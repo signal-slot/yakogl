@@ -1,0 +1,32 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# PowerVR firmware is TI/Img property; generate it locally, never commit it.
+src/fw/
+*.fw
+
+# kernel module build artifacts
+*.o
+*.ko
+*.mod
+*.mod.c
+*.mod.o
+.*.cmd
+*.o.d
+*.symvers
+modules.order
+.tmp_versions/
+
+# offsetof dumper build output
+tools/offsetof/dumpcc
+
+# local captures / scratch
+*.log
+*_dmesg.txt
+# QEMU drops core dumps in the worktree root, a hundred megabytes each, and
+# this tree is shared between several agents: one `git add -A` swept three of
+# them into a commit and GitHub refused the push at its 100 MB file limit.
+# Stage by path, and keep these out either way.
+*.core
+
+# python bytecode
+__pycache__/

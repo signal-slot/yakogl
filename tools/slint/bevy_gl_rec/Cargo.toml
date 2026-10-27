@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# bevy_gl_rec: the GL a Bevy frame hands to an OpenGL ES 3.0 driver, measured
+# on the host without rendering (see src/main.rs).
+[package]
+name = "bevy_gl_rec"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+# DefaultPlugins without windowing or audio (webgl2 as in default_platform:
+# Bevy's shader definitions for a GLES 3.0 device): what the Zephyr image would
+# carry for examples/bevy/bevy-hosts-slint.
+bevy = { version = "=0.19.1", default-features = false, features = [
+    "default_app", "3d_bevy_render", "scene", "std", "multi_threaded", "png", "tonemapping_luts",
+    "ui", "default_font", "webgl2",
+] }
+wgpu = { version = "=29.0.4", default-features = false, features = ["gles", "wgsl"] }
+pollster = "0.4"
+
+# Its own workspace: not part of the YakoGL crate.
+[workspace]

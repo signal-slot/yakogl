@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Scaffolding for cts-selftest.sh check 22c (COMMON_TALLY_PICTURES): not a real reference.
+# Only the pi4 column; am62p has none, so a run on it has no reference.
+tolerance 8
+pi4 | [jellyfish] <default> | 800x600; probes c 4a6f9cff, tl 1c2b4aff, tr 1d2c4bff, bl 0e1a30ff, br 0f1b31ff; crc16 a1b2, crc16q c3d4; mean 40 62 96; black no
+pi4 | [terrain] <default> | 800x600; probes c 7a9ec0ff, tl 5f8fd0ff, tr 5e8ed0ff, bl 3c5a2aff, br 3b592bff; crc16 1234, crc16q 5678; mean 90 120 100; black no
+pi4 | [shadow] <default> | 800x600; probes c b0b0b0ff, tl 303030ff, tr 303030ff, bl 707070ff, br 717171ff; crc16 9abc, crc16q def0; mean 100 100 100; black no

@@ -1,0 +1,281 @@
+MESA: debug: pandecode: dump command stream to file tools/mali/testdata/fsout_55_es3mrt.trace.python3.ctx-0.0000
+shader: MESA_SHADER_VERTEX
+source_blake3: {0xe42544c4, 0xe26e025e, 0x9d8ffa21, 0x05487f8c, 0xd13c9a57, 0xd594d10a, 0x2a5d914c, 0x0197e2cf}
+name: GLSL1
+next_stage: MESA_SHADER_FRAGMENT
+num_ubos: 2
+inputs_read: 15
+outputs_written: 0
+max_subgroup_size: 128
+min_subgroup_size: 1
+api_subgroup_size_draw_uniform: true
+bit_sizes_int: 0x20
+first_ubo_is_default_ubo: true
+known_interpolation_qualifiers: true
+flrp_lowered: true
+inputs: 1
+outputs: 1
+decl_var shader_in INTERP_MODE_NONE none highp vec4 attr_pos (VERT_ATTRIB_GENERIC0.xyzw, 0, 0)
+decl_var shader_out INTERP_MODE_NONE none highp vec4 gl_Position (VARYING_SLOT_POS.xyzw, 0, 0)
+decl_function main () (entrypoint)
+
+impl main {
+    block b0:   // preds:
+    32     %0 = load_const (0x00000010 = 16)
+    32     %1 = load_const (0x00000001 = 0.000000)
+    32x3   %2 = @load_ubo (%1 (0x1), %0 (0x10)) (access=none, align_mul=1073741824, align_offset=16, range_base=0, range=4)
+    32     %3 = load_const (0x00000000)
+    32x3   %4 = @load_input (%3 (0x0)) (base=16777216, range=1, component=0, dest_type=float32, io location=VERT_ATTRIB_GENERIC0 slots=1)  // attr_pos
+    32x3   %5 = @load_ubo (%1 (0x1), %3 (0x0)) (access=none, align_mul=1073741824, align_offset=0, range_base=0, range=4)
+    32     %6 = ffma %4.x, %5.x, %2.x
+    32     %7 = ffma %4.y, %5.y, %2.y
+    32     %8 = ffma %4.z, %5.z, %2.z
+    32     %9 = @load_idvs_output_buf_index_pan
+    32    %10 = load_const (0x3d000000 = 0.031250 = 1023410176)
+    32x2  %11 = @lea_buf_pan (%10 (0x3d000000), %9)
+    64    %12 = pack_64_2x32 %11
+                @store_global (%6, %12) (wrmask=x, access=istream-pan, align_mul=4, align_offset=0)
+    64    %13 = load_const (0x0000000000000004)
+    64    %14 = iadd %13 (0x4), %12
+                @store_global (%7, %14) (wrmask=x, access=istream-pan, align_mul=4, align_offset=0)
+    64    %15 = load_const (0x0000000000000008)
+    64    %16 = iadd %15 (0x8), %12
+                @store_global (%8, %16) (wrmask=x, access=istream-pan, align_mul=4, align_offset=0)
+    64    %17 = load_const (0x000000000000000c = 12)
+    64    %18 = iadd %17 (0xc), %12
+    32    %19 = load_const (0x3f800000 = 1.000000 = 1065353216)
+                @store_global (%19 (0x3f800000), %18) (wrmask=x, access=istream-pan, align_mul=4, align_offset=0)
+                // succs: b1
+    block b1:
+}
+
+block0 {
+32      %34 = MOV.i32 r59
+32      %27 = MOV.i32 r61
+32      %26 = MOV.i32 r60
+32x3    %4 = LD_ATTR_IMM.table1.f32.v3 %26^, %27^, attribute_index:0
+32      %28, %29, %30 = SPLIT.i32 %4^
+32      %6 = FMA.f32 %28^, u0, u0[1]
+32      %7 = FMA.f32 %29^, u1, u1[1]
+32      %8 = FMA.f32 %30^, u2, u2[1]
+32x2    %11 = LEA_BUF_IMM.table13 %34^
+32      %36, %37 = SPLIT.i32 %11^
+        STORE.i32 %6^, %36, %37, byte_offset:0
+32x2    %42 = COLLECT.i32 u3, u256 
+32x2    %45 = COLLECT.i32 %36^, %37^ 
+32x2    %14 = SHADDX.s64 %42^, %45, shift:0
+32      %46, %47 = SPLIT.i32 %14^
+        STORE.i32 %7^, %46^, %47^, byte_offset:0
+32x2    %52 = COLLECT.i32 u3[1], u256 
+32x2    %16 = SHADDX.s64 %52^, %45, shift:0
+32      %56, %57 = SPLIT.i32 %16^
+        STORE.i32 %8^, %56^, %57^, byte_offset:0
+32x2    %62 = COLLECT.i32 u4, u256 
+32x2    %18 = SHADDX.s64 %62^, %45^, shift:0
+32      %66, %67 = SPLIT.i32 %18^
+32      %69 = IADD_IMM.i32 u256, index:1065353216
+        STORE.i32 %69^, %66^, %67^, byte_offset:0
+}
+
+block0 {
+        r0:r1:r2 = LD_ATTR_IMM.table1.f32.v3 r60, r61, attribute_index:0
+        r0 = FMA.f32 r0, u0, u0[1]
+        r1 = FMA.f32 r1, u1, u1[1]
+        r2 = FMA.f32 r2, u2, u2[1]
+        r4:r5 = LEA_BUF_IMM.table13 r59
+        STORE.i32 r0, r4, r5, byte_offset:0
+        r6 = MOV.i32 u3
+        r7 = MOV.i32 u256
+        r6:r7 = SHADDX.s64 r6:r7, r4:r5, shift:0
+        STORE.i32 r1, r6, r7, byte_offset:0
+        r0 = MOV.i32 u3[1]
+        r1 = MOV.i32 u256
+        r0:r1 = SHADDX.s64 r0:r1, r4:r5, shift:0
+        STORE.i32 r2, r0, r1, byte_offset:0
+        r0 = MOV.i32 u4
+        r1 = MOV.i32 u256
+        r0:r1 = SHADDX.s64 r0:r1, r4:r5, shift:0
+        r2 = IADD_IMM.i32 u256, index:1065353216
+        STORE.i32 r2, r0, r1, byte_offset:0
+}
+
+block0 {
+        r0:r1:r2 = LD_ATTR_IMM.table1.flow1.f32.v3 r60^, r61^, attribute_index:0
+        r0 = FMA.f32 r0^, u0, u0[1]
+        r1 = FMA.f32 r1^, u1, u1[1]
+        r2 = FMA.f32 r2^, u2, u2[1]
+        r4:r5 = LEA_BUF_IMM.table13.flow2 r59^
+        STORE.i32 r0, r4, r5, byte_offset:0
+        r6 = MOV.i32 u3
+        r7 = MOV.i32 u256
+        r6:r7 = SHADDX.s64.flow4 r6:r7^, r4:r5, shift:0
+        STORE.i32 r1, r6^, r7^, byte_offset:0
+        r0 = MOV.i32 u3[1]
+        r1 = MOV.i32 u256
+        r0:r1 = SHADDX.s64.flow1 r0:r1^, r4:r5, shift:0
+        STORE.i32 r2, r0^, r1^, byte_offset:0
+        r0 = MOV.i32 u4
+        r1 = MOV.i32 u256
+        r0:r1 = SHADDX.s64 r0:r1^, r4:r5^, shift:0
+        r2 = IADD_IMM.i32.flow2 u256, index:1065353216
+        STORE.i32.flow15 r2, r0^, r1^, byte_offset:0
+}
+
+   LD_ATTR_IMM.v3.f32.slot0.wait0 @r0:r1:r2, r60^, r61^, index:0x0, table:0x1
+   FMA.f32 r0, r0^, u0.w0, u0.w1
+   FMA.f32 r1, r1^, u1.w0, u1.w1
+   FMA.f32 r2, r2^, u2.w0, u2.w1
+   LEA_BUF_IMM.slot1.wait1 @r4:r5, r59^, table:0xD, index:0x0
+   STORE.i32.istream.slot2 @r0, [r4:r5], offset:0
+   MOV.i32 r6, u3.w0
+   MOV.i32 r7, 0x0
+   SHADDX.s64.wait2 [r6:r7], [r6^:r7^], [r4:r5], shift:0x0
+   STORE.i32.istream.slot0 @r1, [r6^:r7^], offset:0
+   MOV.i32 r0, u3.w1
+   MOV.i32 r1, 0x0
+   SHADDX.s64.wait0 [r0:r1], [r0^:r1^], [r4:r5], shift:0x0
+   STORE.i32.istream.slot1 @r2, [r0^:r1^], offset:0
+   MOV.i32 r0, u4.w0
+   MOV.i32 r1, 0x0
+   SHADDX.s64 [r0:r1], [r0^:r1^], [r4^:r5^], shift:0x0
+   IADD_IMM.i32.wait1 r2, 0x0, #0x3F800000
+   STORE.i32.istream.slot2.end @r2, [r0^:r1^], offset:0
+
+MESA_SHADER_POSITION shader: 19 instrs, 6.000000 cycles, 0.046875 fma, 0.203125 cvt, 0.000000 sfu, 0.250000 alu, 0.000000 v, 0.000000 t, 6.000000 ls, 256 code size, 2 threads, 0 loops, 0:0 spills:fills, 0 spill cost, 10 registers used, 5 uniforms used
+shader: MESA_SHADER_VERTEX
+source_blake3: {0xe42544c4, 0xe26e025e, 0x9d8ffa21, 0x05487f8c, 0xd13c9a57, 0xd594d10a, 0x2a5d914c, 0x0197e2cf}
+name: GLSL1
+next_stage: MESA_SHADER_FRAGMENT
+num_ubos: 2
+inputs_read: 15
+outputs_written: 0
+max_subgroup_size: 128
+min_subgroup_size: 1
+api_subgroup_size_draw_uniform: true
+bit_sizes_int: 0x20
+first_ubo_is_default_ubo: true
+known_interpolation_qualifiers: true
+flrp_lowered: true
+inputs: 1
+outputs: 1
+decl_var shader_in INTERP_MODE_NONE none highp vec4 attr_pos (VERT_ATTRIB_GENERIC0.xyzw, 0, 0)
+decl_var shader_out INTERP_MODE_NONE none highp vec4 gl_Position (VARYING_SLOT_POS.xyzw, 0, 0)
+decl_function main () (entrypoint)
+
+impl main {
+    block b0:  // preds:, succs: b1
+    block b1:
+}
+
+block0 {
+}
+
+block0 {
+}
+
+block0 {
+}
+
+
+MESA_SHADER_VARYING shader: 0 instrs, 0.000000 cycles, 0.000000 fma, 0.000000 cvt, 0.000000 sfu, 0.000000 alu, 0.000000 v, 0.000000 t, 0.000000 ls, 0 code size, 2 threads, 0 loops, 0:0 spills:fills, 0 spill cost, 0 registers used, 0 uniforms used
+shader: MESA_SHADER_FRAGMENT
+source_blake3: {0x3b2f6a38, 0x48b656ac, 0x49285f41, 0x78b80534, 0xcc8ecaed, 0xcb0f1d22, 0x91b6e24e, 0x936d5043}
+name: GLSL1
+prev_stage: MESA_SHADER_VERTEX
+num_ubos: 2
+outputs_written: 4-5
+max_subgroup_size: 128
+min_subgroup_size: 1
+api_subgroup_size_draw_uniform: true
+first_ubo_is_default_ubo: true
+known_interpolation_qualifiers: true
+flrp_lowered: true
+outputs: 2
+uniforms: 2
+decl_var uniform INTERP_MODE_NONE none buf ubuf (0, 0, 0)
+decl_var shader_out INTERP_MODE_NONE none highp vec4 fragOutput0 (FRAG_RESULT_DATA0.xyzw, 0, 0)
+decl_var shader_out INTERP_MODE_NONE none highp vec4 fragOutput1 (FRAG_RESULT_DATA1.xyzw, 1, 0)
+decl_var ubo INTERP_MODE_NONE none vec4[2] uniform_0 (0, 0, 0)
+decl_function main () (entrypoint)
+
+impl main {
+    block b0:  // preds:
+    32    %0 = @load_cumulative_coverage_pan
+    32    %1 = load_const (0x00000000)
+    32x4  %2 = @load_ubo (%1 (0x0), %1 (0x0)) (access=none, align_mul=1073741824, align_offset=0, range_base=0, range=32)
+    32    %3 = mov %2.w
+    32    %4 = @atest_pan (%0, %3)
+    64    %5 = @load_blend_descriptor_pan (base=0)
+               @blend_pan (%4, %5, %2) (io location=FRAG_RESULT_DATA0 slots=1, src_type=float32)
+    64    %6 = @load_blend_descriptor_pan (base=1)
+    32    %7 = load_const (0x00000010 = 16)
+    32x4  %8 = @load_ubo (%1 (0x0), %7 (0x10)) (access=none, align_mul=1073741824, align_offset=16, range_base=0, range=32)
+               @blend_pan (%4, %6, %8) (io location=FRAG_RESULT_DATA1 slots=1, src_type=float32)
+               // succs: b1
+    block b1:
+}
+
+block0 {
+32      %9 = MOV.i32 r60
+32      %24 = MOV.i32 atest-param
+32      %4 = ATEST %9^, u3[1], %24^
+32      %25 = MOV.i32 u3
+32      %26 = MOV.i32 u3[1]
+32x4    %15 = COLLECT.i32 u2, u2[1], %25^, %26^ 
+32      %16 = BLEND.f32 %15^, %4, blend_descriptor_0, blend_descriptor_0[1], _.h00, sr_count:4, sr_count_2:2
+32      %27 = MOV.i32 u5
+32      %28 = MOV.i32 u5[1]
+32x4    %22 = COLLECT.i32 u4, u4[1], %27^, %28^ 
+32      %23 = BLEND.f32 %22^, %4^, blend_descriptor_1, blend_descriptor_1[1], _.h00, sr_count:4, sr_count_2:2
+}
+
+block0 {
+        r0 = MOV.i32 atest-param
+        r60 = ATEST r60, u3[1], r0
+        r2 = MOV.i32 u3
+        r3 = MOV.i32 u3[1]
+        r0 = MOV.i32 u2
+        r1 = MOV.i32 u2[1]
+        r48 = BLEND.f32 r0:r1:r2:r3, r60, blend_descriptor_0, blend_descriptor_0[1], _.h00, sr_count:4, sr_count_2:2
+        r2 = MOV.i32 u5
+        r3 = MOV.i32 u5[1]
+        r0 = MOV.i32 u4
+        r1 = MOV.i32 u4[1]
+        r48 = BLEND.f32 r0:r1:r2:r3, r60, blend_descriptor_1, blend_descriptor_1[1], _.h00, sr_count:4, sr_count_2:2
+}
+
+block0 {
+        r0 = MOV.i32.flow8 atest-param
+        r60 = ATEST.flow1 r60^, u3[1], r0^
+        r2 = MOV.i32.flow13 u3
+        r3 = MOV.i32 u3[1]
+        r0 = MOV.i32 u2
+        r1 = MOV.i32.flow9 u2[1]
+        r48 = BLEND.f32 r0:r1:r2:r3, r60, blend_descriptor_0, blend_descriptor_0[1], _.h00, sr_count:4, sr_count_2:2
+        r2 = MOV.i32 u5
+        r3 = MOV.i32 u5[1]
+        r0 = MOV.i32 u4
+        r1 = MOV.i32.flow9 u4[1]
+        r48 = BLEND.flow15.f32 r0:r1:r2:r3, r60^, blend_descriptor_1, blend_descriptor_1[1], _.h00, sr_count:4, sr_count_2:2
+}
+
+   MOV.i32.wait0126 r0, atest_datum.w0
+   ATEST.wait0 @r60, r60^, u3.w1, r0^
+   MOV.i32.discard r2, u3.w0
+   MOV.i32 r3, u3.w1
+   MOV.i32 r0, u2.w0
+   MOV.i32.wait r1, u2.w1
+   BLEND.slot0.v4.f32 @r0:r1:r2:r3, blend_descriptor_0.w0, r60, target:0x2
+   IADD_IMM.i32 r48, program_counter.w0, #0x8
+   BRANCHZI.eq.absolute 0x0, blend_descriptor_0.w1
+
+   MOV.i32 r2, u5.w0
+   MOV.i32 r3, u5.w1
+   MOV.i32 r0, u4.w0
+   MOV.i32.wait r1, u4.w1
+   BLEND.slot1.v4.f32.end @r0:r1:r2:r3, blend_descriptor_1.w0, r60, target:0x0
+   IADD_IMM.i32 r48, 0x0, #0x0
+   BRANCHZI.eq.absolute 0x0, blend_descriptor_1.w1
+
+
+MESA_SHADER_FRAGMENT shader: 16 instrs, 0.203125 cycles, 0.000000 fma, 0.203125 cvt, 0.000000 sfu, 0.203125 alu, 0.000000 v, 0.000000 t, 0.000000 ls, 256 code size, 2 threads, 0 loops, 0:0 spills:fills, 0 spill cost, 6 registers used, 6 uniforms used

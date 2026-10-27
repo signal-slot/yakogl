@@ -1,0 +1,273 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+//
+// The SafeUI meter cluster for the GPU (Slint's FemtoVG / OpenGL ES 2.0
+// renderer on YakoGL). A faithful port of the hand-written C cluster
+// (apps/cluster_c/main.c in the SafeUI repository): same layout, same colours,
+// same fonts, drawn as vector geometry instead of pixel routines.
+//
+// One design, two owners: in the product the safe core (AM62P R5F, i.MX8MP M7)
+// draws the speed, gear, READY, fuel level and the telltales into its overlay
+// plane and the application core draws everything else. `standalone` (the
+// default) also draws the safe core's elements so that a GPU-only demo shows
+// the complete picture; the application build sets it to false.
+//
+// One design, two panels: every coordinate comes from `Layout`
+// (cluster-layout.slint), generated from the SafeUI repository's
+// include/cluster/ui_layout.h for the panel this image is built for and put on
+// the Slint include path by CMake. The cluster therefore fills the panel --
+// 1024x600 on the AM62P, 1280x800 on the Verdin iMX8M Plus -- rather than
+// being a 1024x600 design sitting in the corner of a larger one, and the safe
+// core's elements land on it exactly, because the safety layer is built from
+// the same file.
+
+import { Layout, RichFontSeeds } from "cluster-layout.slint";
+import { Theme } from "theme.slint";
+import { MedicalPanel } from "medmon.slint";
+import { ArcStroke, TickRing, ScaleNumbers, DialBand, FrameBox, PumpIcon,
+         TurnArrow, LowBeamLamp, EngineLamp, FuelLamp } from "gauge-parts.slint";
+
+// Text centred on cx with its top at `ty` (yakogl_drv_text_aa_c).
+component CText inherits Text {
+    in property <length> cx;
+    in property <length> ty;
+    width: 400 * Layout.u;
+    x: root.cx - self.width / 2;
+    y: root.ty;
+    horizontal-alignment: center;
+    vertical-alignment: top;
+    font-family: Theme.font;
+}
+
+// Text right-aligned at rx with its top at `ty` (yakogl_drv_text_aa_r).
+component RText inherits Text {
+    in property <length> rx;
+    in property <length> ty;
+    width: 320 * Layout.u;
+    x: root.rx - self.width;
+    y: root.ty;
+    horizontal-alignment: right;
+    vertical-alignment: top;
+    font-family: Theme.font;
+}
+
+// Text starting at lx with its top at `ty` (yakogl_drv_text_aa).
+component LText inherits Text {
+    in property <length> lx;
+    in property <length> ty;
+    x: root.lx;
+    y: root.ty;
+    vertical-alignment: top;
+    font-family: Theme.font;
+}
+
+export component MainWindow inherits Window {
+    width: Layout.w;
+    height: Layout.h;
+    default-font-family: Theme.font;
+    // The window background belongs to whoever owns the panel. Standalone,
+    // that is this design. In the product (route 3 on the i.MX8MP, where
+    // `standalone` is false) the safe core owns the panel and the application
+    // draws its elements over a TRANSPARENT background: the full-screen
+    // gradient was the single most expensive draw of the frame (gc_slint at
+    // 60 fps, RESULTS.md). The M7 scans the frame out as XRGB8888, so the
+    // cleared pixels show as black and the premultiplied edges as drawn over
+    // black.
+    background: root.standalone ? @linear-gradient(180deg, Layout.bg-top 0%, Layout.bg-bottom 100%) : transparent;
+
+    // --- live values (the platform snapshot) ---
+    in property <int> speed_x10: 0;        // km/h x 10
+    in property <int> rpm: 0;
+    in property <int> fuel_ml: 0;
+    in property <int> tank_ml: 45000;
+    in property <int> trip_m: 0;
+    in property <bool> trip_valid: false;
+    in property <int> odo_m: 0;
+    in property <int> gear: 0;             // -1 = R, 0 = N, 1.. = D<n>
+    in property <bool> engine_on: false;
+    in property <bool> engine_warn: false; // MIL lamp
+    in property <bool> turn_left: false;
+    in property <bool> turn_right: false;
+    in property <bool> lights: false;
+    in property <bool> fuel_low: false;
+    in property <bool> fuel_empty: false;
+    in property <int> uptime_secs: 0;
+    in property <int> frame: 0;
+    in property <bool> standalone: true;   // also draw the safe core's elements
+    // Which design is shown: 0 = the meter cluster, 1 = the medical monitor
+    // (the Supervisor follows the running application; a sample picks one).
+    in property <int> scene: 0;
+    // medical monitor inputs (MedicalPanel, ui/medmon.slint)
+    in property <int> hr: 0;
+    in property <bool> hr_valid: false;
+    in property <int> spo2: 0;
+    in property <bool> spo2_valid: false;
+    in property <int> resp: 0;
+    in property <bool> resp_valid: false;
+    in property <bool> lead_off: false;
+    in property <bool> signal_invalid: false;
+    in property <bool> hr_limit: false;
+    in property <bool> spo2_low: false;
+    in property <bool> blink: false;
+    in property <int> lead_mask: 7;
+    in property <string> wave0;
+    in property <string> wave1;
+    in property <string> wave2;
+    in property <string> wave3;
+    in property <string> wave4;
+    in property <int> cursor-x: -1;
+
+    // The Slint compiler embeds bitmap glyphs (EmbedForSoftwareRenderer) only
+    // for font sizes and weights it sees as LITERALS on Text elements; a
+    // `Layout.small` reference is invisible to it. So the faces are declared by
+    // a generated component, one per panel, rather than by hand.
+    RichFontSeeds { }
+
+    // Gauge fractions. The C app springs each needle towards its target; here
+    // an eased animation follows a value change the same way.
+    property <float> rpm-frac: root.rpm / Layout.rpm-max;
+    property <float> spd-frac: root.speed_x10 / (10 * Layout.speed-max);
+    animate rpm-frac, spd-frac { duration: 150ms; easing: ease-out; }
+    property <int> rpm-shown: Math.round(Math.clamp(root.rpm-frac, 0, 1) * Layout.rpm-max);
+
+    // --- read-out strings, formatted as the C code does ---
+    property <string> rpm-text: Math.floor(root.rpm-shown / 1000) + "." + Math.floor(Math.mod(root.rpm-shown, 1000) / 100);
+    property <string> trip-km: root.trip_valid
+        ? Math.floor(root.trip_m / 1000) + "." + Math.floor(Math.mod(root.trip_m, 1000) / 100) + Math.floor(Math.mod(root.trip_m, 100) / 10) + " km"
+        : "--";
+    property <string> odo-km: Math.floor(root.odo_m / 1000) + "." + Math.floor(Math.mod(root.odo_m, 1000) / 100) + " km";
+    property <int> clock-h: Math.mod(Math.floor(root.uptime_secs / 60), 24);
+    property <int> clock-m: Math.mod(root.uptime_secs, 60);
+    property <string> clock: Math.floor(root.clock-h / 10) + "" + Math.mod(root.clock-h, 10) + ":" + Math.floor(root.clock-m / 10) + "" + Math.mod(root.clock-m, 10);
+    property <string> trip-value: root.trip_valid ? root.trip_m + " m" : "--";
+    property <string> odo-value: root.odo_m + " m";
+    property <string> range-value: (root.fuel_ml > 0 && root.trip_valid)
+        ? Math.floor(Math.min(root.trip_m, 2000000) * 1000 / root.fuel_ml) + " m/L"
+        : "--";
+    property <string> speed-text: Math.floor((root.speed_x10 + 5) / 10);
+    property <string> gear-text: root.gear < 0 ? "R" : root.gear == 0 ? "N" : "D" + root.gear;
+    property <string> litres: Math.floor(root.fuel_ml / 1000) + "." + Math.floor(Math.mod(root.fuel_ml, 1000) / 100) + " L";
+    property <color> fuel-colour: root.fuel_empty ? Layout.red : root.fuel_low ? Layout.amber : Layout.accent;
+    property <length> power-w: Layout.fuel-bar-w * Math.clamp(root.rpm, 0, Layout.rpm-max) / Layout.rpm-max;
+
+    // ---------------------------------------------------------------- medical
+    if root.scene == 1: MedicalPanel {
+        standalone: root.standalone;
+        hr: root.hr; hr_valid: root.hr_valid; spo2: root.spo2; spo2_valid: root.spo2_valid;
+        resp: root.resp; resp_valid: root.resp_valid;
+        lead_off: root.lead_off; signal_invalid: root.signal_invalid; hr_limit: root.hr_limit; spo2_low: root.spo2_low;
+        blink: root.blink; lead_mask: root.lead_mask;
+        wave0: root.wave0; wave1: root.wave1; wave2: root.wave2; wave3: root.wave3; wave4: root.wave4;
+        cursor-x: root.cursor-x; uptime_secs: root.uptime_secs; frame: root.frame;
+    }
+    // ---------------------------------------------------------------- cluster
+    if root.scene == 0: Rectangle {
+        // ---------------------------------------------------------------- dials
+        // flat faces
+        Rectangle {
+            x: Layout.left-cx - Layout.face-r; y: Layout.dial-cy - Layout.face-r;
+            width: 2 * Layout.face-r; height: 2 * Layout.face-r;
+            border-radius: Layout.face-r; background: Theme.face;
+        }
+        Rectangle {
+            x: Layout.right-cx - Layout.face-r; y: Layout.dial-cy - Layout.face-r;
+            width: 2 * Layout.face-r; height: 2 * Layout.face-r;
+            border-radius: Layout.face-r; background: Theme.face;
+        }
+        // graduations and scale numbers
+        TickRing { cx: Layout.left-cx; cy: Layout.dial-cy; count: 33; major-every: 4; red-from: 27; }
+        ScaleNumbers { cx: Layout.left-cx; cy: Layout.dial-cy; count: 9; step: 1; font-size: Layout.label; font-weight: Layout.semibold; }
+        CText { cx: Layout.left-cx; ty: Layout.dial-cy + Layout.dial-cap-dy; text: "ENGINE"; color: Layout.text2; font-size: Layout.small; font-weight: Layout.regular; }
+        CText { cx: Layout.left-cx; ty: Layout.dial-cy + Layout.dial-unit-dy; text: "x1000 rpm"; color: Layout.text2; font-size: Layout.small; font-weight: Layout.regular; }
+        TickRing { cx: Layout.right-cx; cy: Layout.dial-cy; count: 49; major-every: 4; }
+        ScaleNumbers { cx: Layout.right-cx; cy: Layout.dial-cy; count: 13; step: 20; font-size: Layout.small; font-weight: Layout.regular; }
+        CText { cx: Layout.right-cx; ty: Layout.dial-cy + Layout.dial-cap-dy; text: "DRIVE INFO"; color: Layout.text2; font-size: Layout.small; font-weight: Layout.regular; }
+        CText { cx: Layout.right-cx; ty: Layout.dial-cy + Layout.trip-cap-dy; text: "TRIP"; color: Layout.text2; font-size: Layout.small; font-weight: Layout.regular; }
+        CText { cx: Layout.right-cx; ty: Layout.dial-cy + Layout.odo-cap-dy; text: "ODO"; color: Layout.text2; font-size: Layout.small; font-weight: Layout.regular; }
+        CText { cx: Layout.fuel-unit-cx; ty: Layout.fuel-unit-y; text: "km/h"; color: Layout.text2; font-size: Layout.small; font-weight: Layout.regular; }
+        // the bands: track, live arc, bloom
+        DialBand { cx: Layout.left-cx; cy: Layout.dial-cy; frac: root.rpm-frac; tail: Theme.rpm-tail; head: Theme.rpm-head; }
+        DialBand { cx: Layout.right-cx; cy: Layout.dial-cy; frac: root.spd-frac; tail: Theme.speed-tail; head: Theme.speed-head; }
+        // read-outs on the faces
+        CText { cx: Layout.left-cx; ty: Layout.dial-cy + Layout.dial-value-dy; text: root.rpm-text; color: Layout.text; font-size: Layout.big; font-weight: Layout.semibold; }
+        CText { cx: Layout.left-cx; ty: Layout.dial-cy + Layout.dial-state-dy; text: root.engine_on ? "RUNNING" : "OFF";
+                color: root.engine_on ? Layout.green : Layout.dim; font-size: Layout.label; font-weight: Layout.semibold; }
+        CText { cx: Layout.right-cx; ty: Layout.dial-cy + Layout.trip-val-dy; text: root.trip-km; color: Layout.text; font-size: Layout.medium; font-weight: Layout.semibold; }
+        CText { cx: Layout.right-cx; ty: Layout.dial-cy + Layout.odo-val-dy; text: root.odo-km; color: Layout.text; font-size: Layout.medium; font-weight: Layout.semibold; }
+
+        // ------------------------------------------------------------ centre
+        // hairline under the status row
+        Rectangle { x: Layout.hair-x0; y: Layout.hair-y; width: Layout.hair-x1 - Layout.hair-x0; height: 1 * Layout.u; background: Layout.hairline; }
+        // clock (the gear and READY between the dials are the safe core's)
+        CText { cx: Layout.time-cx; ty: Layout.time-y; text: root.clock; color: Layout.text; font-size: Layout.label; font-weight: Layout.semibold; }
+        // Slint logo below the speed, between the gauges
+        Image {
+            x: Layout.logo-x; y: Layout.logo-y; width: Layout.logo-w; height: Layout.logo-h;
+            source: @image-url("assets/slint-logo.png");
+            image-fit: contain;
+        }
+        // info panel: trip / odometer / range index
+        for label[i] in ["TRIP", "ODO", "RANGE INDEX"]: Rectangle {
+            x: Layout.info-x0; y: Layout.info-y + i * Layout.info-row-h;
+            width: Layout.info-x1 - Layout.info-x0; height: Layout.info-row-h;
+            LText { lx: 0; ty: 6 * Layout.u; text: label; color: Layout.text2; font-size: Layout.small; font-weight: Layout.regular; }
+            Rectangle { x: 0; y: parent.height - 2 * Layout.u; width: parent.width; height: 1 * Layout.u; background: Theme.info-rule; }
+            RText { rx: parent.width; ty: 2 * Layout.u; color: Layout.text; font-size: Layout.label; font-weight: Layout.semibold;
+                    text: i == 0 ? root.trip-value : i == 1 ? root.odo-value : root.range-value; }
+        }
+
+        // ------------------------------------------------------------ bottom
+        // power bar (left), mirrors the fuel bar
+        LText { lx: Layout.power-bar-x; ty: Layout.power-cap-y; text: "POWER"; color: Layout.text2; font-size: Layout.small; font-weight: Layout.regular; }
+        FrameBox { bx: Layout.power-bar-x; by: Layout.fuel-bar-y; bw: Layout.fuel-bar-w; bh: Layout.fuel-bar-h; }
+        Rectangle { x: Layout.power-bar-x; y: Layout.fuel-bar-y; width: Layout.fuel-bar-w; height: Layout.fuel-bar-h; background: Layout.bg-bottom; }
+        if root.power-w > 4 * Layout.u: Rectangle { x: Layout.power-bar-x; y: Layout.fuel-bar-y; width: root.power-w; height: Layout.fuel-bar-h; border-radius: 3 * Layout.u; background: Layout.accent; }
+        // fuel frame and pump (the segments and litres are the safe core's)
+        FrameBox { bx: Layout.fuel-bar-x; by: Layout.fuel-bar-y; bw: Layout.fuel-bar-w; bh: Layout.fuel-bar-h; }
+        PumpIcon { px: Layout.fuel-icon-x; py: Layout.fuel-icon-y; colour: Layout.text2; }
+        // brand
+        for letter[i] in ["S", "A", "F", "E", "U", "I"]: CText {
+            cx: Layout.brand-cx0 + i * Layout.brand-dx; ty: Layout.brand-cy; text: letter;
+            color: Theme.brand; font-size: Layout.label; font-weight: Layout.semibold;
+        }
+        // footer frame counter
+        LText { lx: Layout.footer-x; ty: Layout.footer-y; text: "frame " + root.frame; color: Layout.dim; font-size: Layout.small; font-weight: Layout.regular; }
+
+        // --------------------------------------------- safe-core elements
+        // Drawn here only for a standalone demo. In the product these pixels
+        // come from the safety layer (platform/fw/ui/safety.slint), which is
+        // built from the same Layout, so they land in exactly these places.
+        if root.standalone: Rectangle {
+            // telltale row
+            if root.turn_left: TurnArrow { slot-x: Layout.tt-x0; right: false; colour: Layout.green; }
+            if root.lights: LowBeamLamp { slot-x: Layout.tt-x0 + Layout.tt-slot-w; colour: Layout.green; }
+            if root.engine_warn: EngineLamp { slot-x: Layout.tt-x0 + 4 * Layout.tt-slot-w; colour: Layout.amber; }
+            if root.fuel_low || root.fuel_empty: FuelLamp { slot-x: Layout.tt-x0 + 5 * Layout.tt-slot-w; colour: root.fuel_empty ? Layout.red : Layout.amber; }
+            if root.turn_right: TurnArrow { slot-x: Layout.tt-x0 + 9 * Layout.tt-slot-w; right: true; colour: Layout.green; }
+            // gear
+            CText { cx: Layout.gear-cx; ty: Layout.gear-y; text: root.gear-text; color: Layout.gear; font-size: Layout.gear-size; font-weight: Layout.light; }
+            // READY pill
+            Rectangle {
+                x: Layout.ready-x; y: Layout.ready-y; width: Layout.ready-w; height: Layout.ready-h;
+                border-radius: 3 * Layout.u;
+                background: root.engine_on ? #4ADE8030 : #FFFFFF20;
+            }
+            CText { cx: Layout.ready-x + Layout.ready-w / 2; ty: Layout.ready-text-y; text: root.engine_on ? "READY" : "OFF";
+                    color: root.engine_on ? Layout.green : Layout.dim; font-size: Layout.small; font-weight: Layout.regular; }
+            // speed
+            CText { cx: Layout.speed-cx; ty: Layout.speed-top; text: root.speed-text; color: Layout.text; font-size: Layout.speed; font-weight: Layout.light; }
+            CText { cx: Layout.speed-cx; ty: Layout.speed-unit-y; text: "km/h"; color: Layout.text2; font-size: Layout.small; font-weight: Layout.regular; }
+            // fuel: the segments and the litres
+            for i in Layout.fuel-segs: Rectangle {
+                property <bool> on: root.fuel_ml > 0 && root.fuel_ml * 5 > root.tank_ml * i;
+                x: Layout.fuel-bar-x + i * Layout.fuel-seg-dx; y: Layout.fuel-bar-y;
+                width: Layout.fuel-seg-w; height: Layout.fuel-bar-h; border-radius: 3 * Layout.u;
+                background: self.on ? root.fuel-colour : Theme.seg-off;
+            }
+            RText { rx: Layout.fuel-text-rx; ty: Layout.fuel-text-y; text: root.litres; font-size: Layout.label; font-weight: Layout.semibold;
+                    color: root.fuel_empty ? Layout.red : root.fuel_low ? Layout.amber : Layout.text; }
+            // the safety layer's own frame counter
+            RText { rx: Layout.footer-rx; ty: Layout.footer-y; text: root.frame; color: Layout.dim; font-size: Layout.small; font-weight: Layout.regular; }
+        }
+    }
+}

@@ -1,0 +1,45 @@
+Mesa 25.0.x src/c11: do not define call_once and once_flag where glibc does
+
+Mesa 25.0.7 defines once_flag and call_once unconditionally. A glibc that
+defines them too (it sets __once_flag_defined) conflicts with that, so the
+tree does not build on this host. drm_shim_ref.sh applies this patch only to a
+Mesa tree that lacks the guard, to build the 25.0.7 shim driver that is
+compared with the board.
+
+Source: a backport of the guard in Mesa 26.2.1 src/c11/threads.h (line 121,
+`#ifndef __once_flag_defined`, in third_party/mesa-26.2.1/) to 25.0.7's
+src/c11/threads.h and src/c11/impl/threads_posix.c. Mesa is MIT licensed, so
+the patch is MIT too. It changes no compiler or driver code.
+
+Applies to the tarball tree with `patch -p1` from its root.
+
+--- a/src/c11/impl/threads_posix.c
++++ b/src/c11/impl/threads_posix.c
+@@ -46,12 +46,13 @@
+ 
+ /*--------------- 7.25.2 Initialization functions ---------------*/
+ // 7.25.2.1
++#ifndef __once_flag_defined
+ void
+ call_once(once_flag *flag, void (*func)(void))
+ {
+     pthread_once(flag, func);
+ }
+-
++#endif
+ 
+ /*------------- 7.25.3 Condition variable functions -------------*/
+ // 7.25.3.1
+--- a/src/c11/threads.h
++++ b/src/c11/threads.h
+@@ -118,8 +118,10 @@
+ typedef pthread_t       thrd_t;
+ typedef pthread_key_t   tss_t;
+ typedef pthread_mutex_t mtx_t;
++#ifndef __once_flag_defined
+ typedef pthread_once_t  once_flag;
+ #  define ONCE_FLAG_INIT PTHREAD_ONCE_INIT
++#endif
+ #  ifdef PTHREAD_DESTRUCTOR_ITERATIONS
+ #    define TSS_DTOR_ITERATIONS PTHREAD_DESTRUCTOR_ITERATIONS
+ #  else

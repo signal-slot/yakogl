@@ -1,0 +1,160 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+#
+# The reference pictures of glmark2's default scenes, read by tools/cts/common-tally.py
+# (tools/cts/README.md, "The glmark2 picture"). One line per scene and column:
+#
+#   <column> | <scene info string> | <the text after "glmark2-picture: <scene>: ">
+#
+# The column is the board the run was made on (am62p, pi4, imx8mp), or host (the host
+# harness, tools/hostharness/glmark2). The value is a glmark2 image's picture line
+# (driver/docs/glmark2.md, "The picture value"); `common-tally.py --gm-picture-lines
+# <console> <column>` prints a console's lines in this form. A board's picture is judged
+# against the column of that board name: each probe and the mean must be within the
+# tolerance (levels per channel) of the reference, the size must be the same, and an
+# all-black picture is a failed cell where the reference is not black. crc16 is read, not
+# judged: it is named when it differs. A scene with no line in the board's column is
+# "no reference" (an amber cell), so a column is added only from a board run that was
+# looked at, never copied from another board.
+#
+# host: the host harness draws nothing (tools/hostharness/glmark2/README.md), so every
+# scene is black by design: the probes are 000000ff (the harness sets alpha to ff), the
+# crc16 and crc16q are those of an all-zero 40x30 RGB grid, and the mean is 0 0 0. This
+# column checks the parser and the table against the harness; it is not a picture of what
+# a board draws, and no board is judged against it.
+tolerance 8
+host | [build] use-vbo=false | 800x600; probes c 000000ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 7282, crc16q 7282; mean 0 0 0; black yes
+host | [build] use-vbo=true | 800x600; probes c 000000ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 7282, crc16q 7282; mean 0 0 0; black yes
+host | [texture] texture-filter=nearest | 800x600; probes c 000000ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 7282, crc16q 7282; mean 0 0 0; black yes
+host | [texture] texture-filter=linear | 800x600; probes c 000000ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 7282, crc16q 7282; mean 0 0 0; black yes
+host | [texture] texture-filter=mipmap | 800x600; probes c 000000ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 7282, crc16q 7282; mean 0 0 0; black yes
+host | [shading] shading=gouraud | 800x600; probes c 000000ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 7282, crc16q 7282; mean 0 0 0; black yes
+host | [shading] shading=blinn-phong-inf | 800x600; probes c 000000ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 7282, crc16q 7282; mean 0 0 0; black yes
+host | [shading] shading=phong | 800x600; probes c 000000ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 7282, crc16q 7282; mean 0 0 0; black yes
+host | [shading] shading=cel | 800x600; probes c 000000ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 7282, crc16q 7282; mean 0 0 0; black yes
+host | [bump] bump-render=high-poly | 800x600; probes c 000000ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 7282, crc16q 7282; mean 0 0 0; black yes
+host | [bump] bump-render=normals | 800x600; probes c 000000ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 7282, crc16q 7282; mean 0 0 0; black yes
+host | [bump] bump-render=height | 800x600; probes c 000000ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 7282, crc16q 7282; mean 0 0 0; black yes
+host | [effect2d] kernel=0,1,0;1,-4,1;0,1,0; | 800x600; probes c 000000ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 7282, crc16q 7282; mean 0 0 0; black yes
+host | [effect2d] kernel=1,1,1,1,1;1,1,1,1,1;1,1,1,1,1; | 800x600; probes c 000000ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 7282, crc16q 7282; mean 0 0 0; black yes
+host | [pulsar] light=false:quads=5:texture=false | 800x600; probes c 000000ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 7282, crc16q 7282; mean 0 0 0; black yes
+host | [desktop] blur-radius=5:effect=blur:passes=1:separable=true:windows=4 | 800x600; probes c 000000ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 7282, crc16q 7282; mean 0 0 0; black yes
+host | [desktop] effect=shadow:windows=4 | 800x600; probes c 000000ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 7282, crc16q 7282; mean 0 0 0; black yes
+host | [buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=map | 800x600; probes c 000000ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 7282, crc16q 7282; mean 0 0 0; black yes
+host | [buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=subdata | 800x600; probes c 000000ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 7282, crc16q 7282; mean 0 0 0; black yes
+host | [buffer] columns=200:interleave=true:update-dispersion=0.9:update-fraction=0.5:update-method=map | 800x600; probes c 000000ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 7282, crc16q 7282; mean 0 0 0; black yes
+host | [ideas] speed=duration | 800x600; probes c 000000ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 7282, crc16q 7282; mean 0 0 0; black yes
+host | [jellyfish] <default> | 800x600; probes c 000000ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 7282, crc16q 7282; mean 0 0 0; black yes
+host | [terrain] <default> | 800x600; probes c 000000ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 7282, crc16q 7282; mean 0 0 0; black yes
+host | [shadow] <default> | 800x600; probes c 000000ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 7282, crc16q 7282; mean 0 0 0; black yes
+host | [refract] <default> | 800x600; probes c 000000ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 7282, crc16q 7282; mean 0 0 0; black yes
+host | [conditionals] fragment-steps=0:vertex-steps=0 | 800x600; probes c 000000ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 7282, crc16q 7282; mean 0 0 0; black yes
+host | [conditionals] fragment-steps=5:vertex-steps=0 | 800x600; probes c 000000ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 7282, crc16q 7282; mean 0 0 0; black yes
+host | [conditionals] fragment-steps=0:vertex-steps=5 | 800x600; probes c 000000ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 7282, crc16q 7282; mean 0 0 0; black yes
+host | [function] fragment-complexity=low:fragment-steps=5 | 800x600; probes c 000000ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 7282, crc16q 7282; mean 0 0 0; black yes
+host | [function] fragment-complexity=medium:fragment-steps=5 | 800x600; probes c 000000ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 7282, crc16q 7282; mean 0 0 0; black yes
+host | [loop] fragment-loop=false:fragment-steps=5:vertex-steps=5 | 800x600; probes c 000000ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 7282, crc16q 7282; mean 0 0 0; black yes
+host | [loop] fragment-steps=5:fragment-uniform=false:vertex-steps=5 | 800x600; probes c 000000ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 7282, crc16q 7282; mean 0 0 0; black yes
+host | [loop] fragment-steps=5:fragment-uniform=true:vertex-steps=5 | 800x600; probes c 000000ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 7282, crc16q 7282; mean 0 0 0; black yes
+# imx8mp: the per-scene SNVS record of 445c5653 (2026-10-20, records/imx8mp/gm-445c5653/pictures, tools/board.sh imx8mp gm ... pictures, 66 boots, 33 scenes; the README glmark2 commit). NOT looked at by eye (no console, no camera): a regression baseline of what the GC7000 draws, none black, none absent. Against the a8fdc9f0 column 28 of 33 match: probe c of buffer map, terrain, shadow and refract moved (animated scenes, 4 or fewer frames a second for the last three), and [texture] texture-filter=mipmap has probe tl 000000 where a8fdc9f0 had 181c18, the change that arrived with 0d21ab47 and is not explained (RESULTS.md, i.MX8MP notes); which of the two pictures is right is not known. Probes are RGB565 widened to 8 bits, alpha 00.
+imx8mp | [build] use-vbo=false | 800x600; probes c a0a0a000, tl 00000000, tr 00000000, bl 00000000, br 00000000; crc16 8225, crc16q d802; mean 12 12 12; black no
+imx8mp | [build] use-vbo=true | 800x600; probes c a0a4a000, tl 00000000, tr 00000000, bl 00000000, br 00000000; crc16 9e96, crc16q c9d4; mean 12 12 12; black no
+imx8mp | [texture] texture-filter=nearest | 800x600; probes c 38383800, tl 181c1800, tr 00000000, bl 00040000, br 00000000; crc16 1651, crc16q 1926; mean 14 14 14; black no
+imx8mp | [texture] texture-filter=linear | 800x600; probes c 30343000, tl 181c1800, tr 00000000, bl 00040000, br 00000000; crc16 530a, crc16q a4b5; mean 14 14 14; black no
+imx8mp | [texture] texture-filter=mipmap | 800x600; probes c 30343000, tl 00000000, tr 00000000, bl 00040000, br 00000000; crc16 e4ab, crc16q b0af; mean 14 14 14; black no
+imx8mp | [shading] shading=gouraud | 800x600; probes c 0000c800, tl 00000000, tr 00000000, bl 00001000, br 00009000; crc16 6e66, crc16q 3ea0; mean 0 0 17; black no
+imx8mp | [shading] shading=blinn-phong-inf | 800x600; probes c 1818b800, tl 00000000, tr 00000000, bl 18182000, br 18188800; crc16 3298, crc16q 36bc; mean 5 5 18; black no
+imx8mp | [shading] shading=phong | 800x600; probes c 0004a000, tl 00000000, tr 00000000, bl 00048000, br 0004b800; crc16 66aa, crc16q 03ed; mean 1 1 28; black no
+imx8mp | [shading] shading=cel | 800x600; probes c 00980000, tl 00000000, tr 00000000, bl 00980000, br 00980000; crc16 591a, crc16q c6b5; mean 0 25 0; black no
+imx8mp | [bump] bump-render=high-poly | 800x600; probes c a0a0a000, tl 00000000, tr 00000000, bl 00000000, br 00000000; crc16 0be0, crc16q 9870; mean 15 15 15; black no
+imx8mp | [bump] bump-render=normals | 800x600; probes c a8a8a800, tl 00000000, tr 00000000, bl 00000000, br 00000000; crc16 f536, crc16q 26a2; mean 15 15 15; black no
+imx8mp | [bump] bump-render=height | 800x600; probes c 98989800, tl 00000000, tr 00000000, bl 00000000, br 00000000; crc16 852a, crc16q feb3; mean 15 15 15; black no
+imx8mp | [effect2d] kernel=0,1,0;1,-4,1;0,1,0; | 800x600; probes c 00000000, tl 00000000, tr 00000000, bl 00000000, br 00000000; crc16 00e6, crc16q e900; mean 0 0 1; black no
+imx8mp | [effect2d] kernel=1,1,1,1,1;1,1,1,1,1;1,1,1,1,1; | 800x600; probes c f8fcf800, tl f8fcf800, tr f8fcf800, bl f8fcf800, br f8fcf800; crc16 4311, crc16q c3f1; mean 231 233 221; black no
+imx8mp | [pulsar] light=false:quads=5:texture=false | 800x600; probes c 70007000, tl 58041000, tr 00000000, bl 00000000, br 78184800; crc16 17e3, crc16q 0598; mean 47 31 44; black no
+imx8mp | [desktop] blur-radius=5:effect=blur:passes=1:separable=true:windows=4 | 800x600; probes c f8fcf800, tl 90909000, tr f8fcf800, bl f8fcf800, br f8fcf800; crc16 a3bc, crc16q db7b; mean 204 210 189; black no
+imx8mp | [desktop] effect=shadow:windows=4 | 800x600; probes c f8fcf800, tl 90909000, tr 40444000, bl f8fcf800, br f8fcf800; crc16 ca64, crc16q d7fa; mean 197 203 182; black no
+imx8mp | [buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=map | 800x600; probes c f8fcf800, tl 00000000, tr 00000000, bl 00000000, br 00000000; crc16 c62e, crc16q 7761; mean 45 59 67; black no
+imx8mp | [buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=subdata | 800x600; probes c b0d8f000, tl 00000000, tr 00000000, bl 00000000, br 00000000; crc16 82ba, crc16q 2353; mean 41 56 66; black no
+imx8mp | [buffer] columns=200:interleave=true:update-dispersion=0.9:update-fraction=0.5:update-method=map | 800x600; probes c f8fcf800, tl 00000000, tr 00000000, bl 00000000, br 00000000; crc16 5f2a, crc16q bf1f; mean 45 58 66; black no
+imx8mp | [ideas] speed=duration | 800x600; probes c 28203800, tl 00000000, tr 00000000, bl 00000000, br 00000000; crc16 5133, crc16q e1db; mean 5 4 7; black no
+imx8mp | [jellyfish] <default> | 800x600; probes c 28284000, tl 508cf800, tr 508cf800, bl 3058c800, br 3058c800; crc16 fcdc, crc16q c437; mean 69 102 191; black no
+imx8mp | [terrain] <default> | 800x600; probes c 90982000, tl 50541000, tr 788c2000, bl 50601000, br 68882000; crc16 4924, crc16q 35f8; mean 119 129 45; black no
+imx8mp | [shadow] <default> | 800x600; probes c 686c6800, tl 00000000, tr 00000000, bl 484c4800, br 484c4800; crc16 97ca, crc16q b742; mean 34 34 34; black no
+imx8mp | [refract] <default> | 800x600; probes c 706cd000, tl 00000000, tr 00000000, bl 00000000, br 00000000; crc16 2201, crc16q daa0; mean 22 18 29; black no
+imx8mp | [conditionals] fragment-steps=0:vertex-steps=0 | 800x600; probes c 00000000, tl 00000000, tr f8fcf800, bl f8fcf800, br f8f8f800; crc16 6ca6, crc16q e5cb; mean 56 56 56; black no
+imx8mp | [conditionals] fragment-steps=5:vertex-steps=0 | 800x600; probes c 00000000, tl 00000000, tr c0c0c000, bl e8e8e800, br 40444000; crc16 0ca4, crc16q 366d; mean 49 49 49; black no
+imx8mp | [conditionals] fragment-steps=0:vertex-steps=5 | 800x600; probes c 00000000, tl 00000000, tr f8fcf800, bl f8fcf800, br f8f8f800; crc16 6016, crc16q 7a96; mean 54 54 54; black no
+imx8mp | [function] fragment-complexity=low:fragment-steps=5 | 800x600; probes c 00000000, tl 00000000, tr 282c2800, bl 60606000, br 80848000; crc16 f35e, crc16q 688d; mean 54 54 54; black no
+imx8mp | [function] fragment-complexity=medium:fragment-steps=5 | 800x600; probes c 00000000, tl 00000000, tr 282c2800, bl 60606000, br 80848000; crc16 5c3d, crc16q 6ce0; mean 53 53 53; black no
+imx8mp | [loop] fragment-loop=false:fragment-steps=5:vertex-steps=5 | 800x600; probes c 00000000, tl 00000000, tr 282c2800, bl 60606000, br 80848000; crc16 e370, crc16q e1be; mean 54 54 54; black no
+imx8mp | [loop] fragment-steps=5:fragment-uniform=false:vertex-steps=5 | 800x600; probes c 00000000, tl 00000000, tr 282c2800, bl 60606000, br 80848000; crc16 f3cf, crc16q e1be; mean 54 54 54; black no
+imx8mp | [loop] fragment-steps=5:fragment-uniform=true:vertex-steps=5 | 800x600; probes c 00000000, tl 00000000, tr 282c2800, bl 60606000, br 80848000; crc16 e370, crc16q 2cac; mean 54 54 54; black no
+# am62p: the GM run of 445c5653 (2026-10-20, records/am62p/common-445c5653/20261020-1709-GM-6d95738b, score 461, 33 scenes, 0 GL errors; the README glmark2 commit). Judged by value, not looked at on the panel in this run: none black, none absent, and against the bc43ea09 column (which was looked at on the panel through the farm camera, RESULTS.md "AM62P pictures") 29 of 33 match; the 4 others are probe c of animated scenes (the three buffer scenes off 16, 36 and 33, terrain off 63), whose means equal that column's. Probes are RGB565 widened to 8 bits, alpha ff. Animated scenes are sampled at the last frame, so probe c of buffer and terrain (and one probe of pulsar, desktop, jellyfish, shadow, refract) moves between runs of one image.
+am62p | [build] use-vbo=false | 800x600; probes c a4a4a4ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 dfec, crc16q b762; mean 12 12 12; black no
+am62p | [build] use-vbo=true | 800x600; probes c a4a4a4ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 332b, crc16q 0b66; mean 12 12 12; black no
+am62p | [texture] texture-filter=nearest | 800x600; probes c 2b2d2dff, tl 181a1aff, tr 000000ff, bl 050404ff, br 000000ff; crc16 c49b, crc16q 9692; mean 14 14 14; black no
+am62p | [texture] texture-filter=linear | 800x600; probes c 2c2d2dff, tl 1a1b1cff, tr 000000ff, bl 050404ff, br 000000ff; crc16 2dc4, crc16q 3a6b; mean 14 14 14; black no
+am62p | [texture] texture-filter=mipmap | 800x600; probes c 2d2e2eff, tl 1b1d1dff, tr 000000ff, bl 050404ff, br 000000ff; crc16 5317, crc16q 8916; mean 14 14 14; black no
+am62p | [shading] shading=gouraud | 800x600; probes c 0000c9ff, tl 000000ff, tr 000000ff, bl 000011ff, br 00008fff; crc16 f974, crc16q 26c6; mean 0 0 17; black no
+am62p | [shading] shading=blinn-phong-inf | 800x600; probes c 1a1abaff, tl 000000ff, tr 000000ff, bl 1a1a25ff, br 1a1a8bff; crc16 c901, crc16q 4c7c; mean 5 5 18; black no
+am62p | [shading] shading=phong | 800x600; probes c 0505a2ff, tl 000000ff, tr 000000ff, bl 050586ff, br 0505c0ff; crc16 bae2, crc16q 0226; mean 1 1 28; black no
+am62p | [shading] shading=cel | 800x600; probes c 009900ff, tl 000000ff, tr 000000ff, bl 009900ff, br 009900ff; crc16 0f93, crc16q 0c5a; mean 0 25 0; black no
+am62p | [bump] bump-render=high-poly | 800x600; probes c a0a0a0ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 fd79, crc16q 3aa8; mean 15 15 15; black no
+am62p | [bump] bump-render=normals | 800x600; probes c abababff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 e006, crc16q 48e9; mean 15 15 15; black no
+am62p | [bump] bump-render=height | 800x600; probes c 989898ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 4015, crc16q 7013; mean 15 15 15; black no
+am62p | [effect2d] kernel=0,1,0;1,-4,1;0,1,0; | 800x600; probes c 000000ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 2116, crc16q e900; mean 0 0 1; black no
+am62p | [effect2d] kernel=1,1,1,1,1;1,1,1,1,1;1,1,1,1,1; | 800x600; probes c ffffffff, tl ffffffff, tr ffffffff, bl ffffffff, br ffffffff; crc16 e4c5, crc16q 2953; mean 231 233 221; black no
+am62p | [pulsar] light=false:quads=5:texture=false | 800x600; probes c 700170ff, tl 5a0313ff, tr 000000ff, bl 000000ff, br 811b4dff; crc16 a68f, crc16q a371; mean 48 32 45; black no
+am62p | [desktop] blur-radius=5:effect=blur:passes=1:separable=true:windows=4 | 800x600; probes c ffffffff, tl 919191ff, tr ffffffff, bl ffffffff, br ffffffff; crc16 fb6f, crc16q fcda; mean 204 210 189; black no
+am62p | [desktop] effect=shadow:windows=4 | 800x600; probes c ffffffff, tl 919191ff, tr c0c0c0ff, bl ffffffff, br ffffffff; crc16 1631, crc16q 707b; mean 198 203 183; black no
+am62p | [buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=map | 800x600; probes c dcedf8ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 7469, crc16q 10fd; mean 42 57 66; black no
+am62p | [buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=subdata | 800x600; probes c b4d9f0ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 9500, crc16q 3f66; mean 41 56 65; black no
+am62p | [buffer] columns=200:interleave=true:update-dispersion=0.9:update-fraction=0.5:update-method=map | 800x600; probes c d5eaf7ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 d8e7, crc16q 309d; mean 42 57 66; black no
+am62p | [ideas] speed=duration | 800x600; probes c 2a223bff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 f953, crc16q e1db; mean 4 3 6; black no
+am62p | [jellyfish] <default> | 800x600; probes c 582b18ff, tl 578ef9ff, tr 578ef9ff, bl 3358c8ff, br 3358c8ff; crc16 d3c2, crc16q 0736; mean 69 104 196; black no
+am62p | [terrain] <default> | 800x600; probes c a5ac21ff, tl 565810ff, tr 7f9826ff, bl 4b5813ff, br 66851cff; crc16 698d, crc16q e01a; mean 120 129 44; black no
+am62p | [shadow] <default> | 800x600; probes c 9d9d9dff, tl 000000ff, tr 000000ff, bl 4d4d4dff, br 4c4c4cff; crc16 3229, crc16q d11e; mean 34 34 34; black no
+am62p | [refract] <default> | 800x600; probes c 3f1c1aff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 3049, crc16q f02e; mean 23 18 30; black no
+am62p | [conditionals] fragment-steps=0:vertex-steps=0 | 800x600; probes c 000000ff, tl 000000ff, tr fdfdfdff, bl fefefeff, br f9f9f9ff; crc16 f14c, crc16q c00b; mean 57 57 57; black no
+am62p | [conditionals] fragment-steps=5:vertex-steps=0 | 800x600; probes c 000000ff, tl 000000ff, tr c2c2c2ff, bl eaeaeaff, br 474747ff; crc16 bd97, crc16q 988c; mean 50 50 50; black no
+am62p | [conditionals] fragment-steps=0:vertex-steps=5 | 800x600; probes c 000000ff, tl 030303ff, tr fdfdfdff, bl fefefeff, br f9f9f9ff; crc16 e701, crc16q fbdc; mean 55 55 55; black no
+am62p | [function] fragment-complexity=low:fragment-steps=5 | 800x600; probes c 000000ff, tl 000000ff, tr 2c2c2cff, bl 636363ff, br 868686ff; crc16 e9e8, crc16q 3106; mean 55 55 55; black no
+am62p | [function] fragment-complexity=medium:fragment-steps=5 | 800x600; probes c 000000ff, tl 000000ff, tr 2c2c2cff, bl 636363ff, br 868686ff; crc16 27bd, crc16q e8a4; mean 55 55 55; black no
+am62p | [loop] fragment-loop=false:fragment-steps=5:vertex-steps=5 | 800x600; probes c 000000ff, tl 000000ff, tr 2c2c2cff, bl 636363ff, br 868686ff; crc16 787d, crc16q 55db; mean 54 54 54; black no
+am62p | [loop] fragment-steps=5:fragment-uniform=false:vertex-steps=5 | 800x600; probes c 000000ff, tl 000000ff, tr 2c2c2cff, bl 636363ff, br 868686ff; crc16 4fd2, crc16q 474b; mean 55 55 55; black no
+am62p | [loop] fragment-steps=5:fragment-uniform=true:vertex-steps=5 | 800x600; probes c 000000ff, tl 000000ff, tr 2c2c2cff, bl 636363ff, br 868686ff; crc16 c714, crc16q cc81; mean 55 55 55; black no
+# pi4: the GM run of 445c5653 (2026-10-20, records/pi4/common-445c5653/20261020-1719-GM-246e4af3, score 193, 33 scenes, 0 GL errors; the README glmark2 commit). Not looked at by eye (no camera on the Pi 4's panel): a regression baseline, as the imx8mp column is. None black, none absent; against the dcbfb30b run's lines (docs/notes/pi4-glmark2-cpu.md) 31 of 33 match, the 2 others are probe c of animated scenes (buffer subdata off 12, jellyfish off 9). Probes are 8 bits a channel with the framebuffer's alpha (the buffer and jellyfish centres are blended, alpha f0 and 91).
+pi4 | [build] use-vbo=false | 800x600; probes c a4a4a4ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 a05c, crc16q 217f; mean 12 12 12; black no
+pi4 | [build] use-vbo=true | 800x600; probes c a4a4a4ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 fc2a, crc16q 217f; mean 12 12 12; black no
+pi4 | [texture] texture-filter=nearest | 800x600; probes c 313131ff, tl 181a1aff, tr 000000ff, bl 040404ff, br 000000ff; crc16 739c, crc16q b8e1; mean 14 14 14; black no
+pi4 | [texture] texture-filter=linear | 800x600; probes c 2f3030ff, tl 181a1aff, tr 000000ff, bl 040504ff, br 000000ff; crc16 36f6, crc16q 9cb7; mean 14 14 14; black no
+pi4 | [texture] texture-filter=mipmap | 800x600; probes c 2d2e2fff, tl 1b1c1dff, tr 000000ff, bl 050404ff, br 000000ff; crc16 53aa, crc16q d4e5; mean 14 14 14; black no
+pi4 | [shading] shading=gouraud | 800x600; probes c 0000c9ff, tl 000000ff, tr 000000ff, bl 000011ff, br 00008fff; crc16 f6b9, crc16q 297d; mean 0 0 17; black no
+pi4 | [shading] shading=blinn-phong-inf | 800x600; probes c 1919baff, tl 000000ff, tr 000000ff, bl 191924ff, br 19198cff; crc16 e867, crc16q a5f5; mean 5 5 18; black no
+pi4 | [shading] shading=phong | 800x600; probes c 0505a2ff, tl 000000ff, tr 000000ff, bl 050586ff, br 0505c0ff; crc16 cb6f, crc16q 04d1; mean 1 1 28; black no
+pi4 | [shading] shading=cel | 800x600; probes c 009900ff, tl 000000ff, tr 000000ff, bl 009900ff, br 009900ff; crc16 c669, crc16q e872; mean 0 25 0; black no
+pi4 | [bump] bump-render=high-poly | 800x600; probes c a2a2a2ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 c9a3, crc16q b996; mean 15 15 15; black no
+pi4 | [bump] bump-render=normals | 800x600; probes c a8a8a8ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 d066, crc16q 8dff; mean 15 15 15; black no
+pi4 | [bump] bump-render=height | 800x600; probes c 989898ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 4d9d, crc16q 8e89; mean 15 15 15; black no
+pi4 | [effect2d] kernel=0,1,0;1,-4,1;0,1,0; | 800x600; probes c 000000ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 1c4e, crc16q 2919; mean 0 0 1; black no
+pi4 | [effect2d] kernel=1,1,1,1,1;1,1,1,1,1;1,1,1,1,1; | 800x600; probes c ffffffff, tl ffffffff, tr ffffffff, bl ffffffff, br ffffffff; crc16 4857, crc16q c3f1; mean 231 233 221; black no
+pi4 | [pulsar] light=false:quads=5:texture=false | 800x600; probes c 70026fff, tl 5b0313ff, tr 000000ff, bl 000000ff, br 801a4cff; crc16 3145, crc16q 9376; mean 48 32 45; black no
+pi4 | [desktop] blur-radius=5:effect=blur:passes=1:separable=true:windows=4 | 800x600; probes c ffffffff, tl 919191ff, tr c0c0c0ff, bl ffffffff, br ffffffff; crc16 834d, crc16q 1a67; mean 206 211 192; black no
+pi4 | [desktop] effect=shadow:windows=4 | 800x600; probes c ffffffff, tl 919191ff, tr c0c0c0ff, bl ffffffff, br ffffffff; crc16 fcba, crc16q e3b0; mean 198 203 183; black no
+pi4 | [buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=map | 800x600; probes c b4daf0f0, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 d4f8, crc16q 0414; mean 42 57 66; black no
+pi4 | [buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=subdata | 800x600; probes c b5daf0f0, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 b9a9, crc16q 5fb7; mean 42 57 66; black no
+pi4 | [buffer] columns=200:interleave=true:update-dispersion=0.9:update-fraction=0.5:update-method=map | 800x600; probes c b4daf0f0, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 1dce, crc16q f243; mean 42 56 65; black no
+pi4 | [ideas] speed=duration | 800x600; probes c 2a223bff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 f945, crc16q 6c93; mean 4 3 6; black no
+pi4 | [jellyfish] <default> | 800x600; probes c 622e1791, tl 578ef9ff, tr 578ef9ff, bl 3358c8ff, br 3358c8ff; crc16 1bdc, crc16q 6bfa; mean 70 104 197; black no
+pi4 | [terrain] <default> | 800x600; probes c 4e5411ff, tl 5a5a14ff, tr 6d841fff, bl 737d1bff, br 637f12ff; crc16 8f4d, crc16q caff; mean 120 129 44; black no
+pi4 | [shadow] <default> | 800x600; probes c a0a0a0ff, tl 000000ff, tr 000000ff, bl 4d4d4dff, br 4d4d4dff; crc16 cf8c, crc16q afab; mean 34 34 34; black no
+pi4 | [refract] <default> | 800x600; probes c 5a4eb6ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 a39c, crc16q 8fa0; mean 24 20 32; black no
+pi4 | [conditionals] fragment-steps=0:vertex-steps=0 | 800x600; probes c 000000ff, tl 000000ff, tr fdfdfdff, bl fefefeff, br f9f9f9ff; crc16 1657, crc16q d89c; mean 56 56 56; black no
+pi4 | [conditionals] fragment-steps=5:vertex-steps=0 | 800x600; probes c 000000ff, tl 000000ff, tr c2c2c2ff, bl eaeaeaff, br 474747ff; crc16 0f1d, crc16q cbf5; mean 49 49 49; black no
+pi4 | [conditionals] fragment-steps=0:vertex-steps=5 | 800x600; probes c 000000ff, tl 030303ff, tr fdfdfdff, bl fefefeff, br f9f9f9ff; crc16 a1d8, crc16q 0f38; mean 55 55 55; black no
+pi4 | [function] fragment-complexity=low:fragment-steps=5 | 800x600; probes c 000000ff, tl 000000ff, tr 2c2c2cff, bl 636363ff, br 868686ff; crc16 408d, crc16q 3b83; mean 54 54 54; black no
+pi4 | [function] fragment-complexity=medium:fragment-steps=5 | 800x600; probes c 000000ff, tl 000000ff, tr 2c2c2cff, bl 636363ff, br 868686ff; crc16 408d, crc16q 3b83; mean 54 54 54; black no
+pi4 | [loop] fragment-loop=false:fragment-steps=5:vertex-steps=5 | 800x600; probes c 000000ff, tl 000000ff, tr 2c2c2cff, bl 636363ff, br 868686ff; crc16 3437, crc16q 1685; mean 54 54 54; black no
+pi4 | [loop] fragment-steps=5:fragment-uniform=false:vertex-steps=5 | 800x600; probes c 000000ff, tl 000000ff, tr 2c2c2cff, bl 636363ff, br 868686ff; crc16 9fb8, crc16q 3982; mean 54 54 54; black no
+pi4 | [loop] fragment-steps=5:fragment-uniform=true:vertex-steps=5 | 800x600; probes c 000000ff, tl 000000ff, tr 2c2c2cff, bl 636363ff, br 868686ff; crc16 59b4, crc16q 0c47; mean 54 54 54; black no

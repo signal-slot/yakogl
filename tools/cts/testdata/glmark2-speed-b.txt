@@ -1,0 +1,12 @@
+15:40:00 [build] <default>: FPS: 102 FrameTime: 9.804 ms
+15:40:00 glmark2-frame: [build] <default>: 1021 frames; us per frame: gl 880, swap 8300, show 200, other 400, frame 9804 (end waited for in 1021 of 1021)
+15:40:10 [terrain] <default>: FPS: 8 FrameTime: 125.000 ms
+15:40:10 glmark2-frame: [terrain] <default>: 81 frames; us per frame: gl 9100, swap 111900, show 300, other 3700, frame 125000 (end waited for in 81 of 81)
+15:40:20 [shadow] <default>: FPS: 25 FrameTime: 40.000 ms
+15:40:20 glmark2-frame: [shadow] <default>: 251 frames; us per frame: gl 8000, swap 28000, show 300, other 3700, frame 40000 (end waited for in 251 of 251)
+15:40:30 [refract] <default>: FPS: 10 FrameTime: 100.000 ms
+15:40:30 glmark2-frame: [refract] <default>: 101 frames; us per frame: gl 7000, swap 89000, show 300, other 3700, frame 100000 (end waited for in 101 of 101)
+15:40:40 [jellyfish] <default>: FPS: 40 FrameTime: 25.000 ms
+15:40:40 glmark2-frame: [jellyfish] <default>: 401 frames; us per frame: gl 1200, swap 22000, show 300, other 1500, frame 25000 (end waited for in 400 of 401)
+15:40:40 glmark2: score 160: 5 scenes ran, 0 failed, 0 unsupported (5 list entries); window 800x600, shown yes, GPU resets 0
+15:40:40 glmark2: PASS

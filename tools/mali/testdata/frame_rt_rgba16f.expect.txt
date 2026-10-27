@@ -1,0 +1,50 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+#
+# gl_test case 54 (es3chain), phase B pass 1: a cube-map face texture of
+# GL_RGBA16F as the colour target (GLES_SURF_RGBA16F), cleared blue
+# (0, 0, 1, 1) and drawn with a uniform-colour quad, no blending. NOT a dump:
+# no drm-shim was available (docs/notes/mali-frame-formats.md section 1).
+# Derived from Mesa 26.2.1's source. Settled by the board Mesa reference
+# (mode f16rt, tools/mali/board-dump/f16rt-2026-10-24.txt, which
+# src/mali/frame_formats_tests.rs reads): two rows differ and are corrected
+# below (marked "board:"); every other line held.
+#
+# Source: pan_format.c:117-121 BFMT_FLOAT(R16G16B16A16_FLOAT, RGBA16F)
+#           = { internal RGBA16F, writeback FLOAT_COLOR_FORMAT_RGBA16F,
+#               blend { MALI_BLEND_RGBA16F, MALI_BLEND_RGBA16F } } (v9+)
+#         pan_desc.c:677-714 get_rt_formats (blendable: internal/writeback
+#           from the table, swizzle = inverted format swizzle = RGBA identity)
+#         pan_format.h:127-139 pan_format_tib_size (float: raw, 8 bytes)
+#         pan_clear.c:102-113, 61-100 pan_pack_color -> pan_pack_raw (float)
+#         pan_cmdstream.c:386-396 (blend descriptor, v10: no register_format)
+#
+# RGB Render Target (src/mali genxml RgbRenderTarget field)      value
+#   internal_format       board: ColorBufferInternalFormat::RAW64  0x23
+#                         (derived: RGBA16F 0x12)
+#   writeback_format      board: ColorFormat::RAW64 (bits 35..39)    5
+#                         (derived: writeback_float_format RGBA16F 0x13)
+#   write_enable          true
+#   writeback_block_format Linear       (as the RGBA8 target, PAN_MESA_DEBUG=linear)
+#   writeback_msaa        Single
+#   srgb                  false
+#   dithering_enable      true (unconditional, pan_desc.c:1032)
+#   swizzle               RGBA identity  = 0 | 1<<3 | 2<<6 | 3<<9 = 0x688
+#   clear (blue)          pan_pack_raw: util_pack_color to 4 halves, 8 bytes,
+#                         then copied twice:
+#                         color_0 0x00000000  color_1 0x3C003C00
+#                         color_2 0x00000000  color_3 0x3C003C00
+#                         (R=0 G=0 | B=1.0 A=1.0 in fp16 = 0x3C00)
+# Blend descriptor (opaque, blend off)
+#   memory_format         Format::RGBA16F << 12 | RgbComponentOrder::RGBA
+#                         = 0xDF << 12 = 0xDF000
+#   round_to_fb_precision !dithered (GL_DITHER on: false), srgb false
+# Framebuffer descriptor
+#   tile buffer 8 bytes a sample: tile = (16384 >> 3 = 2048) min 1024 = 1024
+#   pixels, colour buffer allocation = 8 * 1024 = 8192 bytes (RGBA8:
+#   4 * 1024 = 4096; src/mali frame.rs tile_size assumes 4 bytes a sample)
+# Fragment shader: for a blendable target on v9+ the draw's shader does not
+# depend on the render target format (pan_shader.c:173-176, 335-350 are
+# arch <= 5 only); the bytes should equal case 54's RGBA8 draws'.
+# Row stride of a 128x128 face: 128 * 8 = 1024 bytes (board: the 4x4 face
+# is 64, a row padded to 64 bytes, not 32).

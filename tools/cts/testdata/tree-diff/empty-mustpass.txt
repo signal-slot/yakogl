@@ -1,0 +1,3 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# an empty mustpass list: bad input (exit 2)

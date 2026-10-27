@@ -1,0 +1,534 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Kconfig for the PowerVR BXS-4-64 driver module.
+
+config YAKOGL_DRV_GPU_PVR
+	bool "PowerVR BXS-4-64 GPU driver (img,img-rogue)"
+	default y
+	depends on DT_HAS_IMG_IMG_ROGUE_ENABLED
+	select FPU
+	select YAKOGL_DRV_GPU_PVR_RUST
+	help
+	  Powers and clocks the GPU through TISCI, builds its MMU, boots the
+	  RISC-V firmware and provides the render service YakoGL runs on.
+	  The device tree node needs the register block, the TISCI device,
+	  power-domain/clock ids and a 64 MiB memory-region carveout.
+
+if YAKOGL_DRV_GPU_PVR
+
+config YAKOGL_DRV_GPU_PVR_INIT_PRIORITY
+	int "Init priority"
+	default 90
+	help
+	  POST_KERNEL init priority of the GPU device; it must come after the
+	  TISCI driver (TISCI_INIT_PRIORITY).
+
+config YAKOGL_DRV_GPU_PVR_PM_LATENCY_MS
+	int "Firmware active power management latency (ms)"
+	default 5
+	help
+	  RGXFWIF_RUNTIME_CFG ui32ActivePMLatencyms, written at firmware boot
+	  (PVR_FW_PM_LATENCY_MS in src/pvr_fw_boot.c). With 100 (the value
+	  used before 2026-09-29) every MMU cache invalidate after a client's
+	  first was acknowledged ~98 ms late on the AM62P; the delay follows
+	  this value (records/am62p/pm-latency).
+
+config YAKOGL_DRV_GPU_PVR_FL_GROW_ON_DEMAND
+	bool "Serve parameter-buffer freelist grows from the render pool on demand (opt-in)"
+	help
+	  The two global freelists keep one grow's pages in reserve instead
+	  of four. A FREELIST_GROW the firmware posts is served from that
+	  reserve, which is then refilled with pages from the render pool
+	  (gpu::pvr::freelist::serve), as the DDK's RGXProcessRequestGrow
+	  allocates a grow's pages from its heap. That gives back 2 x 3 MiB at
+	  the 64 MiB carveout's sizing. A grow is refused only when the pool
+	  refused the refill and refuses again when the firmware asks; a
+	  refused grow is answered with zero pages, and what the firmware
+	  then does is unmeasured
+	  (docs/notes/pvr-render-pool.md). Off until gl_test
+	  and glmark2 have run with it.
+
+config YAKOGL_DRV_GPU_PVR_FL_READY_PAGES
+	bool "Keep the firmware's ready pages in the growable freelists (opt-in)"
+	help
+	  The global freelists keep 13 % of their pages (at most one grow,
+	  a multiple of 4) as the firmware's READY pages, and list the rest
+	  as CURRENT, at build time and after each served grow; the grow
+	  answer is NEW = current + ready, READY = ready. This is the
+	  protocol of Linux drm/imagination (pvr_free_list.c) with Mesa's
+	  global grow threshold (PVR_GLOBAL_FREE_LIST_GROW_THRESHOLD 13);
+	  gpu::pvr::freelist::ready_pages. Without it every listed page is
+	  CURRENT and READY is 0. Measured on the AM62P (70b79a74): the
+	  firmware uses build's READY as a reserve at its first
+	  out-of-memory event; in a grow answer it takes NEW and sets ready
+	  to the grow's own pages, whatever READY says
+	  (docs/notes/pvr-render-pool.md, "The firmware's
+	  counts before the answer"). So only build's share has an effect.
+	  Independent of YAKOGL_DRV_GPU_PVR_FL_GROW_ON_DEMAND; opt-in.
+
+config YAKOGL_DRV_GPU_PVR_GROW_SCENE
+	bool "Say the scene's kicks and time at every freelist grow request (instrument)"
+	help
+	  The grow line ("render: at grow request N ...") gains "scene S:
+	  K kicks since its start (the first F), T ms": the kicks submitted
+	  and the time (ARM generic timer) since the application last called
+	  pvr_render_scene_begin(). The glmark2 sample calls it as each
+	  scene's frames start. The firmware's freelist words are not a live
+	  measure of the TA's use
+	  (docs/notes/pvr-render-pool.md, "the grow scene"),
+	  so this is the host's side. The yakogl-drivers feature pvr-grow-scene.
+	  Off for applications.
+
+config YAKOGL_DRV_GPU_PVR_FL_PROBE_MAX_PAGES
+	int "Probe: cap the global freelists at this many pages (0: off)"
+	default 0
+	help
+	  A board probe, never a product setting: the two global freelists
+	  are built with this many pages at most (and no fewer than they
+	  start with). At 512, the 64 MiB carveout's starting size (448
+	  listed + 64 ready), a list cannot grow at all, and the firmware
+	  asks for no grow: the AM62P measured the parameter manager out of
+	  memory at the list's maximum, one UPDATE_STATS notice and a kick
+	  that never completed (docs/notes/pvr-render-pool.md,
+	  the probe). For an unserved grow use
+	  YAKOGL_DRV_GPU_PVR_FL_PROBE_NO_RESERVE.
+
+config YAKOGL_DRV_GPU_PVR_FL_PROBE_SERVE_MAX
+	int "Probe: refuse freelist grows after this many served (0: off)"
+	default 0
+	help
+	  A board probe, never a product setting: a list that has served this
+	  many grows refuses the next ones ("no grow: the probe's limit of N
+	  served grows"), as the render pool refused glmark2's grows at 1280
+	  pages. With the grow knob on and 3 here, gl_test case 174 makes
+	  glmark2's FWCCB sequence before its lost command: three served
+	  grows, then refusals
+	  (docs/notes/pvr-render-pool.md).
+
+config YAKOGL_DRV_GPU_PVR_FL_PROBE_NO_RESERVE
+	bool "Probe: no grow reserve, so every grow is answered with zero pages"
+	depends on !YAKOGL_DRV_GPU_PVR_FL_GROW_ON_DEMAND
+	help
+	  A board probe, never a product setting: the two global freelists
+	  keep no grow reserve (fl_reserve_mult 0) and the on-demand grow is
+	  off, at the usual maximum (4096 pages at the 64 MiB carveout). The
+	  firmware asks for a grow and the host answers zero pages ("no grow
+	  (reserve 0, pool 0/0, ...)"). It settles what the firmware does
+	  with that answer (docs/notes/pvr-render-pool.md): a
+	  partial render (freelist.rs's old comment) or a kick that never
+	  completes.
+
+config YAKOGL_DRV_GPU_PVR_FW_UNCACHED
+	bool "Give the firmware the uncached window for the host's objects"
+	default y
+	help
+	  The firmware is handed RGXRISCVFW_SHARED_UNCACHED_DATA0_BASE | off
+	  (region 0x4) for every object the host shares with it: the CCBs and
+	  their controls, the init structures, the freelists, the HWRT data,
+	  the client CCBs and UFOs. That is what Linux drm/imagination does
+	  (PVR_BO_FW_FLAGS_DEVICE_UNCACHED, pvr_fw_riscv.c). Without it the
+	  firmware reaches them through its cached window (region 0xC). On the
+	  AM62P that arm lost FWCCB commands: a slot read empty whose words
+	  appeared 240 us after the write offset passed it, in 5 of 20 runs of
+	  gl_test 174, against 0 of 20 with this on (same tree); and the
+	  firmware took our KCCB posts 5-8 ms late, against 1 ms with this on
+	  (gpu::pvr::mem heap_fwaddr,
+	  docs/notes/pvr-render-pool.md). If the firmware does
+	  not map region 0x4 over its heap, it faults at its first read of a
+	  host object. n gives the cached window back, for measurement only.
+
+config YAKOGL_DRV_GPU_PVR_FWCCB_CHECK
+	bool "Re-read an empty FWCCB slot and watch the write offset (instrument)"
+	help
+	  An instrument for the named defect "FWCCB slot read empty (a lost
+	  command)" (docs/notes/pvr-render-pool.md): twice on
+	  the AM62P the host read a firmware CCB slot whose type had no command
+	  magic, skipped it, and the firmware's request was never answered. With
+	  this on, such a slot is re-read every 20 us for up to 2 ms before
+	  it is consumed ("FWCCB: slot S read empty; type 0x... after N us",
+	  or "still empty after 2000 us"), and the write offset is checked
+	  for going back ("FWCCB: write offset went back from X to Y"), which
+	  only the host's writeback of the shared control line could do. Off
+	  until a board run has exercised it.
+
+config YAKOGL_DRV_GPU_PVR_RENDER_VERBOSE
+	bool "Dump render-service diagnostics after every frame"
+	help
+	  After each completed frame log the fence state, the GPU page-table
+	  entries of every render object, the TA output counts and a tail of
+	  the DDK firmware trace (PVR_RENDER_VERBOSE). Bring-up aid; off for
+	  applications.
+
+config YAKOGL_DRV_GPU_PVR_FINE_WAIT
+	bool "Read the frame fence every 20 us instead of once per ms"
+	help
+	  The render service's fence wait reads the fragment UFO once per
+	  millisecond, so every wait ends on a whole millisecond (glmark2 on
+	  the AM62P, 2026-10-03: six scenes at exactly 2,016-2,017 us per
+	  swap). With this option it reads it every 20 us (the yakogl-drivers
+	  feature pvr-fine-wait); the FWCCB service, the HWR check and the
+	  timeout stay per millisecond. Opt-in until gl_test and glmark2 have
+	  run with it (docs/notes/pvr-fence-wait.md).
+
+config YAKOGL_DRV_GPU_PVR_KICK_TIMES
+	bool "Keep per-kick timestamps (instrument)"
+	help
+	  Stamp every render kick with the ARM generic timer: submit entry,
+	  the pre-kick MMU cache invalidate, the post, the first host read
+	  that saw the geometry fence and the fragment fence (each with the
+	  last read that did not, as an error bar) and the first wait for it.
+	  pvr_render_last_kick_us() returns the last completed kick in
+	  microseconds; the glmark2 sample prints it per frame. The yakogl-
+	  drivers feature pvr-kick-times. Adds reads of the UFO words to every
+	  poll of the fence wait; off for applications
+	  (docs/notes/pvr-fence-wait.md).
+
+config YAKOGL_DRV_GPU_PVR_SELFTEST
+	bool "Run the driver's self-test render at boot"
+	help
+	  Draw the bring-up triangle into the carveout right after the firmware
+	  boots (the PVR_DRAW_TRIANGLE rig). Off for applications.
+
+module = YAKOGL_DRV_GPU_PVR
+module-str = PowerVR GPU
+source "subsys/logging/Kconfig.template.log_config"
+
+if MMU
+# The driver maps the whole 64 MiB carveout into the kernel's virtual space
+# (k_mem_map_phys_bare); Zephyr's 8 MiB default leaves no room for it.
+configdefault KERNEL_VM_SIZE
+	default 0x10000000
+
+configdefault MAX_XLAT_TABLES
+	default 256
+endif # MMU
+
+endif # YAKOGL_DRV_GPU_PVR
+
+config YAKOGL_DRV_GPU_VIVANTE
+	bool "Vivante GC7000 GPU driver (vivante,gc; i.MX8MP)"
+	default y
+	depends on DT_HAS_VIVANTE_GC_ENABLED
+	select YAKOGL_DRV_DISPLAY_RUST
+	help
+	  Powers the GPU domains through the i.MX8MP GPC, clocks the core
+	  through the CCM, reads the identity registers and resets the GPU
+	  (milestone 1 of docs/notes/imx8mp-gc-bringup.md).
+	  The device tree node
+	  needs the "gpu", "gpc" and "ccm" register ranges and a memory-region
+	  carveout.
+
+	  The kernel side -- the GPC/CCM bring-up, identify, reset, the init
+	  after reset, the MMU v2 tables, the front-end ring and the
+	  interrupt -- is Rust: gpu::vivante in driver/rust (feature
+	  `vivante`), written from the rnndb headers, NXP's galcore driver
+	  and the i.MX 8M Plus reference manual
+	  (driver/docs/vivante-kernel-rust.md).
+	  drivers/gpu/gpu_vivante_gc_rust.c is the Zephyr side (device,
+	  interrupt, kernel objects). src/vivante's gc_render.c, gc_draw.c
+	  and gc_cmd.c are the composition code in C.
+
+if YAKOGL_DRV_GPU_VIVANTE
+
+config YAKOGL_DRV_GPU_VIVANTE_INIT_PRIORITY
+	int "Init priority"
+	default 90
+	help
+	  POST_KERNEL init priority of the GPU device.
+
+module = YAKOGL_DRV_GPU_VIVANTE
+module-str = Vivante GPU
+source "subsys/logging/Kconfig.template.log_config"
+
+if MMU
+# The render service maps the whole carveout (64 MiB) Normal non-cacheable
+# with k_mem_map_phys_bare; Zephyr's 8 MiB default leaves no room for it.
+configdefault KERNEL_VM_SIZE
+	default 0x10000000
+
+configdefault MAX_XLAT_TABLES
+	default 256
+endif # MMU
+
+endif # YAKOGL_DRV_GPU_VIVANTE
+
+config YAKOGL_DRV_DISPLAY_IMX8MP
+	bool "i.MX8MP display pipeline (yakogl,imx8mp-display or yakogl,imx8mp-lcdif-adopt)"
+	default y
+	# The backlight is a Zephyr PWM device (the node's pwms phandle); PWM
+	# defaults to y when the devicetree has one (configdefault below).
+	depends on (DT_HAS_YAKOGL_IMX8MP_DISPLAY_ENABLED && I2C && GPIO && PWM && YAKOGL_DRV_SN65DSI8X && \
+		    YAKOGL_DRV_IMX8MP_MEDIA_PD) || \
+		   DT_HAS_YAKOGL_IMX8MP_LCDIF_ADOPT_ENABLED || \
+		   DT_HAS_YAKOGL_IMX8MP_HDMI_ENABLED
+	depends on MMU
+	help
+	  Owns the whole display chain on the Verdin iMX8M Plus: the LCDIFv3,
+	  the MIPI DSIM and its D-PHY; it drives the media power domains
+	  (yakogl,imx8mp-media-pd, the MEDIAMIX and MIPI-PHY1 power, CCM
+	  media roots and MEDIA_BLK_CTRL), the TI SN65DSI8x DSI-to-LVDS
+	  bridge (yakogl,sn65dsi8x) and the backlight PWM (yakogl,imx-pwm),
+	  which are devices of their own.
+
+	  A Zephyr image kexec'd out of Torizon arrives to a dark panel,
+	  because Linux's device_shutdown() turns the display off on the way
+	  out. This brings it back, and adopts it instead when the crash
+	  route left it running. See src/display/NOTES.md.
+
+if YAKOGL_DRV_DISPLAY_IMX8MP
+
+config YAKOGL_DRV_DISPLAY_IMX8MP_HDMI
+	bool "HDMI brought up from cold (yakogl,imx8mp-hdmi), register logic in Rust"
+	depends on DT_HAS_YAKOGL_IMX8MP_HDMI_ENABLED
+	default y if !DT_HAS_YAKOGL_IMX8MP_LCDIF_ADOPT_ENABLED
+	select YAKOGL_DRV_DISPLAY_RUST
+	help
+	  LCDIF3 -> PVI -> DesignWare HDMI TX -> HDMI PHY as one Zephyr display
+	  device that powers, clocks and programs the whole chain itself, for a
+	  board that boots Zephyr with no Linux before it (the Armadillo-X2):
+	  driver/drivers/display/display_yakogl_imx8mp_hdmi.c registers it and
+	  provides the imx8mp_display_* API, driver/rust/src/soc/imx8mp/
+	  hdmi_chain.rs (from IMX8MPRM Rev. 3) programs it. See
+	  driver/docs/x2-hdmi-cold.md.
+
+	  A board whose devicetree also has a yakogl,imx8mp-lcdif-adopt node
+	  keeps the adopt driver unless this is set: until the cold path is
+	  proven on the board, choosing it is a deliberate y.
+
+config YAKOGL_DRV_DISPLAY_IMX8MP_HDMI_INIT_PRIORITY
+	int "Init priority of yakogl,imx8mp-hdmi"
+	depends on YAKOGL_DRV_DISPLAY_IMX8MP_HDMI
+	default 80
+	help
+	  POST_KERNEL. Init only maps the registers and reads the health
+	  word; the bring-up runs in imx8mp_display_on() (or the first
+	  display_write()).
+
+config YAKOGL_DRV_DISPLAY_IMX8MP_ADOPT
+	def_bool DT_HAS_YAKOGL_IMX8MP_LCDIF_ADOPT_ENABLED && !DT_HAS_YAKOGL_IMX8MP_DISPLAY_ENABLED && \
+		 !YAKOGL_DRV_DISPLAY_IMX8MP_HDMI && !YAKOGL_DRV_DISPLAY_IMX8MP_LCDIF_RUST
+	help
+	  The board's devicetree has an LCDIF to adopt rather than a chain to
+	  own (dts/bindings/display/yakogl,imx8mp-lcdif-adopt.yaml): the same
+	  imx8mp_display_* API comes from src/display/imx8mp_lcdif_adopt.c,
+	  which only re-points a layer the previous kernel left running.
+	  YAKOGL_DRV_DISPLAY_IMX8MP_LCDIF_RUST serves the same nodes from Rust.
+
+config YAKOGL_DRV_DISPLAY_IMX8MP_LCDIF_RUST
+	bool "LCDIFv3 register logic in Rust (yakogl,imx8mp-lcdif), not yet board-proven"
+	depends on DT_HAS_YAKOGL_IMX8MP_LCDIF_ENABLED || DT_HAS_YAKOGL_IMX8MP_LCDIF_ADOPT_ENABLED
+	select YAKOGL_DRV_DISPLAY_RUST
+	help
+	  driver/drivers/display/display_yakogl_imx8mp_lcdif.c, a Zephyr
+	  display device whose register logic is driver/rust/src/ip/lcdifv3.rs
+	  (from IMX8MPRM Rev. 3 13.3), in place of src/display/imx8mp_lcdif.c
+	  and imx8mp_lcdif_adopt.c: the chain facade drives the display node's
+	  `lcdif` through it (src/display/imx8mp_lcdif_rust.c), the old
+	  yakogl,imx8mp-lcdif-adopt nodes become adopt-only instances of it,
+	  and the panel console's LCDIF reads and flip go through the same Rust.
+	  Off until it has run on the Verdin and the Armadillo-X2
+	  (driver/docs/imx8mp-display-cold.md).
+
+config YAKOGL_DRV_DISPLAY_IMX8MP_LCDIF_INIT_PRIORITY
+	int "Init priority of yakogl,imx8mp-lcdif"
+	depends on YAKOGL_DRV_DISPLAY_IMX8MP_LCDIF_RUST
+	default 75
+	help
+	  POST_KERNEL; before the chain facade (80). Init maps the registers
+	  and reads nothing.
+
+config YAKOGL_DRV_DISPLAY_IMX8MP_NO_EARLY_CLOCKS
+	bool "Diagnostic: do not open the early-ccm-roots/-gates at PRE_KERNEL_1"
+	depends on YAKOGL_DRV_DISPLAY_IMX8MP
+	help
+	  The yakogl,imx8mp-media-blk-ctrl node's early-ccm-roots and
+	  early-ccm-gates (I2C2, PWM3, GPIO4 on the Verdin) are left as the
+	  previous kernel left them.
+
+config YAKOGL_DRV_DISPLAY_IMX8MP_INIT_STOP_AFTER
+	int "Stop display_init() after this stage (0 = never)"
+	depends on YAKOGL_DRV_DISPLAY_IMX8MP
+	default 0
+	help
+	  1 backlight PWM device ready, 2 registers mapped, 3 LCDIF state read (adds
+	  20 s when it was found stopped), 4 bridge EN gpio configured.
+
+config YAKOGL_DRV_DISPLAY_IMX8MP_FORCE_COLD
+	bool "Diagnostic: tear a running chain down and bring it up from cold"
+	depends on YAKOGL_DRV_DISPLAY_IMX8MP
+	help
+	  Whether a kexec'd image finds the LCDIF scanning depends on what
+	  Linux was doing at the jump. This makes every run take the cold
+	  path, for bisecting it with STOP_AFTER.
+
+config YAKOGL_DRV_DISPLAY_IMX8MP_FORCE_COLD_POWER_OFF
+	bool "FORCE_COLD also powers MEDIAMIX and MIPI_PHY1 off before the bring-up"
+	depends on YAKOGL_DRV_DISPLAY_IMX8MP_FORCE_COLD
+	default y
+	help
+	  After the teardown, both media power domains are turned off
+	  (imx8mp_media_pd_off), so the cold path powers them up from off
+	  rather than finding them as Linux left them. The status word
+	  (imx8mp_media_status) reports POWERED_FROM_OFF when it did.
+
+config YAKOGL_DRV_DISPLAY_IMX8MP_STOP_AFTER
+	int "Stop the cold display bring-up after this stage (0 = never)"
+	depends on YAKOGL_DRV_DISPLAY_IMX8MP
+	default 0
+	help
+	  Bisection aid for a board with no console: imx8mp_display_on()
+	  returns -ECANCELED once stage N is done (1 start, 2 media power,
+	  3 clocks and resets, 4 LCDIF configured, 5 DSIM up, 6 bridge
+	  programmed, 7 video flowing), so the time until Linux is back says
+	  whether the failure lies before or after it.
+
+config YAKOGL_DRV_DISPLAY_IMX8MP_INIT_PRIORITY
+	int "Init priority"
+	default 80
+	help
+	  POST_KERNEL priority of the display device. It must come after the
+	  I2C and GPIO drivers (I2C_INIT_PRIORITY, 50 by default) because the
+	  bridge sits on I2C behind a GPIO enable line.
+
+module = YAKOGL_DRV_DISPLAY_IMX8MP
+module-str = i.MX8MP display
+source "subsys/logging/Kconfig.template.log_config"
+
+endif # YAKOGL_DRV_DISPLAY_IMX8MP
+
+# ---- drivers whose register logic is Rust (driver/rust, libyakogl_drivers.a)
+
+config YAKOGL_DRV_DISPLAY_RUST
+	bool
+	help
+	  Hidden: build driver/rust (the yakogl-drivers crate) into
+	  libyakogl_drivers.a and link it. Selected by every driver whose
+	  register logic is there; zephyr/CMakeLists.txt picks the crate's
+	  SoC features from which of them are enabled. Built for
+	  aarch64-unknown-none-softfloat (the code runs at PRE_KERNEL_1 and in
+	  ISRs, where the FP registers are off limits).
+
+config YAKOGL_DRV_GPU_PVR_RUST
+	bool
+	help
+	  Hidden: the PowerVR driver's rgxlayer (the TI/Img DDK's rgxlayer.h
+	  under the vendored rgxstartstop.c and rgxfwimageutils.c) is in
+	  driver/rust (feature `pvr`); build the crate into
+	  libyakogl_drivers.a and link it to the driver library. Selected by
+	  YAKOGL_DRV_GPU_PVR.
+
+if YAKOGL_DRV_DISPLAY_RUST || YAKOGL_DRV_GPU_PVR_RUST || YAKOGL_BOARD_RECORD_RUST
+module = YAKOGL_DRV_DISPLAY_RUST
+module-str = yakogl-drivers (Rust)
+source "subsys/logging/Kconfig.template.log_config"
+endif
+
+config YAKOGL_DRV_DSIM_RUST
+	bool "Samsung MIPI DSI host register logic in Rust (yakogl,samsung-dsim), not yet board-proven"
+	depends on DT_HAS_YAKOGL_SAMSUNG_DSIM_ENABLED
+	depends on ARM64 && MMU
+	select YAKOGL_DRV_DISPLAY_RUST
+	select MIPI_DSI
+	help
+	  driver/drivers/mipi_dsi/dsi_yakogl_samsung.c, a Zephyr MIPI-DSI
+	  device whose register logic is driver/rust/src/ip/samsung_dsim.rs and
+	  ip/dphy_timing.rs (from IMX8MPRM Rev. 3 13.6 / 13.7 and the MIPI
+	  D-PHY v1.2 minimums), in place of src/display/imx8mp_dsim.c: the
+	  chain facade attaches the display node's `dsi` through it
+	  (src/display/imx8mp_dsim_rust.c). Off until it has run on the
+	  Verdin (driver/docs/imx8mp-display-cold.md). Outside the
+	  YAKOGL_DRV_DISPLAY_IMX8MP block: selecting MIPI_DSI under its I2C
+	  dependency makes a Kconfig loop.
+
+config YAKOGL_DRV_DSIM_RUST_INIT_PRIORITY
+	int "Init priority of yakogl,samsung-dsim"
+	depends on YAKOGL_DRV_DSIM_RUST
+	default 75
+
+# A devicetree with a yakogl,imx-pwm node wants the PWM subsystem; selecting
+# it from YAKOGL_DRV_DISPLAY_IMX8MP would loop through I2C (PWM_ITE_IT8801).
+configdefault PWM
+	default y if DT_HAS_YAKOGL_IMX_PWM_ENABLED
+
+config YAKOGL_DRV_PWM_IMX
+	bool "i.MX PWM (yakogl,imx-pwm), register logic in Rust"
+	default y
+	depends on DT_HAS_YAKOGL_IMX_PWM_ENABLED
+	depends on PWM && MMU
+	select YAKOGL_DRV_DISPLAY_RUST
+	select PINCTRL
+	help
+	  The i.MX 8M Plus PWM1-4 as a Zephyr PWM device (set_cycles,
+	  get_cycles_per_sec): driver/drivers/pwm/pwm_yakogl_imx.c registers
+	  it, driver/rust/src/ip/imx_pwm.rs programs it. Zephyr's own
+	  pwm_imx.c (fsl,imx27-pwm) cannot build for this SoC
+	  (docs/source-form.md, group E).
+
+config YAKOGL_DRV_IMX8MP_MEDIA_PD
+	bool "i.MX8MP display power domains (yakogl,imx8mp-media-blk-ctrl), register logic in Rust"
+	default y
+	depends on DT_HAS_YAKOGL_IMX8MP_MEDIA_BLK_CTRL_ENABLED
+	depends on MMU
+	select YAKOGL_DRV_DISPLAY_RUST
+	help
+	  MEDIAMIX and its sub-domains LCDIF1 and MIPI_DSI1 as Zephyr
+	  power-domain devices, VIDEO_PLL1 and the media clock roots, and the
+	  early clock gates at PRE_KERNEL_1:
+	  driver/drivers/power_domain/power_domain_yakogl_imx8mp_media.c
+	  registers them, driver/rust/src/soc/imx8mp/media.rs (from IMX8MPRM
+	  Rev. 3) programs them.
+
+if YAKOGL_DRV_IMX8MP_MEDIA_PD
+
+config YAKOGL_DRV_IMX8MP_MEDIA_INIT_PRIORITY
+	int "Init priority of yakogl,imx8mp-media-blk-ctrl"
+	default 60
+	help
+	  POST_KERNEL; before its domains and their consumers (the display, 80).
+
+config YAKOGL_DRV_IMX8MP_MEDIA_PD_INIT_PRIORITY
+	int "Init priority of the yakogl,imx8mp-media-pd domains"
+	default 61
+
+endif # YAKOGL_DRV_IMX8MP_MEDIA_PD
+
+config YAKOGL_DRV_SN65DSI8X
+	bool "TI SN65DSI83/84 DSI-to-LVDS bridge (yakogl,sn65dsi8x), register logic in Rust"
+	default y
+	depends on DT_HAS_YAKOGL_SN65DSI8X_ENABLED
+	select YAKOGL_DRV_DISPLAY_RUST
+	select I2C
+	select GPIO
+	help
+	  The bridge as a device on its I2C bus:
+	  driver/drivers/display/bridge_sn65dsi8x.c registers it,
+	  driver/rust/src/ip/sn65dsi8x.rs programs it (from TI SLLSEC2H /
+	  SLLSEC1I). A node with a dsi-host starts itself (the AM62P); one
+	  without is driven by its display controller (the i.MX8MP's
+	  yakogl,imx8mp-display).
+
+if YAKOGL_DRV_SN65DSI8X
+
+config YAKOGL_DRV_SN65DSI8X_INIT_PRIORITY
+	int "Init priority of a bridge driven by its display controller"
+	default 75
+	help
+	  After I2C and GPIO, before the controller (yakogl,imx8mp-display,
+	  80) that claims its EN pin at init. Nothing is touched here.
+
+config YAKOGL_DRV_SN65DSI8X_SELF_START_INIT_PRIORITY
+	int "Init priority of a bridge that starts itself (dsi-host)"
+	default 90
+	help
+	  After its DSI host and the video source (the AM62P DSI 70, DSS 80):
+	  the whole bring-up runs here.
+
+module = YAKOGL_DRV_SN65DSI8X
+module-str = sn65dsi8x
+source "subsys/logging/Kconfig.template.log_config"
+
+endif # YAKOGL_DRV_SN65DSI8X
+
+rsource "lib/board/Kconfig"
+
+rsource "Kconfig.am62p"

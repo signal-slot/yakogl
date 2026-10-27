@@ -1,0 +1,4 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-FileCopyrightText: 2026 Signal Slot, Inc. */
+/* The display chain of the Verdin iMX8M Plus on a Mallow carrier. */
+#include "../../common/verdin_imx8mp_display.dtsi"

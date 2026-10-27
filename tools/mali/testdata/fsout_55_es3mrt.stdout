@@ -1,0 +1,2 @@
+gl_ref: renderer Mali-G610 MC4 (Panfrost)
+gl_ref: attributes (none), framebuffer 64x64, viewport 0,0,64,64, depth range 0,1, glGetError 0x0

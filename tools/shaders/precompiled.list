@@ -1,0 +1,748 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+#
+# precompiled.list - the shader sources compiled ahead of time, for every table.
+#
+# One list, read by every table generator, so that what the tables hold is
+# decided in one place:
+#
+#   tools/glsl2usc.sh              the PowerVR table from Mesa's pco_shc
+#                                  (tests/reference/blobs.rs): the `src`, `blend`,
+#                                  `for` and `skip-failures` lines;
+#   tools/vivante/gen_shader_table.py
+#                                  the GC7000 table from Mesa's etna_shc
+#                                  (tests/reference/vivante_blobs.rs): the `dir`
+#                                  lines (its directory allowlist);
+#   yakogl-precompile              the table our own compiler builds at image
+#                                  build time (tools/precompile; into build/,
+#                                  never committed): all of it, `pair` included;
+#                                  with --internal, the back ends' own programs
+#                                  (committed): the `internal` lines.
+#
+# Paths are relative to tools/shaders/. A line is whitespace-separated fields;
+# `#` starts a comment, on a line of its own or after the fields.
+#
+#   dir DIR ROLE...       DIR (`.` is tools/shaders itself) holds shaders, and
+#                         is for ROLE: `gc7000`, the GC7000 table takes every
+#                         shader in it; `internal`, the back ends' own shaders,
+#                         which no table holds (the `internal` lines name the
+#                         ones our compiler builds the back ends' programs from);
+#                         `-`, neither. Every directory under tools/shaders/
+#                         that holds a .vert or .frag must have a line, and a
+#                         `src` or `pair` path must lie in a listed directory:
+#                         a directory nobody was told about fails every reader
+#                         (gen_shader_table.py's TABLE_DIRS guard; its wedge
+#                         probes are why).
+#   src PATH              an input of the PowerVR table, in table order (the
+#                         order is the table's row order). PATH may end in a
+#                         glob (`*`, `?`) over one directory's files, which
+#                         expands in byte order; an empty expansion is nothing.
+#   blend SPEC            a variant every fragment shader is compiled for as
+#                         well as its plain form, unless a `for` line matches
+#                         it. SPEC is glsl2usc's --blend syntax:
+#                         FACTORS[:MASK][@RT], FACTORS `srgb,drgb[,sa,da[,eq[,eqa]]]`
+#                         (Mesa's factor names: one, zero, src_alpha,
+#                         inv_src_alpha, ...; equations add, sub, rsub, min,
+#                         max) or `replace`, MASK the colour channels written
+#                         (r g b a), RT the render target class (rgba8, f16x4,
+#                         f16, f32) or an integer target by its GL name in
+#                         lower case (r8ui, rgba16i, rgb10_a2ui, ...), which
+#                         takes `replace` only.
+#   for GLOB SPEC[;SPEC]  the variants of the fragment shaders whose path
+#                         matches GLOB (`*` also crosses `/`), INSTEAD of the
+#                         `blend` lines; the first matching `for` wins.
+#   skip-failures         pco_shc: a source it cannot build is reported and left
+#                         out of the table instead of failing the run.
+#   app NAME              the `pair` lines after it are one application's.
+#   internal GPU NAME SOURCE [SPEC]
+#                         a program a back end binds itself, not an
+#                         application's: GPU `powervr` or `gc7000`, NAME the
+#                         program's name in that back end's table, SOURCE a
+#                         .vert or .frag of an `internal` directory -- or, on
+#                         the PowerVR, `attach:N`, the clear-attach program of
+#                         N dwords our encoder builds (it moves packed colour
+#                         words, which no GLSL says), `eot:N` (1 to 3), `vs_nop`
+#                         or `vs_passthrough` -- the driver's end-of-tile,
+#                         VDM-sync and self-test programs -- and SPEC, for a
+#                         fragment shader, the variant the back end binds (the
+#                         `blend` syntax). `yakogl-precompile --internal`
+#                         compiles a GPU's lines with our compiler into its
+#                         committed table, src/pvr/internal.rs or
+#                         src/vivante/internal.rs, in list order; the other
+#                         generators read none of them.
+#   pair VS FS            a program the application links. Our generator links
+#                         it as glLinkProgram does, so the records a link makes
+#                         (a fragment shader recompiled with a varying the
+#                         vertex shader never writes read as 0, or for a
+#                         constant gl_Position.w; a vertex shader laid out with
+#                         the program's attribute locations) are compiled
+#                         ahead of time too, and the variants are asked for of
+#                         the linked fragment shader, as a draw asks.
+#
+# The GPUs. The GC7000 has no blend variants (blending and colour masks are
+# pixel-engine state there), so `blend` and `for` are PowerVR-only; its one
+# variant, the opposite front-face winding of a shader that reads
+# gl_FrontFacing, is implied rather than listed. The PowerVR table holds the
+# `src` lines; the GC7000 table every shader of a `gc7000` directory, which
+# leaves out `offarm/` (the PowerVR measurement series of gl_test 193 and 194; the
+# GC7000 runs 193 in an online image only) and `internal/`.
+#
+# Our compiler's sources: the PowerVR build takes the `src` lines and every
+# source a `pair` names; the GC7000 build every shader of a `gc7000`
+# directory and the pair sources in them. A source our compiler refuses
+# (tests/fixtures/online_refused_<gpu>[_es2].txt, which tests/online_corpus.rs
+# pins message for message) is reported and left out, with every pair that
+# names it; any other failure fails the run. The internal directories hold
+# no table's sources: `internal/` is GLSL 450 for Mesa (the reference
+# programs in tests/reference/, tools/glsl2usc.sh's usc-blob calls and
+# gen_shader_table.py's clear_shader), `internal/es/` the GLSL ES twins our
+# compiler builds the back ends' programs from (the `internal` lines below).
+
+dir .              gc7000
+dir es100          gc7000
+dir es300          gc7000
+dir femtovg        gc7000
+dir gl_test_es100  gc7000
+dir offarm         -          # PowerVR-only: gl_test 193/194's predicated-off arm, grown by N
+dir gltest         -          # gl_test's own programs, moved out of its C string literals
+# gltest/ holds the sources gl_test.c used to write inline: gen_gl_test_shaders.py's ENTRIES
+# name them, and tools/precompile/gl_test_pairs.py turns them into the gl_test apps' pairs.
+# Role `-` because the GC7000 has no row for them -- and none for most gl_test sources today
+# either (tools/vivante/check_gl_test_blobs.py counts them, table by table). A gc7000 role is
+# an open item: it needs `gen_shader_table.py --append` with etna_shc, then an i.MX8MP run
+# with no compiler.
+dir internal       internal   # fbload.*, clear.*: Mesa's reference programs (tools/glsl2usc.sh, gen_shader_table.py)
+dir internal/es    internal   # their GLSL ES twins: the `internal` lines
+
+# ---- the back ends' own programs (yakogl-precompile --internal) -------------
+# The PowerVR's: the quad every frame and clear quad draws with; the frame
+# load (a frame that does not clear its target copies what is there), one per
+# render-target class; the masked clears (glColorMask lowered into the shader:
+# M, bit 0 R .. 3 A, the channels written), RGBA8 and RGBA16F; the
+# background object's clear-attach programs for 1, 2 and 3 dwords.
+
+internal powervr quad_vs        internal/es/quad.vert
+internal powervr fbload         internal/es/fbload.frag
+internal powervr fbload_f16x4   internal/es/fbload.frag replace@f16x4
+internal powervr fbload_f16     internal/es/fbload.frag replace@f16
+internal powervr fbload_f32     internal/es/fbload.frag replace@f32
+internal powervr clear_m1       internal/es/clear.frag replace:r
+internal powervr clear_m1_f16x4 internal/es/clear.frag replace:r@f16x4
+internal powervr clear_m2       internal/es/clear.frag replace:g
+internal powervr clear_m2_f16x4 internal/es/clear.frag replace:g@f16x4
+internal powervr clear_m3       internal/es/clear.frag replace:rg
+internal powervr clear_m3_f16x4 internal/es/clear.frag replace:rg@f16x4
+internal powervr clear_m4       internal/es/clear.frag replace:b
+internal powervr clear_m4_f16x4 internal/es/clear.frag replace:b@f16x4
+internal powervr clear_m5       internal/es/clear.frag replace:rb
+internal powervr clear_m5_f16x4 internal/es/clear.frag replace:rb@f16x4
+internal powervr clear_m6       internal/es/clear.frag replace:gb
+internal powervr clear_m6_f16x4 internal/es/clear.frag replace:gb@f16x4
+internal powervr clear_m7       internal/es/clear.frag replace:rgb
+internal powervr clear_m7_f16x4 internal/es/clear.frag replace:rgb@f16x4
+internal powervr clear_m8       internal/es/clear.frag replace:a
+internal powervr clear_m8_f16x4 internal/es/clear.frag replace:a@f16x4
+internal powervr clear_m9       internal/es/clear.frag replace:ra
+internal powervr clear_m9_f16x4 internal/es/clear.frag replace:ra@f16x4
+internal powervr clear_ma       internal/es/clear.frag replace:ga
+internal powervr clear_ma_f16x4 internal/es/clear.frag replace:ga@f16x4
+internal powervr clear_mb       internal/es/clear.frag replace:rga
+internal powervr clear_mb_f16x4 internal/es/clear.frag replace:rga@f16x4
+internal powervr clear_mc       internal/es/clear.frag replace:ba
+internal powervr clear_mc_f16x4 internal/es/clear.frag replace:ba@f16x4
+internal powervr clear_md       internal/es/clear.frag replace:rba
+internal powervr clear_md_f16x4 internal/es/clear.frag replace:rba@f16x4
+internal powervr clear_me       internal/es/clear.frag replace:gba
+internal powervr clear_me_f16x4 internal/es/clear.frag replace:gba@f16x4
+internal powervr clear_attach1  attach:1
+internal powervr clear_attach2  attach:2
+internal powervr clear_attach3  attach:3
+internal powervr clear_attach4  attach:4
+# The programs the C driver binds with no shader of anyone's: the VDM sync's
+# vertex program, the self-test's passthrough vertex shader and the end-of-tile
+# programs of 1, 2 and 3 surfaces (driver/src/pvr_usc_*_blob.h are rendered
+# from these words by tools/pco_shc/gen_usc_blobs.py, which checks them
+# against Mesa's pco). The tile-buffer end-of-tile programs stay pco's.
+internal powervr vdm_sync       vs_nop
+internal powervr vs_passthrough vs_passthrough
+internal powervr eot1           eot:1
+internal powervr eot2           eot:2
+internal powervr eot3           eot:3
+# The frame load of an integer target: the pixel's bytes read raw (the target
+# bound as an unsigned texel of its size, src/pvr/backend.rs) and written
+# back unchanged as one, two or four 32-bit dwords.
+internal powervr fbload_u32     internal/es/fbload_int.frag replace@r32ui
+internal powervr fbload_u32x2   internal/es/fbload_int.frag replace@rg32ui
+internal powervr fbload_u32x4   internal/es/fbload_int.frag replace@rgba32ui
+# glGenerateMipmap on the GPU: the quad that draws level n of a 2D RGBA8
+# chain by sampling level n-1 at the centre of each of its texels
+# (src/pvr/backend.rs pvr_generate_mipmap; the chain is otherwise the GL
+# core's CPU box filter).
+internal powervr mipgen         internal/es/mipgen.frag
+
+# The GC7000's: its clear quad (blending and colour masks are pixel-engine
+# state there, so one fragment shader clears every mask), and the GPU
+# mipmap quad: the same vertex shader, and the fragment program that draws
+# level n of a 2D RGBA8 chain by sampling level n-1 at the centre of each of
+# its texels (src/vivante/mipmap.rs; the chain is otherwise the GL core's
+# CPU box filter).
+
+internal gc7000  clear_vs       internal/es/quad.vert
+internal gc7000  clear_ps       internal/es/clear.frag
+internal gc7000  mipgen_ps      internal/es/mipgen.frag
+
+# ---- the PowerVR table's inputs (tools/glsl2usc.sh), in its row order -------
+
+src uniform_color.frag
+src passthrough.vert
+src interp_color.frag
+src color_uv.vert
+src color_uv.frag
+src mvp.vert
+src texture.frag
+src uv.vert
+src texture2.frag
+src compact.frag
+src points.vert
+src mvp_color.vert
+src zorder.vert
+src es100/matattr2.vert
+src es100/matattr3.vert
+src es100/matattr4.vert
+src es100/matattr.frag
+src es100/hello.vert
+src es100/hello.frag
+src es100/textured.vert
+src es100/textured.frag
+src es300/cube.vert
+src es300/cube.frag
+src es300/array.frag
+src es300/vid.vert
+src es300/vcolor.frag
+src es300/hdrsample.frag
+src es300/dynidx.frag
+src es300/texsize.frag
+src es300/inst.vert
+src es300/inst2.vert
+src es300/vol.frag
+src es300/facing.frag
+# FemtoVG 0.26 (Slint's GPU renderer): 1 VS + 15 FS (+14 NO_DISCARD),
+# reproduced byte-exactly by `yakogl-tools femtovg-shaders`. All are GLSL ES
+# 1.00 with EDGE_AA on.
+src femtovg/main.vert
+src femtovg/fill_color.frag
+src femtovg/fill_gradient.frag
+src femtovg/stencil.frag
+src femtovg/fill_image_gradient.frag
+src femtovg/filter_image.frag
+src femtovg/texture_copy_unclipped.frag
+src femtovg/fill_gradient_conic.frag
+src femtovg/fill_image_gradient_conic.frag
+src femtovg/fill_image.frag
+src femtovg/fill_color.glyph.frag
+src femtovg/fill_gradient.glyph.frag
+src femtovg/fill_image_gradient.glyph.frag
+src femtovg/fill_gradient_conic.glyph.frag
+src femtovg/fill_image_gradient_conic.glyph.frag
+src femtovg/fill_image.glyph.frag
+# The same fragment shaders without the stroke-threshold discard (NO_DISCARD):
+# the no_std fork picks them for every draw whose threshold is negative (all
+# fills), which keeps those draws off the punch-through path.
+src femtovg/fill_color.nodiscard.frag
+src femtovg/fill_gradient.nodiscard.frag
+src femtovg/stencil.nodiscard.frag
+src femtovg/fill_image_gradient.nodiscard.frag
+src femtovg/filter_image.nodiscard.frag
+src femtovg/fill_gradient_conic.nodiscard.frag
+src femtovg/fill_image_gradient_conic.nodiscard.frag
+src femtovg/fill_image.nodiscard.frag
+src femtovg/fill_color.glyph.nodiscard.frag
+src femtovg/fill_gradient.glyph.nodiscard.frag
+src femtovg/fill_image_gradient.glyph.nodiscard.frag
+src femtovg/fill_gradient_conic.glyph.nodiscard.frag
+src femtovg/fill_image_gradient_conic.glyph.nodiscard.frag
+src femtovg/fill_image.glyph.nodiscard.frag
+# gl_test cases 28..33: the bisection of the FemtoVG "invisible fill" (main.vert
+# with a tiny diagnostic FS each), kept as regression tests
+src fvgtest_green.frag
+src fvgtest_ftcoord.frag
+src fvgtest_inner.frag
+src fvgtest_cover.frag
+src fvgtest_discard.frag
+src fvgtest_discard2.frag
+src es300/cubelodv.vert
+src es300/cubelodv.frag
+src es300/cubelodf.vert
+src es300/cubelodf.frag
+# gl_test 193 offarm: fill_color.nodiscard with 8, 32 and 128 dependent
+# steps in the scissor arm a zero radius never runs (N = 0 is the femtovg
+# row above). The table image times them against the online compile.
+src offarm/fill_color.nodiscard.offarm8.frag
+src offarm/fill_color.nodiscard.offarm32.frag
+src offarm/fill_color.nodiscard.offarm128.frag
+# gl_test 194 offarmn: the finer series (tools/gen_offarm.py writes them all)
+src offarm/fill_color.nodiscard.offarm2.frag
+src offarm/fill_color.nodiscard.offarm4.frag
+src offarm/fill_color.nodiscard.offarm12.frag
+src offarm/fill_color.nodiscard.offarm16.frag
+src offarm/fill_color.nodiscard.offarm24.frag
+src offarm/fill_color.nodiscard.offarm48.frag
+src offarm/fill_color.nodiscard.offarm64.frag
+src offarm/fill_color.nodiscard.offarm96.frag
+src offarm/fill_color.nodiscard.offarm192.frag
+src offarm/fill_color.nodiscard.offarm256.frag
+# Uniform layouts the GL core's tests read from this table (src/gl/program.rs):
+# a struct uniform in both stages with the varyings declared in another order
+# (xlink), an int member used in both stages (sharedint). Then gl_test's MRT
+# clear (case 55): two outputs from two uniform colours.
+src es100/xlink.vert
+src es100/xlink.frag
+src es100/sharedint.vert
+src es100/sharedint.frag
+src es300/mrt2.vert
+src es300/mrt2.frag
+# Sources whose pco programs attest our encoder's groups (tests/usc_limits.rs):
+# each is the GLSL of the test that compares ours with pco's form.
+src es300/texfetch.frag
+src es300/texoffset.frag
+src es300/ishr.frag
+src es300/uops.frag
+src es100/pointcoord.frag
+src es100/pointcoordvary.frag
+src es100/absadd.frag
+src es100/ifelse_loop.frag
+src es300/ifelse_uint.frag
+src es100/selects.frag
+src es100/equirect.frag
+# The GL core's and the reflection's tests: a vertex shader with real
+# arithmetic in a struct uniform (texfill: usc1_triangle, usc_old_image), a
+# fragment shader reading gl_FragCoord.z (uses_z), sampler2DArray used and
+# unused beside other uniforms (pvr_layers_), a run-time index into a local
+# array.
+src es100/texfill.vert
+src es100/fragz.frag
+src es300/layers2.frag
+src es300/layersunused.frag
+src es300/tmpidx.frag
+# Source modifiers and register files of single-operation groups that
+# prepare::attested_mods and attested_banks admit (powervr/roundtrip.rs).
+src es100/fmods.frag
+src es100/fmods2.frag
+src es300/derivs.frag
+src es100/vrcp.vert
+src es300/uniidx.frag
+
+# ---- blend / colour-mask / render-target variants (PowerVR) -----------------
+
+# Blend / colour-mask variants precompiled for every fragment shader (both
+# are lowered into the FS on this GPU): GL's usual SRC_ALPHA/ONE_MINUS_SRC_ALPHA
+# (also with alpha masked off), premultiplied ONE/ONE_MINUS_SRC_ALPHA, additive
+# ONE/ONE, CONSTANT_COLOR/ONE_MINUS_CONSTANT_COLOR (reads glBlendColor) and a
+# plain write of the green and alpha channels only.
+blend src_alpha,inv_src_alpha
+blend src_alpha,inv_src_alpha:rgb
+blend one,inv_src_alpha
+blend one,one
+blend const_color,inv_const_color
+blend replace:ga
+# Colour mask with every channel off for shaders that `discard`: the GL core
+# cannot disable the ISP tag writes for those (the punch-through pass then
+# never updates depth/stencil, gl_test case 38), so it runs the shader with
+# this variant, which writes the destination back unchanged.
+blend zero,one
+# FemtoVG composite operations (lib.rs CompositeOperationState; src==dst for
+# both channels). SourceOver (one,inv_src_alpha), Lighter (one,one) and Copy
+# (= the base shader) are already covered above.
+blend dst_alpha,zero
+blend inv_dst_alpha,zero
+blend dst_alpha,inv_src_alpha
+blend inv_dst_alpha,one
+blend zero,src_alpha
+blend zero,inv_src_alpha
+blend inv_dst_alpha,src_alpha
+blend inv_dst_alpha,inv_src_alpha
+blend src_alpha,one
+
+# The ES 3.00 test shaders: premultiplied SourceOver, and the colour output
+# packed for each float render-target class (RGBA16F, R16F, R32F), plain and
+# with SourceOver into RGBA16F.
+for es300/*.frag    one,inv_src_alpha;replace@f16x4;replace@f16;replace@f32;one,inv_src_alpha@f16x4
+
+# ---- the programs the applications link ------------------------------------
+#
+# Our generator links these. A fragment shader that no pair names gets its
+# variants from its plain record, which is what a link that substitutes
+# nothing hands the draw.
+#
+# Not knowable from this repository, so not listed:
+#   - gl_test's three probe cases build one half of the program at run time
+#     with snprintf (case_vsunits 149, shp_arm for shprobe 150 and fshprobe
+#     166, fshp_arm_units for 166's arm C), so no pair names that half -- and
+#     none can name the program. Their named halves (gltest/fshp_vs.vert,
+#     gltest/vsunits_fs.frag) get no row: pairing them with each other names a
+#     program gl_test never links, and one that would not even compile (its
+#     fragment shader uses a varying its vertex shader does not declare).
+#     Those cases need the in-process compiler, as do cases 90 (churn) and
+#     209 (varyorder), which build their text with snprintf: gl_test skips
+#     149, 150, 166, 90 and 209 by name (shader_skip_reason) in a
+#     CONFIG_YAKOGL_SHADERC_PRECOMPILED_ONLY image.
+#   - glBindAttribLocation: a pair is linked with no bindings, so attributes
+#     take the lowest free locations in declaration order, as an application
+#     that binds none gets them.
+
+# Slint (examples/slint) and the cluster (driver/samples/zephyr/
+# cluster) draw through Slint's FemtoVG renderer, whose no_std fork
+# (examples/nostd/femtovg-0.26.0-nostd.patch, MainProgram::new) links main.vert
+# with every fragment shader of femtovg/ at start-up: the nine shader types,
+# the six that take the glyph texture, both again without the stroke-threshold
+# discard (texture_copy_unclipped has none to drop), and the six fills without
+# the scissor mask (.nodiscard.noscissor; optional, a failed one keeps the
+# masked program).
+app femtovg
+pair femtovg/main.vert femtovg/fill_color.frag
+pair femtovg/main.vert femtovg/fill_color.glyph.frag
+pair femtovg/main.vert femtovg/fill_color.glyph.nodiscard.frag
+pair femtovg/main.vert femtovg/fill_color.nodiscard.frag
+pair femtovg/main.vert femtovg/fill_color.nodiscard.noscissor.frag
+pair femtovg/main.vert femtovg/fill_gradient.frag
+pair femtovg/main.vert femtovg/fill_gradient.glyph.frag
+pair femtovg/main.vert femtovg/fill_gradient.glyph.nodiscard.frag
+pair femtovg/main.vert femtovg/fill_gradient.nodiscard.frag
+pair femtovg/main.vert femtovg/fill_gradient.nodiscard.noscissor.frag
+pair femtovg/main.vert femtovg/fill_gradient_conic.frag
+pair femtovg/main.vert femtovg/fill_gradient_conic.glyph.frag
+pair femtovg/main.vert femtovg/fill_gradient_conic.glyph.nodiscard.frag
+pair femtovg/main.vert femtovg/fill_gradient_conic.nodiscard.frag
+pair femtovg/main.vert femtovg/fill_gradient_conic.nodiscard.noscissor.frag
+pair femtovg/main.vert femtovg/fill_image.frag
+pair femtovg/main.vert femtovg/fill_image.glyph.frag
+pair femtovg/main.vert femtovg/fill_image.glyph.nodiscard.frag
+pair femtovg/main.vert femtovg/fill_image.nodiscard.frag
+pair femtovg/main.vert femtovg/fill_image.nodiscard.noscissor.frag
+pair femtovg/main.vert femtovg/fill_image_gradient.frag
+pair femtovg/main.vert femtovg/fill_image_gradient.glyph.frag
+pair femtovg/main.vert femtovg/fill_image_gradient.glyph.nodiscard.frag
+pair femtovg/main.vert femtovg/fill_image_gradient.nodiscard.frag
+pair femtovg/main.vert femtovg/fill_image_gradient.nodiscard.noscissor.frag
+pair femtovg/main.vert femtovg/fill_image_gradient_conic.frag
+pair femtovg/main.vert femtovg/fill_image_gradient_conic.glyph.frag
+pair femtovg/main.vert femtovg/fill_image_gradient_conic.glyph.nodiscard.frag
+pair femtovg/main.vert femtovg/fill_image_gradient_conic.nodiscard.frag
+pair femtovg/main.vert femtovg/fill_image_gradient_conic.nodiscard.noscissor.frag
+pair femtovg/main.vert femtovg/filter_image.frag
+pair femtovg/main.vert femtovg/filter_image.nodiscard.frag
+pair femtovg/main.vert femtovg/stencil.frag
+pair femtovg/main.vert femtovg/stencil.nodiscard.frag
+pair femtovg/main.vert femtovg/texture_copy_unclipped.frag
+
+# gl_test (driver/tools/pvrlab/gl_test.c): every program it links, read out
+# of its text by tools/precompile/gl_test_pairs.py (glsl2v3d.py's reader, and the
+# tables of arms gl_test 193 and 194 link through;
+# `tools/check.sh` requires these lines to be exactly its output). `gl_test`
+# is the default build; `gl_test_es100` the GL_TEST_ES100 one, which an image
+# with the in-process compiler takes: the same programs with the thirteen
+# #version 450 sources swapped for their ES 1.00 twins (gl_test_es100/).
+app gl_test
+pair color_uv.vert color_uv.frag
+pair passthrough.vert uniform_color.frag
+pair mvp.vert uniform_color.frag
+pair uv.vert texture.frag
+pair uv.vert texture2.frag
+pair es100/textured.vert es100/textured.frag
+pair es100/hello.vert es100/hello.frag
+pair points.vert interp_color.frag
+pair uv.vert compact.frag
+pair femtovg/main.vert femtovg/fill_color.frag
+pair femtovg/main.vert fvgtest_green.frag
+pair femtovg/main.vert fvgtest_ftcoord.frag
+pair femtovg/main.vert fvgtest_inner.frag
+pair femtovg/main.vert fvgtest_cover.frag
+pair femtovg/main.vert fvgtest_discard.frag
+pair femtovg/main.vert fvgtest_discard2.frag
+pair femtovg/main.vert femtovg/fill_gradient_conic.frag
+pair femtovg/main.vert femtovg/fill_image_gradient_conic.frag
+pair femtovg/main.vert femtovg/fill_gradient.frag
+pair zorder.vert interp_color.frag
+pair es300/cube.vert es300/cube.frag
+pair es300/cube.vert es300/array.frag
+pair es300/vid.vert es300/vcolor.frag
+pair es300/cube.vert es300/hdrsample.frag
+pair es300/vid.vert es300/dynidx.frag
+pair es300/cube.vert es300/texsize.frag
+pair es300/inst.vert es300/vcolor.frag
+pair es300/cube.vert es300/vol.frag
+pair es300/vid.vert es300/facing.frag
+pair es300/inst2.vert es300/vcolor.frag
+pair color_uv.vert uniform_color.frag
+pair es300/mrt2.vert es300/mrt2.frag
+pair es100/matattr2.vert es100/matattr.frag
+pair es100/matattr3.vert es100/matattr.frag
+pair es100/matattr4.vert es100/matattr.frag
+pair passthrough.vert armselect.frag
+pair es100/ioswap.vert interp_color.frag
+pair passthrough.vert es100/loopcarry.frag
+pair passthrough.vert es100/deadloop.frag
+pair passthrough.vert es100/intlit.frag
+pair passthrough.vert es100/branchlane.frag
+pair passthrough.vert es100/ifoutput2.frag
+pair passthrough.vert es100/ifoutput.frag
+pair gltest/psizvpm_plain_vs.vert interp_color.frag
+pair gltest/psizvpm_word_vs.vert interp_color.frag
+pair gltest/texcube_vs.vert gltest/texcube_fs.frag
+pair gltest/texcubemip_vs.vert gltest/texcube_fs.frag
+pair gltest/texcubemip_vs.vert gltest/texcubenorm_fs.frag
+pair gltest/position_only.vert gltest/uniform_color.frag
+pair gltest/position_only2.vert gltest/uniform_color.frag
+pair gltest/tsf_vs.vert gltest/tsf_fs.frag
+pair gltest/vtl_vs.vert gltest/vtl_fs.frag
+pair gltest/vtl_vs_const.vert gltest/vtl_fs.frag
+pair gltest/vtl_vs_grid.vert gltest/vtl_fs.frag
+pair gltest/deqp_position.vert gltest/f3_fs.frag
+pair gltest/deqp_position.vert gltest/f3_lit_fs.frag
+pair gltest/f3_var_vs.vert gltest/f3_var_fs.frag
+pair gltest/deqp_position.vert gltest/f1_edge_fs.frag
+pair gltest/deqp_position.vert gltest/f1_fs.frag
+pair gltest/deqp_position.vert gltest/f1_mid_fs.frag
+pair passthrough.vert es100/uniidx_a.frag
+pair passthrough.vert es100/uniidx_b.frag
+pair passthrough.vert es100/uniidx_c.frag
+pair passthrough.vert es100/uniidx_d.frag
+pair es100/uniidx_e.vert es100/uniidx_d.frag
+pair es100/uniidx_f.vert es100/uniidx_d.frag
+pair passthrough.vert es100/uniidx_g.frag
+pair passthrough.vert es100/uniidx_h.frag
+pair passthrough.vert es100/uniidx_i.frag
+pair passthrough.vert interp_color.frag
+pair es300/mrt3.vert es300/mrt3.frag
+pair passthrough.vert es100/uniidx_j.frag
+pair es100/cubemap.vert es100/cubelod.frag
+pair passthrough.vert es100/affectand.frag
+pair es100/immneg.vert es100/immneg.frag
+pair passthrough.vert es100/boolany.frag
+pair passthrough.vert es100/transc.frag
+pair passthrough.vert es100/vtransc.frag
+pair es100/matvary.vert es100/matvary.frag
+pair passthrough.vert es100/idiv.frag
+pair passthrough.vert es100/matdyn.frag
+pair passthrough.vert es100/branchquad.frag
+pair es100/anyall.vert interp_color.frag
+pair passthrough.vert es100/fragcoord.frag
+pair gltest/position_only.vert gltest/fma_fs_fused.frag
+pair gltest/fma_vs_fused.vert gltest/fma_fs_varying.frag
+pair gltest/position_only.vert gltest/fma_fs_ctrl.frag
+pair gltest/fma_vs_ctrl.vert gltest/fma_fs_varying.frag
+pair gltest/position_only.vert gltest/fsat_fs_folded.frag
+pair gltest/fsat_vs_folded.vert gltest/fma_fs_varying.frag
+pair gltest/position_only.vert gltest/fsat_fs_ctrl.frag
+pair gltest/fsat_vs_ctrl.vert gltest/fma_fs_varying.frag
+pair gltest/unipad_vs.vert gltest/unipad_fs.frag
+pair gltest/position_only2.vert gltest/dep1_fs.frag
+pair gltest/position_only2.vert gltest/dep2_fs.frag
+pair gltest/position_only2.vert gltest/dep4_fs.frag
+pair gltest/position_only2.vert gltest/kc_fadd_fs.frag
+pair gltest/position_only2.vert gltest/kc_fmul_fs.frag
+pair gltest/position_only2.vert gltest/kc_maxmul_fs.frag
+pair gltest/position_only2.vert gltest/kc_maxneg_fs.frag
+pair gltest/position_only2.vert gltest/kc_mulneg_fs.frag
+pair femtovg/main.vert femtovg/fill_color.nodiscard.frag
+pair gltest/position_only.vert gltest/predif_fs_uni.frag
+pair gltest/predif_vs_uni.vert gltest/fma_fs_varying.frag
+pair gltest/position_only.vert gltest/predif_fs_coord.frag
+pair gltest/position_only.vert gltest/mulone_fs_one.frag
+pair gltest/position_only.vert gltest/mulone_fs_half.frag
+pair gltest/position_only.vert gltest/mulone_fs_mods.frag
+pair gltest/position_only.vert gltest/blendonce_fs.frag
+pair gltest/varyfma_vs.vert gltest/varyfma_fs.frag
+pair gltest/position_only.vert gltest/predlive_fs_uni.frag
+pair gltest/position_only.vert gltest/predlive_fs_coord.frag
+pair femtovg/main.vert offarm/fill_color.nodiscard.offarm128.frag
+pair femtovg/main.vert offarm/fill_color.nodiscard.offarm32.frag
+pair femtovg/main.vert offarm/fill_color.nodiscard.offarm8.frag
+pair gltest/vtxgrid_vs.vert gltest/vtl_fs.frag
+pair gltest/es3trunc_vs.vert gltest/es3trunc_fs.frag
+pair gltest/es3trunc_vsc.vert gltest/es3trunc_vary_fs.frag
+pair es300/cube.vert gltest/intrt.frag
+pair es300/cube.vert gltest/usamp.frag
+pair es300/cube.vert gltest/isamp.frag
+pair es100/deriv.vert es100/texbranch.frag
+pair es100/deriv.vert es100/unibranch.frag
+pair es100/deriv.vert es100/deriv.frag
+pair passthrough.vert es100/fragcentre.frag
+pair points.vert es100/pointcoord.frag
+pair points.vert es100/pointcoordvary.frag
+pair passthrough.vert es100/databreak.frag
+pair es300/flatlast.vert es300/flatlast.frag
+pair es100/hdrquad.vert es100/hdrcolor.frag
+pair es100/hdrquad.vert es100/hdrscale.frag
+pair es100/varyings15.vert es100/varyings15.frag
+pair es100/cubebias.vert es100/cubebias.frag
+pair es100/cubelod.vert es100/cubelod.frag
+pair es300/cubelodv.vert es300/cubelodv.frag
+pair es300/cubelodf.vert es300/cubelodf.frag
+pair es300/vid.vert es300/uniloop.frag
+pair es300/idxtex.vert es300/idxtex.frag
+pair es300/bands.vert es300/divloop.frag
+pair es300/bands.vert es300/divnest.frag
+pair mvp_color.vert interp_color.frag
+pair femtovg/main.vert offarm/fill_color.nodiscard.offarm2.frag
+pair femtovg/main.vert offarm/fill_color.nodiscard.offarm4.frag
+pair femtovg/main.vert offarm/fill_color.nodiscard.offarm12.frag
+pair femtovg/main.vert offarm/fill_color.nodiscard.offarm16.frag
+pair femtovg/main.vert offarm/fill_color.nodiscard.offarm24.frag
+pair femtovg/main.vert offarm/fill_color.nodiscard.offarm48.frag
+pair femtovg/main.vert offarm/fill_color.nodiscard.offarm64.frag
+pair femtovg/main.vert offarm/fill_color.nodiscard.offarm96.frag
+pair femtovg/main.vert offarm/fill_color.nodiscard.offarm192.frag
+pair femtovg/main.vert offarm/fill_color.nodiscard.offarm256.frag
+app gl_test_es100
+pair gl_test_es100/color_uv.vert gl_test_es100/color_uv.frag
+pair gl_test_es100/passthrough.vert gl_test_es100/uniform_color.frag
+pair gl_test_es100/mvp.vert gl_test_es100/uniform_color.frag
+pair gl_test_es100/uv.vert gl_test_es100/texture.frag
+pair gl_test_es100/uv.vert gl_test_es100/texture2.frag
+pair es100/textured.vert es100/textured.frag
+pair es100/hello.vert es100/hello.frag
+pair gl_test_es100/points.vert gl_test_es100/interp_color.frag
+pair gl_test_es100/uv.vert gl_test_es100/compact.frag
+pair femtovg/main.vert femtovg/fill_color.frag
+pair femtovg/main.vert fvgtest_green.frag
+pair femtovg/main.vert fvgtest_ftcoord.frag
+pair femtovg/main.vert fvgtest_inner.frag
+pair femtovg/main.vert fvgtest_cover.frag
+pair femtovg/main.vert fvgtest_discard.frag
+pair femtovg/main.vert fvgtest_discard2.frag
+pair femtovg/main.vert femtovg/fill_gradient_conic.frag
+pair femtovg/main.vert femtovg/fill_image_gradient_conic.frag
+pair femtovg/main.vert femtovg/fill_gradient.frag
+pair gl_test_es100/zorder.vert gl_test_es100/interp_color.frag
+pair es300/cube.vert es300/cube.frag
+pair es300/cube.vert es300/array.frag
+pair es300/vid.vert es300/vcolor.frag
+pair es300/cube.vert es300/hdrsample.frag
+pair es300/vid.vert es300/dynidx.frag
+pair es300/cube.vert es300/texsize.frag
+pair es300/inst.vert es300/vcolor.frag
+pair es300/cube.vert es300/vol.frag
+pair es300/vid.vert es300/facing.frag
+pair es300/inst2.vert es300/vcolor.frag
+pair gl_test_es100/color_uv.vert gl_test_es100/uniform_color.frag
+pair es300/mrt2.vert es300/mrt2.frag
+pair es100/matattr2.vert es100/matattr.frag
+pair es100/matattr3.vert es100/matattr.frag
+pair es100/matattr4.vert es100/matattr.frag
+pair gl_test_es100/passthrough.vert gl_test_es100/armselect.frag
+pair es100/ioswap.vert gl_test_es100/interp_color.frag
+pair gl_test_es100/passthrough.vert es100/loopcarry.frag
+pair gl_test_es100/passthrough.vert es100/deadloop.frag
+pair gl_test_es100/passthrough.vert es100/intlit.frag
+pair gl_test_es100/passthrough.vert es100/branchlane.frag
+pair gl_test_es100/passthrough.vert es100/ifoutput2.frag
+pair gl_test_es100/passthrough.vert es100/ifoutput.frag
+pair gltest/psizvpm_plain_vs.vert gl_test_es100/interp_color.frag
+pair gltest/psizvpm_word_vs.vert gl_test_es100/interp_color.frag
+pair gltest/texcube_vs.vert gltest/texcube_fs.frag
+pair gltest/texcubemip_vs.vert gltest/texcube_fs.frag
+pair gltest/texcubemip_vs.vert gltest/texcubenorm_fs.frag
+pair gltest/position_only.vert gltest/uniform_color.frag
+pair gltest/position_only2.vert gltest/uniform_color.frag
+pair gltest/tsf_vs.vert gltest/tsf_fs.frag
+pair gltest/vtl_vs.vert gltest/vtl_fs.frag
+pair gltest/vtl_vs_const.vert gltest/vtl_fs.frag
+pair gltest/vtl_vs_grid.vert gltest/vtl_fs.frag
+pair gltest/deqp_position.vert gltest/f3_fs.frag
+pair gltest/deqp_position.vert gltest/f3_lit_fs.frag
+pair gltest/f3_var_vs.vert gltest/f3_var_fs.frag
+pair gltest/deqp_position.vert gltest/f1_edge_fs.frag
+pair gltest/deqp_position.vert gltest/f1_fs.frag
+pair gltest/deqp_position.vert gltest/f1_mid_fs.frag
+pair gl_test_es100/passthrough.vert es100/uniidx_a.frag
+pair gl_test_es100/passthrough.vert es100/uniidx_b.frag
+pair gl_test_es100/passthrough.vert es100/uniidx_c.frag
+pair gl_test_es100/passthrough.vert es100/uniidx_d.frag
+pair es100/uniidx_e.vert es100/uniidx_d.frag
+pair es100/uniidx_f.vert es100/uniidx_d.frag
+pair gl_test_es100/passthrough.vert es100/uniidx_g.frag
+pair gl_test_es100/passthrough.vert es100/uniidx_h.frag
+pair gl_test_es100/passthrough.vert es100/uniidx_i.frag
+pair gl_test_es100/passthrough.vert gl_test_es100/interp_color.frag
+pair es300/mrt3.vert es300/mrt3.frag
+pair gl_test_es100/passthrough.vert es100/uniidx_j.frag
+pair es100/cubemap.vert es100/cubelod.frag
+pair gl_test_es100/passthrough.vert es100/affectand.frag
+pair es100/immneg.vert es100/immneg.frag
+pair gl_test_es100/passthrough.vert es100/boolany.frag
+pair gl_test_es100/passthrough.vert es100/transc.frag
+pair gl_test_es100/passthrough.vert es100/vtransc.frag
+pair es100/matvary.vert es100/matvary.frag
+pair gl_test_es100/passthrough.vert es100/idiv.frag
+pair gl_test_es100/passthrough.vert es100/matdyn.frag
+pair gl_test_es100/passthrough.vert es100/branchquad.frag
+pair es100/anyall.vert gl_test_es100/interp_color.frag
+pair gl_test_es100/passthrough.vert es100/fragcoord.frag
+pair gltest/position_only.vert gltest/fma_fs_fused.frag
+pair gltest/fma_vs_fused.vert gltest/fma_fs_varying.frag
+pair gltest/position_only.vert gltest/fma_fs_ctrl.frag
+pair gltest/fma_vs_ctrl.vert gltest/fma_fs_varying.frag
+pair gltest/position_only.vert gltest/fsat_fs_folded.frag
+pair gltest/fsat_vs_folded.vert gltest/fma_fs_varying.frag
+pair gltest/position_only.vert gltest/fsat_fs_ctrl.frag
+pair gltest/fsat_vs_ctrl.vert gltest/fma_fs_varying.frag
+pair gltest/unipad_vs.vert gltest/unipad_fs.frag
+pair gltest/position_only2.vert gltest/dep1_fs.frag
+pair gltest/position_only2.vert gltest/dep2_fs.frag
+pair gltest/position_only2.vert gltest/dep4_fs.frag
+pair gltest/position_only2.vert gltest/kc_fadd_fs.frag
+pair gltest/position_only2.vert gltest/kc_fmul_fs.frag
+pair gltest/position_only2.vert gltest/kc_maxmul_fs.frag
+pair gltest/position_only2.vert gltest/kc_maxneg_fs.frag
+pair gltest/position_only2.vert gltest/kc_mulneg_fs.frag
+pair femtovg/main.vert femtovg/fill_color.nodiscard.frag
+pair gltest/position_only.vert gltest/predif_fs_uni.frag
+pair gltest/predif_vs_uni.vert gltest/fma_fs_varying.frag
+pair gltest/position_only.vert gltest/predif_fs_coord.frag
+pair gltest/position_only.vert gltest/mulone_fs_one.frag
+pair gltest/position_only.vert gltest/mulone_fs_half.frag
+pair gltest/position_only.vert gltest/mulone_fs_mods.frag
+pair gltest/position_only.vert gltest/blendonce_fs.frag
+pair gltest/varyfma_vs.vert gltest/varyfma_fs.frag
+pair gltest/position_only.vert gltest/predlive_fs_uni.frag
+pair gltest/position_only.vert gltest/predlive_fs_coord.frag
+pair femtovg/main.vert offarm/fill_color.nodiscard.offarm128.frag
+pair femtovg/main.vert offarm/fill_color.nodiscard.offarm32.frag
+pair femtovg/main.vert offarm/fill_color.nodiscard.offarm8.frag
+pair gltest/vtxgrid_vs.vert gltest/vtl_fs.frag
+pair gltest/es3trunc_vs.vert gltest/es3trunc_fs.frag
+pair gltest/es3trunc_vsc.vert gltest/es3trunc_vary_fs.frag
+pair es300/cube.vert gltest/intrt.frag
+pair es300/cube.vert gltest/usamp.frag
+pair es300/cube.vert gltest/isamp.frag
+pair es100/deriv.vert es100/texbranch.frag
+pair es100/deriv.vert es100/unibranch.frag
+pair es100/deriv.vert es100/deriv.frag
+pair gl_test_es100/passthrough.vert es100/fragcentre.frag
+pair gl_test_es100/points.vert es100/pointcoord.frag
+pair gl_test_es100/points.vert es100/pointcoordvary.frag
+pair gl_test_es100/passthrough.vert es100/databreak.frag
+pair es300/flatlast.vert es300/flatlast.frag
+pair es100/hdrquad.vert es100/hdrcolor.frag
+pair es100/hdrquad.vert es100/hdrscale.frag
+pair es100/varyings15.vert es100/varyings15.frag
+pair es100/cubebias.vert es100/cubebias.frag
+pair es100/cubelod.vert es100/cubelod.frag
+pair es300/cubelodv.vert es300/cubelodv.frag
+pair es300/cubelodf.vert es300/cubelodf.frag
+pair es300/vid.vert es300/uniloop.frag
+pair es300/idxtex.vert es300/idxtex.frag
+pair es300/bands.vert es300/divloop.frag
+pair es300/bands.vert es300/divnest.frag
+pair gl_test_es100/mvp_color.vert gl_test_es100/interp_color.frag
+pair femtovg/main.vert offarm/fill_color.nodiscard.offarm2.frag
+pair femtovg/main.vert offarm/fill_color.nodiscard.offarm4.frag
+pair femtovg/main.vert offarm/fill_color.nodiscard.offarm12.frag
+pair femtovg/main.vert offarm/fill_color.nodiscard.offarm16.frag
+pair femtovg/main.vert offarm/fill_color.nodiscard.offarm24.frag
+pair femtovg/main.vert offarm/fill_color.nodiscard.offarm48.frag
+pair femtovg/main.vert offarm/fill_color.nodiscard.offarm64.frag
+pair femtovg/main.vert offarm/fill_color.nodiscard.offarm96.frag
+pair femtovg/main.vert offarm/fill_color.nodiscard.offarm192.frag
+pair femtovg/main.vert offarm/fill_color.nodiscard.offarm256.frag

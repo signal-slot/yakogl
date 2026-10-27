@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Toradex Verdin AM62P on the Dahlia carrier, Cortex-A53 cluster.
+#   verdin_am62p/am62p54/a53  an image started by U-Boot ("go 0x82000000",
+#                             from the eMMC or over TFTP: docs/standalone-boot.md)
+#                             or kexec'd out of Linux (verdin_am62p_am62p54_a53.dts)
+board:
+  name: verdin_am62p
+  full_name: Verdin AM62P
+  vendor: toradex
+  socs:
+  - name: am62p54

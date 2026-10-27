@@ -1,0 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+
+config BOARD_VERDIN_AM62P
+	select SOC_AM62P54_A53 if BOARD_VERDIN_AM62P_AM62P54_A53 || \
+			   BOARD_VERDIN_AM62P_AM62P54_A53_DIRECT

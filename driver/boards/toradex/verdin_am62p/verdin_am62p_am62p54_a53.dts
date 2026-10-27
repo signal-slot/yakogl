@@ -1,0 +1,237 @@
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ * SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+ *
+ * Toradex Verdin AM62P Quad 2GB WB IT V1.0B on Dahlia — Cortex-A53 cluster,
+ * host of the SafeUI Application Supervisor.
+ *
+ * Memory map (from the Toradex Verdin AM62P Linux device tree;
+ * DDR = 2 GiB at 0x80000000):
+ *   0x82000000            Zephyr A53 image (U-Boot: fatload ...; go 0x82000000)
+ *   0x97800000 64 MiB     GPU carveout (firmware heap, page tables, render pool)
+ *   0x9b800000  1 MiB     MCU R5F vrings (mcu_r5fss0_core0_dma_memory_region)
+ *   0x9b900000 15 MiB     MCU R5F firmware region: resource table, Zephyr R5F
+ *                         image and, at 0x9c600000, the 2 MiB SafeUI link area
+ *   0x9c800000 31 MiB     WKUP/DM R5F regions
+ *   0x9e780000 / 0x9e800000  TF-A / OP-TEE
+ */
+
+/dts-v1/;
+
+#include <ti/ti_am62p54_a53.dtsi>
+#include "verdin_am62p-pinctrl.dtsi"
+
+/ {
+	model = "Toradex Verdin AM62P (Dahlia)";
+	compatible = "toradex,verdin_am62p";
+
+	chosen {
+		zephyr,console = &main_uart0;
+		zephyr,shell-uart = &main_uart0;
+		zephyr,sram = &a53_ddr_section;
+		zephyr,ipc = &ipc0;
+		zephyr,ipc_shm = &link_shm;
+	};
+
+	aliases {
+		sdhc0 = &main_sdhci1;
+	};
+
+	cpus {
+		cpu@0 {
+			status = "okay";
+		};
+		cpu@1 {
+			status = "okay";
+		};
+		cpu@2 {
+			status = "okay";
+		};
+		cpu@3 {
+			status = "okay";
+		};
+	};
+
+	ddr0: memory@80000000 {
+		device_type = "memory";
+		reg = <0x80000000 DT_SIZE_M(448)>;
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		/* up to the GPU carveout at 0x97800000 */
+		a53_ddr_section: memory@82000000 {
+			reg = <0x82000000 DT_SIZE_M(344)>;
+		};
+	};
+
+	reserved-memory {
+		#address-cells = <1>;
+		#size-cells = <1>;
+		ranges;
+
+		/* GPU firmware heap, MMU page tables and render objects; the
+		 * driver maps it itself, so it stays out of zephyr,sram.
+		 */
+		gpu_carveout: gpu-carveout@97800000 {
+			reg = <0x97800000 DT_SIZE_M(64)>;
+			no-map;
+		};
+	};
+
+	link_shm: memory@9c600000 {
+		compatible = "mmio-sram";
+		reg = <0x9c600000 DT_SIZE_M(2)>;
+	};
+
+	/* A53 -> MCU R5F.  Same convention as Linux mbox-mcu-r5-0: the A53 sends on
+	 * queue 1 and receives on queue 0 (the R5F firmware mirrors this).
+	 */
+	ipc0: ipc0 {
+		compatible = "zephyr,mbox-ipm";
+		mboxes = <&mbox1 1>, <&mbox1 0>;
+		mbox-names = "tx", "rx";
+	};
+
+	/* TISCI for the A53 (Linux DT: host 12, secure proxy threads rx 12 / tx 13,
+	 * GIC SPI 34).  Used to power up and start the MCU R5F (Phase 1 boot).
+	 */
+	secure_proxy_main: mailbox0@4d000000 {
+		compatible = "ti,secure-proxy";
+		reg-names = "target_data", "rt", "scfg";
+		reg = <0x4d000000 0x80000>, <0x4a600000 0x80000>, <0x4a400000 0x80000>;
+		interrupts = <GIC_SPI 34 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>;
+		interrupt-names = "rx_12"; /* Zephyr secproxy driver: "rx_<channel>" */
+		interrupt-parent = <&gic>;
+		#mbox-cells = <1>;
+		status = "okay";
+	};
+
+	dmsc: system-controller@44043000 {
+		compatible = "ti,k2g-sci";
+		reg-names = "debug_messages";
+		reg = <0x44043000 0xfe0>;
+		ti,host-id = <12>;
+		mboxes = <&secure_proxy_main 12>, <&secure_proxy_main 13>;
+		mbox-names = "rx", "tx";
+		status = "okay";
+	};
+};
+
+&mbox1 {
+	status = "okay";
+};
+
+&main_uart0 {
+	current-speed = <115200>;
+	pinctrl-0 = <&main_uart0_rx_default &main_uart0_tx_default>;
+	pinctrl-names = "default";
+	status = "okay";
+};
+
+/* PowerVR BXS-4-64 GPU: powered/clocked through the A53 TISCI (dmsc).
+ * Enabled for the GPU driver (driver/src, "img,img-rogue").
+ */
+&gpu {
+	tisci = <&dmsc>;
+	memory-region = <&gpu_carveout>;
+	status = "okay";
+};
+
+/* Display path from the A53: DSS1 VP2 -> DSI -> SN65DSI83 -> 7" LVDS panel,
+ * the same wiring as the MCU R5F board file. Disabled here because the R5F
+ * owns the display in the SafeUI platform; a stand-alone A53 application
+ * enables dss1, dsi0, main_i2c1 (+ panel), the GPIO banks and
+ * tisci_power_on in its overlay.
+ */
+&pinctrl {
+	/* one pad per node: the TI K3 pinctrl state macros take a single pinmux entry */
+	main_i2c1_scl_default: main_i2c1_scl_default {
+		pinmux = <K3_PINMUX(0x01e8, PIN_INPUT_PULLUP, MUX_MODE_0)>; /* (C24) I2C1_SCL, SODIMM 55 */
+	};
+	main_i2c1_sda_default: main_i2c1_sda_default {
+		pinmux = <K3_PINMUX(0x01ec, PIN_INPUT_PULLUP, MUX_MODE_0)>; /* (B24) I2C1_SDA, SODIMM 53 */
+	};
+	dsi1_bkl_en_default: dsi1_bkl_en_default {
+		pinmux = <K3_PINMUX(0x00a0, PIN_OUTPUT, MUX_MODE_7)>; /* (P24) GPMC0_WPn.GPIO0_39, SODIMM 21 */
+	};
+	touch_reset_default: touch_reset_default {
+		pinmux = <K3_PINMUX(0x0090, PIN_OUTPUT, MUX_MODE_7)>; /* (U24) GPMC0_BE0n_CLE.GPIO0_35, SODIMM 42 */
+	};
+	backlight_gpio_default: backlight_gpio_default {
+		pinmux = <K3_PINMUX(0x01b8, PIN_OUTPUT, MUX_MODE_7)>; /* (E20) SPI0_CS1.GPIO1_16 = PWM_3_DSI, SODIMM 19 */
+	};
+};
+
+&main_gpio0_1 {
+	pinctrl-0 = <&dsi1_bkl_en_default &touch_reset_default>;
+	pinctrl-names = "default";
+};
+
+&main_gpio1_0 {
+	pinctrl-0 = <&backlight_gpio_default>;
+	pinctrl-names = "default";
+};
+
+&main_i2c1 {
+	pinctrl-0 = <&main_i2c1_scl_default &main_i2c1_sda_default>;
+	pinctrl-names = "default";
+
+	/* The SN65DSI8x on the DSI-LVDS adapter, starting itself after the
+	 * DSI host and the DSS (yakogl,sn65dsi8x). LVDS side: 100 ohm
+	 * termination and HS/VS negative, as this board has always run it. */
+	panel: sn65dsi83@2c {
+		compatible = "yakogl,sn65dsi8x";
+		reg = <0x2c>;
+		dsi-host = <&dsi0>;
+		lvds-termination-ohms = <100>;
+		enable-gpios = <&main_gpio0 39 GPIO_ACTIVE_HIGH>;    /* GPIO_10_DSI = display PWR_DN# */
+		reset-gpios = <&main_gpio0 35 GPIO_ACTIVE_LOW>;      /* I2S_2_BCLK = display global reset */
+		backlight-gpios = <&main_gpio1 16 GPIO_ACTIVE_HIGH>; /* PWM_3_DSI held high */
+		data-lanes = <4>;
+		lvds-24bpp;
+		pixel-clock-hz = <51200000>;
+		width = <1024>;
+		height = <600>;
+		hfront-porch = <160>;
+		hback-porch = <160>;
+		hsync-len = <5>;
+		vfront-porch = <12>;
+		vback-porch = <23>;
+		vsync-len = <10>;
+		hsync-active-low;
+		vsync-active-low;
+		status = "disabled";
+	};
+};
+
+&dss1 {
+	width = <1024>;
+	height = <600>;
+	pixel-clock-hz = <51200000>;
+	hfront-porch = <160>;
+	hback-porch = <160>;
+	hsync-len = <5>;
+	vfront-porch = <12>;
+	vback-porch = <23>;
+	vsync-len = <10>;
+	hsync-active-low;
+	vsync-active-low;
+	tisci = <&dmsc>;
+};
+
+&dsi0 {
+	tisci = <&dmsc>;
+	pixel-clock-hz = <51200000>;
+};
+
+/ {
+	/* Peripherals a previous OS may have left powered down (Linux runtime
+	 * PM before a kexec): I2C1 (103), GPIO0 (77), GPIO1 (78).
+	 */
+	tisci_power_on: tisci-power-on {
+		compatible = "yakogl,tisci-power-on";
+		tisci = <&dmsc>;
+		devices = <103 77 78>;
+		status = "disabled";
+	};
+};

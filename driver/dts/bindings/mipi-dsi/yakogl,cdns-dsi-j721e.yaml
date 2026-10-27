@@ -1,0 +1,63 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+description: Cadence DSI host with TI K3 wrapper and Cadence D-PHY TX (AM62P dsi0 / dphy_tx0)
+
+compatible: "yakogl,cdns-dsi-j721e"
+
+include: base.yaml
+
+properties:
+  reg:
+    required: true
+    description: dsi controller, ti wrapper, dphy
+  reg-names:
+    required: true
+  tisci:
+    type: phandle
+  tisci-dsi-device-id:
+    type: int
+    default: 231
+  tisci-dsi-pclk-id:
+    type: int
+    default: 2
+  tisci-dsi-sysclk-id:
+    type: int
+    default: 5
+  tisci-dphy-device-id:
+    type: int
+    default: 238
+  tisci-dphy-psm-clk-id:
+    type: int
+    default: 16
+  tisci-dphy-pllref-clk-id:
+    type: int
+    default: 1
+  tisci-dphy-pllref-parent:
+    type: int
+    default: 2
+    description: parent clock index giving a 25 MHz reference (Linux assigned-clock-parents)
+  pll-ref-hz:
+    type: int
+    default: 25000000
+  sys-clk-hz:
+    type: int
+    default: 0
+    description: dsi_sys_clk frequency if it cannot be read from TISCI (0 = ask TISCI)
+  psm-clk-hz:
+    type: int
+    default: 0
+  pixel-clock-hz:
+    type: int
+    required: true
+  data-lanes:
+    type: int
+    default: 4
+  burst-mode:
+    type: boolean
+    description: video burst mode (no sync pulses); SN65DSI83 requires this
+  eot-packet:
+    type: boolean
+  "#address-cells":
+    const: 1
+  "#size-cells":
+    const: 0

@@ -1,0 +1,9 @@
+--- a/src/panfrost/meson.build
++++ b/src/panfrost/meson.build
+@@ -89,3 +89,6 @@
+ if with_tools.contains('panfrost')
+    subdir('tools')
+ endif
++
++# YakoGL's reference shader tool (OpenGL SPIR-V program -> Valhall VS/FS + driver facts)
++subdir('pan_shc')

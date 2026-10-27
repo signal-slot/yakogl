@@ -1,0 +1,15 @@
+# The AM62P's multisample image: dEQP-GLES2.functional.multisample.* (16 mustpass
+# cases) on YakoGL's 4x multisampled EGL config. am62p-full-tree.txt's 17 images
+# run on dEQP's default single-sampled config, where these 16 are NotSupported
+# ("No multisample buffers"); the last full tree (RESULTS.md 1z2) took them from
+# this image: 16 pass. It is a second table, not an 18th row of the full tree,
+# because tools/board.sh (builder_ok) waits for <label>.built when the image
+# directory holds any such file and for build.out's "img<N> rc=" line
+# otherwise, so one table mixing labelled and unlabelled rows would wait for
+# a verdict that is never written.
+#
+#   tools/cts/am62p-deqp-images.sh tools/cts/am62p-ms4-tree.txt <img-dir> > <img-dir>/build.out
+#   TREE_IMAGE_DIR=<img-dir> tools/board.sh am62p tree tools/cts/am62p-ms4-tree.txt <outdir>
+#
+# image MS4: multisample.* (with DEQP_GL_CONFIG_NAME=rgba8888d24s8ms4)
+dEQP-GLES2.functional.multisample.*

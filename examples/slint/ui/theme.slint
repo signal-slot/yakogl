@@ -1,0 +1,38 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+//
+// What this design owns, and nothing else.
+//
+// Every number that the rich UI and the safety layer have to agree on -- the
+// palette, the font sizes, and every coordinate -- comes from `Layout`
+// (cluster-layout.slint, generated from the SafeUI repository's
+// include/cluster/ui_layout.h), which both
+// designs import. What is left here is the dial rendering's own colouring: it
+// was never in the shared header, because the safe core and the rich core do
+// not both draw a dial band.
+//
+// If a value belongs on the screen in a place the other core can see, it goes
+// in ui_layout.h. If it is only about how this design paints, it goes here.
+
+import { Layout } from "cluster-layout.slint";
+
+export global Theme {
+    // fonts: the bitmap faces are Noto Sans, pre-rendered at the sizes in Layout
+    out property <string> font: "Noto Sans";
+
+    out property <color> face: #080B11;
+    out property <color> tick-minor: #47515D;
+    out property <color> tick-major: #CBD5E1;
+    out property <color> tick-red: #B43A3A;
+    out property <color> speed-tail: #1E3E78;
+    out property <color> speed-head: #FFFFFF;
+    out property <color> rpm-tail: #5A2E0C;
+    out property <color> rpm-head: #FFB02E;
+    out property <color> bloom: #9CC6FF2E;
+    out property <color> bloom-clear: #9CC6FF00;
+    out property <color> brand: #8A939E;
+    out property <color> info-rule: #FFFFFF30;
+    out property <color> frame-ring: #FFFFFF60;
+    // an unlit fuel segment is the dial track's colour; one value, two uses
+    out property <color> seg-off: Layout.track;
+}

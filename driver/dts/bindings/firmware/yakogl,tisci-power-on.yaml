@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+description: |
+  Switches the listed TISCI devices on at boot, before the drivers that use
+  them initialise (for cores served by Zephyr's TISCI driver; the polling
+  client has power-on-devices built in).
+compatible: "yakogl,tisci-power-on"
+include: base.yaml
+properties:
+  tisci:
+    type: phandle
+    required: true
+    description: the TISCI (ti,k2g-sci) device
+  devices:
+    type: array
+    required: true
+    description: TISCI device ids to switch on, in order

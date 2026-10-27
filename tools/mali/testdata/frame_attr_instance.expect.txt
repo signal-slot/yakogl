@@ -1,0 +1,42 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+#
+# gl_test case 52 (es3split): the vertex attribute and buffer descriptors
+# Mesa 26.2.1 packs for its draw (glDrawElementsInstanced(GL_TRIANGLES, 294,
+# GL_UNSIGNED_SHORT, 0, 40 or 8); attribute 0 vec4 pos stride 16 per vertex,
+# attribute 1 vec2 offs offset 0 and attribute 2 vec4 icol offset 8, both of
+# one buffer with stride 24 and glVertexAttribDivisor 1). NOT a dump: no
+# drm-shim was available (docs/notes/mali-frame-formats.md section 1). Derived
+# from the source below and the vertex-rate descriptors of the board's dumps
+# (0dce654a8:tools/mali/board-ref/2026-10-20-mesa-refs/mesa/mesa-uniidxi.pandecode lines
+# 98-112, 117-120); the three per-instance values marked (?) are exactly what
+# the board Mesa reference (mode instsplit) must confirm.
+#
+# Source: pan_cmdstream.c:4083-4117 panfrost_pack_attribute (CSO create),
+#         pan_cmdstream.c:941-971 panfrost_emit_vertex_buffers (draw),
+#         pan_csf.c:1706 INSTANCE_COUNT = info->instance_count.
+#
+# Attribute (pandecode field names; src/mali Attribute fields in brackets)
+#   field               attr 0 (vertex)   attr 1 (instance)   attr 2 (instance)
+#   Attribute type      1D                1D POT Divisor (?)  1D POT Divisor (?)   [attribute_type]
+#   Offset enable       true              false (?)           false (?)            [offset_enable]
+#   Format (v7)         RGBA32F RGBA      RG32F RGB1          RGBA32F RGBA         [format]
+#   Table               2                 2                   2                    [table]
+#   Frequency           Vertex            Instance            Instance             [frequency]
+#   Divisor R           0                 0 (ctz(1))          0                    [divisor_r]
+#   Divisor E           0                 0                   0                    [divisor_e]
+#   Offset              0                 0                   8                    [offset]
+#   Buffer index        vertex buffer     vertex buffer       vertex buffer        [buffer_index]
+#   Stride              16                24                  24                   [stride]
+#   Divisor D           0                 0                   0                    [divisor_d]
+# Buffer: Address = buffer base + buffer_offset, Size = width0 - buffer_offset
+#   (verts 8*8*16 = 1024 bytes; instance data 40*24 = 960 bytes).
+# Mesa's divisor 1 is a power of two, so POT (divisor_r = ctz(divisor)); any
+# other divisor is 1D NPOT Divisor with divisor_d from pan_compute_npot_divisor
+# (pan_cmdstream.c:4108-4115), which the Mali table does not need
+# (YakoglBackend.max_instance_divisor 0 means divisor 1 only).
+# Offset enable is true only for a per-vertex attribute (:4098-4102); whether
+# the hardware reads Offset (8, attribute 2) with it false is the (?) the
+# board dump settles.
+# Draw: IDVS INSTANCE_COUNT (r34 in src/mali frame.rs reg::INSTANCE_COUNT) = 40;
+#   the draw is indexed (u16, 294 indices), VERTEX_OFFSET 0.

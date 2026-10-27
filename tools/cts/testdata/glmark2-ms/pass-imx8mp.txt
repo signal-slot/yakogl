@@ -1,0 +1,13 @@
+glmark2: upstream 22c527cb (2023.01), size 800x600, args ""
+=======================================================
+    glmark2 2023.01
+=======================================================
+[build] use-vbo=false: FPS: 90 FrameTime: 11.111 ms
+[terrain] <default>: FPS: 1 FrameTime: 1000.000 ms
+[shadow] <default>: FPS: 2 FrameTime: 500.000 ms
+[refract] <default>: FPS: 1 FrameTime: 1000.000 ms
+=======================================================
+                                  glmark2 Score: 42
+=======================================================
+glmark2: score 42: 4 scenes ran, 0 failed, 0 unsupported (4 list entries); window 800x600, shown yes, GPU resets 0
+glmark2: PASS

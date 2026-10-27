@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
+<!-- The URLs are relative because the site has no domain yet. The sitemap
+     protocol wants absolute URLs: prefix each <loc> with the published base
+     URL once the repository is public and Pages is on. -->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>index.html</loc><lastmod>2026-10-10</lastmod></url>
+  <url><loc>status.html</loc><lastmod>2026-10-10</lastmod></url>
+  <url><loc>try-it.html</loc><lastmod>2026-10-10</lastmod></url>
+</urlset>

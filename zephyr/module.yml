@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Zephyr module manifest for YakoGL. The module root is yakogl/ (the
+# directory listed in ZEPHYR_EXTRA_MODULES); paths are relative to it.
+name: yakogl
+build:
+  cmake: zephyr
+  kconfig: zephyr/Kconfig

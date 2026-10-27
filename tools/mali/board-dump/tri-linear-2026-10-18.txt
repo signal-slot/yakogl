@@ -1,0 +1,255 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+#
+# An excerpt of a board trace: Mesa's own descriptors for one GLES2 triangle
+# on the NanoPC-T6 in the linear layout, decoded by Mesa (pandecode) and as
+# raw memory and command-stream words. Read by src/mali/genxml/board_tests.rs,
+# which packs the decoded values with src/mali/genxml/v10.rs and requires the
+# raw bytes. It adds to tri-2026-10-18.txt what that run did not show: the
+# Framebuffer Parameters, the RGB Render Target, the Blend, Depth/Stencil,
+# Primitive flags and the two DCD flags words of the draw.
+#
+# Board: NanoPC-T6 (RK3588, Mali-G610, GPU_ID 0xa8670005), Armbian 26.8.10,
+# Linux 6.18.55-current-rockchip64, panthor, Mesa 25.0.7-2+deb13u1 (Debian).
+# Run (2026-10-18, as root): PAN_MESA_DEBUG=linear,nocrc,dump,trace,sync
+#   PANDECODE_DUMP_FILE=/root/mref/linear-dump.pandecode /root/tri
+# (clear blue, a red triangle over the left half of a 64x64 RGBA8 FBO;
+# "pixels 4096: red 2048 blue 2048 other 0 misplaced 0", glGetError 0x0).
+# The file it wrote, linear-dump.pandecode.ctx-0.0000 (45952 bytes, 1367
+# lines, sha256 98432b27c0be66ea9d5246f126a5d3cd5eeabdf538ec30edd6e9a26dbcc8a648);
+# the excerpt is its lines, unchanged but for trailing blanks, each block
+# headed by its line range. The dump is taken after the job ran; the
+# descriptors here are not written by the GPU.
+#
+# This draw has no ZS/CRC extension ("Has ZS CRC Extension: false": no depth
+# or stencil buffer, no CRC), so there is none to pack from this trace.
+
+## lines 67-72
+  00 00 00 00 00 00 30 02    MOVE32 r48, #0x0
+  41 41 fd ff ff 7f 32 01    MOVE d50, #0x7FFFFFFD4141
+  20 41 fd ff ff 7f 34 01    MOVE d52, #0x7FFFFFFD4120
+  00 80 43 00 00 00 38 02    MOVE32 r56, #0x438000
+  ab 21 00 00 00 00 39 02    MOVE32 r57, #0x21AB
+  ff ff 01 00 00 00 3a 02    MOVE32 r58, #0x1FFFF
+
+## lines 79-79
+  08 00 00 00 42 00 00 06    RUN_IDVS.varying_srt0.varying_fau0.varying_tsd0.frag_srt1.frag_tsd0 r0, #8
+
+## lines 459-558
+  Blend RT 0:
+    Load Destination: false
+    Alpha To One: false
+    Enable: true
+    sRGB: false
+    Round to FB precision: false
+    Constant: 0
+    Equation:
+      RGB:
+        A: Src
+        Negate A: false
+        B: Src
+        Negate B: false
+        C: Zero
+        Invert C: false
+      Alpha:
+        A: Src
+        Negate A: false
+        B: Src
+        Negate B: false
+        C: Zero
+        Invert C: false
+      Color Mask: 15
+    Internal:
+      Mode: Opaque
+      Shader:
+        PC: 970752
+      Fixed-Function:
+        Num Comps: 4
+        RT: 0
+        Conversion:
+          Format (v7): RGBA8 TB RGBA
+          Raw: false
+          Register Format: F16
+  Depth/stencil    Type: Depth/stencil
+    Front compare function: Never
+    Front stencil fail: Keep
+    Front depth fail: Keep
+    Front depth pass: Keep
+    Back compare function: Never
+    Back stencil fail: Keep
+    Back depth fail: Keep
+    Back depth pass: Keep
+    Stencil from shader: false
+    Stencil test enable: false
+    Front write mask: 0x0
+    Back write mask: 0x0
+    Front value mask: 0x0
+    Back value mask: 0x0
+    Front reference value: 0x0
+    Back reference value: 0x0
+    Shader read only Z/S: false
+    Depth cull enable: true
+    Depth clamp mode: [0, 1]
+    Depth source: Fixed function
+    Depth write enable: false
+    Depth bias enable: false
+    Depth function: Always
+    Depth units: 0.000000
+    Depth factor: 0.000000
+    Depth bias clamp: 0.000000
+  Primitive flags
+    Draw mode: Triangles
+    Index type: None
+    Point size array format: None
+    Primitive Index Enable: false
+    Primitive Index Writeback: false
+    Allow rotating primitives: true
+    Low Depth Cull: true
+    High Depth Cull: true
+    Secondary Shader: false
+    Primitive restart: false
+    Layer index enable: false
+    Scissor array enable: false
+    Position FIFO format: Basic
+    View mask: 0x0
+  DCD Flags 0
+    Allow forward pixel to kill: true
+    Allow forward pixel to be killed: true
+    Pixel kill operation: Weak Early
+    ZS update operation: Weak Early
+    Allow primitive reorder: false
+    Overdraw alpha0: true
+    Overdraw alpha1: true
+    Clean Fragment Write: false
+    Primitive Barrier: false
+    Evaluate per-sample: false
+    Single-sampled lines: true
+    Occlusion query: Disabled
+    Front face CCW: false
+    Cull front face: false
+    Cull back face: false
+    Multisample enable: false
+    Shader modifies coverage: false
+    Alpha-to-coverage Invert: false
+    Alpha-to-coverage: false
+    Scissor to bounding box: false
+  DCD Flags 1
+    Sample mask: 65535
+    Render target mask: 0x1
+
+## lines 654-692
+  Framebuffer @7ffffffd4000:
+    Parameters:
+      Pre Frame 0: Never
+      Pre Frame 1: Never
+      Post Frame: Never
+      Downscale geometry: None
+      Internal layer index: 0
+      Frame argument: 0x0
+      Sample Locations: 0x7ffffffff000
+      Frame Shader DCDs: 0x0
+      Width: 64
+      Height: 64
+      Bound Min X: 0
+      Bound Min Y: 0
+      Bound Max X: 63
+      Bound Max Y: 63
+      Sample Count: 1
+      Sample Pattern: Single-sampled
+      Tie-Break Rule: MINUS_180_IN_0_OUT
+      Effective Tile Size: 1024
+      First provoking vertex: false
+      Point sprite coord origin max Y: false
+      Blend suppress Inf: false
+      Blend suppress NaN: false
+      Blend suppress denorm: false
+      Render Target Count: 1
+      Color Buffer Allocation: 4096
+      S Clear: 0
+      S Write Enable: false
+      S Preload Enable: false
+      S Unload Enable: false
+      Z Internal Format: D24
+      Z Write Enable: false
+      Z Preload Enable: false
+      Z Unload Enable: false
+      Has ZS CRC Extension: false
+      Empty Tile Read Enable: false
+      Empty Tile Write Enable: false
+      CRC Read Enable: false
+
+## lines 730-781
+  Color Render Targets @7ffffffd4080:
+    Color Render Target 0:
+      YUV:
+        Swizzle: YUVA
+        Full Range: false
+        Conversion Mode: No Conversion
+        Cr Siting: Co-Sited
+        Unsigned Cr Range: false
+        Plane 0 Base: 0x0
+        Plane 1 Base: 0x0
+        Plane 2 Base: 0x7ffffffe4000
+        Plane 0 Stride: 256
+        Plane 1 2 Stride: 0
+      AFBC:
+        YUV Transform: false
+        Split block: false
+        Wide block: false
+        Reverse issue order: false
+        Front buffer: false
+        Alpha hint: false
+        Compression mode: R8
+        Header: 0x7ffffffe4000
+        Row stride: 256
+        Body offset: 0
+      AFRC:
+        Writeback Format: XXX: INVALID
+        Block Size: XXX: INVALID
+        Format: R8 SCAN
+      Writeback Mode: Compat
+      Internal Buffer Offset: 0
+      YUV Enable: false
+      Dithered Clear: false
+      Internal Format: R8G8B8A8
+      Write Enable: true
+      Writeback Format: R8G8B8A8
+      Writeback Block Format: Linear
+      Writeback MSAA: Single
+      sRGB: false
+      Dithering Enable: true
+      Swizzle: 1672 (RGBA)
+      Clean Pixel Write Enable: true
+      RGB:
+        Base: 0x7ffffffe4000
+        Row Stride: 256
+        Surface Stride: 0
+      Clear:
+        Color 0: 4294901760
+        Color 1: 4294901760
+        Color 2: 4294901760
+        Color 3: 4294901760
+
+  00 00 04 00 00 00 00 03    WAIT #4
+
+## lines 1190-1209
+Buffer: memory_7ffffffd4000 gpu 7ffffffd4000
+
+000000  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+000010  00 F0 FF FF FF 7F 00 00 00 00 00 00 00 00 00 00
+000020  3F 00 3F 00 00 00 00 00 3F 00 3F 00 80 14 00 04
+000030  00 00 01 00 00 00 00 00 C0 42 FD FF FF 7F 00 00
+000040  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+*
+000080  00 00 00 04 99 82 88 86 00 00 00 00 00 00 00 00
+000090  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+0000A0  00 40 FE FF FF 7F 00 00 00 01 00 00 00 00 00 00
+0000B0  00 00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF
+0000C0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+*
+000100  00 00 00 00 1F 00 00 00 00 00 00 00 00 00 00 00
+000110  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+000120  07 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+000130  00 00 C0 E4 00 00 00 00 00 00 00 00 00 00 00 00
+000140  00 02 00 00 22 21 12 F0 19 00 00 00 00 D0 0E 00
+000150  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00

@@ -1,0 +1,200 @@
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ * SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+ *
+ * TI AM62P54 Cortex-A53 cluster.  Main-domain peripherals shared with the
+ * AM62x generation come from Zephyr's k3-am62-main.dtsi; AM62P-specific
+ * blocks (DSS0/DSS1, BXS GPU) are declared here as reserved regions until
+ * Zephyr drivers exist (SoW Phase 2/3).
+ */
+
+#include <mem.h>
+#include <freq.h>
+#include <arm64/armv8-a.dtsi>
+#include <zephyr/dt-bindings/interrupt-controller/arm-gic.h>
+#include <zephyr/dt-bindings/pinctrl/ti-k3-pinctrl.h>
+#include <zephyr/dt-bindings/gpio/gpio.h>
+#include <ti/k3-am62-main.dtsi>
+
+/ {
+	#address-cells = <1>;
+	#size-cells = <1>;
+
+	cpus {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		cpu@0 {
+			device_type = "cpu";
+			compatible = "arm,cortex-a53";
+			reg = <0>;
+		};
+		cpu@1 {
+			device_type = "cpu";
+			compatible = "arm,cortex-a53";
+			reg = <1>;
+		};
+		cpu@2 {
+			device_type = "cpu";
+			compatible = "arm,cortex-a53";
+			reg = <2>;
+		};
+		cpu@3 {
+			device_type = "cpu";
+			compatible = "arm,cortex-a53";
+			reg = <3>;
+		};
+	};
+
+	firmware {
+		psci: psci {
+			compatible = "arm,psci-1.1";
+			method = "smc";
+		};
+	};
+
+	arch_timer: timer {
+		compatible = "arm,armv8-timer";
+		interrupts = <GIC_PPI 13 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>,
+			     <GIC_PPI 14 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>,
+			     <GIC_PPI 11 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>,
+			     <GIC_PPI 10 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>;
+		interrupt-parent = <&gic>;
+	};
+
+	gic: interrupt-controller@1800000 {
+		compatible = "arm,gic-v3", "arm,gic";
+		reg = <0x01800000 0x10000>, /* GICD */
+		      <0x01880000 0xc0000>; /* GICR */
+		interrupt-controller;
+		#interrupt-cells = <4>;
+		status = "okay";
+	};
+
+	main_padcfg0: syscon@f0000 {
+		compatible = "ti,control-module";
+		reg = <0xf0000 DT_SIZE_K(32)>;
+		ranges = <0x00 0xf0000 DT_SIZE_K(32)>;
+		ti,unlock-offsets = <0x1008 0x5008>;
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		pinctrl: pinctrl@4000 {
+			compatible = "ti,k3-pinctrl";
+			reg = <0x4000 0x2ac>;
+			status = "okay";
+		};
+	};
+
+	/* Mailbox cluster 1 is used for A53 <-> MCU R5F messaging (user 0 = A53). */
+	mbox1: mailbox1@29010000 {
+		compatible = "ti,omap-mailbox";
+		reg = <0x29010000 0x200>;
+		/* GIC SPI 77 = mailbox cluster 1 (Linux DT); the MCU R5F sees user 2 on VIM 241 */
+		interrupts = <GIC_SPI 77 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>;
+		interrupt-parent = <&gic>;
+		usr-id = <0>;
+		#mbox-cells = <1>;
+		status = "disabled";
+	};
+
+	/* Display: DSS1 (VP2 -> DSI) and the Cadence DSI host + D-PHY, the same
+	 * SafeUI drivers the MCU R5F uses (in the SafeUI platform). Off
+	 * by default: the R5F owns the display in the SafeUI platform; an A53
+	 * application that runs alone enables them in its overlay (the
+	 * examples through driver/zephyr/lib/board/am62p/app.overlay). Register bases and interrupts from the TI Linux
+	 * 6.12 device tree.
+	 */
+	dss0: dss@30200000 {
+		compatible = "ti,am62p51-dss";
+		reg = <0x30200000 0x1000>, <0x30201000 0x1000>; /* common, common1 */
+		interrupts = <GIC_SPI 84 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>,
+			     <GIC_SPI 85 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>;
+		interrupt-parent = <&gic>;
+		status = "disabled";
+	};
+
+	dss1: dss@30220000 {
+		compatible = "yakogl,am62p-dss";
+		reg = <0x30220000 0x1000>, <0x30222000 0x1000>, <0x30226000 0x1000>,
+		      <0x30227000 0x1000>, <0x30228000 0x1000>, <0x3022a000 0x1000>,
+		      <0x3022b000 0x1000>, <0x30221000 0x1000>;
+		reg-names = "common", "vidl1", "vid", "ovr1", "ovr2", "vp1", "vp2", "common1";
+		interrupts = <GIC_SPI 30 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>;
+		interrupt-parent = <&gic>;
+		tisci-device-id = <232>;
+		/* Linux lists power domains 232 and 244 for dss1 */
+		tisci-aux-device-ids = <244>;
+		tisci-fck-clk-id = <8>;
+		/* The DSI output is VP2, fed by TISCI clock 232:4 set directly to
+		 * the pixel clock (measured on Torizon 7.6.1, tidss).
+		 */
+		tisci-vp-clk-id = <4>;
+		vp-clk-div = <1>;
+		video-port = <2>;
+		status = "disabled";
+	};
+
+	dsi0: dsi@30500000 {
+		compatible = "yakogl,cdns-dsi-j721e";
+		reg = <0x30500000 0x100000>, <0x30270000 0x100>, <0x301c0000 0x1000>;
+		reg-names = "dsi", "wrap", "dphy";
+		interrupts = <GIC_SPI 86 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>;
+		interrupt-parent = <&gic>;
+		tisci-dsi-device-id = <231>;
+		tisci-dphy-device-id = <238>;
+		pll-ref-hz = <25000000>;
+		data-lanes = <4>;
+		burst-mode;
+		#address-cells = <1>;
+		#size-cells = <0>;
+		status = "disabled";
+	};
+
+	gpu: gpu@fd80000 {
+		compatible = "img,img-rogue"; /* BXS-4-64 MC1, BVNC 36.53.104.796 */
+		reg = <0x0fd80000 0x80000>;
+		interrupts = <GIC_SPI 241 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>;
+		interrupt-parent = <&gic>;
+		/* TISCI power/clock (TI SYSFW device ids, as in the TI Linux device tree):
+		 * power-domains 237 (GPU) + 242 (GPUVD), clock 237/3 @ 800 MHz.
+		 * The tisci phandle (&dmsc) is wired in the A53 board dts.
+		 */
+		tisci-power-domain-ids = <237>, <242>;
+		tisci-clock-dev-id = <237>;
+		tisci-clock-id = <3>;
+		clock-frequency = <800000000>;
+		status = "disabled";
+	};
+};
+
+&main_uart0 {
+	interrupts = <GIC_SPI 178 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>;
+	interrupt-parent = <&gic>;
+};
+
+&main_uart1 {
+	interrupts = <GIC_SPI 179 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>;
+	interrupt-parent = <&gic>;
+};
+
+&main_i2c0 {
+	interrupts = <GIC_SPI 161 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>;
+	interrupt-parent = <&gic>;
+};
+
+&main_i2c1 {
+	interrupts = <GIC_SPI 162 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>;
+	interrupt-parent = <&gic>;
+};
+
+/* MMC0, the eMMC (Linux k3-am62p-j722s-common-main.dtsi: GIC_SPI 133) */
+&main_sdhci0 {
+	interrupts = <GIC_SPI 133 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>;
+	interrupt-parent = <&gic>;
+};
+
+&main_sdhci1 {
+	interrupts = <GIC_SPI 83 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>;
+	interrupt-parent = <&gic>;
+};

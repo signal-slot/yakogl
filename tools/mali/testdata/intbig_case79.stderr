@@ -1,0 +1,1165 @@
+MESA: debug: pandecode: dump command stream to file tools/mali/testdata/intbig_case79.trace.python3.ctx-0.0000
+shader: MESA_SHADER_VERTEX
+source_blake3: {0x55da330a, 0x3a7cab83, 0x0123ac48, 0x025d378f, 0x7c3987c3, 0x27c58691, 0xcf2b7c59, 0x3e3ab41f}
+name: GLSL1
+next_stage: MESA_SHADER_FRAGMENT
+num_ubos: 2
+inputs_read: 15
+outputs_written: 0
+max_subgroup_size: 128
+min_subgroup_size: 1
+api_subgroup_size_draw_uniform: true
+first_ubo_is_default_ubo: true
+known_interpolation_qualifiers: true
+flrp_lowered: true
+inputs: 1
+outputs: 1
+decl_var shader_in INTERP_MODE_NONE none highp vec4 a_pos (VERT_ATTRIB_GENERIC0.xyzw, 0, 0)
+decl_var shader_out INTERP_MODE_NONE none highp vec4 gl_Position (VARYING_SLOT_POS.xyzw, 0, 0)
+decl_function main () (entrypoint)
+
+impl main {
+    block b0:   // preds:
+    32     %0 = load_const (0x00000000)
+    32x4   %1 = @load_input (%0 (0x0)) (base=16777216, range=1, component=0, dest_type=float32, io location=VERT_ATTRIB_GENERIC0 slots=1)  // a_pos
+    32     %2 = frcp %1.w
+    32     %3 = load_const (0xc7000000 = -32768.000000)
+    32     %4 = fmax %2, %3 (-32768.000000)
+    32     %5 = load_const (0x47000000 = 32768.000000)
+    32     %6 = fmin %4, %5 (32768.000000)
+    32     %7 = fmul %1.x, %6
+    32     %8 = fmul %1.y, %6
+    32     %9 = fmul %1.z, %6
+    32    %10 = load_const (0x00000001 = 0.000000)
+    32x3  %11 = @load_ubo (%10 (0x1), %0 (0x0)) (access=none, align_mul=1073741824, align_offset=0, range_base=0, range=4)
+    32    %12 = load_const (0x00000010 = 16)
+    32x3  %13 = @load_ubo (%10 (0x1), %12 (0x10)) (access=none, align_mul=1073741824, align_offset=16, range_base=0, range=4)
+    32    %14 = ffma %7, %11.x, %13.x
+    32    %15 = ffma %8, %11.y, %13.y
+    32    %16 = ffma %9, %11.z, %13.z
+    32    %17 = @load_idvs_output_buf_index_pan
+    32    %18 = load_const (0x3d000000 = 0.031250 = 1023410176)
+    32x2  %19 = @lea_buf_pan (%18 (0x3d000000), %17)
+    64    %20 = pack_64_2x32 %19
+                @store_global (%14, %20) (wrmask=x, access=istream-pan, align_mul=4, align_offset=0)
+    64    %21 = load_const (0x0000000000000004)
+    64    %22 = iadd %21 (0x4), %20
+                @store_global (%15, %22) (wrmask=x, access=istream-pan, align_mul=4, align_offset=0)
+    64    %23 = load_const (0x0000000000000008)
+    64    %24 = iadd %23 (0x8), %20
+                @store_global (%16, %24) (wrmask=x, access=istream-pan, align_mul=4, align_offset=0)
+    64    %25 = load_const (0x000000000000000c = 12)
+    64    %26 = iadd %25 (0xc), %20
+                @store_global (%6, %26) (wrmask=x, access=istream-pan, align_mul=4, align_offset=0)
+                // succs: b1
+    block b1:
+}
+
+block0 {
+32      %44 = MOV.i32 r59
+32      %29 = MOV.i32 r61
+32      %28 = MOV.i32 r60
+32x4    %1 = LD_ATTR_IMM.table1.f32.v4 %28^, %29^, attribute_index:0
+32      %30, %31, %32, %33 = SPLIT.i32 %1^
+32      %2 = FRCP.f32 %33^
+32      %4 = FMAX.f32.nan_suppress %2^, u3
+32      %6 = FMIN.f32.nan_suppress %4^, u3[1]
+32      %7 = FMA.f32 %30^, %6, u256.neg
+32      %8 = FMA.f32 %31^, %6, u256.neg
+32      %9 = FMA.f32 %32^, %6, u256.neg
+32      %14 = FMA.f32 %7^, u0, u0[1]
+32      %15 = FMA.f32 %8^, u1, u1[1]
+32      %16 = FMA.f32 %9^, u2, u2[1]
+32x2    %19 = LEA_BUF_IMM.table13 %44^
+32      %46, %47 = SPLIT.i32 %19^
+        STORE.i32 %14^, %46, %47, byte_offset:0
+32x2    %52 = COLLECT.i32 u4, u256 
+32x2    %55 = COLLECT.i32 %46^, %47^ 
+32x2    %22 = SHADDX.s64 %52^, %55, shift:0
+32      %56, %57 = SPLIT.i32 %22^
+        STORE.i32 %15^, %56^, %57^, byte_offset:0
+32x2    %62 = COLLECT.i32 u4[1], u256 
+32x2    %24 = SHADDX.s64 %62^, %55, shift:0
+32      %66, %67 = SPLIT.i32 %24^
+        STORE.i32 %16^, %66^, %67^, byte_offset:0
+32x2    %72 = COLLECT.i32 u5, u256 
+32x2    %26 = SHADDX.s64 %72^, %55^, shift:0
+32      %76, %77 = SPLIT.i32 %26^
+        STORE.i32 %6^, %76^, %77^, byte_offset:0
+}
+
+block0 {
+        r0:r1:r2:r3 = LD_ATTR_IMM.table1.f32.v4 r60, r61, attribute_index:0
+        r3 = FRCP.f32 r3
+        r3 = FMAX.f32.nan_suppress r3, u3
+        r3 = FMIN.f32.nan_suppress r3, u3[1]
+        r0 = FMA.f32 r0, r3, u256.neg
+        r1 = FMA.f32 r1, r3, u256.neg
+        r2 = FMA.f32 r2, r3, u256.neg
+        r0 = FMA.f32 r0, u0, u0[1]
+        r1 = FMA.f32 r1, u1, u1[1]
+        r2 = FMA.f32 r2, u2, u2[1]
+        r4:r5 = LEA_BUF_IMM.table13 r59
+        STORE.i32 r0, r4, r5, byte_offset:0
+        r6 = MOV.i32 u4
+        r7 = MOV.i32 u256
+        r6:r7 = SHADDX.s64 r6:r7, r4:r5, shift:0
+        STORE.i32 r1, r6, r7, byte_offset:0
+        r0 = MOV.i32 u4[1]
+        r1 = MOV.i32 u256
+        r0:r1 = SHADDX.s64 r0:r1, r4:r5, shift:0
+        STORE.i32 r2, r0, r1, byte_offset:0
+        r0 = MOV.i32 u5
+        r1 = MOV.i32 u256
+        r0:r1 = SHADDX.s64 r0:r1, r4:r5, shift:0
+        STORE.i32 r3, r0, r1, byte_offset:0
+}
+
+block0 {
+        r0:r1:r2:r3 = LD_ATTR_IMM.table1.flow1.f32.v4 r60^, r61^, attribute_index:0
+        r3 = FRCP.f32 r3^
+        r3 = FMAX.f32.nan_suppress r3^, u3
+        r3 = FMIN.f32.nan_suppress r3^, u3[1]
+        r0 = FMA.f32 r0^, r3, u256.neg
+        r1 = FMA.f32 r1^, r3, u256.neg
+        r2 = FMA.f32 r2^, r3, u256.neg
+        r0 = FMA.f32 r0^, u0, u0[1]
+        r1 = FMA.f32 r1^, u1, u1[1]
+        r2 = FMA.f32 r2^, u2, u2[1]
+        r4:r5 = LEA_BUF_IMM.table13.flow2 r59^
+        STORE.i32 r0, r4, r5, byte_offset:0
+        r6 = MOV.i32 u4
+        r7 = MOV.i32 u256
+        r6:r7 = SHADDX.s64.flow4 r6:r7^, r4:r5, shift:0
+        STORE.i32 r1, r6^, r7^, byte_offset:0
+        r0 = MOV.i32 u4[1]
+        r1 = MOV.i32 u256
+        r0:r1 = SHADDX.s64.flow1 r0:r1^, r4:r5, shift:0
+        STORE.i32 r2, r0^, r1^, byte_offset:0
+        r0 = MOV.i32 u5
+        r1 = MOV.i32 u256
+        r0:r1 = SHADDX.s64.flow2 r0:r1^, r4:r5^, shift:0
+        STORE.i32.flow15 r3, r0^, r1^, byte_offset:0
+}
+
+   LD_ATTR_IMM.v4.f32.slot0.wait0 @r0:r1:r2:r3, r60^, r61^, index:0x0, table:0x1
+   FRCP.f32 r3, r3^
+   FMAX.f32 r3, r3^, u3.w0
+   FMIN.f32 r3, r3^, u3.w1
+   FMA.f32 r0, r0^, r3, 0x0.neg
+   FMA.f32 r1, r1^, r3, 0x0.neg
+   FMA.f32 r2, r2^, r3, 0x0.neg
+   FMA.f32 r0, r0^, u0.w0, u0.w1
+   FMA.f32 r1, r1^, u1.w0, u1.w1
+   FMA.f32 r2, r2^, u2.w0, u2.w1
+   LEA_BUF_IMM.slot1.wait1 @r4:r5, r59^, table:0xD, index:0x0
+   STORE.i32.istream.slot2 @r0, [r4:r5], offset:0
+   MOV.i32 r6, u4.w0
+   MOV.i32 r7, 0x0
+   SHADDX.s64.wait2 [r6:r7], [r6^:r7^], [r4:r5], shift:0x0
+   STORE.i32.istream.slot0 @r1, [r6^:r7^], offset:0
+   MOV.i32 r0, u4.w1
+   MOV.i32 r1, 0x0
+   SHADDX.s64.wait0 [r0:r1], [r0^:r1^], [r4:r5], shift:0x0
+   STORE.i32.istream.slot1 @r2, [r0^:r1^], offset:0
+   MOV.i32 r0, u5.w0
+   MOV.i32 r1, 0x0
+   SHADDX.s64.wait1 [r0:r1], [r0^:r1^], [r4^:r5^], shift:0x0
+   STORE.i32.istream.slot2.end @r3, [r0^:r1^], offset:0
+
+MESA_SHADER_POSITION shader: 24 instrs, 6.000000 cycles, 0.093750 fma, 0.218750 cvt, 0.062500 sfu, 0.328125 alu, 0.000000 v, 0.000000 t, 6.000000 ls, 256 code size, 2 threads, 0 loops, 0:0 spills:fills, 0 spill cost, 11 registers used, 6 uniforms used
+shader: MESA_SHADER_VERTEX
+source_blake3: {0x55da330a, 0x3a7cab83, 0x0123ac48, 0x025d378f, 0x7c3987c3, 0x27c58691, 0xcf2b7c59, 0x3e3ab41f}
+name: GLSL1
+next_stage: MESA_SHADER_FRAGMENT
+num_ubos: 2
+inputs_read: 15
+outputs_written: 0
+max_subgroup_size: 128
+min_subgroup_size: 1
+api_subgroup_size_draw_uniform: true
+first_ubo_is_default_ubo: true
+known_interpolation_qualifiers: true
+flrp_lowered: true
+inputs: 1
+outputs: 1
+decl_var shader_in INTERP_MODE_NONE none highp vec4 a_pos (VERT_ATTRIB_GENERIC0.xyzw, 0, 0)
+decl_var shader_out INTERP_MODE_NONE none highp vec4 gl_Position (VARYING_SLOT_POS.xyzw, 0, 0)
+decl_function main () (entrypoint)
+
+impl main {
+    block b0:  // preds:, succs: b1
+    block b1:
+}
+
+block0 {
+}
+
+block0 {
+}
+
+block0 {
+}
+
+
+MESA_SHADER_VARYING shader: 0 instrs, 0.000000 cycles, 0.000000 fma, 0.000000 cvt, 0.000000 sfu, 0.000000 alu, 0.000000 v, 0.000000 t, 0.000000 ls, 0 code size, 2 threads, 0 loops, 0:0 spills:fills, 0 spill cost, 0 registers used, 0 uniforms used
+shader: MESA_SHADER_FRAGMENT
+source_blake3: {0x5528baaa, 0xc18cfbf4, 0x97d58f1d, 0x851b5cf3, 0x18c3d168, 0x44c8cc3f, 0xfba181da, 0x47af9628}
+name: GLSL1
+prev_stage: MESA_SHADER_VERTEX
+num_ubos: 2
+outputs_written: 4-11
+max_subgroup_size: 128
+min_subgroup_size: 1
+api_subgroup_size_draw_uniform: true
+bit_sizes_float: 0x30
+bit_sizes_int: 0x20
+first_ubo_is_default_ubo: true
+known_interpolation_qualifiers: true
+flrp_lowered: true
+outputs: 8
+uniforms: 1
+decl_var uniform INTERP_MODE_NONE none mediump f16vec4 u_d (0, 0, 0)
+decl_var shader_out INTERP_MODE_NONE none mediump vec4 gl_FragData[0] (FRAG_RESULT_DATA0.xyzw, 0, 0)
+decl_var shader_out INTERP_MODE_NONE none vec4 gl_FragData[1] (FRAG_RESULT_DATA1.xyzw, 1, 0)
+decl_var shader_out INTERP_MODE_NONE none vec4 gl_FragData[2] (FRAG_RESULT_DATA2.xyzw, 2, 0)
+decl_var shader_out INTERP_MODE_NONE none vec4 gl_FragData[3] (FRAG_RESULT_DATA3.xyzw, 3, 0)
+decl_var shader_out INTERP_MODE_NONE none vec4 gl_FragData[4] (FRAG_RESULT_DATA4.xyzw, 4, 0)
+decl_var shader_out INTERP_MODE_NONE none vec4 gl_FragData[5] (FRAG_RESULT_DATA5.xyzw, 5, 0)
+decl_var shader_out INTERP_MODE_NONE none vec4 gl_FragData[6] (FRAG_RESULT_DATA6.xyzw, 6, 0)
+decl_var shader_out INTERP_MODE_NONE none vec4 gl_FragData[7] (FRAG_RESULT_DATA7.xyzw, 7, 0)
+decl_var ubo INTERP_MODE_NONE none vec4[1] uniform_0 (0, 0, 0)
+decl_function main () (entrypoint)
+
+impl main {
+    block b0:    // preds:
+    16      %0 = load_const (0x4900 = 10.000000)
+    32      %1 = load_const (0x00000000)
+    16x4    %2 = @load_ubo (%1 (0x0), %1 (0x0)) (access=none, align_mul=1073741824, align_offset=0, range_base=0, range=8)
+    16x2    %3 = fmul %2.xy, %0 (10.000000).xx
+    32      %4 = f2i32 %3.x
+    32      %5 = f2i32 %3.y
+    16x2    %6 = fabs %2.zw // preserve:inf
+    32      %7 = f2i32 %6.x
+    32      %8 = load_const (0x00000001)
+    32      %9 = iadd %7, %8 (0x1)
+    32     %10 = f2i32 %6.y
+    32     %11 = load_const (0x00000002)
+    32     %12 = iadd %10, %11 (0x2)
+    32     %13 = iabs %4
+    32     %14 = iabs %9
+    32     %15 = ixor %4, %9
+    32     %16 = u2f32 %14 // exact
+    32     %17 = frcp %16 // exact
+    32     %18 = load_const (0x4f7ffffe = 4.294967e+09)
+    32     %19 = fmul %17, %18 (4.294967e+09) // exact
+    32     %20 = f2u32 %19 // exact
+    32     %21 = imul %14, %20
+    32     %22 = ineg %21
+    32     %23 = extract_u16 %20, %1 (0x0)
+    32     %24 = extract_u16 %22, %1 (0x0)
+    32     %25 = extract_u16 %20, %8 (0x1)
+    32     %26 = extract_u16 %22, %8 (0x1)
+    32     %27 = imul %23, %24
+    32     %28 = imul %23, %26
+    32     %29 = imul %25, %24
+    32     %30 = imul %25, %26
+    32     %31 = extract_u16 %27, %8 (0x1)
+    32     %32 = iadd %29, %31
+    32     %33 = extract_u16 %32, %1 (0x0)
+    32     %34 = extract_u16 %32, %8 (0x1)
+    32     %35 = iadd %28, %33
+    32     %36 = extract_u16 %35, %8 (0x1)
+    32     %37 = iadd %36, %34
+    32     %38 = iadd %30, %37
+    32     %39 = iadd %20, %38
+    32     %40 = extract_u16 %13, %1 (0x0)
+    32     %41 = extract_u16 %39, %1 (0x0)
+    32     %42 = extract_u16 %13, %8 (0x1)
+    32     %43 = extract_u16 %39, %8 (0x1)
+    32     %44 = imul %40, %41
+    32     %45 = imul %40, %43
+    32     %46 = imul %42, %41
+    32     %47 = imul %42, %43
+    32     %48 = extract_u16 %44, %8 (0x1)
+    32     %49 = iadd %46, %48
+    32     %50 = extract_u16 %49, %1 (0x0)
+    32     %51 = extract_u16 %49, %8 (0x1)
+    32     %52 = iadd %45, %50
+    32     %53 = extract_u16 %52, %8 (0x1)
+    32     %54 = iadd %53, %51
+    32     %55 = iadd %47, %54
+    32     %56 = imul %55, %14
+    32     %57 = isub %13, %56
+    32     %58 = uge_pan %57, %14
+    32     %59 = b2i32 %58
+    32     %60 = iadd %55, %59
+    32     %61 = isub %57, %14
+    32     %62 = bcsel_pan %58, %61, %57
+    32     %63 = uge_pan %62, %14
+    32     %64 = b2i32 %63
+    32     %65 = iadd %60, %64
+    32     %66 = ineg %65
+    32     %67 = ilt_pan %15, %1 (0x0)
+    32     %68 = bcsel_pan %67, %66, %65
+    32     %69 = iabs %5
+    32     %70 = iabs %12
+    32     %71 = ixor %5, %12
+    32     %72 = u2f32 %70 // exact
+    32     %73 = frcp %72 // exact
+    32     %74 = fmul %73, %18 (4.294967e+09) // exact
+    32     %75 = f2u32 %74 // exact
+    32     %76 = imul %70, %75
+    32     %77 = ineg %76
+    32     %78 = extract_u16 %75, %1 (0x0)
+    32     %79 = extract_u16 %77, %1 (0x0)
+    32     %80 = extract_u16 %75, %8 (0x1)
+    32     %81 = extract_u16 %77, %8 (0x1)
+    32     %82 = imul %78, %79
+    32     %83 = imul %78, %81
+    32     %84 = imul %80, %79
+    32     %85 = imul %80, %81
+    32     %86 = extract_u16 %82, %8 (0x1)
+    32     %87 = iadd %84, %86
+    32     %88 = extract_u16 %87, %1 (0x0)
+    32     %89 = extract_u16 %87, %8 (0x1)
+    32     %90 = iadd %83, %88
+    32     %91 = extract_u16 %90, %8 (0x1)
+    32     %92 = iadd %91, %89
+    32     %93 = iadd %85, %92
+    32     %94 = iadd %75, %93
+    32     %95 = extract_u16 %69, %1 (0x0)
+    32     %96 = extract_u16 %94, %1 (0x0)
+    32     %97 = extract_u16 %69, %8 (0x1)
+    32     %98 = extract_u16 %94, %8 (0x1)
+    32     %99 = imul %95, %96
+    32    %100 = imul %95, %98
+    32    %101 = imul %97, %96
+    32    %102 = imul %97, %98
+    32    %103 = extract_u16 %99, %8 (0x1)
+    32    %104 = iadd %101, %103
+    32    %105 = extract_u16 %104, %1 (0x0)
+    32    %106 = extract_u16 %104, %8 (0x1)
+    32    %107 = iadd %100, %105
+    32    %108 = extract_u16 %107, %8 (0x1)
+    32    %109 = iadd %108, %106
+    32    %110 = iadd %102, %109
+    32    %111 = imul %110, %70
+    32    %112 = isub %69, %111
+    32    %113 = uge_pan %112, %70
+    32    %114 = b2i32 %113
+    32    %115 = iadd %110, %114
+    32    %116 = isub %112, %70
+    32    %117 = bcsel_pan %113, %116, %112
+    32    %118 = uge_pan %117, %70
+    32    %119 = b2i32 %118
+    32    %120 = iadd %115, %119
+    32    %121 = ineg %120
+    32    %122 = ilt_pan %71, %1 (0x0)
+    32    %123 = bcsel_pan %122, %121, %120
+    32    %124 = i2f32 %68
+    32    %125 = load_const (0x3e800000 = 0.250000)
+    32    %126 = fmul %124, %125 (0.250000)
+    32    %127 = load_const (0x00000004)
+    32    %128 = iadd %123, %127 (0x4)
+    32    %129 = i2f32 %128
+    32    %130 = fmul %129, %125 (0.250000)
+    16    %131 = fabs %3.x // preserve:inf
+    32    %132 = f2i32 %131
+    32    %133 = iadd %132, %8 (0x1)
+    32    %134 = iabs %133
+    32    %135 = load_const (0x00000064 = 100)
+    32    %136 = ixor %135 (0x64), %133
+    32    %137 = u2f32 %134 // exact
+    32    %138 = frcp %137 // exact
+    32    %139 = fmul %138, %18 (4.294967e+09) // exact
+    32    %140 = f2u32 %139 // exact
+    32    %141 = imul %134, %140
+    32    %142 = ineg %141
+    32    %143 = extract_u16 %140, %1 (0x0)
+    32    %144 = extract_u16 %142, %1 (0x0)
+    32    %145 = extract_u16 %140, %8 (0x1)
+    32    %146 = extract_u16 %142, %8 (0x1)
+    32    %147 = imul %143, %144
+    32    %148 = imul %143, %146
+    32    %149 = imul %145, %144
+    32    %150 = imul %145, %146
+    32    %151 = extract_u16 %147, %8 (0x1)
+    32    %152 = iadd %149, %151
+    32    %153 = extract_u16 %152, %1 (0x0)
+    32    %154 = extract_u16 %152, %8 (0x1)
+    32    %155 = iadd %148, %153
+    32    %156 = extract_u16 %155, %8 (0x1)
+    32    %157 = iadd %156, %154
+    32    %158 = iadd %150, %157
+    32    %159 = iadd %140, %158
+    32    %160 = extract_u16 %159, %1 (0x0)
+    32    %161 = extract_u16 %159, %8 (0x1)
+    32    %162 = imul %135 (0x64), %160
+    32    %163 = imul %135 (0x64), %161
+    32    %164 = extract_u16 %162, %8 (0x1)
+    32    %165 = extract_u16 %164, %8 (0x1)
+    32    %166 = iadd %163, %164
+    32    %167 = extract_u16 %166, %8 (0x1)
+    32    %168 = iadd %167, %165
+    32    %169 = imul %168, %134
+    32    %170 = isub %135 (0x64), %169
+    32    %171 = uge_pan %170, %134
+    32    %172 = b2i32 %171
+    32    %173 = iadd %168, %172
+    32    %174 = isub %170, %134
+    32    %175 = bcsel_pan %171, %174, %170
+    32    %176 = uge_pan %175, %134
+    32    %177 = b2i32 %176
+    32    %178 = iadd %173, %177
+    32    %179 = ineg %178
+    32    %180 = ilt_pan %136, %1 (0x0)
+    32    %181 = bcsel_pan %180, %179, %178
+    32    %182 = i2f32 %181
+    32    %183 = load_const (0x3d800000 = 0.062500)
+    32    %184 = fmul %182, %183 (0.062500)
+    16    %185 = f2f16 %126
+    16    %186 = f2f16 %130
+    16    %187 = f2f16 %184
+    32    %188 = @load_cumulative_coverage_pan
+    16    %189 = load_const (0x3c00 = 1.000000)
+    32    %190 = @atest_pan (%188, %189 (1.000000))
+    64    %191 = @load_blend_descriptor_pan (base=0)
+    16x4  %192 = vec4 %185, %186, %187, %189 (0x3c00)
+                 @blend_pan (%190, %191, %192) (io location=FRAG_RESULT_DATA0 slots=1, src_type=float16)
+                 // succs: b1
+    block b1:
+}
+
+block0 {
+32      %204 = MOV.i32 r60
+32      %212 = MOV.i32 u3
+32      %3 = FMA.v2f16 u2, %212^, u256.neg
+32      %4 = F16_TO_S32.rtz %3.h00
+32      %5 = F16_TO_S32.rtz %3.h11
+32      %6 = FADD.v2f16 u2[1].abs, u256.neg
+32      %7 = F16_TO_S32.rtz %6.h00
+32      %9 = IADD_IMM.i32 %7^, index:1
+32      %10 = F16_TO_S32.rtz %6^.h11
+32      %12 = IADD_IMM.i32 %10^, index:2
+32      %13 = IABS.s32 %4
+32      %14 = IABS.s32 %9
+32      %15 = LSHIFT_XOR.i32 %4^, %9^, u256.b0
+32      %16 = U32_TO_F32 %14
+32      %17 = FRCP.f32 %16^
+32      %19 = FMA.f32 %17^, u3[1], u256.neg
+32      %20 = F32_TO_U32.rtz %19^
+32      %21 = IMUL.i32 %14, %20
+32      %22 = ISUB.s32 u256, %21^
+32      %23 = U16_TO_U32 %20.h00
+32      %24 = U16_TO_U32 %22.h00
+32      %25 = U16_TO_U32 %20.h11
+32      %26 = U16_TO_U32 %22^.h11
+32      %27 = IMUL.i32 %23, %24
+32      %28 = IMUL.i32 %23^, %26
+32      %29 = IMUL.i32 %25, %24^
+32      %30 = IMUL.i32 %25^, %26^
+32      %31 = U16_TO_U32 %27^.h11
+32      %32 = IADD.s32 %29^, %31^
+32      %33 = U16_TO_U32 %32.h00
+32      %34 = U16_TO_U32 %32^.h11
+32      %35 = IADD.s32 %28^, %33^
+32      %36 = U16_TO_U32 %35^.h11
+32      %37 = IADD.s32 %36^, %34^
+32      %38 = IADD.s32 %30^, %37^
+32      %39 = IADD.s32 %20^, %38^
+32      %40 = U16_TO_U32 %13.h00
+32      %41 = U16_TO_U32 %39.h00
+32      %42 = U16_TO_U32 %13.h11
+32      %43 = U16_TO_U32 %39^.h11
+32      %44 = IMUL.i32 %40, %41
+32      %45 = IMUL.i32 %40^, %43
+32      %46 = IMUL.i32 %42, %41^
+32      %47 = IMUL.i32 %42^, %43^
+32      %48 = U16_TO_U32 %44^.h11
+32      %49 = IADD.s32 %46^, %48^
+32      %50 = U16_TO_U32 %49.h00
+32      %51 = U16_TO_U32 %49^.h11
+32      %52 = IADD.s32 %45^, %50^
+32      %53 = U16_TO_U32 %52^.h11
+32      %54 = IADD.s32 %53^, %51^
+32      %55 = IADD.s32 %47^, %54^
+32      %56 = IMUL.i32 %55, %14
+32      %57 = ISUB.s32 %13^, %56^
+32      %58 = ICMP_OR.u32.ge.m1 %57, %14, u256
+32      %59 = CSEL.u32.eq %58, u256, u256, u4
+32      %60 = IADD.s32 %55^, %59^
+32      %61 = ISUB.s32 %57, %14
+32      %62 = CSEL.u32.eq %58^, u256, %57^, %61^
+32      %64 = ICMP_OR.u32.ge.i1 %62^, %14^, u256
+32      %65 = IADD.s32 %60^, %64^
+32      %66 = ISUB.s32 u256, %65
+32      %67 = ICMP_OR.s32.lt.m1 %15^, u256, u256
+32      %68 = CSEL.u32.eq %67^, u256, %65^, %66^
+32      %69 = IABS.s32 %5
+32      %70 = IABS.s32 %12
+32      %71 = LSHIFT_XOR.i32 %5^, %12^, u256.b0
+32      %72 = U32_TO_F32 %70
+32      %73 = FRCP.f32 %72^
+32      %74 = FMA.f32 %73^, u3[1], u256.neg
+32      %75 = F32_TO_U32.rtz %74^
+32      %76 = IMUL.i32 %70, %75
+32      %77 = ISUB.s32 u256, %76^
+32      %78 = U16_TO_U32 %75.h00
+32      %79 = U16_TO_U32 %77.h00
+32      %80 = U16_TO_U32 %75.h11
+32      %81 = U16_TO_U32 %77^.h11
+32      %82 = IMUL.i32 %78, %79
+32      %83 = IMUL.i32 %78^, %81
+32      %84 = IMUL.i32 %80, %79^
+32      %85 = IMUL.i32 %80^, %81^
+32      %86 = U16_TO_U32 %82^.h11
+32      %87 = IADD.s32 %84^, %86^
+32      %88 = U16_TO_U32 %87.h00
+32      %89 = U16_TO_U32 %87^.h11
+32      %90 = IADD.s32 %83^, %88^
+32      %91 = U16_TO_U32 %90^.h11
+32      %92 = IADD.s32 %91^, %89^
+32      %93 = IADD.s32 %85^, %92^
+32      %94 = IADD.s32 %75^, %93^
+32      %95 = U16_TO_U32 %69.h00
+32      %96 = U16_TO_U32 %94.h00
+32      %97 = U16_TO_U32 %69.h11
+32      %98 = U16_TO_U32 %94^.h11
+32      %99 = IMUL.i32 %95, %96
+32      %100 = IMUL.i32 %95^, %98
+32      %101 = IMUL.i32 %97, %96^
+32      %102 = IMUL.i32 %97^, %98^
+32      %103 = U16_TO_U32 %99^.h11
+32      %104 = IADD.s32 %101^, %103^
+32      %105 = U16_TO_U32 %104.h00
+32      %106 = U16_TO_U32 %104^.h11
+32      %107 = IADD.s32 %100^, %105^
+32      %108 = U16_TO_U32 %107^.h11
+32      %109 = IADD.s32 %108^, %106^
+32      %110 = IADD.s32 %102^, %109^
+32      %111 = IMUL.i32 %110, %70
+32      %112 = ISUB.s32 %69^, %111^
+32      %113 = ICMP_OR.u32.ge.m1 %112, %70, u256
+32      %114 = CSEL.u32.eq %113, u256, u256, u4
+32      %115 = IADD.s32 %110^, %114^
+32      %116 = ISUB.s32 %112, %70
+32      %117 = CSEL.u32.eq %113^, u256, %112^, %116^
+32      %119 = ICMP_OR.u32.ge.i1 %117^, %70^, u256
+32      %120 = IADD.s32 %115^, %119^
+32      %121 = ISUB.s32 u256, %120
+32      %122 = ICMP_OR.s32.lt.m1 %71^, u256, u256
+32      %123 = CSEL.u32.eq %122^, u256, %120^, %121^
+32      %124 = S32_TO_F32 %68^
+32      %126 = FMA.f32 %124^, u268[1].h11, u256.neg
+32      %128 = IADD_IMM.i32 %123^, index:4
+32      %129 = S32_TO_F32 %128^
+32      %130 = FMA.f32 %129^, u268[1].h11, u256.neg
+32      %131 = FADD.v2f16 %3^.abs.h00, u256.neg
+32      %132 = F16_TO_S32.rtz %131^.h00
+32      %133 = IADD_IMM.i32 %132^, index:1
+32      %134 = IABS.s32 %133
+32      %136 = LSHIFT_XOR.i32 u4[1], %133^, u256.b0
+32      %137 = U32_TO_F32 %134
+32      %138 = FRCP.f32 %137^
+32      %139 = FMA.f32 %138^, u3[1], u256.neg
+32      %140 = F32_TO_U32.rtz %139^
+32      %141 = IMUL.i32 %134, %140
+32      %142 = ISUB.s32 u256, %141^
+32      %143 = U16_TO_U32 %140.h00
+32      %144 = U16_TO_U32 %142.h00
+32      %145 = U16_TO_U32 %140.h11
+32      %146 = U16_TO_U32 %142^.h11
+32      %147 = IMUL.i32 %143, %144
+32      %148 = IMUL.i32 %143^, %146
+32      %149 = IMUL.i32 %145, %144^
+32      %150 = IMUL.i32 %145^, %146^
+32      %151 = U16_TO_U32 %147^.h11
+32      %152 = IADD.s32 %149^, %151^
+32      %153 = U16_TO_U32 %152.h00
+32      %154 = U16_TO_U32 %152^.h11
+32      %155 = IADD.s32 %148^, %153^
+32      %156 = U16_TO_U32 %155^.h11
+32      %157 = IADD.s32 %156^, %154^
+32      %158 = IADD.s32 %150^, %157^
+32      %159 = IADD.s32 %140^, %158^
+32      %160 = U16_TO_U32 %159.h00
+32      %161 = U16_TO_U32 %159^.h11
+32      %162 = IMUL.i32 u4[1], %160^
+32      %163 = IMUL.i32 u4[1], %161^
+32      %164 = U16_TO_U32 %162^.h11
+32      %166 = IADD.s32 %163^, %164^
+32      %167 = U16_TO_U32 %166^.h11
+32      %168 = IADD_IMM.i32 %167^, index:0
+32      %169 = IMUL.i32 %168, %134
+32      %170 = ISUB.s32 u4[1], %169^
+32      %171 = ICMP_OR.u32.ge.m1 %170, %134, u256
+32      %172 = CSEL.u32.eq %171, u256, u256, u4
+32      %173 = IADD.s32 %168^, %172^
+32      %174 = ISUB.s32 %170, %134
+32      %175 = CSEL.u32.eq %171^, u256, %170^, %174^
+32      %177 = ICMP_OR.u32.ge.i1 %175^, %134^, u256
+32      %178 = IADD.s32 %173^, %177^
+32      %179 = ISUB.s32 u256, %178
+32      %180 = ICMP_OR.s32.lt.m1 %136^, u256, u256
+32      %181 = CSEL.u32.eq %180^, u256, %178^, %179^
+32      %182 = S32_TO_F32 %181^
+32      %184 = FMA.f32 %182^, u5, u256.neg
+32      %185.h00 = FADD.f32 %126^, u256.neg
+32      %186.h00 = FADD.f32 %130^, u256.neg
+32      %187.h00 = FADD.f32 %184^, u256.neg
+32      %190 = ATEST %204^, u264, atest-param
+32      %209 = MKVEC.v2i16 %185^.h00, %186^.h00
+32      %210 = MKVEC.v2i16 %187^.h00, u5[1].h00
+32x2    %208 = COLLECT.i32 %209^, %210^ 
+32      %211 = BLEND.f16 %208^, %190^, blend_descriptor_0, blend_descriptor_0[1], _.h00, sr_count:2, sr_count_2:2
+}
+
+block0 {
+        r0 = FADD.v2f16 u2[1].abs, u256.neg
+        r1 = F16_TO_S32.rtz r0.h11
+        r1 = IADD_IMM.i32 r1, index:2
+        r2 = IABS.s32 r1
+        r3 = U32_TO_F32 r2
+        r3 = FRCP.f32 r3
+        r3 = FMA.f32 r3, u3[1], u256.neg
+        r3 = F32_TO_U32.rtz r3
+        r4 = IMUL.i32 r2, r3
+        r4 = ISUB.s32 u256, r4
+        r5 = U16_TO_U32 r4.h00
+        r6 = U16_TO_U32 r3.h00
+        r7 = IMUL.i32 r6, r5
+        r7 = U16_TO_U32 r7.h11
+        r8 = U16_TO_U32 r3.h11
+        r5 = IMUL.i32 r8, r5
+        r5 = IADD.s32 r5, r7
+        r4 = U16_TO_U32 r4.h11
+        r6 = IMUL.i32 r6, r4
+        r7 = U16_TO_U32 r5.h00
+        r6 = IADD.s32 r6, r7
+        r5 = U16_TO_U32 r5.h11
+        r6 = U16_TO_U32 r6.h11
+        r5 = IADD.s32 r6, r5
+        r4 = IMUL.i32 r8, r4
+        r4 = IADD.s32 r4, r5
+        r3 = IADD.s32 r3, r4
+        r4 = MOV.i32 u3
+        r4 = FMA.v2f16 u2, r4, u256.neg
+        r5 = F16_TO_S32.rtz r4.h11
+        r6 = IABS.s32 r5
+        r7 = U16_TO_U32 r3.h00
+        r8 = U16_TO_U32 r6.h00
+        r9 = IMUL.i32 r8, r7
+        r9 = U16_TO_U32 r9.h11
+        r10 = U16_TO_U32 r6.h11
+        r7 = IMUL.i32 r10, r7
+        r7 = IADD.s32 r7, r9
+        r3 = U16_TO_U32 r3.h11
+        r8 = IMUL.i32 r8, r3
+        r9 = U16_TO_U32 r7.h00
+        r8 = IADD.s32 r8, r9
+        r7 = U16_TO_U32 r7.h11
+        r8 = U16_TO_U32 r8.h11
+        r7 = IADD.s32 r8, r7
+        r3 = IMUL.i32 r10, r3
+        r3 = IADD.s32 r3, r7
+        r7 = IMUL.i32 r3, r2
+        r6 = ISUB.s32 r6, r7
+        r7 = ISUB.s32 r6, r2
+        r8 = ICMP_OR.u32.ge.m1 r6, r2, u256
+        r6 = CSEL.u32.eq r8, u256, r6, r7
+        r2 = ICMP_OR.u32.ge.i1 r6, r2, u256
+        r6 = CSEL.u32.eq r8, u256, u256, u4
+        r3 = IADD.s32 r3, r6
+        r1 = LSHIFT_XOR.i32 r5, r1, u256.b0
+        r2 = IADD.s32 r3, r2
+        r1 = ICMP_OR.s32.lt.m1 r1, u256, u256
+        r3 = ISUB.s32 u256, r2
+        r1 = CSEL.u32.eq r1, u256, r2, r3
+        r0 = F16_TO_S32.rtz r0.h00
+        r0 = IADD_IMM.i32 r0, index:1
+        r2 = IABS.s32 r0
+        r3 = U32_TO_F32 r2
+        r3 = FRCP.f32 r3
+        r3 = FMA.f32 r3, u3[1], u256.neg
+        r3 = F32_TO_U32.rtz r3
+        r5 = IMUL.i32 r2, r3
+        r5 = ISUB.s32 u256, r5
+        r6 = U16_TO_U32 r5.h00
+        r7 = U16_TO_U32 r3.h00
+        r8 = IMUL.i32 r7, r6
+        r8 = U16_TO_U32 r8.h11
+        r9 = U16_TO_U32 r3.h11
+        r6 = IMUL.i32 r9, r6
+        r6 = IADD.s32 r6, r8
+        r5 = U16_TO_U32 r5.h11
+        r7 = IMUL.i32 r7, r5
+        r8 = U16_TO_U32 r6.h00
+        r7 = IADD.s32 r7, r8
+        r6 = U16_TO_U32 r6.h11
+        r7 = U16_TO_U32 r7.h11
+        r6 = IADD.s32 r7, r6
+        r5 = IMUL.i32 r9, r5
+        r5 = IADD.s32 r5, r6
+        r3 = IADD.s32 r3, r5
+        r5 = F16_TO_S32.rtz r4.h00
+        r6 = IABS.s32 r5
+        r7 = U16_TO_U32 r3.h00
+        r8 = U16_TO_U32 r6.h00
+        r9 = IMUL.i32 r8, r7
+        r9 = U16_TO_U32 r9.h11
+        r10 = U16_TO_U32 r6.h11
+        r7 = IMUL.i32 r10, r7
+        r7 = IADD.s32 r7, r9
+        r3 = U16_TO_U32 r3.h11
+        r8 = IMUL.i32 r8, r3
+        r9 = U16_TO_U32 r7.h00
+        r8 = IADD.s32 r8, r9
+        r7 = U16_TO_U32 r7.h11
+        r8 = U16_TO_U32 r8.h11
+        r7 = IADD.s32 r8, r7
+        r3 = IMUL.i32 r10, r3
+        r3 = IADD.s32 r3, r7
+        r7 = IMUL.i32 r3, r2
+        r6 = ISUB.s32 r6, r7
+        r7 = ISUB.s32 r6, r2
+        r8 = ICMP_OR.u32.ge.m1 r6, r2, u256
+        r6 = CSEL.u32.eq r8, u256, r6, r7
+        r2 = ICMP_OR.u32.ge.i1 r6, r2, u256
+        r6 = CSEL.u32.eq r8, u256, u256, u4
+        r3 = IADD.s32 r3, r6
+        r0 = LSHIFT_XOR.i32 r5, r0, u256.b0
+        r2 = IADD.s32 r3, r2
+        r0 = ICMP_OR.s32.lt.m1 r0, u256, u256
+        r3 = ISUB.s32 u256, r2
+        r0 = CSEL.u32.eq r0, u256, r2, r3
+        r2 = FADD.v2f16 r4.abs.h00, u256.neg
+        r2 = F16_TO_S32.rtz r2.h00
+        r2 = IADD_IMM.i32 r2, index:1
+        r3 = IABS.s32 r2
+        r4 = U32_TO_F32 r3
+        r4 = FRCP.f32 r4
+        r4 = FMA.f32 r4, u3[1], u256.neg
+        r4 = F32_TO_U32.rtz r4
+        r5 = IMUL.i32 r3, r4
+        r5 = ISUB.s32 u256, r5
+        r6 = U16_TO_U32 r5.h00
+        r7 = U16_TO_U32 r4.h00
+        r8 = IMUL.i32 r7, r6
+        r8 = U16_TO_U32 r8.h11
+        r9 = U16_TO_U32 r4.h11
+        r6 = IMUL.i32 r9, r6
+        r6 = IADD.s32 r6, r8
+        r5 = U16_TO_U32 r5.h11
+        r7 = IMUL.i32 r7, r5
+        r8 = U16_TO_U32 r6.h00
+        r7 = IADD.s32 r7, r8
+        r6 = U16_TO_U32 r6.h11
+        r7 = U16_TO_U32 r7.h11
+        r6 = IADD.s32 r7, r6
+        r5 = IMUL.i32 r9, r5
+        r5 = IADD.s32 r5, r6
+        r4 = IADD.s32 r4, r5
+        r5 = U16_TO_U32 r4.h00
+        r5 = IMUL.i32 u4[1], r5
+        r4 = U16_TO_U32 r4.h11
+        r5 = U16_TO_U32 r5.h11
+        r4 = IMUL.i32 u4[1], r4
+        r4 = IADD.s32 r4, r5
+        r4 = U16_TO_U32 r4.h11
+        r4 = IADD_IMM.i32 r4, index:0
+        r5 = IMUL.i32 r4, r3
+        r5 = ISUB.s32 u4[1], r5
+        r6 = ISUB.s32 r5, r3
+        r7 = ICMP_OR.u32.ge.m1 r5, r3, u256
+        r5 = CSEL.u32.eq r7, u256, r5, r6
+        r3 = ICMP_OR.u32.ge.i1 r5, r3, u256
+        r5 = CSEL.u32.eq r7, u256, u256, u4
+        r4 = IADD.s32 r4, r5
+        r3 = IADD.s32 r4, r3
+        r2 = LSHIFT_XOR.i32 u4[1], r2, u256.b0
+        r2 = ICMP_OR.s32.lt.m1 r2, u256, u256
+        r4 = ISUB.s32 u256, r3
+        r2 = CSEL.u32.eq r2, u256, r3, r4
+        r1 = IADD_IMM.i32 r1, index:4
+        r1 = S32_TO_F32 r1
+        r0 = S32_TO_F32 r0
+        r1 = FMA.f32 r1, u268[1].h11, u256.neg
+        r0 = FMA.f32 r0, u268[1].h11, u256.neg
+        r1.h00 = FADD.f32 r1, u256.neg
+        r0.h00 = FADD.f32 r0, u256.neg
+        r0 = MKVEC.v2i16 r0.h00, r1.h00
+        r1 = S32_TO_F32 r2
+        r1 = FMA.f32 r1, u5, u256.neg
+        r1.h00 = FADD.f32 r1, u256.neg
+        r1 = MKVEC.v2i16 r1.h00, u5[1].h00
+        r60 = ATEST r60, u264, atest-param
+        r48 = BLEND.f16 r0:r1, r60, blend_descriptor_0, blend_descriptor_0[1], _.h00, sr_count:2, sr_count_2:2
+}
+
+block0 {
+        r0 = FADD.v2f16.flow13 u2[1].abs, u256.neg
+        r1 = F16_TO_S32.rtz r0.h11
+        r1 = IADD_IMM.i32 r1^, index:2
+        r2 = IABS.s32 r1
+        r3 = U32_TO_F32 r2
+        r3 = FRCP.f32 r3^
+        r3 = FMA.f32 r3^, u3[1], u256.neg
+        r3 = F32_TO_U32.rtz r3^
+        r4 = IMUL.i32 r2, r3
+        r4 = ISUB.s32 u256, r4^
+        r5 = U16_TO_U32 r4.h00
+        r6 = U16_TO_U32 r3.h00
+        r7 = IMUL.i32 r6, r5
+        r7 = U16_TO_U32 r7^.h11
+        r8 = U16_TO_U32 r3.h11
+        r5 = IMUL.i32 r8, r5^
+        r5 = IADD.s32 r5^, r7^
+        r4 = U16_TO_U32 r4^.h11
+        r6 = IMUL.i32 r6^, r4
+        r7 = U16_TO_U32 r5.h00
+        r6 = IADD.s32 r6^, r7^
+        r5 = U16_TO_U32 r5^.h11
+        r6 = U16_TO_U32 r6^.h11
+        r5 = IADD.s32 r6^, r5^
+        r4 = IMUL.i32 r8^, r4^
+        r4 = IADD.s32 r4^, r5^
+        r3 = IADD.s32 r3^, r4^
+        r4 = MOV.i32 u3
+        r4 = FMA.v2f16 u2, r4^, u256.neg
+        r5 = F16_TO_S32.rtz r4.h11
+        r6 = IABS.s32 r5
+        r7 = U16_TO_U32 r3.h00
+        r8 = U16_TO_U32 r6.h00
+        r9 = IMUL.i32 r8, r7
+        r9 = U16_TO_U32 r9^.h11
+        r10 = U16_TO_U32 r6.h11
+        r7 = IMUL.i32 r10, r7^
+        r7 = IADD.s32 r7^, r9^
+        r3 = U16_TO_U32 r3^.h11
+        r8 = IMUL.i32 r8^, r3
+        r9 = U16_TO_U32 r7.h00
+        r8 = IADD.s32 r8^, r9^
+        r7 = U16_TO_U32 r7^.h11
+        r8 = U16_TO_U32 r8^.h11
+        r7 = IADD.s32 r8^, r7^
+        r3 = IMUL.i32 r10^, r3^
+        r3 = IADD.s32 r3^, r7^
+        r7 = IMUL.i32 r3, r2
+        r6 = ISUB.s32 r6^, r7^
+        r7 = ISUB.s32 r6, r2
+        r8 = ICMP_OR.u32.ge.m1 r6, r2, u256
+        r6 = CSEL.u32.eq r8, u256, r6^, r7^
+        r2 = ICMP_OR.u32.ge.i1 r6^, r2^, u256
+        r6 = CSEL.u32.eq r8^, u256, u256, u4
+        r3 = IADD.s32 r3^, r6^
+        r1 = LSHIFT_XOR.i32 r5^, r1^, u256.b0
+        r2 = IADD.s32 r3^, r2^
+        r1 = ICMP_OR.s32.lt.m1 r1^, u256, u256
+        r3 = ISUB.s32 u256, r2
+        r1 = CSEL.u32.eq r1^, u256, r2^, r3^
+        r0 = F16_TO_S32.rtz r0^.h00
+        r0 = IADD_IMM.i32 r0^, index:1
+        r2 = IABS.s32 r0
+        r3 = U32_TO_F32 r2
+        r3 = FRCP.f32 r3^
+        r3 = FMA.f32 r3^, u3[1], u256.neg
+        r3 = F32_TO_U32.rtz r3^
+        r5 = IMUL.i32 r2, r3
+        r5 = ISUB.s32 u256, r5^
+        r6 = U16_TO_U32 r5.h00
+        r7 = U16_TO_U32 r3.h00
+        r8 = IMUL.i32 r7, r6
+        r8 = U16_TO_U32 r8^.h11
+        r9 = U16_TO_U32 r3.h11
+        r6 = IMUL.i32 r9, r6^
+        r6 = IADD.s32 r6^, r8^
+        r5 = U16_TO_U32 r5^.h11
+        r7 = IMUL.i32 r7^, r5
+        r8 = U16_TO_U32 r6.h00
+        r7 = IADD.s32 r7^, r8^
+        r6 = U16_TO_U32 r6^.h11
+        r7 = U16_TO_U32 r7^.h11
+        r6 = IADD.s32 r7^, r6^
+        r5 = IMUL.i32 r9^, r5^
+        r5 = IADD.s32 r5^, r6^
+        r3 = IADD.s32 r3^, r5^
+        r5 = F16_TO_S32.rtz r4.h00
+        r6 = IABS.s32 r5
+        r7 = U16_TO_U32 r3.h00
+        r8 = U16_TO_U32 r6.h00
+        r9 = IMUL.i32 r8, r7
+        r9 = U16_TO_U32 r9^.h11
+        r10 = U16_TO_U32 r6.h11
+        r7 = IMUL.i32 r10, r7^
+        r7 = IADD.s32 r7^, r9^
+        r3 = U16_TO_U32 r3^.h11
+        r8 = IMUL.i32 r8^, r3
+        r9 = U16_TO_U32 r7.h00
+        r8 = IADD.s32 r8^, r9^
+        r7 = U16_TO_U32 r7^.h11
+        r8 = U16_TO_U32 r8^.h11
+        r7 = IADD.s32 r8^, r7^
+        r3 = IMUL.i32 r10^, r3^
+        r3 = IADD.s32 r3^, r7^
+        r7 = IMUL.i32 r3, r2
+        r6 = ISUB.s32 r6^, r7^
+        r7 = ISUB.s32 r6, r2
+        r8 = ICMP_OR.u32.ge.m1 r6, r2, u256
+        r6 = CSEL.u32.eq r8, u256, r6^, r7^
+        r2 = ICMP_OR.u32.ge.i1 r6^, r2^, u256
+        r6 = CSEL.u32.eq r8^, u256, u256, u4
+        r3 = IADD.s32 r3^, r6^
+        r0 = LSHIFT_XOR.i32 r5^, r0^, u256.b0
+        r2 = IADD.s32 r3^, r2^
+        r0 = ICMP_OR.s32.lt.m1 r0^, u256, u256
+        r3 = ISUB.s32 u256, r2
+        r0 = CSEL.u32.eq r0^, u256, r2^, r3^
+        r2 = FADD.v2f16 r4^.abs.h00, u256.neg
+        r2 = F16_TO_S32.rtz r2^.h00
+        r2 = IADD_IMM.i32 r2^, index:1
+        r3 = IABS.s32 r2
+        r4 = U32_TO_F32 r3
+        r4 = FRCP.f32 r4^
+        r4 = FMA.f32 r4^, u3[1], u256.neg
+        r4 = F32_TO_U32.rtz r4^
+        r5 = IMUL.i32 r3, r4
+        r5 = ISUB.s32 u256, r5^
+        r6 = U16_TO_U32 r5.h00
+        r7 = U16_TO_U32 r4.h00
+        r8 = IMUL.i32 r7, r6
+        r8 = U16_TO_U32 r8^.h11
+        r9 = U16_TO_U32 r4.h11
+        r6 = IMUL.i32 r9, r6^
+        r6 = IADD.s32 r6^, r8^
+        r5 = U16_TO_U32 r5^.h11
+        r7 = IMUL.i32 r7^, r5
+        r8 = U16_TO_U32 r6.h00
+        r7 = IADD.s32 r7^, r8^
+        r6 = U16_TO_U32 r6^.h11
+        r7 = U16_TO_U32 r7^.h11
+        r6 = IADD.s32 r7^, r6^
+        r5 = IMUL.i32 r9^, r5^
+        r5 = IADD.s32 r5^, r6^
+        r4 = IADD.s32 r4^, r5^
+        r5 = U16_TO_U32 r4.h00
+        r5 = IMUL.i32 u4[1], r5^
+        r4 = U16_TO_U32 r4^.h11
+        r5 = U16_TO_U32 r5^.h11
+        r4 = IMUL.i32 u4[1], r4^
+        r4 = IADD.s32 r4^, r5^
+        r4 = U16_TO_U32 r4^.h11
+        r4 = IADD_IMM.i32 r4^, index:0
+        r5 = IMUL.i32 r4, r3
+        r5 = ISUB.s32 u4[1], r5^
+        r6 = ISUB.s32 r5, r3
+        r7 = ICMP_OR.u32.ge.m1 r5, r3, u256
+        r5 = CSEL.u32.eq r7, u256, r5^, r6^
+        r3 = ICMP_OR.u32.ge.i1 r5^, r3^, u256
+        r5 = CSEL.u32.eq r7^, u256, u256, u4
+        r4 = IADD.s32 r4^, r5^
+        r3 = IADD.s32 r4^, r3^
+        r2 = LSHIFT_XOR.i32 u4[1], r2^, u256.b0
+        r2 = ICMP_OR.s32.lt.m1 r2^, u256, u256
+        r4 = ISUB.s32 u256, r3
+        r2 = CSEL.u32.eq r2^, u256, r3^, r4^
+        r1 = IADD_IMM.i32 r1^, index:4
+        r1 = S32_TO_F32 r1^
+        r0 = S32_TO_F32 r0^
+        r1 = FMA.f32 r1^, u268[1].h11, u256.neg
+        r0 = FMA.f32 r0^, u268[1].h11, u256.neg
+        r1.h00 = FADD.f32 r1^, u256.neg
+        r0.h00 = FADD.f32 r0^, u256.neg
+        r0 = MKVEC.v2i16 r0^.h00, r1^.h00
+        r1 = S32_TO_F32 r2^
+        r1 = FMA.f32 r1^, u5, u256.neg
+        r1.h00 = FADD.f32 r1^, u256.neg
+        r1 = MKVEC.v2i16.flow8 r1^.h00, u5[1].h00
+        r60 = ATEST.flow9 r60^, u264, atest-param
+        r48 = BLEND.flow15.f16 r0:r1, r60^, blend_descriptor_0, blend_descriptor_0[1], _.h00, sr_count:2, sr_count_2:2
+}
+
+   FADD.v2f16.discard r0, u2.w1.abs, 0x0.neg
+   F16_TO_S32.rtz r1, r0.h1
+   IADD_IMM.i32 r1, r1^, #0x2
+   IABS.s32 r2, r1
+   U32_TO_F32 r3, r2
+   FRCP.f32 r3, r3^
+   FMA.f32 r3, r3^, u3.w1, 0x0.neg
+   F32_TO_U32.rtz r3, r3^
+   IMUL.i32 r4, r2, r3
+   ISUB.s32 r4, 0x0, r4^
+   U16_TO_U32 r5, r4.h0
+   U16_TO_U32 r6, r3.h0
+   IMUL.i32 r7, r6, r5
+   U16_TO_U32 r7, r7^.h1
+   U16_TO_U32 r8, r3.h1
+   IMUL.i32 r5, r8, r5^
+   IADD.s32 r5, r5^, r7^
+   U16_TO_U32 r4, r4^.h1
+   IMUL.i32 r6, r6^, r4
+   U16_TO_U32 r7, r5.h0
+   IADD.s32 r6, r6^, r7^
+   U16_TO_U32 r5, r5^.h1
+   U16_TO_U32 r6, r6^.h1
+   IADD.s32 r5, r6^, r5^
+   IMUL.i32 r4, r8^, r4^
+   IADD.s32 r4, r4^, r5^
+   IADD.s32 r3, r3^, r4^
+   MOV.i32 r4, u3.w0
+   FMA.v2f16 r4, u2.w0, r4^, 0x0.neg
+   F16_TO_S32.rtz r5, r4.h1
+   IABS.s32 r6, r5
+   U16_TO_U32 r7, r3.h0
+   U16_TO_U32 r8, r6.h0
+   IMUL.i32 r9, r8, r7
+   U16_TO_U32 r9, r9^.h1
+   U16_TO_U32 r10, r6.h1
+   IMUL.i32 r7, r10, r7^
+   IADD.s32 r7, r7^, r9^
+   U16_TO_U32 r3, r3^.h1
+   IMUL.i32 r8, r8^, r3
+   U16_TO_U32 r9, r7.h0
+   IADD.s32 r8, r8^, r9^
+   U16_TO_U32 r7, r7^.h1
+   U16_TO_U32 r8, r8^.h1
+   IADD.s32 r7, r8^, r7^
+   IMUL.i32 r3, r10^, r3^
+   IADD.s32 r3, r3^, r7^
+   IMUL.i32 r7, r3, r2
+   ISUB.s32 r6, r6^, r7^
+   ISUB.s32 r7, r6, r2
+   ICMP_OR.u32.ge.m1 r8, r6, r2, 0x0
+   CSEL.u32.eq r6, r8, 0x0, r6^, r7^
+   ICMP_OR.u32.ge.i1 r2, r6^, r2^, 0x0
+   CSEL.u32.eq r6, r8^, 0x0, 0x0, u4.w0
+   IADD.s32 r3, r3^, r6^
+   LSHIFT_XOR.i32 r1, r5^, 0x0.b00, r1^
+   IADD.s32 r2, r3^, r2^
+   ICMP_OR.s32.lt.m1 r1, r1^, 0x0, 0x0
+   ISUB.s32 r3, 0x0, r2
+   CSEL.u32.eq r1, r1^, 0x0, r2^, r3^
+   F16_TO_S32.rtz r0, r0^.h0
+   IADD_IMM.i32 r0, r0^, #0x1
+   IABS.s32 r2, r0
+   U32_TO_F32 r3, r2
+   FRCP.f32 r3, r3^
+   FMA.f32 r3, r3^, u3.w1, 0x0.neg
+   F32_TO_U32.rtz r3, r3^
+   IMUL.i32 r5, r2, r3
+   ISUB.s32 r5, 0x0, r5^
+   U16_TO_U32 r6, r5.h0
+   U16_TO_U32 r7, r3.h0
+   IMUL.i32 r8, r7, r6
+   U16_TO_U32 r8, r8^.h1
+   U16_TO_U32 r9, r3.h1
+   IMUL.i32 r6, r9, r6^
+   IADD.s32 r6, r6^, r8^
+   U16_TO_U32 r5, r5^.h1
+   IMUL.i32 r7, r7^, r5
+   U16_TO_U32 r8, r6.h0
+   IADD.s32 r7, r7^, r8^
+   U16_TO_U32 r6, r6^.h1
+   U16_TO_U32 r7, r7^.h1
+   IADD.s32 r6, r7^, r6^
+   IMUL.i32 r5, r9^, r5^
+   IADD.s32 r5, r5^, r6^
+   IADD.s32 r3, r3^, r5^
+   F16_TO_S32.rtz r5, r4.h0
+   IABS.s32 r6, r5
+   U16_TO_U32 r7, r3.h0
+   U16_TO_U32 r8, r6.h0
+   IMUL.i32 r9, r8, r7
+   U16_TO_U32 r9, r9^.h1
+   U16_TO_U32 r10, r6.h1
+   IMUL.i32 r7, r10, r7^
+   IADD.s32 r7, r7^, r9^
+   U16_TO_U32 r3, r3^.h1
+   IMUL.i32 r8, r8^, r3
+   U16_TO_U32 r9, r7.h0
+   IADD.s32 r8, r8^, r9^
+   U16_TO_U32 r7, r7^.h1
+   U16_TO_U32 r8, r8^.h1
+   IADD.s32 r7, r8^, r7^
+   IMUL.i32 r3, r10^, r3^
+   IADD.s32 r3, r3^, r7^
+   IMUL.i32 r7, r3, r2
+   ISUB.s32 r6, r6^, r7^
+   ISUB.s32 r7, r6, r2
+   ICMP_OR.u32.ge.m1 r8, r6, r2, 0x0
+   CSEL.u32.eq r6, r8, 0x0, r6^, r7^
+   ICMP_OR.u32.ge.i1 r2, r6^, r2^, 0x0
+   CSEL.u32.eq r6, r8^, 0x0, 0x0, u4.w0
+   IADD.s32 r3, r3^, r6^
+   LSHIFT_XOR.i32 r0, r5^, 0x0.b00, r0^
+   IADD.s32 r2, r3^, r2^
+   ICMP_OR.s32.lt.m1 r0, r0^, 0x0, 0x0
+   ISUB.s32 r3, 0x0, r2
+   CSEL.u32.eq r0, r0^, 0x0, r2^, r3^
+   FADD.v2f16 r2, r4^.abs.h00, 0x0.neg
+   F16_TO_S32.rtz r2, r2^.h0
+   IADD_IMM.i32 r2, r2^, #0x1
+   IABS.s32 r3, r2
+   U32_TO_F32 r4, r3
+   FRCP.f32 r4, r4^
+   FMA.f32 r4, r4^, u3.w1, 0x0.neg
+   F32_TO_U32.rtz r4, r4^
+   IMUL.i32 r5, r3, r4
+   ISUB.s32 r5, 0x0, r5^
+   U16_TO_U32 r6, r5.h0
+   U16_TO_U32 r7, r4.h0
+   IMUL.i32 r8, r7, r6
+   U16_TO_U32 r8, r8^.h1
+   U16_TO_U32 r9, r4.h1
+   IMUL.i32 r6, r9, r6^
+   IADD.s32 r6, r6^, r8^
+   U16_TO_U32 r5, r5^.h1
+   IMUL.i32 r7, r7^, r5
+   U16_TO_U32 r8, r6.h0
+   IADD.s32 r7, r7^, r8^
+   U16_TO_U32 r6, r6^.h1
+   U16_TO_U32 r7, r7^.h1
+   IADD.s32 r6, r7^, r6^
+   IMUL.i32 r5, r9^, r5^
+   IADD.s32 r5, r5^, r6^
+   IADD.s32 r4, r4^, r5^
+   U16_TO_U32 r5, r4.h0
+   IMUL.i32 r5, u4.w1, r5^
+   U16_TO_U32 r4, r4^.h1
+   U16_TO_U32 r5, r5^.h1
+   IMUL.i32 r4, u4.w1, r4^
+   IADD.s32 r4, r4^, r5^
+   U16_TO_U32 r4, r4^.h1
+   IADD_IMM.i32 r4, r4^, #0x0
+   IMUL.i32 r5, r4, r3
+   ISUB.s32 r5, u4.w1, r5^
+   ISUB.s32 r6, r5, r3
+   ICMP_OR.u32.ge.m1 r7, r5, r3, 0x0
+   CSEL.u32.eq r5, r7, 0x0, r5^, r6^
+   ICMP_OR.u32.ge.i1 r3, r5^, r3^, 0x0
+   CSEL.u32.eq r5, r7^, 0x0, 0x0, u4.w0
+   IADD.s32 r4, r4^, r5^
+   IADD.s32 r3, r4^, r3^
+   LSHIFT_XOR.i32 r2, u4.w1, 0x0.b00, r2^
+   ICMP_OR.s32.lt.m1 r2, r2^, 0x0, 0x0
+   ISUB.s32 r4, 0x0, r3
+   CSEL.u32.eq r2, r2^, 0x0, r3^, r4^
+   IADD_IMM.i32 r1, r1^, #0x4
+   S32_TO_F32 r1, r1^
+   S32_TO_F32 r0, r0^
+   FMA.f32 r1, r1^, 0x34000000.h1, 0x0.neg
+   FMA.f32 r0, r0^, 0x34000000.h1, 0x0.neg
+   FADD.f32 r1.h0, r1^, 0x0.neg
+   FADD.f32 r0.h0, r0^, 0x0.neg
+   MKVEC.v2i16 r0, r0^.h0, r1^.h0
+   S32_TO_F32 r1, r2^
+   FMA.f32 r1, r1^, u5.w0, 0x0.neg
+   FADD.f32 r1.h0, r1^, 0x0.neg
+   MKVEC.v2i16.wait0126 r1, r1^.h0, u5.w1.h0
+   ATEST.wait @r60, r60^, 0x3F800000, atest_datum.w0
+   BLEND.slot0.v4.f16.end @r0:r1, blend_descriptor_0.w0, r60, target:0x0
+   IADD_IMM.i32 r48, 0x0, #0x0
+   BRANCHZI.eq.absolute 0x0, blend_descriptor_0.w1
+
+
+MESA_SHADER_FRAGMENT shader: 181 instrs, 2.796875 cycles, 0.187500 fma, 2.078125 cvt, 2.125000 sfu, 2.796875 alu, 0.000000 v, 0.000000 t, 0.000000 ls, 1536 code size, 2 threads, 0 loops, 0:0 spills:fills, 0 spill cost, 13 registers used, 6 uniforms used

@@ -1,0 +1,40 @@
+# Sources (and vert+frag pairs) in tools/shaders the V3D online compiler refuses.
+#
+# tests/v3d_online_corpus.rs compares its run against this file: `<path>: <exact
+# message>`, a link refusal as `<vert>+<frag>: <message>`. A refusal not listed, a
+# message that changed, and a listed entry that now compiles all fail the test, so
+# the list stays exact. No Slint, cluster or FemtoVG shader is listed: the V3D
+# compiles all of them (tools/shaders/femtovg).
+
+# Desktop GLSL (`#version 110`..`150`) test sources of the offline generators, not ES.
+# The V3D compiler is an OpenGL ES compiler and refuses them at `#version`.
+# Used by no benchmark: Slint, the cluster and FemtoVG ship ES shaders; these are
+# the PowerVR/Vivante internal blit/clear sources and gl_test helpers.
+armselect.frag: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
+color_uv.frag: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
+color_uv.vert: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
+compact.frag: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
+internal/clear.frag: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
+internal/clear.vert: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
+internal/fbload.frag: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
+internal/fbload.vert: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
+interp_color.frag: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
+mvp.vert: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
+mvp_color.vert: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
+passthrough.vert: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
+points.vert: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
+texture.frag: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
+texture2.frag: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
+uniform_color.frag: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
+uv.vert: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
+zorder.vert: 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler
+
+# gl_test link fixtures: `name.vert` and `name.frag` are paired by file name here,
+# but these two fragment shaders pair with another vertex shader in gl_test (the vertex
+# shader does not declare `v_coords`). Not a V3D refusal; the pairing is the test's.
+es100/loop_nested.vert+es100/loop_nested.frag: rc -22: online shaderc: fragment varying 'v_coords' is not declared in the vertex shader; GLSL ES 1.00 section 4.3.5: a varying the fragment shader uses must be declared by the vertex shader, with the same type
+es100/ret_nested.vert+es100/ret_nested.frag: rc -22: online shaderc: fragment varying 'v_coords' is not declared in the vertex shader; GLSL ES 1.00 section 4.3.5: a varying the fragment shader uses must be declared by the vertex shader, with the same type
+
+# gl_test varyings15: 15 varying vectors, more than MAX_VARYING_VECTORS = 8 on
+# the V3D; the case checks the limit. gl_test only; no benchmark uses it.
+es100/varyings15.vert+es100/varyings15.frag: rc -22: online shaderc: link error: the program's varyings do not fit MAX_VARYING_VECTORS = 8 (Appendix A packing)

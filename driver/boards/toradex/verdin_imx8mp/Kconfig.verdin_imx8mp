@@ -1,0 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# The A53 cluster of the Verdin iMX8M Plus (extends Zephyr's M7-only board).
+
+config BOARD_VERDIN_IMX8MP
+	select SOC_MIMX8ML8_A53 if BOARD_VERDIN_IMX8MP_MIMX8ML8_A53

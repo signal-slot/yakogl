@@ -1,0 +1,24 @@
+<TestCaseResult CasePath="dEQP-GLES2.functional.shaders.a" CaseType="SelfValidate" Version="0.3.4">
+<ShaderProgram LinkStatus="Fail"><VertexShader CompileStatus="Fail">
+<InfoLog>0:59: &apos;.&apos; : assignment to this is not lowered yet</InfoLog>
+</VertexShader></ShaderProgram>
+<Result StatusCode="Fail">fail</Result>
+</TestCaseResult>
+<TestCaseResult CasePath="dEQP-GLES2.functional.shaders.b" CaseType="SelfValidate" Version="0.3.4">
+<ShaderProgram LinkStatus="Fail"><VertexShader CompileStatus="Fail">
+<InfoLog>0:12: &apos;[]&apos; : assignment to this is not lowered yet</InfoLog>
+</VertexShader></ShaderProgram>
+<Result StatusCode="Fail">fail</Result>
+</TestCaseResult>
+<TestCaseResult CasePath="dEQP-GLES2.functional.shaders.neg" CaseType="SelfValidate" Version="0.3.4">
+<ShaderProgram LinkStatus="Fail"><VertexShader CompileStatus="Fail">
+<InfoLog>0:3: &apos;+&apos; : no implicit conversion in GLSL ES 1.00</InfoLog>
+</VertexShader></ShaderProgram>
+<Result StatusCode="Pass">pass</Result>
+</TestCaseResult>
+<TestCaseResult CasePath="dEQP-GLES2.functional.shaders.indexing.c" CaseType="SelfValidate" Version="0.3.4">
+<ShaderProgram LinkStatus="Fail"><FragmentShader CompileStatus="Fail">
+<InfoLog>online shaderc: the code generator refused this fragment shader: Select(OutOfScratch)</InfoLog>
+</FragmentShader></ShaderProgram>
+<Result StatusCode="Fail">fail</Result>
+</TestCaseResult>

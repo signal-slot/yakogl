@@ -1,0 +1,40 @@
+#sessionInfo releaseName vulkan-cts-1.4.6.2-555-g93bca01861b0e3ef3c387027a9791e6d065f900c
+#sessionInfo releaseId 0x93bca018
+#sessionInfo targetName "YakoGL"
+#sessionInfo logFormatVersion "0.3.4"
+
+#beginSession
+
+#beginTestCaseResult dEQP-GLES3.functional.negative_api.buffer.bind_buffer
+<?xml version="1.0" encoding="UTF-8"?>
+<TestCaseResult CasePath="dEQP-GLES3.functional.negative_api.buffer.bind_buffer" Version="0.3.4" CaseType="SelfValidate">
+ <Result StatusCode="Pass">Pass</Result>
+</TestCaseResult>
+
+#endTestCaseResult
+
+#beginTestCaseResult dEQP-GLES3.functional.negative_api.buffer.buffer_data
+<?xml version="1.0" encoding="UTF-8"?>
+<TestCaseResult CasePath="dEQP-GLES3.functional.negative_api.buffer.buffer_data" Version="0.3.4" CaseType="SelfValidate">
+ <Result StatusCode="Fail">Got invalid error</Result>
+</TestCaseResult>
+
+#endTestCaseResult
+
+#beginTestCaseResult dEQP-GLES3.functional.shaders.fixture.a
+<?xml version="1.0" encoding="UTF-8"?>
+<TestCaseResult CasePath="dEQP-GLES3.functional.shaders.fixture.a" Version="0.3.4" CaseType="SelfValidate">
+ <Result StatusCode="Fail">Compile failed: 0:12: not lowered yet</Result>
+</TestCaseResult>
+
+#endTestCaseResult
+
+#beginTestCaseResult dEQP-GLES3.functional.shaders.fixture.b
+<?xml version="1.0" encoding="UTF-8"?>
+<TestCaseResult CasePath="dEQP-GLES3.functional.shaders.fixture.b" Version="0.3.4" CaseType="SelfValidate">
+ <Result StatusCode="Fail">Compile failed: 0:7: not lowered yet</Result>
+</TestCaseResult>
+
+#endTestCaseResult
+
+#endSession

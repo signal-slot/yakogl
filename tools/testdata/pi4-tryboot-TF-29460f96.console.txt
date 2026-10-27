@@ -1,0 +1,380 @@
+13:06:50   4.12 [sdcard] pieeprom.upd not found
+13:06:50   4.13 [sdcard] recover4.elf not found
+13:06:50   4.13 [sdcard] recovery.elf not found
+13:06:50   4.63 Read start4.elf bytes  2299008 hnd 0x211ac
+13:06:50   4.69 Read fixup4.dat bytes     5496 hnd 0x20bca
+13:06:50   4.70 0x00d03114 0x00000000 0x00001fff
+13:06:50   4.74 MEM GPU: 76 ARM: 948 TOTAL: 1024
+13:06:50   4.10 Starting start4.elf @ 0xfec00200 partition 1
+13:06:50   4.31 XHCI-STOP
+13:06:50   4.31 xHC0 ver: 256 HCS: 05000420 fc000031 00e70004 HCC: 002841eb
+13:06:50   4.31 USBSTS 18
+13:06:50   4.32 PCI0 reset
+13:06:50   4.33 +
+13:06:50 
+13:06:50 MESS:00:00:04.344993:0: arasan: arasan_emmc_open
+13:06:50 MESS:00:00:04.346652:0: arasan: arasan_emmc_set_clock C0: 0x00800000 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 400000 max: 400000 delay: 5
+13:06:51 MESS:00:00:04.466879:0: arasan: arasan_emmc_set_clock C0: 0x00800000 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 400000 max: 400000 delay: 5
+13:06:51 MESS:00:00:04.479749:0: arasan: arasan_emmc_set_clock C0: 0x00800f00 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 390000 max: 400000 delay: 5
+13:06:51 MESS:00:00:04.514030:0: boot-part: 1 fs-type: 0
+13:06:51 MESS:00:00:04.515443:0: boot-part: 1 fs-type: 3
+13:06:51 MESS:00:00:04.519827:0: arasan: arasan_emmc_set_clock C0: 0x00800f06 C1: 0x000e0207 emmc: 200000000 actual: 50000000 div: 0x00000002 target: 50000000 min: 0 max: 50000000 delay: 1
+13:06:51 MESS:00:00:04.682753:0: brfs: File read: /mfs/sd/tryboot.txt
+13:06:51 MESS:00:00:04.685624:0: brfs: File read: 250 bytes
+13:06:51 MESS:00:00:04.778855:0: HDMI1:EDID error reading EDID block 0 attempt 0
+13:06:51 MESS:00:00:04.783363:0: HDMI1:EDID giving up on reading EDID block 0
+13:06:51 MESS:00:00:04.797711:0: brfs: File read: /mfs/sd/tryboot.txt
+13:06:51 MESS:00:00:05.296822:0: gpioman: gpioman_get_pin_num: pin DISPLAY_DSI_PORT not defined
+13:06:51 MESS:00:00:05.302369:0: gpioman: gpioman_get_pin_num: pin DISPLAY_DSI_PORT not defined
+13:06:51 MESS:00:00:05.311404:0: *** Restart logging
+13:06:51 MESS:00:00:05.313176:0: brfs: File read: 250 bytes
+13:06:51 MESS:00:00:05.392254:0: hdmi: HDMI1:EDID error reading EDID block 0 attempt 0
+13:06:51 MESS:00:00:05.397286:0: hdmi: HDMI1:EDID giving up on reading EDID block 0
+13:06:51 MESS:00:00:05.409722:0: hdmi: HDMI1:EDID error reading EDID block 0 attempt 0
+13:06:51 MESS:00:00:05.419594:0: hdmi: HDMI1:EDID giving up on reading EDID block 0
+13:06:51 MESS:00:00:05.423418:0: hdmi: HDMI:hdmi_get_state is deprecated, use hdmi_get_display_state instead
+13:06:51 MESS:00:00:05.432173:0: HDMI0: hdmi_pixel_encoding: 300000000
+13:06:51 MESS:00:00:05.437664:0: HDMI1: hdmi_pixel_encoding: 300000000
+13:06:52 MESS:00:00:05.458352:0: dtb_file 'bcm2711-rpi-4-b.dtb'
+13:06:52 MESS:00:00:05.473680:0: brfs: File read: /mfs/sd/bcm2711-rpi-4-b.dtb
+13:06:52 MESS:00:00:05.476970:0: Loaded 'bcm2711-rpi-4-b.dtb' to 0x100 size 0xdbb9
+13:06:52 MESS:00:00:05.517660:0: brfs: File read: 56249 bytes
+13:06:52 MESS:00:00:05.537534:0: brfs: File read: /mfs/sd/overlays/overlay_map.dtb
+13:06:52 MESS:00:00:05.602361:0: brfs: File read: 5971 bytes
+13:06:52 MESS:00:00:05.605076:0: brfs: File read: /mfs/sd/tryboot.txt
+13:06:52 MESS:00:00:05.648130:0: brfs: File read: 250 bytes
+13:06:52 MESS:00:00:05.651868:0: brfs: File read: /mfs/sd/cmdline.txt
+13:06:52 MESS:00:00:05.655290:0: Read command line from file 'cmdline.txt':
+13:06:52 MESS:00:00:05.661139:0: 'console=serial0,115200 console=tty1 root=PARTUUID=269eab4a-02 rootfstype=ext4 fsck.repair=yes rootwait cfg80211.ieee80211_regdom=JP splash quiet'
+13:06:52 MESS:00:00:05.817789:0: brfs: File read: 145 bytes
+13:06:53 MESS:00:00:06.679967:0: brfs: File read: /mfs/sd/pi4run-TF.bin
+13:06:53 MESS:00:00:06.682701:0: Loaded 'pi4run-TF.bin' to 0x200000 size 0x9addd8
+13:06:53 MESS:00:00:06.689140:0: Device tree loaded to 0x2eff1f00 (size 0xe0a1)
+13:06:53 MESS:00:00:06.697914:0: uart: Set PL011 baud rate to 103448.300000 Hz
+13:06:53 MESS:00:00:06.704441:0: uart: Baud rate change done...
+13:06:53 MESS:00:00:06.706463:0:*** Booting Zephyr OS build af17c0c8aa2a ***
+13:06:53 I: shader compiler scratch: 4194304 bytes, keep: 524288 bytes
+13:06:54 deqp: case filter 'dEQP-GLES2.functional.shaders.texture_functions.*'
+13:06:54 Writing test log into deqp.qpa
+13:06:54 dEQP Core 93bca01861b0e3ef3c387027a9791e6d065f900c (0x93bca018) starting..
+13:06:54   target implementation = 'YakoGL-Zephyr'
+13:06:55 v3d_deqp: fw clock 5 on: -116 (not fatal)
+13:06:56 v3d_deqp: fw clock 5 off: -116 (not fatal)
+13:06:57 v3d_deqp: fw clock 5 on: -116 (not fatal)
+13:06:57 I: V3D 4.2: 1 core(s), 8 QPUs, VPM 65536 bytes, PA 35 / VA 35 bits, MMU yes
+13:06:57 I: V3D raw: HUB_IDENT0..3 42554856 000e1124 00000100 00000e00 CTL_IDENT0..2 04443356 81001422 40078121 MMU_DEBUG_INFO 00000550
+13:06:57 osal(v3d): V3D 4.2, 8 QPUs, VPM 65536 bytes, MMU yes (identify 0)
+13:06:57 osal(v3d): UIFCFG 0x00000045
+13:06:57 osal(v3d): ready: carve-out 48 MiB at phys 0x283a000, GPU VA 0x181000..0x3100000
+13:06:57 yakogl/v3d: depth and stencil apart (by renderbuffer), the platform's setting
+13:06:57 yakogl/v3d: job arenas for 1024 draws (the platform's budget): BCL 139264, indirect 458752, binner tile pool 1056768 bytes; tiled copies kept up to 16777216 bytes
+13:06:57 yakogl/v3d: two job arena sets (the second's texture arena 1048576 bytes): a job is recorded while the one before runs
+13:06:57 yakogl/v3d: clear program built: 408 bytes of code
+13:06:57 GL error 0x500 in glGetIntegerv
+13:06:57 
+13:06:57 Test case 'dEQP-GLES2.functional.shaders.texture_functions.fragment.texture2d'..
+13:06:57 yakogl/v3d: tiled copies high-water 266240 of 16777216 bytes
+13:06:57 yakogl: program 2 has no uniform 'ub_true'
+13:06:57 yakogl: program 2 has no uniform 'ub_false'
+13:06:57 yakogl: program 2 has no uniform 'ub4_true'
+13:06:57 yakogl: program 2 has no uniform 'ub4_false'
+13:06:57 yakogl: program 2 has no uniform 'ui_minusOne'
+13:06:57 yakogl: program 2 has no uniform 'ui_zero'
+13:06:57 yakogl: program 2 has no uniform 'ui_one'
+13:06:57 yakogl: program 2 has no uniform 'ui_two'
+13:06:57 yakogl: program 2 has no uniform 'ui_three'
+13:06:57 yakogl: program 2 has no uniform 'ui_four'
+13:06:57 yakogl: program 2 has no uniform 'ui_five'
+13:06:57 yakogl: program 2 has no uniform 'ui_six'
+13:06:57 yakogl: program 2 has no uniform 'ui_seven'
+13:06:57 yakogl: program 2 has no uniform 'ui_eight'
+13:06:57 yakogl: program 2 has no uniform 'ui_oneHundredOne'
+13:06:57 yakogl: program 2 has no uniform 'ui2_minusOne'
+13:06:57 yakogl: program 2 has no uniform 'ui2_zero'
+13:06:57 yakogl: program 2 has no uniform 'ui2_one'
+13:06:57 yakogl: program 2 has no uniform 'ui2_two'
+13:06:57 yakogl: program 2 has no uniform 'ui2_four'
+13:06:57 yakogl: program 2 has no uniform 'ui2_five'
+13:06:57 yakogl: program 2 has no uniform 'ui3_minusOne'
+13:06:57 yakogl: program 2 has no uniform 'ui3_zero'
+13:06:57 yakogl: program 2 has no uniform 'ui3_one'
+13:06:57 yakogl: program 2 has no uniform 'ui3_two'
+13:06:57 yakogl: program 2 has no uniform 'ui3_four'
+13:06:57 yakogl: program 2 has no uniform 'ui3_five'
+13:06:57 yakogl: program 2 has no uniform 'ui4_minusOne'
+13:06:57 yakogl: program 2 has no uniform 'ui4_zero'
+13:06:57 yakogl: program 2 has no uniform 'ui4_one'
+13:06:57 yakogl: program 2 has no uniform 'ui4_two'
+13:06:57 yakogl: program 2 has no uniform 'ui4_four'
+13:06:57 yakogl: program 2 has no uniform 'ui4_five'
+13:06:57 yakogl: program 2 has no uniform 'uf_zero'
+13:06:57 yakogl: program 2 has no uniform 'uf_one'
+13:06:57 yakogl: program 2 has no uniform 'uf_two'
+13:06:57 yakogl: program 2 has no uniform 'uf_three'
+13:06:57 yakogl: program 2 has no uniform 'uf_four'
+13:06:57 yakogl: program 2 has no uniform 'uf_five'
+13:06:57 yakogl: program 2 has no uniform 'uf_six'
+13:06:57 yakogl: program 2 has no uniform 'uf_seven'
+13:06:57 yakogl: program 2 has no uniform 'uf_eight'
+13:06:57 yakogl: program 2 has no uniform 'uf_half'
+13:06:57 yakogl: program 2 has no uniform 'uf_third'
+13:06:57 yakogl: program 2 has no uniform 'uf_fourth'
+13:06:57 yakogl: program 2 has no uniform 'uf_fifth'
+13:06:57 yakogl: program 2 has no uniform 'uf_sixth'
+13:06:57 yakogl: program 2 has no uniform 'uf_seventh'
+13:06:57 yakogl: program 2 has no uniform 'uf_eighth'
+13:06:57 yakogl: program 2 has no uniform 'uv2_minusOne'
+13:06:57 yakogl: program 2 has no uniform 'uv2_zero'
+13:06:57 yakogl: program 2 has no uniform 'uv2_half'
+13:06:57 yakogl: program 2 has no uniform 'uv2_one'
+13:06:57 yakogl: program 2 has no uniform 'uv2_two'
+13:06:57 yakogl: program 2 has no uniform 'uv3_minusOne'
+13:06:57 yakogl: program 2 has no uniform 'uv3_zero'
+13:06:57 yakogl: program 2 has no uniform 'uv3_half'
+13:06:57 yakogl: program 2 has no uniform 'uv3_one'
+13:06:57 yakogl: program 2 has no uniform 'uv3_two'
+13:06:57 yakogl: program 2 has no uniform 'uv4_minusOne'
+13:06:57 yakogl: program 2 has no uniform 'uv4_zero'
+13:06:57 yakogl: program 2 has no uniform 'uv4_half'
+13:06:57 yakogl: program 2 has no uniform 'uv4_one'
+13:06:57 yakogl: program 2 has no uniform 'uv4_two'
+13:06:57 yakogl: program 2 has no uniform 'uv4_black'
+13:06:57 yakogl: program 2 has no uniform 'uv4_gray'
+13:06:57 yakogl: program 2 has no uniform 'uv4_white'
+13:06:57 osal(v3d): BASELINE after a completed job 1: core_sts 0x0 hub_sts 0x0 err 0x1000 ct0 cs 0x0 ea 0x201085 ca 0x201085 ra 0x0 qba 0x201000 qea 0x201085 ct1 ca 0x223097 ra 0x223096 qba 0x223000 qea 0x223097
+13:06:57 deqp: Pass dEQP-GLES2.functional.shaders.texture_functions.fragment.texture2d
+13:06:57   Pass (Pass)
+13:06:57 
+13:06:57 Test case 'dEQP-GLES2.functional.shaders.texture_functions.fragment.texture2d_bias'..
+13:06:57 yakogl: program 2 has no uniform 'ub_true'
+13:06:57 yakogl: program 2 has no uniform 'ub_false'
+13:06:57 yakogl: program 2 has no uniform 'ub4_true'
+13:06:57 yakogl: program 2 has no uniform 'ub4_false'
+13:06:57 yakogl: program 2 has no uniform 'ui_minusOne'
+13:06:57 yakogl: program 2 has no uniform 'ui_zero'
+13:06:57 yakogl: program 2 has no uniform 'ui_one'
+13:06:57 yakogl: program 2 has no uniform 'ui_two'
+13:06:57 yakogl: program 2 has no uniform 'ui_three'
+13:06:57 yakogl: program 2 has no uniform 'ui_four'
+13:06:57 yakogl: program 2 has no uniform 'ui_five'
+13:06:57 yakogl: program 2 has no uniform 'ui_six'
+13:06:57 yakogl: program 2 has no uniform 'ui_seven'
+13:06:57 yakogl: program 2 has no uniform 'ui_eight'
+13:06:57 yakogl: program 2 has no uniform 'ui_oneHundredOne'
+13:06:57 yakogl: program 2 has no uniform 'ui2_minusOne'
+13:06:57 yakogl: program 2 has no uniform 'ui2_zero'
+13:06:57 yakogl: program 2 has no uniform 'ui2_one'
+13:06:57 yakogl: program 2 has no uniform 'ui2_two'
+13:06:57 yakogl: program 2 has no uniform 'ui2_four'
+13:06:57 yakogl: program 2 has no uniform 'ui2_five'
+13:06:57 yakogl: program 2 has no uniform 'ui3_minusOne'
+13:06:57 yakogl: program 2 has no uniform 'ui3_zero'
+13:06:57 yakogl: program 2 has no uniform 'ui3_one'
+13:06:57 yakogl: program 2 has no uniform 'ui3_two'
+13:06:57 yakogl: program 2 has no uniform 'ui3_four'
+13:06:57 yakogl: program 2 has no uniform 'ui3_five'
+13:06:57 yakogl: program 2 has no uniform 'ui4_minusOne'
+13:06:57 yakogl: program 2 has no uniform 'ui4_zero'
+13:06:57 yakogl: program 2 has no uniform 'ui4_one'
+13:06:57 yakogl: program 2 has no uniform 'ui4_two'
+13:06:58 yakogl: program 2 has no uniform 'ui4_four'
+13:06:58 yakogl: program 2 has no uniform 'ui4_five'
+13:06:58 yakogl: program 2 has no uniform 'uf_zero'
+13:06:58 yakogl: program 2 has no uniform 'uf_one'
+13:06:58 yakogl: program 2 has no uniform 'uf_two'
+13:06:58 yakogl: program 2 has no uniform 'uf_three'
+13:06:58 yakogl: program 2 has no uniform 'uf_four'
+13:06:58 yakogl: program 2 has no uniform 'uf_five'
+13:06:58 yakogl: program 2 has no uniform 'uf_six'
+13:06:58 yakogl: program 2 has no uniform 'uf_seven'
+13:06:58 yakogl: program 2 has no uniform 'uf_eight'
+13:06:58 yakogl: program 2 has no uniform 'uf_half'
+13:06:58 yakogl: program 2 has no uniform 'uf_third'
+13:06:58 yakogl: program 2 has no uniform 'uf_fourth'
+13:06:58 yakogl: program 2 has no uniform 'uf_fifth'
+13:06:58 yakogl: program 2 has no uniform 'uf_sixth'
+13:06:58 yakogl: program 2 has no uniform 'uf_seventh'
+13:06:58 yakogl: program 2 has no uniform 'uf_eighth'
+13:06:58 yakogl: program 2 has no uniform 'uv2_minusOne'
+13:06:58 yakogl: program 2 has no uniform 'uv2_zero'
+13:06:58 yakogl: program 2 has no uniform 'uv2_half'
+13:06:58 yakogl: program 2 has no uniform 'uv2_one'
+13:06:58 yakogl: program 2 has no uniform 'uv2_two'
+13:06:58 yakogl: program 2 has no uniform 'uv3_minusOne'
+13:06:58 yakogl: program 2 has no uniform 'uv3_zero'
+13:06:58 yakogl: program 2 has no uniform 'uv3_half'
+13:06:58 yakogl: program 2 has no uniform 'uv3_one'
+13:06:58 yakogl: program 2 has no uniform 'uv3_two'
+13:06:58 yakogl: program 2 has no uniform 'uv4_minusOne'
+13:06:58 yakogl: program 2 has no uniform 'uv4_zero'
+13:06:58 yakogl: program 2 has no uniform 'uv4_half'
+13:06:58 yakogl: program 2 has no uniform 'uv4_one'
+13:06:58 yakogl: program 2 has no uniform 'uv4_two'
+13:06:58 yakogl: program 2 has no uniform 'uv4_black'
+13:06:58 yakogl: program 2 has no uniform 'uv4_gray'
+13:06:58 yakogl: program 2 has no uniform 'uv4_white'
+13:06:58 yakogl/v3d: binner pool after job 1: given 0x00b96000 + 1056768, BPCA 0x00b99000 BPCS 1044480 CT0QMA 0x00b96000 CT0QMS 1056768, overflow blocks 0 of 2 (262144 bytes each)
+13:06:58 deqp: Pass dEQP-GLES2.functional.shaders.texture_functions.fragment.texture2d_bias
+13:06:58   Pass (Pass)
+13:06:58 
+13:06:58 Test case 'dEQP-GLES2.functional.shaders.texture_functions.fragment.texture2dproj_vec3'..
+13:06:58 yakogl: program 2 has no uniform 'ub_true'
+13:06:58 yakogl: program 2 has no uniform 'ub_false'
+13:06:58 yakogl: program 2 has no uniform 'ub4_true'
+13:06:58 yakogl: program 2 has no uniform 'ub4_false'
+13:06:58 yakogl: program 2 has no uniform 'ui_minusOne'
+13:06:58 yakogl: program 2 has no uniform 'ui_zero'
+13:06:58 yakogl: program 2 has no uniform 'ui_one'
+13:06:58 yakogl: program 2 has no uniform 'ui_two'
+13:06:58 yakogl: program 2 has no uniform 'ui_three'
+13:06:58 yakogl: program 2 has no uniform 'ui_four'
+13:06:58 yakogl: program 2 has no uniform 'ui_five'
+13:06:58 yakogl: program 2 has no uniform 'ui_six'
+13:06:58 yakogl: program 2 has no uniform 'ui_seven'
+13:06:58 yakogl: program 2 has no uniform 'ui_eight'
+13:06:58 yakogl: program 2 has no uniform 'ui_oneHundredOne'
+13:06:58 yakogl: program 2 has no uniform 'ui2_minusOne'
+13:06:58 yakogl: program 2 has no uniform 'ui2_zero'
+13:06:58 yakogl: program 2 has no uniform 'ui2_one'
+13:06:58 yakogl: program 2 has no uniform 'ui2_two'
+13:06:58 yakogl: program 2 has no uniform 'ui2_four'
+13:06:58 yakogl: program 2 has no uniform 'ui2_five'
+13:06:58 yakogl: program 2 has no uniform 'ui3_minusOne'
+13:06:58 yakogl: program 2 has no uniform 'ui3_zero'
+13:06:58 yakogl: program 2 has no uniform 'ui3_one'
+13:06:58 yakogl: program 2 has no uniform 'ui3_two'
+13:06:58 yakogl: program 2 has no uniform 'ui3_four'
+13:06:58 yakogl: program 2 has no uniform 'ui3_five'
+13:06:58 yakogl: program 2 has no uniform 'ui4_minusOne'
+13:06:58 yakogl: program 2 has no uniform 'ui4_zero'
+13:06:58 yakogl: program 2 has no uniform 'ui4_one'
+13:06:58 yakogl: program 2 has no uniform 'ui4_two'
+13:06:58 yakogl: program 2 has no uniform 'ui4_four'
+13:06:58 yakogl: program 2 has no uniform 'ui4_five'
+13:06:58 yakogl: program 2 has no uniform 'uf_zero'
+13:06:58 yakogl: program 2 has no uniform 'uf_one'
+13:06:58 yakogl: program 2 has no uniform 'uf_two'
+13:06:58 yakogl: program 2 has no uniform 'uf_three'
+13:06:58 yakogl: program 2 has no uniform 'uf_four'
+13:06:58 yakogl: program 2 has no uniform 'uf_five'
+13:06:58 yakogl: program 2 has no uniform 'uf_six'
+13:06:58 yakogl: program 2 has no uniform 'uf_seven'
+13:06:58 yakogl: program 2 has no uniform 'uf_eight'
+13:06:58 yakogl: program 2 has no uniform 'uf_half'
+13:06:58 yakogl: program 2 has no uniform 'uf_third'
+13:06:58 yakogl: program 2 has no uniform 'uf_fourth'
+13:06:58 yakogl: program 2 has no uniform 'uf_fifth'
+13:06:58 yakogl: program 2 has no uniform 'uf_sixth'
+13:06:58 yakogl: program 2 has no uniform 'uf_seventh'
+13:06:58 yakogl: program 2 has no uniform 'uf_eighth'
+13:06:58 yakogl: program 2 has no uniform 'uv2_minusOne'
+13:06:58 yakogl: program 2 has no uniform 'uv2_zero'
+13:06:58 yakogl: program 2 has no uniform 'uv2_half'
+13:06:58 yakogl: program 2 has no uniform 'uv2_one'
+13:06:58 yakogl: program 2 has no uniform 'uv2_two'
+13:06:58 yakogl: program 2 has no uniform 'uv3_minusOne'
+13:06:58 yakogl: program 2 has no uniform 'uv3_zero'
+13:06:58 yakogl: program 2 has no uniform 'uv3_half'
+13:06:58 yakogl: program 2 has no uniform 'uv3_one'
+13:06:58 yakogl: program 2 has no uniform 'uv3_two'
+13:06:58 yakogl: program 2 has no uniform 'uv4_minusOne'
+13:06:58 yakogl: program 2 has no uniform 'uv4_zero'
+13:06:58 yakogl: program 2 has no uniform 'uv4_half'
+13:06:58 yakogl: program 2 has no uniform 'uv4_one'
+13:06:58 yakogl: program 2 has no uniform 'uv4_two'
+13:06:58 yakogl: program 2 has no uniform 'uv4_black'
+13:06:58 yakogl: program 2 has no uniform 'uv4_gray'
+13:06:58 deqp: Pass dEQP-GLES2.functional.shaders.texture_functions.fragment.texture2dproj_vec3
+13:06:58   Pass (Pass)
+13:06:58 
+13:06:58 Test case 'dEQP-GLES2.functional.shaders.texture_functions.fragment.texture2dproj_vec3_bias'..
+13:06:58 deqp: Pass dEQP-GLES2.functional.shaders.texture_functions.fragment.texture2dproj_vec3_bias
+13:06:58   Pass (Pass)
+13:06:58 
+13:06:58 Test case 'dEQP-GLES2.functional.shaders.texture_functions.fragment.texture2dproj_vec4'..
+13:06:58 deqp: Pass dEQP-GLES2.functional.shaders.texture_functions.fragment.texture2dproj_vec4
+13:06:58   Pass (Pass)
+13:06:58 
+13:06:58 Test case 'dEQP-GLES2.functional.shaders.texture_functions.fragment.texture2dproj_vec4_bias'..
+13:06:58 deqp: Pass dEQP-GLES2.functional.shaders.texture_functions.fragment.texture2dproj_vec4_bias
+13:06:58   Pass (Pass)
+13:06:58 
+13:06:58 Test case 'dEQP-GLES2.functional.shaders.texture_functions.fragment.texturecube'..
+13:06:58   cube-bind: 0x1148000 unit 0 kick 7 (draw)
+13:06:58   cube(draw) @0x1148000 256x256 x6: fmt 0, cpu 0x1e247000 - not dumped
+13:06:58 yakogl/v3d: tiled copies high-water 2117632 of 16777216 bytes
+13:06:58 deqp: Pass dEQP-GLES2.functional.shaders.texture_functions.fragment.texturecube
+13:06:58   Pass (Pass)
+13:06:58 
+13:06:58 Test case 'dEQP-GLES2.functional.shaders.texture_functions.fragment.texturecube_bias'..
+13:06:58   cube-bind: 0x1148000 unit 0 kick 8 (draw)
+13:06:58   cube(draw) @0x1148000 256x256 x6: fmt 0, cpu 0x1e247000 - not dumped
+13:06:58 deqp: Pass dEQP-GLES2.functional.shaders.texture_functions.fragment.texturecube_bias
+13:06:58   Pass (Pass)
+13:06:58 
+13:06:58 Test case 'dEQP-GLES2.functional.shaders.texture_functions.invalid.texture2d_bias_in_vertex'..
+13:06:58 glCompileShader(3): 0:0: 'texture2D' : a texture lookup with a bias is only allowed in a fragment shader [vertex stage, 157 bytes]
+13:06:58 deqp: Pass dEQP-GLES2.functional.shaders.texture_functions.invalid.texture2d_bias_in_vertex
+13:06:58   Pass (Pass)
+13:06:58 
+13:06:58 Test case 'dEQP-GLES2.functional.shaders.texture_functions.invalid.texture2dlod_in_fragment'..
+13:06:58 glCompileShader(5): 0:0: 'texture2DLod' : a 'Lod' texture lookup is only allowed in a vertex shader [fragment stage, 114 bytes]
+13:06:58 deqp: Pass dEQP-GLES2.functional.shaders.texture_functions.invalid.texture2dlod_in_fragment
+13:06:58   Pass (Pass)
+13:06:58 
+13:06:58 Test case 'dEQP-GLES2.functional.shaders.texture_functions.invalid.texturecube_bias_in_vertex'..
+13:06:58 glCompileShader(3): 0:0: 'textureCube' : a texture lookup with a bias is only allowed in a fragment shader [vertex stage, 161 bytes]
+13:06:58 deqp: Pass dEQP-GLES2.functional.shaders.texture_functions.invalid.texturecube_bias_in_vertex
+13:06:58   Pass (Pass)
+13:06:58 
+13:06:58 Test case 'dEQP-GLES2.functional.shaders.texture_functions.invalid.texturecubelod_in_fragment'..
+13:06:58 glCompileShader(5): 0:0: 'textureCubeLod' : a 'Lod' texture lookup is only allowed in a vertex shader [fragment stage, 118 bytes]
+13:06:58 deqp: Pass dEQP-GLES2.functional.shaders.texture_functions.invalid.texturecubelod_in_fragment
+13:06:58   Pass (Pass)
+13:06:58 
+13:06:58 Test case 'dEQP-GLES2.functional.shaders.texture_functions.vertex.texture2d'..
+13:06:58 deqp: Pass dEQP-GLES2.functional.shaders.texture_functions.vertex.texture2d
+13:06:58   Pass (Pass)
+13:06:58 
+13:06:58 Test case 'dEQP-GLES2.functional.shaders.texture_functions.vertex.texture2dlod'..
+13:06:58 deqp: Pass dEQP-GLES2.functional.shaders.texture_functions.vertex.texture2dlod
+13:06:58   Pass (Pass)
+13:06:58 
+13:06:58 Test case 'dEQP-GLES2.functional.shaders.texture_functions.vertex.texture2dproj_vec3'..
+13:06:58 deqp: Pass dEQP-GLES2.functional.shaders.texture_functions.vertex.texture2dproj_vec3
+13:06:58   Pass (Pass)
+13:06:58 
+13:06:58 Test case 'dEQP-GLES2.functional.shaders.texture_functions.vertex.texture2dproj_vec4'..
+13:06:59 deqp: Pass dEQP-GLES2.functional.shaders.texture_functions.vertex.texture2dproj_vec4
+13:06:59   Pass (Pass)
+13:06:59 
+13:06:59 Test case 'dEQP-GLES2.functional.shaders.texture_functions.vertex.texture2dprojlod_vec3'..
+13:06:59 deqp: Pass dEQP-GLES2.functional.shaders.texture_functions.vertex.texture2dprojlod_vec3
+13:06:59   Pass (Pass)
+13:06:59 
+13:06:59 Test case 'dEQP-GLES2.functional.shaders.texture_functions.vertex.texture2dprojlod_vec4'..
+13:06:59 deqp: Pass dEQP-GLES2.functional.shaders.texture_functions.vertex.texture2dprojlod_vec4
+13:06:59   Pass (Pass)
+13:06:59 
+13:06:59 Test case 'dEQP-GLES2.functional.shaders.texture_functions.vertex.texturecube'..
+13:06:59   cube-bind: 0x11bf000 unit 0 kick 19 (draw)
+13:06:59   cube(draw) @0x11bf000 256x256 x6: fmt 0, cpu 0x1e2be000 - not dumped
+13:06:59 deqp: Pass dEQP-GLES2.functional.shaders.texture_functions.vertex.texturecube
+13:06:59   Pass (Pass)
+13:06:59 
+13:06:59 Test case 'dEQP-GLES2.functional.shaders.texture_functions.vertex.texturecubelod'..
+13:06:59   cube-bind: 0x11bf000 unit 0 kick 20 (draw)
+13:06:59   cube(draw) @0x11bf000 256x256 x6: fmt 0, cpu 0x1e2be000 - not dumped
+13:06:59 deqp: Fail dEQP-GLES2.functional.shaders.texture_functions.vertex.texturecubelod
+13:06:59   Fail (Fail)
+13:06:59 
+13:06:59 DONE!
+13:06:59 
+13:06:59 Test run totals:
+13:06:59   Passed:        19/20 (95.0%)
+13:06:59   Failed:        1/20 (5.0%)
+13:06:59   Not supported: 0/20 (0.0%)
+13:06:59   Warnings:      0/20 (0.0%)
+13:06:59   Waived:        0/20 (0.0%)
+13:06:59 deqp: done: 19 passed, 1 failed, 0 not supported, 0 warnings, complete=1
+13:06:59 deqp: summary: 20 cases begun, 20 with a result, 0 without

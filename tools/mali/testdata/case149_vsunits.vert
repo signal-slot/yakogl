@@ -1,0 +1,46 @@
+#version 100
+/* #1384/#1385 plan #153 study-vstex: case 149 vsunits vertex shader, sixteen samplers, vsunits_vs_src(16) of
+ * driver/tools/pvrlab/gl_test.c, verbatim
+ * (tools/mali/drm_shim_ref.sh run, Mesa 26.2.1; see
+ * docs/notes/mali-vs-texture-lanes.md). */
+attribute vec4 a_pos;
+uniform vec4 u_w[4];
+varying vec4 v_c;
+uniform sampler2D u_s0;
+uniform sampler2D u_s1;
+uniform sampler2D u_s2;
+uniform sampler2D u_s3;
+uniform sampler2D u_s4;
+uniform sampler2D u_s5;
+uniform sampler2D u_s6;
+uniform sampler2D u_s7;
+uniform sampler2D u_s8;
+uniform sampler2D u_s9;
+uniform sampler2D u_s10;
+uniform sampler2D u_s11;
+uniform sampler2D u_s12;
+uniform sampler2D u_s13;
+uniform sampler2D u_s14;
+uniform sampler2D u_s15;
+void main() {
+    vec2 c = vec2(0.5);
+    vec4 r = vec4(0.0);
+    r += u_w[0].x * texture2DLod(u_s0, c, 0.0);
+    r += u_w[0].y * texture2DLod(u_s1, c, 0.0);
+    r += u_w[0].z * texture2DLod(u_s2, c, 0.0);
+    r += u_w[0].w * texture2DLod(u_s3, c, 0.0);
+    r += u_w[1].x * texture2DLod(u_s4, c, 0.0);
+    r += u_w[1].y * texture2DLod(u_s5, c, 0.0);
+    r += u_w[1].z * texture2DLod(u_s6, c, 0.0);
+    r += u_w[1].w * texture2DLod(u_s7, c, 0.0);
+    r += u_w[2].x * texture2DLod(u_s8, c, 0.0);
+    r += u_w[2].y * texture2DLod(u_s9, c, 0.0);
+    r += u_w[2].z * texture2DLod(u_s10, c, 0.0);
+    r += u_w[2].w * texture2DLod(u_s11, c, 0.0);
+    r += u_w[3].x * texture2DLod(u_s12, c, 0.0);
+    r += u_w[3].y * texture2DLod(u_s13, c, 0.0);
+    r += u_w[3].z * texture2DLod(u_s14, c, 0.0);
+    r += u_w[3].w * texture2DLod(u_s15, c, 0.0);
+    v_c = r;
+    gl_Position = a_pos;
+}

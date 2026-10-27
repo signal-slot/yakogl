@@ -1,0 +1,38 @@
+attribute vec4 a_position;
+varying vec4 v0;
+varying vec4 v1;
+varying vec4 v2;
+varying vec4 v3;
+void main() {
+  vec4 p = a_position;
+  vec4 t0 = p * 1.000 + vec4(0.000);
+  vec4 t1 = p * 1.010 + vec4(0.010);
+  vec4 t2 = p * 1.020 + vec4(0.020);
+  vec4 t3 = p * 1.030 + vec4(0.030);
+  vec4 t4 = p * 1.040 + vec4(0.040);
+  vec4 t5 = p * 1.050 + vec4(0.050);
+  vec4 t6 = p * 1.060 + vec4(0.060);
+  vec4 t7 = p * 1.070 + vec4(0.070);
+  vec4 t8 = p * 1.080 + vec4(0.080);
+  vec4 t9 = p * 1.090 + vec4(0.090);
+  vec4 t10 = p * 1.100 + vec4(0.100);
+  vec4 t11 = p * 1.110 + vec4(0.110);
+  vec4 t12 = p * 1.120 + vec4(0.120);
+  vec4 t13 = p * 1.130 + vec4(0.130);
+  vec4 t14 = p * 1.140 + vec4(0.140);
+  vec4 t15 = p * 1.150 + vec4(0.150);
+  vec4 t16 = p * 1.160 + vec4(0.160);
+  vec4 t17 = p * 1.170 + vec4(0.170);
+  vec4 t18 = p * 1.180 + vec4(0.180);
+  vec4 t19 = p * 1.190 + vec4(0.190);
+  vec4 t20 = p * 1.200 + vec4(0.200);
+  vec4 t21 = p * 1.210 + vec4(0.210);
+  vec4 t22 = p * 1.220 + vec4(0.220);
+  vec4 t23 = p * 1.230 + vec4(0.230);
+  vec4 s = t0 + t1 + t2 + t3 + t4 + t5 + t6 + t7 + t8 + t9 + t10 + t11 + t12 + t13 + t14 + t15 + t16 + t17 + t18 + t19 + t20 + t21 + t22 + t23;
+  gl_Position = a_position;
+  v0 = s;
+  v1 = s * 1.1;
+  v2 = s * 1.2;
+  v3 = s * 1.3;
+}

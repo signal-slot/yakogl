@@ -1,0 +1,57 @@
+--- vs position: offset 0, 256 bytes
+7c 7d 01 32 08 80 66 08    LD_ATTR_IMM.v4.f32.slot0.wait0 @r0:r1:r2:r3, r60^, r61^, index:0x0, table:0x1
+43 00 00 00 00 c3 9c 00    FRCP.f32 r3, r3^
+43 86 03 00 00 c3 a4 00    FMAX.f32 r3, r3^, u3.w0
+43 87 02 00 00 c3 a4 00    FMIN.f32 r3, r3^, u3.w1
+40 03 c0 00 04 c0 b2 00    FMA.f32 r0, r0^, r3, 0x0.neg
+41 03 c0 00 04 c1 b2 00    FMA.f32 r1, r1^, r3, 0x0.neg
+42 03 c0 00 04 c2 b2 00    FMA.f32 r2, r2^, r3, 0x0.neg
+40 80 81 00 00 c0 b2 00    FMA.f32 r0, r0^, u0.w0, u0.w1
+41 82 83 00 00 c1 b2 00    FMA.f32 r1, r1^, u1.w0, u1.w1
+42 84 85 00 00 c2 b2 00    FMA.f32 r2, r2^, u2.w0, u2.w1
+7b 0d 00 40 04 84 5e 10    LEA_BUF_IMM.slot1.wait1 @r4:r5, r59^, table:0xD, index:0x0
+04 00 00 99 02 40 61 00    STORE.i32.istream.slot2 @r0, [r4:r5], offset:0
+88 00 00 00 00 c6 91 00    MOV.i32 r6, u4.w0
+c0 00 00 00 00 c7 91 00    MOV.i32 r7, 0x0
+46 04 07 00 00 c6 ab 21    SHADDX.s64.wait2 [r6:r7], [r6^:r7^], [r4:r5], shift:0x0
+46 00 00 19 02 41 61 00    STORE.i32.istream.slot0 @r1, [r6^:r7^], offset:0
+89 00 00 00 00 c0 91 00    MOV.i32 r0, u4.w1
+c0 00 00 00 00 c1 91 00    MOV.i32 r1, 0x0
+40 04 07 00 00 c0 ab 09    SHADDX.s64.wait0 [r0:r1], [r0^:r1^], [r4:r5], shift:0x0
+40 00 00 59 02 42 61 00    STORE.i32.istream.slot1 @r2, [r0^:r1^], offset:0
+8a 00 00 00 00 c0 91 00    MOV.i32 r0, u5.w0
+c0 00 00 00 00 c1 91 00    MOV.i32 r1, 0x0
+40 44 07 00 00 c0 ab 11    SHADDX.s64.wait1 [r0:r1], [r0^:r1^], [r4^:r5^], shift:0x0
+40 00 00 99 02 43 61 78    STORE.i32.istream.slot2.end @r3, [r0^:r1^], offset:0
+
+--- vs varying: offset 256, 256 bytes
+7c 7d 01 32 08 80 66 00    LD_ATTR_IMM.v4.f32.slot0 @r0:r1:r2:r3, r60^, r61^, index:0x0, table:0x1
+7b 0d 00 40 04 84 5e 18    LEA_BUF_IMM.slot1.wait01 @r4:r5, r59^, table:0xD, index:0x0
+04 00 00 9a 02 40 61 00    STORE.i32.estream.slot2 @r0, [r4:r5], offset:0
+88 00 00 00 00 c6 91 00    MOV.i32 r6, u4.w0
+c0 00 00 00 00 c7 91 00    MOV.i32 r7, 0x0
+46 04 07 00 00 c6 ab 21    SHADDX.s64.wait2 [r6:r7], [r6^:r7^], [r4:r5], shift:0x0
+46 00 00 1a 02 41 61 00    STORE.i32.estream.slot0 @r1, [r6^:r7^], offset:0
+89 00 00 00 00 c0 91 00    MOV.i32 r0, u4.w1
+c0 00 00 00 00 c1 91 00    MOV.i32 r1, 0x0
+40 04 07 00 00 c0 ab 09    SHADDX.s64.wait0 [r0:r1], [r0^:r1^], [r4:r5], shift:0x0
+40 00 00 5a 02 42 61 00    STORE.i32.estream.slot1 @r2, [r0^:r1^], offset:0
+8a 00 00 00 00 c0 91 00    MOV.i32 r0, u5.w0
+c0 00 00 00 00 c1 91 00    MOV.i32 r1, 0x0
+40 44 07 00 00 c0 ab 11    SHADDX.s64.wait1 [r0:r1], [r0^:r1^], [r4^:r5^], shift:0x0
+40 00 00 9a 02 43 61 78    STORE.i32.estream.slot2.end @r3, [r0^:r1^], offset:0
+
+--- fs fragment: offset 0, 128 bytes
+7d 00 00 32 08 80 5c 08    LD_VAR_BUF_IMM.f32.slot0.v4.src_f32.center.store.wait0 @r0:r1:r2:r3, r61^, index:0x0
+40 41 42 00 00 c0 b2 68    FMA.f32.discard r0, r0^, r1^, r2^
+c0 84 c0 80 04 c1 f4 00    FCMP_OR.f32.lt.m1 r1, 0x0, u2.w0, 0x0
+41 c0 43 40 00 c0 50 01    CSEL.u32.eq r0, r1^, 0x0, r3^, r0^
+40 c0 00 00 10 40 a4 40    FADD.f32.wait0126 r0.h0, r0^, 0x0.neg
+7c d0 ea 00 02 bc 7d 08    ATEST.wait0 @r60, r60^, 0x3F800000, atest_datum.w0
+40 00 14 00 00 c0 90 00    U16_TO_U32 r0, r0^.h0
+db 00 00 00 00 c1 91 48    MOV.i32.wait r1, 0x3C000000
+f0 00 3c 73 04 40 7f 78    BLEND.slot1.v4.f16.end @r0:r1, blend_descriptor_0.w0, r60, target:0x0
+c0 00 00 00 00 f0 10 01    IADD_IMM.i32 r48, 0x0, #0x0
+c0 f1 00 00 10 c1 2f 00    BRANCHZI.eq.absolute 0x0, blend_descriptor_0.w1
+
+

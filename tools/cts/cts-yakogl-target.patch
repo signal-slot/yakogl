@@ -1,0 +1,218 @@
+diff --git a/framework/platform/yakogl/tcuYakoGLPlatform.cpp b/framework/platform/yakogl/tcuYakoGLPlatform.cpp
+new file mode 100644
+index 0000000..7f39ac0
+--- /dev/null
++++ b/framework/platform/yakogl/tcuYakoGLPlatform.cpp
+@@ -0,0 +1,106 @@
++/*-------------------------------------------------------------------------
++ * drawElements Quality Program Tester Core
++ * ----------------------------------------
++ *
++ * Copyright (c) 2026 Signal Slot, Inc.
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ *
++ *//*!
++ * \file
++ * \brief YakoGL platform port.
++ *//*--------------------------------------------------------------------*/
++
++#include "tcuYakoGLPlatform.hpp"
++
++#include "egluGLContextFactory.hpp"
++#include "egluNativeDisplay.hpp"
++#include "eglwEnums.hpp"
++#include "eglwLibrary.hpp"
++
++#if !defined(DEQP_EGL_LIBRARY_PATH)
++#define DEQP_EGL_LIBRARY_PATH "libEGL.so.1"
++#endif
++
++namespace tcu
++{
++namespace yakogl
++{
++
++using namespace eglw;
++
++namespace
++{
++
++/* YakoGL's eglGetDisplay() takes EGL_DEFAULT_DISPLAY and nothing else, so the
++ * display advertises the legacy capability only. libEGL is opened by SONAME:
++ * a board image carries libEGL.so.1, not the libEGL.so development symlink. */
++class Display : public eglu::NativeDisplay
++{
++public:
++    static const Capability CAPABILITIES = CAPABILITY_GET_DISPLAY_LEGACY;
++
++    Display(void) : eglu::NativeDisplay(CAPABILITIES), m_library(DEQP_EGL_LIBRARY_PATH)
++    {
++    }
++
++    EGLNativeDisplayType getLegacyNative(void)
++    {
++        return EGL_DEFAULT_DISPLAY;
++    }
++
++    const eglw::Library &getLibrary(void) const
++    {
++        return m_library;
++    }
++
++private:
++    eglw::DefaultLibrary m_library;
++};
++
++/* No window and no pixmap factory is registered. eglu::GLContextFactory turns
++ * that into a NotSupportedError for the window and pixmap surface types and
++ * uses eglCreatePbufferSurface() for --deqp-surface-type=pbuffer. */
++class DisplayFactory : public eglu::NativeDisplayFactory
++{
++public:
++    DisplayFactory(void) : eglu::NativeDisplayFactory("yakogl", "YakoGL EGL default display", Display::CAPABILITIES)
++    {
++    }
++
++    eglu::NativeDisplay *createDisplay(const EGLAttrib *attribList) const
++    {
++        DE_UNREF(attribList);
++        return new Display();
++    }
++};
++
++} // namespace
++
++Platform::Platform(void)
++{
++    m_nativeDisplayFactoryRegistry.registerFactory(new DisplayFactory());
++    m_contextFactoryRegistry.registerFactory(new eglu::GLContextFactory(m_nativeDisplayFactoryRegistry));
++}
++
++Platform::~Platform(void)
++{
++}
++
++} // namespace yakogl
++} // namespace tcu
++
++tcu::Platform *createPlatform(void)
++{
++    return new tcu::yakogl::Platform();
++}
+diff --git a/framework/platform/yakogl/tcuYakoGLPlatform.hpp b/framework/platform/yakogl/tcuYakoGLPlatform.hpp
+new file mode 100644
+index 0000000..2963604
+--- /dev/null
++++ b/framework/platform/yakogl/tcuYakoGLPlatform.hpp
+@@ -0,0 +1,63 @@
++#ifndef _TCUYAKOGLPLATFORM_HPP
++#define _TCUYAKOGLPLATFORM_HPP
++/*-------------------------------------------------------------------------
++ * drawElements Quality Program Tester Core
++ * ----------------------------------------
++ *
++ * Copyright (c) 2026 Signal Slot, Inc.
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ *
++ *//*!
++ * \file
++ * \brief YakoGL platform port.
++ *
++ * YakoGL is an OpenGL ES 2.0 + minimal EGL library with no window system.
++ * eglGetDisplay() accepts only EGL_DEFAULT_DISPLAY, there are no platform
++ * extensions, and a window surface needs a native window struct whose pages
++ * the caller owns. A test process cannot allocate those, so this port offers
++ * pbuffer surfaces only: it registers a native display factory with no window
++ * and no pixmap factory. Run dEQP with --deqp-surface-type=pbuffer.
++ *//*--------------------------------------------------------------------*/
++
++#include "tcuDefs.hpp"
++#include "tcuPlatform.hpp"
++#include "gluPlatform.hpp"
++#include "egluPlatform.hpp"
++
++namespace tcu
++{
++namespace yakogl
++{
++
++class Platform : public tcu::Platform, private glu::Platform, private eglu::Platform
++{
++public:
++    Platform(void);
++    virtual ~Platform(void);
++
++    virtual const glu::Platform &getGLPlatform(void) const
++    {
++        return static_cast<const glu::Platform &>(*this);
++    }
++
++    virtual const eglu::Platform &getEGLPlatform(void) const
++    {
++        return static_cast<const eglu::Platform &>(*this);
++    }
++};
++
++} // namespace yakogl
++} // namespace tcu
++
++#endif // _TCUYAKOGLPLATFORM_HPP
+diff --git a/targets/yakogl/yakogl.cmake b/targets/yakogl/yakogl.cmake
+new file mode 100644
+index 0000000..fdaa82d
+--- /dev/null
++++ b/targets/yakogl/yakogl.cmake
+@@ -0,0 +1,31 @@
++#-------------------------------------------------------------------------
++# dEQP target for YakoGL
++#
++# YakoGL is a source-compatible OpenGL ES 2.0 + minimal EGL library. Its EGL
++# has no platform extensions and no window system: eglGetDisplay() only takes
++# EGL_DEFAULT_DISPLAY, and the only surface a test process can create for
++# itself is a pbuffer. So this target builds the EGL platform port in
++# framework/platform/yakogl, which registers a pbuffer-only native display
++# factory, and links no GL or EGL library at build time: libEGL.so.1 and
++# libGLESv2.so.2 are opened at run time with deDynamicLibrary.
++#-------------------------------------------------------------------------
++
++message("*** Using YakoGL target")
++
++set(DEQP_TARGET_NAME	"YakoGL")
++
++set(DEQP_SUPPORT_GLES2	ON)
++set(DEQP_SUPPORT_EGL	ON)
++
++# Run-time loading: leave DEQP_GLES2_LIBRARIES and DEQP_EGL_LIBRARIES empty.
++# Name the SONAMEs YakoGL is packaged under, not the "libGLESv2.so" /
++# "libEGL.so" development symlinks, which a board image need not carry.
++add_definitions(-DDEQP_GLES2_LIBRARY_PATH="libGLESv2.so.2")
++add_definitions(-DDEQP_EGL_LIBRARY_PATH="libEGL.so.1")
++
++set(TCUTIL_PLATFORM_SRCS
++	yakogl/tcuYakoGLPlatform.cpp
++	yakogl/tcuYakoGLPlatform.hpp
++	)
++
++set(DEQP_PLATFORM_LIBRARIES	${CMAKE_DL_LIBS})

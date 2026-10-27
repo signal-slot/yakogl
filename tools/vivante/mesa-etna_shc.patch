@@ -1,0 +1,39 @@
+--- a/src/gallium/drivers/etnaviv/etnaviv_screen.c
++++ b/src/gallium/drivers/etnaviv/etnaviv_screen.c
+@@ -845,7 +845,7 @@
+       !DBG_ENABLED(ETNA_DBG_NO_UNIFIED_SAMPLERS);
+ }
+ 
+-static void
++void
+ etna_get_specs(struct etna_screen *screen)
+ {
+    const struct etna_core_info *info = screen->info;
+--- a/src/gallium/drivers/etnaviv/etnaviv_screen.h
++++ b/src/gallium/drivers/etnaviv/etnaviv_screen.h
+@@ -101,6 +101,9 @@
+    return container_of(dev, struct etna_screen, ml_device);
+ }
+ 
++/* fills screen->specs from screen->info (also used by the offline shader tool) */
++void etna_get_specs(struct etna_screen *screen);
++
+ struct etna_bo *
+ etna_screen_bo_from_handle(struct pipe_screen *pscreen,
+                            struct winsys_handle *whandle);
+--- a/src/gallium/drivers/etnaviv/meson.build
++++ b/src/gallium/drivers/etnaviv/meson.build
+@@ -122,3 +122,13 @@
+     protocol : 'gtest',
+   )
+ endif
++
++# YakoGL's offline shader tool (OpenGL SPIR-V -> GC7000 instructions + reflection)
++etna_shc = executable(
++  'etna_shc',
++  ['etna_shc.c', etnaviv_enums_h],
++  include_directories : [inc_include, inc_src, inc_gallium, inc_gallium_aux, inc_etnaviv],
++  link_with : [libetnaviv, libetnaviv_drm, libetnaviv_encode, libgallium],
++  dependencies : [dep_libdrm, idep_nir, idep_vtn, idep_mesautil, idep_libetnaviv_decode, idep_etna_common],
++  build_by_default : false,
++)

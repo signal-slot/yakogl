@@ -1,0 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+<TestCaseResult Version="0.3.4" CasePath="dEQP-GLES2.functional.treediff.same_pass" CaseType="SelfValidate">
+<Result StatusCode="Bogus">not a dEQP status</Result>
+</TestCaseResult>

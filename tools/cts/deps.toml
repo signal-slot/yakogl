@@ -1,0 +1,334 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+#
+# deps.toml -- every external dependency of the gate and of the board tools:
+# what it is called, where it lives, how a usable one is recognised, and how
+# to make one. This is the one place; tools/cts/deps-env.sh reads it, and
+# tools/setup-gate-host.sh takes its distribution packages from it.
+#
+# A change that adds a gate row (or a board tool) needing a tree that is not
+# in the repository adds its [[dep]] here, in the same commit.
+#
+# Layout directory ($DEPS in a build command): deps_env.py layout(), printed by
+# deps-env.sh --layout: $CONNECTED_DEPS_DIR (or $CCFARM_DEPS_DIR) when set,
+# else ~/.local/share/connected/deps/yakogl. One [[dep]] per entry, in the order
+# deps-env.sh prints them. Keys:
+#
+#   name      the environment variable deps-env.sh prints.
+#   aliases   more variables with the same value.
+#   path      the value, relative to the layout directory ("{board}" is the
+#             board given to deps-env.sh).
+#   command   instead of path: a program found on PATH (else /usr/bin/<it>);
+#             the value and the marker are its path.
+#   rustup_target  instead of path: a rustup target of the toolchain in effect
+#             (RUSTUP_TOOLCHAIN, else the default); the value and the marker are
+#             <rustc --print sysroot>/lib/rustlib/<target>/lib, which only an
+#             installed target has.
+#   marker    relative to the layout directory: the file only a usable tree
+#             has (an empty directory or a venv without west is "missing").
+#             "." is the layout directory itself.
+#   board     the entry belongs to a board's set only: a board name
+#             (am62p | imx8mp | rpi_4b), or "*" for every named board.
+#             Without it the entry is in every set.
+#   create    deps-env.sh (printing) makes the directory when it is absent.
+#   requires  entries that must be present before this one is built.
+#   build     a shell command that makes the entry from nothing. It runs with
+#             `bash -eu -o pipefail` from the repository root, with $DEPS set
+#             to the layout directory, $BOARD_NAME to the board given to
+#             deps-env.sh (empty without one) and the inputs in
+#             $DEPS/downloads/. It
+#             must leave the marker only when the entry is complete (build in
+#             a ".part" directory and rename). No build: see note.
+#   note      what to know when there is no build, or about the build.
+#   inputs    the downloads a build needs ([[dep.inputs]]): url, and the
+#             digest as sha256 (pinned here), or sha256_from = "<file in the
+#             repo>:<key>" (a "key: value" line, e.g.
+#             third_party/mesa-26.2.1/UPSTREAM). The digest is always pinned in
+#             the repository, never read from the download's own server.
+#             deps-env.sh --build fetches them into
+#             $DEPS/downloads/<name of the url> and checks the digest.
+#   packages  distribution packages the build needs, per family:
+#             packages.apt, packages.portage, packages.brew (brew only when
+#             known). A host or image recipe installs them before building:
+#             tools/setup-gate-host.sh, `deps-env.sh --packages apt`.
+#
+# deps-env.sh --check is what every host and image is judged by. --build is
+# for hosts and images, run on purpose; the gate never builds these.
+
+[[dep]]
+name = "ZEPHYR_WS"
+aliases = ["ZEPHYR_WORKSPACE"]
+path = "zephyr-ws"
+marker = "zephyr-ws/.west/config"
+note = "the west workspace: Zephyr, the modules west.yml allows, and the yakogl manifest clone (docs/es3/zephyr-env.md)"
+build = '''
+rm -rf "$DEPS/zephyr-ws.part" "$DEPS/zephyr-ws.boot"
+python3 -m venv "$DEPS/zephyr-ws.boot"
+"$DEPS/zephyr-ws.boot/bin/pip" install west
+# the repository is private: https works only with credentials, so ssh is the fallback
+if ! GIT_TERMINAL_PROMPT=0 "$DEPS/zephyr-ws.boot/bin/west" init -m https://github.com/signal-slot/yakogl --mr main "$DEPS/zephyr-ws.part"; then
+  rm -rf "$DEPS/zephyr-ws.part"
+  "$DEPS/zephyr-ws.boot/bin/west" init -m git@github.com:signal-slot/yakogl.git --mr main "$DEPS/zephyr-ws.part"
+fi
+(cd "$DEPS/zephyr-ws.part" && "$DEPS/zephyr-ws.boot/bin/west" update)
+mv "$DEPS/zephyr-ws.part" "$DEPS/zephyr-ws"
+rm -rf "$DEPS/zephyr-ws.boot"
+'''
+packages.apt = ["git", "python3-venv", "python3-pip", "cmake", "ninja-build", "gperf", "ccache", "device-tree-compiler", "xz-utils", "make"]
+packages.portage = ["dev-vcs/git", "dev-build/cmake", "dev-build/ninja", "dev-util/gperf", "dev-util/ccache", "sys-apps/dtc"]
+
+[[dep]]
+name = "WEST_VENV"
+aliases = ["ZEPHYR_VENV"]
+path = "zephyr-ws/.venv"
+marker = "zephyr-ws/.venv/bin/west"
+requires = ["ZEPHYR_WS"]
+note = "west and zephyr/scripts/requirements-base.txt, in the workspace"
+build = '''
+rm -rf "$DEPS/zephyr-ws/.venv"
+python3 -m venv "$DEPS/zephyr-ws/.venv"
+"$DEPS/zephyr-ws/.venv/bin/pip" install west -r "$DEPS/zephyr-ws/zephyr/scripts/requirements-base.txt"
+'''
+
+[[dep]]
+name = "HAL_NXP_DIR"
+path = "zephyr-ws/modules/hal/nxp"
+marker = "zephyr-ws/modules/hal/nxp/zephyr/module.yml"
+requires = ["WEST_VENV"]
+note = "hal_nxp, the i.MX8MP register check; west update of the workspace fetches it (the generator pins 1e91007b)"
+build = '''
+cd "$DEPS/zephyr-ws" && .venv/bin/west update hal_nxp
+'''
+
+[[dep]]
+name = "ZEPHYR_SDK_INSTALL_DIR"
+path = "zephyr-sdk-1.0.1"
+marker = "zephyr-sdk-1.0.1/sdk_version"
+note = "the Zephyr SDK 1.0.1, minimal bundle plus the aarch64 toolchain (docs/es3/zephyr-env.md); no cmake package registration. No `setup.sh -h`: its host tools (dtc, ...) need /lib/ld-linux-x86-64.so.2, which a distribution may lack (Gentoo), and Zephyr then prefers them to the working ones; the host's cmake, ccache, dtc and gperf are used (packages below)"
+build = '''
+rm -rf "$DEPS/zephyr-sdk-1.0.1.part"
+mkdir "$DEPS/zephyr-sdk-1.0.1.part"
+tar -C "$DEPS/zephyr-sdk-1.0.1.part" --strip-components=1 -xf "$DEPS/downloads/zephyr-sdk-1.0.1_linux-x86_64_minimal.tar.xz"
+"$DEPS/zephyr-sdk-1.0.1.part/setup.sh" -t aarch64-zephyr-elf
+mv "$DEPS/zephyr-sdk-1.0.1.part" "$DEPS/zephyr-sdk-1.0.1"
+'''
+packages.apt = ["xz-utils", "file", "wget", "cmake", "ccache", "device-tree-compiler", "gperf"]
+packages.portage = ["dev-build/cmake", "dev-util/ccache", "sys-apps/dtc", "dev-util/gperf", "net-misc/wget"]
+
+[[dep.inputs]]
+url = "https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v1.0.1/zephyr-sdk-1.0.1_linux-x86_64_minimal.tar.xz"
+sha256 = "ca9bc0ff66fafca1dac9d592a36d953cf16d096a9d09b1c0357f021cf9f6a7eb"
+
+[[dep]]
+name = "PCO_SHC"
+path = "PCO_SHC/pco_shc"
+marker = "PCO_SHC/pco_shc"
+note = "Mesa 26.2.1's PowerVR shader compiler (tools/pco_shc/README.md); the toolchain id glsl2usc records depends on the compiler and LLVM versions"
+build = '''
+if [ -z "${LLVM_DIR-}" ] && [ -d /usr/lib/llvm-21 ]; then export LLVM_DIR=/usr/lib/llvm-21; fi
+tools/pco_shc/build_pco_shc.sh "$DEPS/downloads/mesa-26.2.1.tar.xz" "$DEPS/PCO_SHC.src"
+mkdir -p "$DEPS/PCO_SHC"
+cp "$DEPS/PCO_SHC.src/mesa-26.2.1/build/src/imagination/vulkan/pco_shc" "$DEPS/PCO_SHC/pco_shc.part"
+mv "$DEPS/PCO_SHC/pco_shc.part" "$DEPS/PCO_SHC/pco_shc"
+'''
+packages.apt = [
+  "clang-21", "llvm-21-dev", "libclang-21-dev", "libclc-21-dev", "llvm-spirv-21", "libllvmspirvlib-21-dev",
+  "spirv-tools", "spirv-tools-dev", "spirv-headers", "glslang-tools", "meson", "ninja-build",
+  "python3-mako", "python3-yaml", "python3-packaging", "libdrm-dev", "libexpat1-dev", "zlib1g-dev", "libzstd-dev",
+]
+packages.portage = [
+  "llvm-core/clang", "llvm-core/llvm", "dev-util/spirv-llvm-translator", "dev-util/spirv-tools", "dev-util/spirv-headers",
+  "dev-util/glslang", "dev-build/meson", "dev-build/ninja", "dev-python/mako", "dev-python/pyyaml", "dev-python/packaging",
+  "x11-libs/libdrm", "dev-libs/expat", "sys-libs/zlib", "app-arch/zstd",
+]
+
+[[dep.inputs]]
+url = "https://archive.mesa3d.org/mesa-26.2.1.tar.xz"
+sha256_from = "third_party/mesa-26.2.1/UPSTREAM:tarball-sha256"
+
+[[dep]]
+name = "MESA_PAN_TREE"
+path = "mesa-pan/mesa-26.2.1"
+marker = "mesa-pan/mesa-26.2.1/build-pan/build.ninja"
+note = "Mesa 26.2.1's panfrost tree with pan_shc built in build-pan (tools/mali/build_pan_shc.sh); the gate workflow puts /usr/lib/llvm-21/bin on PATH"
+build = '''
+if [ -z "${LLVM_DIR-}" ] && [ -d /usr/lib/llvm-21 ]; then export LLVM_DIR=/usr/lib/llvm-21; fi
+tools/mali/build_pan_shc.sh "$DEPS/downloads/mesa-26.2.1.tar.xz" "$DEPS/mesa-pan"
+'''
+packages.apt = [
+  "bison", "flex", "clang-21", "llvm-21-dev", "libclang-21-dev", "libclc-21-dev", "llvm-spirv-21", "libllvmspirvlib-21-dev",
+  "spirv-tools", "spirv-tools-dev", "spirv-headers", "meson", "ninja-build", "python3-mako", "python3-packaging",
+  "libdrm-dev", "libzstd-dev",
+]
+packages.portage = [
+  "sys-devel/bison", "sys-devel/flex", "llvm-core/clang", "llvm-core/llvm", "dev-util/spirv-llvm-translator",
+  "dev-util/spirv-tools", "dev-util/spirv-headers", "dev-build/meson", "dev-build/ninja", "dev-python/mako",
+  "dev-python/packaging", "x11-libs/libdrm", "app-arch/zstd",
+]
+
+[[dep.inputs]]
+url = "https://archive.mesa3d.org/mesa-26.2.1.tar.xz"
+sha256_from = "third_party/mesa-26.2.1/UPSTREAM:tarball-sha256"
+
+[[dep]]
+name = "GLSLANG"
+command = "glslangValidator"
+note = "glslangValidator on PATH, a distribution package"
+packages.apt = ["glslang-tools"]
+packages.portage = ["dev-util/glslang"]
+
+[[dep]]
+name = "RUST_TARGET_AARCH64_LINUX"
+rustup_target = "aarch64-unknown-linux-gnu"
+note = "the rustup target the Mali rows of tools/check.sh (clippy yakogl-mali-panthor) build for; per toolchain, so it is checked on the one the gate runs under"
+build = '''
+rustup target add aarch64-unknown-linux-gnu
+'''
+
+[[dep]]
+name = "GLSL2USC_CACHE"
+path = "glsl2usc-cache"
+marker = "."
+create = true
+note = "the glsl2usc compile cache; deps-env.sh makes it when absent"
+
+[[dep]]
+name = "GLMARK2_SRC"
+path = "glmark2-src"
+marker = "glmark2-src/src/default-benchmarks.h"
+note = "glmark2 at the commit tools/hostharness/glmark2/run.sh pins"
+build = '''
+rm -rf "$DEPS/glmark2-src.part"
+git clone --no-checkout https://github.com/glmark2/glmark2 "$DEPS/glmark2-src.part"
+git -C "$DEPS/glmark2-src.part" checkout --detach 22c527cb0556f3a1ac4445aaa52cc532760928d5
+mv "$DEPS/glmark2-src.part" "$DEPS/glmark2-src"
+'''
+packages.apt = ["git"]
+packages.portage = ["dev-vcs/git"]
+
+[[dep]]
+name = "PVR_FW_BLOB"
+path = "pvr_fw_blob.h"
+marker = "pvr_fw_blob.h"
+note = "not reproducible: the header is made from the board's PowerVR firmware file with driver/tools/mkfwblob.sh (driver/README.md) and is never committed; copy the host's existing one"
+
+# With a board.
+
+[[dep]]
+name = "DEQP_WORK"
+path = "deqp-stage1-{board}"
+marker = "deqp-stage1-{board}/build"
+board = "*"
+requires = ["WEST_VENV", "ZEPHYR_SDK_INSTALL_DIR"]
+note = "the board's dEQP stage-1 tree (tools/cts/cts-build-zephyr.sh, tools/cts/README.md, docs/release/building.md section 9): VK-GL-CTS at 93bca01 with the two yakogl patches, built with the Zephyr SDK compiler; about 1.9 GB. It is built in place (the CMake cache holds absolute paths) and a failed build removes the directory, so the marker only ever means a complete tree"
+build = '''
+case "$BOARD_NAME" in
+  am62p)  zboard=verdin_am62p/am62p54/a53 ;;
+  imx8mp) zboard=verdin_imx8mp/mimx8ml8/a53 ;;
+  rpi_4b) zboard=rpi_4b ;;
+  *) echo "DEQP_WORK: name a board (--board am62p | imx8mp | rpi_4b)" >&2; exit 2 ;;
+esac
+repo=$PWD
+if [ ! -d "$DEPS/VK-GL-CTS/.git" ]; then
+  rm -rf "$DEPS/VK-GL-CTS.part"
+  git clone --no-checkout https://github.com/KhronosGroup/VK-GL-CTS "$DEPS/VK-GL-CTS.part"
+  git -C "$DEPS/VK-GL-CTS.part" checkout --detach 93bca01861b0e3ef3c387027a9791e6d065f900c
+  (cd "$DEPS/VK-GL-CTS.part" && python3 external/fetch_sources.py)
+  mv "$DEPS/VK-GL-CTS.part" "$DEPS/VK-GL-CTS"
+fi
+work="$DEPS/deqp-stage1-$BOARD_NAME"
+trap 'rc=$?; [ "$rc" -eq 0 ] || rm -rf "$work"' EXIT
+. "$DEPS/zephyr-ws/.venv/bin/activate"
+export ZEPHYR_BASE="$DEPS/zephyr-ws/zephyr"
+export ZEPHYR_SDK_INSTALL_DIR="$DEPS/zephyr-sdk-1.0.1" ZEPHYR_TOOLCHAIN_VARIANT=zephyr   # the SDK's host tools (dtc) come with the variant
+export ZEPHYR_MODULES="$("$repo/tools/cts/zephyr-modules.sh" "$DEPS/zephyr-ws")"
+export CFLAGS=-O2 CXXFLAGS=-O2   # libpng's NEON code does not build at -O0 (docs/release/building.md section 9)
+CTS="$DEPS/VK-GL-CTS" WORK="$work" BOARD="$zboard" tools/cts/cts-build-zephyr.sh
+'''
+packages.apt = ["git", "python3-venv", "cmake", "ninja-build", "gperf", "ccache", "device-tree-compiler"]
+packages.portage = ["dev-vcs/git", "dev-build/cmake", "dev-build/ninja", "dev-util/gperf", "dev-util/ccache", "sys-apps/dtc"]
+
+[[dep]]
+name = "SLINT_NOSTD_DIR"
+path = "slint-nostd"
+marker = "slint-nostd/internal"
+board = "*"
+note = "Slint's no_std tree (the Slint demo image): upstream at 1007c032 plus examples/nostd/slint-nostd.patch (docs/release/building.md section 7); the cargo build of a sample still fetches crates.io, so it needs network once"
+build = '''
+repo=$PWD
+rm -rf "$DEPS/slint-nostd.part"
+mkdir "$DEPS/slint-nostd.part"
+git -C "$DEPS/slint-nostd.part" init -q
+git -C "$DEPS/slint-nostd.part" fetch -q --depth 1 https://github.com/slint-ui/slint.git 1007c032ca1573e60dce2113e802e0ccb91c2641
+git -C "$DEPS/slint-nostd.part" checkout -q --detach FETCH_HEAD
+(cd "$DEPS/slint-nostd.part" && patch -p1 < "$repo/examples/nostd/slint-nostd.patch")
+mv "$DEPS/slint-nostd.part" "$DEPS/slint-nostd"
+'''
+packages.apt = ["git", "patch"]
+packages.portage = ["dev-vcs/git", "sys-devel/patch"]
+
+[[dep]]
+name = "NOSTD_PATCH_DIR"
+path = "nostd"
+marker = "nostd/Cargo.toml"
+board = "*"
+note = "the no_std patch workspace (femtovg 0.26.0, glow 0.18.0; docs/release/building.md section 8). The two crates come through `cargo vendor`, which checks them against the crates.io index; the repository pins no digest for them"
+build = '''
+repo=$PWD
+n=$repo/examples/nostd
+rm -rf "$DEPS/nostd.part" "$DEPS/nostd.fetch"
+mkdir -p "$DEPS/nostd.fetch/src" "$DEPS/nostd.part"
+: > "$DEPS/nostd.fetch/src/lib.rs"
+printf '[package]\nname = "fetch"\nversion = "0.0.0"\nedition = "2021"\n[dependencies]\nfemtovg = "=0.26.0"\nglow = "=0.18.0"\n' > "$DEPS/nostd.fetch/Cargo.toml"
+(cd "$DEPS/nostd.fetch" && cargo vendor -q vendor > /dev/null)
+for c in femtovg glow; do
+  cp -r "$DEPS/nostd.fetch/vendor/$c" "$DEPS/nostd.part/$c"
+  rm -f "$DEPS/nostd.part/$c/.cargo-checksum.json"
+done
+(cd "$DEPS/nostd.part/femtovg" && patch -p1 < "$n/femtovg-0.26.0-nostd.patch")
+(cd "$DEPS/nostd.part/glow" && patch -p1 < "$n/glow-0.18.0-nostd.patch")
+cp "$n/nostd-workspace.Cargo.toml" "$DEPS/nostd.part/Cargo.toml"
+rm -rf "$DEPS/nostd.fetch"
+mv "$DEPS/nostd.part" "$DEPS/nostd"
+'''
+packages.apt = ["patch"]
+packages.portage = ["sys-devel/patch"]
+
+[[dep]]
+name = "NOTO_SANS_DIR"
+path = "noto"
+marker = "noto/NotoSans-Regular.ttf"
+board = "*"
+note = "the Noto Sans fonts of the Slint host replay (optional; NotoSans-Light/-Regular/-SemiBold.ttf), copied from the distribution package"
+build = '''
+src=
+for d in /usr/share/fonts/truetype/noto /usr/share/fonts/noto /usr/share/fonts/NotoSans; do
+  if [ -f "$d/NotoSans-Regular.ttf" ]; then src=$d; break; fi
+done
+[ -n "$src" ] || { echo "NOTO_SANS_DIR: no NotoSans-Regular.ttf in the system fonts; install the package (deps-env.sh --packages)" >&2; exit 1; }
+rm -rf "$DEPS/noto.part"
+mkdir "$DEPS/noto.part"
+cp "$src/NotoSans-Light.ttf" "$src/NotoSans-Regular.ttf" "$src/NotoSans-SemiBold.ttf" "$DEPS/noto.part/"
+mv "$DEPS/noto.part" "$DEPS/noto"
+'''
+packages.apt = ["fonts-noto-core"]
+packages.portage = ["media-fonts/noto"]
+
+[[dep]]
+name = "IMX8MP_OUT"
+path = "imx8mp-out"
+marker = "imx8mp-out"
+board = "imx8mp"
+note = "any empty directory: the i.MX8MP scripts write images and logs there"
+build = '''
+mkdir -p "$DEPS/imx8mp-out"
+'''
+
+[[dep]]
+name = "DEQP_STAGE1"
+path = "deqp-stage1-imx8mp"
+marker = "deqp-stage1-imx8mp/build"
+board = "imx8mp"
+requires = ["DEQP_WORK"]
+note = "the i.MX8MP dEQP stage-1 tree, the same directory as DEQP_WORK of that board (tools/cts/imx8mp-deqp-stage1.sh builds it too)"
+build = 'true'

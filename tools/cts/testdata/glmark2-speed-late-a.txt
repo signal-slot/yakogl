@@ -1,0 +1,36 @@
+15:00:00 glmark2: upstream 22c527cb (2023.01), size 800x600, args ""
+15:00:00 glmark2-mem: entry 0 before setup: osal(v3d) mem: carve-out used 17817856, high-water 17831424, of 100134912 bytes; frees held 0 (0 bytes)
+15:00:01 [build] use-vbo=false:yakogl/v3d: binner pool after job 1: overflow blocks 0 of 2 (262144 bytes each)
+15:00:01 yakogl/v3d: job arenas high-water at frame 1: BCL 124 of 139264, RCL 493 of 4096, 1 draws
+15:00:10  FPS: 157 FrameTime: 6.380 ms
+15:00:10 glmark2-frame: [build] use-vbo=false: 1568 frames; us per frame: gl 2733, swap 55, show 3589, other 2, frame 6379 (end waited for in 1 of 1568)
+15:00:10 glmark2-mem: entry 0 end: osal(v3d) mem: carve-out used 17817856, high-water 17831424, of 100134912 bytes; frees held 0 (0 bytes)
+15:00:10 glmark2-mem: entry 1 before setup: osal(v3d) mem: carve-out used 17817856, high-water 17831424, of 100134912 bytes; frees held 0 (0 bytes)
+15:00:20 [build] use-vbo=true: FPS: 276 FrameTime: 3.628 ms
+15:00:20 glmark2-frame: [build] use-vbo=true: 2758 frames; us per frame: gl 21, swap 16, show 3588, other 1, frame 3626 (end waited for in 1 of 2758)
+15:00:20 glmark2-mem: entry 1 end: osal(v3d) mem: carve-out used 17817856, high-water 18348032, of 100134912 bytes; frees held 0 (0 bytes)
+15:00:20 [shading] shading=gouraud:yakogl/v3d: tiled copies high-water 1052672 of 25165824 bytes
+15:00:30  FPS: 227 FrameTime: 4.410 ms
+15:00:30 glmark2-frame: [shading] shading=gouraud: 2270 frames; us per frame: gl 30, swap 20, show 3650, other 1, frame 4410 (end waited for in 1 of 2270)
+15:00:30 [shading] shading=blinn-phong-inf:yakogl/v3d: binner tile pool high-water at frame 1: 36864 of 1056768 bytes
+15:00:40  FPS: 219 FrameTime: 4.579 ms
+15:00:40 glmark2-frame: [shading] shading=blinn-phong-inf: 2190 frames; us per frame: gl 31, swap 21, show 3700, other 1, frame 4579 (end waited for in 1 of 2190)
+15:00:40 glmark2-mem: entry 22 [terrain] <default>: before setup: osal(v3d) mem: carve-out used 17833984, high-water 61991680, of 100134912 bytes; frees held 0 (0 bytes)
+15:00:41 GL error 0x502 in glGenerateMipmap
+15:00:41 yakogl/v3d: a stale tiled copy of 7684096 bytes given back before the job opened
+15:00:50  FPS: 6 FrameTime: 181.654 ms
+15:00:50 glmark2-frame: [terrain] <default>: 56 frames; us per frame: gl 176747, swap 462, show 4424, other 1, frame 181634 (end waited for in 56 of 56)
+15:00:50 glmark2-mem: entry 22 [terrain] <default>: end: osal(v3d) mem: carve-out used 17833984, high-water 61991680, of 100134912 bytes; frees held 0 (0 bytes)
+15:00:50 glmark2-mem: entry 23 [shadow] <default>: before setup: osal(v3d) mem: carve-out used 17833984, high-water 61991680, of 100134912 bytes; frees held 0 (0 bytes)
+15:00:51 yakogl/v3d: sampler variants high-water at frame 43963: 1 built, 0 refused
+15:01:00  FPS: 6 FrameTime: 175.740 ms
+15:01:00 glmark2-frame: [shadow] <default>: 57 frames; us per frame: gl 170396, swap 623, show 4703, other 2, frame 175724 (end waited for in 57 of 57)
+15:01:00 glmark2-mem: entry 23 [shadow] <default>: end: osal(v3d) mem: carve-out used 17833984, high-water 61991680, of 100134912 bytes; frees held 0 (0 bytes)
+15:01:01 [refract] <default>:yakogl/v3d: job arenas high-water at frame 3: BCL 10796 of 139264, 353 draws
+15:01:10  FPS: 3 FrameTime: 403.800 ms
+15:01:10 glmark2-frame: [refract] <default>: 30 frames; us per frame: gl 390000, swap 600, show 4700, other 2, frame 403800 (end waited for in 30 of 30)
+15:01:11 [jellyfish] <default>:yakogl/v3d: job arenas high-water at frame 5: BCL 900 of 139264, 20 draws
+15:01:20  FPS: 20
+15:01:20 [ideas] speed=duration: Unsupported
+15:01:20 glmark2: score 150: 8 scenes ran, 0 failed, 1 unsupported (9 list entries); window 800x600, shown yes, GPU resets 0
+15:01:20 glmark2: PASS

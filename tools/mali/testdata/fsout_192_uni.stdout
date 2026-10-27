@@ -1,0 +1,6 @@
+gl_ref: renderer Mali-G610 MC4 (Panfrost)
+gl_ref: uniform float u_x at 0 = 16
+gl_ref: uniform float u_q at 1 = 32
+gl_ref: uniform float u_a at 2 = 48
+gl_ref: uniform float u_b at -1 = 64
+gl_ref: attributes a_pos, framebuffer 64x64, viewport 0,0,64,64, depth range 0,1, glGetError 0x0

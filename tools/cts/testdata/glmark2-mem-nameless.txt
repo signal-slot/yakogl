@@ -1,0 +1,10 @@
+15:30:40 glmark2-mem: entry 22 before setup: osal(v3d) mem: carve-out used 17817856, high-water 49012736, of 49807360 bytes; frees held 0 (0 bytes); longest free run 31960832 bytes (1 runs)
+15:30:41 GL error 0x502 in glGenerateMipmap
+15:30:41 GL error 0x502 in glGenerateMipmap
+15:30:50 [terrain] <default>: FPS: 6 FrameTime: 166.667 ms
+15:30:50 glmark2-frame: [terrain] <default>: 61 frames; us per frame: gl 9120, swap 154200, show 320, other 3027, frame 166667
+15:30:50 glmark2-mem: entry 22 end: osal(v3d) mem: carve-out used 17833984, high-water 49012736, of 49807360 bytes; frees held 0 (0 bytes); longest free run 31960832 bytes (1 runs)
+15:30:50 glmark2-mem: entry 23 before setup: osal(v3d) mem: carve-out used 17817856, high-water 49012736, of 49807360 bytes; frees held 0 (0 bytes); longest free run 31960832 bytes (1 runs)
+15:31:00 [shadow] <default>: FPS: 5 FrameTime: 200.000 ms
+15:31:00 glmark2-frame: [shadow] <default>: 51 frames; us per frame: gl 8200, swap 188300, show 330, other 3170, frame 200000
+15:31:00 glmark2-mem: entry 23 end: osal(v3d) mem: carve-out used 17817856, high-water 49012736, of 49807360 bytes; frees held 0 (0 bytes); longest free run 31960832 bytes (1 runs)

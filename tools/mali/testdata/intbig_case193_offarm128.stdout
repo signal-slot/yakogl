@@ -1,0 +1,4 @@
+gl_ref: renderer Mali-G610 MC4 (Panfrost)
+gl_ref: sampler2D tex at unit 0: a 2x2 RGBA8 texture
+gl_ref: sampler2D glyphtex at unit 1: a 2x2 RGBA8 texture
+gl_ref: attributes vertex tcoord, framebuffer 64x64, viewport 0,0,64,64, depth range 0,1, glGetError 0x0

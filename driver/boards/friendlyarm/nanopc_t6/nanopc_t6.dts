@@ -1,0 +1,64 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-FileCopyrightText: 2026 Signal Slot, Inc. */
+/*
+ * FriendlyElec NanoPC-T6 (RK3588), CPU 0 only, as an image kexec'd out of
+ * Armbian (driver/docs/nanopc-t6-mali.md, "Z1").
+ *
+ * The SoC (GICv3, the arch timer at 24 MHz, PSCI over SMC, uart2/uart3) is
+ * Zephyr's rk3588.dtsi. This file adds:
+ *
+ * - zephyr,sram: 16 MiB at 0x10000000, where the image is linked and loaded.
+ *   On the T6 under Armbian 26.8.10 (Linux 6.18.55, /proc/iomem read
+ *   2026-10-18) the range lies inside the System RAM bank
+ *   0x00200000-0xe143ffff and overlaps no entry under it: the kernel image is
+ *   at 0x02000000-0x0432ffff, the bank's other reservation at
+ *   0xcd400000-0xe13fffff. What stays live across the kexec is below it: the
+ *   firmware under 0x00200000 (not System RAM; the SCMI shared memory at
+ *   0x0010f000). The kernel copies the segment into place only at the jump,
+ *   so whatever Linux kept there before does not matter. 2 MiB aligned and
+ *   below 4 GiB.
+ * - uart2 at 24 MHz and 1500000 baud: the console U-Boot and Linux use
+ *   (Linux rk3588-nanopc-t6.dtsi:41, stdout-path "serial2:1500000n8"; the
+ *   board's clk_summary: sclk_uart2 24000000 Hz). rk3588.dtsi says 12 MHz.
+ * - WDT0, the DesignWare APB watchdog (Linux rk3588-base.dtsi:2461-2467:
+ *   "rockchip,rk3588-wdt", "snps,dw-wdt", reg <0xfeaf0000 0x100>, SPI 315,
+ *   level high; tclk is xin24m, clk-rk3588.c:1052-1053, 24 MHz on the
+ *   board). The board glue (driver/zephyr/lib/board/nanopc_t6) arms it at
+ *   boot; Zephyr's own wdt_dw driver must stay off (CONFIG_WDT_DW), which
+ *   the glue asserts.
+ */
+/dts-v1/;
+
+#include <arm64/rockchip/rk3588.dtsi>
+#include <mem.h>
+
+/ {
+	model = "FriendlyElec NanoPC-T6";
+	compatible = "friendlyarm,nanopc-t6", "rockchip,rk3588";
+
+	chosen {
+		zephyr,console = &uart2;
+		zephyr,shell-uart = &uart2;
+		zephyr,sram = &zephyr_ram;
+	};
+
+	zephyr_ram: memory@10000000 {
+		compatible = "mmio-sram";
+		device_type = "memory";
+		reg = <0x10000000 DT_SIZE_M(16)>;
+	};
+
+	wdt0: watchdog@feaf0000 {
+		compatible = "rockchip,rk3588-wdt", "snps,designware-watchdog";
+		reg = <0xfeaf0000 0x100>;
+		interrupts = <GIC_SPI 315 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>;
+		clock-frequency = <24000000>;
+		status = "okay";
+	};
+};
+
+&uart2 {
+	status = "okay";
+	clock-frequency = <24000000>;
+	current-speed = <1500000>;
+};
