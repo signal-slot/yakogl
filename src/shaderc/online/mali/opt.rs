@@ -47,7 +47,8 @@ const fn size(op: Op) -> u8 {
         | Op::IaddV2u16
         | Op::MuxV2i16
         | Op::FroundV2f16 { .. }
-        | Op::FcmpOrV2f16 { .. } => 16,
+        | Op::FcmpOrV2f16 { .. }
+        | Op::IcmpOrV2u16 { .. } => 16,
         Op::ShaddxS64 => 64,
         _ => 32,
     }

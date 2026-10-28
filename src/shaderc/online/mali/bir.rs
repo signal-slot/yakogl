@@ -264,6 +264,10 @@ pub enum TexDim {
     /// words are the cube descriptor `build_cube_desc` packs (the face
     /// index in the top three bits of S).
     Cube,
+    /// A 2D array (`GLSL_SAMPLER_DIM_2D` with `is_array`): `tex2d` and
+    /// `array_enable`, the layer the third staging word (intbig_case42:
+    /// `TEX_SINGLE ... .2d.array_enable`, `TEX_FETCH ... .2d.array_enable`).
+    D2Array,
 }
 
 /// A special varying's name (`enum bi_varying_name`, the ISA's
@@ -339,6 +343,14 @@ pub enum Op {
     /// `nir_type_int` too, and only the `i32` form lists `eq`/`ne`), which
     /// `va_lower_isel` makes the `_OR.u32` form (va_lower_isel.c:16-18).
     IcmpOrU32 {
+        cmpf: Cmpf,
+        result: ResultType,
+    },
+    /// `ICMP_OR.v2u16`, the same per 16-bit lane (an equality of 16-bit
+    /// integers, `ieq_pan` at 16 bits: the texture descriptor's first
+    /// half-word against 0, `pan_nir_load_va_tex_size`'s null test;
+    /// intbig_case42's `ICMP_OR.v2u16.eq.m1 r1, r2^.h00, 0x0, 0x0`).
+    IcmpOrV2u16 {
         cmpf: Cmpf,
         result: ResultType,
     },
@@ -750,6 +762,8 @@ pub const fn src_info(op: Op, s: usize) -> SrcInfo {
         (Op::FcmpOrF32 { .. }, 0..=1) => info(true, true, false, false, 32),
         (Op::FcmpOrV2f16 { .. }, 0..=1) => info(true, true, false, false, 16),
         (Op::FcmpOrV2f16 { .. }, 2) => info(false, false, false, false, 32),
+        (Op::IcmpOrV2u16 { .. }, 0..=1) => info(false, true, false, false, 16),
+        (Op::IcmpOrV2u16 { .. }, 2) => info(false, false, false, false, 32),
         /* DISCARD.f32: both sources float (absneg, widen), valhall.c */
         (Op::DiscardF32 { .. }, 0..=1) => info(true, true, false, false, 32),
         /* a pseudo-op: its one source is the mask word */
@@ -915,7 +929,7 @@ pub const fn nr_srcs(op: Op) -> usize {
         | Op::LdTile { .. } => 3,
         Op::FmaF32 | Op::FmaV2f16 | Op::Atest | Op::ZsEmit { .. } => 3,
         Op::FcmpOrF32 { .. } | Op::IcmpOrS32 { .. } | Op::IcmpOrU32 { .. } | Op::MuxI32 | Op::MuxV2i16 => 3,
-        Op::FcmpOrV2f16 { .. } => 3,
+        Op::FcmpOrV2f16 { .. } | Op::IcmpOrV2u16 { .. } => 3,
         Op::MuxBitI32 | Op::Cubeface1 | Op::Cubeface2 | Op::CubeSsel | Op::CubeTsel => 3,
         Op::CselU32 | Op::CselS32 { .. } => 4,
     }
