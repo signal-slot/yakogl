@@ -46,7 +46,7 @@ use super::select::{self, generic_layout, VaryingAt, MAX_VARYINGS};
 use super::{Defect, MaliError};
 use crate::gl::consts::{
     GL_BOOL, GL_FLOAT, GL_FLOAT_MAT4, GL_FLOAT_VEC2, GL_FLOAT_VEC3, GL_FLOAT_VEC4, GL_INT, GL_INT_VEC2, GL_INT_VEC3,
-    GL_INT_VEC4,
+    GL_INT_VEC4, GL_UNSIGNED_INT, GL_UNSIGNED_INT_VEC2, GL_UNSIGNED_INT_VEC3, GL_UNSIGNED_INT_VEC4,
 };
 use crate::shaderc::online::arena::Arena;
 use crate::shaderc::online::ir::{
@@ -765,10 +765,11 @@ pub fn uniform_of<'m>(m: &Module<'m>, dword: u16) -> Result<(&'m ir::UniformDecl
         /* an int or a bool is one 32-bit word a component, raw bits
          * (docs/notes/mali-int-uniforms.md: Mesa's packed block, a word
          * per component; intuni_ishr's `ivec2 v` at `u2.w0`, `u2.w1`) */
-        GL_INT | GL_BOOL => 1,
-        GL_INT_VEC2 => 2,
-        GL_INT_VEC3 => 3,
-        GL_INT_VEC4 => 4,
+        GL_INT | GL_UNSIGNED_INT | GL_BOOL => 1,
+        GL_INT_VEC2 | GL_UNSIGNED_INT_VEC2 => 2,
+        GL_INT_VEC3 | GL_UNSIGNED_INT_VEC3 => 3,
+        /* intuni_intrt's `uvec4 u_v`, `.xyz` at `u2.w0` to `u3.w0` */
+        GL_INT_VEC4 | GL_UNSIGNED_INT_VEC4 => 4,
         _ => return Err(MaliError::UniformType),
     };
     Ok((u, comps))

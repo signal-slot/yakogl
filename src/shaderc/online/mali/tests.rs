@@ -4676,7 +4676,7 @@ const ES100_PASSTHROUGH_VS: &str = include_str!("../../../../tools/shaders/gl_te
 /// mali-int-loops.md, mali-int-uniforms.md; plan #154 intbool): each pair
 /// against its drm-shim reference, drawn with no uniform values (every
 /// uniform word 0), every region and fact ([`check_program_for`]).
-const INTBOOL_POPULATION: [(&str, &str, &str, &str); 6] = [
+const INTBOOL_POPULATION: [(&str, &str, &str, &str); 7] = [
     /* `int(3.0 * v_color.r)` and `.g`: the varying loaded whole, its two
      * lanes one `V2F32_TO_V2F16` and one `FMA.v2f16` by the fp16 pair of
      * 3.0, `F16_TO_S32.rtz` of each half; the four selects of the colour
@@ -4734,6 +4734,11 @@ const INTBOOL_POPULATION: [(&str, &str, &str, &str); 6] = [
     /* the same program recorded for the loop study (intloop_idiv.frag is
      * idiv.frag, its vertex shader the position-only one) */
     ("idiv", td!("intloop_idiv.vert"), td!("intloop_idiv.frag"), td!("intloop_idiv.expect.json")),
+    /* gl_test case 200 (intrt): a `uvec4` output, the uniform's three
+     * words raw (`MOV.i32 r0, u2.w0`), `uint(gl_FragCoord.x)` the pixel's
+     * column (`U16_TO_U32 r3, r59^.h0`), stored unconverted by
+     * `BLEND.slot0.v4.u32` (docs/notes/mali-int-uniforms.md, 2.5) */
+    ("intrt", td!("intuni_intrt.vert"), td!("intuni_intrt.frag"), td!("intuni_intrt.expect.json")),
 ];
 
 /// The population's member `name` against its reference.
@@ -4755,6 +4760,11 @@ fn case_112_affectand_is_byte_equal_to_mesa_26_2_1() {
 #[test]
 fn intuni_ishr_is_byte_equal_to_mesa_26_2_1() {
     check_intbool("ishr");
+}
+
+#[test]
+fn intuni_intrt_is_byte_equal_to_mesa_26_2_1() {
+    check_intbool("intrt");
 }
 
 #[test]
