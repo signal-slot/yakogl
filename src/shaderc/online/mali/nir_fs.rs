@@ -103,6 +103,12 @@ pub struct TexLookup {
     /// coordinate is [`TexCoord::Computed`], two integer lanes, and the
     /// look-up `TEX_FETCH` ([`super::bir::LodMode::Fetch`]).
     pub fetch: bool,
+    /// A 2D array's look-up of a mediump shader ([`walk_nodes`]; case 42
+    /// es3array): its coordinate is [`TexCoord::Computed`], three lanes
+    /// (the layer the third, fp32 of a look-up and an integer of a
+    /// `texelFetch`), the dimension `2d.array_enable`, and the texels
+    /// written those the colour reads ([`tex_mask`]).
+    pub array: bool,
     /// The IR instruction of the look-up.
     pub at: u16,
     /// The look-up's node (the texels' lanes).
@@ -120,7 +126,7 @@ pub struct TexLookup {
 impl TexLookup {
     /// A look-up at IR instruction `at`, its node `node`.
     fn new(sampler: u8, coord: TexCoord, cube: Option<Cube>, fetch: bool, at: usize, node: u16) -> TexLookup {
-        TexLookup { sampler, coord, cube, fetch, at: at as u16, node, index: 0, load: None, lanes: 0 }
+        TexLookup { sampler, coord, cube, fetch, array: false, at: at as u16, node, index: 0, load: None, lanes: 0 }
     }
 
     const NONE: TexLookup = TexLookup {
@@ -128,6 +134,7 @@ impl TexLookup {
         coord: TexCoord::Computed,
         cube: None,
         fetch: false,
+        array: false,
         at: 0,
         node: 0,
         index: 0,
@@ -409,6 +416,14 @@ fn grafted_locals(m: &Module<'_>, n: usize) -> [Option<ir::ValueId>; MAX_LOCALS]
                             sp += 1;
                         }
                     }
+                }
+                /* a 2D array's look-up (an `ir_texture`, grafted as any
+                 * rvalue: case 42's `t` and `f`, whose `tex` and `txf` stand
+                 * at the colour's store in intbig_case42.stderr, after the
+                 * fetch's coordinates) */
+                Some(ir::Op::Tex { dim: ir::TexDim::D2Array, coord, .. }) => {
+                    stack[sp] = coord.val.0;
+                    sp += 1;
                 }
                 Some(ir::Op::LoadLocal { local, .. }) => match reads.get_mut(local.0 as usize) {
                     Some(r) => *r = true,
@@ -1097,6 +1112,9 @@ impl<'s> Fs<'s> {
         };
         match a {
             AluOp::F2i if self.is_f16(p) || self.uniform_dword(p).is_some() => self.int32(Alu::F2i32, [p, u, u], at),
+            /* of an fp32 value (case 42's `int(uv.x * float(sz.x))`,
+             * `F32_TO_S32.rtz`) */
+            AluOp::F2i if self.fp32_lane(p) => self.int32(Alu::F2i, [p, u, u], at),
             AluOp::I2b if bool_uniform(0) => Ok(p),
             AluOp::Bnot | AluOp::Inot if self.mask_lane(p) => match not(self, p) {
                 Some(inner) => Ok(inner),
@@ -1255,6 +1273,22 @@ impl<'s> Fs<'s> {
     fn widen(&mut self, v: Val, at: usize) -> Result<Val, MaliError> {
         if !self.is_f16(v) {
             return Ok(v);
+        }
+        let first = self.nir.n;
+        let r = self.nir.alu(Alu::F2f32, v, Val::Undef, Val::Undef)?;
+        for id in first..self.nir.n {
+            self.origin[id] = at as u16;
+        }
+        Ok(r)
+    }
+
+    /// [`Fs::widen`] of an fp16 lane or an fp16 uniform's (`F16_TO_F32
+    /// u2.w0.h0`, a 2D array look-up's layer, intbig_case42.expect.json).
+    fn widen_any(&mut self, v: Val, at: usize) -> Result<Val, MaliError> {
+        let uniform = matches!(v, Val::Lane(n, _)
+            if matches!(self.nir.nodes[n as usize], NirNode { kind: Kind::Uniform { .. }, bits: 16, .. }));
+        if !uniform {
+            return self.widen(v, at);
         }
         let first = self.nir.n;
         let r = self.nir.alu(Alu::F2f32, v, Val::Undef, Val::Undef)?;
@@ -2001,6 +2035,23 @@ pub fn walk<'s>(m: &Module<'_>, scratch: &Arena<'s>, prec: FsPrecision) -> Resul
         return Err(MaliError::ControlFlow);
     }
     order_keys(m, f.keys);
+    /* a 2D array look-up's coordinate conversion CSE'd with one a later
+     * statement made first (`nir_opt_cse` keeps the first in program
+     * order): it stands at its first reader (case 42's `F16_TO_F32` of
+     * `uv.x`, made for the look-up grafted into the colour's store, read
+     * first by the fetch's coordinate: intbig_case42.stderr's `%19`) */
+    for t in f.look_ups[..f.nlook].iter().filter(|t| t.array) {
+        for v in f.nir.nodes[t.node as usize].src {
+            let Val::Lane(c, _) = v else { continue };
+            if !matches!(f.nir.nodes[c as usize].kind, Kind::Alu(Alu::F2f32)) {
+                continue;
+            }
+            let first = f.nir.uses(c).map(|(u, _)| f.origin[u as usize]).min_by_key(|&o| f.keys[o as usize]);
+            if let Some(o) = first.filter(|&o| f.keys[o as usize] < f.keys[f.origin[c as usize] as usize]) {
+                f.origin[c as usize] = o;
+            }
+        }
+    }
     /* each read of gl_FragCoord is its own lowered load, and `nir_opt_cse`
      * keeps the first in program order: the position's nodes stand at the
      * read whose statement comes first (fbload_fbload_int.stderr: the y
@@ -2599,11 +2650,13 @@ fn walk_nodes(
             {
                 let op = if a == AluOp::Fmul { Alu::Fmul } else { Alu::Fadd };
                 let w = m.comps_of(ir::ValueId(id.0)) as usize;
+                /* an fp16 operand is widened (lower_precision's `f162f` at
+                 * the edge of the lowered tree: case 42's `uv.x *
+                 * float(sz.x)`, `F16_TO_F32` then `FMA.f32`) */
                 for (i, o) in out.iter_mut().enumerate().take(w) {
                     let (x, y) = (lane(vals, s[0], i), lane(vals, s[1], i));
-                    if !(f.fp32_lane(x) || matches!(x, Val::Const(_)))
-                        || !(f.fp32_lane(y) || matches!(y, Val::Const(_)))
-                    {
+                    let ok = |v: Val| f.fp32_lane(v) || f.is_f16(v) || matches!(v, Val::Const(_));
+                    if !ok(x) || !ok(y) {
                         return Err(MaliError::MixedPrecision);
                     }
                     *o = f.op32(op, [x, y, Val::Undef], at)?;
@@ -2917,6 +2970,82 @@ fn walk_nodes(
                 for (c, o) in out.iter_mut().enumerate() {
                     *o = Val::Lane(n, c as u8);
                 }
+            }
+            /* a 2D array's look-up of a mediump shader (case 42 es3array,
+             * texmore_206_array; docs/notes/mali-texture-lookups.md 3):
+             * `texture(s, vec3(uv, layer))` is `TEX_SINGLE .2d.array_enable
+             * .computed` of the three lanes at fp32 (`F16_TO_F32` each, the
+             * layer not rounded: the sampler clamps it), `texelFetch(s,
+             * ivec3, 0)` `TEX_FETCH .2d.array_enable` of the three 32-bit
+             * integers (pan_nir_lower_tex.c:835-849). A level other than the
+             * constant 0, a constant lane: no reference */
+            ir::Op::Tex {
+                dim: ir::TexDim::D2Array,
+                shadow: false,
+                proj: false,
+                ret: ir::ScalarType::F32,
+                sampler,
+                coord,
+                lod,
+                offset: None,
+            } if !prec.highp => {
+                let fetch = match lod {
+                    ir::TexLod::Implicit => false,
+                    ir::TexLod::Fetch(level) if lane(vals, level, 0) == Val::Const(0) => true,
+                    _ => return Err(MaliError::TexKind),
+                };
+                let mut src = [Val::Undef; 3];
+                for (c, s) in src.iter_mut().enumerate() {
+                    let v = lane(vals, coord, c);
+                    let Val::Lane(n, _) = v else { return Err(MaliError::TexCoord) };
+                    let bits = f.nir.nodes[n as usize].bits;
+                    *s = match (fetch, bits) {
+                        (true, 32) if !f.is_f16(v) => v,
+                        (false, 16) => f.widen_any(v, at)?,
+                        _ => return Err(MaliError::TexCoord),
+                    };
+                }
+                let n = f.nir.push_node(NirNode { kind: Kind::Tex, src, bits: 16, width: 1 })?;
+                f.origin[n as usize] = at as u16;
+                let mut t = TexLookup::new(sampler, TexCoord::Computed, None, fetch, at, n);
+                t.array = true;
+                f.push_look_up(t)?;
+                for (c, o) in out.iter_mut().enumerate() {
+                    *o = Val::Lane(n, c as u8);
+                }
+            }
+            /* `textureSize` of a 2D array at level 0 in a mediump shader
+             * (case 42): `pan_nir_load_va_tex_size` (pan_nir.h:106-140),
+             * the descriptor's first eight bytes ([`Kind::TexDesc`]), its
+             * width and height halves `u2u32` plus one, each selected
+             * against 0 by the null test of its first half (`ieq_pan` at 16
+             * bits, the `if` NIR flattens to `bcsel_pan`), in
+             * intbig_case42.stderr's order (`%7`..`%18`). The layer count
+             * (byte 24) is read by no reference */
+            ir::Op::TexSize { sampler, dim: ir::TexDim::D2Array, lod } if !prec.highp => {
+                if lane(vals, lod, 0) != Val::Const(0) {
+                    return Err(MaliError::TexKind);
+                }
+                let u = Val::Undef;
+                let d = NirNode { kind: Kind::TexDesc { sampler }, src: [u; 3], bits: 32, width: 2 };
+                let d = f.nir.push_node(d)?;
+                f.origin[d as usize] = at as u16;
+                let w = f.int32(Alu::Extract16(0), [Val::Lane(d, 1), u, u], at)?;
+                let h = f.int32(Alu::Extract16(1), [Val::Lane(d, 1), u, u], at)?;
+                let w = f.int32(Alu::Iadd, [w, Val::Const(1), u], at)?;
+                let h = f.int32(Alu::Iadd, [h, Val::Const(1), u], at)?;
+                let null = NirNode {
+                    kind: Kind::Alu(Alu::Icmp(Cmpf::Eq)),
+                    src: [Val::Lane(d, 0), Val::Const(0), u],
+                    bits: 16,
+                    width: 1,
+                };
+                let null = Val::Lane(f.nir.push_node(null)?, 0);
+                if let Val::Lane(n, _) = null {
+                    f.origin[n as usize] = at as u16;
+                }
+                out[0] = f.int32(Alu::Bcsel, [null, Val::Const(0), w], at)?;
+                out[1] = f.int32(Alu::Bcsel, [null, Val::Const(0), h], at)?;
             }
             ir::Op::Tex { sampler, coord, .. } => {
                 if !matches!(op.es100_tex(), Some((Es100Tex::Tex2D, None))) {
@@ -4162,6 +4291,7 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
         ubo_off: [None; MAX_UBO_READS],
         ubo_half: [None; MAX_UBO_READS],
         ubo_lanes: [[None; 4]; MAX_UBO_READS],
+        desc: None,
         frag: None,
     };
     let mut val = [None::<Src>; MAX_PAIRS];
@@ -4417,6 +4547,10 @@ fn word_of(f: &Fs<'_>, a: Val, b: Val) -> Result<Word, MaliError> {
     if f16(a) || f16(b) {
         return match (f.texel(a), f.texel(b)) {
             (Some((t, i)), Some((u, j))) if t == u && i % 2 == 0 && j == i + 1 => Ok(Word::Tex(t as u8, i / 2)),
+            /* the texels of two 2D array look-ups: their halves made one
+             * word (case 42's `vec4(t.rgb, f.a)`, `MKVEC.v2i16 r3^.h0,
+             * r1.h0`) */
+            (Some((t, _)), Some((u, _))) if f.look_ups[t].array && f.look_ups[u].array => Ok(Word::Lanes(a, b)),
             _ => Err(MaliError::TexLanes),
         };
     }
@@ -4510,6 +4644,17 @@ fn src32(f: &Fs<'_>, lv: &Leaves, val: &[Option<Src>], v: Val) -> Result<Src, Ma
                 let j = f.look_up_of(n).ok_or(defect)?;
                 lv.tex.get(j).and_then(|w| w[c as usize & 3]).map(Src::ssa).ok_or(defect)
             }
+            /* an fp16 texel of a 2D array look-up: its half of the register
+             * the write mask packs it in ([`tex_mask`]) */
+            Kind::Tex if f.look_up_of(n).is_some_and(|j| f.look_ups[j].array) => {
+                let j = f.look_up_of(n).ok_or(defect)?;
+                let mask = tex_mask(&f.look_ups[j], true);
+                let at = (mask & ((1u8 << c) - 1)).count_ones() as usize;
+                let w = lv.tex.get(j).and_then(|w| w[(at / 2) & 3]).ok_or(defect)?;
+                Ok(Src::ssa(w).swz(if at.is_multiple_of(2) { Swz::H00 } else { Swz::H11 }))
+            }
+            /* a descriptor word ([`tex_desc`]) */
+            Kind::TexDesc { .. } => lv.desc.map(|d| Src::ssa(d[c as usize & 1])).ok_or(defect),
             _ => Err(MaliError::MixedPrecision),
         },
         _ => Err(defect),
@@ -4563,6 +4708,42 @@ pub fn mask_colour(f: &Fs<'_>) -> bool {
         })
 }
 
+/// The mediump shader `f` makes a 2D array look-up ([`TexLookup::array`]):
+/// its coordinates are fp32 and integer values of fp16 ones (case 42's
+/// `F16_TO_F32` of `uv`, `F32_TO_S32` of `uv.x * float(sz.x)`), NIR's at
+/// 32 bits as a highp shader's, so the program is [`select_highp`]'s, the
+/// fp16 values read by those conversions in pairs ([`int_source_pairs`]),
+/// the colour the look-ups' fp16 texels.
+pub fn array_look_ups(f: &Fs<'_>) -> bool {
+    !f.prec.highp && f.live_look_ups().any(|(_, t)| t.array)
+}
+
+/// The late `fadd(fmul(a, b), c)` -> `ffma(a, b, c)` (nir_opt_algebraic.py:
+/// 3816-3820) on the fp16 lanes of a shader with 2D array look-ups
+/// ([`array_look_ups`]), before they pair ([`vectorise_int_sources`]):
+/// case 42's `v_xy * 0.5 + 0.5`, one `FMA.v2f16` of the converted pair
+/// (intbig_case42.expect.json). The product is left to the dead code.
+pub fn fuse16(f: &mut Fs<'_>) {
+    if !array_look_ups(f) {
+        return;
+    }
+    for x in 0..f.nir.n {
+        let NirNode { kind: Kind::Alu(Alu::Fadd), src, bits: 16, width: 1 } = f.nir.nodes[x] else { continue };
+        for s in 0..2 {
+            let Val::Lane(m, 0) = src[s] else { continue };
+            let fm = f.nir.nodes[m as usize];
+            if !matches!(fm, NirNode { kind: Kind::Alu(Alu::Fmul), bits: 16, width: 1, .. })
+                || f.nir.uses(m).count() != 1
+            {
+                continue;
+            }
+            f.nir.nodes[x].kind = Kind::Alu(Alu::Ffma);
+            f.nir.nodes[x].src = [fm.src[0], fm.src[1], src[1 - s]];
+            break;
+        }
+    }
+}
+
 /// Node `id` is `fabs` of one lane of an fp16 node, read by `f2i32`s
 /// alone: what `nir_opt_vectorize` finds no partner for (case 79's
 /// `abs(u_d.x * 10.0)`, `FADD.v2f16 r2, r4^.abs.h00` of the product pair).
@@ -4607,10 +4788,14 @@ fn int_source_pairs(f: &Fs<'_>) -> Option<[Option<(u16, u16)>; 4]> {
         if nd.bits != 16 || op.is_int() || lone_abs(f, id) {
             continue;
         }
+        /* a product [`fuse16`] fused into its sum reads nothing now */
+        if f.nir.uses(id as u16).next().is_none() && array_look_ups(f) {
+            continue;
+        }
         /* read by `f2i32`s alone (the colour reads no fp16 lane), or by a
          * lone `fabs` of it */
         let readers = f.nir.uses(id as u16).all(|(u, _)| {
-            matches!(f.nir.nodes[u as usize], NirNode { kind: Kind::Alu(Alu::F2i32), bits: 32, .. })
+            matches!(f.nir.nodes[u as usize], NirNode { kind: Kind::Alu(Alu::F2i32 | Alu::F2f32), bits: 32, .. })
                 || lone_abs(f, u as usize)
         });
         if nd.width != 1 || !matches!(op, Alu::Fmul | Alu::Fadd | Alu::Ffma | Alu::Fabs) || !readers {
@@ -4696,7 +4881,7 @@ pub fn vectorise_int_sources(f: &mut Fs<'_>) -> Result<(), MaliError> {
         f.nir.nodes[b as usize] = NirNode { kind: nd.kind, src, bits: 16, width: 2 };
         f.origin[b as usize] = f.origin[a as usize];
         for id in 0..f.nir.n {
-            if f.nir.nodes[id].kind != Kind::Alu(Alu::F2i32) {
+            if !matches!(f.nir.nodes[id].kind, Kind::Alu(Alu::F2i32 | Alu::F2f32)) {
                 continue;
             }
             match f.nir.nodes[id].src[0] {
@@ -4932,14 +5117,17 @@ pub fn select_highp(
     if cube && f.live_look_ups().count() > 1 {
         return Err(MaliError::TexCount);
     }
-    for (j, t) in f.live_look_ups().filter(|_| !cube) {
+    /* so does a 2D array's, after the conversions of its coordinate made
+     * where it stands (case 42's `F16_TO_F32` of the layer) */
+    let inline = cube || f.live_look_ups().any(|(_, t)| t.array);
+    for (j, t) in f.live_look_ups().filter(|_| !inline) {
         events[ne] = (f.nir.block[t.node as usize], f.keys.get(t.at as usize).copied().ok_or(defect)?, TEX, j as u16);
         ne += 1;
     }
     for k in 0..f.nir.len {
         let id = f.nir.order[k] as usize;
         match f.nir.nodes[id].kind {
-            Kind::Tex if cube => {
+            Kind::Tex | Kind::TexDesc { .. } if inline => {
                 events[ne] = (f.nir.block[id], key_of(id), NODE, k as u16);
                 ne += 1;
             }
@@ -4992,6 +5180,7 @@ pub fn select_highp(
         ubo_off: [None; MAX_UBO_READS],
         ubo_half: [None; MAX_UBO_READS],
         ubo_lanes: [[None; 4]; MAX_UBO_READS],
+        desc: None,
         frag: None,
     };
     let val = scratch.alloc_filled(MAX_NODES, None::<Src>).map_err(oom)?;
@@ -5078,6 +5267,13 @@ pub fn select_highp(
                 if nd.kind == Kind::Tex {
                     let j = f.look_up_of(id as u16).ok_or(defect)?;
                     tex_highp(p, f, j, &mut lv, val)?;
+                    continue;
+                }
+                /* `pan_nir_load_va_desc`'s `load_ssbo` (`LD_PKA.i64` of the
+                 * table handle at the descriptor's offset), split into its
+                 * two words */
+                if let Kind::TexDesc { sampler } = nd.kind {
+                    lv.desc = Some(tex_desc(p, f, sampler)?);
                     continue;
                 }
                 if at_store(id) {
@@ -5272,7 +5468,7 @@ pub fn select_highp(
                     }
                     let h00 = |r: u16| Src::ssa(r).swz(Swz::H00);
                     let r = match f.alu_of(x) {
-                        _ if f.is_f16(x) => src32(f, &lv, val, x)?,
+                        _ if f.is_f16(x) || f.texel(x).is_some_and(|(j, _)| f.tex_f16(j)) => src32(f, &lv, val, x)?,
                         Some((Alu::B2f, [c, ..])) => {
                             let s = [src32(f, &lv, val, c)?];
                             h00(row(p, &mut rows, Row { op: Alu::B2f, bits: 16, width: 1 }, &s)?)
@@ -5348,7 +5544,7 @@ fn tex_highp(p: &mut Prog<'_>, f: &Fs<'_>, j: usize, lv: &mut Leaves, val: &[Opt
     let nd = f.nir.nodes[t.node as usize];
     let mut staging = [Src::NULL; 3];
     let n = match t {
-        TexLookup { cube: Some(Cube { explicit: true }), .. } => 3,
+        TexLookup { cube: Some(Cube { explicit: true }), .. } | TexLookup { array: true, .. } => 3,
         TexLookup { coord: TexCoord::Computed, .. } => 2,
         _ => 0,
     };
@@ -5356,6 +5552,41 @@ fn tex_highp(p: &mut Prog<'_>, f: &Fs<'_>, j: usize, lv: &mut Leaves, val: &[Opt
         *x = src32(f, lv, val, nd.src[k])?;
     }
     tex(p, f, j, lv, (n > 0).then_some(&staging[..n]))
+}
+
+/// The table handle `pan_nir_load_va_desc` loads a texture descriptor
+/// through: the texture table (`PAN_TABLE_TEXTURE`, 4) in the low byte of
+/// `pan_res_handle(62, 0)` (pan_nir.h:67-71; intbig_case42.expect.json's
+/// FAU word `3e000004`).
+const TEX_TABLE_HANDLE: u32 = (62 << 24) | 4;
+
+/// The first two words of `sampler`'s texture descriptor ([`Kind::TexDesc`]):
+/// `LD_PKA.i64` at the descriptor's offset in the table (32 bytes each),
+/// split (intbig_case42.expect.json: `LD_PKA.i64.unsigned.slot1 @r2:r3,
+/// 0x0, u2.w1`). The sampler's look-up names the index ([`layout`]); a
+/// size query of a sampler no look-up reads has no reference.
+fn tex_desc(p: &mut Prog<'_>, f: &Fs<'_>, sampler: u8) -> Result<[u16; 2], MaliError> {
+    let (_, t) = f.live_look_ups().find(|(_, t)| t.sampler == sampler).ok_or(MaliError::TexKind)?;
+    let off = Src::of(Idx::Const(32 * u32::from(t.index)));
+    let r = alu(p, Op::LdPka { words: 2, half: false }, &[off, Src::of(Idx::Const(TEX_TABLE_HANDLE))])?;
+    let w = split(p, r, 2)?;
+    Ok([w[0], w[1]])
+}
+
+/// The texels look-up `t` writes: a 2D array's those the colour reads
+/// (`nir_def_components_read`, bifrost_compile.c:3522; case 42's `.a` of
+/// the fetch), another's up to the last one read (`nir_opt_shrink_vectors`
+/// trims the unread tail: texmore_2's `.rgb`), an fp32 look-up's from the
+/// lowest one read (unitype_100.expect.json's `.ba`).
+fn tex_mask(t: &TexLookup, f16: bool) -> u8 {
+    let tail = (1u8 << (8 - t.lanes.leading_zeros())) - 1;
+    if t.array {
+        t.lanes
+    } else if f16 || t.lanes == 0 {
+        tail
+    } else {
+        tail & !((1u8 << t.lanes.trailing_zeros()) - 1)
+    }
 }
 
 /// What ends block `b` of a highp shader (`emit_if`, bifrost_compile.c:
@@ -5523,6 +5754,9 @@ struct Leaves {
     /// Each vec4 array read's loaded lanes in a highp shader
     /// ([`super::select::vec4_fetch`]), by its place in [`Fs::ubo_idx`].
     ubo_lanes: [[Option<u16>; 4]; MAX_UBO_READS],
+    /// The texture descriptor's two words `textureSize` reads
+    /// ([`Kind::TexDesc`], [`tex_desc`]).
+    desc: Option<[u16; 2]>,
     /// The narrowed position's word ([`Leaf::Frag`], [`frag16`]).
     frag: Option<u16>,
 }
@@ -5688,24 +5922,31 @@ fn tex(p: &mut Prog<'_>, f: &Fs<'_>, j: usize, lv: &mut Leaves, computed: Option
     /* a cube's level mode follows the call (`EXPLICIT` or `ZERO_LOD`,
      * pan_nir_lower_tex.c:927-937), its dimension `cube`; a 2D look-up
      * here is `texture2D`'s computed level, or `texelFetch`'s */
+    let plain = if t.array { super::bir::TexDim::D2Array } else { super::bir::TexDim::D2 };
     let (lod, dim) = match t.cube {
-        None if t.fetch => (super::bir::LodMode::Fetch, super::bir::TexDim::D2),
+        None if t.fetch => (super::bir::LodMode::Fetch, plain),
         Some(Cube { explicit: true }) => (super::bir::LodMode::Explicit, super::bir::TexDim::Cube),
         Some(Cube { explicit: false }) => (super::bir::LodMode::Zero, super::bir::TexDim::Cube),
-        None => (super::bir::LodMode::Computed, super::bir::TexDim::D2),
+        None => (super::bir::LodMode::Computed, plain),
     };
-    /* the texels up to the last one read (`nir_opt_shrink_vectors` trims a
-     * look-up's unread tail: texmore_2's `.rgb` of `texture2D(..).rgb`) */
     let tail = (1u8 << (8 - t.lanes.leading_zeros())) - 1;
-    /* an fp32 look-up's below the lowest one read too, one register a
-     * texel read (unitype_100.expect.json's `TEX_SINGLE.slot0.skip
-     * .reserved.32.ba.2d.computed @r2:r3` of `texture(..).ba`) */
-    let mask = if f16 || t.lanes == 0 { tail } else { tail & !((1u8 << t.lanes.trailing_zeros()) - 1) };
+    let mask = tex_mask(&t, f16);
     let op = Op::TexSingle { sr_count: n as u8, mask, f16, skip: false, lod, dim };
     let srcs = [Src::ssa(sr), Src::of(Idx::Const(tex_handle(t.index.into()))), Src::of(Idx::Const(0))];
     let r = alu(p, op, &srcs)?;
     let words = lv.tex.get_mut(j).ok_or(MaliError::Defect(Defect::IrIndex))?;
     *words = [None; 4];
+    /* fp16 texels packed two a register in mask order (`bi_make_vec_to`'s
+     * channels, bifrost_compile.c:3563-3573): the fetch's `.a` alone is
+     * the low half of its one register */
+    if f16 && mask != tail {
+        let n = (mask.count_ones() as usize).div_ceil(2);
+        let w = if n == 1 { [r; 4] } else { split(p, r, n)? };
+        for (i, x) in words.iter_mut().enumerate().take(n) {
+            *x = Some(w[i]);
+        }
+        return Ok(());
+    }
     if mask == tail {
         let n = if f16 { 2 } else { 4 };
         let w = split(p, r, n)?;

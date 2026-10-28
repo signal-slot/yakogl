@@ -375,6 +375,14 @@ pub enum Kind {
     /// A fragment shader's texture look-up (nir_fs.rs): its four 16-bit
     /// lanes are the texels.
     Tex,
+    /// The first eight bytes of the texture descriptor of `sampler`'s
+    /// look-up (nir_fs.rs; `pan_nir_load_va_desc(b, 4, 16, handle, 0)` of
+    /// `pan_nir_load_va_tex_size`, pan_nir.h:106-140: a `load_ssbo` of the
+    /// descriptor table, Mesa's `LD_PKA.i64`): two 32-bit lanes, the
+    /// words, whose halves `textureSize` reads.
+    TexDesc {
+        sampler: u8,
+    },
     /// A fragment shader's read of one element of a uniform array at a
     /// run-time index (nir_fs.rs; `load_ubo(0, index * stride)`, Mesa's
     /// `LD_PKA`): `dword` the front end's first dword of the array, `comps`
@@ -1017,9 +1025,12 @@ impl<'s> Nir<'s> {
                  * (:166, :182); `load_vertex_id` is not in the list */
                 Kind::Preload { reg } if reg != super::ra::VERTEX_ID => {}
                 Kind::Preload { .. } => return None,
-                Kind::Tex | Kind::UniformIdx { .. } | Kind::VsTex { .. } | Kind::FragCoordZw | Kind::Phi => {
-                    return None
-                }
+                Kind::Tex
+                | Kind::TexDesc { .. }
+                | Kind::UniformIdx { .. }
+                | Kind::VsTex { .. }
+                | Kind::FragCoordZw
+                | Kind::Phi => return None,
                 /* a `demote_if` (:227-232, `discard_ok` false in both calls
                  * that count ALU; the GL front end's third call,
                  * gl_nir_linker.c:107-111, is for a side of nothing but

@@ -418,6 +418,17 @@ Sources in `tools/mali/testdata`:
 
 ## 7. Case 80 (`matdyn`): an `int` uniform that indexes
 
+**State since plan #154 item intbool-2.** The `int` uniform is lowered (its
+word read raw, section 1), and case 80 is no longer refused by its type.
+Its fragment shader stops first at the chain refusal: `s[1][1] + d[1][0] +
+q[0][1] + n[1][0] + 4.0 * p[1][0]` is five terms GLSL's `do_rebalance_tree`
+reassociates (`nir::refuse_rebalanced`, plan #154 item chains). With that
+refusal lifted in a scratch build, it then stops at the mixed precision of
+its locals (`MixedPrecision`), and only after that at the run-time indexed
+locals this section describes (`IndexedLocal`, `arr[i]`, `p[i]`, `col[i -
+1]`, `v[j]`). No test pins `unitype_80` yet. The text below predates
+intbool (session 1).
+
 Plan #153 item `study-matdyn-ifbranch`, issue #1386. The newest sweep
 (`0dce654a8:tools/mali/board-ref/2026-10-24-refusals/ours/15-panthor-gltest--sweep-1.log`,
 `verdict case 80`) refuses it with the same `UniformType` message as 100 and

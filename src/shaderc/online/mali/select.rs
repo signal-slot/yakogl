@@ -645,9 +645,12 @@ pub fn vs_variant(
                 let off = vec4_offset(p, ubo, dword, src(lanes, nd.src[0])?, &mut 0)?;
                 pending[id] = Some(off);
             }
-            nir::Kind::Tex | nir::Kind::PixelCoord | nir::Kind::FragCoordZw | nir::Kind::Phi | nir::Kind::Discard => {
-                return Err(MaliError::Defect(super::Defect::IrIndex))
-            }
+            nir::Kind::Tex
+            | nir::Kind::TexDesc { .. }
+            | nir::Kind::PixelCoord
+            | nir::Kind::FragCoordZw
+            | nir::Kind::Phi
+            | nir::Kind::Discard => return Err(MaliError::Defect(super::Defect::IrIndex)),
             nir::Kind::Store { out: o, word } => {
                 let data = src(lanes, nd.src[0])?;
                 let st =

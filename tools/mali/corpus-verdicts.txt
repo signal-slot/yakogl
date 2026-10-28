@@ -132,7 +132,7 @@ tools/shaders/es100/vtex_struct_sampler_array.vert: Valhall: a varying lane comp
 tools/shaders/es100/vtransc.frag: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
 tools/shaders/es100/xlink.frag: Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet
 tools/shaders/es100/xlink.vert: Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add) is not lowered yet
-tools/shaders/es300/array.frag: Valhall: a texture look-up other than texture2D(sampler2D, coordinate) (a bias, a level, a projection, a cube map, a size query) is not lowered yet
+tools/shaders/es300/array.frag: ok
 tools/shaders/es300/bands.vert: ok
 tools/shaders/es300/cube.frag: ok
 tools/shaders/es300/cube.vert: ok

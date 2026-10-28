@@ -83,9 +83,44 @@ of the trace below):
   walk's fp32 arm), narrowed at the store, the program
   `select_highp`'s as a colour of masks (`mask_colour`).
 
-Case 42 stays refused at `array.frag`'s `textureSize` (the texture
-refusal; `TexKind`). Case 80 stays refused (docs/notes/mali-uniform-types.md,
-section 7).
+Case 42 compiles byte-equal in both stages
+(`case_42_es3array_is_byte_equal_to_mesa_26_2_1` against
+`intbig_case42.expect.json`, no uniform value set;
+`texmore_206_array_is_byte_equal_to_mesa_26_2_1`, the same program
+recorded with gl_ref.py's values). The compiler side only: the frame still
+refuses a 2D array texture (`src/mali`, plan #154 item frame-tex2darray).
+
+- **`textureSize` of a 2D array** (`pan_nir_load_va_tex_size`,
+  pan_nir.h:106-140) is a `Kind::TexDesc` node, the descriptor's first
+  eight bytes (`LD_PKA.i64.unsigned` at `32 * index` through the table
+  handle `0x3e000004`, `pan_res_handle(62, 0) | PAN_TABLE_TEXTURE`), then
+  32-bit integer nodes in `intbig_case42.stderr`'s order (`%7`..`%18`):
+  `extract_u16` of the second word's halves (`U16_TO_U32 r3.h0`, `.h1`:
+  width and height minus one), `iadd 1`, the null test `ieq_pan` of the
+  first half at 16 bits (`ICMP_OR.v2u16.eq.m1 r2^.h00, 0x0`, a new emit.rs
+  row) and its `bcsel_pan`s (`S16_TO_S32` once, then `CSEL.u32.eq`). The
+  layer count is read by no reference.
+- **The look-ups** (`TexLookup::array`): `texture(s, vec3(uv, layer))` is
+  `TEX_SINGLE .rgb.2d.array_enable.computed` of `F16_TO_F32` of each lane
+  (the layer not rounded), `texelFetch(s, ivec3, 0)` `TEX_FETCH
+  .a.2d.array_enable` of three integers; the write mask is the texels
+  the colour reads, packed two a register (`nir_def_components_read`,
+  bifrost_compile.c:3522-3573: the fetch's `.a` alone is `r1.h0`), the
+  colour `vec4(t.rgb, f.a)` the words `t.rg` and `MKVEC.v2i16 t.b, f.a`.
+  Both look-ups are grafted into the colour's store as GLSL's
+  `opt_tree_grafting` does (`grafted_locals` takes a 2D array's look-up),
+  so their coordinates' conversions follow the fetch's arithmetic; a
+  conversion CSE'd with an earlier reader stands at that reader (`walk`).
+- **The fetch's coordinates**: `uv` is one `FMA.v2f16` of the converted
+  varying pair (`fuse16`, then `int_source_pairs` with `F16_TO_F32`
+  readers), `uv.x * float(sz.x)` an fp32 `fmul` of the widened lane and
+  `S32_TO_F32` (the walk's fp32 arm now widens an fp16 operand), `int()`
+  of it `F32_TO_S32.rtz` (`Alu::F2i`), `int(layer)` `F16_TO_S32.rtz` of
+  the uniform's half. The program is `select_highp`'s (`array_look_ups`).
+
+Case 80 stays refused (docs/notes/mali-uniform-types.md, section 7): its
+first refusal is the five-term chain (plan #154 item chains), then the
+mixed precision of its locals, then the indexed locals themselves.
 
 Before intbool-2: case 79 (integer division) and case 42 stayed refused: 79
 at `idiv.frag`'s division (`IntValue`), 42 at `array.frag`'s `textureSize`

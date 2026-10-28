@@ -1965,6 +1965,8 @@ fn fs_reference_sources() -> Vec<&'static str> {
     /* integer and boolean values, run-time vec4 array reads (#33) */
     srcs.extend(INTBOOL_POPULATION.iter().map(|c| c.2));
     srcs.extend(UNITYPE_POPULATION.iter().map(|c| c.2));
+    /* a 2D array's size, look-up and fetch (case 42, #33) */
+    srcs.push(include_str!("../../../../tools/shaders/es300/array.frag"));
     srcs
 }
 
@@ -4788,4 +4790,30 @@ fn case_116_uniidxe_is_byte_equal_to_mesa_26_2_1() {
 #[test]
 fn unitype_116v_is_byte_equal_to_mesa_26_2_1() {
     check_unitype("116v");
+}
+
+/* ---- 2D array textures (#33) ---------------------------------------- */
+
+/// Case 42 (es3array): `textureSize` of a `sampler2DArray` (`LD_PKA.i64` of
+/// the descriptor, `U16_TO_U32` of its halves plus one, `ICMP_OR.v2u16`
+/// null test, `CSEL`), a look-up at `vec3(uv, layer)` (`TEX_SINGLE .rgb
+/// .2d.array_enable.computed`, the layer `F16_TO_F32` of its half) and a
+/// `texelFetch` at `int(layer)` (`TEX_FETCH .a.2d.array_enable`), the
+/// colour `vec4(t.rgb, f.a)`. The shim set no uniform value.
+#[test]
+fn case_42_es3array_is_byte_equal_to_mesa_26_2_1() {
+    check_program_for(
+        "42",
+        include_str!("../../../../tools/shaders/es300/cube.vert"),
+        include_str!("../../../../tools/shaders/es300/array.frag"),
+        td!("intbig_case42.expect.json"),
+        false,
+    );
+}
+
+/// The same program recorded for the texture study with gl_ref.py's
+/// uniform values (texmore_206_array, `--uniform-values --levels 3`).
+#[test]
+fn texmore_206_array_is_byte_equal_to_mesa_26_2_1() {
+    check_program(td!("texmore_206_array.vert"), td!("texmore_206_array.frag"), td!("texmore_206_array.expect.json"));
 }
