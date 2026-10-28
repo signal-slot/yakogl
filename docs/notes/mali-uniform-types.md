@@ -30,6 +30,11 @@ not repeated.
 
 ## The answers
 
+(Since plan #154 item intbool, `nir::uniform_of` takes `int`, `bool` and
+`ivec2/3/4` as a word a component, step 1 of section 5, and a highp
+fragment shader reads an int uniform as a value; the vertex stage still
+refuses one read other than as an index. `docs/notes/mali-int-uniforms.md`.)
+
 1. **Cases 100 and 116 fail on `int` and nothing else.** Their uniforms are
    `vec4 xcols[4]` (an array: refused first, as `UniformArray`, in the vertex
    stage), `uniform int xidx` (the type that raises `UniformType`) and, in 100

@@ -44,7 +44,10 @@ use super::bir::{clamp, Cmpf, Swz, Sysval, MAX_BLOCKS};
 use super::fau;
 use super::select::{self, generic_layout, VaryingAt, MAX_VARYINGS};
 use super::{Defect, MaliError};
-use crate::gl::consts::{GL_FLOAT, GL_FLOAT_MAT4, GL_FLOAT_VEC2, GL_FLOAT_VEC3, GL_FLOAT_VEC4, GL_INT};
+use crate::gl::consts::{
+    GL_BOOL, GL_FLOAT, GL_FLOAT_MAT4, GL_FLOAT_VEC2, GL_FLOAT_VEC3, GL_FLOAT_VEC4, GL_INT, GL_INT_VEC2, GL_INT_VEC3,
+    GL_INT_VEC4,
+};
 use crate::shaderc::online::arena::Arena;
 use crate::shaderc::online::ir::{
     self, AluOp, IoKind, IoSlot, Module, Node as IrNode, Op as IrOp, ScalarType, TexDim, TexLod, ValueId,
@@ -185,6 +188,23 @@ pub enum Alu {
     /// is a 16-bit compare's (`pan_nir_lower_bool_to_bitsize`'s
     /// `resize_bool_alu_source`).
     I2i32,
+    /// `f2i32` of a 16-bit source (`F16_TO_S32.rtz`, bifrost_compile.c:
+    /// 3100): a mediump value's integer (case 72's `int(u_in.x)`, the
+    /// half `u2.w0.h0`).
+    F2i32,
+    /// `inot` of a 32-bit boolean: GLSL's `!` on a run-time value. The
+    /// walk folds it into its users (`inot(inot(a))`, `iand(a, a)`,
+    /// `bcsel(inot(a), b, c)` as `bcsel(a, c, b)`, nir_opt_algebraic.py);
+    /// one left for selection has no reference.
+    Inot,
+    /// `ishr` of a 32-bit integer (`ARSHIFT_OR.i32 a, #0, b.b0`,
+    /// bifrost_compile.c:3053-3055): intuni_ishr's `v.x >> v.y`.
+    Ishr,
+    /// `u2f32(extract_u8(a, k))`, byte `k` of a word to fp32 (`U8_TO_F32
+    /// a.bk`): what nir_opt_algebraic makes of `i2f32(iand(a, 0xff))` (`k`
+    /// 0) and `i2f32(iand(ishr(a, 8k), 0xff))` (intuni_ishr's `float(s &
+    /// 255)` and `float((s >> 8) & 255)`).
+    U8f32(u8),
 }
 
 impl Alu {
@@ -205,7 +225,10 @@ impl Alu {
             | Alu::U2u32
             | Alu::F2f32
             | Alu::Iabs
-            | Alu::I2i32 => 1,
+            | Alu::I2i32
+            | Alu::F2i32
+            | Alu::Inot
+            | Alu::U8f32(_) => 1,
             Alu::Ffma
             | Alu::Bcsel
             | Alu::Cubeface1
@@ -261,6 +284,9 @@ impl Alu {
                 | Alu::Ushr
                 | Alu::Imul
                 | Alu::I2i32
+                | Alu::F2i32
+                | Alu::Inot
+                | Alu::Ishr
         )
     }
 }
@@ -606,6 +632,63 @@ fn plain(bits: u32) -> bool {
     e != 0xff && (e != 0 || bits & 0x7f_ffff == 0)
 }
 
+/// `nir_opt_constant_folding` of one lane of the front end's integer and
+/// boolean operation `a` (a boolean is NIR's 32-bit 0 / ~0 after
+/// `pan_nir_lower_bool_to_bitsize`), and the rules of nir_opt_algebraic.py
+/// that a constant or a repeated operand decides: `iadd(a, 0)`,
+/// `imul(a, 1)`, `imul(a, 0)`, `iand(a, 0)`, `iand(a, ~0)`, `ior(a, 0)`,
+/// `ior(a, ~0)`, `iand(a, a)`, `ior(a, a)`, `ixor(a, a)` (each a
+/// commutative match). `None` when nothing folds. The integer arithmetic
+/// an unrolled loop's counter leaves folds so (its step, its test, its
+/// conversion), and so do the int and bool constants GLSL's front end does
+/// not (case 72's `iv.x + iv.y == 3 && bv.x && !bv.y`).
+pub(super) fn fold_int(a: AluOp, x: Val, y: Val) -> Option<Val> {
+    let ci = |v: Val| match v {
+        Val::Const(c) => Some(c),
+        _ => None,
+    };
+    let mask = |t: bool| Val::Const(if t { u32::MAX } else { 0 });
+    let k = |c: u32| Some(Val::Const(c));
+    let f = f32::from_bits;
+    match (a, ci(x), ci(y)) {
+        (AluOp::Iadd, Some(p), Some(q)) => k(p.wrapping_add(q)),
+        (AluOp::Imul, Some(p), Some(q)) => k(p.wrapping_mul(q)),
+        (AluOp::Ineg, Some(p), _) => k(p.wrapping_neg()),
+        (AluOp::Ishl, Some(p), Some(q)) => k(p << (q & 31)),
+        (AluOp::Ishr, Some(p), Some(q)) => k(((p as i32) >> (q & 31)) as u32),
+        (AluOp::Ushr, Some(p), Some(q)) => k(p >> (q & 31)),
+        (AluOp::Iand, Some(p), Some(q)) => k(p & q),
+        (AluOp::Ior, Some(p), Some(q)) => k(p | q),
+        (AluOp::Ixor, Some(p), Some(q)) => k(p ^ q),
+        (AluOp::Ilt, Some(p), Some(q)) => Some(mask((p as i32) < (q as i32))),
+        (AluOp::Ile, Some(p), Some(q)) => Some(mask((p as i32) <= (q as i32))),
+        (AluOp::Ult, Some(p), Some(q)) => Some(mask(p < q)),
+        (AluOp::Ule, Some(p), Some(q)) => Some(mask(p <= q)),
+        (AluOp::Ieq, Some(p), Some(q)) => Some(mask(p == q)),
+        (AluOp::Ine, Some(p), Some(q)) => Some(mask(p != q)),
+        (AluOp::I2f, Some(p), _) => k((p as i32 as f32).to_bits()),
+        (AluOp::F2i, Some(p), _) => k(f(p) as i32 as u32),
+        (AluOp::B2f, Some(p), _) => k(if p != 0 { F32_ONE } else { F32_ZERO }),
+        (AluOp::B2i, Some(p), _) => k(u32::from(p != 0)),
+        (AluOp::I2b, Some(p), _) => Some(mask(p != 0)),
+        (AluOp::F2b, Some(p), _) => Some(mask(f(p) != 0.0)),
+        (AluOp::Bnot | AluOp::Inot, Some(p), _) => k(!p),
+        /* a float counter's test (`for (float i = 0.0; i < 8.0; ..)`) */
+        (AluOp::Flt, Some(p), Some(q)) => Some(mask(f(p) < f(q))),
+        (AluOp::Fle, Some(p), Some(q)) => Some(mask(f(p) <= f(q))),
+        (AluOp::Feq, Some(p), Some(q)) => Some(mask(f(p) == f(q))),
+        (AluOp::Iadd | AluOp::Ior | AluOp::Ixor, Some(0), _) | (AluOp::Imul, Some(1), _) => Some(y),
+        (AluOp::Iadd | AluOp::Ior | AluOp::Ixor, _, Some(0)) | (AluOp::Imul, _, Some(1)) => Some(x),
+        (AluOp::Iand | AluOp::Imul, Some(0), _) | (AluOp::Iand | AluOp::Imul, _, Some(0)) => k(0),
+        (AluOp::Ior, Some(u32::MAX), _) | (AluOp::Ior, _, Some(u32::MAX)) => k(u32::MAX),
+        (AluOp::Iand, Some(u32::MAX), _) => Some(y),
+        (AluOp::Iand, _, Some(u32::MAX)) => Some(x),
+        (AluOp::Iand | AluOp::Ior, _, _) if x == y => Some(x),
+        (AluOp::Ixor, _, _) if x == y => k(0),
+        _ => None,
+    }
+}
+
 /// The uniform a front-end dword falls in, and its component count in
 /// Mesa's packed block (one dword per component, `PackedDriverUniformStorage`):
 /// the types the back end takes.
@@ -633,9 +716,13 @@ pub fn uniform_of<'m>(m: &Module<'m>, dword: u16) -> Result<(&'m ir::UniformDecl
         GL_FLOAT_VEC3 => 3,
         GL_FLOAT_VEC4 => 4,
         GL_FLOAT_MAT4 => 16,
-        /* one 32-bit word; read only as a uniform array's index
-         * ([`index_only`]) */
-        GL_INT => 1,
+        /* an int or a bool is one 32-bit word a component, raw bits
+         * (docs/notes/mali-int-uniforms.md: Mesa's packed block, a word
+         * per component; intuni_ishr's `ivec2 v` at `u2.w0`, `u2.w1`) */
+        GL_INT | GL_BOOL => 1,
+        GL_INT_VEC2 => 2,
+        GL_INT_VEC3 => 3,
+        GL_INT_VEC4 => 4,
         _ => return Err(MaliError::UniformType),
     };
     Ok((u, comps))
@@ -1388,7 +1475,11 @@ impl<'s> Nir<'s> {
                 | Alu::Iabs
                 | Alu::Ushr
                 | Alu::Imul
-                | Alu::I2i32 => return Err(MaliError::ConstantFold),
+                | Alu::I2i32
+                | Alu::F2i32
+                | Alu::Inot
+                | Alu::Ishr
+                | Alu::U8f32(_) => return Err(MaliError::ConstantFold),
                 Alu::F2f16
                 | Alu::Fneg
                 | Alu::Fabs

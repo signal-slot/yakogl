@@ -38,7 +38,7 @@ use super::motion::{Moved, MAX_MOVED};
 use super::nir::{self, Alu, Kind, Nir, NirNode, Val, MAX_LOCALS, MAX_NODES, MAX_VALUES};
 use super::select::{alu, f16_exact, f16_rtne, generic_layout, preloads, split, UboLayout, VaryingAt, MAX_VARYINGS};
 use super::{Defect, FsPrecision, MaliError};
-use crate::gl::consts::{GL_FLOAT, GL_INT};
+use crate::gl::consts::{GL_BOOL, GL_FLOAT, GL_INT};
 use crate::shaderc::online::arena::Arena;
 use crate::shaderc::online::ir::{self, AluOp, Es100Tex, IoKind, IoSlot, Module, Node};
 
@@ -262,6 +262,62 @@ pub fn order_keys(m: &Module<'_>, keys: &mut [u32]) {
         let c = cond.val.0;
         for (v, k) in keys.iter_mut().enumerate().take((c as usize).min(n)) {
             *k = (*k).min(c << 16 | v as u32);
+        }
+    }
+    /* a `?:` whose condition is no constant is GLSL's `conditional_tmp`:
+     * ast_to_hir emits an `if` assigning it while the expression around it
+     * is still being built, so it stands before that statement, a vector
+     * constructor's component assignments included (`nir_opt_peephole_select`
+     * then leaves its `bcsel` there). Placed by the constructor's first
+     * assignment, below every key of that statement (measured:
+     * intuni_ishr.expect.json, `s < 0 ? 1.0 : 0.0` the third lane, its
+     * `ICMP_OR` and `CSEL` before the first lane's `U8_TO_F32`) */
+    let ternaries = (0..n).filter_map(|i| match m.instrs[i] {
+        ir::Op::Alu(AluOp::Bcsel, s) if !matches!(m.def(s[0].val), Some(ir::Op::ConstBool(_))) => {
+            let at = (i + 1..n)
+                .find(|&j| matches!(m.instrs[j], ir::Op::StoreLocal { src, .. } if src.val.0 as usize == i))?;
+            let ir::Op::StoreLocal { local, write_mask, .. } = m.instrs[at] else { return None };
+            if write_mask == 0xf {
+                return None;
+            }
+            /* the constructor's first assignment: the earliest store to the
+             * local with no read of it in between */
+            let mut first = at;
+            for j in (0..at).rev() {
+                match m.instrs[j] {
+                    ir::Op::LoadLocal { local: l, .. } if l == local => break,
+                    ir::Op::StoreLocal { local: l, write_mask: w, .. } if l == local && w != 0xf => first = j,
+                    ir::Op::StoreLocal { local: l, .. } if l == local => break,
+                    _ => {}
+                }
+            }
+            /* the constructor's first lane too (intloop_int_compare: the
+             * four selects' compares and MUXes in lane order) */
+            Some((first, ir::ValueId(i as u32)))
+        }
+        _ => None,
+    });
+    for (first, root) in ternaries {
+        let mut stack = [0u32; MAX_VALUES];
+        let mut under = [false; MAX_VALUES];
+        let mut sp = 1;
+        stack[0] = root.0;
+        while sp > 0 {
+            sp -= 1;
+            let v = stack[sp] as usize;
+            if v >= n || under[v] {
+                continue;
+            }
+            under[v] = true;
+            keys[v] = keys[v].min(((first as u32) << 16).saturating_sub(0x8000) + v as u32);
+            if let ir::Op::Alu(a, srcs) = m.instrs[v] {
+                for s in srcs.iter().take(a.arity()) {
+                    if sp < stack.len() {
+                        stack[sp] = s.val.0;
+                        sp += 1;
+                    }
+                }
+            }
         }
     }
     for (i, root) in stores.chain(conds).chain(params).chain(discards) {
@@ -978,9 +1034,95 @@ impl<'s> Fs<'s> {
     /// expression on gl_FragCoord ([`Fs::alu16`]), not a compare's mask.
     /// `v` is a 32-bit integer compare's mask (gl_FrontFacing's in a
     /// mediump shader, [`mask_colour`]).
+    /// Also a boolean the walk folded (0 or ~0), its `inot`, and a 32-bit
+    /// uniform word read as a boolean (case 112's `uniform bool`, whose
+    /// word Mesa's `bcsel_pan` tests as it is, intbig_case112.stderr).
     fn mask_lane(&self, v: Val) -> bool {
-        matches!(v, Val::Lane(n, 0) if matches!(self.nir.nodes[n as usize],
-            NirNode { kind: Kind::Alu(Alu::Icmp(_)), bits: 32, width: 1, .. }))
+        match v {
+            Val::Const(c) => c == 0 || c == u32::MAX,
+            Val::Lane(n, 0) => matches!(
+                self.nir.nodes[n as usize],
+                NirNode { kind: Kind::Alu(Alu::Icmp(_) | Alu::Inot) | Kind::Uniform { .. }, bits: 32, width: 1, .. }
+            ),
+            _ => false,
+        }
+    }
+
+    /// A 32-bit integer node of a mediump shader ([`Fs::int_lane`]),
+    /// CSE'd (`nir_opt_cse`), made by IR instruction `at`.
+    fn int32(&mut self, op: Alu, src: [Val; 3], at: usize) -> Result<Val, MaliError> {
+        let nd = NirNode { kind: Kind::Alu(op), src, bits: 32, width: 1 };
+        if let Some(i) = self.nir.nodes[..self.nir.n].iter().position(|x| *x == nd) {
+            return Ok(Val::Lane(i as u16, 0));
+        }
+        let id = self.nir.push_node(nd)?;
+        self.origin[id as usize] = at as u16;
+        Ok(Val::Lane(id, 0))
+    }
+
+    /// One lane of a mediump shader's integer or boolean operation `a`
+    /// over the lane's sources `x` (Mesa's NIR keeps integers and booleans
+    /// at 32 bits in a mediump shader: lower_precision lowers floats only,
+    /// and `pan_nir_lower_bool_to_bitsize` gives a compare's bool its
+    /// operands' width). Folded first ([`nir::fold_int`]), then the forms
+    /// the references draw: `f2i32` of an fp16 value (`F16_TO_S32.rtz`),
+    /// the integer compares (GLSL's `<=` swapped into `ige`), a boolean's
+    /// `inot` folded into its users, `ieq(b, true)` as `b` and `ieq(b,
+    /// false)` as `inot(b)` (nir_opt_algebraic.py), a boolean uniform's
+    /// `i2b` as the word itself. Another has no reference.
+    fn int_lane(
+        &mut self,
+        m: &Module<'_>,
+        a: AluOp,
+        srcs: &[ir::Src; 3],
+        x: [Val; 3],
+        at: usize,
+    ) -> Result<Val, MaliError> {
+        let u = Val::Undef;
+        let [p, q, _] = x;
+        if let Some(v) = nir::fold_int(a, p, q) {
+            return Ok(v);
+        }
+        let not = |f: &Self, v: Val| match f.alu_of(v) {
+            Some((Alu::Inot, [inner, ..])) => Some(inner),
+            _ => None,
+        };
+        let bool_uniform = |k: usize| {
+            matches!(m.def(srcs[k].val), Some(ir::Op::LoadUniform { dword_off, .. })
+                if m.uniforms.iter().any(|u| u.dword_off == *dword_off && u.gl_type as u32 == GL_BOOL))
+        };
+        match a {
+            AluOp::F2i if self.is_f16(p) || self.uniform_dword(p).is_some() => self.int32(Alu::F2i32, [p, u, u], at),
+            AluOp::I2b if bool_uniform(0) => Ok(p),
+            AluOp::Bnot | AluOp::Inot if self.mask_lane(p) => match not(self, p) {
+                Some(inner) => Ok(inner),
+                None => self.int32(Alu::Inot, [p, u, u], at),
+            },
+            /* `ieq(b, true)` is `b`, `ieq(b, false)` `inot(b)` */
+            AluOp::Ieq | AluOp::Ine if self.mask_lane(p) && matches!(q, Val::Const(0 | u32::MAX)) => {
+                let same = (q == Val::Const(u32::MAX)) == (a == AluOp::Ieq);
+                if same {
+                    Ok(p)
+                } else {
+                    self.int_lane(m, AluOp::Bnot, srcs, [p, u, u], at)
+                }
+            }
+            AluOp::Ieq | AluOp::Ine if self.mask_lane(q) && matches!(p, Val::Const(0 | u32::MAX)) => {
+                self.int_lane(m, a, srcs, [q, p, u], at)
+            }
+            AluOp::Ilt => self.int32(Alu::Icmp(Cmpf::Lt), [p, q, u], at),
+            /* GLSL's `a <= b` is `ige(b, a)`, a constant on the left as it
+             * comes (intloop_int_compare.expect.json: `ICMP_OR.s32.ge.m1 r3,
+             * r0, r1` of `i <= j`, `ICMP_OR.s32.ge.m1 r1, 0x1000000.b3, r1^`
+             * of `i <= 1`) */
+            AluOp::Ile => self.int32(Alu::Icmp(Cmpf::Ge), [q, p, u], at),
+            AluOp::Ieq => self.int32(Alu::Icmp(Cmpf::Eq), [p, q, u], at),
+            /* `!=` of run-time integers (tri_int's `ine`, whose fp16 operands
+             * feed fp32 integer arithmetic, not lowered), the arithmetic,
+             * and the mixes of a boolean and its negation (`iand(a,
+             * inot(a))`): no reference compiles */
+            _ => Err(MaliError::IntValue),
+        }
     }
 
     fn is_f16(&self, v: Val) -> bool {
@@ -1199,32 +1341,12 @@ impl<'s> Fs<'s> {
         const F32_ONE: u32 = 0x3f80_0000;
         /* `nir_opt_constant_folding` of the integer arithmetic an unrolled
          * loop's counter leaves (its step, its test, its conversion): the
-         * walk folds them so the loop's test is a constant ([`walk_loop`]) */
-        let ci = |v: Val| match v {
-            Val::Const(c) => Some(c),
-            _ => None,
-        };
-        let mask = |t: bool| Val::Const(if t { u32::MAX } else { 0 });
-        let (fp, fq) = (ci(x).map(f32::from_bits), ci(y).map(f32::from_bits));
-        match (a, ci(x), ci(y)) {
-            (AluOp::Iadd, Some(p), Some(q)) => return Ok(Val::Const(p.wrapping_add(q))),
-            (AluOp::Ilt, Some(p), Some(q)) => return Ok(mask((p as i32) < (q as i32))),
-            (AluOp::Ile, Some(p), Some(q)) => return Ok(mask((p as i32) <= (q as i32))),
-            (AluOp::Ieq, Some(p), Some(q)) => return Ok(mask(p == q)),
-            (AluOp::I2f, Some(p), _) => return Ok(Val::Const((p as i32 as f32).to_bits())),
-            (AluOp::F2i, Some(p), _) => return Ok(Val::Const(f32::from_bits(p) as i32 as u32)),
-            /* a float counter's test (`for (float i = 0.0; i < 8.0; ..)`) */
-            (AluOp::Flt, Some(_), Some(_)) => return Ok(mask(fp < fq)),
-            (AluOp::Fle, Some(_), Some(_)) => return Ok(mask(fp <= fq)),
-            (AluOp::Feq, Some(_), Some(_)) => return Ok(mask(fp == fq)),
-            /* a test that also reads the counter (`top > 0.5 && i == 2`,
-             * gl_test's databreak): `iand(a, 0)` is 0 and `iand(a, -1)` is
-             * `a` (nir_opt_algebraic.py:1716-1717, a commutative match) */
-            (AluOp::Iand, Some(p), Some(q)) => return Ok(Val::Const(p & q)),
-            (AluOp::Iand, Some(0), _) | (AluOp::Iand, _, Some(0)) => return Ok(Val::Const(0)),
-            (AluOp::Iand, Some(u32::MAX), _) => return Ok(y),
-            (AluOp::Iand, _, Some(u32::MAX)) => return Ok(x),
-            _ => {}
+         * walk folds them so the loop's test is a constant ([`walk_loop`]);
+         * a test that also reads the counter (`top > 0.5 && i == 2`,
+         * gl_test's databreak) by `iand(a, 0)` and `iand(a, -1)`
+         * (nir_opt_algebraic.py:1716-1717) */
+        if let Some(v) = nir::fold_int(a, x, y) {
+            return Ok(v);
         }
         match a {
             /* `fadd(fadd(a, b), #c)`, the inner sum used once and of no
@@ -1392,8 +1514,25 @@ impl<'s> Fs<'s> {
                 Some(px) => self.op32(Alu::U2u32, [px, u, u], at),
                 None => self.op32(Alu::F2i, [x, u, u], at),
             },
-            AluOp::I2f => self.op32(Alu::I2f, [x, u, u], at),
+            /* `i2f32(iand(a, 0xff))` and `i2f32(iand(ishr(a, 8k), 0xff))`
+             * are `u2f32(extract_u8(a, k))` (nir_opt_algebraic.py's
+             * extract rules), `U8_TO_F32 a.bk` (intuni_ishr.expect.json) */
+            AluOp::I2f => {
+                let byte = match self.alu_of(x) {
+                    Some((Alu::Iand, [a, Val::Const(0xff), _] | [Val::Const(0xff), a, _])) => match self.alu_of(a) {
+                        Some((Alu::Ishr | Alu::Ushr, [b, Val::Const(s @ (8 | 16 | 24)), _])) => Some((b, s / 8)),
+                        _ => Some((a, 0)),
+                    },
+                    _ => None,
+                };
+                match byte {
+                    Some((b, k)) => self.op32(Alu::U8f32(k as u8), [b, u, u], at),
+                    None => self.op32(Alu::I2f, [x, u, u], at),
+                }
+            }
             AluOp::Iadd => self.op32(Alu::Iadd, [x, y, u], at),
+            AluOp::Iand => self.op32(Alu::Iand, [x, y, u], at),
+            AluOp::Ishr => self.op32(Alu::Ishr, [x, y, u], at),
             /* every front-end ffma is `FMA.f32` with its sources in order: a
              * matrix product's term (the vertex stage's rule, here also of a
              * mat3 built from a vec4 array's elements, femtovg's
@@ -1401,7 +1540,8 @@ impl<'s> Fs<'s> {
              * [`Fs::alu32`]'s) and a built-in's, `mix()` (nir_lower_flrp)
              * and atan's polynomial (fvg_fill_gradient*.expect.json) */
             AluOp::Ffma => self.op32(Alu::Ffma, [x, y, z], at),
-            /* `!=` and the rest: no reference draws them */
+            /* `!=`: no reference that compiles draws it (intuni_sharedint's
+             * `mode != 0` waits for its `sin` and its vertex `if`) */
             AluOp::Fne | AluOp::Ine => Err(MaliError::CompareForm),
             _ => Err(MaliError::Arithmetic),
         }
@@ -1793,7 +1933,7 @@ fn walk_if(
     join: usize,
 ) -> Result<Flow, MaliError> {
     if !prec.highp {
-        return Err(MaliError::ControlFlow);
+        return walk_if16(f, m, cond, then_, else_, exit, vals, locals, prec, join);
     }
     let Val::Lane(cn, _) = cond else { return Err(MaliError::IfForm) };
     if !matches!(f.nir.nodes[cn as usize].kind, Kind::Alu(Alu::Fcmp(_) | Alu::Icmp(_))) {
@@ -1914,6 +2054,60 @@ fn walk_if(
     Ok(flow)
 }
 
+/// An `if` of a mediump shader whose sides only assign booleans (case 112:
+/// `u_false == sideEffectA && funcB()`, the inlined call's two flags set
+/// under the condition): `nir_opt_peephole_select` makes each variable a
+/// `bcsel` of the condition at the join, which the boolean rules fold
+/// (`bcsel(a, true, false)` is `a`, `bcsel(a, false, true)` `inot(a)`,
+/// `bcsel(a, true, a)` `ior(a, a)`, `bcsel(a, a, false)` `iand(a, a)`,
+/// nir_opt_algebraic.py), so no select is left (intbig_case112.stderr's
+/// final NIR has none). A side that writes the colour or anything but a
+/// boolean, or ends in a `break` or `continue`, has no reference.
+#[allow(clippy::too_many_arguments)]
+fn walk_if16(
+    f: &mut Fs<'_>,
+    m: &Module<'_>,
+    cond: Val,
+    then_: &[Node],
+    else_: &[Node],
+    exit: IfExit<'_>,
+    vals: &mut [[Val; 4]],
+    locals: &mut [[Val; 4]; MAX_LOCALS],
+    prec: FsPrecision,
+    join: usize,
+) -> Result<Flow, MaliError> {
+    if !matches!(exit, IfExit::Plain) || !f.mask_lane(cond) {
+        return Err(MaliError::ControlFlow);
+    }
+    let (saved_locals, saved_colour) = (*locals, f.colour);
+    let then_flow = walk_nodes(f, m, then_, vals, locals, prec, false, join, None)?;
+    let then_locals = *locals;
+    *locals = saved_locals;
+    let then_colour = core::mem::replace(&mut f.colour, saved_colour);
+    let else_flow = walk_nodes(f, m, else_, vals, locals, prec, false, join, None)?;
+    if then_flow != Flow::Next || else_flow != Flow::Next || then_colour != f.colour {
+        return Err(MaliError::ControlFlow);
+    }
+    let not = |f: &mut Fs<'_>, v: Val| f.int_lane(m, AluOp::Bnot, &[ir::Src::id(ir::ValueId(0)); 3], [v; 3], join);
+    for (l, lanes) in locals.iter_mut().enumerate() {
+        for (c, e) in lanes.iter_mut().enumerate() {
+            let t = then_locals[l][c];
+            *e = match (t, *e) {
+                _ if t == *e => t,
+                /* a side that leaves it undefined (`nir_opt_undef`) */
+                (t, Val::Undef) => t,
+                (Val::Undef, e) => e,
+                (Val::Const(u32::MAX), Val::Const(0)) => cond,
+                (Val::Const(0), Val::Const(u32::MAX)) => not(f, cond)?,
+                (Val::Const(u32::MAX), e) if e == cond => cond,
+                (t, Val::Const(0)) if t == cond => cond,
+                _ => return Err(MaliError::ControlFlow),
+            };
+        }
+    }
+    Ok(Flow::Next)
+}
+
 /// What the sides of an `if` may end in ([`walk_if`]).
 #[derive(Clone, Copy)]
 enum IfExit<'a> {
@@ -1996,7 +2190,9 @@ fn walk_guard(
     walk_if(f, m, c, &[Node::Break], rest, IfExit::Guard(lp), vals, locals, prec, lp.last)
 }
 
-/// A loop of a highp shader (`Node::Loop`), unrolled as `nir_opt_loop_unroll`
+/// A loop (`Node::Loop`; a mediump shader's too, whose passes must fold to
+/// constants and selects: case 72's `for (int i = 0; i < 3; ..) r +=
+/// 0.25`, the constant 0.75), unrolled as `nir_opt_loop_unroll`
 /// unrolls one whose trip count a constant bound decides (`simple_unroll`,
 /// nir_opt_loop_unroll.c:105, within [`MAX_UNROLL_ITERATIONS`] and
 /// [`LOOP_UNROLL_LIMIT`]): the body walked pass after pass, its counter's
@@ -2018,9 +2214,6 @@ fn walk_loop(
     locals: &mut [[Val; 4]; MAX_LOCALS],
     prec: FsPrecision,
 ) -> Result<(), MaliError> {
-    if !prec.highp {
-        return Err(MaliError::ControlFlow);
-    }
     let nodes = m.nodes_of(body);
     let last = nodes.iter().rev().find_map(|n| match *n {
         Node::Instr(id) => Some(id.0 as usize),
@@ -2132,10 +2325,12 @@ fn walk_nodes(
         match *op {
             ir::Op::ConstF32(bits) => out = bits.map(Val::Const),
             /* a 32-bit integer constant is its bits (NIR's `load_const`
-             * has no type); femtovg's `texType == 1`. A boolean constant
-             * has no reference (every `if` reads a comparison) */
-            ir::Op::ConstI32(bits) if prec.highp => out = bits.map(|b| Val::Const(b as u32)),
-            ir::Op::ConstI32(_) | ir::Op::ConstBool(_) => return Err(MaliError::IntValue),
+             * has no type; femtovg's `texType == 1`), a boolean NIR's
+             * 32-bit 0 / ~0 (`pan_nir_lower_bool_to_bitsize`): values the
+             * walk folds ([`nir::fold_int`]; case 72's `ivec2(1, 2)` and
+             * `bvec2(1, 0)`, case 112's side-effect flags) */
+            ir::Op::ConstI32(bits) => out = bits.map(|b| Val::Const(b as u32)),
+            ir::Op::ConstBool(bits) => out = bits.map(|b| Val::Const(if b { u32::MAX } else { 0 })),
             ir::Op::LoadInput { slot: IoSlot::Varying(v), comps } => {
                 /* a mediump varying of a highp shader is an fp16 load
                  * (nir_lower_mediump_io, bifrost_nir.c:914-916) */
@@ -2276,6 +2471,27 @@ fn walk_nodes(
                     out = f.alu32(m, a, &s, vals, at)?
                 }
             }
+            /* a sum or product of constants (an unrolled loop's `r +=
+             * 0.25`, case 72): `nir_opt_constant_folding` at fp16, which
+             * equals the fp32 result when that is exact in fp16; another
+             * has no reference */
+            ir::Op::Alu(a @ (AluOp::Fmul | AluOp::Fadd), s)
+                if (0..m.comps_of(ir::ValueId(id.0)) as usize)
+                    .all(|i| matches!((lane(vals, s[0], i), lane(vals, s[1], i)), (Val::Const(_), Val::Const(_)))) =>
+            {
+                let w = m.comps_of(ir::ValueId(id.0)) as usize;
+                for (i, o) in out.iter_mut().enumerate().take(w) {
+                    let (Val::Const(p), Val::Const(q)) = (lane(vals, s[0], i), lane(vals, s[1], i)) else {
+                        return Err(MaliError::Defect(Defect::IrIndex));
+                    };
+                    let (p, q) = (f32::from_bits(p), f32::from_bits(q));
+                    let r = if a == AluOp::Fadd { p + q } else { p * q }.to_bits();
+                    if [p.to_bits(), q.to_bits(), r].iter().any(|b| f16_exact(*b).is_none()) {
+                        return Err(MaliError::ConstantFold);
+                    }
+                    *o = Val::Const(r);
+                }
+            }
             ir::Op::Alu(a @ (AluOp::Fmul | AluOp::Fadd), s) => {
                 let w = m.comps_of(ir::ValueId(id.0)) as usize;
                 /* the rules run on 16-bit lane pairs: a rule holds for a
@@ -2343,30 +2559,24 @@ fn walk_nodes(
                     *o = f.node(Alu::Ffma, x, at)?;
                 }
             }
-            /* the integer index of a uniform array element as Mesa's NIR
-             * leaves it: `int(t.w * 0.0)` folds to the constant 0
-             * (`f2i32` of a constant), `fidx + 0` to `fidx`
-             * (nir_opt_algebraic.py's `iadd(a, 0)`); case 122's program has
-             * neither an F32_TO_S32 nor an IADD (uniidx_i). Any other
-             * integer arithmetic has no reference */
-            ir::Op::Alu(AluOp::F2i, s) => {
+            /* the integer and boolean operations of a mediump shader, as
+             * 32-bit values ([`Fs::int_lane`]): folded where the constants
+             * decide them (the index of a uniform array element: `int(t.w
+             * * 0.0)` is the constant 0 and `fidx + 0` is `fidx`, case 122's
+             * program has neither an F32_TO_S32 nor an IADD, uniidx_i), else
+             * the compares and conversions the references draw */
+            ir::Op::Alu(a, s) if int_op(a) => {
                 let w = m.comps_of(ir::ValueId(id.0)) as usize;
-                for (i, o) in out.iter_mut().enumerate().take(w) {
-                    match lane(vals, s[0], i) {
-                        Val::Const(b) => *o = Val::Const(f32::from_bits(b) as i32 as u32),
-                        Val::Undef if i > 0 => break,
-                        _ => return Err(MaliError::IntValue),
+                let k = ir_arity(a);
+                for i in 0..w.min(4) {
+                    let x = [lane(vals, s[0], i), lane(vals, s[1], i), lane(vals, s[2], i)];
+                    if x[..k].contains(&Val::Undef) {
+                        if i > 0 {
+                            break;
+                        }
+                        return Err(MaliError::ColourForm);
                     }
-                }
-            }
-            ir::Op::Alu(AluOp::Iadd, s) => {
-                let w = m.comps_of(ir::ValueId(id.0)) as usize;
-                for (i, o) in out.iter_mut().enumerate().take(w) {
-                    *o = match (lane(vals, s[0], i), lane(vals, s[1], i)) {
-                        (Val::Undef, _) | (_, Val::Undef) if i > 0 => break,
-                        (x, Val::Const(0)) | (Val::Const(0), x) => x,
-                        _ => return Err(MaliError::IntValue),
-                    };
+                    out[i] = f.int_lane(m, a, &s, x, at)?;
                 }
             }
             /* a mediump select of constants on gl_FrontFacing's 32-bit mask
@@ -2375,14 +2585,28 @@ fn walk_nodes(
              * constants, which the colour's conversion folds into a 16-bit
              * select as a highp shader's ([`mask_colour`]; builtin_49's
              * `MUX.v2i16 r1, 0x3C000000.h11, 0x0, r0.h00`) */
+            /* a condition the walk folded picks its side; `bcsel(inot(a),
+             * b, c)` is `bcsel(a, c, b)` (nir_opt_algebraic.py; case 112's
+             * `!b && .. ? green : red`, two `MUX.v2i16` on the bool
+             * uniform's word, intbig_case112.expect.json) */
             ir::Op::Alu(AluOp::Bcsel, s) if f.mask_lane(lane(vals, s[0], 0)) => {
                 let w = m.comps_of(ir::ValueId(id.0)) as usize;
                 for (i, o) in out.iter_mut().enumerate().take(w) {
-                    let (c, y, z) = (lane(vals, s[0], i), lane(vals, s[1], i), lane(vals, s[2], i));
-                    *o = match (y, z) {
+                    let (mut c, mut y, mut z) = (lane(vals, s[0], i), lane(vals, s[1], i), lane(vals, s[2], i));
+                    if let Some((Alu::Inot, [a, ..])) = f.alu_of(c) {
+                        (c, y, z) = (a, z, y);
+                    }
+                    *o = match (c, y, z) {
+                        (Val::Const(k), ..) => {
+                            if k != 0 {
+                                y
+                            } else {
+                                z
+                            }
+                        }
                         _ if y == z => y,
-                        (Val::Const(F32_ONE), Val::Const(0)) => f.op32(Alu::B2f, [c, Val::Undef, Val::Undef], at)?,
-                        (Val::Const(_), Val::Const(_)) => f.op32(Alu::Bcsel, [c, y, z], at)?,
+                        (_, Val::Const(F32_ONE), Val::Const(0)) => f.op32(Alu::B2f, [c, Val::Undef, Val::Undef], at)?,
+                        (_, Val::Const(_), Val::Const(_)) => f.op32(Alu::Bcsel, [c, y, z], at)?,
                         _ => return Err(MaliError::Arithmetic),
                     };
                 }
@@ -2391,13 +2615,9 @@ fn walk_nodes(
             /* fp32: the load Mesa makes, as the vertex stage builds it
              * (nir.rs), CSE'd by what it loads */
             ir::Op::LoadUniform { dword_off, comps } if prec.highp => {
+                /* an int or bool uniform's words are raw bits, read as a
+                 * float's are (docs/notes/mali-int-uniforms.md) */
                 let (base, size) = uniform_load(m, dword_off)?;
-                /* an int uniform is read as an array index only
-                 * ([`nir::index_only`]) */
-                let int = uniform_extent(m, base).is_ok_and(|(u, _)| u.gl_type as u32 == GL_INT);
-                if int && !nir::index_only(m, ir::ValueId(id.0)) {
-                    return Err(MaliError::UniformType);
-                }
                 let first = dword_off - base;
                 if first + u16::from(comps) > size {
                     return Err(MaliError::Defect(Defect::IrIndex));
@@ -2417,7 +2637,9 @@ fn walk_nodes(
                         && dword_off >= u.dword_off
                         && dword_off < u.dword_off + u.dwords.max(1)
                 });
-                let int = decl.is_some_and(|u| u.gl_type as u32 == GL_INT && u.array_len <= 1);
+                /* an int or a bool: one 32-bit word (a bool's as GL stores
+                 * it, read as it is, intbig_case112.expect.json) */
+                let int = decl.is_some_and(|u| matches!(u.gl_type as u32, GL_INT | GL_BOOL) && u.array_len <= 1);
                 /* a float array's element at a constant index: no reference
                  * draws it (case108_uniidx reads at run-time indices only) */
                 if decl.is_some_and(|u| u.gl_type as u32 == GL_FLOAT && u.array_len > 1) {
@@ -2859,6 +3081,25 @@ pub fn layout(f: &mut Fs<'_>, m: &Module<'_>, order: Option<super::link::Varying
                     && nd.src.iter().any(|s| matches!(*s, Val::Lane(n, _) if n == node))
                     && c.iter().any(|&root| reaches(f, root, Val::Lane(id, 0)))
             });
+            /* so is one a mediump shader makes an integer of, through its
+             * fp16 lanes (measured: intloop_int_compare.expect.json and
+             * intloop_tri_int.expect.json load `.v4` and their vertex
+             * programs store four lanes of `v_color`, of which the colour
+             * reads two and three; the cmp_* shaders, which read lanes as
+             * floats, are compacted) */
+            whole[loc as usize] |= !f.prec.highp
+                && order.iter().any(|&id| {
+                    let nd = f.nir.nodes[id as usize];
+                    let from_lane = |v: Val| match f.alu_of(v) {
+                        Some((op, s)) if !op.is_int() => {
+                            s[..op.arity()].iter().any(|x| matches!(*x, Val::Lane(n, _) if n == node))
+                        }
+                        _ => false,
+                    };
+                    nd.kind == Kind::Alu(Alu::F2i32)
+                        && from_lane(nd.src[0])
+                        && c.iter().any(|&root| reaches(f, root, Val::Lane(id, 0)))
+                });
         }
     }
     /* a matrix varying of columns narrower than a vec4 is read whole, every
@@ -4040,6 +4281,10 @@ fn word_of(f: &Fs<'_>, a: Val, b: Val) -> Result<Word, MaliError> {
     }
     Ok(match (a, b) {
         (Val::Const(x), Val::Const(y)) => Word::Const(half(x)? as u32 | (half(y)? as u32) << 16),
+        /* a mediump colour of masks ([`mask_colour`]): a constant, then a
+         * select's half, `MKVEC.v2i16 u2.w1.h0, r0^.h0` with the constant
+         * a FAU word (intbig_case72.expect.json, red the folded loop) */
+        (Val::Const(_), _) if !f.prec.highp => Word::Lanes(a, b),
         (Val::Const(_), _) => return Err(MaliError::ColourPair),
         /* a lane and 0.0: `MKVEC.v2i16 x, #0`, which bi_lower_mkvec_swz makes
          * `U16_TO_U32 x` (opt.rs; every s4_* reference draws it) */
@@ -4090,6 +4335,14 @@ fn src32(f: &Fs<'_>, lv: &Leaves, val: &[Option<Src>], v: Val) -> Result<Src, Ma
             Kind::UniformIdx { .. } if f.nir.nodes[n as usize].bits == 32 => {
                 val.get(n as usize).copied().flatten().ok_or(defect)
             }
+            /* an fp16 uniform's half (a mediump shader's colour of masks,
+             * [`mask_colour`]: case 72's `F16_TO_S32.rtz r0, u2.w0.h0`), as
+             * the pair path reads it ([`Leaf::Uniform`]) */
+            Kind::Uniform { dword, .. } if f.nir.nodes[n as usize].bits == 16 => {
+                let (w, half, base) = lv.ubo.half(dword).ok_or(MaliError::FsUniform)?;
+                let swz = if half == 0 { Swz::H00 } else { Swz::H11 };
+                Ok(Src::of(Idx::Ubo { base, comp: (w - base) as u8 }).swz(swz))
+            }
             Kind::Uniform { dword, .. } => {
                 let base = lv.ubo.word(dword).ok_or(defect)?;
                 Ok(Src::of(Idx::Ubo { base, comp: c }))
@@ -4119,16 +4372,143 @@ fn src32(f: &Fs<'_>, lv: &Leaves, val: &[Option<Src>], v: Val) -> Result<Src, Ma
 /// constants narrowed at the store (`f2f16(bcsel(c, a, b))` folded to a
 /// 16-bit select, nir_opt_constant_folding.c), so the program is
 /// [`select_highp`]'s (builtin_49.expect.json).
+///
+/// The masks may also be integer compares of uniforms (case 72: `int(u_in.x)
+/// == 2`, `F16_TO_S32` of the uniform's fp16 half) or a bool uniform's word
+/// itself (case 112): uniform words read by the selects, no load either,
+/// the colour still constants and selects of constants
+/// (intbig_case72/112.expect.json).
+///
+/// The integers may also be `F16_TO_S32` of fp16 products of varying lanes
+/// (int_compare's `int(3.0 * v_color.r)` and `.g`), when those pair
+/// ([`int_source_pairs`]).
 pub fn mask_colour(f: &Fs<'_>) -> bool {
-    let int = |op: Alu| matches!(op, Alu::Icmp(_) | Alu::B2f | Alu::Bcsel);
+    let int = |op: Alu| matches!(op, Alu::Icmp(_) | Alu::B2f | Alu::Bcsel | Alu::F2i32 | Alu::Inot);
     let nodes = &f.nir.nodes[..f.nir.n];
-    f.colour.is_some()
-        && nodes.iter().any(|nd| matches!(nd.kind, Kind::Preload { .. }))
-        && nodes.iter().all(|nd| match nd.kind {
-            Kind::Preload { .. } => true,
-            Kind::Alu(op) => nd.bits == 32 && int(op),
+    let lane = |v: &Val| match *v {
+        Val::Const(_) => true,
+        Val::Lane(n, _) => matches!(nodes[n as usize], NirNode { kind: Kind::Alu(op), bits: 32, .. } if int(op)),
+        _ => false,
+    };
+    let pairs = int_source_pairs(f);
+    let paired = |id: usize| pairs.iter().flatten().flatten().any(|&(a, b)| a as usize == id || b as usize == id);
+    f.colour.is_some_and(|c| c.iter().all(lane) && !c.iter().all(|v| matches!(v, Val::Const(_))))
+        && pairs.is_some()
+        && nodes.iter().enumerate().all(|(id, nd)| match nd.kind {
+            Kind::Preload { .. } | Kind::Uniform { .. } => true,
+            Kind::Input { loc, .. } => (loc as usize) < MAX_VARYINGS && nd.bits == 32,
+            Kind::Alu(op) => (nd.bits == 32 && int(op)) || paired(id),
             _ => false,
         })
+}
+
+/// The fp16 nodes of a colour of masks ([`mask_colour`]), each the source
+/// of `F16_TO_S32`s alone, in pairs: lanes `2p` and `2p + 1` of one varying
+/// under the same operation and constants, which `nir_opt_vectorize` makes
+/// one `vec2` operation (bi_vectorize_filter's width two at 16 bits) on the
+/// pair `nir_lower_mediump_io` converts (intloop_int_compare.expect.json:
+/// `V2F32_TO_V2F16 r0, r0^, r1^`, `FMA.v2f16 r0, u2.w0, r0^, 0x0.neg`, then
+/// `F16_TO_S32.rtz` of `r0.h0` and `r0^.h1`). Pairs in node order; `None`
+/// when a node pairs with none (any other fp16 value: no reference).
+fn int_source_pairs(f: &Fs<'_>) -> Option<[Option<(u16, u16)>; 4]> {
+    let nodes = &f.nir.nodes[..f.nir.n];
+    let mut out = [None; 4];
+    let mut no = 0;
+    let mut pending: Option<u16> = None;
+    for (id, nd) in nodes.iter().enumerate() {
+        let Kind::Alu(op) = nd.kind else { continue };
+        if nd.bits != 16 || op.is_int() {
+            continue;
+        }
+        /* read by `f2i32`s alone (the colour reads no fp16 lane) */
+        let readers = f
+            .nir
+            .uses(id as u16)
+            .all(|(u, _)| matches!(f.nir.nodes[u as usize], NirNode { kind: Kind::Alu(Alu::F2i32), bits: 32, .. }));
+        if nd.width != 1 || !matches!(op, Alu::Fmul | Alu::Fadd | Alu::Ffma) || !readers {
+            return None;
+        }
+        let Some(a) = pending.take() else {
+            pending = Some(id as u16);
+            continue;
+        };
+        let x = nodes[a as usize];
+        let lanes = (0..op.arity()).all(|k| match (x.src[k], nd.src[k]) {
+            (Val::Const(c), Val::Const(d)) => c == d && f16_exact(c).is_some(),
+            (Val::Lane(n, c), Val::Lane(m, d)) => {
+                n == m && c % 2 == 0 && d == c + 1 && matches!(nodes[n as usize].kind, Kind::Input { .. })
+            }
+            _ => false,
+        });
+        /* one varying operand, the others constants */
+        let one = (0..op.arity()).filter(|&k| matches!(nd.src[k], Val::Lane(..))).count() == 1;
+        if x.kind != nd.kind || !lanes || !one || no == out.len() {
+            return None;
+        }
+        out[no] = Some((a, id as u16));
+        no += 1;
+    }
+    pending.is_none().then_some(out)
+}
+
+/// [`int_source_pairs`] made `vec2` operations in place: the first node of
+/// a pair becomes the conversion of the varying's two lanes (`f2f16` of a
+/// `vec2`), the second the operation on it, its constants fp16 (in both
+/// halves as a lane's), and the `f2i32`s read its halves.
+pub fn vectorise_int_sources(f: &mut Fs<'_>) -> Result<(), MaliError> {
+    let pairs = int_source_pairs(f).ok_or(MaliError::Defect(Defect::IrIndex))?;
+    for (a, b) in pairs.into_iter().flatten() {
+        let nd = f.nir.nodes[b as usize];
+        let Kind::Alu(op) = nd.kind else { return Err(MaliError::Defect(Defect::IrIndex)) };
+        let mut src = [Val::Undef; 3];
+        let mut lanes = [Val::Undef; 2];
+        for k in 0..op.arity() {
+            src[k] = match f.nir.nodes[a as usize].src[k] {
+                Val::Const(c) => Val::Const(u32::from(f16_exact(c).ok_or(MaliError::Fp16Inexact)?)),
+                Val::Lane(n, c) => {
+                    lanes = [Val::Lane(n, c), Val::Lane(n, c + 1)];
+                    Val::Lane(a, 0)
+                }
+                v => v,
+            };
+        }
+        f.nir.nodes[a as usize] =
+            NirNode { kind: Kind::Alu(Alu::F2f16), src: [lanes[0], lanes[1], Val::Undef], bits: 16, width: 2 };
+        f.nir.nodes[b as usize] = NirNode { kind: nd.kind, src, bits: 16, width: 2 };
+        f.origin[b as usize] = f.origin[a as usize];
+        for id in 0..f.nir.n {
+            if f.nir.nodes[id].kind != Kind::Alu(Alu::F2i32) {
+                continue;
+            }
+            match f.nir.nodes[id].src[0] {
+                Val::Lane(n, 0) if n == a => f.nir.nodes[id].src[0] = Val::Lane(b, 0),
+                Val::Lane(n, 0) if n == b => f.nir.nodes[id].src[0] = Val::Lane(b, 1),
+                _ => {}
+            }
+        }
+    }
+    Ok(())
+}
+
+/// The 32-bit compare `c` a mediump colour's select reads, emitted where
+/// the select's conversion stands when [`select_highp`] left it for there.
+fn store_cmp(
+    p: &mut Prog<'_>,
+    f: &Fs<'_>,
+    lv: &Leaves,
+    val: &mut [Option<Src>],
+    rows: &mut u64,
+    c: usize,
+) -> Result<(), MaliError> {
+    let nd = f.nir.nodes[c];
+    let (Kind::Alu(op @ (Alu::Icmp(_) | Alu::Fcmp(_))), 32) = (nd.kind, nd.bits) else { return Ok(()) };
+    if val.get(c).copied().flatten().is_some() {
+        return Ok(());
+    }
+    let s = [src32(f, lv, val, nd.src[0])?, src32(f, lv, val, nd.src[1])?];
+    let r = row(p, rows, Row { op, bits: 32, width: 1 }, &s)?;
+    *val.get_mut(c).ok_or(MaliError::Defect(Defect::IrIndex))? = Some(Src::ssa(r));
+    Ok(())
 }
 
 /// The fragment program of a highp shader `f` ([`walk`], [`layout`]) into
@@ -4401,6 +4781,23 @@ pub fn select_highp(
      * the block of the widening, its value) */
     let mut wide = [(0u16, 0u8, 0u16); 8];
     let mut nwide = 0;
+    /* a mediump colour of masks ([`mask_colour`]): each select the colour
+     * alone reads is its 16-bit select at the store (`f2f16(bcsel)`
+     * folded), and `nir_move_comparisons` puts its compare right before it
+     * (intloop_int_compare.expect.json: each `ICMP_OR` then its `MUX.v2i16`,
+     * in lane order): the 32-bit select is not emitted, its compare is at
+     * the store ([`store_cmp`]) */
+    let store_select = |id: usize| {
+        !f.prec.highp
+            && matches!(f.nir.nodes[id], NirNode { kind: Kind::Alu(Alu::B2f | Alu::Bcsel), bits: 32, .. })
+            && f.nir.uses(id as u16).all(|(u, _)| matches!(f.nir.nodes[u as usize].kind, Kind::Store { .. }))
+    };
+    let at_store = |id: usize| {
+        store_select(id)
+            || (matches!(f.nir.nodes[id], NirNode { kind: Kind::Alu(Alu::Icmp(_) | Alu::Fcmp(_)), bits: 32, .. })
+                && f.nir.uses(id as u16).count() > 0
+                && f.nir.uses(id as u16).all(|(u, _)| store_select(u as usize)))
+    };
     let mut block = 0u8;
     for &(b, _, what, x) in events.iter() {
         while block < b {
@@ -4445,9 +4842,15 @@ pub fn select_highp(
                     tex_highp(p, f, j, &mut lv, val)?;
                     continue;
                 }
+                if at_store(id) {
+                    continue;
+                }
                 let Kind::Alu(op) = nd.kind else { return Err(defect) };
                 let mut s = [Src::NULL; 3];
-                for (k, y) in s.iter_mut().enumerate().take(op.arity()) {
+                /* the conversion of a varying's two lanes reads both
+                 * ([`vectorise_int_sources`], `V2F32_TO_V2F16`) */
+                let arity = if op == Alu::F2f16 && nd.width == 2 { 2 } else { op.arity() };
+                for (k, y) in s.iter_mut().enumerate().take(arity) {
                     let v = nd.src[k];
                     *y = src32(f, &lv, val, v)?;
                     /* an fp16 operation's sources ([`Fs::alu16`]): a vector
@@ -4606,6 +5009,9 @@ pub fn select_highp(
                      * with a side that is no constant is not folded, and
                      * narrowed after it (s4_b2f.expect.json: `CSEL.u32.eq`
                      * then `FADD.f32 r0.h0`) */
+                    if let Some((Alu::B2f | Alu::Bcsel, [Val::Lane(c, _), ..])) = f.alu_of(x) {
+                        store_cmp(p, f, &lv, val, &mut rows, c as usize)?;
+                    }
                     let h00 = |r: u16| Src::ssa(r).swz(Swz::H00);
                     let r = match f.alu_of(x) {
                         _ if f.is_f16(x) => src32(f, &lv, val, x)?,
@@ -4709,6 +5115,37 @@ fn end_block(p: &mut Prog<'_>, f: &Fs<'_>, lv: &Leaves, val: &[Option<Src>], b: 
         }
     }
     Ok(())
+}
+
+/// A front-end operation on integers or booleans, or a conversion between
+/// them and floats: a mediump shader's [`Fs::int_lane`].
+fn int_op(a: AluOp) -> bool {
+    use AluOp::*;
+    matches!(
+        a,
+        Iadd | Imul
+            | Ineg
+            | Ishl
+            | Ishr
+            | Ushr
+            | Iand
+            | Ior
+            | Ixor
+            | Ilt
+            | Ile
+            | Ult
+            | Ule
+            | Ieq
+            | Ine
+            | B2i
+            | B2f
+            | I2b
+            | F2b
+            | Bnot
+            | Inot
+            | F2i
+            | I2f
+    )
 }
 
 /// The sources a front-end operation reads (`AluOp::arity` is private to
