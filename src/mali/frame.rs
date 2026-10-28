@@ -23,6 +23,14 @@
 //! draws share one tiler context, and every draw after the first is
 //! depth-tested against the ones before it in the tile buffer.
 //!
+//! A 4x frame is a 4x view of its single-sampled target: averaged into it
+//! on writeback. A 4x frame split into several kicks keeps its samples in a
+//! [`SampleStore`] instead, as Mesa keeps a multisampled surface
+//! (tools/cts/log/2026-10-28-splitref): each kick writes the four samples
+//! back there, the next draws them back once a sample, and a last frame
+//! with the store's `resolve` averages them into the target
+//! (`frame_split_tests.rs`).
+//!
 //! Depth and stencil: a draw carries the depth test, depth write and the
 //! two stencil faces ([`DepthStencilState`], Mesa's ZSA CSO and its
 //! draw-time part), and the frame a linear D24S8 depth/stencil attachment
@@ -151,6 +159,10 @@ pub const INVALID_TEXTURE: &str =
 pub const NOT_BUILT_TEXTURE_SIZE: &str =
     "mali frame: a texture larger than 65536 texels a side or with a row stride narrower than its rows is not built yet";
 pub const INVALID_TEXTURE_ALIGN: &str = "mali frame: a texture's texels not on a 64-byte boundary";
+/// A [`SampleStore`] for a target of other than 4 samples, off a 64-byte
+/// boundary, or with planes closer than one plane of the target.
+pub const INVALID_SAMPLE_STORE: &str =
+    "mali frame: a sample store for a target of other than 4 samples, off 64 bytes, or with overlapping planes";
 pub const NOT_BUILT_FS_OUTPUTS: &str =
     "mali frame: a fragment shader that writes other than colour output 0 is not built yet";
 pub const NOT_BUILT_STAGE: &str = "mali frame: a program given for the wrong stage";
@@ -1540,6 +1552,29 @@ pub struct OpenFrame {
     pub zs_preload: Option<ZsPreload>,
     /// The programs uploaded into this frame ([`upload_program_cached`]).
     pub programs: ProgramCache,
+    /// A 4x frame whose four samples are kept in memory, one plane a
+    /// sample ([`SampleStore`]), as Mesa keeps a multisampled surface: the
+    /// frame writes them back there instead of averaging them into the
+    /// target, and its colour preload, if any, reads them from there, each
+    /// sample its own. None: the 4x frame is a view of its single-sampled
+    /// target (averaged on writeback, preloaded 1x into every sample).
+    pub sample_store: Option<SampleStore>,
+}
+
+/// The four samples of a 4x frame in memory (Mesa's multisampled resource,
+/// tools/cts/log/2026-10-28-splitref, sections 4.2 and 4.6): sample `n`'s
+/// plane at `gpu + n * surface_stride`, each laid out as the target
+/// (its row stride and height).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SampleStore {
+    pub gpu: u64,
+    /// Bytes from one sample's plane to the next.
+    pub surface_stride: u32,
+    /// The frame resolves: its tile buffer, preloaded from the store, is
+    /// averaged into the target ([`Msaa::AVERAGE`]) and every tile written
+    /// whole; the store is only read. Off: the frame writes its samples
+    /// back to the store ([`Msaa::LAYERED`]).
+    pub resolve: bool,
 }
 
 /// The colour preload program in GPU memory (src/shaderc/online/mali/
@@ -1759,6 +1794,7 @@ pub fn begin_frame(desc: &mut Arena, cs: &mut Stream) -> Result<OpenFrame, Frame
         colour_preload: None,
         zs_preload: None,
         programs: ProgramCache::default(),
+        sample_store: None,
     })
 }
 
@@ -1833,11 +1869,25 @@ pub fn end_frame(
     if open.uses_zs && zs.is_none() {
         return Err(FrameError::Invalid(INVALID_NO_ZS));
     }
-    /* a 4x target is a 4x view of a single-sampled image: Mesa's preload
-     * reads the image's sample count (`pan_preload_is_ms`,
-     * pan_fb_preload.c:162-179), so its pre-frame draws are the 1x ones,
-     * which write each pixel's value into all four samples of the tile
-     * buffer (0dce654a8:tools/mali/board-ref/2026-10-23-msaa-preload) */
+    let store = open.sample_store;
+    if let Some(s) = store {
+        let plane = u64::from(t.row_stride) * u64::from(t.height);
+        let ok = t.samples == 4
+            && s.gpu.is_multiple_of(64)
+            && s.surface_stride.is_multiple_of(64)
+            && u64::from(s.surface_stride) >= plane;
+        if !ok {
+            return Err(FrameError::Invalid(INVALID_SAMPLE_STORE));
+        }
+    }
+    /* without a sample store, a 4x target is a 4x view of a single-sampled
+     * image: Mesa's preload reads the image's sample count
+     * (`pan_preload_is_ms`, pan_fb_preload.c:162-179), so its pre-frame
+     * draws are the 1x ones, which write each pixel's value into all four
+     * samples of the tile buffer
+     * (0dce654a8:tools/mali/board-ref/2026-10-23-msaa-preload). With one,
+     * the image has 4 samples and the preload reads each sample back
+     * (2026-10-28-splitref section 5) */
     let (Some(fbd), Some(tls)) = (open.layout.fbd, open.layout.tls) else {
         return Err(FrameError::Invalid(INVALID_OPEN_FRAME));
     };
@@ -1917,10 +1967,20 @@ pub fn end_frame(
         (Some(_), None) => return Err(FrameError::Invalid(INVALID_NO_ZS)),
         (None, _) => None,
     };
+    let resolve = store.is_some_and(|s| s.resolve);
+    if resolve && open.colour_preload.is_none() {
+        /* a resolve averages the samples the store holds: it must load them */
+        return Err(FrameError::Invalid(INVALID_SAMPLE_STORE));
+    }
     if open.colour_preload.is_some() || zs_part.is_some() {
-        params.frame_shader_dcds = preload_dcds(desc, t, zs_part, open.colour_preload, tls.gpu)?;
+        params.frame_shader_dcds = preload_dcds(desc, t, zs_part, open.colour_preload, store, tls.gpu)?;
         if open.colour_preload.is_some() {
-            params.pre_frame_0 = PrePostFrameShaderMode::INTERSECT;
+            /* INTERSECT loads only the tiles the frame's draws reach, the
+             * others keep their memory; a resolve writes every tile
+             * (below), so it loads every tile: ALWAYS, Mesa's mode for a
+             * full-screen frame shader (pan_fb_preload.c:1194-1201, 1244) */
+            params.pre_frame_0 =
+                if resolve { PrePostFrameShaderMode::ALWAYS } else { PrePostFrameShaderMode::INTERSECT };
         }
         if zs_part.is_some() {
             params.pre_frame_1 = PrePostFrameShaderMode::EARLY_ZS_ALWAYS;
@@ -1931,19 +1991,34 @@ pub fn end_frame(
      * or preloaded (no clean-tile write, no clear colour) */
     let cleared = open.colour_preload.is_none();
     let (internal_format, writeback_format) = t.format.formats();
+    /* a 4x tile buffer averaged into single-sampled memory; or its four
+     * samples written to the store, one plane a sample (Mesa's
+     * `mali_sampling_mode` LAYERED for a multisampled view, pan_desc.c:26-48;
+     * 2026-10-28-splitref section 4.2: Writeback MSAA 3, surface stride a
+     * plane), unless the frame resolves them into the target */
+    let (writeback_msaa, writeback_buffer) = match store {
+        Some(s) if !s.resolve => {
+            (Msaa::LAYERED, RtBuffer { base: s.gpu, row_stride: t.row_stride, surface_stride: s.surface_stride })
+        }
+        _ => (
+            if t.samples > 1 { Msaa::AVERAGE } else { Msaa::SINGLE },
+            RtBuffer { base: t.gpu, row_stride: t.row_stride, surface_stride: 0 },
+        ),
+    };
     let rt = RgbRenderTarget {
         writeback_mode: WritebackMode::COMPAT,
         internal_format,
         write_enable: true,
         writeback_format,
         writeback_block_format: BlockFormat::LINEAR,
-        /* a 4x tile buffer averaged into single-sampled memory */
-        writeback_msaa: if t.samples > 1 { Msaa::AVERAGE } else { Msaa::SINGLE },
+        writeback_msaa,
         dithering_enable: true,
         swizzle: t.format.swizzle(),
-        /* `force_clean_writes = fb->rts[i].clear` (pan_desc.c:495) */
-        clean_tile_write_enable: cleared,
-        writeback_buffer: RtBuffer { base: t.gpu, row_stride: t.row_stride, surface_stride: 0 },
+        /* `force_clean_writes = fb->rts[i].clear` (pan_desc.c:495); a
+         * resolve writes every tile, those its preload left clean too (the
+         * preload's fragments are clean writes, `colour_preload_dcd`) */
+        clean_tile_write_enable: cleared || resolve,
+        writeback_buffer,
         clear: if cleared { clear_colour(clear, t.format) } else { RtClear::default() },
         ..Default::default()
     };
@@ -2128,6 +2203,7 @@ fn preload_dcds(
     t: &Target,
     zs: Option<(&ZsAttachment, ZsPreload)>,
     colour: Option<FrameShader>,
+    store: Option<SampleStore>,
     tls: u64,
 ) -> Result<u64, FrameError> {
     if colour.is_some() {
@@ -2147,7 +2223,7 @@ fn preload_dcds(
     }
     if let Some(p) = colour {
         let planes = zs.map_or((false, false), |(_, p)| (p.z, p.s));
-        let draw = colour_preload_dcd(desc, t, planes, coords.gpu, tls, p)?;
+        let draw = colour_preload_dcd(desc, t, planes, coords.gpu, tls, p, store)?;
         desc.write(dcds, 0, &draw.pack()?)?;
     }
     Ok(dcds.gpu)
@@ -2253,6 +2329,13 @@ fn preload_zsd(desc: &mut Arena, (z, s): (bool, bool)) -> Result<Block, FrameErr
 /// ([`preload_zsd`] of the planes the frame also preloads), and
 /// the DCD that names them: early depth/stencil forced (no ATEST in the
 /// program), forward pixel kill allowed, the tiles still clean.
+///
+/// With a sample store, the image read back is the store's four samples
+/// (2026-10-28-splitref section 4.6): the texture has 4 samples, its plane
+/// the store's four planes (size four planes, slice stride one), and the
+/// draw is multisampled and run once a sample (`pan_preload_is_ms`,
+/// pan_fb_preload.c:1095, 1144-1145), so `p` must be the program that
+/// fetches the sample it runs for.
 fn colour_preload_dcd(
     desc: &mut Arena,
     t: &Target,
@@ -2260,16 +2343,23 @@ fn colour_preload_dcd(
     coords: u64,
     tls: u64,
     p: FrameShader,
+    store: Option<SampleStore>,
 ) -> Result<Draw, FrameError> {
     let (format, clump_format) = t.format.preload_view();
     let plane = desc.alloc(GenericPlane::LENGTH, NullPlane::ALIGN as u64)?;
+    /* a single-sampled 2D image has no slice stride in 26.2.1
+     * (pan_texture.c:416-420); a multisampled one has its sample planes */
+    let (pointer, size, slice_stride, sample_count) = match store {
+        Some(s) => (s.gpu, 4 * s.surface_stride, s.surface_stride, 4),
+        None => (t.gpu, t.row_stride * t.height, 0, 1),
+    };
     let pl = GenericPlane {
         clump_ordering: ClumpOrdering::LINEAR,
         clump_format,
-        size: t.row_stride * t.height,
-        pointer: t.gpu,
+        size,
+        pointer,
         row_stride: t.row_stride,
-        slice_stride: 0,
+        slice_stride,
         width: t.width,
         height: t.height,
         ..Default::default()
@@ -2281,7 +2371,7 @@ fn colour_preload_dcd(
         format,
         width: t.width,
         height: t.height,
-        sample_count: 1,
+        sample_count,
         swizzle: SWIZZLE_RGBA,
         levels: 1,
         array_size: 1,
@@ -2318,6 +2408,8 @@ fn colour_preload_dcd(
             allow_forward_pixel_to_kill: true,
             allow_forward_pixel_to_be_killed: true,
             clean_fragment_write: true,
+            multisample_enable: store.is_some(),
+            evaluate_per_sample: store.is_some(),
             ..Default::default()
         },
         flags_1: DcdFlags1 { sample_mask: 0xffff, render_target_mask: 1 },
