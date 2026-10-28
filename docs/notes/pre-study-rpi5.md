@@ -20,15 +20,21 @@ Every claim says where it was read. The paths are:
   4.4.99): `soc/brcm/bcm2712/`, `dts/arm64/broadcom/bcm2712.dtsi`,
   `boards/raspberrypi/rpi_5/`.
 - `repo:` is a file of this repository.
-- **Not read.** The Linux kernel source was **not available** to this study:
-  the checkout under the dependency cache (`linux-v6.18-src`) holds only
-  `drivers/gpu/drm/panthor`, and the network was closed. So nothing below is
-  quoted from the Linux `v3d` driver, from the BCM2712 device tree, from the
-  Linux `vc4` display driver or from Raspberry Pi's boot documentation. Where
-  a section needs them it says "not read" and names the file to read (the
-  questions of section 7). The one Linux fact used is the earlier note's
-  (`repo:docs/notes/pi4-v3d-bringup.md`, which read Linux v6.17): the 7.1 GPU
-  has an SMS block in front of it, `v3d_drv.c:266-294`.
+- `LINUX/` is Linux **v6.18** (`https://raw.githubusercontent.com/torvalds/linux/v6.18/...`),
+  `drivers/gpu/drm/v3d/{v3d_regs.h,v3d_drv.c,v3d_mmu.c}` and
+  `arch/arm64/boot/dts/broadcom/bcm2712.dtsi`, and `RPI/` is the Raspberry Pi
+  fork's branch `rpi-6.12.y` (`bcm2712.dtsi`, `bcm2712-rpi.dtsi`,
+  `bcm2712-rpi-5-b.dts`). GPL: facts and file:line only, nothing copied. The
+  local Linux checkout in the dependency cache holds only `panthor`, so these
+  files were read over the network at the end of the study, and **only those
+  files**; line numbers are the reader's counts from the SPDX line.
+- **Still not read.** `v3d_gem.c`, `v3d_sched.c`, `v3d_irq.c` (the submit and
+  interrupt sequence), the Linux `vc4` display driver, the firmware clock and
+  mailbox code, and Raspberry Pi's boot documentation (`config.txt`, EEPROM,
+  `tryboot`). Where a section needs them it says "not read" and the questions
+  of section 7 name the file. The earlier Pi 4 note's SMS citation
+  (`repo:docs/notes/pi4-v3d-bringup.md`, v6.17 `v3d_drv.c:266-294`) is now
+  confirmed at v6.18 as `v3d_drv.c:287-315` (section 3.4).
 - A task statement named `v3d_packet_v71.xml`. At Mesa 26.2.1 that file does
   not exist: one file, `MESA/src/broadcom/cle/v3d_packet.xml` (`<vcxml
   gen="4.2" min_ver="42" max_ver="71">`, line 1), carries both generations as
@@ -45,7 +51,7 @@ Every claim says where it was read. The paths are:
 | GPU revisions | Several 7.1 revisions exist and differ in the ABI: 7.1.2 has no R/B swap bit in the texture state, 7.1.5 adds it; 7.1.6 and later do not subtract 1 from the CSD batch count; 7.1.7 (and 7.1.6 with `compat_rev` >= 4) have the `max0` unpack; **7.1.10 is "2712D0"** and adds the draw-index shader record | `v3d_packet.xml:1686-1692` and `:1313`; `MESA/src/gallium/drivers/v3d/v3dx_draw.c:1519-1521`; `MESA/src/broadcom/common/v3d_device_info.h:94-112` |
 | Which revision a given Pi 5 carries | **Unknown** (question U2) | |
 | Memory | LPDDR4X, 1 to 16 GB | `ZEPHYR/.../rpi_5/doc/index.rst` |
-| Display | Dual 4Kp60 HDMI output. How a frame reaches HDMI (the SoC's display pipeline), and what part RP1 plays, **not read** (question U3) | `ZEPHYR/.../index.rst` states only the outputs |
+| Display | Dual 4Kp60 HDMI. The HDMI path is on the **SoC**, not RP1: the device tree has an `hvs` (`brcm,bcm2712-hvs`), two pixel valves (`brcm,bcm2712-pixelvalve0/1`) and `hdmi0`/`hdmi1` (`brcm,bcm2712-hdmi0/1`, nine register regions each: hdmi, dvp, phy, rm, packet, metadata, csc, cec, hd), under a display node `vc4: gpu` with `compatible = "brcm,bcm2712-vc6"`. The Pi 5 board file sets `hdmi0`/`hdmi1` `status = "disabled"` and gives the HVS the firmware clocks 4 and 16 (`core`, `disp`). Which of these a firmware-less image must program, and whether the firmware leaves a scanout running, is not read (U3) | `LINUX/arch/arm64/boot/dts/broadcom/bcm2712.dtsi` (`hvs`, `pixelvalve0/1`, `hdmi0/1`); `RPI/bcm2712-rpi-5-b.dts` |
 | I/O chip | RP1 sits behind a PCIe link. Zephyr's device tree puts the RP1 GPIO block under the node `pcie2` and names `pcie1` as the board's `zephyr,pcie-controller` | `ZEPHYR/dts/arm64/broadcom/bcm2712.dtsi` (`pcie1`, `pcie2`, `rp1`), `rpi_5_bcm2712.dts` (`chosen`). Whether Zephyr's `pcie1`/`pcie2` names match Linux's is not checked |
 | Console | `uart10`, a PL011 (`arm,pl011`), 115200 baud in the board file; the 3-pin debug connector between the HDMI ports takes the Raspberry Pi Debug Probe | `rpi_5_bcm2712.dts`, `bcm2712.dtsi`, `.../doc/index.rst` "Serial Communication" |
 | Interrupt controller | GICv2 (`arm,gic-v2`), 280 interrupts, architected timer at 54 MHz | `bcm2712.dtsi` (`gic`), `ZEPHYR/soc/brcm/bcm2712/Kconfig.defconfig` |
@@ -215,7 +221,61 @@ therefore two ISAs behind one `struct v3d_qpu_instr`:
 
 ### 3.4 Registers
 
-Not read (U4). What Mesa shows without Linux: the identity registers read
+Read from `LINUX/drivers/gpu/drm/v3d/` v6.18 (U4 is now partly answered; the
+submit and interrupt sequence in `v3d_gem.c`, `v3d_sched.c`, `v3d_irq.c` is
+not read):
+
+- **The part that does not move.** Hub `IDENT0..3` (0x08 to 0x14, the field
+  layout is not versioned), `MMU_DEBUG_INFO` (0x1238: `PA_WIDTH` 11:8,
+  `VA_WIDTH` 7:4), `CLE_CT0QBA` (0x160), `L2TCACTL` (0x30) and `SLCACTL` (0x24)
+  have no version conditionals in `v3d_regs.h`. The Pi 4 cache-flush and bin
+  start registers of `v3d_regs.h` (ours) therefore need no change by this
+  evidence.
+- **What moves at 7.1** (`v3d_regs.h` writes the macro as `(ver)`): the **TFU
+  block** from 0x400 to 0x700 (`CS` 0x700, `SU` 0x704, `ICFG` 0x708, `IIA`
+  0x70c, `ICA` 0x710, `IIS` 0x714, `IUA` 0x718, **`IOC` 0x71c, new**, `IOA`
+  0x720, `IOS` 0x724, `COEF0..3` 0x728 to 0x734; `COEF0_USECOEF` and `CRC` are
+  4.x only); the **GMP** block (`STATUS` 0x600, `CFG` 0x604, `VIO_ADDR` 0x608
+  against 0x800 to 0x808); the **CSD** configuration registers (0x930 to 0x948,
+  current 0x958 to 0x97c, plus `CFG7` at 0x94c / 0x974, against 0x904 to 0x91c /
+  0x920 to 0x940); the **interrupt bits** (`INT_CSDDONE` bit 6 against 7,
+  `INT_PCTR` bit 5 against 6, a new hub bit `GMPV` 6); `MMUC_CONTROL_CLEAR` bit
+  11 against 3; the performance-counter field widths. The **GCA** block exists
+  only below 4.1 and is not on 7.1.
+- **SMS** (7.1 only): `REE_CS` at 0x00000 and `TEE_CS` at 0x00400 of a separate
+  `sms` register region; bits `POWER_OFF` 30, `CLEAR_POWER_OFF` 29, `LOCK` 28,
+  `SVP_MODE_*`, a 4-bit `STATE` field 3:0 (no named values in the header).
+  The driver maps `sms` only for `ver >= V3D_GEN_71` (`v3d_drv.c:354-358`) and,
+  before reading any identity, writes `CLEAR_POWER_OFF` to `TEE_CS` and polls
+  `STATE` for `V3D_SMS_IDLE` with a 100-iteration limit, logging "Failed to
+  power up SMS" but not failing (`v3d_idle_sms`, `v3d_drv.c:287-301`); power-off
+  writes `POWER_OFF` and polls for the off state (`:303-315`).
+- **Probe order** (`v3d_drv.c`): compatible `brcm,2712-v3d` selects `V3D_GEN_71`
+  (`:278-284`); register regions `hub`, `core0` and, for 7.1, `sms`
+  (`:346-358`); an **optional** clock, enabled (`:360-368`); `v3d_idle_sms`
+  (`:370`); then the DMA mask is `30 + PA_WIDTH` bits and the VA width
+  `30 + VA_WIDTH` read from `MMU_DEBUG_INFO` (`:372-378`); `HUB_IDENT1` version
+  is `TVER*10 + REV`, checked against the device tree (`:380-385`); the reset
+  is optional, the 4.2 "bridge" region is the fallback (`:395-409`); a 4 KiB
+  zeroed write-combined MMU scratch page (`:417-423`).
+- **MMU** (`v3d_mmu.c`): one level; 4 KiB, 64 KiB (bigpage) and 1 MiB
+  (superpage) entries; `VALID` bit 28, `WRITEABLE` 29, `BIGPAGE` 30,
+  `SUPERPAGE` 31; the PFN is limited to 24 bits (`BUG_ON(... >= BIT(24))`,
+  `:101`), which with 4 KiB pages reads as 36 physical bits (the reader's
+  inference, `PA_WIDTH` is the register to confirm). The file mentions no 7.1
+  difference. Our Pi 4 table format therefore carries over on this evidence.
+- **Device tree.** Neither `LINUX/.../bcm2712.dtsi` nor `RPI/bcm2712.dtsi`,
+  `RPI/bcm2712-rpi.dtsi` or `RPI/bcm2712-rpi-5-b.dts` contains a `v3d`, `sms` or
+  `brcm,2712-v3d` node. The GPU's addresses, interrupt, clock and power
+  therefore are not in the files read; the node is in some other file or
+  overlay of the fork (U5). The files do show a firmware interface:
+  `raspberrypi,bcm2835-firmware` with `mboxes = <&mailbox>`, a
+  `firmware_clocks` child (`raspberrypi,firmware-clocks`) and a
+  `firmware-reset` child (`RPI/bcm2712-rpi.dtsi`), so the Pi 4 route (firmware
+  clock through the property mailbox) is the one the device tree has for
+  other blocks.
+
+What Mesa shows without Linux: the identity registers read
 through the ioctl are the same set (`UIFCFG`, `HUB_IDENT1..3`,
 `CORE0_IDENT0..2`, `v3d_drm.h:282-288`); the 7.1 values the Mesa shim reports
 are `CORE0_IDENT0 = 0x07443356` (version byte 7, the "V3D" magic), `CORE0_IDENT1 =
@@ -223,8 +283,9 @@ are `CORE0_IDENT0 = 0x07443356` (version byte 7, the "V3D" magic), `CORE0_IDENT1
 `v3d_device_info.c`'s decode), `HUB_IDENT1 = 0x00081117`, `HUB_IDENT3 =
 0x00000700` (`v3d_noop.c:44-55`). These are the shim's numbers, **not a
 measurement of a Pi 5**. Our `v3d_hw.c` registers (hub `IDENT`, `INT_STS`, MMU,
-`CTnQBA/QEA`, `L2TCACTL`, `SLCACTL`) are Linux's 4.x map; whether the 7.x map
-moved any of them is U4.
+`CTnQBA/QEA`, `L2TCACTL`, `SLCACTL`) are Linux's 4.x map; of those, `IDENT`, MMU,
+`CTnQBA` and the two cache controls do not move at 7.1 (above); the interrupt
+bits, `MMUC_CONTROL_CLEAR`, the TFU block and the new SMS block do.
 
 ### 3.5 What stays
 
@@ -302,7 +363,7 @@ Linux reading of U4 first.
 
 | # | Item | Check |
 |---|---|---|
-| H1 | **Read Linux and the Pi 5 device tree.** A sparse checkout of Linux `drivers/gpu/drm/v3d/` (`v3d_regs.h`, `v3d_drv.c`, `v3d_mmu.c`, `v3d_gem.c`, `v3d_sched.c`), `drivers/gpu/drm/vc4/` (HVS and HDMI for BCM2712), the BCM2712 device tree (`bcm2712.dtsi`, `bcm2712-rpi-5-b.dts`) at a named tag, plus `https://www.raspberrypi.com/documentation/computers/config_txt.html` and the boot EEPROM page. Answers U1 to U7. GPL: facts and file:line only (as for the Pi 4). | A "Linux facts" section of `driver/docs/` with a `linux:` citation per register, as `driver/docs/rpi4-v3d.md` has |
+| H1 | **Finish the Linux reading.** `v3d_regs.h`, `v3d_drv.c`, `v3d_mmu.c` and the device trees are read (section 3.4); still to read: `v3d_gem.c`, `v3d_sched.c`, `v3d_irq.c`, the `vc4` driver for BCM2712, the downstream file that holds the `brcm,2712-v3d` node, and the Raspberry Pi pages. A sparse checkout of Linux `drivers/gpu/drm/v3d/` (`v3d_regs.h`, `v3d_drv.c`, `v3d_mmu.c`, `v3d_gem.c`, `v3d_sched.c`), `drivers/gpu/drm/vc4/` (HVS and HDMI for BCM2712), the BCM2712 device tree (`bcm2712.dtsi`, `bcm2712-rpi-5-b.dts`) at a named tag, plus `https://www.raspberrypi.com/documentation/computers/config_txt.html` and the boot EEPROM page. Answers the rest of U1 to U7. GPL: facts and file:line only (as for the Pi 4). | A "Linux facts" section of `driver/docs/` with a `linux:` citation per register, as `driver/docs/rpi4-v3d.md` has |
 | H2 | **`v3d_shc` for 7.1.** Parametrise the device (`ver` 71, `has_accumulators` false, `vpm_size` 64 KiB, rev) in `tools/v3d/v3d_shc.c:677-680`; the vendored reference build (`tools/v3d/README.md`, "Set up once") already compiles the whole compiler. Run it over `tools/v3d/qpu_corpus.txt` and the femtovg and Qt3D programs used for the Pi 4. | Every program compiles, `v3d_qpu_disasm` of every word reads, and the 7.1 word count per program is recorded beside the 4.2 one |
 | H3 | **Mesa GL driver on the drm-shim at 7.1**, the method of `tools/mali/drm_shim_ref.sh`: build `-Dgallium-drivers=v3d`, run with `V3D_GPU_ID=71` (the shim's default) and `MESA_LOADER_DRIVER_OVERRIDE`, draw with a small GL program (`tools/mali/gl_ref.py` shape), and keep the job Mesa submits via `V3D_DEBUG=clif` (the Pi 4 note used it as the byte reference, "Control lists"). The shim's `SUBMIT_CL` is a no-op (`v3d_noop.c`) but the clif dump is written by the driver before the ioctl; **to be confirmed on the first run**. Gives the 7.1 shader binaries, shader state record, texture state and tile-list bytes for the clear, the first triangle and a textured draw, to match byte for byte. | The dump decodes with `MESA/src/broadcom/clif/` for `ver` 71; the corpus of references is stored as the Pi 4's was (`tools/v3d/`) |
 | H4 | **7.1 packet encoders.** Add `driver/src/v3d/generated/v3d_packet_v71_pack.h` from `mesa_ref.sh` (already produced there) and a `V3D71_*` name table in `v3d_cl_packets.h`; extend `tools/v3d/cl_golden.c` to compare ours with Mesa's packers for 7.1. | `cl_golden`: all cases equal, as the 4.2 run's 720,024 of 720,024 (`pi4-v3d-bringup.md`, "Written so far") |
@@ -362,7 +423,7 @@ Each is a question; none is guessed.
 | U1 | Is there a public BCM2712 register manual, and which blocks does it cover? | The Raspberry Pi documentation index; none was opened |
 | U2 | Which V3D 7.1 revision is on the board we will receive (7.1.2, .5, .6, .7 or .10)? It chooses the texture-state layout, the shader-record variant and the unpack ops | D2's `HUB_IDENT3`; `v3d_device_info.h:94-112` for the consequences |
 | U3 | How does a frame reach HDMI on the Pi 5, and does the firmware offer a framebuffer through the property mailbox as the Pi 4's does? What part does RP1 play for the outputs we use? | Linux `drivers/gpu/drm/vc4/` for BCM2712, the BCM2712 device tree, Raspberry Pi's firmware documentation. The Pi 4 form is `docs/standalone-boot.md` |
-| U4 | What are the 7.x register map, MMU (page-table format, physical address width, 4 KiB or other pages), SMS sequence, interrupt lines, and the job-start and cache-flush sequence? Does any 4.2 register of `v3d_regs.h` move? | Linux `drivers/gpu/drm/v3d/` (`v3d_regs.h`, `v3d_mmu.c`, `v3d_drv.c` incl. the SMS code the earlier note cites at `:266-294`, `v3d_sched.c`, `v3d_gem.c`) at a named tag |
+| U4 | Partly answered (section 3.4: register moves, MMU format, SMS power-up). Open: the job-start, cache-flush and out-of-memory sequence on 7.1, the interrupt line numbers, and the real PA width (`MMU_DEBUG_INFO.PA_WIDTH`). | Linux `drivers/gpu/drm/v3d/` (`v3d_regs.h`, `v3d_mmu.c`, `v3d_drv.c` `v3d_sched.c`, `v3d_gem.c`, `v3d_irq.c`) at a named tag |
 | U5 | How is the GPU clocked and powered up (firmware mailbox clock as on the Pi 4, a clock controller, a power domain), and is it already on when the image starts? | The BCM2712 device tree and Linux's clock/power code; D2 |
 | U6 | At which address and in which exception level does the firmware start a `kernel=` arm64 image on BCM2712, and what does it pass in the registers? Is any `config.txt` key needed beyond `kernel=`, `enable_uart=1`, `uart_2ndstage=1`? | Raspberry Pi `config.txt` documentation (`arm_64bit`, `kernel`, `kernel_address`), Zephyr's `rpi_5` linker address, D1 |
 | U7 | Does the Pi 5 firmware support `tryboot`, and does the bootloader in its flash need updating for our files? | Raspberry Pi boot documentation |
@@ -392,7 +453,7 @@ more. Order is the dependency order.
 
 | Item | Size | Depends on | Done when |
 |---|---|---|---|
-| P0 Read Linux and the Pi 5 device tree (H1), write the `driver/docs/rpi5-v3d.md` facts file | M | none | U1, U3 to U7 answered with citations |
+| P0 Finish the Linux reading (H1), write the `driver/docs/rpi5-v3d.md` facts file | M | none | U1, U3 to U7 answered with citations |
 | P1 Reference build at 7.1: `v3d_shc` parametrised, drm-shim run, clif references (H2, H3) | M | none | corpus compiles, references stored |
 | P2 7.1 packet encoders and golden test (H4) | S | none | `cl_golden` equal |
 | P3 7.1 frame builder and decoder check (H5) | M | P2 | `frame_check` clean; equals P1's clear and triangle |
