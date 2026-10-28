@@ -119,7 +119,7 @@ state on 2026-10-26.
   panthor kernel driver, not on Zephyr yet (#1281). Its newest `gl_test`
   sweep reads 98 of 256 cases PASS and 0 FAIL (2026-10-24).
 - Slow glmark2 scenes: terrain on the AM62P (91 ms a frame; shadow and
-  refract are 10.6 and 37.0 ms since #40), terrain, shadow and refract on
+  refract are 10.6 and 37.1 ms since #40), terrain, shadow and refract on
   the i.MX8MP (4, 2 and 2 FPS), terrain on the Pi 4 (162 ms).
 - One thread issues every GL and EGL call; the library does not lock
   (`include/gles_osal.h`, "threads").
