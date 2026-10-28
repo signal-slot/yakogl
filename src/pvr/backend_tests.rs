@@ -5804,6 +5804,7 @@ fn source_desc(base: u64, w: u32, h: u32, pitch: u32) -> Vec<u32> {
 #[test]
 fn a_64x64_chain_is_drawn_level_by_level_into_the_storage() {
     let rig = Rig::new();
+    rig.b().mip_gpu_all = true;
     with_platform(|p| p.kick_usc_rates.clear());
     let base = HEAP_GENERAL_BASE + 0x3000_0000;
     let b = mip_bind(base, 64, 64, 64, 7);
@@ -5840,7 +5841,7 @@ fn a_64x64_chain_is_drawn_level_by_level_into_the_storage() {
     assert!(il.iter().all(|&l| l == (PVR_VDM_TOPOLOGY_TRI_LIST, rig.b().seq_idx.gpu, 6, 0)), "{il:?}");
     assert!(rig.streams().iter().all(|s| s[0].address == rig.b().fbload_quad.gpu), "the quad's six vertices");
     assert!(
-        rig.logs().iter().any(|l| l.contains("the GPU made the 7-level chain of a 64x64 texture")),
+        rig.logs().iter().any(|l| l.contains("the GPU made levels 1..=6 of the 7-level chain of a 64x64 texture")),
         "{:?}",
         rig.logs()
     );
@@ -5855,6 +5856,7 @@ fn a_64x64_chain_is_drawn_level_by_level_into_the_storage() {
 #[test]
 fn an_800x600_chain_is_drawn_as_the_power_of_two_chain_it_is_laid_out_in() {
     let rig = Rig::new();
+    rig.b().mip_gpu_all = true;
     let base = HEAP_GENERAL_BASE + 0x2000_0000;
     let b = mip_bind(base, 800, 600, 1024, 10);
     assert_eq!(generate(&b, 10), 1);
@@ -5897,6 +5899,51 @@ fn an_800x600_chain_is_drawn_as_the_power_of_two_chain_it_is_laid_out_in() {
     for (l, &(_, _, pitch)) in lv.iter().enumerate() {
         assert_eq!(crate::gl::context::pot_chain_level_pitch(800, l as u32), pitch, "level {l}'s pitch");
     }
+}
+
+/// The same chain by default (MIP_CPU_TAIL_TEXELS): the levels over 64x64
+/// texels alone are drawn -- 400x300, 200x150 and 100x75, three kicks, not
+/// nine -- the last of them is waited for, and the answer is 2 + 3: the GL
+/// core filters levels 4.. from level 3. A 256x256 chain draws level 1
+/// alone (2 + 1); a chain whose levels are all large (2x2, two levels) is
+/// drawn whole and not waited for, as before.
+#[test]
+fn a_chain_with_small_levels_draws_the_large_ones_and_waits_for_them() {
+    let rig = Rig::new();
+    with_platform(|p| p.hold_completion = true);
+    let base = HEAP_GENERAL_BASE + 0x2000_0000;
+    let b = mip_bind(base, 800, 600, 1024, 10);
+    assert_eq!(generate(&b, 10), 2 + 3);
+    let got = level_draws(&rig);
+    assert_eq!(
+        got.kicks.iter().map(|k| k.3).collect::<Vec<_>>(),
+        [(400, 300, 512), (200, 150, 256), (100, 75, 128)].map(|(w, h, p)| pbe_reg_words(
+            GLES_SURF_RGBA8888,
+            false,
+            w,
+            h,
+            p,
+            false,
+            false
+        )),
+        "levels 1 ..= 3"
+    );
+    assert_eq!(rig.b().mip_fence, 3);
+    assert_eq!(with_platform(|p| p.waits.last().copied()), Some(3), "the chain's last kick was waited for");
+    assert!(!rig.b().frame_open);
+    assert_eq!(mip_counts(), (1, 0));
+    assert!(rig.logs().iter().any(|l| l.contains("levels 1..=3 of the 10-level chain")), "{:?}", rig.logs());
+
+    let square = mip_bind(base, 256, 256, 256, 9);
+    assert_eq!(generate(&square, 9), 2 + 1);
+    assert_eq!(rig.kicks().len(), 3 + 1, "128x128 alone");
+    assert_eq!(with_platform(|p| p.waits.last().copied()), Some(4));
+
+    let waits = with_platform(|p| p.waits.len());
+    let two = mip_bind(base, 2, 2, 2, 2);
+    assert_eq!(generate(&two, 2), 1, "level 1 is the whole chain");
+    assert_eq!(rig.kicks().len(), 3 + 1 + 1);
+    assert_eq!(with_platform(|p| p.waits.len()), waits, "no wait");
 }
 
 /// The chain layout the backend walks is the GL core's, size for size
@@ -5966,6 +6013,7 @@ fn the_chain_layout_is_the_gl_cores_for_every_shape() {
 #[test]
 fn chains_the_gpu_cannot_make_are_left_to_the_cpu_by_name() {
     let rig = Rig::new();
+    rig.b().mip_gpu_all = true;
     let base = HEAP_GENERAL_BASE + 0x2000_0000;
     let mut l8 = mip_bind(base, 64, 64, 64, 7);
     l8.format = GLES_TEXFMT_L8;
@@ -6024,7 +6072,8 @@ fn chains_the_gpu_cannot_make_are_left_to_the_cpu_by_name() {
 /// chain already complete, or none made, waits for nothing.
 #[test]
 fn asking_the_chain_back_waits_for_its_last_kick() {
-    let _rig = Rig::new();
+    let rig = Rig::new();
+    rig.b().mip_gpu_all = true;
     with_platform(|p| p.hold_completion = true);
     let base = HEAP_GENERAL_BASE + 0x2000_0000;
     let b = mip_bind(base, 64, 64, 64, 7);
@@ -6049,6 +6098,7 @@ fn asking_the_chain_back_waits_for_its_last_kick() {
 #[test]
 fn a_chain_whose_kick_does_not_submit_is_left_to_the_cpu() {
     let rig = Rig::new();
+    rig.b().mip_gpu_all = true;
     with_platform(|p| p.fail_submit = true);
     let base = HEAP_GENERAL_BASE + 0x2000_0000;
     let b = mip_bind(base, 64, 64, 64, 7);
@@ -6069,6 +6119,7 @@ fn a_chain_whose_kick_does_not_submit_is_left_to_the_cpu() {
 #[test]
 fn a_chain_asked_for_during_a_frame_into_level_0_follows_that_frames_kick() {
     let rig = Rig::new();
+    rig.b().mip_gpu_all = true;
     let base = HEAP_GENERAL_BASE + 0x2000_0000;
     let mut d = rig.draw(3);
     d.target_gpu = base;

@@ -1605,6 +1605,10 @@ struct Backend {
     /// filter, since the backend started (instruments).
     mip_chains: u32,
     mip_chains_refused: u32,
+    /// Every level of a chain on the GPU, the small ones too (false, the
+    /// default: [`MIP_CPU_TAIL_TEXELS`]). Set by the host tests of the
+    /// per-level kicks.
+    mip_gpu_all: bool,
     /// The extent the PBE clips attachment 0 to in the next frame
     /// [`record_mip_level`] opens, and in the open frame (0, 0: the
     /// target's own extent, every frame but a chain level's). Set only for
@@ -5589,7 +5593,10 @@ fn draw_one(p: &mut Pvr, d: &GlesDraw) -> i32 {
  * power-of-two chain), the bilinear sample between the nearest four on a
  * NPOT chain's odd steps (ES 3.0.6 3.8.9 leaves the filter open). The kicks
  * go out in order behind the kick that rendered level 0 (the GL core hands
- * the texture over after it) and nothing is waited for. The levels are
+ * the texture over after it) and nothing is waited for -- unless the chain
+ * has small levels (`MIP_CPU_TAIL_TEXELS`): then only the large ones are
+ * drawn and waited for, and the GL core filters the tail on the CPU with
+ * this same sample (gl/texture.rs `mip_step_gpu_sample`). The levels are
  * written straight into the GL core's storage at the offsets the TPU walks
  * (`mip_chain_layout`), so the GL core asks nothing back but a wait
  * (`pvr_return_mipmap_chain`) before it reads or writes them on the CPU.
@@ -5737,8 +5744,31 @@ fn record_mip_level(p: &mut Pvr, base: u64, src: &MipLevel, dst: &MipLevel, hwrt
 /// floats, bools, null pointers), as `PVR` is.
 static MIP_DRAW: Global<GlesDraw> = Global::zeroed();
 
-/// [`pvr_generate_mipmap`]: the chain, or why it is left to the GL core.
-fn mip_chain_gpu(p: &mut Pvr, t: &GlesTextureBind, levels: u32) -> Result<(), &'static str> {
+/// The levels of a chain the GPU draws are those over this many texels, and
+/// level 1 always; the GL core filters the rest on the CPU with the GPU's
+/// filter (gl/texture.rs `mip_step_gpu_sample`) once they completed.
+///
+/// Why: a kick costs about a millisecond on the AM62P however little it
+/// draws (the firmware's take-up between post and geometry done, issue #42),
+/// and glmark2's terrain made 43 of its 53 kicks a frame here, one a level of
+/// five chains: levels of 3x2 texels cost what 400x300 did. Above 64x64 the
+/// GPU keeps the levels whose CPU reads would cost more than a kick (level 1
+/// of 800x600 is 469 KiB); below, the tail of a 10-level chain is under
+/// 10 KiB. Terrain's 800x600 chain keeps levels 1..=3 (400x300 to 100x75,
+/// every one an even step), its 256x256 chain level 1.
+const MIP_CPU_TAIL_TEXELS: u32 = 64 * 64;
+
+/// The last level of the chain `lv` (`n` levels) the GPU draws
+/// ([`MIP_CPU_TAIL_TEXELS`]): 1 at least, `n` - 1 when every level is large
+/// or `all`.
+fn mip_gpu_last(lv: &[MipLevel], n: usize, all: bool) -> usize {
+    (1..n).take_while(|&l| all || l == 1 || lv[l].w * lv[l].h > MIP_CPU_TAIL_TEXELS).last().unwrap_or(1)
+}
+
+/// [`pvr_generate_mipmap`]: the levels drawn -- `None` the whole chain, its
+/// last kick in flight; `Some(n)` levels 1 ..= n, every kick of them
+/// complete -- or why the chain is left to the GL core.
+fn mip_chain_gpu(p: &mut Pvr, t: &GlesTextureBind, levels: u32) -> Result<Option<usize>, &'static str> {
     if t.format != GLES_TEXFMT_RGBA8 || t.bgra != 0 {
         return Err("not a plain RGBA8 texture");
     }
@@ -5764,7 +5794,8 @@ fn mip_chain_gpu(p: &mut Pvr, t: &GlesTextureBind, levels: u32) -> Result<(), &'
     if lv[1..n].iter().any(|l| l.pitch % 2 != 0 && l.rows > 1) {
         return Err("a level one texel wide above a taller tail: the PBE writes pixel pairs");
     }
-    for l in 1..n {
+    let last = mip_gpu_last(&lv, n, p.b.mip_gpu_all);
+    for l in 1..=last {
         let rc = record_mip_level(p, t.base_gpu, &lv[l - 1], &lv[l], (lv[1].w, lv[1].h));
         if rc != 0 {
             /* the levels recorded so far may be in flight, and the CPU
@@ -5781,14 +5812,26 @@ fn mip_chain_gpu(p: &mut Pvr, t: &GlesTextureBind, levels: u32) -> Result<(), &'
         return Err("the chain's last kick did not submit");
     }
     p.b.mip_fence = p.b.last_fence;
-    Ok(())
+    if last + 1 == n {
+        return Ok(None);
+    }
+    /* the GL core filters the tail from level `last` on the CPU: it must be
+     * in the storage first */
+    let fence = p.b.mip_fence;
+    if p.b.wait_fence(fence) != 0 {
+        return Err("the chain's kicks did not complete");
+    }
+    Ok(Some(last))
 }
 
 /// glGenerateMipmap on the 2D texture `b` describes, whose storage holds a
 /// chain of `levels` levels (`YakoglBackend::generate_mipmap`): a plain
 /// RGBA8 2D texture at a heap address gets its levels 1.. drawn on the GPU
 /// ([`mip_chain_gpu`], one kick per level, every kick submitted before this
-/// returns) and the answer is 1: the GL core filters nothing. 0 -- the GL
+/// returns) and the answer is 1: the GL core filters nothing. A chain with
+/// levels of [`MIP_CPU_TAIL_TEXELS`] or fewer has only the larger ones drawn,
+/// 1 ..= n, waited for, and the answer is `2 + n`: the GL core filters the
+/// tail with the GPU's filter. 0 -- the GL
 /// core's CPU box filter, as before -- for any other texture (another
 /// format, B,G,R,A, a cube or array layer, an address outside the heap), a
 /// chain whose layout this backend does not walk (`mip_chain_layout`), a
@@ -5808,17 +5851,21 @@ pub unsafe extern "C" fn pvr_generate_mipmap(b: *const GlesTextureBind, levels: 
         return 0;
     }
     match mip_chain_gpu(p, t, levels) {
-        Ok(()) => {
+        Ok(drawn) => {
             p.b.mip_chains = p.b.mip_chains.wrapping_add(1);
             if p.b.mip_chains == 1 {
                 glog!(
-                    "pvr_backend: the GPU made the {}-level chain of a {}x{} texture: glGenerateMipmap filters nothing",
+                    "pvr_backend: the GPU made levels 1..={} of the {}-level chain of a {}x{} texture, the GL core the rest",
+                    drawn.unwrap_or(levels as usize - 1),
                     levels,
                     t.width,
                     t.height
                 );
             }
-            1
+            match drawn {
+                None => 1,
+                Some(n) => 2 + n as i32,
+            }
         }
         Err(why) => {
             p.b.mip_chains_refused = p.b.mip_chains_refused.wrapping_add(1);
