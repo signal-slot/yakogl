@@ -378,35 +378,46 @@ is from the two-row set.
 ## Mali: NanoPC-T6 (RK3588, Valhall v10, panthor), gl_test sweep
 
 `panthor-gltest --sweep` on the board's own Linux (panthor, not Zephyr), the
-newest record: `tools/cts/log/2026-10-27-frameboard/` (board clock
-2026-10-27, 11:56 UTC; plan #153 frameboard, after the face-culling
-(`272033a3`) and RGBA16F-target merges). Code: the
-integration tip `0543b60b` plus the record's predictions commit, cross-built
-on the host (`yakogl-build=376b9cf8`).
+newest record: `tools/cts/log/2026-10-28-mid/` (board clock 2026-10-28,
+10:20 UTC; plan #154 board-mid, after split-fix, texture-2, varyconst,
+builtin, intbool, intbool-2 and sizelimit). Code: the integration tip
+`965ac247` plus the record's predictions commit `b9d91861`, built on the
+board itself (`yakogl-build=v0.1.0-65-gb9d9186`).
 
 | Runs | Cases | PASS | REFUSED | NO-CASE | SKIP | FAIL | Kernel messages |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| sweep 1 and 2, equal (the 256 verdict lines are identical) | 256 | **102** | 59 | 86 | 8 | 1 | 0 |
+| sweep 1 and 2, equal (the 256 verdict lines are identical) | 256 | **123** | 36 | 85 | 9 | 3 | 0 |
 
-- The PASS set is the previous record's 98 (`2026-10-24-refusals`) to the
-  string, plus:
-  - 4 `cull` (face culling, #32, #33)
-  - 54 `es3chain` (RGBA16F colour targets)
-  - 73 `branchlane` (was refused as arithmetic other than +, -, *)
-  - 114 `cubelod` (was refused as a constant varying lane)
+- The PASS set is the previous record's 106 (`2026-10-28-tip`) to the
+  string, plus 17 (#33):
+  - built-in inputs: 43 `es3vid`, 47 `es3inst`, 51 `es3heavy`, 57
+    `es3vid_indexed`
+  - integer and boolean values: 72 `intlit`, 79 `idiv`, 112 `affectand`
+  - run-time uniform indices: 100 `idxtex`, 116 `uniidxe`
+  - varying lanes and gl_FragColor lanes: 75 `immneg`, 78 `matvary`, 117
+    `uniidxf`, 150 `shprobe`, 191 `varyfma`
+  - size caps: 193 `offarm`, 194 `offarmn`, 195 `ifbranch`
 
-  Eleven rows moved from one refusal to another (63, 68, 71, 74, 78, 81,
-  100, 101, 116, 142, 148). Every earlier sweep record's PASS set is a
-  subset of this one (`tools/mali/sweep_passsets.py` over the 48 records of
-  `0dce654a8:tools/mali/board-ref/` and this one: 49 records).
-- One FAIL, a case new in gl_test (NO-CASE before): `verdict case 214
-  splitkick: FAIL rc -1, first bad check 5 got 0xffc0c0c0 want 0xff808080`.
-  A 4x frame split into two kicks: the second kick reloads the resolved
-  colour, not the four samples, so the diagonal is blended twice.
-- Cases 4, 52 and 54 also PASS in two runs each on their own. Cases 8, 16,
-  27, 28, 29, 30, 31, 32, 33, 36, 37, 38, 39, 41, 52, 56, 87, 108, 113, 114,
-  121, 122, 169, 186, 187, 190, 196, 197, 198, 207, 208, 209, 210, 211, 212
-  and 213 PASS.
+  Every earlier PASS set is a subset of this one
+  (`tools/mali/sweep_passsets.py --require
+  8,28,29,30,113,122,169,196,197,198,207,208,209` over the frameboard
+  record and this one: exit 0). Fifteen rows moved from one refusal to
+  another (42, 44, 45, 49, 76, 80, 89, 91, 98, 104, 149, 181, 184, 185,
+  199); 215 `shadowmap` is new in gl_test (SKIP).
+- Three FAILs:
+  - `verdict case 214 splitkick: FAIL rc -1, first bad check 5 got
+    0xffc0c0c0 want 0xff808080` (#32), unchanged: the frame builder has
+    `OpenFrame::sample_store` (913474c1), but the backend does not set it
+    and the per-sample preload program is not compiled.
+  - `verdict case 2 texture: FAIL rc -1, first bad check 26 got 0xff000080
+    want 0xff0040bf` (was REFUSED): the shader compiles, the frame binds
+    only `samplers[0]` (frame-tex2darray).
+  - `verdict case 141 es3instdiv: FAIL rc -1, first bad check 2 got
+    0xff00ff00 want 0x80008000` (was REFUSED): a divisor-2 instanced
+    attribute is drawn wrong instead of refused (#32).
+- The 21 cases sweep_predict.py named and 214 also ran twice on their own,
+  with the same lines. Cases 8, 28, 29, 30, 113, 122, 169, 196, 197, 198,
+  207, 208 and 209 PASS in both sweeps.
 
 ## ES 3.0: dEQP-GLES3 (stage 4)
 
