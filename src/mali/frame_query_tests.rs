@@ -140,7 +140,7 @@ fn try_build(counter: Option<u64>) -> Result<Vec<u64>, FrameError> {
             colour_mask: 0xf,
             front_cw: false,
             cull: Cull::None,
-            texture: None,
+            textures: &[],
             vs_texture: None,
             occlusion_query: None,
             alpha_to_coverage: false,

@@ -628,9 +628,10 @@ pub struct ShaderMeta<'a> {
     pub no_psiz_offset: Option<u32>,
     /// Fragment: the colour outputs written, bit n for target n.
     pub colour_outputs: u32,
-    /// The shader samples one texture, at index 0 of its stage's texture
-    /// and sampler tables ([`DrawCall::texture`] for a fragment shader,
-    /// [`DrawCall::vs_texture`] for a vertex shader).
+    /// The shader samples: a fragment shader one texture or more, texture i
+    /// at index i of its stage's texture and sampler tables
+    /// ([`DrawCall::textures`]), a vertex shader one, at index 0
+    /// ([`DrawCall::vs_texture`]).
     pub samples_texture: bool,
     /// Mesa's `contains_barrier`: a barrier, or a fragment shader whose quads
     /// need their helper invocations (NIR's
@@ -1216,9 +1217,18 @@ pub struct TextureLevel {
     pub row_stride: u32,
 }
 
-/// A 2D RGBA8 texture or a cube map, `levels` of its chain linear in
-/// memory, and the GL sampler state it is read with: what a fragment
-/// shader's look-up reads at index 0 of its texture and sampler tables.
+/// The textures (and samplers) one stage's tables hold
+/// ([`DrawCall::textures`]): GL_MAX_TEXTURE_IMAGE_UNITS, the GL core's
+/// `CAP_SAMPLERS` (src/gl/context.rs).
+pub const MAX_STAGE_TEXTURES: usize = 16;
+
+/// The layers of a 2D array texture: ES 3.0's GL_MAX_ARRAY_TEXTURE_LAYERS
+/// minimum, 256 (the descriptor's `Array size` holds 65536).
+pub const MAX_ARRAY_LAYERS: u32 = 256;
+
+/// A 2D texture, a cube map or a 2D array, `levels` of its chain linear in
+/// memory, and the GL sampler state it is read with: what a shader's
+/// look-up reads at its index of the stage's texture and sampler tables.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SampledTexture {
     /// Level 0's extent (one face's for a cube); level l is `max(w >> l,
@@ -1233,8 +1243,15 @@ pub struct SampledTexture {
     pub levels: u32,
     /// The faces: 1 for a 2D image, 6 for a cube map (`Dimension = Cube`,
     /// the planes face-major, level-minor: "faces as extra layers",
-    /// Mesa 26.2.1 pan_texture.c:1074-1100).
+    /// Mesa 26.2.1 pan_texture.c:1074-1100); for a 2D array
+    /// ([`SampledTexture::array`]) its layers, stacked as a cube's faces
+    /// are (the GL core's level-major stack, `chain_layout_npot`).
     pub faces: u32,
+    /// A 2D array: `Dimension = 2D`, `Array size` = [`SampledTexture::faces`]
+    /// layers, a plane a layer and level, layer-major as a cube's
+    /// (pan_texture.c:1074-1100, :1198-1217; the shim's texmore_46 and
+    /// texmore_206_array traces).
+    pub array: bool,
     /// The texture descriptor's format word (`MALI_PACK_FMT`).
     pub format: u32,
     /// The planes' clump format: RAW32 for 4-byte texels, a block format's
@@ -1255,6 +1272,9 @@ pub struct SampledTexture {
     pub mipmap: MipmapMode,
     pub wrap_s: WrapMode,
     pub wrap_t: WrapMode,
+    /// GL_TEXTURE_WRAP_R, which st/mesa passes for every target (REPEAT,
+    /// GL's default, unless set); a cube map's is clamped whatever it is.
+    pub wrap_r: WrapMode,
 }
 
 /// GL's default GL_TEXTURE_MAX_LOD, 1000, as the sampler's 5.8 field holds
@@ -1287,6 +1307,11 @@ pub const SWIZZLE_BGR1: u32 = swizzle4(2, 1, 0, 5);
 pub const SWIZZLE_RRR1: u32 = swizzle4(0, 0, 0, 5);
 
 impl SampledTexture {
+    /// A cube map: six faces that are not a 2D array's layers.
+    pub fn is_cube(&self) -> bool {
+        self.faces == 6 && !self.array
+    }
+
     /// Level `l`'s extent.
     pub fn extent(&self, l: u32) -> (u32, u32) {
         ((self.width >> l).max(1), (self.height >> l).max(1))
@@ -1302,7 +1327,7 @@ impl SampledTexture {
     /// the board's cubemap dump, `Wrap Mode R: Clamp to Edge` with GL's
     /// default REPEAT on R).
     pub fn sampler(&self) -> Sampler {
-        let cube = self.faces == 6;
+        let cube = self.is_cube();
         Sampler {
             magnify_nearest: self.mag_nearest,
             minify_nearest: self.min_nearest,
@@ -1312,7 +1337,7 @@ impl SampledTexture {
             maximum_lod: SAMPLER_MAX_LOD,
             wrap_mode_s: if cube { WrapMode::CLAMP_TO_EDGE } else { self.wrap_s },
             wrap_mode_t: if cube { WrapMode::CLAMP_TO_EDGE } else { self.wrap_t },
-            wrap_mode_r: if cube { WrapMode::CLAMP_TO_EDGE } else { WrapMode::REPEAT },
+            wrap_mode_r: if cube { WrapMode::CLAMP_TO_EDGE } else { self.wrap_r },
             mipmap_mode: self.mipmap,
             compare_function: Func::NEVER,
             seamless_cube_map: true,
@@ -1365,13 +1390,14 @@ impl SampledTexture {
     /// The texture descriptor (`pan_sampled_texture_emit`, Mesa 26.2.1
     /// pan_texture.c:1272-1325): 2D (or, for six faces, a cube: `Dimension
     /// = Cube`, the width and height one face's, `Array size` 1, the
-    /// layer count over 6, `pan_texture_get_array_size`, :1198-1217)
+    /// layer count over 6, `pan_texture_get_array_size`, :1198-1217; a 2D
+    /// array's `Array size` is its layer count)
     /// RGBA8 UNORM read through the swizzle, linear (no texel interleave),
     /// its levels from 0, LOD 0 to the last level, the planes, one a face
     /// and level, at `surfaces`.
     pub fn texture(&self, surfaces: u64) -> Texture {
         Texture {
-            dimension: if self.faces == 6 { TextureDimension::CUBE } else { TextureDimension::_2D },
+            dimension: if self.is_cube() { TextureDimension::CUBE } else { TextureDimension::_2D },
             format: self.format,
             width: self.width,
             height: self.height,
@@ -1379,7 +1405,7 @@ impl SampledTexture {
             swizzle: self.swizzle,
             texel_interleave: self.block_bytes != 0,
             levels: self.levels,
-            array_size: 1,
+            array_size: if self.array { self.faces } else { 1 },
             surfaces,
             minimum_lod: 0.0,
             maximum_lod: (self.levels - 1) as f32,
@@ -1452,9 +1478,12 @@ pub struct DrawCall<'a> {
     pub front_cw: bool,
     /// The winding of the faces to cull (triangles only).
     pub cull: Cull,
-    /// The texture the fragment shader samples, when it samples one
-    /// ([`ShaderMeta::samples_texture`]).
-    pub texture: Option<SampledTexture>,
+    /// The textures the fragment shader samples, texture i (and its
+    /// sampler) at index i of the stage's texture and sampler tables
+    /// (`MaliShader::samplers`: GL sampler binding `samplers[i]`'s); empty
+    /// when it samples none ([`ShaderMeta::samples_texture`]). At most
+    /// [`MAX_STAGE_TEXTURES`].
+    pub textures: &'a [SampledTexture],
     /// The texture the vertex shader samples, when it samples one: both
     /// IDVS programs read it from the vertex resource table (Mesa 26.2.1
     /// pan_csf.c:1726-1727 selects the vertex SRT for the varying shader).
@@ -1504,9 +1533,12 @@ pub struct Layout {
     /// samples one.
     pub vs_texture: Option<Block>,
     pub vs_plane: Option<Block>,
+    /// The fragment shader's samplers, one a texture (or the workaround
+    /// sampler), back to back.
     pub fs_sampler: Option<Block>,
-    /// The fragment shader's texture descriptor and its planes (one a
-    /// level), when it samples one.
+    /// The fragment shader's texture descriptors, back to back, and every
+    /// texture's planes (one a layer and level, texture 0's first), when it
+    /// samples one.
     pub fs_texture: Option<Block>,
     pub fs_plane: Option<Block>,
     /// Empty (length 0) when the shader names no sysval.
@@ -2116,15 +2148,16 @@ fn check_draw(d: &DrawCall, ctx: &Context, t: &Target, has_zs: bool) -> Result<(
      * mali-discard.md); the other side effects are not */
     require(!(fs.writes_depth || fs.writes_stencil || fs.writes_coverage || fs.writes_global), NOT_BUILT_FS_EFFECTS)?;
     require(fs.colour_outputs == 1, NOT_BUILT_FS_OUTPUTS)?;
-    if fs.samples_texture != d.texture.is_some() || vs.samples_texture != d.vs_texture.is_some() {
+    if fs.samples_texture == d.textures.is_empty() || vs.samples_texture != d.vs_texture.is_some() {
         return Err(FrameError::Invalid(INVALID_TEXTURE));
     }
-    for t in [d.vs_texture, d.texture].into_iter().flatten() {
+    require(d.textures.len() <= MAX_STAGE_TEXTURES, NOT_BUILT_TEXTURE_SIZE)?;
+    for t in d.vs_texture.iter().chain(d.textures) {
         require(
             (1..=65536).contains(&t.width)
                 && (1..=65536).contains(&t.height)
                 && (1..=MAX_TEXTURE_LEVELS as u32).contains(&t.levels)
-                && (t.faces == 1 || t.faces == 6),
+                && if t.array { (1..=MAX_ARRAY_LAYERS).contains(&t.faces) } else { t.faces == 1 || t.faces == 6 },
             NOT_BUILT_TEXTURE_SIZE,
         )?;
         for l in 0..t.levels {
@@ -2548,17 +2581,21 @@ fn emit_stage_uniforms(
     d: &DrawCall,
     target_height: u32,
     uniforms: &[u32],
-    texture: Option<&SampledTexture>,
+    textures: &[SampledTexture],
 ) -> Result<(Block, u32, Block, Block, Option<Block>), FrameError> {
     let (v, blend) = (&d.viewport, &d.blend_color);
     let flip = d.flip_y.then_some(target_height);
-    /* the stage's one sampler (`panfrost_emit_sampler_descriptors`, Mesa
-     * 26.2.1 pan_cmdstream.c:2024-2043), or with none bound Mesa's one
-     * workaround sampler at its defaults (`panfrost_upload_wa_sampler`,
-     * :2013-2020) */
-    let sampler = desc.alloc(Sampler::LENGTH, Sampler::ALIGN as u64)?;
-    let s = texture.map_or_else(Sampler::default, SampledTexture::sampler);
-    desc.write(sampler, 0, &s.pack()?)?;
+    /* the stage's samplers, sampler i of texture i, one array
+     * (`panfrost_emit_sampler_descriptors`, Mesa 26.2.1
+     * pan_cmdstream.c:2024-2043), or with none bound Mesa's one workaround
+     * sampler at its defaults (`panfrost_upload_wa_sampler`, :2013-2020) */
+    let sampler = desc.alloc(Sampler::LENGTH * textures.len().max(1), Sampler::ALIGN as u64)?;
+    if textures.is_empty() {
+        desc.write(sampler, 0, &Sampler::default().pack()?)?;
+    }
+    for (i, t) in textures.iter().enumerate() {
+        desc.write(sampler, i * Sampler::LENGTH, &t.sampler().pack()?)?;
+    }
     /* the sysval block, 16 bytes a slot, then the UBO table: user UBOs
      * (none) plus the sysval block as the last (pan_cmdstream.c:1397-1432) */
     let sysvals = desc.alloc(16 * m.sysvals.len(), 16)?;
@@ -2636,25 +2673,38 @@ fn emit_stage_uniforms(
     Ok((ubos, ubo_count, sampler, sysvals, push))
 }
 
-/// A stage's texture descriptor (`panfrost_emit_texture_descriptors`, Mesa
-/// 26.2.1 pan_cmdstream.c:1934-1985, the sampler view's descriptor) and its
-/// payload, one plane a face and level, the face outermost ("faces as
-/// extra layers", pan_texture.c:1074-1100: `plane = face * levels +
-/// level`, the board's cubemap dump tools/mali/board-dump/cube-2026-10-20.txt;
+/// A stage's texture descriptors (`panfrost_emit_texture_descriptors`, Mesa
+/// 26.2.1 pan_cmdstream.c:1934-1985: one array, texture i at index i, each
+/// the sampler view's descriptor) and their payloads, each texture's planes
+/// one a layer (or face) and level, the layer outermost ("faces as extra
+/// layers", pan_texture.c:1074-1100: `plane = layer * levels + level`, the
+/// board's cubemap dump tools/mali/board-dump/cube-2026-10-20.txt;
 /// `pan_tex_emit_linear_payload_entry`, pan_texture.c:1003-1062): the
-/// descriptor and the planes.
-fn texture_descriptor(desc: &mut Arena, tex: &SampledTexture) -> Result<(Block, Block), FrameError> {
-    let count = (tex.faces * tex.levels) as usize;
-    let plane = desc.alloc(count * GenericPlane::LENGTH, NullPlane::ALIGN as u64)?;
-    for f in 0..tex.faces {
-        for l in 0..tex.levels {
-            let k = (f * tex.levels + l) as usize;
-            desc.write(plane, k * GenericPlane::LENGTH, &tex.plane(f, l).pack()?)?;
+/// descriptors and every texture's planes, texture 0's first, back to back
+/// (Mesa keeps a view's payload in the view's own buffer).
+fn texture_descriptors(desc: &mut Arena, textures: &[SampledTexture]) -> Result<(Block, Block), FrameError> {
+    let mut planes: Option<Block> = None;
+    let mut surfaces = [0u64; MAX_STAGE_TEXTURES];
+    for (tex, at) in textures.iter().zip(surfaces.iter_mut()) {
+        let count = (tex.faces * tex.levels) as usize;
+        let plane = desc.alloc(count * GenericPlane::LENGTH, NullPlane::ALIGN as u64)?;
+        for f in 0..tex.faces {
+            for l in 0..tex.levels {
+                let k = (f * tex.levels + l) as usize;
+                desc.write(plane, k * GenericPlane::LENGTH, &tex.plane(f, l).pack()?)?;
+            }
         }
+        *at = plane.gpu;
+        /* 32-byte planes on 32 bytes (`NullPlane::ALIGN`): each texture's
+         * follow the one before's in the arena */
+        planes = Some(planes.map_or(plane, |p| Block { len: (plane.gpu + plane.len as u64 - p.gpu) as usize, ..p }));
     }
-    let texture = desc.alloc(Texture::LENGTH, Texture::ALIGN as u64)?;
-    desc.write(texture, 0, &tex.texture(plane.gpu).pack()?)?;
-    Ok((texture, plane))
+    let planes = planes.ok_or(FrameError::Invalid(INVALID_TEXTURE))?;
+    let texture = desc.alloc(Texture::LENGTH * textures.len(), Texture::ALIGN as u64)?;
+    for (i, (tex, at)) in textures.iter().zip(surfaces).enumerate() {
+        desc.write(texture, i * Texture::LENGTH, &tex.texture(at).pack()?)?;
+    }
+    Ok((texture, planes))
 }
 
 /// One Resource entry (pan_encoder.h:232-243): nothing for a count of 0.
@@ -2897,20 +2947,24 @@ fn emit_draw(
      * `panfrost_update_shader_state`'s order (the board's vtxgrid dump puts
      * the texture descriptor before the sampler) */
     let vs_texture = match d.vs_texture {
-        Some(tex) => Some(texture_descriptor(desc, &tex)?),
+        Some(tex) => Some(texture_descriptors(desc, &[tex])?),
         None => None,
     };
     let (vs_ubos, vs_ubo_count, vs_sampler, vs_sysvals, vs_push) =
-        emit_stage_uniforms(desc, &vs.meta, d, t.height, d.vs_uniforms, d.vs_texture.as_ref())?;
+        emit_stage_uniforms(desc, &vs.meta, d, t.height, d.vs_uniforms, d.vs_texture.as_slice())?;
     let fs_state = if fs_required {
-        Some(emit_stage_uniforms(desc, &fs.meta, d, t.height, d.fs_uniforms, d.texture.as_ref())?)
+        Some(emit_stage_uniforms(desc, &fs.meta, d, t.height, d.fs_uniforms, d.textures)?)
     } else {
         None
     };
-    let fs_texture = match (fs_state, d.texture) {
-        (Some(_), Some(tex)) => Some(texture_descriptor(desc, &tex)?),
+    let fs_texture = match fs_state {
+        Some(_) if !d.textures.is_empty() => Some(texture_descriptors(desc, d.textures)?),
         _ => None,
     };
+    /* the fragment tables' counts: Mesa's `sampler_count` and
+     * `sampler_view_count` (pan_cmdstream.c:1940-1942, 2029-2034), the
+     * stage's bound samplers, at least the workaround sampler */
+    let fs_count = d.textures.len().max(1) as u64;
 
     /* csf_get_tiler_desc (pan_csf.c:654-665), filled by
      * csf_emit_tiler_desc (:668-697): once a frame, by its first draw */
@@ -2933,9 +2987,9 @@ fn emit_draw(
         Some((ubos, count, sampler, _, _)) => {
             let r = desc.alloc(RESOURCE_TABLES * Resource::LENGTH, 64)?;
             resource(desc, r, TABLE_UBO, ubos.gpu, u64::from(count))?;
-            resource(desc, r, TABLE_SAMPLER, sampler.gpu, 1)?;
+            resource(desc, r, TABLE_SAMPLER, sampler.gpu, fs_count)?;
             if let Some((texture, _)) = fs_texture {
-                resource(desc, r, TABLE_TEXTURE, texture.gpu, 1)?;
+                resource(desc, r, TABLE_TEXTURE, texture.gpu, fs_count)?;
             }
             Some(r)
         }

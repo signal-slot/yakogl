@@ -130,7 +130,7 @@ fn build_on(
             },
             clear_rgba: Some([0.0, 0.0, 1.0, 1.0]),
             draw: Some(DrawCall {
-                texture: None,
+                textures: &[],
                 vs_texture: None,
                 occlusion_query: None,
                 alpha_to_coverage: false,
