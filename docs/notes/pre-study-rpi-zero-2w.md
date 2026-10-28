@@ -38,11 +38,17 @@ brings, what can be done on the host first, and what is still unknown.
   `brcm,bcm2836-armctrl-ic` at `0x7e00b200`, wired to `local_intc` input 8;
   four `arm,cortex-a53` CPUs with `spin-table` release addresses `0xd8`,
   `0xe0`, `0xe8`, `0xf0`; `mailbox@7e00b880`, `brcm,bcm2835-mbox`, `reg =
-  <0x7e00b880 0x40>`; `hvs@7e400000`, `reg = <0x7e400000 0x6000>`. Neither
-  file has a `v3d`, `pixelvalve`, `hdmi` or `firmware` node: they are in
-  another file (probably `bcm2835-common.dtsi`; not read, a fetch of it was not
-  approved). The kernel `vc4` driver, the power-domain driver and the
-  architecture guide are still unread.
+  <0x7e00b880 0x40>`; `hvs@7e400000`, `reg = <0x7e400000 0x6000>`. `bcm2835-common.dtsi` (same
+  tag) was read too: `v3d@7ec00000`, `brcm,bcm2835-v3d`, `reg = <0x7ec00000
+  0x1000>`, `interrupts = <1 10>` (two cells: interrupt bank, index; the
+  mapping to a flat number is not checked); `pixelvalve@7e206000`,
+  `@7e207000`, `@7e807000` with `interrupts` `<2 13>`, `<2 14>`, `<2 10>`;
+  `hdmi@7e902000`, `reg = <0x7e902000 0x600>, <0x7e808000 0x100>`,
+  `interrupts = <2 8>, <2 9>`; `vec@7e806000` (disabled); a bare `gpu` node,
+  `brcm,bcm2835-vc4`. The V3D node has no `power-domains` or `clocks`
+  property in this file. The `firmware` node is not in these three files
+  (probably `bcm2835-rpi.dtsi`, unread). The kernel `vc4` driver, the
+  power-domain driver and the architecture guide are still unread.
 
 ## 1. The hardware
 
