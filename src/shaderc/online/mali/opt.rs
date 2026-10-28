@@ -214,11 +214,12 @@ pub fn mod_prop_forward(p: &mut Prog<'_>) {
     }
 }
 
-/// The one instruction reading SSA value `v` after position `k`, or None
-/// when none or more than one does (`bi_record_use`'s `multiple`).
+/// The one instruction reading SSA value `v` (written at position `k`),
+/// or None when none or more than one does (`bi_record_use`'s
+/// `multiple`). A loop header's phi reads a value written after it.
 fn single_use(p: &Prog<'_>, k: usize, v: u16) -> Option<usize> {
     let mut found = None;
-    for (j, i) in p.as_slice().iter().enumerate().skip(k + 1) {
+    for (j, i) in p.as_slice().iter().enumerate().filter(|&(j, _)| j != k) {
         if i.srcs().iter().any(|s| s.ssa_value() == Some(v)) {
             if found.is_some() {
                 return None;
@@ -331,7 +332,7 @@ pub fn lower_opt_instructions(p: &mut Prog<'_>) {
             _ => continue,
         };
         let neg_zero = Src { neg: true, ..Src::of(Idx::Const(0)) };
-        *i = Ins { op, clamp: i.clamp, ..Ins::new(op, i.dests(), &[i.src[0], neg_zero]) };
+        *i = Ins { op, clamp: i.clamp, flow: i.flow, block: i.block, ..Ins::new(op, i.dests(), &[i.src[0], neg_zero]) };
     }
 }
 
@@ -356,14 +357,14 @@ pub fn lower_mkvec_swz(p: &mut Prog<'_>) -> Result<(), MaliError> {
             };
             let x = i.src[0].swz(swz);
             *i = if swz == Swz::H01 {
-                Ins { flow: i.flow, ..Ins::new(Op::MovI32, i.dests(), &[x]) }
+                Ins { flow: i.flow, block: i.block, ..Ins::new(Op::MovI32, i.dests(), &[x]) }
             } else {
-                Ins { flow: i.flow, ..Ins::new(Op::IaddV2u16, i.dests(), &[x, Src::of(Idx::Const(0))]) }
+                Ins { flow: i.flow, block: i.block, ..Ins::new(Op::IaddV2u16, i.dests(), &[x, Src::of(Idx::Const(0))]) }
             };
             continue;
         }
         if is_const(&i.src[1], 0) {
-            *i = Ins { flow: i.flow, ..Ins::new(Op::U16ToU32, i.dests(), &[i.src[0]]) };
+            *i = Ins { flow: i.flow, block: i.block, ..Ins::new(Op::U16ToU32, i.dests(), &[i.src[0]]) };
         }
     }
     Ok(())
@@ -385,7 +386,7 @@ pub fn lower_isel(p: &mut Prog<'_>) -> Result<(), MaliError> {
             return Err(MaliError::Defect(super::Defect::Operand));
         }
         let srcs = [i.src[2], Src::of(Idx::Const(0)), i.src[0], i.src[1]];
-        *i = Ins { flow: i.flow, ..Ins::new(Op::CselU32, i.dests(), &srcs) };
+        *i = Ins { flow: i.flow, block: i.block, ..Ins::new(Op::CselU32, i.dests(), &srcs) };
     }
     Ok(())
 }
@@ -408,7 +409,7 @@ pub fn fuse_add_imm(p: &mut Prog<'_>) {
             }
             let Idx::Const(c) = i.src[s].idx else { continue };
             let imm = apply_swizzle(c, i.src[s].swz);
-            *i = Ins { flow: i.flow, slot: i.slot, ..Ins::new(Op::IaddImmI32(imm), i.dests(), &[other]) };
+            *i = Ins { flow: i.flow, slot: i.slot, block: i.block, ..Ins::new(Op::IaddImmI32(imm), i.dests(), &[other]) };
             continue;
         }
         if !matches!(i.op, Op::FaddF32 | Op::FaddV2f16) || i.clamp != clamp::NONE {
@@ -428,7 +429,7 @@ pub fn fuse_add_imm(p: &mut Prog<'_>) {
             imm ^= if i.op == Op::FaddF32 { 1 << 31 } else { 1 << 31 | 1 << 15 };
         }
         let op = if i.op == Op::FaddF32 { Op::FaddImmF32(imm) } else { Op::FaddImmV2f16(imm) };
-        *i = Ins { flow: i.flow, slot: i.slot, ..Ins::new(op, i.dests(), &[other]) };
+        *i = Ins { flow: i.flow, slot: i.slot, block: i.block, ..Ins::new(op, i.dests(), &[other]) };
     }
 }
 
@@ -540,7 +541,8 @@ pub fn cse(p: &mut Prog<'_>) {
         let mut staged = false;
         for d in 0..a.nd as usize {
             let (Idx::Ssa(from, 0), Idx::Ssa(to, 0)) = (a.dest[d].idx, keep.dest[d].idx) else { continue };
-            for i in k + 1..p.n {
+            /* every reader: a loop header's phi stands before the writer */
+            for i in (0..p.n).filter(|&i| i != k) {
                 for s in 0..p.ins[i].ns as usize {
                     if let Idx::Ssa(v, off) = p.ins[i].src[s].idx {
                         if v == from && p.ins[i].is_staging_src(s) {
@@ -718,7 +720,8 @@ mod arrayvec_blocks {
 }
 
 /// `bi_opt_dce` (bi_opt_dce.c): an instruction without side effects whose
-/// values nothing reads is removed.
+/// values nothing reads is removed. A reader may stand before the writer:
+/// a loop header's phi of the body's value.
 pub fn dce(p: &mut Prog<'_>) {
     let mut k = p.n;
     while k > 0 {
@@ -728,7 +731,9 @@ pub fn dce(p: &mut Prog<'_>) {
             continue;
         }
         let read = i.dests().iter().any(|d| match d.idx {
-            Idx::Ssa(v, _) => p.as_slice()[k + 1..].iter().any(|u| u.srcs().iter().any(|s| s.ssa_value() == Some(v))),
+            Idx::Ssa(v, _) => p.as_slice().iter().enumerate().any(|(j, u)| {
+                j != k && u.srcs().iter().any(|s| s.ssa_value() == Some(v))
+            }),
             _ => true,
         });
         if !read {

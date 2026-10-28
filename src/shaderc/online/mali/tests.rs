@@ -1982,6 +1982,8 @@ fn fs_reference_sources() -> Vec<&'static str> {
     /* integer and boolean values, run-time vec4 array reads (#33) */
     srcs.extend(INTBOOL_POPULATION.iter().map(|c| c.2));
     srcs.extend(UNITYPE_POPULATION.iter().map(|c| c.2));
+    /* the loops Mesa keeps (#33) */
+    srcs.extend(LOOP_POPULATION.iter().map(|c| c.2));
     /* a 2D array's size, look-up and fetch (case 42, #33) */
     srcs.push(include_str!("../../../../tools/shaders/es300/array.frag"));
     srcs
@@ -4780,6 +4782,61 @@ fn case_79_idiv_is_byte_equal_to_mesa_26_2_1() {
 #[test]
 fn intloop_idiv_is_byte_equal_to_mesa_26_2_1() {
     check_intbool("idiv");
+}
+
+/* ---- loops Mesa keeps (#33) ------------------------------------------ */
+
+/// The loops a run-time bound keeps (docs/notes/mali-loop-break.md, Part
+/// 2; plan #154 loops-rt): each pair against its drm-shim reference,
+/// every region and fact ([`check_program_for`]).
+const LOOP_POPULATION: [(&str, &str, &str, &str); 1] = [
+    /* `for (int i = 0; i < n; i++)` with `n` an `int` of a varying: the
+     * header's `ICMP_OR.s32.ge.m1` of the counter and the bound, its
+     * `BRANCHZ` (inverted by `bi_opt_control_flow`) to the exit, the body
+     * `s += g + float(i); i++` and the back `JUMP`; `s` and `i` carried in
+     * r4 and r5, each written in place by its update */
+    ("loop_exit", td!("intloop_loop_exit.vert"), td!("intloop_loop_exit.frag"), td!("intloop_loop_exit.expect.json")),
+];
+
+/// The population's member `name` against its reference.
+fn check_loop(name: &str) {
+    let (_, vs, fs, json) = LOOP_POPULATION.iter().find(|c| c.0 == name).expect("a member");
+    check_program_for(name, vs, fs, json, false);
+}
+
+#[test]
+fn intloop_loop_exit_is_byte_equal_to_mesa_26_2_1() {
+    check_loop("loop_exit");
+}
+
+/// A builtin pair whose fragment shader reads no varying: vid.vert's
+/// position program alone ([`cases_45_and_98_vertex_programs_are_byte_equal_to_mesa_26_2_1`])
+/// and the fragment program, against the reference drawn with
+/// `--uniform-values` ([`uniform_value`]).
+fn check_builtin_loop(vs: &str, fs: &str, json: &str) {
+    let v = {
+        let _k = store::test_keep();
+        store::with_scratch(|s| {
+            super::compile_vs_for_reads(vs.as_bytes(), &[], &[], s, store::keep()).map(|(sh, _)| stage_of(&sh))
+        })
+        .expect("the scratch arena is free")
+        .expect("the vertex shader compiles for a program that reads no varying")
+    };
+    check_vs_stage(&v, vs, fs, json, VIEWPORT_64X64);
+    let f = compile(SHC_STAGE_FRAGMENT, fs).expect("the fragment shader compiles");
+    check_fs_stage(&f, vs, fs, json, VIEWPORT_64X64);
+}
+
+/// Case 98 (uniloop): `for (int i = 0; float(i) < count; i++) { n += 1.0;
+/// last = i; }` with `int last = -1`: three carried values (`n` r0, `last`
+/// r1, `i` r2), the header's `MOV.i32 r3, r2` (the counter read after its
+/// register is overwritten by `float(i)`), the latch's `IADD_IMM r2, r3,
+/// #1` and `MOV.i32 r1, r3^` (`last = i`); the `-1` an `IADD_IMM
+/// #0xFFFFFFFF`; the epilogue's `mod`, `floor` and `min` and the compare
+/// of `last + 1` and `int(n)`.
+#[test]
+fn builtin_98_is_byte_equal_to_mesa_26_2_1() {
+    check_builtin_loop(td!("builtin_98.vert"), td!("builtin_98.frag"), td!("builtin_98.expect.json"));
 }
 
 /* ---- run-time vec4 array reads (#33) -------------------------------- */

@@ -696,6 +696,13 @@ fn allocate_in(p: &mut Prog<'_>, scratch: &Arena<'_>, blend: bool) -> Result<u8,
     if !l.solve() {
         return Err(MaliError::Spill);
     }
+    #[cfg(test)]
+    if std::env::var("YAKOGL_DUMP").is_ok() {
+        for (k, i) in p.as_slice().iter().enumerate() {
+            std::eprintln!("ra {k} b{} {:?} d{:?} s{:?}", i.block, i.op, &i.dest[..i.nd as usize], &i.src[..i.ns as usize]);
+        }
+        std::eprintln!("sol {:?}", &l.solutions[..n]);
+    }
     /* bi_install_registers (bi_ra.c:577-590) */
     let reg = |idx: Idx| -> Result<Idx, MaliError> {
         match idx {

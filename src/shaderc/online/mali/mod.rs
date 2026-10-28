@@ -812,10 +812,22 @@ fn finish_passes(
     marks: &mut Marks,
 ) -> Result<Compiled, MaliError> {
     fau::push_ubo(p, fau_layout, fragment, ubo)?;
+    #[cfg(test)]
+    let dump = |p: &Prog<'_>, t: &str| {
+        if std::env::var("YAKOGL_DUMP").is_ok() {
+            for (k, i) in p.as_slice().iter().enumerate() {
+                std::eprintln!("{t} {k} b{} {:?} d{:?} s{:?}", i.block, i.op, &i.dest[..i.nd as usize], &i.src[..i.ns as usize]);
+            }
+        }
+    };
+    #[cfg(test)]
+    dump(p, "sel");
     /* bifrost_compile.c `bi_compile_variant_nir`, in its order */
     opt::mod_prop_forward(p);
     opt::mod_prop_backward(p);
     opt::dce(p);
+    #[cfg(test)]
+    dump(p, "dce");
     fau::reorder_push(p, fau_layout)?;
     opt::lower_opt_instructions(p);
     opt::lower_mkvec_swz(p)?;
@@ -826,7 +838,11 @@ fn finish_passes(
     if fragment {
         flow::analyze_helper_requirements(p);
     }
+    #[cfg(test)]
+    dump(p, "presched");
     sched::pressure_schedule(p, scratch)?;
+    #[cfg(test)]
+    dump(p, "sched");
     if p.n == 0 {
         return Ok(Compiled { words: 0, preload: 0, work_reg_count: 0 });
     }

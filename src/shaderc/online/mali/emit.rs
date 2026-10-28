@@ -36,7 +36,7 @@ const fn row(op: Alu, bits: u8, width: u8) -> Row {
 }
 
 /// The rows [`emit`] selects, each with the `bi_emit_alu` case it is.
-pub const ROWS: [(Row, &str); 75] = [
+pub const ROWS: [(Row, &str); 76] = [
     (row(Alu::Fadd, 32, 1), "nir_op_fadd: FADD.f32"),
     (row(Alu::Fmul, 32, 1), "nir_op_fmul: FMA.f32 a, b, -0.0"),
     (row(Alu::Ffma, 32, 1), "nir_op_ffma: FMA.f32"),
@@ -156,6 +156,8 @@ pub const ROWS: [(Row, &str); 75] = [
      * tools/mali/testdata/intbig_case42: `ICMP_OR.v2u16.eq.m1 r1, r2^.h00,
      * 0x0, 0x0`) */
     (row(Alu::Icmp(Cmpf::Eq), 16, 1), "nir_op_ieq_pan of one 16-bit lane: ICMP_OR.v2u16.eq.m1 a.h00, b"),
+    /* a kept loop's `float(n)` of `int n = int(x)` (intloop_loop_exit) */
+    (row(Alu::Ftrunc, 32, 1), "nir_op_ftrunc: FROUND.f32.rtz"),
 ];
 
 /// A source of a one-lane 16-bit operation: its lane's half in both
@@ -209,6 +211,7 @@ pub fn emit(p: &mut Prog<'_>, row: Row, s: &[Src]) -> Result<u16, MaliError> {
         (Alu::Frsq, 32, 1) => ins(p, Op::FrsqF32, &s[..1])?,
         (Alu::Ffloor, 32, 1) => ins(p, Op::FroundF32 { round: Round::Rtn }, &s[..1])?,
         (Alu::Fceil, 32, 1) => ins(p, Op::FroundF32 { round: Round::Rtp }, &s[..1])?,
+        (Alu::Ftrunc, 32, 1) => ins(p, Op::FroundF32 { round: Round::Rtz }, &s[..1])?,
         /* `bi_fcmp_to(.., BI_RESULT_TYPE_M1)` (:3267-3272), already in the
          * `_OR` form va_lower_isel gives it, the third source zero */
         (Alu::Fcmp(cmpf), 32, 1) => ins(p, Op::FcmpOrF32 { cmpf, result: ResultType::M1 }, &[s[0], s[1], ZERO])?,
