@@ -2,11 +2,12 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Mesa and chains of three or more additions / multiplications (do_rebalance_tree)
 
-Valhall online compiler (`src/shaderc/online/mali`) refuses
+Valhall online compiler (`src/shaderc/online/mali`) refused
 `MaliError::Rebalance` ("three or more additions or multiplications in a
 chain (GLSL's do_rebalance_tree reassociates such a tree) is not lowered
 yet", `nir.rs` `refuse_rebalanced`) for `tools/shaders/es100/matattr3.vert`,
-`es100/matattr4.vert` and `gltest/mulone_fs_mods.frag`. This note records what
+`es100/matattr4.vert` and `gltest/mulone_fs_mods.frag`; since plan #154's
+chains item all three are byte-equal (the last section). This note records what
 Mesa 26.2.1 (panfrost, drm-shim, GPU_ID 0xa867) emits for them. **Finding: in
 all three, `do_rebalance_tree` does not rebalance anything.** The refusal is
 over-eager; the chains are lowered in the source's order (matattr3/4) or by
@@ -181,44 +182,77 @@ same shader from the algebraic-folds study. Which FAU word is
 which uniform is the JSON's `fau` list (u2/u3 are uniform pairs of this
 program); it was not decoded further here.
 
-## What nir.rs would have to do
+## The lowering (`glsl.rs`, plan #154 chains)
 
-`refuse_rebalanced` flags any chain of three `Fadd`/`Fmul` nodes whose links
-are single-use and equal-width. The three programs show it is both too
-broad and, as applied, unnecessary here:
+`MaliError::Rebalance` used to be raised by `nir.rs` `refuse_rebalanced` for
+any chain of three single-use `Fadd`/`Fmul` links. It is gone; the two GLSL
+passes are now done on the front end's IR before either builder runs
+(`src/shaderc/online/mali/glsl.rs`, called from `mod.rs`
+`compile_module_on` and `vs_constants`), in Mesa's order (one
+`do_common_optimization` at compile time, glsl_parser_extras.cpp:2291:
+rebalance, then algebraic):
 
-1. **Ignore trees GLSL would not rebalance.** The IR has lost which values
-   came from `ir_dereference_array`, from two constants, or from a
-   single-component swizzle pair. For matattr3/4 the chain is built from
-   attribute-column loads and is in the order the program was written;
-   emitting it in source order (`fadd(fadd(fadd(a, b), c), d)` with
-   Mesa's operand order `late-loaded, earlier-loaded`) is byte-equal. A rule
-   "refuse only when the source tree is a pure reduction of >2 expression nodes
-   with no array deref and at most one constant" needs the front end (lower.rs)
-   to record, per Fadd/Fmul, that its operands were written as a tree
-   (`num_expr`), whether an operand came from an array deref
-   (matrix column of an attribute), and the count of constants in the tree
-   before `x * 1.0` folding.
-2. **Constant motion.** For `op(const, tree)` or `op(tree, const)` of one
-   operation, GLSL's `reassociate_constant` (see step 3 above) swaps the
-   constant with the operand of the first sub-expression that has a constant
-   operand; for `((b * 1.0) * q) * 8.0` the result is `(8 * q) * b`. The
-   builder must apply this (on the tree as written, before `* 1.0` is
-   dropped, since the `1.0` is what the swap pairs the `8.0` with) and drop
-   `x * 1.0` as NIR does (l.292, l.162). NIR's own rule l.2394 never fires on
-   the result.
-3. **Do the real rebalance where it applies.** The DSW pair
-   (`tree_to_vine` / `vine_to_tree`) is small; sel_u_rebalance (the existing
-   reference, `tests.rs` `a_chain_of_additions_is_mesa_s_rebalanced_tree`)
-   is the case where it does apply. Implement it on the (add or mul) node
-   tree before NIR lowering, with the rejection list of step 2 of the
-   previous section; then the refusal can go.
-4. Everything else (viewport `ffma`, f16 packing, FAU packing of constants)
-   is already what the existing alu_* references cover.
+1. **What the IR keeps.** A local, a uniform and an input are loads at each
+   read, so GLSL's variable dereferences are visible: a leaf of a tree is
+   a load or a constant, an expression is an ALU value whose one use is an
+   ALU operand. A matrix input or uniform, an array element (`LoadLocal`
+   with an index, `LoadUniformIdx`, a uniform array) or a struct member is
+   an array/record dereference: no reduction (matattr3/4's columns).
+2. **Which rvalue is a candidate.** The rebalance visitor does not handle a
+   whole assignment's right-hand side (`visit_enter(ir_assignment)`,
+   opt_rebalance_tree.cpp:151-163), but its operands, and every other
+   rvalue. A constructor's lane is `vec_ctor.x = swizzle(arg)`
+   (ast_function.cpp:1619-1632): the swizzle's operand is a candidate. In
+   the IR a whole right-hand side is a value whose one use is a
+   `StoreLocal` of every lane of the local (or a `StoreOutput` of every
+   lane of the output) with an identity swizzle; a constructor's
+   `StoreLocal` writes some lanes only. So matattr3's `float off = ...` (5
+   adds) is not rebalanced (and its 4-add operand reads matrix columns),
+   sel_u_rebalance's `vec4(a_pos.x + u0.x + u1.x + u2.x, ..)` is.
+3. **The rebalance.** `is_reduction` (:201-257) over the tree: one
+   operation (`fadd` or `fmul`; `a - b` is the front end's `fadd(a,
+   fneg(b))`, GLSL's `ir_binop_sub`, no reduction), one width, at most one
+   constant, no dereference that ends it, more than two expressions; then
+   `tree_to_vine` / `vine_to_tree` (:70-123) transcribed, and the visitor
+   goes on into the new tree's operands. The result is written over the
+   tree's instructions in post-order (the order glsl_to_nir emits), each
+   leaf load where it is first read; the tree's value keeps the root's id.
+   dep4's `(x + y + z + w) * 0.25` becomes `(x + y) + (z + w)`
+   (`intbig_case184_dep4.expect.json`: `FADD r1, r4^, r1^`, `FADD r0, r2^,
+   r0^`, `FADD r0, r1^, r0^`), sel_u_rebalance's lane `(a_pos.x + u0.x) +
+   (u1.x + u2.x)`.
+4. **The constant swap.** `do_algebraic`'s `reassociate_constant`
+   (opt_algebraic.cpp:175-216, `reassociate_operands` :148-166), bottom-up
+   over every `fadd`/`fmul`, on the tree as written: the outer constant
+   swaps with the operand beside the first constant found operand 0 first,
+   and the two constants fold (NIR's `nir_opt_constant_folding`; GLSL
+   26.2.1 has no constant folding of its own). `((u_b * 1.0) * u_q) * 8.0`
+   becomes `((8.0 * 1.0) * u_q) * u_b`, then `(8.0 * u_q) * u_b`; the `1.0`
+   is what the `8.0` meets, so the swap must come before `x * 1.0` is
+   dropped, which stays NIR's (`Nir::alu`'s identity rule, l.292/l.162).
+   `2.0 * (u_q * 3.0)` is `u_q * 6.0` the same way (algfold_constmul).
+5. **What stays refused, by name.** A tree that would be rebalanced but
+   reads a local `do_tree_grafting` may graft (assigned once, whole, and
+   read once: opt_tree_grafting.cpp:389-401), a multi-use value or a
+   texture result as a leaf, or a swizzled sub-expression, is
+   `Rebalance` (the IR does not say what GLSL had there); only trees the
+   old refusal also refused (three or more links), so no verdict moves
+   back. A constant moved across a change of width (`vec2(3.0) * (q *
+   0.75)`) is `ArithConstant`. An assignment to an `invariant` output is
+   skipped by both passes, as in Mesa.
 
-Caveat: the NIR text above is the final NIR of the compile, so which pass made
-each step is inferred from the passes' source (Mesa 26.2.1 line numbers above)
-and from the reference words, not traced rule by rule (no IR dump between
-passes was taken). That `x * 1.0` is removed in NIR and not in GLSL, and that
-`(8 * q) * b` is the `reassociate_constant` swap, follow from the source plus
-the words; a minimal shader with only one of the two would pin each by itself.
+References pinned (`tests.rs`): `the_chain_population_is_byte_equal_to_mesa_26_2_1`
+(chain_matattr3/4, varyconst_63_matattr, chain_mulone_fs_mods,
+chain_min_mulone, chain_min_reassoc, algfold_189_mods, the algfold folds,
+case 192's four, sel_u_rebalance, algfold_189_half and algfold_189_mulone),
+`case_184_programs_are_byte_equal_to_mesa_26_2_1`
+(dep1/2/4), and the IR shapes in `glsl_rebalances_the_trees_it_takes` and
+`glsl_reassociates_a_constant_into_the_product_beside_another`. The two
+minimal references settle the caveat this note had: `chain_min_mulone`
+(`u_x * 1.0`, drawn without `--uniform-values`) keeps no multiply, so
+`x * 1.0` goes in NIR; `chain_min_reassoc` (`8.0 * u_q * u_b`) is the
+source's order, so `(8 * q) * b` in mods is the swap, not NIR l.2394.
+
+Not covered: the other reduction operations (`min`, `max`, the integer
+and boolean ones) are neither rebalanced nor refused, as before; no
+reference draws a chain of them.

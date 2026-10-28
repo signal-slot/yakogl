@@ -167,6 +167,10 @@ third_party/zephyr-pr114866-2026-07-29-2473da6b (entry 11).
       nir_opt_move.c, nir_lower_viewport_transform.c and the fusion rules
       of nir_opt_algebraic.py, Copyright (C) 2014-2025 Intel Corporation,
       Valve Corporation, Collabora Ltd.; Apache-2.0 AND MIT.
+      src/shaderc/online/mali/glsl.rs: transcribed from src/compiler/glsl/
+      opt_rebalance_tree.cpp (tree_to_vine, vine_to_tree, is_reduction) and
+      opt_algebraic.cpp (reassociate_constant), Copyright (C) 2010-2014
+      Intel Corporation; Apache-2.0 AND MIT.
 
    e. Third-party files inside third_party/mesa-26.2.1/ that are not MIT
       (their own headers say so; unmodified; the host reference builds use
