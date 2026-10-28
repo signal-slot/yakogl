@@ -871,7 +871,7 @@ pub struct StageCode<'s> {
     /// each): the population tests.rs references.
     pub prods: u32,
     /// The rows of emit.rs the fragment graph selected ([`emit::bit`]).
-    pub rows: u64,
+    pub rows: u128,
     /// What this compile used of each [`Table`], in [`Table::ALL`]'s order.
     pub marks: [usize; Table::ALL.len()],
     /// The position slot, then the generic varyings.

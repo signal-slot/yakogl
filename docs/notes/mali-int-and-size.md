@@ -49,8 +49,46 @@ Mali compiler (`src/shaderc/online/mali`) does for them:
 - **Integers of fp16 varying lanes** (`intloop_int_compare`, byte-equal):
   `docs/notes/mali-int-loops.md`, "State since plan #154 item intbool".
 
-Case 79 (integer division) and case 42 stay refused (intbool-2): 79 at
-`idiv.frag`'s division (`IntValue`), 42 at `array.frag`'s `textureSize`
+## Since plan #154 item intbool-2
+
+Case 79 compiles byte-equal in both stages
+(`case_79_idiv_is_byte_equal_to_mesa_26_2_1`; `intloop_idiv`, the same
+pair recorded for the loop study, `intloop_idiv_is_byte_equal_to_mesa_26_2_1`;
+`intbig_case79.expect.json` is `pan_ref_diff.py extract <trace> --draw`
+of the trace below):
+
+- **The division** (`Fs::idiv`, nir_fs.rs) is `nir_lower_idiv`'s sequence
+  node for node in the order of `intbig_case79.stderr` (`%13`..`%68`):
+  `iabs` of both, `ixor` for the sign, `u2f32` (`U32_TO_F32`), `frcp`,
+  `fmul` by `0x4f7ffffe`, `f2u32` (`F32_TO_U32.rtz`), then two
+  `umul_high` of 16-bit halves (`extract_u16` = `U16_TO_U32 x.hN`, four
+  `imul`s and the carries, `Fs::umul_high`), the remainder by `imul` and
+  `isub`, two corrections (`uge_pan` = `ICMP_OR.u32.ge`, `b2i32`, `iadd`;
+  the first `b2i32` a `CSEL` because its compare also picks the
+  remainder, the second folded into its compare as `.i1` by
+  `bi_optimizer_result_type`, opt.rs), and the sign (`ineg` = `ISUB.s32
+  0, x`, `ilt_pan`, `bcsel` = `CSEL`).
+- **A constant numerator** (`100 / ..`) folds as NIR does: `iabs(100)`,
+  the constant's halves, the products with its zero high half; the high
+  half of a half, `extract_u16(extract_u16(c, 1), 1)`, is the zero Mesa's
+  BIR folds only after selection, so its sum stays: `IADD_IMM.i32 r4,
+  r4^, #0x0` (`Fs::iop`, `Fs::umul_high`).
+- **The operands**: `u_d.xy * 10.0` is one `FMA.v2f16` of the uniform's
+  word and `abs(u_d.zw)` one `FADD.v2f16 .abs` (two consecutive dwords of
+  an fp16 uniform pair like a varying's lanes, `int_source_pairs`), and
+  `abs(u_d.x * 10.0)` the lone `FADD.v2f16 r2, r4^.abs.h00` of the
+  product's low half (`lone_abs`), each read by `F16_TO_S32.rtz`.
+- **The colour**: `float(q.x) / 4.0` is fp32 (`S32_TO_F32`, an fp32
+  `fmul`: lower_precision lowers no conversion from an integer, the
+  walk's fp32 arm), narrowed at the store, the program
+  `select_highp`'s as a colour of masks (`mask_colour`).
+
+Case 42 stays refused at `array.frag`'s `textureSize` (the texture
+refusal; `TexKind`). Case 80 stays refused (docs/notes/mali-uniform-types.md,
+section 7).
+
+Before intbool-2: case 79 (integer division) and case 42 stayed refused: 79
+at `idiv.frag`'s division (`IntValue`), 42 at `array.frag`'s `textureSize`
 (the texture refusal). Cases 80, 100 and 116 are no longer refused by an
 integer: 80's fragment shader stops at the chain refusal (`do_rebalance_tree`),
 100's two stages and 116's vertex stage at the run-time uniform index

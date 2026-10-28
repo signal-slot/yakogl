@@ -384,6 +384,17 @@ pub enum Op {
     /// `IMUL.i32` (`nir_op_imul`, bifrost_compile.c:3367-3369: the low word
     /// of the product).
     ImulI32,
+    /// `ISUB.s32 dest, a, b` (`nir_op_isub`; `nir_op_ineg` as `0 - a`,
+    /// bifrost_compile.c:3351-3357).
+    IsubS32,
+    /// `U32_TO_F32` (`nir_op_u2f32` of a 32-bit source,
+    /// bifrost_compile.c:3171-3172).
+    U32ToF32,
+    /// `F32_TO_U32.rtz` (`nir_op_f2u32`, bifrost_compile.c:3137-3150).
+    F32ToU32,
+    /// `LSHIFT_XOR.i32 dest, a, b, shift` (`nir_op_ixor` with the shift the
+    /// byte 0, bifrost_compile.c:3383-3385).
+    LshiftXorI32,
     /// `FROUND.f32` with the rounding mode (`ffloor`: `.rtn`, `fceil`:
     /// `.rtp`).
     FroundF32 {
@@ -751,6 +762,12 @@ pub const fn src_info(op: Op, s: usize) -> SrcInfo {
         (Op::MuxI32 | Op::MuxBitI32 | Op::CselU32 | Op::CselS32 { .. }, 0..=3) => info(false, false, false, false, 32),
         /* IABS.s32 and IMUL.i32: integer sources that widen (valhall.c) */
         (Op::IabsS32, 0) | (Op::ImulI32, 0..=1) => info(false, false, true, false, 32),
+        /* ISUB.s32 widens its sources as IADD.s32; U32_TO_F32 and
+         * F32_TO_U32 read a plain word, F32_TO_U32's float with abs and
+         * neg as F32_TO_S32's (valhall.c) */
+        (Op::IsubS32, 0..=1) => info(false, false, true, false, 32),
+        (Op::U32ToF32, 0) => info(false, false, false, false, 32),
+        (Op::F32ToU32, 0) => info(true, false, false, false, 32),
         /* the coordinates: absneg and widen, as FMA.f32's (valhall.c
          * CUBEFACE1, CUBEFACE2_V9, CUBE_SSEL, CUBE_TSEL); the face index a
          * plain word */
@@ -789,15 +806,33 @@ pub const fn src_info(op: Op, s: usize) -> SrcInfo {
         /* LSHIFT_AND.i32: the value (widen), then, swapped by va_swap_12,
          * BIR's mask is Valhall's third source (32 bits, notted) and BIR's
          * shift its second (an 8-bit `lanes` source) */
-        (Op::LshiftAndI32 | Op::LshiftOrI32 | Op::RshiftAndI32 | Op::RshiftOrI32 | Op::ArshiftOrI32, 0) => {
-            info(false, false, true, false, 32)
-        }
-        (Op::LshiftAndI32 | Op::LshiftOrI32 | Op::RshiftAndI32 | Op::RshiftOrI32 | Op::ArshiftOrI32, 1) => {
-            info(false, false, false, false, 32)
-        }
-        (Op::LshiftAndI32 | Op::LshiftOrI32 | Op::RshiftAndI32 | Op::RshiftOrI32 | Op::ArshiftOrI32, 2) => {
-            SrcInfo { lanes: true, ..info(false, false, false, false, 8) }
-        }
+        (
+            Op::LshiftAndI32
+            | Op::LshiftOrI32
+            | Op::LshiftXorI32
+            | Op::RshiftAndI32
+            | Op::RshiftOrI32
+            | Op::ArshiftOrI32,
+            0,
+        ) => info(false, false, true, false, 32),
+        (
+            Op::LshiftAndI32
+            | Op::LshiftOrI32
+            | Op::LshiftXorI32
+            | Op::RshiftAndI32
+            | Op::RshiftOrI32
+            | Op::ArshiftOrI32,
+            1,
+        ) => info(false, false, false, false, 32),
+        (
+            Op::LshiftAndI32
+            | Op::LshiftOrI32
+            | Op::LshiftXorI32
+            | Op::RshiftAndI32
+            | Op::RshiftOrI32
+            | Op::ArshiftOrI32,
+            2,
+        ) => SrcInfo { lanes: true, ..info(false, false, false, false, 8) },
         /* the byte offset, then the mode descriptor (va_pack.c:746-769) */
         (Op::LdPka { .. }, 0..=1) => info(false, false, false, false, 32),
         (Op::LdTile { .. }, 0..=2) => info(false, false, false, false, 32),
@@ -849,6 +884,8 @@ pub const fn nr_srcs(op: Op) -> usize {
         | Op::F16ToS32
         | Op::U8ToF32
         | Op::IabsS32
+        | Op::U32ToF32
+        | Op::F32ToU32
         | Op::LeaBufImm { .. }
         | Op::LdVarBufImmF32 { .. }
         | Op::LdVarSpecialF32 { .. }
@@ -861,6 +898,7 @@ pub const fn nr_srcs(op: Op) -> usize {
         | Op::FminF32
         | Op::FminV2f16
         | Op::IaddS32
+        | Op::IsubS32
         | Op::ImulI32
         | Op::V2f32ToV2f16
         | Op::MkvecV2i16
@@ -869,6 +907,7 @@ pub const fn nr_srcs(op: Op) -> usize {
         Op::LdAttrImm { .. } | Op::Blend { .. } | Op::BranchzI { .. } | Op::LdPka { .. } => 2,
         Op::LshiftAndI32
         | Op::LshiftOrI32
+        | Op::LshiftXorI32
         | Op::RshiftAndI32
         | Op::RshiftOrI32
         | Op::ArshiftOrI32
@@ -885,7 +924,16 @@ pub const fn nr_srcs(op: Op) -> usize {
 /// `valhall_opcodes[op].is_signed` (valhall.py:198: the name's type, after
 /// its dot, has an `s`; `ICMP_OR.u32` has none).
 pub const fn is_signed(op: Op) -> bool {
-    matches!(op, Op::ShaddxS64 | Op::IaddS32 | Op::IcmpOrS32 { .. } | Op::CselS32 { .. } | Op::IabsS32 | Op::S16ToS32)
+    matches!(
+        op,
+        Op::ShaddxS64
+            | Op::IaddS32
+            | Op::IsubS32
+            | Op::IcmpOrS32 { .. }
+            | Op::CselS32 { .. }
+            | Op::IabsS32
+            | Op::S16ToS32
+    )
 }
 
 /// One instruction (`bi_instr`).

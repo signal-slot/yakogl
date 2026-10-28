@@ -610,6 +610,10 @@ const F32_ONE: u32 = 0x3f80_0000;
 const F32_MINUS_ONE: u32 = 0xbf80_0000;
 const F32_NEG_ZERO: u32 = 0x8000_0000;
 const F32_TWO: u32 = 0x4000_0000;
+/// `nir_lower_idiv`'s scale of the divisor's reciprocal, 4294966784.0 (the
+/// largest float below 2^32: the estimate never overshoots;
+/// intbig_case79.stderr's `fmul %17, %18 (4.294967e+09)`).
+const IDIV_RCP_SCALE: u32 = 0x4f7f_fffe;
 /// 2.0 in both halves of an fp16 pair.
 const F16X2_TWO: u32 = 0x4000_4000;
 
@@ -680,7 +684,7 @@ pub struct Fs<'s> {
     look_ups: [TexLookup; MAX_LOOK_UPS],
     nlook: usize,
     /// The rows of emit.rs selected ([`emit::bit`]).
-    pub rows: u64,
+    pub rows: u128,
     /// The pair nodes the colour took (its use of [`MAX_PAIRS`]).
     pub npairs: usize,
     /// gl_FragCoord's x and y once the shader reads it ([`Fs::frag_coord`]),
@@ -1117,12 +1121,125 @@ impl<'s> Fs<'s> {
              * of `i <= 1`) */
             AluOp::Ile => self.int32(Alu::Icmp(Cmpf::Ge), [q, p, u], at),
             AluOp::Ieq => self.int32(Alu::Icmp(Cmpf::Eq), [p, q, u], at),
+            /* case 79's `int(abs(u_d.z)) + 1` (`IADD_IMM.i32 r1, r1^, #0x2`
+             * once fused), `float(q.x)` (an fp32 value: lower_precision
+             * lowers no conversion from an integer, intbig_case79.stderr's
+             * `i2f32` then `fmul` at 32 bits) and the division */
+            AluOp::Iadd if !self.mask_lane(p) && !self.mask_lane(q) => self.int32(Alu::Iadd, [p, q, u], at),
+            AluOp::I2f if !self.mask_lane(p) => self.op32(Alu::I2f, [p, u, u], at),
+            AluOp::Idiv if !self.mask_lane(p) && !self.mask_lane(q) => self.idiv(p, q, at),
             /* `!=` of run-time integers (tri_int's `ine`, whose fp16 operands
              * feed fp32 integer arithmetic, not lowered), the arithmetic,
              * and the mixes of a boolean and its negation (`iand(a,
              * inot(a))`): no reference compiles */
             _ => Err(MaliError::IntValue),
         }
+    }
+
+    /// One 32-bit integer node of [`Fs::idiv`], folded as NIR's constant
+    /// folding and algebraic rules leave it: a constant's half
+    /// (`extract_u16`), a product with 0, a sum with 0, and
+    /// `extract_u16(extract_u16(a, 1), 0)` as its source (the half is all
+    /// the word holds).
+    fn iop(&mut self, op: Alu, a: Val, b: Val, at: usize) -> Result<Val, MaliError> {
+        let c = |v: Val| match v {
+            Val::Const(c) => Some(c),
+            _ => None,
+        };
+        let k = |x: u32| Ok(Val::Const(x));
+        match (op, c(a), c(b)) {
+            (Alu::Imul, Some(p), Some(q)) => return k(p.wrapping_mul(q)),
+            (Alu::Imul, Some(0), _) | (Alu::Imul, _, Some(0)) => return k(0),
+            (Alu::Iadd, Some(p), Some(q)) => return k(p.wrapping_add(q)),
+            (Alu::Iadd, Some(0), _) => return Ok(b),
+            (Alu::Iadd, _, Some(0)) => return Ok(a),
+            (Alu::Isub, Some(p), Some(q)) => return k(p.wrapping_sub(q)),
+            (Alu::Ixor, Some(p), Some(q)) => return k(p ^ q),
+            (Alu::Ineg, Some(p), _) => return k(p.wrapping_neg()),
+            (Alu::Iabs, Some(p), _) => return k((p as i32).unsigned_abs()),
+            (Alu::Extract16(h), Some(p), _) => return k(p >> (16 * u32::from(h)) & 0xffff),
+            _ => {}
+        }
+        if let (Alu::Extract16(0), Some((Alu::Extract16(1), _))) = (op, self.alu_of(a)) {
+            return Ok(a);
+        }
+        self.int32(op, [a, b, Val::Undef], at)
+    }
+
+    /// `umul_high(x, y)` as `nir_lower_idiv` builds it for a GPU without a
+    /// high multiply (`nir_umul_high` lowered by `lower_umul_high` into the
+    /// 16-bit halves' four products and their carries, the order of
+    /// intbig_case79.stderr's `%23`..`%38`). With a constant `x` (`100 /
+    /// ..`) the folds leave two products (`%160`..`%168`), and the high
+    /// half of a half, `extract_u16(extract_u16(c, 1), 1)`, is the zero
+    /// Mesa's BIR folds only after selection: its sum stays, `IADD_IMM.i32
+    /// r4, r4^, #0x0`.
+    fn umul_high(&mut self, x: Val, y: Val, at: usize) -> Result<Val, MaliError> {
+        let u = Val::Undef;
+        let x0 = self.iop(Alu::Extract16(0), x, u, at)?;
+        let y0 = self.iop(Alu::Extract16(0), y, u, at)?;
+        let x1 = self.iop(Alu::Extract16(1), x, u, at)?;
+        let y1 = self.iop(Alu::Extract16(1), y, u, at)?;
+        let p00 = self.iop(Alu::Imul, x0, y0, at)?;
+        let p01 = self.iop(Alu::Imul, x0, y1, at)?;
+        let p10 = self.iop(Alu::Imul, x1, y0, at)?;
+        let p11 = self.iop(Alu::Imul, x1, y1, at)?;
+        let carry = self.iop(Alu::Extract16(1), p00, u, at)?;
+        let s1 = self.iop(Alu::Iadd, p10, carry, at)?;
+        let s1l = self.iop(Alu::Extract16(0), s1, u, at)?;
+        let late = matches!(self.alu_of(s1), Some((Alu::Extract16(1), _)));
+        let s1h = if late { Val::Const(0) } else { self.iop(Alu::Extract16(1), s1, u, at)? };
+        let s2 = self.iop(Alu::Iadd, p01, s1l, at)?;
+        let s2h = self.iop(Alu::Extract16(1), s2, u, at)?;
+        let t = if late { self.int32(Alu::Iadd, [s2h, s1h, u], at)? } else { self.iop(Alu::Iadd, s2h, s1h, at)? };
+        self.iop(Alu::Iadd, p11, t, at)
+    }
+
+    /// `n / d` of two 32-bit signed integers, `nir_lower_idiv`'s sequence
+    /// (nir_lower_idiv.c, `emit_udiv` under `nir_lower_idiv_fast`'s
+    /// absence: the reciprocal estimate by `frcp` scaled by `0x4f7ffffe`,
+    /// refined once by `umul_high`, the quotient by another, then two
+    /// corrections and the sign), node for node in the order of case 79's
+    /// NIR (intbig_case79.stderr `%13`..`%68`): the first `b2i32` a
+    /// `CSEL` (its compare also feeds the remainder's select), the second
+    /// folded into its compare (`ICMP_OR.u32.ge.i1`, opt.rs).
+    fn idiv(&mut self, n: Val, d: Val, at: usize) -> Result<Val, MaliError> {
+        let u = Val::Undef;
+        let a = self.iop(Alu::Iabs, n, u, at)?;
+        let b = self.iop(Alu::Iabs, d, u, at)?;
+        let sign = self.iop(Alu::Ixor, n, d, at)?;
+        let f = self.int32(Alu::U2f, [b, u, u], at)?;
+        let r = self.op32(Alu::Frcp, [f, u, u], at)?;
+        let m = self.op32(Alu::Fmul, [r, Val::Const(IDIV_RCP_SCALE), u], at)?;
+        let e = self.int32(Alu::F2u, [m, u, u], at)?;
+        let t = self.iop(Alu::Imul, b, e, at)?;
+        let neg = self.iop(Alu::Ineg, t, u, at)?;
+        let hi = self.umul_high(e, neg, at)?;
+        let e = self.iop(Alu::Iadd, e, hi, at)?;
+        let q = self.umul_high(a, e, at)?;
+        let qd = self.iop(Alu::Imul, q, b, at)?;
+        let rem = self.iop(Alu::Isub, a, qd, at)?;
+        let c1 = self.int32(Alu::Ucmp(Cmpf::Ge), [rem, b, u], at)?;
+        let i1 = self.int32(Alu::B2i, [c1, u, u], at)?;
+        let q = self.iop(Alu::Iadd, q, i1, at)?;
+        let rs = self.iop(Alu::Isub, rem, b, at)?;
+        let rem = self.int32(Alu::Bcsel, [c1, rs, rem], at)?;
+        let c2 = self.int32(Alu::Ucmp(Cmpf::Ge), [rem, b, u], at)?;
+        let i2 = self.int32(Alu::B2i, [c2, u, u], at)?;
+        let q = self.iop(Alu::Iadd, q, i2, at)?;
+        let nq = self.iop(Alu::Ineg, q, u, at)?;
+        let neg_sign = self.int32(Alu::Icmp(Cmpf::Lt), [sign, Val::Const(0), u], at)?;
+        self.int32(Alu::Bcsel, [neg_sign, nq, q], at)
+    }
+
+    /// `v` is an fp32 value of a mediump shader: an integer's conversion
+    /// or arithmetic on one ([`Fs::int_lane`], the walk's fp32 arm).
+    fn fp32_lane(&self, v: Val) -> bool {
+        let Val::Lane(n, _) = v else { return false };
+        matches!(
+            self.nir.nodes[n as usize],
+            NirNode { kind: Kind::Alu(Alu::I2f | Alu::U2f | Alu::Fmul | Alu::Fadd | Alu::Ffma), bits: 32, .. }
+        ) && !self.prec.highp
     }
 
     fn is_f16(&self, v: Val) -> bool {
@@ -2471,6 +2588,27 @@ fn walk_nodes(
                     out = f.alu32(m, a, &s, vals, at)?
                 }
             }
+            /* a product or sum on an fp32 value of a mediump shader (an
+             * integer's conversion, case 79's `float(q.x) / 4.0`): lower_
+             * precision leaves it at 32 bits, an operation the vertex stage
+             * builds (intbig_case79.stderr: `fmul %124, 0.25` at 32 bits,
+             * narrowed at the store) */
+            ir::Op::Alu(a @ (AluOp::Fmul | AluOp::Fadd), s)
+                if (0..m.comps_of(ir::ValueId(id.0)) as usize)
+                    .any(|i| f.fp32_lane(lane(vals, s[0], i)) || f.fp32_lane(lane(vals, s[1], i))) =>
+            {
+                let op = if a == AluOp::Fmul { Alu::Fmul } else { Alu::Fadd };
+                let w = m.comps_of(ir::ValueId(id.0)) as usize;
+                for (i, o) in out.iter_mut().enumerate().take(w) {
+                    let (x, y) = (lane(vals, s[0], i), lane(vals, s[1], i));
+                    if !(f.fp32_lane(x) || matches!(x, Val::Const(_)))
+                        || !(f.fp32_lane(y) || matches!(y, Val::Const(_)))
+                    {
+                        return Err(MaliError::MixedPrecision);
+                    }
+                    *o = f.op32(op, [x, y, Val::Undef], at)?;
+                }
+            }
             /* a sum or product of constants (an unrolled loop's `r +=
              * 0.25`, case 72): `nir_opt_constant_folding` at fp16, which
              * equals the fp32 result when that is exact in fp16; another
@@ -2668,7 +2806,9 @@ fn walk_nodes(
                 f.origin[n as usize] = at as u16;
                 f.ubo_idx[f.nubo] = n;
                 f.nubo += 1;
-                out[0] = Val::Lane(n, 0);
+                for (c, o) in out.iter_mut().enumerate().take(comps as usize) {
+                    *o = Val::Lane(n, c as u8);
+                }
             }
             ir::Op::LoadUniformIdx { base_dw, index, comps, .. } => {
                 let (u, _) = uniform_extent(m, base_dw)?;
@@ -3746,7 +3886,7 @@ fn cube_lane(f: &Fs<'_>, pr: &mut Pairs, v: Val, ubo: &UboLayout) -> Result<Cube
 /// rows, in the builder's order (case41.expect.json: `CUBEFACE1`,
 /// `CUBEFACE2_V9`, `CUBE_SSEL`, `CUBE_TSEL`, `FRCP`, the `FMA`s,
 /// `MUX.i32.bit`): the staging words S and T.
-fn cube_rows(p: &mut Prog<'_>, rows: &mut u64, d: [Src; 3]) -> Result<[Src; 2], MaliError> {
+fn cube_rows(p: &mut Prog<'_>, rows: &mut u128, d: [Src; 3]) -> Result<[Src; 2], MaliError> {
     let mut r = |op: Alu, s: &[Src]| -> Result<Src, MaliError> {
         Ok(Src::ssa(row(p, rows, Row { op, bits: 32, width: 1 }, s)?))
     };
@@ -4021,10 +4161,11 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
         ubo_words: [None; 2],
         ubo_off: [None; MAX_UBO_READS],
         ubo_half: [None; MAX_UBO_READS],
+        ubo_lanes: [[None; 4]; MAX_UBO_READS],
         frag: None,
     };
     let mut val = [None::<Src>; MAX_PAIRS];
-    let mut rows = 0u64;
+    let mut rows = 0u128;
     let mut texel = None;
     for &(_, _, what, x) in events.iter() {
         match what {
@@ -4032,7 +4173,7 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
             TEX => {
                 /* the coordinate's lane converted (`F16_TO_F32 r2, r2^.h0`),
                  * the one value both staging words */
-                let f2f32 = |p: &mut Prog<'_>, rows: &mut u64, s: Src| -> Result<Src, MaliError> {
+                let f2f32 = |p: &mut Prog<'_>, rows: &mut u128, s: Src| -> Result<Src, MaliError> {
                     Ok(Src::ssa(row(p, rows, Row { op: Alu::F2f32, bits: 32, width: 1 }, &[s])?))
                 };
                 let mut staging = [Src::NULL; 3];
@@ -4331,7 +4472,12 @@ fn src32(f: &Fs<'_>, lv: &Leaves, val: &[Option<Src>], v: Val) -> Result<Src, Ma
                 Ok(s.swz(if f.nir.nodes[n as usize].width == 2 && c == 1 { Swz::H11 } else { Swz::H00 }))
             }
             Kind::Alu(_) | Kind::Phi => val.get(n as usize).copied().flatten().ok_or(defect),
-            /* a float array read's loaded word (`select_highp`'s `UBO`) */
+            /* a vec4 array read's loaded lane, a float array read's loaded
+             * word (`select_highp`'s `UBO`) */
+            Kind::UniformIdx { comps: 4, .. } if f.nir.nodes[n as usize].bits == 32 => {
+                let k = f.ubo_idx[..f.nubo].iter().position(|&u| u == n).ok_or(defect)?;
+                lv.ubo_lanes[k][c as usize & 3].map(Src::ssa).ok_or(defect)
+            }
             Kind::UniformIdx { .. } if f.nir.nodes[n as usize].bits == 32 => {
                 val.get(n as usize).copied().flatten().ok_or(defect)
             }
@@ -4340,6 +4486,10 @@ fn src32(f: &Fs<'_>, lv: &Leaves, val: &[Option<Src>], v: Val) -> Result<Src, Ma
              * the pair path reads it ([`Leaf::Uniform`]) */
             Kind::Uniform { dword, .. } if f.nir.nodes[n as usize].bits == 16 => {
                 let (w, half, base) = lv.ubo.half(dword).ok_or(MaliError::FsUniform)?;
+                /* a pair of lanes ([`vectorise_int_sources`]) is one word */
+                if f.nir.nodes[n as usize].width == 2 && half != 0 {
+                    return Err(MaliError::FsUniform);
+                }
                 let swz = if half == 0 { Swz::H00 } else { Swz::H11 };
                 Ok(Src::of(Idx::Ubo { base, comp: (w - base) as u8 }).swz(swz))
             }
@@ -4382,24 +4532,53 @@ fn src32(f: &Fs<'_>, lv: &Leaves, val: &[Option<Src>], v: Val) -> Result<Src, Ma
 /// The integers may also be `F16_TO_S32` of fp16 products of varying lanes
 /// (int_compare's `int(3.0 * v_color.r)` and `.g`), when those pair
 /// ([`int_source_pairs`]).
+///
+/// Or the colour is fp32 values of integers narrowed at the store (case
+/// 79: `float(q.x) / 4.0`, the quotients of `nir_lower_idiv`'s sequence,
+/// [`Fs::idiv`]), the integers `F16_TO_S32` of fp16 uniform lanes (`u_d.xy
+/// * 10.0` and `abs(u_d.zw)` in pairs, `abs` of one such lane alone).
 pub fn mask_colour(f: &Fs<'_>) -> bool {
     let int = |op: Alu| matches!(op, Alu::Icmp(_) | Alu::B2f | Alu::Bcsel | Alu::F2i32 | Alu::Inot);
     let nodes = &f.nir.nodes[..f.nir.n];
+    let fp32 = |v: &Val| f.fp32_lane(*v);
     let lane = |v: &Val| match *v {
         Val::Const(_) => true,
         Val::Lane(n, _) => matches!(nodes[n as usize], NirNode { kind: Kind::Alu(op), bits: 32, .. } if int(op)),
         _ => false,
     };
     let pairs = int_source_pairs(f);
-    let paired = |id: usize| pairs.iter().flatten().flatten().any(|&(a, b)| a as usize == id || b as usize == id);
-    f.colour.is_some_and(|c| c.iter().all(lane) && !c.iter().all(|v| matches!(v, Val::Const(_))))
+    let paired = |id: usize| {
+        pairs.iter().flatten().flatten().any(|&(a, b)| a as usize == id || b as usize == id) || lone_abs(f, id)
+    };
+    /* the integer arithmetic of a division, and its fp32 results */
+    let arith = |op: Alu| op.is_int() || matches!(op, Alu::I2f | Alu::U2f | Alu::Frcp | Alu::Fmul | Alu::Fadd);
+    let divides = f.colour.is_some_and(|c| c.iter().any(fp32));
+    f.colour.is_some_and(|c| c.iter().all(|v| lane(v) || fp32(v)) && !c.iter().all(|v| matches!(v, Val::Const(_))))
         && pairs.is_some()
         && nodes.iter().enumerate().all(|(id, nd)| match nd.kind {
             Kind::Preload { .. } | Kind::Uniform { .. } => true,
             Kind::Input { loc, .. } => (loc as usize) < MAX_VARYINGS && nd.bits == 32,
-            Kind::Alu(op) => (nd.bits == 32 && int(op)) || paired(id),
+            Kind::Alu(op) => (nd.bits == 32 && (int(op) || (divides && arith(op)))) || paired(id),
             _ => false,
         })
+}
+
+/// Node `id` is `fabs` of one lane of an fp16 node, read by `f2i32`s
+/// alone: what `nir_opt_vectorize` finds no partner for (case 79's
+/// `abs(u_d.x * 10.0)`, `FADD.v2f16 r2, r4^.abs.h00` of the product pair).
+fn lone_abs(f: &Fs<'_>, id: usize) -> bool {
+    let nd = f.nir.nodes[id];
+    let source = match nd.src[0] {
+        Val::Lane(n, _) => {
+            matches!(f.nir.nodes[n as usize], NirNode { kind: Kind::Alu(op), bits: 16, .. } if !op.is_int())
+        }
+        _ => false,
+    };
+    matches!(nd, NirNode { kind: Kind::Alu(Alu::Fabs), bits: 16, width: 1, .. })
+        && source
+        && f.nir
+            .uses(id as u16)
+            .all(|(u, _)| matches!(f.nir.nodes[u as usize], NirNode { kind: Kind::Alu(Alu::F2i32), bits: 32, .. }))
 }
 
 /// The fp16 nodes of a colour of masks ([`mask_colour`]), each the source
@@ -4408,24 +4587,33 @@ pub fn mask_colour(f: &Fs<'_>) -> bool {
 /// one `vec2` operation (bi_vectorize_filter's width two at 16 bits) on the
 /// pair `nir_lower_mediump_io` converts (intloop_int_compare.expect.json:
 /// `V2F32_TO_V2F16 r0, r0^, r1^`, `FMA.v2f16 r0, u2.w0, r0^, 0x0.neg`, then
-/// `F16_TO_S32.rtz` of `r0.h0` and `r0^.h1`). Pairs in node order; `None`
-/// when a node pairs with none (any other fp16 value: no reference).
+/// `F16_TO_S32.rtz` of `r0.h0` and `r0^.h1`), or two consecutive dwords of
+/// an fp16 uniform, one word (intbig_case79.expect.json: `FMA.v2f16 r4,
+/// u2.w0, r4^, 0x0.neg` of `u_d.xy * 10.0`, `FADD.v2f16 r0, u2.w1.abs,
+/// 0x0.neg` of `abs(u_d.zw)`). A lone `fabs` of such a lane stays a lane
+/// ([`lone_abs`]). Pairs in node order; `None` when a node pairs with none
+/// (any other fp16 value: no reference).
 fn int_source_pairs(f: &Fs<'_>) -> Option<[Option<(u16, u16)>; 4]> {
     let nodes = &f.nir.nodes[..f.nir.n];
     let mut out = [None; 4];
     let mut no = 0;
     let mut pending: Option<u16> = None;
+    let uniform = |n: u16| match nodes[n as usize] {
+        NirNode { kind: Kind::Uniform { dword, comps: 1 }, bits: 16, width: 1, .. } => Some(dword),
+        _ => None,
+    };
     for (id, nd) in nodes.iter().enumerate() {
         let Kind::Alu(op) = nd.kind else { continue };
-        if nd.bits != 16 || op.is_int() {
+        if nd.bits != 16 || op.is_int() || lone_abs(f, id) {
             continue;
         }
-        /* read by `f2i32`s alone (the colour reads no fp16 lane) */
-        let readers = f
-            .nir
-            .uses(id as u16)
-            .all(|(u, _)| matches!(f.nir.nodes[u as usize], NirNode { kind: Kind::Alu(Alu::F2i32), bits: 32, .. }));
-        if nd.width != 1 || !matches!(op, Alu::Fmul | Alu::Fadd | Alu::Ffma) || !readers {
+        /* read by `f2i32`s alone (the colour reads no fp16 lane), or by a
+         * lone `fabs` of it */
+        let readers = f.nir.uses(id as u16).all(|(u, _)| {
+            matches!(f.nir.nodes[u as usize], NirNode { kind: Kind::Alu(Alu::F2i32), bits: 32, .. })
+                || lone_abs(f, u as usize)
+        });
+        if nd.width != 1 || !matches!(op, Alu::Fmul | Alu::Fadd | Alu::Ffma | Alu::Fabs) || !readers {
             return None;
         }
         let Some(a) = pending.take() else {
@@ -4435,12 +4623,15 @@ fn int_source_pairs(f: &Fs<'_>) -> Option<[Option<(u16, u16)>; 4]> {
         let x = nodes[a as usize];
         let lanes = (0..op.arity()).all(|k| match (x.src[k], nd.src[k]) {
             (Val::Const(c), Val::Const(d)) => c == d && f16_exact(c).is_some(),
-            (Val::Lane(n, c), Val::Lane(m, d)) => {
-                n == m && c % 2 == 0 && d == c + 1 && matches!(nodes[n as usize].kind, Kind::Input { .. })
+            (Val::Lane(n, c), Val::Lane(m, d)) if matches!(nodes[n as usize].kind, Kind::Input { .. }) => {
+                n == m && c % 2 == 0 && d == c + 1
+            }
+            (Val::Lane(n, 0), Val::Lane(m, 0)) => {
+                matches!((uniform(n), uniform(m)), (Some(p), Some(q)) if q == p + 1)
             }
             _ => false,
         });
-        /* one varying operand, the others constants */
+        /* one varying or uniform operand, the others constants */
         let one = (0..op.arity()).filter(|&k| matches!(nd.src[k], Val::Lane(..))).count() == 1;
         if x.kind != nd.kind || !lanes || !one || no == out.len() {
             return None;
@@ -4452,9 +4643,12 @@ fn int_source_pairs(f: &Fs<'_>) -> Option<[Option<(u16, u16)>; 4]> {
 }
 
 /// [`int_source_pairs`] made `vec2` operations in place: the first node of
-/// a pair becomes the conversion of the varying's two lanes (`f2f16` of a
+/// a varying's pair becomes the conversion of its two lanes (`f2f16` of a
 /// `vec2`), the second the operation on it, its constants fp16 (in both
-/// halves as a lane's), and the `f2i32`s read its halves.
+/// halves as a lane's), and the `f2i32`s read its halves. A uniform's pair
+/// is one word already: the first node becomes the operation on it (a
+/// 16-bit uniform node of two lanes, read whole), the second is left to
+/// the dead code, its readers moved to the first's high half.
 pub fn vectorise_int_sources(f: &mut Fs<'_>) -> Result<(), MaliError> {
     let pairs = int_source_pairs(f).ok_or(MaliError::Defect(Defect::IrIndex))?;
     for (a, b) in pairs.into_iter().flatten() {
@@ -4462,15 +4656,40 @@ pub fn vectorise_int_sources(f: &mut Fs<'_>) -> Result<(), MaliError> {
         let Kind::Alu(op) = nd.kind else { return Err(MaliError::Defect(Defect::IrIndex)) };
         let mut src = [Val::Undef; 3];
         let mut lanes = [Val::Undef; 2];
+        let mut word = None;
         for k in 0..op.arity() {
             src[k] = match f.nir.nodes[a as usize].src[k] {
                 Val::Const(c) => Val::Const(u32::from(f16_exact(c).ok_or(MaliError::Fp16Inexact)?)),
-                Val::Lane(n, c) => {
+                Val::Lane(n, c) if matches!(f.nir.nodes[n as usize].kind, Kind::Input { .. }) => {
                     lanes = [Val::Lane(n, c), Val::Lane(n, c + 1)];
                     Val::Lane(a, 0)
                 }
+                Val::Lane(n, _) => {
+                    let Kind::Uniform { dword, .. } = f.nir.nodes[n as usize].kind else {
+                        return Err(MaliError::Defect(Defect::IrIndex));
+                    };
+                    let u =
+                        NirNode { kind: Kind::Uniform { dword, comps: 2 }, src: [Val::Undef; 3], bits: 16, width: 2 };
+                    let w = match f.nir.nodes[..f.nir.n].iter().position(|x| *x == u) {
+                        Some(i) => i as u16,
+                        None => f.nir.push_node(u)?,
+                    };
+                    word = Some(w);
+                    Val::Lane(w, 0)
+                }
                 v => v,
             };
+        }
+        if word.is_some() {
+            f.nir.nodes[a as usize] = NirNode { kind: nd.kind, src, bits: 16, width: 2 };
+            for id in 0..f.nir.n {
+                for s in 0..3 {
+                    if f.nir.nodes[id].src[s] == Val::Lane(b, 0) {
+                        f.nir.nodes[id].src[s] = Val::Lane(a, 1);
+                    }
+                }
+            }
+            continue;
         }
         f.nir.nodes[a as usize] =
             NirNode { kind: Kind::Alu(Alu::F2f16), src: [lanes[0], lanes[1], Val::Undef], bits: 16, width: 2 };
@@ -4497,7 +4716,7 @@ fn store_cmp(
     f: &Fs<'_>,
     lv: &Leaves,
     val: &mut [Option<Src>],
-    rows: &mut u64,
+    rows: &mut u128,
     c: usize,
 ) -> Result<(), MaliError> {
     let nd = f.nir.nodes[c];
@@ -4772,10 +4991,11 @@ pub fn select_highp(
         ubo_words: [None; 2],
         ubo_off: [None; MAX_UBO_READS],
         ubo_half: [None; MAX_UBO_READS],
+        ubo_lanes: [[None; 4]; MAX_UBO_READS],
         frag: None,
     };
     let val = scratch.alloc_filled(MAX_NODES, None::<Src>).map_err(oom)?;
-    let mut rows = 0u64;
+    let mut rows = 0u128;
     let none = [[None; 4]; MAX_VARYINGS];
     /* the 16-bit masks widened for 32-bit selects: (the compare's node,
      * the block of the widening, its value) */
@@ -4812,9 +5032,27 @@ pub fn select_highp(
              * its load ([`select::ubo_offset`], [`select::ubo_fetch`]) */
             OFFSET => {
                 let id = f.nir.order[x as usize] as usize;
-                let Kind::UniformIdx { dword, .. } = f.nir.nodes[id].kind else { return Err(defect) };
+                let Kind::UniformIdx { dword, comps } = f.nir.nodes[id].kind else { return Err(defect) };
                 let idx = src32(f, &lv, val, f.nir.nodes[id].src[0])?;
-                val[id] = Some(Src::ssa(super::select::ubo_offset(p, ubo, dword, idx, &mut rows)?));
+                let off = if comps == 4 {
+                    super::select::vec4_offset(p, ubo, dword, idx, &mut rows)?
+                } else {
+                    super::select::ubo_offset(p, ubo, dword, idx, &mut rows)?
+                };
+                val[id] = Some(Src::ssa(off));
+            }
+            /* a vec4 element's lanes from the lowest read to the highest
+             * (unitype_100.expect.json: `IADD_IMM.i32 r0, r0^, #0x8` then
+             * `LD_PKA.i64` of `fcols[fidx].ba`) */
+            UBO if matches!(f.nir.nodes[f.nir.order[x as usize] as usize].kind, Kind::UniformIdx { comps: 4, .. }) => {
+                let id = f.nir.order[x as usize] as usize;
+                let off = val[id].and_then(|s| s.ssa_value()).ok_or(defect)?;
+                let (lo, n) = super::select::lanes_read(&f.nir, id as u16)?;
+                let w = super::select::vec4_fetch(p, off, lo, n, &mut rows)?;
+                let k = f.ubo_idx[..f.nubo].iter().position(|&u| u as usize == id).ok_or(defect)?;
+                for c in 0..n as usize {
+                    lv.ubo_lanes[k][lo as usize + c] = Some(w[c]);
+                }
             }
             UBO => {
                 let id = f.nir.order[x as usize] as usize;
@@ -4911,15 +5149,29 @@ pub fn select_highp(
      * ATEST on the constant alpha 1.0 (fbload_fbload_int.expect.json) */
     let u32 = f.prec.colour_u32;
     if f.prec.colour_f32 || u32 {
-        let mut s = [Src::NULL; 4];
-        for (x, v) in s.iter_mut().zip(c) {
+        /* `nir_opt_move` puts a deferred load before its first reader: the
+         * alpha's is ATEST (`atest_pan`), the others' the colour's `vec4`,
+         * which NIR has after it (intbig_case79.stderr; unitype_100.expect
+         * .json's flat `LD_VAR_BUF_IMM` of `v_col.rg` after `ATEST`) */
+        let mut load = |p: &mut Prog<'_>, lv: &mut Leaves, rows: &mut u128, v: Val| -> Result<(), MaliError> {
             if let Some((false, k, _)) = load_lane(f, v)? {
                 if deferred[k as usize] {
                     deferred[k as usize] = false;
-                    convert(p, f, k as usize, &none, &mut lv, &mut rows)?;
+                    convert(p, f, k as usize, &none, lv, rows)?;
                 }
             }
-            *x = src32(f, &lv, val, v)?;
+            Ok(())
+        };
+        if !u32 {
+            load(p, &mut lv, &mut rows, c[3])?;
+        }
+        let mut s = [Src::NULL; 4];
+        for (x, v) in s.iter_mut().zip(c) {
+            *x = match src32(f, &lv, val, v) {
+                Ok(x) => x,
+                Err(_) if load_lane(f, v)?.is_some() => Src::NULL,
+                Err(e) => return Err(e),
+            };
         }
         /* the look-up's own vector stored whole: `bi_emit_tex_valhall`
          * collects its def right after the split (the `vec4` the store
@@ -4931,6 +5183,12 @@ pub fn select_highp(
         let early = if whole { Some(alu(p, Op::Collect, &s)?) } else { None };
         let alpha = if u32 { Src::of(Idx::Const(F32_ONE)) } else { s[3] };
         let t = alu(p, Op::Atest, &[Src::of(Idx::Reg(60)), alpha, Src::of(Idx::Special(Special::AtestDatum, false))])?;
+        for (x, v) in s.iter_mut().zip(c) {
+            if x.idx == Idx::Null {
+                load(p, &mut lv, &mut rows, v)?;
+                *x = src32(f, &lv, val, v)?;
+            }
+        }
         let col = match early {
             Some(col) => col,
             None => alu(p, Op::Collect, &s)?,
@@ -4969,7 +5227,7 @@ pub fn select_highp(
     let mut nconv = 0;
     let mut pair = [0u16; 2];
     /* a deferred load, before the first conversion that reads it */
-    let mut load = |p: &mut Prog<'_>, lv: &mut Leaves, rows: &mut u64, x: Val| -> Result<(), MaliError> {
+    let mut load = |p: &mut Prog<'_>, lv: &mut Leaves, rows: &mut u128, x: Val| -> Result<(), MaliError> {
         if let Some((false, k, _)) = load_lane(f, x)? {
             if deferred[k as usize] {
                 deferred[k as usize] = false;
@@ -5124,6 +5382,7 @@ fn int_op(a: AluOp) -> bool {
     matches!(
         a,
         Iadd | Imul
+            | Idiv
             | Ineg
             | Ishl
             | Ishr
@@ -5175,7 +5434,7 @@ fn ir_arity(a: AluOp) -> usize {
 }
 
 /// [`emit::emit`], noting the row in `rows`.
-fn row(p: &mut Prog<'_>, rows: &mut u64, r: Row, s: &[Src]) -> Result<u16, MaliError> {
+fn row(p: &mut Prog<'_>, rows: &mut u128, r: Row, s: &[Src]) -> Result<u16, MaliError> {
     *rows |= emit::bit(r);
     emit::emit(p, r, s)
 }
@@ -5261,6 +5520,9 @@ struct Leaves {
     /// half ([`ubo_fetch`]).
     ubo_off: [Option<u16>; MAX_UBO_READS],
     ubo_half: [Option<u16>; MAX_UBO_READS],
+    /// Each vec4 array read's loaded lanes in a highp shader
+    /// ([`super::select::vec4_fetch`]), by its place in [`Fs::ubo_idx`].
+    ubo_lanes: [[Option<u16>; 4]; MAX_UBO_READS],
     /// The narrowed position's word ([`Leaf::Frag`], [`frag16`]).
     frag: Option<u16>,
 }
@@ -5274,7 +5536,7 @@ struct Leaves {
 /// mode descriptor the constant 0), split into its two words. The array
 /// starts the block (its byte offset is the shift alone; any other base has
 /// no reference and is refused at the walk, [`MaliError::UniformIndexed`]).
-fn ubo_load(p: &mut Prog<'_>, f: &Fs<'_>, lv: &mut Leaves, rows: &mut u64) -> Result<(), MaliError> {
+fn ubo_load(p: &mut Prog<'_>, f: &Fs<'_>, lv: &mut Leaves, rows: &mut u128) -> Result<(), MaliError> {
     if f.nubo != 1 {
         return Err(MaliError::Defect(Defect::IrIndex));
     }
@@ -5313,7 +5575,7 @@ fn ubo_load(p: &mut Prog<'_>, f: &Fs<'_>, lv: &mut Leaves, rows: &mut u64) -> Re
 /// base, that` for an array past the block's first word (`IADD_IMM.i32 r1,
 /// r1^, #0x10` after `va_fuse_add_imm`); the index the int uniform's pushed
 /// word.
-fn ubo_offset(p: &mut Prog<'_>, f: &Fs<'_>, k: usize, lv: &mut Leaves, rows: &mut u64) -> Result<(), MaliError> {
+fn ubo_offset(p: &mut Prog<'_>, f: &Fs<'_>, k: usize, lv: &mut Leaves, rows: &mut u128) -> Result<(), MaliError> {
     let defect = MaliError::Defect(Defect::IrIndex);
     let n = *f.ubo_idx.get(k).ok_or(defect)?;
     let nd = f.nir.nodes[n as usize];
@@ -5352,7 +5614,7 @@ fn convert(
     k: usize,
     form: &[[Option<bool>; 4]; MAX_VARYINGS],
     lv: &mut Leaves,
-    rows: &mut u64,
+    rows: &mut u128,
 ) -> Result<(), MaliError> {
     let v = f.varyings[k];
     let ld = p.temp()?;
@@ -5434,16 +5696,32 @@ fn tex(p: &mut Prog<'_>, f: &Fs<'_>, j: usize, lv: &mut Leaves, computed: Option
     };
     /* the texels up to the last one read (`nir_opt_shrink_vectors` trims a
      * look-up's unread tail: texmore_2's `.rgb` of `texture2D(..).rgb`) */
-    let mask = (1u8 << (8 - t.lanes.leading_zeros())) - 1;
+    let tail = (1u8 << (8 - t.lanes.leading_zeros())) - 1;
+    /* an fp32 look-up's below the lowest one read too, one register a
+     * texel read (unitype_100.expect.json's `TEX_SINGLE.slot0.skip
+     * .reserved.32.ba.2d.computed @r2:r3` of `texture(..).ba`) */
+    let mask = if f16 || t.lanes == 0 { tail } else { tail & !((1u8 << t.lanes.trailing_zeros()) - 1) };
     let op = Op::TexSingle { sr_count: n as u8, mask, f16, skip: false, lod, dim };
     let srcs = [Src::ssa(sr), Src::of(Idx::Const(tex_handle(t.index.into()))), Src::of(Idx::Const(0))];
     let r = alu(p, op, &srcs)?;
-    let n = if f16 { 2 } else { 4 };
-    let w = split(p, r, n)?;
     let words = lv.tex.get_mut(j).ok_or(MaliError::Defect(Defect::IrIndex))?;
     *words = [None; 4];
-    for (i, x) in w.iter().enumerate().take(n) {
-        words[i] = Some(*x);
+    if mask == tail {
+        let n = if f16 { 2 } else { 4 };
+        let w = split(p, r, n)?;
+        for (i, x) in w.iter().enumerate().take(n) {
+            words[i] = Some(*x);
+        }
+        return Ok(());
+    }
+    let n = mask.count_ones() as usize;
+    let w = if n == 1 { [r; 4] } else { split(p, r, n)? };
+    let mut k = 0;
+    for (c, x) in words.iter_mut().enumerate() {
+        if mask & (1 << c) != 0 {
+            *x = Some(w[k]);
+            k += 1;
+        }
     }
     Ok(())
 }
@@ -5454,7 +5732,7 @@ fn tex(p: &mut Prog<'_>, f: &Fs<'_>, j: usize, lv: &mut Leaves, computed: Option
 /// narrowed (`f2f16`), then `vec2` of the two halves (prec_84.expect.json:
 /// `U16_TO_F32` x2, `FADD_IMM` x2, `FMA.f32`, `FADD.f32 .h0` x2,
 /// `MKVEC.v2i16 r0, r0^.h0, r1^.h0`).
-fn frag16(p: &mut Prog<'_>, lv: &Leaves, rows: &mut u64) -> Result<u16, MaliError> {
+fn frag16(p: &mut Prog<'_>, lv: &Leaves, rows: &mut u128) -> Result<u16, MaliError> {
     let defect = MaliError::Defect(Defect::IrIndex);
     let px = |c: Swz| Src::of(Idx::Reg(super::ra::POSITION_XY)).swz(c);
     let wpos = |c: u8| -> Result<Src, MaliError> {
@@ -5479,13 +5757,13 @@ fn conv_of(lv: &Leaves, k: u8, c: u8) -> Result<u16, MaliError> {
 }
 
 /// `vec2` of a converted lane and a constant half (`MKVEC.v2i16`).
-fn mkvec(p: &mut Prog<'_>, lv: &Leaves, k: u8, c: u8, half: u16, rows: &mut u64) -> Result<u16, MaliError> {
+fn mkvec(p: &mut Prog<'_>, lv: &Leaves, k: u8, c: u8, half: u16, rows: &mut u128) -> Result<u16, MaliError> {
     let x = Src::ssa(conv_of(lv, k, c)?).swz(Swz::H00);
     row(p, rows, Row { op: Alu::Vec2, bits: 16, width: 2 }, &[x, Src::of(Idx::Const(half as u32)).swz(Swz::H00)])
 }
 
 /// `vec2` of two lanes (load, lane), each converted alone (`MKVEC.v2i16`).
-fn mkvec_lanes(p: &mut Prog<'_>, lv: &Leaves, x: [(u8, u8); 2], rows: &mut u64) -> Result<u16, MaliError> {
+fn mkvec_lanes(p: &mut Prog<'_>, lv: &Leaves, x: [(u8, u8); 2], rows: &mut u128) -> Result<u16, MaliError> {
     let s =
         [Src::ssa(conv_of(lv, x[0].0, x[0].1)?).swz(Swz::H00), Src::ssa(conv_of(lv, x[1].0, x[1].1)?).swz(Swz::H00)];
     row(p, rows, Row { op: Alu::Vec2, bits: 16, width: 2 }, &s)
@@ -5530,7 +5808,7 @@ fn op(
     x: u8,
     lv: &Leaves,
     val: &mut [Option<Src>; MAX_PAIRS],
-    rows: &mut u64,
+    rows: &mut u128,
 ) -> Result<(), MaliError> {
     let P::Op(a, srcs) = pr.nodes[x as usize] else { return Err(MaliError::Defect(Defect::IrIndex)) };
     let mut s = [Src::NULL; 3];

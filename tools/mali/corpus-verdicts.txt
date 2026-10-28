@@ -48,7 +48,7 @@ tools/shaders/es100/hdrquad.vert: ok
 tools/shaders/es100/hdrscale.frag: ok
 tools/shaders/es100/hello.frag: ok
 tools/shaders/es100/hello.vert: Valhall: a vertex shader uniform that is not highp (Mesa's fp16 uniform) is not lowered yet
-tools/shaders/es100/idiv.frag: Valhall: an integer or boolean value is not lowered yet
+tools/shaders/es100/idiv.frag: ok
 tools/shaders/es100/ifelse_loop.frag: Valhall: a shader of more than 32 basic blocks or 8 ifs is not lowered yet
 tools/shaders/es100/ifloop.frag: Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet
 tools/shaders/es100/ifoutput.frag: Valhall: control flow (if, a loop, a return before the end) is not lowered yet
@@ -108,12 +108,12 @@ tools/shaders/es100/tri_if.vert: ok
 tools/shaders/es100/tri_int.frag: Valhall: an integer or boolean value is not lowered yet
 tools/shaders/es100/tri_int.vert: ok
 tools/shaders/es100/unibranch.frag: Valhall: control flow (if, a loop, a return before the end) is not lowered yet
-tools/shaders/es100/uniform_idx.frag: Valhall: an integer or boolean value is not lowered yet
+tools/shaders/es100/uniform_idx.frag: Valhall: a uniform read at a run-time index other than a float array's element or a mediump fragment shader's vec4 array first in the block read once, indexed by an int uniform, is not lowered yet
 tools/shaders/es100/uniidx_a.frag: ok
 tools/shaders/es100/uniidx_b.frag: ok
 tools/shaders/es100/uniidx_c.frag: ok
 tools/shaders/es100/uniidx_d.frag: ok
-tools/shaders/es100/uniidx_e.vert: Valhall: a uniform read at a run-time index other than a float array's element or a mediump fragment shader's vec4 array first in the block read once, indexed by an int uniform, is not lowered yet
+tools/shaders/es100/uniidx_e.vert: ok
 tools/shaders/es100/uniidx_f.vert: ok
 tools/shaders/es100/uniidx_g.frag: ok
 tools/shaders/es100/uniidx_h.frag: ok
@@ -149,8 +149,8 @@ tools/shaders/es300/flatlast.frag: Valhall: arithmetic other than +, -, * and a 
 tools/shaders/es300/flatlast.vert: Valhall: an integer or boolean value is not lowered yet
 tools/shaders/es300/gcops.frag: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
 tools/shaders/es300/hdrsample.frag: Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet
-tools/shaders/es300/idxtex.frag: Valhall: a uniform read at a run-time index other than a float array's element or a mediump fragment shader's vec4 array first in the block read once, indexed by an int uniform, is not lowered yet
-tools/shaders/es300/idxtex.vert: Valhall: a uniform read at a run-time index other than a float array's element or a mediump fragment shader's vec4 array first in the block read once, indexed by an int uniform, is not lowered yet
+tools/shaders/es300/idxtex.frag: ok
+tools/shaders/es300/idxtex.vert: ok
 tools/shaders/es300/ifelse_uint.frag: Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet
 tools/shaders/es300/inst.vert: ok
 tools/shaders/es300/inst2.vert: ok
@@ -291,7 +291,7 @@ tools/shaders/gltest/varyfma_vs.vert: ok
 tools/shaders/gltest/vsunits_fs.frag: ok
 tools/shaders/gltest/vtl_fs.frag: ok
 tools/shaders/gltest/vtl_vs.vert: ok
-tools/shaders/gltest/vtl_vs_const.vert: Valhall: a vertex shader look-up at a coordinate with a constant lane (a shape no reference draws) is not lowered yet
+tools/shaders/gltest/vtl_vs_const.vert: ok
 tools/shaders/gltest/vtl_vs_grid.vert: ok
 tools/shaders/gltest/vtxgrid_vs.vert: ok
 tools/shaders/internal/clear.frag: front end: Rejected { line: 1, tok: "#version", msg: "desktop GLSL source; this is an OpenGL ES compiler" }

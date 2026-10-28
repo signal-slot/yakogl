@@ -35,6 +35,40 @@ not repeated.
 fragment shader reads an int uniform as a value; the vertex stage still
 refuses one read other than as an index. `docs/notes/mali-int-uniforms.md`.)
 
+**State since plan #154 item intbool-2.** The answers and tables below
+were written before item intbool. After it, 100 and 116 no longer failed
+on the `int`: 100's two stages and 116's vertex stage stopped at the
+run-time read itself (`nir::uniform_idx`, `MaliError::UniformIndexed`:
+only a float array's element was taken, or a mediump fragment shader's
+vec4 element). Since intbool-2 the vec4 element is read in every stage,
+and cases 100 and 116 are byte-equal in both stages
+(`case_100_idxtex_is_byte_equal_to_mesa_26_2_1`,
+`case_116_uniidxe_is_byte_equal_to_mesa_26_2_1`,
+`unitype_116v_is_byte_equal_to_mesa_26_2_1`, tests.rs `UNITYPE_POPULATION`,
+compiled through the link):
+
+- the offset `idx << 4` (`LSHIFT_OR` by the table's byte 4,
+  `select::vec4_offset`) where the read stands, the load moved down to its
+  first reader (`nir_opt_move`), of the lanes from the lowest read to the
+  highest (`select::vec4_fetch`: `LD_PKA.i128` of 116v's four, `.i64` of
+  100's vertex `.rg`, `IADD_IMM #0x8` then `.i64` of the fragment's `.ba`);
+- a varying of such a read (or of a look-up at constants) is convergent:
+  the link promotes it to flat (`nir::Nir::convergent`), as for lanes of
+  uniforms alone; uniarray_vs's and 116v's fragment programs load it
+  `.src_flat32`;
+- a vertex look-up whose coordinate is two constants (100's
+  `textureLod(vtex, vec2(0.25), 0.0)`): each staging word the FAU word
+  moved; one constant lane beside a computed one stays refused (case 149);
+- a look-up writes only the texels read (`.rg` in the vertex stage, `.ba`
+  in a highp fragment shader, one register each);
+- in a fragment shader with an fp32 output, a load only the colour's
+  `vec4` reads stands after `ATEST` (NIR has `atest_pan` before the
+  `vec4`).
+
+Case 80 (section 7) is not lowered: its fragment shader stops at the chain
+refusal (`do_rebalance_tree`, the chains item) and its indexed locals
+(`arr[i]`, `p[i]`, `col[i - 1]`, `v[j]`) are `IndexedLocal`.
+
 1. **Cases 100 and 116 fail on `int` and nothing else.** Their uniforms are
    `vec4 xcols[4]` (an array: refused first, as `UniformArray`, in the vertex
    stage), `uniform int xidx` (the type that raises `UniformType`) and, in 100

@@ -321,6 +321,27 @@ pub fn pack_one(i: &Ins, branch: i32) -> Result<u64, MaliError> {
             f.put("saturate", 0)?;
             alu_dest(&mut f, i, "dest_width")?;
         }
+        Op::IsubS32 => {
+            f = Fill::new(IsaOp::IsubS32);
+            for s in 0..2 {
+                f.put(["src0", "src1"][s], src_byte(&i.src[s])?)?
+                    .put(["widen0", "widen1"][s], widen_int(i.src[s].swz)?)?;
+            }
+            f.put("saturate", 0)?;
+            alu_dest(&mut f, i, "dest_width")?;
+        }
+        Op::U32ToF32 => {
+            f = Fill::new(IsaOp::U32ToF32);
+            f.put("src0", src_byte(&i.src[0])?)?.put("round", 0)?;
+            alu_dest(&mut f, i, "dest_width")?;
+        }
+        Op::F32ToU32 => {
+            f = Fill::new(IsaOp::F32ToU32);
+            f.put("src0", src_byte(&i.src[0])?)?;
+            f.put("neg0", i.src[0].neg as u32)?.put("abs0", i.src[0].abs as u32)?;
+            f.put("round", super::bir::Round::Rtz as u32)?;
+            alu_dest(&mut f, i, "dest_width")?;
+        }
         Op::FroundF32 { round } => {
             f = Fill::new(IsaOp::FroundF32);
             fsrc(&mut f, i, 0)?;
@@ -594,10 +615,16 @@ pub fn pack_one(i: &Ins, branch: i32) -> Result<u64, MaliError> {
             f.put("src0", src_byte(&i.src[0])?)?.put("src1", src_byte(&i.src[1])?)?;
             f.put("not", eq as u32)?.put("combine", 0)?.put("address_mode", 1)?.put("conservative", 0)?;
         }
-        Op::LshiftAndI32 | Op::LshiftOrI32 | Op::RshiftAndI32 | Op::RshiftOrI32 | Op::ArshiftOrI32 => {
+        Op::LshiftAndI32
+        | Op::LshiftOrI32
+        | Op::LshiftXorI32
+        | Op::RshiftAndI32
+        | Op::RshiftOrI32
+        | Op::ArshiftOrI32 => {
             f = Fill::new(match i.op {
                 Op::LshiftAndI32 => IsaOp::LshiftAndI32,
                 Op::LshiftOrI32 => IsaOp::LshiftOrI32,
+                Op::LshiftXorI32 => IsaOp::LshiftXorI32,
                 Op::RshiftOrI32 => IsaOp::RshiftOrI32,
                 Op::ArshiftOrI32 => IsaOp::ArshiftOrI32,
                 _ => IsaOp::RshiftAndI32,
