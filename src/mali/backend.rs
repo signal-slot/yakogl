@@ -202,7 +202,7 @@ pub const NOT_BUILT_ATTRIBUTE_RECORDS: &str =
 pub const NOT_BUILT_TEXTURE_FORMAT: &str =
     "mali: a texture stored other than RGBA8, sRGB8_A8, R32F or ETC2 (RGB8, RGBA8, RGB8A1) is not built yet";
 pub const NOT_BUILT_TEXTURE_TYPE: &str =
-    "mali: a texture other than one 2D image or a cube map of six faces (an array, a 3D texture) is not built yet";
+    "mali: a texture other than one 2D image, a cube map of six faces or a 2D array of at most 256 layers (a 3D texture) is not built yet";
 /// A mip chain of a non-power-of-two image: the GL core lays none out for
 /// this backend (`npot_mip_chains`), so one would not be where
 /// [`chain_level`] looks.
@@ -1522,6 +1522,10 @@ fn add_gl_draw(
     }; 16];
     let (vs, fs) = shaders;
     let n = vertex_attributes(d, vs_attributes, &mut a.data, &mut attributes)?;
+    /* the data arena's order: the attributes, the indices, the fragment
+     * textures, the vertex texture */
+    let indices = indices(d, &mut a.data)?;
+    let fs_tex = fs_textures(d, &mut a.data)?;
     let programs = (
         frame::upload_program_cached(&mut open.programs, &mut a.code, &mut a.spds, vs.code, vs.meta)?,
         frame::upload_program_cached(&mut open.programs, &mut a.code, &mut a.spds, fs.code, fs.meta)?,
@@ -1533,7 +1537,7 @@ fn add_gl_draw(
         first_vertex: 0,
         vertex_count: d.index_count,
         instance_count: d.instance_count,
-        indices: indices(d, &mut a.data)?,
+        indices,
         attributes: &attributes[..n],
         viewport: frame::Viewport {
             x: d.viewport[0],
@@ -1556,7 +1560,7 @@ fn add_gl_draw(
         colour_mask: if d.color_write { d.color_mask & 0xf } else { 0 },
         front_cw: d.front_cw,
         cull: cull(d.cull)?,
-        texture: sampled_texture(d, false, &mut a.data)?,
+        textures: fs_tex.as_ref().map_or(&[], |(t, n)| &t[..*n]),
         vs_texture: sampled_texture(d, true, &mut a.data)?,
         occlusion_query: occlusion,
         blend_shader,
@@ -1567,26 +1571,40 @@ fn add_gl_draw(
     frame::add_draw(open, &mut a.desc, cs, ctx, target, has_zs, &draw)
 }
 
-/// The GL core's binding of the sampler the draw's fragment shader (or,
-/// `vertex`, its vertex shader) reads ([`MaliShader::sampler`];
-/// `GlesTextureBind::unit` is the sampler binding, the stage's own binds
-/// `textures` or `vs_textures`): None for a shader that samples nothing,
-/// Some(None) when the GL core handed no texture for it (no texture
-/// object's storage on the unit: GL's texture with no texels, the
-/// backend's to bind).
-fn sampled_bind(d: &GlesDraw, vertex: bool) -> Option<Option<&backend::GlesTextureBind>> {
-    let (sh, binds, n) =
-        if vertex { (d.vs, &d.vs_textures[..], d.num_vs_textures) } else { (d.fs, &d.textures[..], d.num_textures) };
+/// The sampler bindings the draw's fragment shader (or, `vertex`, its
+/// vertex shader) reads, in descriptor index order: a fragment shader's
+/// [`MaliShader::samplers`] (binding `samplers[i]` at index i of its
+/// texture and sampler tables), a vertex shader's one
+/// [`MaliShader::sampler`]; empty for a shader that samples nothing.
+fn sampler_bindings(d: &GlesDraw, vertex: bool) -> &[u8] {
+    let sh = if vertex { d.vs } else { d.fs };
     // SAFETY: the draw's records are null or live past the draw
     // (`programs`).
-    let binding = unsafe { sh.as_ref() }.and_then(MaliShader::of).and_then(|r| r.sampler)?;
+    let Some(r) = unsafe { sh.as_ref() }.and_then(MaliShader::of) else { return &[] };
+    if vertex || r.samplers.is_empty() {
+        r.sampler.as_slice()
+    } else {
+        r.samplers
+    }
+}
+
+/// The GL core's binding of sampler binding `binding` of the draw's
+/// fragment shader (or, `vertex`, its vertex shader; `GlesTextureBind::unit`
+/// is the sampler binding, the stage's own binds `textures` or
+/// `vs_textures`): None when the GL core handed no texture for it (no
+/// texture object's storage on the unit: GL's texture with no texels, the
+/// backend's to bind).
+fn sampled_bind(d: &GlesDraw, vertex: bool, binding: u8) -> Option<&backend::GlesTextureBind> {
+    let (binds, n) = if vertex { (&d.vs_textures[..], d.num_vs_textures) } else { (&d.textures[..], d.num_textures) };
     let binds = &binds[..usize::from(n).min(binds.len())];
-    Some(binds.iter().find(|t| t.unit == binding))
+    binds.iter().find(|t| t.unit == binding)
 }
 
 /// The binds both stages read, the vertex stage's first.
 fn sampled_binds(d: &GlesDraw) -> impl Iterator<Item = &backend::GlesTextureBind> {
-    [true, false].into_iter().filter_map(|v| sampled_bind(d, v).flatten())
+    [true, false]
+        .into_iter()
+        .flat_map(move |v| sampler_bindings(d, v).iter().filter_map(move |&b| sampled_bind(d, v, b)))
 }
 
 /// How the texture unit reads one of the GL core's texel formats
@@ -1764,21 +1782,49 @@ fn texture_ready_one(g: &mut MaliState, t: &backend::GlesTextureBind) -> Result<
 /// its own fallback texture.
 const BLACK_TEXEL: [u8; 4] = [0, 0, 0, 0xff];
 
-/// The texture the fragment (or, `vertex`, the vertex) shader's look-up
-/// reads ([`sampled_bind`]): its
+/// The textures the draw's fragment shader reads, texture i of sampler
+/// binding [`MaliShader::samplers`]`[i]` ([`texture_of`]), and their
+/// count; None for a shader that samples nothing.
+#[allow(clippy::type_complexity)]
+fn fs_textures(
+    d: &GlesDraw,
+    data: &mut Pool,
+) -> Result<Option<([frame::SampledTexture; frame::MAX_STAGE_TEXTURES], usize)>, FrameError> {
+    let bindings = sampler_bindings(d, false);
+    let Some(&first) = bindings.first() else { return Ok(None) };
+    if bindings.len() > frame::MAX_STAGE_TEXTURES {
+        return Err(FrameError::NotBuilt(frame::NOT_BUILT_TEXTURE_SIZE));
+    }
+    let mut out = [texture_of(sampled_bind(d, false, first), data)?; frame::MAX_STAGE_TEXTURES];
+    for (slot, &b) in out.iter_mut().zip(bindings).skip(1) {
+        *slot = texture_of(sampled_bind(d, false, b), data)?;
+    }
+    Ok(Some((out, bindings.len())))
+}
+
+/// The texture the vertex shader's look-up reads ([`texture_of`]), None
+/// for a vertex shader that samples nothing.
+fn sampled_texture(d: &GlesDraw, vertex: bool, data: &mut Pool) -> Result<Option<frame::SampledTexture>, FrameError> {
+    match sampler_bindings(d, vertex).first() {
+        Some(&b) => texture_of(sampled_bind(d, vertex, b), data).map(Some),
+        None => Ok(None),
+    }
+}
+
+/// The texture a look-up of `bind` reads: its
 /// levels in place, at the GL core's linear row pitch, or, for an imported
 /// image whose rows are not [`TEXTURE_ROW_ALIGN`] bytes, each copied with
 /// such rows into the frame's `data` arena ([`texture_ready`] made the
-/// storage current); a sampler with no texels reads [`BLACK_TEXEL`]. What
-/// this backend does not sample yet is refused by name.
-fn sampled_texture(d: &GlesDraw, vertex: bool, data: &mut Pool) -> Result<Option<frame::SampledTexture>, FrameError> {
+/// storage current); a sampler with no texels (`bind` None, or
+/// incomplete) reads [`BLACK_TEXEL`]. What this backend does not sample
+/// yet is refused by name.
+fn texture_of(bind: Option<&backend::GlesTextureBind>, data: &mut Pool) -> Result<frame::SampledTexture, FrameError> {
     let not_built = |why| Err(FrameError::NotBuilt(why));
     let wrap = |w: backend::GlesWrap| match w {
         backend::GLES_WRAP_REPEAT => WrapMode::REPEAT,
         backend::GLES_WRAP_MIRRORED_REPEAT => WrapMode::MIRRORED_REPEAT,
         _ => WrapMode::CLAMP_TO_EDGE,
     };
-    let Some(bind) = sampled_bind(d, vertex) else { return Ok(None) };
     let t = match bind {
         Some(t) if t.incomplete == 0 => t,
         /* no texels: one black texel, the GL state's wraps and filters */
@@ -1787,12 +1833,13 @@ fn sampled_texture(d: &GlesDraw, vertex: bool, data: &mut Pool) -> Result<Option
             let mut level = [frame::TextureLevel::default(); frame::MAX_TEXTURE_LEVELS];
             level[0] = frame::TextureLevel { gpu: b.gpu, row_stride: TEXTURE_ROW_ALIGN };
             let f = texel_format(backend::GLES_TEXFMT_RGBA8).ok_or(FrameError::Invalid(INVALID_TEXTURE_STORAGE))?;
-            return Ok(Some(frame::SampledTexture {
+            return Ok(frame::SampledTexture {
                 width: 1,
                 height: 1,
                 level,
                 levels: 1,
                 faces: 1,
+                array: false,
                 format: f.format,
                 clump: f.clump,
                 block_bytes: 0,
@@ -1802,20 +1849,26 @@ fn sampled_texture(d: &GlesDraw, vertex: bool, data: &mut Pool) -> Result<Option
                 mipmap: MipmapMode::NONE,
                 wrap_s: bind.map_or(WrapMode::REPEAT, |t| wrap(t.wrap_s)),
                 wrap_t: bind.map_or(WrapMode::REPEAT, |t| wrap(t.wrap_t)),
-            }));
+                wrap_r: bind.map_or(WrapMode::REPEAT, |t| wrap(t.wrap_r)),
+            });
         }
     };
     let levels = levels_of(t);
     /* a cube map is six faces stacked in one image, `height` every face's
-     * (`native_layered_textures` is false here, src/gl/draw.rs); a 2D array
-     * and a 3D texture come the same way and are not described yet */
+     * (`native_layered_textures` is false here, src/gl/draw.rs), and a 2D
+     * array its layers stacked the same way (level-major: a level's layers
+     * on one pitch, `chain_layout_npot`), described as Mesa describes its
+     * own (a plane a layer and level, `Array size` the layers; the shim's
+     * texmore_46 and texmore_206_array traces); a 3D texture comes as a
+     * grid of slices and is not described yet */
     let layers = layers_of(t);
     let cube = t.type_ == backend::GLES_TEXTYPE_CUBE && layers == 6;
+    let array = t.type_ == backend::GLES_TEXTYPE_2D_ARRAY && layers as u32 <= frame::MAX_ARRAY_LAYERS;
     let face_h = t.height / layers as u32;
     let pot = t.width.is_power_of_two() && face_h.is_power_of_two();
     let f = texel_format(t.format);
     let checks = [
-        (!(t.type_ == backend::GLES_TEXTYPE_2D && layers == 1 || cube), NOT_BUILT_TEXTURE_TYPE),
+        (!(t.type_ == backend::GLES_TEXTYPE_2D && layers == 1 || cube || array), NOT_BUILT_TEXTURE_TYPE),
         (f.is_none(), NOT_BUILT_TEXTURE_FORMAT),
         (levels > 1 && !pot && f.is_some_and(|f| f.block_bytes == 0), NOT_BUILT_TEXTURE_NPOT_CHAIN),
         (levels as usize > frame::MAX_TEXTURE_LEVELS, frame::NOT_BUILT_TEXTURE_SIZE),
@@ -1879,12 +1932,13 @@ fn sampled_texture(d: &GlesDraw, vertex: bool, data: &mut Pool) -> Result<Option
         1 => MipmapMode::NEAREST,
         _ => MipmapMode::TRILINEAR,
     };
-    Ok(Some(frame::SampledTexture {
+    Ok(frame::SampledTexture {
         width: t.width,
         height: face_h,
         level,
         levels,
         faces: layers as u32,
+        array,
         format: f.format,
         clump: f.clump,
         block_bytes: f.block_bytes,
@@ -1894,7 +1948,8 @@ fn sampled_texture(d: &GlesDraw, vertex: bool, data: &mut Pool) -> Result<Option
         mipmap,
         wrap_s: wrap(t.wrap_s),
         wrap_t: wrap(t.wrap_t),
-    }))
+        wrap_r: wrap(t.wrap_r),
+    })
 }
 
 /// An indexed draw's u16 indices where the frame reads them: the GL core's

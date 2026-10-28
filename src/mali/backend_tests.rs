@@ -11,6 +11,7 @@
 use super::*;
 use crate::backend::{GlesAttrib, GLES_PRIM_TRIANGLES};
 use crate::mali::cs::Instr;
+use crate::mali::genxml::v10::{GenericPlane, Resource, Sampler, Texture};
 use crate::osal::OsalOps;
 use crate::shaderc::online::{codegen, store};
 use crate::shaderc::{ShcShader, SHC_STAGE_FRAGMENT, SHC_STAGE_VERTEX};
@@ -1072,9 +1073,22 @@ fn each_refusal_is_the_exact_line_of_its_cause() {
                 why(&tex(|t| (t.type_, t.layers) = (backend::GLES_TEXTYPE_CUBE, 1))),
                 not_built(NOT_BUILT_TEXTURE_TYPE),
             ),
+            /* a 2D array as the GL core hands it: its layers stacked as a
+             * cube's faces are (frame_tex_tests.rs
+             * `a_three_layer_array_is_the_shim_s`) */
             (
-                "a 2D array",
+                "a 2D array of two layers",
                 why(&tex(|t| (t.type_, t.layers, t.height) = (backend::GLES_TEXTYPE_2D_ARRAY, 2, 32))),
+                built,
+            ),
+            (
+                "a 2D array of six layers is not a cube",
+                why(&tex(|t| (t.type_, t.layers, t.height) = (backend::GLES_TEXTYPE_2D_ARRAY, 6, 96))),
+                built,
+            ),
+            (
+                "a 2D array of 257 layers",
+                why(&tex(|t| (t.type_, t.layers, t.height) = (backend::GLES_TEXTYPE_2D_ARRAY, 257, 16 * 257))),
                 not_built(NOT_BUILT_TEXTURE_TYPE),
             ),
             (
@@ -1806,6 +1820,75 @@ fn a_texture_copied_while_a_render_into_it_runs_is_waited_for() {
     unsafe {
         m_free(&mut ma);
         m_free(&mut mb);
+    }
+}
+
+/// gl_test case 2's program (texmore_2: `u_tex0`, `u_tex1`) reads sampler
+/// binding i at index i of the fragment stage's tables
+/// (`MaliShader::samplers`), whatever order the GL core hands the binds
+/// in: two samplers and two textures, binding 0's texels in texture 0's
+/// plane and its filter in sampler 0 (the words themselves are the shim's,
+/// frame_tex_tests.rs `two_samplers_are_the_shim_s_tables`).
+#[test]
+fn each_sampler_binding_is_bound_at_its_index() {
+    let _rig = Rig::new(true);
+    assert_eq!(mali_init(), 0);
+    let t = target();
+    let (mut m0, mut m1) = (OsalGpuMem::ZERO, OsalGpuMem::ZERO);
+    // SAFETY: valid out-parameters.
+    unsafe {
+        assert_eq!(m_alloc(0, 64 * 2, OSAL_MEM_DATA, &mut m0), 0);
+        assert_eq!(m_alloc(0, 64 * 2, OSAL_MEM_DATA, &mut m1), 0);
+    }
+    let vs = include_str!("../../tools/mali/testdata/texmore_2.vert");
+    let fs = include_str!("../../tools/mali/testdata/texmore_2.frag");
+    let uv = [0.0f32; 12];
+    let words = with_programs(vs, fs, |vs, fs| {
+        assert_eq!(MaliShader::of(fs).unwrap().samplers, [0, 1], "u_tex0 at index 0, u_tex1 at index 1");
+        let mut d = triangle(t, &VERTICES);
+        (d.vs, d.fs) = (vs, fs);
+        d.num_attribs = 2;
+        d.attribs[1] = GlesAttrib { vi_reg: 1, cpu: uv.as_ptr().cast(), ..d.attribs[0] };
+        let bind = |unit: u8, gpu: u64, linear: u8| backend::GlesTextureBind {
+            unit,
+            format: backend::GLES_TEXFMT_RGBA8,
+            layers: 1,
+            base_gpu: gpu,
+            width: 2,
+            height: 2,
+            stride_texels: 16,
+            bytes: 64 * 2,
+            linear_filter: linear,
+            min_linear: linear,
+            ..backend::GlesTextureBind::ZERO
+        };
+        /* binding 1 first: the index is the binding's, not the bind's */
+        d.num_textures = 2;
+        d.textures[0] = bind(1, m1.gpu, 1);
+        d.textures[1] = bind(0, m0.gpu, 0);
+        assert_eq!(draw_flush(&d), 0);
+        with(|m| m.submits.last().cloned().unwrap().1)
+    });
+    let srt = reg_at_idvs(&words, 4).expect("the fragment SRT") & !63;
+    let table = with(|m| m.read(srt, 7 * Resource::LENGTH));
+    let entry = |i: usize| Resource::unpack(table[16 * i..16 * i + 16].try_into().unwrap()).unwrap();
+    let (samplers, textures) = (entry(3), entry(4));
+    assert_eq!((samplers.size, textures.size), (64, 64), "two samplers, two textures");
+    for (i, (gpu, nearest)) in [(m0.gpu, true), (m1.gpu, false)].into_iter().enumerate() {
+        let s = with(|m| m.read(samplers.address + 32 * i as u64, 32));
+        let s = Sampler::unpack(s[..].try_into().unwrap()).unwrap();
+        assert_eq!((s.minify_nearest, s.magnify_nearest), (nearest, nearest), "sampler {i}");
+        let tex = with(|m| m.read(textures.address + 32 * i as u64, 32));
+        let tex = Texture::unpack(tex[..].try_into().unwrap()).unwrap();
+        let plane = with(|m| m.read(tex.surfaces, 32));
+        let plane = GenericPlane::unpack(plane[..].try_into().unwrap()).unwrap();
+        assert_eq!((plane.pointer, plane.width, plane.height), (gpu, 2, 2), "texture {i}");
+    }
+    assert_eq!(mali_finish(), 0);
+    // SAFETY: the texels the mock gave above; every frame completed.
+    unsafe {
+        m_free(&mut m0);
+        m_free(&mut m1);
     }
 }
 

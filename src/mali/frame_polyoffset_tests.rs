@@ -129,7 +129,7 @@ fn build(polygon_offset: Option<[f32; 2]>) -> (Vec<u8>, BTreeMap<u32, u32>) {
                 sample_mask: 0xf,
                 vs_uniforms: &[],
                 fs_uniforms: &[],
-                texture: None,
+                textures: &[],
                 vs_texture: None,
                 occlusion_query: None,
                 alpha_to_coverage: false,

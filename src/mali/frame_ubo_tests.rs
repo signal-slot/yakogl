@@ -101,6 +101,7 @@ fn texture() -> SampledTexture {
         level,
         levels: 1,
         faces: 1,
+        array: false,
         format: Format::RGBA8_UNORM.0 << 12 | RgbComponentOrder::RGBA.0,
         clump: ClumpFormat::RAW32,
         block_bytes: 0,
@@ -110,6 +111,7 @@ fn texture() -> SampledTexture {
         mipmap: MipmapMode::NONE,
         wrap_s: WrapMode::REPEAT,
         wrap_t: WrapMode::REPEAT,
+        wrap_r: WrapMode::REPEAT,
     }
 }
 
@@ -176,7 +178,7 @@ fn try_build(ubo: &'static [UboRow], fs_uniforms: &[u32]) -> Result<Built, Frame
             colour_mask: 0xf,
             front_cw: false,
             cull: Cull::None,
-            texture: Some(texture()),
+            textures: &[texture()],
             vs_texture: None,
             occlusion_query: None,
             blend_shader: None,

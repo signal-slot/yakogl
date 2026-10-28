@@ -149,7 +149,7 @@ fn build(instances: u32, attributes: &[VertexAttribute]) -> Result<(Vec<u64>, Ve
             sample_mask: 0xf,
             vs_uniforms: &[],
             fs_uniforms: &[],
-            texture: None,
+            textures: &[],
             vs_texture: None,
             occlusion_query: None,
             alpha_to_coverage: false,
