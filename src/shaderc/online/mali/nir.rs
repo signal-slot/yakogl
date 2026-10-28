@@ -852,6 +852,10 @@ pub(super) fn uniform_idx(
     let int_word = match idx {
         Val::Lane(n, 0) => match g.nodes[n as usize].kind {
             Kind::Uniform { dword, .. } => uniform_of(m, dword).is_ok_and(|(i, _)| i.gl_type as u32 == GL_INT),
+            /* a vec4 array's element at an int sum (builtin_45's `cols[idx
+             * + i]` in a kept loop: `IADD.s32 r5, u2.w0, r4`, then the
+             * shift and `LD_PKA.i128`) */
+            Kind::Alu(Alu::Iadd) => u.gl_type as u32 == GL_FLOAT_VEC4 && g.nodes[n as usize].bits == 32,
             _ => false,
         },
         _ => false,

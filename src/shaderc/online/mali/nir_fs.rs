@@ -357,6 +357,9 @@ pub fn order_keys(m: &Module<'_>, keys: &mut [u32]) {
                 ir::Op::Alu(a, srcs) => srcs.iter().take(a.arity()).for_each(|s| child(s.val.0)),
                 /* a look-up's coordinate is visited as its child */
                 ir::Op::Tex { coord, .. } => child(coord.val.0),
+                /* and an indexed uniform read's index (builtin_45's `idx +
+                 * i`, an int sum the walk keeps as a node) */
+                ir::Op::LoadUniformIdx { index, .. } => child(index.val.0),
                 /* a grafted local's one read is its stored tree */
                 ir::Op::LoadLocal { local, index: None, .. } => {
                     if let Some(src) = grafted.get(local.0 as usize).copied().flatten() {

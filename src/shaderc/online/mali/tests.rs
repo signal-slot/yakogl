@@ -4652,21 +4652,15 @@ fn the_builtin_population_is_byte_equal_to_mesa_26_2_1() {
 
 /// Cases 45 (dynidx.frag) and 98 (uniloop.frag): vid.vert's programs for a
 /// fragment shader that reads no varying (the position program alone,
-/// builtin_45/98.expect.json, the varying's gl_VertexID code dead). 98's
-/// fragment program is byte-equal since loops-rt
-/// ([`builtin_98_is_byte_equal_to_mesa_26_2_1`]); 45's kept loop walks, and
-/// its body's `cols[idx + i]`, a vec4 array read at a computed index, is
-/// the refusal.
+/// builtin_45/98.expect.json, the varying's gl_VertexID code dead). Both
+/// fragment programs are byte-equal since loops-rt
+/// ([`builtin_98_is_byte_equal_to_mesa_26_2_1`],
+/// [`builtin_45_is_byte_equal_to_mesa_26_2_1`]).
 #[test]
 fn cases_45_and_98_vertex_programs_are_byte_equal_to_mesa_26_2_1() {
-    for (vs, fs, json, gap_fs) in [
-        (
-            td!("builtin_45.vert"),
-            td!("builtin_45.frag"),
-            td!("builtin_45.expect.json"),
-            Some(MaliError::UniformIndexed),
-        ),
-        (td!("builtin_98.vert"), td!("builtin_98.frag"), td!("builtin_98.expect.json"), None),
+    for (vs, fs, json) in [
+        (td!("builtin_45.vert"), td!("builtin_45.frag"), td!("builtin_45.expect.json")),
+        (td!("builtin_98.vert"), td!("builtin_98.frag"), td!("builtin_98.expect.json")),
     ] {
         let v = {
             let _k = store::test_keep();
@@ -4677,9 +4671,6 @@ fn cases_45_and_98_vertex_programs_are_byte_equal_to_mesa_26_2_1() {
             .expect("the vertex shader compiles for a program that reads no varying")
         };
         check_vs_stage(&v, vs, fs, json, VIEWPORT_64X64);
-        if let Some(g) = gap_fs {
-            assert_eq!(gap(SHC_STAGE_FRAGMENT, fs), g);
-        }
     }
 }
 
@@ -4911,6 +4902,22 @@ fn check_builtin_loop(vs: &str, fs: &str, json: &str) {
 #[test]
 fn builtin_98_is_byte_equal_to_mesa_26_2_1() {
     check_builtin_loop(td!("builtin_98.vert"), td!("builtin_98.frag"), td!("builtin_98.expect.json"));
+}
+
+/// Case 45 (dynidx): `for (int i = 0; i < n; ++i) c += cols[idx + i];`:
+/// four carried lanes and the counter, the header's compare against the
+/// FAU word of `n`, the body's `IADD.s32` of `idx`'s word and the counter,
+/// the shift by 4 and the `LD_PKA.i128` that waits on itself in a block
+/// entered once a pass. Drawn without `--uniform-values` (gl_ref.py sets
+/// no int uniform): `idx` and `n`, `u2.w0` and `u2.w1`, are 0.
+#[test]
+fn builtin_45_is_byte_equal_to_mesa_26_2_1() {
+    let (fs, json) = (td!("builtin_45.frag"), td!("builtin_45.expect.json"));
+    let f = compile(SHC_STAGE_FRAGMENT, fs).expect("the fragment shader compiles");
+    let rf = region(json, "fs.fragment").expect("fs.fragment");
+    assert_words("fs.fragment", &trim(&f.code), &rf.words);
+    assert_facts("fs.fragment", &rf, f.info.work_reg_count, f.info.preload, &f.info.fau, VIEWPORT_64X64, &|_| 0);
+    assert_eq!(f.code.len(), (rf.words.len() * 8 + 16).div_ceil(128) * 16);
 }
 
 /* ---- run-time vec4 array reads (#33) -------------------------------- */
