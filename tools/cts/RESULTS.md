@@ -378,46 +378,46 @@ is from the two-row set.
 ## Mali: NanoPC-T6 (RK3588, Valhall v10, panthor), gl_test sweep
 
 `panthor-gltest --sweep` on the board's own Linux (panthor, not Zephyr), the
-newest record: `tools/cts/log/2026-10-28-mid/` (board clock 2026-10-28,
-10:20 UTC; plan #154 board-mid, after split-fix, texture-2, varyconst,
-builtin, intbool, intbool-2 and sizelimit). Code: the integration tip
-`965ac247` plus the record's predictions commit `b9d91861`, built on the
-board itself (`yakogl-build=v0.1.0-65-gb9d9186`).
+newest record: `tools/cts/log/2026-10-28-final/` (board clock 2026-10-28,
+13:34 UTC; plan #154 board-final, after every lowering of the plan: split-fix,
+texture-2, varyconst, builtin, intbool, intbool-2, sizelimit and chains).
+Code: the integration tip `b3f6bf1c` plus the record's predictions commit
+`b081baf1`, built on the board itself (`yakogl-build=v0.1.0-74-gb081baf`).
 
 | Runs | Cases | PASS | REFUSED | NO-CASE | SKIP | FAIL | Kernel messages |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| sweep 1 and 2, equal (the 256 verdict lines are identical) | 256 | **123** | 36 | 85 | 9 | 3 | 0 |
+| sweep 1 and 2, equal (the 256 verdict lines are identical) | 256 | **126** | 32 | 85 | 9 | 4 | 0 |
 
-- The PASS set is the previous record's 106 (`2026-10-28-tip`) to the
-  string, plus 17 (#33):
-  - built-in inputs: 43 `es3vid`, 47 `es3inst`, 51 `es3heavy`, 57
-    `es3vid_indexed`
-  - integer and boolean values: 72 `intlit`, 79 `idiv`, 112 `affectand`
-  - run-time uniform indices: 100 `idxtex`, 116 `uniidxe`
-  - varying lanes and gl_FragColor lanes: 75 `immneg`, 78 `matvary`, 117
-    `uniidxf`, 150 `shprobe`, 191 `varyfma`
-  - size caps: 193 `offarm`, 194 `offarmn`, 195 `ifbranch`
+- The PASS set is the previous record's 123 (`2026-10-28-mid`) to the
+  string, plus 3 (#33, chains `b3f6bf1c`): 184 `depchain`, 185 `kindcost`,
+  189 `mulone`. Against the frameboard record's 102 it adds 24: 43, 47, 51,
+  57 (built-in inputs), 72, 79, 112 (integer and boolean values), 100, 116
+  (run-time uniform indices), 75, 78, 117, 150, 191 (varying and
+  gl_FragColor lanes), 193, 194, 195 (size caps), 82, 84, 119 (mediump
+  gl_FragCoord), 184, 185, 189, 192 (chains and folds).
 
   Every earlier PASS set is a subset of this one
   (`tools/mali/sweep_passsets.py --require
-  8,28,29,30,113,122,169,196,197,198,207,208,209` over the frameboard
-  record and this one: exit 0). Fifteen rows moved from one refusal to
-  another (42, 44, 45, 49, 76, 80, 89, 91, 98, 104, 149, 181, 184, 185,
-  199); 215 `shadowmap` is new in gl_test (SKIP).
-- Three FAILs:
+  8,28,29,30,113,122,169,196,197,198,207,208,209` over the frameboard, mid
+  and final records: exit 0). Cases 8, 28, 29, 30, 113, 122, 169, 196, 197,
+  198, 207, 208 and 209 PASS in both sweeps.
+- Four FAILs:
   - `verdict case 214 splitkick: FAIL rc -1, first bad check 5 got
     0xffc0c0c0 want 0xff808080` (#32), unchanged: the frame builder has
     `OpenFrame::sample_store` (913474c1), but the backend does not set it
     and the per-sample preload program is not compiled.
+  - `verdict case 63 matattr: FAIL rc -1, first bad check 1 got 0xff800000
+    want 0xff804000` (was REFUSED by the chain line, #32): its vertex
+    programs are byte-equal to the drm-shim references, and every matrix
+    attribute column after the first reads 0 (mat2, mat3 and mat4 alike).
   - `verdict case 2 texture: FAIL rc -1, first bad check 26 got 0xff000080
-    want 0xff0040bf` (was REFUSED): the shader compiles, the frame binds
-    only `samplers[0]` (frame-tex2darray).
+    want 0xff0040bf`: the shader compiles, the frame binds only
+    `samplers[0]` (frame-tex2darray).
   - `verdict case 141 es3instdiv: FAIL rc -1, first bad check 2 got
-    0xff00ff00 want 0x80008000` (was REFUSED): a divisor-2 instanced
-    attribute is drawn wrong instead of refused (#32).
-- The 21 cases sweep_predict.py named and 214 also ran twice on their own,
-  with the same lines. Cases 8, 28, 29, 30, 113, 122, 169, 196, 197, 198,
-  207, 208 and 209 PASS in both sweeps.
+    0xff00ff00 want 0x80008000`: a divisor-2 instanced attribute is drawn
+    wrong instead of refused (#32).
+- The 7 cases sweep_predict.py named (42, 63, 91, 149, 184, 185, 189) and
+  214 also ran twice on their own, with the same lines.
 
 ## ES 3.0: dEQP-GLES3 (stage 4)
 
