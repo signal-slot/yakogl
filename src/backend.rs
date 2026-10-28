@@ -1505,9 +1505,14 @@ pub struct YakoglBackend {
     /// nothing, leaves levels 1.. of its storage as they are, and calls
     /// [`YakoglBackend::return_mipmap_chain`] before it reads or writes those
     /// levels on the CPU. 0: the GL core box-filters the chain on the CPU, as
-    /// without the entry. Called after every kick that rendered into the
-    /// texture was handed to the backend (the backend waits for it itself)
-    /// and before the texels' stamp would move. `None`: 0.
+    /// without the entry. `2 + n` for n >= 1: the backend drew levels
+    /// 1 ..= n into the storage and every kick of them has completed; the GL
+    /// core filters the levels after n on the CPU with the GPU's own filter
+    /// (one bilinear sample at each texel centre of the level above,
+    /// [`MipChain::Prefix`]), and there is nothing to return. Called after
+    /// every kick that rendered into the texture was handed to the backend
+    /// (the backend waits for it itself) and before the texels' stamp would
+    /// move. `None`: 0.
     pub generate_mipmap: Option<unsafe extern "C" fn(b: *const GlesTextureBind, levels: u32) -> i32>,
     /// The GL core is about to read or write levels 1.. of the texture `b`
     /// describes on the CPU (an upload, a copy, a CPU filter, a level above
@@ -2136,14 +2141,39 @@ pub fn query_result(handle: u32) -> Result<u64, i32> {
 
 /// Ask the backend to make the mip chain of the 2D texture `b` describes
 /// itself, `levels` levels, from the level 0 its jobs rendered
-/// ([`YakoglBackend::generate_mipmap`]): true when it did, and the GL core's
-/// levels 1.. are then the backend's until [`return_mipmap_chain`]. False
-/// (the default, and a backend without the entry): the GL core filters.
-pub fn generate_mipmap(b: &GlesTextureBind, levels: u32) -> bool {
+/// ([`YakoglBackend::generate_mipmap`]): what of the chain the backend made.
+pub fn generate_mipmap(b: &GlesTextureBind, levels: u32) -> MipChain {
     match table().and_then(|t| t.generate_mipmap) {
         // SAFETY: a static table's entry; `b` is live for the call.
-        Some(f) => (unsafe { f(b, levels) }) == 1,
-        None => false,
+        Some(f) => MipChain::from_answer(unsafe { f(b, levels) }, levels),
+        None => MipChain::None,
+    }
+}
+
+/// What [`generate_mipmap`] left to the GL core.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum MipChain {
+    /// Nothing made: the GL core filters the chain (the default, a backend
+    /// without the entry, and every answer it does not know).
+    None,
+    /// The whole chain is the backend's until [`return_mipmap_chain`].
+    Whole,
+    /// Levels 1 ..= n are in the storage, complete, with no kick of them in
+    /// flight; the GL core filters from level n + 1 with the GPU's filter.
+    Prefix(u32),
+}
+
+impl MipChain {
+    /// The entry's answer for a chain of `levels` levels: 1 is `Whole`,
+    /// `2 + n` a prefix of n levels (n = `levels` - 1 leaves the GL core
+    /// nothing to filter); 0, a negative answer, n = 0 or n past the chain
+    /// is `None`.
+    pub(crate) fn from_answer(answer: i32, levels: u32) -> Self {
+        match answer {
+            1 => MipChain::Whole,
+            a if a >= 3 && ((a - 2) as u32) < levels => MipChain::Prefix((a - 2) as u32),
+            _ => MipChain::None,
+        }
     }
 }
 

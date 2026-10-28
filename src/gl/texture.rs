@@ -4098,6 +4098,44 @@ pub unsafe extern "C" fn glCompressedTexSubImage2D(
     );
 }
 
+/// One level of an RGBA8 chain from the level above as the PowerVR's mipmap
+/// quad makes it (src/pvr/backend.rs `record_mip_level`, mipgen.frag): one
+/// bilinear CLAMP_TO_EDGE sample at the centre of each destination texel,
+/// so destination texel x of `dw` reads the source at
+/// sx = (x + 0.5) * w / dw - 0.5 -- the mean of floor(sx) and the texel
+/// after it, weighted by the fraction -- and rows the same way, rounded to
+/// nearest. Where the level is half the one above that is the 2x2 box the
+/// CPU filter makes, byte for byte; on a NPOT chain's odd steps (75 -> 37)
+/// it is the GPU's sample, not a truncating box. The positions are exact
+/// (integer numerators over 2 * dw), the weights f32. `src` and `dst` are
+/// (byte offset, pitch in texels, width, height) of the two levels.
+fn mip_step_gpu_sample(
+    texels: &mut [u8],
+    (src, sp, w, h): (usize, usize, usize, usize),
+    (dst, dp, dw, dh): (usize, usize, usize, usize),
+) {
+    /* the two source texels and the second one's weight along one axis */
+    let tap = |x: usize, n: usize, dn: usize| -> (usize, usize, f32) {
+        let num = (2 * x + 1) * n - dn; /* (sx) * 2dn, never negative: n >= dn */
+        let i0 = (num / (2 * dn)).min(n - 1);
+        let f = (num % (2 * dn)) as f32 / (2 * dn) as f32;
+        (i0, (i0 + 1).min(n - 1), f)
+    };
+    for y in 0..dh {
+        let (y0, y1, fy) = tap(y, h, dh);
+        for x in 0..dw {
+            let (x0, x1, fx) = tap(x, w, dw);
+            for ch in 0..4 {
+                let at = |yy: usize, xx: usize| f32::from(texels[src + (yy * sp + xx) * 4 + ch]);
+                let top = at(y0, x0) * (1.0 - fx) + at(y0, x1) * fx;
+                let bottom = at(y1, x0) * (1.0 - fx) + at(y1, x1) * fx;
+                let v = top * (1.0 - fy) + bottom * fy;
+                texels[dst + (y * dp + x) * 4 + ch] = (v + 0.5).min(255.0) as u8;
+            }
+        }
+    }
+}
+
 /// Box-filter the chain down from level 0 (CPU; the chain is CPU-visible).
 #[no_mangle]
 pub unsafe extern "C" fn glGenerateMipmap(target: GLenum) {
@@ -4215,7 +4253,13 @@ pub unsafe extern "C" fn glGenerateMipmap(target: GLenum) {
      * framebuffer is read and written by the GPU through the storage, so
      * such a texture keeps the CPU's chain. The clear waiting to be merged
      * into the next draw renders into the texture before this call in GL's
-     * order, so it goes out first, as settle_texture sends it. */
+     * order, so it goes out first, as settle_texture sends it. A backend may
+     * also draw only the large levels (MipChain::Prefix: the PowerVR, one
+     * kick a level, src/pvr/backend.rs MIP_CPU_TAIL_TEXELS) and wait for
+     * them; the levels after are filtered below from the last one it drew,
+     * with its filter (mip_step_gpu_sample), so the chain is the one the GPU
+     * would have made. */
+    let mut first = 1usize;
     let t = &c.objs_ref().textures[ti];
     if t.target == GL_TEXTURE_2D
         && t.texfmt == GLES_TEXFMT_RGBA8
@@ -4227,15 +4271,21 @@ pub unsafe extern "C" fn glGenerateMipmap(target: GLenum) {
     {
         flush_clear_into(c, ti);
         let t = &c.objs_ref().textures[ti];
-        if backend::generate_mipmap(&draw::texture_bind_2d(t), t.chain_levels as u32) {
-            let t = &mut c.objs().textures[ti];
-            t.chain_in_backend = true;
-            t.levels = t.chain_levels;
-            t.levels_written = t.chain_levels;
-            t.level_defined = ((1u32 << u32::from(context::gl_mip_levels(t.width, t.height).min(15))) - 1) as u16;
-            t.level_bad = 0;
-            t.level_faces = [0x3f; CAP_MIP_LEVELS];
-            return;
+        match backend::generate_mipmap(&draw::texture_bind_2d(t), t.chain_levels as u32) {
+            backend::MipChain::Whole => {
+                let t = &mut c.objs().textures[ti];
+                t.chain_in_backend = true;
+                t.levels = t.chain_levels;
+                t.levels_written = t.chain_levels;
+                t.level_defined = ((1u32 << u32::from(context::gl_mip_levels(t.width, t.height).min(15))) - 1) as u16;
+                t.level_bad = 0;
+                t.level_faces = [0x3f; CAP_MIP_LEVELS];
+                return;
+            }
+            /* nothing of the chain is the backend's any more: no
+             * chain_in_backend, and the CPU path below finds no kick */
+            backend::MipChain::Prefix(n) => first = n as usize + 1,
+            backend::MipChain::None => {}
         }
     }
     /* the chain is rewritten in place: no kick may still read or write it */
@@ -4273,15 +4323,28 @@ pub unsafe extern "C" fn glGenerateMipmap(target: GLenum) {
     let csize = bpp / comps; /* 1 (u8), 2 (half), 4 (float) */
     let layers = t.layers.max(1) as usize;
     let (mut w, mut fh) = (t.width as usize, t.height as usize);
+    /* a prefix the backend drew: start from its last level (RGBA8, one
+     * layer, as the offer above asks) */
+    let gpu_sample = first > 1;
+    for _ in 1..first {
+        (w, fh) = ((w / 2).max(1), (fh / 2).max(1));
+    }
 
     // SAFETY: the whole CPU mapping of the allocation.
     osal::cache_invd(t.mem.cpu, t.mem.size);
-    for l in 1..(t.chain_levels as usize).min(CAP_MIP_LEVELS) {
+    for l in first..(t.chain_levels as usize).min(CAP_MIP_LEVELS) {
         let src = t.level_off[l - 1] as usize;
         let dst = t.level_off[l] as usize;
         let (dw, dfh) = (if w > 1 { w / 2 } else { 1 }, if fh > 1 { fh / 2 } else { 1 });
         let (sx, sy) = (if w > 1 { 2usize } else { 1 }, if fh > 1 { 2usize } else { 1 });
         let (sp, dp) = (t.level_pitch_at(l as u32 - 1) as usize, t.level_pitch_at(l as u32) as usize);
+
+        if gpu_sample {
+            mip_step_gpu_sample(texels, (src, sp, w, fh), (dst, dp, dw, dfh));
+            w = dw;
+            fh = dfh;
+            continue;
+        }
 
         for y in 0..dfh * layers {
             /* the face this destination row belongs to, and the source row
@@ -9236,6 +9299,142 @@ mod tests {
         assert!(gl.ctx().objs_ref().textures[name as usize].chain_in_backend);
         tex_image(0, 8, 8, GL_RGBA, GL_UNSIGNED_BYTE, &[]);
         assert!(!gl.ctx().objs_ref().textures[name as usize].chain_in_backend);
+    }
+
+    /// The GPU's sample on the CPU (`mip_step_gpu_sample`): on every even
+    /// step of a 64x48 chain it is the CPU's 2x2 box, byte for byte; on the
+    /// odd steps of glmark2's terrain chain (75 -> 37, 37 -> 18, 9 -> 4) and a
+    /// 3 -> 1 it is an independent f64 bilinear sample at each texel centre,
+    /// within 1 LSB, with the clamped edge texels pinned.
+    #[test]
+    fn the_gpu_sample_is_the_box_on_even_steps_and_bilinear_on_odd_ones() {
+        let texel = |x: usize, y: usize, ch: usize| ((x * 37 + y * 101 + ch * 59 + x * y * 7) % 256) as u8;
+        let level = |w: usize, h: usize| -> Vec<u8> {
+            (0..h).flat_map(|y| (0..w).flat_map(move |x| (0..4).map(move |ch| texel(x, y, ch)))).collect()
+        };
+        /* even steps: the box of the CPU filter, (sum + 2) / 4 */
+        let (mut w, mut h) = (64usize, 48usize);
+        let mut src = level(w, h);
+        while w > 1 && h > 1 && w % 2 == 0 && h % 2 == 0 {
+            let (dw, dh) = (w / 2, h / 2);
+            let mut buf = src.clone();
+            buf.resize(src.len() + dw * dh * 4, 0);
+            mip_step_gpu_sample(&mut buf, (0, w, w, h), (src.len(), dw, dw, dh));
+            for y in 0..dh {
+                for x in 0..dw {
+                    for ch in 0..4 {
+                        let s = |xx: usize, yy: usize| u32::from(src[(yy * w + xx) * 4 + ch]);
+                        let sum = s(2 * x, 2 * y) + s(2 * x + 1, 2 * y) + s(2 * x, 2 * y + 1) + s(2 * x + 1, 2 * y + 1);
+                        assert_eq!(
+                            u32::from(buf[src.len() + (y * dw + x) * 4 + ch]),
+                            (sum + 2) / 4,
+                            "{w}x{h} ({x},{y}) {ch}"
+                        );
+                    }
+                }
+            }
+            src = buf[src.len()..].to_vec();
+            (w, h) = (dw, dh);
+        }
+        assert_eq!((w, h), (4, 3), "the even steps of 64x48 were all walked");
+        /* odd steps, against f64; source rows at a wider pitch */
+        for (w, h, dw, dh) in [(100, 75, 50, 37), (50, 37, 25, 18), (12, 9, 6, 4), (3, 2, 1, 1), (25, 18, 12, 9)] {
+            let pitch = w + 3;
+            let mut buf: Vec<u8> =
+                (0..h).flat_map(|y| (0..pitch).flat_map(move |x| (0..4).map(move |ch| texel(x, y, ch)))).collect();
+            let dst = buf.len();
+            buf.resize(dst + dw * dh * 4, 0);
+            mip_step_gpu_sample(&mut buf, (0, pitch, w, h), (dst, dw, dw, dh));
+            let at = |x: i64, y: i64, ch: usize| {
+                f64::from(texel(x.clamp(0, w as i64 - 1) as usize, y.clamp(0, h as i64 - 1) as usize, ch))
+            };
+            for y in 0..dh {
+                for x in 0..dw {
+                    let sx = (x as f64 + 0.5) * w as f64 / dw as f64 - 0.5;
+                    let sy = (y as f64 + 0.5) * h as f64 / dh as f64 - 0.5;
+                    let (x0, y0) = (sx.floor() as i64, sy.floor() as i64);
+                    let (fx, fy) = (sx - sx.floor(), sy - sy.floor());
+                    for ch in 0..4 {
+                        let want = (at(x0, y0, ch) * (1.0 - fx) + at(x0 + 1, y0, ch) * fx) * (1.0 - fy)
+                            + (at(x0, y0 + 1, ch) * (1.0 - fx) + at(x0 + 1, y0 + 1, ch) * fx) * fy;
+                        let got = f64::from(buf[dst + (y * dw + x) * 4 + ch]);
+                        assert!((got - want).abs() <= 1.0, "{w}x{h} -> {dw}x{dh} ({x},{y}) {ch}: {got} vs {want}");
+                    }
+                }
+            }
+            /* the last texel of a row reads the source's last column, clamped */
+            let edge = |x: usize, y: usize| buf[dst + (y * dw + x) * 4];
+            if (w, h) == (3, 2) {
+                assert_eq!(
+                    edge(0, 0),
+                    (u32::from(texel(1, 0, 0)) + u32::from(texel(1, 1, 0))).div_ceil(2) as u8,
+                    "3x2 -> 1x1: column 1, the two rows"
+                );
+            }
+            if (w, h) == (12, 9) {
+                /* 9 -> 4: the last row's centre is source row 7.375, rows 7
+                 * and 8; 12 -> 6 even, columns 10 and 11 */
+                let (a, b, c, d) = (texel(10, 7, 0), texel(11, 7, 0), texel(10, 8, 0), texel(11, 8, 0));
+                let want = (f64::from(a) + f64::from(b)) / 2.0 * 0.625 + (f64::from(c) + f64::from(d)) / 2.0 * 0.375;
+                assert!((f64::from(edge(5, 3)) - want).abs() <= 1.0, "{} vs {want}", edge(5, 3));
+            }
+        }
+    }
+
+    /// A backend that drew levels 1 ..= n itself and waited for them
+    /// (`generate_mipmap` answering 2 + n: the PowerVR's large levels): the
+    /// GL core leaves those levels as they are, filters the rest from level n
+    /// with the GPU's sample, keeps nothing in the backend and asks nothing
+    /// back. On a 6x5 chain (6x5, 3x2, 1x1) with level 1 drawn: level 2 is
+    /// the sample at (1, 0.5) of level 1 -- column 1, rows 0 and 1 -- not the
+    /// CPU's box of the four texels at the top-left.
+    #[test]
+    fn generate_mipmap_with_a_prefix_from_the_backend_filters_the_tail_with_the_gpus_sample() {
+        let gl = TestGl::new(4, 4);
+        let name = new_tex();
+        let base: Vec<u8> = (0..30u8).flat_map(|i| [i * 8, 240 - i * 8, i * 3, 255 - i]).collect();
+        tex_image(0, 6, 5, GL_RGBA, GL_UNSIGNED_BYTE, &base);
+        /* the CPU's chain first: level 1 then holds texels the prefix keeps */
+        // SAFETY: plain GL call.
+        unsafe { glGenerateMipmap(GL_TEXTURE_2D) };
+        let t = &gl.ctx().objs_ref().textures[name as usize];
+        assert!(t.pot_chain);
+        assert_eq!(t.chain_levels, 3);
+        let (l1, l2) = (t.level_off[1] as usize, t.level_off[2] as usize);
+        let p1 = t.level_pitch_at(1) as usize;
+        let mut s = storage(&gl, name);
+        /* a level 1 the "GPU" drew: other texels than the box made */
+        for (i, v) in s[l1..l1 + p1 * 2 * 4].iter_mut().enumerate() {
+            *v = (i * 29 % 251) as u8;
+        }
+        // SAFETY: the test texture's live CPU mapping, as `storage` read it.
+        unsafe { core::ptr::copy_nonoverlapping(s.as_ptr(), t.mem.cpu as *mut u8, s.len()) };
+        /* in memory, as the GPU's store leaves it */
+        // SAFETY: the same mapping, whole.
+        unsafe { osal::cache_flush(t.mem.cpu, t.mem.size) };
+        gl.answer_generate_mipmap(2 + 1);
+        // SAFETY: plain GL call.
+        unsafe { glGenerateMipmap(GL_TEXTURE_2D) };
+        assert_eq!(gl.error(), GL_NO_ERROR);
+        assert_eq!(gl.mipmap_generates().len(), 2);
+        let after = storage(&gl, name);
+        assert_eq!(after[l1..l1 + p1 * 2 * 4], s[l1..l1 + p1 * 2 * 4], "level 1 is the backend's, untouched");
+        for ch in 0..4 {
+            let want = (u32::from(s[l1 + 4 + ch]) + u32::from(s[l1 + (p1 + 1) * 4 + ch])).div_ceil(2);
+            assert_eq!(u32::from(after[l2 + ch]), want, "level 2 channel {ch}: column 1 of level 1, rows 0 and 1");
+        }
+        let t = &gl.ctx().objs_ref().textures[name as usize];
+        assert!(!t.chain_in_backend, "nothing of the chain is the backend's");
+        assert_eq!((t.levels, t.levels_written, t.level_bad), (3, 3, 0));
+        tex_sub_image(0, 0, 0, 1, 1, GL_RGBA, &ramp(1));
+        assert!(gl.chain_returns().is_empty(), "nothing to ask back");
+        /* answers past the chain, or a prefix of none, are the CPU's whole
+         * box filter (MipChain::from_answer) */
+        assert_eq!(backend::MipChain::from_answer(2 + 3, 3), backend::MipChain::None);
+        assert_eq!(backend::MipChain::from_answer(2, 3), backend::MipChain::None);
+        assert_eq!(backend::MipChain::from_answer(2 + 2, 3), backend::MipChain::Prefix(2));
+        assert_eq!(backend::MipChain::from_answer(-22, 3), backend::MipChain::None);
+        assert_eq!(backend::MipChain::from_answer(1, 3), backend::MipChain::Whole);
     }
 
     /// The PowerVR's chain of a non-power-of-two image, laid out as its

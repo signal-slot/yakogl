@@ -838,20 +838,25 @@ mod pvr {
 
     /// The chain the PowerVR makes for a rendered-into RGBA8 texture: every
     /// frame's glGenerateMipmap is taken by the backend (one made chain, none
-    /// refused), one kick per level above 0, and the GL core filters nothing:
-    /// the levels keep what the storage held (the kicks write them on the
-    /// board; the stand-in GPU draws nothing), and level 0 is the render's.
-    fn pvr_makes_the_chain(w: i32, h: i32) {
+    /// refused), one kick per level above 0 down to the last over 64x64
+    /// texels (level 1 always: src/pvr/backend.rs MIP_CPU_TAIL_TEXELS), and
+    /// the GL core filters only the levels after those, from the last one
+    /// the backend drew, with the GPU's sample. The levels keep what the
+    /// storage held (the kicks write them on the board; the stand-in GPU
+    /// draws nothing), the tail filtered from such a uniform level is that
+    /// same value, and level 0 is the render's.
+    fn pvr_makes_the_chain(w: i32, h: i32, gpu_levels: i64) {
         let _g = rig();
         let levels = 32 - (w.max(h) as u32).leading_zeros();
         let (tex, call) = chain_frames(w, h, 3);
         assert_eq!((call.made, call.refused), (1, 0), "{w}x{h}: the backend took the chain: {:?}", logs());
-        assert_eq!(call.kicks, i64::from(levels) - 1, "{w}x{h}: one kick per level above 0");
-        assert!(call.in_backend, "{w}x{h}: the chain lives in the backend's hands (chain_in_backend)");
+        assert_eq!(call.kicks, gpu_levels, "{w}x{h}: one kick per large level above 0");
+        let whole = gpu_levels == i64::from(levels) - 1;
+        assert_eq!(call.in_backend, whole, "{w}x{h}: a whole chain lives in the backend's hands, a prefix not");
         let t = &ctx().objs_ref().textures[tex as usize];
         assert_eq!(u32::from(t.chain_levels), levels, "{w}x{h}: GL's whole chain");
         for l in 1..levels {
-            assert!(level_rows(tex, l).iter().all(|&b| b == 0xA5), "{w}x{h}: the GL core wrote level {l}");
+            assert!(level_rows(tex, l).iter().all(|&b| b == 0xA5), "{w}x{h}: level {l}");
         }
         assert_eq!(level_rows(tex, 0), common::level0(3, w as u32, h as u32), "{w}x{h}: level 0 is the render's");
         /* the CPU writes the texture: the backend hands the chain back, which
@@ -872,19 +877,22 @@ mod pvr {
 
     #[test]
     fn a_square_power_of_two_target_gets_its_chain_from_the_gpu() {
-        pvr_makes_the_chain(64, 64);
+        pvr_makes_the_chain(64, 64, 1); /* 32x32 */
+        pvr_makes_the_chain(256, 256, 1); /* 128x128; 64x64 is the tail's */
+        pvr_makes_the_chain(2, 2, 1); /* the whole chain */
     }
 
     #[test]
     fn a_rectangular_power_of_two_target_gets_its_chain_from_the_gpu() {
-        pvr_makes_the_chain(64, 32);
+        pvr_makes_the_chain(64, 32, 1);
     }
 
     /// glmark2 terrain's target is 800x600: a NPOT texture whose chain is laid
-    /// out as its power-of-two extent (the PowerVR's `pot_chain`).
+    /// out as its power-of-two extent (the PowerVR's `pot_chain`). Levels 1
+    /// to 3 (400x300, 200x150, 100x75) on the GPU, 50x37 .. 1x1 on the CPU.
     #[test]
     fn glmark2_terrains_800x600_target_gets_its_chain_from_the_gpu() {
-        pvr_makes_the_chain(800, 600);
+        pvr_makes_the_chain(800, 600, 3);
     }
 }
 
