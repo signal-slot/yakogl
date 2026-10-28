@@ -15,6 +15,20 @@ of shaders in `tools/mali/corpus-verdicts.txt` are still refused:
 2. `Valhall: a loop other than one a constant bound ends within 32 passes`:
    es300 `divnest.frag`, `loop_exit.frag`.
 
+**State since plan #154 item intbool (session 1).** A mediump shader's
+loop is walked when its passes fold, int and bool constants are values,
+and integer compares of fp16 uniforms reach the colour
+(`docs/notes/mali-int-and-size.md`, "Since plan #154 item intbool"), but
+`int_compare` and `tri_int` are not lowered yet: their integers are
+`F16_TO_S32` of fp16 *arithmetic on varyings* (`FMA.v2f16` of the colour
+pair), which the mediump pair path (`nir_fs::select`) vectorises and the
+colour-of-masks path (`select_highp`) does not take, and they need the
+`ige`/`ine` compares, `IMUL`/`ISUB`, `S32_TO_F32` and `CSEL` to fp32 in a
+mediump program. Their corpus lines stay the int refusal (a mediump `<=`
+or `!=` of run-time integers is refused there). Loops of
+a mediump shader with a run-time bound are now the `LoopForm` refusal
+(`uniloop.frag`, `divloop.frag`; loops-rt).
+
 ## References
 
 Mesa 26.2.1, panfrost on drm-shim (GPU_ID 0xa867), one draw per pair with

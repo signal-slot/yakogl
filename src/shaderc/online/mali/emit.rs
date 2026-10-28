@@ -36,7 +36,7 @@ const fn row(op: Alu, bits: u8, width: u8) -> Row {
 }
 
 /// The rows [`emit`] selects, each with the `bi_emit_alu` case it is.
-pub const ROWS: [(Row, &str); 59] = [
+pub const ROWS: [(Row, &str); 63] = [
     (row(Alu::Fadd, 32, 1), "nir_op_fadd: FADD.f32"),
     (row(Alu::Fmul, 32, 1), "nir_op_fmul: FMA.f32 a, b, -0.0"),
     (row(Alu::Ffma, 32, 1), "nir_op_ffma: FMA.f32"),
@@ -126,6 +126,15 @@ pub const ROWS: [(Row, &str); 59] = [
      * testdata/varyconst_75_immneg: `FADD.v2f16 r1, 0x3C000000.h11,
      * u2.w1.neg.h00`, the fneg a modifier of its reader) */
     (row(Alu::Fneg, 16, 1), "nir_op_fneg of one 16-bit lane: FABSNEG.v2f16 a.hN.neg"),
+    /* a mediump value's integer (case 72, tools/mali/testdata/intbig_case72:
+     * `F16_TO_S32.rtz r0, u2.w0.h0`) */
+    (row(Alu::F2i32, 32, 1), "nir_op_f2i32 of a 16-bit source: F16_TO_S32.rtz"),
+    /* an int uniform's shift, byte and sign (tools/mali/testdata/intuni_ishr:
+     * `ARSHIFT_OR.i32 r0, u2.w0, r0^.b00, 0x0`, `U8_TO_F32 r1, r0.b0`,
+     * `U8_TO_F32 r0, r0^.b1`) */
+    (row(Alu::Ishr, 32, 1), "nir_op_ishr: ARSHIFT_OR.i32 a, #0, b.b0"),
+    (row(Alu::U8f32(0), 32, 1), "nir_op_u2f32 of extract_u8(a, 0): U8_TO_F32 a.b0"),
+    (row(Alu::U8f32(1), 32, 1), "nir_op_u2f32 of extract_u8(a, 1): U8_TO_F32 a.b1"),
 ];
 
 /// A source of a one-lane 16-bit operation: its lane's half in both
@@ -243,6 +252,22 @@ pub fn emit(p: &mut Prog<'_>, row: Row, s: &[Src]) -> Result<u16, MaliError> {
          * each source's half in both (the caller's swizzle) */
         (Alu::Bcsel, 16, 1) => ins(p, Op::MuxV2i16, &[s[2], s[1], s[0]])?,
         (Alu::Ffloor, 16, 2) => ins(p, Op::FroundV2f16 { round: Round::Rtn }, &s[..1])?,
+        (Alu::F2i32, 32, 1) => ins(p, Op::F16ToS32, &s[..1])?,
+        /* `bi_arshift_or_to(b, sz, dst, s0, bi_zero(), bi_byte(s1, 0))`
+         * (:3053-3055). A uniform's word takes no byte lane: the amount is
+         * moved to a register first (intuni_ishr.expect.json: `MOV.i32 r0,
+         * u2.w1`, then `ARSHIFT_OR.i32 r0, u2.w0, r0^.b00, 0x0`) */
+        (Alu::Ishr, 32, 1) => {
+            let amount = match s[1].idx {
+                Idx::Ubo { .. } => Src::ssa(ins(p, Op::MovI32, &s[1..2])?),
+                _ => s[1],
+            };
+            ins(p, Op::ArshiftOrI32, &[s[0], ZERO, amount.swz(Swz::B0)])?
+        }
+        (Alu::U8f32(k), 32, 1) => {
+            let b = [Swz::B0, Swz::B1, Swz::B2, Swz::B3][k as usize & 3];
+            ins(p, Op::U8ToF32, &[s[0].swz(b)])?
+        }
         _ => return Err(MaliError::Defect(super::Defect::IrIndex)),
     })
 }

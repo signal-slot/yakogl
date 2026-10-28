@@ -1049,7 +1049,11 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
         (VS, "attribute vec4 p; attribute vec2 c; uniform float u; varying vec4 v; void main(){ gl_Position = p; v = vec4(c, u, 1.0); }", MaliError::VaryingNotFromAttribute),
         (VS, "attribute vec4 p; varying vec2 v; void main(){ gl_Position = p; v = p.xx; }", MaliError::VaryingDuplicate),
         (FS, "precision mediump float; varying float f; varying vec4 v; void main(){ gl_FragColor = f + v; }", MaliError::FsOperandForm),
-        (FS, "precision mediump float; void main(){ int i = 1; gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0); }", MaliError::IntValue),
+        (
+            FS,
+            "precision mediump float; varying vec4 v; void main(){ int i = int(v.x); gl_FragColor = vec4(float(i)); }",
+            MaliError::IntValue,
+        ),
         (VS, "uniform sampler2D s; uniform sampler2D t; attribute vec4 p; varying vec4 v; void main(){ gl_Position = p; v = texture2DLod(s, p.xy, 0.0) * texture2DLod(t, p.xy, 0.0); }", MaliError::TexVertex),
         /* a cube look-up at a direction of constants alone (case 101's
          * tools/shaders/es100/cubelod.vert: `vec3(1.0, 0.0, 0.0)`; one
@@ -1100,7 +1104,6 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
          * the clamp forms Mesa's late rules make; a negated float(bool) in
          * a product */
         (FS, "precision highp float; varying vec4 v; void main(){ float r = float(v.x != v.y); gl_FragColor = vec4(r, 0.0, 0.0, 1.0); }", MaliError::CompareForm),
-        (FS, "precision highp float; varying vec4 v; void main(){ float r = float(int(v.x) != int(v.y)); gl_FragColor = vec4(r, 0.0, 0.0, 1.0); }", MaliError::CompareForm),
         (FS, "precision highp float; varying vec4 v; void main(){ float r = clamp(v.x, -1.0, 1.0); gl_FragColor = vec4(r, 0.0, 0.0, 1.0); }", MaliError::AlgebraicForm),
         (FS, "precision highp float; varying vec4 v; void main(){ float r = -float(v.x > 0.5) * v.y; gl_FragColor = vec4(r, 0.0, 0.0, 1.0); }", MaliError::AlgebraicForm),
         /* a chain of more than 8 operations that Mesa's link would move */
@@ -1959,6 +1962,8 @@ fn fs_reference_sources() -> Vec<&'static str> {
      * rounded mediump constant (plan #153 frame-cull) */
     srcs.extend(FRAG_COORD_POPULATION.iter().map(|c| c.1));
     srcs.extend([td!("algfold_192_predlive.frag"), td!("mixprec_hello.frag")]);
+    /* integer and boolean values (#33) */
+    srcs.extend(INTBOOL_POPULATION.iter().map(|c| c.2));
     srcs
 }
 
@@ -2411,16 +2416,19 @@ fn a_highp_float_array_read_at_int_uniforms_is_byte_equal_to_mesa_26_2_1() {
     assert_eq!(&f.info.fau[4..], (0..4).map(|d| FauWord::Uniform { dword: d }).collect::<Vec<_>>());
 }
 
-/// An int uniform is read as an array index only: one read as a value
-/// stays refused at the uniform, in either fp32 stage, as before.
+/// An int uniform read as a value: a highp fragment shader reads its word
+/// raw, as an index's (intuni_ishr: `ARSHIFT_OR.i32 r0, u2.w0, ..`), here
+/// converted by `S32_TO_F32`; the vertex stage reads one as an array index
+/// only and refuses it at the uniform, as before.
 #[test]
-fn an_int_uniform_outside_an_array_index_stays_refused() {
+fn an_int_uniform_outside_an_array_index_is_a_raw_word() {
     let vs = "attribute vec4 p; uniform int i; uniform float a[4]; varying vec4 v;
               void main(){ gl_Position = p; v = vec4(a[i] + float(i)); }";
     assert_eq!(gap(SHC_STAGE_VERTEX, vs), MaliError::UniformType);
     let fs = "precision highp float; uniform highp int i; uniform highp float a[4];
               void main(){ gl_FragColor = vec4(a[i] + float(i)); }";
-    assert_eq!(gap(SHC_STAGE_FRAGMENT, fs), MaliError::UniformType);
+    let f = compile(SHC_STAGE_FRAGMENT, fs).expect("compiles");
+    assert!(trim(&f.code).iter().any(|w| text(*w).starts_with("S32_TO_F32")));
 }
 
 /// Case 108 A's record: the block the frame uploads is the four ints at
@@ -4532,12 +4540,14 @@ fn the_builtin_population_is_byte_equal_to_mesa_26_2_1() {
 /// builtin_45/98.expect.json, the varying's gl_VertexID code dead). Their
 /// fragment shaders stay refused by other families: 45's run-time loop over
 /// an int uniform's bound (loops-rt, intbool-2), 98's int loop and `mod`
-/// (loops-rt, intbool).
+/// (loops-rt, intbool-2). Since intbool an int uniform's word is read and
+/// a mediump shader's loop walked, so for both the run-time `break` is the
+/// refusal.
 #[test]
 fn cases_45_and_98_vertex_programs_are_byte_equal_to_mesa_26_2_1() {
     for (vs, fs, json, gap_fs) in [
-        (td!("builtin_45.vert"), td!("builtin_45.frag"), td!("builtin_45.expect.json"), MaliError::UniformType),
-        (td!("builtin_98.vert"), td!("builtin_98.frag"), td!("builtin_98.expect.json"), MaliError::Arithmetic),
+        (td!("builtin_45.vert"), td!("builtin_45.frag"), td!("builtin_45.expect.json"), MaliError::LoopForm),
+        (td!("builtin_98.vert"), td!("builtin_98.frag"), td!("builtin_98.expect.json"), MaliError::LoopForm),
     ] {
         let v = {
             let _k = store::test_keep();
@@ -4609,4 +4619,67 @@ fn the_builtin_lowering_keeps_its_gaps() {
     assert_eq!(gap(SHC_STAGE_VERTEX, vs3), MaliError::IntValue);
     let fs = "precision mediump float; varying vec4 v; void main(){ gl_FragColor = gl_FrontFacing ? v : vec4(1.0); }";
     assert_eq!(gap(SHC_STAGE_FRAGMENT, fs), MaliError::Arithmetic);
+}
+
+/* ---- integer and boolean values (#33) ------------------------------- */
+
+/// The vertex shader of gl_test's ES 1.00 cases 72, 79 and 112
+/// (docs/notes/mali-int-and-size.md).
+const ES100_PASSTHROUGH_VS: &str = include_str!("../../../../tools/shaders/gl_test_es100/passthrough.vert");
+
+/// The integer and boolean population (docs/notes/mali-int-and-size.md,
+/// mali-int-loops.md, mali-int-uniforms.md; plan #154 intbool): each pair
+/// against its drm-shim reference, drawn with no uniform values (every
+/// uniform word 0), every region and fact ([`check_program_for`]).
+const INTBOOL_POPULATION: [(&str, &str, &str, &str); 3] = [
+    /* an `ivec2` uniform's words read raw: `v.x >> v.y` is `ARSHIFT_OR.i32`
+     * with the amount moved to a register for its byte lane, `s < 0` an
+     * `ICMP_OR.s32.lt.m1` and its select of 1.0 a `CSEL`, `float(s & 255)`
+     * and `float((s >> 8) & 255)` `U8_TO_F32` of bytes 0 and 1, the colour
+     * stored at fp32 (ES 3.00) */
+    ("ishr", td!("intuni_ishr.vert"), td!("intuni_ishr.frag"), td!("intuni_ishr.expect.json")),
+    /* case 72 (intlit): the int-counted loop folds to the constant 0.75,
+     * the `ivec2`/`bvec2` constants to 1.0, and `int(u_in.x) == 2` is
+     * `F16_TO_S32.rtz` of the uniform's fp16 half, `ICMP_OR.u32.eq.m1`
+     * against the byte constant and the 16-bit `MUX` of 0.0 and 1.0; the
+     * colour's words `MKVEC.v2i16 u2.w1.h0, r0^.h0` and the 1.0 pair. The
+     * fragment shader reads no varying: the position program alone */
+    (
+        "72",
+        ES100_PASSTHROUGH_VS,
+        include_str!("../../../../tools/shaders/es100/intlit.frag"),
+        td!("intbig_case72.expect.json"),
+    ),
+    /* case 112 (affectand): the inlined calls' flags fold through the `if`
+     * (`bcsel(a, true, false)` is `a`) and `!b && sideEffectA &&
+     * !sideEffectB` to `inot(u_false)`, whose select swaps its sides: two
+     * `MUX.v2i16` on the bool uniform's word, read as it is (`MOV.i32 r0,
+     * u2.w0`) */
+    (
+        "112",
+        ES100_PASSTHROUGH_VS,
+        include_str!("../../../../tools/shaders/es100/affectand.frag"),
+        td!("intbig_case112.expect.json"),
+    ),
+];
+
+/// The population's member `name` against its reference.
+fn check_intbool(name: &str) {
+    let (_, vs, fs, json) = INTBOOL_POPULATION.iter().find(|c| c.0 == name).expect("a member");
+    check_program_for(name, vs, fs, json, false);
+}
+
+#[test]
+fn case_72_intlit_is_byte_equal_to_mesa_26_2_1() {
+    check_intbool("72");
+}
+
+#[test]
+fn case_112_affectand_is_byte_equal_to_mesa_26_2_1() {
+    check_intbool("112");
+}
+
+#[test]
+fn intuni_ishr_is_byte_equal_to_mesa_26_2_1() {
+    check_intbool("ishr");
 }

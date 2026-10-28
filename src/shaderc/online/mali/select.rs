@@ -366,7 +366,7 @@ impl UboLayout {
     /// Mesa keeps fp32: refused ([`MaliError::FsUniform`]), as is any other
     /// type (no reference draws it).
     pub fn fs16(m: &Module<'_>, fs: &nir::Nir<'_>, highp: &dyn Fn(&str) -> bool) -> Result<UboLayout, MaliError> {
-        use crate::gl::consts::{GL_FLOAT, GL_FLOAT_VEC2, GL_FLOAT_VEC3, GL_FLOAT_VEC4, GL_INT};
+        use crate::gl::consts::{GL_BOOL, GL_FLOAT, GL_FLOAT_VEC2, GL_FLOAT_VEC3, GL_FLOAT_VEC4, GL_INT};
         let mut l = UboLayout::NONE;
         for u in m.uniforms.iter().filter(|u| u.dword_off != crate::shaderc::SHC_UNIFORM_NO_BLOCK) {
             let end = u.dword_off + u.dwords.max(1);
@@ -379,7 +379,7 @@ impl UboLayout {
                 continue;
             }
             let (comps, halves) = match u.gl_type as u32 {
-                GL_INT if u.array_len <= 1 => (1, false),
+                GL_INT | GL_BOOL if u.array_len <= 1 => (1, false),
                 GL_FLOAT => (1, true),
                 GL_FLOAT_VEC2 if u.array_len <= 1 => (2, true),
                 GL_FLOAT_VEC3 if u.array_len <= 1 => (3, true),
