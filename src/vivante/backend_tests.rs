@@ -5129,16 +5129,15 @@ fn mipmap_chains_the_gpu_cannot_make_are_left_to_the_cpu_by_name() {
     assert!(rig.faults().is_empty());
 }
 
-/// A uniform block past the constant registers is refused by name, not cut:
-/// nothing reaches the GPU, the draw is counted among the refusals, and the
-/// reason is logged once. The copy is the block's only home today, so the
-/// dwords past 1280 have nowhere to go; the gc-ubo item, which reads the
-/// blocks from memory, is what lifts this. The block that exactly fits is
-/// copied whole.
+/// A uniform block past the constant registers is not cut and not refused:
+/// the constant file takes only the dwords the shader names and the rest is
+/// read from the block's copy in memory, so `take_uniforms` hands the whole
+/// block over, in place. One with no CPU mapping is refused by name.
 #[test]
-fn a_uniform_block_past_the_constant_registers_is_refused_not_cut() {
-    let rig = Rig::new();
-    let big = vec![7u32; GC_MAX_UNIFORM_DWORDS + 4];
+fn a_uniform_block_past_the_constant_registers_is_taken_whole() {
+    let _rig = Rig::new();
+    let n = GC_MAX_UNIFORM_DWORDS + 4;
+    let big: Vec<u32> = (0..n as u32).collect();
     let fits = vec![5u32; GC_MAX_UNIFORM_DWORDS];
 
     /* the block that exactly fits is copied whole */
@@ -5146,25 +5145,13 @@ fn a_uniform_block_past_the_constant_registers_is_refused_not_cut() {
     let got = unsafe { take_uniforms(fits.as_ptr().cast(), GC_MAX_UNIFORM_DWORDS as u16, false) };
     assert_eq!(got, Some(&fits[..]));
 
+    /* and the one past it is whole too, including the dwords past 1280 */
     for vertex in [true, false] {
-        let stage = if vertex { "vertex" } else { "fragment" };
-        let mut d = rig.draw(3);
-        if vertex {
-            d.vs_uniform_cpu = big.as_ptr().cast();
-            d.vs_uniform_dwords = (GC_MAX_UNIFORM_DWORDS + 4) as u16;
-        } else {
-            d.fs_uniform_cpu = big.as_ptr().cast();
-            d.fs_uniform_dwords = (GC_MAX_UNIFORM_DWORDS + 4) as u16;
-        }
-        // SAFETY: `d` is a live draw for the length of the call.
-        assert!(unsafe { gc_draw(&d) } < 0, "{stage}: refused");
-        assert_eq!(rig.kicks(), 0, "{stage}: nothing reached the GPU");
-        assert!(rig.faults().is_empty());
+        // SAFETY: as above.
+        let got = unsafe { take_uniforms(big.as_ptr().cast(), n as u16, vertex) };
+        assert_eq!(got, Some(&big[..]), "vertex {vertex}");
     }
-    assert_eq!(gc_refused_draws(), 2, "both refusals counted");
-    let lines = rig._gl.logs();
-    let said: Vec<&String> =
-        lines.iter().filter(|l| l.contains("uniform block of 1284 dwords exceeds the 1280")).collect();
-    assert_eq!(said.len(), 1, "the first refusal alone is logged: {lines:?}");
-    assert!(said[0].contains("vertex uniform block"), "{}", said[0]);
+
+    // SAFETY: a null block is allowed.
+    assert_eq!(unsafe { take_uniforms(core::ptr::null(), n as u16, true) }, None);
 }
