@@ -369,7 +369,21 @@ pub fn assemble_from_ir_keyed(
     uniforms: &[crate::shaderc::ShcUniform],
     front_flipped: bool,
 ) -> Result<ShcShader, CompileError> {
-    let sel = select::select_keyed(m, scratch, front_flipped)?;
+    assemble_from_ir_blocks(m, scratch, uniforms, front_flipped, &[])
+}
+
+/// [`assemble_from_ir_keyed`] with the `(dword_off, dwords)` ranges of the
+/// uniform rows that are user-block members, which `select::select_blocks`
+/// reads from memory instead of the constant file.
+#[cfg(feature = "gpu-vivante")]
+pub fn assemble_from_ir_blocks(
+    m: &ir::Module<'_>,
+    scratch: &Arena<'_>,
+    uniforms: &[crate::shaderc::ShcUniform],
+    front_flipped: bool,
+    members: &[(u16, u16)],
+) -> Result<ShcShader, CompileError> {
+    let sel = select::select_blocks(m, scratch, front_flipped, members)?;
 
     /* The stage, because the fragment file's r0 is gl_FragCoord whether the
      * shader names it or not; the allocator cannot see that from `sel`. */
@@ -787,12 +801,22 @@ fn compile_vivante<'s>(
     let uniforms = reflect::uniform_rows(&lowered.reflection, scratch)?;
     let blocks = (lowered.reflection.blocks, lowered.reflection.block_members, [lowered.reflection.uniforms, &[][..]]);
     let attrib = |e| CompileError::BackEnd(BackEndError::Attrib(e));
+    /* The rows of the block members: their dwords are read from the block's
+     * copy in memory, not the constant file (`select::select_blocks`). */
+    let members = scratch.alloc_filled(lowered.reflection.block_members.len(), (0u16, 0u16))?;
+    let mut n = 0;
+    for bm in lowered.reflection.block_members {
+        if let Some(r) = lowered.reflection.uniforms.get(bm.row as usize) {
+            members[n] = (r.dword_off, r.dwords);
+            n += 1;
+        }
+    }
     if stage == crate::shaderc::SHC_STAGE_VERTEX {
         if let Some(map) = map {
             let (m, _) =
                 super::powervr::abi::with_attrib_map(scratch, &lowered.module, lowered.reflection.attribs, map)
                     .map_err(attrib)?;
-            return assemble_from_ir(m, scratch, uniforms).map(|sh| (sh, blocks));
+            return assemble_from_ir_blocks(m, scratch, uniforms, false, &members[..n]).map(|sh| (sh, blocks));
         }
         /* More attribute locations declared than the front end has vertex
          * elements (16; a matrix takes one a column): which of them alias is
@@ -813,7 +837,7 @@ fn compile_vivante<'s>(
         }
     }
     let _ = keep;
-    let mut sh = assemble_from_ir_keyed(&lowered.module, scratch, uniforms, front_flipped)?;
+    let mut sh = assemble_from_ir_blocks(&lowered.module, scratch, uniforms, front_flipped, &members[..n])?;
     /* Says the draw has to pick between the two senses (the GL core asks for
      * the variant only for a shader that says so). */
     sh.reads_front_facing = u8::from(stage == crate::shaderc::SHC_STAGE_FRAGMENT && lowered.module.uses_front_facing);
@@ -1817,6 +1841,34 @@ mod lowered_ops {
          * split instance draws on it (docs/notes/instanceid-per-draw.md,
          * V0; the refusal itself is tested in src/vivante/backend_tests.rs). */
         assert_eq!(sh.vs_instance_id_reg1, 2, "t1, one-based");
+    }
+
+    /// A vertex shader recompiled at link with the program's attribute map
+    /// reads its uniform-block members from memory like the first compile
+    /// does (docs/notes/gc-ubo-const-limit.md): a `load`, and the 64-register
+    /// block is not in the constant file (so a program whose layout waits
+    /// for the link is not refused for the 320 registers either).
+    #[cfg(not(feature = "report-es2"))]
+    #[test]
+    fn a_vertex_shader_with_a_block_relinked_with_an_attribute_map_loads_the_block() {
+        const SRC: &str = "#version 300 es\nlayout(std140) uniform B { vec4 v[64]; };\nin vec4 a;\n\
+                           void main() { gl_Position = a + v[3] + v[60]; }\n";
+        let _k = super::super::store::test_keep();
+        let _serial = super::super::store::test_lock();
+        let mut map = crate::shaderc::ShcAttribMap::ZERO;
+        map.count = 1;
+        map.b[0].name[0] = b'a' as _;
+        map.b[0].location = 3;
+        map.b[0].columns = 1;
+        map.b[0].gl_type = 0x8B52; /* vec4 */
+        map.b[0].active = 1;
+        let sh = super::super::store::with_scratch(|s| {
+            compile_vs_mapped_blocks(SRC.as_bytes(), &map, s, super::super::store::keep()).map(|(sh, _)| sh)
+        })
+        .expect("the scratch region is free")
+        .expect("compiles");
+        assert!(opcodes(&sh).contains(&"load"), "the block is read with load: {:#?}", listing(&sh));
+        assert!(sh.viv.const_count < 64, "the block is not in the constant file: {}", sh.viv.const_count);
     }
 
     /// "After the attributes" counts locations, every column of a matrix

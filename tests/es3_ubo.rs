@@ -1489,19 +1489,11 @@ mod es3 {
     }
 
     /// Cases a back end refuses at link for a limit of its own, with the
-    /// log line that says so. The GC7000 copies a block into the constant
-    /// registers, of which its two stages share 320 (src/vivante); these
-    /// four need 184 + 184. Reading blocks from memory on that GPU is what
-    /// lifts it. A case on the list that starts passing fails the test too,
-    /// so the list cannot outlive the limit.
-    #[cfg(feature = "gpu-vivante")]
-    const KNOWN_LIMITS: [(&str, &str); 4] = [
-        ("single_nested_struct_array.per_block_buffer.shared_instance_array_both", "exceed the 320 this GPU has"),
-        ("single_nested_struct_array.per_block_buffer.std140_instance_array_both", "exceed the 320 this GPU has"),
-        ("single_nested_struct_array.single_buffer.shared_instance_array_both", "exceed the 320 this GPU has"),
-        ("single_nested_struct_array.single_buffer.std140_instance_array_both", "exceed the 320 this GPU has"),
-    ];
-    #[cfg(not(feature = "gpu-vivante"))]
+    /// log line that says so. None today: the GC7000's four struct-array
+    /// cases that needed 184 + 184 of its 320 constant registers read their
+    /// blocks from memory now (docs/notes/gc-ubo-const-limit.md). A case on
+    /// the list that starts passing fails the test too, so the list cannot
+    /// outlive a limit.
     const KNOWN_LIMITS: [(&str, &str); 0] = [];
 
     fn run_all(cases: Vec<(String, Iface, Mode)>) {
