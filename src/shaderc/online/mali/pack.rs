@@ -382,6 +382,18 @@ pub fn pack_one(i: &Ins, branch: i32) -> Result<u64, MaliError> {
             f.put("neg0", i.src[0].neg as u32)?.put("abs0", i.src[0].abs as u32)?;
             alu_dest(&mut f, i, "dest_width")?;
         }
+        Op::F16ToS32 => {
+            f = Fill::new(IsaOp::F16ToS32);
+            f.put("src0", src_byte(&i.src[0])?)?.put("lane0", lane(i.src[0].swz)?)?;
+            f.put("neg0", i.src[0].neg as u32)?.put("abs0", i.src[0].abs as u32)?;
+            f.put("round", super::bir::Round::Rtz as u32)?;
+            alu_dest(&mut f, i, "dest_width")?;
+        }
+        Op::U8ToF32 => {
+            f = Fill::new(IsaOp::U8ToF32);
+            f.put("src0", src_byte(&i.src[0])?)?.put("lane0", byte(i.src[0].swz)?)?;
+            alu_dest(&mut f, i, "dest_width")?;
+        }
         Op::FaddImmF32(imm) => {
             f = Fill::new(IsaOp::FaddImmF32);
             f.put("src0", src_byte(&i.src[0])?)?.put("imm1w", imm)?;
@@ -582,11 +594,12 @@ pub fn pack_one(i: &Ins, branch: i32) -> Result<u64, MaliError> {
             f.put("src0", src_byte(&i.src[0])?)?.put("src1", src_byte(&i.src[1])?)?;
             f.put("not", eq as u32)?.put("combine", 0)?.put("address_mode", 1)?.put("conservative", 0)?;
         }
-        Op::LshiftAndI32 | Op::LshiftOrI32 | Op::RshiftAndI32 | Op::RshiftOrI32 => {
+        Op::LshiftAndI32 | Op::LshiftOrI32 | Op::RshiftAndI32 | Op::RshiftOrI32 | Op::ArshiftOrI32 => {
             f = Fill::new(match i.op {
                 Op::LshiftAndI32 => IsaOp::LshiftAndI32,
                 Op::LshiftOrI32 => IsaOp::LshiftOrI32,
                 Op::RshiftOrI32 => IsaOp::RshiftOrI32,
+                Op::ArshiftOrI32 => IsaOp::ArshiftOrI32,
                 _ => IsaOp::RshiftAndI32,
             });
             /* BIR (value, mask or or-value, shift) as Valhall (src0, src2,

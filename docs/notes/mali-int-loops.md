@@ -15,6 +15,29 @@ of shaders in `tools/mali/corpus-verdicts.txt` are still refused:
 2. `Valhall: a loop other than one a constant bound ends within 32 passes`:
    es300 `divnest.frag`, `loop_exit.frag`.
 
+**State since plan #154 item intbool (session 1).** A mediump shader's
+loop is walked when its passes fold, int and bool constants are values,
+and integer compares of fp16 uniforms reach the colour
+(`docs/notes/mali-int-and-size.md`, "Since plan #154 item intbool").
+`int_compare` is byte-equal (`intloop_int_compare_is_byte_equal_to_mesa_26_2_1`):
+its integers are `F16_TO_S32` of fp16 arithmetic on varying lanes, which
+the colour-of-masks path now takes when the lanes pair
+(`nir_fs::int_source_pairs`, `vectorise_int_sources`: one `V2F32_TO_V2F16`
+and one `FMA.v2f16` of `r` and `g`), the varying loaded whole (Mesa keeps a
+varying a mediump shader makes an integer of: `.v4` though two lanes are
+read, `nir_fs::layout`), `<=` as `ige` with its sources swapped, and each
+select's compare emitted right before its `MUX.v2i16` at the store
+(`nir_move_comparisons`). `tri_int` is not lowered: past its `ine` it
+needs fp32 arithmetic on integers in a mediump program (`IMUL.i32`,
+`ISUB.s32`, `S32_TO_F32`, `FMA.f32` by `1/12`, `CSEL.u32.eq` to the fp32
+1.0 and the `FMA.f32` sums of `float(e)`, `float(n)`), the fp16 `sign()`
+lowering (two `FCMP_OR.v2f16.lt.f1` and an `FADD.v2f16`) and a colour of
+fp32 lanes narrowed beside fp16 ones; the colour-of-masks path holds
+constants and selects of constants only, and the pair path no 32-bit
+value, so it stays the int refusal. Loops of
+a mediump shader with a run-time bound are now the `LoopForm` refusal
+(`uniloop.frag`, `divloop.frag`; loops-rt).
+
 ## References
 
 Mesa 26.2.1, panfrost on drm-shim (GPU_ID 0xa867), one draw per pair with

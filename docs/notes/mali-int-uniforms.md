@@ -28,6 +28,22 @@ python3 -I tools/mali/pan_ref_diff.py extract $D/intuni_<n>.trace --draw > $D/in
 `<work>` is `$CONNECTED_DEPS_DIR/mesa-shim`; `<n>` is `uops`, `ishr`, `gcops`,
 `ifelse_uint`, `intrt`, `idxtex`, `sharedint`. The `.trace` files are not kept.
 
+**State since plan #154 item intbool (session 1).** `int`, `bool` and
+`ivec2/3/4` uniforms take one word a component in `nir::uniform_of` (both
+fp32 stages' layout), and a highp fragment shader reads an int uniform as
+a value, not only as an array index. `ishr` is byte-equal
+(`intuni_ishr_is_byte_equal_to_mesa_26_2_1`): `ARSHIFT_OR.i32` with the
+amount moved to a register for its byte lane (emit.rs, `Alu::Ishr`),
+`U8_TO_F32` of bytes 0 and 1 (`Alu::U8f32`, nir_opt_algebraic's extract
+rules on `i2f32(iand(..., 0xff))`), and the `?:` ordered as GLSL's
+`conditional_tmp` (nir_fs.rs `order_keys`). `sharedint` is not: its
+fragment shader needs `sin` (Mesa's `FSIN_TABLE`, `FCOS_TABLE`,
+`FMA_RSCALE` sequence; the Mali compiler has no `sin` lowering) and its
+vertex shader an `if` (nir.rs refuses vertex control flow), so `mode !=
+0` (`ICMP_OR.u32.ne.m1`) stays the `CompareForm` refusal until a
+reference that compiles draws it. The vertex stage still refuses an int
+uniform read as a value (`UniformType`).
+
 ## The answers
 
 1. **Layout: one FAU word per *read component*, in declaration order, after

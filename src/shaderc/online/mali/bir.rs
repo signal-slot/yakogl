@@ -414,6 +414,14 @@ pub enum Op {
     /// `F16_TO_F32 dest, x.hN`: an fp16 half converted to fp32
     /// (`nir_op_f2f32` of a 16-bit source; case121's coordinate).
     F16ToF32,
+    /// `F16_TO_S32.rtz dest, x.hN`: an fp16 half converted to a 32-bit
+    /// integer (`nir_op_f2i32` of a 16-bit source, bifrost_compile.c:3100;
+    /// case 72's `int(u_in.x)`).
+    F16ToS32,
+    /// `U8_TO_F32 dest, x.bN`: a byte of a word converted to fp32
+    /// (`nir_op_u2f32` of `extract_u8(x, N)`, bifrost_compile.c:3167-3176;
+    /// intuni_ishr's `float(s & 255)`, `U8_TO_F32 r1, r0.b0`).
+    U8ToF32,
     V2f32ToV2f16,
     MkvecV2i16,
     /// `IADD.v2u16 dest, x.hNN, 0`: a word of the halves of one 16-bit
@@ -509,6 +517,11 @@ pub enum Op {
     /// is `(a >> shift) | 0`, bifrost_compile.c:3050-3052); the sources
     /// as [`Op::LshiftAndI32`]'s.
     RshiftOrI32,
+    /// `ARSHIFT_OR.i32 dest, a, b, shift`: `(a >> shift) | b`, the shift
+    /// arithmetic (a NIR `ishr` is `(a >> shift) | 0`, bifrost_compile.c:
+    /// 3053-3055; intuni_ishr's `ARSHIFT_OR.i32 r0, u2.w0, r0^.b00, 0x0`);
+    /// the sources as [`Op::LshiftAndI32`]'s.
+    ArshiftOrI32,
     /// `LD_PKA.i<32 * words> @dest, address, descriptor` (`bi_ld_pka_to`
     /// with `seg = BI_SEG_UBO`, bifrost_compile.c:870-883): `words` 32-bit
     /// words of the buffer the mode descriptor (source 1, UBO 0 is the
@@ -749,7 +762,8 @@ pub const fn src_info(op: Op, s: usize) -> SrcInfo {
         (Op::S32ToF32, 0) => info(false, false, false, false, 32),
         (Op::U16ToU32 | Op::S16ToS32, 0) => info(false, false, false, true, 16),
         (Op::U16ToF32, 0) => info(false, false, false, true, 16),
-        (Op::F16ToF32, 0) => info(true, false, false, true, 16),
+        (Op::F16ToF32 | Op::F16ToS32, 0) => info(true, false, false, true, 16),
+        (Op::U8ToF32, 0) => info(false, false, false, true, 8),
         (Op::MovI32 | Op::IaddImmI32(_), 0) => info(false, false, false, false, 32),
         (Op::V2f32ToV2f16, 0..=1) => info(true, false, false, false, 16),
         (Op::MkvecV2i16, 0..=1) => info(false, false, false, true, 16),
@@ -775,13 +789,13 @@ pub const fn src_info(op: Op, s: usize) -> SrcInfo {
         /* LSHIFT_AND.i32: the value (widen), then, swapped by va_swap_12,
          * BIR's mask is Valhall's third source (32 bits, notted) and BIR's
          * shift its second (an 8-bit `lanes` source) */
-        (Op::LshiftAndI32 | Op::LshiftOrI32 | Op::RshiftAndI32 | Op::RshiftOrI32, 0) => {
+        (Op::LshiftAndI32 | Op::LshiftOrI32 | Op::RshiftAndI32 | Op::RshiftOrI32 | Op::ArshiftOrI32, 0) => {
             info(false, false, true, false, 32)
         }
-        (Op::LshiftAndI32 | Op::LshiftOrI32 | Op::RshiftAndI32 | Op::RshiftOrI32, 1) => {
+        (Op::LshiftAndI32 | Op::LshiftOrI32 | Op::RshiftAndI32 | Op::RshiftOrI32 | Op::ArshiftOrI32, 1) => {
             info(false, false, false, false, 32)
         }
-        (Op::LshiftAndI32 | Op::LshiftOrI32 | Op::RshiftAndI32 | Op::RshiftOrI32, 2) => {
+        (Op::LshiftAndI32 | Op::LshiftOrI32 | Op::RshiftAndI32 | Op::RshiftOrI32 | Op::ArshiftOrI32, 2) => {
             SrcInfo { lanes: true, ..info(false, false, false, false, 8) }
         }
         /* the byte offset, then the mode descriptor (va_pack.c:746-769) */
@@ -832,6 +846,8 @@ pub const fn nr_srcs(op: Op) -> usize {
         | Op::U16ToU32
         | Op::U16ToF32
         | Op::F16ToF32
+        | Op::F16ToS32
+        | Op::U8ToF32
         | Op::IabsS32
         | Op::LeaBufImm { .. }
         | Op::LdVarBufImmF32 { .. }
@@ -851,9 +867,13 @@ pub const fn nr_srcs(op: Op) -> usize {
         | Op::IaddV2u16
         | Op::ShaddxS64 => 2,
         Op::LdAttrImm { .. } | Op::Blend { .. } | Op::BranchzI { .. } | Op::LdPka { .. } => 2,
-        Op::LshiftAndI32 | Op::LshiftOrI32 | Op::RshiftAndI32 | Op::RshiftOrI32 | Op::MkvecV2i8 | Op::LdTile { .. } => {
-            3
-        }
+        Op::LshiftAndI32
+        | Op::LshiftOrI32
+        | Op::RshiftAndI32
+        | Op::RshiftOrI32
+        | Op::ArshiftOrI32
+        | Op::MkvecV2i8
+        | Op::LdTile { .. } => 3,
         Op::FmaF32 | Op::FmaV2f16 | Op::Atest | Op::ZsEmit { .. } => 3,
         Op::FcmpOrF32 { .. } | Op::IcmpOrS32 { .. } | Op::IcmpOrU32 { .. } | Op::MuxI32 | Op::MuxV2i16 => 3,
         Op::FcmpOrV2f16 { .. } => 3,

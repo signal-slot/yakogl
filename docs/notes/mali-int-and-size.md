@@ -16,6 +16,51 @@ sizelimit** the caps are raised and the offarm programs of 193, 194 and 195
 are byte-equal (see "The caps since plan #154"); the sections between were
 written before, against the old caps.
 
+## Since plan #154 item intbool (session 1)
+
+Cases 72 and 112 compile byte-equal in both stages
+(`case_72_intlit_is_byte_equal_to_mesa_26_2_1`,
+`case_112_affectand_is_byte_equal_to_mesa_26_2_1`; their
+`intbig_case72/112.expect.json` are `pan_ref_diff.py extract <trace>
+--draw` of the traces below, drawn with no uniform values). What the
+Mali compiler (`src/shaderc/online/mali`) does for them:
+
+- **Typed values.** An int is its 32-bit bits and a bool NIR's 0 / ~0
+  (`ConstI32`, `ConstBool` in either precision). A mediump shader's integer
+  and boolean operations are 32-bit nodes (`Fs::int_lane`): `F2i` of an
+  fp16 value is `Alu::F2i32` (`F16_TO_S32.rtz`), `Ilt`/`Ieq` the compares,
+  `!` an `Alu::Inot` the walk folds into its users (`inot(inot(a))`,
+  `iand(a, a)`, `bcsel(inot(a), b, c)` as `bcsel(a, c, b)`), a bool
+  uniform's `i2b` the word itself (Mesa tests it as it is,
+  `intbig_case112.stderr`).
+- **`nir::fold_int`**, the integer constant folding and the rules a constant
+  or a repeated operand decides (`iadd(a, 0)`, `iand(a, ~0)`, `ior(a, a)`,
+  ...), in both walks (the highp walk's own folding moved into it).
+- **Control flow of a mediump shader.** A loop is walked (unrolled) as a
+  highp shader's when its passes fold (72's counter); an `if` whose sides
+  assign booleans only is flattened into folded selects (112's inlined
+  calls, `walk_if16`); anything else stays `ControlFlow`.
+- **The colour of masks.** A mediump colour of constants and selects of
+  constants on 32-bit masks (`nir_fs::mask_colour`, builtin_49's path) now
+  takes masks of uniforms too, with the fp16 uniform block (`fs16`, a bool
+  one 32-bit word), and a constant before a select's half as
+  `MKVEC.v2i16 u2.w1.h0, r0^.h0`.
+
+- **Integers of fp16 varying lanes** (`intloop_int_compare`, byte-equal):
+  `docs/notes/mali-int-loops.md`, "State since plan #154 item intbool".
+
+Case 79 (integer division) and case 42 stay refused (intbool-2): 79 at
+`idiv.frag`'s division (`IntValue`), 42 at `array.frag`'s `textureSize`
+(the texture refusal). Cases 80, 100 and 116 are no longer refused by an
+integer: 80's fragment shader stops at the chain refusal (`do_rebalance_tree`),
+100's two stages and 116's vertex stage at the run-time uniform index
+(`UniformIndexed`); 116's fragment shader compiles. Of the integer
+references, `intloop_tri_int` (fp32 integer arithmetic and `sign()` in a
+mediump program, mali-int-loops.md) and `intuni_sharedint` (its fragment
+`sin`, which the Mali compiler does not lower, and its vertex `if`, which
+nir.rs refuses as vertex control flow; mali-int-uniforms.md) are not
+lowered.
+
 ## The eight cases and their shaders
 
 | case | name | vertex shader | fragment shader | refused by |
