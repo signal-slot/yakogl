@@ -456,6 +456,17 @@ config YAKOGL_BOARD_IMX8MP_ROUTE3_M7_WAIT_MS
 	default 3000
 	range 100 60000
 
+config YAKOGL_BOARD_IMX8MP_ROUTE3_TIMELINE_REPORT_MS
+	int "Measurement: show the cold-start timeline this long after the first frame (ms, 0 = off)"
+	default 0
+	range 0 60000
+	help
+	  Both cores stamp their start-up stages on the system counter
+	  (<cluster/boot_timeline.h>, always on). With this set, the image
+	  stops the M7 this long after its first frame was shown, puts the
+	  panel console on the panel and prints the stamps there, and then
+	  stays: a measurement image, never a product one.
+
 config YAKOGL_BOARD_IMX8MP_ROUTE3_BEAT_MS
 	int "Heartbeat period (ms)"
 	default 100

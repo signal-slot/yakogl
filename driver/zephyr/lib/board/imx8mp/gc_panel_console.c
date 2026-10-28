@@ -60,6 +60,9 @@
 #include "gc_result.h"
 #ifdef CONFIG_YAKOGL_DRV_DISPLAY_IMX8MP
 #include "imx8mp_display.h"
+#ifdef CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3
+#include "board_imx8mp_route3.h"
+#endif
 #endif
 /* The reachability check before any LCDIF access (Rust
  * soc::imx8mp::media::lcdif_unreachable) and, with LCDIF_RUST, the LCDIF
@@ -621,7 +624,13 @@ static int panel_console_cold_init(void)
 	fill_rows(0, p.height, p.bg);
 
 	gc_result_stage(GC_RESULT_STAGE_CONSOLE_COLD, 0u);
+#ifdef CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3
+	board_route3_tl_mark(CLUSTER_TL_A53_PANEL_START);
+#endif
 	rc = imx8mp_display_on(k_mem_phys_addr(panel_fb), pitch);
+#ifdef CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3
+	board_route3_tl_mark(CLUSTER_TL_A53_PANEL_ON);
+#endif
 	gc_result_stage(GC_RESULT_STAGE_CONSOLE_COLD_DONE, (uint32_t)rc);
 	if (rc) {
 		p.fb = NULL;
