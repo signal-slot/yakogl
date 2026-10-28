@@ -28,6 +28,15 @@ brings, what can be done on the host first, and what is still unknown.
   or marked "(unread)" if it is general knowledge that a reader must confirm
   first. The first job after this note merges is to read those sources and
   turn each unread item into a cited one (item 0 of section 8).
+- **Read late, partly.** One page fetch of Linux v6.17
+  `arch/arm/boot/dts/broadcom/bcm283x.dtsi` (through a summarising fetch tool,
+  so treat it as a pointer, not a transcript) gave: node `mailbox@7e00b880`,
+  `compatible = "brcm,bcm2835-mbox"`, `reg = <0x7e00b880 0x40>`; node
+  `hvs@7e400000`, `compatible = "brcm,bcm2835-hvs"`, `reg = <0x7e400000
+  0x6000>`. The same fetch did not show `v3d`, `pixelvalve`, `hdmi` or
+  `firmware` nodes (they may be in `bcm2835-common.dtsi` or the board files;
+  not checked), and `bcm2837.dtsi` returned HTTP 429. Both files stay unread
+  for Q-items in section 7.
 
 ## 1. The hardware
 
