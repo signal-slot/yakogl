@@ -5,20 +5,23 @@
 Date 2026-10-28, main `965ac247d`. Host research only: no file under `src/`
 or `tools/` changed, no board run, no board yet.
 
-**Verdict: no open route is shown today, and the port is not scheduled.**
-Mesa's NVK and NAK know the GA10B chip by name, but nothing read says NVK
-runs on a Tegra Ampere GPU, and Mesa itself marks Tegra "not currently
-supported". The kernel half (does `nouveau` bind to Tegra234 at all, and does
-it need GSP firmware there) is **not answered by this note**: see "How this
-note was made". Section 7 names the exact files that answer it. Until they
-are read, the port stays unscheduled; section 8 is the list to use if they
-show a route.
+**Verdict: no open route exists today, and the port is not scheduled.**
+Mesa's NVK and NAK know the GA10B chip by name, but Mesa marks Tegra "not
+currently supported", and the Linux `nouveau` driver has no GA10B at all: its
+chipset table stops at GA107 for Ampere (no `0x17b`), and its Tegra platform
+match lists only `nvidia,gk20a`, `nvidia,gm20b` and `nvidia,gp10b` (section
+2). What would have to appear upstream first is in section 7, question 3.
+Section 8 is the list to use if that happens.
 
 ## How this note was made
 
-The worker that wrote this had no network access: the Linux kernel, NVIDIA's
-Jetson documentation and the Zephyr upstream could not be fetched. What is
-cited as read was read on disk:
+The Mesa and Zephyr facts were read on disk. The Linux facts were read
+through a page fetcher that summarises a file for a prompt, not byte for byte
+(`raw.githubusercontent.com`, Linux `master` on 2026-10-28, no commit hash
+recorded): quoted lines are the fetcher's quotation, and "no `0x17b`" is a
+search of the whole of `base.c` in two passes. Re-check both with a clone
+before code relies on them. NVIDIA's Jetson documents could not be fetched
+(not on the allowed host list). Disk sources:
 
 - **Mesa 26.3.0-devel** (`VERSION` of the tree at
   `$CONNECTED_DEPS_DIR/mesa`; a development snapshot, not a release). Paths
@@ -93,16 +96,30 @@ system memory only (`nvk_physical_device.c:1681-1686` asserts
   (`src/nouveau/headers/nvidia/classes/clc797.h:32`) is therefore
   **UNREAD**, and matters for section 3.
 
-**Linux.** UNREAD. The questions and the files that answer them:
+**Linux** (`master`, 2026-10-28, see "How this note was made").
 
-- Does the kernel `nouveau` driver have a Tegra234 / GA10B platform-device
-  match? Read `drivers/gpu/drm/nouveau/nvkm/engine/device/tegra.c` (the match
-  table and the chipset it hands to the common code) and
-  `drivers/gpu/drm/nouveau/nvkm/engine/device/base.c` (the GA10B chipset
-  case, if any).
-- Does Ampere need GSP firmware in nouveau, and is there a GA10B path without
-  it? Read `drivers/gpu/drm/nouveau/nvkm/subdev/gsp/` and the GA10x case in
-  `base.c`. Mesa has no knowledge of this.
+- The Tegra platform match is in `drivers/gpu/drm/nouveau/nouveau_platform.c`:
+  `nouveau_platform_match[]` holds `nvidia,gk20a`, `nvidia,gm20b` and
+  `nvidia,gp10b` and nothing else. `nvkm/engine/device/tegra.c` has no match
+  table, no chipset and no mention of Tegra234, GA10B or GSP. So there is no
+  Tegra234 entry.
+- The chipset tables are in `nvkm/engine/device/base.c`. The chipset is
+  `(boot0 & 0x1ff00000) >> 20`. The Ampere cases are `0x170` (GA100,
+  `nv170_chipset`) and `0x172` to `0x177` (GA102, GA103, GA104, GA106, GA107).
+  `0x17b`, "GA10B", "ga10b" and "tegra" do not occur in the file. Every
+  Ampere, Hopper, Ada and Blackwell entry read has a `.gsp = { ...,
+  *_gsp_new }` entry (`ga100_gsp_new`, `ga102_gsp_new`, `gh100_gsp_new`,
+  `ad102_gsp_new`, `gb100_gsp_new`, `gb202_gsp_new`). The Ampere entries read
+  (GA100, GA102) also name `tu102_bar_new`, `tu102_mmu_new` and PCIe-card
+  `fb` classes; the gr/fifo lines of the entries were not seen.
+- Two things follow: `nouveau` cannot bind to GA10B in this tree (no chipset
+  case, no `nvidia,ga10b` or Tegra234 compatible), and its Ampere path is the
+  GSP path. That GSP is what the tables use for the desktop parts; whether a
+  GA10B GSP image exists is not in these files.
+- Still UNREAD: the GSP code in `nvkm/subdev/gsp/` (which images it loads
+  and from where), and any out-of-tree or pending patch for Tegra234. The
+  mailing list `nouveau@lists.freedesktop.org` and the Mesa issue tracker
+  would show one; this pass did not search them.
 - Display: `drivers/gpu/drm/tegra/` is the display driver for the older
   Tegra display; whether Tegra234's display engine is in tree, and whether it
   needs firmware, is UNREAD.
@@ -243,8 +260,8 @@ Each item names its check.
 
 ## 6. What needs the board
 
-The following cannot be planned until section 7 questions 1 to 3 are answered;
-assuming a route exists:
+The following assumes the upstream work of section 7, question 3 has landed;
+it is not scheduled:
 
 1. **Day one, in order.** (a) A UART banner from a Zephyr image that the boot
    chain loads, with the register dump of the GPU's identification register
@@ -263,14 +280,17 @@ assuming a route exists:
 
 Each is a question and the source that would answer it.
 
-1. Does `nouveau` bind to Tegra234 at all? `nvkm/engine/device/tegra.c`
-   match table, `base.c` chipset case for `0x17b`, Linux at the latest
-   stable tag.
+1. Answered for `master` of 2026-10-28: `nouveau` does not bind to Tegra234
+   (section 2). Re-check with a clone at a named tag before relying on it.
 2. Does Ampere in `nouveau` require GSP firmware, and is there a GA10B image?
-   `nvkm/subdev/gsp/`, `linux-firmware` `nvidia/` tree, its licence file.
-3. If 1 and 2 are "no route", what would have to appear upstream first?
-   Read the nouveau mailing list (`nouveau@lists.freedesktop.org`) and
-   Mesa's issues for "GA10B"; this note found none on disk.
+   The tables give every Ampere chip a GSP entry; `nvkm/subdev/gsp/` and the
+   `linux-firmware` `nvidia/` tree, with its licence file, say which images
+   exist. UNREAD.
+3. What would have to appear upstream first? At least: a GA10B (`0x17b`)
+   chipset case in `base.c`, a Tegra234 compatible in `nouveau_platform.c`
+   (or its successor) with the SoC clock, reset and power glue, a GA10B GSP
+   or non-GSP init path, and the display driver for Tegra234. Search the
+   nouveau list and Mesa issues for "GA10B" before reopening; not done.
 4. Can a channel be created and run without the kernel's `nvkm`? Only
    `nvgpu` (NVIDIA's Jetson kernel tree) and NVIDIA's open-gpu-doc would say.
 5. What is the GA10B 3D class, `0xC697` or `0xC797`? The class list a Jetson
@@ -293,12 +313,12 @@ Each is a question and the source that would answer it.
 
 ## 8. A proposed item list
 
-Only after question 1 and 2 give a route; sizes are in terms of the done
+Only after section 7, question 3 has landed upstream; sizes are in terms of the done
 ports (`tools/cts/STATUS.md`, `CHANGELOG.md`).
 
 | # | Item | Size, against the done ports |
 |---|---|---|
-| 0 | Answer section 7 questions 1 to 4 (a note, no code) | small; it decides whether the rest exists |
+| 0 | Re-check section 7 questions 2 to 4 (a note, no code) | small; it decides whether the rest exists |
 | 1 | Zephyr SoC, board, console, memory map, built not run | smaller than the AM62P / i.MX8MP definitions only if a Tegra clock and power client is not needed; otherwise larger |
 | 2 | Boot route and a loadable image (UEFI or U-Boot) | as the netboot / direct-boot notes; the unknown is the vendor chain |
 | 3 | `src/nvidia` channel, memory, semaphore, one clear | the "first light" of Mali / PowerVR; GPFIFO setup is the new risk |
@@ -308,6 +328,5 @@ ports (`tools/cts/STATUS.md`, `CHANGELOG.md`).
 | 7 | Display scan-out | UNREAD; may be as large as the Vivante or PowerVR display bring-up |
 | 8 | `gl_test` sweep, glmark2, dEQP-GLES2 on the board | the dEQP stage reached 0 failures on the three ports by the same route |
 
-No item above is scheduled. Reopen this note when the Linux files of section
-7, questions 1 and 2, have been read; if they show no route, record what
-would have to appear upstream and close it.
+No item above is scheduled. Reopen this note when a GA10B chipset case and a Tegra234 platform match
+appear in Linux `nouveau`.
