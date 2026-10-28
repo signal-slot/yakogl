@@ -85,7 +85,16 @@ gate needs only the hashes, not the commit.
   fragment UFO and the geometry UFO ring); after the batch, the line "render:
   at grow request 1 (sampled when the batch was first read): last submitted
   34, last fragment done 33; 1 kicks in flight: 0 with TA done and 3D
-  pending, 1 with TA pending" (`render::InFlight`). Nothing else moves.
+  pending, 1 with TA pending" (`render::InFlight`). A deliberate difference
+  in `render` (#42, `render::HWRT_MEMBERS`): a size whose pair is all in
+  flight takes a second pair while one is free, where the C waited for the
+  member two kicks back. In section C (eighteen 1024x600 kicks back to back)
+  kicks 3 and 4 build a second 1024x600 pair (its HWRT data and common, the
+  MMU cache invalidate of the new buffers: 2 more `render: HWRT 1024x600`
+  builds, 28 against 26) instead of waiting; the member waits then start
+  from kick 5, for the kick four back: 1013 waits of 1000 us against the
+  C's 1018. In section I the second pair holds a slot, so the recycles start
+  one size sooner (8 against 7). 33,377 lines. Nothing else moves.
 
 ## Not covered
 
