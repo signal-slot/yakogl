@@ -32,7 +32,10 @@ Every claim says where it was read. The paths are:
   (`https://raw.githubusercontent.com/raspberrypi/documentation/master/documentation/asciidoc/computers/...`):
   `config_txt/boot.adoc`, `config_txt/conditional.adoc`,
   `config_txt/memory.adoc`, `raspberry-pi/boot-eeprom.adoc`, and the
-  `raspberrypi/rpi-eeprom` `README.md`.
+  `raspberrypi/rpi-eeprom` `README.md`; and the page
+  `https://www.raspberrypi.com/documentation/computers/raspberry-pi.html`
+  (sections "EEPROM boot flow", "Fail-safe OS updates (tryboot)", the
+  `BOOT_ORDER` table), read in its characters 100,000 to 200,000 only.
 - GPL files (Linux, the fork): facts and file:line only, nothing copied. The
   local Linux checkout in the dependency cache holds only `panthor`, so the
   files above were read over the network. **Line numbers**: for the device
@@ -40,13 +43,11 @@ Every claim says where it was read. The paths are:
   the SPDX line (may be off by one); for `v3d_sched.c` and `v3d_gem.c` the
   reading tool returned no line numbers, so those are cited **by function
   name** and by statement order inside it, which is stable and checkable.
-- **Not read.** The firmware's own code (closed), the pages of
-  raspberrypi.com that are not in the documentation repository (the host was
-  not reachable for `www.raspberrypi.com`; the repository holds the same
-  sources), a bootloader-configuration page (`BOOT_ORDER`, `TRYBOOT`,
-  `PARTITION_WALK`: the file names tried under `documentation/asciidoc/computers/raspberry-pi/`
-  returned 404, so the `tryboot` reboot flag is read only from
-  `conditional.adoc` and `boot.adoc`), the second part of `vc4_hdmi.c` (the
+- **Not read.** The firmware's own code (closed), the rest of the
+  raspberrypi.com hardware page (characters 0 to 100,000 gave only headings
+  and 200,000 on were not read; its "Raspberry Pi bootloader configuration"
+  body, `PARTITION_WALK` and the `TRYBOOT` property table, is in those
+  parts), the second part of `vc4_hdmi.c` (the
   reading covered its first 100,000 characters, which did not reach the
   BCM2712 PHY initialisation), and the Linux `Documentation/arch/arm64/booting.rst`
   (the host returned HTTP 429). Where a section needs one it says so and
@@ -75,7 +76,7 @@ Every claim says where it was read. The paths are:
 | I/O chip | RP1 sits behind a PCIe link. Zephyr's device tree puts the RP1 GPIO block under the node `pcie2` and names `pcie1` as the board's `zephyr,pcie-controller` | `ZEPHYR/dts/arm64/broadcom/bcm2712.dtsi` (`pcie1`, `pcie2`, `rp1`), `rpi_5_bcm2712.dts` (`chosen`). Whether Zephyr's `pcie1`/`pcie2` names match Linux's is not checked |
 | Console | `uart10`, a PL011 (`arm,pl011`), 115200 baud in the board file; the 3-pin debug connector between the HDMI ports takes the Raspberry Pi Debug Probe | `rpi_5_bcm2712.dts`, `bcm2712.dtsi`, `.../doc/index.rst` "Serial Communication" |
 | Interrupt controller | GICv2 (`arm,gic-v2`), 280 interrupts, architected timer at 54 MHz | `bcm2712.dtsi` (`gic`), `ZEPHYR/soc/brcm/bcm2712/Kconfig.defconfig` |
-| Boot chain, before our image | On BCM2711 and BCM2712 the **boot ROM** runs first. It looks for `recovery.bin` in the root of the boot partition and, if valid, runs it instead of the flash contents; otherwise it runs the bootloader in the board's **SPI flash EEPROM** (Pi 4 and later; other models load `bootcode.bin` from the boot partition). The Pi 5's EEPROM images are the `firmware-2712` set (Pi 5, Pi 500, CM5), updated with `rpi-eeprom-update`, and Pi 5 alone has an **A/B** update of two EEPROM partitions. The EEPROM bootloader then loads the VideoCore firmware and the files named by `config.txt` from the boot partition. The documentation read does not say, in these pages, which firmware file the Pi 5 loads or what the EEPROM stage hands over; the board page names only `config.txt`, `zephyr.bin` and the DTB | `DOCS/raspberry-pi/boot-eeprom.adoc` ("Raspberry Pi 4 and Pi 5 boot", `recovery.bin`, A/B); `raspberrypi/rpi-eeprom` `README.md` (`firmware-2712`) |
+| Boot chain, before our image | On BCM2711 and BCM2712 the **boot ROM** runs first. It looks for `recovery.bin` in the root of the boot partition and, if valid, runs it instead of the flash contents; otherwise it runs the bootloader in the board's **SPI flash EEPROM** (Pi 4 and later; other models load `bootcode.bin` from the boot partition). The Pi 5's EEPROM images are the `firmware-2712` set (Pi 5, Pi 500, CM5), updated with `rpi-eeprom-update`, and Pi 5 alone has an **A/B** update of two EEPROM partitions. The EEPROM bootloader then loads the VideoCore firmware and the files named by `config.txt` from the boot partition. The EEPROM boot-flow section says of the Pi 5: "Instead of loading `start.elf`, the firmware loads the Linux kernel", so a Pi 5 card needs no `start4.elf`/`fixup4.dat`. `BOOT_ORDER` default `0xf41` is SD first, then USB mass storage, repeating. What the EEPROM stage hands over (registers, exception level) is not stated; the board page names only `config.txt`, `zephyr.bin` and the DTB | `DOCS/raspberry-pi/boot-eeprom.adoc` ("Raspberry Pi 4 and Pi 5 boot", `recovery.bin`, A/B); raspberrypi.com hardware page, "EEPROM boot flow" and the `BOOT_ORDER` table; `raspberrypi/rpi-eeprom` `README.md` (`firmware-2712`) |
 | Boot chain, our image | The firmware reads `config.txt` from the first FAT partition of the SD card (MBR, FAT32 per the board page) and starts `kernel=`. Defaults by model: `kernel8.img` on Pi 4; **`kernel_2712.img` on Pi 5, 500, 500+ and CM5, and if absent the firmware loads `kernel8.img`** (the default Pi 5 kernel has a 16K page size). `arm_64bit` is ignored on the Pi 5 (64-bit only). `os_prefix` puts the kernel, DTB, `cmdline.txt` and overlays under a prefix. `enable_uart=1` creates the serial console; `uart_2ndstage=1` turns on UART logging in the firmware. `armstub` is the Arm stub, chosen by firmware per model, and "sets up low-level hardware, such as the interrupt controller, before the kernel runs". The Zephyr board page builds `zephyr.bin` this way with three files on the card: `config.txt` (`kernel=zephyr.bin`, `enable_uart=1`, `uart_2ndstage=1`), `zephyr.bin` and the firmware's `bcm2712-rpi-5-b.dtb` | `DOCS/config_txt/boot.adoc` (`kernel`, `arm_64bit`, `os_prefix`, `enable_uart`, `uart_2ndstage`, `armstub`); `ZEPHYR/.../rpi_5/doc/index.rst`, "Blinky" and "Serial Communication" |
 | The arm64 image the firmware accepts | Zephyr's arm64 image starts with the Linux arm64 Image header: a branch to `__start`, `text_offset` 0 ("Image load offset from start of RAM"), the effective image size (`_flash_used`), flags with the page size, and the magic `ARM\x64`. Zephyr links the image at `sram0`, 0x200000. `kernel_address` is not in the config documentation read. So: the Pi 5 Zephyr route works with the Linux image header and a link address of 0x200000, and no `kernel_address` key is in the board page | `ZEPHYR/arch/arm64/core/header.S` (the `_image_header` section); `ZEPHYR/dts/arm64/broadcom/bcm2712.dtsi` (`sram0: memory@200000`, `reg = <0x0 0x200000 0x80000>`); `DOCS/config_txt/boot.adoc` (no `kernel_address`) |
 
@@ -446,22 +447,21 @@ Pi 5, so **the vendor firmware loading our image** is the sign-off route, with
 U-Boot (loaded by the firmware as `kernel=`) only if that fails. Three keys
 differ from the Pi 4 form: `kernel=` must name our file (the Pi 5 default is
 `kernel_2712.img`, with `kernel8.img` as the fallback), `arm_64bit` is ignored
-(always 64-bit), and the Pi 4 line `start4.elf` and `fixup4.dat` files of the
-boot partition are the Pi 4's: which firmware files the Pi 5 card needs is not
-in the pages read (the board page lists only `config.txt`, `zephyr.bin` and
-the DTB; U6).
+(always 64-bit), and the Pi 4's `start4.elf` and `fixup4.dat` are not needed:
+the boot-flow section says the Pi 5 firmware loads the kernel instead of
+`start.elf`. The board page lists only `config.txt`, `zephyr.bin` and the DTB.
 
 The Pi 4 test uses the firmware's `tryboot` so a failing image falls back to
 Linux (`docs/standalone-boot.md`, "The test is the product's boot"). For the
-Pi 5, the documentation read gives the pieces and not a Pi 5 statement:
-`conditional.adoc` has the `[tryboot]` filter ("succeeds if the `tryboot`
-reboot flag was set", meant for `autoboot.txt` to choose another boot
-partition) with no model restriction, and `boot.adoc` says the bootloader looks
-for `tryboot.img` instead of `boot.img` when `TRYBOOT` is selected (`boot_ramdisk`),
-which is a Pi 4 and later setting there; the `[pi5]` filter exists for the Pi
-5 family. So **the `[tryboot]` mechanism is documented for the family and not
-excluded for the Pi 5**; that `sudo reboot "0 tryboot"` works on the Pi 5
-with the EEPROM it ships with is not stated in the pages read (U7). A
+Pi 5 the hardware page says "All Raspberry Pi models support `tryboot`": the
+flag, set with `sudo reboot '0 tryboot'` (quoted, one argument), loads
+`tryboot.txt` instead of `config.txt`, once; "a crash or reset will cause the
+original `config.txt` file to be loaded on the next reboot". Under secure boot
+it loads `tryboot.img` instead of `boot.img`. `conditional.adoc` has the
+`[tryboot]` filter and `[pi5]` for the Pi 5 family. So **`tryboot` is
+documented for the Pi 5 as for the Pi 4** (the page does not name the Pi 5;
+the claim is "all models"), and the Pi 4 test form carries over; that it
+works with the EEPROM a given board ships with is a day-one trial (U7). A
 kernel-based jump (Linux `kexec` into our image) is a development
 convenience only.
 
@@ -536,8 +536,8 @@ Each is a question; none is guessed.
 | U3 | Answered in part (section 1): the path is HVS, pixel valve, HDMI, all on the SoC, and the firmware can leave a display running. Open: does a Zephyr image started with `kernel=` find a firmware framebuffer, and does the firmware's property mailbox (as on the Pi 4) still hand one out on the Pi 5? What part does RP1 play for the outputs we use (none for HDMI, by the device tree)? How is the HDMI PHY programmed for BCM2712? | Day one (D1: read `HVS` and `HD_VID_CTL` for a running scanout); `vc4_hdmi.c` beyond the first 100,000 characters; `docs/standalone-boot.md` for the Pi 4 form |
 | U4 | Answered in part (section 3.4): register moves, MMU format, SMS power-up, job start, cache steps, interrupts and the out-of-memory handling. Open: the real PA width (`MMU_DEBUG_INFO.PA_WIDTH`) and whether `v3d_sched.c`/`v3d_gem.c` have line-exact citations (the reading gave function names only) | D2; a checkout of Linux v6.18 (H1) |
 | U5 | The GPU node gives a firmware clock (id 5), a power domain and a reset on `pm` (section 3.4). Open: is the GPU already clocked and powered when the image starts; does the V3D clock name property (`clocks-names` as read) matter; what does `BCM2835_POWER_DOMAIN_GRAFX_V3D` do on BCM2712 and how is it requested without Linux (the property mailbox power call, as the Pi 4's)? | D2; the fork's `drivers/pmdomain/bcm/bcm2835-power.c` and `firmware_clocks` (not read) |
-| U6 | At which address and in which exception level does the firmware start a `kernel=` arm64 image on BCM2712, and what does it pass in the registers (the DTB pointer)? Is any `config.txt` key needed beyond `kernel=`, `enable_uart=1`, `uart_2ndstage=1`? Which firmware files must the card hold? | `config.txt` pages gave the file names only (no load address, no EL, no `kernel_address`); the Linux arm64 `booting.rst` (HTTP 429, not read); Zephyr's link address 0x200000 and Image header; D1 |
-| U7 | Does `sudo reboot "0 tryboot"` work on the Pi 5 as on the Pi 4 (documented generally: the `[tryboot]` filter, `tryboot.img`), and does the EEPROM in the flash need updating for our files? | The bootloader-configuration page (`TRYBOOT`, not read: its file name was not found in the repository); one trial on the board |
+| U6 | At which address and in which exception level does the firmware start a `kernel=` arm64 image on BCM2712, and what does it pass in the registers (the DTB pointer)? Is any `config.txt` key needed beyond `kernel=`, `enable_uart=1`, `uart_2ndstage=1`? The card needs no `start4.elf` per the boot-flow section; the exact set is the board page's three files. | `config.txt` pages gave the file names only (no load address, no EL, no `kernel_address`); the Linux arm64 `booting.rst` (HTTP 429, not read); Zephyr's link address 0x200000 and Image header; D1 |
+| U7 | `tryboot` is documented for all models (section 4); does `sudo reboot '0 tryboot'` work on our Pi 5 with the shipped EEPROM, and does the EEPROM need updating for our files? | One trial on the board; the `TRYBOOT` property table of the hardware page (not read) |
 | U8 | Does the 7.1 TMU filter cube maps seamlessly (the 4.2 defect `docs/v3d-noseamless-cube.md`)? | The first cube-map case on the board; Mesa's cube handling for 7.1 is not read |
 | U9 | How much of dEQP-GLES2 passes on Mesa's 7.1 driver, and does it have known 7.1 erratum workarounds we would need (the 4.2 ones are the `GFXH-*` comments of `v3dx_*.c`)? | `grep -n 'GFXH\|HW-\|erratum' MESA/src/gallium/drivers/v3d/v3dx_*.c`, filtered by `V3D_VERSION`; not done |
 | U10 | Does our one-core, 512 KiB-`sram0` Zephyr start leave the GPU's view of memory valid (cache coherence of the A76 with the V3D, DMA address mapping above 4 GiB on 8 and 16 GB boards)? The Pi 4 asked the same of its 8 GB board (`pi4-v3d-bringup.md`, "Board questions") | D2/D3 plus U4's MMU width; keep the carve-out low until measured |
