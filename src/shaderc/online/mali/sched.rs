@@ -27,6 +27,12 @@ use crate::shaderc::online::arena::Arena;
 
 const WORDS: usize = MAX_NODES.div_ceil(64);
 
+/// The instructions one block may hold for the scheduler: its DAG's edge
+/// rows take the block's size squared (512 KiB of the scratch arena here).
+/// The largest measured, case 194's offarm256, is one block of 329;
+/// filter_image's 949 words are 82 blocks of at most 60 or so.
+pub const MAX_BLOCK_INSTRS: usize = 512;
+
 /// A set of SSA values.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Live([u64; WORDS]);
@@ -77,10 +83,13 @@ fn update(live: &mut Live, i: &Ins) {
 /// is its live-out through its instructions backwards, stopping at its
 /// phis (:53-64); a predecessor's live-out gains that live-in with the
 /// phis' writes killed and the phis' sources for the predecessor made
-/// live (:73-99).
-pub fn liveness_ssa(p: &Prog<'_>) -> [Live; MAX_BLOCKS] {
-    let mut live_in = [Live::EMPTY; MAX_BLOCKS];
-    let mut live_out = [Live::EMPTY; MAX_BLOCKS];
+/// live (:73-99). The sets are in the scratch arena: at [`MAX_BLOCKS`]
+/// blocks of [`MAX_NODES`] values they are too large for a compiling
+/// thread's stack.
+pub fn liveness_ssa<'s>(p: &Prog<'_>, scratch: &Arena<'s>) -> Result<&'s mut [Live], MaliError> {
+    let oos = |_| MaliError::OutOfScratch;
+    let live_in = scratch.alloc_filled(MAX_BLOCKS, Live::EMPTY).map_err(oos)?;
+    let live_out = scratch.alloc_filled(MAX_BLOCKS, Live::EMPTY).map_err(oos)?;
     let nb = p.nblocks as usize;
     loop {
         let mut changed = false;
@@ -118,7 +127,7 @@ pub fn liveness_ssa(p: &Prog<'_>) -> [Live; MAX_BLOCKS] {
             }
         }
         if !changed {
-            return live_out;
+            return Ok(live_out);
         }
     }
 }
@@ -333,7 +342,7 @@ pub fn pressure_schedule(p: &mut Prog<'_>, scratch: &Arena<'_>) -> Result<(), Ma
     if p.n > MAX_INSTRS {
         return Err(MaliError::Defect(super::Defect::ScheduleTable));
     }
-    let live_out = liveness_ssa(p);
+    let live_out = liveness_ssa(p, scratch)?;
     /* a block's DAG holds the instructions before its branch, so the
      * largest block bounds every table */
     let max_n = (0..p.nblocks)
@@ -341,6 +350,11 @@ pub fn pressure_schedule(p: &mut Prog<'_>, scratch: &Arena<'_>) -> Result<(), Ma
         .map(|b| p.block_end(b) - p.block_start(b))
         .max()
         .unwrap_or(0);
+    /* the edge rows are the block's size squared: a longer block is
+     * refused before they outgrow the scratch arena */
+    if max_n > MAX_BLOCK_INSTRS {
+        return Err(MaliError::InstrTableFull);
+    }
     let oos = |_| MaliError::OutOfScratch;
     let mut tables = Tables {
         edges: scratch.alloc_filled(max_n * max_n, 0u16).map_err(oos)?,

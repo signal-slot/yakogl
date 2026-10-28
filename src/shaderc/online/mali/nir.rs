@@ -54,9 +54,10 @@ use crate::shaderc::online::ir::{
 };
 
 /// The instructions one vertex shader may hold here (the fragment walk's
-/// too). The largest measured, femtovg's fill_color with 256 offset arms
-/// (case 194's offarm256), takes 611 (docs/notes/mali-int-and-size.md).
-pub const MAX_NODES: usize = 768;
+/// too). The largest measured, femtovg's filter_image (24 unrolled
+/// passes), takes 1153; fill_color with 256 offset arms (case 194's
+/// offarm256) 611 (docs/notes/mali-int-and-size.md).
+pub const MAX_NODES: usize = 1536;
 /// The IR values the walk keeps lanes for (the fragment walk's too).
 /// offarm256 takes 1658, about six per arm.
 pub const MAX_VALUES: usize = 2048;
@@ -64,8 +65,11 @@ pub const MAX_VALUES: usize = 2048;
 pub const MAX_LOCALS: usize = 32;
 /// The `if`s one shader may hold ([`IfRegion`]): gl_test's databreak (case
 /// 87) has nine, the eight guarded passes of its unrolled loop and the
-/// `continue` of one of them.
-pub const MAX_IFS: usize = 16;
+/// `continue` of one of them; femtovg's filter_image 27, the 24 guards of
+/// its passes among them.
+pub const MAX_IFS: usize = 32;
+/// The loops Mesa keeps ([`LoopRegion`]) one shader may hold.
+pub const MAX_LOOPS: usize = 8;
 
 /// `nir_opt_peephole_select`'s limit as bifrost calls it
 /// (bifrost_nir.c:234-237: `.limit = 64, .expensive_alu_ok = true`).
@@ -115,6 +119,8 @@ pub enum Alu {
     Ffloor,
     /// `fceil` (`FROUND.rtp`).
     Fceil,
+    /// `ftrunc` (`FROUND.rtz`): `i2f32(f2i32(a))` (nir_opt_algebraic.py:1250).
+    Ftrunc,
     /// `flt_pan`, `fge_pan`, `feq_pan` (`pan_nir_lower_bool_to_bitsize`):
     /// a 32-bit 0 / ~0 mask (`FCMP.f32 .m1`). GLSL's `<=` is `fge` with
     /// its sources swapped (glsl_to_nir.cpp:2488).
@@ -243,6 +249,7 @@ impl Alu {
             | Alu::Frsq
             | Alu::Ffloor
             | Alu::Fceil
+            | Alu::Ftrunc
             | Alu::B2f
             | Alu::F2i
             | Alu::I2f
@@ -455,6 +462,15 @@ pub struct IfRegion {
     pub after: u8,
     pub live: bool,
     pub guard: bool,
+    /// The kept loop ([`LoopRegion`], its index in [`Nir::loops`]) whose
+    /// exit the then side's last block jumps to: a `break` ends the side
+    /// (`bi_emit_jump`, bifrost_compile.c:85-100), so the side does not
+    /// reach the join.
+    pub brk: Option<u8>,
+    /// The region's place among the regions in the order the walk closed
+    /// them (an inner one first), which is the order `emit_if` and
+    /// `emit_loop` add their blocks' edges in.
+    pub seq: u8,
 }
 
 impl IfRegion {
@@ -468,7 +484,30 @@ impl IfRegion {
         after: 0,
         live: false,
         guard: false,
+        brk: None,
+        seq: 0,
     };
+}
+
+/// A loop Mesa keeps (no limiting terminator, so `nir_opt_loop_unroll`
+/// leaves it, nir_opt_loop_unroll.c:1112-1114), as `emit_loop`
+/// (bifrost_compile.c:3738-3770) lays it out: the block before it
+/// (`pre`), the header (`continue_block`, where the phis of the values the
+/// body carries stand), the body's blocks up to the `latch`, which jumps
+/// back to the header, and the `exit` (`break_block`), entered by the
+/// `break`s alone.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct LoopRegion {
+    pub pre: u8,
+    pub header: u8,
+    pub latch: u8,
+    pub exit: u8,
+    /// See [`IfRegion::seq`].
+    pub seq: u8,
+}
+
+impl LoopRegion {
+    pub const NONE: LoopRegion = LoopRegion { pre: 0, header: 0, latch: 0, exit: 0, seq: 0 };
 }
 
 impl Kind {
@@ -625,6 +664,10 @@ pub struct Nir<'s> {
     pub dom: [u8; MAX_BLOCKS],
     pub ifs: [IfRegion; MAX_IFS],
     pub nifs: usize,
+    pub loops: [LoopRegion; MAX_LOOPS],
+    pub nloops: usize,
+    /// The regions closed so far ([`IfRegion::seq`]).
+    pub nseq: u8,
     /// A vertex shader's look-up ([`Kind::VsTex`]): the sampler binding
     /// whose texture and sampler it reads at descriptor index
     /// [`super::nir_fs::TEX_INDEX`].
@@ -809,6 +852,10 @@ pub(super) fn uniform_idx(
     let int_word = match idx {
         Val::Lane(n, 0) => match g.nodes[n as usize].kind {
             Kind::Uniform { dword, .. } => uniform_of(m, dword).is_ok_and(|(i, _)| i.gl_type as u32 == GL_INT),
+            /* a vec4 array's element at an int sum (builtin_45's `cols[idx
+             * + i]` in a kept loop: `IADD.s32 r5, u2.w0, r4`, then the
+             * shift and `LD_PKA.i128`) */
+            Kind::Alu(Alu::Iadd) => u.gl_type as u32 == GL_FLOAT_VEC4 && g.nodes[n as usize].bits == 32,
             _ => false,
         },
         _ => false,
@@ -850,6 +897,9 @@ impl<'s> Nir<'s> {
             dom: [0; MAX_BLOCKS],
             ifs: [IfRegion::NONE; MAX_IFS],
             nifs: 0,
+            loops: [LoopRegion::NONE; MAX_LOOPS],
+            nloops: 0,
+            nseq: 0,
             sampler: None,
             consts: super::link::VaryingConsts::NONE,
             nonuniform_const: false,
@@ -933,6 +983,21 @@ impl<'s> Nir<'s> {
                 }
             }
         }
+        for r in self.loops[..self.nloops].iter_mut() {
+            for b in [&mut r.pre, &mut r.header, &mut r.latch, &mut r.exit] {
+                if *b == from {
+                    *b = into;
+                }
+            }
+        }
+    }
+
+    /// Region `r`'s blocks hold a jump out of it: its then side ends in a
+    /// `break`, or a side holds an `if` whose does. NIR keeps such an `if`
+    /// (`nir_opt_dead_cf` keeps a block that ends in a jump; the jump is no
+    /// instruction `nir_opt_peephole_select` may move, :255).
+    fn jumps(&self, r: &IfRegion) -> bool {
+        r.brk.is_some() || self.live_ifs().any(|x| x.brk.is_some() && self.inside(r, x.before))
     }
 
     /// The `demote_if` nodes of the program, in order (nir_fs.rs).
@@ -947,7 +1012,7 @@ impl<'s> Nir<'s> {
     pub fn dead_cf(&mut self) {
         for i in 0..self.nifs {
             let r = self.ifs[i];
-            if !r.live {
+            if !r.live || self.jumps(&r) {
                 continue;
             }
             let dead = (0..self.len).all(|k| {
@@ -1094,7 +1159,7 @@ impl<'s> Nir<'s> {
             progress = false;
             for i in 0..self.nifs {
                 let r = self.ifs[i];
-                if !r.live || r.then_first != r.then_last || r.else_first != r.else_last {
+                if !r.live || r.then_first != r.then_last || r.else_first != r.else_last || r.brk.is_some() {
                     continue;
                 }
                 let (Some(a), Some(b)) = (self.allowed(r.then_first, uniforms), self.allowed(r.else_first, uniforms))
@@ -1201,6 +1266,50 @@ impl<'s> Nir<'s> {
             (g.then_last, g.else_last) = (g.else_last, g.then_last);
         }
         Ok(())
+    }
+
+    /// An inverted guard that stays a branch ([`Nir::invert_guards`]; femtovg's
+    /// filter_image, whose 24 passes are too large for the peephole) is laid
+    /// out as `emit_if` lays out the `if` `opt_if_simplification` made: the
+    /// then side (the rest of the pass and the later ones) before the else
+    /// side (the `break`'s block), so the blocks of the two sides are
+    /// renumbered (fvg_filter_image.expect.json: each guard's `BRANCHZ.eq`
+    /// skips the pass, the break's copies stand after it).
+    pub fn lay_out_inverted_guards(&mut self) {
+        loop {
+            let r = self.live_ifs().find(|r| r.guard && r.else_first < r.then_first && r.else_last + 1 == r.then_first);
+            let Some(r) = r.copied() else { return };
+            let (lo, mid, hi) = (r.else_first, r.then_first, r.then_last);
+            let map = |b: u8| match b {
+                b if b >= lo && b < mid => b + (hi - mid + 1),
+                b if b >= mid && b <= hi => b - (mid - lo),
+                b => b,
+            };
+            for k in 0..self.n {
+                self.block[k] = map(self.block[k]);
+            }
+            let old = self.dom;
+            for b in 0..self.nblocks {
+                self.dom[map(b) as usize] = map(old[b as usize]);
+            }
+            for r in self.ifs[..self.nifs].iter_mut() {
+                for b in [
+                    &mut r.before,
+                    &mut r.then_first,
+                    &mut r.then_last,
+                    &mut r.else_first,
+                    &mut r.else_last,
+                    &mut r.after,
+                ] {
+                    *b = map(*b);
+                }
+            }
+            for r in self.loops[..self.nloops].iter_mut() {
+                for b in [&mut r.pre, &mut r.header, &mut r.latch, &mut r.exit] {
+                    *b = map(*b);
+                }
+            }
+        }
     }
 
     /// `nir_opt_constant_folding` of an operation whose sources are
@@ -1525,6 +1634,7 @@ impl<'s> Nir<'s> {
                 | Alu::Frsq
                 | Alu::Ffloor
                 | Alu::Fceil
+                | Alu::Ftrunc
                 | Alu::Fcmp(_)
                 | Alu::Icmp(_)
                 | Alu::B2f
@@ -1831,6 +1941,8 @@ pub fn build<'s>(
         let id = match *nd {
             IrNode::Instr(id) => id,
             IrNode::Return if k + 1 == nodes.len() => continue,
+            /* intloop_loop_nested_vs: Mesa keeps the loops as blocks */
+            IrNode::Loop { .. } => return Err(MaliError::LoopVertex),
             _ => return Err(MaliError::ControlFlow),
         };
         let op = m.instr(id).ok_or(MaliError::Defect(Defect::IrIndex))?;
@@ -2432,6 +2544,17 @@ pub(super) fn fuse(vs: &mut Nir<'_>) {
             let Some(f) = product(vs, gn.src[0]) else { continue };
             let other = vs.nodes[x].src[1 - s];
             let fm = vs.nodes[f as usize];
+            /* `fneg` of a constant folds (`nir_opt_constant_folding` in the
+             * late loop): femtovg filter_image's `fpos - 3.0 * dir`, the
+             * constant -3.0 an `IADD_IMM #0xC0400000` beside a uniform */
+            if let (Val::Const(c), 32) = (fm.src[0], fm.bits) {
+                vs.nodes[x] =
+                    NirNode { kind: Kind::Alu(Alu::Ffma), src: [Val::Const(c ^ 1 << 31), fm.src[1], other], ..fm };
+                if x < vs.user_end {
+                    vs.note(Prod::FusedNegated);
+                }
+                break;
+            }
             /* the new fneg stands where the fadd does */
             let Ok(n) = vs.insert_before(
                 k,
@@ -2494,25 +2617,34 @@ pub fn dce(vs: &mut Nir<'_>, only: Option<u8>) {
             vs.live[c as usize] = true;
         }
     }
-    for k in (0..vs.len).rev() {
-        let id = vs.order[k] as usize;
-        let nd = vs.nodes[id];
-        let root = match nd.kind {
-            Kind::Store { out, .. } | Kind::Lea { out } | Kind::Addr { out, .. } => {
-                only.is_none_or(|o| o == out || (o == 0 && out == 2))
+    /* in reverse order, again while a loop header's phi made a node of the
+     * body (later in the order) live */
+    let mut progress = true;
+    while progress {
+        progress = false;
+        for k in (0..vs.len).rev() {
+            let id = vs.order[k] as usize;
+            let nd = vs.nodes[id];
+            let root = match nd.kind {
+                Kind::Store { out, .. } | Kind::Lea { out } | Kind::Addr { out, .. } => {
+                    only.is_none_or(|o| o == out || (o == 0 && out == 2))
+                }
+                /* a side effect (`nir_instr_is_dead`: an intrinsic that
+                 * cannot be eliminated) */
+                Kind::Discard => true,
+                _ => false,
+            };
+            if !(root || vs.live[id]) {
+                continue;
             }
-            /* a side effect (`nir_instr_is_dead`: an intrinsic that cannot
-             * be eliminated) */
-            Kind::Discard => true,
-            _ => false,
-        };
-        if !(root || vs.live[id]) {
-            continue;
-        }
-        vs.live[id] = true;
-        for v in nd.src {
-            if let Val::Lane(n, _) = v {
-                vs.live[n as usize] = true;
+            vs.live[id] = true;
+            for v in nd.src {
+                if let Val::Lane(n, _) = v {
+                    if nd.kind == Kind::Phi && !vs.live[n as usize] {
+                        progress |= vs.order[k + 1..vs.len].contains(&n);
+                    }
+                    vs.live[n as usize] = true;
+                }
             }
         }
     }

@@ -204,13 +204,28 @@ pub enum MaliError {
     /// another `if` (the GL front end's `iand` of the conditions), a
     /// mediump shader's.
     DiscardForm,
-    /// A loop other than one a constant bound ends within Mesa's unroll
-    /// limits (nir_fs.rs `walk_loop`): a run-time bound, more than 32
-    /// passes, a body too large to unroll, a second `break` behind a
-    /// run-time condition, or one `complex_unroll` takes whose guarded
-    /// passes stay branches (`walk_guard`; the one it takes and flattens,
-    /// gl_test's databreak, is lowered).
+    /// A loop in a form no reference draws. Unrolled (nir_fs.rs
+    /// `walk_loop`, a constant bound): more than 32 passes, a body too
+    /// large, a second `break` behind a run-time condition. Kept (a
+    /// run-time bound, `walk_kept_loop`, a highp shader's): no `break` or
+    /// more than two, a `continue` other than `if (c) { step; continue; }`
+    /// at the body's top, a body that always breaks or writes the colour.
     LoopForm,
+    /// A loop Mesa keeps (a run-time bound) in a mediump fragment shader
+    /// (nir_fs.rs `walk_kept_loop`): Mesa carries its fp16 values across
+    /// the back edge as 16-bit vectors, whole-word `MOV.i32` copies and
+    /// `MKVEC.v2i16` swizzles (intloop_loop_nested.expect.json), and the
+    /// mediump selection (`select`) has no blocks.
+    LoopMediump,
+    /// A `break` or `continue` behind a run-time condition in a loop a
+    /// mediump fragment shader unrolls (nir_fs.rs `walk_if16`): Mesa's
+    /// `complex_unroll` ladder of `ICMP_OR` and `MUX.v2i16` over fp16
+    /// pairs (intloop_contloops.expect.json, words 0-39).
+    GuardMediump,
+    /// A loop in a vertex shader (nir.rs `build` walks straight code):
+    /// Mesa keeps it as blocks, its mediump values fp16
+    /// (intloop_loop_nested_vs.expect.json's varying program).
+    LoopVertex,
     IndexedLocal,
     SpecialInput,
     NoPosition,
@@ -282,7 +297,7 @@ pub enum MaliError {
 
 impl MaliError {
     /// Every gap, for the tests that check the messages are distinct.
-    pub const GAPS: [MaliError; 59] = [
+    pub const GAPS: [MaliError; 62] = [
         MaliError::LinkedVertexNotLowered,
         MaliError::BlendVariantNotLowered,
         MaliError::ControlFlow,
@@ -312,6 +327,9 @@ impl MaliError {
         MaliError::TexHighp,
         MaliError::DiscardForm,
         MaliError::LoopForm,
+        MaliError::LoopMediump,
+        MaliError::GuardMediump,
+        MaliError::LoopVertex,
         MaliError::IndexedLocal,
         MaliError::SpecialInput,
         MaliError::NoPosition,
@@ -424,8 +442,15 @@ impl MaliError {
                 "Valhall: a discard other than a highp fragment shader's `if (a < b) discard;` with no else (an unconditional one, one among other statements, one under another if, a mediump shader's) is not lowered yet"
             }
             MaliError::LoopForm => {
-                "Valhall: a loop other than one a constant bound ends within 32 passes (a break behind a run-time condition, which Mesa unrolls with guards) is not lowered yet"
+                "Valhall: a loop past Mesa's unroll limits or with two run-time breaks, or a kept loop with more than two breaks, a continue other than the step's at its top or the colour written inside, is not lowered yet"
             }
+            MaliError::LoopMediump => {
+                "Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet"
+            }
+            MaliError::GuardMediump => {
+                "Valhall: a break or continue behind a run-time condition in a loop a mediump fragment shader unrolls (Mesa's ladder of fp16 selects) is not lowered yet"
+            }
+            MaliError::LoopVertex => "Valhall: a loop in a vertex shader is not lowered yet",
             MaliError::IndexedLocal => "Valhall: an indexed local variable is not lowered yet",
             MaliError::SpecialInput => {
                 "Valhall: a built-in input (gl_FragCoord, gl_FrontFacing, gl_PointCoord, gl_VertexID, gl_InstanceID) is not lowered yet"
@@ -466,19 +491,19 @@ impl MaliError {
             }
             MaliError::TooManyLocals => "Valhall: a shader with more than 32 local variables is not lowered yet",
             MaliError::TooManyValues => {
-                "Valhall: a shader of more than 2048 IR values (or 768 instructions before selection) is not lowered yet"
+                "Valhall: a shader of more than 2048 IR values (or 1536 instructions before selection) is not lowered yet"
             }
             MaliError::TooManyConstants => {
                 "Valhall: a program with more than 64 distinct immediates outside the table is not lowered yet"
             }
             MaliError::InstrTableFull => {
-                "Valhall: a program longer than the back end's 384-instruction table is not lowered yet"
+                "Valhall: a program longer than the back end's 1536-instruction table (or a block longer than 512) is not lowered yet"
             }
             MaliError::ValueTableFull => {
-                "Valhall: a program defining more than the back end's 384 SSA values is not lowered yet"
+                "Valhall: a program defining more than the back end's 1536 SSA values is not lowered yet"
             }
             MaliError::BlockTableFull => {
-                "Valhall: a shader of more than 32 basic blocks or 8 ifs is not lowered yet"
+                "Valhall: a shader of more than 128 basic blocks or 32 ifs is not lowered yet"
             }
             MaliError::IfForm => {
                 "Valhall: an if whose condition is not a comparison (a constant, a boolean operator) is not lowered yet"
