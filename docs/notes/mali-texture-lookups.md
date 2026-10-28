@@ -150,12 +150,20 @@ Steps (1), (2), (3) and (5); step (4), the frame, is open.
   admits (`Tex` at `MulA`/`FmaA`, `Op` at `FmaC`), case 91's
   `fsout_91_hdrscale`. One word is pinned, not equal
   (`tests.rs` `FEMTOVG_PINNED`): fill_image_gradient.glyph's glyph
-  look-up, where Mesa clears `skip` and we set it. Our helper analysis
-  (`flow.rs`) finds no helper-needing reader of that texel, and Mesa keeps
-  `skip` on the same look-up without the discard and in the conic
-  variant; which value Mesa's `bi_analyze_helper_requirements` marks
-  needs the shim's BIR listing of that program (not drawn yet). The bit
-  only lets the look-up skip helper lanes, so the image is the same.
+  look-up, where Mesa clears `skip` and we set it. The shim's BIR listing
+  of the pair (`drm_shim_ref.sh run` of `fvg_fill_image_gradient_glyph.*`,
+  not committed) shows why: `bi_add_branch_compare_values`
+  (`M:panfrost/compiler/bifrost/bi_helper_invocations.c`) marks
+  `src[1].value` of each `BRANCHZ.i16` without testing its type, and that
+  source is the zero constant, by then the FAU immediate `u256`, so SSA
+  value 256 is marked. In this program `%256` is the second word of the
+  glyph look-up's `SPLIT` (`%255, %256, %257, %258 = SPLIT.i32 %254`), so
+  its result counts as needed by helpers. It is a collision of value
+  numbers, not a data path, and it hits any program with a branch whose
+  value 256 feeds a look-up's result; ours are not numbered as Mesa's (NIR
+  def indices, then emission temporaries), so it is pinned, not
+  reproduced. The bit only lets the look-up skip helper lanes, so the
+  image is the same.
 - femtovg's `filter_image` (49 look-ups) is no longer refused for the
   look-ups: it stops at the block table (`BlockTableFull`; Mesa keeps the
   24 guarded passes of `if (i >= sampleCount) break;` as nested branches,

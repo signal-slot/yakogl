@@ -3830,14 +3830,19 @@ const FEMTOVG: [(&str, bool); 35] = [
 ///
 /// fill_image_gradient.glyph: the glyph look-up's `skip` bit (Mesa's
 /// `TEX_SINGLE.slot2.reserved.32.2d.computed.discard` against our
-/// `.skip`). `bi_analyze_helper_requirements` (bi_helper_invocations.c)
-/// keeps it, which our analysis (flow.rs) does not reproduce: nothing that
-/// needs helper lanes reads the glyph texel (its result only reaches the
-/// colour), and the same look-up keeps its `skip` in the program without
-/// the discard and in fill_image_gradient_conic.glyph. Which value Mesa
-/// marks needs the shim's BIR listing of the program (`drm_shim_ref.sh run`,
-/// not drawn yet). The bit only lets the look-up skip helper lanes, which
-/// nothing reads here: the image is the same.
+/// `.skip`). Measured on the shim's BIR listing (`drm_shim_ref.sh run` of
+/// the fvg_ pair, `BIFROST_MESA_DEBUG=shaders`): `bi_add_branch_compare_
+/// values` (bi_helper_invocations.c) marks `src[1].value` of each
+/// `BRANCHZ.i16` with no type test, and that source is the zero constant,
+/// by then the FAU immediate `u256`: SSA value 256 is marked. Here `%256`
+/// is the second word of the glyph look-up's `SPLIT` (`%255, %256, %257,
+/// %258 = SPLIT.i32 %254`), so the look-up's result counts as needed by
+/// helpers and Mesa clears `skip`. It is a collision of value numbers, not
+/// a data path: our analysis (flow.rs) has no data path either, and our
+/// values are not numbered as Mesa's (NIR def indices, then emission
+/// temporaries), so the collision cannot be reproduced. The bit only lets
+/// the look-up skip helper lanes, which nothing reads here: the image is
+/// the same.
 const FEMTOVG_PINNED: [(&str, usize, u64, u64); 1] =
     [("fill_image_gradient_glyph", 85, 0x6928_40b4_93c8_2048, 0x6928_4034_93c8_2048)];
 
