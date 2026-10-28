@@ -38,6 +38,7 @@
 #include "yakogl_board.h"
 #include "imx8mp_display.h"
 #include "board_imx8mp_route3.h"
+#include "gc_panel_console.h"
 
 /* ---- the M7's map (the M7 firmware's m7_mem.h) ---------------- */
 
@@ -110,8 +111,77 @@ static struct {
 	uint32_t shown_timeouts;
 	bool lit;                           /* imx8mp_display_backlight_on() called */
 	int64_t released_ms;
+	int64_t first_shown_ms;
 	struct k_timer beat;
+	volatile struct cluster_boot_timeline *tl; /* in the window, once mapped */
 } R;
+
+/* ---- the cold-start timeline (<cluster/boot_timeline.h>) -------------------- */
+
+static uint64_t tl_early[CLUSTER_BOOT_TIMELINE_SLOTS];
+
+static inline uint64_t cntpct(void)
+{
+	uint64_t v;
+
+	__asm__ volatile("isb; mrs %0, cntpct_el0" : "=r"(v) : : "memory");
+	return v;
+}
+
+static inline uint32_t cntfrq(void)
+{
+	uint64_t v;
+
+	__asm__ volatile("mrs %0, cntfrq_el0" : "=r"(v));
+	return (uint32_t)v;
+}
+
+void board_route3_tl_mark(enum cluster_tl_a53 stage)
+{
+	if ((unsigned int)stage >= CLUSTER_BOOT_TIMELINE_SLOTS || tl_early[stage] != 0u) {
+		return;
+	}
+	tl_early[stage] = cntpct();
+	if (R.tl != NULL) {
+		R.tl->a53[stage] = tl_early[stage];
+	}
+}
+
+/* The page for this boot: cleared, the A53's stamps so far, the magic last
+ * (the M7 writes only m7[], and only after its release). */
+static void tl_attach(uint8_t *window)
+{
+	volatile struct cluster_boot_timeline *tl =
+		(volatile struct cluster_boot_timeline *)(window + (CLUSTER_BOOT_TIMELINE_ADDR -
+								    M7_UNCACHED_BASE));
+	volatile uint32_t *w = (volatile uint32_t *)tl;
+
+	for (size_t i = 0; i < sizeof(*tl) / 4u; i++) {
+		w[i] = 0u;
+	}
+	tl->version = CLUSTER_BOOT_TIMELINE_VERSION;
+	tl->cntfrq = cntfrq();
+	for (unsigned int i = 0; i < CLUSTER_BOOT_TIMELINE_SLOTS; i++) {
+		tl->a53[i] = tl_early[i];
+	}
+	barrier_dmem_fence_full();
+	tl->magic = CLUSTER_BOOT_TIMELINE_MAGIC;
+	R.tl = tl;
+}
+
+static int tl_entry(void)
+{
+	board_route3_tl_mark(CLUSTER_TL_A53_ENTRY);
+	return 0;
+}
+SYS_INIT(tl_entry, PRE_KERNEL_1, 0);
+
+static int tl_kernel_up(void)
+{
+	board_route3_tl_mark(CLUSTER_TL_A53_KERNEL_UP);
+	return 0;
+}
+SYS_INIT(tl_kernel_up, APPLICATION, 0);
 
 static void *map_nc(uintptr_t phys, size_t size)
 {
@@ -312,6 +382,7 @@ static void m7_check(void)
 		return;
 	}
 	R.state = BOARD_ROUTE3_UP;
+	board_route3_tl_mark(CLUSTER_TL_A53_M7_UP);
 	printk("route3: M7 up at +%lld ms: build 0x%08x, status v%u, lcdif_flags 0x%x\n",
 	       k_uptime_get() - R.released_ms, s[ST_BUILD_ID], s[ST_VERSION], s[ST_LCDIF_FLAGS]);
 }
@@ -328,6 +399,67 @@ static void m7_give_up(void)
 	printk("route3: no M7 status block after %d ms: stopped it, this image flips\n",
 	       CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_M7_WAIT_MS);
 }
+
+#if CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_TIMELINE_REPORT_MS > 0
+static void tl_line(const char *who, const char *what, uint64_t t, uint64_t t0, uint32_t hz)
+{
+	if (t == 0u) {
+		printk("  %s %-22s      -\n", who, what);
+		return;
+	}
+	/* microseconds since SPL started the counter, and since the A53's entry */
+	const uint64_t abs_us = t * 1000000u / hz;
+	const int64_t rel_us = t0 != 0u ? (int64_t)((int64_t)t - (int64_t)t0) * 1000000 / hz : 0;
+
+	printk("  %s %-22s %6llu.%03llu ms  (+%lld.%03lld)\n", who, what, abs_us / 1000u,
+	       abs_us % 1000u, rel_us / 1000, (rel_us < 0 ? -rel_us : rel_us) % 1000);
+}
+
+/*
+ * The measurement build's ending: stop the M7, put the panel console's own
+ * buffer on the panel, print both cores' stamps, and stay there. A
+ * photograph of the panel is the record (the Mallow has no UART).
+ */
+static void tl_report(void)
+{
+	static const char *const a53[] = {
+		"entry", "panel bring-up start", "panel on (dark)", "kernel up",
+		"window (M7 loaded)", "frame 1 drawn", "M7 released", "M7 up",
+		"first shown"};
+	static const char *const m7[] = {
+		"main", "safety layer ready", "loop", "first A53 frame",
+		"first composite", "first flip latched", "backlight on"};
+	volatile struct cluster_boot_timeline *tl = R.tl;
+	struct gc_panel_surface s;
+	uint32_t hz = cntfrq();
+	uint64_t t0;
+
+	k_timer_stop(&R.beat);
+	(void)sip_rproc(IMX_SIP_RPROC_STOP);
+	if (gc_panel_console_surface(&s)) {
+		(void)imx8mp_display_set_fb(k_mem_phys_addr(s.fb));
+	}
+	imx8mp_display_backlight_on();
+	if (tl == NULL || tl->magic != CLUSTER_BOOT_TIMELINE_MAGIC) {
+		printk("route3 timeline: no page\n");
+	} else {
+		hz = tl->cntfrq != 0u ? tl->cntfrq : hz;
+		t0 = tl->a53[CLUSTER_TL_A53_ENTRY];
+		printk("\nroute3 timeline (system counter %u Hz, ms since SPL started it; +ms since "
+		       "the A53 entry)\n", hz);
+		for (unsigned int i = 0; i < ARRAY_SIZE(a53); i++) {
+			tl_line("A53", a53[i], tl->a53[i], t0, hz);
+		}
+		for (unsigned int i = 0; i < ARRAY_SIZE(m7); i++) {
+			tl_line("M7 ", m7[i], tl->m7[i], t0, hz);
+		}
+	}
+	for (;;) {
+		board_watchdog_feed();
+		k_sleep(K_MSEC(100));
+	}
+}
+#endif
 
 /* ---- the ring ------------------------------------------------------------- */
 
@@ -350,6 +482,10 @@ static int route3_setup(void)
 	R.status = (const volatile uint32_t *)(R.window + (M7_STATUS_ADDR - M7_UNCACHED_BASE));
 	R.ring = (volatile struct cluster_frame_ring *)(R.window + (M7_RING_ADDR - M7_UNCACHED_BASE));
 	R.page = cluster_m7_page_of(R.ring);
+	BUILD_ASSERT(CLUSTER_BOOT_TIMELINE_ADDR + sizeof(struct cluster_boot_timeline) <=
+			     M7_UNCACHED_BASE + M7_UNCACHED_SIZE,
+		     "the timeline page is in the M7's non-cacheable window");
+	tl_attach(R.window);
 
 	/* DDR keeps its contents over a warm reset: what the last boot's M7
 	 * left must not read as this boot's. Its status magic and its page
@@ -366,6 +502,7 @@ static int route3_setup(void)
 	cluster_frame_ring_init(R.ring);
 	k_timer_init(&R.beat, beat_expiry, NULL);
 	R.state = BOARD_ROUTE3_LOADED;
+	board_route3_tl_mark(CLUSTER_TL_A53_WINDOW);
 	return 0;
 }
 
@@ -420,6 +557,7 @@ int board_route3_show(const struct board_window *win)
 
 	switch (R.state) {
 	case BOARD_ROUTE3_LOADED:
+		board_route3_tl_mark(CLUSTER_TL_A53_FRAME1_DRAWN);
 		/* The panel from cold on this frame; the M7 adopts it later. The
 		 * backlight stays off (YAKOGL_DRV_DISPLAY_IMX8MP_BACKLIGHT_ON_FIRST_SHOW):
 		 * this frame has no safety layer, and the M7 turns PWM3 on itself
@@ -435,6 +573,7 @@ int board_route3_show(const struct board_window *win)
 		k_timer_start(&R.beat, K_MSEC(CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_BEAT_MS),
 			      K_MSEC(CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_BEAT_MS));
 		m7_release();
+		board_route3_tl_mark(CLUSTER_TL_A53_M7_RELEASED);
 		return 0;
 	case BOARD_ROUTE3_STARTING:
 	case BOARD_ROUTE3_UP:
@@ -477,9 +616,17 @@ int board_route3_show(const struct board_window *win)
 		 * this writes nothing. */
 		imx8mp_display_backlight_on();
 		R.lit = true;
+		R.first_shown_ms = k_uptime_get();
+		board_route3_tl_mark(CLUSTER_TL_A53_FIRST_SHOWN);
 		printk("route3: the M7's first frame on the panel within %lld ms of the release\n",
 		       k_uptime_get() - R.released_ms);
 	}
+#if CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_TIMELINE_REPORT_MS > 0
+	if (R.lit && R.state == BOARD_ROUTE3_UP &&
+	    k_uptime_get() - R.first_shown_ms >= CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_TIMELINE_REPORT_MS) {
+		tl_report(); /* does not return */
+	}
+#endif
 	return 0;
 }
 

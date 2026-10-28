@@ -18,6 +18,7 @@
 #include <stdint.h>
 
 #include <cluster/frame_ring.h>
+#include <cluster/boot_timeline.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -43,6 +44,14 @@ int board_route3_state(void);
  * when there is none yet (or it raced the M7 writing): keep the last one.
  */
 bool board_route3_vehicle(struct cluster_vehicle_state *out);
+
+/*
+ * Stamp an A53 stage of the cold-start timeline (<cluster/boot_timeline.h>)
+ * on the system counter, the first time it is reached. Callable from
+ * PRE_KERNEL_1 on: until the first board_route3_window() maps the M7's
+ * window the stamps are kept here, and that call copies them in.
+ */
+void board_route3_tl_mark(enum cluster_tl_a53 stage);
 
 /* ---- board layer ---------------------------------------------------------- */
 
