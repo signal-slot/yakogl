@@ -1037,7 +1037,9 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
         (FS, "precision highp float; varying vec4 v; void main(){ mediump vec4 t = v; gl_FragColor = t; }", MaliError::MixedPrecision),
         (VS, "attribute vec4 p; void main(){ if (p.x > 0.0) gl_Position = p; }", MaliError::Arithmetic),
         (VS, "attribute vec4 p; void main(){ while (true) { gl_Position = p; break; } }", MaliError::ControlFlow),
-        (VS, "attribute vec4 p; void main(){ for (int i = 0; i < 2; i++) { gl_Position = p; } }", MaliError::IntValue),
+        /* an integer conversion (the vertex stage takes the built-in
+         * inputs' `%`, `==`, `||` and selects alone) */
+        (VS, "attribute vec4 p; void main(){ gl_Position = p * float(int(p.x)); }", MaliError::IntValue),
         (VS, "attribute vec4 p; void main(){ }", MaliError::NoPosition),
         (VS, "attribute vec4 p; varying vec4 v; void main(){ v = p; }", MaliError::NoPosition),
         (VS, "attribute vec4 p; void main(){ gl_Position = p; gl_PointSize = 2.3; }", MaliError::Fp16Inexact),
@@ -4491,4 +4493,120 @@ fn a_vertex_array_element_pushes_its_lanes_alone() {
     let (v, _) = compile_linked(td!("varyconst_150_a.vert"), td!("varyconst_150_a.frag"));
     assert!(v.info.fau.contains(&FauWord::Uniform { dword: 233 }));
     assert!(!v.info.fau.contains(&FauWord::Uniform { dword: 232 }), "{:?}", v.info.fau);
+}
+
+/* ---- built-in inputs (#33) ------------------------------------------ */
+
+/// The builtin population whose two stages compile
+/// (docs/notes/mali-builtin-inputs.md, plan #154 builtin): each gl_test
+/// case's pair through the link ([`check_linked`]) against its drm-shim
+/// reference. 44 and 57 are 43's programs, 51 and 141 47's (the notes'
+/// study-builtin2 section); 45 and 98 are below.
+const BUILTIN_POPULATION: [(&str, &str, &str, &str); 7] = [
+    /* gl_VertexID (r60): vid.vert + vcolor.frag */
+    ("43", td!("builtin_43.vert"), td!("builtin_43.frag"), td!("builtin_43.expect.json")),
+    ("44", td!("builtin_44.vert"), td!("builtin_44.frag"), td!("builtin_44.expect.json")),
+    ("57", td!("builtin_57.vert"), td!("builtin_57.frag"), td!("builtin_57.expect.json")),
+    /* gl_InstanceID (r61): inst.vert + vcolor.frag */
+    ("47", td!("builtin_47.vert"), td!("builtin_47.frag"), td!("builtin_47.expect.json")),
+    ("51", td!("builtin_51.vert"), td!("builtin_51.frag"), td!("builtin_51.expect.json")),
+    ("141", td!("builtin_141.vert"), td!("builtin_141.frag"), td!("builtin_141.expect.json")),
+    /* gl_FrontFacing (r58): vid.vert + facing.frag, no varying program */
+    ("49", td!("builtin_49.vert"), td!("builtin_49.frag"), td!("builtin_49.expect.json")),
+];
+
+#[test]
+fn the_builtin_population_is_byte_equal_to_mesa_26_2_1() {
+    let mut failed = Vec::new();
+    for (name, vs, fs, json) in BUILTIN_POPULATION {
+        if let Err(e) = std::panic::catch_unwind(|| check_linked(vs, fs, json)) {
+            let m = e.downcast_ref::<String>().cloned().unwrap_or_else(|| format!("{:?}", e.downcast_ref::<&str>()));
+            failed.push(format!("{name}: {m}"));
+        }
+    }
+    assert!(failed.is_empty(), "{} of {} differ:\n{}", failed.len(), BUILTIN_POPULATION.len(), failed.join("\n"));
+}
+
+/// Cases 45 (dynidx.frag) and 98 (uniloop.frag): vid.vert's programs for a
+/// fragment shader that reads no varying (the position program alone,
+/// builtin_45/98.expect.json, the varying's gl_VertexID code dead). Their
+/// fragment shaders stay refused by other families: 45's run-time loop over
+/// an int uniform's bound (loops-rt, intbool-2), 98's int loop and `mod`
+/// (loops-rt, intbool).
+#[test]
+fn cases_45_and_98_vertex_programs_are_byte_equal_to_mesa_26_2_1() {
+    for (vs, fs, json, gap_fs) in [
+        (td!("builtin_45.vert"), td!("builtin_45.frag"), td!("builtin_45.expect.json"), MaliError::UniformType),
+        (td!("builtin_98.vert"), td!("builtin_98.frag"), td!("builtin_98.expect.json"), MaliError::Arithmetic),
+    ] {
+        let v = {
+            let _k = store::test_keep();
+            store::with_scratch(|s| {
+                super::compile_vs_for_reads(vs.as_bytes(), &[], &[], s, store::keep()).map(|(sh, _)| stage_of(&sh))
+            })
+            .expect("the scratch arena is free")
+            .expect("the vertex shader compiles for a program that reads no varying")
+        };
+        check_vs_stage(&v, vs, fs, json, VIEWPORT_64X64);
+        assert_eq!(gap(SHC_STAGE_FRAGMENT, fs), gap_fs);
+    }
+}
+
+/// gl_VertexID and gl_InstanceID are the preloaded r60 and r61: the varying
+/// program reads them (preload r59, r60 for 43's; r59-r61 for 47's), and a
+/// lane computed from them is interpolated, not flat (they are divergent,
+/// `nir_vertex_divergence_analysis`).
+#[test]
+fn vertex_and_instance_ids_are_preloaded_registers() {
+    let (v, _) = compile_linked(td!("builtin_43.vert"), td!("builtin_43.frag"));
+    let sec = v.info.secondary.expect("a varying program");
+    assert_eq!(sec.preload, 0x18 << 56);
+    let (_, var) = vs_regions(&v);
+    assert_eq!(text(var[0]), "LSHIFT_AND.i32 r0, r60^, 0x0.b00, u5.w1");
+    let (v, _) = compile_linked(td!("builtin_47.vert"), td!("builtin_47.frag"));
+    let (_, var) = vs_regions(&v);
+    assert!(var.iter().any(|w| text(*w).starts_with("ICMP_OR.u32.eq.m1.wait0 r4, r61^")), "{var:x?}");
+    let consts = store::with_scratch(|s| super::vs_constants(td!("builtin_43.vert").as_bytes(), s))
+        .expect("free")
+        .expect("the lanes");
+    assert!((0..3).all(|c| !consts.flat(0, c) && consts.get(0, c).is_none()), "{consts:?}");
+    assert_eq!(consts.get(0, 3), Some(0x3f80_0000));
+}
+
+/// `i == 0 || i == 3` is one compare with the other as its third source
+/// (opt.rs `fuse_cmp`, Mesa's `va_fuse_cmp`): the shared `i == 3` once,
+/// each `||` an `ICMP_OR` reading it, no `LSHIFT_OR`.
+#[test]
+fn an_or_of_two_compares_is_one_compare() {
+    let (v, _) = compile_linked(td!("builtin_43.vert"), td!("builtin_43.frag"));
+    let (_, var) = vs_regions(&v);
+    let texts: Vec<String> = var.iter().map(|w| text(*w)).collect();
+    assert_eq!(texts.iter().filter(|t| t.starts_with("ICMP_OR.u32.eq.m1")).count(), 4, "{texts:?}");
+    assert!(!texts.iter().any(|t| t.starts_with("LSHIFT_OR")), "{texts:?}");
+    assert!(texts.iter().any(|t| t == "ICMP_OR.u32.eq.m1 r2, r0, 0x0, r1"), "{texts:?}");
+}
+
+/// gl_FrontFacing is `ICMP_OR.u32.eq.m1 r0, r58^, 0x0, 0x0` (arch 10: the
+/// primitive flags whole, no `LSHIFT_AND`), preloaded with the coverage
+/// (r58, r60, r61); the mediump selects of constants on it are 16-bit
+/// `MUX`es of its low half (builtin_49.expect.json).
+#[test]
+fn front_facing_is_the_primitive_flags_compared_with_zero() {
+    let f = compile(SHC_STAGE_FRAGMENT, td!("builtin_49.frag")).expect("compiles");
+    assert_eq!(f.info.preload, 0x34 << 56);
+    let texts: Vec<String> = trim(&f.code).iter().map(|w| text(*w)).collect();
+    assert_eq!(texts[0], "ICMP_OR.u32.eq.m1.discard r0, r58^, 0x0, 0x0");
+    assert_eq!(texts.iter().filter(|t| t.starts_with("MUX.v2i16")).count(), 2, "{texts:?}");
+}
+
+/// What the built-in lowering leaves refused: a `%` by other than a
+/// positive power of two (no reference), and a mediump select on
+/// gl_FrontFacing of a side that is no constant.
+#[test]
+fn the_builtin_lowering_keeps_its_gaps() {
+    let vs3 = "#version 300 es\nin vec4 p; out vec4 c; void main(){ gl_Position = p; \
+               c = vec4(gl_VertexID % 3 == 0 ? 1.0 : 0.0); }";
+    assert_eq!(gap(SHC_STAGE_VERTEX, vs3), MaliError::IntValue);
+    let fs = "precision mediump float; varying vec4 v; void main(){ gl_FragColor = gl_FrontFacing ? v : vec4(1.0); }";
+    assert_eq!(gap(SHC_STAGE_FRAGMENT, fs), MaliError::Arithmetic);
 }

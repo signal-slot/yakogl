@@ -243,6 +243,14 @@ pub const CUMULATIVE_COVERAGE: u8 = 60;
 /// y in the high half. Read through the `MOV.i32` `bi_preload` makes,
 /// which the RA coalesces like any preload (no pin).
 pub const POSITION_XY: u8 = 59;
+/// `BI_PRELOAD_VERTEX_ID` and `BI_PRELOAD_INSTANCE_ID` for arch >= 9
+/// (compiler.h:1192-1195): an IDVS vertex shader's gl_VertexID and
+/// gl_InstanceID ([`super::nir::Kind::Preload`]).
+pub const VERTEX_ID: u8 = 60;
+pub const INSTANCE_ID: u8 = 61;
+/// `BI_PRELOAD_PRIMITIVE_FLAGS` (compiler.h:1205-1206): a fragment shader's
+/// primitive flags, bit 0 set for a back-facing primitive.
+pub const PRIMITIVE_FLAGS: u8 = 58;
 
 const NO: u32 = u32::MAX;
 const EVEN_BITS_MASK: u64 = 0x5555_5555_5555_5555;

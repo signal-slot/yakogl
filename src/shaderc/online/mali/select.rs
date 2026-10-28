@@ -552,6 +552,8 @@ pub fn vs_variant(
                     lanes[id][c as usize] = Src::of(Idx::Sysval(sv, c));
                 }
             }
+            /* the register itself; [`preloads`] makes its `MOV.i32` */
+            nir::Kind::Preload { reg } => lanes[id][0] = Src::of(Idx::Reg(reg)),
             nir::Kind::Alu(op) => {
                 let mut s = [Src::NULL; 3];
                 for (k, x) in s.iter_mut().enumerate().take(op.arity()) {
