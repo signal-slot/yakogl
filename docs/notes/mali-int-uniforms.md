@@ -44,6 +44,16 @@ vertex shader an `if` (nir.rs refuses vertex control flow), so `mode !=
 reference that compiles draws it. The vertex stage still refuses an int
 uniform read as a value (`UniformType`).
 
+**State since plan #154 item intbool-2.** `idxtex` (case 100) and
+`uniidx_e` (case 116) did not fail on the int uniform after session 1:
+the int index was taken, and the refusal was the run-time read of the
+vec4 array element (`nir::uniform_idx`, `MaliError::UniformIndexed`), not
+`UniformType` as section 3's table says. That read is lowered now in
+every stage and both cases are byte-equal (docs/notes/mali-uniform-types.md,
+"State since plan #154 item intbool-2"). The run-time signed division of
+2.1's "not recorded" line is recorded and lowered: case 79,
+docs/notes/mali-int-and-size.md "Since plan #154 item intbool-2".
+
 ## The answers
 
 1. **Layout: one FAU word per *read component*, in declaration order, after

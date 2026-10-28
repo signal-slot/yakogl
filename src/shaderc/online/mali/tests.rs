@@ -1908,7 +1908,7 @@ fn the_selection_rows_are_the_references() {
         .expect("the scratch arena is free");
     }
     /* the fragment populations, through the graph (nir_fs.rs) */
-    let mut fs_rows = 0u64;
+    let mut fs_rows = 0u128;
     for src in fs_reference_sources() {
         let _k = store::test_keep();
         fs_rows |= store::with_scratch(|s| {
@@ -1922,7 +1922,7 @@ fn the_selection_rows_are_the_references() {
         .expect("the scratch arena is free");
     }
     for (i, r) in super::emit::ROWS.iter().enumerate() {
-        if fs_rows & (1 << i) != 0 && !seen.contains(&r.0) {
+        if fs_rows & (1u128 << i) != 0 && !seen.contains(&r.0) {
             seen.push(r.0);
         }
     }
@@ -1962,8 +1962,11 @@ fn fs_reference_sources() -> Vec<&'static str> {
      * rounded mediump constant (plan #153 frame-cull) */
     srcs.extend(FRAG_COORD_POPULATION.iter().map(|c| c.1));
     srcs.extend([td!("algfold_192_predlive.frag"), td!("mixprec_hello.frag")]);
-    /* integer and boolean values (#33) */
+    /* integer and boolean values, run-time vec4 array reads (#33) */
     srcs.extend(INTBOOL_POPULATION.iter().map(|c| c.2));
+    srcs.extend(UNITYPE_POPULATION.iter().map(|c| c.2));
+    /* a 2D array's size, look-up and fetch (case 42, #33) */
+    srcs.push(include_str!("../../../../tools/shaders/es300/array.frag"));
     srcs
 }
 
@@ -1986,6 +1989,7 @@ fn vs_reference_sources() -> Vec<&'static str> {
     ]);
     /* the vertex look-ups (the shim's, #1385), the cube's among them */
     srcs.extend([td!("tex_vs_lod.vert"), td!("tex_vs_zero.vert"), td!("cube_vs.vert")]);
+    srcs.extend(UNITYPE_POPULATION.iter().map(|c| c.1));
     srcs
 }
 
@@ -3608,6 +3612,19 @@ const S4_POPULATION: [(&str, &str, &str, &str, bool); 34] = [
 fn check_program_for(name: &str, vs: &str, fs: &str, json: &str, vs_values: bool) {
     let f = compile(SHC_STAGE_FRAGMENT, fs).expect("the fragment shader compiles");
     let v = compile_vs_for(vs, fs);
+    check_stages_for(name, &v, &f, json, vs_values);
+}
+
+/// [`check_program_for`] of a pair compiled through the link
+/// ([`compile_linked`]: the fragment shader built with the vertex shader's
+/// constant and flat lanes), every uniform word unset.
+fn check_linked_for(name: &str, vs: &str, fs: &str, json: &str) {
+    let (v, f) = compile_linked(vs, fs);
+    check_stages_for(name, &v, &f, json, false);
+}
+
+/// [`check_program_for`]'s comparison of the compiled stages `v` and `f`.
+fn check_stages_for(name: &str, v: &Stage, f: &Stage, json: &str, vs_values: bool) {
     let vp = VIEWPORT_64X64;
     /* gl_ref.py numbers the program's active uniforms: the vertex shader's
      * first (femtovg's `viewSize` is 0: 16 + c), which `uniform_names`
@@ -3620,7 +3637,7 @@ fn check_program_for(name: &str, vs: &str, fs: &str, json: &str, vs_values: bool
             v.uniforms.iter().find(|r| d >= r.1 && d < r.1 + r.2).expect("a uniform row holds the dword");
         (16.0 + (d - first) as f32).to_bits()
     };
-    let (pos, var) = vs_regions(&v);
+    let (pos, var) = vs_regions(v);
     let rp = region(json, "vs.position").expect("vs.position");
     assert_words(&format!("{name} vs.position"), &pos, &rp.words);
     assert_facts(&format!("{name} vs.position"), &rp, v.info.work_reg_count, v.info.preload, &v.info.fau, vp, &uv_v);
@@ -4631,7 +4648,7 @@ const ES100_PASSTHROUGH_VS: &str = include_str!("../../../../tools/shaders/gl_te
 /// mali-int-loops.md, mali-int-uniforms.md; plan #154 intbool): each pair
 /// against its drm-shim reference, drawn with no uniform values (every
 /// uniform word 0), every region and fact ([`check_program_for`]).
-const INTBOOL_POPULATION: [(&str, &str, &str, &str); 4] = [
+const INTBOOL_POPULATION: [(&str, &str, &str, &str); 6] = [
     /* `int(3.0 * v_color.r)` and `.g`: the varying loaded whole, its two
      * lanes one `V2F32_TO_V2F16` and one `FMA.v2f16` by the fp16 pair of
      * 3.0, `F16_TO_S32.rtz` of each half; the four selects of the colour
@@ -4673,6 +4690,22 @@ const INTBOOL_POPULATION: [(&str, &str, &str, &str); 4] = [
         include_str!("../../../../tools/shaders/es100/affectand.frag"),
         td!("intbig_case112.expect.json"),
     ),
+    /* case 79 (idiv): `n / d` per lane and `100 / (..)`, each
+     * `nir_lower_idiv`'s sequence (`U32_TO_F32`, `FRCP.f32`, the scale
+     * `0x4f7ffffe`, `F32_TO_U32.rtz`, two `umul_high` of 16-bit halves, two
+     * corrections, the sign by `LSHIFT_XOR.i32`), the operands
+     * `F16_TO_S32.rtz` of the uniform's fp16 pairs (`u_d.xy * 10.0` one
+     * `FMA.v2f16`, `abs(u_d.zw)` one `FADD.v2f16 .abs`), the quotients
+     * `S32_TO_F32`, scaled at fp32 and narrowed at the store */
+    (
+        "79",
+        ES100_PASSTHROUGH_VS,
+        include_str!("../../../../tools/shaders/es100/idiv.frag"),
+        td!("intbig_case79.expect.json"),
+    ),
+    /* the same program recorded for the loop study (intloop_idiv.frag is
+     * idiv.frag, its vertex shader the position-only one) */
+    ("idiv", td!("intloop_idiv.vert"), td!("intloop_idiv.frag"), td!("intloop_idiv.expect.json")),
 ];
 
 /// The population's member `name` against its reference.
@@ -4699,4 +4732,88 @@ fn intuni_ishr_is_byte_equal_to_mesa_26_2_1() {
 #[test]
 fn intloop_int_compare_is_byte_equal_to_mesa_26_2_1() {
     check_intbool("int_compare");
+}
+
+#[test]
+fn case_79_idiv_is_byte_equal_to_mesa_26_2_1() {
+    check_intbool("79");
+}
+
+#[test]
+fn intloop_idiv_is_byte_equal_to_mesa_26_2_1() {
+    check_intbool("idiv");
+}
+
+/* ---- run-time vec4 array reads (#33) -------------------------------- */
+
+/// The vec4 uniform arrays read at an int uniform's run-time index
+/// (docs/notes/mali-uniform-types.md, mali-int-uniforms.md; plan #154
+/// intbool-2): each pair through the link ([`check_linked_for`]: a varying
+/// of such a read is convergent, loaded flat), every uniform word unset.
+const UNITYPE_POPULATION: [(&str, &str, &str, &str); 3] = [
+    /* case 100 (idxtex): the vertex stage's `vcols[vidx].rg`, `LSHIFT_OR`
+     * by the table's byte 4, `LD_PKA.i64` after the look-up at the constant
+     * coordinate (`TEX_SINGLE .32.rg.2d.zero`, both staging words the
+     * FAU's 0.25 moved); the fragment stage's `fcols[fidx].ba`, `IADD_IMM
+     * #0x8` then `LD_PKA.i64`, its look-up `.ba`, the flat `v_col.rg` loaded
+     * after `ATEST` */
+    ("100", td!("unitype_100.vert"), td!("unitype_100.frag"), td!("unitype_100.expect.json")),
+    /* case 116 (uniidxe): the vertex stage's read is dead (uniidx_d.frag
+     * reads no varying); the fragment stage's is uniidx_d's */
+    ("116", td!("unitype_116.vert"), td!("unitype_116.frag"), td!("unitype_116.expect.json")),
+    /* 116's vertex shader under a fragment shader that reads `v_color`:
+     * `LD_PKA.i128` of the element, each lane stored `ffma(x, 0.0, x)`,
+     * loaded flat */
+    (
+        "116v",
+        include_str!("../../../../tools/shaders/es100/uniidx_e.vert"),
+        td!("unitype_116v.frag"),
+        td!("unitype_116v.expect.json"),
+    ),
+];
+
+fn check_unitype(name: &str) {
+    let (_, vs, fs, json) = UNITYPE_POPULATION.iter().find(|c| c.0 == name).expect("a member");
+    check_linked_for(name, vs, fs, json);
+}
+
+#[test]
+fn case_100_idxtex_is_byte_equal_to_mesa_26_2_1() {
+    check_unitype("100");
+}
+
+#[test]
+fn case_116_uniidxe_is_byte_equal_to_mesa_26_2_1() {
+    check_unitype("116");
+}
+
+#[test]
+fn unitype_116v_is_byte_equal_to_mesa_26_2_1() {
+    check_unitype("116v");
+}
+
+/* ---- 2D array textures (#33) ---------------------------------------- */
+
+/// Case 42 (es3array): `textureSize` of a `sampler2DArray` (`LD_PKA.i64` of
+/// the descriptor, `U16_TO_U32` of its halves plus one, `ICMP_OR.v2u16`
+/// null test, `CSEL`), a look-up at `vec3(uv, layer)` (`TEX_SINGLE .rgb
+/// .2d.array_enable.computed`, the layer `F16_TO_F32` of its half) and a
+/// `texelFetch` at `int(layer)` (`TEX_FETCH .a.2d.array_enable`), the
+/// colour `vec4(t.rgb, f.a)`. The shim set no uniform value.
+#[test]
+fn case_42_es3array_is_byte_equal_to_mesa_26_2_1() {
+    check_program_for(
+        "42",
+        include_str!("../../../../tools/shaders/es300/cube.vert"),
+        include_str!("../../../../tools/shaders/es300/array.frag"),
+        td!("intbig_case42.expect.json"),
+        false,
+    );
+}
+
+/// The same program recorded for the texture study with gl_ref.py's
+/// uniform values (texmore_206_array, `--uniform-values --levels 3`).
+#[test]
+fn texmore_206_array_is_byte_equal_to_mesa_26_2_1() {
+    check_program(td!("texmore_206_array.vert"), td!("texmore_206_array.frag"), td!("texmore_206_array.expect.json"));
 }

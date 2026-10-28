@@ -235,6 +235,15 @@ pub fn pack_one(i: &Ins, branch: i32) -> Result<u64, MaliError> {
             f.put("cmpf", cmpf as u32)?.put("result_type", result as u32)?;
             alu_dest(&mut f, i, "dest_width")?;
         }
+        Op::IcmpOrV2u16 { cmpf, result } => {
+            f = Fill::new(IsaOp::IcmpOrV2u16);
+            for s in 0..2 {
+                f.put(["src0", "src1"][s], src_byte(&i.src[s])?)?.put(["swz0", "swz1"][s], swz16(i.src[s].swz)?)?;
+            }
+            f.put("src2", src_byte(&i.src[2])?)?;
+            f.put("cmpf", cmpf as u32)?.put("result_type", result as u32)?;
+            alu_dest(&mut f, i, "dest_width")?;
+        }
         Op::IcmpOrS32 { cmpf, result } | Op::IcmpOrU32 { cmpf, result } => {
             f = Fill::new(if matches!(i.op, Op::IcmpOrS32 { .. }) { IsaOp::IcmpOrS32 } else { IsaOp::IcmpOrU32 });
             for s in 0..2 {
@@ -319,6 +328,27 @@ pub fn pack_one(i: &Ins, branch: i32) -> Result<u64, MaliError> {
                     .put(["widen0", "widen1"][s], widen_int(i.src[s].swz)?)?;
             }
             f.put("saturate", 0)?;
+            alu_dest(&mut f, i, "dest_width")?;
+        }
+        Op::IsubS32 => {
+            f = Fill::new(IsaOp::IsubS32);
+            for s in 0..2 {
+                f.put(["src0", "src1"][s], src_byte(&i.src[s])?)?
+                    .put(["widen0", "widen1"][s], widen_int(i.src[s].swz)?)?;
+            }
+            f.put("saturate", 0)?;
+            alu_dest(&mut f, i, "dest_width")?;
+        }
+        Op::U32ToF32 => {
+            f = Fill::new(IsaOp::U32ToF32);
+            f.put("src0", src_byte(&i.src[0])?)?.put("round", 0)?;
+            alu_dest(&mut f, i, "dest_width")?;
+        }
+        Op::F32ToU32 => {
+            f = Fill::new(IsaOp::F32ToU32);
+            f.put("src0", src_byte(&i.src[0])?)?;
+            f.put("neg0", i.src[0].neg as u32)?.put("abs0", i.src[0].abs as u32)?;
+            f.put("round", super::bir::Round::Rtz as u32)?;
             alu_dest(&mut f, i, "dest_width")?;
         }
         Op::FroundF32 { round } => {
@@ -594,10 +624,16 @@ pub fn pack_one(i: &Ins, branch: i32) -> Result<u64, MaliError> {
             f.put("src0", src_byte(&i.src[0])?)?.put("src1", src_byte(&i.src[1])?)?;
             f.put("not", eq as u32)?.put("combine", 0)?.put("address_mode", 1)?.put("conservative", 0)?;
         }
-        Op::LshiftAndI32 | Op::LshiftOrI32 | Op::RshiftAndI32 | Op::RshiftOrI32 | Op::ArshiftOrI32 => {
+        Op::LshiftAndI32
+        | Op::LshiftOrI32
+        | Op::LshiftXorI32
+        | Op::RshiftAndI32
+        | Op::RshiftOrI32
+        | Op::ArshiftOrI32 => {
             f = Fill::new(match i.op {
                 Op::LshiftAndI32 => IsaOp::LshiftAndI32,
                 Op::LshiftOrI32 => IsaOp::LshiftOrI32,
+                Op::LshiftXorI32 => IsaOp::LshiftXorI32,
                 Op::RshiftOrI32 => IsaOp::RshiftOrI32,
                 Op::ArshiftOrI32 => IsaOp::ArshiftOrI32,
                 _ => IsaOp::RshiftAndI32,
@@ -668,11 +704,12 @@ pub fn pack_one(i: &Ins, branch: i32) -> Result<u64, MaliError> {
         Op::TexSingle { mask, f16, lod: LodMode::Fetch, dim, .. } => {
             f = Fill::new(IsaOp::TexFetch);
             let dim = match dim {
-                TexDim::D2 => TEX_DIM_2D,
+                TexDim::D2 | TexDim::D2Array => TEX_DIM_2D,
                 TexDim::Cube => TEX_DIM_CUBE,
             };
+            let array = matches!(i.op, Op::TexSingle { dim: TexDim::D2Array, .. }) as u32;
             f.put("src0", src_byte(&i.src[1])?)?;
-            f.put("array_enable", 0)?.put("texel_offset", 0)?.put("wide_indices", 0)?;
+            f.put("array_enable", array)?.put("texel_offset", 0)?.put("wide_indices", 0)?;
             f.put("dimensionality", dim)?.put("write_mask", mask as u32)?;
             f.put("register_width", if f16 { 0 } else { 1 })?.put("skip", 0)?;
             f.put("message_slot_index", i.slot as u32)?;
@@ -693,11 +730,12 @@ pub fn pack_one(i: &Ins, branch: i32) -> Result<u64, MaliError> {
                 LodMode::Fetch => return Err(MaliError::Defect(Defect::Operand)),
             };
             let dim = match dim {
-                TexDim::D2 => TEX_DIM_2D,
+                TexDim::D2 | TexDim::D2Array => TEX_DIM_2D,
                 TexDim::Cube => TEX_DIM_CUBE,
             };
+            let array = matches!(i.op, Op::TexSingle { dim: TexDim::D2Array, .. }) as u32;
             f.put("src0", src_byte(&i.src[1])?)?;
-            f.put("array_enable", 0)?.put("texel_offset", 0)?.put("compare_enable", 0)?;
+            f.put("array_enable", array)?.put("texel_offset", 0)?.put("compare_enable", 0)?;
             f.put("wide_indices", 0)?.put("lod_mode", lod)?;
             f.put("dimensionality", dim)?.put("write_mask", mask as u32)?;
             f.put("register_width", if f16 { 0 } else { 1 })?.put("skip", skip as u32)?;

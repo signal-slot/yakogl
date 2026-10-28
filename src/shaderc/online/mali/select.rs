@@ -518,12 +518,26 @@ pub fn vs_variant(
             nir::Val::Undef | nir::Val::Pair(..) => Err(MaliError::Defect(super::Defect::IrIndex)),
         }
     };
+    /* a vec4 array read's offset until its load: `nir_opt_move` moves a
+     * `load_ubo` down to its first reader (bifrost_nir.c:375-381;
+     * unitype_100.expect.json's varying program: the offset, the look-up,
+     * then `LD_PKA.i64`) */
+    let pending = scratch.alloc_filled(nir::MAX_NODES, None::<u16>).map_err(|_| MaliError::OutOfScratch)?;
     for k in 0..vs.len {
         let id = vs.order[k] as usize;
         if !vs.live[id] {
             continue;
         }
         let nd = vs.nodes[id];
+        for v in nd.src {
+            let nir::Val::Lane(n, _) = v else { continue };
+            let Some(off) = pending[n as usize].take() else { continue };
+            let (lo, cnt) = lanes_read(vs, n)?;
+            let w = vec4_fetch(p, off, lo, cnt, &mut 0)?;
+            for c in 0..cnt as usize {
+                lanes[n as usize][lo as usize + c] = Src::ssa(w[c]);
+            }
+        }
         match nd.kind {
             nir::Kind::Input { loc, comps } => {
                 let s = ld_attr(p, loc, comps)?;
@@ -583,28 +597,60 @@ pub fn vs_variant(
                  * a staging word not in a register is moved there first */
                 let n = if explicit { 3 } else { 2 };
                 let mut sr = [Src::NULL; 3];
+                /* a constant goes to the COLLECT as it is: the constant
+                 * passes make it a FAU word and the vector's lowering moves
+                 * it into each staging register (unitype_100.expect.json:
+                 * `MOV.i32 r2, u6.w0`, `MOV.i32 r3, u6.w0`) */
                 for (k, x) in sr.iter_mut().enumerate().take(n) {
                     let s = src(lanes, nd.src[k])?;
-                    *x = if s.ssa_value().is_some() { s } else { Src::ssa(alu(p, Op::MovI32, &[s])?) };
+                    *x = if s.ssa_value().is_some() || matches!(s.idx, Idx::Const(_)) {
+                        s
+                    } else {
+                        Src::ssa(alu(p, Op::MovI32, &[s])?)
+                    };
                 }
                 let c = alu(p, Op::Collect, &sr[..n])?;
                 let lod = if explicit { LodMode::Explicit } else { LodMode::Zero };
                 let dim = if cube { TexDim::Cube } else { TexDim::D2 };
-                let op = Op::TexSingle { sr_count: n as u8, mask: 0xf, f16: false, skip: false, lod, dim };
+                /* the texels the live users read, one register each in
+                 * lane order (`nir_opt_shrink_vectors` and the write mask;
+                 * unitype_100.expect.json's `TEX_SINGLE.slot0.reserved.32
+                 * .rg.2d.zero @r2:r3` of `v_col.rg`) */
+                let mask = match read_mask(vs, id as u16) {
+                    0 => 0xf,
+                    m => m,
+                };
+                let op = Op::TexSingle { sr_count: n as u8, mask, f16: false, skip: false, lod, dim };
                 let handle = Src::of(Idx::Const(super::nir_fs::TEX_HANDLE));
                 let r = alu(p, op, &[Src::ssa(c), handle, Src::of(Idx::Const(0))])?;
-                let w = split(p, r, 4)?;
-                for (k, x) in lanes[id].iter_mut().enumerate() {
-                    *x = Src::ssa(w[k]);
+                let w = match mask.count_ones() {
+                    1 => [r; 4],
+                    n => split(p, r, n as usize)?,
+                };
+                let mut k = 0;
+                for (c, x) in lanes[id].iter_mut().enumerate() {
+                    if mask & (1 << c) != 0 {
+                        *x = Src::ssa(w[k]);
+                        k += 1;
+                    }
                 }
             }
-            nir::Kind::UniformIdx { dword, .. } => {
+            nir::Kind::UniformIdx { dword, comps: 1 } => {
                 let off = ubo_offset(p, ubo, dword, src(lanes, nd.src[0])?, &mut 0)?;
                 lanes[id][0] = Src::ssa(ubo_fetch(p, off)?);
             }
-            nir::Kind::Tex | nir::Kind::PixelCoord | nir::Kind::FragCoordZw | nir::Kind::Phi | nir::Kind::Discard => {
-                return Err(MaliError::Defect(super::Defect::IrIndex))
+            /* a vec4 element: its offset here, its load deferred to its
+             * first reader (`pending`) */
+            nir::Kind::UniformIdx { dword, .. } => {
+                let off = vec4_offset(p, ubo, dword, src(lanes, nd.src[0])?, &mut 0)?;
+                pending[id] = Some(off);
             }
+            nir::Kind::Tex
+            | nir::Kind::TexDesc { .. }
+            | nir::Kind::PixelCoord
+            | nir::Kind::FragCoordZw
+            | nir::Kind::Phi
+            | nir::Kind::Discard => return Err(MaliError::Defect(super::Defect::IrIndex)),
             nir::Kind::Store { out: o, word } => {
                 let data = src(lanes, nd.src[0])?;
                 let st =
@@ -639,7 +685,7 @@ pub(super) fn ubo_offset(
     ubo: &UboLayout,
     dword: u16,
     idx: Src,
-    rows: &mut u64,
+    rows: &mut u128,
 ) -> Result<u16, MaliError> {
     let base = ubo.word(dword).ok_or(MaliError::Defect(super::Defect::IrIndex))?;
     let mut row = |p: &mut Prog<'_>, op, s: &[Src]| {
@@ -658,6 +704,76 @@ pub(super) fn ubo_offset(
 /// UBO 0 (the mode descriptor the constant 0), one fp32 word.
 pub(super) fn ubo_fetch(p: &mut Prog<'_>, off: u16) -> Result<u16, MaliError> {
     alu(p, Op::LdPka { words: 1, half: false }, &[Src::ssa(off), Src::of(Idx::Const(0))])
+}
+
+/// The lanes of vec4 array read `id` of graph `g` its users take: (the
+/// lowest, the count up to the highest), what `nir_opt_shrink_vectors`
+/// leaves of the `load_ubo` (`shrink_start` moves its offset up past the
+/// lanes below the lowest one read; unitype_100.expect.json's fragment
+/// `.ba`, `IADD_IMM.i32 #0x8` then `LD_PKA.i64`).
+pub(super) fn lanes_read(g: &nir::Nir<'_>, id: u16) -> Result<(u8, u8), MaliError> {
+    let mask = read_mask(g, id);
+    if mask == 0 {
+        return Err(MaliError::Defect(super::Defect::IrIndex));
+    }
+    let low = mask.trailing_zeros() as u8;
+    Ok((low, 8 - mask.leading_zeros() as u8 - low))
+}
+
+/// The lanes of node `id` of graph `g` its live users read ([`nir::dce`]),
+/// bit k lane k.
+pub(super) fn read_mask(g: &nir::Nir<'_>, id: u16) -> u8 {
+    let mut mask = 0u8;
+    for (u, s) in g.uses(id).filter(|&(u, _)| g.live[u as usize]) {
+        if let nir::Val::Lane(_, c) = g.nodes[u as usize].src[s] {
+            mask |= 1 << (c & 7);
+        }
+    }
+    mask
+}
+
+/// The fp32 read of a vec4 array element at a run-time index
+/// ([`nir::uniform_idx`], array at front-end dword `dword`, `idx` the int
+/// uniform's FAU word): NIR's `ishl idx, 4` (16 bytes an element;
+/// `LSHIFT_OR.i32 r0, u5.w1, 0x7060504.b00, 0x0`, the table's byte 4), then
+/// `iadd` of the array's base; [`vec4_fetch`] loads it.
+pub(super) fn vec4_offset(
+    p: &mut Prog<'_>,
+    ubo: &UboLayout,
+    dword: u16,
+    idx: Src,
+    rows: &mut u128,
+) -> Result<u16, MaliError> {
+    let base = ubo.word(dword).ok_or(MaliError::Defect(super::Defect::IrIndex))?;
+    let mut row = |p: &mut Prog<'_>, op, s: &[Src]| {
+        let r = emit::Row { op, bits: 32, width: 1 };
+        *rows |= emit::bit(r);
+        emit::emit(p, r, s)
+    };
+    let mut off = row(p, nir::Alu::Ishl, &[idx, Src::of(Idx::Const(4))])?;
+    if base > 0 {
+        off = row(p, nir::Alu::Iadd, &[Src::of(Idx::Const(4 * u32::from(base))), Src::ssa(off)])?;
+    }
+    Ok(off)
+}
+
+/// The load of a vec4 element's lanes `lo` to `lo + n - 1` at element
+/// offset `off` ([`vec4_offset`]): the `iadd` of the bytes below the lowest
+/// lane read ([`lanes_read`]), `LD_PKA` of the lanes (`.i128` of four,
+/// unitype_116v.expect.json's varying program; `.i64` of `.rg`,
+/// unitype_100.expect.json's), split.
+pub(super) fn vec4_fetch(p: &mut Prog<'_>, off: u16, lo: u8, n: u8, rows: &mut u128) -> Result<[u16; 4], MaliError> {
+    let mut off = off;
+    if lo > 0 {
+        let r = emit::Row { op: nir::Alu::Iadd, bits: 32, width: 1 };
+        *rows |= emit::bit(r);
+        off = emit::emit(p, r, &[Src::ssa(off), Src::of(Idx::Const(4 * u32::from(lo)))])?;
+    }
+    let ld = alu(p, Op::LdPka { words: n, half: false }, &[Src::ssa(off), Src::of(Idx::Const(0))])?;
+    if n == 1 {
+        return Ok([ld, 0, 0, 0]);
+    }
+    split(p, ld, n as usize)
 }
 
 /// `bi_preload` (bifrost_compile.c): each preloaded register is read once,
