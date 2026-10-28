@@ -160,7 +160,7 @@ pub fn push_ubo(
     for i in p.as_slice() {
         for s in i.srcs() {
             if let Idx::Ubo { base, comp } = s.idx {
-                let r = ubo_read.get_mut(base as usize).ok_or(MaliError::UboFallback)?;
+                let r = ubo_read.get_mut(base as usize).ok_or(MaliError::UboRowsFull)?;
                 *r |= 1u8.checked_shl(u32::from(comp)).ok_or(MaliError::UboFallback)?;
             }
         }

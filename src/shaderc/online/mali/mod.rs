@@ -155,6 +155,12 @@ pub enum MaliError {
     /// More uniform words than the FAU's 128 (Mesa loads the rest from the
     /// UBO).
     UboFallback,
+    /// A uniform block of more rows (uniforms and mediump array elements)
+    /// than the layout's table (select.rs `MAX_LAYOUT_ROWS`) or of a load
+    /// past the push's 512-word table (fau.rs `push_ubo`), or a block the
+    /// program loads of more rows than the record keeps for the frame
+    /// (`MAX_UBO_ROWS`).
+    UboRowsFull,
     /// A constant product in a shape Mesa's algebraic rules move or fold:
     /// a constant times a product with a constant (GLSL IR's
     /// `reassociate_constant`), `fneg(fneg(a))`, a constant in a front-end
@@ -276,7 +282,7 @@ pub enum MaliError {
 
 impl MaliError {
     /// Every gap, for the tests that check the messages are distinct.
-    pub const GAPS: [MaliError; 58] = [
+    pub const GAPS: [MaliError; 59] = [
         MaliError::LinkedVertexNotLowered,
         MaliError::BlendVariantNotLowered,
         MaliError::ControlFlow,
@@ -290,6 +296,7 @@ impl MaliError {
         MaliError::MixedPrecision,
         MaliError::FragCoordMediump,
         MaliError::UboFallback,
+        MaliError::UboRowsFull,
         MaliError::ArithConstant,
         MaliError::Rebalance,
         MaliError::ConstantFold,
@@ -371,6 +378,9 @@ impl MaliError {
             MaliError::UboFallback => {
                 "Valhall: a uniform past the FAU's 128 words (Mesa loads it from the UBO) is not lowered yet"
             }
+            MaliError::UboRowsFull => {
+                "Valhall: a uniform block of more than 256 rows (uniforms and array elements) or 512 words, or a loaded one of more than 32 rows, is not lowered yet"
+            }
             MaliError::ArithConstant => {
                 "Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add) is not lowered yet"
             }
@@ -434,7 +444,7 @@ impl MaliError {
                 "Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet"
             }
             MaliError::FragmentTooLarge => {
-                "Valhall: a fragment colour of more than 64 vectorised operations and operands is not lowered yet"
+                "Valhall: a fragment colour of more than 255 vectorised operations and operands is not lowered yet"
             }
             MaliError::FragOutput => "Valhall: a fragment output other than gl_FragColor is not lowered yet",
             MaliError::NoColour => "Valhall: a fragment shader that leaves gl_FragColor unwritten is not lowered yet",
@@ -678,7 +688,8 @@ pub enum Table {
     /// One program's distinct immediates outside the table (fau.rs
     /// `MAX_CONSTANTS`).
     Constants,
-    /// A stage's uniforms in the block layout (select.rs `MAX_UBO_ROWS`).
+    /// A stage's rows in the block layout, one per uniform or mediump
+    /// array element (select.rs `MAX_LAYOUT_ROWS`).
     UboRows,
     /// A fragment colour's vectorised nodes (nir_fs.rs `MAX_PAIR_NODES`).
     FragPairNodes,
@@ -721,7 +732,7 @@ impl Table {
             Table::Values => bir::MAX_NODES,
             Table::FauWords => fau::FAU_MAX_WORDS,
             Table::Constants => fau::MAX_CONSTANTS,
-            Table::UboRows => select::MAX_UBO_ROWS,
+            Table::UboRows => select::MAX_LAYOUT_ROWS,
             Table::FragPairNodes => nir_fs::MAX_PAIR_NODES,
         }
     }
@@ -1133,7 +1144,7 @@ fn compile_stage<'s>(
         /* an `LD_PKA` reads the block from memory: the frame uploads it in
          * this layout (uniarray_vs) */
         if select::UboLayout::loaded(&vs) {
-            sc.ubo = ubo;
+            sc.ubo = ubo.kept()?;
         }
         for u in m.uniforms.iter().filter(|u| ubo.word(u.dword_off).is_some()) {
             if !matches!(prec(u.name), Some(Precision::High)) {
@@ -1277,7 +1288,7 @@ fn compile_stage<'s>(
         /* a program with an `LD_PKA` reads the block from memory: the frame
          * uploads it in this layout (Mesa's `ubo_mask` bit 0) */
         if f.nubo > 0 {
-            sc.ubo = ubo;
+            sc.ubo = ubo.kept()?;
         }
         /* a look-up takes its LOD from the derivatives, unless it is a
          * cube's at a given level (`txl` has no implicit

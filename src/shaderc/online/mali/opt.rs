@@ -510,7 +510,11 @@ fn apply_swizzle(c: u32, s: Swz) -> u32 {
 /// (bifrost_compile.c:4525-4529): an instruction equal to an earlier one
 /// of its block (op, sources with their modifiers, destination sizes;
 /// the set is cleared per block, :152, "intra-block only") is removed and
-/// its values read from the earlier one's.
+/// its values read from the earlier one's. A staging source keeps its
+/// value (`bi_is_staging_src`, :153-154): a later equal `COLLECT` a message
+/// reads stays (unitype_166c's sixteen look-ups at `vec2(0.5)`, each moving
+/// the coordinate into its own staging registers, `MOV.i32 r2, u6.w0`,
+/// `MOV.i32 r3, u6.w0`).
 pub fn cse(p: &mut Prog<'_>) {
     let mut k = 0;
     while k < p.n {
@@ -533,17 +537,24 @@ pub fn cse(p: &mut Prog<'_>) {
             continue;
         };
         let keep = p.ins[j];
+        let mut staged = false;
         for d in 0..a.nd as usize {
             let (Idx::Ssa(from, 0), Idx::Ssa(to, 0)) = (a.dest[d].idx, keep.dest[d].idx) else { continue };
             for i in k + 1..p.n {
                 for s in 0..p.ins[i].ns as usize {
                     if let Idx::Ssa(v, off) = p.ins[i].src[s].idx {
-                        if v == from {
+                        if v == from && p.ins[i].is_staging_src(s) {
+                            staged = true;
+                        } else if v == from {
                             p.ins[i].src[s].idx = Idx::Ssa(to, off);
                         }
                     }
                 }
             }
+        }
+        if staged {
+            k += 1;
+            continue;
         }
         p.remove(k);
     }
