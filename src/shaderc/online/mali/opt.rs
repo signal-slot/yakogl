@@ -409,7 +409,12 @@ pub fn fuse_add_imm(p: &mut Prog<'_>) {
             }
             let Idx::Const(c) = i.src[s].idx else { continue };
             let imm = apply_swizzle(c, i.src[s].swz);
-            *i = Ins { flow: i.flow, slot: i.slot, block: i.block, ..Ins::new(Op::IaddImmI32(imm), i.dests(), &[other]) };
+            *i = Ins {
+                flow: i.flow,
+                slot: i.slot,
+                block: i.block,
+                ..Ins::new(Op::IaddImmI32(imm), i.dests(), &[other])
+            };
             continue;
         }
         if !matches!(i.op, Op::FaddF32 | Op::FaddV2f16) || i.clamp != clamp::NONE {
@@ -621,7 +626,7 @@ fn remove_simple(p: &mut Prog<'_>, b: u8) {
 /// lies between its predecessor `prev` and successor `next` with no
 /// branch, goes. A successor already seen would make the jump backward:
 /// left alone (:114-120).
-fn try_remove_simple(p: &mut Prog<'_>, prev: Option<u8>, block: Option<u8>, next: u8, seen: &mut u64) -> bool {
+fn try_remove_simple(p: &mut Prog<'_>, prev: Option<u8>, block: Option<u8>, next: u8, seen: &mut u128) -> bool {
     let Some(b) = block else { return false };
     *seen |= 1 << b;
     if !is_simple(p, b) {
@@ -660,7 +665,7 @@ fn try_remove_simple(p: &mut Prog<'_>, prev: Option<u8>, block: Option<u8>, next
 pub fn control_flow(p: &mut Prog<'_>) {
     loop {
         let mut changed = false;
-        let mut seen = 0u64;
+        let mut seen = 0u128;
         let (mut prev, mut block) = (None, None);
         for next in p.live_blocks().collect::<arrayvec_blocks::Blocks>() {
             let removed = try_remove_simple(p, prev, block, next, &mut seen);
@@ -731,9 +736,11 @@ pub fn dce(p: &mut Prog<'_>) {
             continue;
         }
         let read = i.dests().iter().any(|d| match d.idx {
-            Idx::Ssa(v, _) => p.as_slice().iter().enumerate().any(|(j, u)| {
-                j != k && u.srcs().iter().any(|s| s.ssa_value() == Some(v))
-            }),
+            Idx::Ssa(v, _) => p
+                .as_slice()
+                .iter()
+                .enumerate()
+                .any(|(j, u)| j != k && u.srcs().iter().any(|s| s.ssa_value() == Some(v))),
             _ => true,
         });
         if !read {

@@ -466,19 +466,19 @@ impl MaliError {
             }
             MaliError::TooManyLocals => "Valhall: a shader with more than 32 local variables is not lowered yet",
             MaliError::TooManyValues => {
-                "Valhall: a shader of more than 2048 IR values (or 768 instructions before selection) is not lowered yet"
+                "Valhall: a shader of more than 2048 IR values (or 1536 instructions before selection) is not lowered yet"
             }
             MaliError::TooManyConstants => {
                 "Valhall: a program with more than 64 distinct immediates outside the table is not lowered yet"
             }
             MaliError::InstrTableFull => {
-                "Valhall: a program longer than the back end's 384-instruction table is not lowered yet"
+                "Valhall: a program longer than the back end's 1536-instruction table (or a block longer than 512) is not lowered yet"
             }
             MaliError::ValueTableFull => {
-                "Valhall: a program defining more than the back end's 384 SSA values is not lowered yet"
+                "Valhall: a program defining more than the back end's 1536 SSA values is not lowered yet"
             }
             MaliError::BlockTableFull => {
-                "Valhall: a shader of more than 32 basic blocks or 8 ifs is not lowered yet"
+                "Valhall: a shader of more than 128 basic blocks or 32 ifs is not lowered yet"
             }
             MaliError::IfForm => {
                 "Valhall: an if whose condition is not a comparison (a constant, a boolean operator) is not lowered yet"
@@ -812,22 +812,10 @@ fn finish_passes(
     marks: &mut Marks,
 ) -> Result<Compiled, MaliError> {
     fau::push_ubo(p, fau_layout, fragment, ubo)?;
-    #[cfg(test)]
-    let dump = |p: &Prog<'_>, t: &str| {
-        if std::env::var("YAKOGL_DUMP").is_ok() {
-            for (k, i) in p.as_slice().iter().enumerate() {
-                std::eprintln!("{t} {k} b{} {:?} d{:?} s{:?}", i.block, i.op, &i.dest[..i.nd as usize], &i.src[..i.ns as usize]);
-            }
-        }
-    };
-    #[cfg(test)]
-    dump(p, "sel");
     /* bifrost_compile.c `bi_compile_variant_nir`, in its order */
     opt::mod_prop_forward(p);
     opt::mod_prop_backward(p);
     opt::dce(p);
-    #[cfg(test)]
-    dump(p, "dce");
     fau::reorder_push(p, fau_layout)?;
     opt::lower_opt_instructions(p);
     opt::lower_mkvec_swz(p)?;
@@ -838,11 +826,7 @@ fn finish_passes(
     if fragment {
         flow::analyze_helper_requirements(p);
     }
-    #[cfg(test)]
-    dump(p, "presched");
     sched::pressure_schedule(p, scratch)?;
-    #[cfg(test)]
-    dump(p, "sched");
     if p.n == 0 {
         return Ok(Compiled { words: 0, preload: 0, work_reg_count: 0 });
     }

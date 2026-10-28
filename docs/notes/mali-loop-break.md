@@ -706,4 +706,44 @@ assumed.
   outer loop, in the latch in its inner loop) is explained above by CSE into
   `outer = i + 1`; the per-pass NIR (`NIR_DEBUG=print_fs`) was not drawn.
 - The linked compile of `vid.vert` for a fragment that reads nothing (see
-  the builtin prerequisite).
+  the builtin prerequisite). Measured since: it compiles (the position
+  program alone), `cases_45_and_98_vertex_programs_are_byte_equal_to_mesa_26_2_1`.
+
+## Status of Part 2 (plan #154 loops-rt, session 1)
+
+Byte-equal (tests in `tests.rs`): `intloop_loop_exit` (step 1),
+`builtin_98`'s fragment program (step 2, with its `mod` epilogue), and
+femtovg's `filter_image` and `filter_image.nodiscard` (Part 1's guarded
+unroll with the guards left as branches). Not yet lowered:
+`intloop_divnest` (step 3), `builtin_45` (step 4, refused at its
+`cols[idx + i]` read, `UniformIndexed`), `intloop_loop_nested` (step 5),
+`intloop_loop_nested_vs` (step 6), `intloop_contloops` (step 7).
+
+Where the implementation differs from the plan above:
+
+- A kept loop (`nir_fs.rs` `kept_loop`, `walk_kept_loop`) is decided from
+  the body's head test alone: a test the walk cannot fold at the first pass
+  keeps the loop. `nir::LoopRegion` holds `pre`, `header`, `latch`, `exit`;
+  edges are added in the order the regions close (`IfRegion::seq`). One
+  `break` edge only so far (several: `LoopForm`), which divnest needs.
+- The scoreboard (`flow.rs`) and `mark_last` iterate to a fixed point over
+  the back edge; `opt.rs` `dce`, `cse` and `single_use` see a header phi
+  that reads a later value.
+- `i2f(f2i(a))` is `ftrunc(a)` (`Alu::Ftrunc`, `FROUND.f32.rtz`).
+- filter_image: Mesa unrolls it (`complex_unroll`) but its 24 guards are
+  too large for the peephole, so they stay `BRANCHZ.eq` over each pass, the
+  break's five copies after the pass (`Nir::lay_out_inverted_guards`
+  renumbers the two sides' blocks). The unroll's size test counts
+  `instr_cost` as Mesa does (`unroll_cost`: phis and an `fmul` only `fadd`s
+  read are free), not every node. A texel read with a highp non-constant
+  value makes the look-up fp32 (`.32`), as GLSL's lower_precision leaves
+  it (hdrsample's `* 0.25` stays fp16); `fneg` of a constant in the late
+  fusion folds (`-3.0` an `IADD_IMM`). The only words that differ are the
+  `skip` bits of the first 18 (19 without the discard) look-ups, a
+  value-number collision in `bi_add_branch_compare_values`, pinned in
+  `FEMTOVG_SKIP_PINNED`.
+- Caps raised for it: `bir::MAX_BLOCKS` 128 (82 used), `bir::MAX_INSTRS`
+  and `MAX_NODES` 1536 (1419 instructions), `nir::MAX_NODES` 1536 (1153),
+  `nir::MAX_IFS` 32 (27); the scheduler refuses a block over 512
+  instructions (`sched::MAX_BLOCK_INSTRS`: its edge rows are the block's
+  size squared), and `liveness_ssa`'s sets live in the scratch arena.

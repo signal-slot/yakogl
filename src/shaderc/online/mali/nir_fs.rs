@@ -1079,6 +1079,23 @@ impl<'s> Fs<'s> {
     /// varying of the shader's width, a constant, an fp32 result).
     fn op32(&mut self, op: Alu, s: [Val; 3], at: usize) -> Result<Val, MaliError> {
         let mut s = s;
+        /* a texel read with a highp value (not a constant, which takes the
+         * texel's precision): GLSL's lower_precision leaves the look-up
+         * whose result such an expression takes at fp32, as one stored to
+         * a highp local (femtovg's filter_image, `texture2D(tex, ..) *
+         * gaussian_coeff.x`: `TEX_SINGLE .. .32.2d` in
+         * fvg_filter_image.expect.json; hdrsample's `texture(..) * 0.25`
+         * stays fp16, mixprec_hdrsample.expect.json) */
+        let arity = op.arity();
+        let highp = |f: &Self, v: Val| matches!(v, Val::Lane(..)) && f.texel(v).is_none() && !f.is_f16(v);
+        if s[..arity].iter().any(|&v| highp(self, v)) {
+            for &v in &s[..arity] {
+                if let Some((j, _)) = self.texel(v) {
+                    let n = self.look_ups[j].node;
+                    self.nir.nodes[n as usize].bits = 32;
+                }
+            }
+        }
         for v in s.iter_mut().take(op.arity()) {
             if *v == Val::Undef {
                 return Err(MaliError::ColourForm);
@@ -2419,8 +2436,19 @@ fn walk_if(
     let guard = matches!(exit, IfExit::Guard(_));
     let seq = f.nir.nseq;
     f.nir.nseq += 1;
-    f.nir.ifs[f.nir.nifs] =
-        nir::IfRegion { cond, before, then_first, then_last, else_first, else_last, after, live: true, guard, brk, seq };
+    f.nir.ifs[f.nir.nifs] = nir::IfRegion {
+        cond,
+        before,
+        then_first,
+        then_last,
+        else_first,
+        else_last,
+        after,
+        live: true,
+        guard,
+        brk,
+        seq,
+    };
     f.nir.nifs += 1;
     Ok(flow)
 }
@@ -2573,10 +2601,10 @@ fn walk_guard(
 /// does: one straight run in NIR's order, as the unrolled copies are. A
 /// `break` behind a run-time condition is the loop's second terminator,
 /// which `complex_unroll` takes with the counter's test as the limiting one
-/// ([`walk_guard`]: gl_test's databreak, case 87). A loop that runs past the
-/// bound, has two run-time `break`s, or whose guarded passes stay branches
-/// (femtovg's `filter_image`: `if (i >= sampleCount) break;`, 24 guarded
-/// copies with a look-up each) has no reference ([`MaliError::LoopForm`]).
+/// ([`walk_guard`]: gl_test's databreak, case 87). Guarded passes too large for
+/// the peephole stay branches (femtovg's `filter_image`: `if (i >= sampleCount)
+/// break;`, 24 guarded copies with two look-ups each). A loop that runs past
+/// the bound or has two run-time `break`s has no reference ([`MaliError::LoopForm`]).
 fn walk_loop(
     f: &mut Fs<'_>,
     m: &Module<'_>,
@@ -2599,13 +2627,38 @@ fn walk_loop(
     f.guard = outer;
     f.loops -= 1;
     r?;
-    if f.nir.n - first > LOOP_UNROLL_LIMIT * MAX_UNROLL_ITERATIONS {
+    if unroll_cost(f, first) > LOOP_UNROLL_LIMIT * MAX_UNROLL_ITERATIONS {
         return Err(MaliError::LoopForm);
     }
     for id in first..f.nir.n {
         f.origin[id] = last as u16;
     }
     Ok(())
+}
+
+/// The cost of the passes walked from node `first` on, as loop analysis
+/// counts its body's (`instr_cost`, nir_loop_analyze.c:79-130) times the
+/// trip count (nir_opt_loop_unroll.c:924-925): every node one, but a phi
+/// (no ALU, intrinsic or look-up), a constant the passes folded (no node
+/// here) and an `fmul` only `fadd`s read (`is_only_used_by_fadd`: fused
+/// later). Femtovg's filter_image makes 1030 nodes in its 24 passes, more
+/// than 26 * 32; this count is within it, and Mesa unrolls the loop
+/// (fvg_filter_image.expect.json).
+fn unroll_cost(f: &Fs<'_>, first: usize) -> usize {
+    let nodes = &f.nir.nodes[first..f.nir.n];
+    let only_fadd = |id: usize| {
+        nodes.iter().all(|u| {
+            let reads = u.src.iter().any(|s| matches!(*s, Val::Lane(n, _) if n as usize == id));
+            !reads || u.kind == Kind::Alu(Alu::Fadd)
+        })
+    };
+    (first..f.nir.n)
+        .filter(|&id| match f.nir.nodes[id].kind {
+            Kind::Phi => false,
+            Kind::Alu(Alu::Fmul) => !only_fadd(id),
+            _ => true,
+        })
+        .count()
 }
 
 /// Whether Mesa keeps loop `body`: its test (`Lower::break_unless`, the
@@ -2634,9 +2687,9 @@ fn ir_folds(m: &Module<'_>, v: ir::ValueId, locals: &[[Val; 4]; MAX_LOCALS], dep
     }
     match m.def(v) {
         Some(ir::Op::ConstF32(_) | ir::Op::ConstI32(_) | ir::Op::ConstBool(_)) => true,
-        Some(&ir::Op::LoadLocal { local, index: None, comps }) => locals
-            .get(local.0 as usize)
-            .is_some_and(|l| l[..comps as usize].iter().all(|x| matches!(x, Val::Const(_)))),
+        Some(&ir::Op::LoadLocal { local, index: None, comps }) => {
+            locals.get(local.0 as usize).is_some_and(|l| l[..comps as usize].iter().all(|x| matches!(x, Val::Const(_))))
+        }
         Some(&ir::Op::Alu(a, s)) => s[..ir_arity(a)].iter().all(|x| ir_folds(m, x.val, locals, depth + 1)),
         _ => false,
     }
@@ -5835,10 +5888,9 @@ pub fn select_highp(
     f.nir.peephole_select(nir::PEEPHOLE_LIMIT_GL, true, &inots);
     f.nir.invert_guards(&inots)?;
     f.nir.peephole_select(nir::PEEPHOLE_LIMIT, false, &[false; nir::MAX_IFS]);
-    /* a guarded pass Mesa keeps as a branch: no reference */
-    if f.nir.live_ifs().any(|r| r.guard) {
-        return Err(MaliError::LoopForm);
-    }
+    /* a guarded pass too large for the peephole stays a branch (femtovg's
+     * filter_image) */
+    f.nir.lay_out_inverted_guards();
     f.nir.fold_const_selects();
     f.nir.cse_compares();
     nir::dce(&mut f.nir, None);
@@ -6011,14 +6063,17 @@ pub fn select_highp(
     /* so does a 2D array's, after the conversions of its coordinate made
      * where it stands (case 42's `F16_TO_F32` of the layer) */
     let inline = cube || f.live_look_ups().any(|(_, t)| t.array);
-    for (j, t) in f.live_look_ups().filter(|_| !inline) {
+    /* and a look-up of an unrolled pass, among the pass's nodes, which all
+     * stand where the loop's last instruction does ([`walk_loop`]) */
+    let unrolled = |n: u16| f.origin[n as usize] != f.look_up_of(n).map_or(u16::MAX, |j| f.look_ups[j].at);
+    for (j, t) in f.live_look_ups().filter(|(_, t)| !inline && !unrolled(t.node)) {
         events[ne] = (f.nir.block[t.node as usize], f.keys.get(t.at as usize).copied().ok_or(defect)?, TEX, j as u16);
         ne += 1;
     }
     for k in 0..f.nir.len {
         let id = f.nir.order[k] as usize;
         match f.nir.nodes[id].kind {
-            Kind::Tex | Kind::TexDesc { .. } if inline => {
+            Kind::Tex | Kind::TexDesc { .. } if inline || unrolled(id as u16) => {
                 events[ne] = (f.nir.block[id], key_of(id), NODE, k as u16);
                 ne += 1;
             }
@@ -6061,16 +6116,6 @@ pub fn select_highp(
     }
     let events = &mut events[..ne];
     events.sort_unstable_by_key(|e| *e);
-    #[cfg(test)]
-    if std::env::var("YAKOGL_DUMP").is_ok() {
-        for k in 0..f.nir.len {
-            let id = f.nir.order[k] as usize;
-            std::eprintln!("node {id} b{} {:?} {:?} bits{} origin{}", f.nir.block[id], f.nir.nodes[id].kind, f.nir.nodes[id].src, f.nir.nodes[id].bits, f.origin[id]);
-        }
-        for r in f.nir.live_ifs() { std::eprintln!("{r:?}"); }
-        for r in &f.nir.loops[..f.nir.nloops] { std::eprintln!("{r:?}"); }
-        for e in events.iter() { std::eprintln!("ev {e:?}"); }
-    }
     move_loads(f, events, scratch)?;
     let mut lv = Leaves {
         conv: [[None; 4]; MAX_VARYINGS],

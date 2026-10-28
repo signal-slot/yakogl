@@ -54,9 +54,10 @@ use crate::shaderc::online::ir::{
 };
 
 /// The instructions one vertex shader may hold here (the fragment walk's
-/// too). The largest measured, femtovg's fill_color with 256 offset arms
-/// (case 194's offarm256), takes 611 (docs/notes/mali-int-and-size.md).
-pub const MAX_NODES: usize = 768;
+/// too). The largest measured, femtovg's filter_image (24 unrolled
+/// passes), takes 1153; fill_color with 256 offset arms (case 194's
+/// offarm256) 611 (docs/notes/mali-int-and-size.md).
+pub const MAX_NODES: usize = 1536;
 /// The IR values the walk keeps lanes for (the fragment walk's too).
 /// offarm256 takes 1658, about six per arm.
 pub const MAX_VALUES: usize = 2048;
@@ -64,8 +65,9 @@ pub const MAX_VALUES: usize = 2048;
 pub const MAX_LOCALS: usize = 32;
 /// The `if`s one shader may hold ([`IfRegion`]): gl_test's databreak (case
 /// 87) has nine, the eight guarded passes of its unrolled loop and the
-/// `continue` of one of them.
-pub const MAX_IFS: usize = 16;
+/// `continue` of one of them; femtovg's filter_image 27, the 24 guards of
+/// its passes among them.
+pub const MAX_IFS: usize = 32;
 /// The loops Mesa keeps ([`LoopRegion`]) one shader may hold.
 pub const MAX_LOOPS: usize = 8;
 
@@ -1260,6 +1262,50 @@ impl<'s> Nir<'s> {
             (g.then_last, g.else_last) = (g.else_last, g.then_last);
         }
         Ok(())
+    }
+
+    /// An inverted guard that stays a branch ([`Nir::invert_guards`]; femtovg's
+    /// filter_image, whose 24 passes are too large for the peephole) is laid
+    /// out as `emit_if` lays out the `if` `opt_if_simplification` made: the
+    /// then side (the rest of the pass and the later ones) before the else
+    /// side (the `break`'s block), so the blocks of the two sides are
+    /// renumbered (fvg_filter_image.expect.json: each guard's `BRANCHZ.eq`
+    /// skips the pass, the break's copies stand after it).
+    pub fn lay_out_inverted_guards(&mut self) {
+        loop {
+            let r = self.live_ifs().find(|r| r.guard && r.else_first < r.then_first && r.else_last + 1 == r.then_first);
+            let Some(r) = r.copied() else { return };
+            let (lo, mid, hi) = (r.else_first, r.then_first, r.then_last);
+            let map = |b: u8| match b {
+                b if b >= lo && b < mid => b + (hi - mid + 1),
+                b if b >= mid && b <= hi => b - (mid - lo),
+                b => b,
+            };
+            for k in 0..self.n {
+                self.block[k] = map(self.block[k]);
+            }
+            let old = self.dom;
+            for b in 0..self.nblocks {
+                self.dom[map(b) as usize] = map(old[b as usize]);
+            }
+            for r in self.ifs[..self.nifs].iter_mut() {
+                for b in [
+                    &mut r.before,
+                    &mut r.then_first,
+                    &mut r.then_last,
+                    &mut r.else_first,
+                    &mut r.else_last,
+                    &mut r.after,
+                ] {
+                    *b = map(*b);
+                }
+            }
+            for r in self.loops[..self.nloops].iter_mut() {
+                for b in [&mut r.pre, &mut r.header, &mut r.latch, &mut r.exit] {
+                    *b = map(*b);
+                }
+            }
+        }
     }
 
     /// `nir_opt_constant_folding` of an operation whose sources are
@@ -2492,6 +2538,17 @@ pub(super) fn fuse(vs: &mut Nir<'_>) {
             let Some(f) = product(vs, gn.src[0]) else { continue };
             let other = vs.nodes[x].src[1 - s];
             let fm = vs.nodes[f as usize];
+            /* `fneg` of a constant folds (`nir_opt_constant_folding` in the
+             * late loop): femtovg filter_image's `fpos - 3.0 * dir`, the
+             * constant -3.0 an `IADD_IMM #0xC0400000` beside a uniform */
+            if let (Val::Const(c), 32) = (fm.src[0], fm.bits) {
+                vs.nodes[x] =
+                    NirNode { kind: Kind::Alu(Alu::Ffma), src: [Val::Const(c ^ 1 << 31), fm.src[1], other], ..fm };
+                if x < vs.user_end {
+                    vs.note(Prod::FusedNegated);
+                }
+                break;
+            }
             /* the new fneg stands where the fadd does */
             let Ok(n) = vs.insert_before(
                 k,
