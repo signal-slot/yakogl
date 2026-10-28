@@ -8,6 +8,9 @@ item can lower them byte-equal. Nothing here changes the compiler.
 
 ## 1. The refusal
 
+(Sections 1-7 are the study, with its line numbers; section 8 is the state
+after plan #154's chains item lowered most of it.)
+
 `MaliError::ArithConstant` (`src/shaderc/online/mali/mod.rs:152`, message at
 `:361`): "Valhall: a constant product in a shape Mesa's algebraic rules move or
 fold (a constant times a product with a constant, a negation of a negation, a
@@ -227,3 +230,32 @@ reassociation by `do_rebalance_tree` is the item to study for it.
 | `0.0` factor | `:305-306` (`ffma(nsz,nnan)`), `fmul` by 0 | the term dropped | exists for `fmul` (`nir_fs.rs:540`); extend to the dot chain |
 
 All four are NIR folds; none selects a different instruction.
+
+## 8. Lowered (plan #154 chains)
+
+State after the chains item (`glsl.rs`, `nir.rs` `Nir::alu`, `nir_fs.rs`),
+each pinned in `tests.rs` (`the_chain_population_is_byte_equal_to_mesa_26_2_1`,
+`the_corpus_matrix_products_by_a_constant_are_the_references`,
+`a_negation_of_a_negation_compiles_to_its_operand`):
+
+| reference | state | how |
+|---|---|---|
+| `algfold_constmul` | byte-equal | GLSL's `reassociate_constant` (opt_algebraic.cpp:175-216), not NIR `:2406`: `2.0 * (u_q * 3.0)` swaps to `u_q * (2.0 * 3.0)` in the front end, the constants fold, `u_q` first as the words show (`FMA.f32 r1, u2.w0, r0, 0x0.neg`) |
+| `algfold_189_mods` | byte-equal | the same swap on `((u_b * 1.0) * u_q) * 8.0` (docs/notes/mali-rebalance.md), then NIR's `x * 1.0` |
+| `algfold_constfma` | byte-equal | `ffma(±1.0, a, b)` is `fadd(a or fneg(a), b)` (`Nir::alu`, :311-314), which the late fusion fuses: `ffma(u_a, 2.0, u_q)`, `ffma(u_b, 3.0, fneg(u_x))` |
+| `algfold_constfma_ctl` | byte-equal | (was already) |
+| `algfold_192_predlive`, `algfold_192_coord`, `fsout_192_uni`, `fsout_192_coord` | byte-equal | (were already, fragment shader; now both stages through the link) |
+| `algfold_negneg` | compiles, **not byte-equal** | `fneg(fneg(a))` is `a` (`glsl.rs` `negneg`, after the GLSL passes; `Nir::alu` and `Fs::neg` too), but the colour is then `vec4(u_q, u_a, ..)`, whose two uniform lanes Mesa converts with one `V2F32_TO_V2F16 r0, u2.w0, u2.w1`: its NIR loads them as one vec2 (`nir_opt_load_store_vectorize` of two adjacent scalar uniforms), where this compiler has a load per uniform and converts each lane (`FADD.f32 r0.h0, u2.w0, 0x0.neg`): the first differing word is word 0, ours `68a440100000c084`, Mesa's `40a5c00000048584`. Plain `vec4(u_q, u_a, 0.0, 1.0)` differs the same way: a uniform-load item, not a fold |
+| `algfold_189_mulone` | byte-equal | `nir_fs.rs` `MatSum`: the front end's `m * v` by a constant `v` is GLSL's `((m0 * 0.5 + m1 * 0.5) + m2)` (`lower_mat_op_to_vec`, the term by 1.0 the column), split into scalar lanes (`lower_to_scalar`), and NIR's rules run in nir_search's order, the last instruction first: red's `fadd(fadd(fmul, fmul), b)` is reassociated (:2419) to `fadd(fadd(q*0.5, b), a*0.5)`, which the late fusion makes `ffma(a, 0.5, ffma(q, 0.5, b))`; green's the same, then `fadd(a, fadd(a, b))` (:275) and the constant reassociation (:2406, `2.0 * (a * 0.5)` is `a`) leave `fadd(fneg(q), a)`; blue's `0.0 * 0.5` folds and `ffma(q, 0.5, x)` remains |
+| `algfold_189_half` | byte-equal | the same: with every term a product, red and blue meet the distributive law (:246) twice, `fmul(0.5, fadd(b, fadd(q, a)))` and `fmul(0.5, fadd(q, x))` (nir_search's commutative order puts the constant first and `b` before the sum); green's `a*0.5 + a*0.5` is `a` by the same law, and `fadd(a, fneg(fmul(q, 0.5)))` (:2387) fuses to `ffma(fneg(q), 0.5, a)` |
+| `algfold_negneg` | compiles, **not byte-equal** (unchanged) | `fneg(fneg(a))` is `a`, so the colour is `vec4(u_q, u_a, 0.0, 1.0)` (`a_negation_of_a_negation_compiles_to_its_operand` pins that the words are plain `vec4(u_q, u_a, ..)`'s). Mesa's NIR loads the two adjacent scalar uniforms as one vec2 (`nir_opt_load_store_vectorize`) and converts them with one `V2F32_TO_V2F16 r0, u2.w0, u2.w1`; this compiler converts each lane (`FADD.f32 r0.h0, u2.w0, 0x0.neg`): word 0, ours `68a440100000c084`, Mesa's `40a5c00000048584`. A uniform-load item, not a fold |
+
+The `ArithConstant` sites now: `fmul(fneg a, fneg b)` (`nir.rs`, `nir_fs.rs`
+`Fs::op`), a constant times a product with a constant that the IR pass did
+not reach (`is_const_product`, e.g. through a local), a constant moved
+across a change of width (`glsl.rs`), a matrix term by `±1.0` outside a
+product by a constant vector (a scale of `-1.0`, or `1.0` beside scales
+that are not constants in a shape other than femtovg's), a sum that keeps a
+constant term in `MatSum` (the constant reassociations :2398-2412 are not
+transcribed), and `nir_fs.rs`'s `ffma` chain under a constant scale.
+

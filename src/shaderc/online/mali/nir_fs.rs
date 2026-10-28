@@ -813,12 +813,16 @@ impl<'s> Fs<'s> {
     }
 
     /// One lane of `fneg`: a constant's is folded, `fneg(fneg(a))` is
-    /// `fcanonicalize(a)` (nir_opt_algebraic.py:230), not transcribed.
+    /// `fcanonicalize(a)` (nir_opt_algebraic.py:230), which is `a`
+    /// (:161-167).
     fn neg(&mut self, x: Val, at: usize) -> Result<Val, MaliError> {
         match x {
             Val::Undef => Err(MaliError::ColourForm),
             Val::Const(b) => Ok(Val::Const(b ^ F32_NEG_ZERO)),
-            _ if matches!(self.alu_of(x), Some((Alu::Fneg, _))) => Err(MaliError::ArithConstant),
+            _ if matches!(self.alu_of(x), Some((Alu::Fneg, _))) => {
+                let Some((_, [inner, ..])) = self.alu_of(x) else { return Err(MaliError::Defect(Defect::IrIndex)) };
+                Ok(inner)
+            }
             _ => self.node(Alu::Fneg, [x, Val::Undef, Val::Undef], at),
         }
     }
@@ -1713,6 +1717,15 @@ impl<'s> Fs<'s> {
         id: usize,
     ) -> Result<[Val; 4], MaliError> {
         let w = m.comps_of(ir::ValueId(id as u32)) as usize;
+        /* a matrix times a constant vector: Mesa's sums of the scalar
+         * terms, as its rules leave them ([`MatSum`]) */
+        if matches!(a, AluOp::Fmul | AluOp::Ffma) {
+            match const_mat_chain(m, vals, id) {
+                ChainAt::Inner => return Ok([Val::Undef; 4]),
+                ChainAt::Top(terms, n) => return self.const_mat_product(&terms[..n], vals, w, id),
+                ChainAt::None => {}
+            }
+        }
         /* by the lanes' values: a constructor's constants reach the
          * operation through a temporary (`order_keys`), not a `ConstF32` */
         let lane = |k: usize, i: usize| -> Val {
@@ -1741,6 +1754,76 @@ impl<'s> Fs<'s> {
         let r = self.alu32_lanes(m, a, srcs, vals, id, w);
         self.nir.nonuniform_const = saved;
         r
+    }
+
+    /// `m * v` by a constant `v` ([`const_mat_chain`]'s `terms`, column j
+    /// and its scale): each lane's sum of terms simplified as NIR's rules
+    /// leave it ([`MatSum`]), then built in its instructions' order, lane
+    /// after lane, for the late fusion to fuse (algfold_189_half: `fmul(0.5,
+    /// fadd(b, fadd(q, a)))`, `ffma(fneg(q), 0.5, a)`, `fmul(0.5, fadd(q,
+    /// x))`; algfold_189_mulone: `ffma(a, 0.5, ffma(q, 0.5, b))`,
+    /// `fadd(fneg(q), a)`, `ffma(q, 0.5, x)`).
+    fn const_mat_product(
+        &mut self,
+        terms: &[(ir::Src, u32)],
+        vals: &[[Val; 4]],
+        w: usize,
+        id: usize,
+    ) -> Result<[Val; 4], MaliError> {
+        let col_lane = |col: ir::Src, i: usize| {
+            vals.get(col.val.0 as usize).map_or(Val::Undef, |v| v[col.swizzle[i] as usize & 3])
+        };
+        /* the columns' lanes (the front end's width may be the vector's) */
+        let rows = (0..w.min(4)).take_while(|&i| terms.iter().all(|&(c, _)| col_lane(c, i) != Val::Undef)).count();
+        let mut out = [Val::Undef; 4];
+        for (i, o) in out.iter_mut().enumerate().take(rows) {
+            let mut s = MatSum::new();
+            let mut acc: Option<u8> = None;
+            for &(col, k) in terms {
+                let c = col_lane(col, i);
+                let leaf = match self.alu_of(c) {
+                    Some((Alu::Fneg, [x, ..])) => {
+                        let fm = matches!(self.alu_of(x), Some((Alu::Fmul, _)));
+                        let l = s.leaf(x, fm)?;
+                        s.mk(Term::Neg(l))?
+                    }
+                    found => s.leaf(c, matches!(found, Some((Alu::Fmul, _))))?,
+                };
+                /* a term by 1.0 is the column (GLSL's `is_vec_one`) */
+                let t = if k == F32_ONE {
+                    leaf
+                } else {
+                    let kk = s.leaf(Val::Const(k), false)?;
+                    s.mk(Term::Mul(leaf, kk))?
+                };
+                acc = Some(match acc {
+                    None => t,
+                    Some(x) => s.mk(Term::Add(x, t))?,
+                });
+            }
+            let root = acc.ok_or(MaliError::Defect(Defect::IrIndex))?;
+            let root = s.simplify(root)?;
+            *o = self.emit_term(&s, root, id)?;
+        }
+        Ok(out)
+    }
+
+    /// Term `i` of `s` as nodes, its sources first.
+    fn emit_term(&mut self, s: &MatSum, i: u8, at: usize) -> Result<Val, MaliError> {
+        let u = Val::Undef;
+        match s.t[i as usize] {
+            Term::Leaf(v) => Ok(v),
+            Term::Neg(x) => {
+                let x = self.emit_term(s, x, at)?;
+                self.op32(Alu::Fneg, [x, u, u], at)
+            }
+            Term::Add(x, y) | Term::Mul(x, y) => {
+                let op = if matches!(s.t[i as usize], Term::Add(..)) { Alu::Fadd } else { Alu::Fmul };
+                let x = self.emit_term(s, x, at)?;
+                let y = self.emit_term(s, y, at)?;
+                self.op32(op, [x, y, u], at)
+            }
+        }
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1802,6 +1885,17 @@ impl<'s> Fs<'s> {
                 out[i] = self.op32(Alu::Ffma, [outer[i].0, outer[i].1, inner[i]], id)?;
             }
             return Ok(out);
+        }
+        /* any other front-end `ffma` (a matrix product's term) by a
+         * constant 1.0 or -1.0: a product by a constant vector is
+         * [`Fs::const_mat_product`]'s (algfold_189_mulone.expect.json); a
+         * scale of -1.0, or 1.0 beside a scale that is not a constant, in
+         * any other shape has no reference. A dot product's own `ffma`s are
+         * made here and fold (`Nir::alu`) */
+        if a == AluOp::Ffma
+            && (0..w).any(|i| [lane(0, i), lane(1, i)].iter().any(|v| matches!(v, Val::Const(F32_ONE | F32_MINUS_ONE))))
+        {
+            return Err(MaliError::ArithConstant);
         }
         /* atan's sign fix-up: the front end's `fabs(t) * fsign(x)`
          * (builtin_call.rs `atan`, whose `t` is `ffma(fabs(u), res,
@@ -3156,6 +3250,441 @@ fn is_mat_term_fs(m: &Module<'_>, srcs: &[ir::Src; 3]) -> bool {
     let splat = srcs[1].swizzle.iter().all(|&s| s == srcs[1].swizzle[0]);
     let acc = matches!(m.def(srcs[2].val), Some(ir::Op::Alu(AluOp::Fmul | AluOp::Ffma, _)));
     is_col && splat && acc
+}
+
+/// Where an IR value stands in the front end's chain of `m * v` by a
+/// constant `v` ([`const_mat_chain`]).
+enum ChainAt {
+    None,
+    /// A term the chain's last `ffma` reads (made there, not here).
+    Inner,
+    /// The chain's last `ffma`: its terms in the columns' order, each the
+    /// column and its constant scale, and their number.
+    Top([(ir::Src, u32); 4], usize),
+}
+
+/// The front end's `m * v` (lower.rs `mat_times_column`, Mesa's GLSL
+/// order: `fmul(m1, v.y)`, then `ffma(m0, v.x, ..)`, `ffma(m2, v.z, ..)`,
+/// `ffma(m3, v.w, ..)`, every scale a splat lane of one value) whose scales
+/// are all constants other than 0.0 and -1.0, each term but the last read
+/// once: GLSL's `lower_mat_op_to_vec` makes it `((m0 * v.x + m1 * v.y) +
+/// m2 * v.z) + m3 * v.w` (lower_mat_op_to_vec.cpp:157-183), a term by 1.0
+/// the column itself (opt_algebraic.cpp's `is_vec_one`), and NIR's rules
+/// meet the scalar sums before the late fusion ([`MatSum`]).
+fn const_mat_chain(m: &Module<'_>, vals: &[[Val; 4]], id: usize) -> ChainAt {
+    let scale_of = |v: usize| match m.def(ir::ValueId(v as u32)) {
+        Some(ir::Op::Alu(AluOp::Fmul | AluOp::Ffma, s)) => Some(s[1]),
+        _ => None,
+    };
+    /* the next term's `ffma`, when `v` is its accumulator */
+    let link_user = |v: usize| -> Option<usize> {
+        let scale = scale_of(v)?;
+        if ir_uses(m, ir::ValueId(v as u32)) != 1 {
+            return None;
+        }
+        m.instrs.iter().position(|op| {
+            matches!(op, ir::Op::Alu(AluOp::Ffma, s) if s[2].val.0 as usize == v
+                && s[0].val.0 as usize != v && s[1].val == scale.val)
+        })
+    };
+    let mut top = id;
+    while let Some(u) = link_user(top) {
+        top = u;
+    }
+    let mut terms = [(ir::Src::id(ir::ValueId(0)), 0u32); 4];
+    let mut seen = [false; 4];
+    let mut comps = [0u8; 4];
+    let mut n = 0;
+    let mut cur = top;
+    let mut has_id = false;
+    let vec = match scale_of(top) {
+        Some(s) => s.val,
+        None => return ChainAt::None,
+    };
+    loop {
+        has_id |= cur == id;
+        let (op, s) = match m.def(ir::ValueId(cur as u32)) {
+            Some(ir::Op::Alu(op @ (AluOp::Fmul | AluOp::Ffma), s)) => (*op, *s),
+            _ => return ChainAt::None,
+        };
+        let c = s[1].swizzle[0];
+        if n == 4 || s[1].val != vec || s[1].swizzle.iter().any(|&x| x != c) || c > 3 || seen[c as usize] {
+            return ChainAt::None;
+        }
+        let k = match vals.get(vec.0 as usize).map(|v| v[c as usize]) {
+            Some(Val::Const(k)) if nir::plain(k) && k & !F32_NEG_ZERO != 0 && k != F32_MINUS_ONE => k,
+            _ => return ChainAt::None,
+        };
+        seen[c as usize] = true;
+        terms[c as usize] = (s[0], k);
+        comps[n] = c;
+        n += 1;
+        if op == AluOp::Fmul {
+            break;
+        }
+        cur = s[2].val.0 as usize;
+    }
+    /* innermost first: v.y, v.x, then v.z and v.w */
+    const ORDER: [u8; 4] = [1, 0, 2, 3];
+    if n < 2 || !(0..n).all(|k| comps[n - 1 - k] == ORDER[k]) {
+        return ChainAt::None;
+    }
+    match (has_id, top == id) {
+        (_, true) => ChainAt::Top(terms, n),
+        (true, false) => ChainAt::Inner,
+        (false, false) => ChainAt::None,
+    }
+}
+
+/// One scalar instruction of [`MatSum`] (indices into its table).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Term {
+    Leaf(Val),
+    Neg(u8),
+    Add(u8, u8),
+    Mul(u8, u8),
+}
+
+const MAT_TERMS: usize = 64;
+
+/// One lane of a matrix product by a constant vector as NIR holds it after
+/// `nir_lower_alu_to_scalar` (gl_nir_linker.c:71-75: Bifrost's
+/// `lower_to_scalar`), simplified as the GL front end's optimisation loop
+/// does: `nir_opt_algebraic` (nir_search.c:869-905: the last instruction
+/// first, a rewritten instruction's users queued again, the new
+/// instructions before the old one's place, nir_search.c:700-750), each
+/// pass after `nir_opt_dce` and `nir_opt_cse`, a constant operation folded
+/// as it is made (`nir_opt_constant_folding`). The rules are the ones the
+/// sums of scaled terms reach, in their list order: `fadd(fmul(a, b),
+/// fmul(a, c))` (nir_opt_algebraic.py:246), `fadd(a, a)` (:274),
+/// `fadd(a, fadd(a, b))` (:275), `fadd(fadd(fmul, fmul), c)` (:2419);
+/// `fmul(fneg(a), b)` (:2387), `fmul(fmul(a, b), #c)` (:2394) and
+/// `fmul(#a, fmul(b, #c))` (:2406); each commutative operand tried in
+/// nir_search's order (a combination's bit k swaps the k-th commutative
+/// expression of the pattern, the outer one first). A sum with a constant
+/// left after the folding meets the constant reassociations
+/// (:2398-2412), which are not transcribed ([`MaliError::ArithConstant`]).
+/// Measured: algfold_189_half and algfold_189_mulone.expect.json.
+struct MatSum {
+    t: [Term; MAT_TERMS],
+    /// A leaf that is a product (`is_fmul`, nir_search_helpers.h:403-416).
+    fmul: [bool; MAT_TERMS],
+    /// Replaced or dropped by the dead code.
+    gone: [bool; MAT_TERMS],
+    n: usize,
+    /// The instructions in program order.
+    order: [u8; MAT_TERMS],
+    len: usize,
+    /// Where a rule's new instructions go.
+    cursor: Option<usize>,
+}
+
+impl MatSum {
+    fn new() -> MatSum {
+        MatSum {
+            t: [Term::Leaf(Val::Undef); MAT_TERMS],
+            fmul: [false; MAT_TERMS],
+            gone: [false; MAT_TERMS],
+            n: 0,
+            order: [0; MAT_TERMS],
+            len: 0,
+            cursor: None,
+        }
+    }
+
+    fn konst(&self, i: u8) -> Option<u32> {
+        match self.t[i as usize] {
+            Term::Leaf(Val::Const(k)) => Some(k),
+            _ => None,
+        }
+    }
+
+    fn is_fmul(&self, i: u8) -> bool {
+        match self.t[i as usize] {
+            Term::Mul(..) => true,
+            Term::Neg(x) => self.is_fmul(x),
+            Term::Leaf(_) => self.fmul[i as usize],
+            Term::Add(..) => false,
+        }
+    }
+
+    fn leaf(&mut self, v: Val, fmul: bool) -> Result<u8, MaliError> {
+        let i = self.mk(Term::Leaf(v))?;
+        self.fmul[i as usize] |= fmul;
+        Ok(i)
+    }
+
+    fn fold(x: u32, y: u32, mul: bool) -> Result<u32, MaliError> {
+        let (a, b) = (f32::from_bits(x), f32::from_bits(y));
+        let r = if mul { a * b } else { a + b }.to_bits();
+        if !nir::plain(x) || !nir::plain(y) || !nir::plain(r) {
+            return Err(MaliError::ConstantFold);
+        }
+        Ok(r)
+    }
+
+    /// Instruction `t`, folded and CSE'd.
+    fn mk(&mut self, t: Term) -> Result<u8, MaliError> {
+        let zero = |k: Option<u32>| k.is_some_and(|k| k & !F32_NEG_ZERO == 0);
+        let t = match t {
+            Term::Neg(x) => match (self.konst(x), self.t[x as usize]) {
+                (Some(k), _) => Term::Leaf(Val::Const(k ^ F32_NEG_ZERO)),
+                (_, Term::Neg(y)) => return Ok(y),
+                _ => t,
+            },
+            Term::Add(x, y) => match (self.konst(x), self.konst(y)) {
+                (Some(a), Some(b)) => Term::Leaf(Val::Const(Self::fold(a, b, false)?)),
+                (a, _) if zero(a) => return Ok(y),
+                (_, b) if zero(b) => return Ok(x),
+                (Some(_), _) | (_, Some(_)) => return Err(MaliError::ArithConstant),
+                _ => t,
+            },
+            Term::Mul(x, y) => match (self.konst(x), self.konst(y)) {
+                (Some(a), Some(b)) => Term::Leaf(Val::Const(Self::fold(a, b, true)?)),
+                (a, b) if zero(a) || zero(b) => Term::Leaf(Val::Const(0)),
+                (Some(F32_ONE), _) => return Ok(y),
+                (_, Some(F32_ONE)) => return Ok(x),
+                (Some(F32_MINUS_ONE), _) | (_, Some(F32_MINUS_ONE)) => return Err(MaliError::ArithConstant),
+                _ => t,
+            },
+            Term::Leaf(_) => t,
+        };
+        let same = |u: Term| match (u, t) {
+            (Term::Add(a, b), Term::Add(c, d)) | (Term::Mul(a, b), Term::Mul(c, d)) => u == t || (a == d && b == c),
+            _ => u == t,
+        };
+        if let Some(i) = (0..self.n).find(|&i| !self.gone[i] && same(self.t[i])) {
+            return Ok(i as u8);
+        }
+        if self.n == MAT_TERMS {
+            return Err(MaliError::TooManyValues);
+        }
+        let i = self.n;
+        self.t[i] = t;
+        self.n += 1;
+        if !matches!(t, Term::Leaf(_)) {
+            let at = self.cursor.unwrap_or(self.len);
+            self.order.copy_within(at..self.len, at + 1);
+            self.order[at] = i as u8;
+            self.len += 1;
+            if let Some(c) = self.cursor.as_mut() {
+                *c += 1;
+            }
+        }
+        Ok(i as u8)
+    }
+
+    fn srcs(&self, i: u8) -> [Option<u8>; 2] {
+        match self.t[i as usize] {
+            Term::Add(a, b) | Term::Mul(a, b) => [Some(a), Some(b)],
+            Term::Neg(a) => [Some(a), None],
+            Term::Leaf(_) => [None, None],
+        }
+    }
+
+    /// The instructions `root` reads, transitively.
+    fn live(&self, root: u8) -> [bool; MAT_TERMS] {
+        let mut live = [false; MAT_TERMS];
+        let mut stack = [0u8; MAT_TERMS];
+        let mut sp = 1;
+        stack[0] = root;
+        while sp > 0 {
+            sp -= 1;
+            let i = stack[sp];
+            if live[i as usize] {
+                continue;
+            }
+            live[i as usize] = true;
+            for s in self.srcs(i).into_iter().flatten() {
+                if !live[s as usize] && sp < MAT_TERMS {
+                    stack[sp] = s;
+                    sp += 1;
+                }
+            }
+        }
+        live
+    }
+
+    /// The reads of `i` by live instructions, the store's of the root.
+    fn uses(&self, live: &[bool; MAT_TERMS], root: u8, i: u8) -> usize {
+        let reads = (0..self.n)
+            .filter(|&k| live[k] && !self.gone[k])
+            .map(|k| self.srcs(k as u8).iter().filter(|&&s| s == Some(i)).count())
+            .sum::<usize>();
+        reads + usize::from(root == i)
+    }
+
+    /// The first rule of the list that matches instruction `i`, applied.
+    fn rule(&mut self, i: u8, live: &[bool; MAT_TERMS], root: u8) -> Result<Option<u8>, MaliError> {
+        let flip = |p: (u8, u8), on: bool| if on { (p.1, p.0) } else { p };
+        let pair = |s: &Self, x: u8| match s.t[x as usize] {
+            Term::Mul(a, b) => Some((a, b)),
+            _ => None,
+        };
+        let sum = |s: &Self, x: u8| match s.t[x as usize] {
+            Term::Add(a, b) => Some((a, b)),
+            _ => None,
+        };
+        match self.t[i as usize] {
+            Term::Add(p, q) => {
+                /* :246, `fadd(fmul(a, b), fmul(a, c))` -> `fmul(a, fadd(b, c))` */
+                if let (Some(_), Some(_)) = (pair(self, p), pair(self, q)) {
+                    for comb in 0..8 {
+                        let (f, s) = flip((p, q), comb & 1 != 0);
+                        let (Some(fp), Some(sp)) = (pair(self, f), pair(self, s)) else { continue };
+                        let (a, b) = flip(fp, comb & 2 != 0);
+                        let (a2, c) = flip(sp, comb & 4 != 0);
+                        if a == a2 {
+                            let bc = self.mk(Term::Add(b, c))?;
+                            return self.mk(Term::Mul(a, bc)).map(Some);
+                        }
+                    }
+                }
+                /* :274, `fadd(a, a)` -> `fmul(a, 2.0)` */
+                if p == q {
+                    let two = self.leaf(Val::Const(F32_TWO), false)?;
+                    return self.mk(Term::Mul(p, two)).map(Some);
+                }
+                /* :275, `fadd(a, fadd(is_used_once)(a, b))` -> `fadd(b, fmul(a, 2.0))` */
+                for comb in 0..4 {
+                    let (a, inner) = flip((p, q), comb & 1 != 0);
+                    let Some(s) = sum(self, inner) else { continue };
+                    let (a2, b) = flip(s, comb & 2 != 0);
+                    if a2 == a && self.uses(live, root, inner) == 1 {
+                        let two = self.leaf(Val::Const(F32_TWO), false)?;
+                        let m2 = self.mk(Term::Mul(a, two))?;
+                        return self.mk(Term::Add(b, m2)).map(Some);
+                    }
+                }
+                /* :2419, `fadd(fadd(is_used_once)(a(is_fmul), b(is_fmul)),
+                 * c(is_not_fmul))` -> `fadd(fadd(a, c), b)` */
+                for comb in 0..4 {
+                    let (inner, c) = flip((p, q), comb & 1 != 0);
+                    let Some(s) = sum(self, inner) else { continue };
+                    let (a, b) = flip(s, comb & 2 != 0);
+                    if self.is_fmul(a) && self.is_fmul(b) && !self.is_fmul(c) && self.uses(live, root, inner) == 1 {
+                        let ac = self.mk(Term::Add(a, c))?;
+                        return self.mk(Term::Add(ac, b)).map(Some);
+                    }
+                }
+                Ok(None)
+            }
+            Term::Mul(p, q) => {
+                /* :2387, `fmul(fneg(a), b)` -> `fneg(fmul(a, b))` */
+                for (x, y) in [(p, q), (q, p)] {
+                    if let Term::Neg(a) = self.t[x as usize] {
+                        let ab = self.mk(Term::Mul(a, y))?;
+                        return self.mk(Term::Neg(ab)).map(Some);
+                    }
+                }
+                let nonconst = |s: &Self, x: u8| s.konst(x).is_none();
+                /* :2394, `fmul(fmul(is_used_once)(a, b), #c)` -> `fmul(fmul(a, c), b)`,
+                 * `a` and `b` not constants */
+                for comb in 0..4 {
+                    let (inner, c) = flip((p, q), comb & 1 != 0);
+                    let Some(s) = pair(self, inner) else { continue };
+                    let (a, b) = flip(s, comb & 2 != 0);
+                    if self.konst(c).is_some()
+                        && nonconst(self, a)
+                        && nonconst(self, b)
+                        && self.uses(live, root, inner) == 1
+                    {
+                        let ac = self.mk(Term::Mul(a, c))?;
+                        return self.mk(Term::Mul(ac, b)).map(Some);
+                    }
+                }
+                /* :2406, `fmul(#a, fmul(b, #c))` -> `fmul(fmul(a, c), b)` */
+                for comb in 0..4 {
+                    let (a, inner) = flip((p, q), comb & 1 != 0);
+                    let Some(s) = pair(self, inner) else { continue };
+                    let (b, c) = flip(s, comb & 2 != 0);
+                    if self.konst(a).is_some() && self.konst(c).is_some() {
+                        let ac = self.mk(Term::Mul(a, c))?;
+                        return self.mk(Term::Mul(ac, b)).map(Some);
+                    }
+                }
+                Ok(None)
+            }
+            Term::Neg(_) | Term::Leaf(_) => Ok(None),
+        }
+    }
+
+    /// The optimisation loop to its fixed point; the new root.
+    fn simplify(&mut self, root: u8) -> Result<u8, MaliError> {
+        let mut root = root;
+        for _ in 0..16 {
+            /* `nir_opt_dce` */
+            let live = self.live(root);
+            let mut k = 0;
+            while k < self.len {
+                let i = self.order[k] as usize;
+                if live[i] {
+                    k += 1;
+                } else {
+                    self.gone[i] = true;
+                    self.order.copy_within(k + 1..self.len, k);
+                    self.len -= 1;
+                }
+            }
+            let mut queue = [0u8; 4 * MAT_TERMS];
+            let (mut head, mut tail) = (0, 0);
+            for k in (0..self.len).rev() {
+                queue[tail] = self.order[k];
+                tail += 1;
+            }
+            let mut progress = false;
+            while head < tail {
+                let i = queue[head];
+                head += 1;
+                let live = self.live(root);
+                if self.gone[i as usize] || !live[i as usize] {
+                    continue;
+                }
+                let Some(pos) = self.order[..self.len].iter().position(|&x| x == i) else { continue };
+                self.cursor = Some(pos);
+                let r = self.rule(i, &live, root);
+                self.cursor = None;
+                let Some(r) = r? else { continue };
+                if r == i {
+                    continue;
+                }
+                for k in 0..self.n {
+                    if self.gone[k] {
+                        continue;
+                    }
+                    self.t[k] = match self.t[k] {
+                        Term::Add(a, b) => Term::Add(if a == i { r } else { a }, if b == i { r } else { b }),
+                        Term::Mul(a, b) => Term::Mul(if a == i { r } else { a }, if b == i { r } else { b }),
+                        Term::Neg(a) if a == i => Term::Neg(r),
+                        t => t,
+                    };
+                }
+                if root == i {
+                    root = r;
+                }
+                self.gone[i as usize] = true;
+                if let Some(at) = self.order[..self.len].iter().position(|&x| x == i) {
+                    self.order.copy_within(at + 1..self.len, at);
+                    self.len -= 1;
+                }
+                for k in 0..self.len {
+                    let u = self.order[k];
+                    if self.srcs(u).contains(&Some(r)) {
+                        if tail == queue.len() {
+                            return Err(MaliError::ArithConstant);
+                        }
+                        queue[tail] = u;
+                        tail += 1;
+                    }
+                }
+                progress = true;
+            }
+            if !progress {
+                return Ok(root);
+            }
+        }
+        Err(MaliError::ArithConstant)
+    }
 }
 
 /// The uniform of the block that holds front-end dword `dword`, and the
@@ -4929,8 +5458,6 @@ pub fn select_highp(
 ) -> Result<(), MaliError> {
     let oom = |_| MaliError::OutOfScratch;
     let defect = MaliError::Defect(Defect::IrIndex);
-    /* GLSL's do_rebalance_tree is the vertex stage's (nir.rs) */
-    nir::refuse_rebalanced(m)?;
     let c = f.colour.ok_or(MaliError::NoColour)?;
     /* the colour's stores: the fusion counts them as uses */
     for (k, v) in c.iter().enumerate() {

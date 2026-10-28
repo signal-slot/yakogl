@@ -422,7 +422,9 @@ Sources in `tools/mali/testdata`:
 word read raw, section 1), and case 80 is no longer refused by its type.
 Its fragment shader stops first at the chain refusal: `s[1][1] + d[1][0] +
 q[0][1] + n[1][0] + 4.0 * p[1][0]` is five terms GLSL's `do_rebalance_tree`
-reassociates (`nir::refuse_rebalanced`, plan #154 item chains). With that
+reassociates (then `nir::refuse_rebalanced`; plan #154 item chains removed
+that function, and `glsl.rs` still refuses this tree as `Rebalance`, its
+terms being matrix elements). With that
 refusal lifted in a scratch build, it then stops at the mixed precision of
 its locals (`MixedPrecision`), and only after that at the run-time indexed
 locals this section describes (`IndexedLocal`, `arr[i]`, `p[i]`, `col[i -

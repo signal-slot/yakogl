@@ -51,6 +51,7 @@ pub mod blend;
 pub mod emit;
 pub mod fau;
 pub mod flow;
+pub mod glsl;
 pub mod isa;
 pub mod link;
 pub mod motion;
@@ -1052,6 +1053,10 @@ fn compile_module_on<'s>(
     order: Option<link::VaryingOrder>,
     scratch: &Arena<'s>,
 ) -> Result<StageCode<'s>, MaliError> {
+    /* GLSL's do_rebalance_tree and do_algebraic, ahead of NIR (glsl.rs) */
+    let rw = glsl::passes(m, scratch)?;
+    let rewritten = rw.map(|(instrs, comps)| ir_mod::Module { instrs, comps, ..*m });
+    let m = rewritten.as_ref().unwrap_or(m);
     let mut marks = Marks::default();
     if m.instrs.len() <= Table::IrValues.capacity() {
         marks.note(Table::IrValues, m.instrs.len());
@@ -1440,7 +1445,9 @@ pub fn vs_constants(glsl: &[u8], scratch: &Arena<'_>) -> Result<link::VaryingCon
     let l = lower_source(SHC_STAGE_VERTEX, glsl, &[], scratch)?;
     /* built as for a fragment shader that reads nothing: no lane is stored,
      * so none is refused for what it holds */
-    let vs = nir::build(&l.module, scratch, Some(&[]), &[]).map_err(refused)?;
+    let rw = glsl::passes(&l.module, scratch).map_err(refused)?;
+    let m = rw.map_or(l.module, |(instrs, comps)| ir_mod::Module { instrs, comps, ..l.module });
+    let vs = nir::build(&m, scratch, Some(&[]), &[]).map_err(refused)?;
     if vs.consts.full() {
         return Err(refused(MaliError::VaryingNotFromAttribute));
     }
