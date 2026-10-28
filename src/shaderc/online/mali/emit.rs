@@ -36,7 +36,7 @@ const fn row(op: Alu, bits: u8, width: u8) -> Row {
 }
 
 /// The rows [`emit`] selects, each with the `bi_emit_alu` case it is.
-pub const ROWS: [(Row, &str); 57] = [
+pub const ROWS: [(Row, &str); 58] = [
     (row(Alu::Fadd, 32, 1), "nir_op_fadd: FADD.f32"),
     (row(Alu::Fmul, 32, 1), "nir_op_fmul: FMA.f32 a, b, -0.0"),
     (row(Alu::Ffma, 32, 1), "nir_op_ffma: FMA.f32"),
@@ -119,6 +119,9 @@ pub const ROWS: [(Row, &str); 57] = [
     (row(Alu::I2i32, 32, 1), "nir_op_i2i32 of a 16-bit mask: S16_TO_S32"),
     (row(Alu::Bcsel, 16, 1), "nir_op_bcsel_pan of one 16-bit lane: MUX.v2i16.int_zero else, then, c.h00"),
     (row(Alu::Ffloor, 16, 2), "nir_op_ffloor of two 16-bit lanes: FROUND.v2f16.rtn"),
+    /* a colour lane paired with a constant (tools/mali/testdata/texmore_2:
+     * `FMA.v2f16 r1, r3^.h00, 0x38000000.h11, r1^.h00`) */
+    (row(Alu::Ffma, 16, 1), "nir_op_ffma of one 16-bit lane: FMA.v2f16 a.hN, b.hN, c.hN"),
 ];
 
 /// `row`'s bit in a set of [`ROWS`] (a program's rows drawn).
@@ -188,6 +191,7 @@ pub fn emit(p: &mut Prog<'_>, row: Row, s: &[Src]) -> Result<u16, MaliError> {
         /* one lane: each source's own half in both (`bi_alu_src_index`
          * replicates the lane read; the caller's swizzle) */
         (Alu::Fmul, 16, 1) => ins(p, Op::FmaV2f16, &[s[0], s[1], NEG_ZERO])?,
+        (Alu::Ffma, 16, 1) => ins(p, Op::FmaV2f16, &s[..3])?,
         (Alu::F2f32, 32, 1) => ins(p, Op::F16ToF32, &s[..1])?,
         (Alu::U2u32, 32, 1) => ins(p, Op::U16ToU32, &[s[0].swz(Swz::H00)])?,
         /* `bi_lshift_or_to(b, sz, dst, s0, bi_zero(), bi_byte(s1, 0))` (:3047-3048);
