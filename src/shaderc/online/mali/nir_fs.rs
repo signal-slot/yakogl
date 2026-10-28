@@ -1686,6 +1686,12 @@ impl<'s> Fs<'s> {
                 Some(px) => self.op32(Alu::U2u32, [px, u, u], at),
                 None => self.op32(Alu::F2i, [x, u, u], at),
             },
+            /* the same rules of `f2u` (:1955, :1957): `uint(gl_FragCoord.x)`
+             * is `U16_TO_U32 r3, r59^.h0` (intuni_intrt.expect.json) */
+            AluOp::F2u => match self.pixel_lane(x) {
+                Some(px) => self.op32(Alu::U2u32, [px, u, u], at),
+                None => self.op32(Alu::F2u, [x, u, u], at),
+            },
             /* `i2f32(iand(a, 0xff))` and `i2f32(iand(ishr(a, 8k), 0xff))`
              * are `u2f32(extract_u8(a, k))` (nir_opt_algebraic.py's
              * extract rules), `U8_TO_F32 a.bk` (intuni_ishr.expect.json) */

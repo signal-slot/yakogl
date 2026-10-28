@@ -54,6 +54,45 @@ every stage and both cases are byte-equal (docs/notes/mali-uniform-types.md,
 2.1's "not recorded" line is recorded and lowered: case 79,
 docs/notes/mali-int-and-size.md "Since plan #154 item intbool-2".
 
+**State since plan #154 item ubo166.** `intrt` (gl_test case 200) is
+byte-equal (`intuni_intrt_is_byte_equal_to_mesa_26_2_1`, both stages,
+in `INTBOOL_POPULATION`). The compiler needed two things: `uint` and
+`uvec2/3/4` uniforms take one raw word a component as the `int` ones do
+(`nir::uniform_of`), and the highp walk applies the `f2u` forms of the
+rules it had for `f2i` (nir_opt_algebraic.py:1955, :1957), so
+`uint(gl_FragCoord.x)` is the pixel's own x, `U16_TO_U32 r3, r59^.h0`.
+The `uvec4` output itself (`FsPrecision::colour_u32`, `BLEND.v4.u32`, the
+`ATEST` of 1.0) was already lowered for `fbload_int`. The corpus line
+`gltest/intrt.frag` is `ok`; `es300/uops.frag` and `es300/ifelse_uint.frag`
+moved from `UniformType` to the next refusal, `Arithmetic`.
+
+What the Mali frame (`src/mali/**`) must still allow before case 200 can
+draw, for a later frame item:
+
+- **An integer colour target.** `frame.rs`'s `TargetFormat` has
+  `Rgba8888`, `Xrgb8888`, `Rgb565` and `Rgba16f` only. Case 200's target is
+  an integer format (the GL side's `RGBA8UI` or `RGBA32UI` colour
+  attachment); its render-target descriptor, its blend descriptor's
+  `memory_format` (`pan_dithered_format_from_pipe_format` of the integer
+  pipe format, pan_cmdstream.c:394-395) and its read-back
+  (`glReadPixels(GL_RGBA_INTEGER, ...)`) are not built. Take them from a
+  Mesa board reference of case 200, not from this drm-shim one: the shim's
+  `gl_ref.py` target is RGBA8, so its descriptors are not the integer
+  target's.
+- **The non-float equation.** For a format that is not float Mesa writes
+  `so->equation`, not `so->float_equation` (pan_cmdstream.c:350-352), and
+  an integer target does not blend (GL: blending is off for integer
+  attachments), so the descriptor is the opaque or replace one.
+- **No register format on v10.** Mesa sets
+  `fixed_function.conversion.register_format` only for `PAN_ARCH <= 7`
+  (pan_cmdstream.c:409-421). On v10 the type is in the instruction
+  (`BLEND.slot0.v4.u32`), so the frame has no field to fill from it.
+- **The record's type.** `MaliShader::colour_f16` is false for both an
+  fp32 and a u32 output; the record has no `u32` flag. A frame item that
+  must refuse a float program on an integer target (or the reverse) needs
+  one added to the record next to `colour_f16`, set from
+  `FsPrecision::colour_u32` in mod.rs.
+
 ## The answers
 
 1. **Layout: one FAU word per *read component*, in declaration order, after
@@ -222,8 +261,9 @@ uniforms alone moves two corpus rows (`sharedint.vert`, `sharedint.frag`) to
    and xor/not by `LSHIFT_*`/`RSHIFT_OR`/`ARSHIFT_OR` (2.2): `ishr`, `gcops`.
 4. Constant `/` and `%` by magic multiply, then the run-time divide (2.1):
    `ifelse_uint`, `uops`.
-5. Integer render target (`intrt`): output type `u32` plus the frame's colour
-   format.
+5. Integer render target (`intrt`): output type `u32` (done, item ubo166)
+   plus the frame's colour format (open; the list at "State since plan
+   #154 item ubo166").
 6. The `idxtex` index is `mali-uniform-index.md`'s step.
 
 `bool` and signed divide have no reference yet; record one before lowering
