@@ -136,9 +136,9 @@ impl<const N: usize> Huffman<N> {
             return Ok((h, 0)); // no codes: complete, but decodes nothing
         }
         let mut left: i32 = 1;
-        for len in 1..=MAX_BITS {
+        for &n in &h.count[1..] {
             left <<= 1;
-            left -= h.count[len] as i32;
+            left -= n as i32;
             if left < 0 {
                 return Err(InflateError::BadCode);
             }
