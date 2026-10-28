@@ -439,3 +439,63 @@ then the board is the check.
 | `VertexId` (r60) as in builtin_43 | **57** (nothing more), **43** | 44: the RGBA16F target (frame-f16rt) |
 | `InstanceId` (r61) as in builtin_47 | **51** (nothing more: instanced draws, divisor 1 and the arena exist), **47** | 141: a divisor of 2 (items 1-3 above) |
 | `FrontFacing` (r58) as in builtin_49 | 49 only | none of these four |
+
+## The lowering (plan #154 builtin, #33)
+
+Done in `src/shaderc/online/mali`, byte-equal to every `builtin_*` reference
+(`tests.rs`: `the_builtin_population_is_byte_equal_to_mesa_26_2_1` for 43, 44,
+57, 47, 51, 141 and 49 through the link; `cases_45_and_98_vertex_programs_...`
+for the position programs of 45 and 98, whose fragment shaders other items
+own).
+
+- `nir::Kind::Preload { reg }`: a preloaded 32-bit word read as the register
+  itself (`select.rs` `preloads` makes its `MOV.i32`, the preload mask follows
+  from liveness): gl_VertexID r60, gl_InstanceID r61 (`ra::VERTEX_ID`,
+  `ra::INSTANCE_ID`), the primitive flags r58 (`ra::PRIMITIVE_FLAGS`). A lane
+  that reads r60 or r61 is divergent (`reads_attribute`): interpolated, not
+  flat. `nir_opt_peephole_select` allows `load_instance_id` and
+  `load_front_face`, not `load_vertex_id` (nir_opt_peephole_select.c:166-182).
+- The vertex stage takes 32-bit integer constants and exactly the integer
+  forms of vid.vert and inst.vert: `imod(a, 2^k)` as `iand(a, 2^k - 1)`,
+  `ieq`, `ior` of two masks, `bcsel` (`bcsel(a, b, b)` = `b`,
+  `bcsel(a, 1.0, 0.0)` = `b2f32(a)`). Any other integer operation or
+  conversion stays `IntValue` (intbool); a `%` by other than a positive power
+  of two too.
+- `opt::fuse_cmp`, Mesa's `va_fuse_cmp` (va_optimize.c:217-291, after
+  `va_fuse_add_imm`): `LSHIFT_OR.i32` of two compares of one family is one
+  `ICMP_OR`/`FCMP_OR` with the other compare as its third source. This is
+  builtin_43's `ICMP_OR.u32.eq.m1 r2, r0, 0x0, r1`.
+- gl_FrontFacing is `ICMP_OR.u32.eq.m1 r0, r58^, 0x0, 0x0` in either
+  precision. A mediump shader whose colour is selects of constants on it
+  (`nir_fs::mask_colour`: only preloads, 32-bit compares and selects) is built
+  by `select_highp`, where the selects of constants are narrowed into 16-bit
+  `MUX`es. That is NIR's own result (`f2f16(bcsel(c, a, b))` folds into a
+  16-bit select). A select on it with a side that is not a constant stays
+  `Arithmetic`.
+
+`tools/shaders/es300/vid.vert`, `inst.vert` and `facing.frag` are `ok` in
+`tools/mali/corpus-verdicts.txt`.
+
+### What each case still needs (2026-10-28 tip)
+
+| case | compiler | frame / other |
+|---|---|---|
+| 43 es3vid | done | nothing (non-indexed `VERTEX_OFFSET` = first, frame.rs:3184) |
+| 57 es3vid_indexed | done | nothing (u16 indices, no bias) |
+| 47 es3inst | done | nothing (divisor 1 instancing is built) |
+| 51 es3heavy | done | nothing (divisor 1, the arena) |
+| 141 es3instdiv | done | the instance divisor 2 (`NOT_BUILT_INSTANCE_DIVISOR`, frame.rs:2104) |
+| 44 es3hdr | vid.vert done; the second program's `hdrsample.frag` is refused (`MixedPrecision`) | RGBA16F target, opaque write (built) |
+| 49 es3facing | vid.vert + facing.frag done; `hdrsample.frag` as 44 | the facing bit is the rasteriser's `front_face_ccw` (frame.rs) |
+| 45 es3dyn | vid.vert done; dynidx.frag refused (`UniformType`: the int uniform bound of a run-time loop) | none known |
+| 98 uniloop | vid.vert done; uniloop.frag refused (`Arithmetic`: the int loop, `mod`) | none known |
+
+The frame side of 141 (Mesa 26.2.1 `panfrost_pack_attribute`,
+pan_cmdstream.c:4103-4107 for arch >= 9): a power-of-two divisor is
+`MALI_ATTRIBUTE_TYPE_1D_POT_DIVISOR`, frequency INSTANCE,
+`divisor_r = ctz(divisor)`. For 2 that is `Divisor R` 1 (genxml `Attribute`
+bits 56..=60). The frame writes 0 today and refuses any divisor above 1.
+The board dump of Mesa 26.2.1 shows the same word: Attribute 1 w1
+`01000042` against case 47's `00000042`
+(tools/cts/log/2026-10-28-boardref/README.md 5.5). Case 49's front-face
+bit (DCD flags 0 `Front Face CCW`, 5.6) is already built.

@@ -976,6 +976,13 @@ impl<'s> Fs<'s> {
 
     /// `v` is a lane of an fp16 value of a highp shader: a mediump
     /// expression on gl_FragCoord ([`Fs::alu16`]), not a compare's mask.
+    /// `v` is a 32-bit integer compare's mask (gl_FrontFacing's in a
+    /// mediump shader, [`mask_colour`]).
+    fn mask_lane(&self, v: Val) -> bool {
+        matches!(v, Val::Lane(n, 0) if matches!(self.nir.nodes[n as usize],
+            NirNode { kind: Kind::Alu(Alu::Icmp(_)), bits: 32, width: 1, .. }))
+    }
+
     fn is_f16(&self, v: Val) -> bool {
         let Val::Lane(n, _) = v else { return false };
         matches!(self.nir.nodes[n as usize], NirNode { kind: Kind::Alu(op), bits: 16, .. } if !op.is_int())
@@ -2165,6 +2172,19 @@ fn walk_nodes(
             }
             ir::Op::LoadInput { slot: IoSlot::FragCoord, .. } if !prec.frag_coord_highp => out = f.frag_coord16(at)?,
             ir::Op::LoadInput { slot: IoSlot::FragCoord, .. } => return Err(MaliError::FragCoordMediump),
+            /* `load_front_face`: `ICMP_OR.u32.eq.m1` of the primitive
+             * flags and 0, the word whole on arch 10 (bifrost_compile.c:
+             * 2017-2029; builtin_49.expect.json's `ICMP_OR.u32.eq.m1 r0,
+             * r58^, 0x0, 0x0`), a 32-bit mask in either precision */
+            ir::Op::LoadInput { slot: IoSlot::FrontFacing, .. } => {
+                let before = f.nir.n;
+                let n = f.nir.load(Kind::Preload { reg: super::ra::PRIMITIVE_FLAGS })?;
+                if f.nir.n > before {
+                    f.origin[n as usize] = at as u16;
+                }
+                let u = Val::Undef;
+                out[0] = f.op32(Alu::Icmp(Cmpf::Eq), [Val::Lane(n, 0), Val::Const(0), u], at)?;
+            }
             ir::Op::LoadInput { .. } => return Err(MaliError::SpecialInput),
             ir::Op::LoadLocal { local, index: None, comps } => {
                 f.rank_local(local.0 as usize)?;
@@ -2346,6 +2366,24 @@ fn walk_nodes(
                         (Val::Undef, _) | (_, Val::Undef) if i > 0 => break,
                         (x, Val::Const(0)) | (Val::Const(0), x) => x,
                         _ => return Err(MaliError::IntValue),
+                    };
+                }
+            }
+            /* a mediump select of constants on gl_FrontFacing's 32-bit mask
+             * (facing.frag): `bcsel(a, b, b)` is `b`, `bcsel(a, 1.0, 0.0)`
+             * `b2f(a)` (nir_opt_algebraic.py), the rest a select of the two
+             * constants, which the colour's conversion folds into a 16-bit
+             * select as a highp shader's ([`mask_colour`]; builtin_49's
+             * `MUX.v2i16 r1, 0x3C000000.h11, 0x0, r0.h00`) */
+            ir::Op::Alu(AluOp::Bcsel, s) if f.mask_lane(lane(vals, s[0], 0)) => {
+                let w = m.comps_of(ir::ValueId(id.0)) as usize;
+                for (i, o) in out.iter_mut().enumerate().take(w) {
+                    let (c, y, z) = (lane(vals, s[0], i), lane(vals, s[1], i), lane(vals, s[2], i));
+                    *o = match (y, z) {
+                        _ if y == z => y,
+                        (Val::Const(F32_ONE), Val::Const(0)) => f.op32(Alu::B2f, [c, Val::Undef, Val::Undef], at)?,
+                        (Val::Const(_), Val::Const(_)) => f.op32(Alu::Bcsel, [c, y, z], at)?,
+                        _ => return Err(MaliError::Arithmetic),
                     };
                 }
             }
@@ -4056,6 +4094,9 @@ fn src32(f: &Fs<'_>, lv: &Leaves, val: &[Option<Src>], v: Val) -> Result<Src, Ma
                 let base = lv.ubo.word(dword).ok_or(defect)?;
                 Ok(Src::of(Idx::Ubo { base, comp: c }))
             }
+            /* a preloaded word ([`Kind::Preload`]), its `MOV.i32` made by
+             * select.rs `preloads` */
+            Kind::Preload { reg } => Ok(Src::of(Idx::Reg(reg))),
             /* the preloaded position's half (`bi_preload`, select.rs
              * `preloads`): x low, y high */
             Kind::PixelCoord => {
@@ -4070,6 +4111,24 @@ fn src32(f: &Fs<'_>, lv: &Leaves, val: &[Option<Src>], v: Val) -> Result<Src, Ma
         },
         _ => Err(defect),
     }
+}
+
+/// The mediump shader `f` computes its colour from 32-bit integer masks and
+/// constants alone (facing.frag: selects on gl_FrontFacing): no fp16 value,
+/// no load. NIR then holds what a highp shader's holds, the selects of
+/// constants narrowed at the store (`f2f16(bcsel(c, a, b))` folded to a
+/// 16-bit select, nir_opt_constant_folding.c), so the program is
+/// [`select_highp`]'s (builtin_49.expect.json).
+pub fn mask_colour(f: &Fs<'_>) -> bool {
+    let int = |op: Alu| matches!(op, Alu::Icmp(_) | Alu::B2f | Alu::Bcsel);
+    let nodes = &f.nir.nodes[..f.nir.n];
+    f.colour.is_some()
+        && nodes.iter().any(|nd| matches!(nd.kind, Kind::Preload { .. }))
+        && nodes.iter().all(|nd| match nd.kind {
+            Kind::Preload { .. } => true,
+            Kind::Alu(op) => nd.bits == 32 && int(op),
+            _ => false,
+        })
 }
 
 /// The fragment program of a highp shader `f` ([`walk`], [`layout`]) into

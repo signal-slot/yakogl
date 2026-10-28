@@ -336,6 +336,15 @@ pub enum Kind {
     /// preloads in r59 ([`super::ra::POSITION_XY`]), a 16-bit vec2, x in
     /// lane 0 (the low half) and y in lane 1.
     PixelCoord,
+    /// A 32-bit word the hardware preloads in register `reg`
+    /// (`bi_preload`, `bi_preload_reg` compiler.h): gl_VertexID's r60 and
+    /// gl_InstanceID's r61 of an IDVS vertex shader (`load_vertex_id`,
+    /// `load_instance_id`, bifrost_compile.c:2039-2051: a `MOV.i32` of the
+    /// register, no base added on the malloc-IDVS flow), the primitive
+    /// flags' r58 that gl_FrontFacing compares (:2017-2029; nir_fs.rs).
+    Preload {
+        reg: u8,
+    },
     /// gl_FragCoord's z and w (`load_frag_coord_z`/`_w`, not lowered: a
     /// colour that reads one is refused, nir_fs.rs).
     FragCoordZw,
@@ -871,6 +880,10 @@ impl<'s> Nir<'s> {
                  * the start (the module text of `allowed`); a uniform's node
                  * is its lanes' FAU words, checked at their reads */
                 Kind::PixelCoord | Kind::Input { .. } | Kind::Uniform { .. } => {}
+                /* `load_front_face` and `load_instance_id` are allowed too
+                 * (:166, :182); `load_vertex_id` is not in the list */
+                Kind::Preload { reg } if reg != super::ra::VERTEX_ID => {}
+                Kind::Preload { .. } => return None,
                 Kind::Tex | Kind::UniformIdx { .. } | Kind::VsTex { .. } | Kind::FragCoordZw | Kind::Phi => {
                     return None
                 }
@@ -1153,10 +1166,11 @@ impl<'s> Nir<'s> {
         }
     }
 
-    /// Node `n` reads an attribute, itself or through its sources
-    /// (`nir_vertex_divergence_analysis`: the value is divergent).
+    /// Node `n` reads an attribute or the vertex or instance ID, itself or
+    /// through its sources (`nir_vertex_divergence_analysis`: the value is
+    /// divergent).
     fn reads_attribute(&self, n: u16) -> bool {
-        self.reads(n, |k| matches!(k, Kind::Input { .. }))
+        self.reads(n, |k| matches!(k, Kind::Input { .. } | Kind::Preload { .. }))
     }
 
     /// Node `n` reads a texture look-up, itself or through its sources: a
@@ -1247,6 +1261,7 @@ impl<'s> Nir<'s> {
                 (Kind::Input { loc: a, .. }, Kind::Input { loc: b, .. }) => a == b,
                 (Kind::Uniform { dword: a, .. }, Kind::Uniform { dword: b, .. }) => a == b,
                 (Kind::Sysval(a), Kind::Sysval(b)) => a == b,
+                (Kind::Preload { reg: a }, Kind::Preload { reg: b }) => a == b,
                 _ => false,
             };
             if hit {
@@ -1705,12 +1720,22 @@ pub fn build<'s>(
         let mut out = [Val::Undef; 4];
         match *op {
             IrOp::ConstF32(bits) => out = bits.map(Val::Const),
-            IrOp::ConstI32(_) | IrOp::ConstBool(_) => return Err(MaliError::IntValue),
+            /* a 32-bit integer constant is its bits (NIR's `load_const`
+             * has no type); vid.vert's `% 4` and `== k`, inst.vert's `== 3` */
+            IrOp::ConstI32(bits) => out = bits.map(|b| Val::Const(b as u32)),
+            IrOp::ConstBool(_) => return Err(MaliError::IntValue),
             IrOp::LoadInput { slot: IoSlot::Attrib(loc), comps } => {
                 let n = vs.load(Kind::Input { loc, comps })?;
                 for (c, o) in out.iter_mut().enumerate().take(comps as usize) {
                     *o = Val::Lane(n, c as u8);
                 }
+            }
+            /* gl_VertexID and gl_InstanceID: the preloaded r60 and r61
+             * (builtin_43, builtin_47.expect.json: `LSHIFT_AND.i32 r0, r60^,
+             * ..`, `ICMP_OR.u32.eq.m1 r4, r61^, ..`) */
+            IrOp::LoadInput { slot: slot @ (IoSlot::VertexId | IoSlot::InstanceId), .. } => {
+                let reg = if slot == IoSlot::VertexId { super::ra::VERTEX_ID } else { super::ra::INSTANCE_ID };
+                out[0] = Val::Lane(vs.load(Kind::Preload { reg })?, 0);
             }
             IrOp::LoadInput { .. } => return Err(MaliError::SpecialInput),
             IrOp::LoadUniform { dword_off, comps } => {
@@ -1805,6 +1830,57 @@ pub fn build<'s>(
                             acc
                         }
                         AluOp::Fdot2 | AluOp::Fdot3 | AluOp::Fdot4 => Val::Undef,
+                        /* `imod(a, 2^k)` is `iand(a, 2^k - 1)`
+                         * (nir_opt_algebraic.py's power-of-two rule;
+                         * builtin_43's `LSHIFT_AND.i32 r0, r60^, 0x0.b00,
+                         * u5.w1`, the 3 a FAU word) */
+                        AluOp::Imod => match x(1) {
+                            Val::Const(b) if (b as i32) > 0 && b.is_power_of_two() => {
+                                vs.alu(Alu::Iand, x(0), Val::Const(b - 1), Val::Undef)?
+                            }
+                            _ => return Err(MaliError::IntValue),
+                        },
+                        /* `ieq_pan`, a 0 / ~0 mask; `ior` of two masks is
+                         * the compares' `ICMP_OR` (opt.rs `fuse_cmp`) */
+                        AluOp::Ieq => vs.alu(Alu::Icmp(Cmpf::Eq), x(0), x(1), Val::Undef)?,
+                        AluOp::Ior => vs.alu(Alu::Ior, x(0), x(1), Val::Undef)?,
+                        /* `bcsel(a, b, b)` is `b` and `bcsel(a, 1.0, 0.0)`
+                         * is `b2f32(a)` (nir_opt_algebraic.py), the
+                         * `CSEL.u32.eq c, 0, 0, 1.0` of va_lower_isel */
+                        AluOp::Bcsel if x(1) == x(2) => x(1),
+                        AluOp::Bcsel if x(1) == Val::Const(F32_ONE) && x(2) == Val::Const(F32_ZERO) => {
+                            vs.alu(Alu::B2f, x(0), Val::Undef, Val::Undef)?
+                        }
+                        AluOp::Bcsel => vs.alu(Alu::Bcsel, x(0), x(1), x(2))?,
+                        /* the other integer operations and conversions
+                         * (intbool) */
+                        AluOp::Iadd
+                        | AluOp::Imul
+                        | AluOp::Idiv
+                        | AluOp::Ineg
+                        | AluOp::Ishl
+                        | AluOp::Ishr
+                        | AluOp::Iand
+                        | AluOp::Ixor
+                        | AluOp::Ilt
+                        | AluOp::Ile
+                        | AluOp::Ine
+                        | AluOp::B2i
+                        | AluOp::F2i
+                        | AluOp::I2f
+                        | AluOp::I2b
+                        | AluOp::Udiv
+                        | AluOp::Umod
+                        | AluOp::Ushr
+                        | AluOp::Ult
+                        | AluOp::Ule
+                        | AluOp::Imin
+                        | AluOp::Imax
+                        | AluOp::Umin
+                        | AluOp::Umax
+                        | AluOp::Inot
+                        | AluOp::U2f
+                        | AluOp::F2u => return Err(MaliError::IntValue),
                         _ => return Err(MaliError::Arithmetic),
                     };
                 }

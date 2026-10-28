@@ -809,6 +809,7 @@ fn finish_passes(
     opt::lower_mkvec_swz(p)?;
     opt::lower_isel(p)?;
     opt::fuse_add_imm(p);
+    opt::fuse_cmp(p);
     marks.note(Table::Constants, fau::lower_constants(p, fau_layout, true)?);
     if fragment {
         flow::analyze_helper_requirements(p);
@@ -1222,7 +1223,7 @@ fn compile_stage<'s>(
         }
         nir_fs::layout(&mut f, m, order)?;
         let mut p = prog(scratch)?;
-        let sel = if fs.highp {
+        let sel = if fs.highp || nir_fs::mask_colour(&f) {
             /* the fp32 uniform block; a uniform declared at the other
              * precision is Mesa's fp16 one (LowerPrecisionFloat16Uniforms) */
             let ubo = select::UboLayout::fs32(m, &f.nir)?;

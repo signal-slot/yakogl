@@ -21,6 +21,8 @@
 //! * [`lower_isel`] (`va_lower_isel`): an unswizzled `MUX` is a `CSEL`;
 //! * [`fuse_add_imm`] (`va_optimize`): an FADD with a constant and a plain
 //!   other source is `FADD_IMM`;
+//! * [`fuse_cmp`] (`va_optimize_forward`): the OR of two compares is one
+//!   compare with the other as its third source;
 //! * [`cse`] and [`dce`] again after the constant lowering (fau.rs).
 //!
 //! Which source takes which modifier is the Bifrost opcode table's
@@ -409,6 +411,73 @@ pub fn fuse_add_imm(p: &mut Prog<'_>) {
         }
         let op = if i.op == Op::FaddF32 { Op::FaddImmF32(imm) } else { Op::FaddImmV2f16(imm) };
         *i = Ins { flow: i.flow, slot: i.slot, ..Ins::new(op, i.dests(), &[other]) };
+    }
+}
+
+/// The compare family of a 32-bit compare and its result type
+/// (`va_cmp_opcode_to_cmp_type`, va_optimize.c:191-215): 0 float, 1
+/// signed, 2 unsigned.
+fn cmp_family(op: Op) -> Option<(u8, ResultType)> {
+    match op {
+        Op::FcmpOrF32 { result, .. } => Some((0, result)),
+        Op::IcmpOrS32 { result, .. } => Some((1, result)),
+        Op::IcmpOrU32 { result, .. } => Some((2, result)),
+        _ => None,
+    }
+}
+
+/// `va_fuse_cmp` (va_optimize.c:217-291, run to a fixed point by
+/// `va_optimize_forward`, :349-385) for the 32-bit OR: `LSHIFT_OR.i32 x, y,
+/// 0` of two compares of one family and result type is the compare `x`
+/// (when it has this use alone and a zero third source) with `y` as its
+/// third source, at the LSHIFT_OR's place; else `y` with `x`.
+/// builtin_43.expect.json's `i == 0 || i == 3`: `ICMP_OR.u32.eq.m1 r2, r0,
+/// 0x0, r1`. `LSHIFT_AND` would be the `_AND` compares, which no reference
+/// draws.
+pub fn fuse_cmp(p: &mut Prog<'_>) {
+    let def = |p: &Prog<'_>, s: &Src| -> Option<usize> {
+        let v = s.ssa_value()?;
+        p.ins[..p.n].iter().position(|i| i.dests().iter().any(|d| d.idx == Idx::Ssa(v, 0)))
+    };
+    let uses = |p: &Prog<'_>, j: usize| -> usize {
+        let Idx::Ssa(v, _) = p.ins[j].dest[0].idx else { return usize::MAX };
+        p.ins[..p.n].iter().map(|i| i.srcs().iter().filter(|s| s.ssa_value() == Some(v)).count()).sum()
+    };
+    let mut progress = true;
+    while progress {
+        progress = false;
+        for k in 0..p.n {
+            let i = p.ins[k];
+            if i.op != Op::LshiftOrI32 || i.ns != 3 || !is_const(&i.src[2], 0) {
+                continue;
+            }
+            if i.src[..2].iter().any(|s| s.ssa_value().is_none() || s.swz != Swz::H01) {
+                continue;
+            }
+            let (Some(a), Some(b)) = (def(p, &i.src[0]), def(p, &i.src[1])) else { continue };
+            if a == b {
+                continue;
+            }
+            let (Some(fa), Some(fb)) = (cmp_family(p.ins[a].op), cmp_family(p.ins[b].op)) else { continue };
+            if fa != fb {
+                continue;
+            }
+            let fusable = |p: &Prog<'_>, j: usize| uses(p, j) == 1 && is_const(&p.ins[j].src[2], 0);
+            let (old, other) = if fusable(p, a) {
+                (a, i.src[1])
+            } else if fusable(p, b) {
+                (b, i.src[0])
+            } else {
+                continue;
+            };
+            let o = p.ins[old];
+            let srcs = [o.src[0], o.src[1], Src { swz: Swz::H01, ..other }];
+            p.ins[k] = Ins { flow: i.flow, slot: i.slot, ..Ins::new(o.op, i.dests(), &srcs) };
+            p.ins[k].block = i.block;
+            p.remove(old);
+            progress = true;
+            break;
+        }
     }
 }
 
