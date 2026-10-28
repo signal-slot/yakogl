@@ -402,6 +402,14 @@
  *               picture at case 177's four points. Logs the ms a frame, the
  *               depth map's Mpx/s and (PowerVR) the GPU's busy time a frame.
  *               Not in the regression set (a measurement); SKIP as case 177
+ * 216 mipchains glmark2 terrain's mipmapped passes a frame, timed (#42):
+ *               800x600, 256x256 and 800x600 RGBA8 targets, each pass
+ *               followed by glGenerateMipmap of its texture (four chains,
+ *               35 levels a frame), 20 frames, glFinish each; the window's
+ *               four quadrant centres. Logs the ms a frame, the Mpx/s and
+ *               (PowerVR) the GPU's busy time a frame. Not in the
+ *               regression set (a measurement); SKIP on ES 2.0 without
+ *               GL_OES_texture_npot
  * 180 teardown  a 1024x1024 texture sampled, the job flushed and left to
  *               finish unobserved, the texture deleted and one of the same
  *               size made: both read back (red, then green); on the V3D
@@ -8485,7 +8493,7 @@ static const char *const case_names[] = {
 	 * `gl_test: case 65 polyunit: FAIL`, a line the program could not emit.
 	 * A reader grepping for it would have found nothing and concluded the
 	 * case had not run. 63 was still missing when 65/66/67 were added. */
-	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain", [185] = "kindcost", [186] = "fcsplit", [187] = "predarm", [188] = "predif", [189] = "mulone", [190] = "blendonce", [191] = "varyfma", [192] = "predlive", [193] = "offarm", [194] = "offarmn", [195] = "ifbranch", [196] = "occl", [197] = "vtxgrid", [198] = "a2cconst", [199] = "es3trunc", [200] = "intrt", [201] = "usamp", [202] = "blitconv", [203] = "tfcap", [204] = "srgb", [205] = "mappbo", [206] = "es3levels", [207] = "msaazs", [208] = "msaapre", [209] = "varyorder", [210] = "occlacc", [211] = "msaablend", [212] = "ifsel", [213] = "discloop", [214] = "splitkick", [215] = "shadowmap",
+	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain", [185] = "kindcost", [186] = "fcsplit", [187] = "predarm", [188] = "predif", [189] = "mulone", [190] = "blendonce", [191] = "varyfma", [192] = "predlive", [193] = "offarm", [194] = "offarmn", [195] = "ifbranch", [196] = "occl", [197] = "vtxgrid", [198] = "a2cconst", [199] = "es3trunc", [200] = "intrt", [201] = "usamp", [202] = "blitconv", [203] = "tfcap", [204] = "srgb", [205] = "mappbo", [206] = "es3levels", [207] = "msaazs", [208] = "msaapre", [209] = "varyorder", [210] = "occlacc", [211] = "msaablend", [212] = "ifsel", [213] = "discloop", [214] = "splitkick", [215] = "shadowmap", [216] = "mipchains",
 };
 
 /* ---- case 67: what a framebuffer object does NOT have -----------------------
@@ -19850,6 +19858,185 @@ static int case_mappbo(void)
 	return ok ? 0 : -1;
 }
 
+/* ---- case 216: glmark2 terrain's mipmapped passes, timed (mipchains) -------
+ *
+ * The reproducer of glmark2 terrain's 91 ms a frame on the AM62P (#42): the
+ * scene's render-to-texture passes, each followed by glGenerateMipmap on the
+ * texture it rendered (scene-terrain/base-renderer.cpp update_mipmap), on
+ * textures of the scene's sizes. Three RGBA8 textures with
+ * LINEAR_MIPMAP_LINEAR, each alone in an FBO: A and C 800x600 (the terrain
+ * and tilt-shift targets, NPOT, 10 levels), B 256x256 (the bloom target, 9
+ * levels). MIPCHAINS_FRAMES frames, each: a 64x64 source of four coloured
+ * quadrants drawn into A, A's chain; A minified into B, B's chain; B
+ * magnified back into A, A's chain (the bloom overlay); A into C, C's
+ * chain; C minified over the window; glFinish (the swap's wait for the
+ * frame). Four chains a frame, 35 levels above 0: on the PowerVR each level
+ * is a kick of its own (src/pvr/backend.rs mip_chain_gpu), as in terrain,
+ * and the levels of one chain are kicks of one target size.
+ *
+ * The figure, log only: "gl_test: mipchains: <n> frames, <ms> ms a frame
+ * (<Mpx> Mpx a frame, <Mpx/s> Mpx/s)", the whole frame's wall time and the
+ * pixels the frame renders (the five passes and the 35 levels) a second
+ * through it; on the PowerVR also the GPU's busy time a frame, as case 215,
+ * so the CPU's and the waits' share is the frame less the GPU's. Checks: 1
+ * the program linked, 2 the three framebuffers complete, 3 no GL error
+ * after the frames, 4..7 the window's four quadrant centres: every pass
+ * keeps a quadrant's centre one colour, so it is the source's colour
+ * whichever levels the samplers blend. SKIP on an ES 2.0 library without
+ * GL_OES_texture_npot (the 800x600 chains).
+ * ------------------------------------------------------------------------- */
+#define MIPCHAINS_FRAMES 20
+
+/* `src` over the whole of `fbo` (w x h) after a clear, then `dst`'s chain. */
+static void mipchains_pass(GLuint prog, GLuint fbo, GLsizei w, GLsizei h, GLuint src, GLuint dst)
+{
+	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+	glViewport(0, 0, w, h);
+	glClear(GL_COLOR_BUFFER_BIT);
+	dst_sample(prog, src);
+	glBindTexture(GL_TEXTURE_2D, dst);
+	glGenerateMipmap(GL_TEXTURE_2D);
+}
+
+static int case_mipchains(void)
+{
+	/* the source's quadrants, bottom-up rows: [top half][right half] */
+	static const uint32_t quad[2][2] = { { 0xff0000ffu, 0xff00ff00u }, { 0xffff0000u, 0xffffffffu } };
+	static const GLsizei size[3][2] = { { 800, 600 }, { 256, 256 }, { 800, 600 } };
+	static uint32_t src_px[64 * 64];
+	const char *ver = (const char *)glGetString(GL_VERSION);
+	const char *ext = (const char *)glGetString(GL_EXTENSIONS);
+	const bool es2 = !ver || strncmp(ver, "OpenGL ES 2.", 12) == 0;
+	GLuint prog, src = 0, tex[3] = { 0, 0, 0 }, fbo[3] = { 0, 0, 0 };
+	GLenum status[3] = { 0, 0, 0 };
+	uint32_t t0 = 0, t1 = 0, pc0[7], pc1[7], complete = 0;
+	uint64_t px_frame = (uint64_t)TW * TH;
+	bool ok = true;
+
+	if (es2 && (!ext || !strstr(ext, "GL_OES_texture_npot"))) {
+		pr_info("gl_test: case 216 mipchains: SKIP (an ES 2.0 library without GL_OES_texture_npot)\n");
+		return -3;
+	}
+	free_all_objects();
+	while (glGetError() != GL_NO_ERROR)
+		;
+	prog = link_program(gl_test_uv_vs_src, gl_test_texture_fs_src);
+	/* check 1 */
+	if (!expect_u32("mipchains: program linked", prog ? 1u : 0u, 1u))
+		return -1;
+	glDisable(GL_DEPTH_TEST);
+	glDisable(GL_STENCIL_TEST);
+	glDisable(GL_CULL_FACE);
+	glDisable(GL_BLEND);
+	glClearColor(0, 0, 0, 1);
+
+	/* the source: 64x64, four 32x32 quadrants, NEAREST, one level */
+	for (uint32_t y = 0; y < 64; y++)
+		for (uint32_t x = 0; x < 64; x++)
+			src_px[y * 64 + x] = quad[y >= 32][x >= 32];
+	glGenTextures(1, &src);
+	glBindTexture(GL_TEXTURE_2D, src);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 64, 64, 0, GL_RGBA, GL_UNSIGNED_BYTE, src_px);
+
+	/* A, B, C as the scene makes its targets (BaseRenderer::create_texture,
+	 * create_fbo without depth, setup_texture's update_mipmap) */
+	for (int i = 0; i < 3; i++) {
+		GLsizei w = size[i][0], h = size[i][1];
+
+		glGenTextures(1, &tex[i]);
+		glBindTexture(GL_TEXTURE_2D, tex[i]);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glGenerateMipmap(GL_TEXTURE_2D);
+		glGenFramebuffers(1, &fbo[i]);
+		glBindFramebuffer(GL_FRAMEBUFFER, fbo[i]);
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex[i], 0);
+		status[i] = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+		complete |= (status[i] == GL_FRAMEBUFFER_COMPLETE ? 1u : 0u) << i;
+		/* the pixels a frame renders into this texture: each pass and its
+		 * chain's levels, A twice */
+		for (;;) {
+			px_frame += (uint64_t)w * (uint64_t)h * (i == 0 ? 2u : 1u);
+			if (w == 1 && h == 1)
+				break;
+			w = w > 1 ? w / 2 : 1;
+			h = h > 1 ? h / 2 : 1;
+		}
+	}
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	/* check 2: got = which framebuffers are complete (bit i: A, B, C) */
+	if (!expect_u32("mipchains: framebuffers complete", complete, 7u)) {
+		pr_info("gl_test:   mipchains: status 0x%04x 0x%04x 0x%04x\n", status[0], status[1], status[2]);
+		ok = false;
+		goto out;
+	}
+
+	/* the frames: terrain, bloom, overlay, tilt-shift, the window */
+	gl_test_perf_read(pc0);
+	t0 = now_ms();
+	for (int f = 0; f < MIPCHAINS_FRAMES; f++) {
+		mipchains_pass(prog, fbo[0], size[0][0], size[0][1], src, tex[0]);
+		mipchains_pass(prog, fbo[1], size[1][0], size[1][1], tex[0], tex[1]);
+		mipchains_pass(prog, fbo[0], size[0][0], size[0][1], tex[1], tex[0]);
+		mipchains_pass(prog, fbo[2], size[2][0], size[2][1], tex[0], tex[2]);
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		glViewport(0, 0, TW, TH);
+		glClear(GL_COLOR_BUFFER_BIT);
+		dst_sample(prog, tex[2]);
+		glFinish();
+	}
+	t1 = now_ms();
+	gl_test_perf_read(pc1);
+	/* check 3 */
+	ok &= expect_u32("mipchains: error after the frames", glGetError(), GL_NO_ERROR);
+	{
+		const uint32_t ms = t1 - t0;
+		/* hundredths of a ms a frame; the frame's kilopixels a second */
+		const uint32_t ms100 = ms * 100u / MIPCHAINS_FRAMES;
+		const uint64_t kpx_s = ms ? px_frame * MIPCHAINS_FRAMES / ms : 0u;
+
+		pr_info("gl_test: mipchains: %d frames, %u.%02u ms a frame (%u.%02u Mpx a frame, %u.%u Mpx/s)\n",
+			MIPCHAINS_FRAMES, ms100 / 100u, ms100 % 100u, (unsigned)(px_frame / 1000000u),
+			(unsigned)(px_frame % 1000000u / 10000u), (unsigned)(kpx_s / 1000u),
+			(unsigned)(kpx_s % 1000u / 100u));
+		/* GPU-side attribution per frame, as case 215 prints it */
+		pr_info("gl_test:   per frame: TA busy %u us, 3D busy %u us, TA|3D %u us, wall %u us\n",
+			(pc1[0] - pc0[0]) / 800u / MIPCHAINS_FRAMES, (pc1[1] - pc0[1]) / 800u / MIPCHAINS_FRAMES,
+			(pc1[2] - pc0[2]) / 800u / MIPCHAINS_FRAMES,
+			(uint32_t)(((uint64_t)(pc1[6] - pc0[6]) * 256u) / 800u / MIPCHAINS_FRAMES));
+	}
+
+	/* the last frame's picture: the quadrant centres (checks 4..7); a
+	 * top-down y under TH / 2 is the source's top half */
+	read_topdown();
+	for (int qy = 0; qy < 2; qy++) {
+		for (int qx = 0; qx < 2; qx++) {
+			const uint32_t x = qx ? TW * 3u / 4u : TW / 4u, y = qy ? TH * 3u / 4u : TH / 4u;
+			char what[48];
+
+			snprintf(what, sizeof(what), "mipchains: %s %s", qy ? "bottom" : "top", qx ? "right" : "left");
+			ok &= expect_px(what, x, y, quad[!qy][qx], 2);
+		}
+	}
+out:
+	glViewport(0, 0, TW, TH);
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glBindTexture(GL_TEXTURE_2D, 0);
+	glDeleteFramebuffers(3, fbo);
+	glDeleteTextures(3, tex);
+	glDeleteTextures(1, &src);
+	glUseProgram(0);
+	glDeleteProgram(prog);
+	return ok ? 0 : -1;
+}
+
 /* ---- case 215: glmark2 shadow's two passes, timed (shadowmap) ----------------
  *
  * The reproducer of glmark2 shadow's 353 ms a frame on the AM62P (#40): the
@@ -22566,6 +22753,11 @@ static int run_case(int c, int pretransform, int debug, int *ended)
 		rc = case_shadowmap();
 		if (rc == -3)
 			return -3; /* skipped by name: as case 177 */
+		break;
+	case 216:
+		rc = case_mipchains();
+		if (rc == -3)
+			return -3; /* skipped by name: an ES 2.0 library without NPOT chains */
 		break;
 	case 179:
 		rc = case_retile();

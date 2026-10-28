@@ -70,8 +70,19 @@ const TAIL_POINTER_SZ: u32 = 8;
 /// The VHeap table's VA slot (value from DDK capture).
 const VHEAP_BYTES: u32 = 0x2000;
 const MLIST_BYTES: u32 = 0x1000;
-/// Render-target datasets: two per target size, sixteen sizes.
+/// Render-target datasets, each kept for one target size ([`hwrt_get`]).
 pub const HWRT_SETS: usize = 32;
+/// The most datasets one target size takes: as many renders of one size as
+/// can be in flight at once. The GL back end records at most its frame sets
+/// ahead of the GPU (src/pvr/backend.rs `PVR_BACKEND_FRAME_SETS`, 4), so a
+/// size with four members never waits for one of its own renders before the
+/// back end's frame-set reuse would wait anyway. With two (the pair this
+/// replaced) a run of kicks of one size -- the levels of a mipmap chain
+/// (`mip_chain_gpu`: glmark2 terrain asks for four chains of 8 and 9 levels
+/// a frame) -- waited at every kick from the third for the one two before
+/// it, a wait that ends on a whole millisecond without `pvr-fine-wait`
+/// (#42).
+pub const HWRT_MEMBERS: usize = 4;
 /// The FW trace tail a failed frame dumps (a serial console cannot take more).
 const TRACE_DUMP_DWORDS: u32 = 240;
 /// RGXFWIF_CMDTA flags (value from DDK capture).
@@ -619,9 +630,13 @@ fn kccb_cleanup(k: &mut YdPvrKm, ty: u32, fwaddr: u32, answer: &mut u32) -> i32 
 
 /// The dataset for a `w` x `h` target with `samples` samples (Mesa
 /// pvr_arch_rt_mtile_info_init and friends, specialised to this core), built
-/// or reused; `None` when none can be handed out. Two per size, used
+/// or reused; `None` when none can be handed out. Built in pairs, used
 /// alternately (the DDK's RGXFWIF_NUM_RTDATAS): the firmware runs kick N+1's
-/// geometry while kick N's fragment phase still reads its region headers.
+/// geometry while kick N's fragment phase still reads its region headers. A
+/// size whose members are all in flight takes a second pair while a pair is
+/// free, up to [`HWRT_MEMBERS`], rather than wait (Mesa's pvr has a dataset
+/// per framebuffer, so several of one size are the firmware's ordinary
+/// case); only then does a render wait for a member of its size.
 pub fn hwrt_get(k: &mut YdPvrKm, r: &mut YdPvrRender, w: u32, h: u32, samples: u32) -> Option<usize> {
     // samples spread over x/y (Mesa pvr_get_samples_in_xy): the region
     // headers and tail pointers cover tiles of samples, not pixels
@@ -629,6 +644,11 @@ pub fn hwrt_get(k: &mut YdPvrKm, r: &mut YdPvrRender, w: u32, h: u32, samples: u
     let sy = if samples >= 2 { 2 } else { 1 };
     let samples = if samples == 0 { 1 } else { samples };
     let mut hs: Option<usize> = None;
+    // The size's pair whose next member's last kick is the oldest, while
+    // every member seen is in flight: (pair, member, its last kick).
+    let mut busy: Option<(usize, usize, u32)> = None;
+    let mut pairs = 0usize;
+    let mut second = false;
 
     let mut i = 0;
     while i + 1 < HWRT_SETS {
@@ -636,42 +656,56 @@ pub fn hwrt_get(k: &mut YdPvrKm, r: &mut YdPvrRender, w: u32, h: u32, samples: u
         if p.used != 0 && p.w == w && p.h == h && p.samples == samples {
             if r.hwrt[i + 1].used == 0 {
                 hs = Some(i + 1); // second member still to build
+                second = true;
                 break;
             }
             // The pair alternates per render OF THIS SIZE: a frame that
             // interleaves sizes advances the global sequence by more than one
-            // between two renders of the same size. Two renders of one size
-            // may be in flight, no more: wait for the member's last kick
-            // before handing it out again.
+            // between two renders of the same size. A member is handed out
+            // again once its last kick has completed.
+            pairs += 1;
             let pick = i + (r.hwrt[i].next & 1) as usize;
-            r.hwrt[i].next ^= 1;
             let last = r.hwrt[pick].last_seq;
-            if last != 0 && completed(k, r) < last {
-                let wrc = wait_for(k, r, last, 20000, "HWRT member in flight");
-                if wrc != 0 {
-                    r.hwrt_busy_reuse += 1;
-                    km_log!(
-                        k,
-                        Err,
-                        "render: {}x{} set {} still busy at seq {} ({}){}",
-                        w,
-                        h,
-                        pick,
-                        last,
-                        wrc,
-                        if r.cfg.hwrt_refuse != 0 { ": refusing to reuse it" } else { ": handing it out anyway" }
-                    );
-                    if r.cfg.hwrt_refuse != 0 {
-                        return None;
-                    }
+            if last == 0 || completed(k, r) >= last {
+                r.hwrt[i].next ^= 1;
+                return Some(pick);
+            }
+            if busy.is_none_or(|(_, _, l)| last < l) {
+                busy = Some((i, pick, last));
+            }
+        } else if hs.is_none() && p.used == 0 {
+            hs = Some(i);
+        }
+        i += 2;
+    }
+    // Every member of the size seen is in flight. Another pair while one is
+    // free and the size stays within HWRT_MEMBERS (built below: the new
+    // pair's first member); else wait for the oldest member's last kick
+    // before handing it out again. A pair whose second member is still to
+    // build is built instead.
+    if let (false, Some((pair, pick, last))) = (second, busy) {
+        if hs.is_none() || 2 * (pairs + 1) > HWRT_MEMBERS {
+            r.hwrt[pair].next ^= 1;
+            let wrc = wait_for(k, r, last, 20000, "HWRT member in flight");
+            if wrc != 0 {
+                r.hwrt_busy_reuse += 1;
+                km_log!(
+                    k,
+                    Err,
+                    "render: {}x{} set {} still busy at seq {} ({}){}",
+                    w,
+                    h,
+                    pick,
+                    last,
+                    wrc,
+                    if r.cfg.hwrt_refuse != 0 { ": refusing to reuse it" } else { ": handing it out anyway" }
+                );
+                if r.cfg.hwrt_refuse != 0 {
+                    return None;
                 }
             }
             return Some(pick);
         }
-        if hs.is_none() && p.used == 0 {
-            hs = Some(i);
-        }
-        i += 2;
     }
     let hs = match hs {
         Some(x) => x,
@@ -3583,6 +3617,16 @@ mod submit_tests {
     const RTA0P: u32 = 0x3410;
     const RTA1V: u32 = 0x3500;
     const RTA1P: u32 = 0x3510;
+    // A second pair of the same kind, for a size that takes two
+    // (`a_size_with_every_member_in_flight_takes_a_second_pair`).
+    const HC2: u32 = 0x3600;
+    const HRT2: u32 = 0x3680;
+    const HC3: u32 = 0x3780;
+    const HRT3: u32 = 0x3800;
+    const RTA2V: u32 = 0x3a00;
+    const RTA2P: u32 = 0x3a10;
+    const RTA3V: u32 = 0x3b00;
+    const RTA3P: u32 = 0x3b10;
     const GCCCB: u32 = 0x8000;
     const FCCCB: u32 = 0x10000;
     const CARVEOUT_BYTES: usize = 0x40000;
@@ -3656,13 +3700,19 @@ mod submit_tests {
         r.gufo_off = GUFO;
         r.fufo_off = FUFO;
         r.mc_sync_off = MC_SYNC;
-        // Both members start free but built: buffers "allocated" (the rig
-        // only needs non-null block handles), HWRT data and RTA arrays at
-        // the seeded offsets, nobody in flight (last_seq 0). Kick 1 then
+        // Two pairs, every member free but built: buffers "allocated" (the
+        // rig only needs non-null block handles), HWRT data and RTA arrays
+        // at the seeded offsets, nobody in flight (last_seq 0). Kick 1 then
         // builds member 0, kick 2 the pair's second member: every handout
         // walks the build path, which rewrites the HWRT data words at the
-        // seeded offsets without allocating.
-        for (m, (hc, hrt, rtav, rtap)) in [(0usize, (HC0, HRT0, RTA0V, RTA0P)), (1, (HC1, HRT1, RTA1V, RTA1P))] {
+        // seeded offsets without allocating. The second pair is taken only
+        // by a size whose first pair is all in flight.
+        for (m, (hc, hrt, rtav, rtap)) in [
+            (0usize, (HC0, HRT0, RTA0V, RTA0P)),
+            (1, (HC1, HRT1, RTA1V, RTA1P)),
+            (2, (HC2, HRT2, RTA2V, RTA2P)),
+            (3, (HC3, HRT3, RTA3V, RTA3P)),
+        ] {
             let s = &mut r.hwrt[m];
             (s.used, s.w, s.h, s.samples, s.fw_built) = (0, 0, 0, 0, 1);
             (s.hcmn_off, s.hrt_off) = (hc, hrt);
@@ -3808,6 +3858,35 @@ mod submit_tests {
         // geometry slot, 3D, UPDATE on the fragment UFO.
         assert_eq!(Rig::ufo(&f[9].2), (gufo_base + geom_ufo_slot(2) * 4, 2));
         assert_eq!(Rig::ufo(&f[11].2), (t.k.heap_fwaddr(FUFO), 2));
+    }
+
+    /// Kicks of one size that have not completed (#42: the levels of a
+    /// mipmap chain, one kick each at the chain's one target size). Kicks 1
+    /// and 2 build the pair; kick 3 finds both members in flight and takes a
+    /// second pair instead of waiting for kick 1, kick 4 builds that pair's
+    /// second member; once kick 1 has completed, kick 5 takes its member
+    /// again. No wait, nothing handed out busy. With the pair alone (before
+    /// HWRT_MEMBERS) kick 3 waited for kick 1, and kick 4 for kick 2.
+    #[test]
+    fn a_size_with_every_member_in_flight_takes_a_second_pair() {
+        let mut t = rig(0);
+        let mut f = [0u32; 5];
+        for (n, fence) in f.iter_mut().enumerate().take(4) {
+            assert_eq!(submit(&mut t.k, &mut t.r, &kick(n as u32 + 1), fence), 0, "log:\n{}", t.log());
+        }
+        // the fragment UFO: kick 1 done, kicks 2..4 still in flight
+        // SAFETY: the UFO word of the rig's carveout, written as the GPU
+        // writes it.
+        unsafe { (t.k.cpu.wrapping_add(FUFO as usize) as *mut u32).write_volatile(1) };
+        assert_eq!(submit(&mut t.k, &mut t.r, &kick(5), &mut f[4]), 0, "log:\n{}", t.log());
+        assert_eq!(f, [1, 2, 3, 4, 5]);
+        let g = t.cmds(GCCCB, t.r.gwo);
+        let members: Vec<u32> = (0..5).map(|n| g[2 * n].2[1]).collect();
+        let fa = |o: u32| t.k.heap_fwaddr(o);
+        assert_eq!(members, [fa(HRT0), fa(HRT1), fa(HRT2), fa(HRT3), fa(HRT0)], "log:\n{}", t.log());
+        assert_eq!(t.r.hwrt_busy_reuse, 0);
+        assert!(!t.log().contains("still busy"), "log:\n{}", t.log());
+        assert_eq!((t.r.hwrt[0].last_seq, t.r.hwrt[2].last_seq, t.r.hwrt[3].last_seq), (5, 3, 4));
     }
 
     /// Without the knob: the commands are the ones every board record holds
