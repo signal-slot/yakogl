@@ -206,8 +206,7 @@ fn discard_before(p: &Prog<'_>, pass: &[bool; MAX_BLOCKS], b: u8) -> bool {
 
 /// `va_insert_flow_control_nops` (va_insert_flow.c:387-506) on a program
 /// that is not empty: the scoreboard's forward dataflow over the blocks
-/// (`va_assign_scoreboard`, :280-302, one pass in layout order, which is
-/// topological without loops), then per block the discard at its start,
+/// (`va_assign_scoreboard`, :280-302), then per block the discard at its start,
 /// the waits before and after the instructions that need them, the
 /// discard after the last helper use, and `.end` or `.reconverge` at its
 /// end.
@@ -215,64 +214,107 @@ pub fn insert_flow_control_nops(p: &mut Prog<'_>, fragment: bool) -> Result<(), 
     if p.n == 0 {
         return Ok(());
     }
-    /* va_assign_scoreboard: scoreboard_block_update (:219-278) */
+    /* va_assign_scoreboard: scoreboard_block_update (:219-278) to a fixed
+     * point (the worklist, :281-302: a loop's header is entered again from
+     * its latch), then once more with the waits written in */
     let mut sb_out = [Scoreboard::default(); MAX_BLOCKS];
+    loop {
+        let mut changed = false;
+        for b in 0..p.nblocks {
+            if p.blocks[b as usize].dead {
+                continue;
+            }
+            let st = scoreboard_block(p, b, &sb_out, false)?;
+            if st != sb_out[b as usize] {
+                sb_out[b as usize] = st;
+                changed = true;
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+    let fixed = sb_out;
     for b in 0..p.nblocks {
-        if p.blocks[b as usize].dead {
-            continue;
+        if !p.blocks[b as usize].dead {
+            scoreboard_block(p, b, &fixed, true)?;
         }
-        let mut st = Scoreboard::default();
-        for &pr in p.blocks[b as usize].preds() {
-            st.union(&sb_out[pr as usize]);
-        }
-        for k in p.block_start(b)..p.block_end(b) {
-            let i = p.ins[k];
-            let mut f = 0u8;
-            let regs = read_mask(&i) | write_mask(&i);
-            for slot in 0..SLOTS {
-                if st.write[slot] & regs != 0 {
-                    f |= st.pop(slot);
-                }
-            }
-            /* LD_VAR_BUF_IMM with .store writes the hidden register */
-            if props(i.op).msg == Msg::Varying {
-                for slot in 0..SLOTS {
-                    if st.varying & (1 << slot) != 0 {
-                        f |= st.pop(slot);
-                    }
-                }
-            }
-            if is_memory_access(&i) {
-                for slot in 0..SLOTS {
-                    if st.memory & (1 << slot) != 0 {
-                        f |= st.pop(slot);
-                    }
-                }
-            }
-            p.ins[k].flow |= f;
-            /* bi_push_instr */
-            if props(i.op).sr_write {
-                st.write[i.slot as usize] |= write_mask(&i);
-            }
-            if is_memory_access(&i) {
-                st.memory |= 1 << i.slot;
-            }
-            if props(i.op).msg == Msg::Varying {
-                st.varying |= 1 << i.slot;
+    }
+    let pass = if fragment { helper_terminate(p) } else { [false; MAX_BLOCKS] };
+    insert_nops(p, fragment, &pass)
+}
+
+/// `scoreboard_block_update` (va_insert_flow.c:219-278) of block `b` from
+/// its predecessors' states `sb_out`: the state at its end. With `write`,
+/// the waits are or-ed into the instructions' flow and a varying still
+/// pending at the block's end is waited on by a `NOP` there.
+fn scoreboard_block(
+    p: &mut Prog<'_>,
+    b: u8,
+    sb_out: &[Scoreboard; MAX_BLOCKS],
+    write: bool,
+) -> Result<Scoreboard, MaliError> {
+    let mut st = Scoreboard::default();
+    for &pr in p.blocks[b as usize].preds() {
+        st.union(&sb_out[pr as usize]);
+    }
+    for k in p.block_start(b)..p.block_end(b) {
+        let i = p.ins[k];
+        let mut f = 0u8;
+        let regs = read_mask(&i) | write_mask(&i);
+        for slot in 0..SLOTS {
+            if st.write[slot] & regs != 0 {
+                f |= st.pop(slot);
             }
         }
-        if st.varying != 0 {
-            let mut f = 0u8;
+        /* LD_VAR_BUF_IMM with .store writes the hidden register */
+        if props(i.op).msg == Msg::Varying {
             for slot in 0..SLOTS {
                 if st.varying & (1 << slot) != 0 {
                     f |= st.pop(slot);
                 }
             }
+        }
+        if is_memory_access(&i) {
+            for slot in 0..SLOTS {
+                if st.memory & (1 << slot) != 0 {
+                    f |= st.pop(slot);
+                }
+            }
+        }
+        if write {
+            p.ins[k].flow |= f;
+        }
+        /* bi_push_instr */
+        if props(i.op).sr_write {
+            st.write[i.slot as usize] |= write_mask(&i);
+        }
+        if is_memory_access(&i) {
+            st.memory |= 1 << i.slot;
+        }
+        if props(i.op).msg == Msg::Varying {
+            st.varying |= 1 << i.slot;
+        }
+    }
+    if st.varying != 0 {
+        let mut f = 0u8;
+        for slot in 0..SLOTS {
+            if st.varying & (1 << slot) != 0 {
+                f |= st.pop(slot);
+            }
+        }
+        if write {
             p.insert_end(b, Ins::nop(f))?;
         }
-        sb_out[b as usize] = st;
     }
-    let pass = if fragment { helper_terminate(p) } else { [false; MAX_BLOCKS] };
+    Ok(st)
+}
+
+/// The rest of `va_insert_flow_control_nops` (:387-506) once the waits are
+/// in: per block the discards, the per-instruction `NOP`s, the end or
+/// reconvergence.
+fn insert_nops(p: &mut Prog<'_>, fragment: bool, pass: &[bool; MAX_BLOCKS]) -> Result<(), MaliError> {
+    let pass = *pass;
     for b in 0..p.nblocks {
         if p.blocks[b as usize].dead {
             continue;
@@ -502,21 +544,29 @@ pub fn mark_last(p: &mut Prog<'_>) {
     let (_, reg_out) = postra_liveness(p);
     let mut read_out = [[0u64; SLOTS]; MAX_BLOCKS];
     let mut read_in = [[0u64; SLOTS]; MAX_BLOCKS];
-    for b in 0..p.nblocks {
-        if p.blocks[b as usize].dead {
-            continue;
-        }
-        let mut st = [0u64; SLOTS];
-        for &pr in p.blocks[b as usize].preds() {
-            for s in 0..SLOTS {
-                st[s] |= read_out[pr as usize][s];
+    /* to a fixed point: a loop's header is entered from its latch too */
+    loop {
+        let mut changed = false;
+        for b in 0..p.nblocks {
+            if p.blocks[b as usize].dead {
+                continue;
             }
+            let mut st = [0u64; SLOTS];
+            for &pr in p.blocks[b as usize].preds() {
+                for s in 0..SLOTS {
+                    st[s] |= read_out[pr as usize][s];
+                }
+            }
+            read_in[b as usize] = st;
+            for k in p.block_start(b)..p.block_end(b) {
+                reads_update(&mut st, &p.ins[k]);
+            }
+            changed |= read_out[b as usize] != st;
+            read_out[b as usize] = st;
         }
-        read_in[b as usize] = st;
-        for k in p.block_start(b)..p.block_end(b) {
-            reads_update(&mut st, &p.ins[k]);
+        if !changed {
+            break;
         }
-        read_out[b as usize] = st;
     }
     for b in 0..p.nblocks {
         if p.blocks[b as usize].dead {

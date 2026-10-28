@@ -33,19 +33,24 @@
 /// The instructions one program may hold: selection, the constant moves and
 /// the flow NOPs all count. A program that needs more is refused
 /// ([`super::MaliError::InstrTableFull`]), never truncated. The largest
-/// measured, case 194's offarm256, holds 329 (Mesa's 312 and the moves).
-pub const MAX_INSTRS: usize = 384;
+/// measured, femtovg's filter_image (24 unrolled passes of two look-ups,
+/// Mesa's 949 words), holds 1419; case 194's offarm256 329.
+pub const MAX_INSTRS: usize = 1536;
 /// The most SSA values a program may define (the RA's node count);
-/// offarm256 defines 330.
-pub const MAX_NODES: usize = 384;
+/// filter_image defines 946 by selection and more than 1280 by the end
+/// (the RA's copies), offarm256 330.
+pub const MAX_NODES: usize = 1536;
 /// Sources of one instruction (BLEND has five: colour, coverage, the blend
 /// descriptor's two words, the dual-source colour).
 pub const MAX_SRCS: usize = 5;
 /// Destinations of one instruction (a SPLIT of a vec4).
 pub const MAX_DESTS: usize = 4;
 /// The blocks one program may hold: the entry block and three per `if`
-/// (then, else, after; `emit_if`), nested or not.
-pub const MAX_BLOCKS: usize = 32;
+/// (then, else, after; `emit_if`), nested or not, and four per loop Mesa
+/// keeps (`emit_loop`). filter_image's walk makes 82 (its 24 guards and
+/// the `if`s it flattens). At most 128: `bi_opt_control_flow`'s set of
+/// seen blocks is a `u128` (opt.rs).
+pub const MAX_BLOCKS: usize = 128;
 /// The predecessors one block may have (an `if`'s join has two; no loop).
 pub const MAX_PREDS: usize = 4;
 
