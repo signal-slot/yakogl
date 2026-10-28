@@ -1264,26 +1264,38 @@ fn the_rendered_depth_texture_is_the_board_s() {
  * on the drm-shim (tools/mali/drm_shim_ref.sh, the commands in
  * docs/notes/mali-texture-lookups.md): pandecode's decoded descriptors of
  * the fragment resource table, packed again with our packer, against the
- * tables this frame builds for the same textures. */
+ * tables this frame builds for the same textures. The `_dump` and
+ * tex2darray_* traces were made with PAN_MESA_DEBUG=trace,dump (the run
+ * form of drm_shim_ref.sh with `dump` added), so they also hold the
+ * memory: there the descriptors' words themselves are compared with the
+ * decoded fields packed again. */
 
-/// texmore_2: two sampler2D at units 0 and 1, each a 2x2 RGBA8 (gl_test
-/// case 2's look-ups).
-const TEXMORE_2: &str = include_str!("../../tools/mali/testdata/texmore_2.trace");
+/// texmore_2 with the memory dump: two sampler2D at units 0 and 1, each a
+/// 2x2 RGBA8 (gl_test case 2's look-ups; tools/shaders/gl_test_es100/
+/// uv.vert and texture2.frag, `--uniform-values`). Its decoded text is
+/// texmore_2.trace's but for the addresses (the dump's own buffers move
+/// the pool by 0x1000).
+const TEXMORE_2: &str = include_str!("../../tools/mali/testdata/texmore_2_dump.trace");
+/// tex2darray_3layer: an 8x8x3 RGBA8 sampler2DArray, nearest, one level
+/// (tools/shaders/es300/cube.vert and array.frag, `--uniform-values`).
+const TEX2DARRAY_3LAYER: &str = include_str!("../../tools/mali/testdata/tex2darray_3layer.trace");
+/// tex2darray_2layer: a 16x16x2 RGBA8 sampler2DArray of three levels,
+/// nearest-mipmap-nearest (the same pair, `--uniform-values --levels 3`;
+/// gl_test case 206's array).
+const TEX2DARRAY_2LAYER: &str = include_str!("../../tools/mali/testdata/tex2darray_2layer.trace");
 /// texmore_46: a 2x2 sampler2D at unit 0 and an 8x8x3 RGBA8
 /// sampler2DArray at unit 1 (gl_test case 46).
 const TEXMORE_46: &str = include_str!("../../tools/mali/testdata/texmore_46.trace");
-/// texmore_206_array: a 16x16x2 RGBA8 sampler2DArray of three levels
-/// (gl_test case 206's array).
-const TEXMORE_206_ARRAY: &str = include_str!("../../tools/mali/testdata/texmore_206_array.trace");
 
 /// One decoded descriptor: pandecode's `Key: value` lines.
 type Fields = BTreeMap<String, String>;
 
 /// The fragment resource table of a shim trace as pandecode decodes it:
-/// each entry's size, the samplers of entry 3, the textures of entry 4 and
+/// each entry's address and size, the samplers of entry 3, the textures of entry 4 and
 /// each texture's planes, in table order.
 #[derive(Default)]
 struct ShimTables {
+    address: BTreeMap<usize, u64>,
     size: BTreeMap<usize, u64>,
     samplers: Vec<Fields>,
     textures: Vec<Fields>,
@@ -1296,6 +1308,12 @@ fn indent(line: &str) -> usize {
 
 fn hex(v: &str) -> u64 {
     u64::from_str_radix(v.trim_start_matches("0x"), 16).unwrap_or_else(|_| panic!("{v}: not hex"))
+}
+
+/// The memory a whole shim trace dumped (empty for a `trace`-only run):
+/// the file read as one excerpt block from its line 1 ([`trace::memory`]).
+fn shim_memory(trace: &str) -> BTreeMap<u64, [u8; 16]> {
+    trace::memory(&format!("## lines 1-{}\n{trace}", trace.lines().count()))
 }
 
 fn shim_fragment_tables(trace: &str) -> ShimTables {
@@ -1338,6 +1356,10 @@ fn shim_fragment_tables(trace: &str) -> ShimTables {
             let f = match now {
                 In::Entry if indent(l) == entry_indent + 2 && k == "Size" => {
                     t.size.insert(entry, hex(v));
+                    continue;
+                }
+                In::Entry if indent(l) == entry_indent + 2 && k == "Address" => {
+                    t.address.insert(entry, hex(v));
                     continue;
                 }
                 In::Entry | In::Other => continue,
@@ -1525,9 +1547,19 @@ fn stacked(gpu: u64, side: u32, layers: u32, levels: u32, wrap_r: WrapMode) -> S
 /// `Tiled U-Interleaved`), the GL core linear, so the plane words that
 /// describe the layout differ; each such byte is named with its cause,
 /// checked to hold what the cause says in Mesa's words, and every other
-/// byte is equal. Returns the differences named.
+/// byte is equal. When the trace holds the memory (a `trace,dump` run), the
+/// descriptors' words at the table's addresses are the decoded fields'
+/// packed again, so the comparison is with Mesa's own words. Returns the
+/// differences named.
 fn check_shim_tables(name: &'static str, trace: &str, textures: &[SampledTexture]) -> usize {
     let shim = shim_fragment_tables(trace);
+    let mem = shim_memory(trace);
+    /* Mesa's words, where the dump holds them */
+    let words = |what: String, va: u64, packed: &[u8]| {
+        if !mem.is_empty() {
+            assert_eq!(trace::bytes(&mem, va, packed.len()), packed, "{name}: {what} at {va:#x} is not Mesa's words");
+        }
+    };
     let b = build_textures(textures, None, false);
     let ours = |gpu: u64, len: usize| b.desc[(gpu - DESC) as usize..(gpu - DESC) as usize + len].to_vec();
     let table = ours(b.layout.fs_resources.expect("a fragment resource table").gpu, 7 * Resource::LENGTH);
@@ -1547,11 +1579,14 @@ fn check_shim_tables(name: &'static str, trace: &str, textures: &[SampledTexture
     for (i, tex) in textures.iter().enumerate() {
         /* the sampler: every byte equal */
         let m_s = shim_sampler(shim.samplers[i].clone()).pack().unwrap();
+        words(format!("sampler {i}"), shim.address[&3] + 32 * i as u64, &m_s);
         if let Err(e) = compare("Sampler", &ours(o_samplers.address + 32 * i as u64, 32), &m_s, &[]) {
             failures.push(format!("sampler {i}: {e}"));
         }
         let m_tex = shim_texture(shim.textures[i].clone());
         let m_t = m_tex.pack().unwrap();
+        words(format!("texture {i}"), shim.address[&4] + 32 * i as u64, &m_t);
+        words(format!("texture {i}'s planes"), m_tex.surfaces, &planes_bytes(&shim.planes[i]));
         let o_t = ours(o_textures.address + 32 * i as u64, 32);
         let o_tex = Texture::unpack(o_t[..].try_into().unwrap()).unwrap();
         assert_eq!(o_tex.surfaces, planes_at, "{name}: texture {i}'s planes follow texture {}'s", i.max(1) - 1);
@@ -1654,25 +1689,41 @@ fn planes_bytes(planes: &[Fields]) -> Vec<u8> {
 /// descriptors long (`panfrost_emit_sampler_descriptors`,
 /// `panfrost_emit_texture_descriptors`, Mesa 26.2.1 pan_cmdstream.c:
 /// 1934-1985, 2024-2043). Each texture's level 0 is at the shim's plane
-/// pointer, so the textures' order shows in the planes.
+/// pointer, so the textures' order shows in the planes; the words are
+/// Mesa's own (the trace's memory).
 #[test]
 fn two_samplers_are_the_shim_s_tables() {
+    assert!(!shim_memory(TEXMORE_2).is_empty(), "texmore_2_dump holds the memory");
     let shim = shim_fragment_tables(TEXMORE_2);
     let pointer = |i: usize| hex(&shim.planes[i][0]["Pointer"]);
     let (unit0, unit1) = (pointer(0), pointer(1));
-    assert_eq!((unit0, unit1), (0x7fff_fffd_e000, 0x7fff_fffd_d000), "unit 0's texture, then unit 1's");
+    assert_ne!(unit0, unit1, "two textures");
     let textures = [stacked(unit0, 2, 1, 1, WrapMode::REPEAT), stacked(unit1, 2, 1, 1, WrapMode::REPEAT)];
     /* per texture: the planes' address, texel interleave, clump ordering,
      * row stride and size */
     assert_eq!(check_shim_tables("texmore_2", TEXMORE_2, &textures), 2 * 5);
 }
 
-/// gl_test case 46's 2D array (texmore_46): a 2x2 2D texture at index 0
-/// and an 8x8 array of three layers at index 1, `Dimension 2D`, `Array
-/// size 3`, a plane a layer; the array's GL_TEXTURE_WRAP_R (clamped, as
-/// gl_ref sets it) in its sampler.
+/// An 8x8 RGBA8 array of three layers (tex2darray_3layer, Mesa's words):
+/// `Dimension 2D`, `Array size 3`, a plane a layer; the array's
+/// GL_TEXTURE_WRAP_R (clamped, as gl_ref sets it) in its sampler.
 #[test]
 fn a_three_layer_array_is_the_shim_s() {
+    assert!(!shim_memory(TEX2DARRAY_3LAYER).is_empty(), "tex2darray_3layer holds the memory");
+    let shim = shim_fragment_tables(TEX2DARRAY_3LAYER);
+    let textures = [stacked(hex(&shim.planes[0][0]["Pointer"]), 8, 3, 1, WrapMode::CLAMP_TO_EDGE)];
+    let t = textures[0].texture(0);
+    assert_eq!((t.dimension, t.array_size, t.depth), (TextureDimension::_2D, 3, 1));
+    /* the planes' address, texel interleave, then per layer clump
+     * ordering, row stride and size, and the pointers of layers 1 and 2 */
+    assert_eq!(check_shim_tables("tex2darray_3layer", TEX2DARRAY_3LAYER, &textures), 2 + 3 * 3 + 2);
+}
+
+/// gl_test case 46's stage (texmore_46): a 2x2 2D texture at index 0 and
+/// the same 8x8 array of three layers at index 1, a 2D texture and an
+/// array in one stage's tables.
+#[test]
+fn a_2d_texture_and_an_array_are_the_shim_s() {
     let shim = shim_fragment_tables(TEXMORE_46);
     let pointer = |i: usize| hex(&shim.planes[i][0]["Pointer"]);
     let textures =
@@ -1685,12 +1736,13 @@ fn a_three_layer_array_is_the_shim_s() {
     assert_eq!(check_shim_tables("texmore_46", TEXMORE_46, &textures), 5 + 2 + 3 * 3 + 2);
 }
 
-/// gl_test case 206's array (texmore_206_array): a 16x16 array of two
-/// layers and three levels, six planes layer-major, `Array size 2`,
-/// `Levels 3`, LOD 0 to 2, a nearest-mipmap sampler clamped on R.
+/// gl_test case 206's array (tex2darray_2layer, Mesa's words): a 16x16
+/// array of two layers and three levels, six planes layer-major, `Array
+/// size 2`, `Levels 3`, LOD 0 to 2, a nearest-mipmap sampler clamped on R.
 #[test]
 fn a_two_layer_array_chain_is_the_shim_s() {
-    let shim = shim_fragment_tables(TEXMORE_206_ARRAY);
+    assert!(!shim_memory(TEX2DARRAY_2LAYER).is_empty(), "tex2darray_2layer holds the memory");
+    let shim = shim_fragment_tables(TEX2DARRAY_2LAYER);
     let base = hex(&shim.planes[0][0]["Pointer"]);
     let textures = [stacked(base, 16, 2, 3, WrapMode::CLAMP_TO_EDGE)];
     let t = textures[0].texture(0);
@@ -1699,7 +1751,7 @@ fn a_two_layer_array_chain_is_the_shim_s() {
      * and row stride (12); sizes of levels 1 and 2 in both layers (4, level
      * 0's 16 rows of 64 bytes are Mesa's 0x400 too); the pointers of every
      * plane but layer 0's level 0 (5) */
-    assert_eq!(check_shim_tables("texmore_206_array", TEXMORE_206_ARRAY, &textures), 2 + 12 + 4 + 5);
+    assert_eq!(check_shim_tables("tex2darray_2layer", TEX2DARRAY_2LAYER, &textures), 2 + 12 + 4 + 5);
 }
 
 /// The planes of several textures follow one another, texture 0's first,
