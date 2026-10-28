@@ -2,9 +2,9 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # AM62P: fewer kicks for the PowerVR `glGenerateMipmap` (design)
 
-Design only, written 2026-10-25. Nothing ran on a board
-and no code changed: every number below is from the records the note cites,
-and the predictions are marked as such.
+Written 2026-10-25 as a design; path B is built since 2026-10-28 (see
+"Built"), not yet measured on a board. Every number below is from the
+records the note cites, and the predictions are marked as such.
 
 ## The cost
 
@@ -145,10 +145,32 @@ If B's picture or time falls short, A is the next design, starting with a
 board experiment that does not need the whole transfer context: one TQ blit
 job's cost alone, against the 1.8 ms of a kick.
 
+## Built (2026-10-28)
+
+Path B as designed above, points 1 to 3 and 5:
+
+- `src/pvr/backend.rs`: `MIP_CPU_TAIL_TEXELS` (64 x 64) and `mip_gpu_last`
+  (level 1 always, then each level over the threshold); `mip_chain_gpu`
+  draws levels 1 ..= n and waits for the last kick when a tail is left, and
+  `pvr_generate_mipmap` answers `2 + n`. A chain whose every level is large
+  is drawn whole and not waited for, as before. `Backend::mip_gpu_all`
+  keeps the all-GPU arm for the host tests of the per-level kicks.
+- `src/backend.rs`: `generate_mipmap` returns `MipChain` (`None`, `Whole`,
+  `Prefix(n)`); an answer past the chain is `None`.
+- `src/gl/texture.rs`: `Prefix(n)` leaves `chain_in_backend` false and the
+  CPU loop starts at level n + 1 with `mip_step_gpu_sample`, the GPU's
+  bilinear sample at each texel centre (exact positions over 2 * dw, f32
+  weights, rounded to nearest): the 2x2 box byte for byte on even steps.
+- The kicks this predicts: terrain's 800x600 chains 3 each (were 9), its
+  256x256 chain 1 (was 8); gl_test 216's four chains 3 + 1 + 3 + 3 = 10
+  of 35 levels.
+
 ## Open
 
-- The `2 + n` return, the threshold and the bilinear CPU step are unbuilt;
-  the host test of the odd steps (point 5) is the first thing to write.
+- The board run of "What decides it": kicks and ms a frame of terrain and
+  gl_test 216 with this change, the waits it adds, and the picture against
+  column `am62p`. The read-back of the all-GPU and the hybrid chain (point
+  5, board) is not run.
 - Whether the AM62P's non-cacheable carve-out makes the CPU tail's reads slow
   enough to matter is unmeasured (`imx8mp-glmark2-gap.md` gives 67 ms for
   7.7 MB on another board: about 9 ms per MB, so 10 KB is ~0.1 ms).
