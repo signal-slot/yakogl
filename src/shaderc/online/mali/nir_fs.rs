@@ -813,12 +813,16 @@ impl<'s> Fs<'s> {
     }
 
     /// One lane of `fneg`: a constant's is folded, `fneg(fneg(a))` is
-    /// `fcanonicalize(a)` (nir_opt_algebraic.py:230), not transcribed.
+    /// `fcanonicalize(a)` (nir_opt_algebraic.py:230), which is `a`
+    /// (:161-167).
     fn neg(&mut self, x: Val, at: usize) -> Result<Val, MaliError> {
         match x {
             Val::Undef => Err(MaliError::ColourForm),
             Val::Const(b) => Ok(Val::Const(b ^ F32_NEG_ZERO)),
-            _ if matches!(self.alu_of(x), Some((Alu::Fneg, _))) => Err(MaliError::ArithConstant),
+            _ if matches!(self.alu_of(x), Some((Alu::Fneg, _))) => {
+                let Some((_, [inner, ..])) = self.alu_of(x) else { return Err(MaliError::Defect(Defect::IrIndex)) };
+                Ok(inner)
+            }
             _ => self.node(Alu::Fneg, [x, Val::Undef, Val::Undef], at),
         }
     }
@@ -1802,6 +1806,19 @@ impl<'s> Fs<'s> {
                 out[i] = self.op32(Alu::Ffma, [outer[i].0, outer[i].1, inner[i]], id)?;
             }
             return Ok(out);
+        }
+        /* any other front-end `ffma` (a matrix product's term) by a
+         * constant 1.0 or -1.0: Mesa's NIR folds it inside the product's
+         * vector sums, before they are split into lanes, with the
+         * distributive law and the constant reassociation
+         * (algfold_189_mulone.expect.json, `mat3(..) * vec3(0.5, 0.5,
+         * 1.0)`: `ffma(a, 0.5, ffma(q, 0.5, b))`, `fadd(fneg(q), a)`,
+         * `ffma(q, 0.5, x)`), which is not transcribed. A dot product's own
+         * `ffma`s are made here and fold (`Nir::alu`) */
+        if a == AluOp::Ffma
+            && (0..w).any(|i| [lane(0, i), lane(1, i)].iter().any(|v| matches!(v, Val::Const(F32_ONE | F32_MINUS_ONE))))
+        {
+            return Err(MaliError::ArithConstant);
         }
         /* atan's sign fix-up: the front end's `fabs(t) * fsign(x)`
          * (builtin_call.rs `atan`, whose `t` is `ffma(fabs(u), res,
@@ -4929,8 +4946,6 @@ pub fn select_highp(
 ) -> Result<(), MaliError> {
     let oom = |_| MaliError::OutOfScratch;
     let defect = MaliError::Defect(Defect::IrIndex);
-    /* GLSL's do_rebalance_tree is the vertex stage's (nir.rs) */
-    nir::refuse_rebalanced(m)?;
     let c = f.colour.ok_or(MaliError::NoColour)?;
     /* the colour's stores: the fusion counts them as uses */
     for (k, v) in c.iter().enumerate() {

@@ -23,6 +23,7 @@ use super::fau::FauWord;
 use super::isa;
 use super::{MaliError, MaliShader, Section, VaryingSlot};
 use crate::shaderc::online::codegen::{self, CompileError};
+use crate::shaderc::online::ir::{self, AluOp};
 use crate::shaderc::online::store;
 use crate::shaderc::{SHC_STAGE_FRAGMENT, SHC_STAGE_VERTEX};
 use std::fmt::Write as _;
@@ -1006,11 +1007,12 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
     let varyings: String = (0..17).map(|i| format!("varying float v{i}; ")).collect();
     let mut v: Vec<(u32, String, MaliError)> = [
         (VS, "attribute vec4 p; void main(){ gl_Position = abs(p); }", MaliError::Arithmetic),
-        /* a constant times a product with a constant: GLSL IR folds the
-         * two (reassociate_constant) */
-        (VS, "attribute vec2 p; attribute float q; void main(){ gl_Position = vec4(3.0 * (p * 0.75), 0.0, 1.0); }", MaliError::ArithConstant),
-        /* fneg(fneg(a)) is fcanonicalize(a) */
-        (VS, "attribute vec2 p; void main(){ gl_Position = vec4(-(p * -1.0), 0.0, 1.0); }", MaliError::ArithConstant),
+        /* a constant times a product with a constant across a change of
+         * width: GLSL's reassociate_constant moves it (glsl.rs), which is
+         * not transcribed for a vector times a scalar product */
+        (VS, "attribute vec2 p; attribute float q; void main(){ gl_Position = vec4(vec2(3.0) * (q * 0.75), 0.0, 1.0); }", MaliError::ArithConstant),
+        /* fmul(fneg(a), fneg(b)) */
+        (VS, "attribute vec2 p; attribute vec2 q; void main(){ gl_Position = vec4((-p) * (-q), 0.0, 1.0); }", MaliError::ArithConstant),
         (VS, "uniform mat2 m; attribute vec2 p; void main(){ gl_Position = vec4(m * p, 0.0, 1.0); }", MaliError::UniformType),
         (VS, "uniform vec3 u[2]; void main(){ gl_Position = vec4(u[1], 1.0); }", MaliError::UniformArray),
         (VS, "uniform mediump vec4 u; void main(){ gl_Position = u; }", MaliError::UniformPrecision),
@@ -1133,7 +1135,9 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
     /* the references of the FAU's limits (tools/mali/testdata) */
     v.push((VS, SEL_U_FAU65.to_string(), MaliError::FauPage));
     v.push((VS, SEL_U_FAU130.to_string(), MaliError::UboFallback));
-    v.push((VS, SEL_U_REBALANCE.to_string(), MaliError::Rebalance));
+    /* a chain GLSL rebalances whose leaf is a local do_tree_grafting may
+     * graft (glsl.rs) */
+    v.push((VS, REBALANCE_GRAFT.to_string(), MaliError::Rebalance));
     v.extend(stress_cases());
     v
 }
@@ -1813,6 +1817,10 @@ fn the_compacted_fragment_programs_are_byte_equal_to_mesa_26_2_1() {
 const SEL_U_FAU65: &str = td!("sel_u_fau65.vert");
 const SEL_U_FAU130: &str = td!("sel_u_fau130.vert");
 const SEL_U_REBALANCE: &str = td!("sel_u_rebalance.vert");
+/// sel_u_rebalance's shape with a leaf from a local assigned once and read
+/// once, which do_tree_grafting may put into the tree.
+const REBALANCE_GRAFT: &str =
+    "attribute vec4 p; void main(){ float t = p.x * p.y; gl_Position = vec4(t + p.z + p.w + p.x, p.yzw); }";
 const PASSTHROUGH_VS: &str = SAMPLE_VS;
 const INTERP_FS: &str = SAMPLE_FS;
 
@@ -2587,17 +2595,24 @@ fn a_uniform_past_128_words_is_mesa_s_ubo_load() {
 }
 
 /// A chain of additions is reassociated by GLSL's do_rebalance_tree when
-/// it is not a whole right-hand side: the reference adds two uniform words
-/// in one FADD, which the chain's order never does. Refused.
+/// it is not a whole right-hand side (a constructor's lane is the operand
+/// of a swizzle): the reference adds two uniform words in one FADD, which
+/// the chain's order never does, `(a_pos.x + u0.x) + (u1.x + u2.x)`
+/// (glsl.rs `dsw`). Byte-equal; one whose leaf is a local GLSL may graft
+/// is refused.
 #[test]
 fn a_chain_of_additions_is_mesa_s_rebalanced_tree() {
     let r = region(td!("sel_u_rebalance.expect.json"), "vs.position").expect("the region");
-    let two_fau = r.words.iter().any(|w| {
-        let i = isa::decode(*w).expect("decodes");
-        i.op.info().mnemonic == "FADD.f32" && (w & 0xc0) == 0x80 && ((w >> 8) & 0xc0) == 0x80
-    });
-    assert!(two_fau, "the reference adds two uniform words");
-    assert_eq!(gap(SHC_STAGE_VERTEX, SEL_U_REBALANCE), MaliError::Rebalance);
+    let two_fau = |words: &[u64]| {
+        words.iter().any(|w| {
+            let i = isa::decode(*w).expect("decodes");
+            i.op.info().mnemonic == "FADD.f32" && (w & 0xc0) == 0x80 && ((w >> 8) & 0xc0) == 0x80
+        })
+    };
+    assert!(two_fau(&r.words), "the reference adds two uniform words");
+    let (v, _) = check_program(SEL_U_REBALANCE, TRI_FS, td!("sel_u_rebalance.expect.json"));
+    assert!(two_fau(&vs_regions(&v).0));
+    assert_eq!(gap(SHC_STAGE_VERTEX, REBALANCE_GRAFT), MaliError::Rebalance);
 }
 
 /// The gaps that need a large program, each reached by one.
@@ -4816,4 +4831,263 @@ fn case_42_es3array_is_byte_equal_to_mesa_26_2_1() {
 #[test]
 fn texmore_206_array_is_byte_equal_to_mesa_26_2_1() {
     check_program(td!("texmore_206_array.vert"), td!("texmore_206_array.frag"), td!("texmore_206_array.expect.json"));
+}
+
+/* ---- chains and algebraic folds (plan #154 chains, #33) -------------- */
+
+/// The chain and fold population (docs/notes/mali-rebalance.md,
+/// docs/notes/mali-algebraic-folds.md), each pair through the link
+/// ([`check_linked`]) against its drm-shim reference: (name, VS, FS,
+/// expect.json, drawn with `--uniform-values`). The chains of case 63
+/// (matattr3/4: no rebalance, the matrix columns are array dereferences),
+/// case 189's mods (the constant swap, `(8 * q) * b`) with its twin and
+/// the two minimal references (`x * 1.0` dropped in NIR, `8 * q * b` kept),
+/// the folds (a constant times a product with a constant, a dot product
+/// by 1.0 and -1.0, the non-±1 control), case 192's programs whole and
+/// sel_u_rebalance (a rebalanced constructor lane).
+const CHAIN_POPULATION: [(&str, &str, &str, &str, bool); 15] = [
+    (
+        "chain_matattr3",
+        td!("chain_matattr3.vert"),
+        td!("chain_matattr3.frag"),
+        td!("chain_matattr3.expect.json"),
+        false,
+    ),
+    (
+        "chain_matattr4",
+        td!("chain_matattr4.vert"),
+        td!("chain_matattr4.frag"),
+        td!("chain_matattr4.expect.json"),
+        false,
+    ),
+    (
+        "varyconst_63_matattr",
+        td!("varyconst_63_matattr.vert"),
+        td!("varyconst_63_matattr.frag"),
+        td!("varyconst_63_matattr.expect.json"),
+        false,
+    ),
+    (
+        "chain_mulone_fs_mods",
+        td!("chain_mulone_fs_mods.vert"),
+        td!("chain_mulone_fs_mods.frag"),
+        td!("chain_mulone_fs_mods.expect.json"),
+        false,
+    ),
+    (
+        "chain_min_mulone",
+        td!("chain_min_mulone.vert"),
+        td!("chain_min_mulone.frag"),
+        td!("chain_min_mulone.expect.json"),
+        false,
+    ),
+    (
+        "chain_min_reassoc",
+        td!("chain_min_reassoc.vert"),
+        td!("chain_min_reassoc.frag"),
+        td!("chain_min_reassoc.expect.json"),
+        false,
+    ),
+    (
+        "algfold_189_mods",
+        td!("algfold_189_mods.vert"),
+        td!("algfold_189_mods.frag"),
+        td!("algfold_189_mods.expect.json"),
+        true,
+    ),
+    (
+        "algfold_constmul",
+        td!("algfold_constmul.vert"),
+        td!("algfold_constmul.frag"),
+        td!("algfold_constmul.expect.json"),
+        true,
+    ),
+    (
+        "algfold_constfma",
+        td!("algfold_constfma.vert"),
+        td!("algfold_constfma.frag"),
+        td!("algfold_constfma.expect.json"),
+        true,
+    ),
+    (
+        "algfold_constfma_ctl",
+        td!("algfold_constfma_ctl.vert"),
+        td!("algfold_constfma_ctl.frag"),
+        td!("algfold_constfma_ctl.expect.json"),
+        true,
+    ),
+    (
+        "algfold_192_predlive",
+        td!("algfold_192_predlive.vert"),
+        td!("algfold_192_predlive.frag"),
+        td!("algfold_192_predlive.expect.json"),
+        true,
+    ),
+    (
+        "algfold_192_coord",
+        td!("algfold_192_coord.vert"),
+        td!("algfold_192_coord.frag"),
+        td!("algfold_192_coord.expect.json"),
+        true,
+    ),
+    (
+        "fsout_192_uni",
+        include_str!("../../../../tools/shaders/gltest/position_only.vert"),
+        include_str!("../../../../tools/shaders/gltest/predlive_fs_uni.frag"),
+        td!("fsout_192_uni.expect.json"),
+        true,
+    ),
+    (
+        "fsout_192_coord",
+        include_str!("../../../../tools/shaders/gltest/position_only.vert"),
+        include_str!("../../../../tools/shaders/gltest/predlive_fs_coord.frag"),
+        td!("fsout_192_coord.expect.json"),
+        true,
+    ),
+    ("sel_u_rebalance", SEL_U_REBALANCE, TRI_FS, td!("sel_u_rebalance.expect.json"), true),
+];
+
+#[test]
+fn the_chain_population_is_byte_equal_to_mesa_26_2_1() {
+    let mut failed = Vec::new();
+    for (name, vs, fs, json, values) in CHAIN_POPULATION {
+        let r = std::panic::catch_unwind(|| {
+            if values {
+                check_linked(vs, fs, json);
+            } else {
+                check_linked_for(name, vs, fs, json);
+            }
+        });
+        if let Err(e) = r {
+            let m = e.downcast_ref::<String>().cloned().unwrap_or_else(|| format!("{:?}", e.downcast_ref::<&str>()));
+            failed.push(format!("{name}: {m}"));
+        }
+    }
+    assert!(failed.is_empty(), "{} of {} differ:\n{}", failed.len(), CHAIN_POPULATION.len(), failed.join("\n"));
+}
+
+/// The corpus sources the chain references draw are the references'
+/// own (byte copies).
+#[test]
+fn the_corpus_chain_sources_are_the_references() {
+    let pairs = [
+        (include_str!("../../../../tools/shaders/es100/matattr3.vert"), td!("chain_matattr3.vert")),
+        (include_str!("../../../../tools/shaders/es100/matattr4.vert"), td!("chain_matattr4.vert")),
+        (include_str!("../../../../tools/shaders/gltest/mulone_fs_mods.frag"), td!("chain_mulone_fs_mods.frag")),
+    ];
+    for (tree, reference) in pairs {
+        assert_eq!(tree, reference);
+    }
+}
+
+/// Case 184 (depchain: 48 `x*u_b+u_c` steps in 1, 2 and 4 chains, gl_test's
+/// dep1/2/4_fs on position_only2.vert) against its drm-shim references
+/// (`intbig_case184_dep*`, docs/notes/mali-int-and-size.md): dep4's final
+/// `(x + y + z + w) * 0.25` is GLSL's rebalanced `(x + y) + (z + w)`, two
+/// `FADD`s before the third.
+#[test]
+fn case_184_programs_are_byte_equal_to_mesa_26_2_1() {
+    let vs = include_str!("../../../../tools/shaders/gltest/position_only2.vert");
+    for (name, fs, json) in [
+        ("dep1", include_str!("../../../../tools/shaders/gltest/dep1_fs.frag"), td!("intbig_case184_dep1.expect.json")),
+        ("dep2", include_str!("../../../../tools/shaders/gltest/dep2_fs.frag"), td!("intbig_case184_dep2.expect.json")),
+        ("dep4", include_str!("../../../../tools/shaders/gltest/dep4_fs.frag"), td!("intbig_case184_dep4.expect.json")),
+    ] {
+        check_offarm(name, vs, fs, json);
+    }
+}
+
+/// The IR of `src` after the GLSL passes (glsl.rs).
+fn glsl_passes_of(stage: u32, src: &str) -> Vec<ir::Op> {
+    let _k = store::test_keep();
+    store::with_scratch(|s| {
+        let l = codegen::lower_source(stage, src.as_bytes(), &[], s).expect("the front end takes it");
+        match super::glsl::passes(&l.module, s).expect("the passes take it") {
+            Some((instrs, _)) => instrs.to_vec(),
+            None => l.module.instrs.to_vec(),
+        }
+    })
+    .expect("the scratch arena is free")
+}
+
+/// The ALU operation and sources of value `v`.
+fn alu_at(ir: &[ir::Op], v: ir::ValueId) -> Option<(AluOp, [ir::Src; 3])> {
+    match ir.get(v.0 as usize) {
+        Some(ir::Op::Alu(a, s)) => Some((*a, *s)),
+        _ => None,
+    }
+}
+
+/// `do_rebalance_tree`'s DSW on a left-leaning sum of four variables:
+/// `((x + y) + z) + w` becomes `(x + y) + (z + w)`, the operand of a product
+/// (dep4's last line); a whole right-hand side keeps its order (the
+/// visitor does not handle it: opt_rebalance_tree.cpp:151-163); a sum with
+/// two constants is no reduction (:208-217) and meets the constant swap.
+#[test]
+fn glsl_rebalances_the_trees_it_takes() {
+    let fs = "precision highp float; uniform float a, b, c, d; void main(){ float x = a; float y = b; float z = c; \
+              float w = d; x = x * a; y = y * b; z = z * c; w = w * d; float r = (x + y + z + w) * 0.25; \
+              gl_FragColor = vec4(r, r, r, 1.0); }";
+    let ir = glsl_passes_of(SHC_STAGE_FRAGMENT, fs);
+    let (_, [sum, _, _]) = (0..ir.len())
+        .filter_map(|i| alu_at(&ir, ir::ValueId(i as u32)))
+        .find(|(a, s)| *a == AluOp::Fmul && matches!(ir[s[1].val.0 as usize], ir::Op::ConstF32(_)))
+        .expect("the product by 0.25");
+    let (op, [l, r, _]) = alu_at(&ir, sum.val).expect("the sum");
+    assert_eq!(op, AluOp::Fadd);
+    for half in [l, r] {
+        let (op, [p, q, _]) = alu_at(&ir, half.val).expect("each half a sum");
+        assert_eq!(op, AluOp::Fadd);
+        assert!(matches!(ir[p.val.0 as usize], ir::Op::LoadLocal { .. }));
+        assert!(matches!(ir[q.val.0 as usize], ir::Op::LoadLocal { .. }));
+    }
+    let _k = store::test_keep();
+    store::with_scratch(|s| {
+        /* stored whole: unchanged, compiled in the source's order */
+        let whole = "precision highp float; uniform float a, b, c, d; void main(){ float s = a + b + c + d; \
+                     gl_FragColor = vec4(s, s, s, 1.0); }";
+        let l = codegen::lower_source(SHC_STAGE_FRAGMENT, whole.as_bytes(), &[], s).expect("the front end");
+        assert!(super::glsl::passes(&l.module, s).expect("the passes").is_none());
+        /* two constants: no rebalance; the swap makes them meet */
+        let two = "precision highp float; uniform float a, b; void main(){ float s = (a + 1.0 + b + 2.0) * a; \
+                   gl_FragColor = vec4(s, s, s, 1.0); }";
+        let l = codegen::lower_source(SHC_STAGE_FRAGMENT, two.as_bytes(), &[], s).expect("the front end");
+        let (instrs, _) = super::glsl::passes(&l.module, s).expect("the passes").expect("the constants reassociated");
+        assert!(instrs.iter().any(|o| *o == ir::Op::ConstF32([3.0f32.to_bits(); 4])), "{instrs:?}");
+    })
+    .expect("the scratch arena is free");
+}
+
+/// `do_algebraic`'s `reassociate_constant` (opt_algebraic.cpp:175-216) on
+/// mulone_fs_mods' third lane, `((u_b * 1.0) * u_q) * 8.0`: the 8.0 swaps
+/// with u_b, the operand beside the 1.0 (`reassociate_operands`), and the
+/// two constants fold: `(8.0 * u_q) * u_b` (chain_mulone_fs_mods.expect.json,
+/// `FMA 0x48000000.h1, u3.w0, ..` then `* u3.w1`).
+#[test]
+fn glsl_reassociates_a_constant_into_the_product_beside_another() {
+    let ir = glsl_passes_of(SHC_STAGE_FRAGMENT, td!("chain_mulone_fs_mods.frag"));
+    let eight = |s: ir::Src| ir[s.val.0 as usize] == ir::Op::ConstF32([8.0f32.to_bits(); 4]);
+    let uniform =
+        |s: ir::Src, d: u16| matches!(ir[s.val.0 as usize], ir::Op::LoadUniform { dword_off, .. } if dword_off == d);
+    /* u_x u_q u_a u_b at dwords 0 1 2 3 */
+    let lane = (0..ir.len()).filter_map(|i| alu_at(&ir, ir::ValueId(i as u32))).find(|(a, [x, y, _])| {
+        *a == AluOp::Fmul
+            && uniform(*y, 3)
+            && alu_at(&ir, x.val).is_some_and(|(b, [p, q, _])| b == AluOp::Fmul && eight(p) && uniform(q, 1))
+    });
+    assert!(lane.is_some(), "(8.0 * u_q) * u_b: {ir:?}");
+}
+
+/// A matrix product's term by a constant 1.0 (case 189's mulone_fs_one,
+/// `mat3(..) * vec3(0.5, 0.5, 1.0)`) stays [`MaliError::ArithConstant`]:
+/// Mesa folds it inside the product's vector sums (the distributive law,
+/// the constant reassociation) before the lanes split, which is not
+/// transcribed.
+#[test]
+fn a_matrix_product_by_a_constant_one_stays_refused() {
+    assert_eq!(gap(SHC_STAGE_FRAGMENT, td!("algfold_189_mulone.frag")), MaliError::ArithConstant);
+    assert_eq!(
+        gap(SHC_STAGE_FRAGMENT, include_str!("../../../../tools/shaders/gltest/mulone_fs_one.frag")),
+        MaliError::ArithConstant
+    );
 }

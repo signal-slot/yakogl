@@ -1661,8 +1661,14 @@ impl<'s> Nir<'s> {
                 let m = self.alu(Alu::Fmul, inner, other, Val::Undef)?;
                 return self.alu(Alu::Fneg, m, Val::Undef, Val::Undef);
             }
-            /* `fneg(fneg(a))` is `fcanonicalize(a)` (nir_opt_algebraic.py:230) */
-            Alu::Fneg if self.is_alu(a, Alu::Fneg) => return Err(MaliError::ArithConstant),
+            /* `fneg(fneg(a))` is `fcanonicalize(a)` (nir_opt_algebraic.py:230),
+             * which is `a` when fp32 denormals are not flushed (:161-167):
+             * no instruction (algfold_negneg.expect.json) */
+            Alu::Fneg if self.is_alu(a, Alu::Fneg) => {
+                let Val::Lane(id, _) = a else { return Err(MaliError::Defect(Defect::IrIndex)) };
+                self.note_user(Prod::Identity);
+                return Ok(self.nodes[id as usize].src[0]);
+            }
             /* `fabs(fneg(a))` and `fabs(fabs(a))` are `fabs(a)` (nir_opt_algebraic.py) */
             Alu::Fabs if self.is_alu(a, Alu::Fneg) => {
                 let Val::Lane(id, _) = a else { return Err(MaliError::Defect(Defect::IrIndex)) };
@@ -1684,14 +1690,22 @@ impl<'s> Nir<'s> {
                 return Err(MaliError::ArithConstant);
             }
             /* `ffma(1.0, a, b)` is `fadd(a, b)` and `ffma(-1.0, a, b)` is
-             * `fadd(fneg(a), b)` (nir_opt_algebraic.py:313-315, a
-             * commutative match): shapes no reference draws. Any other
-             * constant factor keeps its FMA: a dot product by a constant
-             * vector, `dot(v.xy, vec2(2.0, 3.0))`, is `FMA v.x, 2.0, t`
-             * after `FMA t, v.y, 3.0, -0.0` (tools/mali/testdata/pan_shc-out/
+             * `fadd(fneg(a), b)` (nir_opt_algebraic.py:311-314, a
+             * commutative match on the factors), which the late fusion may
+             * fuse again: `dot(v, vec2(1.0, 2.0))` is `ffma(v.y, 2.0, v.x)`
+             * and `dot(v, vec2(-1.0, 3.0))` `ffma(v.y, 3.0, fneg(v.x))`
+             * (algfold_constfma.expect.json). Any other constant factor
+             * keeps its FMA: a dot product by a constant vector,
+             * `dot(v.xy, vec2(2.0, 3.0))`, is `FMA v.x, 2.0, t` after `FMA
+             * t, v.y, 3.0, -0.0` (tools/mali/testdata/pan_shc-out/
              * s4_motion_dot.json, both stages) */
             Alu::Ffma if consts[..2].iter().any(|c| matches!(c, Some(F32_ONE | F32_MINUS_ONE))) => {
-                return Err(MaliError::ArithConstant);
+                let k = if matches!(consts[0], Some(F32_ONE | F32_MINUS_ONE)) { 0 } else { 1 };
+                let x = if k == 0 { b } else { a };
+                let x =
+                    if consts[k] == Some(F32_MINUS_ONE) { self.alu(Alu::Fneg, x, Val::Undef, Val::Undef)? } else { x };
+                self.note_user(Prod::Identity);
+                return self.alu(Alu::Fadd, x, c, Val::Undef);
             }
             _ => {}
         }
@@ -1787,69 +1801,6 @@ pub(super) fn is_mat_term(m: &Module<'_>, srcs: &[ir::Src; 3]) -> bool {
     is_mat && splat && acc
 }
 
-/// GLSL's `do_rebalance_tree` (compiler/glsl/opt_rebalance_tree.cpp)
-/// reassociates a tree of three or more additions (or multiplications) of
-/// one type, not the right-hand side of an assignment itself, before NIR
-/// sees it (measured: sel_u_rebalance). The IR does not keep which value
-/// was a whole right-hand side, so every such chain is refused: a value of
-/// the operation whose one use is the same operation at the same width is
-/// a link, and three links in one tree are a chain.
-pub(super) fn refuse_rebalanced(m: &Module<'_>) -> Result<(), MaliError> {
-    let n = m.instrs.len().min(MAX_VALUES);
-    let mut uses = [0u8; MAX_VALUES];
-    let mut user = [u16::MAX; MAX_VALUES];
-    let count = |v: ValueId, by: usize, uses: &mut [u8; MAX_VALUES], user: &mut [u16; MAX_VALUES]| {
-        if let Some(u) = uses.get_mut(v.0 as usize) {
-            *u = u.saturating_add(1);
-            user[v.0 as usize] = by as u16;
-        }
-    };
-    for (i, op) in m.instrs.iter().enumerate().take(n) {
-        match *op {
-            IrOp::Alu(a, s) => {
-                for src in s.iter().take(a.arity()) {
-                    count(src.val, i, &mut uses, &mut user);
-                }
-            }
-            IrOp::StoreOutput { src, .. } | IrOp::StoreLocal { src, .. } => count(src.val, i, &mut uses, &mut user),
-            _ => {}
-        }
-    }
-    /* `a - b` is the front end's `fadd(a, fneg(b))` (lower.rs), GLSL's
-     * `ir_binop_sub`, which is no reduction and so ends a tree (measured:
-     * femtovg's `sdroundrect(..) + feather*0.5`, `FADD`, `FADD .neg`, then
-     * the `FMA` in the source's order, fvg_fill_gradient*.expect.json) */
-    let tree = |v: usize| -> Option<AluOp> {
-        match m.instrs[v] {
-            IrOp::Alu(AluOp::Fadd, s) if matches!(m.def(s[1].val), Some(IrOp::Alu(AluOp::Fneg, _))) => None,
-            IrOp::Alu(a @ (AluOp::Fadd | AluOp::Fmul), _) => Some(a),
-            _ => None,
-        }
-    };
-    let link = |v: usize| -> Option<(AluOp, usize)> {
-        let a = tree(v)?;
-        if uses[v] != 1 {
-            return None;
-        }
-        let p = user[v] as usize;
-        let same = p < n && tree(p) == Some(a) && m.comps_of(ValueId(p as u32)) == m.comps_of(ValueId(v as u32));
-        same.then_some((a, p))
-    };
-    let mut size = [0u8; MAX_VALUES];
-    for v in 0..n {
-        if tree(v).is_some() {
-            size[v] = size[v].saturating_add(1);
-            if size[v] >= 3 {
-                return Err(MaliError::Rebalance);
-            }
-            if let Some((_, p)) = link(v) {
-                size[p] = size[p].saturating_add(size[v]);
-            }
-        }
-    }
-    Ok(())
-}
-
 /// Build the program of a vertex shader. `reads`: the fragment shader's
 /// reads of the program (location, component mask), when the vertex shader
 /// is built for one: then only those components are stored, compacted as
@@ -1868,7 +1819,6 @@ pub fn build<'s>(
     if m.locals.len() > MAX_LOCALS {
         return Err(MaliError::TooManyLocals);
     }
-    refuse_rebalanced(m)?;
     let mut vs = Nir::new(scratch)?;
     let vals = scratch.alloc_filled(MAX_VALUES, [Val::Undef; 4]).map_err(|_| MaliError::OutOfScratch)?;
     let w = &mut Walk { vals, locals: [[Val::Undef; 4]; MAX_LOCALS] };
@@ -1979,6 +1929,16 @@ pub fn build<'s>(
                         /* `a / b` is `a * rcp(b)` from the front end */
                         AluOp::Frcp => vs.alu(Alu::Frcp, x(0), Val::Undef, Val::Undef)?,
                         AluOp::Fmul => vs.alu(Alu::Fmul, x(0), x(1), Val::Undef)?,
+                        /* a matrix product's term by a constant 1.0 or -1.0:
+                         * NIR's rules (:311-314) meet it inside the vector
+                         * sums of the product, which no reference draws in
+                         * this stage */
+                        AluOp::Ffma
+                            if is_mat_term(m, &s)
+                                && [x(0), x(1)].iter().any(|v| matches!(v, Val::Const(F32_ONE | F32_MINUS_ONE))) =>
+                        {
+                            return Err(MaliError::ArithConstant);
+                        }
                         AluOp::Ffma if is_mat_term(m, &s) => {
                             vs.note(Prod::MatProduct);
                             vs.alu(Alu::Ffma, x(0), x(1), x(2))?
