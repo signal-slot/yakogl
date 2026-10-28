@@ -958,6 +958,7 @@ fn unreachable_from_es100(e: MaliError) -> Option<&'static str> {
         | E::FsUniform
         | E::MixedPrecision
         | E::UboFallback
+        | E::UboRowsFull
         | E::ArithConstant
         | E::Rebalance
         | E::ConstantFold
@@ -1024,9 +1025,9 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
         (FS, "precision mediump float; uniform vec4 u; void main(){ gl_FragColor = u.yxzw; }", MaliError::FsUniform),
         (FS, "precision mediump float; uniform highp vec4 u; void main(){ gl_FragColor = u; }", MaliError::FsUniform),
         (FS, "precision mediump float; uniform mat4 u; void main(){ gl_FragColor = u[1]; }", MaliError::FsUniform),
-        /* two uniform words in one product: a uniform first in a product
-         * is a place no reference draws */
-        (FS, "precision mediump float; uniform vec4 u; uniform vec4 w; void main(){ gl_FragColor = u * w; }", MaliError::FsOperandForm),
+        /* an absolute value second in a sum is a place no reference draws
+         * (a uniform first in a product is case 166's, unitype_166a) */
+        (FS, "precision mediump float; varying vec4 v; varying vec4 w; void main(){ gl_FragColor = v + abs(w); }", MaliError::FsOperandForm),
         /* a run-time index into an array that does not start the block
          * (its byte offset would add the base), and a second such read */
         (FS, "precision mediump float; uniform int i; uniform vec4 u[2]; void main(){ gl_FragColor = u[i]; }", MaliError::UniformIndexed),
@@ -1135,6 +1136,14 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
     /* the references of the FAU's limits (tools/mali/testdata) */
     v.push((VS, SEL_U_FAU65.to_string(), MaliError::FauPage));
     v.push((VS, SEL_U_FAU130.to_string(), MaliError::UboFallback));
+    /* a mediump fragment shader's arrays, one block row an element, past
+     * the layout's 256 rows (select.rs MAX_LAYOUT_ROWS) */
+    v.push((
+        FS,
+        "precision mediump float; uniform vec4 a[200]; uniform vec4 b[100]; void main(){ gl_FragColor = a[199] + b[99]; }"
+            .to_string(),
+        MaliError::UboRowsFull,
+    ));
     /* a chain GLSL rebalances whose leaf is a local do_tree_grafting may
      * graft (glsl.rs) */
     v.push((VS, REBALANCE_GRAFT.to_string(), MaliError::Rebalance));
@@ -1163,7 +1172,7 @@ fn every_reachable_gap_is_reached_by_an_es100_source() {
         assert!(reached.contains(e.message()), "no case reaches {e:?}");
     }
     assert_eq!(reached.len(), reachable.len(), "a case reaches a gap classified unreachable");
-    assert_eq!((MaliError::GAPS.len(), reachable.len(), unreachable), (58, 53, 5), "gaps: all, reachable, unreachable");
+    assert_eq!((MaliError::GAPS.len(), reachable.len(), unreachable), (59, 54, 5), "gaps: all, reachable, unreachable");
 }
 
 /// The front end's verdict on gl_FragData[1] (the reason FragOutput is
@@ -2541,6 +2550,7 @@ fn the_tables_high_water_marks_are_measured() {
     }
     srcs.extend(VARYING_POPULATION.iter().map(|c| (SHC_STAGE_VERTEX, c.1)));
     srcs.extend(FRAGMENT_VARYING_POPULATION.iter().map(|c| (SHC_STAGE_FRAGMENT, c.2)));
+    srcs.extend(UNITYPE_166_POPULATION.iter().map(|c| (SHC_STAGE_FRAGMENT, c.1)));
     let mut most = [0usize; Table::ALL.len()];
     for (st, src) in srcs {
         let (_, marks) = module_facts(st, src);
@@ -2553,15 +2563,15 @@ fn the_tables_high_water_marks_are_measured() {
     assert_eq!(
         got,
         [
-            ("IR values", 34, 2048),
-            ("locals", 1, 32),
-            ("NIR instructions", 52, 768),
-            ("BIR instructions", 116, 384),
-            ("BIR values", 56, 384),
+            ("IR values", 118, 2048),
+            ("locals", 2, 32),
+            ("NIR instructions", 156, 768),
+            ("BIR instructions", 183, 384),
+            ("BIR values", 102, 384),
             ("FAU words", 64, 128),
-            ("immediates", 9, 64),
-            ("uniform rows", 14, 32),
-            ("fragment pair nodes", 10, 64),
+            ("immediates", 17, 64),
+            ("uniform rows", 70, 256),
+            ("fragment pair nodes", 126, 255),
         ],
         "(table, the referenced programs' most, capacity)"
     );
@@ -2652,7 +2662,7 @@ fn stress_cases() -> Vec<(u32, String, MaliError)> {
     /* a fused multiply-add chain: three vectorised nodes a step and pair */
     let chain = format!(
         "precision mediump float; varying vec4 a; varying vec4 b; void main(){{ vec4 t = a; {} gl_FragColor = t; }}",
-        "t = t * b + a; ".repeat(12)
+        "t = t * b + a; ".repeat(48)
     );
     vec![
         (SHC_STAGE_FRAGMENT, chain, MaliError::FragmentTooLarge),
@@ -3114,6 +3124,9 @@ fn the_fragment_productions_are_the_references() {
     /* a uniform's pair first in a sum (case 75), two lanes of loads the
      * link keeps whole as a word (case 78) */
     fs.extend([td!("varyconst_75_immneg.frag"), td!("varyconst_78_matvary.frag")]);
+    /* a uniform's component first in a product, a look-up's word second in
+     * a product and its fusion (case 166) */
+    fs.extend(UNITYPE_166_POPULATION.iter().map(|c| c.1));
     let mut seen = 0u128;
     for src in fs {
         let _k = store::test_keep();
@@ -4805,6 +4818,79 @@ fn case_116_uniidxe_is_byte_equal_to_mesa_26_2_1() {
 #[test]
 fn unitype_116v_is_byte_equal_to_mesa_26_2_1() {
     check_unitype("116v");
+}
+
+/* ---- case 166: uniform arrays past the 32-row table (#33) ----------- */
+
+/// Case 166 (fshprobe), its three fragment arms under one position-only
+/// vertex shader (docs/notes/mali-ubo-rows.md): a mediump `vec4 u_p[64]`
+/// (A) and `u_p[70]` (B), one block row an element (64 and 70 rows, past
+/// the old 32), every read element pushed, none loaded; `vec4 u_w[4]` and
+/// 16 samplers (C). The shim set no uniform value.
+const UNITYPE_166_POPULATION: [(&str, &str, &str); 3] = [
+    ("166a", td!("unitype_166a.frag"), td!("unitype_166a.expect.json")),
+    ("166b", td!("unitype_166b.frag"), td!("unitype_166b.expect.json")),
+    ("166c", td!("unitype_166c.frag"), td!("unitype_166c.expect.json")),
+];
+
+/// Arm `name` of case 166 against its reference: every region and fact,
+/// no block kept for the frame (Mesa's `ubo_mask` bit 0 clear), so a later
+/// change cannot start loading one.
+fn check_unitype_166(name: &str) {
+    let (_, fs, json) = UNITYPE_166_POPULATION.iter().find(|c| c.0 == name).expect("a member");
+    check_program_for(name, td!("unitype_166.vert"), fs, json, false);
+    let f = compile(SHC_STAGE_FRAGMENT, fs).expect("the fragment shader compiles");
+    assert!(f.info.ubo.is_empty(), "{name}: a loaded block");
+}
+
+#[test]
+fn unitype_166a_is_byte_equal_to_mesa_26_2_1() {
+    check_unitype_166("166a");
+}
+
+#[test]
+fn unitype_166b_is_byte_equal_to_mesa_26_2_1() {
+    check_unitype_166("166b");
+}
+
+#[test]
+fn unitype_166c_is_byte_equal_to_mesa_26_2_1() {
+    check_unitype_166("166c");
+}
+
+/// The layout's rows: one per element of a mediump vec4 array (64 and 70
+/// for case 166's arms, the element's two fp16 words at `2e`), up to
+/// select.rs `MAX_LAYOUT_ROWS`; past it, or a loaded block past the
+/// record's `MAX_UBO_ROWS`, is the table's own refusal, not the FAU's
+/// `UboFallback` (which sel_u_fau130 keeps).
+#[test]
+fn a_mediump_array_takes_one_layout_row_an_element_up_to_the_table() {
+    let rows = |src: &str| {
+        store::with_scratch(|s| {
+            let l = codegen::lower_source(SHC_STAGE_FRAGMENT, src.as_bytes(), &[], s).expect("the front end takes it");
+            let text = s.alloc_str(src).expect("room");
+            let prec = super::FsPrecision::of(&l.module, text, s).expect("the precision");
+            let f = super::nir_fs::walk(&l.module, s, prec).expect("the walk");
+            let ubo = super::select::UboLayout::fs16(&l.module, &f.nir, &|_| false)?;
+            Ok::<_, MaliError>((ubo.rows(), ubo.bytes(), ubo.as_slice().iter().map(|r| r.word).collect::<Vec<_>>()))
+        })
+        .expect("the scratch arena is free")
+    };
+    let (n, bytes, words) = rows(td!("unitype_166a.frag")).expect("64 rows");
+    assert_eq!((n, bytes, words[63]), (64, 512, 126));
+    let (n, bytes, words) = rows(td!("unitype_166b.frag")).expect("70 rows");
+    assert_eq!((n, bytes, words[69]), (70, 560, 138));
+    let (n, _, _) = rows("precision mediump float; uniform vec4 a[255]; void main(){ gl_FragColor = a[0] + a[254]; }")
+        .expect("255 rows");
+    assert_eq!(n, 255);
+    let two = "precision mediump float; uniform vec4 a[200]; uniform vec4 b[100];
+               void main(){ gl_FragColor = a[199] + b[99]; }";
+    assert_eq!(rows(two).err(), Some(MaliError::UboRowsFull));
+    assert_eq!(gap(SHC_STAGE_FRAGMENT, two), MaliError::UboRowsFull);
+    /* a block the program loads keeps at most 32 rows for the frame */
+    let loaded = "precision mediump float; uniform vec4 c[40]; uniform int i; void main(){ gl_FragColor = c[i]; }";
+    assert_eq!(gap(SHC_STAGE_FRAGMENT, loaded), MaliError::UboRowsFull);
+    assert_eq!(gap(SHC_STAGE_VERTEX, SEL_U_FAU130), MaliError::UboFallback);
 }
 
 /* ---- 2D array textures (#33) ---------------------------------------- */

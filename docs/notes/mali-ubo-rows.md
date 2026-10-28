@@ -2,9 +2,10 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Case 166: refused by the 32-row UBO layout, not by the FAU (Mali)
 
-Issue #33 (case 166, "uniforms past the FAU"). Study at commit `0749ee2d`.
-Nothing here changes `src/`; this records what the three references show, where
-our refusal comes from, and the fix to make. It checks and sharpens
+Issue #33 (case 166, "uniforms past the FAU"). Study at commit `0749ee2d`;
+the fix landed on top of `b3f6bf1c` (section "What landed", at the end). The
+study records what the three references show, where our refusal came from,
+and the fix to make. It checks and sharpens
 `docs/notes/mali-uniform-types.md` (section 3 and the finding 3 at its top),
 which already says arms A and B need no UBO fallback.
 
@@ -156,3 +157,47 @@ read as files. The `va_disasm_ref.sh` and `pan_ref_diff.py` outputs were taken
 from the pinned `expect.json` (`words` and `text`), not re-run. The behaviour of
 the frame for a row count above 32 is by reading `program.rs` and `frame.rs`,
 not measured.
+
+## What landed
+
+All three arms compile byte-equal to their references
+(`unitype_166a/b/c_is_byte_equal_to_mesa_26_2_1` in
+`src/shaderc/online/mali/tests.rs`, `check_program_for` with
+`unitype_166.vert`, each asserting `info.ubo` is empty). The design above
+changed in one point and arm C needed more than the texture-2 item gave:
+
+1. **Two constants, not one raised.** `select.rs` now has `MAX_LAYOUT_ROWS =
+   256` for the layout's own table (`UboLayout::rows`, `arrays` as eight
+   32-bit words, `Table::UboRows`), and keeps `MAX_UBO_ROWS = 32` for a block
+   the record keeps for the frame. `UboLayout::kept()` refuses a loaded block
+   past 32 rows (`mod.rs`, both stages, where `sc.ubo` is set), so
+   `StageMeta::ubo` (`src/mali/program.rs`) and the frame stay as they were.
+   A program that only pushes (all three arms) is never kept. Raising
+   `MAX_UBO_ROWS` itself (step 1 of the design) is left to a frame item that
+   needs a loaded block of more than 32 rows.
+2. **The refusal is named.** `MaliError::UboRowsFull` ("a uniform block of
+   more than 256 rows ... or 512 words, or a loaded one of more than 32
+   rows") is returned by `UboLayout::push`, by `kept()` and by
+   `fau.rs push_ubo`'s word table; `UboFallback` stays for a range past the
+   FAU (`sel_u_fau130`, still pinned).
+3. **Arm A: two vectoriser rules.** `u_p[56].x * u_p[0]` puts a uniform first
+   in a product (`prod(Uniform, MulA)` admitted), and `u_p[58].y *
+   vec4(1.0, 0.0, ..)` needs `fmul` by a pair whose constant is 0.0 in both
+   lanes to fold per pair (`Rule::Zero`, `nir_fs.rs`), as Mesa's
+   `ffma %6.yy, (1.0, 0.0), %4` keeps the x and y lanes.
+4. **Arm C: three more.** `u_w[k].x * texture2D(..)` puts a look-up's word
+   second in a product and in its fusion (`prod(Tex, MulB)`, `prod(Tex,
+   FmaB)`); the sixteen look-ups and their sums take 126 pair nodes, so
+   `MAX_PAIR_NODES` is 255 (a pair node is a `u8`; it was 64); and
+   `opt.rs cse` no longer rewrites a staging source (`bi_is_staging_src`,
+   bi_opt_cse.c:153-154), so each look-up keeps its own `COLLECT` of the
+   constant coordinate and Mesa's `MOV.i32 r2, u6.w0`, `MOV.i32 r3, u6.w0`
+   before every `TEX_SINGLE`. No other reference moved.
+5. The layout test `a_mediump_array_takes_one_layout_row_an_element_up_to_the_table`
+   pins rows 64 and 70, bytes 512 and 560, words 126 and 138, a 255-element
+   array, two arrays past 256 (`UboRowsFull`), a loaded 40-element array
+   (`UboRowsFull`) and `sel_u_fau130` (`UboFallback`). The high-water test
+   now includes the three arms (uniform rows 70 of 256, pair nodes 126 of
+   255). `tools/mali/corpus-verdicts.txt` did not move (no corpus source is
+   case 166). Case 166's sweep verdict also needs the frame's sixteen
+   samplers (`frame-tex2darray`); it was not run on the board.

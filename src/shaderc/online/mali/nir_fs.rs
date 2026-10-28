@@ -42,8 +42,10 @@ use crate::gl::consts::{GL_BOOL, GL_FLOAT, GL_INT};
 use crate::shaderc::online::arena::Arena;
 use crate::shaderc::online::ir::{self, AluOp, Es100Tex, IoKind, IoSlot, Module, Node};
 
-/// The vectorised operations and operands of the colour.
-pub const MAX_PAIR_NODES: usize = 64;
+/// The vectorised operations and operands of the colour: a pair node is
+/// named by a `u8` ([`P::Op`]), so up to 255 (case 166's sixteen look-ups
+/// and their sums take 126, unitype_166c).
+pub const MAX_PAIR_NODES: usize = 255;
 
 /// The `demote_if`s one shader may hold ([`Fs::discard`]).
 pub const MAX_DISCARDS: usize = 8;
@@ -579,6 +581,14 @@ pub const ADMITTED: u128 = {
         /* case 75's `vec4(u_k.x - 0.5, u_k.y - 1.0, 1.0 - u_k.z, 1.0)`
          * (varyconst_75_immneg): the uniform's pair first in a sum */
         | prod(Uniform, AddA)
+        /* case 166's `u_p[56].x * u_p[0]` (unitype_166a): a uniform's
+         * component first in a product, `fmul %2.xx, %3.xy` */
+        | prod(Uniform, MulA)
+        /* case 166's `r += u_w[0].x * texture2D(u_s0, c)` (unitype_166c):
+         * a look-up's word second in the product and in its fusion,
+         * `ffma(u_w[k].x, t, r)` */
+        | prod(Tex, MulB)
+        | prod(Tex, FmaB)
 };
 
 /// One load of the fragment shader: a 16-byte slot of the compacted
@@ -642,6 +652,8 @@ enum Rule {
     IdentityFirst,
     /// A source is -1.0 in both lanes (an fneg).
     Negate,
+    /// A source of an `fmul` is 0.0 (or -0.0) in both lanes.
+    Zero,
 }
 
 /// A fragment shader built on the graph.
@@ -785,14 +797,16 @@ impl<'s> Fs<'s> {
         }
         let (cx, cy) = (matches!(x, Val::Const(_)), matches!(y, Val::Const(_)));
         let neg = |s: &Self, v: Val| matches!(s.alu_of(v), Some((Alu::Fneg, _)));
-        let zero = |v: Val| matches!(v, Val::Const(0 | F32_NEG_ZERO));
         match (a, rule) {
             (AluOp::Fmul, Rule::IdentitySecond) => Ok(x),
             (AluOp::Fmul, Rule::IdentityFirst) => Ok(y),
             /* `fmul(a, 0.0)` is 0.0 (nir_opt_algebraic.py's inexact rule, in
              * force without `precise`): case 122's `t.w * 0.0` (uniidx_i,
-             * no FMA in Mesa's program) */
-            (AluOp::Fmul, _) if zero(x) || zero(y) => Ok(Val::Const(0)),
+             * no FMA in Mesa's program). Like the others it holds for a
+             * lane pair whose constant is 0.0 in both lanes: case 166's
+             * `u_p[58].y * vec4(1.0, 0.0, ..)` keeps its x and y lanes as
+             * `ffma %6.yy, (1.0, 0.0), %4` (unitype_166a.stderr) */
+            (AluOp::Fmul, Rule::Zero) => Ok(Val::Const(0)),
             /* two constants: the front end folds them */
             (AluOp::Fmul, _) if cx && cy => Err(MaliError::ConstantFold),
             /* `* -1.0` is an fneg (nir_opt_algebraic.py:296) */
@@ -2793,6 +2807,8 @@ fn walk_nodes(
                         Rule::IdentitySecond
                     } else if all(0, ident) {
                         Rule::IdentityFirst
+                    } else if a == AluOp::Fmul && (all(1, &[0, F32_NEG_ZERO]) || all(0, &[0, F32_NEG_ZERO])) {
+                        Rule::Zero
                     } else if a == AluOp::Fmul && (all(1, &[F32_MINUS_ONE]) || all(0, &[F32_MINUS_ONE])) {
                         Rule::Negate
                     } else {
@@ -4143,8 +4159,8 @@ struct Pairs {
     n: usize,
 }
 
-/// The vectorised operations and operands of the colour.
-pub const MAX_PAIRS: usize = 64;
+/// The pair graph's nodes ([`MAX_PAIR_NODES`]).
+pub const MAX_PAIRS: usize = MAX_PAIR_NODES;
 
 impl Pairs {
     fn push(&mut self, p: P, place: (u32, u8)) -> Result<u8, MaliError> {

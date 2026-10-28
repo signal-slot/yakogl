@@ -245,25 +245,46 @@ impl UboRow {
 /// 32 after `vec4 fcols[4]`'s 8 words, the block's `Size: 36`).
 #[derive(Clone, Copy, Debug)]
 pub struct UboLayout {
-    rows: [UboRow; MAX_UBO_ROWS],
+    rows: [UboRow; MAX_LAYOUT_ROWS],
     n: usize,
     /// The block's words through its last row: the exact bytes Mesa gives
     /// the UBO descriptor (`cfg.size`, pan_cmdstream.c:1438-1452) are
     /// `4 * words`.
     words: u16,
-    /// Bit k: row k is a uniform array's ([`UboLayout::vs`]).
-    arrays: u32,
+    /// Bit k % 32 of word k / 32: row k is a uniform array's
+    /// ([`UboLayout::vs`]).
+    arrays: [u32; MAX_LAYOUT_ROWS / 32],
 }
 
-/// The uniforms one stage's layout holds.
+/// The rows one stage's layout holds: a mediump fragment shader's array
+/// takes one row an element ([`UboLayout::fs16`]) and the front end's
+/// `array_len` is a `u8`, so one array of up to 255 elements fits (case
+/// 166's `vec4 u_p[70]`, unitype_166b, is 70 rows that the program only
+/// pushes; docs/notes/mali-ubo-rows.md).
+pub const MAX_LAYOUT_ROWS: usize = 256;
+
+/// The rows of a block the program loads from memory, which the record
+/// keeps for the frame to upload (mod.rs `MaliShader::ubo`, src/mali
+/// `StageMeta`); a layout that is only pushed is not kept.
 pub const MAX_UBO_ROWS: usize = 32;
 
 impl UboLayout {
-    pub const NONE: UboLayout = UboLayout { rows: [UboRow::NONE; MAX_UBO_ROWS], n: 0, words: 0, arrays: 0 };
+    pub const NONE: UboLayout =
+        UboLayout { rows: [UboRow::NONE; MAX_LAYOUT_ROWS], n: 0, words: 0, arrays: [0; MAX_LAYOUT_ROWS / 32] };
 
-    /// The uniforms the layout holds (its use of [`MAX_UBO_ROWS`]).
+    /// The rows the layout holds, one per uniform or array element (its
+    /// use of [`MAX_LAYOUT_ROWS`]).
     pub fn rows(&self) -> usize {
         self.n
+    }
+
+    /// The layout of a block the program loads, which the record keeps for
+    /// the frame: at most [`MAX_UBO_ROWS`] rows.
+    pub fn kept(self) -> Result<UboLayout, MaliError> {
+        if self.n > MAX_UBO_ROWS {
+            return Err(MaliError::UboRowsFull);
+        }
+        Ok(self)
     }
 
     /// The rows, in block order.
@@ -278,7 +299,7 @@ impl UboLayout {
 
     fn push(&mut self, dword: u16, comps: u16, halves: bool) -> Result<(), MaliError> {
         if self.n >= self.rows.len() {
-            return Err(MaliError::UboFallback);
+            return Err(MaliError::UboRowsFull);
         }
         let row = UboRow { dword, word: self.words, comps, halves };
         self.rows[self.n] = row;
@@ -305,7 +326,7 @@ impl UboLayout {
             let (_, comps) = super::nir_fs::uniform_extent(m, u.dword_off)?;
             l.push(u.dword_off, comps, false)?;
             if u.array_len > 1 {
-                l.arrays |= 1 << (l.n - 1);
+                l.arrays[(l.n - 1) / 32] |= 1 << ((l.n - 1) % 32);
             }
         }
         Ok(l)
@@ -315,7 +336,7 @@ impl UboLayout {
     /// vertex shader's layout, [`UboLayout::vs`]).
     pub fn in_array(&self, dword: u16) -> bool {
         let k = self.rows[..self.n].iter().position(|r| dword >= r.dword && dword < r.dword + r.comps);
-        k.is_some_and(|k| self.arrays & (1 << k) != 0)
+        k.is_some_and(|k| self.arrays[k / 32] & (1 << (k % 32)) != 0)
     }
 
     /// The program reads the block from memory (a [`nir::Kind::UniformIdx`]
