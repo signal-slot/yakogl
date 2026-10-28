@@ -205,6 +205,31 @@ pub enum Alu {
     /// 0) and `i2f32(iand(ishr(a, 8k), 0xff))` (intuni_ishr's `float(s &
     /// 255)` and `float((s >> 8) & 255)`).
     U8f32(u8),
+    /// `ixor` of two 32-bit integers (`LSHIFT_XOR.i32 a, b, #0`,
+    /// bifrost_compile.c:3383-3385): `nir_lower_idiv`'s sign of a quotient.
+    Ixor,
+    /// `isub` (`ISUB.s32 a, b`, bifrost_compile.c:3355-3357).
+    Isub,
+    /// `ineg` (`ISUB.s32 0, a`, bifrost_compile.c:3351-3353).
+    Ineg,
+    /// `u2f32` of a 32-bit integer (`U32_TO_F32`, bifrost_compile.c:
+    /// 3171-3172), where [`Alu::U2f32`] is of a 16-bit one.
+    U2f,
+    /// `f2u32` of an fp32 value (`F32_TO_U32.rtz`, bifrost_compile.c:
+    /// 3137-3150).
+    F2u,
+    /// `extract_u16(a, k)`: half `k` of a word, zero-extended (`U16_TO_U32
+    /// a.hk`, bifrost_compile.c:3013-3025): `nir_lower_idiv`'s 32 x 32
+    /// high product from 16-bit halves.
+    Extract16(u8),
+    /// `b2i32` of a 32-bit boolean (`MUX.i32.int_zero 0, 1, c`,
+    /// bifrost_compile.c:3246-3251), which `bi_optimizer_result_type`
+    /// folds into a compare it alone reads (`.i1`).
+    B2i,
+    /// An unsigned ordering of two 32-bit integers (`uge_pan`, `ult_pan`:
+    /// `ICMP.u32` with `BI_RESULT_TYPE_M1`, bifrost_compile.c:3261-3265, the
+    /// `_OR` form after `va_lower_isel`).
+    Ucmp(Cmpf),
 }
 
 impl Alu {
@@ -228,7 +253,12 @@ impl Alu {
             | Alu::I2i32
             | Alu::F2i32
             | Alu::Inot
-            | Alu::U8f32(_) => 1,
+            | Alu::U8f32(_)
+            | Alu::Ineg
+            | Alu::U2f
+            | Alu::F2u
+            | Alu::Extract16(_)
+            | Alu::B2i => 1,
             Alu::Ffma
             | Alu::Bcsel
             | Alu::Cubeface1
@@ -258,7 +288,8 @@ impl Alu {
             | Alu::Ior
             | Alu::Imax
             | Alu::Imin
-            | Alu::Imul => true,
+            | Alu::Imul
+            | Alu::Ixor => true,
             Alu::Fcmp(c) | Alu::Icmp(c) => matches!(c, Cmpf::Eq | Cmpf::Ne),
             _ => false,
         }
@@ -287,6 +318,13 @@ impl Alu {
                 | Alu::F2i32
                 | Alu::Inot
                 | Alu::Ishr
+                | Alu::Ixor
+                | Alu::Isub
+                | Alu::Ineg
+                | Alu::F2u
+                | Alu::Extract16(_)
+                | Alu::B2i
+                | Alu::Ucmp(_)
         )
     }
 }
@@ -337,6 +375,14 @@ pub enum Kind {
     /// A fragment shader's texture look-up (nir_fs.rs): its four 16-bit
     /// lanes are the texels.
     Tex,
+    /// The first eight bytes of the texture descriptor of `sampler`'s
+    /// look-up (nir_fs.rs; `pan_nir_load_va_desc(b, 4, 16, handle, 0)` of
+    /// `pan_nir_load_va_tex_size`, pan_nir.h:106-140: a `load_ssbo` of the
+    /// descriptor table, Mesa's `LD_PKA.i64`): two 32-bit lanes, the
+    /// words, whose halves `textureSize` reads.
+    TexDesc {
+        sampler: u8,
+    },
     /// A fragment shader's read of one element of a uniform array at a
     /// run-time index (nir_fs.rs; `load_ubo(0, index * stride)`, Mesa's
     /// `LD_PKA`): `dword` the front end's first dword of the array, `comps`
@@ -766,7 +812,15 @@ pub(super) fn uniform_idx(
         },
         _ => false,
     };
-    if u.gl_type as u32 != GL_FLOAT || u.array_len <= 1 || u.dword_off != base_dw || comps != 1 || !int_word {
+    /* a float array's element (one dword), or a vec4 array's (four: the
+     * element's 16 bytes, which the selection loads from the lowest lane
+     * read to the highest, `select::vec4_fetch`) */
+    let shape = match u.gl_type as u32 {
+        GL_FLOAT => comps == 1,
+        GL_FLOAT_VEC4 => comps == 4,
+        _ => false,
+    };
+    if !shape || u.array_len <= 1 || u.dword_off != base_dw || !int_word {
         return Err(MaliError::UniformIndexed);
     }
     let src = [idx, Val::Undef, Val::Undef];
@@ -971,9 +1025,12 @@ impl<'s> Nir<'s> {
                  * (:166, :182); `load_vertex_id` is not in the list */
                 Kind::Preload { reg } if reg != super::ra::VERTEX_ID => {}
                 Kind::Preload { .. } => return None,
-                Kind::Tex | Kind::UniformIdx { .. } | Kind::VsTex { .. } | Kind::FragCoordZw | Kind::Phi => {
-                    return None
-                }
+                Kind::Tex
+                | Kind::TexDesc { .. }
+                | Kind::UniformIdx { .. }
+                | Kind::VsTex { .. }
+                | Kind::FragCoordZw
+                | Kind::Phi => return None,
                 /* a `demote_if` (:227-232, `discard_ok` false in both calls
                  * that count ALU; the GL front end's third call,
                  * gl_nir_linker.c:107-111, is for a side of nothing but
@@ -1281,6 +1338,17 @@ impl<'s> Nir<'s> {
         !self.reads(n, |k| !matches!(k, Kind::Uniform { .. } | Kind::Alu(_)))
     }
 
+    /// Node `n` is convergent (`nir_vertex_divergence_analysis`): no
+    /// attribute, vertex or instance ID or phi behind it. A run-time
+    /// indexed read at an int uniform and a look-up at such values are,
+    /// so Mesa's link promotes their lanes to flat as it does those of
+    /// uniforms alone (nir_opt_varyings.c:4964-5002; measured:
+    /// uniarray_vs.expect.json and unitype_116v.expect.json load
+    /// `.src_flat32`).
+    fn convergent(&self, n: u16) -> bool {
+        !self.reads(n, |k| matches!(k, Kind::Input { .. } | Kind::Preload { .. } | Kind::Phi))
+    }
+
     /// Node `n` is, or reads through its sources, a node of a kind `f`
     /// accepts.
     fn reads(&self, n: u16, f: impl Fn(Kind) -> bool) -> bool {
@@ -1479,7 +1547,15 @@ impl<'s> Nir<'s> {
                 | Alu::F2i32
                 | Alu::Inot
                 | Alu::Ishr
-                | Alu::U8f32(_) => return Err(MaliError::ConstantFold),
+                | Alu::U8f32(_)
+                | Alu::Ixor
+                | Alu::Isub
+                | Alu::Ineg
+                | Alu::U2f
+                | Alu::F2u
+                | Alu::Extract16(_)
+                | Alu::B2i
+                | Alu::Ucmp(_) => return Err(MaliError::ConstantFold),
                 Alu::F2f16
                 | Alu::Fneg
                 | Alu::Fabs
@@ -1856,7 +1932,9 @@ pub fn build<'s>(
              * varying program, docs/notes/mali-uniform-arrays.md) */
             IrOp::LoadUniformIdx { base_dw, index, comps, .. } => {
                 let n = uniform_idx(&mut vs, m, base_dw, comps, lane(w, index, 0))?;
-                out[0] = Val::Lane(n, 0);
+                for (c, o) in out.iter_mut().enumerate().take(comps as usize) {
+                    *o = Val::Lane(n, c as u8);
+                }
             }
             IrOp::LoadLocal { local, index: None, comps } => {
                 let s = w.locals.get(local.0 as usize).ok_or(MaliError::Defect(Defect::IrIndex))?;
@@ -2006,10 +2084,12 @@ pub fn build<'s>(
                     vs.cube_desc(x, y, z)?
                 } else {
                     let (s, t) = (lane(w, coord, 0), lane(w, coord, 1));
-                    /* a constant lane (the staging word would be a FAU
-                     * word moved to a register, as a fragment look-up's;
-                     * no vertex reference draws it) */
-                    if matches!(s, Val::Const(_)) || matches!(t, Val::Const(_)) {
+                    /* a coordinate of constants: each staging word its FAU
+                     * word moved to a register (unitype_100.expect.json's
+                     * `textureLod(vtex, vec2(0.25), 0.0)`, `MOV.i32 r2,
+                     * u6.w0` and `MOV.i32 r3, u6.w0`). One constant lane
+                     * beside a computed one has no reference (case 149) */
+                    if matches!(s, Val::Const(_)) != matches!(t, Val::Const(_)) {
                         return Err(MaliError::TexVertexConstant);
                     }
                     (s, t)
@@ -2050,7 +2130,7 @@ pub fn build<'s>(
                 Val::Const(bits) => vs.consts.push(o.location, c as u8, bits),
                 /* a lane of uniforms alone, which the link promotes to
                  * flat ([`super::link::VaryingConsts::push_flat`]) */
-                Val::Lane(n, _) if vs.uniform_only(n) => vs.consts.push_flat(o.location, c as u8),
+                Val::Lane(n, _) if vs.convergent(n) => vs.consts.push_flat(o.location, c as u8),
                 _ => {}
             }
         }

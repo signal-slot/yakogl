@@ -47,7 +47,8 @@ const fn size(op: Op) -> u8 {
         | Op::IaddV2u16
         | Op::MuxV2i16
         | Op::FroundV2f16 { .. }
-        | Op::FcmpOrV2f16 { .. } => 16,
+        | Op::FcmpOrV2f16 { .. }
+        | Op::IcmpOrV2u16 { .. } => 16,
         Op::ShaddxS64 => 64,
         _ => 32,
     }
@@ -280,6 +281,23 @@ pub fn mod_prop_backward(p: &mut Prog<'_>) {
             if let Op::FcmpOrF32 { cmpf, .. } = p.ins[k].op {
                 p.ins[k].op = Op::FcmpOrF32 { cmpf, result: ResultType::F1 };
             }
+            true
+        } else if use_.op == Op::MuxI32
+            && sz == 32
+            && is_const(&use_.src[0], 0)
+            && is_const(&use_.src[1], 1)
+            && use_.src[2].swz == Swz::H01
+            && matches!(i.op, Op::FcmpOrF32 { .. } | Op::IcmpOrS32 { .. } | Op::IcmpOrU32 { .. })
+        {
+            /* a `b2i32`'s `bcsel` folds into the compare's `.i1` result
+             * type (`bi_takes_int_result_type`; intbig_case79.expect.json's
+             * `ICMP_OR.u32.ge.i1` of `nir_lower_idiv`'s second correction) */
+            p.ins[k].op = match p.ins[k].op {
+                Op::FcmpOrF32 { cmpf, .. } => Op::FcmpOrF32 { cmpf, result: ResultType::I1 },
+                Op::IcmpOrS32 { cmpf, .. } => Op::IcmpOrS32 { cmpf, result: ResultType::I1 },
+                Op::IcmpOrU32 { cmpf, .. } => Op::IcmpOrU32 { cmpf, result: ResultType::I1 },
+                op => op,
+            };
             true
         } else {
             false

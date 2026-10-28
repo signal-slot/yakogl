@@ -35,6 +35,40 @@ not repeated.
 fragment shader reads an int uniform as a value; the vertex stage still
 refuses one read other than as an index. `docs/notes/mali-int-uniforms.md`.)
 
+**State since plan #154 item intbool-2.** The answers and tables below
+were written before item intbool. After it, 100 and 116 no longer failed
+on the `int`: 100's two stages and 116's vertex stage stopped at the
+run-time read itself (`nir::uniform_idx`, `MaliError::UniformIndexed`:
+only a float array's element was taken, or a mediump fragment shader's
+vec4 element). Since intbool-2 the vec4 element is read in every stage,
+and cases 100 and 116 are byte-equal in both stages
+(`case_100_idxtex_is_byte_equal_to_mesa_26_2_1`,
+`case_116_uniidxe_is_byte_equal_to_mesa_26_2_1`,
+`unitype_116v_is_byte_equal_to_mesa_26_2_1`, tests.rs `UNITYPE_POPULATION`,
+compiled through the link):
+
+- the offset `idx << 4` (`LSHIFT_OR` by the table's byte 4,
+  `select::vec4_offset`) where the read stands, the load moved down to its
+  first reader (`nir_opt_move`), of the lanes from the lowest read to the
+  highest (`select::vec4_fetch`: `LD_PKA.i128` of 116v's four, `.i64` of
+  100's vertex `.rg`, `IADD_IMM #0x8` then `.i64` of the fragment's `.ba`);
+- a varying of such a read (or of a look-up at constants) is convergent:
+  the link promotes it to flat (`nir::Nir::convergent`), as for lanes of
+  uniforms alone; uniarray_vs's and 116v's fragment programs load it
+  `.src_flat32`;
+- a vertex look-up whose coordinate is two constants (100's
+  `textureLod(vtex, vec2(0.25), 0.0)`): each staging word the FAU word
+  moved; one constant lane beside a computed one stays refused (case 149);
+- a look-up writes only the texels read (`.rg` in the vertex stage, `.ba`
+  in a highp fragment shader, one register each);
+- in a fragment shader with an fp32 output, a load only the colour's
+  `vec4` reads stands after `ATEST` (NIR has `atest_pan` before the
+  `vec4`).
+
+Case 80 (section 7) is not lowered: its fragment shader stops at the chain
+refusal (`do_rebalance_tree`, the chains item) and its indexed locals
+(`arr[i]`, `p[i]`, `col[i - 1]`, `v[j]`) are `IndexedLocal`.
+
 1. **Cases 100 and 116 fail on `int` and nothing else.** Their uniforms are
    `vec4 xcols[4]` (an array: refused first, as `UniformArray`, in the vertex
    stage), `uniform int xidx` (the type that raises `UniformType`) and, in 100
@@ -383,6 +417,17 @@ Sources in `tools/mali/testdata`:
 | `unitype_166c.frag` | `fshp_units_src` regenerated |
 
 ## 7. Case 80 (`matdyn`): an `int` uniform that indexes
+
+**State since plan #154 item intbool-2.** The `int` uniform is lowered (its
+word read raw, section 1), and case 80 is no longer refused by its type.
+Its fragment shader stops first at the chain refusal: `s[1][1] + d[1][0] +
+q[0][1] + n[1][0] + 4.0 * p[1][0]` is five terms GLSL's `do_rebalance_tree`
+reassociates (`nir::refuse_rebalanced`, plan #154 item chains). With that
+refusal lifted in a scratch build, it then stops at the mixed precision of
+its locals (`MixedPrecision`), and only after that at the run-time indexed
+locals this section describes (`IndexedLocal`, `arr[i]`, `p[i]`, `col[i -
+1]`, `v[j]`). No test pins `unitype_80` yet. The text below predates
+intbool (session 1).
 
 Plan #153 item `study-matdyn-ifbranch`, issue #1386. The newest sweep
 (`0dce654a8:tools/mali/board-ref/2026-10-24-refusals/ours/15-panthor-gltest--sweep-1.log`,

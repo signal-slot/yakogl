@@ -36,7 +36,7 @@ const fn row(op: Alu, bits: u8, width: u8) -> Row {
 }
 
 /// The rows [`emit`] selects, each with the `bi_emit_alu` case it is.
-pub const ROWS: [(Row, &str); 64] = [
+pub const ROWS: [(Row, &str); 75] = [
     (row(Alu::Fadd, 32, 1), "nir_op_fadd: FADD.f32"),
     (row(Alu::Fmul, 32, 1), "nir_op_fmul: FMA.f32 a, b, -0.0"),
     (row(Alu::Ffma, 32, 1), "nir_op_ffma: FMA.f32"),
@@ -138,6 +138,24 @@ pub const ROWS: [(Row, &str); 64] = [
     /* a mediump `<=` of integers (tools/mali/testdata/intloop_int_compare:
      * `ICMP_OR.s32.ge.m1 r3, r0, r1, 0x0`) */
     (row(Alu::Icmp(Cmpf::Ge), 32, 1), "nir_op_ige_pan: ICMP.s32.ge.m1"),
+    /* integer division, `nir_lower_idiv` (case 79, tools/mali/testdata/
+     * intbig_case79: `U32_TO_F32`, `FRCP.f32`, `F32_TO_U32.rtz`, the 16-bit
+     * halves' products, `ICMP_OR.u32.ge`, `LSHIFT_XOR.i32`), and the
+     * absolute value of one fp16 lane (`FADD.v2f16 r2, r4^.abs.h00`) */
+    (row(Alu::Ixor, 32, 1), "nir_op_ixor: LSHIFT_XOR.i32 a, b, #0"),
+    (row(Alu::Isub, 32, 1), "nir_op_isub: ISUB.s32"),
+    (row(Alu::Ineg, 32, 1), "nir_op_ineg: ISUB.s32 0, a"),
+    (row(Alu::U2f, 32, 1), "nir_op_u2f32 of a 32-bit source: U32_TO_F32"),
+    (row(Alu::F2u, 32, 1), "nir_op_f2u32: F32_TO_U32.rtz"),
+    (row(Alu::Extract16(0), 32, 1), "nir_op_extract_u16(a, 0): U16_TO_U32 a.h0"),
+    (row(Alu::Extract16(1), 32, 1), "nir_op_extract_u16(a, 1): U16_TO_U32 a.h1"),
+    (row(Alu::B2i, 32, 1), "nir_op_b2i32: MUX.i32.int_zero 0, 1, c"),
+    (row(Alu::Ucmp(Cmpf::Ge), 32, 1), "nir_op_uge_pan: ICMP.u32.ge.m1"),
+    (row(Alu::Fabs, 16, 1), "nir_op_fabs of one 16-bit lane: FABSNEG.v2f16 a.hN.abs"),
+    /* `textureSize`'s null test of the descriptor's first half (case 42,
+     * tools/mali/testdata/intbig_case42: `ICMP_OR.v2u16.eq.m1 r1, r2^.h00,
+     * 0x0, 0x0`) */
+    (row(Alu::Icmp(Cmpf::Eq), 16, 1), "nir_op_ieq_pan of one 16-bit lane: ICMP_OR.v2u16.eq.m1 a.h00, b"),
 ];
 
 /// A source of a one-lane 16-bit operation: its lane's half in both
@@ -149,7 +167,7 @@ fn lone(s: Src) -> Src {
 }
 
 /// `row`'s bit in a set of [`ROWS`] (a program's rows drawn).
-pub fn bit(row: Row) -> u64 {
+pub fn bit(row: Row) -> u128 {
     ROWS.iter().position(|r| r.0 == row).map_or(0, |i| 1 << i)
 }
 
@@ -270,6 +288,25 @@ pub fn emit(p: &mut Prog<'_>, row: Row, s: &[Src]) -> Result<u16, MaliError> {
         (Alu::U8f32(k), 32, 1) => {
             let b = [Swz::B0, Swz::B1, Swz::B2, Swz::B3][k as usize & 3];
             ins(p, Op::U8ToF32, &[s[0].swz(b)])?
+        }
+        /* `bi_lshift_xor_to(b, sz, dst, s0, s1, bi_imm_u8(0))` */
+        (Alu::Ixor, 32, 1) => ins(p, Op::LshiftXorI32, &[s[0], s[1], ZERO])?,
+        /* `bi_isub_to(.., s0, s1, false)`; `ineg` with `bi_zero()` first */
+        (Alu::Isub, 32, 1) => ins(p, Op::IsubS32, &s[..2])?,
+        (Alu::Ineg, 32, 1) => ins(p, Op::IsubS32, &[ZERO, s[0]])?,
+        (Alu::U2f, 32, 1) => ins(p, Op::U32ToF32, &s[..1])?,
+        (Alu::F2u, 32, 1) => ins(p, Op::F32ToU32, &s[..1])?,
+        /* `bi_u16_to_u32_to(b, dst, bi_half(s0, half))` */
+        (Alu::Extract16(k), 32, 1) => ins(p, Op::U16ToU32, &[s[0].swz(if k == 0 { Swz::H00 } else { Swz::H11 })])?,
+        /* `bi_mux_to(b, sz, dst, bi_imm_u8(0), bi_imm_uintN(1, sz), s0,
+         * BI_MUX_INT_ZERO)` */
+        (Alu::B2i, 32, 1) => ins(p, Op::MuxI32, &[ZERO, Src::of(Idx::Const(1)), s[0]])?,
+        (Alu::Ucmp(cmpf), 32, 1) => ins(p, Op::IcmpOrU32 { cmpf, result: ResultType::M1 }, &[s[0], s[1], ZERO])?,
+        (Alu::Fabs, 16, 1) => ins(p, Op::FabsnegV2f16, &[Src { abs: true, ..lone(s[0]) }])?,
+        /* `bi_icmp_to(nir_type_uint16, ..)`, an equality's `ICMP.v2u16`
+         * made `ICMP_OR` by va_lower_isel (bir.rs) */
+        (Alu::Icmp(cmpf @ Cmpf::Eq), 16, 1) => {
+            ins(p, Op::IcmpOrV2u16 { cmpf, result: ResultType::M1 }, &[s[0].swz(Swz::H00), s[1], ZERO])?
         }
         _ => return Err(MaliError::Defect(super::Defect::IrIndex)),
     })

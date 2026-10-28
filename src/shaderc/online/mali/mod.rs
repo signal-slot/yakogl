@@ -871,7 +871,7 @@ pub struct StageCode<'s> {
     /// each): the population tests.rs references.
     pub prods: u32,
     /// The rows of emit.rs the fragment graph selected ([`emit::bit`]).
-    pub rows: u64,
+    pub rows: u128,
     /// What this compile used of each [`Table`], in [`Table::ALL`]'s order.
     pub marks: [usize; Table::ALL.len()],
     /// The position slot, then the generic varyings.
@@ -1231,11 +1231,12 @@ fn compile_stage<'s>(
                 f.mixed |= !matches!(prec(u.name), Some(Precision::High));
             }
             nir_fs::select_highp(&mut p, &mut f, m, &ubo, scratch).map(|()| ubo)
-        } else if nir_fs::mask_colour(&f) {
+        } else if nir_fs::mask_colour(&f) || nir_fs::array_look_ups(&f) {
             /* a mediump shader's colour of masks: the fp16 uniform block
              * (case 72's `u_in`, its fp16 half read by `F16_TO_S32`; case
              * 112's bool, a word) */
             let highp = |name: &str| matches!(prec(name), Some(Precision::High));
+            nir_fs::fuse16(&mut f);
             nir_fs::vectorise_int_sources(&mut f)
                 .and_then(|()| select::UboLayout::fs16(m, &f.nir, &highp))
                 .and_then(|ubo| nir_fs::select_highp(&mut p, &mut f, m, &ubo, scratch).map(|()| ubo))
