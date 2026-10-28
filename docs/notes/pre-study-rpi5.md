@@ -2,7 +2,7 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Pre-study: Raspberry Pi 5 (BCM2712, VideoCore VII, V3D 7.1)
 
-Date 2026-10-28, main `ea7e4e85`. Host reading only: no board, no file under
+Date 2026-10-28, main `90b53ca2`. Host reading only: no board, no file under
 `src/`, `driver/` or `tools/` changed, nothing built or run. The Pi 5 has not
 arrived.
 
@@ -291,7 +291,11 @@ Read from `LINUX/drivers/gpu/drm/v3d/` v6.18 (`v3d_regs.h`, `v3d_drv.c`,
   `:101`), which with 4 KiB pages reads as 36 physical bits (the reader's
   inference, `PA_WIDTH` is the register to confirm). The file mentions no 7.1
   difference. Our Pi 4 table format therefore carries over on this evidence.
-- **Job start** (`v3d_sched.c`, by function; the same order as the Pi 4):
+- **Job start** (`v3d_sched.c` at v6.18, cited by function name, not by line:
+  a second fetch tool gave approximate line numbers that could not be
+  verified against a checkout, and a shell download was refused in this
+  environment, so no line number is claimed; H1 adds them; the same order as
+  the Pi 4):
   `v3d_bin_job_run` writes `V3D_PTB_BPOS` 0, calls `v3d_invalidate_caches`,
   writes `CLE_CT0QMA`/`QMS` when the job has a tile-state area, `CT0QTS` with
   `ENABLE | qts` when it has a tile state size, then `CLE_CT0QBA` (start) and
