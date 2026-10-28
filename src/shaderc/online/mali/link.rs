@@ -366,7 +366,8 @@ mod tests {
     fn with_layout(sh: &ShcShader, varyings: &'static [VaryingSlot]) -> ShcShader {
         let o = MaliShader::of(sh).expect("a Mali record");
         /* the link reads the layout only */
-        let r: MaliShader<'static> = MaliShader { fau: &[], attributes: &[], varyings, moved: &[], ubo: &[], ..*o };
+        let r: MaliShader<'static> =
+            MaliShader { fau: &[], attributes: &[], varyings, moved: &[], ubo: &[], samplers: &[], ..*o };
         let kept = store::keep().alloc_copy(core::slice::from_ref(&r)).expect("keep has room");
         ShcShader { priv_: codegen_priv(kept.as_ptr().cast()), ..*sh }
     }

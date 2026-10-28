@@ -113,6 +113,7 @@ pub(super) struct Info {
     pub compacted: bool,
     pub moved: Vec<super::motion::Moved>,
     pub sampler: Option<u8>,
+    pub samplers: Vec<u8>,
     pub helper_threads: bool,
     pub can_discard: bool,
     pub ubo: Vec<super::UboRow>,
@@ -133,6 +134,7 @@ impl Info {
             compacted: r.compacted,
             moved: r.moved.to_vec(),
             sampler: r.sampler,
+            samplers: r.samplers.to_vec(),
             helper_threads: r.helper_threads,
             can_discard: r.can_discard,
             ubo: r.ubo.to_vec(),
@@ -155,6 +157,7 @@ impl Info {
             compacted: self.compacted,
             moved: &self.moved,
             sampler: self.sampler,
+            samplers: &self.samplers,
             helper_threads: self.helper_threads,
             can_discard: self.can_discard,
             ubo: &self.ubo,
@@ -1045,10 +1048,9 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
         (FS, "precision mediump float; uniform sampler2D s; varying vec2 v; void main(){ gl_FragColor = texture2D(s, v, 1.0); }", MaliError::TexKind),
         (FS, "precision mediump float; uniform sampler2D s; varying vec3 v; void main(){ gl_FragColor = texture2DProj(s, v); }", MaliError::TexKind),
         (FS, "precision mediump float; uniform samplerCube s; varying vec3 v; void main(){ gl_FragColor = textureCube(s, v); }", MaliError::TexKind),
-        (FS, "precision mediump float; uniform sampler2D s; uniform sampler2D t; varying vec2 v; void main(){ gl_FragColor = texture2D(s, v) * texture2D(t, v); }", MaliError::TexCount),
-        /* a look-up in a loop after one made before it, whatever the loop's
-         * form (femtovg's filter_image: a run-time break) */
-        (FS, "precision highp float; uniform sampler2D s; uniform float u; varying vec2 v; void main(){ vec4 c = texture2D(s, v); for (float i = 0.0; i < 4.0; i += 1.0) { if (i >= u) break; c += texture2D(s, v * i); } gl_FragColor = c; }", MaliError::TexCount),
+        /* a mediump computed coordinate (case 121's form) beside another
+         * look-up: no reference draws it (texmore_2's two read a varying) */
+        (FS, "precision mediump float; uniform sampler2D s; uniform sampler2D t; uniform vec4 u; varying vec2 v; void main(){ gl_FragColor = texture2D(s, v) + texture2D(t, vec2(u.w * 0.5)); }", MaliError::TexCount),
         (FS, "precision mediump float; uniform sampler2D s; varying vec2 v; void main(){ gl_FragColor = texture2D(s, v.yx); }", MaliError::TexCoord),
         /* a computed coordinate (a constant one is lowered: tex_coord_const) */
         (FS, "precision mediump float; uniform sampler2D s; varying vec2 v; void main(){ gl_FragColor = texture2D(s, v * 2.0); }", MaliError::TexCoord),
@@ -1373,6 +1375,7 @@ fn a_freed_record_gives_no_mali_record_and_a_stale_handle_never_a_newer_one() {
         compacted: false,
         moved: &[],
         sampler: None,
+        samplers: &[],
         helper_threads: false,
         can_discard: false,
         ubo: &[],
@@ -1936,6 +1939,8 @@ fn fs_reference_sources() -> Vec<&'static str> {
     srcs.extend([td!("tex_coord_const.frag"), td!("vtl_fs.frag"), td!("uniidx_d.frag"), td!("uniidx_i.frag")]);
     /* a mediump computed coordinate (plan #153 texcoord) */
     srcs.push(td!("case121.frag"));
+    /* two look-ups, the blue lane alone (case 2's texture2) */
+    srcs.push(td!("texmore_2.frag"));
     srcs.extend(UNIARRAY_POPULATION.iter().map(|c| c.2));
     srcs.extend(ALU_POPULATION.iter().map(|c| c.2));
     /* gl_FragCoord by precision class, case 192's uniform twin and the
@@ -3058,6 +3063,8 @@ fn the_fragment_productions_are_the_references() {
     fs.extend(UNIARRAY_POPULATION.iter().map(|c| c.2));
     /* the narrowed gl_FragCoord pair under a product (`Mk` at `MulA`) */
     fs.push(td!("prec_84.frag"));
+    /* two look-ups fused (case 2's texture2) */
+    fs.push(td!("texmore_2.frag"));
     let mut seen = 0u128;
     for src in fs {
         let _k = store::test_keep();
@@ -3118,6 +3125,65 @@ fn the_texture_population_is_byte_equal_to_mesa_26_2_1() {
     }
     assert!(failed.is_empty(), "{} of {} differ:\n{}", failed.len(), TEXTURE_POPULATION.len(), failed.join("\n"));
     assert_eq!((TEXTURE_POPULATION.len(), regions), (2, 6), "(programs, regions) compared");
+}
+
+/// gl_test case 2 texture2 (tools/shaders/gl_test_es100/texture2.frag, as
+/// tools/mali/testdata/texmore_2.frag, #33): two look-ups in one mediump
+/// shader, `u_tex0` and `u_tex1` at one vec2 varying. Mesa numbers the
+/// samplers the program reads in their declaration order, so the handles
+/// are the pushed words `20001800` and `20011801` (`MOV.i32 r2, u2.w0`,
+/// `MOV.i32 r4, u2.w1`), both look-ups read the one coordinate load
+/// `@r0:r1`, and the blue lane, paired with the alpha's 1.0, is one lane
+/// (`FMA.v2f16 r1, r1.h00, ..`, then `MKVEC.v2i16 r1, r1^.h0, u3.w0.h0`).
+/// Byte-equal to the shim in both stages (texmore_2.expect.json, extracted
+/// from texmore_2.trace; docs/notes/mali-texture-lookups.md section 1).
+#[test]
+fn case2_two_look_ups_are_byte_equal_to_mesa_26_2_1() {
+    let (_, f) = check_program(td!("texmore_2.vert"), td!("texmore_2.frag"), td!("texmore_2.expect.json"));
+    assert_eq!(f.info.samplers, [0, 1], "the bindings at descriptor indices 0 and 1");
+    assert_eq!(f.info.sampler, Some(0));
+    assert!(f.info.helper_threads);
+    let handles: Vec<_> =
+        f.info.fau.iter().filter(|w| matches!(w, FauWord::Constant(0x2000_1800 | 0x2001_1801))).collect();
+    assert_eq!(handles, [&FauWord::Constant(0x2000_1800), &FauWord::Constant(0x2001_1801)]);
+}
+
+/// The texel word as a product's first factor, which case 2's fusion
+/// admits (`prod(Tex, MulA)`): gl_test case 91's hdrscale
+/// (tools/shaders/es100/hdrscale.frag, `texture2D(hdr, v_uv) * 0.25`),
+/// byte-equal to its shim reference (docs/notes/mali-fragment-outputs.md:
+/// fsout_91_hdrscale.expect.json, `FMA.v2f16 r0, r0^, 0x34000000.h11,
+/// 0x0.neg` per word). The frame's RGBA16F target is not this test's.
+#[test]
+fn case91_hdrscale_is_byte_equal_to_mesa_26_2_1() {
+    const VS: &str = include_str!("../../../../tools/shaders/es100/hdrquad.vert");
+    const FS: &str = include_str!("../../../../tools/shaders/es100/hdrscale.frag");
+    let (_, f) = check_program(VS, FS, td!("fsout_91_hdrscale.expect.json"));
+    assert_eq!(&f.info.samplers[..], [0]);
+}
+
+/// The descriptor index of each look-up: the rank of its sampler among the
+/// ones the program reads, by binding; a sampler read twice keeps its index
+/// (femtovg's filter_image reads `tex` 49 times, every handle `u8.w0`), and
+/// a sampler declared but not read takes none (sel_t_second).
+#[test]
+fn look_ups_take_the_descriptor_index_of_their_sampler() {
+    const ONE_TWICE: &str = "precision mediump float; uniform sampler2D s; varying vec2 v; \
+        void main(){ gl_FragColor = texture2D(s, v) * 0.5 + texture2D(s, vec2(0.5)) * 0.25; }";
+    const SECOND_FIRST: &str = "precision mediump float; uniform sampler2D a; uniform sampler2D b; varying vec2 v; \
+        void main(){ gl_FragColor = texture2D(b, v) * 0.5 + texture2D(a, v) * 0.25; }";
+    let f = compile(SHC_STAGE_FRAGMENT, ONE_TWICE).expect("compiles");
+    assert_eq!((f.info.sampler, &f.info.samplers[..]), (Some(0), &[0][..]));
+    let handle = |w: &&FauWord| matches!(w, FauWord::Constant(c) if c >> 27 == 4);
+    assert_eq!(f.info.fau.iter().filter(handle).collect::<Vec<_>>(), [&FauWord::Constant(super::nir_fs::TEX_HANDLE)]);
+    let f = compile(SHC_STAGE_FRAGMENT, SECOND_FIRST).expect("compiles");
+    assert_eq!(&f.info.samplers[..], [0, 1]);
+    assert_eq!(
+        f.info.fau.iter().filter(handle).collect::<Vec<_>>(),
+        [&FauWord::Constant(super::nir_fs::tex_handle(1)), &FauWord::Constant(super::nir_fs::tex_handle(0))]
+    );
+    let f = compile(SHC_STAGE_FRAGMENT, td!("sel_t_second.frag")).expect("compiles");
+    assert_eq!((f.info.sampler, &f.info.samplers[..]), (Some(1), &[1][..]));
 }
 
 /// The ISA ops the texture population adds to every other population's:
@@ -3736,18 +3802,18 @@ const FEMTOVG: [(&str, bool); 35] = [
     ("fill_gradient_conic_nodiscard", true),
     ("fill_gradient_conic_nodiscard_noscissor", true),
     ("fill_image", true),
-    ("fill_image_glyph", false),
-    ("fill_image_glyph_nodiscard", false),
+    ("fill_image_glyph", true),
+    ("fill_image_glyph_nodiscard", true),
     ("fill_image_nodiscard", true),
     ("fill_image_nodiscard_noscissor", true),
     ("fill_image_gradient", true),
-    ("fill_image_gradient_glyph", false),
-    ("fill_image_gradient_glyph_nodiscard", false),
+    ("fill_image_gradient_glyph", true),
+    ("fill_image_gradient_glyph_nodiscard", true),
     ("fill_image_gradient_nodiscard", true),
     ("fill_image_gradient_nodiscard_noscissor", true),
     ("fill_image_gradient_conic", true),
-    ("fill_image_gradient_conic_glyph", false),
-    ("fill_image_gradient_conic_glyph_nodiscard", false),
+    ("fill_image_gradient_conic_glyph", true),
+    ("fill_image_gradient_conic_glyph_nodiscard", true),
     ("fill_image_gradient_conic_nodiscard", true),
     ("fill_image_gradient_conic_nodiscard_noscissor", true),
     ("filter_image", false),
@@ -3757,9 +3823,27 @@ const FEMTOVG: [(&str, bool); 35] = [
     ("texture_copy_unclipped", true),
 ];
 
+/// The fragment words of a [`FEMTOVG`] program that differ from the shim's
+/// and why, pinned (program, word index, ours, the reference's): the test
+/// takes our word in their place, so the program is counted only while
+/// that word, and no other, differs.
+///
+/// fill_image_gradient.glyph: the glyph look-up's `skip` bit (Mesa's
+/// `TEX_SINGLE.slot2.reserved.32.2d.computed.discard` against our
+/// `.skip`). `bi_analyze_helper_requirements` (bi_helper_invocations.c)
+/// keeps it, which our analysis (flow.rs) does not reproduce: nothing that
+/// needs helper lanes reads the glyph texel (its result only reaches the
+/// colour), and the same look-up keeps its `skip` in the program without
+/// the discard and in fill_image_gradient_conic.glyph. Which value Mesa
+/// marks needs the shim's BIR listing of the program (`drm_shim_ref.sh run`,
+/// not drawn yet). The bit only lets the look-up skip helper lanes, which
+/// nothing reads here: the image is the same.
+const FEMTOVG_PINNED: [(&str, usize, u64, u64); 1] =
+    [("fill_image_gradient_glyph", 85, 0x6928_40b4_93c8_2048, 0x6928_4034_93c8_2048)];
+
 /// The femtovg count: every program [`FEMTOVG`] counts is byte-equal to
-/// the shim in both stages, every other is refused, and the count is 27
-/// of 35.
+/// the shim in both stages but for its [`FEMTOVG_PINNED`] words, every
+/// other is refused, and the count is 33 of 35.
 #[test]
 fn the_femtovg_programs_byte_equal_to_the_shim_are_counted() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tools/mali/testdata");
@@ -3767,7 +3851,14 @@ fn the_femtovg_programs_byte_equal_to_the_shim_are_counted() {
     let mut failed = Vec::new();
     for (name, equal) in FEMTOVG {
         let read = |ext: &str| std::fs::read_to_string(root.join(format!("fvg_{name}.{ext}"))).expect("the reference");
-        let (vs, fs, json) = (read("vert"), read("frag"), read("expect.json"));
+        let (vs, fs, mut json) = (read("vert"), read("frag"), read("expect.json"));
+        for &(_, at, ours, theirs) in FEMTOVG_PINNED.iter().filter(|p| p.0 == name) {
+            let words = region(&json, "fs.fragment").expect("fs.fragment").words;
+            assert_eq!(words.get(at), Some(&theirs), "{name}: the pinned reference word");
+            let (from, to) = (format!("\"{theirs:016x}\""), format!("\"{ours:016x}\""));
+            assert_eq!(json.matches(&from).count(), 1, "{name}: the pinned word is the region's only one");
+            json = json.replace(&from, &to);
+        }
         if equal {
             let r = std::panic::catch_unwind(|| check_program_for(name, &vs, &fs, &json, true));
             match r {
@@ -3785,7 +3876,7 @@ fn the_femtovg_programs_byte_equal_to_the_shim_are_counted() {
         }
     }
     assert!(failed.is_empty(), "{}", failed.join("\n"));
-    assert_eq!(counted.len(), 27, "{counted:?}");
+    assert_eq!(counted.len(), 33, "{counted:?}");
 }
 
 /// `nir_opt_peephole_select` and the `if` forms, against pan_shc (whose

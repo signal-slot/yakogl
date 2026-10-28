@@ -57,7 +57,7 @@ moves. `--levels` is refused for an ES 1.00 program.
 
 | Case | Shader | Refusal | Site |
 |---|---|---|---|
-| 2 | texture2.frag, two `texture2D` in one FS | `MaliError::TexCount` | `nir_fs.rs:1667` (`f.look_up.is_some()`), message `mod.rs:383` |
+| 2 | texture2.frag, two `texture2D` in one FS | lowered (plan #154 texture-2, section 1); `TexCount` now names only a look-up beside another in a form a lone one takes | `nir_fs.rs` `Fs::look_ups`, `select`'s `lone` |
 | 46 | texsize.frag, `textureSize(sampler2D)`, `textureSize(sampler2DArray)` | `MaliError::TexKind` | `nir_fs.rs:1689` (`ir::Op::TexSize`) |
 | 48 | vol.frag, `texture`/`textureLod`/`texelFetch` of `sampler3D` and `textureSize` | `TexKind` | `nir_fs.rs:1664` (`es100_tex()` is not `Tex2D`; a 3D `Op::Tex` has no ES 1.00 form, `ir.rs:510`) and `:1689` |
 | 206 | vol.frag and array.frag at levels 0..2 | `TexKind` | as 48; array.frag adds `Op::Tex` with a 2D-array dim, `ir.rs:959` |
@@ -114,6 +114,57 @@ MKVEC.v2i16.wait r1, r1^.h0, u3.w0.h0 ; BLEND.slot0.v4.f16.end ...
   scheduler gives the second TEX slot2 and RA reuses the coordinate pair;
   (4) the frame binds two texture and two sampler descriptors (`src/mali`);
   (5) byte-compare to `texmore_2` words (`pan_ref_diff.py diff ... --draw`).
+
+### What landed (plan #154 texture-2)
+
+Steps (1), (2), (3) and (5); step (4), the frame, is open.
+
+- `Fs::look_ups` (`nir_fs.rs`, up to `MAX_LOOK_UPS` = 64) holds every
+  look-up the walk meets, an unrolled loop's once per pass. `layout`
+  sets each one's texels read (`lanes`: the colour reaches them), its
+  coordinate's load, and its descriptor index: the rank of its sampler's
+  binding among the bindings the program reads (texmore_2 `u_tex0` 0,
+  `u_tex1` 1; sel_t_second `u_tex1` alone 0; one sampler read twice keeps
+  one index). The handle is `tex_handle(index)`, an immediate that the
+  constant passes push as a FAU word in order of first use, as before:
+  nothing else was needed for (2) and (3). The look-up's lane mask is
+  trimmed to the last texel read (`nir_opt_shrink_vectors`: texmore_2's
+  `.rgb`).
+- The record (`MaliShader::samplers`) lists the bindings at descriptor
+  indices 0, 1, ..; `MaliShader::sampler` stays the first of them, which
+  is all `src/mali` binds today. **Until the frame binds `samplers[i]` at
+  descriptor index `i` of the fragment texture and sampler tables, a
+  program with two samplers reads a descriptor the frame did not write**
+  (case 2, the femtovg glyph programs on the board).
+- The mediump colour word of a lane alone and a constant (texmore_2's
+  `(b, 1.0)`): `lane_word`/`lane_tree` build the lane as one-lane nodes
+  (`FMA.v2f16 r1, r1.h00, ..`, the fusion as `vectorise`'s) and the word
+  `MKVEC.v2i16 x.h0, <half>.h0`. Only sums and products of texels and
+  constants take it; the other trees of that shape (case 75's uniform
+  lane) stay `ColourForm` for plan #154 varyconst
+  (docs/notes/mali-varying-constants.md, item 5).
+- Several look-ups are taken in a mediump shader only at varyings or
+  constants, and in a highp one only when none is a cube: `TexCount`.
+- Byte-equal: `texmore_2` (case 2, both stages), the six femtovg
+  `fill_image*.glyph*` programs, and, through the operand forms case 2
+  admits (`Tex` at `MulA`/`FmaA`, `Op` at `FmaC`), case 91's
+  `fsout_91_hdrscale`. One word is pinned, not equal
+  (`tests.rs` `FEMTOVG_PINNED`): fill_image_gradient.glyph's glyph
+  look-up, where Mesa clears `skip` and we set it. Our helper analysis
+  (`flow.rs`) finds no helper-needing reader of that texel, and Mesa keeps
+  `skip` on the same look-up without the discard and in the conic
+  variant; which value Mesa's `bi_analyze_helper_requirements` marks
+  needs the shim's BIR listing of that program (not drawn yet). The bit
+  only lets the look-up skip helper lanes, so the image is the same.
+- femtovg's `filter_image` (49 look-ups) is no longer refused for the
+  look-ups: it stops at the block table (`BlockTableFull`; Mesa keeps the
+  24 guarded passes of `if (i >= sampleCount) break;` as nested branches,
+  about 75 blocks, 25 `if`s, 949 instructions). Measured with the caps
+  raised (64 or 128 blocks, 32 `if`s, 1280 BIR instructions, 1536 values
+  and NIR nodes): the walk's loop unrolling then refuses it
+  (`LoopForm`), and the guarded passes kept as branches are refused after
+  the peephole select too. It needs the run-time loop work (plan #154
+  loops-rt) and larger tables, not texture work.
 
 ## 2. textureSize (case 46)
 

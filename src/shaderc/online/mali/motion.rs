@@ -480,22 +480,19 @@ fn find(f: &Fs<'_>, m: &Module<'_>, colour: [Val; 4]) -> Result<Option<(u16, u8,
             }
         }
     }
-    /* the look-up's coordinate lanes have the look-up for a user, which
+    /* a look-up's coordinate lanes have the look-up for a user, which
      * no post-dominator of the lane's other users can move past (the
      * farthest movable one is none): fill_color.glyph's stroke term,
      * `ftcoord.x * 2.0 - 1.0`, stays in the fragment shader (its
      * reference's varying program has no FMA) where fill_color's moves */
-    let coord = f.look_up().and_then(|t| match t.coord {
-        TexCoord::Varying(loc) => Some(loc),
-        TexCoord::Const(..) | TexCoord::Computed => None,
-    });
+    let coord = |loc: u8| f.look_ups().iter().any(|t| t.coord == TexCoord::Varying(loc));
     for n in inputs.into_iter().flatten() {
         let loc = match f.nir.nodes[n as usize].kind {
             Kind::Input { loc, .. } => loc,
             _ => continue,
         };
         for c in 0..4u8 {
-            if d.users(n, c).next().is_none() || (coord == Some(loc) && c < 2) {
+            if d.users(n, c).next().is_none() || (coord(loc) && c < 2) {
                 continue;
             }
             let mut iter = d.of_uses(n, c);

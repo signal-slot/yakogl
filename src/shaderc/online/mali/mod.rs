@@ -178,7 +178,9 @@ pub enum MaliError {
     /// A fragment shader look-up other than `texture2D(sampler2D, vec2)`
     /// (a bias, a level, a projection, a cube map, a texture size).
     TexKind,
-    /// A second look-up in one fragment shader.
+    /// A fragment shader look-up beside another in a form only a lone one
+    /// takes (a mediump computed coordinate, a cube map), or more look-ups
+    /// than [`nir_fs::MAX_LOOK_UPS`].
     TexCount,
     /// A coordinate other than a vec2 varying read whole or two constants.
     TexCoord,
@@ -392,7 +394,9 @@ impl MaliError {
             MaliError::TexKind => {
                 "Valhall: a texture look-up other than texture2D(sampler2D, coordinate) (a bias, a level, a projection, a cube map, a size query) is not lowered yet"
             }
-            MaliError::TexCount => "Valhall: a second texture look-up in one fragment shader is not lowered yet",
+            MaliError::TexCount => {
+                "Valhall: a fragment shader texture look-up beside another in a form only a lone look-up takes (a mediump computed coordinate, a cube map), or more than 64 look-ups, is not lowered yet"
+            }
             MaliError::TexCoord => {
                 "Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet"
             }
@@ -589,8 +593,15 @@ pub struct MaliShader<'k> {
     /// The sampler binding whose texture and sampler the stage's look-up
     /// reads at descriptor index [`nir_fs::TEX_INDEX`] of the stage's
     /// texture and sampler tables, if the shader makes one (a vertex
-    /// shader's: both IDVS programs read the vertex tables).
+    /// shader's: both IDVS programs read the vertex tables). The first of
+    /// [`MaliShader::samplers`].
     pub sampler: Option<u8>,
+    /// Fragment: the sampler bindings at descriptor indices 0, 1, .. of the
+    /// stage's texture and sampler tables, one per sampler the program
+    /// reads, in binding order (texmore_2: `u_tex0`, `u_tex1`; each
+    /// look-up's handle names its index, [`nir_fs::tex_handle`]); empty
+    /// for a vertex shader, whose one is [`MaliShader::sampler`].
+    pub samplers: &'k [u8],
     /// Fragment: the uniform block the program loads from memory (an
     /// `LD_PKA` of a uniform array element at a run-time index), in Mesa's
     /// packed layout ([`select::UboLayout`]'s rows), which the frame uploads
@@ -868,6 +879,9 @@ pub struct StageCode<'s> {
     /// The expressions moved into the vertex shader ([`MaliShader::moved`]).
     moved: [motion::Moved; motion::MAX_MOVED],
     nmoved: usize,
+    /// The fragment stage's sampler bindings ([`MaliShader::samplers`]).
+    samplers: [u8; nir_fs::MAX_LOOK_UPS],
+    nsamplers: usize,
 }
 
 fn prog<'s>(scratch: &Arena<'s>) -> Result<Prog<'s>, MaliError> {
@@ -1077,6 +1091,7 @@ fn compile_stage<'s>(
         compacted: false,
         moved: &[],
         sampler: None,
+        samplers: &[],
         helper_threads: false,
         can_discard: false,
         ubo: &[],
@@ -1096,6 +1111,8 @@ fn compile_stage<'s>(
         marks: [0; Table::ALL.len()],
         moved: [motion::Moved::NONE; motion::MAX_MOVED],
         nmoved: 0,
+        samplers: [0; nir_fs::MAX_LOOK_UPS],
+        nsamplers: 0,
     };
     let total = if m.stage == SHC_STAGE_VERTEX {
         if moved.len() > motion::MAX_MOVED {
@@ -1192,7 +1209,7 @@ fn compile_stage<'s>(
         }
         sc.moved = f.moved;
         sc.nmoved = f.nmoved;
-        if let Some(t) = f.look_up() {
+        for t in f.look_ups() {
             let decl = m
                 .uniforms
                 .iter()
@@ -1234,19 +1251,26 @@ fn compile_stage<'s>(
         sc.info.work_reg_count = c.work_reg_count;
         sc.info.colour_f16 = !fs.colour_f32 && !fs.colour_u32;
         sc.info.compacted = f.compacted;
-        sc.info.sampler = f.tex.map(|(t, _)| t.sampler);
+        /* the bindings by descriptor index ([`nir_fs::layout`] numbers them) */
+        for (_, t) in f.live_look_ups() {
+            let i = usize::from(t.index);
+            let slot = sc.samplers.get_mut(i).ok_or(MaliError::Defect(Defect::IrIndex))?;
+            *slot = t.sampler;
+            sc.nsamplers = sc.nsamplers.max(i + 1);
+        }
+        sc.info.sampler = sc.samplers[..sc.nsamplers].first().copied();
         /* a program with an `LD_PKA` reads the block from memory: the frame
          * uploads it in this layout (Mesa's `ubo_mask` bit 0) */
         if f.nubo > 0 {
             sc.ubo = ubo;
         }
-        /* the one look-up there is takes its LOD from the derivatives,
-         * unless it is a cube's at a given level (`txl` has no implicit
+        /* a look-up takes its LOD from the derivatives, unless it is a
+         * cube's at a given level (`txl` has no implicit
          * derivative: 0dce654a8:tools/mali/board-ref/2026-10-24-mesa-refs4/mesa/
          * mesa-es3cube.pandecode, `Requires helper threads: false`) or a
          * `texelFetch` (`TEX_FETCH` is none of `bi_instr_uses_helpers`';
          * fbload_fbload.trace, `Requires helper threads: false`) */
-        sc.info.helper_threads = f.tex.is_some_and(|(t, _)| t.cube.is_none() && !t.fetch);
+        sc.info.helper_threads = f.live_look_ups().any(|(_, t)| t.cube.is_none() && !t.fetch);
         sc.info.can_discard = f.discards > 0;
         sc.rows = f.rows;
         for r in &f.reads[..f.nreads] {
@@ -1339,7 +1363,8 @@ fn record(
     let varyings = keep.alloc_copy(&sc.varyings[..sc.nvar]).map_err(oom_keep)?;
     let moved = keep.alloc_copy(&sc.moved[..sc.nmoved]).map_err(oom_keep)?;
     let ubo = keep.alloc_copy(sc.ubo.as_slice()).map_err(oom_keep)?;
-    let info = MaliShader { fau, attributes, varyings, moved, ubo, ..sc.info };
+    let samplers = keep.alloc_copy(&sc.samplers[..sc.nsamplers]).map_err(oom_keep)?;
+    let info = MaliShader { fau, attributes, varyings, moved, ubo, samplers, ..sc.info };
     let rec = keep.alloc_copy(core::slice::from_ref(&info)).map_err(oom_keep)?;
     /* tagged: a record that has not been through the cache (the cache keeps
      * this pointer beside its own record when it publishes the shader) */
