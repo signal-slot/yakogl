@@ -505,6 +505,9 @@ pub const ADMITTED: u128 = {
         | prod(Tex, MulA)
         | prod(Tex, FmaA)
         | prod(Op, FmaC)
+        /* case 75's `vec4(u_k.x - 0.5, u_k.y - 1.0, 1.0 - u_k.z, 1.0)`
+         * (varyconst_75_immneg): the uniform's pair first in a sum */
+        | prod(Uniform, AddA)
 };
 
 /// One load of the fragment shader: a 16-byte slot of the compacted
@@ -517,13 +520,19 @@ pub struct FsVarying {
     pub comps: u8,
     pub offset: u16,
     key: u32,
+    /// Loaded flat (`.src_flat32`): the vertex shader computes its lanes
+    /// from uniforms alone ([`super::link::VaryingConsts::flat`]).
+    pub flat: bool,
+    /// Holds a varying the link keeps whole, of which the colour may read
+    /// some lanes only ([`layout`]'s packed matrix).
+    pub whole: bool,
 }
 
 impl FsVarying {
-    pub const NONE: FsVarying = FsVarying { location: 0, comps: 0, offset: 0, key: 0 };
+    pub const NONE: FsVarying = FsVarying { location: 0, comps: 0, offset: 0, key: 0, flat: false, whole: false };
 
     pub const fn new(location: u8, comps: u8, offset: u16, key: u32) -> FsVarying {
-        FsVarying { location, comps, offset, key }
+        FsVarying { location, comps, offset, key, flat: false, whole: false }
     }
 
     /// Its first read, as an order key.
@@ -2814,6 +2823,25 @@ pub fn layout(f: &mut Fs<'_>, m: &Module<'_>, order: Option<super::link::Varying
             });
         }
     }
+    /* a matrix varying of columns narrower than a vec4 is read whole, every
+     * column, when any lane of it is read: the GLSL linker packs its
+     * columns into one slot (`packed:v_m[0],v_m[1]`), which the link then
+     * sees as read whole (measured: varyconst_78_matvary.expect.json, a
+     * mat2 of which the colour reads v_m[0].x and v_m[1].y, stores and
+     * loads all four lanes) */
+    fn root<'a>(d: &ir::IoDecl<'a>) -> &'a str {
+        d.name.split('[').next().unwrap_or(d.name)
+    }
+    let packed = |d: &&ir::IoDecl<'_>| d.kind == IoKind::Varying && is_matrix(d.gl_type) && d.components < 4;
+    for d in m.inputs.iter().filter(packed) {
+        let any =
+            m.inputs.iter().filter(packed).any(|e| root(e) == root(d) && read.get(e.location as usize) > Some(&0));
+        if any {
+            let loc = d.location as usize;
+            *read.get_mut(loc).ok_or(MaliError::VaryingLocation)? |= (1 << d.components) - 1;
+            whole[loc] = true;
+        }
+    }
     /* the texels the colour reads of each look-up; one it reads reads its
      * coordinate's two lanes (Mesa's DCE takes one the colour does not read) */
     for j in 0..f.nlook {
@@ -2856,6 +2884,11 @@ pub fn layout(f: &mut Fs<'_>, m: &Module<'_>, order: Option<super::link::Varying
     /* `compact_varyings`: every component read, in layout order, takes the
      * next scalar slot from VAR0 */
     let mut s = 0u16;
+    /* (a flat lane read, an interpolated lane read): the link packs flat
+     * lanes in slots of their own, a layout no reference draws beside
+     * interpolated ones (nir.rs refuses the pair's vertex shader too) */
+    let (mut flat, mut smooth) = (false, false);
+    let mut kept = [false; MAX_VARYINGS];
     for at in &lay[..n] {
         let loc = at.location as usize & 15;
         let first = s;
@@ -2866,18 +2899,33 @@ pub fn layout(f: &mut Fs<'_>, m: &Module<'_>, order: Option<super::link::Varying
             if read[loc] & (1 << comp) == 0 {
                 continue;
             }
+            if f.prec.consts.flat(at.location, comp) {
+                flat = true;
+            } else {
+                smooth = true;
+            }
             let (slot, lane) = ((s / 4) as usize, (s % 4) as u8);
             let x = slots.get_mut(slot).ok_or(MaliError::VaryingLocation)?;
             let key = if lane == 0 { f.var_key[loc] } else { x.key().min(f.var_key[loc]) };
             *x = FsVarying::new(slot as u8, lane + 1, 16 * slot as u16, key);
             f.lane_of[loc][comp as usize] = Some((slot as u8, lane));
+            kept[slot] |= whole[loc];
             s += 1;
         }
         f.compacted |= read[loc] != (1 << at.comps) - 1;
         f.reads[f.nreads] = FsRead { location: at.location, mask: read[loc], offset: 4 * first };
         f.nreads += 1;
     }
+    if flat && smooth {
+        return Err(MaliError::VaryingNotFromAttribute);
+    }
     let nslots = s.div_ceil(4) as usize;
+    for x in &mut slots[..nslots] {
+        x.flat = flat;
+    }
+    for (x, k) in slots[..nslots].iter_mut().zip(kept) {
+        x.whole = k;
+    }
     let pc = FsVarying::new(POINT_COORD, 2, 0, f.pcoord_key);
     let z = FsVarying::new(FRAG_Z, 1, 0, f.fz_key);
     for v in slots[..nslots].iter().copied().chain(pcoord.then_some(pc)).chain(fz.then_some(z)) {
@@ -2903,6 +2951,13 @@ pub fn layout(f: &mut Fs<'_>, m: &Module<'_>, order: Option<super::link::Varying
         }
     }
     Ok(())
+}
+
+/// `gl_type` names a float matrix (a varying declared once per column).
+fn is_matrix(gl_type: u16) -> bool {
+    use crate::gl::consts as gl;
+    let t = gl_type as u32;
+    (gl::GL_FLOAT_MAT2..=gl::GL_FLOAT_MAT4).contains(&t) || (gl::GL_FLOAT_MAT2x3..=gl::GL_FLOAT_MAT4x3).contains(&t)
 }
 
 /// Lane `c` of the input at `loc`: its load's index and its lane there.
@@ -2935,6 +2990,17 @@ enum Leaf {
         k: u8,
         c: u8,
         half: u16,
+    },
+    /// Lane `c` of load `k` and lane `d` of load `e`, not one aligned pair,
+    /// each converted alone, as a word: `MKVEC.v2i16 x.h0, y.h0`
+    /// (varyconst_78_matvary.expect.json: `FADD.f32 r0.h0, r0^, 0x0.neg`,
+    /// `FADD.f32 r1.h0, r3^, 0x0.neg`, then `MKVEC.v2i16 r0, r0^.h0,
+    /// r1^.h0` of a `.v4` load's lanes 0 and 3).
+    Lanes {
+        k: u8,
+        c: u8,
+        e: u8,
+        d: u8,
     },
     Const(u32),
     /// Word `base + comp` of the fp16 uniform block (`base` the first word
@@ -3016,7 +3082,7 @@ impl Pairs {
             P::Leaf(Leaf::Half { swz: Swz::H10, .. }) => Form::HalfSwapped,
             P::Leaf(Leaf::Half { .. }) => Form::Half,
             P::Leaf(Leaf::Splat { .. }) => Form::Splat,
-            P::Leaf(Leaf::Mk { .. }) => Form::Mk,
+            P::Leaf(Leaf::Mk { .. } | Leaf::Lanes { .. }) => Form::Mk,
             P::Leaf(Leaf::Uniform { .. }) => Form::Uniform,
             P::Leaf(Leaf::Tex(..) | Leaf::TexLane(..)) => Form::Tex,
             P::Leaf(Leaf::Ubo(_) | Leaf::UboLane(_) | Leaf::UboHalf(_)) => Form::Ubo,
@@ -3129,9 +3195,25 @@ fn vectorise(f: &mut Fs<'_>, pr: &mut Pairs, a: Val, b: Val, pair: u8, ubo: &Ubo
                     P::Leaf(Leaf::Half { k, h: j / 2, swz: Swz::H10 })
                 } else if i == j && comps == 1 {
                     P::Leaf(Leaf::Splat { k, c: i })
+                } else if i / 2 != j / 2 && f.varyings[k as usize].whole {
+                    /* two lanes of a load the link keeps whole (78's packed
+                     * matrix); a swizzle of a compacted load has no
+                     * reference */
+                    P::Leaf(Leaf::Lanes { k, c: i, e: k, d: j })
                 } else {
                     return Err(MaliError::ColourForm);
                 }
+            }
+            /* the same of two loads the link keeps whole: 78's fragment
+             * shader alone, where `v_after.z` is read too and the packed
+             * matrix's lanes fall in two slots (its shader object's
+             * record; the program's is compiled with the vertex shader's
+             * constant lane, one load) */
+            (Some((v, i)), Some((w, j)), ..)
+                if f.varyings[index(f, v, i)?.0 as usize].whole && f.varyings[index(f, w, j)?.0 as usize].whole =>
+            {
+                let ((k, i), (e, j)) = (index(f, v, i)?, index(f, w, j)?);
+                P::Leaf(Leaf::Lanes { k, c: i, e, d: j })
             }
             (Some((v, i)), None, _, Val::Const(c)) => {
                 let half = f16(c)?;
@@ -3230,31 +3312,51 @@ fn cmp_leaf(f: &Fs<'_>, pr: &mut Pairs, v: Val, ubo: &UboLayout) -> Result<(u8, 
 /// ([`Leaf::Lane`]). None for any other pair (a lane of a load, a
 /// uniform, a pair of operations: [`vectorise`]'s), or a constant 0.0
 /// ([`Leaf::Zext`]'s form, which no reference draws for this tree).
-fn lane_word(f: &Fs<'_>, pr: &mut Pairs, a: Val, b: Val, pair: u8) -> Result<Option<u8>, MaliError> {
+fn lane_word(f: &Fs<'_>, pr: &mut Pairs, a: Val, b: Val, pair: u8, ubo: &UboLayout) -> Result<Option<u8>, MaliError> {
     let Val::Const(c) = b else { return Ok(None) };
-    if f.alu_of(a).is_none() || !texel_tree(f, a) {
+    if f.alu_of(a).is_none() || !lone_tree(f, a) {
         return Ok(None);
     }
     let half = f16_rtne(c).ok_or(MaliError::Fp16Inexact)?;
     if half == 0 {
         return Err(MaliError::ColourZeroHalf);
     }
-    let x = lane_tree(f, pr, a, pair)?;
+    let x = lane_tree(f, pr, a, pair, ubo)?;
     pr.push(P::Leaf(Leaf::Lane { x, half }), (f.key(a), pair)).map(Some)
 }
 
 /// Lane `v` is sums and products of fp16 texels and constants, with a
-/// texel among them ([`lane_tree`]'s form).
-fn texel_tree(f: &Fs<'_>, v: Val) -> bool {
-    fn walk(f: &Fs<'_>, v: Val) -> Option<bool> {
+/// texel among them, or sums of a uniform's component, negated or not,
+/// and constants, with a uniform among them ([`lane_tree`]'s form;
+/// varyconst_75_immneg's `1.0 - u_k.z`).
+fn lone_tree(f: &Fs<'_>, v: Val) -> bool {
+    /* (a texel, a uniform) among the leaves */
+    fn walk(f: &Fs<'_>, v: Val) -> Option<(bool, bool)> {
+        let or = |x: (bool, bool), y: (bool, bool)| (x.0 | y.0, x.1 | y.1);
         match (f.alu_of(v), f.texel(v), v) {
-            (Some((Alu::Fadd | Alu::Fmul, s)), ..) => Some(walk(f, s[0])? | walk(f, s[1])?),
-            (None, Some((j, _)), _) if f.tex_f16(j) => Some(true),
-            (None, None, Val::Const(_)) => Some(false),
+            (Some((Alu::Fadd | Alu::Fmul, s)), ..) => Some(or(walk(f, s[0])?, walk(f, s[1])?)),
+            (Some((Alu::Fneg, s)), ..) => walk(f, s[0]),
+            (None, Some((j, _)), _) if f.tex_f16(j) => Some((true, false)),
+            (None, None, Val::Const(_)) => Some((false, false)),
+            (None, None, _) if f.uniform_dword(v).is_some() => Some((false, true)),
             _ => None,
         }
     }
-    walk(f, v) == Some(true)
+    /* each with the forms its reference draws: texels under sums and
+     * products (texmore_2), a uniform under a sum and an fneg (75) */
+    fn uniform_form(f: &Fs<'_>, v: Val) -> bool {
+        match f.alu_of(v) {
+            Some((Alu::Fadd, s)) => uniform_form(f, s[0]) && uniform_form(f, s[1]),
+            Some((Alu::Fneg, s)) => uniform_form(f, s[0]),
+            Some(_) => false,
+            None => true,
+        }
+    }
+    match walk(f, v) {
+        Some((true, false)) => true,
+        Some((false, true)) => uniform_form(f, v),
+        _ => false,
+    }
 }
 
 /// Lane `v` of the colour alone ([`lane_word`]) as nodes of one lane: the
@@ -3262,17 +3364,20 @@ fn texel_tree(f: &Fs<'_>, v: Val) -> bool {
 /// [`vectorise`] fuses it (texmore_2.stderr: `%9 = fmul %6.z, 0.25`,
 /// `%12 = ffma %4.z, 0.5, %9`; `FMA.v2f16 %35^.h00, u268[1].h11, u256.neg`
 /// then `FMA.v2f16 %27^.h00, u269.h11, %9^.h00`).
-fn lane_tree(f: &Fs<'_>, pr: &mut Pairs, v: Val, pair: u8) -> Result<u8, MaliError> {
+fn lane_tree(f: &Fs<'_>, pr: &mut Pairs, v: Val, pair: u8, ubo: &UboLayout) -> Result<u8, MaliError> {
     let place = (f.key(v), pair);
     let p = match (f.alu_of(v), f.texel(v), v) {
         (Some((Alu::Fmul, s)), ..) => {
-            let x = lane_tree(f, pr, s[0], pair)?;
-            let y = lane_tree(f, pr, s[1], pair)?;
+            let x = lane_tree(f, pr, s[0], pair, ubo)?;
+            let y = lane_tree(f, pr, s[1], pair, ubo)?;
             P::Op(Alu::Fmul, [x, y, 0])
         }
+        /* an fneg of a uniform's component, a source modifier of its
+         * reader (75: `FADD.v2f16 r1, 0x3C000000.h11, u2.w1.neg.h00`) */
+        (Some((Alu::Fneg, s)), ..) => P::Op(Alu::Fneg, [lane_tree(f, pr, s[0], pair, ubo)?, 0, 0]),
         (Some((Alu::Fadd, s)), ..) => {
-            let x = lane_tree(f, pr, s[0], pair)?;
-            let y = lane_tree(f, pr, s[1], pair)?;
+            let x = lane_tree(f, pr, s[0], pair, ubo)?;
+            let y = lane_tree(f, pr, s[1], pair, ubo)?;
             match (pr.nodes[x as usize], pr.nodes[y as usize]) {
                 (P::Op(Alu::Fmul, [m0, m1, _]), _) => P::Op(Alu::Ffma, [m0, m1, y]),
                 (_, P::Op(Alu::Fmul, [m0, m1, _])) => P::Op(Alu::Ffma, [m0, m1, x]),
@@ -3283,6 +3388,13 @@ fn lane_tree(f: &Fs<'_>, pr: &mut Pairs, v: Val, pair: u8) -> Result<u8, MaliErr
         /* a product with 2.0 is the late rules' `fadd(a, a)`: no reference */
         (None, None, Val::Const(F32_TWO)) => return Err(MaliError::AlgebraicForm),
         (None, None, Val::Const(c)) => P::Leaf(Leaf::Const(u32::from(f16_rtne(c).ok_or(MaliError::Fp16Inexact)?))),
+        /* a uniform's component: its half of the fp16 block's word */
+        (None, None, _) if f.uniform_dword(v).is_some() => {
+            let d = f.uniform_dword(v).ok_or(MaliError::Defect(Defect::IrIndex))?;
+            let (w, half, base) = ubo.half(d).ok_or(MaliError::FsUniform)?;
+            let swz = if half == 0 { Swz::H00 } else { Swz::H11 };
+            P::Leaf(Leaf::Uniform { base, comp: (w - base) as u8, swz })
+        }
         _ => return Err(MaliError::ColourForm),
     };
     let x = pr.push(p, place)?;
@@ -3429,7 +3541,7 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
     let mut roots = [0u8; 2];
     let c = f.colour.ok_or(MaliError::NoColour)?;
     for (k, r) in roots.iter_mut().enumerate() {
-        *r = match lane_word(f, &mut pr, c[2 * k], c[2 * k + 1], k as u8)? {
+        *r = match lane_word(f, &mut pr, c[2 * k], c[2 * k + 1], k as u8, ubo)? {
             Some(x) => x,
             None => vectorise(f, &mut pr, c[2 * k], c[2 * k + 1], k as u8, ubo)?,
         };
@@ -3507,12 +3619,13 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
     let mut used = [0u8; MAX_VARYINGS];
     let mut conv_form = [[None::<bool>; 4]; MAX_VARYINGS];
     for x in &pr.nodes[..pr.n] {
-        let (k, lanes, pair) = match *x {
-            P::Leaf(Leaf::Half { k, h, .. }) => (k, [2 * h, 2 * h + 1], true),
-            P::Leaf(Leaf::Splat { k, c } | Leaf::Mk { k, c, .. }) => (k, [c, c], false),
+        let (lanes, pair) = match *x {
+            P::Leaf(Leaf::Half { k, h, .. }) => ([(k, 2 * h), (k, 2 * h + 1)], true),
+            P::Leaf(Leaf::Splat { k, c } | Leaf::Mk { k, c, .. }) => ([(k, c), (k, c)], false),
+            P::Leaf(Leaf::Lanes { k, c, e, d }) => ([(k, c), (e, d)], false),
             _ => continue,
         };
-        for c in lanes {
+        for (k, c) in lanes {
             used[k as usize] |= 1 << c;
             let cf = &mut conv_form[k as usize][c as usize];
             if cf.is_some_and(|p| p != pair) {
@@ -3531,8 +3644,12 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
             used[k as usize] = 3;
         }
     }
+    /* a load holds the lanes read, and those alone but where the link
+     * keeps a varying whole ([`layout`]'s packed matrix: 78's v4 load, of
+     * which lanes 0 and 3 are read) */
     for (k, v) in f.varyings[..f.nvar].iter().enumerate() {
-        if used[k] != (1 << v.comps) - 1 {
+        let full = (1u8 << v.comps) - 1;
+        if used[k] == 0 || used[k] & !full != 0 || (used[k] != full && !v.whole) {
             return Err(MaliError::Defect(Defect::IrIndex));
         }
     }
@@ -3708,6 +3825,7 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
     for (k, w) in words.iter_mut().enumerate().filter(|_| texel.is_none()) {
         *w = match pr.nodes[roots[k] as usize] {
             P::Leaf(Leaf::Mk { k: v, c, half }) => Src::ssa(mkvec(p, &lv, v, c, half, &mut rows)?),
+            P::Leaf(Leaf::Lanes { k: v, c, e, d }) => Src::ssa(mkvec_lanes(p, &lv, [(v, c), (e, d)], &mut rows)?),
             P::Leaf(Leaf::Zext(x)) => {
                 /* a read the word alone reads is loaded here, after ATEST
                  * (`nir_opt_move` sinks it to the colour's store; uniarray_b:
@@ -3888,8 +4006,10 @@ fn word_of(f: &Fs<'_>, a: Val, b: Val) -> Result<Word, MaliError> {
         /* a lane and 0.0: `MKVEC.v2i16 x, #0`, which bi_lower_mkvec_swz makes
          * `U16_TO_U32 x` (opt.rs; every s4_* reference draws it) */
         (_, Val::Const(y)) if half(y)? == 0 => Word::Lanes(a, b),
-        /* one conversion of a lane twice: not drawn by a reference */
-        _ if a == b => return Err(MaliError::ColourForm),
+        /* one conversion of a lane twice: its half in both lanes of the
+         * word, `MKVEC.v2i16 x.h0, x.h0` (varyconst_185_kindcost_fmul:
+         * `IADD.v2u16 r1, r0.h00, 0x0`, opt.rs `lower_mkvec_swz`) */
+        _ if a == b => Word::Lanes(a, b),
         _ => match (load_lane(f, a)?, load_lane(f, b)?) {
             (Some((u, k, x)), Some((u1, k1, y))) if u == u1 && k == k1 => {
                 if x % 2 == 0 && y == x + 1 {
@@ -4743,9 +4863,12 @@ fn convert(
     let op = match v.location {
         POINT_COORD => Op::LdVarSpecialF32 { name: VaryingName::Point, vecsize: v.comps },
         FRAG_Z => Op::LdVarSpecialF32 { name: VaryingName::FragZ, vecsize: v.comps },
-        _ => Op::LdVarBufImmF32 { index: v.offset as u8, vecsize: v.comps },
+        _ => Op::LdVarBufImmF32 { index: v.offset as u8, vecsize: v.comps, flat: v.flat },
     };
-    p.push(Ins::new(op, &[Dest::ssa(ld)], &[Src::of(Idx::Reg(61))]))?;
+    /* a flat load reads no barycentric (`bi_emit_load_vary`: the source
+     * is zero, varyconst_117_uniidxf.expect.json's `.src_flat32 ..., 0x0`) */
+    let at = if v.flat { Idx::Lut(0) } else { Idx::Reg(61) };
+    p.push(Ins::new(op, &[Dest::ssa(ld)], &[Src::of(at)]))?;
     let lanes = split(p, ld, v.comps as usize)?;
     for c in 0..v.comps as usize {
         lv.raw[k][c] = Some(lanes[c]);
@@ -4865,6 +4988,13 @@ fn mkvec(p: &mut Prog<'_>, lv: &Leaves, k: u8, c: u8, half: u16, rows: &mut u64)
     row(p, rows, Row { op: Alu::Vec2, bits: 16, width: 2 }, &[x, Src::of(Idx::Const(half as u32)).swz(Swz::H00)])
 }
 
+/// `vec2` of two lanes (load, lane), each converted alone (`MKVEC.v2i16`).
+fn mkvec_lanes(p: &mut Prog<'_>, lv: &Leaves, x: [(u8, u8); 2], rows: &mut u64) -> Result<u16, MaliError> {
+    let s =
+        [Src::ssa(conv_of(lv, x[0].0, x[0].1)?).swz(Swz::H00), Src::ssa(conv_of(lv, x[1].0, x[1].1)?).swz(Swz::H00)];
+    row(p, rows, Row { op: Alu::Vec2, bits: 16, width: 2 }, &s)
+}
+
 /// Pair node `x` as a source: a conversion, a constant, a uniform word, a
 /// word of the look-up, or an operation already selected.
 fn operand(pr: &Pairs, x: u8, lv: &Leaves, val: &[Option<Src>; MAX_PAIRS]) -> Result<Src, MaliError> {
@@ -4891,7 +5021,7 @@ fn operand(pr: &Pairs, x: u8, lv: &Leaves, val: &[Option<Src>; MAX_PAIRS]) -> Re
             let w = lv.tex.get(j as usize).and_then(|w| w[(c as usize / 2) & 3]);
             Src::ssa(w.ok_or(MaliError::Defect(Defect::IrIndex))?).swz(if c % 2 == 0 { Swz::H00 } else { Swz::H11 })
         }
-        P::Leaf(Leaf::Mk { .. } | Leaf::Zext(_) | Leaf::Lane { .. }) | P::Op(..) => {
+        P::Leaf(Leaf::Mk { .. } | Leaf::Lanes { .. } | Leaf::Zext(_) | Leaf::Lane { .. }) | P::Op(..) => {
             val[x as usize].ok_or(MaliError::Defect(Defect::IrIndex))?
         }
     })
@@ -4909,8 +5039,12 @@ fn op(
     let P::Op(a, srcs) = pr.nodes[x as usize] else { return Err(MaliError::Defect(Defect::IrIndex)) };
     let mut s = [Src::NULL; 3];
     for (k, y) in srcs.iter().enumerate().take(a.arity()) {
-        if let P::Leaf(Leaf::Mk { k: v, c, half }) = pr.nodes[*y as usize] {
-            val[*y as usize] = Some(Src::ssa(mkvec(p, lv, v, c, half, rows)?));
+        match pr.nodes[*y as usize] {
+            P::Leaf(Leaf::Mk { k: v, c, half }) => val[*y as usize] = Some(Src::ssa(mkvec(p, lv, v, c, half, rows)?)),
+            P::Leaf(Leaf::Lanes { k: v, c, e, d }) => {
+                val[*y as usize] = Some(Src::ssa(mkvec_lanes(p, lv, [(v, c), (e, d)], rows)?))
+            }
+            _ => {}
         }
         s[k] = operand(pr, *y, lv, val)?;
         /* a one-lane operation reads a constant's low half ([`coord_lane`])

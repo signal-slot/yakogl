@@ -416,6 +416,10 @@ pub enum Op {
     F16ToF32,
     V2f32ToV2f16,
     MkvecV2i16,
+    /// `IADD.v2u16 dest, x.hNN, 0`: a word of the halves of one 16-bit
+    /// pair, swizzled (`MKVEC.v2i16 x.h0, x.h0` on Valhall, which has no
+    /// `SWZ.v2i16`: `build_swz_v2i16_to`, bi_lower_mkvec_swz.c:92-102).
+    IaddV2u16,
     /// `MKVEC.v2i8 dest, a.bN, b.bN, cd`: `a | b << 8 | cd << 16`, two
     /// byte lanes and a 16-bit half (`bi_lower_mkvec_swz`'s v4i8 on
     /// Valhall, bi_lower_mkvec_swz.c:189-203: a blend shader's tile word).
@@ -442,10 +446,12 @@ pub enum Op {
         access: Access,
     },
     /// Varying `index` of the varying buffer, `vecsize` f32 components,
-    /// sampled at the centre, `.store` update.
+    /// sampled at the centre, `.store` update; `flat` read as stored
+    /// (`.src_flat32`), else interpolated (`.src_f32`).
     LdVarBufImmF32 {
         index: u8,
         vecsize: u8,
+        flat: bool,
     },
     /// A special varying (`load_var_special_pan`, bifrost_compile.c:
     /// 1419-1440): `name` the ISA's `varying_name` (gl_PointCoord's
@@ -747,6 +753,7 @@ pub const fn src_info(op: Op, s: usize) -> SrcInfo {
         (Op::MovI32 | Op::IaddImmI32(_), 0) => info(false, false, false, false, 32),
         (Op::V2f32ToV2f16, 0..=1) => info(true, false, false, false, 16),
         (Op::MkvecV2i16, 0..=1) => info(false, false, false, true, 16),
+        (Op::IaddV2u16, 0..=1) => info(false, true, false, false, 16),
         /* the two byte lanes, then the 16-bit half read whole */
         (Op::MkvecV2i8, 0..=1) => info(false, false, false, true, 8),
         (Op::MkvecV2i8, 2) => info(false, false, false, false, 16),
@@ -841,6 +848,7 @@ pub const fn nr_srcs(op: Op) -> usize {
         | Op::ImulI32
         | Op::V2f32ToV2f16
         | Op::MkvecV2i16
+        | Op::IaddV2u16
         | Op::ShaddxS64 => 2,
         Op::LdAttrImm { .. } | Op::Blend { .. } | Op::BranchzI { .. } | Op::LdPka { .. } => 2,
         Op::LshiftAndI32 | Op::LshiftOrI32 | Op::RshiftAndI32 | Op::RshiftOrI32 | Op::MkvecV2i8 | Op::LdTile { .. } => {

@@ -335,9 +335,15 @@ fn uniform_names(vs: &str, fs: &str) -> Vec<String> {
 }
 
 /// The value gl_ref.py's `--uniform-values` gave the uniform dword `d` of
-/// a stage (component c of uniform k: 16 (k + 1) + c), as fp32 bits.
+/// a stage (component c of uniform k: 16 (k + 1) + c), as fp32 bits. An
+/// array (`uniform vec4 u_p[64]`) gets none: gl_ref.py asks for the
+/// location of its declarator, `u_p[64]`, one past its last element, which
+/// is -1, so every word of it stays 0 (varyconst_150_a.expect.json).
 fn uniform_value(names: &[String], rows: &[(String, u16, u16)], d: u16) -> u32 {
     let (name, first, _) = rows.iter().find(|r| d >= r.1 && d < r.1 + r.2).expect("a uniform row holds the dword");
+    if names.iter().any(|n| n.strip_prefix(name.as_str()).is_some_and(|t| t.starts_with('['))) {
+        return 0;
+    }
     let k = names.iter().position(|n| n == name).expect("the uniform is declared");
     (16.0 * (k as f32 + 1.0) + (d - first) as f32).to_bits()
 }
@@ -1036,7 +1042,9 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
         (VS, "attribute vec4 p; varying vec4 v; void main(){ v = p; }", MaliError::NoPosition),
         (VS, "attribute vec4 p; void main(){ gl_Position = p; gl_PointSize = 2.3; }", MaliError::Fp16Inexact),
         (VS, "attribute vec4 p; varying vec4 v; void main(){ gl_Position = p; v.xy = p.xy; }", MaliError::VaryingForm),
-        (VS, "attribute vec4 p; attribute vec2 c; varying vec4 v; void main(){ gl_Position = p; v = vec4(c, 0.0, 1.0); }", MaliError::VaryingNotFromAttribute),
+        /* a lane of uniforms alone (flat) beside lanes of an attribute
+         * (interpolated): a layout no reference draws */
+        (VS, "attribute vec4 p; attribute vec2 c; uniform float u; varying vec4 v; void main(){ gl_Position = p; v = vec4(c, u, 1.0); }", MaliError::VaryingNotFromAttribute),
         (VS, "attribute vec4 p; varying vec2 v; void main(){ gl_Position = p; v = p.xx; }", MaliError::VaryingDuplicate),
         (FS, "precision mediump float; varying float f; varying vec4 v; void main(){ gl_FragColor = f + v; }", MaliError::FsOperandForm),
         (FS, "precision mediump float; void main(){ int i = 1; gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0); }", MaliError::IntValue),
@@ -1941,6 +1949,8 @@ fn fs_reference_sources() -> Vec<&'static str> {
     srcs.push(td!("case121.frag"));
     /* two look-ups, the blue lane alone (case 2's texture2) */
     srcs.push(td!("texmore_2.frag"));
+    /* varying lanes from no attribute, the colour's lane shapes (#33) */
+    srcs.extend(VARYCONST_POPULATION.iter().map(|c| c.2));
     srcs.extend(UNIARRAY_POPULATION.iter().map(|c| c.2));
     srcs.extend(ALU_POPULATION.iter().map(|c| c.2));
     /* gl_FragCoord by precision class, case 192's uniform twin and the
@@ -2176,9 +2186,11 @@ fn a_highp_fragment_cube_look_up_is_byte_equal_to_mesa_26_2_1() {
     assert!(f.info.varyings.iter().any(|x| x.offset == 0 && x.mask == 0b110), "{:?}", f.info.varyings);
     let texts: Vec<String> = trim(&f.code).iter().map(|w| text(*w)).collect();
     assert!(texts.iter().any(|t| t.starts_with("TEX_SINGLE") && t.contains(".32.cube.explicit")), "{texts:?}");
-    /* the shader alone: the vertex shader stores the constant (refused),
-     * the fragment shader reads the three lanes */
-    assert_eq!(gap(SHC_STAGE_VERTEX, vs), MaliError::VaryingNotFromAttribute);
+    /* the shader alone: the vertex shader is built without its constant
+     * lane, the layout the link's fragment shader reads (its two lanes at
+     * offset 0); the fragment shader reads the three lanes */
+    let va = compile(SHC_STAGE_VERTEX, vs).expect("case114_f.vert compiles alone");
+    assert!(va.info.varyings.iter().any(|x| x.offset == 0 && x.mask == 0b110), "{:?}", va.info.varyings);
     let alone = compile(SHC_STAGE_FRAGMENT, fs).expect("case114_f.frag compiles alone");
     assert!(alone.info.varyings.iter().any(|x| x.mask == 0b111), "{:?}", alone.info.varyings);
 }
@@ -2988,22 +3000,27 @@ fn the_fragment_varying_population_is_byte_equal_to_mesa_26_2_1() {
 }
 
 /// The varyings Mesa's link moves, rewrites or merges (nir_opt_varyings),
-/// so that the layout is not the vertex stage's alone: the references show
-/// it, the back end refuses each by its own gap.
+/// so that the layout is not the vertex stage's alone: a constant lane is
+/// moved and a lane of uniforms alone rewritten (both lowered), two lanes
+/// of equal value merged (refused by its own gap).
 #[test]
-fn varyings_mesa_s_link_moves_or_merges_are_refused() {
+fn varyings_mesa_s_link_moves_or_merges() {
     let stores = |json: &str| {
         let r = region(json, "vs.varying").expect("a varying program");
         r.words.iter().filter(|w| text(**w).starts_with("STORE")).count()
     };
-    /* vec4(a_t, 0.0, 1.0): the two constant lanes are not stored */
+    /* vec4(a_t, 0.0, 1.0): the two constant lanes are not stored, by the
+     * vertex shader alone either (built without them) */
     assert_eq!(stores(td!("sel_v_const.expect.json")), 2);
-    assert_eq!(gap(SHC_STAGE_VERTEX, td!("sel_v_const.vert")), MaliError::VaryingNotFromAttribute);
-    /* a uniform alone: an exact ffma(u, 0, u) per lane */
+    let alone = compile(SHC_STAGE_VERTEX, td!("sel_v_const.vert")).expect("sel_v_const.vert compiles alone");
+    let (_, var) = vs_regions(&alone);
+    assert_eq!(var.iter().filter(|w| text(**w).starts_with("STORE")).count(), 2);
+    /* a uniform alone: an exact ffma(u, 0, u) per lane, the fragment
+     * shader's load flat; both stages the shim's to the byte */
     let r = region(td!("sel_v_uniform.expect.json"), "vs.varying").expect("a varying program");
     let fmas = r.words.iter().map(|w| text(*w)).filter(|t| t.starts_with("FMA.f32") && t.contains(", 0x0, u")).count();
     assert_eq!(fmas, 4);
-    assert_eq!(gap(SHC_STAGE_VERTEX, td!("sel_v_uniform.vert")), MaliError::VaryingNotFromAttribute);
+    check_linked(td!("sel_v_uniform.vert"), td!("sel_v_uniform.frag"), td!("sel_v_uniform.expect.json"));
     /* two varyings of equal value: one slot, one four-lane load */
     assert_eq!(stores(td!("sel_v_duplicate.expect.json")), 4);
     let fs = region(td!("sel_v_duplicate.expect.json"), "fs.fragment").expect("fs.fragment");
@@ -3065,6 +3082,9 @@ fn the_fragment_productions_are_the_references() {
     fs.push(td!("prec_84.frag"));
     /* two look-ups fused (case 2's texture2) */
     fs.push(td!("texmore_2.frag"));
+    /* a uniform's pair first in a sum (case 75), two lanes of loads the
+     * link keeps whole as a word (case 78) */
+    fs.extend([td!("varyconst_75_immneg.frag"), td!("varyconst_78_matvary.frag")]);
     let mut seen = 0u128;
     for src in fs {
         let _k = store::test_keep();
@@ -4322,4 +4342,153 @@ fn case_194_offarm256_is_byte_equal_to_mesa_26_2_1() {
 #[test]
 fn case_195_offarm32_is_byte_equal_to_mesa_26_2_1() {
     check_offarm("case195", td!("intbig_case195.vert"), td!("intbig_case195.frag"), td!("intbig_case195.expect.json"));
+}
+
+/* ---- varying lanes from no attribute, colour lane shapes (#33) ------- */
+
+/// The varyconst population (docs/notes/mali-varying-constants.md, plan
+/// #154 varyconst): each gl_test case's pair, compiled through the link
+/// ([`check_linked`]) and compared with its drm-shim reference. 101's
+/// cube look-up with a bias is another item's (cubebias101).
+const VARYCONST_POPULATION: [(&str, &str, &str, &str); 11] = [
+    /* a constant lane dropped (the link's propagation) */
+    ("63", td!("varyconst_63_matattr.vert"), td!("varyconst_63_matattr.frag"), td!("varyconst_63_matattr.expect.json")),
+    /* a mat2 varying read whole, the colour's word (x, w) of its load */
+    ("78", td!("varyconst_78_matvary.vert"), td!("varyconst_78_matvary.frag"), td!("varyconst_78_matvary.expect.json")),
+    /* lanes of uniforms alone: flat, `ffma(x, 0.0, x)` stored */
+    (
+        "117",
+        td!("varyconst_117_uniidxf.vert"),
+        td!("varyconst_117_uniidxf.frag"),
+        td!("varyconst_117_uniidxf.expect.json"),
+    ),
+    ("150a", td!("varyconst_150_a.vert"), td!("varyconst_150_a.frag"), td!("varyconst_150_a.expect.json")),
+    ("150b", td!("varyconst_150_b.vert"), td!("varyconst_150_b.frag"), td!("varyconst_150_b.expect.json")),
+    (
+        "181",
+        td!("varyconst_181_fusemad.vert"),
+        td!("varyconst_181_fusemad.frag"),
+        td!("varyconst_181_fusemad.expect.json"),
+    ),
+    (
+        "191",
+        td!("varyconst_191_varyfma.vert"),
+        td!("varyconst_191_varyfma.frag"),
+        td!("varyconst_191_varyfma.expect.json"),
+    ),
+    (
+        "199",
+        td!("varyconst_199_es3trunc.vert"),
+        td!("varyconst_199_es3trunc.frag"),
+        td!("varyconst_199_es3trunc.expect.json"),
+    ),
+    /* gl_FragColor lane shapes: (x, x) and (x, 1.0), a uniform's lanes */
+    (
+        "185 fmul",
+        td!("varyconst_185_kindcost_fmul.vert"),
+        td!("varyconst_185_kindcost_fmul.frag"),
+        td!("varyconst_185_kindcost_fmul.expect.json"),
+    ),
+    (
+        "185 maxneg",
+        td!("varyconst_185_kindcost_maxneg.vert"),
+        td!("varyconst_185_kindcost_maxneg.frag"),
+        td!("varyconst_185_kindcost_maxneg.expect.json"),
+    ),
+    ("75", td!("varyconst_75_immneg.vert"), td!("varyconst_75_immneg.frag"), td!("varyconst_75_immneg.expect.json")),
+];
+
+#[test]
+fn the_varyconst_population_is_byte_equal_to_mesa_26_2_1() {
+    let mut failed = Vec::new();
+    for (name, vs, fs, json) in VARYCONST_POPULATION {
+        if let Err(e) = std::panic::catch_unwind(|| check_linked(vs, fs, json)) {
+            let m = e.downcast_ref::<String>().cloned().unwrap_or_else(|| format!("{:?}", e.downcast_ref::<&str>()));
+            failed.push(format!("{name}: {m}"));
+        }
+    }
+    assert!(failed.is_empty(), "{} of {} differ:\n{}", failed.len(), VARYCONST_POPULATION.len(), failed.join("\n"));
+}
+
+/// Case 117 (uniidx_f.vert, `v_color = u_k`): a lane computed from
+/// uniforms alone stays a varying, promoted to flat by Mesa's link. The
+/// varying program stores `FMA.f32 x, 0x0, x` of each lane; the fragment
+/// shader, compiled with the vertex shader's lanes (`vs_constants` marks
+/// them, link.rs `VaryingConsts::flat`), loads them `.src_flat32` at the
+/// address operand 0x0, no barycentric preloaded. Alone it interpolates.
+#[test]
+fn a_varying_lane_of_uniforms_alone_is_loaded_flat() {
+    let (vs, fs) = (td!("varyconst_117_uniidxf.vert"), td!("varyconst_117_uniidxf.frag"));
+    let (v, f) = compile_linked(vs, fs);
+    let (_, var) = vs_regions(&v);
+    let fmas = var.iter().map(|w| text(*w)).filter(|t| t.starts_with("FMA.f32") && t.contains(", 0x0, u")).count();
+    assert_eq!(fmas, 4);
+    let ld = text(trim(&f.code)[0]);
+    assert!(ld.contains(".src_flat32.") && ld.contains(", 0x0, index:0x0"), "{ld}");
+    let consts = store::with_scratch(|s| super::vs_constants(vs.as_bytes(), s)).expect("free").expect("the lanes");
+    assert!((0..4).all(|c| consts.flat(0, c) && consts.get(0, c).is_none()), "{consts:?}");
+    let alone = compile(SHC_STAGE_FRAGMENT, fs).expect("compiles alone");
+    assert!(text(trim(&alone.code)[0]).contains(".src_f32."));
+    /* a flat lane beside an interpolated one: no reference draws the
+     * layout, refused in the vertex shader */
+    let mixed = "attribute vec4 p; uniform float u; varying vec2 v; void main(){ gl_Position = p; v = vec2(p.x, u); }";
+    assert_eq!(gap(SHC_STAGE_VERTEX, mixed), MaliError::VaryingNotFromAttribute);
+}
+
+/// Case 78 (matvary): `v_m = mat2(a_color)`, the colour reads `v_m[0].x`
+/// and `v_m[1].y`. The GLSL linker packs the mat2's columns into one slot,
+/// which the link keeps whole: the vertex shader stores four words, the
+/// fragment shader loads `.v4` and converts lanes 0 and 3 alone into one
+/// word, `MKVEC.v2i16 r0, r0^.h0, r1^.h0` (nir_fs.rs `Leaf::Lanes`).
+#[test]
+fn case78_a_packed_matrix_varying_is_read_whole() {
+    let (v, f) = compile_linked(td!("varyconst_78_matvary.vert"), td!("varyconst_78_matvary.frag"));
+    let (_, var) = vs_regions(&v);
+    assert_eq!(var.iter().filter(|w| text(**w).starts_with("STORE")).count(), 4);
+    let texts: Vec<String> = trim(&f.code).iter().map(|w| text(*w)).collect();
+    assert!(texts[0].starts_with("LD_VAR_BUF_IMM.f32.slot0.v4."), "{texts:?}");
+    assert!(texts.iter().any(|t| t == "MKVEC.v2i16 r0, r0^.h0, r1^.h0"), "{texts:?}");
+    /* alone (the shader object's record, which the link replaces) it reads
+     * `v_after.z` too, so the matrix's lanes fall in two loads: compiled,
+     * for glCompileShader (the link reads both records) */
+    let alone = compile(SHC_STAGE_FRAGMENT, td!("varyconst_78_matvary.frag")).expect("compiles alone");
+    assert_eq!(alone.info.varyings.iter().filter(|x| x.section == Section::Generic).count(), 3);
+}
+
+/// Case 185 (kindcost): `vec4(x, x, x, 1.0)` of a highp chain, one
+/// conversion of x, then the word (x, x) as a swizzle of its half,
+/// `IADD.v2u16 r1, r0.h00, 0x0` (`MKVEC.v2i16 x.h0, x.h0` lowered by
+/// opt.rs `lower_mkvec_swz`, Mesa's `build_swz_v2i16_to`), and (x, 1.0)
+/// as `MKVEC.v2i16`.
+#[test]
+fn case185_a_lane_twice_in_a_word_is_a_swizzle() {
+    let f = compile(SHC_STAGE_FRAGMENT, td!("varyconst_185_kindcost_fmul.frag")).expect("compiles");
+    let texts: Vec<String> = trim(&f.code).iter().map(|w| text(*w)).collect();
+    assert_eq!(texts.iter().filter(|t| t.starts_with("FADD.f32") && t.contains(".h0, r")).count(), 1, "{texts:?}");
+    assert!(texts.iter().any(|t| t == "IADD.v2u16 r1, r0.h00, 0x0"), "{texts:?}");
+}
+
+/// Case 75 (immneg): `vec4(u_k.x - 0.5, u_k.y - 1.0, 1.0 - u_k.z, 1.0)`.
+/// The first word is the uniform's pair plus a constant pair
+/// (`FADD_IMM.v2f16 r0, u2.w0, #0xBC00B800`), the second a lane alone
+/// beside the constant 1.0: `1.0 - u_k.z` one 16-bit lane with the fneg a
+/// modifier of its reader (`FADD.v2f16 r1, 0x3C000000.h11,
+/// u2.w1.neg.h00`), then `MKVEC.v2i16 r1, r1^.h0, u3.w0.h0`.
+#[test]
+fn case75_a_uniform_lane_beside_a_constant_is_a_lane_alone() {
+    let f = compile(SHC_STAGE_FRAGMENT, td!("varyconst_75_immneg.frag")).expect("compiles");
+    let texts: Vec<String> = trim(&f.code).iter().map(|w| text(*w)).collect();
+    assert!(texts.iter().any(|t| t.starts_with("FADD_IMM.v2f16") && t.ends_with("u2.w0, #0xBC00B800")), "{texts:?}");
+    assert!(texts.iter().any(|t| t.ends_with("r1, 0x3C000000.h11, u2.w1.neg.h00")), "{texts:?}");
+}
+
+/// Case 150 arm A (shprobe): the vertex shader reads `u_p[58].y` alone of
+/// that element. Mesa pushes an array element's lanes alone (32 FAU words,
+/// varyconst_150_a.expect.json), where it pushes a vec4 that is no array
+/// from its x (sel_u_yz): `u_p[58].x`, dword 232, is no FAU word.
+#[test]
+fn a_vertex_array_element_pushes_its_lanes_alone() {
+    let (v, _) = compile_linked(td!("varyconst_150_a.vert"), td!("varyconst_150_a.frag"));
+    assert!(v.info.fau.contains(&FauWord::Uniform { dword: 233 }));
+    assert!(!v.info.fau.contains(&FauWord::Uniform { dword: 232 }), "{:?}", v.info.fau);
 }

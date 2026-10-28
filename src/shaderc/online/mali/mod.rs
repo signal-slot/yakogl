@@ -1423,7 +1423,9 @@ fn compile_lowered<'s>(
 /// [`link::VaryingConsts`]): the first step of the link that builds both
 /// stages for the program. Then [`compile_fs_for_vs`] with them, then
 /// [`compile_vs_for_reads`] with that fragment shader's reads, which no
-/// longer hold the constant lanes (case114_f.expect.json).
+/// longer hold the constant lanes (case114_f.expect.json). The lanes of
+/// uniforms alone ride along, marked flat (`VaryingConsts::flat`): the
+/// fragment shader loads them `.src_flat32` (varyconst_117_uniidxf).
 pub fn vs_constants(glsl: &[u8], scratch: &Arena<'_>) -> Result<link::VaryingConsts, CompileError> {
     let l = lower_source(SHC_STAGE_VERTEX, glsl, &[], scratch)?;
     /* built as for a fragment shader that reads nothing: no lane is stored,

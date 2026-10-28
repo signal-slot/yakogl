@@ -1173,6 +1173,13 @@ impl<'s> Nir<'s> {
         self.reads(n, |k| matches!(k, Kind::UniformIdx { .. }))
     }
 
+    /// Node `n` is arithmetic on uniforms and constants alone: no
+    /// attribute, look-up, run-time index or phi behind it (a lane Mesa's
+    /// link promotes to flat, [`super::link::VaryingConsts::push_flat`]).
+    fn uniform_only(&self, n: u16) -> bool {
+        !self.reads(n, |k| !matches!(k, Kind::Uniform { .. } | Kind::Alu(_)))
+    }
+
     /// Node `n` is, or reads through its sources, a node of a kind `f`
     /// accepts.
     fn reads(&self, n: u16, f: impl Fn(Kind) -> bool) -> bool {
@@ -1872,8 +1879,12 @@ pub fn build<'s>(
     for o in m.outputs.iter().filter(|o| o.kind == IoKind::Varying) {
         let Some(lanes) = varyings.get(o.location as usize).copied().flatten() else { continue };
         for (c, l) in lanes.iter().enumerate().take(o.components as usize) {
-            if let Val::Const(bits) = *l {
-                vs.consts.push(o.location, c as u8, bits);
+            match *l {
+                Val::Const(bits) => vs.consts.push(o.location, c as u8, bits),
+                /* a lane of uniforms alone, which the link promotes to
+                 * flat ([`super::link::VaryingConsts::push_flat`]) */
+                Val::Lane(n, _) if vs.uniform_only(n) => vs.consts.push_flat(o.location, c as u8),
+                _ => {}
             }
         }
     }
@@ -1884,19 +1895,45 @@ pub fn build<'s>(
     if p.contains(&Val::Undef) {
         return Err(MaliError::PositionLane);
     }
-    /* the varyings, laid out as Mesa's link does. Each lane stored is
-     * computed from an attribute: Mesa's link (nir_opt_varyings) propagates
-     * a constant lane into the fragment shader and rewrites a lane that
-     * reads no attribute (sel_v_const, sel_v_uniform), and it merges two
-     * lanes of equal value (sel_v_duplicate); the layout would not be this
-     * stage's alone, so those are refused. A program's vertex shader is
-     * built for a fragment shader that took the constant lanes
-     * (mod.rs `compile_fs_for_vs`): it reads, so stores, none of them. */
+    /* the varyings, laid out as Mesa's link does (nir_opt_varyings): it
+     * propagates a constant lane into the fragment shader (sel_v_const: a
+     * program's vertex shader is built for a fragment shader that took the
+     * constant lanes, mod.rs `compile_fs_for_vs`, so it stores none of
+     * them), promotes a lane that reads no attribute to flat (sel_v_uniform,
+     * below) and merges two lanes of equal value (sel_v_duplicate, refused:
+     * the layout would not be this stage's alone) */
     let decls = m.outputs.iter().filter(|o| o.kind == IoKind::Varying);
-    vs.nvar = generic_layout(decls.map(|o| (o.location, o.components)), &mut vs.varyings)?;
+    vs.nvar = generic_layout(decls.clone().map(|o| (o.location, o.components)), &mut vs.varyings)?;
+    /* a shader alone that stores a constant lane is built for its own lanes
+     * less its constant ones, the layout the link's fragment shader reads
+     * once they are folded into it (codegen.rs `compile_vs_without_consts`,
+     * which this makes the shader's own compile) */
+    let mut own = [(0u8, 0u8); MAX_VARYINGS];
+    let mut nown = 0;
+    let konst = |o: &&ir::IoDecl<'_>, c: u8| {
+        varyings.get(o.location as usize).copied().flatten().is_some_and(|l| matches!(l[c as usize & 3], Val::Const(_)))
+    };
+    let reads = match reads {
+        None if decls.clone().any(|o| (0..o.components).any(|c| konst(&o, c))) => {
+            for o in decls {
+                let mask = (0..o.components).filter(|&c| !konst(&o, c)).fold(0u8, |m, c| m | 1 << c);
+                if mask == 0 {
+                    continue;
+                }
+                *own.get_mut(nown).ok_or(MaliError::VaryingLocation)? = (o.location, mask);
+                nown += 1;
+            }
+            Some(&own[..nown])
+        }
+        r => r,
+    };
     compact_layout(&mut vs, reads);
     let mut seen = [Val::Undef; 4 * MAX_VARYINGS];
     let mut nseen = 0;
+    /* (a lane of uniforms alone stored, an interpolated lane stored): the
+     * link packs flat lanes in slots of their own, a layout no reference
+     * draws beside interpolated ones */
+    let (mut flat, mut smooth) = (false, false);
     for k in 0..vs.nvar {
         let v = vs.varyings[k];
         if vs.masks[k] != (1 << v.comps) - 1 {
@@ -1922,16 +1959,21 @@ pub fn build<'s>(
                 Val::Undef => return Err(MaliError::VaryingForm),
                 Val::Const(_) => return Err(MaliError::VaryingNotFromAttribute),
                 /* a convergent lane (`nir_vertex_divergence_analysis`: no
-                 * attribute behind it) Mesa's link neither propagates nor
-                 * rewrites when a texture look-up is behind it (a `tex` is
-                 * no uniform expression, nir_opt_varyings.c:2846-2878), or
-                 * a uniform array read at a run-time index (measured:
+                 * attribute behind it) is promoted to flat, its store
+                 * below: one behind a texture look-up (a `tex` is no
+                 * uniform expression, nir_opt_varyings.c:2846-2878), a
+                 * uniform array read at a run-time index (measured:
                  * uniarray_vs.expect.json keeps the `LD_PKA.i32` in the
-                 * varying program): it is promoted to flat, its store below */
+                 * varying program), or uniforms alone (117, 181, 191, 199:
+                 * the link neither propagates nor moves them, the
+                 * fragment shader loads them flat, varyconst_*.expect.json) */
+                Val::Lane(n, _) if vs.uniform_only(n) => flat = true,
+                /* no attribute behind it, and no reference of its form
+                 * (a phi of uniforms) */
                 Val::Lane(n, _) if !vs.reads_attribute(n) && !vs.reads_tex(n) && !vs.reads_indexed(n) => {
                     return Err(MaliError::VaryingNotFromAttribute)
                 }
-                Val::Lane(..) => {}
+                Val::Lane(..) => smooth = true,
                 Val::Pair(..) => return Err(MaliError::Defect(Defect::IrIndex)),
             }
             if seen[..nseen].contains(&l) {
@@ -1947,6 +1989,9 @@ pub fn build<'s>(
         if whole {
             vs.note(Prod::Varying);
         }
+    }
+    if flat && smooth {
+        return Err(MaliError::VaryingNotFromAttribute);
     }
     /* the viewport transform, before the position's store */
     vs.user = false;
