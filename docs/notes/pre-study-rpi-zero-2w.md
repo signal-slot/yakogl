@@ -28,15 +28,21 @@ brings, what can be done on the host first, and what is still unknown.
   or marked "(unread)" if it is general knowledge that a reader must confirm
   first. The first job after this note merges is to read those sources and
   turn each unread item into a cited one (item 0 of section 8).
-- **Read late, partly.** One page fetch of Linux v6.17
-  `arch/arm/boot/dts/broadcom/bcm283x.dtsi` (through a summarising fetch tool,
-  so treat it as a pointer, not a transcript) gave: node `mailbox@7e00b880`,
-  `compatible = "brcm,bcm2835-mbox"`, `reg = <0x7e00b880 0x40>`; node
-  `hvs@7e400000`, `compatible = "brcm,bcm2835-hvs"`, `reg = <0x7e400000
-  0x6000>`. The same fetch did not show `v3d`, `pixelvalve`, `hdmi` or
-  `firmware` nodes (they may be in `bcm2835-common.dtsi` or the board files;
-  not checked), and `bcm2837.dtsi` returned HTTP 429. Both files stay unread
-  for Q-items in section 7.
+- **Read late, partly.** Linux v6.17
+  `arch/arm/boot/dts/broadcom/bcm2837.dtsi` and `bcm283x.dtsi` were downloaded
+  and read in full (`linux:` below means these two). Facts taken from them:
+  `soc` ranges `<0x7e000000 0x3f000000 0x1000000>` and `<0x40000000
+  0x40000000 0x1000>`; `local_intc` is `brcm,bcm2836-l1-intc` at `reg =
+  <0x40000000 0x100>`; the generic timer (`arm,armv7-timer`) takes its four
+  PPIs from `local_intc` (0, 1, 3, 2); the main interrupt controller is
+  `brcm,bcm2836-armctrl-ic` at `0x7e00b200`, wired to `local_intc` input 8;
+  four `arm,cortex-a53` CPUs with `spin-table` release addresses `0xd8`,
+  `0xe0`, `0xe8`, `0xf0`; `mailbox@7e00b880`, `brcm,bcm2835-mbox`, `reg =
+  <0x7e00b880 0x40>`; `hvs@7e400000`, `reg = <0x7e400000 0x6000>`. Neither
+  file has a `v3d`, `pixelvalve`, `hdmi` or `firmware` node: they are in
+  another file (probably `bcm2835-common.dtsi`; not read, a fetch of it was not
+  approved). The kernel `vc4` driver, the power-domain driver and the
+  architecture guide are still unread.
 
 ## 1. The hardware
 
@@ -177,9 +183,11 @@ Read in `zephyr:` (4.4.99):
   `0xfe00b880` with GIC SPI 33, and loads at `0x200000`
   (`zephyr:boards/raspberrypi/rpi_4b/rpi_4b.dts`, `dram0`).
   The Zero 2 W's addresses differ: the BCM2837 peripherals are expected at
-  `0x3f000000` and the ARM-local block at `0x40000000` (unread: Linux
-  `bcm2837.dtsi`, `bcm2836-l1-intc`). The interrupt controller is **not a GIC**
-  on this SoC family (unread; question Q4).
+  `0x3f000000` and the ARM-local block at `0x40000000` (`linux:bcm2837.dtsi`,
+  `soc` ranges). The interrupt controller is **not a GIC**: it is the
+  `bcm2836-l1-intc` local block at `0x40000000` plus the `bcm2836-armctrl-ic`
+  at bus `0x7e00b200` (`linux:bcm2837.dtsi`, nodes `local_intc` and the
+  armctrl override). The per-source numbers for V3D are still open (Q4).
 - **Zephyr has the hook for a non-GIC arm64 SoC.**
   `CONFIG_ARM_CUSTOM_INTERRUPT_CONTROLLER` (`zephyr:arch/arm64/Kconfig:17-29`)
   maps `arch_irq_*` to the SoC layer; the vector code calls
