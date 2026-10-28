@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# panthor-gltest 42 63 91 149 184 185 189 214, run 2 (README.md): the verdict and summary lines
+panthor-gltest: verdict case 42 es3array: REFUSED draw: mali: a texture other than one 2D image or a cube map of six faces (an array, a 3D texture) is not built yet
+panthor-gltest: verdict case 63 matattr: FAIL rc -1, first bad check 1 got 0xff800000 want 0xff804000
+panthor-gltest: verdict case 91 hdrblend: REFUSED draw: mali frame: a blended or colour-masked draw into an RGBA16F target is not built yet
+panthor-gltest: verdict case 149 vsunits: REFUSED compile: online shaderc: the code generator refused this vertex shader: Mali(Valhall: a vertex shader texture look-up other than one 2D look-up at a level (a second one, a size query) is not lowered yet)
+panthor-gltest: verdict case 184 depchain: PASS 
+panthor-gltest: verdict case 185 kindcost: PASS 
+panthor-gltest: verdict case 189 mulone: PASS 
+panthor-gltest: verdict case 214 splitkick: FAIL rc -1, first bad check 5 got 0xffc0c0c0 want 0xff808080
+panthor-gltest: 8 case(s) run: FAIL 2, PASS 3, REFUSED 3
