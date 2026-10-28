@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# panthor-gltest 2 42 43 47 51 57 72 75 78 79 91 100 112 116 117 141 149 191 193 194 195 214, run 1 (README.md): the verdict and summary lines
+panthor-gltest: verdict case 2 texture: FAIL rc -1, first bad check 26 got 0xff000080 want 0xff0040bf
+panthor-gltest: verdict case 42 es3array: REFUSED draw: mali: a texture other than one 2D image or a cube map of six faces (an array, a 3D texture) is not built yet
+panthor-gltest: verdict case 43 es3vid: PASS 
+panthor-gltest: verdict case 47 es3inst: PASS 
+panthor-gltest: verdict case 51 es3heavy: PASS 
+panthor-gltest: verdict case 57 es3vid_indexed: PASS 
+panthor-gltest: verdict case 72 intlit: PASS 
+panthor-gltest: verdict case 75 immneg: PASS 
+panthor-gltest: verdict case 78 matvary: PASS 
+panthor-gltest: verdict case 79 idiv: PASS 
+panthor-gltest: verdict case 91 hdrblend: REFUSED draw: mali frame: a blended or colour-masked draw into an RGBA16F target is not built yet
+panthor-gltest: verdict case 100 idxtex: PASS 
+panthor-gltest: verdict case 112 affectand: PASS 
+panthor-gltest: verdict case 116 uniidxe: PASS 
+panthor-gltest: verdict case 117 uniidxf: PASS 
+panthor-gltest: verdict case 141 es3instdiv: FAIL rc -1, first bad check 2 got 0xff00ff00 want 0x80008000
+panthor-gltest: verdict case 149 vsunits: REFUSED compile: online shaderc: the code generator refused this vertex shader: Mali(Valhall: a vertex shader texture look-up other than one 2D look-up at a level (a second one, a size query) is not lowered yet)
+panthor-gltest: verdict case 191 varyfma: PASS 
+panthor-gltest: verdict case 193 offarm: PASS 
+panthor-gltest: verdict case 194 offarmn: PASS 
+panthor-gltest: verdict case 195 ifbranch: PASS 
+panthor-gltest: verdict case 214 splitkick: FAIL rc -1, first bad check 5 got 0xffc0c0c0 want 0xff808080
+panthor-gltest: 22 case(s) run: FAIL 3, PASS 16, REFUSED 3
