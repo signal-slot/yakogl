@@ -112,6 +112,10 @@ impl VaryingOrder {
 /// The constant lanes one program's vertex shader may propagate.
 pub const MAX_CONSTS: usize = 16;
 
+/// The component tag of a flat lane in [`VaryingConsts`]
+/// ([`VaryingConsts::push_flat`]).
+const FLAT_LANE: u8 = 0x80;
+
 /// A vertex shader's varying lanes that are constants: Mesa's link
 /// propagates each into the fragment shader's read of it and removes the
 /// lane from the layout (nir_opt_varyings.c:2880-2900,
@@ -158,6 +162,24 @@ impl VaryingConsts {
     /// The constant of lane `comp` of varying `location`, if it is one.
     pub fn get(&self, location: u8, comp: u8) -> Option<u32> {
         self.as_slice().iter().find(|e| e.0 == location && e.1 == comp).map(|e| e.2)
+    }
+
+    /// Lane `comp` of varying `location` is computed from uniforms alone
+    /// (no attribute, no look-up): Mesa's link keeps it a varying but
+    /// promotes it to flat (nir_opt_varyings.c:4964-5002), so the fragment
+    /// shader loads it `.src_flat32` (varyconst_117_uniidxf.expect.json).
+    /// Kept beside the constants, its component tagged [`FLAT_LANE`] and
+    /// no bits, so that [`VaryingConsts::get`] never finds it and the
+    /// record key (backend.rs `LinkConsts::key`) holds it.
+    pub fn push_flat(&mut self, location: u8, comp: u8) {
+        self.push(location, comp | FLAT_LANE, 0);
+    }
+
+    /// Lane `comp` of varying `location` is a flat lane ([`push_flat`]).
+    ///
+    /// [`push_flat`]: VaryingConsts::push_flat
+    pub fn flat(&self, location: u8, comp: u8) -> bool {
+        self.as_slice().iter().any(|e| e.0 == location && e.1 == comp | FLAT_LANE)
     }
 
     pub fn as_slice(&self) -> &[(u8, u8, u32)] {

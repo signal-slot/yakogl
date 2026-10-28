@@ -11,9 +11,10 @@ that the online Mali compiler refuses:
 | `Valhall: a varying lane computed from no attribute (...) is not lowered yet` | 63 matattr, 78 matvary, 101 cubebias, 117 uniidxf, 181 fusemad, 191 varyfma, 199 es3trunc |
 | `Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet` | 75 immneg, 185 kindcost |
 
-Nothing here changes `src/`; this is Mesa 26.2.1's behaviour, recorded, and an
-order to implement it in. The words quoted are the shim's
-(`BIFROST_MESA_DEBUG=shaders,shaderdb`: NIR, then the final disassembly).
+The study recorded Mesa 26.2.1's behaviour and an order to implement it
+in; plan #154 varyconst lowered it (section "What is lowered" at the end).
+The words quoted are the shim's (`BIFROST_MESA_DEBUG=shaders,shaderdb`: NIR,
+then the final disassembly).
 
 ## How the references were made
 
@@ -296,3 +297,80 @@ clears 117, 181 (to the control half), 191 and 199 (to their fragment arithmetic
 4 clears 185, 5 clears 75. 101 waits on the cube look-up with a bias.
 The byte-equal check for each is `pan_ref_diff.py diff` against the
 `varyconst_*.expect.json` it names (`vs.varying`, `fs.fragment`).
+
+## What is lowered (plan #154 varyconst, 2026-10-28)
+
+Every program of the population is byte-equal to its reference in every
+region and fact (`vs.position`, `vs.varying`, `fs.fragment`, FAU words,
+registers, preload), compiled through the link step (`tests.rs`
+`VARYCONST_POPULATION`, `check_linked`): 63, 75, 78, 117, 150 arms A and
+B, 181, 185 (`kc_fmul`, `kc_maxneg`), 191, 199. 101 is not: its fragment
+shader's cube look-up with a bias is item cubebias101's.
+
+1. **Constant lanes** were already dropped by the link step
+   (`mod.rs` `vs_constants`, `compile_fs_for_vs`; 63 was equal). A vertex
+   shader compiled alone now drops them too (`nir.rs` `build`: it is built
+   for its own lanes less the constant ones, what codegen.rs
+   `compile_vs_without_consts` built after a refusal), so its own verdict
+   is `ok`.
+2. **Lanes of uniforms alone are flat.** `vs_constants` marks each lane
+   whose value reads only uniforms and constants (`Nir::uniform_only`: no
+   attribute, look-up, run-time index or phi) in the same
+   `link::VaryingConsts` (`push_flat`, the component tagged `0x80`, so the
+   backend's record key holds it with no change there). The fragment shader
+   compiled with them loads `.src_flat32` at the address operand `0x0`
+   (`Idx::Lut(0)`: no `r61`, no barycentric preload). The ISA's virtual
+   rule reads a flat load's update as `none` (encoded 1) where va_pack.c
+   packs `store` (0), so the word is encoded as `.src_f32` and its format
+   field cleared (pack.rs). The vertex side's `ffma(x, 0.0, x)` was there
+   already (the look-up lanes of cube_vs); the lane's own arithmetic goes
+   through the vertex lowering unchanged (181 and 150 equal). A flat lane
+   stored or read beside an interpolated one is refused
+   (`VaryingNotFromAttribute`): the link packs flat lanes in slots of their
+   own, a layout no reference draws.
+3. **A packed matrix varying is read whole.** A matrix varying of columns
+   narrower than a vec4 (mat2: the GLSL linker's `packed:v_m[0],v_m[1]`)
+   any lane of which the colour reads is read whole, every column
+   (`nir_fs.rs` `layout`), so 78's vertex shader stores four words and the
+   fragment shader loads `.v4`. The word of two lanes of that load that are
+   no aligned pair is `Leaf::Lanes`: each lane converted alone
+   (`FADD.f32 rN.h0, rM^, 0x0.neg`) then `MKVEC.v2i16 x.h0, y.h0`. Only for a
+   load the link keeps whole: `v.xzyw` of a compacted load stays
+   `ColourForm`. 78's fragment shader alone (no link) also reads
+   `v_after.z`, which splits the matrix over two slots; the word then takes
+   its two lanes from two such loads. That is only the shader object's
+   record, which glCompileShader needs (the link reads both records,
+   backend.rs `link_by_sources`) and the link replaces with the one compiled
+   with the vertex shader's constant lane; no reference draws it.
+4. **`(x, x)`** of a highp shader is `Word::Lanes(x, x)`, one conversion,
+   then `MKVEC.v2i16 x.h0, x.h0`, which `opt.rs` `lower_mkvec_swz` makes
+   `IADD.v2u16 x.h00, 0x0` (`build_swz_v2i16_to` on Valhall; a new op,
+   `Op::IaddV2u16`). The two `MOV`s before BLEND are the register
+   allocator's.
+5. **75**: the first word was already lowered once `Uniform` at `AddA` is
+   admitted (`FADD_IMM.v2f16`). The second, `(1.0 - u_k.z, 1.0)`, is a lane
+   alone beside a constant (`lane_word`, `Leaf::Lane`), whose tree may now
+   hold one uniform component under sums and an fneg (`lone_tree`): one
+   16-bit `FADD.v2f16 0x3C000000.h11, u2.w1.neg.h00` (a new emit row, the
+   fneg of one lane, folded into its reader), then `MKVEC`.
+
+Found on the way (150 arm A): the vertex stage pushes a uniform array
+element's lanes alone, where a vec4 that is no array is pushed from its x
+up to its highest lane read (sel_u_yz). 150 A reads `u_p[58].y` only and
+Mesa's FAU is 32 words, without `u_p[58].x` (the shim's NIR, rerun:
+`32 %2 = @load_ubo (0x0, 0x3a4)`, one component at the y's own offset;
+gl_ref.py prints `u_p[64] at -1`, so the array's words stay 0); `select.rs` `vs_variant` now
+names each lane of an array element as a load of its own
+(`UboLayout::in_array`). The fragment stage already pushed lanes alone.
+
+The corpus (`tools/mali/corpus-verdicts.txt`) moved 168 ok -> 187 ok, none
+backwards (`corpus_forward.py origin/main`); `discard_dynloop.vert` and
+`va_vec2.vert` now stop at `VaryingDuplicate`, `textured.vert` at the fp16
+vertex uniform (case 19's).
+
+Left for the frame (`src/mali`, not changed here): the reference's
+fragment attribute descriptor for a flat varying is an integer format
+(`RGBA32UI`, `RG32UI`, `RGB32UI` where the interpolated one is `*32F`);
+the record does not say which varyings are flat (`VaryingSlot` has no
+interpolation field). Whether `LD_VAR_BUF_IMM` reads the descriptor's
+format at all is for the board to show.

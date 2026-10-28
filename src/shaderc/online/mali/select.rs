@@ -251,13 +251,15 @@ pub struct UboLayout {
     /// the UBO descriptor (`cfg.size`, pan_cmdstream.c:1438-1452) are
     /// `4 * words`.
     words: u16,
+    /// Bit k: row k is a uniform array's ([`UboLayout::vs`]).
+    arrays: u32,
 }
 
 /// The uniforms one stage's layout holds.
 pub const MAX_UBO_ROWS: usize = 32;
 
 impl UboLayout {
-    pub const NONE: UboLayout = UboLayout { rows: [UboRow::NONE; MAX_UBO_ROWS], n: 0, words: 0 };
+    pub const NONE: UboLayout = UboLayout { rows: [UboRow::NONE; MAX_UBO_ROWS], n: 0, words: 0, arrays: 0 };
 
     /// The uniforms the layout holds (its use of [`MAX_UBO_ROWS`]).
     pub fn rows(&self) -> usize {
@@ -302,8 +304,18 @@ impl UboLayout {
              * the varying program's `IADD_IMM.i32 #0x4`) */
             let (_, comps) = super::nir_fs::uniform_extent(m, u.dword_off)?;
             l.push(u.dword_off, comps, false)?;
+            if u.array_len > 1 {
+                l.arrays |= 1 << (l.n - 1);
+            }
         }
         Ok(l)
+    }
+
+    /// Front-end dword `dword` is an element's of a uniform array (a
+    /// vertex shader's layout, [`UboLayout::vs`]).
+    pub fn in_array(&self, dword: u16) -> bool {
+        let k = self.rows[..self.n].iter().position(|r| dword >= r.dword && dword < r.dword + r.comps);
+        k.is_some_and(|k| self.arrays & (1 << k) != 0)
     }
 
     /// The program reads the block from memory (a [`nir::Kind::UniformIdx`]
@@ -521,8 +533,18 @@ pub fn vs_variant(
             }
             nir::Kind::Uniform { dword, comps } => {
                 let base = ubo.word(dword).ok_or(MaliError::Defect(super::Defect::IrIndex))?;
+                /* an array element's lanes are pushed alone, each its own
+                 * load (measured: varyconst_150_a.expect.json pushes
+                 * `u_p[58].y` without `u_p[58].x`, 32 FAU words; a vec4
+                 * that is no array pushes from its x, sel_u_yz) */
+                let alone = ubo.in_array(dword);
                 for c in 0..comps {
-                    lanes[id][c as usize] = Src::of(Idx::Ubo { base, comp: c });
+                    let at = if alone {
+                        Idx::Ubo { base: base + u16::from(c), comp: 0 }
+                    } else {
+                        Idx::Ubo { base, comp: c }
+                    };
+                    lanes[id][c as usize] = Src::of(at);
                 }
             }
             nir::Kind::Sysval(sv) => {

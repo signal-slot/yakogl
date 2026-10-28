@@ -21,7 +21,7 @@ tools/shaders/es100/cond_complex.frag: Valhall: an integer or boolean value is n
 tools/shaders/es100/cond_sequence.frag: Valhall: an integer or boolean value is not lowered yet
 tools/shaders/es100/contloops.frag: Valhall: an integer or boolean value is not lowered yet
 tools/shaders/es100/cubebias.frag: Valhall: a texture look-up other than texture2D(sampler2D, coordinate) (a bias, a level, a projection, a cube map, a size query) is not lowered yet
-tools/shaders/es100/cubebias.vert: Valhall: a varying lane computed from no attribute (a constant or a uniform alone, which Mesa's link moves or rewrites) is not lowered yet
+tools/shaders/es100/cubebias.vert: ok
 tools/shaders/es100/cubelod.frag: ok
 tools/shaders/es100/cubelod.vert: Valhall: a vertex shader look-up at a coordinate with a constant lane (a shape no reference draws) is not lowered yet
 tools/shaders/es100/cubemap.vert: ok
@@ -30,7 +30,7 @@ tools/shaders/es100/deadloop.frag: Valhall: control flow (if, a loop, a return b
 tools/shaders/es100/deriv.frag: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
 tools/shaders/es100/deriv.vert: ok
 tools/shaders/es100/discard_dynloop.frag: Valhall: an integer or boolean value is not lowered yet
-tools/shaders/es100/discard_dynloop.vert: Valhall: a varying lane computed from no attribute (a constant or a uniform alone, which Mesa's link moves or rewrites) is not lowered yet
+tools/shaders/es100/discard_dynloop.vert: Valhall: two varying lanes of equal value (Mesa's link merges them) is not lowered yet
 tools/shaders/es100/dynidx.frag: Valhall: an integer or boolean value is not lowered yet
 tools/shaders/es100/dynidx.vert: ok
 tools/shaders/es100/dynidx_loop.frag: Valhall: an integer or boolean value is not lowered yet
@@ -53,7 +53,7 @@ tools/shaders/es100/ifelse_loop.frag: Valhall: a uniform other than a float, vec
 tools/shaders/es100/ifloop.frag: Valhall: an integer or boolean value is not lowered yet
 tools/shaders/es100/ifoutput.frag: Valhall: control flow (if, a loop, a return before the end) is not lowered yet
 tools/shaders/es100/ifoutput2.frag: Valhall: control flow (if, a loop, a return before the end) is not lowered yet
-tools/shaders/es100/immneg.frag: Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet
+tools/shaders/es100/immneg.frag: ok
 tools/shaders/es100/immneg.vert: ok
 tools/shaders/es100/int_compare.frag: Valhall: an integer or boolean value is not lowered yet
 tools/shaders/es100/int_div.frag: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
@@ -71,12 +71,12 @@ tools/shaders/es100/loop_uniform.dowhile.vert: Valhall: an integer or boolean va
 tools/shaders/es100/loop_uniform.frag: Valhall: an integer or boolean value is not lowered yet
 tools/shaders/es100/loopcarry.frag: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
 tools/shaders/es100/matattr.frag: ok
-tools/shaders/es100/matattr2.vert: Valhall: a varying lane computed from no attribute (a constant or a uniform alone, which Mesa's link moves or rewrites) is not lowered yet
+tools/shaders/es100/matattr2.vert: ok
 tools/shaders/es100/matattr3.vert: Valhall: three or more additions or multiplications in a chain (GLSL's do_rebalance_tree reassociates such a tree) is not lowered yet
 tools/shaders/es100/matattr4.vert: Valhall: three or more additions or multiplications in a chain (GLSL's do_rebalance_tree reassociates such a tree) is not lowered yet
 tools/shaders/es100/matdyn.frag: Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet
-tools/shaders/es100/matvary.frag: Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet
-tools/shaders/es100/matvary.vert: Valhall: a varying lane computed from no attribute (a constant or a uniform alone, which Mesa's link moves or rewrites) is not lowered yet
+tools/shaders/es100/matvary.frag: ok
+tools/shaders/es100/matvary.vert: ok
 tools/shaders/es100/mvstruct.vert: Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add) is not lowered yet
 tools/shaders/es100/partial_varying.frag: ok
 tools/shaders/es100/partial_varying.vert: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
@@ -95,7 +95,7 @@ tools/shaders/es100/swizzled_broadcast.frag: ok
 tools/shaders/es100/texbranch.frag: Valhall: control flow (if, a loop, a return before the end) is not lowered yet
 tools/shaders/es100/texfill.vert: Valhall: a vertex shader uniform that is not highp (Mesa's fp16 uniform) is not lowered yet
 tools/shaders/es100/textured.frag: ok
-tools/shaders/es100/textured.vert: Valhall: a varying lane computed from no attribute (a constant or a uniform alone, which Mesa's link moves or rewrites) is not lowered yet
+tools/shaders/es100/textured.vert: Valhall: a vertex shader uniform that is not highp (Mesa's fp16 uniform) is not lowered yet
 tools/shaders/es100/tmparr_const.frag: Valhall: a shader with more than 32 local variables is not lowered yet
 tools/shaders/es100/tmparr_const.vert: Valhall: a shader with more than 32 local variables is not lowered yet
 tools/shaders/es100/transc.frag: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
@@ -114,7 +114,7 @@ tools/shaders/es100/uniidx_b.frag: ok
 tools/shaders/es100/uniidx_c.frag: ok
 tools/shaders/es100/uniidx_d.frag: ok
 tools/shaders/es100/uniidx_e.vert: Valhall: a uniform read at a run-time index other than a float array's element or a mediump fragment shader's vec4 array first in the block read once, indexed by an int uniform, is not lowered yet
-tools/shaders/es100/uniidx_f.vert: Valhall: a varying lane computed from no attribute (a constant or a uniform alone, which Mesa's link moves or rewrites) is not lowered yet
+tools/shaders/es100/uniidx_f.vert: ok
 tools/shaders/es100/uniidx_g.frag: ok
 tools/shaders/es100/uniidx_h.frag: ok
 tools/shaders/es100/uniidx_i.frag: ok
@@ -122,10 +122,10 @@ tools/shaders/es100/uniidx_j.frag: ok
 tools/shaders/es100/utri.frag: ok
 tools/shaders/es100/utri.vert: ok
 tools/shaders/es100/va.frag: ok
-tools/shaders/es100/va_vec2.vert: Valhall: a varying lane computed from no attribute (a constant or a uniform alone, which Mesa's link moves or rewrites) is not lowered yet
-tools/shaders/es100/va_vec4x2.vert: Valhall: a varying lane computed from no attribute (a constant or a uniform alone, which Mesa's link moves or rewrites) is not lowered yet
+tools/shaders/es100/va_vec2.vert: Valhall: two varying lanes of equal value (Mesa's link merges them) is not lowered yet
+tools/shaders/es100/va_vec4x2.vert: ok
 tools/shaders/es100/varyings15.frag: Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet
-tools/shaders/es100/varyings15.vert: Valhall: a varying lane computed from no attribute (a constant or a uniform alone, which Mesa's link moves or rewrites) is not lowered yet
+tools/shaders/es100/varyings15.vert: ok
 tools/shaders/es100/vrcp.vert: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
 tools/shaders/es100/vtex_struct_sampler.vert: Valhall: a varying lane computed from no attribute (a constant or a uniform alone, which Mesa's link moves or rewrites) is not lowered yet
 tools/shaders/es100/vtex_struct_sampler_array.vert: Valhall: a varying lane computed from no attribute (a constant or a uniform alone, which Mesa's link moves or rewrites) is not lowered yet
@@ -137,7 +137,7 @@ tools/shaders/es300/bands.vert: ok
 tools/shaders/es300/cube.frag: ok
 tools/shaders/es300/cube.vert: ok
 tools/shaders/es300/cubelodf.frag: ok
-tools/shaders/es300/cubelodf.vert: Valhall: a varying lane computed from no attribute (a constant or a uniform alone, which Mesa's link moves or rewrites) is not lowered yet
+tools/shaders/es300/cubelodf.vert: ok
 tools/shaders/es300/cubelodv.frag: ok
 tools/shaders/es300/cubelodv.vert: ok
 tools/shaders/es300/derivs.frag: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
@@ -232,13 +232,13 @@ tools/shaders/gl_test_es100/uniform_color.frag: ok
 tools/shaders/gl_test_es100/uv.vert: ok
 tools/shaders/gl_test_es100/zorder.vert: ok
 tools/shaders/gltest/blendonce_fs.frag: ok
-tools/shaders/gltest/dep1_fs.frag: Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet
-tools/shaders/gltest/dep2_fs.frag: Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet
+tools/shaders/gltest/dep1_fs.frag: ok
+tools/shaders/gltest/dep2_fs.frag: ok
 tools/shaders/gltest/dep4_fs.frag: Valhall: three or more additions or multiplications in a chain (GLSL's do_rebalance_tree reassociates such a tree) is not lowered yet
 tools/shaders/gltest/deqp_position.vert: ok
 tools/shaders/gltest/es3trunc_fs.frag: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
 tools/shaders/gltest/es3trunc_vary_fs.frag: ok
-tools/shaders/gltest/es3trunc_vs.vert: Valhall: a varying lane computed from no attribute (a constant or a uniform alone, which Mesa's link moves or rewrites) is not lowered yet
+tools/shaders/gltest/es3trunc_vs.vert: ok
 tools/shaders/gltest/es3trunc_vsc.vert: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
 tools/shaders/gltest/f1_edge_fs.frag: ok
 tools/shaders/gltest/f1_fs.frag: Valhall: an integer or boolean value is not lowered yet
@@ -246,12 +246,12 @@ tools/shaders/gltest/f1_mid_fs.frag: ok
 tools/shaders/gltest/f3_fs.frag: Valhall: an integer or boolean value is not lowered yet
 tools/shaders/gltest/f3_lit_fs.frag: ok
 tools/shaders/gltest/f3_var_fs.frag: ok
-tools/shaders/gltest/f3_var_vs.vert: Valhall: a varying lane computed from no attribute (a constant or a uniform alone, which Mesa's link moves or rewrites) is not lowered yet
+tools/shaders/gltest/f3_var_vs.vert: ok
 tools/shaders/gltest/fma_fs_ctrl.frag: ok
 tools/shaders/gltest/fma_fs_fused.frag: ok
 tools/shaders/gltest/fma_fs_varying.frag: ok
 tools/shaders/gltest/fma_vs_ctrl.vert: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
-tools/shaders/gltest/fma_vs_fused.vert: Valhall: a varying lane computed from no attribute (a constant or a uniform alone, which Mesa's link moves or rewrites) is not lowered yet
+tools/shaders/gltest/fma_vs_fused.vert: ok
 tools/shaders/gltest/fsat_fs_ctrl.frag: ok
 tools/shaders/gltest/fsat_fs_folded.frag: ok
 tools/shaders/gltest/fsat_vs_ctrl.vert: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
@@ -259,10 +259,10 @@ tools/shaders/gltest/fsat_vs_folded.vert: Valhall: arithmetic other than +, -, *
 tools/shaders/gltest/fshp_vs.vert: ok
 tools/shaders/gltest/intrt.frag: Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet
 tools/shaders/gltest/isamp.frag: ok
-tools/shaders/gltest/kc_fadd_fs.frag: Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet
-tools/shaders/gltest/kc_fmul_fs.frag: Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet
-tools/shaders/gltest/kc_maxmul_fs.frag: Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet
-tools/shaders/gltest/kc_maxneg_fs.frag: Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet
+tools/shaders/gltest/kc_fadd_fs.frag: ok
+tools/shaders/gltest/kc_fmul_fs.frag: ok
+tools/shaders/gltest/kc_maxmul_fs.frag: ok
+tools/shaders/gltest/kc_maxneg_fs.frag: ok
 tools/shaders/gltest/kc_mulneg_fs.frag: Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add) is not lowered yet
 tools/shaders/gltest/mulone_fs_half.frag: ok
 tools/shaders/gltest/mulone_fs_mods.frag: Valhall: three or more additions or multiplications in a chain (GLSL's do_rebalance_tree reassociates such a tree) is not lowered yet
@@ -287,7 +287,7 @@ tools/shaders/gltest/unipad_fs.frag: ok
 tools/shaders/gltest/unipad_vs.vert: ok
 tools/shaders/gltest/usamp.frag: Valhall: a texture look-up other than texture2D(sampler2D, coordinate) (a bias, a level, a projection, a cube map, a size query) is not lowered yet
 tools/shaders/gltest/varyfma_fs.frag: ok
-tools/shaders/gltest/varyfma_vs.vert: Valhall: a varying lane computed from no attribute (a constant or a uniform alone, which Mesa's link moves or rewrites) is not lowered yet
+tools/shaders/gltest/varyfma_vs.vert: ok
 tools/shaders/gltest/vsunits_fs.frag: ok
 tools/shaders/gltest/vtl_fs.frag: ok
 tools/shaders/gltest/vtl_vs.vert: ok

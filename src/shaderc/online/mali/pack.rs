@@ -469,6 +469,13 @@ pub fn pack_one(i: &Ins, branch: i32) -> Result<u64, MaliError> {
             }
             alu_dest(&mut f, i, "dest_width")?;
         }
+        Op::IaddV2u16 => {
+            f = Fill::new(IsaOp::IaddV2u16);
+            f.put("src0", src_byte(&i.src[0])?)?.put("swz0", swz16(i.src[0].swz)?)?;
+            f.put("src1", src_byte(&i.src[1])?)?.put("swz1", swz16(i.src[1].swz)?)?;
+            f.put("saturate", 0)?;
+            alu_dest(&mut f, i, "dest_width")?;
+        }
         Op::MkvecV2i8 => {
             f = Fill::new(IsaOp::MkvecV2i8);
             for s in 0..2 {
@@ -508,9 +515,16 @@ pub fn pack_one(i: &Ins, branch: i32) -> Result<u64, MaliError> {
                 f.put("lane", 0)?;
             }
         }
-        Op::LdVarBufImmF32 { index, vecsize } => {
+        Op::LdVarBufImmF32 { index, vecsize, .. } => {
             f = Fill::new(IsaOp::LdVarBufImmF32);
-            /* centre, .store, source format f32 */
+            /* centre, .store, source format f32. A flat load is the same
+             * word with the format `src_flat32` (0): va_pack.c packs the
+             * update and the sample as for any load (encoded `store` and
+             * `center`, varyconst_117_uniidxf.expect.json's
+             * `085c8008300000c0`), where the ISA's virtual rule reads a
+             * flat format's update as `none` (encoded 1), so the table's
+             * encoder, which reads its word back, cannot make it: the
+             * field is cleared after the encode ([`pack_one`]'s tail) */
             f.put("sample_position", 0)?.put("update", 0)?.put("source_format", 2)?;
             f.put("offset", index as u32)?.put("vecsize", vecsize as u32 - 1)?;
             f.put("src0", src_byte(&i.src[0])?)?;
@@ -684,8 +698,15 @@ pub fn pack_one(i: &Ins, branch: i32) -> Result<u64, MaliError> {
         }
     }
     tail(&mut f, i)?;
-    f.done()
+    let w = f.done()?;
+    Ok(match i.op {
+        Op::LdVarBufImmF32 { flat: true, .. } => w & !LD_VAR_BUF_SOURCE_FORMAT,
+        _ => w,
+    })
 }
+
+/// `LD_VAR_BUF_IMM`'s `source_format` field (bits 24-25; `src_flat32` is 0).
+const LD_VAR_BUF_SOURCE_FORMAT: u64 = 3 << 24;
 
 /// `va_lower_blend` (va_pack.c:1172-1202): after the BLEND that ends the
 /// shader, `r48 = 0` (the blend shader's link register: return to nothing)

@@ -36,7 +36,7 @@ const fn row(op: Alu, bits: u8, width: u8) -> Row {
 }
 
 /// The rows [`emit`] selects, each with the `bi_emit_alu` case it is.
-pub const ROWS: [(Row, &str); 58] = [
+pub const ROWS: [(Row, &str); 59] = [
     (row(Alu::Fadd, 32, 1), "nir_op_fadd: FADD.f32"),
     (row(Alu::Fmul, 32, 1), "nir_op_fmul: FMA.f32 a, b, -0.0"),
     (row(Alu::Ffma, 32, 1), "nir_op_ffma: FMA.f32"),
@@ -122,7 +122,19 @@ pub const ROWS: [(Row, &str); 58] = [
     /* a colour lane paired with a constant (tools/mali/testdata/texmore_2:
      * `FMA.v2f16 r1, r3^.h00, 0x38000000.h11, r1^.h00`) */
     (row(Alu::Ffma, 16, 1), "nir_op_ffma of one 16-bit lane: FMA.v2f16 a.hN, b.hN, c.hN"),
+    /* a uniform's component negated beside a constant (case 75, tools/mali/
+     * testdata/varyconst_75_immneg: `FADD.v2f16 r1, 0x3C000000.h11,
+     * u2.w1.neg.h00`, the fneg a modifier of its reader) */
+    (row(Alu::Fneg, 16, 1), "nir_op_fneg of one 16-bit lane: FABSNEG.v2f16 a.hN.neg"),
 ];
+
+/// A source of a one-lane 16-bit operation: its lane's half in both
+/// (`bi_alu_src_index` replicates the lane read): the high half kept where
+/// the caller selects it (a uniform's odd component, `u2.w0.h11`), else
+/// the low half.
+fn lone(s: Src) -> Src {
+    s.swz(if s.swz == Swz::H11 { Swz::H11 } else { Swz::H00 })
+}
 
 /// `row`'s bit in a set of [`ROWS`] (a program's rows drawn).
 pub fn bit(row: Row) -> u64 {
@@ -146,12 +158,13 @@ pub fn emit(p: &mut Prog<'_>, row: Row, s: &[Src]) -> Result<u16, MaliError> {
             t
         }
         (Alu::Fmax, 16, 1) => ins(p, Op::FmaxV2f16, &[s[0].swz(Swz::H00), s[1].swz(Swz::H00)])?,
-        (Alu::Fadd, 16, 1) => ins(p, Op::FaddV2f16, &[s[0].swz(Swz::H00), s[1].swz(Swz::H00)])?,
+        (Alu::Fadd, 16, 1) => ins(p, Op::FaddV2f16, &[lone(s[0]), lone(s[1])])?,
         (Alu::F2f16, 16, 2) => ins(p, Op::V2f32ToV2f16, &s[..2])?,
         (Alu::Fadd, 16, 2) => ins(p, Op::FaddV2f16, &s[..2])?,
         (Alu::Fmul, 16, 2) => ins(p, Op::FmaV2f16, &[s[0], s[1], NEG_ZERO])?,
         (Alu::Ffma, 16, 2) => ins(p, Op::FmaV2f16, &s[..3])?,
         (Alu::Fneg, 16, 2) => ins(p, Op::FabsnegV2f16, &[Src { neg: !s[0].neg, ..s[0] }])?,
+        (Alu::Fneg, 16, 1) => ins(p, Op::FabsnegV2f16, &[Src { neg: !s[0].neg, ..lone(s[0]) }])?,
         (Alu::Fabs, 16, 2) => ins(p, Op::FabsnegV2f16, &[Src { abs: true, ..s[0] }])?,
         (Alu::Vec2, 16, 2) => ins(p, Op::MkvecV2i16, &s[..2])?,
         (Alu::Fabs, 32, 1) => ins(p, Op::FabsnegF32, &[Src { abs: true, ..s[0] }])?,

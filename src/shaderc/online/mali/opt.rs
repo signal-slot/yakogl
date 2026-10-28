@@ -42,6 +42,7 @@ const fn size(op: Op) -> u8 {
         | Op::FclampV2f16
         | Op::V2f32ToV2f16
         | Op::MkvecV2i16
+        | Op::IaddV2u16
         | Op::MuxV2i16
         | Op::FroundV2f16 { .. }
         | Op::FcmpOrV2f16 { .. } => 16,
@@ -316,15 +317,30 @@ pub fn lower_opt_instructions(p: &mut Prog<'_>) {
 
 /// `bi_lower_mkvec_swz` (bi_lower_mkvec_swz.c:242-260) for the form here:
 /// `MKVEC.v2i16 x, #0` is `U16_TO_U32 x` (the zero half is the
-/// extension); a `MKVEC` of two halves of one word (a swizzle) has no
-/// reference and is refused.
+/// extension); a `MKVEC` of two halves of one word is that word swizzled,
+/// `IADD.v2u16 x.hNN, 0` (`build_swz_v2i16_to` on Valhall, :92-102; the
+/// two halves in order a `MOV.i32`). varyconst_185_kindcost_fmul.expect.json:
+/// `IADD.v2u16 r1, r0.h00, 0x0` for the word `(x, x)`.
 pub fn lower_mkvec_swz(p: &mut Prog<'_>) -> Result<(), MaliError> {
     for i in p.ins[..p.n].iter_mut() {
         if i.op != Op::MkvecV2i16 {
             continue;
         }
         if i.src[0].idx == i.src[1].idx && !matches!(i.src[0].idx, Idx::Const(_)) {
-            return Err(MaliError::Defect(super::Defect::Operand));
+            let swz = match (i.src[0].swz, i.src[1].swz) {
+                (Swz::H00, Swz::H00) => Swz::H00,
+                (Swz::H11, Swz::H11) => Swz::H11,
+                (Swz::H00, Swz::H11) => Swz::H01,
+                (Swz::H11, Swz::H00) => Swz::H10,
+                _ => return Err(MaliError::Defect(super::Defect::Operand)),
+            };
+            let x = i.src[0].swz(swz);
+            *i = if swz == Swz::H01 {
+                Ins { flow: i.flow, ..Ins::new(Op::MovI32, i.dests(), &[x]) }
+            } else {
+                Ins { flow: i.flow, ..Ins::new(Op::IaddV2u16, i.dests(), &[x, Src::of(Idx::Const(0))]) }
+            };
+            continue;
         }
         if is_const(&i.src[1], 0) {
             *i = Ins { flow: i.flow, ..Ins::new(Op::U16ToU32, i.dests(), &[i.src[0]]) };
