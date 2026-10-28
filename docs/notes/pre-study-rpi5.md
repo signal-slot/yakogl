@@ -1,0 +1,413 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
+# Pre-study: Raspberry Pi 5 (BCM2712, VideoCore VII, V3D 7.1)
+
+Date 2026-10-28, main `965ac247`. Host reading only: no board, no file under
+`src/`, `driver/` or `tools/` changed, nothing built or run. The Pi 5 has not
+arrived.
+
+## How to read this note
+
+Every claim says where it was read. The paths are:
+
+- `MESA/` is Mesa 26.2.1, the tree the project vendors unmodified as
+  `third_party/mesa-26.2.1` (only the parts the gate needs) and the full tree
+  this study read (`src/broadcom/`, `src/gallium/drivers/v3d/`,
+  `include/drm-uapi/v3d_drm.h`). MIT: facts and short quotes are fine, the code
+  is read and not copied into our files except where `docs/online-shaderc/`
+  already transcribes it with attribution.
+- `ZEPHYR/` is the Zephyr workspace this repository builds with (`VERSION`
+  4.4.99): `soc/brcm/bcm2712/`, `dts/arm64/broadcom/bcm2712.dtsi`,
+  `boards/raspberrypi/rpi_5/`.
+- `repo:` is a file of this repository.
+- **Not read.** The Linux kernel source was **not available** to this study:
+  the checkout under the dependency cache (`linux-v6.18-src`) holds only
+  `drivers/gpu/drm/panthor`, and the network was closed. So nothing below is
+  quoted from the Linux `v3d` driver, from the BCM2712 device tree, from the
+  Linux `vc4` display driver or from Raspberry Pi's boot documentation. Where
+  a section needs them it says "not read" and names the file to read (the
+  questions of section 7). The one Linux fact used is the earlier note's
+  (`repo:docs/notes/pi4-v3d-bringup.md`, which read Linux v6.17): the 7.1 GPU
+  has an SMS block in front of it, `v3d_drv.c:266-294`.
+- A task statement named `v3d_packet_v71.xml`. At Mesa 26.2.1 that file does
+  not exist: one file, `MESA/src/broadcom/cle/v3d_packet.xml` (`<vcxml
+  gen="4.2" min_ver="42" max_ver="71">`, line 1), carries both generations as
+  `min_ver` / `max_ver` attributes, and `MESA/src/broadcom/cle/meson.build:7-8`
+  generates `v3d_packet_v42_pack.h` and `v3d_packet_v71_pack.h` from it.
+
+## 1. The hardware
+
+| Item | What | Source |
+|---|---|---|
+| SoC | Broadcom BCM2712, 4x Cortex-A76 at 2.4 GHz, 512 KB L2 per core, 2 MB shared L3 | `ZEPHYR/boards/raspberrypi/rpi_5/doc/index.rst`, "Hardware" |
+| GPU | VideoCore VII, "OpenGL ES 3.1, Vulkan 1.2" (the board page's words) | same |
+| GPU core | V3D **7.1**. Mesa identifies it as `devinfo->ver = major*10 + minor` from `CORE0_IDENT0[31:24]` and `CORE0_IDENT1[3:0]`, and takes `rev` from `HUB_IDENT3[15:8]`, `compat_rev` from `[23:16]` | `MESA/src/broadcom/common/v3d_device_info.c` (the `ver`, `rev` and `compat_rev` lines) |
+| GPU revisions | Several 7.1 revisions exist and differ in the ABI: 7.1.2 has no R/B swap bit in the texture state, 7.1.5 adds it; 7.1.6 and later do not subtract 1 from the CSD batch count; 7.1.7 (and 7.1.6 with `compat_rev` >= 4) have the `max0` unpack; **7.1.10 is "2712D0"** and adds the draw-index shader record | `v3d_packet.xml:1686-1692` and `:1313`; `MESA/src/gallium/drivers/v3d/v3dx_draw.c:1519-1521`; `MESA/src/broadcom/common/v3d_device_info.h:94-112` |
+| Which revision a given Pi 5 carries | **Unknown** (question U2) | |
+| Memory | LPDDR4X, 1 to 16 GB | `ZEPHYR/.../rpi_5/doc/index.rst` |
+| Display | Dual 4Kp60 HDMI output. How a frame reaches HDMI (the SoC's display pipeline), and what part RP1 plays, **not read** (question U3) | `ZEPHYR/.../index.rst` states only the outputs |
+| I/O chip | RP1 sits behind a PCIe link. Zephyr's device tree puts the RP1 GPIO block under the node `pcie2` and names `pcie1` as the board's `zephyr,pcie-controller` | `ZEPHYR/dts/arm64/broadcom/bcm2712.dtsi` (`pcie1`, `pcie2`, `rp1`), `rpi_5_bcm2712.dts` (`chosen`). Whether Zephyr's `pcie1`/`pcie2` names match Linux's is not checked |
+| Console | `uart10`, a PL011 (`arm,pl011`), 115200 baud in the board file; the 3-pin debug connector between the HDMI ports takes the Raspberry Pi Debug Probe | `rpi_5_bcm2712.dts`, `bcm2712.dtsi`, `.../doc/index.rst` "Serial Communication" |
+| Interrupt controller | GICv2 (`arm,gic-v2`), 280 interrupts, architected timer at 54 MHz | `bcm2712.dtsi` (`gic`), `ZEPHYR/soc/brcm/bcm2712/Kconfig.defconfig` |
+| Boot chain | The firmware reads `config.txt` from the first FAT partition of the SD card and starts `kernel=` as an arm64 image; the board page builds a Zephyr `zephyr.bin` that way with `enable_uart=1`, `uart_2ndstage=1` and the firmware's `bcm2712-rpi-5-b.dtb`. What runs before that (the bootloader in the on-board flash, the VideoCore firmware) is **not read** | `ZEPHYR/.../rpi_5/doc/index.rst`, "Blinky" and "Serial Communication" |
+
+**Public documentation.** Found: the product brief and the hardware page the
+Zephyr board page links (`https://datasheets.raspberrypi.com/rpi5/raspberry-pi-5-product-brief.pdf`,
+`https://www.raspberrypi.com/documentation/computers/raspberry-pi.html`); they
+were not opened. Mesa's packet XML and Linux's `v3d` driver are the register
+and command-stream documentation for the GPU. For the BCM2712 itself, whether
+Broadcom or Raspberry Pi publish a register manual is **unknown** (U1): the
+Pi 4 work used none (`repo:docs/notes/pi4-v3d-bringup.md` cites only Linux and
+Mesa).
+
+## 2. The open-source stack today
+
+- **Mesa**: the same gallium driver as the Pi 4, `MESA/src/gallium/drivers/v3d/`,
+  built twice from the same sources, once per generation: `v3d_versions =
+  ['42', '71']` with `-DV3D_VERSION=<ver>` (`meson.build:40-51`). The files that
+  differ by generation are the `v3dx_*.c` ones (`v3dx_job.c`, `v3dx_draw.c`,
+  `v3dx_emit.c`, `v3dx_rcl.c`, `v3dx_state.c`, `v3dx_tfu.c`); the `#if
+  V3D_VERSION == 42` / `>= 71` blocks are the whole difference at that level.
+  The compiler is shared: `MESA/src/broadcom/compiler/` switches on
+  `devinfo->ver >= 71` / `has_accumulators` (about 120 lines in
+  `compiler/*.c` and `qpu/qpu_instr.c`, `qpu_pack.c`, by a grep count).
+- **Vulkan** (`v3dv`) shares `src/broadcom/`; not our concern.
+- **How complete for ES 2.0 work.** The screen caps for 7.1 are the same as for
+  4.2 plus a few: `depth_clip_disable` and `clip_halfz` only on >= 71
+  (`v3d_screen.c:371-372`), `lower_fsat` only on < 71 (`:631`), subgroup caps
+  on >= 71 (`:397-402`). The driver exposes compute when the kernel has the CSD
+  (`caps->compute = screen->has_csd`, `:294`) and reports `glsl_feature_level`
+  330 (`:307`). Mesa's own CI on 7.1 is not something this study read, so
+  "complete for ES 2.0" rests on: the driver is one source for both
+  generations and ES 2.0 is a subset of what it implements. A measured pass
+  rate on a Pi 5 is **unknown** (U9).
+- **Kernel**: Linux `drivers/gpu/drm/v3d/`. What its job ABI looks like to a
+  client is readable in `MESA/include/drm-uapi/v3d_drm.h`: the same ioctls for
+  both generations (`SUBMIT_CL`, `SUBMIT_TFU`, `SUBMIT_CSD`, perfmon), the only
+  7.1 additions being `struct drm_v3d_submit_tfu` gaining `v71 { ioc; pad; }`
+  (`v3d_drm.h:344-346`). We do not use the kernel ABI (no OS GPU driver), so
+  what we need from Linux is its **hardware** sequence: register map, MMU, SMS,
+  power and clock. That is the reading U4 asks for.
+- **Firmware for the GPU**: none is visible in Mesa: the host writes control
+  lists and starts them by registers, as on the Pi 4
+  (`repo:docs/notes/pi4-v3d-bringup.md`, "What is new"). That the Pi 5 GPU
+  needs no microcode is an inference from the shared driver; Linux's driver
+  would confirm it (U4). The Pi 4 needed the VideoCore firmware for the V3D
+  clock (firmware clock 5, same note); the Pi 5 equivalent is **unknown** (U5).
+- **ISA and command-stream knowledge we would rely on**, all in Mesa 26.2.1:
+  `src/broadcom/qpu/` (`qpu_instr.[ch]`, `qpu_pack.c`, `qpu_disasm.c`: the
+  packer, unpacker and disassembler for both generations),
+  `src/broadcom/compiler/` (NIR to VIR to QPU), `src/broadcom/cle/v3d_packet.xml`
+  and its generator, `src/broadcom/clif/` and `cle/v3d_decoder.c` (a decoder of
+  a recorded job), `src/broadcom/simulator/` (`v3dx_simulator.c`, the
+  vendor simulator wrapper; not buildable without the vendor library).
+
+## 3. What yakogl already has, and what 7.1 changes
+
+### 3.1 The verdict
+
+The **driver side, the shader back end's ISA layer and the register file of the
+compiler are generation-specific; the GL core, the OSAL shape, the job
+structure, the texture and tiling code and the shader front end carry over.**
+A new directory is not needed for the GL side: `src/v3d/` (the backend
+tables, 6,399 lines in `backend.rs`) is written against the control-list model,
+which 7.1 keeps (binning list, render list, tile list, tile allocation, TSDA,
+shader state record). Three places hold 4.2 as a constant and need a second
+value:
+
+1. `driver/src/v3d/` (5,000 lines of C): the packet encoders are generated from
+   the 4.2 half of the XML (`driver/src/v3d/generated/v3d_packet_v42_pack.h`,
+   `v3d_cl_packets.h` names `V3D42_*`), the registers are 4.2's
+   (`driver/src/v3d/v3d_regs.h`), the power-on is the BCM2711's
+   (`v3d_hw.c`, PM and ASB blocks).
+2. `src/shaderc/online/v3d/` (20,588 lines): the ISA module is 4.2. The QPU
+   FFI hands Mesa a device of `ver = 42` (`repo:src/shaderc/online/v3d/qpu_mesa.c`,
+   `yakogl_v3d42_devinfo`), and `docs/online-shaderc/v3d-backend.md` records
+   the 4.2 choices (accumulators, SFU through magic addresses).
+3. `tools/v3d/`: `v3d_shc.c` builds a device of `ver = 42`
+   (`tools/v3d/v3d_shc.c:677-680`); `cl_golden.c`, `frame_check.c`,
+   `hw_mock_test.c` check the 4.2 packets and registers.
+
+Support in the vendored tools that makes this cheaper than it sounds:
+`tools/v3d/mesa_ref.sh` already generates `v3d_packet_v{21,42,71}_pack.h`
+and builds Mesa's decoder, which loads the XML for a given version; and
+Mesa's drm-shim already has a 7.1 GPU: `MESA/src/broadcom/drm-shim/v3d_noop.c`
+lists `"71"` first and `"42"` second and picks by `V3D_GPU_ID`, default `71`
+(`:43-70`, `:213`).
+
+### 3.2 Packets (read from `v3d_packet.xml`)
+
+Where a packet exists in both generations, the 7.1 one is the `min_ver="71"`
+entry. Differences that change bytes we write today:
+
+| Packet or struct | 4.2 | 7.1 | Lines |
+|---|---|---|---|
+| Clear (code 25) | `Clear Tile Buffers` (flags for Z/stencil and all RTs) | `Clear Render Targets`, no fields; Mesa emits it in both the clear-only tile list and the generic one | `:480,485`; `v3dx_rcl.c:331-340`, `:647-656` |
+| Blend Cfg (84) | RT mask 4 bits | RT mask 8 bits (eight render targets) | `:777-795` |
+| Depth Bounds Test Limits (93) | absent | new, two floats | `:826` |
+| Cfg Bits (96) | has `Early Z enable`, `Early Z updates enable`, 2-bit `Line Rasterization` | no early-z bits; adds `Z Clipping mode` (22, 2 bits, enum `Z Clip Mode`), `Z Clamp Mode` (10), `Depth Bounds Test Enable` (5); 1-bit `Line Rasterization` | `:831-870`, enum `:322` |
+| Clipper XY Scaling (110) | half-size in 1/256 px | in 1/64 px | `:919-927` |
+| Clipper Z no guardband (112) | absent | new | `:934` |
+| Tile Binning Mode Cfg (120) | width, height, 4x flag, double-buffer, max BPP, number of RTs | width, height, `Log2 Tile Width/Height` (8 to 64 px); the MSAA, BPP and RT-count fields are gone from this packet | `:943-994` |
+| Tile Rendering Mode Cfg (121) | Common, Color, ZS Clear Values, Clear Colors Part1/2/3 (sub-ids 0 to 5) | Common (adds log2 tile size and `Depth-buffer disable`, drops max BPP), ZS Clear Values, and **Render Target Part1/2/3** per RT (sub-ids 1 to 4): internal type with clamp (5 bits, enum `Render Target Type Clamp`), BPP, stride (7 bits), base address (11 bits, units of 512 bits), then 40 + 56 bits of clear colour | `:996-1157` |
+| GL Shader State Record | 36 bytes; has `Address of default attribute values`, the two `separate input and output VPM blocks` flags | 32 bytes; those three fields are gone; adds `Never defer FEP depth writes` (bit 20); the uniforms address of each stage moves 4 bytes down | `:1197-1254` and `:1256-1311` |
+| GL Shader State Record Draw Index | absent | for 7.1.10 only (`v3d_device_has_draw_index`): extra `cs_basevertex`, `cs_drawindex`, `vs_basevertex`, `vs_drawindex` bits | `:1313-1342`; `v3d_device_info.h:94-97` |
+| TMU Config Parameter 2 | LOD query bit | adds `DIM query` (25) and `Write conversion` (26) | `:1560-1590` |
+| Texture Shader State | `AHDR`, `sRGB`, `Reverse Standard Border Color`, "Array Stride" 26 bits at 32 | `Transfer func` (3 bits: none, sRGB, PQ, HLG, PQ BT.1886, HLG BT.1886), `Reverse`, `R/B swap` (7.1.5 and later), `Array Stride` 24 bits at 33, chroma pointers `Cb`/`Cr` and offsets | `:1592-1707` (the 7.1.2 / 7.1.5 incompatibility is the comment at `:1686-1690`) |
+| Texture data formats | no BSTC | adds `bstc8_srgb`, `bstc10*`, `rgba10x6*`, `rgb10_a2_{hlg,pq}_bt1886*` (values 46 to 63) | `:271-284` |
+| Render target maxima | 4 targets, 4096 px | 8 targets, 7680 px | `MESA/src/broadcom/common/v3d_limits.h:44,63` |
+| Clipper granularity, CLE read-ahead | 256.0, 256 bytes | 64.0, 1024 bytes | `v3d_device_info.c` (the `case 42` / `case 71`) |
+
+TFU (the texture formatter our texture and mipmap paths use): the
+register layout moves. 4.2 keeps format and mip count in `ICFG` and `IOA`
+(`V3D33_TFU_ICFG_*`, `V3D33_TFU_IOA_*`); 7.1 puts the output format, stride,
+`NUMMM` and `DIMTW` in a **new register `IOC`**, moves `ICFG` fields (`OTYPE`
+shift 16, `IFORMAT` shift 23), and can write raster output, which 4.2 cannot
+(`MESA/src/broadcom/common/v3d_tfu.h`; `v3dx_tfu.c:58-60`, `:165-202`). Our
+`driver/src/v3d/v3d_regs.h` has `ICFG`, `IOA`, `IOS` but no `IOC`.
+
+CSD (compute): 7.1 has no `PROPAGATE_NANS` bit in `cfg[5]`, and from 7.1.6 the
+batch count is not minus one (`v3dx_draw.c:1519-1535`). We use no compute for
+ES 2.0, so this only matters if ES 3.1 compute is ever taken.
+
+### 3.3 The shader ISA (read from `src/broadcom/qpu/` and `compiler/`)
+
+Mesa's own comment says it: "for v3d71 there were a lot of changes"
+(`qpu_pack.c`, above `v3d71_add_ops`). The compiler and QPU packer are
+therefore two ISAs behind one `struct v3d_qpu_instr`:
+
+- **No accumulators.** `devinfo->has_accumulators = ver < 71`
+  (`v3d_device_info.c`). Magic write addresses 0 to 4 (`r0` to `r4`) are
+  "Reserved on V3D 7.x", address 5 is `r5` on 4.x and `QUAD` on 7.x, 55 is `REP`
+  on 7.x (`qpu_instr.h:94-100,137`). The signal map has a separate 7.1 table
+  whose last column is **`RF0`**: `ldunif`, `ldtmu` and similar write the
+  implicit destination `rf0` instead of `r5`/`r4` (`qpu_pack.c:164-` against
+  `v3d42_sig_map`). The register allocator is split on `has_accumulators`
+  (`vir_register_allocate.c`, about 20 sites), and the scheduler has a 7.1
+  branch at about 25 sites (`qpu_schedule.c`).
+- **SFU is no longer a write to a magic address.** On 4.x `recip`, `rsqrt`,
+  `exp`, `log`, `sin`, `rsqrt2` are magic write addresses 19 to 24; they are
+  "Reserved on V3D 7.x" (`qpu_instr.h:115-120`) and appear as ALU add ops
+  `V3D_QPU_A_RECIP`, `_RSQRT`, `_EXP`, `_LOG`, `_SIN`, `_RSQRT2` in the 7.1
+  table (`qpu_pack.c`, `v3d71_add_ops`). Our back end's SFU lowering
+  (`docs/online-shaderc/v3d-backend.md`, "SFU precision") is 4.2's write-then-
+  read-`r4` pattern and must be redone.
+- **Operand encoding.** The 4.2 opcode tables are keyed on `mux.a`/`mux.b`
+  (`v3d42_add_ops`, `qpu_pack.c:457`); the 7.1 tables on `raddr` masks with
+  four read addresses (`raddr_a` to `raddr_d`) and a small-immediate bit per
+  operand, `small_imm_a` to `small_imm_d` ("since V3D 7.x",
+  `qpu_instr.h:56-59`, `:438-455`). This is the repository note's "four
+  register-file read ports instead" (`repo:docs/notes/pi4-v3d-bringup.md`,
+  "Why the Pi 4 and not the Pi 5").
+- **New operations** present in the 7.1 tables and the compiler (checked at
+  `nir_to_vir.c:1399-1444,1844-1910,4095-4176`): half-float vector ops
+  `VFADD`, `VFSUB`, `VFMUL`, `VFMIN`, `VFMAX`, `VFNEG`, `VFABS` and
+  `VFPACK` forms, `FTOUNORM16`, `FTOSNORM16`, `FUNPACK{U,S}NORM{LO,HI}`,
+  `VFTOUNORM8`, `VFTOUNORM10{LO,HI}`, `VFTOSNORM8`, `V8DOT`, and the subgroup
+  group `BALLOT`, `BCASTF`, `SHUFFLE`, `ROTQ`, `ROT`, `ALLEQ`, `ALLFEQ`. For
+  ES 2.0 none is required; the `nir_op_fneg`, `fadd` and so on take the 16-bit
+  path only for `bit_size == 16`.
+- **Thread-switch, TMU and VPM** behave as on 4.2 in the parts the Pi 4 back
+  end uses (the 7.1 scheduler adds rules for `rf0` and TMU delay,
+  `qpu_schedule.c:2018-2111,2694-2716`); whether any of them changes what our
+  compiler already emits is exactly what the host comparison of section 5
+  answers.
+
+### 3.4 Registers
+
+Not read (U4). What Mesa shows without Linux: the identity registers read
+through the ioctl are the same set (`UIFCFG`, `HUB_IDENT1..3`,
+`CORE0_IDENT0..2`, `v3d_drm.h:282-288`); the 7.1 values the Mesa shim reports
+are `CORE0_IDENT0 = 0x07443356` (version byte 7, the "V3D" magic), `CORE0_IDENT1 =
+0x81001441` (low nibble 1, four slices of four QPUs, 64 KiB of VPM by
+`v3d_device_info.c`'s decode), `HUB_IDENT1 = 0x00081117`, `HUB_IDENT3 =
+0x00000700` (`v3d_noop.c:44-55`). These are the shim's numbers, **not a
+measurement of a Pi 5**. Our `v3d_hw.c` registers (hub `IDENT`, `INT_STS`, MMU,
+`CTnQBA/QEA`, `L2TCACTL`, `SLCACTL`) are Linux's 4.x map; whether the 7.x map
+moved any of them is U4.
+
+### 3.5 What stays
+
+The GL core, EGL, the state model, `gl_test`, the OSAL contract and its
+V3D granule allocator (`src/osal/v3d_granules.h`), the texture layout and UIF
+tiling (`driver/src/v3d/v3d_tex.c`, `v3d_tiling_*.c`: the tiling is a property
+of the TMU and TLB which Mesa's `v3d_tiling.c` shares for both generations,
+`MESA/src/broadcom/common/v3d_tiling.c`), the shader front end and the IR
+(`src/shaderc/online/` outside `v3d/`), the job structure of `src/v3d/` (binning
+list, render list, flush rules). The cube-map seamless defect of the 4.2 TMU
+(`repo:docs/v3d-noseamless-cube.md`) is a 4.2 fact: whether 7.1 filters cube
+edges seamlessly is **unknown** (U8); the 7.1 texture state has no seamless
+field either, so the answer comes from the hardware or from Mesa's cube
+handling for 7.1.
+
+## 4. The board on Zephyr
+
+**Zephyr has the SoC and the board**: `soc/brcm/bcm2712/` and
+`boards/raspberrypi/rpi_5/` (`rpi_5/bcm2712`, `rpi_5_bcm2712_defconfig`),
+contributed in 2024 (copyright lines of `Kconfig.rpi_5`), in the 4.4.99
+workspace.
+
+What it brings up and assumes, as read:
+
+- **One core.** `bcm2712.dtsi` declares exactly one CPU node (`cpu@0`,
+  `arm,cortex-a76`) and `rpi_5_bcm2712_defconfig` sets no SMP. The other three
+  A76 cores are not started. The Pi 4 image runs the same way (one A72,
+  `repo:docs/notes/pi4-v3d-bringup.md`, "Board port"), so this costs nothing
+  we have.
+- **Memory.** `zephyr,sram` is the SoC's `sram0` node, 512 KiB at 0x200000
+  (`bcm2712.dtsi`), the same shape as the Pi 4's before our overlay. The Pi 4
+  images resize it per sample (`repo:driver/samples/zephyr/common/rpi_4b_sram.dtsi`
+  and the `boards/rpi_4b.overlay` files). The same is needed here for a GPU
+  carve-out. The defconfig sets `ARM64_VA_BITS_40` and `ARM64_PA_BITS_40`. The
+  load address the firmware uses for `kernel=` on BCM2712 is not stated in
+  what was read (U6).
+- **Interrupts and clock.** GICv2 with 280 interrupts, a 54 MHz timer
+  (`TIMER_READS_ITS_FREQUENCY_AT_RUNTIME=y`), `uart10` on SPI 121.
+- **Console and mailbox.** `uart10` is the console and shell UART. A
+  `brcm,bcm2711-mbox` node (`mbox0`) exists and is `disabled`. The Pi 4
+  experience applies: Zephyr's own mailbox driver and our polling client must
+  not both run (`repo:driver/samples/zephyr/common/rpi_4b_sram.dtsi`, the long
+  comment).
+- **What is missing for us.** The tree has **no node** for the V3D, the SMS,
+  the display pipeline (HVS, pixel valves, HDMI), any clock controller other
+  than one fixed UART clock, or any power domain. No driver exists for them.
+  That is the same state as the Pi 4: our own `osal/zephyr_v3d.c` maps the V3D
+  blocks with `device_map` (`repo:src/osal/zephyr_v3d.c:210-213`), not
+  through devicetree. Addresses, clocks, power and interrupt numbers for the
+  Pi 5 come from the BCM2712 device tree and Linux (U4, U5), and from the DTB
+  the firmware hands the image (see item D1 in section 6, which reads them on
+  the board).
+- **PCIe.** The board enables `pcie1` (the connector) and the defconfig sets
+  `CONFIG_PCIE=y`. We do not need PCIe or RP1 for the GPU. RP1 matters only
+  for USB, ethernet, GPIO and some display connectors, none needed for
+  sign-off.
+
+**Boot route for sign-off.** The route the Zephyr board page documents and the
+Pi 4 form we already have: the firmware on the SD card loads `zephyr.bin`
+through `kernel=` in `config.txt` (`ZEPHYR/.../rpi_5/doc/index.rst`; the Pi 4
+equivalent is `repo:docs/standalone-boot.md`, "Raspberry Pi 4", "The product
+form": firmware, `config.txt`, `kernel=`, `arm_64bit=1`, `enable_uart=1`, no
+U-Boot, no Linux). Nothing in what was read mentions U-Boot for the Pi 5 and
+the Pi 4 product does not use it, so **vendor firmware loading our image** is
+the sign-off route, with U-Boot only if the firmware route fails (U6). The
+Pi 4 test uses the firmware's `tryboot` so a failing image falls back to
+Linux (`docs/standalone-boot.md`, "The test is the product's boot"); whether
+`tryboot` exists on the Pi 5 firmware is **not read** (U7). A kernel-based
+jump (Linux `kexec` into our image) is a development convenience only.
+
+## 5. What can be done before the board arrives
+
+Each item has its check, and each runs on the host. Items marked (R) need the
+Linux reading of U4 first.
+
+| # | Item | Check |
+|---|---|---|
+| H1 | **Read Linux and the Pi 5 device tree.** A sparse checkout of Linux `drivers/gpu/drm/v3d/` (`v3d_regs.h`, `v3d_drv.c`, `v3d_mmu.c`, `v3d_gem.c`, `v3d_sched.c`), `drivers/gpu/drm/vc4/` (HVS and HDMI for BCM2712), the BCM2712 device tree (`bcm2712.dtsi`, `bcm2712-rpi-5-b.dts`) at a named tag, plus `https://www.raspberrypi.com/documentation/computers/config_txt.html` and the boot EEPROM page. Answers U1 to U7. GPL: facts and file:line only (as for the Pi 4). | A "Linux facts" section of `driver/docs/` with a `linux:` citation per register, as `driver/docs/rpi4-v3d.md` has |
+| H2 | **`v3d_shc` for 7.1.** Parametrise the device (`ver` 71, `has_accumulators` false, `vpm_size` 64 KiB, rev) in `tools/v3d/v3d_shc.c:677-680`; the vendored reference build (`tools/v3d/README.md`, "Set up once") already compiles the whole compiler. Run it over `tools/v3d/qpu_corpus.txt` and the femtovg and Qt3D programs used for the Pi 4. | Every program compiles, `v3d_qpu_disasm` of every word reads, and the 7.1 word count per program is recorded beside the 4.2 one |
+| H3 | **Mesa GL driver on the drm-shim at 7.1**, the method of `tools/mali/drm_shim_ref.sh`: build `-Dgallium-drivers=v3d`, run with `V3D_GPU_ID=71` (the shim's default) and `MESA_LOADER_DRIVER_OVERRIDE`, draw with a small GL program (`tools/mali/gl_ref.py` shape), and keep the job Mesa submits via `V3D_DEBUG=clif` (the Pi 4 note used it as the byte reference, "Control lists"). The shim's `SUBMIT_CL` is a no-op (`v3d_noop.c`) but the clif dump is written by the driver before the ioctl; **to be confirmed on the first run**. Gives the 7.1 shader binaries, shader state record, texture state and tile-list bytes for the clear, the first triangle and a textured draw, to match byte for byte. | The dump decodes with `MESA/src/broadcom/clif/` for `ver` 71; the corpus of references is stored as the Pi 4's was (`tools/v3d/`) |
+| H4 | **7.1 packet encoders.** Add `driver/src/v3d/generated/v3d_packet_v71_pack.h` from `mesa_ref.sh` (already produced there) and a `V3D71_*` name table in `v3d_cl_packets.h`; extend `tools/v3d/cl_golden.c` to compare ours with Mesa's packers for 7.1. | `cl_golden`: all cases equal, as the 4.2 run's 720,024 of 720,024 (`pi4-v3d-bringup.md`, "Written so far") |
+| H5 | **7.1 frame builder** (`v3d_frame.c`: binning mode with log2 tile size, render-target parts, `Clear Render Targets`, 32-byte shader record, no default-attribute BO). | `tools/v3d/frame_check.c` at 7.1: Mesa's CLE decoder reads every packet, with its census, at the sizes of the 4.2 run; plus equality with H3's clear and triangle references (R for register parts) |
+| H6 | **QPU FFI for 7.1** (`qpu_mesa.c` gets `yakogl_v3d71_devinfo`; the Rust mirror's `layout()` check already runs against Mesa's header). | The mirror test passes against both devices; the round trip decode/encode over every word H2 produces, byte-exact, as the 4.2 gate did |
+| H7 | **ISA model and encode/decode for 7.1** (`isa.rs`, `encode.rs`, `decode.rs`): raddr operands, no accumulators, `rf0` implicit destinations, SFU as ALU ops. | The same round trip and `tests/v3d_sim_mesa.rs` with the 7.1 interpreter: Mesa's `qpu_disasm.c` vectors for 7.1 (`MESA/src/broadcom/qpu/tests/`) |
+| H8 | **Host-harness row** in `tools/check.sh`: a `v3d71` scope next to `v3d` (the scope pattern is `tools/check.sh:158`). | `tools/check.sh --changed origin/main` reaches it and it is green with 0 gaps |
+| H9 | **Zephyr `rpi_5` image built, not run**: `hello_world` and a no-GPU sample with an overlay that resizes `sram0`, plus a build-only gate row if the existing `rpi_4b` rows (`tools/check.sh` Zephyr image rows) are the template. Not attempted by this study. | The ELF links, `zephyr.bin` size is recorded; the board file and SoC build warning-free |
+| H10 | **`hw_mock_test` for 7.1** (R): the register model of `tools/v3d/hw_mock_test.c` with the 7.x map, SMS and power sequence. | The Pi 4's 38 of 38 pattern, for 7.1 |
+
+## 6. What needs the board
+
+**First three things on day one** (all headless, no GPU command yet):
+
+1. **D1. Boot and look.** A `kernel=zephyr.bin` image built as in
+   `ZEPHYR/.../rpi_5/doc/index.rst` that prints on `uart10` and dumps the
+   device-tree blob pointer the firmware passes and the V3D, SMS, HVS and
+   clock nodes in it (the Pi 4 boots the same way; the DTB is the ground truth
+   for addresses, interrupts and clocks and removes H1's dependence on a
+   particular kernel tag). Proof of life: the banner, then the node list.
+2. **D2. Read identity with no setup.** Read the hub and core identity
+   registers and `MMU_DEBUG_INFO` from the addresses D1 found. If the read
+   bus-faults, the GPU is unpowered or unclocked (U5): try the firmware
+   mailbox clock/power calls the Pi 4 uses, and the SMS sequence H1 found.
+   Proof of life: `CORE0_IDENT0[31:24] == 7`, `CORE0_IDENT1[3:0] == 1`, and
+   `HUB_IDENT3` giving rev and compat rev (U2). Record the raw values as the
+   Pi 4 note did ("Measured under Linux first").
+3. **D3. Boot Linux once and record it.** Raspberry Pi OS on the same card:
+   debugfs `v3d_ident` and `v3d_regs`, `vcgencmd get_config`-style clock
+   readings, `V3D_DEBUG=clif` dumps of a clear and of one triangle taken on the
+   board. These are the byte references that H3 can only approximate, as the
+   Pi 4 work did ("The first byte-exact reference is Mesa itself on the same
+   Pi under Linux").
+
+**Measurements that say the port is alive**, in order, each with the Pi 4
+analogue:
+
+- **First clear** (M1 to M4): power-on returns, identity equal to Linux's, MMU
+  initialised, an empty binning and render list both raise their done
+  interrupts, and a TLB clear to a raster buffer reads back with 0 wrong
+  pixels and an unchanged guard row (`v3d_clear: PASS`).
+- **First triangle** (M5): a Gouraud triangle with Mesa's shaders, then ours,
+  with 0 wrong inside, outside and edge and the largest channel difference
+  within the tolerance of 3 (`v3d_triangle: PASS`).
+- **First `gl_test` case**: the list the Pi 4 started with, cases 5, 58, 59, 66,
+  67, 102 on one context (`pi4-v3d-bringup.md`, "gl_test on the V3D"), with the
+  same refusals by name where a feature is not built yet.
+- Display is **not** needed for any of these: the Pi 4 checks read the
+  buffer back. The panel comes after (U3).
+
+## 7. Risks and unknowns
+
+Each is a question; none is guessed.
+
+| # | Question | What answers it |
+|---|---|---|
+| U1 | Is there a public BCM2712 register manual, and which blocks does it cover? | The Raspberry Pi documentation index; none was opened |
+| U2 | Which V3D 7.1 revision is on the board we will receive (7.1.2, .5, .6, .7 or .10)? It chooses the texture-state layout, the shader-record variant and the unpack ops | D2's `HUB_IDENT3`; `v3d_device_info.h:94-112` for the consequences |
+| U3 | How does a frame reach HDMI on the Pi 5, and does the firmware offer a framebuffer through the property mailbox as the Pi 4's does? What part does RP1 play for the outputs we use? | Linux `drivers/gpu/drm/vc4/` for BCM2712, the BCM2712 device tree, Raspberry Pi's firmware documentation. The Pi 4 form is `docs/standalone-boot.md` |
+| U4 | What are the 7.x register map, MMU (page-table format, physical address width, 4 KiB or other pages), SMS sequence, interrupt lines, and the job-start and cache-flush sequence? Does any 4.2 register of `v3d_regs.h` move? | Linux `drivers/gpu/drm/v3d/` (`v3d_regs.h`, `v3d_mmu.c`, `v3d_drv.c` incl. the SMS code the earlier note cites at `:266-294`, `v3d_sched.c`, `v3d_gem.c`) at a named tag |
+| U5 | How is the GPU clocked and powered up (firmware mailbox clock as on the Pi 4, a clock controller, a power domain), and is it already on when the image starts? | The BCM2712 device tree and Linux's clock/power code; D2 |
+| U6 | At which address and in which exception level does the firmware start a `kernel=` arm64 image on BCM2712, and what does it pass in the registers? Is any `config.txt` key needed beyond `kernel=`, `enable_uart=1`, `uart_2ndstage=1`? | Raspberry Pi `config.txt` documentation (`arm_64bit`, `kernel`, `kernel_address`), Zephyr's `rpi_5` linker address, D1 |
+| U7 | Does the Pi 5 firmware support `tryboot`, and does the bootloader in its flash need updating for our files? | Raspberry Pi boot documentation |
+| U8 | Does the 7.1 TMU filter cube maps seamlessly (the 4.2 defect `docs/v3d-noseamless-cube.md`)? | The first cube-map case on the board; Mesa's cube handling for 7.1 is not read |
+| U9 | How much of dEQP-GLES2 passes on Mesa's 7.1 driver, and does it have known 7.1 erratum workarounds we would need (the 4.2 ones are the `GFXH-*` comments of `v3dx_*.c`)? | `grep -n 'GFXH\|HW-\|erratum' MESA/src/gallium/drivers/v3d/v3dx_*.c`, filtered by `V3D_VERSION`; not done |
+| U10 | Does our one-core, 512 KiB-`sram0` Zephyr start leave the GPU's view of memory valid (cache coherence of the A76 with the V3D, DMA address mapping above 4 GiB on 8 and 16 GB boards)? The Pi 4 asked the same of its 8 GB board (`pi4-v3d-bringup.md`, "Board questions") | D2/D3 plus U4's MMU width; keep the carve-out low until measured |
+| U11 | How does a new shader-record variant (7.1.10) interact with our fixed 3-programs-per-GL-program model, and does the `Never defer FEP depth writes` flag change early-z behaviour for `gl_FragDepth` shaders? | H3 references, then a `gl_test` case |
+| U12 | Does the vendored `third_party/mesa-26.2.1` carry everything H2 to H6 need (the compiler is built from a Mesa tree; the vendored tree has `src/broadcom/{cle,clif,common,qpu}` only)? | `tools/v3d/mesa_ref.sh` and the "vendored reference build" row; the vendored `UPSTREAM` list |
+
+Two things the reading **rules out**: an existing back end cannot be reused
+unchanged (the packets and the ISA differ, section 3), and the Pi 4 power-on
+code cannot be assumed (the BCM2711 PM and ASB blocks are the SoC's, and Linux
+has an SMS block for 7.1, U4). It rules in that the control-list model, the
+job structure and the tiling carry over.
+
+## 8. Proposed item list
+
+Sized against what the three ports cost, from `tools/cts/STATUS.md`, the Pi 4
+note and `ROADMAP.md`: the Pi 4 went from start (2026-09-23) to its first GL
+triangle on the board the next day (M1 to M6, `pi4-v3d-bringup.md`, "On the
+board, 2026-09-24"), with every register sequence and packet already read; it
+reached 0 failures on dEQP-GLES2 on 2026-10-15/16 (`CHANGELOG.md`, "Results"). The
+Mali port is the cautionary case: its compiler work is still being closed
+case by case (`STATUS.md`, the NanoPC-T6 sweep: 102 of 256 at 2026-10-27).
+Size: S = a day or less once its inputs exist, M = a few days, L = a week or
+more. Order is the dependency order.
+
+| Item | Size | Depends on | Done when |
+|---|---|---|---|
+| P0 Read Linux and the Pi 5 device tree (H1), write the `driver/docs/rpi5-v3d.md` facts file | M | none | U1, U3 to U7 answered with citations |
+| P1 Reference build at 7.1: `v3d_shc` parametrised, drm-shim run, clif references (H2, H3) | M | none | corpus compiles, references stored |
+| P2 7.1 packet encoders and golden test (H4) | S | none | `cl_golden` equal |
+| P3 7.1 frame builder and decoder check (H5) | M | P2 | `frame_check` clean; equals P1's clear and triangle |
+| P4 `rpi_5` Zephyr image builds, overlay and sample (H9) | S | none | image links, gate row builds it |
+| P5 Board M1 to M3: boot, identity, power, MMU, empty lists (D1 to D3, 7.x `v3d_hw.c`) | L | P0, P4, board | identity and both done interrupts |
+| P6 Board M4 and M5: clear, triangle with Mesa's shaders (needs only P1 to P3) | M | P3, P5 | `v3d_clear` and `v3d_triangle` PASS |
+| P7 QPU ISA layer for 7.1 and 7.1 FFI (H6, H7), round trip over P1's corpus | L | P1 | byte-exact round trip; `v3d_sim_mesa` at 7.1 |
+| P8 Online compiler back end for 7.1: selection, scheduling, register allocation without accumulators, SFU as ALU (largest item; the 4.2 back end is 20,588 lines and is the template) | L | P7 | the pass-through, uniform, `if` and texture shapes agree with Mesa's 7.1 output on the host, then on the board |
+| P9 `src/v3d/` backend table for 7.1 (record size, no default-attribute BO, the 8-target and 7680 px limits, `Clear Render Targets`, TFU `IOC`) | M | P3, P7 | `gl_test` first six cases on the board |
+| P10 Textures and TFU at 7.1 (texture state with transfer function and R/B swap per revision, TMU config 2) | M | P9 | texture cases and mipmaps; cube result (U8) |
+| P11 Display (U3) | M to L | P0 | a frame on HDMI; may be a separate item after the CTS |
+| P12 `tools/check.sh` rows, `docs/` and `tools/cts` rows for the Pi 5 | S | P9 | gate green, 0 gaps |
+| P13 dEQP-GLES2 and glmark2 on the board | L | P8 to P10 | the Pi 4's counts, or the refusals named |
+
+The shortest path to the first triangle on the board is P0, P4, P5, P6 (about
+the Pi 4's M1 to M5, with Mesa's shaders). The two items that decide the total
+are P8 (the ISA and register allocator change) and P0 (the unread Linux
+reading may reveal a larger hardware difference than the packets show).
