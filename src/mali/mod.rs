@@ -53,6 +53,8 @@ mod frame_prims_tests;
 #[cfg(test)]
 mod frame_query_tests;
 #[cfg(test)]
+mod frame_split_tests;
+#[cfg(test)]
 mod frame_tests;
 #[cfg(test)]
 mod frame_tex_tests;
