@@ -75,6 +75,23 @@ struct v3d_cl {
 
 /* ---- Mesa's packers ------------------------------------------------------ */
 
+/* The generation the packers below are made for: 42 (the Pi 4's V3D 4.2, what
+ * the driver uses) or 71 (the Pi 5's V3D 7.1, only tools/v3d/cl_golden.c
+ * builds it, with -DV3D_CL_VER=71; the generated 7.1 header and 4.2's define
+ * the same plain macros inside their structs, so one translation unit takes
+ * one of them). */
+#ifndef V3D_CL_VER
+#define V3D_CL_VER 42
+#endif
+#if V3D_CL_VER != 42 && V3D_CL_VER != 71
+#error "V3D_CL_VER is 42 or 71"
+#endif
+/* V3D_CL_NAME(NAME) is V3D<ver>_<NAME>: the generated struct, enum and
+ * function names. The two-step paste makes the version expand first. */
+#define V3D_CL_NAME__(ver, name) V3D##ver##_##name
+#define V3D_CL_NAME_(ver, name) V3D_CL_NAME__(ver, name)
+#define V3D_CL_NAME(name) V3D_CL_NAME_(V3D_CL_VER, name)
+
 /* The hooks gen_pack_header.py's output expects from its user. The same
  * definitions as tools/v3d/cl_golden.c and Mesa's clif (clif_private.h). */
 #ifndef __gen_user_data
@@ -135,8 +152,12 @@ struct v3d_cl {
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 #pragma GCC diagnostic ignored "-Wsign-compare"
 #pragma GCC diagnostic ignored "-Wshift-negative-value"
-#include "generated/v3d_packet_v42_pack.h"
 #include "v3d_cl_packets.h"
+#if V3D_CL_VER == 71
+#include "generated/v3d_packet_v71_pack.h"
+#else
+#include "generated/v3d_packet_v42_pack.h"
+#endif
 #pragma GCC diagnostic pop
 #ifdef V3D_CL_RESTORE_CLAMP
 #undef V3D_CL_RESTORE_CLAMP
@@ -154,6 +175,7 @@ struct v3d_cl {
 #include <assert.h>
 #endif
 
+#if V3D_CL_VER == 42
 /* The generated header names a field's values as plain macros inside its
  * structs (NONE, Z, STENCIL, RENDER_TARGET_0, INDEX_TYPE_8_BIT, ...), which
  * would take those words from every file that includes this one, Zephyr's
@@ -181,6 +203,10 @@ enum {
 _Static_assert(TILE_ALLOCATION_INITIAL_BLOCK_SIZE_128B == TILE_ALLOCATION_BLOCK_SIZE_128B &&
 		       TILE_ALLOCATION_INITIAL_BLOCK_SIZE_64B == TILE_ALLOCATION_BLOCK_SIZE_64B,
 	       "one numbering for both tile allocation block sizes");
+#else
+/* Nothing of the 7.1 header is used by name; its field values are only
+ * unmade, as 4.2's are below. */
+#endif
 #undef ATTRIBUTE_BYTE
 #undef ATTRIBUTE_FIXED
 #undef ATTRIBUTE_FLOAT
@@ -239,6 +265,26 @@ _Static_assert(TILE_ALLOCATION_INITIAL_BLOCK_SIZE_128B == TILE_ALLOCATION_BLOCK_
 #undef VPM_SETUP_SIZE_8_BIT
 #undef Z
 #undef ZSTENCIL
+#if V3D_CL_VER == 71
+#undef RENDER_TARGET_4
+#undef RENDER_TARGET_5
+#undef RENDER_TARGET_6
+#undef RENDER_TARGET_7
+#undef TILE_HEIGHT_16_PIXELS
+#undef TILE_HEIGHT_32_PIXELS
+#undef TILE_HEIGHT_64_PIXELS
+#undef TILE_HEIGHT_8_PIXELS
+#undef TILE_WIDTH_16_PIXELS
+#undef TILE_WIDTH_32_PIXELS
+#undef TILE_WIDTH_64_PIXELS
+#undef TILE_WIDTH_8_PIXELS
+#undef TRANSFER_FUNC_HLG
+#undef TRANSFER_FUNC_HLG_BT1886
+#undef TRANSFER_FUNC_NONE
+#undef TRANSFER_FUNC_PQ
+#undef TRANSFER_FUNC_PQ_BT1886
+#undef TRANSFER_FUNC_SRGB
+#endif
 
 /* ---- the list ------------------------------------------------------------ */
 
@@ -305,39 +351,39 @@ static inline void v3d_cl_put(struct v3d_cl *cl, const uint8_t *b, uint32_t len,
 /* ---- the checked packers ------------------------------------------------- */
 
 /*
- * v3d_pack_<NAME>(out, values): Mesa's V3D42_<NAME>_pack into `out`
- * (V3D42_<NAME>_length bytes), then V3D42_<NAME>_unpack of those bytes; true
+ * v3d_pack_<NAME>(out, values): Mesa's V3D<ver>_<NAME>_pack into `out`
+ * (V3D<ver>_<NAME>_length bytes), then V3D<ver>_<NAME>_unpack of those bytes; true
  * only when that gives back `values` exactly. The copy the unpacker writes
  * into starts as `values` itself, so struct padding compares equal.
  *
  * v3d_cl_put_<NAME>(cl, values): the same, stored into the list.
  */
 #define V3D_CL_PACKER(name)                                                                        \
-	static inline bool v3d_pack_##name(uint8_t *out, const struct V3D42_##name *v)             \
+	static inline bool v3d_pack_##name(uint8_t *out, const struct V3D_CL_NAME(name) *v)             \
 	{                                                                                          \
-		struct V3D42_##name back;                                                          \
+		struct V3D_CL_NAME(name) back;                                                          \
 		memcpy(&back, v, sizeof(back));                                                    \
-		V3D42_##name##_pack(NULL, out, v);                                                 \
-		V3D42_##name##_unpack(out, &back);                                                 \
+		V3D_CL_NAME(name##_pack)(NULL, out, v);                                                 \
+		V3D_CL_NAME(name##_unpack)(out, &back);                                                 \
 		return memcmp(&back, v, sizeof(back)) == 0;                                        \
 	}                                                                                          \
-	static inline void v3d_cl_put_##name(struct v3d_cl *cl, const struct V3D42_##name *v)      \
+	static inline void v3d_cl_put_##name(struct v3d_cl *cl, const struct V3D_CL_NAME(name) *v)      \
 	{                                                                                          \
-		uint8_t b[V3D42_##name##_length];                                                  \
+		uint8_t b[V3D_CL_NAME(name##_length)];                                                  \
 		bool ok = v3d_pack_##name(b, v);                                                   \
-		v3d_cl_put(cl, b, V3D42_##name##_length, ok);                                      \
+		v3d_cl_put(cl, b, V3D_CL_NAME(name##_length), ok);                                      \
 	}
 
-/* Mesa's cl_emit(): the body fills `var`, a struct V3D42_<NAME> whose opcode
+/* Mesa's cl_emit(): the body fills `var`, a struct V3D<ver>_<NAME> whose opcode
  * (and sub-id) the generated header sets; the packet is stored when the body
  * ends. A record (no opcode) is written the same way at the list's current
  * position; the caller aligns it first (v3d_cl_reserve). */
 #define v3d_cl_emit(cl, name, var)                                                                 \
-	for (struct V3D42_##name var = { V3D42_##name##_header }, *var##_emit_once = &var;         \
+	for (struct V3D_CL_NAME(name) var = { V3D_CL_NAME(name##_header) }, *var##_emit_once = &var;         \
 	     var##_emit_once != NULL; v3d_cl_put_##name((cl), &var), var##_emit_once = NULL)
 
 /* The packets and records YakoGL writes (v3d_cl_packets.h). */
-V3D_CL_PACKETS(V3D_CL_PACKER)
+V3D_CL_PACKET_LIST(V3D_CL_PACKER)
 
 /* ---- values on a field's grid -------------------------------------------- */
 
