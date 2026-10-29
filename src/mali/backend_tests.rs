@@ -1642,6 +1642,154 @@ fn a_4x_depth_frame_averages_its_d24s8_and_preloads_it() {
     assert_eq!(mali_finish(), 0);
 }
 
+/// The FBD of each RUN_FRAGMENT of a stream, in order.
+fn fbds_at_fragments(words: &[u64]) -> Vec<u64> {
+    let (mut fbd, mut out) = (None, Vec::new());
+    for &w in words {
+        if let Some((40, v)) = move48(w) {
+            fbd = Some(v & !63);
+        }
+        if matches!(Instr::decode(w), Ok(Instr::RunFragment(_))) {
+            out.extend(fbd);
+        }
+    }
+    out
+}
+
+/// gl_test case 214 (splitkick) on the mock, pinned to Mesa 26.2.1's words
+/// on the board (tools/cts/log/2026-10-28-splitref, frame_split_tests.rs):
+/// a 4x XRGB surface cleared black and drawn, flushed (kick 1), drawn again
+/// without a clear, flushed (kick 2). Each kick is two fragment jobs in one
+/// stream: the frame, which writes its four samples to the sample store
+/// (RT 0 Writeback MSAA Layered, surface stride 0x4000: section 4.2's words
+/// but for the base, the store's address of the mock), then our resolve,
+/// which draws them back and averages them into the surface. Kick 2's
+/// frame starts from the four samples, not the resolved colour: pre frame 0
+/// Intersect and a pre-frame DCD that runs Mesa's per-sample preload
+/// program once a sample (flags 0x00080a03, sample mask 0xffff) over a
+/// 4-sample texture of the store (section 4.6's texture and plane but for
+/// the pool and store addresses).
+#[test]
+fn a_split_4x_frame_keeps_its_samples_and_the_next_kick_reloads_them() {
+    use crate::mali::frame_split_tests::{
+        KICK_1_FBD, KICK_1_RT, KICK_2_FBD, KICK_2_RT, PLANE, PRELOAD_DCD, PRELOAD_PROGRAM, SURFACE_STRIDE, TEXTURE,
+    };
+    let words32 = |va: u64, n: usize| -> Vec<u32> {
+        with(|m| m.read(va, 4 * n)).chunks(4).map(|c| u32::from_le_bytes(c.try_into().unwrap())).collect()
+    };
+    let ptr = |w: &[u32], i: usize| u64::from(w[i]) | u64::from(w[i + 1]) << 32;
+    let _rig = Rig::new(true);
+    assert_eq!(mali_init(), 0);
+    let t = target();
+    with_programs(TRI_VS, TRI_FS, |vs, fs| {
+        let mut d = triangle(t, &VERTICES);
+        (d.vs, d.fs, d.samples, d.target_format) = (vs, fs, 4, backend::GLES_SURF_XRGB8888);
+        d.clear_rgba = [0.0, 0.0, 0.0, 1.0];
+        let mut again = d;
+        again.do_clear = false;
+        let mut store = None;
+        for (kick, d, fbd_words, rt_words) in [(1, d, KICK_1_FBD, KICK_1_RT), (2, again, KICK_2_FBD, KICK_2_RT)] {
+            assert_eq!(draw_flush(&d), 0, "kick {kick}");
+            let stream = with(|m| m.submits.last().unwrap().1.clone());
+            let fbds = fbds_at_fragments(&stream);
+            assert_eq!(fbds.len(), 2, "kick {kick}: the frame and the resolve, one kick");
+            let (fbd, rt) = (words32(fbds[0], 16), words32(fbds[0] + 128, 16));
+            /* every FBD word Mesa's but for the pointers (w4:w5 the sample
+             * positions, w6:w7 the pre-frame DCDs, w14:w15 the tiler) and w11
+             * (frame_split_tests.rs `TILE_26_2`: 25.0.7's 4x tile) */
+            for i in [0, 1, 2, 3, 8, 9, 10, 12, 13] {
+                assert_eq!(fbd[i], fbd_words[i], "kick {kick}: FBD w{i}");
+            }
+            assert_eq!(fbd[11], 0x10001492, "kick {kick}: FBD w11");
+            assert_eq!(ptr(&fbd, 6) != 0, kick == 2, "kick {kick}: a pre-frame draw");
+            /* RT 0: Mesa's but for the base, the store */
+            let base = ptr(&rt, 8);
+            assert!(base != t && with(|m| m.find(base, 4 * SURFACE_STRIDE as usize).is_some()), "kick {kick}");
+            assert_eq!(*store.get_or_insert(base), base, "kick {kick}: the same store");
+            let mut want = rt_words;
+            (want[8], want[9]) = (base as u32, (base >> 32) as u32);
+            assert_eq!(rt, want, "kick {kick}: RT 0");
+            /* the resolve: pre frame 0 Always, no tiler, RT 0 averaged into
+             * the surface with every tile written */
+            let (rfbd, rrt) = (words32(fbds[1], 16), words32(fbds[1] + 128, 16));
+            assert_eq!((rfbd[0], ptr(&rfbd, 14)), (1, 0), "kick {kick}: the resolve's FBD");
+            let resolve_rt =
+                [0x04000000, 0x880a9299, 0, 0, 0, 0, 0, 0, t as u32, (t >> 32) as u32, 0x100, 0, 0, 0, 0, 0];
+            assert_eq!(rrt, resolve_rt, "kick {kick}: the resolve's RT 0");
+            let mut dcds = vec![("resolve", ptr(&rfbd, 6))];
+            if kick == 2 {
+                dcds.push(("frame", ptr(&fbd, 6)));
+            }
+            for (what, at) in dcds {
+                /* section 4.6: the DCD's flags, the program and the store's
+                 * 4-sample texture */
+                let dcd = words32(at, 32);
+                assert_eq!(dcd[..2], PRELOAD_DCD[..2], "kick {kick} {what}: DCD flags");
+                let spd = words32(ptr(&dcd, 26), 8);
+                let code: Vec<u64> = with(|m| m.read(ptr(&spd, 2), 8 * PRELOAD_PROGRAM.len()))
+                    .chunks(8)
+                    .map(|c| u64::from_le_bytes(c.try_into().unwrap()))
+                    .collect();
+                assert_eq!(code, PRELOAD_PROGRAM, "kick {kick} {what}: Mesa's per-sample preload");
+                assert_eq!(spd[1], 0x3000, "kick {kick} {what}: preload r60 r61");
+                let table = ptr(&dcd, 24) & !63;
+                let tex_at = ptr(&words32(table, 16), 12) & ((1 << 56) - 1);
+                let tex = words32(tex_at, 8);
+                for i in [0, 1, 2, 3, 6, 7] {
+                    assert_eq!(tex[i], TEXTURE[i], "kick {kick} {what}: texture w{i}");
+                }
+                let mut plane = PLANE;
+                (plane[2], plane[3]) = (base as u32, (base >> 32) as u32);
+                assert_eq!(words32(ptr(&tex, 4), 8), plane, "kick {kick} {what}: the store as its plane");
+            }
+        }
+    });
+    assert_eq!(mali_finish(), 0);
+}
+
+/// The store holds a surface's samples until the surface goes: EGL names
+/// its own depth/stencil (`0x8000_0000 | page`) when it destroys it, or the
+/// GL core releases the memory (`texture_released`). A 4x frame at that
+/// address afterwards starts from the image in every sample (the 1x
+/// preload, DCD not multisampled) and keeps its own samples again.
+#[test]
+fn a_gone_surface_s_samples_are_not_reloaded() {
+    use crate::mali::genxml::v10::DcdFlags0;
+    let _rig = Rig::new(true);
+    assert_eq!(mali_init(), 0);
+    let t = target();
+    with_programs(TRI_VS, TRI_FS, |vs, fs| {
+        let mut d = triangle(t, &VERTICES);
+        (d.vs, d.fs, d.samples) = (vs, fs, 4);
+        let mut again = d;
+        again.do_clear = false;
+        let per_sample = |what: &str| {
+            let stream = with(|m| m.submits.last().unwrap().1.clone());
+            let fbds = fbds_at_fragments(&stream);
+            assert_eq!(fbds.len(), 2, "{what}: the frame and the resolve");
+            let fbd = with(|m| m.read(fbds[0], 64));
+            let dcd = u64::from_le_bytes(fbd[24..32].try_into().unwrap());
+            let flags = DcdFlags0::unpack(&with(|m| m.read(dcd, 4)).try_into().unwrap()).unwrap();
+            flags.evaluate_per_sample && flags.multisample_enable
+        };
+        let gone: [(&str, &dyn Fn()); 2] = [
+            ("the surface destroyed", &|| mali_attachment_gone(0x8000_0000 | (t >> 12) as u32)),
+            ("its memory released", &|| mali_texture_released(t, 64 * 64 * 4)),
+        ];
+        for (what, go) in gone {
+            assert_eq!(draw_flush(&d), 0, "{what}");
+            assert_eq!(draw_flush(&again), 0, "{what}");
+            assert!(per_sample(what), "{what}: before, the samples are reloaded");
+            go();
+            assert_eq!(draw_flush(&again), 0, "{what}");
+            assert!(!per_sample(what), "{what}: the image preloaded once into every sample");
+            assert_eq!(draw_flush(&again), 0, "{what}");
+            assert!(per_sample(what), "{what}: and that frame's samples kept");
+        }
+    });
+    assert_eq!(mali_finish(), 0);
+}
+
 /// gl_test case 162 (dskeep) on the mock: 32 framebuffers each keep the
 /// depth a draw left in its own buffer, so the 33rd is refused (no slot
 /// holds nothing GL keeps); once the first's depth object is gone

@@ -9,6 +9,7 @@ tools/mali/drm_shim_ref.sh).
         [--size WxH] [--viewport X,Y,W,H] [--depth-range N,F] [--uniform-values]
         [--second-frame] [--depth-stencil] [--second-clear depth|stencil]
         [--blend-func SRC,DST] [--blend-color R,G,B,A] [--mrt N] [--levels N]
+        [--samples 4]
 
 <libdir> holds the libEGL.so.1 and libGLESv2.so.2 to use. The program runs on
 an EGL surfaceless display (EGL_PLATFORM_SURFACELESS_MESA) into a WxH RGBA8
@@ -32,6 +33,13 @@ is 0 and a uniform word cannot be told from a zero pad.
 the second frame starts from the first one's image, which Mesa reloads
 with its preload shader (pan_fb_preload.c), so the trace holds that
 program too.
+
+`--samples 4` draws into a WxH pbuffer of a 4x RGB8 config (EGL_SAMPLES 4,
+gl_test's 4x config) instead of the framebuffer object: Mesa keeps the
+surface's four samples in memory. With `--second-frame` the second frame is
+gl_test case 214's split 4x frame (tools/cts/log/2026-10-28-splitref): its
+pre-frame draw reloads each sample with Mesa's per-sample preload program,
+which the trace then holds. Not with `--mrt` or `--depth-stencil`.
 
 `--depth-stencil` attaches a D24S8 renderbuffer as depth and stencil,
 clears both with the colour, and draws with the depth test (LESS, writes
@@ -89,6 +97,8 @@ EGL_DEFAULT_DISPLAY = None
 EGL_OPENGL_ES_API = 0x30A0
 EGL_CONTEXT_CLIENT_VERSION = 0x3098
 EGL_NONE = 0x3038
+EGL_SURFACE_TYPE, EGL_PBUFFER_BIT, EGL_SAMPLES = 0x3033, 0x0001, 0x3031
+EGL_RED_SIZE, EGL_GREEN_SIZE, EGL_BLUE_SIZE, EGL_WIDTH, EGL_HEIGHT = 0x3024, 0x3023, 0x3022, 0x3057, 0x3056
 GL_VERTEX_SHADER, GL_FRAGMENT_SHADER = 0x8B31, 0x8B30
 GL_COMPILE_STATUS, GL_LINK_STATUS, GL_INFO_LOG_LENGTH = 0x8B81, 0x8B82, 0x8B84
 GL_TEXTURE_2D, GL_RGBA, GL_UNSIGNED_BYTE = 0x0DE1, 0x1908, 0x1401
@@ -195,6 +205,7 @@ def main():
         blend_func = option(args, "--blend-func", None, lambda v: tuple(BLEND_FACTORS[x] for x in v.split(",")))
         mrt = option(args, "--mrt", 0, int)
         levels = option(args, "--levels", 1, int)
+        samples = option(args, "--samples", 1, int)
         blend_color = option(args, "--blend-color", (0.0, 0.0, 0.0, 0.0),
                              lambda v: tuple(float(x) for x in v.split(",")))
     except (ValueError, IndexError, KeyError):
@@ -214,7 +225,7 @@ def main():
         return 2
     if (len(args) != 3 or prim not in PRIMS or len(viewport) != 4
             or (blend_func is not None and len(blend_func) != 2) or len(blend_color) != 4
-            or not 0 <= mrt <= 8):
+            or not 0 <= mrt <= 8 or samples not in (1, 4) or (samples > 1 and (mrt or zs))):
         print(__doc__, file=sys.stderr)
         return 2
     libdir, vs_path, fs_path = args
@@ -235,23 +246,43 @@ def main():
         return 1
     egl.eglBindAPI(EGL_OPENGL_ES_API)
     attrs = (C.c_int * 3)(EGL_CONTEXT_CLIENT_VERSION, 3 if es3 else 2, EGL_NONE)
+    cfg, surface = C.c_void_p(), None
+    if samples > 1:
+        # gl_test's 4x config and a pbuffer of the framebuffer's size
+        cfg_attrs = (C.c_int * 11)(EGL_SURFACE_TYPE, EGL_PBUFFER_BIT, EGL_SAMPLES, samples, EGL_RED_SIZE, 8,
+                                   EGL_GREEN_SIZE, 8, EGL_BLUE_SIZE, 8, EGL_NONE)
+        n = C.c_int()
+        egl.eglChooseConfig.argtypes = [C.c_void_p, C.c_void_p, C.c_void_p, C.c_int, C.c_void_p]
+        if not egl.eglChooseConfig(dpy, cfg_attrs, C.byref(cfg), 1, C.byref(n)) or n.value != 1:
+            print("gl_ref: no %dx pbuffer config" % samples, file=sys.stderr)
+            return 1
+        egl.eglCreatePbufferSurface.restype = C.c_void_p
+        egl.eglCreatePbufferSurface.argtypes = [C.c_void_p, C.c_void_p, C.c_void_p]
+        surface = egl.eglCreatePbufferSurface(dpy, cfg, (C.c_int * 5)(EGL_WIDTH, width, EGL_HEIGHT, height, EGL_NONE))
+        if not surface:
+            print("gl_ref: no %dx%d pbuffer" % (width, height), file=sys.stderr)
+            return 1
     egl.eglCreateContext.restype = C.c_void_p
     egl.eglCreateContext.argtypes = [C.c_void_p, C.c_void_p, C.c_void_p, C.c_void_p]
-    ctx = egl.eglCreateContext(dpy, None, None, attrs)
+    ctx = egl.eglCreateContext(dpy, cfg, None, attrs)
     egl.eglMakeCurrent.argtypes = [C.c_void_p, C.c_void_p, C.c_void_p, C.c_void_p]
-    if not ctx or not egl.eglMakeCurrent(dpy, None, None, ctx):
+    if not ctx or not egl.eglMakeCurrent(dpy, surface, surface, ctx):
         print("gl_ref: no GLES %d context" % (3 if es3 else 2), file=sys.stderr)
         return 1
     gl.glGetString.restype = C.c_char_p
     print("gl_ref: renderer %s" % gl.glGetString(GL_RENDERER).decode())
+    if samples > 1:
+        print("gl_ref: a %dx%d pbuffer of %d samples" % (width, height, samples))
 
     tex, fbo = C.c_uint(), C.c_uint()
-    gl.glGenTextures(1, C.byref(tex))
-    gl.glBindTexture(GL_TEXTURE_2D, tex)
-    gl.glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, None)
-    gl.glGenFramebuffers(1, C.byref(fbo))
-    gl.glBindFramebuffer(GL_FRAMEBUFFER, fbo)
-    gl.glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0)
+    if samples == 1:
+        # a 4x run draws into the pbuffer, the default framebuffer
+        gl.glGenTextures(1, C.byref(tex))
+        gl.glBindTexture(GL_TEXTURE_2D, tex)
+        gl.glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, None)
+        gl.glGenFramebuffers(1, C.byref(fbo))
+        gl.glBindFramebuffer(GL_FRAMEBUFFER, fbo)
+        gl.glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0)
     if mrt:
         # attachment 0 is the texture above; the others are alike
         for i in range(1, mrt):

@@ -273,6 +273,13 @@ pub enum TexDim {
     /// `array_enable`, the layer the third staging word (intbig_case42:
     /// `TEX_SINGLE ... .2d.array_enable`, `TEX_FETCH ... .2d.array_enable`).
     D2Array,
+    /// A 2D multisampled texture (`GLSL_SAMPLER_DIM_MS`), read by a
+    /// `txf_ms` only (a [`LodMode::Fetch`]): `tex2d` with `texel_offset`,
+    /// the staging word after the coordinate the offset word whose byte 2
+    /// is the sample index (`pan_nir_lower_tex.c:866-924`: the u8vec4
+    /// `<off_s, off_t, ms_idx, lod>`). The per-sample colour preload's
+    /// look-up (`super::preload::colour_samples`).
+    D2Ms,
 }
 
 /// A special varying's name (`enum bi_varying_name`, the ISA's

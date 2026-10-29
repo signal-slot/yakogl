@@ -1,0 +1,45 @@
+{
+ "trace": "splitkick.trace",
+ "secondary_offset": null,
+ "regions": {
+  "fs.fragment": {
+   "va": "7fffffffe180",
+   "found": true,
+   "words": [
+    "085480041200003d",
+    "6890c000c00c0040",
+    "0090c100c00c0041",
+    "0110c20000001fc0",
+    "00b4c2001042cc7d",
+    "00bdc20000c0c042",
+    "00bdc2000042c0c0",
+    "0110c318001000c0",
+    "0091c40000000043",
+    "0091c500000000c0",
+    "4925403653c00844",
+    "787f4008b23c00f0",
+    "0110f000000000c0",
+    "002fc1100000f1c0"
+   ],
+   "text": [
+    "LD_VAR_IMM.slot0.v2.f32.center.store.wait0 @r0:r1, r61, table:0x0, index:0x0",
+    "F32_TO_S32.rtz.discard r0, r0^",
+    "F32_TO_S32.rtz r1, r1^",
+    "IADD_IMM.i32 r2, 0x0, #0x1F",
+    "RSHIFT_AND.i32 r2, r61^, 0x13121110.b00, r2^",
+    "MKVEC.v2i8 r2, r2^.b0, 0x0.b0, 0x0",
+    "MKVEC.v2i8 r2, 0x0.b0, 0x0.b0, r2^",
+    "IADD_IMM.i32 r3, 0x0, #0x18001000",
+    "MOV.i32 r4, r3^",
+    "MOV.i32 r5, 0x0",
+    "TEX_FETCH.slot1.reserved.32.2d.texel_offset.wait @r0:r1:r2:r3, @r0:r1:r2, [r4^:r5^]",
+    "BLEND.slot2.v4.f32.end @r0:r1:r2:r3, blend_descriptor_0.w0, r60, target:0x0",
+    "IADD_IMM.i32 r48, 0x0, #0x0",
+    "BRANCHZI.eq.absolute 0x0, blend_descriptor_0.w1"
+   ],
+   "work_reg_count": null,
+   "preload": null,
+   "fau": null
+  }
+ }
+}

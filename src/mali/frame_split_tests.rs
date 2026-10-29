@@ -43,7 +43,7 @@ const HEAP_DESC: u64 = 0x7fff_ffff_b000;
 const GEOMETRY: u64 = 0x7fff_fffe_7000;
 
 /// One sample's plane: 64 rows of 256 bytes (RT 0 w11, plane +0x18).
-const SURFACE_STRIDE: u32 = 0x4000;
+pub(super) const SURFACE_STRIDE: u32 = 0x4000;
 
 /// The case's 4x RGB8 pbuffer, 64x64 (section 1): B, G, R, X bytes (RT 0's
 /// swizzle BGR0, the texture's BGR1).
@@ -51,23 +51,23 @@ const TARGET: Target =
     Target { gpu: PBUFFER, width: 64, height: 64, row_stride: 256, format: TargetFormat::Xrgb8888, samples: 4 };
 
 /* section 4.1 */
-const KICK_1_FBD: [u32; 16] = [
+pub(super) const KICK_1_FBD: [u32; 16] = [
     0x00000000, 0x00000000, 0x00000000, 0x00000000, 0xfffff200, 0x00007fff, 0x00000000, 0x00000000, 0x003f003f,
     0x00000000, 0x003f003f, 0x08001292, 0x00010000, 0x00000000, 0xffea8400, 0x00007fff,
 ];
-const KICK_2_FBD: [u32; 16] = [
+pub(super) const KICK_2_FBD: [u32; 16] = [
     0x00000002, 0x00000000, 0x00000000, 0x00000000, 0xfffff200, 0x00007fff, 0xfffc08c0, 0x00007fff, 0x003f003f,
     0x00000000, 0x003f003f, 0x08001292, 0x00010000, 0x00000000, 0xfffc0400, 0x00007fff,
 ];
 /* section 4.2 */
-const KICK_1_RT: [u32; 16] = [
+pub(super) const KICK_1_RT: [u32; 16] = [
     0x04000000, 0x880ab299, 0, 0, 0, 0, 0, 0, 0xfffd0000, 0x00007fff, 0x00000100, 0x00004000, 0xff000000, 0xff000000,
     0xff000000, 0xff000000,
 ];
-const KICK_2_RT: [u32; 16] =
+pub(super) const KICK_2_RT: [u32; 16] =
     [0x04000000, 0x080ab299, 0, 0, 0, 0, 0, 0, 0xfffd0000, 0x00007fff, 0x00000100, 0x00004000, 0, 0, 0, 0];
 /* section 4.6: the pre-frame-0 DCD at kick 2's pool +0x8C0 */
-const PRELOAD_DCD: [u32; 32] = [
+pub(super) const PRELOAD_DCD: [u32; 32] = [
     0x00080a03, 0x0001ffff, 0, 0, 0, 0, 0x00000000, 0x3f800000, 0, 0, 0xfffc0c20, 0x00007fff, 0xfffc0c01, 0x00007fff,
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xfffc0b84, 0x00007fff, 0xfffc0bc0, 0x00007fff, 0xfffc0100, 0x00007fff, 0, 0,
 ];
@@ -83,8 +83,8 @@ const CORNERS: [u32; 16] = [
     0x42800000, 0x00000000, 0x3f800000, 0x42800000, 0x42800000, 0x00000000, 0x3f800000,
 ];
 const SAMPLER: [u32; 8] = [0x1c299901, 0, 0, 0, 0, 0, 0, 0];
-const TEXTURE: [u32; 8] = [0x2ec05022, 0x003f003f, 0x00000688, 0x00004000, 0xfffc0a80, 0x00007fff, 0, 0];
-const PLANE: [u32; 8] =
+pub(super) const TEXTURE: [u32; 8] = [0x2ec05022, 0x003f003f, 0x00000688, 0x00004000, 0xfffc0a80, 0x00007fff, 0, 0];
+pub(super) const PLANE: [u32; 8] =
     [0x0200021a, 0x00010000, 0xfffd0000, 0x00007fff, 0x00000100, 0x00000000, 0x00004000, 0x003f003f];
 const SPD: [u32; 8] = [0x80000128, 0x00003000, 0xffffe180, 0x00007fff, 0, 0, 0, 0];
 const BLEND: [u32; 4] = [0x00000a00, 0xf0122122, 0x00000019, 0x000ed000];
@@ -123,7 +123,17 @@ enum Kick {
     /// Our resolve: the samples drawn back, no draw, averaged into the
     /// target.
     Resolve,
+    /// A frame that starts from the target's image while the store holds
+    /// nothing of it (`SampleStore::reload` off): the target drawn back
+    /// into every sample, the triangle, the samples kept.
+    Unkept,
+    /// The same frame without a store: averaged into the target.
+    NoStore,
 }
+
+/// The single-sampled colour preload program's address in [`Kick::Unkept`]
+/// and [`Kick::NoStore`] (any address but the per-sample program's).
+const PRELOAD_1X_BINARY: u64 = 0x7fff_ffff_e100;
 
 /// A built kick: its descriptor pool's bytes from `pool`, and its FBD's,
 /// TLS's and tiler context's addresses.
@@ -200,20 +210,27 @@ fn build(pool: u64, kick: Kick) -> Built {
             polygon_offset: None,
         };
         let mut cs = Stream::new(&mut words, 92);
-        let mut open = begin_frame(&mut desc, &mut cs).unwrap();
-        open.sample_store =
-            Some(SampleStore { gpu: STORE, surface_stride: SURFACE_STRIDE, resolve: kick == Kick::Resolve });
-        if kick != Kick::First {
-            /* the program's preload word (SPD w1 0x3000: r60, r61) */
-            open.colour_preload = Some(FrameShader { binary: PRELOAD_BINARY, preload: 0x3000 });
-        }
-        if kick != Kick::Resolve {
+        /* the store holds the samples from kick 2 on (kick 1 is cleared) */
+        let reload = matches!(kick, Kick::Second | Kick::Resolve);
+        let store = SampleStore { gpu: STORE, surface_stride: SURFACE_STRIDE, reload, resolve: false };
+        /* the program's preload word (SPD w1 0x3000: r60, r61); the 1x
+         * program's is the same */
+        let preload = FrameShader { binary: PRELOAD_BINARY, preload: 0x3000 };
+        let layout = if kick == Kick::Resolve {
+            resolve_frame(&mut desc, &mut cs, &ctx, &TARGET, store, preload).unwrap().layout
+        } else {
+            let mut open = begin_frame(&mut desc, &mut cs).unwrap();
+            open.sample_store = (kick != Kick::NoStore).then_some(store);
+            open.colour_preload = match kick {
+                Kick::Second => Some(preload),
+                Kick::Unkept | Kick::NoStore => Some(FrameShader { binary: PRELOAD_1X_BINARY, ..preload }),
+                _ => None,
+            };
             add_draw(&mut open, &mut desc, &mut cs, &ctx, &TARGET, false, &draw).unwrap();
-        }
-        (fbd, tls, tiler) =
-            (open.layout.fbd.unwrap().gpu, open.layout.tls.unwrap().gpu, open.layout.tiler.map(|b| b.gpu));
-        let clear = if kick == Kick::First { [0.0, 0.0, 0.0, 1.0] } else { [0.0; 4] };
-        end_frame(&open, &mut desc, &mut cs, &ctx, &TARGET, clear, None).unwrap();
+            let clear = if kick == Kick::First { [0.0, 0.0, 0.0, 1.0] } else { [0.0; 4] };
+            end_frame(&open, &mut desc, &mut cs, &ctx, &TARGET, clear, None).unwrap().layout
+        };
+        (fbd, tls, tiler) = (layout.fbd.unwrap().gpu, layout.tls.unwrap().gpu, layout.tiler.map(|b| b.gpu));
     }
     Built { pool, bytes: desc_m, fbd, tls, tiler }
 }
@@ -365,6 +382,67 @@ fn check_pre_frame(name: &str, b: &Built) {
     );
 }
 
+/// Kick 2 against Mesa 26.2.1's on the drm-shim
+/// (tools/mali/testdata/splitkick_kick2.expect.txt, the trace's decoded
+/// fields; the shim prints no raw descriptor words): every field that says
+/// the samples are reloaded reads as the shim's, as it does as the board's
+/// (the tests above). The fields the shim's tiled layout moves (block
+/// format, clump ordering, row strides) are not compared: ours is the
+/// board's linear one.
+#[test]
+fn the_second_kick_s_pre_frame_draw_reads_as_the_shim_s() {
+    let shim = include_str!("../../tools/mali/testdata/splitkick_kick2.expect.txt");
+    let b = build(KICK_2_POOL, Kick::Second);
+    let block = |gpu: u64, n: usize| b.bytes[(gpu - b.pool) as usize..][..n].to_vec();
+    let ptr = |w: &[u32], i: usize| u64::from(w[i]) | u64::from(w[i + 1]) << 32;
+    let fbd = b.words(b.fbd, 16);
+    let dcd_words = b.words(ptr(&fbd, 6), 32);
+    let draw = Draw::unpack(&block(ptr(&fbd, 6), Draw::LENGTH).try_into().unwrap()).unwrap();
+    let table = ptr(&dcd_words, 24) & !63;
+    let tex_at = ptr(&b.words(table, 16), 12) & ((1 << 56) - 1);
+    let tex = Texture::unpack(&block(tex_at, Texture::LENGTH).try_into().unwrap()).unwrap();
+    let plane = GenericPlane::unpack(&block(tex.surfaces, GenericPlane::LENGTH).try_into().unwrap()).unwrap();
+    /* the union members a fragment SPD and an RGBA8 render target hold */
+    let spd_bytes = block(ptr(&dcd_words, 26), ShaderProgram::LENGTH).try_into().unwrap();
+    let spd = ShaderProgram::unpack_as(&spd_bytes, &["Fragment coverage bitmask type", "Preload.R48-R63"]).unwrap();
+    let rt_bytes = block(b.fbd + 128, RgbRenderTarget::LENGTH).try_into().unwrap();
+    let rt = RgbRenderTarget::unpack_as(&rt_bytes, &["Writeback Format"]).unwrap();
+    let params = FramebufferParameters::unpack(&block(b.fbd, 64).try_into().unwrap()).unwrap();
+    let (f0, f1) = (draw.flags_0, draw.flags_1);
+    let early = |k: PixelKill| if k == PixelKill::FORCE_EARLY { "Force Early" } else { "not Force Early" };
+    let fields: Vec<(&str, String)> = vec![
+        ("Pre Frame 0", if params.pre_frame_0 == PrePostFrameShaderMode::INTERSECT { "Intersect" } else { "?" }.into()),
+        ("Sample Count", params.sample_count.to_string()),
+        ("Allow Forward Pixel To Kill", f0.allow_forward_pixel_to_kill.to_string()),
+        ("Allow Forward Pixel To Be Killed", f0.allow_forward_pixel_to_be_killed.to_string()),
+        ("Pixel Kill Operation", early(f0.pixel_kill_operation).into()),
+        ("ZS Update Operation", early(f0.zs_update_operation).into()),
+        ("Clean Fragment Write", f0.clean_fragment_write.to_string()),
+        ("Evaluate per-sample", f0.evaluate_per_sample.to_string()),
+        ("Multisample Enable", f0.multisample_enable.to_string()),
+        ("Sample Mask", format!("{:#x}", f1.sample_mask)),
+        ("Render Target Mask", format!("{:#x}", f1.render_target_mask)),
+        ("Minimum Z", format!("{:.6}", draw.minimum_z)),
+        ("Maximum Z", format!("{:.6}", draw.maximum_z)),
+        ("Blend count", draw.blend_count.to_string()),
+        ("Sample count", tex.sample_count.to_string()),
+        ("Levels", tex.levels.to_string()),
+        ("Size", format!("{:#x}", plane.size)),
+        ("Slice stride", format!("{:#x}", plane.slice_stride)),
+        ("R48-R63", format!("{:#x}", spd.preload.r48_r63)),
+        ("Binary", format!("{:#x}", spd.binary)),
+        ("Writeback MSAA", if rt.writeback_msaa == Msaa::LAYERED { "Layered" } else { "?" }.into()),
+        ("Clean Tile Write Enable", rt.clean_tile_write_enable.to_string()),
+        ("Surface Stride", format!("{:#x}", rt.writeback_buffer.surface_stride)),
+    ];
+    let differ: Vec<String> = fields
+        .iter()
+        .filter(|(label, ours)| !shim.contains(&format!(" {label}: {ours}\n")))
+        .map(|(label, ours)| format!("{label}: {ours}"))
+        .collect();
+    assert!(differ.is_empty(), "fields of ours the shim's kick 2 does not print: {differ:?}");
+}
+
 /// Our resolve after the last kick: no draw and no tiler, the same
 /// pre-frame draw as kick 2 (the four samples drawn back from the store),
 /// run on every tile (pre frame 0 Always, as no draw marks a tile), and a
@@ -396,8 +474,33 @@ fn the_resolve_averages_the_four_samples_into_the_target() {
     check_pre_frame("resolve", &b);
 }
 
+/// A 4x frame that starts from the target's image while the store holds
+/// nothing of it (the backend's first frame of a surface that was not
+/// cleared): its pre-frame draw is the one a frame without a store makes,
+/// the target read back once into every sample (1x texture, no per-sample
+/// bits; frame_preload_tests.rs pins it against Mesa), and its render
+/// target writes the samples to the store as kick 1's does, but for the
+/// clean-tile write and the clear colour (the frame is preloaded, kick 2's).
+/// Every other byte of the two pools is equal.
+#[test]
+fn a_frame_before_the_store_holds_samples_preloads_the_target_and_keeps_them() {
+    let (unkept, plain) = (build(KICK_2_POOL, Kick::Unkept), build(KICK_2_POOL, Kick::NoStore));
+    assert_eq!((unkept.fbd, unkept.tls, unkept.tiler), (plain.fbd, plain.tls, plain.tiler));
+    let rt_at = (unkept.fbd + 128 - unkept.pool) as usize;
+    let differ: Vec<usize> = (0..unkept.bytes.len())
+        .filter(|&i| unkept.bytes[i] != plain.bytes[i] && !(rt_at..rt_at + 64).contains(&i))
+        .collect();
+    assert!(differ.is_empty(), "pool bytes other than RT 0's differ: {differ:x?}");
+    let fbd = unkept.words(unkept.fbd, 16);
+    assert_eq!(fbd[0], PrePostFrameShaderMode::INTERSECT.0, "pre frame 0 Intersect");
+    let dcd = unkept.words(u64::from(fbd[6]) | u64::from(fbd[7]) << 32, 2);
+    assert_eq!(dcd[0] & (1 << 11 | 1 << 19), 0, "not multisampled, not per sample");
+    compare("unkept RT", &unkept.words(unkept.fbd + 128, 16), &KICK_2_RT, &[], &[]);
+}
+
 /// A store the frame cannot keep its samples in is refused by name, and so
-/// is a resolve with nothing to resolve (no preload of the store).
+/// is a resolve with nothing to resolve (no preload, or a preload of the
+/// target rather than of the store).
 #[test]
 fn a_sample_store_that_cannot_hold_the_samples_is_refused() {
     let (mut desc_m, mut ctx_m) = (vec![0u8; 0x4000], vec![0u8; 0x200]);
@@ -414,18 +517,75 @@ fn a_sample_store_that_cannot_hold_the_samples_is_refused() {
     let mut desc = Arena::new("desc", KICK_2_POOL, &mut desc_m).unwrap();
     let mut cs = Stream::new(&mut words, 92);
     let mut open = begin_frame(&mut desc, &mut cs).unwrap();
-    let store = SampleStore { gpu: STORE, surface_stride: SURFACE_STRIDE, resolve: false };
+    let store = SampleStore { gpu: STORE, surface_stride: SURFACE_STRIDE, reload: true, resolve: false };
     let refused = Err(FrameError::Invalid(INVALID_SAMPLE_STORE));
+    let preload = Some(FrameShader { binary: PRELOAD_BINARY, preload: 0x3000 });
     let cases = [
-        (Target { samples: 1, ..TARGET }, store),
-        (TARGET, SampleStore { gpu: STORE + 32, ..store }),
-        (TARGET, SampleStore { surface_stride: SURFACE_STRIDE + 32, ..store }),
-        (TARGET, SampleStore { surface_stride: SURFACE_STRIDE - 64, ..store }),
-        (TARGET, SampleStore { resolve: true, ..store }),
+        (Target { samples: 1, ..TARGET }, store, None),
+        (TARGET, SampleStore { gpu: STORE + 32, ..store }, None),
+        (TARGET, SampleStore { surface_stride: SURFACE_STRIDE + 32, ..store }, None),
+        (TARGET, SampleStore { surface_stride: SURFACE_STRIDE - 64, ..store }, None),
+        (TARGET, SampleStore { resolve: true, ..store }, None),
+        (TARGET, SampleStore { resolve: true, reload: false, ..store }, preload),
     ];
-    for (k, (target, s)) in cases.into_iter().enumerate() {
+    for (k, (target, s, p)) in cases.into_iter().enumerate() {
         open.sample_store = Some(s);
+        open.colour_preload = p;
         let r = end_frame(&open, &mut desc, &mut cs, &ctx, &target, [0.0; 4], None).map(|_| ());
         assert_eq!(r, refused, "case {k}");
     }
+}
+
+/// Section 4.6's preload program, the board's bytes as little-endian words
+/// (GPU VA 0x7fffffffe180).
+pub(super) const PRELOAD_PROGRAM: [u64; 14] = [
+    0x0854_8004_1200_003d,
+    0x6890_c000_c00c_0040,
+    0x0090_c100_c00c_0041,
+    0x0110_c200_0000_1fc0,
+    0x00b4_c200_1042_cc7d,
+    0x00bd_c200_00c0_c042,
+    0x00bd_c200_0042_c0c0,
+    0x0110_c318_0010_00c0,
+    0x0091_c400_0000_0043,
+    0x0091_c500_0000_00c0,
+    0x4925_4036_53c0_0844,
+    0x787f_4008_b23c_00f0,
+    0x0110_f000_0000_00c0,
+    0x002f_c110_0000_f1c0,
+];
+
+/// The words of the "words" array of a tools/mali/testdata `*.expect.json`
+/// (one region).
+fn expect_words(json: &str) -> Vec<u64> {
+    let at = json.find("\"words\":").expect("a words array");
+    let list = &json[at..];
+    let list = &list[list.find('[').unwrap() + 1..list.find(']').unwrap()];
+    list.split(',').map(|w| u64::from_str_radix(w.trim().trim_matches('"'), 16).unwrap()).collect()
+}
+
+/// The per-sample colour preload program the backend compiles at init
+/// (`preload::colour_samples`, which the second kick's pre-frame draw
+/// runs): Mesa 26.2.1's words on the drm-shim
+/// (tools/mali/testdata/splitkick_preload.expect.json: `drm_shim_ref.sh run
+/// <work> splitkick.vert splitkick.frag <out> --samples 4 --second-frame`,
+/// the program at 0x7fffffffe180, the address the board's has), which are
+/// the board's words too (section 4.6). It preloads r60 (the coverage) and
+/// r61 (the sample id) in 32 work registers, as the shim's and the board's
+/// SPD say (w1 0x3000, `32 Per Thread`).
+#[test]
+fn the_per_sample_preload_program_is_mesa_s() {
+    let shim = expect_words(include_str!("../../tools/mali/testdata/splitkick_preload.expect.json"));
+    assert_eq!(shim, PRELOAD_PROGRAM, "the drm-shim's program is the board's");
+    let (mut ours, preload, wrc) = crate::shaderc::online::store::with_scratch(|s| {
+        let mut out = vec![0u64; 64];
+        let p = crate::shaderc::online::mali::preload::colour_samples(&mut out, s).expect("the preload compiles");
+        (p.code.to_vec(), p.preload, p.work_reg_count)
+    })
+    .expect("the scratch arena is free");
+    while ours.last() == Some(&0) {
+        ours.pop();
+    }
+    assert_eq!(ours, PRELOAD_PROGRAM, "ours against Mesa's\n  ours {ours:016x?}\n  mesa {PRELOAD_PROGRAM:016x?}");
+    assert_eq!((preload >> 48, wrc), (0x3000, 32), "preload r60 r61, 32 work registers");
 }

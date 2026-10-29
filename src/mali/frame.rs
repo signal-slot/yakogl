@@ -29,7 +29,8 @@
 //! (tools/cts/log/2026-10-28-splitref): each kick writes the four samples
 //! back there, the next draws them back once a sample, and a last frame
 //! with the store's `resolve` averages them into the target
-//! (`frame_split_tests.rs`).
+//! (`frame_split_tests.rs`). The backend keeps every 4x frame's samples so
+//! (src/mali/backend.rs, "the sample store").
 //!
 //! Depth and stencil: a draw carries the depth test, depth write and the
 //! two stencil faces ([`DepthStencilState`], Mesa's ZSA CSO and its
@@ -160,7 +161,8 @@ pub const NOT_BUILT_TEXTURE_SIZE: &str =
     "mali frame: a texture larger than 65536 texels a side or with a row stride narrower than its rows is not built yet";
 pub const INVALID_TEXTURE_ALIGN: &str = "mali frame: a texture's texels not on a 64-byte boundary";
 /// A [`SampleStore`] for a target of other than 4 samples, off a 64-byte
-/// boundary, or with planes closer than one plane of the target.
+/// boundary, or with planes closer than one plane of the target; or a
+/// resolve that does not read the samples the store holds back.
 pub const INVALID_SAMPLE_STORE: &str =
     "mali frame: a sample store for a target of other than 4 samples, off 64 bytes, or with overlapping planes";
 pub const NOT_BUILT_FS_OUTPUTS: &str =
@@ -233,6 +235,9 @@ pub const NOT_BUILT_FRAME_ROOM: &str = "mali frame: a draw that does not fit the
 /// A frame's end that would not fit: the words [`end_frame`] writes (18,
 /// and one more for each of its three 64-bit moves above 2^48).
 const END_FRAME_WORDS: usize = 24;
+/// A [`resolve_frame`] after a frame's end: [`begin_frame`]'s two words and
+/// an end's.
+const RESOLVE_WORDS: usize = 2 + END_FRAME_WORDS;
 /// An [`OpenFrame`] not made by [`begin_frame`]: a caller defect.
 pub const INVALID_OPEN_FRAME: &str = "mali frame: an open frame without its framebuffer descriptor or local storage";
 
@@ -1602,6 +1607,13 @@ pub struct SampleStore {
     pub gpu: u64,
     /// Bytes from one sample's plane to the next.
     pub surface_stride: u32,
+    /// The store holds the target's samples, and the frame's colour
+    /// preload, if any, reads them back, each sample its own. Off: the store
+    /// holds nothing of the target yet (a 4x frame that starts from the
+    /// target's image and follows no frame that kept its samples), so the
+    /// preload reads the single-sampled target into every sample, as
+    /// without a store; the frame still writes its samples to the store.
+    pub reload: bool,
     /// The frame resolves: its tile buffer, preloaded from the store, is
     /// averaged into the target ([`Msaa::AVERAGE`]) and every tile written
     /// whole; the store is only read. Off: the frame writes its samples
@@ -1857,8 +1869,11 @@ pub fn add_draw(
         return Ok(());
     };
     let (desc_top, cs_len, before) = (desc.top(), cs.words().len(), *open);
+    /* a frame that keeps its samples is followed in its stream by the
+     * resolve ([`resolve_frame`]) */
+    let end_words = END_FRAME_WORDS + if open.sample_store.is_some_and(|s| !s.resolve) { RESOLVE_WORDS } else { 0 };
     let room = |cs: &Stream| {
-        if cs.capacity() - cs.words().len() < END_FRAME_WORDS {
+        if cs.capacity() - cs.words().len() < end_words {
             Err(FrameError::Cs(CsError::StreamFull { capacity: cs.capacity() }))
         } else {
             Ok(())
@@ -2000,12 +2015,15 @@ pub fn end_frame(
         (None, _) => None,
     };
     let resolve = store.is_some_and(|s| s.resolve);
-    if resolve && open.colour_preload.is_none() {
+    if resolve && (open.colour_preload.is_none() || store.is_some_and(|s| !s.reload)) {
         /* a resolve averages the samples the store holds: it must load them */
         return Err(FrameError::Invalid(INVALID_SAMPLE_STORE));
     }
+    /* the image the colour preload reads: the store's samples, or the
+     * target's one sample while the store holds nothing of it */
+    let reload = store.filter(|s| s.reload);
     if open.colour_preload.is_some() || zs_part.is_some() {
-        params.frame_shader_dcds = preload_dcds(desc, t, zs_part, open.colour_preload, store, tls.gpu)?;
+        params.frame_shader_dcds = preload_dcds(desc, t, zs_part, open.colour_preload, reload, tls.gpu)?;
         if open.colour_preload.is_some() {
             /* INTERSECT loads only the tiles the frame's draws reach, the
              * others keep their memory; a resolve writes every tile
@@ -2119,6 +2137,32 @@ pub fn end_frame(
     }))?;
     cs.wait(1 << SB_LS)?;
     Ok(Frame { layout: open.layout, fbd_pointer })
+}
+
+/// Average the four samples `store` holds into the single-sampled target:
+/// a frame of no draws after the one that wrote them back, in the same
+/// stream (its batch end cleaned the caches its writes went through and
+/// invalidated the texture caches its reads go through). Its pre-frame draw
+/// draws them back with `preload`, the per-sample colour preload program,
+/// as the next frame would (pre frame 0 ALWAYS: every tile, as no draw
+/// marks one), and its render target averages them into `t`, every tile
+/// written ([`SampleStore::resolve`]). Not Mesa's: Mesa keeps the samples
+/// and resolves when the image is read, a blit of four `TEX_FETCH`es it
+/// averages in a third frame (tools/cts/log/2026-10-28-splitref section 4);
+/// here the GL core reads the target's memory after the kick, so every kick
+/// of a 4x frame that keeps its samples resolves them.
+pub fn resolve_frame(
+    desc: &mut Arena,
+    cs: &mut Stream,
+    ctx: &Context,
+    t: &Target,
+    store: SampleStore,
+    preload: FrameShader,
+) -> Result<Frame, FrameError> {
+    let mut open = begin_frame(desc, cs)?;
+    open.colour_preload = Some(preload);
+    open.sample_store = Some(SampleStore { reload: true, resolve: true, ..store });
+    end_frame(&open, desc, cs, ctx, t, [0.0; 4], None)
 }
 
 /// Refuse a draw the builder does not build, each cause by name.
