@@ -36,8 +36,8 @@
 
 #define CLUSTER_BOOT_TIMELINE_ADDR 0x81007000u
 #define CLUSTER_BOOT_TIMELINE_MAGIC 0x314e4c54u /* 'TLN1' */
-#define CLUSTER_BOOT_TIMELINE_VERSION 1u
-#define CLUSTER_BOOT_TIMELINE_SLOTS 16u
+#define CLUSTER_BOOT_TIMELINE_VERSION 2u
+#define CLUSTER_BOOT_TIMELINE_SLOTS 24u
 
 /* The A53's stages. */
 enum cluster_tl_a53 {
@@ -56,6 +56,13 @@ enum cluster_tl_a53 {
 	CLUSTER_TL_A53_APP_EGL,       /* EGL and the GPU come up */
 	CLUSTER_TL_A53_APP_FRAME1,    /* Slint builds and renders frame 1 */
 	CLUSTER_TL_A53_APP_SWAPPED,   /* frame 1 swapped: the GPU has finished it */
+	/* The second-stage loader before this image (its own record, copied
+	 * in by the image when the record is there): */
+	CLUSTER_TL_A53_LOADER_ENTRY,  /* the loader's first C code */
+	CLUSTER_TL_A53_LOADER_MAIN,   /* its main() */
+	CLUSTER_TL_A53_LOADER_READ,   /* the payload is in memory (read or linked in) */
+	CLUSTER_TL_A53_LOADER_UNPACKED, /* inflated to the load address */
+	CLUSTER_TL_A53_LOADER_JUMP,   /* jumping to this image */
 };
 
 /* The M7's stages. */
