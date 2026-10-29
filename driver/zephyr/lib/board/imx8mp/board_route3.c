@@ -39,6 +39,7 @@
 #include "imx8mp_display.h"
 #include "board_imx8mp_route3.h"
 #include "gc_panel_console.h"
+#include "yakogl_record.h"
 
 /* ---- the M7's map (the M7 firmware's m7_mem.h) ---------------- */
 
@@ -172,6 +173,21 @@ static void tl_attach(uint8_t *window)
 	barrier_dmem_fence_full();
 	tl->magic = CLUSTER_BOOT_TIMELINE_MAGIC;
 	R.tl = tl;
+}
+
+/* The application's progress marks (board_progress), stage n of
+ * YK_RECORD_WHERE_STAGE | n: the Slint sample's window, EGL, frame 1 and
+ * swapped marks (examples/slint/src/main.c). */
+void board_progress_hook(uint32_t where)
+{
+	static const enum cluster_tl_a53 at[] = {
+		CLUSTER_TL_A53_APP_WINDOW, CLUSTER_TL_A53_APP_EGL, CLUSTER_TL_A53_APP_FRAME1,
+		CLUSTER_TL_A53_APP_SWAPPED};
+	const uint32_t n = where & ~YK_RECORD_WHERE_STAGE;
+
+	if ((where & YK_RECORD_WHERE_STAGE) != 0u && n >= 1u && n <= ARRAY_SIZE(at)) {
+		board_route3_tl_mark(at[n - 1u]);
+	}
 }
 
 static int tl_entry(void)
@@ -429,11 +445,12 @@ static void tl_report(void)
 {
 	static const char *const a53[] = {
 		"entry", "panel bring-up start", "panel on (dark)", "kernel up",
-		"window (M7 loaded)", "frame 1 drawn", "M7 released", "M7 up",
-		"first shown"};
+		"window (M7 loaded)", "first board_show", "M7 released", "M7 up",
+		"first shown", "app: windows", "app: EGL", "app: frame 1",
+		"app: swapped"};
 	static const char *const m7[] = {
 		"main", "safety layer ready", "loop", "first A53 frame",
-		"first composite", "first flip latched", "backlight on"};
+		"first composite", "first flip latched", "backlight on", "layer pre-rendered"};
 	volatile struct cluster_boot_timeline *tl = R.tl;
 	struct gc_panel_surface s;
 	uint32_t hz = cntfrq();
@@ -609,9 +626,9 @@ int board_route3_show(const struct board_window *win)
 	int64_t t0;
 	int rc;
 
+	board_route3_tl_mark(CLUSTER_TL_A53_FRAME1_DRAWN); /* the first show only */
 	switch (R.state) {
 	case BOARD_ROUTE3_LOADED:
-		board_route3_tl_mark(CLUSTER_TL_A53_FRAME1_DRAWN);
 		/* The panel from cold on this frame; the M7 adopts it later. The
 		 * backlight stays off (YAKOGL_DRV_DISPLAY_IMX8MP_BACKLIGHT_ON_FIRST_SHOW):
 		 * this frame has no safety layer, and the M7 turns PWM3 on itself

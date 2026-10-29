@@ -50,6 +50,12 @@ enum cluster_tl_a53 {
 	CLUSTER_TL_A53_M7_RELEASED,   /* the M7 is released */
 	CLUSTER_TL_A53_M7_UP,         /* the M7's status block was seen */
 	CLUSTER_TL_A53_FIRST_SHOWN,   /* the M7 reports a frame of ours shown */
+	/* The application's own progress marks (board_progress()), for the
+	 * Slint sample: */
+	CLUSTER_TL_A53_APP_WINDOW,    /* asks for its windows */
+	CLUSTER_TL_A53_APP_EGL,       /* EGL and the GPU come up */
+	CLUSTER_TL_A53_APP_FRAME1,    /* Slint builds and renders frame 1 */
+	CLUSTER_TL_A53_APP_SWAPPED,   /* frame 1 swapped: the GPU has finished it */
 };
 
 /* The M7's stages. */
@@ -61,6 +67,7 @@ enum cluster_tl_m7 {
 	CLUSTER_TL_M7_FIRST_COMPOSE,  /* the first composite is done */
 	CLUSTER_TL_M7_FIRST_LATCH,    /* the first flip latched: on the panel */
 	CLUSTER_TL_M7_BACKLIGHT,      /* the backlight was turned on */
+	CLUSTER_TL_M7_PRERENDERED,    /* the safety layer drawn while waiting for frame 1 */
 };
 
 struct cluster_boot_timeline {

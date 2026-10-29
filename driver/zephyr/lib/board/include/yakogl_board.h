@@ -228,6 +228,9 @@ void board_result_tag(unsigned int kind, uint8_t tag, uint32_t w1, uint32_t w2, 
  * own stage n). Context: any.
  */
 void board_progress(uint32_t where);
+/* Called by board_progress() with the same mark; a no-op unless the board
+ * overrides it (the i.MX8MP route 3 stamps its cold-start timeline). */
+void board_progress_hook(uint32_t where);
 
 /*
  * The index the runner asked this run for, read before the first record is
