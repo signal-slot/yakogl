@@ -79,7 +79,11 @@ STAGES = ("fs", "vs", "cs")
 # The known positive: this pair must be formed and must compile to exactly
 # these instruction counts, or nothing else this script prints is believed.
 KNOWN_POSITIVE = ("color_uv.vert", "color_uv.frag")
-KNOWN_POSITIVE_COUNTS = {"fs": 12, "vs": 31, "cs": 22}
+KNOWN_POSITIVE_COUNTS = {"fs": 12, "vs": 31, "cs": 22}  # for --device 42 only
+
+# Extra v3d_shc arguments for the chosen device (--device 71 --rev N ...); empty
+# for 4.2, so a 4.2 run is exactly what it was before the flag existed.
+SHC_FLAGS = []
 
 # gl_test.c functions whose link sites rule 1 cannot read, each with the
 # reason. Their sites are printed and not paired; any other unresolved site
@@ -419,7 +423,7 @@ def run_pair(vs, fs, recs, keep):
     if rf["spv"] is None:
         res.update(status="fail", stage="glslang fs", message=rf["error"])
         return res
-    r = subprocess.run([V3D_SHC, rv["spv"], rf["spv"]], capture_output=True, text=True)
+    r = subprocess.run([V3D_SHC, rv["spv"], rf["spv"]] + SHC_FLAGS, capture_output=True, text=True)
     stderr = r.stderr.replace(rv["spv"], "<vs.spv>").replace(rf["spv"], "<fs.spv>")
     err = "\n".join(ln for ln in stderr.splitlines() if not DISASM.match(ln))
     if keep:
@@ -480,7 +484,19 @@ def main():
     ap.add_argument("--jobs", type=int, default=os.cpu_count() or 1)
     ap.add_argument("--json", help="write every pair's record here")
     ap.add_argument("--keep", help="keep each pair's out.json and disasm.txt under this directory")
+    ap.add_argument("--device", choices=("42", "71"), default="42",
+                    help="V3D generation v3d_shc compiles for (default 42)")
+    ap.add_argument("--rev", type=int, help="V3D 7.1 hardware revision (v3d_shc --rev)")
+    ap.add_argument("--compat-rev", type=int, help="V3D 7.1 compat revision (v3d_shc --compat-rev)")
     args = ap.parse_args()
+    if args.device == "71":
+        SHC_FLAGS.extend(["--device", "71"])
+        if args.rev is not None:
+            SHC_FLAGS.extend(["--rev", str(args.rev)])
+        if args.compat_rev is not None:
+            SHC_FLAGS.extend(["--compat-rev", str(args.compat_rev)])
+    elif args.rev is not None or args.compat_rev is not None:
+        raise SystemExit("glsl2v3d: --rev and --compat-rev need --device 71")
 
     if not os.path.isfile(V3D_SHC):
         raise SystemExit("glsl2v3d: %s not found (set V3D_SHC)" % V3D_SHC)
@@ -589,7 +605,8 @@ def main():
     kpr = results[order.index(KNOWN_POSITIVE)]
     got = {st: (kpr["stats"] or {}).get(st, {}).get("instructions") for st in STAGES} \
         if kpr["stats"] else None
-    if kpr["status"] != "ok" or got != KNOWN_POSITIVE_COUNTS:
+    # The pinned counts are the 4.2 ones; a 7.1 run only requires the pair to compile.
+    if kpr["status"] != "ok" or (args.device == "42" and got != KNOWN_POSITIVE_COUNTS):
         raise SystemExit("glsl2v3d: FAIL: known positive %s + %s: %s %s (want %s)"
                          % (KNOWN_POSITIVE + (kpr["status"], kpr["message"] or got,
                                               KNOWN_POSITIVE_COUNTS)))
@@ -671,7 +688,8 @@ def main():
 
     if args.json:
         with open(args.json, "w") as f:
-            json.dump({"v3d_shc": V3D_SHC, "pairs": results, "no_partner_fs": no_partner,
+            json.dump({"v3d_shc": V3D_SHC, "device": args.device, "shc_flags": SHC_FLAGS,
+                       "pairs": results, "no_partner_fs": no_partner,
                        "fs_inputs_unreadable": fs_unreadable, "unpaired_vs": unpaired_vs,
                        "known_unresolved_sites": known_sites},
                       f, indent=1)

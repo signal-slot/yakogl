@@ -438,3 +438,56 @@ The IR evaluator runs the same GLSL on the same inputs.
   selection grew; not re-measured: 9 compile. (a) vs (b): 6 agree, 0
   disagree, and 3 matrix-attribute pairs are not tried. (a) vs (c): 5 agree.
   12 of 12 mutants of our code are caught.
+
+## V3D 7.1 (Raspberry Pi 5) references, before the board
+
+Host-only work from `docs/notes/pre-study-rpi5.md`, items H1 to H3. Nothing
+here ran on a board, and the Pi 4 (4.2) data above is not touched.
+
+**Status.** H1 is done. For H2 and H3 the tools below are written, but they
+were **not built or run** when this was committed (the session could not start
+a compiler), so `qpu_corpus_71.txt`, `qpu_counts_*.tsv` and the `.clif` golden
+files do not exist yet, and `v3d_shc.c`'s `--device` change has not been
+compiled. Run the commands once and store the output before relying on it.
+
+**H1, the facts file.** `driver/docs/rpi5-v3d71-facts.md` has every register,
+interrupt, clock, power-domain and MMU fact the note uses, with `linux:` and
+`rpi:` citations (file and line) read from shallow clones of Linux `v6.18` and
+the Raspberry Pi `rpi-6.12.y` branch. To re-check a line, clone the same
+commits (they are in the file's first table) and `sed -n 'Np' FILE`.
+
+**H2, `v3d_shc` at 7.1.** One binary serves both devices: `--device 42`
+(default, output unchanged) or `--device 71` (ver 71, no accumulators, 64 KiB
+VPM, 16 QPUs, rev 7 and compat_rev 0 as Mesa's drm-shim reports them).
+`--rev` and `--compat-rev` change the revision, which changes the code through
+`v3d_device_has_unpack_max0`. The Pi 5's real revision is not known (U2).
+
+```sh
+tools/v3d/drm_shim_ref.sh build <mesa-26.2.1.tar.xz> <work dir>  # also builds v3d_shc
+export V3D_SHC=<work dir>/mesa-26.2.1/build/src/broadcom/v3d_shc
+tools/v3d/qpu_corpus.py --device 42 --out /tmp/c42.txt   # equals qpu_corpus.txt but for its header
+tools/v3d/qpu_corpus.py --device 71    # writes qpu_corpus_71.txt and qpu_counts_71.tsv
+```
+
+`qpu_corpus_71.txt` is the 7.1 twin of `qpu_corpus.txt` (same programs: ours
+and femtovg's; the Qt shaders left `tools/shaders` before the 4.2 corpus was
+regenerated, see above). `qpu_counts_<dev>.tsv` has the instruction count of
+every program for fs, vs and cs, so the 7.1 count sits beside the 4.2 one. A
+second run must give the same bytes for both devices.
+
+**H3, Mesa's GL driver on the drm-shim.** Same method as
+`tools/mali/drm_shim_ref.sh`: Mesa 26.2.1 with `-Dgallium-drivers=v3d` and
+`-Dtools=drm-shim`, the shim reporting the GPU named by `V3D_GPU_ID`.
+
+```sh
+tools/v3d/drm_shim_ref.sh run <work dir> clear    <out prefix> 71
+tools/v3d/drm_shim_ref.sh run <work dir> triangle <out prefix> 71
+```
+
+`gl_ref.py` draws the case on an EGL surfaceless display into a 64x64 FBO.
+`V3D_DEBUG=clif` makes Mesa write the control lists it submits. The shim's
+`SUBMIT_CL` does nothing, but the dump comes first (`v3d_job.c`,
+`v3d_clif_dump` before `v3d_ioctl`). `<out prefix>.clif` is the golden file
+for the 7.1 frame builder and packet work (H4, H5). The `run` form splits
+nothing: Mesa's log lines and the CLIF share stderr, so check the first run
+and filter if needed.

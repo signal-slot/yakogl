@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: MIT
  *
- * v3d_shc: YakoGL's offline shader tool for the Broadcom V3D 4.2 (Raspberry Pi 4).
+ * v3d_shc: YakoGL's offline shader tool for the Broadcom V3D 4.2 (Raspberry Pi 4)
+ * and 7.1 (Raspberry Pi 5).
  * Reads one GL program as two OpenGL-flavoured SPIR-V modules (glslangValidator -G),
  * turns them into NIR the way Mesa's GL state tracker and the gallium v3d driver would,
  * and runs Mesa's own v3d compiler three times, as the gallium driver does for a draw:
@@ -13,7 +14,13 @@
  * disassembly on stderr. The GPU is described by a v3d_device_info filled in
  * here; no device is needed.
  *
- *   v3d_shc vs.spv fs.spv [--vpm-size BYTES] [--prim triangles|lines|points] > out.json
+ *   v3d_shc vs.spv fs.spv [--device 42|71] [--rev N] [--compat-rev N]
+ *           [--vpm-size BYTES] [--prim triangles|lines|points] > out.json
+ *
+ * --device picks the GPU generation: 42 (the default, the BCM2711) or 71 (the
+ * BCM2712). One binary serves both; the 42 output does not depend on the flag.
+ * --rev and --compat-rev (71 only) set the hardware revision the compiler sees
+ * (default 7 and 0, what Mesa's drm-shim reports); the 71 JSON names them.
  *
  * --prim picks the variant: Mesa compiles the FS for the primitive being drawn
  * (v3d_program.c v3d_update_compiled_fs: is_points, is_lines) and a points draw
@@ -35,7 +42,7 @@
  *     v3d_uncompiled_shader_create(), lower_uniform_offset_to_bytes_cb(),
  *     lower_textures_cb(), type_size()
  *   - the keys: v3d_program.c v3d_update_compiled_fs() / v3d_update_compiled_vs()
- *   - the device info for ver 42: src/broadcom/common/v3d_device_info.c
+ *   - the device info for ver 42 and 71: src/broadcom/common/v3d_device_info.c
  */
 #include <stdio.h>
 #include <stdint.h>
@@ -58,9 +65,9 @@
 /*
  * The NIR options the gallium v3d driver hands the state tracker
  * (v3d_screen.c, v3d_screen_get_compiler_options). lower_fsat is set for ver < 71
- * there, so it is true here.
+ * there, so it is true here and main() clears it for --device 71.
  */
-static const nir_shader_compiler_options v3d_nir_options = {
+static nir_shader_compiler_options v3d_nir_options = {
 	.compact_arrays = true,
 	.lower_uadd_sat = true,
 	.lower_usub_sat = true,
@@ -662,7 +669,7 @@ static void disasm(const struct v3d_device_info *devinfo, const char *name,
 int main(int argc, char **argv)
 {
 	if (argc < 3) {
-		fprintf(stderr, "usage: v3d_shc vs.spv fs.spv [--vpm-size BYTES] "
+		fprintf(stderr, "usage: v3d_shc vs.spv fs.spv [--device 42|71] [--vpm-size BYTES] "
 				"[--prim triangles|lines|points]\n");
 		return 2;
 	}
@@ -673,6 +680,19 @@ int main(int argc, char **argv)
 	 * Mesa v3d_device_info.c case 42). vpm_size is IDENT1.VPM_SIZE * 8192 on the
 	 * board; until it has been read there it is an assumption, and the JSON
 	 * says which.
+	 *
+	 * ver 71 is the BCM2712 ("brcm,2712-v3d"). No Pi 5 has been read yet, so the
+	 * numbers are the ones Mesa's own drm-shim reports for it (drm-shim/v3d_noop.c,
+	 * gpus[] "71": CORE0_IDENT1 0x81001441, HUB_IDENT3 0x00000700), decoded as
+	 * v3d_get_device_info() decodes them (v3d_device_info.c): VPM_SIZE 8 * 8192 =
+	 * 64 KiB, 4 slices of 4 QPUs, rev 7, compat_rev 0. has_accumulators is false
+	 * from ver 71 (v3d_device_info.c).
+	 *
+	 * The revision is NOT free: the compiler asks v3d_device_has_unpack_max0()
+	 * (v3d_device_info.h), which is true from rev 7 (or rev 6 with compat_rev 4),
+	 * and v3d_nir_lower_algebraic.py uses it. Which revision a Pi 5 carries is
+	 * not known (pre-study U2), so --rev and --compat-rev set it and the JSON
+	 * names both for a 71 run.
 	 */
 	struct v3d_device_info devinfo = {
 		.ver = 42,
@@ -685,10 +705,53 @@ int main(int argc, char **argv)
 		.max_render_targets = V3D_MAX_RENDER_TARGETS(42),
 		.max_framebuffer_size = V3D_MAX_FRAMEBUFFER_SIZE(42),
 	};
+	for (int i = 3; i < argc; i++) {
+		if (strcmp(argv[i], "--device") != 0 || i + 1 >= argc)
+			continue;
+		const char *dev = argv[++i];
+		if (strcmp(dev, "71") == 0) {
+			devinfo = (struct v3d_device_info){
+				.ver = 71,
+				.rev = 7,
+				.compat_rev = 0,
+				.has_accumulators = false,
+				.vpm_size = 64 * 1024,
+				.qpu_count = 16,
+				.page_size = 4096,
+				.clipper_xy_granularity = 64.0f,
+				.cle_readahead = 1024u,
+				.max_render_targets = V3D_MAX_RENDER_TARGETS(71),
+				.max_framebuffer_size = V3D_MAX_FRAMEBUFFER_SIZE(71),
+			};
+		} else if (strcmp(dev, "42") != 0) {
+			fprintf(stderr, "v3d_shc: --device must be 42 or 71, not '%s'\n", dev);
+			return 2;
+		}
+	}
+	/* v3d_screen_get_compiler_options(): lower_fsat = devinfo->ver < 71 */
+	v3d_nir_options.lower_fsat = devinfo.ver < 71;
 	const char *vpm_source = "assumed";
 	const char *prim = "triangles";
 	for (int i = 3; i < argc; i++) {
-		if (strcmp(argv[i], "--vpm-size") == 0 && i + 1 < argc) {
+		if (strcmp(argv[i], "--device") == 0 && i + 1 < argc) {
+			i++; /* read above */
+		} else if ((strcmp(argv[i], "--rev") == 0 ||
+			    strcmp(argv[i], "--compat-rev") == 0) && i + 1 < argc) {
+			if (devinfo.ver != 71) {
+				fprintf(stderr, "v3d_shc: %s needs --device 71\n", argv[i]);
+				return 2;
+			}
+			long v = strtol(argv[i + 1], NULL, 0);
+			if (v < 0 || v > 255) {
+				fprintf(stderr, "v3d_shc: %s must be 0..255\n", argv[i]);
+				return 2;
+			}
+			if (strcmp(argv[i], "--rev") == 0)
+				devinfo.rev = v;
+			else
+				devinfo.compat_rev = v;
+			i++;
+		} else if (strcmp(argv[i], "--vpm-size") == 0 && i + 1 < argc) {
 			devinfo.vpm_size = strtol(argv[++i], NULL, 0);
 			vpm_source = "given";
 		} else if (strcmp(argv[i], "--prim") == 0 && i + 1 < argc) {
@@ -879,10 +942,15 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
+	/* a 71 run names its revision; the 42 output keeps its old bytes */
+	char rev_json[64] = "";
+	if (devinfo.ver == 71)
+		snprintf(rev_json, sizeof(rev_json), ", \"rev\": %u, \"compat_rev\": %u",
+			 devinfo.rev, devinfo.compat_rev);
 	printf("{\n  \"gpu\": { \"ver\": %u, \"vpm_size\": %d, \"vpm_size_source\": \"%s\", "
-	       "\"prim\": \"%s\", \"per_vertex_point_size\": %s },\n",
+	       "\"prim\": \"%s\", \"per_vertex_point_size\": %s%s },\n",
 	       devinfo.ver, devinfo.vpm_size, vpm_source, prim,
-	       vs_key.per_vertex_point_size ? "true" : "false");
+	       vs_key.per_vertex_point_size ? "true" : "false", rev_json);
 	fputs(names_json, stdout);
 
 	printf("  \"fs\": { ");

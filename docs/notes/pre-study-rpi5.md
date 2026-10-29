@@ -70,7 +70,7 @@ Every claim says where it was read. The paths are:
 | GPU revisions | Several 7.1 revisions exist and differ in the ABI: 7.1.2 has no R/B swap bit in the texture state, 7.1.5 adds it; 7.1.6 and later do not subtract 1 from the CSD batch count; 7.1.7 (and 7.1.6 with `compat_rev` >= 4) have the `max0` unpack; **7.1.10 is "2712D0"** and adds the draw-index shader record | `v3d_packet.xml:1686-1692` and `:1313`; `MESA/src/gallium/drivers/v3d/v3dx_draw.c:1519-1521`; `MESA/src/broadcom/common/v3d_device_info.h:94-112` |
 | Which revision a given Pi 5 carries | **Unknown** (question U2) | |
 | Memory | LPDDR4X, 1 to 16 GB | `ZEPHYR/.../rpi_5/doc/index.rst` |
-| Display | Dual 4Kp60 HDMI. The HDMI path is on the **SoC**, not RP1. A frame goes: planes in memory, the **HVS** (hardware video scaler, `brcm,bcm2712-hvs`, registers at 0x10_7c580000, size 0x1a000, a display list in its own memory, three per-channel end-of-frame interrupts through `disp_intr` 2, 9, 16, `iommus = <&iommu4>`) composes them per channel into a FIFO; the FIFO feeds a **pixel valve** (`pixelvalve0` at 0x7c410000, SPI 101; `pixelvalve1` at 0x7c411000, SPI 110); the pixel valve feeds `hdmi0`/`hdmi1` (`brcm,bcm2712-hdmi0/1`, nine register regions each: hdmi, dvp, phy, rm, packet, metadata, csc, cec, hd; hot-plug and CEC interrupts on `aon_intr`; a reset on the `dvp` block). All of it sits under a display node `vc4: gpu` (`brcm,bcm2712-vc6`) that has no registers of its own. In the Linux driver the output-to-FIFO map is: output 0 to FIFO 0, output 2 to FIFO 2, outputs 1, 3, 4 to FIFO 1 (`vc4_hvs_get_fifo_from_output`). The Pi 5 board file gives the HDMI blocks the firmware clocks 13 (`hdmi`) and 14 (`bvb`), the `dvp` audio clock and the 27 MHz crystal, the HVS the firmware clocks 4 (`core`) and 16 (`disp`) | `RPI/bcm2712.dtsi` (`pixelvalve0` 292, `pixelvalve1` 298, `hdmi0` 370, `hdmi1` 399, `vc4: gpu` 446, `hvs` 609); `RPI/bcm2712-rpi-5-b.dts` (the `&hdmi0`, `&hdmi1`, `&hvs` overrides at about 275-290); `RPI/drivers/gpu/drm/vc4/vc4_hvs.c` (`vc4_hvs_get_fifo_from_output`, `vc4_hvs_bind`, `vc4_hvs_dt_match`) |
+| Display | Dual 4Kp60 HDMI. The HDMI path is on the **SoC**, not RP1. A frame goes: planes in memory, the **HVS** (hardware video scaler, `brcm,bcm2712-hvs`, registers at 0x10_7c580000, size 0x1a000, a display list in its own memory, three per-channel end-of-frame interrupts through `disp_intr` 2, 9, 16, `iommus = <&iommu4>`) composes them per channel into a FIFO; the FIFO feeds a **pixel valve** (`pixelvalve0` at 0x7c410000, SPI 101; `pixelvalve1` at 0x7c411000, SPI 110); the pixel valve feeds `hdmi0`/`hdmi1` (`brcm,bcm2712-hdmi0/1`, nine register regions each: hdmi, dvp, phy, rm, packet, metadata, csc, cec, hd; hot-plug and CEC interrupts on `aon_intr`; a reset on the `dvp` block). All of it sits under a display node `vc4: gpu` (`brcm,bcm2712-vc6`) that has no registers of its own. In the Linux driver the output-to-FIFO map is: output 0 to FIFO 0, output 2 to FIFO 2, outputs 1, 3, 4 to FIFO 1 (`vc4_hvs_get_fifo_from_output`). The Pi 5 board file gives the HDMI blocks the firmware clocks 13 (`hdmi`) and 14 (`bvb`), the `dvp` audio clock and the 27 MHz crystal, the HVS the firmware clocks 4 (`core`) and 16 (`disp`) | `RPI/bcm2712.dtsi` (`pixelvalve0` 292, `pixelvalve1` 298, `hdmi0` 370, `hdmi1` 399, `vc4: gpu` 446, `hvs` 612; the first reading said 609); `RPI/bcm2712-rpi-5-b.dts` (the `&hdmi0`, `&hdmi1`, `&hvs` overrides at about 275-290); `RPI/drivers/gpu/drm/vc4/vc4_hvs.c` (`vc4_hvs_get_fifo_from_output`, `vc4_hvs_bind`, `vc4_hvs_dt_match`) |
 | Does the firmware leave a scanout running | **Partly answered.** The Linux driver treats the firmware as the owner of a first display: `__vc4_hvs_alloc` starts its display-list allocator after `HVS_BOOTLOADER_DLIST_END`, "which preserves the bootloader's setup"; `vc4_drm_bind` calls `aperture_remove_all_conflicting_devices` (a framebuffer set up before the driver) and, when the firmware's own display driver is not the one in use (`firmware_kms()` false, checking the nodes `raspberrypi,rpi-firmware-kms` and `...-kms-2711`), sends `RPI_FIRMWARE_NOTIFY_DISPLAY_DONE` to stop it; `vc4_hdmi_bind` enables the HDMI clocks when `VC4_HD_VID_CTL_ENABLE` is already set. Together: the firmware **can** leave HVS, pixel valve and HDMI running with a framebuffer, and Linux has code to adopt or stop it. Whether a Zephyr image started with `kernel=` sees one, and at what address, is not in these files (U3). The HDMI PHY initialisation for BCM2712 was not reached by the reading | `RPI/drivers/gpu/drm/vc4/vc4_hvs.c` (`__vc4_hvs_alloc`), `vc4_drv.c` (`vc4_drm_bind`, `firmware_kms`), `vc4_hdmi.c` (`vc4_hdmi_bind`) |
 | Display clocks and the firmware | The vc4 driver asks the firmware for the maximum core clock (`rpi_firmware_clk_get_max_rate`, `RPI_FIRMWARE_CORE_CLK_ID`) to decide 4096x2160 and HDMI 2.0, and defers probing without the firmware; the pixel and `bvb` clocks are plain `clk_set_rate` / `clk_set_min_rate` calls (minimum 120 MHz or about 101% of the TMDS rate for `hdmi`; 75, 150 or 300 MHz for `bvb`) | `RPI/vc4_hvs.c` (`vc4_hvs_bind`), `vc4_hdmi.c` (the clock requests) |
 | I/O chip | RP1 sits behind a PCIe link. Zephyr's device tree puts the RP1 GPIO block under the node `pcie2` and names `pcie1` as the board's `zephyr,pcie-controller` | `ZEPHYR/dts/arm64/broadcom/bcm2712.dtsi` (`pcie1`, `pcie2`, `rp1`), `rpi_5_bcm2712.dts` (`chosen`). Whether Zephyr's `pcie1`/`pcie2` names match Linux's is not checked |
@@ -123,8 +123,8 @@ Mesa).
   power, clock, job start and interrupts (section 3.4).
 - **Firmware for the GPU**: the kernel driver loads **no** firmware for the
   GPU: the probe, job-start and reset code read in section 3.4 shows no
-  firmware request (the reader summarised those files and did not
-  grep them for `request_firmware`), and the host writes control lists and starts them by registers, as on the
+  firmware request (H1 grepped `drivers/gpu/drm/v3d/*.c` of v6.18 for
+  `request_firmware`: no match), and the host writes control lists and starts them by registers, as on the
   Pi 4 (`repo:docs/notes/pi4-v3d-bringup.md`, "What is new"). The only
   firmware the GPU depends on is the VideoCore firmware's **clock and power**
   service: the fork's device tree gives the V3D `clocks = <&firmware_clocks 5>`
@@ -273,12 +273,18 @@ Read from `LINUX/drivers/gpu/drm/v3d/` v6.18 (`v3d_regs.h`, `v3d_drv.c`,
   only below 4.1 and is not on 7.1.
 - **SMS** (7.1 only): `REE_CS` at 0x00000 and `TEE_CS` at 0x00400 of a separate
   `sms` register region; bits `POWER_OFF` 30, `CLEAR_POWER_OFF` 29, `LOCK` 28,
-  `SVP_MODE_*`, a 4-bit `STATE` field 3:0 (no named values in the header).
-  The driver maps `sms` only for `ver >= V3D_GEN_71` (`v3d_drv.c:354-358`) and,
+  `SVP_MODE_*`, a 4-bit `STATE` field 3:0 (the values are named in
+  `v3d_drv.h:287-291`: IDLE 0x0, ISOLATING_FOR_RESET 0xa, RESETTING 0xb,
+  ISOLATING_FOR_POWER_OFF 0xc, POWER_OFF_STATE 0xd; **corrected by H1**, the
+  summary said there were none).
+  The driver maps `sms` only for `ver >= V3D_GEN_71` (`v3d_drv.c:356-360`) and,
   before reading any identity, writes `CLEAR_POWER_OFF` to `TEE_CS` and polls
-  `STATE` for `V3D_SMS_IDLE` with a 100-iteration limit, logging "Failed to
-  power up SMS" but not failing (`v3d_idle_sms`, `v3d_drv.c:287-301`); power-off
-  writes `POWER_OFF` and polls for the off state (`:303-315`).
+  `STATE` for `V3D_SMS_IDLE` with a limit of 100 **ms** (`wait_for(COND, MS)`,
+  `v3d_drv.h:529`; the summary said 100 iterations), logging "Failed to
+  power up SMS" but not failing (`v3d_idle_sms`, `v3d_drv.c:289-303`); power-off
+  writes `POWER_OFF` and polls for the off state (`:305-317`). Line numbers
+  in this section are 2 lower than the real v6.18 ones; the exact ones are in
+  `driver/docs/rpi5-v3d71-facts.md`.
 - **Probe order** (`v3d_drv.c`): compatible `brcm,2712-v3d` selects `V3D_GEN_71`
   (`:278-284`); register regions `hub`, `core0` and, for 7.1, `sms`
   (`:346-358`); an **optional** clock, enabled (`:360-368`); `v3d_idle_sms`
@@ -341,11 +347,12 @@ Read from `LINUX/drivers/gpu/drm/v3d/` v6.18 (`v3d_regs.h`, `v3d_drv.c`,
 - **Device tree: the GPU node.** The GPU is **not** in the fork's
   `bcm2712.dtsi`, `bcm2712-rpi.dtsi` or `bcm2712-rpi-5-b.dts` (searched for
   `v3d`, `sms` and `brcm,2712-v3d`; the only `gpu` node is the register-less
-  `vc4: gpu`, `RPI/bcm2712.dtsi:446`), and the first pass of this study found
+  `vc4: gpu`, `RPI/bcm2712.dtsi:446`; mainline v6.18 has none either: H1
+  checked), and the first pass of this study found
   none in mainline v6.18's `bcm2712.dtsi` (mainline master was not read). The overlay
   `vc4-kms-v3d-pi5-overlay.dts:89-94` sets `target = <&v3d>; status =
   "okay"`, which names a label defined elsewhere. It is in **`RPI/bcm2712-ds.dtsi`**
-  (`bcm2712-rpi-5-b.dts:11` includes it), `v3d: v3d@2000000`, lines 409-421:
+  (`bcm2712-rpi-5-b.dts:11` includes it), `v3d: v3d@2000000`, lines 410-424 (the first reading said 409-421):
   `compatible = "brcm,2712-v3d"`; `reg-names = "hub", "core0", "sms"` with
   `reg = <0x10 0x02000000 0x0 0x4000>` (hub, 16 KiB),
   `<0x10 0x02008000 0x0 0x6000>` (core 0, 24 KiB),
@@ -357,11 +364,11 @@ Read from `LINUX/drivers/gpu/drm/v3d/` v6.18 (`v3d_regs.h`, `v3d_drv.c`,
   so the first interrupt is the hub's (`platform_get_irq(pdev, 0)`) and the
   second the core's: **hub SPI 250, core SPI 249**. `pm` is
   `pm: watchdog@7d200000` (`bcm2712-ds.dtsi:122`, `#power-domain-cells = <1>`).
-  The reading returned the name property as `clocks-names = "v3d"` (line 418),
-  not `clock-names`; that is the reader's transcription of one line and was
-  not re-checked, and if it is exact in the source, Linux's optional
-  clock request in `v3d_drv.c:360-368` would not find the clock by name
-  (U5). The addresses use two address cells, as the other nodes of the SoC
+  The property is spelt `clocks-names = "v3d"` in the source (line 420 of the
+  checkout, not 418), not `clock-names`. **H1 answered the question:** it is
+  harmless, because Linux asks for the clock with a `NULL` name
+  (`v3d_drv.c:362`), which takes the first `clocks` entry; the Pi 4 node of the
+  same tree has the same typo (`bcm2711-rpi-ds.dtsi:565`). The addresses use two address cells, as the other nodes of the SoC
   (`0x10 0x02000000` is 0x10_0200_0000). The firmware interface is the
   one of the Pi 4: `raspberrypi,bcm2835-firmware` with `mboxes = <&mailbox>`,
   a `firmware_clocks` child (`raspberrypi,firmware-clocks`, `#clock-cells = <1>`)
@@ -588,3 +595,31 @@ the Pi 4's M1 to M5, with Mesa's shaders). The two items that decide the total
 are P8 (the ISA and register allocator change) and P0's
 successor risk, U5 and U6 (power and clock of the GPU without Linux, and the
 start state of the image), which only the board answers.
+
+## 9. Corrections after the H1 checkout
+
+H1 re-read the Linux sources from real checkouts (Linux `v6.18`, the Raspberry
+Pi fork `rpi-6.12.y`, the documentation repository; commits in
+`driver/docs/rpi5-v3d71-facts.md`). Where the first reading, by page summary,
+differs from the source:
+
+| First reading | Source |
+|---|---|
+| SMS power-up polls with "a 100-iteration limit" (section 3.4) | The limit is 100 **ms**: `wait_for(COND, MS)` (`v3d_drv.h:529`) |
+| The SMS `STATE` field has "no named values in the header" (section 3.4) | Five are named: `v3d_drv.h:287-291` |
+| `v3d_drv.c` lines 278-284, 287-301, 303-315, 346-358, 360-368, 370, 372-378, 380-385, 395-409, 417-423 | All 2 lines too low; the real ones are 280-286, 289-303, 305-317, 348-360, 362-370, 372, 374-380, 382-388, 398-412, 420-426. The Pi 4 note's v6.17 `266-294` therefore reads `289-317` at v6.18 (this note had said `287-315`) |
+| `clocks-names` "may be the reader's transcription" (U5) | It is exact in the source (`bcm2712-ds.dtsi:420`) and harmless (`v3d_drv.c:362` passes a `NULL` name; the Pi 4 node has the same typo) |
+| The GPU node is at `bcm2712-ds.dtsi:409-421`; `hvs` at `bcm2712.dtsi:609` | 410-424; 612 |
+| The reader did not grep for `request_firmware` | Done: no match in `drivers/gpu/drm/v3d/` |
+| `v3d_sched.c` and `v3d_gem.c` "cited by function name" | Real lines now: `driver/docs/rpi5-v3d71-facts.md`, sections 6 and 7 |
+| U5: what `BCM2835_POWER_DOMAIN_GRAFX_V3D` does on BCM2712 | The fork's `bcm2835-power.c:380-383` sets the V3D reset bit (bit 6) in `pm` register 0x304 (`PM_GRAFX_2712`); there is no ASB bridge and no domain clock on this node. Mainline v6.18 has no BCM2712 support in that driver |
+| U7: "the `TRYBOOT` property table of the hardware page" | The documentation repository at the commit used has no `TRYBOOT` property in `raspberry-pi/eeprom-bootloader.adoc`; `tryboot` is described in `bootflow-eeprom.adoc:80-98` |
+
+Confirmed unchanged: the register map of section 3.4 (offsets, bits and
+version conditions, `v3d_regs.h`), the MMU format and the 24-bit PFN limit
+(`v3d_mmu.c:101`), the interrupt handling and its line numbers in
+`v3d_irq.c` (they were exact), the hub SPI 250 and core SPI 249 order, the
+HVS/pixel valve/HDMI addresses and interrupts, and the output-to-FIFO map.
+New in H1: the BCM2712 HDMI PHY sequence, the generic arm64 boot protocol, and
+one point to check on the Zephyr side (the GIC interrupt IDs 281 and 282 against
+the 280 interrupts the Zephyr device tree declares), all in the facts file.
