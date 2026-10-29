@@ -149,6 +149,39 @@ url = "https://archive.mesa3d.org/mesa-26.2.1.tar.xz"
 sha256_from = "third_party/mesa-26.2.1/UPSTREAM:tarball-sha256"
 
 [[dep]]
+name = "PCO_SPM_LOAD_CAPTURE"
+path = "PCO_SHC/capture_spm_load"
+marker = "PCO_SHC/capture_spm_load"
+requires = ["PCO_SHC"]
+note = "capture_spm_load of the pco_shc build (tools/pco_shc/capture_spm_load.c): prints the partial render's background-object load shader as Mesa 26.2.1's pco makes it, for the regenerate-and-compare row of tools/check.sh (tools/pco_shc/README.md); without it that row is a gap, never a pass. A host prepared before this entry has pco_shc and not this program: --build PCO_SPM_LOAD_CAPTURE makes it from the tree PCO_SHC's build left in PCO_SHC.src, or builds that tree again (the same tarball, patches and options, so pco_shc, which is not touched, stays what GLSL2USC_CACHE is keyed by)"
+build = '''
+if [ -z "${LLVM_DIR-}" ] && [ -d /usr/lib/llvm-21 ]; then export LLVM_DIR=/usr/lib/llvm-21; fi
+src="$DEPS/PCO_SHC.src/mesa-26.2.1"
+# A tree built from a checkout before capture_spm_load.c has no rule for it.
+if ! grep -q 'capture_spm_load' "$src/build/build.ninja" 2>/dev/null; then
+  tools/pco_shc/build_pco_shc.sh "$DEPS/downloads/mesa-26.2.1.tar.xz" "$DEPS/PCO_SHC.src"
+fi
+ninja -C "$src/build" src/imagination/vulkan/capture_spm_load
+mkdir -p "$DEPS/PCO_SHC"
+cp "$src/build/src/imagination/vulkan/capture_spm_load" "$DEPS/PCO_SHC/capture_spm_load.part"
+mv "$DEPS/PCO_SHC/capture_spm_load.part" "$DEPS/PCO_SHC/capture_spm_load"
+'''
+packages.apt = [
+  "clang-21", "llvm-21-dev", "libclang-21-dev", "libclc-21-dev", "llvm-spirv-21", "libllvmspirvlib-21-dev",
+  "spirv-tools", "spirv-tools-dev", "spirv-headers", "glslang-tools", "meson", "ninja-build",
+  "python3-mako", "python3-yaml", "python3-packaging", "libdrm-dev", "libexpat1-dev", "zlib1g-dev", "libzstd-dev",
+]
+packages.portage = [
+  "llvm-core/clang", "llvm-core/llvm", "dev-util/spirv-llvm-translator", "dev-util/spirv-tools", "dev-util/spirv-headers",
+  "dev-util/glslang", "dev-build/meson", "dev-build/ninja", "dev-python/mako", "dev-python/pyyaml", "dev-python/packaging",
+  "x11-libs/libdrm", "dev-libs/expat", "sys-libs/zlib", "app-arch/zstd",
+]
+
+[[dep.inputs]]
+url = "https://archive.mesa3d.org/mesa-26.2.1.tar.xz"
+sha256_from = "third_party/mesa-26.2.1/UPSTREAM:tarball-sha256"
+
+[[dep]]
 name = "MESA_PAN_TREE"
 path = "mesa-pan/mesa-26.2.1"
 marker = "mesa-pan/mesa-26.2.1/build-pan/build.ninja"
