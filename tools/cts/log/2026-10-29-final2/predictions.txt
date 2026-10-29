@@ -1,4 +1,7 @@
-panthor-gltest: verdict case 0 triangle: PASS 
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Predictions for the T6 final2 sweep and case runs (README.md), written before the runs
+panthor-gltest: verdict case 0 triangle: PASS
 panthor-gltest: verdict case 1 uniform: PASS 
 panthor-gltest: verdict case 2 texture: PASS
 panthor-gltest: verdict case 3 depth: PASS 
