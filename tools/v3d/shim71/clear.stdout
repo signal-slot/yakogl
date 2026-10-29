@@ -1,0 +1,2 @@
+gl_ref: renderer V3D 7.1.7.0
+gl_ref: clear, framebuffer 64x64, glGetError 0x0

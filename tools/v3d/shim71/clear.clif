@@ -1,0 +1,173 @@
+MESA: info: @createbuf_aligned 4096 resource_0x3000
+MESA: info: @createbuf_aligned 4096 CL_0x8000
+MESA: info: @createbuf_aligned 4096 tile_alloc_0x9000
+MESA: info: @createbuf_aligned 4096 TSDA_0xc000
+MESA: info: @createbuf_aligned 4096 CL_0xd000
+MESA: info: @createbuf_aligned 4096 CL_0xe000
+MESA: info: 
+MESA: info: @buffer CL_0x8000
+MESA: info: @format ctrllist  /* [CL_0x8000+0x00000000] */
+MESA: info: NUMBER_OF_LAYERS
+MESA: info:   /*               Number of Layers: */ 1
+MESA: info: TILE_BINNING_MODE_CFG
+MESA: info:   /* tile allocation initial block size: */ 1 /* tile allocation initial block size 128b */
+MESA: info:   /*     tile allocation block size: */ 0 /* tile allocation block size 64b */
+MESA: info:   /*                Log2 Tile Width: */ 3 /* tile width 64 pixels */
+MESA: info:   /*               Log2 Tile Height: */ 3 /* tile height 64 pixels */
+MESA: info:   /*              Width (in pixels): */ 64
+MESA: info:   /*             Height (in pixels): */ 64
+MESA: info: CLEAR_VCD_CACHE
+MESA: info: OCCLUSION_QUERY_COUNTER_ENABLE
+MESA: info:   /*                        address: */ [null]
+MESA: info: START_TILE_BINNING
+MESA: info: FLUSH
+MESA: info: 
+MESA: info: 
+MESA: info: 
+MESA: info: @format blank 4077 /* [CL_0x8000+0x00000013..0x00000fff] */
+MESA: info: 
+MESA: info: @buffer CL_0xd000
+MESA: info: @format ctrllist  /* [CL_0xd000+0x00000000] */
+MESA: info: TILE_RENDERING_MODE_CFG_COMMON
+MESA: info:   /*       Number of Render Targets: */ 1
+MESA: info:   /*           Image Width (pixels): */ 64
+MESA: info:   /*          Image Height (pixels): */ 64
+MESA: info:   /*          Multisample Mode (4x): */ 0 /* false */
+MESA: info:   /*   Double-buffer in non-ms mode: */ 0 /* false */
+MESA: info:   /*           Depth-buffer disable: */ 0 /* false */
+MESA: info:   /* Early-Z Test and Update Direction: */ 0 /* Early-Z direction LT/LE */
+MESA: info:   /*                Early-Z disable: */ 1 /* true */
+MESA: info:   /*            Internal Depth Type: */ 0 /* depth_32f */
+MESA: info:   /*      Early Depth/Stencil Clear: */ 0 /* false */
+MESA: info:   /*                Log2 Tile Width: */ 3 /* tile width 64 pixels */
+MESA: info:   /*               Log2 Tile Height: */ 3 /* tile height 64 pixels */
+MESA: info: TILE_RENDERING_MODE_CFG_RENDER_TARGET_PART1
+MESA: info:   /*           Render Target number: */ 0
+MESA: info:   /*                   Base Address: */ 0
+MESA: info:   /*                         Stride: */ 32
+MESA: info:   /*                   Internal BPP: */ 0 /* 32 */
+MESA: info:   /*     Internal Type and Clamping: */ 8 /* 8 */
+MESA: info:   /*           Clear Color low bits: */ 4294901760
+MESA: info: TILE_RENDERING_MODE_CFG_ZS_CLEAR_VALUES
+MESA: info:   /*            Stencil Clear Value: */ 0
+MESA: info:   /*                  Z Clear Value: */ 0.000000
+MESA: info: TILE_LIST_INITIAL_BLOCK_SIZE
+MESA: info:   /* Size of first block in chained tile lists: */ 1 /* tile allocation block size 128b */
+MESA: info:   /*    Use auto-chained tile lists: */ 1 /* true */
+MESA: info: MULTICORE_RENDERING_TILE_LIST_BASE
+MESA: info:   /*           Tile List Set Number: */ 0
+MESA: info:   /*                        address: */ [tile_alloc_0x9000+0x00000000] /* 0x00009000 */
+MESA: info: MULTICORE_RENDERING_SUPERTILE_CFG
+MESA: info:   /*       Supertile Width in Tiles: */ 1
+MESA: info:   /*      Supertile Height in Tiles: */ 1
+MESA: info:   /* Total Frame Width in Supertiles: */ 1
+MESA: info:   /* Total Frame Height in Supertiles: */ 1
+MESA: info:   /*     Total Frame Width in Tiles: */ 1
+MESA: info:   /*    Total Frame Height in Tiles: */ 1
+MESA: info:   /*               Multicore Enable: */ 0 /* false */
+MESA: info:   /*         Supertile Raster Order: */ 0 /* false */
+MESA: info:   /*       Number of Bin Tile Lists: */ 1
+MESA: info: TILE_COORDS
+MESA: info:   /*             tile column number: */ 0
+MESA: info:   /*                tile row number: */ 0
+MESA: info: END_LOADS
+MESA: info: STORE
+MESA: info:   /*                Buffer to Store: */ 8 /* None */
+MESA: info:   /*                  Memory Format: */ 0 /* Raster */
+MESA: info:   /*                         Flip Y: */ 0 /* false */
+MESA: info:   /*                    Dither Mode: */ 0 /* None */
+MESA: info:   /*                  Decimate mode: */ 0 /* sample 0 */
+MESA: info:   /*            Output Image Format: */ 0 /* srgb8_alpha8 */
+MESA: info:   /*      Clear buffer being stored: */ 0 /* false */
+MESA: info:   /*                Channel Reverse: */ 0 /* false */
+MESA: info:   /*                       R/B swap: */ 0 /* false */
+MESA: info:   /*         Height in UB or Stride: */ 0
+MESA: info:   /*                         Height: */ 0
+MESA: info:   /*                        Address: */ [null]
+MESA: info: CLEAR_RT
+MESA: info: END_TILE
+MESA: info: TILE_COORDS
+MESA: info:   /*             tile column number: */ 0
+MESA: info:   /*                tile row number: */ 0
+MESA: info: END_LOADS
+MESA: info: STORE
+MESA: info:   /*                Buffer to Store: */ 8 /* None */
+MESA: info:   /*                  Memory Format: */ 0 /* Raster */
+MESA: info:   /*                         Flip Y: */ 0 /* false */
+MESA: info:   /*                    Dither Mode: */ 0 /* None */
+MESA: info:   /*                  Decimate mode: */ 0 /* sample 0 */
+MESA: info:   /*            Output Image Format: */ 0 /* srgb8_alpha8 */
+MESA: info:   /*      Clear buffer being stored: */ 0 /* false */
+MESA: info:   /*                Channel Reverse: */ 0 /* false */
+MESA: info:   /*                       R/B swap: */ 0 /* false */
+MESA: info:   /*         Height in UB or Stride: */ 0
+MESA: info:   /*                         Height: */ 0
+MESA: info:   /*                        Address: */ [null]
+MESA: info: END_TILE
+MESA: info: CLEAR_VCD_CACHE
+MESA: info: GENERIC_TILE_LIST
+MESA: info:   /*                          start: */ [CL_0xe000+0x00000000] /* 0x0000e000 */
+MESA: info:   /*                            end: */ [CL_0xe000+0x0000001b] /* 0x0000e01b */
+MESA: info: SUPERTILE_COORDS
+MESA: info:   /*    column number in supertiles: */ 0
+MESA: info:   /*       row number in supertiles: */ 0
+MESA: info: END_RENDER
+MESA: info: 
+MESA: info: 
+MESA: info: 
+MESA: info: @format blank 4000 /* [CL_0xd000+0x00000060..0x00000fff] */
+MESA: info: 
+MESA: info: @buffer CL_0xe000
+MESA: info: @format ctrllist  /* [CL_0xe000+0x00000000] */
+MESA: info: IMPLICIT_TILE_COORDS
+MESA: info: END_LOADS
+MESA: info: PRIM_LIST_FORMAT
+MESA: info:   /*                 primitive type: */ 2 /* List Triangles */
+MESA: info:   /*               tri strip or fan: */ 0 /* false */
+MESA: info: SET_INSTANCEID
+MESA: info:   /*                    Instance ID: */ 0
+MESA: info: BRANCH_IMPLICIT_TILE
+MESA: info:   /*           tile list set number: */ 0
+MESA: info: STORE
+MESA: info:   /*                Buffer to Store: */ 0 /* Render target 0 */
+MESA: info:   /*                  Memory Format: */ 4 /* UIF (No XOR) */
+MESA: info:   /*                         Flip Y: */ 0 /* false */
+MESA: info:   /*                    Dither Mode: */ 0 /* None */
+MESA: info:   /*                  Decimate mode: */ 0 /* sample 0 */
+MESA: info:   /*            Output Image Format: */ 27 /* rgba8 */
+MESA: info:   /*      Clear buffer being stored: */ 0 /* false */
+MESA: info:   /*                Channel Reverse: */ 0 /* false */
+MESA: info:   /*                       R/B swap: */ 0 /* false */
+MESA: info:   /*         Height in UB or Stride: */ 8
+MESA: info:   /*                         Height: */ 0
+MESA: info:   /*                        Address: */ [resource_0x3000+0x00000000] /* 0x00003000 */
+MESA: info: CLEAR_RT
+MESA: info: END_TILE
+MESA: info: RETURN
+MESA: info: 
+MESA: info: 
+MESA: info: @format blank 4069 /* [CL_0xe000+0x0000001b..0x00000fff] */
+MESA: info: @buffer resource_0x3000
+MESA: info: 
+MESA: info: @format blank 20480 /* [resource_0x3000+0x00000000..0x00004fff] */
+MESA: info: 
+MESA: info: @buffer tile_alloc_0x9000
+MESA: info: 
+MESA: info: @format blank 12288 /* [tile_alloc_0x9000+0x00000000..0x00002fff] */
+MESA: info: 
+MESA: info: @buffer TSDA_0xc000
+MESA: info: 
+MESA: info: @format blank 4096 /* [TSDA_0xc000+0x00000000..0x00000fff] */
+MESA: info: 
+MESA: info: @add_bin 0
+MESA: info:   [CL_0x8000+0x00000000] /* 0x00008000 */
+MESA: info:   [CL_0x8000+0x00000013] /* 0x00008013 */
+MESA: info:   [tile_alloc_0x9000+0x00000000] /* 0x00009000 */
+MESA: info:   12288
+MESA: info:   [TSDA_0xc000+0x00000000] /* 0x0000c000 */
+MESA: info: @wait_bin_all_cores
+MESA: info: @add_render 0
+MESA: info:   [CL_0xd000+0x00000000] /* 0x0000d000 */
+MESA: info:   [CL_0xd000+0x00000060] /* 0x0000d060 */
+MESA: info:   [tile_alloc_0x9000+0x00000000] /* 0x00009000 */
+MESA: info: @wait_render_all_cores
