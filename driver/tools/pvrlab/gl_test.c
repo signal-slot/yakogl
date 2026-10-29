@@ -854,6 +854,8 @@ void *gl_test_v3d_osal_arg(void);
  */
 #ifndef GL_TEST_PVR
 static inline void gl_test_perf_read(uint32_t *out) { memset(out, 0, 7 * sizeof(*out)); }
+/* the kicks the GPU has completed: the PowerVR's only (0 elsewhere) */
+static inline uint32_t gl_test_kicks_done(void) { return 0; }
 static inline void gl_test_prim_budget(unsigned int budget) { (void)budget; }
 /* how the run-time compiler lowers an `if` with arithmetic arms: the
  * PowerVR's option only (case 195); elsewhere both forms are one program */
@@ -863,6 +865,8 @@ static inline void gl_test_prim_budget(unsigned int budget) { (void)budget; }
 static inline void gl_test_if_lowering(unsigned int v) { (void)v; }
 #else
 static inline void gl_test_perf_read(uint32_t *out) { pvr_render_perf_read(out); }
+/* the render service's completed fence: one sequence a kick */
+static inline uint32_t gl_test_kicks_done(void) { return pvr_render_completed(); }
 /* PVR_BACKEND_OPT_PRIM_BUDGET is a test knob: a library without them keeps
  * its built-in budget, and the case's two halves draw the same thing */
 static inline void gl_test_prim_budget(unsigned int budget)
@@ -19891,7 +19895,9 @@ static int case_mappbo(void)
  * (<Mpx> Mpx a frame, <Mpx/s> Mpx/s)", the whole frame's wall time and the
  * pixels the frame renders (the five passes and the 35 levels) a second
  * through it; on the PowerVR also the GPU's busy time a frame, as case 215,
- * so the CPU's and the waits' share is the frame less the GPU's. Checks: 1
+ * so the CPU's and the waits' share is the frame less the GPU's, and the
+ * kicks a frame (the completed fence's move over the frames, which start
+ * after a glFinish). Checks: 1
  * the program linked, 2 the three framebuffers complete, 3 no GL error
  * after the frames, 4..7 the window's four quadrant centres: every pass
  * keeps a quadrant's centre one colour, so it is the source's colour
@@ -19922,7 +19928,7 @@ static int case_mipchains(void)
 	const bool es2 = !ver || strncmp(ver, "OpenGL ES 2.", 12) == 0;
 	GLuint prog, src = 0, tex[3] = { 0, 0, 0 }, fbo[3] = { 0, 0, 0 };
 	GLenum status[3] = { 0, 0, 0 };
-	uint32_t t0 = 0, t1 = 0, pc0[7], pc1[7], complete = 0;
+	uint32_t t0 = 0, t1 = 0, pc0[7], pc1[7], complete = 0, seq0 = 0, seq1 = 0;
 	uint64_t px_frame = (uint64_t)TW * TH;
 	bool ok = true;
 
@@ -19992,6 +19998,8 @@ static int case_mipchains(void)
 	}
 
 	/* the frames: terrain, bloom, overlay, tilt-shift, the window */
+	glFinish();
+	seq0 = gl_test_kicks_done();
 	gl_test_perf_read(pc0);
 	t0 = now_ms();
 	for (int f = 0; f < MIPCHAINS_FRAMES; f++) {
@@ -20007,6 +20015,7 @@ static int case_mipchains(void)
 	}
 	t1 = now_ms();
 	gl_test_perf_read(pc1);
+	seq1 = gl_test_kicks_done();
 	/* check 3 */
 	ok &= expect_u32("mipchains: error after the frames", glGetError(), GL_NO_ERROR);
 	{
@@ -20024,6 +20033,12 @@ static int case_mipchains(void)
 			(pc1[0] - pc0[0]) / 800u / MIPCHAINS_FRAMES, (pc1[1] - pc0[1]) / 800u / MIPCHAINS_FRAMES,
 			(pc1[2] - pc0[2]) / 800u / MIPCHAINS_FRAMES,
 			(uint32_t)(((uint64_t)(pc1[6] - pc0[6]) * 256u) / 800u / MIPCHAINS_FRAMES));
+		/* the kicks a frame: every frame ends in glFinish, so the GPU's
+		 * completed fence moved by one per kick of the frames */
+		if (seq1 != seq0)
+			pr_info("gl_test:   per frame: %u.%02u kicks (%u over %d frames)\n",
+				(seq1 - seq0) / MIPCHAINS_FRAMES, (seq1 - seq0) * 100u / MIPCHAINS_FRAMES % 100u,
+				seq1 - seq0, MIPCHAINS_FRAMES);
 	}
 
 	/* the last frame's picture: the quadrant centres (checks 4..7); a
