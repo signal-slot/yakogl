@@ -467,6 +467,21 @@ config YAKOGL_BOARD_IMX8MP_ROUTE3_TIMELINE_REPORT_MS
 	  panel console on the panel and prints the stamps there, and then
 	  stays: a measurement image, never a product one.
 
+config YAKOGL_BOARD_IMX8MP_BSS_CLEARED_BY_LOADER
+	bool "The second-stage loader zeroes this image's .bss"
+	select SKIP_BSS_CLEAR
+	help
+	  Zephyr's reset path zeroes .bss before the MMU is on, so with the
+	  caches off: the route-3 image's 40 MiB took 45 ms between the
+	  loader's jump and the image's first C code (2026-10-29, system
+	  counter). With this, the image leaves .bss alone and the stage2
+	  image carries it as the range the loader zeroes, with its caches on
+	  (tools/am62p-mkboot.py stage2img reads CONFIG_SKIP_BSS_CLEAR from
+	  the .config next to the zephyr.bin and the range from zephyr.elf;
+	  header version 2, which an older loader refuses). Only for an image
+	  that is started by that loader: any other route leaves .bss as it
+	  finds it.
+
 config YAKOGL_BOARD_IMX8MP_ROUTE3_BEAT_MS
 	int "Heartbeat period (ms)"
 	default 100

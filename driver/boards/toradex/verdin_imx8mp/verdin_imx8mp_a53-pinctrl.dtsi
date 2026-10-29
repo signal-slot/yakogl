@@ -9,6 +9,17 @@
 #include <nxp/nxp_imx/mimx8ml8dvnlz-pinctrl.dtsi>
 
 &pinctrl {
+	/* UART1 on its own pads: the Mallow's X11 header. */
+	uart1_default: uart1_default {
+		group0 {
+			bias-pull-up;
+			drive-strength = "x1";
+			pinmux = <&iomuxc_uart1_rxd_uart_rx_uart1_rx>,
+				 <&iomuxc_uart1_txd_uart_tx_uart1_tx>;
+			slew-rate = "slow";
+		};
+	};
+
 	uart3_default: uart3_default {
 		group0 {
 			bias-pull-up;

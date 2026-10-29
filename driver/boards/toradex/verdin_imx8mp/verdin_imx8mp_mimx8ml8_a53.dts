@@ -62,6 +62,19 @@
 	};
 
 	soc {
+		/* The Mallow carrier's X11 debug header (1.8 V): UART1 on its own
+		 * pads, Linux's ttymxc0 (found 2026-10-29 by writing a marker to
+		 * each ttymxc from Torizon). Off unless an overlay turns it on. */
+		uart1: uart@30860000 {
+			compatible = "nxp,imx-iuart";
+			reg = <0x30860000 DT_SIZE_K(64)>;
+			interrupts = <GIC_SPI 26 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>;
+			interrupt-names = "irq_0";
+			interrupt-parent = <&gic>;
+			clocks = <&ccm IMX_CCM_UART1_CLK 0x6c 24>;
+			status = "disabled";
+		};
+
 		/* Verdin UART_1: not in Zephyr's SoC file (it has UART2 and UART4). */
 		uart3: uart@30880000 {
 			compatible = "nxp,imx-iuart";
