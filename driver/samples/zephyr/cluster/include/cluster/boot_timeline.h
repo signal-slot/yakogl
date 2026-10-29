@@ -61,8 +61,11 @@ enum cluster_tl_a53 {
 	CLUSTER_TL_A53_LOADER_ENTRY,  /* the loader's first C code */
 	CLUSTER_TL_A53_LOADER_MAIN,   /* its main() */
 	CLUSTER_TL_A53_LOADER_READ,   /* the payload is in memory (read or linked in) */
-	CLUSTER_TL_A53_LOADER_UNPACKED, /* inflated to the load address */
+	CLUSTER_TL_A53_LOADER_UNPACKED, /* decoded to the load address, both CRCs checked */
 	CLUSTER_TL_A53_LOADER_JUMP,   /* jumping to this image */
+	CLUSTER_TL_A53_LOADER_STORED_OK, /* the stored payload's CRC checked */
+	CLUSTER_TL_A53_LOADER_DECODED, /* decompressed (the image's CRC next) */
+	CLUSTER_TL_A53_LOADER_ZEROED, /* this image's .bss zeroed by the loader */
 };
 
 /* The M7's stages. */

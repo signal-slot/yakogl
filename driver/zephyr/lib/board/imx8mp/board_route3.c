@@ -25,6 +25,7 @@
  * then it is stopped again, the ring dropped, and the caller flips.
  */
 #include <zephyr/kernel.h>
+#include <zephyr/drivers/uart.h>
 #include <zephyr/kernel/mm.h>
 #include <zephyr/sys/device_mmio.h>
 #include <zephyr/sys/printk.h>
@@ -233,8 +234,10 @@ static void *map_nc(uintptr_t phys, size_t size)
 static void tl_loader(void)
 {
 	static const enum cluster_tl_a53 at[] = {
-		CLUSTER_TL_A53_LOADER_ENTRY, CLUSTER_TL_A53_LOADER_MAIN, CLUSTER_TL_A53_LOADER_READ,
-		CLUSTER_TL_A53_LOADER_UNPACKED, CLUSTER_TL_A53_LOADER_JUMP};
+		CLUSTER_TL_A53_LOADER_ENTRY,     CLUSTER_TL_A53_LOADER_MAIN,
+		CLUSTER_TL_A53_LOADER_READ,      CLUSTER_TL_A53_LOADER_UNPACKED,
+		CLUSTER_TL_A53_LOADER_JUMP,      CLUSTER_TL_A53_LOADER_STORED_OK,
+		CLUSTER_TL_A53_LOADER_DECODED,   CLUSTER_TL_A53_LOADER_ZEROED};
 	volatile uint32_t *w = map_nc(BS2_STAMP_ADDR, CONFIG_MMU_PAGE_SIZE);
 
 	if (w == NULL || R.tl == NULL) {
@@ -454,6 +457,40 @@ static void m7_give_up(void)
 }
 
 #if CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_TIMELINE_REPORT_MS > 0
+/*
+ * The report also goes out on the console UART, written here character by
+ * character: the image keeps the UART console off so that nothing on the
+ * way to the first picture waits for a serial line, and this runs after it.
+ * The panel console shows the same lines. One machine-readable line per
+ * stage: "TL <core> <slot> <ticks> <name>".
+ */
+#if DT_NODE_HAS_STATUS(DT_ALIAS(yakogl_timeline_uart), okay)
+static const struct device *const tl_uart = DEVICE_DT_GET(DT_ALIAS(yakogl_timeline_uart));
+#else
+static const struct device *const tl_uart = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
+#endif
+
+static void tl_uart_str(const char *s)
+{
+	if (!device_is_ready(tl_uart)) {
+		return;
+	}
+	for (; *s != '\0'; s++) {
+		if (*s == '\n') {
+			uart_poll_out(tl_uart, '\r');
+		}
+		uart_poll_out(tl_uart, *s);
+	}
+}
+
+static void tl_uart_line(const char *who, const char *what, uint64_t t)
+{
+	char buf[96];
+
+	snprintk(buf, sizeof(buf), "TL %s %llu %s\n", who, (unsigned long long)t, what);
+	tl_uart_str(buf);
+}
+
 static void tl_line(const char *who, const char *what, uint64_t t, uint64_t t0, uint32_t hz)
 {
 	if (t == 0u) {
@@ -470,8 +507,8 @@ static void tl_line(const char *who, const char *what, uint64_t t, uint64_t t0, 
 
 /*
  * The measurement build's ending: stop the M7, put the panel console's own
- * buffer on the panel, print both cores' stamps, and stay there. A
- * photograph of the panel is the record (the Mallow has no UART).
+ * buffer on the panel, print both cores' stamps, and stay there. The
+ * panel shows the table; the same stamps go out on the UART (below).
  */
 static void tl_report(void)
 {
@@ -480,7 +517,8 @@ static void tl_report(void)
 		"window (M7 loaded)", "first board_show", "M7 released", "M7 up",
 		"first shown", "app: windows", "app: EGL", "app: frame 1",
 		"app: swapped", "loader entry", "loader main", "loader payload in RAM",
-		"loader unpacked", "loader jump"};
+		"loader unpacked", "loader jump", "loader stored CRC ok", "loader decoded",
+		"loader .bss zeroed"};
 	static const char *const m7[] = {
 		"main", "safety layer ready", "loop", "first A53 frame",
 		"first composite", "first flip latched", "backlight on", "layer pre-rendered", "frame 1 layer rendered"};
@@ -500,6 +538,7 @@ static void tl_report(void)
 	} else {
 		hz = tl->cntfrq != 0u ? tl->cntfrq : hz;
 		t0 = tl->a53[CLUSTER_TL_A53_ENTRY];
+
 		printk("\nroute3 timeline (system counter %u Hz, ms since SPL started it; +ms since "
 		       "the A53 entry)\n", hz);
 		for (unsigned int i = 0; i < ARRAY_SIZE(a53); i++) {
@@ -508,6 +547,21 @@ static void tl_report(void)
 		for (unsigned int i = 0; i < ARRAY_SIZE(m7); i++) {
 			tl_line("M7 ", m7[i], tl->m7[i], t0, hz);
 		}
+		/* The UART last: the panel already holds the record if the
+		 * serial line is not there. */
+		{
+			char buf[64];
+
+			snprintk(buf, sizeof(buf), "\nTL begin hz=%u\n", hz);
+			tl_uart_str(buf);
+		}
+		for (unsigned int i = 0; i < ARRAY_SIZE(a53); i++) {
+			tl_uart_line("A53", a53[i], tl->a53[i]);
+		}
+		for (unsigned int i = 0; i < ARRAY_SIZE(m7); i++) {
+			tl_uart_line("M7", m7[i], tl->m7[i]);
+		}
+		tl_uart_str("TL end\n");
 	}
 	for (;;) {
 		board_watchdog_feed();
