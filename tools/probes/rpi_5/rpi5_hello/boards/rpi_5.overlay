@@ -1,0 +1,15 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-FileCopyrightText: 2026 Signal Slot, Inc. */
+/*
+ * Zephyr's rpi_5 takes zephyr,sram from the SoC's sram0
+ * (dts/arm64/broadcom/bcm2712.dtsi: 512 KiB at 0x200000, two address cells).
+ * A GPU image carries a carve-out as statics, so sram0 is sized here, the way
+ * the Pi 4 images do (driver/samples/zephyr/gl_test/boards/rpi_4b.overlay).
+ * 32 MiB from 0x200000: the size the Pi 4's first runs used; pre-study-rpi5.md
+ * (U10) says to keep it low until measured. Nothing in this overlay was run.
+ * The same file sizes Zephyr's own hello_world in the gate row
+ * (-DEXTRA_DTC_OVERLAY_FILE).
+ */
+&sram0 {
+	reg = <0x0 0x200000 0x2000000>;
+};

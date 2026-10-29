@@ -3249,6 +3249,7 @@ zephyr_werror_image() {
   # path from the checkout; a sample by its name under driver/samples/zephyr.
   case "$sample" in
     examples/* | tools/*) src="$root/$sample" ;;
+    zephyr:*) src="$ZEPHYR_WS/zephyr/${sample#zephyr:}" ;;
     *) src="$root/driver/samples/zephyr/$sample" ;;
   esac
   mods=$(PATH="$ZEPHYR_WS/.venv/bin:$PATH" tools/cts/zephyr-modules.sh "$ZEPHYR_WS") || return 1
@@ -3260,6 +3261,28 @@ zephyr_werror_image() {
     echo "(the whole log: $log)"
     return 1
   fi
+}
+# The Raspberry Pi 5 images (item H9 of docs/notes/pre-study-rpi5.md): built
+# and not run, no GPU code. Zephyr's own hello_world and our rpi5_hello probe,
+# both with the probe's overlay that sizes sram0. Each must link, carry the
+# Linux arm64 Image header (magic "ARM", 0x64, at byte 56, which the firmware
+# looks for) and be linked at the start of sram0 (0x200000); the sizes of the
+# ELF and of zephyr.bin are printed for the pull request.
+zephyr_rpi5_images() {
+  local overlay="$PWD/tools/probes/rpi_5/rpi5_hello/boards/rpi_5.overlay" d bin elf magic start
+  zephyr_werror_image rpi_5 zephyr:samples/hello_world rpi5-hello_world \
+    "-DEXTRA_DTC_OVERLAY_FILE=$overlay" || return 1
+  zephyr_werror_image rpi_5 tools/probes/rpi_5/rpi5_hello rpi5_hello || return 1
+  for d in rpi5-hello_world rpi5_hello; do
+    bin=build/zephyr-werror/$d/zephyr/zephyr.bin
+    elf=build/zephyr-werror/$d/zephyr/zephyr.elf
+    [ -s "$bin" ] && [ -s "$elf" ] || { echo "$d: no zephyr.bin or zephyr.elf"; return 1; }
+    magic=$(dd if="$bin" bs=1 skip=56 count=4 2>/dev/null | od -An -c | tr -d ' ')
+    [ "$magic" = ARMd ] || { echo "$d: zephyr.bin has no arm64 Image magic at byte 56 (read '$magic')"; return 1; }
+    start=$(nm "$elf" | awk '$3 == "__start" { print $1 }')
+    [ "$start" = 0000000000200000 ] || { echo "$d: __start is at 0x${start:-?}, not the start of sram0"; return 1; }
+    echo "$d: zephyr.bin $(stat -c %s "$bin") bytes; $(size "$elf" | tail -1 | awk '{ print "text " $1 ", data " $2 ", bss " $3 }')"
+  done
 }
 # examples/triangle-rust for one board: it builds, and its main() is the
 # Rust one. The kernel's weak main() (kernel/main_weak.c) also links, so an
@@ -3406,8 +3429,12 @@ if [ "$QUICK" -eq 0 ]; then
     # Z2's probe (AS0's page tables, the cache flush round trip) likewise.
     step "zephyr  nanopc_t6 t6_mmu image (Z2, AS0 and a cache flush), -Werror on our C files" \
       zephyr_werror_image nanopc_t6 tools/probes/nanopc_t6/t6_mmu nanopc_t6_mmu
+    step "zephyr  rpi5 images (H9): hello_world and rpi5_hello link at sram0, built and not run" \
+      zephyr_rpi5_images
   else
     gap "zephyr images: no west workspace at ZEPHYR_WS='${ZEPHYR_WS-}' (set ZEPHYR_WS): our C files were NOT compiled with -Werror"
+    scope drivers samples
+    gap "zephyr rpi5 images: no west workspace at ZEPHYR_WS='${ZEPHYR_WS-}' (set ZEPHYR_WS): the rpi_5 hello_world and rpi5_hello images were NOT built"
   fi
 fi
 
