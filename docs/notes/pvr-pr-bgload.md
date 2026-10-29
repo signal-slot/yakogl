@@ -12,17 +12,16 @@ neither is repeated here. Code is not changed by this note.
 
 ## How this was read (and what was not)
 
-- **Mesa 26.2.1 was not re-read for this note.** The session could not fetch
-  the tarball (network refused), and the vendored `third_party/mesa-26.2.1`
-  holds only csbgen (`src/imagination/csbgen/rogue/*.xml`), not
-  `pvr_arch_spm.c`, `pvr_usc.c` or `pvr_iface.h`; the DDK headers
-  `pvr_rogue_fwif_client.h` are not in the tree either. Every "Mesa" fact below
-  is from the earlier read recorded in `docs/notes/pvr-render-pool.md`
-  (cited there at Mesa file:line; here as `pool:LINE`). Before bgload-pds
-  writes code, re-check each such line against a Mesa 26.2.1 tree in
-  `$CONNECTED_DEPS_DIR/mesa-26.2.1` (the fetch is
-  `https://archive.mesa3d.org/mesa-26.2.1.tar.xz`, the one
-  `tools/pco_shc/build_pco_shc.sh` takes).
+- **Mesa 26.2.1 was re-read** in `$CONNECTED_DEPS_DIR/mesa-26.2.1` (a
+  shallow git checkout of tag `mesa-26.2.1`; paths below are under
+  `src/imagination/`). Checked there: pvr_arch_spm.c:151-241 (programs),
+  :638-691 (image words), :694-758 (DMA program), :760-917 (bgobj state),
+  :796 and :908-916 (sizes), common/pvr_iface.h:75-102 (layout),
+  vulkan/pvr_usc.h:247-253 (data size 8 dwords), pvr_device.c:905-950
+  (`pvr_gpu_upload_pds`), csbgen/rogue/cr.xml:332-351 (units). The
+  `pool:LINE` cites are the design note's, kept where not re-checked here
+  (the pvr_usc.c:1373-1490 shader body, pvr_arch_job_render.c, the
+  DDK header `pvr_rogue_fwif_client.h`, which the vendored tree lacks).
 - **Our side was read now**, at the line numbers given (this tree,
   ea3424fc).
 - The design note's own numbers for backend.rs (`:1136-:2249`, `:8420-8454`)
@@ -120,7 +119,7 @@ background-object block):
 |---|---|---|---|
 | `[0]` | `CR_PDS_BGRND0_BASE` | `shader_addr` = pixel program, `texunicode_addr` = texture program code | the load kick (`kick_usc` output) and the DMA code, both PDS heap offsets (`dev_addr`, as :8426-8433) |
 | `[1]` | `CR_PDS_BGRND1_BASE` | `varying_addr` 0, `texturedata_addr` = per-render DMA data | the DMA data of section 2 (:8434-8441) |
-| `[2]` | `CR_PDS_BGRND3_SIZEINFO` | `usc_sharedsize` = ceil(constants dwords / 16), `pds_texturestatesize` = ceil(data bytes / 4), `pds_tempsize` = ceil(temps / 4) | 8 dwords -> 1; the DMA data's dwords (3 for one kick); `temps_used` / 4 (unit register layout cr.xml:332-351, pool:3301-3309). Today's code writes `CLEAR_ATTACH_DWORDS.div_ceil(16)` (= 1; :1046, :8449), `bg_dma_data_dw` and `bg_dma_temps` (:8450-8451) |
+| `[2]` | `CR_PDS_BGRND3_SIZEINFO` | `usc_sharedsize` = ceil(constants dwords / 16), `pds_texturestatesize` = ceil(data bytes / 4), `pds_tempsize` = ceil(temps / 4) | 8 dwords -> 1; **Mesa: ceil(aligned data dwords / 4) = 1** (`data_size` is in dwords, aligned to 16 bytes by `pvr_gpu_upload_pds`, pvr_device.c:938-949; pvr_arch_spm.c:911-913), so one kick (3 dwords, 4 aligned) gives 1, **not 3**; `temps_used` / 4 (unit register layout cr.xml:332-351, pool:3301-3309). Today's code writes `CLEAR_ATTACH_DWORDS.div_ceil(16)` (= 1; :1046, :8449), `bg_dma_data_dw * 4 / 4` = the dwords (3, :8450) and `bg_dma_temps` (:8451); the clear's 3 differs from Mesa's formula and is silicon-proven for the clear only - the PR word follows Mesa and is board-checked |
 
 - Mesa fills `pds_pr_bgnd` from `pr_pds_bgnd_reg_values` and uses the same
   words for `pds_bgnd` of a barrier load
@@ -147,7 +146,7 @@ In `src/pvr/backend_tests.rs`, in the style of the `pds_bgnd` assertions
 
 1. **Words pinned by literal:** `pds_pr_bgnd[0..3]` for 800x600 RGBA8 equal
    the three dwords computed from Mesa's field packing (hand-checked in the
-   test comment: `usc_sharedsize` 1, `pds_texturestatesize` 3,
+   test comment: `usc_sharedsize` 1, `pds_texturestatesize` 1 (Mesa's 4 aligned dwords / 4),
    `pds_tempsize` 1 for the one-kick program).
 2. **Only with the knob:** `pds_pr_bgnd` is all zero without it; `pds_bgnd`
    is byte-identical to today's (the existing background tests unchanged).
@@ -172,7 +171,7 @@ In `src/pvr/backend_tests.rs`, in the style of the `pds_bgnd` assertions
 
 ## Open, for the planner
 
-- The Mesa citations need the re-read above; the unit oddity and the
+- The unit oddity and the
   `pds_pr_bgnd` placement are the two decisions the board verifies.
 - No R32_UINT texel format exists in `backend.rs`; bgload-pds adds one
   (swizzle R, 0, 0, 1) with its own host test.
