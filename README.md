@@ -45,13 +45,15 @@ GitHub Issues. The order of the work, in five stages, is
 [ROADMAP.md](ROADMAP.md).
 
 dEQP-GLES2 (the 17,165-case mustpass list), one main commit `e9901869a` on
-the three boards (2026-10-15/16). Later runs from newer main commits
-(2026-10-23 to 10-25) read the same counts on each board; the AM62P's 4x
-image was not run again (`tools/cts/RESULTS.md`):
+the three boards (2026-10-15/16). Each board's tree has been re-run from
+newer main commits since (2026-10-23 to 10-29); only the AM62P's figures
+changed: its 1x run at `316b4ad7` (2026-10-29) passes the two
+`flush_finish` cases that dEQP's timing check warned on in the earlier
+runs, and its 4x image was not run again (`tools/cts/RESULTS.md`):
 
 | Board | Failures | Notes |
 | --- | --- | --- |
-| AM62P | 0 | 17,140 pass, 18 not supported, 7 warnings (the 17 images at 1x, with the 16 `multisample.*` cases from the 4x image) |
+| AM62P | 0 | 17,142 pass, 18 not supported, 5 warnings (the 17 images at 1x at `316b4ad7`, with the 16 `multisample.*` cases from the 4x image) |
 | i.MX8MP | 0 | 17,318 of 17,371 cases begun pass, 34 not supported, 19 quality warnings (the same cases warn on NXP's own driver) |
 | Raspberry Pi 4 | 0 | 17,126 pass, 34 not supported, 5 warnings |
 

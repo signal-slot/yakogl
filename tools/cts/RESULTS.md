@@ -27,9 +27,9 @@ closed). Mustpass list: 17,165 cases.
 
 | Board | Pass | Fail | NotSupported | QualityWarning / CompatibilityWarning | GPU resets |
 |---|---:|---:|---:|---|---:|
-| AM62P, 17 images at 1x (re-run at `177c62fd`, 2026-10-28, `records/am62p/deqp-177c62fd/`, 17,371 cases begun: the list plus 206 outside it) | 17,330 | **0** | 34 | 5 / 2 | 0 |
+| AM62P, 17 images at 1x (re-run at `316b4ad7`, 2026-10-29, `records/am62p/deqp-316b4ad7/`, 17,371 cases begun: the list plus 206 outside it) | 17,332 | **0** | 34 | 5 / 0 | 0 |
 | AM62P, ms4 image (`multisample.*` on the 4x config) | 16 | **0** | 0 | 0 / 0 | 0 |
-| AM62P combined (ms4 replaces the 16 1x `multisample.*`) | 17,140 | **0** | 18 | 5 / 2 | 0 |
+| AM62P combined (ms4 replaces the 16 1x `multisample.*`) | 17,142 | **0** | 18 | 5 / 0 | 0 |
 | i.MX8MP, 29 entries (re-run at `d0c5dc48`, 2026-10-23, `records/imx8mp/deqp-d0c5dc48/`, 17,371 cases begun: the list plus 206 outside it) | 17,318 | **0** | 34 | 19 (other) | 0 |
 | Pi 4, 29 rows (every list case has a result; re-run at `46f93767`, 2026-10-24, `records/pi4/deqp-46f93767/`) | 17,126 | **0** | 34 | 3 / 2 | 0 (0 recoveries in 29 records) |
 
@@ -38,22 +38,21 @@ closed). Mustpass list: 17,165 cases.
   `clip_control` 8, `negative_api.texture.compressedtexsubimage2d_*` 9,
   `multisampled_render_to_texture.readpixels` 1 and `multisample.*` 16 (no
   multisample surface at 1x; the AM62P runs them on its ms4 image).
-- The AM62P 1x row is from `177c62fd` (2026-10-28, same figures as `996bc35f`,
-  `25cce714` and `f41a19e8`, `records/am62p/deqp-177c62fd/`, 17 images,
-  every case has a result, every image's own counters read `complete=1`,
-  no row needed a re-arm). Against
-  `a917d123` (17,331 pass) one case warns instead of passing:
-  `flush_finish.flush_wait`. On the 17,165-case list it reads 17,124 pass,
-  0 fail, 34 not supported, 5 QualityWarning and 2 CompatibilityWarning —
-  the list figure of `e9901869a`. The ms4 row is still from `e9901869a`; the
-  combined row below is this run's 17,124 plus the 16 ms4 passes, so its
-  figures are unchanged.
-- The CompatibilityWarnings are `flush_finish.flush` and
-  `flush_finish.flush_wait`, dEQP's timing check. The AM62P 1x run at
-  `f41a19e8` warned on both, as at `e9901869a` and `d61a4c5d`; the AM62P
-  run at `a917d123` warned only on `flush_finish.flush` (`flush_wait`
-  passed); the Pi 4 run at `46f93767` warned on both (at `89b4a1c7` only on
-  `flush`).
+- The AM62P 1x row is from `316b4ad7` (2026-10-29,
+  `records/am62p/deqp-316b4ad7/`, 17 images, every case has a result, every
+  image's own counters read `complete=1`, no row needed a re-arm). Against
+  `177c62fd` (17,330 pass, 5 QualityWarning and 2 CompatibilityWarning) the
+  two `flush_finish` timing cases pass without dEQP's warning: 17,332 pass,
+  0 fail, 34 not supported, 5 QualityWarning and 0 CompatibilityWarning
+  over all 17,371 cases begun. On the 17,165-case list it reads 17,126
+  pass. The ms4 row is still from `e9901869a`; the combined row above is
+  this run's 17,126 plus the 16 ms4 passes.
+- The cases dEQP's timing check warns on are `flush_finish.flush` and
+  `flush_finish.flush_wait` (the CompatibilityWarnings of the older runs).
+  The AM62P 1x runs at `e9901869a`, `d61a4c5d`, `f41a19e8` and `177c62fd`
+  warned on both, the run at `a917d123` only on `flush_finish.flush`; the
+  run at `316b4ad7` above neither, both pass. The Pi 4 run at `46f93767`
+  warned on both (at `89b4a1c7` only on `flush`).
 - The i.MX8MP's 19 warnings appear on NXP's own driver too.
 - The EGL double buffer (`1eb9783d`) costs the dEQP images nothing: the glue
   creates no window surface. `driver/samples/zephyr/deqp/src/main.cpp` (the
