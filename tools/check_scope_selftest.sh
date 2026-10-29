@@ -149,7 +149,15 @@ expect "nanopc_t6 glue: the drivers crate tests" '^plan  test    yakogl-drivers'
 # the Mali firmware row (a plan row here; on a run, `needs` makes it a gap
 # naming the file where MALI_CSFFW or deps-env.sh's place has none)
 expect "nanopc_t6 glue: the firmware row" '^plan  test    yakogl-drivers gpu::mali on the board.s mali_csffw.bin' "$out"
+# The licence audit reads every tracked file: any added or changed path reaches
+# its row, whatever scope the path has (7bd8a8e94 added data under tools/v3d
+# and no row that audits licences ran).
+out=$(plan tools/v3d/shim71/clear.clif)
+expect "licence audit: a v3d data file reaches it" '^plan  .*tools   licence audit' "$out"
+out=$(plan docs/standalone-boot.md)
+expect "licence audit: a docs file reaches it" '^plan  .*tools   licence audit' "$out"
 out=$(plan src/pvr/draw.rs)
+expect "licence audit: a pvr file reaches it" '^plan  .*tools   licence audit' "$out"
 expect "pvr: no firmware row" '^skip  test    yakogl-drivers gpu::mali on the board.s mali_csffw.bin' "$out"
 # The two host rows (2026-10-27) run every key file they compile or decode
 # with: a change to one of them reaches the row (they were rows of nothing
