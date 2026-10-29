@@ -1,0 +1,465 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+#
+# gl_test case 214 (splitkick): kick 2's fragment job as Mesa 26.2.1 builds it
+# on the drm-shim, cut from the pandecode trace of
+#
+#   tools/mali/drm_shim_ref.sh run <work> tools/mali/testdata/splitkick.vert \
+#     tools/mali/testdata/splitkick.frag <out> --samples 4 --second-frame
+#
+# (gl_ref.py: a 64x64 pbuffer of the 4x RGB8 config, cleared and drawn,
+# glFlush, drawn again without a clear, glFlush). The lines from its second
+# frame's RUN_FRAGMENT to the end of its render target, the shader block's
+# CPU address dropped (it differs run to run; two runs are otherwise equal).
+# The program block is splitkick_preload.expect.json.
+#
+# The shim's Mesa lays the surface out tiled (no PAN_MESA_DEBUG=linear), the
+# board reference linear (tools/cts/log/2026-10-28-splitref): RT 0's
+# Writeback Block Format and the plane's Clump ordering are Tiled
+# U-Interleaved, both row strides 0x1000 (one row of 16x16 tiles) where the
+# board's are Linear and 0x100. Every other field equals the board's
+# section 4.1, 4.2 and 4.6 words: pre frame 0 Intersect, Writeback MSAA
+# Layered, surface and slice stride 0x4000, the plane 0x10000 bytes, the
+# texture's sample count 4, the DCD's flags (Clean Fragment Write,
+# Evaluate per-sample, Multisample Enable), sample mask 0xffff, the SPD's
+# preload 0x3000. src/mali/frame_split_tests.rs
+# (`the_second_kick_s_pre_frame_draw_reads_as_the_shim_s`) checks ours
+# against these fields.
+#
+  00 00 00 00 00 00 00 07    RUN_FRAGMENT.tile_order=zorder
+  Scissor
+    Scissor Minimum X: 0
+    Scissor Minimum Y: 0
+    Scissor Maximum X: 63
+    Scissor Maximum Y: 63
+  Parameters:
+    Pre Frame 0: Intersect
+    Pre Frame 1: Never
+    Post Frame: Never
+    Downscale geometry: None
+    Internal layer index: 0
+    Frame argument: 0x0
+    Sample Locations: 0x7ffffffff200
+    Frame Shader DCDs: 0x7ffffffbf8c0
+    Width: 64
+    Height: 64
+    Bound Min X: 0
+    Bound Min Y: 0
+    Bound Max X: 63
+    Bound Max Y: 63
+    Sample Count: 4
+    Sample Pattern: Rotated 4x Grid
+    Tie-Break Rule: MINUS_180_IN_0_OUT
+    Effective Tile Size: 512
+    First provoking vertex: false
+    Point sprite coord origin max Y: false
+    Blend suppress Inf: false
+    Blend suppress NaN: false
+    Blend suppress denorm: false
+    Render Target Count: 1
+    Color Buffer Allocation: 8192
+    S Clear: 0
+    S Write Enable: false
+    S Preload Enable: false
+    S Unload Enable: false
+    Z Internal Format: D24
+    Z Write Enable: false
+    Z Preload Enable: false
+    Z Unload Enable: false
+    Has ZS CRC Extension: false
+    Empty Tile Read Enable: false
+    Empty Tile Write Enable: false
+    CRC Read Enable: false
+    CRC Write Enable: false
+    Z Clear: 0.000000
+    Tiler: 0x7ffffffbf400
+  Sample locations @7ffffffff200:
+    (-32, -96),
+    (96, -32),
+    (-96, 32),
+    (32, 96),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (0, 0),
+  Pre frame 0 @7ffffffbf8c0 (mode=2):
+    Depth/stencil      Type: Depth/stencil
+      Front compare function: Always
+      Front stencil fail: Replace
+      Front depth fail: Replace
+      Front depth pass: Replace
+      Back compare function: Always
+      Back stencil fail: Replace
+      Back depth fail: Replace
+      Back depth pass: Replace
+      Stencil from shader: false
+      Stencil test enable: false
+      Front write mask: 0xff
+      Back write mask: 0xff
+      Front value mask: 0xff
+      Back value mask: 0xff
+      Front reference value: 0x0
+      Back reference value: 0x0
+      Shader read only Z/S: false
+      Depth cull enable: false
+      Depth clamp mode: [0, 1]
+      Depth source: Fixed function
+      Depth write enable: false
+      Depth bias enable: false
+      Depth function: Always
+      Depth units: 0.000000
+      Depth factor: 0.000000
+      Depth bias clamp: 0.000000
+    Blend RT 0:
+      Load Destination: false
+      Alpha To One: false
+      Enable: true
+      sRGB: false
+      Round to FB precision: true
+      Blend Constant: 0
+      Equation:
+        RGB:
+          A: Src
+          Negate A: false
+          B: Src
+          Negate B: false
+          C: Zero
+          Invert C: false
+        Alpha:
+          A: Src
+          Negate A: false
+          B: Src
+          Negate B: false
+          C: Zero
+          Invert C: false
+        Color Mask: 15
+      Internal:
+        Mode: Opaque
+        Shader:
+          PC: 970752
+        Fixed-Function:
+          Num Comps: 4
+          RT: 0
+          Conversion:
+            Format (v7): RGBA8 TB RGBA
+            Raw: false
+    Shader Shader @7ffffffbfbc0:
+      Type: Shader
+      Stage: Fragment
+      Fragment coverage bitmask type: GL
+      Vertex warp limit: Half
+      Suppress NaN: false
+      Flush to zero mode: Preserve subnormals
+      Suppress Inf: false
+      Requires helper threads: false
+      Shader contains JUMP_EX: false
+      Register allocation: 32 Per Thread
+      Preload:
+        R48-R63: 0x3000
+        R55: false
+        R56: false
+        R57: false
+        R58: false
+        R59: false
+        R60: true
+        R61: true
+        R62: false
+        R63: false
+      Binary: 0x7fffffffe180
+
+Shader (GPU VA 7fffffffe180) sz 3712
+3d 00 00 12 04 80 54 08    LD_VAR_IMM.slot0.v2.f32.center.store.wait0 @r0:r1, r61, table:0x0, index:0x0
+40 00 0c c0 00 c0 90 68    F32_TO_S32.rtz.discard r0, r0^
+41 00 0c c0 00 c1 90 00    F32_TO_S32.rtz r1, r1^
+c0 1f 00 00 00 c2 10 01    IADD_IMM.i32 r2, 0x0, #0x1F
+7d cc 42 10 00 c2 b4 00    RSHIFT_AND.i32 r2, r61^, 0x13121110.b00, r2^
+42 c0 c0 00 00 c2 bd 00    MKVEC.v2i8 r2, r2^.b0, 0x0.b0, 0x0
+c0 c0 42 00 00 c2 bd 00    MKVEC.v2i8 r2, 0x0.b0, 0x0.b0, r2^
+c0 00 10 00 18 c3 10 01    IADD_IMM.i32 r3, 0x0, #0x18001000
+43 00 00 00 00 c4 91 00    MOV.i32 r4, r3^
+c0 00 00 00 00 c5 91 00    MOV.i32 r5, 0x0
+44 08 c0 53 36 40 25 49    TEX_FETCH.slot1.reserved.32.2d.texel_offset.wait @r0:r1:r2:r3, @r0:r1:r2, [r4^:r5^]
+f0 00 3c b2 08 40 7f 78    BLEND.slot2.v4.f32.end @r0:r1:r2:r3, blend_descriptor_0.w0, r60, target:0x0
+c0 00 00 00 00 f0 10 01    IADD_IMM.i32 r48, 0x0, #0x0
+c0 f1 00 00 10 c1 2f 00    BRANCHZI.eq.absolute 0x0, blend_descriptor_0.w1
+
+
+
+
+    Resources resource table @7ffffffbfb80
+        Entry 0 @7ffffffbfb80:
+          Address: 0x7ffffffbfb20
+          Contains descriptors: true
+          Size: 0x20
+            Attribute @7ffffffbfb20:
+              Type: Attribute
+              Attribute type: 1D
+              Offset enable: false
+              Format (v7): RGB32F RGB1
+              Table: 1
+              Frequency: Vertex
+              Divisor R: 0
+              Divisor E: 0
+              Offset: 0
+              Buffer index: 0x0
+              Stride: 0x10
+              Attribute stride: 16
+              Packet stride: 0
+              Divisor D: 0x0
+        Entry 1 @7ffffffbfb90:
+          Address: 0x7ffffffbfb40
+          Contains descriptors: true
+          Size: 0x20
+            Buffer @7ffffffbfb40:
+              Type: Buffer
+              Buffer type: Simple
+              Size: 0x40
+              Address: 0x7ffffffbf880
+              Stride: 0x0
+              Packet stride: 0
+              Attribute stride: 0
+              Conversion:
+                Format (v7): XXX: INVALID RGBA
+                Raw: false
+        Entry 2 @7ffffffbfba0:
+          Address: 0x7ffffffbfb00
+          Contains descriptors: true
+          Size: 0x20
+            Sampler @7ffffffbfb00:
+              Type: Sampler
+              Reduction mode: Average
+              Wrap Mode R: Clamp to Edge
+              Wrap Mode T: Clamp to Edge
+              Wrap Mode S: Clamp to Edge
+              Round to nearest even: true
+              sRGB override: false
+              Seamless Cube Map: false
+              Clamp integer coordinates: false
+              Normalized Coordinates: false
+              Clamp integer array indices: true
+              Minify nearest: true
+              Magnify nearest: true
+              Magnify cutoff: false
+              Mipmap Mode: Nearest
+              Minimum LOD: 0.000000
+              Compare Function: Never
+              Maximum LOD: 0.000000
+              LOD bias: 0.000000
+              Maximum anisotropy: 1
+              LOD algorithm: Isotropic
+              Border Color R: 0x0 (0.000000)
+              Border Color G: 0x0 (0.000000)
+              Border Color B: 0x0 (0.000000)
+              Border Color A: 0x0 (0.000000)
+        Entry 3 @7ffffffbfbb0:
+          Address: 0x7ffffffbfa40
+          Contains descriptors: true
+          Size: 0x20
+            Texture @7ffffffbfa40
+            Texture:
+              Type: Texture
+              Dimension: 2D
+              Sample corner position: false
+              Normalize coordinates: false
+              Format (v7): RGBA8 UNORM BGR1
+              Width: 64
+              Height: 64
+              Swizzle: 1672 (RGBA)
+              Texel interleave: true
+              Levels: 1
+              Minimum level: 0
+              Minimum LOD: 0.000000
+              Sample count: 4
+              Maximum LOD: 0.000000
+              Surfaces: 0x7ffffffbfa80
+              Array size: 1
+              Depth: 1
+              Plane 0:
+                Type: Plane
+                Plane type: Generic
+                Clump ordering: Tiled U-Interleaved
+                Clump format: RAW32
+                Size: 0x10000
+                Pointer: 0x7ffffffcf000
+                Row stride: 0x1000
+                Slice stride: 0x4000
+                Width: 64
+                Height: 64
+    Local Storage:
+      TLS Size: 0
+      WLS Instances: 2147483648
+      WLS Size Base: 0
+      WLS Size Scale: 0
+      TLS Base Pointer: 0x0
+      TLS Address Mode: Flat
+      WLS Base Pointer: 0x0
+    Draw:
+      Flags 0:
+        Allow Forward Pixel To Kill: true
+        Allow Forward Pixel To Be Killed: true
+        Pixel Kill Operation: Force Early
+        ZS Update Operation: Force Early
+        Allow Primitive Reorder: false
+        Overdraw Alpha0: false
+        Overdraw Alpha1: false
+        Clean Fragment Write: true
+        Primitive Barrier: false
+        Evaluate per-sample: true
+        Aligned line-ends: false
+        Occlusion Query: Disabled
+        Front Face CCW: false
+        Cull Front Face: false
+        Cull Back Face: false
+        Multisample Enable: true
+        Shader Modifies Coverage: false
+        Alpha To Coverage Invert: false
+        Alpha To Coverage: false
+        Scissor To Bounding Box: false
+      Flags 1:
+        Sample Mask: 0xffff
+        Render Target Mask: 0x1
+      Vertex array:
+        Packet: false
+        Pointer: 0x0
+        Vertex packet stride: 0
+        Vertex attribute stride: 0
+      Flags 2:
+        Read Mask: 0x0
+        Write Mask: 0x0
+      Minimum Z: 0.000000
+      Maximum Z: 1.000000
+      Depth/stencil: 0x7ffffffbfc20
+      Blend count: 1
+      Blend: 0x7ffffffbfc00
+      Occlusion: 0x0
+      Shader:
+        Attribute offset: 0x0
+        FAU count: 0
+        Resources: 0x7ffffffbfb84
+        Shader: 0x7ffffffbfbc0
+        Thread storage: 0x7ffffffbf100
+        FAU: 0x0
+  Framebuffer @7ffffffbf000:
+    Parameters:
+      Pre Frame 0: Intersect
+      Pre Frame 1: Never
+      Post Frame: Never
+      Downscale geometry: None
+      Internal layer index: 0
+      Frame argument: 0x0
+      Sample Locations: 0x7ffffffff200
+      Frame Shader DCDs: 0x7ffffffbf8c0
+      Width: 64
+      Height: 64
+      Bound Min X: 0
+      Bound Min Y: 0
+      Bound Max X: 63
+      Bound Max Y: 63
+      Sample Count: 4
+      Sample Pattern: Rotated 4x Grid
+      Tie-Break Rule: MINUS_180_IN_0_OUT
+      Effective Tile Size: 512
+      First provoking vertex: false
+      Point sprite coord origin max Y: false
+      Blend suppress Inf: false
+      Blend suppress NaN: false
+      Blend suppress denorm: false
+      Render Target Count: 1
+      Color Buffer Allocation: 8192
+      S Clear: 0
+      S Write Enable: false
+      S Preload Enable: false
+      S Unload Enable: false
+      Z Internal Format: D24
+      Z Write Enable: false
+      Z Preload Enable: false
+      Z Unload Enable: false
+      Has ZS CRC Extension: false
+      Empty Tile Read Enable: false
+      Empty Tile Write Enable: false
+      CRC Read Enable: false
+      CRC Write Enable: false
+      Z Clear: 0.000000
+      Tiler: 0x7ffffffbf400
+    Tiler Heap:
+      Type: Buffer
+      Buffer type: Tiler heap
+      Size: 0x200000
+      Base: 0x0
+      Bottom: 0x40
+      Top: 0x200000
+    Tiler Context @7ffffffbf400:
+      Polygon List: 0x0
+      Hierarchy Mask: 254
+      Sample Pattern: Rotated 4x Grid
+      Sample test disable: false
+      First provoking vertex: false
+      FB Width: 64
+      FB Height: 64
+      Layer count: 1
+      Layer offset: 0
+      Heap: 0x7fffffff7000
+      Geometry buffer size: 65536
+      Geometry buffer: 0x7ffffffe7000
+      Completed top: 0x0
+      Completed bottom: 0x0
+      Private state:
+        Word0: 0x0
+        Word1: 0x0
+        Word2: 0x0
+        Word3: 0x0
+        Word4: 0x0
+        Word5: 0x0
+        Word6: 0x0
+        Word7: 0x0
+
+  Color Render Targets @7ffffffbf080:
+    U-Tiled RGB Color Render Target 0:
+      Writeback Mode: Compat
+      Internal Buffer Offset: 0
+      YUV Enable: false
+      Dithered Clear: false
+      Internal Format: R8G8B8A8
+      Write Enable: true
+      Writeback Format: R8G8B8A8
+      Writeback Float Format: RGBA16F
+      Writeback Block Format: Tiled U-Interleaved
+      Writeback MSAA: Layered
+      sRGB: false
+      Dithering Enable: true
+      Swizzle: 2058 (BGR0)
+      Clean Tile Write Enable: false
+      Writeback buffer:
+        Base: 0x7ffffffcf000
+        Row Stride: 0x1000
+        Surface Stride: 0x4000
+      Clear:
+        Color 0: 0x0
+        Color 1: 0x0
+        Color 2: 0x0
+        Color 3: 0x0

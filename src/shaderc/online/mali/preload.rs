@@ -22,7 +22,7 @@
 //! shader does, and its words are the ones Mesa 26.2.1 made for it on the
 //! shim and Mesa 25.0.7 on the board (`tests.rs`, `the_colour_preload_is_mesa_s`).
 
-use super::bir::{Dest, Idx, Ins, LodMode, Op, Prog, Special, Src, TexDim};
+use super::bir::{Dest, Idx, Ins, LodMode, Op, Prog, Special, Src, Swz, TexDim};
 use super::select::{alu, preloads, split};
 use super::{flow, pack, ra, sched, MaliError};
 use crate::shaderc::online::arena::Arena;
@@ -76,6 +76,55 @@ pub fn colour<'s>(out: &'s mut [u64], scratch: &Arena<'_>) -> Result<Preload<'s>
     )?;
     finish(p, out, scratch)
 }
+
+/// The per-sample colour preload program: the colour preload of a
+/// multisampled image (`pan_preload_get_shader` for a 2D surface of more than
+/// one sample, pan_fb_preload.c:460-497), which the pre-frame draw runs once
+/// a sample. The coordinate as for [`colour`], converted to integers
+/// (`nir_f2i32`); the sample id (`load_sample_id`: `(r61 >> 16) & 0x1f`,
+/// `bi_load_sample_id_to`, bifrost_compile.c:887-896) as byte 2 of the
+/// offset word, the u8vec4 `<0, 0, sample, 0>` (pan_nir_lower_tex.c:866-924)
+/// as `bi_lower_mkvec_swz` packs a v4i8 on Valhall: the high half `MKVEC.v2i8
+/// sample, 0, #0` first, then the low bytes with it; a `txf_ms` of that
+/// sample (`TEX_FETCH ... .texel_offset`, the handle of [`colour`]), its fp32
+/// result stored to colour output 0 as [`colour`]'s. Mesa 26.2.1 made the
+/// same words on the shim and on the board (src/mali/frame_split_tests.rs).
+pub fn colour_samples<'s>(out: &'s mut [u64], scratch: &Arena<'_>) -> Result<Preload<'s>, MaliError> {
+    let ins = scratch.alloc_filled(super::bir::MAX_INSTRS, Ins::NOP).map_err(|_| MaliError::OutOfScratch)?;
+    let mut p = Prog::new(ins);
+    let c = |v: u32| Src::of(Idx::Const(v));
+    let ld = p.temp()?;
+    let op = Op::LdVarImmF32 { table: COORD_TABLE, index: 0, vecsize: 2 };
+    p.push(Ins::new(op, &[Dest::ssa(ld)], &[Src::of(Idx::Reg(61))]))?;
+    let xy = split(&mut p, ld, 2)?;
+    let x = alu(&mut p, Op::F32ToS32, &[Src::ssa(xy[0])])?;
+    let y = alu(&mut p, Op::F32ToS32, &[Src::ssa(xy[1])])?;
+    let id = alu(&mut p, Op::RshiftAndI32, &[Src::of(Idx::Reg(61)), c(SAMPLE_ID_MASK), c(SAMPLE_ID_SHIFT)])?;
+    let hi = alu(&mut p, Op::MkvecV2i8, &[Src::ssa(id).swz(Swz::B0), c(0), c(0)])?;
+    let offset = alu(&mut p, Op::MkvecV2i8, &[c(0), c(0), Src::ssa(hi)])?;
+    let sr = alu(&mut p, Op::Collect, &[Src::ssa(x), Src::ssa(y), Src::ssa(offset)])?;
+    let op = Op::TexSingle { sr_count: 3, mask: 0xf, f16: false, skip: false, lod: LodMode::Fetch, dim: TexDim::D2Ms };
+    let t = alu(&mut p, op, &[Src::ssa(sr), c(PRELOAD_TEX_HANDLE), c(0)])?;
+    let w = split(&mut p, t, 4)?;
+    let col = alu(&mut p, Op::Collect, &[Src::ssa(w[0]), Src::ssa(w[1]), Src::ssa(w[2]), Src::ssa(w[3])])?;
+    alu(
+        &mut p,
+        Op::Blend { sr_count: 4, f32: true, u32: false },
+        &[
+            Src::ssa(col),
+            Src::of(Idx::Reg(60)),
+            Src::of(Idx::Special(Special::BlendDescriptor0, false)),
+            Src::of(Idx::Special(Special::BlendDescriptor0, true)),
+            Src::NULL,
+        ],
+    )?;
+    finish(p, out, scratch)
+}
+
+/// `bi_load_sample_id_to`'s mask and shift of r61 (a 5-bit mask: the upper
+/// bits read garbage, bifrost_compile.c:889-891).
+const SAMPLE_ID_MASK: u32 = 0x1f;
+const SAMPLE_ID_SHIFT: u32 = 16;
 
 /// The depth/stencil preload program (`pan_preload_get_shader` for a D24S8
 /// whose depth (`z`), stencil (`s`) or both are preloaded): the coordinate

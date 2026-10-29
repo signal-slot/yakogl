@@ -704,12 +704,14 @@ pub fn pack_one(i: &Ins, branch: i32) -> Result<u64, MaliError> {
         Op::TexSingle { mask, f16, lod: LodMode::Fetch, dim, .. } => {
             f = Fill::new(IsaOp::TexFetch);
             let dim = match dim {
-                TexDim::D2 | TexDim::D2Array => TEX_DIM_2D,
+                TexDim::D2 | TexDim::D2Array | TexDim::D2Ms => TEX_DIM_2D,
                 TexDim::Cube => TEX_DIM_CUBE,
             };
             let array = matches!(i.op, Op::TexSingle { dim: TexDim::D2Array, .. }) as u32;
+            /* a multisampled fetch: the sample index in the offset word */
+            let offset = matches!(i.op, Op::TexSingle { dim: TexDim::D2Ms, .. }) as u32;
             f.put("src0", src_byte(&i.src[1])?)?;
-            f.put("array_enable", array)?.put("texel_offset", 0)?.put("wide_indices", 0)?;
+            f.put("array_enable", array)?.put("texel_offset", offset)?.put("wide_indices", 0)?;
             f.put("dimensionality", dim)?.put("write_mask", mask as u32)?;
             f.put("register_width", if f16 { 0 } else { 1 })?.put("skip", 0)?;
             f.put("message_slot_index", i.slot as u32)?;
@@ -732,6 +734,8 @@ pub fn pack_one(i: &Ins, branch: i32) -> Result<u64, MaliError> {
             let dim = match dim {
                 TexDim::D2 | TexDim::D2Array => TEX_DIM_2D,
                 TexDim::Cube => TEX_DIM_CUBE,
+                /* a multisampled texture is only fetched (`txf_ms`) */
+                TexDim::D2Ms => return Err(MaliError::Defect(Defect::Operand)),
             };
             let array = matches!(i.op, Op::TexSingle { dim: TexDim::D2Array, .. }) as u32;
             f.put("src0", src_byte(&i.src[1])?)?;

@@ -38,6 +38,13 @@
 //! (compiled at `init`, src/shaderc/online/mali/preload.rs), which reads
 //! the target back into the tile buffer (`frame::FrameShader`).
 //!
+//! A 4x frame (an EGL surface of the 4x config) keeps its four samples in
+//! the sample store ([`SampleBuffer`]) and averages them into the target in
+//! the same kick ([`frame::resolve_frame`]): the next frame of the target
+//! that starts from its image draws each sample back with the per-sample
+//! preload program, as Mesa reloads a multisampled surface
+//! (tools/cts/log/2026-10-28-splitref, gl_test case 214).
+//!
 //! Depth and stencil: each attachment pair has a linear D24S8 buffer the
 //! frame writes back to ([`frame::ZsAttachment`]); each GL object's plane
 //! says what it holds, and a live plane which pair's buffer holds it. A
@@ -286,9 +293,9 @@ pub struct ShaderInput<'a> {
  * to the flush, each with its own descriptors, vertex data and program
  * copies, so the sizes hold a few hundred of the measured draws (about
  * 1.6 KiB of descriptors, 0.7 KiB of program and 70 stream words each);
- * each region's high-water is logged when it rises. A 4x frame must not
- * split (the next frame's preload has the resolved colour only, in every
- * sample), and gl_test case 198 draws 1024 times into one, as Mesa runs it
+ * each region's high-water is logged when it rises. A 4x frame that splits
+ * goes on from its samples (the sample store), and gl_test case 198 draws
+ * 1024 times into one, as Mesa runs it
  * (one frame a picture, 0dce654a8:tools/mali/board-ref/2026-10-20-mesa-refs): its
  * draws take 640 bytes of descriptors, 29 stream words and 96 bytes of
  * vertex data each (programs are cached), so the descriptors and the
@@ -413,6 +420,11 @@ struct OpenFrame {
     target: frame::Target,
     clear: [f32; 4],
     zs: Option<OpenZs>,
+    /// A 4x frame that keeps its samples (`frame.sample_store`): the
+    /// per-sample preload in its code arena, which the resolve after it
+    /// runs ([`frame::resolve_frame`]), as does its own colour preload when
+    /// the store holds its target's samples.
+    kept: Option<frame::FrameShader>,
 }
 
 /// One depth/stencil buffer: the attachment pair it is for (its `ds_id`; 0:
@@ -445,6 +457,86 @@ const NO_PLANE: PlaneEntry = PlaneEntry { id: 0, gen: 0, aspect: 0, plane: Plane
 /// The planes kept: a depth and a stencil for each depth/stencil buffer.
 const PLANES: usize = 2 * ds_retention::DS_SLOTS;
 const NO_ZSBUF: ZsBuf = ZsBuf { ds_id: 0, w: 0, h: 0, mem: OsalGpuMem::ZERO };
+
+/// Where the four samples of a 4x frame are kept between frames, one plane
+/// a sample ([`frame::SampleStore`]), as Mesa keeps a multisampled surface
+/// (tools/cts/log/2026-10-28-splitref): every 4x frame writes its samples
+/// here (Writeback MSAA Layered) and, in the same kick, a resolve averages
+/// them into the single-sampled target the GL core reads
+/// ([`frame::resolve_frame`]). A later frame of the same target that
+/// starts from its image draws the samples back once a sample (the
+/// per-sample preload), not the resolved colour into all four (gl_test case
+/// 214 splitkick, issue #32). One store serves the last 4x target: 4x
+/// targets are EGL surfaces (an FBO is single-sampled,
+/// `GlesDraw::samples`), and a surface's frame that follows another
+/// target's starts from its image in every sample, as before.
+#[derive(Clone, Copy)]
+struct SampleBuffer {
+    /// Four planes of the largest 4x target so far; given back at shutdown
+    /// or when a larger one needs more (the OSAL keeps it until the kicks
+    /// that may use it complete, `gpu_free`'s contract).
+    mem: OsalGpuMem,
+    /// The target whose samples it holds: the last frame that kept its
+    /// samples, submitted. None: nothing (no such frame yet, a frame lost,
+    /// or the target's memory written by something else or freed).
+    holds: Option<SampleKey>,
+}
+
+const NO_SAMPLE_BUFFER: SampleBuffer = SampleBuffer { mem: OsalGpuMem::ZERO, holds: None };
+
+/// The colour image whose samples the store holds: its memory and layout
+/// (a [`TargetKey`] without the depth/stencil, which the store does not
+/// keep).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct SampleKey {
+    gpu: u64,
+    w: u32,
+    h: u32,
+    row_stride: u32,
+    format: frame::TargetFormat,
+}
+
+impl SampleKey {
+    fn of(key: &TargetKey) -> SampleKey {
+        SampleKey { gpu: key.gpu, w: key.w, h: key.h, row_stride: key.row_stride, format: key.format }
+    }
+
+    /// Whether its rows share a byte with `[gpu, gpu + bytes)`.
+    fn overlaps(&self, gpu: u64, bytes: u64) -> bool {
+        let end = self.gpu.saturating_add(u64::from(self.row_stride) * u64::from(self.h));
+        self.gpu < gpu.saturating_add(bytes) && gpu < end
+    }
+}
+
+/// The sample store's planes for 4x target `t`: its address and the bytes
+/// from one sample's plane to the next (one plane of the target, its row
+/// stride times its height, as Mesa's surface stride: 0x4000 for case 214's
+/// 64x64 RGB8, splitref section 4.2). The memory grows to four planes of
+/// `t`; a store that grows holds nothing. None, so that the frame averages
+/// into the target as without a store: the per-sample preload did not build
+/// at init (its line was logged), the target's rows are not a multiple of
+/// 64 bytes (the preload reads the store as a texture,
+/// [`frame::NOT_BUILT_PRELOAD_STRIDE`]), or the OSAL gave no memory (its
+/// line is logged by [`alloc`]).
+fn sample_store(g: &mut MaliState, t: &frame::Target) -> Option<(u64, u32)> {
+    if g.sample_preload.n == 0 || !t.row_stride.is_multiple_of(64) {
+        return None;
+    }
+    let plane = t.row_stride.checked_mul(t.height)?;
+    let bytes = 4 * plane as usize;
+    if g.samples.mem.cpu.is_null() || g.samples.mem.size < bytes {
+        osal::gpu_free(&mut g.samples.mem);
+        g.samples = NO_SAMPLE_BUFFER;
+        let mut mem = OsalGpuMem::ZERO;
+        if alloc(bytes, OSAL_MEM_DATA, &mut mem).is_err() {
+            osal::gpu_free(&mut mem);
+            glog_once!("mali: no sample store of {} bytes: a 4x frame averages into its target", bytes);
+            return None;
+        }
+        g.samples.mem = mem;
+    }
+    Some((g.samples.mem.gpu, plane))
+}
 
 /// The clear program: the two stages' records, compiled and linked at init.
 #[derive(Clone, Copy)]
@@ -637,6 +729,13 @@ struct MaliState {
     /// alone, the stencil alone and both ([`zs_variant`]): a frame that
     /// uses depth or stencil a past frame drew draws them back with one.
     zs_preload: [PreloadProgram; 3],
+    /// The per-sample colour preload program (`preload::colour_samples`),
+    /// compiled at init: a 4x frame draws the samples of the sample store
+    /// back with it, and so does the resolve after it. Not built: 4x frames
+    /// keep no samples ([`sample_store`]).
+    sample_preload: PreloadProgram,
+    /// The sample store ([`SampleBuffer`]).
+    samples: SampleBuffer,
     /// The blend shaders compiled so far ([`blend_shader`]).
     blend_shaders: [BlendShaderProgram; BLEND_SHADERS],
     /// Kicks submitted, and waits made.
@@ -676,6 +775,8 @@ static STATE: Global<MaliState> = Global::new(MaliState {
     clear_program: NO_CLEAR_PROGRAM,
     preload: NO_PRELOAD_PROGRAM,
     zs_preload: [NO_PRELOAD_PROGRAM; 3],
+    sample_preload: NO_PRELOAD_PROGRAM,
+    samples: NO_SAMPLE_BUFFER,
     blend_shaders: [NO_BLEND_SHADER; BLEND_SHADERS],
     kicks: 0,
     waits: 0,
@@ -1003,6 +1104,8 @@ fn bring_up(g: &mut MaliState) -> Result<(), i32> {
         g.zs_preload[k] =
             build_preload_program(what, |out, sc| crate::shaderc::online::mali::preload::zs(out, sc, z, s));
     }
+    g.sample_preload =
+        build_preload_program("per-sample colour", crate::shaderc::online::mali::preload::colour_samples);
     Ok(())
 }
 
@@ -1021,6 +1124,8 @@ fn release(g: &mut MaliState) {
         osal::gpu_free(&mut z.mem);
         *z = NO_ZSBUF;
     }
+    osal::gpu_free(&mut g.samples.mem);
+    g.samples = NO_SAMPLE_BUFFER;
     if g.zs_high_water > 0 {
         glog!("mali: depth/stencil buffers: high-water {} of {}", g.zs_high_water, ds_retention::DS_SLOTS);
     }
@@ -2239,6 +2344,11 @@ fn upload_preload(code: &mut Arena, p: &PreloadProgram) -> Result<u64, FrameErro
 
 /// Open a frame in the next slot for `target`: cleared to `clear`, or (None) starting from its
 /// old image, which the colour preload program draws back.
+///
+/// A 4x frame keeps its samples in the sample store ([`SampleBuffer`]) when
+/// it can ([`sample_store`]); it then starts from the samples the store
+/// holds, each drawn back by the per-sample preload, when the store holds
+/// its target's, and otherwise from the target's image in every sample.
 fn open_frame(g: &mut MaliState, key: TargetKey, target: frame::Target, clear: Option<[f32; 4]>) -> Result<(), Fail> {
     if clear.is_none() && g.preload.n == 0 {
         return Err(FrameError::NotBuilt(NOT_BUILT_PRELOAD_PROGRAM).into());
@@ -2255,7 +2365,18 @@ fn open_frame(g: &mut MaliState, key: TargetKey, target: frame::Target, clear: O
     // SAFETY: the slot is free of the GPU since the wait above.
     let (mut a, mut cs) = unsafe { slot_arenas(&g.slots[i], g.user_regs, Tops::ZERO, 0) }?;
     let mut f = frame::begin_frame(&mut a.desc, &mut cs)?;
-    if clear.is_none() {
+    let store = if target.samples == 4 { sample_store(g, &target) } else { None };
+    let mut kept = None;
+    if let Some((gpu, surface_stride)) = store {
+        let bin = upload_preload(&mut a.code, &g.sample_preload)?;
+        kept = Some(frame::FrameShader { binary: bin, preload: g.sample_preload.preload });
+        let reload = clear.is_none() && g.samples.holds == Some(SampleKey::of(&key));
+        f.sample_store = Some(frame::SampleStore { gpu, surface_stride, reload, resolve: false });
+        if reload {
+            f.colour_preload = kept;
+        }
+    }
+    if clear.is_none() && f.colour_preload.is_none() {
         let bin = upload_preload(&mut a.code, &g.preload)?;
         f.colour_preload = Some(frame::FrameShader { binary: bin, preload: g.preload.preload });
     }
@@ -2265,7 +2386,8 @@ fn open_frame(g: &mut MaliState, key: TargetKey, target: frame::Target, clear: O
     } else {
         None
     };
-    g.open = Some(OpenFrame { slot: i, tops: a.tops(), cs_len: cs.words().len(), frame: f, key, target, clear, zs });
+    g.open =
+        Some(OpenFrame { slot: i, tops: a.tops(), cs_len: cs.words().len(), frame: f, key, target, clear, zs, kept });
     Ok(())
 }
 
@@ -2304,10 +2426,19 @@ fn end_open(g: &mut MaliState) -> i32 {
         _ => None,
     };
     let slot = g.slots[o.slot];
+    /* the store holds nothing until this frame is submitted, if it keeps
+     * its samples, and nothing of a target this frame writes otherwise */
+    let bytes = u64::from(o.target.row_stride) * u64::from(o.target.height);
+    g.samples.holds = g.samples.holds.filter(|h| o.kept.is_none() && !h.overlaps(o.target.gpu, bytes));
     // SAFETY: the open frame's slot, which the GPU does not read until the
     // submit below.
     let built = unsafe { slot_arenas(&slot, g.user_regs, o.tops, o.cs_len) }.and_then(|(mut a, mut cs)| {
         frame::end_frame(&o.frame, &mut a.desc, &mut cs, &ctx, &o.target, o.clear, zs)?;
+        /* the kept samples averaged into the target, in the same kick: the
+         * GL core reads the target once the kick completed */
+        if let (Some(store), Some(p)) = (o.frame.sample_store, o.kept) {
+            frame::resolve_frame(&mut a.desc, &mut cs, &ctx, &o.target, store, p)?;
+        }
         Ok((a.tops(), cs.words().len()))
     });
     let (tops, words) = match built {
@@ -2342,6 +2473,9 @@ fn end_open(g: &mut MaliState) -> i32 {
     g.kicks += 1;
     g.slots[o.slot].in_flight = Some(InFlight { kick: g.kicks, fence, wait_failed: false });
     g.next = (o.slot + 1) % SLOTS;
+    if o.kept.is_some() {
+        g.samples.holds = Some(SampleKey::of(&o.key));
+    }
     /* what each plane holds after the frame: drawn into, live; otherwise
      * what it started from (a clear's value, or nothing GL keeps) */
     if let Some(z) = o.zs {
@@ -2773,6 +2907,11 @@ pub extern "C" fn mali_attachment_gone(id: u32) {
     if g.open.is_some_and(|o| o.key.objects.iter().any(|&(obj, _)| obj == id)) {
         end_open_for(g, "its depth/stencil object went");
     }
+    /* a surface going names its own depth/stencil, `0x8000_0000 | page`
+     * of its colour buffer (`backend::attachment_gone`): its samples go too
+     * (the 4x targets are surfaces, whose memory EGL frees without
+     * `texture_released`) */
+    g.samples.holds = g.samples.holds.filter(|h| 0x8000_0000 | (h.gpu >> 12) as u32 != id);
     for p in g.planes.iter_mut().filter(|p| p.id == id) {
         *p = NO_PLANE;
     }
@@ -2859,6 +2998,8 @@ pub extern "C" fn mali_texture_released(base_gpu: u64, bytes: u64) {
     // SAFETY: as in `mali_init`.
     let g = unsafe { STATE.get() };
     let end = base_gpu.saturating_add(bytes);
+    /* the samples of an image that goes are nothing GL keeps */
+    g.samples.holds = g.samples.holds.filter(|h| !h.overlaps(base_gpu, bytes));
     if g.open.is_some_and(|o| {
         let s = o.target.gpu;
         s < end && base_gpu < s + u64::from(o.target.row_stride) * u64::from(o.target.height)
