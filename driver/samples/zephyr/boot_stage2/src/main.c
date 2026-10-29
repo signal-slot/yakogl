@@ -245,8 +245,6 @@ int main(void)
 		halt();
 	}
 #endif
-	const bool compressed = info.compression != BS2_COMPRESSION_NONE;
-
 	progress("boot_stage2: \"%s\": %llu bytes stored (%s), %llu bytes image, entry 0x%llx, "
 	       "%llu bytes zeroed at +0x%llx\n",
 	       info.name, info.stored_bytes,
@@ -274,7 +272,7 @@ int main(void)
 #ifdef CONFIG_BOOT_STAGE2_SOURCE_EMMC
 	/* Uncompressed: straight to the load address. Compressed: to the
 	 * staging copy above the image, then decoded down to the load address. */
-	uint8_t *stored = (uint8_t *)(compressed ? STAGING : LOAD);
+	uint8_t *stored = (uint8_t *)(info.compression != BS2_COMPRESSION_NONE ? STAGING : LOAD);
 	uint32_t nsec = (uint32_t)((info.stored_bytes + SECTOR_BYTES - 1) / SECTOR_BYTES);
 
 	if (read_sectors(stored, HDR_SECTOR + 1, nsec)) {
