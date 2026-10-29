@@ -292,6 +292,8 @@ wanted() {
   fi
   for s in $ROW_SCOPES; do
     [ "$s" = all ] && return 0
+    # `licence` is reached by any changed path: the audit reads every tracked file.
+    [ "$s" = licence ] && [ -n "$changed_paths" ] && return 0
     case " $SCOPES " in *" $s "*) return 0 ;; esac
   done
   return 1
@@ -2573,6 +2575,13 @@ print(len(l), "cases"); sys.exit(0 if ok else 1)'
   # the image .config check, the tallies, the GLES3 tables, and check 20:
   # images-selftest.sh, the image builders against a fake west). Host only.
   step "tools   cts-selftest.sh (the CTS tools' checks, images-selftest included)" tools/cts/cts-selftest.sh
+  # The licence audit (check 25 of the script above) on its own, so that a diff
+  # which reaches no `tools` path (a data file under tools/v3d, 7bd8a8e94) still
+  # meets it: every added or changed file is a tracked file the audit reads.
+  scope licence
+  step "tools   licence audit (SPDX header or allowlist row for every tracked file)" \
+    python3 -I tools/license_audit.py --fail-on missing-spdx,unknown-id,third-party-mismatch,generated-mismatch,unused-license
+  scope tools
   # tools/hostharness/glmark2/compare.py on its fixture run directories: the
   # before/after ms-per-frame table of two GM2_PROFILE runs. Host only.
   step "tools   glmark2 compare-selftest.sh (before/after profile table)" bash tools/hostharness/glmark2/compare-selftest.sh

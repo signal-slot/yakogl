@@ -111,7 +111,7 @@ expect() {
   printf '%s\n' "$out" | grep -qE "$pattern" || { echo "FAIL $label: no line matches '$pattern'"; fails=$((fails + 1)); }
 }
 out=$(plan docs/standalone-boot.md)
-expect "docs: only the shared rows" '^check.sh: 2 ok, 0 failed, 0 gap\(s\).*, 205 skipped \(--changed HEAD, scopes: docs' "$out"
+expect "docs: only the shared rows" '^check.sh: 3 ok, 0 failed, 0 gap\(s\).*, 205 skipped \(--changed HEAD, scopes: docs' "$out"
 out=$(plan src/v3d/job.rs)
 expect "v3d: its clippy row" '^plan  clippy  host-test,gpu-v3d,shaderc-online,no-shader-table$' "$out"
 expect "v3d: its image" '^plan  zephyr  rpi4 ' "$out"
@@ -149,7 +149,15 @@ expect "nanopc_t6 glue: the drivers crate tests" '^plan  test    yakogl-drivers'
 # the Mali firmware row (a plan row here; on a run, `needs` makes it a gap
 # naming the file where MALI_CSFFW or deps-env.sh's place has none)
 expect "nanopc_t6 glue: the firmware row" '^plan  test    yakogl-drivers gpu::mali on the board.s mali_csffw.bin' "$out"
+# The licence audit reads every tracked file: any added or changed path reaches
+# its row, whatever scope the path has (7bd8a8e94 added data under tools/v3d
+# and no row that audits licences ran).
+out=$(plan tools/v3d/shim71/clear.clif)
+expect "licence audit: a v3d data file reaches it" '^plan  .*tools   licence audit' "$out"
+out=$(plan docs/standalone-boot.md)
+expect "licence audit: a docs file reaches it" '^plan  .*tools   licence audit' "$out"
 out=$(plan src/pvr/draw.rs)
+expect "licence audit: a pvr file reaches it" '^plan  .*tools   licence audit' "$out"
 expect "pvr: no firmware row" '^skip  test    yakogl-drivers gpu::mali on the board.s mali_csffw.bin' "$out"
 # The two host rows (2026-10-27) run every key file they compile or decode
 # with: a change to one of them reaches the row (they were rows of nothing
@@ -211,7 +219,7 @@ count "narrowed CONFIGS: the table row once" "^plan  gen     precompiled tables 
 # the control: the full plan keeps its rows, the table row once, before the
 # first CONFIGS row that reads the tables
 out=$(plan src/gl/draw.rs)
-# 208 rows: ok plus gaps, because a row whose tool this host lacks is a gap
+# 209 rows: ok plus gaps, because a row whose tool this host lacks is a gap
 # here and a plan row on the gate host; the sum is the same on both. (Seven
 # more for the direct boot: am62p-mkboot.py, the second-stage vectors, the
 # yakogl-boot-stage2 clippy, test and softfloat rows, boot_stage2.h's layout
@@ -219,7 +227,7 @@ out=$(plan src/gl/draw.rs)
 checks=$((checks + 1))
 line=$(printf '%s\n' "$out" | grep -E '^check.sh: [0-9]+ ok, 0 failed, [0-9]+ gap\(s\).*, 0 skipped \(--changed HEAD, scopes: all\)')
 total=$(printf '%s\n' "$line" | sed -E 's/^check.sh: ([0-9]+) ok, 0 failed, ([0-9]+) gap.*/\1 \2/' | awk '{ print $1 + $2 }')
-[ "$total" = 208 ] || { echo "FAIL full plan: its row count: ${total:-no summary line} rows (ok + gaps), expected 208:$line"; fails=$((fails + 1)); }
+[ "$total" = 209 ] || { echo "FAIL full plan: its row count: ${total:-no summary line} rows (ok + gaps), expected 209:$line"; fails=$((fails + 1)); }
 count "full plan: the table row once" "^plan  gen     precompiled tables for the tier" 1 "$out"
 order "full plan: the tables before their first reader" "$gen" \
   'plan  clippy  host-test,gpu-powervr,shaderc-online,precompiled-shaders' "$out"
