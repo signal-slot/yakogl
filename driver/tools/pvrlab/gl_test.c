@@ -410,6 +410,14 @@
  *               (PowerVR) the GPU's busy time a frame. Not in the
  *               regression set (a measurement); SKIP on ES 2.0 without
  *               GL_OES_texture_npot
+ * 217 forcedpr  a forced partial render read back whole (PowerVR, #3): 256
+ *               overlapping 512x512 rectangles of known colour and scrambled
+ *               depth in a 1024x1024 target, one kick, the free list capped at
+ *               512 pages (CONFIG_YAKOGL_DRV_GPU_PVR_FL_PROBE_MAX_PAGES); the
+ *               whole buffer against the analytic image. Needs
+ *               CONFIG_YAKOGL_DRV_GPU_PVR_PARTIAL_RENDER: without it the kick
+ *               hangs by design (the 10 s stop), so NOT in the default list;
+ *               run it by number (README.md, "Case 217")
  * 180 teardown  a 1024x1024 texture sampled, the job flushed and left to
  *               finish unobserved, the texture deleted and one of the same
  *               size made: both read back (red, then green); on the V3D
@@ -8493,7 +8501,7 @@ static const char *const case_names[] = {
 	 * `gl_test: case 65 polyunit: FAIL`, a line the program could not emit.
 	 * A reader grepping for it would have found nothing and concluded the
 	 * case had not run. 63 was still missing when 65/66/67 were added. */
-	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain", [185] = "kindcost", [186] = "fcsplit", [187] = "predarm", [188] = "predif", [189] = "mulone", [190] = "blendonce", [191] = "varyfma", [192] = "predlive", [193] = "offarm", [194] = "offarmn", [195] = "ifbranch", [196] = "occl", [197] = "vtxgrid", [198] = "a2cconst", [199] = "es3trunc", [200] = "intrt", [201] = "usamp", [202] = "blitconv", [203] = "tfcap", [204] = "srgb", [205] = "mappbo", [206] = "es3levels", [207] = "msaazs", [208] = "msaapre", [209] = "varyorder", [210] = "occlacc", [211] = "msaablend", [212] = "ifsel", [213] = "discloop", [214] = "splitkick", [215] = "shadowmap", [216] = "mipchains",
+	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain", [185] = "kindcost", [186] = "fcsplit", [187] = "predarm", [188] = "predif", [189] = "mulone", [190] = "blendonce", [191] = "varyfma", [192] = "predlive", [193] = "offarm", [194] = "offarmn", [195] = "ifbranch", [196] = "occl", [197] = "vtxgrid", [198] = "a2cconst", [199] = "es3trunc", [200] = "intrt", [201] = "usamp", [202] = "blitconv", [203] = "tfcap", [204] = "srgb", [205] = "mappbo", [206] = "es3levels", [207] = "msaazs", [208] = "msaapre", [209] = "varyorder", [210] = "occlacc", [211] = "msaablend", [212] = "ifsel", [213] = "discloop", [214] = "splitkick", [215] = "shadowmap", [216] = "mipchains", [217] = "forcedpr",
 };
 
 /* ---- case 67: what a framebuffer object does NOT have -----------------------
@@ -22374,6 +22382,174 @@ static int case_refusehang(void)
 	}
 	return c[7] == 0 && c[8] != c0[8] ? 0 : -1;
 }
+
+/* ---- case 217: a forced partial render, read back whole (PowerVR) -----------
+ *
+ * The minimal repro of docs/notes/pvr-render-pool.md, "Design: the firmware's
+ * partial render", "The first board measurement", step 1. Case 175 shows the
+ * refusal; this one checks the PICTURE. One kick in flight (one frame, one
+ * glFinish), CONFIG_GL_TEST_FORCEDPR_LAYERS (256) 512x512 rectangles (two
+ * triangles each) in a 1024x1024 target with a 16-bit depth buffer, depth test
+ * LESS. Build it with CONFIG_YAKOGL_DRV_GPU_PVR_FL_PROBE_MAX_PAGES=512 (no list
+ * can grow): the frame's parameter data, about 64 full-screen quads of it,
+ * exceeds the list.
+ *
+ * Layer k sits at x = 173k mod 512, y = 97k mod 512 (whole pixels, so
+ * coverage is exact), with colour (53k+17, 97k+101, 193k+7) and a depth of rank
+ * 2579k mod 4093, all ranks distinct: later layers are in front of earlier
+ * ones in a scrambled order, so the winner at a pixel is the layer of least
+ * rank among those covering it, and a partial render in the middle of the
+ * draw must keep the depth of what it already tiled. The expected image is
+ * that, computed here; the read-back is compared pixel for pixel (a channel
+ * may differ by 1: unorm rounding) and a pixel no layer covers is the clear
+ * (opaque black).
+ *
+ * - Without CONFIG_YAKOGL_DRV_GPU_PVR_PARTIAL_RENDER: the geometry phase runs
+ *   out of parameter memory with nothing to render, the kick never completes
+ *   and the render service stops at 10 s (cause 4, or 2 with the grow knob):
+ *   the stop counter is not 0, the case prints FAIL "stopped" and does not
+ *   read the buffer. That is the known negative.
+ * - With it: PASS needs a partial render (>= 1), no stop, no GPU recovery and
+ *   the whole image equal. A frame that completed with no partial render
+ *   did not reach the mechanism: FAIL "NOT EXERCISED" (raise the layers).
+ *
+ * Not in the default list until the knob lands on: it hangs there by design.
+ * Run it by number (driver/tools/pvrlab/README.md, "Case 217").
+ * ------------------------------------------------------------------------- */
+#ifndef CONFIG_GL_TEST_FORCEDPR_LAYERS
+#define CONFIG_GL_TEST_FORCEDPR_LAYERS 256
+#endif
+#define FPR_SIZE   1024u
+#define FPR_RECT   512u
+#define FPR_P      4093u /* prime: the depth ranks k * FPR_P2 mod FPR_P are distinct for k < FPR_P */
+#define FPR_P2     2579u
+#define FPR_NONE   0xffffu
+static uint16_t fpr_win[FPR_SIZE * FPR_SIZE];  /* the expected image: the winning layer */
+static uint32_t fpr_px[FPR_SIZE * FPR_SIZE];   /* the read-back */
+
+static uint32_t fpr_rank(uint32_t k) { return (k * FPR_P2) % FPR_P; }
+static uint32_t fpr_x0(uint32_t k) { return (k * 173u) % FPR_RECT; }
+static uint32_t fpr_y0(uint32_t k) { return (k * 97u) % FPR_RECT; }
+static uint32_t fpr_rgba(uint32_t k)
+{
+	return ((53u * k + 17u) & 255u) | (((97u * k + 101u) & 255u) << 8) | (((193u * k + 7u) & 255u) << 16) |
+	       0xff000000u;
+}
+
+static int case_forcedpr(void)
+{
+	GLuint prog = link_program(gl_test_vs_src, gl_test_fs_src), tex, rb, fbo, vbo;
+	uint32_t c0[9], c[9], n = CONFIG_GL_TEST_FORCEDPR_LAYERS, bad = 0, first = 0, got0 = 0, want0 = 0;
+	uint32_t hwr0;
+	bool ok;
+
+	if (!prog)
+		return -1;
+	if (n > FPR_P)
+		n = FPR_P;
+	if (n > FWL_MAXQ)
+		n = FWL_MAXQ;
+	for (uint32_t k = 0; k < n; k++) {
+		struct cuv_vertex *v = &fwl_vtx[k * 6u];
+		uint32_t rgba = fpr_rgba(k);
+		float r = (float)(rgba & 255u) / 255.0f, g = (float)((rgba >> 8) & 255u) / 255.0f,
+		      b = (float)((rgba >> 16) & 255u) / 255.0f;
+		/* whole pixels of a 1024-wide viewport: x / 512 - 1 is exact in a float */
+		float xa = (float)fpr_x0(k) / 512.0f - 1.0f, xb = (float)(fpr_x0(k) + FPR_RECT) / 512.0f - 1.0f;
+		float ya = (float)fpr_y0(k) / 512.0f - 1.0f, yb = (float)(fpr_y0(k) + FPR_RECT) / 512.0f - 1.0f;
+		float z = -0.9f + 1.8f * (float)fpr_rank(k) / (float)FPR_P;
+
+		cuv_set(&v[0], xa, ya, z, r, g, b);
+		cuv_set(&v[1], xb, ya, z, r, g, b);
+		cuv_set(&v[2], xa, yb, z, r, g, b);
+		cuv_set(&v[3], xb, ya, z, r, g, b);
+		cuv_set(&v[4], xb, yb, z, r, g, b);
+		cuv_set(&v[5], xa, yb, z, r, g, b);
+	}
+	glGenTextures(1, &tex);
+	glBindTexture(GL_TEXTURE_2D, tex);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, FPR_SIZE, FPR_SIZE, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+	glGenRenderbuffers(1, &rb);
+	glBindRenderbuffer(GL_RENDERBUFFER, rb);
+	glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT16, FPR_SIZE, FPR_SIZE);
+	glGenFramebuffers(1, &fbo);
+	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0);
+	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, rb);
+	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+		pr_err("gl_test: forcedpr: FBO incomplete\n");
+		return -1;
+	}
+	glViewport(0, 0, FPR_SIZE, FPR_SIZE);
+	vbo = upload_vbo(fwl_vtx, n * 6u * sizeof(fwl_vtx[0]));
+	glUseProgram(prog);
+	cuv_attribs();
+	glEnable(GL_DEPTH_TEST);
+	glDepthFunc(GL_LESS);
+	glDepthMask(GL_TRUE);
+	glDisable(GL_BLEND);
+	glDisable(GL_CULL_FACE);
+	glClearColor(0, 0, 0, 1);
+	glClearDepthf(1.0f);
+	if (!check_gl_error("forcedpr setup"))
+		return -1;
+	pvr_render_fl_counters(c0);
+	hwr0 = pvr_render_hwr_recoveries();
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(n * 6u));
+	glFinish();
+	pvr_render_fl_counters(c);
+	/* a stopped service or a recovery leaves nothing worth reading */
+	ok = c[7] == 0;
+	if (ok) {
+		glReadPixels(0, 0, FPR_SIZE, FPR_SIZE, GL_RGBA, GL_UNSIGNED_BYTE, fpr_px);
+		memset(fpr_win, 0xff, sizeof(fpr_win));
+		for (uint32_t k = 0; k < n; k++) {
+			uint32_t rk = fpr_rank(k), x0 = fpr_x0(k), y0 = fpr_y0(k);
+
+			for (uint32_t y = y0; y < y0 + FPR_RECT; y++) {
+				uint16_t *w = &fpr_win[y * FPR_SIZE];
+
+				for (uint32_t x = x0; x < x0 + FPR_RECT; x++)
+					if (w[x] == FPR_NONE || rk < fpr_rank(w[x]))
+						w[x] = (uint16_t)k;
+			}
+		}
+		for (uint32_t i = 0; i < FPR_SIZE * FPR_SIZE; i++) {
+			uint32_t want = fpr_win[i] == FPR_NONE ? 0xff000000u : fpr_rgba(fpr_win[i]);
+
+			if (chan_diff(fpr_px[i], want) > 1) {
+				if (!bad++) {
+					first = i;
+					got0 = fpr_px[i];
+					want0 = want;
+				}
+			}
+		}
+	}
+	pr_info("gl_test: forcedpr: %s: %u layers: requests %u (served %u, refused %u), notices %u, stop %u, "
+		"partial renders %u, GPU recoveries %u\n",
+		c[7] != 0 ? "FAIL stopped" : bad ? "FAIL pixels" : c[8] == c0[8] ? "NOT EXERCISED" : "PASS", n,
+		c[0] - c0[0], c[1] - c0[1], c[2] - c0[2], c[3] - c0[3], c[7], c[8] - c0[8],
+		pvr_render_hwr_recoveries() - hwr0);
+	if (ok && bad)
+		pr_info("gl_test: forcedpr: %u of %u pixels differ; first at (%u,%u) from the bottom left: got 0x%08x want 0x%08x\n",
+			bad, FPR_SIZE * FPR_SIZE, first % FPR_SIZE, first / FPR_SIZE, got0, want0);
+	glDisableVertexAttribArray(0);
+	glDisableVertexAttribArray(1);
+	glDisableVertexAttribArray(2);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	glDeleteBuffers(1, &vbo);
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glDeleteFramebuffers(1, &fbo);
+	glDeleteRenderbuffers(1, &rb);
+	glDeleteTextures(1, &tex);
+	glDisable(GL_DEPTH_TEST);
+	glViewport(0, 0, TW, TH);
+	if (c[7] != 0 || pvr_render_hwr_recoveries() != hwr0)
+		return -1;
+	return bad == 0 && c[8] != c0[8] ? 0 : -1;
+}
 #endif
 
 /* ---- case 103: a colour-masked draw in front of an earlier one --------------
@@ -22507,6 +22683,7 @@ static int run_case(int c, int pretransform, int debug, int *ended)
 			return -3; /* skipped by name: fewer than 13 FWCCB commands */
 		break;
 	case 175: rc = case_refusehang(); break;
+	case 217: rc = case_forcedpr(); break;
 #endif
 	case 176: rc = case_mapbuf(); break;
 	case 22: rc = case_vao(); break;

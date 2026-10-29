@@ -85,6 +85,19 @@ config GL_TEST_FWCCB_LOSS_SECONDS
 	  grow served) and YAKOGL_DRV_GPU_PVR_FWCCB_CHECK, and
 	  GL_TEST_CASES="174".
 
+config GL_TEST_FORCEDPR_LAYERS
+	int "Case 217 (forcedpr): 512x512 rectangles in the one frame"
+	default 256
+	range 1 4093
+	help
+	  Case 217 draws this many overlapping rectangles of known colour
+	  and depth into a 1024x1024 target in one kick, to exceed a free
+	  list capped at 512 pages (YAKOGL_DRV_GPU_PVR_FL_PROBE_MAX_PAGES),
+	  and reads the whole target back. Raise it when the case prints
+	  "NOT EXERCISED" (the frame fitted the list). Not in the default
+	  list: without YAKOGL_DRV_GPU_PVR_PARTIAL_RENDER it hangs by design
+	  (driver/tools/pvrlab/README.md, "Case 217").
+
 config GL_TEST_FWCCB_LOSS_MAX_LAYERS
 	int "Case 174 (fwccbloss): layers a frame at most"
 	default 1024
