@@ -58,7 +58,11 @@
 #endif
 
 #define CASES 20000
+#if V3D_CL_VER == 71
+#define CONTROLS 16 /* one more refusal: the log2 tile size */
+#else
 #define CONTROLS 15
+#endif
 
 #define MESA_DECL(name)                                                                            \
 	void mesa_pack_##name(uint8_t *out, const void *v);                                        \

@@ -54,6 +54,7 @@ third_party/mesa-26.2.1/src/util/xxhash.h | BSD-2-Clause | xxHash: the file head
 driver/src/pvr/generated/csbgen/rogue/*.h | MIT | output of Mesa csbgen from Mesa XML (MIT text in the file, NOTICE 1a); check.sh regenerates it, so no edit
 driver/src/v3d/generated/util/format/u_format_gen.h | MIT | output of Mesa u_format_table.py (MIT text in the file, NOTICE 1b); check.sh regenerates it
 driver/src/v3d/generated/v3d_packet_v42_pack.h | MIT | output of Mesa gen_pack_header.py from v3d_packet.xml (UPSTREAM generated:, NOTICE 1b); check.sh regenerates it
+driver/src/v3d/generated/v3d_packet_v71_pack.h | MIT | the same generator and XML for version 71 (UPSTREAM generated:, NOTICE 1b); check.sh regenerates it
 include/KHR/khrplatform.h | MIT | Khronos header; the licence text in the file is the MIT text (NOTICE 6)
 driver/rust/src/soc/imx8mp/regs.rs | generated-ok | NXP register data (BSD-3-Clause, NOTICE 10) through our Apache-2.0 generator
 src/pvr/csbgen.rs | generated-ok | bindgen over Mesa csbgen output (MIT, NOTICE 1a) via yakogl-tools
