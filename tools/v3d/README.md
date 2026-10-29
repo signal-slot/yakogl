@@ -438,3 +438,87 @@ The IR evaluator runs the same GLSL on the same inputs.
   selection grew; not re-measured: 9 compile. (a) vs (b): 6 agree, 0
   disagree, and 3 matrix-attribute pairs are not tried. (a) vs (c): 5 agree.
   12 of 12 mutants of our code are caught.
+
+## V3D 7.1 (Raspberry Pi 5) references, before the board
+
+Host-only work from `docs/notes/pre-study-rpi5.md`, items H1 to H3. Nothing
+here ran on a board, and the Pi 4 (4.2) data above is not touched.
+
+**Status.** H1, H2 and H3 ran on 2026-10-29 on a Mesa 26.2.1 build made by
+the `build` command below (Mesa's own ninja graph, one patched meson target
+for `src/broadcom/v3d_shc.c` from this repository). The corpus files, the
+count tables and the `shim71/` golden files in this directory are its
+output; the exact commands are below, and re-running one of them must
+reproduce the bytes.
+
+**H1, the facts file.** `driver/docs/rpi5-v3d71-facts.md` has every register,
+interrupt, clock, power-domain and MMU fact the note uses, each with a
+`linux:`, `rpi:` or `docs:` citation (file and line) read from clones of
+Linux `v6.18`, the Raspberry Pi kernel `rpi-6.12.y` branch and
+`raspberrypi/documentation`, all three at the pinned commits the file's
+first table names. To re-check a line, clone that commit and
+`sed -n 'Np' FILE`.
+
+**H2, `v3d_shc` at 7.1.** One binary serves both devices: `--device 42`
+(default, output unchanged) or `--device 71` (ver 71, no accumulators, 64 KiB
+VPM, 16 QPUs, rev 7 and compat_rev 0 as Mesa's drm-shim reports them).
+`--rev` and `--compat-rev` change the revision, which changes the code through
+`v3d_device_has_unpack_max0`. The Pi 5's real revision is not known (U2).
+
+```sh
+tools/v3d/drm_shim_ref.sh build <mesa-26.2.1.tar.xz> <work dir>  # also builds v3d_shc
+export V3D_SHC=<work dir>/mesa-26.2.1/build/src/broadcom/v3d_shc
+tools/v3d/qpu_corpus.py --device 42 --out <copy 1>  # compare the two copies, then
+tools/v3d/qpu_corpus.py --device 42 --out <copy 2>  # copy 1 with qpu_corpus.txt
+tools/v3d/qpu_corpus.py --device 71                 # writes qpu_corpus_71.txt and qpu_counts_71.tsv
+tools/v3d/qpu_corpus.py --device 71 --out <copy>    # the copy must have the same bytes
+```
+
+Measured 2026-10-29 with that build: the two 42 runs are byte-identical,
+and their words and counts equal `qpu_corpus.txt` (1090 pairs ok of 1116;
+111,083 words: fs 38,469, vs 41,598, cs 31,016; 8,893 unique) apart from
+that file's `# build:` line, which names the tree that ran the tool. The
+two 71 runs are byte-identical too: the same 1090 pairs, 91,412 words
+(fs 34,005, vs 34,012, cs 23,395) and 9,078 unique words.
+
+`qpu_corpus_71.txt` is the 7.1 twin of `qpu_corpus.txt` (same programs: ours
+and femtovg's; the Qt shaders left `tools/shaders` before the 4.2 corpus was
+regenerated, see above). `qpu_counts_<dev>.tsv` has the instruction count of
+every program for fs, vs and cs, so the 7.1 count sits beside the 4.2 one.
+The devices differ per program: `color_uv` is fs 12, vs 31, cs 22 at 4.2
+and fs 12, vs 26, cs 15 at 7.1.
+
+**H3, Mesa's GL driver on the drm-shim.** Same method as
+`tools/mali/drm_shim_ref.sh`: Mesa 26.2.1 with `-Dgallium-drivers=v3d` and
+`-Dtools=drm-shim`, the shim reporting the GPU named by `V3D_GPU_ID`.
+
+```sh
+tools/v3d/drm_shim_ref.sh run <work dir> clear    tools/v3d/shim71/clear    71
+tools/v3d/drm_shim_ref.sh run <work dir> triangle tools/v3d/shim71/triangle 71
+```
+
+`gl_ref.py` draws the case on an EGL surfaceless display into a 64x64 FBO.
+`V3D_DEBUG=clif` makes Mesa write the control lists it submits. The shim's
+`SUBMIT_CL` does nothing, but the dump comes first (`v3d_job.c`,
+`v3d_clif_dump` before `v3d_ioctl`). `<out prefix>.clif` is the golden file
+for the 7.1 frame builder and packet work (H4, H5). The `run` form splits
+nothing: Mesa's log lines and the CLIF share stderr, so the golden keeps
+Mesa's `MESA: info:` line prefixes and `<out prefix>.stderr` repeats the
+file; `<out prefix>.stdout` holds `gl_ref.py`'s two lines.
+
+Measured 2026-10-29 with the build above, stored under `shim71/`: the shim
+names the GPU in the renderer string (`gl_ref: renderer V3D 7.1.7.0`), both
+cases print `glGetError 0x0`, and re-running gives byte-identical files.
+`shim71/clear.clif` (173 lines) is the three lists of a clear-only job:
+binning (`TILE_BINNING_MODE_CFG`, `CLEAR_VCD_CACHE`, `START_TILE_BINNING`,
+`FLUSH`), a render list that clears the frame (`TILE_RENDERING_MODE_CFG_*`,
+`STORE`, `CLEAR_RT`, `END_TILE`) and a bin list (`IMPLICIT_TILE_COORDS`,
+`PRIM_LIST_FORMAT`, `STORE` as `rgba8`, `CLEAR_RT`, `RETURN`).
+`shim71/triangle.clif` (346 lines) adds the draw: `ZERO_ALL_FLATSHADE_FLAGS`
+(and its two siblings), `SAMPLE_STATE`, `VERTEX_ARRAY_PRIMS` (mode
+TRIANGLES), the shader binary with `shadrec_gl_main` and two
+`shadrec_gl_attr` records, and the vertex array buffer.
+
+`qpu_counts_<dev>.tsv`'s second header line names the command and the corpus
+file it wrote, so a table regenerated to a scratch copy differs from the
+committed one only in that line; the rows are byte-identical.
