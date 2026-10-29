@@ -3,8 +3,11 @@
 # AM62P: fewer kicks for the PowerVR `glGenerateMipmap` (design)
 
 Written 2026-10-25 as a design; path B is built since 2026-10-28 (see
-"Built"), not yet measured on a board. Every number below is from the
-records the note cites, and the predictions are marked as such.
+"Built") and was measured on the board on 2026-10-29 and 2026-11-01
+("Measured"): it cuts
+the kicks as predicted but makes the frame slower, so it is off by default
+(`Backend::mip_cpu_tail`). Every number below is from the records the note
+cites, and the predictions are marked as such.
 
 ## The cost
 
@@ -165,15 +168,61 @@ Path B as designed above, points 1 to 3 and 5:
   256x256 chain 1 (was 8); gl_test 216's four chains 3 + 1 + 3 + 3 = 10
   of 35 levels.
 
+## Measured (2026-10-29, 2026-11-01)
+
+gl_test case 216 `mipchains` (terrain's four chains a frame, 20 frames,
+glFinish each; the case now prints its kicks a frame), one boot each on the
+AM62P from the U-Boot one-shot, standard images (`tools/cts/pr-session.sh
+--knob off --cases 216`; the run of 2026-11-01 repeats that of 2026-10-29
+within 0.15 ms):
+
+| Image | ms a frame | Mpx/s | kicks a frame | GPU busy (TA\|3D) a frame |
+|---|---:|---:|---:|---:|
+| main `61ad38a1` plus the kick count (2026-11-01) | 46.15 | 43.5 | 40 | 7.75 ms |
+| path B, `f006dc90` rebased onto it (2026-11-01) | 82.95 | 24.2 | 15 | 7.00 ms |
+| path B, `f006dc90` on main `316b4ad7` (2026-10-29) | 83.10 | 24.2 | 15 | 6.99 ms |
+| path B, cache maintenance of the tail alone (2026-10-29) | 81.00 | 24.8 | 15 | 7.00 ms |
+| path B, the tail filtered in a heap copy (2026-10-29) | 105.60 | 19.0 | 15 | 7.00 ms |
+
+glmark2 with path B on (all 33 scenes, the same image set, 2026-11-01):
+score 467, 0 failed, 0 GL errors, terrain 123.8 ms a frame (81 frames)
+against 83.06 ms with every level on the GPU, refract 42.8 ms against
+35.07 ms. Terrain's picture mean is 119 129 44 against column `am62p`'s
+120 129 44; its probes moved with the animation (a slower scene ends at
+another frame), so they do not decide.
+
+The four quadrant probes are the same in every run (PASS). The kicks fell
+as predicted (35 levels to 10, plus the 5 passes), but the frame rose. A
+measurement build (2026-10-29) timed each prefix `glGenerateMipmap` (the mean of 80
+calls): 15.39 ms in the backend (the chain's kicks and the wait for the
+last), 7.87 ms in the CPU tail, a few microseconds in the settle and the
+cache maintenance (90,112 bytes). So:
+
+- **The wait is the cost.** On main a kick queued costs about 1.15 ms (40
+  kicks in 46 ms); a prefix call waits for its pass and its three levels,
+  four kicks, and that takes 15 ms. This is the fence
+  wait of ce3354ac (a fence that does not move until the render service
+  re-posts the kick), now met four times a frame instead of once.
+- **The CPU tail reads uncached memory.** The carve-out is mapped Normal
+  non-cacheable (`driver/src/pvr_fw_boot.c`), so each byte the filter reads
+  is a DRAM access: 7.9 ms for a tail of a few thousand texels. Copying the
+  bytes out first is slower still (the copy reads them uncached too).
+
+Path B is therefore off by default: every level on the GPU, nothing waited
+for, as on main. The code stays (the GL core's `MipChain::Prefix`, the GPU
+sample on the CPU, the backend's prefix behind `mip_cpu_tail`). It can come
+back only when a wait for a kick costs what a queued kick does, and with a
+tail that does not read the carve-out byte by byte. Until then the lever
+for the kicks is A (one transfer submit for the chain) or the cost of a
+kick itself.
+
 ## Open
 
-- The board run of "What decides it": kicks and ms a frame of terrain and
-  gl_test 216 with this change, the waits it adds, and the picture against
-  column `am62p`. The read-back of the all-GPU and the hybrid chain (point
-  5, board) is not run.
-- Whether the AM62P's non-cacheable carve-out makes the CPU tail's reads slow
-  enough to matter is unmeasured (`imx8mp-glmark2-gap.md` gives 67 ms for
-  7.7 MB on another board: about 9 ms per MB, so 10 KB is ~0.1 ms).
+- Why four kicks waited for take about 15 ms on the AM62P when a queued
+  kick costs about 1.15 ms (the render service's wait and re-post,
+  ce3354ac).
+- The read-back of the all-GPU and the hybrid chain (point 5, board) was
+  not run: the prefix is off.
 - The "Done when" of the issue (kicks and ms a frame down on the AM62P, one
-  glmark2 run from main, picture within tolerance) is not met by this note;
-  the issue stays open.
+  glmark2 run from main, picture within tolerance) is not met; the issue
+  stays open.
