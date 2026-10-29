@@ -2951,7 +2951,8 @@ until they land, a geometry refusal at A = 0 is still survived only while
 a 3D is pending, so the knob stays off on the board. Mesa 26.2.1 (MIT) is
 transcribed with attribution where code is taken. Linux drm/imagination
 and the DDK are cited only. The reading this builds on is the section
-above.
+above. The frame side (Z/S, SPM EOT, background load) is read in "The PR
+frame side, read (Mesa 26.2.1)" below.
 
 **The knob:** `CONFIG_YAKOGL_DRV_GPU_PVR_PARTIAL_RENDER`, off by default. It is
 a new runtime switch in `YdPvrRenderCfg` (`partial_render`, set by
@@ -3137,6 +3138,228 @@ pending - the PR command can be queued, but a partial render that must
 save and resume a frame needs its frame side (parts 2 and 3). The stop
 still ends a hang at 10 s with a record (fix 2) until the forced case
 below runs with the knob on.
+
+### The PR frame side, read (Mesa 26.2.1)
+
+Host-only reading, no code, 2026-10-29. Each claim is marked:
+- **read**: what a source says;
+- **computed**: arithmetic on read formulas;
+- **inferred**: a conclusion from read facts that no source states; it
+  is measured on the board before code relies on it.
+
+Nothing here is measured yet. Mesa 26.2.1 (MIT) is the tarball tree
+(`src/imagination/vulkan/...`, cited without that prefix). Linux
+drm/imagination (7.3) and the DDK (ti-img-rogue-ddk-25.2) are cited by
+file:line only. Two of the brief's line ranges were off; the right ones
+are used below:
+- `pvr_uscgen_spm_load` is pvr_usc.c:1373-1490;
+- pvr_arch_spm.c:77-250 is `pvr_arch_device_init_spm_load_state`, which
+  builds and uploads that shader and its two PDS programs.
+
+**(1) Who sets the Z/S load after a PR, and which words.**
+- **read:** Mesa writes no PR-specific Z/S word.
+  - The PR 3D command is a byte copy of the normal one. Only the PBE
+    register words and `CR_EVENT_PIXEL_PDS_DATA` are replaced
+    (pvr_arch_job_render.c:1388-1406).
+  - So the PR's `CR_ISP_ZLSCTL`, `CR_ISP_ZLOAD_BASE` and
+    `CR_ISP_STENCIL_LOAD_BASE` are the normal job's
+    (pvr_arch_job_render.c:958-1027). They come from the attachment's
+    load/store ops only (pvr_arch_cmd_buffer.c:1849-1920); there is no PR
+    term in them.
+- **read:** neither Mesa nor Linux writes `CMDTA3D_SHARED.asPRBuffer`.
+  - In Mesa it appears only as a declaration
+    (winsys/pvrsrvkm/fw-api/pvr_rogue_fwif_shared.h:151).
+  - Linux's fragment command init sets only `frame_num`, `flags` and the
+    HWRT address (pvr_job.c:195-198).
+  - So the DDK's on-demand Z/S buffer (`RGXFWIF_PRBUFFER_ZSBUFFER`,
+    rgx_fwif_shared.h:122-146) has no user in either driver.
+- **read:** Mesa sets the fragment flags DEPTHBUFFER and STENCILBUFFER
+  whenever the render has a depth or stencil attachment
+  (pvr_arch_job_render.c:1330-1331). The srv winsys maps them to
+  `ROGUE_FWIF_RENDERFLAGS_DEPTHBUFFER` 0x80 and `_STENCILBUFFER` 0x100
+  (winsys/pvrsrvkm/pvr_arch_srv_job_render.c:738-742,
+  fw-api/pvr_rogue_fwif.h:57-60, "Indicates whether a depth buffer is
+  present"). Our capture's values are the same (backend.rs:728, :732).
+- **read:** the firmware's own trace strings name a Z/S load and store
+  that the firmware does for a PR (DDK include/rgx_fwif_sf.h):
+  - SPM 1 "Force Z-Load for partial render" and SPM 2 "Force Z-Store for
+    partial render" (:1499-1502, ids marked deprecated);
+  - SPM 17-20 "ZStore/SStore/ZLoad/SLoad address" (:1533-1540);
+  - MAIN 47 "No ZS Buffer used for partial render (store)" and MAIN 48
+    "No Depth/Stencil Buffer used for partial render (load)" (:208-213).
+- **Answer (inferred):** the firmware itself turns on the Z/S store for
+  the PR and the Z/S load for the render that resumes after it.
+  - It uses the command's own ZLS base registers.
+  - It does so when the flags say a depth or stencil buffer is present.
+  - The host sets no load word for this. Its part: set the two flags
+    (we do, backend.rs:8318) and give `ISP_ZLSCTL` extents and base
+    registers that are valid for a store and a load (we do,
+    backend.rs:8288-8317). Leave `asPRBuffer` at 0, as both drivers do.
+  - Which `ZLSCTL` bits the firmware forces is not readable. By the
+    register's fields, they would be `forcezstore`/`zstoreen`/`sstoreen`
+    and `forcezload`/`zloaden`/`sloaden` (the bits `isp_zlsctl_stores`
+    packs, backend.rs:691-709).
+  - **Open for our swap case:** `swap_drops_zs` turns our store bits off
+    (backend.rs:8301). By the inference, the PR still stores, so the
+    resumed render still finds its depth. If the firmware forces only
+    the load and keeps the host's store bits, a swapped frame loses its
+    depth at the PR. Measure it with the forced-PR case (depth across
+    the PR boundary) in a swapped and an unswapped frame. With the
+    firmware trace on, also look for the SPM 17-20 address lines.
+
+**(2) Where the PR's Z/S go, and their sizes at 800x600 D24S8.**
+- **read:** into the frame's own depth/stencil buffer. The PR command
+  keeps the normal `ZLOAD_BASE` / `STENCIL_LOAD_BASE`
+  (pvr_arch_job_render.c:1009-1027, copied at :1389). The SPM scratch
+  holds colour only: its size counts output registers and tile buffers,
+  no depth (pvr_arch_spm.c:39-75). There is no separate Z/S scratch, and
+  `asPRBuffer` is not used (see (1)).
+- **Ours (read):** one packed D24S8 buffer whose address is both bases
+  (backend.rs:8305-8317). With `split_zs_on`, stencil has its own buffer
+  with the separate-stencil enable (:8309-8312).
+- **Sizes (computed):**
+  - Depth/stencil: `ds_bytes` (backend.rs:4089-4094) gives 800 x 608
+    (600 rounded up to the 32-pixel ZLS tile) x 4 B = 1,945,600 B. The
+    buffer exists already, so the PR adds no Z/S memory.
+  - SPM colour scratch: align(800, 2) x 600 x 4 B x 1 sample x 1 dword x
+    (1 + 0 tile buffers) = 1,920,000 B (pvr_arch_spm.c:67-72; the
+    alignment `ROGUE_CR_PBE_WORD0_MRT0_LINESTRIDE_ALIGNMENT` is 2,
+    csbgen/rogue/cr.xml:612-614).
+- So the sizing risk's "about 2.4 MB for the PR depth and stencil" in
+  this design is not needed (computed from the reads above).
+
+**(3) What the PR command changes against the normal 3D command.**
+- **read, Mesa:** only two things change: all PBE register words (the
+  whole `pr_pbe_reg_words` array) and the EOT data address
+  (pvr_arch_job_render.c:1388-1406). Unchanged:
+  - ZLS, ISP, the background words (`pds_bgnd` and `pds_pr_bgnd`);
+  - `CR_EVENT_PIXEL_PDS_INFO`: one device-wide size, so both EOT
+    programs must fit it (:1187-1195);
+  - the flags, CMDTA3D_SHARED, and the strides.
+- **read, Linux:** the kernel changes only the CCB command type
+  (FRAG_PR, pvr_job.c:187-189). It converts the same flags for both
+  jobs (pvr_job.c:120-140).
+- **read, when Mesa uses the scratch at all:** the PR PBE/EOT point at
+  the SPM scratch only when `requires_frag_pr` is set
+  (pvr_arch_cmd_buffer.c:1736-1747). That is the case when a colour
+  output is not stored or is resolved (pvr_arch_hw_pass.c:2627-2631;
+  dynamic rendering pvr_arch_cmd_buffer.c:4188, :4227). In the ordinary
+  case (every colour attachment STORE), `pr_pbe_reg_words` is a copy of
+  the normal words. The PR then writes the real targets, and
+  `pr_pds_bgnd` is the render's own load-op program
+  (pvr_arch_cmd_buffer.c:1061-1075).
+  - **Open:** for a CLEAR load op that program is a clear. No source
+    says how the firmware keeps it from clearing the tiles a PR stored.
+- **read, the flag a scratch PR needs:** `SPMSCRATCHBUFFER` 0x80000,
+  "Partial render must write to scratch buffer"
+  (fw-api/pvr_rogue_fwif.h:74-75; Linux `ROGUE_FRAG_FLAGS_SCRATCHBUFFER`,
+  bit 19). The uapi says it "also forces the full screen copy expected to
+  be present on the last render after all partial renders have
+  completed" (include/drm-uapi/pvr_drm.h:1129-1132).
+  - Mesa sets it only for a barrier store
+    (`requires_spm_scratch_buffer`, pvr_arch_cmd_buffer.c:1629-1635,
+    passed at pvr_arch_job_render.c:1335).
+  - A barrier load also sets `enable_bg_tag` and `process_empty_tiles`
+    (:1696-1698).
+- **Answer for our design (scratch PR, parts 2-3):**
+  - from Mesa: change the PBE words and the EOT data (dk[15]) in the
+    3D_PR;
+  - inferred: set 0x80000 in the flags (dk[76]) of both commands, so the
+    firmware runs the full-screen load on the last render;
+  - no ZLS or CMDTA3D_SHARED change.
+  - Keep `event_pixel_pds_info` (dk[13]) as it is: the PR EOT program
+    must fit the frame's value, as in Mesa. For a 1-target RGBA8 frame
+    both programs have one emit. For more targets, compare
+    `event_pixel_pds_info_n` (backend.rs:8353-8359) for the two
+    programs before reusing it.
+
+**(4) The PR background PDS program, and `pds_pr_bgnd`'s three words.**
+- **read, the shared registers** (one DMA into the common store from a
+  per-render constants buffer; pvr_arch_spm.c:760-917, layout
+  common/pvr_iface.h:75-102):
+  - sh0-3 (`PVR_SPM_LOAD_DATA_SMP`): the sampler. `TEXSTATE_SAMPLER_WORD0`
+    has non-normalised coordinates, clamp-to-edge u and v, point min and
+    mag filters, min/max LOD `CLAMP_MIN` and dadjust `ZERO_UINT`.
+    WORD1 is all zero (pvr_arch_spm.c:818-831).
+  - sh4-7 (`PVR_SPM_LOAD_DATA_REG_TEX`): the image state of the scratch
+    (pvr_arch_spm.c:638-691): format R32_UINT for 1 dword, linear, 2D,
+    `PVR_TEXTURE_STATE_STORAGE`, the framebuffer's width and height,
+    stride align(width, 2), 1 mip level, the sample count, and the
+    scratch's base address.
+  - With 0 tile buffers the buffer is 8 dwords
+    (`pvr_uscgen_spm_load_data_size`, pvr_usc.h:249-253).
+- **read, the PDS programs** (built once per load shader,
+  pvr_arch_spm.c:151-241):
+  - the uniform/texture program: `pvr_pds_generate_pixel_shader_sa_code_segment`
+    with one texture DMA kick;
+  - its data, per render: DOUTD src0 = the constants buffer's address,
+    src1 = destination common store, `bsize` = the constants size
+    (pvr_arch_spm.c:694-758);
+  - the pixel program: DOUTU of the load shader with pco's temp count
+    and sample rate INSTANCE (FULL only with sample shading)
+    (pvr_arch_spm.c:217-228).
+- **read, the three words** (pvr_arch_spm.c:886-917):
+  - `CR_PDS_BGRND0_BASE`: `shader_addr` = the pixel program,
+    `texunicode_addr` = the texture program's code;
+  - `CR_PDS_BGRND1_BASE`: `texturedata_addr` = the per-render DMA data;
+  - `CR_PDS_BGRND3_SIZEINFO`: `usc_sharedsize` = ceil(constants / 16),
+    `pds_texturestatesize` = ceil(data size / 4), `pds_tempsize` =
+    ceil(temps / 4) (the units, cr.xml:332-351).
+  - Mesa uses these words for both `pds_bgnd` and `pds_pr_bgnd` of a
+    barrier load (pvr_arch_cmd_buffer.c:1696-1717).
+- **read, a Mesa unit oddity:** Mesa passes the constants size in
+  **bytes** (`PVR_DW_TO_BYTES`, pvr_arch_spm.c:796) where both fields
+  count dwords: `bsize` (:717) and `usc_sharedsize` (:908-910). The
+  load-op path passes dwords (`shareds_count`, pvr_arch_cmd_buffer.c:939,
+  :1014-1016). For 0 tile buffers that is 32, not 8 (computed):
+  `usc_sharedsize` 2 instead of 1, and a DMA of 32 dwords from a
+  32-byte buffer. A transcription uses 8 dwords, so `bsize` 8 and
+  `usc_sharedsize` 1. This differs from Mesa on purpose and is checked
+  on the board.
+- **Ours (read):** `pds_bgnd` is built the same way. `shader_addr` =
+  the background kick, `texunicode_addr`/`texturedata_addr` = our DMA
+  program's code and data, and SIZEINFO from `CLEAR_ATTACH_DWORDS`, the
+  DMA data size and its temps (backend.rs:8420-8454). The PR one reuses
+  those generators with a different DMA source (the constants buffer)
+  and a different kick (the load shader).
+- **Open, where `pds_pr_bgnd` sits in our 3D command:** our 80-dword
+  command has `pds_bgnd` at dk[70..75] and the flags at dk[76]
+  (render.rs:1434-1437). Our self-test records "the captured layout has
+  no dwords for it" (driver/src/pvr_selftest.c:1536-1537). Mesa's
+  generic struct puts `pds_pr_bgnd` after `pds_bgnd` and an optional
+  BRN 65101 copy (fw-api/pvr_rogue_fwif.h:302-307). Its fields marked
+  "only used when ..." are compiled out in a single-core DDK build, so
+  dword counting cannot place it. `RGXFWIF_CMD3D` is a DDK user-mode
+  struct that the vendored DDK does not define (only its size check,
+  include/rogue/rgx_fwif_alignchecks.h:88-90). So
+  driver/tools/offsetof cannot pin it either. It needs a DDK capture of
+  a 3D command with a PR background before bgload-pds writes it.
+
+**(5) The exact inputs of `pvr_uscgen_spm_load` for our configuration.**
+- **read:** `struct pvr_spm_load_props` = { `output_reg_count` = 1,
+  `tile_buffer_count` = 0, `is_multisampled` = false } (pvr_usc.h:210-214).
+  That is shader index 0 (pvr_usc.h:264-267). Mesa takes
+  `output_reg_count` as min(the render's output registers, 4)
+  (pvr_arch_spm.c:783-786), and one RGBA8 attachment is 1 dword. The pco
+  context is the device's, here BXS-4-64.
+- **read, what it generates** (pvr_usc.c:1373-1490):
+  - a fragment shader without sample shading;
+  - input `VARYING_SLOT_POS`, no-perspective, x and y used as the
+    texel coordinates;
+  - the sampler state from shared registers 0-3 and the image state from
+    4-7 (preamble loads);
+  - one `smp` with dest type uint32, 2D, `lod_replace` 0 and 1 component;
+  - output `FRAG_RESULT_DATA0` as R32_UINT in output register 0
+    (`outputs` range {0, 1}).
+- **read, the data path:** the PR's PBE writes each pixel's output
+  register raw. It uses packmode U32 for 1 dword, source format
+  8_PER_CHANNEL, swizzle XYZW, linear, stride align(width, 2), and clip
+  (width - 1, height - 1) (pvr_arch_spm.c:258-326). The load returns
+  that dword to output register 0. The frame's own EOT then packs it as
+  usual.
+  - **Open:** this assumes our fragment shaders leave an RGBA8 pixel
+    packed in o0. The bgload-shader item checks this against our
+    end-of-tile words.
 
 ### The landing tip with every switch on: image 67f54d8a, predictions (written before it runs)
 
