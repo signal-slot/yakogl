@@ -706,4 +706,88 @@ assumed.
   outer loop, in the latch in its inner loop) is explained above by CSE into
   `outer = i + 1`; the per-pass NIR (`NIR_DEBUG=print_fs`) was not drawn.
 - The linked compile of `vid.vert` for a fragment that reads nothing (see
-  the builtin prerequisite).
+  the builtin prerequisite). Measured since: it compiles (the position
+  program alone), `cases_45_and_98_vertex_programs_are_byte_equal_to_mesa_26_2_1`.
+
+## Status of Part 2 (plan #154 loops-rt)
+
+Byte-equal (tests in `tests.rs`): `intloop_loop_exit` (step 1),
+`builtin_98`'s fragment program (step 2, with its `mod` epilogue),
+`intloop_divnest` (step 3), `builtin_45`'s fragment program (step 4), and
+femtovg's `filter_image` and `filter_image.nodiscard` (Part 1's guarded
+unroll with the guards left as branches).
+
+Not lowered: the other three references. Each needs a path the back end
+does not have, not a missing case in the paths above, so each is refused
+with a gap of its own (pinned in `tests.rs` `gap_cases` and in
+`tools/mali/corpus-verdicts.txt`, the same-shape corpus sources with them).
+Measured at plan #154 (d)4 by making each `ControlFlow` site return a
+distinct gap and reading the corpus verdicts:
+
+| reference | stops at | gap | what lowering it needs |
+|---|---|---|---|
+| `intloop_loop_nested` (step 5) | `nir_fs.rs` `walk_kept_loop`, `!prec.highp` | `LoopMediump` | Blocks in the mediump fragment path. `select` rebuilds the colour's expression trees into lane pairs and emits one block; it has no phis, no edges and no per-block selection. The words need the header phis as 16-bit vectors (`MOV.i32` of whole pairs, words 3-4, 9, 17), the `yzwx` swizzle as two `MKVEC.v2i16` in the body, int uniforms read by `ICMP_OR` in a mediump shader, and the epilogue's scalar fp16 sums (`FADD.v2f16 .h00/.h11`) over the loops' results. |
+| `intloop_loop_nested_vs` (step 6) | `nir.rs` `build`, the first `Loop` node | `LoopVertex` | Three things the vertex stage lacks. (1) Control flow: `build` walks straight code, and the vertex selection has no blocks. (2) fp16 values: mediump temporaries are `V2F32_TO_V2F16` pairs, then `F16_TO_F32` per lane at the stores. No vertex reference had a mediump temporary before. (3) `int` uniforms read by value (`u5.w1`, `u6.w0`): `build` takes an `int` uniform only as an index (`UniformType`). |
+| `intloop_contloops` (step 7) | `nir_fs.rs` `walk_if16`, a pass's guard (`IfExit::Guard`) | `GuardMediump` | Before its kept `while` comes the mediump form of Part 1's `complex_unroll` ladder (words 0-39: `ICMP_OR` against byte constants, `MUX.v2i16` of fp16 pairs, `MKVEC` re-pairing). This is the shape the control-flow item's cases 70/71 also need. After the ladder it needs `LoopMediump`'s blocks, plus scalar 16-bit phis copied by `U16_TO_U32` (words 51-54). |
+
+The work splits into three steps, each a block emitter of its own (as
+`select_highp` is for the highp path), so each is its own item, in this
+order: mediump blocks (loop_nested), then the mediump guard ladder on top
+of them (contloops), then the vertex stage (loop_nested_vs).
+
+Where the implementation differs from the plan above:
+
+- A kept loop (`nir_fs.rs` `kept_loop`, `walk_kept_loop`) is decided from
+  the body's head test alone: a test the walk cannot fold at the first pass
+  keeps the loop. `nir::LoopRegion` holds `pre`, `header`, `latch`, `exit`;
+  edges are added in the order the regions close (`IfRegion::seq`).
+- Mesa 26.2.1's GLSL front end puts a `for` step in the loop's continue
+  construct (glsl_to_nir.cpp:794-797), and `nir_lower_continue_constructs`
+  moves the code after each `continue`'s `if` into its other side, then
+  inlines the step once before the back edge
+  (nir_lower_continue_constructs.c:91-140). yakogl's front end copies the
+  step before each `continue` instead (`Lower::loop_body`), so the walk
+  takes `if (c) { step; continue; }` at the top of a kept body as
+  `if (!c) { rest } else {}` followed by the step, the copy matched against
+  the body's tail (`same_instrs`). That is why divnest's inner `j++` is in
+  the latch (B9) and the outer `i + 1` is the one of `outer = i + 1`.
+- A header's phis stand in the reverse of the order
+  `nir_lower_vars_to_ssa` registers the locals (`nir::registration_order`):
+  the constant-initialised ones first, in reverse declaration order (a
+  `for` init's local is declared in the enclosing scope), then the others
+  at their first reference. A constant initialiser is any constant
+  expression, as ast_to_hir folds it into `constant_initializer`:
+  builtin_98's `int last = -1` (a negation of `1` in our IR) is one, so the
+  phis are `n`, `last`, `i` (r0, r1, r2); taking only a literal as constant
+  put `last` first (word 0 `#0xFFFFFFFF`).
+- The mediump path has no blocks, so a mediump kept loop is refused at the
+  top of `walk_kept_loop` (`LoopMediump`), and a mediump `if` goes to
+  `walk_if16` as before; no mediump shader reaches `select_highp` through
+  a loop.
+- Two `break` edges: the exit's phis are made for the lanes the edges
+  leave different, in rank order (`n` before `outer`: the copies `MOV r0,
+  r1^; MOV r1, r2^` on both edges; the other order puts `n` in r1 and
+  copies only `outer`). Equal header phis are one (`outer` and `i`), the
+  first kept. A local the body stores before any read (`j` in the outer
+  loop) has no header phi.
+- The scoreboard (`flow.rs`) and `mark_last` iterate to a fixed point over
+  the back edge; `opt.rs` `dce`, `cse` and `single_use` see a header phi
+  that reads a later value.
+- `i2f(f2i(a))` is `ftrunc(a)` (`Alu::Ftrunc`, `FROUND.f32.rtz`).
+- filter_image: Mesa unrolls it (`complex_unroll`) but its 24 guards are
+  too large for the peephole, so they stay `BRANCHZ.eq` over each pass, the
+  break's five copies after the pass (`Nir::lay_out_inverted_guards`
+  renumbers the two sides' blocks). The unroll's size test counts
+  `instr_cost` as Mesa does (`unroll_cost`: phis and an `fmul` only `fadd`s
+  read are free), not every node. A texel read with a highp non-constant
+  value makes the look-up fp32 (`.32`), as GLSL's lower_precision leaves
+  it (hdrsample's `* 0.25` stays fp16); `fneg` of a constant in the late
+  fusion folds (`-3.0` an `IADD_IMM`). The only words that differ are the
+  `skip` bits of the first 18 (19 without the discard) look-ups, a
+  value-number collision in `bi_add_branch_compare_values`, pinned in
+  `FEMTOVG_SKIP_PINNED`.
+- Caps raised for it: `bir::MAX_BLOCKS` 128 (82 used), `bir::MAX_INSTRS`
+  and `MAX_NODES` 1536 (1419 instructions), `nir::MAX_NODES` 1536 (1153),
+  `nir::MAX_IFS` 32 (27); the scheduler refuses a block over 512
+  instructions (`sched::MAX_BLOCK_INSTRS`: its edge rows are the block's
+  size squared), and `liveness_ssa`'s sets live in the scratch arena.

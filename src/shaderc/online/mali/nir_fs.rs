@@ -357,6 +357,9 @@ pub fn order_keys(m: &Module<'_>, keys: &mut [u32]) {
                 ir::Op::Alu(a, srcs) => srcs.iter().take(a.arity()).for_each(|s| child(s.val.0)),
                 /* a look-up's coordinate is visited as its child */
                 ir::Op::Tex { coord, .. } => child(coord.val.0),
+                /* and an indexed uniform read's index (builtin_45's `idx +
+                 * i`, an int sum the walk keeps as a node) */
+                ir::Op::LoadUniformIdx { index, .. } => child(index.val.0),
                 /* a grafted local's one read is its stored tree */
                 ir::Op::LoadLocal { local, index: None, .. } => {
                     if let Some(src) = grafted.get(local.0 as usize).copied().flatten() {
@@ -744,6 +747,36 @@ pub struct Fs<'s> {
     /// condition's IR value (`u32::MAX`: none yet): `complex_unroll` takes
     /// one ([`walk_guard`]).
     guard: u32,
+    /// The innermost loop Mesa keeps around the nodes being walked
+    /// ([`walk_kept_loop`]): its index in `nir.loops`.
+    kept: Option<u8>,
+    /// That loop's body (its nodes' address and count): the run whose
+    /// `if (c) { step; continue; }` [`walk_nodes`] reshapes.
+    kept_body: (usize, usize),
+    /// The `break`s of the kept loops walked so far ([`BreakEdge`]).
+    breaks: [BreakEdge; MAX_BREAKS],
+    nbreaks: usize,
+    /// Each local's place in `nir_lower_vars_to_ssa`'s registration
+    /// ([`nir::registration_order`]): the order of a loop header's phis.
+    reg: [u16; MAX_LOCALS],
+}
+
+/// The `break`s a kept loop may take ([`BreakEdge`]).
+pub const MAX_BREAKS: usize = 8;
+
+/// A `break` of a kept loop: the block whose jump enters the loop's exit,
+/// and the locals and the colour as they stand there (the exit's phis
+/// take one source from each, in the order the jumps were emitted).
+#[derive(Clone, Copy)]
+struct BreakEdge {
+    lp: u8,
+    block: u8,
+    locals: [[Val; 4]; MAX_LOCALS],
+    colour: Option<[Val; 4]>,
+}
+
+impl BreakEdge {
+    const NONE: BreakEdge = BreakEdge { lp: 0, block: 0, locals: [[Val::Undef; 4]; MAX_LOCALS], colour: None };
 }
 
 impl<'s> Fs<'s> {
@@ -1055,6 +1088,23 @@ impl<'s> Fs<'s> {
     /// varying of the shader's width, a constant, an fp32 result).
     fn op32(&mut self, op: Alu, s: [Val; 3], at: usize) -> Result<Val, MaliError> {
         let mut s = s;
+        /* a texel read with a highp value (not a constant, which takes the
+         * texel's precision): GLSL's lower_precision leaves the look-up
+         * whose result such an expression takes at fp32, as one stored to
+         * a highp local (femtovg's filter_image, `texture2D(tex, ..) *
+         * gaussian_coeff.x`: `TEX_SINGLE .. .32.2d` in
+         * fvg_filter_image.expect.json; hdrsample's `texture(..) * 0.25`
+         * stays fp16, mixprec_hdrsample.expect.json) */
+        let arity = op.arity();
+        let highp = |f: &Self, v: Val| matches!(v, Val::Lane(..)) && f.texel(v).is_none() && !f.is_f16(v);
+        if s[..arity].iter().any(|&v| highp(self, v)) {
+            for &v in &s[..arity] {
+                if let Some((j, _)) = self.texel(v) {
+                    let n = self.look_ups[j].node;
+                    self.nir.nodes[n as usize].bits = 32;
+                }
+            }
+        }
         for v in s.iter_mut().take(op.arity()) {
             if *v == Val::Undef {
                 return Err(MaliError::ColourForm);
@@ -1068,6 +1118,29 @@ impl<'s> Fs<'s> {
             self.origin[id] = at as u16;
         }
         Ok(r)
+    }
+
+    /// `inot(c)` of a highp compare's mask `c`, folded into the inverse
+    /// compare (nir_opt_algebraic.py: `inot(flt(a, b))` is `fge(a, b)`,
+    /// `inot(ieq(a, b))` `ine(a, b)`), made where `c` was.
+    fn inverse_compare(&mut self, c: Val) -> Result<Val, MaliError> {
+        let Val::Lane(n, 0) = c else { return Err(MaliError::IfForm) };
+        let nd = self.nir.nodes[n as usize];
+        let inv = |x: Cmpf| match x {
+            Cmpf::Lt => Cmpf::Ge,
+            Cmpf::Ge => Cmpf::Lt,
+            Cmpf::Le => Cmpf::Gt,
+            Cmpf::Gt => Cmpf::Le,
+            Cmpf::Eq => Cmpf::Ne,
+            Cmpf::Ne => Cmpf::Eq,
+        };
+        let op = match nd.kind {
+            Kind::Alu(Alu::Fcmp(x)) if nd.bits == 32 => Alu::Fcmp(inv(x)),
+            Kind::Alu(Alu::Icmp(x)) if nd.bits == 32 => Alu::Icmp(inv(x)),
+            _ => return Err(MaliError::IfForm),
+        };
+        let at = self.origin[n as usize] as usize;
+        self.op32(op, nd.src, at)
     }
 
     /// `v` is a lane of an fp16 value of a highp shader: a mediump
@@ -1676,6 +1749,9 @@ impl<'s> Fs<'s> {
              * databreak, `top > 0.5 ? 1.0 : 0.0`, `MUX.v2i16 r0, 0x0,
              * 0x3C000000.h11, r0^.h00` in case87_databreak.expect.json) */
             AluOp::Bcsel if y == Val::Const(F32_ONE) && z == Val::Const(F32_ZERO) => self.op32(Alu::B2f, [x, u, u], at),
+            /* `bcsel(a, b, b)` is `b` (nir_opt_algebraic.py): builtin_98's
+             * alpha `cond ? 1.0 : 1.0` */
+            AluOp::Bcsel if y == z => Ok(y),
             AluOp::Bcsel => self.op32(Alu::Bcsel, [x, y, z], at),
             /* `f2i(fadd(a, b))` of an integral, non-negative `a` and a `b` in
              * (0, 1) is `f2i(a)`, and `f2i32(u2f32(a@16))` is `u2u32(a)`
@@ -1703,9 +1779,13 @@ impl<'s> Fs<'s> {
                     },
                     _ => None,
                 };
-                match byte {
-                    Some((b, k)) => self.op32(Alu::U8f32(k as u8), [b, u, u], at),
-                    None => self.op32(Alu::I2f, [x, u, u], at),
+                match (byte, self.alu_of(x)) {
+                    (Some((b, k)), _) => self.op32(Alu::U8f32(k as u8), [b, u, u], at),
+                    /* `i2f32(f2i32(a))` is `ftrunc(a)` (nir_opt_algebraic.py:
+                     * 1250): intloop_loop_exit's `float(n)` of `int n =
+                     * int(x)`, `FROUND.f32.rtz` of the product */
+                    (None, Some((Alu::F2i, [a, ..]))) => self.op32(Alu::Ftrunc, [a, u, u], at),
+                    (None, _) => self.op32(Alu::I2f, [x, u, u], at),
                 }
             }
             AluOp::Iadd => self.op32(Alu::Iadd, [x, y, u], at),
@@ -1717,7 +1797,17 @@ impl<'s> Fs<'s> {
              * `scissorMat`; a last column scaled by the constant 1.0 is
              * [`Fs::alu32`]'s) and a built-in's, `mix()` (nir_lower_flrp)
              * and atan's polynomial (fvg_fill_gradient*.expect.json) */
-            AluOp::Ffma => self.op32(Alu::Ffma, [x, y, z], at),
+            /* `ffma(k, fneg(b), c)` of a constant `k`: NIR moves the fneg
+             * out of the product and folds it into the constant
+             * (`fmul(a, fneg(b))` is `fneg(fmul(a, b))`, the late fusion's
+             * `ffma(fneg(a), b, c)`): `mod(n, 16.0)`'s `FMA.f32 r4,
+             * u3.w0, r4^, r3` of -16.0 (builtin_98.expect.json) */
+            AluOp::Ffma => match (x, self.alu_of(y)) {
+                (Val::Const(k), Some((Alu::Fneg, [b, ..]))) => {
+                    self.op32(Alu::Ffma, [Val::Const(k ^ F32_NEG_ZERO), b, z], at)
+                }
+                _ => self.op32(Alu::Ffma, [x, y, z], at),
+            },
             /* `!=`: no reference that compiles draws it (intuni_sharedint's
              * `mode != 0` waits for its `sin` and its vertex `if`) */
             AluOp::Fne | AluOp::Ine => Err(MaliError::CompareForm),
@@ -2144,6 +2234,11 @@ pub fn walk<'s>(m: &Module<'_>, scratch: &Arena<'s>, prec: FsPrecision) -> Resul
         discards: 0,
         loops: 0,
         guard: u32::MAX,
+        kept: None,
+        kept_body: (0, 0),
+        breaks: [BreakEdge::NONE; MAX_BREAKS],
+        nbreaks: 0,
+        reg: nir::registration_order(m),
     };
     let vals = scratch.alloc_filled(MAX_VALUES, [Val::Undef; 4]).map_err(oom)?;
     let mut locals = [[Val::Undef; 4]; MAX_LOCALS];
@@ -2268,7 +2363,22 @@ fn walk_if(
     let else_last = f.nir.cur;
     /* a `break` or `continue` behind a condition the walk could not fold,
      * in a form `complex_unroll` does not take ([`walk_loop`]) */
+    /* `if (c) break;` in a loop Mesa keeps: the then side's last block
+     * jumps to the loop's exit, carrying the locals as they stand there
+     * ([`walk_kept_loop`]); the join is entered from the else side alone */
+    let brk = match (exit, then_flow, else_flow, f.kept) {
+        (IfExit::Plain, Flow::Break, Flow::Next, Some(lp)) if f.loops == 0 => Some(lp),
+        _ => None,
+    };
+    if let Some(lp) = brk {
+        if f.nbreaks == MAX_BREAKS {
+            return Err(MaliError::BlockTableFull);
+        }
+        f.breaks[f.nbreaks] = BreakEdge { lp, block: then_last, locals: then_locals, colour: then_colour };
+        f.nbreaks += 1;
+    }
     let flow = match exit {
+        IfExit::Plain if brk.is_some() => Flow::Next,
         IfExit::Plain if then_flow == Flow::Next && else_flow == Flow::Next => Flow::Next,
         IfExit::Guard(_) if then_flow == Flow::Break && else_flow == Flow::Break => Flow::Break,
         IfExit::Continue if then_flow != Flow::Break && else_flow != Flow::Break => Flow::Next,
@@ -2302,12 +2412,13 @@ fn walk_if(
     let mut vars = [(u32::MAX, usize::MAX); MAX_LOCALS + 1];
     let mut nvars = 0;
     for (l, lanes) in locals.iter().enumerate() {
-        if (0..4).any(|c| then_locals[l][c] != lanes[c]) {
+        if brk.is_none() && (0..4).any(|c| then_locals[l][c] != lanes[c]) {
             vars[nvars] = (f.rank[l], l);
             nvars += 1;
         }
     }
     let colour = match (then_colour, f.colour) {
+        _ if brk.is_some() => None,
         (Some(a), Some(b)) if a != b => {
             vars[nvars] = (f.colour_rank, MAX_LOCALS);
             nvars += 1;
@@ -2330,12 +2441,25 @@ fn walk_if(
             locals[l][c] = f.phi(then_locals[l][c], locals[l][c], at)?;
         }
     }
-    if colour.is_none() {
+    if colour.is_none() && brk.is_none() {
         f.colour = then_colour.or(f.colour);
     }
     let guard = matches!(exit, IfExit::Guard(_));
-    f.nir.ifs[f.nir.nifs] =
-        nir::IfRegion { cond, before, then_first, then_last, else_first, else_last, after, live: true, guard };
+    let seq = f.nir.nseq;
+    f.nir.nseq += 1;
+    f.nir.ifs[f.nir.nifs] = nir::IfRegion {
+        cond,
+        before,
+        then_first,
+        then_last,
+        else_first,
+        else_last,
+        after,
+        live: true,
+        guard,
+        brk,
+        seq,
+    };
     f.nir.nifs += 1;
     Ok(flow)
 }
@@ -2362,7 +2486,12 @@ fn walk_if16(
     prec: FsPrecision,
     join: usize,
 ) -> Result<Flow, MaliError> {
-    if !matches!(exit, IfExit::Plain) || !f.mask_lane(cond) {
+    /* a pass's run-time `break` or `continue` (intloop_contloops' `for (i <
+     * 8)`): Mesa's fp16 ladder, no reference lowered */
+    if !matches!(exit, IfExit::Plain) {
+        return Err(MaliError::GuardMediump);
+    }
+    if !f.mask_lane(cond) {
         return Err(MaliError::ControlFlow);
     }
     let (saved_locals, saved_colour) = (*locals, f.colour);
@@ -2488,10 +2617,10 @@ fn walk_guard(
 /// does: one straight run in NIR's order, as the unrolled copies are. A
 /// `break` behind a run-time condition is the loop's second terminator,
 /// which `complex_unroll` takes with the counter's test as the limiting one
-/// ([`walk_guard`]: gl_test's databreak, case 87). A loop that runs past the
-/// bound, has two run-time `break`s, or whose guarded passes stay branches
-/// (femtovg's `filter_image`: `if (i >= sampleCount) break;`, 24 guarded
-/// copies with a look-up each) has no reference ([`MaliError::LoopForm`]).
+/// ([`walk_guard`]: gl_test's databreak, case 87). Guarded passes too large for
+/// the peephole stay branches (femtovg's `filter_image`: `if (i >= sampleCount)
+/// break;`, 24 guarded copies with two look-ups each). A loop that runs past
+/// the bound or has two run-time `break`s has no reference ([`MaliError::LoopForm`]).
 fn walk_loop(
     f: &mut Fs<'_>,
     m: &Module<'_>,
@@ -2514,12 +2643,367 @@ fn walk_loop(
     f.guard = outer;
     f.loops -= 1;
     r?;
-    if f.nir.n - first > LOOP_UNROLL_LIMIT * MAX_UNROLL_ITERATIONS {
+    if unroll_cost(f, first) > LOOP_UNROLL_LIMIT * MAX_UNROLL_ITERATIONS {
         return Err(MaliError::LoopForm);
     }
     for id in first..f.nir.n {
         f.origin[id] = last as u16;
     }
+    Ok(())
+}
+
+/// The cost of the passes walked from node `first` on, as loop analysis
+/// counts its body's (`instr_cost`, nir_loop_analyze.c:79-130) times the
+/// trip count (nir_opt_loop_unroll.c:924-925): every node one, but a phi
+/// (no ALU, intrinsic or look-up), a constant the passes folded (no node
+/// here) and an `fmul` only `fadd`s read (`is_only_used_by_fadd`: fused
+/// later). Femtovg's filter_image makes 1030 nodes in its 24 passes, more
+/// than 26 * 32; this count is within it, and Mesa unrolls the loop
+/// (fvg_filter_image.expect.json).
+fn unroll_cost(f: &Fs<'_>, first: usize) -> usize {
+    let nodes = &f.nir.nodes[first..f.nir.n];
+    let only_fadd = |id: usize| {
+        nodes.iter().all(|u| {
+            let reads = u.src.iter().any(|s| matches!(*s, Val::Lane(n, _) if n as usize == id));
+            !reads || u.kind == Kind::Alu(Alu::Fadd)
+        })
+    };
+    (first..f.nir.n)
+        .filter(|&id| match f.nir.nodes[id].kind {
+            Kind::Phi => false,
+            Kind::Alu(Alu::Fmul) => !only_fadd(id),
+            _ => true,
+        })
+        .count()
+}
+
+/// Whether Mesa keeps loop `body`: its test (`Lower::break_unless`, the
+/// body's first control-flow node) is on a value the walk cannot fold at
+/// the first pass (a varying, a uniform), so loop analysis finds no
+/// limiting terminator (`nir_loop_analyze.c`) and `nir_opt_loop_unroll`
+/// leaves it (nir_opt_loop_unroll.c:1112-1114). A loop whose test the
+/// walk folds is unrolled ([`walk_loop`]), as is one with no test at its
+/// head (a `do .. while`, whose terminator is the walk's to find).
+fn kept_loop(f: &Fs<'_>, m: &Module<'_>, body: ir::Range, locals: &[[Val; 4]; MAX_LOCALS]) -> bool {
+    let nodes = m.nodes_of(body);
+    let Some(head) = nodes.iter().find(|n| !matches!(n, Node::Instr(_))) else { return false };
+    let Node::If { cond, then_, else_ } = *head else { return false };
+    if then_.len != 0 || m.nodes_of(else_) != [Node::Break] {
+        return false;
+    }
+    let _ = f;
+    !ir_folds(m, cond.val, locals, 0)
+}
+
+/// IR value `v` folds to a constant from the constants and the locals'
+/// constant lanes alone.
+fn ir_folds(m: &Module<'_>, v: ir::ValueId, locals: &[[Val; 4]; MAX_LOCALS], depth: u32) -> bool {
+    if depth > 32 {
+        return false;
+    }
+    match m.def(v) {
+        Some(ir::Op::ConstF32(_) | ir::Op::ConstI32(_) | ir::Op::ConstBool(_)) => true,
+        Some(&ir::Op::LoadLocal { local, index: None, comps }) => {
+            locals.get(local.0 as usize).is_some_and(|l| l[..comps as usize].iter().all(|x| matches!(x, Val::Const(_))))
+        }
+        Some(&ir::Op::Alu(a, s)) => s[..ir_arity(a)].iter().all(|x| ir_folds(m, x.val, locals, depth + 1)),
+        _ => false,
+    }
+}
+
+/// Lane `c` of local `l` is stored by an instruction of run `nodes` itself
+/// before anything in the run reads the local: each pass sets it before
+/// use, so no value of it is carried around a loop whose body is `nodes`.
+fn declared_in(m: &Module<'_>, nodes: &[Node], l: usize, c: usize) -> bool {
+    for n in nodes {
+        match *n {
+            Node::Instr(id) => match m.instr(id) {
+                Some(&ir::Op::StoreLocal { local, index: None, write_mask, .. }) if local.0 as usize == l => {
+                    if write_mask & (1 << c) != 0 {
+                        return true;
+                    }
+                }
+                Some(ir::Op::StoreLocal { local, .. } | ir::Op::LoadLocal { local, .. }) if local.0 as usize == l => {
+                    return false
+                }
+                _ => {}
+            },
+            Node::If { then_, else_, .. } => {
+                if refers_to(m, then_, l) || refers_to(m, else_, l) {
+                    return false;
+                }
+            }
+            Node::Loop { body } => {
+                if refers_to(m, body, l) {
+                    return false;
+                }
+            }
+            Node::Break | Node::Continue | Node::Return => return false,
+        }
+    }
+    false
+}
+
+/// Region `r` loads or stores local `l`.
+fn refers_to(m: &Module<'_>, r: ir::Range, l: usize) -> bool {
+    m.nodes_of(r).iter().any(|n| match *n {
+        Node::Instr(id) => matches!(
+            m.instr(id),
+            Some(ir::Op::StoreLocal { local, .. } | ir::Op::LoadLocal { local, .. }) if local.0 as usize == l
+        ),
+        Node::If { then_, else_, .. } => refers_to(m, then_, l) || refers_to(m, else_, l),
+        Node::Loop { body } => refers_to(m, body, l),
+        _ => false,
+    })
+}
+
+/// Runs `a` and `b` are the same instructions (the front end's copies of
+/// one `for` step): local loads and stores, constants and ALU operations,
+/// equal but for the values each defines, which they read in the same
+/// places.
+fn same_instrs(m: &Module<'_>, a: &[Node], b: &[Node]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let ids = |r: &[Node], k: usize| match r[k] {
+        Node::Instr(id) => Some(id),
+        _ => None,
+    };
+    /* a source: the same value outside the runs, or the values the two
+     * runs define at one place */
+    let same_src = |x: ir::Src, y: ir::Src| {
+        let pos = |r: &[Node], v: ir::ValueId| (0..r.len()).find(|&k| ids(r, k).is_some_and(|id| id.0 == v.0));
+        x.swizzle == y.swizzle
+            && match (pos(a, x.val), pos(b, y.val)) {
+                (Some(p), Some(q)) => p == q,
+                (None, None) => x.val == y.val,
+                _ => false,
+            }
+    };
+    (0..a.len()).all(|k| {
+        let (Some(x), Some(y)) = (ids(a, k), ids(b, k)) else { return false };
+        match (m.instr(x), m.instr(y)) {
+            (
+                Some(&ir::Op::LoadLocal { local: p, index: None, comps: c }),
+                Some(&ir::Op::LoadLocal { local: q, index: None, comps: d }),
+            ) => p == q && c == d,
+            (
+                Some(&ir::Op::StoreLocal { local: p, index: None, src: s, write_mask: w }),
+                Some(&ir::Op::StoreLocal { local: q, index: None, src: t, write_mask: v }),
+            ) => p == q && w == v && same_src(s, t),
+            (Some(ir::Op::ConstI32(p)), Some(ir::Op::ConstI32(q))) => p == q,
+            (Some(ir::Op::ConstF32(p)), Some(ir::Op::ConstF32(q))) => p == q,
+            (Some(&ir::Op::Alu(p, s)), Some(&ir::Op::Alu(q, t))) => {
+                p == q && (0..ir_arity(p)).all(|i| same_src(s[i], t[i]))
+            }
+            _ => false,
+        }
+    })
+}
+
+/// The locals' lanes loop `body` stores (`nir_lower_vars_to_ssa` places a
+/// phi for each at the loop's header), each local's in a mask.
+fn stored_lanes(m: &Module<'_>, body: ir::Range, masks: &mut [u8; MAX_LOCALS]) -> Result<bool, MaliError> {
+    let mut colour = false;
+    for n in m.nodes_of(body) {
+        match *n {
+            Node::Instr(id) => match m.instr(id) {
+                Some(&ir::Op::StoreLocal { local, index: None, write_mask, .. }) => {
+                    *masks.get_mut(local.0 as usize).ok_or(MaliError::Defect(Defect::IrIndex))? |= write_mask;
+                }
+                Some(ir::Op::StoreLocal { .. }) => return Err(MaliError::IndexedLocal),
+                Some(ir::Op::StoreOutput { .. }) => colour = true,
+                _ => {}
+            },
+            Node::If { then_, else_, .. } => {
+                colour |= stored_lanes(m, then_, masks)?;
+                colour |= stored_lanes(m, else_, masks)?;
+            }
+            Node::Loop { body } => colour |= stored_lanes(m, body, masks)?,
+            Node::Break | Node::Continue | Node::Return => {}
+        }
+    }
+    Ok(colour)
+}
+
+/// A loop Mesa keeps ([`kept_loop`]) as `emit_loop` emits it
+/// (bifrost_compile.c:3738-3770; [`nir::LoopRegion`]): a header block
+/// holding one phi per local lane the body stores, in the order of the
+/// locals' first stores (measured: intloop_loop_exit's `s` then `i`,
+/// builtin_98's `n`, `last`, `i`, builtin_45's `c` then `i`;
+/// docs/notes/mali-loop-break.md, Part 2), each taking the value before
+/// the loop and the one at the end of the body; the body walked once from
+/// the header, its `break`s jumps to the exit block ([`walk_if`]), where
+/// the locals are those of the `break` (one) or their phis (two), its
+/// `continue`s branches over the rest of the body to the latch
+/// ([`walk_nodes`]). A kept loop may nest in another (intloop_divnest).
+fn walk_kept_loop(
+    f: &mut Fs<'_>,
+    m: &Module<'_>,
+    body: ir::Range,
+    vals: &mut [[Val; 4]],
+    locals: &mut [[Val; 4]; MAX_LOCALS],
+    prec: FsPrecision,
+) -> Result<(), MaliError> {
+    /* a mediump shader's kept loop: Mesa carries its fp16 lanes across the
+     * back edge as 16-bit vectors, and the mediump selection has no blocks
+     * (intloop_loop_nested; docs/notes/mali-loop-break.md, Part 2) */
+    if !prec.highp {
+        return Err(MaliError::LoopMediump);
+    }
+    let nodes = m.nodes_of(body);
+    let last = nodes.iter().rev().find_map(|n| match *n {
+        Node::Instr(id) => Some(id.0 as usize),
+        _ => None,
+    });
+    let Some(last) = last else { return Err(MaliError::LoopForm) };
+    if f.nir.nloops == nir::MAX_LOOPS {
+        return Err(MaliError::BlockTableFull);
+    }
+    let mut masks = [0u8; MAX_LOCALS];
+    /* the colour written in the loop: no reference */
+    if stored_lanes(m, body, &mut masks)? {
+        return Err(MaliError::LoopForm);
+    }
+    let lp = f.nir.nloops as u8;
+    f.nir.nloops += 1;
+    let pre = f.nir.cur;
+    let header = f.nir.new_block(pre)?;
+    f.nir.cur = header;
+    /* the header's phis: the locals in the reverse of the order
+     * `nir_lower_vars_to_ssa` registers them ([`nir::registration_order`]:
+     * the constant-initialised ones first, so they come last), each one's
+     * lanes in order */
+    let mut order = [(u32::MAX, 0usize); MAX_LOCALS];
+    let mut nl = 0;
+    for (l, &mask) in masks.iter().enumerate() {
+        if mask != 0 {
+            order[nl] = (u32::MAX - u32::from(f.reg[l]), l);
+            nl += 1;
+        }
+    }
+    order[..nl].sort_unstable();
+    let mut phis = [(0u16, 0usize, 0usize); MAX_LOCALS * 4];
+    let mut nphi = 0;
+    for &(_, l) in &order[..nl] {
+        /* a mediump shader's float local is fp16 (lower_precision), its
+         * int or bool 32-bit; a highp shader's lanes are their nodes' */
+        let float = m.locals.get(l).is_some_and(|d| d.ty.scalar == ir::ScalarType::F32);
+        for c in 0..4 {
+            if masks[l] & (1 << c) == 0 {
+                continue;
+            }
+            let v = locals[l][c];
+            /* a local the body declares (divnest's inner `j`, stored before
+             * any read in each pass): no value reaches the header, so no
+             * phi (`nir_lower_vars_to_ssa` places none where the variable
+             * is not live) */
+            if v == Val::Undef {
+                if !declared_in(m, nodes, l, c) {
+                    return Err(MaliError::LoopForm);
+                }
+                continue;
+            }
+            let bits = match v {
+                _ if !prec.highp && float => 16,
+                Val::Lane(n, _) => f.nir.nodes[n as usize].bits,
+                _ => 32,
+            };
+            let id = f.nir.push_node(NirNode { kind: Kind::Phi, src: [v, Val::Undef, Val::Undef], bits, width: 1 })?;
+            f.origin[id as usize] = last as u16;
+            locals[l][c] = Val::Lane(id, 0);
+            phis[nphi] = (id, l, c);
+            nphi += 1;
+        }
+    }
+    let (outer_kept, outer_body, outer_loops, outer_guard) = (f.kept, f.kept_body, f.loops, f.guard);
+    let first_break = f.nbreaks;
+    (f.kept, f.kept_body, f.loops, f.guard) = (Some(lp), (nodes.as_ptr() as usize, nodes.len()), 0, u32::MAX);
+    let flow = walk_nodes(f, m, nodes, vals, locals, prec, false, last, None);
+    (f.kept, f.kept_body, f.loops, f.guard) = (outer_kept, outer_body, outer_loops, outer_guard);
+    /* a body that always breaks runs once: no reference */
+    if flow? == Flow::Break {
+        return Err(MaliError::LoopForm);
+    }
+    let latch = f.nir.cur;
+    for &(id, l, c) in &phis[..nphi] {
+        let v = locals[l][c];
+        /* a lane the body leaves as it found it (`nir_opt_remove_phis`) */
+        if v == Val::Lane(id, 0) {
+            return Err(MaliError::LoopForm);
+        }
+        f.nir.nodes[id as usize].src[1] = v;
+    }
+    /* header phis of equal sources are one (`nir_opt_cse` of phis, the
+     * first kept): divnest's `outer` and `i`, both `phi(0, i + 1)` once the
+     * step's `i + 1` is the one of `outer = i + 1` */
+    for j in 1..nphi {
+        let (pj, ..) = phis[j];
+        let src = |id: u16| {
+            let s = f.nir.nodes[id as usize].src;
+            (s[0], s[1])
+        };
+        let Some(&(pi, ..)) = phis[..j].iter().find(|p| src(p.0) == src(pj)) else { continue };
+        let (from, to) = (Val::Lane(pj, 0), Val::Lane(pi, 0));
+        for nd in f.nir.nodes[..f.nir.n].iter_mut() {
+            for s in nd.src.iter_mut().filter(|s| **s == from) {
+                *s = to;
+            }
+        }
+        for v in locals.iter_mut().flatten().filter(|v| **v == from) {
+            *v = to;
+        }
+        for b in f.breaks[first_break..f.nbreaks].iter_mut() {
+            for v in b.locals.iter_mut().flatten().filter(|v| **v == from) {
+                *v = to;
+            }
+        }
+    }
+    /* the exit is entered by the `break`s alone: two, or one (no `break`
+     * is a loop that never ends; more have no reference) */
+    let mut edges = [BreakEdge::NONE; 2];
+    let mut dom: Option<u8> = None;
+    let mut nedges = 0;
+    for b in f.breaks[first_break..f.nbreaks].iter().filter(|b| b.lp == lp) {
+        if nedges == edges.len() {
+            return Err(MaliError::LoopForm);
+        }
+        dom = Some(dom.map_or(b.block, |d| f.nir.lca(d, b.block)));
+        edges[nedges] = *b;
+        nedges += 1;
+    }
+    let Some(dom) = dom else { return Err(MaliError::LoopForm) };
+    f.nbreaks = first_break;
+    let exit = f.nir.new_block(dom)?;
+    f.nir.cur = exit;
+    *locals = edges[0].locals;
+    f.colour = edges[0].colour;
+    if nedges == 2 {
+        /* the exit's phis, a lane the edges leave different, in the order
+         * an `if`'s join has them ([`walk_if`]), each taking the edges'
+         * values in the order their jumps were added (divnest's outer exit:
+         * `n` and `outer`, whose copies stand before each edge's `JUMP`) */
+        if edges[1].colour != f.colour {
+            return Err(MaliError::LoopForm);
+        }
+        let mut vars = [(u32::MAX, usize::MAX); MAX_LOCALS];
+        let mut nvars = 0;
+        for l in 0..MAX_LOCALS {
+            if edges[0].locals[l] != edges[1].locals[l] {
+                vars[nvars] = (f.rank[l], l);
+                nvars += 1;
+            }
+        }
+        vars[..nvars].sort_unstable();
+        for &(_, l) in &vars[..nvars] {
+            for c in 0..4 {
+                locals[l][c] = f.phi(edges[0].locals[l][c], edges[1].locals[l][c], last)?;
+            }
+        }
+    }
+    let seq = f.nir.nseq;
+    f.nir.nseq += 1;
+    f.nir.loops[lp as usize] = nir::LoopRegion { pre, header, latch, exit, seq };
     Ok(())
 }
 
@@ -2591,14 +3075,62 @@ fn walk_nodes(
                         return walk_if(f, m, c, t, rest, IfExit::Continue, vals, locals, prec, after);
                     }
                 }
+                /* `if (c) {} else break;` (the front end's test of a loop,
+                 * `Lower::break_unless`) in a loop Mesa keeps:
+                 * `opt_if_simplification` (nir_opt_if.c:741-782) swaps the
+                 * sides under `inot(c)`, which `nir_opt_algebraic` folds into
+                 * the inverse compare (`inot(ilt(a, b))` is `ige(a, b)`) */
+                if f.kept.is_some() && f.loops == 0 && t.is_empty() && e == [Node::Break] {
+                    let c = f.inverse_compare(c)?;
+                    walk_if(f, m, c, e, &[], IfExit::Plain, vals, locals, prec, join)?;
+                    continue;
+                }
+                /* `if (c) { step; continue; }` at the top of a kept loop's
+                 * body, the front end's copy of the `for` step before the
+                 * `continue` (`Lower::loop_body`): Mesa's NIR has the step
+                 * once, in the loop's continue construct, which
+                 * `nir_lower_continue_constructs` inlines at the body's end
+                 * after moving the code that follows the `continue`'s `if`
+                 * into its other side (`lower_jumps_in_if`,
+                 * nir_lower_continue_constructs.c:91-140); the then side left
+                 * empty, `opt_if_simplification` swaps the sides under the
+                 * inverse compare. So: `if (!c) { rest } else {}`, then the
+                 * step, in the latch (intloop_divnest.expect.json: `i != 2`
+                 * branches over the inner loop to the outer latch, `j != 1`
+                 * over the inner body to the `j++` of the inner latch). A
+                 * then side with more than the step has no reference */
+                if f.kept.is_some() && f.loops == 0 && e.is_empty() && t.last() == Some(&Node::Continue) {
+                    if f.kept_body != (nodes.as_ptr() as usize, nodes.len()) {
+                        return Err(MaliError::LoopForm);
+                    }
+                    let rest = &nodes[k + 1..];
+                    let s = &t[..t.len() - 1];
+                    if rest.len() < s.len() || !same_instrs(m, s, &rest[rest.len() - s.len()..]) {
+                        return Err(MaliError::LoopForm);
+                    }
+                    let (moved, step) = rest.split_at(rest.len() - s.len());
+                    let join = match step.first() {
+                        Some(Node::Instr(id)) => id.0 as usize,
+                        _ => after,
+                    };
+                    let c = f.inverse_compare(c)?;
+                    if walk_if(f, m, c, moved, &[], IfExit::Plain, vals, locals, prec, join)? != Flow::Next {
+                        return Err(MaliError::LoopForm);
+                    }
+                    return walk_nodes(f, m, step, vals, locals, prec, false, after, None);
+                }
                 walk_if(f, m, c, t, e, IfExit::Plain, vals, locals, prec, join)?;
+                continue;
+            }
+            Node::Loop { body } if kept_loop(f, m, body, locals) => {
+                walk_kept_loop(f, m, body, vals, locals, prec)?;
                 continue;
             }
             Node::Loop { body } => {
                 walk_loop(f, m, body, vals, locals, prec)?;
                 continue;
             }
-            Node::Break if f.loops > 0 => return Ok(Flow::Break),
+            Node::Break if f.loops > 0 || f.kept.is_some() => return Ok(Flow::Break),
             Node::Continue if f.loops > 0 => return Ok(Flow::Continue),
             _ => return Err(MaliError::ControlFlow),
         };
@@ -5562,10 +6094,9 @@ pub fn select_highp(
     f.nir.peephole_select(nir::PEEPHOLE_LIMIT_GL, true, &inots);
     f.nir.invert_guards(&inots)?;
     f.nir.peephole_select(nir::PEEPHOLE_LIMIT, false, &[false; nir::MAX_IFS]);
-    /* a guarded pass Mesa keeps as a branch: no reference */
-    if f.nir.live_ifs().any(|r| r.guard) {
-        return Err(MaliError::LoopForm);
-    }
+    /* a guarded pass too large for the peephole stays a branch (femtovg's
+     * filter_image) */
+    f.nir.lay_out_inverted_guards();
     f.nir.fold_const_selects();
     f.nir.cse_compares();
     nir::dce(&mut f.nir, None);
@@ -5612,14 +6143,29 @@ pub fn select_highp(
             .nir
             .live_ifs()
             .any(|r| [r.before, r.then_first, r.then_last, r.else_first, r.else_last, r.after].contains(&b))
+            || f.nir.loops[..f.nir.nloops].iter().any(|r| [r.pre, r.header, r.latch, r.exit].contains(&b))
             || f.nir.order[..f.nir.len].iter().any(|&id| f.nir.block[id as usize] == b);
         p.blocks[b as usize].dead = !referenced;
     }
-    for r in f.nir.ifs[..f.nir.nifs].iter().filter(|r| r.live) {
-        p.add_successor(r.then_last, r.after)?;
-        p.add_successor(r.else_last, r.after)?;
-        p.add_successor(r.before, r.else_first)?;
-        p.add_successor(r.before, r.then_first)?;
+    /* the edges in the order Mesa adds them: each region's as it is closed
+     * (an inner one first). A side that ends in a `break` enters the
+     * loop's exit, not the join (`unconditional_jumps` culls the edge
+     * `emit_if` adds after it, bi_block_add_successor); a kept loop's are
+     * the block before it into the header, then the latch's back edge */
+    for seq in 0..f.nir.nseq {
+        if let Some(r) = f.nir.ifs[..f.nir.nifs].iter().find(|r| r.live && r.seq == seq) {
+            match r.brk {
+                Some(lp) => p.add_successor(r.then_last, f.nir.loops[lp as usize].exit)?,
+                None => p.add_successor(r.then_last, r.after)?,
+            }
+            p.add_successor(r.else_last, r.after)?;
+            p.add_successor(r.before, r.else_first)?;
+            p.add_successor(r.before, r.then_first)?;
+        }
+        if let Some(r) = f.nir.loops[..f.nir.nloops].iter().find(|r| r.seq == seq) {
+            p.add_successor(r.pre, r.header)?;
+            p.add_successor(r.latch, r.header)?;
+        }
     }
     /* a load's block: the nearest one dominating every reader's
      * (`nir_opt_sink` with `nir_move_load_input`, bifrost_nir.c:380), and
@@ -5723,14 +6269,17 @@ pub fn select_highp(
     /* so does a 2D array's, after the conversions of its coordinate made
      * where it stands (case 42's `F16_TO_F32` of the layer) */
     let inline = cube || f.live_look_ups().any(|(_, t)| t.array);
-    for (j, t) in f.live_look_ups().filter(|_| !inline) {
+    /* and a look-up of an unrolled pass, among the pass's nodes, which all
+     * stand where the loop's last instruction does ([`walk_loop`]) */
+    let unrolled = |n: u16| f.origin[n as usize] != f.look_up_of(n).map_or(u16::MAX, |j| f.look_ups[j].at);
+    for (j, t) in f.live_look_ups().filter(|(_, t)| !inline && !unrolled(t.node)) {
         events[ne] = (f.nir.block[t.node as usize], f.keys.get(t.at as usize).copied().ok_or(defect)?, TEX, j as u16);
         ne += 1;
     }
     for k in 0..f.nir.len {
         let id = f.nir.order[k] as usize;
         match f.nir.nodes[id].kind {
-            Kind::Tex | Kind::TexDesc { .. } if inline => {
+            Kind::Tex | Kind::TexDesc { .. } if inline || unrolled(id as u16) => {
                 events[ne] = (f.nir.block[id], key_of(id), NODE, k as u16);
                 ne += 1;
             }
@@ -5810,6 +6359,8 @@ pub fn select_highp(
                 && f.nir.uses(id as u16).count() > 0
                 && f.nir.uses(id as u16).all(|(u, _)| store_select(u as usize)))
     };
+    let mut late = [(0u16, Val::Undef); MAX_LOCALS * 4];
+    let mut nlate = 0;
     let mut block = 0u8;
     for &(b, _, what, x) in events.iter() {
         while block < b {
@@ -5851,11 +6402,23 @@ pub fn select_highp(
                 let off = val[id].and_then(|s| s.ssa_value()).ok_or(defect)?;
                 val[id] = Some(Src::ssa(super::select::ubo_fetch(p, off)?));
             }
+            /* a loop header's phi reads the value of the body's end, made
+             * later: filled once the body is selected (`late`) */
             PHI => {
                 let id = f.nir.order[x as usize] as usize;
                 let nd = f.nir.nodes[id];
-                let s = [src32(f, &lv, val, nd.src[0])?, src32(f, &lv, val, nd.src[1])?];
-                val[id] = Some(Src::ssa(alu(p, Op::Phi, &s)?));
+                let header = f.nir.loops[..f.nir.nloops].iter().any(|r| r.header == b);
+                let s0 = src32(f, &lv, val, nd.src[0])?;
+                let s1 = if header { Src::NULL } else { src32(f, &lv, val, nd.src[1])? };
+                let r = alu(p, Op::Phi, &[s0, s1])?;
+                val[id] = Some(Src::ssa(r));
+                if header {
+                    if nlate == late.len() {
+                        return Err(MaliError::TooManyValues);
+                    }
+                    late[nlate] = (r, nd.src[1]);
+                    nlate += 1;
+                }
             }
             _ => {
                 let id = f.nir.order[x as usize] as usize;
@@ -5937,6 +6500,11 @@ pub fn select_highp(
         end_block(p, f, &lv, val, block)?;
         block += 1;
         p.cur = block;
+    }
+    for &(r, v) in &late[..nlate] {
+        let s = src32(f, &lv, val, v)?;
+        let k = p.as_slice().iter().position(|i| i.op == Op::Phi && i.dest[0].idx == Idx::Ssa(r, 0)).ok_or(defect)?;
+        p.ins[k].src[1] = s;
     }
     /* a highp ES 3.00 output is stored at fp32 (`bi_emit_fragment_out` of
      * an `nir_type_float32` store): its four words as computed, ATEST on
@@ -6196,15 +6764,27 @@ fn tex_mask(t: &TexLookup, f16: bool) -> u8 {
 /// 3697-3735): before an `if`, `BRANCHZ.i16.eq cond.h0` to the else side's
 /// first block (taken when the mask's low half is zero); at the end of a
 /// then side, the jump to the join (`bi_jump`, a `BRANCHZ.i16.eq` on the
-/// zero constant after `va_lower_isel`). The else side falls through.
+/// zero constant after `va_lower_isel`), or to its loop's exit for a then
+/// side that ends in a `break` (`bi_emit_jump`). The else side falls
+/// through. A kept loop's latch jumps back to its header (`emit_loop`).
 fn end_block(p: &mut Prog<'_>, f: &Fs<'_>, lv: &Leaves, val: &[Option<Src>], b: u8) -> Result<(), MaliError> {
+    let jump = |p: &mut Prog<'_>, target: u8| -> Result<(), MaliError> {
+        p.push(Ins::new(Op::Branchz { target, eq: true }, &[], &[Src::of(Idx::Const(0))]))?;
+        Ok(())
+    };
     for r in f.nir.live_ifs() {
         if r.before == b {
             let cond = src32(f, lv, val, r.cond)?.swz(Swz::H00);
             p.push(Ins::new(Op::Branchz { target: r.else_first, eq: true }, &[], &[cond]))?;
         } else if r.then_last == b {
-            p.push(Ins::new(Op::Branchz { target: r.after, eq: true }, &[], &[Src::of(Idx::Const(0))]))?;
+            match r.brk {
+                Some(lp) => jump(p, f.nir.loops[lp as usize].exit)?,
+                None => jump(p, r.after)?,
+            }
         }
+    }
+    for r in f.nir.loops[..f.nir.nloops].iter().filter(|r| r.latch == b) {
+        jump(p, r.header)?;
     }
     Ok(())
 }
@@ -6243,7 +6823,7 @@ fn int_op(a: AluOp) -> bool {
 
 /// The sources a front-end operation reads (`AluOp::arity` is private to
 /// the front end's own walk).
-fn ir_arity(a: AluOp) -> usize {
+pub(super) fn ir_arity(a: AluOp) -> usize {
     match a {
         AluOp::Fadd
         | AluOp::Fmul
