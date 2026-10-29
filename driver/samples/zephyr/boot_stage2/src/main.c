@@ -31,6 +31,16 @@
 
 #include "boot_stage2.h"
 
+/* The success-path log (BOOT_STAGE2_PROGRESS_LOG): the console is polled,
+ * so each line holds the boot for its length at the UART's rate. Errors
+ * always print (printk). Off, the arguments are still type-checked. */
+#define progress(...)                                                                              \
+	do {                                                                                       \
+		if (IS_ENABLED(CONFIG_BOOT_STAGE2_PROGRESS_LOG)) {                                 \
+			printk(__VA_ARGS__);                                                       \
+		}                                                                                  \
+	} while (0)
+
 /*
  * The loader's own timeline, for the image after it to report: the system
  * counter (CNTPCT_EL0, started by SPL) at the loader's stages, written into
@@ -39,8 +49,9 @@
  * below the top of the region, where Zephyr places device mappings. The
  * image (at 0x48000000, its own RAM elsewhere) maps the page, copies the
  * stamps and clears the magic. Layout, also in the image's board_route3.c:
- * magic, count, then u64 t[8]: entry, main, payload in memory, unpacked,
- * jump.
+ * magic, count, then u64 t[8]: entry, main, payload in memory, unpacked
+ * (both CRCs checked), jump, stored CRC checked (BS2_MARK_STORED_CHECKED),
+ * decoded (BS2_MARK_DECODED), zero range cleared.
  */
 #define BS2_STAMP_ADDR  0x41000000u
 #define BS2_STAMP_MAGIC 0x54325342u /* 'BS2T' */
@@ -72,6 +83,13 @@ static inline uint64_t cntpct(void)
 static void bs2_stamp(unsigned int i)
 {
 	bs2_t[i] = cntpct();
+}
+
+void bs2_mark(uint32_t stage)
+{
+	if (stage < BS2_STAMPS) {
+		bs2_stamp(stage);
+	}
 }
 
 static int bs2_stamp_entry(void)
@@ -182,7 +200,7 @@ int main(void)
 	};
 	uint32_t disk_sectors = 0;
 
-	printk("boot_stage2: image header at eMMC user-area sector %d (payload up to sector %d), "
+	progress("boot_stage2: image header at eMMC user-area sector %d (payload up to sector %d), "
 	       "load 0x%lx\n", HDR_SECTOR, END_SECTOR - 1, (unsigned long)LOAD);
 
 	ret = disk_access_init(CONFIG_BOOT_STAGE2_DISK);
@@ -196,7 +214,7 @@ int main(void)
 		       ret, END_SECTOR);
 		halt();
 	}
-	printk("boot_stage2: eMMC user area %u sectors, ready after %lld ms\n", disk_sectors,
+	progress("boot_stage2: eMMC user area %u sectors, ready after %lld ms\n", disk_sectors,
 	       k_uptime_get() - t0);
 
 	if (read_sectors(hdr, HDR_SECTOR, 1)) {
@@ -215,7 +233,7 @@ int main(void)
 		.max_image = STAGING - LOAD,
 	};
 
-	printk("boot_stage2: image carried in this loader (%zu bytes at %p), load 0x%lx\n", payload_bytes,
+	progress("boot_stage2: image carried in this loader (%zu bytes at %p), load 0x%lx\n", payload_bytes,
 	       (const void *)bs2_payload_start, (unsigned long)LOAD);
 	if (payload_bytes <= SECTOR_BYTES) {
 		printk("boot_stage2: no payload linked in (BOOT_STAGE2_PAYLOAD at build time)\n");
@@ -227,17 +245,22 @@ int main(void)
 		halt();
 	}
 #endif
-	printk("boot_stage2: \"%s\": %llu bytes stored (%s), %llu bytes image, entry 0x%llx\n",
+	const bool compressed = info.compression != BS2_COMPRESSION_NONE;
+
+	progress("boot_stage2: \"%s\": %llu bytes stored (%s), %llu bytes image, entry 0x%llx, "
+	       "%llu bytes zeroed at +0x%llx\n",
 	       info.name, info.stored_bytes,
-	       info.compression == BS2_COMPRESSION_DEFLATE ? "deflate" : "uncompressed",
-	       info.image_bytes, info.entry);
+	       info.compression == BS2_COMPRESSION_DEFLATE ? "deflate"
+	       : info.compression == BS2_COMPRESSION_LZ4   ? "lz4"
+							   : "uncompressed",
+	       info.image_bytes, info.entry, info.zero_bytes, info.zero_offset);
 
 	/* What the read and the inflate run on: the MMU and both caches
 	 * (SCTLR_EL1 M, C, I), and the copy bandwidth into the payload region,
 	 * 1 MiB timed. Before the read: LOAD is free here in both modes (the
 	 * eMMC source reads an uncompressed payload straight to LOAD, which
 	 * this probe would otherwise overwrite -- it did, on 2026-10-22). */
-	{
+	if (IS_ENABLED(CONFIG_BOOT_STAGE2_PROGRESS_LOG)) {
 		uint64_t sctlr;
 		__asm__ volatile("mrs %0, sctlr_el1" : "=r"(sctlr));
 		uint32_t c0 = k_cycle_get_32();
@@ -249,9 +272,9 @@ int main(void)
 	}
 	int64_t t1 = k_uptime_get();
 #ifdef CONFIG_BOOT_STAGE2_SOURCE_EMMC
-	/* Uncompressed: straight to the load address. Deflate: to the staging
-	 * copy above the image, then inflated down to the load address. */
-	uint8_t *stored = (uint8_t *)(info.compression == BS2_COMPRESSION_DEFLATE ? STAGING : LOAD);
+	/* Uncompressed: straight to the load address. Compressed: to the
+	 * staging copy above the image, then decoded down to the load address. */
+	uint8_t *stored = (uint8_t *)(compressed ? STAGING : LOAD);
 	uint32_t nsec = (uint32_t)((info.stored_bytes + SECTOR_BYTES - 1) / SECTOR_BYTES);
 
 	if (read_sectors(stored, HDR_SECTOR + 1, nsec)) {
@@ -274,12 +297,23 @@ int main(void)
 	int64_t t3 = k_uptime_get();
 	bs2_stamp(3);
 
-	printk("boot_stage2: \"%s\" ok (CRC-32 %08x): read %u sectors in %lld ms, unpacked in %lld ms; "
+	/* The image's .bss, for an image that skips its own clear (header
+	 * version 2; bs2_header_parse checked the range is past the image and
+	 * inside the region). Here the caches are on; the image's reset path
+	 * would clear it with them off. */
+	if (info.zero_bytes != 0u) {
+		memset((void *)(LOAD + (uintptr_t)info.zero_offset), 0, (size_t)info.zero_bytes);
+	}
+	bs2_stamp(7);
+
+	progress("boot_stage2: \"%s\" ok (CRC-32 %08x): read %u sectors in %lld ms, unpacked in %lld ms; "
 	       "jumping to 0x%llx at %lld ms\n", info.name, info.image_crc32, nsec, t2 - t1, t3 - t2,
-	       info.entry, t3 - t0);
+	       info.entry, k_uptime_get() - t0);
 
 	/* Let the UART drain the last line: the image re-initialises it. */
-	k_busy_wait(5000);
+	if (IS_ENABLED(CONFIG_BOOT_STAGE2_PROGRESS_LOG)) {
+		k_busy_wait(5000);
+	}
 
 	/* Quiesce what this image started: the SDHC (its interrupt and the
 	 * controller, reset), then interrupts off; the timers are stopped by

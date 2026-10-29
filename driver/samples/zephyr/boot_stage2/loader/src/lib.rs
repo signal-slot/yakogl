@@ -14,9 +14,9 @@
 //! | offset | size | field |
 //! |---|---|---|
 //! | 0 | 8 | magic `"YKSTAGE2"` |
-//! | 8 | 4 | header version, 1 |
+//! | 8 | 4 | header version, 1 or 2 |
 //! | 12 | 4 | header bytes, 512 |
-//! | 16 | 4 | compression: 0 none, 1 raw deflate (RFC 1951) |
+//! | 16 | 4 | compression: 0 none, 1 raw deflate (RFC 1951), 2 one LZ4 frame (version 2) |
 //! | 20 | 4 | reserved, 0 |
 //! | 24 | 8 | load address |
 //! | 32 | 8 | entry address |
@@ -25,23 +25,55 @@
 //! | 56 | 4 | CRC-32 of the stored bytes |
 //! | 60 | 4 | CRC-32 of the image |
 //! | 64 | 32 | name, ASCII, NUL padded (for the log) |
-//! | 96 | 412 | zero |
+//! | 96 | 8 | version 2: start of a range to zero, bytes from the load address |
+//! | 104 | 8 | version 2: bytes to zero there (0: none) |
+//! | 112 | 396 | zero |
 //! | 508 | 4 | CRC-32 of bytes 0..508 |
 //!
-//! `tools/am62p-mkboot.py stage2img` writes it; the CRC-32 is zlib's.
+//! `tools/am62p-mkboot.py stage2img` writes it; the CRC-32 is zlib's. A
+//! version 1 header has no zero range (bytes 96..112 are not read).
+//!
+//! The zero range is the image's .bss, for an image built with Zephyr's
+//! CONFIG_SKIP_BSS_CLEAR: the image's own reset path zeroes .bss with the
+//! MMU and caches still off, which for the i.MX8MP route-3 image (40 MiB of
+//! .bss) was 45 ms between the jump and the image's first C code
+//! (2026-10-29); the loader zeroes it with its caches on. Version 2 exists so
+//! that a loader without the zeroing refuses such an image.
 #![cfg_attr(not(test), no_std)]
 #![deny(unsafe_op_in_unsafe_fn)]
 
 pub mod crc32;
 pub mod inflate;
+pub mod lz4;
 
 use core::ffi::c_char;
 
 pub const MAGIC: [u8; 8] = *b"YKSTAGE2";
-pub const VERSION: u32 = 1;
+pub const VERSION: u32 = 2;
 pub const HEADER_BYTES: usize = 512;
 pub const COMPRESSION_NONE: u32 = 0;
 pub const COMPRESSION_DEFLATE: u32 = 1;
+pub const COMPRESSION_LZ4: u32 = 2;
+
+/// The progress marks `unpack` reports through bs2_mark (the C side stamps
+/// the system counter; include/boot_stage2.h has the same numbers).
+pub const MARK_STORED_CHECKED: u32 = 5;
+pub const MARK_DECODED: u32 = 6;
+
+#[cfg(not(test))]
+unsafe extern "C" {
+    fn bs2_mark(stage: u32);
+}
+
+fn mark(stage: u32) {
+    #[cfg(not(test))]
+    // SAFETY: the C side's stamp, no arguments to check.
+    unsafe {
+        bs2_mark(stage)
+    };
+    #[cfg(test)]
+    let _ = stage;
+}
 pub const NAME_BYTES: usize = 32;
 
 /// What the loader accepts, from its Kconfig (include/boot_stage2.h).
@@ -70,13 +102,18 @@ pub struct Bs2Info {
     pub image_crc32: u32,
     /// NUL terminated (the last byte is always 0).
     pub name: [u8; NAME_BYTES + 1],
+    /// The range to zero after the unpack (version 2; 0 bytes: none),
+    /// bytes from the load address. Past the image, inside the room.
+    pub zero_offset: u64,
+    pub zero_bytes: u64,
 }
 
 // The layouts include/boot_stage2.h pins too.
 const _: () = assert!(core::mem::size_of::<Bs2Limits>() == 24);
 const _: () = assert!(core::mem::offset_of!(Bs2Info, compression) == 32);
 const _: () = assert!(core::mem::offset_of!(Bs2Info, name) == 44);
-const _: () = assert!(core::mem::size_of::<Bs2Info>() == 80);
+const _: () = assert!(core::mem::offset_of!(Bs2Info, zero_offset) == 80);
+const _: () = assert!(core::mem::size_of::<Bs2Info>() == 96);
 
 /// The loader's error codes (negative; `bs2_strerror` names them).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -97,6 +134,8 @@ pub enum Bs2Error {
     Inflate = -13,
     LengthMismatch = -14,
     NotArm64Image = -15,
+    Lz4 = -16,
+    ZeroRange = -17,
 }
 
 impl Bs2Error {
@@ -118,6 +157,8 @@ impl Bs2Error {
             Inflate,
             LengthMismatch,
             NotArm64Image,
+            Lz4,
+            ZeroRange,
         ]
         .into_iter()
         .find(|e| *e as i32 == code)
@@ -141,6 +182,8 @@ impl Bs2Error {
             Bs2Error::Inflate => "deflate stream is malformed\0",
             Bs2Error::LengthMismatch => "decompressed length is not the header's\0",
             Bs2Error::NotArm64Image => "no arm64 Image header (ARM\\x64 at 0x38)\0",
+            Bs2Error::Lz4 => "LZ4 frame is malformed\0",
+            Bs2Error::ZeroRange => "range to zero overlaps the image or leaves the room\0",
         }
     }
 }
@@ -165,13 +208,18 @@ pub fn parse_header(sector: &[u8], limits: &Bs2Limits) -> Result<Bs2Info, Bs2Err
     if crc32::crc32(&h[..508]) != le32(h, 508) {
         return Err(Bs2Error::BadHeaderCrc);
     }
-    if le32(h, 8) != VERSION || le32(h, 12) as usize != HEADER_BYTES {
+    let version = le32(h, 8);
+    if !(1..=VERSION).contains(&version) || le32(h, 12) as usize != HEADER_BYTES {
         return Err(Bs2Error::BadVersion);
     }
     let compression = le32(h, 16);
-    if compression != COMPRESSION_NONE && compression != COMPRESSION_DEFLATE {
+    if !(compression == COMPRESSION_NONE
+        || compression == COMPRESSION_DEFLATE
+        || (compression == COMPRESSION_LZ4 && version >= 2))
+    {
         return Err(Bs2Error::BadCompression);
     }
+    let (zero_offset, zero_bytes) = if version >= 2 { (le64(h, 96), le64(h, 104)) } else { (0, 0) };
     let mut name = [0u8; NAME_BYTES + 1];
     name[..NAME_BYTES].copy_from_slice(&h[64..64 + NAME_BYTES]);
     let info = Bs2Info {
@@ -183,6 +231,8 @@ pub fn parse_header(sector: &[u8], limits: &Bs2Limits) -> Result<Bs2Info, Bs2Err
         stored_crc32: le32(h, 56),
         image_crc32: le32(h, 60),
         name,
+        zero_offset,
+        zero_bytes,
     };
     if info.load != limits.load {
         return Err(Bs2Error::WrongLoad);
@@ -202,6 +252,12 @@ pub fn parse_header(sector: &[u8], limits: &Bs2Limits) -> Result<Bs2Info, Bs2Err
     if info.entry < info.load || info.entry - info.load >= info.image_bytes {
         return Err(Bs2Error::EntryOutside);
     }
+    if info.zero_bytes != 0
+        && (info.zero_offset < info.image_bytes
+            || info.zero_offset.checked_add(info.zero_bytes).is_none_or(|end| end > limits.max_image))
+    {
+        return Err(Bs2Error::ZeroRange);
+    }
     Ok(info)
 }
 
@@ -215,26 +271,30 @@ pub fn check_arm64_image(image: &[u8]) -> Result<(), Bs2Error> {
 }
 
 /// Decompress (or take) the stored payload into the image buffer and check
-/// both CRCs. `stored` and `image` must not overlap for a deflate payload;
-/// for COMPRESSION_NONE they are the same bytes and only the CRC is checked.
+/// both CRCs. `stored` and `image` must not overlap for a compressed
+/// payload; for COMPRESSION_NONE they are the same bytes and only the CRC is
+/// checked. The zero range is the caller's (it lies past `image_bytes`).
 pub fn unpack(info: &Bs2Info, stored: &[u8], image: &mut [u8]) -> Result<usize, Bs2Error> {
     /* The hardware CRC first; the table only if it disagrees, so a wrong
      * hardware path (never run before 2026-10-22) costs time, not the boot. */
     if crc32::crc32(stored) != info.stored_crc32 && crc32::crc32_update_table(0, stored) != info.stored_crc32 {
         return Err(Bs2Error::StoredCrc);
     }
+    mark(MARK_STORED_CHECKED);
     let n = match info.compression {
         COMPRESSION_DEFLATE => inflate::inflate(stored, image).map_err(|_| Bs2Error::Inflate)?,
+        COMPRESSION_LZ4 => lz4::decode_frame(stored, image).map_err(|_| Bs2Error::Lz4)?,
         _ => stored.len(),
     };
+    mark(MARK_DECODED);
     if n as u64 != info.image_bytes {
         return Err(Bs2Error::LengthMismatch);
     }
-    let img = if info.compression == COMPRESSION_DEFLATE { &image[..n] } else { stored };
+    let img = if info.compression != COMPRESSION_NONE { &image[..n] } else { stored };
     /* Uncompressed, the image is the stored bytes: the CRC over them was
      * taken above, so a second pass only repeats it (0.48 s for 66 MB with
      * the table). The header's two values must still agree. */
-    let same_bytes = info.compression != COMPRESSION_DEFLATE;
+    let same_bytes = info.compression == COMPRESSION_NONE;
     if same_bytes {
         if info.image_crc32 != info.stored_crc32 {
             return Err(Bs2Error::ImageCrc);
@@ -275,7 +335,7 @@ pub unsafe extern "C" fn bs2_header_parse(
     }
 }
 
-/// Check the stored payload and produce the image: inflate `stored` into
+/// Check the stored payload and produce the image: decompress `stored` into
 /// `image` (capacity `image_cap`) or, uncompressed, check it where it is
 /// (`image` may then be `stored`). 0 or a negative Bs2Error code.
 ///
@@ -291,7 +351,7 @@ pub unsafe extern "C" fn bs2_unpack(info: *const Bs2Info, stored: *const u8, ima
     // SAFETY: as documented above.
     let info = unsafe { &*info };
     let stored = unsafe { core::slice::from_raw_parts(stored, info.stored_bytes as usize) };
-    let r = if info.compression == COMPRESSION_DEFLATE {
+    let r = if info.compression != COMPRESSION_NONE {
         // SAFETY: as documented above (not overlapping `stored`).
         let image = unsafe { core::slice::from_raw_parts_mut(image, image_cap) };
         unpack(info, stored, image)
@@ -421,6 +481,8 @@ mod tests {
         h[56..60].copy_from_slice(&info.stored_crc32.to_le_bytes());
         h[60..64].copy_from_slice(&info.image_crc32.to_le_bytes());
         h[64..96].copy_from_slice(&info.name[..32]);
+        h[96..104].copy_from_slice(&info.zero_offset.to_le_bytes());
+        h[104..112].copy_from_slice(&info.zero_bytes.to_le_bytes());
         let c = crc32::crc32(&h[..508]);
         h[508..].copy_from_slice(&c.to_le_bytes());
         h
@@ -438,6 +500,8 @@ mod tests {
             stored_crc32: crc32::crc32(image),
             image_crc32: crc32::crc32(image),
             name,
+            zero_offset: 0,
+            zero_bytes: 0,
         }
     }
 
@@ -448,6 +512,26 @@ mod tests {
         let h = header(&info);
         assert_eq!(parse_header(&h, &LIMITS), Ok(info));
         assert_eq!(unpack(&info, &z, &mut []), Ok(5000));
+    }
+
+    #[test]
+    fn zero_range_and_version_1() {
+        let z = zimage(5000);
+        let mut info = info_for(&z);
+        info.zero_offset = 5000;
+        info.zero_bytes = (1 << 22) - 5000;
+        assert_eq!(parse_header(&header(&info), &LIMITS), Ok(info));
+        // Version 1: bytes 96..112 are not a zero range, and no LZ4.
+        let mut h = header(&info);
+        h[8] = 1;
+        let c = crc32::crc32(&h[..508]);
+        h[508..].copy_from_slice(&c.to_le_bytes());
+        let v1 = parse_header(&h, &LIMITS).unwrap();
+        assert_eq!((v1.zero_offset, v1.zero_bytes), (0, 0));
+        h[16] = COMPRESSION_LZ4 as u8;
+        let c = crc32::crc32(&h[..508]);
+        h[508..].copy_from_slice(&c.to_le_bytes());
+        assert_eq!(parse_header(&h, &LIMITS), Err(Bs2Error::BadCompression));
     }
 
     #[test]
@@ -474,8 +558,29 @@ mod tests {
             }
             assert_eq!(parse_header(&out, &LIMITS), Err(want));
         };
-        refuse(&|_, hh| hh[8..16].copy_from_slice(&[2, 0, 0, 0, 0, 2, 0, 0]), Bs2Error::BadVersion);
-        refuse(&|i, _| i.compression = 2, Bs2Error::BadCompression);
+        refuse(&|_, hh| hh[8..16].copy_from_slice(&[3, 0, 0, 0, 0, 2, 0, 0]), Bs2Error::BadVersion);
+        refuse(&|i, _| i.compression = 3, Bs2Error::BadCompression);
+        refuse(
+            &|i, _| {
+                i.zero_offset = 4999;
+                i.zero_bytes = 100;
+            },
+            Bs2Error::ZeroRange,
+        );
+        refuse(
+            &|i, _| {
+                i.zero_offset = 5000;
+                i.zero_bytes = (1 << 22) - 4999;
+            },
+            Bs2Error::ZeroRange,
+        );
+        refuse(
+            &|i, _| {
+                i.zero_offset = u64::MAX;
+                i.zero_bytes = 2;
+            },
+            Bs2Error::ZeroRange,
+        );
         refuse(&|i, _| i.load = 0x8080_0000, Bs2Error::WrongLoad);
         refuse(&|i, _| i.entry = 0x8200_0000 + 5000, Bs2Error::EntryOutside);
         refuse(&|i, _| i.entry = 0x81ff_fffc, Bs2Error::EntryOutside);
@@ -514,12 +619,12 @@ mod tests {
 
     #[test]
     fn strerror_names_every_code() {
-        for code in -15..=-1 {
+        for code in -17..=-1 {
             let e = Bs2Error::from_code(code).expect("every code has a variant");
             assert!(e.text().ends_with('\0') && e.text().len() > 5);
         }
         assert!(Bs2Error::from_code(0).is_none());
-        assert!(Bs2Error::from_code(-16).is_none());
+        assert!(Bs2Error::from_code(-18).is_none());
     }
 
     /// The images `tools/am62p-mkboot.py stage2-vectors <dir>` writes (Python's

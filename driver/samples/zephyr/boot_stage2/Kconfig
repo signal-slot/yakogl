@@ -73,6 +73,16 @@ config BOOT_STAGE2_REGION_END
 	help
 	  The overlay's stage2_payload node ends here (the GPU carveout).
 
+config BOOT_STAGE2_PROGRESS_LOG
+	bool "Log each step on the console, with a memory bandwidth probe"
+	default y
+	help
+	  The header, the read and unpack times, and a timed 1 MiB copy. The
+	  console is polled, so every line costs its length at the UART's
+	  rate before the image runs (at 115200 baud, about 87 us a
+	  character: the four lines and the probe were 31 ms of the i.MX8MP
+	  loader's 300, 2026-10-29). Errors are always printed.
+
 config BOOT_STAGE2_CHUNK_SECTORS
 	int "Sectors per disk read"
 	default 2048
