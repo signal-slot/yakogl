@@ -77,8 +77,8 @@ fi
 mv "$DEPS/zephyr-ws.part" "$DEPS/zephyr-ws"
 rm -rf "$DEPS/zephyr-ws.boot"
 '''
-packages.apt = ["git", "python3-venv", "python3-pip", "cmake", "ninja-build", "gperf", "ccache", "device-tree-compiler", "xz-utils", "make"]
-packages.portage = ["dev-vcs/git", "dev-build/cmake", "dev-build/ninja", "dev-util/gperf", "dev-util/ccache", "sys-apps/dtc"]
+packages.apt = ["git", "python3-venv", "python3-pip", "cmake", "ninja-build", "gperf", "ccache", "device-tree-compiler", "xz-utils", "make", "lz4"]
+packages.portage = ["dev-vcs/git", "dev-build/cmake", "dev-build/ninja", "dev-util/gperf", "dev-util/ccache", "sys-apps/dtc", "app-arch/lz4"]
 
 [[dep]]
 name = "WEST_VENV"
