@@ -119,11 +119,8 @@ static struct {
 	bool lit;                           /* imx8mp_display_backlight_on() called */
 	int64_t released_ms;
 	int64_t first_shown_ms;
-	/* m7_start() once both are true, from whichever side comes last:
-	 * the M7 image is loaded (the first window) and the panel chain runs
-	 * (the panel console's cold bring-up, on its own thread). */
-	atomic_t m7_loaded;
-	atomic_t m7_started;
+	atomic_t m7_started; /* m7_start() ran (it runs once) */
+	bool panel_checked;  /* the first show made sure the panel runs */
 	struct k_timer beat;
 	volatile struct cluster_boot_timeline *tl; /* in the window, once mapped */
 } R;
@@ -575,23 +572,6 @@ static void m7_start(void)
 	board_route3_tl_mark(CLUSTER_TL_A53_M7_RELEASED);
 }
 
-/* m7_start() if the M7 is loaded and the panel runs, and not yet started.
- * The M7's first tick reads the LCDIF (a bus fault while MEDIAMIX is off),
- * so never before the panel. */
-static void m7_start_when_ready(void)
-{
-	if (atomic_get(&R.m7_loaded) != 0 && imx8mp_display_is_running() &&
-	    atomic_cas(&R.m7_started, 0, 1)) {
-		m7_start();
-	}
-}
-
-/* The panel console's bring-up thread, when it has finished. */
-void board_panel_cold_done(void)
-{
-	m7_start_when_ready();
-}
-
 static int route3_setup(void)
 {
 	uint32_t stale_session;
@@ -636,13 +616,17 @@ static int route3_setup(void)
 	 * safety layer and its wait for our frame then run while this core
 	 * initialises the GPU and draws -- 2026-10-29's timeline had the M7
 	 * started 463 ms after it was loaded, and its ~290 ms to the first
-	 * flip all on the critical path. Safe once the panel chain is
-	 * running: here if the panel console's cold bring-up has finished,
-	 * else from its thread when it does (board_panel_cold_done). Without
-	 * a panel the first show brings it up and releases the M7, as before.
+	 * flip all on the critical path. Even before the panel runs: the
+	 * M7 touches the LCDIF and PWM3 (MEDIAMIX, a bus fault while it is
+	 * off) only to flip, and on a handed-over start it flips nothing
+	 * before our first frame, which board_route3_show() publishes only
+	 * once the panel runs. Released after the panel instead, its first
+	 * render of the safety layer (33 ms) stood between the panel and
+	 * the first picture (2026-10-29, v12 timeline).
 	 */
-	atomic_set(&R.m7_loaded, 1);
-	m7_start_when_ready();
+	if (atomic_cas(&R.m7_started, 0, 1)) {
+		m7_start();
+	}
 	return 0;
 }
 
@@ -696,24 +680,32 @@ int board_route3_show(const struct board_window *win)
 	int rc;
 
 	board_route3_tl_mark(CLUSTER_TL_A53_FRAME1_DRAWN); /* the first show only */
-	if (R.state == BOARD_ROUTE3_LOADED) {
-		/* The panel bring-up may still run on its thread; it starts the
-		 * M7 when it is done (board_panel_cold_done). */
+	if (!R.panel_checked && (R.state == BOARD_ROUTE3_LOADED || R.state == BOARD_ROUTE3_STARTING ||
+				 R.state == BOARD_ROUTE3_UP)) {
+		/*
+		 * Nothing is published before the panel runs: the M7 flips
+		 * (touching MEDIAMIX) only once there is a frame. The panel
+		 * console's bring-up may still be on its thread; wait for it.
+		 * Without it (or if it failed), the panel from cold on this
+		 * frame. The backlight stays off either way: the M7 turns PWM3
+		 * on itself right before its first flip of a frame it has
+		 * composited (lcdif_m7_backlight_ensure_on); lit here, the
+		 * A53's bare frame stood on the panel for the whole M7 boot
+		 * (2026-10-22, the first frames wrong).
+		 */
+		R.panel_checked = true;
 		(void)gc_panel_console_cold_wait(K_SECONDS(2));
+		if (!imx8mp_display_is_running()) {
+			rc = imx8mp_display_on(win->phys, win->stride);
+			if (rc != 0) {
+				printk("route3: no panel (%d); stopping the M7\n", rc);
+				m7_give_up();
+				return rc;
+			}
+		}
 	}
 	switch (R.state) {
 	case BOARD_ROUTE3_LOADED:
-		/* The panel from cold on this frame; the M7 adopts it later. The
-		 * backlight stays off (YAKOGL_DRV_DISPLAY_IMX8MP_BACKLIGHT_ON_FIRST_SHOW):
-		 * this frame has no safety layer, and the M7 turns PWM3 on itself
-		 * when it adopts the LCDIF (lcdif_m7_backlight_ensure_on), right
-		 * before its first flip of a frame it has composited. Lit here,
-		 * the A53's bare frame stood on the panel for the whole M7 boot
-		 * (2026-10-22, the first frames wrong). */
-		rc = imx8mp_display_on(win->phys, win->stride);
-		if (rc != 0) {
-			return rc;
-		}
 		(void)publish(win);
 		if (atomic_cas(&R.m7_started, 0, 1)) {
 			m7_start();
