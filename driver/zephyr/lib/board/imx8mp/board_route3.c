@@ -503,6 +503,7 @@ static void tl_uart_line(const char *who, const char *what, uint64_t t)
  * whether frame 1 left this core that way.
  */
 static uint64_t tl_px[3][3];
+static uint32_t tl_desc5_first; /* LCDIF CTRLDESCL0_5 at the first show */
 
 /*
  * The measurement report: both cores' stamps on the timeline UART, one
@@ -546,6 +547,9 @@ static void tl_report(struct k_work *work)
 			 (unsigned long long)tl_px[n][2]);
 		tl_uart_str(buf);
 	}
+	snprintk(buf, sizeof(buf), "TL lcdif desc5 first 0x%08x now 0x%08x\n", tl_desc5_first,
+		 imx8mp_display_layer_control());
+	tl_uart_str(buf);
 	tl_uart_str("TL end\n");
 }
 
@@ -722,6 +726,9 @@ int board_route3_show(const struct board_window *win)
 
 		if (shows < 3u) {
 			tl_sample(win, shows++);
+		}
+		if (shows == 1u && imx8mp_display_is_running()) {
+			tl_desc5_first = imx8mp_display_layer_control();
 		}
 	}
 #endif
