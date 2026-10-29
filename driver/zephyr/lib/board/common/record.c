@@ -50,12 +50,19 @@ void board_result_tag(unsigned int kind, uint8_t tag, uint32_t w1, uint32_t w2, 
 	emit(yd_record_result_tag(&s_writer, kind, tag, w1, w2, w3, w), w, key);
 }
 
+/* A board that wants the marks for itself (a timeline) overrides this. */
+__weak void board_progress_hook(uint32_t where)
+{
+	ARG_UNUSED(where);
+}
+
 void board_progress(uint32_t where)
 {
 	uint32_t w[4];
 	unsigned int key = irq_lock();
 
 	emit(yd_record_progress(&s_writer, where, k_uptime_get_32(), w), w, key);
+	board_progress_hook(where);
 }
 
 void board_record_breadcrumb(unsigned int kind, uint8_t tag, uint32_t w1, uint32_t w2,
