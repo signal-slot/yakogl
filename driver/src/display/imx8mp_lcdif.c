@@ -218,6 +218,14 @@ int lcdif_enable(struct display_ctx *c)
 
 	set32(c->lcdif, LCDC_V8_DISP_PARA, DISP_PARA_DISP_ON);
 	set32(c->lcdif, LCDC_V8_CTRLDESCL0_5, CTRLDESCL0_5_EN);
+	/* The layer registers are shadowed: commit what lcdif_configure()
+	 * wrote (format, size, pitch, address) at the next frame boundary, as
+	 * Linux's lcdif_crtc_atomic_flush() does right after the enable.
+	 * Without it the layer ran on its reset/older values until the first
+	 * flip's shadow load; the route-3 panel's first picture came out red
+	 * and blue swapped (ARGB8888 vs ABGR8888) on a slow-motion video while
+	 * the frame in memory was right (2026-10-29, channel sums). */
+	set32(c->lcdif, LCDC_V8_CTRLDESCL0_5, CTRLDESCL0_5_SHADOW_LOAD_EN);
 	return 0;
 }
 
