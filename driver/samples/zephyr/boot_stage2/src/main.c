@@ -18,6 +18,7 @@
  */
 
 #include <zephyr/kernel.h>
+#include <zephyr/kernel/mm.h>
 #include <zephyr/cache.h>
 #include <zephyr/devicetree.h>
 #include <zephyr/irq.h>
@@ -29,6 +30,76 @@
 #endif
 
 #include "boot_stage2.h"
+
+/*
+ * The loader's own timeline, for the image after it to report: the system
+ * counter (CNTPCT_EL0, started by SPL) at the loader's stages, written into
+ * a page of this loader's RAM that nothing else uses -- the middle of its
+ * 32 MiB, well past the loader and the devicetree SPL appends to it, and
+ * below the top of the region, where Zephyr places device mappings. The
+ * image (at 0x48000000, its own RAM elsewhere) maps the page, copies the
+ * stamps and clears the magic. Layout, also in the image's board_route3.c:
+ * magic, count, then u64 t[8]: entry, main, payload in memory, unpacked,
+ * jump.
+ */
+#define BS2_STAMP_ADDR  0x41000000u
+#define BS2_STAMP_MAGIC 0x54325342u /* 'BS2T' */
+#define BS2_STAMPS      8u
+
+struct bs2_stamps {
+	uint32_t magic;
+	uint32_t count;
+	uint64_t t[BS2_STAMPS];
+};
+
+/*
+ * Kept in .bss until main() maps the page: Zephyr's arm64 MMU maps the
+ * loader's own sections, not the rest of its RAM, so a store to the page
+ * before the mapping faults (2026-10-29: the loader stopped at its first
+ * stamp, the panel stayed dark).
+ */
+static uint64_t bs2_t[BS2_STAMPS];
+static volatile struct bs2_stamps *bs2_st;
+
+static inline uint64_t cntpct(void)
+{
+	uint64_t v;
+
+	__asm__ volatile("isb; mrs %0, cntpct_el0" : "=r"(v) : : "memory");
+	return v;
+}
+
+static void bs2_stamp(unsigned int i)
+{
+	bs2_t[i] = cntpct();
+}
+
+static int bs2_stamp_entry(void)
+{
+	bs2_stamp(0);
+	return 0;
+}
+SYS_INIT(bs2_stamp_entry, PRE_KERNEL_1, 0);
+
+/* Map the page and write the record; the magic last. Called just before the
+ * jump, after the last stamp. */
+static void bs2_stamps_publish(void)
+{
+	uint8_t *va = NULL;
+
+	k_mem_map_phys_bare(&va, BS2_STAMP_ADDR, CONFIG_MMU_PAGE_SIZE,
+			    K_MEM_CACHE_WB | K_MEM_PERM_RW);
+	if (va == NULL) {
+		return;
+	}
+	bs2_st = (volatile struct bs2_stamps *)va;
+	bs2_st->magic = 0u;
+	bs2_st->count = BS2_STAMPS;
+	for (unsigned int i = 0; i < BS2_STAMPS; i++) {
+		bs2_st->t[i] = bs2_t[i];
+	}
+	bs2_st->magic = BS2_STAMP_MAGIC;
+}
 
 #define SECTOR_BYTES 512u
 #define HDR_SECTOR   CONFIG_BOOT_STAGE2_SECTOR
@@ -56,6 +127,7 @@ BUILD_ASSERT((uint64_t)CONFIG_BOOT_STAGE2_STAGING + MAX_STORED <= CONFIG_BOOT_ST
 BUILD_ASSERT(END_SECTOR > HDR_SECTOR + 1, "room for a payload");
 
 static uint8_t hdr[SECTOR_BYTES] __aligned(64);
+
 #else
 /* payload.S (CMake, -DBOOT_STAGE2_PAYLOAD): the stage2 .img, header first. */
 extern const uint8_t bs2_payload_start[];
@@ -97,6 +169,7 @@ static int read_sectors(uint8_t *buf, uint32_t first, uint32_t count)
 
 int main(void)
 {
+	bs2_stamp(1);
 	struct bs2_info info;
 	int64_t t0 = k_uptime_get();
 	int ret;
@@ -191,6 +264,7 @@ int main(void)
 	uint32_t nsec = 0;
 #endif
 	int64_t t2 = k_uptime_get();
+	bs2_stamp(2);
 
 	ret = bs2_unpack(&info, (uint8_t *)stored, (uint8_t *)LOAD, STAGING - LOAD);
 	if (ret) {
@@ -198,6 +272,7 @@ int main(void)
 		halt();
 	}
 	int64_t t3 = k_uptime_get();
+	bs2_stamp(3);
 
 	printk("boot_stage2: \"%s\" ok (CRC-32 %08x): read %u sectors in %lld ms, unpacked in %lld ms; "
 	       "jumping to 0x%llx at %lld ms\n", info.name, info.image_crc32, nsec, t2 - t1, t3 - t2,
@@ -218,6 +293,8 @@ int main(void)
 	/* Everything the image consists of is in the data cache or memory:
 	 * clean and invalidate all of it to the point of coherency, then the
 	 * instruction cache; bs2_jump turns the MMU and caches off. */
+	bs2_stamp(4);
+	bs2_stamps_publish();
 	sys_cache_data_flush_and_invd_all();
 	sys_cache_instr_invd_all();
 	bs2_jump(info.entry);

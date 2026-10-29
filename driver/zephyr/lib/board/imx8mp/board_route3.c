@@ -220,6 +220,38 @@ static void *map_nc(uintptr_t phys, size_t size)
 	return cpu;
 }
 
+/*
+ * The second-stage loader's own stamps (boot_stage2/src/main.c, "the
+ * loader's own timeline"): a page of the loader's RAM, dead once this image
+ * runs. Copied into the timeline's LOADER slots, then the magic cleared so a
+ * later boot by another route does not read this one's.
+ */
+#define BS2_STAMP_ADDR  0x41000000u
+#define BS2_STAMP_MAGIC 0x54325342u /* 'BS2T' */
+#define BS2_STAMPS      8u
+
+static void tl_loader(void)
+{
+	static const enum cluster_tl_a53 at[] = {
+		CLUSTER_TL_A53_LOADER_ENTRY, CLUSTER_TL_A53_LOADER_MAIN, CLUSTER_TL_A53_LOADER_READ,
+		CLUSTER_TL_A53_LOADER_UNPACKED, CLUSTER_TL_A53_LOADER_JUMP};
+	volatile uint32_t *w = map_nc(BS2_STAMP_ADDR, CONFIG_MMU_PAGE_SIZE);
+
+	if (w == NULL || R.tl == NULL) {
+		return;
+	}
+	if (w[0] == BS2_STAMP_MAGIC && w[1] == BS2_STAMPS) {
+		volatile uint64_t *ts = (volatile uint64_t *)(w + 2);
+
+		for (unsigned int i = 0; i < ARRAY_SIZE(at); i++) {
+			tl_early[at[i]] = ts[i];
+			R.tl->a53[at[i]] = ts[i];
+		}
+		w[0] = 0u;
+	}
+	k_mem_unmap_phys_bare((uint8_t *)w, CONFIG_MMU_PAGE_SIZE);
+}
+
 static uintptr_t map_dev(uintptr_t phys, size_t size)
 {
 	mm_reg_t va = 0;
@@ -447,7 +479,8 @@ static void tl_report(void)
 		"entry", "panel bring-up start", "panel on (dark)", "kernel up",
 		"window (M7 loaded)", "first board_show", "M7 released", "M7 up",
 		"first shown", "app: windows", "app: EGL", "app: frame 1",
-		"app: swapped"};
+		"app: swapped", "loader entry", "loader main", "loader payload in RAM",
+		"loader unpacked", "loader jump"};
 	static const char *const m7[] = {
 		"main", "safety layer ready", "loop", "first A53 frame",
 		"first composite", "first flip latched", "backlight on", "layer pre-rendered", "frame 1 layer rendered"};
@@ -540,6 +573,7 @@ static int route3_setup(void)
 			     M7_UNCACHED_BASE + M7_UNCACHED_SIZE,
 		     "the timeline page is in the M7's non-cacheable window");
 	tl_attach(R.window);
+	tl_loader();
 
 	/* DDR keeps its contents over a warm reset: what the last boot's M7
 	 * left must not read as this boot's. Its status magic and its page
