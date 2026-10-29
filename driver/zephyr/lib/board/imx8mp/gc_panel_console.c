@@ -210,13 +210,20 @@ static void fill_rows(uint32_t y0, uint32_t n, uint32_t colour)
 		return;
 	}
 	n = MIN(n, p.height - y0);
+	if (n == 0u) {
+		return;
+	}
 
-	for (uint32_t y = y0; y < y0 + n; y++) {
-		uint8_t *row = p.fb + (size_t)y * p.pitch;
+	/* One row pixel by pixel, the others copies of it: put_pixel() for
+	 * every pixel of the whole 1280x800 buffer was 20 ms before the
+	 * panel's cold bring-up could start (2026-10-29, route-3 timeline). */
+	uint8_t *first = p.fb + (size_t)y0 * p.pitch;
 
-		for (uint32_t x = 0; x < p.width; x++) {
-			put_pixel(row, x, colour);
-		}
+	for (uint32_t x = 0; x < p.width; x++) {
+		put_pixel(first, x, colour);
+	}
+	for (uint32_t y = y0 + 1u; y < y0 + n; y++) {
+		memcpy(p.fb + (size_t)y * p.pitch, first, (size_t)p.width * p.bytes_pp);
 	}
 	sys_cache_data_flush_range(p.fb + (size_t)y0 * p.pitch, (size_t)n * p.pitch);
 }
