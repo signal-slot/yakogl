@@ -154,6 +154,8 @@ struct Replay {
     /// scenes were first seen; `LIFE` is the boot and the blocks between
     /// scenes.
     live_hw: Vec<(u32, u32)>,
+    /// Every served `a` block: (scene, what, device address).
+    placed: Vec<(u32, &'static str, u64)>,
 }
 
 impl Replay {
@@ -172,6 +174,7 @@ impl Replay {
             refused: Vec::new(),
             refused_at: Vec::new(),
             live_hw: Vec::new(),
+            placed: Vec::new(),
         }
     }
 
@@ -213,6 +216,7 @@ impl Replay {
     fn a(&mut self, scene: u32, what: &'static str, heap: usize, bytes: u32) -> bool {
         match self.r.try_alloc(heap, bytes) {
             Some(bo) => {
+                self.placed.push((scene, what, bo.gpu));
                 self.live.push(Blk { scene, what, heap, size: bytes, bo });
                 self.note_live();
                 true
@@ -234,6 +238,13 @@ impl Replay {
         } else {
             self.note_live();
         }
+    }
+
+    /// [`Replay::drv`], false when refused.
+    fn drv_ok(&mut self, heap: usize, bytes: u32) -> bool {
+        let n = self.refused.len();
+        self.drv(heap, bytes);
+        self.refused.len() == n
     }
 
     /// A PM-protected block (a PFN array, an MList) from the bump.
@@ -352,9 +363,11 @@ impl Replay {
     /// released first, then the chain is asked for. False when the chain is
     /// refused: the texture then has no storage at all.
     fn grow(&mut self, n: u32, what: &'static str, chain: (&'static str, u32)) -> bool {
-        let i = self.live.iter().position(|b| b.scene == n && b.what == what).expect("the texture's storage");
-        let old = self.live.remove(i);
-        self.r.free(&old.bo, old.size);
+        /* a texture whose level 0 was itself refused has no storage to give back */
+        if let Some(i) = self.live.iter().position(|b| b.scene == n && b.what == what) {
+            let old = self.live.remove(i);
+            self.r.free(&old.bo, old.size);
+        }
         self.a(n, chain.0, GEN, chain.1)
     }
 
