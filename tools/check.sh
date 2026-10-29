@@ -2349,7 +2349,7 @@ if command -v cc >/dev/null 2>&1; then
   # the POT-extent NPOT chains per carve-out (pool/tests/replay/carveout.rs:
   # refused at 64 MiB, fits the glmark2 image's overlay carve-out).
   pvr_pool_tests() {
-    local out want=33
+    local out want=38
     out=$(cargo_test --libtest --no-fail-fast -p yakogl-drivers --all-features gpu::pvr::pool:: 2>&1) ||
       { printf '%s\n' "$out" | tail -20; return 1; }
     printf '%s\n' "$out" | grep -qE "^test result: ok\. $want passed; 0 failed; 0 ignored;" || {
@@ -2363,7 +2363,7 @@ if command -v cc >/dev/null 2>&1; then
     }
   }
   scope pvr drivers
-  step "test    pvr render pool (Rust; the C pool's golden trace replayed, 33 tests)" pvr_pool_tests
+  step "test    pvr render pool (Rust; the C pool's golden trace replayed, 38 tests)" pvr_pool_tests
   # The AM62P RTI arming arithmetic (driver/zephyr/lib/board/am62p/rti_arm.h):
   # the preload for 60 s at each clock rate the board reported, and the
   # refusal of the MHz parents. The row requires its line.
