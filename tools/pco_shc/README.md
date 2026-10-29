@@ -15,11 +15,15 @@ ever changed by the two patches):
   USC programs -- end-of-tile, clear-attach, a precompiled usclib program --
   for the driver's blobs, see below)
 - `capture_smp_fs.c`     -> `src/imagination/vulkan/` (a texture-sample FS)
-- `meson-vulkan.patch`   adds the three executables to
+- `capture_spm_load.c`   -> `src/imagination/vulkan/` (prints the partial
+  render's background-object load shader, Mesa's `pvr_uscgen_spm_load`,
+  with its metadata; see below)
+- `meson-vulkan.patch`   adds the four executables to
   `src/imagination/vulkan/meson.build`
 - `usclib-tex.cl.patch`  `src/imagination/pco/usclib/tex.cl`: textureSize()
   reads the STRIDE image layout (the reason is in the patch)
 - `gen_usc_blobs.py`, `usc_blobs.txt`: the driver's USC blobs (below)
+- `gen_spm_load.py`, `spm_load/`: the partial render's load shader (below)
 
 Build with `build_pco_shc.sh` (tarball check, the patches, the meson options,
 the usclib check; the packages it needs are in its header; about a minute on
@@ -27,7 +31,8 @@ the usclib check; the packages it needs are in its header; about a minute on
 
     tools/pco_shc/build_pco_shc.sh mesa-26.2.1.tar.xz [<work dir>]
 
-It builds `pco_shc` only; `capture_usc` and `capture_smp_fs` are one more
+It builds `pco_shc` and `capture_spm_load`; `capture_usc` and
+`capture_smp_fs` are one more
 `ninja -C <work dir>/mesa-26.2.1/build src/imagination/vulkan/capture_usc`
 away. Always in a fresh build directory (an old `build` once compiled MRT
 shaders to nothing): the script deletes and re-extracts the tree.
@@ -52,6 +57,65 @@ a build proves the list is what this Mesa's pco makes. Last full run
 (2026-10-01): every program reproduced, usc_blobs.txt sha256
 f9a0dc0adff79149a4b4cb713628631082c086ab63b5ec7555f6228e154701fc, identical
 with and without usclib-tex.cl.patch (none of these programs samples).
+
+## The partial render's background-object load shader
+
+`spm_load/spm_load.hex` and `spm_load/spm_load.meta.txt` are generator
+output too: Mesa's SPM load shader, `pvr_uscgen_spm_load()`
+(`src/imagination/vulkan/pvr_usc.c`, MIT), as Mesa 26.2.1's pco compiles it
+for the BXS-4-64, with `struct pvr_spm_load_props { output_reg_count 1,
+tile_buffer_count 0, is_multisampled false }` (the backend's one
+configuration: an RGBA8 colour target, one sample, no tile buffers;
+`pvr_uscgen_spm_load_index` 0). A render that resumes after a partial render
+runs it as the background object (`pds_pr_bgnd` of the 3D command): it
+samples the tile the partial render stored to the SPM scratch and writes the
+raw dword to pixel output 0, so the resumed render starts from the stored
+colour (docs/notes/pvr-render-pool.md, "Design: the firmware's partial
+render", part 3). Mesa generates it at device creation
+(`pvr_arch_spm.c` `pvr_arch_device_init_spm_load_state`); we have no pco on
+the target, so it is generated once here. The committed words are a table
+entry in a later change; nothing under `src/` reads these files.
+
+    # needs the Mesa build above (capture_spm_load); writes tools/pco_shc/spm_load/
+    tools/pco_shc/gen_spm_load.py capture <mesa>/build/src/imagination/vulkan/capture_spm_load
+    # needs no Mesa: yakogl-tools usc-dis decodes the words and the metadata is checked against them
+    tools/pco_shc/gen_spm_load.py check
+
+`spm_load.meta.txt` is what the compiler says about the program, one
+`key value` line each (`capture_spm_load.c` prints them): `usc_bytes`,
+`entry_offset`, `temps`, the register counts, the colour output (`fs_out`:
+`FRAG_RESULT_DATA0` in po0, `PIPE_FORMAT_R32_UINT`), and the shared-register
+slots the program reads, `enum pvr_spm_load_data`
+(`src/imagination/common/pvr_iface.h`): the sampler state at
+`sh[smp_state_sh..+texstate_dwords)` = sh0..3, the scratch texture's state at
+`sh[tex_state_sh..+texstate_dwords)` = sh4..7, `consts_dwords` = 8 dwords in
+all, which the PDS program DMAs before the kick. Captured 2026-10-29 on
+Gentoo (gcc 16.2.1_p20260926, LLVM/clang 23.1.2): 50 dwords, 16
+instruction groups, temps 6, no coefficients, no usclib call.
+
+What the PDS and state side has to supply, read from Mesa's
+`pvr_arch_spm_init_bgobj_state` (`pvr_arch_spm.c`, MIT), for the change
+that builds the background-object program:
+
+- sh0..3, the sampler (`TEXSTATE_SAMPLER_WORD0`): `non_normalized_coords`,
+  u and v `CLAMP_TO_EDGE`, min and mag filter `POINT`, `minlod` and `maxlod`
+  `CLAMP_MIN`, `dadjust` `DADJUST_ZERO_UINT`; word 1 all zero.
+- sh4..7, the scratch as a texture (`pvr_spm_setup_texture_state_words`):
+  `VK_FORMAT_R32_UINT` for one dword, linear layout, a 2D view of the
+  framebuffer's width and height, one mip level, the frame's sample count,
+  `stride` = the width rounded up to
+  `ROGUE_CR_PBE_WORD0_MRT0_LINESTRIDE_ALIGNMENT`, at the scratch's device
+  address; `PVR_TEXTURE_STATE_STORAGE`.
+- The kick: DOUTU of the program at its heap address with `temps` from the
+  metadata and `SAMPLE_RATE_INSTANCE` (the program does no sample shading).
+- `CR_PDS_BGRND3_SIZEINFO`: `usc_sharedsize` = `consts_dwords` * 4 bytes in
+  units of 16 (= 2), `pds_texturestatesize` = the texture-data upload's size
+  in units of 4, `pds_tempsize` = the PDS texture program's temps.
+
+The two rows of `tools/check.sh`: `gen_spm_load.py check` (every pvr run;
+no Mesa) and `gen_spm_load.py capture --check` against the
+`capture_spm_load` beside `PCO_SHC` (the full run; a gap without one,
+naming the ninja target to build).
 
 Point `PCO_SHC` at `build/src/imagination/vulkan/pco_shc` when running
 `tools/glsl2usc.sh`. Every table regeneration must use the same harness build

@@ -71,7 +71,7 @@ SRC="$WORK/mesa-26.2.1"
 rm -rf "$SRC"
 tar -C "$WORK" -xf "$TARBALL"
 cd "$SRC"
-cp "$HERE"/{pco_shc.c,capture_usc.c,capture_smp_fs.c} src/imagination/vulkan/
+cp "$HERE"/{pco_shc.c,capture_usc.c,capture_smp_fs.c,capture_spm_load.c} src/imagination/vulkan/
 patch -p1 < "$HERE/meson-vulkan.patch"
 patch -p1 < "$HERE/usclib-tex.cl.patch"
 # The tree's absolute path must not reach the binary (debug info, __FILE__),
@@ -81,7 +81,10 @@ meson setup build \
   -Dbuildtype=debug -Dvulkan-drivers=imagination -Dgallium-drivers= \
   -Dgles1=disabled -Dgles2=disabled -Dglx=disabled -Degl=disabled -Dplatforms= \
   -Dc_args="$PREFIX_MAP" -Dcpp_args="$PREFIX_MAP"
-ninja -C build src/imagination/pco/usclib/pco_usclib.spv src/imagination/vulkan/pco_shc
+# capture_spm_load too: tools/check.sh's regenerate-and-compare row of the
+# partial render's load shader (gen_spm_load.py) looks for it beside pco_shc.
+ninja -C build src/imagination/pco/usclib/pco_usclib.spv src/imagination/vulkan/pco_shc \
+  src/imagination/vulkan/capture_spm_load
 
 # The usclib must be the patched one: usclib_tex_state_base_level compares
 # textype against ROGUE_TEXSTATE_TEXTYPE_STRIDE (4) and branches on it. An

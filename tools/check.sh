@@ -2495,6 +2495,16 @@ if command -v python3 >/dev/null 2>&1; then
   scope pvr
   step "gen     driver/src/pvr_usc_*_blob.h == tools/pco_shc/usc_blobs.txt" \
     python3 tools/pco_shc/gen_usc_blobs.py render --check
+  # The partial render's background-object load shader
+  # (tools/pco_shc/spm_load/, Mesa's pvr_uscgen_spm_load as pco compiles it):
+  # the committed words disassemble with the online compiler's decoder
+  # (yakogl-tools usc-dis), tile the program, end once, read the sampler and
+  # texture state from the shared registers the metadata names and nothing
+  # past the block the PDS program DMAs, and write pixel output 0; the size
+  # and the sha256 are the metadata's. No Mesa build; that the words are
+  # what this Mesa's pco makes is the capture --check row below (PCO_SHC).
+  step "gen     tools/pco_shc/spm_load: usc-dis decodes the words, metadata holds" \
+    python3 tools/pco_shc/gen_spm_load.py check
   # The Zephyr dEQP tally's two verdicts on a log: MISSING (no summary) and
   # INCOMPLETE (fewer case lines than the summary's "with a result": the
   # serial capture lost lines, which on 2026-09-25 hid 12 mustpass cases
@@ -3518,6 +3528,38 @@ if [ "$QUICK" -eq 0 ]; then
     step "gen     tests/reference/blobs.rs == tools/glsl2usc.sh on precompiled.list (pco_shc)" mesa_table_repro
   else
     gap "tests/reference/blobs.rs from precompiled.list: no pco_shc at PCO_SHC='${PCO_SHC-}' (set PCO_SHC, GLSLANG, GLSL2USC_CACHE): the list was NOT shown to make the committed table"
+  fi
+  # The partial render's load shader (tools/pco_shc/spm_load/) regenerated
+  # with the same Mesa build's capture_spm_load (tools/pco_shc/README.md)
+  # and compared byte for byte. The program is found beside PCO_SHC: the
+  # tools/README.md form (PCO_SHC in the build directory, or a link into
+  # it), then tools/cts/deps.toml's (PCO_SHC a copy, the tree at
+  # <PCO_SHC's directory>.src); PCO_SPM_LOAD_CAPTURE names it outright.
+  # Without PCO_SHC the row is a gap; with a PCO_SHC whose tree lacks the
+  # program (built before it existed) the row is a gap naming the ninja
+  # target, never a pass.
+  spm_load_capture() {
+    local p
+    for p in "${PCO_SPM_LOAD_CAPTURE-}" \
+             "$(dirname "$(readlink -f "$PCO_SHC")")/capture_spm_load" \
+             "$(dirname "$PCO_SHC").src/mesa-26.2.1/build/src/imagination/vulkan/capture_spm_load"; do
+      if [ -n "$p" ] && [ -x "$p" ]; then echo "$p"; return 0; fi
+    done
+    return 1
+  }
+  key_spm_load() {
+    key_program capture_spm_load "$1" || return 1
+    key_tree tools/pco_shc/gen_spm_load.py tools/pco_shc/spm_load
+  }
+  scope pvr
+  if [ -z "${PCO_SHC-}" ] || [ ! -x "${PCO_SHC-}" ]; then
+    gap "tools/pco_shc/spm_load from capture_spm_load: no pco_shc at PCO_SHC='${PCO_SHC-}' (set PCO_SHC): the load shader was NOT shown to be what Mesa's pco makes"
+  elif spm_load_cap=$(spm_load_capture); then
+    rowkey key_spm_load "$spm_load_cap"
+    step "gen     tools/pco_shc/spm_load == gen_spm_load.py capture (capture_spm_load of PCO_SHC's build)" \
+      python3 tools/pco_shc/gen_spm_load.py capture "$spm_load_cap" --check
+  else
+    gap "tools/pco_shc/spm_load from capture_spm_load: no capture_spm_load beside PCO_SHC='$PCO_SHC' (ninja -C <mesa>/build src/imagination/vulkan/capture_spm_load in a tree built by tools/pco_shc/build_pco_shc.sh, or set PCO_SPM_LOAD_CAPTURE): the load shader was NOT shown to be what Mesa's pco makes"
   fi
 fi
 
