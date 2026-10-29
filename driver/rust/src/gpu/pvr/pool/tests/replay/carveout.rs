@@ -23,6 +23,8 @@
 //! persistent set of 25224 KiB at 64 MiB, and the 256 MiB board's end bump
 //! of 91356 KiB and refract-end live of 139212 KiB.
 
+mod pr_scratch;
+
 use super::*;
 use std::{eprintln, format, string::String};
 
@@ -87,6 +89,8 @@ struct Run {
     top_hw: u32,
     /// Every refusal: (scene, what, KiB) with GENERAL at the request.
     refused: Vec<((u32, &'static str, u32), Shot)>,
+    /// Where each served block went: (scene, what, device address).
+    placed: Vec<(u32, &'static str, u64)>,
 }
 
 impl Run {
@@ -103,8 +107,17 @@ impl Run {
 /// colour texture grown after its depth buffer (`scene-refract.cpp` draws
 /// into it, then generates). Both as `Replay::grow`: old storage out first.
 fn glmark2_on(bytes: usize, chains: Chains) -> Run {
+    glmark2_with(bytes, chains, None)
+}
+
+/// [`glmark2_on`] with `pr`'s scratch blocks reserved right after the boot
+/// (`pr_scratch.rs`).
+fn glmark2_with(bytes: usize, chains: Chains, pr: Option<pr_scratch::Reserve>) -> Run {
     let mut rp = Replay::with_carveout(bytes, YD_PVR_POOL_TOP_ABOVE);
     rp.boot_for(&Cfg::for_carveout(bytes));
+    if let Some(pr) = pr {
+        pr.reserve(&mut rp);
+    }
     before_jellyfish(&mut rp);
     let persistent = rp.live();
     rp.scene = 21;
@@ -134,7 +147,7 @@ fn glmark2_on(bytes: usize, chains: Chains) -> Run {
     let end_bump = rp.r.pool_used() / K;
     let top_hw = rp.r.k.pool_top_hw / K;
     let refused = rp.refused.iter().copied().zip(rp.refused_at.iter().copied()).collect();
-    Run { pool: pool_kib(bytes), persistent, live_hw: rp.live_hw, end_bump, top_hw, refused }
+    Run { pool: pool_kib(bytes), persistent, live_hw: rp.live_hw, end_bump, top_hw, refused, placed: rp.placed }
 }
 
 fn say(name: &str, run: &Run) {
