@@ -496,6 +496,15 @@ static void tl_uart_line(const char *who, const char *what, uint64_t t)
 }
 
 /*
+ * The colour of the frames as this core drew them: channel sums over every
+ * 16th pixel of every 16th row of the first three shows, before they are
+ * published (the M7 blends into the same buffer after). The first picture
+ * looked red/blue swapped on a slow-motion video (2026-10-29); this says
+ * whether frame 1 left this core that way.
+ */
+static uint64_t tl_px[3][3];
+
+/*
  * The measurement report: both cores' stamps on the timeline UART, one
  * line per stage, "TL <core> <ticks> <name>" between "TL begin hz=<Hz>"
  * and "TL end" (read on the laptop, /var/tmp/yk-spawn/tl-table.py). The
@@ -531,10 +540,33 @@ static void tl_report(struct k_work *work)
 	for (unsigned int i = 0; i < ARRAY_SIZE(m7); i++) {
 		tl_uart_line("M7", m7[i], tl->m7[i]);
 	}
+	for (unsigned int n = 0; n < 3u; n++) {
+		snprintk(buf, sizeof(buf), "TL px %u r %llu g %llu b %llu\n", n + 1u,
+			 (unsigned long long)tl_px[n][0], (unsigned long long)tl_px[n][1],
+			 (unsigned long long)tl_px[n][2]);
+		tl_uart_str(buf);
+	}
 	tl_uart_str("TL end\n");
 }
 
 static K_WORK_DEFINE(tl_report_work, tl_report);
+
+static void tl_sample(const struct board_window *win, unsigned int n)
+{
+	const volatile uint8_t *base = (const volatile uint8_t *)win->cpu;
+
+	for (uint32_t y = 0; y < win->h; y += 16u) {
+		const volatile uint32_t *row = (const volatile uint32_t *)(base + (size_t)y * win->stride);
+
+		for (uint32_t x = 0; x < win->w; x += 16u) {
+			const uint32_t v = row[x];
+
+			tl_px[n][0] += (v >> 16) & 0xffu;
+			tl_px[n][1] += (v >> 8) & 0xffu;
+			tl_px[n][2] += v & 0xffu;
+		}
+	}
+}
 #endif
 
 /* ---- the ring ------------------------------------------------------------- */
@@ -684,6 +716,15 @@ int board_route3_show(const struct board_window *win)
 	int rc;
 
 	board_route3_tl_mark(CLUSTER_TL_A53_FRAME1_DRAWN); /* the first show only */
+#if CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_TIMELINE_REPORT_MS > 0
+	{
+		static unsigned int shows;
+
+		if (shows < 3u) {
+			tl_sample(win, shows++);
+		}
+	}
+#endif
 	if (!R.panel_checked && (R.state == BOARD_ROUTE3_LOADED || R.state == BOARD_ROUTE3_STARTING ||
 				 R.state == BOARD_ROUTE3_UP)) {
 		/*
