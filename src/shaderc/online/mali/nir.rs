@@ -54,9 +54,10 @@ use crate::shaderc::online::ir::{
 };
 
 /// The instructions one vertex shader may hold here (the fragment walk's
-/// too). The largest measured, femtovg's fill_color with 256 offset arms
-/// (case 194's offarm256), takes 611 (docs/notes/mali-int-and-size.md).
-pub const MAX_NODES: usize = 768;
+/// too). The largest measured, femtovg's filter_image (24 unrolled
+/// passes), takes 1153; fill_color with 256 offset arms (case 194's
+/// offarm256) 611 (docs/notes/mali-int-and-size.md).
+pub const MAX_NODES: usize = 1536;
 /// The IR values the walk keeps lanes for (the fragment walk's too).
 /// offarm256 takes 1658, about six per arm.
 pub const MAX_VALUES: usize = 2048;
@@ -64,8 +65,12 @@ pub const MAX_VALUES: usize = 2048;
 pub const MAX_LOCALS: usize = 32;
 /// The `if`s one shader may hold ([`IfRegion`]): gl_test's databreak (case
 /// 87) has nine, the eight guarded passes of its unrolled loop and the
-/// `continue` of one of them.
-pub const MAX_IFS: usize = 16;
+/// `continue` of one of them; femtovg's filter_image 27, the 24 guards of
+/// its passes among them.
+pub const MAX_IFS: usize = 32;
+/// The loops Mesa keeps ([`LoopRegion`]) one shader may hold
+/// (intloop_loop_nested holds nine).
+pub const MAX_LOOPS: usize = 16;
 
 /// `nir_opt_peephole_select`'s limit as bifrost calls it
 /// (bifrost_nir.c:234-237: `.limit = 64, .expensive_alu_ok = true`).
@@ -115,6 +120,8 @@ pub enum Alu {
     Ffloor,
     /// `fceil` (`FROUND.rtp`).
     Fceil,
+    /// `ftrunc` (`FROUND.rtz`): `i2f32(f2i32(a))` (nir_opt_algebraic.py:1250).
+    Ftrunc,
     /// `flt_pan`, `fge_pan`, `feq_pan` (`pan_nir_lower_bool_to_bitsize`):
     /// a 32-bit 0 / ~0 mask (`FCMP.f32 .m1`). GLSL's `<=` is `fge` with
     /// its sources swapped (glsl_to_nir.cpp:2488).
@@ -243,6 +250,7 @@ impl Alu {
             | Alu::Frsq
             | Alu::Ffloor
             | Alu::Fceil
+            | Alu::Ftrunc
             | Alu::B2f
             | Alu::F2i
             | Alu::I2f
@@ -455,6 +463,15 @@ pub struct IfRegion {
     pub after: u8,
     pub live: bool,
     pub guard: bool,
+    /// The kept loop ([`LoopRegion`], its index in [`Nir::loops`]) whose
+    /// exit the then side's last block jumps to: a `break` ends the side
+    /// (`bi_emit_jump`, bifrost_compile.c:85-100), so the side does not
+    /// reach the join.
+    pub brk: Option<u8>,
+    /// The region's place among the regions in the order the walk closed
+    /// them (an inner one first), which is the order `emit_if` and
+    /// `emit_loop` add their blocks' edges in.
+    pub seq: u8,
 }
 
 impl IfRegion {
@@ -468,7 +485,30 @@ impl IfRegion {
         after: 0,
         live: false,
         guard: false,
+        brk: None,
+        seq: 0,
     };
+}
+
+/// A loop Mesa keeps (no limiting terminator, so `nir_opt_loop_unroll`
+/// leaves it, nir_opt_loop_unroll.c:1112-1114), as `emit_loop`
+/// (bifrost_compile.c:3738-3770) lays it out: the block before it
+/// (`pre`), the header (`continue_block`, where the phis of the values the
+/// body carries stand), the body's blocks up to the `latch`, which jumps
+/// back to the header, and the `exit` (`break_block`), entered by the
+/// `break`s alone.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct LoopRegion {
+    pub pre: u8,
+    pub header: u8,
+    pub latch: u8,
+    pub exit: u8,
+    /// See [`IfRegion::seq`].
+    pub seq: u8,
+}
+
+impl LoopRegion {
+    pub const NONE: LoopRegion = LoopRegion { pre: 0, header: 0, latch: 0, exit: 0, seq: 0 };
 }
 
 impl Kind {
@@ -625,6 +665,10 @@ pub struct Nir<'s> {
     pub dom: [u8; MAX_BLOCKS],
     pub ifs: [IfRegion; MAX_IFS],
     pub nifs: usize,
+    pub loops: [LoopRegion; MAX_LOOPS],
+    pub nloops: usize,
+    /// The regions closed so far ([`IfRegion::seq`]).
+    pub nseq: u8,
     /// A vertex shader's look-up ([`Kind::VsTex`]): the sampler binding
     /// whose texture and sampler it reads at descriptor index
     /// [`super::nir_fs::TEX_INDEX`].
@@ -735,6 +779,136 @@ pub(super) fn fold_int(a: AluOp, x: Val, y: Val) -> Option<Val> {
     }
 }
 
+/// The order `nir_lower_vars_to_ssa` registers the shader's locals in
+/// (`register_variable_uses`, nir_lower_vars_to_ssa.c:501-540: the first
+/// `load_deref` or `store_deref` of each variable, in block order), which
+/// decides where its phis stand: `nir_phi_builder_finish`
+/// (nir_phi_builder.c:296) inserts each variable's phis at the start of
+/// their block, variable after variable, so a block's phis are in the
+/// **reverse** of this order. Measured on Mesa 26.2.1's per-pass NIR of
+/// intloop_loop_nested (`NIR_DEBUG=print`) and the final NIR of
+/// intloop_loop_exit, builtin_98, builtin_45, intloop_divnest,
+/// intloop_contloops and intloop_loop_nested_vs:
+///
+/// * A local declared with a constant initialiser (`int i = 0`, `float s
+///   = 0.0`, `vec4 c = vec4(0.0)`) is stored at the top of `main` by
+///   glsl_to_nir (the GLSL IR `constant_initializer`), before any other
+///   instruction, so these locals are registered first. Their order is
+///   the GLSL IR's declaration list: each scope's declarations at the
+///   scope's head in reverse declaration order (ast_to_hir pushes a
+///   declaration at the head of its block), the scopes in program order
+///   (main's body, then each nested body as it is entered). loop_nested's
+///   nine counters and three vectors come out `i4, c, i3, b, i2, a, i1,
+///   res, coords` then the inner `j`s loop by loop.
+/// * Every other local is registered at its first reference in program
+///   order.
+///
+/// The index of each local in that order (`u16::MAX` for one never
+/// referenced). A loop header's or a join's phis are the referenced
+/// locals' in descending index ([`super::nir_fs`] `walk_kept_loop`).
+pub fn registration_order(m: &Module<'_>) -> [u16; MAX_LOCALS] {
+    /* a constant expression: a constant, or an operation of constant
+     * expressions (builtin_98's `int last = -1`, the negation of `1`);
+     * ast_to_hir folds such an initialiser into the declaration's
+     * `constant_initializer`, as it does a literal */
+    fn const_expr(m: &Module<'_>, v: ValueId, depth: u32) -> bool {
+        match m.def(v) {
+            Some(IrOp::ConstF32(_) | IrOp::ConstI32(_) | IrOp::ConstBool(_)) => true,
+            Some(&IrOp::Alu(a, s)) if depth < 16 => {
+                s[..super::nir_fs::ir_arity(a)].iter().all(|x| const_expr(m, x.val, depth + 1))
+            }
+            _ => false,
+        }
+    }
+    /* per local: the first reference's position in a pre-order walk, the
+     * scope (a body's first node) of its first store, whether that store
+     * is of a constant */
+    let mut first_ref = [u32::MAX; MAX_LOCALS];
+    let mut scope = [0u32; MAX_LOCALS];
+    let mut konst = [false; MAX_LOCALS];
+    /* the scopes in the order they are entered */
+    let mut scopes = [u32::MAX; MAX_LOCALS];
+    let mut nscopes = 0usize;
+    struct Walk<'m, 'a> {
+        m: &'m Module<'a>,
+        pos: u32,
+    }
+    fn enter(scopes: &mut [u32; MAX_LOCALS], nscopes: &mut usize, r: ir::Range) -> u32 {
+        if let Some(i) = scopes[..*nscopes].iter().position(|&s| s == r.first) {
+            return i as u32;
+        }
+        if *nscopes < scopes.len() {
+            scopes[*nscopes] = r.first;
+            *nscopes += 1;
+        }
+        (*nscopes - 1) as u32
+    }
+    #[allow(clippy::too_many_arguments)]
+    fn walk(
+        w: &mut Walk<'_, '_>,
+        r: ir::Range,
+        first_ref: &mut [u32; MAX_LOCALS],
+        scope: &mut [u32; MAX_LOCALS],
+        konst: &mut [bool; MAX_LOCALS],
+        scopes: &mut [u32; MAX_LOCALS],
+        nscopes: &mut usize,
+    ) {
+        let s = enter(scopes, nscopes, r);
+        for n in w.m.nodes_of(r) {
+            match *n {
+                IrNode::Instr(id) => {
+                    w.pos += 1;
+                    let local = match w.m.instr(id) {
+                        Some(&IrOp::StoreLocal { local, src, .. }) => {
+                            let l = local.0 as usize;
+                            if l < MAX_LOCALS && first_ref[l] == u32::MAX {
+                                scope[l] = s;
+                                konst[l] = const_expr(w.m, src.val, 0);
+                            }
+                            Some(l)
+                        }
+                        Some(&IrOp::LoadLocal { local, .. }) => Some(local.0 as usize),
+                        _ => None,
+                    };
+                    if let Some(l) = local.filter(|&l| l < MAX_LOCALS) {
+                        if first_ref[l] == u32::MAX {
+                            first_ref[l] = w.pos;
+                        }
+                    }
+                }
+                IrNode::If { then_, else_, .. } => {
+                    walk(w, then_, first_ref, scope, konst, scopes, nscopes);
+                    walk(w, else_, first_ref, scope, konst, scopes, nscopes);
+                }
+                IrNode::Loop { body } => walk(w, body, first_ref, scope, konst, scopes, nscopes),
+                IrNode::Break | IrNode::Continue | IrNode::Return => {}
+            }
+        }
+    }
+    let mut w = Walk { m, pos: 0 };
+    walk(&mut w, m.body, &mut first_ref, &mut scope, &mut konst, &mut scopes, &mut nscopes);
+    let n = m.locals.len().min(MAX_LOCALS);
+    /* the constant-initialised locals: by scope, each scope's in reverse
+     * declaration order (the declaration order is the front end's local
+     * order, lower.rs `declare_var`) */
+    let mut key = [(u32::MAX, u32::MAX); MAX_LOCALS];
+    for (l, k) in key.iter_mut().enumerate().take(n) {
+        if first_ref[l] == u32::MAX {
+            continue;
+        }
+        *k = if konst[l] { (scope[l], u32::MAX - l as u32) } else { (u32::MAX - 1, first_ref[l]) };
+    }
+    let mut out = [u16::MAX; MAX_LOCALS];
+    let mut rank = 0u16;
+    loop {
+        let next = (0..n).filter(|&l| out[l] == u16::MAX && key[l] != (u32::MAX, u32::MAX)).min_by_key(|&l| key[l]);
+        let Some(l) = next else { break };
+        out[l] = rank;
+        rank += 1;
+    }
+    out
+}
+
 /// The uniform a front-end dword falls in, and its component count in
 /// Mesa's packed block (one dword per component, `PackedDriverUniformStorage`):
 /// the types the back end takes.
@@ -809,6 +983,10 @@ pub(super) fn uniform_idx(
     let int_word = match idx {
         Val::Lane(n, 0) => match g.nodes[n as usize].kind {
             Kind::Uniform { dword, .. } => uniform_of(m, dword).is_ok_and(|(i, _)| i.gl_type as u32 == GL_INT),
+            /* a vec4 array's element at an int sum (builtin_45's `cols[idx
+             * + i]` in a kept loop: `IADD.s32 r5, u2.w0, r4`, then the
+             * shift and `LD_PKA.i128`) */
+            Kind::Alu(Alu::Iadd) => u.gl_type as u32 == GL_FLOAT_VEC4 && g.nodes[n as usize].bits == 32,
             _ => false,
         },
         _ => false,
@@ -850,6 +1028,9 @@ impl<'s> Nir<'s> {
             dom: [0; MAX_BLOCKS],
             ifs: [IfRegion::NONE; MAX_IFS],
             nifs: 0,
+            loops: [LoopRegion::NONE; MAX_LOOPS],
+            nloops: 0,
+            nseq: 0,
             sampler: None,
             consts: super::link::VaryingConsts::NONE,
             nonuniform_const: false,
@@ -933,6 +1114,21 @@ impl<'s> Nir<'s> {
                 }
             }
         }
+        for r in self.loops[..self.nloops].iter_mut() {
+            for b in [&mut r.pre, &mut r.header, &mut r.latch, &mut r.exit] {
+                if *b == from {
+                    *b = into;
+                }
+            }
+        }
+    }
+
+    /// Region `r`'s blocks hold a jump out of it: its then side ends in a
+    /// `break`, or a side holds an `if` whose does. NIR keeps such an `if`
+    /// (`nir_opt_dead_cf` keeps a block that ends in a jump; the jump is no
+    /// instruction `nir_opt_peephole_select` may move, :255).
+    fn jumps(&self, r: &IfRegion) -> bool {
+        r.brk.is_some() || self.live_ifs().any(|x| x.brk.is_some() && self.inside(r, x.before))
     }
 
     /// The `demote_if` nodes of the program, in order (nir_fs.rs).
@@ -947,7 +1143,7 @@ impl<'s> Nir<'s> {
     pub fn dead_cf(&mut self) {
         for i in 0..self.nifs {
             let r = self.ifs[i];
-            if !r.live {
+            if !r.live || self.jumps(&r) {
                 continue;
             }
             let dead = (0..self.len).all(|k| {
@@ -1094,7 +1290,7 @@ impl<'s> Nir<'s> {
             progress = false;
             for i in 0..self.nifs {
                 let r = self.ifs[i];
-                if !r.live || r.then_first != r.then_last || r.else_first != r.else_last {
+                if !r.live || r.then_first != r.then_last || r.else_first != r.else_last || r.brk.is_some() {
                     continue;
                 }
                 let (Some(a), Some(b)) = (self.allowed(r.then_first, uniforms), self.allowed(r.else_first, uniforms))
@@ -1201,6 +1397,50 @@ impl<'s> Nir<'s> {
             (g.then_last, g.else_last) = (g.else_last, g.then_last);
         }
         Ok(())
+    }
+
+    /// An inverted guard that stays a branch ([`Nir::invert_guards`]; femtovg's
+    /// filter_image, whose 24 passes are too large for the peephole) is laid
+    /// out as `emit_if` lays out the `if` `opt_if_simplification` made: the
+    /// then side (the rest of the pass and the later ones) before the else
+    /// side (the `break`'s block), so the blocks of the two sides are
+    /// renumbered (fvg_filter_image.expect.json: each guard's `BRANCHZ.eq`
+    /// skips the pass, the break's copies stand after it).
+    pub fn lay_out_inverted_guards(&mut self) {
+        loop {
+            let r = self.live_ifs().find(|r| r.guard && r.else_first < r.then_first && r.else_last + 1 == r.then_first);
+            let Some(r) = r.copied() else { return };
+            let (lo, mid, hi) = (r.else_first, r.then_first, r.then_last);
+            let map = |b: u8| match b {
+                b if b >= lo && b < mid => b + (hi - mid + 1),
+                b if b >= mid && b <= hi => b - (mid - lo),
+                b => b,
+            };
+            for k in 0..self.n {
+                self.block[k] = map(self.block[k]);
+            }
+            let old = self.dom;
+            for b in 0..self.nblocks {
+                self.dom[map(b) as usize] = map(old[b as usize]);
+            }
+            for r in self.ifs[..self.nifs].iter_mut() {
+                for b in [
+                    &mut r.before,
+                    &mut r.then_first,
+                    &mut r.then_last,
+                    &mut r.else_first,
+                    &mut r.else_last,
+                    &mut r.after,
+                ] {
+                    *b = map(*b);
+                }
+            }
+            for r in self.loops[..self.nloops].iter_mut() {
+                for b in [&mut r.pre, &mut r.header, &mut r.latch, &mut r.exit] {
+                    *b = map(*b);
+                }
+            }
+        }
     }
 
     /// `nir_opt_constant_folding` of an operation whose sources are
@@ -1371,7 +1611,7 @@ impl<'s> Nir<'s> {
             for v in nd.src {
                 /* each node is pushed at most once a source, at most three
                  * a node: the unvisited fit */
-                if let Val::Lane(y, _) = v {
+                if let Val::Lane(y, _) | Val::Pair(y, _) = v {
                     if seen[y as usize / 64] & (1 << (y % 64)) == 0 && sp < stack.len() {
                         stack[sp] = y;
                         sp += 1;
@@ -1525,6 +1765,7 @@ impl<'s> Nir<'s> {
                 | Alu::Frsq
                 | Alu::Ffloor
                 | Alu::Fceil
+                | Alu::Ftrunc
                 | Alu::Fcmp(_)
                 | Alu::Icmp(_)
                 | Alu::B2f
@@ -1762,18 +2003,31 @@ impl<'s> Nir<'s> {
         (0..self.len).flat_map(move |k| {
             let u = self.order[k];
             let nd = self.nodes[u as usize];
-            let arity = match nd.kind {
-                Kind::Alu(a) => a.arity(),
-                Kind::Store { .. } | Kind::UniformIdx { .. } | Kind::Discard => 1,
-                /* a fragment look-up's computed coordinate (nir_fs.rs
-                 * `TexCoord::Computed`; undefined for the other forms) */
-                Kind::Phi | Kind::VsTex { explicit: false, .. } => 2,
-                /* a cube's third staging source (nir_fs.rs) */
-                Kind::Tex | Kind::VsTex { explicit: true, .. } => 3,
-                _ => 0,
-            };
-            (0..arity).filter(move |&s| matches!(nd.src[s], Val::Lane(n, _) if n == id)).map(move |s| (u, s))
+            let arity = nd.arity();
+            (0..arity)
+                .filter(move |&s| matches!(nd.src[s], Val::Lane(n, _) | Val::Pair(n, _) if n == id))
+                .map(move |s| (u, s))
         })
+    }
+}
+
+impl NirNode {
+    /// The sources the node reads (`nir_foreach_src`): an operation's
+    /// arity, a phi's two, a store's or discard's one, a look-up's staging
+    /// words. The `f2f16` of two 32-bit lanes (`V2F32_TO_V2F16`,
+    /// nir_fs.rs `vectorise_int_sources`) reads both.
+    pub fn arity(&self) -> usize {
+        match self.kind {
+            Kind::Alu(Alu::F2f16) if self.width == 2 => 2,
+            Kind::Alu(a) => a.arity(),
+            Kind::Store { .. } | Kind::UniformIdx { .. } | Kind::Discard => 1,
+            /* a fragment look-up's computed coordinate (nir_fs.rs
+             * `TexCoord::Computed`; undefined for the other forms) */
+            Kind::Phi | Kind::VsTex { explicit: false, .. } => 2,
+            /* a cube's third staging source (nir_fs.rs) */
+            Kind::Tex | Kind::VsTex { explicit: true, .. } => 3,
+            _ => 0,
+        }
     }
 }
 
@@ -1831,6 +2085,8 @@ pub fn build<'s>(
         let id = match *nd {
             IrNode::Instr(id) => id,
             IrNode::Return if k + 1 == nodes.len() => continue,
+            /* intloop_loop_nested_vs: Mesa keeps the loops as blocks */
+            IrNode::Loop { .. } => return Err(MaliError::LoopVertex),
             _ => return Err(MaliError::ControlFlow),
         };
         let op = m.instr(id).ok_or(MaliError::Defect(Defect::IrIndex))?;
@@ -2432,6 +2688,17 @@ pub(super) fn fuse(vs: &mut Nir<'_>) {
             let Some(f) = product(vs, gn.src[0]) else { continue };
             let other = vs.nodes[x].src[1 - s];
             let fm = vs.nodes[f as usize];
+            /* `fneg` of a constant folds (`nir_opt_constant_folding` in the
+             * late loop): femtovg filter_image's `fpos - 3.0 * dir`, the
+             * constant -3.0 an `IADD_IMM #0xC0400000` beside a uniform */
+            if let (Val::Const(c), 32) = (fm.src[0], fm.bits) {
+                vs.nodes[x] =
+                    NirNode { kind: Kind::Alu(Alu::Ffma), src: [Val::Const(c ^ 1 << 31), fm.src[1], other], ..fm };
+                if x < vs.user_end {
+                    vs.note(Prod::FusedNegated);
+                }
+                break;
+            }
             /* the new fneg stands where the fadd does */
             let Ok(n) = vs.insert_before(
                 k,
@@ -2494,25 +2761,34 @@ pub fn dce(vs: &mut Nir<'_>, only: Option<u8>) {
             vs.live[c as usize] = true;
         }
     }
-    for k in (0..vs.len).rev() {
-        let id = vs.order[k] as usize;
-        let nd = vs.nodes[id];
-        let root = match nd.kind {
-            Kind::Store { out, .. } | Kind::Lea { out } | Kind::Addr { out, .. } => {
-                only.is_none_or(|o| o == out || (o == 0 && out == 2))
+    /* in reverse order, again while a loop header's phi made a node of the
+     * body (later in the order) live */
+    let mut progress = true;
+    while progress {
+        progress = false;
+        for k in (0..vs.len).rev() {
+            let id = vs.order[k] as usize;
+            let nd = vs.nodes[id];
+            let root = match nd.kind {
+                Kind::Store { out, .. } | Kind::Lea { out } | Kind::Addr { out, .. } => {
+                    only.is_none_or(|o| o == out || (o == 0 && out == 2))
+                }
+                /* a side effect (`nir_instr_is_dead`: an intrinsic that
+                 * cannot be eliminated) */
+                Kind::Discard => true,
+                _ => false,
+            };
+            if !(root || vs.live[id]) {
+                continue;
             }
-            /* a side effect (`nir_instr_is_dead`: an intrinsic that cannot
-             * be eliminated) */
-            Kind::Discard => true,
-            _ => false,
-        };
-        if !(root || vs.live[id]) {
-            continue;
-        }
-        vs.live[id] = true;
-        for v in nd.src {
-            if let Val::Lane(n, _) = v {
-                vs.live[n as usize] = true;
+            vs.live[id] = true;
+            for v in nd.src {
+                if let Val::Lane(n, _) | Val::Pair(n, _) = v {
+                    if nd.kind == Kind::Phi && !vs.live[n as usize] {
+                        progress |= vs.order[k + 1..vs.len].contains(&n);
+                    }
+                    vs.live[n as usize] = true;
+                }
             }
         }
     }
