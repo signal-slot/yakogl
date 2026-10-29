@@ -68,6 +68,7 @@ enum cluster_tl_m7 {
 	CLUSTER_TL_M7_FIRST_LATCH,    /* the first flip latched: on the panel */
 	CLUSTER_TL_M7_BACKLIGHT,      /* the backlight was turned on */
 	CLUSTER_TL_M7_PRERENDERED,    /* the safety layer drawn while waiting for frame 1 */
+	CLUSTER_TL_M7_FRAME1_RENDERED, /* the layer rendered for the first composite */
 };
 
 struct cluster_boot_timeline {
