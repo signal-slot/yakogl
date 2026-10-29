@@ -2653,6 +2653,10 @@ if command -v python3 >/dev/null 2>&1; then
     }
   }
   step "tools   am62p second stage: mkboot images decoded by the loader's Rust" stage2_vectors_check
+  # The LZ4 vectors come from the lz4 command (--compress lz4); without it
+  # stage2-vectors writes only the deflate and uncompressed ones.
+  command -v lz4 > /dev/null ||
+    gap "second stage: the LZ4 vectors need the lz4 command (app-arch/lz4, Debian lz4)"
   # The i.MX8MP netboot's verdicts
   # (docs/notes/imx8mp-netboot.md) are tools/board.sh's
   # now, replayed on the 2026-10-03 records by
