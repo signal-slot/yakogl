@@ -427,7 +427,9 @@ pub const FRAME2_CLOCK_MS: u64 = 1000;
 /// One Slint frame into the current GL context. Returns 0, or 1
 /// set_platform, 2 the component was not built, 3 show, 4 no window
 /// adapter, 5 render (gl_slint's codes).
-fn draw(get_proc: GetProc, width: u32, height: u32) -> i32 {
+/// The platform and the component, made once; the window sized and shown.
+/// 0 or draw()'s codes 1-3.
+fn ensure_ui(get_proc: GetProc, width: u32, height: u32) -> i32 {
     let size = PhysicalSize::new(width, height);
     {
         let st = state();
@@ -454,6 +456,14 @@ fn draw(get_proc: GetProc, width: u32, height: u32) -> i32 {
     ui.window().set_size(size);
     if ui.show().is_err() {
         return 3;
+    }
+    0
+}
+
+fn draw(get_proc: GetProc, width: u32, height: u32) -> i32 {
+    let rc = ensure_ui(get_proc, width, height);
+    if rc != 0 {
+        return rc;
     }
     slint::platform::update_timers_and_animations();
     let Some(adapter) = state().adapter.as_ref() else {
@@ -509,6 +519,40 @@ pub extern "C" fn slint_sample_first_frame(get_proc: GetProc, width: u32, height
     state().clock_ms = FRAME2_CLOCK_MS;
     let rc = draw(get_proc, width, height);
     line!("slint: frame 2 (demo_vehicle t=0, clock {FRAME2_CLOCK_MS} ms): rc {rc}, {}", draw_rc_what(rc));
+    rc
+}
+
+/// Route 3's first frame, step one of two: the platform and the component,
+/// the car at rest set at Slint clock 0. Nothing is rendered. The checked
+/// frame ([`slint_sample_first_frame`]) draws twice, the default state and
+/// then the values; route 3 has no check, and its first frame is the first
+/// picture on the panel, so it draws once ([`slint_sample_route3_render`]).
+/// Returns 0 or draw()'s codes 1-3.
+#[no_mangle]
+pub extern "C" fn slint_sample_route3_build(get_proc: GetProc, width: u32, height: u32) -> i32 {
+    state().clock_ms = 0;
+    let rc = ensure_ui(get_proc, width, height);
+    if rc != 0 {
+        line!("slint: route 3 frame 1 build: rc {rc}, {}", draw_rc_what(rc));
+        return rc;
+    }
+    // The animations' start is the clock at the change: 0.
+    slint::platform::update_timers_and_animations();
+    if let Some(ui) = state().ui.as_ref() {
+        set_vehicle(ui, &m7_vehicle(&ROUTE3_AT_REST, 0));
+    }
+    0
+}
+
+/// Step two: the frame at Slint clock [`FRAME2_CLOCK_MS`], every animation
+/// of step one's values finished, in one render. The caller swaps.
+#[no_mangle]
+pub extern "C" fn slint_sample_route3_render(get_proc: GetProc, width: u32, height: u32) -> i32 {
+    state().clock_ms = FRAME2_CLOCK_MS;
+    let rc = draw(get_proc, width, height);
+    if rc != 0 {
+        line!("slint: route 3 frame 1: rc {rc}, {}", draw_rc_what(rc));
+    }
     rc
 }
 

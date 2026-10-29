@@ -58,6 +58,9 @@
  * (in a view they are on the screen, CONFIG_YAKOGL_BOARD_SCANOUT_VIEW). */
 static uint32_t s_guard_before[GUARD_ROWS * WIN_W];
 
+/* The first frame is checked at the design size only (first_frame_and_check). */
+#define FRAME_CHECKED (WIN_W == 1024u && WIN_H == 600u)
+
 /* Where a run that died stopped (kind PROGRESS, YK_RECORD_WHERE_STAGE | n). */
 enum stage {
 	STAGE_WINDOW = 1,
@@ -67,6 +70,8 @@ enum stage {
 	STAGE_CHECKED,
 	STAGE_ANIMATING,
 	STAGE_ANIMATED,
+	STAGE_BUILT,    /* route 3: the component built, the car at rest set */
+	STAGE_RENDERED, /* route 3: frame 1 rendered (the GPU may still run) */
 };
 
 /* ---- what the Rust archive needs from C ---------------------------------- */
@@ -97,6 +102,8 @@ struct slint_sample_result {
 BUILD_ASSERT(sizeof(struct slint_sample_result) == 28, "rust/src/lib.rs SampleResult");
 const char *slint_sample_build_inputs(void);
 int slint_sample_first_frame(slint_get_proc_fn get_proc, uint32_t w, uint32_t h);
+int slint_sample_route3_build(slint_get_proc_fn get_proc, uint32_t w, uint32_t h);
+int slint_sample_route3_render(slint_get_proc_fn get_proc, uint32_t w, uint32_t h);
 int slint_sample_animate_frame(slint_get_proc_fn get_proc, uint32_t w, uint32_t h, uint32_t t_ms,
 			       uint32_t frame);
 int slint_sample_check(const uint32_t *cpu, uint32_t w, uint32_t h, uint32_t stride, uint32_t guard_rows,
@@ -295,8 +302,12 @@ static int window_one(unsigned int i)
 	 * and the first GL frame. A console printk after this point goes beside
 	 * the window on the Pi 4 view, never into these rows.
 	 * Through the CPU's view (Normal non-cacheable on every board,
-	 * yakogl_board.h: no cache maintenance). */
-	for (uint32_t y = 0; y < WIN_H + GUARD_ROWS; y++) {
+	 * yakogl_board.h: no cache maintenance).
+	 * Only for the check, which runs at the design size alone (below):
+	 * elsewhere the two 1280x800 windows' fill through that view was
+	 * 10 ms on the way to the Verdin iMX8MP's first picture (2026-10-29,
+	 * route-3 timeline), for nothing. */
+	for (uint32_t y = 0; FRAME_CHECKED && y < WIN_H + GUARD_ROWS; y++) {
 		uint32_t *row = (uint32_t *)((uint8_t *)full.cpu + (size_t)y * full.stride);
 
 		if (y < WIN_H) {
@@ -332,9 +343,21 @@ static int first_frame_and_check(void)
 	int ret;
 
 	board_progress(YK_RECORD_WHERE_STAGE | STAGE_FIRST_FRAME);
+#ifdef CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3
+	/* One draw: no check here, and this frame is the panel's first. */
+	ret = slint_sample_route3_build(get_proc, WIN_W, WIN_H);
+	if (ret)
+		return ret;
+	board_progress(YK_RECORD_WHERE_STAGE | STAGE_BUILT);
+	ret = slint_sample_route3_render(get_proc, WIN_W, WIN_H);
+	if (ret)
+		return ret;
+	board_progress(YK_RECORD_WHERE_STAGE | STAGE_RENDERED);
+#else
 	ret = slint_sample_first_frame(get_proc, WIN_W, WIN_H);
 	if (ret)
 		return ret;
+#endif
 	ret = swap();
 	if (ret)
 		return ret;
@@ -348,7 +371,7 @@ static int first_frame_and_check(void)
 	 * memory held the picture still for about two seconds on the Verdin
 	 * iMX8MP (2026-10-22). So the check runs only at the design size;
 	 * elsewhere the frame is shown and the run goes on unchecked. */
-	if (WIN_W == 1024u && WIN_H == 600u) {
+	if (FRAME_CHECKED) {
 		ret = slint_sample_check(s_win.cpu, WIN_W, WIN_H, s_win.stride / 4u, GUARD_ROWS,
 					 s_guard_before, s_win.format, &s_result);
 		s_checked = ret >= 0;
