@@ -1,0 +1,19 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-FileCopyrightText: 2026 Signal Slot, Inc. */
+/*
+ * Measurement builds on the Mallow carrier: UART1 (the X11 debug header)
+ * on, and the route-3 timeline report sent there
+ * (board_route3.c, alias yakogl-timeline-uart).
+ */
+/ {
+	aliases {
+		yakogl-timeline-uart = &uart1;
+	};
+};
+
+&uart1 {
+	status = "okay";
+	current-speed = <115200>;
+	pinctrl-0 = <&uart1_default>;
+	pinctrl-names = "default";
+};
