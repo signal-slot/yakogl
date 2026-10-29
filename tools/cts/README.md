@@ -56,6 +56,7 @@ tools/cts/
   cts_resume.py                which cases still have no result, and why
   cts-summary.py               .qpa -> per-group Pass/Fail/NotSupported/Crash
   cts-refusals.py              the compiler's refusals in a host run, bucketed by reason (2b)
+  pr-verdict.py                an AM62P serial log -> the partial-render verdict lines per gl_test case (`--expect pr|stop`; `--selftest`, run by cts-selftest.sh check 29)
   cts-selftest.sh              host self-tests of the parsers above
   fault-record.py              decodes the A53 fault record a Zephyr sample leaves in DDR
   check-es100-skips.py         the GL_TEST_ES100 skip list, checked against the code
