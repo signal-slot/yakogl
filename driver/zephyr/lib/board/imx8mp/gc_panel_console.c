@@ -682,10 +682,14 @@ static int panel_console_cold_init(void)
 		atomic_set(&cold_finished, 1); /* stage one adopted a picture */
 		return 0;
 	}
-	/* The init thread's priority: it runs while the init thread sleeps
-	 * or waits, and on another CPU once SMP is up. */
+	/* Cooperative, above the init and main threads: at their priority it
+	 * waited for the init thread's 20 ms time slice before its first
+	 * register write (2026-10-29, v12 timeline: started 21 ms after the
+	 * image's entry). It runs at once and gives the CPU back at each of
+	 * its sleeps; its one busy wait (the LCDIF's first frame boundary)
+	 * comes when the other CPUs are up. */
 	k_thread_create(&cold_thread, cold_stack, K_THREAD_STACK_SIZEOF(cold_stack), cold_entry,
-			NULL, NULL, NULL, K_PRIO_PREEMPT(0), 0, K_NO_WAIT);
+			NULL, NULL, NULL, K_PRIO_COOP(CONFIG_NUM_COOP_PRIORITIES - 2), 0, K_NO_WAIT);
 	k_thread_name_set(&cold_thread, "panel_cold");
 	return 0;
 }
