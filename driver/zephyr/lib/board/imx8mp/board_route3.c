@@ -450,7 +450,7 @@ static void tl_report(void)
 		"app: swapped"};
 	static const char *const m7[] = {
 		"main", "safety layer ready", "loop", "first A53 frame",
-		"first composite", "first flip latched", "backlight on", "layer pre-rendered"};
+		"first composite", "first flip latched", "backlight on", "layer pre-rendered", "frame 1 layer rendered"};
 	volatile struct cluster_boot_timeline *tl = R.tl;
 	struct gc_panel_surface s;
 	uint32_t hz = cntfrq();
