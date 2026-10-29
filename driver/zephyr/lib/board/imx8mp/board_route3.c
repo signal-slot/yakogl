@@ -119,6 +119,11 @@ static struct {
 	bool lit;                           /* imx8mp_display_backlight_on() called */
 	int64_t released_ms;
 	int64_t first_shown_ms;
+	/* m7_start() once both are true, from whichever side comes last:
+	 * the M7 image is loaded (the first window) and the panel chain runs
+	 * (the panel console's cold bring-up, on its own thread). */
+	atomic_t m7_loaded;
+	atomic_t m7_started;
 	struct k_timer beat;
 	volatile struct cluster_boot_timeline *tl; /* in the window, once mapped */
 } R;
@@ -458,11 +463,9 @@ static void m7_give_up(void)
 
 #if CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_TIMELINE_REPORT_MS > 0
 /*
- * The report also goes out on the console UART, written here character by
- * character: the image keeps the UART console off so that nothing on the
- * way to the first picture waits for a serial line, and this runs after it.
- * The panel console shows the same lines. One machine-readable line per
- * stage: "TL <core> <slot> <ticks> <name>".
+ * The report goes out on a UART, written here character by character: the
+ * image keeps the UART console off so that nothing on the way to the first
+ * picture waits for a serial line, and this runs long after it.
  */
 #if DT_NODE_HAS_STATUS(DT_ALIAS(yakogl_timeline_uart), okay)
 static const struct device *const tl_uart = DEVICE_DT_GET(DT_ALIAS(yakogl_timeline_uart));
@@ -491,26 +494,15 @@ static void tl_uart_line(const char *who, const char *what, uint64_t t)
 	tl_uart_str(buf);
 }
 
-static void tl_line(const char *who, const char *what, uint64_t t, uint64_t t0, uint32_t hz)
-{
-	if (t == 0u) {
-		printk("  %s %-22s      -\n", who, what);
-		return;
-	}
-	/* microseconds since SPL started the counter, and since the A53's entry */
-	const uint64_t abs_us = t * 1000000u / hz;
-	const int64_t rel_us = t0 != 0u ? (int64_t)((int64_t)t - (int64_t)t0) * 1000000 / hz : 0;
-
-	printk("  %s %-22s %6llu.%03llu ms  (+%lld.%03lld)\n", who, what, abs_us / 1000u,
-	       abs_us % 1000u, rel_us / 1000, (rel_us < 0 ? -rel_us : rel_us) % 1000);
-}
-
 /*
- * The measurement build's ending: stop the M7, put the panel console's own
- * buffer on the panel, print both cores' stamps, and stay there. The
- * panel shows the table; the same stamps go out on the UART (below).
+ * The measurement report: both cores' stamps on the timeline UART, one
+ * line per stage, "TL <core> <ticks> <name>" between "TL begin hz=<Hz>"
+ * and "TL end" (read on the laptop, /var/tmp/yk-spawn/tl-table.py). The
+ * cluster keeps running: the report is a work item on the system work
+ * queue, so the polled UART (about 90 ms for the whole table) never holds
+ * a frame, and the panel is never taken from the M7.
  */
-static void tl_report(void)
+static void tl_report(struct k_work *work)
 {
 	static const char *const a53[] = {
 		"entry", "panel bring-up start", "panel on (dark)", "kernel up",
@@ -523,51 +515,25 @@ static void tl_report(void)
 		"main", "safety layer ready", "loop", "first A53 frame",
 		"first composite", "first flip latched", "backlight on", "layer pre-rendered", "frame 1 layer rendered"};
 	volatile struct cluster_boot_timeline *tl = R.tl;
-	struct gc_panel_surface s;
-	uint32_t hz = cntfrq();
-	uint64_t t0;
+	char buf[64];
 
-	k_timer_stop(&R.beat);
-	(void)sip_rproc(IMX_SIP_RPROC_STOP);
-	if (gc_panel_console_surface(&s)) {
-		(void)imx8mp_display_set_fb(k_mem_phys_addr(s.fb));
-	}
-	imx8mp_display_backlight_on();
+	ARG_UNUSED(work);
 	if (tl == NULL || tl->magic != CLUSTER_BOOT_TIMELINE_MAGIC) {
-		printk("route3 timeline: no page\n");
-	} else {
-		hz = tl->cntfrq != 0u ? tl->cntfrq : hz;
-		t0 = tl->a53[CLUSTER_TL_A53_ENTRY];
-
-		printk("\nroute3 timeline (system counter %u Hz, ms since SPL started it; +ms since "
-		       "the A53 entry)\n", hz);
-		for (unsigned int i = 0; i < ARRAY_SIZE(a53); i++) {
-			tl_line("A53", a53[i], tl->a53[i], t0, hz);
-		}
-		for (unsigned int i = 0; i < ARRAY_SIZE(m7); i++) {
-			tl_line("M7 ", m7[i], tl->m7[i], t0, hz);
-		}
-		/* The UART last: the panel already holds the record if the
-		 * serial line is not there. */
-		{
-			char buf[64];
-
-			snprintk(buf, sizeof(buf), "\nTL begin hz=%u\n", hz);
-			tl_uart_str(buf);
-		}
-		for (unsigned int i = 0; i < ARRAY_SIZE(a53); i++) {
-			tl_uart_line("A53", a53[i], tl->a53[i]);
-		}
-		for (unsigned int i = 0; i < ARRAY_SIZE(m7); i++) {
-			tl_uart_line("M7", m7[i], tl->m7[i]);
-		}
-		tl_uart_str("TL end\n");
+		tl_uart_str("\nTL none: no timeline page\n");
+		return;
 	}
-	for (;;) {
-		board_watchdog_feed();
-		k_sleep(K_MSEC(100));
+	snprintk(buf, sizeof(buf), "\nTL begin hz=%u\n", tl->cntfrq != 0u ? tl->cntfrq : cntfrq());
+	tl_uart_str(buf);
+	for (unsigned int i = 0; i < ARRAY_SIZE(a53); i++) {
+		tl_uart_line("A53", a53[i], tl->a53[i]);
 	}
+	for (unsigned int i = 0; i < ARRAY_SIZE(m7); i++) {
+		tl_uart_line("M7", m7[i], tl->m7[i]);
+	}
+	tl_uart_str("TL end\n");
 }
+
+static K_WORK_DEFINE(tl_report_work, tl_report);
 #endif
 
 /* ---- the ring ------------------------------------------------------------- */
@@ -607,6 +573,23 @@ static void m7_start(void)
 		      K_MSEC(CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_BEAT_MS));
 	m7_release();
 	board_route3_tl_mark(CLUSTER_TL_A53_M7_RELEASED);
+}
+
+/* m7_start() if the M7 is loaded and the panel runs, and not yet started.
+ * The M7's first tick reads the LCDIF (a bus fault while MEDIAMIX is off),
+ * so never before the panel. */
+static void m7_start_when_ready(void)
+{
+	if (atomic_get(&R.m7_loaded) != 0 && imx8mp_display_is_running() &&
+	    atomic_cas(&R.m7_started, 0, 1)) {
+		m7_start();
+	}
+}
+
+/* The panel console's bring-up thread, when it has finished. */
+void board_panel_cold_done(void)
+{
+	m7_start_when_ready();
 }
 
 static int route3_setup(void)
@@ -654,14 +637,12 @@ static int route3_setup(void)
 	 * initialises the GPU and draws -- 2026-10-29's timeline had the M7
 	 * started 463 ms after it was loaded, and its ~290 ms to the first
 	 * flip all on the critical path. Safe once the panel chain is
-	 * running (the M7's first tick reads the LCDIF, a bus fault while
-	 * MEDIAMIX is off): the panel console's cold bring-up has done that
-	 * at POST_KERNEL. Otherwise the first show brings the panel up and
-	 * releases it, as before.
+	 * running: here if the panel console's cold bring-up has finished,
+	 * else from its thread when it does (board_panel_cold_done). Without
+	 * a panel the first show brings it up and releases the M7, as before.
 	 */
-	if (imx8mp_display_is_running()) {
-		m7_start();
-	}
+	atomic_set(&R.m7_loaded, 1);
+	m7_start_when_ready();
 	return 0;
 }
 
@@ -715,6 +696,11 @@ int board_route3_show(const struct board_window *win)
 	int rc;
 
 	board_route3_tl_mark(CLUSTER_TL_A53_FRAME1_DRAWN); /* the first show only */
+	if (R.state == BOARD_ROUTE3_LOADED) {
+		/* The panel bring-up may still run on its thread; it starts the
+		 * M7 when it is done (board_panel_cold_done). */
+		(void)gc_panel_console_cold_wait(K_SECONDS(2));
+	}
 	switch (R.state) {
 	case BOARD_ROUTE3_LOADED:
 		/* The panel from cold on this frame; the M7 adopts it later. The
@@ -729,7 +715,9 @@ int board_route3_show(const struct board_window *win)
 			return rc;
 		}
 		(void)publish(win);
-		m7_start();
+		if (atomic_cas(&R.m7_started, 0, 1)) {
+			m7_start();
+		}
 		return 0;
 	case BOARD_ROUTE3_STARTING:
 	case BOARD_ROUTE3_UP:
@@ -778,9 +766,12 @@ int board_route3_show(const struct board_window *win)
 		       k_uptime_get() - R.released_ms);
 	}
 #if CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_TIMELINE_REPORT_MS > 0
-	if (R.lit && R.state == BOARD_ROUTE3_UP &&
+	static bool tl_reported;
+
+	if (!tl_reported && R.lit && R.state == BOARD_ROUTE3_UP &&
 	    k_uptime_get() - R.first_shown_ms >= CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_TIMELINE_REPORT_MS) {
-		tl_report(); /* does not return */
+		tl_reported = true;
+		(void)k_work_submit(&tl_report_work);
 	}
 #endif
 	return 0;

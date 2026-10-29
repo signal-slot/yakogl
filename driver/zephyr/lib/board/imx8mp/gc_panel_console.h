@@ -30,6 +30,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <zephyr/kernel.h>
 
 /* True once the console is rendering. False means the LCDIF was not scanning
  * anything we understood, and printk() output goes nowhere. */
@@ -58,6 +59,15 @@ struct gc_panel_surface {
 /* False (and *s untouched) when the console is not rendering. */
 bool gc_panel_console_surface(struct gc_panel_surface *s);
 
+/* The cold bring-up (GC_COMMON_PANEL_CONSOLE_COLD_BRINGUP) on its own thread
+ * (_COLD_THREAD): wait up to `timeout` for it to have finished, whatever its
+ * result; true once it has. True at once without the thread. */
+bool gc_panel_console_cold_wait(k_timeout_t timeout);
+
+/* Called on the bring-up thread when it has finished, before
+ * gc_panel_console_cold_wait() returns true; weak, empty by default. */
+void board_panel_cold_done(void);
+
 #else
 /* No panel console in this image: everything that would draw is a no-op. */
 static inline bool gc_panel_console_ready(void) { return false; }
@@ -67,5 +77,10 @@ static inline void gc_panel_console_stage(unsigned int slot, uint32_t rgb)
 }
 static inline uint16_t gc_panel_console_cols(void) { return 0; }
 static inline uint16_t gc_panel_console_rows(void) { return 0; }
+static inline bool gc_panel_console_cold_wait(k_timeout_t timeout)
+{
+	(void)timeout;
+	return true;
+}
 #endif /* CONFIG_GC_COMMON_PANEL_CONSOLE */
 #endif /* GC_PANEL_CONSOLE_H */
