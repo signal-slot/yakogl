@@ -73,6 +73,11 @@
 #define ST_BUILD_ID    46
 #define ST_VERSION_WITH_PAGE 10u
 
+/* struct m7_control (at 0x8100_0800), word offsets, append-only: the
+ * session handover is word 12, after `inplace` (the M7 firmware's m7_mem.h). */
+#define M7_CTRL_ADDR         0x81000800u
+#define CTRL_A53_SESSION     12
+
 /* ---- the release (the board's BL31, lf-6.6.52-2.2.1, disassembled) -------- */
 
 #define IMX_SIP_RPROC        0xC2000005u /* IMX_SIP_SRC in TF-A */
@@ -470,8 +475,40 @@ static void beat_expiry(struct k_timer *t)
 	cluster_frame_ring_heartbeat(R.ring);
 }
 
+/* This boot's ring session (frame_ring.h, `session`): any non-zero value
+ * the last boot did not use -- the counter's low word is as good as any. */
+static uint32_t new_session(uint32_t stale)
+{
+	uint32_t s = (uint32_t)cntpct() ^ (uint32_t)(cntpct() >> 32);
+
+	if (s == 0u || s == stale) {
+		s = stale + 1u;
+	}
+	return s != 0u ? s : 1u;
+}
+
+/*
+ * Hand the M7 this boot's ring session (it then believes the ring on its first
+ * look instead of waiting for the beat to move), beat once so the ring reads
+ * alive at that look, start the heartbeat, and release the core.
+ */
+static void m7_start(void)
+{
+	volatile uint32_t *ctrl =
+		(volatile uint32_t *)(R.window + (M7_CTRL_ADDR - M7_UNCACHED_BASE));
+
+	ctrl[CTRL_A53_SESSION] = R.ring->session;
+	cluster_frame_ring_heartbeat(R.ring);
+	k_timer_start(&R.beat, K_MSEC(CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_BEAT_MS),
+		      K_MSEC(CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_BEAT_MS));
+	m7_release();
+	board_route3_tl_mark(CLUSTER_TL_A53_M7_RELEASED);
+}
+
 static int route3_setup(void)
 {
+	uint32_t stale_session;
+
 	int rc;
 
 	R.window = map_nc(M7_UNCACHED_BASE, M7_UNCACHED_SIZE);
@@ -492,6 +529,7 @@ static int route3_setup(void)
 	 * go; the M7 writes both again at its start. */
 	((volatile uint32_t *)R.status)[ST_MAGIC] = 0u;
 	R.page->magic = 0u;
+	stale_session = R.ring->session;
 	R.ring->magic = 0u;
 
 	rc = m7_load();
@@ -500,9 +538,25 @@ static int route3_setup(void)
 		return -EIO;
 	}
 	cluster_frame_ring_init(R.ring);
+	R.ring->session = new_session(stale_session);
 	k_timer_init(&R.beat, beat_expiry, NULL);
 	R.state = BOARD_ROUTE3_LOADED;
 	board_route3_tl_mark(CLUSTER_TL_A53_WINDOW);
+
+	/*
+	 * The M7 now, not after frame 1: its start, its first render of the
+	 * safety layer and its wait for our frame then run while this core
+	 * initialises the GPU and draws -- 2026-10-29's timeline had the M7
+	 * started 463 ms after it was loaded, and its ~290 ms to the first
+	 * flip all on the critical path. Safe once the panel chain is
+	 * running (the M7's first tick reads the LCDIF, a bus fault while
+	 * MEDIAMIX is off): the panel console's cold bring-up has done that
+	 * at POST_KERNEL. Otherwise the first show brings the panel up and
+	 * releases it, as before.
+	 */
+	if (imx8mp_display_is_running()) {
+		m7_start();
+	}
 	return 0;
 }
 
@@ -570,10 +624,7 @@ int board_route3_show(const struct board_window *win)
 			return rc;
 		}
 		(void)publish(win);
-		k_timer_start(&R.beat, K_MSEC(CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_BEAT_MS),
-			      K_MSEC(CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_BEAT_MS));
-		m7_release();
-		board_route3_tl_mark(CLUSTER_TL_A53_M7_RELEASED);
+		m7_start();
 		return 0;
 	case BOARD_ROUTE3_STARTING:
 	case BOARD_ROUTE3_UP:
