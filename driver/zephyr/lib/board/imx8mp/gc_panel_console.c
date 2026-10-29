@@ -591,7 +591,7 @@ SYS_INIT(panel_console_init, PRE_KERNEL_1, CONFIG_CONSOLE_INIT_PRIORITY);
  * Stage two, at POST_KERNEL after the display device: if stage one found
  * nothing, turn the panel on ourselves and draw into our own buffer.
  */
-static int panel_console_cold_init(void)
+static int cold_bringup(void)
 {
 	const struct imx8mp_display_info *info;
 	uint32_t width = 0, height = 0, pitch;
@@ -646,8 +646,78 @@ static int panel_console_cold_init(void)
 	return 0;
 }
 
+#ifdef CONFIG_GC_COMMON_PANEL_CONSOLE_COLD_THREAD
+/*
+ * The bring-up on a thread of its own (GC_COMMON_PANEL_CONSOLE_COLD_THREAD):
+ * about 85 of its 95 ms are sleeps (the bridge's EN, PLL and soft-reset
+ * waits, the DSIM FIFO reset) and the LCDIF's first frame boundary, so the
+ * kernel, the application and the GPU go on meanwhile. The GPC registers
+ * both sides power domains through are locked (gpc.rs). When it is done --
+ * whatever the result -- board_panel_cold_done() runs on this thread, and
+ * then gc_panel_console_cold_wait() returns true.
+ */
+static K_THREAD_STACK_DEFINE(cold_stack, 8192);
+static struct k_thread cold_thread;
+static K_SEM_DEFINE(cold_sem, 0, 1);
+static atomic_t cold_finished;
+
+__weak void board_panel_cold_done(void)
+{
+}
+
+static void cold_entry(void *a, void *b, void *c)
+{
+	ARG_UNUSED(a);
+	ARG_UNUSED(b);
+	ARG_UNUSED(c);
+	(void)cold_bringup();
+	board_panel_cold_done();
+	atomic_set(&cold_finished, 1);
+	k_sem_give(&cold_sem);
+}
+
+static int panel_console_cold_init(void)
+{
+	if (p.ready) {
+		atomic_set(&cold_finished, 1); /* stage one adopted a picture */
+		return 0;
+	}
+	/* The init thread's priority: it runs while the init thread sleeps
+	 * or waits, and on another CPU once SMP is up. */
+	k_thread_create(&cold_thread, cold_stack, K_THREAD_STACK_SIZEOF(cold_stack), cold_entry,
+			NULL, NULL, NULL, K_PRIO_PREEMPT(0), 0, K_NO_WAIT);
+	k_thread_name_set(&cold_thread, "panel_cold");
+	return 0;
+}
+
+bool gc_panel_console_cold_wait(k_timeout_t timeout)
+{
+	if (atomic_get(&cold_finished) != 0) {
+		return true;
+	}
+	if (k_sem_take(&cold_sem, timeout) != 0) {
+		return false;
+	}
+	k_sem_give(&cold_sem); /* for the next waiter */
+	return true;
+}
+#else
+static int panel_console_cold_init(void)
+{
+	return cold_bringup();
+}
+#endif
+
 SYS_INIT(panel_console_cold_init, POST_KERNEL,
 	 CONFIG_GC_COMMON_PANEL_CONSOLE_COLD_PRIORITY);
+#endif
+
+#ifndef CONFIG_GC_COMMON_PANEL_CONSOLE_COLD_THREAD
+bool gc_panel_console_cold_wait(k_timeout_t timeout)
+{
+	ARG_UNUSED(timeout);
+	return true;
+}
 #endif
 
 /* ------------------------------------------------------------------ */
