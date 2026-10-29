@@ -838,10 +838,9 @@ mod pvr {
 
     /// The chain the PowerVR makes for a rendered-into RGBA8 texture: every
     /// frame's glGenerateMipmap is taken by the backend (one made chain, none
-    /// refused), one kick per level above 0 down to the last over 64x64
-    /// texels (level 1 always: src/pvr/backend.rs MIP_CPU_TAIL_TEXELS), and
-    /// the GL core filters only the levels after those, from the last one
-    /// the backend drew, with the GPU's sample. The levels keep what the
+    /// refused), one kick per level above 0 (`gpu_levels`; the CPU tail of
+    /// src/pvr/backend.rs MIP_CPU_TAIL_TEXELS is off by default, so every
+    /// level), and the GL core filters nothing after them. The levels keep what the
     /// storage held (the kicks write them on the board; the stand-in GPU
     /// draws nothing), the tail filtered from such a uniform level is that
     /// same value, and level 0 is the render's.
@@ -877,22 +876,22 @@ mod pvr {
 
     #[test]
     fn a_square_power_of_two_target_gets_its_chain_from_the_gpu() {
-        pvr_makes_the_chain(64, 64, 1); /* 32x32 */
-        pvr_makes_the_chain(256, 256, 1); /* 128x128; 64x64 is the tail's */
-        pvr_makes_the_chain(2, 2, 1); /* the whole chain */
+        pvr_makes_the_chain(64, 64, 6);
+        pvr_makes_the_chain(256, 256, 8);
+        pvr_makes_the_chain(2, 2, 1);
     }
 
     #[test]
     fn a_rectangular_power_of_two_target_gets_its_chain_from_the_gpu() {
-        pvr_makes_the_chain(64, 32, 1);
+        pvr_makes_the_chain(64, 32, 6);
     }
 
     /// glmark2 terrain's target is 800x600: a NPOT texture whose chain is laid
-    /// out as its power-of-two extent (the PowerVR's `pot_chain`). Levels 1
-    /// to 3 (400x300, 200x150, 100x75) on the GPU, 50x37 .. 1x1 on the CPU.
+    /// out as its power-of-two extent (the PowerVR's `pot_chain`): its nine
+    /// levels above 0 on the GPU.
     #[test]
     fn glmark2_terrains_800x600_target_gets_its_chain_from_the_gpu() {
-        pvr_makes_the_chain(800, 600, 3);
+        pvr_makes_the_chain(800, 600, 9);
     }
 }
 

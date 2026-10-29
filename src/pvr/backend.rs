@@ -1605,10 +1605,13 @@ struct Backend {
     /// filter, since the backend started (instruments).
     mip_chains: u32,
     mip_chains_refused: u32,
-    /// Every level of a chain on the GPU, the small ones too (false, the
-    /// default: [`MIP_CPU_TAIL_TEXELS`]). Set by the host tests of the
-    /// per-level kicks.
-    mip_gpu_all: bool,
+    /// Only the levels over [`MIP_CPU_TAIL_TEXELS`] on the GPU, waited for,
+    /// and the tail to the GL core (path B of
+    /// docs/notes/am62p-pvr-mipmap-kicks.md). False, the default: every
+    /// level on the GPU, nothing waited for. Off since its board run: slower
+    /// than the whole chain (see the constant). Set by the host tests of
+    /// the prefix.
+    mip_cpu_tail: bool,
     /// The extent the PBE clips attachment 0 to in the next frame
     /// [`record_mip_level`] opens, and in the open frame (0, 0: the
     /// target's own extent, every frame but a chain level's). Set only for
@@ -5756,13 +5759,22 @@ static MIP_DRAW: Global<GlesDraw> = Global::zeroed();
 /// of 800x600 is 469 KiB); below, the tail of a 10-level chain is under
 /// 10 KiB. Terrain's 800x600 chain keeps levels 1..=3 (400x300 to 100x75,
 /// every one an even step), its 256x256 chain level 1.
+///
+/// Off by default (`Backend::mip_cpu_tail`): on the AM62P (2026-11-01,
+/// gl_test case 216 mipchains) the prefix cut the kicks a frame from 40 to
+/// 15 but took the frame from 46.15 to 82.95 ms, and glmark2 terrain from
+/// 83 to 124 ms. Each prefix call spent 15.4 ms in the wait for its pass
+/// and its 3 level kicks (queued, a kick costs about 1.15 ms) and 7.9 ms in
+/// the CPU tail, whose byte reads of the non-cacheable carve-out are DRAM
+/// accesses each (the timing build of 2026-10-29). It comes back when a wait
+/// for a kick costs what a queued kick does.
 const MIP_CPU_TAIL_TEXELS: u32 = 64 * 64;
 
 /// The last level of the chain `lv` (`n` levels) the GPU draws
-/// ([`MIP_CPU_TAIL_TEXELS`]): 1 at least, `n` - 1 when every level is large
-/// or `all`.
-fn mip_gpu_last(lv: &[MipLevel], n: usize, all: bool) -> usize {
-    (1..n).take_while(|&l| all || l == 1 || lv[l].w * lv[l].h > MIP_CPU_TAIL_TEXELS).last().unwrap_or(1)
+/// ([`MIP_CPU_TAIL_TEXELS`] when `tail`): 1 at least, `n` - 1 when every
+/// level is large or without `tail`.
+fn mip_gpu_last(lv: &[MipLevel], n: usize, tail: bool) -> usize {
+    (1..n).take_while(|&l| !tail || l == 1 || lv[l].w * lv[l].h > MIP_CPU_TAIL_TEXELS).last().unwrap_or(1)
 }
 
 /// [`pvr_generate_mipmap`]: the levels drawn -- `None` the whole chain, its
@@ -5794,7 +5806,7 @@ fn mip_chain_gpu(p: &mut Pvr, t: &GlesTextureBind, levels: u32) -> Result<Option
     if lv[1..n].iter().any(|l| l.pitch % 2 != 0 && l.rows > 1) {
         return Err("a level one texel wide above a taller tail: the PBE writes pixel pairs");
     }
-    let last = mip_gpu_last(&lv, n, p.b.mip_gpu_all);
+    let last = mip_gpu_last(&lv, n, p.b.mip_cpu_tail);
     for l in 1..=last {
         let rc = record_mip_level(p, t.base_gpu, &lv[l - 1], &lv[l], (lv[1].w, lv[1].h));
         if rc != 0 {
