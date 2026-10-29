@@ -66,6 +66,8 @@ enum cluster_tl_a53 {
 	CLUSTER_TL_A53_LOADER_STORED_OK, /* the stored payload's CRC checked */
 	CLUSTER_TL_A53_LOADER_DECODED, /* decompressed (the image's CRC next) */
 	CLUSTER_TL_A53_LOADER_ZEROED, /* this image's .bss zeroed by the loader */
+	CLUSTER_TL_A53_APP_BUILT,     /* frame 1: the component built, values set */
+	CLUSTER_TL_A53_APP_RENDERED,  /* frame 1 rendered by the CPU side (GPU may run) */
 };
 
 /* The M7's stages. */

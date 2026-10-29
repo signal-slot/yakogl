@@ -183,13 +183,17 @@ static void tl_attach(uint8_t *window)
  * swapped marks (examples/slint/src/main.c). */
 void board_progress_hook(uint32_t where)
 {
-	static const enum cluster_tl_a53 at[] = {
+	/* the Slint sample's stages 1..9 (examples/slint/src/main.c,
+	 * enum stage); 5..7 (the check, the animation) are not stamped */
+	static const int at[] = {
 		CLUSTER_TL_A53_APP_WINDOW, CLUSTER_TL_A53_APP_EGL, CLUSTER_TL_A53_APP_FRAME1,
-		CLUSTER_TL_A53_APP_SWAPPED};
+		CLUSTER_TL_A53_APP_SWAPPED, -1, -1, -1, CLUSTER_TL_A53_APP_BUILT,
+		CLUSTER_TL_A53_APP_RENDERED};
 	const uint32_t n = where & ~YK_RECORD_WHERE_STAGE;
 
-	if ((where & YK_RECORD_WHERE_STAGE) != 0u && n >= 1u && n <= ARRAY_SIZE(at)) {
-		board_route3_tl_mark(at[n - 1u]);
+	if ((where & YK_RECORD_WHERE_STAGE) != 0u && n >= 1u && n <= ARRAY_SIZE(at) &&
+	    at[n - 1u] >= 0) {
+		board_route3_tl_mark((enum cluster_tl_a53)at[n - 1u]);
 	}
 }
 
@@ -507,7 +511,7 @@ static void tl_report(struct k_work *work)
 		"first shown", "app: windows", "app: EGL", "app: frame 1",
 		"app: swapped", "loader entry", "loader main", "loader payload in RAM",
 		"loader unpacked", "loader jump", "loader stored CRC ok", "loader decoded",
-		"loader .bss zeroed"};
+		"loader .bss zeroed", "app: built", "app: rendered (CPU)"};
 	static const char *const m7[] = {
 		"main", "safety layer ready", "loop", "first A53 frame",
 		"first composite", "first flip latched", "backlight on", "layer pre-rendered", "frame 1 layer rendered"};
