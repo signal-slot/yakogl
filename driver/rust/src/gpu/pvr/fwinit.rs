@@ -54,6 +54,26 @@ pub const FWINIT_ASSERT_ON_HWR: u32 = 1 << 0;
 /// data master then processes nothing; a bring-up aid.
 pub const FWINIT_CTXSWITCH_OFF: u32 = 1 << 1;
 
+/// The partial-render knob is on (`render cfg partial_render != 0`): the
+/// trace also logs the firmware's debug group. Set by the C caller; clear,
+/// the init words are what they were without the knob.
+pub const FWINIT_PARTIAL_RENDER: u32 = 1 << 2;
+
+/// `RGXFWIF_TRACEBUF.ui32LogType` for `flags`. Today's mask is every group
+/// but DEBUG, MTS and POW. With the partial-render knob the DEBUG group
+/// (0x80000000) is added; the SPM (0x100) and MAIN (0x2) groups that carry
+/// the partial-render lines (rgx_fwif_sf.h: SPM "Force Z-Load/Z-Store for
+/// partial render" at 1500/1502, "ZStore/SStore/ZLoad/SLoad address" at
+/// 1534-1540; MAIN "No ZS Buffer used for partial render" at 210) are
+/// already in today's mask. MTS and POW stay masked (idle chatter).
+fn trace_log_type(flags: u32) -> u32 {
+    let mut m = LOG_TYPE_MASK & !LOG_TYPE_GROUP_DEBUG & !(LOG_TYPE_GROUP_MTS | LOG_TYPE_GROUP_POW);
+    if flags & FWINIT_PARTIAL_RENDER != 0 {
+        m |= LOG_TYPE_GROUP_DEBUG;
+    }
+    m
+}
+
 const _: () = {
     assert!(core::mem::size_of::<YdPvrFwinit>() == 24);
 };
@@ -138,11 +158,7 @@ pub fn build(k: &mut YdPvrKm, cfg: &YdPvrFwinit) {
     k.trace_buf_off = ring;
     // SAFETY: the trace buffer structure just allocated.
     unsafe {
-        wr32(
-            tbuf_p,
-            TRACEBUF_LOG_TYPE,
-            (LOG_TYPE_MASK & !LOG_TYPE_GROUP_DEBUG) & !(LOG_TYPE_GROUP_MTS | LOG_TYPE_GROUP_POW),
-        );
+        wr32(tbuf_p, TRACEBUF_LOG_TYPE, trace_log_type(cfg.flags));
         wr32(tbuf_p, TRACEBUF_TRACE_POINTER, 0);
         wr32(tbuf_p, TRACEBUF_WRAP_COUNT, 0);
         wr32(tbuf_p, TRACEBUF_BUFFER, ring_fa);
@@ -366,4 +382,26 @@ pub unsafe extern "C" fn yd_pvr_fwinit_build(k: *mut YdPvrKm, cfg: *const YdPvrF
 pub unsafe extern "C" fn yd_pvr_fw_wait_started(k: *mut YdPvrKm) -> i32 {
     // SAFETY: the caller's contract.
     wait_started(unsafe { km(k) })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn knob_off_keeps_todays_mask() {
+        // 0x8007FFFF without DEBUG, MTS (0x4) and POW (0x200).
+        assert_eq!(trace_log_type(0), 0x0007_FDFB);
+        assert_eq!(trace_log_type(FWINIT_ASSERT_ON_HWR), 0x0007_FDFB);
+    }
+
+    #[test]
+    fn knob_on_enables_debug_and_keeps_spm_main() {
+        let m = trace_log_type(FWINIT_PARTIAL_RENDER);
+        assert_eq!(m, 0x8007_FDFB);
+        assert_ne!(m & 0x0000_0100, 0, "SPM");
+        assert_ne!(m & 0x0000_0002, 0, "MAIN");
+        assert_ne!(m & LOG_TYPE_GROUP_DEBUG, 0);
+        assert_eq!(m & (LOG_TYPE_GROUP_MTS | LOG_TYPE_GROUP_POW), 0);
+    }
 }
