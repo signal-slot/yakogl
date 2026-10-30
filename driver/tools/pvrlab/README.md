@@ -23,6 +23,12 @@ GL ES API and checks pixels read back with `glReadPixels`. The Zephyr samples
   as a crate dependency. `cargo test -p yakogl-gltest-runner` pins the lines
   and the count on the host.
 
+On the PowerVR a second fence timeout in one run ends it with the line
+`gl_test: FAIL case N <name>: second fence timeout in one run (2 timeouts); the run ends`;
+the later cases print `not run` and the run returns nonzero. Cases 175 and 217
+wait with the backend's 20 s fence wait, so the render service's 10 s stop
+decides first.
+
 `tools/check.sh` compiles `gl_test.c` on the host for the PowerVR and GC7000
 arms, and runs `gen_gl_test_shaders.py --check`, which regenerates both headers
 and refuses a drift against the committed ones. The directory name is historical:
