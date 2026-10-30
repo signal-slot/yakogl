@@ -624,3 +624,29 @@ HVS/pixel valve/HDMI addresses and interrupts, and the output-to-FIFO map.
 New in H1: the BCM2712 HDMI PHY sequence, the generic arm64 boot protocol, and
 one point to check on the Zephyr side (the GIC interrupt IDs 281 and 282 against
 the 280 interrupts the Zephyr device tree declares), all in the facts file.
+
+## 10. H9: the Zephyr `rpi_5` image, built and not run
+
+Zephyr 4.4.99 (`VERSION`), board `rpi_5`, SoC `bcm2712`. Built by the gate row
+"zephyr  rpi5 images (H9)" (`tools/check.sh`, `zephyr_rpi5_images`): Zephyr's
+`hello_world` and `tools/probes/rpi_5/rpi5_hello`, both with
+`tools/probes/rpi_5/rpi5_hello/boards/rpi_5.overlay`, which sets `sram0` to
+32 MiB from 0x200000 (the U10 advice: keep it low). Nothing here ran on a board.
+
+| Image | `zephyr.bin` | ELF text / data / bss |
+|---|---|---|
+| `hello_world` | 45,212 bytes | 42,039 / 3,172 / 147,451 |
+| `rpi5_hello` | 45,212 bytes | 42,176 / 3,036 / 147,451 |
+
+Both link; the first LOAD segment is at 0x200000; `zephyr.bin` carries the
+`ARM\x64` magic at byte 56. `__start` is at 0x201084, after the Image header, so
+the row checks the LOAD address, not the symbol.
+
+What the Zephyr files assume (read at `boards/raspberrypi/rpi_5/` and
+`soc/brcm/bcm2712/`, Zephyr 4.4.99; the line numbers are not recorded here):
+
+- **Memory.** `sram0` is 512 KiB at 0x200000 (`bcm2712.dtsi`), two address cells; the image and its RAM share it. The board file sets no larger size, hence the overlay. The defconfig sets 40-bit VA and PA. That the 32 MiB is free RAM on the board is not known (U10).
+- **Console.** `zephyr,console` and the shell are `uart10`, a PL011, 115200 baud, per the board file. Which physical connector carries it, and that the firmware leaves it clocked and routed for an image that does not set it up, is not confirmed (U6 asks for `enable_uart=1`, `uart_2ndstage=1`).
+- **Boot.** The board page says three files on a FAT card: `config.txt` with `kernel=zephyr.bin`, `zephyr.bin`, and the board DTB. That matches the `kernel=` route of section 1. The load address (0x200000 per the legacy `kernel_address` documentation) agrees with the link address. The exception level and the registers at entry (the DTB pointer) are not stated by the board file or SoC: U6 stays open.
+- **GPU (U5).** The board file has no V3D node, no mailbox and no power domain code: whether the GPU is clocked and powered at entry stays open, for the board.
+- **Interrupts.** The SoC declares 280 interrupts (`NUM_IRQS`), against the V3D's 281 and 282 noted in section 9: still to check when a GPU node is added.
