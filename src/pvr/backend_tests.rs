@@ -67,6 +67,8 @@ struct GenLog {
     /// Per end-of-tile program: the emit words it was given (two per
     /// colour-attachment state, `num_rt` pairs).
     eot_emits: Vec<Vec<u32>>,
+    /// The DOUTU each end-of-tile program was given.
+    eot_doutus: Vec<u64>,
     /// The VDM state emitter refuses (as the real one does for a size that
     /// does not fit its field) while this is set.
     refuse_vdm_state: bool,
@@ -444,7 +446,7 @@ unsafe extern "C" fn pvr_pds_render_dma_program(
 
 #[no_mangle]
 unsafe extern "C" fn pvr_pds_generate_pixel_event_tq(
-    _doutu_src0: u64,
+    doutu_src0: u64,
     emit_words: *const u32,
     num_rt: u32,
     _has_slc_mcu_cache_controls: i32,
@@ -455,7 +457,10 @@ unsafe extern "C" fn pvr_pds_generate_pixel_event_tq(
 ) -> i32 {
     unsafe {
         let words = core::slice::from_raw_parts(emit_words, 2 * num_rt as usize).to_vec();
-        with_gen(|g| g.eot_emits.push(words));
+        with_gen(|g| {
+            g.eot_emits.push(words);
+            g.eot_doutus.push(doutu_src0);
+        });
         core::ptr::copy_nonoverlapping([*emit_words, *emit_words.add(1), 0, 0].as_ptr(), data_out, 4);
         core::ptr::copy_nonoverlapping([0x0E0E_0000, 0].as_ptr(), code_out, 2);
         *data_size_dw = 4;
@@ -825,6 +830,11 @@ impl Rig {
     /// The emit words of every end-of-tile program built, in order.
     fn eot_emits(&self) -> Vec<Vec<u32>> {
         with_gen(|g| g.eot_emits.clone())
+    }
+
+    /// The DOUTU of every end-of-tile program built, in order.
+    fn eot_doutus(&self) -> Vec<u64> {
+        with_gen(|g| g.eot_doutus.clone())
     }
 
     /// The dword the platform holds at GPU address `gpu`.
@@ -3163,6 +3173,83 @@ fn a_depth_only_frame_quad_does_not_sample_the_target() {
     let kicks = rig.dma_kicks();
     let quad = &kicks[0];
     assert_eq!(quad, &[(quad[0].0, 1, 0)], "one dword of clear colour, no descriptors");
+}
+
+/// The bytes of `pds_static` from `off` for `n` bytes.
+fn pds_static_bytes(rig: &Rig, off: u32, n: u32) -> Vec<u8> {
+    let m = &rig.b().pds_static;
+    // SAFETY: the mock maps the whole page; the callers stay inside it.
+    unsafe { core::slice::from_raw_parts((m.cpu as *const u8).add(off as usize), n as usize).to_vec() }
+}
+
+#[test]
+fn the_pr_eot_data_slot_follows_the_normal_one() {
+    /* docs/notes/pvr-pr-eot.md 3.6 */
+    let rig = Rig::new();
+    let d = rig.draw(3);
+    assert_eq!(draw(&d), 0);
+    let b = rig.b();
+    assert_eq!(b.eot_pr_data_local, b.eot_data_local + PDS_ALIGN);
+    assert_eq!(b.eot_pr_data_off, b.eot_data_off + PDS_ALIGN);
+    assert_eq!(b.eot_pr_data_local % PDS_ALIGN, 0);
+    assert_ne!(b.eot_pr_data_off, b.eot_data_off);
+    assert!(b.eot_pr_data_local + PR_EOT_DATA_MAX_DW * 4 <= PDS_STATIC_BYTES);
+    assert_eq!(PR_EOT_DATA_MAX_DW, 3 * PVR_BACKEND_MAX_RT + 2);
+}
+
+#[test]
+fn the_pr_eot_words_carry_eot1s_doutu_and_the_given_pair() {
+    let rig = Rig::new();
+    rig.reset_records();
+    let mut out = [0u32; PR_EOT_DATA_MAX_DW as usize];
+    let n = pr_eot_data_words(0x1001, [0xAAAA_0001, 0xBBBB_0002], &mut out).expect("words");
+    assert!(n > 0 && n <= PR_EOT_DATA_MAX_DW);
+    assert_eq!(rig.eot_doutus(), vec![0x1001]);
+    let e = rig.eot_emits().pop().expect("a generator call");
+    assert_eq!(e.len(), 2 * PVR_BACKEND_MAX_RT as usize);
+    assert_eq!(&e[..2], &[0xAAAA_0001, 0xBBBB_0002]);
+    assert!(e[2..].iter().all(|&w| w == 0), "pairs 1 and 2 are zero");
+    assert_eq!(pr_eot_data_words(0, [0, 0], &mut out[..3]), Err(-EINVAL), "a short buffer is refused");
+}
+
+#[test]
+fn writing_the_pr_eot_slot_leaves_the_normal_slot_alone() {
+    let rig = Rig::new();
+    let d = rig.draw(3);
+    assert_eq!(draw(&d), 0);
+    assert_eq!(pvr_backend_flush(), 0);
+    let (nl, pl) = (rig.b().eot_data_local, rig.b().eot_pr_data_local);
+    let before = pds_static_bytes(&rig, 0, PDS_STATIC_BYTES);
+    let n = pr_eot_data_write(rig.b(), 0x1001, [0x1234_5678, 0x9ABC_DEF0]).expect("written");
+    let after = pds_static_bytes(&rig, 0, PDS_STATIC_BYTES);
+    assert_eq!(&before[..pl as usize], &after[..pl as usize], "everything below the PR slot is unchanged");
+    assert_eq!(&before[nl as usize..(nl + PDS_ALIGN) as usize], &after[nl as usize..(nl + PDS_ALIGN) as usize]);
+    let w = u32::from_le_bytes(after[pl as usize..pl as usize + 4].try_into().unwrap());
+    assert_eq!(w, 0x1234_5678, "the mock generator puts pair 0 first");
+    assert!(n > 0);
+}
+
+#[test]
+fn the_pr_slot_leaves_the_knob_off_frame_unchanged() {
+    /* acceptance c4: the same frame kicks the same bytes, and the normal
+     * slot holds the same words, whether or not the PR slot was written. */
+    let run = |write_pr: bool| {
+        let rig = Rig::new();
+        let d = rig.draw(3);
+        assert_eq!(draw(&d), 0);
+        if write_pr {
+            pr_eot_data_write(rig.b(), 0x1001, [1, 2]).expect("written");
+        }
+        assert_eq!(pvr_backend_flush(), 0);
+        let nl = rig.b().eot_data_local;
+        let k = rig.kicks()[0].clone();
+        // SAFETY: PvrRenderKick is plain data.
+        let kb = unsafe {
+            core::slice::from_raw_parts(&k.0 as *const PvrRenderKick as *const u8, size_of::<PvrRenderKick>()).to_vec()
+        };
+        (kb, k.1, pds_static_bytes(&rig, nl, PDS_ALIGN))
+    };
+    assert_eq!(run(false), run(true));
 }
 
 #[test]

@@ -1514,6 +1514,10 @@ struct FrameSet {
     bg_dma_code_off: u32,
     eot_data_off: u32,
     eot_data_local: u32,
+    /// The partial render's own end-of-tile PDS data (docs/notes/pvr-pr-eot.md
+    /// 3.6): one PDS_ALIGN slot after the normal one, same program.
+    eot_pr_data_off: u32,
+    eot_pr_data_local: u32,
     /// The kick that last used the set (0: none).
     fence: i64,
 }
@@ -1649,6 +1653,10 @@ struct Backend {
     frame_tile_buffers: u32,
     eot_data_off: u32,
     eot_data_local: u32,
+    /// The partial render's own end-of-tile PDS data (docs/notes/pvr-pr-eot.md
+    /// 3.6): one PDS_ALIGN slot after the normal one, same program.
+    eot_pr_data_off: u32,
+    eot_pr_data_local: u32,
     bg_dma_data_dw: u32,
     bg_dma_temps: u32,
 
@@ -2269,6 +2277,8 @@ impl Backend {
         self.bg_dma_code_off = fs.bg_dma_code_off;
         self.eot_data_off = fs.eot_data_off;
         self.eot_data_local = fs.eot_data_local;
+        self.eot_pr_data_off = fs.eot_pr_data_off;
+        self.eot_pr_data_local = fs.eot_pr_data_local;
     }
 
     /// The highest fence the GPU has completed (a platform without in-flight
@@ -2723,7 +2733,65 @@ fn frame_set_static_init(b: &mut Backend) -> i32 {
     off = (end + PDS_ALIGN - 1) & !(PDS_ALIGN - 1);
     b.eot_data_local = off;
     b.eot_data_off = heap_off_of(b.pds_static.gpu) + off;
+    /* The partial render's end-of-tile data: the slot after the normal one
+     * (the last thing in the page, so no knob-off byte moves). */
+    b.eot_pr_data_local = off + PDS_ALIGN;
+    b.eot_pr_data_off = b.eot_data_off + PDS_ALIGN;
+    if b.eot_pr_data_local + PR_EOT_DATA_MAX_DW * 4 > PDS_STATIC_BYTES {
+        return -ENOMEM;
+    }
     0
+}
+
+/// Most dwords the end-of-tile data takes: 3 per render target plus 2 (the
+/// `ed` buffer of the frame's end-of-tile write).
+const PR_EOT_DATA_MAX_DW: u32 = 3 * PVR_BACKEND_MAX_RT + 2;
+
+/// The partial render's end-of-tile PDS data words (docs/notes/pvr-pr-eot.md
+/// 3.4): the normal generator, PVR_BACKEND_MAX_RT targets, pair 0 the given
+/// PBE state pair and the rest zero. Returns the dword count written to `out`
+/// (at least [`PR_EOT_DATA_MAX_DW`] long). `doutu_src0` is the end-of-tile
+/// program's DOUTU (eot1's).
+// pr-frame-colour wires it with the kick's frag_pr block; nothing calls it yet.
+#[allow(dead_code)]
+fn pr_eot_data_words(doutu_src0: u64, state_pair: [u32; 2], out: &mut [u32]) -> Result<u32, i32> {
+    if out.len() < PR_EOT_DATA_MAX_DW as usize {
+        return Err(-EINVAL);
+    }
+    let mut emit = [0u32; 2 * PVR_BACKEND_MAX_RT as usize];
+    emit[..2].copy_from_slice(&state_pair);
+    let mut ec = [0u32; PVR_BACKEND_MAX_RT as usize + 1];
+    let (mut dsz, mut csz) = (0u32, 0u32);
+    // SAFETY: emit holds 2 * PVR_BACKEND_MAX_RT dwords, out/ec the documented
+    // 3N+1 / N+1 (out checked above to hold 3N+2).
+    let rc = unsafe {
+        pvr_pds_generate_pixel_event_tq(
+            doutu_src0,
+            emit.as_ptr(),
+            PVR_BACKEND_MAX_RT,
+            0,
+            out.as_mut_ptr(),
+            ec.as_mut_ptr(),
+            &mut dsz,
+            &mut csz,
+        )
+    };
+    if rc != 0 || dsz > PR_EOT_DATA_MAX_DW {
+        return Err(-EINVAL);
+    }
+    Ok(dsz)
+}
+
+/// Build the partial render's end-of-tile data and write it into its slot of
+/// `pds_static`, then flush. Leaves the normal slot alone.
+// pr-frame-colour wires it; nothing calls it yet.
+#[allow(dead_code)]
+fn pr_eot_data_write(b: &Backend, doutu_src0: u64, state_pair: [u32; 2]) -> Result<u32, i32> {
+    let mut ed = [0u32; PR_EOT_DATA_MAX_DW as usize];
+    let n = pr_eot_data_words(doutu_src0, state_pair, &mut ed)?;
+    mem_write(&b.pds_static, b.eot_pr_data_local, &ed[..n as usize]);
+    cache_flush(&b.pds_static, 0, PDS_STATIC_BYTES);
+    Ok(n)
 }
 
 /// Upload one program's words into `mem` (USC heap).
@@ -2786,6 +2854,8 @@ fn static_objects_init(b: &mut Backend, fl: &mut FbLoad) -> i32 {
         fs.bg_dma_code_off = b.bg_dma_code_off;
         fs.eot_data_off = b.eot_data_off;
         fs.eot_data_local = b.eot_data_local;
+        fs.eot_pr_data_off = b.eot_pr_data_off;
+        fs.eot_pr_data_local = b.eot_pr_data_local;
     }
 
     /* Framebuffer load: the quad's VS/FS USC and its six clip-space vertices. */
