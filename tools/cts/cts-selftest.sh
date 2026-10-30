@@ -689,6 +689,20 @@ gmscase "a cut-off FrameTime" fail-damaged.txt 1 'FAIL: damaged scene line'
 gmscase "a started scene with no result" fail-missing.txt 1 'FAIL: scene started, no result line'
 gmscase "no glmark2 output" fail-nooutput.txt 2 '^error: no glmark2 output'
 
+# ---- 29: pr-verdict.py --selftest -------------------------------------------
+#
+# The partial-render verdict lines of an AM62P serial log: a pass log, the
+# knob-off stop, HWR > 0, a missing case, synthetic logs in the formats the
+# driver prints (each pattern cites its source file).
+echo
+echo "== 29. pr-verdict.py --selftest"
+if prout=$(python3 -I "$HERE/pr-verdict.py" --selftest 2>&1); then
+    ok "pr-verdict.py: pass, knob-off stop and HWR > 0 logs judged"
+else
+    bad "pr-verdict.py --selftest failed"
+    printf '%s\n' "$prout" | tail -8 | sed 's/^/        | /'
+fi
+
 if [ "$fail" -eq 0 ]; then
     echo "== all checks passed"
 else
