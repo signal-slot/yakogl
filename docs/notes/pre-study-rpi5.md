@@ -624,3 +624,77 @@ HVS/pixel valve/HDMI addresses and interrupts, and the output-to-FIFO map.
 New in H1: the BCM2712 HDMI PHY sequence, the generic arm64 boot protocol, and
 one point to check on the Zephyr side (the GIC interrupt IDs 281 and 282 against
 the 280 interrupts the Zephyr device tree declares), all in the facts file.
+
+## 10. H9: the Zephyr `rpi_5` image, built and not run
+
+Built 2026-10-30 in the west workspace `west.yml` pins (Zephyr commit
+`af17c0c8aa2a`, `VERSION` 4.4.99), board `rpi_5`, SoC `bcm2712` (board target
+`rpi_5/bcm2712`). The gate row "zephyr  rpi5 images (H9)" (`tools/check.sh`,
+`zephyr_rpi5_images`) builds Zephyr's own `hello_world` sample and this
+repository's `tools/probes/rpi_5/rpi5_hello` (no GPU code), both with
+`-DYAKOGL_WERROR=ON` and both with
+`tools/probes/rpi_5/rpi5_hello/boards/rpi_5.overlay`, which re-sizes `sram0` to
+32 MiB from 0x200000: U10 says keep the carve-out low until measured on a
+board, and 32 MiB is the size the Pi 4's first clear and triangle ran with
+(`driver/samples/zephyr/gl_test/boards/rpi_4b.overlay`). The Pi 5 is not in the
+lab; nothing here ran on a board.
+
+| image | `zephyr.bin` | ELF text / data / bss |
+|---|---|---|
+| `hello_world` | 45,212 bytes | 42,039 / 3,172 / 147,451 |
+| `rpi5_hello` | 45,212 bytes | 42,176 / 3,036 / 147,451 |
+
+Both link at the start of `sram0`: the first LOAD segment is
+`0x0000000000200000` (the linker's RAM region is the overlay's 32 MiB, 192 KiB
+used), and `zephyr.bin` carries the arm64 Image magic `ARM\x64` at byte 56 —
+the header Zephyr links in `arch/arm64/core/header.S` — so the file is what a
+`kernel=` line in `config.txt` takes. The entry symbol `__start` is at 0x201084,
+not at the segment start, so the row checks the LOAD address, not the symbol.
+The board file and the SoC compiled warning-free under `-Werror`: zero compiler
+warnings in either build log. The `rpi5_hello` configure printed one CMake
+"manually-specified variables were not used" note for `YAKOGL_DIR` — a path the
+row passes for the driver module that a hello app never opens, not a board or
+SoC warning.
+
+Against U5 and U6, what the Zephyr board file and SoC assume (Zephyr 4.4.99;
+lines read from the files):
+
+- **Memory.** The SoC `dts/arm64/broadcom/bcm2712.dtsi` has one memory node:
+  `sram0` at `memory@200000`, an `mmio-sram` with `reg = <0x0 0x200000
+  0x80000>` — 512 KiB — under two address cells (`:40-44`, `:37-38`); the board
+  dts gives the image its code and RAM there (`rpi_5_bcm2712.dts:23`,
+  `zephyr,sram = &sram0`), and the defconfig sets 40-bit VA and PA
+  (`rpi_5_bcm2712_defconfig:3-4`). So Zephyr assumes the image runs from
+  0x200000 — the firmware's documented `kernel_address` for 64-bit kernels
+  (section 9) — and says nothing about the RAM above 512 KiB: whether the
+  overlay's 32 MiB is free is U10's question, and the overlay is our claim,
+  not the board file's.
+- **Console.** The board dts makes `uart10` both console and shell
+  (`rpi_5_bcm2712.dts:24-25`) `okay` at `current-speed = <115200>`
+  (`:44-46`). `uart10` is a PL011 at 0x107d001000, GIC SPI 121
+  (`bcm2712.dtsi:88-96`), on a fixed 44,236,800 Hz clock (`:100-104`); the
+  system timer is the armv8 arch timer at 54 MHz
+  (`soc/brcm/bcm2712/Kconfig.defconfig:9-10`, frequency read at runtime,
+  `rpi_5_bcm2712_defconfig:5`). The board's page asks for `enable_uart=1` and
+  `uart_2ndstage=1` in `config.txt` (`doc/index.rst:99-101`): which physical
+  connector carries `uart10`, and in what state the firmware leaves its clock
+  and routing, the files do not say (U6).
+- **Boot.** The board page: a Micro SD card with MBR and FAT32
+  (`doc/index.rst:45`) carrying three files — `config.txt`, `zephyr.bin` and
+  the firmware `bcm2712-rpi-5-b.dtb` from the Raspberry Pi firmware tree
+  (`:47-49`, `:136-137`) — `config.txt` reading `kernel=zephyr.bin` (`:59`):
+  the `kernel=` route of section 1. No load address, exception level or entry
+  register state is stated — in particular whether `x0` carries the DTB
+  pointer — so U6 stays open. The image links at 0x200000, which agrees with
+  the documented `kernel_address` for 64-bit kernels; that is how far the
+  files reach.
+- **GPU (U5).** Neither board file nor SoC dtsi has a V3D, SMS, display or
+  power-domain node, and `mbox0` (the `brcm,bcm2711-mbox`,
+  `bcm2712.dtsi:61-69`) is `status = "disabled"`. What the firmware hands a
+  `kernel=` image over in GPU power and clock stays a board question.
+- **Interrupts.** The SoC declares `NUM_IRQS` 280
+  (`soc/brcm/bcm2712/Kconfig.defconfig:6-7`) for the GICv2 at 0x107fff9000
+  (`bcm2712.dtsi:46-53`). The V3D's hub and core interrupts are GIC IDs 282
+  and 281 (Linux's SPI 250 and 249, section 9, plus the SPI base of 32):
+  above 280. That is section 9's Zephyr-side point, open until a GPU node is
+  added and confirmed on the board.
