@@ -636,7 +636,7 @@ Zephyr 4.4.99 (`VERSION`), board `rpi_5`, SoC `bcm2712`. Built by the gate row
 | Image | `zephyr.bin` | ELF text / data / bss |
 |---|---|---|
 | `hello_world` | 45,212 bytes | 42,039 / 3,172 / 147,451 |
-| `rpi5_hello` | 45,212 bytes | 42,176 / 3,036 / 147,451 |
+| `rpi5_hello` | 45,212 bytes | 42,170 / 3,036 / 147,451 |
 
 Both link; the first LOAD segment is at 0x200000; `zephyr.bin` carries the
 `ARM\x64` magic at byte 56. `__start` is at 0x201084, after the Image header, so
