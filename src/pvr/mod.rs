@@ -4,6 +4,9 @@
 //! `vivante/` instead, and the shader ABI it compiles against is the GC7000's.
 #![cfg(feature = "gpu-powervr")]
 
+/// `#[macro_use]`: the modules after it pack their words with backend.rs's
+/// `csb_pack!`.
+#[macro_use]
 pub mod backend;
 /// The programs this backend binds itself (the frame and clear quads' shaders,
 /// the background object's clear-attach programs), made by our own compiler:
@@ -30,3 +33,6 @@ pub mod mesa_internal;
 )]
 pub mod csbgen;
 pub mod ffi;
+/// The partial render's SPM scratch size and PBE store words (Mesa's
+/// pvr_arch_spm.c, transcribed).
+pub mod spm;
