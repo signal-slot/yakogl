@@ -3266,7 +3266,7 @@ zephyr_werror_image() {
 # and not run, no GPU code. Zephyr's own hello_world and our rpi5_hello probe,
 # both with the probe's overlay that sizes sram0. Each must link, carry the
 # Linux arm64 Image header (magic "ARM", 0x64, at byte 56, which the firmware
-# looks for) and be linked at the start of sram0 (0x200000); the sizes of the
+# looks for) and be loaded at the start of sram0 (0x200000, the first LOAD segment); the sizes of the
 # ELF and of zephyr.bin are printed for the pull request.
 zephyr_rpi5_images() {
   local overlay="$PWD/tools/probes/rpi_5/rpi5_hello/boards/rpi_5.overlay" d bin elf magic start
@@ -3279,8 +3279,8 @@ zephyr_rpi5_images() {
     [ -s "$bin" ] && [ -s "$elf" ] || { echo "$d: no zephyr.bin or zephyr.elf"; return 1; }
     magic=$(dd if="$bin" bs=1 skip=56 count=4 2>/dev/null | od -An -c | tr -d ' ')
     [ "$magic" = ARMd ] || { echo "$d: zephyr.bin has no arm64 Image magic at byte 56 (read '$magic')"; return 1; }
-    start=$(nm "$elf" | awk '$3 == "__start" { print $1 }')
-    [ "$start" = 0000000000200000 ] || { echo "$d: __start is at 0x${start:-?}, not the start of sram0"; return 1; }
+    start=$(readelf -lW "$elf" | awk '$1 == "LOAD" { print $3; exit }')
+    [ "$start" = 0x0000000000200000 ] || { echo "$d: first LOAD segment at ${start:-?}, not the start of sram0"; return 1; }
     echo "$d: zephyr.bin $(stat -c %s "$bin") bytes; $(size "$elf" | tail -1 | awk '{ print "text " $1 ", data " $2 ", bss " $3 }')"
   done
 }
