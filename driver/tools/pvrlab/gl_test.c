@@ -22623,12 +22623,29 @@ static int case_maskdepth(void)
  * its own check) said why itself. The skips by name that come before a case
  * -- the shader set has no form of it, the caller's skip list -- are the
  * runner's, so this is reached only by a case that is to run. */
+const char *gl_test_case_name(int c);
+
+#ifdef GL_TEST_PVR
+/* A second fence timeout in one run ends it (gap G8: a run that keeps kicking
+ * after a wait gave up is bounded only by the board watchdog, ~150 s, then an
+ * SoC reset). Every fence wait here is the backend's WAIT_MS (20 s, src/pvr/
+ * backend.rs), longer than the render service's 10 s stop, so in cases 175
+ * and 217 the driver's stop decides and a timeout is the second thing wrong. */
+#define GL_TEST_MAX_TIMEOUTS 1u
+static uint32_t s_run_timeouts0;     /* the backend's count when the run began */
+static bool s_run_ended;             /* a second timeout ended the run */
+#endif
+
 static int run_case(int c, int pretransform, int debug, int *ended)
 {
 	int rc;
 
 	*ended = 0;
 #ifdef GL_TEST_PVR
+	if (s_run_ended) {
+		pr_info("gl_test: case %d: not run, the run ended at a second fence timeout\n", c);
+		return -3;
+	}
 	/* A fence wait that timed out during the case means its read-backs saw
 	 * whatever the GPU had finished, not the frame the case asked for: that
 	 * is its own outcome, TIMEOUT, never a pixel verdict (case 13's check 9
@@ -22966,11 +22983,21 @@ static int run_case(int c, int pretransform, int debug, int *ended)
 #ifdef GL_TEST_PVR
 	{
 		const uint32_t timeouts = pvr_backend_wait_timeouts() - timeouts0;
+		const uint32_t run_timeouts = pvr_backend_wait_timeouts() - s_run_timeouts0;
 
 		if (timeouts) {
 			rc = -4;
 			pr_info("gl_test: case %d: %u fence wait(s) timed out; its checks are not a verdict\n",
 				c, (unsigned)timeouts);
+		}
+		if (run_timeouts > GL_TEST_MAX_TIMEOUTS) {
+			/* FAIL, not TIMEOUT: the runner prints the case's line,
+			 * the later cases do not run, and gl_test_run returns
+			 * the failure as for any failing run. */
+			rc = -1;
+			s_run_ended = true;
+			pr_info("gl_test: FAIL case %d %s: second fence timeout in one run (%u timeouts); the run ends\n",
+				c, gl_test_case_name(c), (unsigned)run_timeouts);
 		}
 	}
 #endif
@@ -23405,6 +23432,10 @@ int gl_test_run(int gl_case, int pretransform, unsigned int ppp_ctrl, int debug,
 		pr_err("gl_test: backend init failed %d\n", rc);
 		return rc;
 	}
+#ifdef GL_TEST_PVR
+	s_run_timeouts0 = pvr_backend_wait_timeouts();
+	s_run_ended = false;
+#endif
 	if (panel) {
 #if defined(GL_TEST_PVR) && defined(GL_TEST_KNOBS)
 		/* the demo is clip-space geometry through the hardware viewport */
