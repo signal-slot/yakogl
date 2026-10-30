@@ -117,6 +117,13 @@ pins! {
     FWCCB_CMD_FREELISTS_RECONSTRUCTION: u32 = 0x2ABC_0068 => "RGXFWIF_FWCCB_CMD_FREELISTS_RECONSTRUCTION";
     FWCCB_CMD_CONTEXT_RESET_NOTIFICATION: u32 = 0x2ABC_0069 => "RGXFWIF_FWCCB_CMD_CONTEXT_RESET_NOTIFICATION";
     FWCCB_CMD_UPDATE_STATS: u32 = 0x2ABC_006B => "RGXFWIF_FWCCB_CMD_UPDATE_STATS";
+    /// The firmware asks the host to restart the GPU (no data;
+    /// rgx_fwif_km.h:1209-1211). Printed, not acted on.
+    FWCCB_CMD_REQUEST_GPU_RESTART: u32 = 0x2ABC_006D => "RGXFWIF_FWCCB_CMD_REQUEST_GPU_RESTART";
+    /// The firmware took a page fault (rgx_fwif_km.h:1212-1215); the data is
+    /// `RGXFWIF_FWCCB_CMD_FW_PAGEFAULT_DATA`, the faulting device address.
+    FWCCB_CMD_CONTEXT_FW_PF_NOTIFICATION: u32 = 0x2ABC_0070 => "RGXFWIF_FWCCB_CMD_CONTEXT_FW_PF_NOTIFICATION";
+    FWCCB_FW_PF_ADDR: usize = 8 => "offsetof(RGXFWIF_FWCCB_CMD, uCmdData.sCmdFWPagefault.sFWFaultAddr)";
     /// Every CCB command type carries this in its high half
     /// (rgx_fwif_km.h:495-498).
     CMD_MAGIC_DWORD_SHIFTED: u32 = 0x2ABC_0000 => "RGX_CMD_MAGIC_DWORD_SHIFTED";
