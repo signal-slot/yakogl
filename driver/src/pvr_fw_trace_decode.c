@@ -81,6 +81,23 @@ static void fwt_emit(pvr_fwt_emit_fn emit, void *ctx, const char *line)
 	}
 }
 
+/* The partial-render lines, named for the PR; NULL for every other ID, which
+ * keep the DDK's own string. The IDs and parameter counts are those of
+ * rgx_fwif_sf.h: MAIN 47/48 :208-213 (no parameters), SPM 17-20 :1533-1540
+ * (two parameters, the 64-bit address as high dword then low dword, the
+ * DDK's "0x%08x%08x"). SPM 1/2 (:1499-1502) have no entry here: they keep the
+ * DDK strings "Force Z-Load/Z-Store for partial render". */
+static const char *fwt_pr_label(uint32_t id)
+{
+	switch (id) {
+	case RGXFW_SF_SPM_ZSTORE_ADDRESS: return "ZStore";   /* :1533 */
+	case RGXFW_SF_SPM_SSTORE_ADDRESS: return "SStore";   /* :1535 */
+	case RGXFW_SF_SPM_ZLOAD_ADDRESS:  return "ZLoad";    /* :1537 */
+	case RGXFW_SF_SPM_SLOAD_ADDRESS:  return "SLoad";    /* :1539 */
+	default: return NULL;
+	}
+}
+
 static void fwt_format(char *out, size_t out_sz, const struct fwt_walk *w, const char *fmt)
 {
 	uint32_t a[FWT_MAX_ARGS];
@@ -144,6 +161,28 @@ uint32_t pvr_fw_trace_dump_one(const RGXFWIF_TRACEBUF_SPACE *space,
 			fwt_emit(emit, ctx, line);
 			count++;
 			break;
+		}
+
+		if (fwt_pr_label(id) && RGXFW_SF_PARAMNUM(id) == 2) {
+			snprintf(line, sizeof(line), "T%u-%s> [%llu] PR %s address 0x%08x%08x",
+				 thread, fwt_group(id), (unsigned long long)ts,
+				 fwt_pr_label(id), fwt_read(&w, 3), fwt_read(&w, 4));
+			fwt_emit(emit, ctx, line);
+			count++;
+			w.idx += 3 + 2;
+			continue;
+		}
+		if (id == RGXFW_SF_MAIN_PARTIALRENDER_WITHOUT_ZSBUFFER_STORE ||
+		    id == RGXFW_SF_MAIN_PARTIALRENDER_WITHOUT_ZSBUFFER_LOAD) {
+			/* rgx_fwif_sf.h:208-213 */
+			snprintf(line, sizeof(line), "T%u-%s> [%llu] PR: no ZS buffer (%s)",
+				 thread, fwt_group(id), (unsigned long long)ts,
+				 id == RGXFW_SF_MAIN_PARTIALRENDER_WITHOUT_ZSBUFFER_STORE ?
+				 "store" : "load");
+			fwt_emit(emit, ctx, line);
+			count++;
+			w.idx += 3 + RGXFW_SF_PARAMNUM(id);
+			continue;
 		}
 
 		sf = fwt_find(id);
