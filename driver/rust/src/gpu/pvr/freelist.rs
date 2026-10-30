@@ -1414,6 +1414,115 @@ mod grow_tests {
             "an HWRT that does not use the list is left alone"
         );
     }
+
+    /// The counters the verdict reads (`pvr_render_fl_counters`): a refused
+    /// grow bumps `fl_no_grow` once, the refill refusal once, adds nothing to
+    /// `fl_grows_done`, leaves the reserve unrefilled (the "reserve not
+    /// refilled" line), is no stop, and the next grow asks the pool again
+    /// and, served, counts as done.
+    #[test]
+    fn a_refused_grow_counts_exactly_the_verdict_counters_and_asks_again() {
+        let mut r = Rig::new(GROW);
+        let mut b = Blocks::new(&mut r, |n| n < 2);
+        let mut src = |_: &mut YdPvrKm, bytes: u32| b.take(bytes);
+        // The reserve serves; its refill (ask 0) is refused.
+        assert_eq!(serve(&mut r.k, 0, Some(&mut src)), GROW);
+        assert_eq!((r.k.fl_grows_done, r.k.fl_no_grow, r.k.fl_refills_refused), (1, 0, 1));
+        // The next grow has no reserve: its ask (1) is refused. No grow.
+        assert_eq!(serve(&mut r.k, 0, Some(&mut src)), 0);
+        assert_eq!((r.k.fl_grows_done, r.k.fl_no_grow, r.k.fl_refills_refused), (1, 1, 1));
+        assert_eq!(r.k.fl_refill_refused_kib, 1036);
+        assert_eq!((r.k.stop_cause, r.k.fls[0].npages), (0, 768), "survived, nothing listed");
+        assert_eq!(r.k.fw_stats, [0; 7], "UPDATE_STATS is the firmware's, not the grow's");
+        // The pool has pages again: asked again, served.
+        assert_eq!(serve(&mut r.k, 0, Some(&mut src)), GROW);
+        assert_eq!((r.k.fl_grows_done, r.k.fl_no_grow), (2, 1));
+        assert_eq!(b.asked.len(), 4, "refill, refused grow, grow, its refill");
+        let refills = r.logs().iter().filter(|l| l.contains("reserve not refilled")).count();
+        assert_eq!(refills, 1);
+    }
+
+    /// `STOP_AT_MAXIMUM` is for a list with no room only: a refused grow
+    /// with room, however often, never sets a stop cause, and the same
+    /// refusal with the list full does.
+    #[test]
+    fn a_refused_grow_survives_with_room_and_stops_only_at_the_maximum() {
+        let mut r = Rig::new(0);
+        let mut src = |_: &mut YdPvrKm, _: u32| None;
+        for _ in 0..3 {
+            assert_eq!(serve(&mut r.k, 0, Some(&mut src)), 0);
+        }
+        assert_eq!((r.k.stop_cause, r.k.fl_no_grow, r.k.fl_grows_done), (0, 3, 0));
+        r.k.fls[0].npages = MAX;
+        assert_eq!(serve(&mut r.k, 0, Some(&mut src)), 0);
+        assert_eq!((r.k.stop_cause, r.k.stop_fl, r.k.fl_no_grow), (STOP_AT_MAXIMUM, 1, 4));
+    }
+
+    /// `reset_hwrts` clears HAS_LAST_TA and PARTIAL_RENDERED of every HWRT
+    /// that uses the list (any of the three freelist slots), sets the state
+    /// to HWR, keeps every other flag bit and word, and leaves an HWRT of
+    /// another list untouched; it counts the ones it reset.
+    #[test]
+    fn reset_hwrts_clears_the_partial_render_flags_and_leaves_the_rest() {
+        let mut r = Rig::new(0);
+        const KEEP: u32 = 0x1 | 0x10 | 0x8000_0000;
+        const BOTH: u32 = HWRTDATA_HAS_LAST_TA | HWRTDATA_PARTIAL_RENDERED;
+        let seeds = [
+            (HWRT_A, 0usize, FL_FW),
+            (HWRT_B, 2, FL_FW), // uses it in its last slot
+            (0x2200, 0, 0xC000_9000),
+        ];
+        for (off, slot, fl) in seeds {
+            for n in 0..3 {
+                let v = if n == slot { fl } else { 0xC000_5000 };
+                w32(&mut r, off, HWRTDATA_FREELISTS + n * HWRTDATA_FREELIST_PTR_SIZE, v);
+            }
+            w32(&mut r, off, HWRTDATA_STATE, 1);
+            w32(&mut r, off, HWRTDATA_FLAGS, BOTH | KEEP);
+            w32(&mut r, off, HWRTDATA_SIZE - 4, 0xdead_beef);
+        }
+        assert_eq!(reset_hwrts(&r.k, FL_FW, &[HWRT_A, HWRT_B, 0x2200]), 2);
+        for off in [HWRT_A, HWRT_B] {
+            assert_eq!(r32(&r, off, HWRTDATA_STATE), RTDATA_STATE_HWR);
+            let f = r32(&r, off, HWRTDATA_FLAGS);
+            assert_eq!(f & BOTH, 0);
+            assert_eq!(f, KEEP);
+            assert_eq!(r32(&r, off, HWRTDATA_SIZE - 4), 0xdead_beef);
+        }
+        assert_eq!(
+            (r32(&r, 0x2200, HWRTDATA_STATE), r32(&r, 0x2200, HWRTDATA_FLAGS)),
+            (1, BOTH | KEEP),
+            "another list's HWRT is untouched"
+        );
+        assert_eq!(reset_hwrts(&r.k, FL_FW, &[]), 0);
+    }
+
+    /// With the partial-render knob off (no on-demand source, no knob-set
+    /// HWRT flag), nothing in the grow or the reconstruction sets
+    /// PARTIAL_RENDERED: the word stays clear through refused and served
+    /// grows, `reconstruct` and `reset_hwrts`.
+    #[test]
+    fn without_the_knob_partial_rendered_is_never_set() {
+        let mut r = grown_twice();
+        for off in [HWRT_A, HWRT_B] {
+            w32(&mut r, off, HWRTDATA_FREELISTS + GLOBAL_FREELIST * HWRTDATA_FREELIST_PTR_SIZE, FL_FW);
+            w32(&mut r, off, HWRTDATA_STATE, 1);
+            w32(&mut r, off, HWRTDATA_FLAGS, HWRTDATA_HAS_LAST_TA | 0x1);
+        }
+        let seen = |r: &Rig| [HWRT_A, HWRT_B].map(|o| r32(r, o, HWRTDATA_FLAGS) & HWRTDATA_PARTIAL_RENDERED);
+        // A refused grow (no source, no reserve left) and a served one.
+        r.k.fls[0].reserve = 0;
+        assert_eq!(serve(&mut r.k, 0, None), 0);
+        assert_eq!(seen(&r), [0, 0]);
+        r.k.fls[0].reserve = 1024;
+        assert_eq!(serve(&mut r.k, 0, None), GROW);
+        assert_eq!(seen(&r), [0, 0]);
+        reconstruct(&mut r.k, 1, &[HWRT_A, HWRT_B]);
+        assert_eq!(seen(&r), [0, 0]);
+        assert_eq!(reset_hwrts(&r.k, FL_FW, &[HWRT_A, HWRT_B]), 2);
+        assert_eq!(seen(&r), [0, 0]);
+        assert_eq!(r32(&r, HWRT_A, HWRTDATA_FLAGS), 0x1, "only the seeded words move, to clear");
+    }
 }
 
 #[cfg(test)]
