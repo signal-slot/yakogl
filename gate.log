@@ -1,0 +1,8 @@
+check.sh: --changed gate-base: 19 path(s), scopes: all
+      every row: gate.log
+check.sh: 2 compiler slot(s) (7236 MB available, 3072 MB each, 4 cores)
+[32mok    cargo fmt --check [5s][0m
+[32mok    build   yakogl-capi (no_std) [0s][0m
+[32mok    clippy  host-test,gpu-powervr [0s][0m
+[32mok    test    host-test,gpu-powervr [22s][0m
+[32mok    clippy  host-test,gpu-powervr,report-es2 [0s][0m

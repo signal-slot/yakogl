@@ -1,0 +1,24 @@
+check.sh: --changed gate-base: 4 path(s), scopes: all
+      every row: gate.log
+      every row: gate2.log
+check.sh: 2 compiler slot(s) (7198 MB available, 3072 MB each, 4 cores)
+[32mok    cargo fmt --check [7s][0m
+[32mok    build   yakogl-capi (no_std) [0s][0m
+[32mok    clippy  host-test,gpu-powervr [1s][0m
+[32mok    test    host-test,gpu-powervr [22s][0m
+[32mok    clippy  host-test,gpu-powervr,report-es2 [1s][0m
+[32mok    test    host-test,gpu-powervr,report-es2 [24s][0m
+[32mok    clippy  host-test,gpu-vivante [16s][0m
+[32mok    test    host-test,gpu-vivante [79s][0m
+[32mok    clippy  host-test,gpu-powervr,shaderc-online [0s][0m
+[32mok    test    host-test,gpu-powervr,shaderc-online [38s][0m
+[32mok    clippy  host-test,gpu-vivante,shaderc-online [34s][0m
+[32mok    test    host-test,gpu-vivante,shaderc-online [224s][0m
+[32mok    clippy  host-test,gpu-powervr,shaderc-online,report-es2 [0s][0m
+[32mok    test    host-test,gpu-powervr,shaderc-online,report-es2 [32s][0m
+[32mok    clippy  host-test,gpu-vivante,shaderc-online,report-es2 [23s][0m
+[32mok    test    host-test,gpu-vivante,shaderc-online,report-es2 [164s][0m
+[32mok    gen     precompiled tables for the tier configurations [5s][0m
+[32mok    clippy  host-test,gpu-powervr,shaderc-online,precompiled-shaders [43s][0m
+[32mok    test    host-test,gpu-powervr,shaderc-online,precompiled-shaders [248s][0m
+[32mok    clippy  host-test,gpu-vivante,shaderc-online,precompiled-shaders [29s][0m
