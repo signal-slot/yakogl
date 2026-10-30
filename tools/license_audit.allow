@@ -44,6 +44,10 @@ tools/testdata/*.console.txt | Apache-2.0 | console captures of our board runs
 tools/hostharness/allow.txt | Apache-2.0 | our allowlist table
 tools/pvr/km/records.sha256 | Apache-2.0 | hashes of our records
 tools/v3d/qpu_corpus.txt | Apache-2.0 | QPU words Mesa's v3d_shc emits for our tools/shaders corpus (own and femtovg sources), written by tools/v3d/qpu_corpus.py at e0c441974
+tools/v3d/qpu_corpus_71.txt | Apache-2.0 | V7.1 counterpart of qpu_corpus.txt: QPU words Mesa's v3d_shc emits for our tools/shaders corpus, written by tools/v3d/qpu_corpus.py --device 71 (same treatment as qpu_corpus.txt)
+tools/v3d/qpu_counts_*.tsv | Apache-2.0 | per-program fs/vs/cs word counts, written by our tools/v3d/qpu_corpus.py
+tools/v3d/shim71/*.clif | Apache-2.0 AND MIT | control lists our gl_ref run submits to Mesa 26.2.1 under drm-shim (V3D_DEBUG=clif), written by tools/v3d/drm_shim_ref.sh; the layout is Mesa v3d_clif_dump text (MIT, NOTICE 1e3)
+tools/v3d/shim71/*.stdout | Apache-2.0 | stdout of our gl_ref.py run under drm-shim, written by tools/v3d/drm_shim_ref.sh
 third_party/mesa-26.2.1/src/util/softfloat.c | BSD-3-Clause | Berkeley SoftFloat 3e: the file header is the BSD 3-clause text
 third_party/mesa-26.2.1/src/util/softfloat.h | BSD-3-Clause | Berkeley SoftFloat 3e: the file header is the BSD 3-clause text
 third_party/mesa-26.2.1/src/util/xxhash.h | BSD-2-Clause | xxHash: the file header says "BSD 2-Clause License"
