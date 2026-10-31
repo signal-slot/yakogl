@@ -27,6 +27,11 @@
 //! code runs at PRE_KERNEL_1 and in ISRs), no statics: all state lives in the
 //! device's `data` blob, so every instance is independent.
 #![cfg_attr(not(test), no_std)]
+// The host build's personality routine ([`eh_personality`]): a lang item, so
+// a nightly builds the crate for the host (the gate's toolchain); the board's
+// target (`target_os = "none"`) and the tests take neither.
+#![cfg_attr(all(not(test), not(target_os = "none")), feature(lang_items))]
+#![cfg_attr(all(not(test), not(target_os = "none")), allow(internal_features))]
 #![deny(unsafe_op_in_unsafe_fn)]
 // The same allow as the library's src/lib.rs: clippy from 2026-10 flags index
 // loops over parallel per-render-target arrays.
@@ -95,4 +100,24 @@ fn panic(info: &core::panic::PanicInfo<'_>) -> ! {
     };
     // SAFETY: the C side reads `file_len` bytes from `file` and never returns.
     unsafe { yd_panic(file.as_ptr(), file.len(), line) }
+}
+
+/// The personality routine of the host build (tools/pvr/rgxlayer_check.c,
+/// tools/pvr/km/km_check.c link the staticlib for x86_64 Linux). The host's
+/// precompiled `core` is built for unwinding and its unwind tables name the
+/// personality, although the crate is panic=abort and never unwinds. rustc
+/// names that reference itself: `rust_eh_personality` up to mid-2025, since
+/// then mangled under `__rustc` (`_RNv..___rustc19rust_eh_personality`, the
+/// crate hash differs per toolchain), so a C definition under a fixed name no
+/// longer matches; the lang item gets whichever name this rustc uses. It
+/// aborts, as the C stubs it replaces did. The board's target
+/// (aarch64-unknown-none-softfloat) has no such reference and no libc.
+#[cfg(all(not(test), not(target_os = "none")))]
+#[lang = "eh_personality"]
+extern "C" fn eh_personality() {
+    unsafe extern "C" {
+        fn abort() -> !;
+    }
+    // SAFETY: libc's abort takes nothing and does not return.
+    unsafe { abort() }
 }

@@ -325,13 +325,8 @@ void yd_panic(const uint8_t *file, size_t file_len, uint32_t line)
 	exit(4);
 }
 
-/* The host's precompiled `core` names the personality routine; the crate is
- * panic=abort and never unwinds (as tools/pvr/rgxlayer_check.c). */
-void rust_eh_personality(void);
-void rust_eh_personality(void)
-{
-	abort();
-}
+/* The personality routine is the crate's (driver/rust/src/lib.rs,
+ * eh_personality), as for tools/pvr/rgxlayer_check.c. */
 
 int main(int argc, char **argv)
 {
