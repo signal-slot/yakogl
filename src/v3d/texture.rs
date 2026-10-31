@@ -260,6 +260,27 @@ pub fn wrap(w: GlesWrap) -> u32 {
     }
 }
 
+/// The record's swizzle: the format's own ([`tmu_format`]) composed with the
+/// binding's GL_TEXTURE_SWIZZLE_* (`GlesTextureBind::swizzle`). Mesa does the
+/// same for a view: `util_format_compose_swizzles` of the format's swizzle
+/// and the view's, then `v3d_translate_pipe_swizzle` of each component
+/// (v3dx_state.c:1031-1034). A GL component reading a channel takes what the
+/// format swizzle puts there (the GL side is in base-format terms, so an L8's
+/// G is the format's second component, L); ZERO and ONE stay constants. All
+/// zero is the identity, and then this is [`tmu_format`]'s own swizzle.
+pub fn tmu_swizzle(b: &GlesTextureBind) -> [u8; 4] {
+    let (_, fmt) = tmu_format(b);
+    let mut out = fmt;
+    for (k, o) in out.iter_mut().enumerate() {
+        *o = match swizzle_source(k, b.swizzle[k]) {
+            c @ 0..=3 => fmt[c],
+            4 => V3D_SWIZZLE_ZERO,
+            _ => V3D_SWIZZLE_ONE,
+        };
+    }
+    out
+}
+
 /// The sampler state of a binding, as st/mesa's sampler state reaches
 /// `v3d_upload_sampler_state_variant`: GL ES 2.0 has no LOD range and no
 /// bias, so the LOD range is GL's default (-1000, 1000), clamped there; no
@@ -268,7 +289,7 @@ pub fn sampler(b: &GlesTextureBind) -> V3dSampler {
     V3dSampler {
         wrap_s: wrap(b.wrap_s),
         wrap_t: wrap(b.wrap_t),
-        wrap_r: V3D_WRAP_MODE_REPEAT,
+        wrap_r: wrap(b.wrap_r),
         mag_nearest: b.linear_filter == 0,
         min_nearest: b.min_linear == 0,
         mip_nearest: b.mip_filter != 2,
@@ -285,7 +306,8 @@ pub fn sampler(b: &GlesTextureBind) -> V3dSampler {
 /// `create_texture_shader_state_bo`): the base pointer at level 0's slice,
 /// levels 0 to the last sampled, the type and swizzle of [`tmu_format`].
 pub fn state(b: &GlesTextureBind, layout: &V3dTexLayout, image_gpu: u32) -> V3dTexState {
-    let (type_, swizzle) = tmu_format(b);
+    let (type_, _) = tmu_format(b);
+    let swizzle = tmu_swizzle(b);
     let mut s = V3dTexState {
         base: image_gpu + layout.slices[0].offset,
         width: b.width,
@@ -459,6 +481,55 @@ mod tests {
         assert_eq!(rgba.swizzle, [V3D_SWIZZLE_RED, V3D_SWIZZLE_GREEN, V3D_SWIZZLE_BLUE, V3D_SWIZZLE_ALPHA]);
         let xrgb = state(&GlesTextureBind { bgra: 1, ..bind(4, 4) }, &layout, 0x1000);
         assert_eq!(xrgb.swizzle, [V3D_SWIZZLE_BLUE, V3D_SWIZZLE_GREEN, V3D_SWIZZLE_RED, V3D_SWIZZLE_ONE]);
+    }
+
+    /// The GL swizzle is composed with the format's own, as Mesa's
+    /// util_format_compose_swizzles then v3d_translate_pipe_swizzle:
+    /// identity changes nothing, (B,G,R,A) reverses an RGBA8, ZERO/ONE are
+    /// constants, and a format with its own swizzle (XRGB, L8, A8, depth)
+    /// is read through.
+    #[test]
+    fn the_gl_swizzle_composes_with_the_formats() {
+        use crate::backend::{GLES_SWIZZLE_ALPHA as A, GLES_SWIZZLE_BLUE as B, GLES_SWIZZLE_GREEN as G};
+        use crate::backend::{GLES_SWIZZLE_ONE as ONE, GLES_SWIZZLE_RED as R, GLES_SWIZZLE_ZERO as ZERO};
+        let layout = layout(&bind(4, 4)).unwrap();
+        let sw = |b: &GlesTextureBind| state(b, &layout, 0x1000).swizzle;
+        let (vr, vg, vb, va) = (V3D_SWIZZLE_RED, V3D_SWIZZLE_GREEN, V3D_SWIZZLE_BLUE, V3D_SWIZZLE_ALPHA);
+        let (v0, v1) = (V3D_SWIZZLE_ZERO, V3D_SWIZZLE_ONE);
+        let rgba = bind(4, 4);
+        assert_eq!(sw(&rgba), tmu_format(&rgba).1);
+        assert_eq!(sw(&GlesTextureBind { swizzle: [R, G, B, A], ..rgba }), [vr, vg, vb, va]);
+        assert_eq!(sw(&GlesTextureBind { swizzle: [B, G, R, A], ..rgba }), [vb, vg, vr, va]);
+        assert_eq!(sw(&GlesTextureBind { swizzle: [ZERO, ONE, R, ZERO], ..rgba }), [v0, v1, vr, v0]);
+        assert_eq!(
+            sw(&GlesTextureBind { swizzle: [GLES_SWIZZLE_SAME, ONE, GLES_SWIZZLE_SAME, GLES_SWIZZLE_SAME], ..rgba }),
+            [vr, v1, vb, va]
+        );
+        // XRGB (B,G,R,1 in the format): GL R reads the format's component 0
+        let xrgb = GlesTextureBind { bgra: 1, ..rgba };
+        assert_eq!(sw(&GlesTextureBind { swizzle: [B, G, R, A], ..xrgb }), [vr, vg, vb, v1]);
+        assert_eq!(sw(&GlesTextureBind { swizzle: [A, ZERO, ONE, R], ..xrgb }), [v1, v0, v1, vb]);
+        // L8 (L,L,L,1): GL A reads the format's ONE, GL R of (A,..) too
+        let l8 = GlesTextureBind { format: GLES_TEXFMT_L8, ..rgba };
+        assert_eq!(sw(&GlesTextureBind { swizzle: [A, R, ZERO, B], ..l8 }), [v1, vr, v0, vr]);
+        // A8 (0,0,0,A): GL A reads the format's fourth component
+        let a8 = GlesTextureBind { format: GLES_TEXFMT_A8, ..rgba };
+        assert_eq!(sw(&GlesTextureBind { swizzle: [A, A, A, R], ..a8 }), [vr, vr, vr, v0]);
+        // depth (X001 kept for R32F)
+        let d = GlesTextureBind { format: GLES_TEXFMT_R32F, ..rgba };
+        assert_eq!(sw(&d), [vr, v0, v0, v1]);
+        assert_eq!(sw(&GlesTextureBind { swizzle: [A, R, G, ONE], ..d }), [v1, vr, v0, v1]);
+    }
+
+    /// wrap R goes through the same map as S and T; REPEAT is the default.
+    #[test]
+    fn wrap_r_maps_like_s_and_t() {
+        let b = bind(4, 4);
+        assert_eq!(sampler(&b).wrap_r, V3D_WRAP_MODE_REPEAT);
+        let c = sampler(&GlesTextureBind { wrap_r: GLES_WRAP_CLAMP_TO_EDGE, ..b });
+        assert_eq!((c.wrap_r, c.wrap_s, c.wrap_t), (V3D_WRAP_MODE_CLAMP, V3D_WRAP_MODE_REPEAT, V3D_WRAP_MODE_REPEAT));
+        let m = sampler(&GlesTextureBind { wrap_r: GLES_WRAP_MIRRORED_REPEAT, ..b });
+        assert_eq!(m.wrap_r, V3D_WRAP_MODE_MIRROR);
     }
 
     /// Each sampled format is Mesa's V3D 4.2 row (v3dx_format_table.c):
