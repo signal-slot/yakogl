@@ -27,5 +27,6 @@ pub mod km;
 pub mod mem;
 pub mod mmu;
 pub mod pool;
+pub mod pr_diag;
 pub mod render;
 pub mod rgxlayer;
