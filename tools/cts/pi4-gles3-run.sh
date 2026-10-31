@@ -22,7 +22,11 @@ REPO=$(cd "$(dirname "$0")/../.." && pwd)
 DEPS=${CONNECTED_DEPS_DIR:-${CCFARM_DEPS_DIR:-}}
 [ -n "$DEPS" ] || { echo "pi4-gles3-run: set CONNECTED_DEPS_DIR" >&2; exit 2; }
 cd "$REPO"
-HEAD8=${PI4_GLES3_BUILD:-$(git rev-parse --short=8 HEAD)} # PI4_GLES3_BUILD: the commit the images were built from, when HEAD moved since
+verb=${1:-}
+# run and tally take the commit the images were built from (build/pi4-gles3-build,
+# written by build) when HEAD moved since, e.g. by the commit of a script change
+HEAD8=$(git rev-parse --short=8 HEAD)
+[ "$verb" = build ] || { [ ! -s build/pi4-gles3-build ] || HEAD8=$(cat build/pi4-gles3-build); }
 IMG=build/deqp/pi4-gles3-$HEAD8
 REC=build/records-pi4-gles3-$HEAD8
 TABLE=tools/cts/pi4-gles3-tree.txt
@@ -30,6 +34,7 @@ export BOARD_MUSTPASS=$REPO/tools/cts/gles3-mustpass.txt
 verb=${1:-}; shift || true
 case "$verb" in
 build)
+	mkdir -p build && echo "$HEAD8" > build/pi4-gles3-build
 	export ZEPHYR_WS=$DEPS/zephyr-ws WEST_VENV=$DEPS/zephyr-ws/.venv
 	export ZEPHYR_SDK_INSTALL_DIR=$DEPS/zephyr-sdk-1.0.1 ZEPHYR_TOOLCHAIN_VARIANT=zephyr
 	export RUSTUP_TOOLCHAIN=nightly DEQP_WORK=$DEPS/deqp-stage1-rpi_4b-gles3 DEQP_MODULE=gles3
