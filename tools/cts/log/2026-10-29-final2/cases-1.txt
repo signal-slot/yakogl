@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# panthor-gltest 2 42 45 91 98 104 149 166 214, run 1 (README.md): the verdict and summary lines
+panthor-gltest: verdict case 2 texture: PASS 
+panthor-gltest: verdict case 42 es3array: PASS 
+panthor-gltest: verdict case 45 es3dyn: PASS 
+panthor-gltest: verdict case 91 hdrblend: REFUSED draw: mali frame: a blended or colour-masked draw into an RGBA16F target is not built yet
+panthor-gltest: verdict case 98 uniloop: FAIL rc -1, first bad check 4 got 0xfff00010 want 0xfff00000
+panthor-gltest: verdict case 104 divloop: FAULT work lost 2, group state/fatal queues 0x1/0x0, vm usable true
+panthor-gltest: verdict case 149 vsunits: REFUSED compile: online shaderc: the code generator refused this vertex shader: Mali(Valhall: a vertex shader texture look-up other than one 2D look-up at a level (a second one, a size query) is not lowered yet)
+panthor-gltest: verdict case 166 fshprobe: PASS 
+panthor-gltest: verdict case 214 splitkick: PASS 
+panthor-gltest: 9 case(s) run: FAIL 1, FAULT 1, PASS 5, REFUSED 2
