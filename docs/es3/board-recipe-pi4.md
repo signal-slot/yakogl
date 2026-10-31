@@ -49,12 +49,17 @@ HEAD8=$(git rev-parse --short=8 HEAD)
 ## 2. Stage 1 for gles3, once per CTS revision
 
 A gles3 stage 1 is its own `WORK` beside the gles2 one (the script's rule:
-"give each module its own WORK"). In the farm's dependency cache:
+"give each module its own WORK"). In the dependency layout
+(`tools/cts/deps-env.sh --layout`, `$DEPS` below), beside the gles2 stage 1
+`$DEPS/deqp-stage1-rpi_4b` that `tools/cts/deps-env.sh --build --board rpi_4b
+DEQP_WORK` makes (it also fetches `$DEPS/VK-GL-CTS` at 93bca01), with the
+environment of that entry's build in `tools/cts/deps.toml` (the west venv
+activated, `ZEPHYR_TOOLCHAIN_VARIANT=zephyr`, `CFLAGS=CXXFLAGS=-O2`):
 
 ```sh
 export ZEPHYR_BASE=$ZEPHYR_WS/zephyr
-ZEPHYR_MODULES="$(tools/cts/zephyr-modules.sh "$ZEPHYR_WS")" \
-    WORK=$CCFARM_DEPS_DIR/deqp-stage1-rpi_4b-gles3/work BOARD=rpi_4b MODULE=gles3 \
+ZEPHYR_MODULES="$(tools/cts/zephyr-modules.sh "$ZEPHYR_WS")" CTS=$DEPS/VK-GL-CTS \
+    WORK=$DEPS/deqp-stage1-rpi_4b-gles3 BOARD=rpi_4b MODULE=gles3 \
     tools/cts/cts-build-zephyr.sh
 ```
 
@@ -69,7 +74,14 @@ image builder checks for). The gles2 stage 1 built it in 101 s on 64 cores and
 314 s on 12 loaded ones (2026-10-08, see "Notes from the gles2 stage 1"); gles3 has about 15 % more
 sources. Measured on 2026-10-11 (`stage1-pi4`,
 `ab43a20c5:tools/cts/log/board-sessions/pi4-deqp-stage1-gles3.md`): the gles3 stage 1 built
-in 203 s on 12 cores, and image A1 linked at 161,256 KB (61.51 % of the window). Keep `<WORK>` as `DEQP_WORK` for the farm:
+in 203 s on 12 cores, and image A1 linked at 161,256 KB (61.51 % of the window).
+Measured again on 2026-10-31 at `ff7b9882` (`stage1-pi4`, a farm worker
+with 4 cores, no board): the gles2 stage 1 and the CTS fetch through
+`deps-env.sh --build`, then the gles3 stage 1 in 223 s (453 ninja steps,
+`WORK` 2.0 GB, `libdeqp-gles3-package.a` present), then image A1 alone
+(section 3, `... A1`) in 92 s: `A1 rc=0 build=ff7b9882`, `RAM: 161836 KB
+256 MB 61.74%`, `zephyr.bin` 16,533,472 bytes, the `--gles3` conformance
+line, and both `REPORT_ES2` symbols unset in the resolved `.config`. Keep `<WORK>` as `DEQP_WORK` for the farm:
 `<ccfarm-env name="DEQP_WORK_GLES3" ...>` in the session's report, since
 `DEQP_WORK` is the gles2 stage 1 that the ES 2.0 regression rows still need.
 
@@ -124,7 +136,7 @@ C1 dEQP-GLES3.functional.clipping.* [-DDEQP_MODULE=gles3 -DCONFIG_DEQP_REPORT_ES
 Then the build, into a directory that does not exist yet:
 
 ```sh
-export DEQP_WORK=$CCFARM_DEPS_DIR/deqp-stage1-rpi_4b-gles3/work
+export DEQP_WORK=$DEPS/deqp-stage1-rpi_4b-gles3
 DEQP_MODULE=gles3 tools/cts/pi4-deqp-images.sh tools/cts/pi4-gles3-tree.txt build/deqp/pi4-gles3-$HEAD8
 ```
 
