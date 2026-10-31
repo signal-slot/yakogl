@@ -1269,7 +1269,8 @@ struct V3dState {
     tiled_live_bytes: usize,
     tiled_high_water: usize,
     /// The occlusion query counters (`v3d_query_begin`): one 32-bit word per
-    /// query handle, at `handle * OQ_STRIDE`, allocated by the first query
+    /// query handle, at `handle * OQ_STRIDE` (counter 0 of the handle's own
+    /// 1024-byte counter group), allocated by the first query
     /// and kept until shutdown. Zero: none yet.
     oq: OsalGpuMem,
     /// The most bytes of tiled copies kept at once (set at init).
@@ -5775,10 +5776,17 @@ pub extern "C" fn v3d_shutdown() {
 
 /* ---- occlusion queries ---------------------------------------------------------- */
 
-/// Bytes between two handles' counters: a cache line of their own, so the
-/// CPU zeroing or reading one never touches a line the GPU writes for
-/// another (docs/es3/occlusion-query.md 3.1).
-const OQ_STRIDE: usize = 64;
+/// Bytes between two handles' counters: one counter group of the TLB's
+/// each. The hardware's counters are 4-byte words in groups of 16, each
+/// group 1024-byte aligned (Mesa's v3dv_query.c:285-287 and its offsets
+/// `group * 1024 + index * 4`, :347-348; gallium's counter is always a
+/// fresh BO's offset 0, v3d_query_pipe.c:95-99). At a 64-byte stride every
+/// handle but 16, 32 and 48 named word 16 or more of its group, no counter
+/// at all, and the Pi 4 read 0 for every query (gl_test 196). Counter 0 of
+/// its own group: the CPU zeroing or reading one never shares a cache line,
+/// or a group, with a counter the GPU adds into for another handle
+/// (docs/es3/occlusion-query.md 3.1).
+const OQ_STRIDE: usize = 1024;
 const OQ_BYTES: usize = GLES_QUERY_HANDLES as usize * OQ_STRIDE;
 
 /// OCCLUSION_QUERY_COUNTER's address for a draw counted on `handle`
@@ -5801,6 +5809,7 @@ fn oq_word(g: &mut V3dState, handle: u32) -> Result<*mut u32, i32> {
         if osal::gpu_alloc(V3D_HEAP_DATA, OQ_BYTES, OSAL_MEM_DATA, &mut mem) != 0
             || mem.cpu.is_null()
             || gpu32(mem.gpu + OQ_BYTES as u64).is_none()
+            || !mem.gpu.is_multiple_of(OQ_STRIDE as u64)
         {
             osal::gpu_free(&mut mem);
             glog_once!("yakogl/v3d: no GPU memory for the occlusion query counters ({} bytes)", OQ_BYTES);

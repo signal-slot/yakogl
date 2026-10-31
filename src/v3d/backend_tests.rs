@@ -8797,7 +8797,7 @@ fn a_counted_draw_carries_its_counter_and_the_result_reads_it() {
     assert!(g().oq.cpu.is_null(), "no counter memory until a query starts");
     assert_eq!(v3d_query_begin(5), 0, "{:?}", rig.gl.logs());
     let base = g().oq.gpu as u32;
-    let word = base + 5 * 64;
+    let word = base + 5 * OQ_STRIDE as u32;
     with_platform(|p| {
         let w = platform_cpu(p, word as u64, 4) as *mut u32;
         // SAFETY: inside the counter buffer.
@@ -8834,6 +8834,69 @@ fn a_counted_draw_carries_its_counter_and_the_result_reads_it() {
     // SAFETY: `n` is a live u64.
     assert_eq!(unsafe { v3d_query_result(5, &mut n) }, 0);
     assert_eq!(n, 42);
+}
+
+/// The counter the V3D's TLB adds into for OCCLUSION_QUERY_COUNTER's
+/// `address`, or None when the address names none. The counters are 4-byte
+/// words in groups of 16, each group 1024-byte aligned (Mesa's
+/// v3dv_query.c:285-287, the offsets `group * 1024 + index * 4` at
+/// :347-348); an address past word 15 of its group is no counter, and the
+/// Pi 4 counted nothing there (gl_test 196 read 0 for every query).
+fn tlb_counter(address: u32) -> Option<u32> {
+    (address != 0 && address.is_multiple_of(4) && address % 1024 < 16 * 4).then_some(address)
+}
+
+/// gl_test 196 (`occl`) on the host: queries on handles 1..5 (the GL
+/// core's handles for the names of context 0), each with a counted draw in
+/// one job. Every draw's OCCLUSION_QUERY_COUNTER address must be a counter
+/// of the hardware's (`tlb_counter`) and no two handles may share a counter
+/// group, a cache line the CPU zeroes, or a word; the TLB model adds each
+/// draw's samples into the counter its address names, and query_result
+/// must read them back.
+///
+/// Deliberate break: `OQ_STRIDE` back to 64 (the layout that read 0 on the
+/// Pi 4) puts handle 1 at word 16 of group 0, no counter: nothing is added
+/// and the result reads 0.
+#[test]
+fn every_counter_address_is_a_tlb_counter_and_the_result_reads_the_samples() {
+    const HANDLES: [u32; 6] = [1, 2, 3, 4, 5, GLES_QUERY_HANDLES - 1];
+    let rig = Rig::new();
+    rig.init();
+    for h in HANDLES {
+        assert_eq!(v3d_query_begin(h), 0, "{:?}", rig.gl.logs());
+    }
+    for h in HANDLES {
+        let mut d = rig.draw();
+        d.do_clear = false;
+        d.occlusion_query = h;
+        assert_eq!(draw(&d), 0, "{:?}", rig.gl.logs());
+    }
+    assert_eq!(v3d_flush(), 0);
+    let addrs: Vec<u32> = rig.draws().iter().map(|s| s.st.oq_addr).collect();
+    assert_eq!(addrs.len(), HANDLES.len());
+
+    /* the job ran: the TLB adds each draw's samples into its counter */
+    with_platform(|p| {
+        for (i, &a) in addrs.iter().enumerate() {
+            if let Some(word) = tlb_counter(a) {
+                let w = platform_cpu(p, word as u64, 4) as *mut u32;
+                // SAFETY: inside the counter buffer (the address is one of its words).
+                unsafe { w.write(w.read() + 100 + i as u32) };
+            }
+        }
+    });
+    for (i, h) in HANDLES.into_iter().enumerate() {
+        let mut n = 0u64;
+        // SAFETY: `n` is a live u64.
+        assert_eq!(unsafe { v3d_query_result(h, &mut n) }, 0);
+        assert_eq!(n, 100 + i as u64, "handle {h} at {:#x}: the samples the TLB counted", addrs[i]);
+    }
+    for (i, &a) in addrs.iter().enumerate() {
+        assert!(tlb_counter(a).is_some(), "handle {}: {a:#x} is no counter of the TLB's", HANDLES[i]);
+        for &b in &addrs[..i] {
+            assert_ne!(a / 1024, b / 1024, "{a:#x} and {b:#x} share a counter group");
+        }
+    }
 }
 
 /// Handles outside 1 .. GLES_QUERY_HANDLES are refused, a result of a
