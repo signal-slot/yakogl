@@ -1,0 +1,7 @@
+# entry	page	failing case (entry 13 = dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_*), main d1b24389
+13	0	dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_alpha_constant_alpha
+13	0	dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_alpha_constant_color
+13	0	dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_alpha_dst_alpha
+13	0	dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_alpha_dst_color
+13	0	dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_alpha_one
+13	0	dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_alpha_one_minus_constant_alpha

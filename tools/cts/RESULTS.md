@@ -482,4 +482,49 @@ refusals 448 -> 141 (compile 0, image 1,013, framebuffer incomplete 3).
 Per-group host verdicts on the three GPUs: `docs/es3/host-gles3-tip.tsv`
 (`70142d35`).
 
-**i.MX8MP**: not run on the board (recipe `docs/es3/board-recipe-imx8mp.md`).
+**i.MX8MP, gl_test ES 3.0 cases** on main `d1b24389`, 2026-10-31, kexec route
+(a DEV run, not a row), each case alone twice: 196 `occl` (2 checks), 202
+`blitconv` (12), 203 `tfcap` (9), 204 `srgb` and 205 `mappbo` (15) all PASS
+both times, no reset. 204 passes on its texture half only (2 checks): the
+render half is compiled out for this GPU. Record
+`tools/cts/log/2026-10-31-imx8mp-es3/`.
+
+**i.MX8MP, dEQP-GLES3, first run** on main `d1b24389`, 2026-10-31 (133 table
+entries of `tools/cts/imx8mp-gles3-tree.txt`, one image, kexec route, record
+`tools/cts/log/2026-10-31-imx8mp-es3/`; recipe
+`docs/es3/board-recipe-imx8mp.md`): 44,635 cases begun (the entries select
+1,825 cases outside the 42,810-case mustpass list), **37,140 pass / 5,274
+fail / 2,197 NotSupported / 24 other / 0 without a result**. No entry hung
+or ended at the watchdog (longest return 232 s of 600 s); the resets read
+were 0. The failing case names are not recorded for the whole tree (about
+880 extra boots; the run was cut short by worker restarts), so the split
+into mustpass and non-mustpass cases is open (#24). Entries that pass in
+full or nearly include `buffer`, `attribute_location`, `fragment_ops.blend.default_framebuffer`
+(2 of 1,154 fail), `stencil`, `ubo` (5 of 2,357 fail), `uniform_api` (3 of
+2,182), `vertex_array_objects`, `vertex_arrays`, most `shaders`
+entries between `indexing` and `swizzles` and `transform_feedback.basic_types`.
+Largest failure groups by entries (Fail / NotSupported):
+
+| Group | Fail | NotSupported | Cause (`docs/es3-cts-failures.md`) |
+|---|---:|---:|---|
+| `shaders` (arrays and builtin_functions entries 25-27, `conversions.vector_to_vector`, `texture_functions` 383, `random` 30) | 1,994 | 0 | RC13 (code-generator refusals; texture look-ups), RC1 (integer outputs); not split by name |
+| `fragment_ops.blend.fbo_srgb` | 1,104 of 1,183 | 0 | RC7: the GC7000UL refuses a draw into an sRGB target by name |
+| `fbo` (entries 4-9) | 494 | 355 | RC1, RC8, RC17 |
+| `texture.shadow` (all six entries) | 432 of 432 | 0 | RC5 / RC6 |
+| `texture.specification` | 217 | 0 | RC2 (formats the GC7000UL refuses), RC15 (3D) |
+| `fragment_out` | 263 | 115 | RC1, RC14 |
+| `texture.filtering.cube` and `.3d` | 171 and 72 | 12 | sampler classes the GC back end lacks (not classified on this GPU) |
+| `texture.swizzle`, `texture.units` | 103, 74 | 0 | swizzle and wrap R: no back end fills them (feature table of the file) |
+| compressed `texture.wrap.*`, `texture.compressed.*` | 0 | 1,562 | ASTC / EAC / ETC2 not offered |
+| `texture.format` | 88 of 546 | 48 | RC2 / RC17 |
+| `transform_feedback` | 71 | 0 | RC3 (`array.*` 54, `random_full_array_capture` 17) |
+
+Do the board and the host agree on `541975a2` (host: `texture.format`
+upload refusals 200 -> 64, `texture.specification` 448 -> 141)? In
+direction yes, on size not provable: the host cannot run a draw, so it
+failed 498 of 546 `texture.format` cases (0 pass); the board passes 410, fails
+88 and reports 48 NotSupported (the same 48 as the host). `texture.specification`:
+the host passed 6 of 1,163; the board passes 1,025 of 1,242 begun and fails
+217. The eight classes are therefore sampled on the board for most cases;
+whether the 88 and 217 failures are the host's 64 and 141 upload refusals
+needs the failing names or messages, which this run did not keep.

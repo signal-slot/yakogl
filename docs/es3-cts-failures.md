@@ -43,7 +43,7 @@ upload refusals 200 -> 64 (compile 0, image 434); `texture.specification`
 1,163 cases, 6 pass / 1,157 fail, upload refusals 448 -> 141 (compile 0,
 image 1,013, framebuffer incomplete 3). `docs/es3/gc-formats.md` section 5.
 
-**i.MX8MP**: never run on the board (`docs/es3/board-recipe-imx8mp.md`).
+**i.MX8MP**: whole tree on `d1b24389`, 2026-10-31 (counts only, case names not yet recorded): 37,140 pass / 5,274 fail / 2,197 NotSupported / 24 other / 0 without a result over 44,635 cases begun (`tools/cts/RESULTS.md`, `tools/cts/log/2026-10-31-imx8mp-es3/`). Largest groups: `shaders` about 2,000, `fbo_srgb` blend 1,104 (RC7), `fbo` 494, `texture.shadow` 432, `fragment_out` 263.
 
 ## Feature state
 
