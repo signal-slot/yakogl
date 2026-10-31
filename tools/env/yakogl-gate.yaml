@@ -17,6 +17,14 @@ image: ubuntu+yakogl-gate
 vcpus: 4                  # a farm task's machine
 memory-gb: 8
 disk-gb: 200
+# What a machine is counted as against its host, unless it is measured using
+# more (orion-complex docs/pools.md, "Memory", "CPU" and "Disk"). Measured
+# 2026-10-31: a task's machine held 1.2 GiB of memory beyond its file cache
+# and wrote 20-29 GB once its build had run; most of a task is an agent
+# thinking.
+expected-vcpus: 2
+expected-memory-gb: 4
+expected-disk-gb: 40
 generations:
   keep: 2
   before-capture:
