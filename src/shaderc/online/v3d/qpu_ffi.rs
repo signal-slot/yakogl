@@ -10,7 +10,7 @@
 //!
 //! The C is Mesa 26.2.1's, unmodified (`third_party/mesa-26.2.1/src/broadcom/
 //! qpu/`, MIT, Copyright (c) 2016 Broadcom), compiled by `build.rs` with the
-//! adapter `qpu_mesa.c` (the V3D 4.2 device, the layout pins). Nothing here
+//! adapter `qpu_mesa.c` (the V3D 4.2 and 7.1 devices, the layout pins). Nothing here
 //! knows where a field sits in the 64-bit word or which opcode is which
 //! operation: that is `v3d_qpu_instr_pack` / `v3d_qpu_instr_unpack`.
 //!
@@ -47,10 +47,10 @@ const SIG_SMALL_IMM_C: usize = 15;
 const SIG_SMALL_IMM_D: usize = 16;
 
 impl MSig {
-    fn get(&self, i: usize) -> bool {
+    pub(super) fn get(&self, i: usize) -> bool {
         self.bytes[i / 8] & (1 << (i % 8)) != 0
     }
-    fn set(&mut self, i: usize, v: bool) {
+    pub(super) fn set(&mut self, i: usize, v: bool) {
         if v {
             self.bytes[i / 8] |= 1 << (i % 8);
         }
@@ -169,8 +169,9 @@ pub struct DeviceInfo {
 }
 
 extern "C" {
-    /// V3D 4.2 (qpu_mesa.c).
+    /// V3D 4.2 and V3D 7.1 (qpu_mesa.c).
     static yakogl_v3d42_devinfo: DeviceInfo;
+    static yakogl_v3d71_devinfo: DeviceInfo;
 
     fn v3d_qpu_instr_pack(devinfo: *const DeviceInfo, instr: *const MInstr, packed: *mut u64) -> bool;
     fn v3d_qpu_instr_unpack(devinfo: *const DeviceInfo, packed: u64, instr: *mut MInstr) -> bool;
@@ -184,6 +185,9 @@ extern "C" {
     fn v3d_qpu_mul_op_num_src(op: u32) -> i32;
     /// Bounded to Mesa's table (qpu_mesa.c).
     fn yakogl_v3d42_magic_waddr_name(waddr: u32) -> *const u8;
+    fn yakogl_v3d71_magic_waddr_name(waddr: u32) -> *const u8;
+    fn v3d_qpu_writes_rf0_implicitly(devinfo: *const DeviceInfo, instr: *const MInstr) -> bool;
+    fn v3d_qpu_instr_is_sfu(instr: *const MInstr) -> bool;
 }
 
 #[cfg(test)]
@@ -192,6 +196,8 @@ extern "C" {
     static yakogl_v3d_qpu_layout_len: u32;
     static yakogl_v3d_qpu_enum_values: [u32; 0];
     static yakogl_v3d_qpu_enum_values_len: u32;
+    static yakogl_v3d_devinfo_facts: [u32; 0];
+    static yakogl_v3d_devinfo_facts_len: u32;
     fn yakogl_v3d_qpu_sig_images(out: *mut u8, size: u32) -> u32;
     fn v3d_qpu_add_op_name(op: u32) -> *const u8;
     fn v3d_qpu_mul_op_name(op: u32) -> *const u8;
@@ -204,25 +210,70 @@ extern "C" {
     fn v3d_qpu_msfign_name(c: u32) -> *const u8;
 }
 
+/// The QPU generation a word is packed for: the `ver` of Mesa's
+/// `struct v3d_device_info` (4.2, the Raspberry Pi 4; 7.1, the Raspberry
+/// Pi 5). Everything that touches a word takes one; the 4.2 entry points
+/// ([`pack`], [`unpack`] and the rest without a `_for`) are `Gen::V42`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Gen {
+    V42,
+    V71,
+}
+
+impl Gen {
+    pub const ALL: [Gen; 2] = [Gen::V42, Gen::V71];
+}
+
+fn devinfo_for(g: Gen) -> *const DeviceInfo {
+    // Statics the C defines; only their addresses are taken.
+    match g {
+        Gen::V42 => &raw const yakogl_v3d42_devinfo,
+        Gen::V71 => &raw const yakogl_v3d71_devinfo,
+    }
+}
+
 fn devinfo() -> *const DeviceInfo {
-    // A static the C defines; only its address is taken.
-    &raw const yakogl_v3d42_devinfo
+    devinfo_for(Gen::V42)
 }
 
 /// Mesa's `v3d_qpu_instr_pack`. The caller has checked
 /// [`pack_preconditions`]: Mesa asserts them.
 pub fn pack(m: &MInstr) -> Option<u64> {
+    pack_for(Gen::V42, m)
+}
+
+/// [`pack`] for generation `g`.
+pub fn pack_for(g: Gen, m: &MInstr) -> Option<u64> {
     let mut w = 0u64;
     // SAFETY: `m` is a valid `struct v3d_qpu_instr` (layout pinned), `w` a
     // valid out pointer; the C keeps neither.
-    unsafe { v3d_qpu_instr_pack(devinfo(), m, &mut w) }.then_some(w)
+    unsafe { v3d_qpu_instr_pack(devinfo_for(g), m, &mut w) }.then_some(w)
 }
 
 /// Mesa's `v3d_qpu_instr_unpack`, into a zeroed mirror.
 pub fn unpack(w: u64) -> Option<MInstr> {
+    unpack_for(Gen::V42, w)
+}
+
+/// [`unpack`] for generation `g`.
+pub fn unpack_for(g: Gen, w: u64) -> Option<MInstr> {
     let mut m = MInstr::zeroed();
     // SAFETY: as in `pack`.
-    unsafe { v3d_qpu_instr_unpack(devinfo(), w, &mut m) }.then_some(m)
+    unsafe { v3d_qpu_instr_unpack(devinfo_for(g), w, &mut m) }.then_some(m)
+}
+
+/// Mesa's `v3d_qpu_writes_rf0_implicitly`: on 7.x the signals that used to
+/// write r4/r5 (`ldunif`, `ldtmu`, `ldvary`, ...) write rf0 instead.
+pub fn writes_rf0_implicitly(g: Gen, m: &MInstr) -> bool {
+    // SAFETY: a valid `struct v3d_qpu_instr`.
+    unsafe { v3d_qpu_writes_rf0_implicitly(devinfo_for(g), m) }
+}
+
+/// Mesa's `v3d_qpu_instr_is_sfu`: the add ALU does a special-function op
+/// (RECIP .. RSQRT2; on 7.x these are ALU ops, not magic writes).
+pub fn is_sfu(m: &MInstr) -> bool {
+    // SAFETY: a valid `struct v3d_qpu_instr`.
+    unsafe { v3d_qpu_instr_is_sfu(m) }
 }
 
 /// What `v3d_qpu_instr_pack` asserts rather than refuses (qpu_pack.c's
@@ -257,9 +308,13 @@ pub fn pack_preconditions(m: &MInstr) -> bool {
 
 /// `v3d_qpu_sig_writes_address` for 4.2.
 pub fn sig_writes_address(sig: &Sig) -> bool {
-    let m = sig_to_mesa(sig);
+    sig_writes_address_mesa(Gen::V42, &sig_to_mesa(sig))
+}
+
+/// `v3d_qpu_sig_writes_address` of a mirror signal, for generation `g`.
+pub fn sig_writes_address_mesa(g: Gen, m: &MSig) -> bool {
     // SAFETY: a valid `struct v3d_qpu_sig`.
-    unsafe { v3d_qpu_sig_writes_address(devinfo(), &m) }
+    unsafe { v3d_qpu_sig_writes_address(devinfo_for(g), m) }
 }
 
 /// The signals of SIG field value `packed` (`v3d_qpu_sig_unpack`), `None`
@@ -289,15 +344,25 @@ pub fn small_imm_pack(v: u32) -> Option<u32> {
 
 /// `v3d_qpu_add_op_has_dst` / `_num_src` as [`ARG_D`]/[`ARG_A`]/[`ARG_B`].
 pub fn add_op_args(op: AddOp) -> u8 {
+    add_op_args_raw(op as u32)
+}
+
+/// [`add_op_args`] of a Mesa add op value (the 7.1 model's operations too).
+pub fn add_op_args_raw(op: u32) -> u8 {
     // SAFETY: `op` is a Mesa add op (pinned by name); the C asserts that.
-    let (d, n) = unsafe { (v3d_qpu_add_op_has_dst(op as u32), v3d_qpu_add_op_num_src(op as u32)) };
+    let (d, n) = unsafe { (v3d_qpu_add_op_has_dst(op), v3d_qpu_add_op_num_src(op)) };
     args(d, n)
 }
 
 /// `v3d_qpu_mul_op_has_dst` / `_num_src` as [`ARG_D`]/[`ARG_A`]/[`ARG_B`].
 pub fn mul_op_args(op: MulOp) -> u8 {
+    mul_op_args_raw(op as u32)
+}
+
+/// [`mul_op_args`] of a Mesa mul op value (the 7.1 model's operations too).
+pub fn mul_op_args_raw(op: u32) -> u8 {
     // SAFETY: as in add_op_args.
-    let (d, n) = unsafe { (v3d_qpu_mul_op_has_dst(op as u32), v3d_qpu_mul_op_num_src(op as u32)) };
+    let (d, n) = unsafe { (v3d_qpu_mul_op_has_dst(op), v3d_qpu_mul_op_num_src(op)) };
     args(d, n)
 }
 
@@ -309,8 +374,18 @@ fn args(d: bool, n: i32) -> u8 {
 /// entry (25..31, 47..54) and past its end (56..63, where Mesa itself would
 /// read out of bounds).
 pub fn magic_waddr_name(waddr: u8) -> Option<&'static str> {
+    magic_waddr_name_for(Gen::V42, waddr)
+}
+
+/// [`magic_waddr_name`] for generation `g`: on 7.1, 5 is `quad` and 55 `rep`.
+pub fn magic_waddr_name_for(g: Gen, waddr: u8) -> Option<&'static str> {
     // SAFETY: NULL or a pointer to one of the C's static string literals.
-    let p = unsafe { yakogl_v3d42_magic_waddr_name(waddr as u32) };
+    let p = unsafe {
+        match g {
+            Gen::V42 => yakogl_v3d42_magic_waddr_name(waddr as u32),
+            Gen::V71 => yakogl_v3d71_magic_waddr_name(waddr as u32),
+        }
+    };
     if p.is_null() {
         return None;
     }
@@ -373,7 +448,7 @@ fn sig_from_mesa(m: &MSig) -> Option<Sig> {
 }
 
 /// The variant of `all` whose discriminant is `v`.
-fn find<T: Copy>(all: &[T], v: u32, disc: impl Fn(T) -> u32) -> Option<T> {
+pub(super) fn find<T: Copy>(all: &[T], v: u32, disc: impl Fn(T) -> u32) -> Option<T> {
     all.iter().copied().find(|&x| disc(x) == v)
 }
 
@@ -426,22 +501,38 @@ pub fn to_mesa(instr: &Instr) -> MInstr {
                 },
             };
         }
-        Instr::Branch(b) => {
-            m.type_ = INSTR_TYPE_BRANCH;
-            m.body = MBody {
-                branch: MBranch {
-                    cond: b.cond as u32,
-                    msfign: b.msfign as u32,
-                    bdi: b.bdi as u32,
-                    bdu: b.bdu as u32,
-                    ub: b.ub,
-                    raddr_a: b.raddr_a,
-                    offset: b.offset,
-                },
-            };
-        }
+        Instr::Branch(b) => branch_to_mesa(b, &mut m),
     }
     m
+}
+
+/// A branch as Mesa's struct (the same on every generation).
+pub(super) fn branch_to_mesa(b: &Branch, m: &mut MInstr) {
+    m.type_ = INSTR_TYPE_BRANCH;
+    m.body = MBody {
+        branch: MBranch {
+            cond: b.cond as u32,
+            msfign: b.msfign as u32,
+            bdi: b.bdi as u32,
+            bdu: b.bdu as u32,
+            ub: b.ub,
+            raddr_a: b.raddr_a,
+            offset: b.offset,
+        },
+    };
+}
+
+/// Mesa's branch as the model, `None` for a value it has no variant for.
+pub(super) fn branch_from_mesa(b: &MBranch) -> Option<Branch> {
+    Some(Branch {
+        cond: find(&BranchCond::ALL, b.cond, |x| x as u32)?,
+        msfign: find(&Msfign::ALL, b.msfign, |x| x as u32)?,
+        bdi: find(&BranchDest::ALL, b.bdi, |x| x as u32)?,
+        ub: b.ub,
+        bdu: find(&BranchDest::ALL, b.bdu, |x| x as u32)?,
+        raddr_a: b.raddr_a,
+        offset: b.offset,
+    })
 }
 
 /// Mesa's struct as the model, as it stands (no canonical form applied),
@@ -488,15 +579,7 @@ pub fn from_mesa(m: &MInstr) -> Option<Instr> {
         INSTR_TYPE_BRANCH => {
             // SAFETY: a branch's body is `branch`.
             let b = unsafe { m.body.branch };
-            Some(Instr::Branch(Branch {
-                cond: find(&BranchCond::ALL, b.cond, |x| x as u32)?,
-                msfign: find(&Msfign::ALL, b.msfign, |x| x as u32)?,
-                bdi: find(&BranchDest::ALL, b.bdi, |x| x as u32)?,
-                ub: b.ub,
-                bdu: find(&BranchDest::ALL, b.bdu, |x| x as u32)?,
-                raddr_a: b.raddr_a,
-                offset: b.offset,
-            }))
+            Some(Instr::Branch(branch_from_mesa(&b)?))
         }
         _ => None,
     }
@@ -598,6 +681,41 @@ mod tests {
         let c: Vec<usize> = c.iter().map(|&v| v as usize).collect();
         assert_eq!(layout(), c, "the Rust mirror of struct v3d_qpu_instr differs from the header");
 
+        // The same layout serves both devices; each device is what the model
+        // says it is (ver, accumulators), read back from the C structs the
+        // packer is called with.
+        // SAFETY: arrays of `_len` u32 defined in qpu_mesa.c.
+        let facts: &[u32] = unsafe {
+            core::slice::from_raw_parts(
+                (&raw const yakogl_v3d_devinfo_facts).cast(),
+                yakogl_v3d_devinfo_facts_len as usize,
+            )
+        };
+        assert_eq!(facts, &[42, 1, 71, 0], "devinfo: ver and has_accumulators for 4.2, then 7.1");
+        // Both devices pack and unpack through the one mirror: a NOP word is
+        // the same on both, and each gives back the word it packed.
+        for g in Gen::ALL {
+            let nop = {
+                let mut m = MInstr::zeroed();
+                m.type_ = INSTR_TYPE_ALU;
+                // SAFETY: an ALU body.
+                unsafe {
+                    m.body.alu.add.op = AddOp::Nop as u32;
+                    m.body.alu.mul.op = MulOp::Nop as u32;
+                    m.body.alu.add.waddr = WADDR_NOP;
+                    m.body.alu.add.magic_write = true;
+                    m.body.alu.mul.waddr = WADDR_NOP;
+                    m.body.alu.mul.magic_write = true;
+                    if g == Gen::V71 {
+                        m.body.alu.mul.b.mux = 63;
+                    }
+                }
+                m
+            };
+            let w = pack_for(g, &nop).expect("a NOP packs");
+            let back = unpack_for(g, w).expect("and unpacks");
+            assert_eq!(pack_for(g, &back), Some(w), "{g:?}");
+        }
         let mut img = [[0u8; 3]; SIG_FIELDS];
         // SAFETY: SIG_FIELDS images of size_of::<MSig>() bytes.
         let n = unsafe { yakogl_v3d_qpu_sig_images(img.as_mut_ptr().cast(), size_of::<MSig>() as u32) };
@@ -665,6 +783,24 @@ mod tests {
         assert_eq!(names(v3d_qpu_pack_name, &pack), s(&["", ".l", ".h"]));
         let unpack: Vec<u32> = Unpack::ALL.iter().map(|&x| x as u32).collect();
         assert_eq!(names(v3d_qpu_unpack_name, &unpack), s(&["", ".abs", ".l", ".h", ".ff", ".ll", ".hh", ".swp"]));
+        // The 7.1 enums against Mesa's name tables, as the 4.2 ones above.
+        for op in super::super::isa71::AddOp71::ALL {
+            // SAFETY: a valid add op index.
+            let mesa = c_str(unsafe { v3d_qpu_add_op_name(op as u32) });
+            assert_eq!(mesa, Some(snake(format!("{op:?}"))), "AddOp71::{op:?} = {}", op as u32);
+        }
+        for op in super::super::isa71::MulOp71::ALL {
+            // SAFETY: as above.
+            let mesa = c_str(unsafe { v3d_qpu_mul_op_name(op as u32) });
+            assert_eq!(mesa, Some(snake(format!("{op:?}"))), "MulOp71::{op:?} = {}", op as u32);
+        }
+        // Mesa names the unpacks up to MAX0 (4..6 are 7.1's); UL .. IH have
+        // no name function entry (it is unreachable for them).
+        let u71: Vec<u32> = (0..=10).collect();
+        assert_eq!(
+            names(v3d_qpu_unpack_name, &u71),
+            s(&["", ".abs", ".l", ".h", ".sat", ".nsat", ".max0", ".ff", ".ll", ".hh", ".swp"])
+        );
         let bc: Vec<u32> = BranchCond::ALL.iter().map(|&x| x as u32).collect();
         assert_eq!(names(v3d_qpu_branch_cond_name, &bc), s(&["", ".a0", ".na0", ".alla", ".anyna", ".anya", ".allna"]));
         let ms: Vec<u32> = Msfign::ALL.iter().map(|&x| x as u32).collect();

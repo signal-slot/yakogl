@@ -35,6 +35,12 @@
 //! * `mesa_ref`: ~590k enumerated words; which are refused and the listing
 //!   of the rest, against Mesa's (tools/v3d/qpu_ref.c), pinned as a digest.
 //!
+//! The V3D 7.1 (Raspberry Pi 5) QPU ISA is the same layer for the other
+//! generation: [`isa71`] is its model, [`codec71`] its decoder and encoder,
+//! through the same FFI with the 7.1 device ([`qpu_ffi::Gen`]); the 4.2 model
+//! above is unchanged. Its gate is `roundtrip71` (every 7.1 word of
+//! tools/v3d/qpu_corpus_71.txt, byte for byte).
+//!
 //! Compiled only in a `gpu-v3d` build (and its C with it); the tests only in
 //! test builds.
 
@@ -43,9 +49,11 @@
 /// measured with.
 pub const MAT_TIMES_VEC_ORDER: super::ir::MatOrder = super::ir::MatOrder::HighestColumnFirst;
 
+pub mod codec71;
 pub mod decode;
 pub mod encode;
 pub mod isa;
+pub mod isa71;
 pub mod listing;
 pub mod qpu_ffi;
 /// A test-only interpreter of encoded QPU programs, validated on Mesa's code
@@ -73,3 +81,5 @@ mod golden;
 mod mesa_ref;
 #[cfg(test)]
 mod roundtrip;
+#[cfg(test)]
+mod roundtrip71;

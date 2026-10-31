@@ -6,7 +6,8 @@
  * compiled unmodified next to this file by build.rs) that is not a plain
  * function call.
  *
- * - The device the words are packed for: V3D 4.2, the Raspberry Pi 4.
+ * - The devices the words are packed for: V3D 4.2, the Raspberry Pi 4, and
+ *   V3D 7.1, the Raspberry Pi 5.
  * - The layout of `struct v3d_qpu_instr` and of what it nests, as sizeof /
  *   offsetof values read from the real header, which the Rust mirror is
  *   checked against (qpu_ffi.rs, `the_mirror_is_mesas_layout`).
@@ -31,6 +32,22 @@ const struct v3d_device_info yakogl_v3d42_devinfo = {
         .ver = 42,
         .has_accumulators = true,
 };
+
+/* V3D 7.1 (ver 71 selects the raddr-operand tables, the 7.1 signal map and
+ * the 7.1 field layout; there are no accumulators). */
+const struct v3d_device_info yakogl_v3d71_devinfo = {
+        .ver = 71,
+        .has_accumulators = false,
+};
+
+/* What the Rust side expects of each device, read back from the structs
+ * above: { ver, has_accumulators } for 4.2 then 7.1. */
+const uint32_t yakogl_v3d_devinfo_facts[] = {
+        42, true,
+        71, false,
+};
+const uint32_t yakogl_v3d_devinfo_facts_len =
+        sizeof(yakogl_v3d_devinfo_facts) / sizeof(yakogl_v3d_devinfo_facts[0]);
 
 #define OFF(type, member) ((uint32_t)offsetof(type, member))
 
@@ -169,4 +186,14 @@ yakogl_v3d42_magic_waddr_name(uint32_t waddr)
         if (waddr > V3D_QPU_WADDR_R5REP)
                 return NULL;
         return v3d_qpu_magic_waddr_name(&yakogl_v3d42_devinfo, (enum v3d_qpu_waddr)waddr);
+}
+
+/* The same for 7.1: 5 and 55 are QUAD and REP there, and the table holds
+ * "r0".."r4" and the SFU names for the addresses 7.x reserves. */
+const char *
+yakogl_v3d71_magic_waddr_name(uint32_t waddr)
+{
+        if (waddr > V3D_QPU_WADDR_R5REP)
+                return NULL;
+        return v3d_qpu_magic_waddr_name(&yakogl_v3d71_devinfo, (enum v3d_qpu_waddr)waddr);
 }
