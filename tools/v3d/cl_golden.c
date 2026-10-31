@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: MIT
  *
- * cl_golden: checks YakoGL's V3D 4.2 control-list adapter
+ * cl_golden: checks YakoGL's V3D 4.2 (and, built with -DV3D_CL_VER=71 and
+ * the packets of V3D71_CL_PACKETS, V3D 7.1) control-list adapter
  * (driver/src/v3d/v3d_cl.h over the committed, generated
  * v3d_packet_v42_pack.h) against the packers of Mesa's own build
  * (build-v3d/src/broadcom/cle/v3d_packet_v42_pack.h, compiled apart in
@@ -11,7 +12,7 @@
  *  2. valid values are never refused and pack to Mesa's bytes: 20,000 random
  *     byte strings per packet (plus all-zero and all-ones), each unpacked by
  *     Mesa's unpacker into the values it holds, then written through
- *     v3d_cl_put_<name>(): accepted, V3D42_<name>_length bytes, the bytes
+ *     v3d_cl_put_<name>(): accepted, V3D<ver>_<name>_length bytes, the bytes
  *     Mesa's packer gives for the same values;
  *  3. values that do not fit are refused, with nothing written: a field too
  *     wide, a signed field out of range, a misaligned address, a minus-one
@@ -35,6 +36,10 @@
  * cl_golden_mesa.c asks for "cle/v3d_packet_v42_pack.h", which only the Mesa
  * build directory has.
  *
+ * The 7.1 build is the same command plus -DV3D_CL_VER=71 (driver/src/v3d/
+ * generated/v3d_packet_v71_pack.h against Mesa's cle/v3d_packet_v71_pack.h);
+ * tools/check.sh runs both. Nothing in the driver writes 7.1 lists yet.
+ *
  * Exit status 0 only when every case passed AND the number of cases run is
  * the number planned.
  */
@@ -45,14 +50,25 @@
 
 #include "v3d_cl.h"
 
+/* ZS Clear Values is sub-id 2 on 4.2 (after Color), 1 on 7.1 (no Color). */
+#if V3D_CL_VER == 71
+#define ZS_SUB_ID 1
+#else
+#define ZS_SUB_ID 2
+#endif
+
 #define CASES 20000
+#if V3D_CL_VER == 71
+#define CONTROLS 16 /* one more refusal: the log2 tile size */
+#else
 #define CONTROLS 15
+#endif
 
 #define MESA_DECL(name)                                                                            \
 	void mesa_pack_##name(uint8_t *out, const void *v);                                        \
 	void mesa_unpack_##name(const uint8_t *in, void *v);                                       \
 	extern const size_t mesa_size_##name, mesa_len_##name;
-V3D_CL_PACKETS(MESA_DECL)
+V3D_CL_PACKET_LIST(MESA_DECL)
 
 static uint64_t rng = 0x9e3779b97f4a7c15ull;
 static uint8_t rnd8(void)
@@ -85,15 +101,15 @@ static struct v3d_cl list(uint8_t *mem, uint32_t size)
 #define CHECK_PACKET(name)                                                                         \
 	do {                                                                                       \
 		packets++;                                                                         \
-		check(sizeof(struct V3D42_##name) == mesa_size_##name &&                           \
-			      V3D42_##name##_length == mesa_len_##name,                             \
+		check(sizeof(struct V3D_CL_NAME(name)) == mesa_size_##name &&                           \
+			      V3D_CL_NAME(name##_length) == mesa_len_##name,                             \
 		      #name, -1, "struct size or length differs from Mesa's build");               \
 		for (int i = 0; i < CASES + 2; i++) {                                              \
-			uint8_t in[V3D42_##name##_length], ref[V3D42_##name##_length];              \
-			uint8_t mem[V3D42_##name##_length + 8];                                    \
+			uint8_t in[V3D_CL_NAME(name##_length)], ref[V3D_CL_NAME(name##_length)];              \
+			uint8_t mem[V3D_CL_NAME(name##_length) + 8];                                    \
 			for (unsigned b = 0; b < sizeof(in); b++)                                  \
 				in[b] = i == 0 ? 0 : i == 1 ? 0xff : rnd8();                       \
-			struct V3D42_##name v;                                                     \
+			struct V3D_CL_NAME(name) v;                                                     \
 			memset(&v, 0, sizeof(v));                                                  \
 			mesa_unpack_##name(in, &v);                                                \
 			mesa_pack_##name(ref, &v);                                                 \
@@ -112,7 +128,7 @@ static struct v3d_cl list(uint8_t *mem, uint32_t size)
 	do {                                                                                       \
 		uint8_t mem[64];                                                                   \
 		struct v3d_cl cl = list(mem, sizeof(mem));                                         \
-		struct V3D42_##name v = { V3D42_##name##_header };                                 \
+		struct V3D_CL_NAME(name) v = { V3D_CL_NAME(name##_header) };                                 \
 		fill;                                                                              \
 		v3d_cl_put_##name(&cl, &v);                                                        \
 		bool untouched = true;                                                             \
@@ -125,36 +141,47 @@ static struct v3d_cl list(uint8_t *mem, uint32_t size)
 	do {                                                                                       \
 		uint8_t mem[64];                                                                   \
 		struct v3d_cl cl = list(mem, sizeof(mem));                                         \
-		struct V3D42_##name v = { V3D42_##name##_header };                                 \
+		struct V3D_CL_NAME(name) v = { V3D_CL_NAME(name##_header) };                                 \
 		fill;                                                                              \
 		v3d_cl_put_##name(&cl, &v);                                                        \
-		check(v3d_cl_ok(&cl) && cl.used == V3D42_##name##_length, #name, -1, what);        \
+		check(v3d_cl_ok(&cl) && cl.used == V3D_CL_NAME(name##_length), #name, -1, what);        \
 	} while (0)
 
 static void controls(void)
 {
 	REFUSED(CLIP_WINDOW, "a 16-bit field given 0x10000", v.clip_window_width_in_pixels = 0x10000);
 	REFUSED(STORE_TILE_BUFFER_GENERAL, "a 6-bit enum field given 64",
-		v.output_image_format = (enum V3D42_Output_Image_Format)64);
+		v.output_image_format = (enum V3D_CL_NAME(Output_Image_Format))64);
 	REFUSED(VIEWPORT_OFFSET, "a signed 10-bit field given 512", v.coarse_x = 512);
 	REFUSED(VIEWPORT_OFFSET, "a signed 10-bit field given -513", v.coarse_y = -513);
 	REFUSED(GL_SHADER_STATE, "an address that is not 32-byte aligned", v.address = 0x1010u);
 	REFUSED(MULTICORE_RENDERING_TILE_LIST_SET_BASE, "an address that is not 64-byte aligned",
 		v.address = 0x2020u);
+#if V3D_CL_VER == 71
+	REFUSED(TILE_BINNING_MODE_CFG, "a minus-one field given 0",
+		(v.width_in_pixels = 0, v.height_in_pixels = 1));
+	REFUSED(TILE_BINNING_MODE_CFG, "a 3-bit log2 tile size given 8", v.log2_tile_width = 8);
+#else
 	REFUSED(TILE_BINNING_MODE_CFG, "a minus-one field given 0",
 		(v.width_in_pixels = 0, v.height_in_pixels = 1, v.number_of_render_targets = 1));
+#endif
 	REFUSED(VIEWPORT_OFFSET, "a u14.8 value off the 1/256 grid", v.fine_x = 0.3f);
 	REFUSED(SAMPLE_STATE, "an f187 value with low mantissa bits", v.coverage = 1.1f);
 	ACCEPTED(SAMPLE_STATE, "the same value as the f187 field holds it", v.coverage = v3d_cl_f187(1.1f));
 	REFUSED(SAMPLER_STATE, "an s8.8 value off its grid", v.fixed_bias = 0.001f);
+#if V3D_CL_VER == 71
+	ACCEPTED(TILE_BINNING_MODE_CFG, "the minus-one fields at 1",
+		 (v.width_in_pixels = 1, v.height_in_pixels = 1));
+#else
 	ACCEPTED(TILE_BINNING_MODE_CFG, "the minus-one fields at 1",
 		 (v.width_in_pixels = 1, v.height_in_pixels = 1, v.number_of_render_targets = 1));
+#endif
 
 	/* a list with no room: overflow, nothing written, not bad_field */
 	{
 		uint8_t mem[16];
 		struct v3d_cl cl = list(mem, 8); /* CLIP_WINDOW is 9 bytes */
-		struct V3D42_CLIP_WINDOW v = { V3D42_CLIP_WINDOW_header };
+		struct V3D_CL_NAME(CLIP_WINDOW) v = { V3D_CL_NAME(CLIP_WINDOW_header) };
 		v3d_cl_put_CLIP_WINDOW(&cl, &v);
 		check(cl.overflow && !cl.bad_field && cl.used == 0 && mem[0] == 0xa5, "CLIP_WINDOW", -1,
 		      "a packet that does not fit is written anyway");
@@ -167,10 +194,10 @@ static void controls(void)
 			clip.clip_window_left_pixel_coordinate = 3;
 			clip.clip_window_height_in_pixels = 7;
 		}
-		struct V3D42_CLIP_WINDOW v = { V3D42_CLIP_WINDOW_header };
+		struct V3D_CL_NAME(CLIP_WINDOW) v = { V3D_CL_NAME(CLIP_WINDOW_header) };
 		v.clip_window_left_pixel_coordinate = 3;
 		v.clip_window_height_in_pixels = 7;
-		uint8_t ref[V3D42_CLIP_WINDOW_length];
+		uint8_t ref[V3D_CL_NAME(CLIP_WINDOW_length)];
 		mesa_pack_CLIP_WINDOW(ref, &v);
 		v3d_cl_put_CLIP_WINDOW(&cb, &v);
 		check(ca.used == 9 && a[0] == 107 && memcmp(a, ref, 9) == 0 && memcmp(a, b, 16) == 0,
@@ -183,7 +210,7 @@ static void controls(void)
 		v3d_cl_emit(&ca, TILE_RENDERING_MODE_CFG_ZS_CLEAR_VALUES, zs) {
 			zs.stencil_clear_value = 0x5a;
 		}
-		check(ca.used == 9 && a[0] == 121 && (a[1] & 0xf) == 2 && a[2] == 0x5a,
+		check(ca.used == 9 && a[0] == 121 && (a[1] & 0xf) == ZS_SUB_ID && a[2] == 0x5a,
 		      "TILE_RENDERING_MODE_CFG_ZS_CLEAR_VALUES", -1, "the sub-id or a field is wrong");
 	}
 }
@@ -191,7 +218,7 @@ static void controls(void)
 int main(void)
 {
 #define RUN(name) CHECK_PACKET(name);
-	V3D_CL_PACKETS(RUN)
+	V3D_CL_PACKET_LIST(RUN)
 #undef RUN
 	controls();
 	const int planned = packets * (1 + CASES + 2) + CONTROLS;

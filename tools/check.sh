@@ -1732,6 +1732,8 @@ if command -v cc >/dev/null 2>&1; then
     local m=third_party/mesa-26.2.1/src g=driver/src/v3d/generated
     PYTHONDONTWRITEBYTECODE=1 python3 "$m/broadcom/cle/gen_pack_header.py" \
       "$m/broadcom/cle/v3d_packet.xml" 42 | cmp - "$g/v3d_packet_v42_pack.h" || return 1
+    PYTHONDONTWRITEBYTECODE=1 python3 "$m/broadcom/cle/gen_pack_header.py" \
+      "$m/broadcom/cle/v3d_packet.xml" 71 | cmp - "$g/v3d_packet_v71_pack.h" || return 1
     PYTHONDONTWRITEBYTECODE=1 python3 "$m/util/format/u_format_table.py" \
       "$m/util/format/u_format.yaml" --enums | cmp - "$g/util/format/u_format_gen.h"
   }
@@ -2154,7 +2156,7 @@ if command -v cc >/dev/null 2>&1; then
     printf '%s\n' "$out" | grep -E "FAIL|$what run" | head -20
     [ "$status" -eq 0 ] || return 1
     printf '%s\n' "$out" |
-      grep -qE "^$name: ([0-9]+) $what run \(planned \1\), 0 failed\$" || {
+      grep -qE "^${name%%[0-9]*}: ([0-9]+) $what run \(planned \1\), 0 failed\$" || {
       echo "$name exited 0 without its result line"
       return 1
     }
@@ -2173,6 +2175,11 @@ if command -v cc >/dev/null 2>&1; then
       -I"$v3d_mt/src/broadcom" -I"$v3d_ref/gen" "${v3d_inc[@]}" \
       tools/v3d/cl_golden.c tools/v3d/cl_golden_mesa.c -lm
     uses w:v3d-mesa
+    step "run     v3d cl_golden 7.1 (against Mesa 26.2.1)" v3d_mesa_run cl_golden71 cases \
+      cc -O1 -std=c11 -DV3D_CL_VER=71 -D_GNU_SOURCE -DHAVE_ENDIAN_H -I"$v3d_mt/src" -I"$v3d_mt/include" \
+      -I"$v3d_mt/src/broadcom" -I"$v3d_ref/gen" "${v3d_inc[@]}" \
+      tools/v3d/cl_golden.c tools/v3d/cl_golden_mesa.c -lm
+    uses w:v3d-mesa
     step "run     v3d job_check (against Mesa 26.2.1)" v3d_mesa_run job_check checks \
       cc -std=c11 -D_GNU_SOURCE -DHAVE_ENDIAN_H -I"$v3d_mt/src" -I"$v3d_mt/include" \
       -I"$v3d_mt/src/broadcom" -I"$v3d_ref/gen" "${v3d_inc[@]}" \
@@ -2186,6 +2193,11 @@ if command -v cc >/dev/null 2>&1; then
     uses w:v3d-mesa
     step "run     v3d cl_golden (against Mesa 26.2.1)" v3d_mesa_run cl_golden cases \
       cc -O1 -std=c11 -D_GNU_SOURCE -DHAVE_ENDIAN_H -I"$v3d_mesa_tree/src" -I"$v3d_mesa_tree/include" \
+      -I"$v3d_mesa_tree/src/broadcom" -I"$v3d_mb/src/broadcom" -I"$v3d_mb/src" "${v3d_inc[@]}" \
+      tools/v3d/cl_golden.c tools/v3d/cl_golden_mesa.c -lm
+    uses w:v3d-mesa
+    step "run     v3d cl_golden 7.1 (against Mesa 26.2.1)" v3d_mesa_run cl_golden71 cases \
+      cc -O1 -std=c11 -DV3D_CL_VER=71 -D_GNU_SOURCE -DHAVE_ENDIAN_H -I"$v3d_mesa_tree/src" -I"$v3d_mesa_tree/include" \
       -I"$v3d_mesa_tree/src/broadcom" -I"$v3d_mb/src/broadcom" -I"$v3d_mb/src" "${v3d_inc[@]}" \
       tools/v3d/cl_golden.c tools/v3d/cl_golden_mesa.c -lm
     uses w:v3d-mesa

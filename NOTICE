@@ -83,7 +83,8 @@ third_party/zephyr-pr114866-2026-07-29-2473da6b (entry 11).
       include, unmodified. Also qpu_pack.c, qpu_instr.[ch] and
       v3d_device_info.h, unmodified, which build.rs compiles into gpu-v3d
       builds (the QPU encoder and decoder).
-      driver/src/v3d/generated/v3d_packet_v42_pack.h and
+      driver/src/v3d/generated/v3d_packet_v42_pack.h,
+      driver/src/v3d/generated/v3d_packet_v71_pack.h and
       driver/src/v3d/generated/util/format/u_format_gen.h: output of Mesa's
       generators (gen_pack_header.py, u_format_table.py), MIT.
       driver/src/v3d/v3d_cl.h is no longer a copy of Mesa's header but our
