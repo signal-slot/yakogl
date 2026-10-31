@@ -698,17 +698,15 @@ mod tests {
             let nop = {
                 let mut m = MInstr::zeroed();
                 m.type_ = INSTR_TYPE_ALU;
-                // SAFETY: an ALU body.
-                unsafe {
-                    m.body.alu.add.op = AddOp::Nop as u32;
-                    m.body.alu.mul.op = MulOp::Nop as u32;
-                    m.body.alu.add.waddr = WADDR_NOP;
-                    m.body.alu.add.magic_write = true;
-                    m.body.alu.mul.waddr = WADDR_NOP;
-                    m.body.alu.mul.magic_write = true;
-                    if g == Gen::V71 {
-                        m.body.alu.mul.b.mux = 63;
-                    }
+                // Writing a union field is safe: an ALU body.
+                m.body.alu.add.op = AddOp::Nop as u32;
+                m.body.alu.mul.op = MulOp::Nop as u32;
+                m.body.alu.add.waddr = WADDR_NOP;
+                m.body.alu.add.magic_write = true;
+                m.body.alu.mul.waddr = WADDR_NOP;
+                m.body.alu.mul.magic_write = true;
+                if g == Gen::V71 {
+                    m.body.alu.mul.b.mux = 63;
                 }
                 m
             };
