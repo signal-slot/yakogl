@@ -22,7 +22,7 @@ REPO=$(cd "$(dirname "$0")/../.." && pwd)
 DEPS=${CONNECTED_DEPS_DIR:-${CCFARM_DEPS_DIR:-}}
 [ -n "$DEPS" ] || { echo "pi4-gles3-run: set CONNECTED_DEPS_DIR" >&2; exit 2; }
 cd "$REPO"
-HEAD8=$(git rev-parse --short=8 HEAD)
+HEAD8=${PI4_GLES3_BUILD:-$(git rev-parse --short=8 HEAD)} # PI4_GLES3_BUILD: the commit the images were built from, when HEAD moved since
 IMG=build/deqp/pi4-gles3-$HEAD8
 REC=build/records-pi4-gles3-$HEAD8
 TABLE=tools/cts/pi4-gles3-tree.txt
@@ -83,9 +83,10 @@ esac
 while [ "\$1" = -o ]; do shift 2; done
 host=\$1
 shift
-"\$real" "\$host" -- "\$@"
+t0=\$(date +%s)
+if [ -p /dev/stdin ] || [ -f /dev/stdin ]; then "\$real" "\$host" -- "\$@"; else "\$real" -n "\$host" -- "\$@"; fi
 rc=\$?
-[ \$rc -eq 0 ] || echo "\$(date +%T) rc=\$rc \$host \$*" | cut -c1-200 >> $REPO/build/pi4-bin/ssh.log
+echo "\$(date +%T) rc=\$rc \$((\$(date +%s) - t0))s \$host \$*" | cut -c1-160 >> $REPO/build/pi4-bin/ssh.log
 exit \$rc
 EOF
 	chmod +x build/pi4-bin/ssh
