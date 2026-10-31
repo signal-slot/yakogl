@@ -1,0 +1,95 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Case 175 refusehang, partial render on, parts 1+4 (image B), run 1 (README.md): serial console excerpt
+yakogl-netboot: once=neg175B1
+Saving Environment to MMC... Writing to MMC(0)... OK
+yakogl-netboot: cleared
+3124536 bytes read in 39 ms (76.4 MiB/s)
+yakogl-netboot: go 0x82000000
+## Starting application at 0x82000000 ...
+Hxsample: build tree=d1b24389 table=6c5b8a70
+I: rti_arm: armed preload 0xef rate 32768 Hz: expiry 60000 ms, fed for 150 s
+board: watchdog armed
+I: Cadence DSI id 0xcadd5131, IP_CONF 0x948490d0
+I: D-PHY: WIZ at +0xf00 (MOD_VER 0x69924881)
+I: VP clock source 51200000 Hz (pixel clock 51200000 Hz)
+I: DSS rev 0x64040901
+I: DSS ready: VP2 1024x600 @ 51200000 Hz, safety layer ARGB8888 at <addr>
+I: TISCI: power domain 237 on
+I: TISCI: power domain 242 on
+I: TISCI: GPU clock 237/3 = 800000000 Hz
+I: TISCI: GPU clock 237/3 runs at 800000000 Hz
+I: GPU regs <addr> (512 KiB) mapped at <addr>
+I: CORE_ID = 0x002400350068031c -> BVNC 36.53.104.796
+I: PowerVR BXS-4-64 MC1 alive (BVNC 36.53.104.796)
+I: GPU bring-up milestone 1 complete (power + BVNC readback)
+I: GPU core clock measured: 800 MHz (CR_TIMER 31252 ticks in 10 ms)
+I: GPU carveout phys <addr> (64 MiB) mapped at <addr>
+I: DDK FW: code@0x0 (196608 B), data@0x80000 (135168 B), objs from 0xc0000
+I: DDK FW: 229376-byte image for DDK 25.2 loaded (code 0x0, data 0x80000, rodata 0xa0000)
+I: runtime cfg: ActivePMLatency 5 ms
+I: FWIF structs built (KCCB/FWCCB/sysinit/osinit); heap used to 0xd8d28
+I: MMU: FW heap mapped (4096 KiB main + 192 KiB config of the 32 MiB window), PC root phys=<addr>
+I: M3 complete (MMU + FW load + FWIF structs). Booting FW core...
+I: FW boot: firmware_started=0x1 after ~1 ms
+I: GPU bring-up milestone 4 complete (firmware booted)
+I: DDK FW: skipping open-FW healthcheck; render KICK drives the FW
+I: render: scaffolding built; awaiting final cmd_transfer regs (pvr_render_regs.h) before first GPU draw
+I: D-PHY: 307812500 bit/s per lane, band 5
+I: DSI link up: 4 lanes, sync events, line 4047 B, 307812500 bit/s per lane
+I: sn65dsi8x: ID "58ISD" rev 0x01 (attempt 1)
+I: sn65dsi8x: up, DSI 153600 kHz (range 0x1e), LVDS 51200 kHz = /3 (range 1), fmt 0x68
+I: sn65dsi8x: link clean (IRQ_STAT 0x00)
+W: bridge up, video on, IRQ_STAT 0x00, at 276 ms
+W: backlight on at 280 ms
+I: SN65DSI8x up: lvds range 1, dsi range 30, div 2, fmt 0x68, IRQ_STAT 0x00
+*** Booting Zephyr OS build af17c0c8aa2a ***
+I: shader compiler scratch: 4194304 bytes, keep: 1048576 bytes
+Secondary CPU core 1 (MPID:0x1) is up
+Secondary CPU core 2 (MPID:0x2) is up
+Secondary CPU core 3 (MPID:0x3) is up
+gl_test: PVR_BACKEND_OPT_FS_TEMPS_MIN=0
+gl_test: the list 175 (1 cases) on one context
+gl_test: start (case=-1 pretransform=0 ppp_ctrl=0x0 debug=0 no_coalesce=0)
+W: render: PROBE: the global freelists have no grow reserve: every grow is answered with zero pages, on purpose
+I: render: parameter buffer: carveout 64 MiB -> 448 pages listed, 4096 max, grow 256, pool 0 pages
+I: freelist id=1 np=512 max=4096 backing=512 fpm=0 ebase=3584 <addresses dropped>
+I: freelist id=2 np=512 max=4096 backing=512 fpm=0 ebase=3584 <addresses dropped>
+I: freelist id=3 np=26 max=32 backing=26 fpm=0 ebase=4 <addresses dropped>
+I: render: init ok <addresses dropped>
+I: osal(zephyr): ready <addresses dropped>
+I: pvr_backend: init ok <addresses dropped>
+I: render: HWRT 1024x1024 x1 te_screen=0x0003f03f mtile1=0x00400000 mtile2=0x00400000 isp_mtile=0x00100010 stride=256 rgn=1024 tpc=8192 teaa=0
+W: render: fence 1 (frame fence) not moved at 20 ms, re-posted 1 kick(s) (1 so far)
+I: render: HWRT 1024x1024 x1 te_screen=0x0003f03f mtile1=0x00400000 mtile2=0x00400000 isp_mtile=0x00100010 stride=256 rgn=1024 tpc=8192 teaa=0
+W: render: fence 2 (frame fence) not moved at 20 ms, re-posted 1 kick(s) (2 so far)
+W: render: fence 3 (frame fence) not moved at 20 ms, re-posted 1 kick(s) (3 so far)
+W: render: fence 4 (frame fence) not moved at 20 ms, re-posted 1 kick(s) (4 so far)
+W: render: fence 5 (frame fence) not moved at 20 ms, re-posted 1 kick(s) (5 so far)
+W: render: fence 6 (frame fence) not moved at 20 ms, re-posted 1 kick(s) (6 so far)
+W: render: fence 7 (frame fence) not moved at 20 ms, re-posted 1 kick(s) (7 so far)
+W: render: fence 8 (frame fence) not moved at 20 ms, re-posted 1 kick(s) (8 so far)
+W: FWCCB: FREELIST_GROW id=1 -> no grow (reserve 0, pool 0/0, 512/4096 pages)
+I: FWCCB: grow ack: KCCB r/w=35/35 after 1 ms; fl cur=512 top=483 ready=0 pending=0 alloc=28/0 <addresses dropped>
+I: FWCCB: UPDATE_STATS element=2 (out of memory) adjust=1 (seen 1)
+I: render: at grow request 1 (sampled when the batch was first read): last submitted 15, last fragment done 14; 1 kicks in flight: 0 with TA done and 3D pending, 1 with TA pending
+I: FWCCB: UPDATE_STATS element=1 (partial renders) adjust=1 (seen 1)
+gl_test: refusehang: 15 frames, the last of 707 quads asked for a grow: requests 1 (served 0, refused 1), notices 1, re-posts 15, stop 0, partial renders 1
+gl_test: case 175 refusehang: PASS
+gl_test: all: 0 of 1 cases failed (1 passed; 0 timed out; first failure case -1 at index -1; second failure case -1; 0 skipped, first skip case -1); precompiled hits 0, compiler runs 3
+gl_test: done
+osal(zephyr): pending frees: high-water 1/128, waits 0 (opt-in 0), refused 0 (0 unsubmitted, 0 no wait, 0 KiB kept)
+osal(zephyr): at close: pending frees now 0 (0 KiB), oldest fence none, last submitted 15; reclaim on: 0 refusals, 0 served without a wait, 0 after a wait, 0 refused
+I: render pool summary: 59200 KiB, bump 10240 KiB now, 10240 KiB high-water; top 4096 KiB now, 11480 KiB high-water
+I: render pool general: free 12 KiB in 2 ranges, largest 8 KiB; 4 reused, 30 bumped, 0 refused; 9 frees (7424 KiB)
+I: render pool pds: free 0 KiB in 0 ranges, largest none; 0 reused, 8 bumped, 0 refused; 0 frees (0 KiB)
+I: render pool usc: free 0 KiB in 0 ranges, largest none; 0 reused, 43 bumped, 0 refused; 0 frees (0 KiB)
+I: render pool losses: dropped 0 KiB, 0 double frees, 0 bad chain headers, rolled back 0 KiB
+I: render freelists: 1 grow requests, 0 served, 1 unserved, 0 KiB taken on demand; GPU recoveries 0 (HWR counter 0)
+I: render freelists: reserve refills refused 0 (0 KiB); firmware UPDATE_STATS: partial renders 1, out of memory 1, TA stores 0, 3D stores 0, CDM stores 0, TDM stores 0, other 0
+osal(zephyr): ds slots: none allocated, ds given up 0, ds refused 0 (slots full 0, no buffer 0), depth sampled from the buffer 0 (refused 0)
+osal(zephyr): log: 0 causes logged once, 0 repeats not printed
+gl_test: OK (rc=0)
+I: dss stats before hold t=4890 ms: vsyncs 272 app_frames 0 underflows 0 sync_lost 0 go_timeouts 0 go_waits 0 safety_flips 0 app 0
+I: dss stats after hold t=24902 ms: vsyncs 1449 app_frames 0 underflows 0 sync_lost 0 go_timeouts 0 go_waits 0 safety_flips 0 app 0
+I: sample done (0): resetting the SoC
