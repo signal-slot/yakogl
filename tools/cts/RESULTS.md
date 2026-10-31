@@ -30,7 +30,7 @@ closed). Mustpass list: 17,165 cases.
 | AM62P, 17 images at 1x (re-run at `316b4ad7`, 2026-10-29, `records/am62p/deqp-316b4ad7/`, 17,371 cases begun: the list plus 206 outside it) | 17,332 | **0** | 34 | 5 / 0 | 0 |
 | AM62P, ms4 image (`multisample.*` on the 4x config) | 16 | **0** | 0 | 0 / 0 | 0 |
 | AM62P combined (ms4 replaces the 16 1x `multisample.*`) | 17,142 | **0** | 18 | 5 / 0 | 0 |
-| i.MX8MP, 29 entries (re-run at `d0c5dc48`, 2026-10-23, `records/imx8mp/deqp-d0c5dc48/`, 17,371 cases begun: the list plus 206 outside it) | 17,318 | **0** | 34 | 19 (other) | 0 |
+| i.MX8MP, 29 entries (re-run at `0fbe61a3`, 2026-10-31, `records/imx8mp/deqp-0fbe61a3/`, 17,371 cases begun: the list plus 206 outside it) | 17,318 | **0** | 34 | 19 (other) | 0 |
 | Pi 4, 29 rows (every list case has a result; re-run at `46f93767`, 2026-10-24, `records/pi4/deqp-46f93767/`) | 17,126 | **0** | 34 | 3 / 2 | 0 (0 recoveries in 29 records) |
 
 - The 34 NotSupported are the same on the three boards and accepted
