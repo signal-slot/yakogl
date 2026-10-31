@@ -158,9 +158,9 @@ increments per submit; `v3d_kick_id()` is "the kick being recorded"
 
 | where | change |
 |---|---|
-| back end storage | `V3dState::oq`: one 4 KiB GPU buffer from `osal::gpu_alloc`, allocated by the first `v3d_query_begin` (no query, no allocation), mapped. Handle `h` (1..64) owns the dword at `h * 64` (a 64-byte stride: the CPU zeroes and reads one line while the GPU writes another's). |
+| back end storage | `V3dState::oq`: one 64 KiB GPU buffer from `osal::gpu_alloc` (page-aligned, refused if not 1024-aligned), allocated by the first `v3d_query_begin` (no query, no allocation), mapped. Handle `h` (1..64) owns the dword at `h * 1024`: counter 0 of a 1024-byte counter group of its own. The TLB's counters are 4-byte words in groups of 16, each group 1024-byte aligned (`mesa:broadcom/vulkan/v3dv_query.c:285-287`, offsets `group * 1024 + index * 4` at `:347-348`; gallium's counter is a fresh BO's offset 0, `v3d_query_pipe.c:95-99`). The first build used a 64-byte stride: every handle but 16, 32 and 48 named word 16 or more of group 0, no counter, and the Pi 4 read 0 for every query (gl_test 196 on `cd738b1a`). One handle per group also keeps the CPU's zeroing and reading off any line or group the GPU adds into for another handle. |
 | `driver/src/v3d/v3d_job.h:102` `struct v3d_job_state` + `src/v3d/ffi.rs:271` `V3dJobState` | new field `oq_addr: u32` (0 = none). `static_assert` the layout the way the other mirrors do. |
-| `src/v3d/backend.rs` `draw_call` | sets `oq_addr` on the draw's `job_state` from `GlesDraw::occlusion_query` (`oq.gpu + h*64`, 0 for none); the clear quad is built from its own `GlesDraw` (`state::clear_quad_draw`) and carries 0. |
+| `src/v3d/backend.rs` `draw_call` | sets `oq_addr` on the draw's `job_state` from `GlesDraw::occlusion_query` (`oq.gpu + h*1024`, 0 for none); the clear quad is built from its own `GlesDraw` (`state::clear_quad_draw`) and carries 0. |
 | `driver/src/v3d/v3d_job.c:556-566` | `PACK(V3D_PACK_FIXED, 3, mask, st->oq_addr)`: **the address joins the key**, or the packet-skip cache would not re-emit it when it changes. `OCCLUSION_QUERY_COUNTER` gets `oq.address = cl_address(...)` when non-zero. The job-start packet (`:168`) stays zero. |
 | BCL relocation | the C builder emits GPU addresses directly (`cl_address`); no BO list exists. The arena is allocated once and lives as long as the context, so no per-job pinning. |
 | `src/v3d/backend.rs` | `v3d_query_begin(h)`: if the job in flight/open is using `h` (it is not: Begin zeroes a fresh handle) write 0 to the dword, `cache_flush` the line. `v3d_query_result(h)`: `osal::cache_invd` (`src/osal/mod.rs:454`) then read the dword. Both are new `YakoglBackend` entries. |
@@ -596,7 +596,7 @@ State machine, one test per row of section 5:
 Command words:
 
 * *enable*: a counted draw's job BCL contains opcode `92` (0x5c) followed by
-  the 4-byte little-endian address `arena.gpu + h*64` **before** the draw's
+  the 4-byte little-endian address `arena.gpu + h*1024` **before** the draw's
   `GL_SHADER_STATE`/vertex packets, and after `START_TILE_BINNING`;
 * *reset/disable*: the first packet of every job (`v3d_job.c:168`) has
   address 0; an uncounted draw after a counted one in the same job emits
