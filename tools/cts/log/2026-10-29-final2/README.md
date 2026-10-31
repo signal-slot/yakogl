@@ -100,3 +100,21 @@ The delta, in the tool's words:
   `fvg_refusals.py`: `36 ok, 0 texture refusal(s), 0 other`.
 - `MESA_PAN_TREE=… tools/mali/check.sh`: `14 ok, 0 failed, 0 gap(s)`,
   `mali scope green`; the Mali test row passed its 335 (`MALI_TESTS=335`).
+- The full `tools/check.sh` (`--jobs 3`, a fresh `CARGO_TARGET_DIR`,
+  ZEPHYR_WS, HAL_NXP_DIR, PCO_SHC, GLMARK2_SRC and MESA_PAN_TREE under the
+  deps directory, `driver/src/fw/pvr_fw_blob.h` copied in, MESA_V3D_TREE
+  unset) did **not** finish: the session's 2-hour limit and a restart of
+  the worker stopped it after about 141 rows, so there is no summary line.
+  It had 5 FAIL rows and no gap:
+  - `run pvr rgxlayer_check` and `run pvr km_check`: linking
+    `libyakogl_drivers.a` (host, `panic = "abort"`) with `cc` fails on
+    `undefined reference to '__rustc::rust_eh_personality'`, which this
+    host's nightly (`rustc 1.101.0-nightly (5d8fec066 2026-10-16)`) puts in
+    `core` and `compiler_builtins`, and which nothing defines. This
+    reproduces on its own (`nm`: only `U`/`V` entries for the symbol).
+  - `clippy osal-zephyr,gpu-powervr,...` and `clippy
+    osal-zephyr,gpu-v3d,...` (aarch64-unknown-none) and `check
+    osal-zephyr,gpu-powervr,precompiled-shaders`: build.rs failed because
+    the host's preset `CC_aarch64_unknown_none` names a bootlin directory
+    that does not exist. With it unset (build.rs then uses clang), both
+    clippy rows pass.
