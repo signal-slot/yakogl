@@ -66,6 +66,30 @@ run | tally)
 		chmod +x build/pi4-bin/ip
 		export PATH=$REPO/build/pi4-bin:$PATH
 	fi
+	# The lease forwards the board with a login that only takes the form
+	# `ssh user@host -- command`; board.sh calls `ssh -o K=V ... host command`.
+	# A wrapper `ssh` first on PATH turns the second form into the first
+	# (dropping the -o pairs) and logs a failed call to build/pi4-bin/ssh.log.
+	# scp's own calls (joined -oK=V options) pass through unchanged.
+	mkdir -p build/pi4-bin
+	realssh=$(PATH=${PATH#"$REPO/build/pi4-bin:"} command -v ssh)
+	cat > build/pi4-bin/ssh <<EOF
+#!/bin/bash
+real=$realssh
+case "\$1" in
+-o) ;;
+*) exec "\$real" "\$@" ;;
+esac
+while [ "\$1" = -o ]; do shift 2; done
+host=\$1
+shift
+"\$real" "\$host" -- "\$@"
+rc=\$?
+[ \$rc -eq 0 ] || echo "\$(date +%T) rc=\$rc \$host \$*" | cut -c1-200 >> $REPO/build/pi4-bin/ssh.log
+exit \$rc
+EOF
+	chmod +x build/pi4-bin/ssh
+	export PATH=$REPO/build/pi4-bin:$PATH
 	if [ "$verb" = tally ]; then exec tools/board.sh pi4 tally "$REC"; fi
 	[ $# -gt 0 ] && export TREE_ROWS=$1
 	export TREE_IMAGE_DIR=$IMG
