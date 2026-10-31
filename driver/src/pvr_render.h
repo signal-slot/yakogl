@@ -126,14 +126,28 @@ struct pvr_render_frag_regs {
 	 * 22-23 (driver/docs/gpu-recipes/coeff_base_analysis.md). Appended after
 	 * cmd_flags, so no earlier offset moved. */
 	uint64_t isp_oclqry_base;
+	/* The partial render's background object (CR_PDS_BGRND0/1/3 of the
+	 * program that loads the SPM scratch back when a render resumes after a
+	 * partial render; Mesa pds_pr_bgnd, next to pds_bgnd). Zero until the
+	 * backend builds it; the driver writes it into the 3D command only with
+	 * the partial-render knob. Appended, so no earlier offset moved. */
+	uint64_t pds_pr_bgnd[3];
 };
 
-/* One render = one GEOM kick + one FRAG kick on the same HWRT dataset. */
+/* One render = one GEOM kick + one FRAG kick on the same HWRT dataset.
+ * With the partial-render knob the driver queues a second fragment command
+ * (3D_PR) the firmware runs when the geometry phase runs out of parameter
+ * memory: frag_pr is its register block, frag_pr_valid says the backend
+ * filled it (0: no PR command is queued for this kick). A whole
+ * pvr_render_frag_regs rather than the subset Mesa changes: one struct type
+ * on both sides of the ABI, built into a command by the same code. */
 struct pvr_render_kick {
 	uint32_t width, height;         /* render target size (selects the HWRT dataset) */
 	uint32_t samples;               /* 1, 2 or 4 samples per pixel (0 = 1) */
 	struct pvr_render_geom_regs geom;
 	struct pvr_render_frag_regs frag;
+	uint32_t frag_pr_valid;
+	struct pvr_render_frag_regs frag_pr;
 };
 
 /* One-time initialisation after pvr_fw_boot() succeeded. Idempotent. */

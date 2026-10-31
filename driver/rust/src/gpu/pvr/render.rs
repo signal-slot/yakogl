@@ -101,7 +101,9 @@ pub(super) fn geom_ufo_slot(seq: u32) -> u32 {
 
 // ---- the shared structs ---------------------------------------------------------
 
-/// `struct pvr_render_kick` (driver/src/pvr_render.h).
+/// `struct pvr_render_kick` (driver/src/pvr_render.h). `frag_pr` is the
+/// register block of the partial render's 3D command (3D_PR), valid when
+/// `frag_pr_valid` is 1; src/osal/render.rs has why it is a whole block.
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct PvrRenderKick {
@@ -110,6 +112,8 @@ pub struct PvrRenderKick {
     pub samples: u32,
     pub geom: PvrRenderGeomRegs,
     pub frag: PvrRenderFragRegs,
+    pub frag_pr_valid: u32,
+    pub frag_pr: PvrRenderFragRegs,
 }
 
 #[repr(C)]
@@ -143,10 +147,16 @@ pub struct PvrRenderFragRegs {
     /// CR_ISP_OCLQRY_BASE: the visibility-test counters (RGXFWIF_CMD3D
     /// dwords 22-23), 0 when no object of the render tests.
     pub isp_oclqry_base: u64,
+    /// The partial render's background object (CR_PDS_BGRND0/1/3 of the
+    /// program that loads the SPM scratch back when a render resumes after
+    /// a partial render; Mesa `pds_pr_bgnd`). Written into the command at
+    /// [`CMD3D_PDS_PR_BGND_DW`] with the partial-render knob only.
+    pub pds_pr_bgnd: [u64; 3],
 }
 
 const _: () = {
-    assert!(size_of::<PvrRenderKick>() == 216);
+    assert!(size_of::<PvrRenderFragRegs>() == 208);
+    assert!(size_of::<PvrRenderKick>() == 456);
     assert!(offset_of!(PvrRenderKick, geom) == 16);
     assert!(offset_of!(PvrRenderKick, frag) == 32);
     assert!(offset_of!(PvrRenderKick, frag) + offset_of!(PvrRenderFragRegs, pbe_word) == 80);
@@ -155,7 +165,32 @@ const _: () = {
     assert!(offset_of!(PvrRenderKick, frag) + offset_of!(PvrRenderFragRegs, isp_scissor_base) == 160);
     assert!(offset_of!(PvrRenderKick, frag) + offset_of!(PvrRenderFragRegs, cmd_flags) == 200);
     assert!(offset_of!(PvrRenderKick, frag) + offset_of!(PvrRenderFragRegs, isp_oclqry_base) == 208);
+    assert!(offset_of!(PvrRenderKick, frag) + offset_of!(PvrRenderFragRegs, pds_pr_bgnd) == 216);
+    assert!(offset_of!(PvrRenderKick, frag_pr_valid) == 240);
+    assert!(offset_of!(PvrRenderKick, frag_pr) == 248);
 };
+
+/// The dword of `pds_pr_bgnd[0]` in RGXFWIF_CMD3D ([`cmd3d_words`]).
+///
+/// The vendored DDK defines only the command's shared block and the size
+/// check of RGXFWIF_CMD3D (rgx_fwif_alignchecks.h:88-90); the 3D register
+/// block is a user-mode struct it does not carry, so driver/tools/offsetof
+/// cannot pin this one. It is placed by count. The command is 320 bytes (80
+/// dwords, DDK capture); the register block runs from dword 4 to 75 (flags
+/// at 76, then the zls/sls strides and execute_count); its 64-bit registers
+/// start at 18 (six bases), the PBE words at 30 (two per target, four
+/// dwords apart, measured on the board) and the background words
+/// `pds_bgnd` at 70..75 (every clear on the board runs through them). Mesa's
+/// generic block (pvr_rogue_fwif.h:299-307) with every field this core lacks
+/// removed (fb_cdc_zls, the BRN 65101 copies, the dummy stores) is
+/// `pbe_word[8][2]` at 30..61, the TPU border colour table at 62..63, one
+/// background triple at 64..69 and the other at 70..75: exactly 320 bytes,
+/// and 64..69 is the one slot beside `pds_bgnd` that no written field uses.
+/// PROVISIONAL until a DDK capture of a 3D command with a PR background, or
+/// the first knob-on partial render on the board, confirms it (a wrong slot
+/// shows at the resumed render's load). A change is this one number and
+/// `tools/cts/pvr-cmd3d-decode.py --pr-bgnd-dw`.
+const CMD3D_PDS_PR_BGND_DW: usize = 64;
 
 /// `struct yd_pvr_hwrt`: one render-target dataset (an HWRT data and its
 /// buffers).
@@ -221,11 +256,13 @@ pub struct YdPvrRenderCfg {
     /// lists with no reserve).
     pub fl_grow_on_demand: u32,
     /// Hand the firmware its partial render: the geometry command's PR fence
-    /// words and, per kick, a FENCE_PR, a 3D_PR (a copy of the 3D command)
-    /// and an UPDATE on a geometry timeline word
-    /// (`CONFIG_YAKOGL_DRV_GPU_PVR_PARTIAL_RENDER`; docs/notes/pvr-render-pool.md,
-    /// "Design: the firmware's partial render"). Without it every command
-    /// and word is what it was without the knob.
+    /// words and, per kick whose `frag_pr` block is valid, a FENCE_PR, a
+    /// 3D_PR (built from that block) and an UPDATE on a geometry timeline
+    /// word (`CONFIG_YAKOGL_DRV_GPU_PVR_PARTIAL_RENDER`;
+    /// docs/notes/pvr-render-pool.md, "Design: the firmware's partial
+    /// render"). A kick without the block queues today's trio alone and is
+    /// counted (`kicks_without_pr`). Without the knob every command and
+    /// word is what it was without the knob.
     pub partial_render: u32,
 }
 
@@ -298,6 +335,10 @@ pub struct YdPvrRender {
     /// The application's scene mark (feature `pvr-grow-scene`; zero
     /// without it).
     pub grow_scene: YdPvrGrowScene,
+    /// Kicks submitted with the partial-render knob and no valid PR block
+    /// (`PvrRenderKick::frag_pr_valid` 0), so no PR trio was queued for
+    /// them ([`pr_report`], the run-end line).
+    pub kicks_without_pr: u32,
 }
 
 /// `struct yd_pvr_grow_scene`: where the application's current scene began
@@ -339,7 +380,9 @@ const _: () = {
     assert!(offset_of!(YdPvrRender, kick_times) == 864 + 176 * HWRT_SETS);
     assert!(offset_of!(YdPvrRender, grow_scene) == 864 + 176 * HWRT_SETS + size_of::<YdPvrKickTimes>());
     assert!(size_of::<YdPvrGrowScene>() == 16);
-    assert!(size_of::<YdPvrRender>() == 864 + 176 * HWRT_SETS + size_of::<YdPvrKickTimes>() + 16);
+    assert!(offset_of!(YdPvrRender, kicks_without_pr) == 864 + 176 * HWRT_SETS + size_of::<YdPvrKickTimes>() + 16);
+    // kicks_without_pr is 4 bytes; the struct is 8-aligned, so 8.
+    assert!(size_of::<YdPvrRender>() == 864 + 176 * HWRT_SETS + size_of::<YdPvrKickTimes>() + 16 + 8);
 };
 
 // ---- helpers ----------------------------------------------------------------------
@@ -1312,6 +1355,56 @@ fn mc_probe_after_kick(k: &mut YdPvrKm, r: &mut YdPvrRender) {
 
 // ---- submit -------------------------------------------------------------------------
 
+/// RGXFWIF_CMD3D (80 dwords; past CMDTA3D_SHARED a value from DDK capture)
+/// from one fragment register block: the 3D command from the kick's `frag`,
+/// and with the knob the 3D_PR from its `frag_pr` ([`submit`]). `pr` is the
+/// partial-render knob: `pds_pr_bgnd` is written only with it, so without
+/// the knob every dword is what it was before the field existed.
+fn cmd3d_words(hrt_fwaddr: u32, f: &PvrRenderFragRegs, pr: bool) -> [u32; 80] {
+    let mut dk = [0u32; 80];
+    dk[CMDTA3D_SHARED_HWRT_DATA / 4] = hrt_fwaddr;
+    dk[4] = f.usc_pixel_output_ctrl;
+    dk[5..9].copy_from_slice(&f.usc_clear_register);
+    dk[9] = f.isp_bgobjdepth;
+    dk[10] = f.isp_bgobjvals;
+    dk[11] = f.isp_aa;
+    dk[12] = f.isp_ctl;
+    dk[13] = f.event_pixel_pds_info;
+    dk[15] = f.event_pixel_pds_data;
+    // dw18..29: isp_scissor/dbias/oclqry/zlsctl/zload/stencil bases
+    // (docs/gpu-recipes/coeff_base_analysis.md, the DDK 25.2 layout)
+    let lohi = |dk: &mut [u32; 80], i: usize, v: u64| {
+        dk[i] = v as u32;
+        dk[i + 1] = (v >> 32) as u32;
+    };
+    lohi(&mut dk, 18, f.isp_scissor_base);
+    lohi(&mut dk, 20, f.isp_dbias_base);
+    lohi(&mut dk, 22, f.isp_oclqry_base);
+    lohi(&mut dk, 24, f.isp_zlsctl);
+    lohi(&mut dk, 26, f.isp_zload_store_base);
+    lohi(&mut dk, 28, f.isp_stencil_load_store_base);
+    // pbe_word[8][3] in the firmware's 3D registers, PBE_STRIDE_DW apart
+    let nrt = (if f.num_rt != 0 { f.num_rt } else { 1 }).min(MAX_RT as u32) as usize;
+    for (i, pbe) in f.pbe_word.iter().enumerate().take(nrt) {
+        let o = 30 + i * PBE_STRIDE_DW;
+        lohi(&mut dk, o, pbe[0]);
+        lohi(&mut dk, o + 2, pbe[1]);
+    }
+    if pr {
+        // The partial render's background object, at its provisional slot
+        // (CMD3D_PDS_PR_BGND_DW has the count).
+        lohi(&mut dk, CMD3D_PDS_PR_BGND_DW, f.pds_pr_bgnd[0]);
+        lohi(&mut dk, CMD3D_PDS_PR_BGND_DW + 2, f.pds_pr_bgnd[1]);
+        lohi(&mut dk, CMD3D_PDS_PR_BGND_DW + 4, f.pds_pr_bgnd[2]);
+    }
+    lohi(&mut dk, 70, f.pds_bgnd[0]);
+    lohi(&mut dk, 72, f.pds_bgnd[1]);
+    lohi(&mut dk, 74, f.pds_bgnd[2]);
+    dk[76] = f.cmd_flags; // RGXFWIF_CMD3D.flags (dw77/78: zls/sls stride, RTAs only)
+    dk[79] = 0x0000_0001; // execute_count: value from DDK capture
+    dk
+}
+
 /// Kick one render (geometry then fragment) with the caller's register
 /// blocks; `fence_out` is the sequence `wait_for` waits on.
 pub fn submit(k: &mut YdPvrKm, r: &mut YdPvrRender, kick: &PvrRenderKick, fence_out: &mut u32) -> i32 {
@@ -1396,46 +1489,11 @@ pub fn submit(k: &mut YdPvrKm, r: &mut YdPvrRender, kick: &PvrRenderKick, fence_
         r.gwo = gwo;
     }
 
-    // FRAG: with the knob the PR trio FENCE_PR + 3D_PR + UPDATE (geometry
-    // timeline), then FENCE (geometry UFO) + RGXFWIF_CMD3D (80 dwords; past
-    // CMDTA3D_SHARED a value from DDK capture; the 3D_PR body is a copy of
-    // it) + UPDATE (fragment UFO = seq).
+    // FRAG: with the knob and a valid PR block the PR trio FENCE_PR + 3D_PR
+    // (from `frag_pr`) + UPDATE (geometry timeline), then FENCE (geometry
+    // UFO) + RGXFWIF_CMD3D (from `frag`) + UPDATE (fragment UFO = seq).
     {
-        let f = &kick.frag;
-        let mut dk = [0u32; 80];
-        dk[CMDTA3D_SHARED_HWRT_DATA / 4] = hrt_fwaddr;
-        dk[4] = f.usc_pixel_output_ctrl;
-        dk[5..9].copy_from_slice(&f.usc_clear_register);
-        dk[9] = f.isp_bgobjdepth;
-        dk[10] = f.isp_bgobjvals;
-        dk[11] = f.isp_aa;
-        dk[12] = f.isp_ctl;
-        dk[13] = f.event_pixel_pds_info;
-        dk[15] = f.event_pixel_pds_data;
-        // dw18..29: isp_scissor/dbias/oclqry/zlsctl/zload/stencil bases
-        // (docs/gpu-recipes/coeff_base_analysis.md, the DDK 25.2 layout)
-        let lohi = |dk: &mut [u32; 80], i: usize, v: u64| {
-            dk[i] = v as u32;
-            dk[i + 1] = (v >> 32) as u32;
-        };
-        lohi(&mut dk, 18, f.isp_scissor_base);
-        lohi(&mut dk, 20, f.isp_dbias_base);
-        lohi(&mut dk, 22, f.isp_oclqry_base);
-        lohi(&mut dk, 24, f.isp_zlsctl);
-        lohi(&mut dk, 26, f.isp_zload_store_base);
-        lohi(&mut dk, 28, f.isp_stencil_load_store_base);
-        // pbe_word[8][3] in the firmware's 3D registers, PBE_STRIDE_DW apart
-        let nrt = (if f.num_rt != 0 { f.num_rt } else { 1 }).min(MAX_RT as u32) as usize;
-        for (i, pbe) in f.pbe_word.iter().enumerate().take(nrt) {
-            let o = 30 + i * PBE_STRIDE_DW;
-            lohi(&mut dk, o, pbe[0]);
-            lohi(&mut dk, o + 2, pbe[1]);
-        }
-        lohi(&mut dk, 70, f.pds_bgnd[0]);
-        lohi(&mut dk, 72, f.pds_bgnd[1]);
-        lohi(&mut dk, 74, f.pds_bgnd[2]);
-        dk[76] = f.cmd_flags; // RGXFWIF_CMD3D.flags (dw77/78: zls/sls stride, RTAs only)
-        dk[79] = 0x0000_0001; // execute_count: value from DDK capture
+        let dk = cmd3d_words(hrt_fwaddr, &kick.frag, pr);
         if r.cfg.verbose != 0 {
             let mut i = 0;
             while i < 80 {
@@ -1457,26 +1515,39 @@ pub fn submit(k: &mut YdPvrKm, r: &mut YdPvrRender, kick: &PvrRenderKick, fence_
             }
         }
         let mut fwo = r.fwo;
+        // The PR trio only when the backend handed a PR command. With the
+        // knob and no valid block the kick is counted and the fragment CCB
+        // holds today's trio alone: a refusal at A = 0 then stops as it does
+        // without the knob, no worse (the design's "kicks without a PR
+        // command"). The geometry side keeps its PR fence words and timeline
+        // UPDATE either way, so a later kick's FENCE_PR still finds timeline
+        // == its seq.
+        let pr_cmd = pr && kick.frag_pr_valid != 0;
+        if pr && !pr_cmd {
+            r.kicks_without_pr = r.kicks_without_pr.wrapping_add(1);
+        }
         // One trio (FENCE + 3D + UPDATE) today's shape; the PR trio adds an
         // equal amount (bodies padded to 16).
         let need = 16 + 16 + 16 + 320 + 16 + 16;
-        ring_reserve(k, fring, &mut fwo, if pr { 2 * need } else { need });
-        if pr {
+        ring_reserve(k, fring, &mut fwo, if pr_cmd { 2 * need } else { need });
+        if pr_cmd {
             // The partial-render trio first, the order of Linux
             // drm/imagination's fragment queue (pvr_queue.c:698-737):
             // FENCE_PR on the geometry timeline at seq (satisfied exactly
             // when this kick's geometry UPDATE has run), the 3D_PR, and its
-            // UPDATE. The 3D_PR body is a byte copy of the 3D command below:
-            // for an ordinary single-pass render Mesa builds it exactly so -
-            // same attachments, same EOT data, same Z/S and background words
-            // (pvr_arch_cmd_buffer.c:1736-1747, pvr_arch_job_render.c:1353-
-            // 1407) - and the firmware never executes it unless a partial
-            // render is pending. Its UPDATE rewrites the timeline with the
-            // same seq (not seq + 1: the next kick's geometry fence names
-            // seq by equality, and the firmware's UFO test is an equality
-            // test, ctx_init) - a no-op while no partial render is pending.
+            // UPDATE. The 3D_PR body is the 3D command built from the kick's
+            // `frag_pr` block by the code that builds the 3D below: Mesa's
+            // PR command is the fragment command with the PBE words and the
+            // EOT program pointed at the SPM scratch and its own Z/S words
+            // (pvr_arch_job_render.c:1353-1407), and the backend hands both
+            // blocks. The firmware never executes it unless a partial render
+            // is pending. Its UPDATE rewrites the timeline with the same seq
+            // (not seq + 1: the next kick's geometry fence names seq by
+            // equality, and the firmware's UFO test is an equality test,
+            // ctx_init) - a no-op while no partial render is pending.
+            let dkp = cmd3d_words(hrt_fwaddr, &kick.frag_pr, true);
             ring_put(k, fring, &mut fwo, CCB_CMD_TYPE_FENCE_PR, &ufo_bytes(timeline_fa, seq));
-            ring_put(k, fring, &mut fwo, CCB_CMD_TYPE_3D_PR, &words_bytes::<80, 320>(&dk));
+            ring_put(k, fring, &mut fwo, CCB_CMD_TYPE_3D_PR, &words_bytes::<80, 320>(&dkp));
             ring_put(k, fring, &mut fwo, CCB_CMD_TYPE_UPDATE, &ufo_bytes(timeline_fa, seq));
         }
         // The FENCE on the geometry UFO first: the firmware schedules a 3D as
@@ -2797,6 +2868,25 @@ pub unsafe extern "C" fn yd_pvr_render_grow_report(k: *mut YdPvrKm, since: u32) 
     grow_report(unsafe { km(k) }, since)
 }
 
+/// The run-end line of the partial render, with the knob only (a knob-off
+/// run's log is unchanged): the kicks submitted, and how many of them the
+/// backend handed no PR block for (`kicks_without_pr`), so queued no PR
+/// command.
+pub fn pr_report(k: &mut YdPvrKm, r: &YdPvrRender) {
+    if r.cfg.partial_render == 0 {
+        return;
+    }
+    km_log!(k, Inf, "render partial render: {} kicks submitted, {} without a PR command", r.seq, r.kicks_without_pr);
+}
+
+/// # Safety
+/// `k` and `r` are the C driver's, valid for the call.
+#[no_mangle]
+pub unsafe extern "C" fn yd_pvr_render_pr_report(k: *mut YdPvrKm, r: *const YdPvrRender) {
+    // SAFETY: the caller's contract.
+    pr_report(unsafe { km(k) }, unsafe { &*r })
+}
+
 #[cfg(test)]
 mod owner_tests {
     use super::*;
@@ -3587,12 +3677,13 @@ mod wait_tests {
 mod submit_tests {
     //! The client CCB bytes of [`submit`], knob off and on
     //! (docs/notes/pvr-render-pool.md, "Design: the firmware's partial
-    //! render", host tests): with the knob, the fragment CCB of one kick
-    //! holds, in this order, FENCE_PR {timeline, seq}, 3D_PR (the 3D
-    //! command's size and words), UPDATE, then FENCE, 3D, UPDATE, and the
-    //! geometry command's PR fence words are {timeline, seq - 1}. Without
-    //! the knob, the bytes are today's (the km render record unchanged).
-    //! Today's code fails the first test: it is the design's known negative.
+    //! render", host tests): with the knob and a kick whose PR block is
+    //! valid, the fragment CCB of one kick holds, in this order, FENCE_PR
+    //! {timeline, seq}, 3D_PR (the 3D command built from `frag_pr`), UPDATE,
+    //! then FENCE, 3D, UPDATE, and the geometry command's PR fence words are
+    //! {timeline, seq - 1}. With the knob and no PR block, today's trio alone
+    //! and the kick counted. Without the knob, the bytes are today's (the km
+    //! render record unchanged), whatever the kick's PR block holds.
     use super::*;
     use crate::gpu::pvr::km::YdPvrKmOps;
     use std::cell::RefCell;
@@ -3761,6 +3852,30 @@ mod submit_tests {
         c
     }
 
+    /// `kick(tag)` with a valid PR block: `frag_pr` is `frag` with the
+    /// fields Mesa's PR command changes set to other values of the same tag
+    /// (the first target's PBE words, the EOT data address, the Z/S words,
+    /// the flags) and the PR background words set. `frag.pds_pr_bgnd` stays
+    /// zero, so the 3D command is `kick(tag)`'s.
+    fn kick_pr(tag: u32) -> PvrRenderKick {
+        let mut c = kick(tag);
+        let o = |x: u32| x * 0x1000 + tag;
+        // 64-bit values with both halves set, so a test on the dwords of a
+        // field sees the high half differ too.
+        let v = |x: u32| (u64::from(x) << 32) | u64::from(o(x));
+        let r = |x: u32| x * 0x10000 + tag;
+        c.frag_pr = c.frag;
+        c.frag_pr_valid = 1;
+        c.frag_pr.pbe_word[0] = [v(0xA0), v(0xB0)];
+        c.frag_pr.event_pixel_pds_data = o(0xC0);
+        c.frag_pr.isp_zlsctl = v(0xD0);
+        c.frag_pr.isp_zload_store_base = v(0xD1);
+        c.frag_pr.isp_stencil_load_store_base = v(0xD2);
+        c.frag_pr.cmd_flags = r(0xAA);
+        c.frag_pr.pds_pr_bgnd = [v(0xE0), v(0xE1), v(0xE2)];
+        c
+    }
+
     impl Rig {
         /// The commands written into a client CCB so far, as (type, size,
         /// body dwords). The rings never wrapped during a test (the reserve
@@ -3801,18 +3916,18 @@ mod submit_tests {
     const GEOM_BYTES: [u32; 2] = [16 + 64 + 16 + 16, 16 + 64 + 16 + 16 + 16 + 16];
     const FRAG_BYTES: [u32; 2] = [16 + 16 + 16 + 320 + 16 + 16, 2 * (16 + 16 + 16 + 320 + 16 + 16)];
 
-    /// With the knob: the fragment CCB gains FENCE_PR + 3D_PR + UPDATE on
-    /// the geometry timeline before today's trio, and the geometry command
-    /// carries {timeline, seq - 1} and a second UPDATE to the timeline.
-    /// Today's code fails this test (the design's known negative).
+    /// With the knob and a PR block: the fragment CCB gains FENCE_PR + 3D_PR
+    /// + UPDATE on the geometry timeline before today's trio, and the
+    /// geometry command carries {timeline, seq - 1} and a second UPDATE to
+    /// the timeline.
     #[test]
     fn with_the_knob_the_pr_trio_comes_first_on_both_ccbs() {
         let mut t = rig(1);
         let gufo_base = t.k.heap_fwaddr(GUFO);
         let timeline = gufo_base + 4 * GEOM_UFO_SLOTS;
         let (mut f1, mut f2) = (0u32, 0u32);
-        assert_eq!(submit(&mut t.k, &mut t.r, &kick(1), &mut f1), 0, "log:\n{}", t.log());
-        assert_eq!(submit(&mut t.k, &mut t.r, &kick(2), &mut f2), 0, "log:\n{}", t.log());
+        assert_eq!(submit(&mut t.k, &mut t.r, &kick_pr(1), &mut f1), 0, "log:\n{}", t.log());
+        assert_eq!(submit(&mut t.k, &mut t.r, &kick_pr(2), &mut f2), 0, "log:\n{}", t.log());
         assert_eq!((f1, f2), (1, 2));
         assert_eq!((t.r.gwo, t.r.fwo), (2 * GEOM_BYTES[1], 2 * FRAG_BYTES[1]));
 
@@ -3845,19 +3960,136 @@ mod submit_tests {
         assert_eq!(Rig::ufo(&g[5].2), (timeline, 2));
 
         // The fragment PR trio: FENCE_PR waits at the timeline's value seq,
-        // the 3D_PR is the 3D command's own bytes (its size 320), and the
-        // UPDATE rewrites the timeline with the same seq.
+        // the 3D_PR is the 3D command built from the kick's PR block (its
+        // size 320), and the UPDATE rewrites the timeline with the same seq.
         let fp = &f[6];
         assert_eq!((fp.1, fp.2.len()), (16, 4));
         assert_eq!(Rig::ufo(&fp.2), (timeline, 2));
         assert_eq!((f[7].1, f[7].2.len()), (320, 80));
-        assert_eq!(f[7].2, f[10].2, "the 3D_PR body is the 3D command's");
-        assert!(f[7].2.iter().any(|&w| w != 0), "the copy carries the kick's words");
+        let hrt1 = t.k.heap_fwaddr(HRT1);
+        assert_eq!(f[7].2, cmd3d_words(hrt1, &kick_pr(2).frag_pr, true), "the 3D_PR body is built from frag_pr");
+        assert_eq!(f[10].2, cmd3d_words(hrt1, &kick_pr(2).frag, true), "the 3D body from frag");
+        assert_ne!(f[7].2, f[10].2);
         assert_eq!(Rig::ufo(&f[8].2), (timeline, 2));
         // And today's trio after it, unchanged: FENCE on the kick's own
         // geometry slot, 3D, UPDATE on the fragment UFO.
         assert_eq!(Rig::ufo(&f[9].2), (gufo_base + geom_ufo_slot(2) * 4, 2));
         assert_eq!(Rig::ufo(&f[11].2), (t.k.heap_fwaddr(FUFO), 2));
+    }
+
+    /// With the knob and a PR block, the 3D_PR body is the 3D command built
+    /// from `frag_pr`: it differs from the 3D body (built from `frag`) in
+    /// exactly the dwords of the fields the block changed - the EOT data
+    /// address (dw15), the Z/S words (dw24..29), the first target's PBE words
+    /// (dw30..33), the PR background words (CMD3D_PDS_PR_BGND_DW..+5) and the
+    /// flags (dw76) - and carries the block's values there. The rest (the
+    /// HWRT data, the ISP words, `pds_bgnd`, execute_count) is the 3D's.
+    #[test]
+    fn with_the_knob_the_3d_pr_body_is_built_from_frag_pr() {
+        let mut t = rig(1);
+        let mut f1 = 0u32;
+        let c = kick_pr(1);
+        assert_eq!(submit(&mut t.k, &mut t.r, &c, &mut f1), 0, "log:\n{}", t.log());
+        let f = t.cmds(FCCCB, t.r.fwo);
+        assert_eq!(f.len(), 6);
+        let (pr, cmd) = (&f[1], &f[4]);
+        assert_eq!((pr.0, pr.1), (CCB_CMD_TYPE_3D_PR, 320));
+        assert_eq!((cmd.0, cmd.1), (CCB_CMD_TYPE_3D, 320));
+        let differ: Vec<usize> = (0..80).filter(|&i| pr.2[i] != cmd.2[i]).collect();
+        let mut want: Vec<usize> = vec![15, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 76];
+        want.extend(CMD3D_PDS_PR_BGND_DW..CMD3D_PDS_PR_BGND_DW + 6);
+        want.sort_unstable();
+        assert_eq!(differ, want);
+        let p = &c.frag_pr;
+        let lo = |v: u64| v as u32;
+        let hi = |v: u64| (v >> 32) as u32;
+        assert_eq!(pr.2[15], p.event_pixel_pds_data);
+        assert_eq!((pr.2[24], pr.2[25]), (lo(p.isp_zlsctl), hi(p.isp_zlsctl)));
+        assert_eq!((pr.2[26], pr.2[27]), (lo(p.isp_zload_store_base), hi(p.isp_zload_store_base)));
+        assert_eq!((pr.2[28], pr.2[29]), (lo(p.isp_stencil_load_store_base), hi(p.isp_stencil_load_store_base)));
+        assert_eq!((pr.2[30], pr.2[31]), (lo(p.pbe_word[0][0]), hi(p.pbe_word[0][0])));
+        assert_eq!((pr.2[32], pr.2[33]), (lo(p.pbe_word[0][1]), hi(p.pbe_word[0][1])));
+        for i in 0..3 {
+            let d = CMD3D_PDS_PR_BGND_DW + 2 * i;
+            assert_eq!((pr.2[d], pr.2[d + 1]), (lo(p.pds_pr_bgnd[i]), hi(p.pds_pr_bgnd[i])));
+            // the 3D command's PR background words: frag.pds_pr_bgnd is 0
+            assert_eq!((cmd.2[d], cmd.2[d + 1]), (0, 0));
+        }
+        assert_eq!(pr.2[76], p.cmd_flags);
+        assert_eq!(pr.2[1], cmd.2[1]);
+        assert_eq!(pr.2[70..76], cmd.2[70..76]);
+        assert_eq!((pr.2[79], cmd.2[79]), (1, 1));
+        assert_eq!(t.r.kicks_without_pr, 0);
+    }
+
+    /// With the knob, `frag.pds_pr_bgnd` lands at its dwords of the 3D
+    /// command (the resumed render's load program); without the knob the
+    /// same kick leaves them zero, as every board record has them.
+    #[test]
+    fn pds_pr_bgnd_lands_in_the_3d_command_with_the_knob_only() {
+        let (mut on, mut off) = (rig(1), rig(0));
+        let mut c = kick(1);
+        c.frag.pds_pr_bgnd = [0x1_0000_0010, 0x2_0000_0020, 0x3_0000_0030];
+        let (mut a, mut b) = (0u32, 0u32);
+        assert_eq!(submit(&mut on.k, &mut on.r, &c, &mut a), 0, "log:\n{}", on.log());
+        assert_eq!(submit(&mut off.k, &mut off.r, &c, &mut b), 0, "log:\n{}", off.log());
+        let d_on = &on.cmds(FCCCB, on.r.fwo)[1].2; // no PR block: FENCE, 3D, UPDATE
+        let d_off = &off.cmds(FCCCB, off.r.fwo)[1].2;
+        let s = CMD3D_PDS_PR_BGND_DW;
+        assert_eq!(d_on[s..s + 6], [0x10, 1, 0x20, 2, 0x30, 3]);
+        assert_eq!(d_off[s..s + 6], [0; 6]);
+        // and nothing else of the 3D body differs between the two
+        for i in (0..80).filter(|i| !(s..s + 6).contains(i)) {
+            assert_eq!(d_on[i], d_off[i], "3D dw{i}");
+        }
+    }
+
+    /// With the knob and no PR block (`frag_pr_valid` 0, the backend before
+    /// the PR frame lands): the fragment CCB holds today's trio alone, no
+    /// FENCE_PR or 3D_PR; the geometry side keeps the knob's words (the PR
+    /// fence {timeline, seq - 1}, the timeline UPDATE); the kick is counted,
+    /// and the run-end line says so. A later kick with a block gets its trio.
+    #[test]
+    fn with_the_knob_and_no_pr_block_the_fragment_ccb_holds_only_todays_trio() {
+        let mut t = rig(1);
+        let gufo_base = t.k.heap_fwaddr(GUFO);
+        let timeline = gufo_base + 4 * GEOM_UFO_SLOTS;
+        let (mut f1, mut f2) = (0u32, 0u32);
+        assert_eq!(submit(&mut t.k, &mut t.r, &kick(1), &mut f1), 0, "log:\n{}", t.log());
+        assert_eq!(submit(&mut t.k, &mut t.r, &kick(2), &mut f2), 0, "log:\n{}", t.log());
+        assert_eq!((t.r.gwo, t.r.fwo), (2 * GEOM_BYTES[1], 2 * FRAG_BYTES[0]));
+        assert_eq!(t.types(GCCCB, t.r.gwo), [CCB_CMD_TYPE_GEOM, CCB_CMD_TYPE_UPDATE, CCB_CMD_TYPE_UPDATE].repeat(2));
+        assert_eq!(t.types(FCCCB, t.r.fwo), [CCB_CMD_TYPE_FENCE, CCB_CMD_TYPE_3D, CCB_CMD_TYPE_UPDATE].repeat(2));
+        let g = t.cmds(GCCCB, t.r.gwo);
+        assert_eq!((g[3].2[13], g[3].2[14]), (timeline, 1));
+        assert_eq!(Rig::ufo(&g[5].2), (timeline, 2));
+        let f = t.cmds(FCCCB, t.r.fwo);
+        assert_eq!(Rig::ufo(&f[3].2), (gufo_base + geom_ufo_slot(2) * 4, 2));
+        assert_eq!(f[4].2, cmd3d_words(t.k.heap_fwaddr(HRT1), &kick(2).frag, true));
+        assert_eq!(Rig::ufo(&f[5].2), (t.k.heap_fwaddr(FUFO), 2));
+        assert_eq!(t.r.kicks_without_pr, 2);
+        // A third kick with a block: its trio, and the count stays.
+        let mut f3 = 0u32;
+        assert_eq!(submit(&mut t.k, &mut t.r, &kick_pr(3), &mut f3), 0, "log:\n{}", t.log());
+        assert_eq!(t.r.fwo, 2 * FRAG_BYTES[0] + FRAG_BYTES[1]);
+        assert_eq!(
+            t.types(FCCCB, t.r.fwo)[6..].to_vec(),
+            [
+                CCB_CMD_TYPE_FENCE_PR,
+                CCB_CMD_TYPE_3D_PR,
+                CCB_CMD_TYPE_UPDATE,
+                CCB_CMD_TYPE_FENCE,
+                CCB_CMD_TYPE_3D,
+                CCB_CMD_TYPE_UPDATE
+            ]
+        );
+        assert_eq!(t.r.kicks_without_pr, 2);
+        pr_report(&mut t.k, &t.r);
+        assert!(
+            t.log().contains("render partial render: 3 kicks submitted, 2 without a PR command"),
+            "log:\n{}",
+            t.log()
+        );
     }
 
     /// Kicks of one size that have not completed (#42: the levels of a
@@ -3892,14 +4124,18 @@ mod submit_tests {
     /// Without the knob: the commands are the ones every board record holds
     /// today - GEOM + one UPDATE per kick, FENCE + 3D + UPDATE per kick -
     /// the old partial-render fence words of the geometry command untouched
-    /// (the slot address, value 0), and no FENCE_PR or 3D_PR anywhere.
+    /// (the slot address, value 0), no FENCE_PR or 3D_PR anywhere, and the
+    /// kick's PR block and PR background words ignored: the 3D body is the
+    /// one built before the fields existed, and no run-end line.
     #[test]
     fn without_the_knob_the_commands_are_todays() {
         let mut t = rig(0);
         let gufo_base = t.k.heap_fwaddr(GUFO);
         let (mut f1, mut f2) = (0u32, 0u32);
         assert_eq!(submit(&mut t.k, &mut t.r, &kick(1), &mut f1), 0, "log:\n{}", t.log());
-        assert_eq!(submit(&mut t.k, &mut t.r, &kick(2), &mut f2), 0, "log:\n{}", t.log());
+        let mut c2 = kick_pr(2);
+        c2.frag.pds_pr_bgnd = [7, 8, 9];
+        assert_eq!(submit(&mut t.k, &mut t.r, &c2, &mut f2), 0, "log:\n{}", t.log());
         assert_eq!((f1, f2), (1, 2));
         assert_eq!((t.r.gwo, t.r.fwo), (2 * GEOM_BYTES[0], 2 * FRAG_BYTES[0]));
 
@@ -3909,20 +4145,27 @@ mod submit_tests {
         assert_eq!((g2.2[13], g2.2[14]), (gufo_base + geom_ufo_slot(2) * 4, 0));
         assert_eq!(Rig::ufo(&t.cmds(FCCCB, t.r.fwo)[0].2), (gufo_base + geom_ufo_slot(1) * 4, 1));
         assert_eq!(Rig::ufo(&t.cmds(FCCCB, t.r.fwo)[2].2), (t.k.heap_fwaddr(FUFO), 1));
+        let d3 = &t.cmds(FCCCB, t.r.fwo)[4].2;
+        assert_eq!(d3[CMD3D_PDS_PR_BGND_DW..CMD3D_PDS_PR_BGND_DW + 6], [0; 6]);
+        assert_eq!(*d3, cmd3d_words(t.k.heap_fwaddr(HRT1), &kick(2).frag, false));
+        assert_eq!(t.r.kicks_without_pr, 0);
+        let n = t.sim.lines.borrow().len();
+        pr_report(&mut t.k, &t.r);
+        assert_eq!(t.sim.lines.borrow().len(), n, "no partial-render line without the knob");
     }
 
     /// The knob adds the PR commands and their geometry words, and nothing
     /// else: the 3D body, the FENCE and the trailing UPDATE, and every other
     /// geometry word, are byte-identical between knob on and knob off for
-    /// the same kick.
+    /// the same kick (one with a PR block, so the knob queues its trio).
     #[test]
     fn the_knob_changes_only_the_pr_commands_and_the_geometry_fence_words() {
         // Both rigs start at seq 0, so the same kick sequence lines up.
         let (mut on, mut off) = (rig(1), rig(0));
         for tag in 1..=2u32 {
             let (mut a, mut b) = (0u32, 0u32);
-            assert_eq!(submit(&mut on.k, &mut on.r, &kick(tag), &mut a), 0, "log:\n{}", on.log());
-            assert_eq!(submit(&mut off.k, &mut off.r, &kick(tag), &mut b), 0, "log:\n{}", off.log());
+            assert_eq!(submit(&mut on.k, &mut on.r, &kick_pr(tag), &mut a), 0, "log:\n{}", on.log());
+            assert_eq!(submit(&mut off.k, &mut off.r, &kick_pr(tag), &mut b), 0, "log:\n{}", off.log());
             // GEOM: knob off writes 2 commands per kick, knob on 3.
             let g = on.cmds(GCCCB, on.r.gwo);
             let h = off.cmds(GCCCB, off.r.gwo);

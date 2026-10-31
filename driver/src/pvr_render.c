@@ -187,6 +187,7 @@ void pvr_render_pool_report(void)
 	if (R.inited) {
 		yd_pvr_pool_report(&g_pool, pvr_km(), pool_bumps());
 		yd_pvr_render_grow_report(pvr_km(), g_hwr_at_init);
+		yd_pvr_render_pr_report(pvr_km(), &RR);
 	}
 }
 
@@ -720,8 +721,11 @@ int pvr_render_init(void)
 /* ---------------------------------------------------------------------- *
  * Submit / wait: gpu::pvr::render (render.rs has the sequences and why).
  * ---------------------------------------------------------------------- */
-BUILD_ASSERT(sizeof(struct pvr_render_kick) == 216, "gpu::pvr::render::PvrRenderKick");
+BUILD_ASSERT(sizeof(struct pvr_render_kick) == 456, "gpu::pvr::render::PvrRenderKick");
 BUILD_ASSERT(offsetof(struct pvr_render_kick, frag) == 32, "PvrRenderKick.frag");
+BUILD_ASSERT(offsetof(struct pvr_render_kick, frag.pds_pr_bgnd) == 216, "PvrRenderKick.frag.pds_pr_bgnd");
+BUILD_ASSERT(offsetof(struct pvr_render_kick, frag_pr_valid) == 240, "PvrRenderKick.frag_pr_valid");
+BUILD_ASSERT(offsetof(struct pvr_render_kick, frag_pr) == 248, "PvrRenderKick.frag_pr");
 BUILD_ASSERT(offsetof(struct pvr_render_kick, frag.pbe_word) == 80, "PvrRenderKick.frag.pbe_word");
 BUILD_ASSERT(offsetof(struct pvr_render_kick, frag.num_rt) == 128, "PvrRenderKick.frag.num_rt");
 BUILD_ASSERT(offsetof(struct pvr_render_kick, frag.pds_bgnd) == 136, "PvrRenderKick.frag.pds_bgnd");
