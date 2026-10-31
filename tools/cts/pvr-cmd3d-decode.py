@@ -25,9 +25,11 @@ its flag word belong to a DDK user-mode struct they do not define. Those
 offsets are the ones the driver writes (render.rs, cited per field, taken from
 the DDK capture: driver/docs/gpu-recipes/coeff_base_analysis.md section 1).
 A dword no source places prints as `(unplaced)`; a flag bit no source names
-prints as `unnamed 0x...`. pds_pr_bgnd's dword is not placed anywhere yet
-(docs/notes/pvr-render-pool.md, "Open, where pds_pr_bgnd sits"); pass
---pr-bgnd-dw N once a capture places it.
+prints as `unnamed 0x...`. pds_pr_bgnd's dword is placed by count only, not
+by a capture: the driver writes it at dword 64 with the partial-render knob
+(render.rs CMD3D_PDS_PR_BGND_DW, marked provisional; docs/notes/
+pvr-render-pool.md, "Open, where pds_pr_bgnd sits"); pass --pr-bgnd-dw 64 to
+name those dwords, or the dword a capture places it at.
 
     pvr-cmd3d-decode.py [--pr-bgnd-dw N] [LOG]
 """
@@ -137,7 +139,8 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("log", nargs="?", help="serial log (default stdin)")
     ap.add_argument("--pr-bgnd-dw", type=lambda s: int(s, 0), default=None,
-                    help="dword of pds_pr_bgnd[0].lo, once a DDK capture places it")
+                    help="dword of pds_pr_bgnd[0].lo (the driver's provisional slot is 64, "
+                    "render.rs CMD3D_PDS_PR_BGND_DW; a DDK capture may place it elsewhere)")
     a = ap.parse_args()
     f = open(a.log, errors="replace") if a.log else sys.stdin
     recs = []

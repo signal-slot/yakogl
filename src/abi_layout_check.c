@@ -75,7 +75,7 @@ _Static_assert(sizeof(struct pvr_render_geom_regs) == 16, "struct pvr_render_geo
 _Static_assert(offsetof(struct pvr_render_geom_regs, vdm_ctrl_stream_base) == 0, "struct pvr_render_geom_regs.vdm_ctrl_stream_base");
 _Static_assert(offsetof(struct pvr_render_geom_regs, ppp_ctrl) == 8, "struct pvr_render_geom_regs.ppp_ctrl");
 _Static_assert(offsetof(struct pvr_render_geom_regs, te_psg) == 12, "struct pvr_render_geom_regs.te_psg");
-_Static_assert(sizeof(struct pvr_render_frag_regs) == 184, "struct pvr_render_frag_regs");
+_Static_assert(sizeof(struct pvr_render_frag_regs) == 208, "struct pvr_render_frag_regs");
 _Static_assert(offsetof(struct pvr_render_frag_regs, usc_pixel_output_ctrl) == 0, "struct pvr_render_frag_regs.usc_pixel_output_ctrl");
 _Static_assert(offsetof(struct pvr_render_frag_regs, usc_clear_register) == 4, "struct pvr_render_frag_regs.usc_clear_register");
 _Static_assert(offsetof(struct pvr_render_frag_regs, isp_bgobjdepth) == 20, "struct pvr_render_frag_regs.isp_bgobjdepth");
@@ -94,12 +94,15 @@ _Static_assert(offsetof(struct pvr_render_frag_regs, isp_zload_store_base) == 15
 _Static_assert(offsetof(struct pvr_render_frag_regs, isp_stencil_load_store_base) == 160, "struct pvr_render_frag_regs.isp_stencil_load_store_base");
 _Static_assert(offsetof(struct pvr_render_frag_regs, cmd_flags) == 168, "struct pvr_render_frag_regs.cmd_flags");
 _Static_assert(offsetof(struct pvr_render_frag_regs, isp_oclqry_base) == 176, "struct pvr_render_frag_regs.isp_oclqry_base");
-_Static_assert(sizeof(struct pvr_render_kick) == 216, "struct pvr_render_kick");
+_Static_assert(offsetof(struct pvr_render_frag_regs, pds_pr_bgnd) == 184, "struct pvr_render_frag_regs.pds_pr_bgnd");
+_Static_assert(sizeof(struct pvr_render_kick) == 456, "struct pvr_render_kick");
 _Static_assert(offsetof(struct pvr_render_kick, width) == 0, "struct pvr_render_kick.width");
 _Static_assert(offsetof(struct pvr_render_kick, height) == 4, "struct pvr_render_kick.height");
 _Static_assert(offsetof(struct pvr_render_kick, samples) == 8, "struct pvr_render_kick.samples");
 _Static_assert(offsetof(struct pvr_render_kick, geom) == 16, "struct pvr_render_kick.geom");
 _Static_assert(offsetof(struct pvr_render_kick, frag) == 32, "struct pvr_render_kick.frag");
+_Static_assert(offsetof(struct pvr_render_kick, frag_pr_valid) == 240, "struct pvr_render_kick.frag_pr_valid");
+_Static_assert(offsetof(struct pvr_render_kick, frag_pr) == 248, "struct pvr_render_kick.frag_pr");
 _Static_assert(sizeof(struct shc_varying) == 36, "struct shc_varying");
 _Static_assert(offsetof(struct shc_varying, location) == 0, "struct shc_varying.location");
 _Static_assert(offsetof(struct shc_varying, components) == 1, "struct shc_varying.components");

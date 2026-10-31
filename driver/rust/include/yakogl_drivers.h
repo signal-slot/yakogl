@@ -806,9 +806,10 @@ struct yd_pvr_render {
 	struct yd_pvr_hwrt hwrt[YD_PVR_HWRT_SETS];
 	struct yd_pvr_kick_times kick_times;   /* zero without pvr-kick-times */
 	struct yd_pvr_grow_scene grow_scene;   /* zero without pvr-grow-scene */
+	uint32_t kicks_without_pr;      /* partial-render knob: kicks with no valid frag_pr block */
 };
 
-/* kick: a struct pvr_render_kick (driver/src/pvr_render.h; 208 bytes). */
+/* kick: a struct pvr_render_kick (driver/src/pvr_render.h; 456 bytes). */
 void yd_pvr_render_ctx_init(struct yd_pvr_km *km, struct yd_pvr_render *r);
 int yd_pvr_render_submit(struct yd_pvr_km *km, struct yd_pvr_render *r, const void *kick,
 			 uint32_t *fence_out);
@@ -819,6 +820,9 @@ uint32_t yd_pvr_render_completed(const struct yd_pvr_km *km, const struct yd_pvr
 uint32_t yd_pvr_render_hwr_counter(const struct yd_pvr_km *km);
 /* the run-end line of freelist grows and GPU recoveries since `since` */
 void yd_pvr_render_grow_report(struct yd_pvr_km *km, uint32_t since);
+/* The run-end line of the partial render (knob on only; nothing without it):
+ * kicks submitted, and kicks the backend handed no PR block for. */
+void yd_pvr_render_pr_report(struct yd_pvr_km *km, const struct yd_pvr_render *r);
 /* The driver's owner lines (statics: page-rounded bytes per heap [general,
  * pds, usc] of the C side's one-time objects, nstatics blocks); returns KiB. */
 uint64_t yd_pvr_render_pool_owners(struct yd_pvr_km *km, const struct yd_pvr_render *r,
@@ -1513,8 +1517,12 @@ _Static_assert(offsetof(struct yd_pvr_render, grow_scene) ==
 		       864 + 176 * YD_PVR_HWRT_SETS + sizeof(struct yd_pvr_kick_times),
 	       "yd_pvr_render.grow_scene");
 _Static_assert(sizeof(struct yd_pvr_grow_scene) == 16, "struct yd_pvr_grow_scene");
+_Static_assert(offsetof(struct yd_pvr_render, kicks_without_pr) ==
+		       864 + 176 * YD_PVR_HWRT_SETS + sizeof(struct yd_pvr_kick_times) + 16,
+	       "yd_pvr_render.kicks_without_pr");
+/* kicks_without_pr is 4 bytes; the struct is 8-aligned, so 8 */
 _Static_assert(sizeof(struct yd_pvr_render) ==
-	       864 + 176 * YD_PVR_HWRT_SETS + sizeof(struct yd_pvr_kick_times) + 16,
+	       864 + 176 * YD_PVR_HWRT_SETS + sizeof(struct yd_pvr_kick_times) + 16 + 8,
 	       "struct yd_pvr_render");
 _Static_assert(sizeof(struct yd_pvr_bo) == 24, "struct yd_pvr_bo");
 _Static_assert(offsetof(struct yd_pvr_bo, heap_off) == 16, "yd_pvr_bo.heap_off");

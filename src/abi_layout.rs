@@ -66,7 +66,7 @@ const _: () = assert!(size_of::<crate::osal::render::PvrRenderGeomRegs>() == 16)
 const _: () = assert!(offset_of!(crate::osal::render::PvrRenderGeomRegs, vdm_ctrl_stream_base) == 0);
 const _: () = assert!(offset_of!(crate::osal::render::PvrRenderGeomRegs, ppp_ctrl) == 8);
 const _: () = assert!(offset_of!(crate::osal::render::PvrRenderGeomRegs, te_psg) == 12);
-const _: () = assert!(size_of::<crate::osal::render::PvrRenderFragRegs>() == 184);
+const _: () = assert!(size_of::<crate::osal::render::PvrRenderFragRegs>() == 208);
 const _: () = assert!(offset_of!(crate::osal::render::PvrRenderFragRegs, usc_pixel_output_ctrl) == 0);
 const _: () = assert!(offset_of!(crate::osal::render::PvrRenderFragRegs, usc_clear_register) == 4);
 const _: () = assert!(offset_of!(crate::osal::render::PvrRenderFragRegs, isp_bgobjdepth) == 20);
@@ -85,12 +85,15 @@ const _: () = assert!(offset_of!(crate::osal::render::PvrRenderFragRegs, isp_zlo
 const _: () = assert!(offset_of!(crate::osal::render::PvrRenderFragRegs, isp_stencil_load_store_base) == 160);
 const _: () = assert!(offset_of!(crate::osal::render::PvrRenderFragRegs, cmd_flags) == 168);
 const _: () = assert!(offset_of!(crate::osal::render::PvrRenderFragRegs, isp_oclqry_base) == 176);
-const _: () = assert!(size_of::<crate::osal::render::PvrRenderKick>() == 216);
+const _: () = assert!(offset_of!(crate::osal::render::PvrRenderFragRegs, pds_pr_bgnd) == 184);
+const _: () = assert!(size_of::<crate::osal::render::PvrRenderKick>() == 456);
 const _: () = assert!(offset_of!(crate::osal::render::PvrRenderKick, width) == 0);
 const _: () = assert!(offset_of!(crate::osal::render::PvrRenderKick, height) == 4);
 const _: () = assert!(offset_of!(crate::osal::render::PvrRenderKick, samples) == 8);
 const _: () = assert!(offset_of!(crate::osal::render::PvrRenderKick, geom) == 16);
 const _: () = assert!(offset_of!(crate::osal::render::PvrRenderKick, frag) == 32);
+const _: () = assert!(offset_of!(crate::osal::render::PvrRenderKick, frag_pr_valid) == 240);
+const _: () = assert!(offset_of!(crate::osal::render::PvrRenderKick, frag_pr) == 248);
 const _: () = assert!(size_of::<crate::shaderc::ShcVarying>() == 36);
 const _: () = assert!(offset_of!(crate::shaderc::ShcVarying, location) == 0);
 const _: () = assert!(offset_of!(crate::shaderc::ShcVarying, components) == 1);

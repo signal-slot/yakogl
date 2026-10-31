@@ -92,9 +92,25 @@ pub struct PvrRenderFragRegs {
     /// CR_ISP_OCLQRY_BASE: the buffer the ISP's visibility test counts into
     /// (one dword per TA_STATE_ISPCTL.visreg), 0 when no object tests.
     pub isp_oclqry_base: u64,
+    /// The partial render's background object (CR_PDS_BGRND0/1/3 of the
+    /// program that loads the SPM scratch back when a render resumes after
+    /// a partial render; Mesa `pds_pr_bgnd`, next to `pds_bgnd`). Zero until
+    /// the backend builds it; the driver writes it into the 3D command only
+    /// with the partial-render knob. Appended after `isp_oclqry_base` so no
+    /// earlier offset moved.
+    pub pds_pr_bgnd: [u64; 3],
 }
 
 /// `struct pvr_render_kick`: one GEOM kick + one FRAG kick on one HWRT dataset.
+///
+/// With the partial-render knob the driver queues a second fragment command
+/// (3D_PR) the firmware runs when the geometry phase runs out of parameter
+/// memory: `frag_pr` is its register block, `frag_pr_valid` says the backend
+/// filled it (0: no PR command is queued for this kick). It is a whole
+/// [`PvrRenderFragRegs`] rather than the subset Mesa changes (PBE words, EOT
+/// data, Z/S): one struct type on both sides of the ABI, built into a command
+/// by the same code, and a field the partial render later needs to differ
+/// (depth/stencil across the PR) needs no ABI change.
 #[repr(C)]
 #[derive(Clone, Copy, Default, Debug)]
 pub struct PvrRenderKick {
@@ -103,4 +119,6 @@ pub struct PvrRenderKick {
     pub samples: u32,
     pub geom: PvrRenderGeomRegs,
     pub frag: PvrRenderFragRegs,
+    pub frag_pr_valid: u32,
+    pub frag_pr: PvrRenderFragRegs,
 }
