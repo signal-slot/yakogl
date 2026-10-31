@@ -13,9 +13,10 @@
 # Environment (nothing about a machine or an address is in this file):
 #   CONNECTED_DEPS_DIR      the dependency layout (deqp-stage1-rpi_4b-gles3 from
 #                           pi4-gles3-stage1.sh, zephyr-ws, the SDK)
-#   RESOURCE_PI4_ELEGANCE_SSH  user@host of the board's Linux (else BOARD_HOST)
-#   RESOURCE_USB1_HOST, RESOURCE_USB1_PORT  the serial bridge (else BOARD_UART)
-#   BOARD_HDMI_TIMINGS      else read from the board's tryboot.txt/config.txt
+#   RESOURCE_PI4_ELEGANCE_SSH  user@host of the board's Linux
+#   RESOURCE_USB1_HOST, RESOURCE_USB1_PORT  the serial bridge
+# (BOARD_HOST, BOARD_UART and BOARD_HDMI_TIMINGS of the environment are not used:
+# they may name another board; the timings are read from the board's boot files.)
 # The records go to build/records-pi4-gles3-<HEAD8> (not in the tree).
 set -u
 REPO=$(cd "$(dirname "$0")/../.." && pwd)
@@ -47,15 +48,16 @@ build)
 	exec tools/cts/pi4-deqp-images.sh "$TABLE" "$IMG" "$@"
 	;;
 run | tally)
-	export BOARD_HOST=${BOARD_HOST:-${RESOURCE_PI4_ELEGANCE_SSH:-}}
-	export BOARD_UART=${BOARD_UART:-${RESOURCE_USB1_HOST:-}:${RESOURCE_USB1_PORT:-}}
-	[ -n "$BOARD_HOST" ] || { echo "pi4-gles3-run: no BOARD_HOST" >&2; exit 2; }
-	if [ -z "${BOARD_HDMI_TIMINGS:-}" ]; then
-		# the panel's timings, as the board's own boot files carry them
-		BOARD_HDMI_TIMINGS=$(ssh "$BOARD_HOST" -- 'cat /boot/firmware/tryboot.txt /boot/firmware/config.txt 2>/dev/null' |
-			sed -n 's/^hdmi_timings=//p' | head -1)
-		export BOARD_HDMI_TIMINGS
-	fi
+	# The leased Pi 4's variables only: a BOARD_HOST, BOARD_UART or
+	# BOARD_HDMI_TIMINGS already in the environment may name another board.
+	[ -n "${RESOURCE_PI4_ELEGANCE_SSH:-}" ] && [ -n "${RESOURCE_USB1_HOST:-}" ] && [ -n "${RESOURCE_USB1_PORT:-}" ] ||
+		{ echo "pi4-gles3-run: RESOURCE_PI4_ELEGANCE_SSH, RESOURCE_USB1_HOST and RESOURCE_USB1_PORT are not set" >&2; exit 2; }
+	export BOARD_HOST=$RESOURCE_PI4_ELEGANCE_SSH
+	export BOARD_UART=$RESOURCE_USB1_HOST:$RESOURCE_USB1_PORT
+	# the panel's timings, as the board's own boot files carry them
+	BOARD_HDMI_TIMINGS=$(ssh "$BOARD_HOST" -- 'cat /boot/firmware/tryboot.txt /boot/firmware/config.txt 2>/dev/null' |
+		sed -n 's/^hdmi_timings=//p' | head -1)
+	export BOARD_HDMI_TIMINGS
 	[ -n "$BOARD_HDMI_TIMINGS" ] || { echo "pi4-gles3-run: no BOARD_HDMI_TIMINGS" >&2; exit 2; }
 	# board.sh refuses a board whose who(1) lists a session from an address that
 	# is not one of this host's. The lease forwards the board to this machine,
@@ -75,11 +77,14 @@ run | tally)
 	# `ssh user@host -- command`; board.sh calls `ssh -o K=V ... host command`.
 	# A wrapper `ssh` first on PATH turns the second form into the first
 	# (dropping the -o pairs) and logs a failed call to build/pi4-bin/ssh.log.
-	# scp's own calls (joined -oK=V options) pass through unchanged.
+	# scp's own calls (joined -oK=V options) pass through unchanged. The lease's
+	# own ssh wrapper removes only its directory from PATH before it execs ssh, so
+	# this directory has to be taken out of PATH here, or ssh would run itself.
 	mkdir -p build/pi4-bin
 	realssh=$(PATH=${PATH#"$REPO/build/pi4-bin:"} command -v ssh)
 	cat > build/pi4-bin/ssh <<EOF
 #!/bin/bash
+PATH=\$(printf '%s' "\$PATH" | sed 's#$REPO/build/pi4-bin:##g')
 real=$realssh
 case "\$1" in
 -o) ;;
@@ -89,9 +94,9 @@ while [ "\$1" = -o ]; do shift 2; done
 host=\$1
 shift
 t0=\$(date +%s)
-if [ -p /dev/stdin ] || [ -f /dev/stdin ]; then "\$real" "\$host" -- "\$@"; else "\$real" -n "\$host" -- "\$@"; fi
+"\$real" "\$host" -- "\$@"
 rc=\$?
-echo "\$(date +%T) rc=\$rc \$((\$(date +%s) - t0))s \$host \$*" | cut -c1-160 >> $REPO/build/pi4-bin/ssh.log
+[ \$rc -eq 0 ] || echo "\$(date +%T) rc=\$rc \$((\$(date +%s) - t0))s \$host \$*" | cut -c1-160 >> $REPO/build/pi4-bin/ssh.log
 exit \$rc
 EOF
 	chmod +x build/pi4-bin/ssh
