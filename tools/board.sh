@@ -191,7 +191,7 @@ for a in "$@"; do
     # --set NAME=VALUE: the environment setting a few of this script's variables, for a caller (a lent machine's
     # command filter) that cannot put them in front of the command. Only the names below.
     --set=SEL=* | --set=BOARD_BOOT=* | --set=BOARD_HOST=* | --set=TREE_IMAGE=* | --set=TREE_ROWS=* | \
-    --set=TREE_PREV=* | --set=BOARD_STOP_CONTAINER=* |--set=NAMES=* | --set=TREE_IMAGE_DIR=* | --set=GM_ROWS=*)
+    --set=TREE_PREV=* | --set=BOARD_STOP_CONTAINER=* |--set=NAMES=* | --set=NAME_PAGES=* |--set=TREE_IMAGE_DIR=* | --set=GM_ROWS=*)
         a=${a#--set=}; export "${a%%=*}=${a#*=}" ;;
     *) args+=("$a") ;;
     esac
@@ -1939,7 +1939,7 @@ name_pages() {
     IFS=, read -r tp tf tn to tb <<<"$t"
     nr=$((tb - tp - tf - tn - to))
     [ $((tf + to + nr)) -gt 0 ] || return 0
-    for page in $(seq 0 39); do
+    for page in $(seq 0 $((${NAME_PAGES:-40} - 1))); do
         tree_run_one "$name-p$page" "$img" $((0x8000 | page << 8 | sel)) "$out"
         d=$(finished_run "$out" "$name-p$page" "$img") || break
         words=$(cat "$d/snvs.txt" 2>/dev/null)
