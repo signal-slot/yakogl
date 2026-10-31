@@ -1,0 +1,260 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# panthor-gltest --sweep, run 2 (README.md): the verdict and summary lines
+panthor-gltest: verdict case 0 triangle: PASS 
+panthor-gltest: verdict case 1 uniform: PASS 
+panthor-gltest: verdict case 2 texture: PASS 
+panthor-gltest: verdict case 3 depth: PASS 
+panthor-gltest: verdict case 4 cull: PASS 
+panthor-gltest: verdict case 5 scissor: PASS 
+panthor-gltest: verdict case 6 fbo: PASS 
+panthor-gltest: verdict case 7 ?: NO-CASE 
+panthor-gltest: verdict case 8 blend: PASS 
+panthor-gltest: verdict case 9 stencil: PASS 
+panthor-gltest: verdict case 10 prims: PASS 
+panthor-gltest: verdict case 11 persist: PASS 
+panthor-gltest: verdict case 12 stencil2: PASS 
+panthor-gltest: verdict case 13 zls: PASS 
+panthor-gltest: verdict case 14 api: PASS 
+panthor-gltest: verdict case 15 egl: PASS 
+panthor-gltest: verdict case 16 msaa: PASS 
+panthor-gltest: verdict case 17 ctx2: PASS 
+panthor-gltest: verdict case 18 image: PASS 
+panthor-gltest: verdict case 19 es100: REFUSED compile: online shaderc: the code generator refused this vertex shader: Mali(Valhall: a vertex shader uniform that is not highp (Mesa's fp16 uniform) is not lowered yet)
+panthor-gltest: verdict case 20 etc: PASS 
+panthor-gltest: verdict case 21 rgb565: PASS 
+panthor-gltest: verdict case 22 vao: PASS 
+panthor-gltest: verdict case 23 winding: PASS 
+panthor-gltest: verdict case 24 compact: PASS 
+panthor-gltest: verdict case 25 stress: PASS 
+panthor-gltest: verdict case 26 heavy: PASS 
+panthor-gltest: verdict case 27 fvgrepro: PASS 
+panthor-gltest: verdict case 28 fvgvs: PASS 
+panthor-gltest: verdict case 29 fvgft: PASS 
+panthor-gltest: verdict case 30 fvgin: PASS 
+panthor-gltest: verdict case 31 fvgcov: PASS 
+panthor-gltest: verdict case 32 fvgdis: PASS 
+panthor-gltest: verdict case 33 fvgdis2: PASS 
+panthor-gltest: verdict case 34 unishare: PASS 
+panthor-gltest: verdict case 35 tex1d: PASS 
+panthor-gltest: verdict case 36 fvgconic: PASS 
+panthor-gltest: verdict case 37 fvgstroke: PASS 
+panthor-gltest: verdict case 38 fvgstencil: PASS 
+panthor-gltest: verdict case 39 perf: PASS 
+panthor-gltest: verdict case 40 qtstrip: PASS 
+panthor-gltest: verdict case 41 es3cube: PASS 
+panthor-gltest: verdict case 42 es3array: PASS 
+panthor-gltest: verdict case 43 es3vid: PASS 
+panthor-gltest: verdict case 44 es3hdr: REFUSED compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet)
+panthor-gltest: verdict case 45 es3dyn: PASS 
+panthor-gltest: verdict case 46 es3size: REFUSED compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture look-up other than texture2D(sampler2D, coordinate) (a bias, a level, a projection, a cube map, a size query) is not lowered yet)
+panthor-gltest: verdict case 47 es3inst: PASS 
+panthor-gltest: verdict case 48 es3vol: REFUSED compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture look-up other than texture2D(sampler2D, coordinate) (a bias, a level, a projection, a cube map, a size query) is not lowered yet)
+panthor-gltest: verdict case 49 es3facing: REFUSED compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet)
+panthor-gltest: verdict case 50 ?: NO-CASE 
+panthor-gltest: verdict case 51 es3heavy: PASS 
+panthor-gltest: verdict case 52 es3split: PASS 
+panthor-gltest: verdict case 53 zprobe: PASS 
+panthor-gltest: verdict case 54 es3chain: PASS 
+panthor-gltest: verdict case 55 es3mrt: REFUSED compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment output other than gl_FragColor is not lowered yet)
+panthor-gltest: verdict case 56 manylines: PASS 
+panthor-gltest: verdict case 57 es3vid_indexed: PASS 
+panthor-gltest: verdict case 58 clearscis: PASS 
+panthor-gltest: verdict case 59 clearmask: PASS 
+panthor-gltest: verdict case 60 wrapmode: PASS 
+panthor-gltest: verdict case 61 texincomp: PASS 
+panthor-gltest: verdict case 62 clipz: PASS 
+panthor-gltest: verdict case 63 matattr: FAIL rc -1, first bad check 1 got 0xff800000 want 0xff804000
+panthor-gltest: verdict case 64 bgra: PASS 
+panthor-gltest: verdict case 65 polyunit: PASS 
+panthor-gltest: verdict case 66 clearvp: PASS 
+panthor-gltest: verdict case 67 fbods: PASS 
+panthor-gltest: verdict case 68 armselect: REFUSED compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: control flow (if, a loop, a return before the end) is not lowered yet)
+panthor-gltest: verdict case 69 ioswap: PASS 
+panthor-gltest: verdict case 70 loopcarry: REFUSED compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet)
+panthor-gltest: verdict case 71 deadloop: REFUSED compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: control flow (if, a loop, a return before the end) is not lowered yet)
+panthor-gltest: verdict case 72 intlit: PASS 
+panthor-gltest: verdict case 73 branchlane: PASS 
+panthor-gltest: verdict case 74 ifoutput: REFUSED compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: control flow (if, a loop, a return before the end) is not lowered yet)
+panthor-gltest: verdict case 75 immneg: PASS 
+panthor-gltest: verdict case 76 boolany: REFUSED compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet)
+panthor-gltest: verdict case 77 transc: REFUSED compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet)
+panthor-gltest: verdict case 78 matvary: PASS 
+panthor-gltest: verdict case 79 idiv: PASS 
+panthor-gltest: verdict case 80 matdyn: REFUSED compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: three or more additions or multiplications in a chain (GLSL's do_rebalance_tree reassociates such a tree) is not lowered yet)
+panthor-gltest: verdict case 81 branchquad: REFUSED compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a discard other than a highp fragment shader's `if (a < b) discard;` with no else (an unconditional one, one among other statements, one under another if, a mediump shader's) is not lowered yet)
+panthor-gltest: verdict case 82 fragcentre: PASS 
+panthor-gltest: verdict case 83 pointcoord: PASS 
+panthor-gltest: verdict case 84 fragcoord: PASS 
+panthor-gltest: verdict case 85 cubetail: PASS 
+panthor-gltest: verdict case 86 anyall: REFUSED compile: online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet)
+panthor-gltest: verdict case 87 databreak: PASS 
+panthor-gltest: verdict case 88 rsflip: NO-CASE 
+panthor-gltest: verdict case 89 flatlast: REFUSED compile: online shaderc: the code generator refused this vertex shader: Mali(Valhall: an integer or boolean value is not lowered yet)
+panthor-gltest: verdict case 90 churn: PASS 
+panthor-gltest: verdict case 91 hdrblend: REFUSED draw: mali frame: a blended or colour-masked draw into an RGBA16F target is not built yet
+panthor-gltest: verdict case 92 ?: NO-CASE 
+panthor-gltest: verdict case 93 ?: NO-CASE 
+panthor-gltest: verdict case 94 ?: NO-CASE 
+panthor-gltest: verdict case 95 ?: NO-CASE 
+panthor-gltest: verdict case 96 ?: NO-CASE 
+panthor-gltest: verdict case 97 varyings15: SKIP 
+panthor-gltest: verdict case 98 uniloop: FAIL rc -1, first bad check 4 got 0xfff00010 want 0xfff00000
+panthor-gltest: verdict case 99 ?: NO-CASE 
+panthor-gltest: verdict case 100 idxtex: PASS 
+panthor-gltest: verdict case 101 cubebias: REFUSED compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture look-up other than texture2D(sampler2D, coordinate) (a bias, a level, a projection, a cube map, a size query) is not lowered yet)
+panthor-gltest: verdict case 102 maskclear: PASS 
+panthor-gltest: verdict case 103 maskdepth: PASS 
+panthor-gltest: verdict case 104 divloop: FAULT work lost 1, group state/fatal queues 0x1/0x0, vm usable true
+panthor-gltest: verdict case 105 pointcoordvary: PASS 
+panthor-gltest: verdict case 106 mrt3: SKIP 
+panthor-gltest: verdict case 107 clearload: PASS 
+panthor-gltest: verdict case 108 uniidx: PASS 
+panthor-gltest: verdict case 109 ?: NO-CASE 
+panthor-gltest: verdict case 110 ?: NO-CASE 
+panthor-gltest: verdict case 111 ?: NO-CASE 
+panthor-gltest: verdict case 112 affectand: PASS 
+panthor-gltest: verdict case 113 cubemap: PASS 
+panthor-gltest: verdict case 114 cubelod: PASS 
+panthor-gltest: verdict case 115 ?: NO-CASE 
+panthor-gltest: verdict case 116 uniidxe: PASS 
+panthor-gltest: verdict case 117 uniidxf: PASS 
+panthor-gltest: verdict case 118 ?: NO-CASE 
+panthor-gltest: verdict case 119 pbufup: PASS 
+panthor-gltest: verdict case 120 uniidxg: PASS 
+panthor-gltest: verdict case 121 uniidxh: PASS 
+panthor-gltest: verdict case 122 uniidxi: PASS 
+panthor-gltest: verdict case 123 ?: NO-CASE 
+panthor-gltest: verdict case 124 ?: NO-CASE 
+panthor-gltest: verdict case 125 ?: NO-CASE 
+panthor-gltest: verdict case 126 etcmip: PASS 
+panthor-gltest: verdict case 127 lines: PASS 
+panthor-gltest: verdict case 128 uniidxj: PASS 
+panthor-gltest: verdict case 129 ?: NO-CASE 
+panthor-gltest: verdict case 130 ?: NO-CASE 
+panthor-gltest: verdict case 131 ?: NO-CASE 
+panthor-gltest: verdict case 132 narrowla: PASS 
+panthor-gltest: verdict case 133 ?: NO-CASE 
+panthor-gltest: verdict case 134 ?: NO-CASE 
+panthor-gltest: verdict case 135 ?: NO-CASE 
+panthor-gltest: verdict case 136 ?: NO-CASE 
+panthor-gltest: verdict case 137 ?: NO-CASE 
+panthor-gltest: verdict case 138 deriv: REFUSED compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet)
+panthor-gltest: verdict case 139 ?: NO-CASE 
+panthor-gltest: verdict case 140 ?: NO-CASE 
+panthor-gltest: verdict case 141 es3instdiv: FAIL rc -1, first bad check 2 got 0xff00ff00 want 0x80008000
+panthor-gltest: verdict case 142 unibranch: REFUSED compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: control flow (if, a loop, a return before the end) is not lowered yet)
+panthor-gltest: verdict case 143 ?: NO-CASE 
+panthor-gltest: verdict case 144 ?: NO-CASE 
+panthor-gltest: verdict case 145 samplecov: PASS 
+panthor-gltest: verdict case 146 ?: NO-CASE 
+panthor-gltest: verdict case 147 ?: NO-CASE 
+panthor-gltest: verdict case 148 texbranch: REFUSED compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: control flow (if, a loop, a return before the end) is not lowered yet)
+panthor-gltest: verdict case 149 vsunits: REFUSED compile: online shaderc: the code generator refused this vertex shader: Mali(Valhall: a vertex shader texture look-up other than one 2D look-up at a level (a second one, a size query) is not lowered yet)
+panthor-gltest: verdict case 150 shprobe: PASS 
+panthor-gltest: verdict case 151 ?: NO-CASE 
+panthor-gltest: verdict case 152 ?: NO-CASE 
+panthor-gltest: verdict case 153 ?: NO-CASE 
+panthor-gltest: verdict case 154 ?: NO-CASE 
+panthor-gltest: verdict case 155 ?: NO-CASE 
+panthor-gltest: verdict case 156 ?: NO-CASE 
+panthor-gltest: verdict case 157 ?: NO-CASE 
+panthor-gltest: verdict case 158 ?: NO-CASE 
+panthor-gltest: verdict case 159 ?: NO-CASE 
+panthor-gltest: verdict case 160 ?: NO-CASE 
+panthor-gltest: verdict case 161 ?: NO-CASE 
+panthor-gltest: verdict case 162 dskeep: PASS 
+panthor-gltest: verdict case 163 drawbuf0: SKIP 
+panthor-gltest: verdict case 164 bufdel: PASS 
+panthor-gltest: verdict case 165 ctxclear: PASS 
+panthor-gltest: verdict case 166 fshprobe: PASS 
+panthor-gltest: verdict case 167 stcycle: PASS 
+panthor-gltest: verdict case 168 stlayers: PASS 
+panthor-gltest: verdict case 169 dstex: PASS 
+panthor-gltest: verdict case 170 ?: NO-CASE 
+panthor-gltest: verdict case 171 viewwin: PASS 
+panthor-gltest: verdict case 172 swapzs: PASS 
+panthor-gltest: verdict case 173 splitzs: PASS 
+panthor-gltest: verdict case 174 ?: NO-CASE 
+panthor-gltest: verdict case 175 ?: NO-CASE 
+panthor-gltest: verdict case 176 mapbuf: PASS 
+panthor-gltest: verdict case 177 ?: SKIP 
+panthor-gltest: verdict case 178 ?: SKIP 
+panthor-gltest: verdict case 179 retile: SKIP 
+panthor-gltest: verdict case 180 teardown: PASS 
+panthor-gltest: verdict case 181 fusemad: REFUSED compile: online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet)
+panthor-gltest: verdict case 182 fsat: REFUSED compile: online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet)
+panthor-gltest: verdict case 183 unipad: PASS 
+panthor-gltest: verdict case 184 depchain: PASS 
+panthor-gltest: verdict case 185 kindcost: PASS 
+panthor-gltest: verdict case 186 fcsplit: PASS 
+panthor-gltest: verdict case 187 predarm: PASS 
+panthor-gltest: verdict case 188 predif: REFUSED compile: online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet)
+panthor-gltest: verdict case 189 mulone: PASS 
+panthor-gltest: verdict case 190 blendonce: PASS 
+panthor-gltest: verdict case 191 varyfma: PASS 
+panthor-gltest: verdict case 192 predlive: PASS 
+panthor-gltest: verdict case 193 offarm: PASS 
+panthor-gltest: verdict case 194 offarmn: PASS 
+panthor-gltest: verdict case 195 ifbranch: PASS 
+panthor-gltest: verdict case 196 occl: PASS 
+panthor-gltest: verdict case 197 vtxgrid: PASS 
+panthor-gltest: verdict case 198 a2cconst: PASS 
+panthor-gltest: verdict case 199 es3trunc: REFUSED compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet)
+panthor-gltest: verdict case 200 intrt: SKIP 
+panthor-gltest: verdict case 201 usamp: SKIP 
+panthor-gltest: verdict case 202 blitconv: PASS 
+panthor-gltest: verdict case 203 tfcap: PASS 
+panthor-gltest: verdict case 204 srgb: PASS 
+panthor-gltest: verdict case 205 mappbo: PASS 
+panthor-gltest: verdict case 206 es3levels: REFUSED compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture look-up other than texture2D(sampler2D, coordinate) (a bias, a level, a projection, a cube map, a size query) is not lowered yet)
+panthor-gltest: verdict case 207 msaazs: PASS 
+panthor-gltest: verdict case 208 msaapre: PASS 
+panthor-gltest: verdict case 209 varyorder: PASS 
+panthor-gltest: verdict case 210 occlacc: PASS 
+panthor-gltest: verdict case 211 msaablend: PASS 
+panthor-gltest: verdict case 212 ifsel: PASS 
+panthor-gltest: verdict case 213 discloop: PASS 
+panthor-gltest: verdict case 214 splitkick: PASS 
+panthor-gltest: verdict case 215 shadowmap: SKIP 
+panthor-gltest: verdict case 216 mipchains: PASS 
+panthor-gltest: verdict case 217 ?: NO-CASE 
+panthor-gltest: verdict case 218 ?: NO-CASE 
+panthor-gltest: verdict case 219 ?: NO-CASE 
+panthor-gltest: verdict case 220 ?: NO-CASE 
+panthor-gltest: verdict case 221 ?: NO-CASE 
+panthor-gltest: verdict case 222 ?: NO-CASE 
+panthor-gltest: verdict case 223 ?: NO-CASE 
+panthor-gltest: verdict case 224 ?: NO-CASE 
+panthor-gltest: verdict case 225 ?: NO-CASE 
+panthor-gltest: verdict case 226 ?: NO-CASE 
+panthor-gltest: verdict case 227 ?: NO-CASE 
+panthor-gltest: verdict case 228 ?: NO-CASE 
+panthor-gltest: verdict case 229 ?: NO-CASE 
+panthor-gltest: verdict case 230 ?: NO-CASE 
+panthor-gltest: verdict case 231 ?: NO-CASE 
+panthor-gltest: verdict case 232 ?: NO-CASE 
+panthor-gltest: verdict case 233 ?: NO-CASE 
+panthor-gltest: verdict case 234 ?: NO-CASE 
+panthor-gltest: verdict case 235 ?: NO-CASE 
+panthor-gltest: verdict case 236 ?: NO-CASE 
+panthor-gltest: verdict case 237 ?: NO-CASE 
+panthor-gltest: verdict case 238 ?: NO-CASE 
+panthor-gltest: verdict case 239 ?: NO-CASE 
+panthor-gltest: verdict case 240 ?: NO-CASE 
+panthor-gltest: verdict case 241 ?: NO-CASE 
+panthor-gltest: verdict case 242 ?: NO-CASE 
+panthor-gltest: verdict case 243 ?: NO-CASE 
+panthor-gltest: verdict case 244 ?: NO-CASE 
+panthor-gltest: verdict case 245 ?: NO-CASE 
+panthor-gltest: verdict case 246 ?: NO-CASE 
+panthor-gltest: verdict case 247 ?: NO-CASE 
+panthor-gltest: verdict case 248 ?: NO-CASE 
+panthor-gltest: verdict case 249 ?: NO-CASE 
+panthor-gltest: verdict case 250 ?: NO-CASE 
+panthor-gltest: verdict case 251 ?: NO-CASE 
+panthor-gltest: verdict case 252 ?: NO-CASE 
+panthor-gltest: verdict case 253 ?: NO-CASE 
+panthor-gltest: verdict case 254 ?: NO-CASE 
+panthor-gltest: verdict case 255 ?: NO-CASE 
+panthor-gltest: 256 case(s) run: FAIL 3, FAULT 1, NO-CASE 84, PASS 132, REFUSED 27, SKIP 9
