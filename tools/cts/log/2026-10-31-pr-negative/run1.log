@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Forced-PR case 217, knob off, run 1 (README.md): serial console excerpt
+I: GPU core clock measured: 800 MHz (CR_TIMER 31252 ticks in 10 ms)
+I: GPU carveout phys 0x97800000 (64 MiB) mapped at 0x8e000000
+I: DDK FW: 229376-byte image for DDK 25.2 loaded (code 0x0, data 0x80000, rodata 0xa0000)
+I: GPU bring-up milestone 4 complete (firmware booted)
+*** Booting Zephyr OS build af17c0c8aa2a ***
+Secondary CPU core 3 (MPID:0x3) is up
+gl_test: the list 217 (1 cases) on one context
+gl_test: start (case=-1 pretransform=0 ppp_ctrl=0x0 debug=0 no_coalesce=0)
+W: render: PROBE: the global freelists are capped at 512 pages: a grow past them is unserved on purpose
+I: render: parameter buffer: carveout 64 MiB -> 448 pages listed, 512 max, grow 256, pool 0 pages
+I: freelist id=1 np=512 max=512 backing=1536 fpm=0 ebase=0
+I: freelist id=2 np=512 max=512 backing=1536 fpm=0 ebase=0
+I: freelist id=3 np=26 max=32 backing=26 fpm=0 ebase=4
+I: render: HWRT 1024x1024 x1 te_screen=0x0003f03f mtile1=0x00400000 mtile2=0x00400000 isp_mtile=0x00100010 stride=256 rgn=1024 tpc=8192 teaa=0
+gl_test: forcedpr: NOT EXERCISED: 256 layers: requests 0 (served 0, refused 0), notices 0, stop 0, partial renders 0, GPU recoveries 0
+gl_test: case 217 forcedpr: FAIL
+gl_test: all: 1 of 1 cases failed (0 passed; 0 timed out; first failure case 217 at index 0; second failure case -1; 0 skipped, first skip case -1); precompiled hits 0, compiler runs 3
+gl_test: done
+I: render freelists: 0 grow requests, 0 served, 0 unserved, 0 KiB taken on demand; GPU recoveries 0 (HWR counter 0)
+I: render freelists: reserve refills refused 0 (0 KiB); firmware UPDATE_STATS: partial renders 0, out of memory 0, TA stores 0, 3D stores 0, CDM stores 0, TDM stores 0, other 0
+gl_test: FAILED (rc=-1)
+I: dss stats before hold t=2467 ms: vsyncs 129 app_frames 0 underflows 0 sync_lost 0 go_timeouts 0 go_waits 0 safety_flips 0 app 0
