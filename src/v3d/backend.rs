@@ -801,6 +801,21 @@ pub const CLEAR_VS: &[u8] = b"attribute vec4 a_pos;\nvoid main() { gl_Position =
 /// (`tools/shaders/internal/clear.frag`, in GLSL ES 1.00).
 pub const CLEAR_FS: &[u8] =
     b"precision mediump float;\nuniform vec4 u_color;\nvoid main() { gl_FragColor = u_color; }\n\0";
+/// The integer clear quad's vertex shader: `CLEAR_VS` in GLSL ES 3.00, the
+/// language of the fragment shader it links with.
+pub const CLEAR_VS_INT: &[u8] = b"#version 300 es\nin vec4 a_pos;\nvoid main() { gl_Position = a_pos; }\n\0";
+/// The integer clear quad's fragment shader: the four raw words of
+/// glClearBuffer{i,ui}v (`GlesDraw::clear_rgba` holds them as f32 bit
+/// patterns) as a `uvec4`, which the compiler writes as four 32-bit TLB words
+/// (the TLBU config `tlb_config_32b(0, 4)`, then three TLB writes) that the
+/// tile buffer narrows to the target's internal type. One program serves
+/// every integer class, signed or not: the 32-bit write carries no
+/// signedness (Mesa 26.2.1 writes every `f32_color_rb` target with
+/// TLB_TYPE_F32_COLOR, nir_to_vir.c:1963-1977), as Mesa's clear shader
+/// stores its one vec4 for every format (st_nir_builtins.c:138-156).
+/// docs/notes/v3d-int-clear.md.
+pub const CLEAR_FS_INT: &[u8] =
+    b"#version 300 es\nprecision highp int;\nuniform uvec4 u_color;\nout uvec4 o;\nvoid main() { o = u_color; }\n\0";
 
 /// Where the clear program stands.
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -1111,6 +1126,8 @@ struct V3dState {
     tile_state_size: u32,
     j: Job,
     clear_program: ClearProgram,
+    /// The integer clear program (`CLEAR_FS_INT`), built on first use.
+    clear_program_int: ClearProgram,
     zs: [ZsEntry; ZS_TARGETS],
     nzs: usize,
     /// The depth/stencil buffers kept between jobs, the slot given up next
@@ -1332,6 +1349,7 @@ impl V3dState {
         tile_state_size: 0,
         j: Job::ZERO,
         clear_program: ClearProgram::NOT_BUILT,
+        clear_program_int: ClearProgram::NOT_BUILT,
         zs: [ZsEntry { target: 0, z: ZsKnown::Untouched, s: ZsKnown::Untouched }; ZS_TARGETS],
         nzs: 0,
         zsbufs: [ZsBuf::NONE; ZS_BUFS],
@@ -3813,12 +3831,22 @@ fn record_arrays_and_draw(
     }
 }
 
-/// The clear program `v3d_init` built. `Err` is the refusal every clear quad
-/// gets when it did not build; init logged the chain's error.
-fn clear_program(g: &mut V3dState) -> Result<state::ClearProg<'static>, state::Refusal> {
-    let p = &g.clear_program;
+/// The clear program a quad draws with: the integer one (`CLEAR_FS_INT`,
+/// built here the first time it is asked for) for a quad that writes an
+/// integer colour target, otherwise the float one `v3d_init` built. `Err` is
+/// the refusal every clear quad of that kind gets when it did not build; the
+/// build logged the chain's error, once.
+fn clear_program(g: &mut V3dState, integer: bool) -> Result<state::ClearProg<'static>, state::Refusal> {
+    if integer && g.clear_program_int.status == ClearStatus::NotBuilt {
+        g.clear_program_int = made_clear_program("integer ", CLEAR_VS_INT, CLEAR_FS_INT);
+    }
+    let p = if integer { &g.clear_program_int } else { &g.clear_program };
     if p.status != ClearStatus::Built {
-        return Err("the clear program did not build, so a clear the TLB cannot do is not drawn");
+        return Err(if integer {
+            "the integer clear program did not build, so a clear the TLB cannot do of an integer target is not drawn"
+        } else {
+            "the clear program did not build, so a clear the TLB cannot do is not drawn"
+        });
     }
     // SAFETY: the program lives in the backend's static state until shutdown,
     // which no draw outlives.
@@ -3834,27 +3862,40 @@ fn log_text(log: &[core::ffi::c_char]) -> &str {
     core::str::from_utf8(&bytes[..n]).unwrap_or("(the log is not UTF-8)")
 }
 
-/// Build the clear program at init and say once what happened: its code
-/// size, or the stage that failed and the compiler's own error.
-fn init_clear_program(g: &mut V3dState) {
+/// Build one clear program and say once what happened: its code size, or
+/// the stage that failed and the compiler's own error. `what` prefixes the
+/// line ("" or "integer ").
+fn made_clear_program(what: &str, vs: &[u8], fs: &[u8]) -> ClearProgram {
     use core::ffi::c_char;
     let mut log = [0 as c_char; 256];
-    g.clear_program = match build_clear_program(&mut log) {
+    match build_clear_program(&mut log, vs, fs) {
         Ok(p) => {
-            glog!("yakogl/v3d: clear program built: {} bytes of code", p.fs.usc_dw * 4);
+            glog!("yakogl/v3d: {}clear program built: {} bytes of code", what, p.fs.usc_dw * 4);
             p
         }
-        Err(what) => {
-            glog!("yakogl/v3d: clear program did not build: {}: {}", what, log_text(&log));
+        Err(why) => {
+            glog!("yakogl/v3d: {}clear program did not build: {}: {}", what, why, log_text(&log));
             ClearProgram::FAILED
         }
-    };
+    }
 }
 
-/// Compile and link the clear program through the shader back end, as the
-/// GL core compiles an application's, and upload its code. The compiler's
-/// error, when there is one, is left in `log`.
-fn build_clear_program(log: &mut [core::ffi::c_char; 256]) -> Result<ClearProgram, &'static str> {
+/// Build the clear program at init. The integer one is built on the first
+/// quad that needs it (`clear_program`), so a back end that never clears an
+/// integer target part-way spends neither the compile nor its code memory.
+fn init_clear_program(g: &mut V3dState) {
+    g.clear_program = made_clear_program("", CLEAR_VS, CLEAR_FS);
+}
+
+/// Compile and link a clear program (`vs`, `fs`: NUL-terminated sources)
+/// through the shader back end, as the GL core compiles an application's,
+/// and upload its code. The compiler's error, when there is one, is left in
+/// `log`.
+fn build_clear_program(
+    log: &mut [core::ffi::c_char; 256],
+    vs_src: &[u8],
+    fs_src: &[u8],
+) -> Result<ClearProgram, &'static str> {
     use core::ffi::c_char;
     let be = crate::shaderc::backend().ok_or("no shader back end")?;
     let (compile, link) = match (be.compile, be.link) {
@@ -3865,14 +3906,13 @@ fn build_clear_program(log: &mut [core::ffi::c_char; 256]) -> Result<ClearProgra
     // SAFETY: NUL-terminated sources, live out-parameters, a log of the size
     // given.
     let rc =
-        unsafe { compile(SHC_STAGE_VERTEX, CLEAR_VS.as_ptr() as *const c_char, &mut vs, log.as_mut_ptr(), log.len()) };
+        unsafe { compile(SHC_STAGE_VERTEX, vs_src.as_ptr() as *const c_char, &mut vs, log.as_mut_ptr(), log.len()) };
     if rc != 0 {
         return Err("the vertex shader did not compile");
     }
     // SAFETY: as above.
-    let rc = unsafe {
-        compile(SHC_STAGE_FRAGMENT, CLEAR_FS.as_ptr() as *const c_char, &mut fs, log.as_mut_ptr(), log.len())
-    };
+    let rc =
+        unsafe { compile(SHC_STAGE_FRAGMENT, fs_src.as_ptr() as *const c_char, &mut fs, log.as_mut_ptr(), log.len()) };
     if rc != 0 {
         crate::shaderc::release_shader(&vs);
         return Err("the fragment shader did not compile");
@@ -5480,7 +5520,9 @@ fn draw_in_job(g: &mut V3dState, target: Target, d: &GlesDraw, st: &V3dJobState,
 /// Draw the part of `d`'s clear the TLB cannot do as the clear quad
 /// (`state::clear_quad_draw`).
 fn draw_clear_quad(g: &mut V3dState, target: Target, d: &GlesDraw, b: state::QuadBuffers) -> i32 {
-    let p = match clear_program(g) {
+    /* an integer RT 0 takes the integer program's four raw words; a quad
+     * that writes no colour keeps the float one (its mask is 0) */
+    let p = match clear_program(g, b.colour && gles_surf_is_integer(target.format)) {
         Ok(p) => p,
         Err(why) => return refuse(g, why),
     };
@@ -5676,11 +5718,13 @@ pub extern "C" fn v3d_shutdown() {
     }
     let _ = flush_job(g);
     let _ = wait_in_flight(g);
-    if g.clear_program.status == ClearStatus::Built {
-        crate::shaderc::release_shader(&g.clear_program.fs);
-        osal::gpu_free(&mut g.clear_program.code);
+    for p in [&mut g.clear_program, &mut g.clear_program_int] {
+        if p.status == ClearStatus::Built {
+            crate::shaderc::release_shader(&p.fs);
+            osal::gpu_free(&mut p.code);
+        }
+        *p = ClearProgram::NOT_BUILT;
     }
-    g.clear_program = ClearProgram::NOT_BUILT;
     glog!(
         "yakogl/v3d: tiled copies high-water {} of {} bytes ({} tilings, {} of them at upload, {} bytes tiled; \
          {} draws tried again after the open job ran for want of memory, {} of them drawn)",
@@ -5990,13 +6034,6 @@ unsafe fn draw_call(draw: *const GlesDraw) -> i32 {
      * RGBA8 (v3d_job.h); nothing in the GL core makes such a surface */
     if target.msaa && target.typed() {
         return refuse(g, "4x multisampling of an ES 3.0 colour format");
-    }
-    /* The clear quad's program writes gl_FragColor as halves, which an
-     * integer target cannot take: its clear is the TLB's alone (a whole,
-     * unmasked glClearBuffer{i,ui}v); a scissored or masked one is refused
-     * by name, before anything is recorded. */
-    if state::colour_needs_quad(d) && target.formats().iter().any(|&f| gles_surf_is_integer(f)) {
-        return refuse(g, "a scissored or masked colour clear of an integer colour target");
     }
     /* The clear quad writes gl_FragColor, RT 0 only, so a colour clear it
      * would do (scissored, or with a partial colour mask) cannot reach the

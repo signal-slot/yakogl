@@ -144,6 +144,11 @@ pub fn clear_quad_vertices(depth: f32) -> [[f32; 4]; 6] {
 /// masked background clear has none (the GL core would have made it a
 /// `clear_quad` otherwise), and a fused draw's scissor is the draw's.
 ///
+/// `p` is the float clear program, or for a quad that writes an integer
+/// colour target the integer one (`backend.rs: CLEAR_FS_INT`); either reads
+/// `colour` as the four dwords of its fragment block, which for an integer
+/// target are glClearBuffer{i,ui}v's raw words, handed over as bits.
+///
 /// Only the target and the clear's values are taken from `d`; everything
 /// else starts from zero, because `d` may be an application's draw.
 pub fn clear_quad_draw(

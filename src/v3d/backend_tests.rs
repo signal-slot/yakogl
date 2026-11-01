@@ -2320,6 +2320,147 @@ fn the_clear_program_is_built_once_and_a_failed_one_refuses_the_quad() {
     assert_eq!(rig.draws().len(), 2, "nothing more was recorded");
 }
 
+/// The TLBU config of a fragment program's first 32-bit colour write to RT 0
+/// with four components: per pixel, RT 7 - 0, TLB_TYPE_F32_COLOR, size 4 - 1
+/// (`select.rs: tlb_config_32b(0, 4)`; Mesa 26.2.1 nir_to_vir.c:1963-1977).
+/// An f16 vec4 write to RT 0 is the TLB's default and takes no config.
+const TLB_CONFIG_32B_RT0_VEC4: u32 = 0xffff_ff3f;
+
+/// Does the program write its colour as 32-bit words (the TLBU config is
+/// among its constant uniforms)?
+fn writes_32bit_words(q: &SeenDraw) -> bool {
+    q.fs_uniforms.contains(&V3dUniform { contents: V3D_QUNIFORM_CONSTANT, data: TLB_CONFIG_32B_RT0_VEC4 })
+}
+
+/// Raw clear words with an all-ones word and a signalling-NaN pattern among
+/// them: the quad must hand them over as bits, never as floats.
+const INT_CLEAR_BITS: [u32; 4] = [1, 0xffff_fffe, 0x7f80_0001, 0xffff_ffff];
+
+/// A scissored clear of an integer target (the GL core's `clear_quad`) is
+/// drawn, no longer refused: the TLB clears nothing (RT 0 is loaded), and
+/// the quad is the integer clear program's, which reads the four raw words
+/// from the fragment block unchanged and writes them as 32-bit TLB words
+/// (TLBU config 0xffffff3f) that the R32I tile buffer takes as they are,
+/// inside the clear's scissor box (docs/notes/v3d-int-clear.md, Mesa's
+/// clear_with_quad for a screen without clear_scissored).
+///
+/// Revert check: with the refusal back, the draw is -EINVAL and nothing is
+/// recorded; with the float program, the uniforms hold no 32-bit config.
+#[test]
+fn a_scissored_integer_clear_is_the_integer_programs_quad() {
+    let rig = Rig::new();
+    rig.init();
+    let mut c = clear_only(&rig);
+    c.target_format = GLES_SURF_R32I;
+    c.clear_quad = true;
+    (c.scissor, c.scissor_rect) = (true, [8, 4, 16, 32]);
+    c.clear_rgba = INT_CLEAR_BITS.map(f32::from_bits);
+    assert_eq!(draw(&c), 0, "{:?}", rig.gl.logs());
+    assert_eq!(v3d_flush(), 0);
+    let (jobs, draws) = (rig.jobs(), rig.draws());
+    assert_eq!((jobs.len(), draws.len()), (1, 1));
+    assert!(jobs[0].target.typed);
+    assert_eq!(jobs[0].target.rt_format[0], V3D_OUTPUT_IMAGE_FORMAT_R32I);
+    assert!(jobs[0].clear.unwrap().load_rt0, "the TLB clears nothing: RT 0 is loaded");
+    let q = &draws[0];
+    assert_is_the_quad(&rig, q, c.clear_depth, c.clear_rgba);
+    assert_eq!(q.fs_storage, INT_CLEAR_BITS.to_vec(), "the raw words, the NaN pattern included");
+    assert!(writes_32bit_words(q), "32-bit TLB words, not f16 pairs: {:?}", q.fs_uniforms);
+    assert_eq!(q.st.colormask, 0xf);
+    assert!(!q.st.blend_enabled && !q.st.depth_enabled && !q.st.stencil_enabled);
+    let expect = state::scissor(&c).expect("the clear's box");
+    assert!(q.st.scissor);
+    assert_eq!([q.st.scissor_minx, q.st.scissor_miny, q.st.scissor_maxx, q.st.scissor_maxy], expect);
+}
+
+/// A masked clear of an integer target is the integer quad with the GL mask
+/// as COLOR_WRITE_MASKS and no scissor; the integer program is built once,
+/// on the first quad that needs it, and an RGBA8 quad keeps the float
+/// program (f16 pairs, no 32-bit config).
+#[test]
+fn a_masked_integer_clear_is_the_integer_quad_and_rgba8_keeps_the_float_program() {
+    let rig = Rig::new();
+    rig.init();
+    assert_eq!(rig.logs_with("integer clear program built"), 0, "not built at init");
+    let mut c = clear_only(&rig);
+    c.target_format = GLES_SURF_RGBA8I;
+    (c.clear_color_mask, c.clear_rgba) = (0b0101, [5, -3i32 as u32, 0x7f80_0001, 0xffff_ffff].map(f32::from_bits));
+    assert_eq!(draw(&c), 0, "{:?}", rig.gl.logs());
+    assert_eq!(draw(&c), 0);
+    let mut f = clear_only(&rig);
+    f.clear_color_mask = 0b0101;
+    assert_eq!(draw(&f), 0);
+    assert_eq!(v3d_flush(), 0);
+    let draws = rig.draws();
+    assert_eq!(draws.len(), 3);
+    let (q, q2, fq) = (&draws[0], &draws[1], &draws[2]);
+    assert_is_the_quad(&rig, q, c.clear_depth, c.clear_rgba);
+    assert!(writes_32bit_words(q));
+    assert_eq!(q.st.colormask, 0b0101, "R and B only");
+    assert!(!q.st.scissor, "a background clear has no scissor");
+    assert_eq!(q2.fs_code, q.fs_code, "one integer program, one upload");
+    assert_is_the_quad(&rig, fq, f.clear_depth, f.clear_rgba);
+    assert_ne!(fq.fs_code, q.fs_code, "RGBA8 draws with the float program");
+    assert!(!writes_32bit_words(fq), "the float program writes f16 pairs");
+    assert_eq!(fq.st.colormask, 0b0101);
+    let logs = rig.gl.logs();
+    let count = |w: &str| logs.iter().filter(|l| l.contains(w)).count();
+    assert_eq!((count("integer clear program built:"), count("clear program did not build")), (1, 0), "{logs:?}");
+}
+
+/// A masked clear fused into a draw on an integer target: the integer quad
+/// with the clear's mask first, then the application's draw with its own,
+/// in one job.
+#[test]
+fn a_masked_integer_clear_fused_into_a_draw_is_the_quad_then_the_draw() {
+    let rig = Rig::new();
+    rig.init();
+    let mut d = rig.draw();
+    d.target_format = GLES_SURF_RGBA16UI;
+    (d.clear_color_mask, d.clear_rgba) = (0b0011, INT_CLEAR_BITS.map(f32::from_bits));
+    assert_eq!(draw(&d), 0, "{:?}", rig.gl.logs());
+    assert_eq!(v3d_flush(), 0);
+    let (jobs, draws) = (rig.jobs(), rig.draws());
+    assert_eq!((jobs.len(), draws.len()), (1, 2), "one job: the quad and the draw");
+    assert!(jobs[0].clear.unwrap().load_rt0, "the colour is loaded");
+    assert_is_the_quad(&rig, &draws[0], d.clear_depth, d.clear_rgba);
+    assert!(writes_32bit_words(&draws[0]));
+    assert_eq!(draws[0].st.colormask, 0b0011, "the clear's mask");
+    assert_eq!(draws[1].fs_code, FS_USC as u32, "then the application's draw");
+    assert_eq!(draws[1].st.colormask, 0xf, "with its own mask");
+}
+
+/// An integer program that did not build refuses the integer quads by its
+/// own name and nothing else: an RGBA8 quad, the whole-target TLB clear of
+/// an integer target, and a depth-only quad on one (which writes no colour
+/// and keeps the float program) still draw.
+#[test]
+fn a_failed_integer_clear_program_refuses_only_the_integer_quads() {
+    let rig = Rig::new();
+    rig.init();
+    g().clear_program_int = ClearProgram::FAILED;
+    let mut c = clear_only(&rig);
+    (c.target_format, c.clear_color_mask) = (GLES_SURF_R32UI, 0b0001);
+    assert_eq!(draw(&c), -EINVAL);
+    assert_eq!(rig.logs_with("the integer clear program did not build, so a clear"), 1);
+    assert!(rig.draws().is_empty(), "nothing was recorded");
+    let mut whole = clear_only(&rig);
+    whole.target_format = GLES_SURF_R32UI;
+    assert_eq!(draw(&whole), 0, "the TLB clear still works");
+    let mut z = clear_only(&rig);
+    z.target_format = GLES_SURF_R32UI;
+    (z.do_clear, z.clear_color_mask, z.clear_quad, z.do_clear_depth) = (false, 0, true, true);
+    (z.scissor, z.scissor_rect) = (true, [0, 0, 8, 8]);
+    assert_eq!(draw(&z), 0, "{:?}", rig.gl.logs());
+    let mut f = clear_only(&rig);
+    f.clear_color_mask = 0b0001;
+    assert_eq!(draw(&f), 0, "the float quad still works");
+    let draws = rig.draws();
+    assert_eq!(draws.len(), 2, "the depth quad and the RGBA8 quad");
+    assert_eq!(draws[0].fs_code, draws[1].fs_code, "both the float program");
+    assert_eq!(draws[0].st.colormask, 0, "the depth quad writes no colour");
+}
+
 #[test]
 fn a_draw_hands_the_programs_arrays_and_uniform_blocks_over() {
     let rig = Rig::new();
@@ -5916,9 +6057,11 @@ fn a_clear_of_one_draw_buffer_loads_the_others() {
 }
 
 /// What the typed job cannot take is refused by name before anything is
-/// recorded: 4x on an ES 3.0 format (the kept samples are RGBA8), a
-/// scissored or masked clear of an integer target (the clear quad writes
-/// halves), and a 128-bpp job with more tiles than the pools hold.
+/// recorded: 4x on an ES 3.0 format (the kept samples are RGBA8), an
+/// integer one with a quad clear included, and a 128-bpp job with more tiles
+/// than the pools hold. (A scissored or masked clear of a single-sampled
+/// integer target is the integer program's quad:
+/// `a_scissored_integer_clear_is_the_integer_programs_quad`.)
 #[test]
 fn what_a_typed_job_cannot_take_is_refused_by_name() {
     let rig = Rig::new();
@@ -5928,12 +6071,8 @@ fn what_a_typed_job_cannot_take_is_refused_by_name() {
     assert_eq!(draw(&d), -EINVAL);
     assert_eq!(rig.logs_with("4x multisampling of an ES 3.0 colour format"), 1);
     let mut d = rig.draw();
-    (d.target_format, d.clear_quad) = (GLES_SURF_R32I, true);
-    assert_eq!(draw(&d), -EINVAL);
-    assert_eq!(rig.logs_with("a scissored or masked colour clear of an integer colour target"), 1);
-    let mut d = rig.draw();
-    (d.target_format, d.clear_color_mask) = (GLES_SURF_R32I, 0b0001);
-    assert_eq!(draw(&d), -EINVAL, "a masked clear is the quad's too");
+    (d.target_format, d.samples, d.clear_quad) = (GLES_SURF_R32I, 4, true);
+    assert_eq!(draw(&d), -EINVAL, "4x of an integer format, with a quad clear (the same refusal, logged once)");
     let p = program_writing(0b11);
     let mut d = mrt_draw(&rig, &p, 2);
     (d.target_w, d.target_h) = (2048, 2048);
