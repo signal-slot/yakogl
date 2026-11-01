@@ -2954,6 +2954,55 @@ and the DDK are cited only. The reading this builds on is the section
 above. The frame side (Z/S, SPM EOT, background load) is read in "The PR
 frame side, read (Mesa 26.2.1)" below.
 
+**Status, 2026-11-01 (plan #148, issue #3).**
+- **Landed: parts 1 and 4** (freelist grow, FENCE_PR, 3D_PR and its UPDATE,
+  the RTA arrays and the HWRT clear). Verified on the AM62P by neg175-board
+  (2026-10-31, `tools/cts/log/2026-10-31-pr-neg175/`, commit `d1b24389`):
+  - knob off: the refused grow at A = 0 ends in the 10 s stop, cause 4,
+    "partial renders 0", case 175 TIMEOUT, as in the three runs of
+    0ea4c598 (15 frames, 707 quads);
+  - knob on: case 175 PASS in both runs, one firmware partial render
+    (`UPDATE_STATS element=1`), HWR 0, no stop, no timeout, and the HWRT
+    words 32-34 are written by the knob. It reads no pixels: the 3D_PR is
+    still a byte copy of the frame's 3D command.
+- **Case 217 (forcedpr), first board run, knob off** (2026-10-31,
+  `tools/cts/log/2026-10-31-pr-negative/`): 256 layers of 512x512
+  rectangles completed in 2.4 s with requests 0, no stop, no partial render:
+  "NOT EXERCISED". 256 layers do not exhaust 512 pages, so the known negative
+  was not reproduced by that case. The case now sweeps the layer count in the
+  run (256, 512, 1024, 2048, 4093, one kick each, ending at the first step
+  that asks for a grow), reads the depth back across the boundary, and
+  compares once at the last step. Not yet run on the board.
+- **Pending: the frame side.** In review: spm-calc (SPM scratch size and PR
+  PBE words), kick-abi (`frag_pr` block), bgload-shader (the load shader).
+  Not started: pr-frame-colour (SPM colour scratch per RT size, PR PBE
+  words, PR EOT into `frag_pr`), bgload-pds (the load shader's table entry,
+  the PR background-object PDS program, `pds_pr_bgnd`), pr-zs (PR depth and
+  stencil, the six remaining firmware PINs). Until those land a partial
+  render of a frame with live colour is not checked pixel for pixel.
+- **Parameter demand per layer, and the crossing for the board sessions**
+  (computed from the numbers this note records, not measured for 217):
+  - the list: 512 pages of 4 KiB = 2048 KiB, no grow possible (cap 512);
+  - case 175: full-screen quads (1024x1024, 1024 tiles of 32x32) in
+    frames growing by a quarter; 566 quads did not ask and 707 did, so a
+    quad costs between 2048/707 = 2.90 and 2048/566 = 3.62 KiB, about 2.9 to
+    3.6 bytes per tile touched;
+  - a 217 layer is a 512x512 rectangle at whole-pixel offsets: it touches 16
+    x 16 tiles when its offset is a multiple of 32 and 17 x 17 otherwise, on
+    average 16.97^2 = 288 of the 1024 tiles, 0.28 of a full-screen quad. So
+    a layer costs 0.82 to 1.02 KiB (2.90 and 3.62 KiB x 288/1024);
+  - the frame's fixed part (region headers for all tiles) is in both
+    measurements and cancels: the crossing is the 175 crossing x 1024/288 =
+    3.56, whatever the split. **Predicted crossing: 2013 to 2514 layers.**
+    Depth test LESS and 16-bit depth do not change the parameter data;
+  - so on the board: 256, 512 and 1024 ask nothing; the 2048 step asks only
+    if the crossing is at the low end (about 7% of the bracket: 175's
+    crossing between 566 and 576 quads); the 4093 step (1.6 to 2.0 times the
+    crossing) asks. Expect "step 4 or 5" asked, 4093 layers likely, with
+    the knob off the 10 s stop at that step. If 4093 asks for nothing, the
+    unit is wrong (a layer costs under 0.5 KiB) and the layers cannot reach
+    the cap: the case needs fewer, larger primitives, not more layers.
+
 **The knob:** `CONFIG_YAKOGL_DRV_GPU_PVR_PARTIAL_RENDER`, off by default. It is
 a new runtime switch in `YdPvrRenderCfg` (`partial_render`, set by
 pvr_render.c like `fl_grow_on_demand`) and a backend option
