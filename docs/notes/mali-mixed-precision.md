@@ -326,3 +326,113 @@ Open points (no reference): a lowered constant outside the fp16 normal range
 (subnormal, overflow, NaN); mixed regions with a highp *vec3*/*scalar* tail
 (pairs of an odd lane count); `if`/`?:` between a lowered and an fp32 value;
 a lowered varying (`mediump` `in`, `nir_lower_mediump_io`).
+
+## 4. Cases 44 es3hdr and 49 es3facing (plan #156, item `triage-mixed`)
+
+Date 2026-11-01. Issue #33.
+
+### What the two cases refuse on
+
+Both refuse in `es300/hdrsample.frag`, the same program as section 1:
+
+- case 44 `es3hdr` draws `hdrsample.frag` with `es300/cube.vert`;
+- case 49 `es3facing` first draws `es300/facing.frag` (corpus verdict `ok`: a
+  mediump `gl_FrontFacing ? vec4(0,1,0,1) : vec4(1,0,0,1)`, all fp16 constants,
+  no mixing) into the window and an 8x8 texture FBO, then reads the FBO back
+  into the window at x0.25 with `hdrsample.frag` and `cube_vs_src`
+  (`tools/cts/log/2026-10-28-boardref/es3facing.c:50-60,259-260`, checks 3-4).
+  The `hdrsample` program is the whole refusal; the `gl_FrontFacing` shader is
+  not refused. The control flow the brief expects in 49 is **not in the shader
+  sources**: `facing.frag` has a `?:` on a bool, a `bcsel` of two constants (no
+  branch; the ifs Mesa keeps are in `mali-control-flow.md`), so 49 needs
+  nothing from the control-flow items. `es100/ifelse_loop.frag` (verdict line
+  52, also mixed precision) is a different corpus program, not a source of
+  case 49: highp arithmetic with a `for`/`break`/`if` that stores to
+  `gl_FragColor` (a mediump output).
+
+References: `tools/mali/testdata/mixed_44_hdrsample.*` and
+`mixed_49_hdrsample.*` (`.vert`, `.frag`, `.expect.json`, `.stderr`). They are
+the run of section 1 (`mixprec_hdrsample`: Mesa 26.2.1 on drm-shim,
+`drm_shim_ref.sh run ... --uniform-values`, `pan_ref_diff.py extract --draw`)
+saved under the case names: both cases use the same vertex (`cube.vert`) and
+fragment shader, so the program and the bytes are the same; only the `trace`
+name in the json differs. They were **not re-run for this item**: the host
+session could not build the shim (the tarball download and the `ninja` build
+into `mesa-pan/shim` were refused by the sandbox), so the NIR and disassembly
+are those quoted in section 1. A `facing.frag` reference and an `ifelse_loop`
+reference were not made; both need a host that can build the shim.
+
+### Where Mesa converts (cases 44 and 49, read from the stderr)
+
+| Value | Width | Conversion |
+|---|---|---|
+| `v_xy` (varying, highp) and `v_xy * 0.5 + 0.5` | fp32 | none; two `FMA.f32` with `0x38000000.h1` as 0.5 (inline immediate) |
+| coordinate to the texture | fp32 | none: `TEX_SINGLE` takes the fp32 coordinate registers `r0:r1`; the sampler is `lowp`, so the destination is `.f16` |
+| `texture()` result | fp16 | **no f2f16**: the texture instruction writes halves itself (`(float16)tex`; `r0` = (r,g), `r1` = (b,a)) |
+| `* 0.25` | fp16 | two `FMA.v2f16 rX, rX, 0x34000000.h11, -0.0` (the multiply is on `16x2` pairs; `0.25` is a 16-bit `load_const 0x3400`) |
+| `fragColor` (highp `out`) | fp32 | four `f2f32`, i.e. four `F16_TO_F32 rd, rs.h0/.h1`, lane order r,g,b,a -> `r2..r5`: the **only** conversions in the program; there is no `f2f16` anywhere |
+| alpha | fp32 | `r5` (converted) feeds `ATEST`; `MOV.i32` copies `r2..r5` into `r0..r3` for `BLEND.v4.f32` |
+
+So the mix is one edge: an fp16 producer (look-up and multiply), an fp32
+consumer (the highp output). Kept at 32 bits (not lowered): the varying, the
+coordinate arithmetic and the highp output; Panfrost runs no
+`nir_lower_mediump_io`. For `ifelse_loop` (no reference) the expected shape is
+the opposite edge, highp arithmetic and a mediump `gl_FragColor` store, so an
+`f2f16` pair at the store and `BLEND.v4.f16`: **unverified until a reference
+exists**.
+
+### What else the cases need
+
+- Case 44 and the readback of case 49: nothing but mixed precision. The 2D
+  `TEX_SINGLE` with computed LOD and an f16 destination exists for an fp16
+  output (`ctl_tex_mediump.frag`); the fp32 coordinate with an fp16 result is
+  the new combination. The `0.5` and `0.25` immediates are modelled already.
+  Targets are RGBA8 (case 49's FBO values `0x40004000` and `0x40000040` are
+  the x0.25 of `0xff00ff00` and `0xff0000ff`).
+- Case 49's first draw (`facing.frag`): `ok` in the compiler; the frame must
+  get the winding (`glFrontFace` CW/CCW) right, in src/mali (#32).
+
+### Lowering plan
+
+The two paths in `nir_fs.rs` that must meet are the fp32 highp path
+(coordinate arithmetic, fp32 `FMA`, the fp32 blend with four sources) and the
+fp16 mediump path (pair-of-halves values, `FMA.v2f16` with a packed constant,
+`TEX_SINGLE .f16`, fp16 blend). Order:
+
+1. **A width on each `Val`** (fp32 scalar, fp16 pair) in place of
+   `f.mixed`/`MixedPrecision` (`mod.rs:1149,1194`, `nir_fs.rs:3188`). No change
+   for single-width shaders: every `prec_*`, `ctl_*` reference stays byte-equal.
+2. **The edge `F16ToF32`**, one per lane with `.h0`/`.h1`, then the highp
+   blend fed by `MOV.i32` into a contiguous block and alpha to `ATEST`
+   (section 1, items 3-4). The reverse edge `F32ToF16` (`ifelse_loop`'s store)
+   waits for its own reference.
+3. **The texture with an fp32 coordinate and an fp16 destination**, taking
+   the sampler's precision (default lowp), not the output's.
+4. **Schedule and registers** byte for byte against `bi_schedule` and RA for
+   the 20-instruction listing of section 1 (`pressure_schedule`, as for
+   `prec_*`), `.wait` flags included. Cases 44 and 49 pass together.
+
+Relative to the control-flow work (`docs/notes/mali-control-flow.md`, item
+`ref-cflow`): **independent, and first.** Neither case has a branch. The reverse
+constraint is real: `ifelse_loop`, or any `if` between an fp16 and an fp32
+value, needs both the width-carrying `Val` of step 1 and the control-flow
+lowering, so step 1 should land before `cflow-branch` changes `Val` handling
+in `nir_fs.rs` (two changes to the same structure would conflict).
+
+### Proposed items and #33 text
+
+- `mixed-hdr-44-49`: steps 1-4; moves `es300/hdrsample.frag` to `ok` in
+  `corpus-verdicts.txt` and MALI_TESTS via `tools/mali/check.sh`. Touches
+  `nir_fs.rs`, `select.rs`, `mod.rs`, `tests.rs`: serialise with the other
+  compiler lowerings.
+- `mixed-ifelse-loop-ref`: on a host that can build the shim, make the
+  `ifelse_loop` reference (fp32 arithmetic, mediump store, `break`) and decode
+  the `f2f16` store; lower it after `cflow-branch`.
+- #33 comment: "Cases 44 es3hdr and 49 es3facing refuse on one program,
+  es300/hdrsample.frag (lowp sampler under highp: fp32 coordinate, fp16
+  look-up and multiply, fp32 output). Mesa's only conversions are four
+  F16_TO_F32 at the highp output; no f2f16. Nothing in 49 needs control flow
+  (facing.frag is a bcsel and is already ok). References:
+  tools/mali/testdata/mixed_{44,49}_hdrsample.*; plan in
+  docs/notes/mali-mixed-precision.md section 4. ifelse_loop.frag is a separate
+  mixed-precision plus control-flow program with no reference yet."
