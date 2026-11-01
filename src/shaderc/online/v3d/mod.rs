@@ -35,6 +35,12 @@
 //! * `mesa_ref`: ~590k enumerated words; which are refused and the listing
 //!   of the rest, against Mesa's (tools/v3d/qpu_ref.c), pinned as a digest.
 //!
+//! V3D 7.1 (the Raspberry Pi 5) has its own model and codec beside the 4.2
+//! ones, which are unchanged: [`isa71`] (raddr operands, no accumulators, the
+//! SFU as ALU operations), [`codec71`] (decode and encode, and the generation
+//! as a parameter), [`listing71`]. The gates are `roundtrip71` (the 7.1 corpus,
+//! `tools/v3d/qpu_corpus_71.txt`) and `golden71` (Mesa's ver 71 vectors).
+//!
 //! Compiled only in a `gpu-v3d` build (and its C with it); the tests only in
 //! test builds.
 
@@ -43,10 +49,13 @@
 /// measured with.
 pub const MAT_TIMES_VEC_ORDER: super::ir::MatOrder = super::ir::MatOrder::HighestColumnFirst;
 
+pub mod codec71;
 pub mod decode;
 pub mod encode;
 pub mod isa;
+pub mod isa71;
 pub mod listing;
+pub mod listing71;
 pub mod qpu_ffi;
 /// A test-only interpreter of encoded QPU programs, validated on Mesa's code
 /// (`tests/v3d_sim_mesa.rs`). Built like `eval.rs`: tests and `host-test`.
@@ -70,6 +79,10 @@ pub(crate) mod fields;
 #[cfg(test)]
 mod golden;
 #[cfg(test)]
+mod golden71;
+#[cfg(test)]
 mod mesa_ref;
 #[cfg(test)]
 mod roundtrip;
+#[cfg(test)]
+mod roundtrip71;

@@ -23,9 +23,9 @@ use super::isa::*;
 use core::fmt::{self, Write};
 
 /// A writer that counts the bytes written, for Mesa's column padding.
-struct Col<'a, W: Write> {
-    w: &'a mut W,
-    n: usize,
+pub(super) struct Col<'a, W: Write> {
+    pub(super) w: &'a mut W,
+    pub(super) n: usize,
 }
 
 impl<W: Write> Write for Col<'_, W> {
@@ -36,7 +36,7 @@ impl<W: Write> Write for Col<'_, W> {
 }
 
 impl<W: Write> Col<'_, W> {
-    fn pad_to(&mut self, n: usize) -> fmt::Result {
+    pub(super) fn pad_to(&mut self, n: usize) -> fmt::Result {
         while self.n < n {
             self.write_str(" ")?;
         }
@@ -147,7 +147,7 @@ pub fn mul_op_name(op: MulOp) -> &'static str {
     }
 }
 
-fn cond_name(c: Cond) -> &'static str {
+pub(super) fn cond_name(c: Cond) -> &'static str {
     match c {
         Cond::None => "",
         Cond::IfA => ".ifa",
@@ -157,7 +157,7 @@ fn cond_name(c: Cond) -> &'static str {
     }
 }
 
-fn pf_name(p: Pf) -> &'static str {
+pub(super) fn pf_name(p: Pf) -> &'static str {
     match p {
         Pf::None => "",
         Pf::PushZ => ".pushz",
@@ -166,7 +166,7 @@ fn pf_name(p: Pf) -> &'static str {
     }
 }
 
-fn uf_name(u: Uf) -> &'static str {
+pub(super) fn uf_name(u: Uf) -> &'static str {
     match u {
         Uf::None => "",
         Uf::AndZ => ".andz",
@@ -184,7 +184,7 @@ fn uf_name(u: Uf) -> &'static str {
     }
 }
 
-fn pack_name(p: OutPack) -> &'static str {
+pub(super) fn pack_name(p: OutPack) -> &'static str {
     match p {
         OutPack::None => "",
         OutPack::L => ".l",
@@ -344,7 +344,7 @@ fn alu_text<W: Write>(w: &mut Col<W>, alu: &Alu) -> fmt::Result {
     Ok(())
 }
 
-fn branch_text<W: Write>(w: &mut Col<W>, br: &Branch) -> fmt::Result {
+pub(super) fn branch_text<W: Write>(w: &mut Col<W>, br: &Branch) -> fmt::Result {
     w.write_str("b")?;
     if br.ub {
         w.write_str("u")?;
