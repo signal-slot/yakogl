@@ -1,0 +1,41 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES3 at 0ff58329, 2026-11-01, image FR2: deqp-uart-tally.py --mustpass tools/cts/gles3-mustpass.txt FR2.console.txt (README.md)
+/home/orion/connected-work/01a19631-2606-7743-b132-862f5a9a32f3/build/records/pi4-gles3-0ff58329/FR2//console.txt: deqp: done: 422 passed, 31 failed, 67 not supported, 0 warnings, complete=1 | deqp: summary: 520 cases begun, 520 with a result, 0 without
+mustpass cases with a result: 520 (of 520 seen)
+group                                       pass   fail    n/s  other
+fragment_out                                 422     31     67      0
+TOTAL                                        422     31     67      0
+(the pass / fail counts above are the result lines seen; the image's own counters:)
+  FR2: deqp: summary 520 cases begun, 520 with a result; deqp: done 422 passed, 31 failed, 67 not supported, 0 warnings; 0ff58329 DONE: 520 cases, P 422 F 31 R 0 N 67 other 0; 520 result lines seen
+Fail dEQP-GLES3.functional.fragment_out.random.0
+Fail dEQP-GLES3.functional.fragment_out.random.11
+Fail dEQP-GLES3.functional.fragment_out.random.17
+Fail dEQP-GLES3.functional.fragment_out.random.21
+Fail dEQP-GLES3.functional.fragment_out.random.24
+Fail dEQP-GLES3.functional.fragment_out.random.25
+Fail dEQP-GLES3.functional.fragment_out.random.27
+Fail dEQP-GLES3.functional.fragment_out.random.29
+Fail dEQP-GLES3.functional.fragment_out.random.31
+Fail dEQP-GLES3.functional.fragment_out.random.33
+Fail dEQP-GLES3.functional.fragment_out.random.41
+Fail dEQP-GLES3.functional.fragment_out.random.43
+Fail dEQP-GLES3.functional.fragment_out.random.45
+Fail dEQP-GLES3.functional.fragment_out.random.55
+Fail dEQP-GLES3.functional.fragment_out.random.56
+Fail dEQP-GLES3.functional.fragment_out.random.64
+Fail dEQP-GLES3.functional.fragment_out.random.66
+Fail dEQP-GLES3.functional.fragment_out.random.67
+Fail dEQP-GLES3.functional.fragment_out.random.70
+Fail dEQP-GLES3.functional.fragment_out.random.71
+Fail dEQP-GLES3.functional.fragment_out.random.72
+Fail dEQP-GLES3.functional.fragment_out.random.75
+Fail dEQP-GLES3.functional.fragment_out.random.78
+Fail dEQP-GLES3.functional.fragment_out.random.79
+Fail dEQP-GLES3.functional.fragment_out.random.8
+Fail dEQP-GLES3.functional.fragment_out.random.82
+Fail dEQP-GLES3.functional.fragment_out.random.86
+Fail dEQP-GLES3.functional.fragment_out.random.88
+Fail dEQP-GLES3.functional.fragment_out.random.90
+Fail dEQP-GLES3.functional.fragment_out.random.94
+Fail dEQP-GLES3.functional.fragment_out.random.96

@@ -1,0 +1,36 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES3 at 0ff58329, 2026-11-01, image SQ: deqp-uart-tally.py --mustpass tools/cts/gles3-mustpass.txt SQ.console.txt (README.md)
+/home/orion/connected-work/01a19631-2606-7743-b132-862f5a9a32f3/build/records/pi4-gles3-0ff58329/SQ//console.txt: deqp: done: 917 passed, 26 failed, 9 not supported, 0 warnings, complete=1 | deqp: summary: 952 cases begun, 952 with a result, 0 without
+mustpass cases with a result: 946 (of 952 seen)
+group                                       pass   fail    n/s  other
+state_query                                  911     26      9      0
+TOTAL                                        911     26      9      0
+(the pass / fail counts above are the result lines seen; the image's own counters:)
+  SQ: deqp: summary 952 cases begun, 952 with a result; deqp: done 917 passed, 26 failed, 9 not supported, 0 warnings; 0ff58329 DONE: 952 cases, P 917 F 26 R 0 N 9 other 0; 952 result lines seen
+Fail dEQP-GLES3.functional.state_query.integers.compressed_texture_formats_getfloat
+Fail dEQP-GLES3.functional.state_query.integers.compressed_texture_formats_getinteger
+Fail dEQP-GLES3.functional.state_query.integers.compressed_texture_formats_getinteger64
+Fail dEQP-GLES3.functional.state_query.integers.max_color_attachments_getfloat
+Fail dEQP-GLES3.functional.state_query.integers.max_color_attachments_getinteger64
+Fail dEQP-GLES3.functional.state_query.integers.max_draw_buffers_getfloat
+Fail dEQP-GLES3.functional.state_query.integers.max_draw_buffers_getinteger64
+Fail dEQP-GLES3.functional.state_query.integers.max_fragment_input_components_getfloat
+Fail dEQP-GLES3.functional.state_query.integers.max_fragment_input_components_getinteger64
+Fail dEQP-GLES3.functional.state_query.integers.max_samples_getfloat
+Fail dEQP-GLES3.functional.state_query.integers.max_samples_getinteger64
+Fail dEQP-GLES3.functional.state_query.integers.max_varying_components_getfloat
+Fail dEQP-GLES3.functional.state_query.integers.max_varying_components_getinteger64
+Fail dEQP-GLES3.functional.state_query.integers.max_varying_vectors_getfloat
+Fail dEQP-GLES3.functional.state_query.integers.max_varying_vectors_getinteger64
+Fail dEQP-GLES3.functional.state_query.integers.max_vertex_output_components_getfloat
+Fail dEQP-GLES3.functional.state_query.integers.max_vertex_output_components_getinteger64
+Fail dEQP-GLES3.functional.state_query.integers64.max_combined_fragment_uniform_components_getfloat
+Fail dEQP-GLES3.functional.state_query.integers64.max_combined_fragment_uniform_components_getinteger
+Fail dEQP-GLES3.functional.state_query.integers64.max_combined_vertex_uniform_components_getfloat
+Fail dEQP-GLES3.functional.state_query.integers64.max_combined_vertex_uniform_components_getinteger
+Fail dEQP-GLES3.functional.state_query.integers64.max_uniform_block_size_getfloat
+Fail dEQP-GLES3.functional.state_query.integers64.max_uniform_block_size_getinteger
+Fail dEQP-GLES3.functional.state_query.rbo.renderbuffer_component_size_color
+Fail dEQP-GLES3.functional.state_query.shader.program_active_uniform_types
+Fail dEQP-GLES3.functional.state_query.shader.program_binary
