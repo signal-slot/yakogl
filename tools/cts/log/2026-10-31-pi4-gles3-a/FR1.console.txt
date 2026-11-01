@@ -1,0 +1,2232 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES3 at 0ff58329, 2026-11-01, image FR1: UART console of the run, from the firmware's first line to the image's end line (README.md)
+  5.04 [sdcard] pieeprom.upd not found
+  5.05 [sdcard] recover4.elf not found
+  5.05 [sdcard] recovery.elf not found
+  5.82 Read start4.elf bytes  2299008 hnd 0x211ac
+  5.88 Read fixup4.dat bytes     5496 hnd 0x20bca
+  5.89 0x00d03114 0x00000000 0x00001fff
+  5.93 MEM GPU: 76 ARM: 948 TOTAL: 1024
+  5.29 Starting start4.elf @ 0xfec00200 partition 1
+  5.23 XHCI-STOP
+  5.23 xHC0 ver: 256 HCS: 05000420 fc000031 00e70004 HCC: 002841eb
+  5.23 USBSTS 18
+  5.24 PCI0 reset
+  5.25 +
+
+MESS:00:00:05.264219:0: arasan: arasan_emmc_open
+MESS:00:00:05.265877:0: arasan: arasan_emmc_set_clock C0: 0x00800000 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 400000 max: 400000 delay: 5
+MESS:00:00:05.386102:0: arasan: arasan_emmc_set_clock C0: 0x00800000 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 400000 max: 400000 delay: 5
+MESS:00:00:05.398971:0: arasan: arasan_emmc_set_clock C0: 0x00800f00 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 390000 max: 400000 delay: 5
+MESS:00:00:05.433245:0: boot-part: 1 fs-type: 0
+MESS:00:00:05.434656:0: boot-part: 1 fs-type: 3
+MESS:00:00:05.439040:0: arasan: arasan_emmc_set_clock C0: 0x00800f06 C1: 0x000e0207 emmc: 200000000 actual: 50000000 div: 0x00000002 target: 50000000 min: 0 max: 50000000 delay: 1
+MESS:00:00:05.600722:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:05.603606:0: brfs: File read: 256 bytes
+MESS:00:00:05.696080:0: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:05.700588:0: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:05.714163:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:06.180304:0: gpioman: gpioman_get_pin_num: pin DISPLAY_DSI_PORT not defined
+MESS:00:00:06.185850:0: gpioman: gpioman_get_pin_num: pin DISPLAY_DSI_PORT not defined
+MESS:00:00:06.194887:0: *** Restart logging
+MESS:00:00:06.196658:0: brfs: File read: 256 bytes
+MESS:00:00:06.274821:0: hdmi: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:06.279852:0: hdmi: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:06.298069:0: hdmi: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:06.303139:0: hdmi: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:06.308738:0: hdmi: HDMI:hdmi_get_state is deprecated, use hdmi_get_display_state instead
+MESS:00:00:06.317496:0: HDMI0: hdmi_pixel_encoding: 300000000
+MESS:00:00:06.323003:0: HDMI1: hdmi_pixel_encoding: 300000000
+MESS:00:00:06.344931:0: dtb_file 'bcm2711-rpi-4-b.dtb'
+MESS:00:00:06.360219:0: brfs: File read: /mfs/sd/bcm2711-rpi-4-b.dtb
+MESS:00:00:06.363510:0: Loaded 'bcm2711-rpi-4-b.dtb' to 0x100 size 0xdbb9
+MESS:00:00:06.404266:0: brfs: File read: 56249 bytes
+MESS:00:00:06.423819:0: brfs: File read: /mfs/sd/overlays/overlay_map.dtb
+MESS:00:00:06.488738:0: brfs: File read: 5971 bytes
+MESS:00:00:06.491427:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:06.534519:0: brfs: File read: 256 bytes
+MESS:00:00:06.538248:0: brfs: File read: /mfs/sd/cmdline.txt
+MESS:00:00:06.541678:0: Read command line from file 'cmdline.txt':
+MESS:00:00:06.547529:0: 'console=serial0,115200 console=tty1 root=PARTUUID=269eab4a-02 rootfstype=ext4 fsck.repair=yes rootwait cfg80211.ieee80211_regdom=JP splash quiet'
+MESS:00:00:06.704505:0: brfs: File read: 145 bytes
+MESS:00:00:08.099703:0: brfs: File read: /mfs/sd/yakogl-FR1.bin
+MESS:00:00:08.102523:0: Loaded 'yakogl-FR1.bin' to 0x200000 size 0xfc47e0
+MESS:00:00:08.109049:0: Device tree loaded to 0x2eff1f00 (size 0xe0a1)
+MESS:00:00:08.117818:0: uart: Set PL011 baud rate to 103448.300000 Hz
+MESS:00:00:08.124352:0: uart: Baud rate change done...
+MESS:00:00:08.126375:0:board: watchdog armed
+*** Booting Zephyr OS build af17c0c8aa2a ***
+I: shader compiler scratch: 4194304 bytes, keep: 1048576 bytes
+v3d_deqp: build 0ff58329
+board: PM watchdog resets the SoC ~250 s after boot (tryboot -> Linux)
+v3d_deqp: the record at 210 s after boot at the latest
+V3D clock 250000000 -> 500000000 Hz (0)
+deqp: case filter 'dEQP-GLES3.functional.fragment_out.array.*'
+Writing test log into deqp.qpa
+dEQP Core vulkan-cts-1.4.6.2-555-g93bca01861b0e3ef3c387027a9791e6d065f900c (0x93bca018) starting..
+  target implementation = 'YakoGL-Zephyr'
+I: V3D 4.2: 1 core(s), 8 QPUs, VPM 65536 bytes, PA 35 / VA 35 bits, MMU yes
+I: V3D raw: HUB_IDENT0..3 42554856 000e1124 00000100 00000e00 CTL_IDENT0..2 04443356 81001422 40078121 MMU_DEBUG_INFO 00000550
+osal(v3d): V3D 4.2, 8 QPUs, VPM 65536 bytes, MMU yes (identify 0)
+osal(v3d): UIFCFG 0x00000045
+osal(v3d): ready: carve-out 48 MiB at phys 0x2f07000, GPU VA 0x181000..0x3100000
+yakogl/v3d: depth and stencil apart (by renderbuffer), the platform's setting
+yakogl/v3d: job arenas for 1024 draws (the platform's budget): BCL 139264, indirect 458752, binner tile pool 1056768 bytes; tiled copies kept up to 16777216 bytes
+yakogl/v3d: two job arena sets (the second's texture arena 1048576 bytes): a job is recorded while the one before runs
+yakogl/v3d: clear program built: 408 bytes of code
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.r8_highp_float'..
+yakogl/v3d: binner pool after job 1: given 0x00b96000 + 1056768, BPCA 0x00b99000 BPCS 1044480 CT0QMA 0x00b96000 CT0QMS 1056768, overflow blocks 0 of 2 (262144 bytes each)
+osal(v3d): BASELINE after a completed job 1: core_sts 0x0 hub_sts 0x0 err 0x1000 ct0 cs 0x0 ea 0x201011 ca 0x201011 ra 0x0 qba 0x201000 qea 0x201011 ct1 ca 0x223097 ra 0x223096 qba 0x223000 qea 0x223097
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.r8_highp_float
+v3d_deqp: case #0 P 160ms k2/8 c15536/15597 r0 dEQP-GLES3.functional.fragment_out.array.fixed.r8_highp_float
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.r8_highp_vec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.r8_highp_vec2
+v3d_deqp: case #1 P 30ms k2/8 c15537/15599 r0 dEQP-GLES3.functional.fragment_out.array.fixed.r8_highp_vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.r8_highp_vec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.r8_highp_vec3
+v3d_deqp: case #2 P 30ms k2/9 c15537/15601 r0 dEQP-GLES3.functional.fragment_out.array.fixed.r8_highp_vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.r8_highp_vec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.r8_highp_vec4
+v3d_deqp: case #3 P 30ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.r8_highp_vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.r8_lowp_float'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.r8_lowp_float
+v3d_deqp: case #4 P 30ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.r8_lowp_float
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.r8_lowp_vec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.r8_lowp_vec2
+v3d_deqp: case #5 P 29ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.r8_lowp_vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.r8_lowp_vec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.r8_lowp_vec3
+v3d_deqp: case #6 P 30ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.r8_lowp_vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.r8_lowp_vec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.r8_lowp_vec4
+v3d_deqp: case #7 P 30ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.r8_lowp_vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.r8_mediump_float'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.r8_mediump_float
+v3d_deqp: case #8 P 30ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.r8_mediump_float
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.r8_mediump_vec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.r8_mediump_vec2
+v3d_deqp: case #9 P 31ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.r8_mediump_vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.r8_mediump_vec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.r8_mediump_vec3
+v3d_deqp: case #10 P 30ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.r8_mediump_vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.r8_mediump_vec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.r8_mediump_vec4
+v3d_deqp: case #11 P 31ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.r8_mediump_vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rg8_highp_float'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rg8_highp_float
+v3d_deqp: case #12 P 30ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rg8_highp_float
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rg8_highp_vec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rg8_highp_vec2
+v3d_deqp: case #13 P 31ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rg8_highp_vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rg8_highp_vec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rg8_highp_vec3
+v3d_deqp: case #14 P 30ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rg8_highp_vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rg8_highp_vec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rg8_highp_vec4
+v3d_deqp: case #15 P 31ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rg8_highp_vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rg8_lowp_float'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rg8_lowp_float
+v3d_deqp: case #16 P 30ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rg8_lowp_float
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rg8_lowp_vec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rg8_lowp_vec2
+v3d_deqp: case #17 P 30ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rg8_lowp_vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rg8_lowp_vec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rg8_lowp_vec3
+v3d_deqp: case #18 P 30ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rg8_lowp_vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rg8_lowp_vec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rg8_lowp_vec4
+v3d_deqp: case #19 P 31ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rg8_lowp_vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rg8_mediump_float'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rg8_mediump_float
+v3d_deqp: case #20 P 30ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rg8_mediump_float
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rg8_mediump_vec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rg8_mediump_vec2
+v3d_deqp: case #21 P 31ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rg8_mediump_vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rg8_mediump_vec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rg8_mediump_vec3
+v3d_deqp: case #22 P 31ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rg8_mediump_vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rg8_mediump_vec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rg8_mediump_vec4
+v3d_deqp: case #23 P 31ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rg8_mediump_vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgb10_a2_highp_float'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgb10_a2_highp_float
+v3d_deqp: case #24 P 32ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgb10_a2_highp_float
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgb10_a2_highp_vec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgb10_a2_highp_vec2
+v3d_deqp: case #25 P 32ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgb10_a2_highp_vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgb10_a2_highp_vec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgb10_a2_highp_vec3
+v3d_deqp: case #26 P 32ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgb10_a2_highp_vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgb10_a2_highp_vec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgb10_a2_highp_vec4
+v3d_deqp: case #27 P 32ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgb10_a2_highp_vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgb10_a2_lowp_float'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgb10_a2_lowp_float
+v3d_deqp: case #28 P 32ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgb10_a2_lowp_float
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgb10_a2_lowp_vec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgb10_a2_lowp_vec2
+v3d_deqp: case #29 P 32ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgb10_a2_lowp_vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgb10_a2_lowp_vec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgb10_a2_lowp_vec3
+v3d_deqp: case #30 P 32ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgb10_a2_lowp_vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgb10_a2_lowp_vec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgb10_a2_lowp_vec4
+v3d_deqp: case #31 P 32ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgb10_a2_lowp_vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgb10_a2_mediump_float'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgb10_a2_mediump_float
+v3d_deqp: case #32 P 32ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgb10_a2_mediump_float
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgb10_a2_mediump_vec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgb10_a2_mediump_vec2
+v3d_deqp: case #33 P 32ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgb10_a2_mediump_vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgb10_a2_mediump_vec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgb10_a2_mediump_vec3
+v3d_deqp: case #34 P 33ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgb10_a2_mediump_vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgb10_a2_mediump_vec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgb10_a2_mediump_vec4
+v3d_deqp: case #35 P 33ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgb10_a2_mediump_vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgb565_highp_float'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgb565_highp_float
+v3d_deqp: case #36 P 31ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgb565_highp_float
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgb565_highp_vec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgb565_highp_vec2
+v3d_deqp: case #37 P 32ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgb565_highp_vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgb565_highp_vec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgb565_highp_vec3
+v3d_deqp: case #38 P 31ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgb565_highp_vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgb565_highp_vec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgb565_highp_vec4
+v3d_deqp: case #39 P 32ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgb565_highp_vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgb565_lowp_float'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgb565_lowp_float
+v3d_deqp: case #40 P 31ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgb565_lowp_float
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgb565_lowp_vec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgb565_lowp_vec2
+v3d_deqp: case #41 P 31ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgb565_lowp_vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgb565_lowp_vec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgb565_lowp_vec3
+v3d_deqp: case #42 P 31ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgb565_lowp_vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgb565_lowp_vec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgb565_lowp_vec4
+v3d_deqp: case #43 P 32ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgb565_lowp_vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgb565_mediump_float'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgb565_mediump_float
+v3d_deqp: case #44 P 31ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgb565_mediump_float
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgb565_mediump_vec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgb565_mediump_vec2
+v3d_deqp: case #45 P 32ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgb565_mediump_vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgb565_mediump_vec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgb565_mediump_vec3
+v3d_deqp: case #46 P 32ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgb565_mediump_vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgb565_mediump_vec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgb565_mediump_vec4
+v3d_deqp: case #47 P 32ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgb565_mediump_vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgb5_a1_highp_float'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgb5_a1_highp_float
+v3d_deqp: case #48 P 32ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgb5_a1_highp_float
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgb5_a1_highp_vec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgb5_a1_highp_vec2
+v3d_deqp: case #49 P 31ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgb5_a1_highp_vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgb5_a1_highp_vec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgb5_a1_highp_vec3
+v3d_deqp: case #50 P 32ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgb5_a1_highp_vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgb5_a1_highp_vec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgb5_a1_highp_vec4
+v3d_deqp: case #51 P 32ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgb5_a1_highp_vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgb5_a1_lowp_float'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgb5_a1_lowp_float
+v3d_deqp: case #52 P 32ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgb5_a1_lowp_float
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgb5_a1_lowp_vec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgb5_a1_lowp_vec2
+v3d_deqp: case #53 P 31ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgb5_a1_lowp_vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgb5_a1_lowp_vec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgb5_a1_lowp_vec3
+v3d_deqp: case #54 P 32ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgb5_a1_lowp_vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgb5_a1_lowp_vec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgb5_a1_lowp_vec4
+v3d_deqp: case #55 P 32ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgb5_a1_lowp_vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgb5_a1_mediump_float'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgb5_a1_mediump_float
+v3d_deqp: case #56 P 31ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgb5_a1_mediump_float
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgb5_a1_mediump_vec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgb5_a1_mediump_vec2
+v3d_deqp: case #57 P 33ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgb5_a1_mediump_vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgb5_a1_mediump_vec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgb5_a1_mediump_vec3
+v3d_deqp: case #58 P 32ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgb5_a1_mediump_vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgb5_a1_mediump_vec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgb5_a1_mediump_vec4
+v3d_deqp: case #59 P 33ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgb5_a1_mediump_vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgb8_highp_float'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgb8_highp_float
+v3d_deqp: case #60 P 31ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgb8_highp_float
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgb8_highp_vec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgb8_highp_vec2
+v3d_deqp: case #61 P 31ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgb8_highp_vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgb8_highp_vec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgb8_highp_vec3
+v3d_deqp: case #62 P 30ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgb8_highp_vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgb8_highp_vec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgb8_highp_vec4
+v3d_deqp: case #63 P 32ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgb8_highp_vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgb8_lowp_float'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgb8_lowp_float
+v3d_deqp: case #64 P 30ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgb8_lowp_float
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgb8_lowp_vec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgb8_lowp_vec2
+v3d_deqp: case #65 P 31ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgb8_lowp_vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgb8_lowp_vec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgb8_lowp_vec3
+v3d_deqp: case #66 P 30ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgb8_lowp_vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgb8_lowp_vec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgb8_lowp_vec4
+v3d_deqp: case #67 P 31ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgb8_lowp_vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgb8_mediump_float'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgb8_mediump_float
+v3d_deqp: case #68 P 31ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgb8_mediump_float
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgb8_mediump_vec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgb8_mediump_vec2
+v3d_deqp: case #69 P 31ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgb8_mediump_vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgb8_mediump_vec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgb8_mediump_vec3
+v3d_deqp: case #70 P 32ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgb8_mediump_vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgb8_mediump_vec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgb8_mediump_vec4
+v3d_deqp: case #71 P 32ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgb8_mediump_vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgba4_highp_float'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgba4_highp_float
+v3d_deqp: case #72 P 31ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgba4_highp_float
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgba4_highp_vec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgba4_highp_vec2
+v3d_deqp: case #73 P 31ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgba4_highp_vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgba4_highp_vec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgba4_highp_vec3
+v3d_deqp: case #74 P 31ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgba4_highp_vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgba4_highp_vec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgba4_highp_vec4
+v3d_deqp: case #75 P 32ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgba4_highp_vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgba4_lowp_float'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgba4_lowp_float
+v3d_deqp: case #76 P 31ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgba4_lowp_float
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgba4_lowp_vec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgba4_lowp_vec2
+v3d_deqp: case #77 P 31ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgba4_lowp_vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgba4_lowp_vec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgba4_lowp_vec3
+v3d_deqp: case #78 P 31ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgba4_lowp_vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgba4_lowp_vec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgba4_lowp_vec4
+v3d_deqp: case #79 P 31ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgba4_lowp_vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgba4_mediump_float'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgba4_mediump_float
+v3d_deqp: case #80 P 31ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgba4_mediump_float
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgba4_mediump_vec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgba4_mediump_vec2
+v3d_deqp: case #81 P 32ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgba4_mediump_vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgba4_mediump_vec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgba4_mediump_vec3
+v3d_deqp: case #82 P 32ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgba4_mediump_vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgba4_mediump_vec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgba4_mediump_vec4
+v3d_deqp: case #83 P 32ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgba4_mediump_vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgba8_highp_float'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgba8_highp_float
+v3d_deqp: case #84 P 31ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgba8_highp_float
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgba8_highp_vec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgba8_highp_vec2
+v3d_deqp: case #85 P 31ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgba8_highp_vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgba8_highp_vec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgba8_highp_vec3
+v3d_deqp: case #86 P 32ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgba8_highp_vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgba8_highp_vec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgba8_highp_vec4
+v3d_deqp: case #87 P 31ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgba8_highp_vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgba8_lowp_float'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgba8_lowp_float
+v3d_deqp: case #88 P 31ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgba8_lowp_float
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgba8_lowp_vec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgba8_lowp_vec2
+v3d_deqp: case #89 P 31ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgba8_lowp_vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgba8_lowp_vec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgba8_lowp_vec3
+v3d_deqp: case #90 P 31ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgba8_lowp_vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgba8_lowp_vec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgba8_lowp_vec4
+v3d_deqp: case #91 P 32ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgba8_lowp_vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgba8_mediump_float'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgba8_mediump_float
+v3d_deqp: case #92 P 31ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgba8_mediump_float
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgba8_mediump_vec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgba8_mediump_vec2
+v3d_deqp: case #93 P 32ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgba8_mediump_vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgba8_mediump_vec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgba8_mediump_vec3
+v3d_deqp: case #94 P 31ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgba8_mediump_vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.rgba8_mediump_vec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.rgba8_mediump_vec4
+v3d_deqp: case #95 P 33ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.rgba8_mediump_vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.srgb8_alpha8_highp_float'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.srgb8_alpha8_highp_float
+v3d_deqp: case #96 P 35ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.srgb8_alpha8_highp_float
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.srgb8_alpha8_highp_vec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.srgb8_alpha8_highp_vec2
+v3d_deqp: case #97 P 39ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.srgb8_alpha8_highp_vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.srgb8_alpha8_highp_vec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.srgb8_alpha8_highp_vec3
+v3d_deqp: case #98 P 41ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.srgb8_alpha8_highp_vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.srgb8_alpha8_highp_vec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.srgb8_alpha8_highp_vec4
+v3d_deqp: case #99 P 41ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.srgb8_alpha8_highp_vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.srgb8_alpha8_lowp_float'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.srgb8_alpha8_lowp_float
+v3d_deqp: case #100 P 36ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.srgb8_alpha8_lowp_float
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.srgb8_alpha8_lowp_vec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.srgb8_alpha8_lowp_vec2
+v3d_deqp: case #101 P 38ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.srgb8_alpha8_lowp_vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.srgb8_alpha8_lowp_vec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.srgb8_alpha8_lowp_vec3
+v3d_deqp: case #102 P 42ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.srgb8_alpha8_lowp_vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.srgb8_alpha8_lowp_vec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.srgb8_alpha8_lowp_vec4
+v3d_deqp: case #103 P 41ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.srgb8_alpha8_lowp_vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.srgb8_alpha8_mediump_float'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.srgb8_alpha8_mediump_float
+v3d_deqp: case #104 P 36ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.srgb8_alpha8_mediump_float
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.srgb8_alpha8_mediump_vec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.srgb8_alpha8_mediump_vec2
+v3d_deqp: case #105 P 39ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.srgb8_alpha8_mediump_vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.srgb8_alpha8_mediump_vec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.srgb8_alpha8_mediump_vec3
+v3d_deqp: case #106 P 42ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.srgb8_alpha8_mediump_vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.fixed.srgb8_alpha8_mediump_vec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.fixed.srgb8_alpha8_mediump_vec4
+v3d_deqp: case #107 P 43ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.fixed.srgb8_alpha8_mediump_vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.r11f_g11f_b10f_highp_float'..
+deqp: NotSupported dEQP-GLES3.functional.fragment_out.array.float.r11f_g11f_b10f_highp_float
+v3d_deqp: case #108 N 28ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.float.r11f_g11f_b10f_highp_float
+  NotSupported (Unsupported attachment format)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.r11f_g11f_b10f_highp_vec2'..
+deqp: NotSupported dEQP-GLES3.functional.fragment_out.array.float.r11f_g11f_b10f_highp_vec2
+v3d_deqp: case #109 N 31ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.float.r11f_g11f_b10f_highp_vec2
+  NotSupported (Unsupported attachment format)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.r11f_g11f_b10f_highp_vec3'..
+deqp: NotSupported dEQP-GLES3.functional.fragment_out.array.float.r11f_g11f_b10f_highp_vec3
+v3d_deqp: case #110 N 31ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.float.r11f_g11f_b10f_highp_vec3
+  NotSupported (Unsupported attachment format)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.r11f_g11f_b10f_highp_vec4'..
+deqp: NotSupported dEQP-GLES3.functional.fragment_out.array.float.r11f_g11f_b10f_highp_vec4
+v3d_deqp: case #111 N 31ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.float.r11f_g11f_b10f_highp_vec4
+  NotSupported (Unsupported attachment format)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.r11f_g11f_b10f_lowp_float'..
+deqp: NotSupported dEQP-GLES3.functional.fragment_out.array.float.r11f_g11f_b10f_lowp_float
+v3d_deqp: case #112 N 31ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.float.r11f_g11f_b10f_lowp_float
+  NotSupported (Unsupported attachment format)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.r11f_g11f_b10f_lowp_vec2'..
+deqp: NotSupported dEQP-GLES3.functional.fragment_out.array.float.r11f_g11f_b10f_lowp_vec2
+v3d_deqp: case #113 N 31ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.float.r11f_g11f_b10f_lowp_vec2
+  NotSupported (Unsupported attachment format)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.r11f_g11f_b10f_lowp_vec3'..
+deqp: NotSupported dEQP-GLES3.functional.fragment_out.array.float.r11f_g11f_b10f_lowp_vec3
+v3d_deqp: case #114 N 30ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.float.r11f_g11f_b10f_lowp_vec3
+  NotSupported (Unsupported attachment format)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.r11f_g11f_b10f_lowp_vec4'..
+deqp: NotSupported dEQP-GLES3.functional.fragment_out.array.float.r11f_g11f_b10f_lowp_vec4
+v3d_deqp: case #115 N 31ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.float.r11f_g11f_b10f_lowp_vec4
+  NotSupported (Unsupported attachment format)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.r11f_g11f_b10f_mediump_float'..
+deqp: NotSupported dEQP-GLES3.functional.fragment_out.array.float.r11f_g11f_b10f_mediump_float
+v3d_deqp: case #116 N 32ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.float.r11f_g11f_b10f_mediump_float
+  NotSupported (Unsupported attachment format)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.r11f_g11f_b10f_mediump_vec2'..
+deqp: NotSupported dEQP-GLES3.functional.fragment_out.array.float.r11f_g11f_b10f_mediump_vec2
+v3d_deqp: case #117 N 31ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.float.r11f_g11f_b10f_mediump_vec2
+  NotSupported (Unsupported attachment format)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.r11f_g11f_b10f_mediump_vec3'..
+deqp: NotSupported dEQP-GLES3.functional.fragment_out.array.float.r11f_g11f_b10f_mediump_vec3
+v3d_deqp: case #118 N 32ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.float.r11f_g11f_b10f_mediump_vec3
+  NotSupported (Unsupported attachment format)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.r11f_g11f_b10f_mediump_vec4'..
+deqp: NotSupported dEQP-GLES3.functional.fragment_out.array.float.r11f_g11f_b10f_mediump_vec4
+v3d_deqp: case #119 N 31ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.float.r11f_g11f_b10f_mediump_vec4
+  NotSupported (Unsupported attachment format)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.r16f_highp_float'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.float.r16f_highp_float
+v3d_deqp: case #120 P 36ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.float.r16f_highp_float
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.r16f_highp_vec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.float.r16f_highp_vec2
+v3d_deqp: case #121 P 32ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.float.r16f_highp_vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.r16f_highp_vec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.float.r16f_highp_vec3
+v3d_deqp: case #122 P 33ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.float.r16f_highp_vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.r16f_highp_vec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.float.r16f_highp_vec4
+v3d_deqp: case #123 P 32ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.float.r16f_highp_vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.r16f_lowp_float'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.float.r16f_lowp_float
+v3d_deqp: case #124 P 32ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.float.r16f_lowp_float
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.r16f_lowp_vec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.float.r16f_lowp_vec2
+v3d_deqp: case #125 P 32ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.float.r16f_lowp_vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.r16f_lowp_vec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.float.r16f_lowp_vec3
+v3d_deqp: case #126 P 32ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.float.r16f_lowp_vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.r16f_lowp_vec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.float.r16f_lowp_vec4
+v3d_deqp: case #127 P 32ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.float.r16f_lowp_vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.r16f_mediump_float'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.float.r16f_mediump_float
+v3d_deqp: case #128 P 33ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.float.r16f_mediump_float
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.r16f_mediump_vec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.float.r16f_mediump_vec2
+v3d_deqp: case #129 P 32ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.float.r16f_mediump_vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.r16f_mediump_vec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.float.r16f_mediump_vec3
+v3d_deqp: case #130 P 33ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.float.r16f_mediump_vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.r16f_mediump_vec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.float.r16f_mediump_vec4
+v3d_deqp: case #131 P 33ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.float.r16f_mediump_vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.r32f_highp_float'..
+deqp: NotSupported dEQP-GLES3.functional.fragment_out.array.float.r32f_highp_float
+v3d_deqp: case #132 N 26ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.float.r32f_highp_float
+  NotSupported (Unsupported attachment format)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.r32f_highp_vec2'..
+deqp: NotSupported dEQP-GLES3.functional.fragment_out.array.float.r32f_highp_vec2
+v3d_deqp: case #133 N 28ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.float.r32f_highp_vec2
+  NotSupported (Unsupported attachment format)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.r32f_highp_vec3'..
+deqp: NotSupported dEQP-GLES3.functional.fragment_out.array.float.r32f_highp_vec3
+v3d_deqp: case #134 N 29ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.float.r32f_highp_vec3
+  NotSupported (Unsupported attachment format)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.r32f_highp_vec4'..
+deqp: NotSupported dEQP-GLES3.functional.fragment_out.array.float.r32f_highp_vec4
+v3d_deqp: case #135 N 28ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.float.r32f_highp_vec4
+  NotSupported (Unsupported attachment format)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.r32f_lowp_float'..
+deqp: NotSupported dEQP-GLES3.functional.fragment_out.array.float.r32f_lowp_float
+v3d_deqp: case #136 N 29ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.float.r32f_lowp_float
+  NotSupported (Unsupported attachment format)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.r32f_lowp_vec2'..
+deqp: NotSupported dEQP-GLES3.functional.fragment_out.array.float.r32f_lowp_vec2
+v3d_deqp: case #137 N 28ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.float.r32f_lowp_vec2
+  NotSupported (Unsupported attachment format)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.r32f_lowp_vec3'..
+deqp: NotSupported dEQP-GLES3.functional.fragment_out.array.float.r32f_lowp_vec3
+v3d_deqp: case #138 N 28ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.float.r32f_lowp_vec3
+  NotSupported (Unsupported attachment format)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.r32f_lowp_vec4'..
+deqp: NotSupported dEQP-GLES3.functional.fragment_out.array.float.r32f_lowp_vec4
+v3d_deqp: case #139 N 28ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.float.r32f_lowp_vec4
+  NotSupported (Unsupported attachment format)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.r32f_mediump_float'..
+deqp: NotSupported dEQP-GLES3.functional.fragment_out.array.float.r32f_mediump_float
+v3d_deqp: case #140 N 29ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.float.r32f_mediump_float
+  NotSupported (Unsupported attachment format)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.r32f_mediump_vec2'..
+deqp: NotSupported dEQP-GLES3.functional.fragment_out.array.float.r32f_mediump_vec2
+v3d_deqp: case #141 N 29ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.float.r32f_mediump_vec2
+  NotSupported (Unsupported attachment format)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.r32f_mediump_vec3'..
+deqp: NotSupported dEQP-GLES3.functional.fragment_out.array.float.r32f_mediump_vec3
+v3d_deqp: case #142 N 29ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.float.r32f_mediump_vec3
+  NotSupported (Unsupported attachment format)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.r32f_mediump_vec4'..
+deqp: NotSupported dEQP-GLES3.functional.fragment_out.array.float.r32f_mediump_vec4
+v3d_deqp: case #143 N 28ms k2/9 c15539/15603 r0 dEQP-GLES3.functional.fragment_out.array.float.r32f_mediump_vec4
+  NotSupported (Unsupported attachment format)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.rg16f_highp_float'..
+deqp: Fail dEQP-GLES3.functional.fragment_out.array.float.rg16f_highp_float
+v3d_deqp: case #144 F 37ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.float.rg16f_highp_float
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.rg16f_highp_vec2'..
+deqp: Fail dEQP-GLES3.functional.fragment_out.array.float.rg16f_highp_vec2
+v3d_deqp: case #145 F 34ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.float.rg16f_highp_vec2
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.rg16f_highp_vec3'..
+deqp: Fail dEQP-GLES3.functional.fragment_out.array.float.rg16f_highp_vec3
+v3d_deqp: case #146 F 36ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.float.rg16f_highp_vec3
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.rg16f_highp_vec4'..
+deqp: Fail dEQP-GLES3.functional.fragment_out.array.float.rg16f_highp_vec4
+v3d_deqp: case #147 F 35ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.float.rg16f_highp_vec4
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.rg16f_lowp_float'..
+deqp: Fail dEQP-GLES3.functional.fragment_out.array.float.rg16f_lowp_float
+v3d_deqp: case #148 F 35ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.float.rg16f_lowp_float
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.rg16f_lowp_vec2'..
+deqp: Fail dEQP-GLES3.functional.fragment_out.array.float.rg16f_lowp_vec2
+v3d_deqp: case #149 F 35ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.float.rg16f_lowp_vec2
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.rg16f_lowp_vec3'..
+deqp: Fail dEQP-GLES3.functional.fragment_out.array.float.rg16f_lowp_vec3
+v3d_deqp: case #150 F 35ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.float.rg16f_lowp_vec3
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.rg16f_lowp_vec4'..
+deqp: Fail dEQP-GLES3.functional.fragment_out.array.float.rg16f_lowp_vec4
+v3d_deqp: case #151 F 35ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.float.rg16f_lowp_vec4
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.rg16f_mediump_float'..
+deqp: Fail dEQP-GLES3.functional.fragment_out.array.float.rg16f_mediump_float
+v3d_deqp: case #152 F 35ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.float.rg16f_mediump_float
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.rg16f_mediump_vec2'..
+deqp: Fail dEQP-GLES3.functional.fragment_out.array.float.rg16f_mediump_vec2
+v3d_deqp: case #153 F 35ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.float.rg16f_mediump_vec2
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.rg16f_mediump_vec3'..
+deqp: Fail dEQP-GLES3.functional.fragment_out.array.float.rg16f_mediump_vec3
+v3d_deqp: case #154 F 36ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.float.rg16f_mediump_vec3
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.rg16f_mediump_vec4'..
+deqp: Fail dEQP-GLES3.functional.fragment_out.array.float.rg16f_mediump_vec4
+v3d_deqp: case #155 F 36ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.float.rg16f_mediump_vec4
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.rg32f_highp_float'..
+deqp: NotSupported dEQP-GLES3.functional.fragment_out.array.float.rg32f_highp_float
+v3d_deqp: case #156 N 28ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.float.rg32f_highp_float
+  NotSupported (Unsupported attachment format)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.rg32f_highp_vec2'..
+deqp: NotSupported dEQP-GLES3.functional.fragment_out.array.float.rg32f_highp_vec2
+v3d_deqp: case #157 N 28ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.float.rg32f_highp_vec2
+  NotSupported (Unsupported attachment format)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.rg32f_highp_vec3'..
+deqp: NotSupported dEQP-GLES3.functional.fragment_out.array.float.rg32f_highp_vec3
+v3d_deqp: case #158 N 29ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.float.rg32f_highp_vec3
+  NotSupported (Unsupported attachment format)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.rg32f_highp_vec4'..
+deqp: NotSupported dEQP-GLES3.functional.fragment_out.array.float.rg32f_highp_vec4
+v3d_deqp: case #159 N 29ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.float.rg32f_highp_vec4
+  NotSupported (Unsupported attachment format)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.rg32f_lowp_float'..
+deqp: NotSupported dEQP-GLES3.functional.fragment_out.array.float.rg32f_lowp_float
+v3d_deqp: case #160 N 28ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.float.rg32f_lowp_float
+  NotSupported (Unsupported attachment format)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.rg32f_lowp_vec2'..
+deqp: NotSupported dEQP-GLES3.functional.fragment_out.array.float.rg32f_lowp_vec2
+v3d_deqp: case #161 N 29ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.float.rg32f_lowp_vec2
+  NotSupported (Unsupported attachment format)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.rg32f_lowp_vec3'..
+deqp: NotSupported dEQP-GLES3.functional.fragment_out.array.float.rg32f_lowp_vec3
+v3d_deqp: case #162 N 28ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.float.rg32f_lowp_vec3
+  NotSupported (Unsupported attachment format)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.rg32f_lowp_vec4'..
+deqp: NotSupported dEQP-GLES3.functional.fragment_out.array.float.rg32f_lowp_vec4
+v3d_deqp: case #163 N 28ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.float.rg32f_lowp_vec4
+  NotSupported (Unsupported attachment format)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.rg32f_mediump_float'..
+deqp: NotSupported dEQP-GLES3.functional.fragment_out.array.float.rg32f_mediump_float
+v3d_deqp: case #164 N 30ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.float.rg32f_mediump_float
+  NotSupported (Unsupported attachment format)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.rg32f_mediump_vec2'..
+deqp: NotSupported dEQP-GLES3.functional.fragment_out.array.float.rg32f_mediump_vec2
+v3d_deqp: case #165 N 29ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.float.rg32f_mediump_vec2
+  NotSupported (Unsupported attachment format)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.rg32f_mediump_vec3'..
+deqp: NotSupported dEQP-GLES3.functional.fragment_out.array.float.rg32f_mediump_vec3
+v3d_deqp: case #166 N 29ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.float.rg32f_mediump_vec3
+  NotSupported (Unsupported attachment format)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.rg32f_mediump_vec4'..
+deqp: NotSupported dEQP-GLES3.functional.fragment_out.array.float.rg32f_mediump_vec4
+v3d_deqp: case #167 N 29ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.float.rg32f_mediump_vec4
+  NotSupported (Unsupported attachment format)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.rgba16f_highp_float'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.float.rgba16f_highp_float
+v3d_deqp: case #168 P 37ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.float.rgba16f_highp_float
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.rgba16f_highp_vec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.float.rgba16f_highp_vec2
+v3d_deqp: case #169 P 34ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.float.rgba16f_highp_vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.rgba16f_highp_vec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.float.rgba16f_highp_vec3
+v3d_deqp: case #170 P 35ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.float.rgba16f_highp_vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.rgba16f_highp_vec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.float.rgba16f_highp_vec4
+v3d_deqp: case #171 P 34ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.float.rgba16f_highp_vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.rgba16f_lowp_float'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.float.rgba16f_lowp_float
+v3d_deqp: case #172 P 34ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.float.rgba16f_lowp_float
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.rgba16f_lowp_vec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.float.rgba16f_lowp_vec2
+v3d_deqp: case #173 P 34ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.float.rgba16f_lowp_vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.rgba16f_lowp_vec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.float.rgba16f_lowp_vec3
+v3d_deqp: case #174 P 34ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.float.rgba16f_lowp_vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.rgba16f_lowp_vec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.float.rgba16f_lowp_vec4
+v3d_deqp: case #175 P 35ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.float.rgba16f_lowp_vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.rgba16f_mediump_float'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.float.rgba16f_mediump_float
+v3d_deqp: case #176 P 34ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.float.rgba16f_mediump_float
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.rgba16f_mediump_vec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.float.rgba16f_mediump_vec2
+v3d_deqp: case #177 P 35ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.float.rgba16f_mediump_vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.rgba16f_mediump_vec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.float.rgba16f_mediump_vec3
+v3d_deqp: case #178 P 35ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.float.rgba16f_mediump_vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.rgba16f_mediump_vec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.float.rgba16f_mediump_vec4
+v3d_deqp: case #179 P 35ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.float.rgba16f_mediump_vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.rgba32f_highp_float'..
+deqp: NotSupported dEQP-GLES3.functional.fragment_out.array.float.rgba32f_highp_float
+v3d_deqp: case #180 N 27ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.float.rgba32f_highp_float
+  NotSupported (Unsupported attachment format)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.rgba32f_highp_vec2'..
+deqp: NotSupported dEQP-GLES3.functional.fragment_out.array.float.rgba32f_highp_vec2
+v3d_deqp: case #181 N 29ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.float.rgba32f_highp_vec2
+  NotSupported (Unsupported attachment format)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.rgba32f_highp_vec3'..
+deqp: NotSupported dEQP-GLES3.functional.fragment_out.array.float.rgba32f_highp_vec3
+v3d_deqp: case #182 N 29ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.float.rgba32f_highp_vec3
+  NotSupported (Unsupported attachment format)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.rgba32f_highp_vec4'..
+deqp: NotSupported dEQP-GLES3.functional.fragment_out.array.float.rgba32f_highp_vec4
+v3d_deqp: case #183 N 29ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.float.rgba32f_highp_vec4
+  NotSupported (Unsupported attachment format)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.rgba32f_lowp_float'..
+deqp: NotSupported dEQP-GLES3.functional.fragment_out.array.float.rgba32f_lowp_float
+v3d_deqp: case #184 N 29ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.float.rgba32f_lowp_float
+  NotSupported (Unsupported attachment format)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.rgba32f_lowp_vec2'..
+deqp: NotSupported dEQP-GLES3.functional.fragment_out.array.float.rgba32f_lowp_vec2
+v3d_deqp: case #185 N 29ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.float.rgba32f_lowp_vec2
+  NotSupported (Unsupported attachment format)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.rgba32f_lowp_vec3'..
+deqp: NotSupported dEQP-GLES3.functional.fragment_out.array.float.rgba32f_lowp_vec3
+v3d_deqp: case #186 N 29ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.float.rgba32f_lowp_vec3
+  NotSupported (Unsupported attachment format)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.rgba32f_lowp_vec4'..
+deqp: NotSupported dEQP-GLES3.functional.fragment_out.array.float.rgba32f_lowp_vec4
+v3d_deqp: case #187 N 29ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.float.rgba32f_lowp_vec4
+  NotSupported (Unsupported attachment format)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.rgba32f_mediump_float'..
+deqp: NotSupported dEQP-GLES3.functional.fragment_out.array.float.rgba32f_mediump_float
+v3d_deqp: case #188 N 30ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.float.rgba32f_mediump_float
+  NotSupported (Unsupported attachment format)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.rgba32f_mediump_vec2'..
+deqp: NotSupported dEQP-GLES3.functional.fragment_out.array.float.rgba32f_mediump_vec2
+v3d_deqp: case #189 N 29ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.float.rgba32f_mediump_vec2
+  NotSupported (Unsupported attachment format)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.rgba32f_mediump_vec3'..
+deqp: NotSupported dEQP-GLES3.functional.fragment_out.array.float.rgba32f_mediump_vec3
+v3d_deqp: case #190 N 30ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.float.rgba32f_mediump_vec3
+  NotSupported (Unsupported attachment format)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.float.rgba32f_mediump_vec4'..
+deqp: NotSupported dEQP-GLES3.functional.fragment_out.array.float.rgba32f_mediump_vec4
+v3d_deqp: case #191 N 30ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.float.rgba32f_mediump_vec4
+  NotSupported (Unsupported attachment format)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.r16i_highp_int'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.r16i_highp_int
+v3d_deqp: case #192 P 34ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.r16i_highp_int
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.r16i_highp_ivec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.r16i_highp_ivec2
+v3d_deqp: case #193 P 30ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.r16i_highp_ivec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.r16i_highp_ivec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.r16i_highp_ivec3
+v3d_deqp: case #194 P 32ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.r16i_highp_ivec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.r16i_highp_ivec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.r16i_highp_ivec4
+v3d_deqp: case #195 P 31ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.r16i_highp_ivec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.r16i_lowp_int'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.r16i_lowp_int
+v3d_deqp: case #196 P 30ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.r16i_lowp_int
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.r16i_lowp_ivec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.r16i_lowp_ivec2
+v3d_deqp: case #197 P 30ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.r16i_lowp_ivec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.r16i_lowp_ivec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.r16i_lowp_ivec3
+v3d_deqp: case #198 P 31ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.r16i_lowp_ivec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.r16i_lowp_ivec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.r16i_lowp_ivec4
+v3d_deqp: case #199 P 32ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.r16i_lowp_ivec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.r16i_mediump_int'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.r16i_mediump_int
+v3d_deqp: case #200 P 30ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.r16i_mediump_int
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.r16i_mediump_ivec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.r16i_mediump_ivec2
+v3d_deqp: case #201 P 31ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.r16i_mediump_ivec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.r16i_mediump_ivec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.r16i_mediump_ivec3
+v3d_deqp: case #202 P 32ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.r16i_mediump_ivec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.r16i_mediump_ivec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.r16i_mediump_ivec4
+v3d_deqp: case #203 P 32ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.r16i_mediump_ivec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.r32i_highp_int'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.r32i_highp_int
+v3d_deqp: case #204 P 30ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.r32i_highp_int
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.r32i_highp_ivec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.r32i_highp_ivec2
+v3d_deqp: case #205 P 30ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.r32i_highp_ivec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.r32i_highp_ivec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.r32i_highp_ivec3
+v3d_deqp: case #206 P 31ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.r32i_highp_ivec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.r32i_highp_ivec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.r32i_highp_ivec4
+v3d_deqp: case #207 P 32ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.r32i_highp_ivec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.r32i_lowp_int'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.r32i_lowp_int
+v3d_deqp: case #208 P 29ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.r32i_lowp_int
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.r32i_lowp_ivec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.r32i_lowp_ivec2
+v3d_deqp: case #209 P 31ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.r32i_lowp_ivec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.r32i_lowp_ivec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.r32i_lowp_ivec3
+v3d_deqp: case #210 P 30ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.r32i_lowp_ivec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.r32i_lowp_ivec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.r32i_lowp_ivec4
+v3d_deqp: case #211 P 31ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.r32i_lowp_ivec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.r32i_mediump_int'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.r32i_mediump_int
+v3d_deqp: case #212 P 31ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.r32i_mediump_int
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.r32i_mediump_ivec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.r32i_mediump_ivec2
+v3d_deqp: case #213 P 31ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.r32i_mediump_ivec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.r32i_mediump_ivec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.r32i_mediump_ivec3
+v3d_deqp: case #214 P 31ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.r32i_mediump_ivec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.r32i_mediump_ivec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.r32i_mediump_ivec4
+v3d_deqp: case #215 P 32ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.r32i_mediump_ivec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.r8i_highp_int'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.r8i_highp_int
+v3d_deqp: case #216 P 30ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.r8i_highp_int
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.r8i_highp_ivec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.r8i_highp_ivec2
+v3d_deqp: case #217 P 31ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.r8i_highp_ivec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.r8i_highp_ivec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.r8i_highp_ivec3
+v3d_deqp: case #218 P 30ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.r8i_highp_ivec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.r8i_highp_ivec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.r8i_highp_ivec4
+v3d_deqp: case #219 P 32ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.r8i_highp_ivec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.r8i_lowp_int'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.r8i_lowp_int
+v3d_deqp: case #220 P 29ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.r8i_lowp_int
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.r8i_lowp_ivec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.r8i_lowp_ivec2
+v3d_deqp: case #221 P 30ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.r8i_lowp_ivec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.r8i_lowp_ivec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.r8i_lowp_ivec3
+v3d_deqp: case #222 P 31ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.r8i_lowp_ivec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.r8i_lowp_ivec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.r8i_lowp_ivec4
+v3d_deqp: case #223 P 31ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.r8i_lowp_ivec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.r8i_mediump_int'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.r8i_mediump_int
+v3d_deqp: case #224 P 30ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.r8i_mediump_int
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.r8i_mediump_ivec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.r8i_mediump_ivec2
+v3d_deqp: case #225 P 31ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.r8i_mediump_ivec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.r8i_mediump_ivec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.r8i_mediump_ivec3
+v3d_deqp: case #226 P 31ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.r8i_mediump_ivec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.r8i_mediump_ivec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.r8i_mediump_ivec4
+v3d_deqp: case #227 P 32ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.r8i_mediump_ivec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rg16i_highp_int'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rg16i_highp_int
+v3d_deqp: case #228 P 31ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.rg16i_highp_int
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rg16i_highp_ivec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rg16i_highp_ivec2
+v3d_deqp: case #229 P 31ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.rg16i_highp_ivec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rg16i_highp_ivec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rg16i_highp_ivec3
+v3d_deqp: case #230 P 32ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.rg16i_highp_ivec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rg16i_highp_ivec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rg16i_highp_ivec4
+v3d_deqp: case #231 P 31ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.rg16i_highp_ivec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rg16i_lowp_int'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rg16i_lowp_int
+v3d_deqp: case #232 P 31ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.rg16i_lowp_int
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rg16i_lowp_ivec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rg16i_lowp_ivec2
+v3d_deqp: case #233 P 31ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.rg16i_lowp_ivec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rg16i_lowp_ivec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rg16i_lowp_ivec3
+v3d_deqp: case #234 P 31ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.rg16i_lowp_ivec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rg16i_lowp_ivec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rg16i_lowp_ivec4
+v3d_deqp: case #235 P 32ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.rg16i_lowp_ivec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rg16i_mediump_int'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rg16i_mediump_int
+v3d_deqp: case #236 P 31ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.rg16i_mediump_int
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rg16i_mediump_ivec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rg16i_mediump_ivec2
+v3d_deqp: case #237 P 32ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.rg16i_mediump_ivec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rg16i_mediump_ivec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rg16i_mediump_ivec3
+v3d_deqp: case #238 P 32ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.rg16i_mediump_ivec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rg16i_mediump_ivec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rg16i_mediump_ivec4
+v3d_deqp: case #239 P 32ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.rg16i_mediump_ivec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rg32i_highp_int'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rg32i_highp_int
+v3d_deqp: case #240 P 31ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.rg32i_highp_int
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rg32i_highp_ivec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rg32i_highp_ivec2
+v3d_deqp: case #241 P 31ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.rg32i_highp_ivec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rg32i_highp_ivec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rg32i_highp_ivec3
+v3d_deqp: case #242 P 32ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.rg32i_highp_ivec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rg32i_highp_ivec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rg32i_highp_ivec4
+v3d_deqp: case #243 P 32ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.rg32i_highp_ivec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rg32i_lowp_int'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rg32i_lowp_int
+v3d_deqp: case #244 P 30ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.rg32i_lowp_int
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rg32i_lowp_ivec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rg32i_lowp_ivec2
+v3d_deqp: case #245 P 31ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.rg32i_lowp_ivec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rg32i_lowp_ivec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rg32i_lowp_ivec3
+v3d_deqp: case #246 P 32ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.rg32i_lowp_ivec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rg32i_lowp_ivec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rg32i_lowp_ivec4
+v3d_deqp: case #247 P 31ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.rg32i_lowp_ivec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rg32i_mediump_int'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rg32i_mediump_int
+v3d_deqp: case #248 P 31ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.rg32i_mediump_int
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rg32i_mediump_ivec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rg32i_mediump_ivec2
+v3d_deqp: case #249 P 32ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.rg32i_mediump_ivec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rg32i_mediump_ivec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rg32i_mediump_ivec3
+v3d_deqp: case #250 P 32ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.rg32i_mediump_ivec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rg32i_mediump_ivec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rg32i_mediump_ivec4
+v3d_deqp: case #251 P 32ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.rg32i_mediump_ivec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rg8i_highp_int'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rg8i_highp_int
+v3d_deqp: case #252 P 31ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.rg8i_highp_int
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rg8i_highp_ivec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rg8i_highp_ivec2
+v3d_deqp: case #253 P 31ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.rg8i_highp_ivec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rg8i_highp_ivec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rg8i_highp_ivec3
+v3d_deqp: case #254 P 31ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.rg8i_highp_ivec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rg8i_highp_ivec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rg8i_highp_ivec4
+v3d_deqp: case #255 P 32ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.rg8i_highp_ivec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rg8i_lowp_int'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rg8i_lowp_int
+v3d_deqp: case #256 P 30ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.rg8i_lowp_int
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rg8i_lowp_ivec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rg8i_lowp_ivec2
+v3d_deqp: case #257 P 31ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.rg8i_lowp_ivec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rg8i_lowp_ivec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rg8i_lowp_ivec3
+v3d_deqp: case #258 P 31ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.rg8i_lowp_ivec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rg8i_lowp_ivec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rg8i_lowp_ivec4
+v3d_deqp: case #259 P 31ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.rg8i_lowp_ivec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rg8i_mediump_int'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rg8i_mediump_int
+v3d_deqp: case #260 P 31ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.rg8i_mediump_int
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rg8i_mediump_ivec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rg8i_mediump_ivec2
+v3d_deqp: case #261 P 31ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.rg8i_mediump_ivec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rg8i_mediump_ivec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rg8i_mediump_ivec3
+v3d_deqp: case #262 P 32ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.rg8i_mediump_ivec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rg8i_mediump_ivec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rg8i_mediump_ivec4
+v3d_deqp: case #263 P 32ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.rg8i_mediump_ivec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rgba16i_highp_int'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rgba16i_highp_int
+v3d_deqp: case #264 P 31ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.rgba16i_highp_int
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rgba16i_highp_ivec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rgba16i_highp_ivec2
+v3d_deqp: case #265 P 33ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.rgba16i_highp_ivec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rgba16i_highp_ivec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rgba16i_highp_ivec3
+v3d_deqp: case #266 P 32ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.rgba16i_highp_ivec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rgba16i_highp_ivec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rgba16i_highp_ivec4
+v3d_deqp: case #267 P 34ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.rgba16i_highp_ivec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rgba16i_lowp_int'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rgba16i_lowp_int
+v3d_deqp: case #268 P 31ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.rgba16i_lowp_int
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rgba16i_lowp_ivec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rgba16i_lowp_ivec2
+v3d_deqp: case #269 P 32ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.rgba16i_lowp_ivec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rgba16i_lowp_ivec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rgba16i_lowp_ivec3
+v3d_deqp: case #270 P 33ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.rgba16i_lowp_ivec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rgba16i_lowp_ivec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rgba16i_lowp_ivec4
+v3d_deqp: case #271 P 32ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.rgba16i_lowp_ivec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rgba16i_mediump_int'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rgba16i_mediump_int
+v3d_deqp: case #272 P 32ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.rgba16i_mediump_int
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rgba16i_mediump_ivec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rgba16i_mediump_ivec2
+v3d_deqp: case #273 P 33ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.rgba16i_mediump_ivec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rgba16i_mediump_ivec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rgba16i_mediump_ivec3
+v3d_deqp: case #274 P 33ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.rgba16i_mediump_ivec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rgba16i_mediump_ivec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rgba16i_mediump_ivec4
+v3d_deqp: case #275 P 34ms k2/9 c15539/15648 r0 dEQP-GLES3.functional.fragment_out.array.int.rgba16i_mediump_ivec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rgba32i_highp_int'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rgba32i_highp_int
+v3d_deqp: case #276 P 33ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.int.rgba32i_highp_int
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rgba32i_highp_ivec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rgba32i_highp_ivec2
+v3d_deqp: case #277 P 32ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.int.rgba32i_highp_ivec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rgba32i_highp_ivec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rgba32i_highp_ivec3
+v3d_deqp: case #278 P 33ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.int.rgba32i_highp_ivec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rgba32i_highp_ivec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rgba32i_highp_ivec4
+v3d_deqp: case #279 P 33ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.int.rgba32i_highp_ivec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rgba32i_lowp_int'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rgba32i_lowp_int
+v3d_deqp: case #280 P 32ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.int.rgba32i_lowp_int
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rgba32i_lowp_ivec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rgba32i_lowp_ivec2
+v3d_deqp: case #281 P 32ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.int.rgba32i_lowp_ivec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rgba32i_lowp_ivec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rgba32i_lowp_ivec3
+v3d_deqp: case #282 P 32ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.int.rgba32i_lowp_ivec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rgba32i_lowp_ivec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rgba32i_lowp_ivec4
+v3d_deqp: case #283 P 33ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.int.rgba32i_lowp_ivec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rgba32i_mediump_int'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rgba32i_mediump_int
+v3d_deqp: case #284 P 32ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.int.rgba32i_mediump_int
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rgba32i_mediump_ivec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rgba32i_mediump_ivec2
+v3d_deqp: case #285 P 33ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.int.rgba32i_mediump_ivec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rgba32i_mediump_ivec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rgba32i_mediump_ivec3
+v3d_deqp: case #286 P 33ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.int.rgba32i_mediump_ivec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rgba32i_mediump_ivec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rgba32i_mediump_ivec4
+v3d_deqp: case #287 P 34ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.int.rgba32i_mediump_ivec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rgba8i_highp_int'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rgba8i_highp_int
+v3d_deqp: case #288 P 32ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.int.rgba8i_highp_int
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rgba8i_highp_ivec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rgba8i_highp_ivec2
+v3d_deqp: case #289 P 31ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.int.rgba8i_highp_ivec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rgba8i_highp_ivec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rgba8i_highp_ivec3
+v3d_deqp: case #290 P 33ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.int.rgba8i_highp_ivec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rgba8i_highp_ivec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rgba8i_highp_ivec4
+v3d_deqp: case #291 P 32ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.int.rgba8i_highp_ivec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rgba8i_lowp_int'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rgba8i_lowp_int
+v3d_deqp: case #292 P 32ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.int.rgba8i_lowp_int
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rgba8i_lowp_ivec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rgba8i_lowp_ivec2
+v3d_deqp: case #293 P 31ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.int.rgba8i_lowp_ivec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rgba8i_lowp_ivec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rgba8i_lowp_ivec3
+v3d_deqp: case #294 P 32ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.int.rgba8i_lowp_ivec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rgba8i_lowp_ivec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rgba8i_lowp_ivec4
+v3d_deqp: case #295 P 32ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.int.rgba8i_lowp_ivec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rgba8i_mediump_int'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rgba8i_mediump_int
+v3d_deqp: case #296 P 32ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.int.rgba8i_mediump_int
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rgba8i_mediump_ivec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rgba8i_mediump_ivec2
+v3d_deqp: case #297 P 32ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.int.rgba8i_mediump_ivec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rgba8i_mediump_ivec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rgba8i_mediump_ivec3
+v3d_deqp: case #298 P 33ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.int.rgba8i_mediump_ivec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.int.rgba8i_mediump_ivec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.int.rgba8i_mediump_ivec4
+v3d_deqp: case #299 P 33ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.int.rgba8i_mediump_ivec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.r16ui_highp_uint'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.r16ui_highp_uint
+v3d_deqp: case #300 P 31ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.r16ui_highp_uint
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.r16ui_highp_uvec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.r16ui_highp_uvec2
+v3d_deqp: case #301 P 31ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.r16ui_highp_uvec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.r16ui_highp_uvec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.r16ui_highp_uvec3
+v3d_deqp: case #302 P 32ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.r16ui_highp_uvec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.r16ui_highp_uvec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.r16ui_highp_uvec4
+v3d_deqp: case #303 P 32ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.r16ui_highp_uvec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.r16ui_lowp_uint'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.r16ui_lowp_uint
+v3d_deqp: case #304 P 31ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.r16ui_lowp_uint
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.r16ui_lowp_uvec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.r16ui_lowp_uvec2
+v3d_deqp: case #305 P 31ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.r16ui_lowp_uvec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.r16ui_lowp_uvec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.r16ui_lowp_uvec3
+v3d_deqp: case #306 P 31ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.r16ui_lowp_uvec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.r16ui_lowp_uvec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.r16ui_lowp_uvec4
+v3d_deqp: case #307 P 31ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.r16ui_lowp_uvec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.r16ui_mediump_uint'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.r16ui_mediump_uint
+v3d_deqp: case #308 P 32ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.r16ui_mediump_uint
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.r16ui_mediump_uvec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.r16ui_mediump_uvec2
+v3d_deqp: case #309 P 31ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.r16ui_mediump_uvec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.r16ui_mediump_uvec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.r16ui_mediump_uvec3
+v3d_deqp: case #310 P 33ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.r16ui_mediump_uvec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.r16ui_mediump_uvec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.r16ui_mediump_uvec4
+v3d_deqp: case #311 P 32ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.r16ui_mediump_uvec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.r32ui_highp_uint'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.r32ui_highp_uint
+v3d_deqp: case #312 P 31ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.r32ui_highp_uint
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.r32ui_highp_uvec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.r32ui_highp_uvec2
+v3d_deqp: case #313 P 31ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.r32ui_highp_uvec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.r32ui_highp_uvec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.r32ui_highp_uvec3
+v3d_deqp: case #314 P 31ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.r32ui_highp_uvec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.r32ui_highp_uvec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.r32ui_highp_uvec4
+v3d_deqp: case #315 P 32ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.r32ui_highp_uvec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.r32ui_lowp_uint'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.r32ui_lowp_uint
+v3d_deqp: case #316 P 31ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.r32ui_lowp_uint
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.r32ui_lowp_uvec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.r32ui_lowp_uvec2
+v3d_deqp: case #317 P 31ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.r32ui_lowp_uvec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.r32ui_lowp_uvec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.r32ui_lowp_uvec3
+v3d_deqp: case #318 P 31ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.r32ui_lowp_uvec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.r32ui_lowp_uvec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.r32ui_lowp_uvec4
+v3d_deqp: case #319 P 31ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.r32ui_lowp_uvec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.r32ui_mediump_uint'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.r32ui_mediump_uint
+v3d_deqp: case #320 P 31ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.r32ui_mediump_uint
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.r32ui_mediump_uvec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.r32ui_mediump_uvec2
+v3d_deqp: case #321 P 32ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.r32ui_mediump_uvec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.r32ui_mediump_uvec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.r32ui_mediump_uvec3
+v3d_deqp: case #322 P 32ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.r32ui_mediump_uvec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.r32ui_mediump_uvec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.r32ui_mediump_uvec4
+v3d_deqp: case #323 P 32ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.r32ui_mediump_uvec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.r8ui_highp_uint'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.r8ui_highp_uint
+v3d_deqp: case #324 P 31ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.r8ui_highp_uint
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.r8ui_highp_uvec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.r8ui_highp_uvec2
+v3d_deqp: case #325 P 31ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.r8ui_highp_uvec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.r8ui_highp_uvec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.r8ui_highp_uvec3
+v3d_deqp: case #326 P 31ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.r8ui_highp_uvec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.r8ui_highp_uvec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.r8ui_highp_uvec4
+v3d_deqp: case #327 P 32ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.r8ui_highp_uvec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.r8ui_lowp_uint'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.r8ui_lowp_uint
+v3d_deqp: case #328 P 30ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.r8ui_lowp_uint
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.r8ui_lowp_uvec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.r8ui_lowp_uvec2
+v3d_deqp: case #329 P 31ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.r8ui_lowp_uvec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.r8ui_lowp_uvec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.r8ui_lowp_uvec3
+v3d_deqp: case #330 P 31ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.r8ui_lowp_uvec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.r8ui_lowp_uvec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.r8ui_lowp_uvec4
+v3d_deqp: case #331 P 32ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.r8ui_lowp_uvec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.r8ui_mediump_uint'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.r8ui_mediump_uint
+v3d_deqp: case #332 P 30ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.r8ui_mediump_uint
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.r8ui_mediump_uvec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.r8ui_mediump_uvec2
+v3d_deqp: case #333 P 32ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.r8ui_mediump_uvec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.r8ui_mediump_uvec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.r8ui_mediump_uvec3
+v3d_deqp: case #334 P 32ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.r8ui_mediump_uvec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.r8ui_mediump_uvec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.r8ui_mediump_uvec4
+v3d_deqp: case #335 P 32ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.r8ui_mediump_uvec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rg16ui_highp_uint'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rg16ui_highp_uint
+v3d_deqp: case #336 P 31ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rg16ui_highp_uint
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rg16ui_highp_uvec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rg16ui_highp_uvec2
+v3d_deqp: case #337 P 32ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rg16ui_highp_uvec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rg16ui_highp_uvec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rg16ui_highp_uvec3
+v3d_deqp: case #338 P 32ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rg16ui_highp_uvec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rg16ui_highp_uvec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rg16ui_highp_uvec4
+v3d_deqp: case #339 P 32ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rg16ui_highp_uvec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rg16ui_lowp_uint'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rg16ui_lowp_uint
+v3d_deqp: case #340 P 32ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rg16ui_lowp_uint
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rg16ui_lowp_uvec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rg16ui_lowp_uvec2
+v3d_deqp: case #341 P 31ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rg16ui_lowp_uvec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rg16ui_lowp_uvec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rg16ui_lowp_uvec3
+v3d_deqp: case #342 P 32ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rg16ui_lowp_uvec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rg16ui_lowp_uvec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rg16ui_lowp_uvec4
+v3d_deqp: case #343 P 32ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rg16ui_lowp_uvec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rg16ui_mediump_uint'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rg16ui_mediump_uint
+v3d_deqp: case #344 P 32ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rg16ui_mediump_uint
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rg16ui_mediump_uvec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rg16ui_mediump_uvec2
+v3d_deqp: case #345 P 32ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rg16ui_mediump_uvec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rg16ui_mediump_uvec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rg16ui_mediump_uvec3
+v3d_deqp: case #346 P 33ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rg16ui_mediump_uvec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rg16ui_mediump_uvec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rg16ui_mediump_uvec4
+v3d_deqp: case #347 P 33ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rg16ui_mediump_uvec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rg32ui_highp_uint'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rg32ui_highp_uint
+v3d_deqp: case #348 P 31ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rg32ui_highp_uint
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rg32ui_highp_uvec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rg32ui_highp_uvec2
+v3d_deqp: case #349 P 32ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rg32ui_highp_uvec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rg32ui_highp_uvec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rg32ui_highp_uvec3
+v3d_deqp: case #350 P 32ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rg32ui_highp_uvec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rg32ui_highp_uvec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rg32ui_highp_uvec4
+v3d_deqp: case #351 P 32ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rg32ui_highp_uvec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rg32ui_lowp_uint'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rg32ui_lowp_uint
+v3d_deqp: case #352 P 31ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rg32ui_lowp_uint
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rg32ui_lowp_uvec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rg32ui_lowp_uvec2
+v3d_deqp: case #353 P 32ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rg32ui_lowp_uvec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rg32ui_lowp_uvec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rg32ui_lowp_uvec3
+v3d_deqp: case #354 P 32ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rg32ui_lowp_uvec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rg32ui_lowp_uvec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rg32ui_lowp_uvec4
+v3d_deqp: case #355 P 32ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rg32ui_lowp_uvec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rg32ui_mediump_uint'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rg32ui_mediump_uint
+v3d_deqp: case #356 P 31ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rg32ui_mediump_uint
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rg32ui_mediump_uvec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rg32ui_mediump_uvec2
+v3d_deqp: case #357 P 33ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rg32ui_mediump_uvec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rg32ui_mediump_uvec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rg32ui_mediump_uvec3
+v3d_deqp: case #358 P 32ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rg32ui_mediump_uvec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rg32ui_mediump_uvec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rg32ui_mediump_uvec4
+v3d_deqp: case #359 P 33ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rg32ui_mediump_uvec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rg8ui_highp_uint'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rg8ui_highp_uint
+v3d_deqp: case #360 P 32ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rg8ui_highp_uint
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rg8ui_highp_uvec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rg8ui_highp_uvec2
+v3d_deqp: case #361 P 31ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rg8ui_highp_uvec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rg8ui_highp_uvec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rg8ui_highp_uvec3
+v3d_deqp: case #362 P 32ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rg8ui_highp_uvec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rg8ui_highp_uvec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rg8ui_highp_uvec4
+v3d_deqp: case #363 P 32ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rg8ui_highp_uvec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rg8ui_lowp_uint'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rg8ui_lowp_uint
+v3d_deqp: case #364 P 31ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rg8ui_lowp_uint
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rg8ui_lowp_uvec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rg8ui_lowp_uvec2
+v3d_deqp: case #365 P 31ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rg8ui_lowp_uvec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rg8ui_lowp_uvec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rg8ui_lowp_uvec3
+v3d_deqp: case #366 P 31ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rg8ui_lowp_uvec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rg8ui_lowp_uvec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rg8ui_lowp_uvec4
+v3d_deqp: case #367 P 32ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rg8ui_lowp_uvec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rg8ui_mediump_uint'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rg8ui_mediump_uint
+v3d_deqp: case #368 P 31ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rg8ui_mediump_uint
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rg8ui_mediump_uvec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rg8ui_mediump_uvec2
+v3d_deqp: case #369 P 32ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rg8ui_mediump_uvec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rg8ui_mediump_uvec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rg8ui_mediump_uvec3
+v3d_deqp: case #370 P 33ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rg8ui_mediump_uvec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rg8ui_mediump_uvec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rg8ui_mediump_uvec4
+v3d_deqp: case #371 P 32ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rg8ui_mediump_uvec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rgb10_a2ui_highp_uint'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rgb10_a2ui_highp_uint
+v3d_deqp: case #372 P 32ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rgb10_a2ui_highp_uint
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rgb10_a2ui_highp_uvec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rgb10_a2ui_highp_uvec2
+v3d_deqp: case #373 P 32ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rgb10_a2ui_highp_uvec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rgb10_a2ui_highp_uvec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rgb10_a2ui_highp_uvec3
+v3d_deqp: case #374 P 33ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rgb10_a2ui_highp_uvec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rgb10_a2ui_highp_uvec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rgb10_a2ui_highp_uvec4
+v3d_deqp: case #375 P 33ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rgb10_a2ui_highp_uvec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rgb10_a2ui_lowp_uint'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rgb10_a2ui_lowp_uint
+v3d_deqp: case #376 P 31ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rgb10_a2ui_lowp_uint
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rgb10_a2ui_lowp_uvec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rgb10_a2ui_lowp_uvec2
+v3d_deqp: case #377 P 32ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rgb10_a2ui_lowp_uvec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rgb10_a2ui_lowp_uvec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rgb10_a2ui_lowp_uvec3
+v3d_deqp: case #378 P 32ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rgb10_a2ui_lowp_uvec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rgb10_a2ui_lowp_uvec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rgb10_a2ui_lowp_uvec4
+v3d_deqp: case #379 P 32ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rgb10_a2ui_lowp_uvec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rgb10_a2ui_mediump_uint'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rgb10_a2ui_mediump_uint
+v3d_deqp: case #380 P 32ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rgb10_a2ui_mediump_uint
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rgb10_a2ui_mediump_uvec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rgb10_a2ui_mediump_uvec2
+v3d_deqp: case #381 P 33ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rgb10_a2ui_mediump_uvec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rgb10_a2ui_mediump_uvec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rgb10_a2ui_mediump_uvec3
+v3d_deqp: case #382 P 33ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rgb10_a2ui_mediump_uvec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rgb10_a2ui_mediump_uvec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rgb10_a2ui_mediump_uvec4
+v3d_deqp: case #383 P 33ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rgb10_a2ui_mediump_uvec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rgba16ui_highp_uint'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rgba16ui_highp_uint
+v3d_deqp: case #384 P 33ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rgba16ui_highp_uint
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rgba16ui_highp_uvec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rgba16ui_highp_uvec2
+v3d_deqp: case #385 P 33ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rgba16ui_highp_uvec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rgba16ui_highp_uvec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rgba16ui_highp_uvec3
+v3d_deqp: case #386 P 33ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rgba16ui_highp_uvec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rgba16ui_highp_uvec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rgba16ui_highp_uvec4
+v3d_deqp: case #387 P 34ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rgba16ui_highp_uvec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rgba16ui_lowp_uint'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rgba16ui_lowp_uint
+v3d_deqp: case #388 P 32ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rgba16ui_lowp_uint
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rgba16ui_lowp_uvec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rgba16ui_lowp_uvec2
+v3d_deqp: case #389 P 33ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rgba16ui_lowp_uvec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rgba16ui_lowp_uvec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rgba16ui_lowp_uvec3
+v3d_deqp: case #390 P 33ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rgba16ui_lowp_uvec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rgba16ui_lowp_uvec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rgba16ui_lowp_uvec4
+v3d_deqp: case #391 P 33ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rgba16ui_lowp_uvec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rgba16ui_mediump_uint'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rgba16ui_mediump_uint
+v3d_deqp: case #392 P 33ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rgba16ui_mediump_uint
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rgba16ui_mediump_uvec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rgba16ui_mediump_uvec2
+v3d_deqp: case #393 P 33ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rgba16ui_mediump_uvec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rgba16ui_mediump_uvec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rgba16ui_mediump_uvec3
+v3d_deqp: case #394 P 33ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rgba16ui_mediump_uvec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rgba16ui_mediump_uvec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rgba16ui_mediump_uvec4
+v3d_deqp: case #395 P 35ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rgba16ui_mediump_uvec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rgba32ui_highp_uint'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rgba32ui_highp_uint
+v3d_deqp: case #396 P 32ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rgba32ui_highp_uint
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rgba32ui_highp_uvec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rgba32ui_highp_uvec2
+v3d_deqp: case #397 P 33ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rgba32ui_highp_uvec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rgba32ui_highp_uvec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rgba32ui_highp_uvec3
+v3d_deqp: case #398 P 34ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rgba32ui_highp_uvec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rgba32ui_highp_uvec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rgba32ui_highp_uvec4
+v3d_deqp: case #399 P 33ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rgba32ui_highp_uvec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rgba32ui_lowp_uint'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rgba32ui_lowp_uint
+v3d_deqp: case #400 P 33ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rgba32ui_lowp_uint
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rgba32ui_lowp_uvec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rgba32ui_lowp_uvec2
+v3d_deqp: case #401 P 32ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rgba32ui_lowp_uvec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rgba32ui_lowp_uvec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rgba32ui_lowp_uvec3
+v3d_deqp: case #402 P 33ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rgba32ui_lowp_uvec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rgba32ui_lowp_uvec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rgba32ui_lowp_uvec4
+v3d_deqp: case #403 P 34ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rgba32ui_lowp_uvec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rgba32ui_mediump_uint'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rgba32ui_mediump_uint
+v3d_deqp: case #404 P 33ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rgba32ui_mediump_uint
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rgba32ui_mediump_uvec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rgba32ui_mediump_uvec2
+v3d_deqp: case #405 P 33ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rgba32ui_mediump_uvec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rgba32ui_mediump_uvec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rgba32ui_mediump_uvec3
+v3d_deqp: case #406 P 34ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rgba32ui_mediump_uvec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rgba32ui_mediump_uvec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rgba32ui_mediump_uvec4
+v3d_deqp: case #407 P 34ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rgba32ui_mediump_uvec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rgba8ui_highp_uint'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rgba8ui_highp_uint
+v3d_deqp: case #408 P 32ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rgba8ui_highp_uint
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rgba8ui_highp_uvec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rgba8ui_highp_uvec2
+v3d_deqp: case #409 P 33ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rgba8ui_highp_uvec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rgba8ui_highp_uvec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rgba8ui_highp_uvec3
+v3d_deqp: case #410 P 33ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rgba8ui_highp_uvec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rgba8ui_highp_uvec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rgba8ui_highp_uvec4
+v3d_deqp: case #411 P 32ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rgba8ui_highp_uvec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rgba8ui_lowp_uint'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rgba8ui_lowp_uint
+v3d_deqp: case #412 P 32ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rgba8ui_lowp_uint
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rgba8ui_lowp_uvec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rgba8ui_lowp_uvec2
+v3d_deqp: case #413 P 32ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rgba8ui_lowp_uvec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rgba8ui_lowp_uvec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rgba8ui_lowp_uvec3
+v3d_deqp: case #414 P 33ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rgba8ui_lowp_uvec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rgba8ui_lowp_uvec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rgba8ui_lowp_uvec4
+v3d_deqp: case #415 P 33ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rgba8ui_lowp_uvec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rgba8ui_mediump_uint'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rgba8ui_mediump_uint
+v3d_deqp: case #416 P 32ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rgba8ui_mediump_uint
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rgba8ui_mediump_uvec2'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rgba8ui_mediump_uvec2
+v3d_deqp: case #417 P 33ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rgba8ui_mediump_uvec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rgba8ui_mediump_uvec3'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rgba8ui_mediump_uvec3
+v3d_deqp: case #418 P 33ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rgba8ui_mediump_uvec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fragment_out.array.uint.rgba8ui_mediump_uvec4'..
+deqp: Pass dEQP-GLES3.functional.fragment_out.array.uint.rgba8ui_mediump_uvec4
+v3d_deqp: case #419 P 34ms k2/9 c15539/15744 r0 dEQP-GLES3.functional.fragment_out.array.uint.rgba8ui_mediump_uvec4
+  Pass (Pass)
+
+DONE!
+
+Test run totals:
+  Passed:        360/420 (85.7%)
+  Failed:        12/420 (2.9%)
+  Not supported: 48/420 (11.4%)
+  Warnings:      0/420 (0.0%)
+  Waived:        0/420 (0.0%)
+deqp: done: 360 passed, 12 failed, 48 not supported, 0 warnings, complete=1
+deqp: summary: 420 cases begun, 420 with a result, 0 without
+v3d_deqp DONE: build 0ff58329, filter 'dEQP-GLES3.functional.fragment_out.array.*'
+  420 cases in 13495 ms, record at 13 s after boot, reset at ~250 s
+  totals: P 360 F 12 N 48  (R: not passed, a draw was refused in it; passed with one refused: 0)
+  done: 360 passed, 12 failed, 48 not supported, 0 warnings, complete=1
+  summary: 420 cases begun, 420 with a result, 0 without
+  keep region (KiB, of 1024): after #0 2, most 2 at #0, last 2, high-water 9, before #108 (first not passed) 2; slowest #0 160 ms
+  carve-out (KiB, of 48636): after #0 15536, last 15539, high-water 15744
+  jobs: slow in 0 cases; no job hung or timed out
+BASELINE (first completed) job 1: core_sts 0x0 hub_sts 0x0 err 0x1000 ct0 cs 0x0 ea 0x201011 ca 0x201011 ra 0x0 qba 0x201000 qea 0x201011 ct1 ca 0x223097 ra 0x223096 qba 0x223000 qea 0x223097
+FIRST FAILURE: none (no timeout)
+slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+binner out of memory: 0 jobs (2 overflow blocks of 256 KiB, CONFIG_YAKOGL_V3D_BIN_OVERFLOW_BLOCKS; each such job ends in a GPU reset)
+binning by interrupt (IRQ 106): 744 interrupts, 0 overflow blocks fed by the ISR
+carve-out: 15383808 bytes used now, 16122112 at most, of 49803264; 0 frees held
+osal(v3d): pending frees: high-water 3/256, waits 0 (opt-in 0), refused 0 (0 unsubmitted, 0 no wait, 0 KiB kept)
+carve-out find: 1892 calls, 81351 map reads (42 a call, at most 1153 in one); free runs 4, longest 33825024 bytes; small blocks from the top: off (CONFIG_YAKOGL_V3D_CARVEOUT_TOP_BELOW 0)
+packets (packet skip on, CONFIG_YAKOGL_V3D_PACK_SKIP): 744 jobs ended; emitted 7812, skipped 0; groups compared 0, mismatches 0
+allocations refused for lack of GPU memory: 0 (0 size slots; the line is printed at each size's 1st, 10th, 100th, ... refusal)
+UIFCFG 0x00000045 (read at init)
+log: 0 causes logged once, 0 repeats not printed
+case order: P pass F fail R refused N not supported Q quality C compat E resource I internal X crash T timeout
+    0 PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPNNNNNNNNNNNNPPPPPPPP
+  128 PPPPNNNNNNNNNNNNFFFFFFFFFFFFNNNNNNNNNNNNPPPPPPPPPPPPNNNNNNNNNNNNPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP
+  256 PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP
+  384 PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP
+driver: osal(v3d): V3D 4.2, 8 QPUs, VPM 65536 bytes, MMU yes (identify 0)
+driver: osal(v3d): UIFCFG 0x00000045
+driver: osal(v3d): ready: carve-out 48 MiB at phys 0x2f07000, GPU VA 0x181000..0x3100000
+driver: ... 6 more lines (UART)
+not passed, by group (count, letters; reasons by count, F/R before N):
+  float                                                      60 F12 N48                12x Image comparison failed
+                                                                                       48x Unsupported attachment format
+  108 N float.r11f_g11f_b10f_highp_float                 28ms k2/9 c15539/15603          Unsupported attachment format
+  109 N float.r11f_g11f_b10f_highp_vec2                  31ms k2/9 c15539/15603          Unsupported attachment format
+  110 N float.r11f_g11f_b10f_highp_vec3                  31ms k2/9 c15539/15603          Unsupported attachment format
+  111 N float.r11f_g11f_b10f_highp_vec4                  31ms k2/9 c15539/15603          Unsupported attachment format
+  112 N float.r11f_g11f_b10f_lowp_float                  31ms k2/9 c15539/15603          Unsupported attachment format
+  113 N float.r11f_g11f_b10f_lowp_vec2                   31ms k2/9 c15539/15603          Unsupported attachment format
+  114 N float.r11f_g11f_b10f_lowp_vec3                   30ms k2/9 c15539/15603          Unsupported attachment format
+  115 N float.r11f_g11f_b10f_lowp_vec4                   31ms k2/9 c15539/15603          Unsupported attachment format
+  ... 52 more not passed (the UART has every line)
+v3d_deqp: build 0ff58329 DONE: 420 cases, P 360 F 12 R 0 N 48 other 0

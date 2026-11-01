@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES3 at 0ff58329, 2026-11-01, image M1: deqp-uart-tally.py --mustpass tools/cts/gles3-mustpass.txt M1.console.txt (README.md)
+/home/orion/connected-work/01a19631-2606-7743-b132-862f5a9a32f3/build/records/pi4-gles3-0ff58329/M1//console.txt: deqp: done: 382 passed, 13 failed, 54 not supported, 0 warnings, complete=0 | deqp: summary: 449 cases begun, 449 with a result, 0 without
+mustpass cases with a result: 445 (of 449 seen)
+group                                       pass   fail    n/s  other
+multisample                                   12      4     48      0
+negative_api                                 301      7      4      0
+occlusion_query                               62      0      0      0
+pbo                                            4      0      2      1
+TOTAL                                        379     11     54      1
+(the pass / fail counts above are the result lines seen; the image's own counters:)
+  M1: deqp: summary 449 cases begun, 449 with a result; deqp: done 382 passed, 13 failed, 54 not supported, 0 warnings; 449 result lines seen
+Fail dEQP-GLES3.functional.multisample.fbo_max_samples.proportionality_alpha_to_coverage
+Fail dEQP-GLES3.functional.multisample.fbo_max_samples.proportionality_sample_coverage
+Fail dEQP-GLES3.functional.multisample.fbo_max_samples.proportionality_sample_coverage_inverted
+Fail dEQP-GLES3.functional.multisample.fbo_max_samples.sample_coverage_invert
+Fail dEQP-GLES3.functional.negative_api.buffer.blit_framebuffer
+Fail dEQP-GLES3.functional.negative_api.buffer.blit_framebuffer_multisample
+Fail dEQP-GLES3.functional.negative_api.buffer.read_pixels_fbo_format_mismatch
+Fail dEQP-GLES3.functional.negative_api.shader.uniformui_incompatible_type
+Fail dEQP-GLES3.functional.negative_api.shader.uniformuiv_incompatible_type
+Fail dEQP-GLES3.functional.negative_api.texture.texsubimage2d
+Fail dEQP-GLES3.functional.negative_api.texture.texsubimage3d
+ResourceError dEQP-GLES3.functional.pbo.renderbuffer.rg16i_clears
