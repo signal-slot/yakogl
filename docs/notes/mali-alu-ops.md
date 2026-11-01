@@ -180,7 +180,7 @@ spelling of an op Mesa writes otherwise (`Ineg` for `abs(int)`, `Bnot` for
 | es100/transc | 77 | `Fsin` (mediump arm) | `Fcos`, `Flog2`, `Fexp2`, a constant `* 0.25` |
 | es100/vtransc | 77, 2nd program | `Fsin` (mediump arm) | `Frsq` of one fp16 lane |
 | es100/deriv | 138 | `Fddx` (mediump arm) | `Fddy`, `gl_FragCoord` x and y as fp16 (`U16_TO_F32 r59`) |
-| gltest/es3trunc_fs | 199 | `Ftrunc` (`alu32`) | `F2i`, `F2u`, `Ishr`/`Ishl`/`Ushr` by a constant, `I2f`, `U2f` |
+| gltest/es3trunc_fs | 199 | `Ftrunc` (`alu32`) | a flat varying; the int ops are done by Mesa in the vertex stage (fsarith_199) |
 | es100/dynidx | - | `Bcsel` on a non-constant condition (the guard in `walk_nodes`) | `Ieq` of an int uniform against 0..3 per lane; reference intloop_dynidx |
 | es100/f2b | - | `Ffloor` (mediump arm) | `bool(float)` (`Fne`; `alu32` refuses `Fne`/`Ine` as `CompareForm`), `bcsel` of constants |
 | es100/fmods | - | `Fexp2` (`alu32`) | `Flog2`, `Frsq`, `Ffloor`, `Fmin`, one 9-term chain |
@@ -260,34 +260,37 @@ corpus source is that source's reference.
 
 ### The references made here
 
-`drm_shim_ref.sh run` could not be started in this session (the harness
-refused to execute it), although the Mesa 26.2.1 shim is built from
-`$CONNECTED_DEPS_DIR/mesa-pan/mesa-26.2.1` into `$CONNECTED_DEPS_DIR/mesa-pan/
-shim/build` (the script's `build` form wants a tarball; `meson setup` with the
-script's options plus `-Dlibdir=lib64` and `meson compile` do the same, and
-`inst/lib64` holds symlinks to libEGL.so.1, libGLESv2.so.2, libgallium and the
-shim). So `tools/mali/testdata/fsarith_{70_loopcarry,77_transc,77_vtransc,
-138_deriv}.*` are copies of the `alu_*` references (the same sources, drawn on
-the shim for 26.2.1), and 199 has none yet. To draw it and the other missing
-ones:
+The Mesa 26.2.1 shim is built from `$CONNECTED_DEPS_DIR/mesa-pan/mesa-26.2.1`
+into `$CONNECTED_DEPS_DIR/mesa-pan/shim/build` (`meson setup` with the
+script's options plus `-Dlibdir=lib64`, `meson compile`; `inst/lib64` holds
+symlinks to libEGL.so.1, libGLESv2.so.2, libgallium and the shim).
+`tools/mali/testdata/fsarith_{70_loopcarry,77_transc,77_vtransc,138_deriv}.*`
+are copies of the `alu_*` references (same sources, same shim).
+`fsarith_199_es3trunc.*` is a new draw of es3trunc_vs.vert +
+es3trunc_fs.frag. It shows that **Mesa moves the integer work of 199 into the
+vertex stage**: the vertex shader does `F32_TO_S32.rtz`, `LSHIFT_OR`,
+`ARSHIFT_OR`, `ISUB`, `S32_TO_F32`, `F32_TO_U32.rtz`, `RSHIFT_OR`,
+`U32_TO_F32` on the uniforms and stores floats; the fragment shader loads one
+`.v3.src_flat32` varying and runs only `FROUND.f32.rtz` (the second lane on
+`r.neg`), `FADD_IMM` 2.0 / 4.0 and `FMA.f32` by 0.125. So 199's fragment side
+needs `Ftrunc` plus flat varyings, and its integer ops are a vertex-stage
+item (triage-vsarith / triage-intbool), not part of fs-int-ops.
 
-    tools/mali/drm_shim_ref.sh run <shim> tools/shaders/gltest/es3trunc_vs.vert \
-        tools/shaders/gltest/es3trunc_fs.frag target/fsarith_199_es3trunc
-    python3 -I tools/mali/pan_ref_diff.py extract target/fsarith_199_es3trunc.trace --draw \
-        > tools/mali/testdata/fsarith_199_es3trunc.expect.json
+Draws still missing (es300/derivs, es100/f2b, es100/fmods, es300/int_div,
+es300/layersunused):
 
-the same for es300/derivs, es100/f2b, es100/fmods, es300/int_div and
-es300/layersunused (a passthrough vertex shader for the es100 ones).
+    tools/mali/drm_shim_ref.sh run <shim> V F target/<name>
+    python3 -I tools/mali/pan_ref_diff.py extract target/<name>.trace --draw
 
 ### Proposed lowering items, by cases and sources unblocked
 
-1. **fs-int-ops**: es300 uops, ifelse_uint, gcops, int_div, es100 int_div,
-   and 199's shifts. `Ult/Ule`, `Ineg`/`iabs`, min/max, `Inot`, shifts, the
+1. **fs-int-ops**: es300 uops, ifelse_uint, gcops, int_div, es100 int_div.
+   (199's shifts are vertex-stage work.) `Ult/Ule`, `Ineg`/`iabs`, min/max, `Inot`, shifts, the
    div/mod family, `F2u`, `U2f`, `U8_TO_F32`. References exist except for the
    two int_div sources. Shares ops with triage-intbool: one owner.
 2. **fs-transc**: 77, es100 transc, vtransc, fmods. fsin/fcos/flog2/fexp2 at
    fp32, `Frsq` at fp16. Highp draw for fmods.
-3. **fs-round-conv**: 199 (with item 1), f2b, gcops' `floor`, 70 (with
+3. **fs-round-conv**: 199 (fragment side: `Ftrunc` and a flat varying), f2b, gcops' `floor`, 70 (with
    cflow-flatten): `Ffloor/Fceil/Ftrunc/Fract`, `Fne`, the conversions at
    mediump.
 4. **fs-deriv**: 138, es100 deriv, es300 derivs. One case, two sources.
