@@ -490,3 +490,81 @@ test.
 the same table growth; it passes once offarm128 compiles (offarm32 first), so
 the `intbig_case193_offarm32/128` words are also 195's check. The `.trace`
 here is kept, as for the other `intbig_*` references.
+
+## Remaining int and bool values (plan #156, item triage-intbool)
+
+The sources whose verdict in `tools/mali/corpus-verdicts.txt` is `an integer
+or boolean value is not lowered yet` (plus `flatlast.frag`, which refuses on
+arithmetic). The first blocking op of each was read at the tip (7ad18d27)
+with a temporary `println!` at the four `MaliError::IntValue` sites
+(`nir_fs.rs` `int_lane`'s last arm; `nir.rs`'s `ConstBool`, its integer-op arm
+and `imod`), run through `corpus-verdicts.sh`, and reverted: nothing under
+`src/` changed.
+
+**State of the references.** `tools/mali/testdata/intbool_*` (drm-shim
+references for 76, 89 and 199's vertex shader) are **not recorded yet**: this
+session could neither download Mesa 26.2.1's tarball nor repack the local
+extracted tree, so `drm_shim_ref.sh build` did not run. The sequences below
+are those already in tree: `alu_boolany` (76) and `alu_flatlast` (89), tabled
+in mali-alu-ops.md, and the intbig / intloop / intuni dumps. 199's vertex
+shader has no Mesa reference. Record the three with `drm_shim_ref.sh run` and
+`pan_ref_diff.py extract --draw` before any lowering (`gl_ref.py` parses ES
+1.00 only; mali-varying-constants.md says how 300 es cases were drawn).
+
+| Source (case) | Stage | First refused op | Construct |
+|---|---|---|---|
+| es100/boolany.frag (76) | fs | `i2b` | `uniform bool` / `bvec3` words as bools, `any`/`all` of them and of `greaterThan` lanes as `ior`/`iand` chains |
+| es100/cond_complex.frag | fs | `iand` of two compare masks | `a && b` of mediump float compares (a mask AND, `.v2i16` in Mesa) |
+| es100/loop_full.frag | fs | `iand` | `break` on `r > 0.9 && float(i) > g * 8.0`: bool AND of a compare and an `i2f` of the loop counter in a kept loop (also needs mali-loop-break.md) |
+| es100/tri_discard.frag | fs | `iand` of two compares | `if (g > .25 && b < .25) discard;`: mask AND feeding a discard (also needs the general discard, case 81) |
+| es100/tri_int.frag | fs | `ineg` | `int(r*4.0)` (`f2i`), `-i * 3 + 7`, `i == 1`, `i != 2`, `b2f`, `i2f`: fp16 operands into fp32 integer arithmetic |
+| es100/ret_nested.vert | vs | `ConstBool` | `return` inside nested counted loops: Mesa's unrolled return flags are bool constants / selects in the vertex walk |
+| es300/flatlast.vert (89) | vs | `f2u` | `uint(col.a * 4.0 + 0.5)` into a `flat out uint` |
+| es300/flatlast.frag (89) | fs | arithmetic, not an int refusal | `float(v_idx) / 4.0`: `u2f`, then a constant division |
+| gltest/es3trunc_vsc.vert (199) | vs | `f2i` | `int(u_q)`, `uint(u_a)`, `>>`, `<<`, `-`, `i2f`/`u2f`, `trunc` |
+
+The first op is only the first: later ones (`ishr`, `ishl`, `isub`, `u2f`,
+`ushr`, `ftrunc`, `ior`) refuse in turn.
+
+### Mesa's sequences (from the references in tree)
+
+- **76 boolany** (alu_boolany, 29 words). A bool uniform is an `i32` word
+  (`MOV r0, u5.w0`, `CSEL.u32.eq`); `any(bvec3)` / `all(bvec3)` of uniforms
+  are `LSHIFT_OR.i32` / `LSHIFT_AND.i32` chains (`00b4c20111840185`,
+  `00b4c30110840185`); `greaterThan(u_v, 0.5)` is `FCMP_OR.v2f16.lt.m1`
+  (`00f5c204b80189da`), its lane masks ORed / ANDed as `LSHIFT_OR.v2i16` /
+  `LSHIFT_AND.v2i16` (`00b5c3311102c002`) and `IADD.v2u16`, then `MUX.v2i16`
+  to 0 / 1.0. The compare-mask AND is also what cond_complex and tri_discard
+  need.
+- **89 flatlast** (alu_flatlast). The whole chain runs in the vertex stage
+  (nir_opt_varyings moves it): `FMA.f32`, `F32_TO_U32.rtz`
+  (`0090c300c01c0043`), `U32_TO_F32` (`0090c30000190043`), `FMA.f32` (`* 0.25`),
+  stored as a float; the fragment shader loads one flat v4
+  `LD_VAR_BUF_IMM.src_flat32` (`085c8008300000c0`) and converts it to fp16;
+  the uint is not a varying of its own. Whether our pipeline must reproduce
+  that cross-stage motion is open until intbool_89 shows the pair.
+- **199 es3trunc_vsc**: no reference. The conversions are the single ops
+  seen in intbig_case79 / intloop (`F32_TO_S32.rtz`, `S32_TO_F32`,
+  `U32_TO_F32`) and the shifts of intuni_ishr; the result lanes come from
+  uniforms only, so the flat-varying path of mali-varying-constants.md applies
+  after the arithmetic.
+- **tri_int**: `intloop_tri_int` (mali-int-loops.md) is the reference for its
+  fp32 integer arithmetic.
+
+### Proposed lowering items (one agent session each)
+
+1. **bool-mask-ops (fs)**: `Iand` / `Ior` / `Inot` of fp16 compare masks as
+   `.v2i16` ops and of bool-uniform words as `i32`, plus `I2b`. Unblocks 76 and
+   cond_complex; first half of tri_discard. Needs the intbool_76 reference.
+2. **vs-int-convert (vs)**: `F2u`, `F2i`, `U2f`, `I2f`, `Ishl` / `Ishr` /
+   `Ushr`, `Isub` with 32-bit values in the vertex walk (`nir.rs`'s
+   integer-op arm). Unblocks 199's vertex shader and 89's; needs intbool_199
+   and intbool_89.
+3. **fs-int-arith (fs)**: `Ineg`, `Imul`, `Iadd`, `Ine`, `b2f` of fp16 sources
+   in fp32 integer arithmetic (tri_int; `Fs::int_lane`'s last arm). Reference
+   `intloop_tri_int`; `sign()` belongs to triage-fsarith.
+4. **u2f-div (fs)**: `float(v_idx) / 4.0` for flatlast.frag, after item 2.
+5. **ret-nested-vs**: `ConstBool` in the vertex walk (ret_nested.vert); needs
+   a reference of its own.
+6. loop_full and tri_discard are also blocked by control flow (the loop break
+   of mali-loop-break.md, the general discard of case 81): after those items.
