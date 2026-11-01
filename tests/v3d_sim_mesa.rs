@@ -2842,12 +2842,12 @@ fn our_programs_agree_with_the_ir_and_with_mesa() {
     let es2 = cfg!(feature = "report-es2");
     assert_eq!(
         (reals.len(), front_end, n_not_yet, n_other, compiled.len()),
-        if es2 { (271, 70, 0, 2, 199) } else { (271, 44, 4, 2, 221) },
+        if es2 { (271, 70, 0, 2, 199) } else { (271, 44, 3, 2, 222) },
         "our compiler's coverage moved; re-derive the pins"
     );
     assert_eq!(
         (tried, agree.len(), n_un, n_nt),
-        if es2 { (197, 197, 0, 2) } else { (216, 215, 1, 5) },
+        if es2 { (197, 197, 0, 2) } else { (216, 215, 1, 6) },
         "(a) vs (b) moved"
     );
     // The pairs whose output the language does not fix (a pseudo-random
@@ -2860,7 +2860,7 @@ fn our_programs_agree_with_the_ir_and_with_mesa() {
     assert_eq!(trig_sorted, trig_want, "the undefined-precision trig bucket moved");
     assert_eq!(
         (vs_mesa_agree.len(), vs_mesa_skipped.len(), vs_mesa_absent.len()),
-        if es2 { (160, 10, 29) } else { (177, 15, 29) },
+        if es2 { (160, 10, 29) } else { (177, 16, 29) },
         "(a) vs (c) moved"
     );
     assert_eq!(
@@ -3106,7 +3106,7 @@ fn the_hoist_windows_cuts_are_counted() {
     }
     assert_eq!(
         (hoists, cuts),
-        if es2 { ([1074, 2227, 166], [48, 0, 0]) } else { ([1141, 2404, 224], [59, 0, 0]) },
+        if es2 { ([1074, 2227, 166], [48, 0, 0]) } else { ([1146, 2406, 230], [59, 0, 0]) },
         "the hoist counts moved"
     );
 }
@@ -3486,5 +3486,5 @@ const FEMTOVG_FS_COUNTS: &[(&str, usize)] = &[
 /// fixture (#1509, 2026-10-24): 91 programs [5025, 2781, 2225] / ES2 79
 /// [4569, 2370, 1965], the per-program words above of the Qt programs gone
 /// with them.
-const OURS_TOTALS: (usize, [usize; 3]) = (192, [10820, 5519, 4509]);
+const OURS_TOTALS: (usize, [usize; 3]) = (193, [10939, 5537, 4530]);
 const OURS_TOTALS_ES2: (usize, [usize; 3]) = (170, [9823, 4840, 4039]);

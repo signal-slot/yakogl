@@ -116,10 +116,36 @@ pub const WADDR_TMUSLOD: u8 = 42;
 /// (V3D_QPU_WADDR_TMUR / TMUSCM, qpu_instr.h).
 pub const WADDR_TMUR: u8 = 35;
 pub const WADDR_TMUSCM: u8 = 40;
+/// A texel fetch's retiring write (V3D_QPU_WADDR_TMUSF, qpu_instr.h;
+/// v3d_tex.c:372-374): S and T are integer texel coordinates of the level
+/// in TMUB.
+pub const WADDR_TMUSF: u8 = 41;
+/// TMU Config Parameter 2 (v3d_packet.xml, 4.2) of a regular look-up with
+/// nothing else set: "TMU Op" REGULAR (15) in bits 20..23. Mesa's
+/// p2_unpacked_default (v3d_tex.c:68-70); P2 is written only when the
+/// look-up's differs from it (v3d_tex.c:303-306, 367-368).
+pub const TMU_P2_REGULAR: u32 = 15 << 20;
 /// TMU Config Parameter 2 (v3d_packet.xml, 4.2) for a cube look-up at an
 /// explicit level: op Regular (15, bits 20..23) and Disable AutoLOD (bit 1),
 /// Mesa's p2 for a txl on a cube (v3d_tex.c:146-149, 303-306, 367-368).
-pub const TMU_P2_CUBE_LOD: u32 = (15 << 20) | (1 << 1);
+pub const TMU_P2_CUBE_LOD: u32 = TMU_P2_REGULAR | (1 << 1);
+
+/// The TMU Config Parameter 2 word of a regular look-up: "Disable AutoLOD"
+/// (bit 1) when `disable_autolod`, and the constant texel offset's nibbles,
+/// "Offset S" in bits 8..11 and "Offset T" in bits 12..15, 4-bit two's
+/// complement (v3d_packet.xml "TMU Config Parameter 2", min_ver 42;
+/// V3D42_TMU_CONFIG_PARAMETER_2_pack: `util_bitpack_sint(offset_s, 0, 3)`
+/// and `(offset_t, 4, 7)` of byte 1). "Offset R" (bits 16..19) is a 3D
+/// look-up's and stays 0 here.
+pub const fn tmu_p2(disable_autolod: bool, offset: [i8; 2]) -> u32 {
+    TMU_P2_REGULAR | (disable_autolod as u32) << 1 | ((offset[0] as u32) & 0xf) << 8 | ((offset[1] as u32) & 0xf) << 12
+}
+
+/// Whether a constant uniform word is a P2 this file writes: a regular
+/// look-up's, with at most "Disable AutoLOD" and the S/T offset nibbles set.
+pub const fn is_tmu_p2(word: u32) -> bool {
+    word & !((1 << 1) | (0xff << 8)) == TMU_P2_REGULAR
+}
 pub const WADDR_TMUT: u8 = 34;
 /// A 2D-array look-up's layer (V3D_QPU_WADDR_TMUI).
 pub const WADDR_TMUI: u8 = 36;
@@ -834,8 +860,8 @@ impl<'a> Sel<'a> {
                     }
                 }
             }
-            if let SOp::Tex { srcs, cube, layer, bias, lod, .. } = *op {
-                for x in srcs.iter().take(super::prepare::tex_operands(cube || layer, bias || lod)) {
+            if let SOp::Tex { srcs, cube, layer, bias, lod, fetch, .. } = *op {
+                for x in srcs.iter().take(super::prepare::tex_operands(cube || layer, bias || lod || fetch)) {
                     as_value[x.0 as usize] = true;
                 }
             }
@@ -856,12 +882,13 @@ impl<'a> Sel<'a> {
             }
             let o = match *op {
                 /* v3d_tex.c v3d_vir_emit_tex, for a regular 2D look-up with
-                 * an f16 result: P0 (the result words to return), P1, the
-                 * T (and bias or level) writes, then S, which retires the
-                 * look-up (TMUSLOD for an explicit level: `txl`, v3d_tex.c:
-                 * 374-375, which a vertex shader's every look-up is); then
-                 * one ldtmu per word asked for. */
-                SOp::Tex { sampler, srcs, cube, layer, bias, lod } => {
+                 * an f16 result: P0 (the result words to return), P1, P2
+                 * when it is not the default, the T (and bias or level)
+                 * writes, then S, which retires the look-up (TMUSLOD for an
+                 * explicit level: `txl`, v3d_tex.c:377-378, which a vertex
+                 * shader's every look-up is; TMUSF for a texel fetch,
+                 * :372-374); then one ldtmu per word asked for. */
+                SOp::Tex { sampler, srcs, cube, layer, bias, lod, fetch, offset } => {
                     /* A binding the draw keyed for a 32-bit output
                      * (`LodKey::ret32`: an R32F texture, Mesa's return size
                      * 32): one word per channel, lane l is word l, instead
@@ -896,13 +923,28 @@ impl<'a> Sel<'a> {
                      * v3d_tex.c:317). */
                     /* bit 0, "Output Type 32-bit" (v3d_packet.xml TMU Config
                      * Parameter 1), for a ret32 binding */
-                    let p1 = unit | 4 | u32::from(ret32);
-                    self.push(a, VOp::Wrtmuc { u: Uniform { contents: QUNIFORM_TMU_CONFIG_P1, data: p1 } })?;
-                    /* A cube at an explicit level: P2 with disable_autolod,
-                     * after P1 (TMUSLOD, which implies it, is not a cube
-                     * write). */
-                    if cube && lod {
-                        self.push(a, VOp::Wrtmuc { u: Uniform::constant(TMU_P2_CUBE_LOD) })?;
+                    let p1 = 4 | u32::from(ret32);
+                    /* A texel fetch uses no sampler state (its coordinates
+                     * are texels of one level: no filter, no wrap), so its
+                     * P1 is the bits alone, a constant the driver does not
+                     * resolve to a sampler record, as Mesa writes it
+                     * (nir_tex_instr_need_sampler is false for a txf,
+                     * v3d_tex.c:231-235, 337-351). */
+                    let p1 = if fetch {
+                        Uniform::constant(p1)
+                    } else {
+                        Uniform { contents: QUNIFORM_TMU_CONFIG_P1, data: unit | p1 }
+                    };
+                    self.push(a, VOp::Wrtmuc { u: p1 })?;
+                    /* P2, after P1, when it is not the default (v3d_tex.c:
+                     * 303-306, 367-368): a cube at an explicit level has
+                     * disable_autolod (TMUSLOD, which implies it, is not a
+                     * cube write; a fetch has no automatic level and must
+                     * not set it, :141-150), and an `Offset` form has its
+                     * texel offset in the S and T nibbles. */
+                    let p2 = tmu_p2(cube && lod, offset);
+                    if p2 != TMU_P2_REGULAR {
+                        self.push(a, VOp::Wrtmuc { u: Uniform::constant(p2) })?;
                     }
                     let (s, t) = (self.val(a, srcs[0])?, self.val(a, srcs[1])?);
                     self.push(a, VOp::Mul { op: MulOp::Mov, dst: Dst::Magic(WADDR_TMUT), a: t, b: Operand::None })?;
@@ -916,13 +958,18 @@ impl<'a> Sel<'a> {
                         let i = self.val(a, srcs[2])?;
                         self.push(a, VOp::Mul { op: MulOp::Mov, dst: Dst::Magic(WADDR_TMUI), a: i, b: Operand::None })?;
                     }
-                    if bias || lod {
+                    /* the bias, the level, or a fetch's integer level, all
+                     * on TMUB (v3d_tex.c:131-139) */
+                    if bias || lod || fetch {
                         let b = self.val(a, srcs[2 + usize::from(cube || layer)])?;
                         self.push(a, VOp::Mul { op: MulOp::Mov, dst: Dst::Magic(WADDR_TMUB), a: b, b: Operand::None })?;
                     }
-                    /* the retiring S write (v3d_tex.c:371-378): TMUSCM for a
-                     * cube, TMUSLOD for a 2D explicit level, else TMUS */
-                    let retire = if cube {
+                    /* the retiring S write (v3d_tex.c:370-381): TMUSF for a
+                     * texel fetch, TMUSCM for a cube, TMUSLOD for a 2D
+                     * explicit level, else TMUS */
+                    let retire = if fetch {
+                        WADDR_TMUSF
+                    } else if cube {
                         WADDR_TMUSCM
                     } else if lod {
                         WADDR_TMUSLOD
