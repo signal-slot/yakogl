@@ -220,6 +220,12 @@ PIN(0, offsetof(RGXFWIF_FWCCB_CMD_FREELISTS_RECONSTRUCTION_DATA, ui32FreelistsCo
 PIN(4, offsetof(RGXFWIF_FWCCB_CMD_FREELISTS_RECONSTRUCTION_DATA, ui32HwrCounter))
 PIN(8, offsetof(RGXFWIF_FWCCB_CMD_FREELISTS_RECONSTRUCTION_DATA, aui64FreelistIDs))
 PIN(0,     offsetof(RGXFWIF_FWCCB_CMD_FREELIST_GS_DATA, ui64FreelistID))
+/* the two notifications ccb.rs prints and does not act on: a GPU restart
+ * request (no data) and a firmware page fault (its address) */
+PIN(0x2ABC006Du, RGXFWIF_FWCCB_CMD_REQUEST_GPU_RESTART)
+PIN(0x2ABC0070u, RGXFWIF_FWCCB_CMD_CONTEXT_FW_PF_NOTIFICATION)
+PIN(8, offsetof(RGXFWIF_FWCCB_CMD, uCmdData.sCmdFWPagefault.sFWFaultAddr))
+PIN(8, sizeof(RGXFWIF_FWCCB_CMD_FW_PAGEFAULT_DATA))
 
 /* ---- client CCB: header, control, UFO, CMDTA3D_SHARED ------------------ */
 PIN(16, sizeof(RGXFWIF_CCB_CMD_HEADER))

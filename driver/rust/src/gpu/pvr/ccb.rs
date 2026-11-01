@@ -164,9 +164,10 @@ pub fn kccb_probe_slot(k: &YdPvrKm, slot: u32, why: &str) {
 
 /// Service the firmware's requests on the FWCCB: freelist grow and
 /// reconstruction (answered on the KCCB; the firmware stalls the data
-/// masters until then), context-reset notifications (logged). Returns the
-/// number of commands taken. A grow is served from the list's reserve or
-/// the shared grow pool ([`fwccb_service_with`] adds the render pool).
+/// masters until then), context-reset, firmware page-fault and GPU-restart
+/// notifications (logged, nothing done). Returns the number of commands
+/// taken. A grow is served from the list's reserve or the shared grow pool
+/// ([`fwccb_service_with`] adds the render pool).
 pub fn fwccb_service(k: &mut YdPvrKm) -> i32 {
     fwccb_service_with(k, None, &[], None)
 }
@@ -267,6 +268,15 @@ pub fn fwccb_service_with(
                 u[9],
                 u[8]
             );
+            serviced += 1;
+        } else if ty == FWCCB_CMD_CONTEXT_FW_PF_NOTIFICATION {
+            // SAFETY: as above; RGXFWIF_FWCCB_CMD_FW_PAGEFAULT_DATA.
+            let addr = unsafe { rd64(c, FWCCB_FW_PF_ADDR) };
+            crate::km_log!(k, Err, "FWCCB: FW_PAGEFAULT addr=0x{:010x}", addr);
+            serviced += 1;
+        } else if ty == FWCCB_CMD_REQUEST_GPU_RESTART {
+            // No data; printed only, no restart is done.
+            crate::km_log!(k, Err, "FWCCB: GPU restart requested");
             serviced += 1;
         } else if ty == FWCCB_CMD_UPDATE_STATS {
             // SAFETY: as above; RGXFWIF_FWCCB_CMD_UPDATE_STATS_DATA.
@@ -748,6 +758,39 @@ mod fwccb_check_tests {
         assert_eq!(fwccb_service(&mut r.k), 1);
         assert_eq!(r.log(), ["FWCCB: cmd type=0x00000000 (unhandled, skipping)"]);
         assert_eq!((r.k.fw_stats[2], r.fw.waits.get()), (0, 0));
+        assert_eq!(r.read_offset(), 1, "consumed");
+    }
+
+    /// Slot 0 holding a command of type `ty` with `words` from the data's
+    /// start, and nothing else in the ring; the service run without the
+    /// check. Returns the rig after the service.
+    fn one_command(ty: u32, words: &[u32]) -> Rig {
+        let mut r = rig(false, None);
+        let data = (RING as usize + FWCCB_CMD_DATA) / 4;
+        r.mem[data..data + 4].fill(0); // the rig's UPDATE_STATS data
+        r.mem[data..data + words.len()].copy_from_slice(words);
+        r.mem[(RING as usize + FWCCB_CMD_TYPE) / 4] = ty;
+        assert_eq!(fwccb_service(&mut r.k), 1);
+        r
+    }
+
+    /// A firmware page fault is printed with its 64-bit fault address
+    /// (`sFWFaultAddr`, low word first) and consumed; nothing is answered.
+    #[test]
+    fn a_firmware_page_fault_is_printed_with_its_address() {
+        assert_eq!(FWCCB_FW_PF_ADDR, FWCCB_CMD_DATA);
+        let r = one_command(FWCCB_CMD_CONTEXT_FW_PF_NOTIFICATION, &[0xc012_3000, 0xe1]);
+        assert_eq!(r.log(), ["FWCCB: FW_PAGEFAULT addr=0xe1c0123000"]);
+        assert_eq!(r.read_offset(), 1, "consumed");
+        assert_eq!(r.k.fw_stats, [0; 7], "no statistic counted");
+    }
+
+    /// A GPU-restart request is printed on its own line and consumed; no
+    /// restart is done.
+    #[test]
+    fn a_gpu_restart_request_is_printed() {
+        let r = one_command(FWCCB_CMD_REQUEST_GPU_RESTART, &[]);
+        assert_eq!(r.log(), ["FWCCB: GPU restart requested"]);
         assert_eq!(r.read_offset(), 1, "consumed");
     }
 
