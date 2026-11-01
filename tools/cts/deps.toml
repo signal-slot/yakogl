@@ -229,6 +229,25 @@ mv "$DEPS/mali-csffw/mali_csffw.bin.part" "$DEPS/mali-csffw/mali_csffw.bin"
 url = "https://gitlab.com/kernel-firmware/linux-firmware/-/raw/930ef9046e3848df688d98b7d5e68154b031dc66/arm/mali/arch10.8/mali_csffw.bin"
 sha256 = "a27847ea11f8efb3136340c3ba8aab413ae25145eeb4a7f64ff5edd829a2405b"
 
+[[dep]]
+name = "DEQP_GLES3_TEST_DIR"
+path = "VK-GL-CTS-gles3/data/gles3/shaders"
+marker = "VK-GL-CTS-gles3/data/gles3/shaders/arrays.test"
+note = "the dEQP GLES3 shader corpus, VK-GL-CTS at 93bca01's data/gles3/shaders (tests/es3_shaderc_corpus.rs runs its corpus part only when this names it). A full VK-GL-CTS clone already made by the DEQP_WORK flow is reused through a symlink; otherwise a blob-less sparse clone of the same commit holds just that directory (external/fetch_sources.py is not needed). It is a directory of its own, not $DEPS/VK-GL-CTS, because DEQP_WORK skips its clone and fetch_sources.py when that directory exists"
+build = '''
+rm -rf "$DEPS/VK-GL-CTS-gles3.part"
+if [ -f "$DEPS/VK-GL-CTS/data/gles3/shaders/arrays.test" ] && [ "$(git -C "$DEPS/VK-GL-CTS" rev-parse HEAD)" = 93bca01861b0e3ef3c387027a9791e6d065f900c ]; then
+  ln -s "$DEPS/VK-GL-CTS" "$DEPS/VK-GL-CTS-gles3.part"
+else
+  git clone --no-checkout --filter=blob:none https://github.com/KhronosGroup/VK-GL-CTS "$DEPS/VK-GL-CTS-gles3.part"
+  git -C "$DEPS/VK-GL-CTS-gles3.part" sparse-checkout set --no-cone /data/gles3/shaders
+  git -C "$DEPS/VK-GL-CTS-gles3.part" checkout --detach 93bca01861b0e3ef3c387027a9791e6d065f900c
+fi
+mv "$DEPS/VK-GL-CTS-gles3.part" "$DEPS/VK-GL-CTS-gles3"
+'''
+packages.apt = ["git"]
+packages.portage = ["dev-vcs/git"]
+
 # With a board.
 
 [[dep]]
