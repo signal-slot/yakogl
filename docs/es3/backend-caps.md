@@ -236,8 +236,8 @@ one the back end does not draw, by name (`rt_format_drawable`, `:442-460`).
 
 | | PowerVR | GC7000UL | V3D 4.2 |
 |---|---|---|---|
-| Integer RT (R8I … RGBA32UI, RGB10_A2UI; 19) | **yakogl: all 19 drawable**, as the one colour attachment of a draw ([C] `backend.rs:413-416`; `src/pvr/backend.rs:868` `pbe_int_packmode`). Hw: all 19 are `R` formats in Mesa's table, R10G10B10A2_UINT too [M] `pvr_arch_formats.c:93-148,119`; pack modes `pbestate.xml:60-122` | **yakogl: 0 drawable** ([C] `backend.rs:405-408`). Hw: integer RTs with HALTI2, R8I/R8UI with HALTI5 (both met); 128-bit RGBA32I/UI need HALF_FLOAT (set) [M] `etnaviv_screen.c:490-505` | **yakogl: 0 drawable** ([C] `backend.rs:409-412`). Hw: all 19 [M] `v3dx_format_table.c:118-137,75` |
-| Float RT: RGBA16F, R16F, R32F | yakogl draws them: `pbe_emit_words` [C] `src/pvr/backend.rs:918`. Hw has F16, F16x4, F32 [M] `pvr_arch_formats.c:124,137,140` | yakogl draws them [C] `src/vivante/backend.rs:267-269`. Hw: HALTI2 (met), 128-bit with HALF_FLOAT [M] `etnaviv_screen.c:500-505`, `H:19026` | **yakogl refuses** all three [C] `src/v3d/state.rs:31-33`. Hw has all six [M] `v3dx_format_table.c:90-101` |
+| Integer RT (R8I … RGBA32UI, RGB10_A2UI; 19) | **yakogl: all 19 drawable**, as the one colour attachment of a draw ([C] `backend.rs:413-416`; `src/pvr/backend.rs:868` `pbe_int_packmode`). Hw: all 19 are `R` formats in Mesa's table, R10G10B10A2_UINT too [M] `pvr_arch_formats.c:93-148,119`; pack modes `pbestate.xml:60-122` | **yakogl: 0 drawable** ([C] `backend.rs:405-408`). Hw: integer RTs with HALTI2, R8I/R8UI with HALTI5 (both met); 128-bit RGBA32I/UI need HALF_FLOAT (set) [M] `etnaviv_screen.c:490-505` | **yakogl: all 19 drawable**, each with a row in `rt_format` ([C] `backend.rs:460-463`; `src/v3d/state.rs:461-480`). Hw: all 19 [M] `v3dx_format_table.c:118-137,75` |
+| Float RT: RGBA16F, R16F, R32F | yakogl draws them: `pbe_emit_words` [C] `src/pvr/backend.rs:918`. Hw has F16, F16x4, F32 [M] `pvr_arch_formats.c:124,137,140` | yakogl draws them [C] `src/vivante/backend.rs:267-269`. Hw: HALTI2 (met), 128-bit with HALF_FLOAT [M] `etnaviv_screen.c:500-505`, `H:19026` | yakogl draws them: `rt_format` rows [C] `src/v3d/state.rs:458-460`. Hw has all six [M] `v3dx_format_table.c:90-101` |
 | RG16F / RGB16F, RG32F, RGBA32F, R11F_G11F_B10F, RGB10_A2 | `is_color_format` [C] `src/gl/framebuffer.rs:506-536` lists RGBA16F, RGB16F, RG16F, R16F and R32F, and RGB10_A2 (ES 3.0 build only, stored as RGBA8: no back end has a 10-bit target). RG32F, RGBA32F and R11F_G11F_B10F are not colour-renderable names today. Hw: RG32F, RGBA32F, R11F_G11F_B10F and RGB10_A2 are `R` formats [M] `pvr_arch_formats.c:143,149,150,115` | same GL-side gap. Hw: float RTs with HALTI2; whether R11F_G11F_B10F and RGB10_A2 render was not traced through `gpu_supports_render_format` [U] | same GL-side gap. Hw renders all four [M] `v3dx_format_table.c:71,96,101,146` |
 | sRGB render (SRGB8_ALPHA8) | **yakogl draws it**: `SRGB_RT` is true on the PowerVR [C] `backend.rs:432` (the PBE's gamma on store, docs/es3/srgb.md). Hw: RGBA8 sRGB is `_TR_` [M] `pvr_arch_formats.c:105`; PBE gamma `pbestate.xml:267-268` | **yakogl draws it** (PE_LOGIC_OP / RT_CONFIG sRGB bit, docs/es3/srgb.md 6.1; host-tested, board B1/B4 open). Hw: sRGB RT needs HALTI3 (met) [M] `etnaviv_screen.c:497-498` | **yakogl draws it** (`rt_format` row: SRGB8_ALPHA8 over 16F/64 bpp, NORM clamp; host-tested, board B3 open). Hw does it [M] `v3dx_format_table.c:63,67,250-259` |
 
@@ -247,16 +247,16 @@ samples (`sampled_texfmts`, `:227-238`); a format with none is refused by
 name. The masks today ([C] `backend.rs:158-209`; `cargo test --test
 es3_caps -- --nocapture` prints them per build):
 
-| Class | PowerVR (`PVR_SAMPLED_TEXFMTS`, `:181-195`) | GC7000UL (`GC_SAMPLED_TEXFMTS`, `:198`) | V3D 4.2 (`V3D_SAMPLED_TEXFMTS`, `:202-209`) |
+| Class | PowerVR (`PVR_SAMPLED_TEXFMTS`, `:181-195`) | GC7000UL (`GC_SAMPLED_TEXFMTS`, `:198`) | V3D 4.2 (`V3D_SAMPLED_TEXFMTS`, `:233-247`) |
 |---|---|---|---|
 | RGBA8, L8, A8, LA8, R32F | sampled | sampled | sampled |
 | SRGB8_A8 | sampled | sampled | sampled |
-| RGB565, RGBA16F, R16F | sampled | sampled | **not sampled** ([C] `v3d/texture.rs:117-123` refuses them). Hw has them [M] `v3dx_format_table.c:81,100,90` |
-| R11F_G11F_B10F, RGB9_E5, RGB10_A2UI, RGBA8_SNORM | sampled | not sampled. Hw: snorm with HALTI1, the rest per the format table [M] `etnaviv_screen.c:394-449` (the table was not walked row by row) | not sampled. Hw has all four [M] `v3dx_format_table.c:146,147,75,69` |
+| RGB565, RGBA16F, R16F | sampled | sampled | sampled ([C] `v3d/texture.rs:185-188`, `:201-205`: `tmu_format` rows from Mesa's table). Hw has them [M] `v3dx_format_table.c:81,100,90` |
+| R11F_G11F_B10F, RGB9_E5, RGB10_A2UI, RGBA8_SNORM | sampled | not sampled. Hw: snorm with HALTI1, the rest per the format table [M] `etnaviv_screen.c:394-449` (the table was not walked row by row) | sampled ([C] `src/backend.rs:233-247`). Hw has all four [M] `v3dx_format_table.c:146,147,75,69` |
 | RGB10_A2 | **not sampled** on purpose: the descriptor decodes it, but ES 3.0 makes GL_RGB10_A2 renderable and mipmappable, so it stays in RGBA8 (two bits lost) until the PowerVR renders the class ([C] `backend.rs:177-180`) | not sampled | not sampled |
-| RGBA8UI/I, RGBA16UI/I, RGBA32UI/I (integer samplers) | sampled (an `isampler2D` / `usampler2D`, and the cube, 3D and 2D-array integer samplers, a 3D look-up at its nearest slice; `docs/es3/pvr-formats.md` section 10.1) | not sampled. Hw: integer sampling with HALTI2, 128-bit integer with HALTI5, both met [M] `etnaviv_screen.c:419-429` | not sampled. Hw has all [M] `v3dx_format_table.c:122-123,129-130,136-137` |
-| RGBA32F | sampled | not sampled | not sampled. Hw has it [M] `v3dx_format_table.c:101` |
-| ETC2/EAC (`ETC2_RGB`, `ETC2_RGBA`, `ETC2_RGB_PT`) | outside this mask: compressed uploads are kept as blocks (`compressed_format_info`, [C] `src/gl/texture.rs`, ETC1 and RGB8_ETC2 as `ETC2_RGB`, RGBA8_ETC2_EAC as `ETC2_RGBA`); the sRGB pair is in it (`ETC2_SRGB_RGB`, `ETC2_SRGB_RGBA`: the same blocks with the TPU gamma, `docs/es3/srgb.md` 4.3); the other five ES 3.0 formats are not accepted | the linear three as on the PowerVR; not the sRGB pair (the names stay GL_INVALID_ENUM) | `v3d/texture.rs:117-123` refuses ETC2 today ([C]). Hw has all ten [M] `v3dx_format_table.c:159-168` |
+| RGBA8UI/I, RGBA16UI/I, RGBA32UI/I (integer samplers) | sampled (an `isampler2D` / `usampler2D`, and the cube, 3D and 2D-array integer samplers, a 3D look-up at its nearest slice; `docs/es3/pvr-formats.md` section 10.1) | not sampled. Hw: integer sampling with HALTI2, 128-bit integer with HALTI5, both met [M] `etnaviv_screen.c:419-429` | sampled ([C] `src/backend.rs:233-247`; `isampler2D` / `usampler2D` / cube only). Hw has all [M] `v3dx_format_table.c:122-123,129-130,136-137` |
+| RGBA32F | sampled | not sampled | sampled at the TMU's 32-bit output ([C] `src/backend.rs:233-247`). Hw has it [M] `v3dx_format_table.c:101` |
+| ETC2/EAC (`ETC2_RGB`, `ETC2_RGBA`, `ETC2_RGB_PT`) | outside this mask: compressed uploads are kept as blocks (`compressed_format_info`, [C] `src/gl/texture.rs`, ETC1 and RGB8_ETC2 as `ETC2_RGB`, RGBA8_ETC2_EAC as `ETC2_RGBA`); the sRGB pair is in it (`ETC2_SRGB_RGB`, `ETC2_SRGB_RGBA`: the same blocks with the TPU gamma, `docs/es3/srgb.md` 4.3); the other five ES 3.0 formats are not accepted | the linear three as on the PowerVR; not the sRGB pair (the names stay GL_INVALID_ENUM) | `v3d/texture.rs:109-113` refuses ETC2 today ([C]: `V3D_SAMPLED_TEXFMTS` has no ETC2 bit). Hw has all ten [M] `v3dx_format_table.c:159-168` |
 
 32-bit float and integer *filtering*: ES 3.0 requires NEAREST only for
 those, and yakogl enforces completeness accordingly ([C]
@@ -282,9 +282,8 @@ The three transform feedback limits are **not** gaps: 64 / 4 / 64 meet ES
 3.0's 64 / 4 / 4 on every GPU (§2).
 
 Features below ES 3.0 that no limit query shows: integer render targets on
-the GC7000 and the V3D (int-rt-gc, int-rt-v3d); the sized sampling classes
-on the GC7000 and the V3D (formats-gc, formats-v3d); V3D float render
-targets and RGB565 / half-float sampling; the RG32F / RGBA32F / R11F_G11F_B10F colour-renderable names and a
+the GC7000 (int-rt-gc); the sized sampling classes
+on the GC7000 (formats-gc); the RG32F / RGBA32F / R11F_G11F_B10F colour-renderable names and a
 real 10-bit RGB10_A2 target on every GPU; MSAA render targets; the seven
 other ETC2/EAC formats.
 
@@ -312,7 +311,7 @@ other ETC2/EAC formats.
   `src/vivante/VIVANTE_NOTES.md:1136-1137` plans "CAP_COLOR_ATTACHMENTS
   3 -> 4, per GPU (the PowerVR stays 3)", which leaves the PowerVR below
   ES 3.0's minimum of 4.
-- The V3D back end already accepts a 4-sample draw (`src/v3d/state.rs:36-39`,
+- The V3D back end already accepts a 4-sample draw (`src/v3d/state.rs:40-42`,
   V3D's one multisample mode), while the GL core reports MAX_SAMPLES 1 on
   every GPU ([C] `state.rs:1251`).
 - `GL_MAX_ELEMENT_INDEX` is exactly the minimum, 2²⁴-1 (`state.rs:1255`).
