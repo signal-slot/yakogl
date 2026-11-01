@@ -95,9 +95,7 @@ pub fn same_instr71(instr: &Instr71, back: &Instr71) -> bool {
         return true;
     }
     match want {
-        Instr71::Alu(mut a)
-            if matches!(a.add.op, AddOp71::Fadd | AddOp71::Faddnf | AddOp71::Fmin | AddOp71::Fmax) =>
-        {
+        Instr71::Alu(mut a) if matches!(a.add.op, AddOp71::Fadd | AddOp71::Faddnf | AddOp71::Fmin | AddOp71::Fmax) => {
             core::mem::swap(&mut a.add.a, &mut a.add.b);
             core::mem::swap(&mut a.sig.small_imm_a, &mut a.sig.small_imm_b);
             Instr71::Alu(a) == *back

@@ -118,7 +118,8 @@ fn corpus_coverage() {
                 alu += 1;
                 *add.entry(format!("{:?}", a.add.op)).or_default() += 1;
                 *mul.entry(format!("{:?}", a.mul.op)).or_default() += 1;
-                for (k, f) in [a.sig.small_imm_a, a.sig.small_imm_b, a.sig.small_imm_c, a.sig.small_imm_d].iter().enumerate()
+                for (k, f) in
+                    [a.sig.small_imm_a, a.sig.small_imm_b, a.sig.small_imm_c, a.sig.small_imm_d].iter().enumerate()
                 {
                     imm[k] += *f as usize;
                 }
@@ -194,7 +195,8 @@ fn every_accepted_random_word_encodes_back() {
     assert!(accepted > 10_000, "the sweep accepted too little to mean anything");
     // Mesa alone loses every NotReproducedByMesa word.
     // (Except the saturating mul FMOV words, see the test of that name.)
-    let fmov_sat = |w: u64| matches!(decode71(w), Ok(Instr71::Alu(a)) if a.mul.op == MulOp71::Fmov && (w >> 14) & 7 >= 4);
+    let fmov_sat =
+        |w: u64| matches!(decode71(w), Ok(Instr71::Alu(a)) if a.mul.op == MulOp71::Fmov && (w >> 14) & 7 >= 4);
     for &w in corpus().iter().step_by(13) {
         if !fmov_sat(w) {
             assert_eq!(mesa_alone(w), Some(w), "{w:#018x}");
