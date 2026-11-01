@@ -67,6 +67,8 @@ struct GenLog {
     /// Per end-of-tile program: the emit words it was given (two per
     /// colour-attachment state, `num_rt` pairs).
     eot_emits: Vec<Vec<u32>>,
+    /// Per end-of-tile program: the DOUTU word it was given.
+    eot_doutus: Vec<u64>,
     /// The VDM state emitter refuses (as the real one does for a size that
     /// does not fit its field) while this is set.
     refuse_vdm_state: bool,
@@ -444,7 +446,7 @@ unsafe extern "C" fn pvr_pds_render_dma_program(
 
 #[no_mangle]
 unsafe extern "C" fn pvr_pds_generate_pixel_event_tq(
-    _doutu_src0: u64,
+    doutu_src0: u64,
     emit_words: *const u32,
     num_rt: u32,
     _has_slc_mcu_cache_controls: i32,
@@ -455,7 +457,10 @@ unsafe extern "C" fn pvr_pds_generate_pixel_event_tq(
 ) -> i32 {
     unsafe {
         let words = core::slice::from_raw_parts(emit_words, 2 * num_rt as usize).to_vec();
-        with_gen(|g| g.eot_emits.push(words));
+        with_gen(|g| {
+            g.eot_emits.push(words);
+            g.eot_doutus.push(doutu_src0);
+        });
         core::ptr::copy_nonoverlapping([*emit_words, *emit_words.add(1), 0, 0].as_ptr(), data_out, 4);
         core::ptr::copy_nonoverlapping([0x0E0E_0000, 0].as_ptr(), code_out, 2);
         *data_size_dw = 4;
@@ -825,6 +830,11 @@ impl Rig {
     /// The emit words of every end-of-tile program built, in order.
     fn eot_emits(&self) -> Vec<Vec<u32>> {
         with_gen(|g| g.eot_emits.clone())
+    }
+
+    /// The DOUTU word of every end-of-tile program built, in order.
+    fn eot_doutus(&self) -> Vec<u64> {
+        with_gen(|g| g.eot_doutus.clone())
     }
 
     /// The dword the platform holds at GPU address `gpu`.
@@ -3191,6 +3201,78 @@ fn three_colour_attachments_get_a_pbe_state_and_an_eot_program_each() {
 /// word 1 bits 0..5 = address >> 34).
 fn emit_address(w0: u32, w1: u32) -> u64 {
     ((w0 as u64) << 2) | (((w1 & 0x3f) as u64) << 34)
+}
+
+/// The bytes of the static PDS page.
+fn pds_static_bytes(b: &Backend) -> Vec<u8> {
+    // SAFETY: pds_static is a live CPU mapping of PDS_STATIC_BYTES bytes.
+    unsafe { core::slice::from_raw_parts(b.pds_static.cpu as *const u8, PDS_STATIC_BYTES as usize).to_vec() }
+}
+
+#[test]
+fn the_partial_render_eot_slot_follows_the_normal_one() {
+    /* docs/notes/pvr-pr-eot.md 3.6: the PR end-of-tile program has its own
+     * PDS data slot, one PDS_ALIGN after the normal one, inside the page. */
+    let rig = Rig::new();
+    let b = rig.b();
+    assert_eq!(b.eot_pr_data_local, b.eot_data_local + PDS_ALIGN);
+    assert_eq!(b.eot_pr_data_off, b.eot_data_off + PDS_ALIGN);
+    assert_eq!(b.eot_pr_data_local % PDS_ALIGN, 0);
+    assert_ne!(b.eot_pr_data_off, b.eot_data_off);
+    assert!(b.eot_pr_data_local + PR_EOT_DATA_MAX_DW * 4 <= PDS_STATIC_BYTES);
+}
+
+#[test]
+fn the_partial_render_eot_words_carry_eot1s_doutu_and_the_given_pair() {
+    let rig = Rig::new();
+    let doutu = rig.b().st.eot_doutu_src0_n[1];
+    assert_ne!(doutu, 0);
+    let mut out = [0xffff_ffffu32; PR_EOT_DATA_MAX_DW as usize];
+    let n = pr_eot_data_words(doutu, [0x1111, 0x2222], &mut out).expect("the generator accepts it");
+    assert!(n > 0 && n <= PR_EOT_DATA_MAX_DW);
+    assert_eq!(rig.eot_doutus().last(), Some(&doutu));
+    let e = rig.eot_emits().last().cloned().expect("an emit array");
+    assert_eq!(e.len(), 2 * PVR_BACKEND_MAX_RT as usize);
+    assert_eq!(&e[..2], &[0x1111, 0x2222]);
+    assert!(e[2..].iter().all(|&w| w == 0), "pairs 1 and 2 are zero");
+    assert_eq!(&out[..2], &[0x1111, 0x2222], "the data starts with pair 0");
+}
+
+#[test]
+fn writing_the_partial_render_slot_leaves_the_normal_slot_alone() {
+    let rig = Rig::new();
+    let b = rig.b();
+    let before = pds_static_bytes(b);
+    let doutu = b.st.eot_doutu_src0_n[1];
+    let n = pr_eot_data_write(b, doutu, [0xaaaa, 0xbbbb]).expect("written");
+    let after = pds_static_bytes(b);
+    let (pr, normal) = (b.eot_pr_data_local as usize, b.eot_data_local as usize);
+    assert_eq!(&after[pr..pr + 8], &[0xaa, 0xaa, 0, 0, 0xbb, 0xbb, 0, 0]);
+    assert!(n > 0);
+    assert_eq!(after[normal..pr], before[normal..pr], "the normal slot is unchanged");
+    let end = pr + n as usize * 4;
+    assert_eq!(after[..pr], before[..pr]);
+    assert_eq!(after[end..], before[end..]);
+}
+
+#[test]
+fn a_frame_after_init_keeps_the_normal_eot_slot_and_leaves_the_pr_slot_alone() {
+    /* knob off: nothing on the frame path touches the PR slot. */
+    let rig = Rig::new();
+    let before = pds_static_bytes(rig.b());
+    let d = rig.draw(3);
+    assert_eq!(draw(&d), 0);
+    assert_eq!(pvr_backend_flush(), 0);
+    let b = rig.b();
+    let (k, _) = rig.kicks()[0];
+    assert_eq!(k.frag.event_pixel_pds_data, b.eot_data_off);
+    let bytes = pds_static_bytes(b);
+    let e = rig.eot_emits().last().cloned().expect("an end-of-tile program");
+    let normal = b.eot_data_local as usize;
+    let want: Vec<u8> = [e[0], e[1], 0, 0].iter().flat_map(|w| w.to_le_bytes()).collect();
+    assert_eq!(&bytes[normal..normal + 16], &want[..]);
+    let pr = b.eot_pr_data_local as usize;
+    assert_eq!(bytes[pr..pr + PR_EOT_DATA_MAX_DW as usize * 4], before[pr..pr + PR_EOT_DATA_MAX_DW as usize * 4]);
 }
 
 #[test]
