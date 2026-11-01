@@ -163,3 +163,136 @@ fp16: Mesa uses `.v2f16` forms there.
 - Every other case's next refusal is its control flow (an `if` or a loop in
   a mediump shader: 68, 70/71, 74, 142, 148) or the ops of the table
   (76, 77, 86, 89, 104, 138), in the order above.
+
+## Remaining fragment ops (plan #156 triage-fsarith)
+
+State at 7ad18d27: the fragment sources of `corpus-verdicts.txt` that still end
+in `MaliError::Arithmetic`. The first refused op of each was found as in "How
+the first op was found" (a scratch `eprintln!` at the five fragment sites of
+`nir_fs.rs`, reverted; the walk stops at the first op, so a source can need
+more than the one named). The names are the front end's `AluOp`; some are its
+spelling of an op Mesa writes otherwise (`Ineg` for `abs(int)`, `Bnot` for
+`step`).
+
+| Source | Case | First refused op | Also needs |
+|---|---|---|---|
+| es100/loopcarry | 70 | `Fceil` (mediump arm of `walk_nodes`) | the `break` loop unrolled into selects (cflow-flatten; the program equals 71's) |
+| es100/transc | 77 | `Fsin` (mediump arm) | `Fcos`, `Flog2`, `Fexp2`, a constant `* 0.25` |
+| es100/vtransc | 77, 2nd program | `Fsin` (mediump arm) | `Frsq` of one fp16 lane |
+| es100/deriv | 138 | `Fddx` (mediump arm) | `Fddy`, `gl_FragCoord` x and y as fp16 (`U16_TO_F32 r59`) |
+| gltest/es3trunc_fs | 199 | `Ftrunc` (`alu32`) | `F2i`, `F2u`, `Ishr`/`Ishl`/`Ushr` by a constant, `I2f`, `U2f` |
+| es100/dynidx | - | `Bcsel` on a non-constant condition (the guard in `walk_nodes`) | `Ieq` of an int uniform against 0..3 per lane; reference intloop_dynidx |
+| es100/f2b | - | `Ffloor` (mediump arm) | `bool(float)` (`Fne`; `alu32` refuses `Fne`/`Ine` as `CompareForm`), `bcsel` of constants |
+| es100/fmods | - | `Fexp2` (`alu32`) | `Flog2`, `Frsq`, `Ffloor`, `Fmin`, one 9-term chain |
+| es100/int_div | - | `Idiv` by a non-constant (`alu32`) | `Ineg`, `Imul`, the reciprocal sequence; intloop_idiv is the mediump twin (case 79) |
+| es100/varyings15 | 97 | `Ball` (mediump arm) | not an op: the vertex shader writes constants and Mesa folds them into the fragment shader (mixprec_varyings15's fs is two `MOV 0x3C000000`, no compare) |
+| es300/derivs | - | `Fddx` (`alu32`, fp32) | `Fddy` on highp lanes; no reference |
+| es300/gcops | - | `Ineg` (`alu32`: `abs(int)`) | `Ffloor`, `Fsqrt` (`FRSQ` then `FRCP`), `Ixor`, `& 255u`, `U8_TO_F32`; intuni_gcops |
+| es300/ifelse_uint | - | `Ult` (`alu32`) | `Umod`/`Udiv` by the constants 7 and 3, `Bcsel` of vec4s; intuni_ifelse_uint |
+| es300/int_div | - | `Ineg` (`alu32`) | `Imod`, `Udiv`/`Umod` by variables and by 65537, 2^31-1, 2^25-1, 3, `U2f`; no reference |
+| es300/layersunused | - | `Bnot` (`alu32`: `step(edge, x)`) | an unused `sampler2DArray` uniform; no reference |
+| es300/uops | - | `Udiv` (`alu32`) | `Umod`, `Ushr`, `Umin`/`Umax`/`Imin`/`Imax`, `Inot`, `F2u`, `Ult`/`Ule` selects, `fract`; intuni_uops |
+| es300/flatlast | - | `U2f` (mediump arm) | the flat varying; alu_flatlast |
+| gltest/f1_fs | - | `Flog2` (mediump arm) | no GPU op: its `log2`, `atan`, `inversesqrt` and int casts are all of constants, and Mesa folds the program to one `TEX_SINGLE` (intloop_f1_fs) |
+
+### Mesa 26.2.1's sequence per op, and what has a reference
+
+All the names below are in tools/mali/testdata. A `.frag` there that equals a
+corpus source is that source's reference.
+
+- **ffloor / fceil / ftrunc** (one `bi_fround_to`, bifrost_compile.c ~3275):
+  `FROUND.f32.rtn / .rtp / .rtz` (s4_ffloor, s4_fceil; `rtz` in
+  intloop_loop_exit), `FROUND.v2f16.rtp` on a mediump pair (alu_loopcarry).
+  `ffract` is `FROUND.f32.rtn` then `FADD.f32 x, t.neg` (s4_ffract). No
+  reference has a mediump `rtn` or `rtz`.
+- **fsin / fcos** (`bi_lower_fsincos_32`, :2552): the same instructions at
+  fp32 in both precisions: `FMA.f32` (x times a constant plus a bias),
+  `FADD_IMM.f32 #0xC9400000`, `FMA.f32`, `FSIN_TABLE.u6`, `FCOS_TABLE.u6`,
+  `FMA_RSCALE.f32`, `FMA.f32 .neg`, `FMA.f32.clamp_m1_1`, `FADD.f32`; cos
+  takes the other table result. A mediump operand is `F16_TO_F32` first and
+  the result is narrowed with `FADD.f32 r.h0, r, 0x0.neg`. References:
+  alu_transc, alu_vtransc (mediump); intuni_sharedint (highp).
+- **flog2 / fexp2** (:2915-2933; the `bi_lower_*` forms only with
+  `BIFROST_NO_FP32_TRANSCENDENTALS`): log2 is `FREXPE.f32.log`,
+  `S32_TO_F32`, `FADD_LSCALE.f32 -1.0, x`, `FLOGD.f32`, `FMA.f32`; exp2 is
+  `IADD_IMM 0x18`, `FMA_RSCALE.f32`, `F32_TO_S32`, `FEXP.f32`. Reference
+  alu_transc (mediump operands). A highp draw (fmods) is missing.
+- **frsq / fsqrt / frcp**: `FRSQ.f32`; `sqrt` is `FRSQ.f32` + `FRCP.f32`
+  (s4_fsqrt, intuni_gcops); `FRCP.f32` (s4_frcp); mediump `FRSQ.f16`
+  (alu_vtransc).
+- **fddx / fddy** (`bi_emit_derivative`, :1507): `CLPER.i32.subgroup4.xor`
+  (lane 1 for x, 2 for y) and `FADD right, left.neg`. Unless every use
+  ignores the sign (`nir_def_all_uses_ignore_sign_bit`) a sign fix follows:
+  `lane_id` (for y first `LSHIFT_AND.i32 lane_id, 2`) shifted by `sz -
+  ffs(axis)` and `LSHIFT_XOR`ed into the result. At fp16 the pair is packed
+  first (`FMA.v2f16`) and the `CLPER` moves the pair. Reference alu_deriv
+  (mediump). Highp (es300/derivs) is the `.i32`/`FADD.f32` form of the same
+  sequence; no reference.
+- **f2i / f2u / i2f / u2f**: `F32_TO_S32.rtz`, `F32_TO_U32.rtz`, `S32_TO_F32`,
+  `U32_TO_F32`; `float(x & 255u)` is `U8_TO_F32 r.b0` (s4_iconv, intuni_gcops,
+  intuni_uops). Mediump sources go through `F16_TO_S32.rtz` (intloop_idiv).
+- **f2b** (`bool(float)`): NIR's `fneu(x, 0.0)`, `FCMP_OR.<f32|v2f16>.ne.m1`
+  by `bi_translate_cmpf`; no reference draws it (the compiler says so at
+  `Fne`), so es100/f2b is its reference.
+- **integer shifts**: `ishr` is `ARSHIFT_OR.i32 x, n.b00, 0x0` (intuni_ishr);
+  `ishl` is `LSHIFT_OR.i32` and `ushr` `RSHIFT_OR.i32`, a constant count
+  riding in the byte-select of the second source (intuni_uops,
+  intuni_ifelse_uint); `inot` is `LSHIFT_OR.i32 0, 0, x.not`.
+- **iabs / imin / imax / umin / umax**: `IABS.s32`; `CSEL.<s32|u32>.<lt|gt>
+  a, b, a, b` (intuni_gcops, intuni_uops).
+- **udiv / umod / idiv / imod**: a variable divisor is a reciprocal:
+  `U32_TO_F32`, `FRCP.f32`, `FMA.f32 rcp, <scale>`, `F32_TO_U32.rtz`, the
+  high half of the product through a `U16_TO_U32` split of `IMUL.i32` and
+  `IADD.s32`, `IMUL`/`ISUB` for the remainder, then two correction steps
+  `ICMP_OR.u32.ge.m1` + `CSEL.u32.eq` (intuni_uops). A signed divide adds
+  `IABS.s32`, a `LSHIFT_XOR` of the signs, `ICMP_OR.s32.lt.m1`, `ISUB`,
+  `CSEL` (intloop_idiv, mediump). A constant divisor needs no reciprocal: the
+  split-multiply chain with the magic constant and `RSHIFT_OR`; `%` is an
+  `IMUL` by the divisor and `ISUB` (intuni_ifelse_uint: `% 7u`, `/ 3u`). The
+  signed power-of-two divide is in the compiler already.
+- **step**: `b2f(fge(x, edge))`, `FCMP_OR.f32.ge.m1` + `CSEL.u32.eq` as
+  s4_b2f does for `lt`. layersunused needs its own draw to fix the compare
+  direction and the constant arms.
+- **any / all of lessThan**: `FCMP_OR.v2f16.lt.m1` per pair, the masks
+  combined by `LSHIFT_OR/AND.v2i16` (alu_boolany).
+- **dynamic vector subscript**: per lane `ICMP_OR.u32.eq.m1` against the
+  index, `MKVEC.v2i16` of the two masks, `MUX.v2i16` chains (intloop_dynidx).
+
+### The references made here
+
+`drm_shim_ref.sh run` could not be started in this session (the harness
+refused to execute it), although the Mesa 26.2.1 shim is built from
+`$CONNECTED_DEPS_DIR/mesa-pan/mesa-26.2.1` into `$CONNECTED_DEPS_DIR/mesa-pan/
+shim/build` (the script's `build` form wants a tarball; `meson setup` with the
+script's options plus `-Dlibdir=lib64` and `meson compile` do the same, and
+`inst/lib64` holds symlinks to libEGL.so.1, libGLESv2.so.2, libgallium and the
+shim). So `tools/mali/testdata/fsarith_{70_loopcarry,77_transc,77_vtransc,
+138_deriv}.*` are copies of the `alu_*` references (the same sources, drawn on
+the shim for 26.2.1), and 199 has none yet. To draw it and the other missing
+ones:
+
+    tools/mali/drm_shim_ref.sh run <shim> tools/shaders/gltest/es3trunc_vs.vert \
+        tools/shaders/gltest/es3trunc_fs.frag target/fsarith_199_es3trunc
+    python3 -I tools/mali/pan_ref_diff.py extract target/fsarith_199_es3trunc.trace --draw \
+        > tools/mali/testdata/fsarith_199_es3trunc.expect.json
+
+the same for es300/derivs, es100/f2b, es100/fmods, es300/int_div and
+es300/layersunused (a passthrough vertex shader for the es100 ones).
+
+### Proposed lowering items, by cases and sources unblocked
+
+1. **fs-int-ops**: es300 uops, ifelse_uint, gcops, int_div, es100 int_div,
+   and 199's shifts. `Ult/Ule`, `Ineg`/`iabs`, min/max, `Inot`, shifts, the
+   div/mod family, `F2u`, `U2f`, `U8_TO_F32`. References exist except for the
+   two int_div sources. Shares ops with triage-intbool: one owner.
+2. **fs-transc**: 77, es100 transc, vtransc, fmods. fsin/fcos/flog2/fexp2 at
+   fp32, `Frsq` at fp16. Highp draw for fmods.
+3. **fs-round-conv**: 199 (with item 1), f2b, gcops' `floor`, 70 (with
+   cflow-flatten): `Ffloor/Fceil/Ftrunc/Fract`, `Fne`, the conversions at
+   mediump.
+4. **fs-deriv**: 138, es100 deriv, es300 derivs. One case, two sources.
+5. **fs-constfold** (f1_fs): the front end folds `log2`, `atan`,
+   `inversesqrt` and int casts of constants, as NIR does. intloop_f1_fs.
+6. **fs-constvary** (97): fold the vertex stage's constants into the fragment
+   shader at link (mali-varying-constants.md); mixprec_varyings15.
+7. **fs-dynidx** (dynidx): `Bcsel` on `Ieq` per lane; intloop_dynidx.
