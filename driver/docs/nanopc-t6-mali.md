@@ -216,9 +216,62 @@ After Z3 the kernel side must ping at least every 12 s (`PING_INTERVAL_MS`).
   power-on, Z2's AS0 and `csf::boot`, and prints the record; and a
   `yd_t6_*` FFI entry for it. Its image row in the gate will need the
   header, and must be a gap without it, like the firmware row (`needs`).
-- Whether the firmware needs a GPU cache flush after the load beyond the
-  clean (panthor syncs each section for the device and flushes nothing
-  else; the L2 has just been powered).
+
+**Settled: no GPU cache flush after the load, beyond the CPU clean** (read
+in Linux v6.18, 7d0a66e4). panthor's first boot, `panthor_fw_init`
+(`panthor_fw.c:1343-1403`), runs: `panthor_gpu_l2_power_on` (1367;
+`GPU_COHERENCY_PROTOCOL` then the L2 power-on, `panthor_gpu.c:227-248`);
+`panthor_vm_create` for the MCU (1371); `panthor_fw_load` (1381) and, per
+section, `panthor_fw_load_section_entry` (489-633): the kernel buffer is
+created and mapped in the not yet enabled VM (603-607, `panthor_gem.c:173`);
+that map's `FLUSH_PT` is skipped because the VM holds no address space yet
+(`panthor_vm_flush_range` returns at `panthor_mmu.c:903-904`; the map ends
+there at 1005); then `panthor_fw_init_section_mem` copies the data and
+zeroes the rest (619, 398-420; the CPU's mapping of the buffer is
+write-combined on a non-coherent GPU, `panthor_gem.c:247`) and
+`dma_sync_sgtable_for_device(..., DMA_TO_DEVICE)` over the buffer's pages
+(624-626), a clean and nothing else; `panthor_vm_active` (1385;
+`panthor_mmu.c:724-819`), whose `panthor_mmu_as_enable` (636-650) does a
+whole-VA `FLUSH_MEM` first (`mmu_hw_do_operation_locked`, 572-621: `LOCK`,
+`GPU_CMD` flush of L2 clean+invalidate and LSC clean+invalidate at 608,
+`UNLOCK`), then writes `AS_TRANSTAB`/`AS_MEMATTR`/`AS_TRANSCFG` and `UPDATE`;
+`panthor_fw_start` (1389; 1028-1059): `MCU_CONTROL` = `MCU_CONTROL_AUTO` (2,
+`panthor_regs.h:121-124`) at 1034, with nothing in between. So between the
+section copy and the MCU start there is exactly one GPU-side flush: the
+enable's whole-VA clean+invalidate, which `panthor_vm_active` brings for the
+address space, not for the sections. `panthor_gpu_flush_caches` has only two
+callers in the driver, that one (`panthor_mmu.c:608`) and the scheduler's
+suspend (`panthor_sched.c:2764`). panthor's own reload after a slow reset
+(`panthor_fw_post_reset`, 1112-1148) runs the other way round: `panthor_vm_active`
+(1117), then `panthor_reload_fw_sections` (1126; the copy and the same sync,
+675-690), then `panthor_fw_start` (1138): the copy follows the enable's
+flush there, and no flush follows the copy.
+
+Ours, `csf::boot` after Z2: Z1's power-on has powered the L2 (PD_GPU was off
+at hand-over); the flush round trip alone; the tables built and cleaned;
+`mmu::as_enable` with its whole-VA `FLUSH_MEM`; the map's `FLUSH_PT` (Z2's
+step 3); then `csf::load_sections` copies, zeroes and cleans each section
+(`McuMemory::clean`, `sys_cache_data_flush_range`) and `start_mcu` writes
+`MCU_CONTROL` = 2. The order of the clean and the start is panthor's, the
+enable and its flush come before the copy as in panthor's slow reset, and
+nothing flushes the GPU between the clean and the start, as in panthor. The
+sequences match. Why it is enough (our reading, not a panthor statement):
+the MCU is disabled until the write, so the GPU's L2 cannot allocate a line
+of any section between the enable's invalidate and the start (and the L2 was
+powered up after the PD_GPU-off hand-over, so it held nothing to begin with);
+what the MCU must see is only what the CPU's caches still hold, and the clean
+to the point of coherency covers that.
+
+The image must add nothing on the GPU side. What the code items keep to:
+the clean covers each section's whole `va_size`, the zero-filled tail
+included (`load_section` does; panthor syncs the whole buffer); every clean,
+and the table clean, is complete (a barrier after the last `dc cvac`) before
+the `MCU_CONTROL` write, so `clean` should be Zephyr's range flush and
+nothing weaker; and the loaded sections are not touched again by the CPU
+between the clean and the start. An extra GPU flush before `MCU_CONTROL`
+would be harmless but is not panthor's, and would hide a missing clean: add
+none; if the board run shows an MCU fault on its first fetch with the tables
+walking right, adding one is the first experiment, recorded as such.
 
 The interface (linux:`panthor_fw.h:15-269`): a **global** block (GLB) at 0x04000000
 with input/output pages; 8 **command stream groups** (CSG, stride 0xa0), each with 8
@@ -1267,22 +1320,28 @@ page tables in the image, enables AS0 on them the way panthor enables the
 MCU's VM, and gets a GPU cache flush back with its completion bit. It is
 the step before Z3, whose firmware is loaded into exactly these tables.
 
-Sources. Linux v6.18 `drivers/gpu/drm/panthor/` under its MIT option
-(decision 1): `panthor_regs.h` (the `MMU_*`, `AS_*`, `GPU_CMD` and
-`GPU_INT_*` definitions), `panthor_mmu.c` (`panthor_vm_create`,
-`panthor_vm_active`, `mair_to_memattr`, `lock_region`, `wait_ready`,
-`write_cmd`, `mmu_hw_do_operation_locked`, `panthor_mmu_as_enable`,
-`flags_to_prot`, `panthor_vm_map_pages`), `panthor_gpu.c`
-(`panthor_gpu_flush_caches`, `panthor_gpu_irq_handler`). io-pgtable-arm.c
-is GPL only: facts with their function, never its code
-(`arm_lpae_prot_to_pte`, `arm_lpae_install_table`, its stage-1 `MAIR`, the
-PTE sync of a non-coherent walk). The Arm ARM's VMSAv8-64 descriptor fields
-are the architecture. **These citations name the function or macro, not a
-line:** the hosts that wrote this subsection had no Linux tree and could not
-fetch one, so the reading is from these functions as named; where this page
-already had line numbers (`panthor_mmu.c:506-621, 785-790, 1990-2030`)
-they are the earlier reading's. A line-numbered pass against v6.18 is a
-review item before the board run.
+Sources. Linux v6.18 (7d0a66e4), read line by line 2026-11-01;
+`drivers/gpu/drm/panthor/` under its MIT option (decision 1), line numbers
+below are that tree's:
+`panthor_regs.h` (`GPU_MMU_FEATURES` 31-33, `GPU_INT_*`, `GPU_CMD` and
+`GPU_FLUSH_CACHES` 37-56, `MCU_CONTROL` 121-124, `MMU_INT_*` 141-144, the
+`AS_*` registers 148-201), `panthor_mmu.c` (`wait_ready` 506-524, `write_cmd`
+526-536, `lock_region` 538-570, `mmu_hw_do_operation_locked` 572-621,
+`panthor_mmu_as_enable` 636-650, `panthor_vm_active` 724-819,
+`panthor_vm_flush_range` 898-914, `panthor_vm_map_pages` 945-1006,
+`flags_to_prot` 1008-1024, `mair_to_memattr` 1990-2030, `panthor_vm_create`
+2322-2441: the io-pgtable configuration 2381-2392, the memattr 2407-2408),
+`panthor_gpu.c` (`panthor_gpu_irq_handler` 55-75, `panthor_gpu_flush_caches`
+259-294). `drivers/iommu/io-pgtable-arm.c` is **GPL-2.0-only**: facts with
+their line, never its code (`arm_lpae_prot_to_pte` 481-549,
+`arm_lpae_install_table` 392-422, `__arm_lpae_init_pte` 339-358, the stage-1
+`MAIR` and `ttbr` 1037-1058, the PTE sync of a non-coherent walk 318-322,
+356-357 and 413-417). The Arm ARM's VMSAv8-64 descriptor fields are the
+architecture. The `panthor_mmu.c` lines elsewhere on this page (`506-621,
+785-790, 1990-2030`) were checked in the same pass and hold. Where the
+reading contradicted this subsection it is corrected below: the `MAIR`
+byte of `INC_OWBRWA` ("`AS_MEMATTR`"), and the function name in the
+descriptor table's page row.
 
 **Where the tables live.** In the image, at no fixed address: two arrays in
 the `t6_mmu` probe's `.bss`, inside the Z1 memory map's "ours" window.
@@ -1305,7 +1364,7 @@ Why there:
   is a second mapping of the same RAM with other attributes, which the Arm
   ARM calls mismatched. Linux keeps cacheable tables and cleans them for a
   non-coherent walker (io-pgtable's PTE sync when `coherent_walk` is false;
-  panthor sets `coherent_walk` from `ptdev->coherent`, false on the T6).
+  panthor sets `coherent_walk` from `ptdev->coherent`, false on the T6: `panthor_mmu.c:2385`; the PTE sync is `__arm_lpae_sync_pte`, `io-pgtable-arm.c:318-322`).
   The image does the same: after building, `sys_cache_data_flush_range`
   over the used pages (Zephyr's "flush" is a clean to the point of
   coherency, `dc cvac` on arm64). Then the enable's own whole-VA flush
@@ -1316,11 +1375,11 @@ Why there:
   MMU is given its pool.
 
 **The format.** panthor gives a VM's tables to io-pgtable as
-`ARM_64_LPAE_S1` (`panthor_vm_create`: 4 KiB and 2 MiB page sizes, `ias`
+`ARM_64_LPAE_S1` (`panthor_vm_create`, `panthor_mmu.c:2381-2392`: 4 KiB and 2 MiB page sizes, `ias`
 the GPU's VA bits, `oas` its PA bits). That is the Arm VMSAv8-64 stage-1
 format. It is **not** `ARM_MALI_LPAE`, panfrost's format for the older
 job-manager GPUs; the CSF GPUs select the AArch64 mode in `AS_TRANSCFG`
-(`ADRMODE_AARCH64_4K`, `panthor_vm_active`). `MMU_FEATURES` 0x2830 gives
+(`ADRMODE_AARCH64_4K`, `panthor_vm_active`, `panthor_mmu.c:785-788`). `MMU_FEATURES` 0x2830 gives
 48 VA bits and 40 PA bits (Z1's read, panthor's probe line), so: four
 levels (VA bits 47:39, 38:30, 29:21, 20:12), each table one 4 KiB page of
 512 descriptors, the root's PA is `AS_TRANSTAB` as it is (io-pgtable's
@@ -1328,21 +1387,21 @@ levels (VA bits 47:39, 38:30, 29:21, 20:12), each table one 4 KiB page of
 
 | Descriptor | Bits | Source |
 |---|---|---|
-| table (levels 0-2) | next table's PA (47:12) \| 0b11 | `arm_lpae_install_table` (no `NSTable`: only with a quirk panthor does not set) |
-| page (level 3) | PA (47:12) \| 0b11 | `arm_lpae_init_pte` |
-| `AttrIndx` 4:2 | 1 (write-back) for a cached mapping, 0 (non-cacheable) otherwise | `arm_lpae_prot_to_pte`, `IOMMU_CACHE` |
-| `AP[1]` bit 6 | always (unprivileged; panthor never asks `IOMMU_PRIV`) | `arm_lpae_prot_to_pte`, `flags_to_prot` |
-| `AP[2]` bit 7 | read only (`MAP_READONLY`) | the same |
-| `SH` 9:8 | inner shareable (3) cached, outer (2) otherwise | `arm_lpae_prot_to_pte` |
-| `AF` bit 10, `nG` bit 11 | always (stage 1) | the same |
-| `PXN`/`UXN` 54:53 | both, unless executable (`MAP_NOEXEC` clear) | the same |
+| table (levels 0-2) | next table's PA (47:12) \| 0b11 | `arm_lpae_install_table`, `io-pgtable-arm.c:400-402` (no `NSTable`: only with a quirk panthor does not set; `IO_PGTABLE_QUIRK_ARM_NS`) |
+| page (level 3) | PA (47:12) \| 0b11 | `__arm_lpae_init_pte`, `io-pgtable-arm.c:348-354` (called from `arm_lpae_init_pte`, 388) |
+| `AttrIndx` 4:2 | 1 (write-back) for a cached mapping, 0 (non-cacheable) otherwise | `arm_lpae_prot_to_pte`, `io-pgtable-arm.c:519-526` (`IOMMU_CACHE` from `flags_to_prot`, `panthor_mmu.c:1015-1016`) |
+| `AP[1]` bit 6 | always (unprivileged; panthor never asks `IOMMU_PRIV`) | `io-pgtable-arm.c:493-494`; `flags_to_prot` sets no `IOMMU_PRIV` (`panthor_mmu.c:1008-1024`) |
+| `AP[2]` bit 7 | read only (`MAP_READONLY`) | `io-pgtable-arm.c:489-491` (`IOMMU_WRITE` clear, `IOMMU_READ` set), `panthor_mmu.c:1018-1021` |
+| `SH` 9:8 | inner shareable (3) cached, outer (2) otherwise | `io-pgtable-arm.c:534-537` |
+| `AF` bit 10, `nG` bit 11 | always (stage 1) | `io-pgtable-arm.c:488` (`nG`), 545-546 (`AF`) |
+| `PXN`/`UXN` 54:53 | both, unless executable (`MAP_NOEXEC` clear) | `io-pgtable-arm.c:79, 539-540`; `panthor_mmu.c:1012-1013` |
 
 The section VA 0x04000000, 64 KiB, writable, cached, not executable (as
 panthor maps a section without the execute flag): its page `n` is
 `backing + n·0x1000 | 0x0060000000000f47`.
 
 **The registers** (panthor_regs.h; AS n at 0x2400 + 0x40·n, AS0 the
-MCU's: `panthor_vm_active` always gives the MCU VM slot 0):
+MCU's: `panthor_vm_active` always gives the MCU VM slot 0, `panthor_mmu.c:755-757`; AS register offsets `panthor_regs.h:148-201`):
 
 | Register | Offset | Z2 writes |
 |---|---|---|
@@ -1357,47 +1416,56 @@ MCU's: `panthor_vm_active` always gives the MCU VM slot 0):
 | `GPU_CMD` | 0x30 | 0x3304, 0x0304 |
 | `GPU_INT_RAWSTAT`, `_CLEAR` | 0x20, 0x24 | bit 17 `CLEAN_CACHES_COMPLETED` |
 
-- `AS_TRANSCFG` (`panthor_vm_active`): `PTW_MEMATTR_WB` (2 << 24) |
+- `AS_TRANSCFG` (`panthor_vm_active`, `panthor_mmu.c:785-790`): `PTW_MEMATTR_WB` (2 << 24) |
   `PTW_RA` (1 << 30) | `ADRMODE_AARCH64_4K` (6) | `INA_BITS(55 - 48)`
   (7 << 6) = 0x420001c6, the live value; `PTW_SH_OS` only when coherent.
-- `AS_MEMATTR` (`mair_to_memattr` over io-pgtable's stage-1 `MAIR`
-  0xf404ff44: index 0 normal non-cacheable 0x44, 1 write-back 0xff, 2
-  device 0x04, 3 inner non-cacheable outer write-back 0xf4): a byte is
-  write-back only when inner and outer both are, else non-cacheable
-  (0x4c: `INNER_OUTER_NC` | `INNER_ALLOC_EXPL(0, 0)`); write-back takes the
-  inner allocation hints and, non-coherent, `SH_MIDGARD_INNER`: 0xff gives
-  0x8f, 0xf4 gives 0x4c (its inner is non-cacheable), 0x04 and the unused
-  bytes 0x4c. So 0x4c4c4c4c8c4c8f4c derived; the board's live word
+- `AS_MEMATTR` (`mair_to_memattr`, `panthor_mmu.c:1990-2030`, over
+  io-pgtable's stage-1 `MAIR` 0xf404ff44, `io-pgtable-arm.c:1037-1046` with
+  the bytes at 131-138: index 0 normal non-cacheable 0x44, 1 write-back
+  0xff, 2 device 0x04, 3 `INC_OWBRWA` 0xf4): a byte is non-cacheable
+  (`INNER_OUTER_NC` | `SH_MIDGARD_INNER` | `INNER_ALLOC_EXPL(0, 0)` = 0x4c)
+  when `outer & 3` is 0, `outer & 4` is 0 or `inner & 4` is 0 (2004-2007), write-back
+  otherwise (2009-2024): the test is on those bits, not on a policy name. The
+  write-back byte takes the inner allocation hints (`inner & 1`, `inner & 2`)
+  and, non-coherent, `SH_MIDGARD_INNER` (2020-2021): 0xff gives 0x8f, **0xf4
+  gives 0x8c** (its `inner` is 4: bit 2 is set, so panthor's test calls it
+  write-back, with no allocation hints; this page first said 0x4c, from
+  reading 0xf4 as inner non-cacheable, which the Arm ARM does but the
+  driver's test does not), 0x44 gives 0x4c (`outer & 3` is 0), 0x04 and the
+  unused zero bytes 0x4c. So 0x4c4c4c4c8c4c8f4c derived; the board's live word
   ("MMU (Z2)" above) is 0x8f8f8f8f8c4c8f4c, the same in bytes 0-3, the
   ones a PTE selects, and 0x8f in bytes 4-7, which none does. The image
   writes the live word (`MEMATTR_LIVE`; a host test holds its bytes 0-3 to
   `mair_to_memattr`); the page's `AttrIndx` 1 is the 0x8f byte.
-- `AS_LOCKADDR` (`lock_region`): the naturally aligned power-of-two block
-  holding the range, at least `AS_LOCK_REGION_MIN_SIZE` (32 KiB), as its
+- `AS_LOCKADDR` (`lock_region`, `panthor_mmu.c:538-570`): the naturally aligned power-of-two block
+  holding the range, at least `AS_LOCK_REGION_MIN_SIZE` (32 KiB,
+  `panthor_regs.h:173`; the width at 556-557, the base masked at 563), as its
   base with log2(size) - 1 in the low bits. All of VA: 63; the section's
   64 KiB: 0x0400000f.
 - `GPU_FLUSH_CACHES(l2, lsc, other)` = `GPU_CMD_DEF(4, l2 | lsc << 4 |
   other << 8)`, `CACHE_CLEAN` 1, `CACHE_INV` 2: L2 and LSC cleaned and
-  invalidated 0x3304 (`FLUSH_MEM`), the L2 only 0x0304 (`FLUSH_PT`).
+  invalidated 0x3304 (`FLUSH_MEM`), the L2 only 0x0304 (`FLUSH_PT`): the L2
+  always cleaned and invalidated, the LSC only for `FLUSH_MEM`
+  (`panthor_mmu.c:574-590`; `panthor_regs.h:50-56`).
 
 **The sequences.**
 
-1. The round trip alone (`panthor_gpu_flush_caches`): clear bit 17, read it
+1. The round trip alone (`panthor_gpu_flush_caches`, `panthor_gpu.c:259-294`): clear bit 17, read it
    clear (else refuse: a completion could not be told from an old one),
    write `GPU_CMD` 0x3304, poll `GPU_INT_RAWSTAT` bit 17 for at most 100 ms
-   (panthor's `wait_event_timeout`), clear it. panthor waits for the IRQ and
-   its handler clears the bit; Zephyr has no handler on SPI 94 here, so the
+   (panthor's `wait_event_timeout`, 276-278), clear it. panthor waits for the IRQ and
+   its handler (`panthor_gpu_irq_handler`, 55-75) clears the bit; Zephyr has no handler on SPI 94 here, so the
    image polls the raw status, as Z1's soft reset does.
-2. AS0 on (`panthor_mmu_as_enable`): `mmu_hw_do_operation_locked` over the
-   whole VA with `FLUSH_MEM`: `AS_LOCKADDR` = 63, `wait_ready`, `LOCK`,
-   `wait_ready`, the flush (0x3304, bit 17), `UNLOCK` (a `GPU_CMD` flush does
-   not unlock the region, panthor's comment there), `wait_ready`; then
-   `AS_TRANSTAB`, `AS_MEMATTR`, `AS_TRANSCFG` (each 64-bit, low word first),
-   `wait_ready`, `UPDATE`. `wait_ready` polls `AS_STATUS` bit 0 every 10 µs
+2. AS0 on (`panthor_mmu_as_enable`, `panthor_mmu.c:636-650`): `mmu_hw_do_operation_locked` (572-621) over the
+   whole VA with `FLUSH_MEM`: `AS_LOCKADDR` = 63 (568), `wait_ready`, `LOCK` (569),
+   `wait_ready` (604), the flush (0x3304, bit 17, 608), `UNLOCK` (617; a `GPU_CMD` flush does
+   not unlock the region, panthor's comment there, 611-615), `wait_ready` (620); then
+   `AS_TRANSTAB`, `AS_MEMATTR`, `AS_TRANSCFG` (each 64-bit, low word first: `gpu_write64`, `panthor_device.h:473-477`; 645-647),
+   `wait_ready`, `UPDATE` (649). `wait_ready` polls `AS_STATUS` bit 0 every 10 µs
    for at most 100 ms (`gpu_read_relaxed_poll_timeout_atomic(..., 10,
-   100000)`).
+   100000)`, 514-515).
 3. The flush after a map (`panthor_vm_map_pages` ends with the range's
-   `FLUSH_PT`): `AS_LOCKADDR` = 0x0400000f, `LOCK`, the L2-only flush
+   `FLUSH_PT`, 1005, via `panthor_vm_flush_range` 898-914, which does nothing for a VM without an address space, 903-904): `AS_LOCKADDR` = 0x0400000f, `LOCK`, the L2-only flush
    0x0304, `UNLOCK`.
 
 One difference from panthor, on purpose: after each `AS_COMMAND` the image
