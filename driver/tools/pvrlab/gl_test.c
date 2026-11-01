@@ -410,11 +410,16 @@
  *               (PowerVR) the GPU's busy time a frame. Not in the
  *               regression set (a measurement); SKIP on ES 2.0 without
  *               GL_OES_texture_npot
- * 217 forcedpr  a forced partial render read back whole (PowerVR, #3): 256
+ * 217 forcedpr  a forced partial render read back whole (PowerVR, #3):
  *               overlapping 512x512 rectangles of known colour and scrambled
- *               depth in a 1024x1024 target, one kick, the free list capped at
- *               512 pages (CONFIG_YAKOGL_DRV_GPU_PVR_FL_PROBE_MAX_PAGES); the
- *               whole buffer against the analytic image. Needs
+ *               depth in a 1024x1024 target, one kick in flight, the free
+ *               list capped at 512 pages (CONFIG_YAKOGL_DRV_GPU_PVR_FL_PROBE_
+ *               MAX_PAGES). The layer count is swept in the run: 256, 512,
+ *               1024, 2048, 4093, one kick each, up to the first step that
+ *               asks for a grow (256 layers asked for none: board record
+ *               2026-10-31, "NOT EXERCISED"). The colour buffer and the
+ *               16-bit depth buffer (sampled back through a depth texture)
+ *               of that step against the analytic image. Needs
  *               CONFIG_YAKOGL_DRV_GPU_PVR_PARTIAL_RENDER: without it the kick
  *               hangs by design (the 10 s stop), so NOT in the default list;
  *               run it by number (README.md, "Case 217")
@@ -22387,12 +22392,27 @@ static int case_refusehang(void)
  *
  * The minimal repro of docs/notes/pvr-render-pool.md, "Design: the firmware's
  * partial render", "The first board measurement", step 1. Case 175 shows the
- * refusal; this one checks the PICTURE. One kick in flight (one frame, one
- * glFinish), CONFIG_GL_TEST_FORCEDPR_LAYERS (256) 512x512 rectangles (two
- * triangles each) in a 1024x1024 target with a 16-bit depth buffer, depth test
- * LESS. Build it with CONFIG_YAKOGL_DRV_GPU_PVR_FL_PROBE_MAX_PAGES=512 (no list
- * can grow): the frame's parameter data, about 64 full-screen quads of it,
- * exceeds the list.
+ * refusal; this one checks the PICTURE. One kick in flight at a time (one
+ * frame, one glFinish), up to 4093 512x512 rectangles (two triangles each)
+ * in a 1024x1024 target with a 16-bit depth buffer, depth test LESS. Build it
+ * with CONFIG_YAKOGL_DRV_GPU_PVR_FL_PROBE_MAX_PAGES=512 (no list can grow):
+ * the frame's parameter data must exceed the list.
+ *
+ * The sweep. The first board run (2026-10-31, tools/cts/log/2026-10-31-
+ * pr-negative) drew 256 layers: it completed in 2.4 s with requests 0, no
+ * stop and no partial render, "NOT EXERCISED": 256 layers do not exhaust 512
+ * pages. So the case sweeps, as case 175 sweeps its quad count: it starts at
+ * CONFIG_GL_TEST_FORCEDPR_LAYERS (256) and doubles (512, 1024, 2048) up to
+ * 4093 = FPR_P, the most layers with distinct depth ranks, one kick and one
+ * glFinish a step. The sweep ends at the first step with grow requests (the
+ * counter), at the driver's stop (counter 7), at a fence timeout (a second one
+ * in the run ends the run, run_case), at a GPU recovery, or after the 4093
+ * step. Nothing is read back before that last step: the expected image is
+ * built and compared once, so the work is at most five kicks and one compare,
+ * and a board image feeds its watchdog between cases as before. The free-list
+ * cap is unchanged. Predicted crossing (docs/notes/pvr-render-pool.md,
+ * "Design: the firmware's partial render"): 2013 to 2514 layers, so the 4093
+ * step is the first to ask unless the crossing is at the low end (2048 asks).
  *
  * Layer k sits at x = 173k mod 512, y = 97k mod 512 (whole pixels, so
  * coverage is exact), with colour (53k+17, 97k+101, 193k+7) and a depth of rank
@@ -22402,7 +22422,14 @@ static int case_refusehang(void)
  * draw must keep the depth of what it already tiled. The expected image is
  * that, computed here; the read-back is compared pixel for pixel (a channel
  * may differ by 1: unorm rounding) and a pixel no layer covers is the clear
- * (opaque black).
+ * (opaque black). The depth is read back as case 177 does (ES has no depth
+ * glReadPixels): the depth attachment is a texture, sampled over the 64x64
+ * window after the colour compare, and every window pixel must equal the
+ * winning layer's window depth within 2 of 255 (a byte is about 18 ranks: a
+ * lost depth or a winner of the wrong layer shows, a neighbouring rank does
+ * not). An ES 2.0 library without GL_OES_depth_texture checks the colour only.
+ * Layer colours repeat every 256 layers (53k, 97k and 193k mod 256), so past
+ * 256 layers the colour alone cannot tell a layer from its congruent ones.
  *
  * - Without CONFIG_YAKOGL_DRV_GPU_PVR_PARTIAL_RENDER: the geometry phase runs
  *   out of parameter memory with nothing to render, the kick never completes
@@ -22410,8 +22437,9 @@ static int case_refusehang(void)
  *   the stop counter is not 0, the case prints FAIL "stopped" and does not
  *   read the buffer. That is the known negative.
  * - With it: PASS needs a partial render (>= 1), no stop, no GPU recovery and
- *   the whole image equal. A frame that completed with no partial render
- *   did not reach the mechanism: FAIL "NOT EXERCISED" (raise the layers).
+ *   the whole image and the depth equal. A sweep that completed at 4093
+ *   layers with no partial render did not reach the mechanism: FAIL "NOT
+ *   EXERCISED".
  *
  * Not in the default list until the knob lands on: it hangs there by design.
  * Run it by number (driver/tools/pvrlab/README.md, "Case 217").
@@ -22436,12 +22464,28 @@ static uint32_t fpr_rgba(uint32_t k)
 	       0xff000000u;
 }
 
+/* The expected depth, as the sampling below reads it back: the window depth of
+ * layer k (z = -0.9 + 1.8 rank / P, window depth (z + 1) / 2) in 8 bits; a
+ * pixel no layer covers is the clear, 1. */
+static uint8_t fpr_depth_byte(uint32_t win)
+{
+	const float d = win == FPR_NONE ? 1.0f : (-0.9f + 1.8f * (float)fpr_rank(win) / (float)FPR_P + 1.0f) * 0.5f;
+
+	return (uint8_t)(d * 255.0f + 0.5f);
+}
+
 static int case_forcedpr(void)
 {
-	GLuint prog = link_program(gl_test_vs_src, gl_test_fs_src), tex, rb, fbo, vbo;
-	uint32_t c0[9], c[9], n = CONFIG_GL_TEST_FORCEDPR_LAYERS, bad = 0, first = 0, got0 = 0, want0 = 0;
+	GLuint prog = link_program(gl_test_vs_src, gl_test_fs_src), tprog = 0, tex, rb = 0, dtx = 0, fbo, vbo;
+	uint32_t c0[9], c[9], cs[9], n = CONFIG_GL_TEST_FORCEDPR_LAYERS, steps = 0, bad = 0, first = 0, got0 = 0;
+	uint32_t want0 = 0, dbad = 0, dfirst = 0, dgot0 = 0, dwant0 = 0, tmo0 = pvr_backend_wait_timeouts();
 	uint32_t hwr0;
-	bool ok;
+	const char *ver = (const char *)glGetString(GL_VERSION), *ext = (const char *)glGetString(GL_EXTENSIONS);
+	/* the depth read-back samples a depth texture (case 177); an ES 2.0 library without
+	 * GL_OES_depth_texture keeps a renderbuffer and checks the colour only */
+	const bool es2 = !ver || strncmp(ver, "OpenGL ES 2.", 12) == 0;
+	const bool dtex = !es2 || (ext && strstr(ext, "GL_OES_depth_texture"));
+	bool ok, asked = false, timed_out = false;
 
 	if (!prog)
 		return -1;
@@ -22449,7 +22493,13 @@ static int case_forcedpr(void)
 		n = FPR_P;
 	if (n > FWL_MAXQ)
 		n = FWL_MAXQ;
-	for (uint32_t k = 0; k < n; k++) {
+	if (dtex) {
+		tprog = link_program(gl_test_uv_vs_src, gl_test_texture_fs_src);
+		if (!tprog)
+			return -1;
+	}
+	/* every layer is built once: a step draws the first n of them */
+	for (uint32_t k = 0; k < FPR_P; k++) {
 		struct cuv_vertex *v = &fwl_vtx[k * 6u];
 		uint32_t rgba = fpr_rgba(k);
 		float r = (float)(rgba & 255u) / 255.0f, g = (float)((rgba >> 8) & 255u) / 255.0f,
@@ -22469,19 +22519,31 @@ static int case_forcedpr(void)
 	glGenTextures(1, &tex);
 	glBindTexture(GL_TEXTURE_2D, tex);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, FPR_SIZE, FPR_SIZE, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-	glGenRenderbuffers(1, &rb);
-	glBindRenderbuffer(GL_RENDERBUFFER, rb);
-	glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT16, FPR_SIZE, FPR_SIZE);
 	glGenFramebuffers(1, &fbo);
 	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0);
-	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, rb);
+	if (dtex) {
+		glGenTextures(1, &dtx);
+		glBindTexture(GL_TEXTURE_2D, dtx);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glTexImage2D(GL_TEXTURE_2D, 0, depth_target_format(GL_DEPTH_COMPONENT, GL_UNSIGNED_SHORT), FPR_SIZE,
+			     FPR_SIZE, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_SHORT, NULL);
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, dtx, 0);
+	} else {
+		glGenRenderbuffers(1, &rb);
+		glBindRenderbuffer(GL_RENDERBUFFER, rb);
+		glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT16, FPR_SIZE, FPR_SIZE);
+		glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, rb);
+	}
 	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
 		pr_err("gl_test: forcedpr: FBO incomplete\n");
 		return -1;
 	}
 	glViewport(0, 0, FPR_SIZE, FPR_SIZE);
-	vbo = upload_vbo(fwl_vtx, n * 6u * sizeof(fwl_vtx[0]));
+	vbo = upload_vbo(fwl_vtx, FPR_P * 6u * sizeof(fwl_vtx[0]));
 	glUseProgram(prog);
 	cuv_attribs();
 	glEnable(GL_DEPTH_TEST);
@@ -22494,13 +22556,29 @@ static int case_forcedpr(void)
 	if (!check_gl_error("forcedpr setup"))
 		return -1;
 	pvr_render_fl_counters(c0);
+	memcpy(c, c0, sizeof(c));
 	hwr0 = pvr_render_hwr_recoveries();
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(n * 6u));
-	glFinish();
-	pvr_render_fl_counters(c);
-	/* a stopped service or a recovery leaves nothing worth reading */
-	ok = c[7] == 0;
+	/* The sweep: one kick and one glFinish a step, at most the Kconfig start (256), 512, 1024,
+	 * 2048 and 4093 layers. It ends at the first step that asked for a grow, at the driver's stop,
+	 * at a fence timeout, at a GPU recovery, or after the step of FPR_P layers. Nothing is read
+	 * back before that last step. */
+	for (;;) {
+		memcpy(cs, c, sizeof(cs));
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(n * 6u));
+		glFinish();
+		steps++;
+		pvr_render_fl_counters(c);
+		asked = c[0] != cs[0];
+		timed_out = pvr_backend_wait_timeouts() != tmo0;
+		pr_info("gl_test: forcedpr: step %u: %u layers: %s\n", steps, n,
+			asked ? "asked for a grow" : "no grow request");
+		if (asked || c[7] != 0 || timed_out || pvr_render_hwr_recoveries() != hwr0 || n >= FPR_P)
+			break;
+		n = n * 2u > FPR_P ? FPR_P : n * 2u;
+	}
+	/* a stopped service, a recovery or a timeout leaves nothing worth reading */
+	ok = c[7] == 0 && !timed_out && pvr_render_hwr_recoveries() == hwr0;
 	if (ok) {
 		glReadPixels(0, 0, FPR_SIZE, FPR_SIZE, GL_RGBA, GL_UNSIGNED_BYTE, fpr_px);
 		memset(fpr_win, 0xff, sizeof(fpr_win));
@@ -22526,15 +22604,58 @@ static int case_forcedpr(void)
 				}
 			}
 		}
+		if (dtex) {
+			/* The depth the kick left, sampled over the 64x64 window (case 177's way): window
+			 * pixel (x, yb) from the bottom is the texel boundary (16x + 8, 16yb + 8) of the
+			 * 1024 texture, so any of the four texels around it may have answered. The red
+			 * channel is the depth on ES 2.0 and ES 3.x alike. One byte is 0.0039 of depth,
+			 * about 18 ranks, so this finds a lost or wrong winner, not a neighbouring rank. */
+			const uint32_t *px;
+
+			glBindFramebuffer(GL_FRAMEBUFFER, 0);
+			glViewport(0, 0, TW, TH);
+			glDisable(GL_DEPTH_TEST);
+			glClearColor(0, 0, 0, 1);
+			glClear(GL_COLOR_BUFFER_BIT);
+			dst_sample(tprog, dtx);
+			glFinish();
+			px = read_topdown();
+			for (uint32_t y = 0; y < TH; y++)
+				for (uint32_t x = 0; x < TW; x++) {
+					const uint32_t yb = TH - 1u - y, got = px[y * TW + x] & 255u;
+					bool match = false;
+					uint32_t w0 = 0;
+
+					for (uint32_t j = 0; j < 4; j++) {
+						const uint32_t tx = x * 16u + 7u + (j & 1u), ty = yb * 16u + 7u + (j >> 1);
+						const uint32_t w = fpr_win[ty * FPR_SIZE + tx];
+						const int dd = (int)got - (int)fpr_depth_byte(w);
+
+						if (!j)
+							w0 = w;
+						if (dd >= -2 && dd <= 2)
+							match = true;
+					}
+					if (!match && !dbad++) {
+						dfirst = y * TW + x;
+						dgot0 = got;
+						dwant0 = fpr_depth_byte(w0);
+					}
+				}
+		}
 	}
-	pr_info("gl_test: forcedpr: %s: %u layers: requests %u (served %u, refused %u), notices %u, stop %u, "
+	pr_info("gl_test: forcedpr: %s: %u layers (%u step%s): requests %u (served %u, refused %u), notices %u, stop %u, "
 		"partial renders %u, GPU recoveries %u\n",
-		c[7] != 0 ? "FAIL stopped" : bad ? "FAIL pixels" : c[8] == c0[8] ? "NOT EXERCISED" : "PASS", n,
-		c[0] - c0[0], c[1] - c0[1], c[2] - c0[2], c[3] - c0[3], c[7], c[8] - c0[8],
-		pvr_render_hwr_recoveries() - hwr0);
+		c[7] != 0 ? "FAIL stopped" : timed_out ? "FAIL fence timeout" : bad ? "FAIL pixels" :
+		dbad ? "FAIL depth" : c[8] == c0[8] ? "NOT EXERCISED" : "PASS",
+		n, steps, steps == 1 ? "" : "s", c[0] - c0[0], c[1] - c0[1], c[2] - c0[2], c[3] - c0[3], c[7],
+		c[8] - c0[8], pvr_render_hwr_recoveries() - hwr0);
 	if (ok && bad)
 		pr_info("gl_test: forcedpr: %u of %u pixels differ; first at (%u,%u) from the bottom left: got 0x%08x want 0x%08x\n",
 			bad, FPR_SIZE * FPR_SIZE, first % FPR_SIZE, first / FPR_SIZE, got0, want0);
+	if (ok && dbad)
+		pr_info("gl_test: forcedpr: %u of %u depth samples differ; first at window pixel (%u,%u) from the top left: got %u want %u (of 255)\n",
+			dbad, TW * TH, dfirst % TW, dfirst / TW, dgot0, dwant0);
 	glDisableVertexAttribArray(0);
 	glDisableVertexAttribArray(1);
 	glDisableVertexAttribArray(2);
@@ -22542,13 +22663,18 @@ static int case_forcedpr(void)
 	glDeleteBuffers(1, &vbo);
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 	glDeleteFramebuffers(1, &fbo);
-	glDeleteRenderbuffers(1, &rb);
+	if (rb)
+		glDeleteRenderbuffers(1, &rb);
+	if (dtx)
+		glDeleteTextures(1, &dtx);
+	if (tprog)
+		glDeleteProgram(tprog);
 	glDeleteTextures(1, &tex);
 	glDisable(GL_DEPTH_TEST);
 	glViewport(0, 0, TW, TH);
-	if (c[7] != 0 || pvr_render_hwr_recoveries() != hwr0)
+	if (c[7] != 0 || timed_out || pvr_render_hwr_recoveries() != hwr0)
 		return -1;
-	return bad == 0 && c[8] != c0[8] ? 0 : -1;
+	return bad == 0 && dbad == 0 && c[8] != c0[8] ? 0 : -1;
 }
 #endif
 
