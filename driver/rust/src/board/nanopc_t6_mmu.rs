@@ -91,7 +91,7 @@ pub struct MmuUp {
 }
 
 impl MmuUp {
-    fn stopped(&mut self, stop: Stop, refusal: u32, detail: u64) {
+    pub(crate) fn stopped(&mut self, stop: Stop, refusal: u32, detail: u64) {
         self.stop = stop;
         self.refusal = refusal;
         self.detail = detail;
@@ -126,11 +126,51 @@ pub fn mmu_up(
     delay_us: &mut impl FnMut(u32),
 ) -> MmuUp {
     let mut o = MmuUp { tables_pa, backing_pa, ..MmuUp::default() };
+    let build = |t: &mut Tables, o: &mut MmuUp| {
+        if let Err(why) = t.map(FW_SHARED_VA, backing_pa, FW_SHARED_SIZE, FW_SHARED_PROT) {
+            o.stopped(Stop::Tables, why as u32, FW_SHARED_VA);
+            return false;
+        }
+        o.walk = t.walk(PROBE_VA);
+        if o.walk.pa != Some(backing_pa + (PROBE_VA - FW_SHARED_VA)) {
+            o.stopped(Stop::Walk, o.walk.levels, o.walk.pa.unwrap_or(0));
+            return false;
+        }
+        true
+    };
+    if !as0_up(m, gpu, mmu_features, pool, tables_pa, &mut o, build, clean, delay_us) {
+        return o;
+    }
+    match mmu::hw_do_operation(m, gpu, AS_MCU, FW_SHARED_VA, FW_SHARED_SIZE, FlushOp::Pt, delay_us) {
+        Ok(op) => o.flush_pt = op,
+        Err((why, v)) => o.stopped(Stop::FlushPt, why as u32, u64::from(v)),
+    }
+    o
+}
+
+/// The run up to the flush after the map, for one map or many: AS0 and the
+/// interrupts as found, the `MMU_FEATURES` check, the flush round trip, the
+/// tables in `pool` with what `build` maps (it also walks, and records a
+/// stop itself when it refuses), the clean of the used pages, the enable,
+/// the read-back and the fault check. `false` when a step stopped (`o`
+/// says which).
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn as0_up(
+    m: &impl Mmio,
+    gpu: usize,
+    mmu_features: u32,
+    pool: &mut [Table],
+    tables_pa: u64,
+    o: &mut MmuUp,
+    build: impl FnOnce(&mut Tables, &mut MmuUp) -> bool,
+    clean: &mut impl FnMut(usize, usize) -> i32,
+    delay_us: &mut impl FnMut(u32),
+) -> bool {
     o.found = AsRegs::read(m, gpu, AS_MCU);
     o.found_irq = irq(m, gpu);
     if mmu_features & 0xff != pgtable::VA_BITS || (mmu_features >> 8) & 0xff < pgtable::PA_BITS {
         o.stopped(Stop::Features, 0, u64::from(mmu_features));
-        return o;
+        return false;
     }
 
     let cln_inv = mali::CACHE_CLEAN | mali::CACHE_INV;
@@ -138,37 +178,30 @@ pub fn mmu_up(
         Ok(f) => o.flush = f,
         Err((why, raw)) => {
             o.stopped(Stop::Flush, why as u32, u64::from(raw));
-            return o;
+            return false;
         }
     }
 
-    let (root, used, walk, range) = {
+    let (root, range) = {
         let mut t = match Tables::new(pool, tables_pa) {
             Ok(t) => t,
             Err(why) => {
                 o.stopped(Stop::Tables, why as u32, tables_pa);
-                return o;
+                return false;
             }
         };
-        if let Err(why) = t.map(FW_SHARED_VA, backing_pa, FW_SHARED_SIZE, FW_SHARED_PROT) {
-            o.tables_used = t.used() as u32;
-            o.stopped(Stop::Tables, why as u32, FW_SHARED_VA);
-            return o;
+        let built = build(&mut t, o);
+        o.tables_used = t.used() as u32;
+        if !built {
+            return false;
         }
         let used = t.used_pages();
-        let range = (used.as_ptr() as usize, core::mem::size_of_val(used));
-        (t.root_pa(), t.used() as u32, t.walk(PROBE_VA), range)
+        (t.root_pa(), (used.as_ptr() as usize, core::mem::size_of_val(used)))
     };
-    o.tables_used = used;
-    o.walk = walk;
-    if walk.pa != Some(backing_pa + (PROBE_VA - FW_SHARED_VA)) {
-        o.stopped(Stop::Walk, walk.levels, walk.pa.unwrap_or(0));
-        return o;
-    }
     o.clean_rc = clean(range.0, range.1);
     if o.clean_rc != 0 {
         o.stopped(Stop::Clean, 0, o.clean_rc as u64);
-        return o;
+        return false;
     }
 
     let va_bits = mmu_features & 0xff;
@@ -180,7 +213,7 @@ pub fn mmu_up(
             o.stopped(Stop::Enable, why as u32, u64::from(v));
             o.after = AsRegs::read(m, gpu, AS_MCU);
             o.after_irq = irq(m, gpu);
-            return o;
+            return false;
         }
     }
     o.after = AsRegs::read(m, gpu, AS_MCU);
@@ -190,7 +223,7 @@ pub fn mmu_up(
     {
         if got != want {
             o.stopped(Stop::ReadBack, i as u32 + 1, got);
-            return o;
+            return false;
         }
     }
     for (i, v) in
@@ -198,15 +231,10 @@ pub fn mmu_up(
     {
         if v != 0 {
             o.stopped(Stop::Fault, i as u32 + 1, u64::from(v));
-            return o;
+            return false;
         }
     }
-
-    match mmu::hw_do_operation(m, gpu, AS_MCU, FW_SHARED_VA, FW_SHARED_SIZE, FlushOp::Pt, delay_us) {
-        Ok(op) => o.flush_pt = op,
-        Err((why, v)) => o.stopped(Stop::FlushPt, why as u32, u64::from(v)),
-    }
-    o
+    true
 }
 
 /// The PTE of [`PROBE_VA`]'s page for a backing at `backing_pa`: what the

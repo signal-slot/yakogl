@@ -7,7 +7,8 @@
 //! NanoPC-T6 glue still feeds its watchdog ([`nanopc_t6`]) and what its
 //! image prints before Zephyr's console exists ([`nanopc_t6_early`]) and
 //! its GPU power-on ([`nanopc_t6_gpu`]) and its AS0 and cache flush
-//! ([`nanopc_t6_mmu`]).
+//! ([`nanopc_t6_mmu`]), extended to every firmware section with the board's
+//! `McuMemory` ([`nanopc_t6_sections`]).
 //! The C side reaches both through `ffi::board`.
 
 pub mod imx8mp;
@@ -18,6 +19,8 @@ pub mod nanopc_t6_early;
 pub mod nanopc_t6_gpu;
 #[cfg(any(all(feature = "rk3588", feature = "mali"), test))]
 pub mod nanopc_t6_mmu;
+#[cfg(any(all(feature = "rk3588", feature = "mali"), test))]
+pub mod nanopc_t6_sections;
 pub mod record;
 pub mod rpi4;
 
