@@ -6,7 +6,8 @@
  * compiled unmodified next to this file by build.rs) that is not a plain
  * function call.
  *
- * - The device the words are packed for: V3D 4.2, the Raspberry Pi 4.
+ * - The devices the words are packed for: V3D 4.2 (the Raspberry Pi 4) and
+ *   V3D 7.1 (the Raspberry Pi 5).
  * - The layout of `struct v3d_qpu_instr` and of what it nests, as sizeof /
  *   offsetof values read from the real header, which the Rust mirror is
  *   checked against (qpu_ffi.rs, `the_mirror_is_mesas_layout`).
@@ -32,10 +33,19 @@ const struct v3d_device_info yakogl_v3d42_devinfo = {
         .has_accumulators = true,
 };
 
+/* V3D 7.1: ver 71 selects the 7.1 tables (raddr operands, the 7.1 signal
+ * map, the SFU as ALU operations); it has no accumulators. */
+const struct v3d_device_info yakogl_v3d71_devinfo = {
+        .ver = 71,
+        .has_accumulators = false,
+};
+
 #define OFF(type, member) ((uint32_t)offsetof(type, member))
 
-/* The order is the Rust mirror's `layout()`; one list, compared whole. */
-const uint32_t yakogl_v3d_qpu_layout[] = {
+/* The order is the Rust mirror's `layout()`; one list, compared whole. The
+ * structs do not depend on the device; the list a device gets ends with the
+ * two fields of its own devinfo the packer reads. */
+static const uint32_t layout_common[] = {
         (uint32_t)sizeof(struct v3d_qpu_instr),
         (uint32_t)_Alignof(struct v3d_qpu_instr),
         OFF(struct v3d_qpu_instr, type),
@@ -106,7 +116,26 @@ const uint32_t yakogl_v3d_qpu_layout[] = {
         (uint32_t)sizeof(bool),
 };
 const uint32_t yakogl_v3d_qpu_layout_len =
-        sizeof(yakogl_v3d_qpu_layout) / sizeof(yakogl_v3d_qpu_layout[0]);
+        sizeof(layout_common) / sizeof(layout_common[0]) + 2;
+
+/* Writes the layout list for `ver` (42 or 71) to `out`, which has room for
+ * yakogl_v3d_qpu_layout_len values. Returns the count, 0 for another ver. */
+uint32_t
+yakogl_v3d_qpu_layout_for(uint32_t ver, uint32_t *out)
+{
+        const struct v3d_device_info *d;
+        if (ver == 42)
+                d = &yakogl_v3d42_devinfo;
+        else if (ver == 71)
+                d = &yakogl_v3d71_devinfo;
+        else
+                return 0;
+        uint32_t n = sizeof(layout_common) / sizeof(layout_common[0]);
+        memcpy(out, layout_common, sizeof(layout_common));
+        out[n++] = d->ver;
+        out[n++] = d->has_accumulators;
+        return n;
+}
 
 /* The values of the enums qpu_instr.c has no name function for; the others
  * (ops, conditions, flags, packs, unpacks, branch conditions, msfign) are
@@ -118,6 +147,8 @@ const uint32_t yakogl_v3d_qpu_enum_values[] = {
         V3D_QPU_BRANCH_DEST_ABS, V3D_QPU_BRANCH_DEST_REL,
         V3D_QPU_BRANCH_DEST_LINK_REG, V3D_QPU_BRANCH_DEST_REGFILE,
         V3D_QPU_WADDR_NOP,
+        /* 7.1 renames: QUAD and REP take the places of R5 and R5REP. */
+        V3D_QPU_WADDR_QUAD, V3D_QPU_WADDR_REP,
 };
 const uint32_t yakogl_v3d_qpu_enum_values_len =
         sizeof(yakogl_v3d_qpu_enum_values) / sizeof(yakogl_v3d_qpu_enum_values[0]);
@@ -169,4 +200,19 @@ yakogl_v3d42_magic_waddr_name(uint32_t waddr)
         if (waddr > V3D_QPU_WADDR_R5REP)
                 return NULL;
         return v3d_qpu_magic_waddr_name(&yakogl_v3d42_devinfo, (enum v3d_qpu_waddr)waddr);
+}
+
+/* The same for 7.1. Mesa still has names for 0..4 and 19..24 ("r0".."r4",
+ * "recip".."rsqrt2") but qpu_instr.h marks them "Reserved on V3D 7.x": no
+ * 7.1 reference writes them, so they get no name here, and a magic write to
+ * one is refused like any other unnamed address. 5 is "quad", 55 "rep". */
+const char *
+yakogl_v3d71_magic_waddr_name(uint32_t waddr)
+{
+        if (waddr > V3D_QPU_WADDR_REP)
+                return NULL;
+        if (waddr <= V3D_QPU_WADDR_R4 ||
+            (waddr >= V3D_QPU_WADDR_RECIP && waddr <= V3D_QPU_WADDR_RSQRT2))
+                return NULL;
+        return v3d_qpu_magic_waddr_name(&yakogl_v3d71_devinfo, (enum v3d_qpu_waddr)waddr);
 }

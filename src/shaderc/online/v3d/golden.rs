@@ -8,7 +8,7 @@
 //! row of `src/broadcom/qpu/tests/qpu_disasm.c` (Mesa 26.2.1, Copyright (c)
 //! 2016 Broadcom, MIT licence), transcribed in order, the duplicate row
 //! included. Mesa's test binary, built from the same tree, passes all of them
-//! and the 5 ver 71 rows (50 PASS, exit 0).
+//! and the 5 ver 71 rows (50 PASS, exit 0); the ver 71 rows are `golden71.rs`.
 //!
 //! Three statements per row, as Mesa's test makes them: the decode prints as
 //! Mesa's text (every field the listing shows), the encode gives the word
@@ -20,9 +20,8 @@ use super::encode::encode;
 use super::isa::*;
 use super::listing::write_instr;
 
-/// The ver 42 rows of qpu_disasm.c's `tests[]`, in order. The 5 ver 71 rows
-/// (7.1 small immediates and `setnnmode_uu; v8dot`) are not 4.2 and are left
-/// out.
+/// The ver 42 rows of qpu_disasm.c's `tests[]`, in order. The 5 ver 71 rows are
+/// not 4.2: they are `golden71::MESA_V71`.
 pub(super) static MESA_V42: &[(u64, &str)] = &[
     (0x3d003186bb800000, "nop                           ; nop                         ; ldvary.rf0"),
     (0x3c20318105829000, "fadd r1, r1, r5               ; nop                         ; thrsw"),
