@@ -187,3 +187,19 @@ run` (`es100/fragz.frag` with `prec_84.vert`, `tri_fragcoord` with its own
 * The references use the draw state of `gl_ref.py` (a 64x64 RGBA8 target,
   `GL_FLOAT` quad); the y pair is therefore `(1.0, 0.0)` in each.
 * Nothing here was checked on the board.
+
+## 7. Cases 82, 84 and 119 at the tip (plan #156 item `ref-fcmed`, 2026-11-01)
+
+Tip `18027de1`. None of the three refuses any more: `tools/cts/log/2026-10-28-final/sweep-1.verdicts.txt`
+has `case 82 fragcentre: PASS`, `case 84 fragcoord: PASS`, `case 119 pbufup: PASS`.
+Their programs are the section 5 ones and are pinned byte-equal to the
+existing drm-shim references `tools/mali/testdata/prec_82`, `prec_84` and
+`prec_119` (`.vert`/`.frag`/`.expect.json`; `tests.rs`, `FRAG_COORD_POPULATION`).
+No `fcmed_*` reference was made: it would duplicate those. The decoded Mesa
+programs are in sections 2 and 3, and the lowering is in `nir_fs.rs`
+(`Fs::frag_coord`, the narrowing at the `IoSlot::FragCoord` load).
+`MaliError::FragCoordMediump` still fires only for the unsupported shapes
+pinned in `tests.rs:1107-1108` (a swizzled `.yx` read, a highp shader doing
+arithmetic on the read), which no sweep case reaches.
+The two corpus programs of section 5 without a reference (`es100/tri_fragcoord`,
+`es100/fragz`) still have none.
