@@ -41,6 +41,8 @@ mod frame_indexed_tests;
 #[cfg(test)]
 mod frame_instance_tests;
 #[cfg(test)]
+mod frame_mrt_tests;
+#[cfg(test)]
 mod frame_msaa_tests;
 #[cfg(test)]
 mod frame_points_tests;

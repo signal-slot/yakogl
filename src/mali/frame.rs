@@ -165,8 +165,10 @@ pub const INVALID_TEXTURE_ALIGN: &str = "mali frame: a texture's texels not on a
 /// resolve that does not read the samples the store holds back.
 pub const INVALID_SAMPLE_STORE: &str =
     "mali frame: a sample store for a target of other than 4 samples, off 64 bytes, or with overlapping planes";
+/// A fragment shader that does not write colour output 0 or writes one past
+/// the frame's colour targets ([`begin_frame_targets`]).
 pub const NOT_BUILT_FS_OUTPUTS: &str =
-    "mali frame: a fragment shader that writes other than colour output 0 is not built yet";
+    "mali frame: a fragment shader that writes no colour output 0, or one past the frame's colour targets, is not built yet";
 pub const NOT_BUILT_STAGE: &str = "mali frame: a program given for the wrong stage";
 pub const NOT_BUILT_PUSH: &str = "mali frame: a push word names a sysval the shader's sysval block does not hold";
 pub const INVALID_SECONDARY: &str =
@@ -224,6 +226,22 @@ pub const NOT_BUILT_SAMPLES: &str = "mali frame: a target of other than 1 or 4 s
 pub const NOT_BUILT_FLOAT_BLEND: &str =
     "mali frame: a blended or colour-masked draw into an RGBA16F target is not built yet";
 pub const NOT_BUILT_EMPTY_TARGET: &str = "mali frame: a target with no pixels";
+/// The most colour targets a frame has (`PIPE_MAX_COLOR_BUFS`, the
+/// framebuffer descriptor's 3-bit `Render Target Count` minus one).
+pub const MAX_COLOUR_TARGETS: usize = 8;
+/// A frame of several colour targets ([`begin_frame_targets`]) that is
+/// more than its draws and its clear: more than [`MAX_COLOUR_TARGETS`], a
+/// 4x one, one with a sample store, a colour or depth/stencil preload (each
+/// draws back target 0 only), or a draw with a blend shader (the
+/// descriptor of target 0 only). Mesa's reference is a cleared
+/// single-sampled frame of two and of three RGBA8 targets
+/// (tools/mali/testdata/fsout_55_es3mrt.trace, fsout_106_mrt3.trace).
+pub const NOT_BUILT_MRT: &str =
+    "mali frame: several colour targets with more than 8 targets, 4 samples, a sample store, a preload or a blend shader are not built yet";
+/// A frame's colour targets of different sizes: the caller's defect (GL's
+/// framebuffer is the intersection of its attachments, ES 3.0 4.4.4.2; the
+/// GL core gives targets of one size).
+pub const INVALID_MRT_SIZE: &str = "mali frame: colour targets of different sizes in one frame";
 /// A draw tests or writes depth or stencil in a frame given no
 /// depth/stencil attachment: the caller's contract (GL gives such a draw no
 /// test, ES 2.0 4.1.5-4.1.6), not a gap.
@@ -1596,6 +1614,43 @@ pub struct OpenFrame {
     /// sample its own. None: the 4x frame is a view of its single-sampled
     /// target (averaged on writeback, preloaded 1x into every sample).
     pub sample_store: Option<SampleStore>,
+    /// Colour targets 1.. of a frame of several ([`begin_frame_targets`]),
+    /// in order, `None` past the last; target 0 is the `t` every call
+    /// takes. All `None`: a frame of one target.
+    pub more_targets: [Option<Target>; MAX_COLOUR_TARGETS - 1],
+}
+
+impl OpenFrame {
+    /// The frame's colour targets: `t` (target 0), then
+    /// [`OpenFrame::more_targets`].
+    fn colour_targets<'a>(&'a self, t: &'a Target) -> impl Iterator<Item = &'a Target> + Clone + 'a {
+        core::iter::once(t).chain(self.more_targets.iter().map_while(Option::as_ref))
+    }
+
+    /// The frame's colour target count, at least 1.
+    pub fn target_count(&self) -> u32 {
+        1 + self.more_targets.iter().take_while(|t| t.is_some()).count() as u32
+    }
+
+    /// What a frame of several targets must be, checked by [`add_draw`] and
+    /// [`end_frame`] against target 0 `t` ([`NOT_BUILT_MRT`],
+    /// [`INVALID_MRT_SIZE`]).
+    fn check_targets(&self, t: &Target) -> Result<(), FrameError> {
+        if self.target_count() == 1 {
+            return Ok(());
+        }
+        for m in self.colour_targets(t).skip(1) {
+            check_target(m)?;
+            if (m.width, m.height) != (t.width, t.height) {
+                return Err(FrameError::Invalid(INVALID_MRT_SIZE));
+            }
+        }
+        let plain = self.colour_targets(t).all(|m| m.samples == 1)
+            && self.sample_store.is_none()
+            && self.colour_preload.is_none()
+            && self.zs_preload.is_none();
+        require(plain, NOT_BUILT_MRT)
+    }
 }
 
 /// The four samples of a 4x frame in memory (Mesa's multisampled resource,
@@ -1728,14 +1783,18 @@ fn check_target(t: &Target) -> Result<(), FrameError> {
 }
 
 /// The effective tile size in pixels and the colour buffer allocation in
-/// bytes for one target (`GENX(pan_select_tile_size)`, pan_desc.c:382-399):
-/// the format's bytes a sample in the tile buffer
-/// ([`TargetFormat::tib_bytes`]), times the samples (pan_desc.c:336-352);
+/// bytes for a frame's colour targets (`GENX(pan_select_tile_size)`,
+/// pan_desc.c:382-399): the format's bytes a sample in the tile buffer
+/// ([`TargetFormat::tib_bytes`]), times the samples, summed over the
+/// targets (`pan_cbuf_bytes_per_pixel`, Mesa 26.2.1 pan_desc.c:569-593);
 /// the largest power-of-two tile the budget holds, clamped to the
 /// hardware's; the allocation 1 KiB-aligned. The board's Mesa writes 1024
-/// and 16384 for a 4x RGBA8 target, 1024 and 8192 for an RGBA16F one.
-fn tile_size(t: &Target) -> (u32, u32) {
-    let bpp = t.format.tib_bytes() * t.samples;
+/// and 16384 for a 4x RGBA8 target, 1024 and 8192 for an RGBA16F one; two
+/// RGBA8 targets keep the 1024-pixel tile and allocate 8192 bytes
+/// (tools/mali/testdata/fsout_55_es3mrt.trace), three 12288
+/// (fsout_106_mrt3.trace).
+fn tile_size_of<'a>(targets: impl Iterator<Item = &'a Target>) -> (u32, u32) {
+    let bpp: u32 = targets.map(|t| t.format.tib_bytes() * t.samples).sum();
     let tile = (TIB_BUDGET >> log2_ceil(bpp)).min(MAX_EFFECTIVE_TILE);
     (tile, (bpp * tile).div_ceil(1024) * 1024)
 }
@@ -1804,7 +1863,7 @@ pub fn build_frame(desc: &mut Arena, cs: &mut Stream, ctx: &Context, input: &Fra
     check_target(&t)?;
     let clear = input.clear_rgba.ok_or(FrameError::NotBuilt(NOT_BUILT_NO_CLEAR))?;
     if let Some(d) = &input.draw {
-        check_draw(d, ctx, &t, input.zs.is_some())?;
+        check_draw(d, ctx, &t, &[], input.zs.is_some())?;
     }
     let mut open = begin_frame(desc, cs)?;
     if let Some(d) = &input.draw {
@@ -1820,6 +1879,24 @@ pub fn build_frame(desc: &mut Arena, cs: &mut Stream, ctx: &Context, input: &Fra
 /// descriptor itself is written by [`end_frame`], when the frame's clear
 /// and attachments are known.
 pub fn begin_frame(desc: &mut Arena, cs: &mut Stream) -> Result<OpenFrame, FrameError> {
+    begin_frame_targets(desc, cs, &[])
+}
+
+/// [`begin_frame`] for a frame of several colour targets: `more` are
+/// targets 1.. (target 0 is the `t` [`add_draw`] and [`end_frame`] take),
+/// in GL's draw-buffer order, each of target 0's size and single-sampled
+/// ([`OpenFrame::check_targets`]). The framebuffer descriptor's room holds
+/// one render target descriptor a target (`alloc_fbd`: `rt_count`
+/// RENDER_TARGETs after the ZS/CRC extension).
+pub fn begin_frame_targets(desc: &mut Arena, cs: &mut Stream, more: &[Target]) -> Result<OpenFrame, FrameError> {
+    require(more.len() < MAX_COLOUR_TARGETS, NOT_BUILT_MRT)?;
+    for m in more {
+        check_target(m)?;
+    }
+    let mut more_targets = [None; MAX_COLOUR_TARGETS - 1];
+    for (slot, m) in more_targets.iter_mut().zip(more) {
+        *slot = Some(*m);
+    }
     cs.push(Instr::ReqResource(CsReqResource {
         compute: true,
         fragment: true,
@@ -1828,7 +1905,7 @@ pub fn begin_frame(desc: &mut Arena, cs: &mut Stream) -> Result<OpenFrame, Frame
         ..Default::default()
     }))?;
     cs.push(Instr::SetSbEntry(CsSetSbEntry { endpoint_entry: SB_RENDER, other_entry: SB_LS, ..Default::default() }))?;
-    let fbd = desc.alloc(128 + 64 + 64, 64)?;
+    let fbd = desc.alloc(128 + 64 + 64 * (1 + more.len()), 64)?;
     let tls = desc.alloc(LocalStorage::LENGTH, 64)?;
     Ok(OpenFrame {
         layout: Layout { fbd: Some(fbd), tls: Some(tls), ..Default::default() },
@@ -1839,6 +1916,7 @@ pub fn begin_frame(desc: &mut Arena, cs: &mut Stream) -> Result<OpenFrame, Frame
         zs_preload: None,
         programs: ProgramCache::default(),
         sample_store: None,
+        more_targets,
     })
 }
 
@@ -1862,7 +1940,8 @@ pub fn add_draw(
     d: &DrawCall,
 ) -> Result<(), FrameError> {
     check_target(t)?;
-    check_draw(d, ctx, t, has_zs)?;
+    open.check_targets(t)?;
+    check_draw(d, ctx, t, &open.more_targets, has_zs)?;
     /* a draw whose scissor is empty draws nothing (pan_cmdstream.c:3186-3191
      * and `panfrost_batch_skip_rasterization`) */
     let Some(sbox) = draw_box(d, t) else {
@@ -1913,6 +1992,7 @@ pub fn end_frame(
     zs: Option<ZsAttachment>,
 ) -> Result<Frame, FrameError> {
     check_target(t)?;
+    open.check_targets(t)?;
     if open.uses_zs && zs.is_none() {
         return Err(FrameError::Invalid(INVALID_NO_ZS));
     }
@@ -1948,7 +2028,8 @@ pub fn end_frame(
     /* GENX(csf_emit_fbds) / pan_emit_fbd (Mesa 26.2.1 pan_desc.c:1380-1460):
      * the framebuffer parameters, the ZS/CRC extension when there is a
      * depth/stencil attachment, the render target after them */
-    let (tile, cbuf_allocation) = tile_size(t);
+    let (tile, cbuf_allocation) = tile_size_of(open.colour_targets(t));
+    let rt_count = open.target_count();
     let mut params = FramebufferParameters {
         pre_frame_0: PrePostFrameShaderMode::NEVER,
         pre_frame_1: PrePostFrameShaderMode::NEVER,
@@ -1960,7 +2041,8 @@ pub fn end_frame(
         bound_max_y: t.height - 1,
         effective_tile_size: tile,
         tie_break_rule: TieBreakRule::MINUS_180_IN_0_OUT,
-        render_target_count: 1,
+        /* `MAX2(fb->rt_count, 1)` (pan_csf.c:123) */
+        render_target_count: rt_count,
         /* "Default to 24 bit depth if there's no surface"; a D24S8 surface
          * is D24 too (`pan_get_z_internal_format`) */
         z_internal_format: ZInternalFormat::D24,
@@ -2040,7 +2122,6 @@ pub fn end_frame(
     /* pan_prepare_rt (pan_desc.c:491-618) for a linear view: cleared,
      * or preloaded (no clean-tile write, no clear colour) */
     let cleared = open.colour_preload.is_none();
-    let (internal_format, writeback_format) = t.format.formats();
     /* a 4x tile buffer averaged into single-sampled memory; or its four
      * samples written to the store, one plane a sample (Mesa's
      * `mali_sampling_mode` LAYERED for a multisampled view, pan_desc.c:26-48;
@@ -2055,30 +2136,48 @@ pub fn end_frame(
             RtBuffer { base: t.gpu, row_stride: t.row_stride, surface_stride: 0 },
         ),
     };
-    let rt = RgbRenderTarget {
-        writeback_mode: WritebackMode::COMPAT,
-        internal_format,
-        write_enable: true,
-        writeback_format,
-        writeback_block_format: BlockFormat::LINEAR,
-        writeback_msaa,
-        dithering_enable: true,
-        swizzle: t.format.swizzle(),
-        /* `force_clean_writes = fb->rts[i].clear` (pan_desc.c:495); a
-         * resolve writes every tile, those its preload left clean too (the
-         * preload's fragments are clean writes, `colour_preload_dcd`) */
-        clean_tile_write_enable: cleared || resolve,
-        writeback_buffer,
-        clear: if cleared { clear_colour(clear, t.format) } else { RtClear::default() },
-        ..Default::default()
-    };
-    desc.write(fbd, rt_at, &rt.pack()?)?;
+    /* one render target a colour target, back to back after the ZS/CRC
+     * extension (`pan_emit_rts`, pan_desc.c:1324-1340), each at its offset
+     * in the tile buffer: the bytes a sample of the targets before it times
+     * the tile's pixels and samples (0 and 4096 for fsout_55_es3mrt's two
+     * RGBA8 targets, 8192 for fsout_106_mrt3's third). Targets 1.. are
+     * single-sampled without a store ([`OpenFrame::check_targets`]) */
+    let mut internal_buffer_offset = 0;
+    for (i, ti) in open.colour_targets(t).enumerate() {
+        let (internal_format, writeback_format) = ti.format.formats();
+        let (writeback_msaa, writeback_buffer) = if i == 0 {
+            (writeback_msaa, writeback_buffer)
+        } else {
+            (Msaa::SINGLE, RtBuffer { base: ti.gpu, row_stride: ti.row_stride, surface_stride: 0 })
+        };
+        let rt = RgbRenderTarget {
+            writeback_mode: WritebackMode::COMPAT,
+            internal_buffer_offset,
+            internal_format,
+            write_enable: true,
+            writeback_format,
+            writeback_block_format: BlockFormat::LINEAR,
+            writeback_msaa,
+            dithering_enable: true,
+            swizzle: ti.format.swizzle(),
+            /* `force_clean_writes = fb->rts[i].clear` (pan_desc.c:495); a
+             * resolve writes every tile, those its preload left clean too
+             * (the preload's fragments are clean writes, `colour_preload_dcd`) */
+            clean_tile_write_enable: cleared || resolve,
+            writeback_buffer,
+            /* glClear clears every draw buffer to the one colour */
+            clear: if cleared { clear_colour(clear, ti.format) } else { RtClear::default() },
+            ..Default::default()
+        };
+        desc.write(fbd, rt_at + i * RgbRenderTarget::LENGTH, &rt.pack()?)?;
+        internal_buffer_offset += ti.format.tib_bytes() * tile * ti.samples;
+    }
     desc.write(tls, 0, &LocalStorage::default().pack()?)?;
     let fbd_pointer = pack_u64(
         FramebufferPointer {
             pointer: fbd.gpu,
             zs_crc_extension_present: zs.is_some(),
-            render_target_count: 1,
+            render_target_count: rt_count,
             ..Default::default()
         }
         .pack()?,
@@ -2166,8 +2265,16 @@ pub fn resolve_frame(
 }
 
 /// Refuse a draw the builder does not build, each cause by name.
-fn check_draw(d: &DrawCall, ctx: &Context, t: &Target, has_zs: bool) -> Result<(), FrameError> {
+fn check_draw(
+    d: &DrawCall,
+    ctx: &Context,
+    t: &Target,
+    more: &[Option<Target>],
+    has_zs: bool,
+) -> Result<(), FrameError> {
     let (vs, fs) = (&d.vs.meta, &d.fs.meta);
+    let targets = || core::iter::once(t).chain(more.iter().map_while(Option::as_ref));
+    let rt_count = targets().count() as u32;
     require(vs.stage == ShaderStage::VERTEX && fs.stage == ShaderStage::FRAGMENT, NOT_BUILT_STAGE)?;
     if let Some(i) = d.indices {
         if i.gpu % 2 != 0 {
@@ -2191,7 +2298,11 @@ fn check_draw(d: &DrawCall, ctx: &Context, t: &Target, has_zs: bool) -> Result<(
      * the depth/stencil update late when written; docs/notes/
      * mali-discard.md); the other side effects are not */
     require(!(fs.writes_depth || fs.writes_stencil || fs.writes_coverage || fs.writes_global), NOT_BUILT_FS_EFFECTS)?;
-    require(fs.colour_outputs == 1, NOT_BUILT_FS_OUTPUTS)?;
+    /* output 0 written (its alpha is the one ATEST reads,
+     * docs/notes/mali-fragment-outputs.md), none past the targets */
+    require(fs.colour_outputs & 1 == 1 && fs.colour_outputs >> rt_count == 0, NOT_BUILT_FS_OUTPUTS)?;
+    /* a blend shader is target 0's descriptor only */
+    require(rt_count == 1 || d.blend_shader.is_none(), NOT_BUILT_MRT)?;
     if fs.samples_texture == d.textures.is_empty() || vs.samples_texture != d.vs_texture.is_some() {
         return Err(FrameError::Invalid(INVALID_TEXTURE));
     }
@@ -2231,7 +2342,7 @@ fn check_draw(d: &DrawCall, ctx: &Context, t: &Target, has_zs: bool) -> Result<(
     /* an RGBA16F target (RAW64 in the tile buffer) takes only an opaque
      * write of every channel: `pan_blend_is_opaque` on the equation, no
      * partial mask (which reads the destination) */
-    if t.format == TargetFormat::Rgba16f && mask != 0 {
+    if targets().any(|t| t.format == TargetFormat::Rgba16f) && mask != 0 {
         let blended = d.blend.is_some_and(|b| !super::blend::is_opaque(&b));
         require(mask == 0xf && !blended, NOT_BUILT_FLOAT_BLEND)?;
     }
@@ -2828,7 +2939,13 @@ fn emit_draw(
      * written and the equation keeps the source (`pan_blend_is_opaque`),
      * the destination loaded when the equation or a partial mask reads it
      * (`pan_blend_reads_dest`); blending off is "replace" under the mask */
-    let blend = desc.alloc(Blend::LENGTH, 64)?;
+    let rt_count = open.target_count();
+    /* one descriptor a target, in order (`pan_pool_alloc_desc_array` of
+     * `MAX2(rt_count, 1)` BLENDs, pan_cmdstream.c:286-300); GL's one blend
+     * state and colour mask for every draw buffer, so they differ only in
+     * `RT` and what the target's format decides (fsout_55_es3mrt.trace:
+     * `Blend RT 0` and `Blend RT 1` but for `RT: 1`) */
+    let blend = desc.alloc(Blend::LENGTH * rt_count as usize, 64)?;
     let mask = u32::from(d.colour_mask & 0xf);
     /* no channel written: no fragment shader unless alpha-to-coverage is
      * on, which "can modify occlusion query results" (`panfrost_fs_required`,
@@ -2842,74 +2959,80 @@ fn emit_draw(
     let writes_colour = mask != 0;
     let fs_required = writes_colour || d.alpha_to_coverage || fs.meta.can_discard;
     let blending = d.blend.filter(|_| writes_colour);
-    /* a fixed-function DST_ALPHA, INV_DST_ALPHA add on a target without
-     * alpha is opaque (alpha is 1), which the hardware does not see by
-     * itself (pan_cmdstream.c:313-325) */
-    let dst_alpha_on_no_alpha = blending.is_some_and(|b| {
-        use super::blend::{Base, Factor, Func};
-        b.rgb.src == Factor { base: Base::DstAlpha, invert: false }
-            && b.rgb.dst == Factor { base: Base::DstAlpha, invert: true }
-            && b.rgb.func == Func::Add
-            && !t.format.has_alpha()
-    });
-    let opaque = mask == 0xf && (blending.is_none_or(|b| super::blend::is_opaque(&b)) || dst_alpha_on_no_alpha);
     let load_dest = (mask != 0xf && writes_colour) || blending.is_some_and(|b| super::blend::reads_dest(&b));
     let replace =
         BlendFunction { a: BlendOperandA::SRC, b: BlendOperandB::SRC, c: BlendOperandC::ZERO, ..Default::default() };
-    let bd = if writes_colour {
-        let equation = match blending {
-            Some(b) => super::blend::equation(&b, mask),
-            None => BlendEquation { rgb: replace, alpha: replace, color_mask: mask },
-        };
-        /* one constant, the first channel the factors read
-         * (`pan_blend_get_constant`), when any reads it */
-        let constant_mask = blending.map_or(0, |b| super::blend::constant_mask(&b));
-        let blend_constant = super::blend::constant(constant_mask, &d.blend_color)
-            .filter(|_| constant_mask != 0)
-            .map_or(0, |c| super::blend::pack_constant(c, t.format.chan_size()));
-        let mode = if opaque { BlendMode::OPAQUE } else { BlendMode::FIXED_FUNCTION };
-        /* fixed function does not take the RGB1 order: RGBA instead
-         * (pan_cmdstream.c:393-405) */
-        let mut memory_format = t.format.blend_memory_format();
-        if mode == BlendMode::FIXED_FUNCTION && memory_format & 0xff == RgbComponentOrder::RGB1.0 {
-            memory_format = memory_format & !0xff | RgbComponentOrder::RGBA.0;
-        }
-        Blend {
-            load_destination: load_dest,
-            enable: true,
-            round_to_fb_precision: false,
-            blend_constant,
-            equation,
-            internal: InternalBlend {
-                mode,
-                fixed_function: BlendFixedFunction {
-                    num_comps: 4,
-                    rt: 0,
-                    conversion: InternalConversion { memory_format, raw: false },
+    /* the descriptor of target `rt`, of layout `format` */
+    let blend_of = |format: TargetFormat, rt: u32| {
+        /* a fixed-function DST_ALPHA, INV_DST_ALPHA add on a target without
+         * alpha is opaque (alpha is 1), which the hardware does not see by
+         * itself (pan_cmdstream.c:313-325) */
+        let dst_alpha_on_no_alpha = blending.is_some_and(|b| {
+            use super::blend::{Base, Factor, Func};
+            b.rgb.src == Factor { base: Base::DstAlpha, invert: false }
+                && b.rgb.dst == Factor { base: Base::DstAlpha, invert: true }
+                && b.rgb.func == Func::Add
+                && !format.has_alpha()
+        });
+        let opaque = mask == 0xf && (blending.is_none_or(|b| super::blend::is_opaque(&b)) || dst_alpha_on_no_alpha);
+        if writes_colour {
+            let equation = match blending {
+                Some(b) => super::blend::equation(&b, mask),
+                None => BlendEquation { rgb: replace, alpha: replace, color_mask: mask },
+            };
+            /* one constant, the first channel the factors read
+             * (`pan_blend_get_constant`), when any reads it */
+            let constant_mask = blending.map_or(0, |b| super::blend::constant_mask(&b));
+            let blend_constant = super::blend::constant(constant_mask, &d.blend_color)
+                .filter(|_| constant_mask != 0)
+                .map_or(0, |c| super::blend::pack_constant(c, format.chan_size()));
+            let mode = if opaque { BlendMode::OPAQUE } else { BlendMode::FIXED_FUNCTION };
+            /* fixed function does not take the RGB1 order: RGBA instead
+             * (pan_cmdstream.c:393-405) */
+            let mut memory_format = format.blend_memory_format();
+            if mode == BlendMode::FIXED_FUNCTION && memory_format & 0xff == RgbComponentOrder::RGB1.0 {
+                memory_format = memory_format & !0xff | RgbComponentOrder::RGBA.0;
+            }
+            Blend {
+                load_destination: load_dest,
+                enable: true,
+                round_to_fb_precision: false,
+                blend_constant,
+                equation,
+                internal: InternalBlend {
+                    mode,
+                    fixed_function: BlendFixedFunction {
+                        num_comps: 4,
+                        rt,
+                        conversion: InternalConversion { memory_format, raw: false },
+                    },
+                    ..Default::default()
                 },
                 ..Default::default()
-            },
-            ..Default::default()
-        }
-    } else {
-        /* "Disable blending" for a target the draw does not write
-         * (`panfrost_emit_blend`, pan_cmdstream.c:298-307): enable off,
-         * mode Off. Mesa leaves the equation all zero there, whose operand
-         * A v10.xml does not name, and the packer refuses an unnamed zero;
-         * a disabled blend's equation is not read, so it is "replace" with
-         * no channel (frame_zs_tests.rs names the word) */
-        Blend {
-            enable: false,
-            equation: BlendEquation { rgb: replace, alpha: replace, color_mask: 0 },
-            internal: InternalBlend {
-                mode: BlendMode::OFF,
-                fixed_function: BlendFixedFunction { num_comps: 1, ..Default::default() },
+            }
+        } else {
+            /* "Disable blending" for a target the draw does not write
+             * (`panfrost_emit_blend`, pan_cmdstream.c:298-307): enable off,
+             * mode Off. Mesa leaves the equation all zero there, whose operand
+             * A v10.xml does not name, and the packer refuses an unnamed zero;
+             * a disabled blend's equation is not read, so it is "replace" with
+             * no channel (frame_zs_tests.rs names the word) */
+            Blend {
+                enable: false,
+                equation: BlendEquation { rgb: replace, alpha: replace, color_mask: 0 },
+                internal: InternalBlend {
+                    mode: BlendMode::OFF,
+                    fixed_function: BlendFixedFunction { num_comps: 1, ..Default::default() },
+                    ..Default::default()
+                },
                 ..Default::default()
-            },
-            ..Default::default()
+            }
         }
     };
-    let mut packed = bd.pack()?;
+    for (rt, ti) in open.colour_targets(t).enumerate().skip(1) {
+        desc.write(blend, rt * Blend::LENGTH, &blend_of(ti.format, rt as u32).pack()?)?;
+    }
+    let mut packed = blend_of(t.format, 0).pack()?;
     /* a blend shader's descriptor (`panfrost_emit_blend`, pan_cmdstream.c:
      * 329-377 with `blend_shaders[0]` set): word 0 as for fixed function
      * but no constant, word 1 (the equation) not written, the internal
@@ -3015,7 +3138,7 @@ fn emit_draw(
     let first = open.layout.tiler.is_none();
     let tiler = match open.layout.tiler {
         Some(b) => b,
-        None => tiler_context(desc, ctx, t)?,
+        None => tiler_context(desc, ctx, t, tile_size_of(open.colour_targets(t)).0)?,
     };
 
     /* the resource tables (`panfrost_emit_resources`, pan_cmdstream.h:279-323) */
@@ -3133,7 +3256,8 @@ fn emit_draw(
     /* the bytes of one vertex's generic varyings (Mesa 26.2.1
      * pan_csf.c:1506-1507, `generic_size_B`) */
     cs.move32(reg::VARY_SIZE, vs.meta.varying_bytes)?;
-    cs.move64(reg::BLEND_DESC, tagged(blend.gpu, 1, INVALID_BLEND_ALIGN)?)?;
+    /* `batch->blend | MAX2(nr_cbufs, 1)` (pan_csf.c:1508-1509) */
+    cs.move64(reg::BLEND_DESC, tagged(blend.gpu, u64::from(rt_count), INVALID_BLEND_ALIGN)?)?;
     cs.move64(reg::ZSD, ds.gpu)?;
     /* the primitive flags: rotating allowed unless the
      * draw makes lines (no flat shading; `allow_rotating_primitives`,
@@ -3242,8 +3366,10 @@ fn emit_draw(
         ..Default::default()
     };
     cs.move32(reg::DCD0, pack_u32(dcd0.pack()?))?;
-    /* the targets the shader writes, none without one (pan_csf.c:1641-1648) */
-    let rt_mask = if fs_required { fs.meta.colour_outputs & 1 } else { 0 };
+    /* the targets the shader writes, none without one: `outputs_written`
+     * cut by `fb_rt_mask` (pan_csf.c:1641-1648; 0x3 in fsout_55_es3mrt,
+     * 0x7 in fsout_106_mrt3) */
+    let rt_mask = if fs_required { fs.meta.colour_outputs & ((1 << rt_count) - 1) } else { 0 };
     /* `rast->multisample ? ctx->sample_mask : 0xFFFF` (pan_csf.c:1639).
      * st/mesa's mask is all ones cut by glSampleCoverage, its invert over
      * all 16 bits (the board's Mesa: coverage off 0xFFFF, 0.5 0x0003, 0.5
@@ -3306,7 +3432,7 @@ fn emit_draw(
 }
 
 /// The frame's tiler context (`csf_emit_tiler_desc`, pan_csf.c:668-697).
-fn tiler_context(desc: &mut Arena, ctx: &Context, t: &Target) -> Result<Block, FrameError> {
+fn tiler_context(desc: &mut Arena, ctx: &Context, t: &Target, tile: u32) -> Result<Block, FrameError> {
     let tiler = desc.alloc(TilerContext::LENGTH, 64)?;
     let max_wh = t.width.max(t.height);
     /* pan_select_tiler_hierarchy_mask (pan_util.h:83-101), Mesa 25.0.7's
@@ -3329,7 +3455,7 @@ fn tiler_context(desc: &mut Arena, ctx: &Context, t: &Target) -> Result<Block, F
         hierarchy_mask <<= last_bit - ctx.tiler_max_levels;
     }
     /* "For effective tile size larger than 16x16, disable first level" */
-    if tile_size(t).0 > 16 * 16 {
+    if tile > 16 * 16 {
         hierarchy_mask &= !1;
     }
     let tc = TilerContext {
