@@ -112,11 +112,16 @@ LABELS=(gltest)
 SAMPLES=(gl_test)
 EXTRA_0="-DCONFIG_GL_TEST_CASES=\"$CASES\""
 EXTRA_1=
+# glmark2's arguments, from GLMARK2_SRC as it is when called: again after the
+# layout is read below, so the build takes the layout's tree, not the caller's
+glm_extra() {
+    EXTRA_1="-DGLMARK2_SRC=${GLMARK2_SRC:-<GLMARK2_SRC>}"
+    [ "$ONE" = 0 ] || EXTRA_1+=" -DCONFIG_GLMARK2_PVR_ONE_KICK_IN_FLIGHT=y"
+}
 if [ "$GLM" = 1 ]; then
     LABELS+=(glmark2)
     SAMPLES+=(glmark2)
-    EXTRA_1="-DGLMARK2_SRC=${GLMARK2_SRC:-<GLMARK2_SRC>}"
-    [ "$ONE" = 0 ] || EXTRA_1+=" -DCONFIG_GLMARK2_PVR_ONE_KICK_IN_FLIGHT=y"
+    glm_extra
 fi
 
 build_cmd() { # build_cmd I: the west command of image I
@@ -162,6 +167,7 @@ MODS=$(tools/cts/zephyr-modules.sh "$ZEPHYR_WS") || die "zephyr-modules.sh faile
 if [ "$GLM" = 1 ] && [ ! -f "${GLMARK2_SRC:-}/src/default-benchmarks.h" ]; then
     die "set GLMARK2_SRC to the glmark2 checkout"
 fi
+[ "$GLM" = 0 ] || glm_extra
 
 mkdir -p "$OUT" "$BUILD" || die "cannot create $OUT"
 BUILD=$(cd "$BUILD" && pwd)
