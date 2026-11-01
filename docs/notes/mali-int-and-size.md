@@ -501,15 +501,17 @@ with a temporary `println!` at the four `MaliError::IntValue` sites
 and `imod`), run through `corpus-verdicts.sh`, and reverted: nothing under
 `src/` changed.
 
-**State of the references.** `tools/mali/testdata/intbool_*` (drm-shim
-references for 76, 89 and 199's vertex shader) are **not recorded yet**: this
-session could neither download Mesa 26.2.1's tarball nor repack the local
-extracted tree, so `drm_shim_ref.sh build` did not run. The sequences below
-are those already in tree: `alu_boolany` (76) and `alu_flatlast` (89), tabled
-in mali-alu-ops.md, and the intbig / intloop / intuni dumps. 199's vertex
-shader has no Mesa reference. Record the three with `drm_shim_ref.sh run` and
-`pan_ref_diff.py extract --draw` before any lowering (`gl_ref.py` parses ES
-1.00 only; mali-varying-constants.md says how 300 es cases were drawn).
+**References.** `tools/mali/testdata/intbool_76_boolany`,
+`intbool_89_flatlast` and `intbool_199_vsc` (`.vert`, `.frag`, `.trace`,
+`.stdout`, `.stderr`, `.expect.json`) were made with `drm_shim_ref.sh run`
+on a Mesa 26.2.1 shim build (`drm_shim_ref.sh build`; this host's meson
+installs to `lib/x86_64-linux-gnu`, so `inst/lib64` was a symlink to it) and
+`pan_ref_diff.py extract --draw`. 76 is `alu_boolany`'s pair and 89 is
+`es300/flatlast.{vert,frag}`; 199 is `es3trunc_vsc.vert` with
+`es3trunc_vary_fs.frag` (drawn with `--uniform-values`: `u_x` 16, `u_q` 32,
+`u_a` 48 are FAU words `41800000`.. `42400000`; `u_b` is unused and dropped).
+gl_ref.py binds attributes by order, so 300 es sources draw as in
+mali-varying-constants.md.
 
 | Source (case) | Stage | First refused op | Construct |
 |---|---|---|---|
@@ -526,9 +528,9 @@ shader has no Mesa reference. Record the three with `drm_shim_ref.sh run` and
 The first op is only the first: later ones (`ishr`, `ishl`, `isub`, `u2f`,
 `ushr`, `ftrunc`, `ior`) refuse in turn.
 
-### Mesa's sequences (from the references in tree)
+### Mesa's sequences (decoded from the intbool_* references)
 
-- **76 boolany** (alu_boolany, 29 words). A bool uniform is an `i32` word
+- **76 boolany** (intbool_76_boolany, 29 fragment words, 32 registers). A bool uniform is an `i32` word
   (`MOV r0, u5.w0`, `CSEL.u32.eq`); `any(bvec3)` / `all(bvec3)` of uniforms
   are `LSHIFT_OR.i32` / `LSHIFT_AND.i32` chains (`00b4c20111840185`,
   `00b4c30110840185`); `greaterThan(u_v, 0.5)` is `FCMP_OR.v2f16.lt.m1`
@@ -536,18 +538,33 @@ The first op is only the first: later ones (`ishr`, `ishl`, `isub`, `u2f`,
   `LSHIFT_AND.v2i16` (`00b5c3311102c002`) and `IADD.v2u16`, then `MUX.v2i16`
   to 0 / 1.0. The compare-mask AND is also what cond_complex and tri_discard
   need.
-- **89 flatlast** (alu_flatlast). The whole chain runs in the vertex stage
-  (nir_opt_varyings moves it): `FMA.f32`, `F32_TO_U32.rtz`
-  (`0090c300c01c0043`), `U32_TO_F32` (`0090c30000190043`), `FMA.f32` (`* 0.25`),
-  stored as a float; the fragment shader loads one flat v4
-  `LD_VAR_BUF_IMM.src_flat32` (`085c8008300000c0`) and converts it to fp16;
-  the uint is not a varying of its own. Whether our pipeline must reproduce
-  that cross-stage motion is open until intbool_89 shows the pair.
-- **199 es3trunc_vsc**: no reference. The conversions are the single ops
-  seen in intbig_case79 / intloop (`F32_TO_S32.rtz`, `S32_TO_F32`,
-  `U32_TO_F32`) and the shifts of intuni_ishr; the result lanes come from
-  uniforms only, so the flat-varying path of mali-varying-constants.md applies
-  after the arithmetic.
+- **89 flatlast** (intbool_89_flatlast). The varying program (2nd program of
+  the vertex shader, `secondary_offset` 256) is `LD_ATTR_IMM` of `col`,
+  `FMA.f32 r3, r3, 4.0, 0.5` (`00b2c3000adadd43`), `F32_TO_U32.rtz`
+  (`0090c300c01c0043`), `U32_TO_F32` (`0090c30000190043`), `FMA.f32 r3, r3,
+  0.25, -0` (`00b2c30408c0d943`): the fragment shader's `float(v_idx) / 4.0`
+  was moved into the vertex stage by nir_opt_varyings, so the uint is never a
+  varying: both lanes go out as four `STORE.i32.estream` floats and the
+  fragment shader is one flat v4 `LD_VAR_BUF_IMM.src_flat32`
+  (`085c8008300000c0`) plus two `V2F32_TO_V2F16`, `ATEST`, `BLEND`. So case
+  89 needs, in the vertex walk, `f2u` and `u2f` (the pair rounds to an
+  integer), and in the link the producer-side motion of the consumer's
+  `u2f` / `fmul 0.25`; without the motion our fragment side refuses on
+  arithmetic.
+- **199 es3trunc_vsc** (intbool_199_vsc, 41 varying words). The four lanes
+  are stores of single results through `SHADDX` offsets (0, 4, 8, 12):
+  `trunc(u_x) + 2.0` is `FROUND.f32.rtz` (`0090c000c00d008b`), `FADD_IMM`,
+  `FMA * 0.125` and a `FMA r, r, 0, r` (the canonicalising add that
+  Mesa keeps after a multiply); `trunc(-u_x)` is the same `FROUND` with the
+  `.neg` source modifier on `u5.w1`; `int(u_q)` is `F32_TO_S32.rtz`
+  (`0090c200c00c008c`); `i >> 1` is `ARSHIFT_OR.i32 r, i, 0x1000000.b33, 0`
+  and `i << 3` is `LSHIFT_OR.i32 r, i, 0x3020100.b33, 0` (the shift count in
+  the byte-select constant), `-` is `ISUB.s32`, `S32_TO_F32`, then `/ 64.0` as
+  `FMA * 0.015625`; `uint(u_a)` is `F32_TO_U32.rtz`, `u >> 2u` is
+  `RSHIFT_OR.i32 r, u, 0x3020100.b22, 0`, `U32_TO_F32`, `FMA`. The position
+  program is the plain one. The fragment shader is a flat v4 load; the lanes
+  are not constants, so the flat path applies (not the constant-lane rule of
+  mali-varying-constants.md).
 - **tri_int**: `intloop_tri_int` (mali-int-loops.md) is the reference for its
   fp32 integer arithmetic.
 
@@ -563,7 +580,10 @@ The first op is only the first: later ones (`ishr`, `ishl`, `isub`, `u2f`,
 3. **fs-int-arith (fs)**: `Ineg`, `Imul`, `Iadd`, `Ine`, `b2f` of fp16 sources
    in fp32 integer arithmetic (tri_int; `Fs::int_lane`'s last arm). Reference
    `intloop_tri_int`; `sign()` belongs to triage-fsarith.
-4. **u2f-div (fs)**: `float(v_idx) / 4.0` for flatlast.frag, after item 2.
+4. **flat-uint-motion (link)**: `float(v_idx) / 4.0` for flatlast.frag: move
+   the consumer's `u2f` and constant multiply into the vertex shader's
+   varying program, as Mesa does (intbool_89_flatlast), after item 2.
+   Unblocks 89 together with it.
 5. **ret-nested-vs**: `ConstBool` in the vertex walk (ret_nested.vert); needs
    a reference of its own.
 6. loop_full and tri_discard are also blocked by control flow (the loop break
