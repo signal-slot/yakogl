@@ -27,7 +27,7 @@ closed). Mustpass list: 17,165 cases.
 
 | Board | Pass | Fail | NotSupported | QualityWarning / CompatibilityWarning | GPU resets |
 |---|---:|---:|---:|---|---:|
-| AM62P, 17 images at 1x (re-run at `316b4ad7`, 2026-10-29, `records/am62p/deqp-316b4ad7/`, 17,371 cases begun: the list plus 206 outside it) | 17,332 | **0** | 34 | 5 / 0 | 0 |
+| AM62P, 17 images at 1x (re-run at `18462c90`, 2026-11-01, `records/am62p/deqp-18462c90/`, 17,371 cases begun: the list plus 206 outside it) | 17,332 | **0** | 34 | 5 / 0 | 0 |
 | AM62P, ms4 image (`multisample.*` on the 4x config) | 16 | **0** | 0 | 0 / 0 | 0 |
 | AM62P combined (ms4 replaces the 16 1x `multisample.*`) | 17,142 | **0** | 18 | 5 / 0 | 0 |
 | i.MX8MP, 29 entries (re-run at `0fbe61a3`, 2026-10-31, `records/imx8mp/deqp-0fbe61a3/`, 17,371 cases begun: the list plus 206 outside it) | 17,318 | **0** | 34 | 19 (other) | 0 |
@@ -38,8 +38,8 @@ closed). Mustpass list: 17,165 cases.
   `clip_control` 8, `negative_api.texture.compressedtexsubimage2d_*` 9,
   `multisampled_render_to_texture.readpixels` 1 and `multisample.*` 16 (no
   multisample surface at 1x; the AM62P runs them on its ms4 image).
-- The AM62P 1x row is from `316b4ad7` (2026-10-29,
-  `records/am62p/deqp-316b4ad7/`, 17 images, every case has a result, every
+- The AM62P 1x row is from `18462c90` (2026-11-01,
+  `records/am62p/deqp-18462c90/`, 17 images, every case has a result, every
   image's own counters read `complete=1`, no row needed a re-arm). Against
   `177c62fd` (17,330 pass, 5 QualityWarning and 2 CompatibilityWarning) the
   two `flush_finish` timing cases pass without dEQP's warning: 17,332 pass,
