@@ -377,46 +377,53 @@ is from the two-row set.
 ## Mali: NanoPC-T6 (RK3588, Valhall v10, panthor), gl_test sweep
 
 `panthor-gltest --sweep` on the board's own Linux (panthor, not Zephyr), the
-newest record: `tools/cts/log/2026-10-28-final/` (board clock 2026-10-28,
-13:34 UTC; plan #154 board-final, after every lowering of the plan: split-fix,
-texture-2, varyconst, builtin, intbool, intbool-2, sizelimit and chains).
-Code: the integration tip `b3f6bf1c` plus the record's predictions commit
-`b081baf1`, built on the board itself (`yakogl-build=v0.1.0-74-gb081baf`).
+newest record: `tools/cts/log/2026-11-01-final3/` (board clock 2026-11-01,
+20:13 UTC; plan #154 full-gate-final, after cubebias101, loops-rt,
+frame-tex2darray, ubo166 and 606ce713 merged). Code: main `0ff58329` plus
+the record's predictions commit `8222fff1`, built on the board itself
+(`yakogl-build=v0.1.0-131-g8222fff`).
 
-| Runs | Cases | PASS | REFUSED | NO-CASE | SKIP | FAIL | Kernel messages |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| sweep 1 and 2, equal (the 256 verdict lines are identical) | 256 | **126** | 32 | 85 | 9 | 4 | 0 |
+| Runs | Cases | PASS | REFUSED | NO-CASE | SKIP | FAIL | FAULT | Kernel messages |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| sweep 1 and 2, equal (the 256 verdict lines are identical) | 256 | **132** | 27 | 84 | 9 | 3 | 1 | 1 (case 104's job timeout) |
 
-- The PASS set is the previous record's 123 (`2026-10-28-mid`) to the
-  string, plus 3 (#33, chains `b3f6bf1c`): 184 `depchain`, 185 `kindcost`,
-  189 `mulone`. Against the frameboard record's 102 it adds 24: 43, 47, 51,
-  57 (built-in inputs), 72, 79, 112 (integer and boolean values), 100, 116
-  (run-time uniform indices), 75, 78, 117, 150, 191 (varying and
-  gl_FragColor lanes), 193, 194, 195 (size caps), 82, 84, 119 (mediump
-  gl_FragCoord), 184, 185, 189, 192 (chains and folds).
+- The PASS set is the previous record's 126 (`2026-10-28-final`) to the
+  string, plus 6:
+  - `verdict case 214 splitkick: PASS` (was `FAIL rc -1, first bad check 5
+    got 0xffc0c0c0 want 0xff808080`; #32, the sample store ea3424fc).
+  - `verdict case 2 texture: PASS` (was `FAIL rc -1, first bad check 26 got
+    0xff000080 want 0xff0040bf`) and `verdict case 42 es3array: PASS` (was
+    `REFUSED draw: mali: a texture other than one 2D image or a cube map of
+    six faces (an array, a 3D texture) is not built yet`; frame-tex2darray).
+  - `verdict case 45 es3dyn: PASS` (was `REFUSED compile: ... a loop other
+    than one a constant bound ends within 32 passes ...`; loops-rt).
+  - `verdict case 166 fshprobe: PASS` (was `REFUSED compile: ... a uniform
+    past the FAU's 128 words (Mesa loads it from the UBO) is not lowered
+    yet`; ubo166).
+  - `verdict case 216 mipchains: PASS` (was `NO-CASE`: a case added to
+    gl_test since).
 
-  Every earlier PASS set is a subset of this one
+  Against the frameboard record's 102 it adds 30. Every earlier PASS set
+  (frameboard, tip, mid, final) is a subset of this one
   (`tools/mali/sweep_passsets.py --require
-  8,28,29,30,113,122,169,196,197,198,207,208,209` over the frameboard, mid
-  and final records: exit 0). Cases 8, 28, 29, 30, 113, 122, 169, 196, 197,
-  198, 207, 208 and 209 PASS in both sweeps.
-- Four FAILs:
-  - `verdict case 214 splitkick: FAIL rc -1, first bad check 5 got
-    0xffc0c0c0 want 0xff808080` (#32), unchanged: the frame builder has
-    `OpenFrame::sample_store` (913474c1), but the backend does not set it
-    and the per-sample preload program is not compiled.
-  - `verdict case 63 matattr: FAIL rc -1, first bad check 1 got 0xff800000
-    want 0xff804000` (was REFUSED by the chain line, #32): its vertex
-    programs are byte-equal to the drm-shim references, and every matrix
-    attribute column after the first reads 0 (mat2, mat3 and mat4 alike).
-  - `verdict case 2 texture: FAIL rc -1, first bad check 26 got 0xff000080
-    want 0xff0040bf`: the shader compiles, the frame binds only
-    `samplers[0]` (frame-tex2darray).
-  - `verdict case 141 es3instdiv: FAIL rc -1, first bad check 2 got
-    0xff00ff00 want 0x80008000`: a divisor-2 instanced attribute is drawn
-    wrong instead of refused (#32).
-- The 7 cases sweep_predict.py named (42, 63, 91, 149, 184, 185, 189) and
-  214 also ran twice on their own, with the same lines.
+  8,28,29,30,113,122,169,196,197,198,207,208,209 --delta tools/cts/log`:
+  exit 0). Cases 8, 28, 29, 30, 113, 122, 169, 196, 197, 198, 207, 208 and
+  209 PASS in both sweeps.
+- Two cases loops-rt let compile now fail on the board (#33), were REFUSED
+  by the loop line:
+  - `verdict case 98 uniloop: FAIL rc -1, first bad check 4 got 0xfff00010
+    want 0xfff00000`.
+  - `verdict case 104 divloop: FAULT work lost 2, group state/fatal queues
+    0x1/0x0, vm usable true` (`work lost 1` in the first 10-case run), with
+    the kernel's `panthor fb000000.gpu: [drm] job timeout` once per run; the
+    GPU stays usable and the cases after it are unaffected.
+- Unchanged FAILs: `verdict case 63 matattr: FAIL rc -1, first bad check 1
+  got 0xff800000 want 0xff804000` (matrix attribute columns 1..n read 0,
+  #32) and `verdict case 141 es3instdiv: FAIL rc -1, first bad check 2 got
+  0xff00ff00 want 0x80008000` (a divisor-2 instanced attribute, #32).
+- Cases 2, 42, 45, 91, 98, 104, 149, 166, 214 and 216 also ran twice on
+  their own (`cases-1.txt`, `cases-2.txt`), with the sweeps' lines (case
+  104's count of lost work aside).
 
 ## ES 3.0: dEQP-GLES3 (stage 4)
 
