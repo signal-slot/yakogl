@@ -101,7 +101,12 @@ pub enum SOp {
     /// both). `cube`: r follows t. `layer`: a 2D-array look-up whose layer
     /// (the face of a cube record, `cube_noseam`) follows t, written to TMUI;
     /// never with `cube`. Its result is read through [`SOp::TexLane`].
-    Tex { sampler: u8, srcs: [S; 4], cube: bool, layer: bool, bias: bool, lod: bool },
+    /// `fetch`: a `texelFetch` (Mesa's `txf`), never with `cube`: s and t
+    /// are integer texel coordinates and the level (`lod`, always set with
+    /// it) an integer, retired by TMUSF with no sampler state.
+    /// `offset`: the constant texel offset of s, t and r, each -8..7 (TMU
+    /// Config Parameter 2's 4-bit Offset S/T/R; all 0 without one).
+    Tex { sampler: u8, srcs: [S; 4], cube: bool, layer: bool, bias: bool, lod: bool, fetch: bool, offset: [i8; 3] },
     /// Lane `lane` (r, g, b, a) of the look-up `tex[0]`, of the sampler's
     /// result type `ret` (a float, or an integer sampler's raw integer).
     TexLane { tex: [S; 1], lane: u8, ret: TexRet },
@@ -1344,8 +1349,24 @@ impl<'m, 'a> Walk<'m, 'a> {
                     ir::ScalarType::I32 => TexRet::Sint,
                     _ => return Err(PrepError::NotYet("a texture look-up of another result type")),
                 };
-                if offset.is_some() {
-                    return Err(PrepError::NotYet("a texture look-up with an offset"));
+                /* A texel offset is constant (the front end takes only a
+                 * literal in -8..7, MIN/MAX_PROGRAM_TEXEL_OFFSET) and goes
+                 * into P2's 4-bit Offset S/T/R fields, as Mesa's constant
+                 * nir_tex_src_offset does (v3d_tex.c:162-174); GLSL ES 3.00
+                 * has none on a cube (ir.rs Op::Tex). */
+                let offset = offset.unwrap_or([0; 3]);
+                if offset.iter().any(|o| !(-8..=7).contains(o)) {
+                    return Err(PrepError::NotYet("a texel offset outside -8..7"));
+                }
+                if cube && offset != [0; 3] {
+                    return Err(PrepError::NotYet("a cube look-up with an offset"));
+                }
+                let fetch = matches!(lod, ir::TexLod::Fetch(_));
+                if fetch && (cube || proj) {
+                    return Err(PrepError::NotYet("a texelFetch of a cube or a projected one"));
+                }
+                if fetch && !fetch_enabled() {
+                    return Err(PrepError::NotYet("a texelFetch"));
                 }
                 /* The front end gives a vertex shader's implicit look-up as
                  * Lod(0.0) (ir.rs TexLod), Mesa's lower_invalid_implicit_lod
@@ -1361,7 +1382,11 @@ impl<'m, 'a> Walk<'m, 'a> {
                     ir::TexLod::Implicit => (None, false),
                     ir::TexLod::Bias(b) => (Some(self.src(b, 0)?), false),
                     ir::TexLod::Lod(l) => (Some(self.src(l, 0)?), true),
-                    _ => return Err(PrepError::NotYet("a texture look-up with gradients")),
+                    /* texelFetch: the integer level on TMUB, as it is
+                     * (Mesa's txf lod source, v3d_tex.c:136-152); the
+                     * integer coordinates go to S and T unconverted. */
+                    ir::TexLod::Fetch(l) => (Some(self.src(l, 0)?), true),
+                    ir::TexLod::Grad { .. } => return Err(PrepError::NotYet("a texture look-up with gradients")),
                 };
                 let (mut s, mut t) = (self.src(coord, 0)?, self.src(coord, 1)?);
                 if proj {
@@ -1436,6 +1461,8 @@ impl<'m, 'a> Walk<'m, 'a> {
                         layer: layer.is_some(),
                         bias: third.is_some() && !is_lod,
                         lod: is_lod,
+                        fetch,
+                        offset,
                     },
                 )?;
                 for (lane, o) in out.iter_mut().enumerate() {
@@ -2210,11 +2237,11 @@ fn compact<'a>(ops: &[SOp], roots: &mut [S], a: &Arena<'a>) -> Result<&'a [SOp],
                 }
                 SOp::Alu(alu, s)
             }
-            SOp::Tex { sampler, mut srcs, cube, layer, bias, lod } => {
+            SOp::Tex { sampler, mut srcs, cube, layer, bias, lod, fetch, offset } => {
                 for x in srcs.iter_mut().take(tex_operands(cube || layer, bias || lod)) {
                     *x = S(map[x.0 as usize]);
                 }
-                SOp::Tex { sampler, srcs, cube, layer, bias, lod }
+                SOp::Tex { sampler, srcs, cube, layer, bias, lod, fetch, offset }
             }
             SOp::Fsub(s) => SOp::Fsub(s.map(|x| S(map[x.0 as usize]))),
             SOp::TexLane { tex, lane, ret } => SOp::TexLane { tex: [S(map[tex[0].0 as usize])], lane, ret },
@@ -2260,6 +2287,28 @@ fn refuse_undef(ops: &[SOp]) -> Result<(), PrepError> {
         return Err(PrepError::NotYet(UNDEFINED_READ));
     }
     Ok(())
+}
+
+/// Whether a `texelFetch` is prepared. Its whole path is here (select.rs
+/// retires it on TMUSF, sim.rs runs it), and this module's tests turn it on
+/// ([`FETCH_IN_TESTS`]); the compiler itself still refuses it, because
+/// compiling it moves pins under tests/ (tests/v3d_sim_mesa.rs: the corpus
+/// pair es300/cube.vert + gltest/isamp.frag compiles, 222 pairs and its
+/// instruction totals), which the item that pins the fetch programs
+/// re-derives when it turns this on.
+#[cfg(not(test))]
+fn fetch_enabled() -> bool {
+    false
+}
+#[cfg(test)]
+fn fetch_enabled() -> bool {
+    FETCH_IN_TESTS.with(|f| f.get())
+}
+
+#[cfg(test)]
+std::thread_local! {
+    /// [`fetch_enabled`] on this test thread.
+    pub(super) static FETCH_IN_TESTS: core::cell::Cell<bool> = const { core::cell::Cell::new(false) };
 }
 
 /// How many of [`SOp::Tex`]'s `srcs` it reads: s and t, r for a cube or the
@@ -2474,6 +2523,69 @@ mod tests {
                 .count()
         })
         .unwrap()
+    }
+
+    /// The look-ups of an ES 3.00 fragment shader (`s` a sampler2D, `q` a
+    /// uniform vec4, `n` a uniform ivec4), as prepared, with
+    /// [`fetch_enabled`] set to `fetch` on this thread for the duration.
+    #[cfg(not(feature = "report-es2"))]
+    fn look_ups_of(body: &str, fetch: bool) -> Result<std::vec::Vec<SOp>, PrepError> {
+        let src = format!(
+            "#version 300 es\nprecision highp float;\nuniform highp sampler2D s;\nuniform vec4 q;\n\
+             uniform ivec4 n;\nout vec4 o;\nvoid main() {{ {body} }}\n"
+        );
+        FETCH_IN_TESTS.with(|f| f.set(fetch));
+        let r = store::with_scratch(|a| {
+            let f = lower::compile_to_ir(a, Stage::Fragment, a.alloc_str(&src).unwrap()).map_err(|e| e.msg).unwrap();
+            let p = prepare_fragment(&f.module, a)?;
+            Ok(p.ops.iter().filter(|o| matches!(o, SOp::Tex { .. })).copied().collect())
+        })
+        .unwrap();
+        FETCH_IN_TESTS.with(|f| f.set(false));
+        r
+    }
+
+    /// The ES 3.00 forms with a texel offset, and texelFetch, by the
+    /// SOp::Tex each prepares to: the offset whole (select.rs puts it in
+    /// P2, tmu_p2), a bias or level as before; a fetch is `fetch` with its
+    /// integer level as `lod`. Two look-ups that differ only in the offset
+    /// stay two (the offset is part of the op Walk::push compares).
+    /// textureGradOffset is still refused by its gradients, and texelFetch
+    /// by its own name while [`fetch_enabled`] is off (it was refused as "a
+    /// texture look-up with gradients" before). Revert check: with the
+    /// offset refusal back, every offset form fails with "a texture look-up
+    /// with an offset".
+    #[cfg(not(feature = "report-es2"))]
+    #[test]
+    fn offsets_and_texel_fetch_prepare_to_their_look_up() {
+        let one = |body: &str| -> SOp {
+            let v = look_ups_of(body, true).unwrap_or_else(|e| panic!("{body}: {e:?}"));
+            assert_eq!(v.len(), 1, "{body}: {v:?}");
+            v[0]
+        };
+        let shape = |op: SOp| match op {
+            SOp::Tex { cube, layer, bias, lod, fetch, offset, .. } => (cube, layer, bias, lod, fetch, offset),
+            x => panic!("{x:?}"),
+        };
+        for (body, want) in [
+            ("o = textureOffset(s, q.xy, ivec2(-1, 7));", (false, false, false, false, false, [-1, 7, 0])),
+            ("o = textureOffset(s, q.xy, ivec2(2, -8), q.z);", (false, false, true, false, false, [2, -8, 0])),
+            ("o = textureOffset(s, q.xy, ivec2(0));", (false, false, false, false, false, [0, 0, 0])),
+            ("o = textureLodOffset(s, q.xy, q.z, ivec2(1, -1));", (false, false, false, true, false, [1, -1, 0])),
+            ("o = textureProjOffset(s, q.xyz, ivec2(3, 0));", (false, false, false, false, false, [3, 0, 0])),
+            ("o = textureProjLodOffset(s, q, q.z, ivec2(0, 5));", (false, false, false, true, false, [0, 5, 0])),
+            ("o = texelFetch(s, n.xy, n.z);", (false, false, false, true, true, [0, 0, 0])),
+            ("o = texelFetchOffset(s, n.xy, n.z, ivec2(3, -2));", (false, false, false, true, true, [3, -2, 0])),
+        ] {
+            assert_eq!(shape(one(body)), want, "{body}");
+        }
+        let two = look_ups_of("o = textureOffset(s, q.xy, ivec2(1, 0)) + textureOffset(s, q.xy, ivec2(0, 1));", true);
+        assert_eq!(two.map(|v| v.len()), Ok(2), "two offsets, two look-ups");
+        assert_eq!(
+            look_ups_of("o = textureGradOffset(s, q.xy, q.xy, q.zw, ivec2(1, 0));", true),
+            Err(PrepError::NotYet("a texture look-up with gradients"))
+        );
+        assert_eq!(look_ups_of("o = texelFetch(s, n.xy, 0);", false), Err(PrepError::NotYet("a texelFetch")));
     }
 
     /// Common subexpressions (Walk::push, Mesa's nir_opt_cse): the same

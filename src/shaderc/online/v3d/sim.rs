@@ -140,9 +140,10 @@
 //!   (`v3d_vir_emit_tex`, v3d_tex.c:222-393): magic writes to TMUT/TMUR/
 //!   TMUI/TMUB/TMUDREF/TMUOFF give the coordinates, WRTMUC signals take the
 //!   configuration words P0 (then P1, P2) from the uniform stream, and the
-//!   write to TMUS or TMUSLOD (S, "triggers the lookup", v3d_tex.c:58)
-//!   retires the request. P0's bits 0..3 say which result words come back,
-//!   its bits 24..31 which texture: the hardware reads a texture state
+//!   write to TMUS, TMUSLOD, TMUSCM or TMUSF (S, "triggers the lookup",
+//!   v3d_tex.c:58) retires the request. P0's bits 0..3 say which result
+//!   words come back, its bits 24..31 which texture: the hardware reads a
+//!   texture state
 //!   address there (V3D42 "TMU Config Parameter 0", v3d_packet.xml), which
 //!   the driver writes over the compiler's unit placeholder (v3d_tex.c:
 //!   303-306); the interpreter takes the unit, so the caller passes the
@@ -176,16 +177,24 @@
 //!   clamps it). TMUI is ASSUMED to take a float, like the other
 //!   coordinates of a sampled lookup, rounded to the nearest layer (GL ES
 //!   3.0 3.8.9: floor(layer + 0.5)); a lookup whose layer is not finite is
-//!   refused. LINEAR is dEQP's bilinear rule in f32 (`texref`); the TMU's
-//!   fixed-point weights were measured on the board instead (gl_test case
-//!   109, docs/online-shaderc/v3d-backend.md "LINEAR on the board"), so a
+//!   refused. P2's Offset S and T (a constant texel offset, v3d_tex.c:
+//!   162-174) move the coordinates by that many texels of the level read
+//!   (a blend of two levels with an offset is refused). A texel fetch is S
+//!   by TMUSF (Mesa's `txf`, v3d_tex.c:371-373): S and T integer texel
+//!   coordinates, plus P2's offset, TMUB the integer level, read unfiltered
+//!   with no sampler state; a level or texel outside the texture (undefined
+//!   in GLSL ES 3.00 section 8.8) is refused. LINEAR is dEQP's bilinear
+//!   rule in f32 (`texref`); the TMU's fixed-point weights were measured
+//!   on the board instead (gl_test case 109,
+//!   docs/online-shaderc/v3d-backend.md "LINEAR on the board"), so a
 //!   comparison with hardware allows dEQP's LINEAR tolerance. Refused: a
 //!   NEAREST coordinate within 1e-3 of a texel edge (the hardware's
 //!   rounding there is not known), a level of detail within dEQP's LOD
 //!   precision of a level boundary, a cube direction within 1e-3 of a face
-//!   edge, R without TMUSCM (3D), I with TMUSCM (a cube array), DREF/OFF
-//!   (shadow, offsets), a P2 that is not a regular lookup, TMUSF (texel
-//!   fetch), unnormalised coordinates, and conditional texture writes.
+//!   edge, R without TMUSCM (3D), I with TMUSCM (a cube array) or TMUSF,
+//!   DREF/OFF (shadow, a non-constant offset), a P2 that is not a regular
+//!   lookup or has Offset R, unnormalised coordinates, and conditional
+//!   texture writes.
 //! * **General memory through the TMU**, as Mesa's spills and fills and
 //!   its scratch arrays use it (`vir_register_allocate.c:426-611`): TMUD
 //!   gives a lane's word, and the write to TMUA or TMUAU (which takes its
@@ -864,8 +873,8 @@ impl Machine<'_> {
                 self.tmu_coords.push((waddr, vals));
                 Ok(())
             }
-            // TMUS, TMUSLOD, TMUSCM: S, the lookup (v3d_tex.c:370-379).
-            33 | 40 | 42 => self.tmu_lookup(waddr, vals, what),
+            // TMUS, TMUSLOD, TMUSCM, TMUSF: S, the lookup (v3d_tex.c:370-379).
+            33 | 40..=42 => self.tmu_lookup(waddr, vals, what),
             w => unmodelled(format!("{what}: a write to TMU register {}", magic_waddr_name(w).unwrap_or("?"))),
         }
     }
@@ -956,14 +965,24 @@ impl Machine<'_> {
         // P2: a regular lookup (op V3D_TMU_OP_REGULAR = 15 in bits 20..23,
         // v3d_packet.xml "TMU Op"; Mesa emits P2 only when it differs from
         // that default, v3d_tex.c:68-70, 303-306), no gather, coefficient
-        // mode, sample number, offsets or LOD query; disable_autolod (bit 1)
-        // makes TMUB the level of detail (v3d_tex.c:137-153).
+        // mode, sample number or LOD query; disable_autolod (bit 1) makes
+        // TMUB the level of detail (v3d_tex.c:137-153); Offset S and T
+        // (bits 8..11, 12..15, 4-bit two's complement) are added to the
+        // texel coordinates (v3d_tex.c:162-174), Offset R (16..19, a 3D
+        // lookup's) is refused.
         let mut disable_autolod = false;
+        let mut offset = [0i32; 2];
         if let Some(&p2) = config.get(2) {
-            if p2 & !0x2 != 0x00f0_0000 {
+            if p2 & !0xff02 != 0x00f0_0000 {
                 return unmodelled(format!("{what}: TMU P2 {p2:#010x} is not a regular lookup"));
             }
             disable_autolod = p2 & 0x2 != 0;
+            /* a nibble, sign-extended */
+            offset = [8, 12].map(|b| (((p2 >> b) & 0xf) as i32) << 28 >> 28);
+        }
+        let fetch = retire == 41;
+        if fetch && disable_autolod {
+            return unmodelled(format!("{what}: a texel fetch with disable_autolod (v3d_tex.c:141-145)"));
         }
         if config.len() > 3 {
             return unmodelled(format!("{what}: {} TMU configuration words", config.len()));
@@ -990,13 +1009,20 @@ impl Machine<'_> {
         if cube && layer.is_some() {
             return unmodelled(format!("{what}: a cube lookup with an array index (TMUI)"));
         }
+        if fetch && layer.is_some() {
+            return unmodelled(format!("{what}: a texel fetch of an array layer (TMUI)"));
+        }
+        if cube && offset != [0, 0] {
+            return unmodelled(format!("{what}: a cube lookup with a texel offset"));
+        }
         // The level of detail: TMUSLOD takes it from TMUB (and implies
         // disable_autolod); so does a cube lookup with disable_autolod
         // (v3d_tex.c:137-153, 375-379). Otherwise it comes from the
-        // derivatives, and TMUB is a bias on it.
+        // derivatives, and TMUB is a bias on it. A fetch (TMUSF) takes its
+        // level from TMUB too, an integer (Mesa's txf lod source).
         let b = coord(37);
         let explicit = retire == 42 || disable_autolod;
-        if explicit && b.is_none() {
+        if (explicit || fetch) && b.is_none() {
             return unmodelled(format!("{what}: an explicit level of detail with no TMUB write"));
         }
         let idx = (p0 >> 24) as usize;
@@ -1023,7 +1049,7 @@ impl Machine<'_> {
         let integer = idx < 32 && self.env.integer_textures & (1 << idx) != 0;
         let nearest = sampler.mag == texref::Filter::Nearest
             && matches!(sampler.min, texref::MinFilter::Nearest | texref::MinFilter::NearestMipmapNearest);
-        if integer && !nearest {
+        if integer && !nearest && !fetch {
             return unmodelled(format!("{what}: an integer texture {idx} filtered other than NEAREST"));
         }
         let mask = p0 & 0xf;
@@ -1038,6 +1064,24 @@ impl Machine<'_> {
         }
         use crate::shaderc::online::texref::{self, Lod};
         for l in 0..LANES {
+            // A fetch: the texel at integer (s, t) plus the offset, of the
+            // integer level, unfiltered and unwrapped; a level or texel
+            // outside the texture is undefined (GLSL ES 3.00 section 8.8,
+            // texelFetch), so refused.
+            if fetch {
+                let level = b.map_or(0, |b| b[l]) as i32;
+                let Some(lv) = usize::try_from(level).ok().and_then(|k| tex.levels.get(k)) else {
+                    return unmodelled(format!("{what}: a texel fetch of level {level}, which the texture has not"));
+                };
+                let (i, j) = ((s[l] as i32).wrapping_add(offset[0]), (t[l] as i32).wrapping_add(offset[1]));
+                if !(0..lv.width as i32).contains(&i) || !(0..lv.height as i32).contains(&j) {
+                    return unmodelled(format!("{what}: a texel fetch of ({i}, {j}) outside level {level}"));
+                }
+                self.out.levels |= 1 << level;
+                let texel = lv.faces[0][(j as u32 * lv.width + i as u32) as usize];
+                pack_texel(&mut words, l, mask, texel, integer, out32);
+                continue;
+            }
             let lod = match b {
                 Some(b) if explicit => Lod::Explicit(fl(b[l])),
                 _ => Lod::Implicit,
@@ -1048,10 +1092,22 @@ impl Machine<'_> {
             if let Some((l1, _)) = second {
                 self.out.levels |= 1 << l1;
             }
+            // An offset is in texels of the level read (ES 3.0 3.8.10,
+            // u = w s + offset): one level, so (s, t) moved by
+            // offset / size there; a blend of two levels is refused.
+            let (mut sl, mut tl) = (fl(s[l]), fl(t[l]));
+            if offset != [0, 0] {
+                if second.is_some() {
+                    return unmodelled(format!("{what}: a texel offset on a blend of two levels"));
+                }
+                let lv = &tex.levels[level];
+                sl += offset[0] as f32 / lv.width as f32;
+                tl += offset[1] as f32 / lv.height as f32;
+            }
             let texel = match (r, layer) {
                 (Some(r), _) => {
-                    let (v, face) = texref::sample_cube_filtered(tex, &sampler, fl(s[l]), fl(t[l]), fl(r[l]), lod)
-                        .map_err(refused)?;
+                    let (v, face) =
+                        texref::sample_cube_filtered(tex, &sampler, sl, tl, fl(r[l]), lod).map_err(refused)?;
                     self.out.cube_faces |= 1 << face.index();
                     v
                 }
@@ -1066,29 +1122,11 @@ impl Machine<'_> {
                     if tex.cube {
                         self.out.cube_faces |= 1 << layer;
                     }
-                    texref::sample_layer(tex, &sampler, layer, fl(s[l]), fl(t[l]), lod).map_err(refused)?
+                    texref::sample_layer(tex, &sampler, layer, sl, tl, lod).map_err(refused)?
                 }
-                (None, None) => texref::sample_layer(tex, &sampler, 0, fl(s[l]), fl(t[l]), lod).map_err(refused)?,
+                (None, None) => texref::sample_layer(tex, &sampler, 0, sl, tl, lod).map_err(refused)?,
             };
-            let mut n = 0;
-            for k in 0..4 {
-                if mask & (1 << k) == 0 {
-                    continue;
-                }
-                /* an integer held as a float, to its two's complement */
-                let int = |v: f32| if v >= 2_147_483_648.0 { v as u32 } else { v as i32 as u32 };
-                words[n][l] = if integer && out32 {
-                    int(texel[k])
-                } else if integer {
-                    int(texel[2 * k]) & 0xffff | int(texel[2 * k + 1]) << 16
-                } else if out32 {
-                    texel[k].to_bits()
-                } else {
-                    let (a, b) = (texel[2 * k], texel[2 * k + 1]);
-                    f32_to_f16(a.to_bits()) as u32 | (f32_to_f16(b.to_bits()) as u32) << 16
-                };
-                n += 1;
-            }
+            pack_texel(&mut words, l, mask, texel, integer, out32);
         }
         self.tmu_fifo.extend(words.into_iter().map(|w| (w, self.switches)));
         self.out.tmu_lookups += 1;
@@ -1105,6 +1143,32 @@ impl Machine<'_> {
         if self.rtop != Rtop::Zero {
             self.rtop = Rtop::Lost;
         }
+    }
+}
+
+/// Lane `l` of the result words `mask` asks for, from `texel`: a 32-bit
+/// word a channel at the 32-bit output, else two f16 (or two 16-bit
+/// integer) channels a word; an integer texture's channels are integers
+/// held as floats.
+fn pack_texel(words: &mut [[u32; LANES]], l: usize, mask: u32, texel: [f32; 4], integer: bool, out32: bool) {
+    let mut n = 0;
+    for k in 0..4 {
+        if mask & (1 << k) == 0 {
+            continue;
+        }
+        /* an integer held as a float, to its two's complement */
+        let int = |v: f32| if v >= 2_147_483_648.0 { v as u32 } else { v as i32 as u32 };
+        words[n][l] = if integer && out32 {
+            int(texel[k])
+        } else if integer {
+            int(texel[2 * k]) & 0xffff | int(texel[2 * k + 1]) << 16
+        } else if out32 {
+            texel[k].to_bits()
+        } else {
+            let (a, b) = (texel[2 * k], texel[2 * k + 1]);
+            f32_to_f16(a.to_bits()) as u32 | (f32_to_f16(b.to_bits()) as u32) << 16
+        };
+        n += 1;
     }
 }
 
@@ -2268,6 +2332,85 @@ mod undefined_lane_tests {
         let (code, unif) = tex_program(33, 0.3, Some(0.2), None, false, 1.0);
         let e = fs_with(&code, &unif, mip_texture(true)).unwrap_err();
         assert!(e.contains("a 3D lookup (an R coordinate without TMUSCM)"), "{e}");
+    }
+
+    /// An 8x8 2D texture of levels 8, 4, 2, filtered with the mipmap-
+    /// LINEAR filter a fetch must ignore: level k's texel (i, j) is
+    /// 100k + 10j + i in every channel.
+    fn grid_texture() -> Texture {
+        use crate::shaderc::online::texref::{Level, MinFilter};
+        let lv = |k: u32| {
+            let w = 8 >> k;
+            let texels = (0..w * w).map(|x| [(100 * k + 10 * (x / w) + x % w) as f32; 4]).collect();
+            Level { width: w, height: w, faces: vec![texels] }
+        };
+        Texture { cube: false, min: MinFilter::LinearMipmapLinear, levels: (0..3).map(lv).collect() }
+    }
+
+    /// `tex_program_layer`'s look-up retired on `retire` with S = `s`, T =
+    /// `t` and TMUB = `b` as raw words, and P2 = `p2` when given; run on
+    /// [`grid_texture`] (or `tex`).
+    fn grid_run(retire: u8, s: u32, t: u32, b: u32, p2: Option<u32>, tex: Texture) -> R<Outcome> {
+        let w = f32::from_bits;
+        let (code, mut unif) = tex_program_layer(retire, w(t), None, None, Some(w(b)), p2.is_some(), w(s));
+        if let Some(p2) = p2 {
+            let at = unif.iter().position(|&x| x == 0x00f0_0002).expect("the P2 word");
+            unif[at] = p2;
+        }
+        fs_with(&code, &unif, tex)
+    }
+
+    /// A texel fetch (S by TMUSF, Mesa's `txf`, v3d_tex.c:371-373) reads
+    /// the texel at integer (S, T) of the integer level on TMUB, unfiltered
+    /// (the texture's filter is mipmap-LINEAR); P2's Offset S and T move it
+    /// by whole texels (v3d_tex.c:162-174). A level or texel outside the
+    /// texture is undefined (GLSL ES 3.00 section 8.8) and refused, so is
+    /// disable_autolod with TMUSF (Mesa never sets it for a fetch,
+    /// v3d_tex.c:141-145). Revert check: with TMUSF refused as before, every
+    /// run here stops at "a write to TMU register tmusf".
+    #[test]
+    fn a_texel_fetch_reads_its_texel_of_its_level() {
+        let fetch = |i: u32, j: u32, level: u32, p2: Option<u32>| grid_run(41, i, j, level, p2, grid_texture());
+        for (i, j, level, want) in [(1, 2, 0, 21.0), (7, 7, 0, 77.0), (0, 3, 1, 130.0), (1, 1, 2, 211.0)] {
+            let o = fetch(i, j, level, None).expect("runs");
+            assert_eq!(tlb_r(&o), want, "({i}, {j}) of level {level}");
+            assert_eq!(o.levels, 1 << level);
+        }
+        /* Offset S +1, T -1 (0xf): (1, 2) reads (2, 1) */
+        let o = fetch(1, 2, 0, Some(0x00f0_f100)).expect("runs");
+        assert_eq!(tlb_r(&o), 12.0);
+        /* Offset S -8, T +7 from (7, 0) of level 0: (-1, 7), outside */
+        let e = fetch(7, 0, 0, Some(0x00f0_7800)).unwrap_err();
+        assert!(e.contains("a texel fetch of (-1, 7) outside level 0"), "{e}");
+        let e = fetch(4, 0, 1, None).unwrap_err();
+        assert!(e.contains("a texel fetch of (4, 0) outside level 1"), "{e}");
+        let e = fetch(0, 0, 3, None).unwrap_err();
+        assert!(e.contains("a texel fetch of level 3, which the texture has not"), "{e}");
+        let e = fetch(0, 0, 0, Some(0x00f0_0002)).unwrap_err();
+        assert!(e.contains("a texel fetch with disable_autolod"), "{e}");
+    }
+
+    /// P2's Offset S and T on a sampled look-up (TMUSLOD, an explicit
+    /// level) move (s, t) by whole texels of the level read, before the
+    /// wrap (ES 3.0 3.8.10; CLAMP_TO_EDGE here). Offset R (a 3D look-up's)
+    /// is refused; so is an offset on a level blend.
+    #[test]
+    fn a_p2_offset_moves_a_look_up_by_texels_of_its_level() {
+        let mut tex = grid_texture();
+        tex.min = crate::shaderc::online::texref::MinFilter::NearestMipmapNearest;
+        let (s, t) = ((2.5f32 / 8.0).to_bits(), (3.5f32 / 8.0).to_bits());
+        let run = |lod: f32, p2: Option<u32>| grid_run(42, s, t, lod.to_bits(), p2, tex.clone());
+        assert_eq!(tlb_r(&run(0.0, None).expect("runs")), 32.0, "(2, 3) of level 0");
+        /* +1, -2: (3, 1) */
+        assert_eq!(tlb_r(&run(0.0, Some(0x00f0_e100)).expect("runs")), 13.0);
+        /* level 1 (4x4): (1, 1); +1, -2 is (2, -1), clamped to (2, 0) */
+        assert_eq!(tlb_r(&run(1.0, None).expect("runs")), 111.0);
+        assert_eq!(tlb_r(&run(1.0, Some(0x00f0_e100)).expect("runs")), 102.0);
+        let e = run(0.0, Some(0x00f1_0000)).unwrap_err();
+        assert!(e.contains("is not a regular lookup"), "{e}");
+        tex.min = crate::shaderc::online::texref::MinFilter::LinearMipmapLinear;
+        let e = grid_run(42, s, t, 0.5f32.to_bits(), Some(0x00f0_0100), tex).unwrap_err();
+        assert!(e.contains("a texel offset on a blend of two levels"), "{e}");
     }
 
     /// A 4x4 cube of one level: face +X's texel (i, j) is (1, i/4, j/4, 1),

@@ -798,7 +798,7 @@ mod tests {
     }
 
     /// What every program that comes back must satisfy, whatever it is.
-    /// The first TMU access that is not a 2D look-up of a bound texture, as
+    /// The first TMU access that is not a look-up of a bound texture, as
     /// text; `None` when every one is. A look-up writes only TMUS, TMUT and
     /// TMUB (its coordinates and bias) and a `wrtmuc` per P0/P1 uniform
     /// (contents 40/41, which the driver resolves to that texture's state), so
@@ -809,10 +809,10 @@ mod tests {
     fn first_tmu_memory_access(instrs: &[Instr], uniforms: &[(u32, u32)]) -> Option<String> {
         let tmu = |magic: bool, w: u8| magic && ((11..=13).contains(&w) || (32..=46).contains(&w));
         /* a look-up's writes: TMUS, TMUSLOD (a 2D explicit level, every
-         * vertex-stage 2D look-up) or TMUSCM (a cube) retires it; TMUT, TMUR
-         * (a cube's r), TMUI (an array look-up's layer) and TMUB (bias or
-         * level) */
-        let lookup = |w: u8| matches!(w, 33 | 34 | 35 | 36 | 37 | 40 | 42);
+         * vertex-stage 2D look-up), TMUSCM (a cube) or TMUSF (a texelFetch)
+         * retires it; TMUT, TMUR (a cube's r), TMUI (an array look-up's
+         * layer) and TMUB (bias or level) */
+        let lookup = |w: u8| matches!(w, 33 | 34 | 35 | 36 | 37 | 40 | 41 | 42);
         for (n, i) in instrs.iter().enumerate() {
             if let Instr::Alu(a) = i {
                 for (magic, w) in [(a.add.magic, a.add.waddr), (a.mul.magic, a.mul.waddr)] {
@@ -822,12 +822,44 @@ mod tests {
                 }
             }
         }
-        let wrtmuc = instrs.iter().filter(|i| matches!(i, Instr::Alu(a) if a.sig.wrtmuc)).count();
-        /* P0, P1 (their own contents) and a cube's P2 at a level (a constant
-         * uniform, select.rs TMU_P2_CUBE_LOD) */
-        let p2 = super::super::select::TMU_P2_CUBE_LOD;
-        let configs = uniforms.iter().filter(|&&(c, d)| c == 40 || c == 41 || (c == 0 && d == p2)).count();
-        (wrtmuc != configs).then(|| std::format!("{wrtmuc} wrtmuc words but {configs} P0/P1 uniforms"))
+        /* Each wrtmuc's uniform, in stream order (the words that take one,
+         * as uniform_consumers counts them): P0, P1 (their own contents),
+         * a texelFetch's P1 with no sampler state, and a P2 (constants:
+         * select.rs TMU_P1_NO_SAMPLER, tmu_p2). Anything else configures
+         * the TMU for something other than a look-up. */
+        let config = |(c, d): (u32, u32)| {
+            let p1 = d & !1 == super::super::select::TMU_P1_NO_SAMPLER;
+            let p2 = d & !0xf_ff02 == super::super::select::TMU_P2_REGULAR;
+            c == 40 || c == 41 || (c == 0 && (p1 || p2))
+        };
+        let mut next = 0usize;
+        for (n, i) in instrs.iter().enumerate() {
+            let (takes, wrtmuc) = match i {
+                Instr::Alu(a) => (
+                    a.sig.ldunif
+                        || a.sig.ldunifrf
+                        || a.sig.wrtmuc
+                        || (a.add.magic && a.add.waddr == 8)
+                        || (a.mul.magic && a.mul.waddr == 8),
+                    a.sig.wrtmuc,
+                ),
+                Instr::Branch(b) => (b.ub, false),
+            };
+            if !takes {
+                continue;
+            }
+            let Some(&u) = uniforms.get(next) else {
+                return Some(std::format!("word {n}: a uniform past the stream's {}", uniforms.len()));
+            };
+            next += 1;
+            if wrtmuc && !config(u) {
+                return Some(std::format!("word {n}: wrtmuc of ({}, 0x{:08x}), not a look-up's", u.0, u.1));
+            }
+            if !wrtmuc && (u.0 == 40 || u.0 == 41) {
+                return Some(std::format!("word {n}: a P0/P1 uniform ({}) read by a word that is no wrtmuc", u.0));
+            }
+        }
+        None
     }
 
     /// Per word of `c` that consumes a uniform, in order, the word and its
@@ -1525,8 +1557,9 @@ mod tests {
     /* 2026-10-25: the fixture's 242 real pairs, once sim_fixture.py paired
      * the gl_test sources again (128 after the Qt shaders left the tree,
      * #1509; 287 pairs and 163 / 217 compiled before). The ES 3.00 build's
-     * NotYet are textureSize of an array sampler and a look-up with
-     * gradients. */
+     * NotYet are textureSize of an array sampler (3) and a texelFetch
+     * (gltest/isamp; prepare.rs fetch_enabled: with it on, 193 compile, and
+     * the other 192 programs' words are the same). */
     const COMPILED: usize = if cfg!(feature = "report-es2") { 170 } else { 192 };
 
     #[test]
@@ -2309,6 +2342,229 @@ mod tests {
             assert_eq!(ops.iter().filter(|o| o.contains("wrtmuc")).count(), 3, "P0, P1, P2: {ops:#?}");
             assert!(p.vs.code.uniforms.contains(&Uniform::constant(super::super::select::TMU_P2_CUBE_LOD)));
         });
+    }
+
+    /// `f` with texelFetch prepared on this thread (prepare.rs
+    /// fetch_enabled, which the compiler keeps off until tests/ pins the
+    /// fetch programs).
+    #[cfg(not(feature = "report-es2"))]
+    fn with_fetch<R>(f: impl FnOnce() -> R) -> R {
+        use super::super::prepare::FETCH_IN_TESTS;
+        FETCH_IN_TESTS.with(|x| x.set(true));
+        let r = f();
+        FETCH_IN_TESTS.with(|x| x.set(false));
+        r
+    }
+
+    /// A stage's TMU traffic: its magic TMU writes (qpu_instr.h's waddr, in
+    /// program order) and the uniform each `wrtmuc` takes, in stream order.
+    #[cfg(not(feature = "report-es2"))]
+    fn tmu_traffic(instrs: &[Instr], uniforms: &[(u32, u32)]) -> (Vec<u8>, Vec<(u32, u32)>) {
+        let (mut writes, mut configs, mut next) = (Vec::new(), Vec::new(), 0usize);
+        for i in instrs {
+            let Instr::Alu(a) = i else {
+                next += usize::from(matches!(i, Instr::Branch(b) if b.ub));
+                continue;
+            };
+            for (magic, w) in [(a.add.magic, a.add.waddr), (a.mul.magic, a.mul.waddr)] {
+                if magic && (32..=46).contains(&w) {
+                    writes.push(w);
+                }
+            }
+            let tlbu = (a.add.magic && a.add.waddr == 8) || (a.mul.magic && a.mul.waddr == 8);
+            if a.sig.wrtmuc {
+                configs.push(uniforms[next]);
+            }
+            next += usize::from(a.sig.ldunif || a.sig.ldunifrf || a.sig.wrtmuc || tlbu);
+        }
+        (writes, configs)
+    }
+
+    /// Mesa's code and uniform stream of `stage` in the fixture's `pair`.
+    #[cfg(not(feature = "report-es2"))]
+    fn mesa_stage(pair: &str, stage: &str) -> (Vec<Instr>, Vec<(u32, u32)>) {
+        let block = MESA_PAIRS.split(&std::format!("\npair {pair}\n")).nth(1).expect("the pair is in the fixture");
+        let block = block.split("\nend\n").next().unwrap();
+        let code = block.lines().find_map(|l| l.strip_prefix(&std::format!("{stage} code "))).expect("code");
+        let unis = block.lines().find_map(|l| l.strip_prefix(&std::format!("{stage} uniforms "))).unwrap_or("");
+        let instrs =
+            code.split_whitespace().map(|h| decode(u64::from_str_radix(&h[2..], 16).unwrap()).unwrap()).collect();
+        let uniforms = unis
+            .split_whitespace()
+            .map(|u| {
+                let (c, d) = u.split_once(':').unwrap();
+                (c.parse().unwrap(), u32::from_str_radix(d.trim_start_matches("0x"), 16).unwrap())
+            })
+            .collect();
+        (instrs, uniforms)
+    }
+
+    /// A texelFetch is Mesa's `txf` (v3d_tex.c v3d_vir_emit_tex): on the
+    /// fixture's gltest/isamp (an isampler2D fetched at level 0 in the
+    /// fragment stage) our fragment shader's TMU traffic is Mesa's, write
+    /// for write: T, the level on TMUB, S on TMUSF (41), and P0 alone, no P1
+    /// (a fetch reads no sampler state, and the default P1 is left out,
+    /// v3d_tex.c:309-345). Revert check: retiring on TMUSLOD (42) shows in
+    /// the writes; writing the sampler P1 (contents 41) in the configs.
+    #[cfg(not(feature = "report-es2"))]
+    #[test]
+    fn a_texel_fetch_is_mesas_txf() {
+        const PAIR: &str = "es300/cube.vert gltest/isamp.frag";
+        let read = |p: &str| {
+            std::fs::read_to_string(std::format!("{}/tools/shaders/{p}", env!("CARGO_MANIFEST_DIR"))).unwrap()
+        };
+        let (vs, fs) = (read("es300/cube.vert"), read("gltest/isamp.frag"));
+        /* The writes before S are not ordered among themselves (Mesa's
+         * scheduler puts its TMUB first): the set, and S last. */
+        let shape = |(mut w, c): (Vec<u8>, Vec<(u32, u32)>)| {
+            let last = w.pop();
+            w.sort();
+            (w, last, c)
+        };
+        let (mi, mu) = mesa_stage(PAIR, "fs");
+        let theirs = shape(tmu_traffic(&mi, &mu));
+        assert_eq!(theirs, (vec![34, 37], Some(41), vec![(40, 0x3)]), "Mesa's txf");
+        with_fetch(|| {
+            with_program(&vs, &fs, Prim::Triangles, |p| {
+                let p = p.expect("compiles");
+                check_all(p);
+                let words: Vec<(u32, u32)> = p.fs.code.uniforms.iter().map(|u| (u.contents, u.data)).collect();
+                assert_eq!(shape(tmu_traffic(p.fs.code.instrs, &words)), theirs);
+            })
+        });
+        /* With fetch_enabled off, the compiler refuses it by name. */
+        with_program(&vs, &fs, Prim::Triangles, |p| {
+            assert!(matches!(p, Err(V3dError::NotYet("a texelFetch"))), "{:?}", p.err());
+        });
+    }
+
+    /// A fetch or an offset in the vertex stage: P1 then P2 (v3d_tex.c:
+    /// 299-353). A fetch's P1 is the constant default (per-pixel mask, as
+    /// Mesa's p1_unpacked_default), since it reads no sampler state and
+    /// P2 must follow a P1; a textureOffset (level 0 in the vertex stage,
+    /// TMUSLOD) has the sampler's P1 and the offset in P2. An offset of 0 is
+    /// Mesa's default P2 and is not written.
+    #[cfg(not(feature = "report-es2"))]
+    #[test]
+    fn vertex_stage_offsets_and_fetches_write_p2_after_p1() {
+        use super::super::select::{TMU_P1_NO_SAMPLER, WADDR_TMUSF, WADDR_TMUSLOD};
+        const FS: &str = "#version 300 es\nprecision mediump float;\nin vec4 v;\nout vec4 o;\nvoid main() { o = v; }\n";
+        let vs = |look_up: &str| {
+            std::format!(
+                "#version 300 es\nlayout(location = 0) in vec4 a;\nuniform highp sampler2D s;\nout vec4 v;\n\
+                 void main() {{ v = {look_up}; gl_Position = a; }}\n"
+            )
+        };
+        for (look_up, retire, configs) in [
+            (
+                "texelFetchOffset(s, ivec2(a.xy), 0, ivec2(1, -1))",
+                WADDR_TMUSF,
+                vec![(40, 0x3), (0, TMU_P1_NO_SAMPLER), (0, 0x00f0_f100)],
+            ),
+            ("texelFetch(s, ivec2(a.xy), 1)", WADDR_TMUSF, vec![(40, 0x3)]),
+            ("textureOffset(s, a.xy, ivec2(-2, 3))", WADDR_TMUSLOD, vec![(40, 0x3), (41, 0x4), (0, 0x00f0_3e00)]),
+            ("textureLodOffset(s, a.xy, a.z, ivec2(0))", WADDR_TMUSLOD, vec![(40, 0x3), (41, 0x4)]),
+        ] {
+            with_fetch(|| {
+                with_program(&vs(look_up), FS, Prim::Triangles, |p| {
+                    let p = p.unwrap_or_else(|e| panic!("{look_up}: {e:?}"));
+                    check_all(p);
+                    let words: Vec<(u32, u32)> = p.vs.code.uniforms.iter().map(|u| (u.contents, u.data)).collect();
+                    let (writes, got) = tmu_traffic(p.vs.code.instrs, &words);
+                    assert_eq!(writes.last(), Some(&retire), "{look_up}: {writes:?}");
+                    assert_eq!(got, configs, "{look_up}");
+                });
+            });
+        }
+    }
+
+    /// texelFetch, texelFetchOffset and the sampled offset forms run in the
+    /// interpreter (sim.rs: TMUSF, P2's Offset S/T) on an 8x8 texture of
+    /// levels 8, 4, 2 whose level k texel (i, j) is (i/8, j/8, k/4, 1),
+    /// NEAREST_MIPMAP_NEAREST: every lane reads the texel GLSL ES 3.00
+    /// section 8.8 names. `q` (a uniform vec4) holds a normalised (s, t) at
+    /// texel (3, 5)'s centre of level 0 and the level; `n` (a uniform ivec4)
+    /// an integer texel and level.
+    #[cfg(not(feature = "report-es2"))]
+    #[test]
+    fn fetches_and_offsets_read_their_texels_in_the_interpreter() {
+        use crate::shaderc::online::texref::{Level, MinFilter};
+        use crate::shaderc::online::v3d::sim::{self, Env, FsInputs, Inputs, Texture, LANES};
+        const VS: &str = "#version 300 es\nlayout(location = 0) in vec4 p;\nvoid main() { gl_Position = p; }\n";
+        let texel = |i: u32, j: u32, k: u32| [i as f32 / 8.0, j as f32 / 8.0, k as f32 / 4.0, 1.0];
+        let texture = Texture {
+            cube: false,
+            min: MinFilter::NearestMipmapNearest,
+            levels: (0..3)
+                .map(|k| {
+                    let w = 8 >> k;
+                    Level { width: w, height: w, faces: vec![(0..w * w).map(|x| texel(x % w, x / w, k)).collect()] }
+                })
+                .collect(),
+        };
+        let run = |body: &str, q: [f32; 4], n: [i32; 4]| -> [f32; 4] {
+            let fs = std::format!(
+                "#version 300 es\nprecision highp float;\nprecision highp int;\nuniform highp sampler2D s;\n\
+                 uniform vec4 q;\nuniform ivec4 n;\nout vec4 o;\nvoid main() {{ o = {body}; }}\n"
+            );
+            let mut colour = [0.0; 4];
+            with_fetch(|| {
+                with_program(VS, &fs, Prim::Triangles, |p| {
+                    let p = p.unwrap_or_else(|e| panic!("{body}: {e:?}"));
+                    check_all(p);
+                    let c = &p.fs.code;
+                    /* q is dwords 0..3 and n 4..7 of the stage's uniform
+                     * block, in declaration order */
+                    let block: Vec<u32> = q.iter().map(|x| x.to_bits()).chain(n.iter().map(|&x| x as u32)).collect();
+                    let stream: Vec<u32> = c
+                        .uniforms
+                        .iter()
+                        .map(|u| match u.contents {
+                            0 | 40 | 41 => u.data,
+                            1 => block[u.data as usize],
+                            k => panic!("uniform contents {k} not modelled here"),
+                        })
+                        .collect();
+                    let inputs = FsInputs {
+                        w: [1.0f32.to_bits(); LANES],
+                        w_centroid: [1.0f32.to_bits(); LANES],
+                        z: [0; LANES],
+                        x: [0; LANES],
+                        y: [0; LANES],
+                        back_facing: [false; LANES],
+                        varyings: std::vec::Vec::new(),
+                    };
+                    let env = Env { threads: p.fs.threads, textures: vec![texture.clone()], ..Env::default() };
+                    let o = sim::run(c.words, &stream, &Inputs::Fragment(std::boxed::Box::new(inputs)), &env)
+                        .unwrap_or_else(|e| panic!("{body}: {e}"));
+                    let h = |w: u32| sim::half_to_f32(w as u16);
+                    for l in 0..LANES {
+                        let (a, b) = (o.tlb[0].value[l].unwrap(), o.tlb[1].value[l].unwrap());
+                        let got = [h(a & 0xffff), h(a >> 16), h(b & 0xffff), h(b >> 16)];
+                        assert_eq!(got, if l == 0 { got } else { colour }, "{body}: lane {l}");
+                        colour = got;
+                    }
+                })
+            });
+            colour
+        };
+        let uv = [3.5 / 8.0, 5.5 / 8.0];
+        let (q0, q1) = ([uv[0], uv[1], 0.0, 0.0], [uv[0], uv[1], 1.0, 0.0]);
+        assert_eq!(run("texelFetch(s, n.xy, n.z)", q0, [3, 5, 0, 0]), texel(3, 5, 0));
+        assert_eq!(run("texelFetch(s, n.xy, n.z)", q0, [1, 2, 1, 0]), texel(1, 2, 1));
+        assert_eq!(run("texelFetch(s, n.xy, 2)", q0, [1, 0, 0, 0]), texel(1, 0, 2));
+        assert_eq!(run("texelFetchOffset(s, n.xy, n.z, ivec2(2, -1))", q0, [3, 5, 0, 0]), texel(5, 4, 0));
+        assert_eq!(run("texelFetchOffset(s, n.xy, n.z, ivec2(-1, 1))", q0, [2, 1, 1, 0]), texel(1, 2, 1));
+        /* two fetches that differ only in the offset: two look-ups */
+        assert_eq!(
+            run("0.5 * (texelFetch(s, n.xy, 0) + texelFetchOffset(s, n.xy, 0, ivec2(2, 0)))", q0, [3, 5, 0, 0]),
+            [4.0 / 8.0, 5.0 / 8.0, 0.0, 1.0]
+        );
+        assert_eq!(run("textureLod(s, q.xy, q.z)", q0, [0; 4]), texel(3, 5, 0));
+        assert_eq!(run("textureLodOffset(s, q.xy, q.z, ivec2(-1, 2))", q0, [0; 4]), texel(2, 7, 0));
+        /* level 1 (4x4): (1, 2); +7, -8 clamps to (3, 0) */
+        assert_eq!(run("textureLodOffset(s, q.xy, q.z, ivec2(7, -8))", q1, [0; 4]), texel(3, 0, 1));
+        assert_eq!(run("textureProjLodOffset(s, vec3(q.xy * 2.0, 2.0), q.z, ivec2(1, 1))", q1, [0; 4]), texel(2, 3, 1));
     }
 
     /// Where each THRSW signal stands, and the first `ldtmu`.
