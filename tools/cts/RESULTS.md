@@ -78,7 +78,7 @@ is from the two-row set.
 
 | Board | glmark2-es2 | gl_test | GPU resets |
 |---|---|---|---:|
-| AM62P | 467, 33 scenes, 0 failed, 0 GL errors; main `86d0b482`, 2026-10-28 (`records/am62p/common-86d0b482/20261028-1743-GM-883ca4b1/`, `verdict=done`, resets 0; the PowerVR depth-texture fix of #40, `21099fcd`, is in this main); **shadow 10.63 ms a frame (95 FPS), refract 37.05 ms (27 FPS), terrain 90.94 ms (11 FPS)** (353.23, 375.53, 93.95 at `445c5653`); per-scene ms/frame below; pictures against `tools/cts/glmark2-pictures.txt` column `am62p` (the `445c5653` run's): 33 scenes, match 28, mismatch 5, all five probe c of animated scenes (buffer map x3, terrain, refract — sampled at a different frame count; the interleaved-map probe is the subdata scene's own reference value), shadow a match, none black | 49 of 50 (rerun at `86d0b482`, GT `20261028-1727-GT-a83e87ff`): case 20 `etc` fails its first check alone — it wants 3 compressed formats, the build stores 5, the intended ES 3.0 list on the PowerVR (`tests/es3_caps.rs` `known_gaps`); the test's expectation is stale, its other 16 checks pass (below); `445c5653` read 50 of 50; case 215 `shadowmap` PASS on its own, below) | 0 |
+| AM62P | 468, 33 scenes, 0 failed, 0 GL errors; `6a7021ec` (#42's path B, off by default, and the case 216 kick count; built before its rebase onto main `561bad55`, as `e4819b69` on main `61ad38a1`), 2026-11-01 (`records/am62p/common-e4819b69/20261101-1935-GM-4bcd9ff3/`, `verdict=done`, resets 0; the first run since `ce3354ac`, the HWRT second pair); **shadow 10.62 ms a frame (95 FPS), refract 35.09 ms (29 FPS), terrain 83.06 ms (13 FPS)** (10.63, 37.05, 90.94 at `86d0b482`); per-scene ms/frame below; pictures against `tools/cts/glmark2-pictures.txt` column `am62p` (the `445c5653` run's): 33 scenes, match 28, mismatch 5, each one probe of an animated scene (desktop blur tr, buffer map and interleaved map c, terrain c off 10, refract c — sampled at a different frame count), shadow a match, none black | 49 of 50 (rerun at `6a7021ec`, GT `20261101-1943-GT-0225c49e`, as at `86d0b482`): case 20 `etc` fails its first check alone — it wants 3 compressed formats, the build stores 5, the intended ES 3.0 list on the PowerVR (`tests/es3_caps.rs` `known_gaps`); the test's expectation is stale, its other 16 checks pass (below); `445c5653` read 50 of 50; case 215 `shadowmap` PASS on its own, below) | 0 |
 | i.MX8MP | 42, 33 scenes, 0 failed, 0 GL errors (#814 fixed by #922); main `445c5653`, 2026-10-20, 1 screen buffer (the default); re-run from main `a917d123` (holds the GC mipmap offer `dc033dc44`, #1106) the same day: score 42 (`records/imx8mp/common-a917d123`, GM `verdict=done`, words `fc3f002a`), per-scene record `records/imx8mp/20261020-2100-glmark2-a917d123/` (66 boots, ms a frame = 1000 / the integer FPS): **terrain 250 ms (4 FPS), shadow 500 ms (2 FPS), refract 500 ms (2 FPS)**, the other 30 scenes 16.95 to 35.71 ms; 1934.56 ms summed (1932.65 at `445c5653`), so the offer moved no scene at this resolution; all 33 pictures match the `imx8mp` column, none black, terrain and refract means equal to the `445c5653` ones (not looked at by eye); per-scene FPS and picture values from the SNVS record (below: terrain 4, shadow 2, refract 2 FPS), pictures in `tools/cts/glmark2-pictures.txt` column `imx8mp` (33 from this run, none black, not looked at by eye); 49 at 3 buffers, 46 at 2 (`bebce725`, below) | 49 of 49 run, case 16 skipped (#8); cases 10 and 17 nondeterministic (#9, #7: 11 boots of `work/egl-double-buffer`'s code, case 17 failed 3, case 10 failed 1; main `0247ac665`, 10 boots: case 17 failed 3, case 10 failed 3, case 44 once) | 0 where counted |
 | Pi 4 | 195, 33 scenes, 0 failed, 0 GL errors; main `c4af4917`, 2026-10-22 (the TFU no-wait, FS dump off, uniforms from the host arrays, lazy raster, depth storage defer, copy reason counters, UIF walker and buffer retired reuse; the main tip `71c73b0f` differs from it only in `tools/check.sh` and its selftest); GM `verdict=done`, record `records/pi4/20261022-0308-glmark2-c4af4917/`: **terrain 161.79 ms (7 FPS), shadow 7.34 ms (137 FPS), refract 17.27 ms (58 FPS)** (179.26, 7.32, 18.72 at `445c5653`); per-scene ms/frame below; pictures 31 of 33 match the `pi4` column (desktop blur and jellyfish, both animated, differ in one probe each), none black | 12 of 12 (at `445c5653`; not rerun) | 0 |
 
@@ -210,103 +210,106 @@ is from the two-row set.
   contexts on pbuffers) is nondeterministic on main too (#7 reopened) and not
   this tree's; #9 covers case 10.
 - The README glmark2 table's runs: the GM row of the common set on the
-  i.MX8MP from main `445c5653` (2026-10-20); the AM62P column is the run of
-  main `86d0b482` (2026-10-28, the row above); the Pi 4 column is the run of
+  i.MX8MP from main `445c5653` (2026-10-20); the README's AM62P score is the
+  run of main `86d0b482` (2026-10-28) until a main commit is measured, and
+  the AM62P column below is the run of `6a7021ec` (2026-11-01, the row
+  above); the Pi 4 column is the run of
   main `c4af4917` (2026-10-22, below). Per scene, ms/frame. The AM62P and Pi 4 columns are
   `glmark2-ms.py` / `common-tally.py --gm-table` (from `FrameTime`). The
   i.MX8MP column is 1000 / the integer FPS of its SNVS record, with the FPS
-  in brackets. The earlier columns are the AM62P's 461 run of `445c5653`
+  in brackets. The earlier columns are the AM62P's 467 run of `86d0b482`
   (this table before) and the Pi 4's 193 run of `445c5653`.
 
-  | Scene | AM62P | AM62P `445c5653` | Pi 4 `c4af4917` | Pi 4 `445c5653` | i.MX8MP (FPS) |
+  | Scene | AM62P | AM62P `86d0b482` | Pi 4 `c4af4917` | Pi 4 `445c5653` | i.MX8MP (FPS) |
   |---|---:|---:|---:|---:|---:|
-  | build use-vbo=false | 5.81 | 10.00 | 4.75 | 6.42 | 33.33 (30) |
+  | build use-vbo=false | 5.79 | 5.81 | 4.75 | 6.42 | 33.33 (30) |
   | build use-vbo=true | 1.14 | 1.14 | 3.64 | 3.61 | 16.95 (59) |
   | texture nearest | 1.07 | 1.07 | 3.78 | 3.74 | 16.95 (59) |
   | texture linear | 1.08 | 1.08 | 3.72 | 3.70 | 16.95 (59) |
   | texture mipmap | 1.09 | 1.09 | 3.70 | 3.67 | 16.95 (59) |
-  | shading gouraud | 1.42 | 1.43 | 3.69 | 3.66 | 16.95 (59) |
-  | shading blinn-phong-inf | 1.66 | 1.65 | 4.43 | 4.42 | 16.95 (59) |
+  | shading gouraud | 1.42 | 1.42 | 3.69 | 3.66 | 16.95 (59) |
+  | shading blinn-phong-inf | 1.66 | 1.66 | 4.43 | 4.42 | 16.95 (59) |
   | shading phong | 2.07 | 2.07 | 4.49 | 4.46 | 16.95 (59) |
-  | shading cel | 2.43 | 2.42 | 4.43 | 4.43 | 16.95 (59) |
+  | shading cel | 2.42 | 2.43 | 4.43 | 4.43 | 16.95 (59) |
   | bump high-poly | 3.03 | 3.03 | 4.66 | 4.62 | 16.95 (59) |
   | bump normals | 1.19 | 1.19 | 4.42 | 4.42 | 16.95 (59) |
-  | bump height | 1.42 | 1.42 | 4.48 | 4.46 | 16.95 (59) |
-  | effect2d edge (3x3) | 5.82 | 5.81 | 4.46 | 4.46 | 25.00 (40) |
-  | effect2d 5x5 | 8.98 | 8.99 | 4.47 | 4.47 | 35.71 (28) |
-  | pulsar | 1.14 | 1.13 | 4.54 | 4.52 | 18.18 (55) |
-  | desktop blur | 21.31 | 21.32 | 11.18 | 13.06 | 33.33 (30) |
-  | desktop shadow | 6.92 | 6.92 | 6.51 | 6.87 | 33.33 (30) |
-  | buffer map | 16.20 | 16.15 | 10.12 | 10.14 | 33.33 (30) |
-  | buffer subdata | 11.42 | 16.37 | 8.97 | 10.03 | 33.33 (30) |
-  | buffer interleaved map | 14.56 | 14.45 | 8.80 | 8.76 | 33.33 (30) |
-  | ideas | 5.77 | 5.72 | 12.40 | 11.85 | 33.33 (30) |
+  | bump height | 1.41 | 1.42 | 4.48 | 4.46 | 16.95 (59) |
+  | effect2d edge (3x3) | 5.81 | 5.82 | 4.46 | 4.46 | 25.00 (40) |
+  | effect2d 5x5 | 8.99 | 8.98 | 4.47 | 4.47 | 35.71 (28) |
+  | pulsar | 1.13 | 1.14 | 4.54 | 4.52 | 18.18 (55) |
+  | desktop blur | 21.58 | 21.31 | 11.18 | 13.06 | 33.33 (30) |
+  | desktop shadow | 6.80 | 6.92 | 6.51 | 6.87 | 33.33 (30) |
+  | buffer map | 16.20 | 16.20 | 10.12 | 10.14 | 33.33 (30) |
+  | buffer subdata | 11.43 | 11.42 | 8.97 | 10.03 | 33.33 (30) |
+  | buffer interleaved map | 14.51 | 14.56 | 8.80 | 8.76 | 33.33 (30) |
+  | ideas | 5.60 | 5.77 | 12.40 | 11.85 | 33.33 (30) |
   | jellyfish | 6.30 | 6.30 | 4.50 | 4.50 | 33.33 (30) |
-  | **terrain** | **90.94** | 93.95 | 161.79 | 179.26 | 250.00 (4) |
-  | **shadow** | **10.63** | 353.23 | 7.34 | 7.32 | 500.00 (2) |
-  | **refract** | **37.05** | 375.53 | 17.27 | 18.72 | 500.00 (2) |
-  | conditionals 0/0 | 1.07 | 1.06 | 4.37 | 4.36 | 17.54 (57) |
-  | conditionals frag 5 | 1.84 | 1.84 | 4.36 | 4.36 | 19.61 (51) |
+  | **terrain** | **83.06** | 90.94 | 161.79 | 179.26 | 250.00 (4) |
+  | **shadow** | **10.62** | 10.63 | 7.34 | 7.32 | 500.00 (2) |
+  | **refract** | **35.09** | 37.05 | 17.27 | 18.72 | 500.00 (2) |
+  | conditionals 0/0 | 1.06 | 1.07 | 4.37 | 4.36 | 17.54 (57) |
+  | conditionals frag 5 | 1.83 | 1.84 | 4.36 | 4.36 | 19.61 (51) |
   | conditionals vtx 5 | 1.06 | 1.06 | 4.36 | 4.36 | 17.54 (57) |
-  | function low | 1.27 | 1.28 | 4.36 | 4.37 | 19.61 (51) |
+  | function low | 1.27 | 1.27 | 4.36 | 4.37 | 19.61 (51) |
   | function medium | 1.79 | 1.79 | 4.37 | 4.37 | 19.61 (51) |
   | loop fragment-loop=false | 1.35 | 1.35 | 4.37 | 4.37 | 17.54 (57) |
   | loop uniform=false | 1.36 | 1.36 | 4.37 | 4.37 | 19.61 (51) |
-  | loop uniform=true | 3.88 | 3.89 | 4.37 | 4.37 | 19.61 (51) |
-  | sum | 274.07 | 967.09 | 347.45 | 370.50 | 1932.65 |
+  | loop uniform=true | 3.88 | 3.88 | 4.37 | 4.37 | 19.61 (51) |
+  | sum | 264.09 | 274.07 | 347.45 | 370.50 | 1932.65 |
 
-- The AM62P row is from main `86d0b482` (2026-10-28,
-  `records/am62p/common-86d0b482/`, GM `20261028-1743-GM-883ca4b1`, GT
-  `20261028-1727-GT-a83e87ff`): the GM and GT images of
-  `cts-common.sh am62p build` from main (this main holds the #40 PowerVR
-  depth-texture fix, `21099fcd`), run by `tools/board.sh am62p run`
-  (`uboot-mmc`), one GL client at a time. An earlier run of the same GM
-  image (`20261028-1720-GM-883ca4b1`) lost its console bytes mid-run while
-  the board kept booting — the serial bridge serves one client, and the
-  stall is transport, not board or image (the rerun rule of
-  `tools/cts/README.md`); that run stays in the directory as `no_reset`.
-  GM `verdict=done`, resets 0, GL errors 0, 0 refused draws. Record words
-  GM `594b1201,fc3f01d3,6184003f,00258320` — equal to the `c999f2f7`
-  run's words (the record holds the result, not the per-frame times).
-  **Score 467** (461 at `445c5653`
-  and `2483a146`; 465 at `cd738b1a`; 289 at `1d54a4eb`, the in-place swap;
-  462 at `e9f562d8` and `bc43ea09`, after the EGL double buffer). Against
-  `445c5653`: shadow 353.23 -> 10.63 ms, refract 375.53 -> 37.05 ms, terrain
-  93.95 -> 90.94 ms, build use-vbo=false 10.00 -> 5.81 ms, the other 29
-  scenes within 1 percent (ideas 5.72 -> 5.77); summed 967.09 -> 274.07 ms.
-  Scene for scene this equals the `c999f2f7` record of `c5dcf5e8` plus #40
-  (refract 37.03, shadow 10.64, terrain 90.91, summed 273.76) within
-  0.15 ms, with the same score and the same record words: what landed on
-  main between the two builds moves no scene at this resolution. The
-  backend's exit line: `ds slots peak 5/32, ds bytes peak 15564800, ds
-  given up 0, ds refused 0 (slots full 0, no buffer 0), depth sampled from
-  the buffer 2026 (refused 0)`, and the scene line `a 1600x1200 depth
-  texture is sampled from its depth buffer (X8U24, stride 1600): no CPU
-  resolve`. Pictures against the `am62p` column (the `445c5653` run's):
-  `33 scenes, match 28, mismatch 5`, all five probe c of animated scenes —
-  buffer map off 17, buffer subdata off 29, buffer interleaved map off 33
-  (this run's interleaved-map probe c `b4d9f0` is the value the column
-  records for the subdata scene: the three probe the same animation states
-  at a slightly different frame count), terrain (probe c off 80, tr 11,
-  br 18), refract (probe c off 50); every still probe of every scene
+- The AM62P row is from `6a7021ec` (2026-11-01, `records/am62p/common-e4819b69/`,
+  GM `20261101-1935-GM-4bcd9ff3`, GT `20261101-1943-GT-0225c49e`), built
+  as `e4819b69` before the rebase onto main `561bad55` (main's commits
+  between change the V3D compiler and back end, the Mali back end and
+  tools, docs and gl_test case 217, none of the code these images run): main
+  `61ad38a1` plus #42's path B (the mipmap chain's CPU tail, off by default
+  since its board run, below), the case 216 kick count and a `pr-session.sh`
+  fix; with the tail off its mipmap chain is main's. The GM and GT images of
+  `tools/cts/board-stage.sh am62p common`, run by `tools/board.sh am62p run`
+  (`uboot-mmc`), one GL client at a time. GM `verdict=done`, resets 0, GL
+  errors 0, 0 draws that sampled an incomplete texture. Record words GM
+  `594b1201,fc3f01d4,6184003f,00258320` (`86d0b482`'s but the score, 468
+  for 467). It is the first AM62P glmark2 row since `ce3354ac` (the HWRT
+  second pair), whose row was never updated. Against `86d0b482`: terrain
+  90.94 -> 83.06 ms (121 frames, GL time 81.9 ms a frame), refract 37.05 ->
+  35.09 ms, shadow 10.63 -> 10.62 ms, ideas 5.77 -> 5.60 ms, desktop blur
+  21.31 -> 21.58 ms, the other 28 scenes within 0.15 ms; summed 274.07 ->
+  264.09 ms. The backend's exit line: `ds slots peak 5/32, ds bytes peak
+  15564800, ds given up 0, ds refused 0 (slots full 0, no buffer 0), depth
+  sampled from the buffer 2088 (refused 0)`. Pictures against the `am62p`
+  column (the `445c5653` run's): `33 scenes, match 28, mismatch 5`, each one
+  probe of an animated scene — desktop blur tr off 63, buffer map c off 18,
+  buffer interleaved map c off 12, terrain c off 10 (mean 119 129 44, the
+  column's 120 129 44), refract c off 49; every still probe of every scene
   matches, shadow a match (probes c `a0a0a0`, bl `4d4d4d`, br `4c4c4c`,
-  mean 34 as recorded), none black. gl_test reran, the first rerun since
-  its 50 of 50 at `445c5653` (`records/am62p/common-445c5653/`, GT
-  `20261020-1723-GT-4c3e6ee4`): 49 of 50, case 20 `etc` failing its first
-  check alone — `3 compressed formats` wanted, 5 seen. The gl_test image
-  reports ES 3.0 (`driver/samples/zephyr/gl_test/prj.conf
-  CONFIG_YAKOGL_REPORT_ES2=n`: the `#version 300 es` cases need an ES 3.0
-  context) and an ES 3.0 report on the PowerVR stores the sRGB ETC2 pair
-  too (`src/gl/texture.rs` `stored_compressed_formats`) — exactly the list
-  `tests/es3_caps.rs` `known_gaps` states as intended ("3: ETC1,
-  RGB8_ETC2, RGBA8_ETC2_EAC, and 5 on the PowerVR with the sRGB ETC2
-  pair"). Case 20's other 16 checks all pass: every ETC1 and ETC2 block
-  color, the wrong-imageSize `INVALID_VALUE`, PVRTC `INVALID_ENUM`. The
+  mean 34), none black. gl_test 49 of 50 as at `86d0b482`: case 20 `etc`
+  fails its first check alone — `3 compressed formats` wanted, 5 seen. The
+  gl_test image reports ES 3.0 (`driver/samples/zephyr/gl_test/prj.conf
+  CONFIG_YAKOGL_REPORT_ES2=n`) and an ES 3.0 report on the PowerVR stores
+  the sRGB ETC2 pair too (`src/gl/texture.rs` `stored_compressed_formats`),
+  the list `tests/es3_caps.rs` `known_gaps` states as intended; the
   expectation in `driver/tools/pvrlab/gl_test.c` is what is stale, not the
-  back end: a new defect item, to fix in the test. Case 215 `shadowmap`
-  ran on its own at `c999f2f7` (`records/am62p/shadowmap-c999f2f7/`, PASS,
-  27.75 ms a frame) and at main plus the case (`records/am62p/shadowmap-base/`,
-  PASS, 355.20 ms a frame).
+  back end. Case 215 `shadowmap` ran on its own at `c999f2f7`
+  (`records/am62p/shadowmap-c999f2f7/`, PASS, 27.75 ms a frame).
+- AM62P #42 path B (`docs/notes/am62p-pvr-mipmap-kicks.md`: the GPU draws
+  level 1 and the levels over 64x64 texels, waits for them, and the GL core
+  filters the rest with the GPU's sample), 2026-11-01, standard images of
+  `tools/cts/pr-session.sh --knob off`, one U-Boot one-shot boot each.
+  gl_test case 216 `mipchains` (terrain's four chains a frame, 20 frames):
+  main `61ad38a1` plus the kick count 46.15 ms a frame, 43.5 Mpx/s, 40
+  kicks a frame, GPU TA|3D 7.75 ms (`records/am62p/mipchains-42/`, run
+  `20261101-1810-pr-mip216-before-gltest-53f60fa3`); with path B on 82.95
+  ms, 24.2 Mpx/s, 15 kicks, TA|3D 7.00 ms (run
+  `20261101-1839-pr-mip216-after-gltest-4352c07f`); the four quadrant
+  probes the same in both (PASS; the case has no record, `record=absent`).
+  glmark2 with path B on (run `20261101-1917-pr-tail-on-glmark2-fd1287ab`):
+  467, 33 scenes, 0 failed, 0 GL errors, terrain 123.8 ms a frame (81
+  frames), refract 42.8 ms, summed 312.86 ms; terrain's mean 119 129 44,
+  the same as with the tail off, its probes moved with the animation. The
+  kicks fell as predicted and every chain-heavy scene got slower: the wait
+  for the chain's kicks and the CPU tail's uncached reads (the note). So
+  the tail is off by default (`Backend::mip_cpu_tail`), and this row runs
+  every level on the GPU.
 - The Pi 4 row is from main `c4af4917` (2026-10-22,
   `records/pi4/20261022-0308-glmark2-c4af4917/`, GM run
   `20261022-0308-GM-2e41f5e9`): the GM image of `cts-common.sh pi4 build`
@@ -337,7 +340,7 @@ is from the two-row set.
   draw steps (sum 0.17 ms) (#1209). Pictures: none black, none absent; 31 of
   33 match the `pi4` column (desktop blur probe tr off 63, jellyfish probe c
   off 33, both animated).
-- AM62P glmark2 shadow and refract (353 and 375 ms a frame at `445c5653`, #40, #1006) were the CPU resolve of the 1600x1200 depth texture every frame (`docs/notes/pvr-depth-sample.md`): with the TPU sampling the depth buffer (the run above) shadow is 10.63 ms (33x) and refract 37.05 ms (10.1x); terrain stays slow (90.9 ms, CPU GL time). gl_test case 215 `shadowmap` (the scene's two passes a frame on a 1600x1200 depth texture, 20 frames) read on the board 355.20 ms a frame (5.4 Mpx/s) from main `c5dcf5e8` plus the case alone (`records/am62p/shadowmap-base/`), 27.75 ms (69.1 Mpx/s) from `c999f2f7` (`records/am62p/shadowmap-c999f2f7/`), the GPU's busy time 6.35 and 6.37 ms of it (TA|3D), the four picture points equal in both, `depth sampled from the buffer 20 (refused 0)` in the second. The `bc43ea09` image includes the PowerVR `glGenerateMipmap` on the GPU (`d3b8d4b2`). Before it, at `ab43a20c` (`records/am62p/gm-kt-e9d63d06`), terrain took 1,466.6 ms a frame and refract 2,041.9 ms, all CPU time.
+- AM62P glmark2 shadow and refract (353 and 375 ms a frame at `445c5653`, #40, #1006) were the CPU resolve of the 1600x1200 depth texture every frame (`docs/notes/pvr-depth-sample.md`): with the TPU sampling the depth buffer (main `86d0b482`, 2026-10-28) shadow is 10.63 ms (33x) and refract 37.05 ms (10.1x); terrain stays slow (90.9 ms then, 83.1 ms at `6a7021ec`, the row above; CPU GL time). gl_test case 215 `shadowmap` (the scene's two passes a frame on a 1600x1200 depth texture, 20 frames) read on the board 355.20 ms a frame (5.4 Mpx/s) from main `c5dcf5e8` plus the case alone (`records/am62p/shadowmap-base/`), 27.75 ms (69.1 Mpx/s) from `c999f2f7` (`records/am62p/shadowmap-c999f2f7/`), the GPU's busy time 6.35 and 6.37 ms of it (TA|3D), the four picture points equal in both, `depth sampled from the buffer 20 (refused 0)` in the second. The `bc43ea09` image includes the PowerVR `glGenerateMipmap` on the GPU (`d3b8d4b2`). Before it, at `ab43a20c` (`records/am62p/gm-kt-e9d63d06`), terrain took 1,466.6 ms a frame and refract 2,041.9 ms, all CPU time.
 - AM62P pictures by eye (the 33 scenes of GM `bc43ea09` `-1739`, the column
   `am62p` until `445c5653`, whose run now gives it and matches it in 29 of
   33 scenes, the 4 others being animated probe c values). Looked at on
