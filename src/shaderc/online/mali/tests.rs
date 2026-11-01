@@ -2018,6 +2018,7 @@ fn vs_reference_sources() -> Vec<&'static str> {
     ]);
     /* the vertex look-ups (the shim's, #1385), the cube's among them */
     srcs.extend([td!("tex_vs_lod.vert"), td!("tex_vs_zero.vert"), td!("cube_vs.vert")]);
+    srcs.extend([td!("case149_vstexconst.vert"), td!("case149_vstexconst_s.vert")]);
     srcs.extend(UNITYPE_POPULATION.iter().map(|c| c.1));
     srcs
 }
@@ -2053,6 +2054,27 @@ fn a_vertex_look_up_at_a_uniform_level_is_byte_equal_to_mesa_26_2_1() {
 fn a_vertex_look_up_at_level_zero_is_byte_equal_to_mesa_26_2_1() {
     let (v, _) = check_program(td!("tex_vs_zero.vert"), td!("tex_vs_color.frag"), td!("tex_vs_zero.expect.json"));
     assert_eq!(v.info.sampler, Some(0));
+}
+
+/// A look-up at level 0.0 whose coordinate has one constant lane beside an
+/// attribute's (case 149 step A, docs/notes/mali-vs-texture-lanes.md): the
+/// constant is its FAU word moved into the staging register, the other lane
+/// the attribute's in place, both IDVS programs the shim's to the byte
+/// (tools/mali/testdata/case149_vstexconst.expect.json, t = 0.5, and
+/// case149_vstexconst_s.expect.json, s = 0.5).
+#[test]
+fn a_vertex_look_up_at_a_constant_lane_is_byte_equal_to_mesa_26_2_1() {
+    for (vs, fs, json) in [
+        (td!("case149_vstexconst.vert"), td!("case149_vstexconst.frag"), td!("case149_vstexconst.expect.json")),
+        (td!("case149_vstexconst_s.vert"), td!("case149_vstexconst_s.frag"), td!("case149_vstexconst_s.expect.json")),
+    ] {
+        let (v, _) = check_program(vs, fs, json);
+        assert_eq!(v.info.sampler, Some(0));
+        /* 0.5 and the handle after the sysvals (the reference's words 11
+         * and 12; its word 13 is the pair's padding, the sampler word the
+         * immediate 0x0) */
+        assert_eq!(v.info.fau[11..], [FauWord::Constant(0x3f00_0000), FauWord::Constant(super::nir_fs::TEX_HANDLE)]);
+    }
 }
 
 /* ---- the cube-map look-up (#1385 (c), case 113) ---------------------- */

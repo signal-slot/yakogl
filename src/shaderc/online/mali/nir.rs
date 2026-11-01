@@ -2300,16 +2300,14 @@ pub fn build<'s>(
                     }
                     vs.cube_desc(x, y, z)?
                 } else {
-                    let (s, t) = (lane(w, coord, 0), lane(w, coord, 1));
-                    /* a coordinate of constants: each staging word its FAU
-                     * word moved to a register (unitype_100.expect.json's
-                     * `textureLod(vtex, vec2(0.25), 0.0)`, `MOV.i32 r2,
-                     * u6.w0` and `MOV.i32 r3, u6.w0`). One constant lane
-                     * beside a computed one has no reference (case 149) */
-                    if matches!(s, Val::Const(_)) != matches!(t, Val::Const(_)) {
-                        return Err(MaliError::TexVertexConstant);
-                    }
-                    (s, t)
+                    /* a constant lane: its FAU word moved to the staging
+                     * register, whether the other lane is a constant too
+                     * (unitype_100.expect.json's `textureLod(vtex,
+                     * vec2(0.25), 0.0)`, `MOV.i32 r2, u6.w0` and `MOV.i32
+                     * r3, u6.w0`) or an attribute's lane used in place
+                     * (case149_vstexconst{,_s}.expect.json, `MOV.i32 r1,
+                     * u5.w1` / `MOV.i32 r0, u5.w1`) */
+                    (lane(w, coord, 0), lane(w, coord, 1))
                 };
                 let level = lane(w, level, 0);
                 /* `nir_scalar_is_zero`: the bits 0 */

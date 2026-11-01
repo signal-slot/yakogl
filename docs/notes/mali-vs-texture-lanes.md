@@ -137,50 +137,42 @@ status is the 2026-10-27 sweep record,
 `tools/cts/log/2026-10-27-frameboard/sweep-{1,2}.verdicts.txt` line 153:
 `verdict case 149 vsunits: REFUSED compile: ... Mali(Valhall: a vertex shader
 look-up at a coordinate with a constant lane (a shape no reference draws) is
-not lowered yet)`. Step A alone does not make it pass (section 5).
+not lowered yet)`. Step A alone does not make it pass (section 5). At
+7ad18d27 the compiler already refuses it with `TexVertex` instead (the second
+look-up), the coordinate `vec2(0.5)` being two constant lanes, which were
+lowered before step A.
 
-### Step A (small): the 2D constant-lane refusal
+### Step A (landed): the 2D constant-lane refusal
 
-Checked against the tip:
+What landed (`mali compiler: a vertex look-up at a coordinate with one
+constant lane, case 149 step A (#33)`):
 
-* The refusal sites are `src/shaderc/online/mali/nir.rs:1831` (a cube
-  direction of three constants) and `:1840` (a 2D coordinate where `s` or `t`
-  is `Val::Const`; the `if` is at `:1839`), both
-  `MaliError::TexVertexConstant` (`mod.rs:177`, text at `:389`). Step A deletes
-  the `if` at `:1839-1841` and its comment (`:1836-1838`). The cube refusal at
-  `:1831` stays.
-* Nothing else is expected to change for the one-sampler shape.
-  `select.rs:549-571` (`Kind::VsTex`) already moves a staging word that is not
-  in a register with `MovI32` before the `Collect` (`src()` turns a
-  `Val::Const` into a constant source), takes the handle as
-  `Idx::Const(TEX_HANDLE)` and the sampler word as `Idx::Const(0)`. The order
-  of the moves (s, t, then handle, then `0x0`) and the FAU order (0.5, handle,
-  zero) should follow from the emission order; the test below is what proves
-  it. If a word differs, the fix is in that emission order, not a new rule.
-* No existing test asserts the 2D refusal: `tests.rs:1040` is the
-  second-look-up case (`TexVertex`, stays); `:1044` and `:2094` are cube
-  (`TexVertexConstant`, stay). The removal deletes no test.
-* The references already in the tree, pinned by this step:
-  `tools/mali/testdata/case149_vstexconst.{vert,frag,expect.json}` (t lane
-  0.5) and `case149_vstexconst_s.{vert,frag,expect.json}` (s lane 0.5).
-* Test shape: the same call as `tex_vs_zero`
-  (`tests.rs:1997-2001`, `a_vertex_look_up_at_level_zero_is_byte_equal_to_mesa_26_2_1`):
+* `src/shaderc/online/mali/nir.rs`, the vertex `IrOp::Tex` arm: the `if` that
+  refused a 2D coordinate with exactly one `Val::Const` lane
+  (`MaliError::TexVertexConstant`) is gone. A coordinate of two constants was
+  already lowered (the `unitype_100` reference), so the 2D look-up now takes
+  any mix of constant and computed lanes. The cube refusal (a direction of
+  three constants, `es100/cubelod.vert`) stays: no reference draws it.
+* Nothing else changed: `select.rs` (`Kind::VsTex`) already moved each
+  constant staging word into its register with `MOV.i32` in the order s, t,
+  handle, `0x0`, and the FAU order (0.5, handle) followed from it.
+* `tests.rs`: `a_vertex_look_up_at_a_constant_lane_is_byte_equal_to_mesa_26_2_1`
+  checks both IDVS programs and the fragment program of `case149_vstexconst`
+  and `case149_vstexconst_s` against their `expect.json` byte for byte, and
+  the FAU tail `Constant(0x3f00_0000)`, `Constant(TEX_HANDLE)` (words 11 and
+  12; the reference's word 13, 0, is the table's padding to an even count,
+  the sampler word is the immediate `0x0`, not a FAU word). The two `.vert`
+  names are in `vs_reference_sources`.
+* `tools/mali/corpus-verdicts.txt`: unchanged (no corpus shader has a 2D
+  vertex look-up with one constant lane; `cubelod.vert` is the cube shape).
+  The populations are unchanged.
 
-```rust
-let (v, _) = check_program(td!("case149_vstexconst.vert"), td!("case149_vstexconst.frag"), td!("case149_vstexconst.expect.json"));
-assert_eq!(v.info.sampler, Some(0));
-```
-
-  and the same for `case149_vstexconst_s`. Optionally assert the FAU tail as
-  the level test does (`tests.rs:1984-1991`): `Constant(0x3f00_0000)`,
-  `Constant(TEX_HANDLE)`, `Constant(0)` (reference words 11, 12, 13 after the
-  sysvals 8..10, section 2). The tests go next to `tex_vs_zero`; the
-  `td!` list at `tests.rs:1966` (the include check) gets the two `.vert` names.
-
-Step A does not pass case 149. It lowers the shape of the one-sampler
-references, which is what the refusal text claims is missing ("a shape no
-reference draws"). After it the text is wrong for 2D and still right for the
-cube.
+Case 149 itself does not move with step A: at the tip it already refused with
+`TexVertex` ("a vertex shader texture look-up other than one 2D look-up at a
+level (a second one, a size query)"), because its coordinate is
+`vec2(0.5)`, two constant lanes, lowered before step A; the refusal is the
+second look-up (step B item 1). The `TexVertexConstant` text ("a shape no
+reference draws") is now right for the cube direction only.
 
 ### Step B (larger, an issue of its own): sixteen vertex samplers
 
@@ -238,6 +230,24 @@ needs three things beyond step A.
    captures stay out of the tree. The drm-shim reference holds the program
    words only, not the descriptors.
 
+   What step B must measure on the board, because the drm-shim cannot show
+   it (the shim runs the compiler only and records no command stream):
+   * the vertex shader's resource table: the `TABLE_TEXTURE` and
+     `TABLE_SAMPLER` entries (their index in the table, entry count, address)
+     for 16 bindings, and whether the varying (secondary) shader reads the
+     same entries as the position shader;
+   * the 16 texture descriptors and the 16 sampler descriptors: their words,
+     their stride and order (is descriptor K at index K, as the handles
+     `0x20001800 + K * 0x10001` imply), and the alignment of each array;
+   * whether Mesa emits descriptors for all 16 units or only the used ones,
+     and how a unit the shader does not read (none in case 149) is filled;
+   * the FAU (push-constant) block as uploaded: the sixteen `u_w` weights,
+     the 0.5 constant and the sixteen handles in the order the expect.json
+     gives (words 11..43), i.e. that the driver uploads what the compiler's
+     FAU table names;
+   * the draw's result: the framebuffer pixels of case 149 under Mesa, to
+     pin the expected colour of the sixteen weighted look-ups.
+
 Suggested title for the step B issue: *Mali: a vertex shader with sixteen
 texture look-ups (case 149 vsunits): per-look-up sampler indices and N vertex
 texture/sampler descriptors*. It depends on step A (constant lanes), on the
@@ -249,9 +259,9 @@ board reference (descriptors) and on the running lowering chain (`nir.rs`,
 Yes, in the order the compiler meets them (re-checked at the tip):
 
 1. **A second look-up** (step B item 1): the guard at `nir.rs:1819`, then
-   `TexVertex` at `:1856`. After step A this is the first refusal; the
-   sweep text of case 149 changes from the constant-lane text to the "second
-   one" text.
+   `TexVertex` at `:1856`. At 7ad18d27 this is already the first refusal
+   (the guard is `vs.sampler.is_none()` in the vertex `IrOp::Tex` arm of
+   `nir.rs`); the next sweep's text of case 149 is the "second one" text.
 2. **The weights.** `u_w[4]` read at constant indices (a 64-byte `load_ubo`
    whose lanes become FAU words, covered by `uniarray`) and the `ffma` chain of
    section 3, with the final exact `ffma x, 0.0, x` kept as
