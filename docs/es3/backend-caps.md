@@ -79,7 +79,7 @@ API's choices.
 | ASTC rows | in the table (`v3dx_format_table.c:179-207`); whether the screen exposes them on 4.2 was not traced | [U] |
 | Transform feedback | hardware: the wait, flush-and-count, buffer, specs, flush-data and primitive-counts packets; output spec struct | `V/cle/v3d_packet.xml:440,560,700,724,730,735,750-755` |
 | Stream-output buffers | `max_stream_output_buffers = 4`; `stream_output_pause_resume` | `v3d_screen.c:321,250` |
-| Occlusion queries | hardware counter packet; `occlusion_query` cap | `v3d_packet.xml:822`; `v3d_screen.c:249` |
+| Occlusion queries | hardware counter packet; `occlusion_query` cap. The back end's counter address was wrong (gl_test 196 read 0 on the Pi 4); fixed in `9b1ce2ff` (1024-byte group per handle, Mesa `v3dv_query.c:285-287`), board rerun left | `v3d_packet.xml:822`; `v3d_screen.c:249` |
 | Primitive restart | flag on the indexed list packets; fixed-index cap | `v3d_packet.xml:565,580,595`; `v3d_screen.c:246-248` |
 | Shading-language level | GLSL 3.30, ESSL 3.10 | `v3d_screen.c:307,309` |
 | Constant buffer 0 | 16K floats = 64 KiB, 16 constant buffers | `v3d_screen.c:164-165` |
