@@ -901,16 +901,16 @@ const _: () = assert!(size_of::<CsInput>() == 0x58);
 const _: () = assert!(size_of::<CsOutput>() == 0xd8);
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::super::fw::{self, synth};
     use super::*;
     use std::cell::RefCell;
     use std::collections::HashMap;
 
-    const GPU: usize = 0xfb00_0000;
+    pub(crate) const GPU: usize = 0xfb00_0000;
     /// The mock maps AS0 at one CPU window: MCU address `va` is CPU
     /// address `MEM + va`.
-    const MEM: usize = 0x1_0000_0000;
+    pub(crate) const MEM: usize = 0x1_0000_0000;
 
     #[test]
     fn the_layouts_are_panthors() {
@@ -1050,25 +1050,25 @@ mod tests {
     /// the board's firmware is predicted to write (version 1.5.0, the
     /// streams' features); acknowledges a global request when the global
     /// doorbell rings, unless `deaf` says which bits it never acknowledges.
-    struct Mcu {
-        regs: RefCell<HashMap<usize, u32>>,
-        mem: RefCell<HashMap<usize, u32>>,
-        writes: RefCell<Vec<(usize, u32)>>,
-        cleaned: RefCell<Vec<(usize, usize)>>,
+    pub(crate) struct Mcu {
+        pub(crate) regs: RefCell<HashMap<usize, u32>>,
+        pub(crate) mem: RefCell<HashMap<usize, u32>>,
+        pub(crate) writes: RefCell<Vec<(usize, u32)>>,
+        pub(crate) cleaned: RefCell<Vec<(usize, usize)>>,
         image: Vec<u8>,
         /// MCU addresses AS0 does not map.
-        unmapped: Option<u32>,
-        lag: u32,
+        pub(crate) unmapped: Option<u32>,
+        pub(crate) lag: u32,
         polls: RefCell<u32>,
         starting: RefCell<bool>,
-        never_boots: bool,
-        version: u32,
-        deaf: u32,
-        group_num: u32,
+        pub(crate) never_boots: bool,
+        pub(crate) version: u32,
+        pub(crate) deaf: u32,
+        pub(crate) group_num: u32,
     }
 
     impl Mcu {
-        fn new(image: Vec<u8>) -> Mcu {
+        pub(crate) fn new(image: Vec<u8>) -> Mcu {
             Mcu {
                 regs: RefCell::new(HashMap::new()),
                 mem: RefCell::new(HashMap::new()),
@@ -1085,7 +1085,7 @@ mod tests {
                 group_num: 8,
             }
         }
-        fn word(&self, a: usize) -> u32 {
+        pub(crate) fn word(&self, a: usize) -> u32 {
             *self.mem.borrow().get(&a).unwrap_or(&0)
         }
         fn put(&self, va: u32, v: u32) {
