@@ -1,0 +1,52 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Case 217 forcedpr sweep from 1024 layers in steps of 64, partial render off (README.md): serial console excerpt
+yakogl-netboot: once=pr217p64
+Saving Environment to MMC... Writing to MMC(0)... OK
+yakogl-netboot: cleared
+3124528 bytes read in 40 ms (74.5 MiB/s)
+yakogl-netboot: go 0x82000000
+## Starting application at 0x82000000 ...
+Hxsample: build tree=51e4a974-dirty table=6c5b8a70
+I: rti_arm: armed preload 0xef rate 32768 Hz: expiry 60000 ms, fed for 150 s
+board: watchdog armed
+I: TISCI: GPU clock 237/3 runs at 800000000 Hz
+I: CORE_ID = 0x002400350068031c -> BVNC 36.53.104.796
+I: PowerVR BXS-4-64 MC1 alive (BVNC 36.53.104.796)
+I: DDK FW: 229376-byte image for DDK 25.2 loaded (code 0x0, data 0x80000, rodata 0xa0000)
+I: GPU bring-up milestone 4 complete (firmware booted)
+*** Booting Zephyr OS build af17c0c8aa2a ***
+gl_test: the list 217 (1 cases) on one context
+gl_test: start (case=-1 pretransform=0 ppp_ctrl=0x0 debug=0 no_coalesce=0)
+W: render: PROBE: the global freelists are capped at 512 pages: a grow past them is unserved on purpose
+I: render: parameter buffer: carveout 64 MiB -> 448 pages listed, 512 max, grow 256, pool 0 pages
+I: freelist id=1 np=512 max=512 backing=1536 fpm=0 ebase=0 <addresses dropped>
+I: freelist id=2 np=512 max=512 backing=1536 fpm=0 ebase=0 <addresses dropped>
+I: freelist id=3 np=26 max=32 backing=26 fpm=0 ebase=4 <addresses dropped>
+I: render: init ok (<addresses dropped>)
+I: render: HWRT 1024x1024 x1 te_screen=0x0003f03f mtile1=0x00400000 mtile2=0x00400000 isp_mtile=0x00100010 stride=256 rgn=1024 tpc=8192 teaa=0
+W: render: fence 1 (frame fence) not moved at 20 ms, re-posted 1 kick(s) (1 so far)
+gl_test: forcedpr: step 1: 1024 layers: no grow request
+I: render: HWRT 1024x1024 x1 te_screen=0x0003f03f mtile1=0x00400000 mtile2=0x00400000 isp_mtile=0x00100010 stride=256 rgn=1024 tpc=8192 teaa=0
+W: render: fence 2 (frame fence) not moved at 20 ms, re-posted 1 kick(s) (2 so far)
+gl_test: forcedpr: step 2: 1088 layers: no grow request
+W: render: fence 3 (frame fence) not moved at 20 ms, re-posted 1 kick(s) (3 so far)
+gl_test: forcedpr: step 3: 1152 layers: no grow request
+I: FWCCB: UPDATE_STATS element=2 (out of memory) adjust=1 (seen 1)
+E: render: stopped: the parameter manager out of memory with its freelist at the maximum (list 1, 0 KiB); no kick is waited for or taken from now on
+E: render: fence 4 (frame fence) cannot complete: the render service stopped (the parameter manager out of memory with its freelist at the maximum); not waited for
+I: render pool summary: 59200 KiB, bump 18440 KiB now, 18440 KiB high-water; top 14616 KiB now, 14616 KiB high-water
+I: render freelists: 0 grow requests, 0 served, 0 unserved, 0 KiB taken on demand; GPU recoveries 0 (HWR counter 0)
+I: render freelists: reserve refills refused 0 (0 KiB); firmware UPDATE_STATS: partial renders 0, out of memory 1, TA stores 0, 3D stores 0, CDM stores 0, TDM stores 0, other 0
+I: pvr_backend: kick 4 did not complete (-110)
+I: yakogl: GPU work lost: backend finish returned -110; results that depended on it are withheld (yakogl_gpu_work_lost counts every loss)
+gl_test: forcedpr: step 4: 1216 layers: no grow request, out of memory
+gl_test: forcedpr: FAIL stopped: 1216 layers (4 steps): requests 0 (served 0, refused 0), notices 1, stop 2, partial renders 0, GPU recoveries 0
+gl_test: case 217: 1 fence wait(s) timed out; its checks are not a verdict
+gl_test: case 217 forcedpr: TIMEOUT
+gl_test: all: 1 of 1 cases failed (0 passed; 1 timed out; first failure case 217 at index 0; second failure case -1; 0 skipped, first skip case -1); precompiled hits 0, compiler runs 6
+gl_test: done
+I: render freelists: 0 grow requests, 0 served, 0 unserved, 0 KiB taken on demand; GPU recoveries 0 (HWR counter 0)
+I: render freelists: reserve refills refused 0 (0 KiB); firmware UPDATE_STATS: partial renders 0, out of memory 1, TA stores 0, 3D stores 0, CDM stores 0, TDM stores 0, other 0
+gl_test: FAILED (rc=-1)
+I: sample done (-1): resetting the SoC
