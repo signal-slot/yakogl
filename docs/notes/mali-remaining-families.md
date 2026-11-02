@@ -146,17 +146,74 @@ sized for one session each and ordered by corpus sources.
   struct (`vtex_struct_sampler*`). Item `varying-merge`: needs one reference
   per shape first (`drm_shim_ref.sh`), which this item did not make because
   no sweep case uses them.
-- **F4 local count (2 sources)**: `tmparr_const` declares `vec4 arr[40]`
-  (`Pressure::Remat` is cited in its comment); Mesa lowers it to
-  compare/select ladders over constants. The limit is our 32-local cap
-  (`MAX_LOCALS`). Item `locals-cap`: needs a reference (not made), then a
-  larger cap or per-element constants.
+- **F4 local count (2 sources)**: decoded in the section "F4: the local
+  count cap (`tmparr_const`)" below, with a one-session proposal for item
+  `locals-cap`.
 - **F10 constant product (2 sources)** and **F8, F9, F11**: each is one
   shape of a rule `mali-algebraic-folds.md` / `mali-varying-constants.md` /
   `mali-texture-lookups.md` documents; they overlap `triage-fsarith`
   and `triage-vsarith` (check their notes before opening items). `xlink`
   (F9, F10) shares one program pair; `sharedint.frag` (F11) is an
   `ICMP`/`CSEL` on the `int` uniform (`mali-int-uniforms.md` 2.7).
+
+## F4: the local count cap (`tmparr_const`)
+
+Reference: `tools/mali/testdata/other_tmparr.{vert,frag,expect.json,stderr}`
+(Mesa 26.2.1 on drm-shim, `drm_shim_ref.sh run` plus `pan_ref_diff.py
+extract --draw`, as under "How the reference was made"). The pair is
+`es100/tmparr_const.{vert,frag}` verbatim. The `.vert` writes `v_color`,
+which the `.frag` never reads, so Mesa's position shader is 24 instructions
+and the varying shader is empty: **the vertex side of F4 is not exercised by
+this pair**; only the fragment program carries the array.
+
+**Correction of the earlier triage: Mesa builds no compare/select ladder.**
+`mediump vec4 arr[40]` stays an array, goes to thread-local storage
+(`store_scratch`, scratch 320 bytes = 40 x 8), and the program is 40 stores
+followed by 4 dynamic loads:
+
+- NIR: 40 `store_scratch` (f16x4 constant, offset 8k); per index
+  `ishl ui_x, 3` (`ui_*` are FAU `u2.w0, u2.w1, u3.w0, u3.w1`) and
+  `load_scratch` (f16x4); the sum is two `fadd` on the f16x2 halves, then
+  `atest` and `blend` (src_type float16).
+- Stores: `STORE.i64.tl` of an `rA:rB` pair at `thread_local_pointer`,
+  `offset:8k` (`STORE.i64.force.slotN`, opcode byte 0xe2); slots rotate
+  0, 1, 2.
+- Loads: `LSHIFT_OR.i32 r, u2.w0, 0, r0.b3` (index << 3), `IADD.u32 r,
+  thread_local_pointer.w0, r`, `LOAD.i64.force.unsigned.slotN @rA:rB,
+  [rA:rB], offset:0`. Four of them, `FADD.v2f16` accumulate, `ATEST`,
+  `BLEND`.
+- **Constants: FAU for the splats, immediates for four words.** The 36
+  constants 4.0 to 39.0 have equal f16 halves, so each is one 32-bit word
+  used twice (`MOV r0, u5.w0; MOV r1, u5.w0`): FAU `u5..u22` (36 words).
+  `arr[0..3]` are shifted copies of (0.125, 0.25, 0.5, 1.0): the words
+  `0x34003000` and `0x30002C00` are `u4.w0, u4.w1`; the other four
+  (`0x3C003800`, `0x38003400`, `0x2C002800`, `0x28002400`) are
+  `IADD_IMM.i32 r, 0, #imm`. Fragment FAU is `u0..u22`; `u0, u1` are zero.
+- Registers: **8 used** (fragment, 153 instructions, 0 spills; the shaderdb
+  "440 spill cost" is its load/store latency model), 32 per thread. The
+  position shader uses 11 registers, 6 uniforms.
+- Descriptor: `Local Storage` `TLS Size: 5` (320 bytes -> 512 -> 512/16 =
+  2^5, an inference from one draw) and a `TLS Base Pointer`, one
+  descriptor shared by the three stages. `frame.rs` writes
+  `LocalStorage::default()` today.
+
+**The cap is not the lever.** Raising `MAX_LOCALS` cannot give these bytes
+(40 live vec4 would not fit 8 registers); the cap only hides that
+`src/shaderc/online/mali` has no thread-local `.tl` load or store.
+
+**Proposal, item `locals-cap` (one session, compiler first).**
+1. Accept only the shape: `vec4 arr[N]`, `N > 32`, every element written
+   once from a constant, read at a run-time index.
+2. Emit Mesa's sequence above, byte-equal to `fs.fragment` of
+   `other_tmparr.expect.json`: FAU splats `u5..` in first-use order, the
+   four other words as `IADD_IMM`, the `.tl` store and load forms, the
+   slot rotation.
+3. Report the scratch size so `frame.rs` can write `TLS Size` and a base
+   pointer. No sweep case uses it, so the frame can be a second item; the
+   compiler item can stop at the program bytes.
+Verdict move: `corpus-verdicts.txt` lines 99 and 100 (`more than 32 local
+variables`); the `.vert` line needs a fragment that reads `v_color` to be
+checked at all.
 
 ## Roadmap step 4 or not
 
@@ -176,3 +233,7 @@ items (texts in the report). None needs board time.
 
 `other_80_matdyn.vert` is `gl_test_es100/passthrough.vert` and `.frag` is
 `es100/matdyn.frag`, verbatim. The `.trace` is not kept.
+
+The F4 reference is the same with the prefix `other_tmparr`: `.vert` and
+`.frag` are `es100/tmparr_const.vert` and `.frag` copied verbatim, and the
+run's `.stderr` is kept as `other_tmparr.stderr`.
