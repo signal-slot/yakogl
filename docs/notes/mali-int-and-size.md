@@ -602,6 +602,29 @@ The first op is only the first: later ones (`ishr`, `ishl`, `isub`, `u2f`,
 - **tri_int**: `intloop_tri_int` (mali-int-loops.md) is the reference for its
   fp32 integer arithmetic.
 
+### Since plan #185 item vs-int-convert
+
+Item 2 below is in. The vertex walk (`nir.rs` `build`, the integer-op arm)
+lowers `f2i32`, `f2u32`, `i2f32`, `u2f32`, `ftrunc`, `ishl`, `ishr`,
+`ushr`, `ineg` and GLSL's `a - b` (the front end's `iadd(a, ineg(b))`,
+NIR's `isub(a, b)`), constants folded by `fold_int`, `i2f32(f2i32(a))` as
+`ftrunc(a)`. Another `iadd` stays `IntValue`: no reference draws one in
+this stage. A constant shift count of `ishr` is the byte lane
+`va_lower_constants` gives it, as `ishl`'s and `ushr`'s already were
+(`emit.rs`: `ARSHIFT_OR.i32 r2, r2, 0x1000000.b33, 0x0`).
+
+- `case_199_vertex_integers_are_byte_equal_to_mesa_26_2_1`: both IDVS
+  programs of `intbool_199_vsc` (`--uniform-values`), through the link.
+- `case_89_vertex_integers_are_byte_equal_to_mesa_26_2_1`: both IDVS
+  programs of `intbool_89_flatlast`. The test supplies the fragment record
+  by hand: reads `(0, 0b0111)` and `(1, 0b0001)`, and the moved
+  `fmul(u2f32(v_idx), 0.25)` in lane 0 of `v_idx`. The link does not make
+  that record yet (item 4, flat-uint-motion). `motion.rs` `OPS` has no
+  `U2f`, so the test calls `compile_module_for` directly instead of
+  `compile_vs_for_reads`.
+- `corpus-verdicts.txt`: `es300/flatlast.vert` and
+  `gltest/es3trunc_vsc.vert` are now `ok`.
+
 ### Proposed lowering items (one agent session each)
 
 1. **bool-mask-ops (fs)**: `Iand` / `Ior` / `Inot` of fp16 compare masks as
