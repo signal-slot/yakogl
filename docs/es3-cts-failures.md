@@ -54,7 +54,7 @@ Host numbers are HOST-ONLY: the Linux OSAL runs no command stream, so only API e
 | Transform feedback | GL core on the CPU for the three GPUs: the vertex shader runs for every captured vertex, with its texture look-ups on 2D, cube, 3D and 2D-array samplers (`src/shaderc/online/eval.rs` `TexelSource`, `src/gl/tf_capture.rs` `GlTexels`). Host `transform_feedback` 882 / 882; board: AM62P rows pass, gl_test 203 on the AM62P and the Pi 4 | `docs/es3/transform-feedback.md` |
 | Uniform blocks | host `tests/es3_ubo.rs` (dEQP `functional.ubo`, 2,032 cases); the GC7000 reads user blocks from memory with `load` (the four former link refusals pass on the host; the i.MX8MP constant-offset `load` run is open) | `docs/notes/gc-ubo-const-limit.md` |
 | Sized internal formats | the 35 colour formats of ES 3.0 table 3.2, converted at upload; the PowerVR and the V3D (`cc1c6ede`) sample every class but `RGB10A2`; the GC7000UL samples eight more classes (`dc83be67`, `541975a2`: R11G11B10F, RGB9E5, RGB10A2UI, RGBA8_SNORM, RGBA8UI/I, RGBA16UI/I) and refuses or keeps in a fallback class RGBA32F/UI/I, R32I/UI, RG32I/UI and ETC2; host only, no board has run the V3D or GC7000UL classes | `docs/es3/sized-formats.md`, `docs/es3/pvr-formats.md`, `docs/es3/gc-formats.md` |
-| Occlusion queries | counted on the three back ends; board: AM62P passes, Pi 4 reads 0 (gl_test 196) | `docs/es3/occlusion-query.md` |
+| Occlusion queries | counted on the three back ends; board: AM62P passes, Pi 4 read 0 (gl_test 196) until `9b1ce2ff`, board rerun left | `docs/es3/occlusion-query.md` |
 | Integer colour render targets | PowerVR: all nineteen as a draw's one colour attachment (board: gl_test 200); V3D: all nineteen, the float ones and the ES 2.0 formats on any attachment, host only (`src/v3d/state.rs` `rt_format`, `tests/es3_int_rt_v3d.rs`); GC7000UL: 13 of the 19 (`1324a160`, `docs/es3/int-rt-gc.md`: RGBA16I/UI and RG32I/UI mapped but held back, RGBA32I/UI have no hardware format), host only | `docs/es3/pvr-formats.md` section 10, `docs/es3/int-rt-gc.md`, `docs/online-shaderc/v3d-backend.md` |
 | `glBlitFramebuffer` | colour on the CPU, shared by the three back ends; depth on the CPU into a depth texture from a depth texture or renderbuffer (host only, `tests/es3_blit_ds.rs`); depth into a renderbuffer or the window, depth from the window, and all stencil refused by name | `src/gl/blit.rs`, RC8 |
 | sRGB | PowerVR renders and samples (board: gl_test 204); the GC7000 and V3D sample and refuse a draw into sRGB by name | `docs/es3/srgb.md` |
@@ -67,7 +67,7 @@ Host numbers are HOST-ONLY: the Linux OSAL runs no command stream, so only API e
 | `layout(location)` on vertex inputs | `glBindAttribLocation` does not move a qualified input (`src/gl/program.rs` `ExplicitAttribs`); host only, `tests/es3_attrib_location.rs` | |
 | Multiple render targets | GL core: the draw-buffer count is the back end's `DRAW_TARGETS` (3 on every GPU); the framebuffer stores 4 colour points | RC14 |
 | PowerVR 2D-array and shadow sampling | built, host only: 2D arrays sampled by layer address (`e160bafb`, switch `pvr_native_array`, default off; the dEQP image flips it with `CONFIG_DEQP_PVR_NATIVE_ARRAY`, `1ddb0cf3`); every ES 3.00 shadow look-up form compiles and a LINEAR sampler over one level compares per texel (`d7b2cf8b`). Not done: mipmap and cube PCF, mirrored-repeat weights, ETC arrays | `docs/es3/pvr-2darray.md`, RC5, RC6 |
-| Texture swizzle and wrap R | the GL core hands both to the back end (`GlesTextureBind::swizzle`, `::wrap_r`, `e4f58cbe`); no back end fills them yet | `docs/es3/texture-host-repro.md` |
+| Texture swizzle and wrap R | the GL core hands both to the back end (`GlesTextureBind::swizzle`, `::wrap_r`, `e4f58cbe`); the V3D fills both (`18027de1`), the PowerVR and GC7000UL do not yet | `docs/es3/texture-host-repro.md` |
 | ES 3.0 limits | `tests/es3_caps.rs` against the spec minimum and the hardware ceilings | `docs/es3/backend-caps.md` |
 
 ## AM62P failures by group
@@ -114,7 +114,7 @@ passes.
 | Layer | GL core, then each back end (integer fragment outputs through the PBE and their read-back) |
 | Done | GL core accepts the formats; the PowerVR writes all nineteen integer formats as a draw's one colour attachment; the V3D writes them, the float ones and the ES 2.0 formats among any attachments (host only); the GC7000UL draws 13 of the 19 (`1324a160`, `docs/es3/int-rt-gc.md`), host only. Host tests: `tests/es3_int_rt.rs`, `tests/es3_int_rt_v3d.rs` |
 | Left on the PowerVR | an integer attachment beside other attachments (this is why `builtin_functions.common.modf` fails: dEQP's executor binds two integer attachments), colour masks that keep some of an integer target's channels, precompiled rows for the integer variants. Most of `fragment_out`'s 456 `int` / `uint` failures and part of `fbo.color` are here |
-| Left on the V3D | a board run (gl_test 200 on the Pi 4), an integer clear program for a scissored or masked clear |
+| Left on the V3D | a board run (gl_test 200 on the Pi 4); a scissored or masked clear of several colour attachments is still refused. The single-attachment integer clear is done (`e883be8f`, `CLEAR_FS_INT`, `docs/notes/v3d-int-clear.md`) |
 | Float targets | `shaders.derivate` 15 fail on an incomplete RGBA32F / RGBA16F framebuffer: float targets need `GL_EXT_color_buffer_float`, which is not claimed. A decision, no item yet |
 
 ### RC2. ES 3.0 sized texture formats; integer and packed-float textures
@@ -210,7 +210,9 @@ reverted for review and is to be redone).
 
 Counted on the three back ends (`docs/es3/occlusion-query.md`).
 `occlusion_query` 62 / 62 and gl_test 196 pass on the AM62P. On the Pi 4 gl_test
-196 fails (all five results 0): the V3D counter, open.
+196 failed (all five results 0): the counter address was wrong, fixed on the host
+by `9b1ce2ff` (handle h counts at a 1024-byte group of its own, as Mesa does).
+Not yet measured on the Pi 4; the board run of gl_test 196 is left.
 
 ### RC12. default_vertex_attrib int / uint current values
 
@@ -344,10 +346,13 @@ program (the corpus has none that writes `gl_FragDepth`).
 `GlesTextureBind::swizzle` and `::wrap_r`, `backend::swizzle_source`. Host
 dEQP before and after on the three GPUs: identical (a harness that renders
 nothing cannot show the fix), `tests/es3_tex_filtering.rs` pins the binds.
+The V3D fills both (`18027de1`): `tmu_swizzle` composes the format's swizzle
+with `GlesTextureBind::swizzle` into the texture shader state, and
+`sampler().wrap_r` is `wrap(b.wrap_r)`; unit tests in `src/v3d/texture.rs`.
 Left, each a back-end site: PowerVR `build_tex_desc` (`swiz0..3`,
 `addrmode_w`; 3D itself is RC15), GC7000UL `texdesc_swizzle_*` and
-`samp_wwrap`, V3D `tmu_format` / `state` and `sampler().wrap_r`, plus V3D 3D
-sampling. On the V3D host library `texture.filtering` still refuses 227
+`samp_wwrap`, plus V3D 3D sampling (a `wrap_r` needs a 3D look-up, still
+refused). On the V3D host library `texture.filtering` still refuses 227
 look-ups (2D-array and 3D programs) and 72 uploads at `70142d35`, before
 `cc1c6ede` (`docs/es3/texture-host-repro.md` section 1).
 
