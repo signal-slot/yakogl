@@ -97,11 +97,17 @@ pub enum SOp {
     Undef,
     /// A 2D look-up of the texture at sampler binding `sampler` (the
     /// reflection binding, what P0/P1's bits 24..31 carry): `srcs` are s and
-    /// t, and the bias when `bias`, or the explicit level when `lod` (never
-    /// both). `cube`: r follows t. `layer`: a 2D-array look-up whose layer
+    /// t, and the bias when `bias`, or the explicit level when `lod`, or the
+    /// integer level of a `texelFetch` when `fetch` (at most one of the
+    /// three). `cube`: r follows t. `layer`: a 2D-array look-up whose layer
     /// (the face of a cube record, `cube_noseam`) follows t, written to TMUI;
-    /// never with `cube`. Its result is read through [`SOp::TexLane`].
-    Tex { sampler: u8, srcs: [S; 4], cube: bool, layer: bool, bias: bool, lod: bool },
+    /// never with `cube`. `fetch`: s and t are integer texel coordinates of
+    /// that level, retired through TMUSF (v3d_tex.c:372-374); never with
+    /// `cube`. `offset`: the constant texel offset (s, t) of the `Offset`
+    /// forms, -8..7 each, P2's 4-bit `Offset S` / `Offset T` nibbles
+    /// (v3d_packet.xml "TMU Config Parameter 2"; v3d_tex.c:161-173); zeros
+    /// without one. Its result is read through [`SOp::TexLane`].
+    Tex { sampler: u8, srcs: [S; 4], cube: bool, layer: bool, bias: bool, lod: bool, fetch: bool, offset: [i8; 2] },
     /// Lane `lane` (r, g, b, a) of the look-up `tex[0]`, of the sampler's
     /// result type `ret` (a float, or an integer sampler's raw integer).
     TexLane { tex: [S; 1], lane: u8, ret: TexRet },
@@ -168,7 +174,9 @@ impl SOp {
         match self {
             SOp::Alu(op, s) => &s[..op.arity()],
             SOp::Fsub(s) => s,
-            SOp::Tex { srcs, cube, layer, bias, lod, .. } => &srcs[..tex_operands(*cube || *layer, *bias || *lod)],
+            SOp::Tex { srcs, cube, layer, bias, lod, fetch, .. } => {
+                &srcs[..tex_operands(*cube || *layer, *bias || *lod || *fetch)]
+            }
             SOp::TexLane { tex, .. } => tex,
             SOp::Phi { init } => init,
             SOp::PhiNext { ops } => ops,
@@ -1344,12 +1352,20 @@ impl<'m, 'a> Walk<'m, 'a> {
                     ir::ScalarType::I32 => TexRet::Sint,
                     _ => return Err(PrepError::NotYet("a texture look-up of another result type")),
                 };
-                if offset.is_some() {
-                    return Err(PrepError::NotYet("a texture look-up with an offset"));
-                }
+                /* The `Offset` forms' constant texel offset (GLSL ES 3.00
+                 * 8.8, -8..7 per lane, the front end's check): P2's 4-bit
+                 * `Offset S` / `Offset T` nibbles, as Mesa packs a constant
+                 * offset (v3d_tex.c:161-173); never on a cube (no GLSL form).
+                 * The third lane is a 3D texture's `Offset R` (not yet). */
+                let offset = match offset {
+                    None => [0i8; 2],
+                    Some(_) if cube => return Err(PrepError::NotYet("a cube look-up with an offset")),
+                    Some(o) => [o[0], o[1]],
+                };
                 /* The front end gives a vertex shader's implicit look-up as
                  * Lod(0.0) (ir.rs TexLod), Mesa's lower_invalid_implicit_lod
                  * (vir.c:808): the base level. */
+                let mut fetch = false;
                 let (third, is_lod) = match lod {
                     /* No derivatives outside the fragment stage: Mesa's
                      * lower_invalid_implicit_lod (vir.c:808) makes such a
@@ -1361,7 +1377,19 @@ impl<'m, 'a> Walk<'m, 'a> {
                     ir::TexLod::Implicit => (None, false),
                     ir::TexLod::Bias(b) => (Some(self.src(b, 0)?), false),
                     ir::TexLod::Lod(l) => (Some(self.src(l, 0)?), true),
-                    _ => return Err(PrepError::NotYet("a texture look-up with gradients")),
+                    /* texelFetch (ES 3.00 8.8; no cube form): the integer
+                     * texel coordinates go to the TMU as they are, the
+                     * integer level to TMUB, and TMUSF retires the look-up
+                     * (v3d_tex.c:137-139, 372-374: no disable_autolod, a
+                     * fetch has no automatic level). */
+                    ir::TexLod::Fetch(l) => {
+                        if cube {
+                            return Err(PrepError::NotYet("a texel fetch of a cube"));
+                        }
+                        fetch = true;
+                        (Some(self.src(l, 0)?), false)
+                    }
+                    ir::TexLod::Grad { .. } => return Err(PrepError::NotYet("a texture look-up with gradients")),
                 };
                 let (mut s, mut t) = (self.src(coord, 0)?, self.src(coord, 1)?);
                 if proj {
@@ -1434,8 +1462,10 @@ impl<'m, 'a> Walk<'m, 'a> {
                         srcs,
                         cube: cube && layer.is_none(),
                         layer: layer.is_some(),
-                        bias: third.is_some() && !is_lod,
+                        bias: third.is_some() && !is_lod && !fetch,
                         lod: is_lod,
+                        fetch,
+                        offset,
                     },
                 )?;
                 for (lane, o) in out.iter_mut().enumerate() {
@@ -2210,11 +2240,11 @@ fn compact<'a>(ops: &[SOp], roots: &mut [S], a: &Arena<'a>) -> Result<&'a [SOp],
                 }
                 SOp::Alu(alu, s)
             }
-            SOp::Tex { sampler, mut srcs, cube, layer, bias, lod } => {
-                for x in srcs.iter_mut().take(tex_operands(cube || layer, bias || lod)) {
+            SOp::Tex { sampler, mut srcs, cube, layer, bias, lod, fetch, offset } => {
+                for x in srcs.iter_mut().take(tex_operands(cube || layer, bias || lod || fetch)) {
                     *x = S(map[x.0 as usize]);
                 }
-                SOp::Tex { sampler, srcs, cube, layer, bias, lod }
+                SOp::Tex { sampler, srcs, cube, layer, bias, lod, fetch, offset }
             }
             SOp::Fsub(s) => SOp::Fsub(s.map(|x| S(map[x.0 as usize]))),
             SOp::TexLane { tex, lane, ret } => SOp::TexLane { tex: [S(map[tex[0].0 as usize])], lane, ret },
@@ -2263,7 +2293,8 @@ fn refuse_undef(ops: &[SOp]) -> Result<(), PrepError> {
 }
 
 /// How many of [`SOp::Tex`]'s `srcs` it reads: s and t, r for a cube or the
-/// layer of an array look-up (`third_coord`), and the bias or level.
+/// layer of an array look-up (`third_coord`), and the bias or level (a
+/// fetch's integer level included).
 pub(super) fn tex_operands(third_coord: bool, third: bool) -> usize {
     2 + usize::from(third_coord) + usize::from(third)
 }
@@ -2474,6 +2505,63 @@ mod tests {
                 .count()
         })
         .unwrap()
+    }
+
+    /// The look-up of an ES 3.00 fragment shader body (`v` a vec4 input, `s`
+    /// a sampler2D, `c` a samplerCube), or the refusal.
+    #[cfg(not(feature = "report-es2"))]
+    fn tex_of(body: &str) -> Result<SOp, PrepError> {
+        let src = format!(
+            "#version 300 es\nprecision highp float; in vec4 v; uniform sampler2D s; uniform samplerCube c; \
+             out vec4 o; void main() {{ o = {body}; }}"
+        );
+        store::with_scratch(|a| {
+            let f = lower::compile_to_ir(a, Stage::Fragment, a.alloc_str(&src).unwrap()).map_err(|e| e.msg).unwrap();
+            let p = prepare_fragment(&f.module, a)?;
+            Ok(*p.ops.iter().find(|o| matches!(o, SOp::Tex { .. })).expect("a look-up"))
+        })
+        .unwrap()
+    }
+
+    /* GLSL ES 3.00: a report-es2 build refuses it in the front end */
+    #[cfg(not(feature = "report-es2"))]
+    /// texelFetch prepares to a `fetch` look-up of three operands (s, t, the
+    /// integer level), never a bias or a level; the `Offset` forms carry the
+    /// constant offset's two lanes, and nothing else changes (operands,
+    /// `lod`, `cube`). A gradient look-up keeps its own refusal.
+    #[test]
+    fn texel_fetch_and_offsets_prepare_to_their_look_up_fields() {
+        let fields = |op: SOp| match op {
+            SOp::Tex { cube, layer, bias, lod, fetch, offset, .. } => (cube, layer, bias, lod, fetch, offset),
+            o => panic!("{o:?}"),
+        };
+        let f = tex_of("texelFetch(s, ivec2(v.xy), int(v.z))").expect("prepares");
+        assert_eq!(fields(f), (false, false, false, false, true, [0, 0]));
+        assert_eq!(f.operands().len(), 3, "s, t, level: {f:?}");
+        let f = tex_of("texelFetchOffset(s, ivec2(v.xy), int(v.z), ivec2(-8, 7))").expect("prepares");
+        assert_eq!(fields(f), (false, false, false, false, true, [-8, 7]));
+        assert_eq!(f.operands().len(), 3);
+        let f = tex_of("textureOffset(s, v.xy, ivec2(1, -2))").expect("prepares");
+        assert_eq!(fields(f), (false, false, false, false, false, [1, -2]));
+        assert_eq!(f.operands().len(), 2, "s, t: {f:?}");
+        let f = tex_of("textureOffset(s, v.xy, ivec2(1, -2), v.z)").expect("prepares");
+        assert_eq!(fields(f), (false, false, true, false, false, [1, -2]), "with a bias");
+        assert_eq!(f.operands().len(), 3);
+        let f = tex_of("textureLodOffset(s, v.xy, v.z, ivec2(7, 0))").expect("prepares");
+        assert_eq!(fields(f), (false, false, false, true, false, [7, 0]));
+        assert_eq!(f.operands().len(), 3);
+        let f = tex_of("textureProjOffset(s, v.xyzw, ivec2(0, -1))").expect("prepares");
+        assert_eq!(fields(f), (false, false, false, false, false, [0, -1]));
+        let f = tex_of("texture(s, v.xy)").expect("prepares");
+        assert_eq!(fields(f), (false, false, false, false, false, [0, 0]), "control");
+        let f = tex_of("textureLod(c, v.xyz, v.w)").expect("prepares");
+        assert_eq!(fields(f), (true, false, false, true, false, [0, 0]), "control: a cube at a level");
+        assert_eq!(f.operands().len(), 4);
+        assert_eq!(
+            tex_of("textureGrad(s, v.xy, v.zw, v.zw)"),
+            Err(PrepError::NotYet("a texture look-up with gradients")),
+            "a gradient look-up is still its own refusal"
+        );
     }
 
     /// Common subexpressions (Walk::push, Mesa's nir_opt_cse): the same
