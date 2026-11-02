@@ -10,7 +10,7 @@ only.  Prints each other refusal and exits 1; else prints a summary, exits 0.
 import sys
 
 DEFAULT = "tools/mali/corpus-verdicts.txt"
-PREFIXES = ("tools/shaders/femtovg/", "tools/shaders/fvgtest/")
+PREFIXES = ("tools/shaders/femtovg/", "tools/shaders/fvgtest/", "tools/shaders/fvgtest_")
 
 # The refusal texts (after "<path>: Valhall: ") that count as texture refusals.
 TEXTURE_REFUSALS = (
