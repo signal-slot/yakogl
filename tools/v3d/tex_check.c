@@ -30,6 +30,14 @@
  *  8. The packers' refusals (a type no supported format has, every field
  *     that does not fit; nothing is masked) and the TMU P0/P1 uniform words
  *     against V3D42_TMU_CONFIG_PARAMETER_0/1_pack.
+ *  9. Cube maps: the layer stride, size and offsets, every face tiled, the
+ *     record. 10. The TFU mipmap job.
+ * 11. 2D arrays and 3D textures (docs/notes/v3d-tex-layout-es3.md): the 3D
+ *     layout (v3d_tex_layout_3d, Mesa's level_depth) against numbers derived
+ *     by hand from v3d_setup_slices, every slice of a level tiled at
+ *     v3d_tex_slice_offset against Mesa's v3d_store_tiled_image at
+ *     v3d_layer_offset's 3D place, a 2D array's tree stride, and the
+ *     records (image depth, array stride) against Mesa's packer.
  *
  * Built and run against a Mesa 26.2.1 tree with build-v3d
  * (tools/v3d/README.md) by tools/v3d/tex_check.sh, which holds the build
@@ -1169,6 +1177,238 @@ static void part_mipmap_job(void)
 	check(j.iia == packed_iia && packed_iia != 0, "mipmap job: a refusal leaves the job untouched");
 }
 
+/* ---- part 11: 2D arrays and 3D textures ------------------------------------ */
+
+/* A 3D layout (v3d_tex_layout_3d) against numbers derived by hand from
+ * Mesa's v3d_setup_slices with a depth (v3d_resource.c:583-767): each
+ * level's slices at the 2D level's geometry, level_depth of them (:636-639),
+ * slice_total_size = size * level_depth (:720-722), level 1's total
+ * page-aligned (:729-733), level 0 moved to 4 KiB (:749-755). 2 + levels
+ * checks. */
+static void layout3d_case(const char *name, uint32_t w, uint32_t h, uint32_t d, uint32_t levels,
+			  uint32_t size, const struct want_slice *want, const uint32_t *depths)
+{
+	struct v3d_tex_layout l;
+	char what[200];
+	snprintf(what, sizeof(what), "3D %s: laid out", name);
+	check(v3d_tex_layout_3d(w, h, d, levels, 4, &l), what);
+	snprintf(what, sizeof(what), "3D %s: size %u, want %u", name, l.size, size);
+	check(l.size == size, what);
+	for (uint32_t i = 0; i < levels; i++) {
+		const struct v3d_tex_slice *s = &l.slices[i];
+		const struct want_slice *x = &want[i];
+		uint32_t ld = v3d_tex_level_depth(d, i);
+		snprintf(what, sizeof(what),
+			 "3D %s level %u: offset %u stride %u h %u pad %u tiling %d depth %u, want %u %u %u %u %d %u",
+			 name, i, s->offset, s->stride, s->padded_height, s->ub_pad, s->tiling, ld, x->offset,
+			 x->stride, x->padded_height, x->ub_pad, x->tiling, depths[i]);
+		check(s->offset == x->offset && s->stride == x->stride &&
+			      s->padded_height == x->padded_height && s->ub_pad == x->ub_pad &&
+			      s->tiling == x->tiling && s->size == s->stride * s->padded_height &&
+			      ld == depths[i],
+		      what);
+	}
+}
+
+/* Every slice of every level tiled by us at v3d_tex_slice_offset, against
+ * Mesa's v3d_store_tiled_image at slices[L].offset + k * slices[L].size
+ * (v3d_layer_offset's 3D arm, :777-778) with Mesa's level_depth count; the
+ * whole image compared. 1 check. */
+static void tile3d_case(uint32_t w, uint32_t h, uint32_t d, uint32_t levels)
+{
+	struct v3d_tex_layout l;
+	char what[200];
+	if (!v3d_tex_layout_3d(w, h, d, levels, 4, &l)) {
+		snprintf(what, sizeof(what), "3D %ux%ux%u x%u: laid out for tiling", w, h, d, levels);
+		check(false, what);
+		return;
+	}
+	uint8_t *ours = calloc(1, l.size), *mesa = calloc(1, l.size);
+	bool placed = true;
+	uint32_t n = 0;
+	for (uint32_t lv = 0; lv < levels; lv++) {
+		const struct v3d_tex_slice *s = &l.slices[lv];
+		uint32_t lw = w >> lv ? w >> lv : 1, lh = h >> lv ? h >> lv : 1;
+		for (uint32_t k = 0; k < v3d_tex_level_depth(d, lv); k++) {
+			uint32_t off = 0;
+			uint64_t want = (uint64_t)s->offset + (uint64_t)k * s->size;
+			if (!v3d_tex_slice_offset(&l, d, lv, k, &off) || off != want ||
+			    want + s->size > l.size) {
+				placed = false;
+				continue;
+			}
+			uint8_t *src = malloc((size_t)lw * lh * 4);
+			for (uint32_t i = 0; i < lw * lh * 4; i++)
+				src[i] = (uint8_t)rng();
+			v3d_tex_store_level(ours + off - s->offset, &l, lv, src, lw * 4);
+			struct pipe_box box = { .x = 0, .y = 0, .z = 0, .width = (int32_t)lw,
+						.height = (int32_t)lh, .depth = 1 };
+			v3d_store_tiled_image(mesa + want, s->stride, src, lw * 4,
+					      (enum v3d_tiling_mode)s->tiling, 4, s->padded_height, &box);
+			free(src);
+			n++;
+		}
+	}
+	snprintf(what, sizeof(what), "3D %ux%ux%u x%u: %u slices placed and tiled as Mesa's (%u bytes)",
+		 w, h, d, levels, n, l.size);
+	check(placed && memcmp(ours, mesa, l.size) == 0, what);
+	free(ours);
+	free(mesa);
+}
+
+/* Our record of a layered image against Mesa's packer, given the fields
+ * v3d_setup_texture_shader_state fills (v3dx_state.c:935-961): image_depth
+ * the layer count or the level 0 depth, array_stride_64_byte_aligned
+ * cube_map_stride / 64, level 0's UIF bits. 1 check. */
+static void layered_record_case(const char *name, const struct v3d_tex_layout *l, bool is_3d,
+				uint32_t depth, uint32_t want_stride_64)
+{
+	struct v3d_tex_state st = { .base = 0x00400000u + l->slices[0].offset, .width = l->width,
+				    .height = l->height, .depth = depth, .max_level = l->levels - 1,
+				    .type = V3D_TEXTURE_DATA_FORMAT_RGBA8, .swizzle = { 2, 3, 4, 5 } };
+	if (is_3d)
+		v3d_tex_state_from_layout_3d(&st, l);
+	else
+		v3d_tex_state_from_layout(&st, l);
+	uint8_t o[V3D_TEX_STATE_BYTES], m[V3D_TEX_STATE_BYTES];
+	bool packed = v3d_tex_pack_state(o, &st);
+	const struct v3d_tex_slice *s0 = &l->slices[0];
+	const bool uif = s0->tiling == V3D_TEX_TILING_UIF_XOR || s0->tiling == V3D_TEX_TILING_UIF_NO_XOR;
+	struct V3D42_TEXTURE_SHADER_STATE t = { 0 };
+	t.image_width = l->width;
+	t.image_height = l->height;
+	t.image_depth = depth;
+	t.max_level = l->levels - 1;
+	t.texture_base_pointer = 0x00400000u + s0->offset;
+	t.array_stride_64_byte_aligned = want_stride_64;
+	t.level_0_is_strictly_uif = uif;
+	t.level_0_xor_enable = s0->tiling == V3D_TEX_TILING_UIF_XOR;
+	t.level_0_ub_pad = uif ? s0->ub_pad : 0;
+	t.extended = uif;
+	t.swizzle_r = 2;
+	t.swizzle_g = 3;
+	t.swizzle_b = 4;
+	t.swizzle_a = 5;
+	t.texture_type = TEXTURE_DATA_FORMAT_RGBA8;
+	V3D42_TEXTURE_SHADER_STATE_pack(NULL, m, &t);
+	char what[200];
+	snprintf(what, sizeof(what), "%s record: depth %u, array stride %u (want %u), our bytes are Mesa's",
+		 name, depth, st.array_stride_64, want_stride_64);
+	check(packed && st.array_stride_64 == want_stride_64 && memcmp(o, m, sizeof(o)) == 0, what);
+}
+
+static void part_3d_and_arrays(void)
+{
+	char what[200];
+	struct v3d_tex_layout l, l2;
+	uint32_t size = 0, off = 0;
+
+	/* level_depth (v3d_resource.c:609, :636-639): level 0 the depth, level
+	 * i >= 1 u_minify(2 * next_pot(u_minify(depth, 1)), i). 6 -> 6, 4 (not
+	 * 3), 2, 1; 5 -> 5, 2, 1; 9 -> 9, 4, 2, 1; 1 -> 1 everywhere. 1 check. */
+	static const uint32_t ld[][5] = { { 6, 6, 4, 2, 1 }, { 5, 5, 2, 1, 1 },
+					  { 9, 9, 4, 2, 1 }, { 1, 1, 1, 1, 1 } };
+	bool depths = true;
+	for (unsigned c = 0; c < 4; c++)
+		for (uint32_t i = 0; i < 4; i++)
+			depths &= v3d_tex_level_depth(ld[c][0], i) == ld[c][i + 1];
+	check(depths, "level depth: 6, 5, 9 and 1 as Mesa's pot_depth rule");
+
+	/* a depth of 1 is the 2D layout, every byte of it. 1 check. */
+	check(v3d_tex_layout_3d(256, 256, 1, 9, 4, &l) && v3d_tex_layout(256, 256, 9, 4, &l2) &&
+		      memcmp(&l, &l2, sizeof(l)) == 0,
+	      "3D 256x256x1 x9 is the 2D layout");
+
+	/* 32x32x8 x6 (RGBA8: utile 4x4, UIF block 8x8). The 2D geometry of
+	 * each level: 5: 1x1 LT 16 x 4; 4: 2x2 LT; 3: 4x4 LT; 2: 8x8 UB1, 32 x
+	 * 8 = 256; 1: 16x16 UB2, 64 x 16 = 1024; 0: 32x32 UIF (4 UB rows < 32:
+	 * no pad, no XOR), 128 x 32 = 4096. pot_depth 2 * next_pot(4) = 8:
+	 * depths 8, 4, 2, 1, 1, 1. Smallest first: 5 @0 (64), 4 @64 (64), 3
+	 * @128 (64), 2 @192 (2 x 256), 1 @704 (4 x 1024; 16 wide is not past
+	 * 32: no page alignment), 0 @4800 (8 x 4096), 37568 in all; level 0 to
+	 * 8192 (+3392): 40960. */
+	layout3d_case("32x32x8 x6", 32, 32, 8, 6, 40960,
+		      (struct want_slice[]){ { 8192, 128, 32, 0, UIF }, { 4096, 64, 16, 0, UB2 },
+					     { 3584, 32, 8, 0, UB1 },  { 3520, 16, 4, 0, LT },
+					     { 3456, 16, 4, 0, LT },   { 3392, 16, 4, 0, LT } },
+		      (const uint32_t[]){ 8, 4, 2, 1, 1, 1 });
+	/* 13x7x6 x3, non-power-of-two: the 2D geometry of part 1's 13x7 x3
+	 * (2: 4x2 LT 64; 1: 6x3 LT 32 x 4 = 128; 0: UB2 64 x 8 = 512);
+	 * pot_depth 2 * next_pot(3) = 8: depths 6, 4 (GL's 3, padded), 2 (GL's
+	 * 1). 2 @0 (128), 1 @128 (512), 0 @640 (3072), 3712; +3456: 7168. */
+	layout3d_case("13x7x6 x3 (non-pot)", 13, 7, 6, 3, 7168,
+		      (struct want_slice[]){ { 4096, 64, 8, 0, UB2 }, { 3584, 32, 4, 0, LT },
+					     { 3456, 16, 4, 0, LT } },
+		      (const uint32_t[]){ 6, 4, 2 });
+	/* 192x624x5 x2: level 1 is 96x312, UIF 384 x 312 (39 UB rows, 39 % 32 =
+	 * 7: no pad, no XOR) = 119808, two slices (pot_depth 2 * next_pot(2) =
+	 * 4, level 1: 2) = 239616; 96 > 32 and 312 > 208: page-aligned to
+	 * 241664, the alignment taken after the slices are summed. Level 0:
+	 * UIF 768 x 624 (78 rows, 14: no pad, no XOR) = 479232, five slices
+	 * 2396160 @241664 (4 KiB aligned): 2637824. */
+	layout3d_case("192x624x5 x2 (level 1's two slices page-aligned)", 192, 624, 5, 2, 2637824,
+		      (struct want_slice[]){ { 241664, 768, 624, 0, UIF }, { 0, 384, 312, 0, UIF } },
+		      (const uint32_t[]){ 5, 2 });
+
+	/* slice offsets, v3d_layer_offset's 3D arm: 32x32x8 level 0 slice 7 at
+	 * 8192 + 7 x 4096 = 36864 (it ends at the size), level 1 slice 3 at 4096
+	 * + 3 x 1024 = 7168 (it ends at level 0), level 2 slice 1 at 3584 + 256
+	 * = 3840. 1 check. */
+	v3d_tex_layout_3d(32, 32, 8, 6, 4, &l);
+	uint32_t o0 = 0, o1 = 0, o2 = 0;
+	check(v3d_tex_slice_offset(&l, 8, 0, 7, &o0) && o0 == 36864 &&
+		      v3d_tex_slice_offset(&l, 8, 1, 3, &o1) && o1 == 7168 &&
+		      v3d_tex_slice_offset(&l, 8, 2, 1, &o2) && o2 == 3840,
+	      "3D 32x32x8: slice 7 of level 0 at 36864, 3 of level 1 at 7168, 1 of level 2 at 3840");
+
+	/* every slice tiled where Mesa tiles it. 3 checks. */
+	tile3d_case(32, 32, 8, 6);
+	tile3d_case(13, 7, 6, 3);
+	tile3d_case(64, 64, 3, 7);
+
+	/* 3D records: array stride = slices[0].size / 64 (v3d_resource.c:
+	 * 765-766): 4096 / 64 = 64 for 32x32x8 (level 0 UIF), 512 / 64 = 8 for
+	 * 13x7x6 (level 0 UB2: not strictly UIF); depth = depth0
+	 * (v3dx_state.c:935-936). 2 checks. */
+	layered_record_case("3D 32x32x8 x6", &l, true, 8, 64);
+	v3d_tex_layout_3d(13, 7, 6, 3, 4, &l);
+	layered_record_case("3D 13x7x6 x3", &l, true, 6, 8);
+
+	/* 2D array 64x32, 4 layers x7: the cube path (v3d_resource.c:761-764).
+	 * One tree: 6..3 LT at 0, 64, 128, 192 (8x4: 32 x 4 = 128), 2: 16x8 UB2
+	 * 512 @320, 1: 32x16 UIF 2048 @832, 0: 64x32 UIF (4 rows: no pad, no
+	 * XOR) 8192 @2880; 11072, level 0 to 4096 (+1216): 12288. Stride
+	 * align(4096 + 8192, 64) = 12288; 4 layers 12288 + 3 x 12288 = 49152;
+	 * level 2 of layer 3 at 1536 + 3 x 12288 = 38400. 2 + 7 + 1 checks. */
+	layout_case("2D array 64x32 x7 (one layer)", 64, 32, 7, 12288,
+		    (struct want_slice[]){ { 4096, 256, 32, 0, UIF }, { 2048, 128, 16, 0, UIF },
+					   { 1536, 64, 8, 0, UB2 },   { 1408, 32, 4, 0, LT },
+					   { 1344, 16, 4, 0, LT },    { 1280, 16, 4, 0, LT },
+					   { 1216, 16, 4, 0, LT } });
+	v3d_tex_layout(64, 32, 7, 4, &l);
+	snprintf(what, sizeof(what), "2D array 64x32 x7 x4: stride %u (12288), size %u (49152)",
+		 v3d_tex_layer_stride(&l), v3d_tex_layers_size(&l, 4, &size) ? size : 0);
+	check(v3d_tex_layer_stride(&l) == 12288 && v3d_tex_layers_size(&l, 4, &size) && size == 49152 &&
+		      v3d_tex_layer_offset(&l, 2, 3, 4, &off) && off == 38400,
+	      what);
+	/* its record: depth 4 (last_layer - first_layer + 1, v3dx_state.c:938),
+	 * array stride 12288 / 64 = 192. 1 check. */
+	layered_record_case("2D array 64x32 x7 x4", &l, false, 4, 192);
+
+	/* refusals, *out untouched: a depth of 0 and of 16384, a size past 32
+	 * bits (4096x4096x4096 RGBA8: 64 MiB a slice), slice 4 of 32x32x8's
+	 * level 1 (4 allocated), level 6 of 6. 5 checks. */
+	check(!v3d_tex_layout_3d(4, 4, 0, 1, 4, &l2), "3D: a depth of 0 is refused");
+	check(!v3d_tex_layout_3d(4, 4, 16384, 1, 4, &l2), "3D: a depth past 14 bits is refused");
+	check(!v3d_tex_layout_3d(4096, 4096, 4096, 1, 4, &l2), "3D: a size past 32 bits is refused");
+	v3d_tex_layout_3d(32, 32, 8, 6, 4, &l);
+	uint32_t v = 0x12345678u;
+	check(!v3d_tex_slice_offset(&l, 8, 1, 4, &v) && v == 0x12345678u,
+	      "3D slice offset: slice 4 of level 1's 4 is refused");
+	check(!v3d_tex_slice_offset(&l, 8, 6, 0, &v) && v == 0x12345678u,
+	      "3D slice offset: level 6 of 6 is refused");
+}
+
 int main(void)
 {
 	/* part 1: 11 cases (2 + levels each: 3,3,3,3,3,3,11,4,5,3,3) + 4
@@ -1179,11 +1419,15 @@ int main(void)
 	 * part 8: 1 + 12 state refusals + 2 bias edges + 9 sampler refusals +
 	 * P0 + P1 + 3 P0/P1 refusals; part 9: 3 hand cube layouts + 4 cubes
 	 * tiled + 1 cube record + 4 refusals; part 10: 6 mipmap jobs x 4 + 5;
-	 * and the 3 population checks below */
+	 * part 11: 1 level depth + 1 depth-1 identity + 3 hand 3D layouts
+	 * (2 + levels each: 6, 3, 2) + 1 slice offsets + 3 3D images tiled + 2
+	 * 3D records + the 2D array's hand layout (2 + 7), stride and record +
+	 * 5 refusals; and the 3 population checks below */
 	const int part1 = (3 + 3 + 3 + 3 + 3 + 3) + (2 + 9) + (2 + 2) + (2 + 3) + (3 + 3) + 4 + 5;
+	const int part11 = 1 + 1 + (2 + 6) + (2 + 3) + (2 + 2) + 1 + 3 + 2 + (2 + 7) + 1 + 1 + 5;
 	const int planned = part1 + (1 + 13 * 5) + (1 + 15 + 3) + (9 * 5 * 2 + 8 * 2) +
 			    (V3D_TEX_FORMAT_COUNT * 2 + 2) + (108 + 4) + 5 +
-			    (1 + 12 + 2 + 9 + 2 + 3) + (3 + 4 + 1 + 4) + (6 * 4 + 5) + 3;
+			    (1 + 12 + 2 + 9 + 2 + 3) + (3 + 4 + 1 + 4) + (6 * 4 + 5) + part11 + 3;
 	/* the boxes part 4 must have stored: levels 1+1+3+6+1+1+9+2+2 = 26 of
 	 * the 9 sizes, x 5 cpp, x (7 fixed + 16 random) boxes a level */
 	const unsigned planned_boxes = 26 * 5 * (FIXED_BOXES + RANDOM_BOXES);
@@ -1197,6 +1441,7 @@ int main(void)
 	part_refusals_and_p0p1();
 	part_layers();
 	part_mipmap_job();
+	part_3d_and_arrays();
 
 	char what[160];
 	snprintf(what, sizeof(what), "population: %u boxes stored, planned %u", boxes_stored,

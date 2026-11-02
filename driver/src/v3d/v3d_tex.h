@@ -131,6 +131,26 @@ bool v3d_tex_layers_size(const struct v3d_tex_layout *l, uint32_t layers, uint32
 bool v3d_tex_layer_offset(const struct v3d_tex_layout *l, uint32_t level, uint32_t layer,
 			  uint32_t layers, uint32_t *out);
 
+/* 3D textures: v3d_setup_slices with a depth (v3d_resource.c:583-767). A
+ * level holds v3d_tex_level_depth(depth, level) slices one after the other,
+ * each `slices[level].size` bytes and laid out as v3d_tex_layout lays out
+ * the 2D level of that size (the same tiling, stride and padding); only the
+ * offsets and `size` differ. Level 0 has `depth` slices, a level i >= 1
+ * u_minify(2 * next_pot(depth >> 1), i), Mesa's power-of-two padding,
+ * which can be more than GL's depth >> i (padding nothing reads). To tile
+ * slice k of level L, pass image + v3d_tex_slice_offset - slices[L].offset
+ * to v3d_tex_store_level/_box. The texture state takes depth = the level 0
+ * depth (v3dx_state.c:935-936) and array_stride_64 = slices[0].size / 64
+ * (v3d_tex_state_from_layout_3d). v3d_tex_layout_3d refuses a depth of 0
+ * or 16384 or more and a size past 32 bits, besides v3d_tex_layout's
+ * refusals; v3d_tex_slice_offset a level or slice out of range, or an
+ * offset past 32 bits, with *out untouched. */
+uint32_t v3d_tex_level_depth(uint32_t depth, uint32_t level);
+bool v3d_tex_layout_3d(uint32_t width, uint32_t height, uint32_t depth, uint32_t levels,
+		       uint32_t cpp, struct v3d_tex_layout *l);
+bool v3d_tex_slice_offset(const struct v3d_tex_layout *l, uint32_t depth, uint32_t level,
+			  uint32_t slice, uint32_t *out);
+
 /* TEXTURE_SHADER_STATE (V3D 4.2, 24 bytes). */
 #define V3D_TEX_STATE_BYTES 24
 /* Mesa aligns both records to 32 bytes: the P0/P1 uniforms OR their own bits
@@ -249,6 +269,9 @@ struct v3d_tex_state {
 
 /* The layout-derived fields, as v3d_setup_texture_shader_state sets them. */
 void v3d_tex_state_from_layout(struct v3d_tex_state *s, const struct v3d_tex_layout *l);
+/* ... of a 3D texture laid out by v3d_tex_layout_3d: the array stride is one
+ * slice of level 0 (v3d_resource.c:765-766), not a tree stride. */
+void v3d_tex_state_from_layout_3d(struct v3d_tex_state *s, const struct v3d_tex_layout *l);
 /* False, with `out` untouched, for a record the TMU would read as something
  * else: a type no supported format has (v3d_tex_format_get), a base address
  * that is not 64-byte aligned (flag bits share its low bits), a size, level,

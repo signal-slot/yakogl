@@ -76,13 +76,123 @@ pub fn levels_sampled(b: &GlesTextureBind) -> u32 {
 
 /// The layers of the sampled image: 6 for a cube map (GL's faces +X, -X,
 /// +Y, -Y, +Z, -Z, the order the GL core stacks them in and the V3D's layer
-/// order), 1 for a 2D texture.
+/// order), the layer count of a 2D array and the level 0 depth of a 3D
+/// texture (`GlesTextureBind::layers`, which the GL core sets to either; the
+/// GL core stacks that many slots at every level, a 3D level `l` holding its
+/// `max(depth >> l, 1)` slices in the first ones), 1 for a 2D texture.
 pub fn layers(b: &GlesTextureBind) -> u32 {
-    if b.type_ == GLES_TEXTYPE_CUBE {
-        6
-    } else {
-        1
+    match b.type_ {
+        GLES_TEXTYPE_CUBE => 6,
+        GLES_TEXTYPE_2D_ARRAY | GLES_TEXTYPE_3D => u32::from(b.layers).max(1),
+        _ => 1,
     }
+}
+
+/// The slices level `level` of a 3D texture `depth` deep has in the tiled
+/// image: Mesa's level_depth (v3d_setup_slices, v3d_resource.c:609,
+/// :636-639), `depth` at level 0 and `u_minify(pot_depth, level)` below it,
+/// pot_depth being `2 * v3d_get_dimension_mpad(depth, 1, 1)` (:573-581), so
+/// `2 * next_pot(max(depth >> 1, 1))`. From level 1 that can be more than
+/// the GL core's `max(depth >> level, 1)` (a depth of 6 has 4 slices at
+/// level 1, GL's 3): padding nothing writes or reads. The same rule as
+/// `v3d_tex_level_depth` (driver/src/v3d/v3d_tex.c), which
+/// tools/v3d/tex_check.c pins.
+pub fn level_depth(depth: u32, level: u32) -> u32 {
+    if level == 0 {
+        return depth;
+    }
+    let pot = 2 * (depth >> 1).max(1).next_power_of_two();
+    pot.checked_shr(level).unwrap_or(0).max(1)
+}
+
+/// Mesa's utile size in texels for `cpp` bytes a texel, width and height
+/// (`v3d_utile_width`, `v3d_utile_height`, broadcom/common/v3d_tiling.c: a
+/// 64-byte utile); (0, 0) for a size it has no utile for.
+const fn utile(cpp: u32) -> (u32, u32) {
+    match cpp {
+        1 => (8, 8),
+        2 => (8, 4),
+        4 => (4, 4),
+        8 => (4, 2),
+        16 => (2, 2),
+        _ => (0, 0),
+    }
+}
+
+/// The layout of a 3D texture `depth` deep from `flat`, the layout
+/// `v3d_tex_layout` gives the 2D texture of its width, height, levels and
+/// texel size: Mesa's v3d_setup_slices with a depth (v3d_resource.c:583-767),
+/// which lays out every slice of a level as the 2D level (the tiling, stride,
+/// padded height, ub_pad and so `size` of a slice are the 2D level's: they
+/// come from the level's width and height alone, :649-698) and changes only
+/// where the levels are. Smallest level first, each `size *
+/// level_depth(depth, level)` bytes (`slice_total_size`, :720-722); level
+/// 1's total rounded up to a 4 KiB page when it is wider than four UIF
+/// blocks and taller than `PAGE_CACHE_MINUS_1_5_UB_ROWS` (26) UIF block
+/// rows (:729-733); level 0 then moved to a 4 KiB boundary with every level
+/// after it (:749-755). The same arithmetic as `v3d_tex_layout_3d`
+/// (driver/src/v3d/v3d_tex.c), which tools/v3d/tex_check.c checks against
+/// Mesa; this one runs on the C's 2D geometry. `None` for a depth of 0 or
+/// 16384 or more (TEXTURE_SHADER_STATE's 14-bit Image Depth), a texel size
+/// the TMU has no utile for, or a size past 32 bits.
+pub fn layout_3d(flat: &V3dTexLayout, depth: u32) -> Option<V3dTexLayout> {
+    let (utile_w, utile_h) = utile(flat.cpp);
+    let levels = flat.levels as usize;
+    if depth == 0 || depth >= 1 << 14 || utile_w == 0 || levels == 0 || levels > V3D_TEX_MAX_LEVELS {
+        return None;
+    }
+    let (uif_block_w, uif_block_h) = (2 * utile_w, 2 * utile_h);
+    let mut l = *flat;
+    let mut offset = 0u32;
+    for i in (0..levels).rev() {
+        let s = &mut l.slices[i];
+        s.offset = offset;
+        let mut total = s.size.checked_mul(level_depth(depth, i as u32))?;
+        /* the level's padded width in texels and height in rows, the
+         * level_width and level_height Mesa tests here */
+        if i == 1 && s.stride / flat.cpp > 4 * uif_block_w && s.padded_height > 26 * uif_block_h {
+            total = total.checked_next_multiple_of(4096)?;
+        }
+        offset = offset.checked_add(total)?;
+    }
+    let pad = l.slices[0].offset.checked_next_multiple_of(4096)? - l.slices[0].offset;
+    l.size = offset.checked_add(pad)?;
+    for s in &mut l.slices[..levels] {
+        s.offset += pad;
+    }
+    Some(l)
+}
+
+/// Where layer `layer` of level `level` of `b`'s tiled image (laid out as
+/// [`layout`]) starts, in bytes from the start of the image: a face of a
+/// cube map or a layer of a 2D array at `slices[level].offset + layer *
+/// v3d_tex_layer_stride` (Mesa's v3d_layer_offset, v3d_resource.c:771-779,
+/// with cube_map_stride, the 64-byte-aligned end of one layer's mip tree,
+/// :761-763), or a slice of a 3D texture at `slices[level].offset + layer *
+/// slices[level].size` (v3d_layer_offset's 3D arm, :777-778: a level's
+/// slices one after the other). `None` for a level the layout lacks, a layer
+/// past [`layers`] or a slice past [`level_depth`], or an offset past 32
+/// bits. To tile the layer, hand `v3d_tex_store_level`/`_box` the image
+/// moved by this less `slices[level].offset` (they add the level's offset
+/// themselves), as [`tile`] does.
+pub fn image_offset(b: &GlesTextureBind, layout: &V3dTexLayout, level: u32, layer: u32) -> Option<u32> {
+    if level >= layout.levels {
+        return None;
+    }
+    let s = layout.slices[level as usize];
+    let n = layers(b);
+    let (count, step) = if b.type_ == GLES_TEXTYPE_3D {
+        (level_depth(n, level), s.size)
+    } else if n > 1 {
+        // SAFETY: a live layout.
+        (n, unsafe { v3d_tex_layer_stride(layout) })
+    } else {
+        (1, 0)
+    };
+    if layer >= count {
+        return None;
+    }
+    s.offset.checked_add(layer.checked_mul(step)?)
 }
 
 /// What this cut samples, refused by name otherwise.
@@ -305,6 +415,17 @@ pub fn sampler(b: &GlesTextureBind) -> V3dSampler {
 /// `image_gpu` (`v3d_setup_texture_shader_state` and
 /// `create_texture_shader_state_bo`): the base pointer at level 0's slice,
 /// levels 0 to the last sampled, the type and swizzle of [`tmu_format`].
+///
+/// A layered image's image depth is [`layers`]: a cube's 6, a 2D array's
+/// layer count (`last_layer - first_layer + 1`, v3dx_state.c:938) and a 3D
+/// texture's level 0 depth (`prsc->depth0`, :935-936; the TMU minifies it
+/// itself). Its array stride is Mesa's `cube_map_stride / 64` (:961): a 2D
+/// array's the tree stride `v3d_tex_layer_stride` (v3d_resource.c:761-763,
+/// what `v3d_tex_state_from_layout` sets for a cube), a 3D texture's one
+/// slice of level 0, `slices[0].size` (:765-766, as
+/// `v3d_tex_state_from_layout_3d` sets it). The texture type is the
+/// format's whatever the dimensionality: the record has no dimension field;
+/// the look-up's TMU configuration tells the TMU 2D, array or 3D.
 pub fn state(b: &GlesTextureBind, layout: &V3dTexLayout, image_gpu: u32) -> V3dTexState {
     let (type_, _) = tmu_format(b);
     let swizzle = tmu_swizzle(b);
@@ -330,6 +451,11 @@ pub fn state(b: &GlesTextureBind, layout: &V3dTexLayout, image_gpu: u32) -> V3dT
      * v3d_tex_state_from_layout set): Mesa's image_depth = the layer count,
      * v3dx_state.c:936-938 */
     s.depth = layers(b);
+    /* a 2D array keeps the tree stride v3d_tex_state_from_layout set, a cube's;
+     * a 3D texture's is one slice of level 0 (v3d_tex_state_from_layout_3d) */
+    if b.type_ == GLES_TEXTYPE_3D {
+        s.array_stride_64 = layout.slices[0].size / 64;
+    }
     s
 }
 
@@ -347,11 +473,21 @@ pub fn depth_buffer_state(b: &GlesTextureBind, layout: &V3dTexLayout, buffer_gpu
 }
 
 /// The layout of the tiled image for a binding, at its texel size
-/// ([`texel_bytes`]), or `None` when `v3d_tex_layout` refuses the size.
+/// ([`texel_bytes`]), or `None` when `v3d_tex_layout` refuses the size: one
+/// layer's mip tree, which is also the layout of every layer of a cube map
+/// or a 2D array (Mesa gives them the 2D arithmetic, v3d_resource.c:761-779;
+/// [`image_bytes`] and [`image_offset`] add the layers), or for a 3D texture
+/// [`layout_3d`] of it, [`layers`] deep.
 pub fn layout(b: &GlesTextureBind) -> Option<V3dTexLayout> {
     let mut l = V3dTexLayout::default();
     // SAFETY: `l` is a live value of the mirrored type.
-    unsafe { v3d_tex_layout(b.width, b.height, levels_sampled(b), texel_bytes(b), &mut l) }.then_some(l)
+    if !unsafe { v3d_tex_layout(b.width, b.height, levels_sampled(b), texel_bytes(b), &mut l) } {
+        return None;
+    }
+    if b.type_ == GLES_TEXTYPE_3D {
+        return layout_3d(&l, layers(b));
+    }
+    Some(l)
 }
 
 /// The layout of a render image (`backend::RtImage`): `levels` levels of a
@@ -384,11 +520,14 @@ pub fn rt_layout(w: u32, h: u32, levels: u32) -> Option<V3dTexLayout> {
 }
 
 /// The bytes of the tiled image for `b` laid out as `layout`: one mip tree,
-/// or a cube's six of them `v3d_tex_layer_stride` apart
-/// (`v3d_tex_layers_size`); `None` past 32 bits.
+/// or a cube's six of them or a 2D array's layers `v3d_tex_layer_stride`
+/// apart (`v3d_tex_layers_size`, Mesa's `rsc->size += cube_map_stride *
+/// (array_size - 1)`, v3d_resource.c:764), or a 3D texture's whole
+/// [`layout_3d`], every slice of every level in its `size`; `None` past 32
+/// bits.
 pub fn image_bytes(b: &GlesTextureBind, layout: &V3dTexLayout) -> Option<u32> {
     let n = layers(b);
-    if n == 1 {
+    if n == 1 || b.type_ == GLES_TEXTYPE_3D {
         return Some(layout.size);
     }
     let mut out = 0u32;
@@ -405,8 +544,12 @@ pub fn gl_bytes(b: &GlesTextureBind) -> u32 {
 /// Tile the sampled levels of every layer of `b` into `image`
 /// (`image_bytes` bytes) from the GL core's storage at `src` (`gl_bytes`
 /// bytes): layer f's level L from its stacked rows in the GL core's level
-/// (`gl_level_layered`) to its own mip tree `f * v3d_tex_layer_stride` into
-/// the image (Mesa's v3d_layer_offset, v3d_resource.c:771-779).
+/// (`gl_level_layered`) to where [`image_offset`] puts it (Mesa's
+/// v3d_layer_offset, v3d_resource.c:771-779): a face's or an array layer's
+/// own mip tree `f * v3d_tex_layer_stride` into the image, or a 3D slice
+/// after the level's slices before it. A 3D level L has the GL core's
+/// `max(depth >> L, 1)` slices only; the tiled image's padding slices past
+/// them stay as they are.
 ///
 /// # Safety
 /// `image` is writable for `image_bytes(b, layout)` bytes and `src` readable
@@ -414,18 +557,20 @@ pub fn gl_bytes(b: &GlesTextureBind) -> u32 {
 pub unsafe fn tile(b: &GlesTextureBind, layout: &V3dTexLayout, image: *mut u8, src: *const u8) {
     let n = layers(b);
     let bpp = texel_bytes(b);
-    // SAFETY: a live layout.
-    let stride = if n > 1 { unsafe { v3d_tex_layer_stride(layout) } } else { 0 };
-    for f in 0..n {
-        for level in 0..layout.levels {
-            let (off, pitch, rows) = gl_level_layered(b.width, b.height, n, bpp, level);
+    for level in 0..layout.levels {
+        let (off, pitch, rows) = gl_level_layered(b.width, b.height, n, bpp, level);
+        let slices = if b.type_ == GLES_TEXTYPE_3D { n.checked_shr(level).unwrap_or(0).max(1) } else { n };
+        for f in 0..slices {
+            let Some(at) = image_offset(b, layout, level, f) else { continue };
             let from = off + f * rows * pitch * bpp;
-            // SAFETY: the caller's contract; layer f's tree starts f * stride
-            // into the image, and v3d_tex_store_level reads the level's rows
-            // at `pitch * bpp` and writes inside that tree.
+            // SAFETY: the caller's contract; layer f of the level starts
+            // `at` into the image, and v3d_tex_store_level reads the level's
+            // rows at `pitch * bpp` and writes the level at its offset into
+            // the image it is handed, here the image moved so that the
+            // offset lands on `at`.
             unsafe {
                 v3d_tex_store_level(
-                    image.add((f * stride) as usize),
+                    image.add((at - layout.slices[level as usize].offset) as usize),
                     layout,
                     level,
                     src.add(from as usize),
@@ -705,5 +850,284 @@ mod tests {
         b.mip_filter = 0;
         assert!(sampler(&b).mip_none, "no mip filter clamps the LOD to level 0");
         assert_eq!(sampler(&bind(4, 4)).wrap_s, V3D_WRAP_MODE_REPEAT, "GL's default");
+    }
+
+    /* ---- 2D arrays and 3D textures (docs/notes/v3d-tex-layout-es3.md) ----
+     *
+     * This module links the backend tests' fake v3d_tex.c (a packed layout,
+     * backend_tests.rs), so Mesa's numbers are pinned here on layouts built
+     * by hand with Mesa's v3d_setup_slices geometry for RGBA8 (utile 4x4
+     * texels, UIF block 8x8): `layout_3d`, `image_offset`, `image_bytes` and
+     * `state` take the layout as given. tools/v3d/tex_check.c pins the same
+     * cases on the real C against Mesa. */
+
+    /// `enum v3d_tex_tiling`'s UB-linear values (Mesa's v3d_tiling_mode).
+    const UB1: u32 = 2;
+    const UB2: u32 = 3;
+    const LT: u32 = V3D_TEX_TILING_LINEARTILE;
+    const UIF: u32 = V3D_TEX_TILING_UIF_NO_XOR;
+
+    /// An RGBA8 layout `w` x `h` from per-level (offset, stride, padded
+    /// height, tiling), level 0 first; each slice's size is stride x height.
+    fn hand_layout(w: u32, h: u32, size: u32, slices: &[(u32, u32, u32, u32)]) -> V3dTexLayout {
+        let mut l =
+            V3dTexLayout { width: w, height: h, levels: slices.len() as u32, cpp: 4, size, ..Default::default() };
+        for (i, &(offset, stride, padded_height, tiling)) in slices.iter().enumerate() {
+            l.slices[i] =
+                V3dTexSlice { offset, stride, padded_height, size: stride * padded_height, ub_pad: 0, tiling };
+        }
+        l
+    }
+
+    fn array(w: u32, h: u32, layers: u16, levels: u32) -> GlesTextureBind {
+        GlesTextureBind {
+            type_: GLES_TEXTYPE_2D_ARRAY,
+            layers,
+            mip_levels: levels as u8,
+            mip_filter: (levels > 1) as u8,
+            ..bind(w, h)
+        }
+    }
+
+    fn tex3d(w: u32, h: u32, depth: u16, levels: u32) -> GlesTextureBind {
+        GlesTextureBind { type_: GLES_TEXTYPE_3D, ..array(w, h, depth, levels) }
+    }
+
+    /// 64x32 RGBA8, 7 levels, one layer as Mesa's v3d_setup_slices lays it
+    /// out (smallest first): 6, 5, 4 (1x1, 2x1, 4x2) LT, one 4x4 utile, 16 x
+    /// 4 = 64 bytes each at 0, 64, 128; 3 (8x4: 4 rows <= utile_h) LT, 32 x 4
+    /// = 128 at 192; 2 (16x8: <= 2 UIF blocks wide) UB 2 columns, 64 x 8 =
+    /// 512 at 320; 1 (32x16) UIF, 128 x 16 = 2048 at 832 (2 UB rows, under
+    /// the 32-row page cache: no ub_pad; 2 % 32 != 0: no XOR); 0 (64x32) UIF
+    /// 256 x 32 = 8192 at 2880 (4 UB rows: no pad, no XOR); 11072 in all,
+    /// level 0 moved to 4096 (+1216, :749-755): 12288.
+    fn mesa_64x32x7() -> V3dTexLayout {
+        hand_layout(
+            64,
+            32,
+            12288,
+            &[
+                (4096, 256, 32, UIF),
+                (2048, 128, 16, UIF),
+                (1536, 64, 8, UB2),
+                (1408, 32, 4, LT),
+                (1344, 16, 4, LT),
+                (1280, 16, 4, LT),
+                (1216, 16, 4, LT),
+            ],
+        )
+    }
+
+    /// Mesa's level_depth (v3d_resource.c:609, :636-639): level 0 the depth,
+    /// level i u_minify(2 * next_pot(u_minify(depth, 1)), i).
+    #[test]
+    fn a_3d_level_has_mesas_power_of_two_padded_depth() {
+        let depths = |d: u32, n: u32| (0..n).map(|l| level_depth(d, l)).collect::<std::vec::Vec<_>>();
+        // 8: pot_depth 2 * next_pot(4) = 8: 8, 4, 2, 1, 1
+        assert_eq!(depths(8, 5), [8, 4, 2, 1, 1]);
+        // 6: pot_depth 2 * next_pot(3) = 8: level 1 has 4 slices, GL's 3
+        assert_eq!(depths(6, 4), [6, 4, 2, 1]);
+        // 5: 2 * next_pot(2) = 4: 2 at level 1; 9: 2 * next_pot(4) = 8: 4
+        assert_eq!(depths(5, 3), [5, 2, 1]);
+        assert_eq!(depths(9, 4), [9, 4, 2, 1]);
+        // 1: 2 * next_pot(u_minify(1, 1) = 1) = 2: one slice at every level
+        assert_eq!(depths(1, 15), [1; 15]);
+        assert_eq!(level_depth(16, 40), 1, "a shift past the width is 1, not a panic");
+    }
+
+    /// A 2D array and a 3D texture: their layers ([`layers`], the GL core's
+    /// `GlesTextureBind::layers`), the GL core's storage of every slot, and
+    /// the refusal by name, which stays until the backend uploads them
+    /// (v3d-qpu-array-3d).
+    #[test]
+    fn a_2d_array_and_a_3d_texture_are_laid_out_but_still_refused() {
+        let (arr, t3) = (array(64, 32, 4, 7), tex3d(32, 32, 8, 6));
+        assert_eq!((layers(&arr), layers(&t3)), (4, 8));
+        assert_eq!(layers(&GlesTextureBind { layers: 0, ..arr }), 1, "no layer count: one");
+        for b in [arr, t3] {
+            assert_eq!(refusal(&b), Some("a 2D array or 3D texture is not sampled yet"));
+            assert_eq!(refusal_for(&b, true), Some("a 2D array or 3D texture is not sampled yet"));
+        }
+        /* the GL core stacks `layers` slots at every level of both */
+        assert_eq!(gl_bytes(&arr), gl_level_layered(64, 32, 4, 4, 7).0);
+        assert_eq!(gl_bytes(&t3), gl_level_layered(32, 32, 8, 4, 6).0);
+        /* an array's layout is one layer's tree (the C's 2D layout), a 3D
+         * texture's that tree rearranged by layout_3d */
+        assert_eq!(
+            layout(&array(64, 32, 4, 7)),
+            layout(&GlesTextureBind { mip_levels: 7, mip_filter: 1, ..bind(64, 32) })
+        );
+        let mut flat3 = V3dTexLayout::default();
+        // SAFETY: a live out-parameter.
+        assert!(unsafe { v3d_tex_layout(32, 32, 6, 4, &mut flat3) });
+        assert_eq!(layout(&t3), layout_3d(&flat3, 8));
+    }
+
+    /// A 2D array of 4 64x32 RGBA8 layers with its full chain: the cube's
+    /// path (v3d_resource.c:761-764), four trees `cube_map_stride` apart.
+    #[test]
+    fn a_2d_array_is_four_mip_trees_a_tree_stride_apart() {
+        let b = array(64, 32, 4, 7);
+        let l = mesa_64x32x7();
+        // the stride: align(slices[0].offset + slices[0].size, 64) =
+        // align(4096 + 8192, 64) = 12288 (v3d_resource.c:761-763)
+        // SAFETY: a live layout.
+        assert_eq!(unsafe { v3d_tex_layer_stride(&l) }, 12288);
+        // rsc->size += cube_map_stride * (array_size - 1) (:764): 12288 + 3 x
+        // 12288
+        assert_eq!(image_bytes(&b, &l), Some(49152));
+        // v3d_layer_offset's non-3D arm (:778-779): slices[level].offset +
+        // layer x stride; level 2 of layer 3: 1536 + 3 x 12288
+        assert_eq!(image_offset(&b, &l, 2, 3), Some(38400));
+        assert_eq!(image_offset(&b, &l, 0, 0), Some(4096), "level 0 of layer 0: slices[0].offset");
+        assert_eq!(image_offset(&b, &l, 6, 3), Some(1216 + 3 * 12288));
+        assert_eq!(image_offset(&b, &l, 0, 4), None, "layer 4 of 4");
+        assert_eq!(image_offset(&b, &l, 7, 0), None, "level 7 of 7");
+        /* the record (v3d_setup_texture_shader_state, v3dx_state.c:921-961):
+         * image depth = last_layer - first_layer + 1 = 4 (:938), array
+         * stride = cube_map_stride / 64 = 12288 / 64 = 192 (:961), the base
+         * at layer 0's level 0 (:957-960), levels 0..6. The stride is
+         * v3d_tex_state_from_layout's, the cube's (tex_check pins 192 on the
+         * real C for this layout); this module's fake writes size / 64,
+         * which for this layout is the same 192. */
+        let s = state(&b, &l, 0x0040_0000);
+        assert_eq!((s.width, s.height, s.depth, s.array_stride_64), (64, 32, 4, 192));
+        assert_eq!((s.base, s.base_level, s.max_level), (0x0040_0000 + 4096, 0, 6));
+        assert_eq!((s.type_, s.swizzle), tmu_format(&b), "the format's type: no dimension in the record");
+    }
+
+    /// A 32x32x8 RGBA8 3D texture with its full chain (6 levels).
+    #[test]
+    fn a_3d_texture_lays_out_its_slices_level_by_level() {
+        /* the 2D geometry of each level (v3d_setup_slices, as a 32x32 2D
+         * texture): 5, 4, 3 (1x1, 2x2, 4x4) LT 16 x 4 = 64; 2 (8x8: one UIF
+         * block wide) UB 1 column, 32 x 8 = 256; 1 (16x16) UB 2 columns, 64 x
+         * 16 = 1024; 0 (32x32) UIF, 128 x 32 = 4096 (4 UB rows: no pad, no
+         * XOR). The 2D offsets are not used. */
+        let flat = hand_layout(
+            32,
+            32,
+            0,
+            &[(0, 128, 32, UIF), (0, 64, 16, UB2), (0, 32, 8, UB1), (0, 16, 4, LT), (0, 16, 4, LT), (0, 16, 4, LT)],
+        );
+        let l = layout_3d(&flat, 8).unwrap();
+        /* level_depth 8, 4, 2, 1, 1, 1 (pot_depth 2 * next_pot(4) = 8);
+         * slice_total_size = size x level_depth (:720-722), smallest first:
+         * 5 at 0 (64), 4 at 64 (64), 3 at 128 (64), 2 at 192 (2 x 256 = 512),
+         * 1 at 704 (4 x 1024 = 4096; 16 texels wide is not past four UIF
+         * blocks, 32: no page alignment, :729-733), 0 at 4800 (8 x 4096 =
+         * 32768), 37568 in all; level 0 to 4 KiB, 8192 (+3392, :749-755) */
+        let offsets: std::vec::Vec<u32> = l.slices[..6].iter().map(|s| s.offset).collect();
+        assert_eq!(offsets, [8192, 4096, 3584, 3520, 3456, 3392]);
+        assert_eq!(l.size, 37568 + 3392);
+        for i in 0..6 {
+            let (s, f) = (l.slices[i], flat.slices[i]);
+            assert_eq!((s.stride, s.padded_height, s.size, s.tiling), (f.stride, f.padded_height, f.size, f.tiling));
+        }
+        let b = tex3d(32, 32, 8, 6);
+        assert_eq!(image_bytes(&b, &l), Some(40960), "every slice is inside the layout's size");
+        /* v3d_layer_offset's 3D arm (:777-778): slices[level].offset + slice
+         * x slices[level].size: slice 7 of level 0 at 8192 + 7 x 4096 = 36864
+         * (it ends at the size); slice 3 of level 1 at 4096 + 3 x 1024 = 7168
+         * (it ends at level 0); slice 1 of level 2 at 3584 + 256 = 3840 */
+        assert_eq!(image_offset(&b, &l, 0, 7), Some(36864));
+        assert_eq!(image_offset(&b, &l, 1, 3), Some(7168));
+        assert_eq!(image_offset(&b, &l, 2, 1), Some(3840));
+        assert_eq!(image_offset(&b, &l, 5, 0), Some(3392));
+        assert_eq!(image_offset(&b, &l, 1, 4), None, "level 1 has 4 slices");
+        assert_eq!(image_offset(&b, &l, 3, 1), None, "level 3 has 1 slice");
+        /* the record: image depth = depth0 = 8 (v3dx_state.c:935-936), array
+         * stride = cube_map_stride / 64 with cube_map_stride = slices[0].size
+         * for 3D (v3d_resource.c:765-766): 4096 / 64 = 64 */
+        let s = state(&b, &l, 0x0040_0000);
+        assert_eq!((s.width, s.height, s.depth, s.array_stride_64), (32, 32, 8, 64));
+        assert_eq!((s.base, s.max_level), (0x0040_0000 + 8192, 5));
+        assert_eq!((s.type_, s.swizzle), tmu_format(&b));
+    }
+
+    /// A non-power-of-two 3D texture, 13x7x6 RGBA8 with 3 levels: Mesa's
+    /// padded depths are more than GL's.
+    #[test]
+    fn a_non_power_of_two_3d_texture_pads_its_depth_as_mesa() {
+        /* the 2D geometry (tex_check's 13x7 x3): pot 2 * next_pot(6) = 16
+         * wide, 2 * next_pot(3) = 8 high; 2: 16>>2 x 8>>2 = 4x2 LT, 16 x 4 =
+         * 64; 1: 6x3 (u_minify of 13x7) LT, 8 x 4 texels: 32 x 4 = 128; 0:
+         * 13x7 UB 2 columns, 16 x 8 texels: 64 x 8 = 512 */
+        let flat = hand_layout(13, 7, 0, &[(0, 64, 8, UB2), (0, 32, 4, LT), (0, 16, 4, LT)]);
+        let l = layout_3d(&flat, 6).unwrap();
+        /* level_depth 6, 4, 2 (pot_depth 2 * next_pot(3) = 8), where GL has
+         * 6, 3, 1: 2 at 0 (2 x 64 = 128), 1 at 128 (4 x 128 = 512), 0 at 640
+         * (6 x 512 = 3072), 3712; level 0 to 4096 (+3456) */
+        let offsets: std::vec::Vec<u32> = l.slices[..3].iter().map(|s| s.offset).collect();
+        assert_eq!(offsets, [4096, 3584, 3456]);
+        assert_eq!(l.size, 3712 + 3456);
+        let b = tex3d(13, 7, 6, 3);
+        assert_eq!(image_offset(&b, &l, 1, 3), Some(3584 + 3 * 128), "level 1's padding slice is allocated");
+        assert_eq!(image_offset(&b, &l, 2, 1), Some(3456 + 64));
+        /* the record: depth 6, array stride 512 / 64 = 8 */
+        let s = state(&b, &l, 0x0040_0000);
+        assert_eq!((s.width, s.height, s.depth, s.array_stride_64, s.max_level), (13, 7, 6, 8, 2));
+    }
+
+    /// Level 1's page alignment (v3d_resource.c:729-733) is taken on the
+    /// level's slices together, after slice_total_size = size x level_depth.
+    #[test]
+    fn a_3d_level_1_is_page_aligned_with_all_its_slices() {
+        /* 192x624 RGBA8, 2 levels: 1 (96x312) UIF 384 x 312 = 119808 (39 UB
+         * rows, 39 % 32 = 7: no pad, no XOR); 0 (192x624) UIF 768 x 624 =
+         * 479232 (78 rows, 14: no pad, no XOR) */
+        let flat = hand_layout(192, 624, 0, &[(0, 768, 624, UIF), (0, 384, 312, UIF)]);
+        /* depth 5: level 1 has 2 slices (2 * next_pot(2) = 4, u_minify 1), 2
+         * x 119808 = 239616; 96 texels > 32 (four UIF blocks) and 312 rows >
+         * 208 (26 UB rows): aligned to 4096, 241664; level 0's five slices
+         * at 241664 (already 4 KiB aligned), 5 x 479232 = 2396160 */
+        let l = layout_3d(&flat, 5).unwrap();
+        assert_eq!((l.slices[1].offset, l.slices[0].offset, l.size), (0, 241664, 241664 + 2396160));
+        /* depth 1, one slice a level: 119808 aligned to 122880, as the 2D
+         * layout aligns it */
+        let l = layout_3d(&flat, 1).unwrap();
+        assert_eq!((l.slices[1].offset, l.slices[0].offset, l.size), (0, 122880, 122880 + 479232));
+    }
+
+    /// layout_3d's refusals: a depth outside the 14-bit Image Depth, a
+    /// texel size with no utile, a size past 32 bits.
+    #[test]
+    fn layout_3d_refuses_what_the_tmu_cannot_address() {
+        let flat = hand_layout(4, 4, 0, &[(0, 16, 4, LT)]);
+        assert!(layout_3d(&flat, 1).is_some());
+        assert_eq!(layout_3d(&flat, 0), None);
+        assert_eq!(layout_3d(&flat, 1 << 14), None);
+        assert_eq!(layout_3d(&V3dTexLayout { cpp: 3, ..flat }, 2), None);
+        /* 4096x4096 RGBA8: 64 MiB a slice, 4096 slices */
+        let big = hand_layout(4096, 4096, 0, &[(0, 16384, 4096, UIF)]);
+        assert_eq!(layout_3d(&big, 4096), None);
+        assert!(layout_3d(&big, 63).is_some());
+    }
+
+    /// `tile` puts the GL core's slices of a 3D level where `image_offset`
+    /// says, `max(depth >> level, 1)` of them, and leaves Mesa's padding
+    /// slices alone (here on the fake layout, whose "tiling" is a row copy).
+    #[test]
+    fn tile_places_each_3d_slice_and_skips_the_padding() {
+        let b = tex3d(4, 4, 6, 3);
+        let l = layout(&b).unwrap();
+        let src: std::vec::Vec<u8> = (0..gl_bytes(&b)).map(|i| (i % 251) as u8 + 1).collect();
+        let mut image = std::vec![0u8; image_bytes(&b, &l).unwrap() as usize];
+        // SAFETY: both buffers have the sizes tile's contract asks for.
+        unsafe { tile(&b, &l, image.as_mut_ptr(), src.as_ptr()) };
+        for level in 0..3 {
+            let (off, pitch, rows) = gl_level_layered(4, 4, 6, 4, level);
+            let bytes = (pitch * rows * 4) as usize;
+            for k in 0..level_depth(6, level) {
+                let at = image_offset(&b, &l, level, k).unwrap() as usize;
+                let got = &image[at..at + bytes];
+                if k < (6 >> level).max(1) {
+                    let from = (off + k * rows * pitch * 4) as usize;
+                    assert_eq!(got, &src[from..from + bytes], "level {level} slice {k}");
+                } else {
+                    assert!(got.iter().all(|&v| v == 0), "level {level} padding slice {k} untouched");
+                }
+            }
+        }
     }
 }
