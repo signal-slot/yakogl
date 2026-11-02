@@ -1908,15 +1908,24 @@ if command -v cc >/dev/null 2>&1; then
   # placement = the former loader's, and the start sequence's difference from
   # the one the driver used before = tools/pvr/rgxstart/rgxstart.diff, the stop
   # sequence = rgxstop.trace (tools/pvr/rgxstart/README.md explains each).
+  # The host's precompiled core names the personality routine, which the two
+  # harnesses define as `rust_eh_personality`. Nightlies from 2026-10 name it
+  # v0-mangled (`_RNv..._7___rustc19rust_eh_personality`, the hash per
+  # toolchain): that name is linked to the harness's routine. $1: the archive.
+  pvr_eh_personality_alias() {
+    local s
+    s=$(nm -u "$1" 2>/dev/null | grep -oE '_R[0-9A-Za-z_]+rust_eh_personality$' | sort -u | head -1)
+    [ -z "$s" ] || echo "-Wl,--defsym=$s=rust_eh_personality"
+  }
   pvr_rgxlayer_check() {
-    local out d=build/pvr-check/rgxlayer
+    local out d=build/pvr-check/rgxlayer a=build/pvr-check/rgx-target/debug/libyakogl_drivers.a
     mkdir -p "$d" || return 1
     cargo build -q -p yakogl-drivers --features pvr --target-dir build/pvr-check/rgx-target || return 1
     # shellcheck disable=SC2046  # the flags are one word each
     cc -std=gnu11 -O1 -Wall -Wextra -Werror -DTEE_DDK $(driver/tools/offsetof/ddk-cflags.sh) \
       -Idriver/rust/include tools/pvr/rgxlayer_check.c driver/compat/pvr_rgxstartstop.c \
       driver/compat/pvr_rgxfwimageutils.c driver/compat/pvr_rgxlayer_log.c \
-      driver/compat/pvr_rgxlayer_check.c build/pvr-check/rgx-target/debug/libyakogl_drivers.a \
+      driver/compat/pvr_rgxlayer_check.c "$a" $(pvr_eh_personality_alias "$a") \
       -o build/pvr-check/rgxlayer_check || return 1
     out=$(build/pvr-check/rgxlayer_check "$d") || { printf '%s\n' "$out" | tail -20; return 1; }
     printf '%s\n' "$out" |
@@ -1950,11 +1959,12 @@ if command -v cc >/dev/null 2>&1; then
   # origin/main 674ea1cf), and fwinit-step7 for the DDK sizes
   # (fwinit-step7.diff). tools/pvr/km/README.md explains each.
   pvr_km_check() {
-    local out d=build/pvr-check/km s
+    local out d=build/pvr-check/km s a=build/pvr-check/rgx-target/debug/libyakogl_drivers.a
     mkdir -p "$d" || return 1
     cargo build -q -p yakogl-drivers --features pvr --target-dir build/pvr-check/rgx-target || return 1
+    # shellcheck disable=SC2046  # the flag is one word
     cc -std=gnu11 -O1 -Wall -Wextra -Werror -Idriver/rust/include -Itools/pvr/km -Idriver/src \
-      tools/pvr/km/km_check.c build/pvr-check/rgx-target/debug/libyakogl_drivers.a \
+      tools/pvr/km/km_check.c "$a" $(pvr_eh_personality_alias "$a") \
       -o "$d/km_check" || return 1
     "$d/km_check" pins > "$d/rust_pins.h" || return 1
     # shellcheck disable=SC2046  # the flags are one word each
