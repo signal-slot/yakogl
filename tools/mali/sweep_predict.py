@@ -30,7 +30,11 @@ cases: the run_case switch of gl_test.c names the case function, the function
 body names `gl_test_*_src` symbols, and the ENTRIES table of
 gen_gl_test_shaders.py maps each symbol to a file under tools/shaders. A
 source not in corpus-verdicts.txt (or a case with no symbol) cannot be
-judged: it stays REFUSED. The corpus file is read, not regenerated: run
+judged: it stays REFUSED. The cases whose GLSL gl_test.c builds with snprintf
+(149, 166; GENERATED) are judged on the exact text the default build makes:
+this file ports the generators, `--write-generated` writes the text under
+tools/mali/testdata/sweepgen_*, and tools/mali/testdata/sweepgen-verdicts.txt
+holds the compiler's verdict on each (measured, see its header). The corpus file is read, not regenerated: run
 tools/mali/corpus-verdicts.sh --write first when the compiler moved.
 Standard library only.
 """
@@ -44,6 +48,56 @@ ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 LINE = re.compile(r"^(?P<head>.*?\bverdict case )(?P<num>\d+)(?P<mid> \S*?:)\s*(?P<verdict>[A-Z][A-Z-]*)(?P<rest>.*)$")
 SWEEP = re.compile(r"^sweep-(\d+)\.verdicts\.txt$")
 SYMBOL = re.compile(r"\bgl_test_\w+_src\b")
+COMP = "xyzw"
+TESTDATA = os.path.join(HERE, "testdata")
+# the verdicts of the generated sources (the line format of corpus-verdicts.txt)
+GEN_VERDICTS = os.path.join(TESTDATA, "sweepgen-verdicts.txt")
+
+
+def vsunits_vs(n=16):
+    """gl_test.c vsunits_vs_src(buf, size, n): case 149's vertex shader."""
+    s = "#version 100\nattribute vec4 a_pos;\nuniform vec4 u_w[4];\nvarying vec4 v_c;\n"
+    s += "".join("uniform sampler2D u_s%d;\n" % k for k in range(n))
+    s += "void main() {\n    vec2 c = vec2(0.5);\n    vec4 r = vec4(0.0);\n"
+    s += "".join("    r += u_w[%d].%c * texture2DLod(u_s%d, c, 0.0);\n" % (k // 4, COMP[k % 4], k) for k in range(n))
+    return s + "    v_c = r;\n    gl_Position = a_pos;\n}\n"
+
+
+SHP_SEL0, SHP_SEL_CONST, SHP_MAX_VEC4 = 56, 9, 70
+SHP_IDX = (0, 32, 60, 63, 64, 65, 66, 67, 69)
+
+
+def shp_frag(n_vec4):
+    """gl_test.c shp_src(buf, size, n_vec4, frag = true): case 166 arms A and B."""
+    s = ("#version 100\nprecision mediump float;\nuniform vec4 u_p[%d];\nvoid main() {\n"
+         "    vec4 r = u_p[%d].%c * vec4(1.0, 0.0, 1.0, 1.0);\n"
+         % (n_vec4, SHP_SEL0 + SHP_SEL_CONST // 4, COMP[SHP_SEL_CONST % 4]))
+    for j, i in enumerate(SHP_IDX):
+        if i < n_vec4:
+            s += "    r += u_p[%d].%c * u_p[%d];\n" % (SHP_SEL0 + j // 4, COMP[j % 4], i)
+    return s + "    gl_FragColor = r;\n}\n"
+
+
+def fshp_units(n=16):
+    """gl_test.c fshp_units_src(): case 166 arm C (FSHP_UNITS samplers)."""
+    s = "#version 100\nprecision mediump float;\nuniform vec4 u_w[4];\n"
+    s += "".join("uniform sampler2D u_s%d;\n" % k for k in range(n))
+    s += "void main() {\n    vec2 c = vec2(0.5);\n    vec4 r = vec4(0.0);\n"
+    s += "".join("    r += u_w[%d].%c * texture2D(u_s%d, c);\n" % (k // 4, COMP[k % 4], k) for k in range(n))
+    return s + "    gl_FragColor = r;\n}\n"
+
+
+# The sweep cases whose GLSL gl_test.c builds at run time with snprintf: the
+# generated files (name -> text, checked in under tools/mali/testdata) and the
+# static symbols their callers name (not in the case function's own body).
+# The default build: 16 vertex units (CONFIG_GL_TEST_VSU_UNITS unset) and no
+# extra fragment samplers. Case 206's array arm is not here: it draws the
+# static es300/array.frag.
+GENERATED = {
+    149: ({"sweepgen_149_vs.vert": vsunits_vs(16)}, {"gl_test_vsunits_fs_src"}),
+    166: ({"sweepgen_166_a.frag": shp_frag(64), "sweepgen_166_b.frag": shp_frag(SHP_MAX_VEC4),
+           "sweepgen_166_c.frag": fshp_units(16)}, {"gl_test_fshp_vs_src"}),
+}
 
 
 def read_sweeps(rec):
@@ -99,12 +153,29 @@ def corpus(path):
     return out
 
 
-def judge(num, symbols, files, verdicts):
+def gen_verdicts(path=GEN_VERDICTS):
+    """{generated file name: verdict text} from sweepgen-verdicts.txt."""
+    if not os.path.exists(path):
+        return {}
+    return {os.path.basename(k): v for k, v in corpus(path).items()}
+
+
+def judge(num, symbols, files, verdicts, gen=None):
     """(True, "") when every source of case num compiles; else (False, why)."""
-    syms = symbols.get(num)
+    syms = set(symbols.get(num) or ())
+    gaps = []
+    if num in GENERATED:
+        texts, extra = GENERATED[num]
+        syms |= extra
+        gv = gen_verdicts() if gen is None else gen
+        for name in sorted(texts):
+            v = gv.get(name)
+            if v is None:
+                gaps.append("tools/mali/testdata/%s is not in sweepgen-verdicts.txt" % name)
+            elif v != "ok":
+                gaps.append("tools/mali/testdata/%s: %s" % (name, v))
     if not syms:
         return False, "no shader source symbol in the case function (its GLSL is built at run time, or it is not in gl_test.c)"
-    gaps = []
     for s in sorted(syms):
         f = files.get(s)
         if f is None:
@@ -142,7 +213,18 @@ def render(p, pred):
     return "%s%d%s %s" % (p["head"], int(p["num"]), p["mid"], pred)
 
 
+def write_generated():
+    """Write the generated sources under tools/mali/testdata."""
+    for texts, _ in GENERATED.values():
+        for name, text in texts.items():
+            with open(os.path.join(TESTDATA, name), "w") as f:
+                f.write(text)
+
+
 def main(argv):
+    if argv == ["--write-generated"]:
+        write_generated()
+        return 0
     ap = argparse.ArgumentParser(description="predict the verdicts of the next T6 sweep")
     ap.add_argument("record")
     ap.add_argument("--cases", help="comma list of case numbers")

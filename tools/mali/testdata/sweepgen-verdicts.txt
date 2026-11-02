@@ -1,0 +1,10 @@
+# The Mali back end's verdict on each sweep case source that gl_test.c builds at
+# run time (tools/mali/testdata/sweepgen_* files, written by
+# `python3 -I tools/mali/sweep_predict.py --write-generated`), in the line
+# format of corpus-verdicts.txt. Measured with src/shaderc/online/mali/tests.rs
+# `compile(stage, src)`, as the_corpus_verdicts_are_pinned measures the corpus:
+# measure it again when the compiler moves (no test pins this file yet).
+tools/mali/testdata/sweepgen_149_vs.vert: Valhall: a vertex shader texture look-up other than one 2D look-up at a level (a second one, a size query) is not lowered yet
+tools/mali/testdata/sweepgen_166_a.frag: ok
+tools/mali/testdata/sweepgen_166_b.frag: ok
+tools/mali/testdata/sweepgen_166_c.frag: ok
