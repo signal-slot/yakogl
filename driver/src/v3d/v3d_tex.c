@@ -124,17 +124,41 @@ static uint32_t dimension_mpad(uint32_t dimension, uint32_t level)
 	return minify(pot_dim, level - 1);
 }
 
-/* v3d_resource.c v3d_setup_slices, for a 2D, one-layer, uncompressed,
- * never-shared resource (no winsys stride); `uif_top` as Mesa's: level 0 is
- * UIF whatever its size. */
-static bool layout(uint32_t width, uint32_t height, uint32_t levels, uint32_t cpp, bool uif_top,
-		   struct v3d_tex_layout *l);
+/* v3d_setup_slices' level_depth (v3d_resource.c:609-611, :636-639): level 0
+ * has the depth itself (u_minify(depth, 0)); a level i >= 1 has
+ * u_minify(pot_depth, i) with pot_depth = 2 * v3d_get_dimension_mpad(depth,
+ * 1, 1) = 2 * next_pow2(u_minify(depth, 1)), the same power-of-two rule the
+ * sides follow from level 2, one level earlier. So a depth of 6 has 4 slices
+ * at level 1 (next_pow2(3)), a depth of 5 has 2, a depth of 9 has 4, and a
+ * depth of 1 has 1 at every level. */
+uint32_t v3d_tex_level_depth(uint32_t depth, uint32_t level)
+{
+	if (level == 0)
+		return depth;
+	return minify(2 * dimension_mpad(depth, 1), level);
+}
 
-/* ... single-sampled: uif_top false */
+/* v3d_resource.c v3d_setup_slices, for an uncompressed, never-shared
+ * resource (no winsys stride) of `depth` slices (1: a 2D texture, a cube
+ * face or an array layer; more: a 3D texture); `uif_top` as Mesa's: level 0
+ * is UIF whatever its size. */
+static bool layout(uint32_t width, uint32_t height, uint32_t depth, uint32_t levels, uint32_t cpp,
+		   bool uif_top, struct v3d_tex_layout *l);
+
+/* ... one slice a level, single-sampled: uif_top false */
 bool v3d_tex_layout(uint32_t width, uint32_t height, uint32_t levels, uint32_t cpp,
 		    struct v3d_tex_layout *l)
 {
-	return layout(width, height, levels, cpp, false, l);
+	return layout(width, height, 1, levels, cpp, false, l);
+}
+
+/* ... a 3D texture: `depth` slices at level 0, Mesa's level_depth below it */
+bool v3d_tex_layout_3d(uint32_t width, uint32_t height, uint32_t depth, uint32_t levels,
+		       uint32_t cpp, struct v3d_tex_layout *l)
+{
+	if (depth == 0 || depth >= (1u << 14))
+		return false;
+	return layout(width, height, depth, levels, cpp, false, l);
 }
 
 /* A multisampled (4x) width x height resource: one level of twice the width
@@ -145,23 +169,26 @@ bool v3d_tex_layout_msaa(uint32_t width, uint32_t height, uint32_t cpp, struct v
 {
 	if (width == 0 || height == 0 || width >= (1u << 13) || height >= (1u << 13))
 		return false;
-	return layout(2 * width, 2 * height, 1, cpp, true, l);
+	return layout(2 * width, 2 * height, 1, 1, cpp, true, l);
 }
 
-static bool layout(uint32_t width, uint32_t height, uint32_t levels, uint32_t cpp, bool uif_top,
-		   struct v3d_tex_layout *l)
+static bool layout(uint32_t width, uint32_t height, uint32_t depth, uint32_t levels, uint32_t cpp,
+		   bool uif_top, struct v3d_tex_layout *l)
 {
 	if (!l || width == 0 || height == 0 || width >= (1u << 14) || height >= (1u << 14) ||
-	    levels == 0 || levels > V3D_TEX_MAX_LEVELS ||
+	    depth == 0 || levels == 0 || levels > V3D_TEX_MAX_LEVELS ||
 	    (cpp != 1 && cpp != 2 && cpp != 4 && cpp != 8 && cpp != 16))
 		return false;
-	memset(l, 0, sizeof(*l));
-	l->width = width;
-	l->height = height;
-	l->levels = levels;
-	l->cpp = cpp;
+	/* built apart and copied out at the end: a 3D stack past 32 bits is
+	 * refused with `l` untouched */
+	struct v3d_tex_layout out;
+	memset(&out, 0, sizeof(out));
+	out.width = width;
+	out.height = height;
+	out.levels = levels;
+	out.cpp = cpp;
 
-	uint32_t offset = 0;
+	uint64_t offset = 0; /* the slices' total, checked against 32 bits below */
 	uint32_t utile_w = utile_width(cpp);
 	uint32_t utile_h = utile_height(cpp);
 	uint32_t uif_block_w = utile_w * 2;
@@ -172,8 +199,11 @@ static bool layout(uint32_t width, uint32_t height, uint32_t levels, uint32_t cp
 	uint32_t pot_height = 2 * dimension_mpad(height, 1);
 
 	for (int i = (int)levels - 1; i >= 0; i--) {
-		struct v3d_tex_slice *slice = &l->slices[i];
+		struct v3d_tex_slice *slice = &out.slices[i];
 		uint32_t level_width, level_height;
+		/* the slices of this level (:636-639): every one is tiled as
+		 * the level's size says, the depth never enters the choice */
+		uint32_t level_depth = v3d_tex_level_depth(depth, (uint32_t)i);
 
 		if (i < 2) {
 			level_width = minify(width, (uint32_t)i);
@@ -218,24 +248,30 @@ static bool layout(uint32_t width, uint32_t height, uint32_t levels, uint32_t cp
 				slice->tiling = V3D_TEX_TILING_UIF_NO_XOR;
 		}
 
-		slice->offset = offset;
+		if (offset > UINT32_MAX)
+			return false;
+		slice->offset = (uint32_t)offset;
 		slice->stride = level_width * cpp;
 		slice->padded_height = level_height;
 		slice->size = level_height * slice->stride;
 
-		uint32_t slice_total_size = slice->size;
+		/* the level's slices one after the other (:722); `size` stays
+		 * ONE slice's bytes, which is what the tiling and a 3D texture's
+		 * slice stride (v3d_tex_slice_offset) take */
+		uint64_t slice_total_size = (uint64_t)slice->size * level_depth;
 
 		/* The HW aligns level 1's base to a page if any of level 1 or
 		 * below could be UIF XOR.  The lower levels then inherit the
 		 * alignment for as long as necessary, thanks to being power of
-		 * two aligned. */
+		 * two aligned. (The total of level 1's slices is what is
+		 * aligned, :729-734, not each slice.) */
 		if (i == 1 && level_width > 4 * uif_block_w &&
 		    level_height > PAGE_CACHE_MINUS_1_5_UB_ROWS * uif_block_h)
-			slice_total_size = align_u32(slice_total_size, V3D_UIFCFG_PAGE_SIZE);
+			slice_total_size = (slice_total_size + V3D_UIFCFG_PAGE_SIZE - 1) &
+					   ~(uint64_t)(V3D_UIFCFG_PAGE_SIZE - 1);
 
 		offset += slice_total_size;
 	}
-	l->size = offset;
 
 	/* UIF/UBLINEAR levels need to be aligned to UIF-blocks, and LT only
 	 * needs to be aligned to utile boundaries.  Since tiles are laid out
@@ -244,12 +280,14 @@ static bool layout(uint32_t width, uint32_t height, uint32_t levels, uint32_t cp
 	 * slices.
 	 *
 	 * We additionally align to 4k, which improves UIF XOR performance. */
-	uint32_t page_align_offset = align_u32(l->slices[0].offset, 4096) - l->slices[0].offset;
-	if (page_align_offset) {
-		l->size += page_align_offset;
-		for (uint32_t i = 0; i < levels; i++)
-			l->slices[i].offset += page_align_offset;
-	}
+	uint32_t page_align_offset = align_u32(out.slices[0].offset, 4096) - out.slices[0].offset;
+	offset += page_align_offset;
+	if (offset > UINT32_MAX)
+		return false;
+	out.size = (uint32_t)offset;
+	for (uint32_t i = 0; i < levels; i++)
+		out.slices[i].offset += page_align_offset;
+	*l = out;
 	return true;
 }
 
@@ -369,6 +407,21 @@ bool v3d_tex_layer_offset(const struct v3d_tex_layout *l, uint32_t level, uint32
 	if (!out || stride == 0 || level >= l->levels || layer >= layers)
 		return false;
 	uint64_t off = (uint64_t)l->slices[level].offset + (uint64_t)stride * layer;
+	if (off > UINT32_MAX)
+		return false;
+	*out = (uint32_t)off;
+	return true;
+}
+
+/* v3d_layer_offset for a 3D texture (:776-777): slice `slice` of a level is
+ * `slice` slice sizes after the level; the level's slices are Mesa's
+ * level_depth (v3d_tex_level_depth), which the layout allocated. */
+bool v3d_tex_slice_offset(const struct v3d_tex_layout *l, uint32_t level, uint32_t slice,
+			  uint32_t depth, uint32_t *out)
+{
+	if (!l || !out || depth == 0 || level >= l->levels || slice >= v3d_tex_level_depth(depth, level))
+		return false;
+	uint64_t off = (uint64_t)l->slices[level].offset + (uint64_t)l->slices[level].size * slice;
 	if (off > UINT32_MAX)
 		return false;
 	*out = (uint32_t)off;
@@ -522,6 +575,17 @@ void v3d_tex_state_from_layout(struct v3d_tex_state *s, const struct v3d_tex_lay
 	/* v3d_setup_slices' cube_map_stride for a non-3D texture, which
 	 * v3d_setup_texture_shader_state programs whatever the layer count */
 	s->array_stride_64 = align_u32(s0->offset + s0->size, 64) / 64;
+}
+
+/* The same fields for a 3D texture (v3d_tex_layout_3d): Mesa's
+ * cube_map_stride is then level 0's slice size (v3d_resource.c:765-766, "we
+ * need to program the stride between slices of miplevel 0"), and the state
+ * takes it / 64 as for an array (v3dx_state.c:961). A slice is whole utiles
+ * of 64 bytes, so the division is exact. */
+void v3d_tex_state_from_layout_3d(struct v3d_tex_state *s, const struct v3d_tex_layout *l)
+{
+	v3d_tex_state_from_layout(s, l);
+	s->array_stride_64 = l->slices[0].size / 64;
 }
 
 /* A type some supported format has: the TMU would read any other one as a

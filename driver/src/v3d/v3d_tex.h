@@ -26,9 +26,13 @@
  *   Copyright (c) 2014-2017 Broadcom
  *   Copyright (C) 2012 Rob Clark <robclark@freedesktop.org>
  *
- * The cut is what GL ES 2.0 on this backend needs first: 2D, one layer, no
- * MSAA, uncompressed (block size 1), and a resource that is never shared
- * (Mesa's uif_top false). Checked against Mesa by tools/v3d/tex_check.c.
+ * The cut is what GL ES 2.0 on this backend needs first: 2D, no MSAA,
+ * uncompressed (block size 1), and a resource that is never shared (Mesa's
+ * uif_top false); then the layered images of ES 2.0 cube maps and ES 3.0 2D
+ * arrays (v3d_tex_layer_*) and the 3D textures of ES 3.0 (v3d_tex_layout_3d,
+ * v3d_tex_slice_offset, v3d_tex_state_from_layout_3d; the design is
+ * docs/notes/v3d-tex-layout-es3.md). Checked against Mesa by
+ * tools/v3d/tex_check.c.
  *
  * No OS calls: the caller owns the memory.
  */
@@ -70,9 +74,42 @@ struct v3d_tex_layout {
 
 /* The layout of a width x height image with `levels` levels (1 = no mip
  * chain) of `cpp` bytes a texel (1, 2, 4, 8 or 16). False for a size or a
- * count this cut does not lay out. */
+ * count this cut does not lay out. One slice a level: a 2D texture, or one
+ * layer of a cube map or an array (v3d_tex_layer_stride). */
 bool v3d_tex_layout(uint32_t width, uint32_t height, uint32_t levels, uint32_t cpp,
 		    struct v3d_tex_layout *l);
+
+/* The layout of a 3D texture width x height x depth with `levels` levels, as
+ * Mesa's v3d_setup_slices lays out a PIPE_TEXTURE_3D resource
+ * (v3d_resource.c:582-768): each level's slices are tiled by the level's
+ * width and height alone, exactly as v3d_tex_layout tiles that level (same
+ * stride, padded_height, size and tiling), and a level holds
+ * v3d_tex_level_depth(depth, level) slices one `size` after the other
+ * (:722), so the levels' offsets and the whole `size` differ from the 2D
+ * layout's. `size` is the whole stack (Mesa's rsc->size, :739-755: the
+ * level-1 page alignment applies to the level's total, :729-734). With a
+ * depth of 1 it is v3d_tex_layout's layout. False, with `l` untouched, for
+ * a depth of 0 or 16384 and more (the state's Image Depth is 14 bits), a
+ * stack past 32 bits, or what v3d_tex_layout refuses. */
+bool v3d_tex_layout_3d(uint32_t width, uint32_t height, uint32_t depth, uint32_t levels,
+		       uint32_t cpp, struct v3d_tex_layout *l);
+
+/* The slices Mesa allocates for level `level` of a 3D texture `depth` deep
+ * (v3d_setup_slices' level_depth, v3d_resource.c:609-611, :636-639): the
+ * depth at level 0; from level 1, u_minify(2 * next_pow2(depth >> 1), level),
+ * at least 1 (a depth of 6 has 4 slices at level 1, 2 at level 2). GL fills
+ * the first max(depth >> level, 1) of them; the rest are padding. */
+uint32_t v3d_tex_level_depth(uint32_t depth, uint32_t level);
+
+/* v3d_layer_offset for a 3D texture (v3d_resource.c:776-777): the offset of
+ * slice `slice` of level `level` from the start of the 3D image laid out by
+ * v3d_tex_layout_3d with `depth`: slices[level].offset + slice *
+ * slices[level].size. To tile it, pass image + slice * slices[level].size to
+ * v3d_tex_store_level/_box (which add the level's offset). False, with *out
+ * untouched, for a level the layout lacks or a slice at or past
+ * v3d_tex_level_depth(depth, level). */
+bool v3d_tex_slice_offset(const struct v3d_tex_layout *l, uint32_t level, uint32_t slice,
+			  uint32_t depth, uint32_t *out);
 
 /* A 4x multisampled width x height resource as Mesa lays it out: one level
  * of 2 x width by 2 x height, UIF at the top (v3d_resource.c:612-642). The
@@ -243,12 +280,21 @@ struct v3d_tex_state {
 	/* from the layout's level 0 (v3d_tex_state_from_layout) */
 	bool level_0_is_strictly_uif, level_0_xor_enable, extended;
 	uint32_t level_0_ub_pad;
-	/* Mesa's cube_map_stride / 64, programmed whatever the layer count */
+	/* Mesa's cube_map_stride / 64, programmed whatever the layer count:
+	 * the stride from one layer's mip tree to the next, or for a 3D
+	 * texture the stride between two slices of level 0 */
 	uint32_t array_stride_64;
 };
 
-/* The layout-derived fields, as v3d_setup_texture_shader_state sets them. */
+/* The layout-derived fields, as v3d_setup_texture_shader_state sets them,
+ * for a 2D texture, a cube map or an array (array_stride_64 = the tree
+ * stride / 64). The caller sets `depth`: 1, 6, or the layer count
+ * (v3dx_state.c:937-938). */
 void v3d_tex_state_from_layout(struct v3d_tex_state *s, const struct v3d_tex_layout *l);
+/* The same for a 3D texture laid out by v3d_tex_layout_3d: array_stride_64 =
+ * level 0's slice size / 64 (v3d_resource.c:765-766, v3dx_state.c:961). The
+ * caller sets `depth` = the level 0 depth (v3dx_state.c:935-936). */
+void v3d_tex_state_from_layout_3d(struct v3d_tex_state *s, const struct v3d_tex_layout *l);
 /* False, with `out` untouched, for a record the TMU would read as something
  * else: a type no supported format has (v3d_tex_format_get), a base address
  * that is not 64-byte aligned (flag bits share its low bits), a size, level,
