@@ -794,6 +794,12 @@ fn compile_vivante<'s>(
     let lowered = lower::compile_to_ir(scratch, st, src)
         .and_then(|l| lower::zero_varyings(scratch, l, zero))
         .and_then(|l| super::lodkey::remap_mag_switch(scratch, l, mag_switch))
+        /* 128-bit samplers as two G32R32 plane look-ups, joined (the
+         * per-draw key; empty, and the module untouched, unless asked) */
+        .and_then(|l| match super::vivante::wide128::compile_planes() {
+            p if p.is_empty() => Ok(l),
+            p => super::vivante::wide128::split_planes(scratch, l, p),
+        })
         /* integer samplers read as the float look-up (docs/es3/gc-formats.md §3) */
         .and_then(|l| super::vivante::int_tex::float_typed_lookups(scratch, l))
         .and_then(|l| lower::relocate(scratch, l, src, mark))
