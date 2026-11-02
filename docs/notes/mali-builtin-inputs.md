@@ -499,3 +499,54 @@ The board dump of Mesa 26.2.1 shows the same word: Attribute 1 w1
 `01000042` against case 47's `00000042`
 (tools/cts/log/2026-10-28-boardref/README.md 5.5). Case 49's front-face
 bit (DCD flags 0 `Front Face CCW`, 5.6) is already built.
+
+## Case 63 matattr: one attribute record per matrix column (ref-matattr-63)
+
+Case 63 (`case_matattr`, gl_test.c) draws `es100/matattr2.vert`,
+`matattr3.vert` and `matattr4.vert` with `matattr.frag`. A `matN` attribute
+takes N consecutive locations, one per column; the case binds one interleaved
+array buffer (the vec4 `a_pos`, then each column's N floats, vertex stride
+`(4 + N*N) * 4` bytes) and points location `1 + c` at column `c`, offset
+`(4 + c*N) * 4`. The board FAILs (`first bad check 1 got 0xff800000 want
+0xff804000`) because `src/shaderc/online/mali/mod.rs` writes one record per
+*shader input* (the loop `for d in m.inputs`, "record = location"): `a_xf` is
+one input, so the vertex program gets two records and reads the other columns
+from nowhere. Mesa writes one record per column.
+
+The reference is `tools/mali/testdata/other_63_matattr.{vert,frag,expect.json}`
+(the mat4 pair, the largest), made by
+`tools/mali/drm_shim_ref.sh run <shim> vert frag out --mat-columns` with Mesa
+26.2.1 and `pan_ref_diff.py extract out.trace --draw --attributes`.
+`--mat-columns` is gl_ref.py's case-63 draw (above); without it gl_ref enables
+only the first location of a matrix, and Mesa then makes the other columns
+constant records (R32F RGB1, buffer 2, offsets 0, 4, 8 in a stride-0 buffer),
+which is what `varyconst_63_matattr` and `chain_matattr3/4` were made with.
+`--attributes` adds `attributes` and `attribute_buffers` to the JSON: the first
+draw's Attribute records (format, buffer, offset, stride, frequency) and the
+Buffer records they index (size, stride, address less the first buffer's).
+
+What Mesa emits (Valhall v7 descriptors, `Attribute type: 1D`, `Frequency:
+Vertex`, `Divisor` 0 everywhere, draw of 6 vertices from the zero-filled array
+buffer of `6 * stride` bytes):
+
+| shader | record | location | format | buffer index | record offset | record stride | buffer address offset | buffer size |
+|---|---|---|---|---|---|---|---|---|
+| mat4 | 0 | `a_pos` | RGBA32F RGBA | 0 | 0 | 80 | 0 | 480 |
+| mat4 | 1..4 | column c | RGBA32F RGBA | c+1 | 0 | 80 | 16*(c+1) | 480 - 16*(c+1) |
+| mat3 | 0 | `a_pos` | RGBA32F RGBA | 0 | 0 | 52 | 0 | 312 |
+| mat3 | 1..3 | column c | RGB32F RGB1 | c+1 | 0 | 52 | 16 + 12c | 312 - (16 + 12c) |
+| mat2 | 0 | `a_pos` | RGBA32F RGBA | 0 | 0 | 32 | 0 | 192 |
+| mat2 | 1..2 | column c | RG32F RGB1 | c+1 | 0 | 32 | 16 + 8c | 192 - (16 + 8c) |
+
+Decoded: record `i` is the i-th *location* read, `Buffer index` = the record
+number (each column its own buffer record, so mat4 has 5 records and 5
+buffers); the record stride is the vertex stride (the array's stride, in the
+Attribute, not in the Buffer, whose own `Stride` is 0); the column's byte
+offset in the vertex is folded into the buffer's address and shrinks its
+size, and the record's `Offset` stays 0. The format is the column's N floats
+(`R`, `RG`, `RGB`, `RGBA` 32F) with swizzle RGB1 for fewer than four
+components. The mat4 attribute table is 5 records (entry size 0xa0), the buffer table 5.
+The vertex program reads attribute `1 + c` for column c, so the compiler's
+`sc.attributes` needs one `(1 + c, 1 + c)` per column location read, not one
+per input (`fix-matattr-63`); whether the frame side already builds a record
+per bound array was not checked here.

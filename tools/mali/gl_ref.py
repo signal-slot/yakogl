@@ -9,7 +9,7 @@ tools/mali/drm_shim_ref.sh).
         [--size WxH] [--viewport X,Y,W,H] [--depth-range N,F] [--uniform-values]
         [--second-frame] [--depth-stencil] [--second-clear depth|stencil]
         [--blend-func SRC,DST] [--blend-color R,G,B,A] [--mrt N] [--levels N]
-        [--samples 4]
+        [--samples 4] [--mat-columns]
 
 <libdir> holds the libEGL.so.1 and libGLESv2.so.2 to use. The program runs on
 an EGL surfaceless display (EGL_PLATFORM_SURFACELESS_MESA) into a WxH RGBA8
@@ -69,6 +69,13 @@ case 113's cube (16x16 RGBA8, five levels on each of the six faces,
 GL_NEAREST_MIPMAP_NEAREST, clamped to the edge), so the trace holds the cube
 texture descriptor and its planes too. A sampler keeps its place in the
 numbering of the float uniforms.
+
+`--mat-columns` (ES 2.0 path) draws the way gl_test case 63 does: a matN
+attribute takes N consecutive locations, one per column of N floats, and all
+attributes share one interleaved array buffer of zeros (the vec4 position first,
+then the columns), stride the vertex's size, each location's offset its place
+in the vertex. Without it only the first location of a matrix is bound and
+enabled (vec4 client arrays), the other columns stay disabled constants.
 
 ES 3 mode: when either shader's first line is `#version 300 es`, the context
 is an OpenGL ES 3.0 one (EGL_CONTEXT_CLIENT_VERSION 3), the attributes are
@@ -160,6 +167,19 @@ def attributes_es3(text):
     return names
 
 
+def attribute_columns(text):
+    """Name -> (locations taken, floats per column) of the ES 1.00 `attribute`
+    lines: matN is N columns of N floats, anything else one location."""
+    cols = {}
+    decl = re.compile(r"^\s*attribute\s+(?:(?:highp|mediump|lowp)\s+)?(\w+)\s+(.*?)\s*;\s*$", re.S)
+    for top, kind, chunk in u.es100_statements(u.strip_comments(text)):
+        m = decl.match(chunk) if (top and kind == "stmt") else None
+        if m:
+            for d in m.group(2).split(","):
+                cols[d.strip()] = {"mat2": (2, 2), "mat3": (3, 3), "mat4": (4, 4)}.get(m.group(1), (1, 4))
+    return cols
+
+
 INT_UNIFORM_COMPONENTS = {"int": 1, "ivec2": 2, "ivec3": 3, "ivec4": 4}
 UNIFORM_COMPONENTS = {"float": 1, "vec2": 2, "vec3": 3, "vec4": 4, "mat2": 4, "mat3": 9, "mat4": 16}
 
@@ -211,6 +231,9 @@ def main():
     except (ValueError, IndexError, KeyError):
         print(__doc__, file=sys.stderr)
         return 2
+    mat_columns = "--mat-columns" in args
+    if mat_columns:
+        args.remove("--mat-columns")
     set_uniforms = "--uniform-values" in args
     if set_uniforms:
         args.remove("--uniform-values")
@@ -322,7 +345,12 @@ def main():
     gl.glAttachShader(prog, shader(GL_VERTEX_SHADER, vs_path))
     gl.glAttachShader(prog, shader(GL_FRAGMENT_SHADER, fs_path))
     names = (attributes_es3 if es3 else attributes)(open(vs_path).read())
-    for i, n in enumerate(names):
+    cols = attribute_columns(open(vs_path).read()) if (mat_columns and not es3) else {}
+    locs, nloc = [], 0
+    for n in names:
+        locs.append(nloc)
+        nloc += cols.get(n, (1, 4))[0]
+    for i, n in zip(locs, names):
         gl.glBindAttribLocation(prog, i, n.encode())
     gl.glLinkProgram(prog)
     ok = C.c_int()
@@ -421,9 +449,25 @@ def main():
                 getattr(gl, "glUniform%dfv" % n)(loc, 1, vals)
             print("gl_ref: uniform %s %s at %d = %s" % (ty, name, loc, " ".join("%g" % v for v in vals)))
     zeros = (C.c_float * (6 * 16))()
-    for i in range(len(names)):
-        gl.glVertexAttribPointer(i, 4, GL_FLOAT, 0, 0, zeros)
-        gl.glEnableVertexAttribArray(i)
+    if mat_columns and not es3:
+        # one interleaved VBO: per vertex the attributes' floats in order
+        sizes = [cols[n] for n in names]
+        stride = 4 * sum(c * r for c, r in sizes)
+        vbo = C.c_uint()
+        gl.glGenBuffers(1, C.byref(vbo))
+        gl.glBindBuffer(0x8892, vbo)
+        gl.glBufferData(C.c_int(0x8892), C.c_long(6 * stride), (C.c_ubyte * (6 * stride))(), 0x88E4)
+        off = 0
+        for i, (c, r) in zip(locs, sizes):
+            for k in range(c):
+                gl.glVertexAttribPointer(C.c_uint(i + k), C.c_int(r), GL_FLOAT, 0, C.c_int(stride),
+                                         C.c_void_p(off))
+                gl.glEnableVertexAttribArray(i + k)
+                off += 4 * r
+    else:
+        for i in range(nloc):
+            gl.glVertexAttribPointer(i, 4, GL_FLOAT, 0, 0, zeros)
+            gl.glEnableVertexAttribArray(i)
     gl.glViewport(*viewport)
     gl.glDepthRangef(C.c_float(near), C.c_float(far))
     gl.glClearColor(C.c_float(0), C.c_float(0), C.c_float(1), C.c_float(1))

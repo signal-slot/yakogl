@@ -5,6 +5,7 @@
 
     tools/mali/pan_ref_diff.py list <trace>
     tools/mali/pan_ref_diff.py extract <trace> --draw > expect.json
+    tools/mali/pan_ref_diff.py extract <trace> --draw --attributes > expect.json
     tools/mali/pan_ref_diff.py extract <trace> REGION=VA ... > expect.json
     tools/mali/pan_ref_diff.py diff <pan_shc stdout> <pan_shc stderr> <trace> --draw
     tools/mali/pan_ref_diff.py diff <pan_shc stdout> <pan_shc stderr> <trace> REGION=VA ...
@@ -158,6 +159,51 @@ def read_draw(path):
     for kind, d in draw.items():
         d["fau"] = fau.get(kind)
     return {k: d for k, d in draw.items() if d["va"] is not None}
+
+
+def read_attributes(path):
+    """The first draw's attribute and attribute-buffer descriptors.
+
+    The trace prints the draw's resource tables before its first FAU table:
+    an Entry holding Attribute records, and the Entry after it the Buffer
+    records they index. Per Attribute: format, buffer index, offset, stride,
+    frequency; per Buffer: size, stride, and its address less the first
+    buffer's (the address itself is the run's).
+    """
+    attrs, bufs = [], []
+    entry = None  # "attribute" or "buffer": the kind of record being read
+    rec = None
+    for line in open(path, errors="replace"):
+        line = line.rstrip("\n")
+        if FAU_HEAD.match(line):
+            break
+        m = re.match(r"^\s+(Attribute|Buffer) @[0-9a-f]+:", line)
+        if m:
+            if m.group(1) == "Buffer" and not attrs:
+                continue  # a Buffer before any Attribute: the null entry
+            if m.group(1) == "Attribute" and bufs:
+                break  # the second dump of the same tables
+            rec = {"kind": m.group(1)}
+            (attrs if m.group(1) == "Attribute" else bufs).append(rec)
+            continue
+        if re.match(r"^\s+Entry \d+ @", line):
+            if bufs:
+                break  # past the buffer entry
+            rec = None
+            continue
+        m = re.match(r"^\s+(Format \(v7\)|Offset|Buffer index|Stride|Frequency|Size|Address): (.*)$", line)
+        if m and rec is not None and m.group(1) not in rec:
+            rec[m.group(1)] = m.group(2)
+    out = {"attributes": [], "attribute_buffers": []}
+    for a in attrs:
+        out["attributes"].append({"format": a["Format (v7)"], "buffer": int(a["Buffer index"], 16),
+                                  "offset": int(a["Offset"]), "stride": int(a["Stride"], 16),
+                                  "frequency": a["Frequency"]})
+    base = int(bufs[0]["Address"], 16) if bufs else 0
+    for b in bufs:
+        out["attribute_buffers"].append({"size": int(b["Size"], 16), "stride": int(b["Stride"], 16),
+                                         "address_offset": int(b["Address"], 16) - base})
+    return out
 
 
 def region_of(blocks, va, facts):
@@ -369,8 +415,10 @@ def main(argv):
                 print("    %016x  %s" % (w, d))
         return 0
     if len(argv) >= 3 and argv[0] == "extract":
-        if argv[2:] == ["--draw"]:
+        if argv[2:] in (["--draw"], ["--draw", "--attributes"]):
             ref = reference_from_trace(argv[1])
+            if argv[2:] == ["--draw", "--attributes"]:
+                ref.update(read_attributes(argv[1]))
         else:
             pairs = {n: int(v, 16) for n, _, v in (p.partition("=") for p in argv[2:])}
             ref = reference_from_trace(argv[1], pairs)
