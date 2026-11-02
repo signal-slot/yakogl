@@ -124,6 +124,41 @@ unsafe extern "C" fn v3d_tex_state_from_layout(s: *mut V3dTexState, l: *const V3
     unsafe { f(s, l) }
 }
 
+/* The three more that `image_offset`, `image_bytes` and `tile` call for a
+ * layered image. */
+#[no_mangle]
+unsafe extern "C" fn v3d_tex_layer_stride(l: *const V3dTexLayout) -> u32 {
+    // SAFETY: the C function's own signature.
+    let f: unsafe extern "C" fn(*const V3dTexLayout) -> u32 =
+        unsafe { std::mem::transmute(sym("v3d_tex_layer_stride")) };
+    // SAFETY: the library's call, passed on.
+    unsafe { f(l) }
+}
+
+#[no_mangle]
+unsafe extern "C" fn v3d_tex_layers_size(l: *const V3dTexLayout, layers: u32, out: *mut u32) -> bool {
+    // SAFETY: the C function's own signature.
+    let f: unsafe extern "C" fn(*const V3dTexLayout, u32, *mut u32) -> bool =
+        unsafe { std::mem::transmute(sym("v3d_tex_layers_size")) };
+    // SAFETY: the library's call, passed on.
+    unsafe { f(l, layers, out) }
+}
+
+#[no_mangle]
+unsafe extern "C" fn v3d_tex_store_level(
+    image: *mut u8,
+    l: *const V3dTexLayout,
+    level: u32,
+    src: *const u8,
+    stride: u32,
+) {
+    // SAFETY: the C function's own signature.
+    let f: unsafe extern "C" fn(*mut u8, *const V3dTexLayout, u32, *const u8, u32) =
+        unsafe { std::mem::transmute(sym("v3d_tex_store_level")) };
+    // SAFETY: the library's call, passed on.
+    unsafe { f(image, l, level, src, stride) }
+}
+
 /// The real packer: the 24 bytes of TEXTURE_SHADER_STATE, or None when it
 /// refuses the record (a type no row of its table has, a field too wide).
 fn pack(s: &V3dTexState) -> Option<[u8; V3D_TEX_STATE_BYTES]> {
@@ -299,6 +334,325 @@ fn the_depth_binding_is_unchanged() {
     let es2 = GlesTextureBind { depth_luminance: 1, ..es3 };
     assert_eq!(texture::tmu_format(&es3), (29, [2, 0, 0, 1]));
     assert_eq!(texture::tmu_format(&es2), (29, [2, 2, 2, 1]));
+}
+
+/* ---- 2D arrays and 3D textures on the real layout (v3d-tex-3d-array) ------- */
+
+/* The layered images of docs/notes/v3d-tex-layout-es3.md, as `v3d::texture`
+ * places them over the real C's levels: the numbers are derived by hand from
+ * Mesa's v3d_setup_slices (gallium/drivers/v3d/v3d_resource.c, Mesa 26.2.1;
+ * the same numbers tools/v3d/tex_check.c pins on the C), and the Rust
+ * placing (`layout`, `image_offset`, `state`) is compared with the C's own
+ * 3D arm (v3d_tex_layout_3d, v3d_tex_slice_offset, v3d_tex_level_depth,
+ * v3d_tex_state_from_layout_3d), which the backend does not link. Both are
+ * still refused by name for sampling; this pins what the look-up items will
+ * build on. */
+
+/// A 2D array of RGBA8, `layers` layers and `levels` levels.
+fn array(w: u32, h: u32, layers: u32, levels: u32) -> GlesTextureBind {
+    GlesTextureBind {
+        type_: GLES_TEXTYPE_2D_ARRAY,
+        layers: layers as u16,
+        mip_levels: levels as u8,
+        mip_filter: u8::from(levels > 1),
+        ..bind(GLES_TEXFMT_RGBA8, w, h)
+    }
+}
+
+/// A 3D texture of RGBA8, `depth` deep (`layers`, src/backend.rs), `levels`
+/// levels.
+fn vol(w: u32, h: u32, depth: u32, levels: u32) -> GlesTextureBind {
+    GlesTextureBind { type_: GLES_TEXTYPE_3D, ..array(w, h, depth, levels) }
+}
+
+/// The C's v3d_tex_layout_3d.
+fn c_layout_3d(w: u32, h: u32, depth: u32, levels: u32, cpp: u32) -> Option<V3dTexLayout> {
+    // SAFETY: the C function's signature (v3d_tex.h).
+    let f: unsafe extern "C" fn(u32, u32, u32, u32, u32, *mut V3dTexLayout) -> bool =
+        unsafe { std::mem::transmute(sym("v3d_tex_layout_3d")) };
+    let mut l = V3dTexLayout::default();
+    // SAFETY: a live out-parameter.
+    unsafe { f(w, h, depth, levels, cpp, &mut l) }.then_some(l)
+}
+
+/// The C's v3d_tex_slice_offset.
+fn c_slice_offset(l: &V3dTexLayout, level: u32, slice: u32, depth: u32) -> Option<u32> {
+    // SAFETY: the C function's signature (v3d_tex.h).
+    let f: unsafe extern "C" fn(*const V3dTexLayout, u32, u32, u32, *mut u32) -> bool =
+        unsafe { std::mem::transmute(sym("v3d_tex_slice_offset")) };
+    let mut out = 0u32;
+    // SAFETY: a live layout and out-parameter.
+    unsafe { f(l, level, slice, depth, &mut out) }.then_some(out)
+}
+
+/// The C's v3d_tex_layer_offset.
+fn c_layer_offset(l: &V3dTexLayout, level: u32, layer: u32, layers: u32) -> Option<u32> {
+    // SAFETY: the C function's signature (v3d_tex.h).
+    let f: unsafe extern "C" fn(*const V3dTexLayout, u32, u32, u32, *mut u32) -> bool =
+        unsafe { std::mem::transmute(sym("v3d_tex_layer_offset")) };
+    let mut out = 0u32;
+    // SAFETY: a live layout and out-parameter.
+    unsafe { f(l, level, layer, layers, &mut out) }.then_some(out)
+}
+
+/// The C's v3d_tex_level_depth.
+fn c_level_depth(depth: u32, level: u32) -> u32 {
+    // SAFETY: the C function's signature (v3d_tex.h).
+    let f: unsafe extern "C" fn(u32, u32) -> u32 = unsafe { std::mem::transmute(sym("v3d_tex_level_depth")) };
+    // SAFETY: two integers.
+    unsafe { f(depth, level) }
+}
+
+/// The C's v3d_tex_load_box: the w x h box of `level` at (0, 0), read out of
+/// the tiled level that starts (with its slice offset) at `image`, into rows
+/// `stride` bytes apart.
+fn c_load_level(image: &[u8], l: &V3dTexLayout, level: u32, w: u32, h: u32, stride: u32) -> Vec<u8> {
+    // SAFETY: the C function's signature (v3d_tex.h).
+    let f: unsafe extern "C" fn(*const u8, *const V3dTexLayout, u32, u32, u32, u32, u32, *mut u8, u32) -> bool =
+        unsafe { std::mem::transmute(sym("v3d_tex_load_box")) };
+    let mut out = vec![0u8; (stride * h) as usize];
+    // SAFETY: the image holds the level (the caller offset it to the slice)
+    // and `out` holds h rows of `stride`.
+    assert!(unsafe { f(image.as_ptr(), l, level, 0, 0, w, h, out.as_mut_ptr(), stride) }, "load_box");
+    out
+}
+
+/// The dimension fields of a packed record (v3d_packet.xml, Texture Shader
+/// State, V3D 4.2): (Array Stride (64-byte aligned) bits 32..57, Image
+/// Width 58..71, Image Height 72..85, Image Depth 86..99).
+fn decode_dims(rec: &[u8; V3D_TEX_STATE_BYTES]) -> (u32, u32, u32, u32) {
+    let mut lo = [0u8; 16];
+    lo.copy_from_slice(&rec[..16]);
+    let x = u128::from_le_bytes(lo);
+    let field = |start: u32, size: u32| ((x >> start) & ((1u128 << size) - 1)) as u32;
+    (field(32, 26), field(58, 14), field(72, 14), field(86, 14))
+}
+
+/// A 2D array is Mesa's cube path with its layer count (v3d_resource.c:
+/// 757-764, :778-779). 64x32 x7 RGBA8 (utile 4x4, UIF block 8x8), smallest
+/// level first: 1x1 LT 64 B, 2x1 LT 64, 4x2 LT 64, 8x4 LT 32x4 = 128, 16x8
+/// UB2 64x8 = 512, 32x16 UIF 128x16 = 2048 (2 UB rows: no pad, no XOR; 32
+/// wide: no page alignment), 64x32 UIF 256x32 = 8192 (4 rows): offsets 0,
+/// 64, 128, 192, 320, 832, 2880, 11072 in all; level 0 to a page shifts
+/// every offset by 1216 (:749-755): 1216, 1280, 1344, 1408, 1536, 2048,
+/// 4096, 12288 bytes. The tree stride is align(4096 + 8192, 64) = 12288
+/// (:762-763); 4 layers are 12288 + 3 * 12288 = 49152 (:764); level 2 of
+/// layer 3 is at 1536 + 3 * 12288 = 38400 (:778-779). The record: Image
+/// Depth 4 (v3dx_state.c:937-938), Array Stride 12288 / 64 = 192 (:961),
+/// the base level 0 of layer 0 (:957-960), max level 6.
+#[test]
+fn a_2d_array_is_mesas_layout_with_the_layer_count() {
+    let b = array(64, 32, 4, 7);
+    let l = texture::layout(&b).expect("lays out");
+    let offsets: [u32; 7] = core::array::from_fn(|i| l.slices[i].offset);
+    assert_eq!(offsets, [4096, 2048, 1536, 1408, 1344, 1280, 1216]);
+    assert_eq!(l.size, 12288);
+    assert_eq!(texture::image_bytes(&b, &l), Some(49152));
+    assert_eq!(texture::image_offset(&b, &l, 2, 3), Some(38400));
+    for level in 0..7 {
+        for f in 0..5 {
+            assert_eq!(
+                texture::image_offset(&b, &l, level, f),
+                c_layer_offset(&l, level, f, 4),
+                "level {level} layer {f}"
+            );
+        }
+    }
+    assert_eq!(texture::image_offset(&b, &l, 0, 4), None);
+    let st = texture::state(&b, &l, 0x0010_0000);
+    assert_eq!((st.base, st.depth, st.max_level, st.array_stride_64), (0x0010_0000 + 4096, 4, 6, 192));
+    let rec = pack(&st).expect("packs");
+    assert_eq!(decode_dims(&rec), (192, 64, 32, 4));
+    assert_eq!(decode(&rec), (4, XYZW, false));
+    /* the non-power-of-two 13x7 x3 (level 0 UB2 64x8 = 512 at 4096, level
+     * 1 LT 32x4 = 128 at 3968, level 2 LT 64 at 3904; 4608) with 3 layers:
+     * the tree stride align(4608, 64) = 4608, 13824 bytes, level 1 of layer
+     * 2 at 3968 + 2 * 4608 = 13184; Array Stride 72 */
+    let b = array(13, 7, 3, 3);
+    let l = texture::layout(&b).expect("lays out");
+    assert_eq!((l.slices[0].offset, l.slices[1].offset, l.slices[2].offset, l.size), (4096, 3968, 3904, 4608));
+    assert_eq!(texture::image_bytes(&b, &l), Some(13824));
+    assert_eq!(texture::image_offset(&b, &l, 1, 2), Some(13184));
+    let st = texture::state(&b, &l, 0x0010_0000);
+    assert_eq!((st.depth, st.array_stride_64), (3, 72));
+    assert_eq!(decode_dims(&pack(&st).expect("packs")), (72, 13, 7, 3));
+}
+
+/// A 3D texture is Mesa's per-level stack (v3d_resource.c:609-611, :636-639,
+/// :722, :729-734, :749-755, :765-767): the Rust placing over the C's
+/// one-slice levels equals the C's own v3d_tex_layout_3d, struct for struct,
+/// and `image_offset` equals v3d_tex_slice_offset for every slice Mesa
+/// allocates. By hand:
+/// * 32x32x8 x6: pot_depth = 2 * next_pow2(4) = 8, so 8, 4, 2, 1, 1, 1
+///   slices. Smallest first: 1x1 LT 64 x1, 2x2 LT 64 x1, 4x4 LT 64 x1, 8x8
+///   UB1 32x8 = 256 x2 = 512, 16x16 UB2 64x16 = 1024 x4 = 4096, 32x32 UIF
+///   128x32 = 4096 x8 = 32768: offsets 0, 64, 128, 192, 704, 4800, 37568 in
+///   all; +3392 to put level 0 at 8192: 3392, 3456, 3520, 3584, 4096, 8192,
+///   40960 bytes.
+/// * 13x7x6 x4 (non-power-of-two): pot_depth = 2 * next_pow2(3) = 8, so 6,
+///   4, 2, 1 slices (GL fills 6, 3, 1, 1). 2x1 LT 64 x1, 4x2 LT 64 x2 =
+///   128, 6x3 LT 32x4 = 128 x4 = 512, 13x7 UB2 64x8 = 512 x6 = 3072:
+///   offsets 0, 64, 192, 704, 3776 in all; +3392: 3392, 3456, 3584, 4096,
+///   7168 bytes.
+/// * 4x4x16 x5 (the depth outlasts the sides): 16, 8, 4, 2, 1 slices of
+///   LT 64 B levels (4x4, 2x2, then 1x1): totals 1024, 512, 256, 128, 64:
+///   offsets 960, 448, 192, 64, 0; +3136: 4096, 3584, 3328, 3200, 3136,
+///   5120 bytes.
+/// * 80x656x3 x2: level 1 (40x328, UIF 256x328 = 83968, 64 wide and 328
+///   rows: the page rule) holds 1 slice (pot_depth 2 * next_pow2(1) = 2)
+///   and its TOTAL is rounded to 86016 (:729-734); level 0 (UIF 384x656 =
+///   251904) holds 3: 755712 at 86016, 841728 bytes (86016 is 21 pages).
+#[test]
+fn a_3d_texture_is_mesas_stack_in_rust_and_in_c() {
+    for depth in 1..=20 {
+        for level in 0..8 {
+            assert_eq!(texture::level_depth(depth, level), c_level_depth(depth, level), "depth {depth} level {level}");
+        }
+    }
+    /// (width, height, depth, levels, the offsets of levels 0.., the size).
+    type Stack = (u32, u32, u32, u32, &'static [u32], u32);
+    let cases: [Stack; 4] = [
+        (32, 32, 8, 6, &[8192, 4096, 3584, 3520, 3456, 3392], 40960),
+        (13, 7, 6, 4, &[4096, 3584, 3456, 3392], 7168),
+        (4, 4, 16, 5, &[4096, 3584, 3328, 3200, 3136], 5120),
+        (80, 656, 3, 2, &[86016, 0], 841728),
+    ];
+    for (w, h, depth, levels, offsets, size) in cases {
+        let b = vol(w, h, depth, levels);
+        let l = texture::layout(&b).expect("lays out");
+        let c = c_layout_3d(w, h, depth, levels, 4).expect("the C lays out");
+        assert_eq!(l, c, "{w}x{h}x{depth} x{levels}: the Rust stack is the C's");
+        let got: Vec<u32> = (0..levels as usize).map(|i| l.slices[i].offset).collect();
+        assert_eq!(got, offsets, "{w}x{h}x{depth} x{levels}");
+        assert_eq!((l.size, texture::image_bytes(&b, &l)), (size, Some(size)), "{w}x{h}x{depth} x{levels}");
+        for level in 0..levels {
+            let n = texture::level_depth(depth, level);
+            for k in 0..n + 1 {
+                assert_eq!(
+                    texture::image_offset(&b, &l, level, k),
+                    c_slice_offset(&l, level, k, depth),
+                    "{w}x{h}x{depth} level {level} slice {k}"
+                );
+            }
+            assert_eq!(texture::image_offset(&b, &l, level, n), None);
+            assert_eq!(
+                texture::image_offset(&b, &l, level, 0),
+                Some(l.slices[level as usize].offset),
+                "slice 0 is the level"
+            );
+        }
+        assert_eq!(texture::image_offset(&b, &l, levels, 0), None);
+    }
+    /* 32x32x8: level 0 slice 7 at 8192 + 7 * 4096 (:776-777), level 1 slice
+     * 3 at 4096 + 3 * 1024, level 2 slice 1 at 3584 + 256 */
+    let b = vol(32, 32, 8, 6);
+    let l = texture::layout(&b).unwrap();
+    assert_eq!(texture::image_offset(&b, &l, 0, 7), Some(36864));
+    assert_eq!(texture::image_offset(&b, &l, 1, 3), Some(7168));
+    assert_eq!(texture::image_offset(&b, &l, 2, 1), Some(3840));
+    /* a depth of 1 is the 2D layout */
+    let one = vol(32, 32, 1, 6);
+    let flat = GlesTextureBind { mip_levels: 6, mip_filter: 1, ..bind(GLES_TEXFMT_RGBA8, 32, 32) };
+    assert_eq!(texture::layout(&one), texture::layout(&flat));
+}
+
+/// The 3D record: Image Depth the level 0 depth (v3dx_state.c:935-936) and
+/// Array Stride level 0's slice size / 64 (v3d_resource.c:765-766, "the
+/// stride between slices of miplevel 0"; v3dx_state.c:961), 4096 / 64 = 64
+/// for 32x32x8, where the array rule on the same stack would give (8192 +
+/// 4096) / 64 = 192 (tex_check's control); the Rust record equals the C's
+/// v3d_tex_state_from_layout_3d.
+#[test]
+fn a_3d_records_array_stride_is_level_0s_slice_size() {
+    let b = vol(32, 32, 8, 6);
+    let l = texture::layout(&b).unwrap();
+    let st = texture::state(&b, &l, 0x0010_0000);
+    assert_eq!((st.base, st.width, st.height, st.depth), (0x0010_0000 + 8192, 32, 32, 8));
+    assert_eq!((st.base_level, st.max_level, st.array_stride_64), (0, 5, 64));
+    let rec = pack(&st).expect("packs");
+    assert_eq!(decode_dims(&rec), (64, 32, 32, 8));
+    assert_eq!(decode(&rec), (4, XYZW, false));
+    // SAFETY: the C function's signature (v3d_tex.h).
+    let from_3d: unsafe extern "C" fn(*mut V3dTexState, *const V3dTexLayout) =
+        unsafe { std::mem::transmute(sym("v3d_tex_state_from_layout_3d")) };
+    let mut c = V3dTexState {
+        base: st.base,
+        width: 32,
+        height: 32,
+        depth: 8,
+        max_level: 5,
+        type_: st.type_,
+        swizzle: st.swizzle,
+        ..V3dTexState::default()
+    };
+    // SAFETY: live values of the mirrored types.
+    unsafe { from_3d(&mut c, &l) };
+    assert_eq!(c, st, "the C's 3D record");
+    /* the same texture as a 2D array of 8 layers has the tree stride: its
+     * one-layer tree puts level 0 (4096 B) at 4096, so align(4096 + 4096,
+     * 64) / 64 = 128 */
+    let a = array(32, 32, 8, 6);
+    let la = texture::layout(&a).unwrap();
+    let sa = texture::state(&a, &la, 0x0010_0000);
+    assert_eq!((la.slices[0].offset, sa.depth, sa.array_stride_64), (4096, 8, 128));
+    assert_eq!(decode_dims(&pack(&sa).expect("packs")), (128, 32, 32, 8));
+    /* 13x7x6: 512 / 64 = 8; 4x4x16: 64 / 64 = 1 */
+    for (w, h, d, lv, stride64) in [(13, 7, 6, 4, 8), (4, 4, 16, 5, 1), (80, 656, 3, 2, 251904 / 64)] {
+        let b = vol(w, h, d, lv);
+        let l = texture::layout(&b).unwrap();
+        let st = texture::state(&b, &l, 0x0010_0000);
+        assert_eq!((st.depth, st.array_stride_64), (d, stride64), "{w}x{h}x{d}");
+        assert_eq!(decode_dims(&pack(&st).expect("packs")), (stride64, w, h, d), "{w}x{h}x{d}");
+    }
+}
+
+/// `tile` on the real C puts every slice GL fills where Mesa's
+/// v3d_layer_offset reads it: 13x7x6 x4 tiled from a GL-core-shaped source
+/// (`gl_level_layered`: 6 slots a level, slot k of level L the k-th
+/// `rows x pitch` block), then each slice read back through the C's
+/// v3d_load_tiled_image at `image_offset` equals the slot it came from; the
+/// padding slices and the bytes outside every slice keep their fill. The
+/// same for the 13x7 x3 array of 3 layers at the tree stride.
+#[test]
+fn tile_places_every_slice_and_layer_where_mesa_reads_it() {
+    for (b, slots) in [(vol(13, 7, 6, 4), 6u32), (array(13, 7, 3, 3), 3)] {
+        let l = texture::layout(&b).unwrap();
+        let n = texture::gl_bytes(&b) as usize;
+        let src: Vec<u8> = (0..n).map(|i| (i as u32).wrapping_mul(2654435761).to_le_bytes()[1]).collect();
+        let bytes = texture::image_bytes(&b, &l).unwrap() as usize;
+        let mut image = vec![0x5au8; bytes];
+        // SAFETY: the image is image_bytes long and the source gl_bytes.
+        unsafe { texture::tile(&b, &l, image.as_mut_ptr(), src.as_ptr()) };
+        let mut written = vec![false; bytes];
+        for level in 0..l.levels {
+            let (off, pitch, rows) = texture::gl_level_layered(13, 7, slots, 4, level);
+            let (lw, lh) = ((13 >> level).max(1), (7 >> level).max(1));
+            let filled = if b.type_ == GLES_TEXTYPE_3D { (slots >> level).max(1) } else { slots };
+            for k in 0..filled {
+                let at = texture::image_offset(&b, &l, level, k).unwrap() as usize;
+                let s = l.slices[level as usize];
+                /* the level's slice: v3d_tex_load_box reads at the level's
+                 * offset from the pointer it is given */
+                let base = at - s.offset as usize;
+                let back = c_load_level(&image[base..], &l, level, lw, lh, pitch * 4);
+                let slot = (off + k * rows * pitch * 4) as usize;
+                for y in 0..lh as usize {
+                    let (row, want) = (y * pitch as usize * 4, slot + y * pitch as usize * 4);
+                    assert_eq!(
+                        &back[row..row + lw as usize * 4],
+                        &src[want..want + lw as usize * 4],
+                        "level {level} slice {k} row {y}"
+                    );
+                }
+                for w in &mut written[at..at + s.size as usize] {
+                    *w = true;
+                }
+            }
+        }
+        let outside = image.iter().zip(&written).filter(|(_, &w)| !w).all(|(&x, _)| x == 0x5a);
+        assert!(outside, "nothing outside the filled slices is written");
+        assert!(written.iter().filter(|&&w| w).count() < bytes, "and there is an outside");
+    }
 }
 
 /* ---- the compiler on the interpreter ----------------------------------------- */
