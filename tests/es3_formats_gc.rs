@@ -253,6 +253,78 @@ fn the_binding_bits_apply_to_every_class() {
     }
 }
 
+/* ---- 128-bit classes: two G32R32 planes, kept inert ------------------------- */
+
+/// The back-end half of gc-formats.md section 3
+/// (docs/notes/gc-128bit-texture-sampling.md): each 128-bit class has a
+/// G32R32 plane format, the header's TEXTURE_FORMAT_EXT_G32R32F for RGBA32F
+/// and TEXTURE_FORMAT_EXT_G32R32I for both integer classes (Mesa
+/// etnaviv_format.c:229-233), and the descriptor words of either plane are
+/// those: no CONFIG0 format, the extended one in CONFIG1, TILED, the
+/// binding's swizzle, no sign bit and no INT_FILTER. The class itself stays
+/// undecoded and out of GC_SAMPLED_TEXFMTS (its doc row says `none`) until
+/// the compiler joins the two look-ups.
+#[test]
+fn a_128_bit_class_is_a_pair_of_g32r32_plane_descriptors_behind_the_closed_mask() {
+    use yakogl::vivante::texture::{is_wide128, wide128_plane_format};
+    assert_eq!(GC_TEX_FORMAT_EXT_G32R32F, rnndb("TEXTURE_FORMAT_EXT_G32R32F"));
+    assert_eq!(GC_TEX_FORMAT_EXT_G32R32I, rnndb("TEXTURE_FORMAT_EXT_G32R32I"));
+    for (name, id) in CLASSES {
+        let wide = matches!(id, GLES_TEXFMT_RGBA32F | GLES_TEXFMT_RGBA32UI | GLES_TEXFMT_RGBA32I);
+        assert_eq!(is_wide128(id), wide, "{name}");
+        assert_eq!(wide128_plane_format(id).is_some(), wide, "{name}: a plane format for 128-bit classes only");
+        if !wide {
+            continue;
+        }
+        assert!(!gc_texfmt(id).decoded, "{name}: the class itself is still not decoded");
+        assert_eq!(GC_SAMPLED_TEXFMTS & gles_texfmt_bit(id), 0, "{name}: and not sampled");
+        let plane = wide128_plane_format(id).unwrap();
+        let want =
+            rnndb(if id == GLES_TEXFMT_RGBA32F { "TEXTURE_FORMAT_EXT_G32R32F" } else { "TEXTURE_FORMAT_EXT_G32R32I" });
+        assert_eq!((plane.format, plane.format_ext, plane.config2, plane.int_filter), (0, want, 0, false), "{name}");
+        let [c0, c1, c2] = format_words(&bind(id), true);
+        assert_eq!((c0 >> 13) & 0x1f, 0, "{name}: no CONFIG0 format");
+        assert_eq!(c1 & 0x3f, want, "{name}: CONFIG1 FORMAT_EXT");
+        assert_eq!((c0 >> 20) & 3, GC_TEX_ADDRESSING_TILED, "{name}: the planes are tiled");
+        assert_eq!(swizzle_letters(c1), "RGBA", "{name}: the binding's swizzle, in both planes");
+        assert_eq!(c2, GC_TEXDESC_CONFIG2_BASE, "{name}: no sign bit for 32-bit channels");
+    }
+}
+
+/// The companion-slot policy: Mesa's unified packing on this core
+/// (etnaviv_texture.c:301-322), the stage's k-th 128-bit binding in unit
+/// order at `base + count + k`, after every slot the stage's own units take,
+/// so no GL unit is ever displaced; nothing past the 32-slot array the two
+/// stages share (the binding then samples the black texel, by name).
+#[test]
+fn a_companion_follows_its_stages_own_slots_and_never_leaves_the_array() {
+    use yakogl::vivante::texture::{companion_slot, GC_HW_SAMPLER_SLOTS};
+    assert_eq!(GC_HW_SAMPLER_SLOTS, 32);
+    assert_eq!(companion_slot(0, 1, 0), Some(1), "one fragment unit: its companion is slot 1");
+    assert_eq!(companion_slot(0, 3, 1), Some(4), "the second 128-bit unit of three");
+    assert_eq!(companion_slot(5, 2, 0), Some(7), "a vertex stage at 5 with two units");
+    assert_eq!(companion_slot(0, 16, 15), Some(31), "sixteen fragment units, all 128-bit, fill the array");
+    assert_eq!(companion_slot(16, 16, 0), None, "past slot 31");
+}
+
+/// Plane 1 of a level starts half-way into it, after plane 0's layers of
+/// `align4(w) * align4(h) * 8` bytes (Mesa etnaviv_resource.h:91-94).
+#[test]
+fn the_second_plane_starts_half_way_into_each_level() {
+    use yakogl::vivante::tiled_copy::{copy_bpp, second_plane_offset, tiled_layout};
+    let t = GlesTextureBind { width: 13, height: 6, layers: 4, mip_levels: 4, ..bind(GLES_TEXFMT_RGBA32UI) };
+    let (off, total) = tiled_layout(13, 6, 4, 4, 16);
+    let planes = [16 * 8 * 8 * 4, 8 * 4 * 8 * 4, 4 * 4 * 8 * 4, 4 * 4 * 8 * 4];
+    for (l, p) in planes.iter().enumerate() {
+        assert_eq!(second_plane_offset(&t, l as u32), *p, "level {l}");
+        let end = if l < 3 { off[l + 1] } else { total };
+        assert_eq!(end - off[l], 2 * p, "level {l}: the two planes");
+    }
+    assert_eq!(copy_bpp(&t), 8);
+    assert_eq!(copy_bpp(&bind(GLES_TEXFMT_RGBA16F)), 8);
+    assert_eq!(copy_bpp(&bind(GLES_TEXFMT_RGBA8)), 4);
+}
+
 /* ---- the compiler's half: integer look-ups ---------------------------------- */
 
 #[cfg(feature = "shaderc-online")]
