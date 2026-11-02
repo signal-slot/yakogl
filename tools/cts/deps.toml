@@ -209,6 +209,30 @@ packages.apt = ["git"]
 packages.portage = ["dev-vcs/git"]
 
 [[dep]]
+name = "DEQP_GLES3_TEST_DIR"
+path = "VK-GL-CTS/data/gles3/shaders"
+marker = "VK-GL-CTS/data/gles3/shaders/arrays.test"
+note = "the dEQP GLES3 shader corpus (*.test) of VK-GL-CTS at 93bca01, the pin of DEQP_WORK: the corpus part of tests/es3_shaderc_corpus.rs runs only when this names it. A VK-GL-CTS clone that DEQP_WORK made at that commit is reused (the same $DEPS/VK-GL-CTS); otherwise a blobless sparse fetch of just data/gles3/shaders, which needs no external/fetch_sources.py. It is test data: read it, never run anything from it"
+build = '''
+want=93bca01861b0e3ef3c387027a9791e6d065f900c
+if [ -d "$DEPS/VK-GL-CTS/.git" ]; then
+  [ "$(git -C "$DEPS/VK-GL-CTS" rev-parse HEAD)" = "$want" ] || { echo "DEQP_GLES3_TEST_DIR: $DEPS/VK-GL-CTS is not at $want" >&2; exit 1; }
+  git -C "$DEPS/VK-GL-CTS" checkout "$want" -- data/gles3/shaders
+else
+  rm -rf "$DEPS/VK-GL-CTS.part"
+  mkdir "$DEPS/VK-GL-CTS.part"
+  git -C "$DEPS/VK-GL-CTS.part" init -q
+  git -C "$DEPS/VK-GL-CTS.part" remote add origin https://github.com/KhronosGroup/VK-GL-CTS
+  git -C "$DEPS/VK-GL-CTS.part" sparse-checkout set --no-cone /data/gles3/shaders/
+  git -C "$DEPS/VK-GL-CTS.part" fetch -q --depth 1 --filter=blob:none origin "$want"
+  git -C "$DEPS/VK-GL-CTS.part" checkout -q --detach FETCH_HEAD
+  mv "$DEPS/VK-GL-CTS.part" "$DEPS/VK-GL-CTS"
+fi
+'''
+packages.apt = ["git"]
+packages.portage = ["dev-vcs/git"]
+
+[[dep]]
 name = "PVR_FW_BLOB"
 path = "pvr_fw_blob.h"
 marker = "pvr_fw_blob.h"

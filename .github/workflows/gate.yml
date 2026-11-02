@@ -122,10 +122,12 @@ jobs:
         if: steps.seen.outputs.run == 'true'
         # The Mali CSF firmware is one file pinned by sha256 in deps.toml
         # (linux-firmware's, never committed): a runner that lacks it fetches
-        # it here, where an entry that is present is never touched. Every
-        # other entry is a tree a host is prepared with, never built here.
+        # it here, where an entry that is present is never touched; the dEQP
+        # GLES3 shader corpus (a sparse fetch of data/gles3/shaders at the
+        # pinned commit) is made the same way. Every other entry is a tree a host is prepared with, never built here.
         run: |
           tools/cts/deps-env.sh --build MALI_CSFFW
+          tools/cts/deps-env.sh --build DEQP_GLES3_TEST_DIR
           tools/cts/deps-env.sh --check
           tools/cts/deps-env.sh >> "$GITHUB_ENV"
           {
