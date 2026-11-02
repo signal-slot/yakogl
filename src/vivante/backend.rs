@@ -303,8 +303,7 @@ fn align_up(v: u32, a: u32) -> u32 {
 /// has no 128-bit format at all (`hw/state_3d.xml.h:89-113`; etnaviv renders
 /// one as two planes, which takes half of its render targets,
 /// VIVANTE_NOTES.md "Draw buffers"), so it is not in
-/// [`GC_INTEGER_RT_FORMATS`] and never arrives (`draw_one` refuses it too,
-/// and the held-back 64-bit ones).
+/// [`GC_INTEGER_RT_FORMATS`] and never arrives (`draw_one` refuses it too).
 pub fn pe_color_format(surf_format: u8) -> (u32, bool) {
     match surf_format {
         GLES_SURF_RGB565 => (GC_PE_FORMAT_R5G6B5, false),
@@ -326,21 +325,21 @@ pub fn pe_color_format(surf_format: u8) -> (u32, bool) {
 }
 
 /// The integer colour surfaces this back end renders into (bit `format -
-/// GLES_SURF_INT_FIRST`, `backend::INTEGER_RT_FORMATS`): the thirteen of 1, 2
-/// and 4 bytes a pixel. The GL core refuses a draw or clear into the other
-/// six by name:
+/// GLES_SURF_INT_FIRST`, `backend::INTEGER_RT_FORMATS`): seventeen of the
+/// nineteen, every one of 1, 2, 4 and 8 bytes a pixel. The GL core refuses a
+/// draw or clear into the other two by name: RGBA32I and RGBA32UI, which the
+/// pixel engine has no format for ([`pe_color_format`]), a hardware limit.
 ///
-/// - RGBA32I, RGBA32UI: the pixel engine has no format for them
-///   ([`pe_color_format`]), a hardware limit;
-/// - RGBA16I, RGBA16UI, RG32I, RG32UI, 8 bytes a pixel: held back, not a
-///   hardware limit. The PE's 64-bit LINEAR write is the open question of
-///   gl_test case 44 (an RGBA16F target stores pixel x's colour two texels
-///   off, VIVANTE_NOTES.md "RGBA16F targets"), and these would take the same
-///   path. Their PE formats and output modes are in place; [`GC_INT_RT_64BPP`]
-///   goes in once case 44's layout probe says the 64-bit target is right.
+/// The 64-bit ones ([`GC_INT_RT_64BPP`]: RGBA16I/UI, RG32I/UI) are drawn as
+/// RGBA16F is: the PE misplaces 64-bit pixels in a LINEAR target (gl_test
+/// case 44, record `got 0x20000004 want 0x00c2073e`), so a single-target draw
+/// into one renders into a 4x4-tiled shadow (`wide_target.rs`, chosen by
+/// pixel size, not format) with PE_LOGIC_OP SINGLE_BUFFER(2). A 64-bit
+/// target beside other draw buffers keeps the linear path, as RGBA16F does
+/// (`wide_target.rs`, "Not covered").
 pub const GC_INTEGER_RT_FORMATS: u32 = {
     let all = (1u32 << (GLES_SURF_INT_LAST - GLES_SURF_INT_FIRST + 1)) - 1;
-    all & !GC_INT_RT_128BPP & !GC_INT_RT_64BPP
+    all & !GC_INT_RT_128BPP
 };
 
 const fn int_rt_bit(format: u8) -> u32 {
@@ -351,7 +350,7 @@ const fn int_rt_bit(format: u8) -> u32 {
 /// [`GC_INTEGER_RT_FORMATS`]).
 pub const GC_INT_RT_128BPP: u32 = int_rt_bit(GLES_SURF_RGBA32I) | int_rt_bit(GLES_SURF_RGBA32UI);
 
-/// The 64-bit integer surfaces, mapped but held back (see
+/// The 64-bit integer surfaces, drawn through the tiled shadow (see
 /// [`GC_INTEGER_RT_FORMATS`]).
 pub const GC_INT_RT_64BPP: u32 = int_rt_bit(GLES_SURF_RGBA16I)
     | int_rt_bit(GLES_SURF_RGBA16UI)
@@ -2775,8 +2774,8 @@ pub(super) unsafe fn draw_one(draw: *const GlesDraw) -> i32 {
      * possible; it is not done here.) */
     let (slots, n) = hw_targets(gl);
     /* An integer surface this back end does not draw: RGBA32I/UI, which the
-     * pixel engine has no format for (it would be drawn as RGBA8), and the
-     * held-back 64-bit ones ([`GC_INTEGER_RT_FORMATS`]). The GL core refuses
+     * pixel engine has no format for (it would be drawn as RGBA8,
+     * [`GC_INTEGER_RT_FORMATS`]). The GL core refuses
      * them by name before they get here (`backend::rt_format_drawable`); this
      * is the back end's own word. */
     if slots[..n].iter().any(|&s| {

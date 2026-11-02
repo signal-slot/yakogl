@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-//! A 4x4-tiled shadow of a colour target with 64-bit pixels (RGBA16F), for
-//! the pixel engine to render into.
+//! A 4x4-tiled shadow of a colour target with 64-bit pixels (RGBA16F, and
+//! the integer RGBA16I/UI and RG32I/UI), for the pixel engine to render into.
+//! It is chosen by pixel size ([`wanted`]) and copies whole 8-byte pixels, so
+//! the format's channels never matter here.
 //!
 //! The pixel engine writes 64-bit pixels into a LINEAR surface at the wrong
 //! places on this core: gl_test 44's probe (#6, cba8b199, record `got
