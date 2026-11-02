@@ -50,6 +50,7 @@ pub const STRUCTS: &[(&str, &str, &str, &str)] = &[
         "crate::osal::render::PvrRenderFragRegs",
         "struct pvr_render_frag_regs",
     ),
+    ("src/osal/render.rs", "PvrRenderFragPr", "crate::osal::render::PvrRenderFragPr", "struct pvr_render_frag_pr"),
     ("src/osal/render.rs", "PvrRenderKick", "crate::osal::render::PvrRenderKick", "struct pvr_render_kick"),
     ("src/shaderc/mod.rs", "ShcVarying", "crate::shaderc::ShcVarying", "struct shc_varying"),
     ("src/shaderc/mod.rs", "ShcAttrib", "crate::shaderc::ShcAttrib", "struct shc_attrib"),
