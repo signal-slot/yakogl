@@ -14,7 +14,7 @@
 //! its own start.
 
 use crate::backend::{
-    gles_texfmt_bytes, GlesTextureBind, GLES_TEXFMT_A8, GLES_TEXFMT_ETC2_RGB, GLES_TEXFMT_ETC2_RGBA,
+    gles_texfmt_bit, gles_texfmt_bytes, GlesTextureBind, GLES_TEXFMT_A8, GLES_TEXFMT_ETC2_RGB, GLES_TEXFMT_ETC2_RGBA,
     GLES_TEXFMT_ETC2_RGB_PT, GLES_TEXFMT_ETC2_SRGB_RGB, GLES_TEXFMT_ETC2_SRGB_RGBA, GLES_TEXFMT_L8, GLES_TEXFMT_LA8,
     GLES_TEXFMT_R11G11B10F, GLES_TEXFMT_R16F, GLES_TEXFMT_R32F, GLES_TEXFMT_RGB10A2, GLES_TEXFMT_RGB10A2UI,
     GLES_TEXFMT_RGB565, GLES_TEXFMT_RGB9E5, GLES_TEXFMT_RGBA16F, GLES_TEXFMT_RGBA16I, GLES_TEXFMT_RGBA16UI,
@@ -139,6 +139,61 @@ pub fn gc_texfmt(format: u8) -> GcTexfmt {
     f
 }
 
+/// Is `format` a class of 128-bit texels (RGBA32F, RGBA32UI, RGBA32I)? The
+/// TE has no format for one; Mesa samples it as two G32R32 planes
+/// (etnaviv_format.h:86-96, `format_is_128bit`).
+pub fn is_wide128(format: u8) -> bool {
+    matches!(format, GLES_TEXFMT_RGBA32F | GLES_TEXFMT_RGBA32UI | GLES_TEXFMT_RGBA32I)
+}
+
+/// The format both G32R32 planes of a 128-bit class take: EXT_G32R32F for
+/// RGBA32F and EXT_G32R32I for the two integer ones (etnaviv_format.c:
+/// 229-233). No sign bit (CONFIG2 sign-extends 8- and 16-bit channels
+/// only, etnaviv_texture_desc.c:187-189) and no INT_FILTER (not unorm).
+/// `None` for any other class.
+pub fn wide128_plane_format(format: u8) -> Option<GcTexfmt> {
+    let ext = match format {
+        GLES_TEXFMT_RGBA32F => GC_TEX_FORMAT_EXT_G32R32F,
+        GLES_TEXFMT_RGBA32UI | GLES_TEXFMT_RGBA32I => GC_TEX_FORMAT_EXT_G32R32I,
+        _ => return None,
+    };
+    Some(GcTexfmt {
+        format: 0,
+        format_ext: ext,
+        compressed: false,
+        no_alpha: false,
+        config2: 0,
+        int_filter: false,
+        decoded: true,
+    })
+}
+
+/// Is `t` sampled as two G32R32 planes? A 128-bit class, complete, that the
+/// sampled mask holds. GC_SAMPLED_TEXFMTS holds none of them until the
+/// compiler joins the two look-ups (docs/notes/gc-128bit-texture-sampling.md),
+/// so outside a host test that adds them (`TEST_EXTRA_SAMPLED`) this is
+/// false and such a binding samples the black texel, by name, as before.
+pub fn wide128_sampled(t: &GlesTextureBind) -> bool {
+    t.incomplete == 0 && is_wide128(t.format) && crate::backend::sampled_texfmts() & gles_texfmt_bit(t.format) != 0
+}
+
+/// The descriptor slots the hardware has: one 32-entry array the two stages
+/// share (`VS_SAMPLER_BASE`; Mesa etnaviv_texture.c:434-438).
+pub const GC_HW_SAMPLER_SLOTS: u32 = 32;
+
+/// The slot of the companion sampler of a stage's `rank`-th 128-bit binding
+/// (in unit order), the stage's slots starting at `base` and its units
+/// taking `count` of them: Mesa's unified packing, the companions right after
+/// the stage's own slots (`etna_pack_unified_companions`, etnaviv_texture.c:
+/// 301-322, `comp = nr` counting up). No GL unit can be there, so no binding
+/// is ever displaced. `None` past the 32-slot array: the binding has no
+/// companion and samples the black texel, by name (Mesa's `~0U`, with which
+/// it skips the pair, etnaviv_texture_desc.c:505).
+pub fn companion_slot(base: u32, count: u32, rank: u32) -> Option<u32> {
+    let slot = base + count + rank;
+    (slot < GC_HW_SAMPLER_SLOTS).then_some(slot)
+}
+
 /// The unorm classes, the ones INT_FILTER may take.
 fn unorm_format(format: u8) -> GcTexfmt {
     let mut f = GcTexfmt {
@@ -180,8 +235,11 @@ fn unorm_format(format: u8) -> GcTexfmt {
 /// TEXDESC_CONFIG0, CONFIG1 and CONFIG2 of a binding: type, format,
 /// addressing, swizzle, array bit and the integer sign. `tiled` is the
 /// addressing of what is sampled (a block format, or the tiled copy).
+/// A 128-bit class takes its G32R32 plane's words, the same for both
+/// planes ([`wide128_plane_format`]; Mesa copies the descriptor whole,
+/// etnaviv_texture_desc.c:404-410).
 pub fn format_words(t: &GlesTextureBind, tiled: bool) -> [u32; 3] {
-    let mut fmt = gc_texfmt(t.format);
+    let mut fmt = wide128_plane_format(t.format).unwrap_or_else(|| gc_texfmt(t.format));
     /* the channel order is the storage's, even when a tiled copy is sampled */
     /* B,G,R,A texels (an XRGB8888 image, or a texture a draw rendered into:
      * the GL core converted it then and says so in `bgra`) take the format
@@ -232,8 +290,11 @@ pub fn format_words(t: &GlesTextureBind, tiled: bool) -> [u32; 3] {
 }
 
 /// Build one descriptor in the frame arena. Returns its GPU address, or 0.
-fn build_descriptor(f: &mut GcFrame, t: &GlesTextureBind) -> u64 {
-    let fmt = gc_texfmt(t.format);
+/// `plane` 1 is the companion of a 128-bit binding: the same words, its
+/// level addresses each the level's second plane (Mesa's companion,
+/// etnaviv_texture_desc.c:404-415); 0 is every other descriptor.
+fn build_descriptor(f: &mut GcFrame, t: &GlesTextureBind, plane: u32) -> u64 {
+    let fmt = wide128_plane_format(t.format).unwrap_or_else(|| gc_texfmt(t.format));
     /* a mipmapped layered texture, and one with 64-bit texels, is sampled
      * from its tiled copy (tiled_copy.rs) */
     let copy = super::tiled_copy::lookup(t, super::backend::gc_kick_id());
@@ -305,8 +366,9 @@ fn build_descriptor(f: &mut GcFrame, t: &GlesTextureBind) -> u64 {
         t.width.div_ceil(4) * block_bytes(t.format)
     } else if copy.is_some() {
         /* the tiled copy's level-0 row of texels, 4-aligned (Mesa's
-         * levels[0].stride for a tiled layout) */
-        t.width.next_multiple_of(4) * gles_texfmt_bytes(t.format)
+         * levels[0].stride for a tiled layout; a plane's 8-byte texels for a
+         * 128-bit class, etnaviv_resource.c:315-329) */
+        t.width.next_multiple_of(4) * super::tiled_copy::copy_bpp(t)
     } else {
         t.stride_texels * gles_texfmt_bytes(t.format)
     };
@@ -349,7 +411,8 @@ fn build_descriptor(f: &mut GcFrame, t: &GlesTextureBind) -> u64 {
      */
     if let Some((copy_gpu, off, _)) = copy {
         for (lod, o) in off.iter().enumerate().take(levels.min(16)) {
-            desc[texdesc_lod_addr(lod as u32) as usize / 4] = (copy_gpu + *o as u64) as u32;
+            let half = if plane == 1 { super::tiled_copy::second_plane_offset(t, lod as u32) } else { 0 };
+            desc[texdesc_lod_addr(lod as u32) as usize / 4] = (copy_gpu + (*o + half) as u64) as u32;
         }
         return gpu;
     }
@@ -399,7 +462,9 @@ fn samp_ctrl1(t: &GlesTextureBind) -> u32 {
     GC_SAMP_CTRL1_UNK1 | if t.format == GLES_TEXFMT_SRGB8_A8 { GC_SAMP_CTRL1_SRGB } else { 0 }
 }
 
-fn emit_slot(f: &mut GcFrame, slot: u32, t: &GlesTextureBind) -> i32 {
+/// Program `slot` for `t`, and, for a 128-bit binding sampled as two planes,
+/// `companion` for its second plane ([`companion_slot`]).
+fn emit_slot(f: &mut GcFrame, slot: u32, t: &GlesTextureBind, companion: Option<u32>) -> i32 {
     /* GL ES 2.0 section 3.7.10: a texture that is not complete samples
      * (0,0,0,1) everywhere, whatever its texels hold. The GL core decides
      * which those are; here the binding becomes the backend's own 1x1 opaque
@@ -408,9 +473,20 @@ fn emit_slot(f: &mut GcFrame, slot: u32, t: &GlesTextureBind) -> i32 {
      * docs/es3/gc-formats.md section 3) is never in GC_SAMPLED_TEXFMTS, so
      * the GL core does not store one; should a binding of one arrive anyway
      * it samples the black texel, said by name, rather than texels read as
-     * another format. */
-    let undecoded = t.incomplete == 0 && !gc_texfmt(t.format).decoded;
-    if undecoded {
+     * another format. A 128-bit class the mask does hold ([`wide128_sampled`],
+     * a host test's alone today) is sampled as Mesa samples it: two G32R32
+     * planes of the tiled copy, the second at its companion slot -- or, with
+     * no companion slot or no copy, the black texel in both, by name. */
+    let wide = wide128_sampled(t);
+    let planes = wide && companion.is_some() && super::tiled_copy::lookup(t, super::backend::gc_kick_id()).is_some();
+    let undecoded = t.incomplete == 0 && !gc_texfmt(t.format).decoded && !planes;
+    if undecoded && wide {
+        crate::glog_once!(
+            "vivante: 128-bit texel format {} has {}; sampled as black",
+            t.format,
+            if companion.is_none() { "no companion sampler slot" } else { "no tiled plane copy" }
+        );
+    } else if undecoded {
         crate::glog_once!("vivante: texel format {} has no texture descriptor format; sampled as black", t.format);
     }
     let black;
@@ -432,7 +508,16 @@ fn emit_slot(f: &mut GcFrame, slot: u32, t: &GlesTextureBind) -> i32 {
     } else {
         t
     };
-    let desc_gpu = build_descriptor(f, t);
+    let desc_gpu = build_descriptor(f, t, 0);
+    /* The companion: plane 1's descriptor where there are planes; the black
+     * texel's where a reserved companion has none, so the slot never keeps
+     * the previous draw's descriptor. Built straight after plane 0's, as
+     * Mesa allocates the two together (etnaviv_texture_desc.c:378-379). */
+    let companion_gpu = match companion {
+        Some(_) if planes => build_descriptor(f, t, 1),
+        Some(_) => desc_gpu,
+        None => 1, /* nothing to build: never 0 */
+    };
     let c = &mut f.w;
     /* S and T wrap independently in GL, and this used to send the S mode on
      * both axes: a texture with S clamped and T repeating, which is how
@@ -466,7 +551,7 @@ fn emit_slot(f: &mut GcFrame, slot: u32, t: &GlesTextureBind) -> i32 {
         _ => GC_TEX_FILTER_NONE,
     };
 
-    if desc_gpu == 0 {
+    if desc_gpu == 0 || companion_gpu == 0 {
         /* The arena is full: `build_descriptor` allocates there and returns 0
          * for nothing else. Emitting the draw with the slot unprogrammed is
          * what this did, and it renders black with no GL error. No run has
@@ -477,19 +562,28 @@ fn emit_slot(f: &mut GcFrame, slot: u32, t: &GlesTextureBind) -> i32 {
         );
         return -ENOMEM;
     }
+    let samp_ctrl0 = samp_uwrap(uwrap)
+        | samp_vwrap(vwrap)
+        | samp_wwrap(uwrap)
+        | samp_min(if t.min_linear != 0 { GC_TEX_FILTER_LINEAR } else { GC_TEX_FILTER_NEAREST })
+        | samp_mip(mip)
+        | samp_mag(if t.linear_filter != 0 { GC_TEX_FILTER_LINEAR } else { GC_TEX_FILTER_NEAREST })
+        | GC_SAMP_CTRL0_UNK21
+        | if int_filter_wanted(t) { GC_SAMP_INT_FILTER } else { 0 };
+    write_sampler(c, slot, samp_ctrl0, samp_ctrl1(t), desc_gpu as u32);
+    /* the companion takes the same sampler state, written right after its
+     * binding's, as Mesa writes it (etnaviv_texture_desc.c:499-513) */
+    if let Some(y) = companion {
+        write_sampler(c, y, samp_ctrl0, samp_ctrl1(t), companion_gpu as u32);
+    }
+    0
+}
+
+/// One slot's sampler registers and its descriptor address.
+fn write_sampler(c: &mut GcCmd, slot: u32, samp_ctrl0: u32, samp_ctrl1: u32, desc_gpu: u32) {
     c.state(nte_descriptor_tx_ctrl(slot), 0); /* no tile status */
-    c.state(
-        nte_descriptor_samp_ctrl0(slot),
-        samp_uwrap(uwrap)
-            | samp_vwrap(vwrap)
-            | samp_wwrap(uwrap)
-            | samp_min(if t.min_linear != 0 { GC_TEX_FILTER_LINEAR } else { GC_TEX_FILTER_NEAREST })
-            | samp_mip(mip)
-            | samp_mag(if t.linear_filter != 0 { GC_TEX_FILTER_LINEAR } else { GC_TEX_FILTER_NEAREST })
-            | GC_SAMP_CTRL0_UNK21
-            | if int_filter_wanted(t) { GC_SAMP_INT_FILTER } else { 0 },
-    );
-    c.state(nte_descriptor_samp_ctrl1(slot), samp_ctrl1(t));
+    c.state(nte_descriptor_samp_ctrl0(slot), samp_ctrl0);
+    c.state(nte_descriptor_samp_ctrl1(slot), samp_ctrl1);
     /*
      * The sampler's own LOD range, which is GL_TEXTURE_MIN_LOD and
      * GL_TEXTURE_MAX_LOD -- and ES 2.0 has no way to set either, so it is
@@ -506,8 +600,7 @@ fn emit_slot(f: &mut GcFrame, slot: u32, t: &GlesTextureBind) -> i32 {
     c.state(nte_descriptor_samp_lod_minmax(slot), samp_lod_max(GC_SAMP_LOD_FP58_MAX) | samp_lod_min(0));
     c.state(nte_descriptor_samp_lod_bias(slot), 0);
     c.state(nte_descriptor_samp_anisotropy(slot), 0);
-    write_desc_addr(c, slot, desc_gpu as u32);
-    0
+    write_desc_addr(c, slot, desc_gpu);
 }
 
 /// The slots whose INVALIDATE waits for the end of the draw's descriptor
@@ -567,25 +660,41 @@ fn emit_textures_inner(f: &mut GcFrame, d: &GcDraw) -> i32 {
      * draw binds and the ones the shader declares with nothing bound, which
      * get the black texel below -- counting only the bound ones put vertex
      * sampler 0 in the slot a declared-but-unbound fragment sampler takes. */
-    let vs_base = d
-        .textures
-        .iter()
-        .map(|t| t.unit as u32 + 1)
-        .chain(declared_samplers(d.fs).map(|b| b as u32 + 1))
-        .max()
-        .unwrap_or(0)
-        .max(d.textures.len() as u32);
+    let stage_count = |bound: &[GlesTextureBind], sh: &ShcShader| {
+        bound
+            .iter()
+            .map(|t| t.unit as u32 + 1)
+            .chain(declared_samplers(sh).map(|b| b as u32 + 1))
+            .max()
+            .unwrap_or(0)
+            .max(bound.len() as u32)
+    };
+    let fs_count = stage_count(d.textures, d.fs);
+    /* A 128-bit binding sampled as two planes takes a companion slot after
+     * its stage's own, and the vertex stage starts after the fragment
+     * stage's companions too (Mesa's unified packing, etnaviv_texture.c:
+     * 301-322 and 434-438; docs/notes/gc-128bit-texture-sampling.md). With
+     * no such binding -- every draw outside a host test, GC_SAMPLED_TEXFMTS
+     * holding no 128-bit class -- this is the layout it always was. */
+    let fs_wide = d.textures.iter().take(GC_MAX_SAMPLERS).filter(|t| wide128_sampled(t)).count() as u32;
+    let vs_base = fs_count + fs_wide;
+    let vs_count = stage_count(d.vs_textures, d.vs);
 
     /* the fragment stage owns slots 0.., the vertex stage the ones after */
     f.w.state(GC_VS_SAMPLER_BASE, vs_base);
-    for t in d.textures.iter().take(GC_MAX_SAMPLERS) {
-        if emit_slot(f, t.unit as u32, t) != 0 {
-            return -ENOMEM;
-        }
-    }
-    for t in d.vs_textures.iter().take(GC_MAX_SAMPLERS) {
-        if emit_slot(f, vs_base + t.unit as u32, t) != 0 {
-            return -ENOMEM;
+    for (bound, base, count) in [(d.textures, 0u32, fs_count), (d.vs_textures, vs_base, vs_count)] {
+        let bound = &bound[..bound.len().min(GC_MAX_SAMPLERS)];
+        for t in bound {
+            /* ranked in unit order, as Mesa walks its views */
+            let companion = if wide128_sampled(t) {
+                let rank = bound.iter().filter(|o| wide128_sampled(o) && o.unit < t.unit).count() as u32;
+                companion_slot(base, count, rank)
+            } else {
+                None
+            };
+            if emit_slot(f, base + t.unit as u32, t, companion) != 0 {
+                return -ENOMEM;
+            }
         }
     }
     /* A sampler the shader declares with nothing usable bound gets no binding
@@ -602,7 +711,7 @@ fn emit_textures_inner(f: &mut GcFrame, d: &GcDraw) -> i32 {
             if bound.iter().any(|t| t.unit == binding) || binding as usize >= GC_MAX_SAMPLERS {
                 continue;
             }
-            if emit_slot(f, base + binding as u32, &GlesTextureBind { unit: binding, ..black }) != 0 {
+            if emit_slot(f, base + binding as u32, &GlesTextureBind { unit: binding, ..black }, None) != 0 {
                 return -ENOMEM;
             }
         }

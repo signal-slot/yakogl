@@ -883,6 +883,11 @@ pub const GC_TEX_FORMAT_EXT_RGBA8_ETC2_EAC: u32 = 0x02;
 pub const GC_TEX_FORMAT_EXT_R16F: u32 = 0x07;
 pub const GC_TEX_FORMAT_EXT_A16B16G16R16F: u32 = 0x09;
 pub const GC_TEX_FORMAT_EXT_R32F: u32 = 0x0a;
+/// The G32R32 plane of a 128-bit class, two of which Mesa samples for
+/// RGBA32F (etnaviv_format.c:233; docs/notes/gc-128bit-texture-sampling.md).
+pub const GC_TEX_FORMAT_EXT_G32R32F: u32 = 0x0b;
+/// The same plane of RGBA32UI / RGBA32I (etnaviv_format.c:229-230).
+pub const GC_TEX_FORMAT_EXT_G32R32I: u32 = 0x24;
 /* the ES 3.0 classes (docs/es3/gc-formats.md section 2; Mesa
  * etnaviv_format.c rows cited there) */
 pub const GC_TEX_FORMAT_EXT_A2B10G10R10: u32 = 0x0c;

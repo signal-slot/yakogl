@@ -2549,6 +2549,189 @@ fn a_render_into_an_rgba16f_texture_reaches_the_draw_that_samples_it() {
     assert!(rig.faults().is_empty(), "{:?}", rig.faults());
 }
 
+/* ---- 128-bit textures: two G32R32 planes and a companion slot ----------- */
+
+/// Adds texel formats to the sampled mask for one test, as a back end whose
+/// GC_SAMPLED_TEXFMTS held them would (the mask itself holds no 128-bit
+/// class until the compiler joins the two look-ups).
+struct ExtraSampled;
+impl ExtraSampled {
+    fn add(formats: &[u8]) -> ExtraSampled {
+        let mask = formats.iter().fold(0, |m, f| m | crate::backend::gles_texfmt_bit(*f));
+        crate::backend::TEST_EXTRA_SAMPLED.store(mask, core::sync::atomic::Ordering::Relaxed);
+        ExtraSampled
+    }
+}
+impl Drop for ExtraSampled {
+    fn drop(&mut self) {
+        crate::backend::TEST_EXTRA_SAMPLED.store(0, core::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+/// An 8x8 texture of 128-bit texels: texel (x, y) holds the words
+/// (x, y, salt, 0x3f80_0000 + x).
+fn wide128_texture(gpu: u64, format: u8, salt: u32) -> (Vec<u32>, GlesTextureBind) {
+    let (w, h) = (8u32, 8u32);
+    let mut mem = vec![0u32; (w * h * 4) as usize];
+    for y in 0..h {
+        for x in 0..w {
+            let at = ((y * w + x) * 4) as usize;
+            mem[at..at + 4].copy_from_slice(&[x, y, salt, 0x3f80_0000 + x]);
+        }
+    }
+    let mut t = bind(gpu, w, h, 1);
+    t.format = format;
+    t.bytes = w * h * 16;
+    t.cpu = mem.as_ptr() as *const c_void;
+    (mem, t)
+}
+
+/// The sampler registers of one slot, as the stream left them.
+fn sampler_regs(s: &Stream, slot: u32) -> [u32; 7] {
+    [
+        s.reg(nte_descriptor_tx_ctrl(slot)),
+        s.reg(nte_descriptor_samp_ctrl0(slot)),
+        s.reg(nte_descriptor_samp_ctrl1(slot)),
+        s.reg(nte_descriptor_samp_lod_minmax(slot)),
+        s.reg(nte_descriptor_samp_lod_bias(slot)),
+        s.reg(nte_descriptor_samp_anisotropy(slot)),
+        s.writes(nte_descriptor_addr(slot)).1 as u32,
+    ]
+}
+
+/// With the mask closed (GC_SAMPLED_TEXFMTS as it is), a 128-bit binding is
+/// sampled as the black texel, by name, and takes no companion: the slots
+/// are the ones a draw of an RGBA8 texture takes.
+#[test]
+fn a_128_bit_texture_outside_the_mask_is_black_and_takes_no_companion() {
+    let rig = Rig::new();
+    for format in [GLES_TEXFMT_RGBA32F, GLES_TEXFMT_RGBA32UI, GLES_TEXFMT_RGBA32I] {
+        assert_eq!(GC_SAMPLED_TEXFMTS & crate::backend::gles_texfmt_bit(format), 0, "{format}: not sampled");
+        let (_mem, t) = wide128_texture(GC_HEAP_DATA + 0x80_0040, format, 3);
+        let mut d = rig.draw(3);
+        d.num_textures = 1;
+        d.textures[0] = t;
+        d.num_vs_textures = 1;
+        d.vs_textures[0] = bind(rig.vbo.gpu, 2, 2, 1);
+        let s = rig.submit(&d);
+        assert_eq!(s.reg(GC_VS_SAMPLER_BASE), 1, "{format}: no companion before the vertex stage");
+        let desc = s.descriptor(0);
+        assert_eq!(desc[texdesc_lod_addr(0) as usize / 4] as u64, black_texel_gpu(), "{format}: the black texel");
+        assert_eq!(desc[GC_TEXDESC_CONFIG1 as usize / 4] & 0x3f, 0, "{format}: not a G32R32 plane");
+        assert_eq!(s.descriptor(1)[GC_TEXDESC_SIZE as usize / 4], texdesc_size_width(2) | texdesc_size_height(2));
+        assert_eq!(s.writes(nte_descriptor_addr(2)).1, 0, "{format}: nothing past the vertex sampler");
+    }
+    assert!(rig.faults().is_empty(), "{:?}", rig.faults());
+}
+
+/// Through the test hook, an RGBA32F binding is Mesa's pair
+/// (etnaviv_texture_desc.c:404-415, 499-513): plane 0 at the unit's slot,
+/// plane 1 at the companion right after the stage's slots, both
+/// TEXTURE_FORMAT_EXT_G32R32F, TILED, every descriptor word the same but the
+/// level addresses, the second half-way into the level; the same sampler
+/// state in both; the vertex stage after the companion; one invalidate each.
+/// The copy holds each texel's R,G in plane 0 and B,A in plane 1, at a page.
+#[test]
+fn a_sampled_rgba32f_texture_is_two_g32r32_planes_at_a_slot_and_its_companion() {
+    let rig = Rig::new();
+    with_platform(|p| p.off_page = true);
+    let _x = ExtraSampled::add(&[GLES_TEXFMT_RGBA32F]);
+    let (mem, mut t) = wide128_texture(GC_HEAP_DATA + 0x80_0040, GLES_TEXFMT_RGBA32F, 7);
+    t.linear_filter = 1;
+    t.wrap_s = GLES_WRAP_MIRRORED_REPEAT;
+    let mut d = rig.draw(3);
+    d.num_textures = 1;
+    d.textures[0] = t;
+    d.num_vs_textures = 1;
+    d.vs_textures[0] = bind(rig.vbo.gpu, 2, 2, 1);
+    let s = rig.submit(&d);
+
+    assert_eq!(s.reg(GC_VS_SAMPLER_BASE), 2, "one fragment slot and its companion");
+    assert_eq!(s.descriptor(2)[GC_TEXDESC_SIZE as usize / 4], texdesc_size_width(2) | texdesc_size_height(2));
+    let (p0, p1) = (s.descriptor(0), s.descriptor(1));
+    let c0 = p0[GC_TEXDESC_CONFIG0 as usize / 4];
+    assert_eq!((c0 >> 20) & 3, GC_TEX_ADDRESSING_TILED, "CONFIG0 0x{c0:08x}");
+    assert_eq!((c0 >> 13) & 0x1f, 0, "no CONFIG0 format");
+    assert_eq!(p0[GC_TEXDESC_CONFIG1 as usize / 4] & 0x3f, GC_TEX_FORMAT_EXT_G32R32F);
+    assert_eq!(p0[GC_TEXDESC_LINEAR_STRIDE as usize / 4], 8 * 8, "a row of 8 G32R32 texels");
+    assert_eq!(p0[GC_TEXDESC_SLICE as usize / 4], 8 * 8 * 8, "one plane's layer");
+    let lod = |p: &[u32]| p[texdesc_lod_addr(0) as usize / 4] as u64;
+    assert_eq!(lod(&p0) % 4096, 0, "the copy starts on a page: 0x{:x}", lod(&p0));
+    assert_eq!(lod(&p1), lod(&p0) + 8 * 8 * 8, "plane 1 half-way into the level");
+    for (i, (a, b)) in p0.iter().zip(&p1).enumerate() {
+        if i != texdesc_lod_addr(0) as usize / 4 {
+            assert_eq!(a, b, "descriptor word {i}: the companion is a copy");
+        }
+    }
+    let (r0, r1) = (sampler_regs(&s, 0), sampler_regs(&s, 1));
+    assert_eq!(r0[..6], r1[..6], "the same sampler state");
+    assert_ne!(r0[1] & samp_mag(GC_TEX_FILTER_LINEAR), 0, "the binding's own filter");
+    assert_eq!(r0[1] & GC_SAMP_INT_FILTER, 0, "no INT_FILTER for a float plane");
+    let mut invalidated = Vec::new();
+    walk(&s.0, |r, v, _| {
+        if r == GC_NTE_DESCRIPTOR_INVALIDATE {
+            invalidated.push(v & 0x3f);
+        }
+    });
+    invalidated.sort_unstable();
+    assert_eq!(invalidated, [0, 1, 2], "each slot once");
+
+    let (rg, ba) = (gpu_bytes(lod(&p0), 8 * 8 * 8), gpu_bytes(lod(&p1), 8 * 8 * 8));
+    let word = |b: &[u8], i: usize| u32::from_le_bytes(b[i * 4..i * 4 + 4].try_into().unwrap());
+    for y in 0..8u32 {
+        for x in 0..8u32 {
+            let at = (((y / 4) * 2 + x / 4) * 16 + (y % 4) * 4 + x % 4) as usize * 2;
+            let src = ((y * 8 + x) * 4) as usize;
+            assert_eq!([word(&rg, at), word(&rg, at + 1)], mem[src..src + 2], "R,G of ({x}, {y})");
+            assert_eq!([word(&ba, at), word(&ba, at + 1)], mem[src + 2..src + 4], "B,A of ({x}, {y})");
+        }
+    }
+    assert!(rig.faults().is_empty(), "{:?}", rig.faults());
+}
+
+/// The integer pair is TEXTURE_FORMAT_EXT_G32R32I for both signs, with no
+/// CONFIG2 sign bit (etnaviv_format.c:229-230, etnaviv_texture_desc.c:
+/// 187-189); and the companions of the two stages are packed after each
+/// stage's own slots, in unit order, so a texture at the next unit keeps its
+/// slot (Mesa's unified packing, etnaviv_texture.c:301-322, 434-438).
+#[test]
+fn integer_pairs_take_g32r32i_and_companions_follow_each_stages_own_slots() {
+    let rig = Rig::new();
+    let _x = ExtraSampled::add(&[GLES_TEXFMT_RGBA32UI, GLES_TEXFMT_RGBA32I]);
+    let (_m0, mut a) = wide128_texture(GC_HEAP_DATA + 0x80_0000, GLES_TEXFMT_RGBA32I, 1);
+    let (_m1, mut b) = wide128_texture(GC_HEAP_DATA + 0x90_0000, GLES_TEXFMT_RGBA32UI, 2);
+    let (_m2, mut v) = wide128_texture(GC_HEAP_DATA + 0xa0_0000, GLES_TEXFMT_RGBA32UI, 3);
+    a.unit = 2;
+    b.unit = 0;
+    let mut plain = bind(rig.vbo.gpu, 4, 4, 1);
+    plain.unit = 1;
+    v.unit = 1;
+    let mut d = rig.draw(3);
+    d.num_textures = 3;
+    d.textures[..3].copy_from_slice(&[a, plain, b]);
+    d.num_vs_textures = 1;
+    d.vs_textures[0] = v;
+    let s = rig.submit(&d);
+
+    /* fragment units 0..2, their companions 3 (unit 0's) and 4 (unit 2's);
+     * vertex base 5, its unit 1 at 6, the vertex stage's two slots 5..6 and
+     * unit 1's companion after them at 7 */
+    assert_eq!(s.reg(GC_VS_SAMPLER_BASE), 5);
+    assert_eq!(s.descriptor(1)[GC_TEXDESC_SIZE as usize / 4], texdesc_size_width(4) | texdesc_size_height(4));
+    for (slot, companion) in [(0u32, 3u32), (2, 4), (6, 7)] {
+        let (p0, p1) = (s.descriptor(slot), s.descriptor(companion));
+        for p in [&p0, &p1] {
+            assert_eq!(p[GC_TEXDESC_CONFIG1 as usize / 4] & 0x3f, GC_TEX_FORMAT_EXT_G32R32I, "slot {slot}");
+            assert_eq!(p[GC_TEXDESC_CONFIG2 as usize / 4], GC_TEXDESC_CONFIG2_BASE, "slot {slot}: no sign bit");
+        }
+        let lod = |p: &[u32]| p[texdesc_lod_addr(0) as usize / 4];
+        assert_eq!(lod(&p1), lod(&p0) + 8 * 8 * 8, "slot {slot}: its companion {companion} is its plane 1");
+        assert_eq!(sampler_regs(&s, slot)[..6], sampler_regs(&s, companion)[..6], "slot {slot}");
+    }
+    assert_eq!(s.writes(nte_descriptor_addr(8)).1, 0, "nothing past the last companion");
+    assert!(rig.faults().is_empty(), "{:?}", rig.faults());
+}
+
 /// INT_FILTER (SAMP_CTRL0 bit 23) on a UNORM, non-3D texture's sampler in
 /// either stage, as Mesa's texture_use_int_filter sets it (golden mode 26),
 /// never on a float format or a 3D texture.

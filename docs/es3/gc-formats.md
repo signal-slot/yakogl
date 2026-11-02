@@ -141,6 +141,15 @@ a binding of one that arrived anyway would sample the back end's black texel,
 with a log line naming the class (`emit_slot`), not texels read as another
 format.
 
+The back-end half of Mesa's design is in, kept inert behind the mask:
+the tiled copy de-interleaves 16-byte texels into two page-aligned G32R32
+planes, and `emit_slot` emits the descriptor pair (`EXT_G32R32F` /
+`EXT_G32R32I`) at the unit's slot and at a companion packed after the
+stage's own slots. It runs only for a class `sampled_texfmts()` holds,
+which today is a host test's `TEST_EXTRA_SAMPLED` and nothing else.
+The design, the companion-slot policy and what is left (the compiler join,
+then the flip) are in `docs/notes/gc-128bit-texture-sampling.md`.
+
 ## 4. Status and what is left
 
 Built (host only; nothing here has run on the GPU):
