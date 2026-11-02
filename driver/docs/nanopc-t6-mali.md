@@ -198,27 +198,59 @@ After Z3 the kernel side must ping at least every 12 s (`PING_INTERVAL_MS`).
 
 **Open, before the board run:**
 
-- **Z2's map, extended to every section.** The boot needs AS0 enabled with
-  every loaded section mapped at its MCU address (the 7 of the table, 896
-  KiB: read-only for the data and code, writable for 0x02000000 and the
-  shared section, executable only for the code; uncached on the GPU side
-  except `CACHED`, as panthor maps them on a non-coherent GPU), and the
-  shared section mapped uncached for the CPU, since the req/ack words take
-  no cache maintenance. Z2's host side (below, "Z2: AS0 and a cache
-  flush"; `gpu::mali::pgtable::Tables`, `mmu::as_enable`,
-  `board::nanopc_t6_mmu::mmu_up`) maps one section, the shared one, onto
-  the `t6_mmu` probe's 64 KiB backing; the other six need backing in the
-  image and their own `map` calls (9 table pages, Z2's pool holds 16).
-  `csf::McuMemory` is the seam: its `cpu` is the backing's CPU address for
-  the section's MCU address, its `clean` the probe's
-  `sys_cache_data_flush_range`. Not written here.
 - The Zephyr side: a sample that embeds `mali_csffw_blob.h`, runs Z1's
   power-on, Z2's AS0 and `csf::boot`, and prints the record; and a
   `yd_t6_*` FFI entry for it. Its image row in the gate will need the
   header, and must be a gap without it, like the firmware row (`needs`).
+  The sample owns the two things the host side is handed: the backing for
+  every loaded section inside the image, and an uncached CPU mapping of
+  the shared section (its req/ack words take no cache maintenance) —
+  `McuMem::cpu` hands out whatever CPU address the image gives a backing,
+  and `McuMem::clean` is the CPU clean of the loaded bytes, not that
+  mapping.
+
+**Closed on main, host side:**
+
+- **Z2's map, extended to every section** (8c8b8581):
+  `board::nanopc_t6_sections` maps each section `fw::parse` keeps at its
+  MCU address onto its own backing, with the protection panthor derives
+  from the section's own flags (`section_prot`: writable only with `WR`,
+  executable only with `EX`, GPU-cached only for `CACHED`, from
+  `panthor_fw_load_section_entry`'s flags, panthor_fw.c:584-592, and
+  `flags_to_prot`). On the board's file that is the 7 sections, 896 KiB:
+  the data and code read-only, 0x02000000 and the shared section
+  writable, only the code executable, all GPU-cached but the shared
+  section (`CACHED_COHERENT`, uncached on the non-coherent T6).
+  `Placement::new` checks the backings before anything is mapped (one per
+  section, not smaller, 4 KiB aligned, no overlap, none protected);
+  `mmu_up_sections` runs Z2's sequence (`nanopc_t6_mmu::as0_up`, shared
+  with `mmu_up`) with one `map` per section, a CPU walk of each section
+  back to its backing, the clean of the 9 used table pages (of the pool's
+  16: 1 L0, 1 L1, 1 L2 and 6 L3, since 0x00400000 and 0x00410000 share
+  one), the enable, then one flush after the map over each section's own
+  range (each section is its own kernel BO and map in panthor).
+  `McuMem` is the board's `csf::McuMemory` over the placement: `cpu` is
+  the backing's CPU address inside one section only, `clean` calls the
+  cleaner the Zephyr side supplies (`sys_cache_data_flush_range`), and
+  `clean_rc` keeps the first rc that failed. Host tests:
+  `the_protection_is_the_sections_own_flags_as_panthor_reads_them`,
+  `every_page_descriptor_follows_panthors_rules` (every page descriptor
+  of every section, against the descriptor rules of "Z2: AS0 and a cache
+  flush": 0xfc7 read-only cached, 0xf47 writable cached, 0xe43 writable
+  uncached, `XN` on everything but the code),
+  `every_section_comes_up_in_as0_on_nine_table_pages`,
+  `the_cpu_side_is_the_backing_inside_one_section_only`,
+  `a_bad_backing_or_a_small_pool_is_refused_before_as0_is_touched`,
+  `load_sections_through_the_board_memory_cleans_every_loaded_byte`, and,
+  on the board's file, `the_boards_file_maps_into_as0_section_by_section`
+  (`MALI_CSFFW`).
+- **Whether the load needs a GPU cache flush beyond the clean**
+  (7f35d633): it does not — the reading, line by line against Linux
+  v6.18, is the next paragraph.
 
 **Settled: no GPU cache flush after the load, beyond the CPU clean** (read
-in Linux v6.18, 7d0a66e4). panthor's first boot, `panthor_fw_init`
+in Linux v6.18, 7d0a66e4; settled on main 7f35d633). panthor's first
+boot, `panthor_fw_init`
 (`panthor_fw.c:1343-1403`), runs: `panthor_gpu_l2_power_on` (1367;
 `GPU_COHERENCY_PROTOCOL` then the L2 power-on, `panthor_gpu.c:227-248`);
 `panthor_vm_create` for the MCU (1371); `panthor_fw_load` (1381) and, per
@@ -732,8 +764,9 @@ milestones (Zephyr booted by U-Boot), as on every board.
 - **Z3**: firmware loaded; the MCU boots; GLB version reads 1.5.0; a `PING` is
   acknowledged. Host side written 2026-10-28 ("The firmware (Z3)": the
   generator, the parser, the interface, the boot over a model of the MCU);
-  the board run waits for Z2's board run and for its map to cover every
-  section ("The firmware (Z3)", "Open, before the board run").
+  the map over every loaded section joined it on 2026-11-01 (8c8b8581);
+  the board run waits for Z2's board run and for the Zephyr side ("The
+  firmware (Z3)", "Open, before the board run").
 - **Z4**: CSG 0 / CS 0 started from our kernel side; the L1 frame renders the same
   bytes as under panthor. From here the same back end and compiler run on Zephyr,
   and gl_test and dEQP move to the product form.
@@ -1314,8 +1347,8 @@ the jump and after the return).**
 ### Z2: AS0 and a cache flush
 
 Written on the host 2026-10-26, before the code; **not run on the board**
-(a kexec reboots the board's Armbian; the owner schedules it, procedure at
-the end). What Z2 shows: our kernel side builds the MCU address space's
+(a kexec reboots the board's Armbian; the owner schedules it, procedure
+below, "Z2 board procedure"). What Z2 shows: our kernel side builds the MCU address space's
 page tables in the image, enables AS0 on them the way panthor enables the
 MCU's VM, and gets a GPU cache flush back with its completion bit. It is
 the step before Z3, whose firmware is loaded into exactly these tables.
@@ -1503,58 +1536,185 @@ keep its value, a fault after the update; the C header's numbers and layout.
 The gate row is `zephyr  nanopc_t6 t6_mmu image (Z2, AS0 and a cache
 flush)`, built as the `t6_gpu` row is.
 
+### Z2 board procedure
+
+Not run. For a later session that has the owner's go-ahead, the T6,
+someone at the power switch and `resource:nanopc-t6-uart`. This is Z2's
+run (the `t6_mmu` image) only; Z3 runs after it and its procedure and
+predicted record are not here ("The firmware (Z3)", "Open, before the
+board run"). Z1's procedure ("The first board procedure") applies
+unchanged: the named hand, the UART captured read only into the run's
+record (`uart.log`) from before the jump until the board is back in
+Armbian, Linux's watchdog open by default (the record must hold its
+WDT_EN proof), `GLB_RST_ST` read before and after; `--go` takes the
+board lock (`board_lock.sh`; it refuses, never waits). The predictions
+below were written 2026-11-02 from
+`tools/probes/nanopc_t6/t6_mmu/src/main.c` and the host tests, before
+any run; no value in them is measured. A run whose lines differ is a
+finding: record it as it came, never by changing the prediction.
+
+**Build** — from a detached checkout of main, in the west workspace as
+Z1 built (the checkout named `yakogl`):
+
 ```sh
 west build -p always -b nanopc_t6 -d build/t6_mmu yakogl/tools/probes/nanopc_t6/t6_mmu
 ```
 
-**The board procedure (not run).** As Z1's ("The first board
-procedure"), from a detached checkout of main with the image built from it:
-someone who can power-cycle the T6 named, the UART captured read only from
-before the jump, Linux's watchdog open by default.
+The file to jump is `build/t6_mmu/zephyr/zephyr.bin`: the board's
+defconfig carries the AArch64 image header and the watchdog marker
+`nanopc-t6.sh` insists on. The gate builds the same image as the row
+`zephyr  nanopc_t6 t6_mmu image (Z2, AS0 and a cache flush)`, with
+`-Werror` on our C files, and is a gap naming `ZEPHYR_WS` without the
+workspace. The image prints its own checkout on its first line,
+`t6_mmu: build <describe>`: a result row names that build.
 
-1. Ask who uses the board; the dry run `nanopc-t6.sh <t6_mmu zephyr.bin>`
-   and its plan. Note the PAs the ELF gives: `nm zephyr.elf | grep
-   't6_mmu_\(pool\|backing\)'` (the image is identity mapped, so the UART's
-   PAs must equal these).
+**Run** — the board's host, the UART tty and the record directory come
+from the environment (`$BOARD_HOST`, `$BOARD_UART`, `T6_RECORD_DIR`),
+never from this page:
+
+1. Ask who uses the board. `nanopc-t6.sh <t6_mmu zephyr.bin>` (the dry
+   run) and read its plan. Note the two addresses the record will name:
+   `nm build/t6_mmu/zephyr/zephyr.elf | grep 't6_mmu_\(pool\|backing\)'`
+   — below, `P` is the pool's address and `B` the backing's. The image
+   is identity mapped and both sit under 4 GiB (the image is at
+   0x10000000), so the `%p` and the `PA` on a line must be the same
+   number, and every 16-hex-digit field of the record prints as
+   `0x00000000` followed by its 8 digits.
 2. `T6_HAND=<name> T6_RECORD_DIR=<dir> T6_UART=$BOARD_UART nanopc-t6.sh
    <t6_mmu zephyr.bin> --go`.
 
-Predicted on uart2, written before any run (`P` is `t6_mmu_pool`'s address,
-`B` is `t6_mmu_backing`'s, from step 1):
+**The expected uart2 record**, a PASS run, each line exactly as
+`main.c` prints it (`P` and `B` from step 1; `…` is recorded, not
+predicted; each 64-bit register or descriptor field is one `0x` word —
+the L3 word of the walk line is `0x0060000000000f47 | (B + 0x1000)`,
+spelled as that sum below):
 
-- the Z1 banner and marker as for `t6_gpu` (`T6:A` .. `T6:C`), then
-  `t6_mmu: build <describe>`, `t6_mmu: WDT0 period 22369 ms, fed until
-  60000 ms of uptime`;
-- `t6_mmu: Z1: rc 0 stop 0 refusal 0: GPU_ID 0xa8670005 MMU_FEATURES
-  0x00002830 AS_PRESENT 0x000000ff L2_READY 0x1`;
-- `t6_mmu: pool ... at PA P (16 pages), backing ... at PA B`;
-- `AS0 as found`: `STATUS` 0, `FAULTSTATUS` 0, `TRANSTAB`, `MEMATTR`,
-  `LOCKADDR` 0 after Z1's soft reset; `TRANSCFG` as found is not predicted
-  (recorded). `IRQ as found`: `MMU_INT_RAWSTAT` 0; `GPU_INT_RAWSTAT` bit 17
-  clear (bits 9/10, `POWER_CHANGED`, may be set by Z1's L2 power-on); the
-  masks as the reset left them (expected 0, recorded, not asserted);
-- `flush round trip: GPU_CMD 0x00003304`, bit 17 clear after the clear,
-  then set within the 100 ms (Z1's soft reset completed in one 1 µs poll);
-- `tables at PA P: 4 of 16 pages used`;
-- `walk VA 0x0000000004001234: L0 P+0x1003 L1 P+0x2003 L2 P+0x3003 L3
-  (B+0x1000) | 0x0060000000000f47 (4 levels): PA B+0x1234`;
-- `tables cleaned to the point of coherency: rc 0`;
-- `AS0 enable, the whole-VA flush: LOCKADDR 0x000000000000003f`, the flush
-  `GPU_CMD 0x00003304`; `TRANSTAB P MEMATTR 0x8f8f8f8f8c4c8f4c TRANSCFG
-  0x00000000420001c6 written`;
-- `AS0 after`: the same three values read back, `LOCKADDR` 0x3f,
-  `STATUS` 0, `FAULTSTATUS` 0, `FAULTADDRESS` 0; `IRQ after`:
-  `MMU_INT_RAWSTAT` 0;
-- `the flush after the map: LOCKADDR 0x000000000400000f`, `GPU_CMD
-  0x00000304`;
-- `t6_mmu: PASS: AS0 on TRANSTAB P, three cache flush round trips, N ms`,
-  then `t6: t6_mmu done: PSCI SYSTEM_RESET`, the DDR loader, U-Boot;
-  `nanopc-t6.sh` prints "back in Armbian N s after the jump" (45 s for
-  `t6_hello`).
+```
+T6:A .. T6:C, the arming lines, the marker — as for t6_gpu
+t6_mmu: build <describe>
+t6_mmu: WDT0 period 22369 ms, fed until 60000 ms of uptime
+t6_mmu: Z1: rc 0 stop 0 refusal 0: GPU_ID 0xa8670005 MMU_FEATURES 0x00002830 AS_PRESENT 0x000000ff L2_READY 0x1
+t6_mmu: pool 0x{P} at PA 0x{P} (16 pages), backing 0x{B} at PA 0x{B}
+t6_mmu: AS0 as found: TRANSTAB 0x0000000000000000 MEMATTR 0x0000000000000000 TRANSCFG 0x… LOCKADDR 0x0000000000000000 STATUS 0x00000000 FAULTSTATUS 0x00000000 FAULTADDRESS 0x0000000000000000
+t6_mmu: IRQ as found: MMU_INT_RAWSTAT 0x00000000 MMU_INT_MASK … GPU_INT_RAWSTAT 0x… GPU_INT_MASK …
+t6_mmu: flush round trip: GPU_CMD 0x00003304, GPU_INT_RAWSTAT 0x… before the clear, 0x… after; CLEAN_CACHES_COMPLETED after n polls of 1 us
+t6_mmu: tables at PA 0x00000000{P}: 4 of 16 pages used; backing PA 0x00000000{B}
+t6_mmu: walk VA 0x0000000004001234: L0 0x00000000{P+0x1003} L1 0x00000000{P+0x2003} L2 0x00000000{P+0x3003} L3 (B+0x1000) | 0x0060000000000f47 (4 levels): PA 0x00000000{B+0x1234}
+t6_mmu: tables cleaned to the point of coherency: rc 0
+t6_mmu: AS0 enable, the whole-VA flush: LOCKADDR 0x000000000000003f, LOCK polls n/n; GPU_CMD 0x00003304, GPU_INT_RAWSTAT 0x… before the clear, 0x… after, CLEAN_CACHES_COMPLETED after n polls of 1 us; UNLOCK polls n/n
+t6_mmu: AS0 enable: TRANSTAB 0x00000000{P} MEMATTR 0x8f8f8f8f8c4c8f4c TRANSCFG 0x00000000420001c6 written; UPDATE polls n/n
+t6_mmu: AS0 after: TRANSTAB 0x00000000{P} MEMATTR 0x8f8f8f8f8c4c8f4c TRANSCFG 0x00000000420001c6 LOCKADDR 0x000000000000003f STATUS 0x00000000 FAULTSTATUS 0x00000000 FAULTADDRESS 0x0000000000000000
+t6_mmu: IRQ after: MMU_INT_RAWSTAT 0x00000000 MMU_INT_MASK … GPU_INT_RAWSTAT 0x… GPU_INT_MASK …
+t6_mmu: the flush after the map: LOCKADDR 0x000000000400000f, LOCK polls n/n; GPU_CMD 0x00000304, GPU_INT_RAWSTAT 0x… before the clear, 0x… after, CLEAN_CACHES_COMPLETED after n polls of 1 us; UNLOCK polls n/n
+t6_mmu: PASS: AS0 on TRANSTAB 0x00000000{P}, three cache flush round trips, N ms
+t6: t6_mmu done: PSCI SYSTEM_RESET at N ms (F feeds)
+```
 
-A refusal prints `t6_mmu: FAIL: stop <n> (<step>), refusal <n>, detail
-<value>` and resets the same way; the stop and refusal numbers are
-`YD_T6_MMU_STOP_*` and `YD_MALI_*` in `yakogl_drivers.h`.
+then the DDR loader, U-Boot and Armbian; `nanopc-t6.sh` prints "back in
+Armbian N s after the jump" (45 s for `t6_hello`).
+
+What each value is, and what a wrong one would mean:
+
+- **The two lead lines.** `build <describe>` names the checkout the
+  result belongs to; the WDT0 line is Z1's arming — period 22369 ms as
+  measured, fed until 60000 ms of uptime as the lifetime says.
+- **`Z1: rc 0 …`.** As `t6_gpu` measured it. Anything else stops the
+  run there (`t6_mmu: FAIL: Z1's power-on stopped (stop N, refusal R,
+  detail 0x…); run t6_gpu for its lines`): a Z1 or hand-over
+  regression, not a Z2 one.
+- **`AS0 as found`.** `TRANSTAB`, `MEMATTR`, `LOCKADDR`, `STATUS`,
+  `FAULTSTATUS` and `FAULTADDRESS` 0 after Z1's soft reset; `TRANSCFG`
+  recorded, not predicted (Armbian's panthor had AS0 enabled, and how
+  far a soft reset reaches into the AS registers is not measured). A
+  non-zero `TRANSTAB` or `MEMATTR` means the GPU is not in the state Z1
+  reported: the hand-over, not the table builder.
+- **The two IRQ lines.** `MMU_INT_RAWSTAT` 0 as found and after (bit 0
+  an AS0 fault, bit 16 its bus error); the masks 0 as the reset left
+  them — recorded, never written. `GPU_INT_RAWSTAT` bit 17
+  (`CLEAN_CACHES_COMPLETED`) must be clear before the first flush: a
+  bit already set cannot be told from a completion, which is why the
+  round trip refuses there. Bits 9/10 (`POWER_CHANGED`) may ride along
+  in every raw-status field, set by Z1's L2 power-on. A raw status
+  that never clears between the three flushes: the GPU does not take
+  `GPU_CMD`.
+- **The three flushes.** `GPU_CMD` 0x00003304 (L2 and LSC cleaned and
+  invalidated) for the round trip and the enable, 0x00000304 (the L2
+  only) for the flush after the map, in that order; the "after" raw
+  status equals the "before" one, bit 17 clear. The poll counters are
+  recorded; the prediction is a small count — every Z1 GPU wait
+  completed in one 1 µs poll — always under 100 ms, after which the
+  step refuses. Another `GPU_CMD` word is a wrong flush word.
+- **`4 of 16 pages used`.** One 64 KiB section: one table page per
+  level. The host test pins the 4
+  (`from_a_reset_gpu_as0_comes_up_on_the_section_s_tables`); the
+  16-page pool is sized for Z3's 9
+  (`z3_s_firmware_sections_take_nine_table_pages`). A 4 that is not 4
+  on a PASS is the builder or a different image, not the board.
+- **The walk line.** `P+0x1003`, `P+0x2003`, `P+0x3003`: each level's
+  table at the next pool page, its PA | 0b11. The L3 word is one entry
+  of the descriptor table of "The format": write-back (`AttrIndx` 1),
+  unprivileged, writable, inner shareable, `AF`, `nG`, both `XN`. A
+  word differing in one bit field differs in exactly that row: 0xfc7
+  would be the page read-only, an `…e43` word uncached and outer
+  shareable, a high word of 0 a page left executable. A walk `PA` off
+  `B+0x1234`, or fewer than 4 levels, never reaches the PASS record:
+  the run stops at `stop 4` with the walked PA in `detail`.
+- **`tables cleaned to the point of coherency: rc 0`.** One
+  `sys_cache_data_flush_range` over the 4 used pages. An rc that is
+  not 0 is `stop 5` with the rc as `detail`.
+- **The enable's lines.** `LOCKADDR` 0x3f is `lock_region` over all of
+  VA (log2 of its size, minus 1), 0x0400000f the section's 64 KiB;
+  `TRANSTAB` = P, `MEMATTR` 0x8f8f8f8f8c4c8f4c (the board's live word;
+  bytes 4-7 no PTE selects), `TRANSCFG` 0x420001c6
+  (`ADRMODE_AARCH64_4K`, 48 VA bits, write-back table walks, non-
+  coherent so no `SH`). A register that reads back other than written
+  is `stop 7` naming it — `refusal` 1 `TRANSTAB`, 2 `MEMATTR`, 3
+  `TRANSCFG`, `detail` the value read: a dropped write, clocks or
+  reset state, not the tables.
+- **`AS0 after`.** The three written values again, `LOCKADDR` still
+  0x3f (the enable's; the flush after the map rewrites it after this
+  snapshot), `STATUS` 0 (bit 0 `AS_ACTIVE` is the busy bit every
+  `AS_COMMAND` waits clear — panthor's `wait_ready`), `FAULTSTATUS`
+  and `FAULTADDRESS` 0 and `MMU_INT_RAWSTAT` 0: nothing walked AS0.
+  `stop 8` (Fault) refuses those same fields: refusal 1 `AS_ACTIVE`
+  stuck after the `UPDATE`, 2 a `FAULTSTATUS` set though nothing walks
+  AS0 before the MCU, 3 a `MMU_INT_RAWSTAT` bit (1+n or 17+n another
+  address space's — Linux's AS1 state surviving the jump).
+- **`PASS` and the reset.** `TRANSTAB` = P read once more; `N ms` is
+  the wall time from before `yd_t6_mmu_up`, and the budgets of "the
+  way back" below keep it in single seconds. `F feeds` counts the
+  watchdog feeds before the PSCI reset.
+
+A stopped run prints, between the same banner and reset:
+
+```
+t6_mmu: FAIL: stop N (<step>), refusal R, detail 0x…
+```
+
+with the stop names of `main.c` (`YD_T6_MMU_STOP_*` and `YD_MALI_*` in
+`yakogl_drivers.h`). Each stop means:
+
+- **1 Features** — Z1's `MMU_FEATURES` (`detail`) is not 48 VA / 40 PA
+  bits. Nothing was written (a host test holds the run to that): the
+  GPU is not the one these tables were sized for.
+- **2 Flush** — `detail` the `GPU_INT_RAWSTAT` at the stop: bit 17
+  found set before the clear (the refusal exists exactly because a
+  completion could then not be told from an old one) or never raised
+  within the 100 ms (`GPU_CMD` not executed at all: clocks, PD_GPU,
+  L2).
+- **3 Tables** — `refusal` the `pgtable::PtRefusal`, `detail` the
+  refused VA. With one section in a 16-page pool it cannot happen; it
+  would mean the addresses handed over are not the ELF's of step 1.
+- **4 Walk** — `detail` the PA the walk reached, 0 if unmapped: the
+  pool does not hold the tables of the walk line (alignment, the
+  pool's PA, the identity mapping).
+- **5 Clean** — `detail` the rc of the table clean.
+- **6 Enable** — the enable's sequence stopped: a `wait_ready` over its
+  100 ms or a flush refused; `refusal` the mali refusal, `detail` the
+  register value it timed on — the MMU is not accepting commands.
+- **7 ReadBack**, **8 Fault** — as read in the two lines above.
+- **9 FlushPt** — the flush after the map stopped like 2 or 6, in its
+  own step.
 
 **The bounded way back.** Every wait of the run is bounded: Z1's (100 ms
 reset, 20 ms L2, the PMU and SPI budgets), three flushes of at most 100 ms
@@ -1568,6 +1728,17 @@ WDT0 resets the board within one period. A stuck GPU register is a
 bounded refusal, not a hang: a read of the GPU with PD_GPU off would be
 an external abort, but Z2 runs only after Z1 returned 0 (PD_GPU on, L2
 ready).
+
+**Recording the result.** A kexec run is a development result, as Z1's
+was (its sign-off form — U-Boot starting the image — has not run). The
+build line, the PASS or FAIL line and the record reference go into Z2's
+row in `tools/cts/RESULTS.md` (current results only: the run replaces
+the row, no run log) and the summary in `tools/cts/STATUS.md`;
+`uart.log` and the record directory stay out of the tree, in
+`T6_RECORD_DIR`. The run is reported to #20 as a comment naming the
+build and the record, and every new defect opens an issue; a person
+posts both. A run that did not happen is not a row: a gap is never a
+pass.
 
 ## Decisions
 
