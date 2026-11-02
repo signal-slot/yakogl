@@ -30,7 +30,7 @@
 //! outside them is refused with its own message ([`super::MaliError`]),
 //! never approximated.
 
-use super::bir::{Access, Dest, Idx, Ins, LodMode, Op, Prog, Src, TexDim};
+use super::bir::{Access, Dest, Idx, Ins, LodMode, Op, Prog, Src, Swz, TexDim};
 use super::emit;
 use super::fau::FauWord;
 use super::nir;
@@ -324,7 +324,17 @@ impl UboLayout {
              * element (uniarray_vs: `ui_two` at word 0, `u_arr` from word 1,
              * the varying program's `IADD_IMM.i32 #0x4`) */
             let (_, comps) = super::nir_fs::uniform_extent(m, u.dword_off)?;
-            l.push(u.dword_off, comps, false)?;
+            /* an fp16 uniform (nir.rs `fp16_uniform`): two components a
+             * word, the low first, a mat4 its columns in order with no
+             * padding (vsfp16_19_hello: `transformationMatrix` in words
+             * 6-13); each uniform starts a word, and the fp32 ones are not
+             * mixed into those words (prec_19b) */
+            let halves = vs.order[..vs.len].iter().any(|&id| {
+                let nd = vs.nodes[id as usize];
+                matches!(nd.kind, nir::Kind::Uniform { dword, .. } if nd.bits == 16
+                    && dword >= u.dword_off && dword < u.dword_off + u.dwords.max(1))
+            });
+            l.push(u.dword_off, comps, halves)?;
             if u.array_len > 1 {
                 l.arrays[(l.n - 1) / 32] |= 1 << ((l.n - 1) % 32);
             }
@@ -564,6 +574,18 @@ pub fn vs_variant(
                 let s = ld_attr(p, loc, comps)?;
                 for c in 0..comps as usize {
                     lanes[id][c] = Src::ssa(s[c]);
+                }
+            }
+            /* an fp16 uniform's lanes: each its half of the load's words
+             * (`u4.w1.h1`, vsfp16_19_hello.expect.json), which the lane's
+             * `f2f32` reads */
+            nir::Kind::Uniform { dword, comps } if nd.bits == 16 => {
+                let base = ubo.word(dword).ok_or(MaliError::Defect(super::Defect::IrIndex))?;
+                for c in 0..comps {
+                    let (w, half, _) =
+                        ubo.half(dword + u16::from(c)).ok_or(MaliError::Defect(super::Defect::IrIndex))?;
+                    let swz = if half == 0 { Swz::H00 } else { Swz::H11 };
+                    lanes[id][c as usize] = Src::of(Idx::Ubo { base, comp: (w - base) as u8 }).swz(swz);
                 }
             }
             nir::Kind::Uniform { dword, comps } => {

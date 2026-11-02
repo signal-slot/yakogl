@@ -141,6 +141,54 @@ nothing was printed; the first step of the implementation is to print them):
    still refused (a mediump array). `corpus-verdicts.txt` forward only.
 4. Board: case 19 x2, then the sweep x2.
 
+### Lowered (plan #185 item `vsfp16-19`, 2026-11-02)
+
+Steps 1-3 are done; the board (step 4) is not. Byte-equal, both stages and
+every fact, to `tools/mali/testdata/vsfp16_19_{hello,mixed,tex,vec4}.expect.json`
+(drm-shim, `--uniform-values`): `tests.rs`
+`the_fp16_vertex_uniforms_are_byte_equal_to_mesa_26_2_1`, `VSFP16_POPULATION`.
+`hello` is the corpus's `es100/hello.vert` (prec_19), `tex` its
+`textured.vert`, `mixed` a mediump vec4 before a highp vec4, and `vec4`
+a mediump vec4 alone.
+
+- **Which uniforms** (`nir.rs` `fp16_uniform`): a float, vec2, vec3, vec4
+  or mat4, not an array, declared mediump or lowp. That is
+  `lower_variables_visitor::visit` (`G/lower_precision.cpp:1023-1060`): a
+  uniform outside a block whose base type is a float, when the stage has
+  `fp16_const_buffers` (panfrost from v6, `pan_screen.c:588`). A struct
+  member stays fp32 (its base type is a struct), so `mod.rs` gives the
+  walk the plain uniforms only. A mediump array (which Mesa does lower)
+  and a mediump struct member have no reference and stay
+  `MaliError::UniformPrecision`, and so does any other type.
+- **The node.** The walk's `LoadUniform` makes the same `Kind::Uniform`
+  load (`Nir::load16`, `bits: 16`) and widens each lane it reads with its
+  own `Alu::F2f32` (CSE'd like any ALU node). Everything after is the fp32
+  vertex walk, unchanged.
+- **The layout** (`select.rs` `UboLayout::vs`): a uniform read through a
+  16-bit node is a `halves` row (`FauWord::UniformHalves`, the fragment
+  stage's form). The frame already uploads such words for either stage
+  (`src/mali/frame.rs` `PushWord::UniformHalves`, `f32_to_f16`), so
+  `src/mali` did not change.
+- **The selection** (`select.rs` `vs_variant`): lane `c` of a 16-bit
+  uniform node is `Idx::Ubo { base, comp }` of its word, swizzled `H00` or
+  `H11` for its half. `base` is the load's first word, so a mat4 column is
+  its own base (the push keeps Mesa's column order). The existing
+  `F16_TO_F32` row (`emit.rs`, case 121's) reads it as `uK.wJ.hH`.
+- The scheduler and register allocator put the conversions where Mesa
+  does (each before its `FMA`, `r7` reused), with no change to either.
+
+The `tex` pair declares `TexCoord` and `Tint` in the opposite order in each
+stage. Our varying locations follow each stage's declaration order, so the
+test gives `compile_vs_for_reads` the fragment shader's reads at the vertex
+shader's locations (Mesa's link matches them by name).
+
+`es100/texfill.vert` (`uniform Fill u_fill`, a struct with default highp
+members) was refused with the same text only because the precision lookup
+found no row for `u_fill.matrix`. `mod.rs` `uniform_precision` now reads a
+member's precision from the struct's spelling (`reflect.rs`
+`UniformDecl::ty`), and the shader is `ok` on the existing fp32 path. No
+reference draws a struct uniform's block layout yet.
+
 ## Part 2. Cases 82, 84, 119: mediump arithmetic on gl_FragCoord
 
 ### Refusal sites
