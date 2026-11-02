@@ -60,8 +60,13 @@ pub const MAX_PREDS: usize = 4;
 pub enum Special {
     /// `atest_datum` (page 0, entry 5).
     AtestDatum,
-    /// `blend_descriptor_0` (page 0, entry 8).
-    BlendDescriptor0,
+    /// `blend_descriptor_<rt>` (page 0, entry 8 + rt: `BIR_FAU_BLEND_0 +
+    /// rt`, bifrost_compile.c:1626-1631): the descriptor of render target
+    /// `rt`, the only field that names the target a `BLEND` writes.
+    BlendDescriptor(u8),
+    /// `program_counter` (page 0, entry 15): a non-last `BLEND`'s return
+    /// address (`va_lower_blend`, va_pack.c:1188-1194).
+    ProgramCounter,
 }
 
 /// A word of the sysval UBO a vertex shader reads (Mesa's

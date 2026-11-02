@@ -27,7 +27,9 @@ fn src_byte(s: &Src) -> Result<u32, MaliError> {
         Idx::Uniform(w) if w < 64 => 0x80 | w as u32,
         Idx::Lut(i) if i < 32 => 0xc0 | i as u32,
         Idx::Special(Special::AtestDatum, hi) => 0xc0 | (32 + 2 * 5 + hi as u32),
-        Idx::Special(Special::BlendDescriptor0, hi) => 0xc0 | (32 + 2 * 8 + hi as u32),
+        Idx::Special(Special::BlendDescriptor(rt), hi) if rt < 8 => 0xc0 | (32 + 2 * (8 + rt as u32) + hi as u32),
+        /* page 3, entry 15 ([`tail`] names the page) */
+        Idx::Special(Special::ProgramCounter, hi) => 0xc0 | (32 + 2 * 15 + hi as u32),
         _ => return Err(MaliError::Defect(Defect::Operand)),
     })
 }
@@ -162,10 +164,12 @@ impl Fill {
     }
 }
 
-/// The common tail: the FAU page (page 0, the only one this back end
-/// writes) and the flow.
+/// The common tail: the FAU page (page 0, or page 3 for an instruction that
+/// reads `program_counter`, `VA_FAU_SPECIAL_PAGE_3_PROGRAM_COUNTER`,
+/// va_pack.c:95-96) and the flow.
 fn tail(f: &mut Fill, i: &Ins) -> Result<(), MaliError> {
-    f.put("fau_page_index", 0)?.put("flow", i.flow as u32)?;
+    let page = if i.srcs().iter().any(|s| s.idx == Idx::Special(Special::ProgramCounter, false)) { 3 } else { 0 };
+    f.put("fau_page_index", page)?.put("flow", i.flow as u32)?;
     Ok(())
 }
 
@@ -616,7 +620,9 @@ pub fn pack_one(i: &Ins, branch: i32) -> Result<u64, MaliError> {
                 (false, false) => 3,
             };
             f.put("register_format", fmt)?.put("message_slot_index", i.slot as u32)?;
-            f.put("staging_register_index", reg(i.src[0].idx)?)?.put("offset", 0)?;
+            /* `target`: the bytes a BLEND without `.end` skips ([`branch_offset`]) */
+            let skip = branch.checked_mul(8).ok_or(MaliError::Defect(Defect::Operand))? as u32;
+            f.put("staging_register_index", reg(i.src[0].idx)?)?.put("offset", skip)?;
         }
         Op::BranchzI { eq } => {
             f = Fill::new(IsaOp::Jump);
@@ -763,19 +769,24 @@ pub fn pack_one(i: &Ins, branch: i32) -> Result<u64, MaliError> {
 /// `LD_VAR_BUF_IMM`'s `source_format` field (bits 24-25; `src_flat32` is 0).
 const LD_VAR_BUF_SOURCE_FORMAT: u64 = 3 << 24;
 
-/// `va_lower_blend` (va_pack.c:1172-1202): after the BLEND that ends the
-/// shader, `r48 = 0` (the blend shader's link register: return to nothing)
-/// and the branch to the blend shader the descriptor's high word names,
-/// taken when it is not zero.
+/// `va_lower_blend` (va_pack.c:1172-1202): after each BLEND, the blend
+/// shader's link register r48 and the branch to the blend shader the
+/// descriptor's high word names, taken when it is not zero. After the
+/// BLEND that ends the shader `r48 = 0` (return to nothing); after any
+/// other `r48 = program_counter + 8`, the instruction after the branch, and
+/// the BLEND itself skips the two (its `target`, [`BLEND_SKIP`]), as a
+/// fixed-function BLEND without `.end` branches by it (ISA.xml:1745-1752;
+/// fsout_55_es3mrt.expect.json).
 pub fn lower_blend(p: &mut Prog<'_>) -> Result<(), MaliError> {
     let mut k = 0;
     while k < p.n {
         let i = p.ins[k];
         if let Op::Blend { .. } = i.op {
-            if i.flow != flow::END {
-                return Err(MaliError::Defect(Defect::BlendNotLast));
-            }
-            let link = Ins::new(Op::IaddImmI32(0), &[i.dest[0]], &[Src::of(Idx::Lut(0))]);
+            let link = if i.flow == flow::END {
+                Ins::new(Op::IaddImmI32(0), &[i.dest[0]], &[Src::of(Idx::Lut(0))])
+            } else {
+                Ins::new(Op::IaddImmI32(8), &[i.dest[0]], &[Src::of(Idx::Special(Special::ProgramCounter, false))])
+            };
             let call = Ins::new(Op::BranchzI { eq: true }, &[], &[Src::of(Idx::Lut(0)), i.src[3]]);
             p.insert(k + 1, link)?;
             p.insert(k + 2, call)?;
@@ -789,10 +800,22 @@ pub fn lower_blend(p: &mut Prog<'_>) -> Result<(), MaliError> {
 /// `va_lower_branch_target` (va_pack.c:1104-1158) for the branch at `k`:
 /// the instructions from the one after it to the start of its target
 /// block (an empty target starts where the next block does), as the
-/// offset is relative to the next instruction; 0 for any other op.
+/// offset is relative to the next instruction. A BLEND that [`lower_blend`]
+/// gave a return stub (`r48 = program_counter + 8`: not the last) skips the
+/// stub's two instructions (`branch_offset = prolog_length`,
+/// va_pack.c:1199-1200); 0 for any other op.
 fn branch_offset(p: &Prog<'_>, k: usize) -> i32 {
     match p.ins[k].op {
         Op::Branchz { target, .. } => p.block_start(target) as i32 - k as i32 - 1,
+        Op::Blend { .. } => {
+            let pc = Idx::Special(Special::ProgramCounter, false);
+            let stub = p.as_slice().get(k + 1).is_some_and(|n| matches!(n.op, Op::IaddImmI32(_)) && n.src[0].idx == pc);
+            if stub {
+                2
+            } else {
+                0
+            }
+        }
         _ => 0,
     }
 }
