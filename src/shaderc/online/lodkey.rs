@@ -215,7 +215,7 @@ fn copy_block<'a>(
 
 /// `op` with every value it reads renamed by `map`. Exhaustive, as
 /// [`ir::Op::for_each_src`] is, so an operation added later is not missed.
-fn map_op(op: Op, map: &dyn Fn(ValueId) -> ValueId) -> Op {
+pub(super) fn map_op(op: Op, map: &dyn Fn(ValueId) -> ValueId) -> Op {
     let ms = |s: Src| Src { val: map(s.val), ..s };
     match op {
         Op::ConstF32(_) | Op::ConstI32(_) | Op::ConstBool(_) | Op::LoadUniform { .. } | Op::LoadInput { .. } => op,
