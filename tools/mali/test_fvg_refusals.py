@@ -28,6 +28,10 @@ class FvgRefusals(unittest.TestCase):
         line = P + "g.frag: " + FMA
         self.assertEqual(f.classify([P + "a.frag: ok", line]), (1, 0, [line]))
 
+    def test_fvgtest_files_counted(self):
+        line = "tools/shaders/fvgtest_x.frag: " + FMA
+        self.assertEqual(f.classify(["tools/shaders/fvgtest_x.frag: ok", line]), (1, 0, [line]))
+
     def test_other_directories_ignored(self):
         self.assertEqual(f.classify(["tools/shaders/misc/x.frag: " + FMA]), (0, 0, []))
 
