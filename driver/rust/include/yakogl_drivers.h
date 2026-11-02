@@ -808,7 +808,8 @@ struct yd_pvr_render {
 	struct yd_pvr_grow_scene grow_scene;   /* zero without pvr-grow-scene */
 };
 
-/* kick: a struct pvr_render_kick (driver/src/pvr_render.h; 208 bytes). */
+/* kick: a struct pvr_render_kick (driver/src/pvr_render.h; 312 bytes: the
+ * frag regs at 32, the partial-render block frag_pr at 216, 96 bytes). */
 void yd_pvr_render_ctx_init(struct yd_pvr_km *km, struct yd_pvr_render *r);
 int yd_pvr_render_submit(struct yd_pvr_km *km, struct yd_pvr_render *r, const void *kick,
 			 uint32_t *fence_out);

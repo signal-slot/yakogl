@@ -128,12 +128,45 @@ struct pvr_render_frag_regs {
 	uint64_t isp_oclqry_base;
 };
 
+/* What the firmware's partial-render fragment command (the 3D_PR) differs in
+ * from the frame's 3D command: Mesa's pr_pbe_reg_words,
+ * pr_pds_pixel_event_data_offset and pds_pr_bgnd (docs/notes/pvr-render-pool.md
+ * "Design: the firmware's partial render", part 2; docs/notes/pvr-pr-eot.md
+ * 3.3-3.6; docs/notes/pvr-pr-bgload.md 4). All zero means "no partial-render
+ * state for this frame": the backend hands the block out zeroed and the
+ * driver does not read it yet, so every firmware word is today's. Fixed-width
+ * fields with explicit padding (96 bytes), mirrored by src/osal/render.rs and
+ * driver/rust/src/gpu/pvr/render.rs. */
+struct pvr_render_frag_pr {
+	/* The SPM colour scratch the PR EOT stores the tiles to and the
+	 * background load reads them back from: device address (0: none) and
+	 * size in bytes (Mesa pvr_arch_spm_scratch_buffer_calc_required_size:
+	 * align(width, 2) x height x 4 x samples x output dwords x (1 + tile
+	 * buffers)). */
+	uint64_t spm_scratch_gpu;
+	uint32_t spm_scratch_bytes;
+	uint32_t reserved;              /* padding, zero */
+	/* PBE REG_WORD0/1 per slot of the PR command, written whole (Mesa
+	 * copies the whole array): slot 0 the scratch's pair (identity swizzle,
+	 * LINEAR, the scratch's own stride, no downscale), the others zero. */
+	uint64_t pbe_word[PVR_RENDER_MAX_RT][2];
+	/* The PR EOT program: the PDS-heap offset of its DATA segment (what the
+	 * PR command's CR_EVENT_PIXEL_PDS_DATA names; the CODE and the info word
+	 * are the frame's) and that segment's size in bytes. */
+	uint32_t eot_pds_data;
+	uint32_t eot_pds_data_bytes;
+	/* The PR background-object PDS (CR_PDS_PR_BGRND0/1/3, next to the 3D
+	 * command's pds_bgnd): the program that loads the scratch back. */
+	uint64_t pds_pr_bgnd[3];
+};
+
 /* One render = one GEOM kick + one FRAG kick on the same HWRT dataset. */
 struct pvr_render_kick {
 	uint32_t width, height;         /* render target size (selects the HWRT dataset) */
 	uint32_t samples;               /* 1, 2 or 4 samples per pixel (0 = 1) */
 	struct pvr_render_geom_regs geom;
 	struct pvr_render_frag_regs frag;
+	struct pvr_render_frag_pr frag_pr;   /* the partial-render block (zero today) */
 };
 
 /* One-time initialisation after pvr_fw_boot() succeeded. Idempotent. */
