@@ -374,3 +374,112 @@ fragment attribute descriptor for a flat varying is an integer format
 the record does not say which varyings are flat (`VaryingSlot` has no
 interpolation field). Whether `LD_VAR_BUF_IMM` reads the descriptor's
 format at all is for the board to show.
+
+## Equal lanes and sampler-struct lanes (plan #185, ref-varymerge)
+
+Family F5 of `mali-remaining-families.md` had two varying shapes with no
+reference. Both are made now (Mesa 26.2.1 drm-shim, `drm_shim_ref.sh run`,
+`pan_ref_diff.py extract --draw`; the shim is built with `-Dlibdir=lib64`):
+
+| reference | sources | corpus verdict |
+|---|---|---|
+| `varymerge_equal.{vert,frag,expect.json,stderr,stdout,trace}` | `es100/va_vec2.vert` + `es100/va.frag` | two varying lanes of equal value |
+| `varymerge_structsampler.{...}` | `es100/vtex_struct_sampler.vert` + `es100/va.frag` | a varying lane computed from no attribute |
+
+`discard_dynloop.vert` is shape (a) too (same `v_color = vec4(scale * color, 1.0)`
+with `color` the constant `vec3(1.0)`); `vtex_struct_sampler_array.vert` is
+shape (b); neither has its own reference, the lowering has to cover them.
+
+### (a) Equal lanes: one flat float, the fragment stage broadcasts
+
+`v_color = vec4(u_colorScale * vec3(1.0), 1.0)`: lanes x, y, z are the same
+value `u_colorScale`, w is the constant 1.0 (dropped as in cases 63/78/101).
+Mesa's link shrinks the varying to ONE component:
+`shader_out mediump float v_color (VARYING_SLOT_VAR0.x)` in the vertex stage,
+`shader_in INTERP_MODE_FLAT mediump float VARYING_SLOT_VAR0.x` in the fragment
+stage (flat because the value has no attribute in it, as for case 117).
+
+- `vs.varying` is 3 words: `FMA.f32 r0, u3.w1, 0x0, u3.w1` (= the uniform, the
+  FMA is how NIR's `fmul x, 1.0`/`mov` ended), `LEA_BUF_IMM.slot0 @r2:r3, r59`
+  and `STORE.i32.estream.slot1.end @r0, [r2:r3]`: one 4-byte store at the
+  vertex's varying offset (a stride of 4 bytes per vertex, not 16).
+- `fs.fragment`: `LD_VAR_BUF_IMM.f32.slot0.src_flat32.center.store @r0, 0x0,
+  index:0x0` (one lane; `src_flat32`, not `src_f32`), `FADD.f32 r0.h0, r0, 0x0.neg`
+  (the f32 -> f16 narrowing of a mediump result, folded into the add),
+  `ATEST`, then the colour pair is built from that half: `IADD.v2u16.discard
+  r1, r0.h00, 0x0` is (x, x) and `MKVEC.v2i16 r2, r0.h0, u2.w0.h0` is (x, 1.0),
+  with `u2.w0 = 0x3c003c00` (1.0 in f16) in the fragment FAU; `MOV r0, r1; MOV
+  r1, r2` and `BLEND.v4.f16`. So the merged lanes are duplicated in
+  registers after the load; the lanes cost no further varying loads.
+
+What the tip compiler lacks (`VaryingDuplicate`): it gives each lane of the
+vec4 its own varying slot. The lowering has to (1) find lanes of the vertex
+stage's output with the same source value (the same SSA value, or pure
+copies of it), (2) store one lane and leave the others out of the varying
+program and the record, (3) in the fragment stage load the one lane (flat when
+uniform-only, otherwise smooth) and reuse the loaded register for every
+member. The fp16 packing is the existing `gl_FragColor` lane-shape code
+(cases 75, 185): the pair `(x, x)` is `IADD.v2u16 .h00`, `(x, c)` is `MKVEC`
+with the constant in the FAU.
+
+### (b) A lane from no attribute through a sampler struct: kept as an ordinary lane
+
+`v_color = vec4(texture2D(s.c, a_coords.xy * s.b.xy + s.b.z).rgb, s.a)`: x, y,
+z come from a vertex texture fetch, w is `s.a`, a uniform alone. Unlike the
+case-117 shape, Mesa did NOT move this lane to a flat varying: the varying is
+a full `vec4` (`shader_out mediump vec4 v_color`), the fragment stage reads
+`shader_in INTERP_MODE_SMOOTH mediump vec4` and the sampler struct is a plain
+sampler uniform (the struct is split before the
+link; the sampler descriptor pointer is the pair at `u7.w1`).
+
+- `vs.varying` (22 words): `LD_ATTR_IMM.v2.f32 @r0:r1, ..., index:0x1` loads
+  `a_coords.xy`; `MOV r2, u6.w0` (`s.b.z`); `FMA r0, r0, u5.w1, r2` and
+  `FMA r1, r1, u7.w0, r2` (the `* s.b.xy + s.b.z` pair); `MOV r2, u7.w1; MOV r3,
+  0x0` (the texture/sampler descriptor pointer); `TEX_SINGLE.slot1.reserved.32.rgb.2d.zero
+  @r0:r1:r2, @r0:r1, [r2:r3]` (RGB, 2D, LOD zero because the vertex stage has
+  no derivative); then four 4-byte stores, one per lane of the varying:
+  `STORE.i32.estream` of r0, r1, r2 (the texel) and of `r2 = MOV u6.w1` (`s.a`,
+  loaded from the uniform into a register of its own, as the stored value).
+  The four stores use the offsets `LEA_BUF_IMM` + `u4.w0`, `u4.w1`, `u5.w0`.
+- `vs.position` is the plain `a_position` perspective-divided pass-through
+  with the usual clamp (`FRCP`, `FMAX u3.w0`, `FMIN u3.w1`).
+- `fs.fragment`: `LD_VAR_BUF_IMM.f32.slot0.v4.src_f32.center.store @r0:r1:r2:r3,
+  r61, index:0x0` (a smooth v4), `V2F32_TO_V2F16 r0, r0, r1` and
+  `V2F32_TO_V2F16 r1, r2, r3` and the `BLEND`.
+
+So for this shape the "lane from no attribute" is only the fourth lane of an
+otherwise ordinary varying program: the tip compiler's refusal comes from
+treating a uniform-only lane as the flat shape of cases 117/181/191/199,
+which it is not here. Two things differ from that case: the uniform comes
+from a sampler struct member (`s.a`, in the uniform buffer next to `s.b`),
+and the varying stays smooth because the fragment stage reads all four
+lanes as one v4. The word to take over: the stored lane is a `MOV` of the
+uniform, no `FMA` is needed.
+
+### One-session lowering proposal, item `varying-merge`
+
+Order: (a) first, it needs only the register-reuse step; (b) after it,
+because it needs the vertex texture fetch the `vstex-149a` item already
+has, plus the uniform lane in the varying program.
+
+1. `VaryingDuplicate`: group the output lanes by value in the vertex walk,
+   keep one `VaryingSlot` lane per group, and give the fragment stage a
+   `lane -> loaded register` map (flat when the shared value is uniform-only).
+   Target: `varymerge_equal.expect.json` (`vs.varying` 3 words, `fs.fragment`
+   10 words, FAU `3c003c00`).
+2. Sampler-struct lane: in the vertex walk, let a uniform-only lane of a
+   varying whose other lanes are computed be a `MOV` from the uniform and
+   stay smooth; the sampler struct member is the existing texture uniform
+   path. Target: `varymerge_structsampler.expect.json` (`vs.varying`
+   22 words, `fs.fragment` 7 words).
+3. Tests in `tests.rs` against both `.expect.json`; `corpus-verdicts.txt`
+   moves `va_vec2.vert` and `vtex_struct_sampler.vert` forward, then the
+   array variants and `discard_dynloop.vert` (which also needs the loop of
+   its fragment shader and may stay refused).
+
+Not covered by the references: `vtex_struct_sampler_array.vert` (a sampler
+array in the struct: the descriptor index would be a constant lane of the
+uniform buffer), `discard_dynloop.vert`'s own vertex program (same shape as
+`va_vec2`, so expected equal), and the frame side: the varying's stride and
+which varyings are flat are not in the record (see the last paragraph of the
+previous section).
