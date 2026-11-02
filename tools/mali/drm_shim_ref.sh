@@ -61,6 +61,8 @@ run)
   VS=$3 FS=$4 OUT=$5
   shift 5
   INST=$WORK/inst/lib64
+  # Debian-style hosts install under lib/<multiarch> instead of lib64
+  [ -d "$INST" ] || INST=$WORK/inst/lib/$(gcc -dumpmachine)
   [ -f "$INST/libpanfrost_noop_drm_shim.so" ] ||
     { echo "drm_shim_ref: $WORK has no build (run the build form)" >&2; exit 1; }
   rm -f "$OUT".trace*
