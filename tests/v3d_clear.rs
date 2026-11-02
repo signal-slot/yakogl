@@ -676,3 +676,98 @@ fn cts_clear_colours_pack_exactly() {
         assert_eq!(state::pack_rgba8([f, f, f, f]), v * 0x0101_0101, "{v}");
     }
 }
+
+/* ---- 7. integer colour targets: a scissored and a masked clear ----------------- */
+
+/// A scissored or masked clear of an integer colour target is the clear quad
+/// (`colour_needs_quad`), not a refusal: the same decision, scissor and colour
+/// write mask as for RGBA8, the clear colour the four raw words of
+/// glClearBuffer{i,ui}v (`GlesDraw::clear_rgba` as bit patterns).
+/// A model of the quad on an integer target (every pixel inside the job
+/// state's scissor takes the colour write mask's channels of the target,
+/// narrowed to the channel width, the tile buffer's job) is compared with
+/// what the GL says: the clear colour in the box, in the channels the mask
+/// and the format have, the rest untouched. RGBA8UI, R32I and RGBA32UI, with
+/// a window flip and without.
+#[test]
+fn integer_target_scissored_and_masked_clears_are_quads() {
+    const W: u32 = 37;
+    const H: u32 = 29;
+    const UNTOUCHED: [u32; 4] = [0xa5a5_a5a5, 0x3c3c_3c3c, 0x5a5a_5a5a, 0xc3c3_c3c3];
+    for format in [GLES_SURF_RGBA8UI, GLES_SURF_R32I, GLES_SURF_RGBA32UI] {
+        let l = gles_surf_int_layout(format).expect("an integer surface");
+        let keep = |v: u32| if l.bits == 32 { v } else { v & ((1 << l.bits) - 1) };
+        for flip_y in [false, true] {
+            for (name, scissored, masked) in [("scissor", true, false), ("mask", false, true), ("both", true, true)] {
+                let mut rng = Rng::new(u32::from(format) << 8 ^ u32::from(flip_y) << 1 ^ u32::from(scissored));
+                for iter in 0..40 {
+                    let why = format!("{} {name} flip_y {flip_y} iter {iter}", gles_surf_name(format));
+                    let mut fb = vec![UNTOUCHED.map(keep); (W * H) as usize];
+                    let mut want = fb.clone();
+                    let words = [rng.next(), rng.next(), rng.next(), rng.next() | 0x8000_0000];
+                    let rect = if scissored { cts_box(&mut rng, W, H) } else { [0, 0, W as i32, H as i32] };
+                    let mask = if masked { 1 + (rng.next() % 15) as u8 } else { 0xf };
+                    /* what the GL core hands the back end (plan_clear) */
+                    let mut d = GlesDraw {
+                        target_format: format,
+                        do_clear: true,
+                        clear_color_mask: mask,
+                        clear_rgba: words.map(f32::from_bits),
+                        ..target(W, H, flip_y)
+                    };
+                    let [x0, y0, bw, bh] = rect;
+                    if scissored {
+                        if bw <= 0 || bh <= 0 {
+                            continue;
+                        }
+                        if x0 > 0 || y0 > 0 || x0 + bw < W as i32 || y0 + bh < H as i32 {
+                            (d.clear_quad, d.scissor, d.scissor_rect) = (true, true, rect);
+                        }
+                    }
+                    /* the GL's answer */
+                    for y in 0..H as i32 {
+                        for x in 0..W as i32 {
+                            if in_box(rect, x, y) {
+                                let px = &mut want[(mem_row(y, H, flip_y) * W as i32 + x) as usize];
+                                for c in (0..l.channels as usize).filter(|c| mask & (1 << c) != 0) {
+                                    px[c] = keep(words[c]);
+                                }
+                            }
+                        }
+                    }
+                    /* the back end's: the quad, never the TLB, never a refusal */
+                    if d.clear_quad || mask != 0xf {
+                        assert!(state::colour_needs_quad(&d), "{why}: the quad");
+                        let sh = ShcShader::ZERO;
+                        let p = ClearProg { fs: &sh, code_gpu: 0, location: 0 };
+                        let vertices = state::clear_quad_vertices(1.0);
+                        let b = QuadBuffers { colour: true, depth: false, stencil: false };
+                        let q = state::clear_quad_draw(&d, b, d.clear_quad, &p, &vertices, &d.clear_rgba);
+                        let st = state::job_state(&q).expect("the clear quad's state");
+                        assert_eq!(st.colormask, u32::from(mask), "{why}: COLOR_WRITE_MASKS");
+                        assert!(!st.blend_enabled && !st.depth_enabled && !st.stencil_enabled, "{why}");
+                        for row in 0..H as i32 {
+                            for col in 0..W as i32 {
+                                if in_job_scissor(&st, col, row) {
+                                    let px = &mut fb[(row * W as i32 + col) as usize];
+                                    for c in (0..l.channels as usize).filter(|c| st.colormask & (1 << c) != 0) {
+                                        px[c] = keep(words[c]);
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        assert!(!state::colour_needs_quad(&d), "{why}: whole target, full mask: the TLB");
+                        fb.fill(words.map(keep));
+                        want.fill(words.map(keep));
+                    }
+                    /* a 32-bit target keeps the raw words whole */
+                    if l.bits == 32 {
+                        assert_eq!(state::clear_words(format, d.clear_rgba), words, "{why}: kept whole");
+                    }
+                    assert!(fb == want, "{why}: mask {mask:#x}, box {rect:?}");
+                }
+            }
+        }
+    }
+}
