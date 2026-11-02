@@ -25,9 +25,13 @@
 //!
 //! Z3, the firmware (host side): [`fw`] parses `mali_csffw.bin`, [`csf`]
 //! loads it, boots the MCU and talks to it through the shared interface.
+//!
+//! Z4, the first submit (host side): [`sched`] starts command stream group 0
+//! and its stream 0 as panthor does and runs a job on the stream's ring.
 
 pub mod csf;
 pub mod fw;
+pub mod sched;
 
 use crate::mmio::Mmio;
 
