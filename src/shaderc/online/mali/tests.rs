@@ -1019,7 +1019,12 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
         (VS, "attribute vec2 p; attribute vec2 q; void main(){ gl_Position = vec4((-p) * (-q), 0.0, 1.0); }", MaliError::ArithConstant),
         (VS, "uniform mat2 m; attribute vec2 p; void main(){ gl_Position = vec4(m * p, 0.0, 1.0); }", MaliError::UniformType),
         (VS, "uniform vec3 u[2]; void main(){ gl_Position = vec4(u[1], 1.0); }", MaliError::UniformArray),
-        (VS, "uniform mediump vec4 u; void main(){ gl_Position = u; }", MaliError::UniformPrecision),
+        /* an fp16 uniform that is an array (a plain one is case 19's,
+         * the_fp16_vertex_uniforms_are_byte_equal_to_mesa_26_2_1) */
+        (VS, "uniform mediump vec4 u[2]; void main(){ gl_Position = u[1]; }", MaliError::UniformPrecision),
+        /* a mediump struct member, which Mesa keeps fp32 (no reference;
+         * a highp one is es100/texfill.vert's, ok in the corpus) */
+        (VS, "struct S { mediump vec4 a; }; uniform S s; void main(){ gl_Position = s.a; }", MaliError::UniformPrecision),
         (VS, "attribute vec2 p; void main(){ gl_Position = vec4(p, 0.0, 0.0); }", MaliError::ConstantFold),
         /* reflect(i, 0): the dot and its scale fold, the fma stays */
         (VS, "attribute vec4 p; void main(){ gl_Position = reflect(p, vec4(0.0)); }", MaliError::FusedMultiplyAdd),
@@ -1921,7 +1926,7 @@ fn the_selection_rows_are_the_references() {
         let _k = store::test_keep();
         store::with_scratch(|s| {
             let l = codegen::lower_source(SHC_STAGE_VERTEX, src.as_bytes(), &[], s).expect("the front end takes it");
-            let vs = super::nir::build(&l.module, s, None, &[]).expect("the vertex program");
+            let vs = super::nir::build(&l.module, s, None, &[], &|_| false).expect("the vertex program");
             for &id in &vs.order[..vs.len] {
                 let nd = vs.nodes[id as usize];
                 if let super::nir::Kind::Alu(op) = nd.kind {
@@ -4422,12 +4427,53 @@ fn the_case_192_programs_are_byte_equal_to_mesa_26_2_1() {
 /// nearest even (`_mesa_float_to_half`, lower_precision.cpp:739-746):
 /// es100/hello.frag's 0.66 is `0x3948`, the colour's second FAU word
 /// `3c003948` (mixprec_hello.expect.json; its vertex shader, prec_19's
-/// fp16 matrix, is another gap).
+/// fp16 matrix, is case 19's, [`VSFP16_POPULATION`]).
 #[test]
 fn a_mediump_constant_is_rounded_to_nearest_even() {
     let (vs, fs, json) = (td!("mixprec_hello.vert"), td!("mixprec_hello.frag"), td!("mixprec_hello.expect.json"));
     let f = compile(SHC_STAGE_FRAGMENT, fs).expect("the fragment shader compiles");
     check_fs_stage(&f, vs, fs, json, VIEWPORT_64X64);
+}
+
+/// Case 19's fp16 vertex uniforms (#33): a mediump float uniform of the
+/// vertex stage is halves in the block, two a word, the low component
+/// first (a mat4 its columns in order, words 6-13 of hello; a mediump vec4
+/// before a highp one in mixed, which keeps its four fp32 words), and each
+/// lane read is its own `F16_TO_F32 rN, uK.wJ.hH` ahead of the fp32
+/// arithmetic of the highp stage (docs/notes/mali-precision.md Part 1).
+/// Both stages and every fact the shim's to the byte, with
+/// `--uniform-values` (vsfp16_19_*.expect.json; hello and tex are the
+/// corpus's hello.vert and textured.vert).
+const VSFP16_POPULATION: [(&str, &str, &str, &str); 4] = [
+    ("vsfp16_19_hello", td!("vsfp16_19_hello.vert"), td!("vsfp16_19_hello.frag"), td!("vsfp16_19_hello.expect.json")),
+    ("vsfp16_19_mixed", td!("vsfp16_19_mixed.vert"), td!("vsfp16_19_mixed.frag"), td!("vsfp16_19_mixed.expect.json")),
+    ("vsfp16_19_tex", td!("vsfp16_19_tex.vert"), td!("vsfp16_19_tex.frag"), td!("vsfp16_19_tex.expect.json")),
+    ("vsfp16_19_vec4", td!("vsfp16_19_vec4.vert"), td!("vsfp16_19_vec4.frag"), td!("vsfp16_19_vec4.expect.json")),
+];
+
+#[test]
+fn the_fp16_vertex_uniforms_are_byte_equal_to_mesa_26_2_1() {
+    for (name, vs, fs, json) in VSFP16_POPULATION {
+        let (v, f) = compile_linked(vs, fs);
+        /* tex's stages declare `TexCoord` and `Tint` in the other order,
+         * and the varying locations are each stage's declaration order: the
+         * fragment shader's reads are given at the vertex shader's
+         * locations, as Mesa's link matches them by name (`Tint` at offset
+         * 0, `TexCoord` at 16, the fragment's order; `Unused` is no read) */
+        let v = if name == "vsfp16_19_tex" {
+            let _k = store::test_keep();
+            store::with_scratch(|s| {
+                super::compile_vs_for_reads(vs.as_bytes(), &[(1, 0b1111), (0, 0b0011)], &[], s, store::keep())
+                    .map(|(sh, _)| stage_of(&sh))
+            })
+            .expect("the scratch arena is free")
+            .expect("the vertex shader compiles for the program's reads")
+        } else {
+            v
+        };
+        check_vs_stage(&v, vs, fs, json, VIEWPORT_64X64);
+        check_fs_stage(&f, vs, fs, json, VIEWPORT_64X64);
+    }
 }
 
 /// Two corpus programs on the same rules that no reference draws yet (the

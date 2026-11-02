@@ -949,6 +949,21 @@ pub fn uniform_of<'m>(m: &Module<'m>, dword: u16) -> Result<(&'m ir::UniformDecl
     Ok((u, comps))
 }
 
+/// Uniform `u` of a vertex shader is an fp16 uniform: a float, vec2, vec3,
+/// vec4 or mat4 that is no array, declared mediump or lowp (`fp16` names
+/// those). `lower_variables_visitor::visit(ir_variable)`
+/// (lower_precision.cpp:1023-1060) retypes it to 16 bits when the stage
+/// has `fp16_const_buffers`, which panfrost sets for every stage from v6
+/// (pan_screen.c:588); the block holds it as halves, two a word
+/// ([`select::UboLayout::vs`]). A struct's member stays fp32 there (the
+/// base type must be a float; mod.rs gives `fp16` plain uniforms only).
+/// Another type or an array of that precision has no reference: refused
+/// (mod.rs, [`MaliError::UniformPrecision`]).
+pub(super) fn fp16_uniform(u: &ir::UniformDecl<'_>, fp16: &dyn Fn(&str) -> bool) -> bool {
+    let float = matches!(u.gl_type as u32, GL_FLOAT | GL_FLOAT_VEC2 | GL_FLOAT_VEC3 | GL_FLOAT_VEC4 | GL_FLOAT_MAT4);
+    float && u.array_len <= 1 && fp16(u.name)
+}
+
 /// Every read of IR value `v` is the index of a uniform array read
 /// (`LoadUniformIdx`): an int uniform the back end takes as raw bits for
 /// the element's byte offset only (uniarray_highp, uniarray_vs). Any other
@@ -1676,6 +1691,14 @@ impl<'s> Nir<'s> {
         self.push(kind, [Val::Undef; 3])
     }
 
+    /// [`Nir::load`] of 16-bit lanes (a vertex shader's fp16 uniform,
+    /// [`fp16_uniform`]).
+    pub(super) fn load16(&mut self, kind: Kind) -> Result<u16, MaliError> {
+        let n = self.load(kind)?;
+        self.nodes[n as usize].bits = 16;
+        Ok(n)
+    }
+
     /// One 32-bit scalar operation, folded, simplified and CSE'd as NIR
     /// would (a highp fragment shader's too, nir_fs.rs).
     pub(super) fn alu(&mut self, op: Alu, a: Val, b: Val, c: Val) -> Result<Val, MaliError> {
@@ -2061,12 +2084,14 @@ pub(super) fn is_mat_term(m: &Module<'_>, srcs: &[ir::Src; 3]) -> bool {
 /// is built for one: then only those components are stored, compacted as
 /// Mesa's link does ([`compact_layout`]); `moved`: the fragment shader's
 /// expressions the link moves here (motion.rs), computed before the
-/// stores and stored in their lanes.
+/// stores and stored in their lanes; `fp16`: the uniforms declared mediump
+/// or lowp ([`fp16_uniform`]).
 pub fn build<'s>(
     m: &Module<'_>,
     scratch: &Arena<'s>,
     reads: Option<&[(u8, u8)]>,
     moved: &[super::motion::Moved],
+    fp16: &dyn Fn(&str) -> bool,
 ) -> Result<Nir<'s>, MaliError> {
     if m.instrs.len() > MAX_VALUES {
         return Err(MaliError::TooManyValues);
@@ -2128,9 +2153,22 @@ pub fn build<'s>(
                 if first + comps as u16 > size {
                     return Err(MaliError::Defect(Defect::IrIndex));
                 }
-                let n = vs.load(Kind::Uniform { dword: base, comps: size as u8 })?;
-                for (c, o) in out.iter_mut().enumerate().take(comps as usize) {
-                    *o = Val::Lane(n, (first as usize + c) as u8);
+                if fp16_uniform(u, fp16) {
+                    /* a mediump float uniform is fp16 in the block
+                     * (lower_precision.cpp:1023-1060 with
+                     * `fp16_const_buffers`), each lane read widened by its
+                     * own `f2f32` (`F16_TO_F32 r4, u4.w1.h1`,
+                     * vsfp16_19_hello.expect.json; docs/notes/mali-precision.md) */
+                    let n = vs.load16(Kind::Uniform { dword: base, comps: size as u8 })?;
+                    for (c, o) in out.iter_mut().enumerate().take(comps as usize) {
+                        let l = Val::Lane(n, (first as usize + c) as u8);
+                        *o = vs.alu(Alu::F2f32, l, Val::Undef, Val::Undef)?;
+                    }
+                } else {
+                    let n = vs.load(Kind::Uniform { dword: base, comps: size as u8 })?;
+                    for (c, o) in out.iter_mut().enumerate().take(comps as usize) {
+                        *o = Val::Lane(n, (first as usize + c) as u8);
+                    }
                 }
             }
             /* a float array's element at an int uniform: Mesa's 32-bit

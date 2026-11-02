@@ -130,8 +130,9 @@ pub enum MaliError {
     /// form referenced (nir_fs.rs: a mediump fragment shader's vec4 array
     /// at the block's start, indexed by an int uniform, read once).
     UniformIndexed,
-    /// A vertex shader uniform that is not highp (Mesa would keep it as
-    /// fp16).
+    /// A vertex shader uniform that is not highp (Mesa keeps it as fp16)
+    /// other than the lowered shapes (nir.rs `fp16_uniform`: a float,
+    /// vec2, vec3, vec4 or mat4, neither an array nor a struct member).
     UniformPrecision,
     /// A mediump fragment shader's uniform other than the referenced shape
     /// (one vec4 read in its own lane pairs, Mesa's fp16 block). A highp
@@ -382,7 +383,7 @@ impl MaliError {
                 "Valhall: a uniform read at a run-time index other than a float array's element or a mediump fragment shader's vec4 array first in the block read once, indexed by an int uniform, is not lowered yet"
             }
             MaliError::UniformPrecision => {
-                "Valhall: a vertex shader uniform that is not highp (Mesa's fp16 uniform) is not lowered yet"
+                "Valhall: a vertex shader uniform that is not highp (Mesa's fp16 uniform), other than a float, vec2, vec3, vec4 or mat4 that is neither an array nor a struct member, is not lowered yet"
             }
             MaliError::FsUniform => {
                 "Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared highp, is not lowered yet"
@@ -1105,6 +1106,35 @@ fn compile_module_on<'s>(
     r.map(|sc| StageCode { marks: marks.0, ..sc })
 }
 
+/// The declared precision of uniform `name` (a row of the front end's
+/// module), from the interface's declarations: a plain uniform's own, or a
+/// member's of a struct uniform (`u_fill.matrix`), which the struct's
+/// spelling carries (reflect.rs `UniformDecl::ty`: `struct Fill{highp mat4
+/// matrix;...}`). A member of a nested struct or of an array of structs has
+/// none here.
+fn uniform_precision(decls: &[super::reflect::UniformDecl<'_>], name: &str) -> Option<super::ast::Precision> {
+    use super::ast::Precision;
+    if let Some(u) = decls.iter().find(|u| u.name == name) {
+        return Some(u.precision);
+    }
+    let (base, member) = name.split_once('.')?;
+    if member.contains(['.', '[']) {
+        return None;
+    }
+    let ty = decls.iter().find(|u| u.name == base)?.ty;
+    let body = ty.strip_prefix("struct ")?.split_once('{')?.1.strip_suffix('}')?;
+    if body.contains('{') {
+        return None;
+    }
+    let m = body.split(';').find(|m| m.split_whitespace().last() == Some(member))?;
+    match m.split_whitespace().next()? {
+        "highp" => Some(Precision::High),
+        "mediump" => Some(Precision::Medium),
+        "lowp" => Some(Precision::Low),
+        _ => Some(Precision::Default),
+    }
+}
+
 fn compile_stage<'s>(
     m: &ir_mod::Module<'_>,
     precision: &[super::reflect::UniformDecl<'_>],
@@ -1162,7 +1192,14 @@ fn compile_stage<'s>(
         }
         sc.moved[..moved.len()].copy_from_slice(moved);
         sc.nmoved = moved.len();
-        let mut vs = nir::build(m, scratch, reads, moved)?;
+        /* a struct uniform's members too (es100/texfill.vert's `u_fill`);
+         * only a plain uniform is fp16 (lower_precision.cpp:1026-1031 asks
+         * for a float base type: a struct keeps its members fp32) */
+        let prec = |name: &str| uniform_precision(precision, name);
+        let fp16 = |name: &str| {
+            precision.iter().any(|u| u.name == name && matches!(u.precision, Precision::Medium | Precision::Low))
+        };
+        let mut vs = nir::build(m, scratch, reads, moved, &fp16)?;
         marks.note(Table::NirNodes, vs.n);
         let ubo = select::UboLayout::vs(m, &vs)?;
         marks.note(Table::UboRows, ubo.rows());
@@ -1171,8 +1208,10 @@ fn compile_stage<'s>(
         if select::UboLayout::loaded(&vs) {
             sc.ubo = ubo.kept()?;
         }
+        /* an fp16 uniform is lowered (nir.rs `fp16_uniform`): any other
+         * uniform not highp has no reference */
         for u in m.uniforms.iter().filter(|u| ubo.word(u.dword_off).is_some()) {
-            if !matches!(prec(u.name), Some(Precision::High)) {
+            if !matches!(prec(u.name), Some(Precision::High)) && ubo.half(u.dword_off).is_none() {
                 return Err(MaliError::UniformPrecision);
             }
         }
@@ -1483,7 +1522,21 @@ pub fn vs_constants(glsl: &[u8], scratch: &Arena<'_>) -> Result<link::VaryingCon
      * so none is refused for what it holds */
     let rw = glsl::passes(&l.module, scratch).map_err(refused)?;
     let m = rw.map_or(l.module, |(instrs, comps)| ir_mod::Module { instrs, comps, ..l.module });
-    let vs = nir::build(&m, scratch, Some(&[]), &[]).map_err(refused)?;
+    /* the fp16 uniforms as the program's build takes them
+     * ([`compile_vs_for_reads`]); a source the interface does not read
+     * has none */
+    let decls = core::str::from_utf8(glsl)
+        .ok()
+        .and_then(|src| scratch.alloc_str(src).ok())
+        .and_then(|src| super::reflect::interface(scratch, super::sema::Stage::Vertex, src).ok());
+    let fp16 = |name: &str| {
+        decls.as_ref().is_some_and(|d| {
+            d.uniforms.iter().any(|u| {
+                u.name == name && matches!(u.precision, super::ast::Precision::Medium | super::ast::Precision::Low)
+            })
+        })
+    };
+    let vs = nir::build(&m, scratch, Some(&[]), &[], &fp16).map_err(refused)?;
     if vs.consts.full() {
         return Err(refused(MaliError::VaryingNotFromAttribute));
     }
