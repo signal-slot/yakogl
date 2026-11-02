@@ -2276,35 +2276,98 @@ pub fn build<'s>(
                             vs.alu(Alu::B2f, x(0), Val::Undef, Val::Undef)?
                         }
                         AluOp::Bcsel => vs.alu(Alu::Bcsel, x(0), x(1), x(2))?,
-                        /* the other integer operations and conversions
-                         * (intbool) */
-                        AluOp::Iadd
-                        | AluOp::Imul
-                        | AluOp::Idiv
-                        | AluOp::Ineg
+                        /* the 32-bit conversions and shifts of
+                         * intbool_199_vsc and intbool_89_flatlast
+                         * (docs/notes/mali-int-and-size.md, vs-int-convert):
+                         * `F32_TO_S32.rtz`, `F32_TO_U32.rtz`, `S32_TO_F32`,
+                         * `U32_TO_F32`, `FROUND.f32.rtz`, `LSHIFT_OR.i32`,
+                         * `ARSHIFT_OR.i32`, `RSHIFT_OR.i32`, `ISUB.s32`;
+                         * constants fold as NIR's (`fold_int`). The front end
+                         * gives a conversion of a scalar no width (four
+                         * lanes): the lanes past its source's stay undefined */
+                        AluOp::Ftrunc
+                        | AluOp::F2i
+                        | AluOp::F2u
+                        | AluOp::I2f
+                        | AluOp::U2f
                         | AluOp::Ishl
                         | AluOp::Ishr
+                        | AluOp::Ushr
+                        | AluOp::Ineg
+                        | AluOp::Iadd
+                            if x(0) == Val::Undef =>
+                        {
+                            Val::Undef
+                        }
+                        AluOp::Ftrunc => vs.alu(Alu::Ftrunc, x(0), Val::Undef, Val::Undef)?,
+                        AluOp::F2i
+                        | AluOp::F2u
+                        | AluOp::I2f
+                        | AluOp::U2f
+                        | AluOp::Ishl
+                        | AluOp::Ishr
+                        | AluOp::Ushr
+                        | AluOp::Ineg
+                        | AluOp::Iadd => match fold_int(a, x(0), x(1)) {
+                            Some(v) => v,
+                            None => {
+                                let alu_of = |v: Val| match v {
+                                    Val::Lane(n, 0) => match vs.nodes[n as usize] {
+                                        NirNode { kind: Kind::Alu(op), src, width: 1, .. } => Some((op, src)),
+                                        _ => None,
+                                    },
+                                    _ => None,
+                                };
+                                let (p, q) = (x(0), x(1));
+                                let (op, s0, s1) = match a {
+                                    AluOp::F2i => (Alu::F2i, p, Val::Undef),
+                                    AluOp::F2u => (Alu::F2u, p, Val::Undef),
+                                    /* `i2f32(f2i32(a))` is `ftrunc(a)`
+                                     * (nir_opt_algebraic.py:1250) */
+                                    AluOp::I2f => match alu_of(p) {
+                                        Some((Alu::F2i, [t, ..])) => (Alu::Ftrunc, t, Val::Undef),
+                                        _ => (Alu::I2f, p, Val::Undef),
+                                    },
+                                    AluOp::U2f => (Alu::U2f, p, Val::Undef),
+                                    AluOp::Ishl => (Alu::Ishl, p, q),
+                                    AluOp::Ishr => (Alu::Ishr, p, q),
+                                    AluOp::Ushr => (Alu::Ushr, p, q),
+                                    AluOp::Ineg => (Alu::Ineg, p, Val::Undef),
+                                    /* GLSL's `a - b` is `iadd(a, ineg(b))`,
+                                     * which is `isub(a, b)`
+                                     * (nir_opt_algebraic.py); the `ineg`
+                                     * is left to `nir_opt_dce` */
+                                    _ => match (alu_of(p), alu_of(q)) {
+                                        (_, Some((Alu::Ineg, [b, ..]))) => (Alu::Isub, p, b),
+                                        (Some((Alu::Ineg, [b, ..])), _) => (Alu::Isub, q, b),
+                                        /* no reference draws another sum
+                                         * in this stage */
+                                        _ => return Err(MaliError::IntValue),
+                                    },
+                                };
+                                vs.alu(op, s0, s1, Val::Undef)?
+                            }
+                        },
+                        /* the other integer operations and conversions
+                         * (intbool) */
+                        AluOp::Imul
+                        | AluOp::Idiv
                         | AluOp::Iand
                         | AluOp::Ixor
                         | AluOp::Ilt
                         | AluOp::Ile
                         | AluOp::Ine
                         | AluOp::B2i
-                        | AluOp::F2i
-                        | AluOp::I2f
                         | AluOp::I2b
                         | AluOp::Udiv
                         | AluOp::Umod
-                        | AluOp::Ushr
                         | AluOp::Ult
                         | AluOp::Ule
                         | AluOp::Imin
                         | AluOp::Imax
                         | AluOp::Umin
                         | AluOp::Umax
-                        | AluOp::Inot
-                        | AluOp::U2f
-                        | AluOp::F2u => return Err(MaliError::IntValue),
+                        | AluOp::Inot => return Err(MaliError::IntValue),
                         _ => return Err(MaliError::Arithmetic),
                     };
                 }

@@ -280,13 +280,16 @@ pub fn emit(p: &mut Prog<'_>, row: Row, s: &[Src]) -> Result<u16, MaliError> {
         /* `bi_arshift_or_to(b, sz, dst, s0, bi_zero(), bi_byte(s1, 0))`
          * (:3053-3055). A uniform's word takes no byte lane: the amount is
          * moved to a register first (intuni_ishr.expect.json: `MOV.i32 r0,
-         * u2.w1`, then `ARSHIFT_OR.i32 r0, u2.w0, r0^.b00, 0x0`) */
+         * u2.w1`, then `ARSHIFT_OR.i32 r0, u2.w0, r0^.b00, 0x0`). A
+         * constant's byte lane is va_lower_constants', as `Ishl`'s
+         * (intbool_199_vsc: `ARSHIFT_OR.i32 r2, r2, 0x1000000.b33, 0x0`) */
         (Alu::Ishr, 32, 1) => {
             let amount = match s[1].idx {
-                Idx::Ubo { .. } => Src::ssa(ins(p, Op::MovI32, &s[1..2])?),
-                _ => s[1],
+                Idx::Ubo { .. } => Src::ssa(ins(p, Op::MovI32, &s[1..2])?).swz(Swz::B0),
+                Idx::Const(_) => s[1],
+                _ => s[1].swz(Swz::B0),
             };
-            ins(p, Op::ArshiftOrI32, &[s[0], ZERO, amount.swz(Swz::B0)])?
+            ins(p, Op::ArshiftOrI32, &[s[0], ZERO, amount])?
         }
         (Alu::U8f32(k), 32, 1) => {
             let b = [Swz::B0, Swz::B1, Swz::B2, Swz::B3][k as usize & 3];

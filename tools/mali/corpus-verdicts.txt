@@ -146,7 +146,7 @@ tools/shaders/es300/divnest.frag: ok
 tools/shaders/es300/dynidx.frag: ok
 tools/shaders/es300/facing.frag: ok
 tools/shaders/es300/flatlast.frag: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
-tools/shaders/es300/flatlast.vert: Valhall: an integer or boolean value is not lowered yet
+tools/shaders/es300/flatlast.vert: ok
 tools/shaders/es300/gcops.frag: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
 tools/shaders/es300/hdrsample.frag: Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet
 tools/shaders/es300/idxtex.frag: ok
@@ -239,7 +239,7 @@ tools/shaders/gltest/deqp_position.vert: ok
 tools/shaders/gltest/es3trunc_fs.frag: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
 tools/shaders/gltest/es3trunc_vary_fs.frag: ok
 tools/shaders/gltest/es3trunc_vs.vert: ok
-tools/shaders/gltest/es3trunc_vsc.vert: Valhall: an integer or boolean value is not lowered yet
+tools/shaders/gltest/es3trunc_vsc.vert: ok
 tools/shaders/gltest/f1_edge_fs.frag: ok
 tools/shaders/gltest/f1_fs.frag: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
 tools/shaders/gltest/f1_mid_fs.frag: ok

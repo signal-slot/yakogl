@@ -1058,9 +1058,10 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
         (FS, include_str!("../../../../tools/mali/testdata/intloop_loop_nested.frag"), MaliError::LoopMediump),
         (FS, include_str!("../../../../tools/mali/testdata/intloop_contloops.frag"), MaliError::GuardMediump),
         (VS, include_str!("../../../../tools/mali/testdata/intloop_loop_nested_vs.vert"), MaliError::LoopVertex),
-        /* an integer conversion (the vertex stage takes the built-in
-         * inputs' `%`, `==`, `||` and selects alone) */
-        (VS, "attribute vec4 p; void main(){ gl_Position = p * float(int(p.x)); }", MaliError::IntValue),
+        /* an integer product (the vertex stage takes the built-in inputs'
+         * `%`, `==`, `||` and selects, the conversions, shifts and
+         * differences of vs-int-convert, alone) */
+        (VS, "attribute vec4 p; void main(){ gl_Position = p * float(int(p.x) * 3); }", MaliError::IntValue),
         (VS, "attribute vec4 p; void main(){ }", MaliError::NoPosition),
         (VS, "attribute vec4 p; varying vec4 v; void main(){ v = p; }", MaliError::NoPosition),
         (VS, "attribute vec4 p; void main(){ gl_Position = p; gl_PointSize = 2.3; }", MaliError::Fp16Inexact),
@@ -4532,6 +4533,64 @@ fn the_fp16_vertex_uniforms_are_byte_equal_to_mesa_26_2_1() {
         check_vs_stage(&v, vs, fs, json, VIEWPORT_64X64);
         check_fs_stage(&f, vs, fs, json, VIEWPORT_64X64);
     }
+}
+
+/// Case 199's vertex shader (es3trunc_vsc.vert, #33): `trunc` is
+/// `FROUND.f32.rtz` (of `u_x.neg` for `trunc(-u_x)`), `int(u_q)`
+/// `F32_TO_S32.rtz`, `i >> 1` and `i << 3` `ARSHIFT_OR.i32` and
+/// `LSHIFT_OR.i32` with the count a byte of a constant word, their
+/// difference `ISUB.s32` (GLSL's `iadd(a, ineg(b))`), `uint(u_a) >> 2u`
+/// `F32_TO_U32.rtz` and `RSHIFT_OR.i32`, and the floats `S32_TO_F32` and
+/// `U32_TO_F32` (docs/notes/mali-int-and-size.md, vs-int-convert). Both
+/// IDVS programs and their facts, drawn with `--uniform-values` (`u_x`
+/// 16, `u_q` 32, `u_a` 48).
+#[test]
+fn case_199_vertex_integers_are_byte_equal_to_mesa_26_2_1() {
+    let (vs, fs, json) = (td!("intbool_199_vsc.vert"), td!("intbool_199_vsc.frag"), td!("intbool_199_vsc.expect.json"));
+    assert_eq!(vs, include_str!("../../../../tools/shaders/gltest/es3trunc_vsc.vert"));
+    let (v, _) = compile_linked(vs, fs);
+    check_vs_stage(&v, vs, fs, json, VIEWPORT_64X64);
+}
+
+/// Case 89's vertex shader (es300/flatlast.vert, #33): `uint(col.a * 4.0 +
+/// 0.5)` is `FMA.f32` and `F32_TO_U32.rtz`, and the fragment shader's
+/// `float(v_idx) / 4.0`, which Mesa's link moves into this stage
+/// (nir_opt_varyings), `U32_TO_F32` and `FMA.f32 .. 0.25, -0`. The motion
+/// itself is the link's (plan #185 item flat-uint-motion): here the
+/// fragment record is given as that item is to make it, the reads of
+/// `v_flat.rgb` and `v_idx` and the moved `u2f32` and `fmul`. Both IDVS
+/// programs and their facts against intbool_89_flatlast.expect.json.
+#[test]
+fn case_89_vertex_integers_are_byte_equal_to_mesa_26_2_1() {
+    use super::motion::{Moved, Node};
+    let (vs, fs, json) =
+        (td!("intbool_89_flatlast.vert"), td!("intbool_89_flatlast.frag"), td!("intbool_89_flatlast.expect.json"));
+    assert_eq!(vs, include_str!("../../../../tools/shaders/es300/flatlast.vert"));
+    /* the shader alone stores the uint */
+    compile(SHC_STAGE_VERTEX, vs).expect("flatlast.vert compiles");
+    let mut moved = Moved { location: 1, comp: 0, n: 4, ..Moved::NONE };
+    moved.nodes[..4].copy_from_slice(&[
+        Node::Lane { location: 1, comp: 0 },
+        Node::Op { op: super::nir::Alu::U2f, src: [0, 0, 0] },
+        Node::Const(0x3e80_0000),
+        Node::Op { op: super::nir::Alu::Fmul, src: [1, 2, 0] },
+    ]);
+    /* `compile_vs_for_reads` past its record's bytes, which number only the
+     * operations the motion moves today (motion.rs `OPS`) */
+    let _k = store::test_keep();
+    let v = store::with_scratch(|s| {
+        let l = super::lower_source(SHC_STAGE_VERTEX, vs.as_bytes(), &[], s)?;
+        let src = s.alloc_str(vs).map_err(|_| super::refused(MaliError::OutOfScratch))?;
+        let decls = crate::shaderc::online::reflect::interface(s, crate::shaderc::online::sema::Stage::Vertex, src)
+            .map_err(|_| super::refused(MaliError::Defect(super::Defect::IrIndex)))?;
+        let reads = [(0, 0b0111), (1, 0b0001)];
+        let sc =
+            super::compile_module_for(&l.module, decls.uniforms, Some(&reads), &[moved], s).map_err(super::refused)?;
+        super::record(SHC_STAGE_VERTEX, &l, &sc, s, store::keep()).map(|sh| stage_of(&sh))
+    })
+    .expect("the scratch arena is free")
+    .expect("the vertex shader compiles for the program's record");
+    check_vs_stage(&v, vs, fs, json, VIEWPORT_64X64);
 }
 
 /// Two corpus programs on the same rules that no reference draws yet (the
