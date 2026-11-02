@@ -69,8 +69,8 @@ pub fn colour<'s>(out: &'s mut [u64], scratch: &Arena<'_>) -> Result<Preload<'s>
         &[
             Src::ssa(col),
             Src::of(Idx::Reg(60)),
-            Src::of(Idx::Special(Special::BlendDescriptor0, false)),
-            Src::of(Idx::Special(Special::BlendDescriptor0, true)),
+            Src::of(Idx::Special(Special::BlendDescriptor(0), false)),
+            Src::of(Idx::Special(Special::BlendDescriptor(0), true)),
             Src::NULL,
         ],
     )?;
@@ -113,8 +113,8 @@ pub fn colour_samples<'s>(out: &'s mut [u64], scratch: &Arena<'_>) -> Result<Pre
         &[
             Src::ssa(col),
             Src::of(Idx::Reg(60)),
-            Src::of(Idx::Special(Special::BlendDescriptor0, false)),
-            Src::of(Idx::Special(Special::BlendDescriptor0, true)),
+            Src::of(Idx::Special(Special::BlendDescriptor(0), false)),
+            Src::of(Idx::Special(Special::BlendDescriptor(0), true)),
             Src::NULL,
         ],
     )?;

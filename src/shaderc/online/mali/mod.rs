@@ -86,7 +86,6 @@ pub enum Defect {
     OperandName,
     OperandUnset,
     Encode,
-    BlendNotLast,
     /// `pack` was handed a code buffer shorter than a padded program of
     /// [`bir::MAX_INSTRS`] ([`MAX_CODE_WORDS`] is sized for two).
     CodeBuffer,
@@ -619,6 +618,13 @@ pub struct MaliShader<'k> {
     /// Fragment: colour output 0 is written as fp16 (`blend[0].type` =
     /// `nir_type_float16`).
     pub colour_f16: bool,
+    /// Fragment: the colour outputs the program writes, bit i = render
+    /// target i (Mesa's `outputs_written >> FRAG_RESULT_DATA0`; gl_FragColor
+    /// and `layout(location = 0)` are bit 0), each its own `BLEND` on
+    /// `blend_descriptor_<i>` (nir_fs.rs `Fs::targets`). What the frame's
+    /// `ShaderMeta::colour_outputs` takes (src/mali/frame.rs: DCD1's render
+    /// target mask, the targets the draw needs); 0 for a vertex shader.
+    pub colour_outputs: u32,
     /// Fragment: a varying is read in part ([`VaryingSlot::mask`]), so the
     /// program's vertex shader is built for these reads
     /// ([`compile_vs_for_reads`], at glLinkProgram).
@@ -1160,6 +1166,7 @@ fn compile_stage<'s>(
         attributes: &[],
         varyings: &[],
         colour_f16: false,
+        colour_outputs: 0,
         compacted: false,
         moved: &[],
         sampler: None,
@@ -1308,7 +1315,13 @@ fn compile_stage<'s>(
              * precision is Mesa's fp16 one (LowerPrecisionFloat16Uniforms) */
             let ubo = select::UboLayout::fs32(m, &f.nir)?;
             for u in m.uniforms.iter().filter(|u| ubo.word(u.dword_off).is_some()) {
-                f.mixed |= !matches!(prec(u.name), Some(Precision::High));
+                /* a struct member without a qualifier has the default in
+                 * force, highp here (case 55's `u_clear.first`) */
+                let member = || {
+                    uniform_precision(precision, u.name)
+                        .map(|p| if p == Precision::Default { Precision::High } else { p })
+                };
+                f.mixed |= !matches!(prec(u.name).or_else(member), Some(Precision::High));
             }
             nir_fs::select_highp(&mut p, &mut f, m, &ubo, scratch).map(|()| ubo)
         } else if nir_fs::mask_colour(&f) || nir_fs::array_look_ups(&f) {
@@ -1340,6 +1353,7 @@ fn compile_stage<'s>(
         sc.info.preload = c.preload;
         sc.info.work_reg_count = c.work_reg_count;
         sc.info.colour_f16 = !fs.colour_f32 && !fs.colour_u32;
+        sc.info.colour_outputs = f.colour_outputs();
         sc.info.compacted = f.compacted;
         /* the bindings by descriptor index ([`nir_fs::layout`] numbers them) */
         for (_, t) in f.live_look_ups() {

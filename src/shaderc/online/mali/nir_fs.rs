@@ -50,6 +50,10 @@ pub const MAX_PAIR_NODES: usize = 255;
 /// The `demote_if`s one shader may hold ([`Fs::discard`]).
 pub const MAX_DISCARDS: usize = 8;
 
+/// The colour outputs a shader may write, one a render target
+/// (`BIR_FAU_BLEND_0 ... + 7`, va_pack.c:100-101).
+pub const MAX_TARGETS: usize = 8;
+
 /// The run-time indexed uniform reads one shader may make ([`Fs::ubo_idx`]).
 pub const MAX_UBO_READS: usize = 8;
 
@@ -673,6 +677,12 @@ pub struct Fs<'s> {
     keys: &'s mut [u32],
     /// The colour's lanes, once the shader stores it.
     pub(super) colour: Option<[Val; 4]>,
+    /// The lanes of the outputs at locations 1.. (`layout(location = n)
+    /// out vec4`, render target n), once stored; each is its own `BLEND`
+    /// after output 0's (`pan_nir_lower_fs_outputs`,
+    /// docs/notes/mali-fragment-outputs.md). Only in straight-line code
+    /// ([`walk`]).
+    pub(super) targets: [Option<[Val; 4]>; MAX_TARGETS - 1],
     /// The expressions Mesa's link moves into the program's vertex shader
     /// (motion.rs), in the order they were found.
     pub moved: [Moved; MAX_MOVED],
@@ -780,6 +790,12 @@ impl BreakEdge {
 }
 
 impl<'s> Fs<'s> {
+    /// The render targets the program writes, bit i = target i: the colour
+    /// (target 0) and each further target stored (`MaliShader::colour_outputs`).
+    pub fn colour_outputs(&self) -> u32 {
+        targets(self).fold(u32::from(self.colour.is_some()), |m, (rt, _)| m | 1 << rt)
+    }
+
     fn key(&self, v: Val) -> u32 {
         match v {
             Val::Lane(n, _) | Val::Pair(n, _) => self.keys[self.origin[n as usize] as usize],
@@ -2202,6 +2218,7 @@ pub fn walk<'s>(m: &Module<'_>, scratch: &Arena<'s>, prec: FsPrecision) -> Resul
         origin: scratch.alloc_filled(MAX_NODES, 0u16).map_err(oom)?,
         keys: scratch.alloc_filled(MAX_VALUES, u32::MAX).map_err(oom)?,
         colour: None,
+        targets: [None; MAX_TARGETS - 1],
         moved: [Moved::NONE; MAX_MOVED],
         nmoved: 0,
         var_key: [u32::MAX; MAX_VARYINGS],
@@ -2246,6 +2263,12 @@ pub fn walk<'s>(m: &Module<'_>, scratch: &Arena<'s>, prec: FsPrecision) -> Resul
     let end = m.instrs.len().min(MAX_VALUES - 1);
     if walk_nodes(&mut f, m, m.nodes_of(m.body), vals, &mut locals, prec, true, end, None)? != Flow::Next {
         return Err(MaliError::ControlFlow);
+    }
+    /* an output past location 0 is stored where its value is the last
+     * store's: the joins and the loops carry the colour alone */
+    let branches = f.nir.nifs != 0 || f.nir.nloops != 0 || f.discards != 0 || f.nlook != 0;
+    if f.targets.iter().any(Option::is_some) && branches {
+        return Err(MaliError::FragOutput);
     }
     order_keys(m, f.keys);
     /* a 2D array look-up's coordinate conversion CSE'd with one a later
@@ -3252,6 +3275,7 @@ fn walk_nodes(
                         }
                         f.colour = Some(lanes)
                     }
+                    IoSlot::FragColor(n) if (n as usize) < MAX_TARGETS => f.targets[n as usize - 1] = Some(lanes),
                     _ => return Err(MaliError::FragOutput),
                 }
             }
@@ -4374,12 +4398,33 @@ fn reaches(f: &Fs<'_>, root: Val, e: Val) -> bool {
 /// link compiled this shader for it (`order`, link.rs `VaryingOrder`:
 /// Mesa's fragment shader has the vertex shader's layout).
 pub fn layout(f: &mut Fs<'_>, m: &Module<'_>, order: Option<super::link::VaryingOrder>) -> Result<(), MaliError> {
-    if m.outputs.iter().any(|o| o.kind != IoKind::Colour || o.location != 0) {
+    /* colour outputs, one a render target; those past location 0 a
+     * `vec4` as output 0 is ([`Fs::targets`]) */
+    let first = m.outputs.iter().find(|o| o.kind == IoKind::Colour && o.location == 0);
+    let target = |o: &ir::IoDecl<'_>| {
+        o.kind == IoKind::Colour
+            && (o.location == 0
+                || ((o.location as usize) < MAX_TARGETS
+                    && o.components == 4
+                    && first.is_some_and(|z| z.gl_type == o.gl_type && z.components == 4)))
+    };
+    if !m.outputs.iter().all(target) {
         return Err(MaliError::FragOutput);
     }
     let c = f.colour.ok_or(MaliError::NoColour)?;
     if c.contains(&Val::Undef) {
         return Err(MaliError::ColourForm);
+    }
+    /* a further target's lanes are uniform words and constants, which
+     * load nothing and compute nothing (fsout_55_es3mrt, fsout_106_mrt3);
+     * a computed one has no reference of where Mesa puts its code */
+    let leaf = |v: &Val| match *v {
+        Val::Const(_) => true,
+        Val::Lane(n, _) => matches!(f.nir.nodes[n as usize].kind, Kind::Uniform { .. }),
+        _ => false,
+    };
+    if !targets(f).all(|(_, t)| t.iter().all(leaf)) {
+        return Err(MaliError::FragOutput);
     }
     /* what the program reads: the colour's lanes, each `if`'s condition
      * and each discard's */
@@ -5175,6 +5220,20 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
     };
     let mut roots = [0u8; 2];
     let c = f.colour.ok_or(MaliError::NoColour)?;
+    /* each further target's two fp16 words: constants only (fsout_106_mrt3:
+     * `MOV.i32` of each word into r0-r1, then its `BLEND.v4.f16`); a
+     * uniform's has no reference here */
+    let mut more = [(0u8, [0u32; 2]); MAX_TARGETS - 1];
+    let mut nmore = 0;
+    for (rt, lanes) in targets(f) {
+        let mut h = [0u32; 4];
+        for (x, v) in h.iter_mut().zip(lanes) {
+            let Val::Const(b) = v else { return Err(MaliError::FragOutput) };
+            *x = u32::from(f16_rtne(b).ok_or(MaliError::Fp16Inexact)?);
+        }
+        more[nmore] = (rt, [h[0] | h[1] << 16, h[2] | h[3] << 16]);
+        nmore += 1;
+    }
     for (k, r) in roots.iter_mut().enumerate() {
         *r = match lane_word(f, &mut pr, c[2 * k], c[2 * k + 1], k as u8, ubo)? {
             Some(x) => x,
@@ -5487,17 +5546,11 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
         Some(c) => c,
         None => alu(p, Op::Collect, &words)?,
     };
-    alu(
-        p,
-        Op::Blend { sr_count: 2, f32: false, u32: false },
-        &[
-            Src::ssa(col),
-            Src::ssa(t),
-            Src::of(Idx::Special(Special::BlendDescriptor0, false)),
-            Src::of(Idx::Special(Special::BlendDescriptor0, true)),
-            Src::NULL,
-        ],
-    )?;
+    blend(p, 0, col, t, 2, false, false)?;
+    for &(rt, w) in &more[..nmore] {
+        let col = alu(p, Op::Collect, &[Src::of(Idx::Const(w[0])), Src::of(Idx::Const(w[1]))])?;
+        blend(p, rt, col, t, 2, false, false)?;
+    }
     f.rows = rows;
     preloads(p)
 }
@@ -6067,15 +6120,18 @@ pub fn select_highp(
     let defect = MaliError::Defect(Defect::IrIndex);
     f.ubo = *ubo;
     let c = f.colour.ok_or(MaliError::NoColour)?;
-    /* the colour's stores: the fusion counts them as uses */
-    for (k, v) in c.iter().enumerate() {
-        let st = NirNode {
-            kind: Kind::Store { out: 0, word: k as u8 },
-            src: [*v, Val::Undef, Val::Undef],
-            bits: 32,
-            width: 1,
-        };
-        f.nir.push_node(st)?;
+    /* the colour's stores, then the further targets': the fusion counts
+     * them as uses */
+    for (out, lanes) in core::iter::once((0, c)).chain(targets(f)) {
+        for (k, v) in lanes.iter().enumerate() {
+            let st = NirNode {
+                kind: Kind::Store { out, word: k as u8 },
+                src: [*v, Val::Undef, Val::Undef],
+                bits: 32,
+                width: 1,
+            };
+            f.nir.push_node(st)?;
+        }
     }
     let first = f.nir.n;
     b2f_products(&mut f.nir);
@@ -6560,19 +6616,23 @@ pub fn select_highp(
             Some(col) => col,
             None => alu(p, Op::Collect, &s)?,
         };
-        alu(
-            p,
-            Op::Blend { sr_count: 4, f32: !u32, u32 },
-            &[
-                Src::ssa(col),
-                Src::ssa(t),
-                Src::of(Idx::Special(Special::BlendDescriptor0, false)),
-                Src::of(Idx::Special(Special::BlendDescriptor0, true)),
-                Src::NULL,
-            ],
-        )?;
+        blend(p, 0, col, t, 4, !u32, u32)?;
+        /* each further target: its words collected and its own BLEND on
+         * the one coverage (fsout_55_es3mrt.expect.json) */
+        for (rt, lanes) in targets(f) {
+            let mut s = [Src::NULL; 4];
+            for (x, v) in s.iter_mut().zip(lanes) {
+                *x = src32(f, &lv, val, v)?;
+            }
+            let col = alu(p, Op::Collect, &s)?;
+            blend(p, rt, col, t, 4, !u32, u32)?;
+        }
         f.rows = rows;
         return preloads(p);
+    }
+    /* a mediump colour of masks with further targets: no reference */
+    if targets(f).next().is_some() {
+        return Err(MaliError::FragOutput);
     }
     let words = [word_of(f, c[0], c[1])?, word_of(f, c[2], c[3])?];
     /* a lane converted alone and in a pair is not referenced */
@@ -6693,19 +6753,34 @@ pub fn select_highp(
         };
     }
     let col = alu(p, Op::Collect, &out)?;
-    alu(
-        p,
-        Op::Blend { sr_count: 2, f32: false, u32: false },
-        &[
-            Src::ssa(col),
-            Src::ssa(t),
-            Src::of(Idx::Special(Special::BlendDescriptor0, false)),
-            Src::of(Idx::Special(Special::BlendDescriptor0, true)),
-            Src::NULL,
-        ],
-    )?;
+    blend(p, 0, col, t, 2, false, false)?;
     f.rows = rows;
     preloads(p)
+}
+
+/// The outputs past location 0 the shader stores ([`Fs::targets`]), as
+/// (render target, lanes), in target order: the order of their `BLEND`s,
+/// as `pan_nir_lower_fs_outputs` emits one per written slot.
+fn targets(f: &Fs<'_>) -> impl Iterator<Item = (u8, [Val; 4])> {
+    f.targets.into_iter().enumerate().filter_map(|(k, t)| t.map(|l| (k as u8 + 1, l)))
+}
+
+/// The `BLEND` of render target `rt`: the colour vector `col` (in r0..,
+/// [`super::ra`] precolours it), the coverage `cov` ATEST wrote, the
+/// target's descriptor (`blend_descriptor_<rt>`, the only field naming the
+/// target, docs/notes/mali-fragment-outputs.md "The BLEND word").
+fn blend(p: &mut Prog<'_>, rt: u8, col: u16, cov: u16, sr_count: u8, f32: bool, u32: bool) -> Result<u16, MaliError> {
+    alu(
+        p,
+        Op::Blend { sr_count, f32, u32 },
+        &[
+            Src::ssa(col),
+            Src::ssa(cov),
+            Src::of(Idx::Special(Special::BlendDescriptor(rt), false)),
+            Src::of(Idx::Special(Special::BlendDescriptor(rt), true)),
+            Src::NULL,
+        ],
+    )
 }
 
 /// Look-up `j` of a highp shader ([`tex`]): a computed coordinate's two

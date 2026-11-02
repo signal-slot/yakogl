@@ -111,6 +111,7 @@ pub(super) struct Info {
     pub attributes: Vec<(u8, u8)>,
     pub varyings: Vec<VaryingSlot>,
     pub colour_f16: bool,
+    pub colour_outputs: u32,
     pub compacted: bool,
     pub moved: Vec<super::motion::Moved>,
     pub sampler: Option<u8>,
@@ -132,6 +133,7 @@ impl Info {
             attributes: r.attributes.to_vec(),
             varyings: r.varyings.to_vec(),
             colour_f16: r.colour_f16,
+            colour_outputs: r.colour_outputs,
             compacted: r.compacted,
             moved: r.moved.to_vec(),
             sampler: r.sampler,
@@ -155,6 +157,7 @@ impl Info {
             attributes: &self.attributes,
             varyings: &self.varyings,
             colour_f16: self.colour_f16,
+            colour_outputs: self.colour_outputs,
             compacted: self.compacted,
             moved: &self.moved,
             sampler: self.sampler,
@@ -1413,6 +1416,7 @@ fn a_freed_record_gives_no_mali_record_and_a_stale_handle_never_a_newer_one() {
         attributes: &[],
         varyings: &[],
         colour_f16: true,
+        colour_outputs: 1,
         compacted: false,
         moved: &[],
         sampler: None,
@@ -3258,6 +3262,60 @@ fn case91_hdrscale_is_byte_equal_to_mesa_26_2_1() {
     const FS: &str = include_str!("../../../../tools/shaders/es100/hdrscale.frag");
     let (_, f) = check_program(VS, FS, td!("fsout_91_hdrscale.expect.json"));
     assert_eq!(&f.info.samplers[..], [0]);
+}
+
+/// gl_test case 55's es3mrt (tools/shaders/es300/mrt2.frag: two highp
+/// `layout(location = n) out vec4`, each a vec4 of a uniform struct):
+/// one ATEST on output 0's alpha, then per target its words moved into
+/// r0-r3 and a `BLEND.v4.f32` on `blend_descriptor_<rt>`; the first skips
+/// its blend-shader stub (`target:0x2`, `r48 = program_counter + 8`), the
+/// last ends the shader. Byte-equal to fsout_55_es3mrt.expect.json, whose
+/// shader has the same shape under other names (ubuf.clearColor0/1;
+/// docs/notes/mali-fragment-outputs.md); the reference set no uniform
+/// values, so its FAU words are zeros. The program states both targets
+/// (`MaliShader::colour_outputs`).
+#[test]
+fn case55_two_fragment_outputs_are_byte_equal_to_mesa_26_2_1() {
+    const FS: &str = include_str!("../../../../tools/shaders/es300/mrt2.frag");
+    let json = td!("fsout_55_es3mrt.expect.json");
+    let f = compile(SHC_STAGE_FRAGMENT, FS).expect("the fragment shader compiles");
+    let rf = region(json, "fs.fragment").expect("fs.fragment");
+    assert_words("fs.fragment", &trim(&f.code), &rf.words);
+    assert_facts("fs.fragment", &rf, f.info.work_reg_count, f.info.preload, &f.info.fau, VIEWPORT_64X64, &|_| 0);
+    assert_eq!(f.code.len(), (rf.words.len() * 8 + 16).div_ceil(128) * 16);
+    assert_eq!(f.info.colour_outputs, 0b11);
+    assert!(!f.info.colour_f16);
+}
+
+/// gl_test case 106's mrt3 (tools/shaders/es300/mrt3.frag: three mediump
+/// constant outputs): ATEST on the constant alpha, then per target its two
+/// fp16 words moved into r0-r1 (a word the table of immediates lacks
+/// pushed, `u2.w0`, `u2.w1`) and a `BLEND.v4.f16`, each but the last
+/// skipping its stub. Byte-equal to fsout_106_mrt3.expect.json.
+#[test]
+fn case106_three_constant_outputs_are_byte_equal_to_mesa_26_2_1() {
+    const FS: &str = include_str!("../../../../tools/shaders/es300/mrt3.frag");
+    let json = td!("fsout_106_mrt3.expect.json");
+    let f = compile(SHC_STAGE_FRAGMENT, FS).expect("the fragment shader compiles");
+    let rf = region(json, "fs.fragment").expect("fs.fragment");
+    assert_words("fs.fragment", &trim(&f.code), &rf.words);
+    assert_facts("fs.fragment", &rf, f.info.work_reg_count, f.info.preload, &f.info.fau, VIEWPORT_64X64, &|_| 0);
+    assert_eq!(f.info.colour_outputs, 0b111);
+    assert!(f.info.colour_f16);
+}
+
+/// An output past location 0 that is computed, or stored in a branch, has
+/// no reference of where Mesa puts its code: still refused by name.
+#[test]
+fn a_computed_or_branched_further_output_is_refused() {
+    const COMPUTED: &str = "#version 300 es\nprecision highp float; uniform vec4 u; \
+        layout(location = 0) out vec4 a; layout(location = 1) out vec4 b; \
+        void main(){ a = u; b = u * 2.0; }";
+    const BRANCHED: &str = "#version 300 es\nprecision highp float; uniform vec4 u; \
+        layout(location = 0) out vec4 a; layout(location = 1) out vec4 b; \
+        void main(){ a = u; b = u; if (u.x > 0.0) b = vec4(1.0); }";
+    assert_eq!(gap(SHC_STAGE_FRAGMENT, COMPUTED), MaliError::FragOutput);
+    assert_eq!(gap(SHC_STAGE_FRAGMENT, BRANCHED), MaliError::FragOutput);
 }
 
 /// The descriptor index of each look-up: the rank of its sampler among the

@@ -219,6 +219,43 @@ needs no separate copy step.
    (`Target` becomes up to 8); host tests against both traces.
 4. Board: cases 55 and 106 x2 (a board item, not this study).
 
+### What the compiler does now (cases 55 and 106, compiler only)
+
+Steps 1 and 2 above are in `src/shaderc/online/mali`; the tests
+`case55_two_fragment_outputs_are_byte_equal_to_mesa_26_2_1` and
+`case106_three_constant_outputs_are_byte_equal_to_mesa_26_2_1` (tests.rs)
+match `fsout_55_es3mrt` and `fsout_106_mrt3` ("fs.fragment") word for word,
+with the FAU words, register count and preload.
+
+- `nir_fs.rs`: the walk keeps the outputs at locations 1..7 in `Fs::targets`;
+  `layout()` admits `IoKind::Colour` at locations below `MAX_TARGETS` (8) when
+  each further one is a `vec4` of output 0's type. After output 0's `BLEND`
+  each further target gets its own (`blend()`, descriptor `rt`) on the one
+  `ATEST` coverage: the fp32 tail of `select_highp` (55) collects the words as
+  computed; the fp16 pair path `select` (106) takes each target's two fp16
+  words as constants.
+- `bir.rs` `Special::BlendDescriptor(rt)` (src0 `0xf0 + 2 rt`) and
+  `Special::ProgramCounter` (page 3, entry 15; `pack.rs` `tail` sets FAU page 3
+  for the instruction that reads it). `pack.rs` `lower_blend` puts the stub
+  after every `BLEND`: `r48 = program_counter + 8` for one without `.end`,
+  `r48 = 0` for the last; `branch_offset` gives a `BLEND` followed by the
+  first form 2 instructions (16 bytes, `target:0x2`). `Defect::BlendNotLast`
+  is gone.
+- The record states the targets: `MaliShader::colour_outputs`, bit i = target
+  i (0b11 for 55, 0b111 for 106, 1 for every one-output program, 0 for a
+  vertex shader). `src/mali/program.rs` `StageMeta::meta` still sets
+  `ShaderMeta::colour_outputs` from the stage alone (1 for a fragment shader);
+  wiring it to the record's value is the frame side's step.
+
+Still refused with `FragOutput` (no reference of where Mesa puts the code):
+a further target whose lanes are not all uniform words or constants (a
+computed or varying value, a texel), one in a shader with an `if`, a loop, a
+discard or a look-up, a further target in the fp16 mask-colour tail of
+`select_highp`, a uniform word in a mediump further target, and an output
+past location 0 that is not a `vec4` of output 0's type. A struct uniform's
+member without a precision qualifier now takes highp in a highp shader (55's
+`u_clear.first`; before, it counted as mixed precision).
+
 ## Case 91 `hdrblend`: `texture2D(hdr, v_uv) * 0.25`
 
 **Shader that refuses.** `tools/shaders/es100/hdrscale.frag`
