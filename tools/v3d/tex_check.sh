@@ -3,7 +3,8 @@
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 #
 # Build and run tools/v3d/tex_check.c (driver/src/v3d/v3d_tex.c against Mesa
-# 26.2.1). tools/check.sh runs this; so can a person, from anywhere:
+# 26.2.1: the 2D, cube, 2D-array and 3D layouts, the tiling, the records and
+# the TMU words). tools/check.sh runs this; so can a person, from anywhere:
 #
 #   tools/v3d/tex_check.sh
 #
