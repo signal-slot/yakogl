@@ -189,10 +189,10 @@ Notes on the table:
 * `storage_in` (`:183-185`) takes the first listed class the mask has. A back
   end whose mask lacks the new class therefore gets the second entry, which
   is exactly today's class (section 3). A back end that samples neither still
-  refuses the format by name (`src/gl/texture.rs:5743-5750`,
+  refuses the format by name (`src/gl/texture.rs:5806-5813`,
   `es3_storage_or_refuse`).
-* The class is decided once, at specification (`src/gl/texture.rs:5629-5690`
-  `sized_format`, `:5684-5690` for the es3 formats; `:5801-5814` `texfmt_of`),
+* The class is decided once, at specification (`src/gl/texture.rs:5692-5753`
+  `sized_format`, `:5747-5753` for the es3 formats; `:5864-5877` `texfmt_of`),
   and recorded in `GlTexture::texfmt`. Sub-image calls use the recorded class.
 * **An integer format now has two classes, both integer.**
   `tests/es3_sized_formats.rs:179-182` asserts "an integer format has one class".
@@ -204,7 +204,7 @@ Notes on the table:
 All texel uploads of these formats go through `es3_formats::convert_row` /
 `encode` (`src/gl/es3_formats.rs:603-666`, `:673-`). They are called by:
 
-* `src/gl/texture.rs:2184-2228` for glTexImage*/glTexSubImage*/glTexStorage*,
+* `src/gl/texture.rs:2184-2228` (the `convert_row` call is at `:2202`) for glTexImage*/glTexSubImage*/glTexStorage*,
   2D, 3D, arrays and PBO sources alike. It sizes rows by `gles_texfmt_bytes`
   through `storage_bytes` (`es3_formats.rs:596-598`), and its 64-texel chunk
   buffer of 16-byte texels covers every new class.
@@ -230,7 +230,7 @@ the RGBA bytes (section 5).
 Unchanged and still refusing:
 
 * glCopyTexImage/glCopyTexSubImage into an integer or snorm image is refused
-  before any texel moves (`src/gl/texture.rs:5724-5733`, `es3_copy_compatible`).
+  before any texel moves (`src/gl/texture.rs:5787-5796`, `es3_copy_compatible`).
 * glGenerateMipmap on any es3_formats texture but RGB10_A2-in-RGBA8 is
   GL_INVALID_OPERATION (`src/gl/texture.rs:4147-4151`).
 
@@ -279,6 +279,109 @@ paths:
    `:4266`, `:4384`; `src/gl/draw.rs:3216-3253`; `src/gl/egl.rs:2672`). They
    act on RGBA8/float/narrow-LA classes only. None can see a new class: no
    mipmap for these formats, and no EGL image of them.
+
+### 2.6 r32-rg32-classes: the complete change list (classes 26-29)
+
+Re-measured at commit `36bc1f13`. Line numbers of `src/gl/texture.rs` in this
+note were shifted (+63 below line 5600) to that commit; the function names are
+the stable anchors.
+
+**(1) Names, ids, mask bits.** `src/backend.rs`, one `pub const` per line after
+`GLES_TEXFMT_ETC2_SRGB_RGBA` (`:141`):
+
+| id | name | bit in `GC_SAMPLED_TEXFMTS` (`:211`) | other masks |
+|---|---|---|---|
+| 26 | `GLES_TEXFMT_R32UI` | `1 << 26` | not set in `BASE`, `PVR`, `V3D` |
+| 27 | `GLES_TEXFMT_R32I` | `1 << 27` | not set |
+| 28 | `GLES_TEXFMT_RG32UI` | `1 << 28` | not set |
+| 29 | `GLES_TEXFMT_RG32I` | `1 << 29` | not set |
+
+Bits 26-29 fit a `u32`, so no bit >= 32 is needed and the item does not depend
+on mask-u64. Add them to the `texfmts(&[...])` list of `GC_SAMPLED_TEXFMTS` only
+(`:211`), never to `BASE_SAMPLED_TEXFMTS` (`:166`), which `PVR`/`GC`/`V3D` all
+build on. `gles_texfmt_bytes` (`:289`): add `RG32UI | RG32I` to the 8 arm
+(`:292`); R32UI/I fall to the default 4. Update the doc comment of
+`GC_SAMPLED_TEXFMTS` ("Not ... R32I/UI, RG32I/UI").
+
+**(2) GL core.**
+
+| where | change |
+|---|---|
+| `src/gl/es3_formats.rs:87-88` `U32_ST`, `I32_ST` | shared by R32, RG32 **and** RGBA32 (`:139, :145, :146, :157, :158`). Keep them for RGBA32UI/I (`:157-158`). Add `R32U_ST = &[GLES_TEXFMT_R32UI, GLES_TEXFMT_RGBA32UI]`, `R32I_ST = &[GLES_TEXFMT_R32I, GLES_TEXFMT_RGBA32I]`, `RG32U_ST`, `RG32I_ST` likewise, and use them in the rows for GL_R32UI (`:139`), GL_R32I (`:140`), GL_RG32UI (`:145`), GL_RG32I (`:146`) |
+| `src/gl/es3_formats.rs:183` `storage_in` | no change (first listed class the mask has; with the GC mask it is the native class, elsewhere the RGBA32 fallback) |
+| `src/gl/es3_formats.rs:603` `encode`, the arm at `:660` | add `GLES_TEXFMT_R32UI \| GLES_TEXFMT_R32I => put32(dst, 0, ints[0])` and `GLES_TEXFMT_RG32UI \| GLES_TEXFMT_RG32I => { put32(dst, 0, ints[0]); put32(dst, 1, ints[1]); }`. Without an arm `encode` returns `false` (`_ => return false`, `:666`) and the upload fails |
+| `src/gl/es3_formats.rs:673` `convert_row` | no change; it calls `encode` |
+| `src/gl/texture.rs:5747-5753` (`sized_format`, es3 arm), `:5864` `texfmt_of`, `:5806` `es3_storage_or_refuse`, `:2202` `convert_row` call | no change: they take the class `storage_in` answers, size rows by `gles_texfmt_bytes`, and record it in `GlTexture::texfmt` |
+| `src/gl/tf_capture.rs:1161` `decode` | add the four arms: R32: `Texel::I([u32_at(0), 0, 0, 1])`, RG32: `Texel::I([u32_at(0), u32_at(4), 0, 1])` (the existing RGBA32 arm uses `u32_at(4 * k)`); add the names to the `use` at `:65` |
+| `src/gl/framebuffer.rs` | none (`es3_texture_bits` default 32 is right; 2.4) |
+
+**(3) GC7000 words**, `src/vivante/texture.rs` `gc_texfmt` (`:96`), arms before
+the `_ => unorm_format` default (`:139`), and **not** in the arm at `:128`
+(that arm sets `decoded = false`, which makes the texture sampled as an empty
+one, `:412`):
+
+```rust
+GLES_TEXFMT_R32UI | GLES_TEXFMT_R32I => f.format_ext = GC_TEX_FORMAT_EXT_R32I,
+GLES_TEXFMT_RG32UI | GLES_TEXFMT_RG32I => f.format_ext = GC_TEX_FORMAT_EXT_G32R32I,
+```
+
+* **Format**: `CONFIG0.FORMAT` 0, `CONFIG1.FORMAT_EXT` = `TEXTURE_FORMAT_EXT_R32I`
+  (`0x23`, `X:95`) and `TEXTURE_FORMAT_EXT_G32R32I` (`0x24`, `X:96`). Mesa's
+  table lists R32 as `EXT_R32F` (`F:136-137`) and RG32 as `EXT_G32R32F`
+  (`F:209-210`); `etna_format_texture` replaces both on `halti >= 5` with the
+  integer words (`F:286-291`). The GC7000UL is HALTI5. The `EXT_FORMAT` flag is
+  what moves the value from CONFIG0 to CONFIG1 (`D:179-186`).
+* **CONFIG2**: `0x00030000` only. `SIGNED_INT8` / `SIGNED_INT16` are set only
+  for 8- and 16-bit channels (`D:187-189`), so the signed and unsigned classes
+  are identical on the TE: `config2` stays 0 for R32I and RG32I.
+* **Swizzle**: identity; `get_texture_swiz` patches only R8_UNORM and DXT1
+  (`F:346-384`). `int_filter` false (unorm only, `F:296-338`). The missing
+  channels (G, B, A of R32; B, A of RG32) are the TE's, unmeasured on the board
+  (section 4, last note).
+* **Gates**: `EXT_FORMAT` HALTI0 (`S:409-410`), pure integer HALTI2
+  (`S:419-420`).
+* **Constants**: `GC_TEX_FORMAT_EXT_R32I` / `GC_TEX_FORMAT_EXT_G32R32I` come
+  from regs-words (`src/vivante/regs.rs`; in review at the time of writing).
+  If it is not merged, define them next to `GC_TEX_FORMAT_EXT_R32F`
+  (`regs.rs:868-893` block) with the `X:95-96` comment.
+* The tiled copy takes RG32 (8 bytes) on the `wide_texels` path and R32 on the
+  4-byte one with no edit (`src/vivante/tiled_copy.rs:135-137`).
+
+**(4) Other back ends.** Nothing is set in `PVR_SAMPLED_TEXFMTS` (`:190`),
+`V3D_SAMPLED_TEXFMTS` (`:233`) or Mali's mask (`src/mali/backend.rs:96`, 0), so
+`storage_in` hands them the RGBA32UI/I fallback, i.e. today's class, and
+`es3_tex_format` (`src/pvr/backend.rs:1250`) and `tmu_format`
+(`src/v3d/texture.rs:217`, guarded by `refusal_for` at `:109`) never see
+classes 26-29. Do not edit those files. Mali still refuses every es3_formats
+format by name.
+
+**(5) Tests.**
+
+`tests/es3_formats_gc.rs` (held by wide128-backend; edit after it lands):
+* `CLASSES` (`:50-77`) grows by four rows (`R32UI`..`RG32I`, ids 26-29); the
+  existing tests then also demand matching `src/backend.rs` constants and
+  `docs/es3/gc-formats.md` section 2 rows. Add four rows there, with `in mask`
+  yes for the GC.
+* New tests, per the list in step 2 of section 5: native class on the GC mask;
+  RGBA32 fallback on `PVR_SAMPLED_TEXFMTS` / `V3D_SAMPLED_TEXFMTS`, `None` on
+  Mali's; `gc_texfmt` words `0x23` / `0x24` with `config2 == 0` and
+  `decoded == true`; `encode` bytes equal the first 4 / 8 bytes of the
+  RGBA32 encoding; `gles_texfmt_bytes` 4 / 4 / 8 / 8; `tf_capture::decode`.
+* `src/vivante/texture.rs`'s `gc_texfmt` has a silent RGBA8 default: add the
+  every-class sweep of step 3 test 5 (or at least these four).
+
+`tests/es3_sized_formats.rs`: the edits listed in section 5 step 2 (one class per
+integer format -> all integer; `Some(*e.storage.last())` for PVR/V3D; `:211`
+R32UI on the GC native; the GC refusal list at `:574-576` loses R32/RG32;
+`all_classes` includes 26-29).
+
+**Host dEQP** (`tools/cts/host-deqp-run.sh --gpu=vivante --module=gles3`):
+`dEQP-GLES3.functional.texture.format.sized.2d.r32i_*`, `r32ui_*`,
+`rg32i_*`, `rg32ui_*` (and their `cube`, `2d_array`, `3d` twins) and
+`functional.texture.specification` (the `teximage2d` / `texstorage2d` format
+cases). Their upload refusals should disappear, and nothing may become a
+compile refusal. RGB32UI/I and RGBA32UI/I stay refused until the wide128
+items. Verdicts of render are meaningless on the host.
 
 ## 3. Back ends that do not sample a new class
 
@@ -338,7 +441,7 @@ Mesa samples R8_UNORM as `TEXTURE_FORMAT_L8` with green and blue swizzled to
 descriptor words are known (2.5).
 
 The GL core, however, stores GL_R8/GL_RG8 (and GL_EXT_texture_rg's GL_RED/GL_RG)
-outside es3_formats, in `sized_format` (`src/gl/texture.rs:5642-5643`, `:5658`).
+outside es3_formats, in `sized_format` (`src/gl/texture.rs:5705-5706`, `:5721`).
 They are **colour-renderable** and **mipmapped**, and every path that makes
 them so is keyed on `GLES_TEXFMT_RGBA8`:
 
