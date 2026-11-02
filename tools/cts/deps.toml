@@ -125,11 +125,13 @@ sha256 = "ca9bc0ff66fafca1dac9d592a36d953cf16d096a9d09b1c0357f021cf9f6a7eb"
 name = "PCO_SHC"
 path = "PCO_SHC/pco_shc"
 marker = "PCO_SHC/pco_shc"
-note = "Mesa 26.2.1's PowerVR shader compiler (tools/pco_shc/README.md); the toolchain id glsl2usc records depends on the compiler and LLVM versions"
+note = "Mesa 26.2.1's PowerVR shader compiler (tools/pco_shc/README.md); the toolchain id glsl2usc records depends on the compiler and LLVM versions. The same build makes capture_spm_load beside it (the PCO_SPM_LOAD_CAPTURE entry below, for the hosts prepared before it); pco_shc is copied last, so the marker means both are there"
 build = '''
 if [ -z "${LLVM_DIR-}" ] && [ -d /usr/lib/llvm-21 ]; then export LLVM_DIR=/usr/lib/llvm-21; fi
 tools/pco_shc/build_pco_shc.sh "$DEPS/downloads/mesa-26.2.1.tar.xz" "$DEPS/PCO_SHC.src"
 mkdir -p "$DEPS/PCO_SHC"
+cp "$DEPS/PCO_SHC.src/mesa-26.2.1/build/src/imagination/vulkan/capture_spm_load" "$DEPS/PCO_SHC/capture_spm_load.part"
+mv "$DEPS/PCO_SHC/capture_spm_load.part" "$DEPS/PCO_SHC/capture_spm_load"
 cp "$DEPS/PCO_SHC.src/mesa-26.2.1/build/src/imagination/vulkan/pco_shc" "$DEPS/PCO_SHC/pco_shc.part"
 mv "$DEPS/PCO_SHC/pco_shc.part" "$DEPS/PCO_SHC/pco_shc"
 '''
@@ -143,6 +145,29 @@ packages.portage = [
   "dev-util/glslang", "dev-build/meson", "dev-build/ninja", "dev-python/mako", "dev-python/pyyaml", "dev-python/packaging",
   "x11-libs/libdrm", "dev-libs/expat", "sys-libs/zlib", "app-arch/zstd",
 ]
+
+[[dep.inputs]]
+url = "https://archive.mesa3d.org/mesa-26.2.1.tar.xz"
+sha256_from = "third_party/mesa-26.2.1/UPSTREAM:tarball-sha256"
+
+[[dep]]
+name = "PCO_SPM_LOAD_CAPTURE"
+path = "PCO_SHC/capture_spm_load"
+marker = "PCO_SHC/capture_spm_load"
+requires = ["PCO_SHC"]
+note = "capture_spm_load of the pco_shc build (tools/pco_shc/capture_spm_load.c): prints the partial render's background-object load shader as Mesa 26.2.1's pco makes it, for the regenerate-and-compare row of tools/check.sh (tools/pco_shc/README.md); without it that row is a gap, never a pass. A fresh PCO_SHC build makes it; a host prepared before this entry has pco_shc and not this program, and this build makes it from the tree PCO_SHC's build left in PCO_SHC.src, or builds that tree again from the same tarball, patches and options (pco_shc itself is not touched, so the GLSL2USC_CACHE keys and the toolchain id stay). The gate workflow builds this entry when it is absent, as it does MALI_CSFFW: one program, about a minute on 8 threads when the tree is rebuilt. Its packages are PCO_SHC's"
+build = '''
+if [ -z "${LLVM_DIR-}" ] && [ -d /usr/lib/llvm-21 ]; then export LLVM_DIR=/usr/lib/llvm-21; fi
+src="$DEPS/PCO_SHC.src/mesa-26.2.1"
+# A tree built from a checkout before capture_spm_load.c has no rule for it.
+if ! grep -q 'capture_spm_load' "$src/build/build.ninja" 2>/dev/null; then
+  tools/pco_shc/build_pco_shc.sh "$DEPS/downloads/mesa-26.2.1.tar.xz" "$DEPS/PCO_SHC.src"
+fi
+ninja -C "$src/build" src/imagination/vulkan/capture_spm_load
+mkdir -p "$DEPS/PCO_SHC"
+cp "$src/build/src/imagination/vulkan/capture_spm_load" "$DEPS/PCO_SHC/capture_spm_load.part"
+mv "$DEPS/PCO_SHC/capture_spm_load.part" "$DEPS/PCO_SHC/capture_spm_load"
+'''
 
 [[dep.inputs]]
 url = "https://archive.mesa3d.org/mesa-26.2.1.tar.xz"

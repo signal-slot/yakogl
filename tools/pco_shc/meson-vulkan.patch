@@ -1,17 +1,19 @@
 src/imagination/vulkan/meson.build: build pco_shc and the capture programs
 
-Adds three executables next to Mesa's Vulkan driver, linked against the
+Adds four executables next to Mesa's Vulkan driver, linked against the
 same libraries the driver links: pco_shc (the offline shader compiler
 harness, tools/pco_shc/pco_shc.c), capture_usc (the driver's USC blobs,
-tools/pco_shc/capture_usc.c, run by gen_usc_blobs.py) and capture_smp_fs
-(a texture-sample fragment shader, tools/pco_shc/capture_smp_fs.c). None is
-built by default. Local tooling, not for upstream.
+tools/pco_shc/capture_usc.c, run by gen_usc_blobs.py), capture_smp_fs
+(a texture-sample fragment shader, tools/pco_shc/capture_smp_fs.c) and
+capture_spm_load (the partial render's background-object load shader,
+tools/pco_shc/capture_spm_load.c, run by gen_spm_load.py). None is built
+by default. Local tooling, not for upstream.
 
 Applies to the tarball tree with `patch -p1` from its root.
 
 --- a/src/imagination/vulkan/meson.build
 +++ b/src/imagination/vulkan/meson.build
-@@ -202,6 +202,75 @@
+@@ -202,6 +202,98 @@
    install : true,
  )
  
@@ -64,6 +66,29 @@ Applies to the tarball tree with `patch -p1` from its root.
 +capture_smp_fs = executable(
 +  'capture_smp_fs',
 +  ['capture_smp_fs.c', 'pvr_usc.c', 'pvr_formats.c', pvr_entrypoints, pvr_drirc, u_format_pack_h],
++  include_directories : [
++    pvr_includes,
++    inc_imagination,
++    inc_include,
++    inc_src,
++  ],
++  link_with : [
++    powervr_per_arch_libs,
++    libpowervr_common,
++    libpowervr_compiler,
++    libpowervr_uscgen,
++  ],
++  dependencies : [
++    pvr_deps,
++    idep_nir_headers,
++  ],
++  c_args : pvr_flags,
++  build_by_default : false,
++)
++
++capture_spm_load = executable(
++  'capture_spm_load',
++  ['capture_spm_load.c', 'pvr_usc.c', 'pvr_formats.c', pvr_entrypoints, pvr_drirc, u_format_pack_h],
 +  include_directories : [
 +    pvr_includes,
 +    inc_imagination,

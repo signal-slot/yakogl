@@ -295,6 +295,13 @@ gen     precompiled table gpu-powervr,report-es2:
 gen     precompiled table gpu-vivante,report-es2:"
 [ -n "${PCO_SHC-}" ] && want_rows="$want_rows
 gen     tests/reference/blobs.rs"
+# The partial render's load shader row is keyed only when check.sh finds
+# capture_spm_load (PCO_SPM_LOAD_CAPTURE, else beside PCO_SHC); the same
+# two places are looked at here (check.sh also looks in the deps layout's
+# PCO_SHC.src tree, which only adds a key).
+spm_cap=${PCO_SPM_LOAD_CAPTURE:-${PCO_SHC:+$(dirname "$(readlink -f "$PCO_SHC")")/capture_spm_load}}
+[ -n "${PCO_SHC-}" ] && [ -x "${spm_cap-}" ] && want_rows="$want_rows
+gen     tools/pco_shc/spm_load == gen_spm_load.py capture"
 while IFS= read -r r; do
   checks=$((checks + 1))
   printf '%s\n' "$k0" | grep -qF "$r" || { echo "FAIL row keys: no key for '$r'"; fails=$((fails + 1)); }
