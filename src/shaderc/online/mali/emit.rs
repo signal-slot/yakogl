@@ -36,7 +36,7 @@ const fn row(op: Alu, bits: u8, width: u8) -> Row {
 }
 
 /// The rows [`emit`] selects, each with the `bi_emit_alu` case it is.
-pub const ROWS: [(Row, &str); 76] = [
+pub const ROWS: [(Row, &str); 77] = [
     (row(Alu::Fadd, 32, 1), "nir_op_fadd: FADD.f32"),
     (row(Alu::Fmul, 32, 1), "nir_op_fmul: FMA.f32 a, b, -0.0"),
     (row(Alu::Ffma, 32, 1), "nir_op_ffma: FMA.f32"),
@@ -118,6 +118,9 @@ pub const ROWS: [(Row, &str); 76] = [
      * (tools/mali/testdata/fbload_predif_fs_coord, prec_82) */
     (row(Alu::I2i32, 32, 1), "nir_op_i2i32 of a 16-bit mask: S16_TO_S32"),
     (row(Alu::Bcsel, 16, 1), "nir_op_bcsel_pan of one 16-bit lane: MUX.v2i16.int_zero else, then, c.h00"),
+    /* a flattened `if`'s select of two uniform lanes (tools/mali/testdata/
+     * cflow_68_armselect: `MUX.v2i16 r1, u2.w0, u2.w1, r0.h00`) */
+    (row(Alu::Bcsel, 16, 2), "nir_op_bcsel_pan of two 16-bit lanes: MUX.v2i16.int_zero else, then, c.h00"),
     (row(Alu::Ffloor, 16, 2), "nir_op_ffloor of two 16-bit lanes: FROUND.v2f16.rtn"),
     /* a colour lane paired with a constant (tools/mali/testdata/texmore_2:
      * `FMA.v2f16 r1, r3^.h00, 0x38000000.h11, r1^.h00`) */
@@ -274,7 +277,7 @@ pub fn emit(p: &mut Prog<'_>, row: Row, s: &[Src]) -> Result<u16, MaliError> {
         (Alu::I2i32, 32, 1) => ins(p, Op::S16ToS32, &s[..1])?,
         /* `bi_mux_to(.., s2, s1, s0, BI_MUX_INT_ZERO)` as the 32-bit row,
          * each source's half in both (the caller's swizzle) */
-        (Alu::Bcsel, 16, 1) => ins(p, Op::MuxV2i16, &[s[2], s[1], s[0]])?,
+        (Alu::Bcsel, 16, 1 | 2) => ins(p, Op::MuxV2i16, &[s[2], s[1], s[0]])?,
         (Alu::Ffloor, 16, 2) => ins(p, Op::FroundV2f16 { round: Round::Rtn }, &s[..1])?,
         (Alu::F2i32, 32, 1) => ins(p, Op::F16ToS32, &s[..1])?,
         /* `bi_arshift_or_to(b, sz, dst, s0, bi_zero(), bi_byte(s1, 0))`

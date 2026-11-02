@@ -873,9 +873,32 @@ impl<'s> Fs<'s> {
             (AluOp::Fadd, Rule::IdentitySecond) => Ok(x),
             (AluOp::Fadd, Rule::IdentityFirst) => Ok(y),
             (AluOp::Fadd, _) if cx && cy => Err(MaliError::ConstantFold),
+            /* `fadd(fmul(a, b), fmul(a, c))` is `fmul(a, fadd(b, c))`
+             * (nir_opt_algebraic.py's factoring), the constants' sum
+             * folded and `fmul(a, 1.0)` `a`: cflow_68_armselect's `v * 0.5
+             * + w * 0.5` once both arms' selects are one (no `FMA` in
+             * Mesa's program). A sum of other constants has no reference */
+            (AluOp::Fadd, _) if self.factor(x, y).is_some() => {
+                let (a, b, c) = self.factor(x, y).ok_or(MaliError::Defect(Defect::IrIndex))?;
+                match f32::from_bits(b) + f32::from_bits(c) {
+                    1.0 => Ok(a),
+                    _ => Err(MaliError::AlgebraicForm),
+                }
+            }
             (AluOp::Fadd, _) => self.node(Alu::Fadd, [x, y, Val::Undef], at),
             _ => Err(MaliError::Arithmetic),
         }
+    }
+
+    /// `x` and `y` are products of one 16-bit value `a` with the constants
+    /// `b` and `c` ([`Fs::op`]'s factoring).
+    fn factor(&self, x: Val, y: Val) -> Option<(Val, u32, u32)> {
+        let prod = |v: Val| match self.alu_of(v) {
+            Some((Alu::Fmul, [a, Val::Const(k), _])) | Some((Alu::Fmul, [Val::Const(k), a, _])) => Some((a, k)),
+            _ => None,
+        };
+        let ((a, b), (a2, c)) = (prod(x)?, prod(y)?);
+        (a == a2 && !matches!(a, Val::Const(_))).then_some((a, b, c))
     }
 
     /// One lane of `fneg`: a constant's is folded, `fneg(fneg(a))` is
@@ -2514,19 +2537,59 @@ fn walk_if16(
     if !matches!(exit, IfExit::Plain) {
         return Err(MaliError::GuardMediump);
     }
-    if !f.mask_lane(cond) {
+    /* a float compare's 16-bit mask (`pan_nir_lower_bool_to_bitsize`):
+     * the flattened `if`s below */
+    let cmp16 = matches!(cond, Val::Lane(n, 0) if matches!(
+        f.nir.nodes[n as usize],
+        NirNode { kind: Kind::Alu(Alu::Fcmp(_)), bits: 16, width: 1, .. }
+    ));
+    if !f.mask_lane(cond) && !cmp16 {
         return Err(MaliError::ControlFlow);
     }
     let (saved_locals, saved_colour) = (*locals, f.colour);
+    let (looks, discards) = (f.nlook, f.discards);
+    let then_start = f.nir.n;
     let then_flow = walk_nodes(f, m, then_, vals, locals, prec, false, join, None)?;
     let then_locals = *locals;
     *locals = saved_locals;
     let then_colour = core::mem::replace(&mut f.colour, saved_colour);
+    let else_start = f.nir.n;
     let else_flow = walk_nodes(f, m, else_, vals, locals, prec, false, join, None)?;
-    if then_flow != Flow::Next || else_flow != Flow::Next || then_colour != f.colour {
+    if then_flow != Flow::Next || else_flow != Flow::Next || (then_colour != f.colour && !cmp16) {
+        return Err(MaliError::ControlFlow);
+    }
+    /* `nir_opt_peephole_select` takes sides of ALU work alone, at most
+     * [`nir::PEEPHOLE_LIMIT`] operations each (nir_opt_peephole_select.c:
+     * 543-549): a look-up, a discard or a longer side keeps its branch, a
+     * form no mediump reference draws (cflow_148_texbranch's) */
+    let alu_only = |a: usize, b: usize| {
+        b - a <= nir::PEEPHOLE_LIMIT as usize
+            && f.nir.nodes[a..b].iter().all(|nd| matches!(nd.kind, Kind::Alu(_) | Kind::Uniform { .. }))
+    };
+    if cmp16
+        && (f.nlook != looks
+            || f.discards != discards
+            || !alu_only(then_start, else_start)
+            || !alu_only(else_start, f.nir.n))
+    {
         return Err(MaliError::ControlFlow);
     }
     let not = |f: &mut Fs<'_>, v: Val| f.int_lane(m, AluOp::Bnot, &[ir::Src::id(ir::ValueId(0)); 3], [v; 3], join);
+    /* a lane each side defines its own way: the peephole's `bcsel_pan` of
+     * the compare at the join (cflow_68_armselect.stderr's `%8 = bcsel_pan
+     * %7.xx, %3.xy, %2.xy`), which [`vectorise`] pairs */
+    let sel = |f: &mut Fs<'_>, t: Val, e: Val| match (t, e) {
+        _ if t == e => Ok(t),
+        (t, Val::Undef) => Ok(t),
+        (Val::Undef, e) => Ok(e),
+        /* a boolean's 32-bit select under a float compare: no reference */
+        _ if cmp16
+            && ![t, e].iter().any(|&v| v == Val::Const(u32::MAX) || (f.mask_lane(v) && !f.is_const(v, &[0]))) =>
+        {
+            f.node(Alu::Bcsel, [cond, t, e], join)
+        }
+        _ => Err(MaliError::ControlFlow),
+    };
     for (l, lanes) in locals.iter_mut().enumerate() {
         for (c, e) in lanes.iter_mut().enumerate() {
             let t = then_locals[l][c];
@@ -2535,14 +2598,27 @@ fn walk_if16(
                 /* a side that leaves it undefined (`nir_opt_undef`) */
                 (t, Val::Undef) => t,
                 (Val::Undef, e) => e,
-                (Val::Const(u32::MAX), Val::Const(0)) => cond,
-                (Val::Const(0), Val::Const(u32::MAX)) => not(f, cond)?,
-                (Val::Const(u32::MAX), e) if e == cond => cond,
-                (t, Val::Const(0)) if t == cond => cond,
-                _ => return Err(MaliError::ControlFlow),
+                (Val::Const(u32::MAX), Val::Const(0)) if !cmp16 => cond,
+                (Val::Const(0), Val::Const(u32::MAX)) if !cmp16 => not(f, cond)?,
+                (Val::Const(u32::MAX), e) if e == cond && !cmp16 => cond,
+                (t, Val::Const(0)) if t == cond && !cmp16 => cond,
+                (t, e) => sel(f, t, e)?,
             };
         }
     }
+    /* the colour is an output temporary: written on one side alone it is
+     * undefined on the other ([`walk_if`]), else a select per lane
+     * (cflow_74_ifoutput: `%6 = bcsel_pan %4, 0x3c00, 0x0`) */
+    f.colour = match (then_colour, f.colour) {
+        (Some(a), Some(b)) => {
+            let mut c = [Val::Undef; 4];
+            for (k, v) in c.iter_mut().enumerate() {
+                *v = sel(f, a[k], b[k])?;
+            }
+            Some(c)
+        }
+        (a, b) => a.or(b),
+    };
     Ok(Flow::Next)
 }
 
@@ -4722,6 +4798,13 @@ enum Leaf {
     /// gl_FragCoord's x and y narrowed to fp16, in order, as one word
     /// (`MKVEC.v2i16 x.h0, y.h0`; [`Fs::frag_coord16`], [`frag16`]).
     Frag,
+    /// Nodes `x` and `y`, each a lane alone, as a word: `MKVEC.v2i16
+    /// x.h0, y.h0` (cflow_74_ifoutput's `MKVEC.v2i16 r0, r1^.h0, r0^.h0`
+    /// of the red and green selects of constants).
+    Pack {
+        x: u8,
+        y: u8,
+    },
 }
 
 /// The pair nodes: an operation of two lanes, or a leaf.
@@ -4767,7 +4850,7 @@ impl Pairs {
             P::Leaf(Leaf::Tex(..) | Leaf::TexLane(..)) => Form::Tex,
             P::Leaf(Leaf::Ubo(_) | Leaf::UboLane(_) | Leaf::UboHalf(_)) => Form::Ubo,
             /* `MKVEC.v2i16 x, #0`: a lane and a constant half */
-            P::Leaf(Leaf::Zext(_) | Leaf::Lane { .. }) => Form::Mk,
+            P::Leaf(Leaf::Zext(_) | Leaf::Lane { .. } | Leaf::Pack { .. }) => Form::Mk,
             /* `MKVEC.v2i16 x, y` of the position's two halves */
             P::Leaf(Leaf::Frag) => Form::Mk,
             P::Leaf(Leaf::Const(_)) => Form::Const,
@@ -4786,6 +4869,8 @@ impl Pairs {
                 Alu::Fmul => &[Place::MulA, Place::MulB],
                 Alu::Ffma => &[Place::FmaA, Place::FmaB, Place::FmaC],
                 Alu::Fneg => &[Place::NegSrc],
+                /* a select's sources are the forms [`vectorise`] admits */
+                Alu::Bcsel | Alu::Fcmp(_) => &[],
                 _ => &[Place::AbsSrc],
             };
             for (k, p) in places.iter().enumerate() {
@@ -4809,6 +4894,28 @@ fn vectorise(f: &mut Fs<'_>, pr: &mut Pairs, a: Val, b: Val, pair: u8, ubo: &Ubo
          * `vec2(x, 0.0)` (case108_uniidx, uniarray_b) */
         (Some((Alu::Fadd, _)) | None, _) if b == Val::Const(0) && sum_of_reads(f, a) => {
             P::Leaf(Leaf::Zext(scalar(f, pr, a, pair)?))
+        }
+        /* a flattened `if`'s selects ([`walk_if16`]) of one compare: of a
+         * uniform's aligned pairs, one `bcsel_pan` of two lanes
+         * (cflow_68_armselect: `MUX.v2i16 r1, u2.w0, u2.w1, r0.h00`, the
+         * else side first); of constants, each lane alone and the word
+         * packed (cflow_74_ifoutput: `MUX.v2i16 r1, 0x0, 0x3C000000.h11,
+         * r0.h00`, then `MKVEC.v2i16`). Another operand has no reference */
+        (Some((Alu::Bcsel, sa)), Some((Alu::Bcsel, sb))) if sa[0] == sb[0] => {
+            let k = |v: Val| matches!(v, Val::Const(_));
+            if [sa[1], sa[2], sb[1], sb[2]].iter().all(|&v| k(v)) {
+                let x = select_lane(f, pr, a, pair, ubo)?;
+                let y = select_lane(f, pr, b, pair, ubo)?;
+                P::Leaf(Leaf::Pack { x, y })
+            } else {
+                let c = cmp_node(f, pr, sa[0], ubo)?;
+                let t = vectorise(f, pr, sa[1], sb[1], pair, ubo)?;
+                let e = vectorise(f, pr, sa[2], sb[2], pair, ubo)?;
+                if [t, e].iter().any(|&x| pr.form(x) != Form::Uniform) {
+                    return Err(MaliError::FsOperandForm);
+                }
+                P::Op(Alu::Bcsel, [c, t, e])
+            }
         }
         (Some((Alu::Fadd, sa)), Some((Alu::Fadd, sb))) => {
             let x = vectorise(f, pr, sa[0], sb[0], pair, ubo)?;
@@ -4984,6 +5091,59 @@ fn cmp_leaf(f: &Fs<'_>, pr: &mut Pairs, v: Val, ubo: &UboLayout) -> Result<(u8, 
     let x = pr.push(P::Leaf(leaf), (f.key(v), 0))?;
     pr.scalar[x as usize] = true;
     Ok((x, swz))
+}
+
+/// A flattened `if`'s compare ([`walk_if16`]) as a node of one lane, its
+/// operands a uniform's half or a constant's (`FCMP_OR.v2f16.lt.m1 r0,
+/// 0x38000000.h11, u4.w0.h00, ..`, cflow_68_armselect), made once for all
+/// the selects that read it (`nir_opt_cse`). Another operand has no
+/// reference ([`MaliError::FsOperandForm`]).
+fn cmp_node(f: &Fs<'_>, pr: &mut Pairs, c: Val, ubo: &UboLayout) -> Result<u8, MaliError> {
+    let Some((op @ Alu::Fcmp(_), s)) = f.alu_of(c) else { return Err(MaliError::FsOperandForm) };
+    let mut leaf = [Leaf::Const(0); 2];
+    for (l, v) in leaf.iter_mut().zip(s) {
+        *l = match (f.alu_of(v), f.uniform_dword(v), v) {
+            (_, _, Val::Const(k)) => Leaf::Const(u32::from(f16_rtne(k).ok_or(MaliError::Fp16Inexact)?)),
+            (None, Some(d), _) => {
+                let (w, half, base) = ubo.half(d).ok_or(MaliError::FsUniform)?;
+                Leaf::Uniform { base, comp: (w - base) as u8, swz: if half == 0 { Swz::H00 } else { Swz::H11 } }
+            }
+            _ => return Err(MaliError::FsOperandForm),
+        };
+    }
+    let same = |x: u8, l: Leaf| pr.nodes[x as usize] == P::Leaf(l);
+    if let Some(i) = (0..pr.n).find(|&i| match pr.nodes[i] {
+        P::Op(o, [x, y, _]) => o == op && pr.scalar[i] && same(x, leaf[0]) && same(y, leaf[1]),
+        _ => false,
+    }) {
+        return Ok(i as u8);
+    }
+    let place = (f.key(c), 0);
+    let mut x = [0u8; 2];
+    for (n, l) in x.iter_mut().zip(leaf) {
+        *n = pr.push(P::Leaf(l), place)?;
+        pr.scalar[*n as usize] = true;
+    }
+    let n = pr.push(P::Op(op, [x[0], x[1], 0]), place)?;
+    pr.scalar[n as usize] = true;
+    Ok(n)
+}
+
+/// Lane `v`, a flattened `if`'s select of two constants ([`vectorise`]),
+/// as a node of one lane: `MUX.v2i16 else, then, c.h00`.
+fn select_lane(f: &Fs<'_>, pr: &mut Pairs, v: Val, pair: u8, ubo: &UboLayout) -> Result<u8, MaliError> {
+    let Some((Alu::Bcsel, [c, t, e])) = f.alu_of(v) else { return Err(MaliError::FsOperandForm) };
+    let c = cmp_node(f, pr, c, ubo)?;
+    let place = (f.key(v), pair);
+    let mut x = [0u8; 2];
+    for (n, k) in x.iter_mut().zip([t, e]) {
+        let Val::Const(k) = k else { return Err(MaliError::FsOperandForm) };
+        *n = pr.push(P::Leaf(Leaf::Const(u32::from(f16_rtne(k).ok_or(MaliError::Fp16Inexact)?))), place)?;
+        pr.scalar[*n as usize] = true;
+    }
+    let n = pr.push(P::Op(Alu::Bcsel, [c, x[0], x[1]]), place)?;
+    pr.scalar[n as usize] = true;
+    Ok(n)
 }
 
 /// Pair `pair` of the colour as a lane alone and a constant (`a`, `b`):
@@ -5201,6 +5361,10 @@ fn mark(pr: &Pairs, x: u8, live: &mut [bool; MAX_PAIRS]) {
             }
         }
         P::Leaf(Leaf::Zext(y) | Leaf::Lane { x: y, .. }) => mark(pr, y, live),
+        P::Leaf(Leaf::Pack { x, y }) => {
+            mark(pr, x, live);
+            mark(pr, y, live);
+        }
         P::Leaf(_) => {}
     }
 }
@@ -5536,6 +5700,10 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
             }
             P::Leaf(Leaf::Lane { x, half }) => {
                 let s = [operand(&pr, x, &lv, &val)?.swz(Swz::H00), Src::of(Idx::Const(half as u32)).swz(Swz::H00)];
+                Src::ssa(row(p, &mut rows, Row { op: Alu::Vec2, bits: 16, width: 2 }, &s)?)
+            }
+            P::Leaf(Leaf::Pack { x, y }) => {
+                let s = [operand(&pr, x, &lv, &val)?.swz(Swz::H00), operand(&pr, y, &lv, &val)?.swz(Swz::H00)];
                 Src::ssa(row(p, &mut rows, Row { op: Alu::Vec2, bits: 16, width: 2 }, &s)?)
             }
             P::Leaf(Leaf::Const(c)) => Src::of(Idx::Const(c)),
@@ -7294,9 +7462,8 @@ fn operand(pr: &Pairs, x: u8, lv: &Leaves, val: &[Option<Src>; MAX_PAIRS]) -> Re
             let w = lv.tex.get(j as usize).and_then(|w| w[(c as usize / 2) & 3]);
             Src::ssa(w.ok_or(MaliError::Defect(Defect::IrIndex))?).swz(if c % 2 == 0 { Swz::H00 } else { Swz::H11 })
         }
-        P::Leaf(Leaf::Mk { .. } | Leaf::Lanes { .. } | Leaf::Zext(_) | Leaf::Lane { .. }) | P::Op(..) => {
-            val[x as usize].ok_or(MaliError::Defect(Defect::IrIndex))?
-        }
+        P::Leaf(Leaf::Mk { .. } | Leaf::Lanes { .. } | Leaf::Zext(_) | Leaf::Lane { .. } | Leaf::Pack { .. })
+        | P::Op(..) => val[x as usize].ok_or(MaliError::Defect(Defect::IrIndex))?,
     })
 }
 
@@ -7327,7 +7494,8 @@ fn op(
             P::Op(..) => pr.scalar[*y as usize],
             _ => false,
         };
-        if pr.scalar[x as usize] && lone {
+        /* a select's mask is its compare's low half in both lanes (`r0.h00`) */
+        if (pr.scalar[x as usize] && lone) || (a == Alu::Bcsel && k == 0) {
             s[k] = s[k].swz(Swz::H00);
         }
     }

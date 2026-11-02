@@ -366,6 +366,54 @@ Existing code to extend:
   `ControlFlow`. Nothing of the call survives in the output, so the function
   can be dropped by liveness (its result is never read) before the walk.
 
+#### What landed (cflow-flatten)
+
+68 and both shaders of 74 are byte-equal to their references in both stages
+(`tests.rs`: `the_flattened_ifs_are_byte_equal_to_mesa_26_2_1`, the pairs in
+`CFLOW_FLATTEN`; the corpus copies `es100/ifoutput.frag`,
+`es100/ifoutput2.frag` and `gl_test_es100/armselect.frag` are now `ok` in
+`tools/mali/corpus-verdicts.txt`). What the lowering does (`nir_fs.rs`):
+
+- `walk_if16` takes a condition that is a 16-bit float compare's mask, as
+  well as the boolean lanes it took before. It walks both sides and refuses
+  a side that makes a look-up or a discard, or that has more than
+  `PEEPHOLE_LIMIT` nodes (the peephole's count, approximated by the nodes
+  the side adds). A local or a colour lane whose two sides differ becomes a
+  16-bit `Alu::Bcsel` node of the compare at the join (`Fs::node`, CSE'd).
+  A colour written on one side only takes the written side's value
+  (`nir_opt_undef`), as `walk_if` does.
+- `Fs::op` folds `fadd(fmul(a, b), fmul(a, c))` with constants `b + c = 1.0`
+  into `a` (Mesa's factoring rule). This is 68's `v * 0.5 + w * 0.5` once
+  both locals are the same select. Any other sum of constants there is
+  refused (`AlgebraicForm`).
+- `vectorise` pairs two selects of one compare in two ways. If their sources
+  are a uniform's aligned pairs, the result is one two-lane `Bcsel`
+  (`emit.rs` row `(Bcsel, 16, 2)`, `MUX.v2i16 else, then, c.h00`). If their
+  sources are constants, each lane is a one-lane select and the output word
+  is `Leaf::Pack`, `MKVEC.v2i16 x.h0, y.h0` (74). `cmp_node` makes the
+  compare once, a one-lane `FCMP` of a uniform half and a constant. Every
+  other source form is refused (`FsOperandForm`).
+
+Still refused, each by its own gap now and no longer by `ControlFlow`
+(`the_rest_of_the_control_flow_cases_are_refused_by_their_own_gaps`):
+
+- 142 unibranch: `ConstantFold`, from the arms' fp16 arithmetic. The `if`
+  itself would flatten through the same join. What is left is the
+  arithmetic: swizzled `vec4` products paired as Mesa pairs them
+  (`MKVEC.v2i16 u3.w0.h0, r3^.h1`, `FMA.v2f16 u2.w1.h10, ...`), `clamp` as
+  `.clamp_0_1`, the selects of computed pairs (`MUX.v2i16 r2, r3^, r2^,
+  r0.h00`, a lane alone `r4^.h00`), and the `IADD_IMM 0x3C003C00` /
+  `MKVEC` word for `(c.b, 1.0)`. `vectorise`'s `Bcsel` arm admits uniform
+  pairs only, so it must widen to operations.
+- 71 deadloop: `Arithmetic`, from `ceil` at fp16 (`FROUND.v2f16.rtp`) and
+  the mediump `complex_unroll` ladder (`walk_if16` still refuses a
+  non-`Plain` exit as `GuardMediump`). The call of `unused()` with its early
+  `return` has to be dropped first.
+- The corpus sources `cond_sequence` (`FsOperandForm`), `tri_if`
+  (`ColourForm`), `unibranch` (= 142) and `deadloop` (= 71) also moved from
+  `ControlFlow` to their own gaps. `frontfacing`, `texbranch` and the
+  look-up `if` of 148 keep `ControlFlow`.
+
 ### 2. branch: 148 (and the sources that keep blocks)
 
 Mesa's output keeps `nir_if`s with look-ups. The instruction shapes: an `if`
