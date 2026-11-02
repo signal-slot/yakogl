@@ -565,6 +565,40 @@ The first op is only the first: later ones (`ishr`, `ishl`, `isub`, `u2f`,
   program is the plain one. The fragment shader is a flat v4 load; the lanes
   are not constants, so the flat path applies (not the constant-lane rule of
   mali-varying-constants.md).
+- **ret_nested.vert** (intbool_retnested, 21 varying words; the position
+  program is the plain 24-word one). Made with `drm_shim_ref.sh run` and
+  `pan_ref_diff.py extract --draw`. The draw pairs the vertex shader with
+  `es100/va.frag` (a flat `v_color` read, 7 words: `LD_VAR_BUF_IMM`, two
+  `V2F32_TO_V2F16`, `ATEST`, `BLEND`): `ret_nested.frag` reads `v_coords`,
+  which the vertex shader does not write, and would not link. Mesa folds the
+  whole function: `nir_opt_loop_unroll` unrolls both counted loops (6 x 4),
+  every `i == k` is a constant, so the returns, their flags and the `if`s are
+  constants and no bool, `bcsel` or branch is left in the NIR. The result is
+  `-a` (`i = 0` flips `a` four times then once, `i = 1` flips it once more
+  and 4 times and returns `-a0` after the `j = 0` flip). The varying
+  program is `LD_ATTR_IMM` of `a_coords`, `V2F32_TO_V2F16 r0, r0, r1` (mediump
+  `f2f16` of x and y), `FADD.v2f16 r0, r0.neg, 0x0.neg` (the `fneg` of the
+  pair, written as the add of `-0` to keep the negation of a zero exact),
+  `F16_TO_F32` of lane `.h0` and `.h1`, and four `STORE.i32.estream` through
+  `SHADDX` offsets 0, 4, 8, 12: the first two store the converted lanes, the
+  third `IADD_IMM.i32 r, 0x0, #0x0` (0.0) and the fourth `IADD_IMM.i32 r, 0x0,
+  #0x3F800000` (1.0), not `MOV`. So the only constructs that reach the walk
+  are the constants and the `fneg` of an fp16 pair.
+  **What our walk does**: it lowers the same IR with `nir.rs`'s walk
+  (`IrOp::ConstBool(_) => return Err(MaliError::IntValue)`, around line
+  2100) where an unrolled `return` flag or an `i == k` is a `ConstBool`, and
+  refuses before any arithmetic is built. **Lowering needed** (item
+  ret-nested-vs): give `ConstBool(b)` the value `Val::Const(!0 or 0)` (NIR's
+  `load_const` of a 1-bit value is the mask, as `ConstI32` is its bits), and
+  fold `Bcsel` / `Iand` / `Ior` / `Inot` / `Ieq` of constant operands, and a
+  `Bcsel` with a constant condition, to the selected operand in the walk (the
+  `Bcsel` arm next to `bcsel(a, b, b)` is where the fold goes; constants must
+  be gone before `vs.alu`), so that no mask survives; then the lanes are the
+  already supported `f2f16`, `fneg` and `f2f32` plus two constant lanes. The
+  expected bytes are the 21 words of `intbool_retnested.expect.json`
+  `vs.varying`. If the unroller is not reproduced by our IR (a `return` still
+  inside a kept loop), that is the loop-break item (mali-loop-break.md), not
+  this one.
 - **tri_int**: `intloop_tri_int` (mali-int-loops.md) is the reference for its
   fp32 integer arithmetic.
 
@@ -584,7 +618,7 @@ The first op is only the first: later ones (`ishr`, `ishl`, `isub`, `u2f`,
    the consumer's `u2f` and constant multiply into the vertex shader's
    varying program, as Mesa does (intbool_89_flatlast), after item 2.
    Unblocks 89 together with it.
-5. **ret-nested-vs**: `ConstBool` in the vertex walk (ret_nested.vert); needs
-   a reference of its own.
+5. **ret-nested-vs**: `ConstBool` in the vertex walk (ret_nested.vert); the
+   reference is `intbool_retnested` (decoded above): constant folding only.
 6. loop_full and tri_discard are also blocked by control flow (the loop break
    of mali-loop-break.md, the general discard of case 81): after those items.
