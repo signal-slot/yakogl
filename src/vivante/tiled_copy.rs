@@ -23,7 +23,10 @@
 //! and a plain 2D one are sampled as they are -- except a 2D texture the
 //! vertex stage samples, which is copied too (see `wanted_vs`), and a
 //! texture with 64-bit texels (RGBA16F), which is copied into page-aligned
-//! memory (see `wide_texels`).
+//! memory (see `wide_texels`). A texture of 128-bit texels (RGBA32F/UI/I)
+//! sampled as two G32R32 planes is copied the same way, each level's R,G
+//! halves first and its B,A halves after them (see `tile_planes`;
+//! docs/notes/gc-128bit-texture-sampling.md).
 
 use crate::backend::{
     gles_texfmt_bytes, GlesDraw, GlesTextureBind, GLES_TEXTYPE_2D, GLES_TEXTYPE_2D_ARRAY, GLES_TEXTYPE_3D,
@@ -132,8 +135,36 @@ pub fn wanted(t: &GlesTextureBind) -> bool {
 /// page-aligned GEM buffer, and `etna_texture_handle_incompatible`
 /// (etnaviv_texture.c:240) resolves anything else into a TILED one. So the
 /// copy of such a texture is that: 4x4-tiled, at a page boundary.
+///
+/// And a texture of 128-bit texels the back end samples as two G32R32
+/// planes ([`super::texture::wide128_sampled`]): the planes are 64-bit
+/// texels too, and Mesa keeps such a texture TILED whatever it is bound for
+/// (etnaviv_resource.c:592-594). Only while it is sampled that way: a class
+/// the mask does not hold is sampled as the black texel, and makes no copy.
 fn wide_texels(t: &GlesTextureBind) -> bool {
-    gles_texfmt_bytes(t.format) == 8
+    gles_texfmt_bytes(t.format) == 8 || super::texture::wide128_sampled(t)
+}
+
+/// Bytes a texel of the copy takes: a 128-bit texel is two 8-byte ones, one
+/// in each plane.
+pub fn copy_bpp(t: &GlesTextureBind) -> u32 {
+    match gles_texfmt_bytes(t.format) {
+        16 => PLANE_BPP,
+        b => b,
+    }
+}
+
+/// Bytes a texel of one G32R32 plane takes.
+const PLANE_BPP: u32 = 8;
+
+/// Where level `level`'s second (B,A) plane starts, from the level's start:
+/// after the first plane's layers, `align4(w) * align4(h) * 8` bytes each --
+/// half the level, Mesa's `etna_resource_level_second_plane_offset`
+/// (etnaviv_resource.h:91-94, `size * depth / 2` of a level sized twice,
+/// etnaviv_resource.c:334-335).
+pub fn second_plane_offset(t: &GlesTextureBind, level: u32) -> usize {
+    let (lw, lh) = level_dims(t.width, t.height, level);
+    (align4(lw) * align4(lh) * PLANE_BPP) as usize * t.layers.max(1) as usize
 }
 
 /// A texture the vertex stage samples: a layered one as [`wanted`] says,
@@ -229,9 +260,50 @@ unsafe fn tile(t: &GlesTextureBind, src: *const u8, dst: *mut u8, bpp: u32) {
         let layer_linear = (pitch * lh) as usize;
         for k in 0..layers {
             let s = loff[l as usize] + k as usize * layer_linear;
+            if bpp == 16 {
+                /* the two planes of a 128-bit level, each a layer of 8-byte
+                 * texels: the level is twice the plane, so `layer_tiled` is
+                 * two plane layers and the second plane starts half-way */
+                let plane_layer = layer_tiled / 2;
+                let d0 = toff[l as usize] + k as usize * plane_layer;
+                let d1 = toff[l as usize] + second_plane_offset(t, l) + k as usize * plane_layer;
+                // SAFETY: `s` is this layer of the linear layout and `d0`, `d1`
+                // its layer of each plane, inside the level (the caller's contract).
+                unsafe { tile_planes(src.add(s), dst.add(d0), dst.add(d1), (lw, lh), tw, pitch) };
+                continue;
+            }
             let d = toff[l as usize] + k as usize * layer_tiled;
             // SAFETY: `s` and `d` are this layer in each layout (the caller's contract).
             unsafe { tile_layer(src.add(s), dst.add(d), (lw, lh), tw, pitch, bpp) };
+        }
+    }
+}
+
+/// One layer of one level of 128-bit texels, de-interleaved into the two
+/// G32R32 planes Mesa samples (etnaviv_texture_desc.c:404-415): bytes 0-7 of
+/// each texel (R, G) into `dst0`, bytes 8-15 (B, A) into `dst1`, both
+/// 4x4-tiled at 8 bytes a texel as [`tile_layer`] tiles a 64-bit layer.
+///
+/// # Safety
+/// `src` holds `lh` rows of `pitch` bytes; `dst0` and `dst1` each the
+/// `tw`-wide tiled layer of 8-byte texels.
+unsafe fn tile_planes(src: *const u8, dst0: *mut u8, dst1: *mut u8, (lw, lh): (u32, u32), tw: u32, pitch: u32) {
+    for ty in 0..lh.div_ceil(4) {
+        for tx in 0..lw.div_ceil(4) {
+            let x0 = tx * 4;
+            let n = (lw - x0).min(4);
+            let tile = ((ty * (tw / 4) + tx) * 16 * PLANE_BPP) as usize;
+            for r in 0..(lh - ty * 4).min(4) {
+                let from = ((ty * 4 + r) * pitch + x0 * 16) as usize;
+                let to = tile + (r * 4 * PLANE_BPP) as usize;
+                for i in 0..n as usize {
+                    // SAFETY: texel i of the run, inside each layout (the caller's contract).
+                    unsafe {
+                        core::ptr::copy_nonoverlapping(src.add(from + i * 16), dst0.add(to + i * 8), 8);
+                        core::ptr::copy_nonoverlapping(src.add(from + i * 16 + 8), dst1.add(to + i * 8), 8);
+                    }
+                }
+            }
         }
     }
 }
@@ -432,7 +504,10 @@ pub fn lookup(t: &GlesTextureBind, kick: u32) -> Option<(u64, [usize; 16], u32)>
     e.used_by = kick;
     let bpp = gles_texfmt_bytes(t.format);
     let (off, _) = tiled_layout(t.width, t.height, t.layers.max(1) as u32, t.mip_levels as u32, bpp);
-    let slice = align4(t.width) * align4(t.height) * bpp;
+    /* a 128-bit texture's layer step is one plane's: each plane is a stack of
+     * G32R32 layers (Mesa's layer_stride of the 64-bit twin,
+     * etnaviv_resource.c:315-331) */
+    let slice = align4(t.width) * align4(t.height) * copy_bpp(t);
     Some((e.gpu, off, slice))
 }
 
@@ -501,6 +576,58 @@ mod tests {
                 assert_eq!(got, want, "{lw}x{lh}, {bpp} bytes a texel");
             }
         }
+    }
+
+    /// A 128-bit texel's R,G half lands in plane 0 and its B,A half in plane
+    /// 1, each where the 64-bit tiled copy puts an 8-byte texel.
+    #[test]
+    fn a_128_bit_layer_splits_into_two_tiled_g32r32_planes() {
+        for (lw, lh) in [(8u32, 8u32), (17, 13), (1, 1), (5, 3), (2, 7)] {
+            let tw = align4(lw);
+            let pitch = (lw + 1) * 16;
+            let src = pattern((pitch * lh) as usize);
+            let (mut rg, mut ba) = (std::vec![0u8; (pitch * lh) as usize], std::vec![0u8; (pitch * lh) as usize]);
+            for y in 0..lh {
+                for x in 0..lw {
+                    let s = (y * pitch + x * 16) as usize;
+                    let d = (y * pitch / 2 + x * 8) as usize;
+                    rg[d..d + 8].copy_from_slice(&src[s..s + 8]);
+                    ba[d..d + 8].copy_from_slice(&src[s + 8..s + 16]);
+                }
+            }
+            let layer = (tw * align4(lh) * 8) as usize;
+            let (mut want0, mut want1) = (std::vec![0u8; layer], std::vec![0u8; layer]);
+            tile_layer_by_texel(&rg, &mut want0, (lw, lh), tw, pitch / 2, 8);
+            tile_layer_by_texel(&ba, &mut want1, (lw, lh), tw, pitch / 2, 8);
+            let (mut got0, mut got1) = (std::vec![0u8; layer], std::vec![0u8; layer]);
+            // SAFETY: `src` holds `lh` rows of `pitch` bytes, each plane the tiled layer.
+            unsafe { tile_planes(src.as_ptr(), got0.as_mut_ptr(), got1.as_mut_ptr(), (lw, lh), tw, pitch) };
+            assert_eq!((got0, got1), (want0, want1), "{lw}x{lh}");
+        }
+    }
+
+    /// A 128-bit chain is the 64-bit twin's chain with each level twice as
+    /// long: plane 0's layers, then plane 1's, the second half-way into the
+    /// level (Mesa's second_plane_offset), every level on 64 bytes.
+    #[test]
+    fn a_128_bit_level_holds_its_two_planes_half_and_half() {
+        let t = GlesTextureBind {
+            width: 16,
+            height: 8,
+            layers: 6,
+            mip_levels: 5,
+            format: crate::backend::GLES_TEXFMT_RGBA32F,
+            ..GlesTextureBind::ZERO
+        };
+        let (off, total) = tiled_layout(16, 8, 6, 5, 16);
+        for l in 0..5u32 {
+            let (lw, lh) = level_dims(16, 8, l);
+            let plane = (align4(lw) * align4(lh) * 8 * 6) as usize;
+            assert_eq!(second_plane_offset(&t, l), plane, "level {l}");
+            let end = if l < 4 { off[l as usize + 1] } else { total };
+            assert_eq!(end - off[l as usize], 2 * plane, "level {l}: two planes and nothing else");
+        }
+        assert_eq!(copy_bpp(&t), 8, "the planes' texel");
     }
 
     #[test]
