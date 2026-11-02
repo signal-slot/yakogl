@@ -179,6 +179,73 @@ class Sweeps(Fixture):
             self.run_tool(corpus(), "--cases", "x")
 
 
+class Generated(unittest.TestCase):
+    """Cases 149 and 166 build their GLSL with snprintf in gl_test.c."""
+    FILES = {"gl_test_vsunits_fs_src": "gltest/vsunits_fs.frag", "gl_test_fshp_vs_src": "gltest/fshp_vs.vert"}
+    CORP = {"tools/shaders/gltest/vsunits_fs.frag": "ok", "tools/shaders/gltest/fshp_vs.vert": "ok"}
+    OK = {n: "ok" for texts, _ in sp.GENERATED.values() for n in texts}
+
+    def judge(self, num, gen, symbols=None):
+        return sp.judge(num, symbols or {}, self.FILES, self.CORP, gen)
+
+    def test_checked_in_sources_are_what_the_generators_make(self):
+        for texts, _ in sp.GENERATED.values():
+            for name, text in texts.items():
+                with open(os.path.join(sp.TESTDATA, name)) as f:
+                    self.assertEqual(f.read(), text, name)
+
+    def test_generators_follow_gl_test_c(self):
+        with open(os.path.join(sp.ROOT, "driver/tools/pvrlab/gl_test.c")) as f:
+            c = f.read()
+        for needle in (
+                '"uniform sampler2D u_s%d;\\n"', '"    r += u_w[%d].%c * texture2DLod(u_s%d, c, 0.0);\\n"',
+                '"    r += u_w[%d].%c * texture2D(u_s%d, c);\\n"', '"    r += u_p[%d].%c * u_p[%d];\\n"',
+                '"    vec4 r = u_p[%d].%c * vec4(1.0, 0.0, 1.0, 1.0);\\n"',
+                "#define SHP_SEL0 56", "#define SHP_MAX_VEC4 70", "#define SHP_SEL_CONST 9",
+                "shp_idx[] = { 0, 32, 60, 63, 64, 65, 66, 67, 69 }", "#define FSHP_UNITS 16",
+                "#define VSU_UNITS 16"):
+            self.assertIn(needle, c)
+
+    def test_every_generated_source_has_a_verdict(self):
+        self.assertEqual(set(sp.gen_verdicts()), set(self.OK))
+
+    def test_generated_text_shapes(self):
+        self.assertEqual(sp.vsunits_vs(1).count("texture2DLod"), 1)
+        self.assertIn("r += u_w[3].w * texture2DLod(u_s15, c, 0.0);\n", sp.vsunits_vs(16))
+        self.assertIn("uniform vec4 u_p[70];\n", sp.shp_frag(70))
+        self.assertNotIn(" * u_p[64];", sp.shp_frag(64))
+        self.assertIn(" * u_p[69];", sp.shp_frag(70))
+
+    def test_case_with_no_symbol_but_generated_sources_is_judged(self):
+        self.assertEqual(self.judge(166, self.OK), (True, ""))
+
+    def test_a_refused_generated_source_keeps_the_case_refused(self):
+        gen = dict(self.OK, **{"sweepgen_149_vs.vert": "Valhall: x is not lowered yet"})
+        ok, why = self.judge(149, gen)
+        self.assertFalse(ok)
+        self.assertEqual(why, "tools/mali/testdata/sweepgen_149_vs.vert: Valhall: x is not lowered yet")
+
+    def test_a_generated_source_without_a_verdict_keeps_the_case_refused(self):
+        ok, why = self.judge(166, {})
+        self.assertFalse(ok)
+        self.assertIn("sweepgen_166_a.frag is not in sweepgen-verdicts.txt", why)
+
+    def test_the_static_shader_of_the_pair_is_still_judged(self):
+        sp_corp = dict(self.CORP, **{"tools/shaders/gltest/fshp_vs.vert": "Valhall: y"})
+        ok, why = sp.judge(166, {}, self.FILES, sp_corp, self.OK)
+        self.assertFalse(ok)
+        self.assertEqual(why, "tools/shaders/gltest/fshp_vs.vert: Valhall: y")
+
+    def test_the_tip_record_no_longer_says_built_at_run_time(self):
+        rec = os.path.join(sp.ROOT, "tools/cts/log/2026-10-28-final")
+        if not os.path.isdir(rec):
+            self.skipTest("no tools/cts/log/2026-10-28-final")
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(sp.main([rec]), 0)
+        self.assertNotIn("built at run time", out.getvalue())
+
+
 class Parsers(unittest.TestCase):
     def test_line_format_keeps_head_and_spacing(self):
         m = sp.LINE.match(P + "12 name: REFUSED compile: x")
