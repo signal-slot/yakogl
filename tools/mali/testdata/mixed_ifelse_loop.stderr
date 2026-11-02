@@ -1,0 +1,1151 @@
+MESA: debug: pandecode: dump command stream to file .scratch-ifelse.trace.python3.ctx-0.0000
+shader: MESA_SHADER_VERTEX
+source_blake3: {0x685d8b18, 0x7a52b34a, 0xd633d1d3, 0xf6361ce2, 0x3591d056, 0x65a0000c, 0x0d17c76d, 0xe034461d}
+name: GLSL1
+next_stage: MESA_SHADER_FRAGMENT
+num_ubos: 2
+inputs_read: 15
+outputs_written: 0
+max_subgroup_size: 128
+min_subgroup_size: 1
+api_subgroup_size_draw_uniform: true
+first_ubo_is_default_ubo: true
+known_interpolation_qualifiers: true
+flrp_lowered: true
+inputs: 1
+outputs: 1
+decl_var shader_in INTERP_MODE_NONE none highp vec4 a_pos (VERT_ATTRIB_GENERIC0.xyzw, 0, 0)
+decl_var shader_out INTERP_MODE_NONE none highp vec4 gl_Position (VARYING_SLOT_POS.xyzw, 0, 0)
+decl_function main () (entrypoint)
+
+impl main {
+    block b0:   // preds:
+    32     %0 = load_const (0x00000000)
+    32x4   %1 = @load_input (%0 (0x0)) (base=16777216, range=1, component=0, dest_type=float32, io location=VERT_ATTRIB_GENERIC0 slots=1)  // a_pos
+    32     %2 = frcp %1.w
+    32     %3 = load_const (0xc7000000 = -32768.000000)
+    32     %4 = fmax %2, %3 (-32768.000000)
+    32     %5 = load_const (0x47000000 = 32768.000000)
+    32     %6 = fmin %4, %5 (32768.000000)
+    32     %7 = fmul %1.x, %6
+    32     %8 = fmul %1.y, %6
+    32     %9 = fmul %1.z, %6
+    32    %10 = load_const (0x00000001 = 0.000000)
+    32x3  %11 = @load_ubo (%10 (0x1), %0 (0x0)) (access=none, align_mul=1073741824, align_offset=0, range_base=0, range=4)
+    32    %12 = load_const (0x00000010 = 16)
+    32x3  %13 = @load_ubo (%10 (0x1), %12 (0x10)) (access=none, align_mul=1073741824, align_offset=16, range_base=0, range=4)
+    32    %14 = ffma %7, %11.x, %13.x
+    32    %15 = ffma %8, %11.y, %13.y
+    32    %16 = ffma %9, %11.z, %13.z
+    32    %17 = @load_idvs_output_buf_index_pan
+    32    %18 = load_const (0x3d000000 = 0.031250 = 1023410176)
+    32x2  %19 = @lea_buf_pan (%18 (0x3d000000), %17)
+    64    %20 = pack_64_2x32 %19
+                @store_global (%14, %20) (wrmask=x, access=istream-pan, align_mul=4, align_offset=0)
+    64    %21 = load_const (0x0000000000000004)
+    64    %22 = iadd %21 (0x4), %20
+                @store_global (%15, %22) (wrmask=x, access=istream-pan, align_mul=4, align_offset=0)
+    64    %23 = load_const (0x0000000000000008)
+    64    %24 = iadd %23 (0x8), %20
+                @store_global (%16, %24) (wrmask=x, access=istream-pan, align_mul=4, align_offset=0)
+    64    %25 = load_const (0x000000000000000c = 12)
+    64    %26 = iadd %25 (0xc), %20
+                @store_global (%6, %26) (wrmask=x, access=istream-pan, align_mul=4, align_offset=0)
+                // succs: b1
+    block b1:
+}
+
+block0 {
+32      %44 = MOV.i32 r59
+32      %29 = MOV.i32 r61
+32      %28 = MOV.i32 r60
+32x4    %1 = LD_ATTR_IMM.table1.f32.v4 %28^, %29^, attribute_index:0
+32      %30, %31, %32, %33 = SPLIT.i32 %1^
+32      %2 = FRCP.f32 %33^
+32      %4 = FMAX.f32.nan_suppress %2^, u3
+32      %6 = FMIN.f32.nan_suppress %4^, u3[1]
+32      %7 = FMA.f32 %30^, %6, u256.neg
+32      %8 = FMA.f32 %31^, %6, u256.neg
+32      %9 = FMA.f32 %32^, %6, u256.neg
+32      %14 = FMA.f32 %7^, u0, u0[1]
+32      %15 = FMA.f32 %8^, u1, u1[1]
+32      %16 = FMA.f32 %9^, u2, u2[1]
+32x2    %19 = LEA_BUF_IMM.table13 %44^
+32      %46, %47 = SPLIT.i32 %19^
+        STORE.i32 %14^, %46, %47, byte_offset:0
+32x2    %52 = COLLECT.i32 u4, u256 
+32x2    %55 = COLLECT.i32 %46^, %47^ 
+32x2    %22 = SHADDX.s64 %52^, %55, shift:0
+32      %56, %57 = SPLIT.i32 %22^
+        STORE.i32 %15^, %56^, %57^, byte_offset:0
+32x2    %62 = COLLECT.i32 u4[1], u256 
+32x2    %24 = SHADDX.s64 %62^, %55, shift:0
+32      %66, %67 = SPLIT.i32 %24^
+        STORE.i32 %16^, %66^, %67^, byte_offset:0
+32x2    %72 = COLLECT.i32 u5, u256 
+32x2    %26 = SHADDX.s64 %72^, %55^, shift:0
+32      %76, %77 = SPLIT.i32 %26^
+        STORE.i32 %6^, %76^, %77^, byte_offset:0
+}
+
+block0 {
+        r0:r1:r2:r3 = LD_ATTR_IMM.table1.f32.v4 r60, r61, attribute_index:0
+        r3 = FRCP.f32 r3
+        r3 = FMAX.f32.nan_suppress r3, u3
+        r3 = FMIN.f32.nan_suppress r3, u3[1]
+        r0 = FMA.f32 r0, r3, u256.neg
+        r1 = FMA.f32 r1, r3, u256.neg
+        r2 = FMA.f32 r2, r3, u256.neg
+        r0 = FMA.f32 r0, u0, u0[1]
+        r1 = FMA.f32 r1, u1, u1[1]
+        r2 = FMA.f32 r2, u2, u2[1]
+        r4:r5 = LEA_BUF_IMM.table13 r59
+        STORE.i32 r0, r4, r5, byte_offset:0
+        r6 = MOV.i32 u4
+        r7 = MOV.i32 u256
+        r6:r7 = SHADDX.s64 r6:r7, r4:r5, shift:0
+        STORE.i32 r1, r6, r7, byte_offset:0
+        r0 = MOV.i32 u4[1]
+        r1 = MOV.i32 u256
+        r0:r1 = SHADDX.s64 r0:r1, r4:r5, shift:0
+        STORE.i32 r2, r0, r1, byte_offset:0
+        r0 = MOV.i32 u5
+        r1 = MOV.i32 u256
+        r0:r1 = SHADDX.s64 r0:r1, r4:r5, shift:0
+        STORE.i32 r3, r0, r1, byte_offset:0
+}
+
+block0 {
+        r0:r1:r2:r3 = LD_ATTR_IMM.table1.flow1.f32.v4 r60^, r61^, attribute_index:0
+        r3 = FRCP.f32 r3^
+        r3 = FMAX.f32.nan_suppress r3^, u3
+        r3 = FMIN.f32.nan_suppress r3^, u3[1]
+        r0 = FMA.f32 r0^, r3, u256.neg
+        r1 = FMA.f32 r1^, r3, u256.neg
+        r2 = FMA.f32 r2^, r3, u256.neg
+        r0 = FMA.f32 r0^, u0, u0[1]
+        r1 = FMA.f32 r1^, u1, u1[1]
+        r2 = FMA.f32 r2^, u2, u2[1]
+        r4:r5 = LEA_BUF_IMM.table13.flow2 r59^
+        STORE.i32 r0, r4, r5, byte_offset:0
+        r6 = MOV.i32 u4
+        r7 = MOV.i32 u256
+        r6:r7 = SHADDX.s64.flow4 r6:r7^, r4:r5, shift:0
+        STORE.i32 r1, r6^, r7^, byte_offset:0
+        r0 = MOV.i32 u4[1]
+        r1 = MOV.i32 u256
+        r0:r1 = SHADDX.s64.flow1 r0:r1^, r4:r5, shift:0
+        STORE.i32 r2, r0^, r1^, byte_offset:0
+        r0 = MOV.i32 u5
+        r1 = MOV.i32 u256
+        r0:r1 = SHADDX.s64.flow2 r0:r1^, r4:r5^, shift:0
+        STORE.i32.flow15 r3, r0^, r1^, byte_offset:0
+}
+
+   LD_ATTR_IMM.v4.f32.slot0.wait0 @r0:r1:r2:r3, r60^, r61^, index:0x0, table:0x1
+   FRCP.f32 r3, r3^
+   FMAX.f32 r3, r3^, u3.w0
+   FMIN.f32 r3, r3^, u3.w1
+   FMA.f32 r0, r0^, r3, 0x0.neg
+   FMA.f32 r1, r1^, r3, 0x0.neg
+   FMA.f32 r2, r2^, r3, 0x0.neg
+   FMA.f32 r0, r0^, u0.w0, u0.w1
+   FMA.f32 r1, r1^, u1.w0, u1.w1
+   FMA.f32 r2, r2^, u2.w0, u2.w1
+   LEA_BUF_IMM.slot1.wait1 @r4:r5, r59^, table:0xD, index:0x0
+   STORE.i32.istream.slot2 @r0, [r4:r5], offset:0
+   MOV.i32 r6, u4.w0
+   MOV.i32 r7, 0x0
+   SHADDX.s64.wait2 [r6:r7], [r6^:r7^], [r4:r5], shift:0x0
+   STORE.i32.istream.slot0 @r1, [r6^:r7^], offset:0
+   MOV.i32 r0, u4.w1
+   MOV.i32 r1, 0x0
+   SHADDX.s64.wait0 [r0:r1], [r0^:r1^], [r4:r5], shift:0x0
+   STORE.i32.istream.slot1 @r2, [r0^:r1^], offset:0
+   MOV.i32 r0, u5.w0
+   MOV.i32 r1, 0x0
+   SHADDX.s64.wait1 [r0:r1], [r0^:r1^], [r4^:r5^], shift:0x0
+   STORE.i32.istream.slot2.end @r3, [r0^:r1^], offset:0
+
+MESA_SHADER_POSITION shader: 24 instrs, 6.000000 cycles, 0.093750 fma, 0.218750 cvt, 0.062500 sfu, 0.328125 alu, 0.000000 v, 0.000000 t, 6.000000 ls, 256 code size, 2 threads, 0 loops, 0:0 spills:fills, 0 spill cost, 11 registers used, 6 uniforms used
+shader: MESA_SHADER_VERTEX
+source_blake3: {0x685d8b18, 0x7a52b34a, 0xd633d1d3, 0xf6361ce2, 0x3591d056, 0x65a0000c, 0x0d17c76d, 0xe034461d}
+name: GLSL1
+next_stage: MESA_SHADER_FRAGMENT
+num_ubos: 2
+inputs_read: 15
+outputs_written: 0
+max_subgroup_size: 128
+min_subgroup_size: 1
+api_subgroup_size_draw_uniform: true
+first_ubo_is_default_ubo: true
+known_interpolation_qualifiers: true
+flrp_lowered: true
+inputs: 1
+outputs: 1
+decl_var shader_in INTERP_MODE_NONE none highp vec4 a_pos (VERT_ATTRIB_GENERIC0.xyzw, 0, 0)
+decl_var shader_out INTERP_MODE_NONE none highp vec4 gl_Position (VARYING_SLOT_POS.xyzw, 0, 0)
+decl_function main () (entrypoint)
+
+impl main {
+    block b0:  // preds:, succs: b1
+    block b1:
+}
+
+block0 {
+}
+
+block0 {
+}
+
+block0 {
+}
+
+
+MESA_SHADER_VARYING shader: 0 instrs, 0.000000 cycles, 0.000000 fma, 0.000000 cvt, 0.000000 sfu, 0.000000 alu, 0.000000 v, 0.000000 t, 0.000000 ls, 0 code size, 2 threads, 0 loops, 0:0 spills:fills, 0 spill cost, 0 registers used, 0 uniforms used
+shader: MESA_SHADER_FRAGMENT
+source_blake3: {0xa86407f4, 0xad5ddf5b, 0x32b2ce21, 0x5cd50d93, 0x59544d15, 0xa4ce05fc, 0x6b8793e1, 0xbfdde8aa}
+name: GLSL1
+prev_stage: MESA_SHADER_VERTEX
+num_ubos: 2
+outputs_written: 4-11
+max_subgroup_size: 128
+min_subgroup_size: 1
+api_subgroup_size_draw_uniform: true
+bit_sizes_float: 0x20
+bit_sizes_int: 0x21
+first_ubo_is_default_ubo: true
+known_interpolation_qualifiers: true
+flrp_lowered: true
+outputs: 8
+uniforms: 3
+decl_var uniform INTERP_MODE_NONE none highp vec4 u_a (0, 0, 0)
+decl_var uniform INTERP_MODE_NONE none highp vec4 u_b (1, 4, 0)
+decl_var uniform INTERP_MODE_NONE none mediump int u_n (2, 8, 0)
+decl_var shader_out INTERP_MODE_NONE none mediump vec4 gl_FragData[0] (FRAG_RESULT_DATA0.xyzw, 0, 0)
+decl_var shader_out INTERP_MODE_NONE none vec4 gl_FragData[1] (FRAG_RESULT_DATA1.xyzw, 1, 0)
+decl_var shader_out INTERP_MODE_NONE none vec4 gl_FragData[2] (FRAG_RESULT_DATA2.xyzw, 2, 0)
+decl_var shader_out INTERP_MODE_NONE none vec4 gl_FragData[3] (FRAG_RESULT_DATA3.xyzw, 3, 0)
+decl_var shader_out INTERP_MODE_NONE none vec4 gl_FragData[4] (FRAG_RESULT_DATA4.xyzw, 4, 0)
+decl_var shader_out INTERP_MODE_NONE none vec4 gl_FragData[5] (FRAG_RESULT_DATA5.xyzw, 5, 0)
+decl_var shader_out INTERP_MODE_NONE none vec4 gl_FragData[6] (FRAG_RESULT_DATA6.xyzw, 6, 0)
+decl_var shader_out INTERP_MODE_NONE none vec4 gl_FragData[7] (FRAG_RESULT_DATA7.xyzw, 7, 0)
+decl_var ubo INTERP_MODE_NONE none vec4[3] uniform_0 (0, 0, 0)
+decl_function main () (entrypoint)
+
+impl main {
+    block b0:    // preds:
+    32      %0 = load_const (0x00000000 = 0.000000)
+    32      %1 = load_const (0x00000020 = 32)
+    32      %2 = @load_ubo (%0 (0x0), %1 (0x20)) (access=none, align_mul=1073741824, align_offset=32, range_base=32, range=4)
+    32      %3 = ilt_pan %0 (0x0), %2
+                 // succs: b1 b14
+    if %3 {
+        block b1:    // preds: b0
+        32x4    %4 = @load_ubo (%0 (0x0), %0 (0x0)) (access=none, align_mul=1073741824, align_offset=0, range_base=0, range=16)
+        32      %5 = load_const (0x00000010 = 16)
+        32x4    %6 = @load_ubo (%0 (0x0), %5 (0x10)) (access=none, align_mul=1073741824, align_offset=16, range_base=16, range=16)
+        32      %7 = fmul %4.x, %6.x
+        32      %8 = fmul %4.y, %6.y
+        32      %9 = fmul %4.z, %6.z
+        32     %10 = fmul %4.w, %6.w
+        32     %11 = fneg %6.y
+        32     %12 = fneg %6.z
+        32     %13 = fneg %6.w
+        32     %14 = fneg %6.x
+        32     %15 = flt_pan %0 (0.000000), %4.x // preserve:inf
+        32     %16 = bcsel_pan %15, %7, %11
+        32     %17 = bcsel_pan %15, %8, %12
+        32     %18 = bcsel_pan %15, %9, %13
+        32     %19 = bcsel_pan %15, %10, %14
+        32     %20 = load_const (0x00000001)
+        32     %21 = ilt_pan %20 (0x1), %2
+                     // succs: b2 b12
+        if %21 {
+            block b2:    // preds: b1
+            32     %22 = load_const (0x3f800000 = 1.000000)
+            32     %23 = flt_pan %22 (1.000000), %4.x // preserve:inf
+            32     %24 = bcsel_pan %23, %7, %11
+            32     %25 = fadd %16, %24
+            32     %26 = bcsel_pan %23, %8, %12
+            32     %27 = fadd %17, %26
+            32     %28 = bcsel_pan %23, %9, %13
+            32     %29 = fadd %18, %28
+            32     %30 = bcsel_pan %23, %10, %14
+            32     %31 = fadd %19, %30
+            32     %32 = load_const (0x00000002)
+            32     %33 = ilt_pan %32 (0x2), %2
+                         // succs: b3 b10
+            if %33 {
+                block b3:    // preds: b2
+                32     %34 = load_const (0x40000000 = 2.000000)
+                32     %35 = flt_pan %34 (2.000000), %4.x // preserve:inf
+                32     %36 = bcsel_pan %35, %7, %11
+                32     %37 = fadd %25, %36
+                32     %38 = bcsel_pan %35, %8, %12
+                32     %39 = fadd %27, %38
+                32     %40 = bcsel_pan %35, %9, %13
+                32     %41 = fadd %29, %40
+                32     %42 = bcsel_pan %35, %10, %14
+                32     %43 = fadd %31, %42
+                32     %44 = load_const (0x00000003)
+                32     %45 = ilt_pan %44 (0x3), %2
+                             // succs: b4 b8
+                if %45 {
+                    block b4:    // preds: b3
+                    32     %46 = load_const (0x40400000 = 3.000000)
+                    32     %47 = flt_pan %46 (3.000000), %4.x // preserve:inf
+                    32     %48 = bcsel_pan %47, %7, %11
+                    32     %49 = fadd %37, %48
+                    32     %50 = bcsel_pan %47, %8, %12
+                    32     %51 = fadd %39, %50
+                    32     %52 = bcsel_pan %47, %9, %13
+                    32     %53 = fadd %41, %52
+                    32     %54 = bcsel_pan %47, %10, %14
+                    32     %55 = fadd %43, %54
+                    32     %56 = load_const (0x00000004)
+                    32     %57 = ilt_pan %56 (0x4), %2
+                                 // succs: b5 b6
+                    if %57 {
+                        block b5:    // preds: b4
+                        32     %58 = load_const (0x40800000 = 4.000000)
+                        32     %59 = flt_pan %58 (4.000000), %4.x // preserve:inf
+                        32     %60 = bcsel_pan %59, %7, %11
+                        32     %61 = fadd %49, %60
+                        32     %62 = bcsel_pan %59, %8, %12
+                        32     %63 = fadd %51, %62
+                        32     %64 = bcsel_pan %59, %9, %13
+                        32     %65 = fadd %53, %64
+                        32     %66 = bcsel_pan %59, %10, %14
+                        32     %67 = fadd %55, %66
+                        32     %68 = load_const (0x40a00000 = 5.000000)
+                        32     %69 = flt_pan %68 (5.000000), %4.x // preserve:inf
+                        32     %70 = bcsel_pan %69, %7, %11
+                        32     %71 = fadd %61, %70
+                        32     %72 = bcsel_pan %69, %8, %12
+                        32     %73 = fadd %63, %72
+                        32     %74 = bcsel_pan %69, %9, %13
+                        32     %75 = fadd %65, %74
+                        32     %76 = bcsel_pan %69, %10, %14
+                        32     %77 = fadd %67, %76
+                        32     %78 = load_const (0x40c00000 = 6.000000)
+                        32     %79 = flt_pan %78 (6.000000), %4.x // preserve:inf
+                        32     %80 = bcsel_pan %79, %7, %11
+                        32     %81 = fadd %71, %80
+                        32     %82 = bcsel_pan %79, %8, %12
+                        32     %83 = fadd %73, %82
+                        32     %84 = bcsel_pan %79, %9, %13
+                        32     %85 = fadd %75, %84
+                        32     %86 = bcsel_pan %79, %10, %14
+                        32     %87 = fadd %77, %86
+                        32     %88 = load_const (0x40e00000 = 7.000000)
+                        32     %89 = flt_pan %88 (7.000000), %4.x // preserve:inf
+                        32     %90 = bcsel_pan %89, %7, %11
+                        32     %91 = fadd %81, %90
+                        32     %92 = bcsel_pan %89, %8, %12
+                        32     %93 = fadd %83, %92
+                        32     %94 = bcsel_pan %89, %9, %13
+                        32     %95 = fadd %85, %94
+                        32     %96 = bcsel_pan %89, %10, %14
+                        32     %97 = fadd %87, %96
+                        32     %98 = load_const (0x00000007)
+                        32     %99 = ilt_pan %98 (0x7), %2
+                        32    %100 = bcsel_pan %99, %91, %81
+                        32    %101 = bcsel_pan %99, %93, %83
+                        32    %102 = bcsel_pan %99, %95, %85
+                        32    %103 = bcsel_pan %99, %97, %87
+                        32    %104 = load_const (0x00000006)
+                        32    %105 = ilt_pan %104 (0x6), %2
+                        32    %106 = bcsel_pan %105, %100, %71
+                        32    %107 = bcsel_pan %105, %101, %73
+                        32    %108 = bcsel_pan %105, %102, %75
+                        32    %109 = bcsel_pan %105, %103, %77
+                        32    %110 = load_const (0x00000005)
+                        32    %111 = ilt_pan %110 (0x5), %2
+                        32    %112 = bcsel_pan %111, %106, %61
+                        32    %113 = bcsel_pan %111, %107, %63
+                        32    %114 = bcsel_pan %111, %108, %65
+                        32    %115 = bcsel_pan %111, %109, %67
+                                     // succs: b7
+                    } else {
+                        block b6:  // preds: b4, succs: b7
+                    }
+                    block b7:    // preds: b5 b6
+                    32    %116 = phi b5: %112, b6: %49
+                    32    %117 = phi b5: %113, b6: %51
+                    32    %118 = phi b5: %114, b6: %53
+                    32    %119 = phi b5: %115, b6: %55
+                                 // succs: b9
+                } else {
+                    block b8:  // preds: b3, succs: b9
+                }
+                block b9:    // preds: b7 b8
+                32    %120 = phi b7: %116, b8: %37
+                32    %121 = phi b7: %117, b8: %39
+                32    %122 = phi b7: %118, b8: %41
+                32    %123 = phi b7: %119, b8: %43
+                             // succs: b11
+            } else {
+                block b10:  // preds: b2, succs: b11
+            }
+            block b11:   // preds: b9 b10
+            32    %124 = phi b9: %120, b10: %25
+            32    %125 = phi b9: %121, b10: %27
+            32    %126 = phi b9: %122, b10: %29
+            32    %127 = phi b9: %123, b10: %31
+                         // succs: b13
+        } else {
+            block b12:  // preds: b1, succs: b13
+        }
+        block b13:   // preds: b11 b12
+        32    %128 = phi b11: %124, b12: %16
+        32    %129 = phi b11: %125, b12: %17
+        32    %130 = phi b11: %126, b12: %18
+        32    %131 = phi b11: %127, b12: %19
+                     // succs: b15
+    } else {
+        block b14:  // preds: b0, succs: b15
+    }
+    block b15:   // preds: b13 b14
+    32    %132 = phi b13: %128, b14: %0 (0x0)
+    32    %133 = phi b13: %129, b14: %0 (0x0)
+    32    %134 = phi b13: %130, b14: %0 (0x0)
+    32    %135 = phi b13: %131, b14: %0 (0x0)
+    16    %136 = f2f16 %132
+    16    %137 = f2f16 %133
+    16    %138 = f2f16 %134
+    16    %139 = f2f16 %135
+    32    %140 = @load_cumulative_coverage_pan
+    32    %141 = @atest_pan (%140, %139)
+    64    %142 = @load_blend_descriptor_pan (base=0)
+    16x4  %143 = vec4 %136, %137, %138, %139
+                 @blend_pan (%141, %142, %143) (io location=FRAG_RESULT_DATA0 slots=1, src_type=float16)
+                 // succs: b16
+    block b16:
+}
+
+block0 {
+32      %170 = MOV.i32 r60
+32      %3 = ICMP_OR.s32.lt.m1 u256, u6, u256
+        BRANCHZ.i16.eq %3^.h00, u256 -> block14
+} -> block14 block1 
+
+block1 {
+32      %177 = MOV.i32 u256
+32      %7 = FMA.f32 u2, u2[1], %177.neg
+32      %8 = FMA.f32 u3, u3[1], %177.neg
+32      %9 = FMA.f32 u4, u4[1], %177.neg
+32      %10 = FMA.f32 u5, u5[1], %177.neg
+32      %11 = FADD.f32 u3[1].neg, u256.neg
+32      %12 = FADD.f32 u4[1].neg, u256.neg
+32      %13 = FADD.f32 u5[1].neg, u256.neg
+32      %14 = FADD.f32 u2[1].neg, u256.neg
+32      %15 = FCMP_OR.f32.lt.m1 u256, u2, u256
+32      %16 = CSEL.u32.eq %15, u256, %11, %7
+32      %17 = CSEL.u32.eq %15, u256, %12, %8
+32      %18 = CSEL.u32.eq %15, u256, %13, %9
+32      %19 = CSEL.u32.eq %15^, u256, %14, %10
+32      %21 = ICMP_OR.s32.lt.m1 u258.b3, u6, %177^
+        BRANCHZ.i16.eq %21^.h00, u256 -> block12
+} -> block12 block2  from block0
+
+block2 {
+32      %182 = MOV.i32 u256
+32      %23 = FCMP_OR.f32.lt.m1 u264, u2, %182
+32      %24 = CSEL.u32.eq %23, u256, %11, %7
+32      %25 = FADD.f32 %16^, %24^
+32      %26 = CSEL.u32.eq %23, u256, %12, %8
+32      %27 = FADD.f32 %17^, %26^
+32      %28 = CSEL.u32.eq %23, u256, %13, %9
+32      %29 = FADD.f32 %18^, %28^
+32      %30 = CSEL.u32.eq %23^, u256, %14, %10
+32      %31 = FADD.f32 %19^, %30^
+32      %33 = ICMP_OR.s32.lt.m1 u260.b2, u6, %182^
+        BRANCHZ.i16.eq %33^.h00, u256 -> block10
+} -> block10 block3  from block1
+
+block3 {
+32      %184 = MOV.i32 u256
+32      %35 = FCMP_OR.f32.lt.m1 u270, u2, %184
+32      %36 = CSEL.u32.eq %35, u256, %11, %7
+32      %37 = FADD.f32 %25^, %36^
+32      %38 = CSEL.u32.eq %35, u256, %12, %8
+32      %39 = FADD.f32 %27^, %38^
+32      %40 = CSEL.u32.eq %35, u256, %13, %9
+32      %41 = FADD.f32 %29^, %40^
+32      %42 = CSEL.u32.eq %35^, u256, %14, %10
+32      %43 = FADD.f32 %31^, %42^
+32      %45 = ICMP_OR.s32.lt.m1 u260.b3, u6, %184^
+        BRANCHZ.i16.eq %45^.h00, u256 -> block8
+} -> block8 block4  from block2
+
+block4 {
+32      %186 = MOV.i32 u2
+32      %47 = FCMP_OR.f32.lt.m1 u6[1], %186^, u256
+32      %48 = CSEL.u32.eq %47, u256, %11, %7
+32      %49 = FADD.f32 %37^, %48^
+32      %50 = CSEL.u32.eq %47, u256, %12, %8
+32      %51 = FADD.f32 %39^, %50^
+32      %52 = CSEL.u32.eq %47, u256, %13, %9
+32      %53 = FADD.f32 %41^, %52^
+32      %54 = CSEL.u32.eq %47^, u256, %14, %10
+32      %55 = FADD.f32 %43^, %54^
+32      %187 = MOV.i32 u256
+32      %57 = ICMP_OR.s32.lt.m1 u260[1].b0, u6, %187^
+        BRANCHZ.i16.eq %57^.h00, u256 -> block6
+} -> block6 block5  from block3
+
+block5 {
+32      %188 = MOV.i32 u256
+32      %59 = FCMP_OR.f32.lt.m1 u270[1].h11, u2, %188
+32      %60 = CSEL.u32.eq %59, u256, %11, %7
+32      %61 = FADD.f32 %49^, %60^
+32      %62 = CSEL.u32.eq %59, u256, %12, %8
+32      %63 = FADD.f32 %51^, %62^
+32      %64 = CSEL.u32.eq %59, u256, %13, %9
+32      %65 = FADD.f32 %53^, %64^
+32      %66 = CSEL.u32.eq %59^, u256, %14, %10
+32      %67 = FADD.f32 %55^, %66^
+32      %189 = MOV.i32 u2
+32      %69 = FCMP_OR.f32.lt.m1 u7, %189, u256
+32      %70 = CSEL.u32.eq %69, u256, %11, %7
+32      %71 = FADD.f32 %61, %70^
+32      %72 = CSEL.u32.eq %69, u256, %12, %8
+32      %73 = FADD.f32 %63, %72^
+32      %74 = CSEL.u32.eq %69, u256, %13, %9
+32      %75 = FADD.f32 %65, %74^
+32      %76 = CSEL.u32.eq %69^, u256, %14, %10
+32      %77 = FADD.f32 %67, %76^
+32      %79 = FCMP_OR.f32.lt.m1 u7[1], %189, u256
+32      %80 = CSEL.u32.eq %79, u256, %11, %7
+32      %81 = FADD.f32 %71, %80^
+32      %82 = CSEL.u32.eq %79, u256, %12, %8
+32      %83 = FADD.f32 %73, %82^
+32      %84 = CSEL.u32.eq %79, u256, %13, %9
+32      %85 = FADD.f32 %75, %84^
+32      %86 = CSEL.u32.eq %79^, u256, %14, %10
+32      %87 = FADD.f32 %77, %86^
+32      %89 = FCMP_OR.f32.lt.m1 u8, %189^, u256
+32      %90 = CSEL.u32.eq %89, u256, %11^, %7^
+32      %91 = FADD.f32 %81, %90^
+32      %92 = CSEL.u32.eq %89, u256, %12^, %8^
+32      %93 = FADD.f32 %83, %92^
+32      %94 = CSEL.u32.eq %89, u256, %13^, %9^
+32      %95 = FADD.f32 %85, %94^
+32      %96 = CSEL.u32.eq %89^, u256, %14^, %10^
+32      %97 = FADD.f32 %87, %96^
+32      %99 = ICMP_OR.s32.lt.m1 u260[1].b3, u6, %188
+32      %100 = CSEL.u32.eq %99, u256, %81^, %91^
+32      %101 = CSEL.u32.eq %99, u256, %83^, %93^
+32      %102 = CSEL.u32.eq %99, u256, %85^, %95^
+32      %103 = CSEL.u32.eq %99^, u256, %87^, %97^
+32      %105 = ICMP_OR.s32.lt.m1 u260[1].b2, u6, %188
+32      %106 = CSEL.u32.eq %105, u256, %71^, %100^
+32      %107 = CSEL.u32.eq %105, u256, %73^, %101^
+32      %108 = CSEL.u32.eq %105, u256, %75^, %102^
+32      %109 = CSEL.u32.eq %105^, u256, %77^, %103^
+32      %111 = ICMP_OR.s32.lt.m1 u260[1].b1, u6, %188^
+32      %112 = CSEL.u32.eq %111, u256, %61^, %106^
+32      %113 = CSEL.u32.eq %111, u256, %63^, %107^
+32      %114 = CSEL.u32.eq %111, u256, %65^, %108^
+32      %115 = CSEL.u32.eq %111^, u256, %67^, %109^
+        BRANCHZ.i16.eq u256, u256 -> block7
+} -> block7  from block4
+
+block6 {
+} -> block7  from block4
+
+block7 {
+32      %116 = PHI %112, %49 
+32      %117 = PHI %113, %51 
+32      %118 = PHI %114, %53 
+32      %119 = PHI %115, %55 
+        BRANCHZ.i16.eq u256, u256 -> block9
+} -> block9  from block5 block6
+
+block8 {
+} -> block9  from block3
+
+block9 {
+32      %120 = PHI %116, %37 
+32      %121 = PHI %117, %39 
+32      %122 = PHI %118, %41 
+32      %123 = PHI %119, %43 
+        BRANCHZ.i16.eq u256, u256 -> block11
+} -> block11  from block7 block8
+
+block10 {
+} -> block11  from block2
+
+block11 {
+32      %124 = PHI %120, %25 
+32      %125 = PHI %121, %27 
+32      %126 = PHI %122, %29 
+32      %127 = PHI %123, %31 
+        BRANCHZ.i16.eq u256, u256 -> block13
+} -> block13  from block9 block10
+
+block12 {
+} -> block13  from block1
+
+block13 {
+32      %128 = PHI %124, %16 
+32      %129 = PHI %125, %17 
+32      %130 = PHI %126, %18 
+32      %131 = PHI %127, %19 
+        BRANCHZ.i16.eq u256, u256 -> block15
+} -> block15  from block11 block12
+
+block14 {
+} -> block15  from block0
+
+block15 {
+32      %132 = PHI %128, #0x0 
+32      %133 = PHI %129, #0x0 
+32      %134 = PHI %130, #0x0 
+32      %135 = PHI %131, #0x0 
+32      %136.h00 = FADD.f32 %132^, u256.neg
+32      %137.h00 = FADD.f32 %133^, u256.neg
+32      %138.h00 = FADD.f32 %134^, u256.neg
+32      %139.h00 = FADD.f32 %135^, u256.neg
+32      %141 = ATEST %170^, %139.h00, atest-param
+32      %174 = MKVEC.v2i16 %136^.h00, %137^.h00
+32      %175 = MKVEC.v2i16 %138^.h00, %139^.h00
+32x2    %173 = COLLECT.i32 %174^, %175^ 
+32      %176 = BLEND.f16 %173^, %141^, blend_descriptor_0, blend_descriptor_0[1], _.h00, sr_count:2, sr_count_2:2
+} from block13 block14
+
+block0 {
+        r0 = ICMP_OR.s32.lt.m1 u256, u6, u256
+        BRANCHZ.i16.eq r0.h00, u256 -> block14
+} -> block14 block1 
+
+block1 {
+        r0 = MOV.i32 u256
+        r1 = ICMP_OR.s32.lt.m1 u258.b3, u6, r0
+        r2 = FMA.f32 u5, u5[1], r0.neg
+        r3 = FMA.f32 u4, u4[1], r0.neg
+        r4 = FMA.f32 u3, u3[1], r0.neg
+        r0 = FMA.f32 u2, u2[1], r0.neg
+        r5 = FADD.f32 u2[1].neg, u256.neg
+        r6 = FCMP_OR.f32.lt.m1 u256, u2, u256
+        r7 = FADD.f32 u5[1].neg, u256.neg
+        r8 = FADD.f32 u4[1].neg, u256.neg
+        r9 = FADD.f32 u3[1].neg, u256.neg
+        r10 = CSEL.u32.eq r6, u256, r5, r2
+        r11 = CSEL.u32.eq r6, u256, r7, r3
+        r12 = CSEL.u32.eq r6, u256, r8, r4
+        r6 = CSEL.u32.eq r6, u256, r9, r0
+        BRANCHZ.i16.eq r1.h00, u256 -> block12
+} -> block12 block2  from block0
+
+block2 {
+        r1 = MOV.i32 u256
+        r13 = ICMP_OR.s32.lt.m1 u260.b2, u6, r1
+        r1 = FCMP_OR.f32.lt.m1 u264, u2, r1
+        r14 = CSEL.u32.eq r1, u256, r5, r2
+        r10 = FADD.f32 r10, r14
+        r14 = CSEL.u32.eq r1, u256, r7, r3
+        r11 = FADD.f32 r11, r14
+        r14 = CSEL.u32.eq r1, u256, r8, r4
+        r12 = FADD.f32 r12, r14
+        r1 = CSEL.u32.eq r1, u256, r9, r0
+        r1 = FADD.f32 r6, r1
+        BRANCHZ.i16.eq r13.h00, u256 -> block10
+} -> block10 block3  from block1
+
+block3 {
+        r6 = MOV.i32 u256
+        r13 = ICMP_OR.s32.lt.m1 u260.b3, u6, r6
+        r6 = FCMP_OR.f32.lt.m1 u270, u2, r6
+        r14 = CSEL.u32.eq r6, u256, r5, r2
+        r10 = FADD.f32 r10, r14
+        r14 = CSEL.u32.eq r6, u256, r7, r3
+        r11 = FADD.f32 r11, r14
+        r14 = CSEL.u32.eq r6, u256, r8, r4
+        r12 = FADD.f32 r12, r14
+        r6 = CSEL.u32.eq r6, u256, r9, r0
+        r1 = FADD.f32 r1, r6
+        BRANCHZ.i16.eq r13.h00, u256 -> block8
+} -> block8 block4  from block2
+
+block4 {
+        r6 = MOV.i32 u2
+        r6 = FCMP_OR.f32.lt.m1 u6[1], r6, u256
+        r13 = CSEL.u32.eq r6, u256, r9, r0
+        r1 = FADD.f32 r1, r13
+        r13 = CSEL.u32.eq r6, u256, r8, r4
+        r12 = FADD.f32 r12, r13
+        r13 = CSEL.u32.eq r6, u256, r7, r3
+        r11 = FADD.f32 r11, r13
+        r6 = CSEL.u32.eq r6, u256, r5, r2
+        r6 = FADD.f32 r10, r6
+        r10 = MOV.i32 u256
+        r10 = ICMP_OR.s32.lt.m1 u260[1].b0, u6, r10
+        BRANCHZ.i16.eq r10.h00, u256 -> block6
+} -> block6 block5  from block3
+
+block5 {
+        r10 = MOV.i32 u256
+        r13 = FCMP_OR.f32.lt.m1 u270[1].h11, u2, r10
+        r14 = CSEL.u32.eq r13, u256, r9, r0
+        r1 = FADD.f32 r1, r14
+        r14 = CSEL.u32.eq r13, u256, r8, r4
+        r12 = FADD.f32 r12, r14
+        r14 = CSEL.u32.eq r13, u256, r7, r3
+        r11 = FADD.f32 r11, r14
+        r13 = CSEL.u32.eq r13, u256, r5, r2
+        r6 = FADD.f32 r6, r13
+        r13 = MOV.i32 u2
+        r14 = FCMP_OR.f32.lt.m1 u7, r13, u256
+        r15 = CSEL.u32.eq r14, u256, r9, r0
+        r15 = FADD.f32 r1, r15
+        r48 = CSEL.u32.eq r14, u256, r8, r4
+        r48 = FADD.f32 r12, r48
+        r49 = CSEL.u32.eq r14, u256, r7, r3
+        r49 = FADD.f32 r11, r49
+        r14 = CSEL.u32.eq r14, u256, r5, r2
+        r14 = FADD.f32 r6, r14
+        r50 = FCMP_OR.f32.lt.m1 u7[1], r13, u256
+        r51 = CSEL.u32.eq r50, u256, r9, r0
+        r51 = FADD.f32 r15, r51
+        r52 = CSEL.u32.eq r50, u256, r8, r4
+        r52 = FADD.f32 r48, r52
+        r53 = CSEL.u32.eq r50, u256, r7, r3
+        r53 = FADD.f32 r49, r53
+        r50 = CSEL.u32.eq r50, u256, r5, r2
+        r50 = FADD.f32 r14, r50
+        r13 = FCMP_OR.f32.lt.m1 u8, r13, u256
+        r0 = CSEL.u32.eq r13, u256, r9, r0
+        r0 = FADD.f32 r51, r0
+        r4 = CSEL.u32.eq r13, u256, r8, r4
+        r4 = FADD.f32 r52, r4
+        r3 = CSEL.u32.eq r13, u256, r7, r3
+        r3 = FADD.f32 r53, r3
+        r2 = CSEL.u32.eq r13, u256, r5, r2
+        r2 = FADD.f32 r50, r2
+        r5 = ICMP_OR.s32.lt.m1 u260[1].b3, u6, r10
+        r0 = CSEL.u32.eq r5, u256, r51, r0
+        r4 = CSEL.u32.eq r5, u256, r52, r4
+        r3 = CSEL.u32.eq r5, u256, r53, r3
+        r2 = CSEL.u32.eq r5, u256, r50, r2
+        r5 = ICMP_OR.s32.lt.m1 u260[1].b2, u6, r10
+        r0 = CSEL.u32.eq r5, u256, r15, r0
+        r4 = CSEL.u32.eq r5, u256, r48, r4
+        r3 = CSEL.u32.eq r5, u256, r49, r3
+        r2 = CSEL.u32.eq r5, u256, r14, r2
+        r5 = ICMP_OR.s32.lt.m1 u260[1].b1, u6, r10
+        r0 = CSEL.u32.eq r5, u256, r1, r0
+        r1 = CSEL.u32.eq r5, u256, r12, r4
+        r3 = CSEL.u32.eq r5, u256, r11, r3
+        r2 = CSEL.u32.eq r5, u256, r6, r2
+        BRANCHZ.i16.eq u256, u256 -> block7
+} -> block7  from block4
+
+block6 {
+        r0 = MOV.i32 r1
+        r1 = MOV.i32 r12
+        r3 = MOV.i32 r11
+        r2 = MOV.i32 r6
+} -> block7  from block4
+
+block7 {
+        BRANCHZ.i16.eq u256, u256 -> block9
+} -> block9  from block5 block6
+
+block8 {
+        r0 = MOV.i32 r1
+        r1 = MOV.i32 r12
+        r3 = MOV.i32 r11
+        r2 = MOV.i32 r10
+} -> block9  from block3
+
+block9 {
+        BRANCHZ.i16.eq u256, u256 -> block11
+} -> block11  from block7 block8
+
+block10 {
+        r0 = MOV.i32 r1
+        r1 = MOV.i32 r12
+        r3 = MOV.i32 r11
+        r2 = MOV.i32 r10
+} -> block11  from block2
+
+block11 {
+        BRANCHZ.i16.eq u256, u256 -> block13
+} -> block13  from block9 block10
+
+block12 {
+        r0 = MOV.i32 r6
+        r1 = MOV.i32 r12
+        r3 = MOV.i32 r11
+        r2 = MOV.i32 r10
+} -> block13  from block1
+
+block13 {
+        BRANCHZ.i16.eq u256, u256 -> block15
+} -> block15  from block11 block12
+
+block14 {
+        r0 = IADD_IMM.i32 u256, index:0
+        r1 = IADD_IMM.i32 u256, index:0
+        r3 = IADD_IMM.i32 u256, index:0
+        r2 = IADD_IMM.i32 u256, index:0
+} -> block15  from block0
+
+block15 {
+        r0.h00 = FADD.f32 r0, u256.neg
+        r1.h00 = FADD.f32 r1, u256.neg
+        r3.h00 = FADD.f32 r3, u256.neg
+        r2.h00 = FADD.f32 r2, u256.neg
+        r60 = ATEST r60, r2.h00, atest-param
+        r0 = MKVEC.v2i16 r0.h00, r1.h00
+        r1 = MKVEC.v2i16 r3.h00, r2.h00
+        r48 = BLEND.f16 r0:r1, r60, blend_descriptor_0, blend_descriptor_0[1], _.h00, sr_count:2, sr_count_2:2
+} from block13 block14
+
+block0 {
+        r0 = ICMP_OR.s32.flow13.lt.m1 u256, u6, u256
+        BRANCHZ.i16.flow10.eq r0^.h00, u256 -> block14
+} -> block14 block1 
+
+block1 {
+        r0 = MOV.i32 u256
+        r1 = ICMP_OR.s32.lt.m1 u258.b3, u6, r0
+        r2 = FMA.f32 u5, u5[1], r0.neg
+        r3 = FMA.f32 u4, u4[1], r0.neg
+        r4 = FMA.f32 u3, u3[1], r0.neg
+        r0 = FMA.f32 u2, u2[1], r0^.neg
+        r5 = FADD.f32 u2[1].neg, u256.neg
+        r6 = FCMP_OR.f32.lt.m1 u256, u2, u256
+        r7 = FADD.f32 u5[1].neg, u256.neg
+        r8 = FADD.f32 u4[1].neg, u256.neg
+        r9 = FADD.f32 u3[1].neg, u256.neg
+        r10 = CSEL.u32.eq r6, u256, r5, r2
+        r11 = CSEL.u32.eq r6, u256, r7, r3
+        r12 = CSEL.u32.eq r6, u256, r8, r4
+        r6 = CSEL.u32.eq r6^, u256, r9, r0
+        BRANCHZ.i16.flow10.eq r1^.h00, u256 -> block12
+} -> block12 block2  from block0
+
+block2 {
+        r1 = MOV.i32 u256
+        r13 = ICMP_OR.s32.lt.m1 u260.b2, u6, r1
+        r1 = FCMP_OR.f32.lt.m1 u264, u2, r1^
+        r14 = CSEL.u32.eq r1, u256, r5, r2
+        r10 = FADD.f32 r10^, r14^
+        r14 = CSEL.u32.eq r1, u256, r7, r3
+        r11 = FADD.f32 r11^, r14^
+        r14 = CSEL.u32.eq r1, u256, r8, r4
+        r12 = FADD.f32 r12^, r14^
+        r1 = CSEL.u32.eq r1^, u256, r9, r0
+        r1 = FADD.f32 r6^, r1^
+        BRANCHZ.i16.flow10.eq r13^.h00, u256 -> block10
+} -> block10 block3  from block1
+
+block3 {
+        r6 = MOV.i32 u256
+        r13 = ICMP_OR.s32.lt.m1 u260.b3, u6, r6
+        r6 = FCMP_OR.f32.lt.m1 u270, u2, r6^
+        r14 = CSEL.u32.eq r6, u256, r5, r2
+        r10 = FADD.f32 r10^, r14^
+        r14 = CSEL.u32.eq r6, u256, r7, r3
+        r11 = FADD.f32 r11^, r14^
+        r14 = CSEL.u32.eq r6, u256, r8, r4
+        r12 = FADD.f32 r12^, r14^
+        r6 = CSEL.u32.eq r6^, u256, r9, r0
+        r1 = FADD.f32 r1^, r6^
+        BRANCHZ.i16.flow10.eq r13^.h00, u256 -> block8
+} -> block8 block4  from block2
+
+block4 {
+        r6 = MOV.i32 u2
+        r6 = FCMP_OR.f32.lt.m1 u6[1], r6^, u256
+        r13 = CSEL.u32.eq r6, u256, r9, r0
+        r1 = FADD.f32 r1^, r13^
+        r13 = CSEL.u32.eq r6, u256, r8, r4
+        r12 = FADD.f32 r12^, r13^
+        r13 = CSEL.u32.eq r6, u256, r7, r3
+        r11 = FADD.f32 r11^, r13^
+        r6 = CSEL.u32.eq r6^, u256, r5, r2
+        r6 = FADD.f32 r10^, r6^
+        r10 = MOV.i32 u256
+        r10 = ICMP_OR.s32.lt.m1 u260[1].b0, u6, r10^
+        BRANCHZ.i16.flow10.eq r10^.h00, u256 -> block6
+} -> block6 block5  from block3
+
+block5 {
+        r10 = MOV.i32 u256
+        r13 = FCMP_OR.f32.lt.m1 u270[1].h11, u2, r10
+        r14 = CSEL.u32.eq r13, u256, r9, r0
+        r1 = FADD.f32 r1^, r14^
+        r14 = CSEL.u32.eq r13, u256, r8, r4
+        r12 = FADD.f32 r12^, r14^
+        r14 = CSEL.u32.eq r13, u256, r7, r3
+        r11 = FADD.f32 r11^, r14^
+        r13 = CSEL.u32.eq r13^, u256, r5, r2
+        r6 = FADD.f32 r6^, r13^
+        r13 = MOV.i32 u2
+        r14 = FCMP_OR.f32.lt.m1 u7, r13, u256
+        r15 = CSEL.u32.eq r14, u256, r9, r0
+        r15 = FADD.f32 r1, r15^
+        r48 = CSEL.u32.eq r14, u256, r8, r4
+        r48 = FADD.f32 r12, r48^
+        r49 = CSEL.u32.eq r14, u256, r7, r3
+        r49 = FADD.f32 r11, r49^
+        r14 = CSEL.u32.eq r14^, u256, r5, r2
+        r14 = FADD.f32 r6, r14^
+        r50 = FCMP_OR.f32.lt.m1 u7[1], r13, u256
+        r51 = CSEL.u32.eq r50, u256, r9, r0
+        r51 = FADD.f32 r15, r51^
+        r52 = CSEL.u32.eq r50, u256, r8, r4
+        r52 = FADD.f32 r48, r52^
+        r53 = CSEL.u32.eq r50, u256, r7, r3
+        r53 = FADD.f32 r49, r53^
+        r50 = CSEL.u32.eq r50^, u256, r5, r2
+        r50 = FADD.f32 r14, r50^
+        r13 = FCMP_OR.f32.lt.m1 u8, r13^, u256
+        r0 = CSEL.u32.eq r13, u256, r9^, r0^
+        r0 = FADD.f32 r51, r0^
+        r4 = CSEL.u32.eq r13, u256, r8^, r4^
+        r4 = FADD.f32 r52, r4^
+        r3 = CSEL.u32.eq r13, u256, r7^, r3^
+        r3 = FADD.f32 r53, r3^
+        r2 = CSEL.u32.eq r13^, u256, r5^, r2^
+        r2 = FADD.f32 r50, r2^
+        r5 = ICMP_OR.s32.lt.m1 u260[1].b3, u6, r10
+        r0 = CSEL.u32.eq r5, u256, r51^, r0^
+        r4 = CSEL.u32.eq r5, u256, r52^, r4^
+        r3 = CSEL.u32.eq r5, u256, r53^, r3^
+        r2 = CSEL.u32.eq r5^, u256, r50^, r2^
+        r5 = ICMP_OR.s32.lt.m1 u260[1].b2, u6, r10
+        r0 = CSEL.u32.eq r5, u256, r15^, r0^
+        r4 = CSEL.u32.eq r5, u256, r48^, r4^
+        r3 = CSEL.u32.eq r5, u256, r49^, r3^
+        r2 = CSEL.u32.eq r5^, u256, r14^, r2^
+        r5 = ICMP_OR.s32.lt.m1 u260[1].b1, u6, r10^
+        r0 = CSEL.u32.eq r5, u256, r1^, r0^
+        r1 = CSEL.u32.eq r5, u256, r12^, r4^
+        r3 = CSEL.u32.eq r5, u256, r11^, r3^
+        r2 = CSEL.u32.eq r5^, u256, r6^, r2^
+        BRANCHZ.i16.flow10.eq u256, u256 -> block7
+} -> block7  from block4
+
+block6 {
+        r0 = MOV.i32 r1^
+        r1 = MOV.i32 r12^
+        r3 = MOV.i32 r11^
+        r2 = MOV.i32.flow10 r6^
+} -> block7  from block4
+
+block7 {
+        BRANCHZ.i16.flow10.eq u256, u256 -> block9
+} -> block9  from block5 block6
+
+block8 {
+        r0 = MOV.i32 r1^
+        r1 = MOV.i32 r12^
+        r3 = MOV.i32 r11^
+        r2 = MOV.i32.flow10 r10^
+} -> block9  from block3
+
+block9 {
+        BRANCHZ.i16.flow10.eq u256, u256 -> block11
+} -> block11  from block7 block8
+
+block10 {
+        r0 = MOV.i32 r1^
+        r1 = MOV.i32 r12^
+        r3 = MOV.i32 r11^
+        r2 = MOV.i32.flow10 r10^
+} -> block11  from block2
+
+block11 {
+        BRANCHZ.i16.flow10.eq u256, u256 -> block13
+} -> block13  from block9 block10
+
+block12 {
+        r0 = MOV.i32 r6^
+        r1 = MOV.i32 r12^
+        r3 = MOV.i32 r11^
+        r2 = MOV.i32.flow10 r10^
+} -> block13  from block1
+
+block13 {
+        BRANCHZ.i16.flow10.eq u256, u256 -> block15
+} -> block15  from block11 block12
+
+block14 {
+        r0 = IADD_IMM.i32 u256, index:0
+        r1 = IADD_IMM.i32 u256, index:0
+        r3 = IADD_IMM.i32 u256, index:0
+        r2 = IADD_IMM.i32.flow10 u256, index:0
+} -> block15  from block0
+
+block15 {
+        r0.h00 = FADD.f32 r0^, u256.neg
+        r1.h00 = FADD.f32 r1^, u256.neg
+        r3.h00 = FADD.f32 r3^, u256.neg
+        r2.h00 = FADD.f32.flow8 r2^, u256.neg
+        r60 = ATEST.flow1 r60^, r2.h00, atest-param
+        r0 = MKVEC.v2i16 r0^.h00, r1^.h00
+        r1 = MKVEC.v2i16.flow9 r3^.h00, r2^.h00
+        r48 = BLEND.flow15.f16 r0:r1, r60^, blend_descriptor_0, blend_descriptor_0[1], _.h00, sr_count:2, sr_count_2:2
+} from block13 block14
+
+   ICMP_OR.s32.lt.m1.discard r0, 0x0, u6.w0, 0x0
+   BRANCHZ.eq.reconverge r0^.h0, offset:127
+
+   MOV.i32 r0, 0x0
+   ICMP_OR.s32.lt.m1 r1, 0x1000000.b3, u6.w0, r0
+   FMA.f32 r2, u5.w0, u5.w1, r0.neg
+   FMA.f32 r3, u4.w0, u4.w1, r0.neg
+   FMA.f32 r4, u3.w0, u3.w1, r0.neg
+   FMA.f32 r0, u2.w0, u2.w1, r0^.neg
+   FADD.f32 r5, u2.w1.neg, 0x0.neg
+   FCMP_OR.f32.lt.m1 r6, 0x0, u2.w0, 0x0
+   FADD.f32 r7, u5.w1.neg, 0x0.neg
+   FADD.f32 r8, u4.w1.neg, 0x0.neg
+   FADD.f32 r9, u3.w1.neg, 0x0.neg
+   CSEL.u32.eq r10, r6, 0x0, r5, r2
+   CSEL.u32.eq r11, r6, 0x0, r7, r3
+   CSEL.u32.eq r12, r6, 0x0, r8, r4
+   CSEL.u32.eq r6, r6^, 0x0, r9, r0
+   BRANCHZ.eq.reconverge r1^.h0, offset:106
+
+   MOV.i32 r1, 0x0
+   ICMP_OR.s32.lt.m1 r13, 0x3020100.b2, u6.w0, r1
+   FCMP_OR.f32.lt.m1 r1, 0x3F800000, u2.w0, r1^
+   CSEL.u32.eq r14, r1, 0x0, r5, r2
+   FADD.f32 r10, r10^, r14^
+   CSEL.u32.eq r14, r1, 0x0, r7, r3
+   FADD.f32 r11, r11^, r14^
+   CSEL.u32.eq r14, r1, 0x0, r8, r4
+   FADD.f32 r12, r12^, r14^
+   CSEL.u32.eq r1, r1^, 0x0, r9, r0
+   FADD.f32 r1, r6^, r1^
+   BRANCHZ.eq.reconverge r13^.h0, offset:89
+
+   MOV.i32 r6, 0x0
+   ICMP_OR.s32.lt.m1 r13, 0x3020100.b3, u6.w0, r6
+   FCMP_OR.f32.lt.m1 r6, 0x40000000, u2.w0, r6^
+   CSEL.u32.eq r14, r6, 0x0, r5, r2
+   FADD.f32 r10, r10^, r14^
+   CSEL.u32.eq r14, r6, 0x0, r7, r3
+   FADD.f32 r11, r11^, r14^
+   CSEL.u32.eq r14, r6, 0x0, r8, r4
+   FADD.f32 r12, r12^, r14^
+   CSEL.u32.eq r6, r6^, 0x0, r9, r0
+   FADD.f32 r1, r1^, r6^
+   BRANCHZ.eq.reconverge r13^.h0, offset:72
+
+   MOV.i32 r6, u2.w0
+   FCMP_OR.f32.lt.m1 r6, u6.w1, r6^, 0x0
+   CSEL.u32.eq r13, r6, 0x0, r9, r0
+   FADD.f32 r1, r1^, r13^
+   CSEL.u32.eq r13, r6, 0x0, r8, r4
+   FADD.f32 r12, r12^, r13^
+   CSEL.u32.eq r13, r6, 0x0, r7, r3
+   FADD.f32 r11, r11^, r13^
+   CSEL.u32.eq r6, r6^, 0x0, r5, r2
+   FADD.f32 r6, r10^, r6^
+   MOV.i32 r10, 0x0
+   ICMP_OR.s32.lt.m1 r10, 0x7060504.b0, u6.w0, r10^
+   BRANCHZ.eq.reconverge r10^.h0, offset:54
+
+   MOV.i32 r10, 0x0
+   FCMP_OR.f32.lt.m1 r13, 0x44000000.h1, u2.w0, r10
+   CSEL.u32.eq r14, r13, 0x0, r9, r0
+   FADD.f32 r1, r1^, r14^
+   CSEL.u32.eq r14, r13, 0x0, r8, r4
+   FADD.f32 r12, r12^, r14^
+   CSEL.u32.eq r14, r13, 0x0, r7, r3
+   FADD.f32 r11, r11^, r14^
+   CSEL.u32.eq r13, r13^, 0x0, r5, r2
+   FADD.f32 r6, r6^, r13^
+   MOV.i32 r13, u2.w0
+   FCMP_OR.f32.lt.m1 r14, u7.w0, r13, 0x0
+   CSEL.u32.eq r15, r14, 0x0, r9, r0
+   FADD.f32 r15, r1, r15^
+   CSEL.u32.eq r48, r14, 0x0, r8, r4
+   FADD.f32 r48, r12, r48^
+   CSEL.u32.eq r49, r14, 0x0, r7, r3
+   FADD.f32 r49, r11, r49^
+   CSEL.u32.eq r14, r14^, 0x0, r5, r2
+   FADD.f32 r14, r6, r14^
+   FCMP_OR.f32.lt.m1 r50, u7.w1, r13, 0x0
+   CSEL.u32.eq r51, r50, 0x0, r9, r0
+   FADD.f32 r51, r15, r51^
+   CSEL.u32.eq r52, r50, 0x0, r8, r4
+   FADD.f32 r52, r48, r52^
+   CSEL.u32.eq r53, r50, 0x0, r7, r3
+   FADD.f32 r53, r49, r53^
+   CSEL.u32.eq r50, r50^, 0x0, r5, r2
+   FADD.f32 r50, r14, r50^
+   FCMP_OR.f32.lt.m1 r13, u8.w0, r13^, 0x0
+   CSEL.u32.eq r0, r13, 0x0, r9^, r0^
+   FADD.f32 r0, r51, r0^
+   CSEL.u32.eq r4, r13, 0x0, r8^, r4^
+   FADD.f32 r4, r52, r4^
+   CSEL.u32.eq r3, r13, 0x0, r7^, r3^
+   FADD.f32 r3, r53, r3^
+   CSEL.u32.eq r2, r13^, 0x0, r5^, r2^
+   FADD.f32 r2, r50, r2^
+   ICMP_OR.s32.lt.m1 r5, 0x7060504.b3, u6.w0, r10
+   CSEL.u32.eq r0, r5, 0x0, r51^, r0^
+   CSEL.u32.eq r4, r5, 0x0, r52^, r4^
+   CSEL.u32.eq r3, r5, 0x0, r53^, r3^
+   CSEL.u32.eq r2, r5^, 0x0, r50^, r2^
+   ICMP_OR.s32.lt.m1 r5, 0x7060504.b2, u6.w0, r10
+   CSEL.u32.eq r0, r5, 0x0, r15^, r0^
+   CSEL.u32.eq r4, r5, 0x0, r48^, r4^
+   CSEL.u32.eq r3, r5, 0x0, r49^, r3^
+   CSEL.u32.eq r2, r5^, 0x0, r14^, r2^
+   ICMP_OR.s32.lt.m1 r5, 0x7060504.b1, u6.w0, r10^
+   CSEL.u32.eq r0, r5, 0x0, r1^, r0^
+   CSEL.u32.eq r1, r5, 0x0, r12^, r4^
+   CSEL.u32.eq r3, r5, 0x0, r11^, r3^
+   CSEL.u32.eq r2, r5^, 0x0, r6^, r2^
+   BRANCHZ.eq.reconverge 0x0, offset:4
+
+   MOV.i32 r0, r1^
+   MOV.i32 r1, r12^
+   MOV.i32 r3, r11^
+   MOV.i32.reconverge r2, r6^
+   BRANCHZ.eq.reconverge 0x0, offset:4
+
+   MOV.i32 r0, r1^
+   MOV.i32 r1, r12^
+   MOV.i32 r3, r11^
+   MOV.i32.reconverge r2, r10^
+   BRANCHZ.eq.reconverge 0x0, offset:4
+
+   MOV.i32 r0, r1^
+   MOV.i32 r1, r12^
+   MOV.i32 r3, r11^
+   MOV.i32.reconverge r2, r10^
+   BRANCHZ.eq.reconverge 0x0, offset:4
+
+   MOV.i32 r0, r6^
+   MOV.i32 r1, r12^
+   MOV.i32 r3, r11^
+   MOV.i32.reconverge r2, r10^
+   BRANCHZ.eq.reconverge 0x0, offset:4
+
+   IADD_IMM.i32 r0, 0x0, #0x0
+   IADD_IMM.i32 r1, 0x0, #0x0
+   IADD_IMM.i32 r3, 0x0, #0x0
+   IADD_IMM.i32.reconverge r2, 0x0, #0x0
+   FADD.f32 r0.h0, r0^, 0x0.neg
+   FADD.f32 r1.h0, r1^, 0x0.neg
+   FADD.f32 r3.h0, r3^, 0x0.neg
+   FADD.f32.wait0126 r2.h0, r2^, 0x0.neg
+   ATEST.wait0 @r60, r60^, r2.h0, atest_datum.w0
+   MKVEC.v2i16 r0, r0^.h0, r1^.h0
+   MKVEC.v2i16.wait r1, r3^.h0, r2^.h0
+   BLEND.slot0.v4.f16.end @r0:r1, blend_descriptor_0.w0, r60, target:0x0
+   IADD_IMM.i32 r48, 0x0, #0x0
+   BRANCHZI.eq.absolute 0x0, blend_descriptor_0.w1
+
+
+MESA_SHADER_FRAGMENT shader: 143 instrs, 2.203125 cycles, 0.625000 fma, 1.578125 cvt, 0.000000 sfu, 2.203125 alu, 0.000000 v, 0.000000 t, 0.000000 ls, 1280 code size, 2 threads, 0 loops, 0:0 spills:fills, 0 spill cost, 23 registers used, 9 uniforms used

@@ -378,8 +378,8 @@ consumer (the highp output). Kept at 32 bits (not lowered): the varying, the
 coordinate arithmetic and the highp output; Panfrost runs no
 `nir_lower_mediump_io`. For `ifelse_loop` (no reference) the expected shape is
 the opposite edge, highp arithmetic and a mediump `gl_FragColor` store, so an
-`f2f16` pair at the store and `BLEND.v4.f16`: **unverified until a reference
-exists**.
+`f2f16` pair at the store and `BLEND.v4.f16`: verified by
+`mixed_ifelse_loop` (last subsection of this section).
 
 ### What else the cases need
 
@@ -425,9 +425,8 @@ in `nir_fs.rs` (two changes to the same structure would conflict).
   `corpus-verdicts.txt` and MALI_TESTS via `tools/mali/check.sh`. Touches
   `nir_fs.rs`, `select.rs`, `mod.rs`, `tests.rs`: serialise with the other
   compiler lowerings.
-- `mixed-ifelse-loop-ref`: on a host that can build the shim, make the
-  `ifelse_loop` reference (fp32 arithmetic, mediump store, `break`) and decode
-  the `f2f16` store; lower it after `cflow-branch`.
+- `mixed-ifelse-loop-ref`: done (item `ref-ifelse-loop`):
+  `mixed_ifelse_loop.*`, decoded below; lower it after `cflow-branch`.
 - #33 comment: "Cases 44 es3hdr and 49 es3facing refuse on one program,
   es300/hdrsample.frag (lowp sampler under highp: fp32 coordinate, fp16
   look-up and multiply, fp32 output). Mesa's only conversions are four
@@ -436,3 +435,84 @@ in `nir_fs.rs` (two changes to the same structure would conflict).
   tools/mali/testdata/mixed_{44,49}_hdrsample.*; plan in
   docs/notes/mali-mixed-precision.md section 4. ifelse_loop.frag is a separate
   mixed-precision plus control-flow program with no reference yet."
+
+### ifelse_loop: Mesa's program (`mixed_ifelse_loop`, item `ref-ifelse-loop`)
+
+Reference `tools/mali/testdata/mixed_ifelse_loop.{vert,frag,expect.json,stderr}`:
+`es100/ifelse_loop.frag` with `gltest/position_only.vert`, Mesa 26.2.1 on
+drm-shim, drawn with `--uniform-values` (`u_a` = 16..19, `u_b` = 32..35,
+`u_n` = 48, which `gl_ref.py` sets; Mesa compiles the same program for any
+value):
+
+```
+tools/mali/drm_shim_ref.sh run <shim work dir> tools/mali/testdata/mixed_ifelse_loop.vert tools/mali/testdata/mixed_ifelse_loop.frag <scratch>/mixed_ifelse_loop --uniform-values
+python3 -I tools/mali/pan_ref_diff.py extract <scratch>/mixed_ifelse_loop.trace --draw > tools/mali/testdata/mixed_ifelse_loop.expect.json
+```
+
+(143 instructions, 0 loops, 23 registers, 9 uniforms.) What the stderr shows:
+
+- **The loop is fully unrolled** (eight iterations, `0 loops`). The
+  `for (i < 8)` has a constant bound, so no loop construct is left.
+- **The inner `if (u_a.x > float(i)) c += u_a*u_b; else c -= u_b.yzwx;` is
+  flattened** in every iteration: `flt_pan` then four `bcsel_pan`, i.e.
+  `FCMP_OR.f32.lt.m1` and four `CSEL.u32.eq`; both arms (the `fmul`s and the
+  `fneg`s) are computed once before the loop (`FMA.f32 .., r0.neg` with
+  `r0 = 0`, `FADD.f32 .., 0.neg`) and reused by all iterations.
+- **The `break` stays a branch, but only for the first five iterations.**
+  `if (i >= u_n) break;` becomes nested `if (0 < u_n) { .. if (1 < u_n) { ..
+  } }` (`ilt_pan`, `ICMP_OR.s32.lt.m1` with a constant `i` against the
+  `u_n` word loaded from the UBO, no int-to-float): `BRANCHZ.eq.reconverge`
+  at depth 0..4 (offsets 127, 106, 89, 72, 54), each with a
+  `PHI`-fed join block that is just a `BRANCHZ.eq.reconverge 0x0` jump
+  (`offset:4`) plus `MOV.i32` copies of the four accumulator lanes. The
+  innermost block (iterations 4..7) has no branch: NIR flattened it, the
+  conditions of the last three iterations are `ICMP_OR` selects of the
+  accumulated sums (`CSEL.u32.eq r0, r5, 0, r51, r0` ..., nested from
+  iteration 7 back to 4). The not-taken edge of the outermost `if` writes
+  `IADD_IMM.i32 0` to `r0..r3` (the `c = vec4(0.0)` phi).
+- **All arithmetic is fp32** (`f.mixed` only through the store): no
+  `F16_TO_F32` anywhere. The loop-invariant uniforms are `u2..u5` (`u_a`,
+  `u_b` after the FAU split) and `u6` (`u_n`), `load_ubo` of 32-bit words.
+- **The one fp16 edge is the store.** NIR `f2f16` x4 on the phi'd sum, then
+  `vec4` of the halves into `blend_pan` (`src_type=float16`) and the ATEST
+  alpha from the converted `.w`. In the disassembly an `f2f16` is **not** a
+  `F32_TO_F16`/`CVT` opcode: it is `FADD.f32 rN.h0, rN, -0.0` (negated zero,
+  `u256.neg`, the identity), the fp32 add writing the low half of the
+  destination; then `MKVEC.v2i16 r0, r0.h0, r1.h0` and
+  `MKVEC.v2i16 r1, r3.h0, r2.h0` (the output order is r, g, b, a with the
+  `r3`/`r2` swap RA produced) and `BLEND.slot0.v4.f16` with `ATEST` fed from
+  the fp16 alpha. Lane order: the `.flow8` and `.wait0126` flags sit on the
+  last FADD (alpha).
+- Both edges of section 1 are therefore different instructions: fp16 to fp32
+  is `F16_TO_F32 rd, rs.h0/.h1`, fp32 to fp16 is `FADD.f32 .h0 .., -0.0`.
+
+### Ordering needed
+
+1. `mixed-hdr-44-49` (the `Val` width and `F16ToF32`) first. `ifelse_loop`
+   only needs the width on the final store, but the width-carrying `Val` has
+   to exist before control flow adds phi values over it.
+2. A new `F32ToF16` store edge (`FADD.f32 .h0 x, -0.0`, two `MKVEC.v2i16`,
+   `BLEND.f16`, alpha to `ATEST`) lands with or right after step 1: it
+   needs no branch, so a straight-line fp32 shader with a mediump
+   `gl_FragColor` (no reference yet; any `precision highp` shader with
+   `gl_FragColor`) can pin it.
+3. `cflow-branch` (the `if` that Mesa keeps as `BRANCHZ.eq.reconverge`,
+   the `PHI` join blocks with `MOV.i32` and the `BRANCHZ 0x0` jump) and
+   `cflow-flatten` (the `bcsel_pan` to `CSEL.u32.eq` selects) only after
+   them. `ifelse_loop` needs both: `cflow-branch` for the five nested
+   branches, `cflow-flatten` for the inner if-else and the last three
+   breaks. Constant loop unrolling (`nir_opt_loop_unroll`) is Mesa's: the
+   compiler must unroll the bounded loop (see `mali-loop-break.md`) to meet
+   these bytes.
+
+#33 comment text: "es100/ifelse_loop.frag (corpus, mixed precision plus
+control flow) now has a Mesa 26.2.1 drm-shim reference:
+tools/mali/testdata/mixed_ifelse_loop.* (decoded in
+docs/notes/mali-mixed-precision.md section 4, last subsection). Mesa fully
+unrolls the 8-iteration loop, flattens the inner if/else into
+FCMP_OR + 4 CSEL per iteration, and keeps `if (i >= u_n) break` as five nested
+BRANCHZ.eq.reconverge (the last three iterations are CSEL-flattened). The
+only fp16 edge is the store: four f2f16 = `FADD.f32 .h0 x, -0.0`, two
+MKVEC.v2i16, BLEND.f16 (no F16_TO_F32 in the program). Ordering:
+mixed-hdr-44-49 (Val width), then the F32ToF16 store edge, then
+cflow-branch and cflow-flatten."
