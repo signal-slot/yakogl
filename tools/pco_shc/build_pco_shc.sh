@@ -4,13 +4,23 @@
 #
 # build_pco_shc.sh - build the pco_shc that tools/glsl2usc.sh needs (Mesa
 # 26.2.1's PowerVR compiler with tools/pco_shc/pco_shc.c and a freshly
-# compiled usclib carrying usclib-tex.cl.patch), from the release tarball.
+# compiled usclib carrying usclib-tex.cl.patch), from the release tarball,
+# and beside it capture_spm_load (tools/pco_shc/capture_spm_load.c, the
+# partial render's load shader for gen_spm_load.py).
 #
 # Usage:
 #   tools/pco_shc/build_pco_shc.sh <mesa-26.2.1.tar.xz> [<work dir>]
-# The tarball is extracted into <work dir>/mesa-26.2.1 (default: the directory
-# holding the tarball), which is deleted and recreated first; the build dir is
-# <work dir>/mesa-26.2.1/build.
+#       The tarball is extracted into <work dir>/mesa-26.2.1 (default: the
+#       directory holding the tarball), which is deleted and recreated first;
+#       the build dir is <work dir>/mesa-26.2.1/build.
+#   tools/pco_shc/build_pco_shc.sh --update <mesa tree>
+#       In a tree the first form made (<work dir>/mesa-26.2.1, with its
+#       build/): add capture_spm_load.c and its meson target when the tree
+#       predates them (meson-capture_spm_load.patch) and build that one
+#       target. pco_shc and the usclib are not rebuilt, so a PCO_SHC copied
+#       out of the tree, and the GLSL2USC_CACHE keyed by it, stay what they
+#       are. tools/cts/deps.toml's PCO_SPM_LOAD_CAPTURE runs this on a
+#       dependency layout's PCO_SHC.src.
 #
 # Needs (generic name -> Gentoo package):
 #   clang + LLVM (built against the same version) -> llvm-core/clang, llvm-core/llvm
@@ -53,14 +63,45 @@
 # another gcc or LLVM may get a different id for the same output.
 set -euo pipefail
 
-[ $# -ge 1 ] && [ $# -le 2 ] || { sed -n '9,13p' "$0" >&2; exit 2; }
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
-TARBALL="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
-WORK="$(mkdir -p "${2:-$(dirname "$TARBALL")}" && cd "${2:-$(dirname "$TARBALL")}" && pwd)"
 LLVM_DIR="${LLVM_DIR:-/usr/lib/llvm/23}"
 export PATH="$LLVM_DIR/bin:$PATH"
 export PKG_CONFIG_PATH="$LLVM_DIR/lib64/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+
+usage() { sed -n '11,23p' "$0" >&2; exit 2; }
+
+# The four programs dropped into the tree. Copied only on a change: a fresh
+# mtime makes ninja rebuild for nothing.
+cp_changed() { cmp -s "$1" "$2" || cp "$1" "$2"; }
+install_sources() {
+  local f
+  for f in pco_shc.c capture_usc.c capture_smp_fs.c capture_spm_load.c; do
+    cp_changed "$HERE/$f" "$1/src/imagination/vulkan/$f"
+  done
+}
+
+if [ "${1-}" = "--update" ]; then
+  [ $# -eq 2 ] || usage
+  SRC="$(cd "$2" && pwd)"
+  MESON_BUILD="$SRC/src/imagination/vulkan/meson.build"
+  [ -f "$SRC/build/build.ninja" ] ||
+    { echo "build_pco_shc.sh: $SRC has no build/build.ninja (make the tree with the first form)" >&2; exit 1; }
+  grep -q "^pco_shc = executable(" "$MESON_BUILD" ||
+    { echo "build_pco_shc.sh: $MESON_BUILD has no pco_shc target (not a tree of the first form)" >&2; exit 1; }
+  install_sources "$SRC"
+  if ! grep -q "^capture_spm_load = executable(" "$MESON_BUILD"; then
+    echo "build_pco_shc.sh: $SRC predates capture_spm_load: applying meson-capture_spm_load.patch"
+    patch -d "$SRC" -p1 < "$HERE/meson-capture_spm_load.patch"
+  fi
+  ninja -C "$SRC/build" src/imagination/vulkan/capture_spm_load
+  echo "CAPTURE_SPM_LOAD=$SRC/build/src/imagination/vulkan/capture_spm_load"
+  exit 0
+fi
+
+[ $# -ge 1 ] && [ $# -le 2 ] || usage
+TARBALL="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
+WORK="$(mkdir -p "${2:-$(dirname "$TARBALL")}" && cd "${2:-$(dirname "$TARBALL")}" && pwd)"
 
 UPSTREAM="$ROOT/third_party/mesa-26.2.1/UPSTREAM"
 SHA=$(sed -n 's/^tarball-sha256: *//p' "$UPSTREAM")
@@ -71,8 +112,9 @@ SRC="$WORK/mesa-26.2.1"
 rm -rf "$SRC"
 tar -C "$WORK" -xf "$TARBALL"
 cd "$SRC"
-cp "$HERE"/{pco_shc.c,capture_usc.c,capture_smp_fs.c} src/imagination/vulkan/
+install_sources "$SRC"
 patch -p1 < "$HERE/meson-vulkan.patch"
+patch -p1 < "$HERE/meson-capture_spm_load.patch"
 patch -p1 < "$HERE/usclib-tex.cl.patch"
 # The tree's absolute path must not reach the binary (debug info, __FILE__),
 # or the content id glsl2usc records would depend on where it was built.
@@ -81,7 +123,11 @@ meson setup build \
   -Dbuildtype=debug -Dvulkan-drivers=imagination -Dgallium-drivers= \
   -Dgles1=disabled -Dgles2=disabled -Dglx=disabled -Degl=disabled -Dplatforms= \
   -Dc_args="$PREFIX_MAP" -Dcpp_args="$PREFIX_MAP"
-ninja -C build src/imagination/pco/usclib/pco_usclib.spv src/imagination/vulkan/pco_shc
+# capture_spm_load too: tools/check.sh's regenerate-and-compare row of the
+# partial render's load shader (gen_spm_load.py) runs it; capture_usc and
+# capture_smp_fs are one more ninja away (README.md).
+ninja -C build src/imagination/pco/usclib/pco_usclib.spv src/imagination/vulkan/pco_shc \
+  src/imagination/vulkan/capture_spm_load
 
 # The usclib must be the patched one: usclib_tex_state_base_level compares
 # textype against ROGUE_TEXSTATE_TEXTYPE_STRIDE (4) and branches on it. An
@@ -99,3 +145,4 @@ PCO_SHC="$SRC/build/src/imagination/vulkan/pco_shc"
 echo "PCO_SHC=$PCO_SHC"
 # glsl2usc's content id: the first 12 hex digits of the binary's SHA-256.
 echo "toolchain id: pco_shc=$(sha256sum "$PCO_SHC" | cut -c1-12)"
+echo "CAPTURE_SPM_LOAD=$SRC/build/src/imagination/vulkan/capture_spm_load"

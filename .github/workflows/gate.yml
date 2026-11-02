@@ -122,10 +122,15 @@ jobs:
         if: steps.seen.outputs.run == 'true'
         # The Mali CSF firmware is one file pinned by sha256 in deps.toml
         # (linux-firmware's, never committed): a runner that lacks it fetches
-        # it here, where an entry that is present is never touched. Every
-        # other entry is a tree a host is prepared with, never built here.
+        # it here, where an entry that is present is never touched. The
+        # partial render's load-shader capture program (PCO_SPM_LOAD_CAPTURE)
+        # is one more target of the pco_shc build every runner already holds
+        # (PCO_SHC.src): a runner prepared before its entry builds that one
+        # target here (tools/pco_shc/build_pco_shc.sh --update; pco_shc is
+        # not rebuilt). Every other entry is a tree a host is prepared with,
+        # never built here.
         run: |
-          tools/cts/deps-env.sh --build MALI_CSFFW
+          tools/cts/deps-env.sh --build MALI_CSFFW PCO_SPM_LOAD_CAPTURE
           tools/cts/deps-env.sh --check
           tools/cts/deps-env.sh >> "$GITHUB_ENV"
           {

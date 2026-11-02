@@ -1,0 +1,46 @@
+src/imagination/vulkan/meson.build: build capture_spm_load
+
+Adds a fourth executable after the three of meson-vulkan.patch, linked
+against the same libraries: capture_spm_load (the partial render's
+background-object load shader, tools/pco_shc/capture_spm_load.c, run by
+gen_spm_load.py). Not built by default. Local tooling, not for upstream.
+
+A patch of its own, so that a tree patched before this program existed
+(a dependency layout's PCO_SHC.src) takes it without a rebuild:
+build_pco_shc.sh --update applies it when meson.build lacks the target.
+
+Applies with `patch -p1` from the tarball tree's root, after
+meson-vulkan.patch.
+
+--- a/src/imagination/vulkan/meson.build
++++ b/src/imagination/vulkan/meson.build
+@@ -271,6 +271,29 @@
+   build_by_default : false,
+ )
+ 
++capture_spm_load = executable(
++  'capture_spm_load',
++  ['capture_spm_load.c', 'pvr_usc.c', 'pvr_formats.c', pvr_entrypoints, pvr_drirc, u_format_pack_h],
++  include_directories : [
++    pvr_includes,
++    inc_imagination,
++    inc_include,
++    inc_src,
++  ],
++  link_with : [
++    powervr_per_arch_libs,
++    libpowervr_common,
++    libpowervr_compiler,
++    libpowervr_uscgen,
++  ],
++  dependencies : [
++    pvr_deps,
++    idep_nir_headers,
++  ],
++  c_args : pvr_flags,
++  build_by_default : false,
++)
++
+ if with_symbols_check
+   test(
+     'pvr symbols check',

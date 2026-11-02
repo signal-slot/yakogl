@@ -1,0 +1,4 @@
+SPDX-License-Identifier: MIT
+SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+SPDX-FileCopyrightText: 2022 Imagination Technologies Ltd.
+A patch to Mesa 26.2.1 src/imagination/vulkan/meson.build (NOTICE 1f).

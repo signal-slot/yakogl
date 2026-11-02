@@ -117,7 +117,10 @@ the `inputs` that build downloads (url and sha256) and the distribution
 - `tools/cts/deps-env.sh --build NAME...` (or `--build-missing [board]`) makes
   entries on a host or an image, on purpose: it fetches the inputs, runs the
   `build` with `$DEPS` set to the layout directory, and checks the marker. It
-  never touches an entry that is present. The gate never builds them. To try
+  never touches an entry that is present. The gate never builds them, but for
+  the two its workflow names (`MALI_CSFFW`, one pinned file;
+  `PCO_SPM_LOAD_CAPTURE`, one target of the `pco_shc` tree a runner already
+  holds), whose notes in `deps.toml` say why. To try
   it without touching the host, point `CONNECTED_DEPS_DIR` at an empty directory.
 - `tools/env/build-gate-image.sh --pvr-fw-blob <path>` makes a fresh VM into
   the gate's image from these tools alone: `setup-gate-host.sh --install`,

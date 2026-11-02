@@ -54,8 +54,9 @@
 #
 # deps-env.sh --check is what every host and image is judged by. --build is
 # for hosts and images, run on purpose; the gate never builds these, but for
-# MALI_CSFFW: one pinned file, fetched by .github/workflows/gate.yml when a
-# runner lacks it (its note).
+# two entries .github/workflows/gate.yml makes when a runner lacks them:
+# MALI_CSFFW (one pinned file, fetched) and PCO_SPM_LOAD_CAPTURE (one ninja
+# target in the pco_shc tree the runner already holds); their notes say why.
 
 [[dep]]
 name = "ZEPHYR_WS"
@@ -132,6 +133,43 @@ tools/pco_shc/build_pco_shc.sh "$DEPS/downloads/mesa-26.2.1.tar.xz" "$DEPS/PCO_S
 mkdir -p "$DEPS/PCO_SHC"
 cp "$DEPS/PCO_SHC.src/mesa-26.2.1/build/src/imagination/vulkan/pco_shc" "$DEPS/PCO_SHC/pco_shc.part"
 mv "$DEPS/PCO_SHC/pco_shc.part" "$DEPS/PCO_SHC/pco_shc"
+'''
+packages.apt = [
+  "clang-21", "llvm-21-dev", "libclang-21-dev", "libclc-21-dev", "llvm-spirv-21", "libllvmspirvlib-21-dev",
+  "spirv-tools", "spirv-tools-dev", "spirv-headers", "glslang-tools", "meson", "ninja-build",
+  "python3-mako", "python3-yaml", "python3-packaging", "libdrm-dev", "libexpat1-dev", "zlib1g-dev", "libzstd-dev",
+]
+packages.portage = [
+  "llvm-core/clang", "llvm-core/llvm", "dev-util/spirv-llvm-translator", "dev-util/spirv-tools", "dev-util/spirv-headers",
+  "dev-util/glslang", "dev-build/meson", "dev-build/ninja", "dev-python/mako", "dev-python/pyyaml", "dev-python/packaging",
+  "x11-libs/libdrm", "dev-libs/expat", "sys-libs/zlib", "app-arch/zstd",
+]
+
+[[dep.inputs]]
+url = "https://archive.mesa3d.org/mesa-26.2.1.tar.xz"
+sha256_from = "third_party/mesa-26.2.1/UPSTREAM:tarball-sha256"
+
+[[dep]]
+name = "PCO_SPM_LOAD_CAPTURE"
+path = "PCO_SHC/capture_spm_load"
+marker = "PCO_SHC/capture_spm_load"
+requires = ["PCO_SHC"]
+note = "capture_spm_load of the pco_shc build (tools/pco_shc/capture_spm_load.c): prints the partial render's background-object load shader as Mesa 26.2.1's pco makes it, for the regenerate-and-compare row of tools/check.sh (tools/pco_shc/README.md); without it that row is a gap, never a pass. A host prepared before this entry has pco_shc and not this program: the build adds the one target to the tree PCO_SHC's build left in PCO_SHC.src (build_pco_shc.sh --update; pco_shc and the usclib are not rebuilt, so PCO_SHC stays what GLSL2USC_CACHE is keyed by), or, without that tree, builds it again from the same tarball, patches and options. The gate workflow builds this entry when a runner lacks it (one ninja target in a tree the runner already holds; .github/workflows/gate.yml), as it does MALI_CSFFW"
+build = '''
+if [ -z "${LLVM_DIR-}" ] && [ -d /usr/lib/llvm-21 ]; then export LLVM_DIR=/usr/lib/llvm-21; fi
+src="$DEPS/PCO_SHC.src/mesa-26.2.1"
+# One build at a time in the tree: two gates on one host would race Meson's
+# regeneration there (as the pan_shc row's lock says, tools/check.sh).
+exec 9>>"$DEPS/PCO_SHC.src.lock"
+flock 9
+if [ -f "$src/build/build.ninja" ]; then
+  tools/pco_shc/build_pco_shc.sh --update "$src"
+else
+  tools/pco_shc/build_pco_shc.sh "$DEPS/downloads/mesa-26.2.1.tar.xz" "$DEPS/PCO_SHC.src"
+fi
+mkdir -p "$DEPS/PCO_SHC"
+cp "$src/build/src/imagination/vulkan/capture_spm_load" "$DEPS/PCO_SHC/capture_spm_load.part"
+mv "$DEPS/PCO_SHC/capture_spm_load.part" "$DEPS/PCO_SHC/capture_spm_load"
 '''
 packages.apt = [
   "clang-21", "llvm-21-dev", "libclang-21-dev", "libclc-21-dev", "llvm-spirv-21", "libllvmspirvlib-21-dev",

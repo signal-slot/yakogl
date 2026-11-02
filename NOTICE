@@ -186,8 +186,9 @@ third_party/zephyr-pr114866-2026-07-29-2473da6b (entry 11).
       tools/gc7000-isa/*.py, tools/isa-extract/*.py, and the patches
       tools/v3d/mesa-v3d_shc.patch, tools/vivante/mesa-*.patch,
       tools/pco_shc/usclib-tex.cl.patch, tools/pco_shc/meson-vulkan.patch,
+      tools/pco_shc/meson-capture_spm_load.patch,
       tools/mali/mesa-pan_shc.patch, tools/pco_shc/capture_usc.c,
-      capture_smp_fs.c. tools/mali/mesa-glibc-once_flag.patch patches
+      capture_smp_fs.c, capture_spm_load.c. tools/mali/mesa-glibc-once_flag.patch patches
       src/c11/threads.h and impl/threads_posix.c, which are BSL-1.0
       (Copyright yohhoy 2012, Copyright 2022 Yonggang Luo), so the patch is
       BSL-1.0 (LICENSES/BSL-1.0.txt). Each patch has a .license sidecar that
