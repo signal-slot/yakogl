@@ -396,8 +396,13 @@ pub fn build_fragment_for<'a>(
             return Err(ChainError::Build(BuildError::Unsupported("gl_FragDepth with several sRGB attachments")));
         }
     }
+    let mut int_dwords = None;
     let (sel, blend_key) = match int_rt {
-        Some(rt) => (pack_int_output(sel, rt, (blend_key >> 26) & 0xf, a)?, 0),
+        Some(rt) => {
+            let (sel, n) = pack_int_output(sel, rt, (blend_key >> 26) & 0xf, a)?;
+            int_dwords = Some(n);
+            (sel, 0)
+        }
         None if sel.outputs.iter().any(|(slot, _)| *slot == ir::IoSlot::FragDepth) => {
             (clamp_depth_output(sel, a)?, blend_key)
         }
@@ -744,7 +749,6 @@ pub fn build_fragment_for<'a>(
         a2one_flag = Some(flag);
     }
     let mut output_regs = None;
-    let int_dwords = int_rt.map(|rt| rt.dwords() as u8);
     let (len, temps) = if let Some(n) = int_dwords {
         /* the packed dwords, written as they are (`pack_int_output`) */
         let dwords = &colour[..usize::from(n)];
@@ -878,16 +882,26 @@ pub fn build_fragment_for<'a>(
 /// dwords, which [`super::assemble::build_fragment_shader_packed`] writes to
 /// pixel outputs 0.. as they are.
 ///
+/// Several colour outputs (dEQP's shader executor writes modf's `out0` and
+/// `out1` to two integer attachments of one layout): each is packed for the
+/// key's layout, output `n` into the pixel's dwords from `n * d`, `d` the
+/// layout's dword count -- the registers `src/pvr/backend.rs` emits
+/// attachment `n` from when every attachment has that layout (a 64-bit
+/// source then starts at an even register, as the emit asks). The key
+/// carries one layout: attachments of different layouts are the caller's to
+/// refuse. Returned with the dwords written (the record's `num_outputs`).
+///
 /// Refused by name: a colour mask on the target's channels (`mask`, the
 /// key's [26:29]: the output would have to keep the pixel's other channels,
-/// which needs a read of the pixel no integer path makes), and a shader
-/// that writes anything but colour output 0.
+/// which needs a read of the pixel no integer path makes), a shader that
+/// writes anything but colour outputs at the consecutive locations 0..,
+/// and outputs that take more than the pixel's four output registers.
 fn pack_int_output<'a>(
     sel: Selected<'a>,
     rt: crate::shaderc::ShcIntRt,
     mask: u32,
     a: &'a Arena<'a>,
-) -> Result<Selected<'a>, ChainError> {
+) -> Result<(Selected<'a>, u8), ChainError> {
     use super::sel::{OpType, SelDst, SelOp, SelSrc};
     use crate::shaderc::online::arena::AVec;
     use ir::AluOp::{Iand, Ior, Ishl};
@@ -896,10 +910,28 @@ fn pack_int_output<'a>(
     if mask & ((1u32 << rt.channels) - 1) != 0 {
         return Err(unsupported("a colour mask on an integer render target"));
     }
-    let [(ir::IoSlot::FragColor(0), comps)] = sel.outputs else {
-        return Err(unsupported("an integer render target written from other than colour output 0 alone"));
-    };
-    let mut groups: AVec<'a, SelGroup> = AVec::with_capacity(a, sel.groups.len() + 12).map_err(oom)?;
+    /* output n is sel.outputs[at[n]]; every location 0..count is written */
+    let count = sel.outputs.len();
+    let mut at = [0usize; 4];
+    let not_consecutive = || unsupported("an integer render target written from other than colour outputs 0..");
+    if count == 0 || count > at.len() {
+        return Err(not_consecutive());
+    }
+    let mut seen = 0u32;
+    for (i, (slot, _)) in sel.outputs.iter().enumerate() {
+        match *slot {
+            ir::IoSlot::FragColor(loc) if usize::from(loc) < count && seen & (1 << loc) == 0 => {
+                seen |= 1 << loc;
+                at[usize::from(loc)] = i;
+            }
+            _ => return Err(not_consecutive()),
+        }
+    }
+    let per = rt.dwords();
+    if per * count as u32 > 4 {
+        return Err(unsupported("integer colour outputs past the pixel's four output registers"));
+    }
+    let mut groups: AVec<'a, SelGroup> = AVec::with_capacity(a, sel.groups.len() + 12 * count).map_err(oom)?;
     for g in sel.groups {
         groups.push(a, *g).map_err(oom)?;
     }
@@ -918,38 +950,41 @@ fn pack_int_output<'a>(
         _ => (0, 10 * c, if c == 3 { 2 } else { 10 }),
     };
     let mut packed: [Option<SelSrc>; 4] = [None; 4];
-    for c in 0..u32::from(rt.channels) {
-        let x = comps[c as usize].ok_or(ChainError::FragmentOutputsNotBuilt)?;
-        let (dword, offset, width) = field(c);
-        let v = if width == 32 {
-            /* its own register: the output's value moved there as it is */
-            emit(SelOp::Copy, OpType::U32, [Some(x), None, None])?
-        } else {
-            /* masked unless the shift drops the bits above the field */
-            let v = if offset + width < 32 {
-                emit(SelOp::Alu(Iand), OpType::U32, [Some(x), Some(SelSrc::Imm((1 << width) - 1)), None])?
+    for (o, &i) in at[..count].iter().enumerate() {
+        let comps = &sel.outputs[i].1;
+        for c in 0..u32::from(rt.channels) {
+            let x = comps[c as usize].ok_or(ChainError::FragmentOutputsNotBuilt)?;
+            let (dword, offset, width) = field(c);
+            let v = if width == 32 {
+                /* its own register: the output's value moved there as it is */
+                emit(SelOp::Copy, OpType::U32, [Some(x), None, None])?
             } else {
-                x
+                /* masked unless the shift drops the bits above the field */
+                let v = if offset + width < 32 {
+                    emit(SelOp::Alu(Iand), OpType::U32, [Some(x), Some(SelSrc::Imm((1 << width) - 1)), None])?
+                } else {
+                    x
+                };
+                if offset != 0 {
+                    emit(SelOp::Alu(Ishl), OpType::S32, [Some(v), Some(SelSrc::Imm(offset)), None])?
+                } else {
+                    v
+                }
             };
-            if offset != 0 {
-                emit(SelOp::Alu(Ishl), OpType::S32, [Some(v), Some(SelSrc::Imm(offset)), None])?
-            } else {
-                v
-            }
-        };
-        let d = &mut packed[dword as usize];
-        *d = Some(match *d {
-            None => v,
-            Some(acc) => emit(SelOp::Alu(Ior), OpType::U32, [Some(acc), Some(v), None])?,
-        });
+            let d = &mut packed[(o as u32 * per + dword) as usize];
+            *d = Some(match *d {
+                None => v,
+                Some(acc) => emit(SelOp::Alu(Ior), OpType::U32, [Some(acc), Some(v), None])?,
+            });
+        }
     }
-    let n = rt.dwords() as usize;
+    let n = (per * count as u32) as usize;
     let first = packed[0].ok_or(ChainError::FragmentOutputsNotBuilt)?;
     /* the components past the packed dwords are never written; they repeat
      * the first so the output reads as complete */
     let comps = core::array::from_fn(|k| if k < n { packed[k] } else { Some(first) });
     let outputs = a.alloc_copy(&[(ir::IoSlot::FragColor(0), comps)]).map_err(oom)?;
-    Ok(Selected { groups: groups.into_slice(), vregs, outputs, alpha_to_one: None, ..sel })
+    Ok((Selected { groups: groups.into_slice(), vregs, outputs, alpha_to_one: None, ..sel }, n as u8))
 }
 
 /// The colour outputs of a fragment shader drawn into several sRGB
