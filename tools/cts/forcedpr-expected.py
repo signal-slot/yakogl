@@ -4,7 +4,7 @@
 """forcedpr-expected.py - host cross-check of gl_test case 217's expected image.
 
 Case 217 (driver/tools/pvrlab/gl_test.c, "a forced partial render") draws N
-(256) layers of 512x512 rectangles into a 1024x1024 target, depth LESS, and
+(1216, the default: the crossing measured on the AM62P) layers of 512x512 rectangles into a 1024x1024 target, depth LESS, and
 compares the read-back with an image it computes on the target. This tool
 computes that image again, independently (it paints layers in descending
 rank, so the least rank is painted last, instead of comparing ranks), so an
@@ -201,7 +201,7 @@ def explain(text, n):
 
 def main():
     ap = argparse.ArgumentParser(description="host cross-check of gl_test case 217's expected image")
-    ap.add_argument("--layers", type=int, default=256)
+    ap.add_argument("--layers", type=int, default=1216)
     ap.add_argument("--pixel", nargs=2, type=int, metavar=("X", "Y"))
     ap.add_argument("--dump", metavar="FILE")
     ap.add_argument("--explain", metavar="TEXT")

@@ -2,8 +2,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 #
-# Self-test of forcedpr-expected.py: a 4-layer variant checked by hand, and the
-# full 256-layer case 217 with a pinned sha256 of its expected image.
+# Self-test of forcedpr-expected.py: a 4-layer variant checked by hand, the
+# 256-layer image of the first board run, and the default 1216-layer case 217
+# (the crossing measured on the AM62P, 2026-11-02) with pinned sha256s.
 set -u
 here=$(cd "$(dirname "$0")" && pwd)
 tool="$here/forcedpr-expected.py"
@@ -29,11 +30,19 @@ expect "4 layers sha" "$out" "sha256 df42dda7ca70cb5a054318b652ea9b19b5433ce1761
 expect "4 layers hist" "$out" "0:262144    1: 33562    2:209356    3: 98649"
 expect "4 layers coverage" "$out" "exact whole-pixel coverage for all 4 layers"
 
-out=$(run) || fail "256-layer report exited non-zero"
+out=$(run --layers 256) || fail "256-layer report exited non-zero"
 expect "256 sha" "$out" "sha256 b33c2dbdfda636dd6df7ecc7b9e5db60ad0780b4575b7cb1c59d2808b86fe0c0"
 expect "256 coverage" "$out" "exact whole-pixel coverage for all 256 layers"
 expect "256 ranks" "$out" "ranks distinct: yes"
 expect "256 depth" "$out" "ordered in 16-bit unorm"
+
+out=$(run) || fail "default (1216-layer) report exited non-zero"
+expect "1216 default" "$out" "forcedpr-expected: 1216 layers, 1024x1024"
+expect "1216 sha" "$out" "sha256 8e787fe44e5d8694c89a7735fba7aa6a92f11d9c00ec30ac5045674b0507caad"
+expect "1216 clear" "$out" "clear (no layer): 18624 pixels"
+expect "1216 coverage" "$out" "exact whole-pixel coverage for all 1216 layers"
+expect "1216 ranks" "$out" "ranks distinct: yes"
+expect "1216 depth" "$out" "ordered in 16-bit unorm (smallest step 28)"
 
 # explain: a FAIL line's pair
 e=$(run --layers 4 --explain "FAIL (600,600): got 0x89277b00 want 0xff89277b")
