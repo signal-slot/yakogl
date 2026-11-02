@@ -9,6 +9,7 @@
 #   tools/cts/board-stage.sh <board> common   the common set (tools/cts/common-tree.txt)
 #   tools/cts/board-stage.sh <board> deqp     the whole dEQP-GLES2 tree
 #   tools/cts/board-stage.sh am62p ms4        the AM62P's 4x multisample tree
+#   tools/cts/board-stage.sh am62p gles3      the AM62P's whole dEQP-GLES3 tree
 #
 # <board> is am62p, imx8mp or pi4, as tools/board.sh names them. The images
 # are built from HEAD (build/common/<board>-<sha8>, build/deqp/<board>-<sha8>)
@@ -18,6 +19,25 @@
 # interrupted one rebuilt (common-images.sh). A killed run can leave a
 # once-*.bin in the board's stage directory (the Verdins' eMMC route); the run
 # removes it before it starts and says so in one line.
+#
+# gles3 (AM62P only) builds the 46 images of tools/cts/am62p-gles3-tree.txt
+# (DEQP_MODULE=gles3, REPORT_ES2 off, each image checked with --gles3) into
+# build/deqp/am62p-gles3-<sha8> and runs `board.sh am62p tree` into
+# records/am62p/deqp-gles3-<sha8>. It needs a gles3 stage 1, which is not the
+# farm's DEQP_WORK (GLES2): GLES3_WORK names it, else it is the sibling
+# <DEQP_WORK>-gles3 (the deps layout: deqp-stage1-am62p-gles3 beside
+# deqp-stage1-am62p). A complete one (build/modules/gles3/libdeqp-gles3-package.a)
+# is reused, else it is built there by `cts-build-zephyr.sh MODULE=gles3` from the
+# layout's VK-GL-CTS (CTS= overrides). Also for gles3, from the environment:
+#   TREE_ROWS         only those rows (3,5-9, counted from 0 as board.sh tree does)
+#                     are built and run; the build log is then appended to
+#   DEQP_PVR_NATIVE_3D  0|1: -DCONFIG_DEQP_PVR_NATIVE_3D=<v> for every image
+#                     (driver/samples/zephyr/deqp/Kconfig; unset: -1, the
+#                     library's default). The arm is named in the build and
+#                     record directories (...-n3d0, ...-n3d1) and in
+#                     <records>/stage-notes.txt, so two arms never mix.
+#   BOARD_STAGE_DRY_RUN=1  print the commands, the rows and the directories,
+#                     build and run nothing (needs no deps layout or board)
 #
 # The board, from the environment (a farm stage gets it from its leases):
 #   BOARD_HOST   user@host of the board's Linux; else RESOURCE_<B>_SSH, the
@@ -92,7 +112,7 @@ check_deps() {
 }
 [ "${BOARD_STAGE_SOURCE_ONLY:-}" = 1 ] && return 0 2>/dev/null
 
-usage() { echo "usage: tools/cts/board-stage.sh am62p|imx8mp|pi4 common|deqp|ms4" >&2; exit 2; }
+usage() { echo "usage: tools/cts/board-stage.sh am62p|imx8mp|pi4 common|deqp|ms4|gles3" >&2; exit 2; }
 die() { echo "board-stage.sh: $1" >&2; exit "${2:-2}"; }
 [ $# -eq 2 ] || usage
 board=$1 what=$2
@@ -102,10 +122,31 @@ imx8mp) layout=imx8mp key=IMX8MP ;;
 pi4) layout=rpi_4b key=RPI4 ;;
 *) usage ;;
 esac
-case "$what" in common | deqp) ;; ms4) [ "$board" = am62p ] || die "ms4 is the AM62P's tree only" ;; *) usage ;; esac
+case "$what" in common | deqp) ;; ms4 | gles3) [ "$board" = am62p ] || die "$what is the AM62P's tree only" ;; *) usage ;; esac
 
 cd "$(git rev-parse --show-toplevel)" || die "not in the repository"
 H8=$(git rev-parse --short=8 HEAD)
+
+# gles3: the arm and the directories, and the dry run, before the layout is read
+if [ "$what" = gles3 ]; then
+    arm=
+    case "${DEQP_PVR_NATIVE_3D:-}" in
+    '') ;;
+    0 | 1) arm=-n3d$DEQP_PVR_NATIVE_3D ;;
+    *) die "DEQP_PVR_NATIVE_3D must be 0 or 1, not '$DEQP_PVR_NATIVE_3D'" ;;
+    esac
+    G3_BUILD=build/deqp/am62p-gles3-$H8$arm
+    G3_REC=records/am62p/deqp-gles3-$H8$arm
+    G3_TREE=tools/cts/am62p-gles3-tree.txt
+    if [ "${BOARD_STAGE_DRY_RUN:-}" = 1 ]; then
+        echo "board-stage.sh: am62p gles3 at $H8 (dry run: nothing is built or run)"
+        echo "native 3D: ${DEQP_PVR_NATIVE_3D:-unset (-1: library default)}  rows: ${TREE_ROWS:-all}"
+        echo "board-stage.sh\$ DEQP_MODULE=gles3 DEQP_PVR_NATIVE_3D=${DEQP_PVR_NATIVE_3D:-} DEQP_WORK=${GLES3_WORK:-<DEQP_WORK>-gles3} tools/cts/am62p-deqp-images.sh $G3_TREE $G3_BUILD $H8"
+        tools/cts/am62p-deqp-images.sh --dry-run "$G3_TREE" "$G3_BUILD" "$H8" | sed 's/^/  /'
+        echo "board-stage.sh\$ TREE_IMAGE_DIR=$G3_BUILD TREE_TAG=$H8 tools/board.sh am62p tree $G3_TREE $G3_REC"
+        exit 0
+    fi
+fi
 
 # the dependency layout: every entry or nothing
 if ! check_deps "$layout" "$what"; then
@@ -176,6 +217,42 @@ ms4)
         die "ms4 image build failed (build/deqp/am62p-ms4-$H8/build.out)" 1
     TREE_IMAGE_DIR=build/deqp/am62p-ms4-$H8 \
         run tools/board.sh am62p tree tools/cts/am62p-ms4-tree.txt "records/am62p/deqp-ms4-$H8" || die "ms4 tree failed" 1
+    ;;
+gles3)
+    # the gles3 stage 1: GLES3_WORK, else beside the GLES2 one
+    G3_WORK=${GLES3_WORK:-${DEQP_WORK%/}-gles3}
+    if [ ! -f "$G3_WORK/build/modules/gles3/libdeqp-gles3-package.a" ]; then
+        G3_CTS=${CTS:-$(dirname "$DEQP_WORK")/VK-GL-CTS}
+        [ -d "$G3_CTS" ] || die "no VK-GL-CTS at $G3_CTS for the gles3 stage 1 (set CTS=)"
+        [ -n "${WEST_VENV:-}" ] && PATH=$WEST_VENV/bin:$PATH
+        echo "board-stage.sh: building the gles3 stage 1 in $G3_WORK"
+        (
+            export ZEPHYR_BASE=$ZEPHYR_WS/zephyr ZEPHYR_TOOLCHAIN_VARIANT=${ZEPHYR_TOOLCHAIN_VARIANT:-zephyr}
+            ZEPHYR_MODULES=$(tools/cts/zephyr-modules.sh "$ZEPHYR_WS") || exit 1
+            export ZEPHYR_MODULES CFLAGS=-O2 CXXFLAGS=-O2   # as DEQP_WORK's build (deps.toml)
+            CTS=$G3_CTS WORK=$G3_WORK MODULE=gles3 run tools/cts/cts-build-zephyr.sh
+        ) || { rm -rf "$G3_WORK"; die "gles3 stage 1 build failed" 1; }
+    else
+        echo "board-stage.sh: reusing the gles3 stage 1 in $G3_WORK"
+    fi
+    mkdir -p "$G3_BUILD" "$G3_REC"
+    # TREE_ROWS resumes: keep the rows already in build.out
+    redir='>'
+    [ -n "${TREE_ROWS:-}" ] && redir='>>'
+    {
+        echo "commit $H8 ($(git describe --always --dirty 2>/dev/null || echo unknown))"
+        echo "DEQP_PVR_NATIVE_3D=${DEQP_PVR_NATIVE_3D:-unset (-1: library default)}"
+        echo "TREE_ROWS=${TREE_ROWS:-all}"
+        echo "gles3 stage 1: $G3_WORK"
+    } >> "$G3_REC/stage-notes.txt"
+    echo "board-stage.sh\$ DEQP_MODULE=gles3 DEQP_WORK=$G3_WORK tools/cts/am62p-deqp-images.sh $G3_TREE $G3_BUILD $H8 $redir $G3_BUILD/build.out"
+    if [ "$redir" = '>>' ]; then
+        DEQP_MODULE=gles3 DEQP_WORK=$G3_WORK tools/cts/am62p-deqp-images.sh "$G3_TREE" "$G3_BUILD" "$H8" >> "$G3_BUILD/build.out" 2>&1
+    else
+        DEQP_MODULE=gles3 DEQP_WORK=$G3_WORK tools/cts/am62p-deqp-images.sh "$G3_TREE" "$G3_BUILD" "$H8" > "$G3_BUILD/build.out" 2>&1
+    fi || die "gles3 image build failed ($G3_BUILD/build.out)" 1
+    TREE_IMAGE_DIR=$G3_BUILD TREE_TAG=$H8 \
+        run tools/board.sh am62p tree "$G3_TREE" "$G3_REC" || die "gles3 tree failed" 1
     ;;
 esac
 echo "board-stage.sh: $board $what at $H8 done"

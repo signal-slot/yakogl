@@ -198,7 +198,7 @@ board's table (or, on the i.MX8MP, one image with the table and a selector).
 
 **ES 3.0 gl_test cases.** An ES 3.0 gl_test image needs `CONFIG_GL_TEST_CASES` for `gl_test`; `tools/cts/common-images.sh --cases 202,203 am62p ...` sets `CONFIG_GL_TEST_CASES` for the gl_test row (the Pi 4's `CONFIG_V3D_GL_TEST_CASE` for one case, `CONFIG_V3D_GL_TEST_CASES` for a list; `--pipe` adds `-pipe` to the compile; use a new `<img-dir>` when the case list changes, a build directory made with other arguments is refused). The expected readings are in the cases themselves (`driver/tools/pvrlab/gl_test.c`): 196 `occl` q0 to q4 `available 1` with 0, 1, 0, 1, 1; 202 `blitconv` 12 / 12; 203 `tfcap` 9 / 9; 204 `srgb` 8 / 8; 205 `mappbo` 15 / 15. Each skips by name in an ES 2.0 context.
 
-Board rules for every run: one GL client per board (check that the board is idle first); images only from commits on origin/main, built from a detached checkout (section 2d), with the commit recorded beside each result; `BOARD_BOOT=uboot-mmc` on the two Verdins, tryboot (board.sh's default) on the Pi 4. The ES 2.0 sign-off runs are one command each, `tools/cts/board-stage.sh <board> common|deqp` (and `am62p ms4`); that script's header names the environment.
+Board rules for every run: one GL client per board (check that the board is idle first); images only from commits on origin/main, built from a detached checkout (section 2d), with the commit recorded beside each result; `BOARD_BOOT=uboot-mmc` on the two Verdins, tryboot (board.sh's default) on the Pi 4. The ES 2.0 sign-off runs are one command each, `tools/cts/board-stage.sh <board> common|deqp` (and `am62p ms4`, `am62p gles3`); that script's header names the environment.
 
 ### The baseline: five groups, one command per board
 
@@ -661,6 +661,17 @@ an image booted (the RTI watchdog, `CONFIG_YAKOGL_AM62P_WDT_SECONDS`, minus the
 boot), so a row's run must end well inside that; the generator keeps each image
 under about 480 s by splitting what the board measured as slow, and a new slow
 group is split there, not in the table.
+
+`tools/cts/board-stage.sh am62p gles3` runs the whole table as one command: it
+builds the images from HEAD into `build/deqp/am62p-gles3-<sha8>` (a gles3 stage 1
+from `GLES3_WORK`, else the sibling `<DEQP_WORK>-gles3`, reused when complete and
+built by `cts-build-zephyr.sh MODULE=gles3` otherwise; every image is checked with
+`--gles3`) and runs `board.sh am62p tree` into `records/am62p/deqp-gles3-<sha8>`.
+`TREE_ROWS=3,5-9` builds and runs only those rows (rows from 0, as board.sh), and
+`DEQP_PVR_NATIVE_3D=0|1` passes `-DCONFIG_DEQP_PVR_NATIVE_3D` to every image; the
+arm is then part of both directory names (`...-n3d1`) and of `stage-notes.txt` in
+the record directory. `BOARD_STAGE_DRY_RUN=1` prints the build and tree commands
+and the rows without a layout or a board.
 
 Measured on 2026-10-10 from main `c4ccc966`
 (`records/am62p/deqp-gles3-c4ccc966/{full,full2}`): the span from the first to the
