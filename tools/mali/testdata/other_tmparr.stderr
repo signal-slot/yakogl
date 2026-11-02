@@ -1,0 +1,964 @@
+MESA: debug: pandecode: dump command stream to file target/other/other_tmparr.trace.python3.ctx-0.0000
+shader: MESA_SHADER_VERTEX
+source_blake3: {0xd21f28bc, 0xba454c3e, 0x02c8d801, 0x1199c3ea, 0xd85ab051, 0x3227319a, 0xeec5c645, 0x69d64d32}
+name: GLSL1
+next_stage: MESA_SHADER_FRAGMENT
+num_ubos: 2
+inputs_read: 15
+outputs_written: 0
+max_subgroup_size: 128
+min_subgroup_size: 1
+api_subgroup_size_draw_uniform: true
+first_ubo_is_default_ubo: true
+known_interpolation_qualifiers: true
+flrp_lowered: true
+inputs: 1
+outputs: 1
+decl_var shader_in INTERP_MODE_NONE none highp vec4 a_position (VERT_ATTRIB_GENERIC0.xyzw, 0, 0)
+decl_var shader_out INTERP_MODE_NONE none highp vec4 gl_Position (VARYING_SLOT_POS.xyzw, 0, 0)
+decl_function main () (entrypoint)
+
+impl main {
+    block b0:   // preds:
+    32     %0 = load_const (0x00000000)
+    32x4   %1 = @load_input (%0 (0x0)) (base=16777216, range=1, component=0, dest_type=float32, io location=VERT_ATTRIB_GENERIC0 slots=1)  // a_position
+    32     %2 = frcp %1.w
+    32     %3 = load_const (0xc7000000 = -32768.000000)
+    32     %4 = fmax %2, %3 (-32768.000000)
+    32     %5 = load_const (0x47000000 = 32768.000000)
+    32     %6 = fmin %4, %5 (32768.000000)
+    32     %7 = fmul %1.x, %6
+    32     %8 = fmul %1.y, %6
+    32     %9 = fmul %1.z, %6
+    32    %10 = load_const (0x00000001 = 0.000000)
+    32x3  %11 = @load_ubo (%10 (0x1), %0 (0x0)) (access=none, align_mul=1073741824, align_offset=0, range_base=0, range=4)
+    32    %12 = load_const (0x00000010 = 16)
+    32x3  %13 = @load_ubo (%10 (0x1), %12 (0x10)) (access=none, align_mul=1073741824, align_offset=16, range_base=0, range=4)
+    32    %14 = ffma %7, %11.x, %13.x
+    32    %15 = ffma %8, %11.y, %13.y
+    32    %16 = ffma %9, %11.z, %13.z
+    32    %17 = @load_idvs_output_buf_index_pan
+    32    %18 = load_const (0x3d000000 = 0.031250 = 1023410176)
+    32x2  %19 = @lea_buf_pan (%18 (0x3d000000), %17)
+    64    %20 = pack_64_2x32 %19
+                @store_global (%14, %20) (wrmask=x, access=istream-pan, align_mul=4, align_offset=0)
+    64    %21 = load_const (0x0000000000000004)
+    64    %22 = iadd %21 (0x4), %20
+                @store_global (%15, %22) (wrmask=x, access=istream-pan, align_mul=4, align_offset=0)
+    64    %23 = load_const (0x0000000000000008)
+    64    %24 = iadd %23 (0x8), %20
+                @store_global (%16, %24) (wrmask=x, access=istream-pan, align_mul=4, align_offset=0)
+    64    %25 = load_const (0x000000000000000c = 12)
+    64    %26 = iadd %25 (0xc), %20
+                @store_global (%6, %26) (wrmask=x, access=istream-pan, align_mul=4, align_offset=0)
+                // succs: b1
+    block b1:
+}
+
+block0 {
+32      %44 = MOV.i32 r59
+32      %29 = MOV.i32 r61
+32      %28 = MOV.i32 r60
+32x4    %1 = LD_ATTR_IMM.table1.f32.v4 %28^, %29^, attribute_index:0
+32      %30, %31, %32, %33 = SPLIT.i32 %1^
+32      %2 = FRCP.f32 %33^
+32      %4 = FMAX.f32.nan_suppress %2^, u3
+32      %6 = FMIN.f32.nan_suppress %4^, u3[1]
+32      %7 = FMA.f32 %30^, %6, u256.neg
+32      %8 = FMA.f32 %31^, %6, u256.neg
+32      %9 = FMA.f32 %32^, %6, u256.neg
+32      %14 = FMA.f32 %7^, u0, u0[1]
+32      %15 = FMA.f32 %8^, u1, u1[1]
+32      %16 = FMA.f32 %9^, u2, u2[1]
+32x2    %19 = LEA_BUF_IMM.table13 %44^
+32      %46, %47 = SPLIT.i32 %19^
+        STORE.i32 %14^, %46, %47, byte_offset:0
+32x2    %52 = COLLECT.i32 u4, u256 
+32x2    %55 = COLLECT.i32 %46^, %47^ 
+32x2    %22 = SHADDX.s64 %52^, %55, shift:0
+32      %56, %57 = SPLIT.i32 %22^
+        STORE.i32 %15^, %56^, %57^, byte_offset:0
+32x2    %62 = COLLECT.i32 u4[1], u256 
+32x2    %24 = SHADDX.s64 %62^, %55, shift:0
+32      %66, %67 = SPLIT.i32 %24^
+        STORE.i32 %16^, %66^, %67^, byte_offset:0
+32x2    %72 = COLLECT.i32 u5, u256 
+32x2    %26 = SHADDX.s64 %72^, %55^, shift:0
+32      %76, %77 = SPLIT.i32 %26^
+        STORE.i32 %6^, %76^, %77^, byte_offset:0
+}
+
+block0 {
+        r0:r1:r2:r3 = LD_ATTR_IMM.table1.f32.v4 r60, r61, attribute_index:0
+        r3 = FRCP.f32 r3
+        r3 = FMAX.f32.nan_suppress r3, u3
+        r3 = FMIN.f32.nan_suppress r3, u3[1]
+        r0 = FMA.f32 r0, r3, u256.neg
+        r1 = FMA.f32 r1, r3, u256.neg
+        r2 = FMA.f32 r2, r3, u256.neg
+        r0 = FMA.f32 r0, u0, u0[1]
+        r1 = FMA.f32 r1, u1, u1[1]
+        r2 = FMA.f32 r2, u2, u2[1]
+        r4:r5 = LEA_BUF_IMM.table13 r59
+        STORE.i32 r0, r4, r5, byte_offset:0
+        r6 = MOV.i32 u4
+        r7 = MOV.i32 u256
+        r6:r7 = SHADDX.s64 r6:r7, r4:r5, shift:0
+        STORE.i32 r1, r6, r7, byte_offset:0
+        r0 = MOV.i32 u4[1]
+        r1 = MOV.i32 u256
+        r0:r1 = SHADDX.s64 r0:r1, r4:r5, shift:0
+        STORE.i32 r2, r0, r1, byte_offset:0
+        r0 = MOV.i32 u5
+        r1 = MOV.i32 u256
+        r0:r1 = SHADDX.s64 r0:r1, r4:r5, shift:0
+        STORE.i32 r3, r0, r1, byte_offset:0
+}
+
+block0 {
+        r0:r1:r2:r3 = LD_ATTR_IMM.table1.flow1.f32.v4 r60^, r61^, attribute_index:0
+        r3 = FRCP.f32 r3^
+        r3 = FMAX.f32.nan_suppress r3^, u3
+        r3 = FMIN.f32.nan_suppress r3^, u3[1]
+        r0 = FMA.f32 r0^, r3, u256.neg
+        r1 = FMA.f32 r1^, r3, u256.neg
+        r2 = FMA.f32 r2^, r3, u256.neg
+        r0 = FMA.f32 r0^, u0, u0[1]
+        r1 = FMA.f32 r1^, u1, u1[1]
+        r2 = FMA.f32 r2^, u2, u2[1]
+        r4:r5 = LEA_BUF_IMM.table13.flow2 r59^
+        STORE.i32 r0, r4, r5, byte_offset:0
+        r6 = MOV.i32 u4
+        r7 = MOV.i32 u256
+        r6:r7 = SHADDX.s64.flow4 r6:r7^, r4:r5, shift:0
+        STORE.i32 r1, r6^, r7^, byte_offset:0
+        r0 = MOV.i32 u4[1]
+        r1 = MOV.i32 u256
+        r0:r1 = SHADDX.s64.flow1 r0:r1^, r4:r5, shift:0
+        STORE.i32 r2, r0^, r1^, byte_offset:0
+        r0 = MOV.i32 u5
+        r1 = MOV.i32 u256
+        r0:r1 = SHADDX.s64.flow2 r0:r1^, r4:r5^, shift:0
+        STORE.i32.flow15 r3, r0^, r1^, byte_offset:0
+}
+
+   LD_ATTR_IMM.v4.f32.slot0.wait0 @r0:r1:r2:r3, r60^, r61^, index:0x0, table:0x1
+   FRCP.f32 r3, r3^
+   FMAX.f32 r3, r3^, u3.w0
+   FMIN.f32 r3, r3^, u3.w1
+   FMA.f32 r0, r0^, r3, 0x0.neg
+   FMA.f32 r1, r1^, r3, 0x0.neg
+   FMA.f32 r2, r2^, r3, 0x0.neg
+   FMA.f32 r0, r0^, u0.w0, u0.w1
+   FMA.f32 r1, r1^, u1.w0, u1.w1
+   FMA.f32 r2, r2^, u2.w0, u2.w1
+   LEA_BUF_IMM.slot1.wait1 @r4:r5, r59^, table:0xD, index:0x0
+   STORE.i32.istream.slot2 @r0, [r4:r5], offset:0
+   MOV.i32 r6, u4.w0
+   MOV.i32 r7, 0x0
+   SHADDX.s64.wait2 [r6:r7], [r6^:r7^], [r4:r5], shift:0x0
+   STORE.i32.istream.slot0 @r1, [r6^:r7^], offset:0
+   MOV.i32 r0, u4.w1
+   MOV.i32 r1, 0x0
+   SHADDX.s64.wait0 [r0:r1], [r0^:r1^], [r4:r5], shift:0x0
+   STORE.i32.istream.slot1 @r2, [r0^:r1^], offset:0
+   MOV.i32 r0, u5.w0
+   MOV.i32 r1, 0x0
+   SHADDX.s64.wait1 [r0:r1], [r0^:r1^], [r4^:r5^], shift:0x0
+   STORE.i32.istream.slot2.end @r3, [r0^:r1^], offset:0
+
+MESA_SHADER_POSITION shader: 24 instrs, 6.000000 cycles, 0.093750 fma, 0.218750 cvt, 0.062500 sfu, 0.328125 alu, 0.000000 v, 0.000000 t, 6.000000 ls, 256 code size, 2 threads, 0 loops, 0:0 spills:fills, 0 spill cost, 11 registers used, 6 uniforms used
+shader: MESA_SHADER_VERTEX
+source_blake3: {0xd21f28bc, 0xba454c3e, 0x02c8d801, 0x1199c3ea, 0xd85ab051, 0x3227319a, 0xeec5c645, 0x69d64d32}
+name: GLSL1
+next_stage: MESA_SHADER_FRAGMENT
+num_ubos: 2
+inputs_read: 15
+outputs_written: 0
+max_subgroup_size: 128
+min_subgroup_size: 1
+api_subgroup_size_draw_uniform: true
+first_ubo_is_default_ubo: true
+known_interpolation_qualifiers: true
+flrp_lowered: true
+inputs: 1
+outputs: 1
+decl_var shader_in INTERP_MODE_NONE none highp vec4 a_position (VERT_ATTRIB_GENERIC0.xyzw, 0, 0)
+decl_var shader_out INTERP_MODE_NONE none highp vec4 gl_Position (VARYING_SLOT_POS.xyzw, 0, 0)
+decl_function main () (entrypoint)
+
+impl main {
+    block b0:  // preds:, succs: b1
+    block b1:
+}
+
+block0 {
+}
+
+block0 {
+}
+
+block0 {
+}
+
+
+MESA_SHADER_VARYING shader: 0 instrs, 0.000000 cycles, 0.000000 fma, 0.000000 cvt, 0.000000 sfu, 0.000000 alu, 0.000000 v, 0.000000 t, 0.000000 ls, 0 code size, 2 threads, 0 loops, 0:0 spills:fills, 0 spill cost, 0 registers used, 0 uniforms used
+shader: MESA_SHADER_FRAGMENT
+source_blake3: {0x44cb535a, 0xf127f024, 0xf562320f, 0xf334099d, 0xbd19492a, 0x5892f118, 0x6622adcb, 0xc2e12254}
+name: GLSL1
+prev_stage: MESA_SHADER_VERTEX
+num_ubos: 2
+outputs_written: 4-11
+max_subgroup_size: 128
+min_subgroup_size: 1
+api_subgroup_size_draw_uniform: true
+bit_sizes_float: 0x30
+first_ubo_is_default_ubo: true
+known_interpolation_qualifiers: true
+flrp_lowered: true
+outputs: 8
+uniforms: 1
+scratch: 320
+decl_var uniform INTERP_MODE_NONE none mediump int ui_zero (0, 0, 0)
+decl_var uniform INTERP_MODE_NONE none mediump int ui_one (1, 1, 0)
+decl_var uniform INTERP_MODE_NONE none mediump int ui_two (2, 2, 0)
+decl_var uniform INTERP_MODE_NONE none mediump int ui_three (3, 3, 0)
+decl_var shader_out INTERP_MODE_NONE none mediump vec4 gl_FragData[0] (FRAG_RESULT_DATA0.xyzw, 0, 0)
+decl_var shader_out INTERP_MODE_NONE none vec4 gl_FragData[1] (FRAG_RESULT_DATA1.xyzw, 1, 0)
+decl_var shader_out INTERP_MODE_NONE none vec4 gl_FragData[2] (FRAG_RESULT_DATA2.xyzw, 2, 0)
+decl_var shader_out INTERP_MODE_NONE none vec4 gl_FragData[3] (FRAG_RESULT_DATA3.xyzw, 3, 0)
+decl_var shader_out INTERP_MODE_NONE none vec4 gl_FragData[4] (FRAG_RESULT_DATA4.xyzw, 4, 0)
+decl_var shader_out INTERP_MODE_NONE none vec4 gl_FragData[5] (FRAG_RESULT_DATA5.xyzw, 5, 0)
+decl_var shader_out INTERP_MODE_NONE none vec4 gl_FragData[6] (FRAG_RESULT_DATA6.xyzw, 6, 0)
+decl_var shader_out INTERP_MODE_NONE none vec4 gl_FragData[7] (FRAG_RESULT_DATA7.xyzw, 7, 0)
+decl_var ubo INTERP_MODE_NONE none vec4[1] uniform_0 (0, 0, 0)
+decl_function main () (entrypoint)
+
+impl main {
+    block b0:    // preds:
+    16x4    %0 = load_const (0x3000, 0x3400, 0x3800, 0x3c00) = (0.125000, 0.250000, 0.500000, 1.000000) = (12288, 13312, 14336, 15360)
+    32      %1 = load_const (0x00000000)
+                 @store_scratch (%0 (0x3000, 0x3400, 0x3800, 0x3c00), %1 (0x0)) (align_mul=256, align_offset=0, wrmask=xyzw)
+    16x4    %2 = load_const (0x2c00, 0x3000, 0x3400, 0x3800) = (0.062500, 0.125000, 0.250000, 0.500000) = (11264, 12288, 13312, 14336)
+    32      %3 = load_const (0x00000008)
+                 @store_scratch (%2 (0x2c00, 0x3000, 0x3400, 0x3800), %3 (0x8)) (align_mul=256, align_offset=8, wrmask=xyzw)
+    16x4    %4 = load_const (0x2800, 0x2c00, 0x3000, 0x3400) = (0.031250, 0.062500, 0.125000, 0.250000) = (10240, 11264, 12288, 13312)
+    32      %5 = load_const (0x00000010 = 16)
+                 @store_scratch (%4 (0x2800, 0x2c00, 0x3000, 0x3400), %5 (0x10)) (align_mul=256, align_offset=16, wrmask=xyzw)
+    16x4    %6 = load_const (0x2400, 0x2800, 0x2c00, 0x3000) = (0.015625, 0.031250, 0.062500, 0.125000) = (9216, 10240, 11264, 12288)
+    32      %7 = load_const (0x00000018 = 24)
+                 @store_scratch (%6 (0x2400, 0x2800, 0x2c00, 0x3000), %7 (0x18)) (align_mul=256, align_offset=24, wrmask=xyzw)
+    16x4    %8 = load_const (0x4400, 0x4400, 0x4400, 0x4400) = (4.000000, 4.000000, 4.000000, 4.000000) = (17408, 17408, 17408, 17408)
+    32      %9 = load_const (0x00000020 = 32)
+                 @store_scratch (%8 (0x4400, 0x4400, 0x4400, 0x4400), %9 (0x20)) (align_mul=256, align_offset=32, wrmask=xyzw)
+    16x4   %10 = load_const (0x4500, 0x4500, 0x4500, 0x4500) = (5.000000, 5.000000, 5.000000, 5.000000) = (17664, 17664, 17664, 17664)
+    32     %11 = load_const (0x00000028 = 40)
+                 @store_scratch (%10 (0x4500, 0x4500, 0x4500, 0x4500), %11 (0x28)) (align_mul=256, align_offset=40, wrmask=xyzw)
+    16x4   %12 = load_const (0x4600, 0x4600, 0x4600, 0x4600) = (6.000000, 6.000000, 6.000000, 6.000000) = (17920, 17920, 17920, 17920)
+    32     %13 = load_const (0x00000030 = 48)
+                 @store_scratch (%12 (0x4600, 0x4600, 0x4600, 0x4600), %13 (0x30)) (align_mul=256, align_offset=48, wrmask=xyzw)
+    16x4   %14 = load_const (0x4700, 0x4700, 0x4700, 0x4700) = (7.000000, 7.000000, 7.000000, 7.000000) = (18176, 18176, 18176, 18176)
+    32     %15 = load_const (0x00000038 = 56)
+                 @store_scratch (%14 (0x4700, 0x4700, 0x4700, 0x4700), %15 (0x38)) (align_mul=256, align_offset=56, wrmask=xyzw)
+    16x4   %16 = load_const (0x4800, 0x4800, 0x4800, 0x4800) = (8.000000, 8.000000, 8.000000, 8.000000) = (18432, 18432, 18432, 18432)
+    32     %17 = load_const (0x00000040 = 64)
+                 @store_scratch (%16 (0x4800, 0x4800, 0x4800, 0x4800), %17 (0x40)) (align_mul=256, align_offset=64, wrmask=xyzw)
+    16x4   %18 = load_const (0x4880, 0x4880, 0x4880, 0x4880) = (9.000000, 9.000000, 9.000000, 9.000000) = (18560, 18560, 18560, 18560)
+    32     %19 = load_const (0x00000048 = 72)
+                 @store_scratch (%18 (0x4880, 0x4880, 0x4880, 0x4880), %19 (0x48)) (align_mul=256, align_offset=72, wrmask=xyzw)
+    16x4   %20 = load_const (0x4900, 0x4900, 0x4900, 0x4900) = (10.000000, 10.000000, 10.000000, 10.000000) = (18688, 18688, 18688, 18688)
+    32     %21 = load_const (0x00000050 = 80)
+                 @store_scratch (%20 (0x4900, 0x4900, 0x4900, 0x4900), %21 (0x50)) (align_mul=256, align_offset=80, wrmask=xyzw)
+    16x4   %22 = load_const (0x4980, 0x4980, 0x4980, 0x4980) = (11.000000, 11.000000, 11.000000, 11.000000) = (18816, 18816, 18816, 18816)
+    32     %23 = load_const (0x00000058 = 88)
+                 @store_scratch (%22 (0x4980, 0x4980, 0x4980, 0x4980), %23 (0x58)) (align_mul=256, align_offset=88, wrmask=xyzw)
+    16x4   %24 = load_const (0x4a00, 0x4a00, 0x4a00, 0x4a00) = (12.000000, 12.000000, 12.000000, 12.000000) = (18944, 18944, 18944, 18944)
+    32     %25 = load_const (0x00000060 = 96)
+                 @store_scratch (%24 (0x4a00, 0x4a00, 0x4a00, 0x4a00), %25 (0x60)) (align_mul=256, align_offset=96, wrmask=xyzw)
+    16x4   %26 = load_const (0x4a80, 0x4a80, 0x4a80, 0x4a80) = (13.000000, 13.000000, 13.000000, 13.000000) = (19072, 19072, 19072, 19072)
+    32     %27 = load_const (0x00000068 = 104)
+                 @store_scratch (%26 (0x4a80, 0x4a80, 0x4a80, 0x4a80), %27 (0x68)) (align_mul=256, align_offset=104, wrmask=xyzw)
+    16x4   %28 = load_const (0x4b00, 0x4b00, 0x4b00, 0x4b00) = (14.000000, 14.000000, 14.000000, 14.000000) = (19200, 19200, 19200, 19200)
+    32     %29 = load_const (0x00000070 = 112)
+                 @store_scratch (%28 (0x4b00, 0x4b00, 0x4b00, 0x4b00), %29 (0x70)) (align_mul=256, align_offset=112, wrmask=xyzw)
+    16x4   %30 = load_const (0x4b80, 0x4b80, 0x4b80, 0x4b80) = (15.000000, 15.000000, 15.000000, 15.000000) = (19328, 19328, 19328, 19328)
+    32     %31 = load_const (0x00000078 = 120)
+                 @store_scratch (%30 (0x4b80, 0x4b80, 0x4b80, 0x4b80), %31 (0x78)) (align_mul=256, align_offset=120, wrmask=xyzw)
+    16x4   %32 = load_const (0x4c00, 0x4c00, 0x4c00, 0x4c00) = (16.000000, 16.000000, 16.000000, 16.000000) = (19456, 19456, 19456, 19456)
+    32     %33 = load_const (0x00000080 = 128)
+                 @store_scratch (%32 (0x4c00, 0x4c00, 0x4c00, 0x4c00), %33 (0x80)) (align_mul=256, align_offset=128, wrmask=xyzw)
+    16x4   %34 = load_const (0x4c40, 0x4c40, 0x4c40, 0x4c40) = (17.000000, 17.000000, 17.000000, 17.000000) = (19520, 19520, 19520, 19520)
+    32     %35 = load_const (0x00000088 = 136)
+                 @store_scratch (%34 (0x4c40, 0x4c40, 0x4c40, 0x4c40), %35 (0x88)) (align_mul=256, align_offset=136, wrmask=xyzw)
+    16x4   %36 = load_const (0x4c80, 0x4c80, 0x4c80, 0x4c80) = (18.000000, 18.000000, 18.000000, 18.000000) = (19584, 19584, 19584, 19584)
+    32     %37 = load_const (0x00000090 = 144)
+                 @store_scratch (%36 (0x4c80, 0x4c80, 0x4c80, 0x4c80), %37 (0x90)) (align_mul=256, align_offset=144, wrmask=xyzw)
+    16x4   %38 = load_const (0x4cc0, 0x4cc0, 0x4cc0, 0x4cc0) = (19.000000, 19.000000, 19.000000, 19.000000) = (19648, 19648, 19648, 19648)
+    32     %39 = load_const (0x00000098 = 152)
+                 @store_scratch (%38 (0x4cc0, 0x4cc0, 0x4cc0, 0x4cc0), %39 (0x98)) (align_mul=256, align_offset=152, wrmask=xyzw)
+    16x4   %40 = load_const (0x4d00, 0x4d00, 0x4d00, 0x4d00) = (20.000000, 20.000000, 20.000000, 20.000000) = (19712, 19712, 19712, 19712)
+    32     %41 = load_const (0x000000a0 = 160)
+                 @store_scratch (%40 (0x4d00, 0x4d00, 0x4d00, 0x4d00), %41 (0xa0)) (align_mul=256, align_offset=160, wrmask=xyzw)
+    16x4   %42 = load_const (0x4d40, 0x4d40, 0x4d40, 0x4d40) = (21.000000, 21.000000, 21.000000, 21.000000) = (19776, 19776, 19776, 19776)
+    32     %43 = load_const (0x000000a8 = 168)
+                 @store_scratch (%42 (0x4d40, 0x4d40, 0x4d40, 0x4d40), %43 (0xa8)) (align_mul=256, align_offset=168, wrmask=xyzw)
+    16x4   %44 = load_const (0x4d80, 0x4d80, 0x4d80, 0x4d80) = (22.000000, 22.000000, 22.000000, 22.000000) = (19840, 19840, 19840, 19840)
+    32     %45 = load_const (0x000000b0 = 176)
+                 @store_scratch (%44 (0x4d80, 0x4d80, 0x4d80, 0x4d80), %45 (0xb0)) (align_mul=256, align_offset=176, wrmask=xyzw)
+    16x4   %46 = load_const (0x4dc0, 0x4dc0, 0x4dc0, 0x4dc0) = (23.000000, 23.000000, 23.000000, 23.000000) = (19904, 19904, 19904, 19904)
+    32     %47 = load_const (0x000000b8 = 184)
+                 @store_scratch (%46 (0x4dc0, 0x4dc0, 0x4dc0, 0x4dc0), %47 (0xb8)) (align_mul=256, align_offset=184, wrmask=xyzw)
+    16x4   %48 = load_const (0x4e00, 0x4e00, 0x4e00, 0x4e00) = (24.000000, 24.000000, 24.000000, 24.000000) = (19968, 19968, 19968, 19968)
+    32     %49 = load_const (0x000000c0 = 192)
+                 @store_scratch (%48 (0x4e00, 0x4e00, 0x4e00, 0x4e00), %49 (0xc0)) (align_mul=256, align_offset=192, wrmask=xyzw)
+    16x4   %50 = load_const (0x4e40, 0x4e40, 0x4e40, 0x4e40) = (25.000000, 25.000000, 25.000000, 25.000000) = (20032, 20032, 20032, 20032)
+    32     %51 = load_const (0x000000c8 = 200)
+                 @store_scratch (%50 (0x4e40, 0x4e40, 0x4e40, 0x4e40), %51 (0xc8)) (align_mul=256, align_offset=200, wrmask=xyzw)
+    16x4   %52 = load_const (0x4e80, 0x4e80, 0x4e80, 0x4e80) = (26.000000, 26.000000, 26.000000, 26.000000) = (20096, 20096, 20096, 20096)
+    32     %53 = load_const (0x000000d0 = 208)
+                 @store_scratch (%52 (0x4e80, 0x4e80, 0x4e80, 0x4e80), %53 (0xd0)) (align_mul=256, align_offset=208, wrmask=xyzw)
+    16x4   %54 = load_const (0x4ec0, 0x4ec0, 0x4ec0, 0x4ec0) = (27.000000, 27.000000, 27.000000, 27.000000) = (20160, 20160, 20160, 20160)
+    32     %55 = load_const (0x000000d8 = 216)
+                 @store_scratch (%54 (0x4ec0, 0x4ec0, 0x4ec0, 0x4ec0), %55 (0xd8)) (align_mul=256, align_offset=216, wrmask=xyzw)
+    16x4   %56 = load_const (0x4f00, 0x4f00, 0x4f00, 0x4f00) = (28.000000, 28.000000, 28.000000, 28.000000) = (20224, 20224, 20224, 20224)
+    32     %57 = load_const (0x000000e0 = 224)
+                 @store_scratch (%56 (0x4f00, 0x4f00, 0x4f00, 0x4f00), %57 (0xe0)) (align_mul=256, align_offset=224, wrmask=xyzw)
+    16x4   %58 = load_const (0x4f40, 0x4f40, 0x4f40, 0x4f40) = (29.000000, 29.000000, 29.000000, 29.000000) = (20288, 20288, 20288, 20288)
+    32     %59 = load_const (0x000000e8 = 232)
+                 @store_scratch (%58 (0x4f40, 0x4f40, 0x4f40, 0x4f40), %59 (0xe8)) (align_mul=256, align_offset=232, wrmask=xyzw)
+    16x4   %60 = load_const (0x4f80, 0x4f80, 0x4f80, 0x4f80) = (30.000000, 30.000000, 30.000000, 30.000000) = (20352, 20352, 20352, 20352)
+    32     %61 = load_const (0x000000f0 = 240)
+                 @store_scratch (%60 (0x4f80, 0x4f80, 0x4f80, 0x4f80), %61 (0xf0)) (align_mul=256, align_offset=240, wrmask=xyzw)
+    16x4   %62 = load_const (0x4fc0, 0x4fc0, 0x4fc0, 0x4fc0) = (31.000000, 31.000000, 31.000000, 31.000000) = (20416, 20416, 20416, 20416)
+    32     %63 = load_const (0x000000f8 = 248)
+                 @store_scratch (%62 (0x4fc0, 0x4fc0, 0x4fc0, 0x4fc0), %63 (0xf8)) (align_mul=256, align_offset=248, wrmask=xyzw)
+    16x4   %64 = load_const (0x5000, 0x5000, 0x5000, 0x5000) = (32.000000, 32.000000, 32.000000, 32.000000) = (20480, 20480, 20480, 20480)
+    32     %65 = load_const (0x00000100 = 256)
+                 @store_scratch (%64 (0x5000, 0x5000, 0x5000, 0x5000), %65 (0x100)) (align_mul=256, align_offset=0, wrmask=xyzw)
+    16x4   %66 = load_const (0x5020, 0x5020, 0x5020, 0x5020) = (33.000000, 33.000000, 33.000000, 33.000000) = (20512, 20512, 20512, 20512)
+    32     %67 = load_const (0x00000108 = 264)
+                 @store_scratch (%66 (0x5020, 0x5020, 0x5020, 0x5020), %67 (0x108)) (align_mul=256, align_offset=8, wrmask=xyzw)
+    16x4   %68 = load_const (0x5040, 0x5040, 0x5040, 0x5040) = (34.000000, 34.000000, 34.000000, 34.000000) = (20544, 20544, 20544, 20544)
+    32     %69 = load_const (0x00000110 = 272)
+                 @store_scratch (%68 (0x5040, 0x5040, 0x5040, 0x5040), %69 (0x110)) (align_mul=256, align_offset=16, wrmask=xyzw)
+    16x4   %70 = load_const (0x5060, 0x5060, 0x5060, 0x5060) = (35.000000, 35.000000, 35.000000, 35.000000) = (20576, 20576, 20576, 20576)
+    32     %71 = load_const (0x00000118 = 280)
+                 @store_scratch (%70 (0x5060, 0x5060, 0x5060, 0x5060), %71 (0x118)) (align_mul=256, align_offset=24, wrmask=xyzw)
+    16x4   %72 = load_const (0x5080, 0x5080, 0x5080, 0x5080) = (36.000000, 36.000000, 36.000000, 36.000000) = (20608, 20608, 20608, 20608)
+    32     %73 = load_const (0x00000120 = 288)
+                 @store_scratch (%72 (0x5080, 0x5080, 0x5080, 0x5080), %73 (0x120)) (align_mul=256, align_offset=32, wrmask=xyzw)
+    16x4   %74 = load_const (0x50a0, 0x50a0, 0x50a0, 0x50a0) = (37.000000, 37.000000, 37.000000, 37.000000) = (20640, 20640, 20640, 20640)
+    32     %75 = load_const (0x00000128 = 296)
+                 @store_scratch (%74 (0x50a0, 0x50a0, 0x50a0, 0x50a0), %75 (0x128)) (align_mul=256, align_offset=40, wrmask=xyzw)
+    16x4   %76 = load_const (0x50c0, 0x50c0, 0x50c0, 0x50c0) = (38.000000, 38.000000, 38.000000, 38.000000) = (20672, 20672, 20672, 20672)
+    32     %77 = load_const (0x00000130 = 304)
+                 @store_scratch (%76 (0x50c0, 0x50c0, 0x50c0, 0x50c0), %77 (0x130)) (align_mul=256, align_offset=48, wrmask=xyzw)
+    16x4   %78 = load_const (0x50e0, 0x50e0, 0x50e0, 0x50e0) = (39.000000, 39.000000, 39.000000, 39.000000) = (20704, 20704, 20704, 20704)
+    32     %79 = load_const (0x00000138 = 312)
+                 @store_scratch (%78 (0x50e0, 0x50e0, 0x50e0, 0x50e0), %79 (0x138)) (align_mul=256, align_offset=56, wrmask=xyzw)
+    32x4   %80 = @load_ubo (%1 (0x0), %1 (0x0)) (access=none, align_mul=1073741824, align_offset=0, range_base=0, range=16)
+    32     %81 = load_const (0x00000003)
+    32     %82 = ishl %80.x, %81 (0x3)
+    16x4   %83 = @load_scratch (%82) (access=none, align_mul=8, align_offset=0)
+    32     %84 = ishl %80.y, %81 (0x3)
+    16x4   %85 = @load_scratch (%84) (access=none, align_mul=8, align_offset=0)
+    16x2   %86 = fadd %83.xy, %85.xy
+    16x2   %87 = fadd %83.zw, %85.zw
+    32     %88 = ishl %80.z, %81 (0x3)
+    16x4   %89 = @load_scratch (%88) (access=none, align_mul=8, align_offset=0)
+    16x2   %90 = fadd %86, %89.xy
+    16x2   %91 = fadd %87, %89.zw
+    32     %92 = ishl %80.w, %81 (0x3)
+    16x4   %93 = @load_scratch (%92) (access=none, align_mul=8, align_offset=0)
+    16x2   %94 = fadd %90, %93.xy
+    16x2   %95 = fadd %91, %93.zw
+    32     %96 = @load_cumulative_coverage_pan
+    16     %97 = mov %95.y
+    32     %98 = @atest_pan (%96, %97)
+    64     %99 = @load_blend_descriptor_pan (base=0)
+    16x4  %100 = vec4 %94.x, %94.y, %95.x, %95.y
+                 @blend_pan (%98, %99, %100) (io location=FRAG_RESULT_DATA0 slots=1, src_type=float16)
+                 // succs: b1
+    block b1:
+}
+
+block0 {
+32      %238 = MOV.i32 r60
+32      %246 = IADD_IMM.i32 u256, index:1006647296
+32x2    %0 = COLLECT.i32 u4, %246^ 
+        STORE.i64.tl %0^, tls_ptr, tls_ptr[1], byte_offset:0
+32      %247 = IADD_IMM.i32 u256, index:939537408
+32x2    %2 = COLLECT.i32 u4[1], %247^ 
+        STORE.i64.tl %2^, tls_ptr, tls_ptr[1], byte_offset:8
+32      %248 = IADD_IMM.i32 u256, index:738207744
+32x2    %4 = COLLECT.i32 %248^, u4 
+        STORE.i64.tl %4^, tls_ptr, tls_ptr[1], byte_offset:16
+32      %249 = IADD_IMM.i32 u256, index:671097856
+32x2    %6 = COLLECT.i32 %249^, u4[1] 
+        STORE.i64.tl %6^, tls_ptr, tls_ptr[1], byte_offset:24
+32x2    %8 = COLLECT.i32 u5, u5 
+        STORE.i64.tl %8^, tls_ptr, tls_ptr[1], byte_offset:32
+32x2    %10 = COLLECT.i32 u5[1], u5[1] 
+        STORE.i64.tl %10^, tls_ptr, tls_ptr[1], byte_offset:40
+32x2    %12 = COLLECT.i32 u6, u6 
+        STORE.i64.tl %12^, tls_ptr, tls_ptr[1], byte_offset:48
+32x2    %14 = COLLECT.i32 u6[1], u6[1] 
+        STORE.i64.tl %14^, tls_ptr, tls_ptr[1], byte_offset:56
+32x2    %16 = COLLECT.i32 u7, u7 
+        STORE.i64.tl %16^, tls_ptr, tls_ptr[1], byte_offset:64
+32x2    %18 = COLLECT.i32 u7[1], u7[1] 
+        STORE.i64.tl %18^, tls_ptr, tls_ptr[1], byte_offset:72
+32x2    %20 = COLLECT.i32 u8, u8 
+        STORE.i64.tl %20^, tls_ptr, tls_ptr[1], byte_offset:80
+32x2    %22 = COLLECT.i32 u8[1], u8[1] 
+        STORE.i64.tl %22^, tls_ptr, tls_ptr[1], byte_offset:88
+32x2    %24 = COLLECT.i32 u9, u9 
+        STORE.i64.tl %24^, tls_ptr, tls_ptr[1], byte_offset:96
+32x2    %26 = COLLECT.i32 u9[1], u9[1] 
+        STORE.i64.tl %26^, tls_ptr, tls_ptr[1], byte_offset:104
+32x2    %28 = COLLECT.i32 u10, u10 
+        STORE.i64.tl %28^, tls_ptr, tls_ptr[1], byte_offset:112
+32x2    %30 = COLLECT.i32 u10[1], u10[1] 
+        STORE.i64.tl %30^, tls_ptr, tls_ptr[1], byte_offset:120
+32x2    %32 = COLLECT.i32 u11, u11 
+        STORE.i64.tl %32^, tls_ptr, tls_ptr[1], byte_offset:128
+32x2    %34 = COLLECT.i32 u11[1], u11[1] 
+        STORE.i64.tl %34^, tls_ptr, tls_ptr[1], byte_offset:136
+32x2    %36 = COLLECT.i32 u12, u12 
+        STORE.i64.tl %36^, tls_ptr, tls_ptr[1], byte_offset:144
+32x2    %38 = COLLECT.i32 u12[1], u12[1] 
+        STORE.i64.tl %38^, tls_ptr, tls_ptr[1], byte_offset:152
+32x2    %40 = COLLECT.i32 u13, u13 
+        STORE.i64.tl %40^, tls_ptr, tls_ptr[1], byte_offset:160
+32x2    %42 = COLLECT.i32 u13[1], u13[1] 
+        STORE.i64.tl %42^, tls_ptr, tls_ptr[1], byte_offset:168
+32x2    %44 = COLLECT.i32 u14, u14 
+        STORE.i64.tl %44^, tls_ptr, tls_ptr[1], byte_offset:176
+32x2    %46 = COLLECT.i32 u14[1], u14[1] 
+        STORE.i64.tl %46^, tls_ptr, tls_ptr[1], byte_offset:184
+32x2    %48 = COLLECT.i32 u15, u15 
+        STORE.i64.tl %48^, tls_ptr, tls_ptr[1], byte_offset:192
+32x2    %50 = COLLECT.i32 u15[1], u15[1] 
+        STORE.i64.tl %50^, tls_ptr, tls_ptr[1], byte_offset:200
+32x2    %52 = COLLECT.i32 u16, u16 
+        STORE.i64.tl %52^, tls_ptr, tls_ptr[1], byte_offset:208
+32x2    %54 = COLLECT.i32 u16[1], u16[1] 
+        STORE.i64.tl %54^, tls_ptr, tls_ptr[1], byte_offset:216
+32x2    %56 = COLLECT.i32 u17, u17 
+        STORE.i64.tl %56^, tls_ptr, tls_ptr[1], byte_offset:224
+32x2    %58 = COLLECT.i32 u17[1], u17[1] 
+        STORE.i64.tl %58^, tls_ptr, tls_ptr[1], byte_offset:232
+32x2    %60 = COLLECT.i32 u18, u18 
+        STORE.i64.tl %60^, tls_ptr, tls_ptr[1], byte_offset:240
+32x2    %62 = COLLECT.i32 u18[1], u18[1] 
+        STORE.i64.tl %62^, tls_ptr, tls_ptr[1], byte_offset:248
+32x2    %64 = COLLECT.i32 u19, u19 
+        STORE.i64.tl %64^, tls_ptr, tls_ptr[1], byte_offset:256
+32x2    %66 = COLLECT.i32 u19[1], u19[1] 
+        STORE.i64.tl %66^, tls_ptr, tls_ptr[1], byte_offset:264
+32x2    %68 = COLLECT.i32 u20, u20 
+        STORE.i64.tl %68^, tls_ptr, tls_ptr[1], byte_offset:272
+32x2    %70 = COLLECT.i32 u20[1], u20[1] 
+        STORE.i64.tl %70^, tls_ptr, tls_ptr[1], byte_offset:280
+32x2    %72 = COLLECT.i32 u21, u21 
+        STORE.i64.tl %72^, tls_ptr, tls_ptr[1], byte_offset:288
+32x2    %74 = COLLECT.i32 u21[1], u21[1] 
+        STORE.i64.tl %74^, tls_ptr, tls_ptr[1], byte_offset:296
+32x2    %76 = COLLECT.i32 u22, u22 
+        STORE.i64.tl %76^, tls_ptr, tls_ptr[1], byte_offset:304
+32x2    %78 = COLLECT.i32 u22[1], u22[1] 
+        STORE.i64.tl %78^, tls_ptr, tls_ptr[1], byte_offset:312
+32      %250 = MOV.i32 u260
+32      %82 = LSHIFT_OR.i32 u2, u256, %250.b3
+32      %226 = IADD.u32 tls_ptr, %82^
+32x2    %83 = LOAD.i64.tl %226^, tls_ptr[1], byte_offset:0
+32      %227, %228 = SPLIT.i32 %83^
+32      %84 = LSHIFT_OR.i32 u2[1], u256, %250.b3
+32      %229 = IADD.u32 tls_ptr, %84^
+32x2    %85 = LOAD.i64.tl %229^, tls_ptr[1], byte_offset:0
+32      %230, %231 = SPLIT.i32 %85^
+32      %86 = FADD.v2f16 %227^, %230^
+32      %87 = FADD.v2f16 %228^, %231^
+32      %88 = LSHIFT_OR.i32 u3, u256, %250.b3
+32      %232 = IADD.u32 tls_ptr, %88^
+32x2    %89 = LOAD.i64.tl %232^, tls_ptr[1], byte_offset:0
+32      %233, %234 = SPLIT.i32 %89^
+32      %90 = FADD.v2f16 %86^, %233^
+32      %91 = FADD.v2f16 %87^, %234^
+32      %92 = LSHIFT_OR.i32 u3[1], u256, %250^.b3
+32      %235 = IADD.u32 tls_ptr, %92^
+32x2    %93 = LOAD.i64.tl %235^, tls_ptr[1], byte_offset:0
+32      %236, %237 = SPLIT.i32 %93^
+32      %94 = FADD.v2f16 %90^, %236^
+32      %95 = FADD.v2f16 %91^, %237^
+32      %98 = ATEST %238^, %95.h11, atest-param
+32      %243 = MOV.i32 %94^
+32      %244 = MOV.i32 %95^
+32x2    %242 = COLLECT.i32 %243^, %244^ 
+32      %245 = BLEND.f16 %242^, %98^, blend_descriptor_0, blend_descriptor_0[1], _.h00, sr_count:2, sr_count_2:2
+}
+
+block0 {
+        r0 = IADD_IMM.i32 u256, index:1006647296
+        r2 = MOV.i32 u4
+        r3 = MOV.i32 r0
+        STORE.i64.tl r2:r3, tls_ptr, tls_ptr[1], byte_offset:0
+        r0 = IADD_IMM.i32 u256, index:939537408
+        r2 = MOV.i32 u4[1]
+        r3 = MOV.i32 r0
+        STORE.i64.tl r2:r3, tls_ptr, tls_ptr[1], byte_offset:8
+        r0 = IADD_IMM.i32 u256, index:738207744
+        r1 = MOV.i32 u4
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:16
+        r0 = IADD_IMM.i32 u256, index:671097856
+        r1 = MOV.i32 u4[1]
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:24
+        r0 = MOV.i32 u5
+        r1 = MOV.i32 u5
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:32
+        r0 = MOV.i32 u5[1]
+        r1 = MOV.i32 u5[1]
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:40
+        r0 = MOV.i32 u6
+        r1 = MOV.i32 u6
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:48
+        r0 = MOV.i32 u6[1]
+        r1 = MOV.i32 u6[1]
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:56
+        r0 = MOV.i32 u7
+        r1 = MOV.i32 u7
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:64
+        r0 = MOV.i32 u7[1]
+        r1 = MOV.i32 u7[1]
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:72
+        r0 = MOV.i32 u8
+        r1 = MOV.i32 u8
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:80
+        r0 = MOV.i32 u8[1]
+        r1 = MOV.i32 u8[1]
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:88
+        r0 = MOV.i32 u9
+        r1 = MOV.i32 u9
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:96
+        r0 = MOV.i32 u9[1]
+        r1 = MOV.i32 u9[1]
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:104
+        r0 = MOV.i32 u10
+        r1 = MOV.i32 u10
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:112
+        r0 = MOV.i32 u10[1]
+        r1 = MOV.i32 u10[1]
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:120
+        r0 = MOV.i32 u11
+        r1 = MOV.i32 u11
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:128
+        r0 = MOV.i32 u11[1]
+        r1 = MOV.i32 u11[1]
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:136
+        r0 = MOV.i32 u12
+        r1 = MOV.i32 u12
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:144
+        r0 = MOV.i32 u12[1]
+        r1 = MOV.i32 u12[1]
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:152
+        r0 = MOV.i32 u13
+        r1 = MOV.i32 u13
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:160
+        r0 = MOV.i32 u13[1]
+        r1 = MOV.i32 u13[1]
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:168
+        r0 = MOV.i32 u14
+        r1 = MOV.i32 u14
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:176
+        r0 = MOV.i32 u14[1]
+        r1 = MOV.i32 u14[1]
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:184
+        r0 = MOV.i32 u15
+        r1 = MOV.i32 u15
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:192
+        r0 = MOV.i32 u15[1]
+        r1 = MOV.i32 u15[1]
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:200
+        r0 = MOV.i32 u16
+        r1 = MOV.i32 u16
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:208
+        r0 = MOV.i32 u16[1]
+        r1 = MOV.i32 u16[1]
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:216
+        r0 = MOV.i32 u17
+        r1 = MOV.i32 u17
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:224
+        r0 = MOV.i32 u17[1]
+        r1 = MOV.i32 u17[1]
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:232
+        r0 = MOV.i32 u18
+        r1 = MOV.i32 u18
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:240
+        r0 = MOV.i32 u18[1]
+        r1 = MOV.i32 u18[1]
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:248
+        r0 = MOV.i32 u19
+        r1 = MOV.i32 u19
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:256
+        r0 = MOV.i32 u19[1]
+        r1 = MOV.i32 u19[1]
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:264
+        r0 = MOV.i32 u20
+        r1 = MOV.i32 u20
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:272
+        r0 = MOV.i32 u20[1]
+        r1 = MOV.i32 u20[1]
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:280
+        r0 = MOV.i32 u21
+        r1 = MOV.i32 u21
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:288
+        r0 = MOV.i32 u21[1]
+        r1 = MOV.i32 u21[1]
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:296
+        r0 = MOV.i32 u22
+        r1 = MOV.i32 u22
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:304
+        r0 = MOV.i32 u22[1]
+        r1 = MOV.i32 u22[1]
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:312
+        r0 = MOV.i32 u260
+        r1 = LSHIFT_OR.i32 u2, u256, r0.b3
+        r1 = IADD.u32 tls_ptr, r1
+        r2 = MOV.i32 r1
+        r3 = MOV.i32 tls_ptr[1]
+        r2:r3 = LOAD.i64.tl r2, r3, byte_offset:0
+        r1 = LSHIFT_OR.i32 u2[1], u256, r0.b3
+        r1 = IADD.u32 tls_ptr, r1
+        r4 = MOV.i32 r1
+        r5 = MOV.i32 tls_ptr[1]
+        r4:r5 = LOAD.i64.tl r4, r5, byte_offset:0
+        r1 = FADD.v2f16 r2, r4
+        r2 = FADD.v2f16 r3, r5
+        r3 = LSHIFT_OR.i32 u3, u256, r0.b3
+        r3 = IADD.u32 tls_ptr, r3
+        r4 = MOV.i32 r3
+        r5 = MOV.i32 tls_ptr[1]
+        r4:r5 = LOAD.i64.tl r4, r5, byte_offset:0
+        r1 = FADD.v2f16 r1, r4
+        r2 = FADD.v2f16 r2, r5
+        r0 = LSHIFT_OR.i32 u3[1], u256, r0.b3
+        r0 = IADD.u32 tls_ptr, r0
+        r4 = MOV.i32 r0
+        r5 = MOV.i32 tls_ptr[1]
+        r4:r5 = LOAD.i64.tl r4, r5, byte_offset:0
+        r0 = FADD.v2f16 r1, r4
+        r1 = FADD.v2f16 r2, r5
+        r60 = ATEST r60, r1.h11, atest-param
+        r48 = BLEND.f16 r0:r1, r60, blend_descriptor_0, blend_descriptor_0[1], _.h00, sr_count:2, sr_count_2:2
+}
+
+block0 {
+        r0 = IADD_IMM.i32.flow13 u256, index:1006647296
+        r2 = MOV.i32 u4
+        r3 = MOV.i32 r0^
+        STORE.i64.tl r2:r3, tls_ptr, tls_ptr[1], byte_offset:0
+        r0 = IADD_IMM.i32 u256, index:939537408
+        r2 = MOV.i32 u4[1]
+        r3 = MOV.i32.flow1 r0^
+        STORE.i64.tl r2:r3, tls_ptr, tls_ptr[1], byte_offset:8
+        r0 = IADD_IMM.i32 u256, index:738207744
+        r1 = MOV.i32.flow2 u4
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:16
+        r0 = IADD_IMM.i32 u256, index:671097856
+        r1 = MOV.i32.flow4 u4[1]
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:24
+        r0 = MOV.i32 u5
+        r1 = MOV.i32.flow1 u5
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:32
+        r0 = MOV.i32 u5[1]
+        r1 = MOV.i32.flow2 u5[1]
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:40
+        r0 = MOV.i32 u6
+        r1 = MOV.i32.flow4 u6
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:48
+        r0 = MOV.i32 u6[1]
+        r1 = MOV.i32.flow1 u6[1]
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:56
+        r0 = MOV.i32 u7
+        r1 = MOV.i32.flow2 u7
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:64
+        r0 = MOV.i32 u7[1]
+        r1 = MOV.i32.flow4 u7[1]
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:72
+        r0 = MOV.i32 u8
+        r1 = MOV.i32.flow1 u8
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:80
+        r0 = MOV.i32 u8[1]
+        r1 = MOV.i32.flow2 u8[1]
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:88
+        r0 = MOV.i32 u9
+        r1 = MOV.i32.flow4 u9
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:96
+        r0 = MOV.i32 u9[1]
+        r1 = MOV.i32.flow1 u9[1]
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:104
+        r0 = MOV.i32 u10
+        r1 = MOV.i32.flow2 u10
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:112
+        r0 = MOV.i32 u10[1]
+        r1 = MOV.i32.flow4 u10[1]
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:120
+        r0 = MOV.i32 u11
+        r1 = MOV.i32.flow1 u11
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:128
+        r0 = MOV.i32 u11[1]
+        r1 = MOV.i32.flow2 u11[1]
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:136
+        r0 = MOV.i32 u12
+        r1 = MOV.i32.flow4 u12
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:144
+        r0 = MOV.i32 u12[1]
+        r1 = MOV.i32.flow1 u12[1]
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:152
+        r0 = MOV.i32 u13
+        r1 = MOV.i32.flow2 u13
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:160
+        r0 = MOV.i32 u13[1]
+        r1 = MOV.i32.flow4 u13[1]
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:168
+        r0 = MOV.i32 u14
+        r1 = MOV.i32.flow1 u14
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:176
+        r0 = MOV.i32 u14[1]
+        r1 = MOV.i32.flow2 u14[1]
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:184
+        r0 = MOV.i32 u15
+        r1 = MOV.i32.flow4 u15
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:192
+        r0 = MOV.i32 u15[1]
+        r1 = MOV.i32.flow1 u15[1]
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:200
+        r0 = MOV.i32 u16
+        r1 = MOV.i32.flow2 u16
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:208
+        r0 = MOV.i32 u16[1]
+        r1 = MOV.i32.flow4 u16[1]
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:216
+        r0 = MOV.i32 u17
+        r1 = MOV.i32.flow1 u17
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:224
+        r0 = MOV.i32 u17[1]
+        r1 = MOV.i32.flow2 u17[1]
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:232
+        r0 = MOV.i32 u18
+        r1 = MOV.i32.flow4 u18
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:240
+        r0 = MOV.i32 u18[1]
+        r1 = MOV.i32.flow1 u18[1]
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:248
+        r0 = MOV.i32 u19
+        r1 = MOV.i32.flow2 u19
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:256
+        r0 = MOV.i32 u19[1]
+        r1 = MOV.i32.flow4 u19[1]
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:264
+        r0 = MOV.i32 u20
+        r1 = MOV.i32.flow1 u20
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:272
+        r0 = MOV.i32 u20[1]
+        r1 = MOV.i32.flow2 u20[1]
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:280
+        r0 = MOV.i32 u21
+        r1 = MOV.i32.flow4 u21
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:288
+        r0 = MOV.i32 u21[1]
+        r1 = MOV.i32.flow1 u21[1]
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:296
+        r0 = MOV.i32 u22
+        r1 = MOV.i32.flow2 u22
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:304
+        r0 = MOV.i32 u22[1]
+        r1 = MOV.i32.flow4 u22[1]
+        STORE.i64.tl r0:r1, tls_ptr, tls_ptr[1], byte_offset:312
+        r0 = MOV.i32 u260
+        r1 = LSHIFT_OR.i32 u2, u256, r0.b3
+        r1 = IADD.u32 tls_ptr, r1
+        r2 = MOV.i32 r1
+        r3 = MOV.i32.flow1 tls_ptr[1]
+        r2:r3 = LOAD.i64.tl r2^, r3^, byte_offset:0
+        r1 = LSHIFT_OR.i32 u2[1], u256, r0.b3
+        r1 = IADD.u32 tls_ptr, r1^
+        r4 = MOV.i32 r1^
+        r5 = MOV.i32.flow2 tls_ptr[1]
+        r4:r5 = LOAD.i64.flow4.tl r4^, r5^, byte_offset:0
+        r1 = FADD.v2f16 r2^, r4^
+        r2 = FADD.v2f16 r3^, r5^
+        r3 = LSHIFT_OR.i32 u3, u256, r0.b3
+        r3 = IADD.u32 tls_ptr, r3^
+        r4 = MOV.i32 r3^
+        r5 = MOV.i32 tls_ptr[1]
+        r4:r5 = LOAD.i64.flow1.tl r4^, r5^, byte_offset:0
+        r1 = FADD.v2f16 r1^, r4^
+        r2 = FADD.v2f16 r2^, r5^
+        r0 = LSHIFT_OR.i32 u3[1], u256, r0^.b3
+        r0 = IADD.u32 tls_ptr, r0^
+        r4 = MOV.i32 r0^
+        r5 = MOV.i32 tls_ptr[1]
+        r4:r5 = LOAD.i64.flow2.tl r4^, r5^, byte_offset:0
+        r0 = FADD.v2f16 r1^, r4^
+        r1 = FADD.v2f16.flow8 r2^, r5^
+        r60 = ATEST.flow9 r60^, r1.h11, atest-param
+        r48 = BLEND.flow15.f16 r0:r1, r60^, blend_descriptor_0, blend_descriptor_0[1], _.h00, sr_count:2, sr_count_2:2
+}
+
+   IADD_IMM.i32.discard r0, 0x0, #0x3C003800
+   MOV.i32 r2, u4.w0
+   MOV.i32 r3, r0^
+   STORE.i64.force.slot0 @r2:r3, thread_local_pointer.w0, offset:0
+   IADD_IMM.i32 r0, 0x0, #0x38003400
+   MOV.i32 r2, u4.w1
+   MOV.i32.wait0 r3, r0^
+   STORE.i64.force.slot1 @r2:r3, thread_local_pointer.w0, offset:8
+   IADD_IMM.i32 r0, 0x0, #0x2C002800
+   MOV.i32.wait1 r1, u4.w0
+   STORE.i64.force.slot2 @r0:r1, thread_local_pointer.w0, offset:16
+   IADD_IMM.i32 r0, 0x0, #0x28002400
+   MOV.i32.wait2 r1, u4.w1
+   STORE.i64.force.slot0 @r0:r1, thread_local_pointer.w0, offset:24
+   MOV.i32 r0, u5.w0
+   MOV.i32.wait0 r1, u5.w0
+   STORE.i64.force.slot1 @r0:r1, thread_local_pointer.w0, offset:32
+   MOV.i32 r0, u5.w1
+   MOV.i32.wait1 r1, u5.w1
+   STORE.i64.force.slot2 @r0:r1, thread_local_pointer.w0, offset:40
+   MOV.i32 r0, u6.w0
+   MOV.i32.wait2 r1, u6.w0
+   STORE.i64.force.slot0 @r0:r1, thread_local_pointer.w0, offset:48
+   MOV.i32 r0, u6.w1
+   MOV.i32.wait0 r1, u6.w1
+   STORE.i64.force.slot1 @r0:r1, thread_local_pointer.w0, offset:56
+   MOV.i32 r0, u7.w0
+   MOV.i32.wait1 r1, u7.w0
+   STORE.i64.force.slot2 @r0:r1, thread_local_pointer.w0, offset:64
+   MOV.i32 r0, u7.w1
+   MOV.i32.wait2 r1, u7.w1
+   STORE.i64.force.slot0 @r0:r1, thread_local_pointer.w0, offset:72
+   MOV.i32 r0, u8.w0
+   MOV.i32.wait0 r1, u8.w0
+   STORE.i64.force.slot1 @r0:r1, thread_local_pointer.w0, offset:80
+   MOV.i32 r0, u8.w1
+   MOV.i32.wait1 r1, u8.w1
+   STORE.i64.force.slot2 @r0:r1, thread_local_pointer.w0, offset:88
+   MOV.i32 r0, u9.w0
+   MOV.i32.wait2 r1, u9.w0
+   STORE.i64.force.slot0 @r0:r1, thread_local_pointer.w0, offset:96
+   MOV.i32 r0, u9.w1
+   MOV.i32.wait0 r1, u9.w1
+   STORE.i64.force.slot1 @r0:r1, thread_local_pointer.w0, offset:104
+   MOV.i32 r0, u10.w0
+   MOV.i32.wait1 r1, u10.w0
+   STORE.i64.force.slot2 @r0:r1, thread_local_pointer.w0, offset:112
+   MOV.i32 r0, u10.w1
+   MOV.i32.wait2 r1, u10.w1
+   STORE.i64.force.slot0 @r0:r1, thread_local_pointer.w0, offset:120
+   MOV.i32 r0, u11.w0
+   MOV.i32.wait0 r1, u11.w0
+   STORE.i64.force.slot1 @r0:r1, thread_local_pointer.w0, offset:128
+   MOV.i32 r0, u11.w1
+   MOV.i32.wait1 r1, u11.w1
+   STORE.i64.force.slot2 @r0:r1, thread_local_pointer.w0, offset:136
+   MOV.i32 r0, u12.w0
+   MOV.i32.wait2 r1, u12.w0
+   STORE.i64.force.slot0 @r0:r1, thread_local_pointer.w0, offset:144
+   MOV.i32 r0, u12.w1
+   MOV.i32.wait0 r1, u12.w1
+   STORE.i64.force.slot1 @r0:r1, thread_local_pointer.w0, offset:152
+   MOV.i32 r0, u13.w0
+   MOV.i32.wait1 r1, u13.w0
+   STORE.i64.force.slot2 @r0:r1, thread_local_pointer.w0, offset:160
+   MOV.i32 r0, u13.w1
+   MOV.i32.wait2 r1, u13.w1
+   STORE.i64.force.slot0 @r0:r1, thread_local_pointer.w0, offset:168
+   MOV.i32 r0, u14.w0
+   MOV.i32.wait0 r1, u14.w0
+   STORE.i64.force.slot1 @r0:r1, thread_local_pointer.w0, offset:176
+   MOV.i32 r0, u14.w1
+   MOV.i32.wait1 r1, u14.w1
+   STORE.i64.force.slot2 @r0:r1, thread_local_pointer.w0, offset:184
+   MOV.i32 r0, u15.w0
+   MOV.i32.wait2 r1, u15.w0
+   STORE.i64.force.slot0 @r0:r1, thread_local_pointer.w0, offset:192
+   MOV.i32 r0, u15.w1
+   MOV.i32.wait0 r1, u15.w1
+   STORE.i64.force.slot1 @r0:r1, thread_local_pointer.w0, offset:200
+   MOV.i32 r0, u16.w0
+   MOV.i32.wait1 r1, u16.w0
+   STORE.i64.force.slot2 @r0:r1, thread_local_pointer.w0, offset:208
+   MOV.i32 r0, u16.w1
+   MOV.i32.wait2 r1, u16.w1
+   STORE.i64.force.slot0 @r0:r1, thread_local_pointer.w0, offset:216
+   MOV.i32 r0, u17.w0
+   MOV.i32.wait0 r1, u17.w0
+   STORE.i64.force.slot1 @r0:r1, thread_local_pointer.w0, offset:224
+   MOV.i32 r0, u17.w1
+   MOV.i32.wait1 r1, u17.w1
+   STORE.i64.force.slot2 @r0:r1, thread_local_pointer.w0, offset:232
+   MOV.i32 r0, u18.w0
+   MOV.i32.wait2 r1, u18.w0
+   STORE.i64.force.slot0 @r0:r1, thread_local_pointer.w0, offset:240
+   MOV.i32 r0, u18.w1
+   MOV.i32.wait0 r1, u18.w1
+   STORE.i64.force.slot1 @r0:r1, thread_local_pointer.w0, offset:248
+   MOV.i32 r0, u19.w0
+   MOV.i32.wait1 r1, u19.w0
+   STORE.i64.force.slot2 @r0:r1, thread_local_pointer.w0, offset:256
+   MOV.i32 r0, u19.w1
+   MOV.i32.wait2 r1, u19.w1
+   STORE.i64.force.slot0 @r0:r1, thread_local_pointer.w0, offset:264
+   MOV.i32 r0, u20.w0
+   MOV.i32.wait0 r1, u20.w0
+   STORE.i64.force.slot1 @r0:r1, thread_local_pointer.w0, offset:272
+   MOV.i32 r0, u20.w1
+   MOV.i32.wait1 r1, u20.w1
+   STORE.i64.force.slot2 @r0:r1, thread_local_pointer.w0, offset:280
+   MOV.i32 r0, u21.w0
+   MOV.i32.wait2 r1, u21.w0
+   STORE.i64.force.slot0 @r0:r1, thread_local_pointer.w0, offset:288
+   MOV.i32 r0, u21.w1
+   MOV.i32.wait0 r1, u21.w1
+   STORE.i64.force.slot1 @r0:r1, thread_local_pointer.w0, offset:296
+   MOV.i32 r0, u22.w0
+   MOV.i32.wait1 r1, u22.w0
+   STORE.i64.force.slot2 @r0:r1, thread_local_pointer.w0, offset:304
+   MOV.i32 r0, u22.w1
+   MOV.i32.wait2 r1, u22.w1
+   STORE.i64.force.slot0 @r0:r1, thread_local_pointer.w0, offset:312
+   MOV.i32 r0, 0x3020100
+   LSHIFT_OR.i32 r1, u2.w0, r0.b33, 0x0
+   IADD.u32 r1, thread_local_pointer.w0, r1
+   MOV.i32 r2, r1
+   MOV.i32.wait0 r3, thread_local_pointer.w1
+   LOAD.i64.force.unsigned.slot1 @r2:r3, [r2^:r3^], offset:0
+   LSHIFT_OR.i32 r1, u2.w1, r0.b33, 0x0
+   IADD.u32 r1, thread_local_pointer.w0, r1^
+   MOV.i32 r4, r1^
+   MOV.i32.wait1 r5, thread_local_pointer.w1
+   LOAD.i64.force.unsigned.slot2.wait2 @r4:r5, [r4^:r5^], offset:0
+   FADD.v2f16 r1, r2^, r4^
+   FADD.v2f16 r2, r3^, r5^
+   LSHIFT_OR.i32 r3, u3.w0, r0.b33, 0x0
+   IADD.u32 r3, thread_local_pointer.w0, r3^
+   MOV.i32 r4, r3^
+   MOV.i32 r5, thread_local_pointer.w1
+   LOAD.i64.force.unsigned.slot0.wait0 @r4:r5, [r4^:r5^], offset:0
+   FADD.v2f16 r1, r1^, r4^
+   FADD.v2f16 r2, r2^, r5^
+   LSHIFT_OR.i32 r0, u3.w1, r0^.b33, 0x0
+   IADD.u32 r0, thread_local_pointer.w0, r0^
+   MOV.i32 r4, r0^
+   MOV.i32 r5, thread_local_pointer.w1
+   LOAD.i64.force.unsigned.slot1.wait1 @r4:r5, [r4^:r5^], offset:0
+   FADD.v2f16 r0, r1^, r4^
+   FADD.v2f16.wait0126 r1, r2^, r5^
+   ATEST.wait @r60, r60^, r1.h1, atest_datum.w0
+   BLEND.slot2.v4.f16.end @r0:r1, blend_descriptor_0.w0, r60, target:0x0
+   IADD_IMM.i32 r48, 0x0, #0x0
+   BRANCHZI.eq.absolute 0x0, blend_descriptor_0.w1
+
+
+MESA_SHADER_FRAGMENT shader: 153 instrs, 44.000000 cycles, 0.093750 fma, 1.515625 cvt, 0.250000 sfu, 1.671875 alu, 0.000000 v, 0.000000 t, 44.000000 ls, 1280 code size, 2 threads, 0 loops, 0:0 spills:fills, 440 spill cost, 8 registers used, 23 uniforms used
