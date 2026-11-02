@@ -276,11 +276,38 @@ vertex stage**: the vertex shader does `F32_TO_S32.rtz`, `LSHIFT_OR`,
 needs `Ftrunc` plus flat varyings, and its integer ops are a vertex-stage
 item (triage-vsarith / triage-intbool), not part of fs-int-ops.
 
-Draws still missing (es300/derivs, es100/f2b, es100/fmods, es300/int_div,
-es300/layersunused):
+The five draws triage-fsarith could not make (plan #185 ref-fsarith-rest),
+each a corpus fragment source unchanged with a pass-through vertex shader of
+its varyings, on the same Mesa 26.2.1 shim (`tools/mali/drm_shim_ref.sh run`,
+then `pan_ref_diff.py extract --draw`; all five drew with glGetError 0):
 
     tools/mali/drm_shim_ref.sh run <shim> V F target/<name>
     python3 -I tools/mali/pan_ref_diff.py extract target/<name>.trace --draw
+
+All five fragment sources still end in the one verdict of
+`corpus-verdicts.txt`, `Valhall: arithmetic other than +, -, * and a dot or
+matrix product (in a fragment shader: +, -, * and abs) is not lowered yet`
+(`MaliError::Arithmetic`); the first op that raises it is the one in the
+table above. The ops column is what Mesa's fragment program contains
+(`BIFROST_MESA_DEBUG=shaders` listing of the reference), not what the
+compiler refuses.
+
+| Reference (`tools/mali/testdata/`) | Source | Mesa's Valhall ops | Refused first at | Owner |
+|---|---|---|---|---|
+| `fsarith_derivs_es300.*` | es300/derivs (fp32) | per component `FMA.f32` (uniform scale), `CLPER.i32.subgroup4.xor` (lane 1 for x, 2 for y), `FADD.f32 r, l.neg`; the sign fix `MOV.i32` of a constant, `LSHIFT_AND.i32 lane_id, 0, c` for y, `LSHIFT_XOR.i32 lane_id, 0x1F1E1D1C.b22/.b33`, then `FADD.f32` of the two for `dFdx(z) + dFdy(w)`; `MOV.i32 1.0`; fp32 blend | `Fddx` (`alu32`) | new #33 item **fs-deriv** (with 138, fp16 form; the highp form is its second half) |
+| `fsarith_f2b.*` | es100/f2b (fp16 pairs) | `V2F32_TO_V2F16`, `FADD.v2f16` (the `2.0 *`), `FROUND.v2f16.rtn`, `MKVEC.v2i16`, `FCMP_OR.v2f16.ne.m1` (bvec2) and `.ne.f1` (scalar), `S16_TO_S32` per lane, `MOV.i32 1.0`, `CSEL.u32.eq` (mask against two uniform arms), `FADD.f32 r.h0, r, 0x0.neg` (narrow), `MKVEC.v2i16`, fp16 blend. `bool(-z * 0.0)` is folded to a constant | `Ffloor` (mediump arm), then `Fne` (`alu32` `CompareForm`) | the mask-to-select half (`FCMP_OR ... ne` then `CSEL`) is **bool-mask-ops**'s shape; `Ffloor` and `Fne` themselves go to new #33 item **fs-float-ops** |
+| `fsarith_fmods.*` | es100/fmods (fp32 body, fp16 output) | `FMA.f32` (uniform scale), `FADD.f32 x.abs, 0`, `FREXPE.f32.log`, `S32_TO_F32`, `FLOGD.f32`, `FADD_LSCALE.f32 -1.0, x.abs`, `FMA.f32` (log2, twice); `FMA_RSCALE.f32 x.neg, 1.0, 0, 0x...` + `F32_TO_S32` + `FEXP.f32` (exp2, twice, the scale in a `MOV.i32` of a uniform word); `FROUND.f32.rtn`, `FMIN.f32 x, -1.0`, `FRSQ.f32 r.neg`, `FMA.f32 .neg/.abs` chains; the final `FMA.f32` by `u_b` / `u_c` then `FADD.f32 r.h0, r, 0` and `MKVEC.v2i16` | `Fexp2` (`alu32`) | new #33 item **fs-float-ops** (fp32 `Flog2`, `Fexp2`, `Frsq`, `Ffloor`, `Fmin`) |
+| `fsarith_int_div_es300.*` | es300/int_div (highp int) | `F32_TO_S32.rtz`, `F32_TO_U32.rtz`, `U32_TO_F32`, `S32_TO_F32`, `U16_TO_F32`, `FADD.f32.clamp_0_1` (the `clamp`), `FRCP.f32` + `FMA.f32` (reciprocal), 47 `U16_TO_U32` and 26 `IMUL.i32` / 33 `IADD.s32` (the split multiply for the high half), `ISUB.s32`, `IADD_IMM`, `IADD.u32.saturate`, `LSHIFT_OR.i32` / `RSHIFT_OR.i32`, 4 `ICMP_OR.u32.ge.m1` + 6 `CSEL.u32.eq` (the correction steps); the vertex stage is a plain pass-through | `Ineg` (`alu32`) | new #33 item **fs-int-ops** (`Idiv`/`Imod`/`Udiv`/`Umod` by variables and by constants, `U2f`, `F2i`, `F2u`); not bool-mask-ops or vs-int-convert |
+| `fsarith_layersunused.*` | es300/layersunused (fp32) | `LD_VAR_BUF_IMM.f32` (one lane), `FCMP_OR.f32.ge.m1 x, bias`, four `CSEL.u32.eq r, m, 0, 0, tint.k` (the mask selects the uniform lane or 0, no `FMUL`), `MOV.i32` x4 into the blend regs; fp32 blend. The unused `sampler2DArray` leaves no instruction | `Bnot` (`alu32`: `step(edge, x)`) | new #33 item **fs-float-ops** (`step` as `FCMP_OR.ge.m1` + `CSEL`); it shares the mask and select pair with bool-mask-ops but takes a float compare, so it need not wait for it |
+
+The vertex programs are the pass-throughs `fsarith_*.vert` here, which the
+compiler already accepts; nothing is refused there. The new references have
+no `.stdout`/`.stderr`/`.trace` beside them, like the other `fsarith_*`
+files (the Mesa listing is reproduced by the command above). Suggested
+grouping of the new items: **fs-float-ops** = 77 transc/vtransc, fmods, f2b,
+layersunused, gcops' `floor`, 199's `Ftrunc` and 70 with cflow-flatten;
+**fs-deriv** = 138, deriv, derivs; **fs-int-ops** = both int_div, uops,
+ifelse_uint, gcops (items 1-4 below, split by op family).
 
 ### Proposed lowering items, by cases and sources unblocked
 
