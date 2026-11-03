@@ -6,6 +6,7 @@
     tools/mali/pan_ref_diff.py list <trace>
     tools/mali/pan_ref_diff.py extract <trace> --draw > expect.json
     tools/mali/pan_ref_diff.py extract <trace> --draw --attributes > expect.json
+    tools/mali/pan_ref_diff.py extract <trace> --draw --attributes --instanced > expect.json
     tools/mali/pan_ref_diff.py extract <trace> REGION=VA ... > expect.json
     tools/mali/pan_ref_diff.py diff <pan_shc stdout> <pan_shc stderr> <trace> --draw
     tools/mali/pan_ref_diff.py diff <pan_shc stdout> <pan_shc stderr> <trace> REGION=VA ...
@@ -161,14 +162,17 @@ def read_draw(path):
     return {k: d for k, d in draw.items() if d["va"] is not None}
 
 
-def read_attributes(path):
+def read_attributes(path, instanced=False):
     """The first draw's attribute and attribute-buffer descriptors.
 
     The trace prints the draw's resource tables before its first FAU table:
     an Entry holding Attribute records, and the Entry after it the Buffer
     records they index. Per Attribute: format, buffer index, offset, stride,
     frequency; per Buffer: size, stride, and its address less the first
-    buffer's (the address itself is the run's).
+    buffer's (the address itself is the run's). `instanced` (`--instanced`)
+    adds per Attribute its type, offset enable and Divisor R, E and D, and
+    `draw`: the first draw's index count, instance count and instance offset
+    (the IDVS registers pandecode prints after the FAU tables).
     """
     attrs, bufs = [], []
     entry = None  # "attribute" or "buffer": the kind of record being read
@@ -191,7 +195,8 @@ def read_attributes(path):
                 break  # past the buffer entry
             rec = None
             continue
-        m = re.match(r"^\s+(Format \(v7\)|Offset|Buffer index|Stride|Frequency|Size|Address): (.*)$", line)
+        m = re.match(r"^\s+(Format \(v7\)|Offset|Buffer index|Stride|Frequency|Size|Address"
+                     r"|Attribute type|Offset enable|Divisor [RED]): (.*)$", line)
         if m and rec is not None and m.group(1) not in rec:
             rec[m.group(1)] = m.group(2)
     out = {"attributes": [], "attribute_buffers": []}
@@ -199,10 +204,25 @@ def read_attributes(path):
         out["attributes"].append({"format": a["Format (v7)"], "buffer": int(a["Buffer index"], 16),
                                   "offset": int(a["Offset"]), "stride": int(a["Stride"], 16),
                                   "frequency": a["Frequency"]})
+        if instanced:
+            out["attributes"][-1].update({"type": a["Attribute type"], "offset_enable": a["Offset enable"] == "true",
+                                          "divisor_r": int(a["Divisor R"]), "divisor_e": int(a["Divisor E"]),
+                                          "divisor_d": int(a["Divisor D"], 16)})
     base = int(bufs[0]["Address"], 16) if bufs else 0
     for b in bufs:
         out["attribute_buffers"].append({"size": int(b["Size"], 16), "stride": int(b["Stride"], 16),
                                          "address_offset": int(b["Address"], 16) - base})
+    if instanced:
+        draw = {}
+        with open(path, errors="replace") as f:
+            for line in f:
+                m = re.match(r"^\s+(Index count|Instance count|Instance offset): (\d+)$", line)
+                if m and m.group(1) not in draw:
+                    draw[m.group(1)] = int(m.group(2))
+                if len(draw) == 3:
+                    break
+        out["draw"] = {"index_count": draw.get("Index count"), "instance_count": draw.get("Instance count"),
+                       "instance_offset": draw.get("Instance offset")}
     return out
 
 
@@ -415,10 +435,10 @@ def main(argv):
                 print("    %016x  %s" % (w, d))
         return 0
     if len(argv) >= 3 and argv[0] == "extract":
-        if argv[2:] in (["--draw"], ["--draw", "--attributes"]):
+        if argv[2:] in (["--draw"], ["--draw", "--attributes"], ["--draw", "--attributes", "--instanced"]):
             ref = reference_from_trace(argv[1])
-            if argv[2:] == ["--draw", "--attributes"]:
-                ref.update(read_attributes(argv[1]))
+            if argv[3:4] == ["--attributes"]:
+                ref.update(read_attributes(argv[1], argv[4:] == ["--instanced"]))
         else:
             pairs = {n: int(v, 16) for n, _, v in (p.partition("=") for p in argv[2:])}
             ref = reference_from_trace(argv[1], pairs)

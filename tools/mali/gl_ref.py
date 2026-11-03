@@ -9,7 +9,7 @@ tools/mali/drm_shim_ref.sh).
         [--size WxH] [--viewport X,Y,W,H] [--depth-range N,F] [--uniform-values]
         [--second-frame] [--depth-stencil] [--second-clear depth|stencil]
         [--blend-func SRC,DST] [--blend-color R,G,B,A] [--mrt N] [--levels N]
-        [--samples 4] [--mat-columns]
+        [--samples 4] [--mat-columns] [--instances N] [--divisors D0,D1,...]
 
 <libdir> holds the libEGL.so.1 and libGLESv2.so.2 to use. The program runs on
 an EGL surfaceless display (EGL_PLATFORM_SURFACELESS_MESA) into a WxH RGBA8
@@ -89,6 +89,18 @@ program without that first line takes the ES 2.0 path above unchanged.
 `usampler2D` / `isampler2D` get a 2x2 RGBA8UI / RGBA8I texture (nearest), and
 `--uniform-values` sets `int` / `ivecN` uniforms with glUniform*iv (the same
 16*(k+1)+c values, as integers).
+
+`--instances N` draws with glDrawArraysInstanced(…, 0, 6, N) instead of
+glDrawArrays. `--divisors D0,D1,...` (ES 3 path, one value per `in` of the
+vertex shader, in declaration order) draws the way gl_test cases 47 and 141
+do: each `in` takes its declared size (float to vec4, not a matrix) from an
+array buffer of zeros, the divisor-0 ones interleaved in one buffer of six
+vertices, the others interleaved in a second buffer (stride the sum of their
+sizes, each one's offset its place in the record) with ceil(N / D) records
+for the smallest D, and glVertexAttribDivisor(location, D) set on each. For
+case 141 (`--instances 4 --divisors 0,2,2`) that is `pos` stride 16 in a
+96-byte buffer and `offs`, `icol` stride 24 at offsets 0 and 8 in a 48-byte
+buffer, the case's first draw. Without either option the draw is unchanged.
 """
 import ctypes as C
 import os
@@ -167,6 +179,37 @@ def attributes_es3(text):
     return names
 
 
+IN_COMPONENTS = {"float": 1, "vec2": 2, "vec3": 3, "vec4": 4}
+
+
+def attribute_sizes_es3(text):
+    """Name -> components of the `in` declarations of a GLSL ES 3.00 vertex
+    shader (float to vec4; anything else None)."""
+    sizes = {}
+    decl = re.compile(r"^\s*(?:layout\s*\([^)]*\)\s*)?in\s+(?:(?:highp|mediump|lowp)\s+)?(\w+)\s+(.*?)\s*;\s*$", re.S)
+    for top, kind, chunk in u.es100_statements(u.strip_comments(text)):
+        m = decl.match(chunk) if (top and kind == "stmt") else None
+        if m:
+            for d in m.group(2).split(","):
+                sizes[d.strip()] = IN_COMPONENTS.get(m.group(1))
+    return sizes
+
+
+def instance_layout(sizes, divisors, instances):
+    """The arrays of a `--divisors` draw: (vertex stride, instance stride,
+    instance records, [(buffer, offset) per attribute]), buffer 0 the six
+    vertices' and 1 the instances', offsets in bytes; sizes and divisors are
+    per attribute in location order."""
+    places, off = [], [0, 0]
+    for n, d in zip(sizes, divisors):
+        b = 1 if d else 0
+        places.append((b, off[b]))
+        off[b] += 4 * n
+    per_instance = [d for d in divisors if d]
+    records = -(-instances // min(per_instance)) if per_instance else 0
+    return off[0], off[1], records, places
+
+
 def attribute_columns(text):
     """Name -> (locations taken, floats per column) of the ES 1.00 `attribute`
     lines: matN is N columns of N floats, anything else one location."""
@@ -226,6 +269,8 @@ def main():
         mrt = option(args, "--mrt", 0, int)
         levels = option(args, "--levels", 1, int)
         samples = option(args, "--samples", 1, int)
+        instances = option(args, "--instances", None, int)
+        divisors = option(args, "--divisors", None, lambda v: [int(x) for x in v.split(",")])
         blend_color = option(args, "--blend-color", (0.0, 0.0, 0.0, 0.0),
                              lambda v: tuple(float(x) for x in v.split(",")))
     except (ValueError, IndexError, KeyError):
@@ -254,6 +299,16 @@ def main():
     libdir, vs_path, fs_path = args
     es3 = bool(mrt) or is_es3(open(vs_path).read(), open(fs_path).read())
     if levels < 1 or (levels > 1 and not es3):
+        print(__doc__, file=sys.stderr)
+        return 2
+    if divisors is not None:
+        names = attributes_es3(open(vs_path).read()) if es3 else []
+        sizes = attribute_sizes_es3(open(vs_path).read())
+        if (not es3 or mat_columns or len(divisors) != len(names) or any(d < 0 for d in divisors)
+                or any(sizes[n] is None for n in names)):
+            print(__doc__, file=sys.stderr)
+            return 2
+    if instances is not None and instances < 1:
         print(__doc__, file=sys.stderr)
         return 2
     egl = C.CDLL(os.path.join(libdir, "libEGL.so.1"))
@@ -464,6 +519,27 @@ def main():
                                          C.c_void_p(off))
                 gl.glEnableVertexAttribArray(i + k)
                 off += 4 * r
+    elif divisors is not None:
+        # gl_test cases 47/141: per-vertex and per-instance interleaved buffers
+        sizes = attribute_sizes_es3(open(vs_path).read())
+        n_inst = instances or 1
+        vstride, istride, records, places = instance_layout([sizes[n] for n in names], divisors, n_inst)
+        vbos = (C.c_uint * 2)()
+        gl.glGenBuffers(2, vbos)
+        for b, size in ((0, 6 * vstride), (1, records * istride)):
+            if size:
+                gl.glBindBuffer(0x8892, vbos[b])
+                gl.glBufferData(C.c_int(0x8892), C.c_long(size), (C.c_ubyte * size)(), 0x88E4)
+        for i, (n, d, (b, off)) in enumerate(zip(names, divisors, places)):
+            gl.glBindBuffer(0x8892, vbos[b])
+            gl.glVertexAttribPointer(C.c_uint(i), C.c_int(sizes[n]), GL_FLOAT, 0,
+                                     C.c_int(istride if b else vstride), C.c_void_p(off))
+            gl.glEnableVertexAttribArray(i)
+            gl.glVertexAttribDivisor(i, d)
+        gl.glBindBuffer(0x8892, 0)
+        print("gl_ref: %d instances, divisors %s; vertex buffer %d bytes stride %d, instance buffer %d bytes"
+              " stride %d" % (n_inst, ",".join(map(str, divisors)), 6 * vstride, vstride, records * istride,
+                              istride))
     else:
         for i in range(nloc):
             gl.glVertexAttribPointer(i, 4, GL_FLOAT, 0, 0, zeros)
@@ -482,12 +558,18 @@ def main():
         gl.glEnable(GL_BLEND)
         gl.glBlendColor(*[C.c_float(c) for c in blend_color])
         gl.glBlendFunc(*blend_func)
-    gl.glDrawArrays(PRIMS[prim], 0, 6)
+
+    def draw():
+        if instances is None and divisors is None:
+            gl.glDrawArrays(PRIMS[prim], 0, 6)
+        else:
+            gl.glDrawArraysInstanced(PRIMS[prim], 0, 6, instances or 1)
+    draw()
     gl.glFlush()
     if second:
         if second_clear:
             gl.glClear(GL_DEPTH_BUFFER_BIT if second_clear == "depth" else GL_STENCIL_BUFFER_BIT)
-        gl.glDrawArrays(PRIMS[prim], 0, 6)
+        draw()
         gl.glFlush()
     err = gl.glGetError()
     print("gl_ref: attributes %s, framebuffer %dx%d, viewport %s, depth range %g,%g, glGetError 0x%x"
