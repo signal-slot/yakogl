@@ -7,7 +7,7 @@
 # tools/cts/pr-session.sh, the script whose -D options they mirror.
 #
 # For each fragment:
-#   1. an SPDX header on its first two lines;
+#   1. an SPDX header in its first lines;
 #   2. every CONFIG_<SYM>=<value> line names a <SYM> declared as `config <SYM>`
 #      in driver/zephyr/Kconfig, driver/samples/zephyr/glmark2/Kconfig or
 #      driver/samples/zephyr/gl_test/Kconfig;
@@ -23,7 +23,7 @@
 # Exit 0 when every check passes, 1 otherwise (each failure is one line).
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
-REPO=$(cd "$HERE/../.." && pwd)
+REPO=$(cd "$HERE/../../.." && pwd)
 SESSION=$REPO/tools/cts/pr-session.sh
 KCONFIGS=(driver/zephyr/Kconfig driver/samples/zephyr/glmark2/Kconfig driver/samples/zephyr/gl_test/Kconfig)
 EXPECTED=(gl_test-175-off.conf gl_test-175-on.conf glmark2-d320c8a5-off.conf glmark2-d320c8a5-on.conf)
@@ -36,9 +36,9 @@ bad() { echo "FAIL $*"; fails=$((fails + 1)); }
 cd "$REPO" || { echo "selftest.sh: no repository at $REPO"; exit 1; }
 [ -x "$SESSION" ] || { bad "tools/cts/pr-session.sh is missing or not executable"; echo "$passes ok, $fails failed"; exit 1; }
 
-spdx_ok() { # spdx_ok FILE: the two SPDX lines at the top (any comment syntax)
-    head -2 "$1" | grep -q 'SPDX-License-Identifier: Apache-2.0' &&
-        head -2 "$1" | grep -q 'SPDX-FileCopyrightText: 2026 Signal Slot, Inc.'
+spdx_ok() { # spdx_ok FILE: the two SPDX lines in the first three (after a #! line, any comment syntax)
+    head -3 "$1" | grep -q 'SPDX-License-Identifier: Apache-2.0' &&
+        head -3 "$1" | grep -q 'SPDX-FileCopyrightText: 2026 Signal Slot, Inc.'
 }
 
 # declared SYM: `config SYM` in one of the Kconfig files
@@ -68,7 +68,7 @@ fi
 for f in "${EXPECTED[@]}"; do
     path=$HERE/$f
     [ -f "$path" ] || { bad "$f: missing"; continue; }
-    if spdx_ok "$path"; then ok "$f: SPDX header"; else bad "$f: no SPDX header on lines 1-2"; fi
+    if spdx_ok "$path"; then ok "$f: SPDX header"; else bad "$f: no SPDX header on lines 1-3"; fi
 
     # the settings: CONFIG_X=V lines, nothing else but comments and blanks
     mapfile -t lines < <(grep -vE '^[[:space:]]*(#|$)' "$path")
@@ -132,7 +132,7 @@ done
 # README.md: SPDX header, every fragment named
 readme=$HERE/README.md
 if [ -f "$readme" ]; then
-    if spdx_ok "$readme"; then ok "README.md: SPDX header"; else bad "README.md: no SPDX header on lines 1-2"; fi
+    if spdx_ok "$readme"; then ok "README.md: SPDX header"; else bad "README.md: no SPDX header on lines 1-3"; fi
     for f in "${EXPECTED[@]}"; do
         grep -q -- "$f" "$readme" && ok "README.md names $f" || bad "README.md does not name $f"
     done
