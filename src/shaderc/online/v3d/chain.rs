@@ -798,21 +798,21 @@ mod tests {
     }
 
     /// What every program that comes back must satisfy, whatever it is.
-    /// The first TMU access that is not a 2D look-up of a bound texture, as
+    /// The first TMU access that is not a look-up of a bound texture, as
     /// text; `None` when every one is. A look-up writes only TMUS, TMUT and
     /// TMUB (its coordinates and bias) and a `wrtmuc` per P0/P1 uniform
     /// (contents 40/41, which the driver resolves to that texture's state), so
     /// it reads nothing but the texture. Every other TMU register (TMUD, TMUA,
-    /// TMUAU, TMUC, TMUR, TMUI, TMUDREF, TMUOFF, TMUSCM, TMUSF, TMUSLOD, TMUHS*)
-    /// is a general memory access or a form this back end does not select, and
-    /// is reported. `uniforms` are the stream's contents codes.
+    /// TMUAU, TMUC, TMUDREF, TMUOFF, TMUHS*) is a general memory access or a
+    /// form this back end does not select, and is reported. `uniforms` are the
+    /// stream's contents codes.
     fn first_tmu_memory_access(instrs: &[Instr], uniforms: &[(u32, u32)]) -> Option<String> {
         let tmu = |magic: bool, w: u8| magic && ((11..=13).contains(&w) || (32..=46).contains(&w));
         /* a look-up's writes: TMUS, TMUSLOD (a 2D explicit level, every
-         * vertex-stage 2D look-up) or TMUSCM (a cube) retires it; TMUT, TMUR
-         * (a cube's r), TMUI (an array look-up's layer) and TMUB (bias or
-         * level) */
-        let lookup = |w: u8| matches!(w, 33 | 34 | 35 | 36 | 37 | 40 | 42);
+         * vertex-stage 2D look-up), TMUSCM (a cube) or TMUSF (a texelFetch)
+         * retires it; TMUT, TMUR (a cube's r), TMUI (an array look-up's
+         * layer) and TMUB (bias or level) */
+        let lookup = |w: u8| matches!(w, 33 | 34 | 35 | 36 | 37 | 40 | 41 | 42);
         for (n, i) in instrs.iter().enumerate() {
             if let Instr::Alu(a) = i {
                 for (magic, w) in [(a.add.magic, a.add.waddr), (a.mul.magic, a.mul.waddr)] {
@@ -823,11 +823,11 @@ mod tests {
             }
         }
         let wrtmuc = instrs.iter().filter(|i| matches!(i, Instr::Alu(a) if a.sig.wrtmuc)).count();
-        /* P0, P1 (their own contents) and a cube's P2 at a level (a constant
-         * uniform, select.rs TMU_P2_CUBE_LOD) */
-        let p2 = super::super::select::TMU_P2_CUBE_LOD;
-        let configs = uniforms.iter().filter(|&&(c, d)| c == 40 || c == 41 || (c == 0 && d == p2)).count();
-        (wrtmuc != configs).then(|| std::format!("{wrtmuc} wrtmuc words but {configs} P0/P1 uniforms"))
+        /* P0, P1 (their own contents) and a P2 (a constant uniform: a cube's
+         * level, a texel offset; select.rs tmu_p2) */
+        let is_p2 = super::super::select::is_tmu_p2;
+        let configs = uniforms.iter().filter(|&&(c, d)| c == 40 || c == 41 || (c == 0 && is_p2(d))).count();
+        (wrtmuc != configs).then(|| std::format!("{wrtmuc} wrtmuc words but {configs} P0/P1/P2 uniforms"))
     }
 
     /// Per word of `c` that consumes a uniform, in order, the word and its
@@ -1524,10 +1524,11 @@ mod tests {
     /// it compiles fewer pairs, by design; each build has its own pin.
     /* 2026-10-25: the fixture's 242 real pairs, once sim_fixture.py paired
      * the gl_test sources again (128 after the Qt shaders left the tree,
-     * #1509; 287 pairs and 163 / 217 compiled before). The ES 3.00 build's
-     * NotYet are textureSize of an array sampler and a look-up with
-     * gradients. */
-    const COMPILED: usize = if cfg!(feature = "report-es2") { 170 } else { 192 };
+     * #1509; 287 pairs and 163 / 217 compiled before). 2026-11-03: the ES
+     * 3.00 build compiles gltest/isamp.frag (texelFetch, TMUSF) too, 193;
+     * its NotYet is textureSize of an array sampler (es300/array.frag,
+     * es300/vol.frag). */
+    const COMPILED: usize = if cfg!(feature = "report-es2") { 170 } else { 193 };
 
     #[test]
     fn corpus_coverage_is_pinned() {
@@ -1693,10 +1694,14 @@ mod tests {
         }
         std::println!("v3d compiled corpus: {programs} programs, {words} words, digest {h:#018x}");
         assert_eq!(programs, COMPILED);
+        /* 2026-11-03: the ES 3.00 build's digest moved with gltest/isamp.frag
+         * compiling (texelFetch); over the 192 programs compiled before it
+         * is still 0xaae0_0ff1_9d5a_fbfc, 20_848 words (measured by skipping
+         * that pair): no word of an existing program changed. */
         let want: (usize, u64) = if cfg!(feature = "report-es2") {
             (18_702, 0x177f_ab20_d963_ef95)
         } else {
-            (20_848, 0xaae0_0ff1_9d5a_fbfc)
+            (21_006, 0xd705_1e75_32ff_19e7)
         };
         assert_eq!((words, h), want, "the words the compiler emits changed");
     }
@@ -4672,6 +4677,268 @@ mod tests {
     /// [`run_lookups`]'s texel x: (x / 64, 0.5, (63 - x) / 64, 1).
     fn texel(x: usize) -> [f32; 4] {
         [x as f32 / 64.0, 0.5, (63 - x) as f32 / 64.0, 1.0]
+    }
+
+    /// A GLSL ES 3.00 vertex shader passing `a_uv` through as `v_uv`.
+    #[cfg(not(feature = "report-es2"))]
+    const ES3_UV_VS: &str = "#version 300 es\nlayout(location = 0) in vec2 a_uv;\nout vec2 v_uv;\n\
+        void main() { v_uv = a_uv; gl_Position = vec4(a_uv, 0.0, 1.0); }\n";
+
+    /// Compiles the GLSL ES 3.00 fragment shader `fs` (reading `v_uv`, a vec2
+    /// varying lane l gets as `uv(l)`) with [`ES3_UV_VS`], checks it, runs
+    /// it in the interpreter on `textures` (bound at their index, every
+    /// sampler state `sampler`) with the block uniform at dword d read from
+    /// `uniform(d)`, and hands the program and the outcome to `f`.
+    #[cfg(not(feature = "report-es2"))]
+    fn run_es3_lookup(
+        fs: &str,
+        textures: Vec<crate::shaderc::online::v3d::sim::Texture>,
+        sampler: Option<crate::shaderc::online::v3d::sim::Sampler>,
+        uniform: &dyn Fn(u32) -> u32,
+        uv: &dyn Fn(usize) -> (f32, f32),
+        f: &mut dyn FnMut(&V3dProgram<'_>, &crate::shaderc::online::v3d::sim::Outcome),
+    ) {
+        use crate::shaderc::online::v3d::sim::{self, Env, FsInputs, Inputs, Varying, LANES};
+        with_program(ES3_UV_VS, fs, Prim::Triangles, |p| {
+            let p = p.expect("compiles");
+            check_all(p);
+            let c = &p.fs.code;
+            let stream: Vec<u32> = c
+                .uniforms
+                .iter()
+                .map(|w| match w.contents {
+                    0 | 40 | 41 => w.data,
+                    1 => uniform(w.data),
+                    k => panic!("uniform contents {k} not modelled here"),
+                })
+                .collect();
+            let varyings =
+                p.fs.input_slots
+                    .iter()
+                    .map(|&(_, comp)| Varying {
+                        vary: core::array::from_fn(|l| {
+                            let (x, y) = uv(l);
+                            if comp == 0 { x } else { y }.to_bits()
+                        }),
+                        c: [0; LANES],
+                    })
+                    .collect();
+            let inputs = FsInputs {
+                w: [1.0f32.to_bits(); LANES],
+                w_centroid: [1.0f32.to_bits(); LANES],
+                z: [0; LANES],
+                x: [0; LANES],
+                y: [0; LANES],
+                back_facing: [false; LANES],
+                varyings,
+            };
+            let env =
+                Env { threads: p.fs.threads, textures, samplers: sampler.into_iter().collect(), ..Env::default() };
+            let o = sim::run(c.words, &stream, &Inputs::Fragment(std::boxed::Box::new(inputs)), &env).expect("runs");
+            f(p, &o);
+        });
+    }
+
+    /// The two f16 words of RT0's colour, as [`run_lookups`] expects them.
+    #[cfg(not(feature = "report-es2"))]
+    fn rt0_words(c: [f32; 4]) -> (Option<u32>, Option<u32>) {
+        let h = |x: f32| u32::from(crate::shaderc::online::v3d::sim::f32_to_half(x));
+        (Some(h(c[0]) | h(c[1]) << 16), Some(h(c[2]) | h(c[3]) << 16))
+    }
+
+    /// texelFetch (Mesa's txf, v3d_tex.c): P0 and P1 only (no P2: a fetch
+    /// has no automatic level to disable), the integer T, the integer level
+    /// on TMUB, then the integer S on TMUSF, which retires it; two ldtmu. In
+    /// the interpreter on a chain of 16x1, 8x1 and 4x1 (texel i of level k
+    /// is (i / 64 + k / 4, 0.5, k / 8, 1)), lane l fetching texel int(l *
+    /// scale) of level `lvl` reads that texel of that level: no filter, no
+    /// wrap, the level the integer names. A vertex-stage fetch is the same
+    /// sequence.
+    #[cfg(not(feature = "report-es2"))]
+    #[test]
+    fn a_texel_fetch_is_mesas_sequence_and_reads_the_texel_of_its_level() {
+        use crate::shaderc::online::texref::{Level, MinFilter};
+        use crate::shaderc::online::v3d::select::is_tmu_p2;
+        use crate::shaderc::online::v3d::sim::{Texture, LANES};
+        const FS: &str = "#version 300 es\nprecision highp float;\nprecision highp int;\n\
+            uniform highp sampler2D t;\nuniform int lvl;\nin vec2 v_uv;\nlayout(location = 0) out vec4 o;\n\
+            void main() { o = texelFetch(t, ivec2(int(v_uv.x), int(v_uv.y)), lvl); }\n";
+        let want = |i: u32, k: u32| [i as f32 / 64.0 + k as f32 / 4.0, 0.5, k as f32 / 8.0, 1.0];
+        let tex = Texture {
+            cube: false,
+            min: MinFilter::NearestMipmapNearest,
+            levels: (0..3u32)
+                .map(|k| Level { width: 16 >> k, height: 1, faces: vec![(0..16 >> k).map(|i| want(i, k)).collect()] })
+                .collect(),
+        };
+        for (lvl, scale) in [(0u32, 1.0f32), (1, 0.5), (2, 0.25)] {
+            run_es3_lookup(FS, vec![tex.clone()], None, &|_| lvl, &|l| (l as f32 * scale, 0.0), &mut |p, o| {
+                let ops: Vec<String> = p.fs.code.instrs.iter().map(text).collect();
+                let n = |s: &str| ops.iter().filter(|o| o.contains(s)).count();
+                assert_eq!(
+                    (n("wrtmuc"), n("mov tmut"), n("mov tmub"), n("mov tmusf"), n("ldtmu")),
+                    (2, 1, 1, 1, 2),
+                    "{ops:#?}"
+                );
+                assert!(!ops.iter().any(|o| o.contains("tmus,") || o.contains("tmuslod") || o.contains("tmuscm")));
+                let at = |s: &str| ops.iter().position(|o| o.contains(s)).unwrap();
+                assert!(
+                    at("mov tmut") < at("mov tmusf")
+                        && at("mov tmub") < at("mov tmusf")
+                        && at("mov tmusf") < at("ldtmu")
+                );
+                assert!(!p.fs.code.uniforms.iter().any(|u| u.contents == 0 && is_tmu_p2(u.data)), "no P2");
+                for l in 0..LANES {
+                    let i = (l as f32 * scale) as u32;
+                    assert_eq!((o.tlb[0].value[l], o.tlb[1].value[l]), rt0_words(want(i, lvl)), "level {lvl} lane {l}");
+                }
+                assert_eq!((o.levels, o.tmu_lookups), (1 << lvl, 1), "level {lvl}");
+            });
+        }
+        const VS: &str = "#version 300 es\nprecision highp float;\nlayout(location = 0) in vec4 a_pos;\n\
+            uniform highp sampler2D t;\nout vec4 v_c;\n\
+            void main() { gl_Position = a_pos; v_c = texelFetch(t, ivec2(a_pos.xy), 1); }\n";
+        const PASS_FS: &str =
+            "#version 300 es\nprecision highp float;\nin vec4 v_c;\nlayout(location = 0) out vec4 o;\n\
+            void main() { o = v_c; }\n";
+        with_program(VS, PASS_FS, Prim::Triangles, |p| {
+            let p = p.expect("compiles");
+            check_all(p);
+            let ops: Vec<String> = p.vs.code.instrs.iter().map(text).collect();
+            let n = |s: &str| ops.iter().filter(|o| o.contains(s)).count();
+            assert_eq!((n("wrtmuc"), n("mov tmut"), n("mov tmub"), n("mov tmusf")), (2, 1, 1, 1), "{ops:#?}");
+            assert!(!ops.iter().any(|o| o.contains("tmuslod")), "a fetch is not a txl: {ops:#?}");
+        });
+    }
+
+    /// A constant texel offset is TMU config parameter 2's Offset S / T
+    /// (4-bit signed; Mesa's p2_unpacked.offset_s/_t, v3d_tex.c), a third
+    /// `wrtmuc` after P1, with the look-up's own retiring write: TMUS for
+    /// textureOffset and textureProjOffset (the division first), TMUSLOD for
+    /// textureLodOffset, TMUSF for texelFetchOffset. In the interpreter on
+    /// the 64x1 NEAREST texture of [`run_lookups`] (lane l at texel 8 + l)
+    /// the offset moves the texel, and at the texture's edge the wrap mode
+    /// applies after it: CLAMP_TO_EDGE reads texel 0, REPEAT texel 63.
+    #[cfg(not(feature = "report-es2"))]
+    #[test]
+    fn a_texel_offset_is_p2_and_moves_the_texel_before_the_wrap() {
+        use crate::shaderc::online::texref::{Filter, Level, MinFilter, Wrap};
+        use crate::shaderc::online::v3d::select::{is_tmu_p2, tmu_p2};
+        use crate::shaderc::online::v3d::sim::{Sampler, Texture, LANES};
+        /* the four forms at once, as tools/shaders/es300/texoffset.frag
+         * (which Mesa compiles to 36 words, tools/v3d/qpu_counts_42.tsv) */
+        const FS4: &str = "#version 300 es\nprecision highp float;\nprecision highp int;\n\
+            uniform highp sampler2D s;\nuniform vec2 uv;\nuniform float level;\nuniform ivec2 p;\n\
+            layout(location = 0) out vec4 colour;\n\
+            void main() { colour = textureOffset(s, uv, ivec2(-1, 0)) + textureLodOffset(s, uv, level, ivec2(0, -1)) \
+            + texelFetchOffset(s, p, 0, ivec2(7, -8)) + textureProjOffset(s, vec3(uv, 2.0), ivec2(3, 2)); }\n";
+        with_program(ES3_UV_VS, FS4, Prim::Triangles, |p| {
+            let p = p.expect("compiles");
+            check_all(p);
+            let ops: Vec<String> = p.fs.code.instrs.iter().map(text).collect();
+            let n = |s: &str| ops.iter().filter(|o| o.contains(s)).count();
+            /* the projection's constant divisor folds into two multiplies by
+             * 0.5 (s and t) */
+            assert_eq!(
+                (n("wrtmuc"), n("tmus,"), n("tmuslod"), n("tmusf"), n("tmub"), n("0x3f000000")),
+                (12, 2, 1, 1, 2, 2),
+                "{ops:#?}"
+            );
+            let mut p2: Vec<u32> =
+                p.fs.code.uniforms.iter().filter(|u| u.contents == 0 && is_tmu_p2(u.data)).map(|u| u.data).collect();
+            p2.sort_unstable();
+            let mut want = vec![
+                tmu_p2([-1, 0, 0], false),
+                tmu_p2([0, -1, 0], false),
+                tmu_p2([7, -8, 0], false),
+                tmu_p2([3, 2, 0], false),
+            ];
+            want.sort_unstable();
+            assert_eq!(p2, want, "{ops:#?}");
+            assert_eq!(want, [0x00f0_0f00, 0x00f0_2300, 0x00f0_8700, 0x00f0_f000]);
+        });
+        const W: usize = 64;
+        let texture = Texture {
+            cube: false,
+            min: MinFilter::Nearest,
+            levels: vec![Level { width: W as u32, height: 1, faces: vec![(0..W).map(texel).collect()] }],
+        };
+        /* lane l at texel 8 + l: textureOffset by -1 reads 7 + l, a fetch of
+         * texel 8 + l offset by 7 reads 15 + l */
+        const FS_A: &str = "#version 300 es\nprecision highp float;\nprecision highp int;\n\
+            uniform highp sampler2D t;\nin vec2 v_uv;\nlayout(location = 0) out vec4 o;\n\
+            void main() { vec4 a = textureOffset(t, v_uv, ivec2(-1, 0)); \
+            vec4 b = texelFetchOffset(t, ivec2(int(v_uv.x * 64.0), 0), 0, ivec2(7, 0)); o = vec4(a.r, b.r, a.b, b.b); }\n";
+        let uv = |l: usize| ((8.5 + l as f32) / W as f32, 0.5);
+        run_es3_lookup(FS_A, vec![texture.clone()], None, &|_| 0, &uv, &mut |p, o| {
+            let ops: Vec<String> = p.fs.code.instrs.iter().map(text).collect();
+            let n = |s: &str| ops.iter().filter(|o| o.contains(s)).count();
+            assert_eq!((n("wrtmuc"), n("tmus,"), n("tmusf")), (6, 1, 1), "{ops:#?}");
+            for l in 0..LANES {
+                let want = [texel(7 + l)[0], texel(15 + l)[0], texel(7 + l)[2], texel(15 + l)[2]];
+                assert_eq!((o.tlb[0].value[l], o.tlb[1].value[l]), rt0_words(want), "lane {l}");
+            }
+            assert_eq!(o.tmu_lookups, 2);
+        });
+        /* textureLodOffset (TMUSLOD) by +1 reads 9 + l; textureProjOffset
+         * (the coordinate doubled, divided by 2) by +2 reads 10 + l */
+        const FS_B: &str = "#version 300 es\nprecision highp float;\n\
+            uniform highp sampler2D t;\nin vec2 v_uv;\nlayout(location = 0) out vec4 o;\n\
+            void main() { vec4 c = textureLodOffset(t, v_uv, 0.0, ivec2(1, 0)); \
+            vec4 d = textureProjOffset(t, vec3(v_uv * 2.0, 2.0), ivec2(2, 0)); o = vec4(c.r, d.r, c.b, d.b); }\n";
+        run_es3_lookup(FS_B, vec![texture.clone()], None, &|_| 0, &uv, &mut |p, o| {
+            let ops: Vec<String> = p.fs.code.instrs.iter().map(text).collect();
+            let n = |s: &str| ops.iter().filter(|o| o.contains(s)).count();
+            assert_eq!((n("wrtmuc"), n("tmus,"), n("tmuslod"), n("tmub")), (6, 1, 1, 1), "{ops:#?}");
+            for l in 0..LANES {
+                let want = [texel(9 + l)[0], texel(10 + l)[0], texel(9 + l)[2], texel(10 + l)[2]];
+                assert_eq!((o.tlb[0].value[l], o.tlb[1].value[l]), rt0_words(want), "lane {l}");
+            }
+        });
+        /* lane l at texel l, offset -1: lane 0 falls off the edge, and the
+         * sampler's wrap mode decides, after the offset */
+        const FS_C: &str = "#version 300 es\nprecision highp float;\n\
+            uniform highp sampler2D t;\nin vec2 v_uv;\nlayout(location = 0) out vec4 o;\n\
+            void main() { o = textureOffset(t, v_uv, ivec2(-1, 0)); }\n";
+        let edge = |l: usize| ((0.5 + l as f32) / W as f32, 0.5);
+        for (wrap, lane0) in [(Wrap::ClampToEdge, 0usize), (Wrap::Repeat, 63), (Wrap::MirroredRepeat, 0)] {
+            let sampler =
+                Sampler { mag: Filter::Nearest, min: MinFilter::Nearest, wrap_s: wrap, wrap_t: Wrap::ClampToEdge };
+            run_es3_lookup(FS_C, vec![texture.clone()], Some(sampler), &|_| 0, &edge, &mut |_, o| {
+                for l in 0..LANES {
+                    let want = texel(if l == 0 { lane0 } else { l - 1 });
+                    assert_eq!((o.tlb[0].value[l], o.tlb[1].value[l]), rt0_words(want), "{wrap:?} lane {l}");
+                }
+            });
+        }
+    }
+
+    /// The corpus's texelFetch and offset sources compile (refused by name
+    /// until the fetch and offset forms were selected) and retire through the
+    /// write their form takes; their word counts are printed beside Mesa's
+    /// for the same source with es300/cube.vert (tools/v3d/qpu_counts_42.tsv:
+    /// es300/texfetch.frag 21, texoffset.frag 36, gltest/isamp.frag 35). The
+    /// pins of these programs against Mesa are the corpus item's.
+    #[cfg(not(feature = "report-es2"))]
+    #[test]
+    fn the_corpus_fetch_and_offset_sources_compile() {
+        static CUBE_VS: &str = include_str!("../../../../tools/shaders/es300/cube.vert");
+        static TEXFETCH_FS: &str = include_str!("../../../../tools/shaders/es300/texfetch.frag");
+        static TEXOFFSET_FS: &str = include_str!("../../../../tools/shaders/es300/texoffset.frag");
+        static ISAMP_FS: &str = include_str!("../../../../tools/shaders/gltest/isamp.frag");
+        for (name, fs, mesa, retire) in [
+            ("es300/texfetch.frag", TEXFETCH_FS, 21usize, "tmusf"),
+            ("es300/texoffset.frag", TEXOFFSET_FS, 36, "tmus,"),
+            ("gltest/isamp.frag", ISAMP_FS, 35, "tmusf"),
+        ] {
+            with_program(CUBE_VS, fs, Prim::Triangles, |p| {
+                let p = p.unwrap_or_else(|e| panic!("{name}: {e:?}"));
+                check_all(p);
+                let ops: Vec<String> = p.fs.code.instrs.iter().map(text).collect();
+                assert!(ops.iter().any(|o| o.contains(retire)), "{name}: {ops:#?}");
+                std::println!("{name}: {} words (Mesa {mesa})", ops.len());
+            });
+        }
     }
 
     /// Step (d): independent look-ups of one stretch share one thread
