@@ -251,9 +251,14 @@ PY
     gcc $csan -o "$out/bin/gltest" "$out/obj/gltest.w.o" "$out/obj/gl_test_host.w.o" "${common[@]}" 2>> "$out/hcc.log" \
       || { tail -30 "$out/hcc.log"; die "link gltest failed"; }
   fi
-  gcc $csan -o "$out/bin/scen" "$out/obj/scen.w.o" "${common[@]}" 2>> "$out/hcc.log" \
+  # the archive's one capi object carries the gl_test runner (feature
+  # gl-test-runner, above), whose gl_test_* symbols gl_test.c defines: every
+  # program that pulls the archive in links that file too
+  local gtobj=()
+  [ $v3d = 0 ] && gtobj=("$out/obj/gl_test_host.w.o")
+  gcc $csan -o "$out/bin/scen" "$out/obj/scen.w.o" "${gtobj[@]}" "${common[@]}" 2>> "$out/hcc.log" \
     || { tail -30 "$out/hcc.log"; die "link scen failed"; }
-  gcc $csan -o "$out/bin/hostile" "$out/obj/hostile.w.o" "${common[@]}" 2>> "$out/hcc.log" \
+  gcc $csan -o "$out/bin/hostile" "$out/obj/hostile.w.o" "${gtobj[@]}" "${common[@]}" 2>> "$out/hcc.log" \
     || { tail -30 "$out/hcc.log"; die "link hostile failed"; }
   if grep -q 'warning' "$out/hcc.log"; then grep warning "$out/hcc.log" | head; fi
 

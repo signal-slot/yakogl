@@ -1053,3 +1053,7 @@ unsigned long pvr_regs(void) { return 0; }
 int pvr_render_ta3d(unsigned long r) { (void)r; return 0; }
 void pvr_render_perf_read(uint32_t out[7]) { memset(out, 0, 7 * sizeof(out[0])); }
 void pvr_render_fl_counters(uint32_t out[9]) { memset(out, 0, 9 * sizeof(out[0])); }
+/* the render service's completed fence: the harness's own, one a kick */
+uint32_t pvr_render_completed(void) { return (uint32_t)done_fence; }
+/* no firmware here, so no hardware recovery ever runs */
+uint32_t pvr_render_hwr_recoveries(void) { return 0; }
