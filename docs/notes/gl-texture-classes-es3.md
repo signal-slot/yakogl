@@ -383,6 +383,169 @@ cases). Their upload refusals should disappear, and nothing may become a
 compile refusal. RGB32UI/I and RGBA32UI/I stay refused until the wide128
 items. Verdicts of render are meaningless on the host.
 
+### 2.7 narrow-classes: the complete change list (classes 30-39)
+
+Re-measured at commit `5ee474d3`. The list comes from `docs/es3/gc-formats.md`
+section 4, item 5 ("R8, RG8 and the R/RG snorm and integer formats in their own
+narrow classes: memory only") and the masks at `src/backend.rs:211-222`, where
+`GC_SAMPLED_TEXFMTS` holds RGBA8_SNORM, RGBA8UI/I and RGBA16UI/I and no R or RG
+class. Items 3 (ETC2) and 4 (R32/RG32, RGBA32) of that list are other items.
+Of item 5, GL_R8 and GL_RG8 are **not declared** (3.3); the other ten classes
+are the ones below. The RGB formats (GL_RGB8_SNORM, GL_RGB8UI .. GL_RGB16I) stay
+in the RGBA classes, because the TE has no 3-component format (2.1).
+
+**(1) GL-core state today, names, ids, mask bits.** Every one of the ten formats
+is stored **widened** today: no R/RG class exists. `src/gl/es3_formats.rs:80-86`
+gives them the RGBA lists, and `storage_in` (`:183`) answers the first class the
+mask holds.
+
+| format (`es3_formats.rs` row) | stored today in | new class (id) | bit in `GC_SAMPLED_TEXFMTS` | storage list (native first) |
+|---|---|---|---|---|
+| GL_R8_SNORM (`:92`) | `SNORM_ST` (`:80`): `RGBA8_SNORM`, else `RGBA16F` | `GLES_TEXFMT_R8_SNORM` (30) | `1 << 30` | `R8SN_ST = [R8_SNORM, RGBA8_SNORM, RGBA16F]` |
+| GL_RG8_SNORM (`:93`) | `SNORM_ST` | `GLES_TEXFMT_RG8_SNORM` (31) | `1 << 31` | `RG8SN_ST = [RG8_SNORM, RGBA8_SNORM, RGBA16F]` |
+| GL_R8UI (`:135`) | `U8_ST` (`:83`): `RGBA8UI` | `GLES_TEXFMT_R8UI` (32) | `1 << 32` | `R8U_ST = [R8UI, RGBA8UI]` |
+| GL_R8I (`:136`) | `I8_ST` (`:84`): `RGBA8I` | `GLES_TEXFMT_R8I` (33) | `1 << 33` | `R8I_ST = [R8I, RGBA8I]` |
+| GL_RG8UI (`:141`) | `U8_ST` | `GLES_TEXFMT_RG8UI` (34) | `1 << 34` | `RG8U_ST = [RG8UI, RGBA8UI]` |
+| GL_RG8I (`:142`) | `I8_ST` | `GLES_TEXFMT_RG8I` (35) | `1 << 35` | `RG8I_ST = [RG8I, RGBA8I]` |
+| GL_R16UI (`:137`) | `U16_ST` (`:85`): `RGBA16UI` | `GLES_TEXFMT_R16UI` (36) | `1 << 36` | `R16U_ST = [R16UI, RGBA16UI]` |
+| GL_R16I (`:138`) | `I16_ST` (`:86`): `RGBA16I` | `GLES_TEXFMT_R16I` (37) | `1 << 37` | `R16I_ST = [R16I, RGBA16I]` |
+| GL_RG16UI (`:143`) | `U16_ST` | `GLES_TEXFMT_RG16UI` (38) | `1 << 38` | `RG16U_ST = [RG16UI, RGBA16UI]` |
+| GL_RG16I (`:144`) | `I16_ST` | `GLES_TEXFMT_RG16I` (39) | `1 << 39` | `RG16I_ST = [RG16I, RGBA16I]` |
+
+* Bits 32..39 need mask-u64, so this item lands **after** mask-u64. Bits 30 and
+  31 alone would fit a `u32` (31 is its sign bit), but the item is one commit.
+* The bits go into the `texfmts(&[...])` list of `GC_SAMPLED_TEXFMTS`
+  (`src/backend.rs:211-222`) only, never `BASE_SAMPLED_TEXFMTS`, `PVR_` or
+  `V3D_`. Update the doc comment above it (`:209-210`, "Not RGB10A2, RGBA32*,
+  R32I/UI, RG32I/UI or ETC2"): the narrow classes leave the first clause, and
+  only the R32/RG32 words are r32-rg32-classes'.
+* One `pub const GLES_TEXFMT_*: u8 = N;` per line after `:141`
+  (`GLES_TEXFMT_ETC2_SRGB_RGBA`), numbered after the four R32/RG32 classes
+  (26-29). `tests/es3_formats_gc.rs:136-146` parses the list and wants every
+  declared class in `CLASSES`; if narrow-classes lands before
+  r32-rg32-classes, 26-29 are holes, which that parse does not forbid, but the
+  numbers 30-39 must not change.
+* `gles_texfmt_bytes` (`src/backend.rs:289-301`): `R16UI | R16I | RG8UI | RG8I |
+  RG8_SNORM` join the 2 arm (`:294`, today `R16F | RGB565 | LA8`); `R8UI | R8I |
+  R8_SNORM` join the 1 arm (`:296`, today `L8 | A8`). `RG16UI | RG16I` fall to
+  the default 4.
+* **Still widened:** the RGB and RGBA formats of the same families, and GL_R8 /
+  GL_RG8 (3.3).
+
+**(2) GL-core function changes.**
+
+| where | change |
+|---|---|
+| `src/gl/es3_formats.rs:80-86` | keep `SNORM_ST`, `U8_ST` .. `I16_ST` for the RGB and RGBA rows (`:94-95`, `:147-156`); add the ten lists of the table |
+| `src/gl/es3_formats.rs:92, 93, 135-138, 141-144` | point each of the ten rows at its own list |
+| `src/gl/es3_formats.rs:183` `storage_in` | no change |
+| `src/gl/es3_formats.rs:603` `encode` (new arms next to the RGBA8_SNORM and RGBA8UI/I, RGBA16UI/I arms) | the table in 2.3: `R8_SNORM => dst[0] = snorm8(fl[0])` (`snorm8`, `:571`); `RG8_SNORM` two bytes; `R8UI \| R8I => dst[0] = ints[0] as u8`; `RG8UI \| RG8I` two bytes; `R16UI \| R16I => put16(dst, 0, ints[0] as u16)`; `RG16UI \| RG16I` two `put16`. Without an arm `encode` returns `false` (`_ => return false`) and the upload fails |
+| `src/gl/es3_formats.rs:673` `convert_row` | no change |
+| `src/gl/texture.rs:5752` (`sized_format`, es3 arm: `e.storage_here()?`), `:5806` `es3_storage_or_refuse`, `:5864` `texfmt_of`, `:2202` `convert_row` call | no change: they take the class `storage_in` answers and size rows through `gles_texfmt_bytes` |
+| `src/gl/texture.rs:5787` `es3_copy_compatible` | no change (glCopyTexImage into these formats stays refused) |
+| `src/gl/tf_capture.rs:1152-1160` `decode`, arms before `_ => return None` (`:1162`) | `R8_SNORM`: `Texel::F([max(p[0] as i8 / 127, -1), 0, 0, 1])`; `RG8_SNORM` two components; `R8UI` `Texel::I([p[0], 0, 0, 1])`; `R8I` sign-extended (`p[k] as i8 as i32 as u32`); `R16UI/I` from `u16_at(0)` (`as i16` for the signed one); `RG8*`, `RG16*` two components; add the ten names to the `use` at `:65` |
+| `src/gl/framebuffer.rs:2122-2123` `es3_texture_bits` | **needed.** Add `R8UI \| R8I \| RG8UI \| RG8I` to the `first(8)` arm and `R16UI \| R16I \| RG16UI \| RG16I` to the `first(16)` arm; otherwise `_ => first(32)` (`:2124`) reports 32 bits for GL_R8UI. The snorm arm (`:2133`) reads `first(8)` for any class and needs nothing. Plan #155's file: a separate small commit (step 3) |
+| `src/gl/framebuffer.rs:411` `integer_texture_surface` | **no change in this item.** The new classes are incomplete attachments, as the widened ones are for these formats today (2.4 item 1; step 4) |
+
+The widened store already makes GL_R8UI etc. incomplete attachments (the RGBA
+store's surface is not the name's surface, `framebuffer.rs:396-402`), so the
+narrow classes do not regress a case that completes today.
+
+**(3) GC7000 TE words** (`F`, `D`, `S`, `X` as in the header of this note;
+`src/vivante/texture.rs` `gc_texfmt` arms go before the `_ => unorm_format`
+default, `:139`). `X` line numbers are Mesa's; the in-tree header is one more.
+
+| class | `CONFIG1.FORMAT_EXT` (`CONFIG0.FORMAT` = 0) | `CONFIG2` (base `0x00030000`, `D:187`) | Mesa table row | header `X` |
+|---|---|---|---|---|
+| R8_SNORM | `EXT_R8_SNORM` `0x0e` | + 0 | `F:89` | `X:80` |
+| RG8_SNORM | `EXT_G8R8_SNORM` `0x0f` | + 0 | `F:119` | `X:81` |
+| R8UI | `EXT_R8I` `0x15` | + 0 | `F:90` | `X:85` |
+| R8I | `EXT_R8I` `0x15` | `\| SIGNED_INT8` `0x00040000` | `F:91`; `D:187-188` | `X:85`; `X:165` |
+| RG8UI | `EXT_G8R8I` `0x16` | + 0 | `F:120` | `X:86` |
+| RG8I | `EXT_G8R8I` `0x16` | `\| SIGNED_INT8` | `F:121`; `D:187-188` | `X:86`; `X:165` |
+| R16UI | `EXT_R16I` `0x18` | + 0 | `F:102` | `X:88` |
+| R16I | `EXT_R16I` `0x18` | `\| SIGNED_INT16` `0x00080000` | `F:103`; `D:187,189` | `X:88`; `X:166` |
+| RG16UI | `EXT_G16R16I` `0x19` | + 0 | `F:147` | `X:89` |
+| RG16I | `EXT_G16R16I` `0x19` | `\| SIGNED_INT16` | `F:148`; `D:187,189` | `X:89`; `X:166` |
+
+* **Where the value goes:** the table rows carry `EXT_FORMAT`, so
+  `CONFIG0.FORMAT` stays 0 and `CONFIG1.FORMAT_EXT` carries the value
+  (`D:179-186`).
+* **Sign:** `sint = util_format_is_pure_sint` (`D:160`) and the channel size
+  select `SIGNED_INT8` / `SIGNED_INT16` (`D:187-189`). The unsigned and signed
+  classes use one TE word, as RGBA8UI/I do now (`texture.rs:117-121`).
+* **Swizzle:** identity. `get_texture_swiz` (`F:346-384`) patches only R8_UNORM
+  (`F:364`) and DXT1, so none of the ten is touched. `int_filter` stays false
+  (`F:296-338`, unorm only). `format_words` (`texture.rs:183-230`) needs no
+  change.
+* **Gates:** `EXT_FORMAT` HALTI0 (`S:409-410`), snorm HALTI1 (`S:416-417`),
+  pure integer HALTI2 (`S:419-421`). The GC7000UL meets all of them.
+* **Constants:** `src/vivante/regs.rs:881-893` defines only
+  `GC_TEX_FORMAT_EXT_A8B8G8R8_SNORM` (`0x11`), `_A8B8G8R8I` (`0x17`) and
+  `_A16B16G16R16I` (`0x1a`) of this family. The six new words
+  (`GC_TEX_FORMAT_EXT_R8_SNORM`, `_G8R8_SNORM`, `_R8I`, `_G8R8I`, `_R16I`,
+  `_G16R16I`) come from regs-words; if it has not merged, add them there with
+  the `X:` line, as the existing ones do. `GC_TEXDESC_CONFIG2_SIGNED_INT8/16`
+  exist (`regs.rs:841-842`).
+* **Classes Mesa cannot sample natively: none of the ten.** Mesa has an `EXT_`
+  row for each and samples the integers raw (`BYTE_I` / `SHORT_I` in the table's
+  second column), so it widens nothing for them and there is no emulation to
+  mirror. What it cannot sample are the RGB forms (`V_` rows, no `tex`), which
+  stay widened here too. Mesa's R8_UNORM / R8G8_UNORM (`F:88`, `F:118`) are
+  different (L8 with a patched swizzle, `EXT_G8R8`) and are 3.3's.
+* **Unmeasured (board):** what the TE returns in the channels a class lacks
+  (section 4, last note). The same board item as for R32/RG32.
+
+**(4) Other back ends.** None of `PVR_SAMPLED_TEXFMTS` (`src/backend.rs:190`),
+`V3D_SAMPLED_TEXFMTS` (`:233`) or Mali's mask (`src/mali/backend.rs:96`, 0)
+gains a bit, so `storage_in` hands them the later entry of each list, **which is
+today's class**: PowerVR and V3D store GL_R8UI in RGBA8UI, GL_R16I in RGBA16I and
+GL_R8_SNORM in RGBA8_SNORM (RGBA16F only where RGBA8_SNORM is not in the mask,
+as now). `es3_tex_format` (`src/pvr/backend.rs:1250`) and `tmu_format` /
+`refusal_for` (`src/v3d/texture.rs:217`, `:109`) never see ids 30-39. Mali
+refuses every es3_formats format by name. Do not edit those files.
+
+**(5) Tests and dEQP groups.**
+
+`tests/es3_formats_gc.rs` (held by wide128-backend; edit after it lands):
+* `CLASSES` (`:50-77`) grows by ten rows (ids 30-39), and
+  `docs/es3/gc-formats.md` section 2 by ten rows with `in mask` yes. The
+  existing tests demand both.
+* `storage_in(GC_SAMPLED_TEXFMTS)` of the ten formats is the native class. On
+  `PVR_SAMPLED_TEXFMTS` / `V3D_SAMPLED_TEXFMTS` it is today's RGBA class
+  (RGBA8_SNORM, RGBA8UI/I, RGBA16UI/I); on Mali's mask `None`.
+* `gc_texfmt` per class: `format_ext` 0x0e / 0x0f / 0x15 / 0x16 / 0x18 / 0x19,
+  `config2` 0x00040000 for R8I and RG8I, 0x00080000 for R16I and RG16I, 0
+  otherwise, `int_filter` false, `decoded` true.
+* `encode` bytes equal the first 1 / 2 / 2 / 4 bytes of the RGBA class's
+  encoding of the same texel (R8: first byte; RG8 and R16: first two; RG16:
+  first four).
+* `gles_texfmt_bytes` of all ten (1, 2, 1, 1, 2, 2, 2, 2, 4, 4 in id order) in
+  the one table that pins every class.
+* The sweep of step 3 test 5: no declared class reaches `unorm_format`'s
+  `A8B8G8R8` default unless meant to.
+* `tf_capture::decode` of each class.
+
+`tests/es3_sized_formats.rs` (plan #155's file): "an integer format has one
+class" (`:179-182`) becomes "every class of an integer format is an integer
+class"; `Some(e.storage[0])` on PowerVR and V3D (`:189-191`, `:235-237`) becomes
+`Some(*e.storage.last())` for the integer formats; GL_R8_SNORM and GL_RG8_SNORM
+on the GC are the native classes; `all_classes` (`:23-24`) includes 30-39. The
+GC refusal list at `:574-576` does not change (the widened formats were never
+refused).
+
+`src/gl/framebuffer.rs:8157-8207` (attachment bits stay 8 / 16 / 8 on a GC
+build) needs no edit, only to keep passing.
+
+**Host dEQP** (`tools/cts/host-deqp-run.sh --gpu=vivante --module=gles3`):
+`functional.texture.format.sized.2d.r8_snorm_*`, `rg8_snorm_*`, `r8ui_*`,
+`r8i_*`, `rg8ui_*`, `rg8i_*`, `r16ui_*`, `r16i_*`, `rg16ui_*`, `rg16i_*` and
+their `cube`, `2d_array`, `3d` twins, and `functional.texture.specification`
+(`teximage2d`, `texstorage2d` format cases). **The outcome lists must not
+change.** These formats were stored (widened) and sampled before, so the item
+saves memory only, and a case that moves is a regression. `fbo.completeness`
+and `fragment_out` are not reached (no new render target).
+
 ## 3. Back ends that do not sample a new class
 
 The rule: **a back end whose mask lacks the new class stores the format in
