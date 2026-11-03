@@ -16,6 +16,14 @@ GC7000UL needed the GLES2 texture groups split to 36-192 cases. So: shaders 1,00
 groups 800; ubo 600, fragment_ops 500, fbo/fragment_out 400, transform_feedback 300; texture 150,
 texture.filtering.3d 20 (19-25 s a case on the AM62P, RESULTS.md 1r: images of 22 cases fit), size 30,
 format 40, shadow 80.
+
+Re-splitting an entry that overran the watchdog on the board: add its group to SPLIT (below), or try it first
+with  imx8mp-gles3-gen.py --split functional.texture.wrap=4  (prints the trial table on stdout; repeatable).
+The key is a dEQP group name without the leading "dEQP-GLES3."; N is the number of parts. The budget of
+every case under the key becomes ceil(cases under the key / N) (never above the BUDGET figure), so the walk
+descends into the children and the packing cuts the group into about N entries. SPLIT is empty, and with no
+--split the output is the committed table, byte for byte (tools/cts/imx8mp-gles3-gen-selftest.sh checks that,
+and that a trial split loses and doubles no case). Regenerate the table in the same commit as a SPLIT edit.
 """
 import os, sys
 
@@ -35,9 +43,16 @@ BUDGET = [      # (name prefix, cases per entry); first match wins
     ('functional.shaders', 1000),
 ]
 DEFAULT = 800
+SPLIT = {}      # group name without "dEQP-GLES3." -> number of parts; empty: the table of the BUDGET list alone
+_cap = {}       # case name -> per-entry cap from SPLIT (filled by main)
 
 def budget(name):
     n = name.split('.', 1)[1]
+    if name in _cap:
+        return min(_cap[name], budget_base(n))
+    return budget_base(n)
+
+def budget_base(n):
     for p, b in BUDGET:
         if n == p or n.startswith(p + '.'):
             return b
@@ -46,6 +61,22 @@ def budget(name):
 def main():
     here = os.path.dirname(os.path.abspath(__file__))
     cases = [l.strip() for l in open(os.path.join(here, 'gles3-mustpass.txt')) if l.strip()]
+    parts = dict(SPLIT)
+    args = sys.argv[1:]
+    while args:
+        a = args.pop(0)
+        if a == '--split' and args and '=' in args[0]:
+            k, v = args.pop(0).rsplit('=', 1)
+            parts[k] = int(v)
+        else:
+            sys.exit('usage: imx8mp-gles3-gen.py [--split GROUP=N]...')
+    for k, v in parts.items():
+        pre = 'dEQP-GLES3.' + k
+        under = [c for c in cases if c == pre or c.startswith(pre + '.')]
+        if not under or v < 1:
+            sys.exit('--split %s=%d: no such group or bad part count' % (k, v))
+        for c in under:
+            _cap[c] = min(_cap.get(c, 1 << 30), -(-len(under) // v))
     def split(names, depth):
         """yield (child, names) for the names sharing their first `depth` components; child None: a case"""
         groups = {}
@@ -105,6 +136,8 @@ def main():
 # Sizing: an image's WDOG1 window is 600 s (boards/verdin_imx8mp_mimx8ml8_a53.conf), so an entry holds at most 1000 shader cases (random 600), 800 of the API groups, 400-600 ubo/fbo/fragment_out/fragment_ops, 300 transform_feedback, 150 texture, and 20 texture.filtering.3d (19-25 s a case on the AM62P: 1r ran it in images of 22 cases), 30 texture.size, 40 texture.format, 80 texture.shadow (AM62P 1r: 2,000 per image for shaders; the GC7000UL's GLES2 texture groups ran 36-192 cases an entry).
 # To build: DEQP_MODULE=gles3 tools/cts/imx8mp-deqp-build.sh <name> 'dEQP-GLES3.info.*' --table tools/cts/imx8mp-gles3-tree.txt (docs/es3/board-recipe-imx8mp.md).
 """ % (len(entries), max(len(','.join(e)) for e in entries), len(cases)))
+    if parts:
+        out.write('# Re-split: %s\n' % ', '.join('%s=%d' % kv for kv in sorted(parts.items())))
     for e in entries:
         out.write(','.join(e) + '\n')
 
