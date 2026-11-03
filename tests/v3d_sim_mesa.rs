@@ -2839,15 +2839,21 @@ fn our_programs_agree_with_the_ir_and_with_mesa() {
     // 2026-10-04 (work/online-only, ES 3 build): es300/texsize.frag's
     // precision fix moves it from the front end's refusals to NotYet
     // ("textureSize of a 3D or array sampler", the V3D's own gap).
+    // 2026-11-03 (texelFetch / offsets, ES 3 build only): NotYet 4 -> 3,
+    // compiled 221 -> 222: gltest/isamp.frag (texelFetch on an isampler2D)
+    // compiles. The evaluator samples only a float 2D or cube texture, so
+    // the pair is not tried (5 -> 6) and not compared with Mesa's program
+    // (15 -> 16); nothing else moves (the 192 pairs compiled before keep
+    // their words: chain.rs compiled_corpus_words_are_pinned).
     let es2 = cfg!(feature = "report-es2");
     assert_eq!(
         (reals.len(), front_end, n_not_yet, n_other, compiled.len()),
-        if es2 { (271, 70, 0, 2, 199) } else { (271, 44, 4, 2, 221) },
+        if es2 { (271, 70, 0, 2, 199) } else { (271, 44, 3, 2, 222) },
         "our compiler's coverage moved; re-derive the pins"
     );
     assert_eq!(
         (tried, agree.len(), n_un, n_nt),
-        if es2 { (197, 197, 0, 2) } else { (216, 215, 1, 5) },
+        if es2 { (197, 197, 0, 2) } else { (216, 215, 1, 6) },
         "(a) vs (b) moved"
     );
     // The pairs whose output the language does not fix (a pseudo-random
@@ -2860,7 +2866,7 @@ fn our_programs_agree_with_the_ir_and_with_mesa() {
     assert_eq!(trig_sorted, trig_want, "the undefined-precision trig bucket moved");
     assert_eq!(
         (vs_mesa_agree.len(), vs_mesa_skipped.len(), vs_mesa_absent.len()),
-        if es2 { (160, 10, 29) } else { (177, 15, 29) },
+        if es2 { (160, 10, 29) } else { (177, 16, 29) },
         "(a) vs (c) moved"
     );
     assert_eq!(
@@ -3075,8 +3081,10 @@ fn back_to_back_loop_exits_are_counted() {
 /// gradients 4-5 each); the window removed, they cost one word in all
 /// (es300 divnest 131 -> 130, ES 3 only; no executed run moves) and 37%
 /// more test time, so the window stays. Since the Qt pairs left the fixture
-/// (#1509, 2026-10-24): 51 cuts, all in fragment shaders. Pinned: a change
-/// to hoist or to what reaches it moves these.
+/// (#1509, 2026-10-24): 51 cuts, all in fragment shaders. 2026-11-03,
+/// texelFetch (TMUSF), ES 3 build: gltest/isamp.frag compiles and adds its
+/// hoists (fs 5, vs 2, cs 6, no cut); the pairs compiled before keep theirs.
+/// Pinned: a change to hoist or to what reaches it moves these.
 #[test]
 fn the_hoist_windows_cuts_are_counted() {
     let es2 = cfg!(feature = "report-es2");
@@ -3106,7 +3114,7 @@ fn the_hoist_windows_cuts_are_counted() {
     }
     assert_eq!(
         (hoists, cuts),
-        if es2 { ([1074, 2227, 166], [48, 0, 0]) } else { ([1141, 2404, 224], [59, 0, 0]) },
+        if es2 { ([1074, 2227, 166], [48, 0, 0]) } else { ([1146, 2406, 230], [59, 0, 0]) },
         "the hoist counts moved"
     );
 }
@@ -3485,6 +3493,8 @@ const FEMTOVG_FS_COUNTS: &[(&str, usize)] = &[
 /// and loopcarry 4 fewer each; nothing else moves); the Qt pairs left the
 /// fixture (#1509, 2026-10-24): 91 programs [5025, 2781, 2225] / ES2 79
 /// [4569, 2370, 1965], the per-program words above of the Qt programs gone
-/// with them.
-const OURS_TOTALS: (usize, [usize; 3]) = (192, [10820, 5519, 4509]);
+/// with them. 2026-11-03, texelFetch (TMUSF): gltest/isamp.frag compiles,
+/// 193 programs [10939, 5537, 4530], the new pair's own words (fs 119, vs
+/// 18, cs 21; ES 3 build only); no other program moves.
+const OURS_TOTALS: (usize, [usize; 3]) = (193, [10939, 5537, 4530]);
 const OURS_TOTALS_ES2: (usize, [usize; 3]) = (170, [9823, 4840, 4039]);
