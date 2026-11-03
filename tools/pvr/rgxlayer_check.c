@@ -168,7 +168,12 @@ void yd_panic(const uint8_t *file, size_t file_len, uint32_t line)
 
 /* The host's precompiled `core` is built for unwinding and names the
  * personality routine; the crate is panic=abort and never unwinds (the board's
- * target, aarch64-unknown-none-softfloat, has no such reference). */
+ * target, aarch64-unknown-none-softfloat, has no such reference). Older
+ * nightlies name it plain `rust_eh_personality`; from the 2026-10 nightlies it
+ * is rustc's internal `__rustc::rust_eh_personality`, v0-mangled with a hash
+ * per toolchain, and tools/check.sh (pvr_eh_personality_alias) points that name
+ * here with --defsym. Keep this definition and its plain name: the alias needs
+ * it on every toolchain. */
 void rust_eh_personality(void);
 void rust_eh_personality(void)
 {

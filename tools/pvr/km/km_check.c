@@ -326,7 +326,9 @@ void yd_panic(const uint8_t *file, size_t file_len, uint32_t line)
 }
 
 /* The host's precompiled `core` names the personality routine; the crate is
- * panic=abort and never unwinds (as tools/pvr/rgxlayer_check.c). */
+ * panic=abort and never unwinds. A mangled name (from the 2026-10 nightlies)
+ * is linked here by tools/check.sh's --defsym alias, so this definition keeps
+ * its plain name (as tools/pvr/rgxlayer_check.c explains). */
 void rust_eh_personality(void);
 void rust_eh_personality(void)
 {
