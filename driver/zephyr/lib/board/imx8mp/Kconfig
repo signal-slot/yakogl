@@ -504,6 +504,32 @@ config YAKOGL_BOARD_IMX8MP_ROUTE3_BEAT_MS
 	  (CLUSTER_FRAME_RING_TIMEOUT_MS); the header asks for ten beats in
 	  that window.
 
+YK_DT_DEFERRED_INIT := zephyr,deferred-init
+
+config YAKOGL_BOARD_IMX8MP_ROUTE3_A53_RESTART
+	bool "Route 3: the A53 side goes down on the M7's request and boots again"
+	depends on SMP && PM_CPU_OPS_PSCI && YAKOGL_BOARD_IMX8MP_WINDOWS = 2
+	depends on $(dt_nodelabel_bool_prop,display0,$(YK_DT_DEFERRED_INIT))
+	select SCHED_CPU_MASK
+	help
+	  The protocol of <cluster/a53_power.h> (board_route3_restart.c).
+	  While the screen is touched the M7 asks the A53 side to go down
+	  (MU_1 general-purpose interrupt 1, cmd DOWN): this image stops its
+	  GPU work, turns cores 1-3 off (PSCI CPU_OFF, each from its own
+	  core) and suspends the system from core 0 (PSCI SYSTEM_SUSPEND to
+	  the loader at 0x40200000). The M7's UP wakes core 0 in TF-A, the
+	  loader inflates this image again, and the image sees at its first
+	  board hook that it is a restart: it then leaves the M7, the panel
+	  chain, I2C2, PWM3, MEDIAMIX, GPIO4 and the shared status, control
+	  and timeline pages alone, resets the GPU, and publishes into the
+	  frame ring it left, with its session.
+
+	  Needs the devicetree overlay
+	  driver/boards/toradex/verdin_imx8mp/a53-restart.overlay (the
+	  display chain's devices deferred; the cold boot initialises them in
+	  the device model's own order). Off, the image is the cold path
+	  alone.
+
 endif # YAKOGL_BOARD_IMX8MP_ROUTE3
 
 endif # YAKOGL_GC_BOARD

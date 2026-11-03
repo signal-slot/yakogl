@@ -73,6 +73,35 @@ int board_route3_window(unsigned int n, uint32_t w, uint32_t h, struct board_win
  */
 int board_route3_show(const struct board_window *win);
 
+#ifdef CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_A53_RESTART
+/* ---- the A53 restart (board_route3_restart.c, <cluster/a53_power.h>) ------ */
+
+struct cluster_a53_power;
+
+/*
+ * True when this boot is a restart after a SYSTEM_SUSPEND: the M7 runs and
+ * owns the panel chain, I2C2, PWM3, MEDIAMIX and GPIO4, and the shared
+ * status, control and timeline pages are its. Decided at PRE_KERNEL_1
+ * (board_route3_restart_detect, from board_route3.c's first hook) and
+ * constant after.
+ */
+bool board_route3_warm(void);
+
+/* The first hook: decide board_route3_warm(); `entry` is the image's entry
+ * stamp (system counter). PRE_KERNEL_1 only. */
+void board_route3_restart_detect(uint64_t entry);
+
+/* The power page (mapped at PRE_KERNEL_1), or NULL when it could not be. */
+volatile struct cluster_a53_power *board_route3_power_page(void);
+
+/* The route runs (UP, a frame published): listen for the M7's DOWN from now. */
+void board_route3_restart_arm(void);
+
+/* DOWN taken (board_route3_restart.c calls it): stop the heartbeat, publish
+ * nothing more. */
+void board_route3_quiesce(void);
+#endif
+
 #ifdef __cplusplus
 }
 #endif

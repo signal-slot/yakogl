@@ -329,6 +329,17 @@ int gc_render_recover(const char *why);
  * client leaves behind for the next; see gc_render.c. */
 int gc_render_reset_idle(void);
 
+/*
+ * Stop the render service and the GPU for good, before the system is powered
+ * down (the i.MX8MP route-3 A53 restart): no submit gets past this call, the
+ * work submitted is waited for (up to `timeout_ms`), then the core is reset,
+ * so its front end fetches nothing more and no DMA is in flight. Nothing
+ * brings the service back; the next boot does. 0, -ETIMEDOUT when work was
+ * still outstanding at the reset, -EBUSY when the submit lock was not had
+ * (the GPU is then left as it was), or the reset's error.
+ */
+int gc_render_quiesce(uint32_t timeout_ms);
+
 /* How many times gc_render_recover() has reset the GPU. Zero on a healthy
  * run, and the number a board with no console reports through a hold code. */
 uint32_t gc_render_resets(void);

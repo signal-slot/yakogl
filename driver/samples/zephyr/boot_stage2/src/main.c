@@ -80,6 +80,84 @@ static inline uint64_t cntpct(void)
 	return v;
 }
 
+#ifdef CONFIG_BOOT_STAGE2_RESTART
+/*
+ * Every entry is a first entry (BOOT_STAGE2_RESTART). The A53 image suspends
+ * to this loader's entry point (cluster/a53_power.h) and TF-A resumes core 0
+ * at __start with the MMU and caches off, at the EL it gave BL33 at power-on:
+ * psci_get_ns_ep_info() takes the mode from SCR_EL3.HCE, not from the caller,
+ * and HCE is set because imx8mp_bl31_setup.c entered BL33 at EL2. Nothing is
+ * reloaded, so the RAM is as the first run left it. Zephyr's start code
+ * (arch/arm64/core/reset.S, prep_c.c) rebuilds the stack, the MMU tables
+ * (.bss), the GIC and the timers, and zeroes .bss again; it does not restore
+ * the initialised RAM data (arch_data_copy() is empty without XIP). That
+ * range, [__data_region_start, __data_region_end): .data (timeout_list,
+ * whose nodes were in the old .bss, timeslicing's slice_ticks,
+ * virt_region_bitmap, the console hooks) and the device states, whose
+ * `initialized` bits the first run set.
+ *
+ * So the first entry copies the range into noinit room (data_snapshot.ld)
+ * before anything writes it, and every later entry copies it back: the
+ * range is then byte for byte what SPL loaded. Which entry this is comes
+ * from the range itself: bs2_data_state is 'LOAD' as linked and set to
+ * 'RUN!' once the copy is taken, so it reads 'LOAD' exactly when SPL has
+ * just written the file. A power-page check could not decide this (DDR
+ * holds anything at power-on, and a reset keeps a stale page).
+ *
+ * Runs in z_arm64_el_highest_plat_init(), the first hook of the reset path:
+ * after __reset_prep_c set the stack (z_interrupt_stacks, noinit) and before
+ * z_prep_c() (soc_prep_hook, the .bss clear). The MMU is off, so every data
+ * access is Device-nGnRnE and must be aligned: the copies are
+ * arch_early_memcpy() (Zephyr's MMU-off copy, early_mem_funcs.S), the other
+ * accesses aligned volatile words. The caches hold nothing for these
+ * addresses: on a first entry because the loader has not run, on a restart
+ * because TF-A cleaned and invalidated them before the cluster went off.
+ */
+#include <zephyr/linker/linker-defs.h>
+#include <zephyr/arch/common/init.h>
+#include <cluster/a53_power.h>
+
+#define BS2_DATA_LOADED 0x44414f4cu /* 'LOAD': as linked */
+#define BS2_DATA_RAN    0x214e5552u /* 'RUN!': the copy is taken */
+
+/* The linker script defines these in every build; linker-defs.h declares
+ * them for XIP only. */
+extern char __data_region_start[];
+extern char __data_region_end[];
+extern char bs2_data_snapshot[]; /* data_snapshot.ld: as many bytes as the range */
+
+static volatile uint32_t bs2_data_state = BS2_DATA_LOADED;
+
+BUILD_ASSERT(offsetof(struct cluster_a53_power, a53_state) == 12u, "a53_power.h layout");
+BUILD_ASSERT(offsetof(struct cluster_a53_power, a53_loader_in) == 72u, "a53_power.h layout");
+
+/* The weak hook of arch/arm64/core/reset.c; no SoC or board defines it. */
+void z_arm64_el_highest_plat_init(void);
+
+void z_arm64_el_highest_plat_init(void)
+{
+	volatile struct cluster_a53_power *pw =
+		(volatile struct cluster_a53_power *)(uintptr_t)CLUSTER_A53_POWER_ADDR;
+	const size_t n = (size_t)(__data_region_end - __data_region_start);
+
+	/* After a suspend (the page says so): the loader's entry time, and
+	 * nothing else in the page. */
+	if (pw->magic == CLUSTER_A53_POWER_MAGIC && pw->a53_state == CLUSTER_A53_ST_SUSPENDING) {
+		pw->a53_loader_in = cntpct();
+	}
+
+	if (bs2_data_state == BS2_DATA_LOADED) {
+		arch_early_memcpy(bs2_data_snapshot, __data_region_start, n);
+	} else {
+		arch_early_memcpy(__data_region_start, bs2_data_snapshot, n);
+	}
+	/* The copy is in memory before the mark that says it is. */
+	__asm__ volatile("dsb sy" : : : "memory");
+	bs2_data_state = BS2_DATA_RAN;
+	__asm__ volatile("dsb sy" : : : "memory");
+}
+#endif /* CONFIG_BOOT_STAGE2_RESTART */
+
 static void bs2_stamp(unsigned int i)
 {
 	bs2_t[i] = cntpct();
