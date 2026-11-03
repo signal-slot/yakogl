@@ -247,6 +247,50 @@ fn assert_words(name: &str, ours: &[u64], theirs: &[u64]) {
     panic!("{m}");
 }
 
+/// One change the kept-loop cap makes to a Mesa 26.2.1 fragment program
+/// (nir_fs.rs `loop_cap_limit`, a DELIBERATE deviation: Mesa has no pass
+/// counter; docs/notes/mali-loop-board-failures.md). Positions are of the
+/// result, the edits applied in order; every word no edit names still
+/// compares against the reference, and the facts (work registers, preload,
+/// FAU) are the reference's.
+#[derive(Clone, Copy, Debug)]
+enum CapEdit {
+    /// A word of the cap, inserted at this position: the pre-header's
+    /// `IADD_IMM.i32.reconverge rc, 0x0, #0x1000` (LOOP_CAP), the header's
+    /// `IADD_IMM.i32 rc, rc^, #0xFFFFFFFF` and `ICMP_OR.s32.lt.m1 rs, rc,
+    /// 0x0, 0x0`, and after a float test the `LSHIFT_OR.i32 .., 0x0.b00, rs^`
+    /// that ORs `rs` in (an integer test takes it as its third source).
+    Add(usize, u64),
+    /// The reference's word at this position, rewritten: a branch offset
+    /// over the cap's words, a register the counter's moved, the pre-header
+    /// word whose `.reconverge` the counter's start takes, the integer head
+    /// test whose third source is `rs^` in place of `0x0`.
+    Fix(usize, u64),
+}
+
+/// Region `r` with the cap's `edits` applied ([`CapEdit`]). An added word
+/// must be one of the cap's forms.
+fn capped(mut r: Region, edits: &[CapEdit]) -> Region {
+    for &e in edits {
+        match e {
+            CapEdit::Add(at, w) => {
+                let t = text(w);
+                let cap = (t.starts_with("IADD_IMM.i32.reconverge ") && t.ends_with(", 0x0, #0x1000"))
+                    || (t.starts_with("IADD_IMM.i32 ") && t.ends_with("^, #0xFFFFFFFF"))
+                    || (t.starts_with("ICMP_OR.s32.lt.m1 ") && t.ends_with(", 0x0, 0x0"))
+                    || (t.starts_with("LSHIFT_OR.i32 ") && t.contains(", 0x0.b00, "));
+                assert!(cap, "{e:?}: `{t}` is not a word of the loop cap");
+                r.words.insert(at, w);
+            }
+            CapEdit::Fix(at, w) => {
+                assert_ne!(r.words[at], w, "{e:?}: the reference already has the word");
+                r.words[at] = w;
+            }
+        }
+    }
+    r
+}
+
 /// The viewport sysvals of a shim draw (`panfrost_upload_viewport_*_sysval`,
 /// pan_cmdstream.c:989-1010), as fp32 bits.
 #[derive(Clone, Copy)]
@@ -368,9 +412,15 @@ fn check_program_in(vs: &str, fs: &str, json: &str, vp: Viewport) -> (Stage, Sta
 /// The fragment program `f` (of `fs`, in a program with `vs`) against an
 /// expect.json: its words, facts and padding.
 fn check_fs_stage(f: &Stage, vs: &str, fs: &str, json: &str, vp: Viewport) {
+    check_fs_stage_capped(f, vs, fs, json, vp, &[]);
+}
+
+/// [`check_fs_stage`] against the reference with the kept-loop cap's
+/// `edits` applied ([`capped`]).
+fn check_fs_stage_capped(f: &Stage, vs: &str, fs: &str, json: &str, vp: Viewport, edits: &[CapEdit]) {
     let names = uniform_names(vs, fs);
     let uv_f = |d: u16| uniform_value(&names, &f.uniforms, d);
-    let rf = region(json, "fs.fragment").expect("fs.fragment");
+    let rf = capped(region(json, "fs.fragment").expect("fs.fragment"), edits);
     assert_words("fs.fragment", &trim(&f.code), &rf.words);
     assert_facts("fs.fragment", &rf, f.info.work_reg_count, f.info.preload, &f.info.fau, vp, &uv_f);
     /* the padding: up to the next 128 bytes past 16 more */
@@ -441,9 +491,15 @@ fn compile_linked(vs: &str, fs: &str) -> (Stage, Stage) {
 /// [`compile_linked`] checked against an expect.json, every region, and
 /// each fragment read at its vertex output's offset (the link's rule).
 fn check_linked(vs: &str, fs: &str, json: &str) -> (Stage, Stage) {
+    check_linked_capped(vs, fs, json, &[])
+}
+
+/// [`check_linked`] with the kept-loop cap's `edits` applied to the
+/// fragment program's reference ([`capped`]).
+fn check_linked_capped(vs: &str, fs: &str, json: &str, edits: &[CapEdit]) -> (Stage, Stage) {
     let (v, f) = compile_linked(vs, fs);
     check_vs_stage(&v, vs, fs, json, VIEWPORT_64X64);
-    check_fs_stage(&f, vs, fs, json, VIEWPORT_64X64);
+    check_fs_stage_capped(&f, vs, fs, json, VIEWPORT_64X64, edits);
     for s in &f.info.varyings {
         assert!(
             v.info.varyings.iter().any(|x| x.varying == s.varying && x.offset == s.offset && x.mask == s.mask),
@@ -3753,6 +3809,12 @@ fn check_linked_for(name: &str, vs: &str, fs: &str, json: &str) {
 
 /// [`check_program_for`]'s comparison of the compiled stages `v` and `f`.
 fn check_stages_for(name: &str, v: &Stage, f: &Stage, json: &str, vs_values: bool) {
+    check_stages_capped(name, v, f, json, vs_values, &[]);
+}
+
+/// [`check_stages_for`] with the kept-loop cap's `edits` applied to the
+/// fragment program's reference ([`capped`]).
+fn check_stages_capped(name: &str, v: &Stage, f: &Stage, json: &str, vs_values: bool, edits: &[CapEdit]) {
     let vp = VIEWPORT_64X64;
     /* gl_ref.py numbers the program's active uniforms: the vertex shader's
      * first (femtovg's `viewSize` is 0: 16 + c), which `uniform_names`
@@ -3783,7 +3845,7 @@ fn check_stages_for(name: &str, v: &Stage, f: &Stage, json: &str, vs_values: boo
             assert_eq!(secondary_offset(json), None, "{name}: secondary_offset");
         }
     }
-    let rf = region(json, "fs.fragment").expect("fs.fragment");
+    let rf = capped(region(json, "fs.fragment").expect("fs.fragment"), edits);
     assert_words(&format!("{name} fs.fragment"), &trim(&f.code), &rf.words);
     assert_facts(&format!("{name} fs.fragment"), &rf, f.info.work_reg_count, f.info.preload, &f.info.fau, vp, &|_| 0);
     assert_eq!(f.code.len(), (rf.words.len() * 8 + 16).div_ceil(128) * 16, "{name}: the padding");
@@ -4876,9 +4938,9 @@ fn the_builtin_population_is_byte_equal_to_mesa_26_2_1() {
 /// Cases 45 (dynidx.frag) and 98 (uniloop.frag): vid.vert's programs for a
 /// fragment shader that reads no varying (the position program alone,
 /// builtin_45/98.expect.json, the varying's gl_VertexID code dead). Both
-/// fragment programs are byte-equal since loops-rt
-/// ([`builtin_98_is_byte_equal_to_mesa_26_2_1`],
-/// [`builtin_45_is_byte_equal_to_mesa_26_2_1`]).
+/// fragment programs are Mesa's with the kept-loop cap ([`CapEdit`];
+/// [`builtin_98_is_mesa_26_2_1_with_the_loop_cap`],
+/// [`builtin_45_is_mesa_26_2_1_with_the_loop_cap`]).
 #[test]
 fn cases_45_and_98_vertex_programs_are_byte_equal_to_mesa_26_2_1() {
     for (vs, fs, json) in [
@@ -5076,7 +5138,9 @@ fn intloop_idiv_is_byte_equal_to_mesa_26_2_1() {
 
 /// The loops a run-time bound keeps (docs/notes/mali-loop-break.md, Part
 /// 2; plan #154 loops-rt): each pair against its drm-shim reference,
-/// every region and fact ([`check_program_for`]).
+/// every region and fact ([`check_program_for`]), the fragment program's
+/// words with the kept-loop cap's edits ([`CapEdit`]: the counter's words
+/// added, the registers it moves and the branch offsets over it fixed).
 const LOOP_POPULATION: [(&str, &str, &str, &str); 2] = [
     /* `for (int i = 0; i < n; i++)` with `n` an `int` of a varying: the
      * header's `ICMP_OR.s32.ge.m1` of the counter and the bound, its
@@ -5095,27 +5159,78 @@ const LOOP_POPULATION: [(&str, &str, &str, &str); 2] = [
     ("divnest", td!("intloop_divnest.vert"), td!("intloop_divnest.frag"), td!("intloop_divnest.expect.json")),
 ];
 
-/// The population's member `name` against its reference.
-fn check_loop(name: &str) {
+/// The population's member `name` against its reference with the kept-loop
+/// cap's `edits` ([`capped`]).
+fn check_loop(name: &str, edits: &[CapEdit]) {
     let (_, vs, fs, json) = LOOP_POPULATION.iter().find(|c| c.0 == name).expect("a member");
-    check_program_for(name, vs, fs, json, false);
+    let f = compile(SHC_STAGE_FRAGMENT, fs).expect("the fragment shader compiles");
+    let v = compile_vs_for(vs, fs);
+    check_stages_capped(name, &v, &f, json, false, edits);
 }
 
 #[test]
-fn intloop_loop_exit_is_byte_equal_to_mesa_26_2_1() {
-    check_loop("loop_exit");
+fn intloop_loop_exit_is_mesa_26_2_1_with_the_loop_cap() {
+    check_loop(
+        "loop_exit",
+        &[
+            CapEdit::Fix(5, 0x0110c500000000c0), // IADD_IMM.i32 r5, 0x0, #0x0 (Mesa: IADD_IMM.i32.reconverge r5, 0x0, #0x0)
+            CapEdit::Add(6, 0x5110c600001000c0), // IADD_IMM.i32.reconverge r6, 0x0, #0x1000
+            CapEdit::Add(7, 0x0110c6ffffffff46), // IADD_IMM.i32 r6, r6^, #0xFFFFFFFF
+            CapEdit::Add(8, 0x00f8c70480c0c006), // ICMP_OR.s32.lt.m1 r7, r6, 0x0, 0x0
+            CapEdit::Fix(9, 0x00f8c70280470305), // ICMP_OR.s32.ge.m1 r7, r5, r3, r7^ (Mesa: ICMP_OR.s32.ge.m1 r6, r5, r3, 0x0)
+            CapEdit::Fix(10, 0x501fc02000000547), // BRANCHZ.reconverge r7^.h0, offset:5 (Mesa: BRANCHZ.reconverge r6^.h0, offset:5)
+            CapEdit::Fix(11, 0x0090c70000090005), // S32_TO_F32 r7, r5 (Mesa: S32_TO_F32 r6, r5)
+            CapEdit::Fix(12, 0x00a4c70000004701), // FADD.f32 r7, r1, r7^ (Mesa: FADD.f32 r6, r1, r6^)
+            CapEdit::Fix(13, 0x00a4c40000004744), // FADD.f32 r4, r4^, r7^ (Mesa: FADD.f32 r4, r4^, r6^)
+            CapEdit::Fix(15, 0x501fc017fffff7c0), // BRANCHZ.eq.reconverge 0x0, offset:-9 (Mesa: BRANCHZ.eq.reconverge 0x0, offset:-7)
+        ],
+    );
 }
 
 #[test]
-fn intloop_divnest_is_byte_equal_to_mesa_26_2_1() {
-    check_loop("divnest");
+fn intloop_divnest_is_mesa_26_2_1_with_the_loop_cap() {
+    check_loop(
+        "divnest",
+        &[
+            CapEdit::Fix(3, 0x0110c200000000c0), // IADD_IMM.i32 r2, 0x0, #0x0 (Mesa: IADD_IMM.i32.reconverge r2, 0x0, #0x0)
+            CapEdit::Add(4, 0x5110c300001000c0), // IADD_IMM.i32.reconverge r3, 0x0, #0x1000
+            CapEdit::Fix(5, 0x0090c40000090002), // S32_TO_F32 r4, r2 (Mesa: S32_TO_F32 r3, r2)
+            CapEdit::Fix(6, 0x00f4c40280c00044), // FCMP_OR.f32.ge.m1 r4, r4^, r0, 0x0 (Mesa: FCMP_OR.f32.ge.m1 r3, r3^, r0, 0x0)
+            CapEdit::Add(7, 0x0110c3ffffffff43), // IADD_IMM.i32 r3, r3^, #0xFFFFFFFF
+            CapEdit::Add(8, 0x00f8c50480c0c003), // ICMP_OR.s32.lt.m1 r5, r3, 0x0, 0x0
+            CapEdit::Add(9, 0x00b4c4011145c044), // LSHIFT_OR.i32 r4, r4^, 0x0.b00, r5^
+            CapEdit::Fix(10, 0x501fc03000000344), // BRANCHZ.eq.reconverge r4^.h0, offset:3 (Mesa: BRANCHZ.eq.reconverge r3^.h0, offset:3)
+            CapEdit::Fix(13, 0x501fc01000001ac0), // BRANCHZ.eq.reconverge 0x0, offset:26 (Mesa: BRANCHZ.eq.reconverge 0x0, offset:22)
+            CapEdit::Fix(14, 0x00f0c40398c0c802), // ICMP_OR.u32.ne.m1 r4, r2, 0x3020100.b2, 0x0 (Mesa: ICMP_OR.u32.ne.m1 r3, r2, 0x3020100.b2, 0x0)
+            CapEdit::Fix(16, 0x501fc03000001644), // BRANCHZ.eq.reconverge r4^.h0, offset:22 (Mesa: BRANCHZ.eq.reconverge r3^.h0, offset:18)
+            CapEdit::Fix(17, 0x0110c400000000c0), // IADD_IMM.i32 r4, 0x0, #0x0 (Mesa: IADD_IMM.i32.reconverge r3, 0x0, #0x0)
+            CapEdit::Add(18, 0x5110c500001000c0), // IADD_IMM.i32.reconverge r5, 0x0, #0x1000
+            CapEdit::Fix(19, 0x0090c60000090004), // S32_TO_F32 r6, r4 (Mesa: S32_TO_F32 r4, r3)
+            CapEdit::Fix(20, 0x00f4c70280c00006), // FCMP_OR.f32.ge.m1 r7, r6, r0, 0x0 (Mesa: FCMP_OR.f32.ge.m1 r5, r4, r0, 0x0)
+            CapEdit::Add(21, 0x0110c5ffffffff45), // IADD_IMM.i32 r5, r5^, #0xFFFFFFFF
+            CapEdit::Add(22, 0x00f8c80480c0c005), // ICMP_OR.s32.lt.m1 r8, r5, 0x0, 0x0
+            CapEdit::Add(23, 0x00b4c7011148c047), // LSHIFT_OR.i32 r7, r7^, 0x0.b00, r8^
+            CapEdit::Fix(24, 0x501fc02000000847), // BRANCHZ.reconverge r7^.h0, offset:8 (Mesa: BRANCHZ.reconverge r5^.h0, offset:8)
+            CapEdit::Fix(25, 0x00f0c7039cc0c404), // ICMP_OR.u32.ne.m1 r7, r4, 0x1000000.b3, 0x0 (Mesa: ICMP_OR.u32.ne.m1 r5, r3, 0x1000000.b3, 0x0)
+            CapEdit::Fix(26, 0x501fc03000000447), // BRANCHZ.eq.reconverge r7^.h0, offset:4 (Mesa: BRANCHZ.eq.reconverge r5^.h0, offset:4)
+            CapEdit::Fix(27, 0x0114c7c000000000), // FADD_IMM.f32 r7, r0, #0xC0000000 (Mesa: FADD_IMM.f32 r5, r0, #0xC0000000)
+            CapEdit::Fix(28, 0x00f4c60280c04746), // FCMP_OR.f32.ge.m1 r6, r6^, r7^, 0x0 (Mesa: FCMP_OR.f32.ge.m1 r4, r4^, r5^, 0x0)
+            CapEdit::Fix(29, 0x501fc02000000346), // BRANCHZ.reconverge r6^.h0, offset:3 (Mesa: BRANCHZ.reconverge r4^.h0, offset:3)
+            CapEdit::Fix(31, 0x0110c40000000144), // IADD_IMM.i32 r4, r4^, #0x1 (Mesa: IADD_IMM.i32 r3, r3^, #0x1)
+            CapEdit::Fix(32, 0x501fc017fffff2c0), // BRANCHZ.eq.reconverge 0x0, offset:-14 (Mesa: BRANCHZ.eq.reconverge 0x0, offset:-11)
+            CapEdit::Fix(33, 0x0110c440c00000c0), // IADD_IMM.i32 r4, 0x0, #0x40C00000 (Mesa: IADD_IMM.i32 r3, 0x0, #0x40C00000)
+            CapEdit::Fix(34, 0x00f4c40280c04401), // FCMP_OR.f32.ge.m1 r4, r1, r4^, 0x0 (Mesa: FCMP_OR.f32.ge.m1 r3, r1, r3^, 0x0)
+            CapEdit::Fix(35, 0x501fc03000000344), // BRANCHZ.eq.reconverge r4^.h0, offset:3 (Mesa: BRANCHZ.eq.reconverge r3^.h0, offset:3)
+            CapEdit::Fix(39, 0x501fc017ffffddc0), // BRANCHZ.eq.reconverge 0x0, offset:-35 (Mesa: BRANCHZ.eq.reconverge 0x0, offset:-28)
+        ],
+    );
 }
 
 /// A builtin pair whose fragment shader reads no varying: vid.vert's
 /// position program alone ([`cases_45_and_98_vertex_programs_are_byte_equal_to_mesa_26_2_1`])
 /// and the fragment program, against the reference drawn with
 /// `--uniform-values` ([`uniform_value`]).
-fn check_builtin_loop(vs: &str, fs: &str, json: &str) {
+fn check_builtin_loop(vs: &str, fs: &str, json: &str, edits: &[CapEdit]) {
     let v = {
         let _k = store::test_keep();
         store::with_scratch(|s| {
@@ -5126,7 +5241,7 @@ fn check_builtin_loop(vs: &str, fs: &str, json: &str) {
     };
     check_vs_stage(&v, vs, fs, json, VIEWPORT_64X64);
     let f = compile(SHC_STAGE_FRAGMENT, fs).expect("the fragment shader compiles");
-    check_fs_stage(&f, vs, fs, json, VIEWPORT_64X64);
+    check_fs_stage_capped(&f, vs, fs, json, VIEWPORT_64X64, edits);
 }
 
 /// Case 98 (uniloop): `for (int i = 0; float(i) < count; i++) { n += 1.0;
@@ -5135,10 +5250,27 @@ fn check_builtin_loop(vs: &str, fs: &str, json: &str) {
 /// register is overwritten by `float(i)`), the latch's `IADD_IMM r2, r3,
 /// #1` and `MOV.i32 r1, r3^` (`last = i`); the `-1` an `IADD_IMM
 /// #0xFFFFFFFF`; the epilogue's `mod`, `floor` and `min` and the compare
-/// of `last + 1` and `int(n)`.
+/// of `last + 1` and `int(n)`. With the kept-loop cap ([`CapEdit`]) the
+/// counter takes r3 (the header's copy of `i` moves to r4) and, the test a
+/// float compare, its mask is OR-ed in by a `LSHIFT_OR`: 4 words more.
 #[test]
-fn builtin_98_is_byte_equal_to_mesa_26_2_1() {
-    check_builtin_loop(td!("builtin_98.vert"), td!("builtin_98.frag"), td!("builtin_98.expect.json"));
+fn builtin_98_is_mesa_26_2_1_with_the_loop_cap() {
+    check_builtin_loop(
+        td!("builtin_98.vert"),
+        td!("builtin_98.frag"),
+        td!("builtin_98.expect.json"),
+        &[
+            CapEdit::Fix(2, 0x0110c200000000c0), // IADD_IMM.i32 r2, 0x0, #0x0 (Mesa: IADD_IMM.i32.reconverge r2, 0x0, #0x0)
+            CapEdit::Add(3, 0x5110c300001000c0), // IADD_IMM.i32.reconverge r3, 0x0, #0x1000
+            CapEdit::Fix(4, 0x0091c40000000002), // MOV.i32 r4, r2 (Mesa: MOV.i32 r3, r2)
+            CapEdit::Add(7, 0x0110c3ffffffff43), // IADD_IMM.i32 r3, r3^, #0xFFFFFFFF
+            CapEdit::Add(8, 0x00f8c50480c0c003), // ICMP_OR.s32.lt.m1 r5, r3, 0x0, 0x0
+            CapEdit::Add(9, 0x00b4c2011145c042), // LSHIFT_OR.i32 r2, r2^, 0x0.b00, r5^
+            CapEdit::Fix(12, 0x0110c20000000104), // IADD_IMM.i32 r2, r4, #0x1 (Mesa: IADD_IMM.i32 r2, r3, #0x1)
+            CapEdit::Fix(13, 0x0091c10000000044), // MOV.i32 r1, r4^ (Mesa: MOV.i32 r1, r3^)
+            CapEdit::Fix(14, 0x501fc017fffff5c0), // BRANCHZ.eq.reconverge 0x0, offset:-11 (Mesa: BRANCHZ.eq.reconverge 0x0, offset:-8)
+        ],
+    );
 }
 
 /// Case 45 (dynidx): `for (int i = 0; i < n; ++i) c += cols[idx + i];`:
@@ -5146,15 +5278,59 @@ fn builtin_98_is_byte_equal_to_mesa_26_2_1() {
 /// FAU word of `n`, the body's `IADD.s32` of `idx`'s word and the counter,
 /// the shift by 4 and the `LD_PKA.i128` that waits on itself in a block
 /// entered once a pass. Drawn without `--uniform-values` (gl_ref.py sets
-/// no int uniform): `idx` and `n`, `u2.w0` and `u2.w1`, are 0.
+/// no int uniform): `idx` and `n`, `u2.w0` and `u2.w1`, are 0. With the
+/// kept-loop cap ([`CapEdit`]) the counter takes r5 and its mask is the
+/// integer test's third source (`va_fuse_cmp`): 3 words more.
 #[test]
-fn builtin_45_is_byte_equal_to_mesa_26_2_1() {
+fn builtin_45_is_mesa_26_2_1_with_the_loop_cap() {
     let (fs, json) = (td!("builtin_45.frag"), td!("builtin_45.expect.json"));
     let f = compile(SHC_STAGE_FRAGMENT, fs).expect("the fragment shader compiles");
-    let rf = region(json, "fs.fragment").expect("fs.fragment");
+    let rf = capped(
+        region(json, "fs.fragment").expect("fs.fragment"),
+        &[
+            CapEdit::Fix(4, 0x0110c400000000c0), // IADD_IMM.i32 r4, 0x0, #0x0 (Mesa: IADD_IMM.i32.reconverge r4, 0x0, #0x0)
+            CapEdit::Add(5, 0x5110c500001000c0), // IADD_IMM.i32.reconverge r5, 0x0, #0x1000
+            CapEdit::Add(6, 0x0110c5ffffffff45), // IADD_IMM.i32 r5, r5^, #0xFFFFFFFF
+            CapEdit::Add(7, 0x00f8c60480c0c005), // ICMP_OR.s32.lt.m1 r6, r5, 0x0, 0x0
+            CapEdit::Fix(8, 0x00f8c60280468504), // ICMP_OR.s32.ge.m1 r6, r4, u2.w1, r6^ (Mesa: ICMP_OR.s32.ge.m1 r5, r4, u2.w1, 0x0)
+            CapEdit::Fix(9, 0x501fc02000000946), // BRANCHZ.reconverge r6^.h0, offset:9 (Mesa: BRANCHZ.reconverge r5^.h0, offset:9)
+            CapEdit::Fix(10, 0x00a8c60000000484), // IADD.s32 r6, u2.w0, r4 (Mesa: IADD.s32 r5, u2.w0, r4)
+            CapEdit::Fix(11, 0x00b4c60111c0c946), // LSHIFT_OR.i32 r6, r6^, 0x7060504.b00, 0x0 (Mesa: LSHIFT_OR.i32 r5, r5^, 0x7060504.b00, 0x0)
+            CapEdit::Fix(12, 0x086a86f83800c046), // LD_PKA.i128.unsigned.slot0.wait0 @r6:r7:r8:r9, r6^, 0x0 (Mesa: LD_PKA.i128.unsigned.slot0.wait0 @r6:r7:r8:r9, r5^, 0x0)
+            CapEdit::Fix(18, 0x501fc017fffff3c0), // BRANCHZ.eq.reconverge 0x0, offset:-13 (Mesa: BRANCHZ.eq.reconverge 0x0, offset:-11)
+        ],
+    );
     assert_words("fs.fragment", &trim(&f.code), &rf.words);
     assert_facts("fs.fragment", &rf, f.info.work_reg_count, f.info.preload, &f.info.fau, VIEWPORT_64X64, &|_| 0);
     assert_eq!(f.code.len(), (rf.words.len() * 8 + 16).div_ceil(128) * 16);
+}
+
+/// Case 104 (divloop), its top half: bands.vert + divloop.frag through the
+/// link (the vertex program's `v_s * 8.0` moved), `for (int i = 0;
+/// float(i) < bound; i++)` with `bound = b > 6.5 ? 1.0e9 : b` (the
+/// `0x4E6E6B28` in the program), the compare against a register. Its
+/// band 7 is why the cap exists (docs/notes/mali-loop-board-failures.md):
+/// Mesa's program runs about 1e9 passes per fragment there, past the job
+/// timeout. With the cap ([`CapEdit`]) the counter takes r4, the header's
+/// copy of `i` r5, and a `LSHIFT_OR` ORs its mask into the float test.
+#[test]
+fn alu_divloop_is_mesa_26_2_1_with_the_loop_cap() {
+    check_linked_capped(
+        td!("alu_divloop.vert"),
+        td!("alu_divloop.frag"),
+        td!("alu_divloop.expect.json"),
+        &[
+            CapEdit::Fix(8, 0x0110c300000000c0), // IADD_IMM.i32 r3, 0x0, #0x0 (Mesa: IADD_IMM.i32.reconverge r3, 0x0, #0x0)
+            CapEdit::Add(9, 0x5110c400001000c0), // IADD_IMM.i32.reconverge r4, 0x0, #0x1000
+            CapEdit::Fix(10, 0x0091c50000000003), // MOV.i32 r5, r3 (Mesa: MOV.i32 r4, r3)
+            CapEdit::Add(13, 0x0110c4ffffffff44), // IADD_IMM.i32 r4, r4^, #0xFFFFFFFF
+            CapEdit::Add(14, 0x00f8c60480c0c004), // ICMP_OR.s32.lt.m1 r6, r4, 0x0, 0x0
+            CapEdit::Add(15, 0x00b4c3011146c043), // LSHIFT_OR.i32 r3, r3^, 0x0.b00, r6^
+            CapEdit::Fix(18, 0x0110c30000000105), // IADD_IMM.i32 r3, r5, #0x1 (Mesa: IADD_IMM.i32 r3, r4, #0x1)
+            CapEdit::Fix(19, 0x0091c20000000045), // MOV.i32 r2, r5^ (Mesa: MOV.i32 r2, r4^)
+            CapEdit::Fix(20, 0x501fc017fffff5c0), // BRANCHZ.eq.reconverge 0x0, offset:-11 (Mesa: BRANCHZ.eq.reconverge 0x0, offset:-8)
+        ],
+    );
 }
 
 /* ---- run-time vec4 array reads (#33) -------------------------------- */

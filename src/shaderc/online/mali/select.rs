@@ -95,6 +95,12 @@ pub fn f16_rtne(bits: u32) -> Option<u16> {
 /// locations, nir.rs).
 pub const MAX_VARYINGS: usize = 16;
 
+/// The passes a kept loop runs at most when its count cannot be read from
+/// the program (nir_fs.rs `loop_cap_limit`): the PowerVR's and the V3D's
+/// `UNIFORM_LOOP_CAP` (the GC7000's `select::LOOP_CAP`), one number for
+/// every back end.
+pub const LOOP_CAP: u32 = crate::shaderc::online::powervr::unroll::UNIFORM_LOOP_CAP;
+
 /// One generic varying where Mesa puts it: the front end's location, its
 /// 32-bit components and its byte offset in a vertex's generic varyings.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

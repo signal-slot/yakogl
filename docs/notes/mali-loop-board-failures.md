@@ -31,7 +31,10 @@ second case run and in both sweeps, with one kernel `job timeout` per run.)
     fragment until the kernel's job timeout. Mesa's own program does the
     same: this draw cannot finish on any Mesa-equal program.
 - So the fix is in the compiler (#33): give the Mali back end's kept loops the
-  hidden pass counter that select.rs gives the other back ends.
+  hidden pass counter that select.rs gives the other back ends. Done by plan
+  #185 loop-cap, a deliberate deviation from Mesa's words
+  ([the fix](#the-fix-a-pass-counter-on-every-kept-loop-plan-185-loop-cap-33)).
+  Steps 1-3 below are the study as it was made, before the fix.
 
 ## Step 1: the shaders and the values the sweep sets
 
@@ -64,9 +67,11 @@ needed.
 
 ## Step 2: the compiled words against the references
 
-`builtin_98_is_byte_equal_to_mesa_26_2_1` (tests.rs) already covers case 98,
+`builtin_98_is_byte_equal_to_mesa_26_2_1` (tests.rs; since the fix
+`builtin_98_is_mesa_26_2_1_with_the_loop_cap`) already covers case 98,
 with the vertex program compiled for a program that reads no varying.
-Case 104 has a reference (`alu_divloop.*`) but **no byte-equality test**.
+Case 104 has a reference (`alu_divloop.*`) but **no byte-equality test**
+(since the fix: `alu_divloop_is_mesa_26_2_1_with_the_loop_cap`).
 For this study I appended a throw-away test to
 `src/shaderc/online/mali/tests.rs`, ran it and reverted it; it is not in the
 tree:
@@ -141,48 +146,101 @@ The frame and the uniform push are correct:
   not a branch that loops forever. It is a correct program that runs too
   long, and Mesa's program runs just as long.
 
-## Proposed fix (later implementation item, compiler, #33)
+## The fix: a pass counter on every kept loop (plan #185 loop-cap, #33)
 
-Add the structural termination guarantee to the Mali back end's kept loops,
-with the same rule as `select.rs` (2958-2987):
+**A deliberate deviation from Mesa 26.2.1.** Mesa keeps these loops with the
+GLSL test as their only exit. Our Mali back end now also gives every loop it
+keeps a hidden counter of its head entries, with the same rule the GC7000
+selection (`src/shaderc/online/select.rs` `loop_convert`) and the shared
+unroller of the PowerVR and the V3D (`UNIFORM_LOOP_CAP`) use:
 
-- **Where.** `src/shaderc/online/mali/nir_fs.rs` `walk_kept_loop` (:2840),
-  which records the loop region (`f.nir.loops[lp]`: `pre`, `header`, `latch`,
-  `exit`), and the header/latch emission that follows it. Also the vertex
-  walk's kept loop, if one is ever kept there (today `MaliError::LoopVertex`
-  refuses it).
-- **The limit.** `crate::shaderc::online::loop_count::constant_loop_entries`
-  for the loop, or `LOOP_CAP` (`select.rs:110`, 4096) when it cannot count
-  the loop. A constant `for` over 32 passes keeps its own count, so the guard
-  never fires and the loop stays exact.
-- **The words.** Count the head entries, so that a `continue` is counted too:
-  - pre-header: `IADD_IMM.i32 rc, 0x0, #0x0`
-  - header: `IADD_IMM.i32 rc, rc, #0x1`, then
-    `ICMP_OR.u32.gt.m1 rs, rc, <limit>, 0x0`, where the limit comes from an
-    `IADD_IMM` or a constant FAU slot, whichever the scheduler and the FAU
-    budget allow. Fold `rs` into the existing exit
-    compare through Valhall's OR operand: `FCMP_OR.f32.ge.m1 r2, r2^, u2.w0,
-    rs` in place of `..., 0x0`.
+- **The limit** (`nir_fs.rs` `loop_cap_limit`):
+  `loop_count::constant_loop_entries` for the loop, with the index's value
+  before the loop read from the walk's constant locals. When it cannot count
+  the loop, the limit is `LOOP_CAP` (`mali/select.rs`, the PowerVR's
+  `UNIFORM_LOOP_CAP`, 4096). A counted loop's limit is its own number of
+  head entries, so the guard never fires and the loop's results stay exact.
+  A loop Mesa keeps has a run-time bound, so in practice every kept loop
+  gets 4096. A constant `for` of 32 passes or fewer is unrolled and has no
+  counter. Its words are unchanged.
+- **Where** (`walk_kept_loop`, `walk_nodes`): a header phi after the locals'
+  phis, its first source `limit`. At the loop's head test (the body's first
+  `if`, `Lower::break_unless`), `iadd(phi, -1)` becomes the phi's latch
+  source, `ilt(count, 0)` is the stop mask, and `ior(test, stop)` is the
+  condition the `BRANCHZ` to the exit reads. `walk_if` takes that `ior` as a
+  condition only in this form. A nested kept loop's counter restarts at
+  every entry of the inner loop (its pre-header is in the outer body), as in
+  `loop_convert`.
+- **The words.** The counter counts down, not up as the study proposed (an
+  `IADD_IMM rc, rc, #0x1`, then `ICMP_OR.u32.gt.m1` against the limit).
+  That puts the limit in the pre-header's 32-bit immediate, and the compare
+  reads the inline zero. Counting up needs `limit + 1` as a compare operand,
+  which became an `IADD_IMM` in the loop (case 98) or a new FAU constant. The
+  FAU constant moved every later uniform word (`u2.w1` became `u3.w0` in
+  loop_exit's epilogue). Counting down adds no FAU word:
 
-  That is 3 words more and one register live across the loop. The back
-  edge's `offset:-8` and the exit's `offset:4` grow by the inserted words.
-- **Byte-equality.** Mesa has no such counter, so every kept-loop reference
-  (the testdata with a back edge, `grep -l 'offset:-'
-  tools/mali/testdata/*.expect.json`: `builtin_98`, `builtin_45`,
-  `intloop_loop_exit`, `intloop_divnest`, `alu_divloop`, and the refused
-  `intloop_contloops`, `intloop_loop_nested`, `intloop_loop_nested_vs`)
-  stops being byte-equal as is. The tests need one documented
-  transform: the reference words, plus the cap words at named positions,
-  plus the two branch offsets moved. Then every other word still compares
-  against Mesa. This is a decision the issue has to record (a deliberate
-  deviation from Mesa, the same one PowerVR and V3D already make). The
-  alternative, a Mali-only gl_test expectation (want `0xfff00010` for 98), is
-  rejected: it cannot help 104, whose band 7 runs too long for any program
-  equal to Mesa's, and it would drop the termination guarantee that 104
-  exists to test.
-- **Add a byte test for 104**, `check_linked` on `alu_divloop.*`, which the
-  tree lacks today.
-- **Expected after the fix.** 98 check 4 gives `0xfff00000` (PASS). 104's top
-  band 7 gives `0xfff00000`, and the case reaches its bottom half
-  (`divnest.frag`, already byte-equal as `intloop_divnest`, small bounds),
-  which the FAULT has hidden so far. Both need a board run to confirm.
+      pre-header  IADD_IMM.i32.reconverge rc, 0x0, #0x1000   (the phi's limit; takes
+                                                              the pre-header's .reconverge)
+      header      IADD_IMM.i32 rc, rc^, #0xFFFFFFFF
+                  ICMP_OR.s32.lt.m1 rs, rc, 0x0, 0x0
+      integer test: rs is its third source (va_fuse_cmp, opt.rs fuse_cmp)
+                  ICMP_OR.s32.ge.m1 r7, r5, r3, r7^           (loop_exit)
+      float test: one more word (va_fuse_cmp fuses only one compare family)
+                  LSHIFT_OR.i32 r2, r2^, 0x0.b00, r5^         (builtin_98)
+
+  So 3 words for a loop with an integer test and 4 for one with a float test.
+  The counter's register is live across the loop. Entry `k` stops when
+  `limit - k < 0`, so the body runs at most `limit` times: 4096 passes for 98's
+  `count = 4097` and for 104's band 7.
+- **The FAU tables, the preloads and the work register counts** of all five
+  references are unchanged.
+
+### The byte-equality tests (tests.rs `CapEdit`)
+
+A test of a kept loop compares against the drm-shim reference with one
+documented transform, `capped(region, edits)`:
+
+- `CapEdit::Add(at, word)`: a word of the cap, inserted. `capped` refuses a
+  word that is not one of the forms above.
+- `CapEdit::Fix(at, word)`: a reference word rewritten. The rewrites are a
+  register the counter moved, a branch offset over the cap's words, the
+  pre-header word whose `.reconverge` the counter's start takes, and the
+  integer test's third source `rs^` in place of `0x0`.
+
+Every word that no edit names still compares against Mesa, as do the facts
+and the padding. With the cap's words taken out, our program lines up one to
+one with the reference in every test:
+
+| Test (tests.rs) | Reference | Words (ours / Mesa) | Add | Fix |
+|---|---|---|---|---|
+| `builtin_98_is_mesa_26_2_1_with_the_loop_cap` | builtin_98 | 41 / 37 | 4 | 5 |
+| `builtin_45_is_mesa_26_2_1_with_the_loop_cap` | builtin_45 | 24 / 21 | 3 | 7 |
+| `intloop_loop_exit_is_mesa_26_2_1_with_the_loop_cap` | intloop_loop_exit | 26 / 23 | 3 | 7 |
+| `intloop_divnest_is_mesa_26_2_1_with_the_loop_cap` (two kept loops) | intloop_divnest | 65 / 57 | 8 | 22 |
+| `alu_divloop_is_mesa_26_2_1_with_the_loop_cap` (new, case 104's top half, `check_linked`) | alu_divloop | 48 / 44 | 4 | 5 |
+
+The four existing tests were renamed from `*_is_byte_equal_to_mesa_26_2_1`.
+The vertex programs of all five pairs are still byte-equal. No other
+byte-equality test changed: every other population compiles to the same
+words, because only `walk_kept_loop` makes the counter. The other kept-loop
+references (`intloop_contloops`, `intloop_loop_nested`,
+`intloop_loop_nested_vs`) are refused as before (`GuardMediump`,
+`LoopMediump`, `LoopVertex`). A mediump kept loop is refused before the
+counter is made. The vertex walk keeps no loop (`MaliError::LoopVertex`), so
+it has no counter. If it ever keeps one, it needs the same counter.
+
+The alternative was rejected: a Mali-only gl_test expectation (want
+`0xfff00010` for 98). It cannot help 104, whose band 7 runs too long for
+any program equal to Mesa's, and it would drop the termination guarantee
+that 104 exists to test.
+
+### Expected on the board (predictions, not yet run)
+
+- 98 uniloop: check 4 (`count = 4097`) gives `0xfff00000` (n = 4096 passes,
+  `last = 4095`), checks 1-3 unchanged: **PASS**.
+- 104 divloop: the top half's band 7 stops at 4096 passes,
+  `divloop_colour(4096, 255)` = `0xfff00000`, with no job timeout. The bottom
+  half (`divnest.frag`, bounds of 7 or less, its counters never fire) is
+  reached for the first time: **PASS** expected. A FAIL there would be a
+  divnest frame or value issue that the FAULT has hidden so far.
+- The board session must confirm both (twice each), then the sweep.
