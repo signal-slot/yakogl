@@ -38,6 +38,8 @@ use core::fmt::Write as _;
 use super::codegen::{self, CompileError, Which};
 use super::ir;
 use super::store;
+#[cfg(feature = "gpu-vivante")]
+use super::vivante::wide128;
 #[cfg(any(test, feature = "gpu-v3d", feature = "gpu-mali"))]
 use crate::shaderc::sha256::sha256;
 use crate::shaderc::{IfLowering, LodKey, ShcBackend, ShcShader, SHC_STAGE_FRAGMENT, SHC_STAGE_VERTEX};
@@ -2047,6 +2049,96 @@ fn v3d_sensitivity(source: &[u8], stage: super::sema::Stage) -> LodKey {
         LodKey { ret32, cube_noseam: cube, mag_switch, ..LodKey::NONE }
     })
     .unwrap_or(LodKey::NONE)
+}
+
+/* ---- 128-bit plane-join variants (GC7000, vivante::wide128) --------------- */
+
+/// The GC7000 bindings of `sh` whose look-ups a 128-bit plane split would
+/// change (`vivante::wide128::split_planes`): bit `b` set when the stage
+/// samples binding `b` (the stage-relative sampler number the compiler gives
+/// the look-up, its `TEX_ID`, below [`wide128::UNITS`]) with a look-up that
+/// is not a shadow comparison. A shadow sampler reads a depth texture, never
+/// an RGBA32F/UI/I one, so it is not reported; a gradient or offset look-up
+/// is (the split refuses it by name rather than sampling one plane), and a
+/// `textureSize` alone is not (it reads the primary unit, the split leaves
+/// it). 0 for a shader with no such look-up, a shader this back end did not
+/// compile, or a source the front end cannot run again here.
+///
+/// The sibling of [`online_lod_sensitivity`] for the per-draw 128-bit key,
+/// asked of the same record (the shader's source through the front end
+/// again, a compiler run) and, like it, once per linked program: the GL core
+/// keeps the answer next to `ProgGpu::lod_sense`. A program whose two stages
+/// answer 0 never needs a plane key and costs one compare a draw. The
+/// [`LodKey`] the record reports is not changed by this query.
+///
+/// The call contract (wide128-shader):
+/// 1. after a link, `wide128_sensitivity(&p.rvs)` and `(&p.rfs)`, kept;
+/// 2. at each draw, for each stage whose answer is not 0, the per-binding
+///    facts of the textures bound NOW, `companion[b] = Some(c)` when binding
+///    `b`'s texture is sampled as two G32R32 planes (RGBA32F/UI/I in
+///    `sampled_texfmts()`) and its B,A plane has a companion slot `c`, the
+///    slot as the stage's `TEX_ID` numbers it (the GC7000 back end's
+///    absolute slot minus `VS_SAMPLER_BASE` for the vertex stage); `None`
+///    otherwise, including a 128-bit binding with no companion slot (past
+///    slot 31: the back end samples it black, and the shader must not
+///    split);
+/// 3. [`wide128_planes`]`(sense, &companion)`: an empty key (the program's
+///    own shaders, as before) or the stage's [`wide128::Planes`];
+/// 4. the stage compiled under that key, `wide128::set_compile_planes(key)`
+///    around the compile and the previous key put back after it, panic or
+///    not (as `set_compile_lod_key` is, `Restore`). The key is not in
+///    [`Facts`] or the record key, so the caller keeps the variant per key
+///    itself, and a plain compile never runs with a key set.
+#[cfg(feature = "gpu-vivante")]
+pub fn wide128_sensitivity(sh: &ShcShader) -> u32 {
+    #[cfg(test)]
+    let _serial = store::test_lock();
+    base_of(sh).map_or(0, |rec| wide128_sensitivity_of(rec.stage, rec.source))
+}
+
+/// [`wide128_sensitivity`] of a record's stage and source.
+#[cfg(feature = "gpu-vivante")]
+fn wide128_sensitivity_of(stage: u32, source: &[u8]) -> u32 {
+    let stage = match stage {
+        SHC_STAGE_VERTEX => super::sema::Stage::Vertex,
+        SHC_STAGE_FRAGMENT => super::sema::Stage::Fragment,
+        _ => return 0,
+    };
+    struct Restore(LodKey);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            crate::shaderc::set_compile_lod_key(self.0);
+        }
+    }
+    let _restore = Restore(crate::shaderc::set_compile_lod_key(LodKey::NONE));
+    store::with_scratch(|a| {
+        let Some(text) = core::str::from_utf8(source).ok().and_then(|s| a.alloc_str(s).ok()) else {
+            return 0;
+        };
+        let Ok(l) = super::lower::compile_to_ir(a, stage, text) else {
+            return 0;
+        };
+        l.module.instrs.iter().fold(0u32, |acc, op| match *op {
+            ir::Op::Tex { sampler, shadow: false, .. } if (sampler as usize) < wide128::UNITS => acc | 1 << sampler,
+            _ => acc,
+        })
+    })
+    .unwrap_or(0)
+}
+
+/// The stage's [`wide128::Planes`] key for one draw: of the bindings in
+/// `sense` (the stage's [`wide128_sensitivity`]), those whose `companion`
+/// fact is `Some(c)` (binding `b`'s texture is two planes, its B,A plane at
+/// slot `c`; see the call contract there), each with its companion. A
+/// binding outside `sense` or past `companion` is not keyed, so a draw that
+/// binds a 128-bit texture to a binding the shader never samples builds no
+/// variant. [`wide128::Planes::NONE`] when nothing is keyed.
+#[cfg(feature = "gpu-vivante")]
+pub fn wide128_planes(sense: u32, companion: &[Option<u8>]) -> wide128::Planes {
+    companion.iter().take(wide128::UNITS).enumerate().fold(wide128::Planes::NONE, |p, (b, c)| match *c {
+        Some(c) if sense & 1 << b != 0 => p.with(b as u8, c),
+        _ => p,
+    })
 }
 
 /// `lod_sensitivity`: which bindings' filter state `sh`'s code depends on
@@ -4247,5 +4339,111 @@ void main (void)
                 release(sh);
             }
         }
+    }
+}
+
+/* The GC7000's 128-bit sensitivity, and ES 3.00 sources (the integer
+ * samplers), which a report-es2 build refuses. */
+#[cfg(all(test, feature = "gpu-vivante", not(feature = "report-es2")))]
+mod wide128_tests {
+    use super::*;
+    use std::format;
+    use std::string::String;
+
+    /// `src` compiled for `stage` through the entry point, as the GL core does.
+    fn compiled(stage: u32, src: &str) -> ShcShader {
+        let text = format!("{src}\0");
+        let mut sh = ShcShader::ZERO;
+        let mut log = [0u8; 256];
+        // SAFETY: a NUL-terminated source, a real output and log.
+        let rc =
+            unsafe { online_compile(stage, text.as_ptr() as *const c_char, &mut sh, log.as_mut_ptr().cast(), 256) };
+        assert_eq!(rc, 0, "{src}: {}", String::from_utf8_lossy(&log));
+        sh
+    }
+
+    fn fs(decl: &str, body: &str) -> String {
+        format!("#version 300 es\nprecision highp float;\nin vec2 v_uv;\n{decl}\nout vec4 o;\nvoid main() {{ {body} }}")
+    }
+
+    /// Float, signed and unsigned samplers each name their binding.
+    #[test]
+    fn a_fragment_lookup_of_each_sampler_type_names_its_binding() {
+        let _serial = store::test_lock();
+        for (decl, body) in [
+            ("uniform highp sampler2D s;", "o = texture(s, v_uv);"),
+            ("uniform highp isampler2D s;", "o = vec4(texture(s, v_uv));"),
+            ("uniform highp usampler2D s;", "o = vec4(texture(s, v_uv));"),
+            ("uniform highp usampler2D s;", "o = vec4(texelFetch(s, ivec2(v_uv), 0));"),
+        ] {
+            let sh = compiled(SHC_STAGE_FRAGMENT, &fs(decl, body));
+            assert_eq!(wide128_sensitivity(&sh), 1, "{decl} {body}");
+            release(&sh);
+        }
+        let three = "uniform highp sampler2D a;\nuniform highp isampler2D b;\nuniform highp usampler2D c;";
+        let sh = compiled(
+            SHC_STAGE_FRAGMENT,
+            &fs(three, "o = texture(a, v_uv) + vec4(texture(b, v_uv)) + vec4(texture(c, v_uv));"),
+        );
+        assert_eq!(wide128_sensitivity(&sh), 0b111, "three bindings, each its own bit");
+        release(&sh);
+    }
+
+    /// Nothing sampled, only a size asked, or only a shadow comparison:
+    /// no binding a plane split would change.
+    #[test]
+    fn no_sampler_a_size_or_a_shadow_lookup_reports_none() {
+        let _serial = store::test_lock();
+        let none = compiled(SHC_STAGE_FRAGMENT, &fs("", "o = vec4(v_uv, 0.0, 1.0);"));
+        assert_eq!(wide128_sensitivity(&none), 0);
+        let size =
+            compiled(SHC_STAGE_FRAGMENT, &fs("uniform highp sampler2D s;", "o = vec4(textureSize(s, 0), 0, 1);"));
+        assert_eq!(wide128_sensitivity(&size), 0, "textureSize reads the primary unit");
+        for sh in [&none, &size] {
+            release(sh);
+        }
+        /* the GC7000 refuses a shadow look-up today (no record to ask), so
+         * its source is asked directly, as the record's would be */
+        let shadow = "uniform highp sampler2DShadow d;\nuniform highp sampler2D s;";
+        let mixed = fs(shadow, "o = texture(s, v_uv) * texture(d, vec3(v_uv, 0.5));");
+        let sense = wide128_sensitivity_of(SHC_STAGE_FRAGMENT, mixed.as_bytes());
+        assert_eq!(sense.count_ones(), 1, "the 2D sampler only, not the shadow one: {sense:#b}");
+        let alone = fs("uniform highp sampler2DShadow d;", "o = vec4(texture(d, vec3(v_uv, 0.5)));");
+        assert_eq!(wide128_sensitivity_of(SHC_STAGE_FRAGMENT, alone.as_bytes()), 0, "a shadow sampler is not reported");
+        assert_eq!(wide128_sensitivity(&ShcShader::ZERO), 0, "a shader this back end did not compile");
+    }
+
+    /// The vertex stage's look-ups are reported too, and the record's
+    /// LodKey answer is the one it gave before.
+    #[test]
+    fn a_vertex_lookup_is_reported_and_the_lod_answer_is_unchanged() {
+        let _serial = store::test_lock();
+        let vs = "#version 300 es\nin vec4 a;\nuniform highp sampler2D s;\nout vec4 v;\n\
+                  void main() { v = textureLod(s, a.xy, 0.0); gl_Position = a; }";
+        let sh = compiled(SHC_STAGE_VERTEX, vs);
+        // SAFETY: a shader this back end compiled.
+        let lod = unsafe { online_lod_sensitivity(&sh) };
+        assert_eq!(wide128_sensitivity(&sh), 1);
+        // SAFETY: as above.
+        assert_eq!(unsafe { online_lod_sensitivity(&sh) }, lod);
+        release(&sh);
+    }
+
+    /// The draw's key: the sensitive bindings whose texture is two planes,
+    /// each with its companion; nothing else.
+    #[test]
+    fn the_planes_key_is_the_sensitive_bindings_with_a_companion() {
+        assert_eq!(wide128_planes(0, &[Some(4), Some(5)]), wide128::Planes::NONE, "nothing sensitive");
+        assert_eq!(wide128_planes(0b11, &[None, None]), wide128::Planes::NONE, "no 128-bit texture bound");
+        assert_eq!(wide128_planes(0b11, &[]), wide128::Planes::NONE, "no facts");
+        let p = wide128_planes(0b101, &[Some(3), Some(4), Some(5)]);
+        assert_eq!(p, wide128::Planes::NONE.with(0, 3).with(2, 5), "binding 1 is not sampled");
+        assert_eq!(p.companion_of(1), None);
+        let p = wide128_planes(0b11, &[None, Some(7)]);
+        assert_eq!(p, wide128::Planes::NONE.with(1, 7), "binding 0 holds no 128-bit texture");
+        let mut wide = [None; 40];
+        wide[31] = Some(1);
+        wide[35] = Some(2);
+        assert_eq!(wide128_planes(u32::MAX, &wide), wide128::Planes::NONE.with(31, 1), "units past 31 are not keyed");
     }
 }
