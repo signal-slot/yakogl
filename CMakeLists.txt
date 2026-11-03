@@ -39,7 +39,8 @@
 #   -DYAKOGL_CARGO=<cargo> -DYAKOGL_RUSTUP_TOOLCHAIN=<name>
 #   -DYAKOGL_CARGO_BUILD_STD=AUTO|ON|OFF
 #   -DYAKOGL_EH_PERSONALITY=ON|OFF         (external linkage, hosted targets:
-#        libyakogl_c.a defines rust_eh_personality for a no_std Rust
+#        libyakogl_c.a defines rust_eh_personality, under the name the
+#        toolchain's compiler_builtins references, for a no_std Rust
 #        staticlib; OFF when that staticlib links std, which has its own)
 
 cmake_minimum_required(VERSION 3.20)
@@ -192,8 +193,9 @@ else()
   set(YAKOGL_GPU_DEF "YAKOGL_GPU_VIVANTE")
 endif()
 # The C forwarder of rust_eh_personality: a no_std crate's unwind tables name
-# it although YakoGL never unwinds, and capi/assemble.cmake renames the Rust
-# side's definition to yakogl_rust_eh_personality, which the forwarder defines.
+# it although YakoGL never unwinds (newer nightlies: as the mangled
+# `__rustc::rust_eh_personality`), and capi/assemble.cmake renames the Rust
+# side's references to yakogl_rust_eh_personality, which the forwarder defines.
 if(_hosted
    AND (YAKOGL_RUST_LINKAGE STREQUAL "staticlib" OR YAKOGL_EH_PERSONALITY))
   list(APPEND _c_sources "${YAKOGL_DIR}/capi/eh_personality.c")
@@ -205,9 +207,47 @@ else()
   # libyakogl_c.a: what a Rust application that links the yakogl crate
   # itself needs from this build.
   add_library(yakogl_c STATIC ${_c_sources})
-  if(_hosted)
+  if(_hosted AND YAKOGL_EH_PERSONALITY)
+    # The forwarder takes the name the application's staticlib references:
+    # the one the toolchain's precompiled compiler_builtins names. That is
+    # `rust_eh_personality`, or on newer nightlies rustc's internal
+    # `__rustc::rust_eh_personality`, v0-mangled with a hash that changes
+    # with the compiler, so it is read off the rlib (rustc found as
+    # capi/yakogl_capi.cmake finds it). No rlib: the plain name.
+    set(_eh_name rust_eh_personality)
+    set(_eh_env "")
+    if(YAKOGL_RUSTUP_TOOLCHAIN)
+      list(APPEND _eh_env "RUSTUP_TOOLCHAIN=${YAKOGL_RUSTUP_TOOLCHAIN}")
+    endif()
+    if(DEFINED ENV{RUSTC})
+      set(_eh_rustc "$ENV{RUSTC}")
+    else()
+      find_program(YAKOGL_RUSTC_FOUND rustc)
+      set(_eh_rustc "${YAKOGL_RUSTC_FOUND}")
+    endif()
+    if(_eh_rustc)
+      execute_process(COMMAND ${CMAKE_COMMAND} -E env ${_eh_env} "${_eh_rustc}" --print sysroot
+        OUTPUT_VARIABLE _eh_sysroot OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+      set(_eh_triple "${YAKOGL_RUST_TARGET_RESOLVED}")
+      if(NOT _eh_triple)
+        execute_process(COMMAND ${CMAKE_COMMAND} -E env ${_eh_env} "${_eh_rustc}" -vV
+          OUTPUT_VARIABLE _eh_vv ERROR_QUIET)
+        if(_eh_vv MATCHES "\nhost: ([^\n]+)")
+          set(_eh_triple "${CMAKE_MATCH_1}")
+        endif()
+      endif()
+      file(GLOB _eh_rlib "${_eh_sysroot}/lib/rustlib/${_eh_triple}/lib/libcompiler_builtins-*.rlib")
+      if(_eh_sysroot AND _eh_triple AND _eh_rlib)
+        # (nm also reports the rlib's metadata member as not an object.)
+        execute_process(COMMAND "${CMAKE_NM}" -u ${_eh_rlib} OUTPUT_VARIABLE _eh_undef ERROR_QUIET)
+        if(_eh_undef MATCHES "[ \t]U[ \t]+(_R[0-9A-Za-z_]*rust_eh_personality)\n")
+          set(_eh_name "${CMAKE_MATCH_1}")
+        endif()
+      endif()
+    endif()
+    message(STATUS "YakoGL: libyakogl_c.a defines the EH personality as ${_eh_name}")
     set_source_files_properties("${YAKOGL_DIR}/capi/eh_personality.c" PROPERTIES
-      COMPILE_DEFINITIONS "YAKOGL_EH_PERSONALITY=rust_eh_personality")
+      COMPILE_DEFINITIONS "YAKOGL_EH_PERSONALITY=${_eh_name}")
   endif()
 endif()
 target_include_directories(yakogl_c PRIVATE

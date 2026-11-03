@@ -73,9 +73,13 @@ cp "$OUT/cargo/$pdir/libyakogl_capi.a" "$OUT/libyakogl.a"
 #    is deliberately absent: it pins src/pvr/ffi.rs, and the PowerVR backend is
 #    not in a gpu-vivante build. The archive is not post-processed here
 #    (capi/assemble.cmake renames the personality), so the shim is told the
-#    name the crate actually exports -- as run.sh does.
+#    name the archive references -- as run.sh does: `rust_eh_personality`,
+#    or on newer nightlies rustc's v0-mangled `__rustc::rust_eh_personality`.
+eh=$(nm -u "$OUT/libyakogl.a" 2>/dev/null |
+     awk '$NF ~ /^(_R[0-9A-Za-z_]*)?rust_eh_personality$/ { print $NF }' | sort -u)
+[ "$(printf '%s\n' "$eh" | grep -c .)" -le 1 ] || die "the archive names more than one personality: $eh"
 cflags=(-g -O1 -std=gnu11 -Wall -DYAKOGL_OSAL_LINUX -DYAKOGL_GPU_VIVANTE
-        -DYAKOGL_EH_PERSONALITY=rust_eh_personality)
+        -DYAKOGL_EH_PERSONALITY="${eh:-rust_eh_personality}")
 cinc=(-I"$ROOT/include" -I"$ROOT/src" -I"$ROOT/src/osal" -I"$ROOT/src/pvr"
       -I"$ROOT/src/vivante" -I"$DRV/src")
 objs=()
