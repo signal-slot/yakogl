@@ -35,7 +35,10 @@
 # the Zephyr SDK, HAL_NXP_DIR, PCO_SHC with GLSL2USC_CACHE, MESA_PAN_TREE,
 # MESA_V3D_TREE, driver/src/fw/pvr_fw_blob.h) are out of scope here: they are
 # workspaces and firmware, not packages. `tools/cts/deps-env.sh --build-missing`
-# makes them, after this script has installed the packages.
+# makes them, after this script has installed the packages. --check still
+# reports the MALI_CSFFW firmware file (check.sh's gpu::mali row gaps without
+# it); --install only prints the command that fetches it, as that is a
+# download, not a package.
 set -u
 
 PROG=${0##*/}
@@ -256,6 +259,28 @@ check_pkgconfig() {
   done
 }
 
+# The Mali-G610's CSF firmware, which is never committed: check.sh's
+# "yakogl-drivers gpu::mali on the board's mali_csffw.bin" row reads
+# $MALI_CSFFW, else deps-env.sh's place for it, and is a gap when the file is
+# missing. Resolved the same way as check.sh (mali_csffw=...).
+mali_csffw_path() {
+  local f=${MALI_CSFFW-}
+  if [ -z "$f" ]; then
+    f=$("$(dirname "$0")/cts/deps-env.sh" --layout 2>/dev/null)/mali-csffw/mali_csffw.bin
+  fi
+  printf '%s' "$f"
+}
+
+check_mali_csffw() {
+  local f
+  f=$(mali_csffw_path)
+  if [ -f "$f" ]; then
+    line ok MALI_CSFFW "$f"
+  else
+    line missing MALI_CSFFW "$f not found (the gpu::mali row would gap): tools/cts/deps-env.sh --build MALI_CSFFW, or set MALI_CSFFW to the board's mali_csffw.bin"
+  fi
+}
+
 run_checks() {
   check_cargo
   check_rustup_target aarch64-unknown-none
@@ -268,6 +293,7 @@ run_checks() {
   check_yaml
   check_glslang
   check_pkgconfig
+  check_mali_csffw
 }
 
 # ---------------------------------------------------------------------------
@@ -390,6 +416,10 @@ report_values() {
   if [ -n "$cc_path" ]; then
     echo "C compiler for the aarch64 rows (print only, not applied):"
     echo "  export CC_aarch64_unknown_none=$cc_path"
+  fi
+  if [ ! -f "$(mali_csffw_path)" ]; then
+    echo "mali_csffw.bin is missing (print only, not run):"
+    echo "  tools/cts/deps-env.sh --build MALI_CSFFW"
   fi
   if ! probe_libclang >/dev/null 2>&1 && libdir=$(find_libclang_dir); then
     echo "libclang is on disk at $libdir (print only, not applied):"
