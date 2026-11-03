@@ -2285,7 +2285,6 @@ pub fn resolve_frame(
     end_frame(&open, desc, cs, ctx, t, [0.0; 4], None)
 }
 
-/// Refuse a draw the builder does not build, each cause by name.
 /// The draw reads its targets' pixels: it writes a channel and blends with
 /// an equation that is not opaque or leaves a channel out
 /// (`pan_blend_is_opaque` false, pan_blend.c:430-458).
@@ -2294,6 +2293,7 @@ fn reads_target(d: &DrawCall) -> bool {
     mask != 0 && (mask != 0xf || d.blend.is_some_and(|b| !super::blend::is_opaque(&b)))
 }
 
+/// Refuse a draw the builder does not build, each cause by name.
 fn check_draw(
     d: &DrawCall,
     ctx: &Context,
