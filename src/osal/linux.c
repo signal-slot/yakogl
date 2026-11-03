@@ -60,6 +60,22 @@ static void error_log_from_env(void)
 		g_gl_error_log_limit = (unsigned)strtoul(lim, NULL, 0);
 }
 
+#if defined(YAKOGL_GPU_POWERVR)
+void pvr_set_native_3d(int on);   /* shaderc/mod.rs */
+
+/* YAKOGL_PVR_NATIVE_3D=0|1: the PowerVR's native 3D texture
+ * (shaderc::pvr_native_3d), the host's CONFIG_DEQP_PVR_NATIVE_3D. Unset,
+ * the library's default stands. Read at each init, before any shader
+ * compiles; tools/cts/host-deqp-run.sh --pvr-native-3d sets it. */
+static void pvr_knobs_from_env(void)
+{
+	const char *on = getenv("YAKOGL_PVR_NATIVE_3D");
+
+	if (on && *on)
+		pvr_set_native_3d(strtol(on, NULL, 0) != 0);
+}
+#endif
+
 #if !defined(YAKOGL_GPU_V3D)
 
 #define HEAP_GENERAL 0x8000000000ULL
@@ -183,6 +199,9 @@ static int l_init(void *platform_arg)
 	(void)platform_arg;
 	memset(&l, 0, sizeof(l));
 	error_log_from_env();
+#if defined(YAKOGL_GPU_POWERVR)
+	pvr_knobs_from_env();
+#endif
 #if defined(YAKOGL_GPU_VIVANTE)
 	gc_budget_from_env();
 #endif

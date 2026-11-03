@@ -189,6 +189,7 @@ pub fn gradients_for(m: &ir::Module<'_>, op: &ir::Op) -> Option<u32> {
     let n = match dim {
         ir::TexDim::D2 if mode >= 1 => 2,
         ir::TexDim::Cube if mode >= 2 && crate::shaderc::native_cube_enabled() => 3,
+        ir::TexDim::D3 if mode >= 2 && crate::shaderc::native_3d_enabled() => 3,
         _ => return None,
     };
     if m.stage != SHC_STAGE_FRAGMENT {
@@ -1288,46 +1289,77 @@ impl<'a> Sel<'a> {
              * first), the TPU picking the mip level, filtering across
              * slices and wrapping every axis by the sampler's modes. The
              * record says `native_cube` bit 2 and the draw binds the
-             * twiddled volume (`gl::native_vol`). */
+             * twiddled volume (`gl::native_vol`).
+             *
+             * Every form the grid arms below take is here too, an integer
+             * sampler's (`smp_type`) included: the draw binds the twiddled
+             * copy for every 3D binding of a program whose record says bit
+             * 2, so a grid look-up beside a native one would read the copy
+             * as a grid. `textureGrad` takes its gradients as the 2D one
+             * does (three pairs); the implicit level of a smooth varying
+             * takes the exact plane gradients a native cube takes
+             * (`gradients_for`, `pvr_proj_lod` 2), because the TPU's own
+             * level is one per 2x2 quad. */
             ir::Op::Tex {
                 dim: ir::TexDim::D3,
                 shadow: false,
                 proj,
-                ret: ir::ScalarType::F32,
+                ret: ret @ (ir::ScalarType::F32 | ir::ScalarType::I32 | ir::ScalarType::U32),
                 sampler,
                 coord,
-                lod: lod @ (ir::TexLod::Implicit | ir::TexLod::Lod(_) | ir::TexLod::Bias(_)),
+                lod: lod @ (ir::TexLod::Implicit | ir::TexLod::Lod(_) | ir::TexLod::Bias(_) | ir::TexLod::Grad { .. }),
                 offset: None,
             } if crate::shaderc::native_3d_enabled() => {
                 let [u, v, w] = self.tex_coords(coord, 3, proj)?;
-                let (mode, level) = self.smp_level(lod)?;
+                let (mut mode, level) = match lod {
+                    ir::TexLod::Grad { ddx, ddy } => {
+                        self.explicit_gradients(ddx, ddy, 3)?;
+                        (SmpLod::Gradients, None)
+                    }
+                    other => self.smp_level(other)?,
+                };
+                if mode != SmpLod::Gradients && self.gradients_for(op).is_some() {
+                    self.plane_gradients(coord, 3)?;
+                    mode = SmpLod::Gradients;
+                }
                 self.emit(SelGroup { op: SelOp::SampleZ { vol: true }, ty: OpType::F32, dst: None, srcs: [Some(w), None, None] })?;
                 self.emit(SelGroup {
                     op: SelOp::Sample { binding: sampler, proj: false, lod: mode, fetch: false, offset: None, cube: true, layer: false, gather: false },
-                    ty: OpType::F32,
+                    ty: smp_type(ret),
                     dst: Some(SelDst::Virtual(self.tex_out(id))),
                     srcs: [Some(u), Some(v), level],
                 })
             }
             /* texelFetch on a native 3D texture: the texel's centre,
              * p + 0.5 on each axis, at the level given, as the 2D fetch
-             * above and the native array's. */
+             * above and the native array's. Mesa's pco passes p itself,
+             * unnormalised (`nncoords`; pco_nir_tex.c:626-633 and :727-729:
+             * a fetch has a level, so no integer coordinates): the same
+             * texel under NEAREST, and under LINEAR the centre is the texel
+             * alone where p is the corner of eight. texelFetchOffset adds
+             * its offset to the integer coordinate first (ES 3.00 8.8), as
+             * the 2D fetch does: no lookup word, whose w field (bits 12..15,
+             * rogue_hw_defs.h) the 16-bit word carried here has no room for. */
             ir::Op::Tex {
                 dim: ir::TexDim::D3,
                 shadow: false,
                 proj: false,
-                ret: ir::ScalarType::F32,
+                ret: ret @ (ir::ScalarType::F32 | ir::ScalarType::I32 | ir::ScalarType::U32),
                 sampler,
                 coord,
                 lod: ir::TexLod::Fetch(l),
-                offset: None,
+                offset,
             } if crate::shaderc::native_3d_enabled() => {
-                use ir::AluOp::{Fadd, I2f};
+                use ir::AluOp::{Fadd, I2f, Iadd};
                 let g = |s: &mut Self, op: ir::AluOp, x: [Option<SelSrc>; 3]| s.fresh_typed(SelOp::Alu(op), op_type(op), x);
                 let half = Some(SelSrc::Imm(0.5f32.to_bits()));
                 let mut c = [SelSrc::Imm(0); 3];
                 for (k, ck) in c.iter_mut().enumerate() {
                     let p = self.src(coord, k as u32)?;
+                    let p = match offset {
+                        Some(o) if o[k] != 0 => g(self, Iadd, [Some(p), Some(SelSrc::Imm(o[k] as i32 as u32)), None])?,
+                        _ => p,
+                    };
                     let pf = g(self, I2f, [Some(p), None, None])?;
                     *ck = g(self, Fadd, [Some(pf), half, None])?;
                 }
@@ -1336,7 +1368,7 @@ impl<'a> Sel<'a> {
                 self.emit(SelGroup { op: SelOp::SampleZ { vol: true }, ty: OpType::F32, dst: None, srcs: [Some(c[2]), None, None] })?;
                 self.emit(SelGroup {
                     op: SelOp::Sample { binding: sampler, proj: false, lod: SmpLod::Replace, fetch: true, offset: None, cube: true, layer: false, gather: false },
-                    ty: OpType::F32,
+                    ty: smp_type(ret),
                     dst: Some(SelDst::Virtual(self.tex_out(id))),
                     srcs: [Some(c[0]), Some(c[1]), Some(lf)],
                 })
