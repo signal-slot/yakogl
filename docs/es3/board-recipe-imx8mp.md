@@ -77,9 +77,16 @@ side, set `BOARD_HOST=<user@host>` from the environment (never write it into a f
 
 ## 1. Stage 1 (once per VK-GL-CTS revision, about 1.9 GB)
 
+The VK-GL-CTS checkout is pinned at `93bca01861b0e3ef3c387027a9791e6d065f900c` (the `DEQP_WORK` entry of
+`tools/cts/deps.toml`). It needs its external sources too (`fetch_sources.py`), and the stage 1 script reads
+the checkout from `CTS=`:
+
 ```sh
+git clone --no-checkout https://github.com/KhronosGroup/VK-GL-CTS <deps>/VK-GL-CTS
+git -C <deps>/VK-GL-CTS checkout --detach 93bca01861b0e3ef3c387027a9791e6d065f900c
+(cd <deps>/VK-GL-CTS && python3 external/fetch_sources.py)
 export ZEPHYR_WS=<west workspace> ZEPHYR_VENV=<workspace>/.venv \
-       ZEPHYR_SDK_INSTALL_DIR=<zephyr-sdk-1.0.1> IMX8MP_OUT=<out>
+       ZEPHYR_SDK_INSTALL_DIR=<zephyr-sdk-1.0.1> IMX8MP_OUT=<out> CTS=<deps>/VK-GL-CTS
 tools/cts/imx8mp-deqp-stage1.sh gles3     # = DEQP_MODULE=gles3 DEQP_STAGE1=<out>/deqp-stage1-gles3
 ```
 
@@ -87,7 +94,7 @@ The `gles3` argument uses `$DEQP_STAGE1_GLES3` if set, else `$IMX8MP_OUT/deqp-st
 exports `ZEPHYR_SDK` (from `ZEPHYR_SDK_INSTALL_DIR`) and `-O2` flags, which `cts-build-zephyr.sh` needs.
 Measured: 453 ninja steps, about 15 minutes on a 12-thread worker, 2.0 GB.
 
-This exports `MODULE=gles3` to `tools/cts/cts-build-zephyr.sh` (VK-GL-CTS 93bca01, with the same patches as
+This exports `MODULE=gles3` to `tools/cts/cts-build-zephyr.sh` (the VK-GL-CTS pin above, with the same patches as
 gles2). The log goes to `$IMX8MP_OUT/deqp-stage1.log`, the same file as for gles2.
 
 Expected: `rc=0`, and `<out>/deqp-stage1-gles3/build/modules/gles3/libdeqp-gles3-package.a` exists. Stage
