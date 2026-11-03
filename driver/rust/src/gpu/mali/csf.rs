@@ -1065,6 +1065,12 @@ pub(crate) mod tests {
         pub(crate) version: u32,
         pub(crate) deaf: u32,
         pub(crate) group_num: u32,
+        /// `MCU_STATUS` the model reports once it raised the interrupt.
+        pub(crate) status_after_boot: u32,
+        /// The GLB control block's `group_stride`, as the firmware writes it.
+        pub(crate) group_stride: Option<u32>,
+        /// The GLB input and output page addresses the firmware writes.
+        pub(crate) glb_pages: Option<(u32, u32)>,
     }
 
     impl Mcu {
@@ -1083,6 +1089,9 @@ pub(crate) mod tests {
                 version: iface_version(1, 5, 0),
                 deaf: 0,
                 group_num: 8,
+                status_after_boot: MCU_STATUS_ENABLED,
+                group_stride: None,
+                glb_pages: None,
             }
         }
         pub(crate) fn word(&self, a: usize) -> u32 {
@@ -1110,6 +1119,13 @@ pub(crate) mod tests {
             let base = MCU_SHARED_REGION_START;
             self.put(base, self.version);
             self.put(base + 16, self.group_num);
+            if let Some(st) = self.group_stride {
+                self.put(base + 20, st);
+            }
+            if let Some((i, o)) = self.glb_pages {
+                self.put(base + 8, i);
+                self.put(base + 12, o);
+            }
             for i in 0..self.group_num {
                 let csg = base + GROUP_CONTROL_OFFSET + i * 0xa0;
                 self.put(csg + 4, base + 0x3000 + i * 0x80);
@@ -1153,7 +1169,7 @@ pub(crate) mod tests {
                     *self.starting.borrow_mut() = false;
                     if self.boot() {
                         *self.regs.borrow_mut().entry(JOB_INT_RAWSTAT).or_insert(0) |= JOB_INT_GLOBAL_IF;
-                        self.regs.borrow_mut().insert(MCU_STATUS, MCU_STATUS_ENABLED);
+                        self.regs.borrow_mut().insert(MCU_STATUS, self.status_after_boot);
                     }
                 }
             }
@@ -1429,6 +1445,150 @@ pub(crate) mod tests {
         let mut g = Mcu::new(b.clone());
         g.deaf = GLB_PING;
         assert_eq!(boot(&g, &g, GPU, &img, &T6, &mut |_| {}), Err((CsfRefusal::PingTimeout, 0)));
+    }
+
+    // Z3's failure signatures, one test each, injected into the model. The
+    // refusals are `boot`'s own; where it has none, the test pins what it
+    // returns instead, and the reason: panthor v6.18 has no such check
+    // either. panthor_fw.c reads MCU_STATUS only after a boot timeout
+    // (:1039-1054); refuses a version only when it is 0 (:944-947, the rest
+    // is logged at :969-974); and bounds a group or stream block's end by
+    // the shared section (:886, :835), never the stride by the structure's
+    // size.
+
+    fn boot_with(g: &Mcu, img: &Image) -> (Result<Booted, Refused>, u64) {
+        let mut slept = 0u64;
+        let r = boot(g, g, GPU, img, &T6, &mut |us| slept += u64::from(us));
+        (r, slept)
+    }
+
+    #[test]
+    fn fault_the_mcu_never_raises_the_interrupt() {
+        let b = synth::small();
+        let img = fw::parse(&b).unwrap();
+        let mut g = Mcu::new(b.clone());
+        g.never_boots = true;
+        let (r, slept) = boot_with(&g, &img);
+        assert_eq!(r, Err((CsfRefusal::BootTimeout, MCU_STATUS_DISABLED)));
+        assert_eq!(slept, u64::from(BOOT_WAIT_US) + 1);
+        // the global configuration was never written
+        assert!(g.writes.borrow().iter().all(|w| w.0 != doorbell(GLB_DOORBELL_ID)));
+        assert_eq!(*g.writes.borrow().last().unwrap(), (MCU_CONTROL, MCU_CONTROL_AUTO));
+    }
+
+    #[test]
+    fn fault_mcu_status_not_enabled_is_reported_not_refused() {
+        let b = synth::small();
+        let img = fw::parse(&b).unwrap();
+        let mut g = Mcu::new(b.clone());
+        g.status_after_boot = MCU_STATUS_HALT;
+        let r = boot_with(&g, &img).0.unwrap();
+        assert_eq!(r.start.mcu_status, MCU_STATUS_HALT, "the record carries the status for the verdict");
+        assert_eq!(r.start.job_raw, JOB_INT_GLOBAL_IF);
+    }
+
+    #[test]
+    fn fault_a_glb_version_other_than_1_5_0_is_reported_not_refused() {
+        let b = synth::small();
+        let img = fw::parse(&b).unwrap();
+        for v in [iface_version(1, 4, 0), iface_version(1, 5, 1), iface_version(2, 0, 0)] {
+            let mut g = Mcu::new(b.clone());
+            g.version = v;
+            let r = boot_with(&g, &img).0.unwrap();
+            assert_eq!(r.iface.version, v);
+            assert_ne!(r.iface.version, iface_version(1, 5, 0));
+        }
+        // the one version panthor refuses is 0
+        let mut g = Mcu::new(b.clone());
+        g.version = 0;
+        assert_eq!(boot_with(&g, &img).0, Err((CsfRefusal::VersionZero, 0)));
+    }
+
+    #[test]
+    fn fault_group_num_zero_or_out_of_range() {
+        let b = synth::small();
+        let img = fw::parse(&b).unwrap();
+        for n in [0, 2, 32, 64] {
+            let mut g = Mcu::new(b.clone());
+            g.group_num = n;
+            assert_eq!(boot_with(&g, &img).0, Err((CsfRefusal::GroupCount, n)), "group_num {n}");
+            // refused before the configuration is written
+            assert!(g.writes.borrow().iter().all(|w| w.0 != doorbell(GLB_DOORBELL_ID)));
+        }
+    }
+
+    #[test]
+    fn fault_group_stride_too_large_leaves_the_shared_section() {
+        let b = synth::small();
+        let img = fw::parse(&b).unwrap();
+        let mut g = Mcu::new(b.clone());
+        g.group_stride = Some(0x10_0000);
+        // group 0 is read at its offset; group 1 lies past the section's end
+        let va = MCU_SHARED_REGION_START + GROUP_CONTROL_OFFSET + 0x10_0000;
+        assert_eq!(boot_with(&g, &img).0, Err((CsfRefusal::IfaceOutsideShared, va)));
+    }
+
+    #[test]
+    fn fault_group_stride_too_small_is_not_refused_as_in_panthor() {
+        // panthor checks only that the block ends inside the section, never
+        // the stride against the structure's size. The model's groups sit at
+        // 0xa0 whatever the stride says, so a stride of 0 reads group 0's
+        // block eight times and boots; the record carries the stride.
+        let b = synth::small();
+        let img = fw::parse(&b).unwrap();
+        let mut g = Mcu::new(b.clone());
+        g.group_stride = Some(0);
+        let r = boot_with(&g, &img).0.unwrap();
+        assert_eq!(r.iface.group_stride, 0);
+        // a stride of 4 overlaps the blocks onto zero words: the group's
+        // pages read 0, outside the section
+        let mut g = Mcu::new(b.clone());
+        g.group_stride = Some(4);
+        assert_eq!(boot_with(&g, &img).0, Err((CsfRefusal::IfaceOutsideShared, 0)));
+    }
+
+    #[test]
+    fn fault_glb_interface_pages_outside_the_shared_section() {
+        let b = synth::small();
+        let img = fw::parse(&b).unwrap();
+        for (pages, bad) in [((0x0300_0000, 0x0400_6000), 0x0300_0000), ((0x0400_2000, 0x0500_0000), 0x0500_0000)] {
+            let mut g = Mcu::new(b.clone());
+            g.glb_pages = Some(pages);
+            assert_eq!(boot_with(&g, &img).0, Err((CsfRefusal::IfaceOutsideShared, bad)));
+        }
+    }
+
+    #[test]
+    fn fault_each_config_ack_that_never_follows() {
+        let b = synth::small();
+        let img = fw::parse(&b).unwrap();
+        let all = GLB_INIT_TOGGLES;
+        for bit in [GLB_CFG_ALLOC_EN, GLB_CFG_POWEROFF_TIMER, GLB_CFG_PROGRESS_TIMER] {
+            let mut g = Mcu::new(b.clone());
+            g.deaf = bit;
+            let (r, slept) = boot_with(&g, &img);
+            assert_eq!(r, Err((CsfRefusal::GlbConfigAckTimeout, all & !bit)), "deaf to {bit:#x}");
+            assert_eq!(slept, 3 + u64::from(GLB_ACK_WAIT_US) + 1);
+            // the PING was never asked
+            assert_eq!(g.word(MEM + 0x400_2000) & GLB_PING, 0);
+        }
+        let mut g = Mcu::new(b.clone());
+        g.deaf = all;
+        assert_eq!(boot_with(&g, &img).0, Err((CsfRefusal::GlbConfigAckTimeout, 0)));
+    }
+
+    #[test]
+    fn fault_a_ping_whose_ack_never_follows() {
+        let b = synth::small();
+        let img = fw::parse(&b).unwrap();
+        let mut g = Mcu::new(b.clone());
+        g.deaf = GLB_PING;
+        let (r, slept) = boot_with(&g, &img);
+        assert_eq!(r, Err((CsfRefusal::PingTimeout, 0)));
+        assert_eq!(slept, 3 + u64::from(GLB_ACK_WAIT_US) + 1);
+        // asked (req bit 8 set), never acknowledged (ack bit 8 clear)
+        assert_eq!(g.word(MEM + 0x400_2000) & GLB_PING, GLB_PING);
+        assert_eq!(g.word(MEM + 0x400_6000) & GLB_PING, 0);
     }
 
     #[test]
