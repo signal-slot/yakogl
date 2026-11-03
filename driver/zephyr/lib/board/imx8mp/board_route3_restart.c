@@ -89,6 +89,7 @@
 #include <stddef.h>
 
 #include <cluster/a53_power.h>
+#include "gc_wdog_arm.h"
 #include <yakogl_drv/imx8mp_media.h>
 
 #include "board_imx8mp_route3.h"
@@ -337,6 +338,15 @@ static int chain_init(void)
 			printk("route3: %s init: %d\n", chain[i]->name, rc);
 		}
 	}
+	/*
+	 * GPIO4 is the M7's too: its touch interrupt is GPIO4_IO25 (the M7
+	 * firmware's boards/touch.overlay). Zephyr's igpio init connects and enables the
+	 * bank's two GIC lines here, and its ISR clears ISR bits, which would
+	 * take the M7's edge away from it. This image uses GPIO4 for the
+	 * bridge's EN output only, so its interrupt lines stay off here.
+	 */
+	irq_disable(DT_IRQ_BY_IDX(CHAIN_NODE_GPIO, 0, irq));
+	irq_disable(DT_IRQ_BY_IDX(CHAIN_NODE_GPIO, 1, irq));
 	return 0;
 }
 SYS_INIT(chain_init, POST_KERNEL, CONFIG_GPIO_INIT_PRIORITY);
@@ -445,6 +455,7 @@ static void down_thread(void *p1, void *p2, void *p3)
 	s_pw->ack_seq = s_down_seq;
 	s_pw->a53_state = CLUSTER_A53_ST_SUSPENDING;
 	s_pw->a53_suspend = cntpct();
+	gc_wdog_arm_stretch_max();
 	barrier_dsync_fence_full();
 	key = arch_irq_lock();
 	for (unsigned int irq = 32u; irq < CONFIG_NUM_IRQS; irq++) {
