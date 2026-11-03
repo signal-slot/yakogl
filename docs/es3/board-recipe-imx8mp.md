@@ -2,12 +2,13 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # dEQP-GLES3 on the Verdin i.MX8M Plus (GC7000UL): board recipe
 
-Plan #3, items imx8mp-gles3-tree and stage1-imx8mp. The i.MX8MP has never run dEQP-GLES3. This is the
-recipe for the first run. **The gles3 stage 1 and the 133-row table image are built (host only,
-`ab43a20c5:docs/board-sessions/imx8mp-deqp-stage1-gles3.md`); nothing has run on the board yet.** The commands are
+The i.MX8MP has never run dEQP-GLES3. This is the recipe for the first run. **The gles3 stage 1 and the
+133-row table image were built once (host only; the figures are quoted below); nothing has run on the
+board yet.** Board results are recorded under `tools/cts/log/<date>-imx8mp-gles3-<slice>/`; open work is
+issue #2 of signal-slot/yakogl. The commands are
 the existing gles2 ones plus the gles3 switch. The expected lines have the shape of real gles2 lines from
-the i.MX8MP gles2 runs, which went through the same `board.sh` code path. The board session
-(item board-imx8mp) replaces them with what it sees.
+the i.MX8MP gles2 runs, which went through the same `board.sh` code path. The first board session
+replaces them with what it sees.
 
 ## What is in the tree
 
@@ -128,8 +129,7 @@ results are reported against that hash.
 
 **Footprint.** The gles2 table image was 221,282,304 bytes in the 256 MiB `a53_ddr_section`
 (imx8mp-plan1.md). Measured for the gles3 table image: `zephyr.bin` 15,878,520 bytes (`es3-ba8b242a`, sha256 `8df88235…bc8bd2`), RAM about
-221,976 KB of 256 MB (84.7 %), footprint checked by `board.sh` 227,311,616 bytes. Details:
-`ab43a20c5:docs/board-sessions/imx8mp-deqp-stage1-gles3.md`.
+221,976 KB of 256 MB (84.7 %), footprint checked by `board.sh` 227,311,616 bytes.
 
 ## 3. Run the tree on the board
 
@@ -144,7 +144,7 @@ tools/cts/imx8mp-gles3-board.sh tree records/imx8mp/es3-$HEAD8
 - **Preview:** `tools/board.sh --dry-run imx8mp tree ...` (with the same `TREE_IMAGE`; or
   `tools/cts/imx8mp-gles3-board.sh --dry-run tree <dir>`) prints the `DRY host$ ...` steps for every row and
   touches no board. Done for the built image (`es3-ba8b242a`, sha256 `8df88235…bc8bd2`): 133 rows
-  `e00`..`e132`, selectors 0..132; see the session doc.
+  `e00`..`e132`, selectors 0..132.
 - **Subset:** `TREE_ROWS=0-9` or `TREE_ROWS=57,60-66` runs only those rows.
 - **Resume:** a row whose run directory already has an `INDEX.txt` is skipped.
 
@@ -157,7 +157,8 @@ SNVS (`gc_result.h`), runs table entry *i*, and resets through WDOG1 when it is 
 
 ### How records are read
 
-The carrier has no UART. After every case the image rewrites its four-word SNVS DEQP record. After the
+The image's own result channel is the SNVS record (the console is a second, separate channel; see
+"Capturing the console" below). After every case the image rewrites its four-word SNVS DEQP record. After the
 reset, `board.sh` reads the record back through Linux into `<run>/snvs.txt` and decodes it with
 `yakogl-tools record --line`.
 
@@ -182,6 +183,37 @@ column of `results.tsv` holds case names, never `crc:<hex>` — kept only when t
 own table entry (column 2). A name check of two names can be equal; both are then printed. To search one
 module or another list only: `record crc <hex> dEQP-GLES3.`, or `DEQP_CASELIST=<file>` to replace the
 list.
+
+### Capturing the console
+
+The Mallow carrier now has an A53 console: Verdin UART_3 (i.MX8MP UART3, Linux `ttymxc2`), reached
+through a serial bridge whose address comes from the environment (`BOARD_UART`; it is never written into a
+file or a commit). What the code supports:
+
+- **What the sample prints.** When a console is attached, the deqp sample (`deqp_log.c`) prints
+  `deqp: <Status> <case name>` per case, `deqp: selector <n>`, `deqp: done: ...` and
+  `deqp: summary: N cases begun, M with a result, K without` at the end (`main.cpp`).
+  `tools/cts/deqp-uart-tally.py` reads that format.
+- **The image does not send it.** `boards/verdin_imx8mp_mimx8ml8_a53.conf` still sets
+  `CONFIG_UART_CONSOLE=n` (written when "the carrier has no UART"), so the table image as built from
+  this tree prints nothing on UART3. Whether anything reaches the console without a rebuild with the
+  console on is **unverified**; that rebuild is a code change, not part of this recipe.
+- **What `board.sh` does.** `BOARD_UART` is read only by the pi4 and am62p paths (serial capture into
+  `console.raw`/`console.ts`/`console.txt`, bridge probe). The imx8mp `tree` path reads the SNVS record
+  through Linux and does not open `BOARD_UART`; a bridge is therefore not captured by `board.sh`.
+  To keep a console log of a tree run, a second client must read the bridge into its own file for the
+  length of the run (one client at a time; the bridge may refuse a second one). Which tool does that is
+  unverified for this board.
+- **Names from a console instead of CRC paging.** If an image with the console on is run and its
+  console is kept, the failing names are the `deqp: <Status> <case>` lines of that log
+  (`tools/cts/deqp-uart-tally.py` tallies them). Then `NAMES=0` can switch off the `e<i>-p<page>` boots
+  (`board.sh` tree runs them only when `NAMES` is not `0`; each failing row costs an extra boot of the
+  same table image per page of six CRCs). The tally still comes from the SNVS record. Lost console
+  lines make a log incomplete (the tally script says INCOMPLETE/MISSING); keep CRC paging for any row
+  whose console log is not complete.
+- **Unverified until a board session:** that the console prints at all with the image used, that the
+  bridge can be read during a `board.sh` run without disturbing it, and that a captured log is
+  complete for a 600 s row.
 
 ### Expected verdict lines
 
