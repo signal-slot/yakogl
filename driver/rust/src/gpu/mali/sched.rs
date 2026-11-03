@@ -15,9 +15,9 @@
 //! Lines below are of v6.18 (`VERSION = 6`, `PATCHLEVEL = 18`,
 //! `SUBLEVEL = 0`). Where this differs from panthor it says so.
 //!
-//! This file holds the design, the refusals and the constants. The
-//! bring-up and the submit are the next items of the plan; the instruction
-//! words panthor wraps a job in are [`job`]'s.
+//! This file holds the design, the refusals, the constants and the
+//! bring-up ([`start`], below). The submit is the next item of the plan;
+//! the instruction words panthor wraps a job in are [`job`]'s.
 //!
 //! # The interface this uses
 //!
@@ -39,7 +39,11 @@
 //! in the group's VM (panthor_sched.c:3352-3358, 3522-3529), which panthor
 //! binds to the first address space other than 0 (panthor_mmu.c:759:
 //! `ffz(alloc_mask | BIT(0))`, so [`GROUP_AS`] 1 on a fresh device) and
-//! writes to the group's `config` (panthor_sched.c:1330).
+//! writes to the group's `config` (panthor_sched.c:1330). Here the
+//! MCU's side is [`csf::McuMemory`] and the group's is [`GroupVm`]; both
+//! answer the CPU address of a range they map, and both must map it
+//! uncached, as panthor does (panthor_fw.c:451, panthor_sched.c:3352-3358,
+//! 3522-3529).
 //!
 //! # Bring-up: panthor's sequence for one group with one stream
 //!
@@ -295,9 +299,13 @@
 pub mod job;
 
 use super::csf::{
-    self, CSG_ENDPOINT_CONFIG, CSG_STATE_MASK, CS_EXTRACT_EVENT, CS_FATAL, CS_FAULT, CS_IDLE_EMPTY, CS_IDLE_SYNC_WAIT,
-    CS_STATE_MASK, CS_STATE_START,
+    self, Cs, CsInput, CsOutput, Csg, CsgInput, CsgOutput, Iface, McuMemory, CSG_ENDPOINT_CONFIG, CSG_STATE_MASK,
+    CSG_STATE_START, CSG_STATE_TERMINATE, CS_EVT_MASK, CS_EXTRACT_EVENT, CS_FATAL, CS_FAULT, CS_IDLE_EMPTY,
+    CS_IDLE_SYNC_WAIT, CS_PROTM_PENDING, CS_STATE_MASK, CS_STATE_START, CS_TILER_OOM,
 };
+use super::Ident;
+use crate::mmio::Mmio;
+use core::mem::offset_of;
 
 /// The group slot and the stream slot Z4 uses: the first of each (the
 /// design page: one group, one stream).
@@ -473,6 +481,15 @@ pub enum SchedRefusal {
     /// CS 0's `ack` did not show `CS_STATE_STOP` within [`CS_ACK_WAIT_US`]
     /// after the stop (the value: the `ack` word). Ours.
     CsStopAckTimeout = 21,
+    /// The queue priority is above [`CSF_MAX_QUEUE_PRIO`] (the value;
+    /// panthor's -EINVAL, panthor_sched.c:3339-3340).
+    QueuePriority = 22,
+    /// A core mask outside the GPU's, or a core count above its mask's
+    /// (panthor's -EINVAL, panthor_sched.c:3465-3473), or a tiler count
+    /// wider than `CSG_EP_REQ_TILER`'s four bits (panthor_fw.h:167; ours,
+    /// panthor masks it). The value: the check, 1 to 3 the compute,
+    /// fragment and tiler masks, 4 to 6 their counts, 7 the tiler field.
+    GroupCores = 23,
 }
 
 /// The ring's size as panthor's queue creation accepts it
@@ -484,11 +501,411 @@ pub const fn check_ring_size(size: u32) -> Result<u32, (SchedRefusal, u32)> {
     Ok(size)
 }
 
+type Refused = (SchedRefusal, u32);
+
+/// The group's VM as the CPU sees it: the ring buffer and the sync object
+/// are there (panthor_sched.c:3352-3358, 3522-3529), in [`GROUP_AS`].
+pub trait GroupVm {
+    /// The CPU address of the `len` bytes at GPU address `va`, or `None`
+    /// when the group's page tables do not map all of them at one CPU
+    /// range. Mapped uncached for the CPU, as panthor maps both
+    /// (`DRM_PANTHOR_VM_BIND_OP_MAP_UNCACHED`): no cache maintenance follows
+    /// a write.
+    fn cpu(&self, va: u64, len: u32) -> Option<usize>;
+}
+
+/// The group, as `panthor_group_create` takes it (panthor_sched.c:
+/// 3447-3520) and `csg_slot_prog_locked` writes it (:1323-1342).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Group {
+    /// `allow_compute`, `allow_fragment`, `allow_other` (:542-557, 1323-1325).
+    pub compute_core_mask: u64,
+    pub fragment_core_mask: u64,
+    pub tiler_core_mask: u64,
+    /// The endpoint request's counts (:1326-1328).
+    pub max_compute_cores: u8,
+    pub max_fragment_cores: u8,
+    pub max_tiler_cores: u8,
+    /// The CSG slot priority, at most [`MAX_CSG_PRIO`] (:1303-1304, 1329).
+    pub priority: u32,
+    /// The group VM's address space, written to `config` (:1330).
+    pub as_nr: u32,
+    /// MCU addresses (AS0) of the suspend buffers, of the sizes the CSG
+    /// control block gives (:3506-3520); `None` for none.
+    pub suspend_buf: Option<u32>,
+    pub protm_suspend_buf: Option<u32>,
+}
+
+impl Group {
+    /// Every shader core for compute and fragment work, every tiler, at
+    /// [`CSG_PRIORITY`] in [`GROUP_AS`]: the group GL uses. Ours (panthor
+    /// takes what user space asks).
+    pub const fn all_cores(id: &Ident, suspend_buf: Option<u32>, protm_suspend_buf: Option<u32>) -> Group {
+        Group {
+            compute_core_mask: id.shader_present,
+            fragment_core_mask: id.shader_present,
+            tiler_core_mask: id.tiler_present,
+            max_compute_cores: id.shader_present.count_ones() as u8,
+            max_fragment_cores: id.shader_present.count_ones() as u8,
+            max_tiler_cores: id.tiler_present.count_ones() as u8,
+            priority: CSG_PRIORITY,
+            as_nr: GROUP_AS,
+            suspend_buf,
+            protm_suspend_buf,
+        }
+    }
+}
+
+/// The one stream's memory and priority (`group_create_queue`,
+/// panthor_sched.c:3330-3375).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Queue {
+    /// The ring buffer: GPU address in the group's VM, size
+    /// [`RING_MIN_SIZE`]..=[`RING_MAX_SIZE`], a power of two (:3335-3358).
+    pub ring_va: u64,
+    pub ring_size: u32,
+    /// MCU addresses (AS0) of the user input and output pages (panthor:
+    /// one 8 KiB object, output at +4 KiB, panthor_fw.c:448-467).
+    pub input_va: u32,
+    pub output_va: u32,
+    /// The 16-byte [`SyncObj64`], GPU address in the group's VM
+    /// (panthor_sched.c:3522-3540).
+    pub syncobj_va: u64,
+    /// At most [`CSF_MAX_QUEUE_PRIO`] (:3339-3340); [`QUEUE_PRIORITY`] for
+    /// GL.
+    pub priority: u32,
+}
+
+/// What [`start`] left: where the queue's memory is for the CPU, and the
+/// words read back after the acknowledges.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Started {
+    pub ring_cpu: usize,
+    pub input_cpu: usize,
+    pub output_cpu: usize,
+    pub syncobj_cpu: usize,
+    /// The stream's doorbell, [`CS_DOORBELL_ID`]: what a submit rings.
+    pub doorbell_id: u32,
+    /// CS 0's input `config` and `req`, its output `ack`.
+    pub cs_config: u32,
+    pub cs_req: u32,
+    pub cs_ack: u32,
+    /// CSG 0's input `endpoint_req`, `config`, suspend buffers,
+    /// `doorbell_req` and `req`, its output `ack`.
+    pub endpoint_req: u32,
+    pub csg_config: u32,
+    pub suspend_buf: u64,
+    pub protm_suspend_buf: u64,
+    pub csg_doorbell_req: u32,
+    pub csg_req: u32,
+    pub csg_ack: u32,
+    /// The GLB input's `doorbell_req` after the group's doorbell.
+    pub glb_doorbell_req: u32,
+    /// The slot priority as panthor reads it back on the
+    /// `CSG_ENDPOINT_CONFIG` acknowledge (`csg_slot_sync_priority_locked`,
+    /// panthor_sched.c:1869-1870, 1140).
+    pub priority: u32,
+    /// Microseconds polled until CSG 0's acknowledge, then CS 0's.
+    pub csg_ack_us: u32,
+    pub cs_ack_us: u32,
+}
+
+fn write64(m: &impl Mmio, addr: usize, v: u64) {
+    m.write32(addr, v as u32);
+    m.write32(addr + 4, (v >> 32) as u32);
+}
+
+fn read64(m: &impl Mmio, addr: usize) -> u64 {
+    u64::from(m.read32(addr)) | u64::from(m.read32(addr + 4)) << 32
+}
+
+/// Where everything is, found before the first write.
+struct Placed {
+    ring_cpu: usize,
+    input_cpu: usize,
+    output_cpu: usize,
+    syncobj_cpu: usize,
+    suspend_buf: u64,
+    protm_suspend_buf: u64,
+}
+
+/// `panthor_group_create`'s checks of the cores (panthor_sched.c:
+/// 3465-3473), and ours of the tiler field (panthor_fw.h:167).
+fn check_cores(g: &Group, id: &Ident) -> Result<(), Refused> {
+    let checks = [
+        g.compute_core_mask & !id.shader_present != 0,
+        g.fragment_core_mask & !id.shader_present != 0,
+        g.tiler_core_mask & !id.tiler_present != 0,
+        g.compute_core_mask.count_ones() < u32::from(g.max_compute_cores),
+        g.fragment_core_mask.count_ones() < u32::from(g.max_fragment_cores),
+        g.tiler_core_mask.count_ones() < u32::from(g.max_tiler_cores),
+        g.max_tiler_cores > 0xf,
+    ];
+    match checks.iter().position(|&bad| bad) {
+        Some(i) => Err((SchedRefusal::GroupCores, i as u32 + 1)),
+        None => Ok(()),
+    }
+}
+
+/// A suspend buffer of `size` bytes at `va`: 0 when the interface asks for
+/// none (panthor_sched.c:1332-1342), refused when it asks and none is
+/// given or AS0 does not map it.
+fn suspend_buf_va(mem: &impl McuMemory, size: u32, va: Option<u32>) -> Result<u64, Refused> {
+    if size == 0 {
+        return Ok(0);
+    }
+    match va {
+        Some(va) if mem.cpu(va, size).is_some() => Ok(u64::from(va)),
+        _ => Err((SchedRefusal::SuspendBufMissing, size)),
+    }
+}
+
+/// Every check before the first write, in the order panthor meets them:
+/// the group's creation (panthor_sched.c:3465-3473, the suspend buffers
+/// :3506-3520, the sync objects :3522-3529), the queue's (:3335-3340, the
+/// ring :3352-3358, the user pages :3368-3375), the slot priority
+/// (:1303-1304), the address space (`panthor_vm_active`, :982), and ours:
+/// CSG 0 free.
+fn place(
+    m: &impl Mmio,
+    mem: &impl McuMemory,
+    vm: &impl GroupVm,
+    id: &Ident,
+    csg: &Csg,
+    group: &Group,
+    queue: &Queue,
+) -> Result<Placed, Refused> {
+    check_cores(group, id)?;
+    let suspend_buf = suspend_buf_va(mem, csg.suspend_size, group.suspend_buf)?;
+    let protm_suspend_buf = suspend_buf_va(mem, csg.protm_suspend_size, group.protm_suspend_buf)?;
+    let syncobj_cpu =
+        vm.cpu(queue.syncobj_va, SYNCOBJ_SIZE).ok_or((SchedRefusal::SyncObjUnmapped, queue.syncobj_va as u32))?;
+    check_ring_size(queue.ring_size)?;
+    if queue.priority > CSF_MAX_QUEUE_PRIO {
+        return Err((SchedRefusal::QueuePriority, queue.priority));
+    }
+    let ring_cpu = vm.cpu(queue.ring_va, queue.ring_size).ok_or((SchedRefusal::RingUnmapped, queue.ring_va as u32))?;
+    let page = |va: u32| mem.cpu(va, QUEUE_OUTPUT_OFFSET).ok_or((SchedRefusal::UserPagesUnmapped, va));
+    let input_cpu = page(queue.input_va)?;
+    let output_cpu = page(queue.output_va)?;
+    if group.priority > MAX_CSG_PRIO {
+        return Err((SchedRefusal::CsgPriority, group.priority));
+    }
+    if group.as_nr == 0 || group.as_nr >= 32 || id.as_present & (1 << group.as_nr) == 0 {
+        return Err((SchedRefusal::AddressSpace, group.as_nr));
+    }
+    let ack = m.read32(csg.output + offset_of!(CsgOutput, ack));
+    if ack & CSG_STATE_MASK != CSG_STATE_TERMINATE {
+        return Err((SchedRefusal::CsgSlotBusy, ack));
+    }
+    Ok(Placed { ring_cpu, input_cpu, output_cpu, syncobj_cpu, suspend_buf, protm_suspend_buf })
+}
+
+/// The memory panthor zeroes when it creates the group: the sync object
+/// (panthor_sched.c:3539-3540), then the user input and output pages
+/// (`panthor_fw_alloc_queue_iface_mem`, panthor_fw.c:463, called at
+/// panthor_sched.c:3368). Only the words of the structures are written.
+fn zero_queue_mem(m: &impl Mmio, p: &Placed) {
+    write64(m, p.syncobj_cpu + offset_of!(SyncObj64, seqno), 0);
+    m.write32(p.syncobj_cpu + offset_of!(SyncObj64, status), 0);
+    m.write32(p.syncobj_cpu + offset_of!(SyncObj64, pad), 0);
+    write64(m, p.input_cpu + offset_of!(RingbufInput, insert), 0);
+    write64(m, p.input_cpu + offset_of!(RingbufInput, extract), 0);
+    write64(m, p.output_cpu + offset_of!(RingbufOutput, extract), 0);
+    m.write32(p.output_cpu + offset_of!(RingbufOutput, active), 0);
+}
+
+/// `cs_slot_prog_locked` (panthor_sched.c:1053-1084) for CS 0.
+fn prog_cs(m: &impl Mmio, cs: &Cs, queue: &Queue, p: &Placed) {
+    let i = cs.input;
+    // :1061: the input page's extract from the output page's
+    let extract = read64(m, p.output_cpu + offset_of!(RingbufOutput, extract));
+    write64(m, p.input_cpu + offset_of!(RingbufInput, extract), extract);
+    // :1064-1067
+    write64(m, i + offset_of!(CsInput, ringbuf_base), queue.ring_va);
+    m.write32(i + offset_of!(CsInput, ringbuf_size), queue.ring_size);
+    write64(m, i + offset_of!(CsInput, ringbuf_input), u64::from(queue.input_va));
+    write64(m, i + offset_of!(CsInput, ringbuf_output), u64::from(queue.output_va));
+    // :1068-1069, the doorbell of `group_bind_locked` (:997-998)
+    m.write32(i + offset_of!(CsInput, config), csf::cs_config(queue.priority, CS_DOORBELL_ID));
+    // :1070
+    m.write32(i + offset_of!(CsInput, ack_irq_mask), ACK_IRQ_MASK_ALL);
+    // :1071-1079, a field update
+    csf::update_reqs(m, i + offset_of!(CsInput, req), CS_START_REQ, CS_START_MASK);
+}
+
+/// `csg_slot_prog_locked` (panthor_sched.c:1293-1347) for CSG 0, after its
+/// stream (:1316-1321).
+fn prog_csg(m: &impl Mmio, csg: &Csg, group: &Group, p: &Placed) {
+    let i = csg.input;
+    // :1323-1325; `allow_other` is 32 bits, the tiler mask 64 (panthor
+    // stores it as is)
+    write64(m, i + offset_of!(CsgInput, allow_compute), group.compute_core_mask);
+    write64(m, i + offset_of!(CsgInput, allow_fragment), group.fragment_core_mask);
+    m.write32(i + offset_of!(CsgInput, allow_other), group.tiler_core_mask as u32);
+    // :1326-1329
+    let ep = csf::csg_ep_req(
+        u32::from(group.max_compute_cores),
+        u32::from(group.max_fragment_cores),
+        u32::from(group.max_tiler_cores),
+        group.priority,
+    );
+    m.write32(i + offset_of!(CsgInput, endpoint_req), ep);
+    // :1330
+    m.write32(i + offset_of!(CsgInput, config), group.as_nr);
+    // :1332-1342
+    write64(m, i + offset_of!(CsgInput, suspend_buf), p.suspend_buf);
+    write64(m, i + offset_of!(CsgInput, protm_suspend_buf), p.protm_suspend_buf);
+    // :1344
+    m.write32(i + offset_of!(CsgInput, ack_irq_mask), ACK_IRQ_MASK_ALL);
+    // :1345, the mask of the programmed streams (:1319)
+    csf::toggle_reqs(
+        m,
+        i + offset_of!(CsgInput, doorbell_req),
+        csg.output + offset_of!(CsgOutput, doorbell_ack),
+        1 << CS_SLOT,
+    );
+}
+
+/// The start requested and the group rung: `tick_ctx_apply` queues
+/// `CSG_STATE_START` under `CSG_STATE_MASK` and `ack ^ CSG_ENDPOINT_CONFIG`
+/// under `CSG_ENDPOINT_CONFIG` (panthor_sched.c:2285-2291, merged as
+/// `csgs_upd_ctx_queue_reqs` does, :1828-1829); `csgs_upd_ctx_apply_locked`
+/// writes `req` (:1850-1852) and rings the group (:1855,
+/// `panthor_fw_ring_csg_doorbells`, panthor_fw.c:1305-1311).
+fn request_start(m: &impl Mmio, gpu: usize, iface: &Iface, csg: &Csg) {
+    let ack = m.read32(csg.output + offset_of!(CsgOutput, ack));
+    let value = CSG_STATE_START | ((ack ^ CSG_ENDPOINT_CONFIG) & CSG_ENDPOINT_CONFIG);
+    csf::update_reqs(m, csg.input + offset_of!(CsgInput, req), value, CSG_START_MASK);
+    csf::ring_csg_doorbells(m, gpu, iface, 1 << CSG_SLOT);
+}
+
+/// CS 0's pending events, refused (panthor handles them in this order,
+/// panthor_sched.c:1584-1593; `CS_PROTM_PENDING` after them is ours): the
+/// `fatal` word, the `fault` word, the tiler's `heap_vt_start`, the `ack`.
+/// Nothing is acknowledged.
+pub fn cs_events(m: &impl Mmio, cs: &Cs) -> Result<(), Refused> {
+    let req = m.read32(cs.input + offset_of!(CsInput, req));
+    cs_events_of(m, cs, req, m.read32(cs.output + offset_of!(CsOutput, ack)))
+}
+
+/// [`cs_events`] on `req` and `ack` words already read.
+fn cs_events_of(m: &impl Mmio, cs: &Cs, req: u32, ack: u32) -> Result<(), Refused> {
+    let events = (req ^ ack) & CS_EVT_MASK;
+    let out = |f: usize| m.read32(cs.output + f);
+    if events & CS_FATAL != 0 {
+        return Err((SchedRefusal::CsFatal, out(offset_of!(CsOutput, fatal))));
+    }
+    if events & CS_FAULT != 0 {
+        return Err((SchedRefusal::CsFault, out(offset_of!(CsOutput, fault))));
+    }
+    if events & CS_TILER_OOM != 0 {
+        return Err((SchedRefusal::TilerOom, out(offset_of!(CsOutput, heap_vt_start))));
+    }
+    if events & CS_PROTM_PENDING != 0 {
+        return Err((SchedRefusal::ProtmPending, ack));
+    }
+    Ok(())
+}
+
+/// The start's acknowledges: CSG 0's within [`CSG_ACK_WAIT_US`]
+/// (`panthor_fw_csg_wait_acks(..., 100)`, panthor_sched.c:1867;
+/// panthor_fw.c:1270-1294, whose state field counts only when all its bits
+/// are, :1290-1291), then, ours, CS 0's state START within
+/// [`CS_ACK_WAIT_US`], each poll refusing a pending stream event first,
+/// both judged on the same `req` and `ack` read.
+fn wait_started(m: &impl Mmio, csg: &Csg, cs: &Cs, delay_us: &mut impl FnMut(u32)) -> Result<(u32, u32), Refused> {
+    let csg_us = csf::wait_acks(
+        m,
+        csg.input + offset_of!(CsgInput, req),
+        csg.output + offset_of!(CsgOutput, ack),
+        CSG_START_MASK,
+        CSG_ACK_WAIT_US,
+        delay_us,
+    )
+    .map_err(|a| {
+        let a = if a & CSG_STATE_MASK != CSG_STATE_MASK { a & !CSG_STATE_MASK } else { a };
+        (SchedRefusal::CsgStartAckTimeout, a)
+    })?;
+    let (req, ack) = (cs.input + offset_of!(CsInput, req), cs.output + offset_of!(CsOutput, ack));
+    for t in 0..=CS_ACK_WAIT_US {
+        let (r, a) = (m.read32(req), m.read32(ack));
+        cs_events_of(m, cs, r, a)?;
+        if (r ^ a) & CS_STATE_MASK == 0 {
+            return Ok((csg_us, t));
+        }
+        delay_us(1);
+    }
+    Err((SchedRefusal::CsStartAckTimeout, m.read32(ack)))
+}
+
+/// Z4's bring-up: CSG 0 with CS 0 started as panthor starts a lone group in
+/// a free slot (`tick_ctx_apply`, panthor_sched.c:2263-2301):
+///
+/// 1. every check, before any write (the group's, the queue's, the slot
+///    priority, the address space, CSG 0 free); then the memory
+///    panthor zeroes at the group's creation;
+/// 2. CS 0 programmed (`cs_slot_prog_locked`, :1053-1084) with doorbell
+///    CSG slot + 1 (`group_bind_locked`, :997-998);
+/// 3. CSG 0 programmed (`csg_slot_prog_locked`, :1293-1347);
+/// 4. `CSG_STATE_START` and `CSG_ENDPOINT_CONFIG` requested, the group's
+///    GLB doorbell bit toggled and doorbell 0 rung (:2285-2291, 1850-1855);
+/// 5. the acknowledges waited for (:1867, then ours for CS 0).
+///
+/// `iface`, `csg` and `cs` are Z3's ([`csf::Booted`]); `id` gives the
+/// cores and address spaces present. The stream's doorbell is not rung:
+/// that is the submit's (:3210). A refusal past step 1 leaves the slot
+/// programmed and possibly running: the caller terminates it or resets.
+#[allow(clippy::too_many_arguments)]
+pub fn start(
+    m: &impl Mmio,
+    gpu: usize,
+    mem: &impl McuMemory,
+    vm: &impl GroupVm,
+    id: &Ident,
+    iface: &Iface,
+    csg: &Csg,
+    cs: &Cs,
+    group: &Group,
+    queue: &Queue,
+    delay_us: &mut impl FnMut(u32),
+) -> Result<Started, Refused> {
+    let p = place(m, mem, vm, id, csg, group, queue)?;
+    zero_queue_mem(m, &p);
+    prog_cs(m, cs, queue, &p);
+    prog_csg(m, csg, group, &p);
+    request_start(m, gpu, iface, csg);
+    let (csg_ack_us, cs_ack_us) = wait_started(m, csg, cs, delay_us)?;
+    let (ci, co, gi, go) = (cs.input, cs.output, csg.input, csg.output);
+    let endpoint_req = m.read32(gi + offset_of!(CsgInput, endpoint_req));
+    Ok(Started {
+        ring_cpu: p.ring_cpu,
+        input_cpu: p.input_cpu,
+        output_cpu: p.output_cpu,
+        syncobj_cpu: p.syncobj_cpu,
+        doorbell_id: CS_DOORBELL_ID,
+        cs_config: m.read32(ci + offset_of!(CsInput, config)),
+        cs_req: m.read32(ci + offset_of!(CsInput, req)),
+        cs_ack: m.read32(co + offset_of!(CsOutput, ack)),
+        endpoint_req,
+        csg_config: m.read32(gi + offset_of!(CsgInput, config)),
+        suspend_buf: read64(m, gi + offset_of!(CsgInput, suspend_buf)),
+        protm_suspend_buf: read64(m, gi + offset_of!(CsgInput, protm_suspend_buf)),
+        csg_doorbell_req: m.read32(gi + offset_of!(CsgInput, doorbell_req)),
+        csg_req: m.read32(gi + offset_of!(CsgInput, req)),
+        csg_ack: m.read32(go + offset_of!(CsgOutput, ack)),
+        glb_doorbell_req: m.read32(iface.glb_input + offset_of!(csf::GlbInput, doorbell_req)),
+        priority: (endpoint_req & CSG_EP_REQ_PRIORITY_MASK) >> 28,
+        csg_ack_us,
+        cs_ack_us,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    const ALL: [SchedRefusal; 21] = [
+    const ALL: [SchedRefusal; 23] = [
         SchedRefusal::RingSize,
         SchedRefusal::RingUnmapped,
         SchedRefusal::UserPagesUnmapped,
@@ -510,6 +927,8 @@ mod tests {
         SchedRefusal::JobTimeout,
         SchedRefusal::CsgTerminateAckTimeout,
         SchedRefusal::CsStopAckTimeout,
+        SchedRefusal::QueuePriority,
+        SchedRefusal::GroupCores,
     ];
 
     #[test]
@@ -554,5 +973,629 @@ mod tests {
         for s in [0, 0x800, 0xfff, 0x1001, 0x3000, 0x20000, u32::MAX] {
             assert_eq!(check_ring_size(s), Err((SchedRefusal::RingSize, s)));
         }
+    }
+
+    // ---- the MCU's group and stream interface, modelled ----
+
+    use crate::gpu::mali::fw::MCU_SHARED_REGION_START;
+    use csf::{GlbInput, GlbOutput, CSG_REQ_MASK, CS_REQ_MASK};
+    use std::cell::{Cell, RefCell};
+    use std::collections::HashMap;
+
+    const GPU: usize = 0xfb00_0000;
+    /// AS0 at one CPU window: MCU address `va` is CPU address `MEM + va`.
+    const MEM: usize = 0x1_0000_0000;
+    /// The group's VM likewise: GPU address `va` is CPU address `VM + va`.
+    const VM: usize = 0x100_0000_0000;
+
+    /// The interface pages, where the model's firmware puts them in the
+    /// shared section (offsets as csf.rs's model has them).
+    const GLB_IN: u32 = MCU_SHARED_REGION_START + 0x2000;
+    const GLB_OUT: u32 = MCU_SHARED_REGION_START + 0x6000;
+    const CSG_IN: u32 = MCU_SHARED_REGION_START + 0x3000;
+    const CSG_OUT: u32 = MCU_SHARED_REGION_START + 0x7000;
+    const CS_IN: u32 = MCU_SHARED_REGION_START + 0x3400;
+    const CS_OUT: u32 = MCU_SHARED_REGION_START + 0x7200;
+    const SUSPEND_SIZE: u32 = 0x4000;
+    const PROTM_SUSPEND_SIZE: u32 = 0x5000;
+
+    const fn at(va: u32) -> usize {
+        MEM + va as usize
+    }
+
+    fn iface() -> Iface {
+        Iface { glb_input: at(GLB_IN), glb_output: at(GLB_OUT), group_num: 8, ..Iface::default() }
+    }
+
+    fn csg0() -> Csg {
+        Csg {
+            input: at(CSG_IN),
+            output: at(CSG_OUT),
+            suspend_size: SUSPEND_SIZE,
+            protm_suspend_size: PROTM_SUSPEND_SIZE,
+            stream_num: 8,
+            ..Csg::default()
+        }
+    }
+
+    fn cs0() -> Cs {
+        Cs { input: at(CS_IN), output: at(CS_OUT), ..Cs::default() }
+    }
+
+    /// A stream event the model's firmware raises when CS 0 starts.
+    #[derive(Clone, Copy)]
+    struct Fault {
+        /// `CS_FAULT` or `CS_FATAL`.
+        event: u32,
+        word: u32,
+        info: u64,
+    }
+
+    /// The MCU's group and stream request/acknowledge behaviour. On the
+    /// global doorbell it takes the groups whose GLB `doorbell_req` bit
+    /// differs from `doorbell_ack`; `lag` reads of the shared memory later
+    /// it acknowledges CSG 0's request fields (`CSG_REQ_MASK`) and its
+    /// `doorbell_req`; and when that doorbell names CS 0 and the group is
+    /// started, `cs_lag` reads later CS 0's request fields (`CS_REQ_MASK`),
+    /// raising `fault` with them. Every write, memory and register, is
+    /// logged in order.
+    struct Mcu {
+        mem: RefCell<HashMap<usize, u32>>,
+        log: RefCell<Vec<(usize, u32)>>,
+        lag: u32,
+        cs_lag: u32,
+        /// Reads left before the group's, then the stream's, answer.
+        csg_due: Cell<Option<u32>>,
+        cs_due: Cell<Option<u32>>,
+        never_ack: bool,
+        csg_only: bool,
+        fault: Option<Fault>,
+        /// An MCU address AS0 does not map, a GPU address the group's VM
+        /// does not.
+        mcu_hole: Option<u32>,
+        vm_hole: Option<u64>,
+    }
+
+    impl Mcu {
+        fn new() -> Mcu {
+            Mcu {
+                mem: RefCell::new(HashMap::new()),
+                log: RefCell::new(vec![]),
+                lag: 3,
+                cs_lag: 2,
+                csg_due: Cell::new(None),
+                cs_due: Cell::new(None),
+                never_ack: false,
+                csg_only: false,
+                fault: None,
+                mcu_hole: None,
+                vm_hole: None,
+            }
+        }
+        fn word(&self, a: usize) -> u32 {
+            *self.mem.borrow().get(&a).unwrap_or(&0)
+        }
+        fn put(&self, a: usize, v: u32) {
+            self.mem.borrow_mut().insert(a, v);
+        }
+        /// The firmware's side of a field: `ack` takes `req`'s `mask` bits.
+        fn ack_field(&self, req: usize, ack: usize, mask: u32) {
+            self.put(ack, (self.word(ack) & !mask) | (self.word(req) & mask));
+        }
+        fn answer_csg(&self) {
+            let (gi, go) = (at(GLB_IN), at(GLB_OUT));
+            let (db_req, db_ack) = (gi + offset_of!(GlbInput, doorbell_req), go + offset_of!(GlbOutput, doorbell_ack));
+            let rung = self.word(db_req) ^ self.word(db_ack);
+            self.ack_field(db_req, db_ack, rung);
+            if rung & 1 << CSG_SLOT == 0 {
+                return;
+            }
+            let (i, o) = (at(CSG_IN), at(CSG_OUT));
+            self.ack_field(i + offset_of!(CsgInput, req), o + offset_of!(CsgOutput, ack), CSG_REQ_MASK);
+            let (sreq, sack) = (i + offset_of!(CsgInput, doorbell_req), o + offset_of!(CsgOutput, doorbell_ack));
+            let streams = self.word(sreq) ^ self.word(sack);
+            self.ack_field(sreq, sack, streams);
+            let started = self.word(o + offset_of!(CsgOutput, ack)) & CSG_STATE_MASK == CSG_STATE_START;
+            if streams & 1 << CS_SLOT != 0 && started && !self.csg_only {
+                self.cs_due.set(Some(self.cs_lag));
+            }
+        }
+        fn answer_cs(&self) {
+            let (i, o) = (at(CS_IN), at(CS_OUT));
+            let ack = o + offset_of!(CsOutput, ack);
+            self.ack_field(i + offset_of!(CsInput, req), ack, CS_REQ_MASK);
+            if let Some(f) = self.fault {
+                let (word, info) = if f.event == CS_FATAL {
+                    (offset_of!(CsOutput, fatal), offset_of!(CsOutput, fatal_info))
+                } else {
+                    (offset_of!(CsOutput, fault), offset_of!(CsOutput, fault_info))
+                };
+                self.put(o + word, f.word);
+                self.put(o + info, f.info as u32);
+                self.put(o + info + 4, (f.info >> 32) as u32);
+                self.put(ack, self.word(ack) ^ f.event);
+            }
+        }
+        fn tick(&self, due: &Cell<Option<u32>>, answer: impl FnOnce()) {
+            match due.get() {
+                Some(0) => {
+                    due.set(None);
+                    answer();
+                }
+                Some(n) => due.set(Some(n - 1)),
+                None => {}
+            }
+        }
+        fn log(&self) -> Vec<(usize, u32)> {
+            self.log.borrow().clone()
+        }
+    }
+
+    impl Mmio for Mcu {
+        fn read32(&self, addr: usize) -> u32 {
+            assert!(addr >= MEM, "no GPU register is read: {addr:#x}");
+            self.tick(&self.csg_due, || self.answer_csg());
+            self.tick(&self.cs_due, || self.answer_cs());
+            self.word(addr)
+        }
+        fn write32(&self, addr: usize, val: u32) {
+            self.log.borrow_mut().push((addr, val));
+            if addr >= MEM {
+                self.put(addr, val);
+            } else if addr == GPU + csf::doorbell(csf::GLB_DOORBELL_ID) && !self.never_ack {
+                self.csg_due.set(Some(self.lag));
+            }
+        }
+        fn read8(&self, _: usize) -> u8 {
+            unreachable!()
+        }
+        fn write8(&self, _: usize, _: u8) {
+            unreachable!()
+        }
+    }
+
+    impl McuMemory for Mcu {
+        fn cpu(&self, va: u32, len: u32) -> Option<usize> {
+            match self.mcu_hole {
+                Some(h) if h >= va && h - va < len => None,
+                _ => Some(at(va)),
+            }
+        }
+        fn clean(&self, _: usize, _: usize) {
+            unreachable!("the queue's memory is uncached")
+        }
+    }
+
+    impl GroupVm for Mcu {
+        fn cpu(&self, va: u64, len: u32) -> Option<usize> {
+            match self.vm_hole {
+                Some(h) if h >= va && h - va < u64::from(len) => None,
+                _ => Some(VM + va as usize),
+            }
+        }
+    }
+
+    const T6: Ident = Ident { shader_present: 0x50005, tiler_present: 1, as_present: 0xff, ..zero_ident() };
+    const fn zero_ident() -> Ident {
+        Ident {
+            gpu_id: 0,
+            l2_features: 0,
+            tiler_features: 0,
+            mem_features: 0,
+            mmu_features: 0,
+            as_present: 0,
+            csf_id: 0,
+            shader_present: 0,
+            tiler_present: 0,
+            l2_present: 0,
+            coherency_features: 0,
+            status: 0,
+            mcu_status: 0,
+        }
+    }
+
+    const SUSPEND_VA: u32 = 0x0510_0000;
+    const PROTM_SUSPEND_VA: u32 = 0x0518_0000;
+    const QUEUE: Queue = Queue {
+        ring_va: 0x1_0080_0000,
+        ring_size: 0x1000,
+        input_va: 0x0500_0000,
+        output_va: 0x0500_0000 + QUEUE_OUTPUT_OFFSET,
+        syncobj_va: 0x1_0090_0000,
+        priority: QUEUE_PRIORITY,
+    };
+
+    fn group() -> Group {
+        Group::all_cores(&T6, Some(SUSPEND_VA), Some(PROTM_SUSPEND_VA))
+    }
+
+    /// `start` on the model with the T6's group and `QUEUE`, counting the
+    /// microseconds slept.
+    fn run(mcu: &Mcu, csg: &Csg, g: &Group, q: &Queue) -> (Result<Started, Refused>, u64) {
+        let mut slept = 0u64;
+        let r = start(mcu, GPU, mcu, mcu, &T6, &iface(), csg, &cs0(), g, q, &mut |us| slept += u64::from(us));
+        (r, slept)
+    }
+
+    /// Each logged write by its field's name.
+    fn named(log: &[(usize, u32)]) -> Vec<(&'static str, u32)> {
+        let (ci, gi) = (at(CS_IN), at(CSG_IN));
+        let (inp, out) = (at(QUEUE.input_va), at(QUEUE.output_va));
+        let sync = VM + QUEUE.syncobj_va as usize;
+        let fields: Vec<(usize, &'static str)> = vec![
+            (sync, "sync.seqno"),
+            (sync + 4, "sync.seqno.hi"),
+            (sync + 8, "sync.status"),
+            (sync + 12, "sync.pad"),
+            (inp, "in.insert"),
+            (inp + 4, "in.insert.hi"),
+            (inp + 8, "in.extract"),
+            (inp + 12, "in.extract.hi"),
+            (out, "out.extract"),
+            (out + 4, "out.extract.hi"),
+            (out + 8, "out.active"),
+            (ci + offset_of!(CsInput, req), "cs.req"),
+            (ci + offset_of!(CsInput, config), "cs.config"),
+            (ci + offset_of!(CsInput, ack_irq_mask), "cs.ack_irq_mask"),
+            (ci + offset_of!(CsInput, ringbuf_base), "cs.ringbuf_base"),
+            (ci + offset_of!(CsInput, ringbuf_base) + 4, "cs.ringbuf_base.hi"),
+            (ci + offset_of!(CsInput, ringbuf_size), "cs.ringbuf_size"),
+            (ci + offset_of!(CsInput, ringbuf_input), "cs.ringbuf_input"),
+            (ci + offset_of!(CsInput, ringbuf_input) + 4, "cs.ringbuf_input.hi"),
+            (ci + offset_of!(CsInput, ringbuf_output), "cs.ringbuf_output"),
+            (ci + offset_of!(CsInput, ringbuf_output) + 4, "cs.ringbuf_output.hi"),
+            (gi + offset_of!(CsgInput, req), "csg.req"),
+            (gi + offset_of!(CsgInput, ack_irq_mask), "csg.ack_irq_mask"),
+            (gi + offset_of!(CsgInput, doorbell_req), "csg.doorbell_req"),
+            (gi + offset_of!(CsgInput, allow_compute), "csg.allow_compute"),
+            (gi + offset_of!(CsgInput, allow_compute) + 4, "csg.allow_compute.hi"),
+            (gi + offset_of!(CsgInput, allow_fragment), "csg.allow_fragment"),
+            (gi + offset_of!(CsgInput, allow_fragment) + 4, "csg.allow_fragment.hi"),
+            (gi + offset_of!(CsgInput, allow_other), "csg.allow_other"),
+            (gi + offset_of!(CsgInput, endpoint_req), "csg.endpoint_req"),
+            (gi + offset_of!(CsgInput, suspend_buf), "csg.suspend_buf"),
+            (gi + offset_of!(CsgInput, suspend_buf) + 4, "csg.suspend_buf.hi"),
+            (gi + offset_of!(CsgInput, protm_suspend_buf), "csg.protm_suspend_buf"),
+            (gi + offset_of!(CsgInput, protm_suspend_buf) + 4, "csg.protm_suspend_buf.hi"),
+            (gi + offset_of!(CsgInput, config), "csg.config"),
+            (at(GLB_IN) + offset_of!(GlbInput, doorbell_req), "glb.doorbell_req"),
+            (GPU + csf::doorbell(0), "doorbell 0"),
+            (GPU + csf::doorbell(CS_DOORBELL_ID), "doorbell 1"),
+        ];
+        log.iter().map(|&(a, v)| (fields.iter().find(|f| f.0 == a).map_or("?", |f| f.1), v)).collect()
+    }
+
+    /// panthor's sequence for one group with one stream in slot 0, as
+    /// sched.rs's doc lists it, with the T6's values: the zeroing at the
+    /// group's creation (panthor_sched.c:3539-3540, panthor_fw.c:463),
+    /// `cs_slot_prog_locked` (:1061-1079), `csg_slot_prog_locked`
+    /// (:1323-1345), the request (:2285-2291, 1850-1852) and the group's
+    /// doorbell (:1855, panthor_fw.c:1305-1311).
+    const PANTHOR_ORDER: [(&str, u32); 40] = [
+        ("sync.seqno", 0),
+        ("sync.seqno.hi", 0),
+        ("sync.status", 0),
+        ("sync.pad", 0),
+        ("in.insert", 0),
+        ("in.insert.hi", 0),
+        ("in.extract", 0),
+        ("in.extract.hi", 0),
+        ("out.extract", 0),
+        ("out.extract.hi", 0),
+        ("out.active", 0),
+        // :1061
+        ("in.extract", 0),
+        ("in.extract.hi", 0),
+        // :1064-1067
+        ("cs.ringbuf_base", 0x0080_0000),
+        ("cs.ringbuf_base.hi", 1),
+        ("cs.ringbuf_size", 0x1000),
+        ("cs.ringbuf_input", 0x0500_0000),
+        ("cs.ringbuf_input.hi", 0),
+        ("cs.ringbuf_output", 0x0500_1000),
+        ("cs.ringbuf_output.hi", 0),
+        // :1068-1079: priority 1, doorbell 1; ~0; START | IDLE_SYNC_WAIT |
+        // IDLE_EMPTY | EXTRACT_EVENT
+        ("cs.config", 0x0101),
+        ("cs.ack_irq_mask", 0xffff_ffff),
+        ("cs.req", 0x0511),
+        // :1323-1330: shader_present 0x50005, one tiler, 4/4/1 cores at 0xf, AS 1
+        ("csg.allow_compute", 0x50005),
+        ("csg.allow_compute.hi", 0),
+        ("csg.allow_fragment", 0x50005),
+        ("csg.allow_fragment.hi", 0),
+        ("csg.allow_other", 1),
+        ("csg.endpoint_req", 0xf001_0404),
+        ("csg.config", 1),
+        // :1332-1342
+        ("csg.suspend_buf", SUSPEND_VA),
+        ("csg.suspend_buf.hi", 0),
+        ("csg.protm_suspend_buf", PROTM_SUSPEND_VA),
+        ("csg.protm_suspend_buf.hi", 0),
+        // :1344-1345
+        ("csg.ack_irq_mask", 0xffff_ffff),
+        ("csg.doorbell_req", 1),
+        // :2285-2291, 1850-1852: START, ENDPOINT_CONFIG toggled from ack 0
+        ("csg.req", 0x11),
+        // :1855
+        ("glb.doorbell_req", 1),
+        ("doorbell 0", 1),
+        // (no more writes: the waits only read)
+        ("end", 0),
+    ];
+
+    #[test]
+    fn the_writes_follow_panthors_order() {
+        let mcu = Mcu::new();
+        let (r, _) = run(&mcu, &csg0(), &group(), &QUEUE);
+        assert!(r.is_ok(), "{r:?}");
+        let mut got = named(&mcu.log());
+        got.push(("end", 0));
+        assert_eq!(got, PANTHOR_ORDER);
+    }
+
+    #[test]
+    fn the_words_of_cs0_and_csg0_are_panthors() {
+        let mcu = Mcu::new();
+        let (r, _) = run(&mcu, &csg0(), &group(), &QUEUE);
+        let s = r.unwrap();
+        let w = |a: usize| mcu.word(a);
+        let (ci, gi) = (at(CS_IN), at(CSG_IN));
+        let cs = [
+            offset_of!(CsInput, req),
+            offset_of!(CsInput, config),
+            offset_of!(CsInput, ack_irq_mask),
+            offset_of!(CsInput, ringbuf_base),
+            offset_of!(CsInput, ringbuf_base) + 4,
+            offset_of!(CsInput, ringbuf_size),
+            offset_of!(CsInput, ringbuf_input),
+            offset_of!(CsInput, ringbuf_output),
+            // left as found
+            offset_of!(CsInput, heap_start),
+            offset_of!(CsInput, instr_config),
+        ]
+        .map(|f| w(ci + f));
+        assert_eq!(cs, [0x0511, 0x0101, !0, 0x0080_0000, 1, 0x1000, 0x0500_0000, 0x0500_1000, 0, 0]);
+        let csg = [
+            offset_of!(CsgInput, req),
+            offset_of!(CsgInput, ack_irq_mask),
+            offset_of!(CsgInput, doorbell_req),
+            offset_of!(CsgInput, cs_irq_ack),
+            offset_of!(CsgInput, allow_compute),
+            offset_of!(CsgInput, allow_fragment),
+            offset_of!(CsgInput, allow_other),
+            offset_of!(CsgInput, endpoint_req),
+            offset_of!(CsgInput, suspend_buf),
+            offset_of!(CsgInput, protm_suspend_buf),
+            offset_of!(CsgInput, config),
+            offset_of!(CsgInput, iter_trace_config),
+        ]
+        .map(|f| w(gi + f));
+        assert_eq!(csg, [0x11, !0, 1, 0, 0x50005, 0x50005, 1, 0xf001_0404, SUSPEND_VA, PROTM_SUSPEND_VA, 1, 0]);
+        assert_eq!(
+            s,
+            Started {
+                ring_cpu: VM + 0x1_0080_0000,
+                input_cpu: at(0x0500_0000),
+                output_cpu: at(0x0500_1000),
+                syncobj_cpu: VM + 0x1_0090_0000,
+                doorbell_id: 1,
+                cs_config: 0x0101,
+                cs_req: 0x0511,
+                cs_ack: 0x0511,
+                endpoint_req: 0xf001_0404,
+                csg_config: 1,
+                suspend_buf: SUSPEND_VA.into(),
+                protm_suspend_buf: PROTM_SUSPEND_VA.into(),
+                csg_doorbell_req: 1,
+                csg_req: 0x11,
+                csg_ack: 0x11,
+                glb_doorbell_req: 1,
+                priority: 0xf,
+                // the model answers the group 3 reads after the doorbell
+                // (on the second poll), the stream 2 reads after that (on
+                // its first)
+                csg_ack_us: 1,
+                cs_ack_us: 0,
+            }
+        );
+    }
+
+    #[test]
+    fn the_group_rings_doorbell_0_once_after_its_request_and_the_stream_none() {
+        let mcu = Mcu::new();
+        let (r, _) = run(&mcu, &csg0(), &group(), &QUEUE);
+        let s = r.unwrap();
+        let log = mcu.log();
+        let doorbells: Vec<_> = log.iter().enumerate().filter(|(_, (a, _))| *a < MEM).collect();
+        // only the global doorbell, the last write, right after the GLB
+        // doorbell_req toggle, which follows CSG 0's request
+        assert_eq!(doorbells, [(log.len() - 1, &(GPU + 0x80000, 1))]);
+        let names = named(&log);
+        assert_eq!(names[log.len() - 3..], [("csg.req", 0x11), ("glb.doorbell_req", 1), ("doorbell 0", 1)]);
+        // the stream's doorbell is CSG slot + 1, in its config, for the submit
+        assert_eq!((s.doorbell_id, s.cs_config >> 8 & 0xff), (1, 1));
+        assert_eq!(csf::doorbell(s.doorbell_id), 0x90000);
+        // the firmware took the group's doorbell and CS 0's
+        assert_eq!(mcu.word(at(GLB_OUT) + offset_of!(GlbOutput, doorbell_ack)), 1);
+        assert_eq!(mcu.word(at(CSG_OUT) + offset_of!(CsgOutput, doorbell_ack)), 1);
+    }
+
+    #[test]
+    fn a_csg_without_suspend_sizes_gets_no_buffers() {
+        let mcu = Mcu::new();
+        let csg = Csg { suspend_size: 0, protm_suspend_size: 0, ..csg0() };
+        let g = Group { suspend_buf: None, protm_suspend_buf: None, ..group() };
+        let s = run(&mcu, &csg, &g, &QUEUE).0.unwrap();
+        assert_eq!((s.suspend_buf, s.protm_suspend_buf), (0, 0));
+    }
+
+    #[test]
+    fn a_second_start_toggles_endpoint_config_against_the_ack() {
+        // ENDPOINT_CONFIG is a toggle: with the bit already acknowledged
+        // the request clears it (panthor_sched.c:2289-2291)
+        let mcu = Mcu::new();
+        mcu.put(at(CSG_IN) + offset_of!(CsgInput, req), CSG_ENDPOINT_CONFIG);
+        mcu.put(at(CSG_OUT) + offset_of!(CsgOutput, ack), CSG_ENDPOINT_CONFIG);
+        let s = run(&mcu, &csg0(), &group(), &QUEUE).0.unwrap();
+        assert_eq!((s.csg_req, s.csg_ack), (CSG_STATE_START, CSG_STATE_START));
+    }
+
+    /// A refusal before the first write: nothing written.
+    fn refused_before_writing(mcu: &Mcu, csg: &Csg, g: &Group, q: &Queue) -> Refused {
+        let (r, slept) = run(mcu, csg, g, q);
+        assert_eq!((mcu.log(), slept), (vec![], 0));
+        r.unwrap_err()
+    }
+
+    #[test]
+    fn a_ring_size_out_of_bounds_is_refused_before_any_write() {
+        for size in [0x800, 0x3000, 0x20000] {
+            let q = Queue { ring_size: size, ..QUEUE };
+            assert_eq!(refused_before_writing(&Mcu::new(), &csg0(), &group(), &q), (SchedRefusal::RingSize, size));
+        }
+    }
+
+    #[test]
+    fn an_unmapped_ring_is_refused_before_any_write() {
+        let mcu = Mcu { vm_hole: Some(QUEUE.ring_va + 0xff8), ..Mcu::new() };
+        assert_eq!(refused_before_writing(&mcu, &csg0(), &group(), &QUEUE), (SchedRefusal::RingUnmapped, 0x0080_0000));
+        // a 64 KiB ring reaches a hole a 4 KiB one does not
+        let mcu = Mcu { vm_hole: Some(QUEUE.ring_va + 0x8000), ..Mcu::new() };
+        let q = Queue { ring_size: 0x10000, ..QUEUE };
+        assert_eq!(refused_before_writing(&mcu, &csg0(), &group(), &q), (SchedRefusal::RingUnmapped, 0x0080_0000));
+    }
+
+    #[test]
+    fn unmapped_user_pages_are_refused_before_any_write() {
+        for va in [QUEUE.input_va, QUEUE.output_va + 0xffc] {
+            let mcu = Mcu { mcu_hole: Some(va), ..Mcu::new() };
+            let want = va & !0xfff;
+            assert_eq!(
+                refused_before_writing(&mcu, &csg0(), &group(), &QUEUE),
+                (SchedRefusal::UserPagesUnmapped, want)
+            );
+        }
+    }
+
+    #[test]
+    fn an_unmapped_sync_object_is_refused_before_any_write() {
+        let mcu = Mcu { vm_hole: Some(QUEUE.syncobj_va + 8), ..Mcu::new() };
+        assert_eq!(
+            refused_before_writing(&mcu, &csg0(), &group(), &QUEUE),
+            (SchedRefusal::SyncObjUnmapped, 0x0090_0000)
+        );
+    }
+
+    #[test]
+    fn a_missing_suspend_buffer_is_refused_before_any_write() {
+        let g = Group { suspend_buf: None, ..group() };
+        assert_eq!(
+            refused_before_writing(&Mcu::new(), &csg0(), &g, &QUEUE),
+            (SchedRefusal::SuspendBufMissing, SUSPEND_SIZE)
+        );
+        let g = Group { protm_suspend_buf: None, ..group() };
+        assert_eq!(
+            refused_before_writing(&Mcu::new(), &csg0(), &g, &QUEUE),
+            (SchedRefusal::SuspendBufMissing, PROTM_SUSPEND_SIZE)
+        );
+        // given, but AS0 does not map all of it
+        let mcu = Mcu { mcu_hole: Some(SUSPEND_VA + SUSPEND_SIZE - 4), ..Mcu::new() };
+        assert_eq!(
+            refused_before_writing(&mcu, &csg0(), &group(), &QUEUE),
+            (SchedRefusal::SuspendBufMissing, SUSPEND_SIZE)
+        );
+    }
+
+    #[test]
+    fn bad_group_and_queue_parameters_are_refused_before_any_write() {
+        let cases = [
+            (Group { compute_core_mask: 0x10_0000, ..group() }, QUEUE, (SchedRefusal::GroupCores, 1)),
+            (Group { tiler_core_mask: 2, ..group() }, QUEUE, (SchedRefusal::GroupCores, 3)),
+            (Group { max_fragment_cores: 5, ..group() }, QUEUE, (SchedRefusal::GroupCores, 5)),
+            (Group { max_tiler_cores: 2, ..group() }, QUEUE, (SchedRefusal::GroupCores, 6)),
+            (group(), Queue { priority: 0x10, ..QUEUE }, (SchedRefusal::QueuePriority, 0x10)),
+            (Group { priority: 0x10, ..group() }, QUEUE, (SchedRefusal::CsgPriority, 0x10)),
+            (Group { as_nr: 0, ..group() }, QUEUE, (SchedRefusal::AddressSpace, 0)),
+            (Group { as_nr: 8, ..group() }, QUEUE, (SchedRefusal::AddressSpace, 8)),
+            (Group { as_nr: 40, ..group() }, QUEUE, (SchedRefusal::AddressSpace, 40)),
+        ];
+        for (g, q, want) in cases {
+            assert_eq!(refused_before_writing(&Mcu::new(), &csg0(), &g, &q), want, "{g:?} {q:?}");
+        }
+        // a tiler field wider than CSG_EP_REQ_TILER's four bits
+        let id = Ident { tiler_present: 0xffff, ..T6 };
+        let g = Group { tiler_core_mask: 0xffff, max_tiler_cores: 16, ..group() };
+        assert_eq!(check_cores(&g, &id), Err((SchedRefusal::GroupCores, 7)));
+    }
+
+    #[test]
+    fn a_busy_slot_is_refused_before_any_write() {
+        let mcu = Mcu::new();
+        mcu.put(at(CSG_OUT) + offset_of!(CsgOutput, ack), 0x11);
+        assert_eq!(refused_before_writing(&mcu, &csg0(), &group(), &QUEUE), (SchedRefusal::CsgSlotBusy, 0x11));
+    }
+
+    #[test]
+    fn no_csg_ack_is_refused_after_the_whole_budget() {
+        let mcu = Mcu { never_ack: true, ..Mcu::new() };
+        let (r, slept) = run(&mcu, &csg0(), &group(), &QUEUE);
+        // nothing acknowledged: the state field's 0 bits agree with req's
+        // but count only all together (panthor_fw.c:1290-1291)
+        assert_eq!(r, Err((SchedRefusal::CsgStartAckTimeout, 0)));
+        // one poll per microsecond, 0 to the budget, each failing one followed by 1 µs
+        assert_eq!(slept, u64::from(CSG_ACK_WAIT_US) + 1);
+        // the sequence was written whole; the refusal wrote nothing more
+        assert_eq!(named(&mcu.log()), PANTHOR_ORDER[..PANTHOR_ORDER.len() - 1]);
+    }
+
+    #[test]
+    fn no_cs_ack_is_refused_with_the_ack_word() {
+        let mcu = Mcu { csg_only: true, ..Mcu::new() };
+        let (r, slept) = run(&mcu, &csg0(), &group(), &QUEUE);
+        assert_eq!(r, Err((SchedRefusal::CsStartAckTimeout, 0)));
+        // 1 µs for the group's acknowledge, then the stream's whole budget
+        assert_eq!(slept, 1 + u64::from(CS_ACK_WAIT_US) + 1);
+        assert_eq!(mcu.word(at(CSG_OUT) + offset_of!(CsgOutput, ack)), 0x11);
+    }
+
+    #[test]
+    fn a_fault_or_fatal_at_start_is_refused_with_its_word_not_acknowledged() {
+        let fault = Fault { event: CS_FAULT, word: 0x0012_3400 | EXCEPTION_CS_INHERIT_FAULT, info: 0xdead_beef };
+        let fatal = Fault { event: CS_FATAL, word: 0x0000_0100 | EXCEPTION_CS_UNRECOVERABLE, info: 0x1_0000_0000 };
+        for (f, want) in [(fault, SchedRefusal::CsFault), (fatal, SchedRefusal::CsFatal)] {
+            let mcu = Mcu { fault: Some(f), ..Mcu::new() };
+            let (r, _) = run(&mcu, &csg0(), &group(), &QUEUE);
+            assert_eq!(r, Err((want, f.word)));
+            // the event is left pending in req ^ ack: req not written again
+            let req = at(CS_IN) + offset_of!(CsInput, req);
+            assert_eq!(mcu.log().iter().filter(|w| w.0 == req).count(), 1);
+            let ack = mcu.word(at(CS_OUT) + offset_of!(CsOutput, ack));
+            assert_eq!((mcu.word(req) ^ ack) & CS_EVT_MASK, f.event);
+        }
+    }
+
+    #[test]
+    fn a_fatal_is_reported_before_a_fault_then_oom_then_protm() {
+        // panthor_sched.c:1586-1593's order
+        let mcu = Mcu::new();
+        let (o, i) = (at(CS_OUT), at(CS_IN));
+        mcu.put(o + offset_of!(CsOutput, fatal), 0x41);
+        mcu.put(o + offset_of!(CsOutput, fault), 0x4b);
+        mcu.put(o + offset_of!(CsOutput, heap_vt_start), 0x77);
+        let ack = o + offset_of!(CsOutput, ack);
+        let steps = [
+            (CS_FATAL | CS_FAULT | CS_TILER_OOM | CS_PROTM_PENDING, (SchedRefusal::CsFatal, 0x41)),
+            (CS_FAULT | CS_TILER_OOM | CS_PROTM_PENDING, (SchedRefusal::CsFault, 0x4b)),
+            (CS_TILER_OOM | CS_PROTM_PENDING, (SchedRefusal::TilerOom, 0x77)),
+            (CS_PROTM_PENDING, (SchedRefusal::ProtmPending, CS_PROTM_PENDING)),
+        ];
+        for (events, want) in steps {
+            mcu.put(ack, events);
+            assert_eq!(cs_events(&mcu, &cs0()), Err(want));
+        }
+        mcu.put(ack, 0);
+        mcu.put(i + offset_of!(CsInput, req), CS_STATE_START);
+        assert_eq!(cs_events(&mcu, &cs0()), Ok(()));
     }
 }
