@@ -1,0 +1,11 @@
+        PASS [   0.056s] (2048/2074) yakogl::es3_vertex_api client_array_with_a_vao_bound_is_invalid_operation
+        PASS [   0.027s] (2050/2074) yakogl::es3_vertex_api es2_build_refuses_the_es3_types_and_pnames
+        PASS [   0.050s] (2051/2074) yakogl::es3_vertex_api enable_disable_and_divisor_take_only_a_valid_index
+        PASS [   0.044s] (2052/2074) yakogl::es3_vertex_api float_current_values_default_and_fill_the_missing_components
+        PASS [   0.058s] (2053/2074) yakogl::es3_vertex_api get_vertex_attribiv_rounds_the_float_value_to_nearest
+        PASS [   0.054s] (2054/2074) yakogl::es3_vertex_api getter_errors_write_nothing
+        PASS [   0.046s] (2055/2074) yakogl::es3_vertex_api integer_current_value_setters_check_the_index
+        PASS [   0.029s] (2056/2074) yakogl::es3_vertex_api integer_current_values_round_trip_exactly
+        PASS [   0.028s] (2057/2074) yakogl::es3_vertex_api ipointer_records_an_integer_array_of_the_six_integer_types
+        PASS [   0.043s] (2058/2074) yakogl::es3_vertex_api pointer_bad_index_size_and_stride_are_invalid_value
+        PASS [   0.050s] (2059/2074) yakogl::es3_vertex_api pointer_bad_type_is_invalid_enum

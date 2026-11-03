@@ -1,0 +1,9 @@
+        PASS [   1.262s] (1/9) yakogl::v3d_lazy_raster_readers v3d::blit_framebuffer_from_the_target
+        PASS [   1.269s] (2/9) yakogl::v3d_lazy_raster_readers v3d::cpu_filtered_mipmap_then_read_level_1
+        PASS [   1.516s] (3/9) yakogl::v3d_lazy_raster_readers v3d::copy_tex_image_2d_from_the_target
+        PASS [   2.066s] (4/9) yakogl::v3d_lazy_raster_readers v3d::copy_tex_sub_image_2d_from_the_target
+        PASS [   2.331s] (5/9) yakogl::v3d_lazy_raster_readers v3d::read_pixels_after_a_second_render
+        PASS [   2.574s] (6/9) yakogl::v3d_lazy_raster_readers v3d::partial_tex_sub_image_2d_then_sample_then_read
+        PASS [   1.948s] (7/9) yakogl::v3d_lazy_raster_readers v3d::reattached_texture_rendered_on_half
+        PASS [   2.574s] (8/9) yakogl::v3d_lazy_raster_readers v3d::read_pixels_from_the_fbo
+        PASS [   1.424s] (9/9) yakogl::v3d_lazy_raster_readers v3d::the_render_stores_the_image_alone

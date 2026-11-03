@@ -1,0 +1,12 @@
+        PASS [   0.709s] (3291/3310) yakogl::stack_survey the_compilers_stack_by_phase_adversarial
+        PASS [   1.475s] (3293/3310) yakogl::stack_survey the_compilers_stack_by_phase_shaders_gl_test_es100
+        PASS [   2.721s] (3294/3310) yakogl::stack_survey the_compilers_stack_by_phase_shaders_es300
+        PASS [   3.630s] (3295/3310) yakogl::stack_survey the_compilers_stack_by_phase_shaders_femtovg
+        PASS [   1.137s] (3296/3310) yakogl::stack_survey the_compilers_stack_by_phase_shaders_internal
+        PASS [   1.117s] (3297/3310) yakogl::stack_survey the_compilers_stack_by_phase_shaders_top
+        PASS [   1.650s] (3298/3310) yakogl::stack_survey the_compilers_stack_by_phase_shaders_offarm
+        PASS [   6.375s] (3299/3310) yakogl::stack_survey the_compilers_stack_by_phase_shaders_gltest
+        PASS [   0.077s] (3300/3310) yakogl::stack_survey the_parts_cover_the_corpus
+        PASS [   4.443s] (3302/3310) yakogl::stack_survey the_compilers_stack_by_phase_table_vertex
+        PASS [  12.344s] (3309/3310) yakogl::stack_survey the_compilers_stack_by_phase_shaders_es100
+        PASS [  11.571s] (3310/3310) yakogl::stack_survey the_compilers_stack_by_phase_table_fragment

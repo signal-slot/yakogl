@@ -1,0 +1,2 @@
+        PASS [   0.045s] (2877/2966) yakogl::pvr_mipgen_program the_record_is_the_frame_loads_shape
+        PASS [   0.118s] (2879/2966) yakogl::pvr_mipgen_program the_mipmap_quad_samples_the_source_at_the_centre_of_its_own_texel

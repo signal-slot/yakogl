@@ -1,0 +1,3 @@
+        PASS [   0.194s] (2064/2074) yakogl::pvr_pds_once a_sample_rate_change_within_a_frame_keeps_each_rates_kick_program
+        PASS [   0.157s] (2065/2074) yakogl::pvr_pds_once one_program_generates_its_kick_and_coefficient_programs_once_a_frame
+        PASS [   0.098s] (2066/2074) yakogl::pvr_pds_once two_alternating_programs_generate_two_of_each_a_frame

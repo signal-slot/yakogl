@@ -1,0 +1,8 @@
+        PASS [   0.013s] (1/8) yakogl::es3_formats_v3d an_isampler_reads_16_bit_channels_sign_extended
+        PASS [   0.015s] (2/8) yakogl::es3_formats_v3d a_32_bit_integer_texture_reads_its_words_whole
+        PASS [   0.021s] (3/8) yakogl::es3_formats_v3d a_usampler_reads_16_bit_channels_zero_extended
+        PASS [   0.029s] (4/8) yakogl::es3_formats_v3d an_rgba32f_texture_reads_32_bit_floats
+        PASS [   0.021s] (5/8) yakogl::es3_formats_v3d the_depth_binding_is_unchanged
+        PASS [   0.019s] (6/8) yakogl::es3_formats_v3d the_sampled_mask_is_the_rows
+        PASS [   1.206s] (7/8) yakogl::es3_formats_v3d each_class_is_mesas_row_in_rust_and_in_c
+        PASS [   1.245s] (8/8) yakogl::es3_formats_v3d each_classs_record_carries_its_type_and_swizzle

@@ -1,0 +1,12 @@
+        PASS [   0.061s] (2713/2966) yakogl::es2_fragdata gl_api::invalid_assign_to_1
+        PASS [   0.051s] (2714/2966) yakogl::es2_fragdata gl_api::invalid_assign_to_1_requirements_let_the_case_run
+        PASS [   0.058s] (2715/2966) yakogl::es2_fragdata gl_api::valid_dynamic_index
+        PASS [   0.061s] (2716/2966) yakogl::es2_fragdata gl_api::valid_static_index
+        PASS [   0.059s] (2717/2966) yakogl::es2_fragdata gl_api::valid_uniform_index
+        PASS [   0.050s] (2718/2966) yakogl::es2_fragdata gl_api::write_fragcolor_and_fragdata
+        PASS [   0.031s] (2719/2966) yakogl::es2_fragdata invalid_assign_to_1
+        PASS [   0.038s] (2720/2966) yakogl::es2_fragdata gl_max_draw_buffers_is_one_in_the_es2_report
+        PASS [   0.038s] (2721/2966) yakogl::es2_fragdata valid_dynamic_index
+        PASS [   0.035s] (2722/2966) yakogl::es2_fragdata valid_uniform_index
+        PASS [   0.042s] (2723/2966) yakogl::es2_fragdata valid_static_index
+        PASS [   0.048s] (2724/2966) yakogl::es2_fragdata write_fragcolor_and_fragdata

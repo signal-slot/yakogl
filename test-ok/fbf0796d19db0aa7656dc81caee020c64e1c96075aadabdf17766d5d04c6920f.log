@@ -1,0 +1,4 @@
+        PASS [   2.252s] (1/4) yakogl::v3d_glmark2_mem the_recorded_request_sizes_are_the_real_layouts
+        PASS [   2.477s] (2/4) yakogl::v3d_glmark2_mem the_48_mib_control_reproduces_the_recorded_refusals
+        PASS [   2.545s] (3/4) yakogl::v3d_glmark2_mem every_large_allocation_fits_the_96_mib_carve_out
+        PASS [   2.940s] (4/4) yakogl::v3d_glmark2_mem refract_with_the_colour_chain_copy_fits_the_96_mib_carve_out

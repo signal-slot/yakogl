@@ -1,0 +1,9 @@
+        PASS [   1.995s] (1/9) yakogl::v3d_depth_storage generate_mipmap_is_refused_and_copy_tex_sub_image_settles_a_depth_texture
+        PASS [   2.337s] (2/9) yakogl::v3d_depth_storage never_rendered_then_sampled_allocates_cleared_texels
+        PASS [   2.787s] (3/9) yakogl::v3d_depth_storage refract_like_carve_out_high_water
+        PASS [   2.841s] (4/9) yakogl::v3d_depth_storage a_level_above_zero_grows_the_chain_and_resolves_the_rendered_depth
+        PASS [   1.510s] (5/9) yakogl::v3d_depth_storage rendered_then_read_on_the_cpu_resolves_into_the_storage
+        PASS [   1.382s] (6/9) yakogl::v3d_depth_storage rendered_then_sampled_compares_like_the_stored_depth
+        PASS [   1.096s] (7/9) yakogl::v3d_depth_storage respecifying_a_depth_texture_keeps_it_a_working_target_or_makes_it_colour
+        PASS [   1.351s] (8/9) yakogl::v3d_depth_storage shadow_like_carve_out_high_water
+        PASS [   1.122s] (9/9) yakogl::v3d_depth_storage uploaded_then_sampled_reads_the_uploaded_texels

@@ -1,0 +1,15 @@
+        PASS [   0.045s] (2196/2265) yakogl::es3_sized_formats a_source_the_format_does_not_name_is_refused_by_the_converter
+        PASS [   0.040s] (2198/2265) yakogl::es3_sized_formats bytes_per_texel_of_every_pair
+        PASS [   0.047s] (2199/2265) yakogl::es3_sized_formats completeness_follows_the_filters
+        PASS [   0.039s] (2200/2265) yakogl::es3_sized_formats every_format_converts_into_every_class_it_may_be_stored_in
+        PASS [   0.068s] (2201/2265) yakogl::es3_sized_formats half_and_small_float_conversions
+        PASS [   0.048s] (2202/2265) yakogl::es3_sized_formats integer_conversion
+        PASS [   0.057s] (2203/2265) yakogl::es3_sized_formats packed_float_conversion
+        PASS [   0.059s] (2204/2265) yakogl::es3_sized_formats report_es2_has_no_such_formats
+        PASS [   0.060s] (2205/2265) yakogl::es3_sized_formats shared_exponent_reference_values
+        PASS [   0.061s] (2206/2265) yakogl::es3_sized_formats snorm_conversion
+        PASS [   0.070s] (2207/2265) yakogl::es3_sized_formats storage_per_gpu_and_the_refusals
+        PASS [   0.077s] (2208/2265) yakogl::es3_sized_formats ten_bit_conversion
+        PASS [   0.066s] (2209/2265) yakogl::es3_sized_formats the_accept_matrix_is_table_3_2
+        PASS [   0.040s] (2210/2265) yakogl::es3_sized_formats the_formats_a_back_end_refuses_to_upload_are_listed
+        PASS [   0.049s] (2211/2265) yakogl::es3_sized_formats the_table_is_consistent

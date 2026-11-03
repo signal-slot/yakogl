@@ -1,0 +1,31 @@
+check.sh: 2 compiler slot(s) (7231 MB available, 3072 MB each, 4 cores)
+[32mok    cargo fmt --check [14s][0m
+[32mok    build   yakogl-capi (no_std) [44s][0m
+[32mok    clippy  host-test,gpu-powervr [108s][0m
+[32mok    test    host-test,gpu-powervr [1250s][0m
+[32mok    clippy  host-test,gpu-powervr,report-es2 [753s][0m
+[32mok    test    host-test,gpu-powervr,report-es2 [422s][0m
+[32mok    clippy  host-test,gpu-vivante [1s][0m
+[32mok    test    host-test,gpu-vivante [1393s][0m
+[32mok    clippy  host-test,gpu-powervr,shaderc-online [140s][0m
+[32mok    test    host-test,gpu-powervr,shaderc-online [1437s][0m
+[32mok    clippy  host-test,gpu-vivante,shaderc-online [2s][0m
+[32mok    test    host-test,gpu-vivante,shaderc-online [232s][0m
+[32mok    clippy  host-test,gpu-powervr,shaderc-online,report-es2 [343s][0m
+[32mok    test    host-test,gpu-powervr,shaderc-online,report-es2 [1872s][0m
+[32mok    clippy  host-test,gpu-vivante,shaderc-online,report-es2 [1435s][0m
+[32mok    test    host-test,gpu-vivante,shaderc-online,report-es2 [128s][0m
+[32mok    gen     precompiled tables for the tier configurations [15s][0m
+[32mok    clippy  host-test,gpu-powervr,shaderc-online,precompiled-shaders [314s][0m
+[32mok    test    host-test,gpu-powervr,shaderc-online,precompiled-shaders [2287s][0m
+[32mok    clippy  host-test,gpu-vivante,shaderc-online,precompiled-shaders [1752s][0m
+[32mok    test    host-test,gpu-vivante,shaderc-online,precompiled-shaders [189s][0m
+[32mok    clippy  host-test,gpu-powervr,precompiled-shaders,no-shader-table (no compiler; lib and its tests) [0s][0m
+[32mok    test    host-test,gpu-powervr,precompiled-shaders,no-shader-table (no compiler: shaderc::precompiled) [2s][0m
+[32mok    clippy  host-test,gpu-vivante,precompiled-shaders,no-shader-table (no compiler; lib and its tests) [0s][0m
+[32mok    test    host-test,gpu-vivante,precompiled-shaders,no-shader-table (no compiler: shaderc::precompiled) [1s][0m
+[32mok    clippy  host-test,gpu-vivante,shaderc-online,no-shader-table (no tests: see BUILD_ONLY_CONFIGS) [1s][0m
+[32mok    clippy  host-test,gpu-powervr,shaderc-online,no-shader-table (no tests: see BUILD_ONLY_CONFIGS) [0s][0m
+[32mok    clippy  host-test,gpu-vivante,shaderc-online,test-knobs [1s][0m
+[32mok    test    host-test,gpu-vivante,shaderc-online,test-knobs (--lib, 10 knob tests by name) [43s][0m
+[32mok    test    host-test,gpu-vivante,shaderc-online,test-knobs (tests/gc_kick_diff.rs, 7 tests) [0s][0m

@@ -1,0 +1,3 @@
+        PASS [   0.055s] (2066/2135) yakogl::es3_int_rt_gc every_integer_surface_takes_the_rnndb_pe_format_and_output_mode
+        PASS [   0.068s] (2067/2135) yakogl::es3_int_rt_gc the_new_register_constants_are_the_rnndb_values
+        PASS [   0.032s] (2068/2135) yakogl::es3_int_rt_gc the_other_surfaces_are_unchanged

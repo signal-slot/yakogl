@@ -1,0 +1,2 @@
+        PASS [   1.023s] (1/2) yakogl::depth_resolve_v3d a_gl_less_draw_after_gltexsubimage2d_starts_from_the_uploaded_depth
+        PASS [   1.122s] (2/2) yakogl::depth_resolve_v3d shadows_depth_texture_is_sampled_from_its_buffer_with_no_cpu_resolve_a_frame

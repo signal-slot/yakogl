@@ -1,0 +1,38 @@
+
+running 33 tests
+test gpu::pvr::pool::tests::a_double_free_never_hands_one_range_to_two_callers ... ok
+test gpu::pvr::pool::tests::a_double_free_is_refused_in_the_table_and_on_the_chain ... ok
+test gpu::pvr::pool::tests::a_full_table_chains_and_merging_gives_one_range ... ok
+test gpu::pvr::pool::tests::a_free_outside_the_top_region_is_dropped ... ok
+test gpu::pvr::pool::tests::a_large_general_block_comes_from_the_top_and_a_small_one_from_the_bump ... ok
+test gpu::pvr::pool::tests::a_large_request_reuses_a_freed_top_range_first ... ok
+test gpu::pvr::pool::tests::a_refused_allocation_moves_no_cursor ... ok
+test gpu::pvr::pool::tests::an_emptied_slot_takes_the_chains_head ... ok
+test gpu::pvr::pool::tests::an_exhaustion_prints_the_summary_after_the_bumps_line ... ok
+test gpu::pvr::pool::tests::an_overwritten_chain_header_cuts_the_chain ... ok
+test gpu::pvr::pool::tests::best_fit_reaches_the_chain_and_keeps_the_rest ... ok
+test gpu::pvr::pool::tests::exact_reuse_and_split ... ok
+test gpu::pvr::pool::tests::foreign_and_unmapped_blocks_are_counted_as_dropped ... ok
+test gpu::pvr::pool::tests::freed_top_blocks_merge_and_give_the_gap_back_whole ... ok
+test gpu::pvr::pool::tests::known_wrong_a_block_of_another_heap_in_between_splits_the_free_space_for_good ... ok
+test gpu::pvr::pool::tests::neighbours_on_both_sides_are_absorbed ... ok
+test gpu::pvr::pool::tests::a_random_run_over_three_heaps_conserves_each_heap ... ok
+test gpu::pvr::pool::tests::a_random_run_conserves_the_pool ... ok
+test gpu::pvr::pool::tests::replay::carveout::glmark2_before_npot_chains_fits_64_mib ... ok
+test gpu::pvr::pool::tests::replay::carveout::glmark2_npot_chains_at_64_mib_are_refused_for_want_of_memory ... ok
+test gpu::pvr::pool::tests::a_random_run_with_the_top_region_conserves_and_ends_whole ... ok
+test gpu::pvr::pool::tests::replay::carveout::glmark2_fits_the_glmark2_images_carveout ... ok
+test gpu::pvr::pool::tests::replay::carveout::the_replay_matches_the_256_mib_board_run ... ok
+test gpu::pvr::pool::tests::replay::the_frame_sets_general_arenas_are_the_top_regions_first_blocks ... ok
+test gpu::pvr::pool::tests::replay::carveout::the_freelist_grow_pool_takes_a_quarter_from_128_mib ... ok
+test gpu::pvr::pool::tests::rollback_returns_the_newest_block_to_the_bump_only_when_on ... ok
+test gpu::pvr::pool::tests::the_bump_stops_at_the_floor_and_a_small_request_falls_back_to_a_top_range ... ok
+test gpu::pvr::pool::tests::the_run_end_report_is_the_summary_at_inf ... ok
+test gpu::pvr::pool::tests::the_rust_pool_replays_the_c_pools_golden_trace ... ok
+test gpu::pvr::pool::tests::with_the_top_region_on_the_golden_trace_replays_to_equality ... ok
+test gpu::pvr::pool::tests::replay::the_slint_and_cluster_sequences_are_served_with_the_top_region_as_without ... ok
+test gpu::pvr::pool::tests::replay::glmark2_without_the_top_region_has_no_range_for_refract_and_refuses_its_depth_buffer ... ok
+test gpu::pvr::pool::tests::replay::glmark2_with_the_top_region_fits_refract_after_shadow_and_terrain ... ok
+
+test result: ok. 33 passed; 0 failed; 0 ignored; 0 measured; 461 filtered out; finished in 5.03s
+

@@ -1,0 +1,6 @@
+        PASS [   0.028s] (3128/3433) yakogl::es3_pvr_fragdepth depth_with_discard_is_refused
+        PASS [   0.058s] (3129/3433) yakogl::es3_pvr_fragdepth depth_with_an_integer_render_target_is_refused
+        PASS [   0.034s] (3130/3433) yakogl::es3_pvr_fragdepth no_depth_write_no_depthf
+        PASS [   0.046s] (3131/3433) yakogl::es3_pvr_fragdepth depth_with_several_srgb_attachments_is_refused
+        PASS [   0.057s] (3132/3433) yakogl::es3_pvr_fragdepth sampler_flavours_and_depth_output_are_independent
+        PASS [   0.060s] (3133/3433) yakogl::es3_pvr_fragdepth written_depth_is_clamped_and_fed_back

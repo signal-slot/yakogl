@@ -1,0 +1,243 @@
+check.sh: --changed HEAD: 1 path(s), scopes: drivers 
+check.sh: 2 compiler slot(s) (7082 MB available, 3072 MB each, 4 cores)
+[32mok    cargo fmt --check [9s][0m
+[2mskip  build   yakogl-capi (no_std)[0m
+[2mskip  clippy  host-test,gpu-powervr[0m
+[2mskip  test    host-test,gpu-powervr[0m
+[2mskip  clippy  host-test,gpu-powervr,report-es2[0m
+[2mskip  test    host-test,gpu-powervr,report-es2[0m
+[2mskip  clippy  host-test,gpu-vivante[0m
+[2mskip  test    host-test,gpu-vivante[0m
+[2mskip  clippy  host-test,gpu-powervr,shaderc-online[0m
+[2mskip  test    host-test,gpu-powervr,shaderc-online[0m
+[2mskip  clippy  host-test,gpu-vivante,shaderc-online[0m
+[2mskip  test    host-test,gpu-vivante,shaderc-online[0m
+[2mskip  clippy  host-test,gpu-powervr,shaderc-online,report-es2[0m
+[2mskip  test    host-test,gpu-powervr,shaderc-online,report-es2[0m
+[2mskip  clippy  host-test,gpu-vivante,shaderc-online,report-es2[0m
+[2mskip  test    host-test,gpu-vivante,shaderc-online,report-es2[0m
+[2mskip  clippy  host-test,gpu-powervr,shaderc-online,precompiled-shaders[0m
+[2mskip  test    host-test,gpu-powervr,shaderc-online,precompiled-shaders[0m
+[2mskip  clippy  host-test,gpu-vivante,shaderc-online,precompiled-shaders[0m
+[2mskip  test    host-test,gpu-vivante,shaderc-online,precompiled-shaders[0m
+[2mskip  clippy  host-test,gpu-powervr,precompiled-shaders,no-shader-table (no compiler; lib and its tests)[0m
+[2mskip  test    host-test,gpu-powervr,precompiled-shaders,no-shader-table (no compiler: shaderc::precompiled)[0m
+[2mskip  clippy  host-test,gpu-vivante,precompiled-shaders,no-shader-table (no compiler; lib and its tests)[0m
+[2mskip  test    host-test,gpu-vivante,precompiled-shaders,no-shader-table (no compiler: shaderc::precompiled)[0m
+[2mskip  clippy  host-test,gpu-vivante,shaderc-online,no-shader-table (no tests: see BUILD_ONLY_CONFIGS)[0m
+[2mskip  clippy  host-test,gpu-powervr,shaderc-online,no-shader-table (no tests: see BUILD_ONLY_CONFIGS)[0m
+[2mskip  clippy  host-test,gpu-vivante,shaderc-online,test-knobs[0m
+[2mskip  test    host-test,gpu-vivante,shaderc-online,test-knobs (--lib, 10 knob tests by name)[0m
+[2mskip  test    host-test,gpu-vivante,shaderc-online,test-knobs (tests/gc_kick_diff.rs, 7 tests)[0m
+[2mskip  clippy  host-test,gpu-powervr,shaderc-online,test-knobs[0m
+[2mskip  test    host-test,gpu-powervr,shaderc-online,test-knobs (--lib, 9 knob tests by name)[0m
+[2mskip  clippy  host-test,gpu-v3d,shaderc-online,no-shader-table[0m
+[2mskip  test    host-test,gpu-v3d,shaderc-online,no-shader-table (--lib, GL suite on the online compiler)[0m
+[2mskip  test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_sim_mesa.rs)[0m
+[2mskip  test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_cube_noseamless.rs)[0m
+[2mskip  test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_clear.rs)[0m
+[2mskip  test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_glmark2_mem.rs)[0m
+[2mskip  test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_rt_sample.rs)[0m
+[2mskip  test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/depth_resolve_v3d.rs)[0m
+[2mskip  test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/mipmap_offer_guard.rs)[0m
+[2mskip  test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_tfu_host.rs)[0m
+[2mskip  test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_tfu_mipmap_nowait.rs)[0m
+[2mskip  test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_lazy_raster_readers.rs)[0m
+[2mskip  test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_depth_storage.rs)[0m
+[2mskip  test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_uniform_host.rs)[0m
+[2mskip  test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_int_rt.rs)[0m
+[2mskip  test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_int_rt_v3d.rs)[0m
+[2mskip  test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_formats_v3d.rs)[0m
+[2mskip  test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_shaderc_v3d.rs)[0m
+[2mskip  test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_tf_api.rs)[0m
+[2mskip  test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_srgb.rs)[0m
+[2mskip  test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_occlusion_gl.rs)[0m
+[2mskip  test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_mrt_gl.rs)[0m
+[2mskip  test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/egl_bench_configs.rs)[0m
+[2mskip  test    host-test,gpu-powervr,shaderc-online (tests/es3_vertex_arrays.rs)[0m
+[2mskip  test    host-test,gpu-powervr,shaderc-online (tests/es3_pvr_2darray.rs)[0m
+[2mskip  test    host-test,gpu-powervr,shaderc-online (tests/es3_pvr_shadow.rs)[0m
+[2mskip  test    host-test,gpu-powervr,shaderc-online (tests/es3_pvr_3d.rs)[0m
+[2mskip  test    host-test,gpu-powervr,shaderc-online (tests/es3_pvr_fragdepth.rs)[0m
+[2mskip  clippy  host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2[0m
+[2mskip  test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (--lib shaderc::online::v3d)[0m
+[2mskip  test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (--lib v3d::backend_tests, separate depth/stencil)[0m
+[2mskip  test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (tests/v3d_sim_mesa.rs)[0m
+[2mskip  test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (tests/v3d_cube_noseamless.rs)[0m
+[2mskip  test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (tests/v3d_clear.rs)[0m
+[2mskip  test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (tests/es3_int_rt.rs)[0m
+[2mskip  test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (tests/es3_tf_api.rs)[0m
+[2mskip  test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (tests/es3_srgb.rs)[0m
+[2mskip  test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (tests/es3_occlusion_gl.rs)[0m
+[2mskip  test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (tests/es3_mrt_gl.rs)[0m
+[2mskip  clippy  host-test,gpu-mali,shaderc-online,no-shader-table[0m
+[2mskip  test    host-test,gpu-mali,shaderc-online,no-shader-table (--lib mali::, 345 tests: packers and ISA vs Mesa and the board)[0m
+[2mskip  gen     src/mali/genxml == tools/mali/gen_pack_rs.py on third_party v10.xml[0m
+[2mskip  gen     src/shaderc/online/mali/isa/v10.rs == tools/mali/gen_isa_rs.py on third_party[0m
+[2mskip  gen     driver/src/v3d/generated == Mesa's generators on third_party[0m
+[2mskip  gen     driver/src/pvr/generated == Mesa's csbgen on third_party[0m
+[32mok    sha256  third_party files are the upstream files (UPSTREAM) [0s][0m
+[2mskip  cc      v3d FFI layout pins[0m
+[2mskip  cc      v3d job builder[0m
+[2mskip  cc      v3d textures[0m
+[2mskip  run     v3d tex_filter_ref_check (dEQP's filters, the LINEAR plan)[0m
+[2mskip  run     v3d tex_tiling_bench_check (the tiling-time harness)[0m
+[2mskip  run     v3d tfu_case_check (the TFU probe, case 140)[0m
+[2mskip  run     pvr vdm_field_check (VDM/PPP fields refuse, never mask)[0m
+[2mskip  run     pvr render_regs_check (csbgen register words = the former literals)[0m
+[2mskip  run     pvr ddk_abi_check (FWIF numbers = the vendored DDK 25.2 headers)[0m
+[2mskip  run     v3d hw_mock_test (v3d_hw.c against the register model)[0m
+[31mFAIL  run     pvr rgxlayer_check (DDK RGXStart/RGXStop/image loader on the Rust rgxlayer) [1s][0m
+/usr/bin/x86_64-linux-gnu-ld.bfd: build/pvr-check/rgx-target/debug/libyakogl_drivers.a(core-7832d2fe4fa07f06.core.5d050ae3161daf4c-cgu.0.rcgu.o):(.data.DW.ref._RNvCs6EUDi8WbMwz_7___rustc19rust_eh_personality[DW.ref._RNvCs6EUDi8WbMwz_7___rustc19rust_eh_personality]+0x0): undefined reference to `__rustc::rust_eh_personality'
+collect2: error: ld returned 1 exit status
+(whole output: build/check-fail/669926/1.log)
+[31mFAIL  run     pvr km_check (the Rust kernel side = the C it replaced; layouts = the DDK headers) [0s][0m
+/usr/bin/x86_64-linux-gnu-ld.bfd: build/pvr-check/rgx-target/debug/libyakogl_drivers.a(core-7832d2fe4fa07f06.core.5d050ae3161daf4c-cgu.0.rcgu.o):(.data.DW.ref._RNvCs6EUDi8WbMwz_7___rustc19rust_eh_personality[DW.ref._RNvCs6EUDi8WbMwz_7___rustc19rust_eh_personality]+0x0): undefined reference to `__rustc::rust_eh_personality'
+collect2: error: ld returned 1 exit status
+(whole output: build/check-fail/669926/2.log)
+[2mskip  run     v3d tex_upload_check (eager copy = lazy copy)[0m
+[2mskip  run     v3d osal_frees_check (frees back at once with no job open)[0m
+[2mskip  run     v3d osal_granules_check (the carve-out's first fit, small blocks from the top, the STRESS1D replay)[0m
+[2mskip  run     osal pending_frees_check (a full queue waits, never leaks silently)[0m
+[2mskip  run     gc7000 osal_frees_check (frees back at once with no frame open)[0m
+[2mskip  run     osal_bounds_check (gpu_write/gpu_read refuse a wrapped range)[0m
+[2mskip  run     osal_log_check (a 255-byte log line survives the Zephyr OSAL buffer)[0m
+[2mskip  run     baremetal_config_check (init refuses without a complete board)[0m
+[2mskip  run     linux osal linux_heap_check (finite range, reuse, no overlap)[0m
+[2mskip  build   v3d mesa reference (tools/v3d/mesa_ref.sh)[0m
+[2mskip  run     v3d tex_check (against Mesa 26.2.1)[0m
+[2mskip  run     v3d cl_golden (against Mesa 26.2.1)[0m
+[2mskip  run     v3d job_check (against Mesa 26.2.1)[0m
+[2mskip  run     mali pan_ref_diff and ref_cases self-test (no Mesa tree)[0m
+[2mskip  run     mali sweep_passsets self-test[0m
+[2mskip  run     mali pan_shc == Mesa 26.2.1 GL driver on the tri pair (MESA_PAN_TREE)[0m
+[2mskip  cc      gl_test.c -DGL_TEST_HOST=1[0m
+[2mskip  cc      gl_test.c -DGL_TEST_HOST=1 -DYAKOGL_TEST_KNOBS=1[0m
+[2mskip  cc      gl_test.c -DGL_TEST_USER=1 -DYAKOGL_GPU_VIVANTE=1[0m
+[2mskip  cc      gl_test.c -DGL_TEST_USER=1 -DYAKOGL_GPU_VIVANTE=1 -DYAKOGL_TEST_KNOBS=1[0m
+[2mskip  run     gl_test case 44 probe decode[0m
+[2mskip  run     backend.h yakogl_heap_base without a heap_base (0, as the Rust side)[0m
+[2mskip  gen     gl_test_shaders{,_es100}.h == gen_gl_test_shaders.py on tools/shaders[0m
+[32mok    test    pvr render pool (Rust; the C pool's golden trace replayed, 33 tests) [5s][0m
+[2mskip  run     am62p rti_arm_check (60 s preload per reported RTI clock rate)[0m
+[2mskip  clippy  yakogl-gltest-runner[0m
+[2mskip  test    yakogl-gltest-runner (gl_test's lines and count)[0m
+[2mskip  clippy  osal-zephyr,gpu-vivante,shaderc-online,no-shader-table (aarch64-unknown-none, no host-test)[0m
+[2mskip  clippy  osal-zephyr,gpu-powervr,shaderc-online,no-shader-table (aarch64-unknown-none, no host-test)[0m
+[2mskip  clippy  osal-zephyr,gpu-v3d,shaderc-online,no-shader-table (aarch64-unknown-none, no host-test)[0m
+[2mskip  clippy  osal-zephyr,gpu-mali,shaderc-online,no-shader-table (aarch64-unknown-none, no host-test)[0m
+[2mskip  clippy  yakogl-gltest-runner (aarch64-unknown-none)[0m
+[2mskip  check   osal-zephyr,gpu-powervr,precompiled-shaders (aarch64-unknown-none, no compiler)[0m
+[2mskip  tools   fault-record decoder self-test[0m
+[2mskip  tools   fault-record matches its writer[0m
+[2mskip  tools   shader-table generator guards[0m
+[2mskip  tools   gl_test shader sources have table rows[0m
+[2mskip  tools   precompiled.list gl_test pairs == what gl_test.c links[0m
+[2mskip  gen     driver/src/pvr_usc_*_blob.h == tools/pco_shc/usc_blobs.txt[0m
+[2mskip  tools   deqp-uart-tally log verdicts[0m
+[2mskip  tools   common-tally row verdicts[0m
+[2mskip  tools   qpa-from-uart rebuild verdicts[0m
+[2mskip  tools   am62p netboot TFTP server[0m
+[2mskip  tools   am62p netboot UART phases[0m
+[2mskip  tools   am62p-mkboot u-boot.img and boot partition[0m
+[2mskip  tools   am62p second stage: mkboot images decoded by the loader's Rust[0m
+[2mskip  tools   gles3-mustpass: 42,810 cases, sorted, unique, all GLES3[0m
+[2mskip  tools   am62p-gles3-tree: generator self-test and table check[0m
+[2mskip  tools   cts-selftest.sh (the CTS tools' checks, images-selftest included)[0m
+[32mok    tools   licence audit (SPDX header or allowlist row for every tracked file) [1s][0m
+[2mskip  tools   glmark2 compare-selftest.sh (before/after profile table)[0m
+[2mskip  tools   api_coverage.py self-test[0m
+[2mskip  tools   api coverage: gl2.h + egl.h vs exported vs eglGetProcAddress[0m
+[2mskip  tools   api coverage: 0 ES 2.0 core + 0 EGL 1.x core entry points missing from the exports[0m
+[2mskip  tools   board-sudo-setup.sh --dry-run runs from a clean environment[0m
+[2mskip  no table in the artefact[0m
+[2mskip  no Mesa reference in the artefact[0m
+[2mskip  no test knob in the artefact[0m
+[2mskip  clippy  yakogl-tools[0m
+[2mskip  test    yakogl-tools[0m
+[2mskip  clippy  yakogl-mali-panthor[0m
+[2mskip  test    yakogl-mali-panthor[0m
+[2mskip  clippy  yakogl-mali-panthor (aarch64-unknown-linux-gnu)[0m
+[2mskip  clippy  yakogl-precompile gpu-powervr[0m
+[2mskip  clippy  yakogl-precompile gpu-vivante[0m
+[2mskip  clippy  yakogl-precompile gpu-powervr,report-es2[0m
+[2mskip  clippy  yakogl-precompile gpu-vivante,report-es2[0m
+[2mskip  test    yakogl-precompile gpu-powervr[0m
+[2mskip  test    yakogl-precompile gpu-vivante[0m
+[2mskip  gen     src/pvr/internal.rs == yakogl-precompile --internal (our compiler)[0m
+[2mskip  gen     src/vivante/internal.rs == yakogl-precompile --internal (our compiler)[0m
+[2mskip  tools   board.sh dry-run matrix and replays[0m
+[32mok    tools   board_lock.sh: a refusal names the holder; nanopc-t6.sh never waits [3s][0m
+[2mskip  host    imx8mp latch model: waits per swap (passed on main 36bc1f130006)[0m
+      ok    app=panel osal=unwired buffers=1 view=0 interval=1 periods/frame=1.00 latches/frame=1.00 inplace-draws=0 (expected 1)
+      ok    app=panel osal=wired buffers=1 view=0 interval=1 periods/frame=1.00 latches/frame=1.00 inplace-draws=0 (expected 1)
+      ok    app=panel osal=unwired buffers=2 view=0 interval=1 periods/frame=1.00 latches/frame=1.00 inplace-draws=0 (expected 1)
+      ok    app=panel osal=wired buffers=2 view=0 interval=1 periods/frame=1.00 latches/frame=1.00 inplace-draws=0 (expected 1)
+      ok    app=panel osal=unwired buffers=3 view=0 interval=1 periods/frame=1.00 latches/frame=1.00 inplace-draws=0 (expected 1)
+      ok    app=panel osal=wired buffers=3 view=0 interval=1 periods/frame=1.00 latches/frame=1.00 inplace-draws=0 (expected 1)
+      ok    app=view osal=unwired buffers=1 view=1 interval=1 periods/frame=1.00 latches/frame=1.00 inplace-draws=0 (expected 1)
+      ok    app=view osal=wired buffers=1 view=1 interval=1 periods/frame=1.00 latches/frame=1.00 inplace-draws=0 (expected 1)
+      ok    app=view osal=unwired buffers=2 view=1 interval=1 periods/frame=1.00 latches/frame=1.00 inplace-draws=0 (expected 1)
+      ok    app=view osal=wired buffers=2 view=1 interval=1 periods/frame=1.00 latches/frame=1.00 inplace-draws=0 (expected 1)
+      ok    app=view osal=unwired buffers=3 view=1 interval=1 periods/frame=1.00 latches/frame=1.00 inplace-draws=0 (expected 1)
+      ok    app=view osal=wired buffers=3 view=1 interval=1 periods/frame=1.03 latches/frame=1.00 inplace-draws=0 (expected 1)
+      ok    app=view osal=unwired buffers=1 view=0 interval=1 periods/frame=1.00 latches/frame=1.00 inplace-draws=0 (expected 1)
+      ok    app=view osal=wired buffers=1 view=0 interval=1 periods/frame=1.00 latches/frame=1.00 inplace-draws=0 (expected 1)
+      ok    app=view osal=unwired buffers=2 view=0 interval=1 periods/frame=1.00 latches/frame=1.00 inplace-draws=0 (expected 1)
+      ok    app=view osal=wired buffers=2 view=0 interval=1 periods/frame=1.00 latches/frame=1.00 inplace-draws=0 (expected 1)
+      ok    app=view osal=unwired buffers=3 view=0 interval=1 periods/frame=0.48 latches/frame=0.48 inplace-draws=0 (expected u)
+      ok    app=view osal=wired buffers=3 view=0 interval=1 periods/frame=1.00 latches/frame=1.00 inplace-draws=0 (expected 1)
+      ok    app=cluster osal=unwired buffers=1 view=0 interval=1 periods/frame=1.00 latches/frame=1.00 inplace-draws=0 (expected 1)
+      ok    app=cluster osal=wired buffers=1 view=0 interval=1 periods/frame=1.00 latches/frame=1.00 inplace-draws=0 (expected 1)
+      ok    app=cluster osal=unwired buffers=2 view=0 interval=1 periods/frame=0.99 latches/frame=1.00 inplace-draws=0 (expected 1)
+      ok    app=cluster osal=wired buffers=2 view=0 interval=1 periods/frame=1.00 latches/frame=1.00 inplace-draws=0 (expected 1)
+      ok    app=cluster osal=unwired buffers=3 view=0 interval=1 periods/frame=1.00 latches/frame=1.00 inplace-draws=0 (expected 1)
+      ok    app=cluster osal=wired buffers=3 view=0 interval=1 periods/frame=1.00 latches/frame=1.00 inplace-draws=0 (expected 1)
+      ok    app=glmark2 osal=unwired buffers=1 view=0 interval=0 periods/frame=1.00 latches/frame=1.00 inplace-draws=0 (expected 1)
+      ok    app=glmark2 osal=wired buffers=1 view=0 interval=0 periods/frame=1.00 latches/frame=1.00 inplace-draws=0 (expected 1)
+      ok    app=glmark2 osal=unwired buffers=2 view=0 interval=0 periods/frame=1.00 latches/frame=1.00 inplace-draws=0 (expected 1)
+      ok    app=glmark2 osal=wired buffers=2 view=0 interval=0 periods/frame=1.00 latches/frame=1.00 inplace-draws=0 (expected 1)
+      ok    app=glmark2 osal=unwired buffers=3 view=0 interval=0 periods/frame=0.43 latches/frame=0.43 inplace-draws=0 (expected u)
+      ok    app=glmark2 osal=wired buffers=3 view=0 interval=0 periods/frame=0.42 latches/frame=0.43 inplace-draws=0 (expected u)
+      ok    app=fifo osal=unwired buffers=1 view=0 interval=1 periods/frame=1.00 latches/frame=1.00 inplace-draws=0 (expected 1)
+      ok    app=fifo osal=wired buffers=1 view=0 interval=1 periods/frame=1.00 latches/frame=1.00 inplace-draws=0 (expected 1)
+      ok    app=fifo osal=unwired buffers=2 view=0 interval=1 periods/frame=1.00 latches/frame=1.00 inplace-draws=0 (expected 1)
+      ok    app=fifo osal=wired buffers=2 view=0 interval=1 periods/frame=1.00 latches/frame=1.00 inplace-draws=0 (expected 1)
+      ok    app=fifo osal=unwired buffers=3 view=0 interval=1 periods/frame=0.45 latches/frame=0.45 inplace-draws=0 (expected u)
+      ok    app=fifo osal=wired buffers=3 view=0 interval=1 periods/frame=1.00 latches/frame=1.00 inplace-draws=0 (expected 1)
+[2mskip  host    glmark2 PERF page: packed and decoded by yakogl-tools record (passed on main 36bc1f130006)[0m
+      yk-record: 594b0c00 427a024b 00c80064 427a3e80
+      yk-record: 594b0c01 003205dc 07d00003 00320064
+      yk-record: 594b0c02 00070245 427a0003 2710024b
+      yk-record: 594b0c03 27e2352e 07530800 00000320
+      perf_page_test: ok
+      PERF (12) tag 0: experiment 0 page 0: 587 17018 100 200 16000 17018
+      PERF (12) tag 1: experiment 0 page 1: 1500 50 3 2000 100 50
+      PERF (12) tag 2: experiment 0 page 2: 581 7 3 17018 587 10000
+      PERF (12) tag 3: experiment 0 page 3: 13614 10210 2048 1875 800 0
+      gm_perf_page: ok (packed and decoded)
+[2mskip  tools   check.sh --changed: the path-to-scope map and four plans[0m
+[2mskip  tools   check.sh test cache: record, skip, run again on a new key[0m
+[2mskip  tools   check.sh --jobs: the log in order, the counts, a lane[0m
+[2mskip  gen     src/pvr/csbgen.rs + csbgen_wrap.c == bindgen[0m
+[2mskip  clippy  yakogl-slint-check[0m
+[2mskip  test    yakogl-slint-check[0m
+[2mskip  clippy  yakogl-triangle-check[0m
+[2mskip  test    yakogl-triangle-check[0m
+[2mskip  clippy  yakogl-femtovg-check[0m
+[2mskip  test    yakogl-femtovg-check[0m
+[32mok    clippy  yakogl-drivers [0s][0m
+[32mok    clippy  yakogl-drivers, each shipped feature arm (-D warnings) [1s][0m
+[32mok    test    yakogl-drivers (register model) [7s][0m
+[32mok    test    yakogl-drivers gpu::mali on the board's mali_csffw.bin (MALI_CSFFW, 2 tests by name) [46s][0m
+[32mok    check   yakogl-drivers (aarch64-unknown-none-softfloat) [0s][0m
+[32mok    clippy  yakogl-boot-stage2 [0s][0m
+[32mok    test    yakogl-boot-stage2 [0s][0m
+[32mok    clippy  yakogl-boot-stage2 (aarch64-unknown-none-softfloat) [1s][0m
+[32mok    cc      boot_stage2.h layout pins [0s][0m
+[32mok    cc      yakogl_drivers.h layout pins [0s][0m
+[32mok    zephyr  am62p gl_test image, -Werror on our C files [114s][0m
+[32mok    zephyr  am62p gl_test image without a compiler (precompiled shaders only), -Werror [177s][0m
+[32mok    zephyr  imx8mp gl_test image, -Werror on our C files [177s][0m
+[32mok    zephyr  rpi4 gl_test image, -Werror on our C files [267s][0m
+[32mok    zephyr  am62p examples/triangle image, -Werror on our C files [371s][0m

@@ -1,0 +1,16 @@
+        PASS [   0.073s] (2720/2888) yakogl::es2_report_guard draw_buffer_queries_are_invalid_enum
+        PASS [   0.072s] (2721/2888) yakogl::es2_report_guard es2_limits
+        PASS [   0.065s] (2722/2888) yakogl::es2_report_guard es3_entry_points_are_refused
+        PASS [   0.051s] (2723/2888) yakogl::es2_report_guard es3_only_pixel_types_are_invalid_enum
+        PASS [   0.059s] (2724/2888) yakogl::es2_report_guard es3_only_caps_are_invalid_enum
+        PASS [   0.064s] (2725/2888) yakogl::es2_report_guard es3_only_queries_are_invalid_enum
+        PASS [   0.051s] (2726/2888) yakogl::es2_report_guard es3_only_renderbuffer_formats_are_invalid_enum
+        PASS [   0.056s] (2727/2888) yakogl::es2_report_guard es3_version_queries_are_invalid_enum
+        PASS [   0.052s] (2728/2888) yakogl::es2_report_guard extension_list_is_exact
+        PASS [   0.048s] (2729/2888) yakogl::es2_report_guard matrix_uploads_do_not_transpose
+        PASS [   0.060s] (2730/2888) yakogl::es2_report_guard glsl_es_300_is_refused_and_es_100_has_one_draw_buffer
+        PASS [   0.051s] (2731/2888) yakogl::es2_report_guard renderbuffer_formats
+        PASS [   0.050s] (2732/2888) yakogl::es2_report_guard tex_image_2d_formats
+        PASS [   0.050s] (2733/2888) yakogl::es2_report_guard the_bgra8_renderbuffer_is_accepted_for_now
+        PASS [   0.049s] (2734/2888) yakogl::es2_report_guard the_unsized_bgra_renderbuffer_is_accepted_like_bgra8
+        PASS [   0.051s] (2736/2888) yakogl::es2_report_guard version_strings_say_es2

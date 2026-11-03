@@ -1,0 +1,8 @@
+        PASS [   0.031s] (2931/3433) yakogl::es2_error_rules_texture es2_targets_are_accepted
+        PASS [   0.027s] (2933/3433) yakogl::es2_error_rules_texture es3_getting_immutable_state_works
+        PASS [   0.061s] (2934/3433) yakogl::es2_error_rules_texture es3_3d_targets_bind
+        PASS [   0.051s] (2935/3433) yakogl::es2_error_rules_texture es3_pixel_types_are_unchanged
+        PASS [   0.030s] (2936/3433) yakogl::es2_error_rules_texture es3_setting_es3_parameters_works
+        PASS [   0.025s] (2937/3433) yakogl::es2_error_rules_texture mirrored_repeat_and_es2_parameters_are_accepted
+        PASS [   0.041s] (2938/3433) yakogl::es2_error_rules_texture half_float_oes_is_accepted
+        PASS [   0.030s] (2940/3433) yakogl::es2_error_rules_texture oes_depth_texture_types_are_accepted

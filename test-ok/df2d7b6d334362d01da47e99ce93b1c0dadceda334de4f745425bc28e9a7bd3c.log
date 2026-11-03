@@ -1,0 +1,4 @@
+        PASS [   0.064s] (2092/2135) yakogl::es3_srgb es3::a_back_end_that_cannot_encode_refuses_the_draw
+        PASS [   0.062s] (2093/2135) yakogl::es3_srgb es3::a_clear_reads_back_encoded
+        PASS [   0.063s] (2094/2135) yakogl::es3_srgb es3::every_back_end_samples_the_srgb_class
+        PASS [   0.035s] (2095/2135) yakogl::es3_srgb es3::srgb8_alpha8_is_a_complete_srgb_colour_buffer_and_srgb8_is_not

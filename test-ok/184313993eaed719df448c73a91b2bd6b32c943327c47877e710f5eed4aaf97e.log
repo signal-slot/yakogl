@@ -1,0 +1,6 @@
+        PASS [   0.015s] (2939/3433) yakogl::es2_error_rules_vertex es2_array_types_are_accepted
+        PASS [   0.019s] (2941/3433) yakogl::es2_error_rules_vertex es3_array_types_by_build
+        PASS [   0.042s] (2942/3433) yakogl::es2_error_rules_vertex es3_entry_points_are_unchanged
+        PASS [   0.025s] (2943/3433) yakogl::es2_error_rules_vertex query_pnames_by_build
+        PASS [   0.027s] (2944/3433) yakogl::es2_error_rules_vertex value_errors_are_unchanged
+        PASS [   0.035s] (2945/3433) yakogl::es2_error_rules_vertex unsuffixed_vao_names_work

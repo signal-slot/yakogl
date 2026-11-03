@@ -1,0 +1,8 @@
+        PASS [   0.010s] (1/8) yakogl::es3_int_rt_v3d an_integer_output_beside_a_float_one_names_its_render_target
+        PASS [   0.014s] (2/8) yakogl::es3_int_rt_v3d an_ivec4_output_writes_four_raw_words
+        PASS [   0.015s] (3/8) yakogl::es3_int_rt_v3d a_float_output_still_writes_f16_pairs
+        PASS [   0.019s] (4/8) yakogl::es3_int_rt_v3d clear_words_pack_per_internal_type
+        PASS [   0.012s] (5/8) yakogl::es3_int_rt_v3d every_integer_surface_is_drawable
+        PASS [   0.016s] (6/8) yakogl::es3_int_rt_v3d float_rows_and_the_es2_formats
+        PASS [   0.015s] (7/8) yakogl::es3_int_rt_v3d narrower_integer_outputs_write_their_components
+        PASS [   0.020s] (8/8) yakogl::es3_int_rt_v3d integer_rows_follow_mesas_format_table

@@ -1,0 +1,4 @@
+        PASS [   0.138s] (2762/2966) yakogl::es2_pvr_vertex_texture a_2d_cell_stages_more_than_an_empty_general_arena_holds
+        PASS [   0.071s] (2763/2966) yakogl::es2_pvr_vertex_texture a_cube_cell_fits_an_empty_general_arena
+        PASS [   0.057s] (2764/2966) yakogl::es2_pvr_vertex_texture the_vertex_program_samples_at_u_lod_and_a_texcoord_on_the_usc_model
+        PASS [   0.025s] (2765/2966) yakogl::es2_pvr_vertex_texture the_vertex_stage_binding_is_the_textures_own_chain

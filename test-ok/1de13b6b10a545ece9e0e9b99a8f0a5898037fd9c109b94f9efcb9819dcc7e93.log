@@ -1,0 +1,12 @@
+        PASS [   0.030s] (2991/3313) yakogl::es3_fbo_fragops a_3d_layer_past_the_depth_is_incomplete
+        PASS [   0.064s] (2992/3313) yakogl::es3_fbo_fragops a_2d_array_layer_is_complete_below_the_layer_count
+        PASS [   0.071s] (2993/3313) yakogl::es3_fbo_fragops a_3d_slice_below_the_depth_is_complete
+        PASS [   0.072s] (2994/3313) yakogl::es3_fbo_fragops colour_attachments_past_zero_complete_a_framebuffer_alone
+        PASS [   0.071s] (2995/3313) yakogl::es3_fbo_fragops depth_renderbuffers_attach_with_their_sizes
+        PASS [   0.042s] (2996/3313) yakogl::es3_fbo_fragops images_of_different_sizes_are_complete
+        PASS [   0.060s] (2997/3313) yakogl::es3_fbo_fragops depth_textures_attach_with_their_formats
+        PASS [   0.064s] (2998/3313) yakogl::es3_fbo_fragops mixed_sample_counts_are_incomplete_multisample
+        PASS [   0.059s] (2999/3313) yakogl::es3_fbo_fragops rgba32f_texture_attachment_is_incomplete
+        PASS [   0.055s] (3000/3313) yakogl::es3_fbo_fragops separate_depth_and_stencil_with_colour_zero_are_unsupported
+        PASS [   0.059s] (3002/3313) yakogl::es3_fbo_fragops separate_depth_and_stencil_without_colour_zero_are_unsupported
+        PASS [   0.050s] (3003/3313) yakogl::es3_fbo_fragops unsized_depth_textures_are_no_attachment

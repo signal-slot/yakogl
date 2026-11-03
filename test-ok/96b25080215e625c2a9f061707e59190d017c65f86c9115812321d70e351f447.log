@@ -1,0 +1,5 @@
+        PASS [   0.096s] (3210/3313) yakogl::gc_mipmap_gpu a_power_of_two_chain_is_the_cpu_box_filters_within_1_lsb
+        PASS [   0.083s] (3212/3313) yakogl::gc_mipmap_gpu asking_the_chain_back_waits_for_its_last_kick
+        PASS [   0.049s] (3213/3313) yakogl::gc_mipmap_gpu chains_the_gpu_cannot_make_are_left_to_the_cpu_by_name
+        PASS [   2.342s] (3237/3313) yakogl::gc_mipmap_gpu glmark2s_npot_chains_are_drawn_level_by_level
+        PASS [   2.573s] (3242/3313) yakogl::gc_mipmap_gpu glmark2s_rendered_into_chains_are_offered_to_the_gpu

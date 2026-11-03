@@ -1,0 +1,4 @@
+        PASS [   1.920s] (1/4) yakogl::v3d_rt_sample the_board_sizes_lay_out_as_mesa_and_the_tlb_and_tmu_words_agree
+        PASS [   2.118s] (2/4) yakogl::v3d_rt_sample refracts_chain_is_one_tfu_job_from_level_0_of_its_image
+        PASS [   2.162s] (3/4) yakogl::v3d_rt_sample refracts_11_level_chain_image_is_mesas_layout
+        PASS [   2.182s] (4/4) yakogl::v3d_rt_sample refracts_1600x1200_render_image_is_the_raster_storages_size

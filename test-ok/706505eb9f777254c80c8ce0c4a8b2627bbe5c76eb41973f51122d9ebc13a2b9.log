@@ -1,0 +1,5 @@
+        PASS [   1.313s] (1/5) yakogl::mipmap_offer_guard v3d::the_default_tfu_setting_filters_the_chain_on_the_cpu
+        PASS [   1.517s] (2/5) yakogl::mipmap_offer_guard v3d::a_failing_tfu_leaves_the_chain_to_the_cpu
+        PASS [   1.796s] (3/5) yakogl::mipmap_offer_guard v3d::glmark2_terrains_800x600_target_with_the_tfu_on
+        PASS [   1.939s] (4/5) yakogl::mipmap_offer_guard v3d::glmark2_terrains_800x600_target_with_the_default_tfu_setting
+        PASS [   0.977s] (5/5) yakogl::mipmap_offer_guard v3d::with_the_tfu_on_the_chain_is_made_from_the_render_image

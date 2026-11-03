@@ -1,0 +1,9 @@
+        PASS [   0.026s] (1/9) yakogl::es3_shaderc_v3d integer_not_builds_and_runs
+        PASS [   0.035s] (2/9) yakogl::es3_shaderc_v3d matrix_attribute_columns_come_from_consecutive_locations
+        PASS [   0.033s] (3/9) yakogl::es3_shaderc_v3d integer_shift_by_constant_builds
+        PASS [   0.044s] (4/9) yakogl::es3_shaderc_v3d integer_shifts_build
+        PASS [   0.019s] (5/9) yakogl::es3_shaderc_v3d matrix_attribute_product_builds
+        PASS [   0.016s] (6/9) yakogl::es3_shaderc_v3d trunc_values
+        PASS [   0.031s] (7/9) yakogl::es3_shaderc_v3d shift_values
+        PASS [   0.036s] (8/9) yakogl::es3_shaderc_v3d matrix_attributes_build
+        PASS [   0.030s] (9/9) yakogl::es3_shaderc_v3d trunc_builds

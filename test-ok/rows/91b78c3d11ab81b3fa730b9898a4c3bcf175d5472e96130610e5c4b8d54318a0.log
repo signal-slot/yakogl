@@ -1,0 +1,10 @@
+yakogl-precompile: gc7000 es2=0 app=all: 226 rows (vs 66, fs 160) of 224 sources, 129376 code bytes, table 1887808 bytes; 202 jobs, 1.4 s; refused as listed 15, pairs left out 166, internal skipped (9 sources)
+yakogl-precompile: wrote build/precompiled/prove/gpu-vivante.rs
+yakogl-precompile: the counts are tests/fixtures/precompile_counts.txt's pin: gc7000 es2=0 app=all: rows=226 code_bytes=129376
+prove.sh: gpu-vivante: made twice, the same 1887808 bytes
+yakogl-precompile: verify: build/precompiled/prove/gpu-vivante.rs is the regeneration, and each of its 226 rows is what the compiler makes for that row alone (0.9 s)
+yakogl-precompile: gc7000 es2=0 app=femtovg: 36 rows (vs 1, fs 35) of 36 sources, 48304 code bytes, table 808064 bytes; 35 jobs, 0.5 s; refused as listed 0, pairs left out 0, internal skipped (9 sources)
+yakogl-precompile: the counts are tests/fixtures/precompile_counts.txt's pin: gc7000 es2=0 app=femtovg: rows=36 code_bytes=48304
+yakogl-precompile: gc7000 es2=0 app=gl_test_es100: 111 rows (vs 36, fs 75) of 110 sources, 32512 code bytes, table 657341 bytes; 88 jobs, 0.7 s; refused as listed 0, pairs left out 63, internal skipped (9 sources)
+yakogl-precompile: the counts are tests/fixtures/precompile_counts.txt's pin: gc7000 es2=0 app=gl_test_es100: rows=111 code_bytes=32512
+prove.sh: gpu-vivante: the table compiles against the library (rustc -D warnings)

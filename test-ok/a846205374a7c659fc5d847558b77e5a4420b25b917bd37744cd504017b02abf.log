@@ -1,0 +1,4 @@
+        PASS [   2.849s] (1/4) yakogl::v3d_tfu_host raster_tiling_jobs_equal_the_cpu_tiling
+        PASS [   2.927s] (2/4) yakogl::v3d_tfu_host r8_and_rg8_mip_chains_equal_the_gl_cores_filter
+        PASS [   3.017s] (3/4) yakogl::v3d_tfu_host refusals_and_the_tfu_off
+        PASS [   3.088s] (4/4) yakogl::v3d_tfu_host rgba8_mip_chains_equal_the_gl_cores_filter

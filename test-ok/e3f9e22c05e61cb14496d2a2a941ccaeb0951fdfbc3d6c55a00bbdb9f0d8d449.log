@@ -1,0 +1,11 @@
+        PASS [   0.054s] (3047/3313) yakogl::es3_int_rt_gc compiler::a_float_made_integer_is_converted_by_the_shader_only
+        PASS [   0.053s] (3048/3313) yakogl::es3_int_rt_gc compiler::a_uniform_moves_to_the_output_bit_for_bit
+        PASS [   0.034s] (3049/3313) yakogl::es3_int_rt_gc every_integer_surface_takes_the_rnndb_pe_format_and_output_mode
+        PASS [   0.042s] (3050/3313) yakogl::es3_int_rt_gc compiler::an_integer_output_is_the_registers_integer_bits
+        PASS [   0.045s] (3051/3313) yakogl::es3_int_rt_gc gl_path::a_held_back_second_target_refuses_the_draw
+        PASS [   0.066s] (3052/3313) yakogl::es3_int_rt_gc gl_path::an_integer_second_target_takes_its_own_format_mode_and_no_blend
+        PASS [   0.057s] (3053/3313) yakogl::es3_int_rt_gc gl_path::an_rgba8_target_still_saturates_and_blends
+        PASS [   0.047s] (3054/3313) yakogl::es3_int_rt_gc the_new_register_constants_are_the_rnndb_values
+        PASS [   0.145s] (3055/3313) yakogl::es3_int_rt_gc gl_path::an_integer_clear_writes_the_raw_values_in_the_integer_mode
+        PASS [   0.048s] (3056/3313) yakogl::es3_int_rt_gc the_other_surfaces_are_unchanged
+        PASS [   0.565s] (3076/3313) yakogl::es3_int_rt_gc gl_path::a_draw_into_each_integer_target_programs_its_pe_format_and_output_mode

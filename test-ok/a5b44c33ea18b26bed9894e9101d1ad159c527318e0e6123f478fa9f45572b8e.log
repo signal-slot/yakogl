@@ -1,0 +1,5 @@
+        PASS [   0.064s] (3131/3430) yakogl::es3_pvr_shadow a_texel_centre_takes_the_first_tap_alone
+        PASS [   0.093s] (3132/3430) yakogl::es3_pvr_shadow a_shadow_look_up_is_the_plain_sample_and_a_one_channel_gather
+        PASS [   0.230s] (3133/3430) yakogl::es3_pvr_shadow every_shadow_form_of_deqp_compiles
+        PASS [   0.253s] (3136/3430) yakogl::es3_pvr_shadow the_per_texel_compare_weights_the_four_taps
+        PASS [   0.518s] (3138/3430) yakogl::es3_pvr_shadow the_filtered_depth_is_compared_by_the_samplers_op

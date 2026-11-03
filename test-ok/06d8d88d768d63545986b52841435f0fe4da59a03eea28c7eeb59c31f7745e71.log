@@ -1,0 +1,13 @@
+        PASS [   0.028s] (3102/3430) yakogl::es3_pvr_2darray a_dead_array_sample_takes_its_address_with_it_and_a_cube_beside_it_sets_both_bits
+        PASS [   0.035s] (3104/3430) yakogl::es3_pvr_2darray an_array_sample_in_a_loop_agrees_with_the_ir
+        PASS [   0.055s] (3105/3430) yakogl::es3_pvr_2darray a_vertex_texture_size_alone_keeps_the_sampler_row
+        PASS [   0.056s] (3106/3430) yakogl::es3_pvr_2darray an_integer_array_sampler_samples_without_fcnorm
+        PASS [   0.083s] (3107/3430) yakogl::es3_pvr_2darray every_form_agrees_with_the_ir
+        PASS [   0.090s] (3108/3430) yakogl::es3_pvr_2darray every_form_samples_with_the_address_override_as_the_table_says
+        PASS [   0.070s] (3109/3430) yakogl::es3_pvr_2darray off_the_stacked_image_stays_and_the_record_says_nothing
+        PASS [   0.029s] (3110/3430) yakogl::es3_pvr_2darray texture_size_reads_the_layer_count_from_the_image_word
+        PASS [   0.034s] (3111/3430) yakogl::es3_pvr_2darray the_descriptor_of_the_copy_is_a_twiddled_2d_with_the_layer_count_and_the_base
+        PASS [   0.049s] (3112/3430) yakogl::es3_pvr_2darray the_data_block_puts_the_address_after_the_level_word
+        PASS [   0.050s] (3113/3430) yakogl::es3_pvr_2darray the_layer_is_floor_of_z_plus_half_clamped_to_the_depth_with_a_carry
+        PASS [   0.047s] (3114/3430) yakogl::es3_pvr_2darray the_stacked_integer_samplers_sample_without_fcnorm
+        PASS [   0.048s] (3115/3430) yakogl::es3_pvr_2darray the_vertex_stage_samples_an_array_the_same_way

@@ -1,0 +1,13 @@
+        PASS [   0.006s] ( 1/13) yakogl-precompile::bin/yakogl-precompile list::tests::globs_are_fnmatch_on_the_lists_subset
+        PASS [   0.006s] ( 2/13) yakogl-precompile::bin/yakogl-precompile list::tests::blend_keys
+        PASS [   0.005s] ( 3/13) yakogl-precompile::bin/yakogl-precompile table::tests::a_deferred_row_is_named_apart_from_the_link_s
+        PASS [   0.020s] ( 4/13) yakogl-precompile::bin/yakogl-precompile list::tests::a_list_that_is_wrong_is_refused_by_line
+        PASS [   0.022s] ( 5/13) yakogl-precompile::bin/yakogl-precompile list::tests::a_list_reads_and_its_globs_expand_in_byte_order
+        PASS [   0.010s] ( 6/13) yakogl-precompile::bin/yakogl-precompile table::tests::disagreements_name_every_field_two_rows_disagree_on
+        PASS [   0.017s] ( 7/13) yakogl-precompile::bin/yakogl-precompile list::tests::internal_lines
+        PASS [   0.010s] ( 8/13) yakogl-precompile::bin/yakogl-precompile table::tests::disagreements_see_a_static_two_rows_fill_differently
+        PASS [   0.015s] ( 9/13) yakogl-precompile::bin/yakogl-precompile tests::each_record_visits_the_live_records_as_compiled
+        PASS [   0.021s] (10/13) yakogl-precompile::bin/yakogl-precompile tests::the_list_reads_and_accounts_for_every_directory
+        PASS [   4.465s] (11/13) yakogl-precompile::bin/yakogl-precompile tests::a_rows_key_is_the_runtime_key_under_the_default_if_lowering
+        PASS [   4.957s] (12/13) yakogl-precompile::bin/yakogl-precompile tests::a_refusal_must_be_listed
+        PASS [  24.912s] (13/13) yakogl-precompile::bin/yakogl-precompile tests::an_apps_table_is_deterministic_and_each_row_is_a_fresh_compile

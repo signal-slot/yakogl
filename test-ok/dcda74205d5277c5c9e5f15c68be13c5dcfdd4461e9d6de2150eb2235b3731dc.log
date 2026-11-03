@@ -1,0 +1,7 @@
+        PASS [   0.032s] (2950/3313) yakogl::es2_texture_rules_pred param_kept
+        PASS [   0.037s] (2951/3313) yakogl::es2_texture_rules_pred param_get_only_refused
+        PASS [   0.034s] (2952/3313) yakogl::es2_texture_rules_pred param_set_refused
+        PASS [   0.036s] (2953/3313) yakogl::es2_texture_rules_pred pixel_type_refused
+        PASS [   0.042s] (2954/3313) yakogl::es2_texture_rules_pred pixel_type_kept
+        PASS [   0.036s] (2955/3313) yakogl::es2_texture_rules_pred target_kept
+        PASS [   0.039s] (2956/3313) yakogl::es2_texture_rules_pred target_refused

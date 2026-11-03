@@ -1,0 +1,6 @@
+        PASS [   0.078s] (2641/2888) yakogl::es2_error_rules_fbo es2_and_advertised_renderbuffer_formats_are_kept
+        PASS [   0.052s] (2642/2888) yakogl::es2_error_rules_fbo row34_framebuffer_still_works
+        PASS [   0.044s] (2644/2888) yakogl::es2_error_rules_fbo row34_read_and_draw_framebuffer_are_invalid_enum
+        PASS [   0.083s] (2645/2888) yakogl::es2_error_rules_fbo row35_depth_stencil_attachment_is_invalid_enum
+        PASS [   0.070s] (2646/2888) yakogl::es2_error_rules_fbo row36_es3_only_renderbuffer_formats_are_invalid_enum
+        PASS [   0.097s] (2647/2888) yakogl::es2_error_rules_fbo rows37_39_formats_outside_the_advertised_set_stay_invalid_enum

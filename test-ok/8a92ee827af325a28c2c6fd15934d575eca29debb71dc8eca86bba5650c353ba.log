@@ -1,0 +1,154 @@
+        PASS [   0.020s] (  1/154) yakogl shaderc::online::v3d::alloc::tests::a_merge_register_is_lent_inside_the_else_arm_it_is_not_live_in
+        PASS [   0.021s] (  2/154) yakogl shaderc::online::v3d::alloc::tests::a_late_load_takes_a_register_nothing_reads_inside_its_hoist_window
+        PASS [   0.022s] (  3/154) yakogl shaderc::online::v3d::alloc::tests::a_copy_that_ends_its_source_writes_it_into_the_destination_register
+        PASS [   0.028s] (  4/154) yakogl shaderc::online::v3d::alloc::tests::a_move_into_the_register_file_puts_its_source_there
+        PASS [   0.014s] (  5/154) yakogl shaderc::online::v3d::alloc::tests::a_value_live_across_a_thread_switch_is_not_in_an_accumulator
+        PASS [   0.020s] (  6/154) yakogl shaderc::online::v3d::alloc::tests::a_move_that_ends_its_source_takes_the_source_register
+        PASS [   0.025s] (  7/154) yakogl shaderc::online::v3d::alloc::tests::a_program_that_does_not_fit_four_threads_is_refused
+        PASS [   0.019s] (  8/154) yakogl shaderc::online::v3d::alloc::tests::two_threads_have_twice_the_register_file
+        PASS [   0.023s] (  9/154) yakogl shaderc::online::v3d::chain::tests::a_2d_look_up_is_mesas_sequence
+        PASS [   0.021s] ( 10/154) yakogl shaderc::online::v3d::chain::tests::a_cube_direction_is_divided_by_its_major_axis
+        PASS [   0.021s] ( 11/154) yakogl shaderc::online::v3d::chain::tests::a_cube_look_up_is_mesas_sequence
+        PASS [   0.021s] ( 12/154) yakogl shaderc::online::v3d::chain::tests::a_declared_unwritten_varying_is_zeroed_before_the_chain
+        PASS [   0.021s] ( 13/154) yakogl shaderc::online::v3d::chain::tests::a_discard_clears_the_multisample_flags_under_its_condition
+        PASS [   0.025s] ( 14/154) yakogl shaderc::online::v3d::chain::tests::a_lane_another_reader_cannot_unpack_keeps_its_fmov
+        PASS [   0.013s] ( 15/154) yakogl shaderc::online::v3d::chain::tests::a_lane_read_by_ffloor_fceil_or_a_flag_fmov_has_no_fmov
+        PASS [   0.037s] ( 16/154) yakogl shaderc::online::v3d::chain::tests::a_dependent_look_up_has_its_own_switch
+        PASS [   0.046s] ( 17/154) yakogl shaderc::online::v3d::chain::tests::a_flag_push_is_reused_until_something_changes_it
+        PASS [   0.048s] ( 18/154) yakogl shaderc::online::v3d::chain::tests::a_lane_read_only_through_an_unpack_has_no_fmov
+        PASS [   0.044s] ( 19/154) yakogl shaderc::online::v3d::chain::tests::a_local_lane_no_store_reached_is_refused_only_when_it_is_used
+        PASS [   0.038s] ( 20/154) yakogl shaderc::online::v3d::chain::tests::a_look_up_config_word_shares_no_word_with_another_peripheral
+        PASS [   0.059s] ( 21/154) yakogl shaderc::online::v3d::chain::tests::a_large_uniform_if_is_a_branch_round_each_arm
+        PASS [   0.019s] ( 22/154) yakogl shaderc::online::v3d::chain::tests::a_look_up_in_a_uniform_branch_switches_again_after_it
+        PASS [   0.025s] ( 23/154) yakogl shaderc::online::v3d::chain::tests::a_matrix_attribute_has_one_entry_and_one_record_per_column
+        PASS [   0.020s] ( 24/154) yakogl shaderc::online::v3d::chain::tests::a_select_result_read_by_the_next_add_waits_for_the_conditional_move
+        PASS [   0.036s] ( 25/154) yakogl shaderc::online::v3d::chain::tests::a_ret32_binding_reads_one_32_bit_word_per_channel
+        PASS [   0.044s] ( 26/154) yakogl shaderc::online::v3d::chain::tests::a_merged_exit_leaves_the_loop_bound_to_the_back_edge
+        PASS [   0.014s] ( 27/154) yakogl shaderc::online::v3d::chain::tests::a_shader_that_reads_z_writes_it
+        PASS [   0.022s] ( 28/154) yakogl shaderc::online::v3d::chain::tests::a_shader_that_writes_no_colour_writes_z_alone
+        PASS [   0.015s] ( 29/154) yakogl shaderc::online::v3d::chain::tests::a_uniform_break_leaves_filter_images_loop_by_a_branch
+        PASS [   0.039s] ( 30/154) yakogl shaderc::online::v3d::chain::tests::a_thread_switch_takes_the_words_before_it_as_delay_slots
+        PASS [   0.017s] ( 31/154) yakogl shaderc::online::v3d::chain::tests::a_vertex_look_up_switches_threads_once
+        PASS [   0.035s] ( 32/154) yakogl shaderc::online::v3d::chain::tests::a_uniform_read_in_a_loop_is_loaded_before_its_head
+        PASS [   0.023s] ( 33/154) yakogl shaderc::online::v3d::chain::tests::a_vertex_shader_samples_twelve_textures
+        PASS [   0.024s] ( 34/154) yakogl shaderc::online::v3d::chain::tests::abs_is_the_readers_input_unpack
+        PASS [   0.018s] ( 35/154) yakogl shaderc::online::v3d::chain::tests::color_uv
+        PASS [   0.030s] ( 36/154) yakogl shaderc::online::v3d::chain::tests::abs_of_abs_keeps_the_inner_move
+        PASS [   0.027s] ( 37/154) yakogl shaderc::online::v3d::chain::tests::aliased_attributes_read_one_vpm_row
+        PASS [   0.022s] ( 38/154) yakogl shaderc::online::v3d::chain::tests::comparisons_and_bcsel
+        PASS [   0.019s] ( 39/154) yakogl shaderc::online::v3d::chain::tests::constant_colour
+        PASS [   0.230s] ( 40/154) yakogl shaderc::online::v3d::chain::tests::a_loop_the_compiler_cannot_count_stops_at_the_cap
+        PASS [   0.032s] ( 41/154) yakogl shaderc::online::v3d::chain::tests::derivatives_are_fdx_and_fdy_of_the_y_scaled_value
+        PASS [   0.192s] ( 42/154) yakogl shaderc::online::v3d::chain::tests::deqps_nested_struct_arrays_program_keeps_the_order_passes_scratch_small
+        PASS [   0.008s] ( 43/154) yakogl shaderc::online::v3d::chain::tests::ffma_dots_and_the_rounding_family
+        PASS [   0.009s] ( 44/154) yakogl shaderc::online::v3d::chain::tests::float_operations_on_constants_fold
+        PASS [   0.019s] ( 45/154) yakogl shaderc::online::v3d::chain::tests::fneg_fabs_fmin_fmax
+        PASS [   0.133s] ( 46/154) yakogl shaderc::online::v3d::chain::tests::femtovg_outcomes_are_pinned
+        PASS [   0.013s] ( 47/154) yakogl shaderc::online::v3d::chain::tests::gl_fragcoord_is_mesas_sequence_then_the_window_transform
+        PASS [   0.023s] ( 48/154) yakogl shaderc::online::v3d::chain::tests::gl_point_coord_reads_the_implicit_point_varyings_first
+        PASS [   0.016s] ( 49/154) yakogl shaderc::online::v3d::chain::tests::hoisting_packs_femtovg_fill_color_tighter
+        PASS [   0.007s] ( 50/154) yakogl shaderc::online::v3d::chain::tests::mesa_programs_pass_the_verifier
+        PASS [   0.018s] ( 51/154) yakogl shaderc::online::v3d::chain::tests::independent_look_ups_share_one_switch_in_request_order
+        PASS [   0.010s] ( 52/154) yakogl shaderc::online::v3d::chain::tests::nested_counted_loops_pass_and_each_broken_loop_rule_is_refused
+        PASS [   0.027s] ( 53/154) yakogl shaderc::online::v3d::chain::tests::no_emitted_program_touches_memory_through_the_tmu
+        PASS [   0.031s] ( 54/154) yakogl shaderc::online::v3d::chain::tests::passthrough_and_interp_color
+        PASS [   0.032s] ( 55/154) yakogl shaderc::online::v3d::chain::tests::quniform_uniform_data_is_the_dword_index_into_the_block
+        PASS [   0.023s] ( 56/154) yakogl shaderc::online::v3d::chain::tests::sign_ints_and_bool_conversions
+        PASS [   0.040s] ( 57/154) yakogl shaderc::online::v3d::chain::tests::the_discard_samples_json_is_this_compilers_output
+        PASS [   0.041s] ( 58/154) yakogl shaderc::online::v3d::chain::tests::the_fragcoord_samples_json_is_this_compilers_output
+        PASS [   0.019s] ( 59/154) yakogl shaderc::online::v3d::chain::tests::the_int_samples_json_is_this_compilers_output
+        PASS [   0.021s] ( 60/154) yakogl shaderc::online::v3d::chain::tests::the_if_samples_json_is_this_compilers_output
+        PASS [   0.032s] ( 61/154) yakogl shaderc::online::v3d::chain::tests::the_peripheral_pairs_4_2_allows
+        PASS [   0.044s] ( 62/154) yakogl shaderc::online::v3d::chain::tests::the_list_order_packs_femtovg_fill_image_gradient_tighter
+        PASS [   0.476s] ( 63/154) yakogl shaderc::online::v3d::chain::tests::compiled_corpus_words_are_pinned
+        PASS [   0.041s] ( 64/154) yakogl shaderc::online::v3d::chain::tests::the_triangle_samples_json_is_this_compilers_output
+        PASS [   0.038s] ( 65/154) yakogl shaderc::online::v3d::chain::tests::the_uniform_sample_reads_its_storage_by_word
+        PASS [   0.024s] ( 66/154) yakogl shaderc::online::v3d::chain::tests::the_uniform_stream_is_the_order_the_words_consume_it
+        PASS [   0.040s] ( 67/154) yakogl shaderc::online::v3d::chain::tests::the_uniform_samples_json_is_this_compilers_output
+        PASS [   0.027s] ( 68/154) yakogl shaderc::online::v3d::chain::tests::the_verifier_refuses_each_broken_rule
+        PASS [   0.015s] ( 69/154) yakogl shaderc::online::v3d::chain::tests::transcendentals
+        PASS [   0.025s] ( 70/154) yakogl shaderc::online::v3d::chain::tests::varyings_take_one_word_each
+        PASS [   0.027s] ( 71/154) yakogl shaderc::online::v3d::chain::tests::what_this_cut_does_not_compile_is_refused_by_name
+        PASS [   0.026s] ( 72/154) yakogl shaderc::online::v3d::fields::tests::the_fields_are_where_mesa_packs_them
+        PASS [   0.011s] ( 73/154) yakogl shaderc::online::v3d::golden71::every_mesa_v71_vector_encodes_back
+        PASS [   0.028s] ( 74/154) yakogl shaderc::online::v3d::golden71::every_mesa_v71_vector_decodes_to_mesas_text
+        PASS [   0.025s] ( 75/154) yakogl shaderc::online::v3d::golden71::mesa_v71_vectors_fields
+        PASS [   0.027s] ( 76/154) yakogl shaderc::online::v3d::golden::every_mesa_v42_vector_decodes_to_mesas_text
+        PASS [   0.020s] ( 77/154) yakogl shaderc::online::v3d::golden::every_mesa_v42_vector_encodes_back
+        PASS [   0.016s] ( 78/154) yakogl shaderc::online::v3d::golden::mesa_v42_vectors_fields
+        PASS [   0.577s] ( 79/154) yakogl shaderc::online::v3d::chain::tests::corpus_coverage_is_pinned
+        PASS [   0.018s] ( 80/154) yakogl shaderc::online::v3d::order::tests::a_back_edges_flag_push_goes_before_work_its_slots_can_take
+        PASS [   0.019s] ( 81/154) yakogl shaderc::online::v3d::order::tests::a_c_term_is_read_before_the_next_ldvary
+        PASS [   0.020s] ( 82/154) yakogl shaderc::online::v3d::order::tests::a_load_waits_for_the_varyings_and_nothing_crosses_a_switch
+        PASS [   0.018s] ( 83/154) yakogl shaderc::online::v3d::prepare::tests::a_common_subexpression_is_computed_once_but_not_out_of_a_loop
+        PASS [   0.032s] ( 84/154) yakogl shaderc::online::v3d::order::tests::a_regions_scratch_grows_with_its_operations_not_their_pairs
+        PASS [   0.028s] ( 85/154) yakogl shaderc::online::v3d::order::tests::the_longest_chain_starts_first
+        PASS [   0.020s] ( 86/154) yakogl shaderc::online::v3d::prepare::tests::a_discard_is_a_condition_and_an_arm_without_one_means_false
+        PASS [   0.023s] ( 87/154) yakogl shaderc::online::v3d::prepare::tests::a_kept_loops_uniform_break_guard_is_a_branch
+        PASS [   0.015s] ( 88/154) yakogl shaderc::online::v3d::prepare::tests::a_lane_one_arm_writes_keeps_its_value_from_before_the_if
+        PASS [   0.029s] ( 89/154) yakogl shaderc::online::v3d::prepare::tests::a_lane_first_written_inside_one_arm_takes_the_written_value
+        PASS [   0.014s] ( 90/154) yakogl shaderc::online::v3d::prepare::tests::a_varying_stored_in_one_arm_of_the_vertex_shader
+        PASS [   0.026s] ( 91/154) yakogl shaderc::online::v3d::prepare::tests::a_uniform_if_with_a_look_up_is_a_branch
+        PASS [   0.016s] ( 92/154) yakogl shaderc::online::v3d::prepare::tests::control_flow_is_refused_by_name
+        PASS [   0.031s] ( 93/154) yakogl shaderc::online::v3d::prepare::tests::an_if_whose_arms_both_write_selects_per_lane
+        PASS [   0.016s] ( 94/154) yakogl shaderc::online::v3d::prepare::tests::exact_algebraic_rewrites_leave_fewer_operations
+        PASS [   0.016s] ( 95/154) yakogl shaderc::online::v3d::prepare::tests::gl_fragcolor_written_in_the_arms
+        PASS [   0.026s] ( 96/154) yakogl shaderc::online::v3d::prepare::tests::nested_ifs_merge_inside_out
+        PASS [   0.024s] ( 97/154) yakogl shaderc::online::v3d::prepare::tests::work_both_arms_share_goes_before_the_branch
+        PASS [   0.015s] ( 98/154) yakogl shaderc::online::v3d::qpu_ffi::tests::the_mirror_is_mesas_layout
+        PASS [   0.022s] ( 99/154) yakogl shaderc::online::v3d::roundtrip71::corpus_coverage
+        PASS [   0.025s] (100/154) yakogl shaderc::online::v3d::qpu_ffi::tests::the_model_survives_the_mirror
+        PASS [   0.024s] (101/154) yakogl shaderc::online::v3d::roundtrip71::corpus_matches_its_header_and_the_pins
+        PASS [   0.008s] (102/154) yakogl shaderc::online::v3d::roundtrip71::encoder_refusals
+        PASS [   0.013s] (103/154) yakogl shaderc::online::v3d::roundtrip71::model_names_are_mesas
+        PASS [   0.011s] (104/154) yakogl shaderc::online::v3d::roundtrip71::mul_fmov_saturating_unpacks_are_read_with_three_bits
+        PASS [   0.010s] (105/154) yakogl shaderc::online::v3d::roundtrip71::reserved_magic_addresses_are_refused
+        PASS [   0.051s] (106/154) yakogl shaderc::online::v3d::roundtrip71::round_trip_every_corpus_word
+        PASS [   0.034s] (107/154) yakogl shaderc::online::v3d::roundtrip71::round_trip_through_the_generation_parameter
+        PASS [   0.031s] (108/154) yakogl shaderc::online::v3d::roundtrip71::strict_refusals_of_words_mesa_accepts
+        PASS [   0.143s] (109/154) yakogl shaderc::online::v3d::roundtrip71::mutated_corpus_words_are_accepted_exactly_when_they_survive
+        PASS [   0.017s] (110/154) yakogl shaderc::online::v3d::roundtrip71::the_model_survives_the_mirror
+        PASS [   0.015s] (111/154) yakogl shaderc::online::v3d::roundtrip::builder_nop_defaults_hold_in_the_corpus
+        PASS [   0.010s] (112/154) yakogl shaderc::online::v3d::roundtrip::corpus_matches_its_header_and_the_pins
+        PASS [   0.028s] (113/154) yakogl shaderc::online::v3d::roundtrip::corpus_coverage
+        PASS [   0.026s] (114/154) yakogl shaderc::online::v3d::roundtrip::default_branch_unused_fields_hold_in_the_corpus
+        PASS [   0.027s] (115/154) yakogl shaderc::online::v3d::roundtrip::default_stvpm_waddr_and_ma_hold_in_the_corpus
+        PASS [   0.008s] (116/154) yakogl shaderc::online::v3d::roundtrip::encoder_refusals
+        PASS [   0.029s] (117/154) yakogl shaderc::online::v3d::roundtrip::ftoi_unpacks_decode_but_are_refused_until_measured
+        PASS [   0.199s] (118/154) yakogl shaderc::online::v3d::roundtrip::mutated_corpus_words_are_accepted_exactly_when_they_survive
+        PASS [   0.016s] (119/154) yakogl shaderc::online::v3d::roundtrip::program_helpers
+        PASS [   0.015s] (120/154) yakogl shaderc::online::v3d::roundtrip::round_trip_every_corpus_word
+        PASS [   0.009s] (121/154) yakogl shaderc::online::v3d::roundtrip::strict_refusals_of_words_mesa_accepts
+        PASS [   0.016s] (122/154) yakogl shaderc::online::v3d::sched::tests::a_back_edge_takes_the_work_after_its_flag_push_as_a_delay_slot
+        PASS [   0.019s] (123/154) yakogl shaderc::online::v3d::sched::tests::a_branch_never_moves_over_its_flags_a_uniform_or_its_loops_head
+        PASS [   0.020s] (124/154) yakogl shaderc::online::v3d::sched::tests::a_flag_push_is_not_hoisted_over_a_flag_read_or_push
+        PASS [   0.018s] (125/154) yakogl shaderc::online::v3d::sched::tests::a_hoisted_write_waits_for_the_last_read_of_the_old_value
+        PASS [   0.019s] (126/154) yakogl shaderc::online::v3d::sched::tests::a_load_the_window_stops_short_is_counted_as_a_cut
+        PASS [   0.027s] (127/154) yakogl shaderc::online::v3d::sched::tests::a_short_uniform_load_in_a_fragment_shader_is_a_plain_ldunif
+        PASS [   0.021s] (128/154) yakogl shaderc::online::v3d::select::tests::fold_unpacks_moves_abs_into_readers_that_take_it
+        PASS [   0.015s] (129/154) yakogl shaderc::online::v3d::select::tests::fold_unpacks_moves_l_and_h_into_readers_that_take_them
+        PASS [   0.034s] (130/154) yakogl shaderc::online::v3d::select::tests::merged_exits_leave_when_either_would
+        PASS [   0.036s] (131/154) yakogl shaderc::online::v3d::sim::undefined_lane_tests::a_cube_lookup_is_seamless_and_an_array_lookup_of_its_face_is_not
+        PASS [   0.038s] (132/154) yakogl shaderc::online::v3d::sim::undefined_lane_tests::a_cube_lookup_reads_the_face_its_direction_selects
+        PASS [   0.039s] (133/154) yakogl shaderc::online::v3d::sim::undefined_lane_tests::a_sink_refuses_an_undefined_lane
+        PASS [   0.021s] (134/154) yakogl shaderc::online::v3d::sim::undefined_lane_tests::a_vpm_store_refuses_an_undefined_value
+        PASS [   0.020s] (135/154) yakogl shaderc::online::v3d::sim::undefined_lane_tests::a_wrtmuc_shares_its_word_only_with_a_tmu_write
+        PASS [   0.018s] (136/154) yakogl shaderc::online::v3d::sim::undefined_lane_tests::an_explicit_lod_reads_its_level_and_an_implicit_one_is_refused
+        PASS [   0.022s] (137/154) yakogl shaderc::online::v3d::sim::undefined_lane_tests::an_ldtmu_without_a_switch_since_its_request_is_refused_when_threaded
+        PASS [   0.034s] (138/154) yakogl shaderc::online::v3d::sim::undefined_lane_tests::an_undefined_operand_computes_and_reaches_the_tlb_undefined
+        PASS [   0.033s] (139/154) yakogl shaderc::online::v3d::sim::undefined_lane_tests::and_with_a_known_false_clears_an_undefined_flag
+        PASS [   0.028s] (140/154) yakogl shaderc::online::v3d::sim::undefined_lane_tests::the_thread_end_rules_are_refused
+        PASS [   0.025s] (141/154) yakogl shaderc::online::v3d::sim::undefined_lane_tests::the_tmu_rules_are_refused
+        PASS [   0.035s] (142/154) yakogl shaderc::online::v3d::verify::tests::a_backward_target_not_made_by_a_loop_node_is_refused
+        PASS [   0.025s] (143/154) yakogl shaderc::online::v3d::verify::tests::a_target_outside_the_enclosing_loop_is_refused
+        PASS [   0.029s] (144/154) yakogl shaderc::online::v3d::verify::tests::a_target_past_the_programs_end_is_refused
+        PASS [   0.020s] (145/154) yakogl shaderc::online::v3d_abi::tests::a_compiled_stage_carries_reflection_and_no_code
+        PASS [   1.273s] (146/154) yakogl shaderc::online::v3d::mesa_ref::decoder_matches_mesa_on_every_field_combination
+        PASS [   0.028s] (147/154) yakogl shaderc::online::v3d_abi::tests::a_program_the_chain_refuses_fails_the_link_by_name
+        PASS [   0.036s] (148/154) yakogl shaderc::online::v3d_abi::tests::a_declared_unread_fragment_varying_needs_no_vertex_declaration
+        PASS [   0.030s] (149/154) yakogl shaderc::online::v3d_abi::tests::an_undeclared_varying_fails_the_link
+        PASS [   0.157s] (150/154) yakogl shaderc::online::v3d_abi::tests::deqp_bind_aliasing_links_with_the_links_layout
+        PASS [   1.092s] (151/154) yakogl shaderc::online::v3d::roundtrip::every_accepted_random_word_encodes_back
+        PASS [   0.015s] (152/154) yakogl shaderc::online::v3d_abi::tests::linking_builds_the_program_into_the_fragment_shader
+        PASS [   1.410s] (153/154) yakogl shaderc::online::v3d::roundtrip71::every_accepted_random_word_encodes_back
+        PASS [   0.337s] (154/154) yakogl shaderc::online::v3d_abi::tests::femtovgs_thirty_programs_link_and_stay_alive_together

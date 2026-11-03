@@ -1,0 +1,4 @@
+        PASS [   0.049s] (2676/2966) yakogl::es2_error_rules_buffer row1_es3_targets_are_invalid_enum_on_every_buffer_entry_point
+        PASS [   0.024s] (2677/2966) yakogl::es2_error_rules_buffer row2_usage_takes_only_the_three_draw_hints
+        PASS [   0.032s] (2678/2966) yakogl::es2_error_rules_buffer row3_es3_mapping_parameters_are_invalid_enum_the_oes_ones_stay
+        PASS [   0.053s] (2679/2966) yakogl::es2_error_rules_buffer row1_the_two_es2_targets_still_work

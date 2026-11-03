@@ -1,0 +1,12 @@
+        PASS [   0.039s] (2912/3313) yakogl::es2_invariance gc7000::highp_common_subexpression_0
+        PASS [   0.038s] (2914/3313) yakogl::es2_invariance gc7000::highp_common_subexpression_1
+        PASS [   0.052s] (2915/3313) yakogl::es2_invariance gc7000::highp_common_subexpression_2
+        PASS [   0.039s] (2916/3313) yakogl::es2_invariance gc7000::highp_common_subexpression_3
+        PASS [   0.042s] (2917/3313) yakogl::es2_invariance gc7000::lowp_common_subexpression_0
+        PASS [   0.039s] (2918/3313) yakogl::es2_invariance gc7000::lowp_common_subexpression_1
+        PASS [   0.042s] (2919/3313) yakogl::es2_invariance gc7000::lowp_common_subexpression_2
+        PASS [   0.041s] (2920/3313) yakogl::es2_invariance gc7000::lowp_common_subexpression_3
+        PASS [   0.044s] (2921/3313) yakogl::es2_invariance gc7000::mediump_common_subexpression_0
+        PASS [   0.043s] (2922/3313) yakogl::es2_invariance gc7000::mediump_common_subexpression_1
+        PASS [   0.029s] (2923/3313) yakogl::es2_invariance gc7000::mediump_common_subexpression_2
+        PASS [   0.038s] (2924/3313) yakogl::es2_invariance gc7000::mediump_common_subexpression_3

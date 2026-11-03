@@ -1,0 +1,5 @@
+        PASS [   0.022s] (2032/2135) yakogl::es3_formats_gc every_row_is_the_descriptor_the_back_end_builds
+        PASS [   0.032s] (2034/2135) yakogl::es3_formats_gc every_storage_class_has_one_row_with_a_mesa_citation
+        PASS [   0.027s] (2035/2135) yakogl::es3_formats_gc the_binding_bits_apply_to_every_class
+        PASS [   0.033s] (2037/2135) yakogl::es3_formats_gc the_mask_column_is_gc_sampled_texfmts
+        PASS [   0.033s] (2038/2135) yakogl::es3_formats_gc the_new_register_constants_are_the_rnndb_values

@@ -1,0 +1,8 @@
+        PASS [   0.013s] (27/36) yakogl-mali-panthor::bin/panthor-gltest tests::a_compile_refusal_with_a_failed_case_is_refused_and_a_passed_one_passes
+        PASS [   0.046s] (28/36) yakogl-mali-panthor::bin/panthor-gltest tests::a_child_that_printed_nothing_did_not_start
+        PASS [   0.010s] (29/36) yakogl-mali-panthor::bin/panthor-gltest tests::a_passing_case_reads_pass
+        PASS [   0.017s] (30/36) yakogl-mali-panthor::bin/panthor-gltest tests::a_failed_check_names_got_and_want
+        PASS [   0.010s] (31/36) yakogl-mali-panthor::bin/panthor-gltest tests::lost_work_a_group_fault_or_no_result_is_a_fault
+        PASS [   0.022s] (32/36) yakogl-mali-panthor::bin/panthor-gltest tests::a_refused_draw_is_refused_with_its_whole_reason
+        PASS [   0.012s] (33/36) yakogl-mali-panthor::bin/panthor-gltest tests::skip_and_no_case_keep_their_own_words
+        PASS [   0.022s] (34/36) yakogl-mali-panthor::bin/panthor-gltest tests::the_libraries_draw_line_alone_is_marked_when_full

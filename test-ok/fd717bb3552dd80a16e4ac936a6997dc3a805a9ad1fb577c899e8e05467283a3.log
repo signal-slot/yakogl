@@ -1,0 +1,10 @@
+        PASS [   0.053s] (3252/3433) yakogl::es3_vertex_arrays float_and_integer_arrays_stay_in_place
+        PASS [   0.051s] (3253/3433) yakogl::es3_vertex_arrays half_float_array_in_a_buffer_is_converted
+        PASS [   0.066s] (3254/3433) yakogl::es3_vertex_arrays int_array_through_the_float_entry_point_is_converted
+        PASS [   0.024s] (3255/3433) yakogl::es3_vertex_arrays narrow_integer_arrays_fill_w_with_integer_one
+        PASS [   0.053s] (3256/3433) yakogl::es3_vertex_arrays narrow_float_array_still_fills_float_one
+        PASS [   0.050s] (3257/3433) yakogl::es3_vertex_arrays packed_array_filling_the_buffer_is_not_refused
+        PASS [   0.073s] (3258/3433) yakogl::es3_vertex_arrays narrow_signed_integer_array_sign_extends
+        PASS [   0.045s] (3259/3433) yakogl::es3_vertex_arrays packed_array_in_a_buffer_is_converted_from_first
+        PASS [   0.071s] (3260/3433) yakogl::es3_vertex_arrays packed_array_in_a_buffer_honours_the_offset
+        PASS [   0.068s] (3261/3433) yakogl::es3_vertex_arrays packed_array_in_a_buffer_steps_by_the_stride

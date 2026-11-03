@@ -1,0 +1,10 @@
+yakogl-precompile: powervr es2=1 app=all: 2444 rows (vs 49, fs 2395) of 192 sources, 2438736 code bytes, table 13158190 bytes; 170 jobs, 14.9 s; refused as listed 59, pairs left out 66, internal skipped (9 sources)
+yakogl-precompile: wrote build/precompiled/prove/gpu-powervr-report-es2.rs
+yakogl-precompile: the counts are tests/fixtures/precompile_counts.txt's pin: powervr es2=1 app=all: rows=2444 code_bytes=2438736
+prove.sh: gpu-powervr-report-es2: made twice, the same 13158190 bytes
+yakogl-precompile: verify: build/precompiled/prove/gpu-powervr-report-es2.rs is the regeneration, and each of its 2444 rows is what the compiler makes for that row alone (27.6 s)
+yakogl-precompile: powervr es2=1 app=femtovg: 583 rows (vs 1, fs 582) of 36 sources, 1148776 code bytes, table 5169659 bytes; 35 jobs, 7.3 s; refused as listed 0, pairs left out 0, internal skipped (9 sources)
+yakogl-precompile: the counts are tests/fixtures/precompile_counts.txt's pin: powervr es2=1 app=femtovg: rows=583 code_bytes=1148776
+yakogl-precompile: powervr es2=1 app=gl_test_es100: 1786 rows (vs 45, fs 1741) of 149 sources, 1357592 code bytes, table 8231055 bytes; 127 jobs, 10.7 s; refused as listed 35, pairs left out 24, internal skipped (9 sources)
+yakogl-precompile: the counts are tests/fixtures/precompile_counts.txt's pin: powervr es2=1 app=gl_test_es100: rows=1786 code_bytes=1357592
+prove.sh: gpu-powervr-report-es2: the table compiles against the library (rustc -D warnings)

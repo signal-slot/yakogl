@@ -1,0 +1,3 @@
+        PASS [   0.176s] (3244/3313) yakogl::gc_unorm24_exhaustive reference_is_the_crates_conversion
+        PASS [   1.594s] (3269/3313) yakogl::gc_unorm24_exhaustive candidates_over_all_2_24_inputs
+        PASS [   6.218s] (3295/3313) yakogl::gc_unorm24_exhaustive time_1024_square_conversions

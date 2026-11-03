@@ -1,0 +1,4 @@
+        PASS [   0.053s] (3121/3430) yakogl::es3_pvr_centroid centroid_flat_is_the_flat_layout
+        PASS [   0.044s] (3122/3430) yakogl::es3_pvr_centroid centroid_smooth_is_the_smooth_layout
+        PASS [   0.052s] (3123/3430) yakogl::es3_pvr_centroid centroid_input_beside_frag_coord_builds
+        PASS [   0.079s] (3126/3430) yakogl::es3_pvr_centroid mixed_orders_keep_the_layout_of_their_twins

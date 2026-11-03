@@ -1,0 +1,7 @@
+        PASS [   0.015s] (1/7) yakogl::v3d_clear cts_clear_colours_pack_exactly
+        PASS [   0.019s] (2/7) yakogl::v3d_clear colour_needs_quad_is_the_tlb_decision
+        PASS [   0.022s] (3/7) yakogl::v3d_clear depth_clear_quad_z
+        PASS [   0.009s] (4/7) yakogl::v3d_clear quad_state_for_each_buffer_combination
+        PASS [   0.017s] (5/7) yakogl::v3d_clear masked_fused_clear_keeps_its_own_masks
+        PASS [   0.024s] (6/7) yakogl::v3d_clear scissor_is_the_cts_rectangle
+        PASS [   0.060s] (7/7) yakogl::v3d_clear cts_color_clear_reference

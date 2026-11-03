@@ -1,0 +1,2 @@
+vivante: ^(gc_(debug|perf|kick_diff)_|gl_test_) symbols: 0 in the product archive, 13 with test-knobs
+powervr: ^(pvr_debug_|gl_test_) symbols: 0 in the product archive, 4 with test-knobs

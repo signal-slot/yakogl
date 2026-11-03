@@ -1,0 +1,25 @@
+        PASS [   0.012s] ( 1/25) yakogl-slint-check record::tests::classify_known_records
+        PASS [   0.014s] ( 2/25) yakogl-slint-check record::tests::check_run_words_keep_not_measured_apart_from_saturated
+        PASS [   0.017s] ( 3/25) yakogl-slint-check record::tests::describe_every_kind
+        PASS [   0.019s] ( 4/25) yakogl-slint-check record::tests::crcs_check_values
+        PASS [   0.011s] ( 5/25) yakogl-slint-check record::tests::display_words_and_their_decode
+        PASS [   0.012s] ( 6/25) yakogl-slint-check record::tests::gl_error_words_and_their_decode
+        PASS [   0.005s] ( 7/25) yakogl-slint-check record::tests::gm_selector_is_its_own
+        PASS [   0.014s] ( 8/25) yakogl-slint-check record::tests::glmark2_default_info_is_the_default_list
+        PASS [   0.014s] ( 9/25) yakogl-slint-check record::tests::gm_page_words_and_their_decode
+        PASS [   0.008s] (10/25) yakogl-slint-check record::tests::line_round_trip_and_garbage
+        PASS [   0.013s] (11/25) yakogl-slint-check record::tests::kinds_are_one_to_twenty_five_and_the_tag_list_is_the_formats
+        PASS [   0.014s] (12/25) yakogl-slint-check record::tests::packers
+        PASS [   0.013s] (13/25) yakogl-slint-check record::tests::rate_words_give_the_throughput_line
+        PASS [   0.013s] (14/25) yakogl-slint-check record::tests::set_summary_words_and_their_decode
+        PASS [   0.014s] (15/25) yakogl-slint-check record::tests::stages_unique_and_sub_steps_in_place
+        PASS [   0.014s] (16/25) yakogl-slint-check record::tests::throughput_of_two_panels
+        PASS [   0.014s] (17/25) yakogl-slint-check record::tests::writer_reproduces_the_baseline_picture
+        PASS [   0.013s] (18/25) yakogl-slint-check tests::frame_refusals
+        PASS [   0.044s] (19/25) yakogl-slint-check tests::flipped_readpixels_is_caught
+        PASS [   0.040s] (20/25) yakogl-slint-check tests::probes_record_words
+        PASS [   0.076s] (21/25) yakogl-slint-check tests::crc_is_of_the_rows_top_down
+        PASS [   0.058s] (22/25) yakogl-slint-check tests::sentinel_alpha_guard_and_readpixels_each_fail
+        PASS [   0.092s] (23/25) yakogl-slint-check tests::reference_values_pass
+        PASS [   0.169s] (24/25) yakogl-slint-check tests::a_view_with_a_wider_stride_checks_as_the_packed_window
+        PASS [   0.596s] (25/25) yakogl-slint-check tests::tolerance_is_one_per_channel

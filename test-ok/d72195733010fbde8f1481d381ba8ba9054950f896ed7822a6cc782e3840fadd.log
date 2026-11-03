@@ -1,0 +1,8 @@
+        PASS [   0.034s] (2189/2265) yakogl::es3_mrt_gl es3::a_framebuffer_without_attachment_0_clears_through_attachment_1
+        PASS [   0.043s] (2190/2265) yakogl::es3_mrt_gl es3::a_clear_hands_the_back_end_four_targets
+        PASS [   0.033s] (2191/2265) yakogl::es3_mrt_gl es3::colour_attachment_3_is_a_point
+        PASS [   0.023s] (2192/2265) yakogl::es3_mrt_gl es3::draw_buffers_errors_on_an_object
+        PASS [   0.011s] (2193/2265) yakogl::es3_mrt_gl es3::read_buffer_takes_attachment_3
+        PASS [   0.034s] (2194/2265) yakogl::es3_mrt_gl es3::draw_buffers_state_on_an_object
+        PASS [   0.041s] (2195/2265) yakogl::es3_mrt_gl es3::draw_buffers_on_the_window
+        PASS [   0.033s] (2196/2265) yakogl::es3_mrt_gl es3::the_limits_follow_the_back_end

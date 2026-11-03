@@ -1,0 +1,5 @@
+        PASS [   0.046s] (3116/3430) yakogl::es3_pvr_3d a_dead_sample_sets_nothing_and_a_cube_beside_a_volume_sets_both_bits
+        PASS [   0.047s] (3117/3430) yakogl::es3_pvr_3d a_vertex_shader_samples_the_volume_too
+        PASS [   0.052s] (3118/3430) yakogl::es3_pvr_3d every_form_samples_the_tpus_3d_texture
+        PASS [   0.048s] (3119/3430) yakogl::es3_pvr_3d off_the_volume_stays_the_grid_of_slices
+        PASS [   0.036s] (3120/3430) yakogl::es3_pvr_3d texture_size_reads_the_image_word_and_samples_nothing

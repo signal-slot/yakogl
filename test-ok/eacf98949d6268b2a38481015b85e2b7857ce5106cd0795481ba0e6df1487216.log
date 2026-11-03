@@ -1,0 +1,7 @@
+        PASS [   0.020s] (2015/2074) yakogl::es2_texture_rules_pred param_kept
+        PASS [   0.036s] (2016/2074) yakogl::es2_texture_rules_pred param_get_only_refused
+        PASS [   0.018s] (2017/2074) yakogl::es2_texture_rules_pred param_set_refused
+        PASS [   0.015s] (2018/2074) yakogl::es2_texture_rules_pred pixel_type_kept
+        PASS [   0.013s] (2019/2074) yakogl::es2_texture_rules_pred target_refused
+        PASS [   0.027s] (2020/2074) yakogl::es2_texture_rules_pred pixel_type_refused
+        PASS [   0.028s] (2021/2074) yakogl::es2_texture_rules_pred target_kept

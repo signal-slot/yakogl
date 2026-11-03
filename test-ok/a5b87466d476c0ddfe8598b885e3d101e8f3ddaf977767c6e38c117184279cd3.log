@@ -1,0 +1,2 @@
+        PASS [   0.136s] (2861/3310) yakogl::egl_bench_configs glmark2_picks_a_window_config_with_colour_and_depth_for_its_800x600_window
+        PASS [   0.189s] (2863/3310) yakogl::egl_bench_configs slint_gets_an_rgba8888_stencil8_config_and_its_1024x600_window

@@ -1,0 +1,7 @@
+        PASS [   0.049s] (2072/2265) yakogl::depth_resolve_pvr_backend a_depth_pass_into_no_open_frame_samples_the_buffer
+        PASS [   0.093s] (2073/2265) yakogl::depth_resolve_pvr_backend a_cpu_write_after_the_ground_resolves_the_sampled_depth_into_the_texels
+        PASS [   0.078s] (2074/2265) yakogl::depth_resolve_pvr_backend a_depth_pass_submitted_before_the_ground_samples_the_buffer
+        PASS [   0.022s] (2075/2265) yakogl::depth_resolve_pvr_backend with_the_canvas_kick_in_flight_every_frame_samples_its_own_depth
+        PASS [   0.064s] (2076/2265) yakogl::depth_resolve_pvr_backend a_gl_less_depth_pass_after_gltexsubimage2d_loads_the_uploaded_depth
+        PASS [   0.066s] (2077/2265) yakogl::depth_resolve_pvr_backend glmark2_shadow_samples_the_depth_its_frame_rendered
+        PASS [   0.067s] (2078/2265) yakogl::depth_resolve_pvr_backend the_depth_draws_stamp_names_a_kick_still_to_complete

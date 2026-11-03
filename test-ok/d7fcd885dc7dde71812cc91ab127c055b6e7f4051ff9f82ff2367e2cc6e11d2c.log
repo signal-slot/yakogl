@@ -1,0 +1,8 @@
+        PASS [   0.016s] (1/8) yakogl::v3d_sim_mesa only_an_output_the_trig_shift_moves_is_undetermined
+        PASS [   1.441s] (2/8) yakogl::v3d_sim_mesa back_to_back_loop_exits_are_counted
+        PASS [   2.074s] (3/8) yakogl::v3d_sim_mesa executed_instruction_counts_are_pinned
+        PASS [   2.147s] (4/8) yakogl::v3d_sim_mesa our_instruction_counts_are_pinned
+        PASS [   0.028s] (5/8) yakogl::v3d_sim_mesa the_ldtmu_mutant_redirects_a_read_made_before_the_second_result_lands
+        PASS [   1.894s] (6/8) yakogl::v3d_sim_mesa the_hoist_windows_cuts_are_counted
+        PASS [  15.469s] (7/8) yakogl::v3d_sim_mesa the_interpreter_runs_mesas_code_as_the_ir_says
+        PASS [  17.938s] (8/8) yakogl::v3d_sim_mesa our_programs_agree_with_the_ir_and_with_mesa

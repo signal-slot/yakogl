@@ -1,0 +1,15 @@
+        PASS [   0.055s] (3069/3313) yakogl::es3_occlusion_gl es3::a_back_end_that_cannot_allocate_gives_out_of_memory_and_no_active_query
+        PASS [   0.051s] (3070/3313) yakogl::es3_occlusion_gl es3::a_count_above_zero_is_true_and_zero_is_false
+        PASS [   0.075s] (3071/3313) yakogl::es3_occlusion_gl es3::a_back_end_without_the_entries_keeps_the_invalid_operation
+        PASS [   0.040s] (3072/3313) yakogl::es3_occlusion_gl es3::a_draw_after_end_in_the_same_kick_is_not_counted
+        PASS [   0.059s] (3073/3313) yakogl::es3_occlusion_gl es3::a_result_spans_several_kicks_and_availability_follows_the_last_one
+        PASS [   0.067s] (3074/3313) yakogl::es3_occlusion_gl es3::a_name_can_count_again_and_starts_from_zero
+        PASS [   0.065s] (3075/3313) yakogl::es3_occlusion_gl es3::a_query_without_draws_is_available_and_false
+        PASS [   0.064s] (3077/3313) yakogl::es3_occlusion_gl es3::deleting_an_active_query_ends_it_and_its_handle_waits_before_reuse
+        PASS [   0.067s] (3078/3313) yakogl::es3_occlusion_gl es3::lost_work_answers_true
+        PASS [   0.057s] (3079/3313) yakogl::es3_occlusion_gl es3::only_draws_inside_the_query_count_and_a_clear_is_not_a_draw
+        PASS [   0.082s] (3080/3313) yakogl::es3_occlusion_gl es3::many_queries_pending_at_once_keep_their_own_counts
+        PASS [   0.062s] (3081/3313) yakogl::es3_occlusion_gl es3::polling_without_a_flush_terminates
+        PASS [   0.063s] (3082/3313) yakogl::es3_occlusion_gl es3::reading_the_result_waits_for_the_query_kick_alone
+        PASS [   0.081s] (3083/3313) yakogl::es3_occlusion_gl es3::rasterizer_discard_draws_are_not_counted
+        PASS [   0.077s] (3084/3313) yakogl::es3_occlusion_gl es3::the_errors_of_section_2_14

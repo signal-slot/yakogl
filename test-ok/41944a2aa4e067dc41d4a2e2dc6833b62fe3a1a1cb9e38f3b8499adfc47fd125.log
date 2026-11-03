@@ -1,0 +1,18 @@
+        PASS [   0.008s] ( 1/18) yakogl-gltest-runner tests::a_case_runs_reports_counts_and_restores_the_context_in_that_order
+        PASS [   0.008s] ( 2/18) yakogl-gltest-runner tests::a_long_list_is_cut_at_the_bound_and_says_how_many_it_kept
+        PASS [   0.022s] ( 3/18) yakogl-gltest-runner tests::a_clean_set_with_a_skip_has_passed_equal_to_run
+        PASS [   0.024s] ( 4/18) yakogl-gltest-runner tests::a_clean_walk_prints_the_c_walkers_lines
+        PASS [   0.025s] ( 5/18) yakogl-gltest-runner tests::a_long_line_is_cut_on_a_character_boundary
+        PASS [   0.020s] ( 6/18) yakogl-gltest-runner tests::a_single_case_prints_its_verdict_and_reports_nothing
+        PASS [   0.017s] ( 7/18) yakogl-gltest-runner tests::a_table_build_skips_the_cases_whose_shaders_it_has_no_rows_for
+        PASS [   0.020s] ( 8/18) yakogl-gltest-runner tests::a_single_case_the_shader_set_skips_says_why_in_its_own_form
+        PASS [   0.007s] ( 9/18) yakogl-gltest-runner tests::an_image_without_a_compiler_skips_the_cases_that_write_shader_text
+        PASS [   0.007s] (10/18) yakogl-gltest-runner tests::seven_is_the_set_the_sentinel_the_stored_list_and_a_number_one_case
+        PASS [   0.012s] (11/18) yakogl-gltest-runner tests::the_callers_skip_list_is_decimal_numbers_with_junk_skipped_over
+        PASS [   0.043s] (12/18) yakogl-gltest-runner tests::a_timeout_a_fail_and_no_such_case_all_fail_the_first_two_named
+        PASS [   0.041s] (13/18) yakogl-gltest-runner tests::a_walk_skips_by_name_before_the_body_and_says_why_when_it_knows
+        PASS [   0.037s] (14/18) yakogl-gltest-runner tests::an_empty_list_is_clean
+        PASS [   0.020s] (15/18) yakogl-gltest-runner tests::the_es100_sets_skip_stands_on_an_es2_context_and_not_on_an_es3_one
+        PASS [   0.020s] (16/18) yakogl-gltest-runner tests::the_imx8mp_default_sets_shape_counts_as_the_c_walker_did
+        PASS [   0.015s] (17/18) yakogl-gltest-runner tests::the_runner_returns_gl_test_runs_rc
+        PASS [   0.016s] (18/18) yakogl-gltest-runner tests::the_set_has_fifty_cases_and_the_pool_takers_run_last

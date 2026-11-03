@@ -1,0 +1,8 @@
+        PASS [   0.026s] (2916/3430) yakogl::egl_swap_timeline a_pipelined_window_overlaps_without_egls_buffers
+        PASS [   0.013s] (2917/3430) yakogl::egl_swap_timeline a_single_buffered_window_waits_for_its_frames_end_in_every_swap
+        PASS [   0.030s] (2918/3430) yakogl::egl_swap_timeline a_show_that_waits_for_a_period_is_the_one_period_of_interval_1
+        PASS [   0.028s] (2920/3430) yakogl::egl_swap_timeline a_swap_with_nothing_drawn_still_shows_a_complete_buffer
+        PASS [   0.028s] (2921/3430) yakogl::egl_swap_timeline glmark2_interval_0_overlaps_on_every_board
+        PASS [   0.032s] (2922/3430) yakogl::egl_swap_timeline am62p_double_buffer_overlaps_and_never_waits_for_the_frames_end
+        PASS [   0.025s] (2923/3430) yakogl::egl_swap_timeline pi4_double_buffer_overlaps_and_never_waits_for_the_frames_end
+        PASS [   0.041s] (2924/3430) yakogl::egl_swap_timeline interval_2_waits_two_periods_counting_the_show

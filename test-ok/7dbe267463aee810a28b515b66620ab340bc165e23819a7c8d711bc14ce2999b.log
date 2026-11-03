@@ -1,0 +1,6 @@
+        PASS [   0.016s] (1970/2074) yakogl::es2_error_rules_fbo es2_and_advertised_renderbuffer_formats_are_kept
+        PASS [   0.010s] (1971/2074) yakogl::es2_error_rules_fbo row35_depth_stencil_attachment_is_invalid_enum
+        PASS [   0.035s] (1972/2074) yakogl::es2_error_rules_fbo row34_read_and_draw_framebuffer_are_invalid_enum
+        PASS [   0.037s] (1973/2074) yakogl::es2_error_rules_fbo row34_framebuffer_still_works
+        PASS [   0.027s] (1974/2074) yakogl::es2_error_rules_fbo row36_es3_only_renderbuffer_formats_are_invalid_enum
+        PASS [   0.028s] (1976/2074) yakogl::es2_error_rules_fbo rows37_39_formats_outside_the_advertised_set_stay_invalid_enum

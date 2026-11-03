@@ -1,0 +1,5 @@
+        PASS [   0.168s] (3143/3430) yakogl::es3_shaderc_repro fragdepth_writes_lower_to_a_depth_output
+        PASS [   0.045s] (3144/3430) yakogl::es3_shaderc_repro int_output_from_arithmetic_is_the_powervr_shape
+        PASS [   0.089s] (3145/3430) yakogl::es3_shaderc_repro modf_is_exact_in_the_ir
+        PASS [   0.203s] (3146/3430) yakogl::es3_shaderc_repro precision_int_programs_lower
+        PASS [   0.082s] (3147/3430) yakogl::es3_shaderc_repro texture_size_lowers_for_every_sampler

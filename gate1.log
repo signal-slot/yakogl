@@ -1,0 +1,241 @@
+check.sh: 2 compiler slot(s) (7332 MB available, 3072 MB each, 4 cores)
+[32mok    cargo fmt --check [7s][0m
+[32mok    build   yakogl-capi (no_std) [21s][0m
+[32mok    clippy  host-test,gpu-powervr [36s][0m
+[32mok    test    host-test,gpu-powervr [179s][0m
+[32mok    clippy  host-test,gpu-powervr,report-es2 [33s][0m
+[32mok    test    host-test,gpu-powervr,report-es2 [169s][0m
+[32mok    clippy  host-test,gpu-vivante [31s][0m
+[32mok    test    host-test,gpu-vivante [228s][0m
+[32mok    clippy  host-test,gpu-powervr,shaderc-online [74s][0m
+[31mFAIL  test    host-test,gpu-powervr,shaderc-online [472s][0m
+    thread 'corpus' (42106) panicked at tests/es3_shaderc_corpus.rs:842:10:
+error: test run failed
+        PASS [   0.025s] (3397/3430) yakogl::usc_limits gl_test_case_193_off_arm_groups_on_the_host
+        PASS [   0.062s] (3398/3430) yakogl::usc_limits gl_test_case_194_off_arm_series_on_the_host
+        PASS [   0.010s] (3399/3430) yakogl::usc_limits gl_test_case_199_trunc_and_shifts_on_the_host
+        PASS [   0.009s] (3400/3430) yakogl::usc_limits gl_test_case_200_intrt_on_the_host
+        PASS [   0.017s] (3401/3430) yakogl::usc_limits gl_test_case_87_counts_what_the_board_case_expects
+        PASS [   0.014s] (3402/3430) yakogl::usc_limits gl_test_case_8_blends_on_the_host
+        PASS [   0.009s] (3403/3430) yakogl::usc_limits gl_test_case_91_blends_into_rgba16f_on_the_host
+        PASS [   0.119s] (3404/3430) yakogl::usc_limits gl_test_case_98_counts_what_the_board_case_expects
+        PASS [   0.013s] (3405/3430) yakogl::usc_limits integer_render_targets_get_the_packed_bits
+        PASS [   1.325s] (3406/3430) yakogl::usc_limits pcos_execution_mask_loops_run_in_the_model_and_agree_with_ours
+        PASS [   0.017s] (3407/3430) yakogl::usc_limits several_colour_outputs_are_packed_to_their_own_pixel_output_registers
+        PASS [   0.017s] (3408/3430) yakogl::usc_limits several_srgb_outputs_are_encoded_bytes_one_register_each
+        PASS [   0.015s] (3409/3430) yakogl::usc_limits source_modifiers_compose_in_the_hardware_order_or_refuse
+        PASS [   0.015s] (3410/3430) yakogl::usc_limits texture2d_proj_divides_in_the_shader_with_pvr_proj_divide
+        PASS [   0.017s] (3411/3430) yakogl::usc_limits texture_size_of_a_stacked_texture_divides_the_stacked_height
+        PASS [   0.016s] (3412/3430) yakogl::usc_limits texture_size_reads_the_image_state_as_pco_does
+        PASS [   0.013s] (3413/3430) yakogl::usc_limits the_clear_programs_move_shared_k_to_pixel_output_k
+        PASS [   6.941s] (3414/3430) yakogl::usc_limits a_loop_bounded_per_instance_runs_under_the_execution_mask
+        PASS [   0.112s] (3415/3430) yakogl::usc_limits the_default_scratch_compiles_the_pre_runs_two_largest_shaders
+        PASS [   0.017s] (3416/3430) yakogl::usc_limits the_driver_words_sit_after_the_uniforms_in_one_order
+        PASS [   0.009s] (3417/3430) yakogl::usc_limits the_execution_mask_groups_are_pcos_to_the_byte
+        PASS [   0.009s] (3418/3430) yakogl::usc_limits the_masked_clear_programs_keep_the_channels_the_mask_leaves_off
+        PASS [   0.018s] (3419/3430) yakogl::usc_limits the_mag_switch_remap_runs_on_the_usc_model
+        PASS [   0.717s] (3420/3430) yakogl::usc_limits the_unsigned_operations_compute_what_glsl_says
+        PASS [   3.135s] (3421/3430) yakogl::usc_limits gl_test_case_104_counts_what_the_board_case_expects
+        PASS [   0.013s] (3422/3430) yakogl::usc_limits unread_attributes_take_no_vertex_input_registers
+        PASS [   0.017s] (3423/3430) yakogl::usc_limits what_exact_gradients_cost_a_program
+        PASS [   0.699s] (3424/3430) yakogl::usc_limits trunc_rounds_toward_zero_on_every_sign
+        PASS [   0.928s] (3425/3430) yakogl::usc_old_image the_gate_rejects_the_image_main_shipped_before_it_and_accepts_todays
+        PASS [   0.134s] (3426/3430) yakogl::usc_survey the_powervr_corpus_through_selection
+        PASS [   0.012s] (3427/3430) yakogl::usc_survey the_usc1_vehicle_selects_and_here_are_its_groups
+        PASS [   7.597s] (3428/3430) yakogl::usc_limits the_repositorys_deqp_sources_compute_what_the_ir_means
+        PASS [  19.721s] (3429/3430) yakogl::usc_limits deqp_style_shaders_compute_what_the_ir_means_in_each_if_lowering
+        PASS [  23.337s] (3430/3430) yakogl::usc_limits what_the_usc_path_asks_of_the_machine_over_every_source_it_accepts
+────────────
+     Summary [  78.595s] 3430 tests run: 3429 passed, 1 failed, 3 skipped
+        FAIL [   0.011s] (3134/3430) yakogl::es3_shaderc_corpus corpus
+error: test run failed
+cargo_test: 1 of 125 test binaries failed:
+  FAILED binary es3_shaderc_corpus (test): exit 1, log build/check/tests-2256/logs/10/25.log
+(whole output: build/check-fail/2256/1.log)
+[32mok    clippy  host-test,gpu-vivante,shaderc-online [58s][0m
+[31mFAIL  test    host-test,gpu-vivante,shaderc-online [406s][0m
+    thread 'corpus' (54513) panicked at tests/es3_shaderc_corpus.rs:842:10:
+error: test run failed
+        PASS [   0.049s] (3277/3310) yakogl::online_lowering the_shapes_of_if_arms_the_back_end_cannot_flatten
+        PASS [   0.021s] (3278/3310) yakogl::online_oracle a_variant_entry_is_recognised_and_not_counted_as_a_gap
+        PASS [   1.076s] (3279/3310) yakogl::lane_move_equivalence moving_a_value_to_another_lane_changes_no_output
+        PASS [   2.026s] (3280/3310) yakogl::gc_unorm24_exhaustive time_1024_square_conversions
+        PASS [   0.115s] (3281/3310) yakogl::online_oracle generated_code_against_the_table_structurally
+        PASS [   0.133s] (3282/3310) yakogl::online_oracle every_source_either_compiles_or_says_why
+        PASS [   0.012s] (3283/3310) yakogl::online_oracle the_comparison_notices_a_change_in_every_kind_of_field_it_claims_to_cover
+        PASS [   0.127s] (3284/3310) yakogl::online_oracle name_the_sources_that_compile
+        PASS [   0.028s] (3285/3310) yakogl::online_reflection the_reflection_equals_the_offline_tables_rows
+        PASS [   0.129s] (3286/3310) yakogl::online_oracle name_the_sources_that_do_not_compile_by_reason
+        PASS [   0.142s] (3287/3310) yakogl::online_oracle reflection_against_the_offline_table
+        PASS [   0.131s] (3288/3310) yakogl::operand_banks the_operand_bank_surveys
+        PASS [   0.146s] (3289/3310) yakogl::scratch_survey who_sets_the_scratch_high_water
+        PASS [   0.119s] (3290/3310) yakogl::source_use_bits every_source_use_bit_we_emit_is_the_references
+        PASS [   0.220s] (3291/3310) yakogl::read_before_write every_register_a_program_reads_is_written_first
+        PASS [   0.310s] (3292/3310) yakogl::stack_survey the_compilers_stack_by_phase_adversarial
+        PASS [   0.679s] (3293/3310) yakogl::stack_survey the_compilers_stack_by_phase_shaders_gl_test_es100
+        PASS [   0.917s] (3294/3310) yakogl::stack_survey the_compilers_stack_by_phase_shaders_femtovg
+        PASS [   0.209s] (3295/3310) yakogl::stack_survey the_compilers_stack_by_phase_shaders_internal
+        PASS [   0.343s] (3296/3310) yakogl::stack_survey the_compilers_stack_by_phase_shaders_offarm
+        PASS [   1.820s] (3297/3310) yakogl::stack_survey the_compilers_stack_by_phase_shaders_es300
+        PASS [   0.364s] (3298/3310) yakogl::stack_survey the_compilers_stack_by_phase_shaders_top
+        PASS [   3.686s] (3299/3310) yakogl::stack_survey the_compilers_stack_by_phase_shaders_es100
+        PASS [   0.048s] (3300/3310) yakogl::stack_survey the_parts_cover_the_corpus
+        PASS [   2.828s] (3301/3310) yakogl::stack_survey the_compilers_stack_by_phase_shaders_gltest
+        PASS [   0.158s] (3302/3310) yakogl::twin_draw_list twinnable_corpus
+        PASS [   0.314s] (3303/3310) yakogl::temps_survey the_vivante_temps_surveys
+        PASS [   0.022s] (3304/3310) yakogl::uniidx_knobs a_run_time_indexed_uniform_is_a_load_from_the_blocks_copy_in_memory
+        PASS [   0.281s] (3305/3310) yakogl::usc_survey the_powervr_corpus_through_selection
+        PASS [   0.015s] (3306/3310) yakogl::usc_survey the_usc1_vehicle_selects_and_here_are_its_groups
+        PASS [   2.516s] (3307/3310) yakogl::stack_survey the_compilers_stack_by_phase_table_vertex
+        PASS [   0.030s] (3308/3310) yakogl::vivante_npot the_gc7000ul_has_non_power_of_two
+        PASS [   0.672s] (3309/3310) yakogl::undefined_lanes no_selected_instruction_reads_a_lane_nothing_writes
+        PASS [   5.563s] (3310/3310) yakogl::stack_survey the_compilers_stack_by_phase_table_fragment
+────────────
+     Summary [  53.390s] 3310 tests run: 3309 passed, 1 failed, 5 skipped
+        FAIL [   0.024s] (3081/3310) yakogl::es3_shaderc_corpus corpus
+error: test run failed
+cargo_test: 1 of 125 test binaries failed:
+  FAILED binary es3_shaderc_corpus (test): exit 1, log build/check/tests-2256/logs/12/90.log
+(whole output: build/check-fail/2256/2.log)
+[32mok    clippy  host-test,gpu-powervr,shaderc-online,report-es2 [68s][0m
+[32mok    test    host-test,gpu-powervr,shaderc-online,report-es2 [422s][0m
+[32mok    clippy  host-test,gpu-vivante,shaderc-online,report-es2 [48s][0m
+[32mok    test    host-test,gpu-vivante,shaderc-online,report-es2 [384s][0m
+[32mok    gen     precompiled tables for the tier configurations [218s][0m
+[32mok    clippy  host-test,gpu-powervr,shaderc-online,precompiled-shaders [124s][0m
+[31mFAIL  test    host-test,gpu-powervr,shaderc-online,precompiled-shaders [846s][0m
+    thread 'corpus' (90268) panicked at tests/es3_shaderc_corpus.rs:842:10:
+error: test run failed
+        PASS [   0.162s] (3400/3433) yakogl::usc_limits gl_test_case_193_off_arm_groups_on_the_host
+        PASS [   0.184s] (3401/3433) yakogl::usc_limits gl_test_case_194_off_arm_series_on_the_host
+        PASS [   0.043s] (3402/3433) yakogl::usc_limits gl_test_case_199_trunc_and_shifts_on_the_host
+        PASS [   0.096s] (3403/3433) yakogl::usc_limits gl_test_case_200_intrt_on_the_host
+        PASS [   0.083s] (3404/3433) yakogl::usc_limits gl_test_case_87_counts_what_the_board_case_expects
+        PASS [   0.026s] (3405/3433) yakogl::usc_limits gl_test_case_8_blends_on_the_host
+        PASS [   0.017s] (3406/3433) yakogl::usc_limits gl_test_case_91_blends_into_rgba16f_on_the_host
+        PASS [   0.361s] (3407/3433) yakogl::usc_limits gl_test_case_98_counts_what_the_board_case_expects
+        PASS [   0.093s] (3408/3433) yakogl::usc_limits integer_render_targets_get_the_packed_bits
+        PASS [  12.484s] (3409/3433) yakogl::usc_limits a_loop_bounded_per_instance_runs_under_the_execution_mask
+        PASS [   0.047s] (3410/3433) yakogl::usc_limits several_colour_outputs_are_packed_to_their_own_pixel_output_registers
+        PASS [   0.050s] (3411/3433) yakogl::usc_limits several_srgb_outputs_are_encoded_bytes_one_register_each
+        PASS [   0.042s] (3412/3433) yakogl::usc_limits source_modifiers_compose_in_the_hardware_order_or_refuse
+        PASS [   0.053s] (3413/3433) yakogl::usc_limits texture2d_proj_divides_in_the_shader_with_pvr_proj_divide
+        PASS [   0.031s] (3414/3433) yakogl::usc_limits texture_size_of_a_stacked_texture_divides_the_stacked_height
+        PASS [   0.090s] (3415/3433) yakogl::usc_limits texture_size_reads_the_image_state_as_pco_does
+        PASS [   0.063s] (3416/3433) yakogl::usc_limits the_clear_programs_move_shared_k_to_pixel_output_k
+        PASS [   0.244s] (3417/3433) yakogl::usc_limits the_default_scratch_compiles_the_pre_runs_two_largest_shaders
+        PASS [   0.058s] (3418/3433) yakogl::usc_limits the_driver_words_sit_after_the_uniforms_in_one_order
+        PASS [   0.037s] (3419/3433) yakogl::usc_limits the_execution_mask_groups_are_pcos_to_the_byte
+        PASS [   3.220s] (3420/3433) yakogl::usc_limits pcos_execution_mask_loops_run_in_the_model_and_agree_with_ours
+        PASS [   0.038s] (3421/3433) yakogl::usc_limits the_mag_switch_remap_runs_on_the_usc_model
+        PASS [   0.030s] (3422/3433) yakogl::usc_limits the_masked_clear_programs_keep_the_channels_the_mask_leaves_off
+        PASS [   6.625s] (3423/3433) yakogl::usc_limits gl_test_case_104_counts_what_the_board_case_expects
+        PASS [   1.149s] (3424/3433) yakogl::usc_limits the_unsigned_operations_compute_what_glsl_says
+        PASS [   0.016s] (3425/3433) yakogl::usc_limits unread_attributes_take_no_vertex_input_registers
+        PASS [   0.018s] (3426/3433) yakogl::usc_limits what_exact_gradients_cost_a_program
+        PASS [   1.118s] (3427/3433) yakogl::usc_limits trunc_rounds_toward_zero_on_every_sign
+        PASS [   1.079s] (3428/3433) yakogl::usc_old_image the_gate_rejects_the_image_main_shipped_before_it_and_accepts_todays
+        PASS [   0.248s] (3429/3433) yakogl::usc_survey the_powervr_corpus_through_selection
+        PASS [   0.018s] (3430/3433) yakogl::usc_survey the_usc1_vehicle_selects_and_here_are_its_groups
+        PASS [  16.207s] (3431/3433) yakogl::usc_limits the_repositorys_deqp_sources_compute_what_the_ir_means
+        PASS [  27.857s] (3432/3433) yakogl::usc_limits deqp_style_shaders_compute_what_the_ir_means_in_each_if_lowering
+        PASS [  38.013s] (3433/3433) yakogl::usc_limits what_the_usc_path_asks_of_the_machine_over_every_source_it_accepts
+────────────
+     Summary [ 134.264s] 3433 tests run: 3432 passed, 1 failed, 3 skipped
+        FAIL [   0.035s] (3137/3433) yakogl::es3_shaderc_corpus corpus
+error: test run failed
+cargo_test: 1 of 125 test binaries failed:
+  FAILED binary es3_shaderc_corpus (test): exit 1, log build/check/tests-2256/logs/19/56.log
+(whole output: build/check-fail/2256/3.log)
+[32mok    clippy  host-test,gpu-vivante,shaderc-online,precompiled-shaders [105s][0m
+[31mFAIL  test    host-test,gpu-vivante,shaderc-online,precompiled-shaders [686s][0m
+    thread 'corpus' (102873) panicked at tests/es3_shaderc_corpus.rs:842:10:
+error: test run failed
+        PASS [   0.035s] (3280/3313) yakogl::online_lowering the_shapes_of_if_arms_the_back_end_cannot_flatten
+        PASS [   0.014s] (3281/3313) yakogl::online_oracle a_source_is_matched_to_its_row_by_digest_and_not_by_name
+        PASS [   0.014s] (3282/3313) yakogl::online_oracle a_variant_entry_is_recognised_and_not_counted_as_a_gap
+        PASS [   0.074s] (3283/3313) yakogl::online_oracle every_source_either_compiles_or_says_why
+        PASS [   0.086s] (3284/3313) yakogl::online_oracle name_the_sources_that_compile
+        PASS [   0.112s] (3285/3313) yakogl::online_oracle generated_code_against_the_table_structurally
+        PASS [   0.008s] (3286/3313) yakogl::online_oracle the_comparison_notices_a_change_in_every_kind_of_field_it_claims_to_cover
+        PASS [   0.021s] (3287/3313) yakogl::online_reflection the_reflection_equals_the_offline_tables_rows
+        PASS [   0.121s] (3288/3313) yakogl::online_oracle name_the_sources_that_do_not_compile_by_reason
+        PASS [   0.106s] (3289/3313) yakogl::online_oracle reflection_against_the_offline_table
+        PASS [   0.085s] (3290/3313) yakogl::operand_banks the_operand_bank_surveys
+        PASS [   0.102s] (3291/3313) yakogl::scratch_survey who_sets_the_scratch_high_water
+        PASS [   0.075s] (3292/3313) yakogl::source_use_bits every_source_use_bit_we_emit_is_the_references
+        PASS [   0.207s] (3293/3313) yakogl::stack_survey the_compilers_stack_by_phase_adversarial
+        PASS [   0.615s] (3294/3313) yakogl::read_before_write every_register_a_program_reads_is_written_first
+        PASS [   1.228s] (3295/3313) yakogl::stack_survey the_compilers_stack_by_phase_shaders_es300
+        PASS [   3.536s] (3296/3313) yakogl::gc_unorm24_exhaustive time_1024_square_conversions
+        PASS [   0.370s] (3297/3313) yakogl::stack_survey the_compilers_stack_by_phase_shaders_gl_test_es100
+        PASS [   1.343s] (3298/3313) yakogl::stack_survey the_compilers_stack_by_phase_shaders_femtovg
+        PASS [   0.188s] (3299/3313) yakogl::stack_survey the_compilers_stack_by_phase_shaders_internal
+        PASS [   0.217s] (3300/3313) yakogl::stack_survey the_compilers_stack_by_phase_shaders_top
+        PASS [   0.680s] (3301/3313) yakogl::stack_survey the_compilers_stack_by_phase_shaders_offarm
+        PASS [   3.400s] (3302/3313) yakogl::stack_survey the_compilers_stack_by_phase_shaders_es100
+        PASS [   0.013s] (3303/3313) yakogl::stack_survey the_parts_cover_the_corpus
+        PASS [   0.274s] (3304/3313) yakogl::temps_survey the_vivante_temps_surveys
+        PASS [   0.209s] (3305/3313) yakogl::twin_draw_list twinnable_corpus
+        PASS [   2.529s] (3306/3313) yakogl::stack_survey the_compilers_stack_by_phase_shaders_gltest
+        PASS [   0.014s] (3307/3313) yakogl::uniidx_knobs a_run_time_indexed_uniform_is_a_load_from_the_blocks_copy_in_memory
+        PASS [   0.509s] (3308/3313) yakogl::undefined_lanes no_selected_instruction_reads_a_lane_nothing_writes
+        PASS [   0.016s] (3309/3313) yakogl::usc_survey the_usc1_vehicle_selects_and_here_are_its_groups
+        PASS [   0.208s] (3310/3313) yakogl::usc_survey the_powervr_corpus_through_selection
+        PASS [   0.013s] (3311/3313) yakogl::vivante_npot the_gc7000ul_has_non_power_of_two
+        PASS [   2.579s] (3312/3313) yakogl::stack_survey the_compilers_stack_by_phase_table_vertex
+        PASS [   4.114s] (3313/3313) yakogl::stack_survey the_compilers_stack_by_phase_table_fragment
+────────────
+     Summary [  52.538s] 3313 tests run: 3312 passed, 1 failed, 5 skipped
+        FAIL [   0.019s] (3086/3313) yakogl::es3_shaderc_corpus corpus
+error: test run failed
+cargo_test: 1 of 125 test binaries failed:
+  FAILED binary es3_shaderc_corpus (test): exit 1, log build/check/tests-2256/logs/21/17.log
+(whole output: build/check-fail/2256/4.log)
+[32mok    clippy  host-test,gpu-powervr,precompiled-shaders,no-shader-table (no compiler; lib and its tests) [39s][0m
+[32mok    test    host-test,gpu-powervr,precompiled-shaders,no-shader-table (no compiler: shaderc::precompiled) [173s][0m
+[32mok    clippy  host-test,gpu-vivante,precompiled-shaders,no-shader-table (no compiler; lib and its tests) [47s][0m
+[32mok    test    host-test,gpu-vivante,precompiled-shaders,no-shader-table (no compiler: shaderc::precompiled) [146s][0m
+[32mok    clippy  host-test,gpu-vivante,shaderc-online,no-shader-table (no tests: see BUILD_ONLY_CONFIGS) [25s][0m
+[32mok    clippy  host-test,gpu-powervr,shaderc-online,no-shader-table (no tests: see BUILD_ONLY_CONFIGS) [26s][0m
+[32mok    clippy  host-test,gpu-vivante,shaderc-online,test-knobs [77s][0m
+[32mok    test    host-test,gpu-vivante,shaderc-online,test-knobs (--lib, 10 knob tests by name) [334s][0m
+[32mok    test    host-test,gpu-vivante,shaderc-online,test-knobs (tests/gc_kick_diff.rs, 7 tests) [103s][0m
+[32mok    clippy  host-test,gpu-powervr,shaderc-online,test-knobs [93s][0m
+[32mok    test    host-test,gpu-powervr,shaderc-online,test-knobs (--lib, 9 knob tests by name) [282s][0m
+[32mok    clippy  host-test,gpu-v3d,shaderc-online,no-shader-table [71s][0m
+      host-test,gpu-v3d,shaderc-online,no-shader-table: 4 ignored test(s), listed in build/check/v3d-ignored.txt:
+      ignored	gl::tf_capture_tests::capture_cost	a measurement, run by hand
+      ignored	shaderc::online::v3d::chain::tests::a_builtin_on_a_vec2_records_two_lanes	front-end gap: built-in widths unrecorded (comps 0 -> fallback 4); costs lanes, not pixels; see v3d-backend.md
+      ignored	shaderc::online::v3d::mesa_ref::decoder_agrees_with_mesa_on_every_field_combination	needs V3D_QPU_REF, the tools/v3d/qpu_ref.c binary
+      ignored	shaderc::online::v3d::roundtrip::listing_matches_mesa_on_the_corpus	needs V3D_KEEP_DIR, the --keep output of tools/v3d/glsl2v3d.py
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (--lib, GL suite on the online compiler) [367s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_sim_mesa.rs) [152s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_cube_noseamless.rs) [4s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_clear.rs) [4s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_glmark2_mem.rs) [5s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_rt_sample.rs) [3s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/depth_resolve_v3d.rs) [5s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/mipmap_offer_guard.rs) [6s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_tfu_host.rs) [6s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_tfu_mipmap_nowait.rs) [5s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_lazy_raster_readers.rs) [8s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_depth_storage.rs) [8s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_uniform_host.rs) [6s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_int_rt.rs) [2s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_int_rt_v3d.rs) [2s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_formats_v3d.rs) [4s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_shaderc_v3d.rs) [3s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_tf_api.rs) [3s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_srgb.rs) [2s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_occlusion_gl.rs) [3s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_mrt_gl.rs) [3s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/egl_bench_configs.rs) [2s][0m
+[32mok    test    host-test,gpu-powervr,shaderc-online (tests/es3_vertex_arrays.rs) [1s][0m
+[32mok    test    host-test,gpu-powervr,shaderc-online (tests/es3_pvr_2darray.rs) [1s][0m
+[32mok    test    host-test,gpu-powervr,shaderc-online (tests/es3_pvr_shadow.rs) [2s][0m
+[32mok    test    host-test,gpu-powervr,shaderc-online (tests/es3_pvr_3d.rs) [1s][0m
+[32mok    test    host-test,gpu-powervr,shaderc-online (tests/es3_pvr_fragdepth.rs) [1s][0m
+[32mok    clippy  host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 [75s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (--lib shaderc::online::v3d) [335s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (--lib v3d::backend_tests, separate depth/stencil) [2s][0m

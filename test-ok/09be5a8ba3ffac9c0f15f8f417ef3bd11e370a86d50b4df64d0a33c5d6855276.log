@@ -1,0 +1,6 @@
+        PASS [   0.073s] (3261/3430) yakogl::gl_buffer_retired_reuse a_partial_update_after_a_full_one
+        PASS [   0.048s] (3262/3430) yakogl::gl_buffer_retired_reuse alternating_sub_data_and_maps_draw_the_reference_bytes
+        PASS [   0.112s] (3263/3430) yakogl::gl_buffer_retired_reuse an_idle_write_between_busy_ones_is_carried
+        PASS [   0.048s] (3264/3430) yakogl::gl_buffer_retired_reuse more_ranges_than_the_dirty_list_keeps_still_draw_the_reference_bytes
+        PASS [   0.020s] (3265/3430) yakogl::gl_buffer_retired_reuse random_writes_of_every_kind_draw_the_reference_bytes
+        PASS [   0.068s] (3266/3430) yakogl::gl_buffer_retired_reuse sub_data_to_a_busy_buffer_reuses_retired_storage_and_copies_the_dirty_ranges

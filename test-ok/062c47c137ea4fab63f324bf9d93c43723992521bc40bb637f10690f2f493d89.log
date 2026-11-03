@@ -1,0 +1,492 @@
+        PASS [   0.005s] (  1/492) yakogl-drivers board::imx8mp::tests::a_claimed_code_is_held_on_either_end
+        PASS [   0.011s] (  2/492) yakogl-drivers aarch64::tests::the_entry_hcr_drops_every_vhe_host_bit_but_rw
+        PASS [   0.014s] (  3/492) yakogl-drivers board::imx8mp::tests::a_recorded_end_resets_at_once_pass_or_fail
+        PASS [   0.014s] (  4/492) yakogl-drivers aarch64::tests::eoi_mode_is_cleared_only_when_set_and_reachable
+        PASS [   0.009s] (  5/492) yakogl-drivers board::imx8mp::tests::gpu_resets_without_a_code_are_the_reset_codes
+        PASS [   0.011s] (  6/492) yakogl-drivers board::imx8mp::tests::the_older_end_keeps_the_pass_and_fail_holds
+        PASS [   0.008s] (  7/492) yakogl-drivers board::nanopc_t6::tests::before_the_sample_speaks_it_feeds_until_the_deadline_and_not_at_it
+        PASS [   0.008s] (  8/492) yakogl-drivers board::nanopc_t6::tests::a_deadline_of_zero_never_feeds
+        PASS [   0.010s] (  9/492) yakogl-drivers board::nanopc_t6::tests::released_stops_the_feeding_whatever_else_holds
+        PASS [   0.009s] ( 10/492) yakogl-drivers board::nanopc_t6::tests::the_deadline_wins_over_a_fresh_alive_call
+        PASS [   0.009s] ( 11/492) yakogl-drivers board::nanopc_t6_early::tests::banner_a_at_el2_names_both_hcr_values
+        PASS [   0.009s] ( 12/492) yakogl-drivers board::nanopc_t6_early::tests::banner_a_with_the_exit_off_says_kept
+        PASS [   0.012s] ( 13/492) yakogl-drivers board::nanopc_t6::tests::the_alive_window_is_inclusive
+        PASS [   0.006s] ( 14/492) yakogl-drivers board::nanopc_t6_gpu::tests::a_clock_the_supply_does_not_cover_stops_before_the_pmu_is_written
+        PASS [   0.009s] ( 15/492) yakogl-drivers board::nanopc_t6_gpu::tests::a_supply_that_reads_off_stops_before_the_pmu_is_written
+        PASS [   0.006s] ( 16/492) yakogl-drivers board::nanopc_t6_gpu::tests::from_the_handed_over_state_it_reads_the_supply_powers_and_finds_the_g610
+        PASS [   0.012s] ( 17/492) yakogl-drivers board::nanopc_t6_early::tests::the_other_lines
+        PASS [   0.010s] ( 18/492) yakogl-drivers board::nanopc_t6_gpu::tests::another_gpu_id_stops_before_the_reset
+        PASS [   0.006s] ( 19/492) yakogl-drivers board::nanopc_t6_gpu::tests::the_handover_report_comes_before_any_pmu_or_gpu_write
+        PASS [   0.007s] ( 20/492) yakogl-drivers board::nanopc_t6_gpu::tests::the_opp_table_bounds_the_clock_by_the_supply
+        PASS [   0.008s] ( 21/492) yakogl-drivers board::nanopc_t6_mmu::tests::a_pool_too_small_or_a_failed_clean_stops_before_as0_is_touched
+        PASS [   0.005s] ( 22/492) yakogl-drivers board::nanopc_t6_mmu::tests::another_mmu_shape_stops_before_any_write
+        PASS [   0.005s] ( 23/492) yakogl-drivers board::nanopc_t6_mmu::tests::from_a_reset_gpu_as0_comes_up_on_the_section_s_tables
+        PASS [   0.017s] ( 24/492) yakogl-drivers board::nanopc_t6_mmu::tests::a_fault_after_the_update_is_reported
+        PASS [   0.013s] ( 25/492) yakogl-drivers board::nanopc_t6_mmu::tests::a_register_that_does_not_keep_its_value_is_named
+        PASS [   0.010s] ( 26/492) yakogl-drivers board::nanopc_t6_mmu::tests::the_live_memattr_holds_the_derived_attributes_a_pte_selects
+        PASS [   0.011s] ( 27/492) yakogl-drivers board::nanopc_t6_mmu::tests::z3_s_firmware_sections_take_nine_table_pages
+        PASS [   0.009s] ( 28/492) yakogl-drivers board::nanopc_t6_sections::tests::a_bad_backing_or_a_small_pool_is_refused_before_as0_is_touched
+        PASS [   0.006s] ( 29/492) yakogl-drivers board::nanopc_t6_sections::tests::every_section_comes_up_in_as0_on_nine_table_pages
+        PASS [   0.006s] ( 30/492) yakogl-drivers board::nanopc_t6_sections::tests::the_boards_file_maps_into_as0_section_by_section
+        PASS [   0.004s] ( 31/492) yakogl-drivers board::nanopc_t6_sections::tests::the_cpu_side_is_the_backing_inside_one_section_only
+        PASS [   0.014s] ( 32/492) yakogl-drivers board::nanopc_t6_sections::tests::every_page_descriptor_follows_panthors_rules
+        PASS [   0.007s] ( 33/492) yakogl-drivers board::record::tests::classify_known_records
+        PASS [   0.007s] ( 34/492) yakogl-drivers board::nanopc_t6_sections::tests::the_protection_is_the_sections_own_flags_as_panthor_reads_them
+        PASS [   0.005s] ( 35/492) yakogl-drivers board::record::tests::crcs_check_values
+        PASS [   0.012s] ( 36/492) yakogl-drivers board::record::tests::check_run_words_keep_not_measured_apart_from_saturated
+        PASS [   0.006s] ( 37/492) yakogl-drivers board::record::tests::describe_every_kind
+        PASS [   0.006s] ( 38/492) yakogl-drivers board::record::tests::display_words_and_their_decode
+        PASS [   0.009s] ( 39/492) yakogl-drivers board::record::tests::gl_error_words_and_their_decode
+        PASS [   0.008s] ( 40/492) yakogl-drivers board::record::tests::glmark2_default_info_is_the_default_list
+        PASS [   0.005s] ( 41/492) yakogl-drivers board::record::tests::gm_selector_is_its_own
+        PASS [   0.009s] ( 42/492) yakogl-drivers board::record::tests::gm_page_words_and_their_decode
+        PASS [   0.005s] ( 43/492) yakogl-drivers board::record::tests::line_round_trip_and_garbage
+        PASS [   0.008s] ( 44/492) yakogl-drivers board::record::tests::packers
+        PASS [   0.016s] ( 45/492) yakogl-drivers board::record::tests::kinds_are_one_to_twenty_five_and_the_tag_list_is_the_formats
+        PASS [   0.006s] ( 46/492) yakogl-drivers board::record::tests::rate_words_give_the_throughput_line
+        PASS [   0.006s] ( 47/492) yakogl-drivers board::record::tests::stages_unique_and_sub_steps_in_place
+        PASS [   0.009s] ( 48/492) yakogl-drivers board::record::tests::set_summary_words_and_their_decode
+        PASS [   0.016s] ( 49/492) yakogl-drivers board::record::tests::throughput_of_two_panels
+        PASS [   0.011s] ( 50/492) yakogl-drivers board::record::tests::writer_reproduces_the_baseline_picture
+        PASS [   0.010s] ( 51/492) yakogl-drivers board::rpi4::tests::pan_rows
+        PASS [   0.006s] ( 52/492) yakogl-drivers board::rpi4::tests::pixel_order_tag
+        PASS [   0.010s] ( 53/492) yakogl-drivers board::tests::c_header_is_generated_from_the_table
+        PASS [   0.005s] ( 54/492) yakogl-drivers errno_numbers::tests::each_numbering_is_one_to_one
+        PASS [   0.013s] ( 55/492) yakogl-drivers board::tests::gm_record_fixture_decodes_to_the_console_lines
+        PASS [   0.021s] ( 56/492) yakogl-drivers board::rpi4::tests::which_windows_are_views
+        PASS [   0.011s] ( 57/492) yakogl-drivers errno_numbers::tests::the_numberings_differ_where_the_doc_says
+        PASS [   0.009s] ( 58/492) yakogl-drivers ffi::board::tests::entry_points_follow_the_rules
+        PASS [   0.011s] ( 59/492) yakogl-drivers ffi::board::tests::glmark2_entry_points_are_the_record_functions
+        PASS [   0.005s] ( 60/492) yakogl-drivers ffi::board::tests::the_hold_entry_point_is_hold_seconds
+        PASS [   0.008s] ( 61/492) yakogl-drivers ffi::board::tests::the_gm_page_entry_point_is_the_record_function
+        PASS [   0.006s] ( 62/492) yakogl-drivers ffi::hdmi::tests::cold_on_flip_off_and_health
+        PASS [   0.010s] ( 63/492) yakogl-drivers ffi::hdmi::tests::stop_after_is_reported_with_its_stage
+        PASS [   0.012s] ( 64/492) yakogl-drivers ffi::hdmi::tests::config_maps_the_flags
+        PASS [   0.014s] ( 65/492) yakogl-drivers ffi::hdmi::tests::without_force_cold_a_running_chain_is_adopted_and_given_back
+        PASS [   0.010s] ( 66/492) yakogl-drivers ffi::imx8mp::tests::a_root_moved_under_a_running_pwm_forces_a_restart
+        PASS [   0.009s] ( 67/492) yakogl-drivers ffi::imx8mp::tests::channel_one_and_bad_requests_are_refused_without_access
+        PASS [   0.008s] ( 68/492) yakogl-drivers ffi::imx8mp::tests::init_writes_nothing_and_reports_24_mhz
+        PASS [   0.011s] ( 69/492) yakogl-drivers ffi::imx8mp::tests::media_through_the_c_struct_keeps_its_state_in_data
+        PASS [   0.012s] ( 70/492) yakogl-drivers ffi::imx8mp::tests::the_backlight_from_cold_clock_first_then_the_pwm
+        PASS [   0.024s] ( 71/492) yakogl-drivers ffi::imx8mp::tests::init_refuses_indices_outside_the_ccm
+        PASS [   0.018s] ( 72/492) yakogl-drivers ffi::imx8mp::tests::zero_percent_touches_no_clock
+        PASS [   0.018s] ( 73/492) yakogl-drivers ffi::imx8mp_dsi::tests::the_c_header_has_the_link_margin
+        PASS [   0.016s] ( 74/492) yakogl-drivers ffi::imx8mp_dsi::tests::through_the_c_structs_cold_then_adopt
+        PASS [   0.028s] ( 75/492) yakogl-drivers ffi::imx8mp_dsi::tests::the_c_header_names_the_same_bits
+        PASS [   0.012s] ( 76/492) yakogl-drivers ffi::imx_wdog::tests::a_refusal_is_minus_eio_with_its_number
+        PASS [   0.030s] ( 77/492) yakogl-drivers ffi::imx_wdog::tests::a_running_watchdog_with_its_clock_on_writes_nothing_to_the_ccm
+        PASS [   0.029s] ( 78/492) yakogl-drivers ffi::imx_wdog::tests::cold_root_and_gate_are_opened_then_the_watchdog_armed
+        PASS [   0.029s] ( 79/492) yakogl-drivers ffi::imx_wdog::tests::the_c_header_has_the_same_numbers
+        PASS [   0.008s] ( 80/492) yakogl-drivers ffi::rk3588::tests::a_refusal_is_minus_eio_with_its_number
+        PASS [   0.006s] ( 81/492) yakogl-drivers ffi::rk3588::tests::armbian_s_state_arms_without_touching_the_cru
+        PASS [   0.005s] ( 82/492) yakogl-drivers ffi::rk3588::tests::closed_gates_are_opened_apb_clock_first
+        PASS [   0.022s] ( 83/492) yakogl-drivers ffi::rk3588::mmu_tests::the_words_c_prints_are_the_run_s_values
+        PASS [   0.031s] ( 84/492) yakogl-drivers ffi::rk3588::mmu_tests::the_c_header_has_the_z2_numbers_and_layout
+        PASS [   0.008s] ( 85/492) yakogl-drivers ffi::sn65dsi8x::tests::start_through_the_c_structs_fills_data
+        PASS [   0.015s] ( 86/492) yakogl-drivers ffi::rk3588::tests::the_c_header_has_the_same_numbers
+        PASS [   0.020s] ( 87/492) yakogl-drivers gpu::mali::csf::tests::a_csg_doorbell_toggles_doorbell_req_and_rings_the_global_one
+        PASS [   0.031s] ( 88/492) yakogl-drivers gpu::mali::csf::tests::a_running_mcu_or_a_stuck_interrupt_is_refused_before_the_start
+        PASS [   0.027s] ( 89/492) yakogl-drivers gpu::mali::csf::tests::a_section_as0_does_not_map_stops_the_load
+        PASS [   0.017s] ( 90/492) yakogl-drivers gpu::mali::csf::tests::a_toggle_flips_only_its_bits_against_the_ack
+        PASS [   0.026s] ( 91/492) yakogl-drivers gpu::mali::csf::tests::a_version_of_0_is_a_failed_boot
+        PASS [   0.029s] ( 92/492) yakogl-drivers gpu::mali::csf::tests::an_interface_before_1_1_0_has_no_instr_features
+        PASS [   0.059s] ( 93/492) yakogl-drivers gpu::mali::csf::tests::an_mcu_that_never_answers_times_out_after_1_s_with_its_status
+        PASS [   0.016s] ( 94/492) yakogl-drivers gpu::mali::csf::tests::groups_and_streams_that_differ_from_the_first_are_refused
+        PASS [   0.057s] ( 95/492) yakogl-drivers gpu::mali::csf::tests::bad_counts_blocks_and_pages_outside_the_shared_section_are_refused
+        PASS [   0.062s] ( 96/492) yakogl-drivers gpu::mali::csf::tests::code_not_loaded_is_no_boot
+        PASS [   0.010s] ( 97/492) yakogl-drivers gpu::mali::csf::tests::the_layouts_are_panthors
+        PASS [   0.351s] ( 98/492) yakogl-drivers board::nanopc_t6_sections::tests::load_sections_through_the_board_memory_cleans_every_loaded_byte
+        PASS [   0.011s] ( 99/492) yakogl-drivers gpu::mali::csf::tests::the_timers_are_24_mhz_ticks_in_units_of_1024
+        PASS [   0.024s] (100/492) yakogl-drivers gpu::mali::csf::tests::the_boot_reads_version_1_5_0_and_the_ping_is_acknowledged
+        PASS [   0.008s] (101/492) yakogl-drivers gpu::mali::fw::tests::a_synthetic_image_parses_section_by_section
+        PASS [   0.014s] (102/492) yakogl-drivers gpu::mali::fw::tests::a_build_string_without_its_nul_is_ignored
+        PASS [   0.006s] (103/492) yakogl-drivers gpu::mali::fw::tests::an_entry_list_cut_inside_an_entry_is_refused
+        PASS [   0.031s] (104/492) yakogl-drivers gpu::mali::csf::tests::the_sections_land_where_as0_maps_them_zeroed_and_cleaned
+        PASS [   0.005s] (105/492) yakogl-drivers gpu::mali::fw::tests::each_header_defect_is_refused_by_name
+        PASS [   0.007s] (106/492) yakogl-drivers gpu::mali::fw::tests::the_shared_region_must_be_there_and_shared
+        PASS [   0.007s] (107/492) yakogl-drivers gpu::mali::mmu::tests::a_flush_after_a_map_locks_its_range_and_spares_the_lsc
+        PASS [   0.015s] (108/492) yakogl-drivers gpu::mali::fw::tests::each_entry_defect_is_refused_by_name_in_panthors_order
+        PASS [   0.009s] (109/492) yakogl-drivers gpu::mali::mmu::tests::an_address_space_that_stays_active_is_refused_before_its_next_command
+        PASS [   0.011s] (110/492) yakogl-drivers gpu::mali::mmu::tests::as_enable_is_panthor_s_sequence
+        PASS [   0.009s] (111/492) yakogl-drivers gpu::mali::mmu::tests::as_regs_read_writes_nothing
+        PASS [   0.051s] (112/492) yakogl-drivers gpu::mali::csf::tests::unacknowledged_requests_time_out_after_100_ms
+        PASS [   0.007s] (113/492) yakogl-drivers gpu::mali::mmu::tests::lock_regions_are_naturally_aligned_powers_of_two
+        PASS [   0.010s] (114/492) yakogl-drivers gpu::mali::mmu::tests::the_non_coherent_t6_values_are_the_design_page_s
+        PASS [   0.006s] (115/492) yakogl-drivers gpu::mali::pgtable::tests::a_table_outside_the_pool_is_not_followed
+        PASS [   0.012s] (116/492) yakogl-drivers gpu::mali::pgtable::tests::a_cached_writable_page_has_the_fields_io_pgtable_sets
+        PASS [   0.012s] (117/492) yakogl-drivers gpu::mali::pgtable::tests::a_full_pool_and_bad_arguments_are_refused
+        PASS [   0.008s] (118/492) yakogl-drivers gpu::mali::pgtable::tests::mappings_share_tables_and_are_never_replaced
+        PASS [   0.007s] (119/492) yakogl-drivers gpu::mali::tests::a_completion_that_cannot_be_cleared_is_refused_before_the_command
+        PASS [   0.010s] (120/492) yakogl-drivers gpu::mali::pgtable::tests::the_mcu_shared_section_maps_in_four_tables_and_walks_back
+        PASS [   0.011s] (121/492) yakogl-drivers gpu::mali::pgtable::tests::the_indices_of_a_48_bit_va
+        PASS [   0.012s] (122/492) yakogl-drivers gpu::mali::tests::a_flush_clears_then_commands_then_sees_its_completion
+        PASS [   0.007s] (123/492) yakogl-drivers gpu::mali::tests::a_reset_that_never_completes_times_out_after_100_ms
+        PASS [   0.013s] (124/492) yakogl-drivers gpu::mali::tests::a_flush_that_cannot_be_told_from_an_old_one_or_never_ends_is_refused
+        PASS [   0.014s] (125/492) yakogl-drivers gpu::mali::tests::an_l2_ready_of_0_is_not_taken_as_ready
+        PASS [   0.005s] (126/492) yakogl-drivers gpu::mali::tests::l2_power_on_sets_no_coherency_then_powers_the_one_l2
+        PASS [   0.008s] (127/492) yakogl-drivers gpu::mali::tests::ident_reads_what_panthor_printed
+        PASS [   0.006s] (128/492) yakogl-drivers gpu::mali::tests::soft_reset_clears_then_commands_then_acknowledges
+        PASS [   0.006s] (129/492) yakogl-drivers gpu::pvr::ccb::at_maximum_tests::a_grow_to_the_maximum_with_its_own_notice_is_no_stop
+        PASS [   0.010s] (130/492) yakogl-drivers gpu::mali::tests::the_flush_command_is_panthor_s_encoding
+        PASS [   0.008s] (131/492) yakogl-drivers gpu::pvr::ccb::at_maximum_tests::fwccb_2s_batch_stops_at_the_maximum
+        PASS [   0.013s] (132/492) yakogl-drivers gpu::pvr::ccb::at_maximum_tests::two_notices_after_a_grow_with_room_left_are_no_stop
+        PASS [   0.010s] (133/492) yakogl-drivers gpu::pvr::ccb::fwccb_check_tests::a_slot_that_stays_empty_is_said_after_the_bound
+        PASS [   0.007s] (134/492) yakogl-drivers gpu::pvr::ccb::fwccb_check_tests::an_empty_slot_that_fills_is_reread_and_consumed
+        PASS [   0.011s] (135/492) yakogl-drivers gpu::pvr::ccb::fwccb_check_tests::a_write_offset_that_went_back_is_said
+        PASS [   0.008s] (136/492) yakogl-drivers gpu::pvr::freelist::grow_tests::a_grow_from_the_reserve_is_as_before_and_asks_no_source
+        PASS [   0.010s] (137/492) yakogl-drivers gpu::pvr::ccb::fwccb_check_tests::without_the_check_the_empty_slot_is_skipped_and_its_command_lost
+        PASS [   0.014s] (138/492) yakogl-drivers gpu::pvr::freelist::grow_tests::a_full_list_asks_no_source
+        PASS [   0.013s] (139/492) yakogl-drivers gpu::pvr::freelist::grow_tests::a_grow_is_refused_only_when_the_refill_and_the_grow_are_refused
+        PASS [   0.009s] (140/492) yakogl-drivers gpu::pvr::freelist::grow_tests::a_grow_past_the_table_is_refused_by_name
+        PASS [   0.012s] (141/492) yakogl-drivers gpu::pvr::freelist::grow_tests::a_refused_grow_counts_exactly_the_verdict_counters_and_asks_again
+        PASS [   0.010s] (142/492) yakogl-drivers gpu::pvr::freelist::grow_tests::a_refused_on_demand_grow_is_no_grow_with_its_own_line
+        PASS [   0.013s] (143/492) yakogl-drivers gpu::pvr::freelist::grow_tests::a_refused_grow_is_counted_and_not_a_stop_with_the_knob
+        PASS [   0.013s] (144/492) yakogl-drivers gpu::pvr::freelist::grow_tests::a_refused_grow_survives_with_room_and_stops_only_at_the_maximum
+        PASS [   0.008s] (145/492) yakogl-drivers gpu::pvr::freelist::grow_tests::a_refused_refill_is_counted_and_the_next_grow_asks_again
+        PASS [   0.008s] (146/492) yakogl-drivers gpu::pvr::freelist::grow_tests::no_refill_with_a_shared_pool_or_at_the_maximum
+        PASS [   0.010s] (147/492) yakogl-drivers gpu::pvr::freelist::grow_tests::reconstruction_leaves_the_firmware_counts_and_writes_the_stack_top
+        PASS [   0.006s] (148/492) yakogl-drivers gpu::pvr::freelist::grow_tests::reconstruction_lists_the_pages_the_list_holds
+        PASS [   0.012s] (149/492) yakogl-drivers gpu::pvr::freelist::grow_tests::reconstruction_after_own_grows_is_the_old_listing
+        PASS [   0.006s] (150/492) yakogl-drivers gpu::pvr::freelist::grow_tests::reconstruction_resets_every_hwrt_that_uses_the_list
+        PASS [   0.010s] (151/492) yakogl-drivers gpu::pvr::freelist::grow_tests::reset_hwrts_clears_the_partial_render_flags_and_leaves_the_rest
+        PASS [   0.010s] (152/492) yakogl-drivers gpu::pvr::freelist::grow_tests::the_at_maximum_stop_needs_the_notice_alone_and_a_full_list
+        PASS [   0.008s] (153/492) yakogl-drivers gpu::pvr::freelist::grow_tests::the_probe_refuses_grows_past_its_quota_by_name
+        PASS [   0.029s] (154/492) yakogl-drivers gpu::pvr::freelist::grow_tests::an_on_demand_grow_lists_256_pages_from_a_16_kib_boundary
+        PASS [   0.008s] (155/492) yakogl-drivers gpu::pvr::freelist::grow_tests::the_reserve_serves_each_grow_and_is_refilled_after_it
+        PASS [   0.008s] (156/492) yakogl-drivers gpu::pvr::freelist::grow_tests::update_stats_is_counted_by_element_and_named
+        PASS [   0.010s] (157/492) yakogl-drivers gpu::pvr::freelist::grow_tests::with_no_source_and_no_reserve_the_answer_is_the_old_no_grow
+        PASS [   0.015s] (158/492) yakogl-drivers gpu::pvr::freelist::grow_tests::the_table_is_its_own_stop_cause_and_the_first_cause_stays
+        PASS [   0.008s] (159/492) yakogl-drivers gpu::pvr::freelist::grow_tests::without_the_knob_a_refused_grow_is_no_stop
+        PASS [   0.011s] (160/492) yakogl-drivers gpu::pvr::freelist::grow_tests::without_the_knob_a_grow_at_the_maximum_is_a_stop
+        PASS [   0.006s] (161/492) yakogl-drivers gpu::pvr::freelist::grow_tests::without_the_knob_partial_rendered_is_never_set
+        PASS [   0.014s] (162/492) yakogl-drivers gpu::pvr::freelist::ready_pages_tests::a_grow_answers_the_new_share_as_ready
+        PASS [   0.010s] (163/492) yakogl-drivers gpu::pvr::freelist::ready_pages_tests::the_firmware_is_handed_the_uncached_window_with_the_knob
+        PASS [   0.015s] (164/492) yakogl-drivers gpu::pvr::freelist::ready_pages_tests::reconstruction_lists_current_and_ready_pages
+        PASS [   0.018s] (165/492) yakogl-drivers gpu::pvr::freelist::ready_pages_tests::build_writes_the_share_as_ready
+        PASS [   0.006s] (166/492) yakogl-drivers gpu::pvr::freelist::ready_pages_tests::the_share_is_upstreams
+        PASS [   0.012s] (167/492) yakogl-drivers gpu::pvr::freelist::ready_pages_tests::the_firmwares_counts_before_the_answer_are_said
+        PASS [   0.011s] (168/492) yakogl-drivers gpu::pvr::freelist::ready_pages_tests::without_the_threshold_a_grow_answers_ready_0
+        PASS [   0.006s] (169/492) yakogl-drivers gpu::pvr::fwinit::tests::knob_on_enables_debug_and_keeps_spm_main
+        PASS [   0.014s] (170/492) yakogl-drivers gpu::pvr::freelist::ready_pages_tests::without_the_threshold_no_before_line
+        PASS [   0.006s] (171/492) yakogl-drivers gpu::pvr::pool::tests::a_double_free_never_hands_one_range_to_two_callers
+        PASS [   0.010s] (172/492) yakogl-drivers gpu::pvr::pool::tests::a_double_free_is_refused_in_the_table_and_on_the_chain
+        PASS [   0.021s] (173/492) yakogl-drivers gpu::pvr::fwinit::tests::knob_off_keeps_todays_mask
+        PASS [   0.028s] (174/492) yakogl-drivers gpu::pvr::freelist::ready_pages_tests::without_the_threshold_build_is_as_before
+        PASS [   0.008s] (175/492) yakogl-drivers gpu::pvr::pool::tests::a_free_outside_the_top_region_is_dropped
+        PASS [   0.014s] (176/492) yakogl-drivers gpu::pvr::pool::tests::a_full_table_chains_and_merging_gives_one_range
+        PASS [   0.013s] (177/492) yakogl-drivers gpu::pvr::pool::tests::a_large_general_block_comes_from_the_top_and_a_small_one_from_the_bump
+        PASS [   0.021s] (178/492) yakogl-drivers gpu::pvr::pool::tests::a_large_request_reuses_a_freed_top_range_first
+        PASS [   0.015s] (179/492) yakogl-drivers gpu::pvr::pool::tests::a_refused_allocation_moves_no_cursor
+        PASS [   0.013s] (180/492) yakogl-drivers gpu::pvr::pool::tests::an_emptied_slot_takes_the_chains_head
+        PASS [   0.056s] (181/492) yakogl-drivers gpu::pvr::pool::tests::a_random_run_over_three_heaps_conserves_each_heap
+        PASS [   0.031s] (182/492) yakogl-drivers gpu::pvr::pool::tests::an_exhaustion_prints_the_summary_after_the_bumps_line
+        PASS [   0.019s] (183/492) yakogl-drivers gpu::pvr::pool::tests::an_overwritten_chain_header_cuts_the_chain
+        PASS [   0.017s] (184/492) yakogl-drivers gpu::pvr::pool::tests::best_fit_reaches_the_chain_and_keeps_the_rest
+        PASS [   0.014s] (185/492) yakogl-drivers gpu::pvr::pool::tests::exact_reuse_and_split
+        PASS [   0.102s] (186/492) yakogl-drivers gpu::pvr::pool::tests::a_random_run_conserves_the_pool
+        PASS [   0.011s] (187/492) yakogl-drivers gpu::pvr::pool::tests::foreign_and_unmapped_blocks_are_counted_as_dropped
+        PASS [   0.020s] (188/492) yakogl-drivers gpu::pvr::pool::tests::freed_top_blocks_merge_and_give_the_gap_back_whole
+        PASS [   0.018s] (189/492) yakogl-drivers gpu::pvr::pool::tests::known_wrong_a_block_of_another_heap_in_between_splits_the_free_space_for_good
+        PASS [   0.018s] (190/492) yakogl-drivers gpu::pvr::pool::tests::neighbours_on_both_sides_are_absorbed
+        PASS [   0.173s] (191/492) yakogl-drivers gpu::pvr::pool::tests::replay::carveout::glmark2_npot_chains_at_64_mib_are_refused_for_want_of_memory
+        PASS [   0.211s] (192/492) yakogl-drivers gpu::pvr::pool::tests::replay::carveout::glmark2_before_npot_chains_fits_64_mib
+        PASS [   0.317s] (193/492) yakogl-drivers gpu::pvr::pool::tests::replay::carveout::glmark2_fits_the_glmark2_images_carveout
+        PASS [   0.569s] (194/492) yakogl-drivers gpu::pvr::pool::tests::a_random_run_with_the_top_region_conserves_and_ends_whole
+        PASS [   0.379s] (195/492) yakogl-drivers gpu::pvr::pool::tests::replay::carveout::the_replay_matches_the_256_mib_board_run
+        PASS [   0.023s] (196/492) yakogl-drivers gpu::pvr::pool::tests::replay::the_frame_sets_general_arenas_are_the_top_regions_first_blocks
+        PASS [   0.222s] (197/492) yakogl-drivers gpu::pvr::pool::tests::replay::the_slint_and_cluster_sequences_are_served_with_the_top_region_as_without
+        PASS [   0.022s] (198/492) yakogl-drivers gpu::pvr::pool::tests::rollback_returns_the_newest_block_to_the_bump_only_when_on
+        PASS [   0.032s] (199/492) yakogl-drivers gpu::pvr::pool::tests::the_bump_stops_at_the_floor_and_a_small_request_falls_back_to_a_top_range
+        PASS [   0.008s] (200/492) yakogl-drivers gpu::pvr::pool::tests::the_run_end_report_is_the_summary_at_inf
+        PASS [   0.031s] (201/492) yakogl-drivers gpu::pvr::pool::tests::the_rust_pool_replays_the_c_pools_golden_trace
+        PASS [   0.034s] (202/492) yakogl-drivers gpu::pvr::pool::tests::with_the_top_region_on_the_golden_trace_replays_to_equality
+        PASS [   0.013s] (203/492) yakogl-drivers gpu::pvr::pr_diag::tests::addr_at_start_end_and_outside
+        PASS [   0.026s] (204/492) yakogl-drivers gpu::pvr::pr_diag::tests::assert_absent_or_short
+        PASS [   0.013s] (205/492) yakogl-drivers gpu::pvr::pr_diag::tests::assert_present
+        PASS [   0.847s] (206/492) yakogl-drivers gpu::pvr::pool::tests::replay::carveout::the_freelist_grow_pool_takes_a_quarter_from_128_mib
+        PASS [   0.012s] (207/492) yakogl-drivers gpu::pvr::pr_diag::tests::cmd_words_decodable_form
+        PASS [   0.021s] (208/492) yakogl-drivers gpu::pvr::pr_diag::tests::cmd_words_lines_and_indices
+        PASS [   0.020s] (209/492) yakogl-drivers gpu::pvr::pr_diag::tests::hwrt_pr_flag_clear
+        PASS [   0.019s] (210/492) yakogl-drivers gpu::pvr::pr_diag::tests::hwrt_pr_flag_set
+        PASS [   0.019s] (211/492) yakogl-drivers gpu::pvr::pr_diag::tests::hwrt_short_is_none
+        PASS [   0.017s] (212/492) yakogl-drivers gpu::pvr::render::owner_tests::each_block_taken_on_demand_is_its_own_owner_block
+        PASS [   0.020s] (213/492) yakogl-drivers gpu::pvr::render::owner_tests::a_half_built_hwrt_member_is_counted_and_not_built
+        PASS [   0.012s] (214/492) yakogl-drivers gpu::pvr::render::owner_tests::the_driver_owner_lines_follow_the_formulas
+        PASS [   0.012s] (215/492) yakogl-drivers gpu::pvr::render::owner_tests::the_grow_report_says_refills_and_notices
+        PASS [   0.014s] (216/492) yakogl-drivers gpu::pvr::render::submit_tests::a_size_with_every_member_in_flight_takes_a_second_pair
+        PASS [   0.014s] (217/492) yakogl-drivers gpu::pvr::render::submit_tests::the_knob_changes_only_the_pr_commands_and_the_geometry_fence_words
+        PASS [   0.012s] (218/492) yakogl-drivers gpu::pvr::render::submit_tests::with_the_knob_the_hwrt_data_carries_the_partial_render_accounting
+        PASS [   0.022s] (219/492) yakogl-drivers gpu::pvr::render::submit_tests::with_the_knob_the_pr_trio_comes_first_on_both_ccbs
+        PASS [   0.012s] (220/492) yakogl-drivers gpu::pvr::render::submit_tests::without_the_knob_the_commands_are_todays
+        PASS [   0.011s] (221/492) yakogl-drivers gpu::pvr::render::wait_tests::a_batch_of_one_grow_dumps_nothing
+        PASS [   0.022s] (222/492) yakogl-drivers gpu::pvr::render::submit_tests::without_the_knob_the_partial_render_words_stay_zero
+        PASS [   0.014s] (223/492) yakogl-drivers gpu::pvr::render::wait_tests::a_batch_of_two_served_grows_dumps_the_runaway_line
+        PASS [   0.024s] (224/492) yakogl-drivers gpu::pvr::render::wait_tests::a_fence_already_written_returns_without_waiting
+        PASS [   0.022s] (225/492) yakogl-drivers gpu::pvr::render::wait_tests::a_fence_that_never_moves_times_out_after_exactly_the_timeout
+        PASS [   0.007s] (226/492) yakogl-drivers gpu::pvr::render::wait_tests::a_ring_slot_reused_before_its_kick_completed_counts_as_lost
+        PASS [   0.008s] (227/492) yakogl-drivers gpu::pvr::render::wait_tests::a_stopped_render_service_takes_no_kick
+        PASS [   0.006s] (228/492) yakogl-drivers gpu::pvr::render::wait_tests::a_wait_before_init_is_refused_without_waiting
+        PASS [   0.027s] (229/492) yakogl-drivers gpu::pvr::render::wait_tests::a_kick_nobody_read_while_it_moved_has_the_whole_interval_as_its_error
+        PASS [   0.012s] (230/492) yakogl-drivers gpu::pvr::render::wait_tests::a_wait_ends_on_the_first_poll_step_after_the_fence_moved
+        PASS [   0.007s] (231/492) yakogl-drivers gpu::pvr::render::wait_tests::a_waited_kick_is_split_into_geometry_and_fragment_with_error_bars
+        PASS [   0.023s] (232/492) yakogl-drivers gpu::pvr::render::wait_tests::a_wait_shorter_than_the_stop_times_out_as_before
+        PASS [   0.016s] (233/492) yakogl-drivers gpu::pvr::render::wait_tests::an_out_of_memory_notice_with_room_left_is_no_stop
+        PASS [   0.015s] (234/492) yakogl-drivers gpu::pvr::render::wait_tests::before_any_kick_completed_the_reader_answers_no_data
+        PASS [   0.013s] (235/492) yakogl-drivers gpu::pvr::render::wait_tests::the_fl_counters_are_the_fields_in_order
+        PASS [   0.017s] (236/492) yakogl-drivers gpu::pvr::render::wait_tests::the_grow_context_counts_the_kicks_that_hold_pm_pages
+        PASS [   0.023s] (237/492) yakogl-drivers gpu::pvr::render::wait_tests::the_grow_line_is_sampled_before_the_batch_is_served
+        PASS [   0.018s] (238/492) yakogl-drivers gpu::pvr::render::wait_tests::the_grow_line_says_the_scenes_kicks_and_time
+        PASS [   0.014s] (239/492) yakogl-drivers gpu::pvr::render::wait_tests::the_next_kick_reports_fence_to_fence_time
+        PASS [   0.022s] (240/492) yakogl-drivers gpu::pvr::render::wait_tests::the_headers_stop_wait_is_the_rust_one
+        PASS [   0.014s] (241/492) yakogl-drivers gpu::pvr::render::wait_tests::the_probes_case_ends_the_wait_at_once_with_the_knob
+        PASS [   0.017s] (242/492) yakogl-drivers gpu::pvr::render::wait_tests::with_the_knob_a_still_fence_stops_before_the_watchdog
+        PASS [   0.014s] (243/492) yakogl-drivers gpu::pvr::render::wait_tests::without_the_knob_the_probes_case_ends_the_wait_too
+        PASS [   0.025s] (244/492) yakogl-drivers gpu::pvr::render::wait_tests::without_the_knob_a_still_fence_stops_before_the_watchdog_too
+        PASS [   0.014s] (245/492) yakogl-drivers gpu::pvr::rgxlayer::tests::a_64_bit_poll_reads_the_upper_word_first
+        PASS [   0.012s] (246/492) yakogl-drivers gpu::pvr::rgxlayer::tests::a_64_bit_write_is_low_word_then_high_word
+        PASS [   0.012s] (247/492) yakogl-drivers gpu::pvr::rgxlayer::tests::a_poll_that_holds_reads_once_and_waits_not
+        PASS [   0.011s] (248/492) yakogl-drivers gpu::pvr::rgxlayer::tests::a_poll_that_never_holds_times_out_after_the_bound
+        PASS [   0.012s] (249/492) yakogl-drivers gpu::pvr::rgxlayer::tests::meta_and_mips_entry_points_refuse_and_log
+        PASS [   0.015s] (250/492) yakogl-drivers gpu::pvr::rgxlayer::tests::copy_and_set
+        PASS [   0.022s] (251/492) yakogl-drivers gpu::pvr::rgxlayer::tests::read_modify_write_keeps_the_keep_mask
+        PASS [   0.022s] (252/492) yakogl-drivers gpu::pvr::rgxlayer::tests::the_core_answers
+        PASS [   0.011s] (253/492) yakogl-drivers gpu::pvr::rgxlayer::tests::the_irq_ack_clears_only_a_pending_event
+        PASS [   0.014s] (254/492) yakogl-drivers gpu::pvr::rgxlayer::tests::the_powered_state_and_the_addresses_come_from_the_context
+        PASS [   0.013s] (255/492) yakogl-drivers gpu::pvr::rgxlayer::tests::the_words_match_the_c_header
+        PASS [   0.012s] (256/492) yakogl-drivers gpu::pvr::rgxlayer::tests::wait_cycles_takes_the_longer_of_cycles_and_microseconds
+        PASS [   0.014s] (257/492) yakogl-drivers gpu::vivante::regs::tests::constants_are_the_rnndb_headers
+        PASS [   0.010s] (258/492) yakogl-drivers gpu::vivante::tests::a_gpu_that_never_idles_fails_the_reset_after_a_bounded_wait
+        PASS [   0.013s] (259/492) yakogl-drivers gpu::vivante::tests::a_submit_flushes_and_stalls_before_its_event_as_etnaviv_does
+        PASS [   0.013s] (260/492) yakogl-drivers gpu::vivante::tests::an_mmu_left_on_fails_the_reset
+        PASS [   0.024s] (261/492) yakogl-drivers gpu::vivante::tests::errors_count_and_unknown_ids_are_ignored
+        PASS [   0.025s] (262/492) yakogl-drivers gpu::vivante::tests::an_unknown_part_is_identified_from_registers_alone
+        PASS [   0.011s] (263/492) yakogl-drivers gpu::vivante::tests::fe_wait_idle_times_out
+        PASS [   0.013s] (264/492) yakogl-drivers gpu::vivante::tests::events_run_out_and_a_corrupt_bitmap_is_refused
+        PASS [   0.013s] (265/492) yakogl-drivers gpu::vivante::tests::fence_done_moves_forward_across_the_wrap
+        PASS [   0.018s] (266/492) yakogl-drivers gpu::vivante::tests::identify_refuses_a_gpu_that_does_not_answer
+        PASS [   0.026s] (267/492) yakogl-drivers gpu::vivante::tests::idle_state_names_the_busy_modules
+        PASS [   0.021s] (268/492) yakogl-drivers gpu::vivante::tests::layouts_are_the_c_structs
+        PASS [   0.012s] (269/492) yakogl-drivers gpu::vivante::tests::mmu_entries_are_galcores_layout
+        PASS [   0.015s] (270/492) yakogl-drivers gpu::vivante::tests::mmu_enable_failures
+        PASS [   0.018s] (271/492) yakogl-drivers gpu::vivante::tests::mmu_init_refuses_a_carveout_it_cannot_use
+        PASS [   0.009s] (272/492) yakogl-drivers gpu::vivante::tests::power_on_clocks_first_then_gpumix_then_gpu3d
+        PASS [   0.028s] (273/492) yakogl-drivers gpu::vivante::tests::power_failures
+        PASS [   0.010s] (274/492) yakogl-drivers gpu::vivante::tests::power_on_marks_each_sub_step_before_its_first_write
+        PASS [   0.015s] (275/492) yakogl-drivers gpu::vivante::tests::the_c_scenario_comes_out_identical
+        PASS [   0.015s] (276/492) yakogl-drivers gpu::vivante::tests::the_database_facts_are_folded_into_the_feature_words
+        PASS [   0.009s] (277/492) yakogl-drivers gpu::vivante::tests::the_pta_stream_is_one_load_state_and_an_end
+        PASS [   0.008s] (278/492) yakogl-drivers gpu::vivante::tests::wait_cycles_follow_the_core_clock_within_the_field
+        PASS [   0.014s] (279/492) yakogl-drivers gpu::vivante::tests::the_ring_commit_writes_the_address_before_the_header
+        PASS [   0.007s] (280/492) yakogl-drivers ip::cdns_dphy::tests::bands_from_the_vendored_table
+        PASS [   0.006s] (281/492) yakogl-drivers ip::cdns_dphy::tests::divider_ranges_follow_the_trm_table
+        PASS [   0.025s] (282/492) yakogl-drivers gpu::vivante::tests::without_the_secure_ahb_the_reset_uses_clock_control
+        PASS [   0.013s] (283/492) yakogl-drivers ip::cdns_dphy::tests::pll_rounds_as_the_trm_says_when_that_is_fast_enough
+        PASS [   0.014s] (284/492) yakogl-drivers ip::cdns_dphy::tests::pll_rvt70_matches_display_calc
+        PASS [   0.012s] (285/492) yakogl-drivers ip::cdns_dphy::tests::psm_divider_is_to_one_mhz
+        PASS [   0.010s] (286/492) yakogl-drivers ip::cdns_dsi::tests::attach_follows_the_trm_order
+        PASS [   0.025s] (287/492) yakogl-drivers ip::cdns_dsi::tests::detach_stops_video_and_link
+        PASS [   0.023s] (288/492) yakogl-drivers ip::cdns_dsi::tests::direct_commands
+        PASS [   0.021s] (289/492) yakogl-drivers ip::cdns_dsi::tests::ffi_attach_fills_data_and_refuses_a_second
+        PASS [   0.012s] (290/492) yakogl-drivers ip::cdns_dsi::tests::init_identifies_quiesces_and_finds_the_wiz
+        PASS [   0.045s] (291/492) yakogl-drivers ip::cdns_dsi::tests::failures_on_the_way_up
+        PASS [   0.022s] (292/492) yakogl-drivers ip::cdns_dsi::tests::register_image_against_the_replaced_driver
+        PASS [   0.023s] (293/492) yakogl-drivers ip::cdns_dsi::tests::the_wiz_at_the_trms_offset_works_the_same
+        PASS [   0.024s] (294/492) yakogl-drivers ip::cdns_dsi::tests::timings_match_the_trms_worked_example
+        PASS [   0.020s] (295/492) yakogl-drivers ip::cdns_dsi::tests::timings_refuse_what_the_trm_rules_out
+        PASS [   0.021s] (296/492) yakogl-drivers ip::cdns_dsi::tests::timings_rvt70_against_display_calc
+        PASS [   0.022s] (297/492) yakogl-drivers ip::cdns_dsi::tests::wait_burst_time_is_100ns_of_byte_clocks
+        PASS [   0.020s] (298/492) yakogl-drivers ip::dphy_timing::tests::exact_boundaries_round_up_not_to_nearest
+        PASS [   0.028s] (299/492) yakogl-drivers ip::dphy_timing::tests::every_rate_in_range_meets_every_minimum_or_is_refused_for_a_reason
+        PASS [   0.025s] (300/492) yakogl-drivers ip::dphy_timing::tests::out_of_range_rates_are_refused
+        PASS [   0.023s] (301/492) yakogl-drivers ip::dphy_timing::tests::the_board_rate_rounded_up
+        PASS [   0.016s] (302/492) yakogl-drivers ip::dw_hdmi_tx::tests::configure_writes_bytes_in_order_and_the_timing_fields
+        PASS [   0.022s] (303/492) yakogl-drivers ip::dphy_timing::tests::the_old_table_misses_two_minimums_at_this_rate
+        PASS [   0.021s] (304/492) yakogl-drivers ip::dw_hdmi_tx::tests::exctrlspac_stays_within_50_ms
+        PASS [   0.021s] (305/492) yakogl-drivers ip::dw_hdmi_tx::tests::ids_force_and_status
+        PASS [   0.025s] (306/492) yakogl-drivers ip::dw_hdmi_tx::tests::layout_is_the_rm
+        PASS [   0.023s] (307/492) yakogl-drivers ip::dw_hdmi_tx::tests::modes_that_do_not_fit_the_fields_are_refused
+        PASS [   0.021s] (308/492) yakogl-drivers ip::dw_hdmi_tx::tests::phy_interface_values_are_written_when_given
+        PASS [   0.021s] (309/492) yakogl-drivers ip::dw_wdt::tests::a_running_watchdog_in_interrupt_mode_is_moved_to_reset_mode_and_restarted
+        PASS [   0.023s] (310/492) yakogl-drivers ip::dw_wdt::tests::a_watchdog_linux_left_running_is_re_topped_and_restarted_never_stopped
+        PASS [   0.024s] (311/492) yakogl-drivers ip::dw_wdt::tests::bad_arguments_are_refused_before_any_write
+        PASS [   0.017s] (312/492) yakogl-drivers ip::dw_wdt::tests::each_read_back_fault_has_its_refusal
+        PASS [   0.017s] (313/492) yakogl-drivers ip::dw_wdt::tests::feed_writes_the_key_and_nothing_else
+        PASS [   0.012s] (314/492) yakogl-drivers ip::dw_wdt::tests::the_periods_at_24_mhz
+        PASS [   0.017s] (315/492) yakogl-drivers ip::dw_wdt::tests::nothing_is_written_to_a_block_that_is_not_a_dw_wdt
+        PASS [   0.020s] (316/492) yakogl-drivers ip::dw_wdt::tests::the_t6_as_armbian_left_it_is_armed_with_one_torr_write_then_the_cr_then_a_restart
+        PASS [   0.019s] (317/492) yakogl-drivers ip::imx8mp_hdmi_phy::tests::bad_settings_are_refused
+        PASS [   0.012s] (318/492) yakogl-drivers ip::imx8mp_hdmi_phy::tests::plan_for_the_x2_monitor
+        PASS [   0.019s] (319/492) yakogl-drivers ip::imx8mp_hdmi_phy::tests::no_lock_is_a_timeout
+        PASS [   0.011s] (320/492) yakogl-drivers ip::imx8mp_hdmi_phy::tests::the_reset_values_describe_the_rm_default_pll
+        PASS [   0.025s] (321/492) yakogl-drivers ip::imx8mp_hdmi_phy::tests::program_holds_the_global_reset_around_the_pll_writes
+        PASS [   0.022s] (322/492) yakogl-drivers ip::imx_pwm::tests::a_full_fifo_is_busy_and_nothing_is_written
+        PASS [   0.023s] (323/492) yakogl-drivers ip::imx_pwm::tests::a_plan_out_of_range_is_refused_without_access
+        PASS [   0.015s] (324/492) yakogl-drivers ip::imx_pwm::tests::a_running_block_with_the_same_clocking_is_updated_through_the_fifo
+        PASS [   0.009s] (325/492) yakogl-drivers ip::imx_pwm::tests::a_stopped_block_is_reset_then_sample_period_control_in_that_order
+        PASS [   0.007s] (326/492) yakogl-drivers ip::imx_pwm::tests::enabled_without_a_clock_is_not_enabled
+        PASS [   0.021s] (327/492) yakogl-drivers ip::imx_pwm::tests::a_stuck_reset_times_out_and_never_enables
+        PASS [   0.011s] (328/492) yakogl-drivers ip::imx_pwm::tests::inverted_is_the_complement
+        PASS [   0.016s] (329/492) yakogl-drivers ip::imx_pwm::tests::other_clocking_restarts_through_a_reset
+        PASS [   0.021s] (330/492) yakogl-drivers ip::imx_pwm::tests::plan_edges
+        PASS [   0.018s] (331/492) yakogl-drivers ip::imx_pwm::tests::plan_for_the_verdin_backlight
+        PASS [   0.021s] (332/492) yakogl-drivers ip::imx_pwm::tests::restart_resets_even_a_matching_block
+        PASS [   0.015s] (333/492) yakogl-drivers ip::imx_pwm::tests::zero_percent_disables_and_a_disabled_block_is_not_written
+        PASS [   0.012s] (334/492) yakogl-drivers ip::imx_wdog::tests::a_running_watchdog_is_retimed_and_reported_as_found
+        PASS [   0.010s] (335/492) yakogl-drivers ip::imx_wdog::tests::a_running_watchdog_keeps_its_bits_and_gets_the_new_timeout
+        PASS [   0.009s] (336/492) yakogl-drivers ip::imx_wdog::tests::an_unrepresentable_timeout_writes_nothing
+        PASS [   0.012s] (337/492) yakogl-drivers ip::imx_wdog::tests::a_stopped_watchdog_gets_u_boots_value
+        PASS [   0.012s] (338/492) yakogl-drivers ip::imx_wdog::tests::cold_arm_is_one_write_one_service_one_read_back
+        PASS [   0.014s] (339/492) yakogl-drivers ip::imx_wdog::tests::each_read_back_failure_is_its_own_refusal
+        PASS [   0.008s] (340/492) yakogl-drivers ip::imx_wdog::tests::layout_is_the_headers
+        PASS [   0.006s] (341/492) yakogl-drivers ip::imx_wdog::tests::the_power_down_counter_is_cleared_and_read_back
+        PASS [   0.017s] (342/492) yakogl-drivers ip::imx_wdog::tests::no_value_found_makes_a_write_that_resets_or_stops_the_watchdog
+        PASS [   0.015s] (343/492) yakogl-drivers ip::imx_wdog::tests::timeouts_are_whole_half_seconds_from_half_a_second_to_128
+        PASS [   0.009s] (344/492) yakogl-drivers ip::lcdifv3::tests::adopt_refuses_a_dark_or_differently_sized_layer
+        PASS [   0.020s] (345/492) yakogl-drivers ip::lcdifv3::tests::a_reset_that_does_not_clear_is_an_error
+        PASS [   0.012s] (346/492) yakogl-drivers ip::lcdifv3::tests::adopting_without_an_address_writes_nothing_and_the_first_buffer_brings_our_layout
+        PASS [   0.011s] (347/492) yakogl-drivers ip::lcdifv3::tests::bad_layers_are_refused_before_any_write
+        PASS [   0.013s] (348/492) yakogl-drivers ip::lcdifv3::tests::flip_and_layout_and_disable
+        PASS [   0.013s] (349/492) yakogl-drivers ip::lcdifv3::tests::configure_then_enable_writes_the_mode_and_waits_for_the_load
+        PASS [   0.011s] (350/492) yakogl-drivers ip::lcdifv3::tests::layout_is_the_rm
+        PASS [   0.017s] (351/492) yakogl-drivers ip::lcdifv3::tests::no_pixel_clock_is_a_timeout_after_two_frames
+        PASS [   0.012s] (352/492) yakogl-drivers ip::ns16550_tx::tests::a_uart_that_never_drains_costs_poll_max_reads_per_byte
+        PASS [   0.021s] (353/492) yakogl-drivers ip::lcdifv3::tests::polled_flip_and_vblank_interrupt
+        PASS [   0.012s] (354/492) yakogl-drivers ip::ns16550_tx::tests::dlab_set_means_nothing_is_written
+        PASS [   0.015s] (355/492) yakogl-drivers ip::ns16550_tx::tests::each_byte_waits_for_thre_then_goes_to_thr
+        PASS [   0.013s] (356/492) yakogl-drivers ip::ns16550_tx::tests::numbers
+        PASS [   0.015s] (357/492) yakogl-drivers ip::rk806::tests::a_read_frame_is_the_count_the_address_low_first_then_zeros
+        PASS [   0.016s] (358/492) yakogl-drivers ip::rk806::tests::no_frame_this_builds_is_a_write
+        PASS [   0.022s] (359/492) yakogl-drivers ip::rk806::tests::the_t6_reads_675_mv_on_dcdc1
+        PASS [   0.016s] (360/492) yakogl-drivers ip::rockchip_spi::tests::a_busy_controller_and_bad_arguments_are_refused_before_any_write
+        PASS [   0.013s] (361/492) yakogl-drivers ip::rockchip_spi::tests::baudr_is_even_and_never_faster_than_asked
+        PASS [   0.020s] (362/492) yakogl-drivers ip::rockchip_spi::tests::a_device_that_never_answers_times_out_and_releases_the_bus
+        PASS [   0.017s] (363/492) yakogl-drivers ip::rockchip_spi::tests::write_then_read_holds_the_chip_select_across_a_transmit_and_a_receive_only_phase
+        PASS [   0.017s] (364/492) yakogl-drivers ip::samsung_dsim::tests::a_link_without_the_margin_is_refused
+        PASS [   0.014s] (365/492) yakogl-drivers ip::samsung_dsim::tests::bad_links_are_refused_by_the_plan
+        PASS [   0.013s] (366/492) yakogl-drivers ip::samsung_dsim::tests::out_of_window_requests_are_refused
+        PASS [   0.030s] (367/492) yakogl-drivers ip::samsung_dsim::tests::every_setting_is_inside_every_window
+        PASS [   0.012s] (368/492) yakogl-drivers ip::samsung_dsim::tests::the_board_plan
+        PASS [   0.018s] (369/492) yakogl-drivers ip::samsung_dsim::tests::the_board_pll_is_the_golden_pms
+        PASS [   0.014s] (370/492) yakogl-drivers ip::samsung_dsim::tests::the_pll_timer_covers_3000_pfd_periods_at_the_fastest_pclk
+        PASS [   0.012s] (371/492) yakogl-drivers ip::sn65dsi8x::tests::a_csr_that_does_not_stick_is_reported_before_the_pll
+        PASS [   0.027s] (372/492) yakogl-drivers ip::sn65dsi8x::tests::a_bad_mode_touches_nothing
+        PASS [   0.012s] (373/492) yakogl-drivers ip::sn65dsi8x::tests::a_foreign_id_is_refused_before_any_write
+        PASS [   0.008s] (374/492) yakogl-drivers ip::sn65dsi8x::tests::check_link_clears_with_0xff_then_reads
+        PASS [   0.015s] (375/492) yakogl-drivers ip::sn65dsi8x::tests::am62p_image_matches_the_replaced_driver
+        PASS [   0.009s] (376/492) yakogl-drivers ip::sn65dsi8x::tests::health_reads_only
+        PASS [   0.010s] (377/492) yakogl-drivers ip::sn65dsi8x::tests::irq_stat_reads_what_latched_and_writes_nothing
+        PASS [   0.014s] (378/492) yakogl-drivers ip::sn65dsi8x::tests::imx8mp_image_matches_the_linux_golden_dump
+        PASS [   0.010s] (379/492) yakogl-drivers ip::sn65dsi8x::tests::no_pll_times_out_disables_the_pll_and_never_resets
+        PASS [   0.012s] (380/492) yakogl-drivers ip::sn65dsi8x::tests::plan_edges
+        PASS [   0.009s] (381/492) yakogl-drivers ip::sn65dsi8x::tests::plan_for_the_am62p_board
+        PASS [   0.010s] (382/492) yakogl-drivers ip::sn65dsi8x::tests::plan_for_the_imx8mp_board
+        PASS [   0.011s] (383/492) yakogl-drivers ip::sn65dsi8x::tests::reserved_and_channel_b_bits_keep_their_reset_values
+        PASS [   0.015s] (384/492) yakogl-drivers ip::sn65dsi8x::tests::silence_is_eio_and_nothing_is_written
+        PASS [   0.014s] (385/492) yakogl-drivers ip::sn65dsi8x::tests::stop_drops_en_for_the_reset_time
+        PASS [   0.012s] (386/492) yakogl-drivers ip::sn65dsi8x::tests::the_id_is_retried_while_the_adapter_powers_up
+        PASS [   0.007s] (387/492) yakogl-drivers ip::sn65dsi8x::tests::the_sequence_is_table_7_2
+        PASS [   0.009s] (388/492) yakogl-drivers ip::ti_dss7::tests::fifo_thresholds_follow_the_trm
+        PASS [   2.045s] (389/492) yakogl-drivers gpu::pvr::pool::tests::replay::glmark2_without_the_top_region_has_no_range_for_refract_and_refuses_its_depth_buffer
+        PASS [   0.012s] (390/492) yakogl-drivers ip::ti_dss7::tests::vp_timing_polarities_and_limits
+        PASS [   0.006s] (391/492) yakogl-drivers model::tests::long_log_lines_are_cut_with_a_marker
+        PASS [   0.008s] (392/492) yakogl-drivers ip::ti_dss7::tests::vp_timing_rvt70_matches_display_calc
+        PASS [   0.006s] (393/492) yakogl-drivers model_hdmi::tests::the_controller_takes_byte_accesses_only
+        PASS [   0.008s] (394/492) yakogl-drivers soc::am62p::display_golden::cold_image_matches_the_linux_dump_outside_the_allow_list
+        PASS [   0.014s] (395/492) yakogl-drivers model_hdmi::tests::the_block_control_is_unreachable_while_hdmimix_is_off
+        PASS [   0.007s] (396/492) yakogl-drivers soc::am62p::display_golden::the_allow_list_names_dumped_blocks_only
+        PASS [   0.009s] (397/492) yakogl-drivers soc::am62p::dss::tests::a_vsync_during_a_commit_writes_it_again
+        PASS [   0.013s] (398/492) yakogl-drivers soc::am62p::dss::tests::a_vsync_that_does_not_consume_go_settles_nothing
+        PASS [   0.010s] (399/492) yakogl-drivers soc::am62p::dss::tests::another_writers_go_in_between_keeps_the_replaced_buffer_busy
+        PASS [   0.014s] (400/492) yakogl-drivers soc::am62p::dss::tests::app_busy_takes_any_count_and_ignores_null_addresses
+        PASS [   0.012s] (401/492) yakogl-drivers soc::am62p::dss::tests::application_plane_checks_and_layout
+        PASS [   0.009s] (402/492) yakogl-drivers soc::am62p::dss::tests::bad_configuration_is_refused_before_any_write
+        PASS [   0.010s] (403/492) yakogl-drivers soc::am62p::dss::tests::go_is_shared_and_never_waited_for
+        PASS [   0.008s] (404/492) yakogl-drivers soc::am62p::dss::tests::init_resets_then_programs_the_port_and_the_safety_layer
+        PASS [   0.027s] (405/492) yakogl-drivers soc::am62p::dss::tests::commits_while_the_port_is_off_set_no_go
+        PASS [   0.010s] (406/492) yakogl-drivers soc::am62p::dss::tests::many_flips_between_two_frame_ends_keep_a_buffer_free
+        PASS [   0.009s] (407/492) yakogl-drivers soc::am62p::dss::tests::premultiplied_alpha_is_the_safety_layers_only
+        PASS [   0.023s] (408/492) yakogl-drivers soc::am62p::dss::tests::polling_without_an_interrupt_line
+        PASS [   0.014s] (409/492) yakogl-drivers soc::am62p::dss::tests::reset_failures_are_reported
+        PASS [   0.017s] (410/492) yakogl-drivers soc::am62p::dss::tests::safety_flips_alternate_the_two_buffers
+        PASS [   0.015s] (411/492) yakogl-drivers soc::am62p::dss::tests::the_ffi_entry_points_reach_the_same_code
+        PASS [   0.016s] (412/492) yakogl-drivers soc::am62p::dss::tests::the_isr_counts_and_acknowledges_exactly_what_it_read
+        PASS [   0.014s] (413/492) yakogl-drivers soc::am62p::dss::tests::two_commits_riding_one_go_drop_the_first
+        PASS [   0.021s] (414/492) yakogl-drivers soc::am62p::dss::tests::with_go_stuck_the_scanned_and_the_waiting_buffers_stay_busy
+        PASS [   0.017s] (415/492) yakogl-drivers soc::am62p::regs::tests::bits_and_the_generated_wiz_offsets_agree_with_the_trm
+        PASS [   0.014s] (416/492) yakogl-drivers soc::imx8mp::anatop::tests::no_lock_is_a_timeout_not_a_hang
+        PASS [   0.018s] (417/492) yakogl-drivers soc::imx8mp::anatop::tests::m_and_k_from_the_formula
+        PASS [   0.014s] (418/492) yakogl-drivers soc::imx8mp::anatop::tests::running_rate_checks_lock_reset_gate_bypass
+        PASS [   0.016s] (419/492) yakogl-drivers soc::imx8mp::anatop::tests::the_formula_on_the_golden_values
+        PASS [   0.009s] (420/492) yakogl-drivers soc::imx8mp::anatop::tests::video_pll1_from_reset_holds_writes_releases_locks_opens
+        PASS [   0.008s] (421/492) yakogl-drivers soc::imx8mp::ccm::tests::enable_root_and_gate_on_use_the_set_aliases
+        PASS [   0.020s] (422/492) yakogl-drivers soc::imx8mp::ccm::tests::a_root_on_a_pll_is_moved_to_the_oscillator_then_the_gate_opens
+        PASS [   0.013s] (423/492) yakogl-drivers soc::imx8mp::ccm::tests::layout_is_the_headers
+        PASS [   0.023s] (424/492) yakogl-drivers soc::imx8mp::ccm::tests::nothing_is_written_when_root_and_gate_are_already_right
+        PASS [   0.021s] (425/492) yakogl-drivers soc::imx8mp::ccm::tests::out_of_range_indices_are_refused_without_access
+        PASS [   0.014s] (426/492) yakogl-drivers soc::imx8mp::ccm::tests::rate_reads_the_dividers_and_refuses_other_parents
+        PASS [   0.234s] (427/492) yakogl-drivers soc::am62p::dss::tests::a_buffer_reported_free_is_never_scanned_whatever_happens_between_two_accesses
+        PASS [   0.016s] (428/492) yakogl-drivers soc::imx8mp::ccm::tests::reserved_bits_of_the_root_are_kept
+        PASS [   0.007s] (429/492) yakogl-drivers soc::imx8mp::ccm::tests::set_root_encodes_writes_once_and_keeps_reserved_bits
+        PASS [   0.008s] (430/492) yakogl-drivers soc::imx8mp::dsi_chain_tests::a_stuck_software_reset_and_stuck_lanes_are_reported_with_their_step
+        PASS [   0.014s] (431/492) yakogl-drivers soc::imx8mp::ccm::tests::the_rm_tables
+        PASS [   0.014s] (432/492) yakogl-drivers soc::imx8mp::dsi_chain_tests::a_bad_link_writes_nothing
+        PASS [   0.008s] (433/492) yakogl-drivers soc::imx8mp::dsi_chain_tests::cold_chain_order
+        PASS [   0.014s] (434/492) yakogl-drivers soc::imx8mp::dsi_chain_tests::disable_holds_the_lanes_and_stops_the_pll
+        PASS [   0.007s] (435/492) yakogl-drivers soc::imx8mp::dsi_chain_tests::golden_r4_plan_without_video_pll1
+        PASS [   0.016s] (436/492) yakogl-drivers soc::imx8mp::dsi_chain_tests::golden_cold_chain_matches_linux_except_the_allow_list
+        PASS [   0.007s] (437/492) yakogl-drivers soc::imx8mp::dsi_chain_tests::no_pll_reference_is_a_timeout_in_the_pll_step
+        PASS [   0.011s] (438/492) yakogl-drivers soc::imx8mp::dsi_chain_tests::verdin_dt::limit_1_the_panel
+        PASS [   0.005s] (439/492) yakogl-drivers soc::imx8mp::dsi_chain_tests::verdin_dt::limit_2_the_dsi_link_carries_it
+        PASS [   0.015s] (440/492) yakogl-drivers soc::imx8mp::dsi_chain_tests::verdin_dt::limit_2_the_bridge_range_follows
+        PASS [   0.006s] (441/492) yakogl-drivers soc::imx8mp::dsi_chain_tests::verdin_dt::limit_3_video_pll1_makes_it_exactly
+        PASS [   0.007s] (442/492) yakogl-drivers soc::imx8mp::dsi_chain_tests::verdin_dt::the_cold_chain_at_the_plan_matches_linux_except_the_allow_list
+        PASS [   0.020s] (443/492) yakogl-drivers soc::imx8mp::dsi_chain_tests::verdin_dt::limit_4_the_dsi_link_has_the_packet_overhead_margin
+        PASS [   0.008s] (444/492) yakogl-drivers soc::imx8mp::dsi_chain_tests::without_the_phy_reference_root_the_pll_never_settles
+        PASS [   0.018s] (445/492) yakogl-drivers soc::imx8mp::dsi_chain_tests::verdin_dt::the_plan_is_linux_s_69_3_mhz_and_58_76_hz
+        PASS [   0.007s] (446/492) yakogl-drivers soc::imx8mp::gpc::tests::a_stuck_power_down_is_a_timeout
+        PASS [   0.014s] (447/492) yakogl-drivers soc::imx8mp::gpc::tests::a_refused_trigger_is_reported_from_the_status_registers
+        PASS [   0.008s] (448/492) yakogl-drivers soc::imx8mp::gpc::tests::layout_is_the_rm
+        PASS [   0.012s] (449/492) yakogl-drivers soc::imx8mp::gpc::tests::a_stuck_trigger_is_a_timeout_not_a_hang
+        PASS [   0.007s] (450/492) yakogl-drivers soc::imx8mp::gpc::tests::power_down_drops_the_bridge_sets_pcr_then_triggers
+        PASS [   0.015s] (451/492) yakogl-drivers soc::imx8mp::gpc::tests::power_up_maps_triggers_waits_for_the_self_clear_then_clears_pcr
+        PASS [   0.009s] (452/492) yakogl-drivers soc::imx8mp::hdmi::tests::blk_enable_pulses_the_resets_after_the_clocks
+        PASS [   0.023s] (453/492) yakogl-drivers soc::imx8mp::gpc::tests::no_adb_ack_is_a_timeout
+        PASS [   0.008s] (454/492) yakogl-drivers soc::imx8mp::hdmi::tests::layout_is_the_rm
+        PASS [   0.007s] (455/492) yakogl-drivers soc::imx8mp::hdmi::tests::power_off_then_on_again
+        PASS [   0.017s] (456/492) yakogl-drivers soc::imx8mp::hdmi::tests::clock_selects_are_written_only_when_given
+        PASS [   0.006s] (457/492) yakogl-drivers soc::imx8mp::hdmi::tests::power_on_sets_roots_before_the_gate_before_the_domains
+        PASS [   0.006s] (458/492) yakogl-drivers soc::imx8mp::hdmi::tests::pvi_takes_the_lcdif_path_with_the_mode_polarities
+        PASS [   0.006s] (459/492) yakogl-drivers soc::imx8mp::hdmi_chain::tests::a_running_chain_is_stopped_and_power_cycled_first
+        PASS [   0.005s] (460/492) yakogl-drivers soc::imx8mp::hdmi_chain::tests::cold_bring_up_runs_every_stage_in_order
+        PASS [   0.027s] (461/492) yakogl-drivers soc::imx8mp::hdmi::tests::no_adb_ack_stops_before_the_phy_domain
+        PASS [   0.006s] (462/492) yakogl-drivers soc::imx8mp::hdmi_chain::tests::shut_down_powers_off
+        PASS [   0.011s] (463/492) yakogl-drivers soc::imx8mp::hdmi_chain::tests::each_failure_names_its_stage
+        PASS [   0.006s] (464/492) yakogl-drivers soc::imx8mp::hdmi_chain::tests::staging_pictures
+        PASS [   0.005s] (465/492) yakogl-drivers soc::imx8mp::hdmi_golden::cold_image_matches_the_linux_dump_outside_the_allow_list
+        PASS [   0.016s] (466/492) yakogl-drivers soc::imx8mp::hdmi_chain::tests::stop_after_each_stage_leaves_later_blocks_untouched
+        PASS [   0.011s] (467/492) yakogl-drivers soc::imx8mp::hdmi_golden::the_allow_list_names_dumped_blocks_only
+        PASS [   0.008s] (468/492) yakogl-drivers soc::imx8mp::media::tests::a_refused_power_up_is_an_io_error
+        PASS [   0.006s] (469/492) yakogl-drivers soc::imx8mp::media::tests::bus_roots_need_running_system_plls
+        PASS [   0.009s] (470/492) yakogl-drivers soc::imx8mp::media::tests::a_stuck_power_up_fails_without_touching_blk_ctrl
+        PASS [   0.014s] (471/492) yakogl-drivers soc::imx8mp::media::tests::adopting_a_running_chain_writes_nothing
+        PASS [   0.009s] (472/492) yakogl-drivers soc::imx8mp::media::tests::golden_r4_plan_without_video_pll1
+        PASS [   0.006s] (473/492) yakogl-drivers soc::imx8mp::media::tests::lcdif_reachability_reads_only_what_answers
+        PASS [   0.012s] (474/492) yakogl-drivers soc::imx8mp::media::tests::golden_cold_bring_up_matches_linux_except_the_allow_list
+        PASS [   0.006s] (475/492) yakogl-drivers soc::imx8mp::media::tests::no_pll_lock_is_an_error_not_a_hang
+        PASS [   0.008s] (476/492) yakogl-drivers soc::imx8mp::media::tests::no_adb_ack_is_an_error_not_a_hang
+        PASS [   0.006s] (477/492) yakogl-drivers soc::imx8mp::media::tests::power_cycle_reports_powered_from_off
+        PASS [   0.006s] (478/492) yakogl-drivers soc::imx8mp::media::tests::reset_needs_mediamix
+        PASS [   0.019s] (479/492) yakogl-drivers soc::imx8mp::media::tests::ordering_roots_and_gate_before_blk_power_before_release_gates_before_consumers
+        PASS [   0.018s] (480/492) yakogl-drivers soc::imx8mp::media::tests::pixel_plan_is_nearest_and_bounded
+        PASS [   0.012s] (481/492) yakogl-drivers soc::rk3588::tests::a_closed_gate_is_opened_through_its_write_mask_only
+        PASS [   0.019s] (482/492) yakogl-drivers soc::imx8mp::media::tests::the_c_header_names_the_same_status_bits
+        PASS [   0.016s] (483/492) yakogl-drivers soc::rk3588::tests::a_domain_that_is_already_on_is_not_written
+        PASS [   0.009s] (484/492) yakogl-drivers soc::rk3588::tests::a_domain_that_never_powers_times_out_after_linux_10_ms
+        PASS [   0.007s] (485/492) yakogl-drivers soc::rk3588::tests::a_gpu_clock_the_cru_cannot_rate_is_0
+        PASS [   0.011s] (486/492) yakogl-drivers soc::rk3588::tests::open_gates_as_armbian_left_them_are_not_written
+        PASS [   0.006s] (487/492) yakogl-drivers soc::rk3588::tests::pd_gpu_on_follows_linux_order_from_the_suspended_state
+        PASS [   0.012s] (488/492) yakogl-drivers soc::rk3588::tests::clkgate_con_15_is_at_0x83c
+        PASS [   0.018s] (489/492) yakogl-drivers soc::rk3588::tests::the_gpu_clock_armbian_leaves_is_cpll_over_5
+        PASS [   0.018s] (490/492) yakogl-drivers video::tests::totals_and_refresh
+        PASS [   0.020s] (491/492) yakogl-drivers soc::rk3588::tests::the_pll_rates_the_t6_reads_are_1500_and_1188_mhz
+        PASS [   2.947s] (492/492) yakogl-drivers gpu::pvr::pool::tests::replay::glmark2_with_the_top_region_fits_refract_after_shadow_and_terrain

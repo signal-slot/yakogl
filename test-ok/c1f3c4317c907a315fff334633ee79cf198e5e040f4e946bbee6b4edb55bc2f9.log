@@ -1,0 +1,8 @@
+        PASS [   0.047s] (1/8) yakogl::v3d_cube_noseamless a_key_changes_only_its_own_stage
+        PASS [   0.066s] (2/8) yakogl::v3d_cube_noseamless a_fragment_lookup_with_a_constant_direction_magnifies
+        PASS [   0.094s] (3/8) yakogl::v3d_cube_noseamless a_fragment_lookup_takes_each_pixels_level_from_the_direction
+        PASS [   0.052s] (4/8) yakogl::v3d_cube_noseamless a_projected_direction_selects_its_face_after_the_division
+        PASS [   0.101s] (5/8) yakogl::v3d_cube_noseamless a_keyed_cube_lookup_is_non_seamless_for_every_wrap_pair
+        PASS [   0.044s] (6/8) yakogl::v3d_cube_noseamless clamp_mirror_and_repeat_differ_on_a_face_edge_and_from_the_seamless_value
+        PASS [   0.098s] (7/8) yakogl::v3d_cube_noseamless a_vertex_explicit_level_blends_two_non_seamless_levels
+        PASS [   0.111s] (8/8) yakogl::v3d_cube_noseamless an_unkeyed_program_is_unchanged

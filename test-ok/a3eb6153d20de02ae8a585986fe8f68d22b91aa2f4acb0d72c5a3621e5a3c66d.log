@@ -1,0 +1,15 @@
+        PASS [   0.141s] (3145/3310) yakogl::es3_tf_sampler es3::an_unbound_sampler_reads_opaque_black
+        PASS [   0.118s] (3146/3310) yakogl::es3_tf_sampler es3::cube_faces_and_a_seamless_edge
+        PASS [   0.119s] (3148/3310) yakogl::es3_tf_sampler es3::integer_textures_of_the_other_targets
+        PASS [   0.199s] (3149/3310) yakogl::es3_tf_sampler es3::every_format_class_reads_as_the_specification_converts_it
+        PASS [   0.063s] (3150/3310) yakogl::es3_tf_sampler es3::max_level_and_the_lod_range_clamp_the_selection
+        PASS [   0.094s] (3151/3310) yakogl::es3_tf_sampler es3::linear_blends_the_four_texels_and_wraps_across_the_edge
+        PASS [   0.065s] (3152/3310) yakogl::es3_tf_sampler es3::nearest_through_the_three_wrap_modes
+        PASS [   0.098s] (3153/3310) yakogl::es3_tf_sampler es3::non_depth_shadow_compressed_and_mismatched_samplers_are_refused
+        PASS [   0.072s] (3155/3310) yakogl::es3_tf_sampler es3::sampler_objects_the_swizzle_and_incompleteness
+        PASS [   0.143s] (3156/3310) yakogl::es3_tf_sampler es3::sampler_arrays_and_a_depth_texture
+        PASS [   0.108s] (3157/3310) yakogl::es3_tf_sampler es3::texel_fetch_offsets_and_projection
+        PASS [   0.069s] (3158/3310) yakogl::es3_tf_sampler es3::texture_size_of_each_target
+        PASS [   0.111s] (3159/3310) yakogl::es3_tf_sampler es3::texture_lod_selects_and_blends_mip_levels
+        PASS [   0.064s] (3160/3310) yakogl::es3_tf_sampler es3::two_d_array_layers
+        PASS [   0.113s] (3161/3310) yakogl::es3_tf_sampler es3::three_d_nearest_linear_wrap_r_and_levels

@@ -1,0 +1,7 @@
+        PASS [   0.035s] (3288/3433) yakogl::internal_programs powervr::the_clear_attach_programs_are_mesas_words
+        PASS [   0.046s] (3289/3433) yakogl::internal_programs powervr::the_four_dword_clear_moves_four_dwords
+        PASS [   0.054s] (3290/3433) yakogl::internal_programs powervr::the_integer_frame_load_writes_the_texel_back_raw
+        PASS [   0.035s] (3291/3433) yakogl::internal_programs powervr::the_internal_programs_metadata
+        PASS [   0.153s] (3292/3433) yakogl::internal_programs powervr::the_frame_load_reads_the_texel_mesas_reads
+        PASS [   0.037s] (3293/3433) yakogl::internal_programs powervr::the_masked_clears_write_what_mesas_write
+        PASS [   0.040s] (3294/3433) yakogl::internal_programs powervr::the_quad_vertex_shader_writes_what_mesas_writes

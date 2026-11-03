@@ -1,0 +1,5 @@
+        PASS [   0.047s] (2908/3313) yakogl::es2_fragdata invalid_assign_to_1
+        PASS [   0.038s] (2909/3313) yakogl::es2_fragdata valid_dynamic_index
+        PASS [   0.032s] (2910/3313) yakogl::es2_fragdata valid_uniform_index
+        PASS [   0.038s] (2911/3313) yakogl::es2_fragdata valid_static_index
+        PASS [   0.053s] (2913/3313) yakogl::es2_fragdata write_fragcolor_and_fragdata

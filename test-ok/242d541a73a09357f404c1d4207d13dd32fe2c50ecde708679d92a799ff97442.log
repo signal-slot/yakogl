@@ -1,0 +1,3 @@
+        PASS [   0.065s] (2842/3313) yakogl::alloc_clobber an_output_written_only_in_a_loop_arm_keeps_its_register_to_the_end
+        PASS [   0.055s] (2844/3313) yakogl::alloc_clobber the_check_sees_the_io_clobber_the_pass_prevents
+        PASS [   2.213s] (2848/3313) yakogl::alloc_clobber no_allocated_register_is_overwritten_while_its_value_is_live

@@ -1,0 +1,4 @@
+        PASS [   0.037s] (3207/3313) yakogl::gc_depth_resolve depth_texels_become_the_surface_depth
+        PASS [   0.042s] (3208/3313) yakogl::gc_depth_resolve depth_texels_need_no_copy_from_a_surface_of_another_stride
+        PASS [   0.041s] (3209/3313) yakogl::gc_depth_resolve every_texel_is_the_rule_of_its_word
+        PASS [   0.176s] (3211/3313) yakogl::gc_depth_resolve time_one_1024_square_resolve

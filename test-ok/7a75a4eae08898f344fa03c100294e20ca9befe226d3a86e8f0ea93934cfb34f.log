@@ -1,0 +1,9 @@
+        PASS [   0.043s] (3000/3433) yakogl::es3_attrib_location cases::mixed_max_attributes_vec4
+        PASS [   0.056s] (3001/3433) yakogl::es3_attrib_location cases::mixed_the_qualifier_wins_over_the_binding
+        PASS [   0.052s] (3002/3433) yakogl::es3_attrib_location cases::mixed_time_post_link_changes_nothing_until_the_next_link
+        PASS [   0.059s] (3003/3433) yakogl::es3_attrib_location cases::mixed_time_pre_attach
+        PASS [   0.063s] (3004/3433) yakogl::es3_attrib_location cases::mixed_time_pre_link
+        PASS [   0.059s] (3005/3433) yakogl::es3_attrib_location cases::mixed_time_reattach
+        PASS [   0.053s] (3006/3433) yakogl::es3_attrib_location cases::mixed_time_relink
+        PASS [   0.047s] (3007/3433) yakogl::es3_attrib_location cases::qualifiers_in_comments_are_not_read
+        PASS [   0.049s] (3008/3433) yakogl::es3_attrib_location cases::unqualified_unbound_inputs_avoid_every_qualifier

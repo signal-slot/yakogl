@@ -1,0 +1,3 @@
+        PASS [   0.029s] (2099/2265) yakogl::es2_error_rules_draw es2_index_types_are_accepted
+        PASS [   0.057s] (2101/2265) yakogl::es2_error_rules_draw other_index_types_are_invalid_enum
+        PASS [   0.066s] (2103/2265) yakogl::es2_error_rules_draw unsigned_int_index_type_by_build

@@ -1,0 +1,4 @@
+        PASS [   0.064s] (2855/3313) yakogl::depth_resolve_pvr no_frame_open_before_the_depth_pass_resolves
+        PASS [   0.062s] (2856/3313) yakogl::depth_resolve_pvr ruled_out_candidates
+        PASS [   0.046s] (2858/3313) yakogl::depth_resolve_pvr window_clear_before_the_depth_pass_resolves
+        PASS [   0.061s] (2859/3313) yakogl::depth_resolve_pvr the_depth_pass_stamp_names_the_kick_that_renders_it

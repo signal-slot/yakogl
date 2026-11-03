@@ -1,0 +1,9 @@
+        PASS [   0.488s] (3248/3310) yakogl::gl_client_array_copy float4_array_into_vec3_input_takes_the_first_three
+        PASS [   0.042s] (3249/3310) yakogl::gl_client_array_copy float_interleaved
+        PASS [   0.066s] (3250/3310) yakogl::gl_client_array_copy float_strided
+        PASS [   0.112s] (3251/3310) yakogl::gl_client_array_copy float_tightly_packed
+        PASS [   0.036s] (3253/3310) yakogl::gl_client_array_copy narrower_float_array_takes_the_slow_path
+        PASS [   0.032s] (3254/3310) yakogl::gl_client_array_copy normalized_ubyte_is_converted
+        PASS [   0.039s] (3255/3310) yakogl::gl_client_array_copy short_is_converted
+        PASS [   0.089s] (3256/3310) yakogl::gl_client_array_copy the_arena_keeps_its_copy
+        PASS [   0.168s] (3257/3310) yakogl::gl_client_array_copy timing

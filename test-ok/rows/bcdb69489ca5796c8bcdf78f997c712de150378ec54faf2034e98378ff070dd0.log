@@ -1,0 +1,10 @@
+yk-record: 594b0c00 427a024b 00c80064 427a3e80
+yk-record: 594b0c01 003205dc 07d00003 00320064
+yk-record: 594b0c02 00070245 427a0003 2710024b
+yk-record: 594b0c03 27e2352e 07530800 00000320
+perf_page_test: ok
+PERF (12) tag 0: experiment 0 page 0: 587 17018 100 200 16000 17018
+PERF (12) tag 1: experiment 0 page 1: 1500 50 3 2000 100 50
+PERF (12) tag 2: experiment 0 page 2: 581 7 3 17018 587 10000
+PERF (12) tag 3: experiment 0 page 3: 13614 10210 2048 1875 800 0
+gm_perf_page: ok (packed and decoded)

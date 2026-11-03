@@ -1,0 +1,7 @@
+        PASS [   0.063s] (3170/3433) yakogl::es3_tex_filtering es3::a_3d_textures_binding_carries_wrap_r_and_the_swizzle
+        PASS [   0.076s] (3171/3433) yakogl::es3_tex_filtering es3::a_sampler_object_does_not_replace_the_swizzle
+        PASS [   0.075s] (3172/3433) yakogl::es3_tex_filtering es3::every_8_bit_format_carries_the_same_swizzle_codes
+        PASS [   0.051s] (3173/3433) yakogl::es3_tex_filtering es3::swizzle_source_is_the_identity_for_same_and_names_the_rest
+        PASS [   0.067s] (3174/3433) yakogl::es3_tex_filtering es3::the_swizzle_reaches_the_bind
+        PASS [   0.070s] (3175/3433) yakogl::es3_tex_filtering es3::the_upload_hooks_bind_carries_them_too
+        PASS [   0.084s] (3176/3433) yakogl::es3_tex_filtering es3::wrap_r_reaches_the_bind_from_the_texture_or_the_sampler_object

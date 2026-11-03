@@ -1,0 +1,3 @@
+control osal-zephyr,gpu-powervr,mesa-reference-table: 2334 reference symbols
+control osal-zephyr,gpu-vivante,mesa-reference-table: 725 reference symbols
+24 product archive(s), 0 reference symbols each, in 2 target directories

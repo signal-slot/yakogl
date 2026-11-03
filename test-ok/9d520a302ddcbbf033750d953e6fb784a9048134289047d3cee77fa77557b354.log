@@ -1,0 +1,8 @@
+        PASS [   0.030s] (3300/3433) yakogl::online_oracle a_source_is_matched_to_its_row_by_digest_and_not_by_name
+        PASS [   0.030s] (3301/3433) yakogl::online_oracle a_variant_entry_is_recognised_and_not_counted_as_a_gap
+        PASS [   0.355s] (3303/3433) yakogl::online_oracle every_source_either_compiles_or_says_why
+        PASS [   0.566s] (3305/3433) yakogl::online_oracle generated_code_against_the_table_structurally
+        PASS [   0.329s] (3306/3433) yakogl::online_oracle name_the_sources_that_compile
+        PASS [   0.050s] (3307/3433) yakogl::online_oracle the_comparison_notices_a_change_in_every_kind_of_field_it_claims_to_cover
+        PASS [   0.315s] (3310/3433) yakogl::online_oracle reflection_against_the_offline_table
+        PASS [   0.343s] (3312/3433) yakogl::online_oracle name_the_sources_that_do_not_compile_by_reason

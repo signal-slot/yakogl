@@ -1,0 +1,213 @@
+check.sh: 2 compiler slot(s) (7227 MB available, 3072 MB each, 4 cores)
+plan  cargo fmt --check
+plan  build   yakogl-capi (no_std)
+plan  clippy  host-test,gpu-powervr
+plan  test    host-test,gpu-powervr
+plan  clippy  host-test,gpu-powervr,report-es2
+plan  test    host-test,gpu-powervr,report-es2
+plan  clippy  host-test,gpu-vivante
+plan  test    host-test,gpu-vivante
+plan  clippy  host-test,gpu-powervr,shaderc-online
+plan  test    host-test,gpu-powervr,shaderc-online
+plan  clippy  host-test,gpu-vivante,shaderc-online
+plan  test    host-test,gpu-vivante,shaderc-online
+plan  clippy  host-test,gpu-powervr,shaderc-online,report-es2
+plan  test    host-test,gpu-powervr,shaderc-online,report-es2
+plan  clippy  host-test,gpu-vivante,shaderc-online,report-es2
+plan  test    host-test,gpu-vivante,shaderc-online,report-es2
+plan  gen     precompiled tables for the tier configurations
+plan  clippy  host-test,gpu-powervr,shaderc-online,precompiled-shaders
+plan  test    host-test,gpu-powervr,shaderc-online,precompiled-shaders
+plan  clippy  host-test,gpu-vivante,shaderc-online,precompiled-shaders
+plan  test    host-test,gpu-vivante,shaderc-online,precompiled-shaders
+plan  clippy  host-test,gpu-powervr,precompiled-shaders,no-shader-table (no compiler; lib and its tests)
+plan  test    host-test,gpu-powervr,precompiled-shaders,no-shader-table (no compiler: shaderc::precompiled)
+plan  clippy  host-test,gpu-vivante,precompiled-shaders,no-shader-table (no compiler; lib and its tests)
+plan  test    host-test,gpu-vivante,precompiled-shaders,no-shader-table (no compiler: shaderc::precompiled)
+plan  clippy  host-test,gpu-vivante,shaderc-online,no-shader-table (no tests: see BUILD_ONLY_CONFIGS)
+plan  clippy  host-test,gpu-powervr,shaderc-online,no-shader-table (no tests: see BUILD_ONLY_CONFIGS)
+plan  clippy  host-test,gpu-vivante,shaderc-online,test-knobs
+plan  test    host-test,gpu-vivante,shaderc-online,test-knobs (--lib, 10 knob tests by name)
+plan  test    host-test,gpu-vivante,shaderc-online,test-knobs (tests/gc_kick_diff.rs, 7 tests)
+plan  clippy  host-test,gpu-powervr,shaderc-online,test-knobs
+plan  test    host-test,gpu-powervr,shaderc-online,test-knobs (--lib, 9 knob tests by name)
+plan  clippy  host-test,gpu-v3d,shaderc-online,no-shader-table
+plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table (--lib, GL suite on the online compiler)
+plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_sim_mesa.rs)
+plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_cube_noseamless.rs)
+plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_clear.rs)
+plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_glmark2_mem.rs)
+plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_rt_sample.rs)
+plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/depth_resolve_v3d.rs)
+plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/mipmap_offer_guard.rs)
+plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_tfu_host.rs)
+plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_tfu_mipmap_nowait.rs)
+plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_lazy_raster_readers.rs)
+plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_depth_storage.rs)
+plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_uniform_host.rs)
+plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_int_rt.rs)
+plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_int_rt_v3d.rs)
+plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_formats_v3d.rs)
+plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_shaderc_v3d.rs)
+plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_tf_api.rs)
+plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_srgb.rs)
+plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_occlusion_gl.rs)
+plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_mrt_gl.rs)
+plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/egl_bench_configs.rs)
+plan  test    host-test,gpu-powervr,shaderc-online (tests/es3_vertex_arrays.rs)
+plan  test    host-test,gpu-powervr,shaderc-online (tests/es3_pvr_2darray.rs)
+plan  test    host-test,gpu-powervr,shaderc-online (tests/es3_pvr_shadow.rs)
+plan  test    host-test,gpu-powervr,shaderc-online (tests/es3_pvr_3d.rs)
+plan  test    host-test,gpu-powervr,shaderc-online (tests/es3_pvr_fragdepth.rs)
+plan  clippy  host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2
+plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (--lib shaderc::online::v3d)
+plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (--lib v3d::backend_tests, separate depth/stencil)
+plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (tests/v3d_sim_mesa.rs)
+plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (tests/v3d_cube_noseamless.rs)
+plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (tests/v3d_clear.rs)
+plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (tests/es3_int_rt.rs)
+plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (tests/es3_tf_api.rs)
+plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (tests/es3_srgb.rs)
+plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (tests/es3_occlusion_gl.rs)
+plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (tests/es3_mrt_gl.rs)
+plan  clippy  host-test,gpu-mali,shaderc-online,no-shader-table
+plan  test    host-test,gpu-mali,shaderc-online,no-shader-table (--lib mali::, 345 tests: packers and ISA vs Mesa and the board)
+plan  gen     src/mali/genxml == tools/mali/gen_pack_rs.py on third_party v10.xml
+plan  gen     src/shaderc/online/mali/isa/v10.rs == tools/mali/gen_isa_rs.py on third_party
+plan  gen     driver/src/v3d/generated == Mesa's generators on third_party
+plan  gen     driver/src/pvr/generated == Mesa's csbgen on third_party
+plan  sha256  third_party files are the upstream files (UPSTREAM)
+plan  cc      v3d FFI layout pins
+plan  cc      v3d job builder
+plan  cc      v3d textures
+plan  run     v3d tex_filter_ref_check (dEQP's filters, the LINEAR plan)
+plan  run     v3d tex_tiling_bench_check (the tiling-time harness)
+plan  run     v3d tfu_case_check (the TFU probe, case 140)
+plan  run     pvr vdm_field_check (VDM/PPP fields refuse, never mask)
+plan  run     pvr render_regs_check (csbgen register words = the former literals)
+plan  run     pvr ddk_abi_check (FWIF numbers = the vendored DDK 25.2 headers)
+plan  run     v3d hw_mock_test (v3d_hw.c against the register model)
+plan  run     pvr rgxlayer_check (DDK RGXStart/RGXStop/image loader on the Rust rgxlayer)
+plan  run     pvr km_check (the Rust kernel side = the C it replaced; layouts = the DDK headers)
+plan  run     v3d tex_upload_check (eager copy = lazy copy)
+plan  run     v3d osal_frees_check (frees back at once with no job open)
+plan  run     v3d osal_granules_check (the carve-out's first fit, small blocks from the top, the STRESS1D replay)
+plan  run     osal pending_frees_check (a full queue waits, never leaks silently)
+plan  run     gc7000 osal_frees_check (frees back at once with no frame open)
+plan  run     osal_bounds_check (gpu_write/gpu_read refuse a wrapped range)
+plan  run     osal_log_check (a 255-byte log line survives the Zephyr OSAL buffer)
+plan  run     baremetal_config_check (init refuses without a complete board)
+plan  run     linux osal linux_heap_check (finite range, reuse, no overlap)
+plan  build   v3d mesa reference (tools/v3d/mesa_ref.sh)
+plan  run     v3d tex_check (against Mesa 26.2.1)
+plan  run     v3d cl_golden (against Mesa 26.2.1)
+plan  run     v3d job_check (against Mesa 26.2.1)
+plan  run     mali pan_ref_diff and ref_cases self-test (no Mesa tree)
+plan  run     mali sweep_passsets self-test
+plan  run     mali pan_shc == Mesa 26.2.1 GL driver on the tri pair (MESA_PAN_TREE)
+plan  cc      gl_test.c -DGL_TEST_HOST=1
+plan  cc      gl_test.c -DGL_TEST_HOST=1 -DYAKOGL_TEST_KNOBS=1
+plan  cc      gl_test.c -DGL_TEST_USER=1 -DYAKOGL_GPU_VIVANTE=1
+plan  cc      gl_test.c -DGL_TEST_USER=1 -DYAKOGL_GPU_VIVANTE=1 -DYAKOGL_TEST_KNOBS=1
+plan  run     gl_test case 44 probe decode
+plan  run     backend.h yakogl_heap_base without a heap_base (0, as the Rust side)
+plan  gen     gl_test_shaders{,_es100}.h == gen_gl_test_shaders.py on tools/shaders
+plan  test    pvr render pool (Rust; the C pool's golden trace replayed, 33 tests)
+plan  run     am62p rti_arm_check (60 s preload per reported RTI clock rate)
+plan  clippy  yakogl-gltest-runner
+plan  test    yakogl-gltest-runner (gl_test's lines and count)
+plan  clippy  osal-zephyr,gpu-vivante,shaderc-online,no-shader-table (aarch64-unknown-none, no host-test)
+plan  clippy  osal-zephyr,gpu-powervr,shaderc-online,no-shader-table (aarch64-unknown-none, no host-test)
+plan  clippy  osal-zephyr,gpu-v3d,shaderc-online,no-shader-table (aarch64-unknown-none, no host-test)
+plan  clippy  osal-zephyr,gpu-mali,shaderc-online,no-shader-table (aarch64-unknown-none, no host-test)
+plan  clippy  yakogl-gltest-runner (aarch64-unknown-none)
+plan  check   osal-zephyr,gpu-powervr,precompiled-shaders (aarch64-unknown-none, no compiler)
+plan  tools   fault-record decoder self-test
+plan  tools   fault-record matches its writer
+plan  tools   shader-table generator guards
+plan  tools   gl_test shader sources have table rows
+plan  tools   precompiled.list gl_test pairs == what gl_test.c links
+plan  gen     driver/src/pvr_usc_*_blob.h == tools/pco_shc/usc_blobs.txt
+plan  tools   deqp-uart-tally log verdicts
+plan  tools   common-tally row verdicts
+plan  tools   qpa-from-uart rebuild verdicts
+plan  tools   am62p netboot TFTP server
+plan  tools   am62p netboot UART phases
+plan  tools   am62p-mkboot u-boot.img and boot partition
+plan  tools   am62p second stage: mkboot images decoded by the loader's Rust
+plan  tools   gles3-mustpass: 42,810 cases, sorted, unique, all GLES3
+plan  tools   am62p-gles3-tree: generator self-test and table check
+plan  tools   cts-selftest.sh (the CTS tools' checks, images-selftest included)
+plan  tools   licence audit (SPDX header or allowlist row for every tracked file)
+plan  tools   glmark2 compare-selftest.sh (before/after profile table)
+plan  tools   api_coverage.py self-test
+plan  tools   api coverage: gl2.h + egl.h vs exported vs eglGetProcAddress
+plan  tools   api coverage: 0 ES 2.0 core + 0 EGL 1.x core entry points missing from the exports
+plan  tools   board-sudo-setup.sh --dry-run runs from a clean environment
+plan  no table in the artefact
+plan  no Mesa reference in the artefact
+plan  no test knob in the artefact
+plan  clippy  yakogl-tools
+plan  test    yakogl-tools
+plan  clippy  yakogl-mali-panthor
+plan  test    yakogl-mali-panthor
+plan  clippy  yakogl-mali-panthor (aarch64-unknown-linux-gnu)
+plan  clippy  yakogl-precompile gpu-powervr
+plan  clippy  yakogl-precompile gpu-vivante
+plan  clippy  yakogl-precompile gpu-powervr,report-es2
+plan  clippy  yakogl-precompile gpu-vivante,report-es2
+plan  test    yakogl-precompile gpu-powervr
+plan  test    yakogl-precompile gpu-vivante
+plan  gen     src/pvr/internal.rs == yakogl-precompile --internal (our compiler)
+plan  gen     src/vivante/internal.rs == yakogl-precompile --internal (our compiler)
+plan  tools   board.sh dry-run matrix and replays
+plan  tools   board_lock.sh: a refusal names the holder; nanopc-t6.sh never waits
+plan  host    imx8mp latch model: waits per swap
+plan  host    glmark2 PERF page: packed and decoded by yakogl-tools record
+plan  tools   check.sh --changed: the path-to-scope map and four plans
+plan  tools   check.sh test cache: record, skip, run again on a new key
+plan  tools   check.sh --jobs: the log in order, the counts, a lane
+plan  gen     src/pvr/csbgen.rs + csbgen_wrap.c == bindgen
+plan  clippy  yakogl-slint-check
+plan  test    yakogl-slint-check
+plan  clippy  yakogl-triangle-check
+plan  test    yakogl-triangle-check
+plan  clippy  yakogl-femtovg-check
+plan  test    yakogl-femtovg-check
+plan  clippy  yakogl-drivers
+plan  clippy  yakogl-drivers, each shipped feature arm (-D warnings)
+plan  test    yakogl-drivers (register model)
+plan  test    yakogl-drivers gpu::mali on the board's mali_csffw.bin (MALI_CSFFW, 2 tests by name)
+plan  check   yakogl-drivers (aarch64-unknown-none-softfloat)
+plan  clippy  yakogl-boot-stage2
+plan  test    yakogl-boot-stage2
+plan  clippy  yakogl-boot-stage2 (aarch64-unknown-none-softfloat)
+plan  cc      boot_stage2.h layout pins
+plan  cc      yakogl_drivers.h layout pins
+plan  zephyr  am62p gl_test image, -Werror on our C files
+plan  zephyr  am62p gl_test image without a compiler (precompiled shaders only), -Werror
+plan  zephyr  imx8mp gl_test image, -Werror on our C files
+plan  zephyr  rpi4 gl_test image, -Werror on our C files
+plan  zephyr  am62p examples/triangle image, -Werror on our C files
+plan  zephyr  imx8mp examples/triangle image, -Werror on our C files
+plan  zephyr  rpi4 examples/triangle image, -Werror on our C files
+plan  zephyr  am62p examples/triangle-rust image, -Werror on our C files, the Rust main
+plan  zephyr  imx8mp examples/triangle-rust image, -Werror on our C files, the Rust main
+plan  zephyr  rpi4 examples/triangle-rust image, -Werror on our C files, the Rust main
+plan  zephyr  direct-boot images: am62p and imx8mp triangle (direct variants), boot_stage2 for both, -Werror
+plan  zephyr  nanopc_t6 t6_hello image (Z1, the watchdog glue), -Werror on our C files
+plan  zephyr  nanopc_t6 t6_gpu image (Z1, GPU power-on), -Werror on our C files
+plan  zephyr  nanopc_t6 t6_mmu image (Z2, AS0 and a cache flush), -Werror on our C files
+plan  gen     precompiled table gpu-powervr: deterministic, rows == fresh compiles, counts pinned, compiles
+plan  gen     precompiled table gpu-vivante: deterministic, rows == fresh compiles, counts pinned, compiles
+plan  gen     precompiled table gpu-powervr,report-es2: deterministic, rows == fresh compiles, counts pinned, compiles
+plan  gen     precompiled table gpu-vivante,report-es2: deterministic, rows == fresh compiles, counts pinned, compiles
+plan  gen     tests/reference/blobs.rs == tools/glsl2usc.sh on precompiled.list (pco_shc)
+[33mgap   glmark2 corpus: no glmark2 tree at GLMARK2_SRC='/home/orion/connected-deps/glmark2' (set GLMARK2_SRC): the glmark2 shaders were NOT compiled[0m
+plan  tools   hal-nxp gen_regs self-test
+[33mgap   imx8mp regs.rs: no hal_nxp at /home/orion/connected-deps/hal_nxp-1e91007b (set HAL_NXP_DIR): the generated registers were NOT checked[0m
+plan  gen     driver/rust am62p ti_pr114866.rs == gen_dphy_data.py on third_party
+plan  gen     driver/compat/pvr_rgx_core.h == gen_rgx_core.py
+
+check.sh: 207 ok, 0 failed, 2 gap(s) (a gap was not run: it is not a pass), 0 skipped (every row), 0 not run (passed on main) in 5s; test binaries: 0 run, 0 skipped (passed on main); runner: cargo-nextest 0.9.148 (cd1d6d546 2026-10-07) (the rows that read libtest's output run the binaries concurrently)
+[31mcheck.sh: fix the above before pushing[0m

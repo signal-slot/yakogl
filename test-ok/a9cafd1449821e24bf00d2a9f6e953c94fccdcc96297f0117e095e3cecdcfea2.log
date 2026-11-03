@@ -1,0 +1,6 @@
+        PASS [   0.042s] (2809/2888) yakogl::gc_state_dedup equal_words_are_skipped_and_different_ones_written
+        PASS [   0.102s] (2810/2888) yakogl::gc_state_dedup each_invalidating_path_writes_every_group_again
+        PASS [   0.137s] (2811/2888) yakogl::gc_state_dedup one_changed_state_writes_only_its_group
+        PASS [   0.164s] (2812/2888) yakogl::gc_state_dedup every_draw_sees_the_registers_it_did_with_every_group_written
+        PASS [   0.056s] (2813/2888) yakogl::gc_state_dedup two_identical_draws_write_the_state_once
+        PASS [   4.269s] (2850/2888) yakogl::gc_state_dedup time_ideas_shaped_draws_with_and_without_the_skip

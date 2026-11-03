@@ -1,0 +1,7 @@
+        PASS [   0.039s] (2653/2966) yakogl::egl_swap_end_wait desktop_shadow_waits_in_the_swaps_flush_for_its_own_desktop_pass
+        PASS [   0.081s] (2654/2966) yakogl::egl_swap_end_wait desktop_blur_waits_in_the_swaps_flush_for_its_own_last_offscreen_pass
+        PASS [   0.099s] (2655/2966) yakogl::egl_swap_end_wait a_cpu_bound_single_pass_scene_reads_0_of_n
+        PASS [   0.092s] (2656/2966) yakogl::egl_swap_end_wait a_gpu_bound_single_pass_scene_waits_in_the_swap_for_the_frame_before
+        PASS [   0.077s] (2657/2966) yakogl::egl_swap_end_wait refract_waits_in_glgeneratemipmap_for_its_own_colour_pass
+        PASS [   0.070s] (2659/2966) yakogl::egl_swap_end_wait terrain_waits_in_glgeneratemipmap_for_its_own_target_pass
+        PASS [   0.070s] (2660/2966) yakogl::egl_swap_end_wait shadow_waits_in_the_depth_resolve_for_its_own_depth_pass

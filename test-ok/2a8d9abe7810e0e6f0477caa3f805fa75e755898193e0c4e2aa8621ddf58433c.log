@@ -1,0 +1,16 @@
+        PASS [   0.071s] (2115/2135) yakogl::es3_vertex_api client_array_with_a_vao_bound_is_invalid_operation
+        PASS [   0.060s] (2116/2135) yakogl::es3_vertex_api enable_disable_and_divisor_take_only_a_valid_index
+        PASS [   0.041s] (2117/2135) yakogl::es3_vertex_api es3::every_float_array_type_takes_sizes_1_to_4
+        PASS [   0.051s] (2118/2135) yakogl::es3_vertex_api es3::every_array_pname_agrees_across_the_four_getters
+        PASS [   0.057s] (2119/2135) yakogl::es3_vertex_api es3::initial_array_state
+        PASS [   0.080s] (2120/2135) yakogl::es3_vertex_api es3::packed_types_take_size_4_only
+        PASS [   0.039s] (2121/2135) yakogl::es3_vertex_api es3::the_integer_flag_follows_the_last_pointer_call
+        PASS [   0.020s] (2122/2135) yakogl::es3_vertex_api float_current_values_default_and_fill_the_missing_components
+        PASS [   0.101s] (2123/2135) yakogl::es3_vertex_api es3::the_divisor_is_queried_and_survives_a_new_pointer
+        PASS [   0.052s] (2124/2135) yakogl::es3_vertex_api get_vertex_attribiv_rounds_the_float_value_to_nearest
+        PASS [   0.048s] (2125/2135) yakogl::es3_vertex_api getter_errors_write_nothing
+        PASS [   0.051s] (2126/2135) yakogl::es3_vertex_api integer_current_value_setters_check_the_index
+        PASS [   0.053s] (2127/2135) yakogl::es3_vertex_api integer_current_values_round_trip_exactly
+        PASS [   0.049s] (2128/2135) yakogl::es3_vertex_api ipointer_records_an_integer_array_of_the_six_integer_types
+        PASS [   0.045s] (2129/2135) yakogl::es3_vertex_api pointer_bad_index_size_and_stride_are_invalid_value
+        PASS [   0.046s] (2130/2135) yakogl::es3_vertex_api pointer_bad_type_is_invalid_enum

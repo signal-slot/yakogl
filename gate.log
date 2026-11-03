@@ -1,0 +1,8 @@
+check.sh: 2 compiler slot(s) (7175 MB available, 3072 MB each, 4 cores)
+[32mok    cargo fmt --check [19s][0m
+[32mok    build   yakogl-capi (no_std) [75s][0m
+[32mok    clippy  host-test,gpu-powervr [179s][0m
+[32mok    test    host-test,gpu-powervr [1156s][0m
+[32mok    clippy  host-test,gpu-powervr,report-es2 [441s][0m
+[32mok    test    host-test,gpu-powervr,report-es2 [603s][0m
+[32mok    clippy  host-test,gpu-vivante [3s][0m

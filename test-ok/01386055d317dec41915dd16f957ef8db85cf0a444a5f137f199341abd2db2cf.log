@@ -1,0 +1,5 @@
+        PASS [   0.060s] (3314/3433) yakogl::pvr_npot_levels the_255_chain_has_every_level_at_the_tpus_offset_and_pitch
+        PASS [   0.067s] (3315/3433) yakogl::pvr_npot_levels level_2_is_63x63_at_a_64_texel_pitch
+        PASS [   0.068s] (3316/3433) yakogl::pvr_npot_levels the_bind_and_the_texture_words_of_the_255_chain
+        PASS [   0.054s] (3317/3433) yakogl::pvr_npot_levels the_expected_table_follows_from_the_rules
+        PASS [   0.088s] (3318/3433) yakogl::pvr_npot_levels without_a_mipmap_filter_the_words_name_one_level_at_the_same_stride

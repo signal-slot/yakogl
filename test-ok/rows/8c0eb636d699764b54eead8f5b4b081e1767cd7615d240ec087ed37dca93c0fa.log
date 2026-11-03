@@ -1,0 +1,56 @@
+  PASS  full cycle: done, 16107024 bytes (done)
+  PASS  stamped log: done, with times
+  PASS  report: times relative to SPL (i_armed=+15.0s reset=+19.0s linux=+23.0s)
+  PASS  another run's token: wrong_token
+  PASS  no hook line: not_armed
+  PASS  hook, no cleared: not_cleared
+  PASS  TFTP refused: fetch_failed
+  PASS  eMMC cycle: done, 16107024 bytes read (done)
+  PASS  eMMC file absent: load_failed, the bootcmd's later load not counted, back (load_failed, None)
+  PASS  jump, no banner: no_zephyr
+  PASS  Zephyr, no reset: no_reset
+  PASS  reset, no Linux: no_linux
+  PASS  hook twice: looped
+  PASS  fetch failed, Linux booted: kernel_after_spl set
+  PASS  Zephyr still running: kernel_after_spl clear
+  PASS  empty log: empty, not a pass
+  PASS  blank lines only: empty
+  PASS  no rti_arm line: done, and rti_armed reported absent
+  PASS  banner before the hook: not counted
+  PASS  typed: autoboot stopped, the line run once, scan fetch_failed (rc 0, ran 1, fetch_failed)
+  PASS  typed: events name the prompt and the exact echo
+  PASS  typed: a lost byte gets Ctrl-C and a second try, never a wrong line (ran ['echo yakogl-netboot:'])
+  PASS  typed: autoboot not stopped: MISSED, nothing typed, Linux boots (not_armed)
+  PASS  typed: no SPL within the bound: EXPIRED, a later boot is not stopped (ran 0)
+  PASS  typed: unreachable bridge: rc 4
+  PASS  typed: a line with a newline is refused: rc 2
+  PASS  real probe capture: fetch_failed, one hook, the kernel start found, back (netboot-scan: verdict=fetch_failed back=yes lines=125 hooks=)
+  PASS  scan --back on the real probe: exit 0 (the runner stops waiting)
+  PASS  scan --back before the kernel start: exit 1 (the runner keeps waiting)
+  PASS  am62p-netboot-rtiproof-20261003.uart.ts: done, back, every phase matched (missing none)
+  PASS  am62p-netboot-rtiproof-20261003.uart.ts: rti_armed has its timestamp, from the line '...fed for 0 s'
+  PASS  am62p-netboot-rtiproof-20261003.uart.ts: the capture has rti_arm BEFORE the banner (the case the old scan lost)
+  PASS  am62p-netboot-rtiproof-20261003.uart.ts: the verdict line carries rti_armed
+  PASS  am62p-netboot-selfarm-20261003.uart.ts: done, back, every phase matched (missing none)
+  PASS  am62p-netboot-selfarm-20261003.uart.ts: rti_armed has its timestamp, from the line '...fed for 150 s'
+  PASS  am62p-netboot-selfarm-20261003.uart.ts: the capture has rti_arm BEFORE the banner (the case the old scan lost)
+  PASS  am62p-netboot-selfarm-20261003.uart.ts: the verdict line carries rti_armed
+  PASS  rti_arm.c has exactly one 'rti_arm: armed' LOG_INF (found 1)
+  PASS  RTI_ARMED matches what the format string prints: 'rti_arm: armed preload 0x7 rate 7 Hz: expiry 7 ms, fed for 7 s'
+  PASS  tools/board.sh's am62p MARKER is matched by RTI_ARMED
+  PASS  capture: RAW == the bytes the bridge sent (5096 of 5096, rc 0)
+  PASS  capture: STAMPED rows == the cleaned lines, last partial line kept (6 of 6)
+  PASS  probe: quiet bridge 0, refused 3, busy 4, closed at once 5 (got [0, 3, 4, 5])
+  PASS  probe: no message names the address
+  PASS  feed: listens
+  PASS  feed: probe answers ok (rc 0)
+  PASS  feed: a second client gets busy (probe rc 4)
+  PASS  feed: the busy answer does not reach the first client (got b'')
+  PASS  feed: bytes a client sends land in FILE.tx
+  PASS  feed: capture ends on SIGTERM, rc 0
+  PASS  feed: capture reads the appended bytes only (b'U-Boot SPL 2024\r\npartial')
+  PASS  feed: a client reads what is appended after a truncate
+  PASS  feed: a stop ends the bridge
+  PASS  feed: the port is free after the stop
+  PASS  feed: the process runs until SIGTERM, then exits 0 (no stray process)
+am62p_netboot_uart self-test: PASS

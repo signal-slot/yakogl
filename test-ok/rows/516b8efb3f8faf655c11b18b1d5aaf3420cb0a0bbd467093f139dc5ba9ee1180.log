@@ -1,0 +1,18 @@
+  PASS  16 MiB+1, blksize 1468, windowsize 16: bytes equal (0.34 s, err=None)
+  PASS  one-shot: renamed to .served after the final ACK
+  PASS  one-shot: the second request gets 'File not found' (File not found)
+  PASS  size a multiple of blksize: bytes equal (None)
+  PASS  no options: plain RFC 1350 (None)
+  PASS  three DATA packets lost: the window is resent (None)
+  PASS  block numbers wrap past 65535 (None)
+  PASS  refused outside the root: '../etc/passwd' (Access violation)
+  PASS  refused outside the root: '/etc/passwd' (Access violation)
+  PASS  refused outside the root: 'yakogl/../../x' (Access violation)
+  PASS  refused outside the root: 'a\\b' (Access violation)
+  PASS  staged 301 s ago (max age 300): refused, not served (File not found)
+  PASS  missing file: 'File not found' at once
+  PASS  write request refused
+  PASS  one 'done' per offered file, each once: 5 of 5 []
+  PASS  'done' carries rate and sha256
+  PASS  no 'failed' event
+tftp_oneshot self-test: PASS

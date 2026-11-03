@@ -1,0 +1,8 @@
+        PASS [   0.162s] (3137/3310) yakogl::es3_tf_api es3::begin_end_pause_resume_and_their_interlocks
+        PASS [   0.063s] (3138/3310) yakogl::es3_tf_api es3::capture_writes_the_bound_buffer
+        PASS [   0.081s] (3139/3310) yakogl::es3_tf_api es3::limits_are_the_es3_minimums
+        PASS [   0.069s] (3140/3310) yakogl::es3_tf_api es3::objects_have_the_binding_and_lifetime_rules
+        PASS [   0.069s] (3141/3310) yakogl::es3_tf_api es3::primitives_written_query_runs_its_state_machine
+        PASS [   0.071s] (3142/3310) yakogl::es3_tf_api es3::rasterizer_discard_keeps_draws_and_clears_from_the_back_end
+        PASS [   0.035s] (3143/3310) yakogl::es3_tf_api es3::the_indexed_bindings_belong_to_the_bound_object
+        PASS [   0.070s] (3144/3310) yakogl::es3_tf_api es3::varyings_link_and_are_reported

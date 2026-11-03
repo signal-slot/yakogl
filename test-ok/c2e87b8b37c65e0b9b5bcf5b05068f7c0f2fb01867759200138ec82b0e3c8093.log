@@ -1,0 +1,7 @@
+        PASS [   0.026s] (2913/3433) yakogl::egl_swap_latch no_memory_for_the_fourth_buffer_renders_the_window_in_place
+        PASS [   0.045s] (2914/3433) yakogl::egl_swap_latch a_report_that_holds_every_buffer_waits_one_period_instead_of_drawing_into_one
+        PASS [   0.024s] (2915/3433) yakogl::egl_swap_latch with_display_busy_four_buffers
+        PASS [   0.036s] (2916/3433) yakogl::egl_swap_latch the_ring_of_three_draws_into_a_buffer_the_display_holds_above_two_swaps_a_period
+        PASS [   0.043s] (2917/3433) yakogl::egl_swap_latch without_display_busy_three_buffers_in_todays_ring
+        PASS [   0.097s] (2918/3433) yakogl::egl_swap_latch the_am62p_table_without_vertical_sync_holds_the_same
+        PASS [   2.823s] (2988/3433) yakogl::egl_swap_latch with_display_busy_no_frame_is_drawn_into_a_buffer_the_display_holds

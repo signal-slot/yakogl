@@ -1,0 +1,9 @@
+        PASS [   0.038s] (3001/3313) yakogl::es3_formats_gc compiler::an_integer_lookup_is_the_float_texld_unconverted
+        PASS [   0.037s] (3004/3313) yakogl::es3_formats_gc compiler::an_offset_lookup_is_still_refused_by_name
+        PASS [   0.035s] (3005/3313) yakogl::es3_formats_gc compiler::the_result_is_read_as_integers
+        PASS [   0.041s] (3006/3313) yakogl::es3_formats_gc compiler::every_float_shape_selects_for_integer_samplers
+        PASS [   0.036s] (3007/3313) yakogl::es3_formats_gc every_row_is_the_descriptor_the_back_end_builds
+        PASS [   0.039s] (3008/3313) yakogl::es3_formats_gc every_storage_class_has_one_row_with_a_mesa_citation
+        PASS [   0.035s] (3009/3313) yakogl::es3_formats_gc the_binding_bits_apply_to_every_class
+        PASS [   0.038s] (3010/3313) yakogl::es3_formats_gc the_mask_column_is_gc_sampled_texfmts
+        PASS [   0.041s] (3011/3313) yakogl::es3_formats_gc the_new_register_constants_are_the_rnndb_values

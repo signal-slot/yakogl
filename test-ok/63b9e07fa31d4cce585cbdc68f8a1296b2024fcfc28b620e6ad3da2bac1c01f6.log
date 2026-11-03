@@ -1,0 +1,11 @@
+        PASS [   0.035s] (2655/2888) yakogl::es2_error_rules_texture es2_getting_es3_parameters_is_invalid_enum
+        PASS [   0.058s] (2656/2888) yakogl::es2_error_rules_texture es2_depth_extension_types_with_a_colour_format_are_invalid_operation
+        PASS [   0.077s] (2657/2888) yakogl::es2_error_rules_texture es2_3d_targets_are_invalid_enum
+        PASS [   0.038s] (2658/2888) yakogl::es2_error_rules_texture es2_pixel_types_are_accepted
+        PASS [   0.047s] (2659/2888) yakogl::es2_error_rules_texture es2_setting_es3_parameters_is_invalid_enum
+        PASS [   0.046s] (2660/2888) yakogl::es2_error_rules_texture es2_targets_are_accepted
+        PASS [   0.048s] (2661/2888) yakogl::es2_error_rules_texture es2_teximage2d_es3_types_are_invalid_enum
+        PASS [   0.048s] (2662/2888) yakogl::es2_error_rules_texture es2_texsubimage2d_es3_types_are_invalid_enum
+        PASS [   0.050s] (2663/2888) yakogl::es2_error_rules_texture half_float_oes_is_accepted
+        PASS [   0.045s] (2664/2888) yakogl::es2_error_rules_texture mirrored_repeat_and_es2_parameters_are_accepted
+        PASS [   0.034s] (2665/2888) yakogl::es2_error_rules_texture oes_depth_texture_types_are_accepted

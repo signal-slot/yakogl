@@ -1,0 +1,120 @@
+        PASS [   0.016s] (  1/120) yakogl-tools::bin/yakogl-tools emit::tests::attribs_sort_by_location_and_uniforms_keep_the_front_ends_order
+        PASS [   0.023s] (  2/120) yakogl-tools::bin/yakogl-tools emit::tests::escapes
+        PASS [   0.041s] (  3/120) yakogl-tools::bin/yakogl-tools es100::tests::a_pragma_is_blanked_but_the_line_stays
+        PASS [   0.071s] (  4/120) yakogl-tools::bin/yakogl-tools es100::tests::a_preprocessor_error_is_reported_as_one
+        PASS [   0.153s] (  5/120) yakogl-tools::bin/yakogl-tools es100::tests::a_matching_pair_links
+        PASS [   0.094s] (  6/120) yakogl-tools::bin/yakogl-tools es100::tests::a_source_without_a_version_directive_is_es_100_not_desktop_glsl
+        PASS [   0.154s] (  7/120) yakogl-tools::bin/yakogl-tools es100::tests::a_legal_shader_validates_in_both_stages
+        PASS [   0.083s] (  8/120) yakogl-tools::bin/yakogl-tools es100::tests::a_varying_the_fragment_shader_uses_but_the_vertex_shader_never_declares
+        PASS [   0.160s] (  9/120) yakogl-tools::bin/yakogl-tools es100::tests::a_type_without_a_precision_never_conflicts
+        PASS [   0.107s] ( 10/120) yakogl-tools::bin/yakogl-tools es100::tests::a_varying_the_fragment_shader_only_declares_still_links
+        PASS [   0.013s] ( 11/120) yakogl-tools::bin/yakogl-tools es100::tests::an_extension_directive_after_code_is_rejected
+        PASS [   0.117s] ( 12/120) yakogl-tools::bin/yakogl-tools es100::tests::a_uniform_declared_at_two_precisions_is_a_link_error
+        PASS [   0.015s] ( 13/120) yakogl-tools::bin/yakogl-tools es100::tests::an_info_log_drops_the_file_name_echo_and_nothing_else
+        PASS [   0.095s] ( 14/120) yakogl-tools::bin/yakogl-tools es100::tests::a_varying_the_two_stages_type_differently_is_a_link_error
+        PASS [   0.073s] ( 15/120) yakogl-tools::bin/yakogl-tools es100::tests::es_rules_reject_an_implicit_conversion_glsl_450_would_allow
+        PASS [   0.098s] ( 16/120) yakogl-tools::bin/yakogl-tools es100::tests::float_varyings_share_rows
+        PASS [   0.121s] ( 17/120) yakogl-tools::bin/yakogl-tools es100::tests::dead_code_behind_an_if_zero_is_not_translated
+        PASS [   0.019s] ( 18/120) yakogl-tools::bin/yakogl-tools es100::tests::stage_names_from_either_vocabulary
+        PASS [   0.043s] ( 19/120) yakogl-tools::bin/yakogl-tools es100::tests::the_limits_are_this_implementations_own
+        PASS [   0.108s] ( 20/120) yakogl-tools::bin/yakogl-tools es100::tests::fragment_precision_high_is_the_librarys_fact_in_both_stages
+        PASS [   0.023s] ( 21/120) yakogl-tools::bin/yakogl-tools glconsts::tests::values_and_aliases
+        PASS [   0.019s] ( 22/120) yakogl-tools::bin/yakogl-tools glsl2usc::content_id_tests::content_id_resolves_a_bare_command_through_path
+        PASS [   0.023s] ( 23/120) yakogl-tools::bin/yakogl-tools glsl2usc::tests::a_missing_compiler_is_the_service_failing_not_a_bad_shader
+        PASS [   0.181s] ( 24/120) yakogl-tools::bin/yakogl-tools es100::tests::nine_vec4_varyings_fail_and_eight_link
+        PASS [   0.089s] ( 25/120) yakogl-tools::bin/yakogl-tools es100::tests::the_preprocessor_runs_before_the_translation_and_keeps_the_line_count
+        PASS [   0.016s] ( 26/120) yakogl-tools::bin/yakogl-tools glsl2usc::tests::an_opaque_uniform_stays_outside_the_block
+        PASS [   0.021s] ( 27/120) yakogl-tools::bin/yakogl-tools glsl2usc::tests::a_shader_without_tile_buffers_reports_none
+        PASS [   0.041s] ( 28/120) yakogl-tools::bin/yakogl-tools glsl2usc::tests::a_shader_with_no_version_and_no_es_keywords_is_still_translated
+        PASS [   0.008s] ( 29/120) yakogl-tools::bin/yakogl-tools glsl2usc::tests::argparse_rules
+        PASS [   0.011s] ( 30/120) yakogl-tools::bin/yakogl-tools glsl2usc::tests::blend_keys
+        PASS [   0.011s] ( 31/120) yakogl-tools::bin/yakogl-tools glsl2usc::tests::meta_of_a_multi_output_shader_with_a_tile_buffer
+        PASS [   0.021s] ( 32/120) yakogl-tools::bin/yakogl-tools glsl2usc::tests::meta_parsing
+        PASS [   0.017s] ( 33/120) yakogl-tools::bin/yakogl-tools glsl2usc::tests::pco_debug_is_scoped_keyed_and_validated
+        PASS [   0.188s] ( 34/120) yakogl-tools::bin/yakogl-tools es100::tests::the_appendix_example_links_and_one_vec2_more_does_not
+        PASS [   0.012s] ( 35/120) yakogl-tools::bin/yakogl-tools glsl2usc::tests::the_point_coordinate_flag_is_read_from_the_uses_line
+        PASS [   0.028s] ( 36/120) yakogl-tools::bin/yakogl-tools glsl2usc::tests::the_depth_flag_is_read_from_the_uses_line
+        PASS [   0.011s] ( 37/120) yakogl-tools::bin/yakogl-tools glsl2usc::tests::variant_environment
+        PASS [   0.017s] ( 38/120) yakogl-tools::bin/yakogl-tools glsl::tests::a_function_that_shadows_nothing_is_left_alone
+        PASS [   0.026s] ( 39/120) yakogl-tools::bin/yakogl-tools glsl2usc::tests::the_spirv_optimiser_is_off_unless_the_environment_asks_for_it
+        PASS [   0.028s] ( 40/120) yakogl-tools::bin/yakogl-tools glsl::tests::a_gles_100_cube_fetch_is_a_native_cube_fetch
+        PASS [   0.019s] ( 41/120) yakogl-tools::bin/yakogl-tools glsl::tests::a_matrix_attribute_is_assembled_after_the_hoisted_position
+        PASS [   0.032s] ( 42/120) yakogl-tools::bin/yakogl-tools glsl::tests::a_local_that_shadows_a_parameter_gets_a_scope_of_its_own
+        PASS [   0.007s] ( 43/120) yakogl-tools::bin/yakogl-tools glsl::tests::a_matrix_is_columns_of_rows_and_both_answers_come_from_one_place
+        PASS [   0.025s] ( 44/120) yakogl-tools::bin/yakogl-tools glsl::tests::a_matrix_attribute_the_position_itself_reads_is_assembled_first
+        PASS [   0.031s] ( 45/120) yakogl-tools::bin/yakogl-tools glsl::tests::a_parameter_merely_read_is_not_a_shadow
+        PASS [   0.058s] ( 46/120) yakogl-tools::bin/yakogl-tools glsl::tests::a_matrix_attribute_becomes_one_input_per_column
+        PASS [   0.034s] ( 47/120) yakogl-tools::bin/yakogl-tools glsl::tests::a_struct_inside_an_array_of_struct_uniforms_is_refused_with_its_path
+        PASS [   0.016s] ( 48/120) yakogl-tools::bin/yakogl-tools glsl::tests::an_array_size_is_an_integer_constant_expression
+        PASS [   0.041s] ( 49/120) yakogl-tools::bin/yakogl-tools glsl::tests::an_array_of_struct_uniforms_is_flattened_per_member
+        PASS [   0.040s] ( 50/120) yakogl-tools::bin/yakogl-tools glsl::tests::defines_across_lines_and_unicode_digits
+        PASS [   0.046s] ( 51/120) yakogl-tools::bin/yakogl-tools glsl::tests::crlf_source
+        PASS [   0.053s] ( 52/120) yakogl-tools::bin/yakogl-tools glsl::tests::es100_declarations_and_hoist
+        PASS [   0.045s] ( 53/120) yakogl-tools::bin/yakogl-tools glsl::tests::es300_vertex
+        PASS [   0.089s] ( 54/120) yakogl-tools::bin/yakogl-tools glsl::tests::emulated_samplers
+        PASS [   0.069s] ( 55/120) yakogl-tools::bin/yakogl-tools glsl::tests::es100_fragment
+        PASS [   0.048s] ( 56/120) yakogl-tools::bin/yakogl-tools glsl::tests::hoist_blocked_by_a_local
+        PASS [   0.037s] ( 57/120) yakogl-tools::bin/yakogl-tools glsl::tests::main_is_never_nested
+        PASS [   0.059s] ( 58/120) yakogl-tools::bin/yakogl-tools glsl::tests::hoist_takes_trailing_blanks
+        PASS [   0.048s] ( 59/120) yakogl-tools::bin/yakogl-tools glsl::tests::preprocessor_inside_a_line
+        PASS [   0.042s] ( 60/120) yakogl-tools::bin/yakogl-tools glsl::tests::python_whitespace
+        PASS [   0.035s] ( 61/120) yakogl-tools::bin/yakogl-tools glsl::tests::reflection_errors_and_450_sources
+        PASS [   0.042s] ( 62/120) yakogl-tools::bin/yakogl-tools glsl::tests::sampler3d_in_es100
+        PASS [   0.043s] ( 63/120) yakogl-tools::bin/yakogl-tools glsl::tests::stray_closing_brace
+        PASS [   0.095s] ( 64/120) yakogl-tools::bin/yakogl-tools glsl::tests::sampler3d_emulation
+        PASS [   0.076s] ( 65/120) yakogl-tools::bin/yakogl-tools glsl::tests::struct_flattening
+        PASS [   0.048s] ( 66/120) yakogl-tools::bin/yakogl-tools glsl::tests::trailing_statement
+        PASS [   0.018s] ( 67/120) yakogl-tools::bin/yakogl-tools kickdiffrec::tests::a_late_failing_case_10_round_trips
+        PASS [   0.074s] ( 68/120) yakogl-tools::bin/yakogl-tools glsl::tests::the_cube_lod_fetch_is_rewritten_before_the_shorter_name
+        PASS [   0.041s] ( 69/120) yakogl-tools::bin/yakogl-tools glsl::tests::translation_errors
+        PASS [   0.012s] ( 70/120) yakogl-tools::bin/yakogl-tools kickdiffrec::tests::a_stable_passing_case_2_round_trips
+        PASS [   0.020s] ( 71/120) yakogl-tools::bin/yakogl-tools kickdiffrec::tests::counters_saturate_and_large_check_numbers_say_so
+        PASS [   0.047s] ( 72/120) yakogl-tools::bin/yakogl-tools glsl::tests::unroll_loops_backreference
+        PASS [   0.014s] ( 73/120) yakogl-tools::bin/yakogl-tools kickdiffrec::tests::every_page_is_kept_in_order_and_other_records_are_ignored
+        PASS [   0.019s] ( 74/120) yakogl-tools::bin/yakogl-tools kickdiffrec::tests::not_armed_names_the_arming_return
+        PASS [   0.026s] ( 75/120) yakogl-tools::bin/yakogl-tools kickdiffrec::tests::the_layout_is_gl_test_cs
+        PASS [   0.014s] ( 76/120) yakogl-tools::bin/yakogl-tools list::tests::blend_keys
+        PASS [   0.022s] ( 77/120) yakogl-tools::bin/yakogl-tools list::tests::a_list_that_is_wrong_is_refused_by_line
+        PASS [   0.029s] ( 78/120) yakogl-tools::bin/yakogl-tools list::tests::a_list_reads_and_its_globs_expand_in_byte_order
+        PASS [   0.014s] ( 79/120) yakogl-tools::bin/yakogl-tools list::tests::internal_lines
+        PASS [   0.019s] ( 80/120) yakogl-tools::bin/yakogl-tools msaarec::tests::a_missing_page_is_said_not_zeroed
+        PASS [   0.022s] ( 81/120) yakogl-tools::bin/yakogl-tools msaarec::tests::decodes_in_the_consoles_words
+        PASS [   0.026s] ( 82/120) yakogl-tools::bin/yakogl-tools list::tests::globs_are_fnmatch_on_the_lists_subset
+        PASS [   0.017s] ( 83/120) yakogl-tools::bin/yakogl-tools py::tests::fnmatch_like_python
+        PASS [   0.024s] ( 84/120) yakogl-tools::bin/yakogl-tools msaarec::tests::the_last_page_of_a_tag_wins_and_other_records_are_ignored
+        PASS [   0.031s] ( 85/120) yakogl-tools::bin/yakogl-tools msaarec::tests::no_scratch_is_the_consoles_none_allocated
+        PASS [   0.019s] ( 86/120) yakogl-tools::bin/yakogl-tools py::tests::int_parsing
+        PASS [   0.040s] ( 87/120) yakogl-tools::bin/yakogl-tools msaarec::tests::the_layout_is_gl_test_cs
+        PASS [   0.022s] ( 88/120) yakogl-tools::bin/yakogl-tools py::tests::paths
+        PASS [   0.033s] ( 89/120) yakogl-tools::bin/yakogl-tools py::tests::repr_quotes
+        PASS [   0.014s] ( 90/120) yakogl-tools::bin/yakogl-tools record::tests::check_run_words_keep_not_measured_apart_from_saturated
+        PASS [   0.036s] ( 91/120) yakogl-tools::bin/yakogl-tools py::tests::strip_matches_python_isspace
+        PASS [   0.028s] ( 92/120) yakogl-tools::bin/yakogl-tools record::tests::crcs_check_values
+        PASS [   0.060s] ( 93/120) yakogl-tools::bin/yakogl-tools py::tests::widened_space_class
+        PASS [   0.048s] ( 94/120) yakogl-tools::bin/yakogl-tools record::tests::classify_known_records
+        PASS [   0.036s] ( 95/120) yakogl-tools::bin/yakogl-tools record::tests::describe_every_kind
+        PASS [   0.028s] ( 96/120) yakogl-tools::bin/yakogl-tools record::tests::display_words_and_their_decode
+        PASS [   0.024s] ( 97/120) yakogl-tools::bin/yakogl-tools record::tests::gl_error_words_and_their_decode
+        PASS [   0.014s] ( 98/120) yakogl-tools::bin/yakogl-tools record::tests::gm_selector_is_its_own
+        PASS [   0.015s] ( 99/120) yakogl-tools::bin/yakogl-tools record::tests::gm_page_words_and_their_decode
+        PASS [   0.030s] (100/120) yakogl-tools::bin/yakogl-tools record::tests::glmark2_default_info_is_the_default_list
+        PASS [   0.013s] (101/120) yakogl-tools::bin/yakogl-tools record::tests::kinds_are_one_to_twenty_five_and_the_tag_list_is_the_formats
+        PASS [   0.019s] (102/120) yakogl-tools::bin/yakogl-tools record::tests::line_round_trip_and_garbage
+        PASS [   0.025s] (103/120) yakogl-tools::bin/yakogl-tools record::tests::packers
+        PASS [   0.028s] (104/120) yakogl-tools::bin/yakogl-tools record::tests::rate_words_give_the_throughput_line
+        PASS [   0.025s] (105/120) yakogl-tools::bin/yakogl-tools record::tests::set_summary_words_and_their_decode
+        PASS [   0.022s] (106/120) yakogl-tools::bin/yakogl-tools record::tests::stages_unique_and_sub_steps_in_place
+        PASS [   0.023s] (107/120) yakogl-tools::bin/yakogl-tools record::tests::throughput_of_two_panels
+        PASS [   0.019s] (108/120) yakogl-tools::bin/yakogl-tools record::tests::writer_reproduces_the_baseline_picture
+        PASS [   0.017s] (109/120) yakogl-tools::bin/yakogl-tools recordcmd::tests::classify_known_records
+        PASS [   0.021s] (110/120) yakogl-tools::bin/yakogl-tools recordcmd::tests::log_lines_and_the_verdict_record
+        PASS [   0.011s] (111/120) yakogl-tools::bin/yakogl-tools recordcmd::tests::nvmem_bytes_are_little_endian
+        PASS [   0.037s] (112/120) yakogl-tools::bin/yakogl-tools recordcmd::tests::glmark2_pages_of_the_fixture
+        PASS [   0.048s] (113/120) yakogl-tools::bin/yakogl-tools recordcmd::tests::decode_matches_golden
+        PASS [   0.012s] (114/120) yakogl-tools::bin/yakogl-tools recordcmd::tests::tally_resets_and_line
+        PASS [   0.012s] (115/120) yakogl-tools::bin/yakogl-tools recordcmd::tests::the_librarys_draw_steps_are_the_records
+        PASS [   0.022s] (116/120) yakogl-tools::bin/yakogl-tools recordcmd::tests::status_per_kind
+        PASS [   0.016s] (117/120) yakogl-tools::bin/yakogl-tools recordcmd::tests::throughput_from_a_log
+        PASS [   0.022s] (118/120) yakogl-tools::bin/yakogl-tools recordcmd::tests::the_old_writer_names_are_record_rs_aliases
+        PASS [   0.037s] (119/120) yakogl-tools::bin/yakogl-tools uscblob::tests::replace_in_place_and_add
+        PASS [   0.167s] (120/120) yakogl-tools::bin/yakogl-tools recordcmd::tests::a_gles3_name_check_decodes

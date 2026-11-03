@@ -1,0 +1,193 @@
+build   v3d mesa reference (tools/v3d/mesa_ref.sh)
+build   yakogl-capi (no_std)
+cargo fmt --check
+cc      boot_stage2.h layout pins
+cc      gl_test.c -DGL_TEST_HOST=1
+cc      gl_test.c -DGL_TEST_HOST=1 -DYAKOGL_TEST_KNOBS=1
+cc      gl_test.c -DGL_TEST_USER=1 -DYAKOGL_GPU_VIVANTE=1
+cc      gl_test.c -DGL_TEST_USER=1 -DYAKOGL_GPU_VIVANTE=1 -DYAKOGL_TEST_KNOBS=1
+cc      v3d FFI layout pins
+cc      v3d job builder
+cc      v3d textures
+cc      yakogl_drivers.h layout pins
+check   osal-zephyr,gpu-powervr,precompiled-shaders (aarch64-unknown-none, no compiler)
+check   yakogl-drivers (aarch64-unknown-none-softfloat)
+clippy  host-test,gpu-mali,shaderc-online,no-shader-table
+clippy  host-test,gpu-powervr
+clippy  host-test,gpu-powervr,precompiled-shaders,no-shader-table (no compiler; lib and its tests)
+clippy  host-test,gpu-powervr,report-es2
+clippy  host-test,gpu-powervr,shaderc-online
+clippy  host-test,gpu-powervr,shaderc-online,no-shader-table (no tests: see BUILD_ONLY_CONFIGS)
+clippy  host-test,gpu-powervr,shaderc-online,precompiled-shaders
+clippy  host-test,gpu-powervr,shaderc-online,report-es2
+clippy  host-test,gpu-powervr,shaderc-online,test-knobs
+clippy  host-test,gpu-v3d,shaderc-online,no-shader-table
+clippy  host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2
+clippy  host-test,gpu-vivante
+clippy  host-test,gpu-vivante,precompiled-shaders,no-shader-table (no compiler; lib and its tests)
+clippy  host-test,gpu-vivante,shaderc-online
+clippy  host-test,gpu-vivante,shaderc-online,no-shader-table (no tests: see BUILD_ONLY_CONFIGS)
+clippy  host-test,gpu-vivante,shaderc-online,precompiled-shaders
+clippy  host-test,gpu-vivante,shaderc-online,report-es2
+clippy  host-test,gpu-vivante,shaderc-online,test-knobs
+clippy  osal-zephyr,gpu-mali,shaderc-online,no-shader-table (aarch64-unknown-none, no host-test)
+clippy  osal-zephyr,gpu-powervr,shaderc-online,no-shader-table (aarch64-unknown-none, no host-test)
+clippy  osal-zephyr,gpu-v3d,shaderc-online,no-shader-table (aarch64-unknown-none, no host-test)
+clippy  osal-zephyr,gpu-vivante,shaderc-online,no-shader-table (aarch64-unknown-none, no host-test)
+clippy  yakogl-boot-stage2
+clippy  yakogl-boot-stage2 (aarch64-unknown-none-softfloat)
+clippy  yakogl-drivers
+clippy  yakogl-drivers, each shipped feature arm (-D warnings)
+clippy  yakogl-femtovg-check
+clippy  yakogl-gltest-runner
+clippy  yakogl-gltest-runner (aarch64-unknown-none)
+clippy  yakogl-mali-panthor
+clippy  yakogl-mali-panthor (aarch64-unknown-linux-gnu)
+clippy  yakogl-precompile gpu-powervr
+clippy  yakogl-precompile gpu-powervr,report-es2
+clippy  yakogl-precompile gpu-vivante
+clippy  yakogl-precompile gpu-vivante,report-es2
+clippy  yakogl-slint-check
+clippy  yakogl-tools
+clippy  yakogl-triangle-check
+gen     driver/src/pvr/generated == Mesa's csbgen on third_party
+gen     driver/src/pvr_usc_*_blob.h == tools/pco_shc/usc_blobs.txt
+gen     driver/src/v3d/generated == Mesa's generators on third_party
+gen     gl_test_shaders{,_es100}.h == gen_gl_test_shaders.py on tools/shaders
+gen     precompiled tables for the tier configurations
+gen     src/mali/genxml == tools/mali/gen_pack_rs.py on third_party v10.xml
+gen     src/pvr/csbgen.rs + csbgen_wrap.c == bindgen
+gen     src/pvr/internal.rs == yakogl-precompile --internal (our compiler)
+gen     src/shaderc/online/mali/isa/v10.rs == tools/mali/gen_isa_rs.py on third_party
+gen     src/vivante/internal.rs == yakogl-precompile --internal (our compiler)
+host    glmark2 PERF page: packed and decoded by yakogl-tools record
+host    imx8mp latch model: waits per swap
+no Mesa reference in the artefact
+no table in the artefact
+no test knob in the artefact
+run     am62p rti_arm_check (60 s preload per reported RTI clock rate)
+run     backend.h yakogl_heap_base without a heap_base (0, as the Rust side)
+run     baremetal_config_check (init refuses without a complete board)
+run     gc7000 osal_frees_check (frees back at once with no frame open)
+run     gl_test case 44 probe decode
+run     linux osal linux_heap_check (finite range, reuse, no overlap)
+run     mali pan_ref_diff and ref_cases self-test (no Mesa tree)
+run     mali pan_shc == Mesa 26.2.1 GL driver on the tri pair (MESA_PAN_TREE)
+run     mali sweep_passsets self-test
+run     osal pending_frees_check (a full queue waits, never leaks silently)
+run     osal_bounds_check (gpu_write/gpu_read refuse a wrapped range)
+run     osal_log_check (a 255-byte log line survives the Zephyr OSAL buffer)
+run     pvr ddk_abi_check (FWIF numbers = the vendored DDK 25.2 headers)
+run     pvr km_check (the Rust kernel side = the C it replaced; layouts = the DDK headers)
+run     pvr render_regs_check (csbgen register words = the former literals)
+run     pvr rgxlayer_check (DDK RGXStart/RGXStop/image loader on the Rust rgxlayer)
+run     pvr vdm_field_check (VDM/PPP fields refuse, never mask)
+run     v3d cl_golden (against Mesa 26.2.1)
+run     v3d hw_mock_test (v3d_hw.c against the register model)
+run     v3d job_check (against Mesa 26.2.1)
+run     v3d osal_frees_check (frees back at once with no job open)
+run     v3d osal_granules_check (the carve-out's first fit, small blocks from the top, the STRESS1D replay)
+run     v3d tex_check (against Mesa 26.2.1)
+run     v3d tex_filter_ref_check (dEQP's filters, the LINEAR plan)
+run     v3d tex_tiling_bench_check (the tiling-time harness)
+run     v3d tex_upload_check (eager copy = lazy copy)
+run     v3d tfu_case_check (the TFU probe, case 140)
+sha256  third_party files are the upstream files (UPSTREAM)
+test    host-test,gpu-mali,shaderc-online,no-shader-table (--lib mali::, 345 tests: packers and ISA vs Mesa and the board)
+test    host-test,gpu-powervr
+test    host-test,gpu-powervr,precompiled-shaders,no-shader-table (no compiler: shaderc::precompiled)
+test    host-test,gpu-powervr,report-es2
+test    host-test,gpu-powervr,shaderc-online
+test    host-test,gpu-powervr,shaderc-online (tests/es3_pvr_2darray.rs)
+test    host-test,gpu-powervr,shaderc-online (tests/es3_pvr_3d.rs)
+test    host-test,gpu-powervr,shaderc-online (tests/es3_pvr_fragdepth.rs)
+test    host-test,gpu-powervr,shaderc-online (tests/es3_pvr_shadow.rs)
+test    host-test,gpu-powervr,shaderc-online (tests/es3_vertex_arrays.rs)
+test    host-test,gpu-powervr,shaderc-online,precompiled-shaders
+test    host-test,gpu-powervr,shaderc-online,report-es2
+test    host-test,gpu-powervr,shaderc-online,test-knobs (--lib, 9 knob tests by name)
+test    host-test,gpu-v3d,shaderc-online,no-shader-table (--lib, GL suite on the online compiler)
+test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/depth_resolve_v3d.rs)
+test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/egl_bench_configs.rs)
+test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_formats_v3d.rs)
+test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_int_rt.rs)
+test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_int_rt_v3d.rs)
+test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_mrt_gl.rs)
+test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_occlusion_gl.rs)
+test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_shaderc_v3d.rs)
+test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_srgb.rs)
+test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_tf_api.rs)
+test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/mipmap_offer_guard.rs)
+test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_clear.rs)
+test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_cube_noseamless.rs)
+test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_depth_storage.rs)
+test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_glmark2_mem.rs)
+test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_lazy_raster_readers.rs)
+test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_rt_sample.rs)
+test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_sim_mesa.rs)
+test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_tfu_host.rs)
+test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_tfu_mipmap_nowait.rs)
+test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_uniform_host.rs)
+test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (--lib shaderc::online::v3d)
+test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (--lib v3d::backend_tests, separate depth/stencil)
+test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (tests/es3_int_rt.rs)
+test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (tests/es3_mrt_gl.rs)
+test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (tests/es3_occlusion_gl.rs)
+test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (tests/es3_srgb.rs)
+test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (tests/es3_tf_api.rs)
+test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (tests/v3d_clear.rs)
+test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (tests/v3d_cube_noseamless.rs)
+test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (tests/v3d_sim_mesa.rs)
+test    host-test,gpu-vivante
+test    host-test,gpu-vivante,precompiled-shaders,no-shader-table (no compiler: shaderc::precompiled)
+test    host-test,gpu-vivante,shaderc-online
+test    host-test,gpu-vivante,shaderc-online,precompiled-shaders
+test    host-test,gpu-vivante,shaderc-online,report-es2
+test    host-test,gpu-vivante,shaderc-online,test-knobs (--lib, 10 knob tests by name)
+test    host-test,gpu-vivante,shaderc-online,test-knobs (tests/gc_kick_diff.rs, 7 tests)
+test    pvr render pool (Rust; the C pool's golden trace replayed, 33 tests)
+test    yakogl-boot-stage2
+test    yakogl-drivers (register model)
+test    yakogl-drivers gpu::mali on the board's mali_csffw.bin (MALI_CSFFW, 2 tests by name): /home/orion/connected-deps/mali-csffw/mali_csffw.bin is missing (tools/cts/deps-env.sh --build MALI_CSFFW fetches it, or name the board's file in MALI_CSFFW): not built
+test    yakogl-femtovg-check
+test    yakogl-gltest-runner (gl_test's lines and count)
+test    yakogl-mali-panthor
+test    yakogl-precompile gpu-powervr
+test    yakogl-precompile gpu-vivante
+test    yakogl-slint-check
+test    yakogl-tools
+test    yakogl-triangle-check
+tools   am62p netboot TFTP server
+tools   am62p netboot UART phases
+tools   am62p second stage: mkboot images decoded by the loader's Rust
+tools   am62p-gles3-tree: generator self-test and table check
+tools   am62p-mkboot u-boot.img and boot partition
+tools   api coverage: 0 ES 2.0 core + 0 EGL 1.x core entry points missing from the exports
+tools   api coverage: gl2.h + egl.h vs exported vs eglGetProcAddress
+tools   api_coverage.py self-test
+tools   board-sudo-setup.sh --dry-run runs from a clean environment
+tools   board.sh dry-run matrix and replays
+tools   board_lock.sh: a refusal names the holder; nanopc-t6.sh never waits
+tools   check.sh --changed: the path-to-scope map and four plans
+tools   check.sh --jobs: the log in order, the counts, a lane
+tools   check.sh test cache: record, skip, run again on a new key
+tools   common-tally row verdicts
+tools   cts-selftest.sh (the CTS tools' checks, images-selftest included)
+tools   deqp-uart-tally log verdicts
+tools   fault-record decoder self-test
+tools   fault-record matches its writer
+tools   gl_test shader sources have table rows
+tools   gles3-mustpass: 42,810 cases, sorted, unique, all GLES3
+tools   glmark2 compare-selftest.sh (before/after profile table)
+tools   licence audit (SPDX header or allowlist row for every tracked file)
+tools   precompiled.list gl_test pairs == what gl_test.c links
+tools   qpa-from-uart rebuild verdicts
+tools   shader-table generator guards
+zephyr  am62p examples/triangle image, -Werror on our C files
+zephyr  am62p examples/triangle-rust image, -Werror on our C files, the Rust main
+zephyr  am62p gl_test image without a compiler (precompiled shaders only), -Werror
+zephyr  am62p gl_test image, -Werror on our C files
+zephyr  imx8mp examples/triangle image, -Werror on our C files
+zephyr  imx8mp gl_test image, -Werror on our C files
+zephyr  rpi4 examples/triangle image, -Werror on our C files
+zephyr  rpi4 gl_test image, -Werror on our C files

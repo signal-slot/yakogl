@@ -1,0 +1,26 @@
+        PASS [   0.017s] ( 1/36) yakogl-mali-panthor cs::tests::encoders_give_the_words_the_board_ran
+        PASS [   0.019s] ( 2/36) yakogl-mali-panthor cs::tests::encoders_refuse_what_does_not_fit
+        PASS [   0.021s] ( 3/36) yakogl-mali-panthor cs::tests::an_unknown_opcode_is_its_own_refusal
+        PASS [   0.023s] ( 4/36) yakogl-mali-panthor cs::tests::encoders_agree_with_the_kernels_literal_words
+        PASS [   0.009s] ( 5/36) yakogl-mali-panthor cs::tests::mesa_batch_end_is_the_traced_sequence
+        PASS [   0.014s] ( 6/36) yakogl-mali-panthor cs::tests::stream_refuses_kernel_registers_and_missing_slots
+        PASS [   0.008s] ( 7/36) yakogl-mali-panthor dev::tests::a_bind_over_a_bound_range_is_refused_naming_both
+        PASS [   0.013s] ( 8/36) yakogl-mali-panthor cs::tests::synchronous_sync_add_carries_signal_slot_zero
+        PASS [   0.026s] ( 9/36) yakogl-mali-panthor cs::tests::stream_limits_are_refused_not_clamped
+        PASS [   0.016s] (10/36) yakogl-mali-panthor l1::tests::a_frame_built_at_given_vas_is_the_cpu_address_frame_when_the_bases_are_equal
+        PASS [   0.019s] (11/36) yakogl-mali-panthor l1::tests::the_blit_writes_the_scaled_picture_inside_a_white_border_only
+        PASS [   0.007s] (12/36) yakogl-mali-panthor l1::tests::the_tally_counts_what_the_frame_should_put_where
+        PASS [   0.026s] (13/36) yakogl-mali-panthor dev::tests::the_bump_allocator_steps_over_a_range_bound_at_a_chosen_address
+        PASS [   0.010s] (14/36) yakogl-mali-panthor osal::tests::a_free_is_held_to_the_kick_being_recorded
+        PASS [   0.013s] (15/36) yakogl-mali-panthor l1::tests::the_user_registers_follow_the_csif_query
+        PASS [   0.027s] (16/36) yakogl-mali-panthor l1::tests::the_fragment_job_names_the_desc_arena
+        PASS [   0.013s] (17/36) yakogl-mali-panthor osal::tests::a_window_is_the_pages_of_the_buffer_that_holds_the_range
+        PASS [   0.016s] (18/36) yakogl-mali-panthor pandecode::tests::parses_streams_dumps_and_targets
+        PASS [   0.029s] (19/36) yakogl-mali-panthor osal::tests::a_held_item_goes_only_once_its_fence_completes
+        PASS [   0.022s] (20/36) yakogl-mali-panthor pandecode::tests::counts_pixels_and_refuses_a_short_buffer
+        PASS [   0.012s] (21/36) yakogl-mali-panthor uapi::tests::gpu_id_decodes_as_the_design_page_reads_it
+        PASS [   0.028s] (22/36) yakogl-mali-panthor pandecode::tests::refuses_a_star_without_a_closing_row
+        PASS [   0.025s] (23/36) yakogl-mali-panthor tri_shaders::tests::the_programs_are_the_board_s
+        PASS [   0.028s] (24/36) yakogl-mali-panthor uapi::tests::field_offsets_are_the_c_compilers
+        PASS [   0.025s] (25/36) yakogl-mali-panthor uapi::tests::ioctl_numbers_are_the_c_compilers
+        PASS [   0.054s] (26/36) yakogl-mali-panthor uapi::tests::struct_sizes_are_the_c_compilers

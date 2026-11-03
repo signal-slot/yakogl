@@ -1,0 +1,5 @@
+        PASS [   0.047s] (2849/2966) yakogl::gl_map_buffer_reuse an_idle_buffer_is_mapped_in_place_at_every_frame
+        PASS [   0.060s] (2850/2966) yakogl::gl_map_buffer_reuse buffer_data_hands_the_kept_storages_back
+        PASS [   0.034s] (2851/2966) yakogl::gl_map_buffer_reuse glmark2_order_reuses_the_storages_the_buffer_moved_off
+        PASS [   0.050s] (2852/2966) yakogl::gl_map_buffer_reuse invalidate_buffer_copies_nothing
+        PASS [   0.051s] (2853/2966) yakogl::gl_map_buffer_reuse invalidate_range_copies_only_the_bytes_kept

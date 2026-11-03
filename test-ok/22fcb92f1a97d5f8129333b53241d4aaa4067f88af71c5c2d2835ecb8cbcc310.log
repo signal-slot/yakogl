@@ -1,0 +1,5 @@
+        PASS [   0.031s] (2068/2074) yakogl::sha256 incremental_matches_one_shot
+        PASS [   0.063s] (2069/2074) yakogl::sha256 every_source_text_is_in_the_blob_table
+        PASS [   0.057s] (2070/2074) yakogl::sha256 known_answers
+        PASS [   0.016s] (2071/2074) yakogl::sha256 offline_backend_logs
+        PASS [   0.061s] (2072/2074) yakogl::sha256 offline_backend_finds_every_source
