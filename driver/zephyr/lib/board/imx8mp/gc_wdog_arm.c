@@ -96,6 +96,32 @@ static FUNC_NORETURN void psci_system_reset(void)
 	}
 }
 
+#if defined(CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_A53_RESTART)
+/*
+ * Before the A53 side takes itself down (board_route3_restart.c): nothing
+ * feeds WDOG1 while the cluster is off, WDE cannot be cleared once set, and a
+ * timeout drives WDOG_B, which the PMIC turns into a board reset whatever
+ * SRC_A53RCR0's MASK_WDOG1_RST says. So the timeout goes to its longest,
+ * WT = 0xFF ((WT + 1) / 2 s = 128 s, IMX8MPRM Rev. 3 §6.6.5.1.2), and WDOG1
+ * is serviced once; the M7 brings the A53 back before that runs out
+ * (the M7 firmware's a53_power_m7.c). WCR is read, modified and written back: SRS
+ * (bit 4) and WDA (bit 5) read 1 and are written 1, so neither a software
+ * reset nor WDOG_B is asserted; the write-once bits are rewritten with their
+ * own values. The restarted image arms it again as on every entry.
+ */
+void gc_wdog_arm_stretch_max(void)
+{
+	mm_reg_t wdog;
+	uint16_t wcr;
+
+	device_map(&wdog, WDOG1_PHYS, 0x1000, K_MEM_CACHE_NONE);
+	wcr = sys_read16(wdog + 0x0u);
+	sys_write16((uint16_t)((wcr & 0x00FFu) | 0xFF00u), wdog + 0x0u);
+	sys_write16(0x5555u, wdog + 0x2u);
+	sys_write16(0xAAAAu, wdog + 0x2u);
+}
+#endif
+
 static int wdog_arm_init(void)
 {
 	mm_reg_t wdog;
