@@ -54,8 +54,9 @@
 #
 # deps-env.sh --check is what every host and image is judged by. --build is
 # for hosts and images, run on purpose; the gate never builds these, but for
-# MALI_CSFFW: one pinned file, fetched by .github/workflows/gate.yml when a
-# runner lacks it (its note).
+# MALI_CSFFW (one pinned file) and DEQP_GLES3_TEST_DIR (one directory at a
+# pinned commit), fetched by .github/workflows/gate.yml when a runner lacks
+# them (their notes).
 
 [[dep]]
 name = "ZEPHYR_WS"
@@ -204,6 +205,29 @@ rm -rf "$DEPS/glmark2-src.part"
 git clone --no-checkout https://github.com/glmark2/glmark2 "$DEPS/glmark2-src.part"
 git -C "$DEPS/glmark2-src.part" checkout --detach 22c527cb0556f3a1ac4445aaa52cc532760928d5
 mv "$DEPS/glmark2-src.part" "$DEPS/glmark2-src"
+'''
+packages.apt = ["git"]
+packages.portage = ["dev-vcs/git"]
+
+[[dep]]
+name = "DEQP_GLES3_TEST_DIR"
+path = "VK-GL-CTS-gles3/data/gles3/shaders"
+marker = "VK-GL-CTS-gles3/data/gles3/shaders/arrays.test"
+note = "the dEQP GLES3 shader corpus (*.test) of VK-GL-CTS at 93bca01, the commit DEQP_WORK pins: the corpus part of tests/es3_shaderc_corpus.rs runs only when this names it. A sparse checkout of data/gles3/shaders alone (no external/fetch_sources.py), in a directory of its own: DEQP_WORK takes any $DEPS/VK-GL-CTS/.git as a complete tree, so a partial one there would break the board build. DEQP_WORK's clone is the source when it has the commit (no network), else one blobless commit from GitHub. Test data: read it, never run anything from it"
+build = '''
+want=93bca01861b0e3ef3c387027a9791e6d065f900c
+part="$DEPS/VK-GL-CTS-gles3.part"
+rm -rf "$part"
+if git -C "$DEPS/VK-GL-CTS" cat-file -e "$want^{commit}" 2>/dev/null; then
+  git clone -q --no-checkout "$DEPS/VK-GL-CTS" "$part"
+else
+  git init -q "$part"
+  git -C "$part" remote add origin https://github.com/KhronosGroup/VK-GL-CTS
+  git -C "$part" fetch -q --depth 1 --filter=blob:none origin "$want"
+fi
+git -C "$part" sparse-checkout set --no-cone /data/gles3/shaders/
+git -C "$part" checkout -q --detach "$want"
+mv "$part" "$DEPS/VK-GL-CTS-gles3"
 '''
 packages.apt = ["git"]
 packages.portage = ["dev-vcs/git"]
