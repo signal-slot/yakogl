@@ -213,6 +213,8 @@ def main(argv):
         a = args.pop(0)
         if a == "--check":
             mode = "check"
+        elif a == "--present":
+            mode = "present"
         elif a == "--layout":
             mode = "layout"
         elif a == "--build":
@@ -289,6 +291,8 @@ def main(argv):
             ok = os.path.exists(marker)
             print(f"{'ok' if ok else 'missing':<9}{d['name']}  {marker}")
             missing += not ok
+            continue
+        if mode == "present" and not os.path.exists(marker):
             continue
         if d.get("create"):
             os.makedirs(value, exist_ok=True)
