@@ -174,7 +174,9 @@ expect "notpass exits 0" "$rc"
 [ ! -s "$work/np.err" ]; expect "notpass has nothing on stderr" $?
 # pi4-gles3-fails.tsv: leading '#' header lines, then `<record>:<Status> <case>` rows (record = image there, e<i> here)
 shape='^[A-Za-z0-9_.-]+:(Fail|NotSupported|QualityWarning|CompatibilityWarning|ResourceError|InternalError|Crash|Timeout|NoResult) dEQP-GLES3\.[^ ]+$'
-grep -vq '^#' "$PI4" && grep -v '^#' "$PI4" | grep -Evq "$shape"
+# the pi4 records are file paths (build/f-A1.txt), so '/' is allowed there
+refshape="${shape/\[A-Za-z0-9_.-\]+:/[A-Za-z0-9_./-]+:}"
+grep -v '^#' "$PI4" | grep -Evq "$refshape"
 [ $? = 1 ]; expect "the reference pi4-gles3-fails.tsv rows match the shape regex" $?
 grep -v '^#' "$work/np.tsv" | grep -Evq "$shape"
 [ $? = 1 ]; expect "every notpass row is <record>:<Status> <case>" $?
