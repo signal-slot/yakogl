@@ -125,13 +125,46 @@ sha256 = "ca9bc0ff66fafca1dac9d592a36d953cf16d096a9d09b1c0357f021cf9f6a7eb"
 name = "PCO_SHC"
 path = "PCO_SHC/pco_shc"
 marker = "PCO_SHC/pco_shc"
-note = "Mesa 26.2.1's PowerVR shader compiler (tools/pco_shc/README.md); the toolchain id glsl2usc records depends on the compiler and LLVM versions"
+note = "Mesa 26.2.1's PowerVR shader compiler (tools/pco_shc/README.md); the toolchain id glsl2usc records depends on the compiler and LLVM versions. The same build makes capture_spm_load (PCO_CAPTURE), copied beside it"
 build = '''
 if [ -z "${LLVM_DIR-}" ] && [ -d /usr/lib/llvm-21 ]; then export LLVM_DIR=/usr/lib/llvm-21; fi
 tools/pco_shc/build_pco_shc.sh "$DEPS/downloads/mesa-26.2.1.tar.xz" "$DEPS/PCO_SHC.src"
 mkdir -p "$DEPS/PCO_SHC"
+cp "$DEPS/PCO_SHC.src/mesa-26.2.1/build/src/imagination/vulkan/capture_spm_load" "$DEPS/PCO_SHC/capture_spm_load.part"
+mv "$DEPS/PCO_SHC/capture_spm_load.part" "$DEPS/PCO_SHC/capture_spm_load"
 cp "$DEPS/PCO_SHC.src/mesa-26.2.1/build/src/imagination/vulkan/pco_shc" "$DEPS/PCO_SHC/pco_shc.part"
 mv "$DEPS/PCO_SHC/pco_shc.part" "$DEPS/PCO_SHC/pco_shc"
+'''
+packages.apt = [
+  "clang-21", "llvm-21-dev", "libclang-21-dev", "libclc-21-dev", "llvm-spirv-21", "libllvmspirvlib-21-dev",
+  "spirv-tools", "spirv-tools-dev", "spirv-headers", "glslang-tools", "meson", "ninja-build",
+  "python3-mako", "python3-yaml", "python3-packaging", "libdrm-dev", "libexpat1-dev", "zlib1g-dev", "libzstd-dev",
+]
+packages.portage = [
+  "llvm-core/clang", "llvm-core/llvm", "dev-util/spirv-llvm-translator", "dev-util/spirv-tools", "dev-util/spirv-headers",
+  "dev-util/glslang", "dev-build/meson", "dev-build/ninja", "dev-python/mako", "dev-python/pyyaml", "dev-python/packaging",
+  "x11-libs/libdrm", "dev-libs/expat", "sys-libs/zlib", "app-arch/zstd",
+]
+
+[[dep.inputs]]
+url = "https://archive.mesa3d.org/mesa-26.2.1.tar.xz"
+sha256_from = "third_party/mesa-26.2.1/UPSTREAM:tarball-sha256"
+
+[[dep]]
+name = "PCO_CAPTURE"
+path = "PCO_SHC/capture_spm_load"
+marker = "PCO_SHC/capture_spm_load"
+requires = ["PCO_SHC"]
+note = "capture_spm_load, the pco capture of the partial render's SPM background-load shader (tools/pco_shc/capture_spm_load.c, run by gen_spm_load.py; the row of tools/check.sh that regenerates tools/pco_shc/spm_load/ is a gap without it). PCO_SHC's build makes it too; a host prepared before this entry has the PCO_SHC marker and no capture program, and this build rebuilds the Mesa tree in PCO_SHC.src for it, leaving pco_shc as it is"
+build = '''
+if [ -z "${LLVM_DIR-}" ] && [ -d /usr/lib/llvm-21 ]; then export LLVM_DIR=/usr/lib/llvm-21; fi
+cap="$DEPS/PCO_SHC.src/mesa-26.2.1/build/src/imagination/vulkan/capture_spm_load"
+if [ ! -x "$cap" ]; then
+  tools/pco_shc/build_pco_shc.sh "$DEPS/downloads/mesa-26.2.1.tar.xz" "$DEPS/PCO_SHC.src"
+fi
+mkdir -p "$DEPS/PCO_SHC"
+cp "$cap" "$DEPS/PCO_SHC/capture_spm_load.part"
+mv "$DEPS/PCO_SHC/capture_spm_load.part" "$DEPS/PCO_SHC/capture_spm_load"
 '''
 packages.apt = [
   "clang-21", "llvm-21-dev", "libclang-21-dev", "libclc-21-dev", "llvm-spirv-21", "libllvmspirvlib-21-dev",

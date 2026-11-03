@@ -4,7 +4,10 @@
 #
 # build_pco_shc.sh - build the pco_shc that tools/glsl2usc.sh needs (Mesa
 # 26.2.1's PowerVR compiler with tools/pco_shc/pco_shc.c and a freshly
-# compiled usclib carrying usclib-tex.cl.patch), from the release tarball.
+# compiled usclib carrying usclib-tex.cl.patch), from the release tarball,
+# and the two capture programs beside it: capture_usc (gen_usc_blobs.py) and
+# capture_spm_load (gen_spm_load.py, the PCO_CAPTURE entry of
+# tools/cts/deps.toml).
 #
 # Usage:
 #   tools/pco_shc/build_pco_shc.sh <mesa-26.2.1.tar.xz> [<work dir>]
@@ -58,6 +61,9 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
 TARBALL="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
 WORK="$(mkdir -p "${2:-$(dirname "$TARBALL")}" && cd "${2:-$(dirname "$TARBALL")}" && pwd)"
+# LLVM_DIR: the Gentoo slot by default; Ubuntu's versioned tree when that is
+# absent (the same choice tools/cts/deps.toml's PCO_SHC build makes).
+if [ -z "${LLVM_DIR-}" ] && [ ! -d /usr/lib/llvm/23 ] && [ -d /usr/lib/llvm-21 ]; then LLVM_DIR=/usr/lib/llvm-21; fi
 LLVM_DIR="${LLVM_DIR:-/usr/lib/llvm/23}"
 export PATH="$LLVM_DIR/bin:$PATH"
 export PKG_CONFIG_PATH="$LLVM_DIR/lib64/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
@@ -71,7 +77,7 @@ SRC="$WORK/mesa-26.2.1"
 rm -rf "$SRC"
 tar -C "$WORK" -xf "$TARBALL"
 cd "$SRC"
-cp "$HERE"/{pco_shc.c,capture_usc.c,capture_smp_fs.c} src/imagination/vulkan/
+cp "$HERE"/{pco_shc.c,capture_usc.c,capture_smp_fs.c,capture_spm_load.c} src/imagination/vulkan/
 patch -p1 < "$HERE/meson-vulkan.patch"
 patch -p1 < "$HERE/usclib-tex.cl.patch"
 # The tree's absolute path must not reach the binary (debug info, __FILE__),
@@ -81,7 +87,8 @@ meson setup build \
   -Dbuildtype=debug -Dvulkan-drivers=imagination -Dgallium-drivers= \
   -Dgles1=disabled -Dgles2=disabled -Dglx=disabled -Degl=disabled -Dplatforms= \
   -Dc_args="$PREFIX_MAP" -Dcpp_args="$PREFIX_MAP"
-ninja -C build src/imagination/pco/usclib/pco_usclib.spv src/imagination/vulkan/pco_shc
+ninja -C build src/imagination/pco/usclib/pco_usclib.spv src/imagination/vulkan/pco_shc \
+  src/imagination/vulkan/capture_usc src/imagination/vulkan/capture_spm_load
 
 # The usclib must be the patched one: usclib_tex_state_base_level compares
 # textype against ROGUE_TEXSTATE_TEXTYPE_STRIDE (4) and branches on it. An
@@ -97,5 +104,6 @@ echo "usclib: patched (usclib_tex_state_base_level tests textype == STRIDE)"
 
 PCO_SHC="$SRC/build/src/imagination/vulkan/pco_shc"
 echo "PCO_SHC=$PCO_SHC"
+echo "PCO_CAPTURE=$SRC/build/src/imagination/vulkan/capture_spm_load"
 # glsl2usc's content id: the first 12 hex digits of the binary's SHA-256.
 echo "toolchain id: pco_shc=$(sha256sum "$PCO_SHC" | cut -c1-12)"

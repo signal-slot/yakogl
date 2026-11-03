@@ -804,6 +804,31 @@ key_perf_page_row() {
   key_toolchain && key_tree "$@" tools/yakogl-tools Cargo.toml Cargo.lock
 }
 
+# key_yakogl_tools: the yakogl-tools binary a row runs through `cargo run`
+# (its bytes; YAKOGL_TOOLS names a prebuilt one).
+key_yakogl_tools() {
+  local exe
+  if [ -n "${YAKOGL_CHECK_INPUT_KEYS-}" ]; then
+    echo "yakogl-tools: not built (YAKOGL_CHECK_INPUT_KEYS)"
+  elif [ -n "${YAKOGL_TOOLS-}" ]; then
+    key_program yakogl-tools "$YAKOGL_TOOLS" || return 1
+  else
+    exe=$(cargo build -q -p yakogl-tools --message-format=json | python3 -c '
+import json, sys
+for line in sys.stdin:
+    m = json.loads(line)
+    if m.get("reason") == "compiler-artifact" and m["target"]["name"] == "yakogl-tools" and m.get("executable"):
+        print(m["executable"])') || return 1
+    key_program yakogl-tools "$exe" || return 1
+  fi
+}
+# The input key of the SPM load shader's decode row (tools/pco_shc/spm_load/):
+# the yakogl-tools binary it runs usc-dis with, the generator and the files.
+key_spm_load_decode() {
+  key_yakogl_tools || return 1
+  key_python && key_tree tools/pco_shc/gen_spm_load.py tools/pco_shc/spm_load
+}
+
 # A test row: cargo_test <cargo test arguments> [-- <harness arguments>]
 #
 # `cargo test` runs a row's test binaries one after another, so a row took
@@ -2507,6 +2532,20 @@ if command -v python3 >/dev/null 2>&1; then
   scope pvr
   step "gen     driver/src/pvr_usc_*_blob.h == tools/pco_shc/usc_blobs.txt" \
     python3 tools/pco_shc/gen_usc_blobs.py render --check
+  # The partial render's SPM background-load shader (tools/pco_shc/spm_load/:
+  # Mesa 26.2.1's pco output for pvr_uscgen_spm_load, one output dword, no
+  # tile buffer, one sample, written by gen_spm_load.py capture): the
+  # committed words decode through the online compiler's decoder
+  # (yakogl-tools usc-dis), every byte in a group, one end, one texture
+  # sample reading the sampler and image state from the metadata's shared
+  # registers, a data fence, the output to pixout0, and the metadata (temps,
+  # the shared-register slots, the output, the size) is consistent with
+  # them. No Mesa build needed; that the words are what this Mesa's pco
+  # makes is the capture row below (PCO_CAPTURE). Keyed by what it reads:
+  # the script and the two files, and the yakogl-tools binary it runs.
+  rowkey key_spm_load_decode
+  step "gen     tools/pco_shc/spm_load/ decodes (yakogl-tools usc-dis), size and metadata consistent" \
+    python3 -I tools/pco_shc/gen_spm_load.py check
   # The Zephyr dEQP tally's two verdicts on a log: MISSING (no summary) and
   # INCOMPLETE (fewer case lines than the summary's "with a result": the
   # serial capture lost lines, which on 2026-09-25 hid 12 mustpass cases
@@ -3480,20 +3519,8 @@ key_prove() {
 # (cache_key_material in tools/yakogl-tools/src/glsl2usc.rs), so an entry
 # is what pco_shc makes.
 key_mesa_table() {
-  local exe glslang
-  if [ -n "${YAKOGL_CHECK_INPUT_KEYS-}" ]; then
-    echo "yakogl-tools: not built (YAKOGL_CHECK_INPUT_KEYS)"
-  elif [ -n "${YAKOGL_TOOLS-}" ]; then
-    key_program yakogl-tools "$YAKOGL_TOOLS" || return 1
-  else
-    exe=$(cargo build -q -p yakogl-tools --message-format=json | python3 -c '
-import json, sys
-for line in sys.stdin:
-    m = json.loads(line)
-    if m.get("reason") == "compiler-artifact" and m["target"]["name"] == "yakogl-tools" and m.get("executable"):
-        print(m["executable"])') || return 1
-    key_program yakogl-tools "$exe" || return 1
-  fi
+  local glslang
+  key_yakogl_tools || return 1
   key_program pco_shc "${PCO_SHC-}" || return 1
   glslang=$(command -v "${GLSLANG:-glslangValidator}") && key_program glslang "$glslang" || return 1
   env | grep -E '^(PCO_DEBUG|GLSL2USC_OPT|GLSL2USC_UNROLL|GLSL2USC_KEEP|YAKOGL_TOOLS_ROOT)=' | sort
@@ -3523,6 +3550,13 @@ mesa_table_repro() {
   }
   echo "$(grep -c '^    ShcBlob {$' "$out") rows, byte for byte (recorded $recorded; this host $here)"
 }
+# The input key of the SPM load shader's capture row: the capture program
+# (its bytes and libraries), the generator and the committed files (the
+# decode row's key, key_spm_load_decode, is with the key helpers above).
+key_spm_load_capture() {
+  key_program capture_spm_load "$1" || return 1
+  key_python && key_tree tools/pco_shc/gen_spm_load.py tools/pco_shc/spm_load
+}
 if [ "$QUICK" -eq 0 ]; then
   for f in gpu-powervr gpu-vivante gpu-powervr,report-es2 gpu-vivante,report-es2; do
     scope "$(config_scopes "$f")" precompile
@@ -3537,6 +3571,21 @@ if [ "$QUICK" -eq 0 ]; then
     step "gen     tests/reference/blobs.rs == tools/glsl2usc.sh on precompiled.list (pco_shc)" mesa_table_repro
   else
     gap "tests/reference/blobs.rs from precompiled.list: no pco_shc at PCO_SHC='${PCO_SHC-}' (set PCO_SHC, GLSLANG, GLSL2USC_CACHE): the list was NOT shown to make the committed table"
+  fi
+  # The partial render's SPM background-load shader again, now against a pco
+  # build: capture_spm_load (PCO_CAPTURE, tools/cts/deps.toml; built beside
+  # pco_shc by tools/pco_shc/build_pco_shc.sh, so a Mesa build tree's one
+  # is beside PCO_SHC) regenerates tools/pco_shc/spm_load/ and the bytes and
+  # the metadata must be the committed ones. Without the program the row is
+  # a gap: the committed words were NOT shown to be this Mesa's pco output.
+  spm_capture=${PCO_CAPTURE:-${PCO_SHC:+$(dirname "$PCO_SHC")/capture_spm_load}}
+  scope pvr
+  if [ -n "$spm_capture" ] && [ -x "$spm_capture" ]; then
+    rowkey key_spm_load_capture "$spm_capture"
+    step "gen     tools/pco_shc/spm_load/ == capture_spm_load of this pco build (PCO_CAPTURE)" \
+      python3 -I tools/pco_shc/gen_spm_load.py capture "$spm_capture" --check
+  else
+    gap "tools/pco_shc/spm_load/ from capture_spm_load: no program at PCO_CAPTURE='${PCO_CAPTURE-}' (tools/cts/deps-env.sh --build PCO_CAPTURE, or the one beside PCO_SHC in a Mesa build tree): the committed words were NOT shown to be this Mesa's pco output"
   fi
 fi
 

@@ -279,6 +279,7 @@ way.
 |---|---|---|---|
 | `HAL_NXP_DIR` | Zephyr's `modules/hal/nxp` | made by `west update` in 1; the generator pins hal_nxp `1e91007b` and refuses another | `tools/check.sh:2717-2731` |
 | `PCO_SHC` | Mesa's PowerVR compiler `pco_shc`, built from Mesa 26.2.1 | tarball `https://archive.mesa3d.org/mesa-26.2.1.tar.xz`, sha256 `c47e81bddc4760360a41ac3c5acec38acb81f9d750ecef47e7f3adc7021a4442` (`third_party/mesa-26.2.1/UPSTREAM`); build with `tools/pco_shc/build_pco_shc.sh <tarball> <work dir>`; it must print id `f537fc86b41f` (same id only on a similar toolchain: LLVM/clang/libclc 23.1.2 and SPIRV-LLVM-Translator 23.1.1 were used, `tools/pco_shc/build_pco_shc.sh:24-26`) | `tools/check.sh:2579-2673` |
+| `PCO_CAPTURE` | `capture_spm_load`, the pco capture of the partial render's SPM load shader (`tools/pco_shc/README.md`) | the same build (`build_pco_shc.sh` makes it beside `pco_shc`; `tools/cts/deps-env.sh --build PCO_CAPTURE` on a host prepared before it existed) | the `tools/pco_shc/spm_load/` capture row of `tools/check.sh` |
 | `GLSLANG` | `glslangValidator` >= 16.4 | distro package `glslang` | `tools/glsl2usc.sh:17` |
 | `GLSL2USC_CACHE` | a cache directory for the shader compile (3.5 min with a warm one) | any writable directory | `tools/glsl2usc.sh:18`, `tools/check.sh:2579` |
 | `MESA_V3D_TREE` | optional: a built Mesa tree to compare V3D checks against | not needed: the Mesa sources are vendored in `third_party/mesa-26.2.1` | `tools/check.sh:1274`, `:1679` |
