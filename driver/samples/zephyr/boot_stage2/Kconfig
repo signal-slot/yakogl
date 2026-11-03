@@ -87,6 +87,18 @@ config BOOT_STAGE2_CHUNK_SECTORS
 	int "Sectors per disk read"
 	default 2048
 
+config BOOT_STAGE2_RESTART
+	bool "Entered again after the A53 image's SYSTEM_SUSPEND (route 3)"
+	default y if BOARD_VERDIN_IMX8MP
+	help
+	  The A53 image suspends to this loader's entry point
+	  (CLUSTER_A53_RESTART_ENTRY, cluster/a53_power.h) and TF-A resumes core
+	  0 there with the loader's RAM as the first run left it. The loader
+	  then restores its initialised RAM data from the copy taken on the
+	  first entry (src/main.c, "Every entry is a first entry") and, when
+	  the power page says so, stamps a53_loader_in. The page's address is
+	  the i.MX 8M Plus route 3's (the M7's non-cacheable window).
+
 endmenu
 
 source "Kconfig.zephyr"

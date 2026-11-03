@@ -286,6 +286,13 @@ int board_window(uint32_t w, uint32_t h, struct board_window *out)
 			return r3;
 		}
 	}
+#ifdef CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_A53_RESTART
+	/* A restart never has windows of its own: the panel is the M7's, and
+	 * this layer would flip the LCDIF to them. */
+	if (board_route3_warm()) {
+		return -ENODEV;
+	}
+#endif
 #endif
 	if (taken >= CONFIG_YAKOGL_BOARD_IMX8MP_WINDOWS || s_view_phys != 0u) {
 		return -ENOMEM;
@@ -351,6 +358,14 @@ int board_window(uint32_t w, uint32_t h, struct board_window *out)
 int board_show(const struct board_window *win)
 {
 	board_first_frame();
+#ifdef CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_A53_RESTART
+	/* A restart: the display devices were never initialised (the M7 owns
+	 * the chain, board_route3_restart.c), so there is no geometry to ask;
+	 * every show is a publish, and nothing below may flip the LCDIF. */
+	if (board_route3_warm()) {
+		return board_route3_show(win);
+	}
+#endif
 #if defined(CONFIG_YAKOGL_DRV_DISPLAY_IMX8MP) && defined(CONFIG_YAKOGL_DRV_GPU_VIVANTE)
 	uint32_t pw = 0, ph = 0;
 	uintptr_t scan;
