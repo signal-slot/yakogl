@@ -802,6 +802,109 @@ built byte for byte as before. Up to 8 chunks are grown per slot; past that
 the frame ends and the draw goes on in the next (`no_room`), as for the
 other arenas.
 
+## 8. Case 141 instanced divisors (es3instdiv)
+
+Case 141 (`case_es3instdiv`, `driver/tools/pvrlab/gl_test.c:7104-7180`) draws
+es300/inst.vert and vcolor.frag with 4 instances: `pos` (location 0, vec4)
+per vertex from its own buffer at stride 16, `offs` (1, vec2) and `icol`
+(2, vec4) from one 48-byte buffer of two 24-byte records at offsets 0 and 8,
+`glVertexAttribDivisor(1, 2)` and `(2, 2)`, first as
+`glDrawArraysInstanced(GL_TRIANGLES, 0, 6, 4)`, then as
+`glDrawElementsInstanced` (u16). Instance 3 reads record 1 and halves it
+(`gl_InstanceID == 3`); the board FAILs the case.
+
+**The reference.** `tools/mali/testdata/instdiv_141_es3instdiv.{vert,frag,expect.json}`,
+made on drm-shim with Mesa 26.2.1:
+
+    tools/mali/drm_shim_ref.sh run <shim> instdiv_141_es3instdiv.vert instdiv_141_es3instdiv.frag <out> \
+        --instances 4 --divisors 0,2,2
+    tools/mali/pan_ref_diff.py extract <out>.trace --draw --attributes --instanced
+
+`--instances`/`--divisors` are gl_ref.py's case-47/141 draw (its docstring):
+the divisor-0 inputs interleaved in a buffer of six vertices, the others in
+a second buffer of `ceil(N / D)` records, `glVertexAttribDivisor` on each and
+`glDrawArraysInstanced`, so the reference is the case's **first** draw (the
+arrays one); the elements draw has the same attribute words (2026-10-28-boardref
+section 5.4). `--instanced` adds each Attribute's type, `Offset enable` and
+`Divisor R/E/D`, and `draw` (index count, instance count, instance offset)
+to the JSON. The programs are byte-equal to `builtin_141.expect.json`
+(`pan_ref_diff.py diff-ref`: 3 regions, 0 differ), which was made without the
+divisors: the divisor is a descriptor field, not code. Every decoded field
+equals the board's 26.2.1 record (`tools/cts/log/2026-10-28-boardref/README.md`
+section 5.5), and the words packed from those fields with `src/mali`'s genxml
+`Attribute::pack` are that record's words.
+
+**Mesa's descriptors** (little-endian 32-bit words, w0 first):
+
+| descriptor | words | fields |
+|---|---|---|
+| Attribute 0 (`pos`) | `2fc00115 00000002 00000000 00000000 00000010 0 0 0` | `1D`, `Offset enable` 1, RGBA32F RGBA, `Table` 2, `Frequency` Vertex, `Divisor R/E/D` 0, `Buffer index` 0, `Stride` 0x10 |
+| Attribute 1 (`offs`) | `2bc04025 01000042 00000000 00000001 00000018 0 0 0` | **`1D POT Divisor`**, `Offset enable` 0, RG32F RGB1, `Frequency` **Instance**, **`Divisor R` 1** (log2 2), `Divisor E` 0, `Offset` 0, `Buffer index` 1, `Stride` 0x18, `Divisor D` 0 |
+| Attribute 2 (`icol`) | `2fc00025 01000042 00000000 00000002 00000018 0 0 0` | as Attribute 1 with RGBA32F RGBA, `Buffer index` 2 |
+| Buffer 0 | `00000019 00000060 <address> 0 0 0 0` | Simple, `Size` 0x60 (6 x 16) |
+| Buffer 1 | `00000019 00000030 <address> 0 0 0 0` | the instance buffer, `Size` 0x30 (2 x 24) |
+| Buffer 2 | `00000019 00000028 <address + 8> 0 0 0 0` | the same buffer, `icol`'s offset 8 folded into the address, `Size` 0x30 - 8 |
+| r33, r34, r35-r37 | 6, **4**, 0 | INDEX_COUNT, **INSTANCE_COUNT**, INDEX/VERTEX/INSTANCE_OFFSET |
+
+The addresses are allocation (the run's), not compared.
+
+**What `src/mali` emits for the same draw.** Measured with a host test kept
+out of the tree: case 141's `DrawCall` through `build_frame`
+(`src/mali/frame.rs`) as `frame_instance_tests.rs` builds case 52's, the
+Attribute and Buffer bytes found in the descriptor arena and the registers
+read off the stream up to RUN_IDVS. Line numbers are at this note's commit.
+
+*The path the board runs today.* `max_instance_divisor` is 0
+(`src/mali/backend.rs:3114`), read as 1 (`src/backend.rs:1948-1950`), so
+`draw_instanced` (`src/gl/draw.rs:4879-4957`, the check at `:4904-4911`) does not hand the divisor-2
+draw over: it draws each instance on its own (4 draws of 1 instance), with
+`offs` and `icol` disabled and their element for that instance as the
+constant value (`instance_attrib_value`), which the draw stages as a
+16-byte zero-stride fetch (`draw.rs:3706-3722`). Per split draw, against
+Mesa's one draw:
+
+| descriptor | byte | Mesa | ours | field |
+|---|---|---|---|---|
+| Attribute 1 | 0 | `25` | `15` | `Attribute type` (bits 4-7) 2 `1D POT Divisor` against 1 `1D` |
+| Attribute 1 | 1 | `40` | `41` | `Offset enable` (bit 8) 0 against 1 |
+| Attribute 1 | 4 | `42` | `02` | `Frequency` (bits 38-39) Instance against Vertex |
+| Attribute 1 | 7 | `01` | `00` | `Divisor R` (bits 56-60) 1 against 0 |
+| Attribute 1 | 16 | `18` | `00` | `Stride` 24 against 0 (a constant) |
+| Attribute 2 | 0, 1, 4, 7, 16 | `25 00 42 01 18` | `15 01 02 00 00` | the same five fields |
+| Buffer 1 | 4 | `30` | `10` | `Size` 0x30 against 16 (one staged constant) |
+| Buffer 2 | 4 | `28` | `10` | `Size` 0x28 against 16 |
+| Buffers 1, 2 | 8-15 | the instance buffer (+8) | a staging copy | `Address` (allocation; differs by construction) |
+| register r34 | - | 4 | **1** | INSTANCE_COUNT, and 4 RUN_IDVS where Mesa has 1 |
+
+Attribute 0, Buffer 0, r33 and r35-r37 are equal. The split also loses
+`gl_InstanceID`: the core passes each instance's number as
+`GlesDraw::instance_id` (`draw.rs:4949-4950`, `:3387`), which no `src/mali` file reads, so
+each one-instance draw's program reads instance ID 0 and the fourth one draws
+`icol` (green) at full colour instead of half: the case's
+"instance 3 half green" check is the one the descriptors above make fail.
+
+*The frame path, once the divisor is handed over.* `check_draw` refuses a
+divisor above 1 before any word (`NOT_BUILT_INSTANCE_DIVISOR`,
+`frame.rs:2287`). The Attribute literal (`frame.rs:3084-3096`) does not read
+the divisor's value, so the bytes it would write for divisor 2 are those it
+writes for divisor 1. Built that way, against Mesa's:
+
+| descriptor | byte | Mesa | ours | field |
+|---|---|---|---|---|
+| Attribute 1 | 7 | `01` | `00` | `Divisor R` (w1 bits 56-60) |
+| Attribute 2 | 7 | `01` | `00` | `Divisor R` |
+
+Every other byte of the three Attributes and the three Buffers (with the
+same buffer addresses), and r33-r37 (6, 4, 0, 0, 0), are equal. So the
+frame fix is: `max_instance_divisor` above 0 in the backend table, the
+power-of-two divisor through `check_draw`, and `divisor_r =
+instance_divisor.trailing_zeros()` in the Attribute (Mesa
+`panfrost_pack_attribute`, `G/pan_cmdstream.c:4083-4117`). The core hands
+over every divisor up to `max_instance_divisor`, not only powers of two, so a
+fix that raises it must also build `1D NPOT Divisor` (`Divisor D` and `E`
+from `pan_compute_npot_divisor`), or keep the maximum at a value whose
+divisors it builds; this reference has no NPOT divisor to pin that to.
+
 ---
 
 ## Order and dependencies
