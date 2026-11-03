@@ -24,6 +24,8 @@
 # -DCONFIG_YAKOGL_REPORT_ES2=n: the library reports ES 3.0; DEQP_STAGE1 must
 # be a stage 1 built with DEQP_MODULE=gles3) and filters like dEQP-GLES3.info.*; the gles2 default is unchanged.
 # tools/cts/imx8mp-gles3-tree.txt is the whole GLES3 mustpass in 133 table rows (docs/es3/board-recipe-imx8mp.md).
+# IMX8MP_CONSOLE=1 appends tools/cts/imx8mp-console.conf (UART console on the board DTS's uart3, 115200 8N1)
+# to the fragments; unset, the image is the one without a console.
 # Name the image after the commit it is built from: a result is reported against that hash.
 #
 # Needs: the variables of imx8mp-env.sh (Zephyr part) and DEQP_STAGE1 (from imx8mp-deqp-stage1.sh).
@@ -54,12 +56,16 @@ if [ "$frag" = --table ]; then
 	printf 'CONFIG_DEQP_CASE_TABLE="%s"\n' "$(grep -vE '^[[:space:]]*(#|$)' "$table" | paste -sd';' -)" > "$frag"
 	echo "imx8mp: $(grep -cvE '^[[:space:]]*(#|$)' "$table") table rows -> $frag"
 fi
-extra=()
+conf_files=()
 if [ -n "$frag" ]; then
 	frag=$(cd "$(dirname "$frag")" && pwd)/$(basename "$frag")
 	[ -f "$frag" ] || { echo "imx8mp: $frag not found" >&2; exit 2; }
-	extra=(-DEXTRA_CONF_FILE="$frag")
+	conf_files+=("$frag")
 fi
+[ "${IMX8MP_CONSOLE:-}" = 1 ] && conf_files+=("$HERE/imx8mp-console.conf")
+extra=()
+# EXTRA_CONF_FILE is a ';' list applied in order: the console fragment comes last
+[ ${#conf_files[@]} -gt 0 ] && extra=(-DEXTRA_CONF_FILE="$(IFS=';'; echo "${conf_files[*]}")")
 modargs=()
 case "${DEQP_MODULE:-gles2}" in
 	gles2) ;;
