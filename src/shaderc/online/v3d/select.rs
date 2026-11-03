@@ -116,11 +116,46 @@ pub const WADDR_TMUSLOD: u8 = 42;
 /// (V3D_QPU_WADDR_TMUR / TMUSCM, qpu_instr.h).
 pub const WADDR_TMUR: u8 = 35;
 pub const WADDR_TMUSCM: u8 = 40;
-/// TMU Config Parameter 2 (v3d_packet.xml, 4.2) for a cube look-up at an
-/// explicit level: op Regular (15, bits 20..23) and Disable AutoLOD (bit 1),
-/// Mesa's p2 for a txl on a cube (v3d_tex.c:146-149, 303-306, 367-368).
-pub const TMU_P2_CUBE_LOD: u32 = (15 << 20) | (1 << 1);
+/// TMU Config Parameter 2 (v3d_packet.xml, 4.2) as every look-up has it
+/// without a word: op Regular (15, bits 20..23) and nothing else. Mesa writes
+/// P2 only when the look-up's differs from this (v3d_tex.c:68-70, 303-306),
+/// and so does [`Sel::body`].
+pub const TMU_P2_REGULAR: u32 = 15 << 20;
+/// TMU Config Parameter 2 for a cube look-up at an explicit level: op
+/// Regular and Disable AutoLOD (bit 1), Mesa's p2 for a txl on a cube
+/// (v3d_tex.c:146-149, 303-306, 367-368). [`tmu_p2`] of no offset with the
+/// level disabled.
+pub const TMU_P2_CUBE_LOD: u32 = TMU_P2_REGULAR | (1 << 1);
+/// The bits of TMU Config Parameter 2 a look-up of this back end sets: the
+/// op, Offset R / T / S (4-bit signed each, bits 16..19, 12..15, 8..11) and
+/// Disable AutoLOD. Gather Mode / Component, Coefficient Mode, Sample Number,
+/// Offset Format 8 and LOD Query stay 0.
+const TMU_P2_USED: u32 = (0xf << 20) | (0xfff << 8) | (1 << 1);
+
+/// TMU Config Parameter 2 (V3D42_TMU_CONFIG_PARAMETER_2, v3d_packet.xml
+/// 4.2) for a regular look-up with the constant texel `offset` (s, t, r) and,
+/// when `disable_autolod`, TMUB as the level of detail: Mesa's
+/// p2_unpacked.offset_s/_t/_r for a constant nir_tex_src_offset, each a
+/// 4-bit signed field (MIN/MAX_PROGRAM_TEXEL_OFFSET -8..7 fit exactly;
+/// Offset Format 8 stays off), and .disable_autolod (v3d_tex.c).
+pub const fn tmu_p2(offset: [i8; 3], disable_autolod: bool) -> u32 {
+    const fn field(x: i8, shift: u32) -> u32 {
+        ((x as u32) & 0xf) << shift
+    }
+    TMU_P2_REGULAR | field(offset[0], 8) | field(offset[1], 12) | field(offset[2], 16) | ((disable_autolod as u32) << 1)
+}
+
+/// Whether `word` is a P2 this back end writes (`wrtmuc` of a constant
+/// uniform, [`tmu_p2`] other than [`TMU_P2_REGULAR`], which is never
+/// written): the uniform stream checks count P2 words with it.
+pub const fn is_tmu_p2(word: u32) -> bool {
+    word != TMU_P2_REGULAR && word & !TMU_P2_USED == 0 && (word >> 20) & 0xf == 15
+}
 pub const WADDR_TMUT: u8 = 34;
+/// A texelFetch's retiring S write (V3D_QPU_WADDR_TMUSF): integer texel
+/// coordinates on S and T and the integer level on TMUB (v3d_tex.c, the
+/// `nir_texop_txf` case of the retiring write).
+pub const WADDR_TMUSF: u8 = 41;
 /// A 2D-array look-up's layer (V3D_QPU_WADDR_TMUI).
 pub const WADDR_TMUI: u8 = 36;
 pub const WADDR_TMUB: u8 = 37;
@@ -861,7 +896,7 @@ impl<'a> Sel<'a> {
                  * look-up (TMUSLOD for an explicit level: `txl`, v3d_tex.c:
                  * 374-375, which a vertex shader's every look-up is); then
                  * one ldtmu per word asked for. */
-                SOp::Tex { sampler, srcs, cube, layer, bias, lod } => {
+                SOp::Tex { sampler, srcs, cube, layer, bias, lod, fetch, offset } => {
                     /* A binding the draw keyed for a 32-bit output
                      * (`LodKey::ret32`: an R32F texture, Mesa's return size
                      * 32): one word per channel, lane l is word l, instead
@@ -898,11 +933,15 @@ impl<'a> Sel<'a> {
                      * Parameter 1), for a ret32 binding */
                     let p1 = unit | 4 | u32::from(ret32);
                     self.push(a, VOp::Wrtmuc { u: Uniform { contents: QUNIFORM_TMU_CONFIG_P1, data: p1 } })?;
-                    /* A cube at an explicit level: P2 with disable_autolod,
-                     * after P1 (TMUSLOD, which implies it, is not a cube
-                     * write). */
-                    if cube && lod {
-                        self.push(a, VOp::Wrtmuc { u: Uniform::constant(TMU_P2_CUBE_LOD) })?;
+                    /* P2, after P1, only when it differs from the regular
+                     * look-up's (Mesa, v3d_tex.c:303-306): a cube at an
+                     * explicit level has disable_autolod (TMUSLOD, which
+                     * implies it, is not a cube write; a fetch has no
+                     * automatic level and never sets it), and a texel
+                     * offset has its Offset S / T fields. */
+                    let p2 = tmu_p2(offset, cube && lod && !fetch);
+                    if p2 != TMU_P2_REGULAR {
+                        self.push(a, VOp::Wrtmuc { u: Uniform::constant(p2) })?;
                     }
                     let (s, t) = (self.val(a, srcs[0])?, self.val(a, srcs[1])?);
                     self.push(a, VOp::Mul { op: MulOp::Mov, dst: Dst::Magic(WADDR_TMUT), a: t, b: Operand::None })?;
@@ -920,9 +959,12 @@ impl<'a> Sel<'a> {
                         let b = self.val(a, srcs[2 + usize::from(cube || layer)])?;
                         self.push(a, VOp::Mul { op: MulOp::Mov, dst: Dst::Magic(WADDR_TMUB), a: b, b: Operand::None })?;
                     }
-                    /* the retiring S write (v3d_tex.c:371-378): TMUSCM for a
-                     * cube, TMUSLOD for a 2D explicit level, else TMUS */
-                    let retire = if cube {
+                    /* the retiring S write (v3d_tex.c:371-378): TMUSF for a
+                     * texelFetch, TMUSCM for a cube, TMUSLOD for a 2D
+                     * explicit level, else TMUS */
+                    let retire = if fetch {
+                        WADDR_TMUSF
+                    } else if cube {
                         WADDR_TMUSCM
                     } else if lod {
                         WADDR_TMUSLOD
@@ -2481,6 +2523,38 @@ pub fn select_vertex<'a>(
 mod tests {
     use super::*;
     use crate::shaderc::online::store;
+
+    /// TMU Config Parameter 2 (v3d_packet.xml 4.2): Offset S, T and R are
+    /// 4-bit two's complement at bits 8, 12 and 16, the op Regular at bits
+    /// 20..23, Disable AutoLOD bit 1; the regular word itself is never
+    /// written, and every word this back end writes reads back as a P2 (the
+    /// uniform-stream check of chain.rs counts them), while a word with any
+    /// other field set does not. The nibble decode is sim.rs's.
+    #[test]
+    fn tmu_p2_packs_the_offsets_as_signed_nibbles() {
+        assert_eq!(tmu_p2([0; 3], false), TMU_P2_REGULAR);
+        assert_eq!(tmu_p2([0; 3], true), TMU_P2_CUBE_LOD);
+        assert_eq!(TMU_P2_CUBE_LOD, 0x00f0_0002);
+        assert_eq!(tmu_p2([-1, 0, 0], false), 0x00f0_0f00);
+        assert_eq!(tmu_p2([0, -1, 0], false), 0x00f0_f000);
+        assert_eq!(tmu_p2([7, -8, 0], false), 0x00f0_8700);
+        assert_eq!(tmu_p2([1, 2, 3], true), 0x00f3_2102);
+        assert!(!is_tmu_p2(TMU_P2_REGULAR));
+        for s in -8..=7i8 {
+            for t in -8..=7i8 {
+                for lod in [false, true] {
+                    let w = tmu_p2([s, t, 0], lod);
+                    assert_eq!(is_tmu_p2(w), w != TMU_P2_REGULAR, "{w:#010x}");
+                    let nibble = |shift: u32| (((w >> shift) & 0xf) as i32 ^ 8) - 8;
+                    assert_eq!((nibble(8), nibble(12), nibble(16), w & 2 != 0), (s as i32, t as i32, 0, lod));
+                }
+            }
+        }
+        /* op 0 (an atomic), Gather Mode, LOD Query, Offset Format 8, a pad bit */
+        for w in [0x0000_0002, 0x00f0_0080, 0x01f0_0000, 0x00f0_0001, 0x8000_0000 | TMU_P2_CUBE_LOD] {
+            assert!(!is_tmu_p2(w), "{w:#010x}");
+        }
+    }
 
     /// merge_exits, exhaustively: for both branch senses of each exit, each
     /// pushed bit (Z, N, C) and every value of flag A and of the second

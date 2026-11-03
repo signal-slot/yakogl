@@ -100,8 +100,13 @@ pub enum SOp {
     /// t, and the bias when `bias`, or the explicit level when `lod` (never
     /// both). `cube`: r follows t. `layer`: a 2D-array look-up whose layer
     /// (the face of a cube record, `cube_noseam`) follows t, written to TMUI;
-    /// never with `cube`. Its result is read through [`SOp::TexLane`].
-    Tex { sampler: u8, srcs: [S; 4], cube: bool, layer: bool, bias: bool, lod: bool },
+    /// never with `cube`. `fetch`: a `texelFetch`, s, t and the level are
+    /// integers (texel and level indices, no filter, no wrap), retired by
+    /// TMUSF; always with `lod`, never with `cube` or `bias`. `offset`: the
+    /// constant texel offset (s, t, r) of `textureOffset` and its forms,
+    /// TMU config parameter 2's 4-bit signed fields (0 without one; r is 0
+    /// until 3D look-ups). Its result is read through [`SOp::TexLane`].
+    Tex { sampler: u8, srcs: [S; 4], cube: bool, layer: bool, bias: bool, lod: bool, fetch: bool, offset: [i8; 3] },
     /// Lane `lane` (r, g, b, a) of the look-up `tex[0]`, of the sampler's
     /// result type `ret` (a float, or an integer sampler's raw integer).
     TexLane { tex: [S; 1], lane: u8, ret: TexRet },
@@ -1344,8 +1349,31 @@ impl<'m, 'a> Walk<'m, 'a> {
                     ir::ScalarType::I32 => TexRet::Sint,
                     _ => return Err(PrepError::NotYet("a texture look-up of another result type")),
                 };
-                if offset.is_some() {
-                    return Err(PrepError::NotYet("a texture look-up with an offset"));
+                /* A constant texel offset (textureOffset, textureLodOffset,
+                 * textureProjOffset, texelFetchOffset and their bias forms)
+                 * goes to the TMU in config parameter 2's Offset S / T
+                 * fields, 4-bit signed (v3d_packet.xml; Mesa's p2_unpacked
+                 * .offset_s/_t for a constant nir_tex_src_offset, v3d_tex.c);
+                 * the range is MIN/MAX_PROGRAM_TEXEL_OFFSET's -8..7, which
+                 * the front end has checked. GLSL ES 3.00 has no cube form
+                 * with an offset (section 8.8), and a 2D offset has no r. */
+                let offset = offset.unwrap_or([0; 3]);
+                if cube && offset != [0; 3] {
+                    return Err(PrepError::NotYet("a cube look-up with an offset"));
+                }
+                if offset[2] != 0 {
+                    return Err(PrepError::NotYet("a texture offset with a third lane"));
+                }
+                /* texelFetch (Mesa's txf): integer texel coordinates and an
+                 * integer level, both written to the TMU as they are (the
+                 * level on TMUB, like an explicit one), the look-up retired
+                 * by TMUSF (v3d_tex.c: `instr->op == nir_texop_txf` selects
+                 * V3D_QPU_WADDR_TMUSF); no P2 disable_autolod (a fetch has
+                 * no automatic level to disable, v3d_tex.c's comment at the
+                 * lod source). GLSL ES 3.00 has no cube texelFetch. */
+                let fetch = matches!(lod, ir::TexLod::Fetch(_));
+                if fetch && cube {
+                    return Err(PrepError::NotYet("a texelFetch of a cube"));
                 }
                 /* The front end gives a vertex shader's implicit look-up as
                  * Lod(0.0) (ir.rs TexLod), Mesa's lower_invalid_implicit_lod
@@ -1360,8 +1388,10 @@ impl<'m, 'a> Walk<'m, 'a> {
                     }
                     ir::TexLod::Implicit => (None, false),
                     ir::TexLod::Bias(b) => (Some(self.src(b, 0)?), false),
-                    ir::TexLod::Lod(l) => (Some(self.src(l, 0)?), true),
-                    _ => return Err(PrepError::NotYet("a texture look-up with gradients")),
+                    ir::TexLod::Lod(l) | ir::TexLod::Fetch(l) => (Some(self.src(l, 0)?), true),
+                    /* textureGrad: the V3D 4.2 TMU has no gradient operand
+                     * (docs/notes/v3d-qpu-grad.md lowers it to a level). */
+                    ir::TexLod::Grad { .. } => return Err(PrepError::NotYet("a texture look-up with gradients")),
                 };
                 let (mut s, mut t) = (self.src(coord, 0)?, self.src(coord, 1)?);
                 if proj {
@@ -1436,6 +1466,8 @@ impl<'m, 'a> Walk<'m, 'a> {
                         layer: layer.is_some(),
                         bias: third.is_some() && !is_lod,
                         lod: is_lod,
+                        fetch,
+                        offset,
                     },
                 )?;
                 for (lane, o) in out.iter_mut().enumerate() {
@@ -2210,11 +2242,11 @@ fn compact<'a>(ops: &[SOp], roots: &mut [S], a: &Arena<'a>) -> Result<&'a [SOp],
                 }
                 SOp::Alu(alu, s)
             }
-            SOp::Tex { sampler, mut srcs, cube, layer, bias, lod } => {
+            SOp::Tex { sampler, mut srcs, cube, layer, bias, lod, fetch, offset } => {
                 for x in srcs.iter_mut().take(tex_operands(cube || layer, bias || lod)) {
                     *x = S(map[x.0 as usize]);
                 }
-                SOp::Tex { sampler, srcs, cube, layer, bias, lod }
+                SOp::Tex { sampler, srcs, cube, layer, bias, lod, fetch, offset }
             }
             SOp::Fsub(s) => SOp::Fsub(s.map(|x| S(map[x.0 as usize]))),
             SOp::TexLane { tex, lane, ret } => SOp::TexLane { tex: [S(map[tex[0].0 as usize])], lane, ret },
@@ -2474,6 +2506,61 @@ mod tests {
                 .count()
         })
         .unwrap()
+    }
+
+    /// The texelFetch and offset forms GLSL ES 3.00 has not (section 8.8: no
+    /// cube texelFetch, no cube offset, a 2D offset of two lanes), refused
+    /// by name should an IR carry them; and a 2D fetch prepares as a look-up
+    /// with the level and no bias, `fetch` set, the offset carried.
+    #[test]
+    fn a_cube_fetch_or_offset_is_refused_by_name() {
+        use crate::shaderc::online::ir::{
+            InstrId, IoSlot, Module, Node, Op, Range, ScalarType, Src, TexDim, TexLod, ValueId,
+        };
+        let prepared = |dim: TexDim, lod: TexLod, offset: Option<[i8; 3]>| {
+            let coord = Src::id(ValueId(0));
+            let instrs = [
+                Op::ConstI32([1; 4]),
+                Op::Tex { dim, shadow: false, proj: false, ret: ScalarType::F32, sampler: 3, coord, lod, offset },
+                Op::StoreOutput { slot: IoSlot::FragColor(0), src: Src::id(ValueId(1)) },
+            ];
+            let nodes: std::vec::Vec<Node> = (0..3).map(|i| Node::Instr(InstrId(i))).collect();
+            let m = Module {
+                instrs: &instrs,
+                nodes: &nodes,
+                body: Range { first: 0, len: 3 },
+                ..Module::empty(SHC_STAGE_FRAGMENT)
+            };
+            store::with_scratch(|a| {
+                prepare_fragment(&m, a).map(|p| {
+                    p.ops.iter().find_map(|o| match *o {
+                        SOp::Tex { sampler, cube, layer, bias, lod, fetch, offset, .. } => {
+                            Some((sampler, cube, layer, bias, lod, fetch, offset))
+                        }
+                        _ => None,
+                    })
+                })
+            })
+            .unwrap()
+        };
+        let fetch = TexLod::Fetch(Src::id(ValueId(0)));
+        let level = TexLod::Lod(Src::id(ValueId(0)));
+        assert_eq!(prepared(TexDim::Cube, fetch, None), Err(PrepError::NotYet("a texelFetch of a cube")));
+        assert_eq!(
+            prepared(TexDim::Cube, level, Some([1, 0, 0])),
+            Err(PrepError::NotYet("a cube look-up with an offset"))
+        );
+        assert_eq!(
+            prepared(TexDim::D2, fetch, Some([0, 0, 1])),
+            Err(PrepError::NotYet("a texture offset with a third lane"))
+        );
+        assert_eq!(
+            prepared(TexDim::D2, fetch, Some([-8, 7, 0])),
+            Ok(Some((3, false, false, false, true, true, [-8, 7, 0])))
+        );
+        assert_eq!(prepared(TexDim::D2, level, None), Ok(Some((3, false, false, false, true, false, [0; 3]))));
+        /* a cube at a level, with no offset: as before */
+        assert_eq!(prepared(TexDim::Cube, level, Some([0; 3])), Ok(Some((3, true, false, false, true, false, [0; 3]))));
     }
 
     /// Common subexpressions (Walk::push, Mesa's nir_opt_cse): the same
