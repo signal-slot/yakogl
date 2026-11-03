@@ -63,6 +63,7 @@ pub mod preload;
 pub mod ra;
 pub mod sched;
 pub mod select;
+pub mod vec16;
 
 use super::arena::Arena;
 use super::codegen::{lower_source, Blocks, CompileError, Which};
@@ -1288,6 +1289,28 @@ fn compile_stage<'s>(
         if (fs.colour_f32 || fs.colour_u32) && !fs.highp {
             return Err(MaliError::MixedPrecision);
         }
+        /* a mediump colour of vector arithmetic under one flattened `if`
+         * (case 142): Mesa's chunked program (vec16.rs), not the lane walk's */
+        let highp = |name: &str| matches!(prec(name), Some(Precision::High));
+        if !fs.highp && !fs.mixed {
+            if let Some(g) = vec16::program(m, scratch, &highp)? {
+                let mut p = prog(scratch)?;
+                let mut rows = 0u128;
+                let sel = vec16::select(&mut p, &g, &mut rows);
+                marks.prog(&p);
+                sel?;
+                marks.note(Table::UboRows, g.ubo.rows());
+                let c = finish(&mut p, &mut layout, true, &g.ubo, scratch, out, marks)?;
+                sc.info.preload = c.preload;
+                sc.info.work_reg_count = c.work_reg_count;
+                sc.info.colour_f16 = true;
+                sc.info.colour_outputs = 1;
+                sc.rows = rows;
+                sc.code = &out[..c.words];
+                sc.fau = layout;
+                return Ok(sc);
+            }
+        }
         let mut f = nir_fs::walk(m, scratch, fs)?;
         /* the link's code motion (motion.rs): a highp shader's graph is
          * the linker's; a mediump shader converts its inputs first
@@ -1332,6 +1355,13 @@ fn compile_stage<'s>(
             nir_fs::fuse16(&mut f);
             nir_fs::vectorise_int_sources(&mut f)
                 .and_then(|()| select::UboLayout::fs16(m, &f.nir, &highp))
+                .and_then(|ubo| nir_fs::select_highp(&mut p, &mut f, m, &ubo, scratch).map(|()| ubo))
+        } else if nir_fs::guarded16(&f) {
+            /* a mediump shader's unrolled loop with run-time guards: the
+             * graph's regions flattened as a highp shader's, its fp16 nodes
+             * paired afterwards (cflow_71_deadloop) */
+            let highp = |name: &str| matches!(prec(name), Some(Precision::High));
+            select::UboLayout::fs16(m, &f.nir, &highp)
                 .and_then(|ubo| nir_fs::select_highp(&mut p, &mut f, m, &ubo, scratch).map(|()| ubo))
         } else {
             /* the fp16 uniform block (LowerPrecisionFloat16Uniforms); a

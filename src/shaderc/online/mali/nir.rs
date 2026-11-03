@@ -472,6 +472,10 @@ pub struct IfRegion {
     /// them (an inner one first), which is the order `emit_if` and
     /// `emit_loop` add their blocks' edges in.
     pub seq: u8,
+    /// A guard of a loop whose test and `break` NIR merged into one
+    /// terminator (nir_fs.rs `merged_bound`), which
+    /// `complex_unroll_single_terminator` unrolls ([`Nir::invert_ladder`]).
+    pub single: bool,
 }
 
 impl IfRegion {
@@ -487,6 +491,7 @@ impl IfRegion {
         guard: false,
         brk: None,
         seq: 0,
+        single: false,
     };
 }
 
@@ -688,6 +693,11 @@ pub struct Nir<'s> {
     /// source is one lane of a vector constant, and so are the constants
     /// folded from it (the reassociation nir_fs.rs `alu32` makes).
     pub nonuniform: &'s mut [bool],
+    /// Each fp16 uniform lane's uniform (its first dword; `u16::MAX` for
+    /// any other node): a mediump shader's components of one uniform are
+    /// one `load_ubo` in NIR, however many lane nodes the walk makes of
+    /// them (nir_fs.rs; [`Nir::load_read_above`]).
+    pub(super) uniform_load: &'s mut [u16],
 }
 
 const F32_ZERO: u32 = 0;
@@ -1050,6 +1060,7 @@ impl<'s> Nir<'s> {
             consts: super::link::VaryingConsts::NONE,
             nonuniform_const: false,
             nonuniform: scratch.alloc_filled(MAX_NODES, false).map_err(oom)?,
+            uniform_load: scratch.alloc_filled(MAX_NODES, u16::MAX).map_err(oom)?,
         })
     }
 
@@ -1215,7 +1226,11 @@ impl<'s> Nir<'s> {
                         if uk == Kind::Tex && ub == b {
                             return None;
                         }
-                        if !uniforms && matches!(uk, Kind::Uniform { .. }) && !self.lane_read_above(u, c, b) {
+                        if !uniforms
+                            && matches!(uk, Kind::Uniform { .. })
+                            && !self.lane_read_above(u, c, b)
+                            && !self.load_read_above(u, b)
+                        {
                             return None;
                         }
                     }
@@ -1269,6 +1284,26 @@ impl<'s> Nir<'s> {
             };
             nb != b && self.dominates(nb, b) && nd.src[..arity].contains(&Val::Lane(u, c))
         })
+    }
+
+    /// A lane of the fp16 uniform `u` is a lane of ([`Nir::uniform_load`])
+    /// is read by a node of a block that strictly dominates `b`: NIR's one
+    /// `load_ubo` of the uniform stands there (cflow_71_deadloop: `u_k.x`
+    /// read before the loop, `u_k.y` in its passes alone, every guard a
+    /// select).
+    fn load_read_above(&self, u: u16, b: u8) -> bool {
+        let l = self.uniform_load[u as usize];
+        l != u16::MAX
+            && (0..self.len).any(|k| {
+                let id = self.order[k];
+                let nb = self.block[id as usize];
+                let nd = self.nodes[id as usize];
+                nb != b
+                    && self.dominates(nb, b)
+                    && nd.src[..nd.arity()]
+                        .iter()
+                        .any(|v| matches!(*v, Val::Lane(x, _) | Val::Pair(x, _) if self.uniform_load[x as usize] == l))
+            })
     }
 
     /// `is_only_used_by_fadd` for the count: an `fadd` user, or the
@@ -1412,6 +1447,31 @@ impl<'s> Nir<'s> {
             (g.then_last, g.else_last) = (g.else_last, g.then_last);
         }
         Ok(())
+    }
+
+    /// The guards of a loop whose test and `break` are one terminator
+    /// ([`IfRegion::single`]): `complex_unroll_single_terminator`
+    /// (nir_opt_loop_unroll.c:466-527) clones the values the loop leaves
+    /// into both sides of its last pass's `if` (the "lcssa vars"), so that
+    /// `if`'s then side is not empty and `opt_if_simplification`
+    /// (nir_opt_if.c:741-782) leaves it, while every earlier pass's guard,
+    /// its then side the empty `break`, is inverted and reaches the
+    /// selects as `flt` ([`Nir::invert_guards`]). The front end's count
+    /// ([`Nir::inverted_guards`]) does not apply to them: `inots` is
+    /// cleared for each. Measured: cflow_71_deadloop.expect.json, whose
+    /// ladder has `FCMP_OR.v2f16.ge` for the last pass and `.lt` for the
+    /// seven before it (docs/notes/mali-control-flow.md).
+    pub fn invert_ladder(&mut self, inots: &mut [bool; MAX_IFS]) -> Result<(), MaliError> {
+        let mut inv = [false; MAX_IFS];
+        for i in 0..self.nifs {
+            let r = self.ifs[i];
+            if !r.live || !r.single {
+                continue;
+            }
+            inots[i] = false;
+            inv[i] = self.ifs[..self.nifs].iter().any(|x| x.live && x.single && self.inside(&r, x.before));
+        }
+        self.invert_guards(&inv)
     }
 
     /// An inverted guard that stays a branch ([`Nir::invert_guards`]; femtovg's
@@ -2746,6 +2806,72 @@ pub(super) fn bcsel_fadd(vs: &mut Nir<'_>) -> Result<(), MaliError> {
     Ok(())
 }
 
+/// [`bcsel_fadd`] on the one-lane 16-bit nodes of a mediump shader's
+/// flattened ladder (nir_fs.rs `guarded16`), as bifrost's late loop runs it
+/// (bifrost_nir.c:335-344): each `nir_opt_algebraic_late` call walks the
+/// instructions last first (nir_search.c:879-906) and tries a fired rule's
+/// users again after the walk (`nir_algebraic_update_automaton`, :617-638,
+/// the new instructions themselves not); a fired rule's new select stands
+/// before the `fadd` that takes the old select's place (:687-714); the
+/// first rule (the then side's sum used once) before the second, each
+/// trying the commutative combinations in order. `is_used_once` counts
+/// every use still in the program, a dead one's too, until the `nir_opt_dce`
+/// after the call; the calls repeat while one makes progress. So a ladder
+/// of `acc += u` sums peels one `fadd` a call down to the first that is
+/// no sum (cflow_71_deadloop: `%10 = bcsel_pan %9, %3.y, %7` of `2 * u_k.y`
+/// and `3 * u_k.y`, then `%11 = fadd %1.y, %10`, docs/notes/mali-control-flow.md).
+pub(super) fn bcsel_fadd16(vs: &mut Nir<'_>, scratch: &Arena<'_>) -> Result<(), MaliError> {
+    let sum = |vs: &Nir<'_>, v: Val| match v {
+        Val::Lane(n, 0) => match vs.nodes[n as usize] {
+            NirNode { kind: Kind::Alu(Alu::Fadd), src, bits: 16, width: 1 } => Some((n, [src[0], src[1]])),
+            _ => None,
+        },
+        _ => None,
+    };
+    let work = scratch.alloc_filled(2 * MAX_NODES, 0u16).map_err(|_| MaliError::OutOfScratch)?;
+    loop {
+        let mut progress = false;
+        let mut nw = 0;
+        for k in (0..vs.len).rev() {
+            work[nw] = vs.order[k];
+            nw += 1;
+        }
+        let mut next = 0;
+        while next < nw {
+            let x = work[next] as usize;
+            next += 1;
+            let nd = vs.nodes[x];
+            let (Kind::Alu(Alu::Bcsel), 16, 1) = (nd.kind, nd.bits, nd.width) else { continue };
+            let Some(k) = vs.order[..vs.len].iter().position(|&id| id as usize == x) else { continue };
+            let (Some((t, ts)), Some((e, es))) = (sum(vs, nd.src[1]), sum(vs, nd.src[2])) else { continue };
+            let once = [vs.uses(t).count() == 1, vs.uses(e).count() == 1];
+            let found = (0..2).filter(|&r| once[r]).find_map(|_| {
+                (0..4u8).find_map(|comb| {
+                    let (tb, tc) = if comb & 1 == 0 { (ts[0], ts[1]) } else { (ts[1], ts[0]) };
+                    let (eb, ed) = if comb & 2 == 0 { (es[0], es[1]) } else { (es[1], es[0]) };
+                    (tb == eb).then_some((tb, tc, ed))
+                })
+            });
+            let Some((b, c, d)) = found else { continue };
+            let sel = NirNode { kind: Kind::Alu(Alu::Bcsel), src: [nd.src[0], c, d], ..nd };
+            let n = vs.insert_before(k, sel)?;
+            vs.nodes[x] = NirNode { kind: Kind::Alu(Alu::Fadd), src: [b, Val::Lane(n, 0), Val::Undef], ..nd };
+            progress = true;
+            for (id, _) in vs.uses(x as u16) {
+                if nw == work.len() {
+                    return Err(MaliError::TooManyValues);
+                }
+                work[nw] = id;
+                nw += 1;
+            }
+        }
+        if !progress {
+            return Ok(());
+        }
+        dce(vs, None);
+    }
+}
+
 /// The late fusion, last instruction first (nir_search.c's worklist pops
 /// the last instruction first).
 pub(super) fn fuse(vs: &mut Nir<'_>) {
@@ -2947,6 +3073,22 @@ fn shrink(vs: &mut Nir<'_>, m: &Module<'_>) -> Result<(), MaliError> {
 /// an instruction already just before that user stays and keeps its own
 /// index, so a later one that shares the user goes after it.
 fn opt_move(vs: &mut Nir<'_>, scratch: &Arena<'_>) -> Result<(), MaliError> {
+    move_before_users(vs, scratch, Kind::movable)
+}
+
+/// [`opt_move`] of the comparisons (`nir_move_comparisons`,
+/// bifrost_nir.c:375-381; nir_opt_sink.c:94-95) over a mediump shader's
+/// flattened ladder, one block (nir_fs.rs `guarded16`): each compare stands
+/// right before the first select that reads it, so the passes' compares
+/// come innermost first (cflow_71_deadloop.expect.json: `FCMP_OR.v2f16.ge`
+/// of pass 7 before its `MUX.v2i16`, the constants pushed in that order,
+/// `u3.w0` = (7.0, 7.0), `u3.w1` = (6.0, 6.0), `u4.w0` = (4.0, 5.0)).
+pub(super) fn move_compares(vs: &mut Nir<'_>, scratch: &Arena<'_>) -> Result<(), MaliError> {
+    move_before_users(vs, scratch, |k| matches!(k, Kind::Alu(Alu::Fcmp(_))))
+}
+
+/// `nir_opt_move_block` of the instructions `movable` takes ([`opt_move`]).
+fn move_before_users(vs: &mut Nir<'_>, scratch: &Arena<'_>, movable: fn(Kind) -> bool) -> Result<(), MaliError> {
     let index = scratch.alloc_filled(MAX_NODES, 0u32).map_err(|_| MaliError::OutOfScratch)?;
     let mut next = 1u32;
     let mut pos = vs.len;
@@ -2955,7 +3097,7 @@ fn opt_move(vs: &mut Nir<'_>, scratch: &Arena<'_>) -> Result<(), MaliError> {
         let id = vs.order[pos];
         index[id as usize] = next;
         next += 1;
-        if !vs.nodes[id as usize].kind.movable() {
+        if !movable(vs.nodes[id as usize].kind) {
             continue;
         }
         /* the first user: the user with the largest index */

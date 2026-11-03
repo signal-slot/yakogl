@@ -36,7 +36,7 @@ const fn row(op: Alu, bits: u8, width: u8) -> Row {
 }
 
 /// The rows [`emit`] selects, each with the `bi_emit_alu` case it is.
-pub const ROWS: [(Row, &str); 76] = [
+pub const ROWS: [(Row, &str); 83] = [
     (row(Alu::Fadd, 32, 1), "nir_op_fadd: FADD.f32"),
     (row(Alu::Fmul, 32, 1), "nir_op_fmul: FMA.f32 a, b, -0.0"),
     (row(Alu::Ffma, 32, 1), "nir_op_ffma: FMA.f32"),
@@ -118,6 +118,9 @@ pub const ROWS: [(Row, &str); 76] = [
      * (tools/mali/testdata/fbload_predif_fs_coord, prec_82) */
     (row(Alu::I2i32, 32, 1), "nir_op_i2i32 of a 16-bit mask: S16_TO_S32"),
     (row(Alu::Bcsel, 16, 1), "nir_op_bcsel_pan of one 16-bit lane: MUX.v2i16.int_zero else, then, c.h00"),
+    /* a flattened `if`'s select of two uniform lanes (tools/mali/testdata/
+     * cflow_68_armselect: `MUX.v2i16 r1, u2.w0, u2.w1, r0.h00`) */
+    (row(Alu::Bcsel, 16, 2), "nir_op_bcsel_pan of two 16-bit lanes: MUX.v2i16.int_zero else, then, c.h00"),
     (row(Alu::Ffloor, 16, 2), "nir_op_ffloor of two 16-bit lanes: FROUND.v2f16.rtn"),
     /* a colour lane paired with a constant (tools/mali/testdata/texmore_2:
      * `FMA.v2f16 r1, r3^.h00, 0x38000000.h11, r1^.h00`) */
@@ -158,6 +161,18 @@ pub const ROWS: [(Row, &str); 76] = [
     (row(Alu::Icmp(Cmpf::Eq), 16, 1), "nir_op_ieq_pan of one 16-bit lane: ICMP_OR.v2u16.eq.m1 a.h00, b"),
     /* a kept loop's `float(n)` of `int n = int(x)` (intloop_loop_exit) */
     (row(Alu::Ftrunc, 32, 1), "nir_op_ftrunc: FROUND.f32.rtz"),
+    /* a mediump unrolled loop's ladder (tools/mali/testdata/cflow_71_deadloop:
+     * `FROUND.v2f16.rtp r1, r0.h00`, `FMIN.v2f16 r1, r1^.h00, 0x48000000.h11`,
+     * `FCMP_OR.v2f16.ge.m1 r3, u3.w0, r1.h00, 0x0` of one pass, `.lt` of two) */
+    (row(Alu::Fceil, 16, 1), "nir_op_fceil of one 16-bit lane: FROUND.v2f16.rtp a.hN"),
+    (row(Alu::Fmin, 16, 1), "nir_op_fmin of one 16-bit lane: FMIN.v2f16 a.hN, b.hN"),
+    (row(Alu::Fcmp(Cmpf::Ge), 16, 1), "nir_op_fge_pan of one 16-bit lane: FCMP.v2f16.ge.m1 a.hN, b.hN"),
+    (row(Alu::Fcmp(Cmpf::Lt), 16, 2), "nir_op_flt_pan of two 16-bit lanes: FCMP.v2f16.lt.m1"),
+    /* a mediump `clamp(x, 0.0, 1.0)` (tools/mali/testdata/cflow_142_unibranch:
+     * `FADD.v2f16.clamp_0_1 r2, r2^, r7^` of a pair, `r4^.h00, r6^.h11` of a
+     * lane, the FCLAMP folded into its producer) */
+    (row(Alu::Fclamp(clamp::ZERO_ONE), 16, 1), "nir_op_fsat of one 16-bit lane: FCLAMP.v2f16 .clamp_0_1"),
+    (row(Alu::Fclamp(clamp::ZERO_ONE), 16, 2), "nir_op_fsat of two 16-bit lanes: FCLAMP.v2f16 .clamp_0_1"),
 ];
 
 /// A source of a one-lane 16-bit operation: its lane's half in both
@@ -208,6 +223,13 @@ pub fn emit(p: &mut Prog<'_>, row: Row, s: &[Src]) -> Result<u16, MaliError> {
             p.push(i)?;
             t
         }
+        (Alu::Fclamp(c @ clamp::ZERO_ONE), 16, 1 | 2) => {
+            let t = p.temp()?;
+            let mut i = Ins::new(Op::FclampV2f16, &[Dest::ssa(t)], &s[..1]);
+            i.clamp = c;
+            p.push(i)?;
+            t
+        }
         (Alu::Frsq, 32, 1) => ins(p, Op::FrsqF32, &s[..1])?,
         (Alu::Ffloor, 32, 1) => ins(p, Op::FroundF32 { round: Round::Rtn }, &s[..1])?,
         (Alu::Fceil, 32, 1) => ins(p, Op::FroundF32 { round: Round::Rtp }, &s[..1])?,
@@ -218,7 +240,9 @@ pub fn emit(p: &mut Prog<'_>, row: Row, s: &[Src]) -> Result<u16, MaliError> {
         /* `bi_icmp_to(nir_type_int, ..)`: an equality is `ICMP.i32`, hence
          * `ICMP_OR.u32` (bir.rs); an ordering is `ICMP.s32` */
         /* one lane: each source's half in both (the caller's swizzle) */
-        (Alu::Fcmp(cmpf), 16, 1) => ins(p, Op::FcmpOrV2f16 { cmpf, result: ResultType::M1 }, &[s[0], s[1], ZERO])?,
+        (Alu::Fcmp(cmpf), 16, 1 | 2) => ins(p, Op::FcmpOrV2f16 { cmpf, result: ResultType::M1 }, &[s[0], s[1], ZERO])?,
+        (Alu::Fceil, 16, 1) => ins(p, Op::FroundV2f16 { round: Round::Rtp }, &[lone(s[0])])?,
+        (Alu::Fmin, 16, 1) => ins(p, Op::FminV2f16, &[lone(s[0]), lone(s[1])])?,
         (Alu::Icmp(cmpf @ (Cmpf::Eq | Cmpf::Ne)), 32, 1) => {
             ins(p, Op::IcmpOrU32 { cmpf, result: ResultType::M1 }, &[s[0], s[1], ZERO])?
         }
@@ -274,7 +298,7 @@ pub fn emit(p: &mut Prog<'_>, row: Row, s: &[Src]) -> Result<u16, MaliError> {
         (Alu::I2i32, 32, 1) => ins(p, Op::S16ToS32, &s[..1])?,
         /* `bi_mux_to(.., s2, s1, s0, BI_MUX_INT_ZERO)` as the 32-bit row,
          * each source's half in both (the caller's swizzle) */
-        (Alu::Bcsel, 16, 1) => ins(p, Op::MuxV2i16, &[s[2], s[1], s[0]])?,
+        (Alu::Bcsel, 16, 1 | 2) => ins(p, Op::MuxV2i16, &[s[2], s[1], s[0]])?,
         (Alu::Ffloor, 16, 2) => ins(p, Op::FroundV2f16 { round: Round::Rtn }, &s[..1])?,
         (Alu::F2i32, 32, 1) => ins(p, Op::F16ToS32, &s[..1])?,
         /* `bi_arshift_or_to(b, sz, dst, s0, bi_zero(), bi_byte(s1, 0))`
