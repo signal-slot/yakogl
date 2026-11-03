@@ -829,11 +829,14 @@ fn each_refusal_is_the_exact_line_of_its_cause() {
         let (blend_190_3, blend_190_4) = case_190_columns(&blend);
         let mut blend_190_3_4x = blend_190_3;
         blend_190_3_4x.samples = 4;
-        /* an RGBA16F target is RAW64 in the tile buffer: no dump blends
-         * into it or writes it through a mask */
+        /* an RGBA16F target blends in the fixed-function unit on Mesa's
+         * float rules (case 91's SRC_ALPHA, ONE_MINUS_SRC_ALPHA) and takes
+         * a mask; GL_MIN wants a blend shader there, not built */
         let mut rgba16f_blend = blend;
         rgba16f_blend.target_format = backend::GLES_SURF_RGBA16F;
         let rgba16f_masked = state(|d| (d.target_format, d.color_mask) = (backend::GLES_SURF_RGBA16F, 0x7));
+        let mut rgba16f_min = min_blend;
+        rgba16f_min.target_format = backend::GLES_SURF_RGBA16F;
         let mut bad_blend = blend;
         bad_blend.blend_src_rgb = 0;
         let cull = state(|d| d.cull = backend::GLES_CULL_CCW);
@@ -907,8 +910,9 @@ fn each_refusal_is_the_exact_line_of_its_cause() {
             ("a 4x target whose D24S8 the draw does not use", why(&with_ds(multisampled)), built),
             ("a 4x draw with a depth test is built", why(&with_ds(msaa_depth)), built),
             ("an RGBA16F target is built", why(&rgba16f), built),
-            ("a blended draw into RGBA16F", why(&rgba16f_blend), not_built(frame::NOT_BUILT_FLOAT_BLEND)),
-            ("a colour-masked draw into RGBA16F", why(&rgba16f_masked), not_built(frame::NOT_BUILT_FLOAT_BLEND)),
+            ("a blended draw into RGBA16F is built", why(&rgba16f_blend), built),
+            ("a colour-masked draw into RGBA16F is built", why(&rgba16f_masked), built),
+            ("a min blend into RGBA16F", why(&rgba16f_min), not_built(frame::NOT_BUILT_FLOAT_BLEND)),
             ("R16F", why(&r16f), not_built(NOT_BUILT_TARGET_FORMAT)),
             ("an XRGB8888 target is built", why(&xrgb), built),
             ("an RGB565 target is built", why(&rgb565), built),
