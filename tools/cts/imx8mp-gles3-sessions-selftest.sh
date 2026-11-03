@@ -52,11 +52,11 @@ field() { row "$1" | cut -f"$2"; }
 [ "$(field 4 2)" = 3 ] || fail "ubo cases: $(field 4 2)"
 total=$(grep -v '^#' "$tmp/out.tsv" | awk -F'\t' '$1 ~ /^[0-9]+$/ {s += $2} END {print s}')
 [ "$total" = 15 ] || fail "case sum $total, expected 15"
-# estimates: 4 x 0.5 s measured, 2 x 22 s, 3 x 0.3 s, 3 x (0.5 x 600/800)
+# estimates: 4 x 0.5 s measured, 2 x 22 s, 3 x 0.3 s, 3 x (0.5 x 600/600)
 [ "$(field 0 3)" = 2.0 ] || fail "lifetime seconds: $(field 0 3)"
 [ "$(field 1 3)" = 44.0 ] || fail "filtering seconds: $(field 1 3)"
 [ "$(field 2 3)" = 0.9 ] || fail "shader seconds: $(field 2 3)"
-[ "$(field 4 3)" = 1.1 ] || [ "$(field 4 3)" = 1.2 ] || fail "ubo seconds: $(field 4 3)"
+[ "$(field 4 3)" = 1.5 ] || fail "ubo seconds: $(field 4 3)"
 field 0 4 | grep -q '^pi4:LT$' || fail "lifetime source: $(field 0 4)"
 field 1 4 | grep -q '^assumed:' || fail "filtering source: $(field 1 4)"
 # risk flag: 44 s is at risk with --window 50 --margin 0.8 (> 40 s), not with the default
