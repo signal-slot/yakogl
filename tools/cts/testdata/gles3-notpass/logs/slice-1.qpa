@@ -1,0 +1,22 @@
+#beginSession
+#beginTestCaseResult dEQP-GLES3.a.pass
+<TestCaseResult CasePath="dEQP-GLES3.a.pass" CaseType="SelfValidate" Version="0.3.4">
+<Result StatusCode="Pass">Pass</Result>
+</TestCaseResult>
+#endTestCaseResult
+<TestCaseResult CasePath="dEQP-GLES3.a.fail" CaseType="SelfValidate" Version="0.3.4">
+<Text>noise</Text>
+<Result StatusCode="Fail">Image comparison failed &amp; more
+second line</Result>
+</TestCaseResult>
+<TestCaseResult CasePath="dEQP-GLES3.a.notsup" CaseType="SelfValidate" Version="0.3.4">
+<Result StatusCode="NotSupported">Extension &quot;X&quot; not supported</Result>
+</TestCaseResult>
+<TestCaseResult CasePath="dEQP-GLES3.a.cut" CaseType="SelfValidate" Version="0.3.4">
+<Text>board reset here</Text>
+<TestCaseResult CasePath="dEQP-GLES3.b.merged_fail" CaseType="SelfValidate" Version="0.3.4">
+<Result StatusCode="Fail">first try</Result>
+</TestCaseResult>
+<TestCaseResult CasePath="dEQP-GLES3.not.in.mustpass" CaseType="SelfValidate" Version="0.3.4">
+<Result StatusCode="Fail">ignored</Result>
+</TestCaseResult>

@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# dEQP-GLES3 on the TI AM62P (Verdin, PowerVR), build abc1234, run 2026-11-03: every mustpass case
+# (tools/cts/gles3-mustpass.txt) whose result is not Pass. One case per line, tab separated:
+# <outcome> <case> <first message line>. NoResult: the case never ran
+# (the run's "Not run" list).
+Fail	dEQP-GLES3.a.fail	Image comparison failed & more
+NotSupported	dEQP-GLES3.a.notsup	Extension "X" not supported
+Crash	dEQP-GLES3.a.cut	no result recorded (case cut off)
+NoResult	dEQP-GLES3.b.never	
+NoResult	dEQP-GLES3.b.merged_pass	
+QualityWarning	dEQP-GLES3.b.qw	Interpolation was calculated

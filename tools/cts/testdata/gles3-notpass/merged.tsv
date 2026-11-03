@@ -1,0 +1,3 @@
+# merged statuses
+dEQP-GLES3.b.merged_fail	Pass
+dEQP-GLES3.b.qw	QualityWarning	Interpolation was calculated

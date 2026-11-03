@@ -703,6 +703,21 @@ else
     printf '%s\n' "$prout" | tail -8 | sed 's/^/        | /'
 fi
 
+# ---- 30: gles3-notpass.py --self-test ----------------------------------------
+#
+# The not-pass TSV writer (docs/es3/am62p-gles3-notpass.tsv): qpa logs and a
+# merged status table over a small mustpass list, compared byte for byte with
+# testdata/gles3-notpass/expected.tsv (Pass dropped, missing case NoResult, cut-off
+# case Crash, first message line unescaped, later source wins).
+echo
+echo "== 30. gles3-notpass.py --self-test"
+if npout=$(python3 -I "$HERE/gles3-notpass.py" --self-test 2>&1); then
+    ok "gles3-notpass.py: the not-pass TSV reproduced from fixtures"
+else
+    bad "gles3-notpass.py --self-test failed"
+    printf '%s\n' "$npout" | tail -8 | sed 's/^/        | /'
+fi
+
 if [ "$fail" -eq 0 ]; then
     echo "== all checks passed"
 else

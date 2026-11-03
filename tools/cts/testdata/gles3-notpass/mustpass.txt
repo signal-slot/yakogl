@@ -1,0 +1,8 @@
+dEQP-GLES3.a.pass
+dEQP-GLES3.a.fail
+dEQP-GLES3.a.notsup
+dEQP-GLES3.a.cut
+dEQP-GLES3.b.never
+dEQP-GLES3.b.merged_fail
+dEQP-GLES3.b.merged_pass
+dEQP-GLES3.b.qw
