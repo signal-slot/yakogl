@@ -77,7 +77,16 @@ side, set `BOARD_HOST=<user@host>` from the environment (never write it into a f
 
 ## 1. Stage 1 (once per VK-GL-CTS revision, about 1.9 GB)
 
+The CTS checkout comes first (the pin is the `DEQP_WORK` entry of `tools/cts/deps.toml`, which `tools/cts/deps-env.sh`
+builds the same way): VK-GL-CTS at `93bca01861b0e3ef3c387027a9791e6d065f900c`, with its external sources fetched.
+`cts-build-zephyr.sh` takes the checkout from `CTS=` (default `~/com/github/KhronosGroup/VK-GL-CTS`) and never writes
+to it.
+
 ```sh
+git clone --no-checkout https://github.com/KhronosGroup/VK-GL-CTS <deps>/VK-GL-CTS
+git -C <deps>/VK-GL-CTS checkout --detach 93bca01861b0e3ef3c387027a9791e6d065f900c
+(cd <deps>/VK-GL-CTS && python3 external/fetch_sources.py)     # glslang, spirv-tools, libpng, ... under external/*/src
+export CTS=<deps>/VK-GL-CTS
 export ZEPHYR_WS=<west workspace> ZEPHYR_VENV=<workspace>/.venv \
        ZEPHYR_SDK_INSTALL_DIR=<zephyr-sdk-1.0.1> IMX8MP_OUT=<out>
 tools/cts/imx8mp-deqp-stage1.sh gles3     # = DEQP_MODULE=gles3 DEQP_STAGE1=<out>/deqp-stage1-gles3
