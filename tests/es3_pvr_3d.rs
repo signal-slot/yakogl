@@ -13,6 +13,13 @@
 //! ```
 #![cfg(all(feature = "shaderc-online", feature = "gpu-powervr", not(feature = "report-es2")))]
 use std::collections::BTreeMap;
+use yakogl::backend::{
+    GlesTextureBind, GLES_TEXFMT_RGBA8, GLES_TEXTYPE_3D, GLES_TEXTYPE_3D_TWIDDLED, GLES_WRAP_CLAMP_TO_EDGE,
+    GLES_WRAP_MIRRORED_REPEAT, GLES_WRAP_REPEAT,
+};
+use yakogl::gl::native_vol::{
+    chain_levels, copy_bytes, level_extent, level_texel_off, level_texels, physical_extent, twiddle3d,
+};
 use yakogl::shaderc::online::powervr::chain::{compile_fragment, compile_vertex};
 use yakogl::shaderc::online::powervr::decode::decode_group;
 use yakogl::shaderc::online::powervr::isa::ops_for;
@@ -204,4 +211,153 @@ fn texture_size_reads_the_image_word_and_samples_nothing() {
         compile_with(Stage::Fragment, &src, |rec, image| (rec.native_cube, smps(image).len())).unwrap()
     });
     assert_eq!((flag, n), (4, 0));
+}
+
+/// The sampler words of a descriptor as the TPU reads them (texstate.xml
+/// SAMPLER_WORD0): (minlod, maxlod, mipfilter, addrmode u, v, w).
+fn sampler(w: &[u32]) -> (u64, u64, u64, u64, u64, u64) {
+    let q = w[8] as u64 | (w[9] as u64) << 32;
+    ((q >> 13) & 0x3ff, (q >> 23) & 0x3ff, (q >> 40) & 1, (q >> 41) & 7, (q >> 44) & 7, (q >> 56) & 7)
+}
+
+/// A native 3D bind of `w x h x d` (level 0), `levels` levels.
+fn volume_bind(w: u32, h: u32, d: u16, levels: u8, mip_filter: u8) -> GlesTextureBind {
+    let phys = physical_extent(w, h, u32::from(d));
+    GlesTextureBind {
+        format: GLES_TEXFMT_RGBA8,
+        type_: GLES_TEXTYPE_3D_TWIDDLED,
+        layers: d,
+        base_gpu: 0x80_0000_9000,
+        width: w,
+        height: h,
+        stride_texels: w,
+        bytes: copy_bytes(phys, 4, u32::from(levels)),
+        linear_filter: 1,
+        min_linear: 1,
+        mip_filter,
+        mip_levels: levels,
+        wrap_s: GLES_WRAP_REPEAT,
+        wrap_t: GLES_WRAP_REPEAT,
+        wrap_r: GLES_WRAP_REPEAT,
+        ..GlesTextureBind::ZERO
+    }
+}
+
+/// (a) A mipmapped NPOT volume (63x57x67: physical 64x64x128, a chain of
+/// eight levels to 1x1x1): the levels follow each other at the offsets
+/// `native_vol` computes, each texel of each API level (its size halved, at
+/// least 1) lands at a distinct twiddled index inside its own level's padded
+/// extent, so no level writes into another, and the copy's size is the last
+/// level's end.
+#[test]
+fn an_npot_mipmapped_volume_writes_every_level_at_its_offset() {
+    let (w, h, d) = (63u32, 57u32, 67u32);
+    let phys = physical_extent(w, h, d);
+    assert_eq!(phys, (64, 64, 128));
+    let n = chain_levels(phys);
+    assert_eq!(n, 8, "128 -> 1");
+    /* the API's own chain is shorter than the copy's: 67 -> 1 is seven levels */
+    let api = 32 - w.max(h).max(d).leading_zeros();
+    assert_eq!(api, 7);
+    let mut off = 0;
+    for l in 0..n {
+        assert_eq!(level_texel_off(phys, l), off, "level {l} follows the one before");
+        let e = level_extent(phys, l);
+        assert_eq!(e, ((64 >> l).max(1), (64 >> l).max(1), (128 >> l).max(1)));
+        off += level_texels(e);
+    }
+    assert_eq!(copy_bytes(phys, 4, 1), level_texels(phys) * 4, "no mipmap filter: level 0 alone");
+    for levels in 2..=n {
+        assert_eq!(copy_bytes(phys, 4, levels), off * 4, "{levels} levels: the whole chain");
+    }
+    for l in 0..api {
+        let (lw, lh, ld) = ((w >> l).max(1), (h >> l).max(1), (d >> l).max(1));
+        let e = level_extent(phys, l);
+        let mut seen = vec![false; level_texels(e) as usize];
+        for z in 0..ld {
+            for y in 0..lh {
+                for x in 0..lw {
+                    let i = twiddle3d(x, y, z, e) as usize;
+                    assert!(i < seen.len(), "level {l} ({x}, {y}, {z}) = {i} leaves its {} texels", seen.len());
+                    assert!(!seen[i], "level {l} ({x}, {y}, {z}) collides at {i}");
+                    seen[i] = true;
+                }
+            }
+        }
+        let end = (level_texel_off(phys, l) + level_texels(e)) * 4;
+        assert!(end <= copy_bytes(phys, 4, api), "level {l} ends inside the copy");
+    }
+}
+
+/// (b) The descriptor of the NPOT volume carries level 0's API size, the
+/// depth, the level count and the LOD range, so LINEAR_MIPMAP_LINEAR walks
+/// above level 0: maxlod is 64 per level less one (u4.6), minlod stays 0 and
+/// the mip filter bit is set only for a linear mix between levels.
+#[test]
+fn the_descriptor_carries_the_level_count_and_the_lod_range() {
+    let t = volume_bind(63, 57, 67, 7, 2);
+    let w = yakogl::pvr::backend::texture_descriptor(&t);
+    let iw0 = w[0] as u64 | (w[1] as u64) << 32;
+    let iw1 = w[2] as u64 | (w[3] as u64) << 32;
+    assert_eq!(iw0 & 7, 2, "TEXTYPE_3D");
+    assert_eq!(((iw0 >> 34) & 0x3fff, (iw0 >> 48) & 0x3fff), (62, 56), "level 0's API size");
+    assert_eq!(iw1 & 0xf, 7, "seven levels");
+    assert_eq!((iw1 >> 4) & 0x7ff, 66, "depth - 1");
+    assert_eq!((iw1 >> 15) & 1, 1, "mipmaps_present");
+    let (minlod, maxlod, mip, ..) = sampler(&w);
+    assert_eq!((minlod, maxlod, mip), (0, 6 * 64, 1), "LOD 0 to 6, mixing levels");
+    for levels in 2u8..=8 {
+        let w = yakogl::pvr::backend::texture_descriptor(&volume_bind(63, 57, 67, levels, 2));
+        let s = sampler(&w);
+        assert_eq!(w[2] & 0xf, u32::from(levels));
+        assert_eq!((s.0, s.1, s.2), (0, u64::from(levels - 1) * 64, 1), "{levels} levels");
+    }
+    /* MIPMAP_NEAREST: the levels are walked but not mixed */
+    let n = sampler(&yakogl::pvr::backend::texture_descriptor(&volume_bind(63, 57, 67, 7, 1)));
+    assert_eq!((n.1, n.2), (6 * 64, 0));
+    /* no mipmap filter: one level, LOD 0 */
+    let w1 = yakogl::pvr::backend::texture_descriptor(&volume_bind(63, 57, 67, 1, 0));
+    let s1 = sampler(&w1);
+    assert_eq!((w1[2] & 0xf, (w1[3] >> 15) & 1, s1.1, s1.2), (1, 0, 0, 0));
+}
+
+/// (c) REPEAT and MIRRORED_REPEAT reach the sampler on S, T and R: each axis
+/// has its own mode, none is clamped, and they do not leak into each other.
+#[test]
+fn repeat_and_mirrored_repeat_reach_the_sampler_on_every_axis() {
+    const REPEAT: u64 = 0;
+    const FLIP: u64 = 1;
+    const CLAMP: u64 = 2;
+    let modes = [(GLES_WRAP_REPEAT, REPEAT), (GLES_WRAP_MIRRORED_REPEAT, FLIP), (GLES_WRAP_CLAMP_TO_EDGE, CLAMP)];
+    for (ms, es) in modes {
+        for (mt, et) in modes {
+            for (mr, er) in modes {
+                let t = GlesTextureBind { wrap_s: ms, wrap_t: mt, wrap_r: mr, ..volume_bind(63, 57, 67, 7, 2) };
+                let s = sampler(&yakogl::pvr::backend::texture_descriptor(&t));
+                assert_eq!((s.3, s.4, s.5), (es, et, er), "s={ms} t={mt} r={mr}");
+            }
+        }
+    }
+}
+
+/// (d) With the switch off the texture is a grid of slices: the descriptor is
+/// the stride 2D image it always was -- not TEXTYPE_3D, one level, the third
+/// axis clamped whatever WRAP_R says (the grid's depth is the shader's).
+#[test]
+fn off_the_descriptor_is_the_grids_stride_image() {
+    let t = GlesTextureBind {
+        type_: GLES_TEXTYPE_3D,
+        height: 8 * 4,
+        bytes: 8 * 8 * 4 * 4 * 4,
+        ..volume_bind(8, 8, 4, 1, 0)
+    };
+    let w = yakogl::pvr::backend::texture_descriptor(&t);
+    assert_eq!(w[0] & 7, 4, "a STRIDE image, not TEXTYPE_3D");
+    let (_, maxlod, mip, _, _, wr) = sampler(&w);
+    assert_eq!((maxlod, mip), (0, 0), "level 0 only");
+    assert_eq!(wr, 2, "the third axis stays CLAMP_TO_EDGE under REPEAT");
+    /* the same bind, native: REPEAT on R is the TPU's */
+    let n =
+        sampler(&yakogl::pvr::backend::texture_descriptor(&GlesTextureBind { type_: GLES_TEXTYPE_3D_TWIDDLED, ..t }));
+    assert_eq!(n.5, 0);
 }
