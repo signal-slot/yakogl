@@ -1,0 +1,44 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-FileCopyrightText: 2026 Signal Slot, Inc. */
+/*
+ * Route 3 with the A53 restart (CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_A53_RESTART,
+ * which depends on this overlay; board_route3_restart.c): the display chain's
+ * devices are not initialised by the device model. On a cold boot
+ * board_route3_restart.c initialises them itself, in the device model's own
+ * order and at its place (POST_KERNEL, CONFIG_GPIO_INIT_PRIORITY); on a
+ * restart it does not, because the M7 then owns every one of them: the LCDIF,
+ * the DSIM, the SN65DSI84 on I2C2, PWM3, the MEDIAMIX domains, and GPIO4,
+ * whose driver init (IMR = 0, ISR cleared) would mask the M7's touch
+ * interrupt on GPIO4_IO25.
+ */
+&gpio4 {
+	zephyr,deferred-init;
+};
+
+&backlight_pwm {
+	zephyr,deferred-init;
+};
+
+&i2c2 {
+	zephyr,deferred-init;
+};
+
+&media_blk_ctrl {
+	zephyr,deferred-init;
+};
+
+&pd_lcdif1 {
+	zephyr,deferred-init;
+};
+
+&pd_mipi_dsi1 {
+	zephyr,deferred-init;
+};
+
+&lvds_bridge {
+	zephyr,deferred-init;
+};
+
+&display0 {
+	zephyr,deferred-init;
+};

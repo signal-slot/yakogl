@@ -864,6 +864,49 @@ int gc_render_reset_idle(void)
 	return rc;
 }
 
+/*
+ * Stop the GPU for good, with nothing in flight (gc_render.h). The submit lock
+ * is taken and never given back: a submit already past its s_ready check
+ * blocks on it, any later one finds s_ready false. Then the work submitted so
+ * far is waited for, and the core is reset -- the reset every boot runs
+ * (gc_bringup_reset), which isolates the GPU, stops the front end's idle
+ * WAIT/LINK loop and leaves the MMU off; the same reset gc_render_reset_idle()
+ * runs on a live ring between clients. After it the GPU fetches nothing.
+ */
+int gc_render_quiesce(uint32_t timeout_ms)
+{
+	struct gc_dev *g = gc_dev_get();
+	const int64_t t0 = k_uptime_get();
+	uint32_t last;
+	bool done;
+	int rc;
+
+	if (!s_ready) {
+		return 0; /* never started: the boot's reset left it idle */
+	}
+	/* A holder of the lock is a submit waiting for an event, which the
+	 * GPU frees (gc_event_alloc gives up after 1 s): bounded. */
+	if (k_mutex_lock(&g->submit_lock, K_MSEC(timeout_ms)) != 0) {
+		LOG_ERR("quiesce: a submit held the ring for %u ms; the GPU is left running",
+			timeout_ms);
+		return -EBUSY;
+	}
+	s_ready = false;
+	last = g->fence_next - 1;
+	while (!(done = fence_done(g, last)) && k_uptime_get() - t0 < (int64_t)timeout_ms) {
+		k_sleep(K_MSEC(1));
+	}
+	g->fe_running = false;
+	g->mmu_on = false;
+	rc = gc_bringup_reset(g->regs, g->id);
+	LOG_INF("quiesce: fences through %u submitted, %u done%s; reset %d", last, g->fence_done,
+		done ? "" : " (timed out)", rc);
+	if (rc == 0 && !done) {
+		rc = -ETIMEDOUT;
+	}
+	return rc;
+}
+
 uint32_t gc_render_resets(void)
 {
 	return gc_dev_get()->resets;

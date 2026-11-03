@@ -583,6 +583,13 @@ static int panel_console_init(void)
 {
 	uint32_t done;
 
+#ifdef CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_A53_RESTART
+	/* A route-3 restart: the LCDIF that scans is the M7's, and the
+	 * take-over would flip it to this console's buffer. No console. */
+	if (board_route3_warm()) {
+		return 0;
+	}
+#endif
 	gc_result_stage(GC_RESULT_STAGE_CONSOLE_ENTER, 0u);
 	done = panel_console_take_over();
 	gc_result_stage(GC_RESULT_STAGE_CONSOLE_DONE, done);
@@ -607,6 +614,11 @@ static int cold_bringup(void)
 	if (p.ready) {
 		return 0;   /* stage one already has a console */
 	}
+#ifdef CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_A53_RESTART
+	if (board_route3_warm()) {
+		return 0;   /* a route-3 restart: the panel is the M7's */
+	}
+#endif
 	imx8mp_display_geometry(&width, &height);
 	pitch = width * 4u;
 	if (width == 0u || height == 0u ||
@@ -689,6 +701,12 @@ static int panel_console_cold_init(void)
 		atomic_set(&cold_finished, 1); /* stage one adopted a picture */
 		return 0;
 	}
+#ifdef CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_A53_RESTART
+	if (board_route3_warm()) {
+		atomic_set(&cold_finished, 1); /* a route-3 restart: no bring-up */
+		return 0;
+	}
+#endif
 	/* Cooperative, above the init and main threads: at their priority it
 	 * waited for the init thread's 20 ms time slice before its first
 	 * register write (2026-10-29, v12 timeline: started 21 ms after the
