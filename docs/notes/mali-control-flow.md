@@ -366,6 +366,101 @@ Existing code to extend:
   `ControlFlow`. Nothing of the call survives in the output, so the function
   can be dropped by liveness (its result is never read) before the walk.
 
+#### What landed (cflow-flatten)
+
+68 and both shaders of 74 are byte-equal to their references in both stages
+(`tests.rs`: `the_flattened_ifs_are_byte_equal_to_mesa_26_2_1`, the pairs in
+`CFLOW_FLATTEN`; the corpus copies `es100/ifoutput.frag`,
+`es100/ifoutput2.frag` and `gl_test_es100/armselect.frag` are now `ok` in
+`tools/mali/corpus-verdicts.txt`). What the lowering does (`nir_fs.rs`):
+
+- `walk_if16` takes a condition that is a 16-bit float compare's mask, as
+  well as the boolean lanes it took before. It walks both sides and refuses
+  a side that makes a look-up or a discard, or that has more than
+  `PEEPHOLE_LIMIT` nodes (the peephole's count, approximated by the nodes
+  the side adds). A local or a colour lane whose two sides differ becomes a
+  16-bit `Alu::Bcsel` node of the compare at the join (`Fs::node`, CSE'd).
+  A colour written on one side only takes the written side's value
+  (`nir_opt_undef`), as `walk_if` does.
+- `Fs::op` folds `fadd(fmul(a, b), fmul(a, c))` with constants `b + c = 1.0`
+  into `a` (Mesa's factoring rule). This is 68's `v * 0.5 + w * 0.5` once
+  both locals are the same select. Any other sum of constants there is
+  refused (`AlgebraicForm`).
+- `vectorise` pairs two selects of one compare in two ways. If their sources
+  are a uniform's aligned pairs, the result is one two-lane `Bcsel`
+  (`emit.rs` row `(Bcsel, 16, 2)`, `MUX.v2i16 else, then, c.h00`). If their
+  sources are constants, each lane is a one-lane select and the output word
+  is `Leaf::Pack`, `MKVEC.v2i16 x.h0, y.h0` (74). `cmp_node` makes the
+  compare once, a one-lane `FCMP` of a uniform half and a constant. Every
+  other source form is refused (`FsOperandForm`).
+
+71 deadloop is byte-equal in both stages too (the same test). Its loop
+takes the highp shader's guard machinery at fp16 (`nir_fs.rs`, `nir.rs`):
+
+- The test `i < 8.0` and the guard `if (i >= n) break;` on one float
+  counter are one terminator in NIR (`opt_loop_merge_terminators` makes
+  `ior(fge(i, n), fge(i, 8.0))`, nir_opt_algebraic.py:1152 makes that
+  `fge(i, fmin(n, 8.0))`). `merged_bound` finds that shape and `walk_guard`
+  builds each pass's compare against the one `fmin`. Only such a guard
+  takes the region path at mediump (`walk_if`; `IfRegion::single`). Any
+  other mediump guard is still `GuardMediump`.
+- `complex_unroll_single_terminator` puts the values the loop leaves on
+  both sides of the last pass's `if`, so `opt_if_simplification` inverts
+  every guard but that one (`Nir::invert_ladder`): `ge` for pass 7, `lt` for
+  passes 0-6, as the reference has them.
+- The dead `unused()` call (an `if` of selects into its slot) and `waste`
+  die in DCE. `ceil` is an fp16 `fceil` node. `acc + acc` is
+  `fmul(acc, 2.0)` (nir_opt_algebraic.py:274). A compare of two constants
+  folds (the unrolled counter's test).
+- `select_highp` takes the shader (`guarded16`). It flattens the guards as
+  for a highp shader. A mediump uniform's lanes are one `load_ubo` there, so
+  a side reading `u_k.y` may run speculatively when `u_k.x` is read above
+  (`Nir::load_read_above`). Then come the late
+  `bcsel(c, fadd(b, x), fadd(b, y))` hoist to a fixed point
+  (`bcsel_fadd16`, one `fadd` peeled a late-loop round, `is_used_once`
+  counting dead uses until the DCE), the pairing of the fp16 lanes
+  (`vectorize16`: `u_k.x * 3.0` with `u_k.y * 2.0`, the compares of passes
+  0 and 1, 2 and 3, 4 and 5) and the compares moved to their selects
+  (`move_compares`, the constants pushed in that order).
+- `ladder_forms` refuses what the route does not transcribe. Case 70's
+  `(acc * 2.0) * 0.5`, which Mesa folds (nir_opt_algebraic.py:2405), is
+  `ArithConstant` (es100/loopcarry.frag).
+
+142 unibranch is byte-equal in both stages through its own route
+(`vec16.rs`, taken before the lane walk for a mediump shader of this shape):
+
+- The IR is read as NIR's vectors. A local assigned in parts is a
+  constructor of its lanes, a swizzled read of one a new constructor
+  (`merge_vec_and_mov`), and `fmin(fmax(a, 0), 1)` is `fsat(a)`.
+- `nir_lower_alu_width` cuts each vec4 operation into its aligned pairs. A
+  pair whose source has two lanes of one value in two words (`a.xy` of
+  `vec4(u.y, u.z, ..)` is `u.yz`) is cut into lanes. A constructor's pair of
+  two values is a `vec2` (`MKVEC.v2i16`), and so are the lanes of a pair cut
+  alone, which its readers read.
+- The lanes cut alone pair again in program order (`nir_opt_vectorize`).
+  One equal to an earlier lane still alone is first that lane
+  (`nir_opt_cse`). This order is measured, not derived. It is what makes
+  the then side's `u.y * 0.5` pair with the else side's `u.y * 0.25` while
+  the then side's `u.y * 0.25` pairs with `u.y * 0.125`, and the else
+  side's `u.y * 0.5` the then side's. Plain `nir_opt_vectorize` order
+  would pair the two `u.y * 0.5` instead. Which of Mesa's pass rounds puts
+  the CSE first here is not traced.
+- nir_opt_algebraic.py:2419 reassociates `(P - Q) + R` to `(P + R) - Q`
+  where `R`'s pair was cut alone. Then come the late fusion, and
+  `nir_opt_shrink_vectors` of a pair one lane of which is read, which
+  leaves a `vec2` read at one lane to copy propagation, so `c'.yx * 0.25`
+  keeps its two lanes (`r3.h10`). Last, `nir_opt_move` moves the copies
+  and the compare to their first readers.
+- New emit rows: `(Fclamp(ZERO_ONE), 16, 1)`, `(16, 2)` (the `FCLAMP` folds
+  into its producer as `.clamp_0_1`), `(Fceil, 16, 1)`, `(Fmin, 16, 1)`,
+  `(Fcmp(Ge), 16, 1)` and `(Fcmp(Lt), 16, 2)`.
+
+The corpus copies `es100/deadloop.frag` and `es100/unibranch.frag` are now
+`ok` (`tools/mali/corpus-verdicts.txt`). `cond_sequence` (`FsOperandForm`)
+and `tri_if` (`ColourForm`) keep their own gaps. `frontfacing`, `texbranch`
+and the look-up `if` of 148 keep `ControlFlow`
+(`the_branch_case_is_refused_by_its_own_gap`).
+
 ### 2. branch: 148 (and the sources that keep blocks)
 
 Mesa's output keeps `nir_if`s with look-ups. The instruction shapes: an `if`

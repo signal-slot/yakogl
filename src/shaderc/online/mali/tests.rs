@@ -1051,8 +1051,11 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
         (FS, "precision highp float; varying vec4 v; void main(){ mediump vec4 t = v; gl_FragColor = t; }", MaliError::MixedPrecision),
         (VS, "attribute vec4 p; void main(){ if (p.x > 0.0) gl_Position = p; }", MaliError::Arithmetic),
         (VS, "attribute vec4 p; void main(){ while (true) { gl_Position = p; break; } }", MaliError::LoopVertex),
-        /* a mediump `if` whose side computes a float (no select of masks) */
-        (FS, "precision mediump float; varying vec4 v; void main(){ vec4 c = v; if (v.x > 0.5) c = v * v; gl_FragColor = c; }", MaliError::ControlFlow),
+        /* a mediump `if` with a look-up under it, which keeps its branch
+         * (cflow_148_texbranch); its side's arithmetic flattened into
+         * selects reaches the operand forms instead */
+        (FS, "precision mediump float; varying vec4 v; varying vec2 uv; uniform sampler2D s; void main(){ vec4 c = v; if (v.x > 0.5) c = texture2D(s, uv); gl_FragColor = c; }", MaliError::ControlFlow),
+        (FS, "precision mediump float; varying vec4 v; void main(){ vec4 c = v; if (v.x > 0.5) c = v * v; gl_FragColor = c; }", MaliError::FsOperandForm),
         /* the three intloop references no lowering takes yet, each at its
          * own gap (docs/notes/mali-loop-break.md, Part 2 status) */
         (FS, include_str!("../../../../tools/mali/testdata/intloop_loop_nested.frag"), MaliError::LoopMediump),
@@ -2006,6 +2009,8 @@ fn fs_reference_sources() -> Vec<&'static str> {
     srcs.extend(LOOP_POPULATION.iter().map(|c| c.2));
     /* a 2D array's size, look-up and fetch (case 42, #33) */
     srcs.push(include_str!("../../../../tools/shaders/es300/array.frag"));
+    /* the `if`s Mesa flattens into selects (#33) */
+    srcs.extend(CFLOW_FLATTEN.iter().map(|c| c.2));
     srcs
 }
 
@@ -5573,4 +5578,93 @@ fn glsl_reassociates_a_constant_into_the_product_beside_another() {
 fn the_corpus_matrix_products_by_a_constant_are_the_references() {
     assert_eq!(include_str!("../../../../tools/shaders/gltest/mulone_fs_one.frag"), td!("algfold_189_mulone.frag"));
     assert_eq!(include_str!("../../../../tools/shaders/gltest/mulone_fs_half.frag"), td!("algfold_189_half.frag"));
+}
+
+/// The `if`s Mesa flattens (docs/notes/mali-control-flow.md, "flatten"):
+/// `nir_opt_peephole_select` turns each into `bcsel_pan`s of the compare at
+/// the join, so the program has no branch. Case 68 armselect (two locals,
+/// each written by one side: `MUX.v2i16` of the uniforms' aligned pairs,
+/// the `* 0.5` sum factored away) and case 74's two fragment shaders
+/// (gl_FragColor written on both sides, or before the `if` and on one:
+/// one-lane `MUX.v2i16` of constants packed by `MKVEC.v2i16`), and case 71
+/// deadloop (the dead `unused()` call and `waste` dropped, the loop's test
+/// and run-time `break` one terminator `fge(i, fmin(n, 8.0))`, eight
+/// guarded passes flattened into a ladder of `FCMP_OR.v2f16` and
+/// `MUX.v2i16`, the compares of two passes paired), each pair drawn with
+/// `--uniform-values` (the fragment FAU words named by value). Byte-equal
+/// to the shim in both stages (nir_fs.rs `walk_if16`, the `Bcsel` pairs of
+/// `vectorise`; for 71 `merged_bound`, `guarded16`, `vectorize16` and
+/// nir.rs `invert_ladder`, `bcsel_fadd16`, `move_compares`).
+const CFLOW_FLATTEN: [(&str, &str, &str, &str); 5] = [
+    (
+        "cflow_142_unibranch",
+        td!("cflow_142_unibranch.vert"),
+        td!("cflow_142_unibranch.frag"),
+        td!("cflow_142_unibranch.expect.json"),
+    ),
+    (
+        "cflow_68_armselect",
+        td!("cflow_68_armselect.vert"),
+        td!("cflow_68_armselect.frag"),
+        td!("cflow_68_armselect.expect.json"),
+    ),
+    (
+        "cflow_74_ifoutput",
+        td!("cflow_74_ifoutput.vert"),
+        td!("cflow_74_ifoutput.frag"),
+        td!("cflow_74_ifoutput.expect.json"),
+    ),
+    (
+        "cflow_74_ifoutput2",
+        td!("cflow_74_ifoutput2.vert"),
+        td!("cflow_74_ifoutput2.frag"),
+        td!("cflow_74_ifoutput2.expect.json"),
+    ),
+    (
+        "cflow_71_deadloop",
+        td!("cflow_71_deadloop.vert"),
+        td!("cflow_71_deadloop.frag"),
+        td!("cflow_71_deadloop.expect.json"),
+    ),
+];
+
+#[test]
+fn the_flattened_ifs_are_byte_equal_to_mesa_26_2_1() {
+    let mut failed = Vec::new();
+    for (name, vs, fs, json) in CFLOW_FLATTEN {
+        let r = std::panic::catch_unwind(|| {
+            let v = compile_vs_for(vs, fs);
+            check_vs_stage(&v, vs, fs, json, VIEWPORT_64X64);
+            let f = compile(SHC_STAGE_FRAGMENT, fs).expect("the fragment shader compiles");
+            check_fs_stage(&f, vs, fs, json, VIEWPORT_64X64);
+            assert!(!f.info.can_discard, "{name}: no discard");
+        });
+        if let Err(e) = r {
+            let m = e.downcast_ref::<String>().cloned().unwrap_or_else(|| format!("{:?}", e.downcast_ref::<&str>()));
+            failed.push(format!("{name}: {m}"));
+        }
+    }
+    assert!(failed.is_empty(), "{} of {} differ:\n{}", failed.len(), CFLOW_FLATTEN.len(), failed.join("\n"));
+}
+
+/// The corpus lines the flatten makes `ok` are the references' own
+/// sources (byte copies), so they compile to the words
+/// [`CFLOW_FLATTEN`] pins.
+#[test]
+fn the_corpus_flattened_if_sources_are_the_references() {
+    assert_eq!(include_str!("../../../../tools/shaders/es100/ifoutput.frag"), td!("cflow_74_ifoutput.frag"));
+    assert_eq!(include_str!("../../../../tools/shaders/es100/ifoutput2.frag"), td!("cflow_74_ifoutput2.frag"));
+    assert_eq!(include_str!("../../../../tools/shaders/gl_test_es100/armselect.frag"), td!("cflow_68_armselect.frag"));
+    assert_eq!(include_str!("../../../../tools/shaders/es100/deadloop.frag"), td!("cflow_71_deadloop.frag"));
+    assert_eq!(include_str!("../../../../tools/shaders/es100/unibranch.frag"), td!("cflow_142_unibranch.frag"));
+}
+
+/// The `if` with a look-up under it (case 148, the note's "branch" part)
+/// keeps its branch in Mesa's program: the flatten does not take it.
+#[test]
+fn the_branch_case_is_refused_by_its_own_gap() {
+    match compile(SHC_STAGE_FRAGMENT, td!("cflow_148_texbranch.frag")) {
+        Err(CompileError::BackEnd(codegen::BackEndError::Mali(e))) => assert_eq!(e, MaliError::ControlFlow),
+        r => panic!("refused by the back end: {:?}", r.map(|_| ())),
+    }
 }
