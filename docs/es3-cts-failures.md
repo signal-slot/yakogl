@@ -57,7 +57,7 @@ Host numbers are HOST-ONLY: the Linux OSAL runs no command stream, so only API e
 | Occlusion queries | counted on the three back ends; board: AM62P passes, Pi 4 read 0 (gl_test 196) until `9b1ce2ff`, board rerun left | `docs/es3/occlusion-query.md` |
 | Integer colour render targets | PowerVR: all nineteen as a draw's one colour attachment (board: gl_test 200); V3D: all nineteen, the float ones and the ES 2.0 formats on any attachment, host only (`src/v3d/state.rs` `rt_format`, `tests/es3_int_rt_v3d.rs`); GC7000UL: 13 of the 19 (`1324a160`, `docs/es3/int-rt-gc.md`: RGBA16I/UI and RG32I/UI mapped but held back, RGBA32I/UI have no hardware format), host only | `docs/es3/pvr-formats.md` section 10, `docs/es3/int-rt-gc.md`, `docs/online-shaderc/v3d-backend.md` |
 | `glBlitFramebuffer` | colour on the CPU, shared by the three back ends; depth on the CPU into a depth texture from a depth texture or renderbuffer (host only, `tests/es3_blit_ds.rs`); depth into a renderbuffer or the window, depth from the window, and all stencil refused by name | `src/gl/blit.rs`, RC8 |
-| sRGB | PowerVR renders and samples (board: gl_test 204); the GC7000 and V3D sample and refuse a draw into sRGB by name | `docs/es3/srgb.md` |
+| sRGB | PowerVR renders and samples (board: gl_test 204); the GC7000UL renders and samples, host only (RC7); the V3D samples and refuses a draw into sRGB by name | `docs/es3/srgb.md` |
 | Buffer mapping and pixel buffers | host; board: gl_test 205 on the AM62P and the Pi 4 | |
 | NPOT levels of arrays and storage textures | valid at every level | |
 | Framebuffer completeness | host `fbo.completeness`: 17 cases Fail to Pass on the PowerVR and the GC7000UL (`src/gl/framebuffer.rs` `check_status` under `!REPORT_ES2`, `tests/es3_fbo_fragops.rs`) | RC17 |
@@ -163,9 +163,25 @@ the copy's cost. `docs/es3/pvr-2darray.md`.
 
 The PowerVR encodes on write and blends in linear space
 (`docs/es3/srgb.md`); `fragment_ops.blend.fbo_srgb` passes 1,152 / 1,152.
-Left: the GC7000UL's and the V3D's sRGB render targets (they sample the class
-and refuse a draw into it by name), an sRGB attachment beside another on the
-PowerVR, compressed sRGB.
+The GC7000UL draws into an sRGB target, host only (no GPU result yet;
+`docs/es3/srgb.md` 6.1, 6.3): `SRGB_RT` includes `gpu-vivante`
+(`src/backend.rs:488`), so `rt_format_drawable` lets the draw through
+(`:498-505`); RT0 sets `PE_LOGIC_OP`'s SRGB bit with its write-enable and a
+later linear draw writes the write-enable alone (`pe_logic_op_srgb`,
+`src/vivante/backend.rs:588-598`, written at `:1738-1745`), RT1..7 set
+`RT_CONFIG_SRGB` (`:1704-1705`), with the bits as Mesa's `state_3d.xml.h`
+gives them (`src/vivante/regs.rs:68-70,553-559`); the pixel shader saturates
+the output (`src/vivante/shader.rs:353-357`). Host tests: `tests/es3_srgb.rs`
+`a_back_end_that_cannot_encode_refuses_the_draw` (the clear reaches the back
+end under `gpu-vivante`), `src/vivante/backend_tests.rs`
+`an_srgb_target_sets_the_pe_srgb_bits` and
+`an_srgb_draw_buffer_sets_rt_config_srgb`, `tests/es3_int_rt_gc.rs`
+`the_other_surfaces_are_unchanged` (the A8R8G8B8 PE format). The blend in
+linear space and the `PE_LOGIC_OP` write are board checks B1 and B4 of
+`docs/es3/srgb.md`.
+Left: the V3D's sRGB render target (it samples the class and refuses a draw
+into it by name), an sRGB attachment beside another on the PowerVR,
+compressed sRGB.
 
 ### RC8. glBlitFramebuffer and multisample
 

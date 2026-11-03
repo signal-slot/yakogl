@@ -459,8 +459,9 @@ All from etnaviv; `caps:` = `mesa-26.2.1-caps/src/gallium/drivers/etnaviv/`.
 * The flag: **RT0** sets `VIVS_PE_LOGIC_OP_SRGB` in `PE_LOGIC_OP`
   (`etnaviv_state.c:326-327`, merged into the register at `:540`); **RT1+**
   set `RT_CONFIG_SRGB` in `PE_RT_CONFIG[rt-1]` (`:330-333`). yakogl has
-  both registers: `GC_PE_LOGIC_OP` is written at `src/vivante/backend.rs:1548-1551`
-  and `pe_rt_config_8(rt)` at `:1519`.
+  both registers: `GC_PE_LOGIC_OP` is written at `src/vivante/backend.rs:1738-1745`
+  (its sRGB bits from `pe_logic_op_srgb`, `:588-598`) and `pe_rt_config_8(rt)`
+  with `GC_RT_CONFIG_SRGB` at `:1704-1705`.
 * Gate: a render target of an sRGB format needs `ETNA_FEATURE_HALTI3`
   (`etnaviv_screen.c:497-498`). The board's chip is in Mesa's feature DB as
   `gc7000ULN_v123`, ChipID 0x7000, revision 0x6204, product 0x70003
@@ -512,16 +513,23 @@ a larger item; keep it as the contingency, not the plan.
   `int_filter_wanted` leaves it out (host tests
   `an_srgb_sampler_decodes_and_takes_no_int_filter`,
   `the_srgb_class_is_the_rgba8_texel_row_with_the_decode_bit`). The render
-  side is built (6.1): the sRGB surface is the A8R8G8B8 PE format (no new
+  side is built (6.1), and drawn: `SRGB_RT` includes `gpu-vivante`
+  (`src/backend.rs:488`), so `rt_format_drawable` (`:498-505`) does not
+  refuse the draw. The sRGB surface is the A8R8G8B8 PE format (no new
   format row) and `emit_pe_state` sets RT0's `PE_LOGIC_OP` bit with its
-  write-enable (`0xc0000000`), RT1+'s `RT_CONFIG_SRGB`; a draw to another
+  write-enable (`0xc0000000`, `src/vivante/backend.rs:588-598,1738-1745`),
+  RT1+'s `RT_CONFIG_SRGB` (`:1704-1705`); a draw to another
   format after an sRGB one writes the write-enable alone to clear the bit
   (nothing is written to the bit before the first sRGB draw, so no earlier
   draw's register moved), and the pixel shader saturates the sRGB output as
-  a unorm one (`shader.rs`). The clear is the quad, so it is encoded by the
+  a unorm one (`src/vivante/shader.rs:353-357`). The clear is the quad, so it is encoded by the
   PE like a draw. The HALTI3 gate is not checked in code (the board's entry
-  has it). Host tests: `an_srgb_target_sets_the_pe_srgb_bits`,
-  `an_srgb_draw_buffer_sets_rt_config_srgb`. B1 (the PE's blend in linear
+  has it). Host tests: `src/vivante/backend_tests.rs`
+  `an_srgb_target_sets_the_pe_srgb_bits`,
+  `an_srgb_draw_buffer_sets_rt_config_srgb`; `tests/es3_srgb.rs`
+  `a_back_end_that_cannot_encode_refuses_the_draw` (under `gpu-vivante` the
+  clear reaches the back end); `tests/es3_int_rt_gc.rs`
+  `the_other_surfaces_are_unchanged` (the A8R8G8B8 PE format). B1 (the PE's blend in linear
   space: decode the destination, blend, encode) and B4 (the `PE_LOGIC_OP`
   write) are board checks; the fallback of 6.2 stands if B1 fails.
 * `SRGB8`: etnaviv has `R8G8B8X8_SRGB` (X8 formats, `etnaviv_translate.h:258,303`);
