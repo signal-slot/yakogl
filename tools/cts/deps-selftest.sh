@@ -57,6 +57,17 @@ check "env prints a name" "ZEPHYR_WS=$L/zephyr-ws" "$out"
 check "env prints an alias" "ZEPHYR_WORKSPACE=$L/zephyr-ws" "$out"
 check "env prints MESA_PAN_TREE" "MESA_PAN_TREE=$L/mesa-pan/mesa-26.2.1" "$out"
 [ -d "$L/glsl2usc-cache" ] && ok "env makes GLSL2USC_CACHE" || bad "env did not make GLSL2USC_CACHE"
+# --present: only the entries whose marker is there, aliases with them
+out=$("$ENV_SH" --present 2>&1)
+absent "--present leaves out a missing tree" "ZEPHYR_WS=" "$out"
+absent "--present leaves out a missing tree's alias" "ZEPHYR_WORKSPACE=" "$out"
+absent "--present leaves out MESA_PAN_TREE without its build" "MESA_PAN_TREE=" "$out"
+check "--present prints an entry whose marker is the layout" "GLSL2USC_CACHE=$L" "$out"
+mkdir -p "$L/zephyr-ws/.west" && : > "$L/zephyr-ws/.west/config"
+out=$("$ENV_SH" --present 2>&1)
+check "--present prints a tree once its marker is there" "ZEPHYR_WS=$L/zephyr-ws" "$out"
+check "--present prints that tree's alias" "ZEPHYR_WORKSPACE=$L/zephyr-ws" "$out"
+rm -rf "$L/zephyr-ws"
 out=$("$ENV_SH" imx8mp 2>&1)
 check "a board adds its tree" "DEQP_WORK=$L/deqp-stage1-imx8mp" "$out"
 check "a board adds a board=\"*\" entry" "NOSTD_PATCH_DIR=$L/nostd" "$out"

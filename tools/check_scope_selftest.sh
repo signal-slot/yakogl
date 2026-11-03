@@ -259,8 +259,11 @@ expect "local: no report-es2 pair" '^skip  test    host-test,gpu-powervr,shaderc
 expect "local: no image" '^skip  zephyr  am62p gl_test image, -Werror' "$out"
 expect "local: no table proof" '^skip  gen     precompiled table gpu-powervr:' "$out"
 # the local set is small, about twenty rows (20 with the gl_test.c arm with
-# the test knobs); the bound says --local trimmed the plan, not the exact count
-expect "local: the summary says so" '^check.sh: (9|[12][0-9]) ok, 0 failed, 0 gap\(s\).*skipped \(--local HEAD, scopes: all\)' "$out"
+# the test knobs); the bound says --local trimmed the plan, not the exact count.
+# One gap: its shaderc-online rows compile tests/es3_shaderc_corpus.rs, and the
+# plans here run without the dEQP corpus (DEQP_GLES3_TEST_DIR unset above).
+expect "local: the summary says so" '^check.sh: (9|[12][0-9]) ok, 0 failed, 1 gap\(s\).*skipped \(--local HEAD, scopes: all\)' "$out"
+expect "local: the corpus gap" '^gap   es3_shaderc_corpus: no dEQP GLES3 corpus at' "$out"
 out=$(local_plan src/v3d/job.rs)
 expect "local on a V3D change: the whole V3D scope" '^plan  zephyr  rpi4 ' "$out"
 echo "check_scope_selftest: $checks checks run (planned $checks), $fails failed"

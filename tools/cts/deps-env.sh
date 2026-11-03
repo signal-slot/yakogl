@@ -19,6 +19,11 @@
 #   tools/cts/deps-env.sh [board]
 #     Print NAME=value lines for `$GITHUB_ENV` or `export $(...)`: the gate's
 #     entries, and with a board (am62p | imx8mp | rpi_4b) that board's too.
+#   tools/cts/deps-env.sh --present [board]
+#     The same lines for the entries whose marker is there only (a missing
+#     tree prints nothing, so a consumer sees it unset). tools/check.sh loads
+#     its inputs this way: a row that tests "is the variable set" then gaps
+#     on a missing tree instead of failing on it.
 #   tools/cts/deps-env.sh --layout
 #     Print the layout directory (for scripts that need a path in it).
 #   tools/cts/deps-env.sh --check [board]
