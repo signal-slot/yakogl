@@ -155,9 +155,15 @@ build() {
                 "$drv/src/v3d/v3d_tiling_mesa.c" "$drv/src/v3d/v3d_frame.c")
       fi
       # the archive is not post-processed here (capi/assemble.cmake renames the
-      # personality); the harness links no other Rust code
+      # personality); the harness links no other Rust code, so the shim takes
+      # the name the archive references: `rust_eh_personality`, or on newer
+      # nightlies rustc's v0-mangled `__rustc::rust_eh_personality`
       [ -f "$src/capi/eh_personality.c" ] && cparts+=("$src/capi/eh_personality.c")
-      cflags+=(-DYAKOGL_EH_PERSONALITY=rust_eh_personality)
+      local eh
+      eh=$(nm -u "$out/lib/libyakogl.a" 2>/dev/null |
+           awk '$NF ~ /^(_R[0-9A-Za-z_]*)?rust_eh_personality$/ { print $NF }' | sort -u)
+      [ "$(printf '%s\n' "$eh" | grep -c .)" -le 1 ] || die "the archive names more than one personality: $eh"
+      cflags+=(-DYAKOGL_EH_PERSONALITY="${eh:-rust_eh_personality}")
       local guards=("$src/src/abi_layout_check.c" "$src/src/pvr/ffi_layout_check.c")
       [ $v3d = 1 ] && guards=("$src/src/abi_layout_check.c" "$src/src/v3d/ffi_layout_check.c")
       for f in "${guards[@]}"; do

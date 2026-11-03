@@ -31,7 +31,9 @@
 #   profile) the Rust objects reference each other's mangled symbols, which
 #   cannot be hidden, so a non-LTO archive is rejected.
 # - Hosted targets: core and compiler_builtins name `rust_eh_personality` in
-#   their unwind tables. The reference is renamed to
+#   their unwind tables (newer nightlies: rustc's v0-mangled
+#   `__rustc::rust_eh_personality`, the name read off the archive). The
+#   reference is renamed to
 #   `yakogl_rust_eh_personality`, which capi/eh_personality.c defines (a C
 #   forwarder to the GCC C personality), so it cannot collide with the one of
 #   a Rust std staticlib linked next to this archive.
@@ -159,9 +161,38 @@ list(REMOVE_DUPLICATES localize)
 list(JOIN localize "\n" _loc_text)
 file(WRITE "${_work}/localize.txt" "${_loc_text}\n")
 
+# The personality references (see the header), by the names the archive
+# uses: plain `rust_eh_personality`, or, from rustc 1.101 nightlies on,
+# rustc's internal `__rustc::rust_eh_personality`, v0-mangled with a hash
+# that changes with the compiler (`_R...19rust_eh_personality`). Read off
+# the archive rather than spelled here.
+function(_personality_refs archive out)
+  execute_process(COMMAND "${NM}" -A -u "${archive}"
+    WORKING_DIRECTORY "${_work}" OUTPUT_VARIABLE _undef RESULT_VARIABLE _rc ERROR_VARIABLE _err)
+  if(NOT _rc EQUAL 0)
+    _fail("${NM} -u failed on ${archive}: ${_err}")
+  endif()
+  string(REPLACE ";" "\\;" _undef "${_undef}")
+  string(REPLACE "\n" ";" _lines "${_undef}")
+  set(_refs "")
+  foreach(_l IN LISTS _lines)
+    if(_l MATCHES "[ \t]U[ \t]+(rust_eh_personality|_R[0-9A-Za-z_]*rust_eh_personality)$")
+      list(APPEND _refs "${CMAKE_MATCH_1}")
+    endif()
+  endforeach()
+  list(REMOVE_DUPLICATES _refs)
+  set(${out} "${_refs}" PARENT_SCOPE)
+endfunction()
+
+_personality_refs("${_tmp}" personality_refs)
+set(redefine "")
+foreach(s IN LISTS personality_refs)
+  list(APPEND redefine "--redefine-sym" "${s}=yakogl_rust_eh_personality")
+endforeach()
+
 execute_process(COMMAND "${OBJCOPY}"
     "--localize-symbols=localize.txt"
-    "--redefine-sym" "rust_eh_personality=yakogl_rust_eh_personality"
+    ${redefine}
     "${_tmp}"
   WORKING_DIRECTORY "${_work}"
   RESULT_VARIABLE _rc ERROR_VARIABLE _err)
@@ -180,11 +211,10 @@ foreach(s IN LISTS lto_after rt_after)
     list(APPEND bad "${s}")
   endif()
 endforeach()
-execute_process(COMMAND "${NM}" -A -u "${_tmp}"
-  WORKING_DIRECTORY "${_work}" OUTPUT_VARIABLE _undef)
-if(_undef MATCHES "[ \t]rust_eh_personality\n")
-  list(APPEND bad "rust_eh_personality (undefined reference)")
-endif()
+_personality_refs("${_tmp}" personality_left)
+foreach(s IN LISTS personality_left)
+  list(APPEND bad "${s} (undefined reference)")
+endforeach()
 if(bad)
   # (GNU objcopy built without the target's BFD back end copies such
   # objects unchanged and still exits 0.)
