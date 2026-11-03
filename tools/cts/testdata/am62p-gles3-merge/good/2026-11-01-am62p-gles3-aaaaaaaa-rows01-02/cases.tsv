@@ -1,0 +1,3 @@
+dEQP-GLES3.t.a.x	Pass
+dEQP-GLES3.t.a.y	Fail	Mismatch at pixel 3
+dEQP-GLES3.t.zz	Pass

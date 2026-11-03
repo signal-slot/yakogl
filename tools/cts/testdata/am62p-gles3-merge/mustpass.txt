@@ -1,0 +1,6 @@
+dEQP-GLES3.t.a.x
+dEQP-GLES3.t.a.y
+dEQP-GLES3.t.b.x
+dEQP-GLES3.t.b.y
+dEQP-GLES3.t.c.x
+dEQP-GLES3.t.d.x
