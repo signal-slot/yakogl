@@ -634,7 +634,7 @@ which is wrong with a back edge: make it the worklist of
 `va_assign_scoreboard` (`va_insert_flow.c:281-302`), and check `flow.rs`
 `mark_last` across the back edge; `ra.rs` `out_of_ssa` must put the latch's
 phi moves before its `JUMP` (`logical_end`). Tests:
-`intloop_loop_exit_is_byte_equal_to_mesa_26_2_1`; a unit test of the
+`intloop_loop_exit_is_mesa_26_2_1_with_the_loop_cap`; a unit test of the
 scoreboard over a back edge (a load issued in the body and read at the
 header); `MaliError::LoopForm`'s text (`mod.rs`) and `walk_loop`'s doc
 rewritten, since a run-time loop is then not the refusal.
@@ -643,7 +643,7 @@ rewritten, since a run-time loop is then not the refusal.
 header `MOV r3, r2` and the latch's `MOV r1, r3^` come from `out_of_ssa` as
 it is; the step checks them, the `-1` constant phi source
 (`IADD_IMM #0xFFFFFFFF`), and the `Fmod` epilogue. Test:
-`builtin_98_is_byte_equal_to_mesa_26_2_1` (with the `--uniform-values`
+`builtin_98_is_mesa_26_2_1_with_the_loop_cap` (with the `--uniform-values`
 FAU word for `count`).
 
 **Step 3, nesting, `continue` and break edges (divnest).** A loop inside a
@@ -656,14 +656,14 @@ B11); CSE of equal header phis (`outer` and `i`) and of the step's `i + 1`
 copies into the dominating `outer = i + 1`; `Ine`. `MAX_IFS` (`nir.rs`, 16)
 and the blocks (`bir.rs` `MAX_BLOCKS`, 32) are counted here: divnest is 14
 blocks after the clean-ups, more before. Test:
-`intloop_divnest_is_byte_equal_to_mesa_26_2_1`, with its vertex program
+`intloop_divnest_is_mesa_26_2_1_with_the_loop_cap`, with its vertex program
 (the `* 8.0` motion).
 
 **Step 4, a load in the body (builtin_45).** After intbool-2's indexed
 vec4 read: the index a run-time `IADD` of a uniform word and the counter,
 the `LD_PKA` inside the loop (its slot and wait in a block that is entered
 twice: the step-1 scoreboard), four carried lanes. Test:
-`builtin_45_is_byte_equal_to_mesa_26_2_1`.
+`builtin_45_is_mesa_26_2_1_with_the_loop_cap`.
 
 **Step 5, mediump kept loops (loop_nested).** The pair path (`select`,
 mediump fragment) has no blocks today (`walk_if` and `walk_loop` refuse

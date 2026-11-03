@@ -36,7 +36,9 @@ use super::bir::{clamp, Cmpf, Dest, Idx, Ins, Op, Prog, Special, Src, Swz, Varyi
 use super::emit::{self, Row};
 use super::motion::{Moved, MAX_MOVED};
 use super::nir::{self, Alu, Kind, Nir, NirNode, Val, MAX_LOCALS, MAX_NODES, MAX_VALUES};
-use super::select::{alu, f16_exact, f16_rtne, generic_layout, preloads, split, UboLayout, VaryingAt, MAX_VARYINGS};
+use super::select::{
+    alu, f16_exact, f16_rtne, generic_layout, preloads, split, UboLayout, VaryingAt, LOOP_CAP, MAX_VARYINGS,
+};
 use super::{Defect, FsPrecision, MaliError};
 use crate::gl::consts::{GL_BOOL, GL_FLOAT, GL_INT};
 use crate::shaderc::online::arena::Arena;
@@ -763,6 +765,9 @@ pub struct Fs<'s> {
     /// That loop's body (its nodes' address and count): the run whose
     /// `if (c) { step; continue; }` [`walk_nodes`] reshapes.
     kept_body: (usize, usize),
+    /// That loop's pass counter, until its head test takes it
+    /// ([`LoopCap`]).
+    cap: Option<LoopCap>,
     /// The `break`s of the kept loops walked so far ([`BreakEdge`]).
     breaks: [BreakEdge; MAX_BREAKS],
     nbreaks: usize,
@@ -773,6 +778,17 @@ pub struct Fs<'s> {
 
 /// The `break`s a kept loop may take ([`BreakEdge`]).
 pub const MAX_BREAKS: usize = 8;
+
+/// The hidden pass counter of a kept loop ([`walk_kept_loop`]): its header
+/// phi, the passes left, `limit` from the pre-header ([`loop_cap_limit`]).
+/// The head test subtracts 1 and ORs `count < 0` into its `break`
+/// ([`walk_nodes`]).
+#[derive(Clone, Copy)]
+struct LoopCap {
+    phi: u16,
+    /// The phi's value at the latch: the head's `count - 1`, once made.
+    next: Val,
+}
 
 /// A `break` of a kept loop: the block whose jump enters the loop's exit,
 /// and the locals and the colour as they stand there (the exit's phis
@@ -2280,6 +2296,7 @@ pub fn walk<'s>(m: &Module<'_>, scratch: &Arena<'s>, prec: FsPrecision) -> Resul
         guard: u32::MAX,
         kept: None,
         kept_body: (0, 0),
+        cap: None,
         breaks: [BreakEdge::NONE; MAX_BREAKS],
         nbreaks: 0,
         reg: nir::registration_order(m),
@@ -2371,7 +2388,18 @@ fn walk_if(
         return walk_if16(f, m, cond, then_, else_, exit, vals, locals, prec, join);
     }
     let Val::Lane(cn, _) = cond else { return Err(MaliError::IfForm) };
-    if !matches!(f.nir.nodes[cn as usize].kind, Kind::Alu(Alu::Fcmp(_) | Alu::Icmp(_))) {
+    let kind = |v: Val| match v {
+        Val::Lane(n, _) => Some(f.nir.nodes[n as usize].kind),
+        _ => None,
+    };
+    let compare = |v: Val| matches!(kind(v), Some(Kind::Alu(Alu::Fcmp(_) | Alu::Icmp(_))));
+    /* or a kept loop's head test with its counter's compare OR-ed in
+     * ([`loop_cap_limit`]) */
+    let src = f.nir.nodes[cn as usize].src;
+    let capped = kind(cond) == Some(Kind::Alu(Alu::Ior))
+        && compare(src[0])
+        && kind(src[1]) == Some(Kind::Alu(Alu::Icmp(Cmpf::Lt)));
+    if !compare(cond) && !capped {
         return Err(MaliError::IfForm);
     }
     if f.nir.nifs >= nir::MAX_IFS {
@@ -2986,6 +3014,33 @@ fn stored_lanes(m: &Module<'_>, body: ir::Range, masks: &mut [u8; MAX_LOCALS]) -
     Ok(colour)
 }
 
+/// The passes kept loop `body` may run before its hidden counter ends it,
+/// the rule of the other back ends (select.rs `loop_convert`): a constant
+/// `for`'s own count of head entries (`loop_count::constant_loop_entries`,
+/// the index's value before the loop read from `locals`), so the counter
+/// never ends it, or [`LOOP_CAP`] (4096) for a loop that cannot be counted.
+///
+/// The counter is a DELIBERATE deviation from Mesa 26.2.1, which keeps such
+/// a loop with the GLSL test as its only exit: a bound read at run time can
+/// keep a pass running past the GPU's job timeout (case 104's band 7, a
+/// 1e9 bound per fragment), and gl_test wants the capped 4096 passes (case
+/// 98's `count = 4097`). The counter counts the head entries down, so the
+/// limit is the pre-header's immediate and the compare is with the inline
+/// zero (no constant in the loop, no FAU word): the pre-header's `IADD_IMM
+/// rc, 0x0, #limit` (the phi's first source), the header's `IADD_IMM rc,
+/// rc^, #0xFFFFFFFF` and `ICMP_OR.s32.lt.m1 rs, rc, 0x0`, OR-ed into the
+/// head test's mask before its `BRANCHZ` (an integer test takes it as its
+/// third source, `va_fuse_cmp`; a float test keeps a `LSHIFT_OR`). Entry
+/// `k` leaves when `limit - k < 0`, so the body runs at most `limit` times
+/// (docs/notes/mali-loop-board-failures.md).
+fn loop_cap_limit(m: &Module<'_>, body: ir::Range, locals: &[[Val; 4]; MAX_LOCALS]) -> u32 {
+    let init = |l: ir::LocalId, _float: bool| match locals.get(l.0 as usize).map(|v| v[0]) {
+        Some(Val::Const(bits)) => Some(bits),
+        _ => None,
+    };
+    crate::shaderc::online::loop_count::constant_loop_entries(m, body, &init).unwrap_or(LOOP_CAP)
+}
+
 /// A loop Mesa keeps ([`kept_loop`]) as `emit_loop` emits it
 /// (bifrost_compile.c:3738-3770; [`nir::LoopRegion`]): a header block
 /// holding one phi per local lane the body stores, in the order of the
@@ -3025,6 +3080,7 @@ fn walk_kept_loop(
     if stored_lanes(m, body, &mut masks)? {
         return Err(MaliError::LoopForm);
     }
+    let limit = loop_cap_limit(m, body, locals);
     let lp = f.nir.nloops as u8;
     f.nir.nloops += 1;
     let pre = f.nir.cur;
@@ -3076,15 +3132,26 @@ fn walk_kept_loop(
             nphi += 1;
         }
     }
-    let (outer_kept, outer_body, outer_loops, outer_guard) = (f.kept, f.kept_body, f.loops, f.guard);
+    /* the pass counter's phi, after the locals' (a DELIBERATE deviation from
+     * Mesa, which has none: [`loop_cap_limit`]) */
+    let nd = NirNode { kind: Kind::Phi, src: [Val::Const(limit), Val::Undef, Val::Undef], bits: 32, width: 1 };
+    let cap_phi = f.nir.push_node(nd)?;
+    f.origin[cap_phi as usize] = last as u16;
+    let cap = LoopCap { phi: cap_phi, next: Val::Undef };
+    let (outer_kept, outer_body, outer_loops, outer_guard, outer_cap) = (f.kept, f.kept_body, f.loops, f.guard, f.cap);
     let first_break = f.nbreaks;
-    (f.kept, f.kept_body, f.loops, f.guard) = (Some(lp), (nodes.as_ptr() as usize, nodes.len()), 0, u32::MAX);
+    (f.kept, f.kept_body, f.loops, f.guard, f.cap) =
+        (Some(lp), (nodes.as_ptr() as usize, nodes.len()), 0, u32::MAX, Some(cap));
     let flow = walk_nodes(f, m, nodes, vals, locals, prec, false, last, None);
-    (f.kept, f.kept_body, f.loops, f.guard) = (outer_kept, outer_body, outer_loops, outer_guard);
+    let cap = f.cap;
+    (f.kept, f.kept_body, f.loops, f.guard, f.cap) = (outer_kept, outer_body, outer_loops, outer_guard, outer_cap);
     /* a body that always breaks runs once: no reference */
     if flow? == Flow::Break {
         return Err(MaliError::LoopForm);
     }
+    /* the head test took the counter ([`walk_nodes`]) */
+    let Some(LoopCap { next: next @ Val::Lane(..), .. }) = cap else { return Err(MaliError::LoopForm) };
+    f.nir.nodes[cap_phi as usize].src[1] = next;
     let latch = f.nir.cur;
     for &(id, l, c) in &phis[..nphi] {
         let v = locals[l][c];
@@ -3241,7 +3308,19 @@ fn walk_nodes(
                  * sides under `inot(c)`, which `nir_opt_algebraic` folds into
                  * the inverse compare (`inot(ilt(a, b))` is `ige(a, b)`) */
                 if f.kept.is_some() && f.loops == 0 && t.is_empty() && e == [Node::Break] {
-                    let c = f.inverse_compare(c)?;
+                    let mut c = f.inverse_compare(c)?;
+                    /* the loop's head test (the body's first `if`,
+                     * [`kept_loop`]) also leaves once the hidden counter
+                     * runs out ([`loop_cap_limit`]): `count - 1`, its
+                     * compare with 0, OR-ed into the mask */
+                    let head = f.kept_body == (nodes.as_ptr() as usize, nodes.len());
+                    if let Some(cap) = f.cap.filter(|cap| head && cap.next == Val::Undef) {
+                        let at = cond.val.0 as usize;
+                        let next = f.op32(Alu::Iadd, [Val::Lane(cap.phi, 0), Val::Const(u32::MAX), Val::Undef], at)?;
+                        let stop = f.op32(Alu::Icmp(Cmpf::Lt), [next, Val::Const(0), Val::Undef], at)?;
+                        c = f.op32(Alu::Ior, [c, stop, Val::Undef], at)?;
+                        f.cap = Some(LoopCap { next, ..cap });
+                    }
                     walk_if(f, m, c, e, &[], IfExit::Plain, vals, locals, prec, join)?;
                     continue;
                 }
