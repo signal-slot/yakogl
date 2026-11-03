@@ -214,17 +214,15 @@ pub const INVALID_BLEND_SHADER: &str =
     "mali frame: a blend shader the draw does not need, or not 16-byte aligned in the fragment program's 4 GiB window";
 /// A target of other than 1 or 4 samples.
 pub const NOT_BUILT_SAMPLES: &str = "mali frame: a target of other than 1 or 4 samples is not built yet";
-/// A draw into an RGBA16F target that is not an opaque write of every
-/// channel: a blend equation that reads the destination or a partial
-/// colour mask. The board's Mesa 25.0.7 keeps such a target as RAW64 in
-/// the tile buffer (tools/mali/board-dump/f16rt-2026-10-24.txt), a layout
-/// the fixed-function unit does not blend; `panfrost_get_blend`
-/// (pan_context.c:178-197) runs fixed function on a non-blendable format
-/// only when the write is opaque and a blend shader otherwise, which
-/// `blend::shader_equation` builds for RGBA8888 only. The only dump is the
-/// opaque draw of case 54.
+/// A blended draw into an RGBA16F target whose equation the blend unit
+/// does not run on floats (`blend::can_fixed_function_float`: a factor
+/// other than ZERO, ONE, SRC_ALPHA and ONE_MINUS_SRC_ALPHA, min or max):
+/// Mesa 26.2.1 runs it in a blend shader (`panfrost_get_blend`,
+/// pan_context.c:170-200), which `blend::shader_equation` builds for
+/// RGBA8888 only. The float equations and colour masks are built, with
+/// the frame's tile buffer in RGBA16F ([`OpenFrame::float_blend`]).
 pub const NOT_BUILT_FLOAT_BLEND: &str =
-    "mali frame: a blended or colour-masked draw into an RGBA16F target is not built yet";
+    "mali frame: a blend into an RGBA16F target that needs a blend shader (a factor other than ZERO, ONE, SRC_ALPHA or ONE_MINUS_SRC_ALPHA, min or max) is not built yet";
 pub const NOT_BUILT_EMPTY_TARGET: &str = "mali frame: a target with no pixels";
 /// The most colour targets a frame has (`PIPE_MAX_COLOR_BUFS`, the
 /// framebuffer descriptor's 3-bit `Render Target Count` minus one).
@@ -938,8 +936,10 @@ pub enum TargetFormat {
     /// R, G, B, A halves (`PIPE_FORMAT_R16G16B16A16_FLOAT`), as the board's
     /// Mesa 25.0.7 draws a `GL_RGBA16F` face (tools/mali/board-dump/
     /// f16rt-2026-10-24.txt; docs/notes/mali-frame-formats.md sections 4, 6):
-    /// RAW64 in the tile buffer, so only opaque writes of every channel
-    /// ([`NOT_BUILT_FLOAT_BLEND`]).
+    /// RAW64 in the tile buffer while every draw of the frame writes every
+    /// channel opaquely; RGBA16F there, as Mesa 26.2.1 keeps it
+    /// (`BFMT_FLOAT`), in a frame with a blended or colour-masked draw
+    /// ([`OpenFrame::float_blend`], docs/notes/mali-blend-shaders.md).
     Rgba16f,
 }
 
@@ -1618,6 +1618,14 @@ pub struct OpenFrame {
     /// in order, `None` past the last; target 0 is the `t` every call
     /// takes. All `None`: a frame of one target.
     pub more_targets: [Option<Target>; MAX_COLOUR_TARGETS - 1],
+    /// A draw blended or colour-masked into an RGBA16F target (one that
+    /// reads the destination: `pan_blend_is_opaque` false): the fixed-function
+    /// unit blends it in the tile buffer, so the frame's RGBA16F targets are
+    /// RGBA16F there (`Internal Format` RGBA16F, `Writeback Float Format`
+    /// RGBA16F: Mesa 26.2.1's `get_rt_formats` of a `BFMT_FLOAT` format,
+    /// pan_desc.c:678-714), not the RAW64 of the board's Mesa 25.0.7 that
+    /// an opaque frame keeps. The writeback's memory is the same halves.
+    pub float_blend: bool,
 }
 
 impl OpenFrame {
@@ -1917,6 +1925,7 @@ pub fn begin_frame_targets(desc: &mut Arena, cs: &mut Stream, more: &[Target]) -
         programs: ProgramCache::default(),
         sample_store: None,
         more_targets,
+        float_blend: false,
     })
 }
 
@@ -1963,6 +1972,7 @@ pub fn add_draw(
             open.draws += 1;
             open.uses_zs |= d.zs.uses_attachment();
             open.sprite_origin_max_y |= d.primitive == Topology::Points && !d.flip_y;
+            open.float_blend |= open.colour_targets(t).any(|m| m.format == TargetFormat::Rgba16f) && reads_target(d);
             Ok(())
         }
         Err(e) => {
@@ -2150,7 +2160,7 @@ pub fn end_frame(
         } else {
             (Msaa::SINGLE, RtBuffer { base: ti.gpu, row_stride: ti.row_stride, surface_stride: 0 })
         };
-        let rt = RgbRenderTarget {
+        let mut rt = RgbRenderTarget {
             writeback_mode: WritebackMode::COMPAT,
             internal_buffer_offset,
             internal_format,
@@ -2169,6 +2179,17 @@ pub fn end_frame(
             clear: if cleared { clear_colour(clear, ti.format) } else { RtClear::default() },
             ..Default::default()
         };
+        if ti.format == TargetFormat::Rgba16f && open.float_blend {
+            /* the blended frame's tile buffer (`OpenFrame::float_blend`):
+             * Mesa 26.2.1's BFMT_FLOAT words, the writeback in the float
+             * overlay of the same five bits (0x13, which pandecode also
+             * names R8G8B8A8); the clear stays raw halves (`pan_pack_raw`
+             * for any float format) and 8 bytes a sample
+             * (`pan_format_tib_size`) */
+            rt.internal_format = ColorBufferInternalFormat::RGBA16F;
+            rt.writeback_format = ColorFormat::default();
+            rt.writeback_float_format = FloatColorFormat::RGBA16F;
+        }
         desc.write(fbd, rt_at + i * RgbRenderTarget::LENGTH, &rt.pack()?)?;
         internal_buffer_offset += ti.format.tib_bytes() * tile * ti.samples;
     }
@@ -2265,6 +2286,14 @@ pub fn resolve_frame(
 }
 
 /// Refuse a draw the builder does not build, each cause by name.
+/// The draw reads its targets' pixels: it writes a channel and blends with
+/// an equation that is not opaque or leaves a channel out
+/// (`pan_blend_is_opaque` false, pan_blend.c:430-458).
+fn reads_target(d: &DrawCall) -> bool {
+    let mask = d.colour_mask & 0xf;
+    mask != 0 && (mask != 0xf || d.blend.is_some_and(|b| !super::blend::is_opaque(&b)))
+}
+
 fn check_draw(
     d: &DrawCall,
     ctx: &Context,
@@ -2330,6 +2359,14 @@ fn check_draw(
     /* a target the draw does not write takes no blend shader whatever the
      * equation (`panfrost_get_blend`, pan_context.c:186-190) */
     let mask = d.colour_mask & 0xf;
+    /* an RGBA16F target: fixed function on Mesa's float rules
+     * (`fixed_function_float`), checked first, as its blend shader is not
+     * built; every float equation is fixed function on UNORM too, so no
+     * blend shader is wanted below */
+    if targets().any(|t| t.format == TargetFormat::Rgba16f) && mask != 0 {
+        let fixed = d.blend.is_none_or(|b| super::blend::can_fixed_function_float(&b));
+        require(fixed, NOT_BUILT_FLOAT_BLEND)?;
+    }
     if let Some(b) = d.blend.filter(|_| mask != 0) {
         if super::blend::needs_shader(&b, &d.blend_color) {
             require(d.blend_shader.is_some(), NOT_BUILT_BLEND_SHADER)?;
@@ -2338,13 +2375,6 @@ fn check_draw(
         }
     } else if d.blend_shader.is_some() {
         return Err(FrameError::Invalid(INVALID_BLEND_SHADER));
-    }
-    /* an RGBA16F target (RAW64 in the tile buffer) takes only an opaque
-     * write of every channel: `pan_blend_is_opaque` on the equation, no
-     * partial mask (which reads the destination) */
-    if targets().any(|t| t.format == TargetFormat::Rgba16f) && mask != 0 {
-        let blended = d.blend.is_some_and(|b| !super::blend::is_opaque(&b));
-        require(mask == 0xf && !blended, NOT_BUILT_FLOAT_BLEND)?;
     }
     for (m, uniforms) in [(vs, d.vs_uniforms), (fs, d.fs_uniforms)] {
         let named = |w: &PushWord| match *w {

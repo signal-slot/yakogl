@@ -294,6 +294,11 @@ Compared with `tools/mali/testdata/frame_{cull,attr_instance,rt_rgba16f}.expect.
   only). The colour preload of an RGBA16F target (a frame without a clear)
   follows the opaque draw's pattern (conversion `RGBA16F`, `raw` false over
   the RAW64 buffer); no dump pins it, and a board item should say so.
+- Since case 91 (2026-11-03): a frame with a blended or colour-masked draw
+  into an RGBA16F target is built the Mesa 26.2.1 way instead, its tile
+  buffer RGBA16F and the blend fixed function on the float rules; an opaque
+  frame keeps the RAW64 words above. `NOT_BUILT_FLOAT_BLEND` now names only
+  the equations that need a blend shader (mali-blend-shaders.md section 8).
 
 ## 7. Order of work
 

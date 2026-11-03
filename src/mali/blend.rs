@@ -5,7 +5,8 @@
 //! operands, whether it is opaque or reads the destination, and its
 //! constant. Each function is the Mesa 26.2.1 function it names
 //! (src/panfrost/lib/pan_blend.c, unless said otherwise), for the
-//! UNORM targets the frame builds (`is_float` false). An equation Mesa
+//! UNORM targets (`is_float` false) and, by [`can_fixed_function_float`],
+//! the RGBA16F one (`is_float` true). An equation Mesa
 //! runs in a blend shader runs in one when src/shaderc/online/mali/blend.rs
 //! builds it ([`shader_equation`]: the constant colour's equations at 1x,
 //! case 211's 4x constant colour, case 190's GL_MIN and
@@ -99,6 +100,38 @@ fn channel_fixed_function(c: Channel, is_alpha: bool) -> bool {
 /// `pan_blend_can_fixed_function` (:284-298).
 pub fn can_fixed_function(b: &Blending) -> bool {
     channel_fixed_function(b.rgb, false) && channel_fixed_function(b.alpha, true)
+}
+
+/// `factor_is_supported_for_float` (:36-47): the hardware blends a float
+/// target with these factors only.
+fn factor_is_supported_for_float(f: Factor) -> bool {
+    f == Factor::ZERO || f == Factor::ONE || f == Factor::SRC_ALPHA || f == Factor::INV_SRC_ALPHA
+}
+
+/// `can_fixed_function_equation` (:64-86) with `is_float`: add, subtract or
+/// reverse subtract, the float factors, or ZERO with ONE_MINUS_SRC_COLOR or
+/// DST_ALPHA on the destination of an add.
+fn channel_fixed_function_float(c: Channel) -> bool {
+    if !matches!(c.func, Func::Add | Func::Subtract | Func::ReverseSubtract) {
+        return false;
+    }
+    let inv_src_colour = Factor { base: Base::SrcColor, invert: true };
+    let dst_alpha = Factor { base: Base::DstAlpha, invert: false };
+    if c.func == Func::Add && c.src == Factor::ZERO && (c.dst == inv_src_colour || c.dst == dst_alpha) {
+        return true;
+    }
+    factor_is_supported_for_float(c.src) && factor_is_supported_for_float(c.dst)
+}
+
+/// `pan_blend_can_fixed_function` of the float equation, Mesa's
+/// `fixed_function_float` (G/pan_cmdstream.c:4381-4407), which
+/// `panfrost_get_blend` reads for a float target (G/pan_context.c:172-184):
+/// on v9+ an RGBA16F target is blendable (`BFMT_FLOAT`, pan_format.c:117-121),
+/// so such an equation runs in the blend unit, the other ones in a blend
+/// shader. No float factor reads the constant. The equation word is
+/// [`equation`]'s: `to_mali_function` does not read `is_float`.
+pub fn can_fixed_function_float(b: &Blending) -> bool {
+    channel_fixed_function_float(b.rgb) && channel_fixed_function_float(b.alpha)
 }
 
 /// `blend_factor_constant_mask` (:108-120) and `pan_blend_constant_mask`
@@ -321,6 +354,26 @@ mod tests {
         assert!(!can_fixed_function(&both(Func::Add, Factor::SRC_ALPHA, DST_COLOR)), "two different factors");
         let sat = Factor { base: Base::SrcAlphaSaturate, invert: false };
         assert!(!can_fixed_function(&both(Func::Add, sat, Factor::ZERO)), "SRC_ALPHA_SATURATE");
+    }
+
+    /// The float rules: ZERO, ONE, SRC_ALPHA and its inverse, or the two
+    /// add-with-zero forms; case 91's two equations among them.
+    #[test]
+    fn the_float_fixed_function_equations_are_mesa_s() {
+        assert!(can_fixed_function_float(&both(Func::Add, Factor::ONE, Factor::INV_SRC_ALPHA)), "case 91 left");
+        assert!(can_fixed_function_float(&both(Func::Add, Factor::SRC_ALPHA, Factor::INV_SRC_ALPHA)), "case 91 right");
+        assert!(can_fixed_function_float(&both(Func::ReverseSubtract, Factor::ONE, Factor::ONE)));
+        let inv_src = Factor { base: Base::SrcColor, invert: true };
+        let dst_alpha = Factor { base: Base::DstAlpha, invert: false };
+        assert!(can_fixed_function_float(&both(Func::Add, Factor::ZERO, inv_src)));
+        assert!(can_fixed_function_float(&both(Func::Add, Factor::ZERO, dst_alpha)));
+        assert!(!can_fixed_function_float(&both(Func::Subtract, Factor::ZERO, dst_alpha)), "add only");
+        assert!(!can_fixed_function_float(&both(Func::Add, DST_COLOR, Factor::ZERO)), "UNORM only");
+        assert!(can_fixed_function(&both(Func::Add, DST_COLOR, Factor::ZERO)));
+        assert!(!can_fixed_function_float(&both(Func::Add, DST_COLOR, SRC_COLOR)), "no 2src");
+        let cc = Factor { base: Base::ConstColor, invert: false };
+        assert!(!can_fixed_function_float(&both(Func::Add, cc, Factor { invert: true, ..cc })), "no constant");
+        assert!(!can_fixed_function_float(&both(Func::Max, Factor::ONE, Factor::ONE)), "max");
     }
 
     /// One constant: the first channel read, refused when the channels read

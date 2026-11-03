@@ -16,6 +16,12 @@
 //! blendshader-2026-10-24.txt), the descriptors byte for byte; the words the
 //! compiler builds for case 211 and 190 against
 //! tools/mali/testdata/blend_case*.words.
+//!
+//! RGBA16F targets (case 91 hdrblend): the blend unit on Mesa 26.2.1's
+//! float rules, against the drm-shim's hdrcolor draw
+//! (tools/mali/testdata/fsout_91_hdrcolor.trace and .expect.json, an RGBA8
+//! target) with every differing byte named (docs/notes/mali-blend-shaders.md
+//! section 8).
 
 use super::arena::Arena;
 use super::blend::{Base, Blending, Channel, Factor, Func};
@@ -419,4 +425,513 @@ fn a_blend_shader_out_of_place_is_refused() {
     assert_eq!(build_with(None, distinct, Some(0x7fff_fffc_7000)).err(), invalid, "blending off");
     assert_eq!(build_with(Some(c), distinct, Some(0x7fff_fffc_7008)).err(), invalid, "not on 16 bytes");
     assert_eq!(build_with(Some(c), distinct, Some(0x7ffe_fffc_7000)).err(), invalid, "another window");
+}
+
+/* ---- case 91 hdrblend: blends and masks into an RGBA16F target ---------- */
+
+/// Mesa 26.2.1 on the drm-shim drawing case 91's colour program with its
+/// left half's equation (`drm_shim_ref.sh run ... hdrquad.vert
+/// hdrcolor.frag fsout_91_hdrcolor --blend-func ONE,ONE_MINUS_SRC_ALPHA`,
+/// docs/notes/mali-fragment-outputs.md): one quad into a 64x64 RGBA8
+/// target, `gl_ref.py` having no RGBA16F one. Its program words
+/// (`.expect.json`) are the compiler's; the frame here uploads them.
+const HDRCOLOR: &str = include_str!("../../tools/mali/testdata/fsout_91_hdrcolor.trace");
+const HDRCOLOR_EXPECT: &str = include_str!("../../tools/mali/testdata/fsout_91_hdrcolor.expect.json");
+
+/// The words of region `region` of a tools/mali/testdata `*.expect.json`.
+fn region_words(json: &str, region: &str) -> Vec<u64> {
+    let at = json.find(&format!("\"{region}\"")).unwrap_or_else(|| panic!("no region {region}"));
+    let rest = &json[at..];
+    let list = &rest[rest.find("\"words\":").expect("a words array")..];
+    let list = &list[list.find('[').unwrap() + 1..list.find(']').unwrap()];
+    list.split(',').map(|w| u64::from_str_radix(w.trim().trim_matches('"'), 16).expect("a hex word")).collect()
+}
+
+fn le_bytes(words: &[u64]) -> Vec<u8> {
+    words.iter().flat_map(|w| w.to_le_bytes()).collect()
+}
+
+/// One block pandecode decoded: its `Key: value` lines, each key the path
+/// of the headers above it (`Equation/RGB/A`).
+type Fields = BTreeMap<String, String>;
+
+/// The fields of the first block whose header line is `header`.
+fn fields(trace: &str, header: &str) -> Fields {
+    let indent = |l: &str| l.len() - l.trim_start().len();
+    let lines: Vec<&str> = trace.lines().collect();
+    let at = lines.iter().position(|l| l.trim() == header).unwrap_or_else(|| panic!("no {header}"));
+    let base = indent(lines[at]);
+    let mut path: Vec<(usize, String)> = Vec::new();
+    let mut f = Fields::new();
+    for l in lines[at + 1..].iter().take_while(|l| indent(l) > base && !l.trim().is_empty()) {
+        let s = l.trim();
+        while path.last().is_some_and(|(i, _)| *i >= indent(l)) {
+            path.pop();
+        }
+        if let Some(h) = s.strip_suffix(':') {
+            path.push((indent(l), h.to_string()));
+            continue;
+        }
+        let (k, v) = s.split_once(": ").unwrap_or_else(|| panic!("{s}: not a field"));
+        let key = path.iter().map(|(_, h)| h.as_str()).chain([k]).collect::<Vec<_>>().join("/");
+        assert!(f.insert(key, v.to_string()).is_none(), "{s} twice");
+    }
+    f
+}
+
+fn take(f: &mut Fields, k: &str) -> String {
+    f.remove(k).unwrap_or_else(|| panic!("no {k}"))
+}
+
+fn flag(f: &mut Fields, k: &str) -> bool {
+    match take(f, k).as_str() {
+        "true" => true,
+        "false" => false,
+        v => panic!("{k}: {v}"),
+    }
+}
+
+fn num(f: &mut Fields, k: &str) -> u32 {
+    let v = take(f, k);
+    match v.strip_prefix("0x") {
+        Some(h) => u32::from_str_radix(h, 16),
+        None => v.parse(),
+    }
+    .unwrap_or_else(|_| panic!("{k}: {v} not a number"))
+}
+
+/// The CS word a trace's last `MOVE32 r<n>,` line sets.
+fn cs_word32(trace: &str, mnemonic: &str) -> u32 {
+    let l = trace.lines().rev().find(|l| l.contains(mnemonic)).unwrap_or_else(|| panic!("no {mnemonic}"));
+    let b: Vec<u8> = l.split_whitespace().take(4).map(|h| u8::from_str_radix(h, 16).expect("a printed byte")).collect();
+    u32::from_le_bytes(b.try_into().expect("four bytes"))
+}
+/// Mesa's `Blend RT 0` of the hdrcolor trace, its decoded fields packed
+/// again with our packer: the blend unit's ONE, ONE_MINUS_SRC_ALPHA into
+/// RGBA8 (`RGBA8 TB RGBA`).
+fn hdrcolor_blend() -> Blend {
+    let mut f = fields(HDRCOLOR, "Blend RT 0:");
+    let f = &mut f;
+    let mut func = |p: &str| {
+        let a = match take(f, &format!("Equation/{p}/A")).as_str() {
+            "Src" => BlendOperandA::SRC,
+            "Dest" => BlendOperandA::DEST,
+            "Zero" => BlendOperandA::ZERO,
+            v => panic!("A {v}"),
+        };
+        let b = match take(f, &format!("Equation/{p}/B")).as_str() {
+            "Src" => BlendOperandB::SRC,
+            "Dest" => BlendOperandB::DEST,
+            v => panic!("B {v}"),
+        };
+        let c = match take(f, &format!("Equation/{p}/C")).as_str() {
+            "Zero" => BlendOperandC::ZERO,
+            "Src Alpha" => BlendOperandC::SRC_ALPHA,
+            v => panic!("C {v}"),
+        };
+        BlendFunction {
+            a,
+            negate_a: flag(f, &format!("Equation/{p}/Negate A")),
+            b,
+            negate_b: flag(f, &format!("Equation/{p}/Negate B")),
+            c,
+            invert_c: flag(f, &format!("Equation/{p}/Invert C")),
+        }
+    };
+    let (rgb, alpha) = (func("RGB"), func("Alpha"));
+    assert_eq!(take(f, "Internal/Mode"), "Fixed-Function");
+    assert_eq!(take(f, "Internal/Fixed-Function/Conversion/Format (v7)"), "RGBA8 TB RGBA");
+    let b = Blend {
+        load_destination: flag(f, "Load Destination"),
+        alpha_to_one: flag(f, "Alpha To One"),
+        enable: flag(f, "Enable"),
+        srgb: flag(f, "sRGB"),
+        round_to_fb_precision: flag(f, "Round to FB precision"),
+        blend_constant: num(f, "Blend Constant"),
+        equation: BlendEquation { rgb, alpha, color_mask: num(f, "Equation/Color Mask") },
+        internal: InternalBlend {
+            mode: BlendMode::FIXED_FUNCTION,
+            fixed_function: BlendFixedFunction {
+                num_comps: num(f, "Internal/Fixed-Function/Num Comps"),
+                rt: num(f, "Internal/Fixed-Function/RT"),
+                conversion: InternalConversion {
+                    memory_format: Format::RGBA8_TB.0 << 12 | RgbComponentOrder::RGBA.0,
+                    raw: flag(f, "Internal/Fixed-Function/Conversion/Raw"),
+                },
+            },
+            ..Default::default()
+        },
+    };
+    /* `Shader/PC` overlays the conversion: the same top word */
+    let pc = num(f, "Internal/Shader/PC");
+    assert!(f.is_empty(), "blend fields not read: {f:?}");
+    assert_eq!(pc, b.internal.fixed_function.conversion.memory_format);
+    b
+}
+
+/// One draw of a case 91 frame: its blending, colour mask and scissor.
+#[derive(Clone, Copy)]
+struct Draw91 {
+    blend: Option<Blending>,
+    mask: u8,
+    scissor: Option<[i32; 4]>,
+}
+
+/// What a case 91 frame built: the descriptor arena, each RUN_IDVS's
+/// registers, the frame, and the code arena with its fragment program.
+struct Built91 {
+    desc: Vec<u8>,
+    regs: Vec<BTreeMap<u32, u32>>,
+    frame: Frame,
+    code: Vec<u8>,
+    fs_binary: u64,
+}
+
+const CODE: u64 = 0x7fff_ffff_c000;
+
+impl Built91 {
+    fn at(&self, gpu: u64, len: usize) -> &[u8] {
+        let o = (gpu - DESC) as usize;
+        &self.desc[o..o + len]
+    }
+    fn blend(&self, draw: usize) -> &[u8] {
+        self.at(d50(&self.regs[draw]), Blend::LENGTH)
+    }
+    fn rt(&self) -> &[u8] {
+        /* no depth/stencil attachment: no ZS/CRC extension before it */
+        self.at(self.frame.layout.fbd.expect("an FBD").gpu + 128, RgbRenderTarget::LENGTH)
+    }
+    fn params(&self) -> FramebufferParameters {
+        let fbd = self.frame.layout.fbd.expect("an FBD");
+        FramebufferParameters::unpack(self.at(fbd.gpu, 64).try_into().unwrap()).unwrap()
+    }
+}
+
+/// A frame of `draws` with Mesa's hdrquad/hdrcolor programs
+/// (fsout_91_hdrcolor.expect.json) into a `w` x `h` target of `format`,
+/// cleared to `clear`.
+fn build_91(format: TargetFormat, w: u32, h: u32, clear: [f32; 4], draws: &[Draw91]) -> Result<Built91, FrameError> {
+    let (mut desc_m, mut code_m, mut spd_m, mut ctx_m) =
+        (vec![0u8; 0x4000], vec![0u8; 0x800], vec![0u8; 0x100], vec![0u8; 0x200]);
+    let mut words = vec![0u64; 1024];
+    let (n, frame, fs_binary);
+    {
+        let mut ctx_a = Arena::new("context", 0x7fff_ffff_b000, &mut ctx_m).unwrap();
+        let heap = tiler_heap_descriptor(&mut ctx_a, 0x8000_00a0_0000, 2 << 20).unwrap();
+        let ctx = Context {
+            heap: heap.gpu,
+            geometry_buffer: 0x7fff_fffe_b000,
+            geometry_buffer_size: GEOMETRY_BUFFER_BYTES,
+            sample_positions: 0x7fff_ffff_f000,
+            tiler_max_levels: 8,
+        };
+        let mut desc = Arena::new("desc", DESC, &mut desc_m).unwrap();
+        let mut code = Arena::new("code", CODE, &mut code_m).unwrap();
+        let mut spds = Arena::new("spds", 0x7fff_ffff_d000, &mut spd_m).unwrap();
+        let vs_bin = le_bytes(&region_words(HDRCOLOR_EXPECT, "vs.position"));
+        let fs_bin = le_bytes(&region_words(HDRCOLOR_EXPECT, "fs.fragment"));
+        /* the programs' `preload` (0x3800.. and 0x3000..: r48-r63 in the
+         * top 16 bits), 32 work registers */
+        let vs_meta = ShaderMeta { preload: 0x3800, ..meta(ShaderStage::VERTEX) };
+        let fs_meta = ShaderMeta { preload: 0x3000, ..meta(ShaderStage::FRAGMENT) };
+        let vs = upload_program(&mut code, &mut spds, &vs_bin, vs_meta).unwrap();
+        let fs = upload_program(&mut code, &mut spds, &fs_bin, fs_meta).unwrap();
+        fs_binary = fs.binary;
+        let attributes = [VertexAttribute {
+            buffer: VertexBuffer { gpu: 0x7fff_ffec_c000, size: 96 },
+            offset: 0,
+            stride: 16,
+            components: 4,
+            instance_divisor: 0,
+        }];
+        let t =
+            Target { gpu: 0x7fff_ffe0_0000, width: w, height: h, row_stride: w * format.bytes(), format, samples: 1 };
+        let mut cs = Stream::new(&mut words, 92);
+        let mut open = begin_frame(&mut desc, &mut cs)?;
+        for d in draws {
+            let draw = DrawCall {
+                zs: DepthStencilState::OFF,
+                colour_mask: d.mask,
+                front_cw: false,
+                cull: Cull::None,
+                vs: &vs,
+                fs: &fs,
+                primitive: Topology::Triangles,
+                first_vertex: 0,
+                vertex_count: 6,
+                instance_count: 1,
+                indices: None,
+                attributes: &attributes,
+                viewport: Viewport { x: 0, y: 0, width: w as i32, height: h as i32, near: 0.0, far: 1.0 },
+                scissor: d.scissor,
+                line_width: 1.0,
+                flip_y: false,
+                blend_color: [0.0; 4],
+                blend: d.blend,
+                polygon_offset: None,
+                sample_mask: 0xf,
+                vs_uniforms: &[],
+                fs_uniforms: &[],
+                textures: &[],
+                vs_texture: None,
+                occlusion_query: None,
+                alpha_to_coverage: false,
+                blend_shader: None,
+            };
+            add_draw(&mut open, &mut desc, &mut cs, &ctx, &t, false, &draw)?;
+        }
+        frame = end_frame(&open, &mut desc, &mut cs, &ctx, &t, clear, None)?;
+        n = cs.words().len();
+    }
+    let mut regs = Vec::new();
+    let mut r = BTreeMap::new();
+    for &w in &words[..n] {
+        match Instr::decode(w) {
+            Ok(Instr::Move32(m)) => {
+                r.insert(m.destination, m.immediate);
+            }
+            Ok(Instr::Move48(m)) => {
+                r.insert(m.destination, m.immediate as u32);
+                r.insert(m.destination + 1, (m.immediate >> 32) as u32);
+            }
+            Ok(Instr::RunIdvs(_)) => regs.push(r.clone()),
+            _ => {}
+        }
+    }
+    Ok(Built91 { desc: desc_m, regs, frame, code: code_m, fs_binary })
+}
+
+/// Case 91's left half (Quick 3D's premultiplied SourceOver) and right
+/// half (the plain over).
+fn premul() -> Blending {
+    mode("premul").0
+}
+
+fn over() -> Blending {
+    mode("over").0
+}
+
+/// `MALI_BLEND_RGBA16F` (pan_format.c:37): the conversion of a float target.
+const RGBA16F_BLEND: u32 = Format::RGBA16F.0 << 12 | RgbComponentOrder::RGBA.0;
+/// The hdrcolor draw as Mesa drew it, into RGBA8: its blend descriptor is
+/// Mesa's `Blend RT 0` byte for byte (load destination, enable, no
+/// constant, `A Src, B Dest, C Src Alpha inverted` on both groups, mask 15,
+/// fixed function, 4 components, RT 0, `RGBA8 TB RGBA`, not raw) and DCD0
+/// and DCD1 Mesa's (r57 0x21AA: forward pixel kill off for a draw reading
+/// the destination; r58 0x1FFFF). The fragment program the frame runs is
+/// Mesa's words, which read the descriptor (`BLEND ... blend_descriptor_0.w0`,
+/// `BRANCHZI ... blend_descriptor_0.w1`).
+#[test]
+fn case_91_s_left_equation_is_mesa_s_into_rgba8() {
+    let draw = Draw91 { blend: Some(premul()), mask: 0xf, scissor: None };
+    let b = build_91(TargetFormat::Rgba8888, 64, 64, [0.0, 0.0, 1.0, 1.0], &[draw]).expect("hdrcolor's frame builds");
+    assert_eq!(b.blend(0), hdrcolor_blend().pack().unwrap(), "Mesa's blend descriptor");
+    assert_eq!(b.regs[0][&57], cs_word32(HDRCOLOR, "MOVE32 r57,"), "DCD0");
+    assert_eq!(b.regs[0][&57], 0x21aa);
+    assert_eq!(b.regs[0][&58], cs_word32(HDRCOLOR, "MOVE32 r58,"), "DCD1");
+    let fs_words = region_words(HDRCOLOR_EXPECT, "fs.fragment");
+    let fs = le_bytes(&fs_words);
+    let o = (b.fs_binary - CODE) as usize;
+    assert_eq!(b.code[o..o + fs.len()], fs[..], "Mesa's fragment program");
+    /* the program that reads the descriptor: BLEND.slot0.v4.f16.end */
+    assert_eq!(fs_words[4], 0x787f_4004_333c_00f0);
+}
+
+/// The same draw into RGBA16F: Mesa 26.2.1's descriptor for a float
+/// target is the RGBA8 one but for the conversion (`fixed_function_float`
+/// holds for ONE, ONE_MINUS_SRC_ALPHA; the equation word is the same,
+/// `to_mali_function` not reading `is_float`; `pan_dithered_format_from_pipe_format`
+/// of R16G16B16A16_FLOAT is MALI_BLEND_RGBA16F): the differing bytes are 13
+/// and 14 only, the memory format 0xED000 (RGBA8 TB) become 0xDF000
+/// (RGBA16F) in word 3, the top word the program's BRANCHZI reads.
+#[test]
+fn case_91_s_left_equation_into_rgba16f_differs_from_mesa_s_rgba8_in_the_conversion() {
+    let draw = Draw91 { blend: Some(premul()), mask: 0xf, scissor: None };
+    let b = build_91(TargetFormat::Rgba16f, 64, 64, [0.0, 0.0, 1.0, 1.0], &[draw]).expect("the RGBA16F frame builds");
+    let mut want = hdrcolor_blend();
+    want.internal.fixed_function.conversion.memory_format = RGBA16F_BLEND;
+    assert_eq!(b.blend(0), want.pack().unwrap());
+    let mesa = hdrcolor_blend().pack().unwrap();
+    let differ: Vec<usize> = (0..Blend::LENGTH).filter(|&i| b.blend(0)[i] != mesa[i]).collect();
+    assert_eq!(differ, [13, 14], "the conversion's format only");
+    assert_eq!((mesa[13], mesa[14]), (0xd0, 0x0e));
+    assert_eq!((b.blend(0)[13], b.blend(0)[14]), (0xf0, 0x0d));
+    assert_eq!(b.regs[0][&57], cs_word32(HDRCOLOR, "MOVE32 r57,"), "DCD0: Mesa's");
+    assert_eq!(b.regs[0][&58], cs_word32(HDRCOLOR, "MOVE32 r58,"), "DCD1: Mesa's");
+}
+
+/// Case 91's frame (gl_test.c `case_hdrblend`): an 8x8 RGBA16F target
+/// cleared to (2.0, 0.5, 0.25, 1.0), the left half drawn with ONE,
+/// ONE_MINUS_SRC_ALPHA and the right with SRC_ALPHA, ONE_MINUS_SRC_ALPHA,
+/// each scissored. It builds; each descriptor is Mesa's fixed-function
+/// one with the RGBA16F conversion (the left the drm-shim's hdrcolor
+/// words, the right the board's `over` of blend-2026-10-19, Mesa 25.0.7
+/// into RGBA8, whose equation word 26.2.1 packs alike); the render target
+/// is Mesa 26.2.1's for R16G16B16A16_FLOAT (`Internal Format` RGBA16F
+/// 0x12, the float writeback 0x13), the clear raw halves, 8 bytes a sample.
+#[test]
+fn case_91_s_frame_builds_with_mesa_s_float_blend_words() {
+    let left = Draw91 { blend: Some(premul()), mask: 0xf, scissor: Some([0, 0, 4, 8]) };
+    let right = Draw91 { blend: Some(over()), mask: 0xf, scissor: Some([4, 0, 4, 8]) };
+    let b = build_91(TargetFormat::Rgba16f, 8, 8, [2.0, 0.5, 0.25, 1.0], &[left, right]).expect("case 91 builds");
+    assert_eq!(b.regs.len(), 2, "two draws");
+
+    let mut want = hdrcolor_blend();
+    want.internal.fixed_function.conversion.memory_format = RGBA16F_BLEND;
+    let want = want.pack().unwrap();
+    assert_eq!(b.blend(0), want, "the left half");
+    /* the board's `over`, its conversion RGBA16F's */
+    let (theirs, _) = regs_at_idvs(&trace::cs_words(BLEND, "mesa-over").iter().map(|w| w.word).collect::<Vec<_>>());
+    let board = trace::bytes(&trace::memory_of(BLEND, "mesa-over"), d50(&theirs), Blend::LENGTH);
+    assert_eq!((board[13], board[14]), (0xd0, 0x0e), "the board's RGBA8 TB");
+    let mut right_want = board.clone();
+    right_want[12..16].copy_from_slice(&want[12..16]);
+    assert_eq!(b.blend(1), &right_want[..], "the right half");
+    for r in &b.regs {
+        assert_eq!(r[&57], 0x21aa, "DCD0: the destination read");
+    }
+
+    /* the render target against hdrcolor's RGBA8 one, field by field;
+     * what differs is named */
+    let mut f = fields(HDRCOLOR, "AFBC RGB Color Render Target 0:");
+    assert_eq!(take(&mut f, "Writeback Mode"), "Compat");
+    assert_eq!(take(&mut f, "Internal Buffer Offset"), "0");
+    /* the named difference: the tile buffer's format, R8G8B8A8 (1) there,
+     * RGBA16F (0x12, `BFMT_FLOAT`) here */
+    assert_eq!(take(&mut f, "Internal Format"), "R8G8B8A8");
+    /* the writeback: 0x13 in the five bits both names share, R8G8B8A8 as a
+     * Color Format and RGBA16F as a Float Color Format; Mesa's RGBA16F
+     * target (`MALI_FLOAT_COLOR_FORMAT_RGBA16F`) writes the same bits */
+    assert_eq!(take(&mut f, "Writeback Format"), "R8G8B8A8");
+    assert_eq!(take(&mut f, "Writeback Float Format"), "RGBA16F");
+    assert_eq!(ColorFormat::R8G8B8A8.0, FloatColorFormat::RGBA16F.0);
+    assert_eq!(take(&mut f, "Writeback MSAA"), "Single");
+    assert_eq!(take(&mut f, "Swizzle"), "1672 (RGBA)");
+    let want_rt = RgbRenderTarget {
+        writeback_mode: WritebackMode::COMPAT,
+        internal_buffer_offset: 0,
+        yuv_enable: flag(&mut f, "YUV Enable"),
+        dithered_clear: flag(&mut f, "Dithered Clear"),
+        internal_format: ColorBufferInternalFormat::RGBA16F,
+        write_enable: flag(&mut f, "Write Enable"),
+        writeback_float_format: FloatColorFormat::RGBA16F,
+        writeback_msaa: Msaa::SINGLE,
+        srgb: flag(&mut f, "sRGB"),
+        dithering_enable: flag(&mut f, "Dithering Enable"),
+        swizzle: 1672,
+        clean_tile_write_enable: flag(&mut f, "Clean Tile Write Enable"),
+        /* the named difference: raw halves (`pan_pack_raw`), R lowest:
+         * 2.0 0x4000, 0.5 0x3800, 0.25 0x3400, 1.0 0x3C00, twice */
+        clear: RtClear { color_0: 0x3800_4000, color_1: 0x3c00_3400, color_2: 0x3800_4000, color_3: 0x3c00_3400 },
+        /* the named difference: linear, the target's memory, where Mesa's
+         * is AFBC */
+        writeback_block_format: BlockFormat::LINEAR,
+        writeback_buffer: RtBuffer { base: 0x7fff_ffe0_0000, row_stride: 64, surface_stride: 0 },
+        ..Default::default()
+    };
+    assert_eq!(b.rt(), want_rt.pack().unwrap(), "the render target");
+    for c in 0..4 {
+        take(&mut f, &format!("Clear/Color {c}"));
+    }
+    assert_eq!(take(&mut f, "Writeback Block Format"), "AFBC");
+    for k in [
+        "YUV Transform",
+        "Split block",
+        "Wide block",
+        "Reverse issue order",
+        "Front buffer",
+        "Alpha hint",
+        "Compression mode",
+        "Header",
+        "Row stride",
+        "Body offset",
+    ] {
+        take(&mut f, k);
+    }
+    assert!(f.is_empty(), "render target fields not read: {f:?}");
+    /* 8 bytes a sample (`pan_format_tib_size` of a float format, RAW64's
+     * too): a 1024-pixel tile, 8 KiB of colour buffer */
+    let p = b.params();
+    assert_eq!((p.effective_tile_size, p.color_buffer_allocation), (1024, 8192));
+}
+
+/// A frame whose RGBA16F draws all write every channel opaquely keeps the
+/// board's Mesa 25.0.7 RAW64 words (case 54's, frame_formats_tests.rs);
+/// one blended or colour-masked draw makes the frame's tile buffer
+/// RGBA16F, whichever draw it is.
+#[test]
+fn only_a_frame_that_reads_its_rgba16f_target_keeps_it_as_rgba16f() {
+    /* `Internal Format`: bits 26..31 of word 0 */
+    let internal = |b: &Built91| ColorBufferInternalFormat(u32::from_le_bytes(b.rt()[0..4].try_into().unwrap()) >> 26);
+    let opaque = Draw91 { blend: None, mask: 0xf, scissor: None };
+    let replace = Draw91 { blend: Some(mode("replace").0), ..opaque };
+    let blended = Draw91 { blend: Some(over()), ..opaque };
+    let masked = Draw91 { mask: 0x7, ..opaque };
+    let clear = [0.0, 0.0, 1.0, 1.0];
+    for (draws, want) in [
+        (&[opaque][..], ColorBufferInternalFormat::RAW64),
+        (&[opaque, replace][..], ColorBufferInternalFormat::RAW64),
+        (&[opaque, blended][..], ColorBufferInternalFormat::RGBA16F),
+        (&[blended, opaque][..], ColorBufferInternalFormat::RGBA16F),
+        (&[masked][..], ColorBufferInternalFormat::RGBA16F),
+    ] {
+        let b = build_91(TargetFormat::Rgba16f, 8, 8, clear, draws).expect("builds");
+        assert_eq!(internal(&b), want, "{} draws", draws.len());
+    }
+    /* an RGBA8 target is R8G8B8A8 whatever the draws */
+    let b = build_91(TargetFormat::Rgba8888, 8, 8, clear, &[blended]).unwrap();
+    assert_eq!(internal(&b), ColorBufferInternalFormat::R8G8B8A8);
+}
+
+/// A colour-masked draw into RGBA16F (blending off, mask R, G, B): fixed
+/// function (`pan_blend_can_fixed_function` holds with blending off), the
+/// destination loaded, `replace` under the mask, the RGBA16F conversion.
+#[test]
+fn a_colour_masked_draw_into_rgba16f_runs_in_the_blend_unit() {
+    let masked = Draw91 { blend: None, mask: 0x7, scissor: None };
+    let b = build_91(TargetFormat::Rgba16f, 8, 8, [0.0; 4], &[masked]).expect("the masked draw builds");
+    let replace =
+        BlendFunction { a: BlendOperandA::SRC, b: BlendOperandB::SRC, c: BlendOperandC::ZERO, ..Default::default() };
+    let want = Blend {
+        load_destination: true,
+        enable: true,
+        equation: BlendEquation { rgb: replace, alpha: replace, color_mask: 0x7 },
+        internal: InternalBlend {
+            mode: BlendMode::FIXED_FUNCTION,
+            fixed_function: BlendFixedFunction {
+                num_comps: 4,
+                rt: 0,
+                conversion: InternalConversion { memory_format: RGBA16F_BLEND, raw: false },
+            },
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    assert_eq!(b.blend(0), want.pack().unwrap());
+    assert_eq!(b.regs[0][&57], 0x21aa, "DCD0: the destination read");
+}
+
+/// The equations the blend unit does not run on floats are refused by
+/// name before any word, whatever the mask: a destination-colour factor,
+/// the 2src form, a constant, min; with no channel written there is
+/// nothing to blend. blend.c's other modes into RGBA16F build.
+#[test]
+fn an_rgba16f_blend_that_needs_a_blend_shader_is_refused_by_name() {
+    let min = Blending {
+        rgb: Channel { func: Func::Min, src: Factor::ONE, dst: Factor::ONE },
+        alpha: Channel { func: Func::Add, src: Factor::ONE, dst: Factor::ZERO },
+    };
+    let refused = Some(FrameError::NotBuilt(NOT_BUILT_FLOAT_BLEND));
+    for b in [mode("mul").0, mode("twosd").0, mode("const").0, min] {
+        for mask in [0xf, 0x7] {
+            let d = [Draw91 { blend: Some(b), mask, scissor: None }];
+            assert_eq!(build_91(TargetFormat::Rgba16f, 8, 8, [0.0; 4], &d).err(), refused, "{b:?} mask {mask:#x}");
+        }
+        let off = [Draw91 { blend: Some(b), mask: 0, scissor: None }];
+        assert!(build_91(TargetFormat::Rgba16f, 8, 8, [0.0; 4], &off).is_ok(), "{b:?}: no channel written");
+    }
+    for name in ["over", "add", "premul", "replace", "sub", "revsub", "sep"] {
+        let d = [Draw91 { blend: Some(mode(name).0), mask: 0xf, scissor: None }];
+        assert!(build_91(TargetFormat::Rgba16f, 8, 8, [0.0; 4], &d).is_ok(), "{name}");
+    }
 }

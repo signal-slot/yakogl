@@ -334,3 +334,56 @@ reference for 190 on the board is the `mesarefs4` item.
 - No constant is inlined in 26.2.1; the board's 25.0.7 inlines them and, at 4x,
   ends in `ST_TILE` instead of `BLEND`: to be settled by the board run
   (section 4).
+
+## 8. RGBA16F targets: fixed function, no blend shader (case 91 hdrblend)
+
+Mesa 26.2.1 makes `R16G16B16A16_FLOAT` blendable on v9+ (`BFMT_FLOAT`,
+`pan_format.c:66-76, 117-121`), so `panfrost_get_blend`
+(`G/pan_context.c:170-200`) reads `fixed_function_float`, the equation with
+`is_float` (`G/pan_cmdstream.c:4381-4407`): add, subtract or reverse subtract
+with the factors ZERO, ONE, SRC_ALPHA and ONE_MINUS_SRC_ALPHA only, or ZERO
+with ONE_MINUS_SRC_COLOR or DST_ALPHA on the destination of an add
+(`can_fixed_function_equation`, `pan_blend.c:36-47, 77-86`). Case 91's two
+equations (ONE, ONE_MINUS_SRC_ALPHA and SRC_ALPHA, ONE_MINUS_SRC_ALPHA) and
+every colour mask (blending off is fixed function) are in that set; no blend
+shader is needed. `to_mali_function` does not read `is_float`, so the
+equation word is the UNORM one.
+
+What `src/mali` builds (`blend::can_fixed_function_float`; `frame.rs`
+`check_draw`, `OpenFrame::float_blend`, `end_frame`), pinned by
+`src/mali/frame_blend_tests.rs` (`case_91_*` and the three RGBA16F tests
+after them) against `tools/mali/testdata/fsout_91_hdrcolor.trace`, the
+drm-shim's hdrcolor draw into **RGBA8** (`gl_ref.py` has no float target),
+with the fragment program of `fsout_91_hdrcolor.expect.json` uploaded:
+
+| Word | Mesa's (hdrcolor, RGBA8) | Ours, RGBA16F | Differs |
+|---|---|---|---|
+| Blend w0 | load destination, enable, constant 0, round false | the same | no |
+| Blend w1 (equation) | `A Src, B Dest, C Src Alpha inverted` x2, mask 15 | the same | no |
+| Blend w2-w3 | Fixed-Function, 4 comps, RT 0, `RGBA8 TB RGBA` (0xED000), raw false | `RGBA16F RGBA` (0xDF000, `MALI_BLEND_RGBA16F`) | bytes 13, 14 only: `d0 0e` -> `f0 0d` |
+| DCD0 / DCD1 (r57 / r58) | 0x21AA / 0x1FFFF | the same | no |
+| RT `Internal Format` | R8G8B8A8 (1) | RGBA16F (0x12) | yes, the format |
+| RT writeback (bits 35..39) | 0x13 (`R8G8B8A8` / `RGBA16F` float) | 0x13 (`Writeback Float Format` RGBA16F) | no |
+| RT clear | 8-bit pattern | raw halves (`pan_pack_raw`) | yes, the format |
+| RT block format | AFBC, CRC | linear | yes, as every frame (`frame_mrt_tests.rs`) |
+| Tile, allocation | 4 bytes a sample | 8 bytes a sample: 1024 px, 8192 | the format |
+
+The right half's descriptor is the board's `over` (Mesa 25.0.7, RGBA8,
+`tools/mali/board-dump/blend-2026-10-19.txt`) with the same conversion bytes
+replaced. A frame whose RGBA16F draws are all opaque writes of every channel
+keeps the board's 25.0.7 words (`Internal Format` RAW64, `Writeback Format`
+RAW64: case 54, `frame_formats_tests.rs`); one blended or colour-masked draw
+makes the frame's tile buffer RGBA16F (Mesa 26.2.1's words for any RGBA16F
+frame). The memory the writeback produces is the same halves either way.
+
+Still refused, `NOT_BUILT_FLOAT_BLEND`: an equation outside the float set
+into an RGBA16F target (a colour or destination-colour factor, the 2src
+form, a constant, min, max), which Mesa runs in a blend shader;
+`shader_equation` builds RGBA8888 keys only.
+
+Open, for the board: no dump shows `Internal Format` RGBA16F on the T6 (the
+board's Mesa 25.0.7 has no `BFMT_FLOAT` and keeps RAW64 with a blend shader
+for a blended draw). A Mesa 26.2.1 board reference of case 91, or the case
+itself passing x2, confirms that the hardware blends in an RGBA16F tile
+buffer with these words; until then the RT words are 26.2.1's source and the
+drm-shim's RGBA8 frame with the format named.
