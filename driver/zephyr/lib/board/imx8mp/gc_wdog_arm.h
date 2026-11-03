@@ -21,4 +21,8 @@ void gc_wdog_arm_proof_hold(void);
  * which never feeds). The kind STAGE breadcrumb's w3 (gc_result.h). */
 uint32_t gc_wdog_arm_feeds(void);
 
+/* Route 3 A53 restart: WDOG1's timeout to 128 s and one service, just before
+ * the A53 side takes itself down (gc_wdog_arm.c). */
+void gc_wdog_arm_stretch_max(void);
+
 #endif /* GC_WDOG_ARM_H */
