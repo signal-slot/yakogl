@@ -1009,7 +1009,11 @@ int gc_render_wait(uint32_t fence, uint32_t timeout_ms)
 			}
 		}
 		g->perf_wait_sleeps++;
-		k_sleep(K_MSEC(1));
+		/* 100 us, not 1 ms: the route-3 cluster waits for its frame
+		 * here on the way to the M7's vblank, and a 1 ms step was up to
+		 * a millisecond of every frame (2026-11-04). A kernel ticking
+		 * slower than 10 kHz rounds it up to its tick, as before. */
+		k_sleep(K_USEC(100));
 	}
 	g->perf_wait_ns += gc_now_ns() - perf_t0;
 	if (fence_done(g, fence)) {
