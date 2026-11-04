@@ -1444,7 +1444,10 @@ fn emit_raster_state(c: &mut GcCmd, d: &GcDraw) {
 /// 0x01400..0x014bc.
 fn emit_pe_state(c: &mut GcCmd, d: &GcDraw, depth_stride: u32, depth_addr: u32) {
     let gl = d.gl;
-    let depth_test = if d.is_clear { true } else { gl.depth_test };
+    /* A clear of the colour alone leaves the depth unit off, so that the
+     * pixel engine has no reason to touch the depth/stencil surface: the
+     * route-3 cluster clears its window's colour every frame (2026-11-04). */
+    let depth_test = if d.is_clear { d.clear_depth || d.clear_stencil } else { gl.depth_test };
     /* GL 4.1.5: with the depth test off the buffer is not written, whatever
      * glDepthMask says. */
     let depth_write = if d.is_clear { d.clear_depth } else { gl.depth_test && gl.depth_write };

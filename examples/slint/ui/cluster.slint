@@ -75,6 +75,9 @@ export component MainWindow inherits Window {
     // gradient costs the same clear (docs/notes/imx8mp-direct-boot.md,
     // "Route 3").
     background: root.standalone ? @linear-gradient(180deg, Layout.bg-top 0%, Layout.bg-bottom 100%) : Layout.bg-bottom;
+    // what the route-3 sample clears the window to itself (rust/src/lib.rs,
+    // clear_window): the background above when it is flat
+    out property <color> flat-background: Layout.bg-bottom;
 
     // --- live values (the platform snapshot) ---
     in property <int> speed_x10: 0;        // km/h x 10

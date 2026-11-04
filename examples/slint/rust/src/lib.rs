@@ -460,18 +460,118 @@ fn ensure_ui(get_proc: GetProc, width: u32, height: u32) -> i32 {
     0
 }
 
+/// Where a frame's CPU time goes on this side, in counter ticks summed since
+/// the last [`slint_sample_phase_ticks`]: the vehicle properties, Slint's
+/// timers and animations, and the renderer's render() (the item tree walk,
+/// FemtoVG's paths and its flush into GL).
+static PHASE_TICKS: [core::sync::atomic::AtomicU64; 3] = [const { core::sync::atomic::AtomicU64::new(0) }; 3];
+
+fn ticks() -> u64 {
+    #[cfg(target_arch = "aarch64")]
+    {
+        let t: u64;
+        // SAFETY: a read of the virtual counter.
+        unsafe { core::arch::asm!("mrs {}, cntvct_el0", out(reg) t, options(nomem, nostack)) };
+        t
+    }
+    #[cfg(not(target_arch = "aarch64"))]
+    {
+        0
+    }
+}
+
+fn phase_add(i: usize, t0: u64) -> u64 {
+    let t = ticks();
+    PHASE_TICKS[i].fetch_add(t.wrapping_sub(t0), core::sync::atomic::Ordering::Relaxed);
+    t
+}
+
+/// The three sums of [`PHASE_TICKS`] into `out`, cleared: set_vehicle,
+/// update_timers_and_animations, render().
+///
+/// # Safety
+/// `out` points at three u64s.
+#[no_mangle]
+pub unsafe extern "C" fn slint_sample_phase_ticks(out: *mut u64) {
+    for (i, p) in PHASE_TICKS.iter().enumerate() {
+        // SAFETY: the caller's contract.
+        unsafe { *out.add(i) = p.swap(0, core::sync::atomic::Ordering::Relaxed) };
+    }
+}
+
+/// Route 3: the window's clear, colour only, done here instead of by the
+/// renderer (`set_skip_window_clear`). FemtoVG's clear_rect clears colour
+/// AND stencil every frame -- with YakoGL's clear quad on the GC7000 a read
+/// and a write of the 4 MiB D24S8 surface besides the colour -- and the GPU
+/// is fill-bound (2026-11-04: 11 MB written per frame, 2.7 screens). FemtoVG
+/// leaves the stencil zero after every fill and stroke (opengl.rs: the
+/// concave cover's ZERO, the stroke's third pass), so it is cleared once,
+/// on the first frame, when its contents are unknown.
+fn clear_window(get_proc: GetProc, first: bool) {
+    type ClearColor = extern "C" fn(f32, f32, f32, f32);
+    type Clear = extern "C" fn(u32);
+    type Disable = extern "C" fn(u32);
+    type StencilMask = extern "C" fn(u32);
+    type ColorMask = extern "C" fn(u8, u8, u8, u8);
+    const GL_COLOR_BUFFER_BIT: u32 = 0x4000;
+    const GL_STENCIL_BUFFER_BIT: u32 = 0x0400;
+    const GL_SCISSOR_TEST: u32 = 0x0C11;
+    let Some(ui) = state().ui.as_ref() else {
+        return;
+    };
+    let c = ui.get_flat_background();
+    let f = |name: &CStr| get_proc(name.as_ptr());
+    let (cc, cl, dis, sm, cm) =
+        (f(c"glClearColor"), f(c"glClear"), f(c"glDisable"), f(c"glStencilMask"), f(c"glColorMask"));
+    if cc.is_null() || cl.is_null() || dis.is_null() || sm.is_null() || cm.is_null() {
+        return;
+    }
+    // SAFETY: the GL entry points of the current context, by their ES 2.0
+    // signatures.
+    unsafe {
+        let (cc, cl, dis, sm, cm): (ClearColor, Clear, Disable, StencilMask, ColorMask) = (
+            core::mem::transmute(cc),
+            core::mem::transmute(cl),
+            core::mem::transmute(dis),
+            core::mem::transmute(sm),
+            core::mem::transmute(cm),
+        );
+        dis(GL_SCISSOR_TEST);
+        cm(1, 1, 1, 1);
+        cc(c.red() as f32 / 255.0, c.green() as f32 / 255.0, c.blue() as f32 / 255.0, c.alpha() as f32 / 255.0);
+        if first {
+            sm(0xff);
+            cl(GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+        } else {
+            cl(GL_COLOR_BUFFER_BIT);
+        }
+    }
+}
+
 fn draw(get_proc: GetProc, width: u32, height: u32) -> i32 {
     let rc = ensure_ui(get_proc, width, height);
     if rc != 0 {
         return rc;
     }
+    if state().route3 {
+        static CLEARED: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+        if let Some(adapter) = state().adapter.as_ref() {
+            adapter.renderer.set_skip_window_clear(true);
+        }
+        // every window's stencil once: each of the windows is new to it
+        let n = CLEARED.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+        clear_window(get_proc, n < 4);
+    }
+    let t0 = ticks();
     slint::platform::update_timers_and_animations();
+    let t1 = phase_add(1, t0);
     let Some(adapter) = state().adapter.as_ref() else {
         return 4;
     };
     if adapter.renderer.render().is_err() {
         return 5;
     }
+    phase_add(2, t1);
     0
 }
 
@@ -611,7 +711,9 @@ pub unsafe extern "C" fn slint_sample_animate_frame_m7(
         Some(v) => m7_vehicle(v, frame),
         None => demo_vehicle(t_ms as i64, frame),
     };
+    let t0 = ticks();
     set_vehicle(ui, &vehicle);
+    phase_add(0, t0);
     state().clock_ms = FRAME2_CLOCK_MS + t_ms as u64;
     let rc = draw(get_proc, width, height);
     if rc != 0 {

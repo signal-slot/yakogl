@@ -457,6 +457,58 @@ struct gc_render_perf {
 	uint32_t mc_ra;
 };
 void gc_render_perf(struct gc_render_perf *out);
+int yakogl_gl_timing_row(int i, const char **name, uint32_t *calls, uint64_t *us);
+void slint_sample_phase_ticks(uint64_t *out);
+#define GLT_ROWS 128
+static uint32_t glt_calls_prev[GLT_ROWS];
+static uint64_t glt_us_prev[GLT_ROWS];
+static uint64_t glt_total_prev;
+
+/* A third line: every GL entry point's CPU time (gl/timing.rs), the total
+ * and the five largest, us and calls per frame; and the Rust side's phases. */
+static int glcalls_line(uint32_t frames, char *b, size_t bsz)
+{
+	static uint64_t us[GLT_ROWS];
+	static uint32_t calls[GLT_ROWS];
+	static const char *name[GLT_ROWS];
+	uint64_t tot = 0, ph[3] = {0};
+	int n;
+
+	memset(name, 0, sizeof(name));
+
+	for (int i = 0; i < GLT_ROWS; i++) {
+		uint32_t c = 0;
+		uint64_t u = 0;
+
+		if (yakogl_gl_timing_row(i, &name[i], &c, &u) != 0)
+			break;
+		calls[i] = c - glt_calls_prev[i];
+		us[i] = u - glt_us_prev[i];
+		glt_calls_prev[i] = c;
+		glt_us_prev[i] = u;
+	}
+	(void)yakogl_gl_timing_row(-1, NULL, NULL, &tot);
+	slint_sample_phase_ticks(ph);
+	n = snprintk(b, bsz, "A53G gl_us %llu | rust set %llu timers %llu render %llu |",
+		     (tot - glt_total_prev) / frames, ph[0] / 8u / frames, ph[1] / 8u / frames,
+		     ph[2] / 8u / frames);
+	glt_total_prev = tot;
+	for (int k = 0; k < 6; k++) {
+		int best = -1;
+
+		for (int i = 0; i < GLT_ROWS; i++) {
+			if (name[i] != NULL && (best < 0 || us[i] > us[best]))
+				best = i;
+		}
+		if (best < 0 || us[best] == 0)
+			break;
+		n += snprintk(b + n, bsz - n, " %s %llu/%u", name[best], us[best] / frames,
+			      calls[best] / frames);
+		us[best] = 0;
+	}
+	n += snprintk(b + n, bsz - n, "\n");
+	return n;
+}
 static const char *const step_names[OSAL_DRAW_STEPS] = {
 	"prog", "unif", "attr", "tex", "state", "gcrest", "gcds", "gctile", "gcframe",
 	"gcunif", "gcvtx", "gcemit"};
@@ -529,7 +581,7 @@ static void phase_add(struct phase *p, uint32_t c0, uint32_t c1)
 
 static void phase_line(uint32_t frames, int64_t ms)
 {
-	char b[380];
+	char b[600];
 	int n;
 
 	if (!frames)
@@ -538,6 +590,7 @@ static void phase_line(uint32_t frames, int64_t ms)
 		 "A53F frames %u ms %lld draw %llu/%u gpu %llu/%u show %llu/%u swap %llu/%u\n",
 		 frames, (long long)ms, ph_draw.sum / frames, ph_draw.max, ph_gpu.sum / frames,
 		 ph_gpu.max, ph_show.sum / frames, ph_show.max, ph_swap.sum / frames, ph_swap.max);
+	n += glcalls_line(frames, b + n, sizeof(b) - n);
 	yakogl_line(frames, b + n, sizeof(b) - n);
 	board_route3_report_line(b);
 	ph_draw = (struct phase){0};
