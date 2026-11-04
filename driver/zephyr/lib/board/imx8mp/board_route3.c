@@ -508,6 +508,35 @@ static void tl_uart_str(const char *s)
 }
 #endif
 
+/*
+ * A line of the application's onto the timeline UART, off its thread: the
+ * polled UART takes about 10 ms a line, so it is written from the system work
+ * queue. A line that comes while the last is still going out is dropped.
+ */
+#if CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_TIMELINE_REPORT_MS > 0 || \
+	defined(CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_A53_RESTART)
+static char app_line[160];
+static atomic_t app_line_busy;
+
+static void app_line_work_fn(struct k_work *work)
+{
+	ARG_UNUSED(work);
+	tl_uart_str(app_line);
+	atomic_set(&app_line_busy, 0);
+}
+static K_WORK_DEFINE(app_line_work, app_line_work_fn);
+
+void board_route3_report_line(const char *line)
+{
+	if (atomic_set(&app_line_busy, 1) != 0) {
+		return;
+	}
+	strncpy(app_line, line, sizeof(app_line) - 1u);
+	app_line[sizeof(app_line) - 1u] = '\0';
+	k_work_submit(&app_line_work);
+}
+#endif
+
 #if CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_TIMELINE_REPORT_MS > 0
 static void tl_uart_line(const char *who, const char *what, uint64_t t)
 {
