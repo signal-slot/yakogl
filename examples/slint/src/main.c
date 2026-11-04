@@ -38,6 +38,25 @@
 
 #include <EGL/egl.h>
 #include <GLES2/gl2.h>
+#if defined(CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3) && CONFIG_SLINT_WINDOW_BUFFERS == 2
+#include <GLES3/gl3.h> /* glFenceSync, glClientWaitSync */
+/*
+ * Route 3 with two windows overlaps the CPU and the GPU: frame N + 1 is
+ * recorded while the GPU draws N. The order, per frame k (animate()):
+ *   record k into its window (CPU only: the GPU writes a window only when
+ *     the swap submits it; YakoGL's GC backend submits a frame early only
+ *     on a new render target, a full stream or arena);
+ *   wait for k - 1's fence (glClientWaitSync, which submits nothing,
+ *     gc_wait_kick); publish k - 1; wait until the M7 has it on the panel,
+ *     so k's window, which held k - 2, is free (board_route3_wait_shown);
+ *   swap k (GLES_NATIVE_WINDOW_PIPELINED: submits, waits only for k - 1).
+ * Before: record, swap waiting for the GPU, publish, wait for the panel, in
+ * series -- 35 ms a frame on 2026-11-04 (draw 8.5, GPU 11, panel 14).
+ */
+#define R3_PIPELINE 1
+#else
+#define R3_PIPELINE 0
+#endif
 
 #include <yakogl_board.h>
 #include <yakogl_record.h>
@@ -204,6 +223,9 @@ static int egl_up(void)
 			.phys = s_wins[i].phys, .width = s_wins[i].w, .height = s_wins[i].h,
 			.stride_bytes = s_wins[i].stride, .format = s_wins[i].format,
 		};
+#if R3_PIPELINE
+		nw[i].format |= GLES_NATIVE_WINDOW_PIPELINED;
+#endif
 	}
 	/* every board: the Pi 4 board layer gives the V3D OSAL its clock
 	 * switch through the OSAL's default-platform hook (db659a88) */
@@ -361,6 +383,9 @@ static int first_frame_and_check(void)
 	ret = swap();
 	if (ret)
 		return ret;
+#if R3_PIPELINE
+	glFinish(); /* a pipelined swap returns with the frame still drawing */
+#endif
 	board_progress(YK_RECORD_WHERE_STAGE | STAGE_SWAPPED);
 	show();
 	/* The check's reference points (check/src/lib.rs REFERENCE) are pixel
@@ -416,7 +441,7 @@ struct phase {
 	uint64_t sum;
 	uint32_t max;
 };
-static struct phase ph_draw, ph_swap, ph_show;
+static struct phase ph_draw, ph_swap, ph_show, ph_gpu;
 
 static void phase_add(struct phase *p, uint32_t c0, uint32_t c1)
 {
@@ -433,13 +458,14 @@ static void phase_line(uint32_t frames, int64_t ms)
 	if (!frames)
 		return;
 	snprintk(b, sizeof(b),
-		 "A53F frames %u ms %lld draw %llu/%u swap %llu/%u show %llu/%u\n", frames,
-		 (long long)ms, ph_draw.sum / frames, ph_draw.max, ph_swap.sum / frames,
-		 ph_swap.max, ph_show.sum / frames, ph_show.max);
+		 "A53F frames %u ms %lld draw %llu/%u gpu %llu/%u show %llu/%u swap %llu/%u\n",
+		 frames, (long long)ms, ph_draw.sum / frames, ph_draw.max, ph_gpu.sum / frames,
+		 ph_gpu.max, ph_show.sum / frames, ph_show.max, ph_swap.sum / frames, ph_swap.max);
 	board_route3_report_line(b);
 	ph_draw = (struct phase){0};
 	ph_swap = (struct phase){0};
 	ph_show = (struct phase){0};
+	ph_gpu = (struct phase){0};
 }
 #else
 #define PHASE_REPORT 0
@@ -452,6 +478,13 @@ static int animate(void)
 	uint32_t frame = 1, win_frames = 0;
 	int64_t win_t0 = t0;
 	int ret = 0;
+#if R3_PIPELINE
+	GLsync prev_fence = NULL;
+	struct board_window prev_win;
+	bool have_prev = false;
+
+	board_route3_defer_wait(true);
+#endif
 
 	board_progress(YK_RECORD_WHERE_STAGE | STAGE_ANIMATING);
 	while ((now = k_uptime_get() - t0) < bound_ms || IS_ENABLED(CONFIG_SLINT_ANIMATE_FOREVER)) {
@@ -466,6 +499,41 @@ static int animate(void)
 			ret = slint_sample_animate_frame(get_proc, WIN_W, WIN_H, (uint32_t)now, frame);
 #endif
 		uint32_t c1 = k_cycle_get_32();
+#if R3_PIPELINE
+		/* the frame before: finished, published, on the panel */
+		uint32_t cg = c1, cs = c1;
+
+		if (ret == 0 && have_prev) {
+			if (glClientWaitSync(prev_fence, 0, GL_TIMEOUT_IGNORED) == GL_WAIT_FAILED) {
+				printk("slint: glClientWaitSync failed\n");
+			}
+			glDeleteSync(prev_fence);
+			have_prev = false;
+			cg = k_cycle_get_32();
+			ret = board_show(&prev_win);
+			if (ret == 0)
+				ret = board_route3_wait_shown();
+			if (ret) {
+				printk("slint: route 3 show = %d\n", ret);
+				ret = 0; /* as show() does: say it, go on */
+			}
+			cs = k_cycle_get_32();
+		}
+		if (ret == 0)
+			ret = swap();
+		uint32_t c3 = k_cycle_get_32();
+		if (ret)
+			break;
+		prev_fence = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+		prev_win = s_win;
+		have_prev = prev_fence != NULL;
+#if PHASE_REPORT
+		phase_add(&ph_draw, c0, c1);
+		phase_add(&ph_gpu, c1, cg);
+		phase_add(&ph_show, cg, cs);
+		phase_add(&ph_swap, cs, c3);
+#endif
+#else
 		if (ret == 0)
 			ret = swap();
 		uint32_t c2 = k_cycle_get_32();
@@ -473,15 +541,21 @@ static int animate(void)
 			break;
 		show();
 		uint32_t c3 = k_cycle_get_32();
-#if PHASE_REPORT
+#endif
+#if PHASE_REPORT && !R3_PIPELINE
 		phase_add(&ph_draw, c0, c1);
 		phase_add(&ph_swap, c1, c2);
 		phase_add(&ph_show, c2, c3);
-#else
+#elif !PHASE_REPORT
 		ARG_UNUSED(c0);
 		ARG_UNUSED(c1);
-		ARG_UNUSED(c2);
 		ARG_UNUSED(c3);
+#if R3_PIPELINE
+		ARG_UNUSED(cg);
+		ARG_UNUSED(cs);
+#else
+		ARG_UNUSED(c2);
+#endif
 #endif
 		board_watchdog_feed();
 		frame++;

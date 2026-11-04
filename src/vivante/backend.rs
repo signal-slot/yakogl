@@ -3259,6 +3259,36 @@ pub(super) fn kick_pending_retired(kick_id: u32) -> bool {
     kick_pending(kick_id)
 }
 
+/// Wait until kick `kick_id` has completed, submitting nothing recorded
+/// after it (`YakoglBackend::wait_kick`, for glClientWaitSync and
+/// eglClientWaitSync). Without it the sync waits finished, which submits the
+/// open frame too: a producer that records frame N + 1 into a window still on
+/// the panel and waits for frame N's fence then had the GPU writing the
+/// scanned window (the route-3 cluster, 2026-11-04). Three cases, as the V3D
+/// backend's:
+/// - a submitted kick still in `frames`: wait for its fence;
+/// - the open frame's (a fence is made after a flush, so a sync wait never
+///   names it): submit it and wait, as finish does;
+/// - an older kick, or one that does not exist: it has completed.
+pub extern "C" fn gc_wait_kick(kick_id: u32) -> i32 {
+    if kick_id == 0 {
+        return 0;
+    }
+    if kick_id == g().kick_id.wrapping_add(1) {
+        return if g().recording { gc_finish() } else { 0 };
+    }
+    let fence = g().frames.iter().find(|f| f.kick_id == kick_id && f.fence > 0).map_or(0, |f| f.fence);
+    let rc = if fence <= 0 || completed_fence() >= fence {
+        0
+    } else {
+        g().waits += 1;
+        wait_fence(fence)
+    };
+    /* what that kick rendered may be read now (gc_kick_pending's rule) */
+    retire_wide_targets();
+    rc
+}
+
 /// [`gc_kick_pending`] without writing anything back.
 fn kick_pending(kick_id: u32) -> bool {
     let g = g();
@@ -3376,8 +3406,7 @@ pub static yakogl_backend_vivante: YakoglBackend = YakoglBackend {
     /* divisor 1, as before the field (GcStream carries a divisor; whether
      * the FE takes more than 1 is unmeasured) */
     max_instance_divisor: 1,
-    /* the sync waits keep finish() until this backend waits for one kick */
-    wait_kick: None,
+    wait_kick: Some(gc_wait_kick),
     /* the texture unit reads the storage */
     samples_texel_copies: false,
     attachment_gone: Some(gc_attachment_gone),

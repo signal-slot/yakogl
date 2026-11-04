@@ -131,6 +131,8 @@ static struct {
 	int64_t released_ms;
 	int64_t first_shown_ms;
 	atomic_t m7_started; /* m7_start() ran (it runs once) */
+	bool defer_wait;       /* board_route3_defer_wait(): show returns after the publish */
+	uint32_t pending_seq;  /* published, its shown wait still owed */
 	bool panel_checked;  /* the first show made sure the panel runs */
 	struct k_timer beat;
 	volatile struct cluster_boot_timeline *tl; /* in the window, once mapped */
@@ -933,10 +935,11 @@ static uint32_t publish(const struct board_window *win)
 	return cluster_frame_ring_publish(R.ring, &f);
 }
 
+static int shown_wait(uint32_t seq);
+
 int board_route3_show(const struct board_window *win)
 {
 	uint32_t seq;
-	int64_t t0;
 	int rc;
 
 #ifdef CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_A53_RESTART
@@ -1029,6 +1032,28 @@ int board_route3_show(const struct board_window *win)
 						 1000)));
 	}
 #endif
+	if (R.defer_wait && R.state == BOARD_ROUTE3_UP) {
+		/* the caller waits later (board_route3_wait_shown) */
+		R.pending_seq = seq;
+		return 0;
+	}
+	return shown_wait(seq);
+}
+
+/*
+ * The second half of a show: wait until the M7 has frame `seq` on the
+ * panel, then what follows the first one (the backlight, the timeline, the
+ * restart arm).
+ */
+static int shown_wait(uint32_t seq)
+{
+	int64_t t0;
+
+#ifdef CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_A53_RESTART
+	if (R.going_down) {
+		return 0;
+	}
+#endif
 	t0 = k_uptime_get();
 	/* The previous window holds frame seq - 1: it is ours again once the
 	 * M7's `shown` has moved past it (frame_ring.h). Until the M7 is up,
@@ -1088,6 +1113,22 @@ int board_route3_show(const struct board_window *win)
 int board_route3_state(void)
 {
 	return R.state;
+}
+
+void board_route3_defer_wait(bool on)
+{
+	R.defer_wait = on;
+}
+
+int board_route3_wait_shown(void)
+{
+	const uint32_t seq = R.pending_seq;
+
+	if (seq == 0u) {
+		return 0;
+	}
+	R.pending_seq = 0u;
+	return shown_wait(seq);
 }
 
 bool board_route3_vehicle(struct cluster_vehicle_state *out)

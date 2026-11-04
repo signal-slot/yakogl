@@ -78,6 +78,16 @@ int board_route3_window(unsigned int n, uint32_t w, uint32_t h, struct board_win
  */
 int board_route3_show(const struct board_window *win);
 
+/*
+ * A producer that overlaps its CPU and GPU (the slint sample, route 3): with
+ * `on`, a show once the M7 is up returns right after the publish, and
+ * board_route3_wait_shown() later waits until that frame is on the panel
+ * (and does what a show did after that wait). The window that held the frame
+ * before it is free once it returns. 0, or what the show's wait returns.
+ */
+void board_route3_defer_wait(bool on);
+int board_route3_wait_shown(void);
+
 #ifdef CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_A53_RESTART
 /* ---- the A53 restart (board_route3_restart.c, <cluster/a53_power.h>) ------ */
 
