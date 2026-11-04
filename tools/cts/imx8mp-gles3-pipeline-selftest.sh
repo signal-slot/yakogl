@@ -8,17 +8,10 @@
 #   TMPDIR=<dir> tools/cts/imx8mp-gles3-pipeline-selftest.sh
 #
 # Host only; no board, no driver. Everything is written under $TMPDIR (never /tmp) and removed at the end.
-# Exit 0 when the chain agrees, or when the only disagreements are the documented mismatches below, which
+# Exit 0 when the chain agrees, or when the only disagreement is the documented mismatch below, which
 # are printed as `EXPECTED-MISMATCH` (nothing is changed to hide them). Exit 1 on any other failure.
 #
-# Documented mismatches (the files are not changed here; a fix item follows):
-#   M1  board.sh tally writes a row for EVERY entry of tree.txt, with `-` fields for the entries a
-#       TREE_ROWS slice did not run; merge.py counts such a row as an entry present, so two raw slices
-#       of one tree are rejected as `entry N is in both`. A slice has to be cut to its own rows first.
-#   M2  merge.py --check does not flag an entry that no input covers, and --notpass lists none for it
-#       unless a `-` row exists; only --totals' `no record:` line shows it.
-#   M3  results.tsv and merge.py carry no reset/watchdog verdict (that lives in the README / INDEX.txt
-#       verdict lines: done_with_resets, died_after=...), so --check cannot fail on a reset slice.
+# Documented mismatch (the files are not changed here; a fix item follows):
 #   M4  --notpass emits only Fail and NoResult; NotSupported/QualityWarning/Crash/Timeout cases are not
 #       named by results.tsv, only counted (`# e<i>: unresolved ...`), unlike pi4-gles3-fails.tsv.
 set -u
@@ -107,24 +100,24 @@ echo "== --check on the three slices (each holding only its own rows)"
 mp --check "${S[@]}" > "$work/c1.out" 2>&1; rc=$?
 expect "check exits 0 on the full 133-entry set, one commit" "$rc"
 grep -q 'with a record: ' "$work/c1.out" && grep -q '133 entries' "$work/c1.out"; expect "check reports 133 entries" $?
-mp --check "${S[0]}" "${S[1]}" > "$work/c1s.out" 2>&1; rc=$?
-expect "check exits 0 on the subset mode (two slices of three)" "$rc"
+mp --check --partial "${S[0]}" "${S[1]}" > "$work/c1s.out" 2>&1; rc=$?
+expect "check --partial exits 0 on two slices of three" "$rc"
 
 echo "== --check, the failing inputs"
 # mixed commit
 py "$work/gen.py" "$work" "$HERE" "$C2" mixed
 mapfile -t X < <(ls -d "$work"/mixed/*/)
-mp --check "${S[0]}" "${X[1]}" > "$work/c2.out" 2>&1; rc=$?
+mp --check --partial "${S[0]}" "${X[1]}" > "$work/c2.out" 2>&1; rc=$?
 { [ "$rc" = 1 ] && grep -q 'different commits' "$work/c2.out"; }; expect "check fails on a mixed commit" $?
 # short hash of the same commit is fine
 sed -i "s/$C1/${C1:0:8}/" "${S[1]}README.md"
 mp --check "${S[@]}" > /dev/null 2>&1; expect "check accepts an 8-hex form of the same commit" $?
 # duplicate entry
-mp --check "${S[0]}" "${S[0]}" > "$work/c3.out" 2>&1; rc=$?
+mp --check --partial "${S[0]}" "${S[0]}" > "$work/c3.out" 2>&1; rc=$?
 { [ "$rc" = 1 ] && grep -q 'is in both' "$work/c3.out"; }; expect "check fails on an entry in two inputs" $?
 # no commit named
 nc="$work/nocommit"; mkdir "$nc"; cp "${S[2]}results.tsv" "$nc/"
-mp --check "${S[0]}" "$nc" > "$work/c4.out" 2>&1; rc=$?
+mp --check --partial "${S[0]}" "$nc" > "$work/c4.out" 2>&1; rc=$?
 { [ "$rc" = 1 ] && grep -q 'names no commit' "$work/c4.out"; }; expect "check fails on a slice without a commit" $?
 # filter that is not the table's
 bf="$work/badfilter"; cp -r "${S[2]}" "$bf"
@@ -133,16 +126,10 @@ mp --check "${S[0]}" "${S[1]}" "$bf" > "$work/c5.out" 2>&1; rc=$?
 { [ "$rc" = 1 ] && grep -q 'filter differs' "$work/c5.out"; }; expect "check fails on a filter that is not the table's" $?
 
 echo "== missing entry (M2)"
-mp --check "${S[0]}" "${S[1]}" > /dev/null 2>&1; rc=$?
+mp --check "${S[0]}" "${S[1]}" > "$work/c7.out" 2>&1; rc=$?
+{ [ "$rc" = 1 ] && grep -q 'no record: 43 of 133 entries (90-132)' "$work/c7.out"; }; expect "check fails on missing entries 90-132, naming the range" $?
 mp --totals "${S[0]}" "${S[1]}" > "$work/t2.out" 2>&1
-if [ "$rc" = 0 ] && grep -q '^no record: 43 of 133 entries (90-132)' "$work/t2.out"; then
-	mismatch M2 "--check exits 0 with entries 90-132 missing; only --totals says 'no record: 43 of 133'"
-	ok "missing entries are visible in --totals"
-elif [ "$rc" != 0 ]; then
-	ok "check now fails on a missing entry (M2 fixed)"
-else
-	bad "missing entries are visible neither in --check nor in --totals ($(grep '^no record' "$work/t2.out"))"
-fi
+grep -q '^no record: 43 of 133 entries (90-132)' "$work/t2.out"; expect "missing entries are visible in --totals" $?
 mp --totals "${S[@]}" > "$work/t3.out" 2>&1
 grep -q '^no record: 0 of 133 entries (none), 0 mustpass cases' "$work/t3.out"; expect "totals: the full set has no missing entry" $?
 
@@ -151,22 +138,16 @@ rs="$work/reset"; cp -r "${S[1]}" "$rs"
 sed -i 's/e46 rc=0 verdict=done resets=absent/e46 rc=0 verdict=done_with_resets resets=2/' "$rs/README.md"
 sed -i "s/^origin\/main .*/origin\/main $C1/" "$rs/README.md"
 mp --check "${S[0]}" "$rs" "${S[2]}" > "$work/c6.out" 2>&1; rc=$?
-if [ "$rc" = 0 ]; then
-	mismatch M3 "--check exits 0 on a slice whose README says verdict=done_with_resets (merge.py reads only results.tsv and the commit)"
-else
-	ok "check fails on a reset verdict (M3 fixed)"
-fi
+{ [ "$rc" = 1 ] && grep -q 'e46: verdict=done_with_resets resets=2' "$work/c6.out"; }; expect "check fails on a reset verdict, naming the entry (M3)" $?
+nv="$work/noverdict"; cp -r "${S[2]}" "$nv"; sed -i '/^board\.sh /d' "$nv/README.md"
+mp --check "${S[0]}" "${S[1]}" "$nv" > "$work/c8.out" 2>&1; rc=$?
+{ [ "$rc" = 1 ] && grep -q 'no verdict lines' "$work/c8.out"; }; expect "check fails on a slice without verdict lines" $?
 
 echo "== board-form slices (results.tsv as board.sh tally writes it, dash rows for unrun entries) (M1)"
-mp --check "${B[@]}" > "$work/b1.out" 2>&1; rc=$?
-if [ "$rc" = 0 ]; then
-	ok "board-form slices merge (M1 fixed)"
-elif grep -q 'entry [0-9]* is in both' "$work/b1.out"; then
-	mismatch M1 "raw TREE_ROWS slices are rejected: $(grep -c 'is in both' "$work/b1.out") 'entry N is in both' lines, first: $(grep -m1 'is in both' "$work/b1.out")"
-else
-	bad "board-form slices fail for another reason: $(head -3 "$work/b1.out")"
-fi
-mp --check "${B[0]}" > "$work/b2.out" 2>&1; expect "one board-form slice alone checks" $?
+mp --check "${B[@]}" > "$work/b1.out" 2>&1; expect "board-form slices merge, 133 entries from one commit (M1)" $?
+mp --check --partial "${B[0]}" > "$work/b2.out" 2>&1; expect "one board-form slice alone checks with --partial" $?
+mp --check "${B[0]}" > "$work/b3.out" 2>&1; rc=$?
+{ [ "$rc" = 1 ] && grep -q 'no record: 88 of 133 entries (45-132)' "$work/b3.out"; }; expect "one board-form slice alone fails --check, naming 45-132" $?
 
 echo "== --notpass shape"
 mp --notpass "${S[@]}" > "$work/np.tsv" 2> "$work/np.err"; rc=$?
