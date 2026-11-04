@@ -213,7 +213,9 @@ fn unorm_format(format: u8) -> GcTexfmt {
         GLES_TEXFMT_A8 => f.format = GC_TEX_FORMAT_A8,
         GLES_TEXFMT_LA8 => f.format = GC_TEX_FORMAT_A8L8,
         GLES_TEXFMT_ETC2_RGB => {
-            f.format = GC_TEX_FORMAT_ETC1; /* ETC2 RGB decodes ETC1 as a subset */
+            /* Mesa's EXT_NONE (CONFIG0 FORMAT 0, "Extd. format NONE doubles as
+             * ETC2_RGB8", F:244): the ETC2 decoder, which takes ETC1 blocks
+             * too and the T, H and planar modes besides */
             f.compressed = true;
             f.no_alpha = true;
         }

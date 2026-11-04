@@ -72,7 +72,7 @@ core's `no_alpha` (a GL_RGB / GL_LUMINANCE base) turns the alpha swizzle into
 | class | TE format | swizzle | CONFIG2 | INT_FILTER | GC7000UL samples it | in mask | integer sampler | sRGB, border | Mesa's fallback | Mesa |
 |---|---|---|---|---|---|---|---|---|---|---|
 | `GLES_TEXFMT_RGBA8` | `TEXTURE_FORMAT_A8B8G8R8` | RGBA | - | yes | yes (no gate) | yes | - | linear; none | - (R,G,B,A bytes: A8B8G8R8; a texture the PE wrote, B,G,R,A, is A8R8G8B8, which is Mesa's own choice for its PE-order resources, `F:155,417-425`) | `F:155,164`; `X:52` |
-| `GLES_TEXFMT_ETC2_RGB` | `TEXTURE_FORMAT_ETC1` | RGB1 | - | yes | yes (HALTI0) | no (block) | - | linear; none | Mesa samples ETC2_RGB8 as `TEXTURE_FORMAT_EXT_NONE` with `EXT_FORMAT` ("Extd. format NONE doubles as ETC2_RGB8"), ETC1 as `TEXTURE_FORMAT_ETC1`; ours decodes ETC1 for both (section 4, item 3) | `F:237,244`; `X:65-66` |
+| `GLES_TEXFMT_ETC2_RGB` | `TEXTURE_FORMAT_EXT_NONE` | RGB1 | - | yes | yes (HALTI0) | no (block) | - | linear; none | Mesa samples ETC2_RGB8 as `TEXTURE_FORMAT_EXT_NONE` with `EXT_FORMAT` ("Extd. format NONE doubles as ETC2_RGB8", CONFIG0 FORMAT 0), ETC1 as `TEXTURE_FORMAT_ETC1`; ours decodes EXT_NONE for both (the GL core stores GL_ETC1_RGB8_OES and GL_COMPRESSED_RGB8_ETC2 alike), so ETC2's T, H and planar modes decode and an ETC1 block decodes the same | `F:237,244`; `X:65-67` |
 | `GLES_TEXFMT_ETC2_RGBA` | `TEXTURE_FORMAT_EXT_RGBA8_ETC2_EAC` | RGBA | - | yes | yes (HALTI0) | no (block) | - | linear; none | - | `F:246`; `X:68` |
 | `GLES_TEXFMT_ETC2_RGB_PT` | `TEXTURE_FORMAT_EXT_RGB8_PUNCHTHROUGH_ALPHA1_ETC2` | RGBA | - | yes | yes (HALTI0) | no (block) | - | linear; none | - | `F:245`; `X:67` |
 | `GLES_TEXFMT_ETC2_SRGB_RGB` | none | RGB1 | - | no | not here (only the PowerVR's mask has the compressed sRGB classes, `docs/es3/srgb.md` 4.3) | no | - | sRGB; none | - (etnaviv samples it as the ETC2 block format with `SAMP_CTRL1.SRGB`; not built) | `F:237`; `X:65-66` |
@@ -167,15 +167,15 @@ Built (host only; nothing here has run on the GPU):
 in the mask, so the GL core stores them natively on this back end;
 `GLES_TEXFMT_RGB10A2` stays out for the reason `PVR_SAMPLED_TEXFMTS` gives.
 The test fails when the mask and the `in mask` column disagree. Still unsupported
-(refused or kept in a fallback class): RGBA32F/UI/I, R32I/UI, RG32I/UI, ETC2.
+(refused or kept in a fallback class): RGBA32F/UI/I, R32I/UI, RG32I/UI.
 
 Left:
 
-3. `GLES_TEXFMT_ETC2_RGB` is decoded as `TEXTURE_FORMAT_ETC1`, where Mesa uses
-   the extended `EXT_NONE` (`F:244`). An ETC1 block decodes the same either way,
-   but ETC2's T, H and planar modes only with Mesa's; the ETC1 choice is older
-   than this item and ES 2.0's ETC1 textures go through it, so it is a board
-   question, not changed here (dEQP-GLES3 `texture.compressed.etc2*`).
+3. Done: `GLES_TEXFMT_ETC2_RGB` is decoded as the extended `EXT_NONE`
+   (`F:244`, `X:65-67`), as Mesa does, so ETC2's T, H and planar modes decode;
+   an ETC1 block decodes the same. ES 2.0's ETC1 textures go through the same
+   row (board check: dEQP-GLES2 compressed set and gl_test's ETC1 case on the
+   i.MX8MP).
 4. RGBA32F/I/UI as two planes (section 3), and R32I/UI, RG32I/UI as their own
    classes: the TE samples them as `EXT_R32I` / `EXT_G32R32I` (`F:286-291`),
    but the GL core has no class for them and stores them in RGBA32UI/I.
