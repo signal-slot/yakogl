@@ -650,6 +650,20 @@ static int cold_bringup(void)
 #ifdef CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3
 	board_route3_tl_mark(CLUSTER_TL_A53_PANEL_ON);
 #endif
+#ifdef CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_A53_RESTART
+	/*
+	 * I2C2 is the M7's from here (the M7 firmware's boards/touch.overlay: it reads
+	 * the touch controller on it); this image wrote the bridge just above and
+	 * never uses I2C2 again. Its line is wired to both cores' interrupt
+	 * controllers, and this image's ii2c ISR (MCUXpresso
+	 * I2C_MasterTransferHandleIRQ) clears the flag and steps its own idle
+	 * transfer on every interrupt, which broke every M7 transfer on the
+	 * x10 board run: -EIO from the bridge (0x2c) and the touch controller
+	 * (0x41) alike, at 24 MHz / IFDR 0x0f like Linux. So the line is off
+	 * in this core's GIC from now on, as GPIO4's is.
+	 */
+	irq_disable(DT_IRQ(DT_NODELABEL(i2c2), irq));
+#endif
 	gc_result_stage(GC_RESULT_STAGE_CONSOLE_COLD_DONE, (uint32_t)rc);
 	if (rc) {
 		p.fb = NULL;
