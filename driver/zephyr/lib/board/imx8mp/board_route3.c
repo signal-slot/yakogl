@@ -39,6 +39,9 @@
 #include "yakogl_board.h"
 #include "imx8mp_display.h"
 #include "board_imx8mp_route3.h"
+#ifdef CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_CLOCK_REPORT
+#include "board_imx8mp_route3_clkdiag.h"
+#endif
 #include "gc_panel_console.h"
 #include "yakogl_record.h"
 #ifdef CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_A53_RESTART
@@ -602,6 +605,9 @@ static void tl_report(struct k_work *work)
 		 imx8mp_display_layer_control());
 	tl_uart_str(buf);
 	tl_uart_str("TL end\n");
+#ifdef CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_CLOCK_REPORT
+	board_route3_clock_report(tl_uart_str);
+#endif
 }
 
 static K_WORK_DEFINE(tl_report_work, tl_report);
