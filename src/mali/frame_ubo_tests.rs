@@ -102,6 +102,7 @@ fn texture() -> SampledTexture {
         levels: 1,
         faces: 1,
         array: false,
+        volume: false,
         format: Format::RGBA8_UNORM.0 << 12 | RgbComponentOrder::RGBA.0,
         clump: ClumpFormat::RAW32,
         block_bytes: 0,

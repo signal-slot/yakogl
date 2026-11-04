@@ -1249,7 +1249,11 @@ pub const MAX_STAGE_TEXTURES: usize = 16;
 /// minimum, 256 (the descriptor's `Array size` holds 65536).
 pub const MAX_ARRAY_LAYERS: u32 = 256;
 
-/// A 2D texture, a cube map or a 2D array, `levels` of its chain linear in
+/// The slices of a 3D texture: ES 3.0's GL_MAX_3D_TEXTURE_SIZE minimum, 256
+/// (the descriptor's `Depth` holds 65536).
+pub const MAX_3D_DEPTH: u32 = 256;
+
+/// A 2D texture, a cube map, a 2D array or a 3D texture, `levels` of its chain linear in
 /// memory, and the GL sampler state it is read with: what a shader's
 /// look-up reads at its index of the stage's texture and sampler tables.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -1268,13 +1272,21 @@ pub struct SampledTexture {
     /// the planes face-major, level-minor: "faces as extra layers",
     /// Mesa 26.2.1 pan_texture.c:1074-1100); for a 2D array
     /// ([`SampledTexture::array`]) its layers, stacked as a cube's faces
-    /// are (the GL core's level-major stack, `chain_layout_npot`).
+    /// are (the GL core's level-major stack, `chain_layout_npot`); for a
+    /// 3D texture ([`SampledTexture::volume`]) its level 0 slices.
     pub faces: u32,
     /// A 2D array: `Dimension = 2D`, `Array size` = [`SampledTexture::faces`]
     /// layers, a plane a layer and level, layer-major as a cube's
     /// (pan_texture.c:1074-1100, :1198-1217; the shim's texmore_46 and
     /// texmore_206_array traces).
     pub array: bool,
+    /// A 3D texture of [`SampledTexture::faces`] slices at level 0 (level l
+    /// has `max(faces >> l, 1)`): `Dimension = 3D`, `Depth` the slices, one
+    /// plane a level whose slice stride steps from one slice to the next
+    /// (`emit_generic_plane`, Mesa 26.2.1 pan_texture.c:410-421; the shim's
+    /// texmore_48 and texmore_206_vol traces). A level's slices are stacked
+    /// as a cube's faces are (slice s at [`SampledTexture::face_gpu`]).
+    pub volume: bool,
     /// The texture descriptor's format word (`MALI_PACK_FMT`).
     pub format: u32,
     /// The planes' clump format: RAW32 for 4-byte texels, a block format's
@@ -1332,7 +1344,27 @@ pub const SWIZZLE_RRR1: u32 = swizzle4(0, 0, 0, 5);
 impl SampledTexture {
     /// A cube map: six faces that are not a 2D array's layers.
     pub fn is_cube(&self) -> bool {
-        self.faces == 6 && !self.array
+        self.faces == 6 && !self.array && !self.volume
+    }
+
+    /// The planes the descriptor names: one a level for a 3D texture, one a
+    /// face (or layer) and level otherwise.
+    pub fn plane_count(&self) -> u32 {
+        if self.volume {
+            self.levels
+        } else {
+            self.faces * self.levels
+        }
+    }
+
+    /// The slices of a 3D texture's level `l` (its depth halved `l` times,
+    /// ES 3.0.6 3.8.14), the faces (or layers) of any other.
+    pub fn slices(&self, l: u32) -> u32 {
+        if self.volume {
+            (self.faces >> l).max(1)
+        } else {
+            self.faces
+        }
     }
 
     /// Level `l`'s extent.
@@ -1394,16 +1426,19 @@ impl SampledTexture {
     /// (:410-421; Mesa 25.0.7 wrote the layer stride there, the shim's
     /// 26.2.1 writes 0 in every plane of a cube, tools/mali/testdata/
     /// cube_vs), the level's extent.
+    /// A 3D texture's level is one plane of its slices (`face` 0): the
+    /// slice stride is one slice's rows, the size every slice's (:410-416).
     pub fn plane(&self, face: u32, l: u32) -> GenericPlane {
         let lv = self.level[l as usize];
         let (w, h) = self.extent(l);
+        let slice = lv.row_stride * self.rows(l);
         GenericPlane {
             clump_ordering: ClumpOrdering::LINEAR,
             clump_format: self.clump,
-            size: lv.row_stride * self.rows(l),
+            size: if self.volume { slice * self.slices(l) } else { slice },
             pointer: self.face_gpu(face, l),
             row_stride: lv.row_stride,
-            slice_stride: 0,
+            slice_stride: if self.volume { slice } else { 0 },
             width: w,
             height: h,
             ..Default::default()
@@ -1414,13 +1449,20 @@ impl SampledTexture {
     /// pan_texture.c:1272-1325): 2D (or, for six faces, a cube: `Dimension
     /// = Cube`, the width and height one face's, `Array size` 1, the
     /// layer count over 6, `pan_texture_get_array_size`, :1198-1217; a 2D
-    /// array's `Array size` is its layer count)
+    /// array's `Array size` is its layer count; a 3D texture is `Dimension
+    /// = 3D`, `Depth` its level 0 slices)
     /// RGBA8 UNORM read through the swizzle, linear (no texel interleave),
     /// its levels from 0, LOD 0 to the last level, the planes, one a face
     /// and level, at `surfaces`.
     pub fn texture(&self, surfaces: u64) -> Texture {
         Texture {
-            dimension: if self.is_cube() { TextureDimension::CUBE } else { TextureDimension::_2D },
+            dimension: if self.volume {
+                TextureDimension::_3D
+            } else if self.is_cube() {
+                TextureDimension::CUBE
+            } else {
+                TextureDimension::_2D
+            },
             format: self.format,
             width: self.width,
             height: self.height,
@@ -1429,6 +1471,7 @@ impl SampledTexture {
             texel_interleave: self.block_bytes != 0,
             levels: self.levels,
             array_size: if self.array { self.faces } else { 1 },
+            depth: if self.volume { self.faces } else { 1 },
             surfaces,
             minimum_lod: 0.0,
             maximum_lod: (self.levels - 1) as f32,
@@ -2341,7 +2384,14 @@ fn check_draw(
             (1..=65536).contains(&t.width)
                 && (1..=65536).contains(&t.height)
                 && (1..=MAX_TEXTURE_LEVELS as u32).contains(&t.levels)
-                && if t.array { (1..=MAX_ARRAY_LAYERS).contains(&t.faces) } else { t.faces == 1 || t.faces == 6 },
+                && !(t.array && t.volume)
+                && if t.array {
+                    (1..=MAX_ARRAY_LAYERS).contains(&t.faces)
+                } else if t.volume {
+                    (1..=MAX_3D_DEPTH).contains(&t.faces)
+                } else {
+                    t.faces == 1 || t.faces == 6
+                },
             NOT_BUILT_TEXTURE_SIZE,
         )?;
         for l in 0..t.levels {
@@ -2351,7 +2401,7 @@ fn check_draw(
             /* every plane's pointer on 64 bytes: a face's too (the board's
              * Mesa samples faces at 64-byte steps, not 4 KiB ones:
              * docs/notes/mali-cube-textures.md (e)) */
-            if (0..t.faces).any(|f| t.face_gpu(f, l) % 64 != 0) {
+            if (0..t.slices(l)).any(|f| t.face_gpu(f, l) % 64 != 0) {
                 return Err(FrameError::Invalid(INVALID_TEXTURE_ALIGN));
             }
         }
@@ -2861,7 +2911,7 @@ fn emit_stage_uniforms(
 /// A stage's texture descriptors (`panfrost_emit_texture_descriptors`, Mesa
 /// 26.2.1 pan_cmdstream.c:1934-1985: one array, texture i at index i, each
 /// the sampler view's descriptor) and their payloads, each texture's planes
-/// one a layer (or face) and level, the layer outermost ("faces as extra
+/// one a layer (or face) and level (a 3D texture's one a level), the layer outermost ("faces as extra
 /// layers", pan_texture.c:1074-1100: `plane = layer * levels + level`, the
 /// board's cubemap dump tools/mali/board-dump/cube-2026-10-20.txt;
 /// `pan_tex_emit_linear_payload_entry`, pan_texture.c:1003-1062): the
@@ -2871,9 +2921,10 @@ fn texture_descriptors(desc: &mut Arena, textures: &[SampledTexture]) -> Result<
     let mut planes: Option<Block> = None;
     let mut surfaces = [0u64; MAX_STAGE_TEXTURES];
     for (tex, at) in textures.iter().zip(surfaces.iter_mut()) {
-        let count = (tex.faces * tex.levels) as usize;
+        let count = tex.plane_count() as usize;
         let plane = desc.alloc(count * GenericPlane::LENGTH, NullPlane::ALIGN as u64)?;
-        for f in 0..tex.faces {
+        /* a 3D texture's level is one plane of its slices */
+        for f in 0..if tex.volume { 1 } else { tex.faces } {
             for l in 0..tex.levels {
                 let k = (f * tex.levels + l) as usize;
                 desc.write(plane, k * GenericPlane::LENGTH, &tex.plane(f, l).pack()?)?;

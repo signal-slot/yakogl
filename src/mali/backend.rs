@@ -209,7 +209,7 @@ pub const NOT_BUILT_ATTRIBUTE_RECORDS: &str =
 pub const NOT_BUILT_TEXTURE_FORMAT: &str =
     "mali: a texture stored other than RGBA8, sRGB8_A8, R32F or ETC2 (RGB8, RGBA8, RGB8A1) is not built yet";
 pub const NOT_BUILT_TEXTURE_TYPE: &str =
-    "mali: a texture other than one 2D image, a cube map of six faces or a 2D array of at most 256 layers (a 3D texture) is not built yet";
+    "mali: a texture other than one 2D image, a cube map of six faces, a 2D array of at most 256 layers or a one-level 3D texture of at most 256 4-byte slices (a 3D chain) is not built yet";
 /// A mip chain of a non-power-of-two image: the GL core lays none out for
 /// this backend (`npot_mip_chains`), so one would not be where
 /// [`chain_level`] looks.
@@ -1831,6 +1831,40 @@ fn level_at(t: &backend::GlesTextureBind, f: &TexelFormat, l: u32) -> Option<Lev
     None
 }
 
+/// A 3D texture as the GL core hands this backend one
+/// (`native_layered_textures` false): level 0 alone, its `layers` slices
+/// tiled `cols` across in one 2D image of `width` x `height` on the
+/// `stride_texels` pitch (`texture_alloc_storage_3d`, `grid_cols_for`:
+/// the least `cols` with `cols * cols >= depth`, src/gl/texture.rs; the
+/// binding's sides are the grid's, src/gl/draw.rs). Slice `k` is at column
+/// `k % cols`, row `k / cols` of slices `w` x `h` each.
+#[derive(Clone, Copy)]
+struct SliceGrid {
+    cols: u32,
+    w: u32,
+    h: u32,
+}
+
+/// The binding's [`SliceGrid`], None for one whose sides are not whole
+/// slices.
+fn slice_grid(t: &backend::GlesTextureBind) -> Option<SliceGrid> {
+    let depth = u32::from(t.layers.max(1));
+    let mut cols = 1u32;
+    while cols * cols < depth {
+        cols += 1;
+    }
+    let rows = depth.div_ceil(cols);
+    (t.width.is_multiple_of(cols) && t.height.is_multiple_of(rows) && t.width != 0 && t.height != 0)
+        .then(|| SliceGrid { cols, w: t.width / cols, h: t.height / rows })
+}
+
+/// A 3D binding: always copied, its slices stacked one under the other
+/// ([`texture_of`]), since the texture unit steps from one slice to the
+/// next by one slice stride and a grid's slices are not one stride apart.
+fn is_volume(t: &backend::GlesTextureBind) -> bool {
+    t.type_ == backend::GLES_TEXTYPE_3D
+}
+
 /// The levels a binding's descriptor names.
 fn levels_of(t: &backend::GlesTextureBind) -> u32 {
     u32::from(t.mip_levels.max(1))
@@ -1843,11 +1877,18 @@ fn levels_of(t: &backend::GlesTextureBind) -> u32 {
 /// refused).
 fn needs_copy(t: &backend::GlesTextureBind) -> bool {
     let Some(f) = texel_format(t.format) else { return false };
+    if is_volume(t) {
+        return true;
+    }
     (0..levels_of(t)).any(|l| level_at(t, &f, l).is_none_or(|a| a.pitch % TEXTURE_ROW_ALIGN as usize != 0))
 }
 
 /// The end of the storage a copy reads: the last level's (every face's).
 fn storage_end(t: &backend::GlesTextureBind) -> Option<usize> {
+    if is_volume(t) {
+        /* the grid: level 0 alone */
+        return (t.stride_texels as usize).checked_mul(4)?.checked_mul(t.height as usize);
+    }
     let f = texel_format(t.format)?;
     let a = level_at(t, &f, levels_of(t) - 1)?;
     a.off.checked_add(a.pitch.checked_mul(a.rows)?.checked_mul(layers_of(t))?)
@@ -1925,11 +1966,7 @@ fn sampled_texture(d: &GlesDraw, vertex: bool, data: &mut Pool) -> Result<Option
 /// yet is refused by name.
 fn texture_of(bind: Option<&backend::GlesTextureBind>, data: &mut Pool) -> Result<frame::SampledTexture, FrameError> {
     let not_built = |why| Err(FrameError::NotBuilt(why));
-    let wrap = |w: backend::GlesWrap| match w {
-        backend::GLES_WRAP_REPEAT => WrapMode::REPEAT,
-        backend::GLES_WRAP_MIRRORED_REPEAT => WrapMode::MIRRORED_REPEAT,
-        _ => WrapMode::CLAMP_TO_EDGE,
-    };
+    let wrap = wrap_of;
     let t = match bind {
         Some(t) if t.incomplete == 0 => t,
         /* no texels: one black texel, the GL state's wraps and filters */
@@ -1945,6 +1982,7 @@ fn texture_of(bind: Option<&backend::GlesTextureBind>, data: &mut Pool) -> Resul
                 levels: 1,
                 faces: 1,
                 array: false,
+                volume: false,
                 format: f.format,
                 clump: f.clump,
                 block_bytes: 0,
@@ -1965,13 +2003,22 @@ fn texture_of(bind: Option<&backend::GlesTextureBind>, data: &mut Pool) -> Resul
      * on one pitch, `chain_layout_npot`), described as Mesa describes its
      * own (a plane a layer and level, `Array size` the layers; the shim's
      * texmore_46 and texmore_206_array traces); a 3D texture comes as a
-     * grid of slices and is not described yet */
+     * grid of its level 0 slices ([`SliceGrid`]) and is copied with its
+     * slices stacked, described as Mesa describes its own (one plane a
+     * level, its slice stride one slice; the shim's texmore_48 and
+     * texmore_206_vol traces) */
     let layers = layers_of(t);
     let cube = t.type_ == backend::GLES_TEXTYPE_CUBE && layers == 6;
     let array = t.type_ == backend::GLES_TEXTYPE_2D_ARRAY && layers as u32 <= frame::MAX_ARRAY_LAYERS;
+    let f = texel_format(t.format);
+    let volume =
+        is_volume(t) && layers as u32 <= frame::MAX_3D_DEPTH && levels == 1 && f.is_some_and(|f| f.block_bytes == 0);
+    if volume {
+        let f = f.ok_or(FrameError::NotBuilt(NOT_BUILT_TEXTURE_FORMAT))?;
+        return volume_of(t, f, data);
+    }
     let face_h = t.height / layers as u32;
     let pot = t.width.is_power_of_two() && face_h.is_power_of_two();
-    let f = texel_format(t.format);
     let checks = [
         (!(t.type_ == backend::GLES_TEXTYPE_2D && layers == 1 || cube || array), NOT_BUILT_TEXTURE_TYPE),
         (f.is_none(), NOT_BUILT_TEXTURE_FORMAT),
@@ -2018,6 +2065,27 @@ fn texture_of(bind: Option<&backend::GlesTextureBind>, data: &mut Pool) -> Resul
             *lv = frame::TextureLevel { gpu: b.gpu, row_stride: dst as u32 };
         }
     }
+    Ok(sampled(t, &f, level))
+}
+
+/// GL's wrap mode as the sampler's.
+fn wrap_of(w: backend::GlesWrap) -> WrapMode {
+    match w {
+        backend::GLES_WRAP_REPEAT => WrapMode::REPEAT,
+        backend::GLES_WRAP_MIRRORED_REPEAT => WrapMode::MIRRORED_REPEAT,
+        _ => WrapMode::CLAMP_TO_EDGE,
+    }
+}
+
+/// The texture [`texture_of`] describes for `t`, a 2D image, cube map or 2D
+/// array whose levels are `level`: its extent, levels and stack, and the
+/// sampler state and swizzle the binding names.
+fn sampled(
+    t: &backend::GlesTextureBind,
+    f: &TexelFormat,
+    level: [frame::TextureLevel; frame::MAX_TEXTURE_LEVELS],
+) -> frame::SampledTexture {
+    let layers = layers_of(t);
     /* a view of storage without alpha, or in BGRA order, reads it through
      * the format's own swizzle composed with these; a depth texture of the
      * ES 2.0 surface reads (d, d, d, 1), GL_OES_depth_texture's luminance
@@ -2037,13 +2105,14 @@ fn texture_of(bind: Option<&backend::GlesTextureBind>, data: &mut Pool) -> Resul
         1 => MipmapMode::NEAREST,
         _ => MipmapMode::TRILINEAR,
     };
-    Ok(frame::SampledTexture {
+    frame::SampledTexture {
         width: t.width,
-        height: face_h,
+        height: t.height / layers as u32,
         level,
-        levels,
+        levels: levels_of(t),
         faces: layers as u32,
-        array,
+        array: t.type_ == backend::GLES_TEXTYPE_2D_ARRAY,
+        volume: false,
         format: f.format,
         clump: f.clump,
         block_bytes: f.block_bytes,
@@ -2051,9 +2120,54 @@ fn texture_of(bind: Option<&backend::GlesTextureBind>, data: &mut Pool) -> Resul
         min_nearest: t.min_linear == 0,
         mag_nearest: t.linear_filter == 0,
         mipmap,
-        wrap_s: wrap(t.wrap_s),
-        wrap_t: wrap(t.wrap_t),
-        wrap_r: wrap(t.wrap_r),
+        wrap_s: wrap_of(t.wrap_s),
+        wrap_t: wrap_of(t.wrap_t),
+        wrap_r: wrap_of(t.wrap_r),
+    }
+}
+
+/// A one-level 3D texture ([`SliceGrid`]): its slices copied from the GL
+/// core's grid into the frame's `data` arena one under the other, each
+/// row on [`TEXTURE_ROW_ALIGN`] bytes, so slice `k` is at `k * h` rows
+/// ([`frame::SampledTexture::face_gpu`]) and the plane's slice stride is
+/// one slice (`emit_generic_plane`, Mesa 26.2.1 pan_texture.c:410-416;
+/// [`texture_ready`] made the storage current).
+fn volume_of(
+    t: &backend::GlesTextureBind,
+    f: TexelFormat,
+    data: &mut Pool,
+) -> Result<frame::SampledTexture, FrameError> {
+    let g = slice_grid(t).ok_or(FrameError::Invalid(INVALID_TEXTURE_STORAGE))?;
+    let depth = u32::from(t.layers.max(1));
+    let too_big = FrameError::NotBuilt(frame::NOT_BUILT_TEXTURE_SIZE);
+    let pitch = (t.stride_texels as usize).checked_mul(4).ok_or(too_big)?;
+    let end = storage_end(t).ok_or(too_big)?;
+    let row = g.w as usize * 4;
+    if t.cpu.is_null() || (t.bytes as usize) < end || (t.width as usize) * 4 > pitch {
+        return Err(FrameError::Invalid(INVALID_TEXTURE_STORAGE));
+    }
+    // SAFETY: the GL core's CPU view of the grid: `bytes` of it, which hold
+    // `end` (checked above), live until the draw returns.
+    let texels = unsafe { core::slice::from_raw_parts(t.cpu.cast::<u8>(), end) };
+    let dst = row.next_multiple_of(TEXTURE_ROW_ALIGN as usize);
+    let h = g.h as usize;
+    let b = data.alloc(dst.checked_mul(h * depth as usize).ok_or(too_big)?, u64::from(TEXTURE_ROW_ALIGN))?;
+    for k in 0..depth as usize {
+        let (col, grid_row) = (k % g.cols as usize, k / g.cols as usize);
+        for y in 0..h {
+            let at = (grid_row * h + y) * pitch + col * row;
+            data.write(b, (k * h + y) * dst, &texels[at..at + row])?;
+        }
+    }
+    let mut level = [frame::TextureLevel::default(); frame::MAX_TEXTURE_LEVELS];
+    level[0] = frame::TextureLevel { gpu: b.gpu, row_stride: dst as u32 };
+    Ok(frame::SampledTexture {
+        width: g.w,
+        height: g.h,
+        levels: 1,
+        faces: depth,
+        volume: true,
+        ..sampled(t, &f, level)
     })
 }
 
