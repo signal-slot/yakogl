@@ -111,7 +111,9 @@ BUILD_ASSERT(!DT_PROP_OR(DT_NODELABEL(display0), zephyr_deferred_init, 0),
 #define M7_DTCM_SYS  0x00800000u
 #define M7_TCM_SIZE  0x00020000u
 
-#define WAIT_POLL_MS       1
+/* the poll of `shown`: 100 us (the A53 ticks at 10 kHz); 1 ms steps were
+ * most of what made a frame miss its vblank (2026-11-04) */
+#define WAIT_POLL_US       100
 #define SHOWN_TIMEOUT_MS   200
 
 /* The stripped M7 ELF (m7_image.py), linked in by m7_blob.S. */
@@ -1076,7 +1078,7 @@ static int shown_wait(uint32_t seq)
 			break;
 		}
 		board_watchdog_feed();
-		k_sleep(K_MSEC(WAIT_POLL_MS));
+		k_sleep(K_USEC(WAIT_POLL_US));
 	}
 	m7_check();
 	if (!R.lit && R.state == BOARD_ROUTE3_UP && cluster_frame_ring_shown(R.ring) != 0u) {
