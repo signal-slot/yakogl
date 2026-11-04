@@ -373,6 +373,9 @@ impl Rig {
         };
         gc_shutdown();
         assert_eq!(gc_init(), 0);
+        /* the clear tests below are about the quad; the resolve engine's
+         * clear has its own (a_whole_colour_clear_is_a_resolve_engine_fill) */
+        gc_debug_rs_clear(false);
 
         /* a vertex shader reading one attribute into register 0, writing
          * position from register 1 and one varying from register 2, and a
@@ -3501,6 +3504,50 @@ fn a_clear_is_a_quad_drawn_with_the_backends_own_shaders() {
     let mut only = rig.draw(0);
     only.do_clear = true;
     assert_eq!(rig.submit(&only).draws().len(), 1);
+}
+
+/// A colour-only clear of the whole 64x64 RGBA8 target is the resolve
+/// engine's fill, as etnaviv clears a surface without tile status: the value
+/// packed A8R8G8B8 in all four fill words, MODE_ENABLED1 with every bit, a
+/// linear destination at the target, and the draw after it alone. A clear
+/// that also clears depth, or one under a scissor, stays the quad.
+#[test]
+fn a_whole_colour_clear_is_a_resolve_engine_fill() {
+    let rig = Rig::new();
+    gc_debug_rs_clear(true);
+    let mut d = rig.draw(3);
+    d.do_clear = true;
+    d.clear_rgba = [1.0, 0.5, 0.0, 1.0];
+    let s = rig.submit(&d);
+
+    assert_eq!(s.draws().len(), 1, "no clear quad, the draw alone");
+    assert_eq!(s.reg(GC_RS_CLEAR_CONTROL), GC_RS_CLEAR_CONTROL_BITS_ALL | GC_RS_CLEAR_CONTROL_MODE_ENABLED1);
+    for i in 0..4 {
+        assert_eq!(s.reg(rs_fill_value(i)), 0xffff_8000, "A8R8G8B8 of (1, 0.5, 0, 1)");
+    }
+    assert_eq!(s.reg(rs_pipe_dest_addr(0)), TARGET_GPU as u32);
+    assert_eq!(s.reg(GC_RS_DEST_STRIDE), 64 * 4);
+    assert_eq!(s.reg(GC_RS_WINDOW_SIZE), rs_window_width(64) | rs_window_height(64));
+    assert_eq!(s.reg(GC_RS_CONFIG) & GC_RS_DEST_TILED, 0, "linear");
+    assert_eq!(s.writes(GC_RS_KICKER).1, 1);
+
+    /* with depth it is the quad again */
+    let mut both = rig.draw(3);
+    both.do_clear = true;
+    both.do_clear_depth = true;
+    let s = rig.submit(&both);
+    assert_eq!(s.draws().len(), 2);
+    assert_eq!(s.writes(GC_RS_KICKER).1, 0);
+
+    /* and under a scissor */
+    let mut sc = rig.draw(3);
+    sc.do_clear = true;
+    sc.scissor = true;
+    sc.scissor_rect = [0, 0, 16, 16];
+    let s = rig.submit(&sc);
+    assert_eq!(s.draws().len(), 2);
+    assert_eq!(s.writes(GC_RS_KICKER).1, 0);
+    gc_debug_rs_clear(false);
 }
 
 /// gl_PointCoord, as Mesa's etnaviv programs it: its row's two components
