@@ -2054,6 +2054,193 @@ fn the_gl_cores_cube_layout_is_the_one_the_backend_reads() {
     }
 }
 
+/// A layered RGBA8 texture of type `type_` (`GLES_TEXTYPE_2D_ARRAY`: `n`
+/// layers; `GLES_TEXTYPE_3D`: `n` deep), `levels` levels, `content_gen`
+/// its stamp, in memory of the rig's platform where the GL core keeps it
+/// (`texture::gl_level_layered`: `n` slots at every level); each texel of
+/// slot k of level L is (L, k, x, y).
+fn layered_texture(type_: u8, w: u32, h: u32, n: u32, levels: u32, content_gen: u32) -> GlesTextureBind {
+    let b = GlesTextureBind { type_, layers: n as u16, content_gen, ..texture(0, w, h, levels) };
+    let bytes = texture::gl_bytes(&b);
+    let mut mem = OsalGpuMem::ZERO;
+    assert_eq!(crate::osal::gpu_alloc(V3D_HEAP_DATA, bytes as usize, OSAL_MEM_DATA, &mut mem), 0);
+    for level in 0..levels {
+        let (off, pitch, rows) = texture::gl_level_layered(w, h, n, 4, level);
+        for k in 0..n {
+            for y in 0..rows {
+                for x in 0..(w >> level).max(1) {
+                    let at = (off + ((k * rows + y) * pitch + x) * 4) as usize;
+                    assert!(at + 4 <= bytes as usize, "inside gl_bytes");
+                    // SAFETY: inside the allocation (gl_bytes).
+                    unsafe {
+                        core::ptr::copy_nonoverlapping(
+                            [level as u8, k as u8, x as u8, y as u8].as_ptr(),
+                            (mem.cpu as *mut u8).add(at),
+                            4,
+                        )
+                    };
+                }
+            }
+        }
+    }
+    GlesTextureBind { base_gpu: mem.gpu, ..b }
+}
+
+/// `copy_image_for` of `b`, which must succeed (`what` names the copy).
+fn copied(rig: &Rig, b: &GlesTextureBind, what: &str) -> (V3dTexLayout, u32) {
+    match copy_image_for(g(), b) {
+        Ok(got) => got,
+        Err(_) => panic!("{what}: not copied, {:?}", rig.gl.logs()),
+    }
+}
+
+/// The texels `copy_image_for` tiled for `b` into the image at `image_gpu`:
+/// level L's slice or layer k at `texture::image_offset(L, k)` holds the GL
+/// core's slot k of level L (the fake tiling stores a level as its packed
+/// rows), for the `slots(L)` slots the GL core fills.
+fn assert_layers_at_their_offsets(
+    rig: &Rig,
+    b: &GlesTextureBind,
+    layout: &V3dTexLayout,
+    image_gpu: u32,
+    slots: impl Fn(u32) -> u32,
+) {
+    for level in 0..layout.levels {
+        let (lw, lh) = ((b.width >> level).max(1), (b.height >> level).max(1));
+        for k in 0..slots(level) {
+            let at = texture::image_offset(b, layout, level, k).expect("a slice the layout has");
+            let got = rig.gpu_bytes(image_gpu + at, (lw * lh * 4) as usize);
+            for y in 0..lh {
+                for x in 0..lw {
+                    let i = ((y * lw + x) * 4) as usize;
+                    assert_eq!(
+                        got[i..i + 4],
+                        [level as u8, k as u8, x as u8, y as u8],
+                        "level {level} slot {k} ({x}, {y})"
+                    );
+                }
+            }
+        }
+    }
+}
+
+/// A 2D array (4x4, 3 layers, 2 levels) is tiled whole into its kept copy:
+/// one image of `texture::image_bytes` = three whole mip trees
+/// `v3d_tex_layer_stride` apart (the fake layout: level 1's 16 bytes at 48,
+/// level 0's 64 at 64, a tree 128), every layer of every level at
+/// `texture::image_offset`, and nothing written past it. The arena (an
+/// unstamped binding) puts the same bytes at the same offsets. The binding
+/// itself is still refused (`a_2d_array_or_3d_binding_is_still_refused`):
+/// this is the copy a draw will sample once the look-ups are in.
+#[test]
+fn a_2d_arrays_layers_are_uploaded_at_the_layouts_offsets() {
+    let rig = Rig::new();
+    rig.init();
+    let b = layered_texture(GLES_TEXTYPE_2D_ARRAY, 4, 4, 3, 2, 7);
+    let (layout, image_gpu) = copied(&rig, &b, "a kept copy");
+    assert_eq!(layout, texture::layout(&b).unwrap());
+    assert_eq!((layout.slices[0].offset, layout.slices[1].offset, layout.size), (64, 48, 128));
+    assert_eq!(texture::image_bytes(&b, &layout), Some(3 * 128));
+    for (level, base) in [(0u32, 64u32), (1, 48)] {
+        for f in 0..3 {
+            assert_eq!(texture::image_offset(&b, &layout, level, f), Some(base + f * 128), "level {level} layer {f}");
+        }
+    }
+    assert_layers_at_their_offsets(&rig, &b, &layout, image_gpu, |_| 3);
+    let kept = g().tiled.iter().find(|t| t.live() && t.key == TexKey::of(&b)).expect("kept under its key");
+    assert_eq!((kept.key.layers, kept.key.type_, kept.image_gpu), (3, GLES_TEXTYPE_2D_ARRAY, image_gpu));
+    assert_eq!(kept.src_bytes, texture::gl_bytes(&b) as u64);
+    assert_eq!(g().overruns, 0, "{:?}", rig.gl.logs());
+    /* found again, not tiled again */
+    let tilings = g().tilings;
+    assert_eq!(copied(&rig, &b, "found again").1, image_gpu);
+    assert_eq!(g().tilings, tilings);
+    /* the job's arena: the same layout and bytes, the canary intact */
+    let arena = layered_texture(GLES_TEXTYPE_2D_ARRAY, 4, 4, 3, 2, 0);
+    let (layout, image_gpu) = copied(&rig, &arena, "an arena copy");
+    assert_eq!(image_gpu % 4096, 0);
+    assert_layers_at_their_offsets(&rig, &arena, &layout, image_gpu, |_| 3);
+    assert_eq!(g().overruns, 0, "{:?}", rig.gl.logs());
+}
+
+/// A 3D texture (4x4x4, 3 levels) is tiled as its stack of slices
+/// (`texture::layout`'s stack_3d over the fake one-slice levels): 4, 2, 1
+/// slices of 64, 16 and 4 bytes, smallest level first (level 2 at 0, level 1
+/// at 4, level 0 at 36, 292 bytes), then level 0 moved to a page: level 0 at
+/// 4096, level 1 at 4064, level 2 at 4060, 4352 bytes, with no tree stride
+/// added. Slice k of level L is at `texture::image_offset(L, k)` = the
+/// level's offset + k slice sizes, holding the GL core's slot k of the level
+/// (`max(4 >> L, 1)` of them filled), in the kept copy and in the arena.
+#[test]
+fn a_3d_textures_slices_are_uploaded_at_the_layouts_offsets() {
+    let rig = Rig::new();
+    rig.init();
+    let b = layered_texture(GLES_TEXTYPE_3D, 4, 4, 4, 3, 9);
+    let (layout, image_gpu) = copied(&rig, &b, "a kept copy");
+    assert_eq!(layout, texture::layout(&b).unwrap());
+    let offsets: [u32; 3] = core::array::from_fn(|i| layout.slices[i].offset);
+    assert_eq!((offsets, layout.size), ([4096, 4064, 4060], 4352));
+    assert_eq!(texture::image_bytes(&b, &layout), Some(4352));
+    assert_eq!([0, 1, 2].map(|l| texture::level_depth(4, l)), [4, 2, 1]);
+    for (level, base, size) in [(0u32, 4096u32, 64u32), (1, 4064, 16), (2, 4060, 4)] {
+        for k in 0..texture::level_depth(4, level) {
+            assert_eq!(texture::image_offset(&b, &layout, level, k), Some(base + k * size), "level {level} slice {k}");
+        }
+    }
+    assert_layers_at_their_offsets(&rig, &b, &layout, image_gpu, |level| (4 >> level).max(1));
+    let kept = g().tiled.iter().find(|t| t.live() && t.key == TexKey::of(&b)).expect("kept under its key");
+    assert_eq!((kept.key.layers, kept.key.type_, kept.key.levels), (4, GLES_TEXTYPE_3D, 3));
+    assert_eq!(g().overruns, 0, "{:?}", rig.gl.logs());
+    let arena = layered_texture(GLES_TEXTYPE_3D, 4, 4, 4, 3, 0);
+    let (layout, image_gpu) = copied(&rig, &arena, "an arena copy");
+    assert_layers_at_their_offsets(&rig, &arena, &layout, image_gpu, |level| (4 >> level).max(1));
+    assert_eq!(g().overruns, 0, "{:?}", rig.gl.logs());
+}
+
+/// A 3D texture and a 2D array of as many layers over the same storage and
+/// stamp are two images (a stack of slices, three whole trees): the kept
+/// copy of one is not the other's. Revert check: without `TexKey::type_`
+/// the 3D binding finds the array's copy and its slices are not where
+/// `texture::image_offset` says.
+#[test]
+fn a_3d_texture_does_not_find_an_arrays_kept_copy() {
+    let rig = Rig::new();
+    rig.init();
+    let array = layered_texture(GLES_TEXTYPE_2D_ARRAY, 4, 4, 4, 3, 11);
+    let vol = GlesTextureBind { type_: GLES_TEXTYPE_3D, ..array };
+    assert_eq!(texture::layers(&array), texture::layers(&vol));
+    assert_ne!(TexKey::of(&array), TexKey::of(&vol));
+    let (_, at_array) = copied(&rig, &array, "the array's copy");
+    let (layout, at_vol) = copied(&rig, &vol, "the 3D texture's copy");
+    assert_ne!(at_array, at_vol);
+    assert_layers_at_their_offsets(&rig, &vol, &layout, at_vol, |level| (4 >> level).max(1));
+}
+
+/// The upload is in place, the sampling is not: a draw binding a 2D array or
+/// a 3D texture is still refused by that name (texture.rs keeps the
+/// refusal until the look-ups are in), with no draw and nothing tiled.
+/// Revert check: without the refusal both draws tile their copies.
+#[test]
+fn a_2d_array_or_3d_binding_is_still_refused() {
+    let rig = Rig::new();
+    rig.init();
+    for type_ in [GLES_TEXTYPE_2D_ARRAY, GLES_TEXTYPE_3D] {
+        let mut d = rig.draw();
+        d.textures[0] = GlesTextureBind { unit: 1, ..layered_texture(type_, 4, 4, 3, 2, 5) };
+        d.num_textures = 1;
+        assert_eq!(draw(&d), -EINVAL);
+    }
+    /* one cause, logged the first time (`count_refusal`), counted twice */
+    assert_eq!(rig.logs_with("draw refused: a 2D array or 3D texture is not sampled yet"), 1);
+    assert_eq!(g().refused, 2);
+    assert!(rig.draws().is_empty());
+    let mut tilings = 0u32;
+    // SAFETY: a live out-parameter.
+    unsafe { v3d_texture_counters(&mut tilings, core::ptr::null_mut()) };
+    assert_eq!(tilings, 0, "the refusal comes before any tiling");
+    assert_eq!((g().j.tex_used, g().j.ntex), (0, 0));
+}
+
 /* ---- the clear quad ------------------------------------------------------------ */
 
 /// A clear-only draw of the rig's target (no geometry, no program).
@@ -8051,6 +8238,7 @@ fn a_tiling_that_writes_past_its_image_is_named() {
         format: GLES_TEXFMT_RGBA8,
         content_gen: 5,
         layers: 1,
+        type_: GLES_TEXTYPE_2D,
         depth_id: 0,
     };
     let inside = tiled_copy(g(), key, 1000, 1024, TILE_KEPT_AT_DRAW, |p, _| {
@@ -8092,6 +8280,7 @@ fn a_tiled_copy_without_a_cpu_view_is_refused_and_freed() {
         format: GLES_TEXFMT_RGBA8,
         content_gen: 5,
         layers: 1,
+        type_: GLES_TEXTYPE_2D,
         depth_id: 0,
     };
     let r = tiled_copy(g(), key, 1000, 1024, TILE_KEPT_AT_DRAW, |_, _| panic!("filled a copy with no CPU view"));
