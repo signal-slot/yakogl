@@ -49,10 +49,18 @@ pub struct Root {
     pub post: u32,
 }
 
+/// Core and shader: mux 010 SYSTEM_PLL1_CLK (800 MHz), or with the
+/// `vivante-1000mhz` feature 100 SYSTEM_PLL2_CLK (1000 MHz, the table's
+/// maximum, in the SoC's overdrive mode only).
+#[cfg(not(feature = "vivante-1000mhz"))]
+const CORE_MUX: u32 = 2;
+#[cfg(feature = "vivante-1000mhz")]
+const CORE_MUX: u32 = 4;
+
 /// The roots, in the order they are set (Table 5-1, see the module text).
 pub const ROOTS: [Root; 4] = [
-    Root { name: "gpu3d_core", slice: 3, mux: 2, post: 1 },
-    Root { name: "gpu3d_shader", slice: 4, mux: 2, post: 1 },
+    Root { name: "gpu3d_core", slice: 3, mux: CORE_MUX, post: 1 },
+    Root { name: "gpu3d_shader", slice: 4, mux: CORE_MUX, post: 1 },
     Root { name: "gpu_axi", slice: 24, mux: 1, post: 1 },
     Root { name: "gpu_ahb", slice: 25, mux: 1, post: 2 },
 ];

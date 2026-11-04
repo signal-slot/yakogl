@@ -350,8 +350,11 @@ fn power_on_clocks_first_then_gpumix_then_gpu3d() {
     let pos =
         |b: &str, o: u32| w.iter().position(|x| x.0 == b && x.1 == o).unwrap_or_else(|| panic!("{b} {o:#x}: {w:?}"));
     // roots (Table 5-1 offsets), with their mux and dividers
-    assert_eq!(m.peek(CCM, 0x8180), (1 << 28) | (2 << 24));
-    assert_eq!(m.peek(CCM, 0x8200), (1 << 28) | (2 << 24));
+    // core and shader: SYSTEM_PLL1 (mux 2), or SYSTEM_PLL2 (mux 4) with
+    // the vivante-1000mhz feature
+    let core_mux = if cfg!(feature = "vivante-1000mhz") { 4 } else { 2 };
+    assert_eq!(m.peek(CCM, 0x8180), (1 << 28) | (core_mux << 24));
+    assert_eq!(m.peek(CCM, 0x8200), (1 << 28) | (core_mux << 24));
     assert_eq!(m.peek(CCM, 0x8c00), (1 << 28) | (1 << 24));
     assert_eq!(m.peek(CCM, 0x8c80), (1 << 28) | (1 << 24) | 1);
     assert!(pos(CCM, 0x8c80) < pos(CCM, 0x4574), "roots before gates");

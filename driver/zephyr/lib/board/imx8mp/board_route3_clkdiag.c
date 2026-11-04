@@ -167,6 +167,12 @@ void board_route3_clock_report(void (*out)(const char *line))
 		 sys_read32(an + 0x84u), sys_read32(an + 0x88u),
 		 sys_read32(ccm + 0x8000u), sys_read32(ccm + 0x9880u));
 	out(buf);
+	/* the GPU's core and shader roots (slices 3, 4: CCM 0x8180, 0x8200) and
+	 * SYSTEM_PLL2 (CCM_ANALOG 0x104 / 0x108, clk-imx8mp.c "sys_pll2") */
+	snprintf(buf, sizeof(buf), "A53GPUCLK core %08x shader %08x | syspll2 gen %08x fdiv0 %08x\n",
+		 sys_read32(ccm + 0x8180u), sys_read32(ccm + 0x8200u), sys_read32(an + 0x104u),
+		 sys_read32(an + 0x108u));
+	out(buf);
 	for (unsigned int i = 0; i < 16u && rc == 0; i++) {
 		rc = pmic_read(i2, (uint8_t)(0x10u + i), &r[i]);
 	}
