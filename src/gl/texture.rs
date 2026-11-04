@@ -26,8 +26,8 @@ use super::{draw, framebuffer};
 use crate::backend::{
     self, gles_texfmt_bytes, GLES_SURF_RGB565, GLES_SURF_XRGB8888, GLES_TEXFMT_A8, GLES_TEXFMT_ETC2_RGB,
     GLES_TEXFMT_ETC2_RGBA, GLES_TEXFMT_ETC2_SRGB_RGB, GLES_TEXFMT_ETC2_SRGB_RGBA, GLES_TEXFMT_L8, GLES_TEXFMT_LA8,
-    GLES_TEXFMT_R16F, GLES_TEXFMT_R32F, GLES_TEXFMT_RGB565, GLES_TEXFMT_RGBA16F, GLES_TEXFMT_RGBA8,
-    GLES_TEXFMT_SRGB8_A8,
+    GLES_TEXFMT_R16F, GLES_TEXFMT_R32F, GLES_TEXFMT_RGB10A2, GLES_TEXFMT_RGB565, GLES_TEXFMT_RGBA16F,
+    GLES_TEXFMT_RGBA8, GLES_TEXFMT_SRGB8_A8,
 };
 use crate::osal::{self, OsalGpuMem, OSAL_MEM_DATA};
 use crate::util::{self, Global};
@@ -4180,10 +4180,10 @@ pub unsafe extern "C" fn glGenerateMipmap(target: GLenum) {
     }
     /* ES 3.0 3.8.14: only a colour-renderable, texture-filterable base level
      * has a generated chain; of the formats of es3_formats that is RGB10_A2,
-     * and only while it is stored as RGBA8 (the fallback): a box filter over
-     * the packed word has no CPU path here. */
+     * in its own class (the box filter below averages the packed word field
+     * by field) or stored as RGBA8 (the fallback). */
     if let Some(e) = es3_formats::by_index(t.es3_fmt) {
-        if e.internalformat != GL_RGB10_A2 || t.texfmt != GLES_TEXFMT_RGBA8 {
+        if e.internalformat != GL_RGB10_A2 || !matches!(t.texfmt, GLES_TEXFMT_RGBA8 | GLES_TEXFMT_RGB10A2) {
             c.set_error(GL_INVALID_OPERATION, FUNC);
             return;
         }
@@ -4191,7 +4191,12 @@ pub unsafe extern "C" fn glGenerateMipmap(target: GLenum) {
     let filtered = !t.mem.cpu.is_null()
         && (matches!(
             t.texfmt,
-            GLES_TEXFMT_RGBA8 | GLES_TEXFMT_SRGB8_A8 | GLES_TEXFMT_RGBA16F | GLES_TEXFMT_R16F | GLES_TEXFMT_R32F
+            GLES_TEXFMT_RGBA8
+                | GLES_TEXFMT_SRGB8_A8
+                | GLES_TEXFMT_RGBA16F
+                | GLES_TEXFMT_R16F
+                | GLES_TEXFMT_R32F
+                | GLES_TEXFMT_RGB10A2
         ) || is_narrow_la(t.texfmt))
         && !t.external;
     if t.target == GL_TEXTURE_3D {
@@ -4313,6 +4318,8 @@ pub unsafe extern "C" fn glGenerateMipmap(target: GLenum) {
      * implementation, which samples in linear space, 3.8.16); alpha is
      * linear already */
     let srgb = t.texfmt == GLES_TEXFMT_SRGB8_A8;
+    /* the 10/10/10/2 word averages field by field (`box_average_rgb10a2`) */
+    let rgb10a2 = t.texfmt == GLES_TEXFMT_RGB10A2;
     let comps = if matches!(t.texfmt, GLES_TEXFMT_RGBA8 | GLES_TEXFMT_SRGB8_A8 | GLES_TEXFMT_RGBA16F) {
         4usize
     } else if is_narrow_la(t.texfmt) {
@@ -4352,6 +4359,18 @@ pub unsafe extern "C" fn glGenerateMipmap(target: GLenum) {
             let sy0 = (y / dfh) * fh + (y % dfh) * sy;
 
             for x in 0..dw {
+                if rgb10a2 {
+                    let mut srcs = [0usize; 4];
+                    let mut k = 0;
+                    for j in 0..sy {
+                        for i in 0..sx {
+                            srcs[k] = src + ((sy0 + j) * sp + x * sx + i) * bpp;
+                            k += 1;
+                        }
+                    }
+                    box_average_rgb10a2(texels, dst + (y * dp + x) * bpp, &srcs[..k]);
+                    continue;
+                }
                 for ch in 0..comps {
                     let d = dst + (y * dp + x) * bpp + ch * csize;
                     let box_src = |j: usize, i: usize| src + ((sy0 + j) * sp + x * sx + i) * bpp + ch * csize;
@@ -4479,6 +4498,10 @@ fn generate_mipmap_3d(c: &mut GlContext, ti: usize, filtered: bool) {
                             }
                         }
                         let d = texel_offset_3d(t, l, x, y, z);
+                        if t.texfmt == GLES_TEXFMT_RGB10A2 {
+                            box_average_rgb10a2(texels, d, &srcs[..k]);
+                            continue;
+                        }
                         for ch in 0..comps {
                             box_average(texels, d + ch * csize, &srcs[..k], ch * csize, csize, srgb && ch < 3);
                         }
@@ -4531,6 +4554,22 @@ fn box_average(texels: &mut [u8], dst: usize, srcs: &[usize], ch: usize, csize: 
     } else {
         texels[dst..dst + 4].copy_from_slice(&sum.to_le_bytes());
     }
+}
+
+/// The box filter of one `GLES_TEXFMT_RGB10A2` texel: each field of the
+/// 10/10/10/2 word (R in the low 10 bits, alpha in the top 2) of the texels at
+/// `srcs` averaged as unsigned normalised, rounded half up as a byte channel
+/// is, and packed again at `dst` (docs/notes/v3d-rgb10a2.md (d)).
+fn box_average_rgb10a2(texels: &mut [u8], dst: usize, srcs: &[usize]) {
+    const FIELDS: [(u32, u32); 4] = [(0, 0x3ff), (10, 0x3ff), (20, 0x3ff), (30, 0x3)];
+    let word = |p: usize| u32::from_le_bytes([texels[p], texels[p + 1], texels[p + 2], texels[p + 3]]);
+    let n = srcs.len() as u32;
+    let mut out = 0u32;
+    for (shift, mask) in FIELDS {
+        let sum: u32 = srcs.iter().map(|&s| (word(s) >> shift) & mask).sum();
+        out |= ((sum + n / 2) / n) << shift;
+    }
+    texels[dst..dst + 4].copy_from_slice(&out.to_le_bytes());
 }
 
 /// Is `param` a value GL ES 3.0 accepts for `pname` (the modelled ones)?

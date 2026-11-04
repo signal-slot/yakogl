@@ -456,3 +456,135 @@ fn levels_of_another_es3_format_are_a_mismatch() {
     assert_eq!(gl.error(), GL_NO_ERROR);
     assert_ne!(gl.ctx().objs().textures[name as usize].level_bad & 2, 0);
 }
+
+/// The RGB10A2 class on, as a back end that samples and renders it would
+/// state (docs/notes/v3d-rgb10a2.md (a)); no build's mask holds it yet.
+const RGB10A2_ON: u32 = 1 << crate::backend::GLES_TEXFMT_RGB10A2;
+
+/// A framebuffer with `attach` called on it while bound, and its status.
+fn fbo_status(attach: impl FnOnce()) -> GLenum {
+    let mut fb: GLuint = 0;
+    // SAFETY: room for one name; plain GL calls.
+    unsafe {
+        super::framebuffer::glGenFramebuffers(1, &mut fb);
+        super::framebuffer::glBindFramebuffer(GL_FRAMEBUFFER, fb);
+    }
+    attach();
+    // SAFETY: plain GL call.
+    unsafe { super::framebuffer::glCheckFramebufferStatus(GL_FRAMEBUFFER) }
+}
+
+/// The bound framebuffer's colour attachment 0 sizes, red to alpha.
+fn attachment_sizes() -> [GLint; 4] {
+    [
+        GL_FRAMEBUFFER_ATTACHMENT_RED_SIZE,
+        GL_FRAMEBUFFER_ATTACHMENT_GREEN_SIZE,
+        GL_FRAMEBUFFER_ATTACHMENT_BLUE_SIZE,
+        GL_FRAMEBUFFER_ATTACHMENT_ALPHA_SIZE,
+    ]
+    .map(|p| {
+        let mut v: GLint = -1;
+        // SAFETY: `v` is room for the one value.
+        unsafe {
+            super::framebuffer::glGetFramebufferAttachmentParameteriv(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, p, &mut v)
+        };
+        v
+    })
+}
+
+/// A GL_RGB10_A2 renderbuffer has the 10/10/10/2 surface and says so where
+/// the back end samples (so renders) the class; elsewhere it is held as
+/// RGBA8 and says eight bits, as before.
+#[test]
+fn an_rgb10_a2_renderbuffer_is_ten_bits_where_the_class_is_on() {
+    if crate::REPORT_ES2 {
+        return;
+    }
+    use super::framebuffer::*;
+    use crate::backend::{GLES_SURF_RGB10_A2, GLES_SURF_RGBA8888};
+    let rb_sizes = || {
+        [GL_RENDERBUFFER_RED_SIZE, GL_RENDERBUFFER_GREEN_SIZE, GL_RENDERBUFFER_BLUE_SIZE, GL_RENDERBUFFER_ALPHA_SIZE]
+            .map(|p| {
+                let mut v: GLint = -1;
+                // SAFETY: `v` is room for the one value.
+                unsafe { glGetRenderbufferParameteriv(GL_RENDERBUFFER, p, &mut v) };
+                v
+            })
+    };
+    for (on, sizes, surf) in [(true, [10, 10, 10, 2], GLES_SURF_RGB10_A2), (false, [8; 4], GLES_SURF_RGBA8888)] {
+        let gl = TestGl::new(4, 4);
+        let _s = if on { Sampled::also(RGB10A2_ON) } else { Sampled::none_new() };
+        let mut rb: GLuint = 0;
+        let status = fbo_status(|| {
+            // SAFETY: room for one name; plain GL calls.
+            unsafe {
+                glGenRenderbuffers(1, &mut rb);
+                glBindRenderbuffer(GL_RENDERBUFFER, rb);
+                glRenderbufferStorage(GL_RENDERBUFFER, GL_RGB10_A2, 4, 4);
+                glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, rb);
+            }
+        });
+        assert_eq!(gl.error(), GL_NO_ERROR, "on {on}");
+        assert_eq!(status, GL_FRAMEBUFFER_COMPLETE, "on {on}");
+        assert_eq!(renderbuffer_surf_format(GL_RGB10_A2), surf, "on {on}");
+        assert_eq!(fb_target_format(gl.ctx()), surf, "on {on}");
+        assert_eq!(rb_sizes(), sizes, "on {on}: the renderbuffer's sizes");
+        assert_eq!(attachment_sizes(), sizes, "on {on}: the attachment's sizes");
+        let rb = &gl.ctx().objs().renderbuffers[rb as usize];
+        assert!(rb.mem.size >= 4 * 4 * 4, "on {on}: four bytes a pixel");
+    }
+}
+
+/// A GL_RGB10_A2 texture in its own class is a colour attachment: the
+/// framebuffer is complete and renders into the 10/10/10/2 surface.
+#[test]
+fn an_rgb10_a2_texture_in_its_class_is_a_complete_attachment() {
+    if crate::REPORT_ES2 {
+        return;
+    }
+    let gl = TestGl::new(4, 4);
+    let _s = Sampled::also(RGB10A2_ON);
+    let name = new_tex(GL_TEXTURE_2D);
+    let z = [0u8; 16];
+    tex_image_2d(GL_RGB10_A2, 2, 2, GL_RGBA, GL_UNSIGNED_INT_2_10_10_10_REV, &z);
+    assert_eq!(gl.error(), GL_NO_ERROR);
+    assert_eq!(gl.ctx().objs().textures[name as usize].texfmt, crate::backend::GLES_TEXFMT_RGB10A2);
+    let status = fbo_status(|| {
+        // SAFETY: plain GL call.
+        unsafe {
+            super::framebuffer::glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, name, 0)
+        };
+    });
+    assert_eq!(gl.error(), GL_NO_ERROR);
+    assert_eq!(status, GL_FRAMEBUFFER_COMPLETE);
+    assert_eq!(super::framebuffer::fb_target_format(gl.ctx()), crate::backend::GLES_SURF_RGB10_A2);
+    assert_eq!(attachment_sizes(), [10, 10, 10, 2]);
+}
+
+/// glGenerateMipmap of a texture in the RGB10A2 class: each field of the
+/// packed word averaged on its own over the 2x2 box (rounded half up), never
+/// the bytes, which would mix the 2-bit alpha with blue's top bits.
+#[test]
+fn an_rgb10_a2_chain_averages_field_by_field() {
+    if crate::REPORT_ES2 {
+        return;
+    }
+    let gl = TestGl::new(4, 4);
+    let _s = Sampled::also(RGB10A2_ON);
+    let name = new_tex(GL_TEXTURE_2D);
+    let word = |r: u32, g: u32, b: u32, a: u32| r | g << 10 | b << 20 | a << 30;
+    let w = [word(1023, 0, 1, 3), word(1022, 512, 2, 2), word(0, 1023, 3, 0), word(1, 1, 1023, 0)];
+    let bytes: Vec<u8> = w.iter().flat_map(|v| v.to_ne_bytes()).collect();
+    tex_image_2d(GL_RGB10_A2, 2, 2, GL_RGBA, GL_UNSIGNED_INT_2_10_10_10_REV, &bytes);
+    assert_eq!(gl.error(), GL_NO_ERROR);
+    // SAFETY: plain GL call.
+    unsafe { glGenerateMipmap(GL_TEXTURE_2D) };
+    assert_eq!(gl.error(), GL_NO_ERROR);
+    let t = &gl.ctx().objs().textures[name as usize];
+    assert_eq!(t.texfmt, crate::backend::GLES_TEXFMT_RGB10A2);
+    assert_eq!(t.levels, t.chain_levels, "the chain is filled");
+    let l1 = gl.gpu_bytes(t.mem.gpu + u64::from(t.level_off[1]), 4);
+    /* r (1023+1022+0+1)/4 = 511.5 -> 512, g (0+512+1023+1)/4 = 384,
+     * b (1+2+3+1023)/4 = 257.25 -> 257, a (3+2+0+0)/4 = 1.25 -> 1 */
+    assert_eq!(u32::from_le_bytes([l1[0], l1[1], l1[2], l1[3]]), word(512, 384, 257, 1));
+}
