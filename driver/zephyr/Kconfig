@@ -251,6 +251,15 @@ config YAKOGL_DRV_GPU_VIVANTE
 
 if YAKOGL_DRV_GPU_VIVANTE
 
+
+config YAKOGL_DRV_GPU_VIVANTE_1000MHZ
+	bool "GC7000UL core and shader at 1000 MHz (SYSTEM_PLL2) instead of 800 (SYSTEM_PLL1)"
+	depends on YAKOGL_DRV_GPU_VIVANTE
+	help
+	  IMX8MPRM Rev. 3 Table 5-1: GPU3D_CORE_CLK_ROOT and GPU3D_SHADER_CLK_ROOT
+	  are at most 1000 MHz; mux 100 is SYSTEM_PLL2_CLK (1000 MHz). Only in the
+	  SoC's overdrive mode (VDD_SOC 0.95 V); AXI stays at 800 MHz and AHB at
+	  400 MHz. driver/rust/src/gpu/vivante/power.rs.
 config YAKOGL_DRV_GPU_VIVANTE_INIT_PRIORITY
 	int "Init priority"
 	default 90
