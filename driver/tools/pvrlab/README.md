@@ -41,7 +41,9 @@ The minimal repro of the firmware's partial render (issue #3; design:
 first board measurement", step 1). PowerVR only. Case 175 (`refusehang`) shows
 a refused grow; this case checks the picture. In one kick, with the global free
 lists capped at 512 pages (`CONFIG_YAKOGL_DRV_GPU_PVR_FL_PROBE_MAX_PAGES=512`:
-no grow is possible), it draws `CONFIG_GL_TEST_FORCEDPR_LAYERS` (default 256)
+no grow is possible), it draws `CONFIG_GL_TEST_FORCEDPR_LAYERS` (default 1216,
+the crossing measured on the AM62P on 2026-11-02; the case doubles it up to
+4093 while no step runs out of memory)
 overlapping 512x512 rectangles into a 1024x1024 target with a 16-bit depth
 buffer and the depth test on (LESS). Each rectangle has its own colour and a
 distinct, scrambled depth, so the winner at a pixel is not the last one drawn
@@ -67,7 +69,9 @@ EXERCISED, a failure; raise the layers.
 
 - **Knob off (the known negative).** The geometry phase runs out of parameter
   memory with nothing to render, the kick never completes, and the render
-  service ends the run at its 10 s stop (cause 4; cause 2 with the grow knob).
+  service stops: cause 2 at the 512-page cap (the out-of-memory notice with
+  the list at its maximum; the firmware asks for no grow, so requests stay 0),
+  cause 4 at its 10 s stop otherwise.
   The case then sees stop != 0, prints `FAIL stopped` without reading the
   buffer and returns a failure; the stop's record and `GPU recoveries` are the
   board record.
