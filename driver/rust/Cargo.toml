@@ -33,6 +33,9 @@ doctest = false
 bench = false
 
 [features]
+# The GC7000UL core and shader at 1000 MHz from SYSTEM_PLL2 instead of 800
+# from SYSTEM_PLL1 (gpu::vivante::power; IMX8MPRM Table 5-1, overdrive only).
+vivante-1000mhz = ["vivante"]
 # The SoC whose drivers are compiled in. A Zephyr build passes the ones its
 # Kconfig selected; the host tests take both.
 imx8mp = []
