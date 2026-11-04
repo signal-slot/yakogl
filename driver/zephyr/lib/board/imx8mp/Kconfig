@@ -480,6 +480,14 @@ config YAKOGL_BOARD_IMX8MP_ROUTE3_TIMELINE_REPORT_MS
 	  first frame was shown, from the system work queue. The cluster and
 	  the M7 keep running.
 
+config YAKOGL_BOARD_IMX8MP_A53_MHZ
+	int "i.MX8MP direct image: set the A53 cluster to this many MHz at boot (0 = leave the SPL's)"
+	default 0
+	help
+	  board_imx8mp_a53_clock.c. 1200 or 1600, Linux's operating points for
+	  this SoC at the VDD_ARM the SPL sets (0.95 V); the PMIC is not
+	  touched. Only for a part whose speed grade allows the rate.
+
 config YAKOGL_BOARD_IMX8MP_ROUTE3_CLOCK_REPORT
 	bool "Measurement: the A53's clock and VDD_ARM, read back, after the timeline"
 	depends on YAKOGL_BOARD_IMX8MP_ROUTE3_TIMELINE_REPORT_MS > 0
