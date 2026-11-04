@@ -480,6 +480,15 @@ config YAKOGL_BOARD_IMX8MP_ROUTE3_TIMELINE_REPORT_MS
 	  first frame was shown, from the system work queue. The cluster and
 	  the M7 keep running.
 
+config YAKOGL_BOARD_IMX8MP_ROUTE3_CLOCK_REPORT
+	bool "Measurement: the A53's clock and VDD_ARM, read back, after the timeline"
+	depends on YAKOGL_BOARD_IMX8MP_ROUTE3_TIMELINE_REPORT_MS > 0
+	help
+	  board_route3_clkdiag.c: the core clock measured with the PMU cycle
+	  counter, the ARM PLL and A53 clock-root registers, and the PCA9450's
+	  registers 0x10-0x1f (BUCK2 is VDD_ARM) read over I2C1 by hand. Reads
+	  only; nothing is changed.
+
 config YAKOGL_BOARD_IMX8MP_BSS_CLEARED_BY_LOADER
 	bool "The second-stage loader zeroes this image's .bss"
 	select SKIP_BSS_CLEAR
