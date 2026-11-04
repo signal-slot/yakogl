@@ -346,6 +346,15 @@ config YAKOGL_V3D_CARVEOUT_TOP_BELOW
 	  "carve-out find" line prints the setting, the free runs and the
 	  longest.
 
+config YAKOGL_DRAW_STEP_STATS
+	bool "Time every draw's steps (src/draw_steps.rs) and keep the totals"
+	default y
+	help
+	  The OSAL keeps the per-step CPU time of every glDraw* (osal_draw_stats;
+	  the check runs' step records). It costs about twenty clock reads and
+	  two reports a draw: the route-3 cluster (about 200 draws a frame)
+	  turns it off.
+
 choice YAKOGL_SHADERC
 	prompt "shader back end"
 	default YAKOGL_SHADERC_ONLINE

@@ -75,7 +75,14 @@ int osal_zephyr_timing_query(uint32_t what, void *out, size_t out_sz)
 	case OSAL_QUERY_CLOCK_NS:
 		return clock_ns(out, out_sz);
 	case OSAL_QUERY_DRAW_STATS:
+#ifdef CONFIG_YAKOGL_DRAW_STEP_STATS
 		return draw_stats_add(out, out_sz);
+#else
+		/* no totals kept: the library stops timing its draw steps
+		 * (draw_steps.rs, the first refused report) */
+		ARG_UNUSED(draw_stats_add);
+		return -ENOTSUP;
+#endif
 	default:
 		return -ENOTSUP;
 	}
