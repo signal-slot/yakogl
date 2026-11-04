@@ -460,6 +460,10 @@ pub const fn rt_format(surf: u8) -> Option<RtFormat> {
         /* sRGB: the tile buffer is 16F linear at 64 bpp, the TLB converts at
          * load and store (v3dx_format_table.c:250-259), clamped to [0, 1] */
         GLES_SURF_SRGB8_A8 => row(V3D_OUTPUT_IMAGE_FORMAT_SRGB8_ALPHA8, V3D_INTERNAL_TYPE_16F, B64, NORM, 4),
+        /* RGB10_A2: the same 16F case (v3dx_format_table.c:252, Mesa's row
+         * :71), unclamped as neither integer nor sRGB, quantised to
+         * 10/10/10/2 at the store (docs/notes/v3d-rgb10a2.md (b)) */
+        GLES_SURF_RGB10_A2 => row(V3D_OUTPUT_IMAGE_FORMAT_RGB10_A2, V3D_INTERNAL_TYPE_16F, B64, NONE, 4),
         GLES_SURF_RGBA16F => row(V3D_OUTPUT_IMAGE_FORMAT_RGBA16F, V3D_INTERNAL_TYPE_16F, B64, NONE, 8),
         GLES_SURF_R16F => row(V3D_OUTPUT_IMAGE_FORMAT_R16F, V3D_INTERNAL_TYPE_16F, B64, NONE, 2),
         GLES_SURF_R32F => row(V3D_OUTPUT_IMAGE_FORMAT_R32F, V3D_INTERNAL_TYPE_32F, B32, NONE, 4),
@@ -522,9 +526,11 @@ pub fn clear_words(surf: u8, c: [f32; 4]) -> [u32; 4] {
         }
         Some(V3D_INTERNAL_TYPE_16F) => {
             /* the TLB clamps a colour entering the tile buffer, not the
-             * clear (v3dx_draw.c:1705-1710); the sRGB surface's clear is
-             * clamped here (NaN to 0) as the PowerVR's is */
-            let c = if surf == GLES_SURF_SRGB8_A8 { c.map(|x| if x > 0.0 { x.min(1.0) } else { 0.0 }) } else { c };
+             * clear (v3dx_draw.c:1705-1710); the clear of the sRGB and the
+             * RGB10_A2 surface, fixed point in memory, is clamped here to
+             * [0, 1] (NaN to 0, ES 3.0 4.2.3) as the PowerVR's sRGB one is */
+            let fixed = surf == GLES_SURF_SRGB8_A8 || surf == GLES_SURF_RGB10_A2;
+            let c = if fixed { c.map(|x| if x > 0.0 { x.min(1.0) } else { 0.0 }) } else { c };
             let h = c.map(|x| u32::from(f32_to_f16(x)));
             [h[0] | h[1] << 16, h[2] | h[3] << 16, 0, 0]
         }
@@ -1015,11 +1021,13 @@ mod tests {
     /// pixel equal to the GL core's; a draw into any of them is not refused.
     /// The sRGB surface's row is the TLB's SRGB8_ALPHA8 over a 16F tile
     /// buffer at 64 bpp, clamped NORM (v3dx_format_table.c:250-259,
-    /// v3dx_rcl.c:400-401); a draw into it is not refused.
+    /// v3dx_rcl.c:400-401); a draw into it is not refused. The RGB10_A2
+    /// surface's is the TLB's RGB10_A2 over the same 16F tile buffer, clamped
+    /// NONE (v3dx_format_table.c:71, 252; docs/notes/v3d-rgb10a2.md (b)).
     #[test]
     fn every_colour_surface_has_mesas_row() {
         /* (surface, output image format, internal type, bpp, clamp) */
-        let rows: [(u8, u32, u32, u32, u32); 26] = [
+        let rows: [(u8, u32, u32, u32, u32); 27] = [
             (GLES_SURF_RGBA8888, 27, 2, 0, 0),
             (GLES_SURF_XRGB8888, 27, 2, 0, 0),
             (GLES_SURF_RGB565, 7, 2, 0, 0),
@@ -1046,6 +1054,7 @@ mod tests {
             (GLES_SURF_RGBA32UI, 15, 9, 2, 3),
             (GLES_SURF_RGB10_A2UI, 2, 5, 1, 3),
             (GLES_SURF_SRGB8_A8, 0, 6, 1, 1),
+            (GLES_SURF_RGB10_A2, 3, 6, 1, 0),
         ];
         for (surf, output, ty, bpp, clamp) in rows {
             let name = gles_surf_name(surf);
@@ -1084,6 +1093,9 @@ mod tests {
         /* the sRGB surface: the same halves of the linear colour, clamped to [0, 1] (the TLB encodes at the store) */
         assert_eq!(clear_words(GLES_SURF_SRGB8_A8, f), [0x3800_3c00, 0x0000_0000, 0, 0], "linear halves, clamped");
         assert_eq!(clear_words(GLES_SURF_SRGB8_A8, [f32::NAN, 0.5, 2.0, 1.0]), [0x3800_0000, 0x3c00_3c00, 0, 0]);
+        /* RGB10_A2: fixed point in memory, so clamped the same way; the store quantises to 10/10/10/2 */
+        assert_eq!(clear_words(GLES_SURF_RGB10_A2, f), [0x3800_3c00, 0x0000_0000, 0, 0], "halves, clamped");
+        assert_eq!(clear_words(GLES_SURF_RGB10_A2, [f32::NAN, 0.25, 7.0, -0.5]), [0x3400_0000, 0x0000_3c00, 0, 0]);
         assert_eq!(clear_words(GLES_SURF_R16F, f), [0x3800_3c00, 0x0000_c000, 0, 0]);
         assert_eq!(clear_words(GLES_SURF_R32F, f), f.map(f32::to_bits));
         let rgba = [1.0f32, 0.0, 0.0, 1.0];

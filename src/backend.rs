@@ -357,6 +357,15 @@ pub const GLES_SURF_INT_LAST: u8 = GLES_SURF_RGB10_A2UI;
  * is refused by name ([`rt_format_drawable`]). */
 pub const GLES_SURF_SRGB8_A8: u8 = 25;
 
+/* ES 3.0's GL_RGB10_A2 colour buffer (a renderbuffer or a texture level of
+ * the RGB10A2 class): unsigned normalised, stored as the 32-bit word of
+ * GLES_TEXFMT_RGB10A2 (R in the low 10 bits, alpha in the top 2). Outside
+ * the integer range, so [`gles_surf_is_integer`] is false for it. A back end
+ * renders it exactly when it samples the class ([`rt_format_drawable`],
+ * docs/notes/v3d-rgb10a2.md (a)); otherwise the GL core keeps the format in
+ * RGBA8, as before. */
+pub const GLES_SURF_RGB10_A2: u8 = 26;
+
 /// Is this the sRGB colour surface?
 pub const fn gles_surf_is_srgb(format: u8) -> bool {
     format == GLES_SURF_SRGB8_A8
@@ -437,6 +446,7 @@ pub const fn gles_surf_name(format: u8) -> &'static str {
         GLES_SURF_RGBA32UI => "RGBA32UI",
         GLES_SURF_RGB10_A2UI => "RGB10_A2UI",
         GLES_SURF_SRGB8_A8 => "SRGB8_ALPHA8",
+        GLES_SURF_RGB10_A2 => "RGB10_A2",
         _ => "unknown",
     }
 }
@@ -493,8 +503,11 @@ pub const SRGB_RT: bool = cfg!(any(feature = "gpu-powervr", feature = "gpu-vivan
 pub static HOST_SRGB_RT: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
 
 /// Can this build's back end render into the surface? Everything but the
-/// integer and sRGB surfaces is a yes (those were always in); an integer one
-/// needs its bit in [`INTEGER_RT_FORMATS`], the sRGB one [`SRGB_RT`].
+/// integer, sRGB and RGB10_A2 surfaces is a yes (those were always in); an
+/// integer one needs its bit in [`INTEGER_RT_FORMATS`], the sRGB one
+/// [`SRGB_RT`], the RGB10_A2 one the class in [`sampled_texfmts`]: a back end
+/// samples `GLES_TEXFMT_RGB10A2` only when it renders it too (the PowerVR
+/// keeps the class out of its mask because it cannot).
 pub fn rt_format_drawable(format: u8) -> bool {
     if gles_surf_is_srgb(format) {
         #[cfg(feature = "host-test")]
@@ -502,6 +515,9 @@ pub fn rt_format_drawable(format: u8) -> bool {
             return true;
         }
         return SRGB_RT;
+    }
+    if format == GLES_SURF_RGB10_A2 {
+        return sampled_texfmts() & gles_texfmt_bit(GLES_TEXFMT_RGB10A2) != 0;
     }
     if !gles_surf_is_integer(format) {
         return true;
@@ -524,6 +540,8 @@ pub const fn gles_surf_bytes_per_pixel(format: u8) -> u32 {
     } else if format == GLES_SURF_RGBA16F {
         8
     } else {
+        /* RGBA8888, XRGB8888, R32F, SRGB8_A8 and RGB10_A2 (its 10/10/10/2
+         * word) */
         4
     }
 }
