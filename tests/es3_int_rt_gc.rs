@@ -11,10 +11,12 @@
 //!   integer surface, against the rnndb header the back end is written from
 //!   (driver/src/vivante/hw/state_3d.xml.h, read here by name so that a wrong
 //!   constant in src/vivante/regs.rs shows);
-//! - RGBA32I and RGBA32UI, which the PE has no format for, and the four
-//!   64-bit surfaces held back behind gl_test case 44's open 64-bit LINEAR
-//!   write, refused by name (`rt_format_drawable`, GL_INVALID_OPERATION) and
-//!   never drawn;
+//! - RGBA32I and RGBA32UI, which the PE has no format for, refused by name
+//!   (`rt_format_drawable`, GL_INVALID_OPERATION) and never drawn;
+//! - the four 64-bit surfaces (RGBA16I/UI, RG32I/UI), drawn as RGBA16F is:
+//!   into the 4x4-tiled shadow of `src/vivante/wide_target.rs` (gl_test case
+//!   44: the PE misplaces 64-bit pixels in a LINEAR target), its address,
+//!   stride and SINGLE_BUFFER(2) in the stream and the shadow copied back;
 //! - the state words of a real draw and a real glClearBufferuiv through the
 //!   GL core and the Vivante back end on a stand-in OSAL that keeps every
 //!   submitted stream (as tests/gc_npot_repeat.rs): PE_COLOR_FORMAT,
@@ -105,17 +107,21 @@ fn pe_format_bytes(name: &str) -> u32 {
     }
 }
 
-/// Is the surface drawn? Not the 128-bit ones (no PE format) and not the
-/// 64-bit ones, held back while gl_test case 44 has the PE's 64-bit LINEAR
-/// write open (src/vivante/VIVANTE_NOTES.md, "RGBA16F targets").
+/// Is the surface drawn? Every one but the 128-bit ones (no PE format).
 fn drawn(s: u8) -> bool {
-    expected(s).is_some() && gles_surf_bytes_per_pixel(s) <= 4
+    expected(s).is_some()
+}
+
+/// Is a single-target draw into the surface rendered through the tiled
+/// shadow (`src/vivante/wide_target.rs`)? The 64-bit ones, as RGBA16F.
+fn shadowed(s: u8) -> bool {
+    gles_surf_bytes_per_pixel(s) == 8
 }
 
 #[test]
 fn every_integer_surface_takes_the_rnndb_pe_format_and_output_mode() {
     let mut drawable = 0u32;
-    let mut held = 0u32;
+    let mut wide = 0u32;
     for s in GLES_SURF_INT_FIRST..=GLES_SURF_INT_LAST {
         let name = gles_surf_name(s);
         let bit = 1u32 << (s - GLES_SURF_INT_FIRST);
@@ -128,10 +134,10 @@ fn every_integer_surface_takes_the_rnndb_pe_format_and_output_mode() {
                 assert_eq!(ps_color_output_mode(s), rnndb(mode), "{name}: {mode}");
                 assert_eq!(gles_surf_bytes_per_pixel(s), pe_format_bytes(pe), "{name}: pixel size of {pe}");
                 assert_eq!(rt_format_drawable(s), drawn(s), "{name}");
-                if drawn(s) {
-                    drawable |= bit;
-                } else {
-                    held |= bit;
+                assert!(drawn(s), "{name}");
+                drawable |= bit;
+                if shadowed(s) {
+                    wide |= bit;
                 }
             }
             None => {
@@ -142,9 +148,10 @@ fn every_integer_surface_takes_the_rnndb_pe_format_and_output_mode() {
         }
     }
     assert_eq!(GC_INTEGER_RT_FORMATS, drawable);
-    assert_eq!(GC_INT_RT_64BPP, held, "the held-back ones are the four 64-bit surfaces");
+    assert_eq!(GC_INT_RT_64BPP, wide, "GC_INT_RT_64BPP is the four 64-bit surfaces");
+    assert_eq!(GC_INTEGER_RT_FORMATS & GC_INT_RT_64BPP, GC_INT_RT_64BPP, "the 64-bit ones are drawn");
     assert_eq!(INTEGER_RT_FORMATS, drawable, "the build's mask is the back end's");
-    assert_eq!((drawable.count_ones(), held.count_ones(), GC_INT_RT_128BPP.count_ones()), (13, 4, 2));
+    assert_eq!((drawable.count_ones(), wide.count_ones(), GC_INT_RT_128BPP.count_ones()), (17, 4, 2));
 }
 
 /// The register constants the back end writes are the rnndb's.
@@ -497,9 +504,47 @@ mod gl_path {
         format!("#version 300 es\nlayout(location = 0) out highp {ty} o;\nvoid main() {{ o = {one}; }}\n")
     }
 
+    /// The pixel engine's surface words of a 16x16 single-target draw or
+    /// clear. A 64-bit target renders into its tiled shadow (wide_target.rs):
+    /// a page-aligned address, the padded row stride (16 pixels * 8 bytes),
+    /// PE_LOGIC_OP SINGLE_BUFFER(2), no SUPER_TILED bit, and the shadow
+    /// untiled back into the storage once the kick completed. Every other
+    /// target is LINEAR, SINGLE_BUFFER(1), at its own 16-pixel pitch.
+    fn assert_surface(name: &str, surf: u8, w: &[(u32, u32)], copied_back: u64) {
+        let color = last(w, GC_PE_COLOR_FORMAT).unwrap();
+        let tiled = rnndb("VIVS_PE_COLOR_FORMAT_SUPER_TILED") | rnndb("VIVS_PE_COLOR_FORMAT_SUPER_TILED_NEW");
+        assert_eq!(color & tiled, 0, "{name}: no SUPER_TILED bit");
+        /* FORMAT_EXT's own write mask (bit 31) clear, or the PE keeps its old
+         * FORMAT_EXT (VIVANTE_NOTES.md, "RGBA16F targets") */
+        assert_eq!(color & rnndb("VIVS_PE_COLOR_FORMAT_FORMAT_EXT_MASK"), 0, "{name}: FORMAT_EXT written");
+        let logic = last(w, GC_PE_LOGIC_OP).expect("PE_LOGIC_OP");
+        assert_eq!(logic & rnndb("VIVS_PE_LOGIC_OP_SINGLE_BUFFER_MASK"), 0, "{name}: SINGLE_BUFFER written");
+        let single_mask = rnndb("VIVS_PE_LOGIC_OP_SINGLE_BUFFER__MASK");
+        let single = (logic & single_mask) >> single_mask.trailing_zeros();
+        let stride = last(w, rnndb("VIVS_PE_COLOR_STRIDE")).expect("PE_COLOR_STRIDE");
+        let addr = last(w, pe_pipe_color_addr(0)).expect("PE_PIPE_COLOR_ADDR(0)");
+        assert_eq!(last(w, pe_pipe_color_addr(1)), Some(addr), "{name}: both pipes, one surface");
+        if shadowed(surf) {
+            assert_eq!(single, 2, "{name}: SINGLE_BUFFER(2), the tiled 64-bit value");
+            assert_eq!(stride, yakogl::vivante::wide_target::stride(16), "{name}: the shadow's stride");
+            assert_eq!(stride, 16 * 8, "{name}");
+            assert_eq!(addr & 0xfff, 0, "{name}: the shadow starts on a page");
+            assert_eq!(copied_back, 16 * 16 * 8, "{name}: the shadow went back into the storage");
+        } else {
+            assert_eq!(single, 1, "{name}: SINGLE_BUFFER(1), linear");
+            assert_eq!(stride, 16 * gles_surf_bytes_per_pixel(surf), "{name}: linear pitch");
+            assert_eq!(copied_back, 0, "{name}: no shadow");
+        }
+    }
+
+    /// Bytes untiled out of shadows since init.
+    fn untiled() -> u64 {
+        yakogl::vivante::wide_target::counts().1
+    }
+
     /// One draw into each integer format: the PE format, the output mode,
-    /// no saturate and no blend, or a refusal by name for the two the PE
-    /// has no format for and the four held back.
+    /// no saturate and no blend, the tiled shadow for the four 64-bit ones,
+    /// or a refusal by name for the two the PE has no format for.
     #[test]
     fn a_draw_into_each_integer_target_programs_its_pe_format_and_output_mode() {
         for (internal, surf, ty) in FORMATS {
@@ -507,6 +552,7 @@ mod gl_path {
                 let name = gles_surf_name(surf);
                 let rb = renderbuffer(internal);
                 framebuffer(&[rb]);
+                let untiled0 = untiled();
                 let (e, w) = draw(&fs_for(ty));
                 let Some((pe, mode)) = expected(surf).filter(|_| drawn(surf)) else {
                     assert_eq!(e, GL_INVALID_OPERATION, "{name}: refused by name");
@@ -522,11 +568,30 @@ mod gl_path {
                 let ext_mask = rnndb("VIVS_PE_COLOR_FORMAT_FORMAT_EXT__MASK");
                 assert_eq!((color & ext_mask) >> 24, rnndb(pe), "{name}: FORMAT_EXT is {pe}");
                 assert_ne!(color & rnndb("VIVS_PE_COLOR_FORMAT_FORMAT_MASK"), 0, "{name}: FORMAT_MASK");
+                /* the whole word, as etnaviv writes it with no blend
+                 * (VIVANTE_NOTES.md "RGBA16F targets": 0x13010f10 for
+                 * RGBA16F): FORMAT_EXT, FORMAT_MASK, every channel the
+                 * target has (one without alpha keeps A out of COMPONENTS,
+                 * and so loses OVERWRITE), no FORMAT_EXT_MASK; 0x1c010f10
+                 * for RGBA16I/UI, 0x15000710 for RG32I/UI */
+                let field = |mask: &str, v: u32| (v << rnndb(mask).trailing_zeros()) & rnndb(mask);
+                let alpha = gles_surf_int_layout(surf).expect("an integer layout").channels == 4;
+                let word = field("VIVS_PE_COLOR_FORMAT_FORMAT_EXT__MASK", rnndb(pe))
+                    | rnndb("VIVS_PE_COLOR_FORMAT_FORMAT_MASK")
+                    | field("VIVS_PE_COLOR_FORMAT_COMPONENTS__MASK", if alpha { 0xf } else { 0x7 })
+                    | if alpha { rnndb("VIVS_PE_COLOR_FORMAT_OVERWRITE") } else { 0 };
+                assert_eq!(color, word, "{name}: PE_COLOR_FORMAT");
+                match surf {
+                    GLES_SURF_RGBA16I | GLES_SURF_RGBA16UI => assert_eq!(color, 0x1c01_0f10, "{name}"),
+                    GLES_SURF_RG32I | GLES_SURF_RG32UI => assert_eq!(color, 0x1500_0710, "{name}"),
+                    _ => {}
+                }
                 let ext = last(&w, rnndb("VIVS_PS_CONTROL_EXT")).expect("PS_CONTROL_EXT");
                 assert_eq!(ext & 0x7, rnndb(mode), "{name}: OUTPUT_MODE0 is {mode}");
                 let ctl = last(&w, rnndb("VIVS_PS_CONTROL")).expect("PS_CONTROL");
                 assert_eq!(ctl & rnndb("VIVS_PS_CONTROL_SATURATE_RT0"), 0, "{name}: an integer is not saturated");
                 assert_eq!(last(&w, rnndb("VIVS_PE_ALPHA_CONFIG")), Some(0), "{name}: never blended");
+                assert_surface(name, surf, &w, untiled() - untiled0);
             });
         }
     }
@@ -576,20 +641,66 @@ mod gl_path {
         });
     }
 
-    /// The held-back 64-bit surface as a second draw buffer is refused as
-    /// the first is: by name, nothing drawn.
+    /// RGBA32UI as a second draw buffer is refused as the first is: by name,
+    /// nothing drawn.
     #[test]
-    fn a_held_back_second_target_refuses_the_draw() {
+    fn a_128_bit_second_target_refuses_the_draw() {
         on_gc7000(|| {
             let a = renderbuffer(GL_RGBA8);
-            let b = renderbuffer(GL_RGBA16UI);
+            let b = renderbuffer(GL_RGBA32UI);
             framebuffer(&[a, b]);
             let fs = "#version 300 es\nprecision mediump float;\nlayout(location = 0) out vec4 c;\n\
                       layout(location = 1) out highp uvec4 u;\nvoid main() { c = vec4(0.5); u = uvec4(1u); }\n";
             let (e, w) = draw(fs);
             assert_eq!(e, GL_INVALID_OPERATION);
             assert!(!w.iter().any(|&(r, _)| r == pe_rt_config_8(1)), "nothing reached the second target");
+            assert!(!w.iter().any(|&(r, _)| r == GC_PE_COLOR_FORMAT), "nothing reached the pixel engine");
         });
+    }
+
+    /// A 64-bit integer target beside another draw buffer is refused by the
+    /// back end: the 8-RT bank has no tiled bit of its own, so a draw with
+    /// more than one target would keep the linear path, where the PE
+    /// misplaces 64-bit pixels (gl_test case 44, wide_target.rs "Not
+    /// covered"). Each of the four, as first and as second target: nothing
+    /// reaches the pixel engine, no shadow is made.
+    #[test]
+    fn a_64_bit_target_beside_another_refuses_the_draw() {
+        for (internal, ty) in [(GL_RGBA16I, "ivec4"), (GL_RGBA16UI, "uvec4"), (GL_RG32I, "ivec4"), (GL_RG32UI, "uvec4")]
+        {
+            for wide_first in [false, true] {
+                on_gc7000(|| {
+                    let a = renderbuffer(GL_RGBA8);
+                    let b = renderbuffer(internal);
+                    let (fs, rbs) = if wide_first {
+                        (
+                            format!(
+                                "#version 300 es\nprecision mediump float;\nlayout(location = 0) out highp {ty} u;\n\
+                                  layout(location = 1) out vec4 c;\nvoid main() {{ u = {ty}(1); c = vec4(0.5); }}\n"
+                            ),
+                            [b, a],
+                        )
+                    } else {
+                        (format!("#version 300 es\nprecision mediump float;\nlayout(location = 0) out vec4 c;\n\
+                                  layout(location = 1) out highp {ty} u;\nvoid main() {{ c = vec4(0.5); u = {ty}(1); }}\n"), [a, b])
+                    };
+                    framebuffer(&rbs);
+                    let untiled0 = untiled();
+                    let (e, w) = draw(&fs);
+                    let what = format!("{internal:#x} first={wide_first}");
+                    assert_eq!(e, GL_INVALID_OPERATION, "{what}");
+                    assert!(
+                        !w.iter().any(|&(r, _)| r == pe_rt_config_8(1)),
+                        "{what}: nothing reached the second target"
+                    );
+                    assert!(
+                        !w.iter().any(|&(r, _)| r == GC_PE_COLOR_FORMAT),
+                        "{what}: nothing reached the pixel engine"
+                    );
+                    assert_eq!(untiled(), untiled0, "{what}: no shadow");
+                });
+            }
+        }
     }
 
     /// glClearBufferuiv / glClearBufferiv: the clear quad runs with the
@@ -604,6 +715,7 @@ mod gl_path {
                 let rb = renderbuffer(internal);
                 framebuffer(&[rb]);
                 let kicks0 = with_platform(|p| p.kicks.len());
+                let untiled0 = untiled();
                 let bits: [u32; 4] = [0x8000_0001, 7, 0xffff_fff0, 0x1234_5678];
                 // SAFETY: four values; plain GL calls.
                 unsafe {
@@ -620,6 +732,7 @@ mod gl_path {
                 assert_eq!((color >> 24) & 0x7f, rnndb(pe), "{name}: the clear's FORMAT_EXT");
                 assert_eq!(last(&w, GC_PS_CONTROL_EXT).unwrap() & 0x7, rnndb(mode), "{name}: the clear's mode");
                 assert_eq!(last(&w, GC_PS_CONTROL).unwrap() & GC_PS_CONTROL_SATURATE_RT0, 0, "{name}");
+                assert_surface(name, surf, &w, untiled() - untiled0);
                 /* the four values in a row in the fragment constant window */
                 let ps: Vec<u32> = w
                     .iter()

@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-//! A 4x4-tiled shadow of a colour target with 64-bit pixels (RGBA16F), for
-//! the pixel engine to render into.
+//! A 4x4-tiled shadow of a colour target with 64-bit pixels (RGBA16F, and
+//! the integer RGBA16I/UI and RG32I/UI), for the pixel engine to render into.
+//! It is chosen by pixel size ([`wanted`]) and copies whole 8-byte pixels, so
+//! the format's channels never matter here.
 //!
 //! The pixel engine writes 64-bit pixels into a LINEAR surface at the wrong
 //! places on this core: gl_test 44's probe (#6, cba8b199, record `got
@@ -43,11 +45,12 @@
 //!
 //! Not covered: a draw with more than one colour target (the 8-RT bank's
 //! RT_CONFIG has no tiled bit of its own: SINGLE_BUFFER switches every
-//! target), which keeps the linear path; and the depth surface of a draw
-//! into a shadow, which SINGLE_BUFFER(2) switches too: its layout under (2)
-//! is unmeasured, which matters only to `depth_resolve` and to a depth
-//! buffer shared with draws into 32-bit targets (logged once when a draw
-//! reaches it). ES 2.0 has no 64-bit colour format to render into.
+//! target), which keeps the linear path (an RGBA16F target there still
+//! does; `draw_one` refuses the 64-bit integer ones); and the depth surface
+//! of a draw into a shadow, which SINGLE_BUFFER(2) switches too: its layout
+//! under (2) is unmeasured, which matters only to `depth_resolve` and to a
+//! depth buffer shared with draws into 32-bit targets (logged once when a
+//! draw reaches it). ES 2.0 has no 64-bit colour format to render into.
 
 use crate::backend::{gles_surf_bytes_per_pixel, GlesDraw};
 use crate::osal::{self, OsalGpuMem, OSAL_MEM_DATA};
