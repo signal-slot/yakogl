@@ -163,7 +163,8 @@ void board_route3_clock_report(void (*out)(const char *line))
 		 board_imx8mp_a53_clock_result(),
 #else
 		 1,
-#endif sys_read32(an + 0x84u), sys_read32(an + 0x88u),
+#endif
+		 sys_read32(an + 0x84u), sys_read32(an + 0x88u),
 		 sys_read32(ccm + 0x8000u), sys_read32(ccm + 0x9880u));
 	out(buf);
 	for (unsigned int i = 0; i < 16u && rc == 0; i++) {

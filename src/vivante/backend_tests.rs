@@ -4303,6 +4303,48 @@ fn a_swap_waits_for_the_previous_frame_not_the_one_it_submits() {
     assert_eq!((kicks, waits), (2, 2));
 }
 
+/// A sync wait on a submitted kick waits for that kick and submits nothing
+/// recorded since: the route-3 producer records frame N + 1 into a window
+/// still on the panel while it waits for frame N (2026-11-04).
+#[test]
+fn a_sync_wait_waits_for_its_kick_and_submits_nothing_recorded_since() {
+    let rig = Rig::new();
+    let d = rig.draw(3);
+    let (mut kicks, mut waits) = (0u32, 0u32);
+
+    let first = gc_kick_id();
+    rig.submit(&d);
+    /* the next frame is being recorded, and the first is not done */
+    // SAFETY: `d` is a live draw for the length of the call.
+    assert_eq!(unsafe { gc_draw(&d) }, 0);
+    with_platform(|p| p.fence = 0);
+    assert_eq!(gc_wait_kick(first), 0);
+    // SAFETY: both are writable.
+    unsafe { gc_counters(&mut kicks, &mut waits) };
+    assert_eq!((kicks, waits), (1, 1), "one wait, and the open frame stays open");
+    assert!(gc_kick_pending(gc_kick_id()), "the open frame is still recording");
+
+    /* done already: no wait */
+    with_platform(|p| p.fence = 1);
+    assert_eq!(gc_wait_kick(first), 0);
+    // SAFETY: as above.
+    unsafe { gc_counters(&mut kicks, &mut waits) };
+    assert_eq!((kicks, waits), (1, 1));
+
+    /* kick 0 and a kick that never existed complete at once */
+    assert_eq!(gc_wait_kick(0), 0);
+    assert_eq!(gc_wait_kick(first + 7), 0);
+    // SAFETY: as above.
+    unsafe { gc_counters(&mut kicks, &mut waits) };
+    assert_eq!((kicks, waits), (1, 1));
+
+    /* the open frame's own id: submitted and waited for, as finish does */
+    assert_eq!(gc_wait_kick(gc_kick_id()), 0);
+    // SAFETY: as above.
+    unsafe { gc_counters(&mut kicks, &mut waits) };
+    assert_eq!(kicks, 2);
+}
+
 #[test]
 fn the_heaps_are_the_ones_the_gl_core_allocates_in() {
     assert_eq!(gc_heap_base(GLES_HEAP_DATA), GC_HEAP_DATA);
