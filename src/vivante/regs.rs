@@ -862,40 +862,133 @@ pub const fn texdesc_3d_depth(x: u32) -> u32 {
 }
 
 // texel formats (TEXDESC_CONFIG0_FORMAT)
+//
+// Citations: `F` is Mesa 26.2.1 src/gallium/drivers/etnaviv/etnaviv_format.c
+// (the etnaviv driver is not under third_party/; it is read from the same
+// tag, commit da14d65e4499e66468094be52bff9ea0915a695e), `X` is
+// src/etnaviv/hw/common_3d.xml.h. The `mesa_header` test below checks every
+// value against driver/src/vivante/hw/common_3d.xml.h (X plus one SPDX line,
+// so its line numbers are X's plus one).
 /* one and two bytes a texel (Mesa etnaviv_format.c: A8_UNORM, L8_UNORM,
  * L8A8_UNORM; common_3d.xml.h TEXTURE_FORMAT_*), sampled as (0,0,0,A),
  * (L,L,L,1) and (L,L,L,A) with no swizzle */
+/// Mesa X:44, F:95
 pub const GC_TEX_FORMAT_A8: u32 = 0x01;
+/// Also Mesa's R8_UNORM texture word (F:88, `VT(R8_UNORM, UNSIGNED_BYTE, L8, R8)`).
+/// Mesa X:45, F:96
 pub const GC_TEX_FORMAT_L8: u32 = 0x02;
+/// Mesa X:47, F:111
 pub const GC_TEX_FORMAT_A8L8: u32 = 0x04;
+/// Mesa X:50, F:155
 pub const GC_TEX_FORMAT_A8R8G8B8: u32 = 0x07;
+/// Mesa X:51, F:165
 pub const GC_TEX_FORMAT_X8R8G8B8: u32 = 0x08;
+/// Mesa X:52, F:421
 pub const GC_TEX_FORMAT_A8B8G8R8: u32 = 0x09;
+/// Mesa X:53, F:422
 pub const GC_TEX_FORMAT_X8B8G8R8: u32 = 0x0a;
+/// Mesa X:54, F:114
 pub const GC_TEX_FORMAT_R5G6B5: u32 = 0x0b;
 /// R9G9B9E5_FLOAT (Mesa etnaviv_format.c:186): a CONFIG0 format, not an
 /// extended one.
+/// Mesa X:64, F:186
 pub const GC_TEX_FORMAT_E5B9G9R9: u32 = 0x1d;
+/// ETC1_RGB8 (Mesa etnaviv_format.c:237, `_T(ETC1_RGB8, ETC1, NONE)`): a
+/// CONFIG0 format. ETC2_RGB8 is not this one, see `GC_TEX_FORMAT_EXT_NONE`.
+/// Mesa X:65, F:237
 pub const GC_TEX_FORMAT_ETC1: u32 = 0x1e;
-// the extended set (TEXDESC_CONFIG1_FORMAT_EXT, with CONFIG0 format 0)
+// the extended set (TEXDESC_CONFIG1_FORMAT_EXT, with CONFIG0 format 0). Mesa
+// writes these as `TEXTURE_FORMAT_EXT_x | EXT_FORMAT`; EXT_FORMAT is bit 31
+// of its table word (etnaviv_format.h:35), the CONFIG0 field is then 0.
+/// ETC2_RGB8 (Mesa etnaviv_format.c:244): "Extd. format NONE doubles as
+/// ETC2_RGB8", so ETC2_RGB8 (and ETC2_SRGB8, which util_format_linear maps
+/// to it) is EXT field 0 with CONFIG0 0, not TEXTURE_FORMAT_ETC1.
+/// Mesa X:66, F:244
+pub const GC_TEX_FORMAT_EXT_NONE: u32 = 0x00;
+/// Mesa X:67, F:245
 pub const GC_TEX_FORMAT_EXT_RGB8_PUNCHTHROUGH_ALPHA1_ETC2: u32 = 0x01;
+/// Mesa X:68, F:246
 pub const GC_TEX_FORMAT_EXT_RGBA8_ETC2_EAC: u32 = 0x02;
+/// ETC2 R11 / RG11 (Mesa etnaviv_format.c:247-250). The signed one-channel
+/// word is 0x0d, not next to the other three.
+/// Mesa X:69, F:247
+pub const GC_TEX_FORMAT_EXT_R11_EAC: u32 = 0x03;
+/// Mesa X:70, F:249
+pub const GC_TEX_FORMAT_EXT_RG11_EAC: u32 = 0x04;
+/// Mesa X:71, F:250
+pub const GC_TEX_FORMAT_EXT_SIGNED_RG11_EAC: u32 = 0x05;
+/// Mesa X:79, F:248
+pub const GC_TEX_FORMAT_EXT_SIGNED_R11_EAC: u32 = 0x0d;
+/// R8G8_UNORM (Mesa etnaviv_format.c:118).
+/// Mesa X:72, F:118
+pub const GC_TEX_FORMAT_EXT_G8R8: u32 = 0x06;
+/// Mesa X:73, F:106
 pub const GC_TEX_FORMAT_EXT_R16F: u32 = 0x07;
+/// R16G16_FLOAT (Mesa etnaviv_format.c:151).
+/// Mesa X:74, F:151
+pub const GC_TEX_FORMAT_EXT_G16R16F: u32 = 0x08;
+/// Mesa X:75, F:205
 pub const GC_TEX_FORMAT_EXT_A16B16G16R16F: u32 = 0x09;
+/// Mesa X:76, F:140
 pub const GC_TEX_FORMAT_EXT_R32F: u32 = 0x0a;
-/// The G32R32 plane of a 128-bit class, two of which Mesa samples for
-/// RGBA32F (etnaviv_format.c:233; docs/notes/gc-128bit-texture-sampling.md).
+/// R32G32_FLOAT (Mesa etnaviv_format.c:213). Also the word of Mesa's
+/// R32G32_SINT/UINT rows before the HALTI5 override (F:209-210) and the
+/// plane format of the emulated 128-bit R32G32B32A32_FLOAT (F:233): the
+/// G32R32 plane of a 128-bit class, two of which Mesa samples for RGBA32F
+/// (docs/notes/gc-128bit-texture-sampling.md). The RGBA32UI / RGBA32I plane
+/// is GC_TEX_FORMAT_EXT_G32R32I below.
+/// Mesa X:77, F:213
 pub const GC_TEX_FORMAT_EXT_G32R32F: u32 = 0x0b;
-/// The same plane of RGBA32UI / RGBA32I (etnaviv_format.c:229-230).
-pub const GC_TEX_FORMAT_EXT_G32R32I: u32 = 0x24;
 /* the ES 3.0 classes (docs/es3/gc-formats.md section 2; Mesa
  * etnaviv_format.c rows cited there) */
+/// Mesa X:78, F:168
 pub const GC_TEX_FORMAT_EXT_A2B10G10R10: u32 = 0x0c;
+/// R8_SNORM (Mesa etnaviv_format.c:89), R8G8_SNORM (F:119), R8G8B8X8_SNORM
+/// (F:158), R8G8B8A8_SNORM (F:156).
+/// Mesa X:80, F:89
+pub const GC_TEX_FORMAT_EXT_R8_SNORM: u32 = 0x0e;
+/// Mesa X:81, F:119
+pub const GC_TEX_FORMAT_EXT_G8R8_SNORM: u32 = 0x0f;
+/// Mesa X:82, F:158
+pub const GC_TEX_FORMAT_EXT_X8B8G8R8_SNORM: u32 = 0x10;
+/// Mesa X:83, F:156
 pub const GC_TEX_FORMAT_EXT_A8B8G8R8_SNORM: u32 = 0x11;
+/// R8_UINT / R8_SINT (Mesa etnaviv_format.c:90-91) and R8G8_UINT / SINT
+/// (F:120-121): one word for both signednesses.
+/// Mesa X:85, F:90
+pub const GC_TEX_FORMAT_EXT_R8I: u32 = 0x15;
+/// Mesa X:86, F:120
+pub const GC_TEX_FORMAT_EXT_G8R8I: u32 = 0x16;
+/// Mesa X:87, F:159
 pub const GC_TEX_FORMAT_EXT_A8B8G8R8I: u32 = 0x17;
+/// R16_UINT / SINT (Mesa etnaviv_format.c:102-103) and R16G16_UINT / SINT
+/// (F:147-148).
+/// Mesa X:88, F:102
+pub const GC_TEX_FORMAT_EXT_R16I: u32 = 0x18;
+/// Mesa X:89, F:147
+pub const GC_TEX_FORMAT_EXT_G16R16I: u32 = 0x19;
+/// Mesa X:90, F:201
 pub const GC_TEX_FORMAT_EXT_A16B16G16R16I: u32 = 0x1a;
+/// Mesa X:91, F:187
 pub const GC_TEX_FORMAT_EXT_B10G11R11F: u32 = 0x1b;
+/// Mesa X:92, F:170
 pub const GC_TEX_FORMAT_EXT_A2B10G10R10UI: u32 = 0x1c;
+/// Mesa does not sample R8_UNORM with it (etnaviv_format.c:88 uses CONFIG0
+/// L8); the word exists in the header (X:93) and no etnaviv_format.c row
+/// names it.
+/// Mesa X:93
+pub const GC_TEX_FORMAT_EXT_R8: u32 = 0x21;
+/// R32_SINT / R32_UINT (Mesa etnaviv_format.c:287-288): on HALTI5 and up
+/// (the GC7000UL is HALTI5) translate_texture_format replaces the table's
+/// EXT_R32F row (F:136-137) with this word.
+/// Mesa X:95, F:288
+pub const GC_TEX_FORMAT_EXT_R32I: u32 = 0x23;
+/// R32G32_SINT / R32G32_UINT (Mesa etnaviv_format.c:289-290, the same HALTI5
+/// override of the EXT_G32R32F rows at F:209-210). Mesa's emulated
+/// R32G32B32A32_SINT/UINT rows (F:229-230) carry this word with G32R32F as
+/// the render format.
+/// Mesa X:96, F:290
+pub const GC_TEX_FORMAT_EXT_G32R32I: u32 = 0x24;
 // swizzles
 pub const GC_SWIZZLE_R: u32 = 0;
 pub const GC_SWIZZLE_G: u32 = 1;
@@ -996,3 +1089,54 @@ pub const GC_RS_FORMAT_A4R4G4B4: u32 = 0x00000001;
 pub const GC_RS_FORMAT_R5G6B5: u32 = 0x00000004;
 pub const GC_RS_FORMAT_X8R8G8B8: u32 = 0x00000005;
 pub const GC_RS_FORMAT_A8R8G8B8: u32 = 0x00000006;
+
+#[cfg(test)]
+mod mesa_header {
+    //! Every `GC_TEX_FORMAT_*` const is checked against the TEXTURE_FORMAT
+    //! #define of Mesa 26.2.1's etnaviv hw/common_3d.xml.h.
+    //! third_party/mesa-26.2.1 does not vendor etnaviv, so the reference is
+    //! the copy the driver is written from,
+    //! driver/src/vivante/hw/common_3d.xml.h (the same header plus an SPDX
+    //! line).
+    use std::collections::HashMap;
+
+    fn header() -> HashMap<String, u32> {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/driver/src/vivante/hw/common_3d.xml.h");
+        let text = std::fs::read_to_string(path).expect("read common_3d.xml.h");
+        let mut defs = HashMap::new();
+        for line in text.lines() {
+            let mut it = line.split_whitespace();
+            if it.next() != Some("#define") {
+                continue;
+            }
+            let (Some(name), Some(val)) = (it.next(), it.next()) else {
+                continue;
+            };
+            if let (Some(n), Some(hex)) = (name.strip_prefix("TEXTURE_FORMAT_"), val.strip_prefix("0x")) {
+                defs.insert(n.to_string(), u32::from_str_radix(hex, 16).expect("hex"));
+            }
+        }
+        defs
+    }
+
+    #[test]
+    fn tex_format_consts_match_mesa() {
+        let defs = header();
+        let mut n = 0;
+        for line in include_str!("regs.rs").lines() {
+            let Some(rest) = line.strip_prefix("pub const GC_TEX_FORMAT_") else {
+                continue;
+            };
+            let (name, rest) = rest.split_once(':').expect("const name");
+            let val = rest
+                .split_once("= 0x")
+                .and_then(|(_, v)| v.split_once(';'))
+                .map(|(v, _)| u32::from_str_radix(v, 16).expect("hex"))
+                .expect("const value");
+            let want = defs.get(name).unwrap_or_else(|| panic!("TEXTURE_FORMAT_{name} is not in Mesa's header"));
+            assert_eq!(val, *want, "GC_TEX_FORMAT_{name}");
+            n += 1;
+        }
+        assert!(n >= 39, "only {n} GC_TEX_FORMAT_* consts found");
+    }
+}
