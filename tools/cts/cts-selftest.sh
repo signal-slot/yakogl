@@ -703,6 +703,18 @@ else
     printf '%s\n' "$prout" | tail -8 | sed 's/^/        | /'
 fi
 
+echo
+echo "== 30. imx8mp-console-scan-selftest.sh: the console scanner on a synthetic log"
+IMX8MP_SCAN_SELFTEST_CHECKS=22
+csout=$(bash "$HERE/imx8mp-console-scan-selftest.sh" 2>&1)
+csrc=$?
+csok=$(printf '%s\n' "$csout" | grep -c '^  ok ')
+if [ "$csrc" -eq 0 ] && [ "$csok" = "$IMX8MP_SCAN_SELFTEST_CHECKS" ]; then
+    ok "imx8mp-console-scan-selftest.sh: $csok checks passed"
+else
+    bad "imx8mp-console-scan-selftest.sh: rc $csrc, $csok of $IMX8MP_SCAN_SELFTEST_CHECKS ok; $(printf '%s\n' "$csout" | grep 'FAIL' | head -3 | paste -sd';' -)"
+fi
+
 if [ "$fail" -eq 0 ]; then
     echo "== all checks passed"
 else

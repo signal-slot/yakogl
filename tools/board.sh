@@ -156,7 +156,11 @@
 #   BOARD_HOST         user@host of the board's Linux (pi4: PI4_HOST also read)
 #   BOARD_UART         pi4: the serial device wired to the Pi, or host:port of
 #                      a serial bridge (PI4_UART also read); am62p: host:port
-#                      of the serial bridge (UART_ADDR also read)
+#                      of the serial bridge (UART_ADDR also read); imx8mp: optional,
+#                      host:port of a bridge or a local device; when set, a uboot-
+#                      tftp/uboot-mmc run probes it and captures the console into
+#                      the run directory (console.raw/.ts/.txt; read it with
+#                      tools/cts/imx8mp-console-scan.py), unset: no capture
 #   BOARD_BOOT         the boot backend (default: pi4 tryboot, else uboot-tftp)
 #   BOARD_PERSON_PRESENT  1: a person is at the board ("default ... forever" refuses without)
 #   NETBOOT_SERVER, NETBOOT_TFTP_ROOT, NETBOOT_TFTP_LOG (i.MX8MP), NETBOOT_ROUTE
@@ -1163,13 +1167,49 @@ mmc_stage() {
     meta staged "$dst on the eMMC, read back equal"
 }
 
+# imx8mp_capture_start SRC FILE: the i.MX8MP console into the run directory
+# (BOARD_UART set): a bridge through bridge_capture (console.raw, console.ts;
+# console.txt derived at the end), a local device read line by line into
+# console.txt as pi4_capture_start does. Stopped by stop_cap.
+imx8mp_capture_start() {
+    local src=$1 file=$2
+    if uart_is_bridge; then
+        if ! bridge_capture; then
+            [ "$src" = net ] && rm -f "$NETBOOT_TFTP_ROOT/$file"
+            die "serial bridge $BOARD_UART busy or unreachable after 12 tries (no reboot)"
+        fi
+        meta console "serial bridge: console.raw, console.ts; console.txt derived"
+        return 0
+    fi
+    act stty -F "$BOARD_UART" 115200 cs8 -cstopb -parenb raw -echo || {
+        [ "$src" = net ] && rm -f "$NETBOOT_TFTP_ROOT/$file"
+        die "stty on $BOARD_UART failed (no reboot)"
+    }
+    if [ "$DRY" = 1 ]; then
+        echo "DRY host\$ read $BOARD_UART line by line into <rundir>/console.txt as 'HH:MM:SS line' &"
+        return 0
+    fi
+    (
+        exec 2>/dev/null
+        while IFS= read -r line || [ -n "$line" ]; do
+            printf '%(%H:%M:%S)T %s\n' -1 "${line//$'\r'/}"
+        done < "$BOARD_UART" > "$RD/console.txt"
+    ) &
+    CAP=$!
+    sleep 1
+    meta console "serial device: console.txt"
+}
+
 run_uboot() {
     local file route typed_line net back left st pend kx rcc="" el up="" src
     # --dry-run stands in for what a real run would refuse without; only what
     # the backend reads: a uboot-mmc dry run sees no NETBOOT_* (set -u catches
     # a TFTP-only variable on the eMMC path, as on a board)
+    # the i.MX8MP captures the console only when BOARD_UART is set (opt-in)
+    UCAP=0
+    if [ "$BOARD" = imx8mp ] && [ -n "${BOARD_UART:-}" ]; then UCAP=1; fi
     if [ "$DRY" = 1 ]; then
-        BOARD_UART=${BOARD_UART:-BRIDGE:PORT}
+        [ "$BOARD" = imx8mp ] || BOARD_UART=${BOARD_UART:-BRIDGE:PORT}
         if [ "$BOOT" = uboot-tftp ]; then
             NETBOOT_SERVER=${NETBOOT_SERVER:-HOST_IP}
             NETBOOT_TFTP_ROOT=${NETBOOT_TFTP_ROOT:-/TFTP_ROOT}; NETBOOT_TFTP_LOG=${NETBOOT_TFTP_LOG:-/TFTP_LOG}
@@ -1218,6 +1258,8 @@ run_uboot() {
                 die "NETBOOT_TFTP_LOG=$NETBOOT_TFTP_LOG has no 'done' line for the canary: it is not the log of the server on $NETBOOT_SERVER:69"
         fi
     fi
+    # the i.MX8MP console (opt-in): the bridge or the device is probed before the board is touched
+    [ "$UCAP" = 1 ] && pi4_uart_free
     take_lock
     bget st 'systemctl is-system-running --wait >/dev/null 2>&1; cat /proc/uptime' || die "the board's Linux does not answer"
     common_prechecks
@@ -1276,7 +1318,8 @@ run_uboot() {
         fi
     fi
 
-    # 5. the capture, before anything can print (AM62P; the i.MX8MP has no UART)
+    # 5. the capture, before anything can print (AM62P; the i.MX8MP only with BOARD_UART set)
+    if [ "$UCAP" = 1 ]; then imx8mp_capture_start "$src" "$file"; fi
     if [ "$BOARD" = am62p ]; then
         # the typed route's one command line (TFTP only): the installed hook's
         # yako_net with its three variables written out, then "boot" when the
@@ -1395,6 +1438,7 @@ run_uboot() {
         fi
         snvs_read > "$RD/snvs.txt"
         [ -s "$RD/snvs.txt" ] && [ "$(wc -w < "$RD/snvs.txt")" = 4 ] || rm -f "$RD/snvs.txt"
+        if [ "$UCAP" = 1 ] && uart_is_bridge; then console_from_ts; fi
     else
         console_from_ts
     fi
