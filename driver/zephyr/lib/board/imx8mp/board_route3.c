@@ -522,7 +522,7 @@ static void tl_uart_str(const char *s)
  */
 #if CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_TIMELINE_REPORT_MS > 0 || \
 	defined(CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_A53_RESTART)
-static char app_line[160];
+static char app_line[400];
 static atomic_t app_line_busy;
 
 static void app_line_work_fn(struct k_work *work)
