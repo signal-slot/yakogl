@@ -77,9 +77,16 @@ side, set `BOARD_HOST=<user@host>` from the environment (never write it into a f
 
 ## 1. Stage 1 (once per VK-GL-CTS revision, about 1.9 GB)
 
+The VK-GL-CTS checkout is pinned at `93bca01861b0e3ef3c387027a9791e6d065f900c` (the `DEQP_WORK` entry of
+`tools/cts/deps.toml`). It needs its external sources too (`external/fetch_sources.py`), and
+`cts-build-zephyr.sh` reads the checkout from `CTS=` (its default is a path in your home directory):
+
 ```sh
+git clone --no-checkout https://github.com/KhronosGroup/VK-GL-CTS <deps>/VK-GL-CTS
+git -C <deps>/VK-GL-CTS checkout --detach 93bca01861b0e3ef3c387027a9791e6d065f900c
+(cd <deps>/VK-GL-CTS && python3 external/fetch_sources.py)
 export ZEPHYR_WS=<west workspace> ZEPHYR_VENV=<workspace>/.venv \
-       ZEPHYR_SDK_INSTALL_DIR=<zephyr-sdk-1.0.1> IMX8MP_OUT=<out>
+       ZEPHYR_SDK_INSTALL_DIR=<zephyr-sdk-1.0.1> IMX8MP_OUT=<out> CTS=<deps>/VK-GL-CTS
 tools/cts/imx8mp-deqp-stage1.sh gles3     # = DEQP_MODULE=gles3 DEQP_STAGE1=<out>/deqp-stage1-gles3
 ```
 
@@ -87,8 +94,8 @@ The `gles3` argument uses `$DEQP_STAGE1_GLES3` if set, else `$IMX8MP_OUT/deqp-st
 exports `ZEPHYR_SDK` (from `ZEPHYR_SDK_INSTALL_DIR`) and `-O2` flags, which `cts-build-zephyr.sh` needs.
 Measured: 453 ninja steps, about 15 minutes on a 12-thread worker, 2.0 GB.
 
-This exports `MODULE=gles3` to `tools/cts/cts-build-zephyr.sh` (VK-GL-CTS 93bca01, with the same patches as
-gles2). The log goes to `$IMX8MP_OUT/deqp-stage1.log`, the same file as for gles2.
+This exports `MODULE=gles3` to `tools/cts/cts-build-zephyr.sh` (the VK-GL-CTS pin above, with the same
+patches as gles2). The log goes to `$IMX8MP_OUT/deqp-stage1.log`, the same file as for gles2.
 
 Expected: `rc=0`, and `<out>/deqp-stage1-gles3/build/modules/gles3/libdeqp-gles3-package.a` exists. Stage
 2 refuses to run without it. With no `DEQP_MODULE` (or `DEQP_MODULE=gles2`) the script does what it always
@@ -128,8 +135,19 @@ The image is `$IMX8MP_OUT/es3-$HEAD8/zephyr/zephyr.bin`. Name it after the commi
 results are reported against that hash.
 
 **Footprint.** The gles2 table image was 221,282,304 bytes in the 256 MiB `a53_ddr_section`
-(imx8mp-plan1.md). Measured for the gles3 table image: `zephyr.bin` 15,878,520 bytes (`es3-ba8b242a`, sha256 `8df88235…bc8bd2`), RAM about
-221,976 KB of 256 MB (84.7 %), footprint checked by `board.sh` 227,311,616 bytes.
+(imx8mp-plan1.md). Measured for the gles3 table image built from commit `6ddba20c` (`es3-6ddba20c`):
+`zephyr.bin` 16,443,032 bytes (sha256 `a5213848…4620e4`). The sections of `zephyr.elf` (`zephyr.stat`):
+text 11,472,896, rodata 3,521,708 (plus `.gcc_except_table` 402,623 and `.eh_frame` 987,504), data
+52,477, bss 42,604,674, noinit 168,858,272. The noinit section holds the libc malloc arena,
+`CONFIG_COMMON_LIBC_MALLOC_ARENA_SIZE=167772160` (160 MiB; the image sets
+`CONFIG_HEAP_MEM_POOL_SIZE=0`), and 1,086,112 bytes besides.
+
+The footprint `board.sh` checks is the AArch64 header's `image_size` (`nb_check_image` in
+`tools/uboot-netboot-lib.sh`): Zephyr writes `_flash_used` there, the distance from `0x60000000` to the
+end of `.last_section`, which this image links right after `.last_ram_section`. It is 227,909,632 bytes
+(222,568 KB, the linker's `RAM` line), 84.9 % of the 256 MiB `a53_ddr_section`; `board.sh` refuses an
+image whose `image_size` passes `0x70000000`, and on the `kexec-dev` route one larger than the crash
+window. `CONFIG_KERNEL_VM_SIZE=0x20000000` (512 MiB) is twice the region, so it covers the image.
 
 ## 3. Run the tree on the board
 
@@ -143,8 +161,8 @@ tools/cts/imx8mp-gles3-board.sh tree records/imx8mp/es3-$HEAD8
 
 - **Preview:** `tools/board.sh --dry-run imx8mp tree ...` (with the same `TREE_IMAGE`; or
   `tools/cts/imx8mp-gles3-board.sh --dry-run tree <dir>`) prints the `DRY host$ ...` steps for every row and
-  touches no board. Done for the built image (`es3-ba8b242a`, sha256 `8df88235…bc8bd2`): 133 rows
-  `e00`..`e132`, selectors 0..132.
+  touches no board. Done for the built image (`es3-6ddba20c`, sha256 `a5213848…4620e4`): 133 rows
+  `e00`..`e132`, selectors 0..132, `footprint 227909632`.
 - **Subset:** `TREE_ROWS=0-9` or `TREE_ROWS=57,60-66` runs only those rows.
 - **Resume:** a row whose run directory already has an `INDEX.txt` is skipped.
 
