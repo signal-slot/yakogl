@@ -56,6 +56,13 @@
 #             copied), and links a library that
 #             reports OpenGL ES 3.0 (YAKOGL_REPORT_ES2=OFF), in its own
 #             directories so the two modules never share a build
+#   PVR_NATIVE_3D  0 | 1: the PowerVR's native 3D texture (shaderc::pvr_native_3d,
+#             docs/notes/pvr-3d-native.md), exported to the library as
+#             YAKOGL_PVR_NATIVE_3D (the Linux OSAL sets it at init, the board's
+#             CONFIG_DEQP_PVR_NATIVE_3D); GPU=powervr only. Unset: the library's
+#             default, and the run directory has no suffix for it; set, the
+#             directory ends in -native3d-<0|1>, so an off and an on run of one
+#             commit sit side by side. The library is the same build either way.
 #   OUT       run directory              (default <repo>/build/host-deqp/run-<commit>,
 #             run-<commit>-powervr for the PowerVR)
 #   JOBS      chunks in parallel         (default nproc - 2)
@@ -65,7 +72,8 @@ set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/../.." && pwd)
 # Options equal to the environment variables below, for callers that cannot set
-# them: --gpu=G --module=M --cts=DIR --out=DIR --chunk=N --jobs=N (before the filter).
+# them: --gpu=G --module=M --cts=DIR --out=DIR --chunk=N --jobs=N --pvr-native-3d=0|1
+# (before the filter).
 # --report=DIR builds and runs nothing: it prints step 4's report of the
 # finished run in DIR again (and rewrites its aborted.txt and summary.txt).
 while [ $# -gt 0 ]; do
@@ -76,6 +84,7 @@ while [ $# -gt 0 ]; do
         --out=*) OUT=${1#*=} ;;
         --chunk=*) CHUNK=${1#*=} ;;
         --jobs=*) JOBS=${1#*=} ;;
+        --pvr-native-3d=*) PVR_NATIVE_3D=${1#*=} ;;
         --report=*) OUT=${1#*=}; REPORT=1 ;;
         *) break ;;
     esac
@@ -92,6 +101,16 @@ case "$GPU" in
          export YAKOGL_V3D_TILED_COPIES_BYTES=${YAKOGL_V3D_TILED_COPIES_BYTES:-16777216} ;;
     *) echo "host-deqp-run: GPU must be vivante, powervr or v3d, not '$GPU'" >&2; exit 1 ;;
 esac
+if [ -n "${PVR_NATIVE_3D:-}" ]; then
+    case "$PVR_NATIVE_3D" in
+        0|1) ;;
+        *) echo "host-deqp-run: PVR_NATIVE_3D must be 0 or 1, not '$PVR_NATIVE_3D'" >&2; exit 1 ;;
+    esac
+    [ "$GPU" = powervr ] ||
+        { echo "host-deqp-run: PVR_NATIVE_3D is the PowerVR's switch (GPU=powervr), not $GPU's" >&2; exit 1; }
+    export YAKOGL_PVR_NATIVE_3D=$PVR_NATIVE_3D
+    SUFFIX=$SUFFIX-native3d-$PVR_NATIVE_3D
+fi
 MODULE=${MODULE:-gles2}
 case "$MODULE" in
     gles2) DEQP_DIR=$BASE/deqp; MUSTPASS=$HERE/gles2-mustpass.txt; REPORT_ES2=ON; SURFACE=64 ;;
@@ -118,6 +137,8 @@ else
 echo "host-deqp-run: library and harness from $COMMIT, GPU $GPU, $MODULE (HOST-ONLY: compile/link outcomes only)"
 [ "$GPU" != v3d ] ||
     echo "host-deqp-run: YAKOGL_V3D_TILED_COPIES_BYTES=$YAKOGL_V3D_TILED_COPIES_BYTES (the Pi 4 image uses 16777216)"
+[ -z "${YAKOGL_PVR_NATIVE_3D:-}" ] ||
+    echo "host-deqp-run: YAKOGL_PVR_NATIVE_3D=$YAKOGL_PVR_NATIVE_3D (the native 3D texture; unset: the library's default)"
 
 # 1. deqp-<module> for the host, against the YakoGL target (dlopen()s our libs).
 if [ ! -x "$DEQP_DIR/modules/$MODULE/deqp-$MODULE" ]; then
@@ -151,7 +172,7 @@ fi
 asked=$(wc -l < "$OUT/all.txt")
 [ "$asked" -gt 0 ] || { echo "host-deqp-run: no case matches '$FILTER'" >&2; exit 1; }
 (cd "$OUT" && split -l "$CHUNK" -d -a 3 all.txt c_)
-echo "$COMMIT $GPU $MODULE" > "$OUT/commit"
+echo "$COMMIT $GPU $MODULE${YAKOGL_PVR_NATIVE_3D:+ pvr_native_3d=$YAKOGL_PVR_NATIVE_3D}" > "$OUT/commit"
 
 # A chunk whose process stops early (a crash, the timeout, a ResourceError --
 # which ends dEQP's whole run -- or a die() in a group's init) goes on in a

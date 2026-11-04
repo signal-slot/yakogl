@@ -331,7 +331,9 @@ pub fn native_array_enabled() -> bool {
 /// says so in the record (`ShcShader::native_cube` bit 2); the draw binds a
 /// twiddled copy of the volume. Off, a 3D texture stays the grid of slices
 /// glsl2usc's pvr_vol samples: level 0 only, REPEAT lost. Read when a shader
-/// COMPILES.
+/// COMPILES. Set by the dEQP image's CONFIG_DEQP_PVR_NATIVE_3D on the board,
+/// by the Linux OSAL from `YAKOGL_PVR_NATIVE_3D` (0 or 1) on the host
+/// (`tools/cts/host-deqp-run.sh --pvr-native-3d=1`).
 #[no_mangle]
 pub static mut pvr_native_3d: i32 = PVR_NATIVE_3D_DEFAULT;
 
@@ -379,7 +381,8 @@ pub fn proj_divide_enabled() -> bool {
 
 /// The level of an implicit-level sample of a smooth varying, on the
 /// PowerVR online compiler: 0 = the TPU's own (`smp lodm = normal`),
-/// 1 = exact per-pixel gradients for a 2D sample, 2 = for a cube too.
+/// 1 = exact per-pixel gradients for a 2D sample, 2 = for a native cube and
+/// a native 3D texture too (three coordinates).
 ///
 /// The TPU's implicit level takes one set of derivatives per 2x2 quad. For a
 /// perspective-interpolated coordinate the derivatives change from pixel to
