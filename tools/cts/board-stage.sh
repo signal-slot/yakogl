@@ -28,7 +28,9 @@
 # <DEQP_WORK>-gles3 (the deps layout: deqp-stage1-am62p-gles3 beside
 # deqp-stage1-am62p). A complete one (build/modules/gles3/libdeqp-gles3-package.a)
 # is reused, else it is built there by `cts-build-zephyr.sh MODULE=gles3` from the
-# layout's VK-GL-CTS (CTS= overrides). Also for gles3, from the environment:
+# layout's VK-GL-CTS (CTS= overrides). A failed build removes that directory
+# only if the run made it (a GLES3_WORK or an earlier attempt is kept).
+# Also for gles3, from the environment:
 #   TREE_ROWS         only those rows (3,5-9, counted from 0 as board.sh tree does)
 #                     are built and run; the build log is then appended to build.out
 #   DEQP_PVR_NATIVE_3D  0|1: -DCONFIG_DEQP_PVR_NATIVE_3D=<v> for every image
@@ -226,12 +228,21 @@ gles3)
         [ -d "$G3_CTS" ] || die "no VK-GL-CTS at $G3_CTS for the gles3 stage 1 (set CTS=)"
         [ -n "${WEST_VENV:-}" ] && PATH=$WEST_VENV/bin:$PATH
         echo "board-stage.sh: building the gles3 stage 1 in $G3_WORK"
+        # a failed build removes the directory only if this run made it
+        g3_new=0
+        [ -e "$G3_WORK" ] || g3_new=1
         (
             export ZEPHYR_BASE=$ZEPHYR_WS/zephyr ZEPHYR_TOOLCHAIN_VARIANT=${ZEPHYR_TOOLCHAIN_VARIANT:-zephyr}
             ZEPHYR_MODULES=$(tools/cts/zephyr-modules.sh "$ZEPHYR_WS") || exit 1
             export ZEPHYR_MODULES CFLAGS=-O2 CXXFLAGS=-O2   # as DEQP_WORK's build (deps.toml)
             CTS=$G3_CTS WORK=$G3_WORK MODULE=gles3 run tools/cts/cts-build-zephyr.sh
-        ) || { rm -rf "$G3_WORK"; die "gles3 stage 1 build failed" 1; }
+        ) || {
+            if [ "$g3_new" = 1 ]; then
+                rm -rf "$G3_WORK"
+                die "gles3 stage 1 build failed (removed $G3_WORK)" 1
+            fi
+            die "gles3 stage 1 build failed (kept $G3_WORK, which existed before)" 1
+        }
     else
         echo "board-stage.sh: reusing the gles3 stage 1 in $G3_WORK"
     fi
