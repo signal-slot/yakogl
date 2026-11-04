@@ -10,11 +10,11 @@ format a back end has not learned, `backend::rt_format_drawable`).
 ## 1. What the GC7000UL now draws
 
 `backend::INTEGER_RT_FORMATS` is `GC_INTEGER_RT_FORMATS` on the GC7000
-(`src/vivante/backend.rs`): **13 of the 19** integer surfaces, those of 1, 2
-and 4 bytes a pixel. Four more (RGBA16I/UI, RG32I/UI, 8 bytes a pixel) are
-mapped but **held back** (`GC_INT_RT_64BPP`, below the table), and two
-(RGBA32I/UI) the hardware has no format for (section 2). Per surface, the
-pixel engine format (`pe_color_format`, written to `PE_COLOR_FORMAT`'s
+(`src/vivante/backend.rs`): **17 of the 19** integer surfaces, those of 1, 2,
+4 and 8 bytes a pixel. The four of 8 bytes (RGBA16I/UI, RG32I/UI,
+`GC_INT_RT_64BPP`) are drawn through the tiled shadow RGBA16F takes, as the
+only draw buffer (below the table); two (RGBA32I/UI) the hardware has no
+format for (section 2). Per surface, the pixel engine format (`pe_color_format`, written to `PE_COLOR_FORMAT`'s
 `FORMAT_EXT` with `FORMAT_MASK`, or to `PE_RT_CONFIG_8`'s format for draw
 buffers 1..3) and the fragment stage's output mode (`shader.rs`
 `ps_color_output_mode`, `PS_CONTROL_EXT.OUTPUT_MODEn`):
@@ -26,25 +26,55 @@ buffers 1..3) and the fragment stage's output mode (`shader.rs`
 | RGBA8I / RGBA8UI | `PE_FORMAT_A8B8G8R8I` 0x19 (`:106`) | `I8` / `U8` | 4 |
 | R16I / R16UI | `PE_FORMAT_R16I` 0x1a (`:107`) | `I16` 6 / `U16` 4 (`:136`, `:134`) | 2 |
 | RG16I / RG16UI | `PE_FORMAT_G16R16I` 0x1b (`:108`) | `I16` / `U16` | 4 |
-| *RGBA16I / RGBA16UI* (held) | `PE_FORMAT_A16B16G16R16I` 0x1c (`:109`) | `I16` / `U16` | 8 |
+| RGBA16I / RGBA16UI (tiled shadow) | `PE_FORMAT_A16B16G16R16I` 0x1c (`:109`) | `I16` / `U16` | 8 |
 | R32I / R32UI | `PE_FORMAT_R32F` 0x14 (`:101`) | `UIF32` 2 (`:132`) | 4 |
-| *RG32I / RG32UI* (held) | `PE_FORMAT_G32R32F` 0x15 (`:102`) | `UIF32` | 8 |
+| RG32I / RG32UI (tiled shadow) | `PE_FORMAT_G32R32F` 0x15 (`:102`) | `UIF32` | 8 |
 | RGB10_A2UI | `PE_FORMAT_A2B10G10R10UI` 0x1e (`:111`) | `A2B10G10R10UI` 1 (`:131`) | 4 |
 | **RGBA32I / RGBA32UI** | **none**: refused, section 2 | | 16 |
 
-**Why the 64-bit ones are held back.** Not a hardware limit: the PE has
-their formats. But this back end renders every target LINEAR, and the PE's
-64-bit LINEAR write is the open question of gl_test case 44
-(`src/vivante/VIVANTE_NOTES.md`, "RGBA16F targets": an RGBA16F target stores
-pixel x's colour two texels off on the i.MX8MP, the AM62P passes the case;
-Mesa never renders a linear target on this core, `LINEAR_PE` is off unless
-the `linear_pe` debug flag asks). RGBA16I/UI and RG32I/UI are 64-bit pixels
-on the same path, so drawing them would most likely store misplaced pixels:
-the silent garbage the GL core's refusal exists to avoid. They are refused by
-name like RGBA32; once case 44's layout probe settles the 64-bit target
-(tiled, or a pitch rule), `GC_INT_RT_64BPP` goes into `GC_INTEGER_RT_FORMATS`
-and the test's `drawn()` follows. RGBA16F itself is still drawn, as before
-this item.
+**The 64-bit ones: the tiled shadow.** They were held back (item
+int-rt-gc) while gl_test case 44 had the PE's 64-bit LINEAR write open. The
+probe settled it (`src/vivante/wide_target.rs`, module doc; #6, `cba8b199`,
+record `got 0x20000004 want 0x00c2073e`): the PE misplaces 64-bit pixels in a
+LINEAR target (16-byte pixel pairs move inside a row, at every pitch), so a
+draw into any 64-bit-pixel colour target renders into a 4x4-tiled shadow
+instead, as Mesa only ever renders tiled targets on this core. `wanted()`
+picks the shadow by pixel size (`gles_surf_bytes_per_pixel == 8`), not by
+format, and its copies move whole 8-byte pixels, so RGBA16I/UI and RG32I/UI
+take the path RGBA16F already draws through with nothing format-specific to
+add: the shadow's page-aligned address in `PE_PIPE_COLOR_ADDR`, a
+`PE_COLOR_STRIDE` of the width padded to 16 times 8, `PE_LOGIC_OP`
+`SINGLE_BUFFER(2)` (Mesa's value for a tiled target above 16 bits a pixel,
+`etnaviv_state.c:536-539`), no `SUPER_TILED` bit, the linear storage tiled in
+before the first draw of a kick and untiled back when the kick retires.
+`GC_INT_RT_64BPP` is now inside `GC_INTEGER_RT_FORMATS`.
+
+The words, pinned by `tests/es3_int_rt_gc.rs` for a full-mask draw and for
+`glClearBuffer{i,ui}v`: `PE_COLOR_FORMAT` `0x1c010f10` for RGBA16I/UI
+(`FORMAT_EXT` `A16B16G16R16I` 0x1c, `FORMAT_MASK` bit 4, `COMPONENTS` 0xf,
+`OVERWRITE`; bit 31, `FORMAT_EXT`'s own write mask, clear: the mask-bit
+lesson of `VIVANTE_NOTES.md`, "RGBA16F targets", `etnaviv_state.c:282-283`)
+and `0x15000710` for RG32I/UI (`G32R32F` 0x15; a target without alpha keeps A
+out of `COMPONENTS` and so loses `OVERWRITE`, as every alpha-less target
+does). Output modes `I16`/`U16` (RGBA16I/UI) and `UIF32` (RG32I/UI); no
+saturate; `PE_ALPHA_CONFIG` 0 with `GL_BLEND` on (the GL core clears
+`GlesDraw::blend` for an integer attachment 0).
+
+The shadow has two limits (`wide_target.rs`, "Not covered"). A draw with
+**more than one colour target** cannot use it: the 8-RT bank's `RT_CONFIG`
+has no tiled bit of its own and `SINGLE_BUFFER` switches every target, so
+such a draw keeps the linear path, where case 44 measured the PE misplacing
+64-bit pixels. `draw_one` therefore refuses (`-ENOTSUP`, `GL_INVALID_OPERATION`
+from the draw, nothing reaching the PE) any draw that has one of the four
+64-bit integer surfaces beside another draw buffer, first or later
+(`a_64_bit_target_beside_another_refuses_the_draw`): a refusal, not misplaced
+pixels. RGBA16F there is still drawn linear, as before this item. Drawing
+them in an MRT draw takes a tiled multi-target path (every target tiled,
+section 5); whether the GL core should report such a framebuffer
+`GL_FRAMEBUFFER_UNSUPPORTED` instead of failing the draw is open for a
+person. And the **depth surface** of a draw into a shadow is switched by
+`SINGLE_BUFFER(2)` too; its layout under (2) is unmeasured (logged once when
+a draw reaches it), for the board (section 5).
 
 All line numbers are `driver/src/vivante/hw/state_3d.xml.h`, the rnndb
 header etnaviv generates its own from (MIT; README there). The test reads
@@ -186,8 +216,43 @@ Nothing here has run on the GPU. What a session should check, cheapest first:
    inference (section 1). A wrong answer shows as wrong values, not a hang;
    if it fails, take the two bits out of `GC_INTEGER_RT_FORMATS` and they are
    refused by name like RGBA32.
-3. gl_test case 44's layout probe (64-bit LINEAR targets); only after it
-   reads right, `GC_INT_RT_64BPP` in and the `rgba16i`/`rg32i` cases.
+3. The four 64-bit integer targets through the tiled shadow (section 1):
+   a. `functional.fragment_out.basic.int.rgba16i_*`, `.uint.rgba16ui_*`,
+      `.int.rg32i_*`, `.uint.rg32ui_*` (one target: the shadow path);
+   b. `functional.fragment_out.array.*` and `.random.*` cases that put one of
+      them beside another target: refused by `draw_one` (the linear
+      multi-target path misplaces 64-bit pixels, case 44), so they fail
+      with `GL_INVALID_OPERATION`, not wrong pixels; a tiled multi-target
+      path (every target of the draw tiled) is what would draw them;
+   c. `functional.color_clear.*` on an `rgba16ui`/`rg32i` renderbuffer, and
+      `fbo.color.clear.rgba16i`/`rg32ui` style cases: the clear quad into the
+      shadow, then read back after `glFinish` (the untile on retire);
+   d. one such draw with a depth buffer attached
+      (`fbo.render.*` with depth on an `rgba16ui` target, or gl_test 44 with
+      depth): the depth surface under `SINGLE_BUFFER(2)`;
+   e. `fbo.blit.conversion.*` into and out of the four (60 cases that drew
+      nothing before this item, below): the blit's draw into the shadow
+      and the read of a 64-bit integer source.
+
+   Host reach of item 3 (`tools/cts/host-deqp-run.sh --gpu=vivante
+   --module=gles3`, VK-GL-CTS `93bca018`, the `functional.fbo.` and
+   `functional.fragment_out.` filters; HOST-ONLY: the Linux OSAL reads
+   black, so only GL-error and incomplete-framebuffer failures count, never
+   an image verdict). Before is this tree with `GC_INT_RT_64BPP` taken out
+   of `GC_INTEGER_RT_FORMATS` again:
+
+   | filter (cases) | GL-error/incomplete failures, before → after | of them naming rgba16i/ui or rg32i/ui |
+   |---|---|---|
+   | `fbo` (2,028) | 390 → 294 | 128 → 32 |
+   | `fragment_out` (940) | 198 → 150 | 96 → 48 |
+
+   The 48 `fragment_out.basic.{int,uint}` cases of the four draw; the 48
+   `fragment_out.array.*` ones of them (several targets of the format) are
+   refused by `draw_one`, as item 3b says. Of `fbo`, 96 cases draw now
+   (`color`, `render`, `blit`, `completeness`, `invalidate` on the four);
+   the 32 left are the RGBA32I/UI blits (8) and RG32I/UI *texture*
+   attachments (24: the GL core has no RG32I/UI texture class yet, the
+   formats-gc item), not the render target.
 4. `functional.color_clear.*int*` and the `shaders.builtin_functions` groups
    that render into integer renderbuffers (es3-inventory's bucket for
    int-rt-gl): the clear quad's raw constants.
