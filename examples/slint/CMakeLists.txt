@@ -121,6 +121,13 @@ file(GLOB_RECURSE slint_rust_srcs CONFIGURE_DEPENDS
      "${NOSTD_PATCH_DIR}/femtovg/src/*.glsl"
      "${NOSTD_PATCH_DIR}/glow/src/*.rs")
 
+# The core's own scheduling model where Zephyr names it (with --target,
+# RUSTFLAGS reach the target's crates only, not the build scripts).
+set(slint_rustflags "")
+if(CONFIG_CPU_CORTEX_A53)
+  set(slint_rustflags "-C target-cpu=cortex-a53")
+endif()
+
 add_custom_command(
   OUTPUT "${slint_staticlib}"
   COMMAND ${CMAKE_COMMAND} -E env
@@ -128,6 +135,7 @@ add_custom_command(
           "SLINT_UI_FILE=${SLINT_UI_FILE}"
           "CLUSTER_LAYOUT_DIR=${CLUSTER_LAYOUT_DIR}"
           "SLINT_BUILD_INPUTS_FILE=${slint_inputs}"
+          "RUSTFLAGS=${slint_rustflags}"
           ${CARGO} build --release ${slint_cargo_flags}
           -Z build-std=core,alloc
           --target ${RUST_TARGET}
