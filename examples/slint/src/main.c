@@ -437,6 +437,82 @@ static void fps_line(uint32_t frames, int64_t ms)
  * frame and waits until the M7 has it on the panel.
  */
 #define PHASE_REPORT 1
+/* YakoGL's own counters (src/osal/osal_internal.h, driver/src/vivante/
+ * gc_render.h): the CPU time inside glDraw* by step, and the GPU's. */
+#define OSAL_DRAW_STEPS 12u
+bool osal_draw_stats(uint64_t ns[OSAL_DRAW_STEPS], uint32_t *untimed);
+void osal_gc_gpu_stats(uint64_t *submit_us, uint64_t *gpu_busy_us, uint32_t *kicks);
+struct gc_render_perf {
+	uint64_t gpu_busy_ns;
+	uint64_t wait_ns;
+	uint32_t kicks_done;
+	uint32_t waits;
+	uint32_t wait_sleeps;
+	uint32_t hi_total_cycles;
+	uint32_t hi_idle_cycles;
+	uint32_t hi_read_bytes8;
+	uint32_t hi_write_bytes8;
+	uint32_t mc_pe;
+	uint32_t mc_sh;
+	uint32_t mc_ra;
+};
+void gc_render_perf(struct gc_render_perf *out);
+static const char *const step_names[OSAL_DRAW_STEPS] = {
+	"prog", "unif", "attr", "tex", "state", "gcrest", "gcds", "gctile", "gcframe",
+	"gcunif", "gcvtx", "gcemit"};
+static uint64_t st_prev[OSAL_DRAW_STEPS];
+static struct gc_render_perf gp_prev;
+static bool gp_have;
+
+/* A second line: the draw steps (us per frame, the four largest and the
+ * sum), the GPU's busy share from its own cycle counters, kicks per frame
+ * and bytes per frame. */
+static void yakogl_line(uint32_t frames, char *b, size_t bsz)
+{
+	uint64_t ns[OSAL_DRAW_STEPS] = {0};
+	uint32_t untimed = 0;
+	struct gc_render_perf p;
+	uint64_t d[OSAL_DRAW_STEPS], sum = 0;
+	int n;
+
+	(void)osal_draw_stats(ns, &untimed);
+	gc_render_perf(&p);
+	for (unsigned int i = 0; i < OSAL_DRAW_STEPS; i++) {
+		d[i] = ns[i] - st_prev[i];
+		st_prev[i] = ns[i];
+		sum += d[i];
+	}
+	n = snprintk(b, bsz, "A53Y glsteps_us %llu:", sum / 1000u / frames);
+	for (unsigned int k = 0; k < 5u; k++) {
+		unsigned int best = 0;
+
+		for (unsigned int i = 1; i < OSAL_DRAW_STEPS; i++) {
+			if (d[i] > d[best])
+				best = i;
+		}
+		n += snprintk(b + n, bsz - n, " %s %llu", step_names[best],
+			      d[best] / 1000u / frames);
+		d[best] = 0;
+	}
+	if (gp_have) {
+		const uint32_t tot = p.hi_total_cycles - gp_prev.hi_total_cycles;
+		const uint32_t idle = p.hi_idle_cycles - gp_prev.hi_idle_cycles;
+
+		n += snprintk(b + n, bsz - n,
+			      " | gpu busy %u%% cyc/f %u kicks/f %u.%02u rd_kb/f %u wr_kb/f %u",
+			      tot ? (uint32_t)((uint64_t)(tot - idle) * 100u / tot) : 0u,
+			      (tot - idle) / frames,
+			      (p.kicks_done - gp_prev.kicks_done) / frames,
+			      ((p.kicks_done - gp_prev.kicks_done) * 100u / frames) % 100u,
+			      (p.hi_read_bytes8 - gp_prev.hi_read_bytes8) / 128u / frames,
+			      (p.hi_write_bytes8 - gp_prev.hi_write_bytes8) / 128u / frames);
+	}
+	snprintk(b + n, bsz - n, "\n");
+	gp_prev = p;
+	gp_have = true;
+	board_route3_report_line(b);
+}
+
 struct phase {
 	uint64_t sum;
 	uint32_t max;
@@ -453,14 +529,16 @@ static void phase_add(struct phase *p, uint32_t c0, uint32_t c1)
 
 static void phase_line(uint32_t frames, int64_t ms)
 {
-	char b[160];
+	char b[380];
+	int n;
 
 	if (!frames)
 		return;
-	snprintk(b, sizeof(b),
+	n = snprintk(b, sizeof(b),
 		 "A53F frames %u ms %lld draw %llu/%u gpu %llu/%u show %llu/%u swap %llu/%u\n",
 		 frames, (long long)ms, ph_draw.sum / frames, ph_draw.max, ph_gpu.sum / frames,
 		 ph_gpu.max, ph_show.sum / frames, ph_show.max, ph_swap.sum / frames, ph_swap.max);
+	yakogl_line(frames, b + n, sizeof(b) - n);
 	board_route3_report_line(b);
 	ph_draw = (struct phase){0};
 	ph_swap = (struct phase){0};
