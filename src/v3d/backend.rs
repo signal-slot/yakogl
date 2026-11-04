@@ -188,8 +188,14 @@ struct TexKey {
     /// for (storage re-specified in another format also takes a new stamp).
     format: u8,
     content_gen: u32,
-    /// 6 for a cube map: the same storage sampled as 2D is another image.
+    /// `texture::layers`: 6 for a cube map, the layer count of a 2D array,
+    /// the level 0 depth of a 3D texture; the same storage sampled as 2D is
+    /// another image.
     layers: u32,
+    /// `GLES_TEXTYPE_*`: a 3D texture and a 2D array of as many layers are
+    /// laid out apart (`texture::layout`: a stack of slices or whole mip
+    /// trees), so the same layer count is another image.
+    type_: u8,
     /// A depth texture read from its depth buffer (`GlesTextureBind::depth_id`,
     /// `depth_sample`) is another record than the same texels read from a
     /// copy: never 0 for such a binding, 0 for every kept copy.
@@ -206,6 +212,7 @@ impl TexKey {
         format: 0,
         content_gen: 0,
         layers: 0,
+        type_: 0,
         depth_id: 0,
     };
 
@@ -219,6 +226,7 @@ impl TexKey {
             format: b.format,
             content_gen: b.content_gen,
             layers: texture::layers(b),
+            type_: b.type_,
             depth_id: b.depth_id,
         }
     }
@@ -4262,7 +4270,11 @@ fn depth_sample(g: &mut V3dState, b: &GlesTextureBind) -> Result<(V3dTexLayout, 
 
 /// The tiled image of binding `b` for this job and its layout: the copy
 /// kept across jobs (`tiled_copy`, found again or made now), or one tiled
-/// into the job's arena when no kept copy could be made.
+/// into the job's arena when no kept copy could be made. Every layer of
+/// every sampled level: a cube's six trees, a 2D array's `layers` trees
+/// `v3d_tex_layer_stride` apart, or a 3D texture's stack of slices, each at
+/// `texture::image_offset` (`texture::tile`), in `texture::image_bytes`
+/// bytes, which the canary after it and the arena's size check measure.
 fn copy_image_for(g: &mut V3dState, b: &GlesTextureBind) -> Result<(V3dTexLayout, u32), Attempt> {
     let key = TexKey::of(b);
     /* the copy is tiled from the storage: a render target whose jobs stored
@@ -4598,8 +4610,11 @@ pub unsafe extern "C" fn v3d_texture_uploaded(
     {
         return;
     }
+    /* one layer's rows: a cube's, an array's or a 3D texture's image is
+     * every layer (`texture::image_bytes`), which only the draw's tiling of
+     * the whole storage (`copy_image_for`) fills */
     let whole = level == 0 && (x, y, w, h) == (0, 0, b.width, b.height);
-    if !whole || texture::levels_sampled(b) != 1 {
+    if !whole || texture::levels_sampled(b) != 1 || texture::layers(b) != 1 {
         return;
     }
     let Some(layout) = texture::layout(b) else { return };
