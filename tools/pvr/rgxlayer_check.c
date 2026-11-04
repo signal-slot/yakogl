@@ -168,7 +168,14 @@ void yd_panic(const uint8_t *file, size_t file_len, uint32_t line)
 
 /* The host's precompiled `core` is built for unwinding and names the
  * personality routine; the crate is panic=abort and never unwinds (the board's
- * target, aarch64-unknown-none-softfloat, has no such reference). */
+ * target, aarch64-unknown-none-softfloat, has no such reference). Keep this
+ * definition, under this plain name: rustc 1.101.0-nightly (2026-10-16) names
+ * the reference v0-mangled (`_RNv..._7___rustc19rust_eh_personality`, the
+ * hash per toolchain), and tools/check.sh (pvr_eh_personality_alias) reads
+ * that name off the archive with nm -u and links it to this routine with
+ * --defsym; an older toolchain names it plainly and links it directly. A
+ * definition inside the crate instead (an eh_personality lang item) leaves
+ * the --defsym's target undefined, and neither harness links. */
 void rust_eh_personality(void);
 void rust_eh_personality(void)
 {
