@@ -2433,6 +2433,81 @@ fn emit_clear(f: &mut GcFrame, gl: &GlesDraw, code: (u64, u64), depth: (u32, u32
     emit_draw(f, &d, depth.0, depth.1)
 }
 
+/// [`emit_rs_clear`] on (the default) or off, for a board experiment that
+/// wants the quad back.
+static RS_CLEAR: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(true);
+
+fn gc_rs_clear_on() -> bool {
+    RS_CLEAR.load(core::sync::atomic::Ordering::Relaxed)
+}
+
+/// Clears by the resolve engine's fill ([`emit_rs_clear`]) or always by the
+/// quad.
+pub extern "C" fn gc_debug_rs_clear(on: bool) {
+    RS_CLEAR.store(on, core::sync::atomic::Ordering::Relaxed);
+}
+
+/// A colour-only clear of a whole single-sampled 32-bit linear target, by
+/// the resolve engine's fill instead of the quad: etnaviv's RS clear for a
+/// surface without tile status (Mesa 26.2.1 etnaviv_rs.c
+/// etna_rs_gen_clear_cmd: A8R8G8B8, RS_CLEAR_CONTROL BITS 0xffff |
+/// MODE_ENABLED1, the value in all four RS_FILL_VALUE words, a linear
+/// destination whose width is a multiple of 16 and height of 4). The quad
+/// shaded every pixel through the pixel engine at its ~4 ns a pixel: about
+/// 4 ms of the route-3 cluster's frame for its full-window clear
+/// (2026-11-05). Returns false when the clear is not one it takes, and the
+/// caller draws the quad.
+fn emit_rs_clear(f: &mut GcFrame, gl: &GlesDraw) -> bool {
+    if !gl.do_clear || gl.do_clear_depth || gl.do_clear_stencil || !gl.color_write {
+        return false;
+    }
+    if gl.target_gpu == 0 || gl.num_targets > 1 || gl.scissor || ms_via_scratch(gl) || wide_target(gl) {
+        return false;
+    }
+    if gl.clear_color_mask != 0 && gl.clear_color_mask != 0xf {
+        return false;
+    }
+    let (fmt, ext) = pe_color_format(gl.target_format);
+    let alpha = match (fmt, ext) {
+        (GC_PE_FORMAT_A8R8G8B8, false) => None,
+        (GC_PE_FORMAT_X8R8G8B8, false) => Some(0xffu32),
+        _ => return false,
+    };
+    let (w, h) = (gl.target_w, gl.target_h);
+    if w == 0 || h == 0 || w % 16 != 0 || h % 4 != 0 || negative_stride(gl.flip_y) {
+        return false;
+    }
+    let pitch = crate::backend::draw_pitch(gl) * 4;
+    let ch = |v: f32| -> u32 { ((v.clamp(0.0, 1.0) * 255.0) + 0.5) as u32 };
+    let [r, g_, b, a] = gl.clear_rgba;
+    let value = (alpha.unwrap_or_else(|| ch(a)) << 24) | (ch(r) << 16) | (ch(g_) << 8) | ch(b);
+    let rsf = GC_RS_FORMAT_A8R8G8B8;
+    let c = &mut f.w;
+    c.state(GC_GL_FLUSH_CACHE, GC_FLUSH_COLOR | GC_FLUSH_DEPTH);
+    c.stall(GC_SYNC_RA, GC_SYNC_PE);
+    c.state(GC_RS_CONFIG, rs_source_format(rsf) | rs_dest_format(rsf));
+    c.state(GC_RS_SOURCE_STRIDE, 0);
+    c.state(GC_RS_DEST_STRIDE, pitch);
+    c.state(rs_pipe_source_addr(0), 0);
+    c.state(rs_pipe_dest_addr(0), gl.target_gpu as u32);
+    c.state(rs_pipe_offset(0), 0);
+    c.state(rs_pipe_offset(1), 0);
+    c.state(GC_RS_WINDOW_SIZE, rs_window_width(w) | rs_window_height(h));
+    c.state(rs_dither(0), 0xffff_ffff);
+    c.state(rs_dither(1), 0xffff_ffff);
+    c.state(GC_RS_CLEAR_CONTROL, GC_RS_CLEAR_CONTROL_BITS_ALL | GC_RS_CLEAR_CONTROL_MODE_ENABLED1);
+    for i in 0..4 {
+        c.state(rs_fill_value(i), value);
+    }
+    c.state(GC_RS_EXTRA_CONFIG, 0);
+    c.state(GC_RS_KICKER, GC_RS_KICKER_VALUE);
+    /* the draws after it: the colour cache holds nothing of the target, and
+     * each draw's flushes stall the pixel engine on the resolve engine */
+    c.state(GC_GL_FLUSH_CACHE, GC_FLUSH_COLOR | GC_FLUSH_DEPTH);
+    c.stall(GC_SYNC_RA, GC_SYNC_PE);
+    true
+}
+
 /* ---- the backend entry points ------------------------------------------- */
 
 pub(super) fn completed_fence() -> i64 {
@@ -3161,7 +3236,9 @@ unsafe fn record(gl: &GlesDraw, clock: &mut Timer) -> i32 {
     let depth = (g.depth_stride, g.depth.gpu as u32 + g.depth_surface_off);
     let cur = g.cur;
 
-    if (gl.do_clear || gl.do_clear_depth || gl.do_clear_stencil) && emit_clear(&mut g.frames[cur], gl, code, depth) != 0
+    if (gl.do_clear || gl.do_clear_depth || gl.do_clear_stencil)
+        && !(gc_rs_clear_on() && emit_rs_clear(&mut g.frames[cur], gl))
+        && emit_clear(&mut g.frames[cur], gl, code, depth) != 0
     {
         return -1;
     }
