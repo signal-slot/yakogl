@@ -19,6 +19,14 @@ unset MESA_V3D_TREE
 # And MESA_PAN_TREE: the pan_shc row is a gap without it and a plan row with
 # it; the plans below are made without it.
 unset MESA_PAN_TREE
+# And DEQP_GLES3_TEST_DIR: without the corpus the shaderc rows carry a gap
+# naming it; the plans below are made without it.
+unset DEQP_GLES3_TEST_DIR
+# check.sh fills an unset input from the dependency layout (tools/cts/deps.toml),
+# which would bring every variable above back on a host that has one: the plans
+# are made with no layout (a directory that does not exist).
+export CONNECTED_DEPS_DIR=$PWD/build/check/no-layout
+unset CCFARM_DEPS_DIR
 fails=0
 checks=0
 want() {
@@ -111,7 +119,7 @@ expect() {
   printf '%s\n' "$out" | grep -qE "$pattern" || { echo "FAIL $label: no line matches '$pattern'"; fails=$((fails + 1)); }
 }
 out=$(plan docs/standalone-boot.md)
-expect "docs: only the shared rows" '^check.sh: 3 ok, 0 failed, 0 gap\(s\).*, 205 skipped \(--changed HEAD, scopes: docs' "$out"
+expect "docs: only the shared rows" '^check.sh: 3 ok, 0 failed, 0 gap\(s\).*, 206 skipped \(--changed HEAD, scopes: docs' "$out"
 out=$(plan src/v3d/job.rs)
 expect "v3d: its clippy row" '^plan  clippy  host-test,gpu-v3d,shaderc-online,no-shader-table$' "$out"
 expect "v3d: its image" '^plan  zephyr  rpi4 ' "$out"
@@ -219,15 +227,17 @@ count "narrowed CONFIGS: the table row once" "^plan  gen     precompiled tables 
 # the control: the full plan keeps its rows, the table row once, before the
 # first CONFIGS row that reads the tables
 out=$(plan src/gl/draw.rs)
-# 209 rows: ok plus gaps, because a row whose tool this host lacks is a gap
+# 210 rows: ok plus gaps, because a row whose tool this host lacks is a gap
 # here and a plan row on the gate host; the sum is the same on both. (Seven
 # more for the direct boot: am62p-mkboot.py, the second-stage vectors, the
 # yakogl-boot-stage2 clippy, test and softfloat rows, boot_stage2.h's layout
-# pins and the direct-boot images; one more for the Mali firmware row.)
+# pins and the direct-boot images; one more for the Mali firmware row; one
+# more for the dEQP GLES3 corpus line, a gap here, where the plans run with
+# no layout.)
 checks=$((checks + 1))
 line=$(printf '%s\n' "$out" | grep -E '^check.sh: [0-9]+ ok, 0 failed, [0-9]+ gap\(s\).*, 0 skipped \(--changed HEAD, scopes: all\)')
 total=$(printf '%s\n' "$line" | sed -E 's/^check.sh: ([0-9]+) ok, 0 failed, ([0-9]+) gap.*/\1 \2/' | awk '{ print $1 + $2 }')
-[ "$total" = 209 ] || { echo "FAIL full plan: its row count: ${total:-no summary line} rows (ok + gaps), expected 209:$line"; fails=$((fails + 1)); }
+[ "$total" = 210 ] || { echo "FAIL full plan: its row count: ${total:-no summary line} rows (ok + gaps), expected 210:$line"; fails=$((fails + 1)); }
 count "full plan: the table row once" "^plan  gen     precompiled tables for the tier" 1 "$out"
 order "full plan: the tables before their first reader" "$gen" \
   'plan  clippy  host-test,gpu-powervr,shaderc-online,precompiled-shaders' "$out"
@@ -249,8 +259,11 @@ expect "local: no report-es2 pair" '^skip  test    host-test,gpu-powervr,shaderc
 expect "local: no image" '^skip  zephyr  am62p gl_test image, -Werror' "$out"
 expect "local: no table proof" '^skip  gen     precompiled table gpu-powervr:' "$out"
 # the local set is small, about twenty rows (20 with the gl_test.c arm with
-# the test knobs); the bound says --local trimmed the plan, not the exact count
-expect "local: the summary says so" '^check.sh: (9|[12][0-9]) ok, 0 failed, 0 gap\(s\).*skipped \(--local HEAD, scopes: all\)' "$out"
+# the test knobs); the bound says --local trimmed the plan, not the exact count.
+# One gap: its shaderc-online rows compile tests/es3_shaderc_corpus.rs, and the
+# plans here run without the dEQP corpus (DEQP_GLES3_TEST_DIR unset above).
+expect "local: the summary says so" '^check.sh: (9|[12][0-9]) ok, 0 failed, 1 gap\(s\).*skipped \(--local HEAD, scopes: all\)' "$out"
+expect "local: the corpus gap" '^gap   es3_shaderc_corpus: no dEQP GLES3 corpus at' "$out"
 out=$(local_plan src/v3d/job.rs)
 expect "local on a V3D change: the whole V3D scope" '^plan  zephyr  rpi4 ' "$out"
 echo "check_scope_selftest: $checks checks run (planned $checks), $fails failed"

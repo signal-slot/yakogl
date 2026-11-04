@@ -106,6 +106,28 @@ set -u
 
 cd "$(dirname "$0")/.." || exit 2
 
+# The external inputs (ZEPHYR_WS, HAL_NXP_DIR, PCO_SHC, GLMARK2_SRC,
+# DEQP_GLES3_TEST_DIR, ...) are the entries of the dependency layout,
+# tools/cts/deps.toml: the one definition of the gate's environment, which the
+# gate image builds (tools/env/build-gate-image.sh). An entry the caller left
+# unset or empty is taken from the layout here, so the CI, a pool machine and
+# a laptop get the same inputs and nothing has to be passed in; a value the
+# caller set is kept. Only entries whose tree is there are loaded
+# (deps-env.sh --present): several rows test only "is the variable set"
+# (MESA_PAN_TREE's pan_shc row), and a path to a missing tree would make them
+# fail instead of being a gap. Without a layout nothing is loaded, and each
+# row that needs an entry is a gap naming it. On 2026-11-01 the pool
+# machines' only values were stale ones passed in from outside, and the gate
+# failed on them (#382).
+if deps_lines=$(tools/cts/deps-env.sh --present 2>/dev/null); then
+  while IFS= read -r deps_line; do
+    case "$deps_line" in [A-Za-z_]*=*) ;; *) continue ;; esac
+    deps_name=${deps_line%%=*}
+    [ -n "${!deps_name-}" ] || export "$deps_line"
+  done <<<"$deps_lines"
+fi
+unset deps_lines deps_line deps_name
+
 CONFIGS=(
   "host-test,gpu-powervr"
   "host-test,gpu-powervr,report-es2"
@@ -1289,6 +1311,28 @@ uses_tier_tables() {
   fi
   uses r:tier-tables
 }
+# tests/es3_shaderc_corpus.rs `corpus` compiles dEQP's GLSL ES 3.00 corpus at
+# DEQP_GLES3_TEST_DIR (the deps.toml entry: VK-GL-CTS data/gles3/shaders at
+# 93bca01) in the shaderc-online test rows below. Without the corpus the
+# test skips itself and its row still passes, so the run says so here: a gap
+# naming the entry. The variable is then unset, so that a value naming no
+# corpus cannot fail those rows in its place (#382). The gap belongs to the
+# rows that compile the test: a CONFIGS entry with shaderc-online and without
+# report-es2 (the file's cfg); --quick and a narrowed YAKOGL_CHECK_CONFIGS
+# may plan none, and then there is nothing to report. Its scopes are those
+# rows' (pvr, vivante, the precompile tier, and local for the two plain
+# shaderc-online rows).
+corpus_rows=0
+for f in "${CONFIGS[@]}"; do
+  case "$f" in *report-es2*) ;; *shaderc-online*) corpus_rows=1 ;; esac
+done
+if ! ls "${DEQP_GLES3_TEST_DIR:-/nonexistent}"/*.test >/dev/null 2>&1; then
+  if [ "$corpus_rows" -eq 1 ]; then
+    scope pvr vivante precompile local
+    gap "es3_shaderc_corpus: no dEQP GLES3 corpus at DEQP_GLES3_TEST_DIR='${DEQP_GLES3_TEST_DIR-}' (tools/cts/deps-env.sh --build DEQP_GLES3_TEST_DIR): the corpus was NOT compiled"
+  fi
+  unset DEQP_GLES3_TEST_DIR
+fi
 for f in "${CONFIGS[@]}"; do
   tier=()
   scope "$(config_scopes "$f")"
