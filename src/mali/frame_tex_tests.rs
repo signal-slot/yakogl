@@ -96,6 +96,7 @@ fn texture_of(mode: &str) -> SampledTexture {
         levels: 1,
         faces: 1,
         array: false,
+        volume: false,
         format: Format::RGBA8_UNORM.0 << 12 | RgbComponentOrder::RGBA.0,
         clump: ClumpFormat::RAW32,
         block_bytes: 0,
@@ -428,7 +429,13 @@ fn a_texture_and_its_shader_must_agree() {
     };
     let (misaligned, narrow) = ([with_level0(TEXELS + 32, ROW_STRIDE)], [with_level0(TEXELS, 28)]);
     let plain = [texture_of("nearest_clamp")];
+    /* a 3D texture past the descriptor's depth limit, and one that is
+     * also an array */
+    let deep = [volume(TEXELS, 8, MAX_3D_DEPTH + 1, 1, false)];
+    let both = [SampledTexture { array: true, ..volume(TEXELS, 8, 2, 1, false) }];
     for (d, want) in [
+        (draw(&fs_tex, &deep), FrameError::NotBuilt(NOT_BUILT_TEXTURE_SIZE)),
+        (draw(&fs_tex, &both), FrameError::NotBuilt(NOT_BUILT_TEXTURE_SIZE)),
         (draw(&fs_tex, &plain[..0]), FrameError::Invalid(INVALID_TEXTURE)),
         (draw(&fs_plain, &plain), FrameError::Invalid(INVALID_TEXTURE)),
         (draw(&fs_tex, &misaligned), FrameError::Invalid(INVALID_TEXTURE_ALIGN)),
@@ -478,6 +485,7 @@ fn check_mip(mode: &'static str) {
         levels: 6,
         faces: 1,
         array: false,
+        volume: false,
         format: Format::RGBA8_UNORM.0 << 12 | RgbComponentOrder::RGBA.0,
         clump: ClumpFormat::RAW32,
         block_bytes: 0,
@@ -594,6 +602,7 @@ fn check_format(mode: &'static str) {
         levels: 1,
         faces: 1,
         array: false,
+        volume: false,
         format,
         clump,
         block_bytes,
@@ -708,6 +717,7 @@ fn a_vertex_shader_s_texture_is_the_board_s() {
         levels: 5,
         faces: 1,
         array: false,
+        volume: false,
         format: Format::RGBA8_UNORM.0 << 12 | RgbComponentOrder::RGBA.0,
         clump: ClumpFormat::RAW32,
         block_bytes: 0,
@@ -843,6 +853,7 @@ fn a_cube_map_s_texture_is_the_board_s() {
         levels: 5,
         faces: 6,
         array: false,
+        volume: false,
         format: Format::RGBA8_UNORM.0 << 12 | RgbComponentOrder::RGBA.0,
         clump: ClumpFormat::RAW32,
         block_bytes: 0,
@@ -1082,6 +1093,7 @@ fn depth_texture_of(source: &str, luminance: bool) -> SampledTexture {
         levels: 1,
         faces: 1,
         array: false,
+        volume: false,
         format: Format::R32F.0 << 12 | RgbComponentOrder::RGB1.0,
         clump: ClumpFormat::RAW32,
         block_bytes: 0,
@@ -1286,6 +1298,13 @@ const TEX2DARRAY_2LAYER: &str = include_str!("../../tools/mali/testdata/tex2darr
 /// texmore_46: a 2x2 sampler2D at unit 0 and an 8x8x3 RGBA8
 /// sampler2DArray at unit 1 (gl_test case 46).
 const TEXMORE_46: &str = include_str!("../../tools/mali/testdata/texmore_46.trace");
+/// texmore_48: a 4x4x5 RGBA8 sampler3D, linear, one level (gl_test case
+/// 48; tools/shaders/es300/cube.vert and vol.frag, `--uniform-values`).
+const TEXMORE_48: &str = include_str!("../../tools/mali/testdata/texmore_48.trace");
+/// texmore_206_vol: a 16x16x4 RGBA8 sampler3D of three levels (16x16x4,
+/// 8x8x2, 4x4x1), nearest-mipmap-nearest (the same pair, `--uniform-values
+/// --levels 3`; gl_test case 206's volume).
+const TEXMORE_206_VOL: &str = include_str!("../../tools/mali/testdata/texmore_206_vol.trace");
 
 /// One decoded descriptor: pandecode's `Key: value` lines.
 type Fields = BTreeMap<String, String>;
@@ -1464,6 +1483,7 @@ fn shim_texture(mut f: Fields) -> Texture {
         dimension: match take(f, "Dimension").as_str() {
             "2D" => TextureDimension::_2D,
             "Cube" => TextureDimension::CUBE,
+            "3D" => TextureDimension::_3D,
             v => panic!("dimension {v}"),
         },
         sample_corner_position: flag(f, "Sample corner position"),
@@ -1534,6 +1554,7 @@ fn stacked(gpu: u64, side: u32, layers: u32, levels: u32, wrap_r: WrapMode) -> S
         levels,
         faces: layers,
         array: layers > 1,
+        volume: false,
         mipmap: if levels > 1 { MipmapMode::NEAREST } else { MipmapMode::NONE },
         wrap_r,
         ..texture_of("nearest_clamp")
@@ -1607,8 +1628,9 @@ fn check_shim_tables(name: &'static str, trace: &str, textures: &[SampledTexture
                         (pan_texture.c:1310-1311), the GL core's linear rows do not",
             });
         }
-        /* the planes, layer-major: plane `layer * levels + level` */
-        let count = (tex.faces * tex.levels) as usize;
+        /* the planes, layer-major: plane `layer * levels + level`; a 3D
+         * texture's one a level */
+        let count = tex.plane_count() as usize;
         let m_planes = &shim.planes[i];
         assert_eq!(m_planes.len(), count, "{name}: texture {i}'s planes, one a layer and level");
         let o_planes = ours(planes_at, count * GenericPlane::LENGTH);
@@ -1619,8 +1641,21 @@ fn check_shim_tables(name: &'static str, trace: &str, textures: &[SampledTexture
             let rows = u64::from(tex.extent(l).1);
             let lv = tex.level[l as usize];
             let our_pointer = lv.gpu + u64::from(layer) * rows * u64::from(lv.row_stride);
-            let our_size = lv.row_stride * rows as u32;
+            /* a 3D level: every slice, one slice stride apart */
+            let our_slice = if tex.volume { lv.row_stride * rows as u32 } else { 0 };
+            let our_size = lv.row_stride * rows as u32 * if tex.volume { tex.slices(l) } else { 1 };
             let at = 32 * k;
+            if m_p.slice_stride != our_slice {
+                diffs.push(Difference {
+                    block: "Planes",
+                    at: at + 0x18,
+                    dump: m_p.slice_stride.to_le_bytes().to_vec(),
+                    ours: our_slice.to_le_bytes().to_vec(),
+                    cause: "Slice stride: Mesa's 3D slice is whole 16x16 tile rows (a slice of 16 rows or \
+                            fewer is one row of tiles, `pan_image_layout`), ours one slice's linear rows on \
+                            the 64-byte pitch",
+                });
+            }
             if m_p.clump_ordering == ClumpOrdering::TILED_U_INTERLEAVED {
                 diffs.push(Difference {
                     block: "Planes",
@@ -1645,7 +1680,7 @@ fn check_shim_tables(name: &'static str, trace: &str, textures: &[SampledTexture
                     dump: m_p.size.to_le_bytes().to_vec(),
                     ours: our_size.to_le_bytes().to_vec(),
                     cause: "Size: Mesa's level slice is whole tile rows (pan_image_layout), ours the level's linear \
-                            rows",
+                            rows (a 3D level's: every slice's)",
                 });
             }
             if m_p.pointer != our_pointer {
@@ -1752,6 +1787,89 @@ fn a_two_layer_array_chain_is_the_shim_s() {
      * 0's 16 rows of 64 bytes are Mesa's 0x400 too); the pointers of every
      * plane but layer 0's level 0 (5) */
     assert_eq!(check_shim_tables("tex2darray_2layer", TEX2DARRAY_2LAYER, &textures), 2 + 12 + 4 + 5);
+}
+
+/// A 3D texture as this backend hands the frame one: `depth` slices of
+/// `side` x `side` RGBA8 at level 0, each level's slices stacked on one
+/// 64-byte pitch (the backend's copy of the GL core's grid, `volume_of`),
+/// the levels back to back on 64 bytes from `gpu`, clamped to the edge.
+fn volume(gpu: u64, side: u32, depth: u32, levels: u32, linear: bool) -> SampledTexture {
+    let mut level = [TextureLevel::default(); MAX_TEXTURE_LEVELS];
+    let mut at = gpu;
+    for (l, lv) in level.iter_mut().enumerate().take(levels as usize) {
+        *lv = TextureLevel { gpu: at, row_stride: 64 };
+        at = (at + 64 * u64::from((side >> l).max(1)) * u64::from((depth >> l).max(1))).next_multiple_of(64);
+    }
+    SampledTexture {
+        level,
+        faces: depth,
+        array: false,
+        volume: true,
+        min_nearest: !linear,
+        mag_nearest: !linear,
+        ..stacked(gpu, side, 1, levels, WrapMode::CLAMP_TO_EDGE)
+    }
+}
+
+/// gl_test case 48's volume (texmore_48): a 4x4x5 RGBA8 sampler3D,
+/// GL_LINEAR, one level: `Dimension 3D`, `Depth 5`, `Array size 1`, one
+/// plane whose slice stride steps from one slice to the next
+/// (`emit_generic_plane`, Mesa 26.2.1 pan_texture.c:410-416), the size every
+/// slice's; the sampler linear (round-to-nearest-even set) and clamped on R.
+#[test]
+fn a_volume_is_the_shim_s() {
+    let shim = shim_fragment_tables(TEXMORE_48);
+    let textures = [volume(hex(&shim.planes[0][0]["Pointer"]), 4, 5, 1, true)];
+    let t = textures[0].texture(0);
+    assert_eq!((t.dimension, t.array_size, t.depth, t.levels), (TextureDimension::_3D, 1, 5, 1));
+    let p = textures[0].plane(0, 0);
+    assert_eq!((p.row_stride, p.slice_stride, p.size), (64, 4 * 64, 5 * 4 * 64), "five slices of four rows");
+    /* the planes' address and texel interleave; the one plane's clump
+     * ordering, row stride, slice stride and size */
+    assert_eq!(check_shim_tables("texmore_48", TEXMORE_48, &textures), 2 + 4);
+}
+
+/// gl_test case 206's volume (texmore_206_vol): a 16x16x4 sampler3D of
+/// three levels, one plane a level (16x16 of 4 slices, 8x8 of 2, 4x4 of
+/// 1: the depth halves with the sides, ES 3.0.6 3.8.14), `Depth 4` (level
+/// 0's), `Levels 3`, LOD 0 to 2, a nearest-mipmap sampler clamped on R.
+#[test]
+fn a_volume_chain_is_the_shim_s() {
+    let shim = shim_fragment_tables(TEXMORE_206_VOL);
+    let textures = [volume(hex(&shim.planes[0][0]["Pointer"]), 16, 4, 3, false)];
+    let v = &textures[0];
+    let t = v.texture(0);
+    assert_eq!((t.dimension, t.depth, t.levels, t.maximum_lod), (TextureDimension::_3D, 4, 3, 2.0));
+    assert_eq!([v.slices(0), v.slices(1), v.slices(2)], [4, 2, 1]);
+    assert_eq!(v.plane_count(), 3, "one plane a level");
+    /* the planes' address and texel interleave; per plane clump ordering
+     * and row stride (6); the slice strides and sizes of levels 1 and 2
+     * (4: level 0's 16 rows of 64 bytes a slice are Mesa's one 0x400 tile
+     * row, its four slices Mesa's 0x1000); level 2's pointer (Mesa's level
+     * 1 is two 0x400 tile rows, ours two slices of 8 rows, so level 1 is at
+     * Mesa's 0x1000 and level 2 is not) */
+    assert_eq!(check_shim_tables("texmore_206_vol", TEXMORE_206_VOL, &textures), 2 + 6 + 4 + 1);
+}
+
+/// A 3D texture's planes and descriptor against a cube's and an array's:
+/// a 2D array or a cube of the same stack is not a volume, a volume of six
+/// slices is not a cube, and a level's plane names every slice of it.
+#[test]
+fn a_volume_is_neither_a_cube_nor_an_array() {
+    let v = volume(TEXELS, 8, 6, 2, false);
+    assert!(!v.is_cube(), "six slices are not six faces");
+    assert_eq!((v.texture(0).dimension, v.texture(0).array_size), (TextureDimension::_3D, 1));
+    assert_eq!(v.sampler().wrap_mode_r, WrapMode::CLAMP_TO_EDGE);
+    let b = build_textures(&[v, stacked(TEXELS + 0x4000, 8, 3, 1, WrapMode::REPEAT)], None, false);
+    let planes = b.layout.fs_plane.expect("the planes");
+    assert_eq!(planes.len, (2 + 3) * GenericPlane::LENGTH, "a volume's plane a level, an array's a layer");
+    let plane = |k: u64| {
+        let o = (planes.gpu - DESC + k * 32) as usize;
+        GenericPlane::unpack(b.desc[o..o + 32].try_into().unwrap()).unwrap()
+    };
+    assert_eq!((plane(0).pointer, plane(0).slice_stride, plane(0).size), (TEXELS, 8 * 64, 6 * 8 * 64));
+    assert_eq!((plane(1).width, plane(1).slice_stride, plane(1).size), (4, 4 * 64, 3 * 4 * 64));
+    assert_eq!(plane(2).slice_stride, 0, "an array's layer has no slice stride");
 }
 
 /// The planes of several textures follow one another, texture 0's first,

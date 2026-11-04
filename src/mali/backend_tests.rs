@@ -1043,6 +1043,14 @@ fn each_refusal_is_the_exact_line_of_its_cause() {
         let mut imported = draw;
         (imported.textures[0].width, imported.textures[0].stride_texels) = (8, 8);
         imported.textures[0].cpu = texel_bytes.as_ptr().cast();
+        let volume = |f: fn(&mut backend::GlesTextureBind)| {
+            let mut d = imported;
+            let t = &mut d.textures[0];
+            (t.type_, t.layers, t.width, t.height, t.stride_texels, t.bytes) =
+                (backend::GLES_TEXTYPE_3D, 2, 16, 8, 16, 64 * 8);
+            f(t);
+            d
+        };
         /* the kick `why` records into: the one after every case before it */
         let feedback = || {
             let mut f = imported;
@@ -1095,9 +1103,25 @@ fn each_refusal_is_the_exact_line_of_its_cause() {
                 why(&tex(|t| (t.type_, t.layers, t.height) = (backend::GLES_TEXTYPE_2D_ARRAY, 257, 16 * 257))),
                 not_built(NOT_BUILT_TEXTURE_TYPE),
             ),
+            /* a 3D texture as the GL core hands it: level 0's slices in a
+             * grid, here two 8x8 slices side by side on the 64-byte pitch,
+             * copied with the slices stacked (frame_tex_tests.rs
+             * `a_volume_is_the_shim_s`) */
+            ("a 3D texture of two slices, stacked", why(&volume(|_| {})), built),
             (
-                "a 3D texture",
-                why(&tex(|t| (t.type_, t.layers, t.height) = (backend::GLES_TEXTYPE_3D, 2, 32))),
+                "a 3D texture and no CPU view",
+                why(&volume(|t| t.cpu = core::ptr::null())),
+                invalid(INVALID_TEXTURE_STORAGE),
+            ),
+            (
+                "a 3D texture's grid past its storage",
+                why(&volume(|t| t.bytes = 64 * 7)),
+                invalid(INVALID_TEXTURE_STORAGE),
+            ),
+            ("a 3D chain", why(&volume(|t| (t.mip_filter, t.mip_levels) = (1, 2))), not_built(NOT_BUILT_TEXTURE_TYPE)),
+            (
+                "a 3D texture of 257 slices",
+                why(&volume(|t| (t.layers, t.width, t.height) = (257, 8 * 17, 8 * 16))),
                 not_built(NOT_BUILT_TEXTURE_TYPE),
             ),
             ("L8 storage", why(&tex(|t| t.format = backend::GLES_TEXFMT_L8)), not_built(NOT_BUILT_TEXTURE_FORMAT)),
@@ -3779,4 +3803,60 @@ fn a_frame_that_fits_its_first_data_chunk_takes_no_more_memory() {
         assert_eq!(attribute_buffers(&words), [(data0, (4 * v.len()) as u32)]);
     });
     assert_eq!(mali_finish(), 0);
+}
+
+/// A 3D texture's grid as the GL core lays it out for this backend
+/// (`texture_alloc_storage_3d`): 4x4 slices, five of them in three columns
+/// and two rows on one 64-byte pitch (gl_test case 48's volume). The copy
+/// stacks slice k at k * 4 rows of 64 bytes, each row the slice's own.
+#[test]
+fn a_volume_s_grid_is_copied_slice_under_slice() {
+    let (w, depth, cols) = (4usize, 5usize, 3usize);
+    let pitch = 64usize;
+    let grid_rows = depth.div_ceil(cols);
+    /* texel (x, y) of slice k: bytes k, x, y, 0xff */
+    let mut grid = vec![0u8; pitch * w * grid_rows];
+    for k in 0..depth {
+        for y in 0..w {
+            for x in 0..w {
+                let at = ((k / cols) * w + y) * pitch + ((k % cols) * w + x) * 4;
+                grid[at..at + 4].copy_from_slice(&[k as u8, x as u8, y as u8, 0xff]);
+            }
+        }
+    }
+    let t = backend::GlesTextureBind {
+        format: backend::GLES_TEXFMT_RGBA8,
+        type_: backend::GLES_TEXTYPE_3D,
+        layers: depth as u16,
+        base_gpu: 0x10_0000,
+        width: (w * cols) as u32,
+        height: (w * grid_rows) as u32,
+        stride_texels: (pitch / 4) as u32,
+        bytes: grid.len() as u32,
+        min_linear: 1,
+        linear_filter: 1,
+        wrap_r: backend::GLES_WRAP_CLAMP_TO_EDGE,
+        cpu: grid.as_ptr().cast(),
+        ..backend::GlesTextureBind::ZERO
+    };
+    let base = 0x20_0000u64;
+    let mut data_m = vec![0u8; 0x1000];
+    let tex = {
+        let mut data = Pool::new("data", base, &mut data_m).unwrap();
+        texture_of(Some(&t), &mut data).unwrap()
+    };
+    assert!(tex.volume && !tex.array && !tex.is_cube());
+    assert_eq!((tex.width, tex.height, tex.faces, tex.levels), (4, 4, 5, 1));
+    assert_eq!(tex.wrap_r, WrapMode::CLAMP_TO_EDGE);
+    let lv = tex.level[0];
+    assert_eq!(lv.row_stride, 64);
+    for k in 0..depth {
+        for y in 0..w {
+            let at = (tex.face_gpu(k as u32, 0) - base) as usize + y * 64;
+            let want: Vec<u8> = (0..w).flat_map(|x| [k as u8, x as u8, y as u8, 0xff]).collect();
+            assert_eq!(&data_m[at..at + 16], &want[..], "slice {k}, row {y}");
+        }
+    }
+    let p = tex.plane(0, 0);
+    assert_eq!((p.pointer, p.slice_stride, p.size), (lv.gpu, 4 * 64, 5 * 4 * 64));
 }

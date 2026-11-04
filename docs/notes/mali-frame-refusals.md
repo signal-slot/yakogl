@@ -907,6 +907,41 @@ divisors it builds; this reference has no NPOT divisor to pin that to.
 
 ---
 
+## 9. 3D textures (cases 48 and 206)
+
+**Refusal, before.** `NOT_BUILT_TEXTURE_TYPE` for every `GLES_TEXTYPE_3D`
+binding (`texture_of`, `src/mali/backend.rs`).
+
+**Mesa.** `pan_sampled_texture_emit` writes `Dimension 3D`, `Depth` level 0's
+slices, `Array size 1`, and one plane a level (`emit_generic_plane`,
+pan_texture.c:410-416): `Slice stride` steps from one slice to the next,
+`Size` covers every slice of the level, the depth halving with the sides.
+The shim's `texmore_48` (4x4x5, one level) and `texmore_206_vol` (16x16x4,
+three levels) traces hold those descriptors.
+
+**Ours.** `SampledTexture::volume` (`src/mali/frame.rs`): the planes one a
+level, the slice stride one slice's linear rows, the size every slice's,
+`Depth` = `faces`, and the sampler keeps GL's R wrap. This GL core gives this
+backend a 3D texture as a grid of level 0's slices (`native_layered_textures`
+false; `texture_alloc_storage_3d`, `grid_cols_for`, src/gl/texture.rs). Its
+slices are not one stride apart, so `volume_of` copies them into the frame's
+data arena with the slices stacked, at every draw (`needs_copy`,
+`texture_ready`). The frame tests `a_volume_is_the_shim_s` and
+`a_volume_chain_is_the_shim_s` pin the descriptors against the two traces.
+Every differing byte is named: the planes' address, texel interleave, clump
+ordering, row stride, slice stride (Mesa's is whole 16x16 tile rows), size,
+and level 2's pointer (Mesa's level 1 is two tile rows).
+
+**Left.** Only level 0. The grid has no chain as far as the binding says
+(`levels` 1, `mip_filter` 0, `sampling_fields` in src/gl/draw.rs), so case
+206's "3D L1" and "3D L2" still read level 0. The frame describes a 3D chain
+(pinned to `texmore_206_vol`). What is missing is the GL core handing over
+the grid levels it already keeps (`level_off`, `grid_level_held`) with the
+GL filter's mip mode, and `volume_of` copying each of them. The backend
+refuses a 3D binding of more than one level by name.
+
+---
+
 ## Order and dependencies
 
 - `frame-query`, `frame-a2c` and `frame-blendconst` are independent of each
