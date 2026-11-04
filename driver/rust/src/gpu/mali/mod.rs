@@ -27,10 +27,13 @@
 //! loads it, boots the MCU and talks to it through the shared interface.
 //!
 //! Z4, the first submit (host side): [`sched`] starts command stream group 0
-//! and its stream 0 as panthor does and runs a job on the stream's ring.
+//! and its stream 0 as panthor does and runs a job on the stream's ring;
+//! [`heap`] the tiler heap the L1 frame's `HEAP_SET` names, its context and
+//! chunks made as panthor's TILER_HEAP_CREATE makes them.
 
 pub mod csf;
 pub mod fw;
+pub mod heap;
 pub mod sched;
 
 use crate::mmio::Mmio;
