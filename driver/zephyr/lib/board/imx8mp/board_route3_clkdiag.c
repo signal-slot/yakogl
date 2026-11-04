@@ -24,6 +24,9 @@
 #include <errno.h>
 #include <stdio.h>
 #include "board_imx8mp_route3_clkdiag.h"
+#if CONFIG_YAKOGL_BOARD_IMX8MP_A53_MHZ > 0
+#include "board_imx8mp_a53_clock.h"
+#endif
 
 #define CCM_ANALOG 0x30360000u
 #define CCM        0x30380000u
@@ -154,8 +157,13 @@ void board_route3_clock_report(void (*out)(const char *line))
 	int n;
 
 	snprintf(buf, sizeof(buf),
-		 "A53CLK cpu_khz %u | armpll gen %08x fdiv0 %08x | a53root %08x coresel %08x\n",
-		 (unsigned int)cpu_khz(), sys_read32(an + 0x84u), sys_read32(an + 0x88u),
+		 "A53CLK cpu_khz %u set %d | armpll gen %08x fdiv0 %08x | a53root %08x coresel %08x\n",
+		 (unsigned int)cpu_khz(),
+#if CONFIG_YAKOGL_BOARD_IMX8MP_A53_MHZ > 0
+		 board_imx8mp_a53_clock_result(),
+#else
+		 1,
+#endif sys_read32(an + 0x84u), sys_read32(an + 0x88u),
 		 sys_read32(ccm + 0x8000u), sys_read32(ccm + 0x9880u));
 	out(buf);
 	for (unsigned int i = 0; i < 16u && rc == 0; i++) {
