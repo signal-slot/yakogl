@@ -21,7 +21,9 @@
  *     enters the non-secure entry point with the MMU off: the loader starts
  *     from its first instruction and the A53 image boots again.
  *   - The M7 sees the cluster go off in GPC_PGC_A53SCU_SR (0x303A_090C) bit 0
- *     PSR, write-1-to-clear (IMX8MPRM §5.2.11.4).
+ *     PSR, write-1-to-clear (IMX8MPRM §5.2.11.4). The same register holds
+ *     L2RSTDIS_DEASSERT_CNT (17:8, reset 0x10, never 0) and PUP_CLK_DIV_SEL:
+ *     clear PSR by read, OR, write, never by writing 1 alone.
  *
  * MU channel: MU_1, general-purpose interrupt 1 (IMX8MPRM §4.3.6.1.10-11;
  * n = 0 is the high-order bit). The M7 is processor B (MU_1_B, 0x30AB_0000)

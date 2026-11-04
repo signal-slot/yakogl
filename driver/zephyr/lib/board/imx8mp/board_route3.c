@@ -945,6 +945,17 @@ int board_route3_show(const struct board_window *win)
 				return rc;
 			}
 		}
+#ifdef CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_A53_RESTART
+		/*
+		 * The bridge is written by now whichever way the panel came up
+		 * (the console's cold bring-up, which disables this line itself,
+		 * or this fallback): I2C2 is the M7's from here, so its line is
+		 * off in this core's GIC before the first publish -- the M7
+		 * starts I2C2 only after a published frame is on its panel (desk
+		 * audit D7; gc_panel_console.c says why). Idempotent.
+		 */
+		irq_disable(DT_IRQ(DT_NODELABEL(i2c2), irq));
+#endif
 	}
 	switch (R.state) {
 	case BOARD_ROUTE3_LOADED:

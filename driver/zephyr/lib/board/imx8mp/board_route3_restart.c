@@ -123,6 +123,9 @@ BUILD_ASSERT(MU1_IRQ < CONFIG_NUM_IRQS);
 #define PSCI_AFFINITY_INFO   0xC4000004u
 #define PSCI_SYSTEM_SUSPEND  0xC400000Eu
 #define PSCI_AFF_OFF         1
+#define PSCI_SYSTEM_RESET    0x84000009u
+#define PSCI_RC_DENIED       (-3)
+#define SUSPEND_TRIES        20u     /* TF-A returns 0 at once on a pending interrupt (psci_suspend.c:194-196) */
 
 /*
  * How long the M7's heartbeat may take to move. It is bumped once per M7 loop
@@ -132,9 +135,9 @@ BUILD_ASSERT(MU1_IRQ < CONFIG_NUM_IRQS);
  * (k_sleep at the end of the loop): far less than this. A cold boot never
  * waits for it: the M7 is held (CPUWAIT) after any reset.
  */
-#define HEARTBEAT_WAIT_MS    200u
+#define HEARTBEAT_WAIT_MS    2000u   /* an M7 loop pass can be long (fallback render); desk audit D5/R5 */
 #define GPU_QUIESCE_MS       2000u
-#define CORES_OFF_WAIT_MS    500u
+#define CORES_OFF_WAIT_MS    3000u   /* a long coop thread on a core delays its CPU_OFF (desk audit R6) */
 
 /* ---- state ---------------------------------------------------------------- */
 
@@ -235,9 +238,15 @@ void board_route3_restart_detect(uint64_t entry)
 	if (gpr == 0 || (sys_read32(gpr + IOMUXC_GPR22) & GPR22_CM7_CPUWAIT) != 0u) {
 		return;
 	}
-	if (s_pw->magic != CLUSTER_A53_POWER_MAGIC || s_pw->a53_state != CLUSTER_A53_ST_SUSPENDING) {
-		return;
-	}
+	/*
+	 * CPUWAIT clear: the M7 was released in this power session, so this
+	 * entry is not the first. Whether this image may skip the M7 load
+	 * rests on one thing only, the M7 running (its heartbeat moving); the
+	 * page's state is reported, not required (desk audit D5: a cold path
+	 * here would load the M7 image over the M7 executing it). An M7 that
+	 * does not beat in 2 s is dead, and the cold path reloading it is the
+	 * recovery.
+	 */
 	stp = map_nc(M7_STATUS_ADDR, CONFIG_MMU_PAGE_SIZE);
 	if (stp == NULL) {
 		return;
@@ -260,6 +269,12 @@ void board_route3_restart_detect(uint64_t entry)
 		return;
 	}
 	s_warm = true;
+	if (s_pw->magic != CLUSTER_A53_POWER_MAGIC || s_pw->a53_state != CLUSTER_A53_ST_SUSPENDING) {
+		/* No console yet at PRE_KERNEL_1: the page keeps what was seen
+		 * (reserved0 = the state found, | 0x100 if the magic was not). */
+		s_pw->reserved0 = s_pw->a53_state |
+				  (s_pw->magic != CLUSTER_A53_POWER_MAGIC ? 0x100u : 0u);
+	}
 	s_pw->a53_image_in = entry;
 	s_pw->restarts++;
 	if (s_pw->cmd == CLUSTER_A53_CMD_UP) {
@@ -437,7 +452,7 @@ static bool cores_off(void)
 static void down_thread(void *p1, void *p2, void *p3)
 {
 	unsigned int key;
-	int gpu, rc;
+	int gpu, rc = 0;
 
 	ARG_UNUSED(p1);
 	ARG_UNUSED(p2);
@@ -447,9 +462,22 @@ static void down_thread(void *p1, void *p2, void *p3)
 	s_pw->a53_state = CLUSTER_A53_ST_GOING_DOWN;
 	board_route3_quiesce();
 	gpu = gc_render_quiesce(GPU_QUIESCE_MS);
+	/* A GPU that did not stop (-EBUSY) only writes this image's own
+	 * buffers; the restarted image resets it in its device init (desk audit
+	 * R4). Reported, and the A53 goes down all the same. */
 	printk("route3: DOWN (cmd_seq %u): GPU stopped (%d); cores 1-%u off next\n", s_down_seq, gpu,
 	       OFF_CPUS);
-	(void)cores_off();
+	if (!cores_off()) {
+		/* SYSTEM_SUSPEND would be DENIED, and this image has already
+		 * stopped publishing, its GPU and the cores that answered: it
+		 * cannot draw again. A SoC reset is the known state to go to
+		 * (desk audit D4); the M7 starts again with it. */
+		s_pw->suspend_rc = -1000;
+		s_pw->a53_state = CLUSTER_A53_ST_SUSPEND_FAIL;
+		barrier_dmem_fence_full();
+		printk("route3: cores not off: SoC reset\n");
+		(void)smc3(PSCI_SYSTEM_RESET, 0, 0);
+	}
 
 	/* CPU 0 alone from here */
 	s_pw->ack_seq = s_down_seq;
@@ -466,7 +494,16 @@ static void down_thread(void *p1, void *p2, void *p3)
 	irq_enable(MU1_IRQ);
 	write_sysreg(0, ICC_PMR_EL1);
 	barrier_isync_fence_full();
-	rc = (int)(int64_t)smc3(PSCI_SYSTEM_SUSPEND, CLUSTER_A53_RESTART_ENTRY, 0);
+	for (unsigned int t = 0; t < SUSPEND_TRIES; t++) {
+		rc = (int)(int64_t)smc3(PSCI_SYSTEM_SUSPEND, CLUSTER_A53_RESTART_ENTRY, 0);
+		/* A suspend that happens never returns here: the wake enters the
+		 * loader. 0 = refused for a pending interrupt, DENIED = a core
+		 * was not off yet: both worth another try (desk audit D4). */
+		if (rc != 0 && rc != PSCI_RC_DENIED) {
+			break;
+		}
+		k_busy_wait(1000);
+	}
 
 	/* came back: the suspend did not happen */
 	write_sysreg(GIC_IDLE_PRIO, ICC_PMR_EL1);
@@ -475,7 +512,9 @@ static void down_thread(void *p1, void *p2, void *p3)
 	barrier_dmem_fence_full();
 	s_pw->a53_state = CLUSTER_A53_ST_SUSPEND_FAIL;
 	arch_irq_unlock(key);
-	printk("route3: SYSTEM_SUSPEND returned %d: running on, on CPU 0, without the GPU\n", rc);
+	printk("route3: SYSTEM_SUSPEND returned %d %u times: SoC reset\n", rc, SUSPEND_TRIES);
+	/* As for cores that did not go off: nothing here can draw again. */
+	(void)smc3(PSCI_SYSTEM_RESET, 0, 0);
 }
 
 void board_route3_restart_arm(void)
@@ -485,12 +524,13 @@ void board_route3_restart_arm(void)
 	if (armed) {
 		return;
 	}
-	armed = true;
 	if (s_pw == NULL || s_pw->magic != CLUSTER_A53_POWER_MAGIC) {
-		printk("route3: no A53 power page from the M7 (magic 0x%08x): DOWN not armed\n",
-		       s_pw != NULL ? s_pw->magic : 0u);
+		/* The M7 writes its power page only once its loop starts, after
+		 * its display set-up: not yet is not never. Tried again on the
+		 * next show (desk audit D8). */
 		return;
 	}
+	armed = true;
 	if (!s_warm) {
 		s_pw->a53_state = CLUSTER_A53_ST_RUN_COLD;
 	}
