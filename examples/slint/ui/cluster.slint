@@ -229,11 +229,6 @@ export component MainWindow inherits Window {
         // fuel frame and pump (the segments and litres are the safe core's)
         FrameBox { bx: Layout.fuel-bar-x; by: Layout.fuel-bar-y; bw: Layout.fuel-bar-w; bh: Layout.fuel-bar-h; }
         PumpIcon { px: Layout.fuel-icon-x; py: Layout.fuel-icon-y; colour: Layout.text2; }
-        // brand
-        for letter[i] in ["S", "A", "F", "E", "U", "I"]: CText {
-            cx: Layout.brand-cx0 + i * Layout.brand-dx; ty: Layout.brand-cy; text: letter;
-            color: Theme.brand; font-size: Layout.label; font-weight: Layout.semibold;
-        }
         // footer frame counter
         LText { lx: Layout.footer-x; ty: Layout.footer-y; text: "frame " + root.frame; color: Layout.dim; font-size: Layout.small; font-weight: Layout.regular; }
 
