@@ -3,7 +3,7 @@
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 """Merge i.MX8MP dEQP-GLES3 tree records into a not-pass list and totals.
 
-  imx8mp-gles3-merge.py [--table T] [--mustpass M] (--notpass | --totals | --check) DIR...
+  imx8mp-gles3-merge.py [--table T] [--mustpass M] (--notpass | --totals | --check [--partial]) DIR...
   imx8mp-gles3-merge.py --selftest        (synthetic records under $TMPDIR)
 
 Each DIR is a `tools/board.sh imx8mp tree` record (results.tsv: index, filter, begun, passed, failed, notsup,
@@ -25,7 +25,12 @@ tools/cts/check-imx8mp-gles3-tree.py does (dEQP's filter: comma-separated patter
            others, at least 0), then the entries with no usable record.
 --check    exit 1 when two inputs cover the same entry, the inputs name different commits (or none), a row
            does not fit the table (index, filter), or a case is listed twice. The other modes print the same
-           problems on stderr and go on.
+           problems on stderr and go on. Also exit 1 when an entry has no record ('no record: N of 133 entries
+           (span)'; --partial allows it, for one slice alone), when a slice README has no verdict lines, or
+           when an entry's `board.sh <board> e<NN> rc=.. verdict=.. resets=..` line is not verdict=done with
+           resets absent or 0 (done_with_resets, done_lossy, died_after=..., ...).
+           A row whose fields are all '-' (board.sh tally's row for an entry a TREE_ROWS slice did not run)
+           claims nothing when another input has a real row; with none it is a no-record entry.
 """
 import argparse, contextlib, io, os, re, shutil, sys, tempfile
 
@@ -98,7 +103,7 @@ def read_rows(path):
         nums = [parse_int(x) for x in f[2:8]]
         tally = None if any(n is None for n in nums[:5]) else [n or 0 for n in nums]
         names = [] if f[8] in ('-', '') else [n for part in f[8].split(';') for n in part.split(',') if n]
-        rows.append((idx, f[1], tally, names))
+        rows.append((idx, f[1], tally, names, f[2:8]))
     return rows
 
 
@@ -109,6 +114,8 @@ class Merge:
         self.commits = []      # (dir, commit)
         self.rec = {}          # entry -> dict
         self.info = []         # per-row comments
+        self.dash = {}         # entry -> dir of an all-'-' row (board.sh tally's row for an entry not run)
+        self.verdicts = {}     # dir -> {entry: (verdict, resets, rc)} from its README / INDEX verdict lines
         for d in dirs:
             self.add(d)
         known = [c for _, c in self.commits if c]
@@ -118,6 +125,10 @@ class Merge:
         for d, c in self.commits:
             if c and known and not same_commit(known[0], c):
                 self.problems.append('different commits: %s (%s) and %s (%s)' % (self.commits[0][0], known[0], d, c))
+        for i, d in sorted(self.dash.items()):
+            if i not in self.rec:      # no input has a real row: a no-record entry
+                self.rec[i] = dict(dir=d, tally=None, names=[], outside=0, crc=0)
+        self.check_verdicts()
         self.listed = {}
         for i in sorted(self.rec):
             r = self.rec[i]
@@ -138,12 +149,15 @@ class Merge:
         if not path:
             self.problems.append('%s: no results.tsv' % d)
             return
-        for idx, filt, tally, names in read_rows(path):
+        for idx, filt, tally, names, raw in read_rows(path):
             if not 0 <= idx < len(self.table):
                 self.problems.append('%s: entry %d is not in the table (%d entries)' % (d, idx, len(self.table)))
                 continue
             if filt != self.table[idx]:
                 self.problems.append('%s: entry %d filter differs from the table' % (d, idx))
+                continue
+            if tally is None and not names and not any(x != '-' for x in raw):
+                self.dash.setdefault(idx, d)
                 continue
             if idx in self.rec:
                 self.problems.append('entry %d is in both %s and %s' % (idx, self.rec[idx]['dir'], d))
@@ -158,6 +172,41 @@ class Merge:
                 else:
                     outside += 1
             self.rec[idx] = dict(dir=d, tally=tally, names=placed, outside=outside, crc=crc)
+
+    def read_verdicts(self, d):
+        """{entry: (verdict, resets, rc)} from the `board.sh <board> e<NN> rc=.. verdict=.. resets=..` lines."""
+        out = {}
+        for name in sorted(os.listdir(d)):
+            if not (name.lower().startswith('readme') or name.upper().startswith('INDEX')):
+                continue
+            for l in open(os.path.join(d, name), errors='replace'):
+                m = re.search(r'\bboard\.sh\s+\S+\s+[A-Za-z_-]*(\d+)\s+rc=(\S+)\s+verdict=(\S+)', l)
+                if not m:
+                    continue
+                r = re.search(r'\bresets=(\S+)', l)
+                out[int(m.group(1))] = (m.group(3), r.group(1) if r else 'absent', m.group(2))
+        return out
+
+    def check_verdicts(self):
+        for i in sorted(self.rec):
+            r = self.rec[i]
+            if r['tally'] is None:
+                continue
+            d = r['dir']
+            if d not in self.verdicts:
+                self.verdicts[d] = self.read_verdicts(d)
+                if not self.verdicts[d]:
+                    self.problems.append('%s: no verdict lines (board.sh imx8mp e<NN> rc=.. verdict=.. resets=..) '
+                                         'in its README' % d)
+            v = self.verdicts[d]
+            if not v:
+                continue
+            if i not in v:
+                self.problems.append('e%d: no verdict line in %s' % (i, d))
+                continue
+            verdict, resets, rc = v[i]
+            if verdict != 'done' or resets not in ('absent', '0') or rc != '0':
+                self.problems.append('e%d: verdict=%s resets=%s rc=%s is not a clean done (%s)' % (i, verdict, resets, rc, d))
 
     def counts(self, i):
         """(mustpass, begun, pass, fail, ns, other, none) of an entry, or None without a record."""
@@ -232,11 +281,16 @@ def run(argv, out=None):
     g.add_argument('--notpass', action='store_true')
     g.add_argument('--totals', action='store_true')
     g.add_argument('--check', action='store_true')
+    ap.add_argument('--partial', action='store_true', help='--check: allow entries no input has a record for')
     ap.add_argument('dirs', nargs='+')
     a = ap.parse_args(argv)
     table = load_table(a.table)
     m = Merge(table, entry_cases(table, a.mustpass), a.dirs)
     if a.check:
+        missing = [i for i in range(len(table)) if m.counts(i) is None]
+        if missing and not a.partial:
+            m.problems.append('no record: %d of %d entries (%s), %d mustpass cases' % (
+                len(missing), len(table), span(missing), sum(len(m.per[i]) for i in missing)))
         for p in m.problems:
             print('FAIL:', p)
         print('checked %d inputs, %d entries with a record: %s' % (len(a.dirs), len(m.rec), 'FAILED' if m.problems else 'OK'))
@@ -262,11 +316,16 @@ def selftest():
             fails.append(what)
         print('%-4s %s' % ('ok' if ok else 'FAIL', what))
 
-    def slice_(name, commit, rows):
+    def slice_(name, commit, rows, verdicts=None, lines=True):
         d = os.path.join(root, name)
         os.makedirs(d)
         with open(os.path.join(d, 'README.md'), 'w') as f:
             f.write('# slice at origin/main %s\n' % commit)
+            for r in rows if lines else []:
+                if r[2] != '-':
+                    v, rs = (verdicts or {}).get(r[0], ('done', 'absent'))
+                    f.write('board.sh imx8mp e%02d rc=%d verdict=%s boot=uboot-mmc row boot_verdict=cycled '
+                            'result=record:DEQP resets=%s record=x back_after=1s\n' % (r[0], 0 if v == 'done' else 4, v, rs))
         with open(os.path.join(d, 'results.tsv'), 'w') as f:
             f.write('# index\tfilter\tbegun\tpassed\tfailed\tnotsup\tother\tnoresult\tfailing names\n')
             for r in rows:
@@ -288,23 +347,64 @@ def selftest():
                  ['dEQP-GLES3.c.x'] + ['dEQP-GLES3.d.%d' % k for k in range(5)] + ['dEQP-GLES3.e.0'])
         open(must, 'w').write('# synthetic\n' + '\n'.join(cases) + '\n')
         c1, c2 = 'a' * 40, 'b' * 40
-        A = slice_('a', c1, [
+        A_rows = [
             (0, entries[0], 4, 4, 0, 0, 0, 0, '-'),                                    # all pass
             (1, entries[1], 4, 1, 1, 1, 0, 1, 'dEQP-GLES3.b.1;dEQP-GLES3.nonmust.z'),  # failing names
-        ])
-        B = slice_('b', c1[:8], [
+        ]
+        B_rows = [
             (2, entries[2], 3, 3, 0, 0, 0, 0, '-'),                                    # ended early: 3 of 5 begun
             (3, entries[3], '-', '-', '-', '-', '-', '-', '-'),                        # no usable record
-        ])
+        ]
+        F_rows = [(3, entries[3], 1, 1, 0, 0, 0, 0, '-')]
+        A = slice_('a', c1, A_rows)
+        B = slice_('b', c1[:8], B_rows)
+        F = slice_('f', c1, F_rows)                                                    # entry 3, a real row
+        # board.sh tally form: a row for every entry, '-' fields for the ones the slice did not run
+        def dash(i):
+            return (i, entries[i], '-', '-', '-', '-', '-', '-', '-')
+        BA = slice_('board-a', c1, [A_rows[0], A_rows[1], dash(2), dash(3)])
+        BB = slice_('board-b', c1, [dash(0), dash(1), B_rows[0], F_rows[0]])
+        RS = slice_('resets', c1, A_rows, {1: ('done_with_resets', '2')})
+        DA = slice_('died', c1, A_rows, {1: ('died_after=gpu_init_done', 'absent')})
+        NV = slice_('noverdict', c1, A_rows, lines=False)
+        R0 = slice_('resets0', c1, A_rows, {1: ('done', '0')})
         D = slice_('dup', c1, [(1, entries[1], 4, 4, 0, 0, 0, 0, '-')])               # entry 1 again
         X = slice_('mixed', c2, [(2, entries[2], 5, 5, 0, 0, 0, 0, '-')])             # other commit
         base_args = ['--table', table, '--mustpass', must]
 
+        rc, out, _ = call(*base_args, '--check', '--partial', A, B)
+        expect('check --partial accepts disjoint slices of one commit (full and 8-char hash)', rc == 0)
+        rc, out, _ = call(*base_args, '--check', A, B, F)
+        expect('check accepts the complete set (every entry recorded)', rc == 0)
         rc, out, _ = call(*base_args, '--check', A, B)
-        expect('check accepts disjoint slices of one commit (full and 8-char hash)', rc == 0)
-        rc, out, _ = call(*base_args, '--check', A, D)
+        expect('check fails when entries are missing, naming them',
+               rc == 1 and 'no record: 1 of 4 entries (3), 1 mustpass' in out)
+        rc, out, _ = call(*base_args, '--check', A)
+        expect('check fails on a single slice, naming the range', rc == 1 and 'no record: 2 of 4 entries (2-3)' in out)
+        rc, out, _ = call(*base_args, '--check', '--partial', A)
+        expect('check --partial accepts one slice alone', rc == 0)
+        rc, out, _ = call(*base_args, '--check', BA, BB)
+        expect('check accepts two board-form slices (dash rows claim nothing)', rc == 0)
+        rc, out, _ = call(*base_args, '--check', '--partial', BA)
+        expect('check --partial accepts one board-form slice alone', rc == 0)
+        rc, out, _ = call(*base_args, '--check', BA)
+        expect('a dash row is a missing entry when no input has a real row',
+               rc == 1 and 'no record: 2 of 4 entries (2-3)' in out)
+        rc, out, _ = call(*base_args, '--notpass', BA)
+        expect('notpass: a dash-only entry is NoResult', 'e3:NoResult dEQP-GLES3.e.0' in out)
+        rc, out, _ = call(*base_args, '--check', R0, B, F)
+        expect('check accepts resets=0', rc == 0)
+        rc, out, _ = call(*base_args, '--check', '--partial', RS)
+        expect('check fails on done_with_resets, naming entry and verdict',
+               rc == 1 and 'e1: verdict=done_with_resets resets=2' in out)
+        rc, out, _ = call(*base_args, '--check', '--partial', DA)
+        expect('check fails on died_after, naming entry and verdict',
+               rc == 1 and 'e1: verdict=died_after=gpu_init_done' in out)
+        rc, out, _ = call(*base_args, '--check', '--partial', NV)
+        expect('check fails on a slice without verdict lines', rc == 1 and 'no verdict lines' in out)
+        rc, out, _ = call(*base_args, '--check', '--partial', A, D)
         expect('check flags a duplicate entry', rc == 1 and 'entry 1 is in both' in out)
-        rc, out, _ = call(*base_args, '--check', A, X)
+        rc, out, _ = call(*base_args, '--check', '--partial', A, X)
         expect('check flags mixed commits', rc == 1 and 'different commits' in out)
 
         rc, out, _ = call(*base_args, '--notpass', A, B)
