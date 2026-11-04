@@ -48,7 +48,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/.." && pwd)
 B="$HERE/board.sh"
 TD="$HERE/testdata"
-WANT_CHECKS=246
+WANT_CHECKS=254
 
 S=$(mktemp -d)
 trap 'rm -rf "$S"' EXIT
@@ -156,6 +156,24 @@ out=$(dry imx8mp run "$S/img/imx8mp.bin" "$S/logs" 2>&1)
 check "imx8mp: the SNVS record cleared and read back before the boot" grep -q "od -A n -t x4 /sys/bus/nvmem" <<<"$out"
 out=$(SEL=0x8003 dry imx8mp run "$S/img/imx8mp.bin" "$S/logs" 2>&1)
 check "imx8mp: SEL=0x8003 is written as w1 = 53458003" grep -q "00000000 53458003 00000000 00000000" <<<"$out"
+# the i.MX8MP console is opt-in (BOARD_UART): a bridge or a device is probed
+# and captured into the run directory, unset leaves the run as it was
+for boot in uboot-tftp uboot-mmc; do
+    out=$(BOARD_BOOT=$boot dry imx8mp run "$S/img/imx8mp.bin" "$S/logs" 2>&1)
+    check "imx8mp $boot run, no BOARD_UART: no probe, capture, stty or fd scan" \
+        eval '! grep -q "am62p_netboot_uart.py" <<<"$out" && ! grep -q "stty" <<<"$out" && ! grep -q "/proc/<pid>/fd" <<<"$out"'
+    out=$(BOARD_UART=bridge.invalid:1 BOARD_BOOT=$boot dry imx8mp run "$S/img/imx8mp.bin" "$S/logs" 2>&1)
+    rc=$?
+    check "imx8mp $boot run, BOARD_UART host:port: probe and TCP capture, no stty, no fd scan" \
+        eval '[ "$rc" = 0 ] && grep -q "am62p_netboot_uart.py probe bridge.invalid:1" <<<"$out" &&
+              grep -q "am62p_netboot_uart.py capture bridge.invalid:1 <rundir>/console.raw <rundir>/console.ts" <<<"$out" &&
+              ! grep -q "stty" <<<"$out" && ! grep -q "/proc/<pid>/fd" <<<"$out"'
+    out=$(BOARD_UART=/dev/ttyFAKE9 BOARD_BOOT=$boot dry imx8mp run "$S/img/imx8mp.bin" "$S/logs" 2>&1)
+    rc=$?
+    check "imx8mp $boot run, BOARD_UART a device: fd scan, stty and the line reader into console.txt, no bridge command" \
+        eval '[ "$rc" = 0 ] && grep -q "scan every /proc/<pid>/fd for /dev/ttyFAKE9" <<<"$out" && grep -q "stty -F /dev/ttyFAKE9" <<<"$out" &&
+              grep -q "read /dev/ttyFAKE9 .* into <rundir>/console.txt" <<<"$out" && ! grep -q "am62p_netboot_uart.py" <<<"$out"'
+done
 out=$(dry pi4 run "$S/img/pi4.bin" "$S/logs" 2>&1)
 check "pi4: /boot/firmware free space read, tryboot.txt written and put back" \
     eval 'grep -q "df -B1 --output=avail /boot/firmware" <<<"$out" && [ "$(grep -c "tee /boot/firmware/tryboot.txt" <<<"$out")" = 2 ]'
@@ -336,6 +354,13 @@ rc=$?
 check "imx8mp tree (one image, selector): rc 0, TREE_ROWS=1 runs only e01, with selector 1" \
     eval '[ "$rc" = 0 ] && grep -q "^=== e01 .*selector 1" <<<"$out" && ! grep -q "^=== e00" <<<"$out" && grep -q "53450001" <<<"$out"'
 check "tree wrote nothing on the host" [ ! -e "$S/tree" ]
+out=$(BOARD_UART=bridge.invalid:1 TREE_IMAGE=$S/img/imx8mp.bin TREE_ROWS=1 dry imx8mp tree "$S/am.txt" "$S/tree" 2>&1)
+rc=$?
+check "imx8mp tree, BOARD_UART host:port: probe and TCP capture commands, no stty, no fd scan" \
+    eval '[ "$rc" = 0 ] && grep -q "am62p_netboot_uart.py probe bridge.invalid:1" <<<"$out" &&
+          grep -q "am62p_netboot_uart.py capture bridge.invalid:1 <rundir>/console.raw <rundir>/console.ts" <<<"$out" && ! grep -q "stty" <<<"$out" && ! grep -q "/proc/<pid>/fd" <<<"$out"'
+out=$(TREE_IMAGE=$S/img/imx8mp.bin TREE_ROWS=1 dry imx8mp tree "$S/am.txt" "$S/tree" 2>&1)
+check "imx8mp tree, no BOARD_UART: no probe or capture line" eval '! grep -q "am62p_netboot_uart.py" <<<"$out" && ! grep -q "console.raw" <<<"$out"'
 
 # gm: the i.MX8MP's glmark2 pages (kind GM_PAGE), and their decode
 out=$(dry imx8mp gm "$S/img/imx8mp.bin" "$S/gm" fps 2>&1)
