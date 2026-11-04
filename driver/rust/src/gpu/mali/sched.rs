@@ -15,8 +15,9 @@
 //! Lines below are of v6.18 (`VERSION = 6`, `PATCHLEVEL = 18`,
 //! `SUBLEVEL = 0`). Where this differs from panthor it says so.
 //!
-//! This file holds the design, the refusals, the constants and the
-//! bring-up ([`start`], below). The submit is the next item of the plan;
+//! This file holds the design, the refusals, the constants, the bring-up
+//! ([`start`]), the submit ([`submit`]), the completion wait ([`wait`])
+//! and the group's end ([`stop`], [`terminate`], [`stop_and_terminate`]);
 //! the instruction words panthor wraps a job in are [`job`]'s.
 //!
 //! # The interface this uses
@@ -213,13 +214,49 @@
 //!   panthor wait (panthor trusts the group's acknowledge), ours, at the
 //!   same 100 ms ([`CS_ACK_WAIT_US`]); it is a read, so it adds no write to
 //!   panthor's sequence;
-//! - the job: [`JOB_TIMEOUT_US`], panthor's 5 s, counted from the stream's
-//!   doorbell; the poll reads the job interrupt's group bit, the group's
-//!   `req ^ ack` events, the stream's `cs_irq` and events, and the sync
-//!   object;
-//! - the terminate's acknowledge: [`CSG_ACK_WAIT_US`], panthor's 100 ms;
-//! - CS 0's state reading STOP after it: ours, [`CS_ACK_WAIT_US`] (panthor
-//!   writes STOP and does not wait).
+//! - the job: [`JOB_TIMEOUT_US`], panthor's 5 s, counted from the call
+//!   right after the stream's doorbell, polled every [`JOB_POLL_US`]; the
+//!   poll reads the group's `req ^ ack` events, the stream's `cs_irq` and
+//!   events, and the sync object. It does not read `JOB_INT`: the words
+//!   it stands for are read directly, and the interrupt is left to Z3's
+//!   setup;
+//! - CS 0's state reading STOP: ours, [`CS_ACK_WAIT_US`] (panthor writes
+//!   STOP and does not wait);
+//! - the terminate's acknowledge: [`CSG_ACK_WAIT_US`], panthor's 100 ms.
+//!
+//! # What the implementation settled
+//!
+//! - The stop comes before the terminate, and is rung. panthor terminates
+//!   the group and then writes the streams' STOP with no doorbell
+//!   (:1275-1288), so the firmware never looks at it before the next start
+//!   and its acknowledge could not be checked. [`stop`] writes STOP while
+//!   the group still runs, toggles CS 0's bit of the group's
+//!   `doorbell_req` and rings the group, as the start does (:1345, 1855),
+//!   and waits for the acknowledge. [`stop_and_terminate`] then runs
+//!   [`terminate`] whatever the stop's result, and keeps both results.
+//! - Only the timeout stops and terminates by itself (`queue_timedout_job`,
+//!   :3233-3267). After a fault, a fatal, a progress timer event or a sync
+//!   object error, [`wait`] returns the record and the caller decides
+//!   (panthor goes on after a fault and terminates after a fatal).
+//! - The wait acknowledges `CSG_SYNC_UPDATE` and `CSG_IDLE` (panthor's
+//!   mask, :1695-1698, less the refused progress timer) and copies
+//!   `cs_irq_req` to `cs_irq_ack` (:1687-1693) only when nothing is
+//!   refused, then rings the group (:1719-1722). Completion is the sync
+//!   object's `seqno` alone. A `seqno` seen before its `SYNC_UPDATE` event
+//!   ends the wait with the event still pending; the next wait acknowledges
+//!   it.
+//! - 64-bit words go through [`Mmio`] as two 32-bit writes, low half first:
+//!   the ring's words, the input page's `extract` and `insert`. panthor
+//!   stores them with one 64-bit store. Before the doorbell the firmware
+//!   reads `insert` whole, and below 4 GiB of jobs its high half never
+//!   changes. The sync object's `seqno` is read high, low, high, so a carry
+//!   between the reads is never taken for completion.
+//! - panthor's `wmb()` before `insert` (:3188-3191) is the `dmb sy` that
+//!   every [`crate::mmio::Hw`] write begins with. The ring is uncached, so
+//!   nothing is cleaned.
+//! - The sync object is the queue's ([`Queue::syncobj_va`], :3019-3020),
+//!   not a separate argument of [`submit`]. The sequence number is the
+//!   caller's count, refused when the sync object has already reached it.
 //!
 //! # What we refuse instead of masking
 //!
@@ -291,10 +328,13 @@
 //! `insert` after a barrier and rings doorbell 1. Completion is the 16-byte
 //! sync object's `seqno` (338-351, 2933) seen on the CSG `SYNC_UPDATE`
 //! event (1665-1723); a fault, fatal, tiler OOM, protected-mode or progress
-//! event is refused, not acknowledged. The job timeout is panthor's 5 s
-//! (90, 3323); terminate is `CSG_STATE_TERMINATE` with its 100 ms
-//! acknowledge, then CS 0 to `STOP` (2197-2207, 1275-1288); a terminate
-//! that times out goes to the reset (2742-2754).
+//! event is refused, not acknowledged; `SYNC_UPDATE` is acknowledged and the
+//! group rung (1695-1698, 1719-1722). The job timeout is panthor's 5 s (90,
+//! 3323). On it CS 0 goes to `STOP`, rung through the group's doorbell and
+//! acknowledged within 100 ms (panthor writes it after the terminate, without
+//! ringing, 1275-1288). Then `CSG_STATE_TERMINATE` is requested with its
+//! 100 ms acknowledge (2197-2207). Both results are reported, and a
+//! terminate that times out goes to the reset (2742-2754).
 
 pub mod job;
 
@@ -490,6 +530,19 @@ pub enum SchedRefusal {
     /// panthor masks it). The value: the check, 1 to 3 the compute,
     /// fragment and tiler masks, 4 to 6 their counts, 7 the tiler field.
     GroupCores = 23,
+    /// The job [`submit`] was given cannot be encoded (none is panthor's,
+    /// which takes validated ioctl input). The value: the check, 1 a
+    /// zero-size stream (panthor runs nothing, panthor_sched.c:3150-3153),
+    /// 2 a stream or sync object address above `MOV48`'s 48 bits, 3 the
+    /// stream's work registers too few or odd for `addr_reg`
+    /// (:3013-3015), 4 a scoreboard count giving no `WAIT` mask (:3023),
+    /// 5 a sequence number the sync object has already reached.
+    JobParams = 24,
+    /// The user input page's `insert` is not a multiple of 8, so the job's
+    /// words would straddle the ring's 64-bit slots (the value: `insert`'s
+    /// low 32 bits). Ours: panthor's `insert` only ever advances by whole
+    /// cache lines (:3116-3119, 3181).
+    RingInsert = 25,
 }
 
 /// The ring's size as panthor's queue creation accepts it
@@ -901,11 +954,384 @@ pub fn start(
     })
 }
 
+/// The job the caller hands [`submit`]: what `drm_panthor_queue_submit`
+/// carries (`stream_addr`, `stream_size`, `latest_flush`), read by
+/// `get_job_cs_params` (panthor_sched.c:3025-3027).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Job {
+    /// The user stream: its GPU address in the group's VM and its size in
+    /// bytes, the target of the block's `CALL`.
+    pub cs_start: u64,
+    pub cs_size: u32,
+    /// The flush id `FLUSH_CACHE2` compares against (:3044-3048).
+    pub latest_flush: u32,
+}
+
+/// What [`submit`] wrote.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Submitted {
+    /// The sequence number the job's `SYNC_ADD64` brings the sync object
+    /// to (panthor's `job->done_fence->seqno`, :3165-3169).
+    pub seqno: u64,
+    /// `insert` before and after (`job->ringbuf.start`, `.end`, :3175,
+    /// 3181), and the ring offset the block went to (:2975).
+    pub start: u64,
+    pub end: u64,
+    pub ring_offset: u32,
+    /// The block as written ([`job::job_block`]).
+    pub block: [u64; job::JOB_WORDS],
+}
+
+/// The job wait's poll interval. Ours: panthor sleeps on the DRM fence.
+/// [`JOB_TIMEOUT_US`] is a multiple of it, so the timeout is exact.
+pub const JOB_POLL_US: u32 = 10;
+const _: () = assert!(JOB_TIMEOUT_US.is_multiple_of(JOB_POLL_US));
+
+/// The group events the wait acknowledges, as panthor's
+/// `sched_process_csg_irq_locked` does (panthor_sched.c:1695-1698) less
+/// `CSG_PROGRESS_TIMER_EVENT`, which is refused before it.
+pub const CSG_EVT_ACK: u32 = csf::CSG_SYNC_UPDATE | csf::CSG_IDLE;
+
+/// A 64-bit word the GPU may change between the two 32-bit reads: high,
+/// low, high again, until both highs agree, so a carry between the reads
+/// is never taken for a jump of 2^32.
+fn read64_stable(m: &impl Mmio, addr: usize) -> u64 {
+    loop {
+        let hi = m.read32(addr + 4);
+        let lo = m.read32(addr);
+        if m.read32(addr + 4) == hi {
+            return u64::from(hi) << 32 | u64::from(lo);
+        }
+    }
+}
+
+/// `get_job_cs_params` (panthor_sched.c:3005-3030) from CS 0's features
+/// and the queue, checked as [`job::check_params`] does.
+fn job_params(cs: &Cs, queue: &Queue, j: &Job) -> Result<job::JobParams, Refused> {
+    let regs = csf::cs_features_work_regs(cs.features);
+    let refuse = |check: u32| (SchedRefusal::JobParams, check);
+    // :3013-3014; job::addr_reg would underflow below the unpreserved count
+    let addr_reg = regs.checked_sub(csf::UNPRESERVED_REG_COUNT).ok_or(refuse(3))?;
+    let p = job::JobParams {
+        addr_reg: u64::from(addr_reg),
+        cs_start: j.cs_start,
+        cs_size: j.cs_size,
+        // :3019-3020: the queue's own 16 bytes of the group's sync objects
+        sync_addr: queue.syncobj_va,
+        last_flush: j.latest_flush,
+        // :3023
+        waitall_mask: job::waitall_mask(csf::cs_features_scoreboards(cs.features)),
+    };
+    // the val_reg (:3015) must be below the stream's work registers too
+    if job::val_reg(p.addr_reg) >= u64::from(regs) {
+        return Err(refuse(3));
+    }
+    job::check_params(&p).map_err(|e| {
+        refuse(match e {
+            job::ParamsError::EmptyStream => 1,
+            job::ParamsError::AddressAbove48Bits(_) => 2,
+            job::ParamsError::RegisterRange(_) => 3,
+            job::ParamsError::WaitMask(_) => 4,
+        })
+    })?;
+    Ok(p)
+}
+
+/// One job on the started stream, as `queue_run_job` puts it there
+/// (panthor_sched.c:3133-3231):
+///
+/// 1. checks before any write: a pending stream event ([`cs_events`]), the
+///    job's words ([`job_params`]; `seqno` above the sync object's), the
+///    ring's room between the input page's `insert` and the output page's
+///    `extract` ([`job::check_ring_fit`]: [`SchedRefusal::RingOverflow`]
+///    with the free bytes, where panthor's DRM scheduler would hold the job
+///    back, :3322);
+/// 2. [`job::job_block`] (:3039-3120) copied into the ring at `insert &
+///    (size - 1)`, wrapping at its end (`copy_instrs_to_ringbuf`,
+///    :2969-2994), each 64-bit word as its low then its high half;
+/// 3. the input page's `extract` from the output page's, then `insert` to
+///    the end (:3193-3194), after the ring: panthor's `wmb()`
+///    (:3188-3191) is the `dmb sy` every [`crate::mmio::Hw`] write begins
+///    with, and the ring is uncached, so nothing is cleaned;
+/// 4. the stream's doorbell, [`Started::doorbell_id`] (:3210).
+///
+/// `seqno` is the value the job's `SYNC_ADD64` of 1 brings the sync object
+/// to: one more than the jobs before it (:3165-3169), the caller's count.
+pub fn submit(
+    m: &impl Mmio,
+    gpu: usize,
+    cs: &Cs,
+    queue: &Queue,
+    s: &Started,
+    j: &Job,
+    seqno: u64,
+) -> Result<Submitted, Refused> {
+    cs_events(m, cs)?;
+    let p = job_params(cs, queue, j)?;
+    if seqno <= read64_stable(m, s.syncobj_cpu + offset_of!(SyncObj64, seqno)) {
+        return Err((SchedRefusal::JobParams, 5));
+    }
+    let insert = read64(m, s.input_cpu + offset_of!(RingbufInput, insert));
+    let extract = read64(m, s.output_cpu + offset_of!(RingbufOutput, extract));
+    if !insert.is_multiple_of(8) {
+        return Err((SchedRefusal::RingInsert, insert as u32));
+    }
+    job::check_ring_fit(queue.ring_size, insert, extract, job::JOB_BYTES as u32)?;
+    let block = job::job_block(&p);
+    let ring_offset = job::ring_offset(insert, queue.ring_size);
+    for (i, w) in block.iter().enumerate() {
+        let off = job::ring_offset(insert + 8 * i as u64, queue.ring_size) as usize;
+        write64(m, s.ring_cpu + off, *w);
+    }
+    let end = insert + job::JOB_BYTES;
+    write64(m, s.input_cpu + offset_of!(RingbufInput, extract), extract);
+    write64(m, s.input_cpu + offset_of!(RingbufInput, insert), end);
+    csf::ring_doorbell(m, gpu, s.doorbell_id);
+    Ok(Submitted { seqno, start: insert, end, ring_offset, block })
+}
+
+/// What [`wait`] saw when the job was done.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Waited {
+    /// The sync object's `seqno`, at least the job's.
+    pub seqno: u64,
+    /// Microseconds polled from the call (right after the doorbell).
+    pub us: u32,
+    /// `CSG_SYNC_UPDATE` events acknowledged on the way.
+    pub sync_updates: u32,
+}
+
+/// [`stop_and_terminate`]'s two results, each kept: one never hides the
+/// other.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Ended {
+    /// [`stop`]: the microseconds until CS 0's `ack` read `CS_STATE_STOP`.
+    pub stop: Result<u32, Refused>,
+    /// [`terminate`]: the microseconds until CSG 0's acknowledge.
+    pub terminate: Result<u32, Refused>,
+}
+
+/// Why [`wait`] stopped short of the job's completion, with what the
+/// refusal's single value cannot carry.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct WaitRefused {
+    pub refused: Refused,
+    /// `fault_info` for [`SchedRefusal::CsFault`], `fatal_info` for
+    /// [`SchedRefusal::CsFatal`] (panthor prints both, panthor_sched.c:
+    /// 1349-1446); 0 otherwise.
+    pub info: u64,
+    /// The sync object's `seqno` and CS 0's `status_cmd_ptr` when refused
+    /// (panthor's timeout report names the queue's progress the same way).
+    pub seqno: u64,
+    pub status_cmd_ptr: u64,
+    /// Microseconds polled.
+    pub us: u32,
+    /// The stop and terminate [`wait`] ran itself: on the timeout only, as
+    /// panthor's `queue_timedout_job` terminates the group
+    /// (panthor_sched.c:3233-3267). After any other refusal the caller
+    /// decides (`None`).
+    pub ended: Option<Ended>,
+}
+
+/// The poll's verdict on one look at the words.
+enum Poll {
+    Done(u64),
+    Pending,
+}
+
+/// One look at CSG 0, CS 0 and the sync object, in the order panthor's
+/// interrupt handling takes them (`sched_process_csg_irq_locked`,
+/// panthor_sched.c:1665-1723), every failure refused before a completion
+/// could hide it:
+///
+/// 1. `CSG_PROGRESS_TIMER_EVENT` in the group's `req ^ ack` (:1703-1704):
+///    refused, not acknowledged;
+/// 2. CS 0's events ([`cs_events`], :1573-1601): refused, not
+///    acknowledged; then, when CS 0's bit of `cs_irq_req ^ cs_irq_ack`
+///    is set, `cs_irq_ack` set to `cs_irq_req` (:1687-1693);
+/// 3. `CSG_SYNC_UPDATE` and `CSG_IDLE` acknowledged by updating `req` to
+///    `ack` under them (:1695-1698; the sync update is
+///    `csg_slot_sync_update_locked`'s, :1629-1641), and, when anything was
+///    acknowledged, the group rung (:1719-1722);
+/// 4. the sync object: `status` non-zero refused, `seqno` reaching the
+///    job's done (`group_sync_upd_work`'s test, :2933).
+#[allow(clippy::too_many_arguments)]
+fn poll_job(
+    m: &impl Mmio,
+    gpu: usize,
+    iface: &Iface,
+    csg: &Csg,
+    cs: &Cs,
+    s: &Started,
+    target: u64,
+    sync_updates: &mut u32,
+) -> Result<Poll, Refused> {
+    let (req, ack) = (csg.input + offset_of!(CsgInput, req), csg.output + offset_of!(CsgOutput, ack));
+    let (r, a) = (m.read32(req), m.read32(ack));
+    let events = (r ^ a) & csf::CSG_EVT_MASK;
+    if events & csf::CSG_PROGRESS_TIMER_EVENT != 0 {
+        return Err((SchedRefusal::CsgProgressTimeout, a));
+    }
+    cs_events(m, cs)?;
+    let mut rung = false;
+    let irq_ack = csg.input + offset_of!(CsgInput, cs_irq_ack);
+    let irq_req = m.read32(csg.output + offset_of!(CsgOutput, cs_irq_req));
+    if (irq_req ^ m.read32(irq_ack)) & 1 << CS_SLOT != 0 {
+        m.write32(irq_ack, irq_req);
+        rung = true;
+    }
+    if events & CSG_EVT_ACK != 0 {
+        csf::update_reqs(m, req, a, CSG_EVT_ACK);
+        if events & csf::CSG_SYNC_UPDATE != 0 {
+            *sync_updates += 1;
+        }
+        rung = true;
+    }
+    if rung {
+        csf::ring_csg_doorbells(m, gpu, iface, 1 << CSG_SLOT);
+    }
+    let status = m.read32(s.syncobj_cpu + offset_of!(SyncObj64, status));
+    if status != 0 {
+        return Err((SchedRefusal::SyncObjError, status));
+    }
+    let seqno = read64_stable(m, s.syncobj_cpu + offset_of!(SyncObj64, seqno));
+    Ok(if seqno >= target { Poll::Done(seqno) } else { Poll::Pending })
+}
+
+/// The job's completion, polled every [`JOB_POLL_US`] for up to
+/// [`JOB_TIMEOUT_US`] (`JOB_TIMEOUT_MS`, panthor_sched.c:90, 3323), each
+/// look as [`poll_job`] lists it. On the timeout the group is stopped and
+/// terminated ([`stop_and_terminate`], as `queue_timedout_job` does,
+/// :3233-3267) and [`SchedRefusal::JobTimeout`] carries the sync object's
+/// `seqno` (low 32 bits), with both ends' results in the record. Call it
+/// right after [`submit`]: the budget counts from the call.
+#[allow(clippy::too_many_arguments)]
+pub fn wait(
+    m: &impl Mmio,
+    gpu: usize,
+    iface: &Iface,
+    csg: &Csg,
+    cs: &Cs,
+    s: &Started,
+    sub: &Submitted,
+    delay_us: &mut impl FnMut(u32),
+) -> Result<Waited, WaitRefused> {
+    let mut sync_updates = 0;
+    let mut t = 0;
+    let refused = |refused: Refused, us: u32| {
+        let o = |f: usize| cs.output + f;
+        let info = match refused.0 {
+            SchedRefusal::CsFault => read64(m, o(offset_of!(CsOutput, fault_info))),
+            SchedRefusal::CsFatal => read64(m, o(offset_of!(CsOutput, fatal_info))),
+            _ => 0,
+        };
+        WaitRefused {
+            refused,
+            info,
+            seqno: read64_stable(m, s.syncobj_cpu + offset_of!(SyncObj64, seqno)),
+            status_cmd_ptr: read64(m, o(offset_of!(CsOutput, status_cmd_ptr))),
+            us,
+            ended: None,
+        }
+    };
+    loop {
+        match poll_job(m, gpu, iface, csg, cs, s, sub.seqno, &mut sync_updates) {
+            Ok(Poll::Done(seqno)) => return Ok(Waited { seqno, us: t, sync_updates }),
+            Ok(Poll::Pending) => {}
+            Err(r) => return Err(refused(r, t)),
+        }
+        if t >= JOB_TIMEOUT_US {
+            break;
+        }
+        delay_us(JOB_POLL_US);
+        t += JOB_POLL_US;
+    }
+    // the record's words as the timeout found them, before the ends move them
+    let mut r = refused((SchedRefusal::JobTimeout, 0), t);
+    r.refused.1 = r.seqno as u32;
+    r.ended = Some(stop_and_terminate(m, gpu, iface, csg, cs, delay_us));
+    Err(r)
+}
+
+/// CS 0 stopped: its state field to `CS_STATE_STOP` under `CS_STATE_MASK`
+/// (`cs_slot_reset_locked`'s write, panthor_sched.c:1106-1108), CS 0's bit
+/// of the group's `doorbell_req` toggled and the group rung (as for its
+/// start, :1345, 1855), then CS 0's `ack` waited for within
+/// [`CS_ACK_WAIT_US`]: [`SchedRefusal::CsStopAckTimeout`] with the `ack`
+/// word. panthor writes the stop only after the group's terminate and
+/// neither rings nor waits (:1275-1288); we stop the stream while its
+/// group still runs, so the firmware looks at the request and its
+/// acknowledge can be checked.
+pub fn stop(
+    m: &impl Mmio,
+    gpu: usize,
+    iface: &Iface,
+    csg: &Csg,
+    cs: &Cs,
+    delay_us: &mut impl FnMut(u32),
+) -> Result<u32, Refused> {
+    let (req, ack) = (cs.input + offset_of!(CsInput, req), cs.output + offset_of!(CsOutput, ack));
+    csf::update_reqs(m, req, csf::CS_STATE_STOP, CS_STATE_MASK);
+    csf::toggle_reqs(
+        m,
+        csg.input + offset_of!(CsgInput, doorbell_req),
+        csg.output + offset_of!(CsgOutput, doorbell_ack),
+        1 << CS_SLOT,
+    );
+    csf::ring_csg_doorbells(m, gpu, iface, 1 << CSG_SLOT);
+    for t in 0..=CS_ACK_WAIT_US {
+        if m.read32(ack) & CS_STATE_MASK == csf::CS_STATE_STOP && (m.read32(req) ^ m.read32(ack)) & CS_STATE_MASK == 0 {
+            return Ok(t);
+        }
+        delay_us(1);
+    }
+    Err((SchedRefusal::CsStopAckTimeout, m.read32(ack)))
+}
+
+/// CSG 0 terminated: its state field to `CSG_STATE_TERMINATE` under
+/// `CSG_STATE_MASK` (`tick_ctx_apply`, panthor_sched.c:2197-2207), applied
+/// and rung as the start is (:1850-1855), its acknowledge waited for
+/// within [`CSG_ACK_WAIT_US`] (:2237, 1867):
+/// [`SchedRefusal::CsgTerminateAckTimeout`] with the bits that were (the
+/// state field only when all of its bits are, panthor_fw.c:1290-1291).
+/// After that refusal the GPU needs the reset (`panthor_sched_suspend`,
+/// panthor_sched.c:2742-2754), which is not ours.
+pub fn terminate(
+    m: &impl Mmio,
+    gpu: usize,
+    iface: &Iface,
+    csg: &Csg,
+    delay_us: &mut impl FnMut(u32),
+) -> Result<u32, Refused> {
+    let (req, ack) = (csg.input + offset_of!(CsgInput, req), csg.output + offset_of!(CsgOutput, ack));
+    csf::update_reqs(m, req, CSG_STATE_TERMINATE, CSG_STATE_MASK);
+    csf::ring_csg_doorbells(m, gpu, iface, 1 << CSG_SLOT);
+    csf::wait_acks(m, req, ack, CSG_STATE_MASK, CSG_ACK_WAIT_US, delay_us).map_err(|a| {
+        let a = if a & CSG_STATE_MASK != CSG_STATE_MASK { a & !CSG_STATE_MASK } else { a };
+        (SchedRefusal::CsgTerminateAckTimeout, a)
+    })
+}
+
+/// The group's end: [`stop`], then [`terminate`] whatever the stop's
+/// result, both results kept.
+pub fn stop_and_terminate(
+    m: &impl Mmio,
+    gpu: usize,
+    iface: &Iface,
+    csg: &Csg,
+    cs: &Cs,
+    delay_us: &mut impl FnMut(u32),
+) -> Ended {
+    let stop = stop(m, gpu, iface, csg, cs, delay_us);
+    let terminate = terminate(m, gpu, iface, csg, delay_us);
+    Ended { stop, terminate }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    const ALL: [SchedRefusal; 23] = [
+    const ALL: [SchedRefusal; 25] = [
         SchedRefusal::RingSize,
         SchedRefusal::RingUnmapped,
         SchedRefusal::UserPagesUnmapped,
@@ -929,6 +1355,8 @@ mod tests {
         SchedRefusal::CsStopAckTimeout,
         SchedRefusal::QueuePriority,
         SchedRefusal::GroupCores,
+        SchedRefusal::JobParams,
+        SchedRefusal::RingInsert,
     ];
 
     #[test]
@@ -1019,7 +1447,8 @@ mod tests {
     }
 
     fn cs0() -> Cs {
-        Cs { input: at(CS_IN), output: at(CS_OUT), ..Cs::default() }
+        // 96 work registers, 8 scoreboards (the G610's, as csf.rs's model)
+        Cs { input: at(CS_IN), output: at(CS_OUT), features: 0x085f, ..Cs::default() }
     }
 
     /// A stream event the model's firmware raises when CS 0 starts.
@@ -1039,6 +1468,18 @@ mod tests {
     /// started, `cs_lag` reads later CS 0's request fields (`CS_REQ_MASK`),
     /// raising `fault` with them. Every write, memory and register, is
     /// logged in order.
+    ///
+    /// The submit: on doorbell 1, `job_lag` reads later, it runs every
+    /// block between the output page's `extract` and the input page's
+    /// `insert`, read from the ring at `extract & (size - 1)` as the
+    /// firmware would: `MOV32` and `MOV48` load registers, `SYNC_ADD64`
+    /// adds to the 64-bit word at the GPU address it names (and writes
+    /// `sync_status`), the rest is skipped. Then `extract` advances to
+    /// `insert` and `CSG_SYNC_UPDATE` is raised in CSG 0's `ack`. With
+    /// `job_fault` the `SYNC_ADD64` is not reached: the event is raised on
+    /// CS 0 and in `cs_irq_req` instead. Knobs: `never_complete` ignores
+    /// doorbell 1, `no_stop_ack` and `no_terminate_ack` leave a stop or a
+    /// terminate request unacknowledged.
     struct Mcu {
         mem: RefCell<HashMap<usize, u32>>,
         log: RefCell<Vec<(usize, u32)>>,
@@ -1054,6 +1495,15 @@ mod tests {
         /// does not.
         mcu_hole: Option<u32>,
         vm_hole: Option<u64>,
+        job_lag: u32,
+        job_due: Cell<Option<u32>>,
+        never_complete: bool,
+        job_fault: Option<Fault>,
+        sync_status: u32,
+        no_stop_ack: bool,
+        no_terminate_ack: bool,
+        /// Blocks run.
+        runs: Cell<u32>,
     }
 
     impl Mcu {
@@ -1070,6 +1520,14 @@ mod tests {
                 fault: None,
                 mcu_hole: None,
                 vm_hole: None,
+                job_lag: 20,
+                job_due: Cell::new(None),
+                never_complete: false,
+                job_fault: None,
+                sync_status: 0,
+                no_stop_ack: false,
+                no_terminate_ack: false,
+                runs: Cell::new(0),
             }
         }
         fn word(&self, a: usize) -> u32 {
@@ -1091,7 +1549,10 @@ mod tests {
                 return;
             }
             let (i, o) = (at(CSG_IN), at(CSG_OUT));
-            self.ack_field(i + offset_of!(CsgInput, req), o + offset_of!(CsgOutput, ack), CSG_REQ_MASK);
+            let req = i + offset_of!(CsgInput, req);
+            let terminating = self.word(req) & CSG_STATE_MASK == CSG_STATE_TERMINATE;
+            let mask = if self.no_terminate_ack && terminating { CSG_REQ_MASK & !CSG_STATE_MASK } else { CSG_REQ_MASK };
+            self.ack_field(req, o + offset_of!(CsgOutput, ack), mask);
             let (sreq, sack) = (i + offset_of!(CsgInput, doorbell_req), o + offset_of!(CsgOutput, doorbell_ack));
             let streams = self.word(sreq) ^ self.word(sack);
             self.ack_field(sreq, sack, streams);
@@ -1103,7 +1564,10 @@ mod tests {
         fn answer_cs(&self) {
             let (i, o) = (at(CS_IN), at(CS_OUT));
             let ack = o + offset_of!(CsOutput, ack);
-            self.ack_field(i + offset_of!(CsInput, req), ack, CS_REQ_MASK);
+            let req = i + offset_of!(CsInput, req);
+            let stopping = self.word(req) & CS_STATE_MASK == csf::CS_STATE_STOP;
+            let mask = if self.no_stop_ack && stopping { CS_REQ_MASK & !CS_STATE_MASK } else { CS_REQ_MASK };
+            self.ack_field(req, ack, mask);
             if let Some(f) = self.fault {
                 let (word, info) = if f.event == CS_FATAL {
                     (offset_of!(CsOutput, fatal), offset_of!(CsOutput, fatal_info))
@@ -1115,6 +1579,63 @@ mod tests {
                 self.put(o + info + 4, (f.info >> 32) as u32);
                 self.put(ack, self.word(ack) ^ f.event);
             }
+        }
+        fn read64(&self, a: usize) -> u64 {
+            u64::from(self.word(a)) | u64::from(self.word(a + 4)) << 32
+        }
+        fn put64(&self, a: usize, v: u64) {
+            self.put(a, v as u32);
+            self.put(a + 4, (v >> 32) as u32);
+        }
+        /// A stream event raised on CS 0 and signalled to the group.
+        fn raise(&self, f: Fault) {
+            let o = at(CS_OUT);
+            let (word, info) = if f.event == CS_FATAL {
+                (offset_of!(CsOutput, fatal), offset_of!(CsOutput, fatal_info))
+            } else {
+                (offset_of!(CsOutput, fault), offset_of!(CsOutput, fault_info))
+            };
+            self.put(o + word, f.word);
+            self.put64(o + info, f.info);
+            self.put(o + offset_of!(CsOutput, ack), self.word(o + offset_of!(CsOutput, ack)) ^ f.event);
+            let irq = at(CSG_OUT) + offset_of!(CsgOutput, cs_irq_req);
+            self.put(irq, self.word(irq) ^ 1 << CS_SLOT);
+        }
+        /// The firmware's side of a submit: the blocks run from the ring.
+        fn answer_job(&self) {
+            let (inp, out) = (at(QUEUE.input_va), at(QUEUE.output_va));
+            let size = u64::from(self.word(at(CS_IN) + offset_of!(CsInput, ringbuf_size)));
+            let ring = VM + self.read64(at(CS_IN) + offset_of!(CsInput, ringbuf_base)) as usize;
+            let insert = self.read64(inp + offset_of!(RingbufInput, insert));
+            let mut extract = self.read64(out + offset_of!(RingbufOutput, extract));
+            let mut regs = [0u64; 256];
+            while extract < insert {
+                for i in 0..job::JOB_WORDS as u64 {
+                    let w = self.read64(ring + ((extract + 8 * i) & (size - 1)) as usize);
+                    let r = (w >> 48 & 0xff) as usize;
+                    match w >> 56 {
+                        1 => regs[r] = w & 0xffff_ffff_ffff,
+                        2 => regs[r] = w & 0xffff_ffff,
+                        51 => {
+                            if let Some(f) = self.job_fault {
+                                self.raise(f);
+                                return;
+                            }
+                            let sync = VM + regs[(w >> 40 & 0xff) as usize] as usize;
+                            self.put64(sync, self.read64(sync) + regs[(w >> 32 & 0xff) as usize]);
+                            if self.sync_status != 0 {
+                                self.put(sync + offset_of!(SyncObj64, status), self.sync_status);
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                self.runs.set(self.runs.get() + 1);
+                extract += job::JOB_BYTES;
+            }
+            self.put64(out + offset_of!(RingbufOutput, extract), extract);
+            let ack = at(CSG_OUT) + offset_of!(CsgOutput, ack);
+            self.put(ack, self.word(ack) ^ csf::CSG_SYNC_UPDATE);
         }
         fn tick(&self, due: &Cell<Option<u32>>, answer: impl FnOnce()) {
             match due.get() {
@@ -1136,6 +1657,7 @@ mod tests {
             assert!(addr >= MEM, "no GPU register is read: {addr:#x}");
             self.tick(&self.csg_due, || self.answer_csg());
             self.tick(&self.cs_due, || self.answer_cs());
+            self.tick(&self.job_due, || self.answer_job());
             self.word(addr)
         }
         fn write32(&self, addr: usize, val: u32) {
@@ -1144,6 +1666,8 @@ mod tests {
                 self.put(addr, val);
             } else if addr == GPU + csf::doorbell(csf::GLB_DOORBELL_ID) && !self.never_ack {
                 self.csg_due.set(Some(self.lag));
+            } else if addr == GPU + csf::doorbell(CS_DOORBELL_ID) && !self.never_complete {
+                self.job_due.set(Some(self.job_lag));
             }
         }
         fn read8(&self, _: usize) -> u8 {
@@ -1245,6 +1769,7 @@ mod tests {
             (ci + offset_of!(CsInput, ringbuf_output), "cs.ringbuf_output"),
             (ci + offset_of!(CsInput, ringbuf_output) + 4, "cs.ringbuf_output.hi"),
             (gi + offset_of!(CsgInput, req), "csg.req"),
+            (gi + offset_of!(CsgInput, cs_irq_ack), "csg.cs_irq_ack"),
             (gi + offset_of!(CsgInput, ack_irq_mask), "csg.ack_irq_mask"),
             (gi + offset_of!(CsgInput, doorbell_req), "csg.doorbell_req"),
             (gi + offset_of!(CsgInput, allow_compute), "csg.allow_compute"),
@@ -1262,7 +1787,13 @@ mod tests {
             (GPU + csf::doorbell(0), "doorbell 0"),
             (GPU + csf::doorbell(CS_DOORBELL_ID), "doorbell 1"),
         ];
-        log.iter().map(|&(a, v)| (fields.iter().find(|f| f.0 == a).map_or("?", |f| f.1), v)).collect()
+        let ring = VM + QUEUE.ring_va as usize..VM + (QUEUE.ring_va + u64::from(RING_MAX_SIZE)) as usize;
+        let name = |a: usize| match fields.iter().find(|f| f.0 == a) {
+            Some(f) => f.1,
+            None if ring.contains(&a) => "ring",
+            None => "?",
+        };
+        log.iter().map(|&(a, v)| (name(a), v)).collect()
     }
 
     /// panthor's sequence for one group with one stream in slot 0, as
@@ -1597,5 +2128,321 @@ mod tests {
         mcu.put(ack, 0);
         mcu.put(i + offset_of!(CsInput, req), CS_STATE_START);
         assert_eq!(cs_events(&mcu, &cs0()), Ok(()));
+    }
+
+    // ---- the submit, the wait and the end ----
+
+    const STREAM: Job = Job { cs_start: 0x1_0040_0000, cs_size: 0x180, latest_flush: 0x1234 };
+
+    /// CSG 0 / CS 0 started on `mcu`, the log cleared.
+    fn started(mcu: &Mcu) -> Started {
+        let s = run(mcu, &csg0(), &group(), &QUEUE).0.unwrap();
+        mcu.log.borrow_mut().clear();
+        s
+    }
+
+    fn do_submit(mcu: &Mcu, s: &Started, seqno: u64) -> Result<Submitted, Refused> {
+        submit(mcu, GPU, &cs0(), &QUEUE, s, &STREAM, seqno)
+    }
+
+    fn do_wait(mcu: &Mcu, s: &Started, sub: &Submitted) -> (Result<Waited, WaitRefused>, u64) {
+        let mut slept = 0u64;
+        let r = wait(mcu, GPU, &iface(), &csg0(), &cs0(), s, sub, &mut |us| slept += u64::from(us));
+        (r, slept)
+    }
+
+    /// The block panthor's `prepare_job_instrs` builds for `STREAM` on the
+    /// G610 (r92:r93 the address pair, r94 the value, 8 scoreboards): job.rs's
+    /// hand-computed example with this module's stream and sync object.
+    const BLOCK: [u64; job::JOB_WORDS] = [
+        0x025e_0000_0000_1234, // MOV32 r94, latest_flush
+        0x2400_5e00_0000_0233, // FLUSH_CACHE2 r94
+        0x015c_0001_0040_0000, // MOV48 r92:93, cs.start
+        0x025e_0000_0000_0180, // MOV32 r94, cs.size
+        0x0300_0000_0001_0000, // WAIT(0)
+        0x2000_5c5e_0000_0000, // CALL r92:93, r94
+        0x015c_0001_0090_0000, // MOV48 r92:93, sync object
+        0x015e_0000_0000_0001, // MOV48 r94, 1
+        0x0300_0000_00ff_0000, // WAIT(all)
+        0x3300_5c5e_0000_0001, // SYNC_ADD64
+        0x2f00_0000_0000_0000, // ERROR_BARRIER
+        0,
+        0,
+        0,
+        0,
+        0,
+    ];
+
+    const RING: usize = VM + QUEUE.ring_va as usize;
+
+    fn ring_word(mcu: &Mcu, off: u32) -> u64 {
+        mcu.read64(RING + off as usize)
+    }
+
+    /// The input page's `insert` and the output page's `extract` set as if
+    /// `n` bytes of jobs had run.
+    fn consumed(mcu: &Mcu, n: u64) {
+        mcu.put64(at(QUEUE.input_va), n);
+        mcu.put64(at(QUEUE.output_va), n);
+    }
+
+    #[test]
+    fn submit_order_is_ring_then_extract_and_insert_then_doorbell_1() {
+        let mcu = Mcu { never_complete: true, ..Mcu::new() };
+        let s = started(&mcu);
+        let sub = do_submit(&mcu, &s, 1).unwrap();
+        assert_eq!((sub.seqno, sub.start, sub.end, sub.ring_offset), (1, 0, 128, 0));
+        assert_eq!(sub.block, BLOCK);
+        // panthor_sched.c:2969-2994, then 3193-3194, then 3210
+        let mut want: Vec<(&str, u32)> =
+            BLOCK.iter().flat_map(|w| [("ring", *w as u32), ("ring", (w >> 32) as u32)]).collect();
+        want.extend([
+            ("in.extract", 0),
+            ("in.extract.hi", 0),
+            ("in.insert", 128),
+            ("in.insert.hi", 0),
+            ("doorbell 1", 1),
+        ]);
+        assert_eq!(named(&mcu.log()), want);
+        // each ring write at its word's offset, in order
+        let offs: Vec<usize> = mcu.log().iter().take(32).map(|w| w.0 - RING).collect();
+        assert_eq!(offs, (0..32).map(|i| 4 * i).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn submit_ring_bytes_are_job_blocks_words_at_insert() {
+        let mcu = Mcu { never_complete: true, ..Mcu::new() };
+        let s = started(&mcu);
+        consumed(&mcu, 0x300);
+        let sub = do_submit(&mcu, &s, 1).unwrap();
+        assert_eq!((sub.start, sub.end, sub.ring_offset), (0x300, 0x380, 0x300));
+        for (i, w) in BLOCK.iter().enumerate() {
+            assert_eq!(ring_word(&mcu, 0x300 + 8 * i as u32), *w, "word {i}");
+        }
+        // nothing around it written
+        assert_eq!((mcu.word(RING + 0x2fc), mcu.word(RING + 0x380)), (0, 0));
+    }
+
+    #[test]
+    fn submit_wraps_at_the_ring_end() {
+        // insert 64 bytes before the end of the second lap: eight words at
+        // 0xfc0, eight at 0 (copy_instrs_to_ringbuf's two copies, :2986-2993)
+        let mcu = Mcu::new();
+        let s = started(&mcu);
+        let insert = 2 * 0x1000 - 64;
+        consumed(&mcu, insert);
+        let sub = do_submit(&mcu, &s, 1).unwrap();
+        assert_eq!((sub.ring_offset, sub.end), (0xfc0, insert + 128));
+        for (i, w) in BLOCK.iter().enumerate() {
+            let off = (0xfc0 + 8 * i as u32) % 0x1000;
+            assert_eq!(ring_word(&mcu, off), *w, "word {i} at {off:#x}");
+        }
+        assert_eq!(mcu.word(RING + 64), 0);
+        // and the model's firmware ran it from there
+        let (r, _) = do_wait(&mcu, &s, &sub);
+        assert_eq!(r.unwrap().seqno, 1);
+        assert_eq!(mcu.read64(at(QUEUE.output_va)), insert + 128);
+        // a whole lap: insert at the ring's size lands at offset 0
+        let mcu = Mcu { never_complete: true, ..Mcu::new() };
+        let s = started(&mcu);
+        consumed(&mcu, 0x1000);
+        assert_eq!(do_submit(&mcu, &s, 1).unwrap().ring_offset, 0);
+        assert_eq!(ring_word(&mcu, 0), BLOCK[0]);
+    }
+
+    #[test]
+    fn completion_is_the_sync_objects_seqno_with_sync_update_acknowledged() {
+        let mcu = Mcu::new();
+        let s = started(&mcu);
+        let sub = do_submit(&mcu, &s, 1).unwrap();
+        mcu.log.borrow_mut().clear();
+        let (r, slept) = do_wait(&mcu, &s, &sub);
+        let w = r.unwrap();
+        assert_eq!((w.seqno, w.sync_updates), (1, 1));
+        assert_eq!(u64::from(w.us), slept);
+        assert!(w.us > 0 && w.us.is_multiple_of(JOB_POLL_US), "{w:?}");
+        assert_eq!(mcu.runs.get(), 1);
+        // the stream consumed the job
+        assert_eq!(mcu.read64(at(QUEUE.output_va)), 128);
+        // CSG_SYNC_UPDATE acknowledged: req updated to ack under the events
+        // (panthor_sched.c:1695-1698), then the group rung (:1719-1722)
+        let (req, ack) = (mcu.word(at(CSG_IN)), mcu.word(at(CSG_OUT)));
+        assert_eq!((req ^ ack) & csf::CSG_EVT_MASK, 0);
+        assert_eq!(req, 0x11 | csf::CSG_SYNC_UPDATE);
+        assert_eq!(
+            named(&mcu.log()),
+            [("csg.req", 0x11 | csf::CSG_SYNC_UPDATE), ("glb.doorbell_req", 0), ("doorbell 0", 1)]
+        );
+        // a second job on the same stream: seqno 2, the next 128 bytes
+        let sub = do_submit(&mcu, &s, 2).unwrap();
+        assert_eq!((sub.start, sub.ring_offset), (128, 128));
+        let w = do_wait(&mcu, &s, &sub).0.unwrap();
+        assert_eq!((w.seqno, w.sync_updates), (2, 1));
+        assert_eq!(mcu.word(at(CSG_IN)) ^ mcu.word(at(CSG_OUT)), 0);
+    }
+
+    #[test]
+    fn ring_overflow_is_refused_with_nothing_written_and_no_doorbell() {
+        let mcu = Mcu::new();
+        let s = started(&mcu);
+        // 64 bytes free: insert one lap ahead of extract less 64
+        mcu.put64(at(QUEUE.input_va), 0x1000);
+        mcu.put64(at(QUEUE.output_va), 64);
+        assert_eq!(do_submit(&mcu, &s, 1), Err((SchedRefusal::RingOverflow, 64)));
+        // a full ring
+        mcu.put64(at(QUEUE.output_va), 0);
+        assert_eq!(do_submit(&mcu, &s, 1), Err((SchedRefusal::RingOverflow, 0)));
+        assert_eq!(mcu.log(), vec![]);
+        assert_eq!(mcu.runs.get(), 0);
+    }
+
+    #[test]
+    fn bad_jobs_are_refused_before_any_write() {
+        let mcu = Mcu::new();
+        let s = started(&mcu);
+        let cases = [
+            (Job { cs_size: 0, ..STREAM }, cs0(), 1, (SchedRefusal::JobParams, 1)),
+            (Job { cs_start: 1 << 48, ..STREAM }, cs0(), 1, (SchedRefusal::JobParams, 2)),
+            // 3 work registers, then 7: too few for r(X), r(X+2)
+            (STREAM, Cs { features: 2, ..cs0() }, 1, (SchedRefusal::JobParams, 3)),
+            (STREAM, Cs { features: 6, ..cs0() }, 1, (SchedRefusal::JobParams, 3)),
+            // no scoreboards
+            (STREAM, Cs { features: 0x5f, ..cs0() }, 1, (SchedRefusal::JobParams, 4)),
+            (STREAM, cs0(), 0, (SchedRefusal::JobParams, 5)),
+        ];
+        for (j, cs, seqno, want) in cases {
+            assert_eq!(submit(&mcu, GPU, &cs, &QUEUE, &s, &j, seqno), Err(want), "{j:?} {cs:?}");
+        }
+        consumed(&mcu, 4);
+        assert_eq!(do_submit(&mcu, &s, 1), Err((SchedRefusal::RingInsert, 4)));
+        assert_eq!(mcu.log(), vec![]);
+    }
+
+    #[test]
+    fn a_cs_fault_mid_job_is_refused_with_fault_word_and_info() {
+        let f = Fault { event: CS_FAULT, word: 0x0012_3400 | EXCEPTION_CS_INHERIT_FAULT, info: 0x1_dead_beef };
+        let mcu = Mcu { job_fault: Some(f), ..Mcu::new() };
+        let s = started(&mcu);
+        let sub = do_submit(&mcu, &s, 1).unwrap();
+        let (r, slept) = do_wait(&mcu, &s, &sub);
+        let e = r.unwrap_err();
+        assert_eq!((e.refused, e.info, e.seqno, e.ended), ((SchedRefusal::CsFault, f.word), f.info, 0, None));
+        assert_eq!(u64::from(e.us), slept);
+        // left pending: neither the stream's event nor the group's cs_irq
+        // acknowledged
+        let ack = at(CS_OUT) + offset_of!(CsOutput, ack);
+        assert_eq!((mcu.word(at(CS_IN)) ^ mcu.word(ack)) & CS_EVT_MASK, CS_FAULT);
+        assert_eq!(mcu.word(at(CSG_IN) + offset_of!(CsgInput, cs_irq_ack)), 0);
+        assert_eq!(mcu.word(at(CSG_OUT) + offset_of!(CsgOutput, cs_irq_req)), 1);
+    }
+
+    #[test]
+    fn a_cs_fatal_mid_job_is_refused_with_fatal_word_and_info() {
+        let f = Fault { event: CS_FATAL, word: 0x0000_0100 | EXCEPTION_CS_UNRECOVERABLE, info: 0x2_0000_0040 };
+        let mcu = Mcu { job_fault: Some(f), ..Mcu::new() };
+        let s = started(&mcu);
+        let sub = do_submit(&mcu, &s, 1).unwrap();
+        let e = do_wait(&mcu, &s, &sub).0.unwrap_err();
+        assert_eq!((e.refused, e.info, e.ended), ((SchedRefusal::CsFatal, f.word), f.info, None));
+        assert_eq!((mcu.word(at(CS_IN)) ^ mcu.word(at(CS_OUT))) & CS_EVT_MASK, CS_FATAL);
+    }
+
+    #[test]
+    fn a_sync_object_status_is_refused_with_its_value() {
+        let mcu = Mcu { sync_status: 0xffff_ffff, ..Mcu::new() };
+        let s = started(&mcu);
+        let sub = do_submit(&mcu, &s, 1).unwrap();
+        let e = do_wait(&mcu, &s, &sub).0.unwrap_err();
+        // refused although seqno reached the job's
+        assert_eq!((e.refused, e.seqno, e.ended), ((SchedRefusal::SyncObjError, 0xffff_ffff), 1, None));
+    }
+
+    #[test]
+    fn a_progress_timer_event_is_refused_not_acknowledged() {
+        let mcu = Mcu { never_complete: true, ..Mcu::new() };
+        let s = started(&mcu);
+        let sub = do_submit(&mcu, &s, 1).unwrap();
+        let ack = at(CSG_OUT) + offset_of!(CsgOutput, ack);
+        mcu.put(ack, mcu.word(ack) ^ csf::CSG_PROGRESS_TIMER_EVENT);
+        let e = do_wait(&mcu, &s, &sub).0.unwrap_err();
+        assert_eq!(e.refused, (SchedRefusal::CsgProgressTimeout, 0x11 | csf::CSG_PROGRESS_TIMER_EVENT));
+        assert_eq!(mcu.word(at(CSG_IN)), 0x11);
+    }
+
+    /// The timeout of a job that never completes, `mcu`'s knobs as given.
+    fn timed_out(mcu: &Mcu) -> (WaitRefused, u64) {
+        let s = started(mcu);
+        mcu.put64(at(CS_OUT) + offset_of!(CsOutput, status_cmd_ptr), 0x1_0040_0040);
+        let sub = do_submit(mcu, &s, 1).unwrap();
+        mcu.log.borrow_mut().clear();
+        let (r, slept) = do_wait(mcu, &s, &sub);
+        (r.unwrap_err(), slept)
+    }
+
+    #[test]
+    fn a_job_timeout_sleeps_exactly_5_s_then_stops_and_terminates() {
+        let mcu = Mcu { never_complete: true, ..Mcu::new() };
+        let (e, slept) = timed_out(&mcu);
+        assert_eq!((e.refused, e.seqno, e.status_cmd_ptr), ((SchedRefusal::JobTimeout, 0), 0, 0x1_0040_0040));
+        assert_eq!(e.us, JOB_TIMEOUT_US);
+        let ended = e.ended.unwrap();
+        let (stop_us, term_us) = (ended.stop.unwrap(), ended.terminate.unwrap());
+        // the model answers the group 3 reads after doorbell 0 and the
+        // stream 2 reads after that: the stop's poll reads one word until
+        // the state reads STOP (5 µs), the terminate's reads two (1 µs)
+        assert_eq!((stop_us, term_us), (5, 1));
+        assert_eq!(slept, u64::from(JOB_TIMEOUT_US) + u64::from(stop_us) + u64::from(term_us));
+        // the polls wrote nothing; then the stop, then the terminate
+        assert_eq!(
+            named(&mcu.log()),
+            [
+                ("cs.req", 0x0510),
+                ("csg.doorbell_req", 0),
+                ("glb.doorbell_req", 0),
+                ("doorbell 0", 1),
+                ("csg.req", 0x10),
+                ("glb.doorbell_req", 1),
+                ("doorbell 0", 1),
+            ]
+        );
+        assert_eq!(mcu.word(at(CS_OUT)) & CS_STATE_MASK, csf::CS_STATE_STOP);
+        assert_eq!(mcu.word(at(CSG_OUT)) & CSG_STATE_MASK, CSG_STATE_TERMINATE);
+    }
+
+    #[test]
+    fn no_stop_ack_is_refused_and_the_terminate_still_runs() {
+        let mcu = Mcu { never_complete: true, no_stop_ack: true, ..Mcu::new() };
+        let (e, slept) = timed_out(&mcu);
+        assert_eq!(e.refused.0, SchedRefusal::JobTimeout);
+        let ended = e.ended.unwrap();
+        // CS 0's ack still reads the start's state
+        assert_eq!(ended.stop, Err((SchedRefusal::CsStopAckTimeout, 0x0511)));
+        assert_eq!(ended.terminate, Ok(1));
+        assert_eq!(slept, u64::from(JOB_TIMEOUT_US) + u64::from(CS_ACK_WAIT_US) + 1 + 1);
+    }
+
+    #[test]
+    fn no_terminate_ack_is_refused_after_the_whole_budget() {
+        let mcu = Mcu { never_complete: true, no_terminate_ack: true, ..Mcu::new() };
+        let (e, slept) = timed_out(&mcu);
+        let ended = e.ended.unwrap();
+        assert_eq!(ended.stop, Ok(5));
+        // the state field not acknowledged: none of its bits counted
+        assert_eq!(ended.terminate, Err((SchedRefusal::CsgTerminateAckTimeout, 0)));
+        assert_eq!(slept, u64::from(JOB_TIMEOUT_US) + 5 + u64::from(CSG_ACK_WAIT_US) + 1);
+        assert_eq!(mcu.word(at(CSG_OUT)) & CSG_STATE_MASK, CSG_STATE_START);
+        // on their own, outside the timeout path, the same refusals
+        let mcu = Mcu { no_stop_ack: true, no_terminate_ack: true, ..Mcu::new() };
+        started(&mcu);
+        let mut slept = 0u64;
+        let ended = stop_and_terminate(&mcu, GPU, &iface(), &csg0(), &cs0(), &mut |us| slept += u64::from(us));
+        assert_eq!(
+            ended,
+            Ended {
+                stop: Err((SchedRefusal::CsStopAckTimeout, 0x0511)),
+                terminate: Err((SchedRefusal::CsgTerminateAckTimeout, 0)),
+            }
+        );
+        assert_eq!(slept, 2 * (u64::from(CSG_ACK_WAIT_US) + 1));
     }
 }
