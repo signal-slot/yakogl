@@ -3403,7 +3403,10 @@ pub static yakogl_backend_vivante: YakoglBackend = YakoglBackend {
     generate_mipmap: Some(super::mipmap::gc_generate_mipmap),
     return_mipmap_chain: Some(super::mipmap::gc_return_mipmap_chain),
     linear_row_align: 0,
-    uniforms_host_only: false,
+    /* the backend copies the program's host arrays (vs/fs_uniform_cpu)
+     * into its frame arena and never reads the GPU copy: the GL core's
+     * upload and range flush per draw were for nothing (2026-11-05) */
+    uniforms_host_only: true,
     ds_write: None,
     stencil_resolve: None,
     /* divisor 1, as before the field (GcStream carries a divisor; whether
