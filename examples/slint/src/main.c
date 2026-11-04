@@ -562,7 +562,6 @@ static void yakogl_line(uint32_t frames, char *b, size_t bsz)
 	snprintk(b + n, bsz - n, "\n");
 	gp_prev = p;
 	gp_have = true;
-	board_route3_report_line(b);
 }
 
 struct phase {
