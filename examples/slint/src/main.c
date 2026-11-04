@@ -400,6 +400,51 @@ static void fps_line(uint32_t frames, int64_t ms)
 	printk("slint-frame: frames=%u ms_per_frame=%u.%02u\n", frames, centi / 100u, centi % 100u);
 }
 
+#if defined(CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3) &&                                                \
+	(CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_TIMELINE_REPORT_MS > 0 ||                               \
+	 defined(CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_A53_RESTART))
+/*
+ * Where a frame's time goes, per FPS_WINDOW frames, on the timeline UART:
+ *   A53F frames <n> ms <window> draw <avg>/<max> swap <avg>/<max>
+ *        show <avg>/<max> (us)
+ * draw: Slint's update and the GL calls (the CPU); swap: eglSwapBuffers,
+ * which submits and waits for the GPU; show: board_show, which publishes the
+ * frame and waits until the M7 has it on the panel.
+ */
+#define PHASE_REPORT 1
+struct phase {
+	uint64_t sum;
+	uint32_t max;
+};
+static struct phase ph_draw, ph_swap, ph_show;
+
+static void phase_add(struct phase *p, uint32_t c0, uint32_t c1)
+{
+	uint32_t us = (uint32_t)k_cyc_to_us_floor64(c1 - c0);
+
+	p->sum += us;
+	p->max = MAX(p->max, us);
+}
+
+static void phase_line(uint32_t frames, int64_t ms)
+{
+	char b[160];
+
+	if (!frames)
+		return;
+	snprintk(b, sizeof(b),
+		 "A53F frames %u ms %lld draw %llu/%u swap %llu/%u show %llu/%u\n", frames,
+		 (long long)ms, ph_draw.sum / frames, ph_draw.max, ph_swap.sum / frames,
+		 ph_swap.max, ph_show.sum / frames, ph_show.max);
+	board_route3_report_line(b);
+	ph_draw = (struct phase){0};
+	ph_swap = (struct phase){0};
+	ph_show = (struct phase){0};
+}
+#else
+#define PHASE_REPORT 0
+#endif
+
 static int animate(void)
 {
 	const int64_t bound_ms = (int64_t)CONFIG_YAKOGL_BOARD_ANIMATE_S * 1000;
@@ -411,6 +456,7 @@ static int animate(void)
 	board_progress(YK_RECORD_WHERE_STAGE | STAGE_ANIMATING);
 	while ((now = k_uptime_get() - t0) < bound_ms || IS_ENABLED(CONFIG_SLINT_ANIMATE_FOREVER)) {
 		ret = next_window();
+		uint32_t c0 = k_cycle_get_32();
 #ifdef CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3
 		if (ret == 0)
 			ret = slint_sample_animate_frame_m7(get_proc, WIN_W, WIN_H, (uint32_t)now, frame,
@@ -419,17 +465,33 @@ static int animate(void)
 		if (ret == 0)
 			ret = slint_sample_animate_frame(get_proc, WIN_W, WIN_H, (uint32_t)now, frame);
 #endif
+		uint32_t c1 = k_cycle_get_32();
 		if (ret == 0)
 			ret = swap();
+		uint32_t c2 = k_cycle_get_32();
 		if (ret)
 			break;
 		show();
+		uint32_t c3 = k_cycle_get_32();
+#if PHASE_REPORT
+		phase_add(&ph_draw, c0, c1);
+		phase_add(&ph_swap, c1, c2);
+		phase_add(&ph_show, c2, c3);
+#else
+		ARG_UNUSED(c0);
+		ARG_UNUSED(c1);
+		ARG_UNUSED(c2);
+		ARG_UNUSED(c3);
+#endif
 		board_watchdog_feed();
 		frame++;
 		if (++win_frames == FPS_WINDOW) {
 			int64_t t = k_uptime_get();
 
 			fps_line(win_frames, t - win_t0);
+#if PHASE_REPORT
+			phase_line(win_frames, t - win_t0);
+#endif
 			win_t0 = t;
 			win_frames = 0;
 		}
