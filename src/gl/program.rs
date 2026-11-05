@@ -97,6 +97,9 @@ struct ProgState {
     /// answer of a command that was run, not a property of the program, so it
     /// cannot be derived from the link status.
     validated: [[bool; MAX_PROGRAMS]; MAX_CONTEXTS],
+    /// GL_PROGRAM_BINARY_RETRIEVABLE_HINT (glProgramParameteri; initially
+    /// GL_FALSE). Only stored and returned: no binary format exists.
+    binary_hint: [[bool; MAX_PROGRAMS]; MAX_CONTEXTS],
     /// How many varyings glTransformFeedbackVaryings asked the next link
     /// to capture (interleaved). This GPU path captures none, so a link
     /// with any fails (`glLinkProgram`).
@@ -123,6 +126,13 @@ struct ProgState {
 }
 
 static STATE: Global<ProgState> = Global::zeroed();
+
+/// glProgramParameteri(GL_PROGRAM_BINARY_RETRIEVABLE_HINT) of an existing
+/// program: the hint glGetProgramiv answers.
+pub(super) fn set_binary_hint(group: u32, program: GLuint, on: bool) {
+    // SAFETY: single-threaded by contract; no other reference to STATE is live.
+    unsafe { STATE.get() }.binary_hint[group as usize][obj_index(program)] = on;
+}
 
 /// The error for a name that is not a program object (GL ES 3.0 2.5):
 /// GL_INVALID_OPERATION when it names a shader, else GL_INVALID_VALUE. The
@@ -899,6 +909,7 @@ pub unsafe extern "C" fn glCreateProgram() -> GLuint {
             st.log[c.group as usize][h][0] = 0;
             st.delete_pending[c.group as usize][h] = false;
             st.validated[c.group as usize][h] = false;
+            st.binary_hint[c.group as usize][h] = false;
             st.tf_varyings[c.group as usize][h] = 0;
             super::tf::program_reset(c.group, obj_name(h, OBJ_PROGRAM));
             return obj_name(h, OBJ_PROGRAM);
@@ -2029,6 +2040,7 @@ unsafe fn destroy_program(c: &mut GlContext, program: GLuint) {
     st.blocks[c.group as usize][obj_index(program)].count = 0;
     st.delete_pending[c.group as usize][obj_index(program)] = false;
     st.validated[c.group as usize][obj_index(program)] = false;
+    st.binary_hint[c.group as usize][obj_index(program)] = false;
     st.relinked[c.group as usize][obj_index(program)] = false;
     drop_active_attribs(&mut st.active_attribs[c.group as usize][obj_index(program)]);
     super::tf::program_reset(c.group, program);
@@ -2982,7 +2994,7 @@ pub unsafe extern "C" fn glGetProgramiv(program: GLuint, pname: GLenum, params: 
             return;
         }
         GL_PROGRAM_BINARY_LENGTH => 0,
-        GL_PROGRAM_BINARY_RETRIEVABLE_HINT => 0,
+        GL_PROGRAM_BINARY_RETRIEVABLE_HINT => (if st.binary_hint[ctx][h] { GL_TRUE } else { GL_FALSE }) as GLint,
         GL_ATTACHED_SHADERS => (p.vs != 0) as GLint + (p.fs != 0) as GLint,
         GL_ACTIVE_UNIFORMS => active_total(p, &st.loc[ctx][h], &st.blocks[ctx][h]) as GLint,
         GL_ACTIVE_UNIFORM_BLOCKS => GLint::from(st.blocks[ctx][h].count),
