@@ -121,3 +121,49 @@ run (`texture.mipmap.3d`, `texture.filtering.3d`, one image per arm of
 - the cost: dEQP's 64x64x64 cases copy 262,144 texels per level-0 write.
 
 On a wrong answer set the switch to 0: the grid path is unchanged.
+
+## Host dEQP of the 3D texture groups, native 3D off (2026-11-05)
+
+Measured at `f3ec9117` (the HEAD of the workspace), GPU powervr, dEQP-GLES3,
+VK-GL-CTS `93bca01` with the yakogl target, native 3D off (the default). The
+commands, one per group, from the repository root:
+
+```sh
+tools/cts/host-deqp-run.sh --gpu=powervr --module=gles3 --cts=<VK-GL-CTS> dEQP-GLES3.functional.texture.filtering.3d.
+tools/cts/host-deqp-run.sh --gpu=powervr --module=gles3 --cts=<VK-GL-CTS> --out=<dir> dEQP-GLES3.functional.texture.mipmap.3d.
+```
+
+| group | cases | Pass | Fail | NotSupported | QualityWarning | crash | wall | sum of case times |
+|---|---|---|---|---|---|---|---|---|
+| `texture.filtering.3d` | 153 | 0 | 141 | 12 | 0 | 0 | 4.6 s | 6.3 s |
+| `texture.mipmap.3d` | 64 | 0 | 64 | 0 | 0 | 0 | 1.0 s | 1.0 s |
+
+Wall is from the case list to the last chunk log with the default 2 parallel
+processes of a 4-core host (the library and dEQP were already built). Every
+Fail is "Image verification failed": this is the Linux OSAL, which keeps the
+command stream and never runs it, so `glReadPixels` reads black and no render
+verdict here means anything (the script's HOST-ONLY rule). The 12
+NotSupported are all in `filtering.3d` (not looked into further).
+
+Slowest cases (dEQP's own TestDuration):
+
+| case | time |
+|---|---|
+| `filtering.3d.formats.rgba4_linear_mipmap_linear` | 0.149 s |
+| `filtering.3d.formats.rgba8_snorm_linear_mipmap_linear` | 0.126 s |
+| `filtering.3d.formats.r11f_g11f_b10f_linear_mipmap_linear` | 0.103 s |
+| `filtering.3d.formats.rgb9_e5_linear_mipmap_linear` | 0.101 s |
+| `filtering.3d.formats.rgba8_snorm_linear` | 0.094 s |
+| `mipmap.3d.projected.linear_linear_clamp` | 0.036 s |
+| `mipmap.3d.projected.linear_linear_mirror` | 0.036 s |
+| `mipmap.3d.projected.linear_linear_repeat` | 0.034 s |
+
+What this does and does not show for issue #2 (images 20 and 21): the host
+does not reproduce the 9 to 19 s per `linear_mipmap_linear` case. Here the
+slowest case is 0.15 s, the black readback is the likely reason: it probably makes
+dEQP's picture comparison fail at once (not verified). The
+9 to 19 s that the note above attributes to dEQP checking each wrong picture
+is the cost of a picture that is wrong but not black, so it needs a host that
+renders (the native-3D-on arm, `host-3d`) or the board. This measurement is
+only the host baseline: zero crashes, all 217 cases began, no chunk was
+resumed.
