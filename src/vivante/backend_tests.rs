@@ -2814,7 +2814,8 @@ fn an_etc1_chain_is_addressed_tiled_at_the_gl_cores_level_offsets() {
     let desc = rig.submit(&d).descriptor(0);
     let c0 = desc[GC_TEXDESC_CONFIG0 as usize / 4];
     assert_eq!((c0 >> 20) & 0x3, GC_TEX_ADDRESSING_TILED, "CONFIG0 0x{c0:08x}");
-    assert_eq!(c0 & texdesc_format(0x1f), texdesc_format(GC_TEX_FORMAT_ETC1), "CONFIG0 0x{c0:08x}");
+    /* ETC2_RGB samples as Mesa's EXT_NONE: CONFIG0.FORMAT 0 and CONFIG1.FORMAT_EXT 0 (F:244) */
+    assert_eq!(c0 & texdesc_format(0x1f), 0, "CONFIG0 0x{c0:08x}");
     assert_eq!(desc[GC_TEXDESC_LINEAR_STRIDE as usize / 4], 4 * 8, "four blocks a row");
     assert_eq!(desc[GC_TEXDESC_SLICE as usize / 4], 4 * 4 * 8, "one block grid");
     for (l, off) in [0u64, 128, 192, 256, 320].iter().enumerate() {
