@@ -111,7 +111,7 @@ expect() {
   printf '%s\n' "$out" | grep -qE "$pattern" || { echo "FAIL $label: no line matches '$pattern'"; fails=$((fails + 1)); }
 }
 out=$(plan docs/standalone-boot.md)
-expect "docs: only the shared rows" '^check.sh: 3 ok, 0 failed, 0 gap\(s\).*, 207 skipped \(--changed HEAD, scopes: docs' "$out"
+expect "docs: only the shared rows" '^check.sh: 3 ok, 0 failed, 0 gap\(s\).*, 208 skipped \(--changed HEAD, scopes: docs' "$out"
 out=$(plan src/v3d/job.rs)
 expect "v3d: its clippy row" '^plan  clippy  host-test,gpu-v3d,shaderc-online,no-shader-table$' "$out"
 expect "v3d: its image" '^plan  zephyr  rpi4 ' "$out"
@@ -145,6 +145,8 @@ out=$(plan driver/zephyr/lib/board/nanopc_t6/nanopc_t6.c)
 expect "nanopc_t6 glue: its image" '^plan  zephyr  nanopc_t6 t6_hello image' "$out"
 expect "nanopc_t6 glue: the GPU sample's image" '^plan  zephyr  nanopc_t6 t6_gpu image' "$out"
 expect "nanopc_t6 glue: the MMU probe's image" '^plan  zephyr  nanopc_t6 t6_mmu image' "$out"
+# Z3's probe (on a run, a gap naming the firmware without it, as the row below)
+expect "nanopc_t6 glue: the firmware probe's image" '^plan  zephyr  nanopc_t6 t6_fw image' "$out"
 expect "nanopc_t6 glue: the drivers crate tests" '^plan  test    yakogl-drivers' "$out"
 # the Mali firmware row (a plan row here; on a run, `needs` makes it a gap
 # naming the file where MALI_CSFFW or deps-env.sh's place has none)
@@ -219,17 +221,18 @@ count "narrowed CONFIGS: the table row once" "^plan  gen     precompiled tables 
 # the control: the full plan keeps its rows, the table row once, before the
 # first CONFIGS row that reads the tables
 out=$(plan src/gl/draw.rs)
-# 211 rows: ok plus gaps, because a row whose tool this host lacks is a gap
+# 212 rows: ok plus gaps, because a row whose tool this host lacks is a gap
 # here and a plan row on the gate host; the sum is the same on both. (Seven
 # more for the direct boot: am62p-mkboot.py, the second-stage vectors, the
 # yakogl-boot-stage2 clippy, test and softfloat rows, boot_stage2.h's layout
 # pins and the direct-boot images; one more for the Mali firmware row; two
 # for the partial render's load shader, tools/pco_shc/spm_load: its decode
-# row and its regenerate-and-compare row, a gap without PCO_SHC.)
+# row and its regenerate-and-compare row, a gap without PCO_SHC; one for
+# t6_fw's image, a gap without the Mali firmware.)
 checks=$((checks + 1))
 line=$(printf '%s\n' "$out" | grep -E '^check.sh: [0-9]+ ok, 0 failed, [0-9]+ gap\(s\).*, 0 skipped \(--changed HEAD, scopes: all\)')
 total=$(printf '%s\n' "$line" | sed -E 's/^check.sh: ([0-9]+) ok, 0 failed, ([0-9]+) gap.*/\1 \2/' | awk '{ print $1 + $2 }')
-[ "$total" = 211 ] || { echo "FAIL full plan: its row count: ${total:-no summary line} rows (ok + gaps), expected 211:$line"; fails=$((fails + 1)); }
+[ "$total" = 212 ] || { echo "FAIL full plan: its row count: ${total:-no summary line} rows (ok + gaps), expected 212:$line"; fails=$((fails + 1)); }
 count "full plan: the table row once" "^plan  gen     precompiled tables for the tier" 1 "$out"
 order "full plan: the tables before their first reader" "$gen" \
   'plan  clippy  host-test,gpu-powervr,shaderc-online,precompiled-shaders' "$out"
