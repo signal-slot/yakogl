@@ -735,6 +735,60 @@ else
     printf '%s\n' "$npout" | tail -8 | sed 's/^/        | /'
 fi
 
+# ---- 32-36: the i.MX8MP GLES3 tree tools' own selftests ----------------------
+#
+# Each runs with bash and is judged by its exit status only (their ok counts
+# move as the tools grow). They write synthetic records, so they get a scratch
+# directory of their own as TMPDIR and as cwd: under $TMPDIR, or under the
+# gitignored target/ when TMPDIR is unset or under /tmp (the merge and
+# pipeline selftests refuse /tmp). The scratch directory is removed at the
+# end, so the working tree is left as it was.
+ROOT=$(cd "$HERE/../.." && pwd)
+gl3base=${TMPDIR:-}
+case $( [ -n "$gl3base" ] && [ -d "$gl3base" ] && cd "$gl3base" && pwd -P) in
+    ''|/tmp|/tmp/*|/var/tmp|/var/tmp/*) gl3base=$ROOT/target; mkdir -p "$gl3base" ;;
+esac
+gl3tmp=$(mktemp -d "$gl3base/cts-selftest-gles3.XXXXXX")
+trap 'rm -rf "$gl3tmp"' EXIT
+gl3check() { # number, selftest, ok text
+    local out
+    echo
+    echo "== $1. $2"
+    if out=$(cd "$gl3tmp" && TMPDIR="$gl3tmp" bash "$ROOT/tools/cts/$2" 2>&1); then
+        ok "$2: $3"
+    else
+        bad "$2 failed"
+        printf '%s\n' "$out" | tail -8 | sed 's/^/        | /'
+    fi
+}
+
+# 32: imx8mp-gles3-merge.py --selftest on synthetic slices: disjoint slices,
+# board-form slices with '-' rows, missing entries refused unless --partial,
+# reset verdicts refused, clean and non-clean README verdict lines.
+gl3check 32 imx8mp-gles3-merge-selftest.sh "synthetic slices merged, missing entries and resets refused"
+
+# 33: synthetic slice records in the layout the board scripts write
+# (imx8mp-gles3-board.sh, log/README.md naming) into imx8mp-gles3-merge.py
+# --check (the full 133-entry set, --partial), --notpass and --totals. Its
+# documented mismatches print as EXPECTED-MISMATCH and still exit 0.
+gl3check 33 imx8mp-gles3-pipeline-selftest.sh "slice records through the record layout into --check, --notpass and --totals"
+
+# 34: imx8mp-gles3-gen.py's default output is the committed
+# imx8mp-gles3-tree.txt byte for byte; a trial --split of one large entry
+# gives more entries and check-imx8mp-gles3-tree.py still passes on it.
+gl3check 34 imx8mp-gles3-gen-selftest.sh "the table regenerated unchanged, a trial --split still checks"
+
+# 35: imx8mp-gles3-board.sh (usage errors, image choice, the hand-off to a stub
+# tools/board.sh under a temporary ROOT, never the real one) and
+# check-imx8mp-gles3-tree.py (passes on the committed table, fails on broken
+# copies of it).
+gl3check 35 imx8mp-gles3-wrap-selftest.sh "the board wrapper on a stub board.sh, the tree check on broken copies"
+
+# 36: gles3-triage.py on the real docs/es3/am62p-gles3-notpass.tsv (group
+# counts sum to its rows at several depths, host and table columns present)
+# and on a synthetic list with a synthetic host file and table.
+gl3check 36 gles3-triage-selftest.sh "real and synthetic not-pass lists grouped into issue drafts"
+
 if [ "$fail" -eq 0 ]; then
     echo "== all checks passed"
 else
