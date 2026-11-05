@@ -54,8 +54,9 @@ bool board_route3_vehicle(struct cluster_vehicle_state *out);
 void board_route3_tl_mark(enum cluster_tl_a53 stage);
 
 /* One line onto the timeline UART (the A53 image's report UART), written
- * from the system work queue; dropped if the last one is still going out.
- * Only with a timeline report or the A53 restart (CONFIG_..._ROUTE3_*). */
+ * from a lowest-priority thread; dropped if the last one is still going out.
+ * Only with CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_REPORT_LINE (selected by an
+ * application that reports: the Slint sample's SLINT_FRAME_REPORT). */
 void board_route3_report_line(const char *line);
 
 /* ---- board layer ---------------------------------------------------------- */

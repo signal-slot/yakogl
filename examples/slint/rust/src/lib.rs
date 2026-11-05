@@ -467,6 +467,9 @@ fn ensure_ui(get_proc: GetProc, width: u32, height: u32) -> i32 {
 static PHASE_TICKS: [core::sync::atomic::AtomicU64; 3] = [const { core::sync::atomic::AtomicU64::new(0) }; 3];
 
 fn ticks() -> u64 {
+    if !cfg!(feature = "frame-report") {
+        return 0;
+    }
     #[cfg(target_arch = "aarch64")]
     {
         let t: u64;
@@ -481,16 +484,21 @@ fn ticks() -> u64 {
 }
 
 fn phase_add(i: usize, t0: u64) -> u64 {
+    if !cfg!(feature = "frame-report") {
+        return 0;
+    }
     let t = ticks();
     PHASE_TICKS[i].fetch_add(t.wrapping_sub(t0), core::sync::atomic::Ordering::Relaxed);
     t
 }
 
 /// The three sums of [`PHASE_TICKS`] into `out`, cleared: set_vehicle,
-/// update_timers_and_animations, render().
+/// update_timers_and_animations, render(). Only with the route-3 frame
+/// report (feature frame-report, Kconfig SLINT_FRAME_REPORT).
 ///
 /// # Safety
 /// `out` points at three u64s.
+#[cfg(feature = "frame-report")]
 #[no_mangle]
 pub unsafe extern "C" fn slint_sample_phase_ticks(out: *mut u64) {
     for (i, p) in PHASE_TICKS.iter().enumerate() {

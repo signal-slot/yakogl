@@ -497,6 +497,16 @@ config YAKOGL_BOARD_IMX8MP_ROUTE3_CLOCK_REPORT
 	  registers 0x10-0x1f (BUCK2 is VDD_ARM) read over I2C1 by hand. Reads
 	  only; nothing is changed.
 
+config YAKOGL_BOARD_IMX8MP_ROUTE3_REPORT_LINE
+	bool
+	help
+	  board_route3_report_line(): an application's measurement lines onto
+	  the timeline UART (alias yakogl-timeline-uart, else the console
+	  UART), written by a thread of the lowest preemptible priority.
+	  Selected by an application that reports (the Slint sample's
+	  SLINT_FRAME_REPORT); without it neither the function nor the thread
+	  exists.
+
 config YAKOGL_BOARD_IMX8MP_BSS_CLEARED_BY_LOADER
 	bool "The second-stage loader zeroes this image's .bss"
 	select SKIP_BSS_CLEAR

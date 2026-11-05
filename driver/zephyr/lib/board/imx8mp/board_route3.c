@@ -489,7 +489,8 @@ static void m7_give_up(void)
 }
 
 #if CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_TIMELINE_REPORT_MS > 0 || \
-	defined(CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_A53_RESTART)
+	defined(CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_A53_RESTART) || \
+	defined(CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_REPORT_LINE)
 /*
  * The report goes out on a UART, written here character by character: the
  * image keeps the UART console off so that nothing on the way to the first
@@ -517,11 +518,14 @@ static void tl_uart_str(const char *s)
 
 /*
  * A line of the application's onto the timeline UART, off its thread: the
- * polled UART takes about 10 ms a line, so it is written from the system work
- * queue. A line that comes while the last is still going out is dropped.
+ * polled UART takes about 10 ms a line, so it is written from a thread of its
+ * own (below). A line that comes while the last is still going out is
+ * dropped. Only for an application that reports
+ * (CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_REPORT_LINE, selected by the Slint
+ * sample's SLINT_FRAME_REPORT): a product build has neither the function nor
+ * the thread.
  */
-#if CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_TIMELINE_REPORT_MS > 0 || \
-	defined(CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_A53_RESTART)
+#ifdef CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_REPORT_LINE
 static char app_line[600];
 static atomic_t app_line_busy;
 
