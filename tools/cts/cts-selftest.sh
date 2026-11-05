@@ -735,7 +735,7 @@ else
     printf '%s\n' "$npout" | tail -8 | sed 's/^/        | /'
 fi
 
-# ---- 32-36: the i.MX8MP GLES3 tree tools' own selftests ----------------------
+# ---- 32-38: the i.MX8MP GLES3 tree tools' own selftests ----------------------
 #
 # Each runs with bash and is judged by its exit status only (their ok counts
 # move as the tools grow). They write synthetic records, so they get a scratch
@@ -788,6 +788,22 @@ gl3check 35 imx8mp-gles3-wrap-selftest.sh "the board wrapper on a stub board.sh,
 # counts sum to its rows at several depths, host and table columns present)
 # and on a synthetic list with a synthetic host file and table.
 gl3check 36 gles3-triage-selftest.sh "real and synthetic not-pass lists grouped into issue drafts"
+
+# 37: imx8mp-gles3-preflight.sh on a fake layout of empty stub files (a stage 1
+# build tree, an out dir named after a fixed fake commit, ws/hal dirs): all ok,
+# a missing stage 1 package, a missing table image, an image named after
+# another commit, BOARD_UART unset, a missing table file. The preflight runs
+# under env -i with stub env values and a dummy BOARD_UART, so the host's real
+# board env never reaches it and its value (never a real address here) must not
+# appear in its output; the layout must stay as it was found.
+gl3check 37 imx8mp-gles3-preflight-selftest.sh "the session preflight on a fake layout, refusals named, read-only"
+
+# 38: imx8mp-gles3-report.py on synthetic slice records in the pipeline
+# selftest's layout: a complete 133-entry run drafts the RESULTS.md, STATUS.md
+# (Japanese), ROADMAP.md and issue comment blocks, with the totals row equal to
+# merge --totals; an incomplete run exits 1, prints PARTIAL and names the
+# missing entries while still drafting; a reset verdict reads as incomplete.
+gl3check 38 imx8mp-gles3-report-selftest.sh "slice records drafted into the RESULTS, STATUS and ROADMAP lines"
 
 if [ "$fail" -eq 0 ]; then
     echo "== all checks passed"
