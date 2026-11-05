@@ -1546,7 +1546,7 @@ flush)`, built as the `t6_gpu` row is.
 ### Z2 board procedure
 
 Not run. For a later session that has the owner's go-ahead, the T6,
-someone at the power switch and `resource:nanopc-t6-uart`. This is Z2's
+someone at the power switch and `resource:<board-uart>`. This is Z2's
 run (the `t6_mmu` image) only; Z3 runs after it and its procedure and
 predicted record are not here ("The firmware (Z3)", "Open, before the
 board run"). Z1's procedure ("The first board procedure") applies
@@ -1759,7 +1759,7 @@ reports to #20 (milestones: #1281).
 
 - The owner's go-ahead for this run, given for Z3 itself (Z2's does not
   carry over), the T6, someone at the power switch, and
-  `resource:nanopc-t6-uart`; the named hand, the read-only UART capture,
+  `resource:<board-uart>`; the named hand, the read-only UART capture,
   the WDT_EN proof, `GLB_RST_ST` before and after, and `--go` taking the
   board lock are Z1's procedure as the Z2 one above states them.
 - Z2's board run has passed and is recorded (its row in
