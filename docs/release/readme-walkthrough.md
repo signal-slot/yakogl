@@ -111,7 +111,7 @@ Status is from reading the text at the base, not from a run, unless a count is g
 | S6 | 298 names vs 304 measured | **open**, 304 re-measured (step 8) | README.md:291, 293 |
 | P5, S10 | "about 45 minutes" | **fixed** here: "35 to 50 minutes, depending on the host" with the two measurements | CONTRIBUTING.md:30 |
 | P6, S7 | AM62P Zephyr rows: `swi_tables.ld` not found | CONTRIBUTING **fixed** (needs a real `ZEPHYR_WS` path, no symbolic link). The cause in `tools/check.sh:2519` is **open** (outside this item) | CONTRIBUTING.md, tools/check.sh |
-| P7, S9 | `--quick` described as "the PowerVR build only" | CONTRIBUTING **fixed** (about 120 rows, 14 and 4 minutes). README **open**; `tools/check.sh:17` has the same stale wording, **open** | README.md:307, tools/check.sh:17 |
+| P7, S9 | `--quick` described as "the PowerVR build only" | CONTRIBUTING **fixed** (169 of 209 rows counted at `bfd75c57`, minutes warm and up to an hour cold; `1e54f2d1`). README **open**; `tools/check.sh:17` has the same stale wording, **open** | README.md:307, tools/check.sh:17 |
 | S8 | `tests/es3_tex_levels.rs` does not set `query_begin`/`query_end`/`query_result` | **fixed in the source** (`query_begin: None` now at line 128), confirmed: the six test rows and `--quick` build (steps 9-16) | tests |
 | P8, S11 | the count of open `ignore = "BUG` tests | **open**, and the count changed again: **two** today (`src/pvr/backend_tests.rs:4601` and `tests/es2_report_guard.rs:672`) | README.md:357-359 |
 | P9, S12 | cost of the host-harness run | **open** | README.md:363-373 |
@@ -121,7 +121,7 @@ Status is from reading the text at the base, not from a run, unless a count is g
 
 - **N1 (README, open).** Same set as above; proposed texts follow.
 - **N2 (tools, outside this item).** `tools/check.sh:17` says `--quick` is "the PowerVR
-  build only". It runs about 120 rows. Change to `the short gate (about 120 rows)`.
+  build only". It runs 169 of 209 rows (counted at `bfd75c57`). Change to `the short gate (169 of 209 rows)`.
 - **N3 (tools, outside this item).** `tools/check.sh:2519`: `ZEPHYR_BASE="$ZEPHYR_WS/zephyr"`
   with `cd "$ZEPHYR_WS"`. Walk 2's lead: use `$(cd "$ZEPHYR_WS" && pwd -P)` so a linked
   workspace works. Not confirmed by a build. `tools/check.sh:2719` also defaults
@@ -169,7 +169,7 @@ Line numbers are of README.md at the base. Each proposed text replaces the quote
 5. **Line 288** (S5). After `tools/api_coverage.py` add `(after cargo build -p yakogl-capi --features gpu-powervr,mesa-reference-table; without that archive it parses the source instead)`.
 6. **Lines 291 and 293** (S6). `298 names` becomes `304 names` (walk 2), or drop both counts: `the names it exports` and `the names it resolves`. Counts drift; dropping is better.
 7. **Line 307** (P7, S9). `#    the PowerVR build only, for a tight edit loop` becomes
-   `#    the short gate (about 120 rows; 4 to 14 minutes), for a tight edit loop`.
+   `#    the short gate (169 of 209 rows, counted at bfd75c57; minutes warm, up to an hour cold), for a tight edit loop`.
 8. **Lines 357-358** (P8, S11). `Five are open today` becomes `Two are open today`, and
    `four ES 2.0 report pins in `tests/es2_report_guard.rs` and the PowerVR's split 4x frame in
    `src/pvr/backend_tests.rs`` becomes `one ES 2.0 report pin in `tests/es2_report_guard.rs` and
