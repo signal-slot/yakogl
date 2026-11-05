@@ -1601,6 +1601,51 @@ pub fn release_shader(sh: &ShcShader) {
     let _ = sh;
 }
 
+/* ---- 128-bit plane-join variants (GC7000, docs/notes/gc-128bit-texture-sampling.md) */
+
+/// The per-draw key of a GC7000 stage's 128-bit look-ups: which bindings
+/// hold an RGBA32F/UI/I texture as two G32R32 planes, and the slot of each
+/// one's B,A plane.
+#[cfg(all(feature = "gpu-vivante", feature = "shaderc-online"))]
+pub use online::vivante::wide128::Planes as Wide128Planes;
+
+/// The bindings of `sh` whose look-ups a 128-bit plane key would change
+/// (bit `b`: binding `b`); 0 for a shader with none or one the in-process
+/// compiler did not make. Asked once per linked program, as
+/// `lod_sensitivity` is. The call contract is
+/// [`online::backend::wide128_sensitivity`]'s.
+#[cfg(all(feature = "gpu-vivante", feature = "shaderc-online"))]
+pub fn wide128_sensitivity(sh: &ShcShader) -> u32 {
+    online::backend::wide128_sensitivity(sh)
+}
+
+/// A stage's plane key for one draw: of the bindings in `sense` (its
+/// [`wide128_sensitivity`]), those whose `companion[b]` is `Some(slot)`
+/// ([`online::backend::wide128_planes`]). Empty when nothing is keyed.
+#[cfg(all(feature = "gpu-vivante", feature = "shaderc-online"))]
+pub fn wide128_planes(sense: u32, companion: &[Option<u8>]) -> Wide128Planes {
+    online::backend::wide128_planes(sense, companion)
+}
+
+/// `sh` compiled again under the plane key `planes` and the sampler-state
+/// key `lod`: 0 and `*out` filled, released by the caller with
+/// [`release_shader`], or < 0 and a NUL-terminated line in `log`
+/// ([`VARIANT_NO_ROOM`] when the compiler had no room now). An empty
+/// `planes` is `sampler_variant(sh, lod)` exactly (`lod` 0: a copy of `sh`).
+/// The compile's key is put back after the call. A fragment result is
+/// linked by the caller as a sampler variant is
+/// ([`online::backend::wide128_variant`]).
+#[cfg(all(feature = "gpu-vivante", feature = "shaderc-online"))]
+pub fn wide128_variant(
+    sh: &ShcShader,
+    planes: Wide128Planes,
+    lod: LodKey,
+    out: &mut ShcShader,
+    log: &mut [c_char],
+) -> i32 {
+    online::backend::wide128_variant(sh, planes, lod, out, log)
+}
+
 /* ---- the offline table's row types (blobs.rs is generated) ---------------- */
 
 /// One precompiled shader: the SHA-256 of its GLSL source, the stage, and the
