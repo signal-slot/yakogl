@@ -13,6 +13,51 @@ the project was developed in.
 
 ## [Unreleased]
 
+### Added
+
+- V3D: ES 3.0 texture and QPU work for the Raspberry Pi 4: 3D textures and
+  2D-array textures (the layout and slice offsets in `v3d_tex.c`, uploaded
+  at their `texture.rs` offsets; the draw refusal stays), `texelFetch` and
+  the `*Offset` look-ups in the QPU compiler, swizzle and wrap R taken from
+  `GlesTextureBind`, and an integer clear program for a scissored or masked
+  clear of an integer colour target. Also the V3D 7.1 (Raspberry Pi 5)
+  QPU model, encoder and decoder, host-side only (#210).
+- V3D: a `GLES_SURF_RGB10_A2` render surface with its TLB words, and the GL
+  core's side of `GL_RGB10_A2` (own surface, bits, CPU mipmap chain). Both
+  are gated off: no back end reports the format yet
+  (`docs/notes/v3d-rgb10a2.md`).
+- GC7000: texture-format words for the remaining ES 3.0 classes, checked
+  against Mesa; RGBA32F/UI/I as two G32R32 planes with a companion slot and
+  the compiler's 128-bit look-up keys (kept inert,
+  `docs/notes/gc-128bit-texture-sampling.md`); the four 64-bit integer
+  render targets (RGBA16I/UI, RG32I/UI) drawn through
+  a tiled shadow, 17 of the 19 integer surfaces (RGBA32I/UI stay refused).
+- PowerVR: the groundwork of the firmware's partial render (#2, #3), all
+  off by default: the render kick's zeroed `frag_pr` block
+  (`PvrRenderFragPr`, 96 bytes), the SPM scratch size and PBE store words
+  (`src/pvr/spm.rs`), the reserved PR end-of-tile PDS data slot, the
+  partial-render stall decoders (`pr_diag.rs`) and the debug trace groups.
+  `gl_test` case 217 `forcedpr` is the reproducer
+  (`docs/notes/pvr-render-pool.md`, `docs/notes/pvr-pr-zs.md`).
+- PowerVR: an integer render target variant packs several colour outputs
+  (the two outputs of `modf`); more than four output registers are refused
+  by name.
+- Mali (`gpu-mali`, NanoPC-T6, #32, #33): the GLSL ES compiler reaches many
+  more shader forms (integer and bool values, run-time loops and arrays,
+  several samplers, 2D-array and 3D textures, mixed fp16/fp32 code,
+  control flow kept as branches or flattened into selects, fragment outputs
+  past location 0), and the frame builder draws into several colour targets
+  and keeps a split 4x frame's samples. Each is checked byte for byte
+  against Mesa's drm-shim output.
+- NanoPC-T6 bring-up, not on Zephyr's GPU path yet: the MCU firmware's
+  section list, CSF interface and boot over a host model (Z3); the
+  `board::nanopc_t6_fw` probe with a `#[repr(C)]` record and its C entry
+  `yd_t6_fw_up` (declared in `yakogl_drivers.h`); and Z4, the CSG/CS
+  start, the scheduler's submit sequence, ring, doorbell and sync-object
+  wait, and the tiler heap's creation, growth and chunk return, transcribed
+  from panthor and run over host models only. `driver/tools/t6-verdict.sh`
+  judges a board `uart.log`.
+
 ### Changed
 
 - PowerVR: a depth texture a kick rendered into is sampled by the TPU from
@@ -21,6 +66,29 @@ the project was developed in.
   shadow on the AM62P goes from 353 to 10.6 ms a frame and refract from
   376 to 37.0 ms (score 461 to 467); gl_test case 215 `shadowmap` is the
   reproducer (355 to 27.8 ms a frame for its 1600x1200 shadow map).
+- PowerVR: a render of a size whose two HWRT datasets are both in flight
+  takes a second pair, up to four, instead of waiting for the first kick
+  (#42). A mipmap chain that draws its large levels on the GPU and filters
+  the tail on the CPU exists as an opt-in (`mip_cpu_tail`, off): on the
+  AM62P it was slower than drawing every level on the GPU
+  (`docs/notes/am62p-pvr-mipmap-kicks.md`); `gl_test` case 216 `mipchains`
+  prints its kicks a frame.
+- Build: `capi/assemble.cmake` and the external linkage handle the
+  `__rustc::rust_eh_personality` name that recent nightlies reference from
+  `compiler_builtins`: the references are read off the archive and renamed
+  to `yakogl_rust_eh_personality`, and the build fails if one is left.
+  `libyakogl.a` links with `--whole-archive` again on such a nightly.
+
+### Fixed
+
+- V3D: occlusion counters sit at a 1024-byte group each (V3D's TLB counter
+  groups), not a 64-byte stride; `gl_test` 196 `occl` read 0 for every
+  query on the Raspberry Pi 4.
+- GC7000: a user uniform block member is read with a `load` from the
+  block's copy in memory, not from the 320-register constant file, when
+  its register holds only members; large uniform blocks now link.
+- GC7000: `ETC2_RGB` is sampled as Mesa's `EXT_NONE` format, so the T, H
+  and planar modes of ETC2 decode (ETC1 blocks decode as before).
 
 ## [0.1.0] - 2026-10-27
 
