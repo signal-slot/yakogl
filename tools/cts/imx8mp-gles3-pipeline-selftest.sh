@@ -8,12 +8,8 @@
 #   TMPDIR=<dir> tools/cts/imx8mp-gles3-pipeline-selftest.sh
 #
 # Host only; no board, no driver. Everything is written under $TMPDIR (never /tmp) and removed at the end.
-# Exit 0 when the chain agrees, or when the only disagreement is the documented mismatch below, which
-# are printed as `EXPECTED-MISMATCH` (nothing is changed to hide them). Exit 1 on any other failure.
-#
-# Documented mismatch (the files are not changed here; a fix item follows):
-#   M4  --notpass emits only Fail and NoResult; NotSupported/QualityWarning/Crash/Timeout cases are not
-#       named by results.tsv, only counted (`# e<i>: unresolved ...`), unlike pi4-gles3-fails.tsv.
+# Exit 0 when the chain agrees, 1 on any failure. (M4, --notpass naming only Fail and NoResult, is closed:
+# the slices carry a cases.tsv and the rows must name NotSupported/QualityWarning/Crash/Timeout.)
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/../.." && pwd)
@@ -29,7 +25,6 @@ fails=0
 ok() { printf 'ok   %s\n' "$1"; }
 bad() { printf 'FAIL %s\n' "$1"; fails=$((fails + 1)); }
 expect() { if [ "$2" = 0 ]; then ok "$1"; else bad "$1"; fi; }
-mismatch() { printf 'EXPECTED-MISMATCH %s: %s\n' "$1" "$2"; }
 
 C1=0123456789abcdef0123456789abcdef01234567
 C2=fedcba9876543210fedcba9876543210fedcba98
@@ -47,18 +42,26 @@ assert n == 133, n
 cut = [(0, 45), (45, 90), (90, n)]
 names = ['2026-11-10-imx8mp-gles3-%s-rows%03d-%03d' % (commit[:8], a + 1, b) for a, b in cut]
 
+STATUS = {}
+
 def row(i):
     c = per[i]; k = len(c)
     # verdict mix: Pass everywhere, then per entry a few non-pass statuses
     fail, ns, other, nr, named = 0, 0, 0, 0, []
+    st = {}                             # the per-case statuses cases.tsv records
     if i % 7 == 1 and k >= 3:           # Fail (named) + NotSupported
         fail, ns, named = 1, 1, [c[1]]
+        st[c[1]], st[c[2]] = 'Fail', 'NotSupported'
     if i % 11 == 2 and k >= 2:          # QualityWarning (counted as other)
         other = 1
+        st[c[0]] = 'QualityWarning'
     if i == 5:                          # Crash: dEQP stopped, rest never began
         fail, nr, named = 1, max(0, k // 2), [c[0]]
+        st[c[0]] = 'Crash'
     if i == 9:                          # Timeout (other) then stopped
         other, nr = 1, max(0, k // 3)
+        st[c[0]] = 'Timeout'
+    STATUS[i] = st
     begun = k - nr
     passed = begun - fail - ns - other
     return (i, table[i], begun, passed, fail, ns, other, nr, ';'.join(named) or '-')
@@ -73,6 +76,10 @@ def write(d, rows, commit_text):
         f.write("# index\tfilter\tbegun\tpassed\tfailed\tnotsup\tother\tnoresult\tfailing names (';'-separated)\n")
         for r in rows:
             f.write('\t'.join(str(x) for x in r) + '\n')
+    with open(os.path.join(d, 'cases.tsv'), 'w') as f:
+        for r in rows:
+            for case, status in STATUS.get(r[0], {}).items():
+                f.write('%s\t%s\n' % (case, status))
 
 for (a, b), nm in zip(cut, names):
     d = os.path.join(root, mode, nm)
@@ -166,16 +173,21 @@ grep -q "^# entries run (133 of 133): 0-132" "$work/np.tsv"; expect "notpass hea
 grep -q '^e1:Fail dEQP-GLES3\.' "$work/np.tsv"; expect "a named Fail is listed (e1)" $?
 grep -q '^# e5: unresolved ' "$work/np.tsv"; expect "the crashed entry (e5) has its unresolved comment" $?
 grep -q '^# e9: unresolved ' "$work/np.tsv"; expect "the timed-out entry (e9) has its unresolved comment" $?
-grep -q '^# e2: unresolved ' "$work/np.tsv"; expect "the QualityWarning entry (e2) has its unresolved comment" $?
+grep -q '^e2:QualityWarning dEQP-GLES3\.' "$work/np.tsv" && ! grep -q '^# e2: unresolved ' "$work/np.tsv"; expect "the QualityWarning entry (e2) is named, so nothing is unresolved" $?
 grep -q '^e0:' "$work/np.tsv"; [ $? = 1 ]; expect "an all-pass entry (e0) lists nothing" $?
 awk -F'[: ]' '!/^#/ {print $1}' "$work/np.tsv" | sort -u | grep -qv '^e[0-9]*$'; [ $? = 1 ]; expect "record column is e<i>" $?
-if grep -Evq '^(#|[^:]+:(Fail|NoResult) )' "$work/np.tsv"; then bad "notpass rows outside Fail/NoResult"; else
-	mismatch M4 "notpass names only Fail/NoResult rows; NotSupported/QualityWarning/Crash/Timeout cases appear as counts in '# e<i>: unresolved' comments, not as rows as in pi4-gles3-fails.tsv"
-fi
+if grep -Evq '^(#|[^:]+:(Fail|NoResult) )' "$work/np.tsv"; then ok "notpass rows go beyond Fail/NoResult (M4)"; else bad "notpass names only Fail/NoResult rows (M4)"; fi
+for st in NotSupported QualityWarning Crash Timeout; do
+	grep -q "^e[0-9]*:$st dEQP-GLES3\." "$work/np.tsv"; expect "notpass names $st cases (M4)" $?
+done
+grep -q '^e1:NotSupported dEQP-GLES3\.' "$work/np.tsv" && grep -q '^e1:Fail dEQP-GLES3\.' "$work/np.tsv"; expect "e1 has its Fail and its NotSupported row (M4)" $?
+grep -q '^e5:Crash dEQP-GLES3\.' "$work/np.tsv" && ! grep -q '^e5:Fail ' "$work/np.tsv"; expect "e5's named Fail is replaced by the source's Crash (M4)" $?
+grep -q '^e9:Timeout dEQP-GLES3\.' "$work/np.tsv"; expect "e9's Timeout is named (M4)" $?
+grep -q '^# e1: unresolved ' "$work/np.tsv"; [ $? = 1 ]; expect "e1's unresolved comment falls with the cases the source names (M4)" $?
 # a no-record entry becomes NoResult rows
 nr="$work/norec"; cp -r "${S[2]}" "$nr"
 awk 'BEGIN{FS=OFS="\t"} /^#/ {print; next} !d {print $1,$2,"-","-","-","-","-","-","-"; d=1; next} {print}' "${S[2]}results.tsv" > "$nr/results.tsv"
 mp --notpass "${S[0]}" "${S[1]}" "$nr" 2> /dev/null | grep -q '^e90:NoResult dEQP-GLES3\.'; expect "an entry with a dash row gives NoResult cases" $?
 
-if [ "$fails" = 0 ]; then echo "pipeline selftest: OK (documented mismatches above, if any)"; exit 0; fi
+if [ "$fails" = 0 ]; then echo "pipeline selftest: OK "; exit 0; fi
 echo "pipeline selftest: FAILED ($fails)"; exit 1
