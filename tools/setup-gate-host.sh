@@ -40,7 +40,12 @@
 # download, not a package. --check also reports whether
 # driver/src/fw/pvr_fw_blob.h is there (the AM62P image rows gap without it;
 # it is copied in by hand, never fetched, copied or committed by this script)
-# and a CC_aarch64_unknown_none that names no executable.
+# and a CC_aarch64_unknown_none that names no executable. --check also
+# reports GLMARK2_SRC (check.sh's glmark2 corpus row gaps unless it names a
+# glmark2 tree at the commit tools/hostharness/glmark2/run.sh pins, tested
+# the way run.sh tests it: a git checkout at the pin without local changes,
+# or the GitHub archive directory glmark2-<pin>); --install only prints the
+# commands that fetch it.
 set -u
 
 PROG=${0##*/}
@@ -283,6 +288,65 @@ check_mali_csffw() {
   fi
 }
 
+# The glmark2 sources the "glmark2 corpus generated from GLMARK2_SRC" row
+# reads (check.sh). Accepted exactly as tools/hostharness/glmark2/run.sh
+# accepts the tree it is handed: it holds src/default-benchmarks.h, and it is
+# either a git checkout of its own at the pinned commit without local changes
+# (an archive carries no git metadata, so it cannot pass that test), or the
+# GitHub archive of that commit, whose directory name is its provenance. The
+# commit belongs to run.sh; nothing here names a host path.
+
+# The pinned commit, read from run.sh's own COMMIT= line so this check and
+# the row cannot drift apart. Empty when run.sh has none.
+glmark2_pin() {
+  sed -n 's/^COMMIT=\([0-9a-f]\{40\}\)\([^0-9a-f].*\)\?$/\1/p' \
+    "$(dirname "$0")/hostharness/glmark2/run.sh" 2>/dev/null | head -n 1
+}
+
+# Print how $GLMARK2_SRC is such a tree, and exit 0, exactly when run.sh
+# would accept it; exit 1 silently otherwise.
+glmark2_provenance() {
+  local commit src head dirty
+  commit=$(glmark2_pin)
+  [ -n "$commit" ] || return 1
+  [ -n "${GLMARK2_SRC-}" ] || return 1
+  # the physical path: run.sh compares it with git's resolved top level, so
+  # a symlink to the tree (the dependency layout's glmark2-src) passes too.
+  src=$(cd "$GLMARK2_SRC" 2>/dev/null && pwd -P) || return 1
+  [ -f "$src/src/default-benchmarks.h" ] || return 1
+  if [ "$(git -C "$src" rev-parse --show-toplevel 2>/dev/null)" = "$src" ]; then
+    head=$(git -C "$src" rev-parse HEAD 2>/dev/null)
+    dirty=$(git -C "$src" status --porcelain --untracked-files=no 2>/dev/null)
+    [ "$head" = "$commit" ] && [ -z "$dirty" ] || return 1
+    printf 'git checkout at %s' "$commit"
+  elif [ "$(basename "$src")" = "glmark2-$commit" ]; then
+    printf "GitHub archive glmark2-%s (not a git tree: the commit is the archive's name)" "$commit"
+  else
+    return 1
+  fi
+}
+
+check_glmark2_src() {
+  local commit provenance hint src
+  if provenance=$(glmark2_provenance); then
+    line ok GLMARK2_SRC "$provenance ($GLMARK2_SRC)"
+    return
+  fi
+  commit=$(glmark2_pin)
+  if [ -z "$commit" ]; then
+    line missing GLMARK2_SRC "the pinned commit is not readable from tools/hostharness/glmark2/run.sh (its COMMIT= line)"
+    return
+  fi
+  hint="git clone https://github.com/glmark2/glmark2 <dir> && git -C <dir> checkout --detach $commit, or unpack the GitHub archive of $commit so that the directory is named glmark2-$commit, then set GLMARK2_SRC=<dir>; tools/cts/deps-env.sh --build GLMARK2_SRC does the first into its layout"
+  if [ -n "${GLMARK2_SRC-}" ] && src=$(cd "$GLMARK2_SRC" 2>/dev/null && pwd -P) &&
+    [ -f "$src/src/default-benchmarks.h" ] &&
+    [ "$(git -C "$src" rev-parse --show-toplevel 2>/dev/null)" = "$src" ]; then
+    line missing GLMARK2_SRC "$src is a git checkout other than the pinned $commit without local changes (the glmark2 corpus row would gap): git -C \"$src\" checkout --detach $commit"
+  else
+    line missing GLMARK2_SRC "GLMARK2_SRC='${GLMARK2_SRC-}' names no glmark2 tree at the pinned $commit: neither a git checkout of it without local changes nor the archive directory glmark2-$commit: $hint"
+  fi
+}
+
 # The PowerVR firmware header the AM62P image rows embed (check.sh,
 # needs_pvr_fw_blob). It is gitignored and never committed; this only reports.
 check_pvr_fw_blob() {
@@ -320,6 +384,7 @@ run_checks() {
   check_glslang
   check_pkgconfig
   check_mali_csffw
+  check_glmark2_src
   check_pvr_fw_blob
   check_cc_aarch64
 }
@@ -448,6 +513,11 @@ report_values() {
   if [ ! -f "$(mali_csffw_path)" ]; then
     echo "mali_csffw.bin is missing (print only, not run):"
     echo "  tools/cts/deps-env.sh --build MALI_CSFFW"
+  fi
+  if [ -z "$(glmark2_provenance)" ]; then
+    echo "glmark2 at the pinned commit is missing (print only, not run):"
+    echo "  tools/cts/deps-env.sh --build GLMARK2_SRC"
+    echo "  git clone https://github.com/glmark2/glmark2 <dir> && git -C <dir> checkout --detach $(glmark2_pin), then set GLMARK2_SRC=<dir>"
   fi
   if ! probe_libclang >/dev/null 2>&1 && libdir=$(find_libclang_dir); then
     echo "libclang is on disk at $libdir (print only, not applied):"
