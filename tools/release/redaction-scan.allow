@@ -18,12 +18,16 @@ drop | * | * | <(user|login)@(host|board)> | placeholder
 # The RFC 1918 fixtures that the console redaction self-test rewrites.
 drop | private-ipv4 | tools/board_selftest.sh | \b(10\.11\.12\.(1|13)|172\.16\.0\.9)\b | redact_dir fixture input (RFC 1918)
 drop | private-ipv4 | tools/cts/pr-session-selftest.sh | secret-user@10\.9\.8\.7\b | fixture of the self-test's BOARD_HOST refusal
+# The preflight selftest's fake BOARD_UART canary (a look-alike, never a real value).
+drop | password | tools/cts/imx8mp-gles3-preflight-selftest.sh | SECRET\=ttyUSB | selftest fixture: the fake UART string the test asserts the preflight never prints
 # Product defaults and keywords.
 drop | som-serial | * | verdin-(am62p|imx8mp)-00000000 | zeroed serial: the product's default host name
 drop | password | * | NOPASSWD: | sudoers keyword, not a password
 drop | lab-host | * | \barmadillo\.local\b | the vendor's mDNS default host name
 drop | lab-host | * | \byakogl-gate\b | the gate's public runner label
 drop | lab-host | * | \bccfarm\b | the name of the farm tool
+# The scanner's self-description: lab-layout mentions in its own class table and pattern.
+drop | lab-layout | tools/release/redaction-scan.py | \$HOME/com/github/|yakogl\-in\-rust | the class's own name, in the file that defines the class
 # E-mail shapes that are no address of a person.
 drop | * | * | @[A-Za-z0-9.-]+\.invalid\b | .invalid placeholder (RFC 2606)
 drop | email | * | \bt@example\.org\b | a self-test's address
