@@ -1,0 +1,32 @@
+# SPDX-License-Identifier: Apache-2.0 AND MIT
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# SPDX-FileCopyrightText: 2025 Imagination Technologies Ltd.
+# Mesa 26.2.1 pco, BXS-4-64 (BVNC 36.53.104.796, TI AM62P): the SPM (partial render)
+# background-object load shader, pvr_uscgen_spm_load() of
+# src/imagination/vulkan/pvr_usc.c (MIT) with struct pvr_spm_load_props
+# { output_reg_count 1, tile_buffer_count 0, is_multisampled 0 }.
+# Written by: tools/pco_shc/gen_spm_load.py capture <mesa>/build/src/imagination/vulkan/capture_spm_load
+# (tools/pco_shc/capture_spm_load.c, README.md). Do not edit.
+# One `key value` line each, as capture_spm_load prints them; the shared-
+# register slots are enum pvr_spm_load_data (src/imagination/common/pvr_iface.h).
+program spm_load
+mesa 26.2.1
+device 36.53.104.796
+capture_args 1 0 0
+props output_reg_count=1 tile_buffer_count=0 is_multisampled=0
+index 0
+consts_dwords 8
+smp_state_sh 0
+tex_state_sh 4
+texstate_dwords 4
+usc_bytes 200
+entry_offset 0
+temps 6
+shareds 0
+coeffs 0
+vtxins 0
+interns 0
+uses sample_shading=0 z=0 w=0 pntc=0 discard=0 usclib=0 point_sampler=0
+fs_out res=4 po.start=0 count=1 fmt=PIPE_FORMAT_R32_UINT
+usc_dwords 50
+sha256 c8b9264e4ea316042879144099512834a8e2c1a9499aad28482a1db340a9071d
