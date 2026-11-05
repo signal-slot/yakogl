@@ -262,7 +262,7 @@ fn chain_gpu(t: &GlesTextureBind, levels: u32) -> Result<(), &'static str> {
      * texture the vertex stage reads) hold the old levels: none of them is
      * current once the kicks below have run, and the GL core's stamps,
      * which the copies are keyed by, do not move for a GPU-made chain */
-    super::tiled_copy::storage_rewritten(t.base_gpu, |k| backend::gc_kick_pending(k));
+    super::tiled_copy::storage_rewritten(t.base_gpu, backend::kick_pending_retired);
     /* Every level is a stream of its own (a new target), whose first draw
      * writes every state group; forgetting them here as well keeps that
      * true if a level ever shares a stream with the draws around it. */

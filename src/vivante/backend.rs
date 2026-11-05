@@ -2831,8 +2831,8 @@ pub(super) unsafe fn draw_one(draw: *const GlesDraw) -> i32 {
         /* depth texels the CPU wrote become the surface's depth first */
         // SAFETY: the GL core's contract for the draw it hands over.
         unsafe { ds_retention::DepthTexels::of(gl) },
-        |k| gc_kick_pending(k),
-        || gc_finish(),
+        kick_pending_retired,
+        finish,
     ) {
         Ok(s) => s,
         Err(rc) => return rc,
@@ -2869,7 +2869,7 @@ pub(super) unsafe fn draw_one(draw: *const GlesDraw) -> i32 {
      * finished first. Without its copy the draw would read the wrong faces
      * (or texels), so it is refused. */
     clock.lap(Step::GcRest);
-    if super::tiled_copy::prepare(gl, |k| gc_kick_pending(k), || gc_finish()) != 0 {
+    if super::tiled_copy::prepare(gl, kick_pending_retired, finish) != 0 {
         return -1;
     }
     /* A 64-bit colour target is rendered into its tiled shadow
@@ -2877,7 +2877,7 @@ pub(super) unsafe fn draw_one(draw: *const GlesDraw) -> i32 {
      * LINEAR surface at the wrong places (#6), so without the shadow the
      * draw is refused. */
     if wide_target(gl) {
-        if super::wide_target::prepare(gl, || gc_finish()) != 0 {
+        if super::wide_target::prepare(gl, finish) != 0 {
             return -ENOMEM;
         }
         if gl.depth_test || gl.stencil || gl.do_clear_depth || gl.do_clear_stencil {
@@ -2983,7 +2983,7 @@ pub extern "C" fn gc_attachment_gone(id: u32) {
     if !g().inited || id == 0 {
         return;
     }
-    super::ds_cache::gone(id, |k| gc_kick_pending(k));
+    super::ds_cache::gone(id, kick_pending_retired);
 }
 
 /// Write the depth plane of GL object `id` into a depth texture's texels
@@ -2999,7 +2999,7 @@ pub unsafe extern "C" fn gc_depth_resolve(id: u32, dst: *mut f32, w: u32, h: u32
      * writes the stream from being skipped over */
     dedup::invalidate();
     // SAFETY: the caller's contract.
-    unsafe { super::ds_cache::resolve_depth(id, dst, w, h, pitch, GC_DEPTH_GUARD_BYTES, |k| gc_kick_pending(k)) }
+    unsafe { super::ds_cache::resolve_depth(id, dst, w, h, pitch, GC_DEPTH_GUARD_BYTES, kick_pending_retired) }
 }
 
 /// The open frame's `extra` block holds at least `need` bytes: a draw's copies
@@ -3189,6 +3189,11 @@ fn wait_frame(i: usize) -> i32 {
 }
 
 pub extern "C" fn gc_finish() -> i32 {
+    finish()
+}
+
+/// [`gc_finish`] for Rust callers, which hand it on as a closure-free `Fn`.
+pub(super) fn finish() -> i32 {
     if frame_submit() != 0 {
         return -1;
     }
@@ -3243,6 +3248,11 @@ pub extern "C" fn gc_kick_id() -> u32 {
 /// Is kick `kick_id` still to complete? The kick being recorded is, while
 /// the frame is open: it has not even been submitted.
 pub extern "C" fn gc_kick_pending(kick_id: u32) -> bool {
+    kick_pending_retired(kick_id)
+}
+
+/// [`gc_kick_pending`] for Rust callers, which hand it on as a closure-free `Fn`.
+pub(super) fn kick_pending_retired(kick_id: u32) -> bool {
     /* whoever learns that a kick completed may read what it rendered: the
      * 64-bit targets it rendered are back in their storage first */
     retire_wide_targets();
