@@ -12,14 +12,23 @@
 //! cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_pvr_3d
 //! ```
 #![cfg(all(feature = "shaderc-online", feature = "gpu-powervr", not(feature = "report-es2")))]
+use core::ffi::{c_char, c_void};
 use std::collections::BTreeMap;
 use yakogl::backend::{
-    GlesTextureBind, GLES_TEXFMT_RGBA8, GLES_TEXTYPE_3D, GLES_TEXTYPE_3D_TWIDDLED, GLES_WRAP_CLAMP_TO_EDGE,
-    GLES_WRAP_MIRRORED_REPEAT, GLES_WRAP_REPEAT,
+    self, GlesDraw, GlesHeap, GlesTextureBind, YakoglBackend, GLES_TEXFMT_RGBA8, GLES_TEXTYPE_3D,
+    GLES_TEXTYPE_3D_TWIDDLED, GLES_WRAP_CLAMP_TO_EDGE, GLES_WRAP_MIRRORED_REPEAT, GLES_WRAP_REPEAT,
 };
+use yakogl::gl::consts::*;
+use yakogl::gl::context;
+use yakogl::gl::names::{self, Kind};
 use yakogl::gl::native_vol::{
-    chain_levels, copy_bytes, level_extent, level_texel_off, level_texels, physical_extent, twiddle3d,
+    self, chain_levels, copy_bytes, level_extent, level_texel_off, level_texels, physical_extent, twiddle3d,
+    twiddle_extent,
 };
+use yakogl::gl::state::{glGetError, glPixelStorei};
+use yakogl::gl::texture::{glBindTexture, glDeleteTextures, glGenTextures, glTexImage3D};
+use yakogl::gl::types::*;
+use yakogl::osal::{osal_set_ops, OsalGpuMem, OsalOps};
 use yakogl::shaderc::online::powervr::chain::{compile_fragment, compile_vertex};
 use yakogl::shaderc::online::powervr::decode::decode_group;
 use yakogl::shaderc::online::powervr::isa::ops_for;
@@ -243,22 +252,23 @@ fn volume_bind(w: u32, h: u32, d: u16, levels: u8, mip_filter: u8) -> GlesTextur
     }
 }
 
-/// (a) A mipmapped NPOT volume (63x57x67: physical 64x64x128, a chain of
-/// eight levels to 1x1x1): the levels follow each other at the offsets
-/// `native_vol` computes, each texel of each API level (its size halved, at
-/// least 1) lands at a distinct twiddled index inside its own level's padded
-/// extent, so no level writes into another, and the copy's size is the last
-/// level's end.
+/// (a) A mipmapped NPOT volume: the levels follow each other in the
+/// physical chain (63x57x67: physical 64x64x128, eight levels to 1x1x1, each
+/// at the offset `native_vol` computes), and `native_vol::copy` writes each
+/// texel of each API level at its level's offset plus `twiddle3d` over the
+/// level's API extent (`twiddle_extent`: its size halved, at least 1), not
+/// over the physical level's extent, inside the level's padded extent: no
+/// level writes into another, nothing else is written, and the copy's size
+/// is the last level's end. 3x7x5 is a size of dEQP's
+/// texture.filtering.3d.sizes; 17x9x5 is one whose level 1 (8x4x2, in a
+/// 16x8x4 level) twiddles differently over the two extents, so a copy in
+/// the physical order fails here.
 #[test]
 fn an_npot_mipmapped_volume_writes_every_level_at_its_offset() {
-    let (w, h, d) = (63u32, 57u32, 67u32);
-    let phys = physical_extent(w, h, d);
+    let phys = physical_extent(63, 57, 67);
     assert_eq!(phys, (64, 64, 128));
     let n = chain_levels(phys);
     assert_eq!(n, 8, "128 -> 1");
-    /* the API's own chain is shorter than the copy's: 67 -> 1 is seven levels */
-    let api = 32 - w.max(h).max(d).leading_zeros();
-    assert_eq!(api, 7);
     let mut off = 0;
     for l in 0..n {
         assert_eq!(level_texel_off(phys, l), off, "level {l} follows the one before");
@@ -270,23 +280,206 @@ fn an_npot_mipmapped_volume_writes_every_level_at_its_offset() {
     for levels in 2..=n {
         assert_eq!(copy_bytes(phys, 4, levels), off * 4, "{levels} levels: the whole chain");
     }
-    for l in 0..api {
-        let (lw, lh, ld) = ((w >> l).max(1), (h >> l).max(1), (d >> l).max(1));
-        let e = level_extent(phys, l);
-        let mut seen = vec![false; level_texels(e) as usize];
-        for z in 0..ld {
-            for y in 0..lh {
-                for x in 0..lw {
-                    let i = twiddle3d(x, y, z, e) as usize;
-                    assert!(i < seen.len(), "level {l} ({x}, {y}, {z}) = {i} leaves its {} texels", seen.len());
-                    assert!(!seen[i], "level {l} ({x}, {y}, {z}) collides at {i}");
-                    seen[i] = true;
+    /* the two orders differ where an API level rounds to fewer cubes than
+     * the physical level on an axis that is not the last to drop out:
+     * 17x9x5's level 1, texel (4, 0, 0) */
+    let p17 = physical_extent(17, 9, 5);
+    assert_eq!((twiddle_extent(17, 9, 5, 1), level_extent(p17, 1)), ((8, 4, 2), (16, 8, 4)));
+    assert_ne!(twiddle3d(4, 0, 0, twiddle_extent(17, 9, 5, 1)), twiddle3d(4, 0, 0, level_extent(p17, 1)));
+    for size in [(3, 7, 5), (17, 9, 5), (63, 57, 67)] {
+        copy_lands_at_the_twiddle_extent(size);
+    }
+}
+
+/* ---- a GL context on the host for `native_vol::copy`: host memory, and a
+ * stand-in back end with the PowerVR's texture layout (no native layers, a
+ * 3D texture's slices in a grid, levels unaligned) that draws nothing ---- */
+
+unsafe extern "C" fn m_gpu_alloc(_heap: u64, size: usize, _flags: u32, out: *mut OsalGpuMem) -> i32 {
+    let mem = Box::leak(vec![0u8; size].into_boxed_slice());
+    let p = mem.as_mut_ptr();
+    *out = OsalGpuMem { cpu: p as *mut c_void, gpu: p as u64, phys: p as u64, size, impl_: p as *mut c_void };
+    0
+}
+unsafe extern "C" fn m_gpu_free(_mem: *mut OsalGpuMem) -> i32 {
+    0
+}
+unsafe extern "C" fn m_cache(_cpu: *mut c_void, _n: usize) {}
+unsafe extern "C" fn b_init() -> i32 {
+    0
+}
+unsafe extern "C" fn b_heap_base(_heap: GlesHeap) -> u64 {
+    0x1000_0000
+}
+unsafe extern "C" fn b_ok() -> i32 {
+    0
+}
+unsafe extern "C" fn b_draw(_d: *const GlesDraw) -> i32 {
+    0
+}
+
+static OSAL: OsalOps = OsalOps {
+    init: None,
+    shutdown: None,
+    gpu_alloc: Some(m_gpu_alloc),
+    gpu_free: Some(m_gpu_free),
+    mmu_map: None,
+    map_phys: None,
+    gpu_write: None,
+    gpu_read: None,
+    cache_flush: Some(m_cache),
+    cache_invd: Some(m_cache),
+    submit: None,
+    wait: None,
+    completed: None,
+    reg_read: None,
+    reg_write: None,
+    query: None,
+    log: None,
+    wait_vblank: None,
+    present: None,
+    lock: None,
+    unlock: None,
+    thread_id: None,
+    display_busy: None,
+};
+
+static GRID: YakoglBackend = YakoglBackend {
+    name: c"es3-pvr-3d-grid".as_ptr() as *const c_char,
+    native_attrib_formats: 0,
+    rt_rgba8888_is_bgra: false,
+    mip_level_align: 0,
+    compressed_blocks_in_rows: false,
+    native_layered_textures: false,
+    front_facing_shader_variant: false,
+    etc1_decoded_at_upload: false,
+    init: Some(b_init),
+    shutdown: None,
+    draw: Some(b_draw),
+    flush: Some(b_ok),
+    finish: Some(b_ok),
+    finish_previous: None,
+    kick_id: None,
+    kick_pending: None,
+    heap_base: Some(b_heap_base),
+    counters: None,
+    texture_released: None,
+    surface_swapped: None,
+    texture_uploaded: None,
+    max_instance_divisor: 1,
+    wait_kick: None,
+    samples_texel_copies: false,
+    attachment_gone: None,
+    depth_resolve: None,
+    query_begin: None,
+    query_end: None,
+    query_result: None,
+    generate_mipmap: None,
+    return_mipmap_chain: None,
+    linear_row_align: 0,
+    uniforms_host_only: false,
+    ds_write: None,
+    stencil_resolve: None,
+};
+
+/// The one GL context of this file, current, with [`GRID`] as the back end.
+fn gl_context() -> std::sync::MutexGuard<'static, ()> {
+    static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    let g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    // SAFETY: the tables are statics; the lock serialises the GL users.
+    unsafe {
+        ONCE.call_once(|| {
+            osal_set_ops(&OSAL);
+            backend::g_backend = &GRID;
+            assert!(!context::gl_context_create(8, 8).is_null());
+        });
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        while glGetError() != GL_NO_ERROR {}
+    }
+    g
+}
+
+/// Texel (x, y, z) of level `l`: its coordinates and level, so no two
+/// texels of the volumes here are the same.
+fn texel(l: u32, x: u32, y: u32, z: u32) -> [u8; 4] {
+    [x as u8, y as u8, z as u8, 0x80 | l as u8]
+}
+
+/// A `w x h x d` RGBA8 volume with every level of its chain uploaded
+/// (glTexImage3D, texels [`texel`]), copied by `native_vol::copy` with all
+/// its levels: each texel of level l is at `level_texel_off(l) +
+/// twiddle3d(x, y, z, twiddle_extent(l))`, inside level l's padded extent,
+/// and every texel of the copy that is no level's is zero.
+fn copy_lands_at_the_twiddle_extent((w, h, d): (u32, u32, u32)) {
+    let _g = gl_context();
+    let levels = 32 - w.max(h).max(d).leading_zeros();
+    let mut name = 0;
+    // SAFETY: room for one name; each level's pixels hold its texels.
+    unsafe {
+        glGenTextures(1, &mut name);
+        glBindTexture(GL_TEXTURE_3D, name);
+        for l in 0..levels {
+            let (lw, lh, ld) = twiddle_extent(w, h, d, l);
+            assert_eq!((lw, lh, ld), ((w >> l).max(1), (h >> l).max(1), (d >> l).max(1)), "API level {l}");
+            let mut px = Vec::new();
+            for z in 0..ld {
+                for y in 0..lh {
+                    for x in 0..lw {
+                        px.extend_from_slice(&texel(l, x, y, z));
+                    }
+                }
+            }
+            glTexImage3D(
+                GL_TEXTURE_3D,
+                l as GLint,
+                GL_RGBA8 as GLint,
+                lw as GLsizei,
+                lh as GLsizei,
+                ld as GLsizei,
+                0,
+                GL_RGBA,
+                GL_UNSIGNED_BYTE,
+                px.as_ptr() as *const c_void,
+            );
+            assert_eq!(glGetError(), GL_NO_ERROR, "{w}x{h}x{d} level {l}");
+        }
+    }
+    let c = context::current().expect("a current context");
+    let slot = names::slot_of(c, Kind::Texture, name).expect("a texture name");
+    let t = c.texture_object(slot).expect("a texture object");
+    assert_ne!(t.grid_cols, 0, "{w}x{h}x{d}: the PowerVR's grid of slices");
+    let (gpu, bytes) = native_vol::copy(t, 0, levels).unwrap_or_else(|| panic!("{w}x{h}x{d}: copied"));
+    let phys = physical_extent(w, h, d);
+    assert_eq!(bytes, copy_bytes(phys, 4, levels), "{w}x{h}x{d}: the copy's size");
+    // SAFETY: the host OSAL's GPU address is its CPU pointer, `bytes` long.
+    let out = unsafe { core::slice::from_raw_parts(gpu as *const u8, bytes as usize) };
+    let mut written = vec![false; (bytes / 4) as usize];
+    for l in 0..levels {
+        let ext = twiddle_extent(w, h, d, l);
+        let (base, room) = (level_texel_off(phys, l), level_texels(level_extent(phys, l)));
+        for z in 0..ext.2 {
+            for y in 0..ext.1 {
+                for x in 0..ext.0 {
+                    let i = twiddle3d(x, y, z, ext);
+                    assert!(i < room, "{w}x{h}x{d} level {l} ({x}, {y}, {z}) = {i} leaves its {room} texels");
+                    let at = (base + i) as usize;
+                    assert!(!written[at], "{w}x{h}x{d} level {l} ({x}, {y}, {z}) collides at {i}");
+                    written[at] = true;
+                    assert_eq!(
+                        out[at * 4..at * 4 + 4],
+                        texel(l, x, y, z),
+                        "{w}x{h}x{d} level {l} ({x}, {y}, {z}) at {base} + {i}"
+                    );
                 }
             }
         }
-        let end = (level_texel_off(phys, l) + level_texels(e)) * 4;
-        assert!(end <= copy_bytes(phys, 4, api), "level {l} ends inside the copy");
     }
+    for (at, _) in written.iter().enumerate().filter(|(_, w)| !**w) {
+        assert_eq!(out[at * 4..at * 4 + 4], [0; 4], "{w}x{h}x{d}: texel {at} of the copy is no level's");
+    }
+    // SAFETY: a name this test made.
+    unsafe { glDeleteTextures(1, &name) };
 }
 
 /// (b) The descriptor of the NPOT volume carries level 0's API size, the
