@@ -7,7 +7,7 @@
 #   driver/tools/kexec-zephyr/t6-verdict.sh <probe> <uart.log>
 #   T6_POOL_PA=<hex> T6_BACKING_PA=<hex> t6-verdict.sh t6_mmu <uart.log>
 #
-# probe: t6_hello, t6_gpu or t6_mmu. The expected lines are in order: the
+# probe: t6_hello, t6_gpu, t6_mmu or t6_fw. The expected lines are in order: the
 # early banner (T6:A .. T6:A3, board::nanopc_t6_early), the board glue's
 # lines (T6:B, the marker, the GIC line, the arming, T6:C, "board: watchdog
 # armed"; driver/zephyr/lib/board/nanopc_t6/nanopc_t6.c), the probe's own
@@ -45,7 +45,7 @@
 set -euo pipefail
 export LC_ALL=C
 
-usage() { echo "usage: $0 {t6_hello|t6_gpu|t6_mmu} <uart.log>" >&2; exit 2; }
+usage() { echo "usage: $0 {t6_hello|t6_gpu|t6_mmu|t6_fw} <uart.log>" >&2; exit 2; }
 [ $# -eq 2 ] || usage
 PROBE=$1
 LOG=$2
@@ -195,8 +195,28 @@ table_t6_mmu() {
 	table_reset t6_mmu
 }
 
+# the pool line's P as 16 digits, for the Z2 line's TRANSTAB
+fw_pool() { V[P16]=$(hex16 $((16#${V[P]}))); }
+
+# tools/probes/nanopc_t6/t6_fw/src/main.c up to Z2: build, image, the 7
+# loaded sections, Z1, the pool, Z2's 9 of 16 table pages. Z3 (yd_t6_fw_up)
+# and the reset line are not judged yet. Any "t6_fw: FAIL:" line fails.
+table_t6_fw() {
+	table_boot
+	e 't6_fw: build {s}'
+	e 't6_fw: WDT0 period 22369 ms, fed until 60000 ms of uptime'
+	e 't6_fw: image {d} bytes, 7 loaded sections, sha256 {s}, magic 0x{x8}'
+	local i
+	for i in 0 1 2 3 4 5 6; do
+		e "t6_fw: section $i: VA 0x{x8}, {d} KiB, backing 0x{x} at PA 0x{x}" "t6_fw: section $i:"
+	done
+	e 't6_fw: Z1: rc 0 stop 0 refusal 0: GPU_ID 0xa8670005 MMU_FEATURES 0x00002830 AS_PRESENT 0x000000ff L2_READY 0x1'
+	e 't6_fw: pool 0x{x} at PA 0x{@P} (16 pages)' '' fw_pool
+	e 't6_fw: Z2: AS0 on TRANSTAB 0x{=P16}, 9 of 16 table pages, {d} ms'
+}
+
 case "$PROBE" in
-t6_hello | t6_gpu | t6_mmu) "table_$PROBE" ;;
+t6_hello | t6_gpu | t6_mmu | t6_fw) "table_$PROBE" ;;
 *) usage ;;
 esac
 
@@ -285,6 +305,20 @@ for ((i = 0; i < total; i++)); do
 		bad=$((bad + 1))
 	fi
 done
+
+# t6_fw: a FAIL line from the probe fails the verdict, named
+if [ "$PROBE" = t6_fw ]; then
+	for ((j = 0; j < ${#LINES[@]}; j++)); do
+		if [[ ${LINES[j]} == 't6_fw: FAIL:'* ]]; then
+			printf 'FAIL     the probe printed "%s" (line %d)\n' "${LINES[j]}" $((j + 1))
+			bad=$((bad + 1))
+		fi
+	done
+	if [ "$bad" -eq 0 ]; then
+		echo "VERDICT $PROBE scaffold ok, Z3 not judged"
+		exit 0
+	fi
+fi
 
 if [ "$bad" -eq 0 ]; then
 	echo "VERDICT $PROBE PASS"

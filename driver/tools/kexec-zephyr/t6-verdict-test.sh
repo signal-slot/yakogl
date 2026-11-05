@@ -82,9 +82,16 @@ check t6_gpu-over-mmu 1 "VERDICT t6_gpu FAIL ($((GPU - 10)) of $GPU)" "10 $((GPU
 check t6_hello-pass 0 'VERDICT t6_hello PASS' "$HELLO 0 0" t6_hello "$D/t6_hello-pass.uart"
 check t6_gpu-pass 0 'VERDICT t6_gpu PASS' "$GPU 0 0" t6_gpu "$D/t6_gpu-pass.uart"
 
+# t6_fw: boot 10 + build, WDT0, image, 7 sections, Z1, pool, Z2 = 23
+FW=23
+check t6_fw-pass 0 'VERDICT t6_fw scaffold ok, Z3 not judged' "$FW 0 0" t6_fw "$D/t6_fw-pass.uart"
+check t6_fw-missing 1 "VERDICT t6_fw FAIL (1 of $FW)" "$((FW - 1)) 1 0" t6_fw "$D/t6_fw-missing.uart"
+# Z1's rc -5 differs, the pool and Z2 lines never came, and the FAIL line is named
+check t6_fw-z1fail 1 "VERDICT t6_fw FAIL (4 of $FW)" "$((FW - 3)) 2 1" t6_fw "$D/t6_fw-z1fail.uart"
+
 # usage
 rc=0
-bash "$V" t6_fw "$D/t6_mmu-pass.uart" >/dev/null 2>&1 || rc=$?
+bash "$V" t6_nonesuch "$D/t6_mmu-pass.uart" >/dev/null 2>&1 || rc=$?
 runs=$((runs + 1))
 if [ "$rc" = 2 ]; then echo "ok   unknown probe: rc 2"; else echo "FAIL unknown probe: rc $rc (want 2)"; fails=$((fails + 1)); fi
 
