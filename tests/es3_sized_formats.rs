@@ -16,11 +16,11 @@ use yakogl::backend::*;
 use yakogl::gl::consts::*;
 use yakogl::gl::es3_formats::*;
 
-const MASKS: [(&str, u32); 3] =
+const MASKS: [(&str, u64); 3] =
     [("PowerVR", PVR_SAMPLED_TEXFMTS), ("GC7000UL", GC_SAMPLED_TEXFMTS), ("V3D 4.2", V3D_SAMPLED_TEXFMTS)];
 
 /// Every class this module can write, as a back end that samples them all.
-fn all_classes() -> u32 {
+fn all_classes() -> u64 {
     (GLES_TEXFMT_R11G11B10F..=GLES_TEXFMT_RGBA32F).fold(PVR_SAMPLED_TEXFMTS, |m, f| m | gles_texfmt_bit(f))
 }
 
@@ -565,7 +565,7 @@ fn the_formats_a_back_end_refuses_to_upload_are_listed() {
     if cfg!(feature = "report-es2") {
         return;
     }
-    let refused = |mask: u32| -> Vec<&'static str> {
+    let refused = |mask: u64| -> Vec<&'static str> {
         FORMATS.iter().filter(|e| e.storage_in(mask).is_none()).map(|e| e.name).collect()
     };
     assert_eq!(refused(PVR_SAMPLED_TEXFMTS), Vec::<&str>::new(), "PowerVR");
