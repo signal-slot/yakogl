@@ -987,10 +987,6 @@ fn every_gap_has_its_own_message_of_the_not_lowered_class() {
 fn unreachable_from_es100(e: MaliError) -> Option<&'static str> {
     use MaliError as E;
     match e {
-        E::IndexedLocal => Some(
-            "a dynamic index is an int value, refused before the access (IntValue for a constant or a \
-             loop counter, Uniform, Arithmetic); a constant index the front end resolves to a plain local",
-        ),
         E::FragOutput => Some(
             "ES 1.00 has no fragment output but gl_FragColor and gl_FragData[0] (both FragColor(0)); the \
              front end refuses gl_FragData[n > 0] (the test pins its verdict), and a vertex shader writes none",
@@ -1037,6 +1033,7 @@ fn unreachable_from_es100(e: MaliError) -> Option<&'static str> {
         | E::LoopMediump
         | E::GuardMediump
         | E::LoopVertex
+        | E::IndexedLocal
         | E::SpecialInput
         | E::NoPosition
         | E::PositionLane
@@ -1234,6 +1231,15 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
     /* a chain GLSL rebalances whose leaf is a local do_tree_grafting may
      * graft (glsl.rs) */
     v.push((VS, REBALANCE_GRAFT.to_string(), MaliError::Rebalance));
+    /* a vector's component read at a run-time index: the front end's `ieq`
+     * ladder, not Mesa's `ilt` search (glsl.rs `indexed_read`, case 80) */
+    v.push((
+        FS,
+        "precision highp float; uniform int i; uniform vec4 u; void main(){ vec4 v = u * u; \
+         gl_FragColor = vec4(v[i]); }"
+            .to_string(),
+        MaliError::IndexedLocal,
+    ));
     v.extend(stress_cases());
     v
 }
@@ -1259,7 +1265,7 @@ fn every_reachable_gap_is_reached_by_an_es100_source() {
         assert!(reached.contains(e.message()), "no case reaches {e:?}");
     }
     assert_eq!(reached.len(), reachable.len(), "a case reaches a gap classified unreachable");
-    assert_eq!((MaliError::GAPS.len(), reachable.len(), unreachable), (62, 57, 5), "gaps: all, reachable, unreachable");
+    assert_eq!((MaliError::GAPS.len(), reachable.len(), unreachable), (62, 58, 4), "gaps: all, reachable, unreachable");
 }
 
 /// The front end's verdict on gl_FragData[1] (the reason FragOutput is
@@ -5812,6 +5818,96 @@ fn glsl_rebalances_the_trees_it_takes() {
         assert!(instrs.iter().any(|o| *o == ir::Op::ConstF32([3.0f32.to_bits(); 4])), "{instrs:?}");
     })
     .expect("the scratch arena is free");
+}
+
+/// Case 80's chain (other_80_matdyn.frag, docs/notes/mali-remaining-families.md
+/// F1) without its run-time indexed reads: five terms read from matrix
+/// locals, which the front end splits into one local per column.
+const CHAIN_80: &str = "precision highp float; uniform vec4 u_k; void main() { \
+                        mat2 m = mat2(u_k.x, u_k.y, u_k.z, u_k.w); mat2 s = m + m; mat2 d = 4.0 - m; \
+                        mat2 q = 2.0 / m; mat2 n = -m; mat2 p = m++; \
+                        float r = (s[1][1] + d[1][0] + q[0][1] + n[1][0] + 4.0 * p[1][0]) / 16.0; \
+                        gl_FragColor = vec4(r, 0.0, 0.0, 1.0); }";
+
+/// A matrix local's column is an `ir_dereference_array`, which ends
+/// `is_reduction` (opt_rebalance_tree.cpp:219-226): case 80's five-term
+/// sum keeps the source's left-to-right order, `((((s11 + d10) + q01) +
+/// n10) + 4 * p10) * (1 / 16)`, every leaf a column's load. A local of one
+/// slot is still a leaf the tree takes ([`glsl_rebalances_the_trees_it_takes`]),
+/// a second declaration of a name too (a shadow is no slot of the first).
+#[test]
+fn glsl_leaves_a_chain_of_matrix_local_columns_in_order() {
+    let ir = glsl_passes_of(SHC_STAGE_FRAGMENT, CHAIN_80);
+    let (_, [sum, _, _]) = (0..ir.len())
+        .filter_map(|i| alu_at(&ir, ir::ValueId(i as u32)))
+        .find(|(a, s)| *a == AluOp::Fmul && ir[s[1].val.0 as usize] == ir::Op::ConstF32([0.0625f32.to_bits(); 4]))
+        .expect("the product by 1 / 16");
+    let load = |s: ir::Src| matches!(ir[s.val.0 as usize], ir::Op::LoadLocal { index: None, .. });
+    /* the last term, 4 * p10, then two sums whose right term is a load */
+    let (op, [mut acc, last, _]) = alu_at(&ir, sum.val).expect("the sum");
+    assert_eq!(op, AluOp::Fadd);
+    assert!(alu_at(&ir, last.val).is_some_and(|(a, [k, p, _])| a == AluOp::Fmul
+        && matches!(ir[k.val.0 as usize], ir::Op::ConstF32(_))
+        && load(p)));
+    for _ in 0..2 {
+        let (op, [l, r, _]) = alu_at(&ir, acc.val).expect("a sum on the left");
+        assert_eq!(op, AluOp::Fadd);
+        assert!(load(r), "{ir:?}");
+        acc = l;
+    }
+    /* s11 + d10: two loads */
+    let (op, [l, r, _]) = alu_at(&ir, acc.val).expect("the first sum");
+    assert_eq!(op, AluOp::Fadd);
+    assert!(load(l) && load(r));
+    /* a shadow of a one-slot local: a reduction (rebalanced) */
+    let shadow = "precision highp float; uniform float a, b, c, d; void main(){ float x = a; x = x * a; \
+                  { float x = b; float y = c; float z = d; float w = a; x = x * b; y = y * c; z = z * d; \
+                  w = w * a; float r = (x + y + z + w) * 0.25; gl_FragColor = vec4(r, r, r, 1.0); } }";
+    let ir = glsl_passes_of(SHC_STAGE_FRAGMENT, shadow);
+    let (_, [sum, _, _]) = (0..ir.len())
+        .filter_map(|i| alu_at(&ir, ir::ValueId(i as u32)))
+        .find(|(a, s)| *a == AluOp::Fmul && ir[s[1].val.0 as usize] == ir::Op::ConstF32([0.25f32.to_bits(); 4]))
+        .expect("the product by 0.25");
+    let (_, [l, r, _]) = alu_at(&ir, sum.val).expect("the sum");
+    assert!(alu_at(&ir, l.val).is_some_and(|(a, _)| a == AluOp::Fadd), "rebalanced: {ir:?}");
+    assert!(alu_at(&ir, r.val).is_some_and(|(a, _)| a == AluOp::Fadd), "rebalanced: {ir:?}");
+}
+
+/// The chain's program in NIR's order (docs/notes/mali-remaining-families.md
+/// F1, other_80_matdyn.expect.json words 42-51): `4 - z` first, then
+/// `s11`, `frcp(y)` and `ffma(2.0, rcp, ..)`, `- z`, `ffma(4.0, z, ..)` and
+/// the product by 1 / 16. Words 1 and 2 are where it is not Mesa's yet:
+/// Mesa makes `s11 = w + w` `fmul(w, 2.0)` (nir_opt_algebraic.py:274) and
+/// fuses it, `FMA.f32 .., u3.w1, 0x40000000, ..`; nir.rs applies :274 to
+/// no source sum. (FAU words differ from case 80's: this shader reads no
+/// `u_k.x`, `u_c` or `u_i`.)
+#[test]
+fn the_matrix_local_chain_compiles_in_the_source_order() {
+    let f = compile(SHC_STAGE_FRAGMENT, CHAIN_80).expect("the chain compiles");
+    let code = trim(&f.code);
+    let ops: Vec<String> = code.iter().take(8).map(|&w| text(w)).collect();
+    assert_eq!(
+        ops,
+        [
+            "FADD.f32.discard r0, 0x44000000.h1, u2.w1.neg",
+            "FADD.f32 r1, u3.w0, u3.w0",
+            "FADD.f32 r0, r1^, r0^",
+            "FRCP.f32 r1, u2.w0",
+            "FMA.f32 r0, 0x40000000, r1^, r0^",
+            "FADD.f32 r0, r0^, u2.w1.neg",
+            "FMA.f32 r0, 0x44000000.h1, u2.w1, r0^",
+            "FMA.f32 r0, r0^, u3.w1, 0x0.neg",
+        ]
+    );
+}
+
+/// Case 80 whole stops at its vector components read at a run-time index
+/// (`col[i - 1]`, `v[j]`; glsl.rs `indexed_read`): the front end's `ieq`
+/// ladder is not Mesa's `ilt` search, other_80_matdyn.expect.json's
+/// `ICMP_OR.s32.lt.m1`.
+#[test]
+fn case_80_is_refused_at_its_indexed_local_reads() {
+    assert_eq!(gap(SHC_STAGE_FRAGMENT, td!("other_80_matdyn.frag")), MaliError::IndexedLocal);
 }
 
 /// `do_algebraic`'s `reassociate_constant` (opt_algebraic.cpp:175-216) on
