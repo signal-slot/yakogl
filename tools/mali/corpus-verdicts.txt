@@ -148,7 +148,7 @@ tools/shaders/es300/facing.frag: ok
 tools/shaders/es300/flatlast.frag: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
 tools/shaders/es300/flatlast.vert: ok
 tools/shaders/es300/gcops.frag: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
-tools/shaders/es300/hdrsample.frag: Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet
+tools/shaders/es300/hdrsample.frag: ok
 tools/shaders/es300/idxtex.frag: ok
 tools/shaders/es300/idxtex.vert: ok
 tools/shaders/es300/ifelse_uint.frag: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet

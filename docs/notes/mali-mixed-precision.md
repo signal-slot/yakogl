@@ -419,6 +419,52 @@ value, needs both the width-carrying `Val` of step 1 and the control-flow
 lowering, so step 1 should land before `cflow-branch` changes `Val` handling
 in `nir_fs.rs` (two changes to the same structure would conflict).
 
+### Lowered (item `mixed-hdr-44-49`, plan #309)
+
+Date 2026-11-05. `es300/hdrsample.frag` compiles byte-equal to
+`mixed_44_hdrsample` and `mixed_49_hdrsample`, both stages, linked and alone
+(tests.rs `the_mixed_precision_hdrsample_is_byte_equal_to_mesa_26_2_1`).
+How the four steps landed in `nir_fs.rs`:
+
+1. **The width is the node's.** A `Val` names a graph node, and the node's
+   `bits` (16 or 32) is its width: a highp shader's walk already kept fp16
+   nodes (`alu16`, the mediump gl_FragCoord of `prec_82`) and converted
+   them where an fp32 value reads them (`widen`). No separate field was
+   added. `f.mixed` is still the refusal for every shape without a
+   reference; it no longer fires on hdrsample's.
+2. **The texel is an fp16 operand.** In the highp `Alu` arm a texel of a
+   16-bit look-up counts as a low operand of `fmul` (`texel16`), so
+   `texture(..) * 0.25` is `alu16`'s new `Fmul` arm: per lane pair one
+   width-2 fp16 node, its first operand the `vec2` of texels 2k and 2k+1
+   (`vec16_of`), its second the constant as one half (`f16_rtne`, read
+   `.h00`, packed by the encoder as `0x34000000.h11`). `select_highp` emits
+   no instruction for that `vec2`: it is the look-up's word k, read whole.
+3. **The edge is the store.** `StoreOutput` of a highp output
+   (`colour_f32`) widens each fp16 lane (`widen_store`, one `F2f32` of the
+   lane's half), so the existing fp32 colour path gives the four
+   `F16_TO_F32 .h0/.h1`, ATEST on the alpha, `COLLECT` and `BLEND.v4.f32`.
+   The look-up keeps the sampler's width (16 for the default lowp) with its
+   fp32 coordinate (`tex_highp` reads the two `FMA.f32` as they are).
+4. **Schedule and registers** needed nothing new: the scheduler and RA give
+   Mesa's 20 words and `.wait` flags as they stand.
+
+One change outside these files, in `motion.rs`: Mesa's link leaves
+`v_xy * 0.5 + 0.5` in the fragment shader (its varying program is the
+plain copy), so a post-dominator that a look-up's computed coordinate reads
+is not moved. This is measured, like the existing rule for one whose only
+users are the colour's stores (`s4_fneg`). The text of
+`nir_opt_varyings.c` does not give either rule: both post-dominators feed a
+vector (`vecN`) only, which is the common factor, but that is not
+confirmed.
+
+Still refused (`MixedPrecision`, tests.rs gap rows), since no reference
+has these shapes: a texel product with a constant that differs per lane; a
+texel product read at fp32 by other arithmetic, a look-up, a phi or a
+discard (`texel16_product`, checked at the end of `walk`); a texel product
+stored to a mediump colour (the `F32ToF16`/fp16 store edge); an fp16
+product beside an fp32 read of the same look-up (`tex32`); and any other
+fp16 operation on texels.
+
 ### Proposed items and #33 text
 
 - `mixed-hdr-44-49`: steps 1-4; moves `es300/hdrsample.frag` to `ok` in
