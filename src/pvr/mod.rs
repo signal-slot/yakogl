@@ -33,6 +33,8 @@ pub mod mesa_internal;
 )]
 pub mod csbgen;
 pub mod ffi;
+/// The partial render's depth/stencil words (docs/notes/pvr-pr-zs.md).
+pub mod pr_zs;
 /// The partial render's SPM scratch size and PBE store words (Mesa's
 /// pvr_arch_spm.c, transcribed).
 pub mod spm;
