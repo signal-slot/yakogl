@@ -522,16 +522,30 @@ static void tl_uart_str(const char *s)
  */
 #if CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_TIMELINE_REPORT_MS > 0 || \
 	defined(CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_A53_RESTART)
-static char app_line[400];
+static char app_line[600];
 static atomic_t app_line_busy;
 
-static void app_line_work_fn(struct k_work *work)
+/*
+ * On a thread of its own at the lowest preemptible priority, not the system
+ * work queue: that one is cooperative (priority -1), and its 50 ms of polled
+ * UART for a 600-character line held the frame loop when the two shared a
+ * core (2026-11-05: the cluster missed vblanks in the windows it reported).
+ */
+static K_SEM_DEFINE(app_line_go, 0, 1);
+
+static void app_line_thread(void *a, void *b, void *c)
 {
-	ARG_UNUSED(work);
-	tl_uart_str(app_line);
-	atomic_set(&app_line_busy, 0);
+	ARG_UNUSED(a);
+	ARG_UNUSED(b);
+	ARG_UNUSED(c);
+	for (;;) {
+		k_sem_take(&app_line_go, K_FOREVER);
+		tl_uart_str(app_line);
+		atomic_set(&app_line_busy, 0);
+	}
 }
-static K_WORK_DEFINE(app_line_work, app_line_work_fn);
+K_THREAD_DEFINE(route3_report, 1024, app_line_thread, NULL, NULL, NULL,
+		K_LOWEST_APPLICATION_THREAD_PRIO, 0, 0);
 
 void board_route3_report_line(const char *line)
 {
@@ -540,7 +554,7 @@ void board_route3_report_line(const char *line)
 	}
 	strncpy(app_line, line, sizeof(app_line) - 1u);
 	app_line[sizeof(app_line) - 1u] = '\0';
-	k_work_submit(&app_line_work);
+	k_sem_give(&app_line_go);
 }
 #endif
 
