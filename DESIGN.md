@@ -8,7 +8,8 @@ Apps compile against the standard Khronos `<GLES2/gl2.h>` and link this archive.
 It started on the PowerVR BXS-4-64 (Rogue, BVNC 36.53.104.796; TI AM62P / Toradex
 Verdin) and now also drives the Vivante GC7000UL (i.MX 8M Plus) and the Broadcom V3D 4.2
 (Raspberry Pi 4). A fourth back end, for the Arm Mali-G610 (RK3588, FriendlyElec
-NanoPC-T6), is in progress (`src/mali/`, `driver/docs/nanopc-t6-mali.md`). Some
+NanoPC-T6), is in progress: so far it runs on the board's own Linux, not on Zephyr
+(`src/mali/`, `driver/docs/nanopc-t6-mali.md`; README.md, "Status"). Some
 sections below describe the PowerVR first, as it was built.
 
 ## Goals / non-goals
@@ -21,16 +22,18 @@ sections below describe the PowerVR first, as it was built.
   Targets, in priority order: **Zephyr** (primary), **bare-metal**, then other OSes
   (**Linux**). One `.a` of portable core + one small OSAL `.o` (C) per platform.
 - **dEQP-GLES2.** Zero dEQP-GLES2 failures on the three boards was the first goal
-  (`ROADMAP.md`, stage 1), and it is met: one whole tree per board from main
-  `e9901869a` (2026-10-15/16) reads 0 Fail over the 17,165-case mustpass list
-  (AM62P 17,140 pass, i.MX8MP 17,318, Raspberry Pi 4 17,126). The per-board state
-  is `tools/cts/RESULTS.md`; the per-case detail is `docs/es2-cts-failures.md`.
-- **GLES3.** The API dispatch, state object model, and backend are structured so
-  GLES3 (VAOs, UBOs, MRT, instancing, transform feedback, 3D/array textures, sampler
-  objects, integer/GLSL-ES-3.00 shaders) needs no reworking of the core. The ES 3.0
-  entry points are already provided (`include/GLES3/`, `src/gl/es3.rs`). The cargo
-  crate reports ES 3.0 unless the `report-es2` feature is on; the CMake and Zephyr
-  builds default to ES 2.0 (`YAKOGL_REPORT_ES2` ON / `y`), as the dEQP-GLES2 runs need.
+  (`ROADMAP.md`, stage 1). The current state, with the numbers, is README.md's
+  "Status" section and `tools/cts/RESULTS.md`; the per-case detail is
+  `docs/es2-cts-failures.md`.
+- **GLES3.** ES 3.0 is work in progress (`ROADMAP.md`, stage 4): it is not a claim
+  of the library yet. The API dispatch, state object model, and backend are
+  structured so GLES3 needs no reworking of the core, and its entry points are
+  provided (`include/GLES3/`, `src/gl/es3.rs` and the files beside it); what runs on
+  the host and on each board, and what fails, is `tools/cts/RESULTS.md` ("ES 3.0")
+  and `docs/es3-cts-failures.md`. The cargo crate reports ES 3.0 unless the
+  `report-es2` feature is on; the CMake and Zephyr builds default to ES 2.0
+  (`YAKOGL_REPORT_ES2` ON / `y`), as the dEQP-GLES2 runs need and as a product
+  image keeps.
 - **Non-goal (for now):** EGL window-system integration beyond a minimal
   surface/context.
 
@@ -68,10 +71,11 @@ The hard GPU bring-up is done and silicon-verified (see `driver/tools/pvrlab/`
 and `docs/`): TA(geom)+3D kick, indexed draws, **multiple primitives & multiple draw calls**,
 per-vertex varyings, **texture sampling** (TPU image/sampler state + PDS DOUTD), **uniform
 / constant** (push-const via DOUTD), **scissor** (region clip), **depth test** (ISP), **face
-culling** (PPP cullmode). Recipes in hand for **blending** (FS-lowered, passtype
-TRANSLUCENT), **render-to-texture** (two ordered kicks, coherent SLC — no flush), **stencil**
-(ISPB 2-pass), **multi-varying / perspective** (coeff/DOUTI). These become the backend's
-state-driven code paths; the `PVR_*` build knobs collapse into GL-state-driven branches.
+culling** (PPP cullmode), **blending** (FS-lowered, passtype TRANSLUCENT),
+**render-to-texture** (two ordered kicks, coherent SLC — no flush), **stencil**
+(ISPB 2-pass) and **multi-varying / perspective** (coeff/DOUTI). They are the backend's
+GL-state-driven code paths (`src/pvr/backend.rs`); what the boards pass is in
+README.md's "Status" section.
 
 Backend interface (as built): `int pvr_backend_draw(const struct gles_draw *draw)`
 (`src/pvr/pvr_backend.h`) consumes a resolved draw (vertex buffers, index buffer,
@@ -206,7 +210,7 @@ is in git history (`git show 5ad2fa0e:DESIGN.md`, "Incremental plan"). The silic
 The GL core reaches the GPU only through `struct yakogl_backend`, a function table
 (`init`, `draw`, `flush`, `finish`, `finish_previous`, `kick_id`, `kick_pending`,
 `heap_base`, `counters`, and the hooks for texture uploads and releases, queries,
-depth resolves and mipmap chains; `src/backend.h` has all 21) and the GPU-agnostic types next to it: `struct gles_draw` (the
+depth resolves and mipmap chains; `src/backend.h` has the full table) and the GPU-agnostic types next to it: `struct gles_draw` (the
 fully resolved draw), `gles_attrib`, `gles_texture_bind`, the `GLES_PRIM_/CMP_/CULL_/SOP_`
 enums, `gles_texfmt`, `gles_surf_format` and the three heaps the core allocates in
 (`GLES_HEAP_DATA`, `GLES_HEAP_SHADER`, `GLES_HEAP_PROGRAM`). The contract is defined in
@@ -234,7 +238,7 @@ wait for the object's stamp while it is pending.
 The GL/EGL core, the PowerVR backend and the offline shader back end were rewritten from
 C to Rust: the crate `yakogl` at the repository root (`no_std`, no dependencies,
 an `rlib` without a panic handler; exactly one of `gpu-powervr` | `gpu-vivante` |
-`gpu-v3d` picks the GPU, `osal-linux` | `osal-zephyr` | `osal-baremetal` pick the
+`gpu-v3d` | `gpu-mali` picks the GPU, `osal-linux` | `osal-zephyr` | `osal-baremetal` pick the
 compile-time default of `g_osal`, `host-test` for host tests only). The static library for C is the crate `yakogl-capi` (capi/), which owns the
 panic handler. The C ABI is the product and did not
 change: `gl*`, `egl*`, `g_osal`, `g_backend`, `g_shaderc` and the structs in `include/`
@@ -254,7 +258,7 @@ What deliberately stays C:
   driver structs, constants and prototypes that `ffi.rs` mirrors, so a driver header
   change fails the build. `src/abi_layout_check.c` (generated, with its Rust twin
   `src/abi_layout.rs`, by `yakogl-tools abi-layout <driver src dir>`) does the same
-  for the 38 `#[repr(C)]` structs (590 fields, 2026-10-26) the C headers share with the crate:
+  for the `#[repr(C)]` structs the C headers share with the crate:
   size and every offset are asserted on both sides, so header/Rust drift fails the
   build; re-run the tool when a shared struct changes;
 - the headers `src/gl_internal.h`, `src/gl_context.h`, `src/backend.h`,
