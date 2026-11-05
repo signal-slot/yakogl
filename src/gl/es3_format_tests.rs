@@ -30,13 +30,13 @@ use crate::testutil::TestGl;
 
 /// Every texel format of the new classes (ids 11 and up), as the mask a back
 /// end that samples all of them would state.
-const ALL_NEW: u32 = (!0 << 11) | (1 << GLES_TEXFMT_RGBA16F);
+const ALL_NEW: u64 = (!0 << 11) | (1 << GLES_TEXFMT_RGBA16F);
 
 /// Holds `TEST_EXTRA_SAMPLED` / `TEST_HIDDEN_SAMPLED` for a test and puts
 /// them back.
 struct Sampled;
 impl Sampled {
-    fn also(mask: u32) -> Sampled {
+    fn also(mask: u64) -> Sampled {
         TEST_EXTRA_SAMPLED.store(mask, Ordering::Relaxed);
         Sampled
     }
@@ -444,7 +444,7 @@ fn generate_mipmap_follows_renderable_and_filterable() {
 
 /// The bit of the RGB10A2 class: a back end that samples it renders
 /// `GLES_SURF_RGB10_A2` (`rt_format_drawable`, docs/notes/v3d-rgb10a2.md).
-const RGB10A2: u32 = gles_texfmt_bit(GLES_TEXFMT_RGB10A2);
+const RGB10A2: u64 = gles_texfmt_bit(GLES_TEXFMT_RGB10A2);
 
 /// glGetRenderbufferParameteriv of the bound renderbuffer; -1 when nothing
 /// was written.

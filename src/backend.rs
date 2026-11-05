@@ -139,6 +139,7 @@ pub const GLES_TEXFMT_SRGB8_A8: u8 = 23;
 /// ([`sampled_texfmts`]); elsewhere the names stay GL_INVALID_ENUM.
 pub const GLES_TEXFMT_ETC2_SRGB_RGB: u8 = 24;
 pub const GLES_TEXFMT_ETC2_SRGB_RGBA: u8 = 25;
+const _: () = assert!(GLES_TEXFMT_ETC2_SRGB_RGBA < 64, "the class masks are u64");
 
 /// Is the texel format stored as four bytes R,G,B,A (RGBA8, or the sRGB
 /// class whose bytes are the same and only sample differently)?
@@ -147,11 +148,11 @@ pub const fn gles_texfmt_is_rgba8_bytes(f: u8) -> bool {
 }
 
 /// The bit of one texel format in a mask such as [`sampled_texfmts`].
-pub const fn gles_texfmt_bit(f: u8) -> u32 {
-    1u32 << f
+pub const fn gles_texfmt_bit(f: u8) -> u64 {
+    1u64 << f
 }
 
-const fn texfmts(list: &[u8]) -> u32 {
+const fn texfmts(list: &[u8]) -> u64 {
     let mut m = 0;
     let mut i = 0;
     while i < list.len() {
@@ -163,7 +164,7 @@ const fn texfmts(list: &[u8]) -> u32 {
 
 /// The texel formats the original tables hold and every sampler but the
 /// V3D's reads: RGBA8, RGB565, the float trio and the narrow L8/A8/LA8.
-const BASE_SAMPLED_TEXFMTS: u32 = texfmts(&[
+const BASE_SAMPLED_TEXFMTS: u64 = texfmts(&[
     GLES_TEXFMT_RGBA8,
     GLES_TEXFMT_RGB565,
     GLES_TEXFMT_RGBA16F,
@@ -187,7 +188,7 @@ const BASE_SAMPLED_TEXFMTS: u32 = texfmts(&[
 /// that class is no render target and has no glGenerateMipmap in the GL core
 /// (docs/es3/sized-formats.md), and ES 3.0 makes GL_RGB10_A2 both, so it
 /// stays in RGBA8 (two bits lost) until the PowerVR renders the class.
-pub const PVR_SAMPLED_TEXFMTS: u32 = BASE_SAMPLED_TEXFMTS
+pub const PVR_SAMPLED_TEXFMTS: u64 = BASE_SAMPLED_TEXFMTS
     | texfmts(&[
         GLES_TEXFMT_SRGB8_A8,
         GLES_TEXFMT_ETC2_SRGB_RGB,
@@ -208,7 +209,7 @@ pub const PVR_SAMPLED_TEXFMTS: u32 = BASE_SAMPLED_TEXFMTS
 /// (A8B8G8R8 with SAMP_CTRL1's SRGB decode) and the eight ES 3.0 classes
 /// the descriptor decodes (packed float, snorm, RGB10A2UI, 8/16-bit integer);
 /// `formats-gc`. Not RGB10A2, RGBA32*, R32I/UI, RG32I/UI or ETC2.
-pub const GC_SAMPLED_TEXFMTS: u32 = BASE_SAMPLED_TEXFMTS
+pub const GC_SAMPLED_TEXFMTS: u64 = BASE_SAMPLED_TEXFMTS
     | texfmts(&[
         GLES_TEXFMT_SRGB8_A8,
         GLES_TEXFMT_R11G11B10F,
@@ -230,7 +231,7 @@ pub const GC_SAMPLED_TEXFMTS: u32 = BASE_SAMPLED_TEXFMTS
 /// core from [`gles_texfmt_return_32`]). Not the ETC2 formats, and not
 /// `GLES_TEXFMT_RGB10A2`, which the TMU decodes too (`tmu_format`'s row) but
 /// which stays in RGBA8 for the reason the PowerVR's does (above).
-pub const V3D_SAMPLED_TEXFMTS: u32 = BASE_SAMPLED_TEXFMTS
+pub const V3D_SAMPLED_TEXFMTS: u64 = BASE_SAMPLED_TEXFMTS
     | texfmts(&[
         GLES_TEXFMT_SRGB8_A8,
         GLES_TEXFMT_R11G11B10F,
@@ -257,12 +258,12 @@ pub const fn gles_texfmt_return_32(f: u8) -> bool {
 /// Test hook: texel formats a host test adds to the mask, to exercise the
 /// native storage classes before any backend samples them.
 #[cfg(test)]
-pub static TEST_EXTRA_SAMPLED: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+pub static TEST_EXTRA_SAMPLED: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
 
 /// Test hook: texel formats a host test takes out of the mask, to stand in
 /// for a back end that samples fewer classes than this build's.
 #[cfg(test)]
-pub static TEST_HIDDEN_SAMPLED: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+pub static TEST_HIDDEN_SAMPLED: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
 
 /// The texel formats (a mask of [`gles_texfmt_bit`]) this build's backend
 /// samples. The GL core stores an ES 3.0 sized texture (src/gl/es3_formats.rs)
@@ -270,7 +271,7 @@ pub static TEST_HIDDEN_SAMPLED: core::sync::atomic::AtomicU32 = core::sync::atom
 /// by name when it has none. The classes the original tables hold (RGBA8, the
 /// float trio, L8/A8/LA8, RGB565) are listed as sampled where the sampler
 /// reads them, which only matters to the formats that fall back to them.
-pub fn sampled_texfmts() -> u32 {
+pub fn sampled_texfmts() -> u64 {
     #[cfg(feature = "gpu-powervr")]
     let m = PVR_SAMPLED_TEXFMTS;
     #[cfg(feature = "gpu-vivante")]
@@ -278,7 +279,7 @@ pub fn sampled_texfmts() -> u32 {
     #[cfg(feature = "gpu-v3d")]
     let m = V3D_SAMPLED_TEXFMTS;
     #[cfg(feature = "gpu-mali")]
-    let m = crate::mali::backend::SAMPLED_TEXFMTS;
+    let m = crate::mali::backend::SAMPLED_TEXFMTS as u64;
     #[cfg(test)]
     let m = (m & !TEST_HIDDEN_SAMPLED.load(core::sync::atomic::Ordering::Relaxed))
         | TEST_EXTRA_SAMPLED.load(core::sync::atomic::Ordering::Relaxed);

@@ -180,7 +180,7 @@ impl Es3Format {
 
     /// The first storage class of the format that `sampled` (a mask of
     /// `gles_texfmt_bit`) has; None when the back end samples none.
-    pub fn storage_in(&self, sampled: u32) -> Option<u8> {
+    pub fn storage_in(&self, sampled: u64) -> Option<u8> {
         self.storage.iter().copied().find(|&s| sampled & gles_texfmt_bit(s) != 0)
     }
 
