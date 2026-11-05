@@ -407,6 +407,32 @@ nothing for the back end to see, so the shape the S6 emit sees is a
 Whether a conditional `discard` ends up as one or the other for the 14 femtovg
 programs is **measured by the shim reference**, not by this note (section 6).
 
+### 4.5 A mediump discard of a varying lane (case 81, 2026-11-05)
+
+The compiler takes a mediump `if (v.y > 0.5) discard;` whose compare reads
+a varying lane (`tools/mali/testdata/discard_81_branchquad.expect.json`, the
+shim's draw of `tools/shaders/es100/branchquad.frag`, 11 fragment words):
+
+- Each read lane is converted alone after the load (`FADD.f32 r0.h0, r1^,
+  0x0.neg`, the `f2f16` row of one lane), compared in fp16 and fused into
+  `DISCARD.f32.lt 0x38000000.h1, r0^.h0`: the varying lane is a
+  `Leaf::Splat` operand of the compare (nir_fs.rs `cmp_leaf`), beside the
+  fp16 uniform half and the constant case 73 already took.
+- The link keeps the varying **whole**: `LD_VAR_BUF_IMM ... .v4`, and the
+  varying program stores all four lanes of `v_color`, though the two
+  discards read only y and w. nir_fs.rs `layout` marks a varying whole in a
+  mediump shader when a discard's compare reads one of its lanes, as it
+  already does for one a mediump shader makes an integer of
+  (`intloop_int_compare`). A highp discard (`fvgtest_discard2`) compacts.
+- Both discards stand in the entry block, in program order, before ATEST
+  (no branch: a lone `if (c) discard;` is one `demote_if`); the first takes
+  the start-of-shader `.discard` flow of the helper analysis only in the
+  uniform case (case 73); here the `FADD` before them carries it.
+
+Still refused (`MaliError::DiscardForm`): an unconditional `discard`, one
+among other statements of its block, one under another `if`, a compare of
+a computed value; the `gap_cases` rows of tests.rs pin them.
+
 ## 5. Which programs discard, and which case checks them
 
 **femtovg** (`tools/shaders/femtovg/`): the discard is one line,
@@ -445,7 +471,7 @@ acceptance.
 | 33 `fvgdis2` | `fvgtest_discard2`: a never-taken discard must not kill fragments | colour on | REFUSED (control flow) |
 | 38 `fvgstencil` | femtovg's stencil-stroke sequence with a firing discard: pass (1) stencil INCR with colour and strokeThr 0.998, (2) EQUAL 0 with strokeThr -1, (3) a **colour-masked** pass with a discard-capable shader that zeroes the stencil (gl_test.c:5822-5840, the cluster bug) | stencil write + discard (late update, 2.2) and mask 0 + discard (`fs_required` by `sidefx`, 2.3) | REFUSED (control flow) |
 | 73 `branchlane` | a discard behind a test of lane y and one behind lane w (an `if` containing a `discard`) | colour on | REFUSED (arithmetic other than `+ - *`) |
-| 81 `branchquad` | two discards behind tests of lanes y and w of a varying, every quadrant takes its own branches | colour on | REFUSED (arithmetic) |
+| 81 `branchquad` | two discards behind tests of lanes y and w of a varying, every quadrant takes its own branches | colour on | REFUSED (arithmetic); compiles byte-equal since plan #309 `discard-81` (section 4.5) |
 
 Case 38 is the only board check of the two frame-side facts that cost a
 field (late stencil update; a mask-0 draw that runs a discard shader) and

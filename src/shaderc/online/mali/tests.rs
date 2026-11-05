@@ -4454,13 +4454,36 @@ fn the_alu_population_is_byte_equal_to_mesa_26_2_1() {
     assert!(f.info.can_discard);
 }
 
-/// alu_branchquad's discards test lanes y and w of a mediump varying: Mesa
-/// keeps the varying whole (`LD_VAR_BUF_IMM ... .v4`, four vertex stores),
-/// a link rule no other reference pins, so the compare of a varying lane
-/// stays refused.
+/// Case 81's branchquad: the discards of case 73 behind tests of lanes y
+/// and w of a mediump varying. Each lane is converted alone (`FADD.f32
+/// r0.h0, r1^, 0x0.neg`) and compared in fp16, fused to `DISCARD.f32.lt
+/// 0x38000000.h1, r0^.h0`; the link keeps the varying whole (`LD_VAR_BUF_IMM
+/// ... .v4`, four vertex stores) though only y and w are read. Every program
+/// the shim's to the byte (alu_branchquad is the same draw); the fragment
+/// program discards and its record is not compacted.
 #[test]
-fn a_mediump_discard_of_a_varying_lane_is_refused() {
-    assert_eq!(gap(SHC_STAGE_FRAGMENT, td!("alu_branchquad.frag")), MaliError::DiscardForm);
+fn a_mediump_discard_of_a_varying_lane_is_byte_equal_to_mesa_26_2_1() {
+    let (vs, fs, json) = (
+        td!("discard_81_branchquad.vert"),
+        td!("discard_81_branchquad.frag"),
+        td!("discard_81_branchquad.expect.json"),
+    );
+    check_program_for("discard_81_branchquad", vs, fs, json, false);
+    check_program_for(
+        "alu_branchquad",
+        td!("alu_branchquad.vert"),
+        td!("alu_branchquad.frag"),
+        td!("alu_branchquad.expect.json"),
+        false,
+    );
+    let f = compile(SHC_STAGE_FRAGMENT, fs).expect("discard_81_branchquad.frag compiles");
+    assert!(f.info.can_discard);
+    assert!(!f.info.compacted, "v_color is read whole");
+    assert_eq!(
+        include_str!("../../../../tools/shaders/es100/branchquad.frag"),
+        fs,
+        "the case's source is the reference's"
+    );
 }
 
 /// gl_FragCoord by precision class (docs/notes/mali-fragcoord-mediump.md):
