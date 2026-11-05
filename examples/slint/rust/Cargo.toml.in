@@ -26,6 +26,10 @@ slint = { path = "@SLINT_NOSTD_DIR@/api/rs/slint", default-features = false, fea
 i-slint-renderer-femtovg = { path = "@SLINT_NOSTD_DIR@/internal/renderers/femtovg", default-features = false, features = ["opengl"] }
 i-slint-core = { path = "@SLINT_NOSTD_DIR@/internal/core", default-features = false, features = ["libm", "unsafe-single-threaded"] }
 
+[features]
+# The route-3 frame report's phase times (Kconfig SLINT_FRAME_REPORT).
+frame-report = []
+
 [build-dependencies]
 slint-build = { path = "@SLINT_NOSTD_DIR@/api/rs/build", default-features = false, features = ["compat-1-18", "renderer-software"] }
 

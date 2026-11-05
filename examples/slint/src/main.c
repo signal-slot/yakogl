@@ -425,11 +425,11 @@ static void fps_line(uint32_t frames, int64_t ms)
 	printk("slint-frame: frames=%u ms_per_frame=%u.%02u\n", frames, centi / 100u, centi % 100u);
 }
 
-#if defined(CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3) &&                                                \
-	(CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_TIMELINE_REPORT_MS > 0 ||                               \
-	 defined(CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_A53_RESTART))
+#ifdef CONFIG_SLINT_FRAME_REPORT
 /*
- * Where a frame's time goes, per FPS_WINDOW frames, on the timeline UART:
+ * Where a frame's time goes, per FPS_WINDOW frames, on the timeline UART
+ * (CONFIG_SLINT_FRAME_REPORT, a measurement; without it nothing below is
+ * built, timed or printed):
  *   A53F frames <n> ms <window> draw <avg>/<max> swap <avg>/<max>
  *        show <avg>/<max> (us)
  * draw: Slint's update and the GL calls (the CPU); swap: eglSwapBuffers,

@@ -88,6 +88,11 @@ if(SLINT_CARGO_LOCKED)
   configure_file("${slint_lock}" "${cargo_build_dir}/Cargo.lock" COPYONLY)
   set(slint_cargo_flags --locked)
 endif()
+# The route-3 frame report (Kconfig SLINT_FRAME_REPORT): the Rust side times
+# its phases only with it.
+if(CONFIG_SLINT_FRAME_REPORT)
+  list(APPEND slint_cargo_flags --features frame-report)
+endif()
 
 # The line the image prints at boot ("slint-build: ..."): the Slint, femtovg
 # and glow trees outside the repository, the lock, and (build.rs) the rustc.
