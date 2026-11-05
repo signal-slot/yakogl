@@ -5415,6 +5415,29 @@ fn frame_ends_here(b: &Backend, d: &GlesDraw, any_clear: bool) -> bool {
         || (any_clear && d.do_clear && b.frame_loads_color)
 }
 
+/// Whether a draw into several colour attachments, some integer, is drawn:
+/// every attachment is present and has the integer layout of attachment 0,
+/// the draw clears nothing, and `fs` is that layout's integer variant (no
+/// colour mask) writing every attachment's dwords. That program packs output
+/// `n` into the pixel's dwords from `n * d`, `d` the layout's dword count
+/// (`chain::pack_int_output`), which is where the end-of-tile emit reads
+/// attachment `n` from when every attachment takes `d` registers: dEQP's
+/// shader executor, two integer attachments of one layout (modf's `out0`
+/// and `out1`). Attachments of different layouts, or past the pixel's four
+/// output registers (two RGBA32UI), are not.
+pub fn several_int_targets_drawn(d: &GlesDraw, fs: Option<&ShcShader>) -> bool {
+    let n = (d.num_targets as usize).min(d.targets.len());
+    let Some(l) = gles_surf_int_layout(d.target_format) else { return false };
+    let rt = shaderc::ShcIntRt { channels: l.channels, bits: l.bits, signed: l.signed };
+    let dwords = n as u32 * rt.dwords();
+    d.target_gpu != 0
+        && d.targets[1..n].iter().all(|t| t.gpu != 0 && t.format == d.target_format)
+        && dwords <= PVR_BACKEND_MAX_OUT_REGS
+        && !d.do_clear
+        && !d.clear_quad
+        && fs.is_some_and(|fs| fs.blend_key == shaderc::shc_blend_key_int_rt(rt) && u32::from(fs.num_outputs) == dwords)
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn pvr_backend_draw(draw: *const GlesDraw) -> i32 {
     // SAFETY: single-threaded by contract; taken once per entry point.
@@ -5447,12 +5470,16 @@ pub unsafe extern "C" fn pvr_backend_draw(draw: *const GlesDraw) -> i32 {
         }
         return -util::ENOTSUP;
     }
-    /* An integer colour attachment beside another one: the program's
-     * integer output is packed for one target's layout (the variant key
-     * carries one), and the MRT path packs RGBA8. Refused by name, never
-     * drawn with the wrong packing. */
+    /* An integer colour attachment beside another one: drawn only as
+     * [`several_int_targets_drawn`] says (attachments of one layout, the
+     * program that packs them all), else refused by name, never drawn with
+     * the wrong packing. */
     let ntargets = (d.num_targets as usize).min(d.targets.len());
-    if ntargets > 1 && d.targets[..ntargets].iter().any(|t| t.gpu != 0 && gles_surf_is_integer(t.format)) {
+    if ntargets > 1
+        && d.targets[..ntargets].iter().any(|t| t.gpu != 0 && gles_surf_is_integer(t.format))
+        // SAFETY: the GL core's draw points `fs` at a live record or at nothing.
+        && !several_int_targets_drawn(d, unsafe { d.fs.as_ref() })
+    {
         glog_once!("yakogl/pvr: draw refused: an integer colour attachment beside another colour attachment");
         return -util::ENOTSUP;
     }
