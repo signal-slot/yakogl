@@ -69,8 +69,8 @@ BUILD   ?= build/bm
 BUILD_ABS := $(abspath $(BUILD))
 
 # ---- C sources ---------------------------------------------------------------
-# powervr-bxs-am62p/src (this repository is its yakogl/ submodule); override for other layouts
-DRVSRC  ?= $(HERE)/../src
+# The PowerVR driver sources, in this tree; override for another layout
+DRVSRC  ?= $(HERE)/driver/src
 SRCS    := $(SRC)/osal/baremetal.c $(SRC)/abi_layout_check.c
 # The PowerVR backend calls the driver's OS-free command generators through
 # FFI, and pins their structs; the GC7000 has no such driver and writes its own
