@@ -94,6 +94,43 @@ sed -i 's/e46 rc=0 verdict=done resets=absent/e46 rc=0 verdict=done_with_resets 
 python3 "$REPORT" "${S[0]}" "$rs" "${S[2]}" > "$work/rs.out" 2>&1; rc=$?
 { [ "$rc" = 1 ] && grep -q PARTIAL "$work/rs.out" && grep -q 'e46' "$work/rs.out"; }; expect "reset verdict: exit 1, PARTIAL, e46 named" $?
 
+echo "== anchors and --apply (scratch copy of the three docs)"
+ROOT=$(cd "$HERE/../.." && pwd)
+mkroot() { rm -rf "$1"; mkdir -p "$1/tools/cts"; cp "$ROOT/ROADMAP.md" "$1/"; cp "$ROOT/tools/cts/RESULTS.md" "$ROOT/tools/cts/STATUS.md" "$1/tools/cts/"; }
+mkroot "$work/r1"; mkroot "$work/r1.orig"
+grep -q '^--- anchors' "$work/full.out"; expect "anchors block printed" $?
+python3 "$REPORT" --date 2026-11-10 --root "$work/r1" "${S[@]}" > "$work/anc.out" 2>&1
+grep -q 'RESULTS.md line [0-9]*, replaces' "$work/anc.out" && grep -q 'ROADMAP.md line [0-9]*, replaces' "$work/anc.out" \
+	&& grep -q 'STATUS.md line [0-9]*, replaces' "$work/anc.out"; expect "anchors name the lines of all three docs" $?
+cmp -s "$work/r1/tools/cts/RESULTS.md" "$ROOT/tools/cts/RESULTS.md" && cmp -s "$work/r1/ROADMAP.md" "$ROOT/ROADMAP.md"; expect "without --apply nothing is written" $?
+python3 "$REPORT" --date 2026-11-10 --apply "$work/r1" "${S[@]}" > "$work/app.out" 2>&1; rc=$?
+expect "--apply exits 0" "$rc"
+grep -n 'i.MX8MP\*\*: not run on the board' "$work/r1/tools/cts/RESULTS.md" > /dev/null; [ $? = 1 ]; expect "c3 grep RESULTS.md has no match" $?
+grep -n 'i.MX8MP: not run on the board yet' "$work/r1/ROADMAP.md" > /dev/null; [ $? = 1 ]; expect "c3 grep ROADMAP.md has no match" $?
+grep -q 'Pi 4 と i.MX8MP の GLES3 全ツリー' "$work/r1/tools/cts/STATUS.md"; [ $? = 1 ]; expect "STATUS.md sentence replaced" $?
+grep -q 'i.MX8MP の dEQP-GLES3 は' "$work/r1/tools/cts/STATUS.md" && grep -q 'i.MX8MP, whole tree' "$work/r1/tools/cts/RESULTS.md" \
+	&& grep -q '^- i.MX8MP: dEQP-GLES3 whole tree' "$work/r1/ROADMAP.md"; expect "the drafts are in the three docs" $?
+for f in ROADMAP.md tools/cts/RESULTS.md tools/cts/STATUS.md; do
+	diff "$work/r1.orig/$f" "$work/r1/$f" > "$work/d.diff"
+	[ "$(grep -c '^[<>]' "$work/d.diff")" -gt 0 ] || { bad "$f changed by --apply"; continue; }
+	[ "$(grep -c '^[0-9]' "$work/d.diff")" = 1 ]; expect "$f: exactly one changed hunk" $?
+done
+cmp -s "$work/r1.orig/ROADMAP.md" "$ROOT/ROADMAP.md"; expect "the scratch original is the repository's ROADMAP.md" $?
+
+mkroot "$work/r2"; sed -i '/^\*\*i\.MX8MP\*\*: not run on the board/d' "$work/r2/tools/cts/RESULTS.md"
+mkroot "$work/r2.orig"; cp "$work/r2/tools/cts/RESULTS.md" "$work/r2.orig/tools/cts/RESULTS.md"
+python3 "$REPORT" --apply "$work/r2" "${S[@]}" > "$work/miss.out" 2>&1; rc=$?
+{ [ "$rc" != 0 ] && grep -q 'missing' "$work/miss.out" && grep -q 'RESULTS.md' "$work/miss.out"; }; expect "missing anchor: --apply fails and names it" $?
+cmp -s "$work/r2/ROADMAP.md" "$ROOT/ROADMAP.md" && cmp -s "$work/r2/tools/cts/STATUS.md" "$ROOT/tools/cts/STATUS.md" \
+	&& cmp -s "$work/r2/tools/cts/RESULTS.md" "$work/r2.orig/tools/cts/RESULTS.md"; expect "missing anchor: nothing written" $?
+
+mkroot "$work/r3"; printf '\n- i.MX8MP: not run on the board yet (#1262)\n' >> "$work/r3/ROADMAP.md"
+mkroot "$work/r3.orig"; cp "$work/r3/ROADMAP.md" "$work/r3.orig/"
+python3 "$REPORT" --apply "$work/r3" "${S[@]}" > "$work/dup.out" 2>&1; rc=$?
+{ [ "$rc" != 0 ] && grep -q 'matches 2 times' "$work/dup.out"; }; expect "duplicate anchor: --apply fails and names it" $?
+cmp -s "$work/r3/ROADMAP.md" "$work/r3.orig/ROADMAP.md" && cmp -s "$work/r3/tools/cts/RESULTS.md" "$ROOT/tools/cts/RESULTS.md" \
+	&& cmp -s "$work/r3/tools/cts/STATUS.md" "$ROOT/tools/cts/STATUS.md"; expect "duplicate anchor: nothing written" $?
+
 python3 "$REPORT" --help > /dev/null; expect "--help works" $?
 
 if [ "$fails" = 0 ]; then echo "report selftest: OK"; exit 0; fi
