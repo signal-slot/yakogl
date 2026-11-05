@@ -42,7 +42,7 @@
 use super::{Defect, MaliError};
 use crate::shaderc::online::arena::Arena;
 use crate::shaderc::online::ir::{
-    AluOp, IoKind, IoSlot, Module, Node as IrNode, Op as IrOp, Src, ValueId, SWIZZLE_IDENTITY,
+    AluOp, IoKind, IoSlot, Module, Node as IrNode, Op as IrOp, Src, ValueId, VarDecl, SWIZZLE_IDENTITY,
 };
 
 /// A value's uses, by kind.
@@ -98,6 +98,9 @@ pub(super) type Rewritten<'s> = (&'s [IrOp], &'s [u8]);
 /// nothing); otherwise the stage's instructions and widths after them,
 /// in the same node order.
 pub(super) fn passes<'s>(m: &Module<'_>, scratch: &Arena<'s>) -> Result<Option<Rewritten<'s>>, MaliError> {
+    if indexed_read(m) {
+        return Err(MaliError::IndexedLocal);
+    }
     let n = m.instrs.len();
     let oom = |_| MaliError::OutOfScratch;
     let instrs = scratch.alloc_copy(m.instrs).map_err(oom)?;
@@ -118,6 +121,43 @@ pub(super) fn passes<'s>(m: &Module<'_>, scratch: &Arena<'s>) -> Result<Option<R
     }
     let Tree { instrs, comps, .. } = t;
     Ok(Some((&*instrs, &*comps)))
+}
+
+/// Locals `a` and `b` (`a < b`) are slots of one variable: the front end
+/// gives a matrix's columns, an array's elements and a struct's leaves one
+/// local each, consecutive, every one under the declaration's own name
+/// (lower.rs `alloc_var`). The same name slice, not equal text: a second
+/// declaration of the name (a shadow in a nested scope) is another slice of
+/// the source.
+fn same_run(locals: &[VarDecl<'_>], a: usize, b: usize) -> bool {
+    let Some(d) = locals.get(a) else { return false };
+    !d.name.is_empty() && a < b && locals.get(a..=b).is_some_and(|r| r.iter().all(|o| core::ptr::eq(o.name, d.name)))
+}
+
+/// A vector's component read at a run-time index (case 80's `col[i - 1]`
+/// and `v[j]`): the front end lowers it to a ladder of `bcsel(ieq(i, k),
+/// v.k, ..)` over the lanes of the value. Mesa reads it, as it reads an
+/// array's element at a run-time index, by a binary search
+/// (`nir_vector_extract`, `_nir_select_from_array_helper`,
+/// nir_builder.h:947-958: `bcsel(ilt(i, mid), ..)` and each half;
+/// other_80_matdyn.expect.json's `ICMP_OR.s32.lt.m1 .., 0x3020100.b2` and
+/// `0x1000000.b3`), so the ladder is not Mesa's program and is refused
+/// ([`MaliError::IndexedLocal`]). The array element's ladder, the same
+/// `ieq` over the variable's slots, is not Mesa's either, but a corpus
+/// source compiles it today (es300/tmpidx.frag, no reference) and the
+/// corpus verdicts move forward only: it is left as it was
+/// (docs/notes/mali-remaining-families.md F1). A write at a run-time index
+/// is an `ieq` ladder in both and is not this. The test is on the shape: a
+/// select between two lanes of one value under an `ieq` of a run-time int
+/// written as such in the source is refused too.
+fn indexed_read(m: &Module<'_>) -> bool {
+    let op = |v: ValueId| m.instrs.get(v.0 as usize);
+    let konst = |v: ValueId| matches!(op(v), Some(IrOp::ConstI32(_)));
+    m.instrs.iter().any(|o| {
+        let IrOp::Alu(AluOp::Bcsel, [c, a, b]) = *o else { return false };
+        let Some(&IrOp::Alu(AluOp::Ieq, [x, y, _])) = op(c.val) else { return false };
+        konst(x.val) != konst(y.val) && a.val == b.val && a.swizzle[0] != b.swizzle[0]
+    })
 }
 
 fn is_const(op: &IrOp) -> bool {
@@ -255,6 +295,13 @@ impl Tree<'_, '_> {
         matches!(self.locals.get(l), Some(&(1, 1, 1)))
     }
 
+    /// The local `l` is one slot of a variable of several ([`same_run`]
+    /// with a neighbour): a matrix's column, an array's element or a
+    /// struct's leaf.
+    fn run_slot(&self, l: usize) -> bool {
+        same_run(self.m.locals, l, l + 1) || l.checked_sub(1).is_some_and(|k| same_run(self.m.locals, k, l))
+    }
+
     /// GLSL's view of a leaf of a tree: a constant (`Some(true)`), a
     /// variable dereference (`Some(false)`), or a dereference that ends the
     /// reduction (`None` in `Err(Not)`), or a value whose GLSL form is not
@@ -297,7 +344,11 @@ impl Tree<'_, '_> {
             IrOp::LoadLocal { index: Some(_), .. } | IrOp::LoadUniformIdx { .. } => Err(Reduction::Not),
             IrOp::LoadLocal { local, index: None, .. } => {
                 let l = local.0 as usize;
-                if m.locals.get(l).is_some_and(|d| d.array_len > 1) {
+                /* a matrix local's column, an array element or a struct
+                 * member is an `ir_dereference_array`/`_record` (:219-226),
+                 * as a matrix attribute's column is (case 80's
+                 * `s[1][1] + d[1][0] + ..`) */
+                if m.locals.get(l).is_some_and(|d| d.array_len > 1) || self.run_slot(l) {
                     return Err(Reduction::Not);
                 }
                 if self.graftable(l) {

@@ -99,6 +99,79 @@ mixed-precision item (triage-mixed), dynamic indexing of locals (`Ilt` +
 `CSEL` ladder, from `unitype_80`), then the pin of `other_80_matdyn`. Do not
 write `other_80_matdyn` into `MALI_TESTS` before it is byte-equal.
 
+**State after item `chain-80` (`chain-matlocal` done; case 80 stops at
+`IndexedLocal`).** What the IR keeps of a matrix local is enough after all:
+the front end gives a matrix's columns, an array's elements and a struct's
+leaves one local each, consecutive, all under the declaration's own name
+slice (lower.rs `alloc_var`; a shadowing declaration is another slice).
+`glsl.rs` `leaf()` now ends the reduction (`Err(Reduction::Not)`) at a load
+of such a slot (`run_slot`), so the chain stays in source order. Tests:
+`glsl_leaves_a_chain_of_matrix_local_columns_in_order` (the IR, and a
+shadowed one-slot local still rebalanced) and
+`the_matrix_local_chain_compiles_in_the_source_order` (the chain alone,
+`CHAIN_80`: `4 - z`, `s11`, `FRCP`, `FMA 2.0`, `- z`, `FMA 4.0`, `* 1/16`,
+the order above).
+
+What stands between case 80 and `other_80_matdyn`, in the order the
+compiler meets it:
+
+1. **`IndexedLocal`, a vector's component read at a run-time index**
+   (`col[i - 1]`, `v[j]`), refused by `glsl.rs` `indexed_read` (test
+   `case_80_is_refused_at_its_indexed_local_reads`, gap row in
+   `gap_cases`). The front end reads every run-time index as an `ieq`
+   ladder, `bcsel(ieq(i, k), x_k, ..)`; Mesa reads both a vector's
+   component (`nir_vector_extract`) and an array's element
+   (`nir_lower_indirect_derefs`) by the binary search of
+   `_nir_select_from_array_helper` (Mesa 26.2.1 nir_builder.h:947-958):
+   `bcsel(ilt(i, mid), lower half, upper half)`, the reference's
+   `ICMP_OR.s32.lt.m1 .., u4.w1, 0x3020100.b2` (2) and `0x1000000.b3` (1),
+   with `j = i + 1`'s compares folded into `LSHIFT_OR`/`LSHIFT_AND`
+   combinations. A write at a run-time index (`arr[j] = ..`) is an `ieq`
+   ladder in both. Only the component form is refused: an array element's
+   ladder is no more Mesa's, but `es300/tmpidx.frag` (`t[i & 3]`, no
+   reference) compiles it today and `corpus-verdicts.txt` moves forward
+   only, so `arr[i]` and `p[i]` stay accepted until the `ilt` rewrite
+   lands. The corpus moved three refusal texts to this one: `matdyn.frag`,
+   `dynidx.frag`, `dynidx_loop.frag`. The lowering: rewrite each read
+   ladder (component and element) into the `ilt` search on the IR, in
+   `glsl.rs` (the front end is shared with the other back ends), then
+   compare against `other_80_matdyn` and `tmpidx` (which needs a
+   reference).
+2. **`MixedPrecision` from the `int` uniform.** In a highp shader the
+   uniform loop of `mod.rs` (`f.mixed |= ..` over the fp32 block) counts
+   any uniform not declared highp, and `u_i` is an `int` at the fragment
+   stage's default `mediump`. Mesa reads it as a 32-bit word
+   (`ICMP_OR.s32 .., u4.w1`): `LowerPrecisionFloat16Uniforms` touches
+   float uniforms only. Counting only float uniforms there lets case 80
+   through, but also `es100/ifelse_loop.frag`, whose only refusal is the
+   same (`int u_n`), and that program is not Mesa's yet (159 words against
+   `mixed_ifelse_loop`'s 143: the five kept `break` branches and the
+   flattened arms), so the rule was left as it is; it moves with
+   `ifelse_loop`'s lowering or with a narrower test.
+3. **`s11 = w + w`.** Mesa's NIR makes `fadd(a, a)` `fmul(a, 2.0)`
+   (nir_opt_algebraic.py:274) and fuses it: `FMA.f32 r3, u3.w1,
+   0x40000000, r3^`. `nir.rs`'s 32-bit builder does not apply :274 to a
+   source sum, so the chain has `FADD w, w` and `FADD` there (words 1-2 of
+   `the_matrix_local_chain_compiles_in_the_source_order`).
+4. The rest of the program, measured with steps 1 and 2 bypassed in a
+   scratch build: 60 words against 61, first difference word 1 (the
+   constants' FAU order, `u5.w1` against `u6.w1`), then the ladders of
+   step 1 (`ICMP_OR.u32.eq` against `ICMP_OR.s32.lt`) and their schedule.
+
+#33 text for case 80: "Case 80 matdyn (chain-80): the matrix-local chain
+no longer refuses. glsl.rs ends GLSL's reduction at a matrix column, array
+element or struct member of a local (the front end's slots of one
+variable), so `s[1][1] + d[1][0] + q[0][1] + n[1][0] + 4.0 * p[1][0]` keeps
+Mesa's source order (tests glsl_leaves_a_chain_of_matrix_local_columns_in_order,
+the_matrix_local_chain_compiles_in_the_source_order). The case now stops
+at IndexedLocal: `col[i - 1]` and `v[j]` are read by the front end's ieq
+ladder where Mesa uses the ilt binary search of _nir_select_from_array_helper.
+Next, in order: rewrite the read ladders to the ilt search in glsl.rs
+(element reads too; es300/tmpidx.frag needs a reference first), count only
+float uniforms as mixed precision once ifelse_loop is byte-equal, apply
+fadd(a, a) -> fmul(a, 2.0) to source sums in nir.rs, then pin
+other_80_matdyn. docs/notes/mali-remaining-families.md F1."
+
 `es300/texoffset.frag` is the other kind: `0.25 * (A + B + C + D)` where
 A..D are texture results. A texture is an `ir_texture` rvalue, not a
 dereference, so the four-leaf add tree (three adds, no constant) **is**
