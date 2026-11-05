@@ -18,7 +18,8 @@ CI, a review, then the merge. Never push main by hand.
 
 1. Locally, run the rows of the gate your change reaches:
    `tools/check.sh --changed origin/main`. It maps each changed path to the
-   parts it can break and skips the rest (a docs-only change runs two rows).
+   parts it can break and skips the rest (a docs-only change runs three
+   rows, as `tools/check_scope_selftest.sh` pins it).
    The scope comes from `git diff <base> HEAD` plus `git status --porcelain`,
    so an untracked file counts: one outside the ignored paths (for example
    `build/`) that maps to no narrower scope widens it to "all" and runs every
@@ -54,13 +55,22 @@ CI, a review, then the merge. Never push main by hand.
   `swi_tables.ld` not found in a worktree of another depth). A snippet that
   names a file no path resolves is left as it is and the configure warns with
   that line.
-- `tools/check.sh --quick` (about 120 rows, fewer than the full run; 14
-  minutes in one walk, 4 to 10 minutes on a warm tree in others) is for the
-  edit loop. If `MESA_V3D_TREE` is set on your host to a Mesa tree without
-  `build-v3d`, two rows fail; run `env -u MESA_V3D_TREE tools/check.sh --quick`
-  (measured: 119 ok, 0 failed, 0 gaps, 236 s). `tools/check.sh --local <base>` runs the local set (13
-  rows) when a change reaches everything. Neither is the landing gate: the
-  CI is.
+- `tools/check.sh --quick` is for the edit loop. It runs 169 of the
+  full plan's 209 rows (counted on 2026-11-05 at main `bfd75c57` with
+  `YAKOGL_CHECK_PLAN=1`, which lists the rows and runs none;
+  `tools/check_scope_selftest.sh` pins the 209). Measured on 2026-10-25,
+  when it had fewer rows (`docs/release/checklist.md` "Line 3: re-run"):
+  "146 ok, 0 failed, 0 gap(s)" in 2747 s at main `8198a56f`, and "145 ok,
+  0 failed, 0 gap(s)" in 1491 s from a fresh clone. It takes minutes on a warm tree (190 s on four lanes,
+  `tools/check.sh` header, 2026-10-25) and up to an hour from a cold one (59
+  minutes with two compiler slots, `CLAUDE.md`). If `MESA_V3D_TREE` is set on
+  your host to a Mesa tree without `build-v3d`, the three v3d rows (tex_check,
+  cl_golden, job_check) become one `gap` naming `MESA_V3D_TREE`, and a gap
+  keeps the run red: unset it (`env -u MESA_V3D_TREE tools/check.sh --quick`)
+  to use the vendored reference build, or point it at a built tree
+  (`tools/v3d/README.md`). `tools/check.sh --local <base>` runs the local set
+  (about twenty rows, `tools/check_scope_selftest.sh`) when a change reaches
+  everything. Neither is the landing gate: the CI is.
 
 ## Branches and commits
 
