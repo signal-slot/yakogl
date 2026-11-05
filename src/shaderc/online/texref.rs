@@ -492,12 +492,26 @@ pub fn seamless_texel(l: &Level, face: Face, i: i32, j: i32) -> Option<[f32; 4]>
 /// does (under REPEAT and MIRRORED_REPEAT every edge counts, the image's
 /// own included: the next texel is a wrapped one).
 pub fn sample_face(l: &Level, face: usize, filter: Filter, sp: &Sampler, s: f32, t: f32) -> Result<[f32; 4], Refusal> {
+    sample_face_with(l, face, filter, sp, s, t, |v| v)
+}
+
+/// [`sample_face`] with `tap` applied to every texel read before the blend:
+/// the one body of the plain and the compare-then-filter samplers.
+fn sample_face_with(
+    l: &Level,
+    face: usize,
+    filter: Filter,
+    sp: &Sampler,
+    s: f32,
+    t: f32,
+    tap: impl Fn([f32; 4]) -> [f32; 4],
+) -> Result<[f32; 4], Refusal> {
     if !(s.is_finite() && t.is_finite()) {
         return Err(Refusal::NotFinite);
     }
     let texels = &l.faces[face];
     let (w, h) = (l.width, l.height);
-    let at = |i: u32, j: u32| texels[(j * w + i) as usize];
+    let at = |i: u32, j: u32| tap(texels[(j * w + i) as usize]);
     let (u, v) = (s * w as f32, t * h as f32);
     match filter {
         Filter::Nearest => {
@@ -590,6 +604,20 @@ pub fn sample_cube_filtered(
     z: f32,
     lod: Lod,
 ) -> Result<([f32; 4], Face), Refusal> {
+    sample_cube_with(t, sp, x, y, z, lod, |v| v)
+}
+
+/// [`sample_cube_filtered`] with `tap` applied to every texel read before
+/// the blend (and before a corner tap's mean).
+fn sample_cube_with(
+    t: &Texture,
+    sp: &Sampler,
+    x: f32,
+    y: f32,
+    z: f32,
+    lod: Lod,
+    tap: impl Fn([f32; 4]) -> [f32; 4],
+) -> Result<([f32; 4], Face), Refusal> {
     if !(x.is_finite() && y.is_finite() && z.is_finite()) {
         return Err(Refusal::NotFinite);
     }
@@ -606,15 +634,15 @@ pub fn sample_cube_filtered(
     let v = over_levels(t, sp, lod, |l, filter| match filter {
         Filter::Nearest => {
             let (i, j) = (nearest_index(s, l.width)?, nearest_index(tc, l.height)?);
-            Ok(l.faces[face.index()][(j * l.width + i) as usize])
+            Ok(tap(l.faces[face.index()][(j * l.width + i) as usize]))
         }
         Filter::Linear => {
             let n = l.width;
             let (u, v) = (s * n as f32, tc * n as f32);
             let (x0, y0) = (floor_i(u - 0.5), floor_i(v - 0.5));
             let (a, b) = (u - 0.5 - (x0 as f32), v - 0.5 - (y0 as f32));
-            let taps =
-                [(x0, y0), (x0 + 1, y0), (x0, y0 + 1), (x0 + 1, y0 + 1)].map(|(i, j)| seamless_texel(l, face, i, j));
+            let taps = [(x0, y0), (x0 + 1, y0), (x0, y0 + 1), (x0 + 1, y0 + 1)]
+                .map(|(i, j)| seamless_texel(l, face, i, j).map(&tap));
             /* a corner tap: the mean of the other three (module doc) */
             let mut p = [[0.0f32; 4]; 4];
             for k in 0..4 {
@@ -635,6 +663,153 @@ pub fn sample_cube_filtered(
         }
     })?;
     Ok((v, face))
+}
+
+/// A GL depth compare function (`GL_TEXTURE_COMPARE_FUNC`), in the order and
+/// with the encoding of `GlesTextureBind::compare_op` bits 0-2 (`func -
+/// GL_NEVER`; docs/notes/v3d-shadow.md (a)), which is also the V3D sampler
+/// record's "Depth Compare Function" field.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum CompareFunc {
+    Never,
+    Less,
+    Equal,
+    Lequal,
+    Greater,
+    NotEqual,
+    Gequal,
+    Always,
+}
+
+impl CompareFunc {
+    /// The function `compare_op` asks for, or `None` when bit 4 (no compare:
+    /// the depth itself, ES 3.0.6 3.8.15.1) is set. Bit 3 (a fixed-point
+    /// depth) is not part of the function: see [`compare_op_clamps_ref`].
+    pub fn from_compare_op(compare_op: u8) -> Option<CompareFunc> {
+        if compare_op & 16 != 0 {
+            return None;
+        }
+        Some(match compare_op & 7 {
+            0 => CompareFunc::Never,
+            1 => CompareFunc::Less,
+            2 => CompareFunc::Equal,
+            3 => CompareFunc::Lequal,
+            4 => CompareFunc::Greater,
+            5 => CompareFunc::NotEqual,
+            6 => CompareFunc::Gequal,
+            _ => CompareFunc::Always,
+        })
+    }
+
+    /// `reference OP depth`: GL_LESS passes when the reference is less than
+    /// the texel's depth (ES 3.0.6 3.8.15.1).
+    pub fn passes(self, reference: f32, depth: f32) -> bool {
+        match self {
+            CompareFunc::Never => false,
+            CompareFunc::Less => reference < depth,
+            CompareFunc::Equal => reference == depth,
+            CompareFunc::Lequal => reference <= depth,
+            CompareFunc::Greater => reference > depth,
+            CompareFunc::NotEqual => reference != depth,
+            CompareFunc::Gequal => reference >= depth,
+            CompareFunc::Always => true,
+        }
+    }
+}
+
+/// `compare_op` bit 3: a fixed-point depth, whose reference is clamped to
+/// [0, 1] (ES 3.0.6 3.8.15.1); the `clamp_ref` of [`Compare`].
+pub fn compare_op_clamps_ref(compare_op: u8) -> bool {
+    compare_op & 8 != 0
+}
+
+/// One shadow look-up's compare: the function, the reference value
+/// (`Dref`, the coordinate's last lane) and whether the reference is clamped
+/// to [0, 1] first (a fixed-point depth format; the caller knows the format,
+/// this model has no format table). The texel is taken as it is: a
+/// fixed-point depth texel is in range already.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub struct Compare {
+    pub func: CompareFunc,
+    pub dref: f32,
+    pub clamp_ref: bool,
+}
+
+impl Compare {
+    /// 1.0 when the reference passes against the texel's R channel (the
+    /// depth: the GL core keeps depth as R32F), else 0.0.
+    pub fn texel(&self, texel: [f32; 4]) -> f32 {
+        let r = if self.clamp_ref { self.dref.clamp(0.0, 1.0) } else { self.dref };
+        if self.func.passes(r, texel[0]) {
+            1.0
+        } else {
+            0.0
+        }
+    }
+
+    /// The texel as the filters blend it: the compare result in R, (0, 0, 1)
+    /// beside it, so the blend of the taps is the blend of the compares.
+    fn tap(&self, texel: [f32; 4]) -> [f32; 4] {
+        [self.texel(texel), 0.0, 0.0, 1.0]
+    }
+}
+
+/// [`sample_face`] for a shadow look-up: compare every texel the filter
+/// reads (NEAREST: the one texel; LINEAR: each of the four taps, wrapped as
+/// [`sample_face`] wraps them), then blend the results with the bilinear
+/// weights (percentage-closer, ES 3.0.6 3.8.15.1; docs/notes/v3d-shadow.md
+/// (c)). Returns the compare result, 0.0..=1.0, one f32 as `TexLookup` in
+/// the evaluator holds a shadow value. Refuses as [`sample_face`].
+pub fn sample_face_compare(
+    l: &Level,
+    face: usize,
+    filter: Filter,
+    sp: &Sampler,
+    cmp: &Compare,
+    s: f32,
+    t: f32,
+) -> Result<f32, Refusal> {
+    sample_face_with(l, face, filter, sp, s, t, |v| cmp.tap(v)).map(|v| v[0])
+}
+
+/// [`sample_layer`] for a shadow look-up: the level(s) [`levels`] selects,
+/// [`sample_face_compare`] on each, a mipmap-LINEAR pair blended by its
+/// weight.
+pub fn sample_layer_compare(
+    t: &Texture,
+    sp: &Sampler,
+    cmp: &Compare,
+    layer: usize,
+    s: f32,
+    tc: f32,
+    lod: Lod,
+) -> Result<f32, Refusal> {
+    let faces = t.levels.first().map_or(0, |l| l.faces.len());
+    if faces == 0 {
+        return Err(Refusal::NoLevel);
+    }
+    let layer = layer.min(faces - 1);
+    over_levels(t, sp, lod, |l, filter| sample_face_with(l, layer, filter, sp, s, tc, |v| cmp.tap(v))).map(|v| v[0])
+}
+
+/// [`sample_layer_compare`] on layer 0: a `sampler2DShadow` look-up.
+pub fn sample_2d_compare(t: &Texture, sp: &Sampler, cmp: &Compare, s: f32, tc: f32, lod: Lod) -> Result<f32, Refusal> {
+    sample_layer_compare(t, sp, cmp, 0, s, tc, lod)
+}
+
+/// [`sample_cube_filtered`] for a shadow look-up (`samplerCubeShadow`): the
+/// seamless taps are compared first, a corner tap being the mean of the
+/// other three compares. Returns the compare result and the face selected.
+pub fn sample_cube_compare(
+    t: &Texture,
+    sp: &Sampler,
+    cmp: &Compare,
+    x: f32,
+    y: f32,
+    z: f32,
+    lod: Lod,
+) -> Result<(f32, Face), Refusal> {
+    sample_cube_with(t, sp, x, y, z, lod, |v| cmp.tap(v)).map(|(v, f)| (v[0], f))
 }
 
 #[cfg(test)]
@@ -864,5 +1039,163 @@ mod tests {
         assert_eq!(levels(&t, MinFilter::NearestMipmapNearest, Lod::Explicit(1.5)), Err(Refusal::LevelBoundary(1.5)));
         assert_eq!(MinFilter::NearestMipmapLinear.within_level(), Filter::Nearest);
         assert_eq!(MinFilter::LinearMipmapNearest.within_level(), Filter::Linear);
+    }
+
+    fn depth_2x2(d: [f32; 4]) -> Texture {
+        Texture::flat(2, 2, d.iter().map(|&v| [v, 0.0, 0.0, 1.0]).collect())
+    }
+
+    fn cmp(func: CompareFunc, dref: f32) -> Compare {
+        Compare { func, dref, clamp_ref: false }
+    }
+
+    fn lin(wrap: Wrap) -> Sampler {
+        Sampler { mag: Filter::Linear, min: MinFilter::Linear, wrap_s: wrap, wrap_t: wrap }
+    }
+
+    #[test]
+    fn compare_op_gives_the_function_or_none() {
+        use CompareFunc::*;
+        let all = [Never, Less, Equal, Lequal, Greater, NotEqual, Gequal, Always];
+        for (op, f) in all.iter().enumerate() {
+            assert_eq!(CompareFunc::from_compare_op(op as u8), Some(*f));
+            assert_eq!(CompareFunc::from_compare_op(op as u8 | 8), Some(*f), "bit 3 is the clamp, not the function");
+            assert_eq!(CompareFunc::from_compare_op(op as u8 | 16), None, "bit 4: no compare");
+        }
+        assert_eq!(CompareFunc::from_compare_op(16), None);
+        assert!(compare_op_clamps_ref(8 | 1) && !compare_op_clamps_ref(1));
+    }
+
+    /// Every function on a texel of depth 0.5: the reference below, equal
+    /// and above.
+    #[test]
+    fn every_function_compares_the_reference_with_the_texel() {
+        use CompareFunc::*;
+        let texel = [0.5, 0.9, 0.9, 0.9];
+        let at = |f: CompareFunc, r: f32| cmp(f, r).texel(texel);
+        let expect = [
+            (Never, [0.0, 0.0, 0.0]),
+            (Less, [1.0, 0.0, 0.0]),
+            (Equal, [0.0, 1.0, 0.0]),
+            (Lequal, [1.0, 1.0, 0.0]),
+            (Greater, [0.0, 0.0, 1.0]),
+            (NotEqual, [1.0, 0.0, 1.0]),
+            (Gequal, [0.0, 1.0, 1.0]),
+            (Always, [1.0, 1.0, 1.0]),
+        ];
+        for (f, want) in expect {
+            assert_eq!([at(f, 0.25), at(f, 0.5), at(f, 0.75)], want, "{f:?}");
+        }
+    }
+
+    #[test]
+    fn the_reference_is_clamped_only_when_asked() {
+        let hi = |clamp_ref| Compare { func: CompareFunc::Equal, dref: 3.0, clamp_ref };
+        assert_eq!(hi(true).texel([1.0, 0.0, 0.0, 1.0]), 1.0, "3.0 clamps to the texel's 1.0");
+        assert_eq!(hi(false).texel([1.0, 0.0, 0.0, 1.0]), 0.0);
+        let lo = |clamp_ref| Compare { func: CompareFunc::Equal, dref: -2.0, clamp_ref };
+        assert_eq!(lo(true).texel([0.0; 4]), 1.0);
+        assert_eq!(lo(false).texel([0.0; 4]), 0.0);
+    }
+
+    #[test]
+    fn nearest_returns_the_compare_of_the_one_texel() {
+        let t = depth_2x2([0.2, 0.4, 0.6, 0.8]);
+        let sp = Sampler::NEAREST_CLAMP;
+        let at = |r: f32, s: f32, tc: f32| {
+            sample_2d_compare(&t, &sp, &cmp(CompareFunc::Less, r), s, tc, Lod::Explicit(0.0)).unwrap()
+        };
+        /* texel (1, 0) holds 0.4; (0, 1) holds 0.6 */
+        assert_eq!(at(0.3, 0.75, 0.25), 1.0);
+        assert_eq!(at(0.5, 0.75, 0.25), 0.0);
+        assert_eq!(at(0.5, 0.25, 0.75), 1.0);
+        assert_eq!(at(0.7, 0.25, 0.75), 0.0);
+    }
+
+    /// Taps 0.0, 1.0, 1.0, 0.0 at weights (a, b) = (.25, .25), reference 0.6
+    /// under LESS: the two 1.0 taps pass, so the compare-then-filter result is
+    /// the weighted mean of the compares (0.375); the compare of the blended
+    /// depth (0.375, which fails) is 0.
+    #[test]
+    fn linear_compares_each_tap_then_filters() {
+        let t = depth_2x2([0.0, 1.0, 1.0, 0.0]);
+        let sp = lin(Wrap::ClampToEdge);
+        let c = cmp(CompareFunc::Less, 0.6);
+        let (s, tc) = (0.375, 0.375);
+        let got = sample_2d_compare(&t, &sp, &c, s, tc, Lod::Explicit(0.0)).unwrap();
+        let (a, b) = (0.25f32, 0.25f32);
+        let want = a * (1.0 - b) + (1.0 - a) * b;
+        assert!((got - want).abs() < 1e-6, "{got} vs {want}");
+        let filtered = sample_layer(&t, &sp, 0, s, tc, Lod::Explicit(0.0)).unwrap()[0];
+        let after = c.texel([filtered, 0.0, 0.0, 1.0]);
+        assert_eq!(after, 0.0, "the blended depth {filtered} fails");
+        assert_ne!(got, after, "percentage-closer differs from compare-after-filter");
+    }
+
+    #[test]
+    fn a_texel_centre_has_no_blend() {
+        let t = depth_2x2([0.1, 0.9, 0.9, 0.9]);
+        let sp = lin(Wrap::ClampToEdge);
+        let c = cmp(CompareFunc::Lequal, 0.5);
+        let at = |s: f32, tc: f32| sample_2d_compare(&t, &sp, &c, s, tc, Lod::Explicit(0.0)).unwrap();
+        assert_eq!(at(0.25, 0.25), 0.0, "0.5 <= 0.1 fails");
+        assert_eq!(at(0.75, 0.25), 1.0, "0.5 <= 0.9 passes");
+    }
+
+    #[test]
+    fn the_wrap_modes_apply_to_the_compared_taps() {
+        /* column 0 holds 0.9 (LESS 0.5 passes), column 1 holds 0.1 (fails) */
+        let t = depth_2x2([0.9, 0.1, 0.9, 0.1]);
+        let c = cmp(CompareFunc::Less, 0.5);
+        /* s = 0 is the left edge: the taps are columns -1 and 0, equal weight */
+        let at = |wrap: Wrap| sample_2d_compare(&t, &lin(wrap), &c, 0.0, 0.25, Lod::Explicit(0.0)).unwrap();
+        assert_eq!(at(Wrap::ClampToEdge), 1.0, "both taps read column 0");
+        assert_eq!(at(Wrap::Repeat), 0.5, "column -1 wraps to column 1");
+    }
+
+    #[test]
+    fn a_mipmapped_texture_compares_on_the_level_lod_picks() {
+        let lv =
+            |w: u32, v: f32| Level { width: w, height: w, faces: vec![vec![[v, 0.0, 0.0, 1.0]; (w * w) as usize]] };
+        let t = Texture {
+            cube: false,
+            min: MinFilter::LinearMipmapLinear,
+            levels: vec![lv(4, 0.2), lv(2, 0.8), lv(1, 0.8)],
+        };
+        let sp = Sampler { mag: Filter::Linear, min: MinFilter::LinearMipmapLinear, ..lin(Wrap::ClampToEdge) };
+        let c = cmp(CompareFunc::Less, 0.5);
+        let at = |lod: f32| sample_2d_compare(&t, &sp, &c, 0.3, 0.3, Lod::Explicit(lod)).unwrap();
+        assert_eq!(at(0.0), 0.0, "level 0 holds 0.2");
+        assert_eq!(at(1.0), 1.0, "level 1 holds 0.8");
+        assert_eq!(at(0.25), 0.25, "the compares of the two levels blend");
+    }
+
+    #[test]
+    fn a_layer_compare_reads_its_layer() {
+        let l = Level { width: 1, height: 1, faces: vec![vec![[0.2; 4]], vec![[0.8; 4]]] };
+        let t = Texture { cube: false, min: MinFilter::Nearest, levels: vec![l] };
+        let sp = Sampler::NEAREST_CLAMP;
+        let c = cmp(CompareFunc::Less, 0.5);
+        let at = |layer| sample_layer_compare(&t, &sp, &c, layer, 0.3, 0.3, Lod::Explicit(0.0)).unwrap();
+        assert_eq!((at(0), at(1), at(7)), (0.0, 1.0, 1.0), "a layer past the last is clamped");
+    }
+
+    /// The direction of the seamless test above ((1, 0, -0.875): +X column 3
+    /// with R = 1, blended 3:1 with -Z's edge column with R = 0): LESS 0.5
+    /// compares each tap, so the answer is 0.75, where the blended depth 0.75
+    /// would pass outright.
+    #[test]
+    fn a_cube_compare_filters_the_compares_across_the_seams() {
+        let t = edge_cube(MinFilter::Linear);
+        let sp = lin(Wrap::ClampToEdge);
+        let dir = (1.0, 0.0, -0.875);
+        let at = |c: Compare| sample_cube_compare(&t, &sp, &c, dir.0, dir.1, dir.2, Lod::Explicit(0.0)).unwrap();
+        let (v, face) = at(cmp(CompareFunc::Less, 0.5));
+        assert_eq!(face, Face::PosX);
+        assert!((v - 0.75).abs() < 1e-6, "{v}");
+        let (plain, _) = sample_cube_filtered(&t, &sp, dir.0, dir.1, dir.2, Lod::Explicit(0.0)).unwrap();
+        assert!((plain[0] - 0.75).abs() < 1e-6 && cmp(CompareFunc::Less, 0.5).texel(plain) == 1.0);
+        assert_eq!(at(cmp(CompareFunc::Always, 0.0)).0, 1.0);
+        assert_eq!(at(cmp(CompareFunc::Never, 0.0)).0, 0.0);
     }
 }
