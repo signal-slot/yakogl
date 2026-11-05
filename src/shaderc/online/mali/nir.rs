@@ -237,6 +237,15 @@ pub enum Alu {
     /// `ICMP.u32` with `BI_RESULT_TYPE_M1`, bifrost_compile.c:3261-3265, the
     /// `_OR` form after `va_lower_isel`).
     Ucmp(Cmpf),
+    /// `mov` of one 16-bit lane of a vector (a texel): the copy
+    /// `nir_lower_phis_to_scalar` puts at the end of a side for a phi whose
+    /// source is a lane of a vector (a phi source takes no swizzle), which
+    /// copy propagation cannot fold. `bi_make_vec_to` of one 16-bit
+    /// component is `MKVEC.v2i16 a.hN, #0` (bifrost_compile.c:836-848),
+    /// which `bi_lower_mkvec_swz` makes `U16_TO_U32 a.hN` (opt.rs;
+    /// cflow_148_texbranch.expect.json's `U16_TO_U32 r1, r1^.h0` after each
+    /// look-up under an `if`).
+    Mov,
 }
 
 impl Alu {
@@ -266,6 +275,7 @@ impl Alu {
             | Alu::U2f
             | Alu::F2u
             | Alu::Extract16(_)
+            | Alu::Mov
             | Alu::B2i => 1,
             Alu::Ffma
             | Alu::Bcsel
@@ -1885,6 +1895,7 @@ impl<'s> Nir<'s> {
                 | Alu::Fneg
                 | Alu::Fabs
                 | Alu::Vec2
+                | Alu::Mov
                 | Alu::Cubeface1
                 | Alu::Cubeface2
                 | Alu::CubeSsel
@@ -2882,9 +2893,15 @@ pub(super) fn fuse(vs: &mut Nir<'_>) {
         }
         /* the rules in their list order (nir_opt_algebraic.py:3816-3820),
          * each trying the fadd's sources in order: `fadd(fmul(a, b), c)`,
-         * then `fadd(fneg(fmul(a, b)), c)` -> `ffma(fneg(a), b, c)` */
-        let product = |vs: &Nir<'_>, v: Val| match v {
-            Val::Lane(f, 0) if vs.nodes[f as usize].kind == Kind::Alu(Alu::Fmul) && vs.live_in_order(f) => {
+         * then `fadd(fneg(fmul(a, b)), c)` -> `ffma(fneg(a), b, c)`. A
+         * 16-bit vector of two lanes reads its product whole
+         * ([`Val::Pair`] of both halves, nir_fs.rs `revector_coords`) */
+        let whole = |v: Val| match v {
+            Val::Lane(f, 0) | Val::Pair(f, Swz::H01) => Some(f),
+            _ => None,
+        };
+        let product = |vs: &Nir<'_>, v: Val| match whole(v) {
+            Some(f) if vs.nodes[f as usize].kind == Kind::Alu(Alu::Fmul) && vs.live_in_order(f) => {
                 vs.only_used_by_fadd(f).then_some(f)
             }
             _ => None,
@@ -2905,7 +2922,7 @@ pub(super) fn fuse(vs: &mut Nir<'_>) {
             continue;
         }
         for s in 0..2 {
-            let Val::Lane(g, 0) = vs.nodes[x].src[s] else { continue };
+            let Some(g) = whole(vs.nodes[x].src[s]) else { continue };
             let gn = vs.nodes[g as usize];
             if gn.kind != Kind::Alu(Alu::Fneg) || !vs.live_in_order(g) || !vs.only_used_by_fadd(g) {
                 continue;
@@ -2915,10 +2932,19 @@ pub(super) fn fuse(vs: &mut Nir<'_>) {
             let fm = vs.nodes[f as usize];
             /* `fneg` of a constant folds (`nir_opt_constant_folding` in the
              * late loop): femtovg filter_image's `fpos - 3.0 * dir`, the
-             * constant -3.0 an `IADD_IMM #0xC0400000` beside a uniform */
-            if let (Val::Const(c), 32) = (fm.src[0], fm.bits) {
+             * constant -3.0 an `IADD_IMM #0xC0400000` beside a uniform; a
+             * 16-bit node's constant is its fp16 halves by now (nir_fs.rs
+             * `vectorize16`): the sign of each (cflow_148_texbranch's `0.5 -
+             * 2.0 * u.w`, `FMA.v2f16 .., 0x40000000.neg.h11, ..` once the
+             * constant lowering finds -2.0 as the table's 2.0 negated) */
+            if let Val::Const(c) = fm.src[0] {
+                let sign = match (fm.bits, fm.width) {
+                    (32, _) => 1 << 31,
+                    (_, 2) => 0x8000_8000,
+                    _ => 0x8000,
+                };
                 vs.nodes[x] =
-                    NirNode { kind: Kind::Alu(Alu::Ffma), src: [Val::Const(c ^ 1 << 31), fm.src[1], other], ..fm };
+                    NirNode { kind: Kind::Alu(Alu::Ffma), src: [Val::Const(c ^ sign), fm.src[1], other], ..fm };
                 if x < vs.user_end {
                     vs.note(Prod::FusedNegated);
                 }

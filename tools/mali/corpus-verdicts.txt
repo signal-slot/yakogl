@@ -92,7 +92,7 @@ tools/shaders/es100/selects.frag: ok
 tools/shaders/es100/sharedint.frag: Valhall: a comparison other than <, <=, >, >= and == of floats and < of ints (no reference draws it) is not lowered yet
 tools/shaders/es100/sharedint.vert: Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet
 tools/shaders/es100/swizzled_broadcast.frag: ok
-tools/shaders/es100/texbranch.frag: Valhall: control flow (if, a loop, a return before the end) is not lowered yet
+tools/shaders/es100/texbranch.frag: ok
 tools/shaders/es100/texfill.vert: ok
 tools/shaders/es100/textured.frag: ok
 tools/shaders/es100/textured.vert: ok

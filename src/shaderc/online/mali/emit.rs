@@ -36,7 +36,7 @@ const fn row(op: Alu, bits: u8, width: u8) -> Row {
 }
 
 /// The rows [`emit`] selects, each with the `bi_emit_alu` case it is.
-pub const ROWS: [(Row, &str); 83] = [
+pub const ROWS: [(Row, &str); 84] = [
     (row(Alu::Fadd, 32, 1), "nir_op_fadd: FADD.f32"),
     (row(Alu::Fmul, 32, 1), "nir_op_fmul: FMA.f32 a, b, -0.0"),
     (row(Alu::Ffma, 32, 1), "nir_op_ffma: FMA.f32"),
@@ -173,6 +173,10 @@ pub const ROWS: [(Row, &str); 83] = [
      * lane, the FCLAMP folded into its producer) */
     (row(Alu::Fclamp(clamp::ZERO_ONE), 16, 1), "nir_op_fsat of one 16-bit lane: FCLAMP.v2f16 .clamp_0_1"),
     (row(Alu::Fclamp(clamp::ZERO_ONE), 16, 2), "nir_op_fsat of two 16-bit lanes: FCLAMP.v2f16 .clamp_0_1"),
+    /* a texel's copy for the phi at the join of an `if` Mesa keeps
+     * (tools/mali/testdata/cflow_148_texbranch: `U16_TO_U32 r1, r1^.h0`
+     * after each look-up under an `if`, the MKVEC lowered by opt.rs) */
+    (row(Alu::Mov, 16, 1), "nir_op_mov of one 16-bit lane: MKVEC.v2i16 a.hN, #0 (bi_make_vec_to)"),
 ];
 
 /// A source of a one-lane 16-bit operation: its lane's half in both
@@ -338,6 +342,10 @@ pub fn emit(p: &mut Prog<'_>, row: Row, s: &[Src]) -> Result<u16, MaliError> {
         (Alu::Icmp(cmpf @ Cmpf::Eq), 16, 1) => {
             ins(p, Op::IcmpOrV2u16 { cmpf, result: ResultType::M1 }, &[s[0].swz(Swz::H00), s[1], ZERO])?
         }
+        /* `bi_make_vec_to` of one 16-bit component (bifrost_compile.c:
+         * 836-848): the lane's half (the caller's swizzle) and `bi_imm_u16(0)`,
+         * the zero's low half */
+        (Alu::Mov, 16, 1) => ins(p, Op::MkvecV2i16, &[s[0], ZERO.swz(Swz::H00)])?,
         _ => return Err(MaliError::Defect(super::Defect::IrIndex)),
     })
 }

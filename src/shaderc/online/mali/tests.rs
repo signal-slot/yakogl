@@ -1107,9 +1107,11 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
         (FS, "precision highp float; varying vec4 v; void main(){ mediump vec4 t = v; gl_FragColor = t; }", MaliError::MixedPrecision),
         (VS, "attribute vec4 p; void main(){ if (p.x > 0.0) gl_Position = p; }", MaliError::Arithmetic),
         (VS, "attribute vec4 p; void main(){ while (true) { gl_Position = p; break; } }", MaliError::LoopVertex),
-        /* a mediump `if` with a look-up under it, which keeps its branch
-         * (cflow_148_texbranch); its side's arithmetic flattened into
-         * selects reaches the operand forms instead */
+        /* a mediump `if` with a look-up under it keeps its branch
+         * (cflow_148_texbranch, nir_fs.rs `kept16`): one over a varying,
+         * or whose look-up reads a varying, has no reference there
+         * (`branch_forms`); its side's arithmetic flattened into selects
+         * reaches the operand forms instead */
         (FS, "precision mediump float; varying vec4 v; varying vec2 uv; uniform sampler2D s; void main(){ vec4 c = v; if (v.x > 0.5) c = texture2D(s, uv); gl_FragColor = c; }", MaliError::ControlFlow),
         (FS, "precision mediump float; varying vec4 v; void main(){ vec4 c = v; if (v.x > 0.5) c = v * v; gl_FragColor = c; }", MaliError::FsOperandForm),
         /* the three intloop references no lowering takes yet, each at its
@@ -2065,8 +2067,9 @@ fn fs_reference_sources() -> Vec<&'static str> {
     srcs.extend(LOOP_POPULATION.iter().map(|c| c.2));
     /* a 2D array's size, look-up and fetch (case 42, #33) */
     srcs.push(include_str!("../../../../tools/shaders/es300/array.frag"));
-    /* the `if`s Mesa flattens into selects (#33) */
+    /* the `if`s Mesa flattens into selects, and the ones it keeps (#33) */
     srcs.extend(CFLOW_FLATTEN.iter().map(|c| c.2));
+    srcs.extend(CFLOW_BRANCH.iter().map(|c| c.2));
     srcs
 }
 
@@ -5835,12 +5838,63 @@ fn the_corpus_flattened_if_sources_are_the_references() {
     assert_eq!(include_str!("../../../../tools/shaders/es100/unibranch.frag"), td!("cflow_142_unibranch.frag"));
 }
 
-/// The `if` with a look-up under it (case 148, the note's "branch" part)
-/// keeps its branch in Mesa's program: the flatten does not take it.
+/// The `if`s Mesa keeps as blocks with a branch in a mediump shader
+/// (docs/notes/mali-control-flow.md, the "branch" part): case 148
+/// texbranch, drawn with `--uniform-values` (cflow_148_texbranch) and
+/// without (alu_texbranch, plan #153's study-alu reference of the same
+/// pair). A two-sided `if` with a look-up in each arm (`BRANCHZ.eq
+/// .reconverge r0.h0` to the else arm, the then arm's jump over it, each
+/// arm's texel copied for the join's phi by `U16_TO_U32`), a one-sided one
+/// (the empty arm's `IADD_IMM.i32.reconverge r0, 0x0, #0x0` for the
+/// join's 0.0), both conditions one `FCMP_OR.v2f16.lt.m1` of the uniform's
+/// pair, then the 24 passes `complex_unroll` makes of the loop, each a
+/// kept guard (`BRANCHZ.eq.reconverge r2.h0, offset:501`, the compares
+/// paired two passes at a time, `.h1` testing the second), two look-ups at
+/// fp16 coordinates of two lanes converted by `F16_TO_F32` each, and the
+/// sum's phis coalesced into one register down the ladder of joins
+/// ([`CFLOW_BRANCH`]; nir_fs.rs `kept16`, `walk_if`'s regions at mediump,
+/// `revector_coords`, `branch_forms`). Byte-equal to the shim in both
+/// stages; the fragment program needs helpers (the look-ups' level).
+const CFLOW_BRANCH: [(&str, &str, &str, &str, bool); 2] = [
+    (
+        "cflow_148_texbranch",
+        td!("cflow_148_texbranch.vert"),
+        td!("cflow_148_texbranch.frag"),
+        td!("cflow_148_texbranch.expect.json"),
+        true,
+    ),
+    ("alu_texbranch", td!("alu_texbranch.vert"), td!("alu_texbranch.frag"), td!("alu_texbranch.expect.json"), false),
+];
+
 #[test]
-fn the_branch_case_is_refused_by_its_own_gap() {
-    match compile(SHC_STAGE_FRAGMENT, td!("cflow_148_texbranch.frag")) {
-        Err(CompileError::BackEnd(codegen::BackEndError::Mali(e))) => assert_eq!(e, MaliError::ControlFlow),
-        r => panic!("refused by the back end: {:?}", r.map(|_| ())),
+fn the_kept_branches_are_byte_equal_to_mesa_26_2_1() {
+    let mut failed = Vec::new();
+    for (name, vs, fs, json, values) in CFLOW_BRANCH {
+        let r = std::panic::catch_unwind(|| {
+            let f = compile(SHC_STAGE_FRAGMENT, fs).expect("the fragment shader compiles");
+            if values {
+                let v = compile_vs_for(vs, fs);
+                check_vs_stage(&v, vs, fs, json, VIEWPORT_64X64);
+                check_fs_stage(&f, vs, fs, json, VIEWPORT_64X64);
+            } else {
+                check_program_for(name, vs, fs, json, false);
+            }
+            assert!(!f.info.can_discard, "{name}: no discard");
+            assert!(f.info.helper_threads, "{name}: the look-ups need helpers");
+            let n = trim(&f.code).iter().filter(|w| text(**w).starts_with("BRANCHZ.")).count();
+            assert_eq!(n, 30, "{name}: 26 conditional branches and 4 jumps");
+        });
+        if let Err(e) = r {
+            let m = e.downcast_ref::<String>().cloned().unwrap_or_else(|| format!("{:?}", e.downcast_ref::<&str>()));
+            failed.push(format!("{name}: {m}"));
+        }
     }
+    assert!(failed.is_empty(), "{} of {} differ:\n{}", failed.len(), CFLOW_BRANCH.len(), failed.join("\n"));
+}
+
+/// The corpus line the kept branches make `ok` is the reference's own
+/// source (a byte copy), so it compiles to the words [`CFLOW_BRANCH`] pins.
+#[test]
+fn the_corpus_kept_branch_source_is_the_reference() {
+    assert_eq!(include_str!("../../../../tools/shaders/es100/texbranch.frag"), td!("cflow_148_texbranch.frag"));
 }
