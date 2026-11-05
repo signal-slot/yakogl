@@ -350,9 +350,11 @@ change tests/reference/blobs.rs "the committed Mesa table" '^(gen     tests/refe
 # The environment: the toolchain's variables, the interpreter's. Rows whose
 # key holds the toolchain (key_toolchain) move with RUSTFLAGS: the precompile
 # table rows, the rows that read their artefacts, and the glmark2 PERF page
-# row, whose run.sh builds the decoder binary with cargo.
+# row, whose run.sh builds the decoder binary with cargo. The Python rows
+# (key_python: the tools rows and the two tools/pco_shc/spm_load/ rows) move
+# with PYTHONPATH.
 moved "RUSTFLAGS" '^(gen     precompiled table|no |host    glmark2 PERF page)' "$(row_keys RUSTFLAGS=--cfg=testcache_probe)"
-moved "PYTHONPATH" '^tools ' "$(row_keys PYTHONPATH=/nonexistent)"
+moved "PYTHONPATH" '^(tools |gen     tools/pco_shc/spm_load/)' "$(row_keys PYTHONPATH=/nonexistent)"
 moved "PCO_DEBUG" '^gen     tests/reference' "$(row_keys PCO_DEBUG=probe)"
 echo "check_testcache_selftest: $checks checks run (planned $checks), $fails failed"
 [ "$fails" -eq 0 ]

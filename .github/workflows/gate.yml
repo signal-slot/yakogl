@@ -124,10 +124,18 @@ jobs:
         # (linux-firmware's, never committed), and the dEQP GLES3 shader
         # corpus is one directory of VK-GL-CTS at a pinned commit (3.6 MB,
         # test data only): a runner that lacks either fetches it here, where
-        # an entry that is present is never touched. Every other entry is a
-        # tree a host is prepared with, never built here.
+        # an entry that is present is never touched. PCO_CAPTURE
+        # (capture_spm_load, the pco capture of the partial render's SPM
+        # load shader, tools/pco_shc/README.md) is one program more of the
+        # PCO_SHC build: a runner prepared before the entry existed has
+        # pco_shc and not it, and `deps-env.sh --check` would refuse every
+        # run until someone rebuilt the runner by hand, so it is built here
+        # once (PCO_SHC's packages are on the runner; the Mesa tarball is
+        # fetched by its pinned sha256; a few minutes, then present).
+        # Every other entry is a tree a host is prepared with, never built
+        # here.
         run: |
-          tools/cts/deps-env.sh --build MALI_CSFFW DEQP_GLES3_TEST_DIR
+          tools/cts/deps-env.sh --build MALI_CSFFW DEQP_GLES3_TEST_DIR PCO_CAPTURE
           tools/cts/deps-env.sh --check
           tools/cts/deps-env.sh >> "$GITHUB_ENV"
           {

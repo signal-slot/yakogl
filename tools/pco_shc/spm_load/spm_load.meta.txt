@@ -1,0 +1,60 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# The register metadata of spm_load.hex, the partial render's SPM
+# background-load shader (Mesa 26.2.1 pvr_uscgen_spm_load() on the
+# BXS-4-64, tools/pco_shc/capture_spm_load.c): what the PDS program that
+# kicks it must set up. "key value" lines; the keys:
+#   mesa, generator, device   the Mesa version, the generator and the GPU
+#   output_reg_count, tile_buffer_count, is_multisampled
+#                             the generator's inputs (struct pvr_spm_load_props)
+#   index                     pvr_uscgen_spm_load_index() of those inputs
+#   size_bytes, entry_offset  the machine code's size, and where it starts
+#   temps                     pco's temp register count (the DOUTU's temps,
+#                             ceil(temps / 4), docs/notes/pvr-pr-spm-const.md section 5)
+#   shareds, coeffs, vtxins, interns, spilled_temps, scratch
+#                             pco's other register counts (shareds is what pco
+#                             allocated, not the preamble: see data_dwords)
+#   data_dwords               the shared registers the shader reads, DMAed from
+#                             the constants buffer (sh0 up, pvr_iface.h enum
+#                             pvr_spm_load_data): the DOUTD's bsize
+#   smp_state, tex_state      the sampler state and the output registers' image
+#                             state in those shared registers (sh<n>, count)
+#   pos_coeffs                the coefficient registers of gl_FragCoord
+#                             (VARYING_SLOT_POS; cf<n>, count). count 0: pco
+#                             reads the pixel position from the special
+#                             registers (sr97/sr98 and sr100/sr101, chosen on
+#                             sc64), not from an iterated varying, so no
+#                             coefficient registers and no iterator setup
+#   uses_z, uses_w            whether the shader reads gl_FragCoord.z / .w
+#   sample_shading            runs per sample (the DOUTU's sample rate FULL)
+#                             rather than per instance
+#   point_sampler, usclib     pco's point-sampler and usclib use flags
+#   output                    the pixel output registers written (po<n>, count,
+#                             pipe format)
+# Written by: tools/pco_shc/gen_spm_load.py capture <mesa>/build/src/imagination/vulkan/capture_spm_load
+mesa 26.2.1
+generator pvr_uscgen_spm_load
+device BXS-4-64 36.53.104.796
+output_reg_count 1
+tile_buffer_count 0
+is_multisampled 0
+index 0
+size_bytes 200
+entry_offset 0
+temps 6
+shareds 0
+coeffs 0
+vtxins 0
+interns 0
+spilled_temps 0
+scratch 0
+data_dwords 8
+smp_state sh0 count 4
+tex_state sh4 count 4
+pos_coeffs cf0 count 0
+uses_z 0
+uses_w 0
+sample_shading 0
+point_sampler 0
+usclib 0
+output po0 count 1 format r32_uint

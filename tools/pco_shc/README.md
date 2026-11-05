@@ -15,11 +15,15 @@ ever changed by the two patches):
   USC programs -- end-of-tile, clear-attach, a precompiled usclib program --
   for the driver's blobs, see below)
 - `capture_smp_fs.c`     -> `src/imagination/vulkan/` (a texture-sample FS)
-- `meson-vulkan.patch`   adds the three executables to
+- `capture_spm_load.c`   -> `src/imagination/vulkan/` (prints Mesa's SPM
+  background-load shader of the partial render with its register metadata,
+  see below)
+- `meson-vulkan.patch`   adds the four executables to
   `src/imagination/vulkan/meson.build`
 - `usclib-tex.cl.patch`  `src/imagination/pco/usclib/tex.cl`: textureSize()
   reads the STRIDE image layout (the reason is in the patch)
 - `gen_usc_blobs.py`, `usc_blobs.txt`: the driver's USC blobs (below)
+- `gen_spm_load.py`, `spm_load/`: the partial render's SPM load shader (below)
 
 Build with `build_pco_shc.sh` (tarball check, the patches, the meson options,
 the usclib check; the packages it needs are in its header; about a minute on
@@ -27,10 +31,14 @@ the usclib check; the packages it needs are in its header; about a minute on
 
     tools/pco_shc/build_pco_shc.sh mesa-26.2.1.tar.xz [<work dir>]
 
-It builds `pco_shc` only; `capture_usc` and `capture_smp_fs` are one more
-`ninja -C <work dir>/mesa-26.2.1/build src/imagination/vulkan/capture_usc`
+It builds `pco_shc`, `capture_usc` and `capture_spm_load` (all three in
+`<work dir>/mesa-26.2.1/build/src/imagination/vulkan/`); `capture_smp_fs` is
+one more `ninja -C <work dir>/mesa-26.2.1/build src/imagination/vulkan/capture_smp_fs`
 away. Always in a fresh build directory (an old `build` once compiled MRT
-shaders to nothing): the script deletes and re-extracts the tree.
+shaders to nothing): the script deletes and re-extracts the tree. On a gate
+host the build is the `PCO_SHC` entry of `tools/cts/deps.toml`
+(`tools/cts/deps-env.sh --build PCO_SHC`), which copies `pco_shc` and
+`capture_spm_load` (the `PCO_CAPTURE` entry) into the dependency layout.
 
 ## The driver's USC blobs
 
@@ -52,6 +60,50 @@ a build proves the list is what this Mesa's pco makes. Last full run
 (2026-10-01): every program reproduced, usc_blobs.txt sha256
 f9a0dc0adff79149a4b4cb713628631082c086ab63b5ec7555f6228e154701fc, identical
 with and without usclib-tex.cl.patch (none of these programs samples).
+
+## The partial render's SPM load shader
+
+`spm_load/spm_load.hex` and `spm_load/spm_load.meta.txt` are generator
+output too: the USC program the resumed render of a partial render runs as
+its background object, which samples the tiles the PR's end-of-tile program
+stored to the SPM scratch back into the output registers
+(`docs/notes/pvr-render-pool.md`, "Design: the firmware's partial render",
+part 3; the shared-register words it reads are
+`docs/notes/pvr-pr-spm-const.md`). Mesa's Vulkan driver generates it with
+pco at device init (`pvr_uscgen_spm_load`, `src/imagination/vulkan/pvr_usc.c`,
+called from `pvr_arch_spm.c`); the target has no pco, so
+`capture_spm_load.c` calls that generator once on the host for the AM62P
+driver's one configuration, `pvr_spm_load_props { 1 output dword (RGBA8),
+0 tile buffers, 1 sample }` on the BXS-4-64 (shader index 0 of Mesa's set
+of 20), and prints the machine code with the metadata the PDS program that
+kicks it needs (temps, the shared-register slots of the sampler and image
+state, the position coefficients, the output register, entry and size; the
+keys are explained in the meta file's header):
+
+    # needs the Mesa build above; writes tools/pco_shc/spm_load/
+    tools/pco_shc/gen_spm_load.py capture <mesa>/build/src/imagination/vulkan/capture_spm_load
+    # needs nothing: decodes the committed words and checks the metadata
+    tools/pco_shc/gen_spm_load.py check
+
+`tools/check.sh` runs `check` always (`yakogl-tools usc-dis`, the online
+compiler's decoder: every byte in an instruction group, one end on a lone
+`mbyp` to pixout0 with `olchk`, one 2D texture sample reading its image
+state from sh4 and its sampler from sh0, a `wdf`, the temps and shared
+registers the code names within the counts, the size and the metadata
+consistent; the documentation decoder `tools/isa-extract/usc_decode.py`
+cannot tell this shader's `fmad`/`movc` and `tst` forms apart, having no
+`pco_map.py` half, so it is not used), and `capture --check` against the capture
+program of a pco build when it has one (`PCO_CAPTURE`, or the one beside
+`PCO_SHC` in a Mesa build tree); without one that row is a gap, never a
+pass. The committed files are the 2026-11-03 capture (Mesa 26.2.1, the
+build of `tools/cts/deps.toml`, LLVM/clang 21.1.8), reproduced byte for
+byte by the 2026-11-04 build of the `PCO_CAPTURE` entry on another Ubuntu
+host (gcc 15.2.0; this shader uses no usclib, so the LLVM that compiles
+the usclib does not reach its words); the words are Mesa's pco output for
+Mesa's own source (MIT, NOTICE 1), and the file header names the Mesa
+version, the inputs and the device. The Rust table entry the
+backend binds, and the PDS program that kicks the shader, are not here
+(driver issue #2, items bgload-pds and pr-frame-colour).
 
 Point `PCO_SHC` at `build/src/imagination/vulkan/pco_shc` when running
 `tools/glsl2usc.sh`. Every table regeneration must use the same harness build

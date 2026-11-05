@@ -50,6 +50,7 @@ check "--check counts the entries" "entries missing in $L" "$out"
 check "--check accepts the layout itself as a marker" "ok       GLSL2USC_CACHE  $L" "$out"
 absent "--check without a board has no board entry" DEQP_WORK "$out"
 check "--check has the Mali firmware entry" "missing  MALI_CSFFW  $L/mali-csffw/mali_csffw.bin" "$out"
+check "--check has the PCO_CAPTURE entry beside pco_shc" "missing  PCO_CAPTURE  $L/PCO_SHC/capture_spm_load" "$out"
 check "--check has the rustup target entry" "RUST_TARGET_AARCH64_LINUX  $(rustc --print sysroot)/lib/rustlib/aarch64-unknown-linux-gnu/lib" "$out"
 
 out=$("$ENV_SH" 2>&1)
