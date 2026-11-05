@@ -117,11 +117,22 @@ static uint32_t get_ub_pad(uint32_t cpp, uint32_t height)
 	return 0;
 }
 
-/* v3d_resource.c v3d_get_dimension_mpad, block size 1, level >= 1 */
+/* v3d_resource.c v3d_get_dimension_mpad (:573-581), level >= 1: level 1's
+ * size in blocks of `block` texels, rounded up to a power of two, back in
+ * texels. "Through testing it was found that the block dimension should be
+ * used" (its comment): an ETC2 width of 36 has 18 texels, 5 blocks at level
+ * 1, so 8 blocks, 32 texels. With a block of 1 it is next_pow2(dimension >>
+ * 1) minified. */
+static uint32_t dimension_mpad_block(uint32_t dimension, uint32_t level, uint32_t block)
+{
+	uint32_t pot_dim = next_pot((minify(dimension, 1) + block - 1) / block);
+	return minify(block * pot_dim, level - 1);
+}
+
+/* ... block size 1 */
 static uint32_t dimension_mpad(uint32_t dimension, uint32_t level)
 {
-	uint32_t pot_dim = next_pot(minify(dimension, 1));
-	return minify(pot_dim, level - 1);
+	return dimension_mpad_block(dimension, level, 1);
 }
 
 /* v3d_setup_slices' level_depth (v3d_resource.c:609-611, :636-639): level 0
@@ -138,18 +149,30 @@ uint32_t v3d_tex_level_depth(uint32_t depth, uint32_t level)
 	return minify(2 * dimension_mpad(depth, 1), level);
 }
 
-/* v3d_resource.c v3d_setup_slices, for an uncompressed, never-shared
- * resource (no winsys stride) of `depth` slices (1: a 2D texture, a cube
- * face or an array layer; more: a 3D texture); `uif_top` as Mesa's: level 0
- * is UIF whatever its size. */
+/* v3d_resource.c v3d_setup_slices, for a never-shared resource (no winsys
+ * stride) of `depth` slices (1: a 2D texture, a cube face or an array layer;
+ * more: a 3D texture) whose format has blocks of block_w x block_h texels of
+ * `cpp` bytes (1 x 1 and the texel's bytes: uncompressed; 4 x 4 and 8 or 16:
+ * ETC2/EAC); `uif_top` as Mesa's: level 0 is UIF whatever its size. */
 static bool layout(uint32_t width, uint32_t height, uint32_t depth, uint32_t levels, uint32_t cpp,
-		   bool uif_top, struct v3d_tex_layout *l);
+		   uint32_t block_w, uint32_t block_h, bool uif_top, struct v3d_tex_layout *l);
 
-/* ... one slice a level, single-sampled: uif_top false */
+/* ... one slice a level, single-sampled, uncompressed: uif_top false */
 bool v3d_tex_layout(uint32_t width, uint32_t height, uint32_t levels, uint32_t cpp,
 		    struct v3d_tex_layout *l)
 {
-	return layout(width, height, 1, levels, cpp, false, l);
+	return layout(width, height, 1, levels, cpp, 1, 1, false, l);
+}
+
+/* ... a compressed 2D image: Mesa's rsc->cpp is util_format_get_blocksize
+ * (v3d_resource.c:797), the block is one texel of the tiling */
+bool v3d_tex_layout_compressed(uint32_t width, uint32_t height, uint32_t levels, uint32_t block_w,
+			       uint32_t block_h, uint32_t block_bytes, struct v3d_tex_layout *l)
+{
+	if (block_w == 0 || block_w > V3D_TEX_MAX_BLOCK_DIM || block_h == 0 ||
+	    block_h > V3D_TEX_MAX_BLOCK_DIM || (block_bytes != 8 && block_bytes != 16))
+		return false;
+	return layout(width, height, 1, levels, block_bytes, block_w, block_h, false, l);
 }
 
 /* ... a 3D texture: `depth` slices at level 0, Mesa's level_depth below it */
@@ -158,7 +181,7 @@ bool v3d_tex_layout_3d(uint32_t width, uint32_t height, uint32_t depth, uint32_t
 {
 	if (depth == 0 || depth >= (1u << 14))
 		return false;
-	return layout(width, height, depth, levels, cpp, false, l);
+	return layout(width, height, depth, levels, cpp, 1, 1, false, l);
 }
 
 /* A multisampled (4x) width x height resource: one level of twice the width
@@ -169,11 +192,11 @@ bool v3d_tex_layout_msaa(uint32_t width, uint32_t height, uint32_t cpp, struct v
 {
 	if (width == 0 || height == 0 || width >= (1u << 13) || height >= (1u << 13))
 		return false;
-	return layout(2 * width, 2 * height, 1, 1, cpp, true, l);
+	return layout(2 * width, 2 * height, 1, 1, cpp, 1, 1, true, l);
 }
 
 static bool layout(uint32_t width, uint32_t height, uint32_t depth, uint32_t levels, uint32_t cpp,
-		   bool uif_top, struct v3d_tex_layout *l)
+		   uint32_t block_w, uint32_t block_h, bool uif_top, struct v3d_tex_layout *l)
 {
 	if (!l || width == 0 || height == 0 || width >= (1u << 14) || height >= (1u << 14) ||
 	    depth == 0 || levels == 0 || levels > V3D_TEX_MAX_LEVELS ||
@@ -194,9 +217,10 @@ static bool layout(uint32_t width, uint32_t height, uint32_t depth, uint32_t lev
 	uint32_t uif_block_w = utile_w * 2;
 	uint32_t uif_block_h = utile_h * 2;
 
-	/* "power-of-two padding is based on level 1" */
-	uint32_t pot_width = 2 * dimension_mpad(width, 1);
-	uint32_t pot_height = 2 * dimension_mpad(height, 1);
+	/* "power-of-two padding is based on level 1 ... Additionally the pot
+	 * padding is based on the block size" (:596-608) */
+	uint32_t pot_width = 2 * dimension_mpad_block(width, 1, block_w);
+	uint32_t pot_height = 2 * dimension_mpad_block(height, 1, block_h);
 
 	for (int i = (int)levels - 1; i >= 0; i--) {
 		struct v3d_tex_slice *slice = &out.slices[i];
@@ -212,6 +236,10 @@ static bool layout(uint32_t width, uint32_t height, uint32_t depth, uint32_t lev
 			level_width = minify(pot_width, (uint32_t)i);
 			level_height = minify(pot_height, (uint32_t)i);
 		}
+		/* from here on in blocks (:646-647): the tiling, the alignment
+		 * and the stride take a block for a texel of `cpp` bytes */
+		level_width = (level_width + block_w - 1) / block_w;
+		level_height = (level_height + block_h - 1) / block_h;
 
 		/* tiled; every level chosen by size, except level 0 of a
 		 * uif_top resource, which is UIF (the (i != 0 || !uif_top)
@@ -296,31 +324,46 @@ static bool layout(uint32_t width, uint32_t height, uint32_t depth, uint32_t lev
 /* The UIF walker for cpp 4, compiled with this file (see its comment) */
 #include "v3d_tiling_uif.c"
 
-/* The box is checked here, a box of whole UIF blocks of a UIF level with
- * cpp 4 goes to the UIF walker, any other to Mesa's v3d_store_tiled_image
- * (broadcom/common/v3d_tiling.c, compiled by v3d_tiling_mesa.c), with the
- * level's start, its padded height and the slice's tiling, whose enum is
- * Mesa's enum v3d_tiling_mode numbering (v3d_tex.h). */
-bool v3d_tex_store_box(uint8_t *image, const struct v3d_tex_layout *l, uint32_t level,
-		       uint32_t x, uint32_t y, uint32_t w, uint32_t h, const uint8_t *src,
-		       uint32_t src_stride)
+/* The checks of every box: 0 refused, 1 an empty box (nothing to move), 2 a
+ * box to move. The box must lie in the level's grid (gw x gh: texels for
+ * the texel entry points, blocks for the block ones) and in the slice the
+ * layout allocated: (x + w) * cpp within the stride and y + h within the
+ * padded height. The second test holds for every grid the matching entry
+ * point takes, and it is what keeps a layout of v3d_tex_layout_compressed
+ * given to a texel entry point (its texel grid is up to block_w times wider
+ * and block_h times taller than its slice) from moving texels past the
+ * slice. Written so that no sum can
+ * wrap: x + w and y + h are at most gw and gh, below 2^14. */
+static int check_box(const struct v3d_tex_layout *l, uint32_t level, uint32_t gw, uint32_t gh,
+		     uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint32_t row_stride)
 {
-	if (!image || !l || !src || level >= l->levels)
-		return false;
-	uint32_t lw = minify(l->width, level), lh = minify(l->height, level);
-	/* written so that no sum can wrap */
-	if (x > lw || w > lw - x || y > lh || h > lh - y)
-		return false;
+	if (x > gw || w > gw - x || y > gh || h > gh - y)
+		return 0;
+	const struct v3d_tex_slice *s = &l->slices[level];
+	if ((uint64_t)(x + w) * l->cpp > s->stride || y + h > s->padded_height)
+		return 0;
 	if (w == 0 || h == 0)
-		return true;
-	if (src_stride < w * l->cpp)
-		return false;
+		return 1;
+	if (row_stride < w * l->cpp)
+		return 0;
+	return 2;
+}
 
+/* The checked box to Mesa's v3d_store_tiled_image (broadcom/common/
+ * v3d_tiling.c, compiled by v3d_tiling_mesa.c), with the level's start, its
+ * padded height and the slice's tiling, whose enum is Mesa's enum
+ * v3d_tiling_mode numbering (v3d_tex.h); a box of whole UIF blocks of a UIF
+ * level with cpp 4 to the UIF walker. A block is one texel of l->cpp bytes,
+ * as Mesa's own store moves "entire compressed blocks" (v3d_resource.c:
+ * 320-321). */
+static void store_checked(uint8_t *image, const struct v3d_tex_layout *l, uint32_t level, uint32_t x,
+			  uint32_t y, uint32_t w, uint32_t h, const uint8_t *src, uint32_t src_stride)
+{
 	const struct v3d_tex_slice *s = &l->slices[level];
 	/* a UIF level with cpp 4 and a box of whole UIF blocks: the stepped
 	 * walker (v3d_tiling_uif.c), the same bytes */
 	if (v3d_tex_store_uif4(image + s->offset, s, l->cpp, x, y, w, h, src, src_stride))
-		return true;
+		return;
 	struct pipe_box box;
 	memset(&box, 0, sizeof(box));
 	box.x = (int32_t)x; /* all below 2^14: the layout's limit */
@@ -331,26 +374,14 @@ bool v3d_tex_store_box(uint8_t *image, const struct v3d_tex_layout *l, uint32_t 
 	/* the source is only read (v3d_move_tiled_image with is_load false) */
 	v3d_store_tiled_image(image + s->offset, s->stride, (void *)(uintptr_t)src, src_stride,
 			      (enum v3d_tiling_mode)s->tiling, (int)l->cpp, s->padded_height, &box);
-	return true;
 }
 
-/* v3d_tex_store_box's checks, then Mesa's v3d_load_tiled_image: the image
- * is only read (v3d_move_tiled_image with is_load true reads the tiled
- * side), the raster rows written. */
-bool v3d_tex_load_box(const uint8_t *image, const struct v3d_tex_layout *l, uint32_t level,
-		      uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint8_t *dst,
-		      uint32_t dst_stride)
+/* ... and Mesa's v3d_load_tiled_image: the image is only read
+ * (v3d_move_tiled_image with is_load true reads the tiled side), the raster
+ * rows written. */
+static void load_checked(const uint8_t *image, const struct v3d_tex_layout *l, uint32_t level, uint32_t x,
+			 uint32_t y, uint32_t w, uint32_t h, uint8_t *dst, uint32_t dst_stride)
 {
-	if (!image || !l || !dst || level >= l->levels)
-		return false;
-	uint32_t lw = minify(l->width, level), lh = minify(l->height, level);
-	if (x > lw || w > lw - x || y > lh || h > lh - y)
-		return false;
-	if (w == 0 || h == 0)
-		return true;
-	if (dst_stride < w * l->cpp)
-		return false;
-
 	const struct v3d_tex_slice *s = &l->slices[level];
 	struct pipe_box box;
 	memset(&box, 0, sizeof(box));
@@ -361,7 +392,32 @@ bool v3d_tex_load_box(const uint8_t *image, const struct v3d_tex_layout *l, uint
 	box.depth = 1;
 	v3d_load_tiled_image(dst, dst_stride, (void *)(uintptr_t)(image + s->offset), s->stride,
 			     (enum v3d_tiling_mode)s->tiling, (int)l->cpp, s->padded_height, &box);
-	return true;
+}
+
+bool v3d_tex_store_box(uint8_t *image, const struct v3d_tex_layout *l, uint32_t level,
+		       uint32_t x, uint32_t y, uint32_t w, uint32_t h, const uint8_t *src,
+		       uint32_t src_stride)
+{
+	if (!image || !l || !src || level >= l->levels)
+		return false;
+	int c = check_box(l, level, minify(l->width, level), minify(l->height, level), x, y, w, h,
+			  src_stride);
+	if (c == 2)
+		store_checked(image, l, level, x, y, w, h, src, src_stride);
+	return c != 0;
+}
+
+bool v3d_tex_load_box(const uint8_t *image, const struct v3d_tex_layout *l, uint32_t level,
+		      uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint8_t *dst,
+		      uint32_t dst_stride)
+{
+	if (!image || !l || !dst || level >= l->levels)
+		return false;
+	int c = check_box(l, level, minify(l->width, level), minify(l->height, level), x, y, w, h,
+			  dst_stride);
+	if (c == 2)
+		load_checked(image, l, level, x, y, w, h, dst, dst_stride);
+	return c != 0;
 }
 
 void v3d_tex_store_level(uint8_t *image, const struct v3d_tex_layout *l, uint32_t level,
@@ -371,6 +427,70 @@ void v3d_tex_store_level(uint8_t *image, const struct v3d_tex_layout *l, uint32_
 		return;
 	(void)v3d_tex_store_box(image, l, level, 0, 0, minify(l->width, level),
 				minify(l->height, level), src, src_stride);
+}
+
+/* ---- compressed images: whole blocks ---------------------------------------- */
+
+/* The level's grid of blocks: the texel size of the level (u_minify of the
+ * level 0 size) rounded up to blocks, as v3d_setup_slices counts a level
+ * (:646-647) before its pot padding and alignment, which only add blocks
+ * (the padding Mesa allocates past them is the caller's to leave alone). */
+static bool block_grid(const struct v3d_tex_layout *l, uint32_t level, uint32_t block_w, uint32_t block_h,
+		       uint32_t *gw, uint32_t *gh)
+{
+	if (!l || level >= l->levels || block_w == 0 || block_w > V3D_TEX_MAX_BLOCK_DIM || block_h == 0 ||
+	    block_h > V3D_TEX_MAX_BLOCK_DIM)
+		return false;
+	*gw = (minify(l->width, level) + block_w - 1) / block_w;
+	*gh = (minify(l->height, level) + block_h - 1) / block_h;
+	return true;
+}
+
+bool v3d_tex_level_blocks(const struct v3d_tex_layout *l, uint32_t level, uint32_t block_w,
+			  uint32_t block_h, uint32_t *blocks_w, uint32_t *blocks_h)
+{
+	uint32_t gw, gh;
+	if (!blocks_w || !blocks_h || !block_grid(l, level, block_w, block_h, &gw, &gh))
+		return false;
+	*blocks_w = gw;
+	*blocks_h = gh;
+	return true;
+}
+
+bool v3d_tex_store_blocks(uint8_t *image, const struct v3d_tex_layout *l, uint32_t level,
+			  uint32_t block_w, uint32_t block_h, uint32_t bx, uint32_t by, uint32_t bw,
+			  uint32_t bh, const uint8_t *src, uint32_t src_stride)
+{
+	uint32_t gw, gh;
+	if (!image || !src || !block_grid(l, level, block_w, block_h, &gw, &gh))
+		return false;
+	int c = check_box(l, level, gw, gh, bx, by, bw, bh, src_stride);
+	if (c == 2)
+		store_checked(image, l, level, bx, by, bw, bh, src, src_stride);
+	return c != 0;
+}
+
+bool v3d_tex_load_blocks(const uint8_t *image, const struct v3d_tex_layout *l, uint32_t level,
+			 uint32_t block_w, uint32_t block_h, uint32_t bx, uint32_t by, uint32_t bw,
+			 uint32_t bh, uint8_t *dst, uint32_t dst_stride)
+{
+	uint32_t gw, gh;
+	if (!image || !dst || !block_grid(l, level, block_w, block_h, &gw, &gh))
+		return false;
+	int c = check_box(l, level, gw, gh, bx, by, bw, bh, dst_stride);
+	if (c == 2)
+		load_checked(image, l, level, bx, by, bw, bh, dst, dst_stride);
+	return c != 0;
+}
+
+bool v3d_tex_store_level_blocks(uint8_t *image, const struct v3d_tex_layout *l, uint32_t level,
+				uint32_t block_w, uint32_t block_h, const uint8_t *src,
+				uint32_t src_stride)
+{
+	uint32_t gw, gh;
+	if (!block_grid(l, level, block_w, block_h, &gw, &gh))
+		return false;
+	return v3d_tex_store_blocks(image, l, level, block_w, block_h, 0, 0, gw, gh, src, src_stride);
 }
 
 /* ---- layered images: cube maps and arrays (v3d_resource.c) --------------- */
@@ -454,15 +574,33 @@ bool v3d_tex_slice_offset(const struct v3d_tex_layout *l, uint32_t level, uint32
  *   FORMAT(R32G32B32A32_UINT, RGBA32UI,   RGBA32UI,    SWIZ_XYZW, 32, 4)  (:137)
  *   FORMAT(R11G11B10_FLOAT,   R11F_G11F_B10F, R11F_G11F_B10F, SWIZ_XYZ1, 16, 0)  (:146)
  *   FORMAT(R9G9B9E5_FLOAT,    NO,         RGB9_E5,     SWIZ_XYZ1, 16, 0)  (:147)
+ * and the ES 3.0 compressed formats (:159-168), 4x4 blocks of 8 or 16 bytes
+ * (util_format_get_blocksize), the sRGB rows with the linear row's type:
+ *   FORMAT(ETC2_RGB8,       NO, RGB8_ETC2,                SWIZ_XYZ1, 16, 0)
+ *   FORMAT(ETC2_SRGB8,      NO, RGB8_ETC2,                SWIZ_XYZ1, 16, 0)
+ *   FORMAT(ETC2_RGB8A1,     NO, RGB8_PUNCHTHROUGH_ALPHA1, SWIZ_XYZW, 16, 0)
+ *   FORMAT(ETC2_SRGB8A1,    NO, RGB8_PUNCHTHROUGH_ALPHA1, SWIZ_XYZW, 16, 0)
+ *   FORMAT(ETC2_RGBA8,      NO, RGBA8_ETC2_EAC,           SWIZ_XYZW, 16, 0)
+ *   FORMAT(ETC2_SRGBA8,     NO, RGBA8_ETC2_EAC,           SWIZ_XYZW, 16, 0)
+ *   FORMAT(ETC2_R11_UNORM,  NO, R11_EAC,                  SWIZ_X001, 16, 0)
+ *   FORMAT(ETC2_R11_SNORM,  NO, SIGNED_R11_EAC,           SWIZ_X001, 16, 0)
+ *   FORMAT(ETC2_RG11_UNORM, NO, RG11_EAC,                 SWIZ_XY01, 16, 0)
+ *   FORMAT(ETC2_RG11_SNORM, NO, SIGNED_RG11_EAC,          SWIZ_XY01, 16, 0)
  * (the line numbers of Mesa 26.2.1's file, third_party/mesa-26.2.1), with the
  * swizzle translated as v3d_translate_pipe_swizzle does (v3d_util.c:
  * X..W -> 2..5). A row with cpp 0 is a format this cut refuses. */
 #define XYZW { V3D_SWIZZLE_RED, V3D_SWIZZLE_GREEN, V3D_SWIZZLE_BLUE, V3D_SWIZZLE_ALPHA }
 #define XYZ1 { V3D_SWIZZLE_RED, V3D_SWIZZLE_GREEN, V3D_SWIZZLE_BLUE, V3D_SWIZZLE_ONE }
 #define X001 { V3D_SWIZZLE_RED, V3D_SWIZZLE_ZERO, V3D_SWIZZLE_ZERO, V3D_SWIZZLE_ONE }
+#define XY01 { V3D_SWIZZLE_RED, V3D_SWIZZLE_GREEN, V3D_SWIZZLE_ZERO, V3D_SWIZZLE_ONE }
 static const struct {
 	const char *name;
 	struct v3d_tex_format f;
+	/* a compressed row: its block is block x block texels (0: 1 x 1,
+	 * f.cpp the texel's bytes); srgb: util_format_is_srgb, the state's
+	 * sRGB bit (v3dx_state.c:1023-1025) */
+	uint8_t block;
+	bool srgb;
 } formats[V3D_TEX_FORMAT_COUNT] = {
 	[V3D_TEX_FORMAT_RGBA8] = { "RGBA8",
 				   { V3D_TEXTURE_DATA_FORMAT_RGBA8, 4,
@@ -531,10 +669,36 @@ static const struct {
 				      { V3D_TEXTURE_DATA_FORMAT_RGBA32UI, 16, XYZW, 32 } },
 	[V3D_TEX_FORMAT_RGBA32I] = { "RGBA32I", { V3D_TEXTURE_DATA_FORMAT_RGBA32I, 16, XYZW, 32 } },
 	[V3D_TEX_FORMAT_RGBA32F] = { "RGBA32F", { V3D_TEXTURE_DATA_FORMAT_RGBA32F, 16, XYZW, 32 } },
+	/* ETC2 and EAC: cpp is the block's bytes, the tiling's texel
+	 * (docs/notes/v3d-tex-layout-es3.md section 4) */
+	[V3D_TEX_FORMAT_ETC2_RGB8] = { "ETC2_RGB8",
+				       { V3D_TEXTURE_DATA_FORMAT_RGB8_ETC2, 8, XYZ1, 16 }, 4, false },
+	[V3D_TEX_FORMAT_ETC2_SRGB8] = { "ETC2_SRGB8",
+					{ V3D_TEXTURE_DATA_FORMAT_RGB8_ETC2, 8, XYZ1, 16 }, 4, true },
+	[V3D_TEX_FORMAT_ETC2_RGB8A1] = { "ETC2_RGB8A1",
+					 { V3D_TEXTURE_DATA_FORMAT_RGB8_PUNCHTHROUGH_ALPHA1, 8, XYZW, 16 },
+					 4, false },
+	[V3D_TEX_FORMAT_ETC2_SRGB8A1] = { "ETC2_SRGB8A1",
+					  { V3D_TEXTURE_DATA_FORMAT_RGB8_PUNCHTHROUGH_ALPHA1, 8, XYZW, 16 },
+					  4, true },
+	[V3D_TEX_FORMAT_ETC2_RGBA8] = { "ETC2_RGBA8",
+					{ V3D_TEXTURE_DATA_FORMAT_RGBA8_ETC2_EAC, 16, XYZW, 16 }, 4, false },
+	[V3D_TEX_FORMAT_ETC2_SRGBA8] = { "ETC2_SRGBA8",
+					 { V3D_TEXTURE_DATA_FORMAT_RGBA8_ETC2_EAC, 16, XYZW, 16 }, 4, true },
+	[V3D_TEX_FORMAT_ETC2_R11_UNORM] = { "ETC2_R11_UNORM",
+					    { V3D_TEXTURE_DATA_FORMAT_R11_EAC, 8, X001, 16 }, 4, false },
+	[V3D_TEX_FORMAT_ETC2_R11_SNORM] = { "ETC2_R11_SNORM",
+					    { V3D_TEXTURE_DATA_FORMAT_SIGNED_R11_EAC, 8, X001, 16 }, 4, false },
+	[V3D_TEX_FORMAT_ETC2_RG11_UNORM] = { "ETC2_RG11_UNORM",
+					     { V3D_TEXTURE_DATA_FORMAT_RG11_EAC, 16, XY01, 16 }, 4, false },
+	[V3D_TEX_FORMAT_ETC2_RG11_SNORM] = { "ETC2_RG11_SNORM",
+					     { V3D_TEXTURE_DATA_FORMAT_SIGNED_RG11_EAC, 16, XY01, 16 }, 4,
+					     false },
 };
 #undef XYZW
 #undef XYZ1
 #undef X001
+#undef XY01
 
 bool v3d_tex_format_get(enum v3d_tex_format_id id, struct v3d_tex_format *out)
 {
@@ -542,6 +706,19 @@ bool v3d_tex_format_get(enum v3d_tex_format_id id, struct v3d_tex_format *out)
 		return false;
 	*out = formats[id].f;
 	return true;
+}
+
+bool v3d_tex_format_block(enum v3d_tex_format_id id, uint32_t *block_w, uint32_t *block_h)
+{
+	if ((unsigned)id >= V3D_TEX_FORMAT_COUNT || !block_w || !block_h || formats[id].f.cpp == 0)
+		return false;
+	*block_w = *block_h = formats[id].block ? formats[id].block : 1;
+	return true;
+}
+
+bool v3d_tex_format_is_srgb(enum v3d_tex_format_id id)
+{
+	return (unsigned)id < V3D_TEX_FORMAT_COUNT && formats[id].srgb;
 }
 
 const char *v3d_tex_format_name(enum v3d_tex_format_id id)
@@ -740,7 +917,10 @@ bool v3d_tex_tfu_pack(const struct v3d_tex_layout *l, uint32_t ttype, uint32_t s
 		return false;
 	const struct v3d_tex_slice *s = &l->slices[0];
 	const uint32_t ioa = dst_gpu + s->offset;
-	if ((ioa & 0x3fu) != 0)
+	/* the TFU writes width x height texels of cpp bytes: a layout whose
+	 * slice is smaller (a compressed one, counted in blocks) is refused */
+	if ((ioa & 0x3fu) != 0 || (uint64_t)l->width * l->cpp > s->stride ||
+	    l->height > s->padded_height)
 		return false;
 	struct v3d_tex_tfu_job out = { 0 };
 	out.ios = l->height << 16 | l->width;
@@ -791,7 +971,8 @@ bool v3d_tex_tfu_pack_mipmap(const struct v3d_tex_layout *l, uint32_t ttype, uin
 		return false;
 	const struct v3d_tex_slice *s = &l->slices[0];
 	const uint32_t level0 = image_gpu + s->offset;
-	if ((level0 & 0x3fu) != 0 || s->tiling < V3D_TEX_TILING_LINEARTILE)
+	if ((level0 & 0x3fu) != 0 || s->tiling < V3D_TEX_TILING_LINEARTILE ||
+	    (uint64_t)l->width * l->cpp > s->stride || l->height > s->padded_height)
 		return false;
 	const uint32_t distance = (uint32_t)s->tiling - V3D_TEX_TILING_LINEARTILE;
 	struct v3d_tex_tfu_job out = { 0 };

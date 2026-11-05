@@ -184,6 +184,17 @@ not one, the rows fail.
   (`i * 131 + 1`, period 256 bytes; the low bits of an LCG, period 64 KiB),
   and UIF XOR moves data by a multiple of both, so XOR errors went unseen
   at 512x512 and 256x256.
+  Its part 12 checks the ES 3.0 ETC2/EAC formats
+  (`v3d_tex_layout_compressed`, `v3d_tex_*_blocks`): block-aware layouts
+  derived by hand from `v3d_setup_slices` (17x9, 36x36 with a full chain,
+  1x1, a UIF one with `ub_pad` and one with XOR), each of the ten formats
+  tiled at every level against Mesa's store with Mesa's block counts, block
+  boxes stored and loaded, each format's record against Mesa's row (type,
+  swizzle, the sRGB bit of `util_format_is_srgb`), and the texel entry points
+  and the TFU refusing a compressed layout. Measured 2026-11-05:
+  `669 checks run (planned 669), 0 failed`; dropping the slice bound of the
+  box check fails its 5 texel-on-compressed refusals, and rounding the block
+  count down corrupts the heap.
   `tools/v3d/tex_check.sh` builds and runs it (against the vendored Mesa
   sources; `MESA_V3D_TREE` optionally names a built Mesa tree instead;
   output in `build/v3d-check/`), and `tools/check.sh` runs that script.
