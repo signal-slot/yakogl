@@ -1,0 +1,10 @@
+# The merged per-case statuses of several sources (cases.tsv form, as
+# am62p-gles3-merge.py reads it). dEQP-GLES3.a.fail repeats the qpa's status
+# with a later message, dEQP-GLES3.b.compat agrees with it: same status
+# across sources is fine, and the later line's message wins.
+dEQP-GLES3.b.merged_pass	Pass
+dEQP-GLES3.b.merged_fail	Fail	scalar precision 0.0.0 vs 1.0.0
+dEQP-GLES3.b.qw	QualityWarning	Interpolation was calculated
+dEQP-GLES3.b.compat	CompatibilityWarning	Precision ok 'ish
+dEQP-GLES3.b.noreq	NoResult
+dEQP-GLES3.a.fail	Fail	retried: mismatch at row 3

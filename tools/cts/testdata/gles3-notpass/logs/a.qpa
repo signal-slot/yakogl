@@ -1,0 +1,25 @@
+#beginSession
+#beginTestCaseResult dEQP-GLES3.a.pass
+<TestCaseResult CasePath="dEQP-GLES3.a.pass" CaseType="SelfValidate" Version="0.3.4">
+<Result StatusCode="Pass">Pass</Result>
+</TestCaseResult>
+#endTestCaseResult
+#beginTestCaseResult dEQP-GLES3.a.fail
+<TestCaseResult CasePath="dEQP-GLES3.a.fail" CaseType="SelfValidate" Version="0.3.4">
+<Text>driver noise &lt;not the message&gt;</Text>
+<Result StatusCode="Fail">Image comparison failed &amp; more
+second line, not the first</Result>
+</TestCaseResult>
+#endTestCaseResult
+<TestCaseResult CasePath="dEQP-GLES3.a.notsup" CaseType="SelfValidate" Version="0.3.4">
+<Result StatusCode="NotSupported">Extension &quot;X&quot; not supported</Result>
+</TestCaseResult>
+#beginTestCaseResult dEQP-GLES3.a.cut
+<TestCaseResult CasePath="dEQP-GLES3.a.cut" CaseType="SelfValidate" Version="0.3.4">
+<Text>board reset in the middle: no Result, no end marker
+#beginTestCaseResult dEQP-GLES3.a.terminated
+#terminateTestCaseResult InternalError
+#endTestCaseResult
+<TestCaseResult CasePath="dEQP-GLES3.not.in.mustpass" CaseType="SelfValidate" Version="0.3.4">
+<Result StatusCode="Fail">not a mustpass case, ignored</Result>
+</TestCaseResult>

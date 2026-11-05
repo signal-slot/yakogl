@@ -715,6 +715,26 @@ else
     bad "imx8mp-console-scan-selftest.sh: rc $csrc, $csok of $IMX8MP_SCAN_SELFTEST_CHECKS ok; $(printf '%s\n' "$csout" | grep 'FAIL' | head -3 | paste -sd';' -)"
 fi
 
+# ---- 31: gles3-notpass.py --self-test ----------------------------------------
+#
+# The not-pass TSV writer (docs/es3/am62p-gles3-notpass.tsv): qpa logs, a
+# merged status table and a tree slice directory over a small mustpass list,
+# compared byte for byte with testdata/gles3-notpass/expected.tsv (Pass
+# dropped, cut-off and unreported cases NoResult, #terminateTestCaseResult
+# honoured, the statuses normalised with am62p-gles3-merge.py's norm():
+# CompatibilityWarning as QualityWarning, other non-Pass as Fail). It also
+# refuses conflicting statuses, a slice naming another commit and sources
+# from which nothing at all was read, so an empty input cannot silently
+# write a TSV of only NoResult.
+echo
+echo "== 31. gles3-notpass.py --self-test"
+if npout=$(python3 -I "$HERE/gles3-notpass.py" --self-test 2>&1); then
+    ok "gles3-notpass.py: the not-pass TSV reproduced from fixtures"
+else
+    bad "gles3-notpass.py --self-test failed"
+    printf '%s\n' "$npout" | tail -8 | sed 's/^/        | /'
+fi
+
 if [ "$fail" -eq 0 ]; then
     echo "== all checks passed"
 else
