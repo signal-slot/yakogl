@@ -341,14 +341,61 @@ pub const PVR_NATIVE_3D_DEFAULT: i32 = 0;
 /// Set [`pvr_native_3d`].
 #[no_mangle]
 pub extern "C" fn pvr_set_native_3d(on: core::ffi::c_int) {
+    NATIVE_3D_ASKED.store(true, core::sync::atomic::Ordering::Relaxed);
     // SAFETY: single-threaded by contract; a plain store of an int.
     unsafe { core::ptr::addr_of_mut!(pvr_native_3d).write(i32::from(on != 0)) }
 }
 
 /// Is [`pvr_native_3d`] on?
 pub fn native_3d_enabled() -> bool {
+    native_3d_from_env();
     // SAFETY: a plain read of an int only the setter writes.
     (unsafe { core::ptr::addr_of!(pvr_native_3d).read() }) != 0
+}
+
+/// [`pvr_native_3d`] was set ([`pvr_set_native_3d`]) or the environment
+/// was read ([`native_3d_from_env`]): the environment is not read again.
+static NATIVE_3D_ASKED: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
+
+/// The host's way to set [`pvr_native_3d`] without a call: a library built
+/// with the Linux OSAL (the host dEQP run's, `tools/cts/host-deqp-run.sh
+/// --native-3d=1`) reads `YAKOGL_PVR_NATIVE_3D`, `0` or `1`, once, when the
+/// switch is first asked for. Any other value, or none, leaves the default;
+/// a [`pvr_set_native_3d`] call made before wins, and one made after
+/// replaces it. Boards set the switch by the call (`CONFIG_DEQP_PVR_NATIVE_3D`).
+fn native_3d_from_env() {
+    use core::sync::atomic::Ordering;
+    let first = !NATIVE_3D_ASKED.swap(true, Ordering::Relaxed);
+    #[cfg(all(feature = "osal-linux", not(target_os = "none")))]
+    if first {
+        extern "C" {
+            fn getenv(name: *const core::ffi::c_char) -> *const core::ffi::c_char;
+        }
+        // SAFETY: a NUL-terminated name; getenv returns NULL or a
+        // NUL-terminated string that lives while the environment is not
+        // changed, read before anything here could change it.
+        let on = unsafe {
+            let v = getenv(c"YAKOGL_PVR_NATIVE_3D".as_ptr());
+            switch_setting((!v.is_null()).then(|| core::ffi::CStr::from_ptr(v)))
+        };
+        if let Some(on) = on {
+            // SAFETY: single-threaded by contract; a plain store of an int.
+            unsafe { core::ptr::addr_of_mut!(pvr_native_3d).write(on) }
+        }
+    }
+    #[cfg(not(all(feature = "osal-linux", not(target_os = "none"))))]
+    let _ = first;
+}
+
+/// An environment switch's value as [`native_3d_from_env`] takes it: exactly
+/// `0` or `1`, else none (unset, empty, or anything else: the default
+/// stands).
+pub fn switch_setting(v: Option<&core::ffi::CStr>) -> Option<i32> {
+    match v?.to_bytes() {
+        b"0" => Some(0),
+        b"1" => Some(1),
+        _ => None,
+    }
 }
 
 /// The PowerVR's `texture2DProj`, default OFF: the online compiler divides

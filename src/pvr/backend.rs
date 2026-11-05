@@ -1318,11 +1318,25 @@ fn tex_twiddled_image_word1(
     mipmaps_present: bool,
     base_gpu: u64,
 ) -> [u32; 2] {
+    tex_twiddled_image_word1_msb(etc, !etc, num_mip_levels, depth, mipmaps_present, base_gpu)
+}
+
+/// [`tex_twiddled_image_word1`] with `alpha_msb` as the format says (Mesa
+/// sets it from `vk_format_is_alpha_on_msb` in either word,
+/// pvr_arch_tex_state.c:253-254 and :308-309).
+fn tex_twiddled_image_word1_msb(
+    etc: bool,
+    alpha_msb: bool,
+    num_mip_levels: u32,
+    depth: u32,
+    mipmaps_present: bool,
+    base_gpu: u64,
+) -> [u32; 2] {
     csb_pack!(
         ROGUE_TEXSTATE_IMAGE_WORD1_pack,
         2,
         csb::ROGUE_TEXSTATE_IMAGE_WORD1 {
-            alpha_msb: !etc,
+            alpha_msb,
             tpu_image_state_v2_compression_mode: if etc {
                 csb::ROGUE_TEXSTATE_COMPRESSION_MODE_TPU
             } else {
@@ -5219,10 +5233,20 @@ fn build_tex_desc(w: &mut [u32], t: &GlesTextureBind, warned: &mut u32) {
          * axis is the texture's WRAP_R (`tex_desc_sampler`). The image meta
          * layer size is the copy's bytes (a volume has one "layer"). The
          * level count is the levels the copy holds and the sampler may walk:
-         * a one-level draw gets a one-level copy. */
+         * a one-level draw gets a one-level copy. `alpha_msb` is the
+         * format's, as in its STRIDE word: clear for R11G11B10F and RGB9E5,
+         * whose alpha is the constant 1 (the cube's and the array's words
+         * keep the `true` they were verified with). */
         let iw0 = tex_image_word0(fmt, csb::ROGUE_TEXSTATE_TEXTYPE_3D, t.width, t.height);
         let depth = u32::from(t.layers).max(1);
-        let iw1 = tex_twiddled_image_word1(false, levels.min(15), (depth - 1).min(2047), levels > 1, t.base_gpu);
+        let iw1 = tex_twiddled_image_word1_msb(
+            false,
+            fmt.alpha_msb,
+            levels.min(15),
+            (depth - 1).min(2047),
+            levels > 1,
+            t.base_gpu,
+        );
         w[0..2].copy_from_slice(&iw0);
         w[2..4].copy_from_slice(&iw1);
         w[4] = t.bytes;
