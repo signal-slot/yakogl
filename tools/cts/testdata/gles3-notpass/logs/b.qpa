@@ -1,0 +1,9 @@
+<TestCaseResult CasePath="dEQP-GLES3.b.compat" CaseType="SelfValidate" Version="0.3.4">
+<Result StatusCode="CompatibilityWarning">Precision ok &apos;ish
+</Result>
+</TestCaseResult>
+#endTestCaseResult
+<TestCaseResult CasePath="dEQP-GLES3.b.timeout" CaseType="SelfValidate" Version="0.3.4">
+<Result StatusCode="Timeout" />
+</TestCaseResult>
+#endTestCaseResult

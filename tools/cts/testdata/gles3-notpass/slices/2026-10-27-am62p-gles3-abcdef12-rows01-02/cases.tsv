@@ -1,0 +1,4 @@
+# one line per case this slice ran: <case> TAB <status> [TAB <message>]
+dEQP-GLES3.c.slice_fail	Fail
+dEQP-GLES3.c.slice_notsup	NotSupported	stub
+dEQP-GLES3.b.merged_pass	Pass

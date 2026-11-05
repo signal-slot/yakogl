@@ -137,3 +137,12 @@ page runs of `driver/rust/tests/gm-record/runs` (byte for byte
 scenes 0, 21, 22, 25, a RATE record, which no row reads). The run directory
 holds a synthetic GLMARK2 record; `tree.txt` names it. `cts-selftest.sh` check
 22d reads the rows, `--gm-table`, `--gm-diff` and `--gm-pictures` over it.
+
+`gles3-notpass/`: fixtures for `gles3-notpass.py` (`cts-selftest.sh` check 31,
+`--self-test`): a toy mustpass list, two qpa logs (a cut-off case, a
+`#terminateTestCaseResult`, entity-escaped messages, `CompatibilityWarning`
+and `Timeout`), a merged status table, and `slices/` with one slice directory
+in the tree's layout (`README.md` commit line, `cases.tsv`). The tool must
+reproduce `expected.tsv` byte for byte, and refuse the `bad/` inputs: a
+directory with nothing to read, a case with two statuses, a slice naming
+another commit, a source with no records.
