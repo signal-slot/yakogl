@@ -145,7 +145,7 @@ tools/shaders/es300/divloop.frag: ok
 tools/shaders/es300/divnest.frag: ok
 tools/shaders/es300/dynidx.frag: ok
 tools/shaders/es300/facing.frag: ok
-tools/shaders/es300/flatlast.frag: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
+tools/shaders/es300/flatlast.frag: ok
 tools/shaders/es300/flatlast.vert: ok
 tools/shaders/es300/gcops.frag: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
 tools/shaders/es300/hdrsample.frag: ok

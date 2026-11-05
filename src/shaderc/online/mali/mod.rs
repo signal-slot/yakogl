@@ -1318,11 +1318,11 @@ fn compile_stage<'s>(
         }
         let mut f = nir_fs::walk(m, scratch, fs)?;
         /* the link's code motion (motion.rs): a highp shader's graph is
-         * the linker's; a mediump shader converts its inputs first
-         * (lower_precision), which stops every chain */
-        if fs.highp {
-            motion::move_into_producer(&mut f, m)?;
-        }
+         * the linker's; a mediump shader converts its float inputs first
+         * (lower_precision), which stops their chains, but not an integer
+         * one's (case 89's flat `uint`, whose `float(v_idx) / 4.0` is
+         * fp32, intbool_89_flatlast): motion.rs takes no fp16 node */
+        motion::move_into_producer(&mut f, m)?;
         sc.moved = f.moved;
         sc.nmoved = f.nmoved;
         for t in f.look_ups() {

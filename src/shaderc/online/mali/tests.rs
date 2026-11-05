@@ -4396,9 +4396,12 @@ fn a_moved_expression_s_operations_round_trip_by_number() {
     /* bytes encode never writes */
     let defect = Err(MaliError::Defect(Defect::IrIndex));
     assert_eq!(motion::decode(&[1, 2, 0], &mut back), defect, "an entry of no node");
-    assert_eq!(motion::decode(&[1, 2, 1, 2, 4, 0, 0, 0, 0], &mut back), defect, "a number past the table");
+    assert_eq!(motion::decode(&[1, 2, 1, 2, 5, 0, 0, 0, 0], &mut back), defect, "a number past the table");
     assert_eq!(motion::decode(&[1, 2, 1, 2, 3, 0, 1, 2, 0], &mut back), Ok(1), "ffma's number");
     assert_eq!(back[0].nodes(), &[op(Alu::Ffma, [0, 1, 2])]);
+    /* `u2f32`, appended for case 89: the numbers before it stand */
+    assert_eq!(motion::decode(&[1, 0, 1, 2, 4, 0, 0, 0, 0], &mut back), Ok(1), "u2f32's number");
+    assert_eq!(back[0].nodes(), &[op(Alu::U2f, [0, 0, 0])]);
 }
 
 /// A moved `ffma` reaches the vertex graph as an `ffma` (`apply`, after the
@@ -4682,45 +4685,39 @@ fn case_199_vertex_integers_are_byte_equal_to_mesa_26_2_1() {
     check_vs_stage(&v, vs, fs, json, VIEWPORT_64X64);
 }
 
-/// Case 89's vertex shader (es300/flatlast.vert, #33): `uint(col.a * 4.0 +
-/// 0.5)` is `FMA.f32` and `F32_TO_U32.rtz`, and the fragment shader's
-/// `float(v_idx) / 4.0`, which Mesa's link moves into this stage
-/// (nir_opt_varyings), `U32_TO_F32` and `FMA.f32 .. 0.25, -0`. The motion
-/// itself is the link's (plan #185 item flat-uint-motion): here the
-/// fragment record is given as that item is to make it, the reads of
-/// `v_flat.rgb` and `v_idx` and the moved `u2f32` and `fmul`. Both IDVS
-/// programs and their facts against intbool_89_flatlast.expect.json.
+/// Case 89 (es300/flatlast.vert and .frag, #33): `uint(col.a * 4.0 + 0.5)`
+/// is `FMA.f32` and `F32_TO_U32.rtz`, and the fragment shader's
+/// `float(v_idx) / 4.0` moves into the vertex shader through the link
+/// (nir_opt_varyings, motion.rs: a flat value's `u2f32` and its product by
+/// a constant), `U32_TO_F32` and `FMA.f32 .. 0.25, -0`, stored beside
+/// `v_flat.rgb`; the fragment shader is one flat `.v4` load
+/// (`.src_flat32`), two `V2F32_TO_V2F16`, ATEST and BLEND. Both IDVS
+/// programs, the fragment program and every fact against
+/// intbool_89_flatlast.expect.json.
 #[test]
-fn case_89_vertex_integers_are_byte_equal_to_mesa_26_2_1() {
-    use super::motion::{Moved, Node};
+fn case_89_flatlast_is_byte_equal_to_mesa_26_2_1() {
+    use super::motion::Node;
     let (vs, fs, json) =
         (td!("intbool_89_flatlast.vert"), td!("intbool_89_flatlast.frag"), td!("intbool_89_flatlast.expect.json"));
     assert_eq!(vs, include_str!("../../../../tools/shaders/es300/flatlast.vert"));
+    assert_eq!(fs, include_str!("../../../../tools/shaders/es300/flatlast.frag"));
     /* the shader alone stores the uint */
     compile(SHC_STAGE_VERTEX, vs).expect("flatlast.vert compiles");
-    let mut moved = Moved { location: 1, comp: 0, n: 4, ..Moved::NONE };
-    moved.nodes[..4].copy_from_slice(&[
+    /* the record the link makes: the reads of `v_flat.rgb` and `v_idx`, and
+     * the moved `fmul(u2f32(v_idx), 0.25)` in lane 0 of `v_idx` */
+    let f = compile(SHC_STAGE_FRAGMENT, fs).expect("flatlast.frag compiles");
+    let pr = super::fragment_reads(&f.info.shader()).expect("the record's moved expressions encode");
+    let mut out = [super::motion::Moved::NONE; super::motion::MAX_MOVED];
+    let n = super::motion::decode(pr.moved(), &mut out).expect("the record's bytes decode");
+    let moved: Vec<_> = out[..n].iter().map(|m| (m.location, m.comp, m.nodes().to_vec())).collect();
+    let nodes = vec![
         Node::Lane { location: 1, comp: 0 },
         Node::Op { op: super::nir::Alu::U2f, src: [0, 0, 0] },
         Node::Const(0x3e80_0000),
         Node::Op { op: super::nir::Alu::Fmul, src: [1, 2, 0] },
-    ]);
-    /* `compile_vs_for_reads` past its record's bytes, which number only the
-     * operations the motion moves today (motion.rs `OPS`) */
-    let _k = store::test_keep();
-    let v = store::with_scratch(|s| {
-        let l = super::lower_source(SHC_STAGE_VERTEX, vs.as_bytes(), &[], s)?;
-        let src = s.alloc_str(vs).map_err(|_| super::refused(MaliError::OutOfScratch))?;
-        let decls = crate::shaderc::online::reflect::interface(s, crate::shaderc::online::sema::Stage::Vertex, src)
-            .map_err(|_| super::refused(MaliError::Defect(super::Defect::IrIndex)))?;
-        let reads = [(0, 0b0111), (1, 0b0001)];
-        let sc =
-            super::compile_module_for(&l.module, decls.uniforms, Some(&reads), &[moved], s).map_err(super::refused)?;
-        super::record(SHC_STAGE_VERTEX, &l, &sc, s, store::keep()).map(|sh| stage_of(&sh))
-    })
-    .expect("the scratch arena is free")
-    .expect("the vertex shader compiles for the program's record");
-    check_vs_stage(&v, vs, fs, json, VIEWPORT_64X64);
+    ];
+    assert_eq!(moved, vec![(1, 0, nodes)]);
+    check_linked_for("89", vs, fs, json);
 }
 
 /// Two corpus programs on the same rules that no reference draws yet (the
