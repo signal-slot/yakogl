@@ -4,11 +4,14 @@
 """forcedpr-expected.py - host cross-check of gl_test case 217's expected image.
 
 Case 217 (driver/tools/pvrlab/gl_test.c, "a forced partial render") draws N
-(256) layers of 512x512 rectangles into a 1024x1024 target, depth LESS, and
+layers of 512x512 rectangles into a 1024x1024 target, depth LESS, and
 compares the read-back with an image it computes on the target. This tool
 computes that image again, independently (it paints layers in descending
 rank, so the least rank is painted last, instead of comparing ranks), so an
-expectation bug is found on the host and not in a board session.
+expectation bug is found on the host and not in a board session. N defaults
+to the case's default layer count (CONFIG_GL_TEST_FORCEDPR_LAYERS,
+driver/samples/zephyr/gl_test/Kconfig: DEFAULT_LAYERS below); the case sweeps
+up from it by a quarter a step, so --layers names any step it may end at.
 
   forcedpr-expected.py [--layers N]       sha256, histogram, checks
   forcedpr-expected.py --pixel X Y        the covering layers at a pixel
@@ -31,6 +34,9 @@ import sys
 
 SIZE, RECT, P, P2 = 1024, 512, 4093, 2579
 CLEAR = 0xFF000000
+# CONFIG_GL_TEST_FORCEDPR_LAYERS's default (driver/samples/zephyr/gl_test/Kconfig
+# and gl_test.c's fallback): the AM62P crossing, tools/cts/log/2026-11-02-pr-217probe.
+DEFAULT_LAYERS = 1220
 
 
 def rank(k):
@@ -168,7 +174,9 @@ def explain(text, n):
         if not near(exp, want, 1):
             print("EXPECTATION MISMATCH: gl_test wants %s, the host computes %s" % (fmt(want), fmt(exp)))
     else:
-        lw = [k for k in range(min(n, 256)) if rgba(k) == want]
+        # colours repeat every 256 layers (53k, 97k, 193k mod 256): past 256 a
+        # colour names a class of layers, every 256th from the first
+        lw = [k for k in range(n) if rgba(k) == want]
         print("want is %s" % ("the clear" if want == CLEAR else "layer %s" % lw if lw else "no layer's colour"))
     if near(got, want, 1):
         print("got is within one count of want per channel: not a mismatch for gl_test")
@@ -181,11 +189,21 @@ def explain(text, n):
     else:
         ls = []
         for tol in (0, 1):
-            ls = [k for k in range(min(n, 256)) if near(got, rgba(k), tol)]
+            ls = [k for k in range(n) if near(got, rgba(k), tol)]
             if ls:
                 break
         if not ls:
             print("got is no layer's colour and not the clear: a blend, garbage or a wrong store")
+        elif pos and len(ls) > 1:
+            # the class of layers with that colour: the ones covering the pixel
+            # are the candidates; the rest are named once
+            out = [j for j in ls if not covers(j, *pos)]
+            ls = [j for j in ls if covers(j, *pos)]
+            if out:
+                print("got is the colour of %d layers (every 256th from %d); %d of them do NOT cover the pixel: %s"
+                      % (len(out) + len(ls), min(out + ls), len(out), out))
+            if not ls:
+                print("no layer of that colour covers the pixel (a misplaced tile or a wrong address)")
         for j in ls:
             msg = "got is layer %d's colour (rank %d%s)" % (j, rank(j), ", within 1" if tol else "")
             if not pos:
@@ -201,7 +219,7 @@ def explain(text, n):
 
 def main():
     ap = argparse.ArgumentParser(description="host cross-check of gl_test case 217's expected image")
-    ap.add_argument("--layers", type=int, default=256)
+    ap.add_argument("--layers", type=int, default=DEFAULT_LAYERS)
     ap.add_argument("--pixel", nargs=2, type=int, metavar=("X", "Y"))
     ap.add_argument("--dump", metavar="FILE")
     ap.add_argument("--explain", metavar="TEXT")
