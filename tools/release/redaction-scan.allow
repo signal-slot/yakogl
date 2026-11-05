@@ -1,0 +1,39 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+#
+# Look-alikes for tools/release/redaction-scan.py (read by default).
+# action | class | path glob | regex | reason
+# action: drop (a look-alike, not counted) or info (listed, not a finding).
+# class `*` is any class; the glob is fnmatch over the whole path ("*"
+# matches across "/"); the regex is searched in the line and drops or lists
+# the hits its match overlaps.  Patterns and public names only: a private
+# value (login, lab, runner or bridge host, address) never goes here.
+#
+# Placeholders (docs/release/redaction-audit.md part 3).
+drop | home-path | * | /(home|Users)/\.\.\. | elided path, not a user name
+drop | login-at-host | * | root@BOARD\b | placeholder for the board's ssh target
+drop | login-at-host | * | root@localhost\b | loopback through a tunnel
+drop | login-at-host | tools/mali/panthor/tests/board_lock.rs | root[@]board-lock-test\b | test fixture for the lock's BOARD_HOST
+drop | * | * | <(user|login)@(host|board)> | placeholder
+# The RFC 1918 fixtures that the console redaction self-test rewrites.
+drop | private-ipv4 | tools/board_selftest.sh | \b(10\.11\.12\.(1|13)|172\.16\.0\.9)\b | redact_dir fixture input (RFC 1918)
+drop | private-ipv4 | tools/cts/pr-session-selftest.sh | secret-user@10\.9\.8\.7\b | fixture of the self-test's BOARD_HOST refusal
+# Product defaults and keywords.
+drop | som-serial | * | verdin-(am62p|imx8mp)-00000000 | zeroed serial: the product's default host name
+drop | password | * | NOPASSWD: | sudoers keyword, not a password
+drop | lab-host | * | \barmadillo\.local\b | the vendor's mDNS default host name
+drop | lab-host | * | \byakogl-gate\b | the gate's public runner label
+drop | lab-host | * | \bccfarm\b | the name of the farm tool
+# E-mail shapes that are no address of a person.
+drop | * | * | @[A-Za-z0-9.-]+\.invalid\b | .invalid placeholder (RFC 2606)
+drop | email | * | \bt@example\.org\b | a self-test's address
+drop | email | * | \bgit@github\.com\b | the project's clone URL
+drop | email | tools/testdata/* | @fa10000\.bootdev\.part_ | U-Boot device node in a console capture
+drop | email | tools/testdata/* | @1000\.service\b | systemd unit name in a console capture
+drop | email | docs/notes/pre-study-iq9075.md | @oss\.qualcomm\.com\b | Message-ID of an upstream patch series
+# Upstream authors (information, not a finding).
+info | email | * | \binfo@slint\.dev\b | upstream: the Slint licence contact
+info | email | * | @kdab\.com\b | upstream: authors of the Slint sources the patch touches
+info | email | driver/src/vivante/hw/*.xml.h | @ | upstream: authors of the etnaviv rules-ng headers
+info | email | driver/src/v3d/* | \brobclark@freedesktop\.org\b | upstream: Mesa author of the code this file follows
+info | email | tools/vivante/*.patch | @gmail\.com\b | upstream: etnaviv author in a Mesa patch
