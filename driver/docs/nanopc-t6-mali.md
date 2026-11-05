@@ -1740,6 +1740,140 @@ build and the record, and every new defect opens an issue; a person
 posts both. A run that did not happen is not a row: a gap is never a
 pass.
 
+### Z3 board procedure
+
+Not run. Written 2026-11-05 from `board::nanopc_t6_fw` and the host tests
+over the MCU model, before any run; no value in it is measured on the
+board. A run whose record differs is a finding: record it as it came,
+never by changing the prediction. Z3 runs only after Z2 has passed, and
+reports to #20 (milestones: #1281).
+
+**Preconditions** — all of them, or no run:
+
+- The owner's go-ahead for this run, given for Z3 itself (Z2's does not
+  carry over), the T6, someone at the power switch, and
+  `resource:nanopc-t6-uart`; the named hand, the read-only UART capture,
+  the WDT_EN proof, `GLB_RST_ST` before and after, and `--go` taking the
+  board lock are Z1's procedure as the Z2 one above states them.
+- Z2's board run has passed and is recorded (its row in
+  `tools/cts/RESULTS.md`): AS0 is the step Z3 stands on.
+- The `t6_fw` image built from a detached checkout of a commit that is on
+  `origin/main` (the image prints it on its first line, `t6_fw: build
+  <describe>`; a result row names that build), in the west workspace as
+  for Z2:
+
+  ```sh
+  west build -p always -b nanopc_t6 -d build/t6_fw yakogl/tools/probes/nanopc_t6/t6_fw
+  ```
+
+- The firmware header made on the building host and never committed:
+  `tools/cts/deps-env.sh --build MALI_CSFFW` fetches the board's
+  `mali_csffw.bin` (sha256 `a27847ea…a2405b`, "The firmware (Z3)"),
+  `driver/tools/mkmalifw.sh <file>` writes the gitignored
+  `driver/src/fw/mali_csffw_blob.h`. The probe prints the blob's size,
+  sha256 and magic before it touches the GPU: they must be 282624 bytes
+  and the digest above, or the result is not Z3's. The gate's `t6_fw`
+  row is a gap without `ZEPHYR_WS` or the header, and a gap is not the
+  precondition met.
+
+**Run** — as Z2's, with the `t6_fw` image: ask who uses the board;
+`nanopc-t6.sh <t6_fw zephyr.bin>` (the dry run) and read its plan;
+`nm build/t6_fw/zephyr/zephyr.elf | grep 't6_fw_'` for the pool, the
+section backings and the `__nocache` shared section (the lines
+`t6_fw: section n: VA …, backing … at PA …` print the same, and the
+addresses are identity mapped under 4 GiB, as for Z2); then
+`T6_HAND=<name> T6_RECORD_DIR=<dir> T6_UART=$BOARD_UART nanopc-t6.sh
+<t6_fw zephyr.bin> --go`. The board's host, tty and record directory
+come from the environment, never from this page. The WDT0 feeder
+bounds every wait as for Z2; the MCU's boot is the longest new one,
+1 s, and `csf::boot` adds at most the 100 ms of the two acknowledge
+waits, so the run stays inside the feeder's 5 s between feeds when the
+probe feeds around `yd_t6_fw_up`.
+
+**Predicted record.** Z1's and Z2's lines are as the Z2 procedure and
+"Closed on main, host side" say, except that Z2's map is the 7 sections
+of the firmware and not Z2's one 64 KiB section. The values Z3 adds are
+the fields of `FwUp` (`board::nanopc_t6_fw`, `struct yd_t6_fw_up`); a
+`PASS` run holds `step` 0 (`STEP_NONE`), `stop` 0, `refusal` 0 and:
+
+| `FwUp` field | Predicted | From |
+|---|---|---|
+| `image_version`, `sections`, `protected_skipped` | 0x01050000, 7, 1 | the header and `fw::parse` ("Host side, written 2026-10-28") |
+| `tables_used`, `flushed` | 9 of 16 pool pages, 7 flushes (one per section: 896 KiB) | `every_section_comes_up_in_as0_on_nine_table_pages` |
+| `clean_rc` | 0 for every clean | `McuMem::clean_rc` |
+| `mcu_status_before`, `mcu_status` | 0 (disabled), then 1 (enabled) | "Predicted for the board run" |
+| `job_raw` | `JOB_INT_RAWSTAT` bit 31 set (`JOB_INT_GLOBAL_IF`) | `start_mcu` |
+| `boot_waited_us` | recorded, not predicted; far under the 1 s (1,000,000 µs) budget | the MCU's own boot time is not known from the model |
+| `version` | 0x01050000 = **1.5.0**, equal to `image_version` | the board's dmesg under panthor; `the_boards_file_boots_over_the_model` |
+| `features`, `instr_features` | 0, 0x71 | the image's own words |
+| `group_num`, `group_stride` | 8, 0xa0 | the image's control block |
+| `glb_input`, `glb_output` | 0x04002000, 0x04006000 | as above |
+| `csg0` (input, output, `stream_num`, `stream_stride`) | 0x04003000, 0x04007000, 8, 0xc | as above |
+| `cs0` (input, output, `features`) | 0x04003400, 0x04007200, features recorded (work registers 96, scoreboards 8 under panthor) | as above |
+| `core_en_mask` | 0x50005 (`SHADER_PRESENT` of Z1's reset) | `global_init` |
+| `poweroff_timer`, `progress_timer`, `idle_timer`, `ack_irq_mask`, `init_req` | 235, 0x271000, 19, 0x0400050e, 0x40e | "Predicted for the board run" |
+| `acked` | 0x10e: `GLB_INIT_TOGGLES` (0xe) and `GLB_PING` (0x100), all acknowledged | `csf::acked` |
+| `init_ack_us`, `ping_ack_us` | recorded, not predicted; each under the 100 ms budget (100,000 µs) | the firmware's latency is not known from the model |
+| `ping_acked` | 1 | `csf::ping` |
+| `glb_req`, `glb_ack` | agree on the bits of `acked` | the toggle protocol |
+| `gpu_id`, `shader_present`, `mmu_features` | as Z1 measured: 0xa8670005, 0x50005, 0x00002830 | `t6_gpu` |
+
+The values the host run gives over the MCU model with the real
+file (not measured by this draft: the values above are the ones the host
+tests and "Predicted for the board run" pin; re-run `MALI_CSFFW=<file> cargo test -p yakogl-drivers --features mali
+--lib board::nanopc_t6_fw -- --nocapture`) are the first six rows and the
+control-block rows; the timings and the MCU's own `features` word are
+the ones only the board can give. The board can differ from the model in
+exactly these: the MCU's boot time, the acknowledge latencies, and
+whether the firmware rewrites the control block's pages and strides.
+The probe's own `t6_fw:` lines carry them. **The literal uart2 lines of
+`t6_fw` (their text, the order and the PASS line) are not written here:
+the probe does not call `yd_t6_fw_up` yet; the board-procedure item
+fills them in from `tools/probes/nanopc_t6/t6_fw/src/main.c` once it
+does.** Until then the record must show at least the `FwUp` fields
+`step`, `stop`, `refusal` and `detail`, `tables_used`, `flushed`,
+`clean_rc`, `mcu_status_before`, `job_raw`, `mcu_status`, `boot_waited_us`,
+`version`, `image_version`, `acked`, `init_ack_us`, `ping_acked`,
+`ping_ack_us`, `glb_req` and `glb_ack`, and the control-block rows
+above.
+
+**Failure signatures.** A refused run prints `step` (`STEP_*` of
+`nanopc_t6_fw.rs`), `stop`, `refusal` and `detail` (lo, hi), and the PSCI
+reset follows as for Z2. Steps 1 to 4 (`STEP_PARSE`, `STEP_PLACE`,
+`STEP_GPU`, `STEP_MMU`) are the file, the image's backings, Z1 and Z2
+refusing: read them with the Z1 and Z2 procedures. What Z3 adds is
+`STEP_BOOT` (5) with `refusal` a `csf::CsfRefusal`, and the two after it.
+panthor v6.18 `drivers/gpu/drm/panthor/`, lines as cited elsewhere on
+this page:
+
+| Signature in the record | `FwUp` step, refusal (`detail`) | What it means; panthor v6.18 |
+|---|---|---|
+| `mcu_status_before` not 0 | `STEP_BOOT`, `McuNotDisabled` (2): the status read | The MCU was not disabled after Z1's reset; panthor starts only a disabled MCU (`panthor_fw_start`, `panthor_fw.c:1028-1059`). |
+| `JOB_INT` raw bit 31 set before the start | `STEP_BOOT`, `BootIrqStuck` (3): the raw word | An old event; the start's acknowledge could not be told from it (`panthor_fw.c:1013` clears what the handler saw). |
+| MCU never halts nor boots: no `JOB_INT` bit 31 within 1 s, `mcu_status` still 0 | `STEP_BOOT`, `BootTimeout` (4): `MCU_STATUS` (`mcu_status` repeats it) | The MCU did not start: the sections it fetched are not what the CPU wrote (the clean, `clean_rc`, the AS0 map's attributes, the uncached shared section), or its clocks/power. panthor: "Failed to boot MCU" and `MCU_STATUS` read after a timeout, `panthor_fw.c:1039-1054`. |
+| MCU halts: `mcu_status` 2 (halt) or 3 (fatal) with bit 31 set | not refused: `step` 0 or `STEP_VERSION`; read `mcu_status` | The MCU ran and stopped; the record carries the status for the verdict (`fault_mcu_status_not_enabled_is_reported_not_refused`). panthor reads the status only after a timeout (`panthor_fw.c:1039-1054`). A fault the MCU took on AS0 shows in Z2's fault fields: `FAULTSTATUS`, `MMU_INT_RAWSTAT`. |
+| GLB version 0 | `STEP_BOOT`, `VersionZero` (5): 0 | The MCU did not run far enough to write its version, or the shared section is not coherent for the CPU: "Firmware version is 0. Firmware may have failed to boot" (`panthor_fw.c:944-947`). |
+| Wrong GLB version (not 0x01050000) | `STEP_VERSION` (7): `detail` the version read, `image_version` the header's | A different firmware build or the CPU reading a stale shared section. panthor refuses only version 0 and logs the others (`panthor_fw.c:969-974`); ours refuses a version that is not the header's. |
+| Interface page or block outside the shared section | `STEP_BOOT`, `IfaceOutsideShared` (6): the MCU address | A control block read from a section that is not coherent, or a rewritten page (`panthor_fw.c:886`, `:835`). |
+| `group_num` or `stream_num` out of panthor's counts, or slots differing | `STEP_BOOT`, `GroupCount` (7), `StreamCount` (8), `CsgSlotsDiffer` (11), `CsSlotsDiffer` (12): the count, the group, or the group · 256 + stream | The control block is not the image's (the model's values: 8 groups, 8 streams); panthor: "Invalid number of control groups", "Expecting identical CSG/CS slots" (`panthor_fw.c:202-203`, `:886`). |
+| CFG ack missing: `acked` without some of 0xe, `init_ack_us` unset | `STEP_BOOT`, `GlbConfigAckTimeout` (9): the bits that were acknowledged (`acked`) | The firmware is up (version read) but does not take the global configuration, or the CPU's write of `req` is not seen by the MCU (the shared section cached for the CPU). panthor does not wait here; its next request would time out (`panthor_fw.c:978-1009`). |
+| PING ack missing: `acked` 0xe, `ping_acked` 0 | `STEP_BOOT`, `PingTimeout` (10): 0 | The firmware took the configuration but does not answer `PING` within 100 ms, or the doorbell did not reach it. panthor: "FW ping timeout, scheduling a reset" (`panthor_fw.c:1313-1335`). |
+| A section's clean failed | `STEP_CLEAN` (6): the first rc (`clean_rc`) | The boot ran, but `sys_cache_data_flush_range` failed over a section; the run's other fields stand. panthor's equivalent is the sync to the device, `dma_sync_sgtable_for_device` (`panthor_fw.c:624-626`). |
+| `SectionUnmapped` | `STEP_BOOT`, `SectionUnmapped` (1): the MCU address | AS0 does not cover a section: Z2's map is missing or short (the placement is checked before, so this is the image, not the run). |
+
+A refusal not in the table is read from `refusal` against
+`csf::CsfRefusal`; a `step` not in the table against `STEP_*`. The 100 ms
+waits are the host's budgets (the 1 s boot wait is panthor's and the
+configuration wait is ours; panthor does not wait there), so a timeout
+here is a finding, not a defect of the prediction.
+
+**Recording the result.** As Z2's: the build line and the PASS or FAIL
+line into Z3's row in `tools/cts/RESULTS.md` and the summary in
+`tools/cts/STATUS.md`, `uart.log` and the record directory out of the
+tree, one comment for #20 naming the build and the record, a new issue
+for each defect; a person posts them. A run that did not happen is not a
+row.
+
 ## Decisions
 
 Decided by the user on 2026-10-18:
