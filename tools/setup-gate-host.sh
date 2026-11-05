@@ -45,7 +45,8 @@
 # glmark2 tree at the commit tools/hostharness/glmark2/run.sh pins, tested
 # the way run.sh tests it: a git checkout at the pin without local changes,
 # or the GitHub archive directory glmark2-<pin>); --install only prints the
-# commands that fetch it.
+# commands that fetch it. --check also reports DEQP_GLES3_TEST_DIR (the dEQP
+# shader tree es3_shaderc_corpus reads: unset skips it, a bad path fails it).
 set -u
 
 PROG=${0##*/}
@@ -347,6 +348,32 @@ check_glmark2_src() {
   fi
 }
 
+# The dEQP shader tree the shaderc corpus part of tests/es3_shaderc_corpus.rs
+# reads (the full-suite rows of the host-test,gpu-powervr,shaderc-online and
+# host-test,gpu-vivante,shaderc-online configurations run it). Unset, the test
+# prints that it skipped and passes; set, it expect()s the directory to be
+# readable and measures every .test file in it, so a value naming a missing
+# path fails those rows. The repository pins no VK-GL-CTS revision (it only
+# names the checkout's default place, ~/com/github/KhronosGroup/VK-GL-CTS in
+# tools/cts/cts-build.sh), so none is named here either.
+check_deqp_gles3_dir() {
+  local d=${DEQP_GLES3_TEST_DIR-} n
+  if [ -z "$d" ]; then
+    line ok DEQP_GLES3_TEST_DIR "unset: the es3_shaderc_corpus corpus part is skipped and passes; set it to a VK-GL-CTS data/gles3/shaders directory to run it"
+    return
+  fi
+  if [ ! -d "$d" ]; then
+    line missing DEQP_GLES3_TEST_DIR "$d is not a directory (the shaderc-online suite rows would fail in es3_shaderc_corpus): unset it, or point it at data/gles3/shaders of a VK-GL-CTS checkout (this repository pins no revision; tools/cts/cts-build.sh uses ~/com/github/KhronosGroup/VK-GL-CTS by default)"
+    return
+  fi
+  n=$(find "$d" -maxdepth 1 -type f -name '*.test' 2>/dev/null | wc -l)
+  if [ "$n" -gt 0 ]; then
+    line ok DEQP_GLES3_TEST_DIR "$d ($n .test files)"
+  else
+    line missing DEQP_GLES3_TEST_DIR "$d holds no .test file (not a data/gles3/shaders directory of a VK-GL-CTS checkout): unset it or point it at that directory"
+  fi
+}
+
 # The PowerVR firmware header the AM62P image rows embed (check.sh,
 # needs_pvr_fw_blob). It is gitignored and never committed; this only reports.
 check_pvr_fw_blob() {
@@ -385,6 +412,7 @@ run_checks() {
   check_pkgconfig
   check_mali_csffw
   check_glmark2_src
+  check_deqp_gles3_dir
   check_pvr_fw_blob
   check_cc_aarch64
 }
