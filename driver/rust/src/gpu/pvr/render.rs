@@ -150,9 +150,12 @@ pub struct PvrRenderFragRegs {
 /// `struct pvr_render_frag_pr`: what the 3D_PR (the firmware's partial-render
 /// fragment command) differs in from the 3D command (docs/notes/pvr-render-pool.md
 /// "Design: the firmware's partial render", part 2). All zero: no
-/// partial-render state. Not read yet: [`submit`] builds the 3D_PR as a byte
-/// copy of the 3D command whatever the block holds (the item that consumes
-/// it replaces the PBE words, dword 15 and the PR background words from it).
+/// partial-render state, and [`submit`] builds the 3D_PR as a byte copy of
+/// the 3D command. Not all zero, with the knob: the 3D_PR takes its PBE
+/// register words (the whole array) and its EOT PDS data (dword 15) from
+/// here, and both commands carry [`FRAG_FLAGS_SPMSCRATCHBUFFER`].
+/// `spm_scratch_*` and `eot_pds_data_bytes` are the backend's bookkeeping
+/// (no command word); `pds_pr_bgnd` is not written into the 3D_PR yet.
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct PvrRenderFragPr {
@@ -169,6 +172,31 @@ pub struct PvrRenderFragPr {
     /// CR_PDS_PR_BGRND0/1/3: the PR background-object PDS.
     pub pds_pr_bgnd: [u64; 3],
 }
+
+impl PvrRenderFragPr {
+    /// No partial-render state: every field (the padding too) is zero.
+    fn is_zero(&self) -> bool {
+        self.spm_scratch_gpu == 0
+            && self.spm_scratch_bytes == 0
+            && self.reserved == 0
+            && self.pbe_word.iter().flatten().all(|&w| w == 0)
+            && self.eot_pds_data == 0
+            && self.eot_pds_data_bytes == 0
+            && self.pds_pr_bgnd.iter().all(|&w| w == 0)
+    }
+}
+
+/// RGXFWIF_CMD3D flag "partial render must write to scratch buffer": Mesa's
+/// srvkm ROGUE_FWIF_RENDERFLAGS_SPMSCRATCHBUFFER (fw-api/pvr_rogue_fwif.h:
+/// 74-75; Linux ROGUE_FRAG_FLAGS_SCRATCHBUFFER, bit 19), which "also forces
+/// the full screen copy expected to be present on the last render after all
+/// partial renders have completed" (pvr_drm.h:1129-1132). Set on both the 3D
+/// and the 3D_PR of a kick whose `frag_pr` is filled (docs/notes/
+/// pvr-render-pool.md, "The PR frame side" (3): inferred, Mesa sets it for a
+/// barrier store). RGXFWIF_CMD3D is the DDK's user-mode structure, not in
+/// the vendored headers, so driver/tools/offsetof cannot pin it (as
+/// src/pvr/backend.rs's FRAG_FLAGS_GETVISRESULTS of the same flag set).
+const FRAG_FLAGS_SPMSCRATCHBUFFER: u32 = 0x0008_0000;
 
 const _: () = {
     assert!(size_of::<PvrRenderKick>() == 312);
@@ -255,8 +283,9 @@ pub struct YdPvrRenderCfg {
     /// lists with no reserve).
     pub fl_grow_on_demand: u32,
     /// Hand the firmware its partial render: the geometry command's PR fence
-    /// words and, per kick, a FENCE_PR, a 3D_PR (a copy of the 3D command)
-    /// and an UPDATE on a geometry timeline word
+    /// words and, per kick, a FENCE_PR, a 3D_PR (a copy of the 3D command,
+    /// or built from the kick's `frag_pr` when that is filled) and an
+    /// UPDATE on a geometry timeline word
     /// (`CONFIG_YAKOGL_DRV_GPU_PVR_PARTIAL_RENDER`; docs/notes/pvr-render-pool.md,
     /// "Design: the firmware's partial render"). Without it every command
     /// and word is what it was without the knob.
@@ -1433,7 +1462,8 @@ pub fn submit(k: &mut YdPvrKm, r: &mut YdPvrRender, kick: &PvrRenderKick, fence_
     // FRAG: with the knob the PR trio FENCE_PR + 3D_PR + UPDATE (geometry
     // timeline), then FENCE (geometry UFO) + RGXFWIF_CMD3D (80 dwords; past
     // CMDTA3D_SHARED a value from DDK capture; the 3D_PR body is a copy of
-    // it) + UPDATE (fragment UFO = seq).
+    // it, or with a filled `frag_pr` that copy with the PR's PBE and EOT
+    // words) + UPDATE (fragment UFO = seq).
     {
         let f = &kick.frag;
         let mut dk = [0u32; 80];
@@ -1470,6 +1500,34 @@ pub fn submit(k: &mut YdPvrKm, r: &mut YdPvrRender, kick: &PvrRenderKick, fence_
         lohi(&mut dk, 74, f.pds_bgnd[2]);
         dk[76] = f.cmd_flags; // RGXFWIF_CMD3D.flags (dw77/78: zls/sls stride, RTAs only)
         dk[79] = 0x0000_0001; // execute_count: value from DDK capture
+
+        // With the knob and a filled `frag_pr` (a scratch PR: the PR stores
+        // the tiles to the SPM scratch and the background load reads them
+        // back), the 3D_PR differs from the 3D command where Mesa's does
+        // (pvr_arch_job_render.c:1388-1406): the PBE register words, the
+        // whole array (slot 0 the scratch's, the others zero, written
+        // whatever the frame's num_rt), and the EOT PDS data (dword 15). The
+        // EOT PDS info (dword 13) stays: the PR EOT program is built to fit
+        // the frame's (docs/notes/pvr-pr-eot.md 3.4-3.6). Both commands
+        // carry the scratch flag. CMDTA3D_SHARED.asPRBuffer (dwords 2-3)
+        // stays 0 in both, as Mesa and Linux leave it: a non-zero slot
+        // raises FWCCB requests the driver does not answer
+        // (docs/notes/pvr-render-pool.md, pr-fwccb-read). A zero block, or
+        // the knob off, leaves every word as it was.
+        let pr_block = pr && !kick.frag_pr.is_zero();
+        if pr_block {
+            dk[76] |= FRAG_FLAGS_SPMSCRATCHBUFFER;
+        }
+        let mut dk_pr = dk;
+        if pr_block {
+            let p = &kick.frag_pr;
+            dk_pr[15] = p.eot_pds_data;
+            for (i, pbe) in p.pbe_word.iter().enumerate() {
+                let o = 30 + i * PBE_STRIDE_DW;
+                lohi(&mut dk_pr, o, pbe[0]);
+                lohi(&mut dk_pr, o + 2, pbe[1]);
+            }
+        }
         if r.cfg.verbose != 0 {
             let mut i = 0;
             while i < 80 {
@@ -1492,7 +1550,8 @@ pub fn submit(k: &mut YdPvrKm, r: &mut YdPvrRender, kick: &PvrRenderKick, fence_
         }
         let mut fwo = r.fwo;
         // One trio (FENCE + 3D + UPDATE) today's shape; the PR trio adds an
-        // equal amount (bodies padded to 16).
+        // equal amount (bodies padded to 16), whether its 3D_PR is the copy
+        // or `dk_pr` (the same 80 dwords).
         let need = 16 + 16 + 16 + 320 + 16 + 16;
         ring_reserve(k, fring, &mut fwo, if pr { 2 * need } else { need });
         if pr {
@@ -1500,17 +1559,18 @@ pub fn submit(k: &mut YdPvrKm, r: &mut YdPvrRender, kick: &PvrRenderKick, fence_
             // drm/imagination's fragment queue (pvr_queue.c:698-737):
             // FENCE_PR on the geometry timeline at seq (satisfied exactly
             // when this kick's geometry UPDATE has run), the 3D_PR, and its
-            // UPDATE. The 3D_PR body is a byte copy of the 3D command below:
-            // for an ordinary single-pass render Mesa builds it exactly so -
-            // same attachments, same EOT data, same Z/S and background words
-            // (pvr_arch_cmd_buffer.c:1736-1747, pvr_arch_job_render.c:1353-
-            // 1407) - and the firmware never executes it unless a partial
+            // UPDATE. Without a filled `frag_pr` the 3D_PR body is a byte
+            // copy of the 3D command below: for an ordinary single-pass
+            // render Mesa builds it exactly so - same attachments, same EOT
+            // data, same Z/S and background words (pvr_arch_cmd_buffer.c:
+            // 1736-1747, pvr_arch_job_render.c:1353-1407); with one it is
+            // `dk_pr` above. The firmware never executes it unless a partial
             // render is pending. Its UPDATE rewrites the timeline with the
             // same seq (not seq + 1: the next kick's geometry fence names
             // seq by equality, and the firmware's UFO test is an equality
             // test, ctx_init) - a no-op while no partial render is pending.
             ring_put(k, fring, &mut fwo, CCB_CMD_TYPE_FENCE_PR, &ufo_bytes(timeline_fa, seq));
-            ring_put(k, fring, &mut fwo, CCB_CMD_TYPE_3D_PR, &words_bytes::<80, 320>(&dk));
+            ring_put(k, fring, &mut fwo, CCB_CMD_TYPE_3D_PR, &words_bytes::<80, 320>(&dk_pr));
             ring_put(k, fring, &mut fwo, CCB_CMD_TYPE_UPDATE, &ufo_bytes(timeline_fa, seq));
         }
         // The FENCE on the geometry UFO first: the firmware schedules a 3D as
@@ -3773,7 +3833,8 @@ mod submit_tests {
     /// values, so a command of kick 1 and of kick 2 differ word by word).
     /// Control-register values use only high bits: submit reads meaning out
     /// of the low bits of ISP CTL, PPP CTRL or the command flags (z-buffer
-    /// bits, GETVISRESULTS), and a test value must not claim any of them.
+    /// bits, GETVISRESULTS), and a test value must not claim any of them,
+    /// nor the scratch flag a filled `frag_pr` adds (bit 19).
     fn kick(tag: u32) -> PvrRenderKick {
         // SAFETY: every field is a plain integer or an array of them.
         let mut c: PvrRenderKick = unsafe { core::mem::zeroed() };
@@ -3791,7 +3852,7 @@ mod submit_tests {
         c.frag.num_rt = 1;
         c.frag.pds_bgnd[0] = v(0x80);
         c.frag.isp_scissor_base = v(0x90);
-        c.frag.cmd_flags = r(0x99);
+        c.frag.cmd_flags = r(0x91);
         c
     }
 
@@ -4028,11 +4089,35 @@ mod submit_tests {
         dk
     }
 
+    /// A synthetic filled `frag_pr` (the shape bgload-pds hands out for a
+    /// scratch PR) on `kick(1)`.
+    fn filled_frag_pr() -> PvrRenderKick {
+        let mut c = kick(1);
+        c.frag_pr.spm_scratch_gpu = GENERAL_HEAP_BASE + 0xA000;
+        c.frag_pr.spm_scratch_bytes = 1_920_000;
+        c.frag_pr.pbe_word = [[0xB0, 0xB1], [0xB2, 0xB3], [0xB4, 0xB5]];
+        c.frag_pr.eot_pds_data = 0xC0;
+        c.frag_pr.eot_pds_data_bytes = 44;
+        c.frag_pr.pds_pr_bgnd = [0xD0, 0xD1, 0xD2];
+        c
+    }
+
+    /// The 3D and (with the knob) the 3D_PR body of a rig's one kick.
+    fn threed_bodies(t: &Rig) -> (Vec<u32>, Option<Vec<u32>>) {
+        let f = t.cmds(FCCCB, t.r.fwo);
+        let body = |ty: u32| {
+            f.iter().find(|c| c.0 == ty).map(|c| {
+                assert_eq!(c.1, 320, "command type {ty:#x}");
+                c.2.clone()
+            })
+        };
+        (body(CCB_CMD_TYPE_3D).expect("a 3D command"), body(CCB_CMD_TYPE_3D_PR))
+    }
+
     /// G1 (kick-abi): a kick whose `frag_pr` block is zero writes today's 3D
-    /// command words, knob off and (both the 3D and the 3D_PR) knob on; and,
-    /// while nothing consumes the block, a filled block changes no command
-    /// byte either. The item that builds the 3D_PR from the block
-    /// (pr-frame-colour) replaces the second half of this test.
+    /// command words, knob off and (both the 3D and the 3D_PR) knob on; and
+    /// without the knob a filled block changes no command byte either. With
+    /// the knob a filled block builds the 3D_PR (G3).
     #[test]
     fn g1_a_zeroed_frag_pr_leaves_the_3d_command_words_as_todays() {
         let zero = kick(1);
@@ -4042,34 +4127,101 @@ mod submit_tests {
                 .to_vec()
         };
         assert!(bytes(&zero)[216..].iter().all(|&b| b == 0), "kick() leaves the block zero");
-        let mut filled = zero;
-        filled.frag_pr.spm_scratch_gpu = GENERAL_HEAP_BASE + 0xA000;
-        filled.frag_pr.spm_scratch_bytes = 1_920_000;
-        filled.frag_pr.pbe_word = [[0xB0, 0xB1], [0xB2, 0xB3], [0xB4, 0xB5]];
-        filled.frag_pr.eot_pds_data = 0xC0;
-        filled.frag_pr.eot_pds_data_bytes = 44;
-        filled.frag_pr.pds_pr_bgnd = [0xD0, 0xD1, 0xD2];
+        let filled = filled_frag_pr();
         assert_eq!(bytes(&filled)[..216], bytes(&zero)[..216], "the block is past every other field");
 
         for knob in [0u32, 1] {
-            let (mut z, mut f) = (rig(knob), rig(knob));
-            let (mut fz, mut ff) = (0u32, 0u32);
+            let mut z = rig(knob);
+            let mut fz = 0u32;
             assert_eq!(submit(&mut z.k, &mut z.r, &zero, &mut fz), 0, "log:\n{}", z.log());
-            assert_eq!(submit(&mut f.k, &mut f.r, &filled, &mut ff), 0, "log:\n{}", f.log());
             let want = todays_3d_words(&z, HRT0, &zero);
             let zc = z.cmds(FCCCB, z.r.fwo);
-            let fc = f.cmds(FCCCB, f.r.fwo);
             let threed: Vec<&(u32, u32, Vec<u32>)> =
                 zc.iter().filter(|c| c.0 == CCB_CMD_TYPE_3D || c.0 == CCB_CMD_TYPE_3D_PR).collect();
             assert_eq!(threed.len(), if knob == 0 { 1 } else { 2 }, "knob {knob}");
             for c in threed {
                 assert_eq!((c.1, &c.2), (320, &want), "knob {knob}: command type {:#x}", c.0);
             }
-            // The whole fragment ring and the whole geometry ring: the same
-            // bytes for the filled block as for the zero one (no consumer).
-            assert_eq!(fc, zc, "knob {knob}: the fragment CCB ignores frag_pr");
-            assert_eq!(f.cmds(GCCCB, f.r.gwo), z.cmds(GCCCB, z.r.gwo), "knob {knob}: the geometry CCB too");
         }
+        // Knob off: the whole fragment ring and the whole geometry ring are
+        // the same bytes for the filled block as for the zero one.
+        let (mut z, mut f) = (rig(0), rig(0));
+        let (mut fz, mut ff) = (0u32, 0u32);
+        assert_eq!(submit(&mut z.k, &mut z.r, &zero, &mut fz), 0, "log:\n{}", z.log());
+        assert_eq!(submit(&mut f.k, &mut f.r, &filled, &mut ff), 0, "log:\n{}", f.log());
+        assert_eq!(f.cmds(FCCCB, f.r.fwo), z.cmds(FCCCB, z.r.fwo), "knob off: the fragment CCB ignores frag_pr");
+        assert_eq!(f.cmds(GCCCB, f.r.gwo), z.cmds(GCCCB, z.r.gwo), "knob off: the geometry CCB too");
+    }
+
+    /// G3 (pr-frame-colour): with the knob, a filled `frag_pr` builds the
+    /// 3D_PR from it: the PR PBE words at dwords 30.., the PR EOT data at
+    /// dword 15 (not the frame's), the scratch flag. The 3D command is
+    /// today's but for that flag, asPRBuffer (dwords 2-3) stays 0 in both,
+    /// and everything else of the 3D_PR is the 3D command's, the EOT info
+    /// word (13) included. The ring sizes and the geometry ring are as for a
+    /// zero block.
+    #[test]
+    fn g3_with_the_knob_a_filled_frag_pr_builds_the_3d_pr_from_it() {
+        let c = filled_frag_pr();
+        let (mut t, mut z) = (rig(1), rig(1));
+        let (mut f1, mut fz) = (0u32, 0u32);
+        assert_eq!(submit(&mut t.k, &mut t.r, &c, &mut f1), 0, "log:\n{}", t.log());
+        assert_eq!(submit(&mut z.k, &mut z.r, &kick(1), &mut fz), 0, "log:\n{}", z.log());
+        assert_eq!((t.r.gwo, t.r.fwo), (GEOM_BYTES[1], FRAG_BYTES[1]), "the reservation's sizes");
+        assert_eq!(t.types(FCCCB, t.r.fwo), z.types(FCCCB, z.r.fwo));
+        assert_eq!(t.cmds(GCCCB, t.r.gwo), z.cmds(GCCCB, z.r.gwo), "the geometry CCB ignores frag_pr");
+
+        let today = todays_3d_words(&t, HRT0, &c);
+        assert_eq!(today[76] & FRAG_FLAGS_SPMSCRATCHBUFFER, 0, "kick() leaves the flag clear");
+        let (d3, pr) = threed_bodies(&t);
+        let pr = pr.expect("a 3D_PR with the knob");
+
+        // The 3D command: today's words, the scratch flag added.
+        let mut want3d = today.clone();
+        want3d[76] |= FRAG_FLAGS_SPMSCRATCHBUFFER;
+        assert_eq!(d3, want3d);
+        // The 3D_PR: the PR EOT data, a different slot from the frame's,
+        // under the frame's EOT info word.
+        assert_eq!(pr[15], c.frag_pr.eot_pds_data);
+        assert_ne!(pr[15], d3[15], "the PR EOT data is not the frame's");
+        assert_eq!(pr[13], d3[13], "the EOT info word is the frame's");
+        // ... the PR PBE words, the whole array.
+        for (i, pbe) in c.frag_pr.pbe_word.iter().enumerate() {
+            let o = 30 + i * PBE_STRIDE_DW;
+            let want = [pbe[0] as u32, (pbe[0] >> 32) as u32, pbe[1] as u32, (pbe[1] >> 32) as u32];
+            assert_eq!(pr[o..o + 4], want, "PR PBE slot {i}");
+        }
+        assert_ne!(pr[30..34], d3[30..34], "the PR PBE words are not the frame's");
+        // ... the flag; asPRBuffer 0 in both.
+        assert_eq!(pr[76], d3[76]);
+        assert_eq!((d3[2], d3[3], pr[2], pr[3]), (0, 0, 0, 0), "CMDTA3D_SHARED.asPRBuffer");
+        // ... and nothing else differs (pds_pr_bgnd is not written).
+        let pbe = 30..30 + MAX_RT * PBE_STRIDE_DW;
+        for i in (0..80).filter(|&i| i != 15 && !pbe.contains(&i)) {
+            assert_eq!(pr[i], d3[i], "3D_PR dw{i}");
+        }
+        // The driver's record of the last 3D command is the 3D's.
+        assert_eq!(t.r.last_frag_cmd.to_vec(), d3);
+    }
+
+    /// G4 (pr-frame-colour): a 3-target frame's scratch PR writes the PR
+    /// array whole: slots 1 and 2 are the block's zeros, not the frame's
+    /// real targets the 3D command keeps.
+    #[test]
+    fn g4_the_pr_pbe_array_replaces_every_slot_of_a_three_target_frame() {
+        let mut c = filled_frag_pr();
+        c.frag.num_rt = 3;
+        c.frag.pbe_word[1] = [0xE0_0000_0001, 0xE1_0000_0002];
+        c.frag.pbe_word[2] = [0xE2_0000_0003, 0xE3_0000_0004];
+        c.frag_pr.pbe_word = [[0xB0, 0xB1], [0, 0], [0, 0]];
+        let mut t = rig(1);
+        let mut f1 = 0u32;
+        assert_eq!(submit(&mut t.k, &mut t.r, &c, &mut f1), 0, "log:\n{}", t.log());
+        let (d3, pr) = threed_bodies(&t);
+        let pr = pr.expect("a 3D_PR with the knob");
+        assert_eq!(pr[30..34], [0xB0, 0, 0xB1, 0]);
+        assert_eq!(pr[34..42], [0; 8], "PR slots 1 and 2");
+        assert_eq!(d3[34..42], [1, 0xE0, 2, 0xE1, 3, 0xE2, 4, 0xE3], "the frame's slots 1 and 2");
     }
 
     /// G2 (kick-abi): the block's size and every offset, as bytes: each

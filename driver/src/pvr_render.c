@@ -415,11 +415,15 @@ bool pvr_render_fl_ready_pages = PVR_FL_READY_PAGES_DEFAULT;
 
 /* Hand the firmware its partial render: the geometry command's PR fence
  * words {timeline, seq - 1}, a second geometry UPDATE to a timeline word,
- * and per kick a FENCE_PR, a 3D_PR (a byte copy of the 3D command, the
- * single-pass shape per Mesa pvr_arch_cmd_buffer.c:1736-1747) and an UPDATE,
- * before today's FENCE + 3D + UPDATE -- the order of Linux drm/imagination's
- * fragment queue (pvr_queue.c:698-737) and the fence arithmetic of
- * Mesa's srvkm (pvr_arch_srv_job_render.c:531-569, :870-902).
+ * and per kick a FENCE_PR, a 3D_PR and an UPDATE, before today's FENCE + 3D
+ * + UPDATE -- the order of Linux drm/imagination's fragment queue
+ * (pvr_queue.c:698-737) and the fence arithmetic of Mesa's srvkm
+ * (pvr_arch_srv_job_render.c:531-569, :870-902). The 3D_PR is a byte copy of
+ * the 3D command (the single-pass shape per Mesa pvr_arch_cmd_buffer.c:
+ * 1736-1747) while the kick's frag_pr block is zero; a filled block makes it
+ * a scratch PR: the 3D_PR takes frag_pr's PBE register words and EOT PDS
+ * data, and both commands carry the SPM scratch flag 0x80000
+ * (pvr_arch_job_render.c:1388-1406).
  * (CONFIG_YAKOGL_DRV_GPU_PVR_PARTIAL_RENDER; gpu::pvr::render::submit and
  * docs/notes/pvr-render-pool.md, "Design: the firmware's partial render".)
  * It is what the firmware waits for when the geometry phase is out of
