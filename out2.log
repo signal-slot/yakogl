@@ -1,0 +1,23 @@
+/bin/bash: warning: setlocale: LC_ALL: cannot change locale (ja_JP.UTF-8): No such file or directory
+bash: warning: setlocale: LC_ALL: cannot change locale (ja_JP.UTF-8): No such file or directory
+bash: warning: setlocale: LC_ALL: cannot change locale (ja_JP.UTF-8): No such file or directory
+board-stage.sh: am62p deqp at 93f9c958 (93f9c958)
+board-stage.sh$ tools/cts/am62p-deqp-images.sh tools/cts/am62p-full-tree.txt build/deqp/am62p-93f9c958 93f9c958 > build/deqp/am62p-93f9c958/build.out
+board-stage.sh$ tools/board.sh am62p tree tools/cts/am62p-full-tree.txt records/am62p/deqp-93f9c958
+/bin/bash: warning: setlocale: LC_ALL: cannot change locale (ja_JP.UTF-8): No such file or directory
+board.sh am62p: tree: 17 rows from tools/cts/am62p-full-tree.txt, build 93f9c958
+board.sh am62p: img1-93f9c958: finished run records/am62p/deqp-93f9c958/20261104-2351-img1-93f9c958-3c7df724, skipped
+board.sh am62p: img2-93f9c958: finished run records/am62p/deqp-93f9c958/20261104-2354-img2-93f9c958-78315879, skipped
+board.sh am62p: img3-93f9c958: finished run records/am62p/deqp-93f9c958/20261104-2356-img3-93f9c958-180d358e, skipped
+board.sh am62p: img4-93f9c958: finished run records/am62p/deqp-93f9c958/20261104-2358-img4-93f9c958-1d46d55d, skipped
+=== img5-93f9c958 (zephyr.bin, selector -) 2026-11-05 00:31:51
+/bin/bash: warning: setlocale: LC_ALL: cannot change locale (ja_JP.UTF-8): No such file or directory
+board.sh am62p: img5-93f9c958: build 93f9c958 boot uboot-mmc (row) image sha256 a1e141c957e4040a footprint 113041408
+board.sh am62p: img5-93f9c958: image build: YAKOGL_SAMPLE_TABLE=6c5b8a70 YAKOGL_SAMPLE_TREE=93f9c958; zephyr: af17c0c8aa2a
+board.sh am62p: img5-93f9c958: route env source mmc token img5-93f9c958-a1e141c957e4040a-1793838711
+board_lock: stale record, pid 46602 gone (bash board.sh am62p run build/deqp/am62p-93f9c958/img5-93f9c958/zephyr/zephyr.bin records/am62p/deqp); taking the lock
+board.sh am62p: board lease: taken over: holder=orion:46602 row=img5-93f9c958 expires=1793838128 
+board.sh am62p: /var/yakogl holds a one-shot image of a run that did not clean up (/var/yakogl/once-img5-93f9c958-a1e141c957e4040a-1793836867.bin): look at it, or 'disarm'
+=== img5-93f9c958 rc=3 2026-11-05 00:32:04
+board.sh am62p: img5-93f9c958 refused; the chain stops
+board-stage.sh: dEQP tree failed

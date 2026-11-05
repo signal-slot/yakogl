@@ -1,0 +1,89 @@
+/bin/bash: warning: setlocale: LC_ALL: cannot change locale (ja_JP.UTF-8): No such file or directory
+bash: warning: setlocale: LC_ALL: cannot change locale (ja_JP.UTF-8): No such file or directory
+bash: warning: setlocale: LC_ALL: cannot change locale (ja_JP.UTF-8): No such file or directory
+board-stage.sh: am62p deqp at 93f9c958 (93f9c958)
+board-stage.sh$ tools/cts/am62p-deqp-images.sh tools/cts/am62p-full-tree.txt build/deqp/am62p-93f9c958 93f9c958 > build/deqp/am62p-93f9c958/build.out
+board-stage.sh$ tools/board.sh am62p tree tools/cts/am62p-full-tree.txt records/am62p/deqp-93f9c958
+/bin/bash: warning: setlocale: LC_ALL: cannot change locale (ja_JP.UTF-8): No such file or directory
+board.sh am62p: tree: 17 rows from tools/cts/am62p-full-tree.txt, build 93f9c958
+=== img1-93f9c958 (zephyr.bin, selector -) 2026-11-04 23:51:52
+/bin/bash: warning: setlocale: LC_ALL: cannot change locale (ja_JP.UTF-8): No such file or directory
+board.sh am62p: img1-93f9c958: build 93f9c958 boot uboot-mmc (row) image sha256 3c7df724038291f9 footprint 113041408
+board.sh am62p: img1-93f9c958: image build: YAKOGL_SAMPLE_TABLE=6c5b8a70 YAKOGL_SAMPLE_TREE=93f9c958; zephyr: af17c0c8aa2a
+board.sh am62p: img1-93f9c958: route env source mmc token img1-93f9c958-3c7df724038291f9-1793836312
+/home/orion/connected-work/01a1a894-3291-7055-8620-56e91e7f8972/tools/board.sh: line 362: warning: setlocale: LC_ALL: cannot change locale (ja_JP.UTF-8): No such file or directory
+/home/orion/connected-work/01a1a894-3291-7055-8620-56e91e7f8972/tools/board.sh: line 362: warning: setlocale: LC_ALL: cannot change locale (ja_JP.UTF-8): No such file or directory
+/home/orion/connected-work/01a1a894-3291-7055-8620-56e91e7f8972/tools/board.sh: line 356: warning: setlocale: LC_ALL: cannot change locale (ja_JP.UTF-8): No such file or directory
+/home/orion/connected-work/01a1a894-3291-7055-8620-56e91e7f8972/tools/board.sh: line 356: warning: setlocale: LC_ALL: cannot change locale (ja_JP.UTF-8): No such file or directory
+  *** Booting Zephyr OS build af17c0c8aa2a ***
+  DONE!
+  deqp: done: 1512 passed, 0 failed, 0 not supported, 0 warnings, complete=1
+  deqp: summary: 1512 cases begun, 1512 with a result, 0 without
+records:
+  none (the console has no yk-record line: the image prints none)
+board.sh am62p img1-93f9c958 rc=0 verdict=done boot=uboot-mmc row boot_verdict=done result=legacy:deqp_summary resets=0 record=absent back_after=123s
+board.sh am62p: record records/am62p/deqp-93f9c958/20261104-2351-img1-93f9c958-3c7df724/INDEX.txt
+=== img1-93f9c958 rc=0 2026-11-04 23:54:17
+=== img2-93f9c958 (zephyr.bin, selector -) 2026-11-04 23:54:17
+/bin/bash: warning: setlocale: LC_ALL: cannot change locale (ja_JP.UTF-8): No such file or directory
+board.sh am62p: img2-93f9c958: build 93f9c958 boot uboot-mmc (row) image sha256 783158798f206be0 footprint 113041408
+board.sh am62p: img2-93f9c958: image build: YAKOGL_SAMPLE_TABLE=6c5b8a70 YAKOGL_SAMPLE_TREE=93f9c958; zephyr: af17c0c8aa2a
+board.sh am62p: img2-93f9c958: route env source mmc token img2-93f9c958-783158798f206be0-1793836458
+board_lock: stale record, pid 44326 gone (bash board.sh am62p run build/deqp/am62p-93f9c958/img1-93f9c958/zephyr/zephyr.bin records/am62p/deqp); taking the lock
+/home/orion/connected-work/01a1a894-3291-7055-8620-56e91e7f8972/tools/board.sh: line 362: warning: setlocale: LC_ALL: cannot change locale (ja_JP.UTF-8): No such file or directory
+/home/orion/connected-work/01a1a894-3291-7055-8620-56e91e7f8972/tools/board.sh: line 362: warning: setlocale: LC_ALL: cannot change locale (ja_JP.UTF-8): No such file or directory
+/home/orion/connected-work/01a1a894-3291-7055-8620-56e91e7f8972/tools/board.sh: line 356: warning: setlocale: LC_ALL: cannot change locale (ja_JP.UTF-8): No such file or directory
+/home/orion/connected-work/01a1a894-3291-7055-8620-56e91e7f8972/tools/board.sh: line 356: warning: setlocale: LC_ALL: cannot change locale (ja_JP.UTF-8): No such file or directory
+  *** Booting Zephyr OS build af17c0c8aa2a ***
+  DONE!
+  deqp: done: 994 passed, 0 failed, 0 not supported, 0 warnings, complete=1
+  deqp: summary: 994 cases begun, 994 with a result, 0 without
+records:
+  none (the console has no yk-record line: the image prints none)
+board.sh am62p img2-93f9c958 rc=0 verdict=done boot=uboot-mmc row boot_verdict=done result=legacy:deqp_summary resets=0 record=absent back_after=116s
+board.sh am62p: record records/am62p/deqp-93f9c958/20261104-2354-img2-93f9c958-78315879/INDEX.txt
+=== img2-93f9c958 rc=0 2026-11-04 23:56:34
+=== img3-93f9c958 (zephyr.bin, selector -) 2026-11-04 23:56:34
+/bin/bash: warning: setlocale: LC_ALL: cannot change locale (ja_JP.UTF-8): No such file or directory
+board.sh am62p: img3-93f9c958: build 93f9c958 boot uboot-mmc (row) image sha256 180d358ee30221a5 footprint 113041408
+board.sh am62p: img3-93f9c958: image build: YAKOGL_SAMPLE_TABLE=6c5b8a70 YAKOGL_SAMPLE_TREE=93f9c958; zephyr: af17c0c8aa2a
+board.sh am62p: img3-93f9c958: route env source mmc token img3-93f9c958-180d358ee30221a5-1793836594
+board_lock: stale record, pid 44858 gone (bash board.sh am62p run build/deqp/am62p-93f9c958/img2-93f9c958/zephyr/zephyr.bin records/am62p/deqp); taking the lock
+/home/orion/connected-work/01a1a894-3291-7055-8620-56e91e7f8972/tools/board.sh: line 362: warning: setlocale: LC_ALL: cannot change locale (ja_JP.UTF-8): No such file or directory
+/home/orion/connected-work/01a1a894-3291-7055-8620-56e91e7f8972/tools/board.sh: line 362: warning: setlocale: LC_ALL: cannot change locale (ja_JP.UTF-8): No such file or directory
+/home/orion/connected-work/01a1a894-3291-7055-8620-56e91e7f8972/tools/board.sh: line 356: warning: setlocale: LC_ALL: cannot change locale (ja_JP.UTF-8): No such file or directory
+/home/orion/connected-work/01a1a894-3291-7055-8620-56e91e7f8972/tools/board.sh: line 356: warning: setlocale: LC_ALL: cannot change locale (ja_JP.UTF-8): No such file or directory
+  *** Booting Zephyr OS build af17c0c8aa2a ***
+  DONE!
+  deqp: done: 1172 passed, 0 failed, 0 not supported, 0 warnings, complete=1
+  deqp: summary: 1172 cases begun, 1172 with a result, 0 without
+records:
+  none (the console has no yk-record line: the image prints none)
+board.sh am62p img3-93f9c958 rc=0 verdict=done boot=uboot-mmc row boot_verdict=done result=legacy:deqp_summary resets=0 record=absent back_after=118s
+board.sh am62p: record records/am62p/deqp-93f9c958/20261104-2356-img3-93f9c958-180d358e/INDEX.txt
+=== img3-93f9c958 rc=0 2026-11-04 23:58:53
+=== img4-93f9c958 (zephyr.bin, selector -) 2026-11-04 23:58:53
+/bin/bash: warning: setlocale: LC_ALL: cannot change locale (ja_JP.UTF-8): No such file or directory
+board.sh am62p: img4-93f9c958: build 93f9c958 boot uboot-mmc (row) image sha256 1d46d55d83425fe8 footprint 113041408
+board.sh am62p: img4-93f9c958: image build: YAKOGL_SAMPLE_TABLE=6c5b8a70 YAKOGL_SAMPLE_TREE=93f9c958; zephyr: af17c0c8aa2a
+board.sh am62p: img4-93f9c958: route env source mmc token img4-93f9c958-1d46d55d83425fe8-1793836733
+board_lock: stale record, pid 45400 gone (bash board.sh am62p run build/deqp/am62p-93f9c958/img3-93f9c958/zephyr/zephyr.bin records/am62p/deqp); taking the lock
+/home/orion/connected-work/01a1a894-3291-7055-8620-56e91e7f8972/tools/board.sh: line 362: warning: setlocale: LC_ALL: cannot change locale (ja_JP.UTF-8): No such file or directory
+/home/orion/connected-work/01a1a894-3291-7055-8620-56e91e7f8972/tools/board.sh: line 362: warning: setlocale: LC_ALL: cannot change locale (ja_JP.UTF-8): No such file or directory
+/home/orion/connected-work/01a1a894-3291-7055-8620-56e91e7f8972/tools/board.sh: line 356: warning: setlocale: LC_ALL: cannot change locale (ja_JP.UTF-8): No such file or directory
+/home/orion/connected-work/01a1a894-3291-7055-8620-56e91e7f8972/tools/board.sh: line 356: warning: setlocale: LC_ALL: cannot change locale (ja_JP.UTF-8): No such file or directory
+  *** Booting Zephyr OS build af17c0c8aa2a ***
+  DONE!
+  deqp: done: 1100 passed, 0 failed, 0 not supported, 0 warnings, complete=1
+  deqp: summary: 1100 cases begun, 1100 with a result, 0 without
+records:
+  none (the console has no yk-record line: the image prints none)
+board.sh am62p img4-93f9c958 rc=0 verdict=done boot=uboot-mmc row boot_verdict=done result=legacy:deqp_summary resets=0 record=absent back_after=113s
+board.sh am62p: record records/am62p/deqp-93f9c958/20261104-2358-img4-93f9c958-1d46d55d/INDEX.txt
+=== img4-93f9c958 rc=0 2026-11-05 00:01:07
+=== img5-93f9c958 (zephyr.bin, selector -) 2026-11-05 00:01:07
+/bin/bash: warning: setlocale: LC_ALL: cannot change locale (ja_JP.UTF-8): No such file or directory
+board.sh am62p: img5-93f9c958: build 93f9c958 boot uboot-mmc (row) image sha256 a1e141c957e4040a footprint 113041408
+board.sh am62p: img5-93f9c958: image build: YAKOGL_SAMPLE_TABLE=6c5b8a70 YAKOGL_SAMPLE_TREE=93f9c958; zephyr: af17c0c8aa2a
+board.sh am62p: img5-93f9c958: route env source mmc token img5-93f9c958-a1e141c957e4040a-1793836867
+board_lock: stale record, pid 46052 gone (bash board.sh am62p run build/deqp/am62p-93f9c958/img4-93f9c958/zephyr/zephyr.bin records/am62p/deqp); taking the lock
