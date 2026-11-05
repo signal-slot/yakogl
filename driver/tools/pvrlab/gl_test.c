@@ -22417,17 +22417,26 @@ static int case_refusehang(void)
  * pr-negative) drew 256 layers: it completed in 2.4 s with requests 0, no
  * stop and no partial render, "NOT EXERCISED": 256 layers do not exhaust 512
  * pages. So the case sweeps, as case 175 sweeps its quad count: it starts at
- * CONFIG_GL_TEST_FORCEDPR_LAYERS (256) and doubles (512, 1024, 2048) up to
- * 4093 = FPR_P, the most layers with distinct depth ranks, one kick and one
- * glFinish a step. The sweep ends at the first step with grow requests (the
- * counter), at the driver's stop (counter 7), at a fence timeout (a second one
- * in the run ends the run, run_case), at a GPU recovery, or after the 4093
- * step. Nothing is read back before that last step: the expected image is
- * built and compared once, so the work is at most five kicks and one compare,
- * and a board image feeds its watchdog between cases as before. The free-list
- * cap is unchanged. Predicted crossing (docs/notes/pvr-render-pool.md,
- * "Design: the firmware's partial render"): 2013 to 2514 layers, so the 4093
- * step is the first to ask unless the crossing is at the low end (2048 asks).
+ * CONFIG_GL_TEST_FORCEDPR_LAYERS and grows the count by a quarter a step
+ * (n += n / 4, as case 175) up to 4093 = FPR_P, the most layers with distinct
+ * depth ranks, one kick and one glFinish a step. The sweep ends at the first
+ * step the firmware ran out of parameter memory in, at the driver's stop
+ * (counter 7), at a fence timeout (a second one in the run ends the run,
+ * run_case), at a GPU recovery, or after the 4093 step. "Ran out" is either
+ * a grow request (counter 0) or an out-of-memory notice (counter 3): with the
+ * list capped at its starting size the firmware asks for no grow, it sends
+ * the notice alone (docs/notes/pvr-render-pool.md, the probe of 2026-10-04),
+ * and the driver's at-maximum stop (cause 2) follows it in the same batch.
+ * Nothing is read back before that last step: the expected image is built
+ * and compared once, and a board image feeds its watchdog between cases as
+ * before. The free-list cap is unchanged. The AM62P measured the crossing
+ * between 976 layers (fit the 512 pages) and 1220 (out of memory at the
+ * list's maximum, stop cause 2) on 2026-11-05 (tools/cts/log/2026-11-02-
+ * pr-217probe): the default below is that 1220, so the first step asks; the
+ * sweep above it is for a board or a list size that differs. The design
+ * note's prediction (2013 to 2514 layers, from case 175's cost per quad) was
+ * about twice too high: a 512x512 layer costs more than 288/1024 of a
+ * full-screen quad, 1.7 to 2.1 KiB of the 2048 KiB list.
  *
  * Layer k sits at x = 173k mod 512, y = 97k mod 512 (whole pixels, so
  * coverage is exact), with colour (53k+17, 97k+101, 193k+7) and a depth of rank
@@ -22447,20 +22456,28 @@ static int case_refusehang(void)
  * 256 layers the colour alone cannot tell a layer from its congruent ones.
  *
  * - Without CONFIG_YAKOGL_DRV_GPU_PVR_PARTIAL_RENDER: the geometry phase runs
- *   out of parameter memory with nothing to render, the kick never completes
- *   and the render service stops at 10 s (cause 4, or 2 with the grow knob):
- *   the stop counter is not 0, the case prints FAIL "stopped" and does not
- *   read the buffer. That is the known negative.
+ *   out of parameter memory with nothing to render. With the cap the firmware
+ *   sends the out-of-memory notice alone and the driver's at-maximum stop
+ *   (ccb.rs at_maximum, cause 2) ends the run at once; with a list free to
+ *   ask (case 175's no-reserve config) the refused grow ends in the 10 s stop
+ *   (cause 4). Either way the stop counter is not 0, the case prints FAIL
+ *   "stopped" and does not read the buffer. That is the known negative.
  * - With it: PASS needs a partial render (>= 1), no stop, no GPU recovery and
  *   the whole image and the depth equal. A sweep that completed at 4093
  *   layers with no partial render did not reach the mechanism: FAIL "NOT
- *   EXERCISED".
+ *   EXERCISED". Measured 2026-11-05 (tools/cts/log/2026-11-02-pr-217probe):
+ *   with the cap the knob changes nothing, the at-maximum stop is not gated
+ *   by it and comes before any partial render (cause 2, partial renders 0);
+ *   with case 175's no-reserve config the firmware renders partially (1),
+ *   the kick completes, the depth read-back is equal and the colour is the
+ *   clear over most of the image (FAIL "pixels": the frame side, parts 2 and
+ *   3, is not in yet).
  *
  * Not in the default list until the knob lands on: it hangs there by design.
  * Run it by number (driver/tools/pvrlab/README.md, "Case 217").
  * ------------------------------------------------------------------------- */
 #ifndef CONFIG_GL_TEST_FORCEDPR_LAYERS
-#define CONFIG_GL_TEST_FORCEDPR_LAYERS 256
+#define CONFIG_GL_TEST_FORCEDPR_LAYERS 1220
 #endif
 #define FPR_SIZE   1024u
 #define FPR_RECT   512u
@@ -22573,10 +22590,11 @@ static int case_forcedpr(void)
 	pvr_render_fl_counters(c0);
 	memcpy(c, c0, sizeof(c));
 	hwr0 = pvr_render_hwr_recoveries();
-	/* The sweep: one kick and one glFinish a step, at most the Kconfig start (256), 512, 1024,
-	 * 2048 and 4093 layers. It ends at the first step that asked for a grow, at the driver's stop,
-	 * at a fence timeout, at a GPU recovery, or after the step of FPR_P layers. Nothing is read
-	 * back before that last step. */
+	/* The sweep: one kick and one glFinish a step, from the Kconfig start up by a quarter a step
+	 * to FPR_P layers. It ends at the first step the firmware ran out of parameter memory in (a
+	 * grow request, or an out-of-memory notice alone: the capped list), at the driver's stop, at
+	 * a fence timeout, at a GPU recovery, or after the step of FPR_P layers. Nothing is read back
+	 * before that last step. */
 	for (;;) {
 		memcpy(cs, c, sizeof(cs));
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -22584,13 +22602,14 @@ static int case_forcedpr(void)
 		glFinish();
 		steps++;
 		pvr_render_fl_counters(c);
-		asked = c[0] != cs[0];
+		asked = c[0] != cs[0] || c[3] != cs[3];
 		timed_out = pvr_backend_wait_timeouts() != tmo0;
 		pr_info("gl_test: forcedpr: step %u: %u layers: %s\n", steps, n,
-			asked ? "asked for a grow" : "no grow request");
+			c[0] != cs[0] ? "asked for a grow" :
+			c[3] != cs[3] ? "out of memory at the list's maximum (no grow request)" : "no grow request");
 		if (asked || c[7] != 0 || timed_out || pvr_render_hwr_recoveries() != hwr0 || n >= FPR_P)
 			break;
-		n = n * 2u > FPR_P ? FPR_P : n * 2u;
+		n = n + n / 4u > FPR_P ? FPR_P : n + n / 4u;
 	}
 	/* a stopped service, a recovery or a timeout leaves nothing worth reading */
 	ok = c[7] == 0 && !timed_out && pvr_render_hwr_recoveries() == hwr0;

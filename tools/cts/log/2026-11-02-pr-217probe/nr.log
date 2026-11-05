@@ -1,0 +1,65 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Case 217 forcedpr at the committed default (1220 layers), partial render ON (parts 1+4), case 175's refusal config
+# (no grow reserve, cap off: image C, README.md): serial console excerpt. Not one of the two contract runs.
+yakogl-netboot: once=pr217nr1220
+Saving Environment to MMC... Writing to MMC(0)... OK
+yakogl-netboot: cleared
+3128632 bytes read in 39 ms (76.5 MiB/s)
+yakogl-netboot: go 0x82000000
+## Starting application at 0x82000000 ...
+Htsample: build tree=93f9c958-dirty table=6c5b8a70
+I: rti_arm: armed preload 0xef rate 32768 Hz: expiry 60000 ms, fed for 150 s
+board: watchdog armed
+<the display, GPU power, firmware load and DSI bring-up lines: as sweep-off.log>
+*** Booting Zephyr OS build af17c0c8aa2a ***
+I: shader compiler scratch: 4194304 bytes, keep: 1048576 bytes
+Secondary CPU core 1 (MPID:0x1) is up
+Secondary CPU core 2 (MPID:0x2) is up
+Secondary CPU core 3 (MPID:0x3) is up
+gl_test: PVR_BACKEND_OPT_FS_TEMPS_MIN=0
+gl_test: the list 217 (1 cases) on one context
+gl_test: start (case=-1 pretransform=0 ppp_ctrl=0x0 debug=0 no_coalesce=0)
+W: render: PROBE: the global freelists have no grow reserve: every grow is answered with zero pages, on purpose
+I: render: parameter buffer: carveout 64 MiB -> 448 pages listed, 4096 max, grow 256, pool 0 pages
+I: freelist id=1 np=512 max=4096 backing=512 fpm=0 ebase=3584 arr.gpu=<addr> pages_phys=<addr> cur_dev=<addr> pfn[3584]=<addr> pfn[4095]=<addr>
+I: freelist id=2 np=512 max=4096 backing=512 fpm=0 ebase=3584 arr.gpu=<addr> pages_phys=<addr> cur_dev=<addr> pfn[3584]=<addr> pfn[4095]=<addr>
+I: freelist id=3 np=26 max=32 backing=26 fpm=0 ebase=4 arr.gpu=<addr> pages_phys=<addr> cur_dev=<addr> pfn[4]=<addr> pfn[31]=0x00000000
+I: render: pds0: <addresses dropped>
+I: render: init ok (PB@<addr> border@<addr> eot_usc_off=0x1000 gen_b=0x62c000 pds_b=0x1000 usc_b=0x6000)
+I: osal(zephyr): ready (regs=<addr>)
+I: pvr_backend: init ok (pds arena off 0x1000, gen arena <addr>, vdm <addr>, clear_fs off 0x8000)
+I: render: hc dwords: <dropped>
+I: render: hrt[0..56]: <dumps dropped; the knob's words hrt[32..34] read 400e9e80 400e9f00 00000003>
+I: render: HWRT 1024x1024 x1 te_screen=0x0003f03f mtile1=0x00400000 mtile2=0x00400000 isp_mtile=0x00100010 stride=256 rgn=1024 tpc=8192 teaa=0
+W: FWCCB: FREELIST_GROW id=1 -> no grow (reserve 0, pool 0/0, 512/4096 pages)
+I: FWCCB: grow ack: KCCB r/w=3/3 after 1 ms; fl cur=512 top=7 ready=0 pending=0 alloc=504/0 base=<addr> cur_dev=<addr>
+I: FWCCB: UPDATE_STATS element=2 (out of memory) adjust=1 (seen 1)
+I: render: at grow request 1 (sampled when the batch was first read): last submitted 1, last fragment done 0; 1 kicks in flight: 0 with TA done and 3D pending, 1 with TA pending
+I: FWCCB: UPDATE_STATS element=1 (partial renders) adjust=1 (seen 1)
+gl_test: forcedpr: step 1: 1220 layers: asked for a grow
+I: pvr_backend: a 1024x1024 depth texture is sampled from its depth buffer (X8U24, stride 1024): no CPU resolve
+I: render: hc dwords: <dropped>
+I: render: hrt[0..56]: <dumps dropped; hrt[32..34] read 400ea100 400ea180 00000003>
+I: render: HWRT 64x64 x1 te_screen=0x00003003 mtile1=0x00080000 mtile2=0x00080000 isp_mtile=0x00020002 stride=4 rgn=16 tpc=128 teaa=0
+gl_test: forcedpr: FAIL pixels: 1220 layers (1 step): requests 1 (served 0, refused 1), notices 1, stop 0, partial renders 1, GPU recoveries 0
+gl_test: forcedpr: 1001186 of 1048576 pixels differ; first at (48,0) from the bottom left: got 0xff000000 want 0xff076511
+gl_test: case 217 forcedpr: FAIL
+gl_test: all: 1 of 1 cases failed (0 passed; 0 timed out; first failure case 217 at index 0; second failure case -1; 0 skipped, first skip case -1); precompiled hits 0, compiler runs 9
+gl_test: done
+osal(zephyr): pending frees: high-water 1/128, waits 0 (opt-in 0), refused 0 (0 unsubmitted, 0 no wait, 0 KiB kept)
+osal(zephyr): at close: pending frees now 0 (0 KiB), oldest fence none, last submitted 2; reclaim on: 0 refusals, 0 served without a wait, 0 after a wait, 0 refused
+I: render pool summary: 59200 KiB, bump 10284 KiB now, 10284 KiB high-water; top 4096 KiB now, 14616 KiB high-water
+I: render pool general: free 0 KiB in 0 ranges, largest none; 1 reused, 32 bumped, 0 refused; 4 frees (10524 KiB)
+I: render pool pds: free 0 KiB in 0 ranges, largest none; 0 reused, 8 bumped, 0 refused; 0 frees (0 KiB)
+I: render pool usc: free 0 KiB in 0 ranges, largest none; 0 reused, 46 bumped, 0 refused; 0 frees (0 KiB)
+I: render pool losses: dropped 0 KiB, 0 double frees, 0 bad chain headers, rolled back 0 KiB
+I: render freelists: 1 grow requests, 0 served, 1 unserved, 0 KiB taken on demand; GPU recoveries 0 (HWR counter 0)
+I: render freelists: reserve refills refused 0 (0 KiB); firmware UPDATE_STATS: partial renders 1, out of memory 1, TA stores 0, 3D stores 0, CDM stores 0, TDM stores 0, other 0
+osal(zephyr): ds slots peak 2/32, ds bytes peak 4210688, ds given up 0, ds refused 0 (slots full 0, no buffer 0), depth sampled from the buffer 1 (refused 0)
+osal(zephyr): log: 0 causes logged once, 0 repeats not printed
+gl_test: FAILED (rc=-1)
+I: dss stats before hold t=6302 ms: vsyncs 355 app_frames 0 underflows 0 sync_lost 0 go_timeouts 0 go_waits 0 safety_flips 0 app 0
+I: dss stats after hold t=26313 ms: vsyncs 1532 app_frames 0 underflows 0 sync_lost 0 go_timeouts 0 go_waits 0 safety_flips 0 app 0
+I: sample done (-1): resetting the SoC
+U-Boot SPL 2024.04-ti-g11cb0162a795 (Jan 01 1970 - 00:00:00 +0000)
