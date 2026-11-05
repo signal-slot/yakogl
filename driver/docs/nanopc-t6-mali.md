@@ -198,16 +198,23 @@ After Z3 the kernel side must ping at least every 12 s (`PING_INTERVAL_MS`).
 
 **Open, before the board run:**
 
-- The Zephyr side: a sample that embeds `mali_csffw_blob.h`, runs Z1's
-  power-on, Z2's AS0 and `csf::boot`, and prints the record; and a
-  `yd_t6_*` FFI entry for it. Its image row in the gate will need the
-  header, and must be a gap without it, like the firmware row (`needs`).
-  The sample owns the two things the host side is handed: the backing for
-  every loaded section inside the image, and an uncached CPU mapping of
-  the shared section (its req/ack words take no cache maintenance) —
-  `McuMem::cpu` hands out whatever CPU address the image gives a backing,
-  and `McuMem::clean` is the CPU clean of the loaded bytes, not that
-  mapping.
+- **Done: the all-section AS0 map** (8c8b8581):
+  `board::nanopc_t6_sections` and `board::nanopc_t6_mmu`, in the next list.
+- **Done: the Zephyr probe and its FFI entry.**
+  `tools/probes/nanopc_t6/t6_fw/src/main.c` (ceb971bb scaffold, 4f042566
+  the call) embeds `mali_csffw_blob.h`, owns the backing of every loaded
+  section inside the image and the `__nocache` shared section, and prints
+  the record; `yd_t6_fw_up` (c022cbfc, over `board::nanopc_t6_fw`,
+  c76d6bca) runs Z1's power-on, Z2's AS0 and `csf::boot`. The expected
+  uart2 lines are in "Z3 board procedure". `McuMem::cpu` hands out
+  whatever CPU address the image gives a backing, and `McuMem::clean` is
+  the CPU clean of the loaded bytes.
+- **Done: the cache flush after the load** — answered, in the paragraph
+  "Settled: no GPU cache flush after the load, beyond the CPU clean"
+  below (7f35d633).
+- **Open: the gate row for the `t6_fw` image** (`tools/check.sh`, next to
+  the `t6_hello`, `t6_gpu` and `t6_mmu` rows). It needs the header, and
+  must be a gap without it, like the firmware row (`needs`).
 
 **Closed on main, host side:**
 
@@ -1827,16 +1834,65 @@ are the model's pinned values; the timings and the MCU's own `features` word are
 the ones only the board can give. The board can differ from the model in
 exactly these: the MCU's boot time, the acknowledge latencies, and
 whether the firmware rewrites the control block's pages and strides.
-The probe's own `t6_fw:` lines carry them. **The literal uart2 lines of
-`t6_fw` (their text, the order and the PASS line) are not written here:
-the probe does not call `yd_t6_fw_up` yet; the board-procedure item
-fills them in from `tools/probes/nanopc_t6/t6_fw/src/main.c` once it
-does.** Until then the record must show at least the `FwUp` fields
-`step`, `stop`, `refusal` and `detail`, `tables_used`, `flushed`,
-`clean_rc`, `mcu_status_before`, `job_raw`, `mcu_status`, `boot_waited_us`,
-`version`, `image_version`, `acked`, `init_ack_us`, `ping_acked`,
-`ping_ack_us`, `glb_req` and `glb_ack`, and the control-block rows
-above.
+The probe's own `t6_fw:` lines carry them.
+
+**Expected uart2 record**, typed from the printk formats of
+`tools/probes/nanopc_t6/t6_fw/src/main.c` (4f042566), in the order the
+probe prints them. `<…>` is a value the board gives (not predicted),
+`…` the rest of a value that is not predicted; `%p` addresses are the
+image's. Z1's and Z2's own lines are not repeated: `yd_t6_fw_up` runs them
+inside and prints nothing until it returns.
+
+```
+t6_fw: build <describe>
+t6_fw: WDT0 period <ms> ms, fed until <ms> ms of uptime
+t6_fw: image 282624 bytes, 7 loaded sections, sha256 a27847ea…a2405b, magic 0x…
+t6_fw: section 0: VA 0x00400000, 64 KiB, backing <p> at PA 0x<pa>
+t6_fw: section 1: VA 0x00410000, 64 KiB, backing <p> at PA 0x<pa>
+t6_fw: section 2: VA 0x00000000, 64 KiB, backing <p> at PA 0x<pa>
+t6_fw: section 3: VA 0x00800000, 128 KiB, backing <p> at PA 0x<pa>
+t6_fw: section 4: VA 0x02000000, 256 KiB, backing <p> at PA 0x<pa>
+t6_fw: section 5: VA 0x01000000, 256 KiB, backing <p> at PA 0x<pa>
+t6_fw: section 6: VA 0x04000000, 64 KiB, backing <p> at PA 0x<pa>
+t6_fw: pool <p> at PA 0x<pa> (16 pages)
+t6_fw: Z3: rc 0 step 0, <ms> ms
+t6_fw: Z3: image version 0x01050000, 7 sections loaded, 1 protected skipped, 9 table pages, 7 flushes
+t6_fw: Z3: GPU_ID 0xa8670005 SHADER_PRESENT 0x0000000000050005 MMU_FEATURES 0x00002830 shared PA 0x…<pa> clean rc 0
+t6_fw: Z3: MCU_STATUS 0 before, 1 after, booted in <us> us, JOB_INT_RAWSTAT 0x8…
+t6_fw: Z3: GLB version 1.5.0 (0x01050000), features 0x00000000, instr 0x00000071, 8 groups stride 0xa0
+t6_fw: Z3: GLB input 0x04002000 output 0x04006000, CSG0 in 0x04003000 out 0x04007000 8 streams stride 0xc, CS0 in 0x04003400 out 0x04007200 features 0x<recorded>
+t6_fw: Z3: CORE_EN 0x0000000000050005, poweroff 0x000000eb progress 0x00271000 idle 0x00000013, ack_irq_mask 0x0400050e
+t6_fw: Z3: init req 0x0000040e acked 0x0000010e in <us> us, PING acked in <us> us, GLB req 0x… ack 0x…
+t6_fw: PASS
+```
+
+(Reading the format strings: `shader_present` and `core_en_mask` print
+as two 32-bit words, high first, so 0x50005 is `0x0000000000050005`;
+`poweroff_timer` 235 prints as `0x000000eb`; `job_raw` has bit 31 set, so
+it reads `0x8…`; the section lines list the backings in the order of
+`fw::Image::sections()`, not by VA, which is why VA 0x00400000 is
+section 0. The model's counts, not the board's: 7 sections, 896 KiB, 9
+table pages, 7 flushes.) `PASS` needs `rc` 0, `ping_acked` and
+`version` 0x01050000 together (`main.c`); the same run on the host over
+the MCU model is `cargo test -p yakogl-drivers --features mali --lib
+board::nanopc_t6_fw`: `test result: ok. 9 passed; 0 failed; 0 ignored;
+0 measured; 566 filtered out` (2026-11-05).
+
+**What the probe prints instead of the record when the run fails.** The
+`t6_fw: Z3: rc <rc> step <n>, <ms> ms` line is always printed; then:
+
+| Failure | Lines that replace the record and PASS |
+|---|---|
+| `yd_t6_fw_up` refused its arguments (rc -EINVAL) | `t6_fw: FAIL: yd_t6_fw_up refused its arguments` |
+| Step 1 to 4 (the image was refused, the backings do not fit, Z1's power-on stopped, Z2's AS0 stopped) | `t6_fw: Z3: stop <n> refusal <n> detail 0x<hi><lo> acked 0x<acked>`, then `t6_fw: FAIL: Z3 step <n> (<name>)` with `<name>` one of `the image was refused`, `the backings do not fit the sections`, `Z1's power-on stopped`, `Z2's AS0 stopped` |
+| Step 5, `csf::boot` refused (the table above) | the same `stop … refusal … detail … acked …` line, then the seven `t6_fw: Z3:` record lines (as far as filled), then `t6_fw: FAIL: Z3 step 5 (csf::boot refused)` |
+| Step 6, a cache clean of the load failed | as step 5, ending `t6_fw: FAIL: Z3 step 6 (a cache clean of the load failed)` |
+| Step 7, GLB version is not the header's | the `stop …` line, the record lines, then `t6_fw: FAIL: Z3 step 7 (the GLB version is not the image's)` |
+| `step` 0 but not PASS (no PING ack or a version other than 0x01050000) | the record lines, then `t6_fw: FAIL: Z3 step 0 (none): rc <rc>, PING not acked, GLB version 0x<version>` (`PING acked` when only the version is wrong) |
+
+A run that prints no `t6_fw: Z3: rc` line at all stopped inside
+`yd_t6_fw_up`: the watchdog's PSCI reset follows, and the capture ends
+at the `t6_fw: pool` line.
 
 **Failure signatures.** A refused run prints `step` (`STEP_*` of
 `nanopc_t6_fw.rs`), `stop`, `refusal` and `detail` (lo, hi), and the PSCI
