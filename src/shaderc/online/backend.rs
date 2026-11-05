@@ -40,7 +40,7 @@ use super::ir;
 use super::store;
 #[cfg(feature = "gpu-vivante")]
 use super::vivante::wide128;
-#[cfg(any(test, feature = "gpu-v3d", feature = "gpu-mali"))]
+#[cfg(any(test, feature = "gpu-v3d", feature = "gpu-mali", feature = "gpu-vivante"))]
 use crate::shaderc::sha256::sha256;
 use crate::shaderc::{IfLowering, LodKey, ShcBackend, ShcShader, SHC_STAGE_FRAGMENT, SHC_STAGE_VERTEX};
 use crate::util::{cstr_bytes, CStrWriter, Global, EINVAL, ENOMEM, ENOSPC, ENOTSUP};
@@ -1147,7 +1147,19 @@ fn variant_of(
     facts: Facts<'_>,
     log: &mut CStrWriter,
 ) -> Result<ShcShader, i32> {
-    let sha = record_key(glsl, &ZeroList::EMPTY, map, facts);
+    variant_keyed(record_key(glsl, &ZeroList::EMPTY, map, facts), stage, glsl, blend_key, map, facts, log)
+}
+
+/// [`variant_of`] for the record key `sha` its caller made.
+fn variant_keyed(
+    sha: [u8; 32],
+    stage: u32,
+    glsl: &[u8],
+    blend_key: u32,
+    map: Option<&crate::shaderc::ShcAttribMap>,
+    facts: Facts<'_>,
+    log: &mut CStrWriter,
+) -> Result<ShcShader, i32> {
     if let Some(hit) = cached_or_precompiled(&sha, stage, blend_key) {
         return Ok(hit);
     }
@@ -2088,7 +2100,8 @@ fn v3d_sensitivity(source: &[u8], stage: super::sema::Stage) -> LodKey {
 ///    around the compile and the previous key put back after it, panic or
 ///    not (as `set_compile_lod_key` is, `Restore`). The key is not in
 ///    [`Facts`] or the record key, so the caller keeps the variant per key
-///    itself, and a plain compile never runs with a key set.
+///    itself, and a plain compile never runs with a key set. The GL core's
+///    entry for this step is `shaderc::wide128_variant` ([`wide128_variant`]).
 #[cfg(feature = "gpu-vivante")]
 pub fn wide128_sensitivity(sh: &ShcShader) -> u32 {
     #[cfg(test)]
@@ -2139,6 +2152,79 @@ pub fn wide128_planes(sense: u32, companion: &[Option<u8>]) -> wide128::Planes {
         Some(c) if sense & 1 << b != 0 => p.with(b as u8, c),
         _ => p,
     })
+}
+
+/// Step 4 of [`wide128_sensitivity`]'s call contract: `sh` compiled again
+/// with its look-ups on the units of `planes` split into their two plane
+/// look-ups (`wide128::split_planes`) and for the sampler-state key `lod`
+/// (as `sampler_variant` compiles it), with the attribute map and the
+/// constant W it was compiled with. 0 and `*out` filled, which the caller
+/// releases (`shaderc::release_shader`) like a sampler variant, or < 0 and
+/// a log ([`crate::shaderc::VARIANT_NO_ROOM`] as for every draw's variant).
+/// An empty `planes` is `sampler_variant(sh, lod)` exactly: `lod` 0 copies
+/// the input.
+///
+/// The key is set around the compile only and the previous one put back
+/// after it, panic or not (as `set_compile_lod_key` is). It is not in
+/// [`Facts`], so the record is keyed apart instead: its record key is the
+/// one [`record_key`] gives, chained with the plane key, so a plain compile
+/// of the same source never finds the split record, nor this one the plain.
+/// A fragment result is linked by the caller (`link`) as a sampler
+/// variant is. Its blend variants (`blend_variant`) do not inherit the
+/// plane key: they are compiled from the source and the [`Facts`] alone.
+#[cfg(feature = "gpu-vivante")]
+pub fn wide128_variant(
+    sh: &ShcShader,
+    planes: wide128::Planes,
+    lod: LodKey,
+    out: &mut ShcShader,
+    log: &mut [c_char],
+) -> i32 {
+    if planes.is_empty() {
+        // SAFETY: a real shader and output, and a log of the size announced.
+        return unsafe { online_sampler_variant(sh, lod.bits(), out, log.as_mut_ptr(), log.len()) };
+    }
+    // SAFETY: a log valid for its length.
+    let mut log = unsafe { CStrWriter::new(log.as_mut_ptr(), log.len()) };
+    #[cfg(test)]
+    let _serial = store::test_lock();
+    let Some(base) = base_of(sh) else {
+        let _ = log.write_str("online shaderc: a 128-bit plane variant of a shader this back end did not compile");
+        return -EINVAL;
+    };
+    if base.blend_key != 0 || !(base.stage == SHC_STAGE_VERTEX || base.stage == SHC_STAGE_FRAGMENT) {
+        let _ = log.write_str("online shaderc: a 128-bit plane variant of a blend variant");
+        return -EINVAL; /* a variant of the plain shader only; blending comes after */
+    }
+    let facts = Facts { lod_key: lod, ..Facts::of(&base) };
+    /* the plane key, chained into the record key as `record_key` chains
+     * its facts: only the units in the mask and their companions */
+    let mut key = [0u8; 4 + wide128::UNITS];
+    key[..4].copy_from_slice(&planes.mask.to_le_bytes());
+    for (u, k) in key[4..].iter_mut().enumerate() {
+        *k = planes.companion_of(u as u8).unwrap_or(0);
+    }
+    let mut sha = record_key(base.source, &ZeroList::EMPTY, base.attrib_map, facts);
+    for extra in [&b"wide128-planes"[..], &key[..]] {
+        let mut both = [0u8; 64];
+        both[..32].copy_from_slice(&sha);
+        both[32..].copy_from_slice(&sha256(extra));
+        sha = sha256(&both);
+    }
+    struct Restore(wide128::Planes);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            wide128::set_compile_planes(self.0);
+        }
+    }
+    let _restore = Restore(wide128::set_compile_planes(planes));
+    match variant_keyed(sha, base.stage, base.source, 0, base.attrib_map, facts, &mut log) {
+        Ok(v) => {
+            *out = v;
+            0
+        }
+        Err(rc) => rc,
+    }
 }
 
 /// `lod_sensitivity`: which bindings' filter state `sh`'s code depends on
