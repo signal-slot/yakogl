@@ -901,7 +901,7 @@ snvs_read() { b "sudo -n od -A n -t x4 $NV" 2>/dev/null | xargs; }
 
 # ---- tryboot (pi4) ----------------------------------------------------------------
 pi4_uart_free() {
-    local uart p f holders= rc
+    local uart p f holders= rc try
     if uart_is_bridge; then
         # no device on this host: the bridge must accept a connection and not
         # answer "busy" (the capture retries "busy" later; this refuses early)
@@ -909,12 +909,22 @@ pi4_uart_free() {
             echo "DRY host\$ python3 tools/am62p_netboot_uart.py probe $BOARD_UART   # the bridge must accept and not be busy"
             return 0
         fi
-        python3 "$HERE/am62p_netboot_uart.py" probe "$BOARD_UART" && return 0
-        rc=$?
+        # rc 4/5: an earlier client may still hold the relay, so retry a few times;
+        # rc 3 is a wrong route to the relay and retrying will not help
+        for try in 1 2 3 4 5; do
+            rc=0
+            python3 "$HERE/am62p_netboot_uart.py" probe "$BOARD_UART" || rc=$?
+            [ "$rc" = 0 ] && return 0
+            if [ "$rc" = 4 ] || [ "$rc" = 5 ]; then
+                [ "$try" -lt 5 ] && sleep 3
+            else
+                break
+            fi
+        done
         case $rc in
-        3) die "BOARD_UART bridge refused or unreachable" ;;
-        4) die "BOARD_UART bridge is busy (another client holds it)" ;;
-        5) die "BOARD_UART bridge accepted and closed at once" ;;
+        3) die "BOARD_UART bridge refused or unreachable (wrong route to the relay; retrying will not help)" ;;
+        4) die "BOARD_UART bridge is busy (another client holds it) after $try tries" ;;
+        5) die "BOARD_UART bridge accepted and closed at once, after $try tries" ;;
         *) die "BOARD_UART bridge probe failed (rc $rc)" ;;
         esac
     fi
@@ -922,7 +932,7 @@ pi4_uart_free() {
         echo "DRY host\$ scan every /proc/<pid>/fd for $BOARD_UART (nobody may hold it)"
         return 0
     fi
-    [ -c "$BOARD_UART" ] || die "$BOARD_UART is not a character device"
+    [ -c "$BOARD_UART" ] || die "BOARD_UART is not a character device"
     uart=$(readlink -f "$BOARD_UART")
     # Who holds the UART: every fd of every process, resolved, compared exactly.
     for p in /proc/[0-9]*; do
@@ -1006,11 +1016,11 @@ $(pi4_config "$STAGED")"
 
 pi4_capture_start() {
     if uart_is_bridge; then
-        bridge_capture || { pi4_undo; die "serial bridge $BOARD_UART busy or unreachable after 12 tries (staged image removed; no reboot)"; }
+        bridge_capture || { pi4_undo; die "serial bridge BOARD_UART busy or unreachable after 12 tries (staged image removed; no reboot)"; }
         meta console "serial bridge: console.raw, console.ts; console.txt derived"
         return 0
     fi
-    act stty -F "$BOARD_UART" 115200 cs8 -cstopb -parenb raw -echo || { pi4_undo; die "stty on $BOARD_UART failed"; }
+    act stty -F "$BOARD_UART" 115200 cs8 -cstopb -parenb raw -echo || { pi4_undo; die "stty on BOARD_UART failed"; }
     if [ "$DRY" = 1 ]; then
         echo "DRY host\$ read $BOARD_UART line by line into <rundir>/console.txt as 'HH:MM:SS line' &"
         return 0
@@ -1176,14 +1186,14 @@ imx8mp_capture_start() {
     if uart_is_bridge; then
         if ! bridge_capture; then
             [ "$src" = net ] && rm -f "$NETBOOT_TFTP_ROOT/$file"
-            die "serial bridge $BOARD_UART busy or unreachable after 12 tries (no reboot)"
+            die "serial bridge BOARD_UART busy or unreachable after 12 tries (no reboot)"
         fi
         meta console "serial bridge: console.raw, console.ts; console.txt derived"
         return 0
     fi
     act stty -F "$BOARD_UART" 115200 cs8 -cstopb -parenb raw -echo || {
         [ "$src" = net ] && rm -f "$NETBOOT_TFTP_ROOT/$file"
-        die "stty on $BOARD_UART failed (no reboot)"
+        die "stty on BOARD_UART failed (no reboot)"
     }
     if [ "$DRY" = 1 ]; then
         echo "DRY host\$ read $BOARD_UART line by line into <rundir>/console.txt as 'HH:MM:SS line' &"
@@ -1485,7 +1495,7 @@ run_kexec() {
 kexec_am62p() {
     local t0 rcc=""
     # 5. the capture (bridge_capture: 'busy' retried)
-    bridge_capture || die "serial bridge $BOARD_UART busy or unreachable after 12 tries"
+    bridge_capture || die "serial bridge BOARD_UART busy or unreachable after 12 tries"
     if [ "$DRY" != 1 ]; then
         trap 'stop_cap; lease_release; rm -rf "$TMP"; [ -n "${BOARD_LOCK_WATCHDOG:-}" ] && kill "$BOARD_LOCK_WATCHDOG" 2>/dev/null' EXIT
     fi
