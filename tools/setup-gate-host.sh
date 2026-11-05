@@ -33,12 +33,14 @@
 # tools/cts/deps.toml needs (the same list: `tools/cts/deps-env.sh --packages
 # apt`). The heavy per-machine workspaces themselves (ZEPHYR_WS with west and
 # the Zephyr SDK, HAL_NXP_DIR, PCO_SHC with GLSL2USC_CACHE, MESA_PAN_TREE,
-# MESA_V3D_TREE, driver/src/fw/pvr_fw_blob.h) are out of scope here: they are
-# workspaces and firmware, not packages. `tools/cts/deps-env.sh --build-missing`
+# MESA_V3D_TREE) are out of scope here: they are workspaces, not packages. `tools/cts/deps-env.sh --build-missing`
 # makes them, after this script has installed the packages. --check still
 # reports the MALI_CSFFW firmware file (check.sh's gpu::mali row gaps without
 # it); --install only prints the command that fetches it, as that is a
-# download, not a package.
+# download, not a package. --check also reports whether
+# driver/src/fw/pvr_fw_blob.h is there (the AM62P image rows gap without it;
+# it is copied in by hand, never fetched, copied or committed by this script)
+# and a CC_aarch64_unknown_none that names no executable.
 set -u
 
 PROG=${0##*/}
@@ -281,6 +283,30 @@ check_mali_csffw() {
   fi
 }
 
+# The PowerVR firmware header the AM62P image rows embed (check.sh,
+# needs_pvr_fw_blob). It is gitignored and never committed; this only reports.
+check_pvr_fw_blob() {
+  local f
+  f=$(dirname "$0")/../driver/src/fw/pvr_fw_blob.h
+  if [ -f "$f" ]; then
+    line ok pvr_fw_blob.h "$f"
+  else
+    line missing pvr_fw_blob.h "$f not found (the AM62P image rows would gap): copy it in by hand, e.g. from the path in PVR_FW_BLOB (never fetched, never committed)"
+  fi
+}
+
+# A CC_aarch64_unknown_none that names no executable breaks the aarch64 rows
+# (build.rs uses it instead of clang on PATH). Silent when it is unset.
+check_cc_aarch64() {
+  local cc=${CC_aarch64_unknown_none-}
+  [ -n "$cc" ] || return 0
+  if command -v "$cc" >/dev/null 2>&1; then
+    line ok CC_aarch64_unknown_none "$cc"
+  else
+    line missing CC_aarch64_unknown_none "$cc is not an executable: unset it (build.rs then falls back to clang on PATH) or point it at a working compiler, e.g. /usr/bin/clang"
+  fi
+}
+
 run_checks() {
   check_cargo
   check_rustup_target aarch64-unknown-none
@@ -294,6 +320,8 @@ run_checks() {
   check_glslang
   check_pkgconfig
   check_mali_csffw
+  check_pvr_fw_blob
+  check_cc_aarch64
 }
 
 # ---------------------------------------------------------------------------
