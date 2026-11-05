@@ -60,6 +60,16 @@ if [ -n "$frag" ]; then
 	[ -f "$frag" ] || { echo "imx8mp: $frag not found" >&2; exit 2; }
 	extra=(-DEXTRA_CONF_FILE="$frag")
 fi
+# IMX8MP_CONSOLE=1: the UART3 console fragment (the board devicetree already makes uart3 the console)
+if [ "${IMX8MP_CONSOLE:-}" = 1 ]; then
+	con=$HERE/imx8mp-console.conf
+	[ -f "$con" ] || { echo "imx8mp: $con not found" >&2; exit 2; }
+	if [ ${#extra[@]} -gt 0 ]; then
+		extra=(-DEXTRA_CONF_FILE="$frag;$con")
+	else
+		extra=(-DEXTRA_CONF_FILE="$con")
+	fi
+fi
 modargs=()
 case "${DEQP_MODULE:-gles2}" in
 	gles2) ;;
