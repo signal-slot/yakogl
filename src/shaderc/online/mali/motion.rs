@@ -510,6 +510,16 @@ fn find(f: &Fs<'_>, m: &Module<'_>, colour: [Val; 4]) -> Result<Option<(u16, u8,
             if d.up(pd) == SINK {
                 continue;
             }
+            /* measured, as the stores above: nor when a look-up's computed
+             * coordinate reads it (mixed_44_hdrsample.expect.json: `v_xy *
+             * 0.5 + 0.5` stays two `FMA.f32` before `TEX_SINGLE`, the
+             * varying program the plain copy) */
+            let coord_of = |t: &super::nir_fs::TexLookup| {
+                t.coord == TexCoord::Computed && f.nir.nodes[t.node as usize].src.contains(&Val::Lane(pd, 0))
+            };
+            if f.look_ups().iter().any(coord_of) {
+                continue;
+            }
             return Ok(Some((n, c, pd)));
         }
     }

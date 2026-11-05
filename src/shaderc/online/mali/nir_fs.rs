@@ -1187,8 +1187,7 @@ impl<'s> Fs<'s> {
         if s[..arity].iter().any(|&v| highp(self, v)) {
             for &v in &s[..arity] {
                 if let Some((j, _)) = self.texel(v) {
-                    let n = self.look_ups[j].node;
-                    self.nir.nodes[n as usize].bits = 32;
+                    self.tex32(self.look_ups[j].node)?;
                 }
             }
         }
@@ -1461,6 +1460,33 @@ impl<'s> Fs<'s> {
         if !self.is_f16(v) {
             return Ok(v);
         }
+        /* fp16 products of texels read at fp32 other than by a highp
+         * output's store ([`Fs::widen_store`]): no reference */
+        self.mixed |= self.texel16_product(v, 0);
+        self.widen_store(v, at)
+    }
+
+    /// `v` is fp16 arithmetic on the texels of an fp16 look-up of a highp
+    /// shader ([`Fs::alu16`]; mixed_44_hdrsample's `* 0.25`).
+    fn texel16_product(&self, v: Val, depth: u8) -> bool {
+        let Val::Lane(n, _) = v else { return false };
+        if !self.prec.highp {
+            return false;
+        }
+        let nd = self.nir.nodes[n as usize];
+        let Kind::Alu(op) = nd.kind else { return false };
+        nd.bits == 16
+            && depth < 8
+            && nd.src[..op.arity()].iter().any(|&s| self.texel16(s) || self.texel16_product(s, depth + 1))
+    }
+
+    /// [`Fs::widen`] at the store of a highp output: lower_precision's
+    /// `f162f` where the lowered tree meets the assignment
+    /// (mixed_44_hdrsample's four `F16_TO_F32` ahead of `BLEND.v4.f32`).
+    fn widen_store(&mut self, v: Val, at: usize) -> Result<Val, MaliError> {
+        if !self.is_f16(v) {
+            return Ok(v);
+        }
         let first = self.nir.n;
         let r = self.nir.alu(Alu::F2f32, v, Val::Undef, Val::Undef)?;
         for id in first..self.nir.n {
@@ -1502,12 +1528,24 @@ impl<'s> Fs<'s> {
     /// lanes 0 and 1 of, or their `vec2` (`MKVEC.v2i16 x.h0, y.h0`,
     /// prec_82.expect.json).
     fn vec16(&mut self, x: Val, y: Val, at: usize) -> Result<Val, MaliError> {
+        self.vec16_of(x, y, false, at)
+    }
+
+    /// [`Fs::vec16`], taking two texels of an fp16 look-up as a pair when
+    /// `texels` (an fp16 product's operand, [`Fs::alu16`]).
+    fn vec16_of(&mut self, x: Val, y: Val, texels: bool, at: usize) -> Result<Val, MaliError> {
         if let (Val::Lane(n, 0), Val::Lane(m, 1)) = (x, y) {
             if n == m && self.nir.nodes[n as usize].width == 2 {
                 return Ok(Val::Lane(n, 0));
             }
         }
-        if !self.is_f16(x) || !self.is_f16(y) {
+        /* two texels of an fp16 look-up, lanes 2k and 2k + 1: the halves of
+         * its result's word k, read whole (the `vec2` copy-propagated,
+         * [`select_highp`]; mixed_44_hdrsample's `FMA.v2f16 r0, r0^, ..`) */
+        let texels = texels
+            && matches!((x, y), (Val::Lane(n, c), Val::Lane(m, d))
+            if n == m && c % 2 == 0 && d == c + 1 && self.texel16(x));
+        if !texels && (!self.is_f16(x) || !self.is_f16(y)) {
             return Err(MaliError::FragCoordMediump);
         }
         self.node16(Alu::Vec2, [x, y, Val::Undef], 2, at)
@@ -1598,6 +1636,32 @@ impl<'s> Fs<'s> {
                 let Val::Lane(n, _) = r else { return Err(MaliError::Defect(Defect::IrIndex)) };
                 out[0] = Val::Lane(n, 0);
                 out[1] = Val::Lane(n, 1);
+            }
+            /* a product of the lanes in pairs, each one vector operation
+             * of halves (`nir_opt_vectorize`): `FMA.v2f16 x, c, -0.0`, the
+             * constant one fp16 in both halves (mixed_44_hdrsample's `* 0.25`,
+             * `0x34000000.h11`). Two different constants of a pair, another
+             * operand than texels by a constant, or an odd lane count, have no
+             * reference */
+            AluOp::Fmul if w % 2 == 0 => {
+                if matches!(x[0][0], Val::Const(_)) && !matches!(x[1][0], Val::Const(_)) {
+                    x.swap(0, 1);
+                }
+                for k in (0..w).step_by(2) {
+                    if !self.texel16(x[0][k]) {
+                        return Err(MaliError::FragCoordMediump);
+                    }
+                    let v = self.vec16_of(x[0][k], x[0][k + 1], true, at)?;
+                    let q = match (x[1][k], x[1][k + 1]) {
+                        (Val::Const(a), Val::Const(b)) if a == b => Val::Const(a),
+                        _ => return Err(MaliError::FragCoordMediump),
+                    };
+                    let Val::Lane(n, _) = self.node16(Alu::Fmul, [v, q, u], 2, at)? else {
+                        return Err(MaliError::Defect(Defect::IrIndex));
+                    };
+                    out[k] = Val::Lane(n, 0);
+                    out[k + 1] = Val::Lane(n, 1);
+                }
             }
             _ => return Err(MaliError::FragCoordMediump),
         }
@@ -2207,6 +2271,27 @@ impl<'s> Fs<'s> {
         self.look_ups().iter().enumerate().filter(|(_, t)| t.live())
     }
 
+    /// `v` is a texel of an fp16 look-up (`TEX_SINGLE ... .16`).
+    fn texel16(&self, v: Val) -> bool {
+        self.texel(v).is_some_and(|(j, _)| self.tex_f16(j))
+    }
+
+    /// Look-up node `n` is taken at fp32 (a highp value reads it): refused
+    /// when an fp16 operation already reads its halves ([`Fs::alu16`]),
+    /// which would then read words of the other width (no reference).
+    fn tex32(&mut self, n: u16) -> Result<(), MaliError> {
+        let read16 = self.nir.nodes[..self.nir.n].iter().any(|x| {
+            x.bits == 16
+                && matches!(x.kind, Kind::Alu(_))
+                && x.src.iter().any(|v| matches!(v, Val::Lane(m, _) if *m == n))
+        });
+        if read16 && self.nir.nodes[n as usize].bits == 16 {
+            return Err(MaliError::MixedPrecision);
+        }
+        self.nir.nodes[n as usize].bits = 32;
+        Ok(())
+    }
+
     /// The look-up whose node is `n`, if one's is.
     fn look_up_of(&self, n: u16) -> Option<usize> {
         self.look_ups().iter().position(|t| t.node == n)
@@ -2347,6 +2432,23 @@ pub fn walk<'s>(m: &Module<'_>, scratch: &Arena<'s>, prec: FsPrecision) -> Resul
     let branches = f.nir.nifs != 0 || f.nir.nloops != 0 || f.discards != 0 || f.nlook != 0;
     if f.targets.iter().any(Option::is_some) && branches {
         return Err(MaliError::FragOutput);
+    }
+    /* fp16 texel products read by anything but fp16 arithmetic and the
+     * highp output's conversions ([`Fs::texel16_product`]): no reference */
+    for id in 0..f.nir.n {
+        let nd = f.nir.nodes[id];
+        let arity = match nd.kind {
+            Kind::Alu(Alu::F2f32) => 0,
+            Kind::Alu(_) if nd.bits == 16 => 0,
+            Kind::Alu(op) => op.arity(),
+            Kind::Phi => 2,
+            Kind::Tex => 3,
+            Kind::Discard => 1,
+            _ => 0,
+        };
+        if nd.src[..arity].iter().any(|&v| f.texel16_product(v, 0)) {
+            f.mixed = true;
+        }
     }
     order_keys(m, f.keys);
     /* a 2D array look-up's coordinate conversion CSE'd with one a later
@@ -3530,8 +3632,7 @@ fn walk_nodes(
                 if prec.highp {
                     for v in lanes {
                         if let Some((j, _)) = f.texel(v) {
-                            let n = f.look_ups[j].node;
-                            f.nir.nodes[n as usize].bits = 32;
+                            f.tex32(f.look_ups[j].node)?;
                         }
                     }
                 }
@@ -3546,6 +3647,18 @@ fn walk_nodes(
                 let mut lanes = [Val::Undef; 4];
                 for (i, t) in lanes.iter_mut().enumerate() {
                     *t = lane(vals, src, i);
+                }
+                /* an fp16 value stored to a highp output is converted at the
+                 * assignment, lane by lane (lower_precision's `f162f`;
+                 * mixed_44_hdrsample's four `F16_TO_F32 rN, rK.h0/.h1`), the
+                 * blend the fp32 one */
+                if prec.highp && prec.colour_f32 {
+                    for t in lanes.iter_mut() {
+                        *t = f.widen_store(*t, at)?;
+                    }
+                } else if prec.highp {
+                    /* stored to a mediump colour as they are: no reference */
+                    f.mixed |= lanes.iter().any(|&t| f.texel16_product(t, 0));
                 }
                 match slot {
                     IoSlot::FragColor(0) => {
@@ -3585,10 +3698,20 @@ fn walk_nodes(
                 /* the lanes an operand has (a compare's and a conversion's
                  * width is its sources', [`Fs::alu32_lanes`]) */
                 let n = (0..w).take_while(|&i| src[0][i] != Val::Undef).count();
-                let low = |f: &Fs<'_>, k: usize| fc[k] || (0..n).any(|i| f.is_f16(src[k][i]));
+                /* a lowp or mediump sampler's texel is fp16 (lower_precision's
+                 * `visit_enter(ir_texture)`: the look-up takes its sampler's
+                 * precision; hdrsample's `texture(hdr, ..) * 0.25`) */
+                let texel = |f: &Fs<'_>, v: Val| a == AluOp::Fmul && f.texel16(v);
+                let low = |f: &Fs<'_>, k: usize| fc[k] || (0..n).any(|i| f.is_f16(src[k][i]) || texel(f, src[k][i]));
                 let konst = |k: usize| (0..n).all(|i| matches!(src[k][i], Val::Const(_)));
                 if (0..arity).any(|k| low(f, k)) && (0..arity).all(|k| low(f, k) || konst(k)) {
-                    out = f.alu16(a, src, fc, n, at)?;
+                    /* a form [`Fs::alu16`] does not take on no gl_FragCoord
+                     * read: fp16 arithmetic of a mixed shader */
+                    let frag = fc.iter().any(|&b| b);
+                    out = f.alu16(a, src, fc, n, at).map_err(|e| match e {
+                        MaliError::FragCoordMediump if !frag => MaliError::MixedPrecision,
+                        e => e,
+                    })?;
                 } else {
                     out = f.alu32(m, a, &s, vals, at)?
                 }
@@ -7236,6 +7359,19 @@ pub fn select_highp(
                     continue;
                 }
                 let Kind::Alu(op) = nd.kind else { return Err(defect) };
+                /* the `vec2` of an fp16 look-up's two texels is its word
+                 * ([`Fs::vec16`]): no instruction, the readers take it whole */
+                if op == Alu::Vec2 && nd.bits == 16 && nd.width == 2 {
+                    let (x, y) = (src32(f, &lv, val, nd.src[0])?, src32(f, &lv, val, nd.src[1])?);
+                    if f.texel(nd.src[0]).is_some()
+                        && x.swz == Swz::H00
+                        && y.swz == Swz::H11
+                        && x.swz(Swz::H01) == y.swz(Swz::H01)
+                    {
+                        val[id] = Some(x.swz(Swz::H01));
+                        continue;
+                    }
+                }
                 let mut s = [Src::NULL; 3];
                 /* the conversion of a varying's two lanes reads both
                  * ([`vectorise_int_sources`], `V2F32_TO_V2F16`) */

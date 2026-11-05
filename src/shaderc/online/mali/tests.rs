@@ -1105,6 +1105,13 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
         (FS, "precision highp float; varying mediump vec4 v; void main(){ gl_FragColor = v; }", MaliError::MixedPrecision),
         (FS, "precision mediump float; varying highp vec4 a; varying highp vec4 b; void main(){ gl_FragColor = a + b; }", MaliError::MixedPrecision),
         (FS, "precision highp float; varying vec4 v; void main(){ mediump vec4 t = v; gl_FragColor = t; }", MaliError::MixedPrecision),
+        /* a lowp sampler's texels of a highp shader are fp16, their
+         * product too (mixed_44_hdrsample): one by two constants a pair,
+         * one read at fp32 by other arithmetic, and one stored to the
+         * mediump gl_FragColor have no reference */
+        (FS, "precision highp float; uniform sampler2D s; varying vec2 v; void main(){ gl_FragColor = texture2D(s, v) * vec4(0.5, 0.25, 0.5, 0.5); }", MaliError::MixedPrecision),
+        (FS, "precision highp float; uniform sampler2D s; varying vec2 v; void main(){ gl_FragColor = texture2D(s, v) * 0.5 + texture2D(s, v) * v.x; }", MaliError::MixedPrecision),
+        (FS, "precision highp float; uniform sampler2D s; varying vec2 v; void main(){ gl_FragColor = texture2D(s, v) * 0.5; }", MaliError::MixedPrecision),
         (VS, "attribute vec4 p; void main(){ if (p.x > 0.0) gl_Position = p; }", MaliError::Arithmetic),
         (VS, "attribute vec4 p; void main(){ while (true) { gl_Position = p; break; } }", MaliError::LoopVertex),
         /* a mediump `if` with a look-up under it keeps its branch
@@ -4562,6 +4569,30 @@ fn a_mediump_constant_is_rounded_to_nearest_even() {
     let (vs, fs, json) = (td!("mixprec_hello.vert"), td!("mixprec_hello.frag"), td!("mixprec_hello.expect.json"));
     let f = compile(SHC_STAGE_FRAGMENT, fs).expect("the fragment shader compiles");
     check_fs_stage(&f, vs, fs, json, VIEWPORT_64X64);
+}
+
+/// Cases 44 es3hdr and 49 es3facing (#33): es300/hdrsample.frag, a lowp
+/// sampler under `precision highp float`. The coordinate is fp32 (two
+/// `FMA.f32`), the look-up takes the sampler's precision (`TEX_SINGLE` of
+/// the fp32 registers into halves), the `* 0.25` is two `FMA.v2f16` of the
+/// packed pair, and the highp output's only conversions are four
+/// `F16_TO_F32 .h0/.h1` ahead of the fp32 blend, the alpha to `ATEST`
+/// (docs/notes/mali-mixed-precision.md 1 and 4). Both cases' references
+/// are the one program's; the vertex shader is es300/cube.vert.
+#[test]
+fn the_mixed_precision_hdrsample_is_byte_equal_to_mesa_26_2_1() {
+    let cases = [
+        (td!("mixed_44_hdrsample.vert"), td!("mixed_44_hdrsample.frag"), td!("mixed_44_hdrsample.expect.json")),
+        (td!("mixed_49_hdrsample.vert"), td!("mixed_49_hdrsample.frag"), td!("mixed_49_hdrsample.expect.json")),
+    ];
+    assert_eq!(cases[0].1, include_str!("../../../../tools/shaders/es300/hdrsample.frag"));
+    for (vs, fs, json) in cases {
+        let (v, f) = compile_linked(vs, fs);
+        check_vs_stage(&v, vs, fs, json, VIEWPORT_64X64);
+        check_fs_stage(&f, vs, fs, json, VIEWPORT_64X64);
+        let alone = compile(SHC_STAGE_FRAGMENT, fs).expect("the fragment shader compiles alone");
+        check_fs_stage(&alone, vs, fs, json, VIEWPORT_64X64);
+    }
 }
 
 /// Case 19's fp16 vertex uniforms (#33): a mediump float uniform of the
