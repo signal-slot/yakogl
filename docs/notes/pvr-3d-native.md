@@ -167,3 +167,43 @@ is the cost of a picture that is wrong but not black, so it needs a host that
 renders (the native-3D-on arm, `host-3d`) or the board. This measurement is
 only the host baseline: zero crashes, all 217 cases began, no chunk was
 resumed.
+
+## Host dEQP of the 3D texture groups, native 3D on (2026-11-05)
+
+Measured at `e179ad48` (the HEAD of the workspace), GPU powervr, dEQP-GLES3,
+VK-GL-CTS `93bca01` with the yakogl target, native 3D on through the host
+knob `YAKOGL_PVR_NATIVE_3D=1` (`host-deqp-run.sh --native-3d=1`; the off-arm
+above is the default, same script without the flag). The commands, one per
+group, from the repository root:
+
+```sh
+tools/cts/host-deqp-run.sh --gpu=powervr --module=gles3 --native-3d=1 --cts=<VK-GL-CTS> --out=<dir> dEQP-GLES3.functional.texture.filtering.3d.
+tools/cts/host-deqp-run.sh --gpu=powervr --module=gles3 --native-3d=1 --cts=<VK-GL-CTS> --out=<dir> dEQP-GLES3.functional.texture.mipmap.3d.
+```
+
+| group | cases | Pass | Fail | NotSupported | crash | wall | sum of case times |
+|---|---|---|---|---|---|---|---|
+| `texture.filtering.3d` | 153 | 0 | 141 | 12 | 0 | 9 s | 8.7 s |
+| `texture.mipmap.3d` | 64 | 0 | 64 | 0 | 0 | 3 s | 1.3 s |
+
+Wall is the whole script call (library and dEQP already built, 2 parallel
+processes), so it includes process start-up; the off-arm's wall was counted
+from the case list to the last chunk log and is not comparable to the second.
+Every Fail is "Image verification failed" (the Linux OSAL never runs the
+command stream, so `glReadPixels` reads black: HOST-ONLY, no render verdict
+means anything). All 217 cases began, no refusal carried a `0:<line>:` reason.
+
+The 3D `linear_mipmap_linear` cases that fail, all with the first message
+"Image verification failed" (9 `formats`, 4 `sizes`):
+
+- `filtering.3d.formats.{r11f_g11f_b10f,rgb10_a2,rgb565,rgb5_a1,rgb9_e5,rgba4,rgba8,rgba8_snorm,srgb8_alpha8}_linear_mipmap_linear`
+- `filtering.3d.sizes.{128x32x64,32x64x16,3x7x5,4x8x8}_linear_mipmap_linear`
+
+`mipmap.3d` has no case named `linear_mipmap_linear`; its 64 cases (affine,
+projected, ... by filter and wrap) all fail the same way.
+
+Against the off-arm: the tally is identical (141/12 and 64/64, zero Pass) and
+the sum of case times is about 40% higher in `filtering.3d` (8.7 s against
+6.3 s), so on the host the switch changes neither the verdicts nor the
+runtime in a way that matters; only the board, which renders, can show
+whether the picture is now right.
