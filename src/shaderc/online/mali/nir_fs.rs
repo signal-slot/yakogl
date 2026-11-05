@@ -40,7 +40,7 @@ use super::select::{
     alu, f16_exact, f16_rtne, generic_layout, preloads, split, UboLayout, VaryingAt, LOOP_CAP, MAX_VARYINGS,
 };
 use super::{Defect, FsPrecision, MaliError};
-use crate::gl::consts::{GL_BOOL, GL_FLOAT, GL_INT};
+use crate::gl::consts::{GL_BOOL, GL_BOOL_VEC2, GL_BOOL_VEC3, GL_BOOL_VEC4, GL_FLOAT, GL_INT};
 use crate::shaderc::online::arena::Arena;
 use crate::shaderc::online::ir::{self, AluOp, Es100Tex, IoKind, IoSlot, Module, Node};
 
@@ -312,7 +312,43 @@ pub fn order_keys(m: &Module<'_>, keys: &mut [u32]) {
         }
         _ => None,
     });
-    for (first, root) in ternaries {
+    /* a `?:` inside a statement's arithmetic: its `if` stands before the
+     * statement (the first store after it whose tree holds it, that of a
+     * grafted local's assignment, not where the local is read), with
+     * the tree of its condition and sides (measured: intbool_76_boolany's
+     * `r = (u_b ? 0.5 : 0.0) + (any(u_bv) ? ..) + (all(u_bv) ? ..)`: the
+     * three `CSEL`s and the `any` and `all` chains, then both `FADD`s) */
+    let stored = |i: usize| {
+        m.instrs[..n].iter().any(|op| {
+            matches!(op, ir::Op::StoreLocal { src, .. } | ir::Op::StoreOutput { src, .. } if src.val.0 as usize == i)
+        })
+    };
+    let nested = (0..n).filter(|&i| is_ternary(m, i) && !stored(i)).filter_map(|i| {
+        let holds = |root: u32| {
+            let mut stack = [0u32; MAX_VALUES];
+            let (mut sp, mut found) = (1, false);
+            stack[0] = root;
+            while sp > 0 && !found {
+                sp -= 1;
+                let v = stack[sp] as usize;
+                found = v == i;
+                if let Some(ir::Op::Alu(a, srcs)) = m.instrs.get(v).filter(|_| v > i) {
+                    for x in srcs.iter().take(a.arity()) {
+                        if sp < stack.len() {
+                            stack[sp] = x.val.0;
+                            sp += 1;
+                        }
+                    }
+                }
+            }
+            found
+        };
+        let at = (i + 1..n).find(|&j| {
+            matches!(m.instrs[j], ir::Op::StoreLocal { src, .. } | ir::Op::StoreOutput { src, .. } if holds(src.val.0))
+        })?;
+        Some((at, ir::ValueId(i as u32)))
+    });
+    for (first, root) in ternaries.chain(nested) {
         let mut stack = [0u32; MAX_VALUES];
         let mut under = [false; MAX_VALUES];
         let mut sp = 1;
@@ -452,11 +488,22 @@ fn grafted_locals(m: &Module<'_>, n: usize) -> [Option<ir::ValueId>; MAX_LOCALS]
         let clobbered = (st + 1..ld).any(
             |i| matches!(m.instrs[i], ir::Op::StoreLocal { local, .. } if reads.get(local.0 as usize) == Some(&true)),
         );
-        if !clobbered {
+        /* a `?:` on a run-time condition between them is an `if` (GLSL's
+         * `conditional_tmp`, [`order_keys`]), which ends the basic block
+         * the grafting stays in (`tree_grafting_basic_block`): measured,
+         * intbool_76_boolany's `r`, whose sum stands before `g`'s compares */
+        let ternary = (st + 1..ld).any(|i| is_ternary(m, i));
+        if !clobbered && !ternary {
             *o = Some(src.val);
         }
     }
     out
+}
+
+/// IR instruction `i` is a `?:` whose condition is no constant: GLSL's
+/// `conditional_tmp`, an `if` before the statement ([`order_keys`]).
+fn is_ternary(m: &Module<'_>, i: usize) -> bool {
+    matches!(m.instrs.get(i), Some(ir::Op::Alu(AluOp::Bcsel, s)) if !matches!(m.def(s[0].val), Some(ir::Op::ConstBool(_))))
 }
 
 /// `s` is a read of a local GLSL's `opt_tree_grafting` leaves in place
@@ -1247,6 +1294,50 @@ impl<'s> Fs<'s> {
         }
     }
 
+    /// `v` is a mediump shader's 32-bit select of two constants on a
+    /// boolean ([`Fs::mask_lane`], [`Fs::mask16`]): a value of no precision
+    /// (lower_precision lowers no operation of constants and booleans), so
+    /// a sum of two stays fp32 and is narrowed at the store
+    /// (intbool_76_boolany: `CSEL.u32.eq` of `u_b ? 0.5 : 0.0`, the
+    /// `FADD.f32` of the three, then `FADD.f32 r0.h0`).
+    fn select32(&self, v: Val) -> bool {
+        matches!(self.alu_of(v), Some((Alu::Bcsel, [_, Val::Const(_), Val::Const(_)]) | (Alu::B2f, _)))
+            && matches!(v, Val::Lane(n, _) if self.nir.nodes[n as usize].bits == 32)
+            && !self.prec.highp
+    }
+
+    /// `v` is a 16-bit boolean of a mediump shader: an fp16 compare's mask,
+    /// or the `ior` / `iand` of such masks ([`Fs::mask_op`]).
+    fn mask16(&self, v: Val) -> bool {
+        matches!(v, Val::Lane(n, 0) if matches!(
+            self.nir.nodes[n as usize],
+            NirNode { kind: Kind::Alu(Alu::Fcmp(_) | Alu::Ior | Alu::Iand), bits: 16, width: 1, .. }
+        )) && !self.prec.highp
+    }
+
+    /// `v` is a 32-bit boolean ([`Fs::mask_lane`]) or the `ior` / `iand`
+    /// of two ([`Fs::mask_op`]).
+    fn bool32(&self, v: Val) -> bool {
+        match self.alu_of(v) {
+            Some((Alu::Ior | Alu::Iand, [a, b, _])) if !self.mask16(v) => self.bool32(a) && self.bool32(b),
+            _ => self.mask_lane(v),
+        }
+    }
+
+    /// `op` (`ior`, `iand`) of two booleans of `any` / `all`: two constants
+    /// folded, two 32-bit masks a 32-bit node, two 16-bit masks a 16-bit
+    /// one (`pan_nir_lower_bool_to_bitsize` gives a bool its compare's
+    /// width). Another mix has no reference.
+    fn mask_op(&mut self, op: Alu, a: Val, b: Val, at: usize) -> Result<Val, MaliError> {
+        let u = Val::Undef;
+        match (a, b) {
+            (Val::Const(x), Val::Const(y)) => Ok(Val::Const(if op == Alu::Ior { x | y } else { x & y })),
+            _ if self.bool32(a) && self.bool32(b) => self.int32(op, [a, b, u], at),
+            _ if self.mask16(a) && self.mask16(b) => self.node(op, [a, b, u], at),
+            _ => Err(MaliError::IntValue),
+        }
+    }
+
     /// A 32-bit integer node of a mediump shader ([`Fs::int_lane`]),
     /// CSE'd (`nir_opt_cse`), made by IR instruction `at`.
     fn int32(&mut self, op: Alu, src: [Val; 3], at: usize) -> Result<Val, MaliError> {
@@ -1288,7 +1379,8 @@ impl<'s> Fs<'s> {
         };
         let bool_uniform = |k: usize| {
             matches!(m.def(srcs[k].val), Some(ir::Op::LoadUniform { dword_off, .. })
-                if m.uniforms.iter().any(|u| u.dword_off == *dword_off && u.gl_type as u32 == GL_BOOL))
+                if m.uniforms.iter().any(|u| *dword_off >= u.dword_off && *dword_off < u.dword_off + u.dwords.max(1)
+                    && matches!(u.gl_type as u32, GL_BOOL | GL_BOOL_VEC2 | GL_BOOL_VEC3 | GL_BOOL_VEC4)))
         };
         match a {
             AluOp::F2i if self.is_f16(p) || self.uniform_dword(p).is_some() => self.int32(Alu::F2i32, [p, u, u], at),
@@ -3722,8 +3814,10 @@ fn walk_nodes(
              * builds (intbig_case79.stderr: `fmul %124, 0.25` at 32 bits,
              * narrowed at the store) */
             ir::Op::Alu(a @ (AluOp::Fmul | AluOp::Fadd), s)
-                if (0..m.comps_of(ir::ValueId(id.0)) as usize)
-                    .any(|i| f.fp32_lane(lane(vals, s[0], i)) || f.fp32_lane(lane(vals, s[1], i))) =>
+                if (0..m.comps_of(ir::ValueId(id.0)) as usize).any(|i| {
+                    let (x, y) = (lane(vals, s[0], i), lane(vals, s[1], i));
+                    f.fp32_lane(x) || f.fp32_lane(y) || (f.select32(x) && f.select32(y))
+                }) =>
             {
                 let op = if a == AluOp::Fmul { Alu::Fmul } else { Alu::Fadd };
                 let w = m.comps_of(ir::ValueId(id.0)) as usize;
@@ -3732,7 +3826,7 @@ fn walk_nodes(
                  * float(sz.x)`, `F16_TO_F32` then `FMA.f32`) */
                 for (i, o) in out.iter_mut().enumerate().take(w) {
                     let (x, y) = (lane(vals, s[0], i), lane(vals, s[1], i));
-                    let ok = |v: Val| f.fp32_lane(v) || f.is_f16(v) || matches!(v, Val::Const(_));
+                    let ok = |v: Val| f.fp32_lane(v) || f.select32(v) || f.is_f16(v) || matches!(v, Val::Const(_));
                     if !ok(x) || !ok(y) {
                         return Err(MaliError::MixedPrecision);
                     }
@@ -3846,6 +3940,26 @@ fn walk_nodes(
                     *o = f.node(Alu::Ffma, x, at)?;
                 }
             }
+            /* `any` and `all` of a bvec: `nir_lower_alu_width`'s reduction
+             * from the last lane (`ior(ior(ior(w, z), y), x)`), of bool
+             * uniforms' words as 32-bit `ior` / `iand` and of mediump
+             * compares' masks as 16-bit ones (intbool_76_boolany:
+             * `LSHIFT_OR.i32 r2, u2.w1, r1.b00, u2.w0` of `u_bv.z` and
+             * `.y`, `LSHIFT_OR.v2i16 r3, r2.h11, 0x0.b00, r2` of `gt.w` and
+             * `.z`). The front end repeats the last lane read into the
+             * spare ones (builtin_call.rs) */
+            ir::Op::Alu(a @ (AluOp::Bany | AluOp::Ball), s) => {
+                let n = (1..=4).find(|&n| s[0].swizzle[n - 1..].iter().all(|&c| c == s[0].swizzle[3])).unwrap_or(4);
+                let op = if a == AluOp::Bany { Alu::Ior } else { Alu::Iand };
+                let mut acc = lane(vals, s[0], n - 1);
+                for i in (0..n - 1).rev() {
+                    acc = f.mask_op(op, acc, lane(vals, s[0], i), at)?;
+                }
+                if acc == Val::Undef {
+                    return Err(MaliError::ColourForm);
+                }
+                out[0] = acc;
+            }
             /* the integer and boolean operations of a mediump shader, as
              * 32-bit values ([`Fs::int_lane`]): folded where the constants
              * decide them (the index of a uniform array element: `int(t.w
@@ -3876,7 +3990,7 @@ fn walk_nodes(
              * b, c)` is `bcsel(a, c, b)` (nir_opt_algebraic.py; case 112's
              * `!b && .. ? green : red`, two `MUX.v2i16` on the bool
              * uniform's word, intbig_case112.expect.json) */
-            ir::Op::Alu(AluOp::Bcsel, s) if f.mask_lane(lane(vals, s[0], 0)) => {
+            ir::Op::Alu(AluOp::Bcsel, s) if f.bool32(lane(vals, s[0], 0)) || f.mask16(lane(vals, s[0], 0)) => {
                 let w = m.comps_of(ir::ValueId(id.0)) as usize;
                 for (i, o) in out.iter_mut().enumerate().take(w) {
                     let (mut c, mut y, mut z) = (lane(vals, s[0], i), lane(vals, s[1], i), lane(vals, s[2], i));
@@ -3926,7 +4040,10 @@ fn walk_nodes(
                 });
                 /* an int or a bool: one 32-bit word (a bool's as GL stores
                  * it, read as it is, intbig_case112.expect.json) */
-                let int = decl.is_some_and(|u| matches!(u.gl_type as u32, GL_INT | GL_BOOL) && u.array_len <= 1);
+                let int = decl.is_some_and(|u| {
+                    matches!(u.gl_type as u32, GL_INT | GL_BOOL | GL_BOOL_VEC2 | GL_BOOL_VEC3 | GL_BOOL_VEC4)
+                        && u.array_len <= 1
+                });
                 /* a float array's element at a constant index: no reference
                  * draws it (case108_uniidx reads at run-time indices only) */
                 if decl.is_some_and(|u| u.gl_type as u32 == GL_FLOAT && u.array_len > 1) {
@@ -6443,14 +6560,27 @@ pub fn mask_colour(f: &Fs<'_>) -> bool {
     /* the integer arithmetic of a division, and its fp32 results */
     let arith = |op: Alu| op.is_int() || matches!(op, Alu::I2f | Alu::U2f | Alu::Frcp | Alu::Fmul | Alu::Fadd);
     let divides = f.colour.is_some_and(|c| c.iter().any(fp32));
+    let masks = masks16(f);
     f.colour.is_some_and(|c| c.iter().all(|v| lane(v) || fp32(v)) && !c.iter().all(|v| matches!(v, Val::Const(_))))
         && pairs.is_some()
         && nodes.iter().enumerate().all(|(id, nd)| match nd.kind {
             Kind::Preload { .. } | Kind::Uniform { .. } => true,
             Kind::Input { loc, .. } => (loc as usize) < MAX_VARYINGS && nd.bits == 32,
+            Kind::Alu(Alu::Fcmp(_) | Alu::Ior | Alu::Iand) if nd.bits == 16 && masks => true,
             Kind::Alu(op) => (nd.bits == 32 && (int(op) || (divides && arith(op)))) || paired(id),
             _ => false,
         })
+}
+
+/// The mediump shader `f` reduces fp16 compares' masks with `any` or `all`
+/// ([`Fs::mask_op`]): 16-bit `ior` / `iand` nodes, which [`select_highp`]
+/// selects as `LSHIFT_OR.v2i16` / `LSHIFT_AND.v2i16` after the compares
+/// pair (intbool_76_boolany).
+pub fn masks16(f: &Fs<'_>) -> bool {
+    !f.prec.highp
+        && f.nir.nodes[..f.nir.n]
+            .iter()
+            .any(|nd| matches!(nd, NirNode { kind: Kind::Alu(Alu::Ior | Alu::Iand), bits: 16, .. }))
 }
 
 /// The mediump shader `f` makes a 2D array look-up ([`TexLookup::array`]):
@@ -7016,7 +7146,11 @@ pub fn select_highp(
      * mediump shader's with kept branches ([`kept16`]: the two `if`s'
      * compares of cflow_148_texbranch, and its guards' two by two) */
     let ladder = guarded16(f) || kept16(f);
-    if ladder {
+    /* so do the compares a mediump `any` / `all` reduces ([`masks16`]:
+     * intbool_76_boolany's `greaterThan` of a vec4, two `FCMP_OR.v2f16`) */
+    let masks = masks16(f);
+    let pairs16 = ladder || masks;
+    if pairs16 {
         vectorize16(f)?;
     }
     nir::fuse(&mut f.nir);
@@ -7027,7 +7161,7 @@ pub fn select_highp(
     }
     nir::dce(&mut f.nir, None);
     /* the ladder is one block now: its compares move to their selects */
-    if ladder && f.nir.live_ifs().next().is_none() {
+    if (ladder && f.nir.live_ifs().next().is_none()) || masks {
         nir::move_compares(&mut f.nir, scratch)?;
     }
     clamp_forms(&f.nir)?;
@@ -7405,7 +7539,7 @@ pub fn select_highp(
                         } else if matches!(v, Val::Const(_)) {
                             /* a pair [`vectorize16`] made holds a word of two
                              * halves */
-                            *y = y.swz(if ladder && nd.width == 2 { Swz::H01 } else { Swz::H00 });
+                            *y = y.swz(if pairs16 && nd.width == 2 { Swz::H01 } else { Swz::H00 });
                         }
                     }
                 }

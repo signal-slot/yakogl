@@ -36,7 +36,7 @@ const fn row(op: Alu, bits: u8, width: u8) -> Row {
 }
 
 /// The rows [`emit`] selects, each with the `bi_emit_alu` case it is.
-pub const ROWS: [(Row, &str); 84] = [
+pub const ROWS: [(Row, &str); 86] = [
     (row(Alu::Fadd, 32, 1), "nir_op_fadd: FADD.f32"),
     (row(Alu::Fmul, 32, 1), "nir_op_fmul: FMA.f32 a, b, -0.0"),
     (row(Alu::Ffma, 32, 1), "nir_op_ffma: FMA.f32"),
@@ -177,6 +177,11 @@ pub const ROWS: [(Row, &str); 84] = [
      * (tools/mali/testdata/cflow_148_texbranch: `U16_TO_U32 r1, r1^.h0`
      * after each look-up under an `if`, the MKVEC lowered by opt.rs) */
     (row(Alu::Mov, 16, 1), "nir_op_mov of one 16-bit lane: MKVEC.v2i16 a.hN, #0 (bi_make_vec_to)"),
+    /* `any` / `all` of mediump compares (tools/mali/testdata/intbool_76_boolany:
+     * `LSHIFT_OR.v2i16 r3, r2.h11, 0x0.b00, r2`, `LSHIFT_AND.v2i16 r2,
+     * r2^.h00, 0x0.b00, r4^` with `IADD.v2u16 r4, r1.h11, 0x0`) */
+    (row(Alu::Ior, 16, 1), "nir_op_ior of one 16-bit lane: LSHIFT_OR.v2i16 a.hN, b, #0"),
+    (row(Alu::Iand, 16, 1), "nir_op_iand of one 16-bit lane: LSHIFT_AND.v2i16 a.hN, b, #0"),
 ];
 
 /// A source of a one-lane 16-bit operation: its lane's half in both
@@ -346,6 +351,20 @@ pub fn emit(p: &mut Prog<'_>, row: Row, s: &[Src]) -> Result<u16, MaliError> {
          * 836-848): the lane's half (the caller's swizzle) and `bi_imm_u16(0)`,
          * the zero's low half */
         (Alu::Mov, 16, 1) => ins(p, Op::MkvecV2i16, &[s[0], ZERO.swz(Swz::H00)])?,
+        /* `bi_lshift_or_to` / `bi_lshift_and_to(b, 16, dst, s0, s1,
+         * bi_imm_u8(0))` of one lane, then `bi_lower_swizzle`
+         * (bi_lower_swizzle.c `lower_swizzle`): the second source takes no
+         * swizzle, so its low half is read whole (the result is a scalar:
+         * its high half is not read) and its high half is moved to both
+         * first (`IADD.v2u16 x.h11, 0`, CSE'd) */
+        (op @ (Alu::Ior | Alu::Iand), 16, 1) => {
+            let b = match lone(s[1]) {
+                x if x.swz == Swz::H11 => Src::ssa(ins(p, Op::IaddV2u16, &[x, ZERO])?),
+                x => x.swz(Swz::H01),
+            };
+            let o = if op == Alu::Ior { Op::LshiftOrV2i16 } else { Op::LshiftAndV2i16 };
+            ins(p, o, &[lone(s[0]), b, ZERO])?
+        }
         _ => return Err(MaliError::Defect(super::Defect::IrIndex)),
     })
 }

@@ -652,6 +652,18 @@ pub fn pack_one(i: &Ins, branch: i32) -> Result<u64, MaliError> {
             f.put("not_result", 0)?;
             alu_dest(&mut f, i, "dest_width")?;
         }
+        Op::LshiftAndV2i16 | Op::LshiftOrV2i16 => {
+            f = Fill::new(if i.op == Op::LshiftAndV2i16 { IsaOp::LshiftAndV2i16 } else { IsaOp::LshiftOrV2i16 });
+            /* as the 32-bit form (`va_swap_12`), the value's halves its
+             * `swz0` (`swiz_int_m`: h00 0, h10 1, h01 2, h11 3), the shift
+             * a byte pair (`shift_bitwise_i16_lanes_m`: b00 4, as the
+             * 32-bit b0) */
+            f.put("src0", src_byte(&i.src[0])?)?.put("swz0", swz16(i.src[0].swz)?)?;
+            f.put("src2", src_byte(&i.src[1])?)?.put("not2", 0)?;
+            f.put("src1", src_byte(&i.src[2])?)?.put("lanes1", byte_lane(i.src[2].swz)?)?;
+            f.put("not_result", 0)?;
+            alu_dest(&mut f, i, "dest_width")?;
+        }
         Op::LdPka { words, half } => {
             /* `va_pack_load` (va_pack.c:746-769): the address at bit 0, the
              * mode descriptor at bit 8, the memory access `.none` (0); the

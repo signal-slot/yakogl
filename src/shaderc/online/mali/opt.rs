@@ -45,6 +45,8 @@ const fn size(op: Op) -> u8 {
         | Op::V2f32ToV2f16
         | Op::MkvecV2i16
         | Op::IaddV2u16
+        | Op::LshiftAndV2i16
+        | Op::LshiftOrV2i16
         | Op::MuxV2i16
         | Op::FroundV2f16 { .. }
         | Op::FcmpOrV2f16 { .. }

@@ -625,6 +625,47 @@ this stage. A constant shift count of `ishr` is the byte lane
 - `corpus-verdicts.txt`: `es300/flatlast.vert` and
   `gltest/es3trunc_vsc.vert` are now `ok`.
 
+### Since plan #309 item bool-mask-ops: case 76
+
+Case 76 (`es100/boolany.frag`) is byte-equal to `intbool_76_boolany`
+(`case_76_boolany_is_byte_equal_to_mesa_26_2_1`, a member of tests.rs
+`INTBOOL_POPULATION`). What it took (nir_fs.rs unless named):
+
+- A `bvec2/3/4` uniform is 32-bit words as a `bool` is (the walk's
+  `LoadUniform`, `int_lane`'s `i2b`, select.rs `UboLayout::fs16`).
+- `any` / `all` (`AluOp::Bany` / `Ball`) are `nir_lower_alu_width`'s
+  reduction from the last lane, `ior(ior(z, y), x)` (`Fs::mask_op`): of
+  32-bit booleans (bool uniform words, compares, and the `ior` / `iand` of
+  those, `Fs::bool32`) a 32-bit node, `LSHIFT_OR.i32` / `LSHIFT_AND.i32`; of
+  fp16 compares' masks (`Fs::mask16`) a 16-bit node, the new rows
+  `LSHIFT_OR.v2i16` / `LSHIFT_AND.v2i16` (emit.rs; bir.rs `LshiftOrV2i16`,
+  `LshiftAndV2i16`, packed in pack.rs). Their second source takes no
+  swizzle (`bi_lower_swizzle`): a low half is read whole, a high half
+  through `IADD.v2u16 x.h11, 0`, which CSE makes one for both chains.
+- The program is `select_highp`'s (`mask_colour` admits the 16-bit compares
+  and masks when `masks16`): the four compares pair into two
+  `FCMP_OR.v2f16` (`vectorize16`) and each moves to its first reduction
+  (`nir::move_compares`).
+- `u_b ? 0.5 : 0.0` and the other two selects of constants are 32-bit
+  values of no precision (`Fs::select32`), so their sum is `FADD.f32` and
+  is narrowed at the store, while `any(gt) ? 1.0 : 0.0` stays the select the
+  store folds into `MUX.v2i16` (facing.frag's fold, unchanged:
+  builtin_49 still passes).
+- Order: GLSL makes every `?:` on a run-time condition an `if` before its
+  statement (`conditional_tmp`, ast_to_hir.cpp:1975-2005). `order_keys`
+  now places a `?:` nested in arithmetic before the statement that holds
+  it, and `grafted_locals` grafts no local across such an `if` (it ends
+  `opt_tree_grafting`'s basic block): `r` is computed where it is assigned,
+  before `g`'s compares, as in the reference.
+
+The open points of the study: the pushed uniform words needed no change
+(fau.rs already pairs them as Mesa does: `u2` = `u_bv.y`, `.z`, `u3` =
+`u_b`, `u_bv.x`); each fp16 compare pair stands just before its first use
+(`move_compares`); `r` stays fp32 without touching the colour-select fold.
+Corpus: `es100/boolany.frag` is `ok`; `es100/varyings15.frag` now refuses
+one step later, on the `inot` of a 16-bit mask (`!near(..)` of
+`all(lessThan(..))`), an integer or boolean value instead of arithmetic.
+
 ### Proposed lowering items (one agent session each)
 
 1. **bool-mask-ops (fs)**: `Iand` / `Ior` / `Inot` of fp16 compare masks as
