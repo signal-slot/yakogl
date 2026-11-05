@@ -34,6 +34,10 @@ static enum pipe_format pipe_of(const char *name)
 		{ "RGB5_A1", PIPE_FORMAT_A1B5G5R5_UNORM }, { "R32F", PIPE_FORMAT_R32_FLOAT },
 		/* the depth/stencil buffer the jobs store, sampled as its depth */
 		{ "D24S8", PIPE_FORMAT_S8_UINT_Z24_UNORM },
+		/* the depth types a shadow look-up compares (docs/notes/v3d-shadow.md
+		 * (d)): Mesa's rows for Z32_FLOAT and Z16_UNORM; our C table has
+		 * neither, so tex_check reads them for the gap check only */
+		{ "Z32F", PIPE_FORMAT_Z32_FLOAT }, { "Z16", PIPE_FORMAT_Z16_UNORM },
 		/* the GL core's ES 3.0 storage classes (src/backend.rs) */
 		{ "R16F", PIPE_FORMAT_R16_FLOAT },
 		{ "RGBA16F", PIPE_FORMAT_R16G16B16A16_FLOAT },
