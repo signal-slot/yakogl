@@ -549,6 +549,14 @@ pub enum Op {
     /// byte 0 of its source, bifrost_compile.c `nir_op_ishl`); the sources
     /// as [`Op::LshiftAndI32`]'s.
     LshiftOrI32,
+    /// `LSHIFT_AND.v2i16 dest, a, mask, shift`: [`Op::LshiftAndI32`] of
+    /// each 16-bit half (a 16-bit NIR `iand`, `all` of mediump compares'
+    /// masks, intbool_76_boolany); `a` swizzled, the mask read whole.
+    LshiftAndV2i16,
+    /// `LSHIFT_OR.v2i16 dest, a, b, shift`: [`Op::LshiftOrI32`] of each
+    /// 16-bit half (a 16-bit NIR `ior`); the sources as
+    /// [`Op::LshiftAndV2i16`]'s.
+    LshiftOrV2i16,
     /// `RSHIFT_AND.i32 dest, a, mask, shift`: `(a >> shift) & mask`
     /// (`bi_rshift_and_i32`, the sample id of r61, `bi_load_sample_id_to`,
     /// bifrost_compile.c:887-896); the sources as [`Op::LshiftAndI32`]'s.
@@ -864,6 +872,12 @@ pub const fn src_info(op: Op, s: usize) -> SrcInfo {
             | Op::ArshiftOrI32,
             2,
         ) => SrcInfo { lanes: true, ..info(false, false, false, false, 8) },
+        /* LSHIFT_AND.v2i16: the value a 16-bit widen (any half swizzle),
+         * the mask or or-value a plain word, the shift an 8-bit `lanes`
+         * source (valhall.c) */
+        (Op::LshiftAndV2i16 | Op::LshiftOrV2i16, 0) => info(false, false, true, false, 16),
+        (Op::LshiftAndV2i16 | Op::LshiftOrV2i16, 1) => info(false, false, false, false, 16),
+        (Op::LshiftAndV2i16 | Op::LshiftOrV2i16, 2) => SrcInfo { lanes: true, ..info(false, false, false, false, 8) },
         /* the byte offset, then the mode descriptor (va_pack.c:746-769) */
         (Op::LdPka { .. }, 0..=1) => info(false, false, false, false, 32),
         (Op::LdTile { .. }, 0..=2) => info(false, false, false, false, 32),
@@ -939,6 +953,8 @@ pub const fn nr_srcs(op: Op) -> usize {
         Op::LshiftAndI32
         | Op::LshiftOrI32
         | Op::LshiftXorI32
+        | Op::LshiftAndV2i16
+        | Op::LshiftOrV2i16
         | Op::RshiftAndI32
         | Op::RshiftOrI32
         | Op::ArshiftOrI32

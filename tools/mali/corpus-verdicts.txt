@@ -12,7 +12,7 @@ tools/shaders/es100/anyall.vert: Valhall: arithmetic other than +, -, * and a do
 tools/shaders/es100/attrib.frag: ok
 tools/shaders/es100/attrib_hole_float.vert: ok
 tools/shaders/es100/attrib_max_vec4.vert: ok
-tools/shaders/es100/boolany.frag: Valhall: an integer or boolean value is not lowered yet
+tools/shaders/es100/boolany.frag: ok
 tools/shaders/es100/branchlane.frag: ok
 tools/shaders/es100/branchquad.frag: ok
 tools/shaders/es100/clipping.frag: ok
@@ -124,7 +124,7 @@ tools/shaders/es100/utri.vert: ok
 tools/shaders/es100/va.frag: ok
 tools/shaders/es100/va_vec2.vert: Valhall: two varying lanes of equal value (Mesa's link merges them) is not lowered yet
 tools/shaders/es100/va_vec4x2.vert: ok
-tools/shaders/es100/varyings15.frag: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
+tools/shaders/es100/varyings15.frag: Valhall: an integer or boolean value is not lowered yet
 tools/shaders/es100/varyings15.vert: ok
 tools/shaders/es100/vrcp.vert: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
 tools/shaders/es100/vtex_struct_sampler.vert: Valhall: a varying lane computed from no attribute (a constant or a uniform alone, which Mesa's link moves or rewrites) is not lowered yet

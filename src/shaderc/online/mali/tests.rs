@@ -5091,7 +5091,7 @@ const ES100_PASSTHROUGH_VS: &str = include_str!("../../../../tools/shaders/gl_te
 /// mali-int-loops.md, mali-int-uniforms.md; plan #154 intbool): each pair
 /// against its drm-shim reference, drawn with no uniform values (every
 /// uniform word 0), every region and fact ([`check_program_for`]).
-const INTBOOL_POPULATION: [(&str, &str, &str, &str); 7] = [
+const INTBOOL_POPULATION: [(&str, &str, &str, &str); 8] = [
     /* `int(3.0 * v_color.r)` and `.g`: the varying loaded whole, its two
      * lanes one `V2F32_TO_V2F16` and one `FMA.v2f16` by the fp16 pair of
      * 3.0, `F16_TO_S32.rtz` of each half; the four selects of the colour
@@ -5154,6 +5154,21 @@ const INTBOOL_POPULATION: [(&str, &str, &str, &str); 7] = [
      * column (`U16_TO_U32 r3, r59^.h0`), stored unconverted by
      * `BLEND.slot0.v4.u32` (docs/notes/mali-int-uniforms.md, 2.5) */
     ("intrt", td!("intuni_intrt.vert"), td!("intuni_intrt.frag"), td!("intuni_intrt.expect.json")),
+    /* case 76 (boolany): a bool uniform's word and `any` / `all` of a
+     * `bvec3` uniform's three words as 32-bit `LSHIFT_OR` / `LSHIFT_AND`
+     * chains from the last lane (`u_bv.z` and `.y` share `u2`, `u_b` and
+     * `.x` `u3`), each `?:` a `CSEL.u32` of 0.5 or 0.25, their sum fp32
+     * and narrowed at the store; `greaterThan(u_v, vec4(0.5))` as two
+     * `FCMP_OR.v2f16`, each just before its first reduction, the chains
+     * `LSHIFT_OR.v2i16` / `LSHIFT_AND.v2i16` (`y` through one `IADD.v2u16
+     * .h11`), the colour's `MUX.v2i16`s at the store
+     * (docs/notes/mali-int-and-size.md) */
+    (
+        "76",
+        td!("intbool_76_boolany.vert"),
+        include_str!("../../../../tools/shaders/es100/boolany.frag"),
+        td!("intbool_76_boolany.expect.json"),
+    ),
 ];
 
 /// The population's member `name` against its reference.
@@ -5170,6 +5185,12 @@ fn case_72_intlit_is_byte_equal_to_mesa_26_2_1() {
 #[test]
 fn case_112_affectand_is_byte_equal_to_mesa_26_2_1() {
     check_intbool("112");
+}
+
+#[test]
+fn case_76_boolany_is_byte_equal_to_mesa_26_2_1() {
+    assert_eq!(td!("intbool_76_boolany.frag"), include_str!("../../../../tools/shaders/es100/boolany.frag"));
+    check_intbool("76");
 }
 
 #[test]
