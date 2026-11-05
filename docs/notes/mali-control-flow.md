@@ -457,9 +457,8 @@ takes the highp shader's guard machinery at fp16 (`nir_fs.rs`, `nir.rs`):
 
 The corpus copies `es100/deadloop.frag` and `es100/unibranch.frag` are now
 `ok` (`tools/mali/corpus-verdicts.txt`). `cond_sequence` (`FsOperandForm`)
-and `tri_if` (`ColourForm`) keep their own gaps. `frontfacing`, `texbranch`
-and the look-up `if` of 148 keep `ControlFlow`
-(`the_branch_case_is_refused_by_its_own_gap`).
+and `tri_if` (`ColourForm`) keep their own gaps. `frontfacing` keeps
+`ControlFlow`; `texbranch` is the branch part's (below).
 
 ### 2. branch: 148 (and the sources that keep blocks)
 
@@ -497,6 +496,56 @@ Existing code to extend:
 - the textures under `if`: every `TEX_SINGLE` here is `.skip.reserved.16.
   <comp>.2d.computed`; `analyze_helper_requirements` (`flow.rs`) decides
   `skip`, and 148's words are what to compare against.
+
+#### What landed (cflow-branch)
+
+148 is byte-equal to both its references in both stages: `cflow_148_texbranch`
+(drawn with `--uniform-values`) and `alu_texbranch` (the same pair drawn
+without, plan #153's study-alu reference), `tests.rs`
+`the_kept_branches_are_byte_equal_to_mesa_26_2_1`, the pairs in
+`CFLOW_BRANCH`; the corpus copy `es100/texbranch.frag` is `ok` in
+`tools/mali/corpus-verdicts.txt`. The route is the highp shader's blocks
+(`select_highp`) over the mediump walk's fp16 nodes, as the ladder of 71
+already was (`guarded16`); what it adds (`nir_fs.rs`):
+
+- `walk_if` takes a mediump `if` as a region when a side holds a look-up,
+  or when it is a pass's guard in a loop whose body holds one
+  (`holds_look_up`): the peephole takes no `tex`, so NIR keeps the blocks.
+  Any other mediump `if` is still `walk_if16`'s (the flatten). `kept16`
+  names a mediump shader with such a region; mod.rs routes it to
+  `select_highp`, where `nir::Nir::peephole_select` keeps the regions
+  (its `allowed` refuses a `Tex`) and `inverted_guards`, `invert_guards`
+  and `lay_out_inverted_guards` lay the 24 guards out as filter_image's.
+- A phi's source that is a lane of a vector (a texel: `c.r = texture2D(ta,
+  ..).r`) is a 16-bit `mov` node at the end of its side (`Fs::phi_src`,
+  `Alu::Mov`), the copy `nir_lower_phis_to_scalar` leaves because a phi
+  source takes no swizzle: `MKVEC.v2i16 a.hN, #0` (emit.rs), which
+  `lower_mkvec_swz` makes the reference's `U16_TO_U32 r1, r1^.h0`. A scalar
+  source (the sums) or a constant (the empty arm's 0.0) is the phi's own;
+  the phis coalesce into one register down the ladder of joins, so the
+  joins of guards 3 to 24 are empty and `bi_opt_control_flow` (opt.rs)
+  retargets their branches to the first non-empty one, which is why 22
+  guards share the target 527.
+- A coordinate whose two lanes are one fp16 value (`vec2(0.5) - i *
+  vec2(u.w)`, one scalar node by the walk's CSE) is widened to NIR's
+  operation of two lanes, with every fp16 operation under it
+  (`revector_coords`: `FADD.v2f16 r3, 0x38000000.h11, u2.w1.h11`, then
+  `F16_TO_F32` of `.h1` and `.h0`, which `tex_highp` emits at the look-up).
+  This runs before `vectorize16`, which pairs one-lane nodes only, so each
+  pass keeps its own `k * u.w` while the two `if`s' compares pair into one
+  `FCMP_OR.v2f16` and the guards' compares two passes at a time (`.h1`
+  tests the second: `end_block` keeps a lane-1 condition's `.h11`).
+  `nir::fuse` reads a product through `Val::Pair` and folds the `fneg` of
+  an fp16 constant into its halves (`0x40000000.neg.h11`: the constant
+  lowering finds -2.0 as the table's 2.0 negated).
+- A look-up writes the texels the colour reads (`tex_mask`:
+  `nir_def_components_read`, bifrost_compile.c:3522), so `.r`, `.g` and
+  `.b` alone are one register each; `src32` reads an fp16 texel at its
+  packed half. The pair path (`select`) refuses texels read with a gap
+  (`TexLanes`): its leaves index a prefix.
+- `branch_forms` refuses what the route does not transcribe under a kept
+  branch (a varying, a discard, an integer, a select, a cube, array or
+  fetch look-up): `ControlFlow`.
 
 ### Caveats
 

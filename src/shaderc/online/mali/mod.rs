@@ -1356,10 +1356,12 @@ fn compile_stage<'s>(
             nir_fs::vectorise_int_sources(&mut f)
                 .and_then(|()| select::UboLayout::fs16(m, &f.nir, &highp))
                 .and_then(|ubo| nir_fs::select_highp(&mut p, &mut f, m, &ubo, scratch).map(|()| ubo))
-        } else if nir_fs::guarded16(&f) {
+        } else if nir_fs::guarded16(&f) || nir_fs::kept16(&f) {
             /* a mediump shader's unrolled loop with run-time guards: the
              * graph's regions flattened as a highp shader's, its fp16 nodes
-             * paired afterwards (cflow_71_deadloop) */
+             * paired afterwards (cflow_71_deadloop); or its `if`s with a
+             * look-up under them, kept as blocks with a branch
+             * (cflow_148_texbranch) */
             let highp = |name: &str| matches!(prec(name), Some(Precision::High));
             select::UboLayout::fs16(m, &f.nir, &highp)
                 .and_then(|ubo| nir_fs::select_highp(&mut p, &mut f, m, &ubo, scratch).map(|()| ubo))

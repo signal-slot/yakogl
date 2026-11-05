@@ -948,6 +948,34 @@ impl<'s> Fs<'s> {
         }
     }
 
+    /// A phi's source `v` as the side whose last block is `block` leaves
+    /// it: a 16-bit lane of a vector (a texel, `c.r = texture2D(..).r`) is
+    /// a `mov` of the lane at the end of the side, which
+    /// `nir_lower_phis_to_scalar` makes for each scalar phi it splits off
+    /// (nir_lower_phis_to_scalar.c: `nir_mov_alu` of the source with the
+    /// lane's swizzle, inserted before the block's jump) and copy
+    /// propagation keeps, a phi source taking no swizzle ([`Alu::Mov`];
+    /// cflow_148_texbranch.stderr's `%8 = mov %7.x` on each side of the
+    /// first `if`). A scalar value or a constant is the source itself
+    /// (`nir_opt_copy_propagate`; the constant a move `bi_out_of_ssa`
+    /// makes, s5_phi_const). An fp32 lane of a vector has no reference.
+    fn phi_src(&mut self, v: Val, block: u8, at: usize) -> Result<Val, MaliError> {
+        let Val::Lane(n, _) = v else { return Ok(v) };
+        let nd = self.nir.nodes[n as usize];
+        let vector = nd.kind == Kind::Tex || nd.width > 1;
+        if !vector || nd.bits != 16 {
+            return Ok(v);
+        }
+        let saved = self.nir.cur;
+        self.nir.cur = block;
+        let mov = NirNode { kind: Kind::Alu(Alu::Mov), src: [v, Val::Undef, Val::Undef], bits: 16, width: 1 };
+        let r = self.nir.push_node(mov);
+        self.nir.cur = saved;
+        let id = r?;
+        self.origin[id as usize] = at as u16;
+        Ok(Val::Lane(id, 0))
+    }
+
     /// The join's value of a lane the sides of an `if` left as `a` (then)
     /// and `b` (else): one of them when they agree or the other is
     /// unwritten (`nir_opt_remove_phis`, `nir_opt_undef`), else a phi node
@@ -1413,9 +1441,15 @@ impl<'s> Fs<'s> {
         ) && !self.prec.highp
     }
 
+    /// `v` is a lane of an fp16 operation, or of a phi of fp16 values (the
+    /// join of an `if` Mesa keeps in a mediump shader, [`kept16`]).
     fn is_f16(&self, v: Val) -> bool {
         let Val::Lane(n, _) = v else { return false };
-        matches!(self.nir.nodes[n as usize], NirNode { kind: Kind::Alu(op), bits: 16, .. } if !op.is_int())
+        match self.nir.nodes[n as usize] {
+            NirNode { kind: Kind::Alu(op), bits: 16, .. } => !op.is_int(),
+            NirNode { kind: Kind::Phi, bits: 16, .. } => true,
+            _ => false,
+        }
     }
 
     /// An fp16 lane where a highp value is read: lower_precision's
@@ -2382,9 +2416,18 @@ fn walk_if(
 ) -> Result<Flow, MaliError> {
     /* a mediump pass's guard on the loop's one terminator ([`merged_bound`])
      * is a region as a highp one's: the ladder the optimisations flatten
-     * afterwards ([`select_highp`]; cflow_71_deadloop). Another mediump
-     * guard has no reference ([`walk_if16`]) */
-    if !prec.highp && !matches!(exit, IfExit::Guard(Unroll { merged: true, .. })) {
+     * afterwards ([`select_highp`]; cflow_71_deadloop), and so is an `if`
+     * with a look-up under it, or a pass's guard in a loop with one: the
+     * peephole takes no `tex` (`block_check_for_allowed_instrs`,
+     * nir_opt_peephole_select.c:319), so the `if` keeps its blocks and its
+     * branch ([`kept16`]; cflow_148_texbranch). Another mediump `if` is the
+     * pair path's ([`walk_if16`]) */
+    let merged = matches!(exit, IfExit::Guard(Unroll { merged: true, .. }));
+    let kept = match exit {
+        IfExit::Guard(lp) => holds_look_up(m, lp.nodes),
+        _ => holds_look_up(m, then_) || holds_look_up(m, else_),
+    };
+    if !prec.highp && !merged && !kept {
         return walk_if16(f, m, cond, then_, else_, exit, vals, locals, prec, join);
     }
     let Val::Lane(cn, _) = cond else { return Err(MaliError::IfForm) };
@@ -2520,7 +2563,17 @@ fn walk_if(
             continue;
         }
         for c in 0..4 {
-            locals[l][c] = f.phi(then_locals[l][c], locals[l][c], at)?;
+            let (a, b) = (then_locals[l][c], locals[l][c]);
+            if a == b || a == Val::Undef || b == Val::Undef {
+                locals[l][c] = f.phi(a, b, at)?;
+                continue;
+            }
+            /* a side's value that is a lane of a vector is copied at the
+             * side's end for the phi (`nir_lower_phis_to_scalar`; a texel,
+             * cflow_148_texbranch) */
+            let a = f.phi_src(a, then_last, at)?;
+            let b = f.phi_src(b, else_last, at)?;
+            locals[l][c] = f.phi(a, b, at)?;
         }
     }
     if colour.is_none() && brk.is_none() {
@@ -2751,6 +2804,17 @@ fn walk_guard(
     };
     let exit = IfExit::Guard(Unroll { merged, ..lp });
     walk_if(f, m, c, &[Node::Break], rest, exit, vals, locals, prec, lp.last)
+}
+
+/// Run `nodes` holds a texture look-up, itself or in a nested region: the
+/// `if` around it keeps its blocks ([`walk_if`]).
+fn holds_look_up(m: &Module<'_>, nodes: &[Node]) -> bool {
+    nodes.iter().any(|n| match *n {
+        Node::Instr(id) => matches!(m.instr(id), Some(ir::Op::Tex { .. })),
+        Node::If { then_, else_, .. } => holds_look_up(m, m.nodes_of(then_)) || holds_look_up(m, m.nodes_of(else_)),
+        Node::Loop { body } => holds_look_up(m, m.nodes_of(body)),
+        Node::Break | Node::Continue | Node::Return => false,
+    })
 }
 
 /// The bound `C` of a loop whose body `nodes` begins with its test on a
@@ -5575,6 +5639,13 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
     if f.prods & !ADMITTED != 0 || roots.iter().any(|&r| splat(r)) {
         return Err(MaliError::FsOperandForm);
     }
+    /* the texels read with a gap between them (`.rb`): Mesa writes the
+     * ones read, packed ([`tex_mask`]), a layout the leaves here do not
+     * index ([`Leaf::TexLane`] counts from the first texel); no reference
+     * draws it */
+    if f.live_look_ups().any(|(_, t)| t.lanes & (t.lanes + 1) != 0) {
+        return Err(MaliError::TexLanes);
+    }
     /* more than one look-up: each at a vec2 varying read whole or two
      * constants (texmore_2's `texture2D(u_tex0, v_uv)` and `texture2D(
      * u_tex1, v_uv)`); a computed coordinate or a cube among them has no
@@ -6122,6 +6193,11 @@ fn src32(f: &Fs<'_>, lv: &Leaves, val: &[Option<Src>], v: Val) -> Result<Src, Ma
                 let s = val.get(n as usize).copied().flatten().ok_or(defect)?;
                 Ok(s.swz(if f.nir.nodes[n as usize].width == 2 && c == 1 { Swz::H11 } else { Swz::H00 }))
             }
+            /* a phi of fp16 values holds its value in the low half (a
+             * texel's copy, a sum; [`kept16`]) */
+            Kind::Phi if f.nir.nodes[n as usize].bits == 16 => {
+                Ok(val.get(n as usize).copied().flatten().ok_or(defect)?.swz(Swz::H00))
+            }
             Kind::Alu(_) | Kind::Phi => val.get(n as usize).copied().flatten().ok_or(defect),
             /* a vec4 array read's loaded lane, a float array read's loaded
              * word (`select_highp`'s `UBO`) */
@@ -6161,9 +6237,10 @@ fn src32(f: &Fs<'_>, lv: &Leaves, val: &[Option<Src>], v: Val) -> Result<Src, Ma
                 let j = f.look_up_of(n).ok_or(defect)?;
                 lv.tex.get(j).and_then(|w| w[c as usize & 3]).map(Src::ssa).ok_or(defect)
             }
-            /* an fp16 texel of a 2D array look-up: its half of the register
-             * the write mask packs it in ([`tex_mask`]) */
-            Kind::Tex if f.look_up_of(n).is_some_and(|j| f.look_ups[j].array) => {
+            /* an fp16 texel: its half of the register the write mask packs
+             * it in ([`tex_mask`]; a 2D array look-up's, case 42, and a
+             * look-up's under an `if` Mesa keeps, cflow_148_texbranch) */
+            Kind::Tex if f.look_up_of(n).is_some_and(|j| f.tex_f16(j)) => {
                 let j = f.look_up_of(n).ok_or(defect)?;
                 let mask = tex_mask(&f.look_ups[j], true);
                 let at = (mask & ((1u8 << c) - 1)).count_ones() as usize;
@@ -6254,6 +6331,114 @@ pub fn array_look_ups(f: &Fs<'_>) -> bool {
 /// (cflow_71_deadloop), its fp16 lanes then paired ([`vectorize16`]).
 pub fn guarded16(f: &Fs<'_>) -> bool {
     !f.prec.highp && f.nir.ifs[..f.nir.nifs].iter().any(|r| r.single)
+}
+
+/// The mediump shader `f` keeps an `if` as blocks with a branch: a look-up
+/// under it, which `nir_opt_peephole_select` may not speculate
+/// (`block_check_for_allowed_instrs`, nir_opt_peephole_select.c:319), so
+/// the `if` is a region of the graph ([`walk_if`]) that [`select_highp`]
+/// lays out as a highp shader's (cflow_148_texbranch: the two `if`s with
+/// a look-up in an arm, and the 24 guards of the unrolled loop with two
+/// look-ups a pass). Its fp16 lanes pair as a ladder's ([`vectorize16`]).
+pub fn kept16(f: &Fs<'_>) -> bool {
+    !f.prec.highp && f.nir.live_ifs().any(|r| !r.single)
+}
+
+/// The forms [`kept16`]'s route transcribes (cflow_148_texbranch): fp16
+/// sums, products and compares over uniform lanes, constants, texels and
+/// each other, the negation of one, the look-ups' copies and the joins'
+/// phis, and look-ups of a 2D texture at a constant coordinate or one
+/// computed from those. A varying, a discard, an integer or a select has no
+/// reference under a kept branch ([`MaliError::ControlFlow`]).
+fn branch_forms(f: &Fs<'_>) -> Result<(), MaliError> {
+    for &id in &f.nir.order[..f.nir.len] {
+        let nd = f.nir.nodes[id as usize];
+        let ok = match nd.kind {
+            Kind::Alu(Alu::Fadd | Alu::Fmul | Alu::Ffma | Alu::Fneg | Alu::Fcmp(_) | Alu::Mov) => nd.bits == 16,
+            Kind::Uniform { .. } | Kind::Phi => nd.bits == 16,
+            Kind::Store { .. } => true,
+            Kind::Tex => {
+                let plain = |t: &TexLookup| t.cube.is_none() && !t.array && !t.fetch;
+                nd.bits == 16
+                    && f.look_up_of(id)
+                        .is_some_and(|j| plain(&f.look_ups[j]) && !matches!(f.look_ups[j].coord, TexCoord::Varying(_)))
+            }
+            _ => false,
+        };
+        if !ok {
+            return Err(MaliError::ControlFlow);
+        }
+    }
+    Ok(())
+}
+
+/// A look-up's coordinate whose two lanes are one fp16 value (`vec2(0.5) -
+/// i * vec2(u.w)`: the walk's CSE made one scalar node of the two equal
+/// lanes) is NIR's operation of two lanes: `nir_lower_alu_width` keeps a
+/// 16-bit vector of two (`bi_vectorize_filter`, bifrost_nir.c:176-179),
+/// and `nir_opt_shrink_vectors` does not merge equal lanes. The node and
+/// every fp16 operation under it become nodes of two lanes, each source
+/// the value's halves ([`Val::Pair`]) or a constant pair, and the look-up
+/// reads lane 0 and lane 1 (cflow_148_texbranch: `FADD.v2f16 r3,
+/// 0x38000000.h11, u2.w1.h11`, then `F16_TO_F32` of `.h1` and `.h0`). So
+/// widened before [`vectorize16`], which pairs one-lane nodes only
+/// (`nir_opt_vectorize` leaves a vector alone): the passes' products
+/// `k * u.w` stay each pass's own.
+fn revector_coords(f: &mut Fs<'_>) -> Result<(), MaliError> {
+    let defect = MaliError::Defect(Defect::IrIndex);
+    let half = |b: u32| f16_rtne(b).map(u32::from).ok_or(MaliError::Fp16Inexact);
+    let mut stack = [0u16; MAX_LOOK_UPS];
+    let mut sp = 0;
+    for j in 0..f.nlook {
+        let t = f.look_ups[j];
+        if !t.live() || t.coord != TexCoord::Computed || t.cube.is_some() || t.array {
+            continue;
+        }
+        let nd = f.nir.nodes[t.node as usize];
+        let Val::Lane(n, 0) = nd.src[0] else { continue };
+        if nd.src[1] != nd.src[0] || !f.is_f16(nd.src[0]) || f.nir.nodes[n as usize].width != 1 {
+            continue;
+        }
+        f.nir.nodes[t.node as usize].src[1] = Val::Lane(n, 1);
+        if sp == stack.len() {
+            return Err(MaliError::TooManyValues);
+        }
+        stack[sp] = n;
+        sp += 1;
+    }
+    while sp > 0 {
+        sp -= 1;
+        let n = stack[sp] as usize;
+        let nd = f.nir.nodes[n];
+        let (Kind::Alu(op), 16, 1) = (nd.kind, nd.bits, nd.width) else { continue };
+        let mut src = [Val::Undef; 3];
+        for s in 0..op.arity() {
+            src[s] = match nd.src[s] {
+                Val::Const(k) => Val::Const(half(k)? | half(k)? << 16),
+                /* an fp16 operation under it is widened too (once: a
+                 * product both coordinates of a pass read), and read whole;
+                 * a leaf (a uniform lane, a texel) is its half in both lanes */
+                v @ Val::Lane(m, _) => match f.nir.nodes[m as usize] {
+                    NirNode { kind: Kind::Alu(_), bits: 16, width: 1, .. } => {
+                        if sp == stack.len() {
+                            return Err(MaliError::TooManyValues);
+                        }
+                        stack[sp] = m;
+                        sp += 1;
+                        Val::Pair(m, Swz::H01)
+                    }
+                    NirNode { kind: Kind::Alu(_), bits: 16, width: 2, .. } => Val::Pair(m, Swz::H01),
+                    _ => {
+                        let h = lane_half(f, v).ok_or(defect)?;
+                        Val::Pair(m, if h == 0 { Swz::H00 } else { Swz::H11 })
+                    }
+                },
+                _ => return Err(defect),
+            };
+        }
+        f.nir.nodes[n] = NirNode { kind: nd.kind, src, bits: 16, width: 2 };
+    }
+    Ok(())
 }
 
 /// The forms [`guarded16`]'s route transcribes (cflow_71_deadloop): fp16
@@ -6672,6 +6857,10 @@ pub fn select_highp(
     if guarded16(f) {
         ladder_forms(f)?;
     }
+    if kept16(f) {
+        branch_forms(f)?;
+        revector_coords(f)?;
+    }
     let mut inots = f.nir.inverted_guards();
     f.nir.invert_ladder(&mut inots)?;
     f.nir.peephole_select(nir::PEEPHOLE_LIMIT_GL, true, &inots);
@@ -6684,8 +6873,10 @@ pub fn select_highp(
     f.nir.cse_compares();
     nir::dce(&mut f.nir, None);
     /* a mediump ladder's fp16 lanes pair in bifrost's optimisation loop,
-     * before the late rules (bifrost_nir.c:228-229, 335-344) */
-    let ladder = guarded16(f);
+     * before the late rules (bifrost_nir.c:228-229, 335-344); so do a
+     * mediump shader's with kept branches ([`kept16`]: the two `if`s'
+     * compares of cflow_148_texbranch, and its guards' two by two) */
+    let ladder = guarded16(f) || kept16(f);
     if ladder {
         vectorize16(f)?;
     }
@@ -6966,7 +7157,7 @@ pub fn select_highp(
         }
         match what {
             LOAD | TAIL_LOAD => convert(p, f, x as usize, &none, &mut lv, &mut rows)?,
-            TEX => tex_highp(p, f, x as usize, &mut lv, val)?,
+            TEX => tex_highp(p, f, x as usize, &mut lv, val, &mut rows)?,
             /* a float array read's offset, held in its node's value until
              * its load ([`select::ubo_offset`], [`select::ubo_fetch`]) */
             OFFSET => {
@@ -7004,8 +7195,11 @@ pub fn select_highp(
                 let id = f.nir.order[x as usize] as usize;
                 let nd = f.nir.nodes[id];
                 let header = f.nir.loops[..f.nir.nloops].iter().any(|r| r.header == b);
-                let s0 = src32(f, &lv, val, nd.src[0])?;
-                let s1 = if header { Src::NULL } else { src32(f, &lv, val, nd.src[1])? };
+                /* a phi's source is the value's register whole: an fp16
+                 * value's half is where its readers find it ([`src32`]), the
+                 * copy out of SSA takes no swizzle */
+                let s0 = src32(f, &lv, val, nd.src[0])?.swz(Swz::H01);
+                let s1 = if header { Src::NULL } else { src32(f, &lv, val, nd.src[1])?.swz(Swz::H01) };
                 let r = alu(p, Op::Phi, &[s0, s1])?;
                 val[id] = Some(Src::ssa(r));
                 if header {
@@ -7028,7 +7222,7 @@ pub fn select_highp(
                 }
                 if nd.kind == Kind::Tex {
                     let j = f.look_up_of(id as u16).ok_or(defect)?;
-                    tex_highp(p, f, j, &mut lv, val)?;
+                    tex_highp(p, f, j, &mut lv, val, &mut rows)?;
                     continue;
                 }
                 /* `pan_nir_load_va_desc`'s `load_ssbo` (`LD_PKA.i64` of the
@@ -7335,7 +7529,19 @@ pub(super) fn blend(
 
 /// Look-up `j` of a highp shader ([`tex`]): a computed coordinate's two
 /// values, or a cube's S, T and explicit level's word, selected before it.
-fn tex_highp(p: &mut Prog<'_>, f: &Fs<'_>, j: usize, lv: &mut Leaves, val: &[Option<Src>]) -> Result<(), MaliError> {
+/// A mediump shader's computed coordinate ([`kept16`]) is fp16 lanes,
+/// which the look-up reads converted (`F16_TO_F32` of each, lower_precision's
+/// `f162f` at the edge of the lowered tree; cflow_148_texbranch's
+/// `F16_TO_F32 r4, r3.h1` and `F16_TO_F32 r3, r3^.h0` before each pass's
+/// `TEX_SINGLE`).
+fn tex_highp(
+    p: &mut Prog<'_>,
+    f: &Fs<'_>,
+    j: usize,
+    lv: &mut Leaves,
+    val: &[Option<Src>],
+    rows: &mut u128,
+) -> Result<(), MaliError> {
     let t = f.look_ups().get(j).copied().ok_or(MaliError::Defect(Defect::IrIndex))?;
     let nd = f.nir.nodes[t.node as usize];
     let mut staging = [Src::NULL; 3];
@@ -7345,7 +7551,12 @@ fn tex_highp(p: &mut Prog<'_>, f: &Fs<'_>, j: usize, lv: &mut Leaves, val: &[Opt
         _ => 0,
     };
     for (k, x) in staging.iter_mut().enumerate().take(n) {
-        *x = src32(f, lv, val, nd.src[k])?;
+        let v = nd.src[k];
+        *x = src32(f, lv, val, v)?;
+        let f16 = matches!(v, Val::Lane(m, _) if f.nir.nodes[m as usize].bits == 16);
+        if f16 {
+            *x = Src::ssa(row(p, rows, Row { op: Alu::F2f32, bits: 32, width: 1 }, &[*x])?);
+        }
     }
     tex(p, f, j, lv, (n > 0).then_some(&staging[..n]))
 }
@@ -7369,17 +7580,17 @@ fn tex_desc(p: &mut Prog<'_>, f: &Fs<'_>, sampler: u8) -> Result<[u16; 2], MaliE
     Ok([w[0], w[1]])
 }
 
-/// The texels look-up `t` writes: a 2D array's those the colour reads
+/// The texels look-up `t` writes: those the colour reads
 /// (`nir_def_components_read`, bifrost_compile.c:3522; case 42's `.a` of
-/// the fetch), another's up to the last one read (`nir_opt_shrink_vectors`
-/// trims the unread tail: texmore_2's `.rgb`), an fp32 look-up's from the
-/// lowest one read (unitype_100.expect.json's `.ba`).
+/// the fetch, texmore_2's `.rgb`, cflow_148_texbranch's `.r`, `.g` and `.b`
+/// alone), an fp32 look-up's from the lowest one read (unitype_100.expect
+/// .json's `.ba`). The pair path packs the texels as a prefix
+/// ([`Leaf::TexLane`]): a mediump look-up read at lanes with a gap is
+/// refused there ([`select`]).
 fn tex_mask(t: &TexLookup, f16: bool) -> u8 {
     let tail = (1u8 << (8 - t.lanes.leading_zeros())) - 1;
-    if t.array {
+    if t.array || f16 || t.lanes == 0 {
         t.lanes
-    } else if f16 || t.lanes == 0 {
-        tail
     } else {
         tail & !((1u8 << t.lanes.trailing_zeros()) - 1)
     }
@@ -7399,7 +7610,12 @@ fn end_block(p: &mut Prog<'_>, f: &Fs<'_>, lv: &Leaves, val: &[Option<Src>], b: 
     };
     for r in f.nir.live_ifs() {
         if r.before == b {
-            let cond = src32(f, lv, val, r.cond)?.swz(Swz::H00);
+            /* the mask's low half; the high one of a 16-bit compare of two
+             * lanes whose second this `if` tests (`nir_opt_vectorize` pairs
+             * the guards' compares two by two, cflow_148_texbranch's
+             * `BRANCHZ.eq.reconverge r2^.h1, offset:482`) */
+            let c = src32(f, lv, val, r.cond)?;
+            let cond = if c.swz == Swz::H11 { c } else { c.swz(Swz::H00) };
             p.push(Ins::new(Op::Branchz { target: r.else_first, eq: true }, &[], &[cond]))?;
         } else if r.then_last == b {
             match r.brk {
