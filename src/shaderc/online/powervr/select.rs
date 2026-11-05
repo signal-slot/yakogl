@@ -850,7 +850,12 @@ impl<'a> Sel<'a> {
          * direction (the face is chosen from it) whatever the level; where
          * the arm is off, a cube's direction is (1, 0, 0), a texelFetch's
          * texel (0, 0) at its centre as every fetch is (0.5, 0.5 in texels),
-         * any other look-up's coordinate (0, 0) */
+         * any other look-up's coordinate (0, 0). A native 3D sample is a
+         * `dmn` 3d one too (`cube`, its SampleZ `vol`) but has no face to
+         * choose: it is guarded as a 2D look-up is, its third coordinate
+         * as the other two (0.5 for a fetch, at texel (0, 0, 0)'s centre). */
+        let vol = before[..n].iter().flatten().any(|b| b.op == SelOp::SampleZ { vol: true });
+        let cube = cube && !vol;
         if explicit && (level_guarded || cube) {
             let (x, y) = match (cube, fetch) {
                 (true, _) => (1.0, 0.0),
@@ -859,8 +864,9 @@ impl<'a> Sel<'a> {
             };
             g.srcs[0] = guard(self, g.srcs[0], f(x))?;
             g.srcs[1] = guard(self, g.srcs[1], f(y))?;
+            let z = if vol && fetch { 0.5 } else { 0.0 };
             for b in before[..n].iter_mut().flatten().filter(|b| matches!(b.op, SelOp::SampleZ { .. })) {
-                b.srcs[0] = guard(self, b.srcs[0], f(0.0))?;
+                b.srcs[0] = guard(self, b.srcs[0], f(z))?;
             }
             if proj {
                 /* the divisor: 1 where the arm is off */
@@ -1288,35 +1294,57 @@ impl<'a> Sel<'a> {
              * first), the TPU picking the mip level, filtering across
              * slices and wrapping every axis by the sampler's modes. The
              * record says `native_cube` bit 2 and the draw binds the
-             * twiddled volume (`gl::native_vol`). */
+             * twiddled volume (`gl::native_vol`).
+             *
+             * Every return type: the draw binds the copy for every 3D
+             * binding of a program whose record says bit 2 (an isampler3D's
+             * binding is a GLES_TEXTYPE_3D too, `draw::binding_type`), so an
+             * integer look-up left on the grid arms below would address the
+             * twiddled copy as a grid of slices. The integer sample is the
+             * 2D one's (`smp_type`: no `fcnorm`). `textureGrad` is pco's
+             * txd over three axes: d/dx and d/dy of u, v and w in the data
+             * block (pco_nir_tex.c:274-283), which the grid had no form for. */
             ir::Op::Tex {
                 dim: ir::TexDim::D3,
                 shadow: false,
                 proj,
-                ret: ir::ScalarType::F32,
+                ret: ret @ (ir::ScalarType::F32 | ir::ScalarType::I32 | ir::ScalarType::U32),
                 sampler,
                 coord,
-                lod: lod @ (ir::TexLod::Implicit | ir::TexLod::Lod(_) | ir::TexLod::Bias(_)),
+                lod: lod @ (ir::TexLod::Implicit | ir::TexLod::Lod(_) | ir::TexLod::Bias(_) | ir::TexLod::Grad { .. }),
                 offset: None,
             } if crate::shaderc::native_3d_enabled() => {
                 let [u, v, w] = self.tex_coords(coord, 3, proj)?;
-                let (mode, level) = self.smp_level(lod)?;
+                let (mode, level) = match lod {
+                    ir::TexLod::Grad { ddx, ddy } => {
+                        self.explicit_gradients(ddx, ddy, 3)?;
+                        (SmpLod::Gradients, None)
+                    }
+                    other => self.smp_level(other)?,
+                };
                 self.emit(SelGroup { op: SelOp::SampleZ { vol: true }, ty: OpType::F32, dst: None, srcs: [Some(w), None, None] })?;
                 self.emit(SelGroup {
                     op: SelOp::Sample { binding: sampler, proj: false, lod: mode, fetch: false, offset: None, cube: true, layer: false, gather: false },
-                    ty: OpType::F32,
+                    ty: smp_type(ret),
                     dst: Some(SelDst::Virtual(self.tex_out(id))),
                     srcs: [Some(u), Some(v), level],
                 })
             }
             /* texelFetch on a native 3D texture: the texel's centre,
-             * p + 0.5 on each axis, at the level given, as the 2D fetch
-             * above and the native array's. */
+             * p + 0.5 on each axis (w too: `nncoords` puts all three in
+             * texels, as pco's txf of a 3D image passes them, pco_nir_tex.c
+             * process_coords), at the level given, as the 2D fetch above and
+             * the native array's. pco passes p itself; at the corner the
+             * binding's own LINEAR filter would blend the eight texels
+             * around it (and LINEAR_MIPMAP_LINEAR's two levels coincide
+             * there only because the level is replaced by an integer), at
+             * the centre every filter returns the texel. Every return type,
+             * as the sample above. */
             ir::Op::Tex {
                 dim: ir::TexDim::D3,
                 shadow: false,
                 proj: false,
-                ret: ir::ScalarType::F32,
+                ret: ret @ (ir::ScalarType::F32 | ir::ScalarType::I32 | ir::ScalarType::U32),
                 sampler,
                 coord,
                 lod: ir::TexLod::Fetch(l),
@@ -1336,7 +1364,7 @@ impl<'a> Sel<'a> {
                 self.emit(SelGroup { op: SelOp::SampleZ { vol: true }, ty: OpType::F32, dst: None, srcs: [Some(c[2]), None, None] })?;
                 self.emit(SelGroup {
                     op: SelOp::Sample { binding: sampler, proj: false, lod: SmpLod::Replace, fetch: true, offset: None, cube: true, layer: false, gather: false },
-                    ty: OpType::F32,
+                    ty: smp_type(ret),
                     dst: Some(SelDst::Virtual(self.tex_out(id))),
                     srcs: [Some(c[0]), Some(c[1]), Some(lf)],
                 })

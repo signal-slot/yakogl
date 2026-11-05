@@ -22,7 +22,7 @@
 //! stored in `align(extent, 4)` per axis (`pvr_image_plane_setup_mip_levels`,
 //! `pvr_image.c:146-171`: `extent_alignment` 4 for a 3D image), the levels
 //! back to back, and a texel at `usclib_twiddle3d`'s index inside its level
-//! (`pco/usclib/tex.cl`).
+//! (`pco/usclib/tex.cl`) over that level's API extent ([`twiddle_extent`]).
 //!
 //! When is it stale: the texels were written on the CPU (`GlTexture::
 //! content_gen`) or a kick rendered into the texture (`framebuffer::
@@ -66,6 +66,32 @@ pub fn level_texels(e: (u32, u32, u32)) -> u32 {
 /// Texel offset of level `l` in the copy: the levels before it, back to back.
 pub fn level_texel_off(phys: (u32, u32, u32), l: u32) -> u32 {
     (0..l).map(|k| level_texels(level_extent(phys, k))).sum()
+}
+
+/// The extent level `l`'s texels are twiddled over: the API extent of a
+/// `w x h x d` volume halved `l` times, at least 1 (`u_minify`), which
+/// [`twiddle3d`] rounds up to a power of two per axis -- not the physical
+/// extent halved, which is where the level starts and how much it takes.
+/// The two differ for a NPOT side whose half is a power of two: a 65-wide
+/// volume's level 1 is 32 wide, twiddled over 32 (8 cubes), in a level that
+/// takes 64 (16). Mesa writes a 3D twiddled level so in both of its paths
+/// that address one, and the TPU must read what they wrote: the PBE, sized
+/// by the image view's extent, which Vulkan minifies to the view's level
+/// (`pvr_arch_cmd_buffer.c:1167-1168` -> `PBESTATE_REG_WORD1.size_x =
+/// util_logbase2_ceil(width)`, `pvr_arch_job_common.c:279-289`), and the
+/// image atomics, twiddled by `usclib_twiddle3d` over
+/// `usclib_tex_state_size(.., lod)`, the descriptor's API size shifted by
+/// the level (`pco_nir_tex.c:1164-1177`, `usclib/tex.cl:64-94`).
+pub fn twiddle_extent(w: u32, h: u32, d: u32, l: u32) -> (u32, u32, u32) {
+    ((w >> l).max(1), (h >> l).max(1), (d >> l).max(1))
+}
+
+/// The texel index the TPU reads texel (x, y, z) of level `l` of a `w x h x
+/// d` volume at: the level's offset in the physical chain plus the twiddle
+/// over the level's API extent.
+pub fn texel_index(api: (u32, u32, u32), l: u32, x: u32, y: u32, z: u32) -> u32 {
+    let phys = physical_extent(api.0, api.1, api.2);
+    level_texel_off(phys, l) + twiddle3d(x, y, z, twiddle_extent(api.0, api.1, api.2, l))
 }
 
 /// Texel (x, y, z)'s index inside a level of extent `size`, in the order
@@ -239,7 +265,7 @@ pub fn copy(t: &GlTexture, target_kick: u32, levels: u32) -> Option<(u64, u32)> 
             }
             let (lw, lh) = level_size(t, l);
             let ld = depth_at(t, l);
-            let ext = level_extent(phys, l);
+            let ext = twiddle_extent(w, h, d, l);
             let base = level_texel_off(phys, l);
             for z in 0..ld {
                 for y in 0..lh {
@@ -335,9 +361,10 @@ mod tests {
     }
 
     /// The texel the TPU would read at integer (x, y, z) of level l of a
-    /// copy: the layout's own arithmetic, from the extents alone.
-    fn tpu_texel(s: &[u8], phys: (u32, u32, u32), l: u32, x: u32, y: u32, z: u32) -> [u8; 4] {
-        let at = ((level_texel_off(phys, l) + twiddle3d(x, y, z, level_extent(phys, l))) * 4) as usize;
+    /// copy of a `api` volume: the layout's own arithmetic, from the extents
+    /// alone.
+    fn tpu_texel(s: &[u8], api: (u32, u32, u32), l: u32, x: u32, y: u32, z: u32) -> [u8; 4] {
+        let at = (texel_index(api, l, x, y, z) * 4) as usize;
         s[at..at + 4].try_into().unwrap()
     }
 
@@ -424,7 +451,7 @@ mod tests {
                 for y in 0..lh {
                     for x in 0..lw {
                         assert_eq!(
-                            tpu_texel(s, phys, l, x, y, z),
+                            tpu_texel(s, (w, h, d), l, x, y, z),
                             [(z * 16 + l) as u8, (x * 8) as u8, (y * 8) as u8, 255],
                             "level {l} ({x}, {y}, {z})"
                         );
@@ -446,11 +473,42 @@ mod tests {
         let (gpu, bytes) = copy(t, 0, 1).expect("a one-level copy");
         assert_eq!(bytes, 4 * 8 * 8 * 4);
         let s = bytes_at(gpu, bytes as usize);
-        let phys = physical_extent(3, 7, 5);
         for (x, y, z) in [(0u32, 0u32, 0u32), (2, 6, 4), (1, 3, 2)] {
-            assert_eq!(tpu_texel(s, phys, 0, x, y, z), [(z * 16) as u8, (x * 8) as u8, (y * 8) as u8, 255]);
+            assert_eq!(tpu_texel(s, (3, 7, 5), 0, x, y, z), [(z * 16) as u8, (x * 8) as u8, (y * 8) as u8, 255]);
         }
-        assert_eq!(tpu_texel(s, phys, 0, 3, 7, 7), [0, 0, 0, 0], "outside the 3x7x5 image");
+        assert_eq!(tpu_texel(s, (3, 7, 5), 0, 3, 7, 7), [0, 0, 0, 0], "outside the 3x7x5 image");
+    }
+
+    /// A NPOT volume's mip levels are twiddled over their API extent
+    /// (`twiddle_extent`): 17x9x4's level 1 is 8x4x2 (cubes 2x1x1) in a
+    /// 16x8x2 level (cubes 4x2x1), so texel (4, 0, 0) is cube 1, where the
+    /// physical extent's interleave (y0, x0, ...) would put it in cube 2.
+    #[test]
+    fn a_npot_volumes_levels_are_twiddled_over_their_api_extent() {
+        let gl = TestGl::new(4, 4);
+        let (w, h, d, levels) = (17u32, 9u32, 4u32, 3u32);
+        let name = volume(&gl, w, h, d, levels, GL_LINEAR_MIPMAP_LINEAR);
+        let t = &gl.ctx().objs_ref().textures[name as usize];
+        let (gpu, bytes) = copy(t, 0, levels).expect("a copy");
+        let s = bytes_at(gpu, bytes as usize);
+        let phys = physical_extent(w, h, d);
+        let at = |i: u32| -> [u8; 4] { s[(i * 4) as usize..(i * 4 + 4) as usize].try_into().unwrap() };
+        assert_eq!(at(level_texel_off(phys, 1) + 64), [1, 32, 0, 255], "level 1 (4, 0, 0) in cube 1");
+        assert_ne!(at(level_texel_off(phys, 1) + 128), [1, 32, 0, 255], "not the physical extent's cube 2");
+        for l in 0..levels {
+            let (lw, lh, ld) = twiddle_extent(w, h, d, l);
+            for z in 0..ld {
+                for y in 0..lh {
+                    for x in 0..lw {
+                        assert_eq!(
+                            tpu_texel(s, (w, h, d), l, x, y, z),
+                            [(z * 16 + l) as u8, (x * 8) as u8, (y * 8) as u8, 255],
+                            "level {l} ({x}, {y}, {z})"
+                        );
+                    }
+                }
+            }
+        }
     }
 
     /// REPEAT on all three axes, mip level 1 of a 4x4x4 volume: a texel
@@ -465,12 +523,11 @@ mod tests {
         let t = &gl.ctx().objs_ref().textures[name as usize];
         let (gpu, bytes) = copy(t, 0, 3).expect("a copy");
         let s = bytes_at(gpu, bytes as usize);
-        let phys = physical_extent(4, 4, 4);
         for (l, n) in [(0u32, 4u32), (1, 2), (2, 1)] {
             for (i, j, k) in [(-1i32, 5i32, -3i32), (n as i32, -(n as i32) - 1, 2 * n as i32 + 1), (7, -7, 7)] {
                 let (x, y, z) = (repeat(i, n), repeat(j, n), repeat(k, n));
                 assert_eq!(
-                    tpu_texel(s, phys, l, x, y, z),
+                    tpu_texel(s, (4, 4, 4), l, x, y, z),
                     [(z * 16 + l) as u8, (x * 8) as u8, (y * 8) as u8, 255],
                     "level {l}: ({i}, {j}, {k}) wraps to ({x}, {y}, {z})"
                 );
@@ -515,7 +572,7 @@ mod tests {
         let (gpu, bytes) = copy(t, 7, 3).expect("a copy");
         assert_eq!(copies() - n0, 4, "made again after the write");
         let s = bytes_at(gpu, bytes as usize);
-        assert_eq!(tpu_texel(s, physical_extent(4, 4, 4), 0, 1, 1, 1), px, "and it holds the new texel");
+        assert_eq!(tpu_texel(s, (4, 4, 4), 0, 1, 1, 1), px, "and it holds the new texel");
         released(t.mem.gpu);
         let n1 = copies();
         copy(t, 7, 3).expect("a copy");
