@@ -1,0 +1,35 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+[  812.402117] reboot: kexec_core: Starting new kernel
+[  812.405230] psci: CPU1 killed (polled 0 ms)
+T6:A EL2 HCR_EL2 0x000000048800003a -> 0x0000000080000002 SCTLR_EL2 0x0000000030400800 VBAR_EL2 0xffffcd30f6810800 -> 0x0000000010001000
+T6:A1 EL1 init done, MMU off
+T6:A2 PRE_KERNEL_1, MMU on: arming WDT0
+T6:A3 WDT0 arm rc 0 CR 0x00000009 period_ms 22369
+T6:B console up (uart2 through the ns16550 driver)
+yakogl-wdt: nanopc_t6 WDT0 armed at boot; top 13; lifetime_s 60; alive_s 5; proof 0; load 0x10000000
+t6: GICv3 CPU interface: ICC_CTLR_EL1 0x8402 had EOImode 1 (the kernel before us), now 0
+t6: WDT0 armed: CR 0x00000009 -> 0x00000009 (was running), TORR 0x0000000e -> 0x0000000d, CCVR 0x2a7f1c00, PARAM_1 0x12001f3a, version 0x3131302a, flags 0x1: period 22369 ms (TOP 13), fed until 60 s of uptime, alive window 5 s
+T6:C WDT0 armed, period 22369 ms
+board: watchdog armed
+t6_fw: build 2026-11-05 test
+t6_fw: WDT0 period 22369 ms, fed until 60000 ms of uptime
+t6_fw: image 262144 bytes, 7 loaded sections, sha256 abababababababababababababababababababababababababababababababab, magic 0xc3f13a6e
+t6_fw: section 0: VA 0x00400000, 64 KiB, backing 0x10040000 at PA 0x10040000
+t6_fw: section 1: VA 0x00410000, 64 KiB, backing 0x10050000 at PA 0x10050000
+t6_fw: section 2: VA 0x00000000, 64 KiB, backing 0x10060000 at PA 0x10060000
+t6_fw: section 3: VA 0x00800000, 128 KiB, backing 0x10070000 at PA 0x10070000
+t6_fw: section 4: VA 0x02000000, 256 KiB, backing 0x10090000 at PA 0x10090000
+t6_fw: section 5: VA 0x01000000, 256 KiB, backing 0x100d0000 at PA 0x100d0000
+t6_fw: section 6: VA 0x04000000, 64 KiB, backing 0x10110000 at PA 0x10110000
+t6_fw: pool 0x10027000 at PA 0x10027000 (16 pages)
+t6_fw: Z3: rc -5 step 5, 1260 ms
+t6_fw: Z3: stop 0 refusal 5 detail 0x0000000000000000 acked 0x00000000
+t6_fw: Z3: image version 0x01050000, 7 sections loaded, 1 protected skipped, 9 table pages, 7 flushes
+t6_fw: Z3: GPU_ID 0xa8670005 SHADER_PRESENT 0x0000000000050005 MMU_FEATURES 0x00002830 shared PA 0x0000000010110000 clean rc 0
+t6_fw: Z3: MCU_STATUS 0 before, 1 after, booted in 1480 us, JOB_INT_RAWSTAT 0x80000000
+t6_fw: Z3: GLB version 0.0.0 (0x00000000), features 0x00000000, instr 0x00000000, 0 groups stride 0x0
+t6_fw: Z3: init req 0x00000000 acked 0x00000000 in 0 us, PING NOT acked in 0 us, GLB req 0x00000000 ack 0x00000000
+t6_fw: FAIL: Z3 step 5 (csf::boot refused)
+t6: t6_fw done: PSCI SYSTEM_RESET at 214 ms (0 feeds)
+DDR V1.16 4bfdbd7 typ 24/01/09-11:49:58

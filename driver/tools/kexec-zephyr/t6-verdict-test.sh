@@ -82,12 +82,26 @@ check t6_gpu-over-mmu 1 "VERDICT t6_gpu FAIL ($((GPU - 10)) of $GPU)" "10 $((GPU
 check t6_hello-pass 0 'VERDICT t6_hello PASS' "$HELLO 0 0" t6_hello "$D/t6_hello-pass.uart"
 check t6_gpu-pass 0 'VERDICT t6_gpu PASS' "$GPU 0 0" t6_gpu "$D/t6_gpu-pass.uart"
 
-# t6_fw: boot 10 + build, WDT0, image, 7 sections, Z1, pool, Z2 = 23
-FW=23
-check t6_fw-pass 0 'VERDICT t6_fw scaffold ok, Z3 not judged' "$FW 0 0" t6_fw "$D/t6_fw-pass.uart"
+# t6_fw: boot 10 + build, WDT0, image, 7 sections, pool, Z3's rc line and 7
+# record lines, PASS, reset = 31
+FW=31
+check t6_fw-pass 0 'VERDICT t6_fw PASS' "$FW 0 0" t6_fw "$D/t6_fw-pass.uart"
 check t6_fw-missing 1 "VERDICT t6_fw FAIL (1 of $FW)" "$((FW - 1)) 1 0" t6_fw "$D/t6_fw-missing.uart"
-# Z1's rc -5 differs, the pool and Z2 lines never came, and the FAIL line is named
-check t6_fw-z1fail 1 "VERDICT t6_fw FAIL (4 of $FW)" "$((FW - 3)) 2 1" t6_fw "$D/t6_fw-z1fail.uart"
+# Z1 refused (step 3): the rc line differs, so does the stop line, the FAIL
+# line stands for PASS (differs, it names the step) and the record never came
+check t6_fw-z1fail 1 "VERDICT t6_fw FAIL (10 of $FW)" "$((FW - 9)) 7 3" t6_fw "$D/t6_fw-z1fail.uart"
+# stops at boot with no GLB version (step 5, VersionZero): the rc line, the
+# version, the interface and the configuration lines differ or are missing
+check t6_fw-boot-stop 1 "VERDICT t6_fw FAIL (7 of $FW)" "$((FW - 6)) 2 5" t6_fw "$D/t6_fw-boot-stop.uart"
+# the PING not acked (step 5, PingTimeout): the rc line, the last record line
+# (acked 0xe, NOT acked) and the FAIL line differ, with the stop line
+check t6_fw-ping-lost 1 "VERDICT t6_fw FAIL (4 of $FW)" "$((FW - 3)) 0 4" t6_fw "$D/t6_fw-ping-lost.uart"
+# JOB_INT_RAWSTAT without bit 31 differs (hook)
+sed 's/JOB_INT_RAWSTAT 0x80000000/JOB_INT_RAWSTAT 0x00000000/' "$D/t6_fw-pass.uart" >"$WORK/job.log"
+check t6_fw-job-bit 1 "VERDICT t6_fw FAIL (1 of $FW)" "$((FW - 1)) 0 1" t6_fw "$WORK/job.log"
+# GLB version 1.4.0 differs on that line only
+sed 's/GLB version 1.5.0 (0x01050000)/GLB version 1.4.0 (0x01040000)/' "$D/t6_fw-pass.uart" >"$WORK/ver.log"
+check t6_fw-version 1 "VERDICT t6_fw FAIL (1 of $FW)" "$((FW - 1)) 0 1" t6_fw "$WORK/ver.log"
 
 # usage
 rc=0
