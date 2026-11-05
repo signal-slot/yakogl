@@ -64,7 +64,7 @@
 use super::nir::{self, Alu, Kind, Nir, Val};
 use super::nir_fs::{Fs, TexCoord, FRAG_Z, POINT_COORD};
 use super::{Defect, MaliError};
-use crate::shaderc::online::ir::Module;
+use crate::shaderc::online::ir::{IoKind, Module, INTERP_FLAT};
 
 /// The moved expressions one program may carry.
 pub const MAX_MOVED: usize = 4;
@@ -108,7 +108,9 @@ impl Moved {
 /// interpolation, `can_move_alu_across_interp`), as [`encode`] numbers
 /// them: the index is the byte in every record key, so an operation is only
 /// ever appended. [`flag`] marks movable exactly these.
-const OPS: [Alu; 4] = [Alu::Fadd, Alu::Fmul, Alu::Fneg, Alu::Ffma];
+/// `U2f` moves only off a flat varying (case 89's `float(v_idx) / 4.0`,
+/// intbool_89_flatlast).
+const OPS: [Alu; 5] = [Alu::Fadd, Alu::Fmul, Alu::Fneg, Alu::Ffma, Alu::U2f];
 
 /// `moved` as the bytes of a record key, into `out`; the bytes written. An
 /// operation outside [`OPS`] is a defect (it would otherwise travel as
@@ -213,11 +215,13 @@ const ROOT: u16 = u16::MAX;
 const SINK: u16 = u16::MAX - 1;
 
 /// Movability (`FLAG_MOVABLE`, `FLAG_UNMOVABLE`) and interpolation
-/// (`FLAG_INTERP_CONVERGENT`, else the varyings' interpolation) of a value.
+/// (`FLAG_INTERP_CONVERGENT`, `FLAG_INTERP_FLAT`, else the varyings'
+/// interpolation) of a value.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Flag {
     Unmovable,
     Convergent,
+    Flat,
     Interpolated,
 }
 
@@ -357,6 +361,9 @@ fn flag(f: &Fs<'_>, m: &Module<'_>, v: Val, depth: u8) -> Flag {
             /* a special varying is no output of the vertex shader */
             if loc == POINT_COORD || loc == FRAG_Z {
                 Flag::Unmovable
+            } else if m.inputs.iter().any(|d| d.location == loc && d.kind == IoKind::Varying && d.interp == INTERP_FLAT)
+            {
+                Flag::Flat
             } else {
                 Flag::Interpolated
             }
@@ -365,6 +372,9 @@ fn flag(f: &Fs<'_>, m: &Module<'_>, v: Val, depth: u8) -> Flag {
         /* an operation inside an `if`: no reference moves one (every
          * femtovg chain the link moves stands before the scissor `if`) */
         Kind::Alu(_) if nir.block[n as usize] != 0 => Flag::Unmovable,
+        /* a mediump shader's fp16 value: lower_precision converted its
+         * operands first (`f2fmp` of the load), which no chain passes */
+        Kind::Alu(_) if nd.bits == 16 && !f.prec.highp => Flag::Unmovable,
         Kind::Alu(op) => {
             let mut flags = [Flag::Convergent; 3];
             for (k, fl) in flags.iter_mut().enumerate().take(op.arity()) {
@@ -375,6 +385,18 @@ fn flag(f: &Fs<'_>, m: &Module<'_>, v: Val, depth: u8) -> Flag {
             }
             if flags[..op.arity()].iter().all(|f| *f == Flag::Convergent) {
                 return Flag::Convergent;
+            }
+            /* the sources' interpolation, which must agree (:3866-3881): a
+             * flat value and an interpolated one never become one input */
+            let flat = flags[..op.arity()].contains(&Flag::Flat);
+            if flat && flags[..op.arity()].contains(&Flag::Interpolated) {
+                return Flag::Unmovable;
+            }
+            /* on a flat value any operation moves (:3888, only an
+             * interpolated one asks `can_move_alu_across_interp`), here
+             * one [`OPS`] numbers */
+            if flat {
+                return if OPS.contains(&op) { Flag::Flat } else { Flag::Unmovable };
             }
             /* `can_move_alu_across_interp` (every arm an [`OPS`] member) */
             let ok = match op {
@@ -506,8 +528,11 @@ fn find(f: &Fs<'_>, m: &Module<'_>, colour: [Val; 4]) -> Result<Option<(u16, u8,
             }
             let Some(pd) = postdom else { continue };
             /* measured (module text): not when the colour's stores are
-             * its only users */
-            if d.up(pd) == SINK {
+             * its only users. A mediump shader's fp32 value is stored
+             * through its narrowing (`f2fmp`, no [`OPS`] member), which is
+             * the user the chain stops at (intbool_89_flatlast: `float(v_idx)
+             * / 4.0` stored as the alpha moves) */
+            if d.up(pd) == SINK && f.prec.highp {
                 continue;
             }
             /* measured, as the stores above: nor when a look-up's computed

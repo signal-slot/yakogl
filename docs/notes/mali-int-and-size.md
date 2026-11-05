@@ -666,6 +666,18 @@ Corpus: `es100/boolany.frag` is `ok`; `es100/varyings15.frag` now refuses
 one step later, on the `inot` of a 16-bit mask (`!near(..)` of
 `all(lessThan(..))`), an integer or boolean value instead of arithmetic.
 
+### Since plan #309 item bool-mask-ops: case 89
+
+Case 89 (`es300/flatlast.{vert,frag}`) is byte-equal to `intbool_89_flatlast`
+through the link (`case_89_flatlast_is_byte_equal_to_mesa_26_2_1`, which
+replaces the vertex-only test above and checks the record the fragment
+shader now makes): the fragment walk takes `u2f32` of a 32-bit integer
+(fp32, as `i2f32`), and motion.rs moves `fmul(u2f32(v_idx), 0.25)` into the
+vertex shader (docs/notes/mali-varying-constants.md, "Flat values"). The
+fragment shader is the flat `.v4` load of `v_flat.rgb` and the moved lane,
+`.src_flat32` (`layout` now takes a varying declared `flat`). Corpus:
+`es300/flatlast.frag` is `ok`; MALI_TESTS does not move.
+
 ### Proposed lowering items (one agent session each)
 
 1. **bool-mask-ops (fs)**: `Iand` / `Ior` / `Inot` of fp16 compare masks as

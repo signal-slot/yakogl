@@ -716,7 +716,7 @@ enum Rule {
 pub struct Fs<'s> {
     pub nir: Nir<'s>,
     /// The shader's float precision: a highp one's arithmetic is fp32.
-    prec: FsPrecision,
+    pub(super) prec: FsPrecision,
     /// A value of the other width met ([`MaliError::MixedPrecision`],
     /// reported when no other gap is).
     pub mixed: bool,
@@ -1417,6 +1417,9 @@ impl<'s> Fs<'s> {
              * `i2f32` then `fmul` at 32 bits) and the division */
             AluOp::Iadd if !self.mask_lane(p) && !self.mask_lane(q) => self.int32(Alu::Iadd, [p, q, u], at),
             AluOp::I2f if !self.mask_lane(p) => self.op32(Alu::I2f, [p, u, u], at),
+            /* `float(v_idx)` of a flat `uint` varying (case 89), fp32 as
+             * `i2f32` is; motion.rs moves it into the vertex shader */
+            AluOp::U2f if !self.mask_lane(p) => self.op32(Alu::U2f, [p, u, u], at),
             AluOp::Idiv if !self.mask_lane(p) && !self.mask_lane(q) => self.idiv(p, q, at),
             /* `!=` of run-time integers (tri_int's `ine`, whose fp16 operands
              * feed fp32 integer arithmetic, not lowered), the arithmetic,
@@ -5094,7 +5097,8 @@ pub fn layout(f: &mut Fs<'_>, m: &Module<'_>, order: Option<super::link::Varying
     }
     let decls = m.inputs.iter().filter(|d| d.kind == IoKind::Varying && read.get(d.location as usize) > Some(&0));
     for d in decls.clone() {
-        if d.interp != ir::INTERP_SMOOTH {
+        /* a `flat` one is loaded `.src_flat32` (intbool_89_flatlast) */
+        if d.interp != ir::INTERP_SMOOTH && d.interp != ir::INTERP_FLAT {
             return Err(MaliError::Interpolation);
         }
     }
@@ -5132,7 +5136,11 @@ pub fn layout(f: &mut Fs<'_>, m: &Module<'_>, order: Option<super::link::Varying
             if read[loc] & (1 << comp) == 0 {
                 continue;
             }
-            if f.prec.consts.flat(at.location, comp) {
+            let declared = m
+                .inputs
+                .iter()
+                .any(|d| d.kind == IoKind::Varying && d.location == at.location && d.interp == ir::INTERP_FLAT);
+            if declared || f.prec.consts.flat(at.location, comp) {
                 flat = true;
             } else {
                 smooth = true;
@@ -7945,6 +7953,7 @@ fn int_op(a: AluOp) -> bool {
             | Inot
             | F2i
             | I2f
+            | U2f
     )
 }
 

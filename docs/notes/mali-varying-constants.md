@@ -456,6 +456,23 @@ and the varying stays smooth because the fragment stage reads all four
 lanes as one v4. The word to take over: the stored lane is a `MOV` of the
 uniform, no `FMA` is needed.
 
+### Flat values: the link's motion in a mediump shader (case 89)
+
+Plan #309 item bool-mask-ops. Mesa's `nir_opt_varyings` moves any ALU
+operation on a flat input (`update_movable_flags`: only an interpolated
+value asks `can_move_alu_across_interp`, nir_opt_varyings.c:3888), and an
+operation whose sources are flat and interpolated is unmovable
+(:3866-3881). motion.rs now has that `Flat` interpolation (an input
+declared `flat`), a flat chain moving only through `OPS` members; `U2f` is
+appended to `OPS` (number 4: the earlier numbers, which are record key
+bytes, stand). The motion runs for a mediump shader too: its fp16 nodes
+are unmovable (lower_precision's `f2fmp` of the load stands first), so
+only 32-bit chains of integer inputs move, and the colour's store of an
+fp32 value is through its narrowing, so the "stores alone" rule is
+highp's only. Measured: intbool_89_flatlast, `float(v_idx) / 4.0` computed
+by the varying program (`U32_TO_F32`, `FMA.f32 .. 0.25, -0`) and stored
+after `v_flat.rgb`, the fragment shader one `LD_VAR_BUF_IMM .src_flat32`.
+
 ### One-session lowering proposal, item `varying-merge`
 
 Order: (a) first, it needs only the register-reuse step; (b) after it,
