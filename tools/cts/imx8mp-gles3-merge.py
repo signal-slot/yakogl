@@ -16,11 +16,17 @@ of the other (8 characters at least).
 The table (tools/cts/imx8mp-gles3-tree.txt) and the mustpass list give each entry's cases, matched as
 tools/cts/check-imx8mp-gles3-tree.py does (dEQP's filter: comma-separated patterns, '*' = any run, whole name).
 
---notpass  `e<i>:<status> <case>` per mustpass case a record names as failing (Fail), and `e<i>:NoResult
-           <case>` for every case of an entry whose row has no usable record. A record names only the failing
-           cases, not the n.s./other/none ones, so each row also gets a `# e<i>: unresolved N ...` comment with
-           the cases it cannot place (mustpass - pass - named fails; non-mustpass cases a wildcard also begins
-           can hide some).
+--notpass  `e<i>:<status> <case>` per mustpass case that is not Pass: NotSupported, QualityWarning,
+           CompatibilityWarning, ResourceError, InternalError, Crash, Timeout or Fail, and `e<i>:NoResult
+           <case>` for every case of an entry whose row has no usable record. results.tsv names only the
+           failing cases (Fail), so the other statuses come from the per-case sources kept in the record's
+           own directory: its cases.tsv (`<case><TAB><Status>`), then its consoles (`*console.txt` at the top,
+           `<run>/console.txt` below; lines `deqp: <Status> <case>`, optionally behind an `HH:MM:SS ` or epoch
+           time stamp, as driver/samples/zephyr/deqp/src/deqp_log.c prints them). The last line for a case
+           wins; only mustpass cases of an entry whose record is in that directory count. A source status
+           replaces a results.tsv Fail; a Fail no source names stays Fail. Each row also gets a
+           `# e<i>: unresolved N ...` comment with the cases nothing places (mustpass - pass - named fails -
+           cases a source names; non-mustpass cases a wildcard also begins can hide some).
 --totals   per entry and overall: mustpass, begun, pass, fail, n.s., other, none (mustpass minus the
            others, at least 0), then the entries with no usable record.
 --check    exit 1 when two inputs cover the same entry, the inputs name different commits (or none), a row
@@ -114,6 +120,7 @@ class Merge:
         self.commits = []      # (dir, commit)
         self.rec = {}          # entry -> dict
         self.info = []         # per-row comments
+        self.statuses = {}     # dir -> read_statuses(dir)
         self.dash = {}         # entry -> dir of an all-'-' row (board.sh tally's row for an entry not run)
         self.verdicts = {}     # dir -> {entry: (verdict, resets, rc)} from its README / INDEX verdict lines
         for d in dirs:
@@ -218,6 +225,45 @@ class Merge:
         return m, b, p, f, s, o, max(0, m - p - f - s - o)
 
 
+STATUSES = ('Pass', 'Fail', 'NotSupported', 'QualityWarning', 'CompatibilityWarning', 'ResourceError',
+            'InternalError', 'Crash', 'Timeout', 'NoResult')
+CONSOLE_LINE = re.compile(r'^(?:(?:\d{2}:\d{2}:\d{2}|\d+(?:\.\d+)?)\s+)?deqp: (\w+) (dEQP-\S+)\s*$')
+
+
+def read_statuses(d):
+    """{case: Status} of a slice directory: cases.tsv, then its consoles (the last line for a case wins)."""
+    out = {}
+    tsv = os.path.join(d, 'cases.tsv')
+    if os.path.isfile(tsv):
+        for l in open(tsv, errors='replace'):
+            f = l.rstrip('\n').split('\t')
+            if len(f) >= 2 and f[1] in STATUSES and f[0].startswith('dEQP-'):
+                out[f[0]] = f[1]
+    files = [os.path.join(d, n) for n in sorted(os.listdir(d)) if n.endswith('console.txt')]
+    for n in sorted(os.listdir(d)):
+        c = os.path.join(d, n, 'console.txt')
+        if os.path.isdir(os.path.join(d, n)) and os.path.isfile(c):
+            files.append(c)
+    for path in files:
+        for l in open(path, errors='replace'):
+            m = CONSOLE_LINE.match(l.rstrip('\r\n'))
+            if m and m.group(1) in STATUSES:
+                out[m.group(2)] = m.group(1)
+    return out
+
+
+def sourced(m, i):
+    """{case: Status} the record's own directory names for the mustpass cases of entry i."""
+    r = m.rec.get(i)
+    if r is None or r['tally'] is None:
+        return {}
+    d = r['dir']
+    if d not in m.statuses:
+        m.statuses[d] = read_statuses(d)
+    must = set(m.per[i])
+    return {c: s for c, s in m.statuses[d].items() if c in must}
+
+
 def span(ids):
     ids, out, k = sorted(ids), [], 0
     while k < len(ids):
@@ -246,15 +292,20 @@ def do_notpass(m, out):
                 out.write('e%d:NoResult %s\n' % (i, case))
             continue
         mp, b, p, f, s, o, _ = c
-        unresolved = max(0, mp - p - len(r['names']))
+        src = sourced(m, i)
+        fails = set(r['names'])
+        shown = {n: 'Fail' for n in fails if n not in src}
+        shown.update((n, st) for n, st in src.items() if st != 'Pass')
+        named = fails | {n for n, st in src.items() if st != 'Pass'}
+        unresolved = max(0, mp - p - len(named))
         if unresolved or r['crc'] or r['outside'] or f != len(r['names']) or b < mp:
             out.write('# e%d: unresolved %d (mustpass %d, begun %d, pass %d, fail %d of which %d named, n.s. %d, other %d%s%s)\n'
                       % (i, unresolved, mp, b, p, f, len(r['names']), s, o,
                          ', %d names unresolved crc' % r['crc'] if r['crc'] else '',
                          ', %d names outside the mustpass' % r['outside'] if r['outside'] else ''))
         order = {n: k for k, n in enumerate(m.per[i])}
-        for n in sorted(set(r['names']), key=order.get):
-            out.write('e%d:Fail %s\n' % (i, n))
+        for n in sorted(shown, key=order.get):
+            out.write('e%d:%s %s\n' % (i, shown[n], n))
 
 
 def do_totals(m, out):
