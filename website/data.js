@@ -28,8 +28,8 @@
 window.YAKOGL_DATA = {
   "repo": "https://github.com/signal-slot/yakogl",
   "checkedAgainst": {
-    "commit": "381b0f09e9c8e7b3d437946c888224f12a27b367",
-    "date": "2026-10-27",
+    "commit": "08163414b656836b0d5e00260992f5d033e63a74",
+    "date": "2026-11-05",
     "source": "tools/cts/RESULTS.md"
   },
   "boards": [
@@ -75,23 +75,23 @@ window.YAKOGL_DATA = {
       "label": "dEQP-GLES2, whole tree at 1x",
       "board": "am62p",
       "value": {
-        "pass": 17330,
+        "pass": 17332,
         "fail": 0,
         "notSupported": 34,
-        "warnings": 7,
+        "warnings": 5,
         "total": 17371
       },
       "unit": "cases begun at 1x (17,165 mustpass cases plus 206 outside the list)",
-      "commit": "996bc35f",
-      "onMain": false,
-      "date": "2026-10-26",
+      "commit": "36c4305a",
+      "onMain": true,
+      "date": "2026-11-05",
       "source": "tools/cts/RESULTS.md",
       "section": "ES 2.0: dEQP-GLES2 (stage 1, met)",
       "status": "pass",
-      "note": "0 GPU resets. Within the mustpass list: 17,124 pass, 34 not supported, 7 warnings. The 16 multisample cases require the separate 4x image below; that image has not been rerun since 2026-10-15.",
+      "note": "0 GPU resets. Within the mustpass list: 17,126 pass, 34 not supported, 5 warnings. The 16 multisample cases require the separate 4x image below; that image has not been rerun since 2026-10-15.",
       "provenance": {
-        "kind": "pre-publication",
-        "recordCommit": "381b0f09e9c8e7b3d437946c888224f12a27b367"
+        "kind": "repository",
+        "recordCommit": "08163414b656836b0d5e00260992f5d033e63a74"
       }
     },
     "deqp2.am62p.ms4": {
@@ -125,16 +125,16 @@ window.YAKOGL_DATA = {
         "total": 17371
       },
       "unit": "cases begun (the 17,165 of the mustpass list plus 206 outside it)",
-      "commit": "d0c5dc48",
-      "onMain": false,
-      "date": "2026-10-23",
+      "commit": "0fbe61a3",
+      "onMain": true,
+      "date": "2026-10-31",
       "source": "tools/cts/RESULTS.md",
       "section": "ES 2.0: dEQP-GLES2 (stage 1, met)",
       "status": "pass",
       "note": "0 GPU resets. The 34 not-supported cases include the 16 multisample cases at 1x. The 19 quality warnings are also reported with NXP's driver.",
       "provenance": {
-        "kind": "pre-publication",
-        "recordCommit": "381b0f09e9c8e7b3d437946c888224f12a27b367"
+        "kind": "repository",
+        "recordCommit": "08163414b656836b0d5e00260992f5d033e63a74"
       }
     },
     "deqp2.pi4": {
