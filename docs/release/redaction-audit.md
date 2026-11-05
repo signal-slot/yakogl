@@ -3,11 +3,13 @@
 
 # Redaction audit of the tree and the history (release stage 3)
 
-Audit for checklist line 8 (`docs/release/checklist.md`), in three
+Audit for checklist line 8 (`docs/release/checklist.md`), in four
 passes:
 
-- **Part 3** (next section): the re-run on the tree after the scope cut of
-  #1606 step 5 (2026-10-26). It is the current state of the tree.
+- **Part 4** (first section): the re-run on `origin/main` `f3ec9117`
+  (2026-11-05), the current state of the tree.
+- **Part 3**: the re-run on the tree after the scope cut of #1606 step 5
+  (2026-10-26).
 - **Part 1** ("Part 1", down to "Notes for other items"): read-only
   audit of the tree and of every ref of the clone. Base: `5f8fff01`
   (ccfarm/integration tip, equal to `origin/main` in that clone), audited
@@ -21,6 +23,82 @@ passes:
 Where parts 1 and 2 disagree on the tree, the status after the merge is
 noted at the finding (H2, H3, M1). Their `file:line` references are at
 their own bases; many of those files have left the tree since.
+
+# Part 4: re-run on the current main tip (2026-11-05)
+
+| Item | Value |
+|---|---|
+| Date | 2026-11-05 |
+| Base | `origin/main` `f3ec911740cb41fec0a534e2b8c0464ca1b9ce88` (`f3ec9117`), 3,824 tracked files; Part 3's scanned tree was main `1ccb1a1b9` plus the step-5 change ("before" below = Part 3's "after", all zero) |
+| History | not scanned (decision 1 of #1606: the public history is one fresh commit of the cleaned tree) |
+| Method | Part 3's: `git grep -n -I <pattern> <rev> -- ':!third_party' ':!docs/release/redaction-audit.md'` per class, the ref written out in full in each command, every hit read by hand. The private values (owner login, runner, laptop, Pi 4 and bridge names) were kept in a scratch file outside the repository; none is written here |
+| Scan to re-run | `YAKOGL_REDACTION_PRIVATE_FILE=<file outside the repo> python3 -I tools/release/redaction-scan.py <rev>` (private values alternatively in `YAKOGL_REDACTION_PRIVATE`; allow file `tools/release/redaction-scan.allow`). The counts below come from the commands in the table, by hand; they are reconciled with the tool's output once the tool has landed |
+
+Values are masked as before (first character, `***`, length). "Raw" is the
+`git grep` line count; "After" is what remains once Part 3's look-alikes
+are dropped. The 12 findings are not edited here: plan #214 holds
+`tools/cts/**`.
+
+| Class | Command (pattern, extended regex) | Raw | After look-alikes | Before | After (open) |
+|---|---|---|---|---|---|
+| Home path | `/(home\|Users)/[A-Za-z0-9_.-]+` | 14 | 12 | 0 | 12 |
+| Owner login | the login, case-insensitive substring | 1 | 0 | 0 | 0 |
+| Private / tailnet IPv4 | 10/8, 172.16/12, 192.168/16, 100.64/10, 169.254/16 | 16 | 0 | 0 | 0 |
+| IPv6 link-local / ULA | `\b(fe80\|fd[0-9a-f]{2}):[0-9a-f:]+` | 0 | 0 | 0 | 0 |
+| Login at a real host | `(<login>\|signal-slot\|root\|torizon\|user)@[A-Za-z0-9_.<-]+`, case-insensitive | 53 | 0 | 0 | 0 |
+| Lab machine names | the runners, laptop, Pi 4 resource and bridge hosts of Part 3, whole words, case-insensitive | 0 | 0 | 0 | 0 |
+| SoM serial in a host name | `verdin-(am62p\|imx8mp)-[0-9a-f]{8}` | 6 | 0 | 0 | 0 |
+| Serial-bridge ports | `3593[0-9]` | 6 | 0 | 0 | 0 |
+| Tailnet DNS name | `\.ts\.net` | 0 | 0 | 0 | 0 |
+| Token / key | `ghp_\|github_pat_\|gho_\|AKIA\|xox.?-\|AIza\|sk-\|BEGIN [A-Z ]*PRIVATE KEY` | 7,526 | 0 | 0 | 0 |
+| Password / secret value | `(password\|passwd\|passphrase\|pwd\|secret\|api_?key)[[:space:]]*[:=][[:space:]]*[^[:space:]]`, case-insensitive | 2 | 0 | 0 | 0 |
+| E-mail addresses | `[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}` | 84 | 0 private | upstream, `.invalid`, a self-test's | same |
+
+## Every surviving hit
+
+### Findings (class M, left for a later item)
+
+`tools/cts/log/2026-10-31-pi4-gles3-a/{FO2,FO3,FO4,FO5,FO6,FR1,FR2,LT,M1,PR,R1,SQ}.tally.txt:4`
+(12 lines in 12 files): each starts with the absolute path of the
+`console.txt` the tally read, `/home/o***[5]/connected-work/<task id>/build/records/pi4-gles3-<hash>/<id>//console.txt`.
+The path is the home directory and work directory of a farm worker
+account (`o***[5]`), not the owner's login. Commit `e4ff10a3` brought them
+in. Held by plan #214 (`tools/cts/**`); not edited here. Fix: strip the
+prefix from line 4 of the 12 files (or have the tally script emit
+relative paths), tracked as a new issue. After: 12.
+
+### Look-alikes and L rows (not findings)
+
+| Class | Where | Masked value | Disposition |
+|---|---|---|---|
+| Home path | `driver/tools/kexec-zephyr/board_lock.sh:135`, `board_lock_selftest.sh:15` | `/home/.../` | look-alike: the elided placeholder in a comment |
+| Owner login | `docs/release/license-audit.md:187` | `T***[6]` | look-alike: the public author name (with the surname) of a commit, not a login |
+| IPv4 | `tools/board_selftest.sh:518-521` | `10.11.12.13`, `10.11.12.1`, `172.16.0.9` (RFC 1918 fixtures; `192.0.2.7` is RFC 5737) | look-alike: self-test data (4 lines) |
+| IPv4 | `tools/cts/pr-session-selftest.sh:22` | `10.9.8.7` | look-alike: fixture of a self-test |
+| IPv4 | 11 lines of `driver/docs/x2-hdmi-allow.txt`, `driver/docs/x2-hdmi-cold.md`, `driver/rust/src/ip/imx8mp_hdmi_phy.rs`, `driver/rust/src/soc/imx8mp/hdmi_golden.rs` | `13.10.x.y.z` | look-alike: reference-manual section numbers |
+| Login at host | `tools/check.sh:2644` | `t***[7]@gate.invalid` | look-alike: `.invalid` placeholder |
+| Login at host | `tools/cts/pr-session-selftest.sh:22` | `s***[11]@10.9.8.7` | look-alike: fixture |
+| Login at host | `tools/testdata/pi4-tryboot-E-a27d69c0.uart.ts:4` | `u***[4]@1000.service` | look-alike: a systemd unit in a console capture |
+| Login at host | the other 49 lines | `root@<t6>`, `torizon@<board>`, `user@host`, `root@BOARD`, `root@$...`, `git@github.com` | look-alike: placeholders and the clone URL (Part 3) |
+| SoM serial | 6 lines | `verdin-am62p-00000000`, `verdin-imx8mp-00000000` | look-alike: the zeroed form |
+| Bridge port | `docs/online-shaderc/v3d-backend.md:1962,1974`, `tools/cts/log/2026-10-31-pi4-gles3-a/PR.console.txt:2627`, `tools/mali/testdata/{fbload_isamp,intbool_199_vsc,texfetch_isamp}.stderr` | `3***[5]` inside longer numbers, `b019c041`, `c359306a` | look-alike: digits of a hash or a decimal, not a port |
+| Token / key | 7,526 lines | `highp_`, `mask-`, `->value_mask`, `sk->`, `ask-password`, `task-` | look-alike: identifiers and unit names; no real token or key |
+| Password | `driver/tools/kexec-zephyr/board-sudo-setup.sh:188,200` | `NOPASSWD:` | look-alike: the sudoers rule |
+| E-mail | 84 lines | upstream authors (Slint, KDAB, freedesktop, Pengutronix, Mesa, Linux kernel), `security-contact@example.invalid`, `t@example.org`, `torizon@gate.invalid`, `git@github.com`, log noise (`mmc@fa10000.bootdev.part`, `...@1000.service`) | look-alike: no private address |
+| L | the lab layout rows of Part 3 | | unchanged by this pass: not re-read for new paths beyond the home-path hits above |
+
+Not counted, as in Part 3: `verdin-*-00000000`, `armadillo.local`,
+`git@github.com`, the runner label `yakogl-gate`, `ccfarm`, and the
+`orion` pool tool and CLI (`tools/env/*`, a product name, not a login).
+
+## Verdict of part 4
+
+One M finding (12 lines, above), held by plan #214, so the tree on
+`f3ec9117` does not pass the scan yet. Every other class is clean. Lab
+machine names and the owner login are 0 against the private values that
+could be rebuilt from the farm's notes; the two bridge host names of Part 3
+could not be rebuilt, so the lab-name row must be re-run by the owner with
+the full private file. Re-run the scan above on the snapshot commit.
 
 # Part 3: re-run on the cut tree (2026-10-27)
 
