@@ -24,10 +24,21 @@
 //! `:N` is panthor_heap.c's line N. Where this differs from panthor it says
 //! so.
 //!
-//! Growth on `CS_TILER_OOM` (`panthor_heap_grow`, :416-489) and the return
-//! of a chunk the firmware could not take (`panthor_heap_return_chunk`,
-//! :359-414) are not here: the next item of the plan adds them; nothing
-//! calls them in Z4 (sched.rs refuses `CS_TILER_OOM`).
+//! Growth on `CS_TILER_OOM` (`panthor_heap_grow`, :416-489: [`grow`]), the
+//! return of a chunk the firmware could not take
+//! (`panthor_heap_return_chunk`, :359-414: [`return_chunk`]) and a heap's
+//! teardown (`panthor_heap_destroy`, :226-255: [`destroy`]) are transcribed
+//! too. Nothing calls them in Z4: they are for a later `CS_TILER_OOM`
+//! handler in sched.rs, which refuses `CS_TILER_OOM` today.
+//!
+//! Two points where panthor differs from the plan's wording for growth,
+//! both followed as panthor has them: the in-flight refusal is for strictly
+//! more render passes than `target_in_flight`, and it is `-ENOMEM`, not
+//! `-EBUSY` (:458-461; panthor's handler takes `-ENOMEM` as "let the
+//! firmware wait", panthor_sched.c:1491-1501); and a grown chunk's header is
+//! zeroed, not linked to the old head (`initial_chunk` false, :168, 475):
+//! the firmware links it after the handler writes it to `heap_start` and
+//! `heap_end` (panthor_sched.c:1512-1513).
 //!
 //! # What panthor builds
 //!
@@ -140,7 +151,10 @@
 //! allocator handed out (short, not 4 KiB aligned, no CPU address), of the
 //! L2 line size (`1 << x` with `x` of 32 or more is not a size,
 //! panthor_regs.h:23), and of the caller's chunk list (it must hold
-//! `max_chunks` entries, the bound growth stops at, :459).
+//! `max_chunks` entries, the bound growth stops at, :459). Growth, return
+//! and teardown add panthor's own: an unknown heap or chunk (`-EINVAL`,
+//! :379-387, 407-408, 443-451, 231-233) and the two `-ENOMEM` bounds of
+//! growth (:458-459).
 //!
 //! Two differences from the plan's wording, both following panthor: the
 //! chunk size must be a multiple of 4 KiB, not a power of two (132 KiB is
@@ -154,13 +168,22 @@
 //!
 //! # Follow-ups (written down only; not changed here)
 //!
-//! - sched.rs: `CS_TILER_OOM` is refused (`SchedRefusal::TilerOom`). With
-//!   heap growth (the next item) it would read the stream's `heap_address`,
-//!   `heap_vt_start`, `heap_vt_end`, `heap_frag_end`, grow, write the new
-//!   chunk to `heap_start`/`heap_end` and acknowledge
+//! - sched.rs: `CS_TILER_OOM` is refused (`SchedRefusal::TilerOom`). A
+//!   handler would read the stream's `heap_address`, `heap_vt_start`,
+//!   `heap_vt_end`, `heap_frag_end`, refuse `frag_end > vt_end` or
+//!   `vt_end >= vt_start` (panthor_sched.c:1480), call [`grow`] with
+//!   `vt_start - frag_end` and `vt_end - frag_end`, write its value (0 on
+//!   `InFlightAboveTarget`, `MaxChunksReached` or an allocator's out of
+//!   memory, panthor's `-ENOMEM`; any other refusal makes the queue fatal)
+//!   to `heap_start`/`heap_end` and acknowledge, then [`return_chunk`] the
+//!   chunk if the group was scheduled out meanwhile
 //!   (`group_process_tiler_oom`, panthor_sched.c:1448-1532). It also has to
-//!   be given the heap's pool to reach it from the group. csf.rs already has
-//!   those `CsInput`/`CsOutput` fields; it needs nothing.
+//!   be given the heap's pool and heaps to reach them from the group.
+//!   csf.rs already has those `CsInput`/`CsOutput` fields; it needs nothing.
+//! - Pool destruction (`panthor_heap_pool_destroy`, :594-616) is not
+//!   transcribed: Z4's group VM lives until the reset. panthor's pool
+//!   `size` counter (:101-102, 133, 188, 397), read only by its fdinfo, is
+//!   not kept.
 //! - pgtable.rs: the pool and the chunks are mapped no-exec in the group's
 //!   tables at 0x8000_0000_0000 and above; 48-bit VAs are what it builds
 //!   already. It maps 4 KiB pages only, so each 2 MiB chunk costs one level
@@ -168,9 +191,7 @@
 //!   them.
 //! - The Zephyr side: one [`HeapPool`] and one [`Heap`] per group VM, made
 //!   before the queue-init stream runs, and `OSAL_QUERY_MALI_TILER_HEAP`
-//!   answered from [`Heap::osal`]. Heap destruction
-//!   (`panthor_heap_destroy`, :226-255) and pool destruction (:594-616) are
-//!   not transcribed yet: Z4's group lives until the reset.
+//!   answered from [`Heap::osal`].
 //!
 //! # For driver/docs/nanopc-t6-mali.md: "The tiler heap (Z4)"
 //!
@@ -347,6 +368,18 @@ pub enum HeapError<E> {
     /// `[0, MAX_HEAPS_PER_POOL - 1]`, panthor_heap.c:331-332); the chunks
     /// were given back (:343-350).
     PoolFull { heaps: u32 },
+    /// No heap of the pool has its context at `heap_gpu_va`
+    /// (panthor_heap.c:443-451 for grow, 379-387 for return_chunk, 231-233
+    /// for destroy; each `-EINVAL`).
+    UnknownHeap { heap_gpu_va: u64 },
+    /// More render passes in flight than the heap's `target_in_flight`
+    /// (panthor_heap.c:458, `-ENOMEM`: the firmware waits instead).
+    InFlightAboveTarget { renderpasses_in_flight: u32, target_in_flight: u32 },
+    /// The heap has `max_chunks` chunks (panthor_heap.c:459, `-ENOMEM`).
+    MaxChunksReached { chunk_count: u32, max_chunks: u32 },
+    /// No chunk of the heap at `chunk_gpu_va`, its low 12 bits dropped
+    /// (panthor_heap.c:389, 407-408, `-EINVAL`).
+    UnknownChunk { chunk_gpu_va: u64 },
 }
 
 /// What the module asks of an allocation: the pool buffer or a chunk (the
@@ -485,9 +518,10 @@ impl Heap<'_> {
         self.ctx_gpu
     }
     /// The first chunk's GPU address, the list head (`first_chunk_gpu_va`,
-    /// panthor_heap.c:321-324).
+    /// panthor_heap.c:321-324); after [`grow`] the newest chunk. 0 once
+    /// [`return_chunk`] has given back every chunk.
     pub fn first_chunk_gpu(&self) -> u64 {
-        self.chunks[self.chunk_count as usize - 1].gpu
+        self.chunks().last().map_or(0, |c| c.gpu)
     }
     pub fn chunk_size(&self) -> u32 {
         self.chunk_size
@@ -618,6 +652,145 @@ pub fn create<'l, M: HeapMemory>(
         chunks: list,
         chunk_count: count,
     })
+}
+
+/// The heap whose context is at `heap_gpu_va`, as `panthor_heap_grow` and
+/// `panthor_heap_return_chunk` find it (panthor_heap.c:437-451, 373-387):
+/// the offset from the pool buffer, `(u32)offset / stride` the id, `-EINVAL`
+/// for an offset above `U32_MAX` (a VA below the pool wraps to one), an id
+/// of `MAX_HEAPS_PER_POOL` or more, or a slot `xa_load` finds empty. An
+/// address inside a slot names that slot, as panthor's division does.
+/// panthor's `xa` holds the heaps; here the caller does, in `heaps`, and the
+/// one found is the heap of that slot made on this pool.
+fn find_heap<'h, 'l, E>(
+    pool: &HeapPool,
+    heaps: &'h mut [Heap<'l>],
+    heap_gpu_va: u64,
+) -> Result<&'h mut Heap<'l>, HeapError<E>> {
+    let unknown = HeapError::UnknownHeap { heap_gpu_va };
+    let offset = heap_gpu_va.wrapping_sub(pool.ctx.gpu);
+    let id = offset as u32 / pool.stride;
+    if offset > u64::from(u32::MAX) || id >= MAX_HEAPS_PER_POOL || pool.used & (1 << id) == 0 {
+        return Err(unknown);
+    }
+    let ctx_gpu = pool.ctx_gpu(id);
+    heaps.iter_mut().find(|h| h.id == id && h.ctx_gpu == ctx_gpu).ok_or(unknown)
+}
+
+/// `panthor_heap_grow` (panthor_heap.c:416-489): one more chunk for the heap
+/// whose context is at `heap_gpu_va`, the `heap_address` a stream's
+/// `CS_TILER_OOM` reports. For a later `CS_TILER_OOM` handler in sched.rs
+/// (`group_process_tiler_oom`, panthor_sched.c:1448-1532); nothing calls it
+/// yet: Z4's sched.rs refuses `CS_TILER_OOM`.
+///
+/// `renderpasses_in_flight` is the stream's `heap_vt_start - heap_frag_end`
+/// and `pending_frag_count` its `heap_vt_end - heap_frag_end`
+/// (panthor_sched.c:1469-1470); panthor takes the second and reads it
+/// nowhere, nor does this. The refusals, in panthor's order: the heap is
+/// unknown (`-EINVAL`, :443-451); more render passes in flight than
+/// `target_in_flight` (strictly more, :458) or `max_chunks` chunks already
+/// (:459), both `-ENOMEM`, which panthor's handler answers by acknowledging
+/// with no chunk so the firmware waits for fragment jobs or runs the
+/// exception handler (panthor_sched.c:1491-1501, 1512-1514); the chunk's
+/// allocation failing (:475-477). After a refusal the heap is as it was.
+///
+/// Otherwise the new chunk is the list head (`list_add`, :184) and the
+/// value is the one panthor writes to `*new_chunk_gpu_va`:
+/// `(va & GENMASK_ULL(63, 12)) | (chunk_size >> 12)` (:482-483), which the
+/// handler writes to the stream's `heap_start` and `heap_end`
+/// (panthor_sched.c:1512-1513). The chunk's header is zeroed and not linked
+/// to the old head (`initial_chunk` is false, :168, 475): the firmware
+/// links a grown chunk itself; only create's chunks are chained by the
+/// kernel side.
+pub fn grow<M: HeapMemory>(
+    pool: &HeapPool,
+    mem: &mut M,
+    heaps: &mut [Heap<'_>],
+    heap_gpu_va: u64,
+    renderpasses_in_flight: u32,
+    pending_frag_count: u32,
+) -> Result<u64, HeapError<M::Error>> {
+    let _ = pending_frag_count;
+    let heap = find_heap(pool, heaps, heap_gpu_va)?;
+    if renderpasses_in_flight > heap.target_in_flight {
+        return Err(HeapError::InFlightAboveTarget { renderpasses_in_flight, target_in_flight: heap.target_in_flight });
+    }
+    if heap.chunk_count >= heap.max_chunks {
+        return Err(HeapError::MaxChunksReached { chunk_count: heap.chunk_count, max_chunks: heap.max_chunks });
+    }
+    // panthor_alloc_heap_chunk(pool, heap, false) (:139-199, 475)
+    let size = u64::from(heap.chunk_size);
+    let a = mem.alloc(size, HeapObject::Chunk).map_err(|err| HeapError::ChunkAlloc { index: heap.chunk_count, err })?;
+    let a = take(mem, a, size)?;
+    let hdr = chunk_header(0);
+    // SAFETY: as in create: `a` holds at least chunk_size (> CHUNK_HEADER_SIZE)
+    // bytes at a non-null `cpu` this module may write.
+    unsafe { core::ptr::copy_nonoverlapping(hdr.as_ptr(), a.cpu as *mut u8, CHUNK_HEADER_SIZE) };
+    // chunk_count < max_chunks <= chunks.len() (create's ChunkListTooShort)
+    heap.chunks[heap.chunk_count as usize] = a;
+    heap.chunk_count += 1;
+    Ok(chunk_link(a.gpu, heap.chunk_size))
+}
+
+/// `panthor_heap_return_chunk` (panthor_heap.c:359-414): give back the
+/// chunk at `chunk_gpu_va` of the heap whose context is at `heap_gpu_va`,
+/// the chunk [`grow`] made that the handler could not hand to the stream
+/// because the group was scheduled out meanwhile (:365-367;
+/// panthor_sched.c:1520-1525). For the same later `CS_TILER_OOM` handler;
+/// nothing calls it yet.
+///
+/// The heap is found as [`grow`] finds it (`-EINVAL`, :373-387), the low 12
+/// bits of `chunk_gpu_va` are dropped (:389), so [`grow`]'s value names its
+/// chunk, and the first chunk from the head at that address is taken out of
+/// the list, `chunk_count` one less (:392-400), and given back (:403-405).
+/// No chunk there: `-EINVAL` (:407-408). As in panthor, nothing else is
+/// checked or rewritten: a chunk of the chain create linked can be given
+/// back too, and the header of the chunk that pointed at it is left as it
+/// is; the last chunk can go, leaving the list empty.
+pub fn return_chunk<M: HeapMemory>(
+    pool: &HeapPool,
+    mem: &mut M,
+    heaps: &mut [Heap<'_>],
+    heap_gpu_va: u64,
+    chunk_gpu_va: u64,
+) -> Result<(), HeapError<M::Error>> {
+    let heap = find_heap(pool, heaps, heap_gpu_va)?;
+    let chunk_gpu_va = chunk_gpu_va & CHUNK_VA_MASK;
+    let n = heap.chunk_count as usize;
+    // panthor walks from the head, the newest: here from the end
+    let Some(i) = heap.chunks[..n].iter().rposition(|c| c.gpu == chunk_gpu_va) else {
+        return Err(HeapError::UnknownChunk { chunk_gpu_va });
+    };
+    let removed = heap.chunks[i];
+    // list_del (:395): the newer chunks move down one
+    heap.chunks.copy_within(i + 1..n, i);
+    heap.chunks[n - 1] = Allocation::default();
+    heap.chunk_count -= 1;
+    mem.free(removed);
+    Ok(())
+}
+
+/// `panthor_heap_destroy` (panthor_heap.c:226-255): free the heap's slot
+/// (`xa_erase`, :231) and give back its chunks, head first
+/// (`panthor_free_heap_chunks`, :235; :201-208). The slot is not zeroed
+/// (panthor does not; create zeroes it again, :336). A heap that is not
+/// this pool's, panthor's `-EINVAL` for a handle `xa_erase` does not find
+/// (:232-233), is refused and handed back untouched with the error. On
+/// success the caller's chunk list is handed back, every entry given back
+/// through `mem`.
+pub fn destroy<'l, M: HeapMemory>(
+    pool: &mut HeapPool,
+    mem: &mut M,
+    heap: Heap<'l>,
+) -> Result<&'l mut [Allocation], (HeapError<M::Error>, Heap<'l>)> {
+    if heap.id >= MAX_HEAPS_PER_POOL || pool.used & (1 << heap.id) == 0 || pool.ctx_gpu(heap.id) != heap.ctx_gpu {
+        return Err((HeapError::UnknownHeap { heap_gpu_va: heap.ctx_gpu }, heap));
+    }
+    pool.used &= !(1 << heap.id);
+    let n = heap.chunk_count as usize;
+    free_chunks(mem, &heap.chunks[..n]);
+    heap.chunks[..n].fill(Allocation::default());
+    Ok(heap.chunks)
 }
 
 #[cfg(test)]
@@ -1015,5 +1188,245 @@ mod tests {
         let pool = HeapPool::create(&mut mem, 0x07).unwrap();
         assert_eq!(pool.buffer().size, 16384);
         assert_eq!(pool.ctx_gpu(2), POOL_VA + 256);
+    }
+
+    /// The chunk VAs from the list head along the headers' `next`.
+    fn walk(mem: &Fake, head: u64) -> Vec<u64> {
+        let mut walked = vec![];
+        let mut va = head;
+        while va != 0 {
+            walked.push(va);
+            va = mem.word(va) & CHUNK_VA_MASK;
+        }
+        walked
+    }
+
+    #[test]
+    fn grow_puts_a_zeroed_chunk_at_the_head_and_returns_panthor_s_word() {
+        let mut mem = Fake::new(16 << 20);
+        let mut pool = HeapPool::create(&mut mem, T6_L2).unwrap();
+        let mut list = [Allocation::default(); 64];
+        let mut heaps = [create(&mut pool, &mut mem, &HeapParams::MESA, &mut list).unwrap()];
+        let old: Vec<Allocation> = heaps[0].chunks().to_vec();
+        // the sixth 2 MiB chunk, at 0x8000_00c0_0000: panthor_heap.c:482-483
+        // gives (0x8000_00c0_0000 & GENMASK_ULL(63, 12)) | (0x20_0000 >> 12)
+        // = 0x8000_00c0_0200, little-endian 00 02 c0 00 00 80 00 00
+        let v = grow(&pool, &mut mem, &mut heaps, 0x8000_0001_5000, 1, 0).unwrap();
+        assert_eq!(v, 0x0000_8000_00c0_0200);
+        assert_eq!(v.to_le_bytes(), [0x00, 0x02, 0xc0, 0x00, 0x00, 0x80, 0x00, 0x00]);
+        let h = &heaps[0];
+        // the new chunk is the list head (:184): last of ours, the first chunk
+        assert_eq!(h.chunks().len(), 6);
+        assert_eq!(h.chunks()[..5], old[..]);
+        assert_eq!(h.chunks()[5].gpu, 0x8000_00c0_0000);
+        assert_eq!(h.first_chunk_gpu(), 0x8000_00c0_0000);
+        assert_eq!(h.osal().first_chunk_gpu, 0x8000_00c0_0000);
+        // its header is zeroed, not linked to the old head (:166, 168): the
+        // firmware links it; its body is as found
+        assert_eq!(mem.read(0x8000_00c0_0000, 64), [0u8; 64]);
+        assert_eq!(mem.read(0x8000_00c0_0000 + 64, 8), [0xaa; 8]);
+        // create's chain from the old head is untouched
+        assert_eq!(mem.word(0x8000_00a0_0000), 0x8000_0080_0200);
+        assert_eq!(
+            walk(&mem, 0x8000_00a0_0000),
+            [0x8000_00a0_0000, 0x8000_0080_0000, 0x8000_0060_0000, 0x8000_0040_0000, 0x8000_0020_0000]
+        );
+        // an address inside heap 0's slot names heap 0 ((u32)offset / stride,
+        // :437-438): the seventh chunk
+        assert_eq!(grow(&pool, &mut mem, &mut heaps, 0x8000_0001_5000 + 8, 1, 0), Ok(0x8000_00e0_0200));
+        assert_eq!(heaps[0].chunks().len(), 7);
+        assert!(mem.freed.is_empty());
+    }
+
+    #[test]
+    fn grow_refuses_at_max_chunks_and_allocates_nothing() {
+        let mut mem = Fake::new(2 << 20);
+        let mut pool = HeapPool::create(&mut mem, T6_L2).unwrap();
+        let mut list = [Allocation::default(); 2];
+        let mut heaps = [create(&mut pool, &mut mem, &params(1, 128 << 10, 2), &mut list).unwrap()];
+        // 128 KiB: the value carries 0x20
+        assert_eq!(grow(&pool, &mut mem, &mut heaps, POOL_VA, 0, 0), Ok((CHUNK_VA + (128 << 10)) | 0x20));
+        let asked = mem.chunks_asked;
+        // chunk_count >= max_chunks (:459): -ENOMEM
+        assert_eq!(
+            grow(&pool, &mut mem, &mut heaps, POOL_VA, 0, 0),
+            Err(E::MaxChunksReached { chunk_count: 2, max_chunks: 2 })
+        );
+        assert_eq!(mem.chunks_asked, asked);
+        assert_eq!(heaps[0].chunks().len(), 2);
+    }
+
+    #[test]
+    fn grow_refuses_only_above_target_in_flight() {
+        let mut mem = Fake::new(2 << 20);
+        let mut pool = HeapPool::create(&mut mem, T6_L2).unwrap();
+        let mut list = [Allocation::default(); 4];
+        let p = HeapParams { target_in_flight: 3, ..params(1, 128 << 10, 4) };
+        let mut heaps = [create(&mut pool, &mut mem, &p, &mut list).unwrap()];
+        // renderpasses_in_flight > target_in_flight (:458): 4 is refused
+        // with -ENOMEM, pending_frag_count is not read
+        assert_eq!(
+            grow(&pool, &mut mem, &mut heaps, POOL_VA, 4, 0),
+            Err(E::InFlightAboveTarget { renderpasses_in_flight: 4, target_in_flight: 3 })
+        );
+        assert_eq!(mem.chunks_asked, 1);
+        // at the target, panthor grows
+        assert!(grow(&pool, &mut mem, &mut heaps, POOL_VA, 3, u32::MAX).is_ok());
+        assert_eq!(heaps[0].chunks().len(), 2);
+        // both reasons at once: the in-flight one is panthor's first operand
+        let mut l2 = [Allocation::default(); 1];
+        let q = HeapParams { target_in_flight: 0, ..params(1, 128 << 10, 1) };
+        let mut h2 = [create(&mut pool, &mut mem, &q, &mut l2).unwrap()];
+        assert_eq!(
+            grow(&pool, &mut mem, &mut h2, POOL_VA + 64, 1, 0),
+            Err(E::InFlightAboveTarget { renderpasses_in_flight: 1, target_in_flight: 0 })
+        );
+    }
+
+    #[test]
+    fn grow_with_a_failing_allocator_leaves_the_heap_as_it_was() {
+        let mut mem = Fake::new(4 << 20);
+        let mut pool = HeapPool::create(&mut mem, T6_L2).unwrap();
+        let mut list = [Allocation::default(); 8];
+        let mut heaps = [create(&mut pool, &mut mem, &params(3, 128 << 10, 8), &mut list).unwrap()];
+        let before: Vec<Allocation> = heaps[0].chunks().to_vec();
+        let osal = heaps[0].osal();
+        let headers: Vec<Vec<u8>> = before.iter().map(|c| mem.read(c.gpu, 64)).collect();
+        // the allocation fails (:475-477): the index is the chunk it would be
+        mem.fail_chunk = Some(3);
+        assert_eq!(grow(&pool, &mut mem, &mut heaps, POOL_VA, 0, 0), Err(E::ChunkAlloc { index: 3, err: OutOfMemory }));
+        // the allocation is handed out but not usable: given back
+        mem.fail_chunk = None;
+        mem.misalign = true;
+        assert_eq!(
+            grow(&pool, &mut mem, &mut heaps, POOL_VA, 0, 0),
+            Err(E::MisalignedAllocation { gpu: CHUNK_VA + 3 * (128 << 10) + 16 })
+        );
+        assert_eq!(mem.freed, [*mem.allocs.last().unwrap()]);
+        assert_eq!(heaps[0].chunks(), &before[..]);
+        assert_eq!(heaps[0].osal(), osal);
+        assert_eq!(before.iter().map(|c| mem.read(c.gpu, 64)).collect::<Vec<_>>(), headers);
+        // and it grows once the allocator does
+        mem.misalign = false;
+        assert!(grow(&pool, &mut mem, &mut heaps, POOL_VA, 0, 0).is_ok());
+        assert_eq!(heaps[0].chunks()[..3], before[..]);
+    }
+
+    #[test]
+    fn grow_and_return_refuse_an_unknown_heap() {
+        let mut mem = Fake::new(2 << 20);
+        let mut pool = HeapPool::create(&mut mem, T6_L2).unwrap();
+        let mut list = [Allocation::default(); 2];
+        let mut heaps = [create(&mut pool, &mut mem, &params(1, 128 << 10, 2), &mut list).unwrap()];
+        let chunk = heaps[0].first_chunk_gpu();
+        for va in [
+            // below the pool: the offset wraps above U32_MAX (:443)
+            POOL_VA - 64,
+            // slot 1, empty (:447-450)
+            POOL_VA + 64,
+            // slot 128 and the end of the pool's 4 GiB of offsets (:443)
+            POOL_VA + 128 * 64,
+            POOL_VA + (1 << 32),
+        ] {
+            assert_eq!(grow(&pool, &mut mem, &mut heaps, va, 0, 0), Err(E::UnknownHeap { heap_gpu_va: va }));
+            assert_eq!(return_chunk(&pool, &mut mem, &mut heaps, va, chunk), Err(E::UnknownHeap { heap_gpu_va: va }));
+        }
+        // a slot taken, but its heap not among those given
+        assert_eq!(grow(&pool, &mut mem, &mut [], POOL_VA, 0, 0), Err(E::UnknownHeap { heap_gpu_va: POOL_VA }));
+        assert_eq!(mem.chunks_asked, 1);
+        assert!(mem.freed.is_empty());
+        assert_eq!(heaps[0].chunks().len(), 1);
+    }
+
+    #[test]
+    fn return_chunk_takes_out_a_middle_chunk_and_a_grown_head() {
+        let mut mem = Fake::new(16 << 20);
+        let mut pool = HeapPool::create(&mut mem, T6_L2).unwrap();
+        let mut list = [Allocation::default(); 64];
+        let mut heaps = [create(&mut pool, &mut mem, &HeapParams::MESA, &mut list).unwrap()];
+        let c: Vec<Allocation> = heaps[0].chunks().to_vec();
+        // the middle chunk, named with grow's encoding: the low bits are
+        // dropped (:389)
+        assert_eq!(return_chunk(&pool, &mut mem, &mut heaps, POOL_VA, c[2].gpu | 0x200), Ok(()));
+        assert_eq!(mem.freed, [c[2]]);
+        assert_eq!(heaps[0].chunks(), &[c[0], c[1], c[3], c[4]][..]);
+        assert_eq!(heaps[0].first_chunk_gpu(), c[4].gpu);
+        // panthor rewrites no header (:392-400): the chunk that pointed at
+        // the returned one still does
+        assert_eq!(mem.word(c[3].gpu), c[2].gpu | 0x200);
+        // the head: a chunk grow made, given back as panthor's handler does
+        // with grow's value (panthor_sched.c:1524-1525)
+        let v = grow(&pool, &mut mem, &mut heaps, POOL_VA, 0, 0).unwrap();
+        let grown = heaps[0].chunks()[4];
+        assert_eq!(v, grown.gpu | 0x200);
+        assert_eq!(return_chunk(&pool, &mut mem, &mut heaps, POOL_VA, v), Ok(()));
+        assert_eq!(mem.freed, [c[2], grown]);
+        // the list re-walked: back to the four, c[4] the head again, and its
+        // chain through the headers as create wrote it
+        assert_eq!(heaps[0].chunks(), &[c[0], c[1], c[3], c[4]][..]);
+        assert_eq!(heaps[0].osal().first_chunk_gpu, c[4].gpu);
+        assert_eq!(walk(&mem, heaps[0].first_chunk_gpu()), [c[4].gpu, c[3].gpu, c[2].gpu, c[1].gpu, c[0].gpu]);
+        // the freed entries are cleared, and grow takes the next one again
+        assert_eq!(list_tail(&heaps[0]), Allocation::default());
+        assert!(grow(&pool, &mut mem, &mut heaps, POOL_VA, 0, 0).is_ok());
+        assert_eq!(heaps[0].chunks().len(), 5);
+    }
+
+    fn list_tail(h: &Heap<'_>) -> Allocation {
+        h.chunks[h.chunk_count as usize]
+    }
+
+    #[test]
+    fn return_chunk_refuses_an_unknown_chunk_and_can_empty_the_list() {
+        let mut mem = Fake::new(2 << 20);
+        let mut pool = HeapPool::create(&mut mem, T6_L2).unwrap();
+        let mut list = [Allocation::default(); 2];
+        let mut heaps = [create(&mut pool, &mut mem, &params(1, 128 << 10, 2), &mut list).unwrap()];
+        let only = heaps[0].chunks()[0];
+        // a VA no chunk has (:407-408), reported with the low bits dropped;
+        // an address inside a chunk is not the chunk
+        for (va, want) in [(only.gpu + 0x1_0000, only.gpu + 0x1_0000), (0xdead_beef, 0xdead_b000), (0, 0)] {
+            assert_eq!(
+                return_chunk(&pool, &mut mem, &mut heaps, POOL_VA, va),
+                Err(E::UnknownChunk { chunk_gpu_va: want })
+            );
+        }
+        assert!(mem.freed.is_empty());
+        // the only chunk can go, as in panthor; then it is unknown
+        assert_eq!(return_chunk(&pool, &mut mem, &mut heaps, POOL_VA, only.gpu), Ok(()));
+        assert_eq!(heaps[0].chunks(), &[][..]);
+        assert_eq!(heaps[0].first_chunk_gpu(), 0);
+        assert_eq!(
+            return_chunk(&pool, &mut mem, &mut heaps, POOL_VA, only.gpu),
+            Err(E::UnknownChunk { chunk_gpu_va: only.gpu })
+        );
+        assert_eq!(mem.freed, [only]);
+    }
+
+    #[test]
+    fn destroy_gives_the_chunks_back_head_first_and_frees_the_slot() {
+        let mut mem = Fake::new(4 << 20);
+        let mut pool = HeapPool::create(&mut mem, T6_L2).unwrap();
+        let mut list = [Allocation::default(); 4];
+        let mut heaps = [create(&mut pool, &mut mem, &params(3, 128 << 10, 4), &mut list).unwrap()];
+        grow(&pool, &mut mem, &mut heaps, POOL_VA, 0, 0).unwrap();
+        let [heap] = heaps;
+        let c: Vec<Allocation> = heap.chunks().to_vec();
+        // a heap that is not this pool's (:232-233) is handed back untouched
+        let mut other = Fake::new(1 << 20);
+        let mut foreign = HeapPool::create(&mut other, T6_L2).unwrap();
+        let (e, heap) = destroy(&mut foreign, &mut mem, heap).unwrap_err();
+        assert_eq!(e, E::UnknownHeap { heap_gpu_va: POOL_VA });
+        assert_eq!(heap.chunks(), &c[..]);
+        assert!(mem.freed.is_empty());
+        // the list, from the head (:206-207): the grown chunk first
+        let list = destroy(&mut pool, &mut mem, heap).unwrap();
+        assert_eq!(mem.freed, [c[3], c[2], c[1], c[0]]);
+        assert_eq!(list, [Allocation::default(); 4]);
+        assert_eq!(pool.used, 0);
+        // the slot is free: grow finds no heap there, create takes it again
+        assert_eq!(grow(&pool, &mut mem, &mut [], POOL_VA, 0, 0), Err(E::UnknownHeap { heap_gpu_va: POOL_VA }));
+        let h = create(&mut pool, &mut mem, &params(1, 128 << 10, 4), list).unwrap();
+        assert_eq!((h.id(), h.ctx_gpu()), (0, POOL_VA));
     }
 }
