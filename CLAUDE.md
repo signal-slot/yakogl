@@ -11,17 +11,19 @@ defects and the next board sessions. This file is the short list.
 - `tools/check.sh --changed origin/main`: the rows your diff reaches. Run it
   against the **current** main tip, right before the result is handed in,
   not against the commit you started from (see the first failure below).
-- `tools/check.sh --quick`: about 120 rows, the edit loop. Not the gate.
+- `tools/check.sh --quick`: 169 of the full plan's 209 rows (counted at
+  `bfd75c57`, see CONTRIBUTING.md), the edit loop. Not the gate.
 - `tools/check.sh --local <base>`: the local set when a diff reaches
   everything (`src/gl`, `src/shaderc`, `tools/check.sh`, `Cargo.toml`, ...).
 - `tools/check.sh`: every row, what the CI (`.github/workflows/gate.yml`)
   runs on each pull request's reach, on each push to main and nightly.
 
-Green is "N ok, 0 failed, 0 gap(s)". A run takes long (one `--quick` from a
-cold tree with 2 compiler slots: 59 min); run it in the background and wait
-for the summary line instead of a tool timeout. Exit 2 before any row: the
-gate could not start (cargo, rustfmt or clippy missing from the toolchain;
-the message says what to install). That is the host, not the code.
+Green is "N ok, 0 failed, 0 gap(s)". A `--quick` takes minutes on a warm tree
+and up to an hour from a cold one (59 min with 2 compiler slots); run it in the
+background and wait for the summary line instead of a tool timeout. Exit 2
+before any row: the gate could not start (cargo, rustfmt or clippy missing
+from the toolchain; the message says what to install). That is the host, not
+the code.
 
 ## Common failures and how to avoid them
 
