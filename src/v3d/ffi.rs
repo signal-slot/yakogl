@@ -270,6 +270,7 @@ pub struct V3dJobTarget {
  * by ffi_layout_check.c. */
 pub const V3D_OUTPUT_IMAGE_FORMAT_SRGB8_ALPHA8: u32 = 0;
 pub const V3D_OUTPUT_IMAGE_FORMAT_RGB10_A2UI: u32 = 2;
+pub const V3D_OUTPUT_IMAGE_FORMAT_RGB10_A2: u32 = 3;
 pub const V3D_OUTPUT_IMAGE_FORMAT_BGR565: u32 = 7;
 pub const V3D_OUTPUT_IMAGE_FORMAT_R32F: u32 = 11;
 pub const V3D_OUTPUT_IMAGE_FORMAT_RGBA32I: u32 = 12;

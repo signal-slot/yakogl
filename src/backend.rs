@@ -357,6 +357,19 @@ pub const GLES_SURF_INT_LAST: u8 = GLES_SURF_RGB10_A2UI;
  * is refused by name ([`rt_format_drawable`]). */
 pub const GLES_SURF_SRGB8_A8: u8 = 25;
 
+/* ES 3.0's GL_RGB10_A2 colour buffer (a renderbuffer or a texture level of
+ * the class [`GLES_TEXFMT_RGB10A2`]): one 32-bit word a pixel, unsigned
+ * normalised, red in the low 10 bits and alpha in the top 2, the texel
+ * layout of the class. Fragment colours, the blend and the clear colour are
+ * floats clamped to [0, 1], quantised to 10/10/10/2 at the store. A back
+ * end renders the surface exactly where it samples the class
+ * ([`rt_format_drawable`]: the one bit in its sampled set), since ES 3.0
+ * makes the format both colour-renderable and filterable; elsewhere the GL
+ * core holds GL_RGB10_A2 as RGBA8 and this value is never produced
+ * (docs/notes/v3d-rgb10a2.md). Outside the integer range, so
+ * [`gles_surf_is_integer`] is false for it, as for the sRGB surface. */
+pub const GLES_SURF_RGB10_A2: u8 = 26;
+
 /// Is this the sRGB colour surface?
 pub const fn gles_surf_is_srgb(format: u8) -> bool {
     format == GLES_SURF_SRGB8_A8
@@ -437,6 +450,7 @@ pub const fn gles_surf_name(format: u8) -> &'static str {
         GLES_SURF_RGBA32UI => "RGBA32UI",
         GLES_SURF_RGB10_A2UI => "RGB10_A2UI",
         GLES_SURF_SRGB8_A8 => "SRGB8_ALPHA8",
+        GLES_SURF_RGB10_A2 => "RGB10_A2",
         _ => "unknown",
     }
 }
@@ -493,8 +507,11 @@ pub const SRGB_RT: bool = cfg!(any(feature = "gpu-powervr", feature = "gpu-vivan
 pub static HOST_SRGB_RT: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
 
 /// Can this build's back end render into the surface? Everything but the
-/// integer and sRGB surfaces is a yes (those were always in); an integer one
-/// needs its bit in [`INTEGER_RT_FORMATS`], the sRGB one [`SRGB_RT`].
+/// integer, sRGB and RGB10_A2 surfaces is a yes (those were always in); an
+/// integer one needs its bit in [`INTEGER_RT_FORMATS`], the sRGB one
+/// [`SRGB_RT`], and [`GLES_SURF_RGB10_A2`] the class's bit in the sampled
+/// set ([`sampled_texfmts`]): a back end that samples the class renders it,
+/// and one that cannot render it keeps the class out of its set.
 pub fn rt_format_drawable(format: u8) -> bool {
     if gles_surf_is_srgb(format) {
         #[cfg(feature = "host-test")]
@@ -502,6 +519,9 @@ pub fn rt_format_drawable(format: u8) -> bool {
             return true;
         }
         return SRGB_RT;
+    }
+    if format == GLES_SURF_RGB10_A2 {
+        return sampled_texfmts() & gles_texfmt_bit(GLES_TEXFMT_RGB10A2) != 0;
     }
     if !gles_surf_is_integer(format) {
         return true;
@@ -524,6 +544,8 @@ pub const fn gles_surf_bytes_per_pixel(format: u8) -> u32 {
     } else if format == GLES_SURF_RGBA16F {
         8
     } else {
+        /* RGBA8888, XRGB8888, R32F, the sRGB bytes and the 10/10/10/2 word
+         * of GLES_SURF_RGB10_A2 */
         4
     }
 }
@@ -555,6 +577,7 @@ pub const fn gles_surf_texfmt(format: u8) -> u8 {
         /* decoded by the sampler: the frame load puts linear colour back in
          * the accumulation the PBE encodes again on store */
         GLES_SURF_SRGB8_A8 => GLES_TEXFMT_SRGB8_A8,
+        GLES_SURF_RGB10_A2 => GLES_TEXFMT_RGB10A2,
         _ => GLES_TEXFMT_RGBA8,
     }
 }

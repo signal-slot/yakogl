@@ -146,8 +146,8 @@ static uint32_t job_rts(const struct v3d_job_target *t)
  * 16I/16UI :272-291, 32I/32UI :293-317, 32F :319-330) and
  * clamp_for_format_and_type (v3dx_rcl.c:396-407, V3D 4.2: NORM for an sRGB
  * format, INT for a pure integer one, NONE otherwise). False for a format
- * the table has no row for here (RGB10_A2, R11F_G11F_B10F, the 2- and
- * 3-channel float rows, the depth formats). */
+ * the table has no row for here (R11F_G11F_B10F, the 2- and 3-channel
+ * float rows, the depth formats). */
 static bool rt_internal(uint32_t fmt, uint32_t *type, uint32_t *bpp, uint32_t *clamp)
 {
 	*clamp = V3D_RENDER_TARGET_CLAMP_NONE;
@@ -158,6 +158,15 @@ static bool rt_internal(uint32_t fmt, uint32_t *type, uint32_t *bpp, uint32_t *c
 		*type = V3D_INTERNAL_TYPE_16F;
 		*bpp = V3D_INTERNAL_BPP_64;
 		*clamp = V3D_RENDER_TARGET_CLAMP_NORM;
+		return true;
+	case V3D_OUTPUT_IMAGE_FORMAT_RGB10_A2:
+		/* GLES_SURF_RGB10_A2 (state::rt_format's row): the same 16F case
+		 * as sRGB (v3dx_format_table.c:250-259), the tile buffer holds
+		 * halves, the TLB packs them to the 10/10/10/2 word at the store;
+		 * neither integer nor sRGB, so clamp NONE
+		 * (docs/notes/v3d-rgb10a2.md (b)) */
+		*type = V3D_INTERNAL_TYPE_16F;
+		*bpp = V3D_INTERNAL_BPP_64;
 		return true;
 	case V3D_OUTPUT_IMAGE_FORMAT_RGBA8:
 	case V3D_OUTPUT_IMAGE_FORMAT_BGR565:
