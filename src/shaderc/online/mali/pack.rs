@@ -128,8 +128,13 @@ const TEX_LOD_ZERO: u32 = 0;
 /// `tex_lod_mode_m` explicit (BI_VA_LOD_MODE_EXPLICIT: the level in a
 /// staging register; valhall/ISA.xml "LOD mode" value 4).
 const TEX_LOD_EXPLICIT: u32 = 4;
+/// `tex_lod_mode_m` computed_bias (BI_VA_LOD_MODE_COMPUTED_BIAS: the
+/// derivatives' level plus the bias in a staging register; value 5).
+const TEX_LOD_COMPUTED_BIAS: u32 = 5;
 /// `tex_dimensionality_m` tex2d.
 const TEX_DIM_2D: u32 = 1;
+/// `tex_dimensionality_m` tex3d (`BI_DIMENSION_3D`).
+const TEX_DIM_3D: u32 = 2;
 /// `tex_dimensionality_m` cube (`BI_DIMENSION_CUBE`; the ISA's `Dimension`
 /// enum is 1d, 2d, 3d, cube in order, valhall/ISA.xml:477-482).
 const TEX_DIM_CUBE: u32 = 3;
@@ -723,6 +728,7 @@ pub fn pack_one(i: &Ins, branch: i32) -> Result<u64, MaliError> {
             f = Fill::new(IsaOp::TexFetch);
             let dim = match dim {
                 TexDim::D2 | TexDim::D2Array | TexDim::D2Ms => TEX_DIM_2D,
+                TexDim::D3 => TEX_DIM_3D,
                 TexDim::Cube => TEX_DIM_CUBE,
             };
             let array = matches!(i.op, Op::TexSingle { dim: TexDim::D2Array, .. }) as u32;
@@ -747,10 +753,12 @@ pub fn pack_one(i: &Ins, branch: i32) -> Result<u64, MaliError> {
                 LodMode::Computed => TEX_LOD_COMPUTED,
                 LodMode::Zero => TEX_LOD_ZERO,
                 LodMode::Explicit => TEX_LOD_EXPLICIT,
+                LodMode::ComputedBias => TEX_LOD_COMPUTED_BIAS,
                 LodMode::Fetch => return Err(MaliError::Defect(Defect::Operand)),
             };
             let dim = match dim {
                 TexDim::D2 | TexDim::D2Array => TEX_DIM_2D,
+                TexDim::D3 => TEX_DIM_3D,
                 TexDim::Cube => TEX_DIM_CUBE,
                 /* a multisampled texture is only fetched (`txf_ms`) */
                 TexDim::D2Ms => return Err(MaliError::Defect(Defect::Operand)),

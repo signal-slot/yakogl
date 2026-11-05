@@ -254,6 +254,13 @@ pub enum LodMode {
     /// The level in the staging word after the coordinate, signed 8.8
     /// fixed point (`BI_VA_LOD_MODE_EXPLICIT`): any other `txl`.
     Explicit,
+    /// From the derivatives plus the bias in the staging word after the
+    /// coordinate (`BI_VA_LOD_MODE_COMPUTED_BIAS`, the ISA's
+    /// `computed_bias`, 5): a `txb`, its word `build_lod_bias_clamp`'s
+    /// `pack_32_2x16(sfixed_8_8(bias), 0)` (pan_nir_lower_tex.c:144-149,
+    /// :938-940; varyconst_101_cubebias.expect.json's `TEX_SINGLE ...
+    /// .cube.computed_bias`).
+    ComputedBias,
     /// `texelFetch` at level 0: a `txf`, which `bi_emit_tex_valhall`
     /// selects as `TEX_FETCH` (bifrost_compile.c:3535-3540) on the integer
     /// coordinate's words, no level word, and which has no `skip` bit
@@ -278,6 +285,10 @@ pub enum TexDim {
     /// `array_enable`, the layer the third staging word (intbig_case42:
     /// `TEX_SINGLE ... .2d.array_enable`, `TEX_FETCH ... .2d.array_enable`).
     D2Array,
+    /// `GLSL_SAMPLER_DIM_3D`: `tex3d` (2), the coordinate's three staging
+    /// words S, T, R (texmore_48: `TEX_SINGLE ... .3d.computed`, `.3d.zero`,
+    /// `TEX_FETCH ... .3d`).
+    D3,
     /// A 2D multisampled texture (`GLSL_SAMPLER_DIM_MS`), read by a
     /// `txf_ms` only (a [`LodMode::Fetch`]): `tex2d` with `texel_offset`,
     /// the staging word after the coordinate the offset word whose byte 2

@@ -33,7 +33,8 @@ use super::MaliError;
 /// a look-up whose level of detail comes from the derivatives (a level-0
 /// one does not).
 pub fn uses_helpers(i: &Ins) -> bool {
-    matches!(i.op, Op::TexSingle { lod: super::bir::LodMode::Computed, .. })
+    use super::bir::LodMode;
+    matches!(i.op, Op::TexSingle { lod: LodMode::Computed | LodMode::ComputedBias, .. })
 }
 
 /// `bi_analyze_helper_requirements` (bi_helper_invocations.c) over the

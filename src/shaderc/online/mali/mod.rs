@@ -1392,11 +1392,12 @@ fn compile_stage<'s>(
         sc.info.colour_f16 = !fs.colour_f32 && !fs.colour_u32;
         sc.info.colour_outputs = f.colour_outputs();
         sc.info.compacted = f.compacted;
-        /* the bindings by descriptor index ([`nir_fs::layout`] numbers them) */
-        for (_, t) in f.live_look_ups() {
-            let i = usize::from(t.index);
+        /* the bindings by descriptor index ([`nir_fs::layout`] numbers them:
+         * a look-up's sampler, a `textureSize`'s) */
+        for (index, sampler) in f.bound_samplers() {
+            let i = usize::from(index);
             let slot = sc.samplers.get_mut(i).ok_or(MaliError::Defect(Defect::IrIndex))?;
-            *slot = t.sampler;
+            *slot = sampler;
             sc.nsamplers = sc.nsamplers.max(i + 1);
         }
         sc.info.sampler = sc.samplers[..sc.nsamplers].first().copied();
@@ -1411,7 +1412,7 @@ fn compile_stage<'s>(
          * mesa-es3cube.pandecode, `Requires helper threads: false`) or a
          * `texelFetch` (`TEX_FETCH` is none of `bi_instr_uses_helpers`';
          * fbload_fbload.trace, `Requires helper threads: false`) */
-        sc.info.helper_threads = f.live_look_ups().any(|(_, t)| t.cube.is_none() && !t.fetch);
+        sc.info.helper_threads = f.live_look_ups().any(|(_, t)| t.computed());
         sc.info.can_discard = f.discards > 0;
         sc.rows = f.rows;
         for r in &f.reads[..f.nreads] {

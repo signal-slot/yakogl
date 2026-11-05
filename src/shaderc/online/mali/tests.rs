@@ -2080,6 +2080,9 @@ fn fs_reference_sources() -> Vec<&'static str> {
     srcs.extend(LOOP_POPULATION.iter().map(|c| c.2));
     /* a 2D array's size, look-up and fetch (case 42, #33) */
     srcs.push(include_str!("../../../../tools/shaders/es300/array.frag"));
+    /* the sizes of a 2D texture and an array with no look-up (case 46), a
+     * 3D texture's size, look-ups and fetch (cases 48 and 206, #33) */
+    srcs.extend([td!("texmore_46.frag"), td!("texmore_48.frag")]);
     /* the `if`s Mesa flattens into selects, and the ones it keeps (#33) */
     srcs.extend(CFLOW_FLATTEN.iter().map(|c| c.2));
     srcs.extend(CFLOW_BRANCH.iter().map(|c| c.2));
@@ -4819,10 +4822,19 @@ fn case_195_offarm32_is_byte_equal_to_mesa_26_2_1() {
 /// The varyconst population (docs/notes/mali-varying-constants.md, plan
 /// #154 varyconst): each gl_test case's pair, compiled through the link
 /// ([`check_linked`]) and compared with its drm-shim reference. 101's
-/// cube look-up with a bias is another item's (cubebias101).
-const VARYCONST_POPULATION: [(&str, &str, &str, &str); 11] = [
+/// cube look-up with a bias (`COMPUTED_BIAS`, the 8.8 bias word of the
+/// mediump uniform, the direction's raw varying lanes and the link's
+/// constant 1.0; nir_fs.rs `select`) joined with plan #309 tex-lookups.
+const VARYCONST_POPULATION: [(&str, &str, &str, &str); 12] = [
     /* a constant lane dropped (the link's propagation) */
     ("63", td!("varyconst_63_matattr.vert"), td!("varyconst_63_matattr.frag"), td!("varyconst_63_matattr.expect.json")),
+    /* a constant lane dropped, a cube look-up with a bias */
+    (
+        "101",
+        td!("varyconst_101_cubebias.vert"),
+        td!("varyconst_101_cubebias.frag"),
+        td!("varyconst_101_cubebias.expect.json"),
+    ),
     /* a mat2 varying read whole, the colour's word (x, w) of its load */
     ("78", td!("varyconst_78_matvary.vert"), td!("varyconst_78_matvary.frag"), td!("varyconst_78_matvary.expect.json")),
     /* lanes of uniforms alone: flat, `ffma(x, 0.0, x)` stored */
@@ -5559,6 +5571,38 @@ fn case_42_es3array_is_byte_equal_to_mesa_26_2_1() {
 #[test]
 fn texmore_206_array_is_byte_equal_to_mesa_26_2_1() {
     check_program(td!("texmore_206_array.vert"), td!("texmore_206_array.frag"), td!("texmore_206_array.expect.json"));
+}
+
+/// Case 46 (es3size): `textureSize` of a 2D texture and of a 2D array in a
+/// highp shader with no look-up (nir_fs.rs `Fs::tex_size`; docs/notes/
+/// mali-texture-lookups.md 2): the 2D texture's size flattened to `CSEL`s
+/// of the null test, the array's kept as a branch around the layer count's
+/// `LD_PKA.i16` at byte 0x38, the two descriptors at indices 0 and 1, each
+/// integer `S32_TO_F32` then `FMA` by the pushed 1/255. The fragment shader
+/// reads no varying, so the program's vertex shader has no varying program.
+#[test]
+fn texmore_46_is_byte_equal_to_mesa_26_2_1() {
+    check_program_for("46", td!("texmore_46.vert"), td!("texmore_46.frag"), td!("texmore_46.expect.json"), false);
+}
+
+/// Case 48 (es3vol): a `highp sampler3D` read by `texture` (`TEX_SINGLE
+/// .32.r.3d.computed`), `textureLod(.., 0.0)` (`.3d.zero`) and `texelFetch`
+/// (`TEX_FETCH .32.b.3d` at `ivec3(0, 0, int(zz * float(sz.z)))`), its
+/// `textureSize` read at the depth alone (`LD_PKA.i16` of the null test's
+/// half, the branch around the depth's `LD_PKA.i16` at byte 0x1C); the
+/// look-ups in the colour constructor's order, the grafted `a` and `f`
+/// after the `texture` named first (nir_fs.rs `order_keys`). Drawn with
+/// `--uniform-values` (`zz` = 32).
+#[test]
+fn texmore_48_is_byte_equal_to_mesa_26_2_1() {
+    check_program(td!("texmore_48.vert"), td!("texmore_48.frag"), td!("texmore_48.expect.json"));
+}
+
+/// Case 206's volume: the program of texmore_48 over a 3-level chain
+/// (`--levels 3`; the same words, the descriptors differ).
+#[test]
+fn texmore_206_vol_is_byte_equal_to_mesa_26_2_1() {
+    check_program(td!("texmore_206_vol.vert"), td!("texmore_206_vol.frag"), td!("texmore_206_vol.expect.json"));
 }
 
 /* ---- chains and algebraic folds (plan #154 chains, #33) -------------- */

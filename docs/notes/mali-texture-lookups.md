@@ -278,6 +278,61 @@ select from the precision; (3) the descriptors above in `src/mali/frame.rs`
 order); (4) byte-compare `texmore_48`, `texmore_206_vol`, `texmore_206_array`,
 `texmore_46`; (5) board runs of 46, 48, 206 (not this item).
 
+### What landed (plan #309 tex-lookups, #33)
+
+Sections 2 and 3's compiler steps, byte-equal to `texmore_46`, `texmore_48`,
+`texmore_206_vol` and `texmore_206_array` (`tests.rs`, one test each; case
+42's `intbig_case42` stays byte-equal), `src/shaderc/online/mali`:
+
+- **`textureSize` (`Fs::tex_size`, nir_fs.rs).** One form for a 2D texture,
+  a 2D array and a 3D texture at level 0: `Kind::TexDesc { byte: 0 }` loads
+  the descriptor's first eight bytes, then Mesa's own `if (!is_null)` is
+  built as a region of the graph (`nir::IfRegion::inot`): the then side
+  `extract_u16` of the width and height halves, the depth (byte 28) or the
+  layer count (byte 24) as a 16-bit `TexDesc` load sunk to just before its
+  `u2u32`, each plus one; a phi per lane with the constant 0. Bifrost's
+  peephole decides the form: with no load in the side it flattens the `if`
+  to `bcsel(ieq, 0, size)` (`CSEL.u32.eq`; the 2D texture of case 46, case
+  42's array whose layer count is unread), with a load it keeps the branch
+  (`ICMP_OR.v2u16.ne.m1`, `BRANCHZ.eq`; case 46's array, case 48's volume).
+  A first-eight-bytes load whose second word nothing reads shrinks to
+  `LD_PKA.i16` of the null test's half (case 48). The descriptor index is
+  the sampler's rank among the samplers the program reads, look-ups and
+  size queries alike, so case 46 (no look-up) binds `tex` at 0 and `arr` at
+  1 (`Fs::bound_samplers`, `MaliShader::samplers`). A cube's size, another
+  level, a mediump shader whose null test stays a branch, and a second word
+  read at its low half alone (`LD_PKA.i48`) have no reference and are
+  refused.
+- **3D look-ups (`TexDim::D3`).** `texture`, `textureLod(.., 0.0)`
+  (`LodMode::Zero`) and `texelFetch(.., 0)` of a `sampler3D` in a highp
+  shader: three computed staging words, the texels 32-bit for a highp
+  sampler. The look-ups' order follows the colour constructor: GLSL IR's
+  tree grafting puts `a` (`textureLod`) and `f` (`texelFetch`) where the
+  constructor reads them, after the `texture` it names first
+  (`order_keys` places a grafted tree at its read; `grafted_locals` grafts a
+  3D or 2D-array look-up and a lane of one, `float a = textureLod(..).r`).
+  A one-word result (`.r`, `.b`) is not split (`bi_emit_cached_split`), which
+  the pressure scheduler's choice depends on.
+- **The cube bias (case 101, `varyconst_101_cubebias`).** `textureCube(s,
+  dir, bias)` in a mediump shader: `LodMode::ComputedBias` (the ISA's
+  `computed_bias`, 5), the third staging word `build_lod_bias_clamp`'s 8.8
+  form of the mediump uniform widened (`F16_TO_F32 r2, u2.w0.h0`, `FMA.f32
+  .clamp_m1_1` by 1/16, `FMA.f32` by 4096, `F32_TO_S32.rtz`, `U16_TO_U32`),
+  the direction's raw varying lanes and the link's constant 1.0 fed to the
+  cube ops as they are (`select`'s `CubeDir::Raw`). Byte-equal through the
+  link in the varyconst population; `es100/cubebias.frag` alone is `ok`.
+  `textureCube` without a bias (gltest/texcube_fs.frag, `COMPUTED_LOD` on a
+  cube) has no reference and stays refused.
+
+Corpus: `es300/texsize.frag`, `es300/vol.frag` and `es100/cubebias.frag`
+move to `ok`. Still refused for other reasons: `es300/texfetch.frag` (a 2D
+`texelFetch` at a uniform level), `es300/layers2.frag` (a highp 2D array
+look-up with a constant layer), `gltest/usamp.frag` (`texture` of a
+`usampler2D`, an integer return), `gltest/texcube_fs.frag` (above).
+
+The frame: section 2's and 3's descriptors (3D with the slice stride, the
+array's planes, the chains of case 206) are plan #309's frame-tex item.
+
 ## Caveat
 
 The `texmore_*` references were drawn with the gl_ref.py default texel data and
