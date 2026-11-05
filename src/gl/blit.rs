@@ -235,6 +235,79 @@ fn read_image(c: &GlContext, fb: GLuint) -> Option<Image> {
     attachment_image(c, a)
 }
 
+/// The kind of colour the attachment `a` holds, from its format alone: the
+/// integer formats the blit cannot copy (RGBA32I, RGBA32UI: no `Image`) still
+/// have a kind, and ES 3.0 4.3.3 compares kinds before anything is copied.
+fn attachment_kind(c: &GlContext, a: &GlAttachment) -> Option<ColorKind> {
+    if a.type_ == GL_NONE {
+        return None;
+    }
+    let s = attachment_storage(c, a)?;
+    if a.type_ == GL_TEXTURE {
+        let t = c.texture_ref(a.name)?;
+        if matches!(t.format, GL_DEPTH_COMPONENT | GL_DEPTH_STENCIL) {
+            return None;
+        }
+        return Some(match texture_bits(t).component_type {
+            GL_INT => ColorKind::Int,
+            GL_UNSIGNED_INT => ColorKind::Uint,
+            _ => ColorKind::Float,
+        });
+    }
+    match s.internalformat {
+        GL_R8I | GL_R16I | GL_R32I | GL_RG8I | GL_RG16I | GL_RG32I | GL_RGBA8I | GL_RGBA16I | GL_RGBA32I
+            if !crate::REPORT_ES2 =>
+        {
+            Some(ColorKind::Int)
+        }
+        GL_R8UI | GL_R16UI | GL_R32UI | GL_RG8UI | GL_RG16UI | GL_RG32UI | GL_RGBA8UI | GL_RGBA16UI | GL_RGBA32UI
+        | GL_RGB10_A2UI
+            if !crate::REPORT_ES2 =>
+        {
+            Some(ColorKind::Uint)
+        }
+        f => {
+            let bits = renderbuffer_bits(f);
+            (bits.rgba != [0; 4]).then_some(ColorKind::Float)
+        }
+    }
+}
+
+/// The kind of the READ buffer's colour, and of each draw buffer's, whether
+/// or not the GL core can copy the image.
+fn colour_kinds(c: &GlContext, read: GLuint) -> (Option<ColorKind>, [Option<ColorKind>; CAP_COLOR_ATTACHMENTS]) {
+    let att = |fb: &super::context::GlFramebuffer, i: usize| match i {
+        0 => fb.color,
+        n => fb.color_n[n - 1],
+    };
+    let rk = if read == 0 {
+        (!c.default_read_none && c.default_surface_valid).then_some(ColorKind::Float)
+    } else {
+        c.framebuffer_ref(read).filter(|f| !f.read_none).and_then(|f| {
+            let i = f.read_index as usize;
+            (i < CAP_COLOR_ATTACHMENTS).then(|| attachment_kind(c, &att(f, i))).flatten()
+        })
+    };
+    let mut dk = [None; CAP_COLOR_ATTACHMENTS];
+    if c.bound_framebuffer == 0 {
+        if !framebuffer::default_draw_none(c) && c.default_surface_valid {
+            dk[0] = Some(ColorKind::Float);
+        }
+    } else if let Some(f) = c.framebuffer_ref(c.bound_framebuffer) {
+        for (i, slot) in dk.iter_mut().enumerate() {
+            let b = framebuffer::draw_buffer(c, i);
+            if b == GL_NONE {
+                continue;
+            }
+            let k = (b - GL_COLOR_ATTACHMENT0) as usize;
+            if k < CAP_COLOR_ATTACHMENTS {
+                *slot = attachment_kind(c, &att(f, k));
+            }
+        }
+    }
+    (rk, dk)
+}
+
 /// The images the bound DRAW framebuffer's draw buffers write (GL_NONE and
 /// draw buffers with nothing attached write nothing).
 fn draw_images(c: &GlContext) -> ([Option<Image>; CAP_COLOR_ATTACHMENTS], usize) {
@@ -1058,6 +1131,26 @@ pub(super) fn blit_framebuffer(c: &mut GlContext, k: Corners, mut mask: GLbitfie
     }
     /* "If a buffer is specified in mask and does not exist in both the read
      * and draw framebuffers, the corresponding bit is silently ignored." */
+    /* The kinds are compared before any colour is dropped for an image the
+     * core cannot copy (RGBA32I/UI): 4.3.3's INVALID_OPERATION when the
+     * mask has COLOR and the read and a draw buffer differ in kind, or the
+     * filter is LINEAR with an integer read buffer. */
+    if mask & GL_COLOR_BUFFER_BIT != 0 {
+        if let (Some(rk), dk) = colour_kinds(c, read) {
+            let mut any = false;
+            for d in dk.iter().flatten() {
+                any = true;
+                if *d != rk {
+                    c.set_error(GL_INVALID_OPERATION, FN);
+                    return;
+                }
+            }
+            if any && filter == GL_LINEAR && rk != ColorKind::Float {
+                c.set_error(GL_INVALID_OPERATION, FN);
+                return;
+            }
+        }
+    }
     let src = read_image(c, read);
     let (dsts, ndst) = draw_images(c);
     if mask & GL_COLOR_BUFFER_BIT != 0 {
