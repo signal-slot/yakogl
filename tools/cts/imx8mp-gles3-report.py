@@ -9,7 +9,12 @@ the status comment for GitHub issue #2. It edits no file. When --check fails (mi
 verdicts, several commits) the drafts are still printed, marked PARTIAL, the problems are named, and the
 exit status is 1.
 
-  imx8mp-gles3-report.py [--table T] [--mustpass M] [--date YYYY-MM-DD] <slice dir>...
+  imx8mp-gles3-report.py [--table T] [--mustpass M] [--date YYYY-MM-DD] [--root R] [--apply R] <slice dir>...
+
+After the drafts a block "anchors" names, for RESULTS.md, STATUS.md and ROADMAP.md of the tree R (default:
+this checkout), the current text each draft replaces, found by matching in the file, with its line number
+for reference. --apply R rewrites exactly those texts in R. It writes nothing and exits 1 when an anchor is
+missing or matches more than once (or when the drafts are PARTIAL).
 """
 import argparse
 import datetime
@@ -77,6 +82,33 @@ def rel(d):
     return (d if r.startswith('..') else r).rstrip('/')
 
 
+# (file under the repo root, regex of the current text, what it is). Matched in the file, not by line number.
+ANCHORS = [
+    ('tools/cts/RESULTS.md', re.compile(r'^\*\*i\.MX8MP\*\*: not run on the board[^\n]*$', re.M), 'RESULTS.md i.MX8MP line'),
+    ('tools/cts/STATUS.md', re.compile(r'Pi 4 と i\.MX8MP の GLES3 全ツリー。'), 'STATUS.md next-steps sentence'),
+    ('ROADMAP.md', re.compile(r'^- i\.MX8MP: not run on the board yet[^\n]*(?:\n  [^\n]*)*', re.M), 'ROADMAP.md stage 4 i.MX8MP bullet'),
+]
+
+
+def find_anchors(root, repl):
+    """[(label, path, text, match-or-None, problem-or-None, replacement)] for the three docs under root."""
+    res = []
+    for (rel_path, rx, label), new in zip(ANCHORS, repl):
+        path = os.path.join(root, rel_path)
+        try:
+            text = open(path, encoding='utf-8', newline='').read()
+        except OSError as e:
+            res.append((label, rel_path, None, None, 'cannot read %s: %s' % (path, e.strerror), new))
+            continue
+        ms = list(rx.finditer(text))
+        if len(ms) != 1:
+            res.append((label, rel_path, text, None, 'anchor %s in %s: %s' % (
+                'missing' if not ms else 'matches %d times' % len(ms), rel_path, rx.pattern), new))
+        else:
+            res.append((label, rel_path, text, ms[0], None, new))
+    return res
+
+
 def n(x):
     return f'{x:,}'
 
@@ -86,6 +118,8 @@ def main():
     ap.add_argument('--table', default=os.path.join(HERE, 'imx8mp-gles3-tree.txt'))
     ap.add_argument('--mustpass', default=os.path.join(HERE, 'gles3-mustpass.txt'))
     ap.add_argument('--date', default=datetime.date.today().isoformat(), help='date of the drafts (default: today)')
+    ap.add_argument('--root', default=os.path.dirname(os.path.dirname(HERE)), help='tree whose docs the anchors are read from')
+    ap.add_argument('--apply', metavar='ROOT', help='rewrite the anchored lines in the tree ROOT (all or nothing)')
     ap.add_argument('dirs', nargs='+', help='slice record directories (tools/cts/log/*-imx8mp-gles3-*/)')
     args = ap.parse_args()
 
@@ -132,30 +166,30 @@ def main():
             print('  problem: %s' % p)
     print()
     print('--- RESULTS.md (ES 3.0 section, replaces "**i.MX8MP**: not run on the board") ---')
-    print('%s**i.MX8MP, whole tree** on %s (tools/cts/imx8mp-gles3-tree.txt, %d entries; recipe\n'
-          '`docs/es3/board-recipe-imx8mp.md`), %s: %s, %s mustpass cases (%s begun):' % (
-              partial, commit_txt, n_entries, args.date, entries_txt, n(mp), n(begun)))
-    print()
-    print('| Pass | Fail | NotSupported | Other | No result |')
-    print('|---:|---:|---:|---:|---:|')
-    print('| %s | %s | %s | %s | %s |' % five)
-    print()
-    print('- Records: %s; %s.' % (dirs_txt, reset_txt))
-    print('- Every case that is not Pass: `docs/es3/imx8mp-gles3-notpass.tsv`.')
+    results_txt = ('%s**i.MX8MP, whole tree** on %s (tools/cts/imx8mp-gles3-tree.txt, %d entries; recipe\n'
+                   '`docs/es3/board-recipe-imx8mp.md`), %s: %s, %s mustpass cases (%s begun):' % (
+                       partial, commit_txt, n_entries, args.date, entries_txt, n(mp), n(begun)))
+    results_txt += '\n\n| Pass | Fail | NotSupported | Other | No result |\n|---:|---:|---:|---:|---:|\n'
+    results_txt += '| %s | %s | %s | %s | %s |\n' % five
+    results_txt += '\n- Records: %s; %s.\n' % (dirs_txt, reset_txt)
+    results_txt += '- Every case that is not Pass: `docs/es3/imx8mp-gles3-notpass.tsv`.'
     for p in problems:
-        print('- PARTIAL, not final: %s.' % p)
+        results_txt += '\n- PARTIAL, not final: %s.' % p
+    print(results_txt)
     print()
     print('--- STATUS.md (Japanese, current state only) ---')
-    print('i.MX8MP の dEQP-GLES3 は%s 全 %d エントリのうち %d エントリを %s（%s）のボードで実行し、必須 %s 件中 合格 %s / 失敗 %s / 未対応 %s / その他 %s / 結果なし %s、'
+    status_txt = ('i.MX8MP の dEQP-GLES3 は%s 全 %d エントリのうち %d エントリを %s（%s）のボードで実行し、必須 %s 件中 合格 %s / 失敗 %s / 未対応 %s / その他 %s / 結果なし %s、'
           'リセット%s。記録は %s。' % (
               '' if ok else '（途中、記録が不完全）', n_entries, run_n, short_txt, args.date, n(mp), *five,
               'の確認が未完' if bad_verdict else '0', ', '.join(rel(d) for d in args.dirs)))
+    print(status_txt)
     print()
     print('--- ROADMAP.md (stage 4, i.MX8MP line) ---')
-    print('- i.MX8MP: %sdEQP-GLES3 %s on the board at %s (%s): %s Pass / %s Fail / %s NotSupported / %s other / %s without a result '
+    roadmap_txt = ('- i.MX8MP: %sdEQP-GLES3 %s on the board at %s (%s): %s Pass / %s Fail / %s NotSupported / %s other / %s without a result '
           'of %s mustpass cases (#1262).' % (
               partial, 'whole tree, %d entries,' % n_entries if not miss[0] else '%d of %d entries,' % (run_n, n_entries),
               short_txt, args.date, *five, n(mp)))
+    print(roadmap_txt)
     print()
     print('--- GitHub issue #2 comment ---')
     print('%s**i.MX8MP dEQP-GLES3, %s**' % (partial, args.date))
@@ -172,6 +206,32 @@ def main():
     left += [p for p in problems if not p.startswith('no record:')]
     left.append('triage of the not-pass groups into issues (`docs/es3/imx8mp-gles3-notpass.tsv`)')
     print('- Remains: %s.' % '; '.join(left))
+
+    repl = [results_txt, status_txt + 'Pi 4 の GLES3 全ツリー。', roadmap_txt]
+    anchors = find_anchors(args.apply or args.root, repl)
+    print()
+    print('--- anchors (the current text each draft replaces, matched in the file; tree %s) ---' % (args.apply or args.root))
+    for label, path, text, m, prob, new in anchors:
+        if prob:
+            print('%s: %s' % (label, prob))
+            continue
+        line = text.count('\n', 0, m.start()) + 1
+        print('%s: %s line %d, replaces' % (label, path, line))
+        for l in m.group(0).split('\n'):
+            print('  - %s' % l)
+        print('  with the %s draft above%s' % (path.rsplit('/', 1)[-1], ' (followed by "Pi 4 の GLES3 全ツリー。")' if 'STATUS' in path else ''))
+    if args.apply:
+        bad = [a[4] for a in anchors if a[4]]
+        if not ok:
+            bad.append('the drafts are PARTIAL')
+        if bad:
+            print('--apply: refused, nothing written: %s' % '; '.join(bad))
+            return 1
+        for label, path, text, m, prob, new in anchors:
+            out = text[:m.start()] + new + text[m.end():]
+            with open(os.path.join(args.apply, path), 'w', encoding='utf-8', newline='') as f:
+                f.write(out)
+        print('--apply: rewrote %s' % ', '.join(a[1] for a in anchors))
     return 0 if ok else 1
 
 
