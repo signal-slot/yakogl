@@ -336,7 +336,7 @@ if data is not None:
             if not valid_hash:
                 err(f"data.js: {fid}: pre-publication build needs a commit identifier")
             elif have_git:
-                if git("cat-file", "-e", c + "^{commit}").returncode == 0:
+                if git("merge-base", "--is-ancestor", c, "HEAD").returncode == 0:
                     err(f"data.js: {fid}: public commit must use repository provenance")
                 if section is not None and not re.search(r"(?<![0-9a-f])" + re.escape(c) + r"(?![0-9a-f])", section):
                     err(f"data.js: {fid}: pre-publication hash is absent from its cited section")
