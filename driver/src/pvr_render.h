@@ -133,8 +133,10 @@ struct pvr_render_frag_regs {
  * pr_pds_pixel_event_data_offset and pds_pr_bgnd (docs/notes/pvr-render-pool.md
  * "Design: the firmware's partial render", part 2; docs/notes/pvr-pr-eot.md
  * 3.3-3.6; docs/notes/pvr-pr-bgload.md 4). All zero means "no partial-render
- * state for this frame": the backend hands the block out zeroed and the
- * driver does not read it yet, so every firmware word is today's. Fixed-width
+ * state for this frame": the 3D_PR is then a byte copy of the 3D command, as
+ * every firmware word is without the partial-render knob. With the knob a
+ * filled block gives the 3D_PR its pbe_word and eot_pds_data (and both
+ * commands the SPM scratch flag); pds_pr_bgnd is not written yet. Fixed-width
  * fields with explicit padding (96 bytes), mirrored by src/osal/render.rs and
  * driver/rust/src/gpu/pvr/render.rs. */
 struct pvr_render_frag_pr {
@@ -166,7 +168,7 @@ struct pvr_render_kick {
 	uint32_t samples;               /* 1, 2 or 4 samples per pixel (0 = 1) */
 	struct pvr_render_geom_regs geom;
 	struct pvr_render_frag_regs frag;
-	struct pvr_render_frag_pr frag_pr;   /* the partial-render block (zero today) */
+	struct pvr_render_frag_pr frag_pr;   /* the partial-render block (zero: none) */
 };
 
 /* One-time initialisation after pvr_fw_boot() succeeded. Idempotent. */

@@ -75,12 +75,15 @@ config YAKOGL_DRV_GPU_PVR_PARTIAL_RENDER
 	  run ends in the 10 s stop (gl_test case 175, refusehang). With this
 	  every geometry command carries the PR fence words {timeline,
 	  seq - 1} and a second UPDATE to a geometry timeline word, and every
-	  kick gains a FENCE_PR, a 3D_PR (a byte copy of the 3D command) and
-	  an UPDATE before today's FENCE, 3D and UPDATE - the order and
-	  arithmetic of Linux drm/imagination (pvr_queue.c) and Mesa's srvkm
-	  (gpu::pvr::render::submit; docs/notes/pvr-render-pool.md, "Design:
-	  the firmware's partial render"). Without it every command and word
-	  is what it was. Independent of YAKOGL_DRV_GPU_PVR_FL_GROW_ON_DEMAND;
+	  kick gains a FENCE_PR, a 3D_PR and an UPDATE before today's FENCE,
+	  3D and UPDATE - the order and arithmetic of Linux drm/imagination
+	  (pvr_queue.c) and Mesa's srvkm (gpu::pvr::render::submit;
+	  docs/notes/pvr-render-pool.md, "Design: the firmware's partial
+	  render"). The 3D_PR is a byte copy of the 3D command, or, when the
+	  back end fills the kick's frag_pr block, a scratch PR: the PR PBE
+	  words and PR EOT data from that block, and the SPM scratch flag on
+	  both fragment commands. Without it every command and word is what
+	  it was. Independent of YAKOGL_DRV_GPU_PVR_FL_GROW_ON_DEMAND;
 	  gl_test case 175 is the board gate. Off until gl_test and glmark2
 	  have run with it, knob off and on.
 
