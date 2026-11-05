@@ -923,6 +923,11 @@ fn stream(st: &Stage, stage: &str, u: &Uniforms, ours: bool) -> Result<Vec<u32>,
             // QUNIFORM_TEXTURE_WIDTH/HEIGHT of unit `data` (v3d_uniforms.c:
             // 58-68, level 0).
             44 | 45 if data < TEXTURE_UNITS => TEXTURE_SIZE,
+            // QUNIFORM_TEXTURE_DEPTH / _ARRAY_SIZE of unit `data`: every
+            // harness texture is one 2D layer (a 3D look-up's sampling stops
+            // the interpreter by name, sim.rs), so a depth or a layer count
+            // of 1, as get_texture_size gives for it.
+            46 | 47 if data < TEXTURE_UNITS => 1,
             // QUNIFORM_SPILL_OFFSET / _SIZE_PER_THREAD (v3d_compiler.h;
             // vir_register_allocate.c:426-455: spill_base = TIDX * size +
             // EIDX * 4 + offset): the harness's scratch buffer, which the
@@ -2209,11 +2214,16 @@ fn the_interpreter_runs_mesas_code_as_the_ir_says() {
     // 2026-10-04 (work/online-only, ES 3 build): es300/texsize.frag now
     // declares its sampler2DArray's precision (GLSL ES 3.00 4.5.4), so the
     // front end takes it: tried +1, as unmodelled (uniform contents 47,
-    // Mesa's texture size), not tried -1.
+    // Mesa's texture size), not tried -1. 2026-11-05 (2D-array and 3D
+    // look-ups, ES 3 build): the stream now gives contents 46 / 47 (depth,
+    // array size), so Mesa's es300/array.frag, texsize.frag and vol.frag
+    // no longer stop at those words: two of the three unmodelled ones go
+    // on to the evaluator, which has no array or 3D texture: tried -2,
+    // unmodelled 3 -> 1, not tried +2.
     let es2 = cfg!(feature = "report-es2");
     assert_eq!(
         (pairs.len(), tried, agree.len(), n_un, n_nt),
-        if es2 { (240, 161, 161, 0, 79) } else { (240, 181, 178, 3, 59) },
+        if es2 { (240, 161, 161, 0, 79) } else { (240, 179, 178, 1, 61) },
         "the population moved; re-derive the pins"
     );
     assert_eq!(retried.len(), if es2 { 2 } else { 4 }, "the positive-input retries moved: {retried:?}");
@@ -2845,15 +2855,24 @@ fn our_programs_agree_with_the_ir_and_with_mesa() {
     // the pair is not tried (5 -> 6) and not compared with Mesa's program
     // (15 -> 16); nothing else moves (the 192 pairs compiled before keep
     // their words: chain.rs compiled_corpus_words_are_pinned).
+    // 2026-11-05 (2D-array and 3D look-ups, ES 3 build only): NotYet 3 ->
+    // 0, compiled 222 -> 225: es300/array.frag, texsize.frag and vol.frag.
+    // None is tried (6 -> 9): the evaluator has no array or 3D texture,
+    // and the interpreter none of 3D (vol.frag stops at its TMUR without
+    // TMUSCM, array.frag at a texel fetch past the harness's one-layer
+    // 5x5 texture), so none is compared with Mesa's program here either
+    // (16 -> 19); chain.rs the_corpus_array_and_3d_sources_compile checks
+    // their TMU writes against Mesa's v3d_tex.c, and texture_size_of_a_
+    // volume_and_an_array their textureSize in the interpreter.
     let es2 = cfg!(feature = "report-es2");
     assert_eq!(
         (reals.len(), front_end, n_not_yet, n_other, compiled.len()),
-        if es2 { (271, 70, 0, 2, 199) } else { (271, 44, 3, 2, 222) },
+        if es2 { (271, 70, 0, 2, 199) } else { (271, 44, 0, 2, 225) },
         "our compiler's coverage moved; re-derive the pins"
     );
     assert_eq!(
         (tried, agree.len(), n_un, n_nt),
-        if es2 { (197, 197, 0, 2) } else { (216, 215, 1, 6) },
+        if es2 { (197, 197, 0, 2) } else { (216, 215, 1, 9) },
         "(a) vs (b) moved"
     );
     // The pairs whose output the language does not fix (a pseudo-random
@@ -2866,7 +2885,7 @@ fn our_programs_agree_with_the_ir_and_with_mesa() {
     assert_eq!(trig_sorted, trig_want, "the undefined-precision trig bucket moved");
     assert_eq!(
         (vs_mesa_agree.len(), vs_mesa_skipped.len(), vs_mesa_absent.len()),
-        if es2 { (160, 10, 29) } else { (177, 16, 29) },
+        if es2 { (160, 10, 29) } else { (177, 19, 29) },
         "(a) vs (c) moved"
     );
     assert_eq!(
@@ -3084,6 +3103,8 @@ fn back_to_back_loop_exits_are_counted() {
 /// (#1509, 2026-10-24): 51 cuts, all in fragment shaders. 2026-11-03,
 /// texelFetch (TMUSF), ES 3 build: gltest/isamp.frag compiles and adds its
 /// hoists (fs 5, vs 2, cs 6, no cut); the pairs compiled before keep theirs.
+/// 2026-11-05, 2D-array and 3D look-ups, ES 3 build: es300/array.frag,
+/// texsize.frag and vol.frag add theirs (fs 7, vs 2, cs 18, no cut).
 /// Pinned: a change to hoist or to what reaches it moves these.
 #[test]
 fn the_hoist_windows_cuts_are_counted() {
@@ -3114,7 +3135,7 @@ fn the_hoist_windows_cuts_are_counted() {
     }
     assert_eq!(
         (hoists, cuts),
-        if es2 { ([1074, 2227, 166], [48, 0, 0]) } else { ([1146, 2406, 230], [59, 0, 0]) },
+        if es2 { ([1074, 2227, 166], [48, 0, 0]) } else { ([1153, 2408, 248], [59, 0, 0]) },
         "the hoist counts moved"
     );
 }
@@ -3495,6 +3516,10 @@ const FEMTOVG_FS_COUNTS: &[(&str, usize)] = &[
 /// [4569, 2370, 1965], the per-program words above of the Qt programs gone
 /// with them. 2026-11-03, texelFetch (TMUSF): gltest/isamp.frag compiles,
 /// 193 programs [10939, 5537, 4530], the new pair's own words (fs 119, vs
-/// 18, cs 21; ES 3 build only); no other program moves.
-const OURS_TOTALS: (usize, [usize; 3]) = (193, [10939, 5537, 4530]);
+/// 18, cs 21; ES 3 build only); no other program moves. 2026-11-05,
+/// 2D-array and 3D look-ups and their textureSize: es300/array.frag,
+/// texsize.frag and vol.frag compile, 196 programs [11013, 5595, 4593],
+/// the three pairs' own words (fs 29 + 16 + 29; ES 3 build only); no other
+/// program moves (chain.rs compiled_corpus_words_are_pinned).
+const OURS_TOTALS: (usize, [usize; 3]) = (196, [11013, 5595, 4593]);
 const OURS_TOTALS_ES2: (usize, [usize; 3]) = (170, [9823, 4840, 4039]);

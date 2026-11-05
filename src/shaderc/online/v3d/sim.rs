@@ -178,9 +178,10 @@
 //!   3.0 3.8.9: floor(layer + 0.5)); a lookup whose layer is not finite is
 //!   refused. A texel fetch (`texelFetch`, Mesa's txf) is S by TMUSF with
 //!   T, both integer texel indices, and the integer level on TMUB: that
-//!   texel of that level of a 2D texture, no filter, no wrap (GL ES 3.0
-//!   8.8); a fetch outside the level or the chain is undefined in GL and
-//!   refused here. P2's Offset S and T (4-bit signed, `textureOffset`,
+//!   texel of that level of a 2D texture (with an integer layer in TMUI,
+//!   that layer of a 2D array), no filter, no wrap (GL ES 3.0 8.8); a
+//!   fetch outside the level, the layers or the chain is undefined in GL
+//!   and refused here. P2's Offset S and T (4-bit signed, `textureOffset`,
 //!   `texelFetchOffset`) are added to the texel coordinates of each level
 //!   sampled before the wrap (GL ES 3.0 3.8.10); Offset R (3D) and an
 //!   offset on a cube lookup are refused. LINEAR is dEQP's bilinear rule
@@ -190,8 +191,8 @@
 //!   LINEAR tolerance. Refused: a NEAREST coordinate within 1e-3 of a
 //!   texel edge (the hardware's rounding there is not known), a level of
 //!   detail within dEQP's LOD precision of a level boundary, a cube
-//!   direction within 1e-3 of a face edge, R without TMUSCM (3D), I with
-//!   TMUSCM (a cube array) or with TMUSF (an array fetch), DREF/OFF
+//!   direction within 1e-3 of a face edge, R without TMUSCM (3D: the model
+//!   has no 3D texture), I with TMUSCM (a cube array), DREF/OFF
 //!   (shadow, a non-constant offset), a P2 that is not a regular lookup
 //!   (gather, coefficient mode, a sample number, Offset Format 8, an LOD
 //!   query), unnormalised coordinates, and conditional texture writes.
@@ -1017,9 +1018,6 @@ impl Machine<'_> {
         if cube && offset != [0; 3] {
             return unmodelled(format!("{what}: a cube lookup with a texel offset"));
         }
-        if fetch && layer.is_some() {
-            return unmodelled(format!("{what}: a texel fetch with an array index (TMUI)"));
-        }
         if fetch && disable_autolod {
             return unmodelled(format!("{what}: a texel fetch with P2 Disable AutoLOD (Mesa never sets it on a txf)"));
         }
@@ -1132,8 +1130,18 @@ impl Machine<'_> {
                         lv.width, lv.height
                     ));
                 }
+                /* a 2D array's fetch: the integer layer on TMUI, which
+                 * must name a layer there is (GL ES 3.0 8.8 leaves the rest
+                 * undefined) */
+                let k = layer.map_or(0, |i| i[l] as i32);
+                if k < 0 || k >= lv.faces.len() as i32 {
+                    return unmodelled(format!(
+                        "{what}: a texel fetch of layer {k} on a texture of {} layers",
+                        lv.faces.len()
+                    ));
+                }
                 self.out.levels |= 1 << level;
-                lv.faces[0][(j as u32 * lv.width + i as u32) as usize]
+                lv.faces[k as usize][(j as u32 * lv.width + i as u32) as usize]
             } else {
                 let lod = match b {
                     Some(b) if explicit => Lod::Explicit(fl(b[l])),
@@ -2343,9 +2351,9 @@ mod undefined_lane_tests {
 
     /// A texel fetch (S by TMUSF, T, the integer level on TMUB) reads that
     /// texel of that level, no filter and no wrap; P2's Offset S / T move
-    /// it. Refused: a texel or a level outside the texture (undefined in
-    /// GL), no TMUB, an array index, Disable AutoLOD (Mesa never sets it on
-    /// a txf), a cube texture.
+    /// it; an integer layer on TMUI picks a 2D array's layer. Refused: a
+    /// texel, a layer or a level outside the texture (undefined in GL), no
+    /// TMUB, Disable AutoLOD (Mesa never sets it on a txf), a cube texture.
     #[test]
     fn a_texel_fetch_reads_the_texel_of_its_level() {
         use crate::shaderc::online::texref;
@@ -2387,8 +2395,23 @@ mod undefined_lane_tests {
         refused(fetch(0, 0, 0, Some(0x00f0_0002)), "a texel fetch with P2 Disable AutoLOD");
         let (code, unif) = tex_program_words(41, 0, None, None, None, None, 0);
         refused(fs_with(&code, &unif, tex.clone()), "a texel fetch with no level (TMUB)");
-        let (code, unif) = tex_program_words(41, 0, None, Some(0), Some(0), None, 0);
-        refused(fs_with(&code, &unif, tex.clone()), "a texel fetch with an array index (TMUI)");
+        /* a 2D array of three layers, each layer k the mip texture plus
+         * 1000k: the integer layer on TMUI picks it */
+        let mut arr = tex.clone();
+        for lv in arr.levels.iter_mut() {
+            let base = lv.faces[0].clone();
+            for k in 1..3 {
+                lv.faces.push(base.iter().map(|t| t.map(|c| c + 1000.0 * k as f32)).collect());
+            }
+        }
+        let layer = |k: i32| {
+            let (code, unif) = tex_program_words(41, 1, None, Some(k as u32), Some(0), None, 2);
+            fs_with(&code, &unif, arr.clone())
+        };
+        assert_eq!(value(layer(0)), (12.0, 1, 1));
+        assert_eq!(value(layer(2)), (2012.0, 1, 1));
+        refused(layer(3), "a texel fetch of layer 3 on a texture of 3 layers");
+        refused(layer(-1), "a texel fetch of layer -1 on a texture of 3 layers");
         let (code, unif) = tex_program_words(41, 0, None, None, Some(0), None, 0);
         refused(fs_with(&code, &unif, mip_texture(true)), "a texel fetch lookup on cube texture 0");
     }

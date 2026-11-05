@@ -1526,9 +1526,11 @@ mod tests {
      * the gl_test sources again (128 after the Qt shaders left the tree,
      * #1509; 287 pairs and 163 / 217 compiled before). 2026-11-03: the ES
      * 3.00 build compiles gltest/isamp.frag (texelFetch, TMUSF) too, 193;
-     * its NotYet is textureSize of an array sampler (es300/array.frag,
-     * es300/vol.frag). */
-    const COMPILED: usize = if cfg!(feature = "report-es2") { 170 } else { 193 };
+     * its NotYet was textureSize of an array sampler (es300/array.frag,
+     * es300/vol.frag). 2026-11-05: 196, with es300/array.frag, texsize.frag
+     * and vol.frag (2D-array and 3D look-ups, their textureSize); no NotYet
+     * is left in the corpus. */
+    const COMPILED: usize = if cfg!(feature = "report-es2") { 170 } else { 196 };
 
     #[test]
     fn corpus_coverage_is_pinned() {
@@ -1697,11 +1699,15 @@ mod tests {
         /* 2026-11-03: the ES 3.00 build's digest moved with gltest/isamp.frag
          * compiling (texelFetch); over the 192 programs compiled before it
          * is still 0xaae0_0ff1_9d5a_fbfc, 20_848 words (measured by skipping
-         * that pair): no word of an existing program changed. */
+         * that pair): no word of an existing program changed. 2026-11-05:
+         * moved again with es300/array.frag, texsize.frag and vol.frag
+         * compiling (2D-array and 3D look-ups, their textureSize); over the
+         * 193 programs compiled before it is still 0xd705_1e75_32ff_19e7,
+         * 21_006 words (measured by skipping those three pairs). */
         let want: (usize, u64) = if cfg!(feature = "report-es2") {
             (18_702, 0x177f_ab20_d963_ef95)
         } else {
-            (21_006, 0xd705_1e75_32ff_19e7)
+            (21_201, 0x1bf6_c942_ff7d_24a8)
         };
         assert_eq!((words, h), want, "the words the compiler emits changed");
     }
@@ -4204,6 +4210,111 @@ mod tests {
                 }
             }
         });
+    }
+
+    /// textureSize of a 3D and of a 2D-array sampler (Mesa's ntq_emit_txs):
+    /// the third lane is the depth word (QUNIFORM_TEXTURE_DEPTH), minified
+    /// like width and height, or the layer count (_ARRAY_SIZE), which is
+    /// not. Run for a 64x16x8 volume and a 64x16 array of 8 layers at
+    /// levels 0, 1 and 5: the volume's depth goes 8, 4, 1 and the array's
+    /// count stays 8. Revert check: minifying the array size gives 4 at
+    /// level 1.
+    #[cfg(not(feature = "report-es2"))]
+    #[test]
+    fn texture_size_of_a_volume_and_an_array() {
+        use crate::shaderc::online::v3d::select::{
+            QUNIFORM_TEXTURE_ARRAY_SIZE, QUNIFORM_TEXTURE_DEPTH, QUNIFORM_TEXTURE_HEIGHT, QUNIFORM_TEXTURE_WIDTH,
+        };
+        use crate::shaderc::online::v3d::sim::{self, Env, FsInputs, Inputs, LANES};
+        const VS: &str = "#version 300 es\nlayout(location = 0) in vec4 p;\nvoid main() { gl_Position = p; }\n";
+        for (sampler, third) in [("sampler3D", QUNIFORM_TEXTURE_DEPTH), ("sampler2DArray", QUNIFORM_TEXTURE_ARRAY_SIZE)]
+        {
+            let fs = std::format!(
+                "#version 300 es\nprecision highp float;\nuniform highp {sampler} t;\nuniform int lod;\n\
+                 layout(location = 0) out vec4 o;\n\
+                 void main() {{ ivec3 s = textureSize(t, lod); o = vec4(vec3(s) / 64.0, 1.0); }}\n"
+            );
+            with_program(VS, &fs, Prim::Triangles, |p| {
+                let p = p.unwrap_or_else(|e| panic!("{sampler}: {e:?}"));
+                check_all(p);
+                let c = &p.fs.code;
+                let words: Vec<(u32, u32)> = c.uniforms.iter().map(|u| (u.contents, u.data)).collect();
+                assert!(words.contains(&(third, 0)), "{sampler}: {words:?}");
+                let h = |x: f32| u32::from(sim::f32_to_half(x));
+                for (lod, w, ht) in [(0i32, 64.0f32, 16.0f32), (1, 32.0, 8.0), (5, 2.0, 1.0)] {
+                    let d = if third == QUNIFORM_TEXTURE_DEPTH { (8u32 >> lod).max(1) as f32 } else { 8.0 };
+                    let stream: Vec<u32> = c
+                        .uniforms
+                        .iter()
+                        .map(|u| match u.contents {
+                            0 => u.data,
+                            1 => lod as u32,
+                            QUNIFORM_TEXTURE_WIDTH => 64,
+                            QUNIFORM_TEXTURE_HEIGHT => 16,
+                            QUNIFORM_TEXTURE_DEPTH | QUNIFORM_TEXTURE_ARRAY_SIZE => 8,
+                            k => panic!("uniform contents {k} not modelled here"),
+                        })
+                        .collect();
+                    let inputs = FsInputs {
+                        w: [1.0f32.to_bits(); LANES],
+                        w_centroid: [1.0f32.to_bits(); LANES],
+                        z: [0; LANES],
+                        x: [0; LANES],
+                        y: [0; LANES],
+                        back_facing: [false; LANES],
+                        varyings: std::vec::Vec::new(),
+                    };
+                    let env = Env { threads: p.fs.threads, ..Env::default() };
+                    let o = sim::run(c.words, &stream, &Inputs::Fragment(std::boxed::Box::new(inputs)), &env)
+                        .expect("runs");
+                    let want = [h(w / 64.0) | h(ht / 64.0) << 16, h(d / 64.0) | h(1.0) << 16];
+                    for l in 0..LANES {
+                        assert_eq!(
+                            [o.tlb[0].value[l], o.tlb[1].value[l]],
+                            want.map(Some),
+                            "{sampler} lod {lod}, lane {l}"
+                        );
+                    }
+                }
+            });
+        }
+    }
+
+    /// The corpus's 2D-array and 3D sources compile (refused by name until
+    /// the look-ups were selected) with the TMU writes Mesa's v3d_tex.c
+    /// makes: an array's layer on TMUI, a 3D's r on TMUR with no TMUSCM
+    /// (a cube's retire), texelFetch by TMUSF, an explicit level by
+    /// TMUSLOD. Their word counts are printed beside Mesa's for the same
+    /// source with es300/cube.vert (tools/v3d/qpu_counts_42.tsv); the
+    /// programs themselves are compared with Mesa's in
+    /// tests/v3d_sim_mesa.rs.
+    #[cfg(not(feature = "report-es2"))]
+    #[test]
+    fn the_corpus_array_and_3d_sources_compile() {
+        static CUBE_VS: &str = include_str!("../../../../tools/shaders/es300/cube.vert");
+        static ARRAY_FS: &str = include_str!("../../../../tools/shaders/es300/array.frag");
+        static VOL_FS: &str = include_str!("../../../../tools/shaders/es300/vol.frag");
+        static LAYERS2_FS: &str = include_str!("../../../../tools/shaders/es300/layers2.frag");
+        static TEXSIZE_FS: &str = include_str!("../../../../tools/shaders/es300/texsize.frag");
+        for (name, fs, mesa, has, hasnt) in [
+            ("es300/array.frag", ARRAY_FS, 25usize, &["tmui", "tmusf", "tmus,"][..], &["tmur", "tmuscm"][..]),
+            ("es300/vol.frag", VOL_FS, 25, &["tmur", "tmusf", "tmuslod", "tmus,"], &["tmui", "tmuscm"]),
+            ("es300/layers2.frag", LAYERS2_FS, 27, &["tmui", "tmus,"], &["tmur", "tmuscm"]),
+            ("es300/texsize.frag", TEXSIZE_FS, 18, &[], &["tmu"]),
+        ] {
+            with_program(CUBE_VS, fs, Prim::Triangles, |p| {
+                let p = p.unwrap_or_else(|e| panic!("{name}: {e:?}"));
+                check_all(p);
+                let ops: Vec<String> = p.fs.code.instrs.iter().map(text).collect();
+                for w in has {
+                    assert!(ops.iter().any(|o| o.contains(w)), "{name} has {w}: {ops:#?}");
+                }
+                for w in hasnt {
+                    assert!(!ops.iter().any(|o| o.contains(w)), "{name} has no {w}: {ops:#?}");
+                }
+                std::println!("{name}: {} words (Mesa {mesa})", ops.len());
+            });
+        }
     }
 
     /// dEQP-GLES2 uniform_api's nested_structs_arrays mat4/mat2 "both"
