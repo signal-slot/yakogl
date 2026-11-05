@@ -423,6 +423,20 @@
  *               CONFIG_YAKOGL_DRV_GPU_PVR_PARTIAL_RENDER: without it the kick
  *               hangs by design (the 10 s stop), so NOT in the default list;
  *               run it by number (README.md, "Case 217")
+ * 218 shadowcmp a depth texture compared by sampler2DShadow (#version 300 es):
+ *               a 4x4 DEPTH_COMPONENT32F texture (texel (x, y) = (1 + (7x +
+ *               5y) % 16) / 17, uploaded) bound with two sampler objects,
+ *               GL_COMPARE_REF_TO_TEXTURE with LESS and NEAREST on the left
+ *               half of the window, GEQUAL and LINEAR on the right; the
+ *               reference is 0.5 and the result is drawn as a grey level.
+ *               The left half samples the texel centres (0 or 1 a texel),
+ *               the right half the texel corners, where the compare happens
+ *               per texel and the filter after it: 0, 1/4, 1/2, 3/4 or 1
+ *               (ES 3.0 3.8.15.1). Each of the 16 blocks of a half is
+ *               checked against the value the case computes from the texels.
+ *               The V3D refuses the shader by name today ("a shadow
+ *               look-up"): FAIL at the link, not a wrong picture. Skipped
+ *               in an ES 2.0 library. All three GPUs; not in the set
  * 180 teardown  a 1024x1024 texture sampled, the job flushed and left to
  *               finish unobserved, the texture deleted and one of the same
  *               size made: both read back (red, then green); on the V3D
@@ -8510,7 +8524,7 @@ static const char *const case_names[] = {
 	 * `gl_test: case 65 polyunit: FAIL`, a line the program could not emit.
 	 * A reader grepping for it would have found nothing and concluded the
 	 * case had not run. 63 was still missing when 65/66/67 were added. */
-	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain", [185] = "kindcost", [186] = "fcsplit", [187] = "predarm", [188] = "predif", [189] = "mulone", [190] = "blendonce", [191] = "varyfma", [192] = "predlive", [193] = "offarm", [194] = "offarmn", [195] = "ifbranch", [196] = "occl", [197] = "vtxgrid", [198] = "a2cconst", [199] = "es3trunc", [200] = "intrt", [201] = "usamp", [202] = "blitconv", [203] = "tfcap", [204] = "srgb", [205] = "mappbo", [206] = "es3levels", [207] = "msaazs", [208] = "msaapre", [209] = "varyorder", [210] = "occlacc", [211] = "msaablend", [212] = "ifsel", [213] = "discloop", [214] = "splitkick", [215] = "shadowmap", [216] = "mipchains", [217] = "forcedpr",
+	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain", [185] = "kindcost", [186] = "fcsplit", [187] = "predarm", [188] = "predif", [189] = "mulone", [190] = "blendonce", [191] = "varyfma", [192] = "predlive", [193] = "offarm", [194] = "offarmn", [195] = "ifbranch", [196] = "occl", [197] = "vtxgrid", [198] = "a2cconst", [199] = "es3trunc", [200] = "intrt", [201] = "usamp", [202] = "blitconv", [203] = "tfcap", [204] = "srgb", [205] = "mappbo", [206] = "es3levels", [207] = "msaazs", [208] = "msaapre", [209] = "varyorder", [210] = "occlacc", [211] = "msaablend", [212] = "ifsel", [213] = "discloop", [214] = "splitkick", [215] = "shadowmap", [216] = "mipchains", [217] = "forcedpr", [218] = "shadowcmp",
 };
 
 /* ---- case 67: what a framebuffer object does NOT have -----------------------
@@ -19875,6 +19889,126 @@ static int case_mappbo(void)
 	return ok ? 0 : -1;
 }
 
+/* ---- case 218: a depth texture compared by sampler2DShadow (shadowcmp) ---
+ *
+ * The board check that docs/notes/v3d-shadow.md (e) asks for: the direction
+ * of the comparison (reference OP texel), the compare-before-filter order of
+ * a LINEAR shadow sampler, and the 32-bit float depth type, in one picture.
+ * The texture is uploaded as DEPTH_COMPONENT32F (the R32F texels of the GL
+ * core); the D24S8 binding of a rendered texture is a second case once this
+ * one passes. The layout is in the comment at the case list. */
+static int case_shadowcmp(void)
+{
+	static const char *const vs_src =
+		"#version 300 es\n"
+		"in vec2 a_pos;\n"
+		"void main() { gl_Position = vec4(a_pos, 0.0, 1.0); }\n";
+	/* blocks of 8 x 16 pixels, four across a half window and four up it:
+	 * block (bx, by) samples texel (bx, by)'s centre on the left and the
+	 * corner (bx + 1, by + 1) / 4 on the right */
+	static const char *const fs_src =
+		"#version 300 es\n"
+		"precision mediump float;\n"
+		"uniform mediump sampler2DShadow u_near;\n"
+		"uniform mediump sampler2DShadow u_lin;\n"
+		"out vec4 o_color;\n"
+		"void main() {\n"
+		"    float right = step(32.0, gl_FragCoord.x);\n"
+		"    vec2 b = vec2(floor((gl_FragCoord.x - 32.0 * right) / 8.0), floor(gl_FragCoord.y / 16.0));\n"
+		"    float n = texture(u_near, vec3((b + 0.5) / 4.0, 0.5));\n"
+		"    float l = texture(u_lin, vec3((b + 1.0) / 4.0, 0.5));\n"
+		"    float r = right > 0.5 ? l : n;\n"
+		"    o_color = vec4(r, r, r, 1.0);\n"
+		"}\n";
+	static const float quad[12] = { -1, -1, 1, -1, 1, 1, -1, -1, 1, 1, -1, 1 };
+	const char *ver = (const char *)glGetString(GL_VERSION);
+	float depth[4][4];
+	GLuint prog, vbo, tex = 0, smp[2] = { 0, 0 };
+	GLint loc;
+	bool ok = true;
+
+	if (!ver || strncmp(ver, "OpenGL ES 2.", 12) == 0) {
+		pr_info("gl_test: case 218 shadowcmp: SKIP (an ES 2.0 library has no shadow samplers)\n");
+		return -3;
+	}
+	free_all_objects();
+	prog = link_program(vs_src, fs_src);
+	if (!prog) {
+		pr_err("gl_test: shadowcmp: the sampler2DShadow program did not link\n");
+		return -1;
+	}
+	for (int y = 0; y < 4; y++)
+		for (int x = 0; x < 4; x++)
+			depth[y][x] = (float)(1 + (x * 7 + y * 5) % 16) / 17.0f;
+
+	glGenTextures(1, &tex);
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, tex);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT32F, 4, 4, 0, GL_DEPTH_COMPONENT, GL_FLOAT, depth);
+	glActiveTexture(GL_TEXTURE1);
+	glBindTexture(GL_TEXTURE_2D, tex);
+	glGenSamplers(2, smp);
+	for (int i = 0; i < 2; i++) {
+		glSamplerParameteri(smp[i], GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
+		glSamplerParameteri(smp[i], GL_TEXTURE_COMPARE_FUNC, i ? GL_GEQUAL : GL_LESS);
+		glSamplerParameteri(smp[i], GL_TEXTURE_MIN_FILTER, i ? GL_LINEAR : GL_NEAREST);
+		glSamplerParameteri(smp[i], GL_TEXTURE_MAG_FILTER, i ? GL_LINEAR : GL_NEAREST);
+		glSamplerParameteri(smp[i], GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glSamplerParameteri(smp[i], GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glBindSampler((GLuint)i, smp[i]);
+	}
+	if (!check_gl_error("shadowcmp upload"))
+		return -1;
+
+	glUseProgram(prog);
+	glUniform1i(glGetUniformLocation(prog, "u_near"), 0);
+	glUniform1i(glGetUniformLocation(prog, "u_lin"), 1);
+	vbo = upload_vbo(quad, sizeof(quad));
+	loc = glGetAttribLocation(prog, "a_pos");
+	glVertexAttribPointer((GLuint)loc, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (const void *)0);
+	glEnableVertexAttribArray((GLuint)loc);
+	glViewport(0, 0, TW, TH);
+	glDisable(GL_BLEND);
+	glDisable(GL_DEPTH_TEST);
+	glClearColor(1.0f, 0.0f, 1.0f, 1.0f);
+	glClear(GL_COLOR_BUFFER_BIT);
+	glDrawArrays(GL_TRIANGLES, 0, 6);
+	glFinish();
+	ok &= gl_test_check(check_gl_error("shadowcmp draw"), 0, 0);
+	read_topdown();
+
+	for (int by = 0; by < 4; by++) {
+		for (int bx = 0; bx < 4; bx++) {
+			const int x1 = bx < 3 ? bx + 1 : 3, y1 = by < 3 ? by + 1 : 3;
+			/* LESS: 1 where the reference 0.5 is below the texel */
+			const float near_v = 0.5f < depth[by][bx] ? 1.0f : 0.0f;
+			/* GEQUAL per texel, then the bilinear mean (weights 1/2) */
+			const float lin_v = ((0.5f >= depth[by][bx]) + (0.5f >= depth[by][x1]) +
+					     (0.5f >= depth[y1][bx]) + (0.5f >= depth[y1][x1])) / 4.0f;
+			const uint32_t py = (uint32_t)(3 - by) * 16 + 8;
+			const uint8_t gn = (uint8_t)(near_v * 255.0f + 0.5f), gl = (uint8_t)(lin_v * 255.0f + 0.5f);
+			char what[40];
+
+			snprintf(what, sizeof(what), "LESS nearest (%d,%d)", bx, by);
+			ok &= expect_px(what, (uint32_t)bx * 8 + 4, py, rgba_u32(gn, gn, gn, 255), 2);
+			snprintf(what, sizeof(what), "GEQUAL linear (%d,%d)", bx, by);
+			ok &= expect_px(what, 32 + (uint32_t)bx * 8 + 4, py, rgba_u32(gl, gl, gl, 255), 2);
+		}
+	}
+
+	glDisableVertexAttribArray((GLuint)loc);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	glDeleteBuffers(1, &vbo);
+	for (GLuint u = 0; u < 2; u++)
+		glBindSampler(u, 0);
+	glDeleteSamplers(2, smp);
+	glActiveTexture(GL_TEXTURE0);
+	glDeleteTextures(1, &tex);
+	glUseProgram(0);
+	glDeleteProgram(prog);
+	return ok ? 0 : -1;
+}
+
 /* ---- case 216: glmark2 terrain's mipmapped passes, timed (mipchains) -------
  *
  * The reproducer of glmark2 terrain's 91 ms a frame on the AM62P (#42): the
@@ -22862,6 +22996,11 @@ static int run_case(int c, int pretransform, int debug, int *ended)
 	case 175: rc = case_refusehang(); break;
 	case 217: rc = case_forcedpr(); break;
 #endif
+	case 218:
+		rc = case_shadowcmp();
+		if (rc == -3)
+			return -3; /* skipped by name: an ES 2.0 library */
+		break;
 	case 176: rc = case_mapbuf(); break;
 	case 22: rc = case_vao(); break;
 	case 23: rc = case_winding(); break;
