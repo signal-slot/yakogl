@@ -640,6 +640,16 @@ info log, and it is cached as a refusal; a service error (`{"error": ...}`, no
 `"ok"`) is reserved for the host being unable to answer at all (a missing
 compiler, an unreachable server) and is never cached.
 
+## release/redaction-scan.py — the redaction audit's classes on any revision
+
+`tools/release/redaction-scan.py [REV]` scans REV's tree (default `HEAD`) with
+the classes of `docs/release/redaction-audit.md` part 3 and prints every hit
+masked; the look-alikes are in `tools/release/redaction-scan.allow`, the
+private values (logins, lab host names) only in `YAKOGL_REDACTION_PRIVATE` or
+the file `YAKOGL_REDACTION_PRIVATE_FILE` names. Exit 0 clean, 1 an H/M
+finding, 3 private classes not run; `--help` has the format, `--self-test`
+the fixtures (`tests/redaction_scan.rs` runs it).
+
 ## land.sh — land one branch tip on main
 
 main moves through pull requests: a pull request, the full gate on it
