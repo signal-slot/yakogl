@@ -1818,11 +1818,12 @@ the fields of `FwUp` (`board::nanopc_t6_fw`, `struct yd_t6_fw_up`); a
 | `glb_req`, `glb_ack` | agree on the bits of `acked` | the toggle protocol |
 | `gpu_id`, `shader_present`, `mmu_features` | as Z1 measured: 0xa8670005, 0x50005, 0x00002830 | `t6_gpu` |
 
-The values the host run gives over the MCU model with the real
-file (not measured by this draft: the values above are the ones the host
-tests and "Predicted for the board run" pin; re-run `MALI_CSFFW=<file> cargo test -p yakogl-drivers --features mali
---lib board::nanopc_t6_fw -- --nocapture`) are the first six rows and the
-control-block rows; the timings and the MCU's own `features` word are
+Over the MCU model with the real file
+(`cargo test -p yakogl-drivers --features mali --lib board::nanopc_t6_fw`,
+`MALI_CSFFW` set; run 2026-11-05, 9 tests ok) the run asserts 7 sections,
+1 protected skipped, 9 table pages, 7 flushes, GLB version 1.5.0 equal
+to the header's and the PING acknowledged: those rows are host-measured; the rest
+are the model's pinned values; the timings and the MCU's own `features` word are
 the ones only the board can give. The board can differ from the model in
 exactly these: the MCU's boot time, the acknowledge latencies, and
 whether the firmware rewrites the control block's pages and strides.
