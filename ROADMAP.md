@@ -9,8 +9,8 @@ each stage is read from what is committed: the `README.md` "Status" tables,
 `docs/es2-cts-failures.md`, `docs/es3-cts-failures.md`, the board results in
 `tools/cts/RESULTS.md`, `docs/release/checklist.md` and `CHANGELOG.md`.
 Every number carries the date of its record. Known defects are tracked as
-GitHub Issues. The states below were read on 2026-10-26, at main
-`5ac5ac23c`.
+GitHub Issues. The states below were read on 2026-11-05, at main
+`08163414`.
 
 The order is a priority, not a schedule. Board time and review go to the
 lowest-numbered stage that is not done. Stage 4 runs on the host in parallel
@@ -37,18 +37,18 @@ config, `multisampled_render_to_texture.readpixels`; section C of
 numbers for every board, with the commit and the record they come from.
 
 **State.** Met. The three boards ran the whole tree from one main commit,
-`e9901869a` (2026-10-15/16, issue #870; `tools/cts/RESULTS.md`):
+`e9901869a` (2026-10-15/16, issue #870), and every newer run reads 0 Fail.
+The newest whole tree of each board (`tools/cts/RESULTS.md`, "ES 2.0"):
 
 | Board | Pass | Fail | NotSupported | Warnings |
 | --- | ---: | ---: | ---: | ---: |
-| AM62P (1x tree with the 16 `multisample.*` cases of the 4x image) | 17,140 | 0 | 18 | 7 |
-| i.MX8MP | 17,318 of 17,371 begun | 0 | 34 | 19 |
-| Raspberry Pi 4 | 17,126 | 0 | 34 | 5 |
+| AM62P (1x run of `36c4305a`, 2026-11-05, plus the 16 `multisample.*` cases of the 4x image from `e9901869a`) | 17,142 | 0 | 18 | 5 |
+| i.MX8MP (`0fbe61a3`, 2026-10-31; 17,371 cases begun, the list plus 206 outside it) | 17,318 | 0 | 34 | 19 |
+| Raspberry Pi 4 (`46f93767`, 2026-10-24) | 17,126 | 0 | 34 | 5 |
 
-Later runs from newer main commits read the same counts: the AM62P 1x images
-at `25cce714` (2026-10-25), the i.MX8MP at `d0c5dc48` (2026-10-23) and the
-Raspberry Pi 4 at `46f93767` (2026-10-24). The AM62P's 4x image was not run
-again.
+The AM62P's 1x run alone reads 17,126 pass on the 17,165-case list. The 34
+NotSupported are the agreed set; the AM62P runs its 16 `multisample.*`
+cases on the 4x image, which was not run again after `e9901869a`.
 
 ## 2. Benchmarks on the three boards
 
@@ -99,13 +99,24 @@ own `CHANGELOG.md` section.
 **State.** Not public yet. On 2026-10-21 the owner decided how
 (issue #1606): a new public repository whose history starts with one fresh
 commit of the cleaned tree, and the order of the work. Stage 1, which this
-stage follows, is met. `CHANGELOG.md`, `CONTRIBUTING.md`, `SECURITY.md`,
-`DESIGN.md`, this roadmap and the release building guide are in the tree;
-`CHANGELOG.md` has no version section and no version is tagged yet (#1606,
-step 8). The state of each checklist line is in `docs/release/checklist.md`.
-Still open there: the licence audit's undecided files, the redaction scan of
-the snapshot commit, the website's numbers, the README glmark2 table from one
-commit (#1196), and a green full `tools/check.sh` on the snapshot.
+stage follows, is met. `CHANGELOG.md` has its `0.1.0` section (dated
+2026-10-27, commit `625f82ce`); no version is tagged. `CONTRIBUTING.md`,
+`SECURITY.md`, `DESIGN.md`, this roadmap and the release building guide are
+in the tree. The state of each checklist line is in
+`docs/release/checklist.md`. Still open:
+
+- The licence audit is clean with 0 findings (checklist line 7), but
+  `undecided` is not yet a `--fail-on` class of `tools/license_audit.py`.
+- The redaction scan: the tree has one finding, a farm worker's home path in
+  `tools/cts/log/2026-10-31-pi4-gles3-a/*.tally.txt` (`f3ec9117`,
+  `docs/release/redaction-audit.md` Part 4); the snapshot commit does not
+  exist yet, so it has not passed `tools/release/redaction-scan.py`.
+- The website: `tools/website-check.sh` exits 0, but `website/data.js` still
+  says it was checked against `381b0f09` (2026-10-27), before the newer
+  dEQP and glmark2 figures.
+- The README glmark2 table from one commit (#1196).
+- A green full `tools/check.sh` on the snapshot: the nightly
+  `rust_eh_personality` link failure (`fce3e6aa`) is being fixed.
 
 ## 4. OpenGL ES 3.0
 
@@ -130,7 +141,14 @@ On the boards (`tools/cts/RESULTS.md`, "ES 3.0"):
   `texture.filtering.3d` (#1285).
 - Raspberry Pi 4: 9 of its 91 images at `925dbca9` (2026-10-22): 4,917
   cases, 3,943 pass / 643 fail / 331 NotSupported, 0 without a result (#1261).
-- i.MX8MP: not run on the board yet (#1262).
+  A later record, not yet in `RESULTS.md`, holds rows 9-20 at `0ff58329`
+  (2026-11-01, `tools/cts/log/2026-10-31-pi4-gles3-a/README.md`): 5,749
+  cases, 5,343 pass / 97 fail / 204 NotSupported / 4 QualityWarning /
+  2 ResourceError, 99 never began (a scissored or masked clear of an integer
+  target aborts images FO6 and M1).
+- i.MX8MP: not run on the board yet (#1262); the recipe
+  (`docs/es3/board-recipe-imx8mp.md`) and the preflight
+  (`tools/cts/imx8mp-gles3-preflight.sh`) are in the tree.
 
 The per-cause inventory is `docs/es3-cts-failures.md`.
 
@@ -145,6 +163,7 @@ with 0 Fail, and the three benchmarks running, each recorded the same way.
 (Rockchip RK3588, Arm Mali-G610) runs outside the five stages (issue #20,
 `driver/docs/nanopc-t6-mali.md`). Its back end (`gpu-mali`) runs on the
 board's own Linux through the panthor kernel driver: the newest `gl_test`
-sweep (2026-10-24) reads 98 of 256 cases PASS, 0 FAIL, 63 refused by name,
-87 with no case and 8 skipped (`tools/cts/RESULTS.md`, "Mali"). Booting it under
+sweep (`tools/cts/log/2026-11-01-final3/`, main `0ff58329`, 2026-11-01) reads
+132 of 256 cases PASS, 3 FAIL, 1 FAULT, 27 refused by name, 84 with no case
+and 9 skipped (`tools/cts/RESULTS.md`, "Mali"). Booting it under
 Zephyr is milestones Z1 to Z4 (#1281).
