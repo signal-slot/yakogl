@@ -17,8 +17,8 @@
 //!
 //! This file holds the design, the refusals, the constants, the bring-up
 //! ([`start`]), the submit ([`submit`]), the completion wait ([`wait`])
-//! and the group's end ([`stop`], [`terminate`], [`stop_and_terminate`]);
-//! the instruction words panthor wraps a job in are [`job`]'s.
+//! and the group's end ([`stop`], [`terminate`], [`clear_events`],
+//! [`stop_and_terminate`]); the instruction words panthor wraps a job in are [`job`]'s.
 //!
 //! # The interface this uses
 //!
@@ -233,7 +233,9 @@
 //!   the group still runs, toggles CS 0's bit of the group's
 //!   `doorbell_req` and rings the group, as the start does (:1345, 1855),
 //!   and waits for the acknowledge. [`stop_and_terminate`] then runs
-//!   [`terminate`] whatever the stop's result, and keeps both results.
+//!   [`terminate`] whatever the stop's result, and keeps both results
+//!   ([`Ended`]; the terminate's is a [`Terminated`], the acknowledge's
+//!   microseconds and the events [`clear_events`] cleared after it).
 //! - Only the timeout stops and terminates by itself (`queue_timedout_job`,
 //!   :3233-3267). After a fault, a fatal, a progress timer event or a sync
 //!   object error, [`wait`] returns the record and the caller decides
@@ -244,13 +246,17 @@
 //!   refused, then rings the group (:1719-1722). Completion is the sync
 //!   object's `seqno` alone. A `seqno` seen before its `SYNC_UPDATE` event
 //!   ends the wait with the event still pending; the next wait acknowledges
-//!   it.
+//!   it. A group state of 4 to 7 on any read of CSG 0's `ack` ends the wait
+//!   at once as [`SchedRefusal::CsgStateUnknown`].
 //! - 64-bit words go through [`Mmio`] as two 32-bit writes, low half first:
 //!   the ring's words, the input page's `extract` and `insert`. panthor
 //!   stores them with one 64-bit store. Before the doorbell the firmware
 //!   reads `insert` whole, and below 4 GiB of jobs its high half never
 //!   changes. The sync object's `seqno` is read high, low, high, so a carry
-//!   between the reads is never taken for completion.
+//!   between the reads is never taken for completion; a high word that
+//!   still moves after [`READ64_TRIES`] reads is
+//!   [`SchedRefusal::Read64Unstable`], and [`WaitRefused::seqno_unstable`]
+//!   marks the record's `seqno` as a plain, possibly torn read.
 //! - panthor's `wmb()` before `insert` (:3188-3191) is the `dmb sy` that
 //!   every [`crate::mmio::Hw`] write begins with. The ring is uncached, so
 //!   nothing is cleaned.
@@ -270,7 +276,10 @@
 //!   is not free before the start (panthor's -EINVAL and -ENOMEM paths, and
 //!   our own checks);
 //! - an acknowledge that does not come in its budget (panthor resets);
-//! - a group state that is none of the four (panthor resets);
+//! - a group state that is none of the four, 4 to 7
+//!   ([`SchedRefusal::CsgStateUnknown`]; panthor resets);
+//! - a sync object `seqno` whose high word does not settle in
+//!   [`READ64_TRIES`] reads ([`SchedRefusal::Read64Unstable`]; ours);
 //! - `CS_FAULT` (panthor acknowledges it and lets the stream go on to its
 //!   `ERROR_BARRIER`), `CS_FATAL` (panthor acknowledges it and terminates
 //!   the group), `CS_TILER_OOM` (panthor grows the heap),
@@ -282,7 +291,8 @@
 //!
 //! After a refusal past the start the group may still run: the caller
 //! terminates it (and resets the GPU when the terminate is refused, as
-//! panthor does), and the record carries both refusals.
+//! panthor does). [`wait`]'s timeout does both ends itself, and its
+//! [`WaitRefused`] carries the refusal and both results ([`Ended`]).
 //!
 //! # What Z4 does not do, and why one group with one stream suffices
 //!
@@ -333,8 +343,14 @@
 //! 3323). On it CS 0 goes to `STOP`, rung through the group's doorbell and
 //! acknowledged within 100 ms (panthor writes it after the terminate, without
 //! ringing, 1275-1288). Then `CSG_STATE_TERMINATE` is requested with its
-//! 100 ms acknowledge (2197-2207). Both results are reported, and a
-//! terminate that times out goes to the reset (2742-2754).
+//! 100 ms acknowledge (2197-2207); on it the group's and CS 0's pending
+//! events are acknowledged and the group rung, as before the slot is
+//! unbound (1665-1723, 2245-2256), and reported. Both results are reported,
+//! and a terminate that times out goes to the reset (2742-2754). A group
+//! state of 4 to 7 and a sync object `seqno` that does not settle in a few
+//! reads are refused by name. `start` does not touch the MMU: the caller
+//! has enabled address space 1 and mapped the ring and the sync object in
+//! it (the MCU's AS0 holds the user pages and suspend buffers) first.
 //!
 //! # What the caller has set up before [`start`]
 //!
@@ -1286,8 +1302,12 @@ enum Poll {
 ///    `ack` under them (:1695-1698; the sync update is
 ///    `csg_slot_sync_update_locked`'s, :1629-1641), and, when anything was
 ///    acknowledged, the group rung (:1719-1722);
-/// 4. the sync object: `status` non-zero refused, `seqno` reaching the
-///    job's done (`group_sync_upd_work`'s test, :2933).
+/// 4. the sync object: `status` non-zero refused, `seqno` (read whole by
+///    [`read64_stable`]; [`SchedRefusal::Read64Unstable`] when it does not
+///    settle) reaching the job's done (`group_sync_upd_work`'s test, :2933).
+///
+/// Before all of them a group state of 4 to 7 in CSG 0's `ack` is refused
+/// ([`SchedRefusal::CsgStateUnknown`], :1250-1260).
 #[allow(clippy::too_many_arguments)]
 fn poll_job(
     m: &impl Mmio,
@@ -1337,7 +1357,9 @@ fn poll_job(
 /// look as [`poll_job`] lists it. On the timeout the group is stopped and
 /// terminated ([`stop_and_terminate`], as `queue_timedout_job` does,
 /// :3233-3267) and [`SchedRefusal::JobTimeout`] carries the sync object's
-/// `seqno` (low 32 bits), with both ends' results in the record. Call it
+/// `seqno` (low 32 bits), with both ends' results in the record
+/// ([`WaitRefused::ended`]). Any other refusal leaves the group running,
+/// `ended` `None`. Call it
 /// right after [`submit`]: the budget counts from the call.
 #[allow(clippy::too_many_arguments)]
 pub fn wait(
@@ -2743,6 +2765,73 @@ mod tests {
         let mut slept = 0u64;
         let r = terminate(&mcu, GPU, &iface(), &csg0(), &cs0(), &mut |us| slept += u64::from(us));
         assert_eq!((r, slept), (Err((SchedRefusal::CsgStateUnknown, 0x17)), 1));
+    }
+
+    /// CS 0 raising `event` as the firmware does: its `ack` bit flipped
+    /// against `req`, the group's `cs_irq_req` bit for CS 0 flipped.
+    fn raise_event(mcu: &Mcu, event: u32) {
+        let ack = at(CS_OUT) + offset_of!(CsOutput, ack);
+        mcu.put(ack, mcu.word(ack) ^ event);
+        let irq = at(CSG_OUT) + offset_of!(CsgOutput, cs_irq_req);
+        mcu.put(irq, mcu.word(irq) ^ 1 << CS_SLOT);
+    }
+
+    #[test]
+    fn tiler_oom_is_refused_by_name_and_cleared_with_the_doorbell_toggled() {
+        // panthor_sched.c:1584-1593 reads the three events from
+        // (req ^ ack) & CS_EVT_MASK; CS_TILER_OOM's word is heap_vt_start.
+        // 0x77 is the model's.
+        let oom_word = at(CS_OUT) + offset_of!(CsOutput, heap_vt_start);
+
+        // a job under way: the wait refuses it by name, with that word,
+        // writes nothing (no acknowledge, no doorbell) and ends nothing
+        let mcu = Mcu { never_complete: true, ..Mcu::new() };
+        let s = started(&mcu);
+        let sub = do_submit(&mcu, &s, 1).unwrap();
+        mcu.put(oom_word, 0x77);
+        raise_event(&mcu, CS_TILER_OOM);
+        mcu.log.borrow_mut().clear();
+        let (r, slept) = do_wait(&mcu, &s, &sub);
+        let e = r.unwrap_err();
+        assert_eq!((e.refused, e.us, slept, e.ended), ((SchedRefusal::TilerOom, 0x77), 0, 0, None));
+        assert_eq!(mcu.log(), vec![]);
+        // a submit meets it first, before any write
+        assert_eq!(do_submit(&mcu, &s, 2), Err((SchedRefusal::TilerOom, 0x77)));
+        assert_eq!(mcu.log(), vec![]);
+
+        // the group's end: the event acknowledged on CS 0's req, the
+        // stream's bit of doorbell_req toggled and the group rung
+        // (cs_slot_process_irq_locked returns true for CS_FAULT |
+        // CS_TILER_OOM, :1573-1601, and the group's ring follows, :1719-1722)
+        let ended = stop_and_terminate(&mcu, GPU, &iface(), &csg0(), &cs0(), &mut |_| {});
+        let t = ended.terminate.unwrap();
+        assert_eq!(t.cleared, Cleared { csg_events: 0, cs_irq: 1, cs_events: CS_TILER_OOM });
+        let log = named(&mcu.log());
+        let term = log.iter().position(|w| *w == ("csg.req", 0x10)).unwrap();
+        assert_eq!(
+            log[term + 3..],
+            [
+                ("csg.cs_irq_ack", 1),
+                ("csg.req", 0x10),
+                ("cs.req", 0x0510 | CS_TILER_OOM),
+                ("csg.doorbell_req", 1),
+                ("glb.doorbell_req", 0),
+                ("doorbell 0", 1),
+            ]
+        );
+        let w = |a: usize| mcu.word(a);
+        assert_eq!((w(at(CS_IN)) ^ w(at(CS_OUT))) & CS_EVT_MASK, 0);
+
+        // a fatal alone is acknowledged too but toggles nothing: panthor
+        // returns the toggle only for a fault or a tiler OOM
+        let mcu = Mcu { never_complete: true, ..Mcu::new() };
+        started(&mcu);
+        raise_event(&mcu, CS_FATAL);
+        let c = clear_events(&mcu, GPU, &iface(), &csg0(), &cs0());
+        assert_eq!(c, Cleared { csg_events: 0, cs_irq: 1, cs_events: CS_FATAL });
+        let log = named(&mcu.log());
+        assert!(log.iter().all(|w| w.0 != "csg.doorbell_req"), "{log:?}");
+        assert_eq!(log.last(), Some(&("doorbell 0", 1)));
     }
 
     #[test]
