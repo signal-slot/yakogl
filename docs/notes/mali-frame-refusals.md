@@ -905,6 +905,36 @@ fix that raises it must also build `1D NPOT Divisor` (`Divisor D` and `E`
 from `pan_compute_npot_divisor`), or keep the maximum at a value whose
 divisors it builds; this reference has no NPOT divisor to pin that to.
 
+**Fixed (2026-11-05).** The second way: the maximum stays at a value whose
+divisors are all powers of two.
+
+- `src/mali/backend.rs`: `max_instance_divisor` is
+  `frame::MAX_INSTANCE_DIVISOR`, 2. The core hands divisors 1 and 2 over as
+  one draw (`draw_instanced`, `src/gl/draw.rs`, `a.divisor > max_divisor`);
+  a divisor of 3 or more is still drawn instance by instance, as above.
+- `src/mali/frame.rs`: `check_draw` admits 0 and a power of two up to
+  `MAX_INSTANCE_DIVISOR`; anything else stays `NOT_BUILT_INSTANCE_DIVISOR`
+  (its text now "other than 1 or 2"). The Attribute literal writes
+  `divisor_r = instance_divisor.trailing_zeros()` for a per-instance
+  attribute, with `1D POT Divisor` as before (Mesa 26.2.1
+  `panfrost_pack_attribute`, `pan_cmdstream.c:4084-4116`, the POT branch).
+  Divisor 1 gives `Divisor R` 0: its words are unchanged, and case 52's
+  `per_instance_attributes_are_the_board_s` still pins them to the
+  instsplit dump.
+- `src/mali/frame_instance_tests.rs` `a_divisor_of_two_is_case_141_s`
+  (the former `a_divisor_other_than_one_is_refused`, same test count):
+  case 141's attributes through `build_frame` with 4 instances. The three
+  Attributes are the table's words above, all 96 bytes; the three Buffers
+  are `00000019 00000060|00000030|00000028 <address>` with the test's
+  addresses; r34 is 4. Divisors 3 and 4 are refused by name.
+  `frame_tests.rs` and `backend_tests.rs` now refuse a divisor of 3 where
+  they refused 2, and `backend_tests.rs` builds 2.
+
+What still differs from Mesa's words for case 141's draw: only the buffer
+addresses (Buffers 0-2, bytes 8-15), which are allocation. Every Attribute
+byte, the Buffers' type and size words and r33-r37 are equal. NPOT
+divisors (`1D NPOT Divisor`, `Divisor D`/`E`) remain unbuilt and unpinned.
+
 ---
 
 ## 9. 3D textures (cases 48 and 206)

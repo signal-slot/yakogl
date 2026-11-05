@@ -139,12 +139,18 @@ pub const INVALID_INDEX_ALIGN: &str = "mali frame: a u16 index buffer at an odd 
 /// The indices' bytes (2 * count) do not fit INDEX_BUFFER_SIZE's 32 bits.
 pub const INVALID_INDEX_BYTES: &str = "mali frame: an indexed draw of more than 2^31 indices";
 pub const INVALID_INDEXED_FIRST_VERTEX: &str = "mali frame: an indexed draw with a first vertex (an index bias)";
-/// A per-instance attribute whose divisor is not 1: Mesa's `1D POT Divisor`
-/// with `Divisor R` above 0 or its `1D NPOT Divisor`, which no board dump
-/// shows yet (the GL core hands the Mali divisor 1 only,
-/// `YakoglBackend::max_instance_divisor` 0).
+/// A per-instance attribute whose divisor is above [`MAX_INSTANCE_DIVISOR`]:
+/// Mesa's `1D POT Divisor` with `Divisor R` above 1 or its `1D NPOT Divisor`
+/// (`Divisor D` and `E`), which no reference pins yet (the GL core hands the
+/// Mali divisors up to `YakoglBackend::max_instance_divisor`, that value).
 pub const NOT_BUILT_INSTANCE_DIVISOR: &str =
-    "mali frame: a per-instance vertex attribute with a divisor other than 1 is not built yet";
+    "mali frame: a per-instance vertex attribute with a divisor other than 1 or 2 is not built yet";
+/// The largest instance divisor the builder builds: 1 and 2, both powers of
+/// two (`1D POT Divisor`, `Divisor R` their log2), the divisors the board's
+/// instsplit dump (1) and case 141's drm-shim reference
+/// (tools/mali/testdata/instdiv_141_es3instdiv.expect.json, 2) pin. The
+/// backend table's `max_instance_divisor`.
+pub const MAX_INSTANCE_DIVISOR: u32 = 2;
 pub const NOT_BUILT_ATTRIBUTES: &str =
     "mali frame: a draw with no vertex attribute, more than 16, or one of other than 1 to 4 32-bit floats is not built yet";
 /// A stage with varyings and no IDVS varying program: the program record
@@ -1080,8 +1086,10 @@ pub struct VertexAttribute {
     pub stride: u32,
     pub components: u32,
     /// 0: one element per vertex; n: one element per n instances (ES 3.0
-    /// `glVertexAttribDivisor`). The builder builds 1 only, the divisor
-    /// the board's dump shows (tools/mali/board-dump/instsplit-2026-10-24.txt).
+    /// `glVertexAttribDivisor`). The builder builds 1 and 2
+    /// ([`MAX_INSTANCE_DIVISOR`]): the board's dump shows 1
+    /// (tools/mali/board-dump/instsplit-2026-10-24.txt), case 141's
+    /// reference 2 (tools/mali/testdata/instdiv_141_es3instdiv.expect.json).
     pub instance_divisor: u32,
 }
 
@@ -2356,7 +2364,15 @@ fn check_draw(
             return Err(FrameError::Invalid(INVALID_INDEXED_FIRST_VERTEX));
         }
     }
-    require(d.attributes.iter().all(|a| a.instance_divisor <= 1), NOT_BUILT_INSTANCE_DIVISOR)?;
+    /* 0 (per vertex), or a power of two up to the maximum: every divisor
+     * built is one, so no `1D NPOT Divisor` */
+    require(
+        d.attributes.iter().all(|a| {
+            a.instance_divisor == 0
+                || a.instance_divisor.is_power_of_two() && a.instance_divisor <= MAX_INSTANCE_DIVISOR
+        }),
+        NOT_BUILT_INSTANCE_DIVISOR,
+    )?;
     require(
         (1..=MAX_ATTRIBUTES).contains(&d.attributes.len())
             && d.attributes.iter().all(|a| (1..=4).contains(&a.components)),
@@ -3149,7 +3165,10 @@ fn emit_draw(
      * instsplit dump (tools/mali/board-dump/instsplit-2026-10-24.txt):
      * `1D POT Divisor`, `Frequency: Instance`, `Offset enable` false,
      * `Divisor R/E/D` 0 and `Offset` 0, its offset folded into its Buffer
-     * (base + offset, the size less it) */
+     * (base + offset, the size less it). A power-of-two divisor is the same
+     * with `Divisor R` its log2 (`panfrost_pack_attribute`, pan_cmdstream.c
+     * 4084-4116; case 141's divisor 2, `Divisor R` 1, in
+     * tools/mali/testdata/instdiv_141_es3instdiv.expect.json) */
     let n = d.attributes.len();
     let attributes = desc.alloc(n * Attribute::LENGTH, 32)?;
     for (i, a) in d.attributes.iter().enumerate() {
@@ -3173,6 +3192,9 @@ fn emit_draw(
             stride: a.stride,
             attribute_type: if per_instance { AttributeType::_1D_POT_DIVISOR } else { AttributeType::_1D },
             offset_enable: !per_instance,
+            /* 0 for divisor 1 and per vertex; `check_draw` admits powers
+             * of two only */
+            divisor_r: if per_instance { a.instance_divisor.trailing_zeros() } else { 0 },
             ..Default::default()
         };
         desc.write(attributes, i * Attribute::LENGTH, &attr.pack()?)?;

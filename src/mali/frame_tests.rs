@@ -616,7 +616,7 @@ fn each_draw_not_built_is_refused_by_name() {
         instance_divisor: 0,
     }];
     let five = [VertexAttribute { components: 5, ..attributes[0] }];
-    let divisor_two = [VertexAttribute { instance_divisor: 2, ..attributes[0] }];
+    let divisor_three = [VertexAttribute { instance_divisor: 3, ..attributes[0] }];
     let seventeen = [attributes[0]; 17];
     let draw = DrawCall {
         zs: DepthStencilState::OFF,
@@ -673,7 +673,7 @@ fn each_draw_not_built_is_refused_by_name() {
                 front_cw: false,
                 cull: Cull::None,
                 instance_count: 2,
-                attributes: &divisor_two,
+                attributes: &divisor_three,
                 ..draw
             }),
             NOT_BUILT_INSTANCE_DIVISOR,

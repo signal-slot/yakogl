@@ -2254,8 +2254,9 @@ fn vertex_attributes(
             return Err(FrameError::NotBuilt(NOT_BUILT_ATTRIBUTE));
         };
         /* one element per `divisor` instances, 0 read as 1 (`GlesAttrib`);
-         * the frame builds divisor 1, the one the core hands the Mali
-         * (`max_instance_divisor` 0) */
+         * the core hands the Mali divisors up to `max_instance_divisor`
+         * (`frame::MAX_INSTANCE_DIVISOR`, 2), 1 and 2 both powers of two the
+         * frame builds as Mesa's `1D POT Divisor` */
         let instance_divisor = if a.per_instance != 0 { u32::from(a.divisor.max(1)) } else { 0 };
         out[rec] = frame::VertexAttribute {
             buffer,
@@ -3224,8 +3225,9 @@ pub static yakogl_backend_mali: YakoglBackend = YakoglBackend {
     texture_released: Some(mali_texture_released),
     surface_swapped: None,
     texture_uploaded: None,
-    /* divisor 1 only (the field's 0) */
-    max_instance_divisor: 0,
+    /* divisors 1 and 2 as one draw (powers of two, `1D POT Divisor`);
+     * a larger one is drawn instance by instance by the core */
+    max_instance_divisor: frame::MAX_INSTANCE_DIVISOR,
     wait_kick: None,
     samples_texel_copies: false,
     attachment_gone: Some(mali_attachment_gone),
