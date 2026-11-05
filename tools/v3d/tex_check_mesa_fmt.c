@@ -12,6 +12,7 @@
 #include <string.h>
 
 #include "util/format/u_format.h"
+#include "util/u_math.h"
 #include "broadcom/common/v3d_util.h"
 #include "v3d_context.h"
 #include "v3d_format_table.h"
@@ -48,6 +49,17 @@ static enum pipe_format pipe_of(const char *name)
 		{ "RGBA32UI", PIPE_FORMAT_R32G32B32A32_UINT },
 		{ "RGBA32I", PIPE_FORMAT_R32G32B32A32_SINT },
 		{ "RGBA32F", PIPE_FORMAT_R32G32B32A32_FLOAT },
+		/* the ES 3.0 compressed formats, by Mesa's own names */
+		{ "ETC2_RGB8", PIPE_FORMAT_ETC2_RGB8 },
+		{ "ETC2_SRGB8", PIPE_FORMAT_ETC2_SRGB8 },
+		{ "ETC2_RGB8A1", PIPE_FORMAT_ETC2_RGB8A1 },
+		{ "ETC2_SRGB8A1", PIPE_FORMAT_ETC2_SRGB8A1 },
+		{ "ETC2_RGBA8", PIPE_FORMAT_ETC2_RGBA8 },
+		{ "ETC2_SRGBA8", PIPE_FORMAT_ETC2_SRGBA8 },
+		{ "ETC2_R11_UNORM", PIPE_FORMAT_ETC2_R11_UNORM },
+		{ "ETC2_R11_SNORM", PIPE_FORMAT_ETC2_R11_SNORM },
+		{ "ETC2_RG11_UNORM", PIPE_FORMAT_ETC2_RG11_UNORM },
+		{ "ETC2_RG11_SNORM", PIPE_FORMAT_ETC2_RG11_SNORM },
 	};
 	for (unsigned i = 0; i < sizeof(map) / sizeof(map[0]); i++)
 		if (strcmp(map[i].name, name) == 0)
@@ -62,6 +74,9 @@ bool mesa_v3d_format(const char *name, struct mesa_fmt *out)
 	if (pf == PIPE_FORMAT_NONE)
 		return false;
 	out->cpp = util_format_get_blocksize(pf);
+	out->block_w = util_format_get_blockwidth(pf);
+	out->block_h = util_format_get_blockheight(pf);
+	out->srgb = util_format_is_srgb(pf);
 	const struct v3d_format *vf = v3d42_get_format_desc(pf);
 	/* the table has a row only for a format it can sample (every row's
 	 * texture column names a real type) */
@@ -72,5 +87,20 @@ bool mesa_v3d_format(const char *name, struct mesa_fmt *out)
 	for (int i = 0; i < 4; i++)
 		out->swizzle[i] = v3d_translate_pipe_swizzle(vf->swizzle[i]);
 	out->return_size = vf->return_size;
+	return true;
+}
+
+/* The blocks of level `level` of a w0 x h0 resource of the format, as
+ * Mesa's transfers count them (util_format_get_nblocksx/y of u_minify of
+ * the level 0 size; v3d_resource.c's transfers move whole blocks,
+ * u_box_pixels_to_blocks at :320-321). */
+bool mesa_v3d_level_blocks(const char *name, uint32_t w0, uint32_t h0, uint32_t level, uint32_t *bx,
+			   uint32_t *by)
+{
+	enum pipe_format pf = pipe_of(name);
+	if (pf == PIPE_FORMAT_NONE)
+		return false;
+	*bx = util_format_get_nblocksx(pf, u_minify(w0, level));
+	*by = util_format_get_nblocksy(pf, u_minify(h0, level));
 	return true;
 }

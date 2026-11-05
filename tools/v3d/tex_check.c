@@ -21,7 +21,8 @@
  *     the whole image compared after every box; and the refusals.
  *  5. The source formats against Mesa's own format table
  *     (v3dx_format_table.c, compiled here; tex_check_mesa_fmt.c): the
- *     supported rows equal Mesa's, every other format is refused by name.
+ *     supported rows equal Mesa's (with their block and sRGB-ness), every
+ *     other format is refused by name.
  *  6. Every GL ES 2.0 sampler (6 min x 2 mag filters x 3 x 3 wraps) and
  *     femtovg's four named ones against V3D42_SAMPLER_STATE_pack of what
  *     Mesa's v3d_upload_sampler_state_variant fills.
@@ -40,6 +41,14 @@
  *     hand from v3d_setup_slices, every slice x level tiled at
  *     v3d_layer_offset's place, the record with level 0's slice stride, a
  *     control, the refusals; docs/notes/v3d-tex-layout-es3.md).
+ * 12. ETC2 and EAC (v3d_tex_layout_compressed): the block-aware layouts
+ *     derived by hand from v3d_setup_slices (odd, non-power-of-two and 1x1
+ *     sizes, a full chain, ub_pad, XOR), a control without the block-aware
+ *     padding, each of the ten formats tiled at every level against Mesa's
+ *     v3d_store_tiled_image with Mesa's block counts, block boxes stored and
+ *     loaded, each format's record (type, swizzle, sRGB bit) against Mesa's
+ *     row and packer, and the refusals: the texel entry points and the TFU
+ *     write nothing for a compressed layout.
  *
  * Built and run against a Mesa 26.2.1 tree with build-v3d
  * (tools/v3d/README.md) by tools/v3d/tex_check.sh, which holds the build
@@ -634,15 +643,19 @@ static void part_formats(void)
 		if (want) {
 			formats_supported += got;
 			snprintf(what, sizeof(what),
-				 "format %s: ours type %u cpp %u swizzle %u%u%u%u return %u, "
-				 "Mesa's %s %u %u %u%u%u%u %u",
+				 "format %s: ours type %u cpp %u swizzle %u%u%u%u return %u (and the "
+				 "block, sRGB), Mesa's %s %u %u %u%u%u%u %u",
 				 name, f.type, f.cpp, f.swizzle[0], f.swizzle[1], f.swizzle[2],
 				 f.swizzle[3], f.return_size, m.in_table ? "row" : "(no row)", m.type,
 				 m.cpp, m.swizzle[0], m.swizzle[1], m.swizzle[2], m.swizzle[3],
 				 m.return_size);
+			uint32_t bw = 0, bh = 0;
+			bool block = v3d_tex_format_block((enum v3d_tex_format_id)id, &bw, &bh) &&
+				     bw == m.block_w && bh == m.block_h &&
+				     v3d_tex_format_is_srgb((enum v3d_tex_format_id)id) == m.srgb;
 			check(got && m.in_table && f.type == m.type && f.cpp == m.cpp &&
 				      memcmp(f.swizzle, m.swizzle, 4) == 0 &&
-				      f.return_size == m.return_size,
+				      f.return_size == m.return_size && block,
 			      what);
 		} else {
 			snprintf(what, sizeof(what), "format %s: refused by name, out untouched", name);
@@ -1490,6 +1503,419 @@ static void part_arrays_and_3d(void)
 	check(!v3d_tex_slice_offset(&l, 6, 0, 8, &v) && v == sentinel, "slice offset: level 6 of 6 is refused");
 }
 
+/* ---- part 12: ETC2 and EAC (docs/notes/v3d-tex-layout-es3.md section 4) -- */
+
+/* A compressed level is laid out and tiled as a level of blocks, a block one
+ * texel of the block's bytes (v3d_resource.c:646-647, :797), with the
+ * power-of-two padding of the levels from 2 taken in whole blocks
+ * (v3d_get_dimension_mpad with the block, :573-581, :596-608). The layouts
+ * are derived by hand from v3d_setup_slices, as part 1's are; the formats'
+ * rows, blocks and sRGB-ness are Mesa's built format table and util_format;
+ * the tiling is Mesa's built v3d_store_tiled_image / v3d_load_tiled_image
+ * with Mesa's block counts (util_format_get_nblocksx/y) and cpp = the
+ * block's bytes. */
+
+static void clayout_case(const char *name, uint32_t w, uint32_t h, uint32_t levels, uint32_t cpp,
+			 uint32_t size, const struct want_slice *want)
+{
+	struct v3d_tex_layout l;
+	char what[200];
+	snprintf(what, sizeof(what), "ETC2 %s: laid out", name);
+	check(v3d_tex_layout_compressed(w, h, levels, 4, 4, cpp, &l) && l.width == w && l.height == h &&
+		      l.cpp == cpp && l.levels == levels,
+	      what);
+	snprintf(what, sizeof(what), "ETC2 %s: size %u, want %u", name, l.size, size);
+	check(l.size == size, what);
+	for (uint32_t i = 0; i < levels; i++) {
+		const struct v3d_tex_slice *s = &l.slices[i];
+		const struct want_slice *x = &want[i];
+		snprintf(what, sizeof(what),
+			 "ETC2 %s level %u: offset %u stride %u h %u pad %u tiling %d, want %u %u %u %u %d",
+			 name, i, s->offset, s->stride, s->padded_height, s->ub_pad, s->tiling, x->offset,
+			 x->stride, x->padded_height, x->ub_pad, x->tiling);
+		check(s->offset == x->offset && s->stride == x->stride &&
+			      s->padded_height == x->padded_height && s->ub_pad == x->ub_pad &&
+			      s->tiling == x->tiling && s->size == x->stride * x->padded_height,
+		      what);
+	}
+}
+
+static const enum v3d_tex_format_id etc_ids[10] = {
+	V3D_TEX_FORMAT_ETC2_RGB8,      V3D_TEX_FORMAT_ETC2_SRGB8,     V3D_TEX_FORMAT_ETC2_RGB8A1,
+	V3D_TEX_FORMAT_ETC2_SRGB8A1,   V3D_TEX_FORMAT_ETC2_RGBA8,     V3D_TEX_FORMAT_ETC2_SRGBA8,
+	V3D_TEX_FORMAT_ETC2_R11_UNORM, V3D_TEX_FORMAT_ETC2_R11_SNORM, V3D_TEX_FORMAT_ETC2_RG11_UNORM,
+	V3D_TEX_FORMAT_ETC2_RG11_SNORM,
+};
+
+/* Every level of a w x h x levels image of format `id`: ours laid out by our
+ * row's block and tiled by v3d_tex_store_level_blocks, against Mesa's
+ * v3d_store_tiled_image of Mesa's block count at the layout's slices. Mesa's
+ * cpp and block are the ones the layout must have been given: a row that
+ * disagrees fails here as well as in part 5. */
+static void ctiling_case(enum v3d_tex_format_id id, uint32_t w, uint32_t h, uint32_t levels)
+{
+	const char *name = v3d_tex_format_name(id);
+	char what[200];
+	struct v3d_tex_format f;
+	struct mesa_fmt m;
+	uint32_t bw = 0, bh = 0;
+	struct v3d_tex_layout l;
+	if (!(v3d_tex_format_get(id, &f) && v3d_tex_format_block(id, &bw, &bh) && mesa_v3d_format(name, &m) &&
+	      f.cpp == m.cpp && bw == m.block_w && bh == m.block_h &&
+	      v3d_tex_layout_compressed(w, h, levels, bw, bh, f.cpp, &l))) {
+		snprintf(what, sizeof(what), "ETC2 tiling %s %ux%u x%u: our row, Mesa's row and a layout", name, w,
+			 h, levels);
+		check(false, what);
+		return;
+	}
+	uint8_t *ours = calloc(1, l.size), *mesa = calloc(1, l.size);
+	bool ok = true;
+	for (uint32_t lv = 0; lv < levels; lv++) {
+		uint32_t mx = 0, my = 0, gx = 0, gy = 0;
+		ok &= mesa_v3d_level_blocks(name, w, h, lv, &mx, &my) &&
+		      v3d_tex_level_blocks(&l, lv, bw, bh, &gx, &gy) && gx == mx && gy == my;
+		uint32_t stride = mx * m.cpp + 8; /* a source pitch wider than the row */
+		uint8_t *src = malloc((size_t)stride * my);
+		for (uint32_t i = 0; i < stride * my; i++)
+			src[i] = (uint8_t)rng();
+		ok &= v3d_tex_store_level_blocks(ours, &l, lv, bw, bh, src, stride);
+		const struct v3d_tex_slice *s = &l.slices[lv];
+		struct pipe_box box = { .x = 0, .y = 0, .z = 0, .width = (int32_t)mx, .height = (int32_t)my,
+					.depth = 1 };
+		v3d_store_tiled_image(mesa + s->offset, s->stride, src, stride, (enum v3d_tiling_mode)s->tiling,
+				      (int)m.cpp, s->padded_height, &box);
+		free(src);
+	}
+	snprintf(what, sizeof(what),
+		 "ETC2 tiling %s %ux%u x%u: Mesa's block counts, every level, our bytes are Mesa's (%u bytes)", name,
+		 w, h, levels, l.size);
+	check(ok && memcmp(ours, mesa, l.size) == 0, what);
+	free(ours);
+	free(mesa);
+}
+
+static unsigned cboxes_stored;
+
+/* Sub-boxes of blocks (glCompressedTexSubImage2D: whole blocks, Mesa's
+ * u_box_pixels_to_blocks): fixed and seeded random boxes on every level,
+ * the whole image compared with Mesa's after every box, and each box loaded
+ * back with v3d_tex_load_blocks against v3d_load_tiled_image. */
+static void cbox_case(uint32_t w, uint32_t h, uint32_t levels, uint32_t cpp)
+{
+	char what[240];
+	struct v3d_tex_layout l;
+	if (!v3d_tex_layout_compressed(w, h, levels, 4, 4, cpp, &l)) {
+		snprintf(what, sizeof(what), "ETC2 boxes %ux%u x%u cpp %u: laid out", w, h, levels, cpp);
+		check(false, what);
+		check(false, what);
+		return;
+	}
+	uint8_t *ours = malloc(l.size), *mesa = malloc(l.size);
+	for (uint32_t i = 0; i < l.size; i++)
+		ours[i] = mesa[i] = (uint8_t)(i * 31 + 3);
+	char bad[160] = "", load_bad[160] = "";
+	for (uint32_t lv = 0; lv < levels; lv++) {
+		const struct v3d_tex_slice *s = &l.slices[lv];
+		uint32_t gw = 1, gh = 1;
+		v3d_tex_level_blocks(&l, lv, 4, 4, &gw, &gh);
+		uint32_t box[10][4] = {
+			{ 0, 0, 1, 1 }, { gw - 1, gh - 1, 1, 1 }, { 1, 1, gw, gh }, { 0, 0, gw, gh },
+		};
+		for (int r = 4; r < 10; r++) {
+			uint32_t bx = rng() % gw, by = rng() % gh;
+			box[r][0] = bx;
+			box[r][1] = by;
+			box[r][2] = 1 + rng() % (gw - bx);
+			box[r][3] = 1 + rng() % (gh - by);
+		}
+		for (int b = 0; b < 10; b++) {
+			uint32_t bx = min_u32(box[b][0], gw - 1), by = min_u32(box[b][1], gh - 1);
+			uint32_t bwid = min_u32(box[b][2], gw - bx), bhei = min_u32(box[b][3], gh - by);
+			uint32_t stride = bwid * cpp + 4;
+			size_t n = (size_t)stride * bhei;
+			uint8_t *src = malloc(n);
+			for (size_t i = 0; i < n; i++)
+				src[i] = (uint8_t)rng();
+			bool ok = v3d_tex_store_blocks(ours, &l, lv, 4, 4, bx, by, bwid, bhei, src, stride);
+			struct pipe_box pb = { .x = (int32_t)bx, .width = (int32_t)bwid, .y = (int32_t)by,
+					       .height = (int32_t)bhei, .z = 0, .depth = 1 };
+			v3d_store_tiled_image(mesa + s->offset, s->stride, src, stride,
+					      (enum v3d_tiling_mode)s->tiling, (int)cpp, s->padded_height, &pb);
+			cboxes_stored++;
+			if (!bad[0] && (!ok || memcmp(ours, mesa, l.size) != 0))
+				snprintf(bad, sizeof(bad), " (first difference: level %u box %u,%u %ux%u%s)", lv, bx,
+					 by, bwid, bhei, ok ? "" : ", refused");
+			/* back out of both images, into rows whose padding must
+			 * stay as it was */
+			uint8_t *a = malloc(n), *mm = malloc(n);
+			memset(a, 0x3c, n);
+			memset(mm, 0x3c, n);
+			bool lok = v3d_tex_load_blocks(ours, &l, lv, 4, 4, bx, by, bwid, bhei, a, stride);
+			v3d_load_tiled_image(mm, stride, mesa + s->offset, s->stride, (enum v3d_tiling_mode)s->tiling,
+					     (int)cpp, s->padded_height, &pb);
+			if (!load_bad[0] && (!lok || memcmp(a, mm, n) != 0))
+				snprintf(load_bad, sizeof(load_bad), " (first difference: level %u box %u,%u %ux%u%s)",
+					 lv, bx, by, bwid, bhei, lok ? "" : ", refused");
+			free(a);
+			free(mm);
+			free(src);
+		}
+	}
+	snprintf(what, sizeof(what), "ETC2 boxes %ux%u x%u cpp %u: store_blocks, our bytes are Mesa's after every box%s",
+		 w, h, levels, cpp, bad);
+	check(!bad[0], what);
+	snprintf(what, sizeof(what), "ETC2 boxes %ux%u x%u cpp %u: load_blocks reads Mesa's v3d_load_tiled_image%s", w,
+		 h, levels, cpp, load_bad);
+	check(!load_bad[0], what);
+	free(ours);
+	free(mesa);
+}
+
+/* The record of a 36x36 x6 image of format `id` against Mesa's packer of
+ * Mesa's row: its type, its swizzle, and the sRGB bit util_format_is_srgb
+ * gives (v3dx_state.c:1023-1025); width and height in texels (prsc->width0,
+ * v3dx_state.c:932-933). */
+static void cstate_case(enum v3d_tex_format_id id, uint32_t base)
+{
+	const char *name = v3d_tex_format_name(id);
+	char what[200];
+	struct v3d_tex_format f;
+	struct mesa_fmt m;
+	uint32_t bw = 0, bh = 0;
+	struct v3d_tex_layout l;
+	if (!(v3d_tex_format_get(id, &f) && v3d_tex_format_block(id, &bw, &bh) && mesa_v3d_format(name, &m) &&
+	      m.in_table && v3d_tex_layout_compressed(36, 36, 6, bw, bh, f.cpp, &l))) {
+		snprintf(what, sizeof(what), "ETC2 texture state %s: our row, Mesa's row and a layout", name);
+		check(false, what);
+		return;
+	}
+	struct v3d_tex_state s = { .base = base + l.slices[0].offset, .width = 36, .height = 36, .depth = 1,
+				   .max_level = 5, .type = f.type, .srgb = v3d_tex_format_is_srgb(id) };
+	memcpy(s.swizzle, f.swizzle, 4);
+	v3d_tex_state_from_layout(&s, &l);
+	uint8_t ours[V3D_TEX_STATE_BYTES], mesa[V3D_TEX_STATE_BYTES];
+	bool packed = v3d_tex_pack_state(ours, &s);
+	struct V3D42_TEXTURE_SHADER_STATE t = { 0 };
+	t.image_width = 36;
+	t.image_height = 36;
+	t.image_depth = 1;
+	t.max_level = 5;
+	t.texture_base_pointer = base + l.slices[0].offset;
+	t.array_stride_64_byte_aligned = ((l.slices[0].offset + l.slices[0].size + 63) & ~63u) / 64;
+	t.level_0_is_strictly_uif = l.slices[0].tiling == V3D_TEX_TILING_UIF_XOR ||
+				    l.slices[0].tiling == V3D_TEX_TILING_UIF_NO_XOR;
+	t.level_0_xor_enable = l.slices[0].tiling == V3D_TEX_TILING_UIF_XOR;
+	if (t.level_0_is_strictly_uif) {
+		t.level_0_ub_pad = l.slices[0].ub_pad;
+		t.extended = true;
+	}
+	t.swizzle_r = m.swizzle[0];
+	t.swizzle_g = m.swizzle[1];
+	t.swizzle_b = m.swizzle[2];
+	t.swizzle_a = m.swizzle[3];
+	t.texture_type = m.type;
+	t.srgb = m.srgb;
+	V3D42_TEXTURE_SHADER_STATE_pack(NULL, mesa, &t);
+	snprintf(what, sizeof(what), "ETC2 texture state %s 36x36 x6 (type %u, sRGB %d): our bytes are Mesa's", name,
+		 m.type, m.srgb);
+	check(packed && memcmp(ours, mesa, sizeof(ours)) == 0, what);
+	if (memcmp(ours, mesa, sizeof(ours)) != 0)
+		for (int i = 0; i < V3D_TEX_STATE_BYTES; i++)
+			printf("  %2d: ours %02x mesa %02x\n", i, ours[i], mesa[i]);
+}
+
+static void part_compressed(void)
+{
+	/* By hand from v3d_setup_slices with 4x4 blocks. cpp 8: utile 4x2
+	 * blocks, UIF block 8x4; cpp 16: utile 2x2, UIF block 4x4.
+	 *
+	 * 17x9 x5, cpp 8: pot_width = 2 * 4 * next_pot(ceil(8 / 4)) = 16,
+	 * pot_height = 2 * 4 * next_pot(ceil(4 / 4)) = 8. Level 0: 5x3 blocks,
+	 * 5 > 4 and 3 > 2, 5 <= 8: UB1, 8x4, stride 64, 256 bytes. Level 1:
+	 * 8x4 texels, 2x1 blocks: LT 4x2, stride 32, 64. Levels 2..4: 16 >> i
+	 * x 8 >> i texels (4x2, 2x1, 1x1): one block each, LT 64. Smallest
+	 * first: 4 @0, 3 @64, 2 @128, 1 @192, 0 @256; 512 in all, level 0 to
+	 * 4 KiB: +3840. */
+	clayout_case("17x9 x5 (cpp 8)", 17, 9, 5, 8, 4352,
+		     (struct want_slice[]){ { 4096, 64, 4, 0, UB1 }, { 4032, 32, 2, 0, LT },
+					    { 3968, 32, 2, 0, LT }, { 3904, 32, 2, 0, LT },
+					    { 3840, 32, 2, 0, LT } });
+	/* ... cpp 16: level 0's 5x3 blocks: 5 > 4, <= 8: UB2, 8x4, stride 128,
+	 * 512 bytes; the rest LT 2x2 utiles of 64 bytes: +3840 as above */
+	clayout_case("17x9 x5 (cpp 16)", 17, 9, 5, 16, 4608,
+		     (struct want_slice[]){ { 4096, 128, 4, 0, UB2 }, { 4032, 32, 2, 0, LT },
+					    { 3968, 32, 2, 0, LT }, { 3904, 32, 2, 0, LT },
+					    { 3840, 32, 2, 0, LT } });
+	/* 36x36 x6, cpp 8 (the note's example): pot = 2 * 4 * next_pot(ceil(18
+	 * / 4) = 5) = 64. Level 0: 9x9 blocks, 9 > 8, <= 16: UB2, 16x12, stride
+	 * 128, 1536. Level 1: 18 texels, 5x5 blocks: UB1, 8x8, stride 64, 512.
+	 * Level 2: 64 >> 2 = 16 texels, 4x4 blocks (36 >> 2 = 9 texels would be
+	 * 3): LT, 4x4, stride 32, 128. Levels 3..5: 8, 4, 2 texels, 2, 1, 1
+	 * blocks: LT 4x2, 64 each. 5 @0, 4 @64, 3 @128, 2 @192, 1 @320, 0 @832;
+	 * 2368, level 0 to 4 KiB: +3264. */
+	clayout_case("36x36 x6 (cpp 8)", 36, 36, 6, 8, 5632,
+		     (struct want_slice[]){ { 4096, 128, 12, 0, UB2 }, { 3584, 64, 8, 0, UB1 },
+					    { 3456, 32, 4, 0, LT },   { 3392, 32, 2, 0, LT },
+					    { 3328, 32, 2, 0, LT },   { 3264, 32, 2, 0, LT } });
+	/* ... cpp 16: level 0 9x9 blocks > 8: UIF, 16 wide (4 UIF blocks), 12
+	 * high (3 UB rows: no pad, no XOR), stride 256, 3072. Level 1 5x5: UB2
+	 * 8x8, stride 128, 1024. Level 2 4x4 blocks: UB1 4x4, stride 64, 256.
+	 * Levels 3..5 LT 2x2, 64 each. 5 @0, 4 @64, 3 @128, 2 @192, 1 @448, 0
+	 * @1472; 4544, level 0 to 4 KiB: +2624. */
+	clayout_case("36x36 x6 (cpp 16)", 36, 36, 6, 16, 7168,
+		     (struct want_slice[]){ { 4096, 256, 12, 0, UIF }, { 3072, 128, 8, 0, UB2 },
+					    { 2816, 64, 4, 0, UB1 },  { 2752, 32, 2, 0, LT },
+					    { 2688, 32, 2, 0, LT },   { 2624, 32, 2, 0, LT } });
+	/* 1x1: one block in one utile, 64 bytes at 0 */
+	clayout_case("1x1 (cpp 8)", 1, 1, 1, 8, 64, (struct want_slice[]){ { 0, 32, 2, 0, LT } });
+	clayout_case("1x1 (cpp 16)", 1, 1, 1, 16, 64, (struct want_slice[]){ { 0, 32, 2, 0, LT } });
+	/* 256x256 x9, cpp 16: 64, 32, 16 blocks wide at levels 0..2: UIF (16
+	 * rows, 8, 4: no pad, no XOR; level 1 is 32 blocks wide, > 16, but its
+	 * 32 rows are not > 26 UB rows (104): no page alignment); level 3 8
+	 * blocks UB2, 4 UB1, then LT. 8..5 @0, 64, 128, 192; 4 @256 (256), 3
+	 * @512 (1024), 2 @1536 (4096), 1 @5632 (16384), 0 @22016 (65536);
+	 * level 0 to 4 KiB: +2560. */
+	clayout_case("256x256 x9 (cpp 16)", 256, 256, 9, 16, 90112,
+		     (struct want_slice[]){ { 24576, 1024, 64, 0, UIF }, { 8192, 512, 32, 0, UIF },
+					    { 4096, 256, 16, 0, UIF },   { 3072, 128, 8, 0, UB2 },
+					    { 2816, 64, 4, 0, UB1 },     { 2752, 32, 2, 0, LT },
+					    { 2688, 32, 2, 0, LT },      { 2624, 32, 2, 0, LT },
+					    { 2560, 32, 2, 0, LT } });
+	/* 1024x1056, cpp 16: 256x264 blocks, UIF; 66 UB rows, 66 % 32 = 2 < 6
+	 * and 66 >= 32: ub_pad 4, 70 rows (280), no XOR; stride 4096 */
+	clayout_case("1024x1056 (cpp 16, ub_pad 4)", 1024, 1056, 1, 16, 4096 * 280,
+		     (struct want_slice[]){ { 0, 4096, 280, 4, UIF } });
+	/* 64x960, cpp 16: 16x240 blocks, UIF; 60 UB rows, 60 % 32 = 28 > 26:
+	 * pad 4, 64 rows (256), 64 % 32 == 0: XOR; stride 256 */
+	clayout_case("64x960 (cpp 16, UIF XOR)", 64, 960, 1, 16, 65536,
+		     (struct want_slice[]){ { 0, 256, 256, 4, UIFX } });
+
+	/* control: level 0's block count minified (36x36 laid out as an
+	 * uncompressed 9x9 of cpp 8) misses the block-aware padding: its level
+	 * 1 is 4 blocks wide where Mesa's is 5, and its level 2 2 rows high
+	 * where Mesa allocates 4 */
+	struct v3d_tex_layout l, naive;
+	uint32_t gw = 0, gh = 0;
+	check(v3d_tex_layout_compressed(36, 36, 6, 4, 4, 8, &l) && v3d_tex_layout(9, 9, 6, 8, &naive) &&
+		      l.slices[2].padded_height == 4 && naive.slices[2].padded_height == 2 &&
+		      memcmp(&l.slices[1], &naive.slices[1], sizeof(l.slices[1])) != 0,
+	      "control: 36x36 laid out as level 0's 9x9 blocks is detected (level 2: 2 rows, Mesa 4)");
+	/* GL's blocks of 36x36 level 2 (9 texels: 3x3) sit in Mesa's 4x4 */
+	check(v3d_tex_level_blocks(&l, 2, 4, 4, &gw, &gh) && gw == 3 && gh == 3 &&
+		      l.slices[2].stride / 8 == 4 && l.slices[2].padded_height == 4,
+	      "36x36 level 2: GL's 3x3 blocks in Mesa's padded 4x4");
+	/* a 1x1 block is the uncompressed layout */
+	bool same = true;
+	static const uint32_t flat[][3] = { { 1, 1, 1 }, { 13, 7, 3 }, { 256, 256, 9 }, { 80, 656, 2 } };
+	for (unsigned i = 0; i < sizeof(flat) / sizeof(flat[0]); i++)
+		for (uint32_t cpp = 8; cpp <= 16; cpp += 8)
+			same &= v3d_tex_layout(flat[i][0], flat[i][1], flat[i][2], cpp, &l) &&
+				v3d_tex_layout_compressed(flat[i][0], flat[i][1], flat[i][2], 1, 1, cpp, &naive) &&
+				memcmp(&l, &naive, sizeof(l)) == 0;
+	check(same, "a 1x1 block is v3d_tex_layout's layout (4 sizes x cpp 8, 16)");
+
+	/* every format, odd, non-power-of-two and 1x1 sizes */
+	for (unsigned i = 0; i < 10; i++) {
+		ctiling_case(etc_ids[i], 17, 9, 5);
+		ctiling_case(etc_ids[i], 36, 36, 6);
+		ctiling_case(etc_ids[i], 1, 1, 1);
+	}
+	cbox_case(36, 36, 6, 8);
+	cbox_case(36, 36, 6, 16);
+	cbox_case(256, 256, 9, 8);
+	cbox_case(256, 256, 9, 16);
+	for (unsigned i = 0; i < 10; i++)
+		cstate_case(etc_ids[i], 0x00a00000u + i * 0x10000u);
+
+	/* the refusals: nothing written */
+	struct v3d_tex_layout untouched;
+	memset(&naive, 0xcc, sizeof(naive));
+	untouched = naive;
+	check(!v3d_tex_layout_compressed(36, 36, 1, 0, 4, 8, &naive) && memcmp(&naive, &untouched, sizeof(naive)) == 0,
+	      "ETC2 layout: a block width of 0 is refused, nothing written");
+	check(!v3d_tex_layout_compressed(36, 36, 1, 4, V3D_TEX_MAX_BLOCK_DIM + 1, 8, &naive) &&
+		      memcmp(&naive, &untouched, sizeof(naive)) == 0,
+	      "ETC2 layout: a block height past V3D_TEX_MAX_BLOCK_DIM is refused, nothing written");
+	check(!v3d_tex_layout_compressed(36, 36, 1, 4, 4, 4, &naive) && memcmp(&naive, &untouched, sizeof(naive)) == 0,
+	      "ETC2 layout: a block of 4 bytes is refused, nothing written");
+	check(!v3d_tex_layout_compressed(16384, 4, 1, 4, 4, 8, &naive) && memcmp(&naive, &untouched, sizeof(naive)) == 0,
+	      "ETC2 layout: a width past 14 bits is refused, nothing written");
+
+	/* The texel entry points on a compressed layout: level 0 of 36x36 cpp 8
+	 * is 9x9 blocks in a slice 16 blocks (128 bytes) wide and 12 high; a
+	 * texel box of the level is 36 x 8 = 288 bytes a row. Each is refused
+	 * and writes nothing, in the image or past it: the image sits in a
+	 * buffer with a guard after it. */
+	check(v3d_tex_layout_compressed(36, 36, 6, 4, 4, 8, &l), "ETC2 36x36 x6 cpp 8: laid out for the refusals");
+	const size_t guard = 64 * 1024, rows = 36 * 8 * 36 + 64;
+	uint8_t *img = malloc(l.size + guard), *copy = malloc(l.size + guard);
+	for (size_t i = 0; i < l.size + guard; i++)
+		img[i] = copy[i] = (uint8_t)(i * 7 + 5);
+	uint8_t *src = malloc(rows), *dst = malloc(rows), *dst0 = malloc(rows);
+	memset(src, 0xa5, rows);
+	memset(dst, 0x5c, rows);
+	memcpy(dst0, dst, rows);
+	/* each case on its own: the buffers are put back after it */
+	enum { STORE_LEVEL, STORE_BOX, LOAD_BOX, STORE_BLOCKS, LOAD_BLOCKS };
+	static const struct {
+		const char *name;
+		int fn;
+		uint32_t level, bw, x, y, w, h, stride;
+	} r[] = {
+		{ "v3d_tex_store_level of level 0 (texels as blocks) stops", STORE_LEVEL, 0, 0, 0, 0, 0, 0,
+		  36 * 8 },
+		{ "v3d_tex_store_box of level 0's texels is refused", STORE_BOX, 0, 0, 0, 0, 36, 36, 36 * 8 },
+		{ "v3d_tex_store_box of level 1's texels (18 x 8 > the 64-byte stride) is refused", STORE_BOX, 1, 0, 0,
+		  0, 18, 18, 18 * 8 },
+		{ "v3d_tex_store_box at row 12 of a 12-row slice is refused", STORE_BOX, 0, 0, 0, 12, 1, 1, 8 },
+		{ "v3d_tex_load_box of level 0's texels is refused", LOAD_BOX, 0, 0, 0, 0, 36, 36, 36 * 8 },
+		{ "store_blocks one block wider than the level's 9 is refused", STORE_BLOCKS, 0, 4, 0, 0, 10, 1, 80 },
+		{ "store_blocks with a block width of 0 is refused", STORE_BLOCKS, 0, 0, 0, 0, 1, 1, 8 },
+		{ "load_blocks past GL's 3 blocks of level 2 is refused", LOAD_BLOCKS, 2, 4, 3, 0, 1, 1, 8 },
+	};
+	char what[200];
+	for (unsigned i = 0; i < sizeof(r) / sizeof(r[0]); i++) {
+		bool got = false;
+		switch (r[i].fn) {
+		case STORE_LEVEL:
+			v3d_tex_store_level(img, &l, r[i].level, src, r[i].stride);
+			break;
+		case STORE_BOX:
+			got = v3d_tex_store_box(img, &l, r[i].level, r[i].x, r[i].y, r[i].w, r[i].h, src,
+						r[i].stride);
+			break;
+		case LOAD_BOX:
+			got = v3d_tex_load_box(img, &l, r[i].level, r[i].x, r[i].y, r[i].w, r[i].h, dst,
+					       r[i].stride);
+			break;
+		case STORE_BLOCKS:
+			got = v3d_tex_store_blocks(img, &l, r[i].level, r[i].bw, 4, r[i].x, r[i].y, r[i].w, r[i].h,
+						   src, r[i].stride);
+			break;
+		default:
+			got = v3d_tex_load_blocks(img, &l, r[i].level, r[i].bw, 4, r[i].x, r[i].y, r[i].w, r[i].h,
+						  dst, r[i].stride);
+			break;
+		}
+		snprintf(what, sizeof(what), "ETC2: %s, nothing written", r[i].name);
+		check(!got && memcmp(img, copy, l.size + guard) == 0 && memcmp(dst, dst0, rows) == 0, what);
+		memcpy(img, copy, l.size + guard);
+		memcpy(dst, dst0, rows);
+	}
+	struct v3d_tex_tfu_job j;
+	memset(&j, 0xcc, sizeof(j));
+	struct v3d_tex_tfu_job j0 = j;
+	check(v3d_tex_layout_compressed(36, 36, 1, 4, 4, 8, &l) &&
+		      !v3d_tex_tfu_pack(&l, V3D_TFU_TTYPE_RGBA8, 0x01000000u, 36 * 8, 0x02000000u, &j) &&
+		      memcmp(&j, &j0, sizeof(j)) == 0,
+	      "ETC2: a TFU job of a compressed layout (texels past its slice) is refused");
+	free(img);
+	free(copy);
+	free(src);
+	free(dst);
+	free(dst0);
+}
+
 int main(void)
 {
 	/* part 1: 11 cases (2 + levels each: 3,3,3,3,3,3,11,4,5,3,3) + 4
@@ -1503,15 +1929,23 @@ int main(void)
 	 * part 11: 2 hand array layouts + 2 arrays tiled + 1 array record + 4
 	 * 3D layouts (2 + levels each: 8, 6, 7, 4) + level_depth + depth 1 +
 	 * slice offsets + 4 3D tilings + 1 3D record + 1 control + 5 refusals;
-	 * and the 3 population checks below */
+	 * part 12: 9 compressed layouts (2 + levels each: 5,5,6,6,1,1,9,1,1) +
+	 * 1 control + 1 level-2 grid + 1 block-1 equality + 10 formats x 3
+	 * sizes tiled + 4 box cases x 2 (store, load) + 10 records + 4 layout
+	 * refusals + 1 layout + 8 texel/block refusals + 1 TFU refusal;
+	 * and the 4 population checks below */
 	const int part1 = (3 + 3 + 3 + 3 + 3 + 3) + (2 + 9) + (2 + 2) + (2 + 3) + (3 + 3) + 4 + 5;
 	const int part11 = (2 + 2 + 1) + (8 + 6 + 7 + 4) + 1 + 1 + 1 + 4 + 1 + 1 + 5;
+	const int part12 = (7 + 7 + 8 + 8 + 3 + 3 + 11 + 3 + 3) + 1 + 1 + 1 + 10 * 3 + 4 * 2 + 10 + 4 + 1 +
+			   8 + 1;
 	const int planned = part1 + (1 + 13 * 5) + (1 + 15 + 3) + (9 * 5 * 2 + 8 * 2) +
 			    (V3D_TEX_FORMAT_COUNT * 2 + 2) + (108 + 4) + 5 +
-			    (1 + 12 + 2 + 9 + 2 + 3) + (3 + 4 + 1 + 4) + (6 * 4 + 5) + part11 + 3;
+			    (1 + 12 + 2 + 9 + 2 + 3) + (3 + 4 + 1 + 4) + (6 * 4 + 5) + part11 + part12 + 4;
 	/* the boxes part 4 must have stored: levels 1+1+3+6+1+1+9+2+2 = 26 of
 	 * the 9 sizes, x 5 cpp, x (7 fixed + 16 random) boxes a level */
 	const unsigned planned_boxes = 26 * 5 * (FIXED_BOXES + RANDOM_BOXES);
+	/* part 12's: levels 6 + 6 + 9 + 9 = 30, 10 boxes a level */
+	const unsigned planned_cboxes = 30 * 10;
 	part_layout();
 	part_tiling();
 	part_records();
@@ -1523,16 +1957,20 @@ int main(void)
 	part_layers();
 	part_mipmap_job();
 	part_arrays_and_3d();
+	part_compressed();
 
-	char what[160];
+	char what[200];
 	snprintf(what, sizeof(what), "population: %u boxes stored, planned %u", boxes_stored,
 		 planned_boxes);
 	check(boxes_stored == planned_boxes, what);
 	snprintf(what, sizeof(what),
-		 "population: %u formats supported, planned 22 (RGBA8, BGRA8, L8, A8, L8A8, RGB565, "
-		 "R32F, D24S8 and the 14 ES 3.0 classes)",
+		 "population: %u formats supported, planned 32 (RGBA8, BGRA8, L8, A8, L8A8, RGB565, "
+		 "R32F, D24S8, the 14 ES 3.0 classes and the 10 ETC2/EAC formats)",
 		 formats_supported);
-	check(formats_supported == 22, what);
+	check(formats_supported == 32, what);
+	snprintf(what, sizeof(what), "population: %u compressed boxes stored, planned %u", cboxes_stored,
+		 planned_cboxes);
+	check(cboxes_stored == planned_cboxes, what);
 	snprintf(what, sizeof(what), "population: %u GL samplers packed, planned 112",
 		 samplers_checked);
 	check(samplers_checked == 112, what);

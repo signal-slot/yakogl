@@ -3,14 +3,16 @@
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 #
 # A util_format_description() that knows what tex_check needs of Mesa's format
-# table, and nothing else: each format's name and block size, read from
+# table, and nothing else: each format's name, block (width, height, depth,
+# bytes) and colour space (util_format_is_srgb), read from
 # Mesa's own src/util/format/u_format.yaml with Mesa's own parser
 # (u_format_parse.py), both vendored in third_party/mesa-26.2.1.
 #
 # Mesa's generated u_format_table.c answers the same call, but it is 57,000
 # lines that call the pack, unpack and compression code of half of src/util
-# and src/gallium/auxiliary; tex_check asks it only for
-# util_format_get_blocksize(). tools/v3d/mesa_ref.sh compiles this file
+# and src/gallium/auxiliary; tex_check asks it only for the block
+# (util_format_get_blocksize, _blockwidth, _blockheight) and
+# util_format_is_srgb(). tools/v3d/mesa_ref.sh compiles this file
 # instead, and only when it builds the reference apart from a Mesa tree.
 #
 #   gen_fmt_blocks.py <third_party/mesa-26.2.1> > fmt_blocks.c
@@ -30,9 +32,9 @@ print('#include "util/format/u_format.h"')
 print("")
 print("static const struct util_format_description table[PIPE_FORMAT_COUNT] = {")
 for f in formats:
-    print('\t[%s] = { %s, "%s", "%s", { %d, %d, %d, %d } },'
+    print('\t[%s] = { %s, "%s", "%s", { %d, %d, %d, %d }, .colorspace = UTIL_FORMAT_COLORSPACE_%s },'
           % (f.name, f.name, f.name, f.short_name(), f.block_width, f.block_height,
-             f.block_depth, f.block_size()))
+             f.block_depth, f.block_size(), f.colorspace))
 print("};")
 print("")
 print("const struct util_format_description *util_format_description(enum pipe_format format)")

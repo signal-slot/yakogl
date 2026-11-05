@@ -260,6 +260,18 @@ Current state: the V3D table has `compressed_blocks_in_rows: false`
 as cpp, and the pot rule of `dimension_mpad` (`:120-125`) takes no block
 size, so it must learn the block (Mesa `:573-581`).
 
+The C half has since landed (item `v3d-tex-etc2`): `v3d_tex.c` has the ten
+rows (`V3D_TEX_FORMAT_ETC2_*`, cpp the block's bytes, `v3d_tex_format_block`
+4x4, `v3d_tex_format_is_srgb` for the three sRGB rows), the layout takes a
+block (`v3d_tex_layout_compressed`: `dimension_mpad_block`, then the level
+in blocks), and the blocks are tiled by `v3d_tex_store_level_blocks`,
+`v3d_tex_store_blocks` and `v3d_tex_load_blocks`. The layout records no
+block, so the texel entry points (`v3d_tex_store_level/_box`,
+`v3d_tex_load_box`, the TFU packers) also refuse a box past the slice's
+stride or padded height, which is what they would do to a compressed
+layout. `tools/v3d/tex_check.c` part 12 checks all of it against Mesa. The
+Rust back end still refuses ETC2/EAC by name (item `v3d-vs-ret32`).
+
 ## 5. What the next items take from this
 
 - `v3d-tex-3d-array`: a layer-aware `layout` with `level_depth` per level

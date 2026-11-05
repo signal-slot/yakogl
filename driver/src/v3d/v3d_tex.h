@@ -29,8 +29,9 @@
  * The cut is what GL ES 2.0 on this backend needs first: 2D, no MSAA,
  * uncompressed (block size 1), and a resource that is never shared (Mesa's
  * uif_top false); then the layered images of ES 2.0 cube maps and ES 3.0 2D
- * arrays (v3d_tex_layer_*) and the 3D textures of ES 3.0 (v3d_tex_layout_3d,
- * v3d_tex_slice_offset, v3d_tex_state_from_layout_3d; the design is
+ * arrays (v3d_tex_layer_*), the 3D textures of ES 3.0 (v3d_tex_layout_3d,
+ * v3d_tex_slice_offset, v3d_tex_state_from_layout_3d) and its ETC2/EAC
+ * formats (v3d_tex_layout_compressed, v3d_tex_*_blocks; the design is
  * docs/notes/v3d-tex-layout-es3.md). Checked against Mesa by
  * tools/v3d/tex_check.c.
  *
@@ -78,6 +79,30 @@ struct v3d_tex_layout {
  * layer of a cube map or an array (v3d_tex_layer_stride). */
 bool v3d_tex_layout(uint32_t width, uint32_t height, uint32_t levels, uint32_t cpp,
 		    struct v3d_tex_layout *l);
+
+/* The largest block side v3d_tex_layout_compressed takes (ETC2 and EAC are
+ * 4 x 4; Mesa's widest ASTC block is 12). */
+#define V3D_TEX_MAX_BLOCK_DIM 16
+
+/* The layout of a compressed width x height image (in texels) with `levels`
+ * levels, as Mesa's v3d_setup_slices lays out a resource of a compressed
+ * format (v3d_resource.c:582-768, rsc->cpp = the block's bytes, :797): the
+ * power-of-two padding of the levels from 2 is taken in whole blocks
+ * (v3d_get_dimension_mpad with the block, :573-581: a level i >= 2 has
+ * ceil((pot_width >> i) / block_w) blocks, so a width of 36 has 4 blocks at
+ * level 2, not 3), each level is counted in blocks (:646-647), and from there
+ * a block is one texel of `block_bytes` bytes: the tiling choice, the
+ * alignment, stride, padded_height and size are v3d_tex_layout's for a
+ * level of that many texels of that cpp. l->width and l->height stay in
+ * texels, l->cpp is block_bytes. Tile it with the block entry points below
+ * (v3d_tex_store_level_blocks, v3d_tex_store_blocks, v3d_tex_load_blocks):
+ * the texel ones (v3d_tex_store_level/_box, v3d_tex_load_box) refuse a box
+ * that leaves the slice and would read texels as blocks otherwise. False,
+ * with `l` untouched, for a block side of 0 or past V3D_TEX_MAX_BLOCK_DIM, a
+ * block size other than 8 or 16 bytes (ETC2/EAC), or what v3d_tex_layout
+ * refuses. With a 1 x 1 block it would be v3d_tex_layout's layout. */
+bool v3d_tex_layout_compressed(uint32_t width, uint32_t height, uint32_t levels, uint32_t block_w,
+			       uint32_t block_h, uint32_t block_bytes, struct v3d_tex_layout *l);
 
 /* The layout of a 3D texture width x height x depth with `levels` levels, as
  * Mesa's v3d_setup_slices lays out a PIPE_TEXTURE_3D resource
@@ -127,9 +152,11 @@ void v3d_tex_store_level(uint8_t *image, const struct v3d_tex_layout *l, uint32_
  * v3d_store_tiled_image with a pipe_box): `src` points at the box's first
  * texel, and its rows are `src_stride` bytes apart. Texels outside the box
  * are not touched. False, with nothing written, for a level the layout does
- * not have, a box that does not fit inside the level, or a src_stride shorter
- * than one row of the box. An empty box (w or h 0) inside the level writes
- * nothing and is not an error, as in GL. */
+ * not have, a box that does not fit inside the level or inside the level's
+ * slice ((x + w) * cpp past the stride or y + h past the padded height: only
+ * a compressed layout, whose slice is counted in blocks), or a src_stride
+ * shorter than one row of the box. An empty box (w or h 0) inside the level
+ * writes nothing and is not an error, as in GL. */
 bool v3d_tex_store_box(uint8_t *image, const struct v3d_tex_layout *l, uint32_t level,
 		       uint32_t x, uint32_t y, uint32_t w, uint32_t h, const uint8_t *src,
 		       uint32_t src_stride);
@@ -149,6 +176,30 @@ bool v3d_tex_store_uif4(uint8_t *level_base, const struct v3d_tex_slice *s, uint
 bool v3d_tex_load_box(const uint8_t *image, const struct v3d_tex_layout *l, uint32_t level,
 		      uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint8_t *dst,
 		      uint32_t dst_stride);
+
+/* Compressed levels (v3d_tex_layout_compressed with the same block_w x
+ * block_h): the box is in blocks, a block is one texel of l->cpp bytes, and
+ * Mesa's v3d_store_tiled_image / v3d_load_tiled_image move it as such ("our
+ * load/store routines work on entire compressed blocks", v3d_resource.c:
+ * 320-321). A level's grid is ceil(w_l / block_w) x ceil(h_l / block_h)
+ * blocks, w_l and h_l its texel size (u_minify of level 0's): the blocks GL
+ * stores; the pot padding Mesa allocates past them (a level >= 2 of a
+ * non-power-of-two size) is the caller's to leave alone. The refusals are
+ * v3d_tex_store_box's with the grid in blocks (and the slice check), plus a
+ * block side of 0 or past V3D_TEX_MAX_BLOCK_DIM; nothing is written. */
+bool v3d_tex_level_blocks(const struct v3d_tex_layout *l, uint32_t level, uint32_t block_w,
+			  uint32_t block_h, uint32_t *blocks_w, uint32_t *blocks_h);
+bool v3d_tex_store_blocks(uint8_t *image, const struct v3d_tex_layout *l, uint32_t level,
+			  uint32_t block_w, uint32_t block_h, uint32_t bx, uint32_t by, uint32_t bw,
+			  uint32_t bh, const uint8_t *src, uint32_t src_stride);
+bool v3d_tex_load_blocks(const uint8_t *image, const struct v3d_tex_layout *l, uint32_t level,
+			 uint32_t block_w, uint32_t block_h, uint32_t bx, uint32_t by, uint32_t bw,
+			 uint32_t bh, uint8_t *dst, uint32_t dst_stride);
+/* The whole grid of one level: `src` holds its blocks in raster rows of
+ * ceil(w_l / block_w) blocks, `src_stride` bytes apart. */
+bool v3d_tex_store_level_blocks(uint8_t *image, const struct v3d_tex_layout *l, uint32_t level,
+				uint32_t block_w, uint32_t block_h, const uint8_t *src,
+				uint32_t src_stride);
 
 /* Layered images: a cube map (6 layers, in GL's face order +X, -X, +Y, -Y,
  * +Z, -Z) or an array. Every layer is a whole mip tree laid out by
@@ -193,6 +244,14 @@ bool v3d_tex_layer_offset(const struct v3d_tex_layout *l, uint32_t level, uint32
 #define V3D_TEXTURE_DATA_FORMAT_R11F_G11F_B10F 19
 #define V3D_TEXTURE_DATA_FORMAT_RGB9_E5     20
 #define V3D_TEXTURE_DATA_FORMAT_RGBA32F     31
+/* ETC2 and EAC (v3d_packet.xml:371-379) */
+#define V3D_TEXTURE_DATA_FORMAT_RGB8_ETC2   32
+#define V3D_TEXTURE_DATA_FORMAT_RGB8_PUNCHTHROUGH_ALPHA1 33
+#define V3D_TEXTURE_DATA_FORMAT_R11_EAC     34
+#define V3D_TEXTURE_DATA_FORMAT_SIGNED_R11_EAC 35
+#define V3D_TEXTURE_DATA_FORMAT_RG11_EAC    36
+#define V3D_TEXTURE_DATA_FORMAT_SIGNED_RG11_EAC 37
+#define V3D_TEXTURE_DATA_FORMAT_RGBA8_ETC2_EAC 38
 #define V3D_TEXTURE_DATA_FORMAT_RGBA8I      100
 #define V3D_TEXTURE_DATA_FORMAT_RGBA8UI     101
 #define V3D_TEXTURE_DATA_FORMAT_RGBA16I     106
@@ -244,6 +303,18 @@ enum v3d_tex_format_id {
 	V3D_TEX_FORMAT_RGBA32UI,   /* R32G32B32A32_UINT */
 	V3D_TEX_FORMAT_RGBA32I,    /* R32G32B32A32_SINT */
 	V3D_TEX_FORMAT_RGBA32F,    /* R32G32B32A32_FLOAT */
+	/* the ES 3.0 compressed formats, 4x4 blocks (Mesa's pipe names; the
+	 * sRGB ones are the linear type with the state's sRGB bit) */
+	V3D_TEX_FORMAT_ETC2_RGB8,       /* COMPRESSED_RGB8_ETC2 */
+	V3D_TEX_FORMAT_ETC2_SRGB8,      /* COMPRESSED_SRGB8_ETC2 */
+	V3D_TEX_FORMAT_ETC2_RGB8A1,     /* COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2 */
+	V3D_TEX_FORMAT_ETC2_SRGB8A1,    /* COMPRESSED_SRGB8_PUNCHTHROUGH_ALPHA1_ETC2 */
+	V3D_TEX_FORMAT_ETC2_RGBA8,      /* COMPRESSED_RGBA8_ETC2_EAC */
+	V3D_TEX_FORMAT_ETC2_SRGBA8,     /* COMPRESSED_SRGB8_ALPHA8_ETC2_EAC */
+	V3D_TEX_FORMAT_ETC2_R11_UNORM,  /* COMPRESSED_R11_EAC */
+	V3D_TEX_FORMAT_ETC2_R11_SNORM,  /* COMPRESSED_SIGNED_R11_EAC */
+	V3D_TEX_FORMAT_ETC2_RG11_UNORM, /* COMPRESSED_RG11_EAC */
+	V3D_TEX_FORMAT_ETC2_RG11_SNORM, /* COMPRESSED_SIGNED_RG11_EAC */
 	V3D_TEX_FORMAT_COUNT
 };
 
@@ -253,7 +324,8 @@ enum v3d_tex_format_id {
  * The TMU applies the swizzle, so a program always reads R, G, B, A. */
 struct v3d_tex_format {
 	uint32_t type;        /* V3D_TEXTURE_DATA_FORMAT_* */
-	uint32_t cpp;         /* bytes of one texel in memory */
+	uint32_t cpp;         /* bytes of one texel in memory; of one block
+			       * for a compressed format (v3d_tex_format_block) */
 	uint8_t swizzle[4];   /* V3D_SWIZZLE_*, for R, G, B, A */
 	uint32_t return_size; /* 16: the TMU returns 16-bit pairs (f16, or the
 			       * integers of an integer type); 32: 32-bit words */
@@ -262,6 +334,13 @@ struct v3d_tex_format {
 /* False for a format this cut does not support, or an id out of range; `out`
  * is then untouched. */
 bool v3d_tex_format_get(enum v3d_tex_format_id id, struct v3d_tex_format *out);
+/* The format's block, block_w x block_h texels of `cpp` bytes: 1 x 1 for an
+ * uncompressed format, 4 x 4 for ETC2/EAC (util_format_get_blockwidth/
+ * height). False, with both untouched, where v3d_tex_format_get is. */
+bool v3d_tex_format_block(enum v3d_tex_format_id id, uint32_t *block_w, uint32_t *block_h);
+/* True for an sRGB format (util_format_is_srgb): the caller sets the
+ * state's `srgb` (v3dx_state.c:1023-1025); its type is the linear row's. */
+bool v3d_tex_format_is_srgb(enum v3d_tex_format_id id);
 /* The format's name ("RGBA8", ...), or "unknown" for an id out of range. */
 const char *v3d_tex_format_name(enum v3d_tex_format_id id);
 
