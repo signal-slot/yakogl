@@ -295,7 +295,7 @@ pub fn fw_up(
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::gpu::mali::csf::tests::{Mcu, GPU, MEM};
     use crate::gpu::mali::csf::{
@@ -315,8 +315,8 @@ mod tests {
 
     const SPI: usize = rk3588::SPI2_BASE;
     const QOS: usize = rk3588::QOS_GPU[0];
-    const B: Bases = Bases { cru: CRU_BASE, pmu: PMU_BASE, spi2: SPI, qos: QOS, gpu: GPU };
-    const TABLES_PA: u64 = 0x1040_0000;
+    pub(crate) const B: Bases = Bases { cru: CRU_BASE, pmu: PMU_BASE, spi2: SPI, qos: QOS, gpu: GPU };
+    pub(crate) const TABLES_PA: u64 = 0x1040_0000;
 
     /// What the board saw, in order: a register write, or a clean.
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -332,7 +332,7 @@ mod tests {
     /// (`mmu::tests::Gpu`); and the MCU with the memory behind AS0
     /// (`csf::tests::Mcu`: an MCU address `va` is the CPU's `MEM + va`), which
     /// boots only from code that was loaded and cleaned.
-    struct T6 {
+    pub(crate) struct T6 {
         soc: RefCell<HashMap<usize, u32>>,
         rk806: HashMap<u16, u8>,
         frame: RefCell<Vec<u8>>,
@@ -347,7 +347,7 @@ mod tests {
     }
 
     impl T6 {
-        fn handed_over(blob: Vec<u8>) -> T6 {
+        pub(crate) fn handed_over(blob: Vec<u8>) -> T6 {
             let mut r = HashMap::new();
             for (a, v) in [
                 (CRU_BASE + clksel_con(158), 0x1f24),
@@ -403,7 +403,7 @@ mod tests {
         fn writes(&self) -> Vec<(usize, u32)> {
             self.log.borrow().iter().filter_map(|e| if let Ev::W(a, v) = *e { Some((a, v)) } else { None }).collect()
         }
-        fn clean(&self, a: usize, n: usize) -> i32 {
+        pub(crate) fn clean(&self, a: usize, n: usize) -> i32 {
             self.log.borrow_mut().push(Ev::Clean(a, n));
             // the model boots from code it saw cleaned, failed or not
             self.mcu.cleaned.borrow_mut().push((a, n));
@@ -510,7 +510,7 @@ mod tests {
     /// One backing per section, in the parse's order: physical memory one
     /// after the other from 0x10500000, at the CPU address the model's
     /// memory has for the section's MCU address.
-    fn backings(blob: &[u8]) -> Vec<Backing> {
+    pub(crate) fn backings(blob: &[u8]) -> Vec<Backing> {
         let img = fw::parse(blob).unwrap();
         let mut pa = 0x1050_0000;
         img.sections()

@@ -399,6 +399,86 @@ int yd_t6_mmu_up(uintptr_t gpu, uint32_t mmu_features, void *pool, uint32_t pool
 		 uint64_t tables_pa, uint64_t backing_pa, int (*clean)(uintptr_t addr, size_t len),
 		 void (*delay_us)(uint32_t us), struct yd_t6_mmu_up *out);
 
+/* Z3, in one run (board::nanopc_t6_fw over gpu::mali::fw, nanopc_t6_sections
+ * and csf; feature mali): parse blob (mali_csffw.bin) and place each loaded
+ * section on its backing, then yd_t6_gpu_up's power-on, Z2's AS0 over every
+ * section, the load (data, zeroes, clean() of each section), the MCU's
+ * start, the GLB interface, the global configuration and its acknowledge,
+ * one PING. backings[0..n_backings] is one per loaded section in the file's
+ * order (at most 16; the board's file has 7: 0x00400000, 0x00410000,
+ * 0x00000000, 0x00800000, 0x02000000, 0x01000000, 0x04000000), cpu the
+ * address the CPU reaches the memory at pa by, the shared section's
+ * uncached. pool is pool_pages 4 KiB pages at physical tables_pa (9 of
+ * them for the board's file), 4 KiB aligned. gpu maps 0xfb000000 for
+ * 0x280000 bytes (the doorbells). timer_hz is CNTFRQ_EL0 (24000000).
+ * clean() cleans the data cache over a range, 0 on success. on_handover as
+ * yd_t6_gpu_up's. 0 when every step ran (out->step YD_T6_FW_STEP_NONE),
+ * -EIO when one stopped (out->step says which), -EINVAL for a null or
+ * misaligned argument. A 64-bit value is two words, lo first. */
+#define YD_T6_FW_STEP_NONE    0 /* every step ran: GLB version = the image's, PING acknowledged */
+#define YD_T6_FW_STEP_PARSE   1 /* the image was refused (refusal: its error, detail: its value) */
+#define YD_T6_FW_STEP_PLACE   2 /* the backings do not fit the sections (refusal: why, detail: the section) */
+#define YD_T6_FW_STEP_GPU     3 /* Z1 stopped (stop: YD_T6_GPU_STOP_*; refusal, detail as yd_t6_gpu_up) */
+#define YD_T6_FW_STEP_MMU     4 /* Z2 stopped (stop: YD_T6_MMU_STOP_*; refusal, detail as yd_t6_mmu_up) */
+#define YD_T6_FW_STEP_BOOT    5 /* csf::boot refused (refusal: CsfRefusal, detail: its value; acked: the bits seen) */
+#define YD_T6_FW_STEP_CLEAN   6 /* the boot ran, a clean() returned non-zero (detail: the first rc) */
+#define YD_T6_FW_STEP_VERSION 7 /* the boot ran, GLB version (detail) is not image_version */
+
+struct yd_t6_fw_backing {
+	uint64_t pa;
+	uintptr_t cpu;
+	uint64_t size;
+};
+
+struct yd_t6_fw_up {
+	uint32_t step;          /* YD_T6_FW_STEP_* */
+	uint32_t stop;          /* of the Z1 or Z2 run for STEP_GPU, STEP_MMU; else 0 */
+	uint32_t refusal;
+	uint32_t detail[2];
+	uint32_t image_version; /* the header's version hash (0x01050000 on the board's file) */
+	uint32_t sections;      /* loaded */
+	uint32_t protected_skipped;
+	uint32_t gpu_id;        /* after the reset */
+	uint32_t shader_present[2];
+	uint32_t mmu_features;
+	uint32_t tables_used;   /* table pages in use (9 on the board's file) */
+	uint32_t flushed;       /* flushes after the map, one per section */
+	uint32_t shared_pa[2];  /* the shared section's backing */
+	int32_t clean_rc;       /* the first failed clean of the load, 0 for none */
+	uint32_t mcu_status_before;
+	uint32_t boot_waited_us;
+	uint32_t job_raw;       /* JOB_INT_RAWSTAT when bit 31 rose */
+	uint32_t mcu_status;
+	uint32_t version;       /* the GLB control block; the pages are MCU addresses */
+	uint32_t features;
+	uint32_t instr_features;
+	uint32_t group_num;
+	uint32_t group_stride;
+	uint32_t glb_input;
+	uint32_t glb_output;
+	uint32_t csg0[4];       /* input, output, stream_num, stream_stride */
+	uint32_t cs0[3];        /* input, output, features */
+	uint32_t core_en_mask[2];
+	uint32_t poweroff_timer;
+	uint32_t progress_timer;
+	uint32_t idle_timer;
+	uint32_t ack_irq_mask;
+	uint32_t init_req;      /* GLB req after the configuration's toggles */
+	uint32_t acked;         /* of INIT_TOGGLES | PING, the bits where req and ack agree */
+	uint32_t init_ack_us;
+	uint32_t ping_acked;    /* 1 when the PING was acknowledged */
+	uint32_t ping_ack_us;
+	uint32_t glb_req;
+	uint32_t glb_ack;
+};
+
+int yd_t6_fw_up(uintptr_t cru, uintptr_t pmu, uintptr_t spi2, uintptr_t qos, uintptr_t gpu,
+		const void *blob, size_t blob_len, const struct yd_t6_fw_backing *backings,
+		uint32_t n_backings, void *pool, uint32_t pool_pages, uint64_t tables_pa,
+		uint32_t timer_hz, int (*clean)(uintptr_t addr, size_t len),
+		void (*delay_us)(uint32_t us),
+		void (*on_handover)(const struct yd_t6_gpu_up *h), struct yd_t6_fw_up *out);
+
 /* ---- TI SN65DSI83/84 (ip::sn65dsi8x; yakogl,sn65dsi8x) ------------------
  * I2C bus 0 of the env is the bridge; GPIO line 0 its EN pin, line 1 the
  * display adapter's reset (logical, 1 = asserted). */
@@ -1403,6 +1483,19 @@ _Static_assert(offsetof(struct yd_t6_mmu_up, walk_va) == 100, "yd_t6_mmu_up.walk
 _Static_assert(offsetof(struct yd_t6_mmu_up, enable_op) == 156, "yd_t6_mmu_up.enable_op");
 _Static_assert(offsetof(struct yd_t6_mmu_up, after) == 228, "yd_t6_mmu_up.after");
 _Static_assert(offsetof(struct yd_t6_mmu_up, stop) == 332, "yd_t6_mmu_up.stop");
+_Static_assert(sizeof(struct yd_t6_fw_backing) == 24, "struct yd_t6_fw_backing");
+_Static_assert(offsetof(struct yd_t6_fw_backing, cpu) == 8, "yd_t6_fw_backing.cpu");
+_Static_assert(offsetof(struct yd_t6_fw_backing, size) == 16, "yd_t6_fw_backing.size");
+_Static_assert(sizeof(struct yd_t6_fw_up) == 192, "struct yd_t6_fw_up");
+_Static_assert(offsetof(struct yd_t6_fw_up, image_version) == 20, "yd_t6_fw_up.image_version");
+_Static_assert(offsetof(struct yd_t6_fw_up, gpu_id) == 32, "yd_t6_fw_up.gpu_id");
+_Static_assert(offsetof(struct yd_t6_fw_up, tables_used) == 48, "yd_t6_fw_up.tables_used");
+_Static_assert(offsetof(struct yd_t6_fw_up, clean_rc) == 64, "yd_t6_fw_up.clean_rc");
+_Static_assert(offsetof(struct yd_t6_fw_up, version) == 84, "yd_t6_fw_up.version");
+_Static_assert(offsetof(struct yd_t6_fw_up, csg0) == 112, "yd_t6_fw_up.csg0");
+_Static_assert(offsetof(struct yd_t6_fw_up, core_en_mask) == 140, "yd_t6_fw_up.core_en_mask");
+_Static_assert(offsetof(struct yd_t6_fw_up, acked) == 168, "yd_t6_fw_up.acked");
+_Static_assert(offsetof(struct yd_t6_fw_up, glb_ack) == 188, "yd_t6_fw_up.glb_ack");
 _Static_assert(sizeof(struct yd_sn65dsi8x_config) == 8, "struct yd_sn65dsi8x_config");
 _Static_assert(offsetof(struct yd_sn65dsi8x_config, flags) == 0, "yd_sn65dsi8x_config.flags");
 _Static_assert(offsetof(struct yd_sn65dsi8x_config, lanes) == 4, "yd_sn65dsi8x_config.lanes");

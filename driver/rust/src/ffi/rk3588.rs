@@ -679,6 +679,257 @@ pub unsafe extern "C" fn yd_t6_mmu_up(
     }
 }
 
+/// `struct yd_t6_fw_backing`: the memory one loaded firmware section maps
+/// to ([`crate::board::nanopc_t6_sections::Backing`]): physical address, the
+/// CPU's address of it, size in bytes.
+#[cfg(any(feature = "mali", test))]
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct YdT6FwBacking {
+    pub pa: u64,
+    pub cpu: usize,
+    pub size: u64,
+}
+
+#[cfg(all(any(feature = "mali", test), target_pointer_width = "64"))]
+const _: () = assert!(size_of::<YdT6FwBacking>() == 24);
+
+/// Z3's run ([`crate::board::nanopc_t6_fw::fw_up`]) behind the C entry,
+/// over any [`Mmio`]: the arguments as [`yd_t6_fw_up`] documents them.
+#[cfg(feature = "mali")]
+#[allow(clippy::too_many_arguments)]
+fn fw_up_run(
+    m: &impl Mmio,
+    b: crate::board::nanopc_t6_gpu::Bases,
+    blob: &[u8],
+    backings: &[crate::board::nanopc_t6_sections::Backing],
+    pool: &mut [crate::gpu::mali::pgtable::Table],
+    tables_pa: u64,
+    timer_hz: u32,
+    clean: extern "C" fn(usize, usize) -> i32,
+    delay_us: extern "C" fn(u32),
+    on_handover: extern "C" fn(*const YdT6GpuUp),
+) -> crate::board::nanopc_t6_fw::FwUp {
+    crate::board::nanopc_t6_fw::fw_up(
+        m,
+        b,
+        blob,
+        backings,
+        pool,
+        tables_pa,
+        timer_hz,
+        &|a, n| clean(a, n),
+        &mut |us| delay_us(us),
+        &mut |h| {
+            let h = YdT6GpuUp::from(h);
+            on_handover(&h);
+        },
+    )
+}
+
+/// Z3 on the NanoPC-T6 ([`crate::board::nanopc_t6_fw::fw_up`]): the
+/// firmware image `blob` (`mali_csffw.bin`, `blob_len` bytes) parsed and
+/// placed on `backings[0..n_backings]` (one per loaded section, in the
+/// file's order), then Z1's power-on, Z2's AS0 over every section, the load
+/// with a `clean` of each section, the MCU's start, the global
+/// configuration and one `PING`. 0 when every step ran (`out->step` is
+/// `YD_T6_FW_STEP_NONE`), `-EIO` when one stopped (`out->step` says which),
+/// `-EINVAL` for a null or misaligned argument. The bases are those of
+/// [`yd_t6_gpu_up`], `gpu` mapped for 0x280000 bytes (the doorbells);
+/// `pool` is `pool_pages` 4 KiB pages at physical `tables_pa`, written by
+/// this call; `timer_hz` is CNTFRQ_EL0; `clean` cleans the data cache over
+/// a range to the point of coherency, 0 on success; `on_handover` as
+/// [`yd_t6_gpu_up`]'s.
+///
+/// # Safety
+/// The bases are mapped device memory; `blob` is valid for `blob_len` bytes
+/// and `backings` for `n_backings` entries; each backing's `cpu` is the
+/// memory at its `pa` for `size` bytes, writable by this call (the shared
+/// section's mapped uncached); `pool` is valid for writes of `pool_pages` *
+/// 4096 bytes and is the memory at `tables_pa`; `out` is valid.
+#[cfg(feature = "mali")]
+#[no_mangle]
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "C" fn yd_t6_fw_up(
+    cru: usize,
+    pmu: usize,
+    spi2: usize,
+    qos: usize,
+    gpu: usize,
+    blob: *const u8,
+    blob_len: usize,
+    backings: *const YdT6FwBacking,
+    n_backings: u32,
+    pool: *mut u8,
+    pool_pages: u32,
+    tables_pa: u64,
+    timer_hz: u32,
+    clean: Option<extern "C" fn(usize, usize) -> i32>,
+    delay_us: Option<extern "C" fn(u32)>,
+    on_handover: Option<extern "C" fn(*const YdT6GpuUp)>,
+    out: *mut YdT6FwUp,
+) -> i32 {
+    use crate::board::nanopc_t6_sections::Backing;
+    use crate::gpu::mali::pgtable::{Table, PAGE};
+    let (Some(clean), Some(delay_us), Some(on_handover)) = (clean, delay_us, on_handover) else { return -EINVAL };
+    if out.is_null()
+        || blob.is_null()
+        || backings.is_null()
+        || pool.is_null()
+        || pool_pages == 0
+        || n_backings as usize > crate::gpu::mali::fw::MAX_SECTIONS
+        || !(pool as usize).is_multiple_of(PAGE as usize)
+    {
+        return -EINVAL;
+    }
+    // SAFETY: the caller's contract.
+    let (blob, given) = unsafe {
+        (core::slice::from_raw_parts(blob, blob_len), core::slice::from_raw_parts(backings, n_backings as usize))
+    };
+    let mut placed = [Backing::default(); crate::gpu::mali::fw::MAX_SECTIONS];
+    for (p, k) in placed.iter_mut().zip(given) {
+        *p = Backing { pa: k.pa, cpu: k.cpu, size: k.size };
+    }
+    // SAFETY: the caller's contract; 4 KiB aligned covers u64's alignment.
+    let pages = unsafe { core::slice::from_raw_parts_mut(pool.cast::<Table>(), pool_pages as usize) };
+    // SAFETY: the caller's contract.
+    let hw = unsafe { Hw::new() };
+    let b = crate::board::nanopc_t6_gpu::Bases { cru, pmu, spi2, qos, gpu };
+    let o = fw_up_run(&hw, b, blob, &placed[..given.len()], pages, tables_pa, timer_hz, clean, delay_us, on_handover);
+    // SAFETY: the caller's contract.
+    unsafe { *out = o };
+    if o.step == crate::board::nanopc_t6_fw::STEP_NONE {
+        0
+    } else {
+        -EIO
+    }
+}
+
+/// `struct yd_t6_fw_up` is [`crate::board::nanopc_t6_fw::FwUp`] as it is.
+#[cfg(any(feature = "mali", test))]
+pub type YdT6FwUp = crate::board::nanopc_t6_fw::FwUp;
+
+#[cfg(all(test, feature = "mali"))]
+mod fw_tests {
+    use super::*;
+    use crate::board::nanopc_t6_fw::tests::{backings, B, T6, TABLES_PA};
+    use crate::board::nanopc_t6_fw::{self as fwb, FwUp};
+    use crate::gpu::mali::csf::RK3588_TIMER_HZ;
+    use crate::gpu::mali::fw::synth;
+    use crate::gpu::mali::pgtable::ENTRIES;
+
+    extern "C" fn clean_ok(_: usize, _: usize) -> i32 {
+        0
+    }
+    thread_local! {
+        static MODEL: core::cell::Cell<*const T6> = const { core::cell::Cell::new(core::ptr::null()) };
+    }
+    /// The model's clean: it boots only from code it saw cleaned.
+    extern "C" fn clean_model(a: usize, n: usize) -> i32 {
+        // SAFETY: set by the test below to a T6 that outlives the run.
+        MODEL.with(|m| unsafe { &*m.get() }.clean(a, n))
+    }
+    extern "C" fn no_delay(_: u32) {}
+    extern "C" fn no_handover(_: *const YdT6GpuUp) {}
+
+    #[test]
+    fn the_c_header_has_the_z3_numbers_and_layout() {
+        const H: &str = include_str!("../../include/yakogl_drivers.h");
+        let def = |name: &str| -> u32 {
+            let l = H.lines().find(|l| l.starts_with(&format!("#define {name} "))).expect(name);
+            l.split_whitespace().nth(2).expect(name).parse().unwrap_or_else(|_| panic!("{name}"))
+        };
+        for (name, v) in [
+            ("YD_T6_FW_STEP_NONE", fwb::STEP_NONE),
+            ("YD_T6_FW_STEP_PARSE", fwb::STEP_PARSE),
+            ("YD_T6_FW_STEP_PLACE", fwb::STEP_PLACE),
+            ("YD_T6_FW_STEP_GPU", fwb::STEP_GPU),
+            ("YD_T6_FW_STEP_MMU", fwb::STEP_MMU),
+            ("YD_T6_FW_STEP_BOOT", fwb::STEP_BOOT),
+            ("YD_T6_FW_STEP_CLEAN", fwb::STEP_CLEAN),
+            ("YD_T6_FW_STEP_VERSION", fwb::STEP_VERSION),
+        ] {
+            assert_eq!(def(name), v, "{name}");
+        }
+        let pins = [
+            ("sizeof(struct yd_t6_fw_backing)", size_of::<YdT6FwBacking>()),
+            ("offsetof(struct yd_t6_fw_backing, cpu)", offset_of!(YdT6FwBacking, cpu)),
+            ("offsetof(struct yd_t6_fw_backing, size)", offset_of!(YdT6FwBacking, size)),
+            ("sizeof(struct yd_t6_fw_up)", size_of::<FwUp>()),
+            ("offsetof(struct yd_t6_fw_up, image_version)", offset_of!(FwUp, image_version)),
+            ("offsetof(struct yd_t6_fw_up, gpu_id)", offset_of!(FwUp, gpu_id)),
+            ("offsetof(struct yd_t6_fw_up, tables_used)", offset_of!(FwUp, tables_used)),
+            ("offsetof(struct yd_t6_fw_up, clean_rc)", offset_of!(FwUp, clean_rc)),
+            ("offsetof(struct yd_t6_fw_up, version)", offset_of!(FwUp, version)),
+            ("offsetof(struct yd_t6_fw_up, csg0)", offset_of!(FwUp, csg0)),
+            ("offsetof(struct yd_t6_fw_up, core_en_mask)", offset_of!(FwUp, core_en_mask)),
+            ("offsetof(struct yd_t6_fw_up, acked)", offset_of!(FwUp, acked)),
+            ("offsetof(struct yd_t6_fw_up, glb_ack)", offset_of!(FwUp, glb_ack)),
+        ];
+        for (what, v) in pins {
+            let pin = format!("_Static_assert({what} == {v},");
+            assert!(H.contains(&pin), "{pin}");
+        }
+    }
+
+    #[test]
+    fn the_entry_runs_the_mcu_model_through_to_the_record() {
+        let blob = synth::small();
+        let t6 = T6::handed_over(blob.clone());
+        let bk = backings(&blob);
+        let mut pool = vec![[0u64; ENTRIES]; 16];
+        MODEL.with(|m| m.set(&t6));
+        let o =
+            fw_up_run(&t6, B, &blob, &bk, &mut pool, TABLES_PA, RK3588_TIMER_HZ, clean_model, no_delay, no_handover);
+        assert_eq!((o.step, o.stop, o.refusal), (fwb::STEP_NONE, 0, 0));
+        assert_eq!((o.version, o.image_version, o.sections), (0x0105_0000, 0x0105_0000, 4));
+        assert_eq!((o.ping_acked, o.mcu_status, o.tables_used), (1, 1, 7));
+        assert_eq!((o.glb_input, o.glb_output), (0x0400_2000, 0x0400_6000));
+        // the backings' order is the file's: a short list is the placement's refusal
+        let o =
+            fw_up_run(&t6, B, &blob, &bk[..3], &mut pool, TABLES_PA, RK3588_TIMER_HZ, clean_ok, no_delay, no_handover);
+        assert_eq!(o.step, fwb::STEP_PLACE);
+    }
+
+    #[test]
+    fn the_entry_refuses_null_and_misaligned_arguments() {
+        let mut out = FwUp::default();
+        let mut pool = vec![0u8; 8192];
+        let bk = [YdT6FwBacking::default()];
+        let blob = [0u8; 4];
+        let off = pool.as_mut_ptr().align_offset(4096);
+        let call = |blob: *const u8,
+                    pool: *mut u8,
+                    clean: Option<extern "C" fn(usize, usize) -> i32>,
+                    out: *mut FwUp| unsafe {
+            yd_t6_fw_up(
+                0,
+                0,
+                0,
+                0,
+                0,
+                blob,
+                4,
+                bk.as_ptr(),
+                1,
+                pool,
+                1,
+                0,
+                1,
+                clean,
+                Some(no_delay),
+                Some(no_handover),
+                out,
+            )
+        };
+        let p = unsafe { pool.as_mut_ptr().add(off) };
+        assert_eq!(call(blob.as_ptr(), p, Some(clean_ok), core::ptr::null_mut()), -EINVAL);
+        assert_eq!(call(core::ptr::null(), p, Some(clean_ok), &mut out), -EINVAL);
+        assert_eq!(call(blob.as_ptr(), p, None, &mut out), -EINVAL);
+        assert_eq!(call(blob.as_ptr(), unsafe { p.add(8) }, Some(clean_ok), &mut out), -EINVAL);
+    }
+}
+
 #[cfg(test)]
 mod mmu_tests {
     use super::*;
