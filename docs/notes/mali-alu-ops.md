@@ -148,14 +148,16 @@ fp16: Mesa uses `.v2f16` forms there.
   `bi_fuse_discard_fcmp` does for a 16-bit compare (the mask's swizzle
   composed into each source's): `DISCARD.f32.lt 0x38000000.h1, u2.w0.h1`.
   The compare's operands may be an fp16 uniform's component or a constant.
-- **81 branchquad** stays refused (`DiscardForm`) at its varying operand: Mesa
-  converts the lane alone (`FADD.f32 r0.h0, r1^, 0x0.neg`, which the selector
-  already makes), but it also keeps the mediump `v_color` whole (`.v4` load,
-  four vertex stores) although only y and w are read, where every highp
-  reference (fvgtest_discard2: `.y` alone, one component) and pan_shc's
-  mediump `cmp_*` compact. The GL path's rule for a partly read mediump
-  varying needs a reference of its own (a mediump `gl_FragColor =
-  vec4(v.y, v.w, 0, 1)` pair on the shim) before the layout changes.
+- **81 branchquad** (byte-equal since plan #309 `discard-81`,
+  `a_mediump_discard_of_a_varying_lane_is_byte_equal_to_mesa_26_2_1`): the
+  compare's varying operand is the lane converted alone (`FADD.f32 r0.h0,
+  r1^, 0x0.neg`, nir_fs.rs `cmp_leaf`), and the link keeps the mediump
+  `v_color` whole (`.v4` load, four vertex stores) although only y and w are
+  read, where every highp reference (fvgtest_discard2: `.y` alone, one
+  component) and pan_shc's mediump `cmp_*` compact. The rule is pinned only
+  for a varying a mediump discard's compare reads (nir_fs.rs `layout`,
+  `whole`); a mediump colour that reads a varying in part on the GL path
+  has no shim reference yet.
 - The vertex `fmax`/`fmin` rules of 182 (fsat) were written and dropped: the
   programs then stop at `VaryingNotFromAttribute` (the uniform-only flat
   varying, docs/notes/mali-varying-constants.md rule 3), so no byte-equal

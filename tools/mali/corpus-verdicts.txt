@@ -14,7 +14,7 @@ tools/shaders/es100/attrib_hole_float.vert: ok
 tools/shaders/es100/attrib_max_vec4.vert: ok
 tools/shaders/es100/boolany.frag: Valhall: an integer or boolean value is not lowered yet
 tools/shaders/es100/branchlane.frag: ok
-tools/shaders/es100/branchquad.frag: Valhall: a discard other than a highp fragment shader's `if (a < b) discard;` with no else (an unconditional one, one among other statements, one under another if, a mediump shader's) is not lowered yet
+tools/shaders/es100/branchquad.frag: ok
 tools/shaders/es100/clipping.frag: ok
 tools/shaders/es100/clipping.vert: ok
 tools/shaders/es100/cond_complex.frag: Valhall: an integer or boolean value is not lowered yet

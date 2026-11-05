@@ -4924,6 +4924,19 @@ pub fn layout(f: &mut Fs<'_>, m: &Module<'_>, order: Option<super::link::Varying
                         && from_lane(nd.src[0])
                         && c.iter().any(|&root| reaches(f, root, Val::Lane(id, 0)))
                 });
+            /* and one a mediump shader's discard compares a lane of
+             * (measured: discard_81_branchquad.expect.json loads `.v4` and
+             * its vertex program stores four lanes of `v_color`, of which
+             * the two discards read y and w) */
+            whole[loc as usize] |= !f.prec.highp
+                && f.nir.discards().any(|id| match f.nir.nodes[id as usize].src[0] {
+                    Val::Lane(cn, _) => {
+                        let cmp = f.nir.nodes[cn as usize];
+                        matches!(cmp.kind, Kind::Alu(Alu::Fcmp(_)))
+                            && cmp.src[..2].iter().any(|x| matches!(*x, Val::Lane(n, _) if n == node))
+                    }
+                    _ => false,
+                });
         }
     }
     /* a matrix varying of columns narrower than a vec4 is read whole, every
@@ -5420,15 +5433,18 @@ fn scalar(f: &Fs<'_>, pr: &mut Pairs, v: Val, pair: u8) -> Result<u8, MaliError>
 /// An operand of a mediump discard's compare as a leaf of one lane and the
 /// half it is read through (`bi_alu_src_index` of a one-lane 16-bit op
 /// replicates the lane): a component of an fp16 uniform (`u2.w0.h11`,
-/// alu_branchlane) or a constant's half. A varying's lane is refused
-/// ([`MaliError::DiscardForm`]): Mesa converts it alone (`FADD.f32 r0.h0,
-/// r1^, 0x0.neg`), but alu_branchquad also keeps the mediump varying whole
-/// (`.v4`, four vertex stores) where the read lanes are y and w, a link
-/// rule (no compaction of a mediump varying the GL path reads in part) no
-/// other reference pins; any other operand has no reference either.
+/// alu_branchlane), a constant's half, or a varying's lane converted alone
+/// (`FADD.f32 r0.h0, r1^, 0x0.neg`, then `DISCARD.f32.lt 0x38000000.h1,
+/// r0^.h0`; discard_81_branchquad, whose varying the link keeps whole,
+/// [`layout`]). Any other operand has no reference
+/// ([`MaliError::DiscardForm`]).
 fn cmp_leaf(f: &Fs<'_>, pr: &mut Pairs, v: Val, ubo: &UboLayout) -> Result<(u8, Swz), MaliError> {
     let (leaf, swz) = match (f.alu_of(v), f.input_lane(v), f.uniform_dword(v), v) {
         (_, _, _, Val::Const(c)) => (Leaf::Const(u32::from(f16_rtne(c).ok_or(MaliError::Fp16Inexact)?)), Swz::H00),
+        (None, Some((loc, c)), _, _) if (loc as usize) < MAX_VARYINGS => {
+            let (k, c) = index(f, loc, c)?;
+            (Leaf::Splat { k, c }, Swz::H00)
+        }
         (None, None, Some(d), _) => {
             let (w, half, base) = ubo.half(d).ok_or(MaliError::FsUniform)?;
             (Leaf::Uniform { base, comp: (w - base) as u8, swz: Swz::H01 }, if half == 0 { Swz::H00 } else { Swz::H11 })
