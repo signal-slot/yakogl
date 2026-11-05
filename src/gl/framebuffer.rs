@@ -41,8 +41,9 @@ use super::types::*;
 use super::{draw, texture};
 use crate::backend::{
     self, gles_surf_bytes_per_pixel, gles_surf_int_layout, gles_surf_is_integer, gles_texfmt_bytes, GLES_SURF_R16F,
-    GLES_SURF_R32F, GLES_SURF_RGB565, GLES_SURF_RGBA16F, GLES_SURF_RGBA8888, GLES_SURF_SRGB8_A8, GLES_SURF_XRGB8888,
-    GLES_TEXFMT_R16F, GLES_TEXFMT_R32F, GLES_TEXFMT_RGBA16F, GLES_TEXFMT_RGBA8, GLES_TEXFMT_SRGB8_A8,
+    GLES_SURF_R32F, GLES_SURF_RGB10_A2, GLES_SURF_RGB565, GLES_SURF_RGBA16F, GLES_SURF_RGBA8888, GLES_SURF_SRGB8_A8,
+    GLES_SURF_XRGB8888, GLES_TEXFMT_R16F, GLES_TEXFMT_R32F, GLES_TEXFMT_RGB10A2, GLES_TEXFMT_RGBA16F,
+    GLES_TEXFMT_RGBA8, GLES_TEXFMT_SRGB8_A8,
 };
 use crate::osal::{self, OsalGpuMem, OSAL_MEM_DATA};
 use crate::util::Global;
@@ -407,6 +408,24 @@ fn integer_texture_internalformat(t: &context::GlTexture) -> Option<GLenum> {
         .then_some(e.internalformat)
 }
 
+/// Is GL_RGB10_A2 its own render surface in this build ([`GLES_SURF_RGB10_A2`],
+/// the 10/10/10/2 word of the class [`GLES_TEXFMT_RGB10A2`])? That is where
+/// the back end samples the class ([`backend::rt_format_drawable`], the one
+/// bit); elsewhere a GL_RGB10_A2 renderbuffer is RGBA8888 and a texture of
+/// the name is in the RGBA8 class (es3_formats' fallback), as before
+/// (docs/notes/v3d-rgb10a2.md (a)).
+fn rgb10a2_surface() -> bool {
+    !crate::REPORT_ES2 && backend::rt_format_drawable(GLES_SURF_RGB10_A2)
+}
+
+/// The surface of a texture in the RGB10A2 class, the way
+/// [`integer_texture_surface`] maps the integer classes: GL_RGB10_A2 is
+/// colour-renderable (ES 3.0 table 3.13), and the class is stored only where
+/// the back end renders it ([`rgb10a2_surface`]).
+fn rgb10a2_texture_surface(texfmt: u8) -> Option<u8> {
+    (texfmt == GLES_TEXFMT_RGB10A2 && rgb10a2_surface()).then_some(GLES_SURF_RGB10_A2)
+}
+
 /// The surface that has the memory layout of an integer texel class.
 fn integer_texture_surface(texfmt: u8) -> Option<u8> {
     use backend::*;
@@ -472,6 +491,7 @@ pub(super) fn attachment_storage(c: &GlContext, a: &GlAttachment) -> Option<Stor
             });
         }
         let int_format = integer_texture_internalformat(t);
+        let rgb10a2 = rgb10a2_texture_surface(t.texfmt).is_some();
 
         if t.mem.impl_.is_null()
             || t.width == 0
@@ -480,13 +500,15 @@ pub(super) fn attachment_storage(c: &GlContext, a: &GlAttachment) -> Option<Stor
             || !(matches!(
                 t.texfmt,
                 GLES_TEXFMT_RGBA8 | GLES_TEXFMT_SRGB8_A8 | GLES_TEXFMT_RGBA16F | GLES_TEXFMT_R16F | GLES_TEXFMT_R32F
-            ) || int_format.is_some())
+            ) || int_format.is_some()
+                || rgb10a2)
             /* SRGB8 is a texture format only (ES 3.0.6 table 3.13: not
              * colour-renderable); SRGB8_ALPHA8 is both */
             || (t.texfmt == GLES_TEXFMT_SRGB8_A8 && t.format == GL_RGB)
             /* an ES 3.0 format of es3_formats is no render target, but
-             * RGB10_A2 held as RGBA8 (ES 3.0 table 3.13) */
-            || (t.es3_fmt != 0 && t.texfmt != GLES_TEXFMT_RGBA8 && int_format.is_none())
+             * RGB10_A2 (ES 3.0 table 3.13): held as RGBA8, or in its own
+             * class where the back end renders it */
+            || (t.es3_fmt != 0 && t.texfmt != GLES_TEXFMT_RGBA8 && int_format.is_none() && !rgb10a2)
             || a.level < 0
             || a.level as u32 >= t.chain_levels as u32
             || a.level as usize >= CAP_MIP_LEVELS
@@ -510,6 +532,7 @@ pub(super) fn attachment_storage(c: &GlContext, a: &GlAttachment) -> Option<Stor
             GLES_TEXFMT_R16F => GL_R16F,
             GLES_TEXFMT_R32F => GL_R32F,
             GLES_TEXFMT_SRGB8_A8 => GL_SRGB8_ALPHA8,
+            GLES_TEXFMT_RGB10A2 => GL_RGB10_A2,
             _ => GL_RGBA,
         };
         /* A 1-wide level of a PowerVR chain has one-texel rows where the
@@ -602,10 +625,11 @@ fn is_color_format(f: GLenum) -> bool {
             | GL_R16F
             | GL_R32F
     ) || is_integer_color_format(f)
-        /* ES 3.0 table 3.13: colour-renderable, so renderbuffer storage. Held
-         * as RGBA8 (eight bits a channel, which the size queries say), as
-         * the texture of the name is (es3_formats' fallback class); no
-         * back end has a 10-bit render target yet. ES 2.0 has no such name. */
+        /* ES 3.0 table 3.13: colour-renderable, so renderbuffer storage. In
+         * its own 10/10/10/2 surface where the back end renders the class
+         * (`rgb10a2_surface`), else held as RGBA8 (eight bits a channel,
+         * which the size queries say), as the texture of the name is
+         * (es3_formats' fallback class). ES 2.0 has no such name. */
         || (f == GL_RGB10_A2 && !crate::REPORT_ES2)
 }
 
@@ -700,6 +724,9 @@ pub(super) fn renderbuffer_surf_format(internalformat: GLenum) -> u8 {
         /* ES 3.0 only: the ES 2.0 report has no such renderbuffer
          * (`is_renderbuffer_color_format`) */
         GL_SRGB8_ALPHA8 if !crate::REPORT_ES2 => GLES_SURF_SRGB8_A8,
+        /* the 10/10/10/2 word where the back end renders it, RGBA8888 (two
+         * bits of each colour lost, alpha widened) elsewhere */
+        GL_RGB10_A2 if rgb10a2_surface() => GLES_SURF_RGB10_A2,
         f if is_integer_color_format(f) => integer_surf_format(f).unwrap_or(GLES_SURF_RGBA8888),
         _ => GLES_SURF_RGBA8888,
     }
@@ -903,10 +930,11 @@ pub fn fb_target_format_n(c: &GlContext, n: u8) -> u8 {
     if let Some(fb) = c.framebuffer_ref(c.bound_framebuffer) {
         let Some(a) = color_attachment(fb, n) else { return GLES_SURF_RGBA8888 };
         if a.type_ == GL_TEXTURE {
-            if let Some(surf) = c
-                .texture_ref(a.name)
-                .and_then(|t| integer_texture_internalformat(t).and_then(|_| integer_texture_surface(t.texfmt)))
-            {
+            if let Some(surf) = c.texture_ref(a.name).and_then(|t| {
+                integer_texture_internalformat(t)
+                    .and_then(|_| integer_texture_surface(t.texfmt))
+                    .or_else(|| rgb10a2_texture_surface(t.texfmt))
+            }) {
                 return surf;
             }
             match c.texture_ref(a.name).map(|t| (t.texfmt, t.bgra)) {
@@ -1207,7 +1235,7 @@ pub fn fb_target_n(c: &GlContext, n: u8) -> Option<(u64, u32, u32, u8)> {
         GL_RGBA16F => GLES_SURF_RGBA16F,
         GL_R16F => GLES_SURF_R16F,
         GL_R32F => GLES_SURF_R32F,
-        f if is_integer_color_format(f) || f == GL_SRGB8_ALPHA8 => renderbuffer_surf_format(f),
+        f if is_integer_color_format(f) || f == GL_SRGB8_ALPHA8 || f == GL_RGB10_A2 => renderbuffer_surf_format(f),
         _ => GLES_SURF_RGBA8888,
     };
     Some((mem.gpu + st.offset as u64, st.w, st.h, format))
@@ -2014,9 +2042,11 @@ pub(super) fn renderbuffer_bits(internalformat: GLenum) -> AttachmentBits {
         GL_RGB565 => AttachmentBits::color([5, 6, 5, 0], un),
         GL_RGB8 | GL_RGB => AttachmentBits::color([8, 8, 8, 0], un),
         GL_RGBA8 | GL_RGBA | GL_BGRA_EXT | GL_BGRA8_EXT => AttachmentBits::color([8, 8, 8, 8], un),
-        /* held as RGBA8 (`is_color_format`): eight bits a channel, the
-         * same as glGetRenderbufferParameteriv says, not the 10/10/10/2
-         * the name asks for, which no render target here stores */
+        /* the 10/10/10/2 the name asks for where its surface is stored
+         * (`renderbuffer_surf_format`); held as RGBA8 elsewhere
+         * (`is_color_format`): eight bits a channel, the same as
+         * glGetRenderbufferParameteriv says */
+        GL_RGB10_A2 if rgb10a2_surface() => AttachmentBits::color([10, 10, 10, 2], un),
         GL_RGB10_A2 if !crate::REPORT_ES2 => AttachmentBits::color([8, 8, 8, 8], un),
         GL_SRGB8_ALPHA8 => AttachmentBits { encoding: GL_SRGB, ..AttachmentBits::color([8, 8, 8, 8], un) },
         GL_R8 => AttachmentBits::color([8, 0, 0, 0], un),
@@ -2650,7 +2680,9 @@ pub unsafe extern "C" fn glGetRenderbufferParameteriv(target: GLenum, pname: GLe
         | GL_RENDERBUFFER_BLUE_SIZE
         | GL_RENDERBUFFER_ALPHA_SIZE => {
             let bits = renderbuffer_bits(f);
-            if is_integer_color_format(f) {
+            /* an integer renderbuffer's own widths, and RGB10_A2's where
+             * its surface is stored (10/10/10/2; 8 held as RGBA8) */
+            if is_integer_color_format(f) || (f == GL_RGB10_A2 && !crate::REPORT_ES2) {
                 bits.rgba[(pname - GL_RENDERBUFFER_RED_SIZE) as usize]
             } else if !crate::REPORT_ES2 && bits.component_type == GL_FLOAT {
                 /* ES 3.0 6.1.15: the stored resolution. A half- or

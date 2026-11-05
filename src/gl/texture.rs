@@ -26,8 +26,8 @@ use super::{draw, framebuffer};
 use crate::backend::{
     self, gles_texfmt_bytes, GLES_SURF_RGB565, GLES_SURF_XRGB8888, GLES_TEXFMT_A8, GLES_TEXFMT_ETC2_RGB,
     GLES_TEXFMT_ETC2_RGBA, GLES_TEXFMT_ETC2_SRGB_RGB, GLES_TEXFMT_ETC2_SRGB_RGBA, GLES_TEXFMT_L8, GLES_TEXFMT_LA8,
-    GLES_TEXFMT_R16F, GLES_TEXFMT_R32F, GLES_TEXFMT_RGB565, GLES_TEXFMT_RGBA16F, GLES_TEXFMT_RGBA8,
-    GLES_TEXFMT_SRGB8_A8,
+    GLES_TEXFMT_R16F, GLES_TEXFMT_R32F, GLES_TEXFMT_RGB10A2, GLES_TEXFMT_RGB565, GLES_TEXFMT_RGBA16F,
+    GLES_TEXFMT_RGBA8, GLES_TEXFMT_SRGB8_A8,
 };
 use crate::osal::{self, OsalGpuMem, OSAL_MEM_DATA};
 use crate::util::{self, Global};
@@ -4180,10 +4180,11 @@ pub unsafe extern "C" fn glGenerateMipmap(target: GLenum) {
     }
     /* ES 3.0 3.8.14: only a colour-renderable, texture-filterable base level
      * has a generated chain; of the formats of es3_formats that is RGB10_A2,
-     * and only while it is stored as RGBA8 (the fallback): a box filter over
-     * the packed word has no CPU path here. */
+     * in its own class (the 10/10/10/2 word, which the box filter below
+     * averages field by field, `box_average_rgb10a2`) or stored as RGBA8
+     * (the fallback). */
     if let Some(e) = es3_formats::by_index(t.es3_fmt) {
-        if e.internalformat != GL_RGB10_A2 || t.texfmt != GLES_TEXFMT_RGBA8 {
+        if e.internalformat != GL_RGB10_A2 || !matches!(t.texfmt, GLES_TEXFMT_RGBA8 | GLES_TEXFMT_RGB10A2) {
             c.set_error(GL_INVALID_OPERATION, FUNC);
             return;
         }
@@ -4191,7 +4192,12 @@ pub unsafe extern "C" fn glGenerateMipmap(target: GLenum) {
     let filtered = !t.mem.cpu.is_null()
         && (matches!(
             t.texfmt,
-            GLES_TEXFMT_RGBA8 | GLES_TEXFMT_SRGB8_A8 | GLES_TEXFMT_RGBA16F | GLES_TEXFMT_R16F | GLES_TEXFMT_R32F
+            GLES_TEXFMT_RGBA8
+                | GLES_TEXFMT_SRGB8_A8
+                | GLES_TEXFMT_RGBA16F
+                | GLES_TEXFMT_R16F
+                | GLES_TEXFMT_R32F
+                | GLES_TEXFMT_RGB10A2
         ) || is_narrow_la(t.texfmt))
         && !t.external;
     if t.target == GL_TEXTURE_3D {
@@ -4313,6 +4319,9 @@ pub unsafe extern "C" fn glGenerateMipmap(target: GLenum) {
      * implementation, which samples in linear space, 3.8.16); alpha is
      * linear already */
     let srgb = t.texfmt == GLES_TEXFMT_SRGB8_A8;
+    /* the 10/10/10/2 word: one "channel" of 4 bytes below, averaged field
+     * by field rather than as a float (`box_average_rgb10a2`) */
+    let rgb10a2 = t.texfmt == GLES_TEXFMT_RGB10A2;
     let comps = if matches!(t.texfmt, GLES_TEXFMT_RGBA8 | GLES_TEXFMT_SRGB8_A8 | GLES_TEXFMT_RGBA16F) {
         4usize
     } else if is_narrow_la(t.texfmt) {
@@ -4320,7 +4329,7 @@ pub unsafe extern "C" fn glGenerateMipmap(target: GLenum) {
     } else {
         1
     };
-    let csize = bpp / comps; /* 1 (u8), 2 (half), 4 (float) */
+    let csize = bpp / comps; /* 1 (u8), 2 (half), 4 (float or the packed word) */
     let layers = t.layers.max(1) as usize;
     let (mut w, mut fh) = (t.width as usize, t.height as usize);
     /* a prefix the backend drew: start from its last level (RGBA8, one
@@ -4352,6 +4361,18 @@ pub unsafe extern "C" fn glGenerateMipmap(target: GLenum) {
             let sy0 = (y / dfh) * fh + (y % dfh) * sy;
 
             for x in 0..dw {
+                if rgb10a2 {
+                    let mut srcs = [0usize; 4];
+                    let mut k = 0;
+                    for j in 0..sy {
+                        for i in 0..sx {
+                            srcs[k] = src + ((sy0 + j) * sp + x * sx + i) * bpp;
+                            k += 1;
+                        }
+                    }
+                    box_average_rgb10a2(texels, dst + (y * dp + x) * bpp, &srcs[..k]);
+                    continue;
+                }
                 for ch in 0..comps {
                     let d = dst + (y * dp + x) * bpp + ch * csize;
                     let box_src = |j: usize, i: usize| src + ((sy0 + j) * sp + x * sx + i) * bpp + ch * csize;
@@ -4442,8 +4463,10 @@ fn generate_mipmap_3d(c: &mut GlContext, ti: usize, filtered: bool) {
             return;
         };
         let bpp = gles_texfmt_bytes(t.texfmt) as usize;
-        /* sRGB red, green and blue average in linear space, as in the 2D filter */
+        /* sRGB red, green and blue average in linear space, and the
+         * 10/10/10/2 word field by field, as in the 2D filter */
         let srgb = t.texfmt == GLES_TEXFMT_SRGB8_A8;
+        let rgb10a2 = t.texfmt == GLES_TEXFMT_RGB10A2;
         let comps = if matches!(t.texfmt, GLES_TEXFMT_RGBA8 | GLES_TEXFMT_SRGB8_A8 | GLES_TEXFMT_RGBA16F) {
             4usize
         } else if is_narrow_la(t.texfmt) {
@@ -4479,6 +4502,10 @@ fn generate_mipmap_3d(c: &mut GlContext, ti: usize, filtered: bool) {
                             }
                         }
                         let d = texel_offset_3d(t, l, x, y, z);
+                        if rgb10a2 {
+                            box_average_rgb10a2(texels, d, &srcs[..k]);
+                            continue;
+                        }
                         for ch in 0..comps {
                             box_average(texels, d + ch * csize, &srcs[..k], ch * csize, csize, srgb && ch < 3);
                         }
@@ -4498,6 +4525,28 @@ fn generate_mipmap_3d(c: &mut GlContext, ti: usize, filtered: bool) {
     /* GL's whole chain exists as far as completeness goes, held or not */
     t.level_defined = ((1u32 << n.min(15)) - 1) as u16;
     t.level_bad = 0;
+}
+
+/// The box filter of one texel of the RGB10A2 class (`GLES_TEXFMT_RGB10A2`:
+/// one little-endian word, red in the low 10 bits, alpha in the top 2,
+/// unsigned normalised): each of the four fields is the mean of that field
+/// over the texels at `srcs`, rounded half up as a byte channel is
+/// (`box_average`), and the word is packed again at `dst`. Averaging the
+/// word byte by byte would mix alpha's two bits with blue's, and as a float
+/// would be nonsense (docs/notes/v3d-rgb10a2.md (d)).
+fn box_average_rgb10a2(texels: &mut [u8], dst: usize, srcs: &[usize]) {
+    let n = srcs.len() as u32;
+    let mut sums = [0u32; 4];
+    for &s in srcs {
+        let w = u32::from_le_bytes([texels[s], texels[s + 1], texels[s + 2], texels[s + 3]]);
+        sums[0] += w & 0x3ff;
+        sums[1] += (w >> 10) & 0x3ff;
+        sums[2] += (w >> 20) & 0x3ff;
+        sums[3] += w >> 30;
+    }
+    let mean = |sum: u32| (sum + n / 2) / n;
+    let w = mean(sums[0]) | (mean(sums[1]) << 10) | (mean(sums[2]) << 20) | (mean(sums[3]) << 30);
+    texels[dst..dst + 4].copy_from_slice(&w.to_le_bytes());
 }
 
 /// One channel of the box filter: the mean of the `csize`-byte channel at
