@@ -15,10 +15,16 @@ use std::vec::Vec;
 use super::consts::*;
 use super::draw::texture_bind_2d;
 use super::es3_formats::{self, FORMATS};
+use super::framebuffer::{
+    fb_target_format, glBindFramebuffer, glBindRenderbuffer, glCheckFramebufferStatus, glFramebufferTexture2D,
+    glGenFramebuffers, glGenRenderbuffers, glGetFramebufferAttachmentParameteriv, glGetRenderbufferParameteriv,
+    glRenderbufferStorage, renderbuffer_surf_format,
+};
 use super::texture::*;
 use super::types::*;
 use crate::backend::{
-    gles_texfmt_bit, GLES_TEXFMT_RGBA16F, GLES_TEXFMT_RGBA8, TEST_EXTRA_SAMPLED, TEST_HIDDEN_SAMPLED,
+    gles_texfmt_bit, rt_format_drawable, GLES_SURF_RGB10_A2, GLES_SURF_RGBA8888, GLES_TEXFMT_RGB10A2,
+    GLES_TEXFMT_RGBA16F, GLES_TEXFMT_RGBA8, TEST_EXTRA_SAMPLED, TEST_HIDDEN_SAMPLED,
 };
 use crate::testutil::TestGl;
 
@@ -434,6 +440,174 @@ fn generate_mipmap_follows_renderable_and_filterable() {
         unsafe { glGenerateMipmap(GL_TEXTURE_2D) };
         assert_eq!(gl.error(), GL_INVALID_OPERATION);
     }
+}
+
+/// The bit of the RGB10A2 class: a back end that samples it renders
+/// `GLES_SURF_RGB10_A2` (`rt_format_drawable`, docs/notes/v3d-rgb10a2.md).
+const RGB10A2: u32 = gles_texfmt_bit(GLES_TEXFMT_RGB10A2);
+
+/// glGetRenderbufferParameteriv of the bound renderbuffer; -1 when nothing
+/// was written.
+fn rb_param(pname: GLenum) -> GLint {
+    let mut v: GLint = -1;
+    // SAFETY: `v` is a writable GLint.
+    unsafe { glGetRenderbufferParameteriv(GL_RENDERBUFFER, pname, &mut v) };
+    v
+}
+
+/// glGetFramebufferAttachmentParameteriv of colour attachment 0; -1 when
+/// nothing was written.
+fn fb_param(pname: GLenum) -> GLint {
+    let mut v: GLint = -1;
+    // SAFETY: `v` is a writable GLint.
+    unsafe { glGetFramebufferAttachmentParameteriv(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, pname, &mut v) };
+    v
+}
+
+/// A GL_RGB10_A2 renderbuffer is the 10/10/10/2 surface, and says so in its
+/// sizes, exactly where the back end samples the class; elsewhere it stays
+/// RGBA8888 and says eight bits a channel, as before (ES 3.0 6.1.15 asks for
+/// the stored resolution).
+#[test]
+fn rgb10a2_renderbuffer_is_the_ten_bit_surface_where_the_class_is_sampled() {
+    if crate::REPORT_ES2 {
+        return;
+    }
+    let gl = TestGl::new(4, 4);
+    let mut rb: GLuint = 0;
+    // SAFETY: room for one name; plain GL calls.
+    unsafe {
+        glGenRenderbuffers(1, &mut rb);
+        glBindRenderbuffer(GL_RENDERBUFFER, rb);
+    }
+    {
+        let _s = Sampled::also(RGB10A2);
+        assert!(rt_format_drawable(GLES_SURF_RGB10_A2), "the class's bit makes the surface drawable");
+        assert_eq!(renderbuffer_surf_format(GL_RGB10_A2), GLES_SURF_RGB10_A2);
+        // SAFETY: plain GL call.
+        unsafe { glRenderbufferStorage(GL_RENDERBUFFER, GL_RGB10_A2, 4, 4) };
+        assert_eq!(gl.error(), GL_NO_ERROR);
+        let sizes = [
+            GL_RENDERBUFFER_RED_SIZE,
+            GL_RENDERBUFFER_GREEN_SIZE,
+            GL_RENDERBUFFER_BLUE_SIZE,
+            GL_RENDERBUFFER_ALPHA_SIZE,
+        ]
+        .map(rb_param);
+        assert_eq!(sizes, [10, 10, 10, 2], "the stored resolution");
+        assert_eq!(rb_param(GL_RENDERBUFFER_INTERNAL_FORMAT), GL_RGB10_A2 as GLint);
+        /* four bytes a pixel, as RGBA8: the same storage size */
+        let m = gl.ctx().objs().renderbuffers[rb as usize].mem;
+        assert!(m.size >= 4 * 4 * 4, "{} bytes", m.size);
+    }
+    {
+        let _s = Sampled::none_new();
+        assert!(!rt_format_drawable(GLES_SURF_RGB10_A2), "no bit, no surface");
+        assert_eq!(renderbuffer_surf_format(GL_RGB10_A2), GLES_SURF_RGBA8888);
+        // SAFETY: plain GL call.
+        unsafe { glRenderbufferStorage(GL_RENDERBUFFER, GL_RGB10_A2, 4, 4) };
+        assert_eq!(gl.error(), GL_NO_ERROR);
+        let sizes = [
+            GL_RENDERBUFFER_RED_SIZE,
+            GL_RENDERBUFFER_GREEN_SIZE,
+            GL_RENDERBUFFER_BLUE_SIZE,
+            GL_RENDERBUFFER_ALPHA_SIZE,
+        ]
+        .map(rb_param);
+        assert_eq!(sizes, [8, 8, 8, 8], "held as RGBA8");
+    }
+}
+
+/// A GL_RGB10_A2 texture in its own class is a complete colour attachment
+/// (ES 3.0 table 3.13: colour-renderable), rendered as `GLES_SURF_RGB10_A2`,
+/// its attachment sizes 10/10/10/2 and its component type unsigned
+/// normalised. The same texture held as RGBA8 (no bit) is complete too, as
+/// before, and rendered as RGBA8888.
+#[test]
+fn rgb10a2_texture_is_a_complete_colour_attachment_in_its_class() {
+    if crate::REPORT_ES2 {
+        return;
+    }
+    let gl = TestGl::new(4, 4);
+    let words = [0u32; 16];
+    let bytes: Vec<u8> = words.iter().flat_map(|w| w.to_ne_bytes()).collect();
+    let mut fb: GLuint = 0;
+    // SAFETY: room for one name; plain GL calls.
+    unsafe {
+        glGenFramebuffers(1, &mut fb);
+        glBindFramebuffer(GL_FRAMEBUFFER, fb);
+    }
+    for (on, texfmt, surf, sizes) in [
+        (true, GLES_TEXFMT_RGB10A2, GLES_SURF_RGB10_A2, [10, 10, 10, 2]),
+        (false, GLES_TEXFMT_RGBA8, GLES_SURF_RGBA8888, [8, 8, 8, 8]),
+    ] {
+        let _s = if on { Sampled::also(RGB10A2) } else { Sampled::none_new() };
+        let name = new_tex(GL_TEXTURE_2D);
+        tex_image_2d(GL_RGB10_A2, 4, 4, GL_RGBA, GL_UNSIGNED_INT_2_10_10_10_REV, &bytes);
+        assert_eq!(gl.error(), GL_NO_ERROR);
+        assert_eq!(first_row(&gl, name, 1).1, texfmt, "class on {on}");
+        // SAFETY: plain GL calls.
+        unsafe {
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, name, 0);
+            assert_eq!(gl.error(), GL_NO_ERROR);
+            assert_eq!(glCheckFramebufferStatus(GL_FRAMEBUFFER), GL_FRAMEBUFFER_COMPLETE, "class on {on}");
+        }
+        assert_eq!(fb_target_format(gl.ctx()), surf, "class on {on}");
+        let got = [
+            GL_FRAMEBUFFER_ATTACHMENT_RED_SIZE,
+            GL_FRAMEBUFFER_ATTACHMENT_GREEN_SIZE,
+            GL_FRAMEBUFFER_ATTACHMENT_BLUE_SIZE,
+            GL_FRAMEBUFFER_ATTACHMENT_ALPHA_SIZE,
+        ]
+        .map(fb_param);
+        assert_eq!(got, sizes, "class on {on}");
+        assert_eq!(fb_param(GL_FRAMEBUFFER_ATTACHMENT_COMPONENT_TYPE), GL_UNSIGNED_NORMALIZED as GLint);
+        assert_eq!(fb_param(GL_FRAMEBUFFER_ATTACHMENT_COLOR_ENCODING), GL_LINEAR as GLint);
+        assert_eq!(gl.error(), GL_NO_ERROR);
+        // SAFETY: plain GL calls.
+        unsafe {
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, 0, 0);
+            glDeleteTextures(1, &name);
+        }
+    }
+}
+
+/// glGenerateMipmap of a GL_RGB10_A2 texture in its own class (renderable
+/// and filterable, ES 3.0 3.8.14) box-filters the 10/10/10/2 word field by
+/// field, each field rounded half up as a byte channel is, never byte by
+/// byte (alpha's two bits would mix with blue's) and never through the back
+/// end's RGBA8 chain.
+#[test]
+fn generate_mipmap_of_an_rgb10a2_texture_averages_each_field() {
+    if crate::REPORT_ES2 {
+        return;
+    }
+    let gl = TestGl::new(4, 4);
+    let _s = Sampled::also(RGB10A2);
+    let name = new_tex(GL_TEXTURE_2D);
+    let word = |r: u32, g: u32, b: u32, a: u32| r | (g << 10) | (b << 20) | (a << 30);
+    /* r {1023, 0, 10, 20} -> 263.25 -> 263; g {512, 513, 514, 515} -> 513.5
+     * -> 514; b {0, 1, 1, 1} -> 0.75 -> 1; a {3, 2, 2, 0} -> 1.75 -> 2 */
+    let texels = [word(1023, 512, 0, 3), word(0, 513, 1, 2), word(10, 514, 1, 2), word(20, 515, 1, 0)];
+    let bytes: Vec<u8> = texels.iter().flat_map(|w| w.to_le_bytes()).collect();
+    tex_image_2d(GL_RGB10_A2, 2, 2, GL_RGBA, GL_UNSIGNED_INT_2_10_10_10_REV, &bytes);
+    assert_eq!(gl.error(), GL_NO_ERROR);
+    assert_eq!(first_row(&gl, name, 1).1, GLES_TEXFMT_RGB10A2, "in its class");
+    // SAFETY: plain GL call.
+    unsafe { glGenerateMipmap(GL_TEXTURE_2D) };
+    assert_eq!(gl.error(), GL_NO_ERROR, "renderable and filterable");
+    let (m, off, levels) = {
+        let t = &gl.ctx().objs().textures[name as usize];
+        (t.mem, t.level_off[1] as usize, t.levels)
+    };
+    assert_eq!(levels, 2, "the chain of a 2x2 image");
+    let all = gl.gpu_bytes(m.gpu, m.size);
+    let level1 = u32::from_le_bytes([all[off], all[off + 1], all[off + 2], all[off + 3]]);
+    assert_eq!(
+        (level1 & 0x3ff, (level1 >> 10) & 0x3ff, (level1 >> 20) & 0x3ff, level1 >> 30),
+        (263, 514, 1, 2),
+        "level 1 word {level1:#010x}"
+    );
 }
 
 /// A level of another ES 3.0 format than level 0 leaves the chain bad,
