@@ -201,7 +201,7 @@ After Z3 the kernel side must ping at least every 12 s (`PING_INTERVAL_MS`).
 - **Done: the all-section AS0 map** (8c8b8581):
   `board::nanopc_t6_sections` and `board::nanopc_t6_mmu`, in the next list.
 - **Done: the Zephyr probe and its FFI entry.**
-  `tools/probes/nanopc_t6/t6_fw/src/main.c` (ceb971bb scaffold, 4f042566
+  `tools/probes/nanopc_t6/t6_fw/src/main.c` (ceb971bb scaffold, 29756d0e
   the call) embeds `mali_csffw_blob.h`, owns the backing of every loaded
   section inside the image and the `__nocache` shared section, and prints
   the record; `yd_t6_fw_up` (c022cbfc, over `board::nanopc_t6_fw`,
@@ -1837,7 +1837,7 @@ whether the firmware rewrites the control block's pages and strides.
 The probe's own `t6_fw:` lines carry them.
 
 **Expected uart2 record**, typed from the printk formats of
-`tools/probes/nanopc_t6/t6_fw/src/main.c` (4f042566), in the order the
+`tools/probes/nanopc_t6/t6_fw/src/main.c` (29756d0e), in the order the
 probe prints them. `<…>` is a value the board gives (not predicted),
 `…` the rest of a value that is not predicted; `%p` addresses are the
 image's. Z1's and Z2's own lines are not repeated: `yd_t6_fw_up` runs them
