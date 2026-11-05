@@ -17,6 +17,9 @@
 //! addresses), and the registers the draw moves for its counts (r33 the
 //! index count, r34 INSTANCE_COUNT, r35 the index offset, r36 the vertex
 //! offset, r39 the indices' bytes).
+//!
+//! Divisor 2 is case 141's (es3instdiv) draw against its drm-shim reference
+//! (tools/mali/testdata/instdiv_141_es3instdiv.expect.json).
 
 use super::arena::Arena;
 use super::cs::{Instr, Stream};
@@ -222,10 +225,69 @@ fn the_dump_folds_an_instance_offset_into_the_buffer() {
     assert_eq!(buffer(2), (INSTANCES + 8, 952));
 }
 
-/// A divisor other than 1 is refused by name, before any word: the dump
-/// shows divisor 1 only.
+/// Little-endian bytes of 32-bit words, a descriptor as the note's tables
+/// spell it.
+fn le(words: &[u32]) -> Vec<u8> {
+    words.iter().flat_map(|w| w.to_le_bytes()).collect()
+}
+
+/// Divisor 2 is case 141's (es3instdiv) one draw of 4 instances, its
+/// Attributes and Buffers Mesa 26.2.1's on drm-shim
+/// (tools/mali/testdata/instdiv_141_es3instdiv.expect.json,
+/// docs/notes/mali-frame-refusals.md section 8): `pos` per vertex (6 x 16
+/// bytes), `offs` and `icol` at offsets 0 and 8 of two 24-byte records,
+/// `1D POT Divisor` with `Divisor R` 1, and INSTANCE_COUNT 4. The addresses
+/// are the run's allocation, so the Buffers are compared with ours. A
+/// divisor past `MAX_INSTANCE_DIVISOR` (3 not a power of two, 4 above it)
+/// is refused by name, before any word.
 #[test]
-fn a_divisor_other_than_one_is_refused() {
-    assert_eq!(build(8, &attributes(2)), Err(FrameError::NotBuilt(NOT_BUILT_INSTANCE_DIVISOR)));
-    assert!(build(8, &attributes(1)).is_ok());
+fn a_divisor_of_two_is_case_141_s() {
+    let instances = VertexBuffer { gpu: INSTANCES, size: 2 * 24 };
+    let attrs = [
+        VertexAttribute {
+            buffer: VertexBuffer { gpu: GRID, size: 6 * 16 },
+            offset: 0,
+            stride: 16,
+            components: 4,
+            instance_divisor: 0,
+        },
+        VertexAttribute { buffer: instances, offset: 0, stride: 24, components: 2, instance_divisor: 2 },
+        VertexAttribute { buffer: instances, offset: 8, stride: 24, components: 4, instance_divisor: 2 },
+    ];
+    let (words, desc) = build(4, &attrs).unwrap();
+    let mesa = le(&[
+        0x2fc0_0115,
+        0x0000_0002,
+        0,
+        0,
+        0x10,
+        0,
+        0,
+        0, // pos: 1D, Vertex
+        0x2bc0_4025,
+        0x0100_0042,
+        0,
+        1,
+        0x18,
+        0,
+        0,
+        0, // offs: 1D POT Divisor, Instance, Divisor R 1
+        0x2fc0_0025,
+        0x0100_0042,
+        0,
+        2,
+        0x18,
+        0,
+        0,
+        0, // icol: as offs, RGBA32F, buffer 2
+    ]);
+    assert!(find(&desc, &mesa).is_some(), "the three Attributes {mesa:02x?}");
+    let buffer = |gpu: u64, size: u32| [0x19, size, gpu as u32, (gpu >> 32) as u32, 0, 0, 0, 0];
+    let bufs = le(&[buffer(GRID, 0x60), buffer(INSTANCES, 0x30), buffer(INSTANCES + 8, 0x28)].concat());
+    assert!(find(&desc, &bufs).is_some(), "the three Buffers {bufs:02x?}");
+    assert_eq!(regs_at_idvs(&words).get(&R_INSTANCE_COUNT), Some(&4), "r34");
+    for divisor in [3, 4] {
+        let refused = [attrs[0], VertexAttribute { instance_divisor: divisor, ..attrs[1] }, attrs[2]];
+        assert_eq!(build(4, &refused), Err(FrameError::NotBuilt(NOT_BUILT_INSTANCE_DIVISOR)), "divisor {divisor}");
+    }
 }

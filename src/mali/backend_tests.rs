@@ -884,6 +884,7 @@ fn each_refusal_is_the_exact_line_of_its_cause() {
         });
         let per_instance_staged = state(|d| (d.attribs[0].per_instance, d.attribs[0].divisor) = (1, 0));
         let divisor_two = state(|d| (d.attribs[0].per_instance, d.attribs[0].divisor, d.instance_count) = (1, 2, 4));
+        let divisor_three = state(|d| (d.attribs[0].per_instance, d.attribs[0].divisor, d.instance_count) = (1, 3, 4));
         let small_ds = {
             let mut d = with_ds(depth_test);
             d.ds_w = 32;
@@ -971,7 +972,8 @@ fn each_refusal_is_the_exact_line_of_its_cause() {
             ("an instanced draw is built", why(&instanced), built),
             ("a divisor-1 attribute in a buffer object, 40 instances, is built", why(&per_instance), built),
             ("a staged per-instance attribute (divisor 0 read as 1) is built", why(&per_instance_staged), built),
-            ("a divisor of 2", why(&divisor_two), not_built(frame::NOT_BUILT_INSTANCE_DIVISOR)),
+            ("a divisor of 2 is built (case 141)", why(&divisor_two), built),
+            ("a divisor of 3", why(&divisor_three), not_built(frame::NOT_BUILT_INSTANCE_DIVISOR)),
             ("a clear of a window target is built", why(&window_clear), built),
         ];
         /* the clear quad with no clear program */
