@@ -548,5 +548,18 @@ size, and the record's `Offset` stays 0. The format is the column's N floats
 components. The mat4 attribute table is 5 records (entry size 0xa0), the buffer table 5.
 The vertex program reads attribute `1 + c` for column c, so the compiler's
 `sc.attributes` needs one `(1 + c, 1 + c)` per column location read, not one
-per input (`fix-matattr-63`); whether the frame side already builds a record
-per bound array was not checked here.
+per input (`fix-matattr-63`).
+
+Done in `chain-80` (step A): `mod.rs` walks each attribute input's columns
+(`glsl::columns` of its GL type) and writes `(loc, loc)` for every column
+location the program reads; `other_63_matattr_is_byte_equal_to_mesa_26_2_1`
+(tests.rs) pins both programs and the five records against the reference's
+`attributes` table. The frame side needed no change for this: the GL core
+already splits a matrix into one staged attribute per column (`vertex_inputs`,
+src/gl/draw.rs, `vi_reg + k`), and `vertex_attributes` (src/mali/backend.rs)
+builds one Attribute and one Buffer record per compiler record, found by
+`vi_reg`. Its descriptors are not Mesa's bytes, though: the frame keeps the
+column's byte offset in the Attribute's `Offset` and the whole store in the
+Buffer, where Mesa folds the offset into the Buffer's address and size and
+leaves `Offset` 0. Both fetch the same data; matching Mesa's bytes there is
+frame work (#32).
