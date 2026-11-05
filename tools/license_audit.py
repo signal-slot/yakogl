@@ -40,7 +40,8 @@ Exit status is 0 unless --strict is given and there are findings
 findings).  --fail-on CLASS[,CLASS] makes only those classes count (check 25
 of tools/cts/cts-selftest.sh uses missing-spdx,unknown-id,third-party-mismatch,
 generated-mismatch: unused-license stays information until the owner decides
-the LicenseRef texts).
+the LicenseRef texts).  `--fail-on undecided` fails while any file is parked
+as `undecided`, so a new file cannot be parked unnoticed.
 
     tools/license_audit.py                 text report
     tools/license_audit.py --json          machine-readable
@@ -554,13 +555,18 @@ def self_test():
         with open(os.path.join(tmp, "tree", "new.rs"), "w") as f:
             f.write("fn main() {}\n")
         r_new = fail_on(os.path.join(tmp, "tree"), cl_allow, classes)
-    if r_bad == 0 or r_ok != 0 or r_new == 0:
+    r_und = fail_on(cl_tree, cl_allow, "undecided")
+    r_und0 = fail_on(os.path.join(FIXTURES, "basic", "tree"),
+                     os.path.join(FIXTURES, "basic", "allow.txt"), "undecided")
+    if r_bad == 0 or r_ok != 0 or r_new == 0 or r_und == 0 or r_und0 != 0:
         print("FAIL --fail-on: headerless=%d clean=%d clean+new.rs=%d "
-              "(want non-zero, 0, non-zero)" % (r_bad, r_ok, r_new))
+              "undecided=%d no-undecided=%d "
+              "(want non-zero, 0, non-zero, non-zero, 0)"
+              % (r_bad, r_ok, r_new, r_und, r_und0))
         failures += 1
     else:
         print("ok   --fail-on (a new source file without SPDX fails, "
-              "an undecided patch does not)")
+              "an undecided patch fails only under undecided)")
     print("self-test: %s" % ("FAILED" if failures else "passed"))
     return 1 if failures else 0
 
