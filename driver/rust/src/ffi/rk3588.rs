@@ -881,14 +881,15 @@ mod fw_tests {
         MODEL.with(|m| m.set(&t6));
         let o =
             fw_up_run(&t6, B, &blob, &bk, &mut pool, TABLES_PA, RK3588_TIMER_HZ, clean_model, no_delay, no_handover);
-        assert_eq!((o.step, o.stop, o.refusal), (fwb::STEP_NONE, 0, 0));
+        assert_eq!((o.step, o.stop, o.refusal, o.detail), (fwb::STEP_NONE, 0, 0, [0, 0]));
         assert_eq!((o.version, o.image_version, o.sections), (0x0105_0000, 0x0105_0000, 4));
         assert_eq!((o.ping_acked, o.mcu_status, o.tables_used), (1, 1, 7));
+        assert_eq!((o.gpu_id, o.flushed, o.clean_rc), (0xa867_0005, 4, 0));
         assert_eq!((o.glb_input, o.glb_output), (0x0400_2000, 0x0400_6000));
         // the backings' order is the file's: a short list is the placement's refusal
         let o =
             fw_up_run(&t6, B, &blob, &bk[..3], &mut pool, TABLES_PA, RK3588_TIMER_HZ, clean_ok, no_delay, no_handover);
-        assert_eq!(o.step, fwb::STEP_PLACE);
+        assert_eq!((o.step, o.detail), (fwb::STEP_PLACE, [3, 0]));
     }
 
     #[test]
