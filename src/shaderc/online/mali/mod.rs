@@ -1252,15 +1252,20 @@ fn compile_stage<'s>(
             });
         }
         /* the attribute records: one per location read, record = location
-         * (pan_shc's `attributes`) */
+         * (pan_shc's `attributes`); a matrix takes one location per column,
+         * each its own record (other_63_matattr: mat4 `a_xf` at 1 is
+         * records 1..4) */
         for d in m.inputs.iter() {
-            let ir_mod::IoSlot::Attrib(loc) = d.slot() else { continue };
-            let read = vs.order[..vs.len]
-                .iter()
-                .any(|&id| matches!(vs.nodes[id as usize].kind, nir::Kind::Input { loc: l, .. } if l == loc));
-            if read {
-                sc.attributes[sc.nattr] = (loc, loc);
-                sc.nattr += 1;
+            let ir_mod::IoSlot::Attrib(base) = d.slot() else { continue };
+            for loc in (0..glsl::columns(d.gl_type)).filter_map(|c| base.checked_add(c)) {
+                let read = vs.order[..vs.len]
+                    .iter()
+                    .any(|&id| matches!(vs.nodes[id as usize].kind, nir::Kind::Input { loc: l, .. } if l == loc));
+                if read {
+                    let slot = sc.attributes.get_mut(sc.nattr).ok_or(MaliError::Defect(Defect::IrIndex))?;
+                    *slot = (loc, loc);
+                    sc.nattr += 1;
+                }
             }
         }
         sc.varyings[0] = VaryingSlot { varying: None, comps: 4, section: Section::Position, offset: 0, mask: 0xf };

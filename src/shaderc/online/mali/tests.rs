@@ -5690,6 +5690,38 @@ fn the_chain_population_is_byte_equal_to_mesa_26_2_1() {
     assert!(failed.is_empty(), "{} of {} differ:\n{}", failed.len(), CHAIN_POPULATION.len(), failed.join("\n"));
 }
 
+/// The `attributes` table of an expect.json (`pan_ref_diff.py extract
+/// --attributes`): each Attribute record's (format, buffer index).
+fn attribute_records(json: &str) -> Vec<(String, u32)> {
+    let t = after(json, "attributes").expect("an attributes table");
+    let t = &t[..t.find(']').expect("the table's end")];
+    t.split('}')
+        .filter_map(|r| {
+            let format = after(r, "format")?.split('"').nth(1)?.to_string();
+            let buffer = after(r, "buffer")?.split(|c: char| !c.is_ascii_digit()).next()?.parse().ok()?;
+            Some((format, buffer))
+        })
+        .collect()
+}
+
+/// Case 63 matattr (docs/notes/mali-builtin-inputs.md, "Case 63 matattr:
+/// one attribute record per matrix column"): the mat4 pair drawn with every
+/// column location bound (gl_ref.py `--mat-columns`). Both programs, and
+/// one attribute record per column location read: record `i` is location
+/// `i` and Mesa's Buffer index `i`, its format the column's four floats.
+#[test]
+fn other_63_matattr_is_byte_equal_to_mesa_26_2_1() {
+    let json = td!("other_63_matattr.expect.json");
+    let (v, _) = compile_linked(td!("other_63_matattr.vert"), td!("other_63_matattr.frag"));
+    check_linked_for("other_63_matattr", td!("other_63_matattr.vert"), td!("other_63_matattr.frag"), json);
+    assert_eq!(v.info.attributes, [(0, 0), (1, 1), (2, 2), (3, 3), (4, 4)]);
+    /* `a_pos` and the mat4's columns are all four floats wide */
+    let ours: Vec<(String, u32)> =
+        v.info.attributes.iter().map(|&(_, rec)| ("RGBA32F RGBA".to_string(), u32::from(rec))).collect();
+    assert_eq!(ours, attribute_records(json));
+    assert_eq!(after(json, "attribute_buffers").expect("a buffer table").matches("\"size\"").count(), ours.len());
+}
+
 /// The corpus sources the chain references draw are the references'
 /// own (byte copies).
 #[test]

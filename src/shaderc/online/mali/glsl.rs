@@ -132,7 +132,7 @@ fn is_matrix(gl_type: u16) -> bool {
 }
 
 /// The columns of a matrix type (1 for any other).
-fn columns(gl_type: u16) -> u8 {
+pub(super) fn columns(gl_type: u16) -> u8 {
     use crate::gl::consts as gl;
     match gl_type as u32 {
         gl::GL_FLOAT_MAT2 | gl::GL_FLOAT_MAT2x3 | gl::GL_FLOAT_MAT2x4 => 2,
