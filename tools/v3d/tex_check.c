@@ -353,6 +353,48 @@ static void state_case(const char *name, uint32_t w, uint32_t h, uint32_t levels
 	state_case_srgb(name, w, h, levels, base, id, false);
 }
 
+/* A depth type our C reference has no row for. Two checks: Mesa's row for the
+ * depth format is the type, texel size, XXXX swizzle and return size the note
+ * says (so the later row has a reference to be held to), and our packer
+ * refuses a record of that type while it packs the same record with the
+ * colour row of the same texel size (the control). The second check passes
+ * only while the row is missing: it is the gap, named, and it fails the day
+ * the row lands, so the state_case row replaces it. */
+static void depth_gap_case(const char *name, const char *mesa_name, uint32_t type, uint32_t cpp,
+			   uint32_t return_size, enum v3d_tex_format_id like)
+{
+	struct mesa_fmt m;
+	struct v3d_tex_format f;
+	struct v3d_tex_layout l;
+	uint8_t out[V3D_TEX_STATE_BYTES];
+	char what[160];
+	bool have = mesa_v3d_format(mesa_name, &m) && m.in_table;
+
+	snprintf(what, sizeof(what), "texture state %s: Mesa's row is type %u, %u byte(s), XXXX, return %u",
+		 name, type, cpp, return_size);
+	check(have && m.type == type && m.cpp == cpp && m.return_size == return_size &&
+		      m.swizzle[0] == V3D_SWIZZLE_RED && m.swizzle[1] == V3D_SWIZZLE_RED &&
+		      m.swizzle[2] == V3D_SWIZZLE_RED && m.swizzle[3] == V3D_SWIZZLE_RED,
+	      what);
+
+	bool ok = v3d_tex_format_get(like, &f) && f.cpp == cpp && v3d_tex_layout(16, 16, 1, cpp, &l);
+	bool refused = false;
+	if (ok) {
+		struct v3d_tex_state s = { .base = 0x00920000u + l.slices[0].offset, .width = 16,
+					   .height = 16, .depth = 1, .type = f.type };
+		memcpy(s.swizzle, f.swizzle, 4);
+		v3d_tex_state_from_layout(&s, &l);
+		ok = v3d_tex_pack_state(out, &s);
+		s.type = type;
+		refused = !v3d_tex_pack_state(out, &s);
+	}
+	snprintf(what, sizeof(what), "texture state %s: GAP, our C reference has no row (type %u refused)",
+		 name, type);
+	check(ok && refused, what);
+	printf("tex_check: GAP: %s is not checked against Mesa's record: no row in driver/src/v3d/v3d_tex.c\n",
+	       name);
+}
+
 static void sampler_case(const char *name, const struct v3d_sampler *s,
 			 const struct V3D42_SAMPLER_STATE *m)
 {
@@ -389,6 +431,12 @@ static void part_records(void)
 	state_case("16x16 RGBA16UI", 16, 16, 1, 0x00800000u, V3D_TEX_FORMAT_RGBA16UI);
 	state_case("64x64 x7 RGBA32F", 64, 64, 7, 0x00810000u, V3D_TEX_FORMAT_RGBA32F);
 	state_case("13x7 RGBA32I", 13, 7, 1, 0x00900000u, V3D_TEX_FORMAT_RGBA32I);
+	/* the depth types of a shadow look-up (docs/notes/v3d-shadow.md (d)):
+	 * DEPTH24_X8 is the D24S8 row; DEPTH_COMP32F and DEPTH_COMP16 have no row
+	 * in our C reference, which the gap check names */
+	state_case("16x16 DEPTH24_X8 (D24S8)", 16, 16, 1, 0x00910000u, V3D_TEX_FORMAT_D24S8);
+	depth_gap_case("16x16 DEPTH_COMP32F", "Z32F", 23, 4, 32, V3D_TEX_FORMAT_R32F);
+	depth_gap_case("16x16 DEPTH_COMP16", "Z16", 21, 2, 32, V3D_TEX_FORMAT_R16F);
 
 	/* GL's defaults: min_lod -1000, max_lod 1000, no bias
 	 * (v3d_upload_sampler_state_variant with the clamps it applies) */
@@ -1933,6 +1981,7 @@ int main(void)
 	 * 1 control + 1 level-2 grid + 1 block-1 equality + 10 formats x 3
 	 * sizes tiled + 4 box cases x 2 (store, load) + 10 records + 4 layout
 	 * refusals + 1 layout + 8 texel/block refusals + 1 TFU refusal;
+	 * the depth records (1 DEPTH24_X8 state + 2 formats x 2 gap checks);
 	 * and the 4 population checks below */
 	const int part1 = (3 + 3 + 3 + 3 + 3 + 3) + (2 + 9) + (2 + 2) + (2 + 3) + (3 + 3) + 4 + 5;
 	const int part11 = (2 + 2 + 1) + (8 + 6 + 7 + 4) + 1 + 1 + 1 + 4 + 1 + 1 + 5;
@@ -1940,7 +1989,7 @@ int main(void)
 			   8 + 1;
 	const int planned = part1 + (1 + 13 * 5) + (1 + 15 + 3) + (9 * 5 * 2 + 8 * 2) +
 			    (V3D_TEX_FORMAT_COUNT * 2 + 2) + (108 + 4) + 5 +
-			    (1 + 12 + 2 + 9 + 2 + 3) + (3 + 4 + 1 + 4) + (6 * 4 + 5) + part11 + part12 + 4;
+			    (1 + 12 + 2 + 9 + 2 + 3) + (3 + 4 + 1 + 4) + (6 * 4 + 5) + part11 + part12 + (1 + 2 * 2) + 4;
 	/* the boxes part 4 must have stored: levels 1+1+3+6+1+1+9+2+2 = 26 of
 	 * the 9 sizes, x 5 cpp, x (7 fixed + 16 random) boxes a level */
 	const unsigned planned_boxes = 26 * 5 * (FIXED_BOXES + RANDOM_BOXES);
@@ -1977,6 +2026,8 @@ int main(void)
 
 	printf("tex_check: %u sub-image boxes stored, %llu image bytes compared with Mesa's\n",
 	       boxes_stored, (unsigned long long)box_bytes_compared);
+	printf("tex_check: depth formats: DEPTH24_X8 record checked; DEPTH_COMP32F and DEPTH_COMP16 "
+	       "GAP (Mesa's rows pinned, our C reference has none)\n");
 	printf("tex_check: %d checks run (planned %d), %d failed\n", checks, planned, failures);
 	return (failures == 0 && checks == planned) ? 0 : 1;
 }
