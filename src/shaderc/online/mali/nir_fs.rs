@@ -117,6 +117,20 @@ pub struct TexLookup {
     /// `texelFetch`), the dimension `2d.array_enable`, and the texels
     /// written those the colour reads ([`tex_mask`]).
     pub array: bool,
+    /// A 3D texture's look-up of a highp shader ([`walk_nodes`]; case 48
+    /// es3vol, texmore_48): its coordinate is [`TexCoord::Computed`], three
+    /// lanes (fp32 of `texture` and `textureLod`, integers of a
+    /// `texelFetch`), the dimension `3d`.
+    pub d3: bool,
+    /// `textureLod(s, p, 0.0)`: the level the constant 0, `ZERO_LOD` with
+    /// no level word ([`super::bir::LodMode::Zero`]; `nir_scalar_is_zero`,
+    /// pan_nir_lower_tex.c:929-930; texmore_48's `TEX_SINGLE ... .3d.zero`).
+    pub zero: bool,
+    /// `textureCube(s, dir, bias)`'s bias (case 101 cubebias), a mediump
+    /// uniform's lane, else undefined: `COMPUTED_BIAS`
+    /// ([`super::bir::LodMode::ComputedBias`]), the third staging word its
+    /// 8.8 form ([`select`]).
+    pub bias: Val,
     /// The IR instruction of the look-up.
     pub at: u16,
     /// The look-up's node (the texels' lanes).
@@ -134,7 +148,7 @@ pub struct TexLookup {
 impl TexLookup {
     /// A look-up at IR instruction `at`, its node `node`.
     fn new(sampler: u8, coord: TexCoord, cube: Option<Cube>, fetch: bool, at: usize, node: u16) -> TexLookup {
-        TexLookup { sampler, coord, cube, fetch, array: false, at: at as u16, node, index: 0, load: None, lanes: 0 }
+        TexLookup { sampler, coord, cube, fetch, at: at as u16, node, ..TexLookup::NONE }
     }
 
     const NONE: TexLookup = TexLookup {
@@ -143,6 +157,9 @@ impl TexLookup {
         cube: None,
         fetch: false,
         array: false,
+        d3: false,
+        zero: false,
+        bias: Val::Undef,
         at: 0,
         node: 0,
         index: 0,
@@ -154,7 +171,40 @@ impl TexLookup {
     pub fn live(&self) -> bool {
         self.lanes != 0
     }
+
+    /// Its level comes from the derivatives (`COMPUTED_LOD`, or
+    /// `COMPUTED_BIAS`; `bi_instr_uses_helpers`): neither a fetch, nor a
+    /// level given.
+    pub fn computed(&self) -> bool {
+        (self.cube.is_none() && !self.fetch && !self.zero) || self.bias != Val::Undef
+    }
 }
+
+/// A `textureSize(s, 0)` the walk met ([`Fs::tex_size`]).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct SizeQuery {
+    /// The sampler binding.
+    pub sampler: u8,
+    /// The node of the descriptor's first eight bytes ([`Kind::TexDesc`]
+    /// at byte 0).
+    pub node: u16,
+    /// The size's lanes (the join's values; the third undefined for a 2D
+    /// texture).
+    pub out: [Val; 3],
+    /// The descriptor index of its sampler ([`tex_handle`]), set by
+    /// [`layout`].
+    pub index: u8,
+    /// The colour reads a lane of it ([`layout`]; Mesa's DCE takes the
+    /// query, its `if` and its loads when none is read).
+    pub live: bool,
+}
+
+impl SizeQuery {
+    const NONE: SizeQuery = SizeQuery { sampler: 0, node: 0, out: [Val::Undef; 3], index: 0, live: false };
+}
+
+/// The size queries one fragment shader may make (texmore_46 makes two).
+pub const MAX_SIZE_QUERIES: usize = 8;
 
 /// The look-ups one fragment shader may make (femtovg's filter_image makes
 /// 49: one, then two in each of 24 unrolled passes,
@@ -376,36 +426,47 @@ pub fn order_keys(m: &Module<'_>, keys: &mut [u32]) {
             continue;
         }
         keys[i] = keys[i].min((i as u32) << 16 | i as u32);
-        /* each value is pushed once (`under`), so the stack holds them all */
+        /* each value is pushed once (`under`), so the stack holds them all;
+         * with each, the place its key takes: its own index, or, inside a
+         * grafted local's tree, the index of the read the tree was grafted
+         * into (glsl_to_nir visits the grafted rvalue where the
+         * dereference stood: texmore_48's `a` and `f`, `textureLod` and
+         * `texelFetch` of earlier statements, are emitted after the
+         * `texture` the colour's constructor names first, texmore_48.stderr
+         * `%22`-`%25`) */
         let mut under = [false; MAX_VALUES];
-        let mut stack = [0u32; MAX_VALUES];
+        let mut stack = [(0u32, u32::MAX); MAX_VALUES];
         let mut sp = 1;
-        stack[0] = root.0;
+        stack[0] = (root.0, u32::MAX);
         while sp > 0 {
             sp -= 1;
-            let v = stack[sp] as usize;
+            let (v, pos) = stack[sp];
+            let v = v as usize;
             if v >= n || under[v] {
                 continue;
             }
             under[v] = true;
-            keys[v] = keys[v].min((i as u32) << 16 | v as u32);
-            let mut child = |x: u32| {
+            let at = if pos == u32::MAX { v as u32 } else { pos };
+            keys[v] = keys[v].min((i as u32) << 16 | at);
+            let mut child = |x: u32, pos: u32| {
                 if (x as usize) < n && !under[x as usize] && sp < stack.len() {
-                    stack[sp] = x;
+                    stack[sp] = (x, pos);
                     sp += 1;
                 }
             };
             match m.instrs[v] {
-                ir::Op::Alu(a, srcs) => srcs.iter().take(a.arity()).for_each(|s| child(s.val.0)),
+                ir::Op::Alu(a, srcs) => srcs.iter().take(a.arity()).for_each(|s| child(s.val.0, pos)),
                 /* a look-up's coordinate is visited as its child */
-                ir::Op::Tex { coord, .. } => child(coord.val.0),
+                ir::Op::Tex { coord, .. } => child(coord.val.0, pos),
                 /* and an indexed uniform read's index (builtin_45's `idx +
                  * i`, an int sum the walk keeps as a node) */
-                ir::Op::LoadUniformIdx { index, .. } => child(index.val.0),
-                /* a grafted local's one read is its stored tree */
+                ir::Op::LoadUniformIdx { index, .. } => child(index.val.0, pos),
+                /* a grafted local's one read is its stored tree, placed at
+                 * the read (an outer read's place holds for a tree grafted
+                 * into a grafted tree) */
                 ir::Op::LoadLocal { local, index: None, .. } => {
                     if let Some(src) = grafted.get(local.0 as usize).copied().flatten() {
-                        child(src.0)
+                        child(src.0, if pos == u32::MAX { v as u32 } else { pos })
                     }
                 }
                 _ => {}
@@ -440,9 +501,18 @@ fn grafted_locals(m: &Module<'_>, n: usize) -> [Option<ir::ValueId>; MAX_LOCALS]
         if st > ld || !matches!(m.instrs[ld], ir::Op::LoadLocal { index: None, .. }) {
             continue;
         }
-        /* a whole assignment, read with the identity swizzle */
+        /* a whole assignment, read with the identity swizzle; or one lane
+         * of a 2D array's or 3D texture's look-up (`float a =
+         * textureLod(vol, p, 0.0).r`, texmore_48: an `ir_swizzle` of the
+         * `ir_texture`, one rvalue, grafted as the look-up itself is) */
         let comps = m.comps_of(src.val) as usize;
-        if write_mask != (1u8 << comps) - 1 || (0..comps).any(|c| src.swizzle[c] as usize != c) {
+        let whole = write_mask == (1u8 << comps) - 1 && (0..comps).all(|c| src.swizzle[c] as usize == c);
+        let texel = write_mask.count_ones() == 1
+            && matches!(
+                m.instrs.get(src.val.0 as usize),
+                Some(ir::Op::Tex { dim: ir::TexDim::D2Array | ir::TexDim::D3, .. })
+            );
+        if !whole && !texel {
             continue;
         }
         /* the locals the tree reads, none stored in between; a tree of
@@ -464,11 +534,13 @@ fn grafted_locals(m: &Module<'_>, n: usize) -> [Option<ir::ValueId>; MAX_LOCALS]
                         }
                     }
                 }
-                /* a 2D array's look-up (an `ir_texture`, grafted as any
-                 * rvalue: case 42's `t` and `f`, whose `tex` and `txf` stand
-                 * at the colour's store in intbig_case42.stderr, after the
-                 * fetch's coordinates) */
-                Some(ir::Op::Tex { dim: ir::TexDim::D2Array, coord, .. }) => {
+                /* a 2D array's or a 3D texture's look-up (an `ir_texture`,
+                 * grafted as any rvalue: case 42's `t` and `f`, whose `tex`
+                 * and `txf` stand at the colour's store in
+                 * intbig_case42.stderr, after the fetch's coordinates;
+                 * texmore_48's `a` and `f`, whose `txl` and `txf` follow the
+                 * `texture` the constructor names first) */
+                Some(ir::Op::Tex { dim: ir::TexDim::D2Array | ir::TexDim::D3, coord, .. }) => {
                     stack[sp] = coord.val.0;
                     sp += 1;
                 }
@@ -775,6 +847,10 @@ pub struct Fs<'s> {
     /// .reserved.32.2d.computed @r0:r1:r2:r3`).
     look_ups: [TexLookup; MAX_LOOK_UPS],
     nlook: usize,
+    /// The size queries the shader makes, in the walk's order
+    /// ([`Fs::tex_size`]).
+    sizes: [SizeQuery; MAX_SIZE_QUERIES],
+    nsizes: usize,
     /// The rows of emit.rs selected ([`emit::bit`]).
     pub rows: u128,
     /// The pair nodes the colour took (its use of [`MAX_PAIRS`]).
@@ -2415,6 +2491,125 @@ impl<'s> Fs<'s> {
         Ok(())
     }
 
+    /// `textureSize(s, 0)` of a 2D, 2D array or 3D texture at IR
+    /// instruction `at`, as `va_lower_tex_query` lowers `txs` on v10
+    /// (`pan_nir_load_va_tex_size`, pan_nir.h:105-140): the descriptor's
+    /// first eight bytes loaded through the table handle ([`Kind::TexDesc`]
+    /// at byte 0), then `if (!is_null)` on its first half, the then side
+    /// `u2u32` of the width and height halves (`extract_u16` of the second
+    /// word) and, for a 3D texture or an array, of the depth or layer count
+    /// loaded at byte 28 or 24 (that load sunk to just before its `u2u32`,
+    /// `nir_opt_sink` of `load_ssbo`), each plus one; the else side
+    /// nothing; a phi per lane with the constant 0 (texmore_46.stderr's
+    /// `%15`-`%24`, texmore_48.stderr's `%8`-`%15`). The `if` is built on
+    /// `inot(ieq)` ([`nir::IfRegion::inot`]): bifrost's peephole flattens it
+    /// to `bcsel(ieq, 0, size)` when its then side holds no load (the 2D
+    /// texture of texmore_46, case 42's array whose layer count is not
+    /// read: `CSEL.u32.eq`), and keeps its branch when it does (the array
+    /// of texmore_46, the volume of texmore_48). The compare stands after
+    /// the side's nodes in the order: where `nir_move_comparisons` leaves
+    /// it, before its first select, once flattened; a kept `if` tests it at
+    /// its block's end. A cube's size has no reference.
+    fn tex_size(&mut self, sampler: u8, dim: ir::TexDim, at: usize, out: &mut [Val; 4]) -> Result<(), MaliError> {
+        let u = Val::Undef;
+        if self.nir.nifs >= nir::MAX_IFS {
+            return Err(MaliError::BlockTableFull);
+        }
+        if self.nsizes >= MAX_SIZE_QUERIES {
+            return Err(MaliError::TexCount);
+        }
+        let extra = match dim {
+            ir::TexDim::D2 => None,
+            ir::TexDim::D3 => Some(7 * 4),
+            ir::TexDim::D2Array => Some(6 * 4),
+            ir::TexDim::Cube => return Err(MaliError::TexKind),
+        };
+        let first = self.nir.n;
+        let before = self.nir.cur;
+        let d = NirNode { kind: Kind::TexDesc { sampler, byte: 0 }, src: [u; 3], bits: 32, width: 2 };
+        let d = self.nir.push_node(d)?;
+        let then_first = self.nir.new_block(before)?;
+        self.nir.cur = then_first;
+        let w = self.int32(Alu::Extract16(0), [Val::Lane(d, 1), u, u], at)?;
+        let h = self.int32(Alu::Extract16(1), [Val::Lane(d, 1), u, u], at)?;
+        let e = match extra {
+            Some(byte) => {
+                let l = NirNode { kind: Kind::TexDesc { sampler, byte }, src: [u; 3], bits: 16, width: 1 };
+                let l = self.nir.push_node(l)?;
+                self.int32(Alu::U2u32, [Val::Lane(l, 0), u, u], at)?
+            }
+            None => u,
+        };
+        let w = self.int32(Alu::Iadd, [w, Val::Const(1), u], at)?;
+        let h = self.int32(Alu::Iadd, [h, Val::Const(1), u], at)?;
+        let e = match e {
+            Val::Undef => u,
+            e => self.int32(Alu::Iadd, [e, Val::Const(1), u], at)?,
+        };
+        let then_last = self.nir.cur;
+        let else_first = self.nir.new_block(before)?;
+        self.nir.cur = before;
+        let cond = NirNode {
+            kind: Kind::Alu(Alu::Icmp(Cmpf::Ne)),
+            src: [Val::Lane(d, 0), Val::Const(0), u],
+            bits: 16,
+            width: 1,
+        };
+        let cond = Val::Lane(self.nir.push_node(cond)?, 0);
+        let after = self.nir.new_block(before)?;
+        self.nir.cur = after;
+        let mut outs = [u; 3];
+        for (o, v) in outs.iter_mut().zip([w, h, e]) {
+            if v != Val::Undef {
+                *o = self.phi(v, Val::Const(0), at)?;
+            }
+        }
+        for id in first..self.nir.n {
+            self.origin[id] = at as u16;
+        }
+        let seq = self.nir.nseq;
+        self.nir.nseq += 1;
+        self.nir.ifs[self.nir.nifs] = nir::IfRegion {
+            cond,
+            before,
+            then_first,
+            then_last,
+            else_first,
+            else_last: else_first,
+            after,
+            live: true,
+            guard: false,
+            brk: None,
+            seq,
+            single: false,
+            inot: true,
+        };
+        self.nir.nifs += 1;
+        self.sizes[self.nsizes] = SizeQuery { sampler, node: d, out: outs, index: 0, live: false };
+        self.nsizes += 1;
+        out[..3].copy_from_slice(&outs);
+        Ok(())
+    }
+
+    /// The size query whose first-eight-bytes node is `n`, if one's is.
+    fn size_of(&self, n: u16) -> Option<usize> {
+        self.sizes[..self.nsizes].iter().position(|q| q.node == n)
+    }
+
+    /// The sampler bindings the program reads, each with its descriptor
+    /// index ([`layout`] numbers them: a live look-up's or size query's
+    /// sampler, by binding), in index order.
+    pub fn bound_samplers(&self) -> impl Iterator<Item = (u8, u8)> + '_ {
+        let looks = self.live_look_ups().map(|(_, t)| (t.index, t.sampler));
+        let sizes = self.sizes[..self.nsizes].iter().filter(|q| q.live).map(|q| (q.index, q.sampler));
+        looks.chain(sizes)
+    }
+
+    /// The descriptor index of `sampler` ([`Fs::bound_samplers`]).
+    fn sampler_index(&self, sampler: u8) -> Result<u8, MaliError> {
+        self.bound_samplers().find(|&(_, s)| s == sampler).map(|(i, _)| i).ok_or(MaliError::TexKind)
+    }
+
     /// The component of the run-time indexed vec4 element a lane is, if it
     /// is one.
     fn ubo_lane(&self, v: Val) -> Option<u8> {
@@ -2497,6 +2692,8 @@ pub fn walk<'s>(m: &Module<'_>, scratch: &Arena<'s>, prec: FsPrecision) -> Resul
         prods: 0,
         look_ups: [TexLookup::NONE; MAX_LOOK_UPS],
         nlook: 0,
+        sizes: [SizeQuery::NONE; MAX_SIZE_QUERIES],
+        nsizes: 0,
         rows: 0,
         npairs: 0,
         frag_xy: None,
@@ -2792,6 +2989,7 @@ fn walk_if(
         brk,
         seq,
         single: matches!(exit, IfExit::Guard(Unroll { merged: true, .. })),
+        inot: false,
     };
     f.nir.nifs += 1;
     Ok(flow)
@@ -4157,6 +4355,42 @@ fn walk_nodes(
                     *o = Val::Lane(n, c as u8);
                 }
             }
+            /* `textureCube(s, dir, bias)` in a mediump shader (case 101
+             * cubebias, varyconst_101_cubebias.expect.json): the look-up at
+             * `COMPUTED_BIAS`, its third staging word `build_lod_bias_clamp`'s
+             * `pack_32_2x16(sfixed_8_8(bias), 0)` of the mediump uniform
+             * widened (pan_nir_lower_tex.c:144-149, :938-940: `F16_TO_F32
+             * r2, u2.w0.h0` then the 8.8 chain, [`select`]); the direction's
+             * lanes as a cube's at level 0, raw varying lanes and the
+             * link's constant among them. A bias that is no uniform lane, or
+             * a highp shader's: no reference */
+            ir::Op::Tex {
+                dim: ir::TexDim::Cube,
+                shadow: false,
+                proj: false,
+                ret: ir::ScalarType::F32,
+                sampler,
+                coord,
+                lod: ir::TexLod::Bias(bias),
+                offset: None,
+            } if !prec.highp => {
+                let dir = [lane(vals, coord, 0), lane(vals, coord, 1), lane(vals, coord, 2)];
+                let bias = lane(vals, bias, 0);
+                if dir.contains(&Val::Undef) || dir.iter().all(|v| matches!(v, Val::Const(_))) {
+                    return Err(MaliError::TexCoord);
+                }
+                if f.uniform_dword(bias).is_none() {
+                    return Err(MaliError::TexKind);
+                }
+                let n = f.nir.push_node(NirNode { kind: Kind::Tex, src: dir, bits: 16, width: 1 })?;
+                f.origin[n as usize] = at as u16;
+                let mut t = TexLookup::new(sampler, TexCoord::Computed, Some(Cube { explicit: false }), false, at, n);
+                t.bias = bias;
+                f.push_look_up(t)?;
+                for (c, o) in out.iter_mut().enumerate() {
+                    *o = Val::Lane(n, c as u8);
+                }
+            }
             /* `texelFetch(s, ivec2, 0)` of a highp shader: Mesa's `txf`,
              * `TEX_FETCH` on the coordinate's two integer words with no
              * level word (fbload_fbload.expect.json, of a `sampler2D`;
@@ -4233,38 +4467,58 @@ fn walk_nodes(
                     *o = Val::Lane(n, c as u8);
                 }
             }
-            /* `textureSize` of a 2D array at level 0 in a mediump shader
-             * (case 42): `pan_nir_load_va_tex_size` (pan_nir.h:106-140),
-             * the descriptor's first eight bytes ([`Kind::TexDesc`]), its
-             * width and height halves `u2u32` plus one, each selected
-             * against 0 by the null test of its first half (`ieq_pan` at 16
-             * bits, the `if` NIR flattens to `bcsel_pan`), in
-             * intbig_case42.stderr's order (`%7`..`%18`). The layer count
-             * (byte 24) is read by no reference */
-            ir::Op::TexSize { sampler, dim: ir::TexDim::D2Array, lod } if !prec.highp => {
+            /* `texture`, `textureLod(.., 0.0)` and `texelFetch(.., 0)` of
+             * a `sampler3D` in a highp shader (case 48 es3vol, case 206;
+             * texmore_48, docs/notes/mali-texture-lookups.md 3): `TEX_SINGLE
+             * .3d` of the three fp32 lanes at the computed level or at
+             * `zero`, `TEX_FETCH .3d` of the three integers; the texels
+             * 32-bit for a highp sampler. Another level, a bias, an
+             * integer sampler: no reference */
+            ir::Op::Tex {
+                dim: ir::TexDim::D3,
+                shadow: false,
+                proj: false,
+                ret: ir::ScalarType::F32,
+                sampler,
+                coord,
+                lod,
+                offset: None,
+            } if prec.highp => {
+                let (fetch, zero) = match lod {
+                    ir::TexLod::Implicit => (false, false),
+                    ir::TexLod::Lod(level) if lane(vals, level, 0) == Val::Const(0) => (false, true),
+                    ir::TexLod::Fetch(level) if lane(vals, level, 0) == Val::Const(0) => (true, false),
+                    _ => return Err(MaliError::TexKind),
+                };
+                let mut src = [Val::Undef; 3];
+                for (c, s) in src.iter_mut().enumerate() {
+                    let v = lane(vals, coord, c);
+                    if v == Val::Undef {
+                        return Err(MaliError::TexCoord);
+                    }
+                    f.mark_mixed(v);
+                    *s = v;
+                }
+                let bits = if prec.highp_samplers >> (sampler & 31) & 1 != 0 { 32 } else { 16 };
+                let n = f.nir.push_node(NirNode { kind: Kind::Tex, src, bits, width: 1 })?;
+                f.origin[n as usize] = at as u16;
+                let mut t = TexLookup::new(sampler, TexCoord::Computed, None, fetch, at, n);
+                t.d3 = true;
+                t.zero = zero;
+                f.push_look_up(t)?;
+                for (c, o) in out.iter_mut().enumerate() {
+                    *o = Val::Lane(n, c as u8);
+                }
+            }
+            /* `textureSize` at level 0 of a 2D texture, a 2D array or a 3D
+             * texture ([`Fs::tex_size`]; case 42, texmore_46, texmore_48).
+             * `lower_txs_lod` makes another level's size a shift of this
+             * one (pan_compiler.c:120), which no reference draws */
+            ir::Op::TexSize { sampler, dim, lod } => {
                 if lane(vals, lod, 0) != Val::Const(0) {
                     return Err(MaliError::TexKind);
                 }
-                let u = Val::Undef;
-                let d = NirNode { kind: Kind::TexDesc { sampler }, src: [u; 3], bits: 32, width: 2 };
-                let d = f.nir.push_node(d)?;
-                f.origin[d as usize] = at as u16;
-                let w = f.int32(Alu::Extract16(0), [Val::Lane(d, 1), u, u], at)?;
-                let h = f.int32(Alu::Extract16(1), [Val::Lane(d, 1), u, u], at)?;
-                let w = f.int32(Alu::Iadd, [w, Val::Const(1), u], at)?;
-                let h = f.int32(Alu::Iadd, [h, Val::Const(1), u], at)?;
-                let null = NirNode {
-                    kind: Kind::Alu(Alu::Icmp(Cmpf::Eq)),
-                    src: [Val::Lane(d, 0), Val::Const(0), u],
-                    bits: 16,
-                    width: 1,
-                };
-                let null = Val::Lane(f.nir.push_node(null)?, 0);
-                if let Val::Lane(n, _) = null {
-                    f.origin[n as usize] = at as u16;
-                }
-                out[0] = f.int32(Alu::Bcsel, [null, Val::Const(0), w], at)?;
-                out[1] = f.int32(Alu::Bcsel, [null, Val::Const(0), h], at)?;
+                f.tex_size(sampler, dim, at, &mut out)?;
             }
             ir::Op::Tex { sampler, coord, .. } => {
                 if !matches!(op.es100_tex(), Some((Es100Tex::Tex2D, None))) {
@@ -4301,7 +4555,6 @@ fn walk_nodes(
                     *o = Val::Lane(n, c as u8);
                 }
             }
-            ir::Op::TexSize { .. } => return Err(MaliError::TexKind),
             /* a `discard` outside `if (c) discard;` (unconditional, or in a
              * block with other statements): `demote`'s `DISCARD.f32 0, 0
              * .eq`, which no reference draws */
@@ -5088,12 +5341,26 @@ pub fn layout(f: &mut Fs<'_>, m: &Module<'_>, order: Option<super::link::Varying
             *read.get_mut(loc as usize).ok_or(MaliError::VaryingLocation)? |= 0b11;
         }
     }
+    /* a size query the colour reads a lane of ([`SizeQuery::live`]) */
+    for k in 0..f.nsizes {
+        let outs = f.sizes[k].out;
+        f.sizes[k].live = outs.iter().any(|&o| o != Val::Undef && c.iter().any(|&root| reaches(f, root, o)));
+    }
     /* the descriptor index of each: its sampler's rank among the samplers
-     * the program reads, by binding (the declaration order; [`TEX_INDEX`]) */
+     * the program reads (a look-up's, a size query's: texmore_46 reads
+     * `tex` at 0 and `arr` at 1 with no look-up), by binding (the
+     * declaration order; [`TEX_INDEX`]) */
+    let read_sampler = |f: &Fs<'_>, x: u8| {
+        f.look_ups().iter().any(|t| t.live() && t.sampler == x)
+            || f.sizes[..f.nsizes].iter().any(|q| q.live && q.sampler == x)
+    };
     for j in 0..f.nlook {
         let b = f.look_ups[j].sampler;
-        let below = (0..b).filter(|&x| f.look_ups().iter().any(|t| t.live() && t.sampler == x)).count();
-        f.look_ups[j].index = below as u8;
+        f.look_ups[j].index = (0..b).filter(|&x| read_sampler(f, x)).count() as u8;
+    }
+    for k in 0..f.nsizes {
+        let b = f.sizes[k].sampler;
+        f.sizes[k].index = (0..b).filter(|&x| read_sampler(f, x)).count() as u8;
     }
     let decls = m.inputs.iter().filter(|d| d.kind == IoKind::Varying && read.get(d.location as usize) > Some(&0));
     for d in decls.clone() {
@@ -5764,6 +6031,23 @@ enum CubeLane {
     Node(u8, Swz),
 }
 
+/// A lane of a mediump cube direction the cube ops read raw ([`select`]):
+/// an fp32 constant (the link's, varyconst_101_cubebias's `0x3F800000`),
+/// or lane `c` of the varying at location `loc`, the load's word.
+#[derive(Clone, Copy)]
+enum RawLane {
+    F32(u32),
+    Input(u8, u8),
+}
+
+/// A mediump cube direction ([`select`]): x and y one fp16 pair and z a
+/// lane alone (case41), or three raw lanes (varyconst_101_cubebias).
+#[derive(Clone, Copy)]
+enum CubeDir {
+    Pair(u8, CubeLane),
+    Raw([RawLane; 3]),
+}
+
 impl CubeLane {
     fn node(self) -> Option<u8> {
         match self {
@@ -5934,13 +6218,26 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
     };
     /* a cube's direction: x and y one pair (`nir_opt_vectorize` pairs
      * lanes 0 and 1 of the vec3; case41.expect.json's `FMA.v2f16 r0, r0^,
-     * u3.w0, r1^`), z a lane alone (`u2.w1.h0`), converted at the look-up */
+     * u3.w0, r1^`), z a lane alone (`u2.w1.h0`), converted at the look-up;
+     * or raw varying lanes and constants (varyconst_101_cubebias: `v_dir`
+     * read by the cube ops alone, which are fp32, so `nir_lower_mediump_io`
+     * narrows nothing: `CUBEFACE1 r2, 0x3F800000, r0, r1` of the load's
+     * words and the link's constant) */
     let cube = match lone {
         Some(TexLookup { cube: Some(_), node, .. }) => {
             let nd = f.nir.nodes[node as usize];
-            let xy = vectorise(f, &mut pr, nd.src[0], nd.src[1], 0, ubo)?;
-            let z = cube_lane(f, &mut pr, nd.src[2], ubo)?;
-            Some((xy, z))
+            let raw = |v: Val| match v {
+                Val::Const(c) => Some(RawLane::F32(c)),
+                _ => f.input_lane(v).filter(|&(loc, _)| loc != POINT_COORD).map(|(loc, c)| RawLane::Input(loc, c)),
+            };
+            match (raw(nd.src[0]), raw(nd.src[1]), raw(nd.src[2])) {
+                (Some(x), Some(y), Some(z)) => Some(CubeDir::Raw([x, y, z])),
+                _ => {
+                    let xy = vectorise(f, &mut pr, nd.src[0], nd.src[1], 0, ubo)?;
+                    let z = cube_lane(f, &mut pr, nd.src[2], ubo)?;
+                    Some(CubeDir::Pair(xy, z))
+                }
+            }
         }
         _ => None,
     };
@@ -5997,6 +6294,17 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
             used[k as usize] = 3;
         }
     }
+    /* so are a cube direction's raw lanes (varyconst_101_cubebias) */
+    if let Some(CubeDir::Raw(lanes)) = cube {
+        for l in lanes {
+            let RawLane::Input(loc, c) = l else { continue };
+            let (k, lane) = index(f, loc, c)?;
+            if used[k as usize] & (1 << lane) != 0 {
+                return Err(MaliError::TexCoordShared);
+            }
+            used[k as usize] |= 1 << lane;
+        }
+    }
     /* a load holds the lanes read, and those alone but where the link
      * keeps a varying whole ([`layout`]'s packed matrix: 78's v4 load, of
      * which lanes 0 and 3 are read) */
@@ -6007,7 +6315,14 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
         }
     }
     let mut live = [false; MAX_PAIRS];
-    let cube_nodes = cube.map(|(xy, z)| [Some(xy), z.node()]).into_iter().flatten().flatten();
+    let cube_nodes = cube
+        .map(|d| match d {
+            CubeDir::Pair(xy, z) => [Some(xy), z.node()],
+            CubeDir::Raw(_) => [None, None],
+        })
+        .into_iter()
+        .flatten()
+        .flatten();
     let cmp_nodes = discards[..nd].iter().flat_map(|d| d.2.map(|x| x.0));
     for r in roots.into_iter().chain(coord).chain(cube_nodes).chain(cmp_nodes) {
         mark(&pr, r, &mut live);
@@ -6096,7 +6411,7 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
         ubo_off: [None; MAX_UBO_READS],
         ubo_half: [None; MAX_UBO_READS],
         ubo_lanes: [[None; 4]; MAX_UBO_READS],
-        desc: None,
+        desc: [[None; 2]; MAX_SIZE_QUERIES],
         frag: None,
     };
     let mut val = [None::<Src>; MAX_PAIRS];
@@ -6119,18 +6434,62 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
                         2
                     }
                     /* each lane to fp32 (`F16_TO_F32 r1, r0.h0`, `r0^.h1`,
-                     * `u2.w1.h0`), then the descriptor */
-                    (None, Some((xy, z))) => {
-                        let w = operand(&pr, xy, &lv, &val)?;
-                        let x = f2f32(p, &mut rows, w.swz(Swz::H00))?;
-                        let y = f2f32(p, &mut rows, w.swz(Swz::H11))?;
-                        let z = match z {
-                            CubeLane::F32(c) => Src::of(Idx::Const(c)),
-                            CubeLane::Node(z, swz) => f2f32(p, &mut rows, operand(&pr, z, &lv, &val)?.swz(swz))?,
+                     * `u2.w1.h0`), then the descriptor; raw lanes as they
+                     * are */
+                    (None, Some(dir)) => {
+                        let d = match dir {
+                            CubeDir::Pair(xy, z) => {
+                                let w = operand(&pr, xy, &lv, &val)?;
+                                let x = f2f32(p, &mut rows, w.swz(Swz::H00))?;
+                                let y = f2f32(p, &mut rows, w.swz(Swz::H11))?;
+                                let z = match z {
+                                    CubeLane::F32(c) => Src::of(Idx::Const(c)),
+                                    CubeLane::Node(z, swz) => {
+                                        f2f32(p, &mut rows, operand(&pr, z, &lv, &val)?.swz(swz))?
+                                    }
+                                };
+                                [x, y, z]
+                            }
+                            CubeDir::Raw(lanes) => {
+                                let mut d = [Src::NULL; 3];
+                                for (s, l) in d.iter_mut().zip(lanes) {
+                                    *s = match l {
+                                        RawLane::F32(c) => Src::of(Idx::Const(c)),
+                                        RawLane::Input(loc, c) => {
+                                            let (k, l) = index(f, loc, c)?;
+                                            let w = lv.raw[k as usize][l as usize & 3];
+                                            Src::ssa(w.ok_or(MaliError::Defect(Defect::IrIndex))?)
+                                        }
+                                    };
+                                }
+                                d
+                            }
                         };
-                        let st = cube_rows(p, &mut rows, [x, y, z])?;
+                        let st = cube_rows(p, &mut rows, d)?;
                         staging[..2].copy_from_slice(&st);
-                        2
+                        /* the bias word after the descriptor
+                         * ([`TexLookup::bias`]): the uniform's half widened,
+                         * then `build_sfixed_8_8` as rows (`FMA.f32
+                         * .clamp_m1_1` by 1/16, `FMA.f32` by 4096,
+                         * `F32_TO_S32.rtz`, `U16_TO_U32 .h0`) */
+                        let t = f.look_ups().get(x as usize).copied().ok_or(MaliError::Defect(Defect::IrIndex))?;
+                        if t.bias != Val::Undef {
+                            let d = f.uniform_dword(t.bias).ok_or(MaliError::Defect(Defect::IrIndex))?;
+                            let (w, half, base) = ubo.half(d).ok_or(MaliError::FsUniform)?;
+                            let swz = if half == 0 { Swz::H00 } else { Swz::H11 };
+                            let b = f2f32(p, &mut rows, Src::of(Idx::Ubo { base, comp: (w - base) as u8 }).swz(swz))?;
+                            let mut r = |op: Alu, bits: u8, s: &[Src]| -> Result<Src, MaliError> {
+                                Ok(Src::ssa(row(p, &mut rows, Row { op, bits, width: 1 }, s)?))
+                            };
+                            let l = r(Alu::Fmul, 32, &[b, Src::of(Idx::Const(nir::LOD_DIV16))])?;
+                            let l = r(Alu::Fclamp(clamp::M1_1), 32, &[l])?;
+                            let l = r(Alu::Fmul, 32, &[l, Src::of(Idx::Const(nir::LOD_8_8))])?;
+                            let l = r(Alu::F2i, 16, &[l])?;
+                            staging[2] = r(Alu::U2u32, 32, &[l])?;
+                            3
+                        } else {
+                            2
+                        }
                     }
                     (None, None) => 0,
                 };
@@ -6511,8 +6870,13 @@ fn src32(f: &Fs<'_>, lv: &Leaves, val: &[Option<Src>], v: Val) -> Result<Src, Ma
                 let w = lv.tex.get(j).and_then(|w| w[(at / 2) & 3]).ok_or(defect)?;
                 Ok(Src::ssa(w).swz(if at.is_multiple_of(2) { Swz::H00 } else { Swz::H11 }))
             }
-            /* a descriptor word ([`tex_desc`]) */
-            Kind::TexDesc { .. } => lv.desc.map(|d| Src::ssa(d[c as usize & 1])).ok_or(defect),
+            /* a descriptor word ([`tex_desc`]): the first eight bytes'
+             * two, by the size query's place; a 16-bit field's own value */
+            Kind::TexDesc { byte: 0, .. } => {
+                let k = f.size_of(n).ok_or(defect)?;
+                lv.desc.get(k).and_then(|d| d[c as usize & 1]).map(Src::ssa).ok_or(defect)
+            }
+            Kind::TexDesc { .. } => val.get(n as usize).copied().flatten().ok_or(defect),
             _ => Err(MaliError::MixedPrecision),
         },
         /* the halves of a pair's source ([`vectorize16`]): an fp16 value's
@@ -6618,7 +6982,10 @@ pub fn guarded16(f: &Fs<'_>) -> bool {
 /// a look-up in an arm, and the 24 guards of the unrolled loop with two
 /// look-ups a pass). Its fp16 lanes pair as a ladder's ([`vectorize16`]).
 pub fn kept16(f: &Fs<'_>) -> bool {
-    !f.prec.highp && f.nir.live_ifs().any(|r| !r.single)
+    /* a `textureSize`'s null test ([`Fs::tex_size`]) is Mesa's own `if`,
+     * which the peephole flattens unless the side loads (case 42: a `CSEL`
+     * pair; a mediump one kept is refused after the peephole) */
+    !f.prec.highp && f.nir.live_ifs().any(|r| !r.single && !r.inot)
 }
 
 /// The forms [`kept16`]'s route transcribes (cflow_148_texbranch): fp16
@@ -7143,6 +7510,12 @@ pub fn select_highp(
     f.nir.peephole_select(nir::PEEPHOLE_LIMIT_GL, true, &inots);
     f.nir.invert_guards(&inots)?;
     f.nir.peephole_select(nir::PEEPHOLE_LIMIT, false, &[false; nir::MAX_IFS]);
+    /* a `textureSize`'s null test kept as a branch (its side loads the
+     * depth or the layer count, [`Fs::tex_size`]) in a mediump shader: no
+     * reference (texmore_46 and texmore_48 are highp) */
+    if !f.prec.highp && f.nir.live_ifs().any(|r| r.inot) {
+        return Err(MaliError::TexKind);
+    }
     /* a guarded pass too large for the peephole stays a branch (femtovg's
      * filter_image) */
     f.nir.lay_out_inverted_guards();
@@ -7347,7 +7720,13 @@ pub fn select_highp(
     for k in 0..f.nir.len {
         let id = f.nir.order[k] as usize;
         match f.nir.nodes[id].kind {
-            Kind::Tex | Kind::TexDesc { .. } if inline || unrolled(id as u16) => {
+            Kind::Tex if inline || unrolled(id as u16) => {
+                events[ne] = (f.nir.block[id], key_of(id), NODE, k as u16);
+                ne += 1;
+            }
+            /* a descriptor load stands where its `textureSize` does
+             * ([`Fs::tex_size`]), a field's just before its `u2u32` */
+            Kind::TexDesc { .. } => {
                 events[ne] = (f.nir.block[id], key_of(id), NODE, k as u16);
                 ne += 1;
             }
@@ -7400,7 +7779,7 @@ pub fn select_highp(
         ubo_off: [None; MAX_UBO_READS],
         ubo_half: [None; MAX_UBO_READS],
         ubo_lanes: [[None; 4]; MAX_UBO_READS],
-        desc: None,
+        desc: [[None; 2]; MAX_SIZE_QUERIES],
         frag: None,
     };
     let val = scratch.alloc_filled(MAX_NODES, None::<Src>).map_err(oom)?;
@@ -7506,11 +7885,9 @@ pub fn select_highp(
                     tex_highp(p, f, j, &mut lv, val, &mut rows)?;
                     continue;
                 }
-                /* `pan_nir_load_va_desc`'s `load_ssbo` (`LD_PKA.i64` of the
-                 * table handle at the descriptor's offset), split into its
-                 * two words */
-                if let Kind::TexDesc { sampler } = nd.kind {
-                    lv.desc = Some(tex_desc(p, f, sampler)?);
+                /* `pan_nir_load_va_desc`'s `load_ssbo` ([`tex_desc`]) */
+                if let Kind::TexDesc { .. } = nd.kind {
+                    tex_desc(p, f, &mut lv, val, id as u16)?;
                     continue;
                 }
                 if at_store(id) {
@@ -7840,7 +8217,10 @@ fn tex_highp(
     let nd = f.nir.nodes[t.node as usize];
     let mut staging = [Src::NULL; 3];
     let n = match t {
-        TexLookup { cube: Some(Cube { explicit: true }), .. } | TexLookup { array: true, .. } => 3,
+        TexLookup { cube: Some(Cube { explicit: true }), .. }
+        | TexLookup { array: true, .. }
+        | TexLookup { d3: true, .. } => 3,
+        TexLookup { cube: Some(_), bias, .. } if bias != Val::Undef => 3,
         TexLookup { coord: TexCoord::Computed, .. } => 2,
         _ => 0,
     };
@@ -7861,17 +8241,52 @@ fn tex_highp(
 /// FAU word `3e000004`).
 const TEX_TABLE_HANDLE: u32 = (62 << 24) | 4;
 
-/// The first two words of `sampler`'s texture descriptor ([`Kind::TexDesc`]):
-/// `LD_PKA.i64` at the descriptor's offset in the table (32 bytes each),
-/// split (intbig_case42.expect.json: `LD_PKA.i64.unsigned.slot1 @r2:r3,
-/// 0x0, u2.w1`). The sampler's look-up names the index ([`layout`]); a
-/// size query of a sampler no look-up reads has no reference.
-fn tex_desc(p: &mut Prog<'_>, f: &Fs<'_>, sampler: u8) -> Result<[u16; 2], MaliError> {
-    let (_, t) = f.live_look_ups().find(|(_, t)| t.sampler == sampler).ok_or(MaliError::TexKind)?;
-    let off = Src::of(Idx::Const(32 * u32::from(t.index)));
-    let r = alu(p, Op::LdPka { words: 2, half: false }, &[off, Src::of(Idx::Const(TEX_TABLE_HANDLE))])?;
-    let w = split(p, r, 2)?;
-    Ok([w[0], w[1]])
+/// A read of a texture descriptor for `textureSize` ([`Kind::TexDesc`],
+/// node `id`): `LD_PKA` of the table handle at the descriptor's offset (32
+/// bytes each, [`layout`] numbers them) plus the field's byte. The first
+/// eight bytes are `LD_PKA.i64`, split into two words
+/// (intbig_case42.expect.json: `LD_PKA.i64.unsigned.slot1 @r2:r3, 0x0,
+/// u2.w1`; texmore_46's second descriptor `IADD_IMM.i32 r1, 0x0, #0x20`
+/// then `LD_PKA.i64 ... r1^, u2.w0`), or, when nothing reads the second
+/// word (a 3D texture's size read at its depth alone, texmore_48),
+/// `nir_opt_shrink_vectors` keeps the first half only: `LD_PKA.i16` of one
+/// register (`LD_PKA.i16.unsigned.slot0 @r0, 0x0, u2.w1`). A second word
+/// read at its low half alone would be three halves (`LD_PKA.i48`), which
+/// no reference draws. A 16-bit field (the depth, the layer count) is
+/// `LD_PKA.i16` at its byte (texmore_46's `IADD_IMM.i32 r3, 0x0, #0x38`
+/// then `LD_PKA.i16.unsigned.slot2 @r3, r3^, u2.w0`).
+fn tex_desc(p: &mut Prog<'_>, f: &Fs<'_>, lv: &mut Leaves, val: &mut [Option<Src>], id: u16) -> Result<(), MaliError> {
+    let defect = MaliError::Defect(Defect::IrIndex);
+    let Kind::TexDesc { sampler, byte } = f.nir.nodes[id as usize].kind else { return Err(defect) };
+    let index = f.sampler_index(sampler)?;
+    let off = Src::of(Idx::Const(32 * u32::from(index) + u32::from(byte)));
+    let handle = Src::of(Idx::Const(TEX_TABLE_HANDLE));
+    if byte != 0 {
+        let r = alu(p, Op::LdPka { words: 1, half: true }, &[off, handle])?;
+        *val.get_mut(id as usize).ok_or(defect)? = Some(Src::ssa(r));
+        return Ok(());
+    }
+    let k = f.size_of(id).ok_or(defect)?;
+    let halves =
+        f.nir.uses(id).fold(0u8, |m, (u, s)| match (f.nir.nodes[u as usize].src[s], f.nir.nodes[u as usize].kind) {
+            (Val::Lane(_, 1), Kind::Alu(Alu::Extract16(h))) => m | 1 << (2 + h),
+            (Val::Lane(_, 1), _) => m | 0b1100,
+            _ => m | 1,
+        });
+    let words = match halves {
+        0b0001 => 1,
+        h if h & 0b1000 != 0 => 2,
+        _ => return Err(MaliError::TexKind),
+    };
+    let r = alu(p, Op::LdPka { words, half: words == 1 }, &[off, handle])?;
+    let d = lv.desc.get_mut(k).ok_or(defect)?;
+    *d = if words == 2 {
+        let w = split(p, r, 2)?;
+        [Some(w[0]), Some(w[1])]
+    } else {
+        [Some(r), Some(r)]
+    };
+    Ok(())
 }
 
 /// The texels look-up `t` writes: those the colour reads
@@ -8073,9 +8488,10 @@ struct Leaves {
     /// Each vec4 array read's loaded lanes in a highp shader
     /// ([`super::select::vec4_fetch`]), by its place in [`Fs::ubo_idx`].
     ubo_lanes: [[Option<u16>; 4]; MAX_UBO_READS],
-    /// The texture descriptor's two words `textureSize` reads
-    /// ([`Kind::TexDesc`], [`tex_desc`]).
-    desc: Option<[u16; 2]>,
+    /// Each size query's first two descriptor words ([`Kind::TexDesc`] at
+    /// byte 0, [`tex_desc`]; by its place in [`Fs::sizes`]): one register
+    /// read as both when only the null test's half is loaded.
+    desc: [[Option<u16>; 2]; MAX_SIZE_QUERIES],
     /// The narrowed position's word ([`Leaf::Frag`], [`frag16`]).
     frag: Option<u16>,
 }
@@ -8239,11 +8655,18 @@ fn tex(p: &mut Prog<'_>, f: &Fs<'_>, j: usize, lv: &mut Leaves, computed: Option
     };
     let sr = alu(p, Op::Collect, &staging[..n])?;
     /* a cube's level mode follows the call (`EXPLICIT` or `ZERO_LOD`,
-     * pan_nir_lower_tex.c:927-937), its dimension `cube`; a 2D look-up
-     * here is `texture2D`'s computed level, or `texelFetch`'s */
-    let plain = if t.array { super::bir::TexDim::D2Array } else { super::bir::TexDim::D2 };
+     * pan_nir_lower_tex.c:927-937), its dimension `cube`; a 2D, 2D array
+     * or 3D look-up here is `texture`'s computed level, `textureLod(..,
+     * 0.0)`'s level 0, or `texelFetch`'s */
+    let plain = match (t.array, t.d3) {
+        (true, _) => super::bir::TexDim::D2Array,
+        (_, true) => super::bir::TexDim::D3,
+        _ => super::bir::TexDim::D2,
+    };
     let (lod, dim) = match t.cube {
         None if t.fetch => (super::bir::LodMode::Fetch, plain),
+        None if t.zero => (super::bir::LodMode::Zero, plain),
+        Some(_) if t.bias != Val::Undef => (super::bir::LodMode::ComputedBias, super::bir::TexDim::Cube),
         Some(Cube { explicit: true }) => (super::bir::LodMode::Explicit, super::bir::TexDim::Cube),
         Some(Cube { explicit: false }) => (super::bir::LodMode::Zero, super::bir::TexDim::Cube),
         None => (super::bir::LodMode::Computed, plain),
@@ -8266,9 +8689,13 @@ fn tex(p: &mut Prog<'_>, f: &Fs<'_>, j: usize, lv: &mut Leaves, computed: Option
         }
         return Ok(());
     }
+    /* a prefix of texels: the result's words in order (`bi_emit_cached_split`
+     * of `bitcount(mask) * bit_size`, bifrost_compile.c:3563: one word is
+     * not split, texmore_48's `.r` and `.b`) */
     if mask == tail {
-        let n = if f16 { 2 } else { 4 };
-        let w = split(p, r, n)?;
+        let chans = mask.count_ones() as usize;
+        let n = if f16 { chans.div_ceil(2) } else { chans };
+        let w = if n == 1 { [r; 4] } else { split(p, r, n)? };
         for (i, x) in w.iter().enumerate().take(n) {
             words[i] = Some(*x);
         }

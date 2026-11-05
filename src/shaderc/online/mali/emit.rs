@@ -36,7 +36,7 @@ const fn row(op: Alu, bits: u8, width: u8) -> Row {
 }
 
 /// The rows [`emit`] selects, each with the `bi_emit_alu` case it is.
-pub const ROWS: [(Row, &str); 86] = [
+pub const ROWS: [(Row, &str); 87] = [
     (row(Alu::Fadd, 32, 1), "nir_op_fadd: FADD.f32"),
     (row(Alu::Fmul, 32, 1), "nir_op_fmul: FMA.f32 a, b, -0.0"),
     (row(Alu::Ffma, 32, 1), "nir_op_ffma: FMA.f32"),
@@ -159,6 +159,10 @@ pub const ROWS: [(Row, &str); 86] = [
      * tools/mali/testdata/intbig_case42: `ICMP_OR.v2u16.eq.m1 r1, r2^.h00,
      * 0x0, 0x0`) */
     (row(Alu::Icmp(Cmpf::Eq), 16, 1), "nir_op_ieq_pan of one 16-bit lane: ICMP_OR.v2u16.eq.m1 a.h00, b"),
+    /* the same test kept as a branch (`inot(ieq)` is `ine`; texmore_46's
+     * array, texmore_48: `ICMP_OR.v2u16.ne.m1 r0, r0^.h00, 0x0, 0x0` then
+     * `BRANCHZ.eq`) */
+    (row(Alu::Icmp(Cmpf::Ne), 16, 1), "nir_op_ine_pan of one 16-bit lane: ICMP_OR.v2u16.ne.m1 a.h00, b"),
     /* a kept loop's `float(n)` of `int n = int(x)` (intloop_loop_exit) */
     (row(Alu::Ftrunc, 32, 1), "nir_op_ftrunc: FROUND.f32.rtz"),
     /* a mediump unrolled loop's ladder (tools/mali/testdata/cflow_71_deadloop:
@@ -344,7 +348,7 @@ pub fn emit(p: &mut Prog<'_>, row: Row, s: &[Src]) -> Result<u16, MaliError> {
         (Alu::Fabs, 16, 1) => ins(p, Op::FabsnegV2f16, &[Src { abs: true, ..lone(s[0]) }])?,
         /* `bi_icmp_to(nir_type_uint16, ..)`, an equality's `ICMP.v2u16`
          * made `ICMP_OR` by va_lower_isel (bir.rs) */
-        (Alu::Icmp(cmpf @ Cmpf::Eq), 16, 1) => {
+        (Alu::Icmp(cmpf @ (Cmpf::Eq | Cmpf::Ne)), 16, 1) => {
             ins(p, Op::IcmpOrV2u16 { cmpf, result: ResultType::M1 }, &[s[0].swz(Swz::H00), s[1], ZERO])?
         }
         /* `bi_make_vec_to` of one 16-bit component (bifrost_compile.c:

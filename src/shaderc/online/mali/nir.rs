@@ -393,13 +393,18 @@ pub enum Kind {
     /// A fragment shader's texture look-up (nir_fs.rs): its four 16-bit
     /// lanes are the texels.
     Tex,
-    /// The first eight bytes of the texture descriptor of `sampler`'s
-    /// look-up (nir_fs.rs; `pan_nir_load_va_desc(b, 4, 16, handle, 0)` of
+    /// A read of `sampler`'s texture descriptor for `textureSize`
+    /// (nir_fs.rs `Fs::tex_size`; `pan_nir_load_va_desc` of
     /// `pan_nir_load_va_tex_size`, pan_nir.h:106-140: a `load_ssbo` of the
-    /// descriptor table, Mesa's `LD_PKA.i64`): two 32-bit lanes, the
-    /// words, whose halves `textureSize` reads.
+    /// descriptor table). `byte` 0: its first eight bytes (`(b, 4, 16,
+    /// handle, 0)`, Mesa's `LD_PKA.i64`), two 32-bit lanes, the words, whose
+    /// halves hold the null test and the width and height minus one; byte
+    /// 28 (`7 * 4`): the depth minus one of a 3D texture, and byte 24 (`6 *
+    /// 4`) the layer count minus one of an array, each one 16-bit lane
+    /// (`LD_PKA.i16`).
     TexDesc {
         sampler: u8,
+        byte: u8,
     },
     /// A fragment shader's read of one element of a uniform array at a
     /// run-time index (nir_fs.rs; `load_ubo(0, index * stride)`, Mesa's
@@ -486,6 +491,16 @@ pub struct IfRegion {
     /// terminator (nir_fs.rs `merged_bound`), which
     /// `complex_unroll_single_terminator` unrolls ([`Nir::invert_ladder`]).
     pub single: bool,
+    /// Mesa built the `if` on `inot` of a compare (`nir_push_if(b,
+    /// nir_inot(b, is_null))`, `pan_nir_load_va_tex_size`, pan_nir.h:111):
+    /// `cond` is the inverse compare already (`inot(ieq(a, b))` is `ine(a,
+    /// b)`, nir_opt_algebraic.py, what a kept `if` tests: texmore_46's
+    /// `ICMP_OR.v2u16.ne.m1` before its `BRANCHZ`); a flattened one's
+    /// `bcsel(inot(c), then, else)` is `bcsel(c, else, then)`
+    /// (nir_opt_algebraic.py:971), so the peephole flips the compare back
+    /// and swaps the sides (texmore_46's `ICMP_OR.v2u16.eq.m1` then
+    /// `CSEL.u32.eq r2, r0, 0x0, r2^, 0x0`).
+    pub inot: bool,
 }
 
 impl IfRegion {
@@ -502,6 +517,7 @@ impl IfRegion {
         brk: None,
         seq: 0,
         single: false,
+        inot: false,
     };
 }
 
@@ -719,8 +735,8 @@ const F32_TWO: u32 = 0x4000_0000;
 const W_RECIP_MIN: u32 = 0xc700_0000;
 const W_RECIP_MAX: u32 = 0x4700_0000;
 /// 1.0 / 16.0 and 16.0 * 256.0, `build_sfixed_8_8`'s factors.
-const LOD_DIV16: u32 = 0x3d80_0000;
-const LOD_8_8: u32 = 0x4580_0000;
+pub(super) const LOD_DIV16: u32 = 0x3d80_0000;
+pub(super) const LOD_8_8: u32 = 0x4580_0000;
 /// 0.5: `build_cube_coord2_face`'s `0.5 / max{x, y, z}` and its addend.
 const F32_HALF: u32 = 0x3f00_0000;
 /// `BITFIELD_MASK(29)`: the S coordinate's bits of the cube descriptor,
@@ -1363,12 +1379,24 @@ impl<'s> Nir<'s> {
                 if a + b + held > limit {
                     continue;
                 }
+                /* an `if` on `inot` of a compare ([`IfRegion::inot`]):
+                 * `bcsel(inot(c), then, else)` is `bcsel(c, else, then)`,
+                 * the compare the one the `inot` was of */
+                if r.inot {
+                    let Val::Lane(c, _) = r.cond else { continue };
+                    let flipped = match self.nodes[c as usize].kind {
+                        Kind::Alu(Alu::Icmp(Cmpf::Ne)) => Kind::Alu(Alu::Icmp(Cmpf::Eq)),
+                        Kind::Alu(Alu::Icmp(Cmpf::Eq)) => Kind::Alu(Alu::Icmp(Cmpf::Ne)),
+                        _ => continue,
+                    };
+                    self.nodes[c as usize].kind = flipped;
+                }
                 for k in 0..self.len {
                     let id = self.order[k] as usize;
                     if self.block[id] == r.after && self.nodes[id].kind == Kind::Phi {
                         let nd = self.nodes[id];
-                        self.nodes[id] =
-                            NirNode { kind: Kind::Alu(Alu::Bcsel), src: [r.cond, nd.src[0], nd.src[1]], ..nd };
+                        let (t, e) = if r.inot { (nd.src[1], nd.src[0]) } else { (nd.src[0], nd.src[1]) };
+                        self.nodes[id] = NirNode { kind: Kind::Alu(Alu::Bcsel), src: [r.cond, t, e], ..nd };
                     }
                 }
                 self.ifs[i].live = false;
