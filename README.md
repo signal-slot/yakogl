@@ -47,13 +47,13 @@ GitHub Issues. The order of the work, in five stages, is
 dEQP-GLES2 (the 17,165-case mustpass list), one main commit `e9901869a` on
 the three boards (2026-10-15/16). Each board's tree has been re-run from
 newer main commits since (2026-10-23 to 10-29); only the AM62P's figures
-changed: its 1x run at `316b4ad7` (2026-10-29) passes the two
+changed: its 1x run at `36c4305a` (2026-11-05, re-run from `bfd75c57`, same figures) passes the two
 `flush_finish` cases that dEQP's timing check warned on in the earlier
 runs, and its 4x image was not run again (`tools/cts/RESULTS.md`):
 
 | Board | Failures | Notes |
 | --- | --- | --- |
-| AM62P | 0 | 17,142 pass, 18 not supported, 5 warnings (the 17 images at 1x at `316b4ad7`, with the 16 `multisample.*` cases from the 4x image) |
+| AM62P | 0 | 17,142 pass, 18 not supported, 5 warnings (the 17 images at 1x at `36c4305a`, with the 16 `multisample.*` cases from the 4x image) |
 | i.MX8MP | 0 | 17,318 of 17,371 cases begun pass, 34 not supported, 19 quality warnings (the same cases warn on NXP's own driver) |
 | Raspberry Pi 4 | 0 | 17,126 pass, 34 not supported, 5 warnings |
 
@@ -84,8 +84,8 @@ Pi 4, terrain takes 179 ms (shadow 7.3, refract 18.7). On the i.MX8MP they run
 at 1 to 2 FPS. The i.MX8MP's other scenes are capped by a wait for the panel's
 VSYNC on every frame (`docs/notes/imx8mp-frame-floor.md`).
 
-Slint applications run on all three boards from one sample with the same picture
-(`examples/slint/`).
+The Slint sample (`examples/slint/`) is kept working on the boards but is no
+row of `tools/cts/RESULTS.md`; no run of it is recorded there.
 
 `tools/cts/RESULTS.md` has the current board results and `tools/cts/STATUS.md`
 the summary in Japanese. Commit hashes cited from before the first public
