@@ -85,7 +85,7 @@ pub struct Instr {
     pub vals: [u32; MAX_FIELDS],
     /// The bits of [`Op::dont_care`] as they were read, in place. Zero for
     /// every instruction in the offline table today, which
-    /// [`super::roundtrip`] asserts so that the first one that is not is
+    /// `super::roundtrip` asserts so that the first one that is not is
     /// news rather than silence.
     pub dont_care: u128,
 }
@@ -125,7 +125,7 @@ pub fn write_field(w: &mut u128, f: &Field, v: u32) {
 }
 
 /// Every bit of `op` that is either pinned or covered by one of its fields.
-/// The tables are expected to cover all 128; [`super::roundtrip`] is what
+/// The tables are expected to cover all 128; `super::roundtrip` is what
 /// proves they do, on the real corpus rather than on this function.
 pub fn coverage(op: &Op) -> u128 {
     let mut c = op.care | op.dont_care;

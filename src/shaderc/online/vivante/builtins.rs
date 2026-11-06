@@ -447,7 +447,7 @@ fn compare(
 ///
 /// Mesa's `etna_emit_tex` (etnaviv_compiler_nir_emit.c, MIT, read and
 /// transcribed): `nir_texop_tex` -> TEXLD, `txb` -> TEXLDB, `txl` -> TEXLDL,
-/// with the coordinate in src[0] and the bias or level in src[1]. Our corpus
+/// with the coordinate in src\[0\] and the bias or level in src\[1\]. Our corpus
 /// agrees for the two it contains -- texld 284, texldl 78 -- and contains
 /// **zero** texldb, texldd, tg4, texldgpcf and texldlpcf. So the BIAS form is
 /// transcribed and not measured, and is named as such here the way `Ineg` is
@@ -667,7 +667,7 @@ pub const UDIV_RCP_SCALE_BITS: u32 = 0x4f7f_fffe;
 ///
 /// `umul_high` is not an instruction here: etnaviv sets `lower_mul_high`
 /// (etnaviv_compiler.c) and NIR expands it over 16-bit halves
-/// (`nir_lower_alu.c`, Hacker's Delight figure 8-2) -- see [`umul_high`].
+/// (`nir_lower_alu.c`, Hacker's Delight figure 8-2) -- see `umul_high`.
 /// So the core's `imulhi0`, which nothing we have ever run emits, stays
 /// unused.
 ///
