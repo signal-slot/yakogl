@@ -151,6 +151,11 @@ U-Boot reporting "reset cause: watchdog", LPGPR0 unchanged. Two points that run
 did not show: `gc_wdog_arm: armed` is printed before the UART2 console's first
 line, so the console does not prove the arm, and the image resets the SoC
 itself at the end, so WDOG1 expiring on a hung image has not been seen here.
+Whether WDOG1 resets a hung image on the X2 is still open: the proof image
+(main `22265e87`, `IMX8MP_BOARD=x2 tools/cts/imx8mp-gltest-build.sh <name> 0
+-DCONFIG_GC_BOARD_WDOG_PROOF=y`, which never feeds WDOG1 and stores record tag 3)
+carries the marker and passed the dry run, `status` and `probe` on the board,
+but has not been jumped, because no person was declared at the board for it.
 
 ## The loader refuses to jump without a running watchdog (AM62P)
 
