@@ -114,7 +114,7 @@ fn cache() -> &'static mut Cache {
 /// core gives an NPOT texture one level.
 ///
 /// And a texture with 64-bit texels always, whatever its type and levels
-/// ([`wide_texels`]).
+/// (`wide_texels`).
 pub fn wanted(t: &GlesTextureBind) -> bool {
     let layered = t.type_ == GLES_TEXTYPE_CUBE || t.type_ == GLES_TEXTYPE_2D_ARRAY || t.type_ == GLES_TEXTYPE_3D;
     let padded = t.stride_texels * t.height != align4(t.width) * align4(t.height);

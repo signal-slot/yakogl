@@ -10,7 +10,7 @@
 //! is: which operation is this, what are its fields, and does writing them
 //! back give the same bits.
 //!
-//! The gate is the same as the PowerVR one and is in [`roundtrip`]: every
+//! The gate is the same as the PowerVR one and is in `roundtrip`: every
 //! shader the driver ships - the GC7000 offline table
 //! (`tests/reference/vivante_blobs.rs`) and the backend's two internal clear
 //! shaders - decodes into instructions and re-encodes byte for byte.

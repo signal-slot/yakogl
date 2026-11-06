@@ -21,7 +21,7 @@
 //! over time (or a stencil with more than one depth): its contents live in
 //! exactly one surface at a time, and when a draw needs them in another
 //! surface they are copied there, plane by plane, with a word mask on the
-//! CPU ([`copy_plane`]): the GPU is idle for it and the surfaces have no
+//! CPU (`copy_plane`): the GPU is idle for it and the surfaces have no
 //! tile status (`emit_pe_state`: TS mode 0), so memory holds every pixel.
 //! A plane that holds a whole clear's value only is written back by a clear
 //! of that plane ([`Selected::restore`]), which the backend records before
@@ -258,7 +258,7 @@ pub struct Selected {
 /// a plane is copied.
 ///
 /// `seed`: depth texels the draw carries (`GlesDraw::depth_texels`): they
-/// become the surface's depth plane ([`seed_depth`]), and no depth is
+/// become the surface's depth plane (`seed_depth`), and no depth is
 /// restored from a clear value.
 #[allow(clippy::too_many_arguments)]
 pub fn select(

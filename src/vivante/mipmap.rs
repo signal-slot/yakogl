@@ -25,7 +25,7 @@
 //! core keeps for this backend through `mip_level_align`), so the GL core
 //! asks nothing back but a wait ([`gc_return_mipmap_chain`]) before it
 //! reads or writes them on the CPU. Each level's draw goes through
-//! [`super::backend::draw_one`], so the frame still open (the one that
+//! `super::backend::draw_one`, so the frame still open (the one that
 //! rendered level 0, or the level before) is submitted first and the level
 //! kicks follow it in order; nothing is waited for.
 //!
@@ -289,11 +289,11 @@ fn chain_gpu(t: &GlesTextureBind, levels: u32) -> Result<(), &'static str> {
 /// glGenerateMipmap on the 2D texture `b` describes, whose storage holds a
 /// chain of `levels` levels (`YakoglBackend::generate_mipmap`): a 2D RGBA8
 /// texture, in either channel order, gets its levels 1.. drawn on the GPU
-/// ([`chain_gpu`]: one kick per level, every kick submitted before this
+/// (`chain_gpu`: one kick per level, every kick submitted before this
 /// returns) and the answer is 1: the GL core filters nothing. 0 -- the GL
 /// core's CPU box filter, as before -- for any other texture (another
 /// format, a cube or array stack), a chain whose layout this backend does
-/// not walk ([`chain_layout`]), a chain past the 32-bit address space, a
+/// not walk (`chain_layout`), a chain past the 32-bit address space, a
 /// level's draw or the last kick refused (the kicks recorded so far are
 /// waited for, since the CPU filter rewrites their levels), or a backend
 /// that is not running. Logged once with the reason, and counted

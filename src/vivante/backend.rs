@@ -389,12 +389,12 @@ const GC_MSAA_RASTERISE: bool = true;
 /// CONFIG_GC_GL_TEST_MSAA), and with it the EGL 4x config (gl/egl.rs
 /// `offered_configs`). Bit 1 adds etnaviv's SMALL_MSAA settings
 /// ([`msaa_extras`]), bit 2 a per-draw PS_MSAA_CONFIG, bit 3 the window-space
-/// scaling ([`vp_scale`]), bit 4 etnaviv's SINGLE_BUFFER value for the
-/// supertiled scratch ([`single_buffer`]). Bits 1 and 4 are what Mesa 26.2.1
+/// scaling (`vp_scale`), bit 4 etnaviv's SINGLE_BUFFER value for the
+/// supertiled scratch (`single_buffer`). Bits 1 and 4 are what Mesa 26.2.1
 /// writes for every 4x target on this core; bits 2 and 3 are not
 /// (docs/notes/gc-msaa-addresses.md). A test knob: it and
 /// its setter exist only with the `test-knobs` feature, and without it 4x is
-/// [`GC_MSAA_ENABLE`]'s, off, until the board has run it (issue #8).
+/// `GC_MSAA_ENABLE`'s, off, until the board has run it (issue #8).
 #[cfg(feature = "test-knobs")]
 #[no_mangle]
 pub static mut gc_debug_msaa: i32 = 0;
@@ -755,7 +755,7 @@ fn ms_pitch(w: u32, bpp: u32) -> u32 {
 /// to 64x64 supertiles.
 /// This backend draws into a framebuffer with no colour attachment
 /// (`backend::DEPTH_ONLY_TARGETS`): `target_gpu` 0 names
-/// [`ensure_no_colour_surface`]'s surface, which is never written.
+/// `ensure_no_colour_surface`'s surface, which is never written.
 pub const DRAWS_WITHOUT_COLOUR: bool = true;
 
 /// The part's NPOT support: the GC7000UL's NON_POWER_OF_TWO feature bit
@@ -878,7 +878,7 @@ fn emit_msaa_state(c: &mut GcCmd, gl: &GlesDraw) {
 /// asks. It and its setter exist only with the `test-knobs` feature; without
 /// it the study is never on.
 ///
-/// 1, [`FLIP_STUDY_NEGATIVE_STRIDE`]: a top-down target (the default
+/// 1, `FLIP_STUDY_NEGATIVE_STRIDE`: a top-down target (the default
 /// framebuffer, `flip_y`) is drawn BOTTOM-UP instead of through a mirrored
 /// viewport: the colour surface starts at its last row with a negative
 /// stride, and the viewport, scissor, clear clip, cull and front face treat
@@ -886,7 +886,7 @@ fn emit_msaa_state(c: &mut GcCmd, gl: &GlesDraw) {
 /// stride, the picture is upright AND gl_FragCoord.y, dFdy and point sprites
 /// are GL's, for nothing.
 ///
-/// 2, [`FLIP_STUDY_RS_COPY`]: every frame ends with 100 resolve-engine
+/// 2, `FLIP_STUDY_RS_COPY`: every frame ends with 100 resolve-engine
 /// copies of its target into the scratch surface with RS_CONFIG_FLIP set,
 /// then one plain copy back -- so the target reads back mirrored, and the
 /// frame's fence time over 100 copies is the cost of a flip at present.

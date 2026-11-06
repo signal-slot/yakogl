@@ -589,14 +589,14 @@ fn last_stats() -> LastAlloc {
     last_store::get()
 }
 
-/// See [`LastAlloc`]. Valid for the program most recently allocated.
+/// See `LastAlloc`. Valid for the program most recently allocated.
 pub fn last_reserved() -> usize {
     last_stats().reserved
 }
 
 /// The most register COMPONENTS live at one instruction in the last program.
 ///
-/// [`LastAlloc`] counts whole values, which is the floor for an allocator
+/// `LastAlloc` counts whole values, which is the floor for an allocator
 /// that gives each value a whole register. This counts the components those
 /// values actually occupy, so `ceil(components / 4)` is the floor for one
 /// that can pack a scalar into any lane. The gap between the two is what
@@ -609,17 +609,17 @@ pub fn last_reserved() -> usize {
 /// allocator's to fix -- the width is chosen where the instruction is
 /// selected -- but counting them here is what says whether a high `temps` is
 /// "many values live" or "few values, each four times wider than it needs".
-/// See [`LastAlloc`]. Valid for the program most recently allocated.
+/// See `LastAlloc`. Valid for the program most recently allocated.
 pub fn last_wide_but_scalar() -> usize {
     last_stats().wide_but_scalar
 }
 
-/// See [`LastAlloc`].
+/// See `LastAlloc`.
 pub fn last_copies() -> usize {
     last_stats().copies
 }
 
-/// See [`LastAlloc`].
+/// See `LastAlloc`.
 pub fn last_coalescable() -> usize {
     last_stats().coalescable
 }
@@ -639,7 +639,7 @@ pub fn last_lane_moves() -> usize {
 
 /// Host tests only: allocate without moving any value to another lane, so an
 /// equivalence test can compare the two allocations of one program. Per
-/// thread, like [`LastAlloc`].
+/// thread, like `LastAlloc`.
 #[cfg(feature = "host-test")]
 pub fn set_lane_moves_disabled(off: bool) {
     LANE_MOVES_OFF.with(|c| c.set(off));
@@ -667,7 +667,7 @@ fn record_lane_moves(n: usize) {
 }
 
 /// Values the last allocation kept live across a loop's back edge; see
-/// [`extend_across_back_edges`]. Zero for a program with no loop.
+/// `extend_across_back_edges`. Zero for a program with no loop.
 pub fn last_loop_extended() -> usize {
     last_stats().loop_extended
 }
@@ -675,7 +675,7 @@ pub fn last_loop_extended() -> usize {
 /// Whether the last program allocated had any branch in it.
 ///
 /// A linear live range BOUNDS liveness only while every branch points
-/// forward; a back edge needs [`extend_across_back_edges`] before the ranges
+/// forward; a back edge needs `extend_across_back_edges` before the ranges
 /// are a bound at all. Given that, the ranges are all register assignment
 /// needs. A transformation that deletes an
 /// instruction needs more than a bound: a copy inside a conditional arm only
@@ -732,39 +732,39 @@ pub fn last_mov_breakdown() -> (usize, usize, usize, usize, usize) {
     (s.movs, s.coalescable, s.mov_overlap, s.mov_seed, s.mov_io)
 }
 
-/// See [`LastAlloc`].
+/// See `LastAlloc`.
 pub fn last_safe_sunk() -> usize {
     last_stats().safe_sunk
 }
 
-/// See [`LastAlloc`].
+/// See `LastAlloc`.
 pub fn last_multi_def() -> usize {
     last_stats().multi_def
 }
 
 /// Instructions in the last program that cannot be moved: a branch, or one
 /// whose destination is not a virtual register (an io write, a discard).
-/// See [`LastAlloc`].
+/// See `LastAlloc`.
 pub fn last_pinned_instrs() -> usize {
     last_stats().pinned_instrs
 }
 
-/// See [`LastAlloc`]. Valid for the program most recently allocated.
+/// See `LastAlloc`. Valid for the program most recently allocated.
 pub fn last_sunk_overlap() -> usize {
     last_stats().sunk_overlap
 }
 
-/// See [`LastAlloc`]. Valid for the program most recently allocated.
+/// See `LastAlloc`. Valid for the program most recently allocated.
 pub fn last_live_components() -> usize {
     last_stats().live_components
 }
 
-/// See [`LastAlloc`]. Valid for the program most recently allocated.
+/// See `LastAlloc`. Valid for the program most recently allocated.
 pub fn last_overlap() -> usize {
     last_stats().overlap
 }
 
-/// See [`VREG_PEAK`]: the largest requirement seen, for sizing [`MAX_VREGS`].
+/// See `VREG_PEAK`: the largest requirement seen, for sizing [`MAX_VREGS`].
 pub fn vreg_peak() -> usize {
     // SAFETY: single-threaded by contract.
     *unsafe { VREG_PEAK.get() }
@@ -1728,7 +1728,7 @@ fn lanes_needed(sel: &[SelInstr], need: &mut [u8]) {
 ///
 /// A virtual register is written by selection in whole or in lanes, and a
 /// reader consumes the lanes its swizzle names for the lanes it writes that
-/// somebody needs ([`consumed_lanes`], over the [`lanes_needed`] fixpoint).
+/// somebody needs (`consumed_lanes`, over the `lanes_needed` fixpoint).
 /// A consumed lane that nothing writes is a value never computed: twice now
 /// a one-lane condition was read as `.xyzw` -- by a branch (0828b91) and by
 /// the if-conversion's select (fb04d88) -- and the lanes past x decided
@@ -1879,7 +1879,7 @@ fn lanes_needed_skipping(sel: &[SelInstr], dead: &[u64], need: &mut [u8]) {
 /// constant 1.0 -- 70 of its 83 instructions.
 ///
 /// An instruction is dead when it writes a virtual register and no lane it
-/// writes is needed ([`lanes_needed`]). Anything else -- an io write, a
+/// writes is needed (`lanes_needed`). Anything else -- an io write, a
 /// branch, a discard, the address register -- is a root and stays.
 ///
 /// **A branch target is an instruction index**, and so is every entry of
@@ -1888,7 +1888,7 @@ fn lanes_needed_skipping(sel: &[SelInstr], dead: &[u64], need: &mut [u8]) {
 /// lands on the next survivor, which is where control arrived after the
 /// deleted, effect-free run; a target at the old end becomes the new end.
 ///
-/// Programs longer than [`MAX_LIVE_INSTRS`] are left alone, as they always
+/// Programs longer than `MAX_LIVE_INSTRS` are left alone, as they always
 /// were (the flow-sensitive half once swept every instruction per value; it
 /// now costs each value's live range, and its tables index instructions in
 /// `u16`). Its tables come from `scratch`, sized by the program.

@@ -66,7 +66,7 @@ impl GcKick {
 /// the write did not arrive in `delay_us`.
 ///
 /// A test knob: it exists only with the `test-knobs` feature, and it is off
-/// until a harness arms it ([`gc_kick_diff_enable`]). Without the feature
+/// until a harness arms it (`gc_kick_diff_enable`). Without the feature
 /// none of this is in the build. It never writes to the target and never
 /// touches the command stream; it only reads memory the GPU wrote.
 #[cfg(feature = "test-knobs")]
