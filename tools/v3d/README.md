@@ -533,3 +533,47 @@ TRIANGLES), the shader binary with `shadrec_gl_main` and two
 `qpu_counts_<dev>.tsv`'s second header line names the command and the corpus
 file it wrote, so a table regenerated to a scratch copy differs from the
 committed one only in that line; the rows are byte-identical.
+
+### What of 7.1 is on main
+
+The tools above, and these (commits `2671baec`, `3762ec20`, `7bd8a8e9`,
+`8471ff8b`, `55e3550d`). The 7.1 packet encoders, the 7.1 frame builder, the
+register mock and the `v3d71` gate row are being added (issue #7) and are not
+described here.
+
+- **`v3d_shc --device 71`** (`v3d_shc.c`): the 7.1 device flag described under
+  H2. `qpu_corpus.py --device 71` runs it over the corpus programs and writes
+  `qpu_corpus_71.txt` (the words) and `qpu_counts_71.tsv` (fs/vs/cs counts per
+  program); `--device 42` writes `qpu_corpus.txt` and `qpu_counts_42.tsv`.
+  `--out <copy>` writes a scratch copy instead. `V3D_SHC` names the binary
+  `drm_shim_ref.sh build` made.
+- **`tools/v3d/shim71/`**: `clear.clif` and `triangle.clif` are the control lists
+  Mesa 26.2.1's v3d driver writes with `V3D_DEBUG=clif` for a clear and for one
+  triangle, taken on the drm-shim with `V3D_GPU_ID=71` (`drm_shim_ref.sh run
+  <work dir> <case> <out prefix> 71`; `<case>` is what `gl_ref.py` draws).
+  `clear.stdout` and `triangle.stdout` hold `gl_ref.py`'s two lines (renderer
+  string, `glGetError`). They are what Mesa submits, not a board capture;
+  the shim's `SUBMIT_CL` does nothing.
+- **`src/shaderc/online/v3d/`** (the 4.2 modules next to them are unchanged):
+  - `isa71.rs`: the 7.1 QPU instruction model (no accumulators or mux, a
+    register-file address per operand, the SFU as add operations).
+  - `codec71.rs`: decode and encode of 7.1 words, the generation as a
+    parameter (`Gen`, `decode_gen`, `encode_any`); Mesa's pack/unpack through
+    `qpu_ffi.rs` (which takes the 7.1 device) does the bit work.
+  - `listing71.rs`: the disassembler, in the text of Mesa's `v3d_qpu_decode`.
+  - `golden71.rs`: the `{ 71, word, text }` rows of Mesa's `qpu_disasm.c`.
+  - `roundtrip71.rs`: every word of `qpu_corpus_71.txt` decoded and written
+    back bit for bit, the strict refusals, and a random sweep.
+- **Tests.** The two test modules are `#[cfg(test)]` in a `gpu-v3d` build, the
+  configuration `tools/check.sh` runs for its `scope v3d` rows:
+
+  ```sh
+  cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table --lib -- v3d::roundtrip71 v3d::golden71
+  ```
+
+  15 tests pass on `1673798c`. `listing71.rs` has no test of its own; `golden71`
+  and `roundtrip71` print through it.
+- **Where the Pi 5 facts are:** `driver/docs/rpi5-v3d71-facts.md` (registers,
+  interrupts, clocks, power domains, MMU, each with a file-and-line citation)
+  and `docs/notes/pre-study-rpi5.md` (the plan: what can be done before the
+  board, what needs it, the open questions U1 to U12).
