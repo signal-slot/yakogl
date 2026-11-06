@@ -54,6 +54,13 @@ void v3d_frame_tiling_ms(uint32_t width, uint32_t height, uint32_t rts, bool msa
 void v3d_frame_tiling_bpp(uint32_t width, uint32_t height, uint32_t rts, bool msaa, uint32_t max_bpp,
 			  struct v3d_tiling *t);
 
+/* The same for a V3D generation (`ver` 42 or 71, as Mesa's devinfo->ver). 4.2
+ * reads `rts` and `max_bpp` and is v3d_frame_tiling_bpp; 7.1 reads only
+ * `total_color_bpp`, the bytes per pixel of all render targets together
+ * (RGBA8 4, RGBA16F 8, RGBA32F 16 each), as Mesa's v3d_choose_tile_size does. */
+void v3d_frame_tiling_gen(uint32_t ver, uint32_t width, uint32_t height, uint32_t rts, bool msaa,
+			  uint32_t max_bpp, uint32_t total_color_bpp, struct v3d_tiling *t);
+
 /* Tile allocation and tile state sizes for a frame (v3d_util.c
  * v3d_tile_alloc_sizes, one layer). `draws` is the number of draw calls. */
 void v3d_frame_alloc_sizes(const struct v3d_tiling *t, uint32_t draws, uint32_t page_size,

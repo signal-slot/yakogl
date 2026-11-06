@@ -45,18 +45,45 @@ void v3d_frame_tiling_ms(uint32_t width, uint32_t height, uint32_t rts, bool msa
 void v3d_frame_tiling_bpp(uint32_t width, uint32_t height, uint32_t rts, bool msaa, uint32_t max_bpp,
 			  struct v3d_tiling *t)
 {
-	/* v3d_choose_tile_size, the 4.x branch (v3d_util.c:122-200, Mesa
-	 * b739817b): from 64x64, one step down the table for 2 render targets
+	v3d_frame_tiling_gen(42, width, height, rts, msaa, max_bpp, 0, t);
+}
+
+/* v3d_util.c tile_size_valid, V3D 7.1 (the TLB memories in bytes). */
+static bool tile_size_valid71(uint32_t pixels, uint32_t color_bpp, uint32_t depth_bpp)
+{
+	if (pixels * depth_bpp <= 8 * 1024 && pixels * color_bpp <= 16 * 1024 + 16 * 1024)
+		return true;
+	return pixels * depth_bpp <= 16 * 1024 && pixels * color_bpp <= 16 * 1024;
+}
+
+void v3d_frame_tiling_gen(uint32_t ver, uint32_t width, uint32_t height, uint32_t rts, bool msaa,
+			  uint32_t max_bpp, uint32_t total_color_bpp, struct v3d_tiling *t)
+{
+	/* v3d_choose_tile_size (v3d_util.c:122-200, Mesa 26.2.1; the 4.x branch
+	 * is the else at :177): from 64x64, one step down the table for 2 render targets
 	 * and two for 3-4, two more for 4x MSAA ("if (msaa) idx += 2"), no
 	 * double buffer, and one more per step of the largest internal bpp
 	 * ("tile_size_index += max_internal_bpp": 32 bpp adds nothing, 64 one,
 	 * 128 two; Mesa's table runs down to 8x8). The TILE_BINNING_MODE_CFG
 	 * packet carries only the RT count, the max bpp and the MSAA bit, and
 	 * the hardware takes the tile size from them, so this rule is the
-	 * hardware's, not a choice. */
+	 * hardware's, not a choice.
+	 *
+	 * V3D 7.1 (:148-175) ignores the count and the maximum: the first
+	 * table entry whose colour (total_color_bpp bytes of all render
+	 * targets, x4 with MSAA) and 32-bit depth (x4) fit the TLB. */
 	static const uint8_t sizes[][2] = { { 64, 64 }, { 64, 32 }, { 32, 32 }, { 32, 16 },
 					    { 16, 16 }, { 16, 8 },  { 8, 8 } };
-	uint32_t idx = (rts > 2 ? 2 : rts > 1 ? 1 : 0) + (msaa ? 2 : 0) + (max_bpp > 2 ? 2 : max_bpp);
+	uint32_t idx;
+	if (ver >= 71) {
+		uint32_t color_bpp = total_color_bpp * (msaa ? 4 : 1);
+		uint32_t depth_bpp = 4 * (msaa ? 4 : 1);
+		for (idx = 0; idx < 6; idx++)
+			if (tile_size_valid71(sizes[idx][0] * sizes[idx][1], color_bpp, depth_bpp))
+				break;
+	} else {
+		idx = (rts > 2 ? 2 : rts > 1 ? 1 : 0) + (msaa ? 2 : 0) + (max_bpp > 2 ? 2 : max_bpp);
+	}
 	t->tile_w = sizes[idx][0];
 	t->tile_h = sizes[idx][1];
 	t->tiles_x = div_round_up(width, t->tile_w);
