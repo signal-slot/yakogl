@@ -3,7 +3,7 @@
 # Mali (Valhall, v10): `discard`, the frame side and the compiler side
 
 Date 2026-10-22, tip `bc17288cb`. Plan #152 item `notes-discard`, for step S6
-of issue #1384 (`gh` was not run; the scope is `driver/docs/nanopc-t6-mali.md`,
+of issue #31 (`gh` was not run; the scope is `driver/docs/nanopc-t6-mali.md`,
 "The general lowering (approved 2026-10-19)"). It is a reading of Mesa
 26.2.1's source and of our tree; host research only, no file under `src/`,
 `tools/` or `driver/` changed, no board run. What only the board can settle is
@@ -215,7 +215,7 @@ discard.
   late update; a counting draw of a non-discarding shader does not (section
   2.2 of this note; `frame.rs:2670-2676` documents the non-discard case, whose
   comment "which `check_draw` refused" is the one that stops being true).
-- **Alpha-to-coverage** (#1386 `frame-a2c`) feeds the same two terms
+- **Alpha-to-coverage** (#33 `frame-a2c`) feeds the same two terms
   (`late_update`, `late_coverage`, `shader_modifies_coverage`) with the same
   formulas; the two items must share one computation. A discard with a2c is
   just both.
@@ -538,5 +538,5 @@ Each is a prediction from the source, to be written before the run
    program's `can_discard` set from the emit. The byte-equal gate is
    `fvgtest_discard2.expect.json` first, then `fvgtest_discard`.
 6. A discard inside an `if` needs S5's blocks (4.4).
-7. Update `tools/cts/RESULTS.md` and #1384 with the board cases 32, 33, 38
+7. Update `tools/cts/RESULTS.md` and #31 with the board cases 32, 33, 38
    (and 73, 81 once their arithmetic is lowered).

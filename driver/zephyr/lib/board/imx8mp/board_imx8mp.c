@@ -516,7 +516,7 @@ int yakogl_zephyr_wait_vblank(int64_t timeout_us)
 }
 
 #ifdef CONFIG_YAKOGL_BOARD_IMX8MP_DISPLAY_RECORD
-/* The DISPLAY record (record.rs, kind DISPLAY; issue #23): the chain as it
+/* The DISPLAY record (record.rs, kind DISPLAY; issue #8): the chain as it
  * scans the window, after a second of it, so the bridge's IRQ_STAT has had
  * about 60 frames to latch a link error. Only after a pass, and only once a
  * show put the window on the panel: a failed run keeps its verdict. */

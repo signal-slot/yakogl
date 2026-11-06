@@ -1,5 +1,5 @@
 #version 100
-/* #1385 (c): a vertex-stage cube-map look-up at a uniform direction and a
+/* #32 (c): a vertex-stage cube-map look-up at a uniform direction and a
  * uniform level, textureCubeLod's CUBEFACE1/CUBEFACE2/CUBE_SSEL/CUBE_TSEL
  * sequence and TEX_SINGLE.cube EXPLICIT; gl_test case 113's
  * tools/shaders/es100/cubemap.vert verbatim (tools/mali/drm_shim_ref.sh run,

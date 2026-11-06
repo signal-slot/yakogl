@@ -2,7 +2,7 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Valhall fragment stage: arithmetic on gl_FragCoord that the back end calls mediump
 
-Date 2026-10-25, tip `653fe45d`. Plan #153 item `precision2`, for issue #1384.
+Date 2026-10-25, tip `653fe45d`. Plan #153 item `precision2`, for issue #31.
 Host research only: no file under `src/` changed, no board run. Mesa 26.2.1
 (`MESA_PAN_TREE`), cited as `G/` = `src/compiler/glsl/`. Words are quoted from
 `tools/mali/testdata/fbload_<name>.expect.json` (`name` = `fbload`,

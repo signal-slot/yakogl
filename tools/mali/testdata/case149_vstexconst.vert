@@ -1,5 +1,5 @@
 #version 100
-/* #1384/#1385 plan #153 study-vstex: minimal vertex shader, one sampler, a look-up at a coordinate with one constant lane (the t lane constant)
+/* #31/#32 plan #153 study-vstex: minimal vertex shader, one sampler, a look-up at a coordinate with one constant lane (the t lane constant)
  * (tools/mali/drm_shim_ref.sh run, Mesa 26.2.1; see
  * docs/notes/mali-vs-texture-lanes.md). */
 attribute vec4 a_pos;

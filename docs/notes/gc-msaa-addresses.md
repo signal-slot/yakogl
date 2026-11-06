@@ -1,6 +1,6 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
-# gc-msaa-addresses: case 16's 4x stream against Mesa's etnaviv (issue #8)
+# gc-msaa-addresses: case 16's 4x stream against Mesa's etnaviv (issue #4)
 
 Date: 2026-10-12. Host only; no board run was made for this record.
 
@@ -10,7 +10,7 @@ The round-2 board record (`ab43a20c5:tools/cts/log/board-sessions/imx8mp-gltest-
 image `e3efeaad`) shows case 16's 4x half failing check 4 (`x4 inside` got
 `0x00000000`, want `0xffff00ff`) in arms 1 and 9, with the 64 KiB scratch
 empty after the frame, after the clear alone and after the draw alone. The
-status comment on #8 asks two things of the host: (1) is the 4x colour
+status comment on #4 asks two things of the host: (1) is the 4x colour
 surface given to the PE and the RS the one the probe reads, and (2) how the
 4x setup differs from Mesa's etnaviv.
 

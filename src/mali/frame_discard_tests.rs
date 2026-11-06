@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-//! The frame builder's draw of a fragment shader that discards (#1384 S6,
+//! The frame builder's draw of a fragment shader that discards (#31 S6,
 //! docs/notes/mali-discard.md): what a `can_discard` program moves in the
 //! draw, as Mesa 26.2.1 builds it on v10 (`csf_emit_draw_state`,
 //! pan_csf.c:1433-1673, with `pan_earlyzs_analyze`, pan_earlyzs.c:31-115,

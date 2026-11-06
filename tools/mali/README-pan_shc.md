@@ -265,7 +265,7 @@ The per-instruction detail is the full output of the commands above.
 
 ### Control cases
 
-`testdata/cases.txt`: 73 cases, 208 regions (the 9 below, then the S4-S6 programs of #1384: `s4_*`, `fvg_*`, `fvgtest_*`, then the constant-coordinate and run-time-index programs of #1385 (b): `tex_coord_const`, `vtl_fs`, `uniidx_d`, `uniidx_i`), each pan_shc region against the shim
+`testdata/cases.txt`: 73 cases, 208 regions (the 9 below, then the S4-S6 programs of #31: `s4_*`, `fvg_*`, `fvgtest_*`, then the constant-coordinate and run-time-index programs of #32 (b): `tex_coord_const`, `vtl_fs`, `uniidx_d`, `uniidx_i`), each pan_shc region against the shim
 driver (26.2.1). `ref_cases.py` passes when every region is as recorded. `equal`
 means the words and the facts agree. A `differs:<cause>:<n>:<sha256>` pins
 the number of differing words and the digest of those words on both sides, so

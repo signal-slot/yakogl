@@ -3,7 +3,7 @@
 # Valhall general lowering: Mesa pass map (S2-S6) and the femtovg per-program needs
 
 Date 2026-10-20, tip `db5701fb1`. Plan #152 item `notes-lowering`, for issue
-#1384 (`gh` was not readable from the worker; the scope is
+#31 (`gh` was not readable from the worker; the scope is
 `driver/docs/nanopc-t6-mali.md`, "The general lowering (approved 2026-10-19)").
 Host research only: no file under `src/` or `tools/` changed, no board run.
 
@@ -393,7 +393,7 @@ Features per shader type (names in the "Ops" column):
 
 Step key: S2 = highp arithmetic, S3 = fragment uniform block to FAU, S4 = ALU
 rows, S5 = `if`, S6 = `discard` and the loop. **Tex** = the texture slice
-(the issue #1385 items and the "Tex row" of #1384; today's refusals are one
+(the issue #32 items and the "Tex row" of #31; today's refusals are one
 look-up per fragment shader, a coordinate that is a varying read whole, a
 result read in its own pairs; `mod.rs:306-321`), which is independent of S2-S6
 and not scheduled by the design; a texture program is `ok` at the *later* of
@@ -441,7 +441,7 @@ Common to every row: highp = yes. Columns: `frag[]` words read; `if` live
 | `fill_image` | arith | + 10.y | 4 (4) | - | yes | | 1 | S6 + Tex |
 | `fill_image.glyph.nodiscard` | arith | + 11.x | 4 (4) | - | - | | 2 | S5 + Tex (two look-ups) |
 | `fill_image.glyph` | arith | + 10.y | 5 (5) | - | yes | | 2 | S6 + Tex (two look-ups) |
-| `fill_image_gradient.nodiscard.noscissor` | arith | 3-5,9,10.x | 0 (0) | - | - | gradient ops, `vec2(d,0)` coordinate | 1 | **S4\*** + Tex (coordinate form, #1385 case 122) |
+| `fill_image_gradient.nodiscard.noscissor` | arith | 3-5,9,10.x | 0 (0) | - | - | gradient ops, `vec2(d,0)` coordinate | 1 | **S4\*** + Tex (coordinate form, #32 case 122) |
 | `fill_image_gradient.nodiscard` | arith | + scissor | 1 (1) | - | - | | 1 | S5\* + Tex |
 | `fill_image_gradient` | arith | + 10.y | 2 (2) | - | yes | | 1 | S6\* + Tex |
 | `fill_image_gradient.glyph.nodiscard` | arith | + 11.x | 2 (2) | - | - | | 2 | S5\* + Tex |
@@ -560,7 +560,7 @@ Common to every row: highp = yes. Columns: `frag[]` words read; `if` live
    `pan_shc` reference already includes the first; our graph runs both in
    that order or the byte-equal check fails near the counts.
 7. **Texture is unscheduled** in the S2-S6 chain although 24 programs
-   need it; #1385's "Tex row" lands where the plan puts it.
+   need it; #32's "Tex row" lands where the plan puts it.
 8. **The link's code motion** (found by S4, 2026-10-21). The GL linker runs
    `nir_opt_varyings` on every program (`gl_nir_lower_optimize_varyings`,
    gl_nir_linker.c:1477-1525), whose backward inter-shader code motion

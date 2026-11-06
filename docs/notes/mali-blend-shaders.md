@@ -1,6 +1,6 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
-# Mali Valhall: Mesa's blend shaders for gl_test cases 211 and 190 (#1384 S6, #1385)
+# Mali Valhall: Mesa's blend shaders for gl_test cases 211 and 190 (#31 S6, #32)
 
 A study, not an implementation (item `study-blend` of plan 153; the item
 `blendshaders` builds it). Mesa is 26.2.1 (`MESA_PAN_TREE`), the byte

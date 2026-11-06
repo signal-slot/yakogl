@@ -2,7 +2,7 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Mali (Valhall, v10): the frame-side refusals, Mesa's design per case
 
-The six refusals of issue #1386 (the NanoPC-T6's `gpu-mali` backend) and how
+The six refusals of issue #33 (the NanoPC-T6's `gpu-mali` backend) and how
 Mesa 26.2.1's panfrost builds each one on v10: the code it runs, the
 descriptor fields and program bytes that differ from what `src/mali` packs
 today, where the change lands in our tree, and the `gl_test` case that checks
@@ -772,7 +772,7 @@ halves read `0xffbfbf40` (`mesa/mesa-varyorder.stdout:8-10`, PASS). Ours
 reads PASS too since `link-varying-order`
 (`0dce654a8:tools/mali/board-ref/2026-10-23-varying-order/README.md:104`).
 
-## 7. A frame's data past its first chunk (cases 197 and 56, #1385 (b))
+## 7. A frame's data past its first chunk (cases 197 and 56, #32 (b))
 
 **Ours, before.** The frame's `data` arena (client vertex arrays, staged
 indices, texel row copies) was one fixed 256 KiB region of the slot

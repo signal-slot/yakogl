@@ -256,7 +256,7 @@ the program (release, opt-level 2, no LTO) instead of the assembled
 `libyakogl.a`. The milliseconds therefore compare with each other, not
 with FINDINGS-gc.md's.
 
-**Board check needed** (#1206): terrain and refract pictures, dEQP-GLES2
+**Board check needed** (#16): terrain and refract pictures, dEQP-GLES2
 `texture.mipmap.*`, and the per-scene ms a frame on the i.MX8MP.
 
 ## After: buffer map reuse (item 4, map half, 2026-10-18)

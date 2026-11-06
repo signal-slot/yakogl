@@ -56,7 +56,7 @@ MHz, 58.761 Hz with the 1404 x 840 total; DSIM reference 12 MHz, lane rate
 426.6 Mbit/s (`burst-clock-frequency`, golden PLLCTRL 0x00816C74), 2.6 %
 above the 415.8 Mbit/s of the pixels -- the room the packet overhead needs
 (`ip::samsung_dsim::LINK_MARGIN_PERMILLE`, measured: a link with no margin
-broke the picture on 2026-09-23 and, at 71.1 MHz, on 2026-10-06, issue #23).
+broke the picture on 2026-09-23 and, at 71.1 MHz, on 2026-10-06, issue #8).
 The SN65DSI84's DSI clock range (42) and divider (3) give an LVDS clock of
 71.1 MHz, as on Linux. The 71.1 MHz plan of 2026-10-02 to 2026-10-06
 (VIDEO_PLL1 1066.5 MHz, 60.286 Hz) had no margin and is withdrawn. NOTES.md

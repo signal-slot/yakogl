@@ -15,7 +15,7 @@
 //! stores a clear's integers the way a back end that can render the format
 //! must (`backend::HOST_INTEGER_RT_FORMATS` is what tells the GL core it can);
 //! no GPU runs here. The back ends' own work is int-rt:
-//! #1229, #1230, #1231.
+//! #1229, #1230, #20.
 //!
 //! An ES 2.0-reporting build (`report-es2`) must still refuse every one of
 //! the formats: `es2_build_refuses_the_integer_formats` is the only test it

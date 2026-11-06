@@ -19,7 +19,7 @@ psiz_triangles  ctl_psiz.vert     tri.frag              triangles  vs.position_n
 tex_highp       ctl_uv.vert       ctl_tex_highp.frag    triangles  vs.position=equal vs.varying=equal fs.fragment=differs:mediump:17:81b3a8b98eec   # closes with the GLSL front end (follow-up)
 tex_mediump     ctl_uv.vert       ctl_tex_mediump.frag  triangles  vs.position=equal vs.varying=equal fs.fragment=differs:mediump:20:ca043932e1b4   # closes with the GLSL front end (follow-up)
 tex_points      ctl_uv.vert       ctl_tex_mediump.frag  points     vs.position=equal vs.varying=equal fs.fragment=differs:mediump:20:ca043932e1b4   # closes with the GLSL front end (follow-up)
-# The Valhall general lowering (#1384): S4 one minimal highp program per ALU op, then the femtovg
+# The Valhall general lowering (#31): S4 one minimal highp program per ALU op, then the femtovg
 # and fvgtest programs (S4 fill_color.nodiscard.noscissor; S5 if; S6 discard and the loop). Their
 # shim references are the <name>.expect.json files; fvg_* are drawn with --uniform-values.
 s4_fmin         s4_fmin.vert      s4_fmin.frag          triangles  vs.position=equal vs.varying=equal fs.fragment=equal
@@ -86,12 +86,12 @@ s4_fceil                                         s4_fceil.vert s4_fceil.frag tri
 s4_ffloor                                        s4_ffloor.vert s4_ffloor.frag triangles fs.fragment=equal vs.position=equal vs.varying=equal
 s4_fneg                                          s4_fneg.vert s4_fneg.frag triangles fs.fragment=differs:unanalysed:1:4e2b54bcfadc vs.position=equal vs.varying=differs:unanalysed:4:61cc784a9a88
 s4_fsat                                          s4_fsat.vert s4_fsat.frag triangles fs.fragment=equal vs.position=equal vs.varying=equal
-# #1385 (b): a look-up at a constant coordinate (cases 122, 197) and a vec4 array read at a run-time index (case 122,
+# #32 (b): a look-up at a constant coordinate (cases 122, 197) and a vec4 array read at a run-time index (case 122,
 # 108 D). uniidx_* read an int uniform, which gl_ref.py's --uniform-values does not set: drawn without it (fidx 0);
 # the others with it. The passthrough vertex shader's varying is unread, so those programs have no varying stage.
 tex_coord_const                                  tri.vert tex_coord_const.frag triangles vs.position=equal fs.fragment=equal
 vtl_fs                                           tex_vs_lod.vert vtl_fs.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:24:584bf3729d29
-# #1385 (c): gl_test case 113's vertex-stage cube-map look-up (textureCubeLod at a uniform direction and level) with its
+# #32 (c): gl_test case 113's vertex-stage cube-map look-up (textureCubeLod at a uniform direction and level) with its
 # pass-through fragment shader; gl_ref.py binds the samplerCube a 16x16 cube of 5 levels. Drawn with --uniform-values for
 # the .expect.json (the FAU words name u_dir and u_lod).
 cube_vs                                          cube_vs.vert cube_vs_color.frag triangles vs.position=equal vs.varying=equal fs.fragment=equal

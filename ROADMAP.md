@@ -73,7 +73,7 @@ Left for the criterion:
 - Pictures by eye: only the AM62P's were looked at on its panel (at
   `bc43ea09`; 29 of 33 scenes match the current run, the other 4 are animated).
   The Pi 4 and i.MX8MP pictures are checked by value only (the i.MX8MP:
-  #1207).
+  #17).
 - One main commit for the three scores again, with terrain and refract
   checked (#1196).
 
@@ -81,7 +81,7 @@ Slow scenes, which the criterion does not judge: on the AM62P terrain,
 shadow and refract take 94, 353 and 376 ms a frame, mostly GL-call time on
 the CPU (#1199, #1006, #1198); on the Pi 4 terrain takes 162 ms (#1209); on
 the i.MX8MP terrain, shadow and refract run at 4, 2 and 2 FPS (shadow and
-refract: #1204), and the other scenes wait for the panel's VSYNC every frame
+refract: #15), and the other scenes wait for the panel's VSYNC every frame
 (`docs/notes/imx8mp-frame-floor.md`). The gap list is
 `docs/notes/stage2-bench-gap.md`.
 
@@ -146,7 +146,7 @@ On the boards (`tools/cts/RESULTS.md`, "ES 3.0"):
   cases, 5,343 pass / 97 fail / 204 NotSupported / 4 QualityWarning /
   2 ResourceError, 99 never began (a scissored or masked clear of an integer
   target aborts images FO6 and M1).
-- i.MX8MP: not run on the board yet (#1262); the recipe
+- i.MX8MP: not run on the board yet (#24); the recipe
   (`docs/es3/board-recipe-imx8mp.md`) and the preflight
   (`tools/cts/imx8mp-gles3-preflight.sh`) are in the tree.
 
@@ -160,10 +160,10 @@ from its own storage (`docs/standalone-boot.md`), one whole dEQP-GLES2 tree
 with 0 Fail, and the three benchmarks running, each recorded the same way.
 
 **State.** No board has joined. A port to the FriendlyElec NanoPC-T6
-(Rockchip RK3588, Arm Mali-G610) runs outside the five stages (issue #20,
+(Rockchip RK3588, Arm Mali-G610) runs outside the five stages (issue #7,
 `driver/docs/nanopc-t6-mali.md`). Its back end (`gpu-mali`) runs on the
 board's own Linux through the panthor kernel driver: the newest `gl_test`
 sweep (`tools/cts/log/2026-11-01-final3/`, main `0ff58329`, 2026-11-01) reads
 132 of 256 cases PASS, 3 FAIL, 1 FAULT, 27 refused by name, 84 with no case
 and 9 skipped (`tools/cts/RESULTS.md`, "Mali"). Booting it under
-Zephyr is milestones Z1 to Z4 (#1281).
+Zephyr is milestones Z1 to Z4 (#26).

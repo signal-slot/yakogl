@@ -394,7 +394,7 @@ const GC_MSAA_RASTERISE: bool = true;
 /// writes for every 4x target on this core; bits 2 and 3 are not
 /// (docs/notes/gc-msaa-addresses.md). A test knob: it and
 /// its setter exist only with the `test-knobs` feature, and without it 4x is
-/// `GC_MSAA_ENABLE`'s, off, until the board has run it (issue #8).
+/// `GC_MSAA_ENABLE`'s, off, until the board has run it (issue #4).
 #[cfg(feature = "test-knobs")]
 #[no_mangle]
 pub static mut gc_debug_msaa: i32 = 0;
@@ -562,7 +562,7 @@ fn wide_target(gl: &GlesDraw) -> bool {
 /// target (etnaviv_state.c:536-539, Mesa 26.2.1, MIT; this core has the
 /// feature: hwdb gc7000 0x6204, `REG_PEEnhancements3` = 1, which
 /// etna_hwdb.c:84 maps to SINGLE_BUFFER). The 4x path wrote 1 with a
-/// SUPER_TILED colour format, a pair Mesa never emits. Issue #8; opt-in
+/// SUPER_TILED colour format, a pair Mesa never emits. Issue #4; opt-in
 /// until the board has run it.
 fn single_buffer(gl: &GlesDraw, wide: bool) -> u32 {
     if wide {
