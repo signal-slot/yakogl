@@ -167,7 +167,7 @@ scope_of_path() {
   tools/osal/*) echo osal ;;
   driver/samples/* | examples/* | tools/slint/* | tools/probes/* | tools/host-replay/*) echo samples ;;
   driver/rust/* | driver/*) echo drivers ;;
-  tools/cts/* | tools/testdata/* | tools/*.py | tools/board.sh | tools/board_selftest.sh | tools/setup-gate-host.sh | tools/env/* | tools/uboot-netboot-lib.sh | tools/website-check.sh | tools/hostharness/* | tools/README.md) echo tools ;;
+  tools/cts/* | tools/testdata/* | tools/*.py | tools/board.sh | tools/board_selftest.sh | tools/uboot_env_selftest.sh | tools/setup-gate-host.sh | tools/env/* | tools/uboot-netboot-lib.sh | tools/website-check.sh | tools/hostharness/* | tools/README.md) echo tools ;;
   *) echo all ;;
   esac
 }
@@ -3079,6 +3079,10 @@ step "gen     src/vivante/internal.rs == yakogl-precompile --internal (our compi
 # every board and backend), so it runs every time.
 scope tools
 step "tools   board.sh dry-run matrix and replays" tools/board_selftest.sh
+# tools/uboot_env.py on synthetic environment images the test builds itself
+# (no board data).
+scope tools
+step "tools   uboot_env.py: edit, check and diff on synthetic images" tools/uboot_env_selftest.sh
 # The board lock every board runner takes (driver/tools/kexec-zephyr/
 # board_lock.sh), without a board: a second taker refuses at once and names
 # the holder's pid and script, and nanopc-t6.sh sources it with LOCK_WAIT 0
