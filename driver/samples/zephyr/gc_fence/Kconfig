@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+
+config GC_FENCE_WAIT_MS
+	int "Bound on the wait for the fence, ms"
+	default 1000
+	range 1 10000
+	help
+	  gc_render_wait()'s bound. An empty kick retires in microseconds;
+	  past the bound the render service dumps the GPU's state, resets
+	  it, and the run fails at the wait.
+
+source "Kconfig.zephyr"

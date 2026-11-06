@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+
+config GC_CLEAR_WIDTH
+	int "Render target width, pixels (a multiple of 16)"
+	default 256
+	range 16 2048
+	help
+	  The resolve engine takes widths in multiples of 16 only; the
+	  sample asserts it at build time and gc_draw_clear() refuses
+	  anything else.
+
+config GC_CLEAR_HEIGHT
+	int "Render target height, pixels"
+	default 128
+	range 1 2048
+
+config GC_CLEAR_WAIT_MS
+	int "Bound on the wait for each clear's fence, ms"
+	default 1000
+	range 1 10000
+	help
+	  gc_render_wait()'s bound. Past it the render service dumps the
+	  GPU's state, resets it, and the run fails at the wait.
+
+source "Kconfig.zephyr"
