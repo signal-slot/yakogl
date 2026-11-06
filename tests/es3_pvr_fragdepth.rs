@@ -167,15 +167,14 @@ fn depth_with_several_outputs_builds() {
     let src = "#version 300 es\nprecision highp float;\nuniform vec4 c;\nuniform float d;\nin vec2 v;\n\
                layout(location = 0) out vec4 o0;\nlayout(location = 1) out vec4 o1;\n\
                void main() { o0 = c; o1 = c + 1.0; BODY }\n";
-    for body in ["gl_FragDepth = d;"] {
-        let r = compile(&src.replace("BODY", body)).unwrap_or_else(|e| panic!("{body}: {e}"));
-        assert_eq!(r.writes_depth, 1, "{body}");
-        let p = ops(&r.image);
-        assert_eq!(p.iter().filter(|o| o.0 == "depthf").count(), 1, "{body}: {p:?}");
-        let at = p.iter().position(|o| o.0 == "depthf").unwrap();
-        let src_reg = p[at].2.expect("depthf reads a register");
-        assert!(p[..at].iter().any(|o| o.0 == "fadd" && o.1 == 1 && o.3 == Some(src_reg)), "{body}: {p:?}");
-    }
+    let body = "gl_FragDepth = d;";
+    let r = compile(&src.replace("BODY", body)).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(r.writes_depth, 1);
+    let p = ops(&r.image);
+    assert_eq!(p.iter().filter(|o| o.0 == "depthf").count(), 1, "{p:?}");
+    let at = p.iter().position(|o| o.0 == "depthf").unwrap();
+    let src_reg = p[at].2.expect("depthf reads a register");
+    assert!(p[..at].iter().any(|o| o.0 == "fadd" && o.1 == 1 && o.3 == Some(src_reg)), "{p:?}");
 }
 
 /// `compile` under a blend key: Ok or the refusal.
