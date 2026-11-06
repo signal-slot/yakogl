@@ -13,11 +13,11 @@
 #   tools/board.sh <board> gm-lines <outdir>
 #   tools/board.sh [--dry-run] <board> default <image> <boots|forever> | nodefault
 #   tools/board.sh <board> tally <rundir> | diff <rundir-a> <rundir-b>
-#      board = pi4 | am62p | imx8mp | x2
+#      board = pi4 | pi5 | am62p | imx8mp | x2
 #      BOARD_BOOT = tryboot | uboot-tftp | uboot-mmc | kexec-dev
 #
 # Only the boot backend differs between the boards; everything else is one
-# sequence. The backends: tryboot (pi4; the firmware boots the image once
+# sequence. The backends: tryboot (pi4, pi5; the firmware boots the image once
 # from the SD card), uboot-tftp (am62p, imx8mp, the default there; U-Boot
 # fetches the image over TFTP once: tools/uboot-netboot-lib.sh,
 # tools/tftp_oneshot.py), uboot-mmc (am62p, imx8mp; the same one-shot, but
@@ -159,9 +159,10 @@
 # (results.tsv).
 #
 # Environment (no default for a machine or an address):
-#   BOARD_HOST         user@host of the board's Linux (pi4: PI4_HOST also read)
-#   BOARD_UART         pi4: the serial device wired to the Pi, or host:port of
-#                      a serial bridge (PI4_UART also read); am62p: host:port
+#   BOARD_HOST         user@host of the board's Linux (pi4: PI4_HOST also read; pi5: PI5_HOST)
+#   BOARD_UART         pi4, pi5: the serial device wired to the Pi, or host:port of
+#                      a serial bridge (PI4_UART / PI5_UART also read; the pi5's is
+#                      its debug connector, read only: the runner never writes to it); am62p: host:port
 #                      of the serial bridge (UART_ADDR also read); imx8mp: optional,
 #                      host:port of a bridge or a local device; when set, a uboot-
 #                      tftp/uboot-mmc run probes it and captures the console into
@@ -176,13 +177,13 @@
 #                      as docs/notes/am62p-netboot.md and imx8mp-netboot.md describe
 #                      (uboot-mmc needs no server, TFTP root, log or route)
 #   RUN_BOUND, RETURN_BOUND  seconds to the image's end and to Linux after it
-#                      (pi4 420/300, am62p U-Boot 420/180 (780/180 for a dEQP image:
+#                      (pi4 420/300, pi5 420/420 (a reboot takes ~150 s to ssh), am62p U-Boot 420/180 (780/180 for a dEQP image:
 #                      600 s RTI bound + 60 s + 120 s boot), imx8mp U-Boot 600
 #                      in all, am62p kexec-dev 1500/600, imx8mp and x2 kexec-dev
 #                      1500 in all)
 #   BOARD_END_RE       extended regex of the image's last line (pi4: PI4_END_RE
 #                      also read); BOARD_TAIL_S seconds kept after it (5)
-#   BOARD_HDMI_TIMINGS pi4: the panel's hdmi_timings, 17 integers (PI4_HDMI_TIMINGS
+#   BOARD_HDMI_TIMINGS pi4 only (pi5: ignored): the panel's hdmi_timings, 17 integers (PI4_HDMI_TIMINGS
 #                      also read); any other shape is refused before the board is touched
 #   BOARD_MUSTPASS     the mustpass list the console tally and diff read
 #                      (default tools/cts/gles2-mustpass.txt; a dEQP-GLES3
@@ -232,6 +233,38 @@ pi4)
     BOARD_UART=${BOARD_UART:-${PI4_UART:-}}
     BOARD_END_RE=${BOARD_END_RE:-${PI4_END_RE:-}}
     BOARD_HDMI_TIMINGS=${BOARD_HDMI_TIMINGS:-${PI4_HDMI_TIMINGS:-}}
+    RUN_BOUND_DEFAULT=420; RETURN_BOUND_DEFAULT=300
+    TREE_RETRIES_DEFAULT=0
+    ;;
+pi5)
+    # The Raspberry Pi 5 (BCM2712, V3D 7.1): the pi4's tryboot sequence with the
+    # three differences of docs/notes/pre-study-rpi5.md section 4: tryboot.txt
+    # always names our file (kernel=; the firmware's own default is
+    # kernel_2712.img), no arm_64bit (ignored there), no start4.elf/fixup4.dat.
+    BOOTS="tryboot"
+    NB_MMC=-
+    # Zephyr's rpi_5 links sram0 at 0x200000 (bcm2712.dtsi); the window ends at
+    # the largest rpi_5 overlay's (none exists yet: the Pi 4's 256 MiB, 0x10000000
+    # at 0x200000). Whether the firmware loads a kernel= image there is U6,
+    # answered by the D1 run, not by this file.
+    YAKO_ADDR=0x200000; LOAD_END=0x10200000
+    MARKER='board: PM watchdog resets'   # driver/zephyr/lib/board/rpi4/rpi_wdog.c, built for the Pi 5 with the same literal
+    NB_WATCHDOG="the PM watchdog"
+    RESET_RE='GPU reset (recovery'
+    END_RE_DEFAULT='^(deqp: summary: |v3d_deqp: build [^ ]+ (DONE|INCOMPLETE|STOPPED)|v3d_gl_test RECORD end|v3d_clear: (PASS|FAIL))'
+    LEGACY_RE=$END_RE_DEFAULT
+    BOARD_HOST=${BOARD_HOST:-${PI5_HOST:-}}
+    BOARD_UART=${BOARD_UART:-${PI5_UART:-}}
+    BOARD_END_RE=${BOARD_END_RE:-}
+    # no HDMI timings: cmdline.txt carries video= for the capture device, and
+    # the pi4's hdmi_timings lines are not written (nor required)
+    BOARD_HDMI_TIMINGS=
+    # Bounds. Measured 2026-11-06: a reboot to ssh is ~150 s (kernel 11 s, user
+    # space 98 s, plus the firmware); RUN_BOUND is the image's own end (the pi4's
+    # 420 s); RETURN_BOUND 420 is that 150 s with the pi4's 300 s margin added
+    # again, because a slow SD bridge (0.4 MB/s writes) stretches the first
+    # boot after an image that did not finish cleanly.
+    RUN_BOUND_DEFAULT=420; RETURN_BOUND_DEFAULT=420
     TREE_RETRIES_DEFAULT=0
     ;;
 am62p)
@@ -1056,7 +1089,9 @@ pi4_prechecks() {
 # pi4_config KERNEL: the configuration that boots KERNEL, the same lines for a
 # tryboot (tryboot.txt) and for the permanent default (config.txt)
 pi4_config() {
-    printf '%s\n' '[all]' "kernel=$1" arm_64bit=1 enable_uart=1 uart_2ndstage=1
+    printf '%s\n' '[all]' "kernel=$1"
+    [ "$BOARD" = pi5 ] || printf '%s\n' arm_64bit=1   # ignored by the Pi 5's firmware
+    printf '%s\n' enable_uart=1 uart_2ndstage=1
     if [ -n "$BOARD_HDMI_TIMINGS" ]; then
         printf '%s\n' hdmi_group=2 hdmi_mode=87 "hdmi_timings=$BOARD_HDMI_TIMINGS"
     fi
@@ -1125,14 +1160,27 @@ pi4_capture_start() {
     sleep 1
 }
 
+# throttled_record before|after: the Pi 5's supply is weak (USB-PD 3000 mA,
+# "Undervoltage detected"), so vcgencmd get_throttled goes into meta.txt with
+# every record: a GPU result that looks like a hardware fault is checked
+# against it first. A read that fails is recorded as such; it stops nothing.
+throttled_record() {
+    local thr
+    [ "$BOARD" = pi5 ] || return 0
+    bget thr 'vcgencmd get_throttled 2>/dev/null' 'throttled=0x0' || thr=
+    thr=${thr#throttled=}
+    meta "throttled_$1" "${thr:-unreadable}"
+}
+
 run_tryboot() {
     local t0 ended=0 back=0 bid left
-    local bound=${RUN_BOUND:-420} backs=${RETURN_BOUND:-300}
+    local bound=${RUN_BOUND:-$RUN_BOUND_DEFAULT} backs=${RETURN_BOUND:-$RETURN_BOUND_DEFAULT}
     HOLD_MAX=${HOLD_MAX:-$((bound + backs + 300))}
     STAGED="yakogl-$NAME.bin"
     take_lock
     common_prechecks
     pi4_prechecks
+    throttled_record before
     pi4_stage
     pi4_capture_start
     trap 'stop_cap; lease_release; rm -rf "$TMP"; [ -n "${BOARD_LOCK_WATCHDOG:-}" ] && kill "$BOARD_LOCK_WATCHDOG" 2>/dev/null' EXIT
@@ -1143,6 +1191,7 @@ run_tryboot() {
         uart_is_bridge && echo "DRY host\$ derive <rundir>/console.txt ('HH:MM:SS line') from <rundir>/console.ts as it grows, and once more after the capture stops"
         echo "DRY host\$ wait for the end line ($END_RE) or a result yk-record: line, <= $bound s; then $TAIL_S s more"
         echo "DRY host\$ stop the reader; wait for a boot_id other than the one read (<= $backs s more)"
+        throttled_record after
         pi4_undo
         exit 0
     fi
@@ -1165,6 +1214,7 @@ run_tryboot() {
     meta back "$back"
     if [ "$back" = 1 ]; then
         meta t_back "$(date +%s)"
+        throttled_record after
         pi4_undo
         left=$(b "ls /boot/firmware/$STAGED 2>/dev/null; cat /boot/firmware/tryboot.txt")
         if [ "$left" = "$PREV" ]; then
@@ -1175,6 +1225,7 @@ run_tryboot() {
         fi
     else
         meta cleanup "not done: Linux not back"
+        [ "$BOARD" = pi5 ] && note "the board did not answer within $((bound + backs)) s of the reboot: it has no remote power or reset, so a person must power-cycle it. Nothing was retried; no other run may take it until the owner says it is back." >&2
     fi
     finish
 }
@@ -2012,7 +2063,7 @@ pi4_nodefault() {
 default_undo() {
     note "UNDO, from Linux (before the reboot, or once Linux is back): tools/board.sh $BOARD nodefault"
     case "$BOARD:$BOOTS_N" in
-    pi4:*)
+    pi4:* | pi5:*)
         note "UNDO, without Linux (a person): the SD card in a PC; on its FAT partition copy config-linux.txt over config.txt" ;;
     *:forever)
         note "UNDO, without Linux (a person at the U-Boot prompt$([ "$BOARD" = am62p ] && echo ", or the serial bridge: docs/standalone-boot.md")): setenv yako_default; saveenv; boot" ;;
@@ -2032,13 +2083,13 @@ cmd_default() {
         [ $# -eq 2 ] || usage
         IMG=$1 BOOTS_N=$2
         case "$BOARD:$BOOTS_N" in
-        pi4:forever | am62p:forever | imx8mp:forever) ;;
-        pi4:*) die "pi4: the firmware has no boot count: 'forever' only, with a person (docs/standalone-boot.md)" 2 ;;
+        pi4:forever | pi5:forever | am62p:forever | imx8mp:forever) ;;
+        pi4:* | pi5:*) die "$BOARD: the firmware has no boot count: 'forever' only, with a person (docs/standalone-boot.md)" 2 ;;
         *:[1-9]) ;;
         *) die "boots must be 1-9 or forever, not '$BOOTS_N'" 2 ;;
         esac
         if [ "$BOOTS_N" = forever ] && [ "${BOARD_PERSON_PRESENT:-0}" != 1 ]; then
-            die "'forever' makes the image every boot's: Linux comes back only through a person (docs/standalone-boot.md). Set BOARD_PERSON_PRESENT=1 when one is at the board$([ "$BOARD" != pi4 ] && echo ", or give a boot count (1-9): the board then returns to Linux by itself")."
+            die "'forever' makes the image every boot's: Linux comes back only through a person (docs/standalone-boot.md). Set BOARD_PERSON_PRESENT=1 when one is at the board$([ "$BOARD" != pi4 ] && [ "$BOARD" != pi5 ] && echo ", or give a boot count (1-9): the board then returns to Linux by itself")."
         fi
         check_image "$IMG"
         default_undo
@@ -2050,8 +2101,8 @@ cmd_default() {
     trap 'lease_release; rm -rf "$TMP"; [ -n "${BOARD_LOCK_WATCHDOG:-}" ] && kill "$BOARD_LOCK_WATCHDOG" 2>/dev/null' EXIT
     common_prechecks
     case "$BOARD:$VERB" in
-    pi4:default) pi4_default ;;
-    pi4:nodefault) pi4_nodefault ;;
+    pi4:default | pi5:default) pi4_default ;;
+    pi4:nodefault | pi5:nodefault) pi4_nodefault ;;
     *:default) uboot_default ;;
     *:nodefault) uboot_nodefault ;;
     esac
