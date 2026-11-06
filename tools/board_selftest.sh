@@ -48,7 +48,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/.." && pwd)
 B="$HERE/board.sh"
 TD="$HERE/testdata"
-WANT_CHECKS=282
+WANT_CHECKS=286
 
 S=$(mktemp -d)
 trap 'rm -rf "$S"' EXIT
@@ -386,6 +386,14 @@ out=$(TREE_IMAGE=$S/img/imx8mp.bin TREE_ROWS=1 dry imx8mp tree "$S/am.txt" "$S/t
 rc=$?
 check "imx8mp tree (one image, selector): rc 0, TREE_ROWS=1 runs only e01, with selector 1" \
     eval '[ "$rc" = 0 ] && grep -q "^=== e01 .*selector 1" <<<"$out" && ! grep -q "^=== e00" <<<"$out" && grep -q "53450001" <<<"$out"'
+out=$(TREE_IMAGE=$S/img/x2.bin dry x2 tree "$S/am.txt" "$S/tree" 2>&1)
+rc=$?
+check "x2 tree (one image, selector): rc 0, both rows booted, the final line names tally" \
+    eval '[ "$rc" = 0 ] && grep -q "^=== e00 .*selector 0" <<<"$out" && grep -q "^=== e01 .*selector 1" <<<"$out" && grep -q "^DRY.*tally" <<<"$out"'
+check "x2 tree: row n writes w1 = 0x5345 | n into LPGPR2, LPGPR0 kept" \
+    eval 'grep -qF "write <LPGPR0 as read> 0x00000000 0x53450000 0x00000000" <<<"$out" && grep -qF "write <LPGPR0 as read> 0x00000000 0x53450001 0x00000000" <<<"$out"'
+check "x2 tree: no sudo" eval '! grep -q "sudo" <<<"$out"'
+check "x2 tree wrote nothing on the host, no stub ran" eval '[ ! -e "$S/tree" ] && untouched'
 check "tree wrote nothing on the host" [ ! -e "$S/tree" ]
 out=$(BOARD_UART=bridge.invalid:1 TREE_IMAGE=$S/img/imx8mp.bin TREE_ROWS=1 dry imx8mp tree "$S/am.txt" "$S/tree" 2>&1)
 rc=$?
@@ -548,8 +556,8 @@ rc=$?
 check "x2 default: rc 2 (no boot loader backend), nothing done" eval '[ "$rc" = 2 ] && ! grep -q "^DRY" <<<"$out"'
 out=$(dry x2 nodefault 2>&1)
 check "x2 nodefault: rc 2" [ $? = 2 ]
-out=$(TREE_IMAGE=$S/img/x2.bin dry x2 tree "$S/img/x2.bin" "$S/tree" 2>&1)
-check "x2 tree with TREE_IMAGE (the selector form): rc 2" [ $? = 2 ]
+out=$(TREE_IMAGE=$S/img/pi4.bin dry pi4 tree "$S/am.txt" "$S/tree" 2>&1)
+check "pi4 tree with TREE_IMAGE (a board without a selector): rc 2" [ $? = 2 ]
 out=$(dry rpi5 status 2>&1)
 check "an unknown board: rc 2" [ $? = 2 ]
 out=$(dry pi4 run "$S/img/pi4.bin" "$S/logs" 'bad name' 2>&1)

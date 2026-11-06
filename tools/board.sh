@@ -2063,7 +2063,7 @@ cmd_default() {
 tree_rows() {
     local table=$1
     if [ -n "${TREE_IMAGE:-}" ]; then
-        [ "$BOARD" = imx8mp ] || die "TREE_IMAGE (one image, the row picked by the selector) needs a board with a selector: imx8mp" 2
+        case "$BOARD" in imx8mp | x2) ;; *) die "TREE_IMAGE (one image, the row picked by the selector) needs a board with a selector: imx8mp, x2" 2 ;; esac
         awk -v img="$TREE_IMAGE" '/^[[:space:]]*(#|$)/ { next } { printf "e%02d\t%s\t%d\t%s\n", n, img, n, $0; n++ }' "$table"
     elif [ -n "${TREE_IMAGE_DIR:-}" ]; then
         awk -v dir="$TREE_IMAGE_DIR" -v tag="${TREE_TAG:-}" '
