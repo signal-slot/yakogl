@@ -5,6 +5,7 @@
 
   gles3-notpass.py [--commit SHA] [--board NAME] [--date RUN]
                    [--mustpass FILE] [-o OUT] SOURCE...
+  gles3-notpass.py --pi4 [--mustpass FILE] [--tree FILE] [-o OUT] SESSION_DIR...
   gles3-notpass.py --self-test
 
 A SOURCE is read whole, in the order given:
@@ -43,6 +44,18 @@ This one is the writer for runs that are not slice dirs (the qpa logs of one
 board session or of tools/cts/host-deqp-run.sh --gpu=pvr) and for a merged
 status table, and its header names the run date, which merge's lacks.
 --commit is mandatory unless a source directory names the build.
+
+--pi4 writes the Pi 4 form of docs/es3/pi4-gles3-fails.tsv instead: every
+SESSION_DIR (tools/cts/log/<date>-pi4-gles3-<sha8>-rowsAA-BB/) holds a
+README.md with a 'commit' line and one <LABEL>.console.txt per image run
+(the UART consoles of tools/cts/pi4-deqp-images.sh). All directories must
+name one commit (a sha8 and the full sha of it agree; anything else is
+refused, naming both commits and directories), and an image in two
+directories is refused. The rows are "<LABEL>.console.txt:<Status> <case>",
+sorted by case name, for every mustpass case of the image's tree line
+(tools/cts/pi4-gles3-tree.txt, --tree) that is not Pass: the raw status
+word, or NoResult for a case without a result line. The header names the
+commit and the images run out of the tree's images.
 
 stdout (or -o OUT): the header naming the build, the board and the run date,
 then every mustpass case (tools/cts/gles3-mustpass.txt) that is not Pass, in
@@ -271,6 +284,111 @@ def render(results, mustpass, commit, board, date):
     return "".join(out), count
 
 
+COMMIT_LINE = re.compile(r"^\W*commit\W*\s*([0-9a-fA-F]{7,40})\b", re.I)
+
+
+def session_commit(d):
+    """The commit a Pi 4 session directory's README.md names ('commit: <sha>')."""
+    readme = os.path.join(d, "README.md")
+    if not os.path.isfile(readme):
+        raise NotpassError("%s: no README.md (its 'commit' line names the build)" % d)
+    with open(readme, encoding="utf-8", errors="replace") as f:
+        for line in f:
+            m = COMMIT_LINE.match(line)
+            if m:
+                return m.group(1).lower()
+    raise NotpassError("%s: README.md has no 'commit: <sha>' line" % readme)
+
+
+def pi4_commit(dirs):
+    """The one commit of all session directories; refuse two. A short sha
+    and the long one that starts with it are the same commit (the longer
+    is kept)."""
+    seen = []   # (commit, first dir)
+    for d in dirs:
+        c = session_commit(d)
+        for i, (o, od) in enumerate(seen):
+            if o.startswith(c) or c.startswith(o):
+                if len(c) > len(o):
+                    seen[i] = (c, od)
+                break
+        else:
+            seen.append((c, d))
+    if len(seen) > 1:
+        raise NotpassError("the session directories name different commits: %s"
+                           % "; ".join("%s (%s)" % (c, d) for c, d in seen))
+    return seen[0][0]
+
+
+def read_tree(path):
+    """[(label, [case filter patterns])] of the pi4-gles3-tree.txt images."""
+    images, label = [], None
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            m = re.match(r"# image (\S+):", line)
+            if m:
+                label = m.group(1)
+            elif line and not line.startswith("#") and label:
+                images.append((label, line.split(",")))
+                label = None
+    return images
+
+
+def uart_tally():
+    path = os.path.join(HERE, "deqp-uart-tally.py")
+    spec = spec_from_file_location("deqp_uart_tally", path)
+    mod = module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def pi4_rows(dirs, mustpass, tree):
+    """(header+rows text, run labels, stopped labels) for the session dirs."""
+    commit = pi4_commit(dirs)
+    tally = uart_tally()
+    filters = dict(tree)
+    got, where = {}, {}
+    for d in dirs:
+        consoles = sorted(glob.glob(os.path.join(d, "*.console.txt")))
+        if not consoles:
+            raise NotpassError("%s: no <LABEL>.console.txt" % d)
+        for c in consoles:
+            label = os.path.basename(c)[:-len(".console.txt")]
+            if label not in filters:
+                raise NotpassError("%s: image %s is not in the tree" % (c, label))
+            if label in got:
+                raise NotpassError("image %s is in both %s and %s" % (label, where[label], d))
+            with open(c, encoding="utf-8", errors="replace") as f:
+                got[label] = tally.scan(f.read())["got"]
+            where[label] = d
+    rows, stopped = [], []
+    for label, _ in tree:
+        if label not in got:
+            continue
+        rx = tally.filter_regex(filters[label])
+        none = 0
+        for case in mustpass:
+            if not rx.match(case):
+                continue
+            st = got[label].get(case)
+            if st is None:
+                st, none = "NoResult", none + 1
+            if st != "Pass":
+                rows.append((case, "%s.console.txt:%s %s\n" % (label, st, case)))
+        if none:
+            stopped.append(label)
+    run = [l for l, _ in tree if l in got]
+    head = ("# Pi 4 dEQP-GLES3 at %s: every case that is not Pass, per image of tools/cts/pi4-gles3-tree.txt\n"
+            "# rows: <record>:<status> <case>, sorted by case name   (<image>.console.txt = the UART console of the image, "
+            "the records of %s; NoResult = the case never began)\n"
+            "# images run (%d of %d): %s%s\n"
+            % (commit, ", ".join(sorted(os.path.basename(os.path.normpath(d)) for d in dirs)),
+               len(run), len(tree), " ".join(l + ("*" if l in stopped else "") for l in run),
+               " (*: cases of the image never began)" if stopped else ""))
+    return head + "".join(r for _, r in sorted(rows)), run, stopped
+
+
 def self_test():
     d = os.path.join(HERE, "testdata", "gles3-notpass")
     fails = []
@@ -364,12 +482,27 @@ def main():
     ap.add_argument("--date", default=datetime.date.today().isoformat(), metavar="RUN")
     ap.add_argument("--mustpass", default=os.path.join(HERE, "gles3-mustpass.txt"))
     ap.add_argument("-o", "--output", metavar="OUT")
+    ap.add_argument("--pi4", action="store_true", help="session directories of one Pi 4 commit")
+    ap.add_argument("--tree", default=os.path.join(HERE, "pi4-gles3-tree.txt"))
     ap.add_argument("--self-test", action="store_true")
     a = ap.parse_args()
     if a.self_test:
         return self_test()
     if not a.sources:
         ap.error("at least one SOURCE is required")
+    if a.pi4:
+        try:
+            text, run, stopped = pi4_rows(a.sources, read_mustpass(a.mustpass), read_tree(a.tree))
+        except NotpassError as e:
+            sys.stderr.write("gles3-notpass: %s\n" % e)
+            return 1
+        if a.output:
+            with open(a.output, "w", encoding="utf-8") as f:
+                f.write(text)
+        else:
+            sys.stdout.write(text)
+        sys.stderr.write("%d image(s) run, %d stopped early\n" % (len(run), len(stopped)))
+        return 0
     results = {}
     try:
         commits = collect(a.sources, results)
