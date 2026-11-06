@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 # Pi 4 dEQP-GLES3 at 0ff58329, 2026-11-01, image FR2: deqp-uart-tally.py --mustpass tools/cts/gles3-mustpass.txt FR2.console.txt (README.md)
-/home/orion/connected-work/01a19631-2606-7743-b132-862f5a9a32f3/build/records/pi4-gles3-0ff58329/FR2//console.txt: deqp: done: 422 passed, 31 failed, 67 not supported, 0 warnings, complete=1 | deqp: summary: 520 cases begun, 520 with a result, 0 without
+FR2.console.txt: deqp: done: 422 passed, 31 failed, 67 not supported, 0 warnings, complete=1 | deqp: summary: 520 cases begun, 520 with a result, 0 without
 mustpass cases with a result: 520 (of 520 seen)
 group                                       pass   fail    n/s  other
 fragment_out                                 422     31     67      0
