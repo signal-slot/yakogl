@@ -63,6 +63,18 @@ expect "BOARD_UART unset" 1 "FAIL BOARD_UART is unset"
 run "$W/a" "$SECRET" --commit "$SHA" --table "$W/nonexistent"
 expect "missing table" 1 "FAIL table file not found"
 
+# X2 images live in <out>/x2/es3-<hash8> (imx8mp-env.sh): a newer one next to the Verdin's is never picked up,
+# neither by the preflight nor by the glob imx8mp-gles3-board.sh takes its default image from
+mk "$W/f"; mkdir -p "$W/f/out/x2/es3-fedcba98/zephyr"; : > "$W/f/out/x2/es3-fedcba98/zephyr/zephyr.bin"
+sleep 1; touch "$W/f/out/x2/es3-fedcba98/zephyr/zephyr.bin"
+run "$W/f" "$SECRET" --commit "$SHA"
+expect "newer X2 image beside the Verdin's" 0 "table image exists (es3-01234567)"
+run "$W/f" "$SECRET" --commit fedcba98
+expect "X2 image is not a Verdin image" 1 "FAIL no image is named after commit fedcba98"
+pick=$(ls -t "$W"/f/out/es3-*/zephyr/zephyr.bin 2>/dev/null | head -1)
+if [ "$pick" = "$W/f/out/es3-01234567/zephyr/zephyr.bin" ]; then echo "  ok   board script's glob picks the Verdin image"
+else echo "  FAIL board script's glob picked '$pick'"; fails=$((fails + 1)); fi
+
 if [ "$(find "$W/a" -type f | wc -l)" -eq 2 ]; then echo "  ok   read-only"
 else echo "  FAIL read-only"; fails=$((fails + 1)); fi
 
