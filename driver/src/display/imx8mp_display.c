@@ -332,8 +332,18 @@ static uint32_t refresh_mhz(const struct display_ctx *c)
  * time until Linux is back says whether the SoC reset happened before or
  * after that stage. 0 = never stop.
  */
+#ifdef CONFIG_YAKOGL_DRV_DISPLAY_IMX8MP_STAGE_TIMES
+/* imx8mp_display_on()'s stages, k_cycle_get_64() at its entry ([0]) and at
+ * each STOP_AFTER(n) ([n]), and after the backlight arm ([8]). */
+uint64_t imx8mp_display_stage_cycles[9];
+#define STAGE_TIME(n) (imx8mp_display_stage_cycles[(n)] = k_cycle_get_64())
+#else
+#define STAGE_TIME(n) do { } while (0)
+#endif
+
 #define STOP_AFTER(n)                                                          \
 	do {                                                                   \
+		STAGE_TIME(n);                                                 \
 		if (CONFIG_YAKOGL_DRV_DISPLAY_IMX8MP_STOP_AFTER == (n)) {          \
 			LOG_INF("stopping after stage %d", (n));               \
 			return -ECANCELED;                                     \
@@ -346,6 +356,8 @@ int imx8mp_display_on(uintptr_t fb_phys, uint32_t pitch)
 	uint32_t w, h, p, bpp;
 	uint64_t linux_fb;
 	int rc;
+
+	STAGE_TIME(0);
 
 	if (!g_mapped) {
 		LOG_ERR("no yakogl,imx8mp-display node, or it did not initialise");
@@ -527,6 +539,7 @@ int imx8mp_display_on(uintptr_t fb_phys, uint32_t pitch)
 	bridge_check(c);
 	STOP_AFTER(7);
 	backlight_arm(c);
+	STAGE_TIME(8);
 
 	c->info.on = true;
 	LOG_INF("display on: %ux%u at %u.%03u Hz, pixel clock %u Hz, DSI %u Hz",

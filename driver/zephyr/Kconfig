@@ -418,6 +418,14 @@ config YAKOGL_DRV_DISPLAY_IMX8MP_FORCE_COLD_POWER_OFF
 	  rather than finding them as Linux left them. The status word
 	  (imx8mp_media_status) reports POWERED_FROM_OFF when it did.
 
+config YAKOGL_DRV_DISPLAY_IMX8MP_STAGE_TIMES
+	bool "Measurement: time each stage of the cold display bring-up"
+	depends on YAKOGL_DRV_DISPLAY_IMX8MP
+	help
+	  imx8mp_display_on() records k_cycle_get_64() at its entry and at each
+	  of its stages (STOP_AFTER's numbers) in imx8mp_display_stage_cycles[];
+	  the route-3 timeline report prints them (TLP lines).
+
 config YAKOGL_DRV_DISPLAY_IMX8MP_STOP_AFTER
 	int "Stop the cold display bring-up after this stage (0 = never)"
 	depends on YAKOGL_DRV_DISPLAY_IMX8MP
