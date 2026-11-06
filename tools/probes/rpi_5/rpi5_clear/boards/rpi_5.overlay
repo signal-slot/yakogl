@@ -1,0 +1,16 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-FileCopyrightText: 2026 Signal Slot, Inc. */
+/*
+ * Zephyr's rpi_5 takes zephyr,sram from the SoC's sram0
+ * (dts/arm64/broadcom/bcm2712.dtsi: 512 KiB at 0x200000, two address cells).
+ * The probe's GPU buffers (page table, lists, tile memory, target) are statics,
+ * so sram0 is the 32 MiB from 0x200000 every Pi 5 image has
+ * (tools/probes/rpi_5/rpi5_hello): low, below 4 GiB, so the V3D's page table
+ * entries and the mailbox's buffer address fit (pre-study-rpi5.md, U10).
+ * Zephyr's own mailbox driver (mbox0) stays disabled, as bcm2712.dtsi has it:
+ * the board layer's rpi_mbox.c owns the mailbox.
+ * Nothing in this overlay was run.
+ */
+&sram0 {
+	reg = <0x0 0x200000 0x2000000>;
+};
