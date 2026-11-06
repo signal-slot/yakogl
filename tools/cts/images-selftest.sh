@@ -15,6 +15,20 @@
 # arguments it was given.
 set -u
 
+# Hermetic: nothing the host exports reaches the scripts under test. Each
+# check passes the variables it means to pass. (A worker's DEQP_STAGE1 changed
+# imx8mp-deqp-build.sh's -DDEQP_SRC; a locale it lacks prints a warning into
+# every captured output.)
+unset BOARD BOARD_UART DEQP_MODULE DEQP_STAGE1 DEQP_STAGE1_GLES3 DEQP_WORK \
+    DRYRUN GLMARK2_SRC GLSL2USC_CACHE GLSL2USC_KEEP GLSL2USC_NEW_REFERENCE \
+    GLSL2USC_OPT GLSL2USC_OUT GLSL2USC_UNROLL HAL_NXP_DIR IMX8MP_BOARD \
+    IMX8MP_CONSOLE IMX8MP_IMG_OUT IMX8MP_OUT MESA_PAN_TREE MESA_V3D_TREE \
+    PCO_SHC PVR_FW_BLOB STAGE_FAKE TREE_IMAGE TREE_ROWS WDOG_SELF_ARM \
+    WEST_LOG WEST_VENV YAKOGL_DIR ZEPHYR_BASE ZEPHYR_EXTRA_MODULES \
+    ZEPHYR_MODULES ZEPHYR_SDK ZEPHYR_SDK_INSTALL_DIR ZEPHYR_TOOLCHAIN_VARIANT \
+    ZEPHYR_VENV ZEPHYR_WORKSPACE ZEPHYR_WS LANGUAGE LC_ALL LC_CTYPE LC_MESSAGES
+export LANG=C
+
 HERE=$(cd "$(dirname "$0")" && pwd)
 fail=0
 ok()  { printf '  ok    %s\n' "$1"; }
