@@ -649,6 +649,22 @@ pub const DEPTH_FEEDBACK: Template = Template {
     iss: &[],
 };
 
+/// [`DEPTH_FEEDBACK`] in a shader that also discards: executed under p0 (the
+/// header's `if(p0)`, set by [`KILL_TEST`] when the fragment is kept), after
+/// [`ALPHA_FEEDBACK`] and before the shared `wdf`. A killed fragment writes
+/// no depth, as Mesa's `isp_feedback` predicates `depthf` under the kill.
+pub const DEPTH_FEEDBACK_KEPT: Template = Template {
+    name: "depthf",
+    bitwise: false,
+    dst: false,
+    dst_w1: false,
+    header: &[("cc", "if(p0)")],
+    steps: &[Step { op: "depthf", phase: super::isa::PH_BACKEND, fields: &[] }],
+    slots: [Some(Arg::Op(0)), None, None, None, None, None],
+    mux: None,
+    iss: &[],
+};
+
 /// `group_map(O_FRED)` part A: `x` in `s0`, the result in `w1` (pco
 /// leaves `w0` null), `iter` 0.
 macro_rules! fred_a {

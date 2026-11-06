@@ -8,8 +8,10 @@
 //! DEPTH_FEEDBACK. The sampler flavours stay in `native_cube`, and the tests
 //! below pin that a depth write never changes that byte and a native sample
 //! never sets `writes_depth`. Refused, by name: a depth written together
-//! with a discard, in a variant that rewrites the outputs as colour (several
-//! sRGB attachments, an integer render target).
+//! in a variant that rewrites the outputs as colour (several sRGB
+//! attachments, an integer render target). A depth written with a discard
+//! (`depthf` under the kill test's p0, after `alphaf`), beside several colour
+//! outputs and in a blend variant builds.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_pvr_fragdepth
@@ -140,11 +142,40 @@ fn no_depth_write_no_depthf() {
     assert!(ops(&r.image).iter().all(|o| o.0 != "depthf"));
 }
 
-/// A depth written by a shader that also discards is refused by name.
+/// A depth written by a shader that also discards: the kill test, `alphaf`
+/// and `depthf` (both under p0) and one `wdf`, in that order, then the write.
 #[test]
-fn depth_with_discard_is_refused() {
-    let e = compile(&fragment("if (v.x < 0.5) discard; gl_FragDepth = d;")).expect_err("refused");
-    assert!(e.contains("gl_FragDepth in a shader that discards"), "{e}");
+fn depth_with_discard_feeds_back_after_the_kill_test() {
+    let r = compile(&fragment("if (v.x < 0.5) discard; gl_FragDepth = d;")).expect("compiles");
+    assert_eq!(r.writes_depth, 1);
+    let p = ops(&r.image);
+    let pos = |n: &str| p.iter().position(|o| o.0 == n).unwrap_or_else(|| panic!("no {n} in {p:?}"));
+    assert_eq!(p.iter().filter(|o| o.0 == "depthf").count(), 1, "{p:?}");
+    assert_eq!(p.iter().filter(|o| o.0 == "alphaf").count(), 1, "{p:?}");
+    assert!(pos("alphaf") < pos("depthf"), "{p:?}");
+    let wdf = p.iter().rposition(|o| o.0 == "wdf").expect("wdf");
+    assert!(pos("depthf") < wdf, "{p:?}");
+    // the discard-only program is unchanged by the depth work
+    let k = compile(&fragment("if (v.x < 0.5) discard;")).expect("compiles");
+    assert_eq!(k.writes_depth, 0);
+    assert!(ops(&k.image).iter().all(|o| o.0 != "depthf"));
+}
+
+/// A depth written beside several colour outputs.
+#[test]
+fn depth_with_several_outputs_builds() {
+    let src = "#version 300 es\nprecision highp float;\nuniform vec4 c;\nuniform float d;\nin vec2 v;\n\
+               layout(location = 0) out vec4 o0;\nlayout(location = 1) out vec4 o1;\n\
+               void main() { o0 = c; o1 = c + 1.0; BODY }\n";
+    for body in ["gl_FragDepth = d;"] {
+        let r = compile(&src.replace("BODY", body)).unwrap_or_else(|e| panic!("{body}: {e}"));
+        assert_eq!(r.writes_depth, 1, "{body}");
+        let p = ops(&r.image);
+        assert_eq!(p.iter().filter(|o| o.0 == "depthf").count(), 1, "{body}: {p:?}");
+        let at = p.iter().position(|o| o.0 == "depthf").unwrap();
+        let src_reg = p[at].2.expect("depthf reads a register");
+        assert!(p[..at].iter().any(|o| o.0 == "fadd" && o.1 == 1 && o.3 == Some(src_reg)), "{body}: {p:?}");
+    }
 }
 
 /// `compile` under a blend key: Ok or the refusal.
@@ -223,4 +254,70 @@ fn sampler_flavours_and_depth_output_are_independent() {
     assert_eq!(r.native_cube, on.native_cube);
     assert_eq!(r.writes_depth, 1);
     assert_eq!(ops(&r.image).iter().filter(|o| o.0 == "depthf").count(), 1);
+}
+
+/// A blend variant (glBlendFunc SRC_ALPHA, ONE_MINUS_SRC_ALPHA) of a shader
+/// that writes depth, with and without a discard, builds: the blend works on
+/// the colour and the feedback is independent of it.
+#[test]
+fn depth_in_a_blend_variant_builds() {
+    use yakogl::shaderc::{shc_blend_key, SHC_BF_INV_SRC_ALPHA, SHC_BF_SRC_ALPHA};
+    let key = shc_blend_key(SHC_BF_SRC_ALPHA, SHC_BF_INV_SRC_ALPHA, SHC_BF_SRC_ALPHA, SHC_BF_INV_SRC_ALPHA, 0, 0);
+    for body in ["gl_FragDepth = d;", "if (v.x < 0.5) discard; gl_FragDepth = d;"] {
+        compile_for(&fragment(body), key).unwrap_or_else(|e| panic!("{body}: {e}"));
+    }
+}
+
+/// The eight `shaders.fragdepth` programs that write `gl_FragDepth`
+/// (es3fFragDepthTests.cpp), as dEQP sends them: (name, declarations, body).
+const DEQP: [(&str, &str, &str); 8] = [
+    ("const", "", "    gl_FragDepth = 0.5;\n"),
+    ("uniform", "uniform highp float uf_half;\n", "    gl_FragDepth = uf_half;\n"),
+    ("dynamic", "in highp vec2 v_coord;\n", "    gl_FragDepth = (v_coord.x+v_coord.y)*0.5;\n"),
+    ("fragcoord_z", "", "    gl_FragDepth = gl_FragCoord.z;\n"),
+    (
+        "uniform_conditional_write",
+        "uniform bool ub_true;\nin highp vec2 v_coord;\n",
+        "    if (ub_true)\n        gl_FragDepth = (v_coord.x+v_coord.y)*0.5;\n",
+    ),
+    (
+        "dynamic_conditional_write",
+        "uniform bool ub_true;\nin highp vec2 v_coord;\n",
+        "    mediump float d = (v_coord.x+v_coord.y)*0.5f;\n    if (v_coord.y < 0.5)\n        gl_FragDepth = d;\n    else\n        gl_FragDepth = 1.0 - d;\n",
+    ),
+    (
+        "uniform_loop_write",
+        "uniform int ui_two;\nuniform highp float uf_fourth;\nin highp vec2 v_coord;\n",
+        "    gl_FragDepth = 0.0;\n    for (int i = 0; i < ui_two; i++)\n        gl_FragDepth += uf_fourth;\n",
+    ),
+    ("write_in_function", "in highp vec2 v_coord;\n", "    myfunc(v_coord);\n"),
+];
+
+fn deqp_source(name: &str, decl: &str, body: &str) -> String {
+    let func = if name == "write_in_function" {
+        "void myfunc (highp vec2 coord)\n{\n    gl_FragDepth = (coord.x+coord.y)*0.5;\n}\n"
+    } else {
+        ""
+    };
+    format!(
+        "#version 300 es\nuniform highp vec4 u_color;\n{decl}layout(location = 0) out mediump vec4 o_color;\n\
+         {func}void main (void)\n{{\n    o_color = u_color;\n{body}}}\n"
+    )
+}
+
+/// Every dEQP fragdepth program that writes depth compiles and feeds back
+/// exactly one depth.
+#[test]
+fn deqp_fragdepth_programs_compile() {
+    let mut bad = Vec::new();
+    for (name, decl, body) in DEQP {
+        match compile(&deqp_source(name, decl, body)) {
+            Ok(r) => {
+                assert_eq!(r.writes_depth, 1, "{name}");
+                assert_eq!(ops(&r.image).iter().filter(|o| o.0 == "depthf").count(), 1, "{name}");
+            }
+            Err(e) => bad.push(format!("{name}: {e}")),
+        }
+    }
+    assert!(bad.is_empty(), "{bad:#?}");
 }
