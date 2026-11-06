@@ -48,7 +48,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/.." && pwd)
 B="$HERE/board.sh"
 TD="$HERE/testdata"
-WANT_CHECKS=286
+WANT_CHECKS=308
 
 S=$(mktemp -d)
 trap 'rm -rf "$S"' EXIT
@@ -90,7 +90,7 @@ td=$(cd "$REPO" && cargo metadata --no-deps --format-version 1 | sed -n 's/.*"ta
 export YAKOGL_TOOLS=$td/debug/yakogl-tools
 [ -x "$YAKOGL_TOOLS" ] || { echo "board_selftest: no $YAKOGL_TOOLS"; exit 1; }
 # nothing of the operator's environment reaches the runs
-unset BOARD_HOST BOARD_UART BOARD_BOOT PI4_HOST PI4_UART UART_ADDR NETBOOT_SERVER NETBOOT_TFTP_ROOT \
+unset BOARD_HOST BOARD_UART BOARD_BOOT PI4_HOST PI4_UART PI5_HOST PI5_UART UART_ADDR NETBOOT_SERVER NETBOOT_TFTP_ROOT \
     NETBOOT_TFTP_LOG NETBOOT_ROUTE NETBOOT_NO_WATCHDOG SEL TREE_IMAGE TREE_IMAGE_DIR TREE_TAG TREE_ROWS \
     TREE_PREV LOCK BOARD_LOCK RUN_BOUND RETURN_BOUND BOARD_END_RE PI4_END_RE PI4_HDMI_TIMINGS BOARD_HDMI_TIMINGS \
     DEQP_CASELIST
@@ -110,6 +110,7 @@ mkimg() { # mkimg FILE FOOTPRINT MARKER
 }
 mkdir -p "$S/img"
 mkimg "$S/img/pi4.bin" 4194304 'board: PM watchdog resets the SoC ~50 s after boot'
+mkimg "$S/img/pi5.bin" 4194304 'board: PM watchdog resets the SoC ~50 s after boot'
 mkimg "$S/img/am62p.bin" 4194304 'rti_arm: armed preload 0xef'
 mkimg "$S/img/am62p-deqp.bin" 4194304 'rti_arm: armed preload 0xef deqp: summary'
 mkimg "$S/img/imx8mp.bin" 4194304 'gc_wdog_arm: armed'
@@ -136,7 +137,8 @@ am62p:kexec-dev:kexec_run.sh
 imx8mp:uboot-tftp:sync; sudo -n systemctl reboot
 imx8mp:uboot-mmc:sync; sudo -n systemctl reboot
 imx8mp:kexec-dev:kexec-zephyr 0x60000000 --crash
-x2:kexec-dev:/tmp/yakogl-kexec/kexec_zephyr /tmp/yakogl-kexec/zephyr.bin 0x60000000 --crash'
+x2:kexec-dev:/tmp/yakogl-kexec/kexec_zephyr /tmp/yakogl-kexec/zephyr.bin 0x60000000 --crash
+pi5:tryboot:sudo reboot "0 tryboot"'
 while IFS=: read -r board boot bootcmd; do
     img="$S/img/$board.bin"
     for verb in status install uninstall disarm; do
@@ -347,6 +349,7 @@ check "pi4 default forever: rc 0, the SD-card undo printed first, config.txt kep
           ! grep -q "0 tryboot" <<<"$out"'
 # the default's config.txt and a tryboot's tryboot.txt are the same lines (pi4_config), past the comment
 eval "$(sed -n '/^pi4_config() {/,/^}/p' "$B")"
+BOARD=pi4
 BOARD_HDMI_TIMINGS="1920 1 50 44 50 720 1 10 20 50 0 0 0 60 0 99070000 1"
 check "pi4_config: [all], the kernel, arm_64bit, the UART, and the panel's hdmi lines when set" \
     eval '[ "$(pi4_config k.bin | tr "\n" "|")" = "[all]|kernel=k.bin|arm_64bit=1|enable_uart=1|uart_2ndstage=1|hdmi_group=2|hdmi_mode=87|hdmi_timings=1920 1 50 44 50 720 1 10 20 50 0 0 0 60 0 99070000 1|" ]'
@@ -356,6 +359,56 @@ check "pi4 nodefault: config-linux.txt put back as config.txt, the image removed
     eval '[ "$rc" = 0 ] && grep -q "mv /boot/firmware/config-linux.txt /boot/firmware/config.txt" <<<"$out"'
 out=$(dry pi4 run "$S/img/pi4.bin" "$S/logs" 2>&1)
 check "pi4 tryboot run refuses when a default is set (config-linux.txt)" grep -q "test ! -e /boot/firmware/config-linux.txt" <<<"$out"
+
+# pi5 (BCM2712): the pi4's tryboot sequence, the three differences of
+# docs/notes/pre-study-rpi5.md section 4, the supply record, the longer bounds
+out=$(BOARD_UART=/dev/ttyACM9 BOARD_HDMI_TIMINGS="1920 1 50 44 50 720 1 10 20 50 0 0 0 60 0 99070000 1" dry pi5 run "$S/img/pi5.bin" "$S/logs" 2>&1)
+rc=$?
+check "pi5 run: rc 0, tryboot.txt written and put back, the reboot is '0 tryboot', a default set refuses, config.txt not written" \
+    eval '[ "$rc" = 0 ] && grep -qF "sudo reboot \"0 tryboot\"" <<<"$out" && [ "$(grep -c "tee /boot/firmware/tryboot.txt" <<<"$out")" = 2 ] &&
+          grep -q "test ! -e /boot/firmware/config-linux.txt" <<<"$out" && ! grep -q "tee /boot/firmware/config.txt" <<<"$out"'
+check "pi5 run: the console is only read (stty and the fd scan, no write to the device)" \
+    eval 'grep -qF "stty -F /dev/ttyACM9 115200 cs8 -cstopb -parenb raw -echo" <<<"$out" && grep -q "scan every /proc/<pid>/fd for /dev/ttyACM9" <<<"$out" &&
+          ! grep -q "> /dev/ttyACM9" <<<"$out"'
+check "pi5 run: get_throttled read before staging and after the board is back" \
+    eval '[ "$(grep -c "vcgencmd get_throttled" <<<"$out")" = 2 ] &&
+          [ "$(grep -n "vcgencmd get_throttled" <<<"$out" | head -1 | cut -d: -f1)" -lt "$(grep -n "install -m 0755" <<<"$out" | cut -d: -f1)" ]'
+check "pi5 run: waits <= 420 s for the end, then 420 s more for Linux (a reboot is ~150 s to ssh)" \
+    eval 'grep -q "<= 420 s; then 5 s more" <<<"$out" && grep -q "(<= 420 s more)" <<<"$out"'
+out=$(RUN_BOUND=500 RETURN_BOUND=600 dry pi5 run "$S/img/pi5.bin" "$S/logs" 2>&1)
+check "pi5 run: RUN_BOUND and RETURN_BOUND override the defaults" eval 'grep -q "<= 500 s; then" <<<"$out" && grep -q "(<= 600 s more)" <<<"$out"'
+out=$(BOARD_HDMI_TIMINGS=1920x720 dry pi5 run "$S/img/pi5.bin" "$S/logs" 2>&1)
+rc=$?
+check "pi5 run: BOARD_HDMI_TIMINGS is not read (no refusal, rc 0)" eval '[ "$rc" = 0 ]'
+out=$(PI5_UART=/dev/ttyACM8 dry pi5 run "$S/img/pi5.bin" "$S/logs" 2>&1)
+rc=$?
+check "pi5 run: PI5_UART is read as BOARD_UART" eval '[ "$rc" = 0 ] && grep -q "for /dev/ttyACM8" <<<"$out"'
+out=$(BOARD_UART=bridge:40001 dry pi5 probe "$S/logs" 2>&1)
+rc=$?
+check "pi5 probe on a bridge BOARD_UART: rc 0, no fd scan" eval '[ "$rc" = 0 ] && ! grep -q "/proc/<pid>/fd" <<<"$out"'
+out=$(BOARD_BOOT=kexec-dev dry pi5 status 2>&1)
+rc=$?
+check "pi5 has no kexec-dev: rc 2" [ "$rc" = 2 ]
+out=$(dry pi5 run "$S/img/nomarker.bin" "$S/logs" 2>&1)
+rc=$?
+check "pi5 run of an image without the watchdog marker: rc 3, REFUSED" eval '[ "$rc" = 3 ] && grep -q REFUSED <<<"$out"'
+out=$(dry pi5 default "$S/img/pi5.bin" 2 2>&1)
+rc=$?
+check "pi5 default with a boot count: rc 2 (the firmware has none)" eval '[ "$rc" = 2 ] && grep -q "pi5: the firmware has no boot count" <<<"$out"'
+out=$(dry pi5 default "$S/img/pi5.bin" forever 2>&1)
+rc=$?
+check "pi5 default forever without BOARD_PERSON_PRESENT=1: rc 3" eval '[ "$rc" = 3 ] && grep -q BOARD_PERSON_PRESENT <<<"$out"'
+out=$(BOARD_PERSON_PRESENT=1 dry pi5 default "$S/img/pi5.bin" forever 2>&1)
+check "pi5 default forever: rc 0, config.txt kept as config-linux.txt and names yakogl-default.bin, no reboot" \
+    eval '[ $? = 0 ] && grep -q "cp /boot/firmware/config.txt /boot/firmware/config-linux.txt" <<<"$out" && grep -q "tee /boot/firmware/config.txt" <<<"$out" &&
+          ! grep -q "0 tryboot" <<<"$out"'
+out=$(dry pi5 nodefault 2>&1)
+rc=$?
+check "pi5 nodefault: config-linux.txt put back as config.txt" eval '[ "$rc" = 0 ] && grep -q "mv /boot/firmware/config-linux.txt /boot/firmware/config.txt" <<<"$out"'
+BOARD=pi5
+check "pi5_config: [all], kernel= the staged file, no arm_64bit, the UART lines, no hdmi lines (BOARD_HDMI_TIMINGS unset for pi5)" \
+    eval '[ "$(BOARD_HDMI_TIMINGS= pi4_config k.bin | tr "\n" "|")" = "[all]|kernel=k.bin|enable_uart=1|uart_2ndstage=1|" ]'
+BOARD=pi4
 
 # tree: the three table forms
 mkdir -p "$S/pi4img/AA/zephyr" "$S/pi4img/BB/zephyr" "$S/amimg/img1-t/zephyr" "$S/amimg/img2-t/zephyr"
