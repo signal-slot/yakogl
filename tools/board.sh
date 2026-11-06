@@ -659,8 +659,8 @@ verdict_line() {
                 shown=$rec
             fi
             if [ -n "$rec" ]; then
-                # shellcheck disable=SC2086  # four words
-                line=$(ytools record --line $rec) || line=
+                # shellcheck disable=SC2086  # four words, three on the X2
+                line=$(yrec --line $rec) || line=
                 cls=$(sed -n 's/^class=\([^ ]*\).*/\1/p' <<<"$line")
                 kname=$(sed -n 's/.* name=\([^ ]*\).*/\1/p' <<<"$line")
                 resets=$(sed -n 's/.* resets=\([^ ]*\).*/\1/p' <<<"$line")
@@ -758,8 +758,8 @@ write_index() {
         echo "records:"
         rec=$(cat "$dir/snvs.txt" 2>/dev/null)
         if [ -n "$rec" ]; then
-            # shellcheck disable=SC2086  # four words
-            ytools record $rec 2>&1 | sed 's/^/  /'
+            # shellcheck disable=SC2086  # four words, three on the X2
+            yrec $rec 2>&1 | sed 's/^/  /'
         elif [ -s "$dir/console.txt" ] && grep -aq 'yk-record: ' "$dir/console.txt"; then
             ytools record --log "$dir/console.txt" 2>&1 | sed 's/^/  /'
         elif [ -n "$REC_SINK" ]; then
@@ -955,6 +955,8 @@ rec0_set() {
     else
         REC0="00000000 00000000 00000000 00000000"
     fi
+    # the X2 stores three words: its cleared record has no w3 either
+    [ "$BOARD" = x2 ] && REC0=${REC0% *}
     meta rec0 "$REC0"
     [ -n "${SEL:-}" ] && meta sel "$SEL"
 }
@@ -970,6 +972,13 @@ snvs_clear() {
     got=$(snvs_read)
     [ "$got" = "$REC0" ] || die "SNVS record read back '$got', not '$REC0'"
 }
+# yrec [MODE] WORDS...: yakogl-tools record; a record of three words (the X2's,
+# w3 is not stored) is decoded with --words 3: every field of w3 absent
+yrec() {
+    local mode=
+    case ${1:-} in --*) mode=$1; shift ;; esac
+    if [ $# = 3 ]; then ytools record --words 3 ${mode:+"$mode"} "$@"; else ytools record ${mode:+"$mode"} "$@"; fi
+}
 # snvs_read: the four words, "w0 w1 w2 w3", empty when the read failed
 snvs_read() { b "sudo -n od -A n -t x4 $NV" 2>/dev/null | xargs; }
 
@@ -982,14 +991,15 @@ snvs_read() { b "sudo -n od -A n -t x4 $NV" 2>/dev/null | xargs; }
 lpgpr_words() {
     b "$X2_DIR/snvs_lpgpr" 2>/dev/null | sed -n 's/^0x303700[9][048c]: 0x\([0-9a-f]\{8\}\)$/\1/p' | xargs
 }
-# lpgpr_read: the record as the other boards' four words, "w0 w1 w2 00000000"
+# lpgpr_read: the record, "w0 w1 w2" (LPGPR1..3): w3 is not stored and no value
+# stands in for it (yrec decodes three words with --words 3)
 lpgpr_read() {
     local l
     l=$(lpgpr_words)
     # shellcheck disable=SC2086  # four words
     set -- $l
     [ $# = 4 ] || return 0
-    echo "$2 $3 $4 00000000"
+    echo "$2 $3 $4"
 }
 # lpgpr_clear: the record cleared (w1 = the selector when SEL is set) and read
 # back; LPGPR0 is written back as it was read and must read back the same
@@ -998,7 +1008,7 @@ lpgpr_clear() {
     rec0_set
     # LPGPR1..3 = w0 w1 w2, as hexadecimal arguments (the tool reads a bare number as decimal)
     # shellcheck disable=SC2086  # three words
-    new=$(printf ' 0x%s' ${REC0% *})
+    new=$(printf ' 0x%s' $REC0)
     if [ "$DRY" = 1 ]; then
         b "$X2_DIR/snvs_lpgpr write <LPGPR0 as read>$new; $X2_DIR/snvs_lpgpr   # LPGPR0 is U-Boot's boot count: kept"
         return 0
@@ -1007,7 +1017,7 @@ lpgpr_clear() {
     # shellcheck disable=SC2086  # four words
     set -- $l
     [ $# = 4 ] || die "cannot read the SNVS LPGPR words ($X2_DIR/snvs_lpgpr on the board)"
-    want="$1 ${REC0% *}"
+    want="$1 $REC0"
     b "$X2_DIR/snvs_lpgpr write 0x$1$new" > /dev/null || die "cannot write the SNVS record"
     got=$(lpgpr_words)
     [ "$got" = "$want" ] || die "SNVS LPGPR0..3 read back '$got', not '$want'"
@@ -2197,14 +2207,14 @@ tree_run_one() {
 
 # name_pages NAME IMAGE SEL OUTDIR: the selector form's DEQP_FAILS pages for a
 # row with a failure, another status or a case without a result (six names
-# per boot, pages until 6 * (page + 1) >= the fails seen)
+# per boot, four on the X2; pages until per * (page + 1) >= the fails seen)
 name_pages() {
-    local name=$1 img=$2 sel=$3 out=$4 d words t tp tf tn to tb nr page low
+    local name=$1 img=$2 sel=$3 out=$4 d words t tp tf tn to tb nr page low per
     d=$(finished_run "$out" "$name" "$img") || return 0
     words=$(cat "$d/snvs.txt" 2>/dev/null)
     [ -n "$words" ] || return 0
-    # shellcheck disable=SC2086  # four words
-    t=$(ytools record --line $words | sed -n 's/.* tally=//p')
+    # shellcheck disable=SC2086  # four words, three on the X2
+    t=$(yrec --line $words | sed -n 's/.* tally=//p')
     { [ -n "$t" ] && [ "$t" != - ]; } || return 0
     IFS=, read -r tp tf tn to tb <<<"$t"
     nr=$((tb - tp - tf - tn - to))
@@ -2215,7 +2225,10 @@ name_pages() {
         words=$(cat "$d/snvs.txt" 2>/dev/null)
         [ -n "$words" ] && [ $(((0x${words%% *} >> 8) & 255)) = 10 ] || break
         low=$((0x${words%% *} & 255))
-        [ $((6 * (page + 1))) -ge "$low" ] && break
+        # a page holds two names a word after w0: six, or four on the X2 (no w3)
+        # shellcheck disable=SC2086
+        set -- $words; per=$((($# - 1) * 2))
+        [ $((per * (page + 1))) -ge "$low" ] && break
     done
 }
 
@@ -2346,15 +2359,22 @@ py_list() { local s="" x; for x in "$@"; do s+="${s:+, }'$x'"; done; echo "[$s]"
 # wrote them (results.tsv, rows.md, the TALLY line): begun passed failed notsup
 # other noresult and the failing names; '-' is absent, never 0
 results_tsv() {
-    local dir=$1 name img sel filt d words t tp tf tn to tb nr page c w p f n inside joined fs=() names=()
+    local dir=$1 name img sel filt d words t tp tf tn to tb nr page c w p f n inside joined line derived fs=() names=()
     printf '# index\tfilter\tbegun\tpassed\tfailed\tnotsup\tother\tnoresult\tfailing names (%s-separated)\n' "';'" > "$dir/results.tsv"
     while IFS=$'\t' read -r name img sel filt; do
         d=$(finished_run "$dir" "$name" "$img") || d=
         words=
         [ -n "$d" ] && words=$(cat "$d/snvs.txt" 2>/dev/null)
         t=
-        # shellcheck disable=SC2086  # four words
-        [ -n "$words" ] && t=$(ytools record --line $words | sed -n 's/.* tally=//p')
+        derived=0
+        # shellcheck disable=SC2086  # four words, three on the X2
+        if [ -n "$words" ]; then
+            line=$(yrec --line $words)
+            t=$(sed -n 's/.* tally=//p' <<<"$line")
+            # a three-word DEQP record has no begun count (w3): it is the sum, and no case is
+            # known to have begun without a result
+            [[ $line == *" begun=derived "* ]] && derived=1
+        fi
         if [ -z "$t" ] || [ "$t" = - ]; then
             echo "$name: no usable record ${words:-absent}"
             printf '%s\t%s\t-\t-\t-\t-\t-\t-\t-\n' "$sel" "$filt" >> "$dir/results.tsv"
@@ -2362,6 +2382,7 @@ results_tsv() {
         fi
         IFS=, read -r tp tf tn to tb <<<"$t"
         nr=$((tb - tp - tf - tn - to))
+        if [ "$derived" = 1 ]; then nr=-; fi
         names=()
         IFS=, read -ra fs <<<"$filt"
         for page in $(seq 0 39); do

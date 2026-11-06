@@ -278,6 +278,12 @@ uint64_t imx8mp_display_scanout(void)
 	return hdmi_data0.mapped ? yd_imx8mp_hdmi_scanout(&hdmi_data0.yd) : 0;
 }
 
+/* An HDMI sink has no backlight: the board layer's call after the first frame
+ * has nothing to do. */
+void imx8mp_display_backlight_on(void)
+{
+}
+
 void imx8mp_display_off(void)
 {
 	hdmi_off(DEV);

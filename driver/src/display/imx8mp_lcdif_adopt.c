@@ -198,6 +198,13 @@ int imx8mp_display_set_fb(uintptr_t fb_phys)
 	return lcdif_set_fb(s_lcdif, fb_phys);
 }
 
+/* The backlight is the previous kernel's and stays as it is: nothing to turn
+ * on after the first frame (the board layer calls this on every i.MX8MP
+ * display driver, see imx8mp_display.h). */
+void imx8mp_display_backlight_on(void)
+{
+}
+
 void imx8mp_display_off(void)
 {
 	/* Nothing downstream is ours to stop, so "off" gives the panel back

@@ -48,7 +48,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/.." && pwd)
 B="$HERE/board.sh"
 TD="$HERE/testdata"
-WANT_CHECKS=308
+WANT_CHECKS=312
 
 S=$(mktemp -d)
 trap 'rm -rf "$S"' EXIT
@@ -1142,6 +1142,34 @@ check "record crc on a known GLES3 check ($cA) prints its name, no list and no p
     eval '"$YAKOGL_TOOLS" record crc "$cA" | grep -qxF "$nA"'
 check "the decoded GLES3 row record names its first fail ($nA)" \
     eval '"$YAKOGL_TOOLS" record 594b0801 00020001 00000000 "${cA}0003" | grep -qF "$nA"'
+
+echo "== 3g. Armadillo-X2 tree: three-word records (LPGPR1..3, w3 never stored) decoded without a w3"
+# the record of the same one-image selector tree on the X2: snvs.txt holds three words,
+# a DEQP row record without its begun count (derived from the other four) and DEQP_FAILS
+# pages of four names; no case is claimed to have begun without a result
+TX="$S/x2tree"
+mkdir -p "$TX"
+printf 'e00\t%s\t0\tdEQP-GLES3.functional.attribute_location.*\n' "$S/one.bin" > "$TX/tree.txt"
+x2n=(float int ivec2 ivec3 ivec4)
+xc=()
+for k in "${x2n[@]}"; do xc+=("$(crc "dEQP-GLES3.functional.attribute_location.bind.$k")"); done
+dx="$TX/20261106-1500-e00-$sha8"
+mkrun "$dx" board=x2 boot=kexec-dev name=e00 probe=0 back=1 up=40
+printf '594b0801 00050003 00000000\n' > "$dx/snvs.txt"
+: > "$dx/INDEX.txt"
+for pg in 0 1; do
+    px="$TX/20261106-1500-e00-p$pg-$sha8"
+    mkrun "$px" board=x2 boot=kexec-dev name=e00-p$pg probe=0 back=1
+    if [ "$pg" = 0 ]; then printf '594b0a05 %s%s %s%s\n' "${xc[1]}" "${xc[0]}" "${xc[3]}" "${xc[2]}" > "$px/snvs.txt"
+    else printf '594b0a05 ffff%s ffffffff\n' "${xc[4]}" > "$px/snvs.txt"; fi
+    : > "$px/INDEX.txt"
+done
+"$B" x2 tally "$TX" > "$S/new-x2.txt" 2>&1
+check "x2 tally: begun is the sum (8), no-result is '-' (not 0), the five failing names come from two pages of four"     eval 'grep -qP "^0\tdEQP-GLES3.functional.attribute_location.\*\t8\t3\t5\t0\t0\t-\t" "$TX/results.tsv"'
+check "x2 tally: all five names in results.tsv, none as crc:"     eval 'for k in "${x2n[@]}"; do grep -qF "dEQP-GLES3.functional.attribute_location.bind.$k" "$TX/results.tsv" || exit 1; done; ! grep -q "crc:" "$TX/results.tsv"'
+check "x2 tally: the TALLY line has no-result 0 from the '-' (absent is not counted)" grep -q '^TALLY (1 entries): begun 8 passed 3 failed 5 notsup 0 other 0 noresult 0' "$S/new-x2.txt"
+check "record --words 3 on that row prints w3 as '-', the line says begun=derived" \
+    eval '"$YAKOGL_TOOLS" record --words 3 594b0801 00050003 00000000 | grep -q " -$" && "$YAKOGL_TOOLS" record --words 3 --line 594b0801 00050003 00000000 | grep -q "begun=derived tally=3,5,0,0,8"'
 
 echo "board_selftest: $n checks, $fails failed (pinned: $WANT_CHECKS)"
 [ "$fails" = 0 ] && [ "$n" = "$WANT_CHECKS" ]

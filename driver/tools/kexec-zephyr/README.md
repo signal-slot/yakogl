@@ -108,7 +108,19 @@ What differs from the Verdin's crash route, each read on the board on
   `dead0002`), so an X2 image stores w0..w2 in LPGPR1..3 and no w3
   (`CONFIG_GC_COMMON_RESULT_SNVS_KEEP_LPGPR0`). The runner clears LPGPR1..3
   (the selector `SEL` goes into LPGPR2), writes LPGPR0 back as it read it, and
-  records the result as `w0 w1 w2 00000000`.
+  records the result as the three words `w0 w1 w2` (`snvs.txt`): no value
+  stands in for w3, and `yakogl-tools record --words 3` (which `board.sh`
+  uses for a three-word record) prints every field of w3 as `-`. What that
+  costs, from `gc_result.h` and `deqp_snvs.c`: a DEQP row record loses the
+  cases begun and the first failing name check (begun is derived as
+  pass + fail + notsup + other, so a case that began without a result is not
+  counted), DEQP_CASES its GPU resets, and the DEQP_FAILS pages hold four
+  names instead of six (the X2 image writes them so, `GC_RESULT_DEQP_FAILS_PER_PAGE`).
+  Decision: an X2 tree names its failing cases from those shorter pages in the
+  selector form (`TREE_IMAGE`, `results_tsv` reads `ceil(fails / 4)` pages per
+  failing row), because the record is the only result a run without
+  `BOARD_UART` has; with a console (`NAMES=0`) the names come from
+  `tools/cts/deqp-uart-tally.py` instead and no page boots are spent.
 - **OpenRC, not systemd.** The boot has finished when the runlevel is
   `default` and no `openrc` process is left; the readiness read waits for
   that for up to 40 s. There is no remoteproc entry for the M7.
