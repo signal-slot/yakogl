@@ -126,6 +126,10 @@ def scan(text):
     v3d_deqp "case #N" lines, "done" / "summary" / "v3d": the image's own counters (None when
     absent), "loss": the capture-loss evidence (None when nothing is lost)}."""
     raw = text.replace("\0", "").replace("\r", "").splitlines()
+    # a capture that stops mid-line (the 600 s watchdog, a lost link) leaves a last result line
+    # whose case name may be cut: that name is not a case, so it is not read as one
+    if raw and text[-1] not in "\r\n" and LINE.match(STAMP.sub("", raw[-1], count=1)):
+        raw.pop()
     r = {"got": {}, "tail": [], "filters": [], "cases": {}, "done": None, "summary": None, "v3d": None}
     stamped = []  # (seconds, last case number seen, line is a result line)
     last_no = None
