@@ -339,12 +339,21 @@ static int dsim_init_link(struct display_ctx *c)
 	uint32_t lanes_mask = BIT(c->lanes) - 1;
 	uint32_t reg;
 
-	/* Initialise the FIFO pointers: the low five bits down, then up. */
+	/*
+	 * Initialise the FIFO pointers: the low five bits down, then up. 1 ms
+	 * each way, not Linux's 10 (samsung_dsim_init_fifo_pointer): the RM
+	 * gives the bits no length (IMX8MPRM Rev. 3 13.6.9.1.21), a pointer
+	 * initialisation takes cycles of the block's clocks, and 1 ms is
+	 * 20,000 of the slowest (the escape clock, at most 20 MHz), as the
+	 * Rust port of this driver has it (driver/rust/src/ip/samsung_dsim.rs).
+	 * The two 10 ms waits were 20 of the route-3 cold start's 95 ms of
+	 * panel bring-up (2026-11-06, stage times).
+	 */
 	reg = rd32(c->dsim, DSIM_FIFOCTRL_REG) & ~0x1fu;
 	wr32(c->dsim, DSIM_FIFOCTRL_REG, reg);
-	k_sleep(K_MSEC(10));
+	k_sleep(K_MSEC(1));
 	wr32(c->dsim, DSIM_FIFOCTRL_REG, reg | 0x1fu);
-	k_sleep(K_MSEC(10));
+	k_sleep(K_MSEC(1));
 
 	/*
 	 * Video mode, RGB888, burst mode: CONFIG = 0x0600707f once the lanes
