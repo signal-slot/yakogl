@@ -80,6 +80,7 @@
  *   26    dEQP texture.vertex.2d.filtering.nearest_nearest_clamp's shape:
  *         texture2DLod in the vertex stage over two 128x128 RGB mipmapped
  *         textures, a minified and a magnified draw in one frame. Online too
+ *   28    golden only: a 4.0-wide GL_LINES draw (Q11 of issue #1281)
  */
 struct pc_vertex {
 	float pos[4];

@@ -64,6 +64,8 @@
  *      rows, each block a flat colour of its own. Where the blocks lie in
  *      memory and what the descriptor says about them is the whole question,
  *      so read this one with --tex-desc and --mem.
+ *  28  a 4.0-wide GL_LINES draw (golden only): ALIASED_LINE_WIDTH_RANGE and
+ *      PA_LINE_WIDTH, the Q11 question of issue #1281
  *  16  case 20's ETC2 RGBA8 EAC texture. The branch is here, but ES 2.0 has
  *      no ETC2 and this context rejects the upload with GL_INVALID_ENUM, so
  *      there is no golden to be had: it stops with exit 3 and says why,
@@ -779,7 +781,7 @@ int main(int argc, char **argv)
 		 * drift from the code the way the old duplicate mode list did. If
 		 * you add a branch, add the number here. */
 		static const int have[] = { 1, 2, 3, 4, 5, 7, 8, 10, 11, 12, 14, 15, 16, 17, 18,
-					    19, 20, 21, 22, 23, 24, 25, 26, 27 };
+					    19, 20, 21, 22, 23, 24, 25, 26, 27, 28 };
 		size_t k;
 		int known = 0;
 
@@ -865,7 +867,7 @@ int main(int argc, char **argv)
 	}
 	glViewport(0, 0, 64, 64);
 
-	if (mode >= 19) {
+	if (mode >= 19 && mode != 28) {
 		return frag_mode_g(mode);
 	}
 
@@ -1219,6 +1221,17 @@ draw:
 					: GL_COLOR_BUFFER_BIT);
 	if (mode == 7) {
 		glDrawArrays(GL_POINTS, 0, 3);
+	} else if (mode == 28) {
+		/* Q11: a line wider than one pixel. What the driver reports as
+		 * the range, and what PA_LINE_WIDTH ends up holding. */
+		GLfloat range[2] = { 0, 0 }, width = 0;
+
+		glLineWidth(4.0f);
+		glGetFloatv(GL_ALIASED_LINE_WIDTH_RANGE, range);
+		glGetFloatv(GL_LINE_WIDTH, &width);
+		fprintf(stderr, "ALIASED_LINE_WIDTH_RANGE %g %g, LINE_WIDTH after glLineWidth(4) %g\n",
+			range[0], range[1], width);
+		glDrawArrays(GL_LINES, 0, 2);
 	} else {
 		glDrawArrays(GL_TRIANGLES, 0, mode == 5 ? 6 : 3);
 	}
