@@ -19,7 +19,7 @@ Raspberry Pi 4 uses Zephyr's own `rpi_4b`.
 
 ## The samples
 
-Four samples here, each one source tree for every board it runs on: the Zephyr
+Each sample here is one source tree for every board it runs on: the Zephyr
 board (`-b`) picks the GPU, and what differs per board is in the sample's
 `boards/` (`<board>.conf`, `<board>.overlay`) and the board layer
 (`driver/zephyr/lib/board`). The fifth, the triangle, is the first example
@@ -31,11 +31,17 @@ board (`-b`) picks the GPU, and what differs per board is in the sample's
 | `deqp` | dEQP-GLES2/3 as an image |
 | `glmark2` | the benchmark |
 | `examples/slint` | the Slint demo (outside this directory): kept working on every board, not a test or a benchmark |
+| `gc_fence` | Vivante bring-up: one kick whose fence retires through the interrupt (fence, interrupts, elapsed time) |
+| `gc_clear` | Vivante bring-up: a resolve-engine clear of a small target read back by the CPU (wrong pixels) |
 
 The earlier per-GPU samples (`gc_*`, `v3d_*`, `gl_triangle`, `gl_femtovg`, ...)
 are gone: their boards became board configurations of these, the probes that
 the gate still builds are under `tools/probes/` and the host replay is
-`tools/host-replay/`.
+`tools/host-replay/`. `gc_fence` and `gc_clear` are back as board-layer
+samples for bringing up a new board with a Vivante GPU (the STM32MP257F-DK):
+no GL, only the board layer and the GPU driver's `gc_render.h`/`gc_draw.h`,
+built for any board whose board layer has a `vivante,gc` node, with no files
+of their own per board (`examples/zephyr.cmake` applies the board layer's).
 
 ## The samples
 

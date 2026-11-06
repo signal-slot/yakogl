@@ -3,8 +3,9 @@
 # Probes
 
 Zephyr images that measure one thing on one board and are not samples
-(`driver/samples/zephyr` holds only `triangle`, `gl_test`, `slint`, `deqp` and
-`glmark2`). `tools/check.sh` builds each with `-DYAKOGL_WERROR=ON` (the
+(`driver/samples/zephyr` holds `gl_test`, `deqp`, `glmark2` and the Vivante
+bring-up samples `gc_fence` and `gc_clear`; `triangle` and `slint` are under
+`examples/`). `tools/check.sh` builds each with `-DYAKOGL_WERROR=ON` (the
 `zephyr` rows, by path: `zephyr_werror_image`).
 
 - `nanopc_t6/t6_hello`: milestone Z1 on the NanoPC-T6, the build line and the
