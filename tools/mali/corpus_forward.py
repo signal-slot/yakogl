@@ -17,7 +17,7 @@ whose text changes and refusals that become ok are allowed (listed under
 
 No exemption exists, none is needed over the public range. Plan #154 (a)
 expected to accept the removal of the tools/shaders/qt* lines, whose sources
-the owner removed in c2538996 (#1509). That commit belongs to the history
+the owner removed in c2538996. That commit belongs to the history
 before the repository started over (root 381b0f09, 2026-10-27): the root's
 corpus-verdicts.txt has no qt* line, so 381b0f09..HEAD removes none, and the
 range reports 0 regressions. A removal in a later range is an offence like any

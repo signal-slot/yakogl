@@ -52,7 +52,7 @@ findings: 0
 
 `GPL-3.0-only`, `LicenseRef-Imagination-DDK-MIT`,
 `LicenseRef-Slint-Royalty-free-2.0` and `LicenseRef-Slint-Software-3.0` left
-`LICENSES/` and `NOTICE` (owner decision 5 of #1606; items 11 and 12 below):
+`LICENSES/` and `NOTICE` (owner decision 5; items 11 and 12 below):
 no file named them. The origin pass brought `GPL-3.0-only` and the two Slint
 texts back, unchanged, because the Slint patch's sidecar names them now
 (item 5); `LicenseRef-Imagination-DDK-MIT` stays out. NOTICE 4 now points at the DDK's own `MIT-COPYING`,
@@ -71,7 +71,7 @@ sets, which added about 2400 files.
 | Group | Files | Treatment |
 |---|---|---|
 | Own source and prose | 14 | SPDX header added (`Apache-2.0`, `Signal Slot, Inc.`): 10 READMEs and docs (`docs/es3/*.md`, `driver/samples/zephyr/*/replay/README.md`, `tools/mali/board-ref/*/README.md`), `tools/docs/check-refs.py`, `tri.c` and `tri_varying.c` (probes of `tools/mali/board-ref/2026-10-18/shaders/`), `.ccfarm/project.toml` |
-| Board captures (`tools/mali/board-ref/`): `*.dmesg`, `*.log`, `*.stdout`, `*.stderr`, `*.txt`, `*.pandecode*`, `*.jpg` | 2189 | allowlist by kind, `Apache-2.0` (output of our runs). The directory left the tree on 2026-10-26 (#1606 step 5) and its 16 allowlist rows with it; the six excerpts the tests read moved to `tools/mali/board-dump/` (row `tools/mali/board-dump/*.txt`) |
+| Board captures (`tools/mali/board-ref/`): `*.dmesg`, `*.log`, `*.stdout`, `*.stderr`, `*.txt`, `*.pandecode*`, `*.jpg` | 2189 | allowlist by kind, `Apache-2.0` (output of our runs). The directory left the tree on 2026-10-26 and its 16 allowlist rows with it; the six excerpts the tests read moved to `tools/mali/board-dump/` (row `tools/mali/board-dump/*.txt`) |
 | `tools/mali/testdata/` (probe shaders, disassembly, traces compared byte for byte), `panthor/uapi_pins.expected`, `isa-ref/board-2026-10-18.txt` | 217 | allowlist, `Apache-2.0` |
 | `tools/cts/testdata/` (self-test inputs and expected output), `driver/rust/tests/gm-record/`, `tools/shaders/known-uncompilable-v3d.txt` | 64 | allowlist, `Apache-2.0` |
 | `tests/fixtures/deqp_random_dead_cube/` | 11 | allowlist, `Apache-2.0` (VK-GL-CTS is Apache-2.0, NOTICE 5; the shader source is a test input) |
@@ -85,7 +85,7 @@ three `docs/notes/mali-*.md`, `tools/mali/fvg_refusals.py`,
 (`*.pam`, `*.rgba`, `*.kmsg`, `*.trace`, `*.xz`), 3 `tools/mali/board-dump/`
 records and 66 host-harness fixtures (`tools/hostharness/glmark2/testdata/`)
 took allowlist rows. The 501 `undecided` rows of the Qt shaders left with the
-files (#1509): 580 became 79.
+files: 580 became 79.
 
 ## How the tool decides
 
@@ -170,7 +170,7 @@ licence was read from. `undecided: 0`.
 
 | # | Item | Files | What was found, and the source | What was done |
 |---|---|---|---|---|
-| 1 | `tools/shaders/qt/`, `qt3d/` | 501 | GLSL ES text from Qt Quick / Qt Quick 3D `.qsb` packs. | **Done**: removed from the tree (#1509, #1824). |
+| 1 | `tools/shaders/qt/`, `qt3d/` | 501 | GLSL ES text from Qt Quick / Qt Quick 3D `.qsb` packs. | **Done**: removed from the tree. |
 | 2 | `tools/shaders/femtovg/*.frag,*.vert`, `offarm/` | 49 (36 + 13) | femtovg 0.26.0's `src/renderer/opengl/main-fs.glsl` and `main-vs.glsl` as its `program.rs` assembles them, with the `NO_DISCARD` hunk of `femtovg-0.26.0-nostd.patch` (lines 590-608). Checked: the crate from crates.io (sha256 `2aaa216522a4fe16...`, `.cargo_vcs_info.json` sha1 `a9104b9079a3`), its two GLSL files plus that hunk, then `python3 -I tools/shaders/femtovg/verify_variants.py <dir>`: "36 variants expected; 0 problem(s)". `offarm/` is `fill_color.nodiscard.frag` plus our steps (`python3 -I tools/gen_offarm.py --check` passes). femtovg is `MIT OR Apache-2.0`, "Copyright 2021 femtovg contributors" (its `LICENSE-APACHE`); its README says it is ported from NanoVG. | Allowlist rows `MIT OR Apache-2.0` (the offline shader table hashes the text, so no header); NOTICE 8 names the files and the holder. |
 | 3 | `tests/fixtures/deqp_random_dead_cube/*` | 11 | Shaders from dEQP's random shader generator. | Allowlisted as Apache-2.0 (CTS) with the pass. |
 | 4 | `tools/cts/testdata/wedge-shaders/*` | 4 | Not Qt: the dEQP cases `shaders.algorithm.{hsl_to_rgb,rgb_to_hsl}_{vertex,fragment}`, built by `createExpressionCase()` and `LineStream(1)` in `modules/gles2/functional/es2fShaderAlgorithmTests.cpp` of VK-GL-CTS `93bca018` ("Copyright 2014 The Android Open Source Project", Apache-2.0). A script that applies that template to the file's `SHADER_OP_CASE` lines gives all four files byte for byte. | Allowlist row `Apache-2.0` (`tests/temps_survey.rs` reads them); NOTICE 5 names them. |
@@ -180,7 +180,7 @@ licence was read from. `undecided: 0`.
 | 8 | `tools/v3d/qpu_corpus.txt` | 1 | Its header names its origin: `tools/v3d/qpu_corpus.py` over a `glsl2v3d.py` run at `a87ed25c`. At that commit `tools/shaders` held 625 sources, 503 of them the Qt shaders of item 1, so most of its 37,427 words were Mesa's v3d_shc output for Qt text. | **Regenerated** without them: `glsl2v3d.py` failed on six gl_test sites it cannot read and now names them (`KNOWN_UNRESOLVED`); the new corpus (1090 of 1116 pairs, 8,893 words; three runs, same file) replaces the old one, and `roundtrip.rs` pins the new counts. Allowlist row `Apache-2.0` (our and femtovg's sources through Mesa's compiler). |
 | 9 | `driver/src/display/golden-linux-2026-09-21.txt` | 1 | Register values read with `mmio_rd` on our board while Linux drove the panel (commit `0e7a8268f`, 2026-09-21; the bus-error line of our `golden_dump.sh` is in it). Hardware state, no driver text; `driver/docs/imx8mp-display-cold.md` says the GPL drivers were not read. | Allowlist row `Apache-2.0` (`driver/rust/src/model.rs` and `soc/imx8mp/media/tests.rs` read it with `include_str!`). |
 | 10 | `tools/pvr/rgxstart/*.trace`, `rgxstart.diff`, `tools/pvr/km/fwinit-step7.diff` | 4 | Not DDK text: the traces are the register offsets and values our recording `sys_io` logged (`record_main.sh`, `rgxlayer_check.c`, `tools/pvr/rgxstart/README.md`); the diffs are `diff -u` of two of our records (`tools/check.sh` row "pvr rgxlayer_check" compares them byte for byte). | Allowlist rows `Apache-2.0`. |
-| 11 | `LicenseRef-Imagination-DDK-MIT` unused | - | | **Done**: the text left `LICENSES/` (owner decision 5 of #1606). |
+| 11 | `LicenseRef-Imagination-DDK-MIT` unused | - | | **Done**: the text left `LICENSES/` (owner decision 5). |
 | 12 | `GPL-3.0-only`, `LicenseRef-Slint-*` unused | 3 | | Done with decision 5; item 5 brings them back, used by the Slint patch's sidecar. |
 | 13 | `GPL-2.0-only` used once | - | Only through the DDK `UPSTREAM` ("Dual MIT/GPLv2"). | Informational. |
 | 14 | `website/og-image.png`, `website/glmark2-am62p-phong.png`, `tools/cts/board-ref/glmark2-am62p-shading-phong/glmark2-phong.png` | 3 | `og-image.png` is ours: `python3 -I tools/website-og-image.py` (commit `91b24e17f`) writes the same bytes again, with SPDX tEXt chunks. The two glmark2 PNGs are the frame YakoGL drew of glmark2's `shading=phong` scene, a rendering of glmark2's `data/models/cat.3ds`; glmark2 is GPL-3.0 with no other licence for its data (its README). | `og-image.png`: allowlist row `Apache-2.0`. The two glmark2 PNGs are **removed**; the home page's GL band keeps its text without the figure, and the board-ref README keeps the run record and its picture value. |

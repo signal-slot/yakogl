@@ -192,7 +192,7 @@ the reference compiler's choice for gl_test's `es300/vid.vert` (register 1
 after `pos` in register 0). Pinned by `codegen.rs` `lowered_ops`
 (`gl_vertex_id_is_x_of_the_register_after_the_attributes` and the two after
 it). Until this the online compiler refused the shader with "this built-in
-input is not selected yet" (GitHub issue #11), so gl_test cases 43, 44, 45,
+input is not selected yet", so gl_test cases 43, 44, 45,
 49, 57 and 98 failed in an online image. The PowerVR online selector had it
 already (`powervr/select.rs`, `vs_vertex_id_reg1`).
 

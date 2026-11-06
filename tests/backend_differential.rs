@@ -420,7 +420,7 @@ fn the_back_end_computes_what_the_ir_says() {
      * moves either re-derives the pin; widening it silently is how a check
      * stops checking. Per build: a report-es2 build refuses GLSL ES 3.00 in
      * the front end (pp.rs out_of_scope). Measured 2026-10-24; 347 / 244
-     * compared while the Qt shaders were in the GC7000 table, until #1509. */
+     * compared while the Qt shaders were in the GC7000 table, until their removal. */
     let skipped: usize = skips.values().sum();
     let es2 = cfg!(feature = "report-es2");
     assert_eq!(
@@ -434,7 +434,7 @@ fn the_back_end_computes_what_the_ir_says() {
      * gap, to close), one loop that does not end on the harness's inputs,
      * and the sources whose result is undefined on them. Measured
      * 2026-10-24; 209 / 126 while the Qt shaders were in the GC7000 table,
-     * until #1509. */
+     * until their removal. */
     assert_eq!(skipped, if es2 { 42 } else { 61 }, "the skipped population moved: {skips:?}");
     assert!(bad.is_empty(), "{} programs compute something other than their IR", bad.len());
 }

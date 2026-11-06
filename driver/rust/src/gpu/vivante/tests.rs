@@ -669,7 +669,7 @@ fn the_ring_commit_writes_the_address_before_the_header() {
 }
 
 /// The words a submit puts around the caller's stream, against what the
-/// etnaviv kernel puts around a submitted buffer (issues #9 and #25; the
+/// etnaviv kernel puts around a submitted buffer (issues #5 and #10; the
 /// step-by-step comparison is src/vivante/VIVANTE_NOTES.md, "Draw, resolve,
 /// read back: our sync sequence against etnaviv's"):
 ///

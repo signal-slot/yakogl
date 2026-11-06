@@ -511,7 +511,7 @@ entry keeps its ES 3.0 rules for whoever resolves it anyway.
   and CPU view, row pitch, surface format and alpha width
   (`fb_target_pitched_n`, `fb_target_format_n`, `fb_target_alpha_bits_n`),
   not placeholder values. The GC7000 wants the CPU view to tile a 64-bit
-  target into its shadow (`wide_target`; the wrong-place pixels of probe #6)
+  target into its shadow (`wide_target`; the wrong-place pixels of gl_test 44's probe)
   and wants the alpha width the target really has for its pixel engine (write
   mask, clear alpha, DST_ALPHA rewrite) and for the blend variant it picks;
   a clear's `clear_target_mask` and its rounding of the clear colour's alpha

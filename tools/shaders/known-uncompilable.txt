@@ -13,7 +13,7 @@
 # BOTH tables at that date, compiled cleanly for Vivante -- which is how they
 # were identified as staleness rather than as members of this list.
 #
-# Empty since the Qt shaders left the tree (#1509): pco_shc builds every source
+# Empty since the Qt shaders left the tree: pco_shc builds every source
 # the list names.
 #
 # An entry here that gains a row is also an error: the list has rotted and the

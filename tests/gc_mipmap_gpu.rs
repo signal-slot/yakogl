@@ -39,7 +39,7 @@
 //! unit do what the model does with these registers is the board's answer
 //! (dEQP-GLES2 texture.mipmap.*, glmark2's terrain and refract pictures).
 //!
-//! The GL core's own glGenerateMipmap reaches the entry too (#1106): a
+//! The GL core's own glGenerateMipmap reaches the entry too (`dc033dc4`): a
 //! texture a draw rendered into (`pe_order`, at the chain's one pitch), as
 //! glmark2's terrain and refract targets are every frame, has its chain made
 //! here and not by the CPU filter
@@ -1036,7 +1036,7 @@ fn rendered_into_case(w: u32, h: u32, seed: u32) {
     });
 }
 
-/// #1106: glmark2's terrain (800x600) and refract (1600x1200) targets, and
+/// `dc033dc4`: glmark2's terrain (800x600) and refract (1600x1200) targets, and
 /// a power-of-two one, rendered into and then glGenerateMipmap'd through
 /// the GL core: the GPU makes the chain, not the CPU box filter.
 #[test]

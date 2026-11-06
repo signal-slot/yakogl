@@ -2,8 +2,8 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # The PR EOT program recipe: Mesa's SPM EOT against our end-of-tile path
 
-Host-only reading, no code, 2026-10-29 (plan #148 item pr-eot-read, issue
-#3). It is part 3 "EOT store" of "Design: the firmware's partial render" in
+Host-only reading, no code, 2026-10-29 (plan #148 item pr-eot-read).
+It is part 3 "EOT store" of "Design: the firmware's partial render" in
 [pvr-render-pool.md](pvr-render-pool.md), made word-exact. Nothing here is
 measured. Each claim is marked:
 - **read**: what a source says;

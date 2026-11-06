@@ -2,7 +2,7 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Mali (Valhall, v10): a float uniform array read at a run-time index, Mesa's design
 
-Issue #1385 (b), plan #153 items `study-uniarray` (this note) and `uniarray`
+Issue #32 (b), plan #153 items `study-uniarray` (this note) and `uniarray`
 (the lowering of gl_test case 108 `uniidx`, programs A, B and C of
 `tools/shaders/es100/uniidx_{a,b,c}.frag`, refused with `MaliError::UniformArray`,
 "Valhall: a uniform array is not lowered yet"). Companion of

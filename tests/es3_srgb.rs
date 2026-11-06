@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! ES 3.0's sRGB colour buffers and textures through the GL API on the host
 //! (docs/es3/srgb.md; the AM62P dEQP-GLES3 failures it answers are listed
-//! there and in #1234, #1235).
+//! there).
 //!
 //! What is held here is the GL layer's contract with a back end: an
 //! `SRGB8_ALPHA8` renderbuffer or texture level is a complete colour buffer

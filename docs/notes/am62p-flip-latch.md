@@ -4,7 +4,7 @@
 
 2026-10-18. Plan #150 item `am62p-flip-latch-design`, read at main
 `3adf39e3`. The then hand-over ("New: the AM62P DSS flip does not
-wait"; board run now #1211) asks for a choice between a fourth buffer and a `present` that
+wait"; board run still open) asks for a choice between a fourth buffer and a `present` that
 reports the latched buffer. Option C is implemented (item
 `am62p-flip-latch-impl`); "Implemented" below says where the code differs
 from the steps. No board run yet.
@@ -222,7 +222,7 @@ of those that are busy: equal to `app_addr_shown`, `app_addr_unsure` or
    in the swap changes: no new wait, `finish_previous` as now.
 5. **Docs**: the AM62P row of the board table in
    `docs/notes/egl-swap-timeline.md`, and the issue of the
-   implementing result (#1211).
+   implementing result.
 
 ## Host test plan
 

@@ -117,7 +117,7 @@ into each frame; which texture it is was not checked.
 
 ## Fix items, in order
 
-0. **The frame floor (#737), not a CPU item.** It decides 23 of the 33
+0. **The frame floor, not a CPU item.** It decides 23 of the 33
    scenes and most of the score. Ordered here so the CPU items are read in their
    place: expected gain is the largest of all (the score is capped near 58
    by the wait), and it is owned by `imx8mp-floor-gm-arms` and
@@ -132,7 +132,7 @@ into each frame; which texture it is was not checked.
    board more, since the filter reads non-cacheable memory. Most of the
    three scenes' gain. Needs a board check of the picture (a wrong level shows
    as shimmer). **Done on the host** (2026-10-18, `src/vivante/mipmap.rs`;
-   2026-10-20, the GL core's offer of glmark2's rendered-into chains, #1106;
+   2026-10-20, the GL core's offer of glmark2's rendered-into chains;
    the sections "After: the GPU chain" and "After: the GL core's offer"
    below). The board check is what is left.
 2. **The depth resolve** (`ds_cache.rs:resolve_depth`). Cheap step first:
@@ -203,7 +203,7 @@ That change alone did not reach glmark2: the GL core offered a chain only
 at `chain_pitch` 0 and not `pe_order`, which no GC7000 chain is (next
 section).
 
-## After: the GL core's offer (item 1, #1106, 2026-10-20)
+## After: the GL core's offer (item 1, 2026-10-20)
 
 `src/gl/texture.rs` `glGenerateMipmap` offered a chain to the back end only
 when `t.chain_pitch == 0` and `!t.pe_order` (from the V3D's TFU change
@@ -238,7 +238,7 @@ before column is not that file's):
 Runs (frame ms): terrain before 11.39, 10.79, 11.44, after 0.87, 0.97,
 0.85; refract before 15.92, 13.79, 13.28, after 2.20, 3.11, 1.76.
 Before: main `b4e5f46e` (its library sources are `4b057224`'s). After: the
-same plus the `src/gl/texture.rs` change of #1106. Every after run logs
+same plus the `src/gl/texture.rs` change of `dc033dc4`. Every after run logs
 "the GPU made the ... chain" and no chain left to the CPU; 0 GL errors,
 0 refused draws, 0 allocations refused in all twelve runs. What is left in
 glGenerateMipmap is the recording of the chain's draws. Refract's
@@ -256,7 +256,7 @@ the program (release, opt-level 2, no LTO) instead of the assembled
 `libyakogl.a`. The milliseconds therefore compare with each other, not
 with FINDINGS-gc.md's.
 
-**Board check needed** (#1206): terrain and refract pictures, dEQP-GLES2
+**Board check needed** (#16): terrain and refract pictures, dEQP-GLES2
 `texture.mipmap.*`, and the per-scene ms a frame on the i.MX8MP.
 
 ## After: buffer map reuse (item 4, map half, 2026-10-18)
@@ -288,7 +288,7 @@ The update calls drop by about a third (0.062 to 0.040 ms a frame). The frame do
 The per-scene record (`tools/board.sh imx8mp gm ... pictures`, 66 boots, all
 `verdict=done`; `records/imx8mp/20261020-2100-glmark2-a917d123/`) of an
 image that holds `dc033dc44` (the GL core offers glmark2's rendered-into
-RGBA8 chains to the GC7000 path, #1106). The score run of the same image
+RGBA8 chains to the GC7000 path). The score run of the same image
 reads 42, 33 ran, 0 failed, 0 GL errors.
 
 | scene | ms a frame | FPS (integer) |

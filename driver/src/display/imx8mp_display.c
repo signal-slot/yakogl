@@ -661,7 +661,7 @@ static int display_init(const struct device *dev)
 		     "burst-clock-frequency leaves the DSI link no margin for packet overhead: " \
 		     "it must be at least clock-frequency x 24 / dsi-lanes x 1.025 "            \
 		     "(YD_SAMSUNG_DSIM_LINK_MARGIN_PERMILLE; 71.1 MHz on 426.6 Mbit/s broke "   \
-		     "the picture, issue #23)");                                               \
+		     "the picture, issue #8)");                                               \
 	BUILD_ASSERT(DT_NODE_HAS_COMPAT(DT_INST_PHANDLE(inst, bridge), yakogl_sn65dsi8x) && \
 		     !DT_NODE_HAS_PROP(DT_INST_PHANDLE(inst, bridge), dsi_host),       \
 		     "bridge: a yakogl,sn65dsi8x without a dsi-host");                 \

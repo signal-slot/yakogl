@@ -20,7 +20,7 @@
 //! * A swap with nothing drawn since the last one still shows a complete
 //!   buffer (its previous frame is the last kick, which "all but the last
 //!   kick" would leave running).
-//! * The window rendered in place (EGL_SINGLE_BUFFER: #925, 0247ac66) waits
+//! * The window rendered in place (EGL_SINGLE_BUFFER: 0247ac66) waits
 //!   for its frame's end in every swap: no overlap. This is the timeline the
 //!   AM62P's 289 and the Pi 4's 157 were measured with.
 //! * GLES_NATIVE_WINDOW_PIPELINED: the overlap without EGL's buffers (the
@@ -223,7 +223,7 @@ static OSAL_NO_VBLANK: OsalOps = OsalOps {
     display_busy: None,
 };
 
-/// The same with a vertical-sync source (the i.MX8MP once #737 wires its
+/// The same with a vertical-sync source (the i.MX8MP once it wires its
 /// `yakogl_zephyr_wait_vblank` into the GC OSAL).
 static OSAL_VBLANK: OsalOps = OsalOps { wait_vblank: Some(m_wait_vblank), ..OSAL_NO_VBLANK };
 
@@ -355,7 +355,7 @@ const PI4: Board = Board { name: "Pi 4", present_waits: false, vblank: false };
 /// default): the show waits for the LCDIF latch; zephyr_gc.c has no
 /// `.wait_vblank` yet.
 const IMX8MP: Board = Board { name: "i.MX8MP", present_waits: true, vblank: false };
-/// The i.MX8MP once `.wait_vblank` is wired (#737) and the show still waits.
+/// The i.MX8MP once `.wait_vblank` is wired and the show still waits.
 const IMX8MP_VBLANK: Board = Board { name: "i.MX8MP with .wait_vblank", present_waits: true, vblank: true };
 
 /* ---- the run -------------------------------------------------------------------- */
@@ -369,7 +369,7 @@ const FRAMES: u32 = 6;
 enum Window {
     /// No attribute list: EGL_BACK_BUFFER, what glmark2 asks for.
     Back,
-    /// EGL_RENDER_BUFFER EGL_SINGLE_BUFFER: rendered in place, #925.
+    /// EGL_RENDER_BUFFER EGL_SINGLE_BUFFER: rendered in place (0247ac66).
     Single,
     /// GLES_NATIVE_WINDOW_PIPELINED in the native window's format.
     Pipelined,
@@ -606,7 +606,7 @@ fn double_buffer_check_tail(r: &Run, board: Board, from: u32) {
 
 #[test]
 fn a_single_buffered_window_waits_for_its_frames_end_in_every_swap() {
-    /* #925: the window is shown in place right after the swap, so the swap
+    /* 0247ac66: the window is shown in place right after the swap, so the swap
      * completes the frame. The CPU work of frame N+1 then starts on an idle
      * GPU: the timeline of the AM62P's 289 and the Pi 4's 157 */
     for board in [AM62P, PI4] {
@@ -634,7 +634,7 @@ fn a_single_buffered_window_waits_for_its_frames_end_in_every_swap() {
 #[test]
 fn a_pipelined_window_overlaps_without_egls_buffers() {
     /* GLES_NATIVE_WINDOW_PIPELINED: the swap waits only for the frame before,
-     * as before #925 (the AM62P's 462, the Pi 4's 188); EGL shows nothing
+     * as before 0247ac66 (the AM62P's 462, the Pi 4's 188); EGL shows nothing
      * and every frame goes into the application's window */
     for board in [AM62P, PI4] {
         let r = run(board, Window::Pipelined, None, None);

@@ -37,7 +37,7 @@ config, `multisampled_render_to_texture.readpixels`; section C of
 numbers for every board, with the commit and the record they come from.
 
 **State.** Met. The three boards ran the whole tree from one main commit,
-`e9901869a` (2026-10-15/16, issue #870), and every newer run reads 0 Fail.
+`e9901869a` (2026-10-15/16), and every newer run reads 0 Fail.
 The newest whole tree of each board (`tools/cts/RESULTS.md`, "ES 2.0"):
 
 | Board | Pass | Fail | NotSupported | Warnings |
@@ -73,15 +73,15 @@ Left for the criterion:
 - Pictures by eye: only the AM62P's were looked at on its panel (at
   `bc43ea09`; 29 of 33 scenes match the current run, the other 4 are animated).
   The Pi 4 and i.MX8MP pictures are checked by value only (the i.MX8MP:
-  #1207).
+  #17).
 - One main commit for the three scores again, with terrain and refract
-  checked (#1196).
+  checked.
 
 Slow scenes, which the criterion does not judge: on the AM62P terrain,
 shadow and refract take 94, 353 and 376 ms a frame, mostly GL-call time on
-the CPU (#1199, #1006, #1198); on the Pi 4 terrain takes 162 ms (#1209); on
+the CPU; on the Pi 4 terrain takes 162 ms (`docs/notes/pi4-glmark2-cpu.md`); on
 the i.MX8MP terrain, shadow and refract run at 4, 2 and 2 FPS (shadow and
-refract: #1204), and the other scenes wait for the panel's VSYNC every frame
+refract: #15), and the other scenes wait for the panel's VSYNC every frame
 (`docs/notes/imx8mp-frame-floor.md`). The gap list is
 `docs/notes/stage2-bench-gap.md`.
 
@@ -96,8 +96,8 @@ the website consistent with the status sources, this roadmap, and a green
 `tools/check.sh` on the tree to publish. A first version is tagged with its
 own `CHANGELOG.md` section.
 
-**State.** Not public yet. On 2026-10-21 the owner decided how
-(issue #1606): a new public repository whose history starts with one fresh
+**State.** Not public yet. On 2026-10-21 the owner decided how:
+a new public repository whose history starts with one fresh
 commit of the cleaned tree, and the order of the work. Stage 1, which this
 stage follows, is met. `CHANGELOG.md` has its `0.1.0` section (dated
 2026-10-27, commit `625f82ce`); no version is tagged. `CONTRIBUTING.md`,
@@ -114,7 +114,7 @@ in the tree. The state of each checklist line is in
 - The website: `tools/website-check.sh` exits 0, but `website/data.js` still
   says it was checked against `381b0f09` (2026-10-27), before the newer
   dEQP and glmark2 figures.
-- The README glmark2 table from one commit (#1196).
+- The README glmark2 table from one commit.
 - A green full `tools/check.sh` on the snapshot: the nightly
   `rust_eh_personality` link failure (`fce3e6aa`) is being fixed.
 
@@ -138,15 +138,15 @@ On the boards (`tools/cts/RESULTS.md`, "ES 3.0"):
   one image that stopped on a `ResourceError`; that case passes since
   `ffee428a` (on the board at `be84094b`, 2026-10-25), and the tree is now
   31 images, 5 of them run since. Images 20 and 21 hang the GPU in
-  `texture.filtering.3d` (#1285).
+  `texture.filtering.3d` (`docs/notes/pvr-3d-mipmap-hang.md`).
 - Raspberry Pi 4: 9 of its 91 images at `925dbca9` (2026-10-22): 4,917
-  cases, 3,943 pass / 643 fail / 331 NotSupported, 0 without a result (#1261).
+  cases, 3,943 pass / 643 fail / 331 NotSupported, 0 without a result.
   A later record, not yet in `RESULTS.md`, holds rows 9-20 at `0ff58329`
   (2026-11-01, `tools/cts/log/2026-10-31-pi4-gles3-a/README.md`): 5,749
   cases, 5,343 pass / 97 fail / 204 NotSupported / 4 QualityWarning /
   2 ResourceError, 99 never began (a scissored or masked clear of an integer
   target aborts images FO6 and M1).
-- i.MX8MP: not run on the board yet (#1262); the recipe
+- i.MX8MP: not run on the board yet (#24); the recipe
   (`docs/es3/board-recipe-imx8mp.md`) and the preflight
   (`tools/cts/imx8mp-gles3-preflight.sh`) are in the tree.
 
@@ -160,10 +160,10 @@ from its own storage (`docs/standalone-boot.md`), one whole dEQP-GLES2 tree
 with 0 Fail, and the three benchmarks running, each recorded the same way.
 
 **State.** No board has joined. A port to the FriendlyElec NanoPC-T6
-(Rockchip RK3588, Arm Mali-G610) runs outside the five stages (issue #20,
+(Rockchip RK3588, Arm Mali-G610) runs outside the five stages (issue #7,
 `driver/docs/nanopc-t6-mali.md`). Its back end (`gpu-mali`) runs on the
 board's own Linux through the panthor kernel driver: the newest `gl_test`
 sweep (`tools/cts/log/2026-11-01-final3/`, main `0ff58329`, 2026-11-01) reads
 132 of 256 cases PASS, 3 FAIL, 1 FAULT, 27 refused by name, 84 with no case
 and 9 skipped (`tools/cts/RESULTS.md`, "Mali"). Booting it under
-Zephyr is milestones Z1 to Z4 (#1281).
+Zephyr is milestones Z1 to Z4 (#26).

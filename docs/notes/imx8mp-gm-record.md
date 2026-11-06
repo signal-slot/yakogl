@@ -127,7 +127,7 @@ bits a scene) at the price of a page that means nothing by itself; 11 boots
   also gives the fps.
 
 The score, the scene counts and the GL error counters stay with the normal
-full run (kind GLMARK2, with GL_ERROR pages for #814). The pages add the
+full run (kind GLMARK2, with GL_ERROR pages). The pages add the
 per-scene values beside it; a complete GM row is the full run plus one of
 the sessions. The cluster's rate is one more boot of the cluster image with
 its own selector (kind RATE).

@@ -302,7 +302,7 @@ line and kept by `board_finish`. `record.rs` (the `GLMARK2` row of `KINDS`,
 - w3 = W (12 bits) | H << 12 (12 bits) | GL errors raised << 24 | draws that
   sampled an incomplete texture << 28.
 
-The last two are the GL core's counters for the whole run (issue #13):
+The last two are the GL core's counters for the whole run:
 `yakogl_gl_errors_raised` (`src/gl/context.rs`: every GL error an entry
 point raised, the ones the console's `GL error 0x.. in gl..` lines name) and
 `yakogl_incomplete_texture_draws` (`src/gl/draw.rs`: every draw whose
@@ -333,7 +333,7 @@ record instead. Per-scene numbers on the i.MX8MP come from page runs (kind
 counters per scene (`tools/hostharness/glmark2`, the `gm2: scene-end` line)
 and checks them against the library's own lines.
 
-### The first GL errors by name: kind 23 GL_ERROR (issue #814)
+### The first GL errors by name: kind 23 GL_ERROR
 
 The GL core keeps the first eight GL errors with the entry point that
 raised them and a tag the client sets (`src/gl/context.rs`,

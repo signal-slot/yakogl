@@ -282,7 +282,7 @@ fn moving_a_value_to_another_lane_changes_no_output() {
      * program the interpreter cannot run is its own outcome, not a pass).
      * Per build: a report-es2 build refuses GLSL ES 3.00 in the front end
      * (pp.rs out_of_scope). Measured 2026-10-24; 249 / 165 while the Qt
-     * shaders were in the GC7000 table, until #1509. */
+     * shaders were in the GC7000 table, until their removal. */
     let es2 = cfg!(feature = "report-es2");
     assert_eq!(
         with_moves,

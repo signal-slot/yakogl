@@ -7485,7 +7485,7 @@ mod tests {
             }
             /* not a type of this surface (`es3_only_pixel_type`); the
              * INVALID_OPERATION of the (unsized, float) pair it gave until
-             * issue #128 is the same refusal under the ES 2.0 error */
+             * the fix is the same refusal under the ES 2.0 error */
             assert_eq!(gl.error(), GL_INVALID_ENUM, "0x{format:x} with type 0x{type_:x}");
         }
         /* the type the advertised extension does define is taken */
@@ -10308,7 +10308,7 @@ mod tests {
     #[test]
     fn get_tex_parameterfv_writes_nothing_on_an_error() {
         /* ES 2.0.25 2.5: "no change is made to these values" (0 was written
-         * until issue #128) */
+         * until the fix) */
         let gl = TestGl::new(4, 4);
         new_tex();
         let mut f: GLfloat = -1.0;

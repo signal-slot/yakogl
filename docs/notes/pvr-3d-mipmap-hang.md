@@ -6,7 +6,7 @@ Plan #144, item `pvr-3d-hang`. Investigation only: no file under `src/` or
 `driver/` changed, and nothing ran on a board. Integration tip `cd738b1a`,
 2026-10-14.
 
-The defect as #1285 states it: on
+The defect as it was reported: on
 `f2a13877` (2026-10-11) image 20 (`texture.filtering.3d.formats.*`) and
 image 21 (`texture.filtering.3d.sizes.*`) of `tools/cts/am62p-gles3-tree.txt`
 each gave 13 results, began a 14th case and printed nothing more. The 14th

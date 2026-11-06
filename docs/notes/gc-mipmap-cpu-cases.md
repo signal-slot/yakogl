@@ -3,10 +3,10 @@
 # GC7000: which glmark2 glGenerateMipmap calls take the CPU filter, and why
 
 Measured on 2026-10-20 with the host harness, GC7000 build. The library
-sources are those of main `dc033dc4` (#1106: the GL core offers the
+sources are those of main `dc033dc4` (the GL core offers the
 GC7000's chains to the back end). They are the same at the main tip
 `6a157ddd`: no later commit touches `src/`, `include/`, `Cargo.toml`, the
-CMake files or the harness scripts. Goes with issue #1106.
+CMake files or the harness scripts.
 
 **Result: at this main, no glmark2 glGenerateMipmap call on the GC7000 takes
 the CPU filter.** All 28 calls of the three scenes that call it, in setup and

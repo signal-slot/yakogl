@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! `yakogl-tools record kickdiff` - the KICK_DIFF pages of gl_test cases 2
-//! and 10 (#9, #25), read from the result records they were written to
+//! and 10 (#5, #10), read from the result records they were written to
 //! (docs/notes/gc-kick-diff.md, "How to run it on the board").
 //!
 //!     yakogl-tools record kickdiff [--log <file>]... [--nvmem <file>]... [<w0> <w1> <w2> <w3>]...

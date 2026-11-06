@@ -242,7 +242,7 @@ parts! {
     the_compilers_stack_by_phase_adversarial: "adversarial", 10;
 }
 /* Measured 2026-10-24, the sum of the parts (1359 / 1363 while the Qt
- * shaders were in the corpus and the tables, until #1509). */
+ * shaders were in the corpus and the tables, until their removal). */
 const TOTAL: usize = if cfg!(feature = "gpu-vivante") { 568 } else { 447 };
 
 /// The parts together are the whole corpus: every source is in exactly one

@@ -2,7 +2,7 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Mali (Valhall, v10): int, uint and bool uniforms, Mesa's layout and op selection
 
-Issue #1384 / #1385, plan #153 item `study-vstex2`. Seventeen rows of
+Issue #31 / #32, plan #153 item `study-vstex2`. Seventeen rows of
 `tools/mali/corpus-verdicts.txt` are refused with `Valhall: a uniform other
 than a float, vec2, vec3, vec4 or mat4 is not lowered yet`
 (`MaliError::UniformType`). `docs/notes/mali-uniform-types.md` covers cases 100,

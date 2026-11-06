@@ -6,7 +6,7 @@ Study of the nine cases of the 2026-10-23 sweep
 (`0dce654a8:tools/mali/board-ref/2026-10-23-s6-discard/ours/03-panthor-gltest--sweep-1.log`)
 that are refused with "Valhall: a built-in input (gl_FragCoord,
 gl_FrontFacing, gl_PointCoord, gl_VertexID, gl_InstanceID) is not lowered yet"
-(`MaliError::SpecialInput`, #1384 S6). Host-only: Mesa 26.2.1's programs on
+(`MaliError::SpecialInput`, #31 S6). Host-only: Mesa 26.2.1's programs on
 drm-shim, nothing lowered here. Items: study-builtin of plan #153.
 
 ## How the references were made
@@ -372,7 +372,7 @@ draws are built (frame-instance, case 52: `Attribute` `1D POT Divisor`,
 `Frequency: Instance`, `Divisor R/E/D` 0, the attribute's offset folded into
 its buffer, `frame.rs:2699-2725`; `INSTANCE_COUNT` register `frame.rs:2993`).
 What is new is only the size: the 2048-instance buffer (48 KiB: 2048 records
-of 24 bytes) and 50x50 indexed vertices must fit the data arena (#1385 (b), done).
+of 24 bytes) and 50x50 indexed vertices must fit the data arena (#32 (b), done).
 So the lowering of `InstanceId` (preload r61, as in builtin_47) is the only
 missing piece, as for 47.
 

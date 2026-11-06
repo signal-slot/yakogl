@@ -1278,7 +1278,7 @@ tier_tables() {
 # makes the tables, just before itself, so the tables are made exactly when a
 # row of the run reads them: not only when CONFIGS names `precompiled-shaders`
 # (the no-compiler, aarch64 and artefact rows are not CONFIGS rows; a
-# narrowed YAKOGL_CHECK_CONFIGS left them reading a table nothing made, #127),
+# narrowed YAKOGL_CHECK_CONFIGS left them reading a table nothing made),
 # and not at all when no reader is selected.
 TIER_TABLES_ROW=0
 uses_tier_tables() {
@@ -2424,8 +2424,8 @@ step "test    yakogl-gltest-runner (gl_test's lines and count)" cargo_test -p ya
 # bare-metal target, which is also the only configuration where a std-only
 # dependency creeping into no_std code shows up. They run
 # clippy with zero warnings (`--lib`): `c_char` is `u8` there and `i8` on x86_64, so a
-# cast that is needed on the host is "unnecessary" on the product target
-# (issue #1130); both GPUs, because the backends have their own cfg arms.
+# cast that is needed on the host is "unnecessary" on the product target;
+# both GPUs, because the backends have their own cfg arms.
 TARGET_CONFIGS=(
   "osal-zephyr,gpu-vivante,shaderc-online,no-shader-table"
   "osal-zephyr,gpu-powervr,shaderc-online,no-shader-table"
@@ -3022,7 +3022,7 @@ step "test    yakogl-mali-panthor" cargo_test -p yakogl-mali-panthor
 mali_target=aarch64-unknown-linux-gnu
 if rustup target list --installed 2>/dev/null | grep -qx "$mali_target"; then
   # clippy does not link: the rustup target is all it needs
-  # This row is NARROWED (issue #1130 is the reason; drop `--no-deps` when it
+  # This row is NARROWED (the reason follows; drop `--no-deps` when it
   # is fixed). `--no-deps`: the crate links the library (the frame builder,
   # panthor-frame), and the library has never been linted for an aarch64
   # target, where c_char is u8 and eleven `as *const u8` / `as u8` casts are
@@ -3592,7 +3592,7 @@ fi
 # (shadow and refract on the PowerVR, pvr-depth-resolve: "the backend did not
 # resolve its depth"), and no GL error: the GC7000's run has the i.MX8MP
 # glmark2 image's GPU memory (run.sh, YAKOGL_GC_CARVEOUT_BYTES), where a
-# 64 MiB carve-out raised GL errors in terrain, shadow and refract (#814).
+# 64 MiB carve-out raised GL errors in terrain, shadow and refract.
 glmark2_corpus_tests() {
   local c stale glerr
   GM2_WRITE=0 tools/hostharness/glmark2/run.sh "$GLMARK2_SRC" build/glmark2-host powervr vivante \
@@ -3610,7 +3610,7 @@ glmark2_corpus_tests() {
   # returns a free at once and runs one entry per process; the board holds a
   # free until its kick completes and runs every entry in one fragmenting
   # pool. At 64 MiB terrain peaked at 83% here with no error, and the board
-  # raised GL errors in every common set (#814).
+  # raised GL errors in every common set.
   local budget tight f
   budget=$(sed -n 's/^YAKOGL_GC_CARVEOUT_BYTES=\([0-9]*\).*/\1/p' build/glmark2-host/gc-settings.txt)
   [ -n "$budget" ] || { echo "no YAKOGL_GC_CARVEOUT_BYTES in build/glmark2-host/gc-settings.txt"; return 1; }

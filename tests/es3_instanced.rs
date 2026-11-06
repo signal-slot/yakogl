@@ -3,7 +3,7 @@
 //! ES 3.0 instanced draws on the host (item es3-instanced; the six AM62P
 //! dEQP-GLES3 `functional.instanced.{draw_arrays_instanced,
 //! draw_elements_instanced}.mixed.{2,4,20}_instances` cases,
-//! docs/es3-cts-failures.md Appendix A, #1248).
+//! docs/es3-cts-failures.md Appendix A).
 //!
 //! Those cases draw with one array at divisor 0, one at 1 and one at 2, and
 //! the vertex shader reads `gl_InstanceID`. A back end that takes divisor 1

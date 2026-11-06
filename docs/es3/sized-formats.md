@@ -98,8 +98,8 @@ change; the tests state the expectation per mask.
 
 ## Not done (left to other items)
 
-* Sampling the new classes and isampler/usampler on the GC7000 and the V3D
-  (#1232, #1233). The PowerVR's integer cube, 3D and 2D-array samplers
+* Sampling the new classes and isampler/usampler on the GC7000 and the V3D.
+  The PowerVR's integer cube, 3D and 2D-array samplers
   select since the stacked arms take the sampler's return type
   (`docs/es3/pvr-formats.md` section 10.1); their AM62P dEQP-GLES3
   `texture.format` run is still to do.

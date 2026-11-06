@@ -32,7 +32,7 @@ the project was developed in.
   `docs/notes/gc-128bit-texture-sampling.md`); the four 64-bit integer
   render targets (RGBA16I/UI, RG32I/UI) drawn through
   a tiled shadow, 17 of the 19 integer surfaces (RGBA32I/UI stay refused).
-- PowerVR: the groundwork of the firmware's partial render (#2, #3), all
+- PowerVR: the groundwork of the firmware's partial render (#2), all
   off by default: the render kick's zeroed `frag_pr` block
   (`PvrRenderFragPr`, 96 bytes), the SPM scratch size and PBE store words
   (`src/pvr/spm.rs`), the reserved PR end-of-tile PDS data slot, the
@@ -113,7 +113,7 @@ state on 2026-10-26.
 - glmark2-es2 at 800x600 runs all 33 scenes on every board, with 0 failed
   scenes and 0 GL errors. Scores from main `445c5653` (2026-10-20): AM62P
   461, Raspberry Pi 4 193, i.MX8MP 42. The Pi 4 read 195 at `c4af4917`
-  (2026-10-22). A new table from one main commit is issue #1196.
+  (2026-10-22). A new table from one main commit is still open.
 - dEQP-GLES3 (OpenGL ES 3.0) is partial: the AM62P's whole tree read
   36,552 of 42,810 pass (2026-10-14), the Pi 4 ran 9 of its 91 images, the
   i.MX8MP has not run it (`ROADMAP.md`, stage 4).
@@ -131,8 +131,8 @@ state on 2026-10-26.
   NXP i.MX 8M Plus), `gpu-v3d` (Broadcom V3D 4.2, Raspberry Pi 4) and
   `gpu-mali` (Arm Mali-G610, RK3588; in progress, see below).
 - The OS layer behind one interface (`include/gles_osal.h`): a Zephyr OSAL
-  per GPU, a bare-metal OSAL whose board hooks are still to be written
-  (#1223), and a Linux OSAL for host tests with no GPU.
+  per GPU, a bare-metal OSAL whose board hooks are still to be written,
+  and a Linux OSAL for host tests with no GPU.
 - EGL window surfaces are double-buffered by default (`EGL_BACK_BUFFER`) on
   a platform that can show a buffer; `EGL_SINGLE_BUFFER` renders in place.
   Pbuffer surfaces are supported too.
@@ -184,7 +184,7 @@ state on 2026-10-26.
 
 - OpenGL ES 3.0 is not complete on any board (stage 4 of `ROADMAP.md`).
 - The `gpu-mali` back end runs only on the NanoPC-T6's own Linux, through the
-  panthor kernel driver, not on Zephyr yet (#1281). Its newest `gl_test`
+  panthor kernel driver, not on Zephyr yet (#26). Its newest `gl_test`
   sweep reads 98 of 256 cases PASS and 0 FAIL (2026-10-24).
 - Slow glmark2 scenes: terrain on the AM62P (91 ms a frame; shadow and
   refract are 10.6 and 37.1 ms since #40), terrain, shadow and refract on

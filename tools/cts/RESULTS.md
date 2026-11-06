@@ -22,8 +22,8 @@ way.
 
 ## ES 2.0: dEQP-GLES2 (stage 1, met)
 
-One main commit, `e9901869a`, on the three boards (2026-10-15/16; issue #870,
-closed). Mustpass list: 17,165 cases.
+One main commit, `e9901869a`, on the three boards (2026-10-15/16).
+Mustpass list: 17,165 cases.
 
 | Board | Pass | Fail | NotSupported | QualityWarning / CompatibilityWarning | GPU resets |
 |---|---:|---:|---:|---|---:|
@@ -81,7 +81,7 @@ is from the two-row set.
 | Board | glmark2-es2 | gl_test | GPU resets |
 |---|---|---|---:|
 | AM62P | 468, 33 scenes, 0 failed, 0 GL errors; `6a7021ec` (#42's path B, off by default, and the case 216 kick count; built before its rebase onto main `561bad55`, as `e4819b69` on main `61ad38a1`), 2026-11-01 (`records/am62p/common-e4819b69/20261101-1935-GM-4bcd9ff3/`, `verdict=done`, resets 0; the first run since `ce3354ac`, the HWRT second pair); **shadow 10.62 ms a frame (95 FPS), refract 35.09 ms (29 FPS), terrain 83.06 ms (13 FPS)** (10.63, 37.05, 90.94 at `86d0b482`); per-scene ms/frame below; pictures against `tools/cts/glmark2-pictures.txt` column `am62p` (the `445c5653` run's): 33 scenes, match 28, mismatch 5, each one probe of an animated scene (desktop blur tr, buffer map and interleaved map c, terrain c off 10, refract c — sampled at a different frame count), shadow a match, none black | 49 of 50 (rerun at `6a7021ec`, GT `20261101-1943-GT-0225c49e`, as at `86d0b482`): case 20 `etc` fails its first check alone — it wants 3 compressed formats, the build stores 5, the intended ES 3.0 list on the PowerVR (`tests/es3_caps.rs` `known_gaps`); the test's expectation is stale, its other 16 checks pass (below); `445c5653` read 50 of 50; case 215 `shadowmap` PASS on its own, below) | 0 |
-| i.MX8MP | 42, 33 scenes, 0 failed, 0 GL errors (#814 fixed by #922); main `445c5653`, 2026-10-20, 1 screen buffer (the default); re-run from main `a917d123` (holds the GC mipmap offer `dc033dc44`, #1106) the same day: score 42 (`records/imx8mp/common-a917d123`, GM `verdict=done`, words `fc3f002a`), per-scene record `records/imx8mp/20261020-2100-glmark2-a917d123/` (66 boots, ms a frame = 1000 / the integer FPS): **terrain 250 ms (4 FPS), shadow 500 ms (2 FPS), refract 500 ms (2 FPS)**, the other 30 scenes 16.95 to 35.71 ms; 1934.56 ms summed (1932.65 at `445c5653`), so the offer moved no scene at this resolution; all 33 pictures match the `imx8mp` column, none black, terrain and refract means equal to the `445c5653` ones (not looked at by eye); per-scene FPS and picture values from the SNVS record (below: terrain 4, shadow 2, refract 2 FPS), pictures in `tools/cts/glmark2-pictures.txt` column `imx8mp` (33 from this run, none black, not looked at by eye); 49 at 3 buffers, 46 at 2 (`bebce725`, below) | 49 of 49 run, case 16 skipped (#8); cases 10 and 17 nondeterministic (#9, #7: 11 boots of `work/egl-double-buffer`'s code, case 17 failed 3, case 10 failed 1; main `0247ac665`, 10 boots: case 17 failed 3, case 10 failed 3, case 44 once) | 0 where counted |
+| i.MX8MP | 42, 33 scenes, 0 failed, 0 GL errors (fixed by the larger carve-out); main `445c5653`, 2026-10-20, 1 screen buffer (the default); re-run from main `a917d123` (holds the GC mipmap offer `dc033dc44`) the same day: score 42 (`records/imx8mp/common-a917d123`, GM `verdict=done`, words `fc3f002a`), per-scene record `records/imx8mp/20261020-2100-glmark2-a917d123/` (66 boots, ms a frame = 1000 / the integer FPS): **terrain 250 ms (4 FPS), shadow 500 ms (2 FPS), refract 500 ms (2 FPS)**, the other 30 scenes 16.95 to 35.71 ms; 1934.56 ms summed (1932.65 at `445c5653`), so the offer moved no scene at this resolution; all 33 pictures match the `imx8mp` column, none black, terrain and refract means equal to the `445c5653` ones (not looked at by eye); per-scene FPS and picture values from the SNVS record (below: terrain 4, shadow 2, refract 2 FPS), pictures in `tools/cts/glmark2-pictures.txt` column `imx8mp` (33 from this run, none black, not looked at by eye); 49 at 3 buffers, 46 at 2 (`bebce725`, below) | 49 of 49 run, case 16 skipped (#4); cases 10 and 17 nondeterministic (#5, #3: 11 boots of `work/egl-double-buffer`'s code, case 17 failed 3, case 10 failed 1; main `0247ac665`, 10 boots: case 17 failed 3, case 10 failed 3, case 44 once) | 0 where counted |
 | Pi 4 | 195, 33 scenes, 0 failed, 0 GL errors; main `c4af4917`, 2026-10-22 (the TFU no-wait, FS dump off, uniforms from the host arrays, lazy raster, depth storage defer, copy reason counters, UIF walker and buffer retired reuse; the main tip `71c73b0f` differs from it only in `tools/check.sh` and its selftest); GM `verdict=done`, record `records/pi4/20261022-0308-glmark2-c4af4917/`: **terrain 161.79 ms (7 FPS), shadow 7.34 ms (137 FPS), refract 17.27 ms (58 FPS)** (179.26, 7.32, 18.72 at `445c5653`); per-scene ms/frame below; pictures 31 of 33 match the `pi4` column (desktop blur and jellyfish, both animated, differ in one probe each), none black | 12 of 12 (at `445c5653`; not rerun) | 0 |
 
 - i.MX8MP glmark2 at 1, 3 and 2 screen buffers (frame-floor step 2, GM half;
@@ -165,7 +165,7 @@ is from the two-row set.
   | GT | 49 of 49 run, case 16 skipped, none failing | same | same |
 
   GM at every arm: 33 ran, 0 failed, **GL errors raised 0**, 0 incomplete-texture
-  draws. #814: GM raised 0 GL errors in all three arms here, as in
+  draws. GM raised 0 GL errors in all three arms here, as in
   `imx8mp-db-baseline` (`499b946e`) and the earlier arms (`bebce725`).
 - i.MX8MP common set from main `445c5653` with the per-scene record
   (2026-10-20, `tools/cts/board-stage.sh imx8mp common`, `uboot-mmc`,
@@ -184,7 +184,7 @@ is from the two-row set.
   scene equals the `c5f10ea9` record within one FPS step (the light scenes at
   the panel's 59). The one GL or GC7000 change between the two commits is
   `dc033dc44` (the GL core offers the GC7000's rendered-into RGBA8 chains to
-  the back end, #1106). Terrain and refract are the scenes that call
+  the back end). Terrain and refract are the scenes that call
   `glGenerateMipmap` on a render target, so this is the first board reading
   of that change, although the record cannot show that the GPU chain was
   taken (the i.MX8MP has no console). ms is 1000 /
@@ -204,13 +204,13 @@ is from the two-row set.
   that scene marked unexplained in the column's comment.
 - The i.MX8MP gl_test cell is from `work/egl-double-buffer` (the
   EGL-double-buffered window); its glmark2 read 42 on 2026-10-17 from the code rebased
-  onto `f40a2aba0` (#922's carve-out, 0 GL errors), 43 the day before from
+  onto `f40a2aba0` (the larger carve-out, 0 GL errors), 43 the day before from
   the same code on `0247ac665`, the whole jellyfish on the panel (no band)
   both times; gl_test (before the rebase) 49 of 49 on 7 of 11 boots, the other 4 lost case 17 (3)
   or case 10 (1); main at `0247ac665` the same day: 49 of 49 on 6 of 10
   boots, case 17 failed 3, case 10 failed 3, case 44 once. Case 17 (ctx2, two
-  contexts on pbuffers) is nondeterministic on main too (#7 reopened) and not
-  this tree's; #9 covers case 10.
+  contexts on pbuffers) is nondeterministic on main too (#3 reopened) and not
+  this tree's; #5 covers case 10.
 - The README glmark2 table's runs: the GM row of the common set on the
   i.MX8MP from main `445c5653` (2026-10-20); the README's AM62P score is the
   run of main `86d0b482` (2026-10-28) until a main commit is measured, and
@@ -339,10 +339,10 @@ is from the two-row set.
   (`end waited for in 62 of 62`); 3 TFU chains a frame, all queued behind a
   job, 0 waited; the GPU work of frame 10 is 29.1 ms (8 jobs, 4 TFU jobs
   1.8 ms), so about 130 ms of the 161.8 ms is CPU time outside the timed
-  draw steps (sum 0.17 ms) (#1209). Pictures: none black, none absent; 31 of
+  draw steps (sum 0.17 ms). Pictures: none black, none absent; 31 of
   33 match the `pi4` column (desktop blur probe tr off 63, jellyfish probe c
   off 33, both animated).
-- AM62P glmark2 shadow and refract (353 and 375 ms a frame at `445c5653`, #40, #1006) were the CPU resolve of the 1600x1200 depth texture every frame (`docs/notes/pvr-depth-sample.md`): with the TPU sampling the depth buffer (main `86d0b482`, 2026-10-28) shadow is 10.63 ms (33x) and refract 37.05 ms (10.1x); terrain stays slow (90.9 ms then, 83.1 ms at `6a7021ec`, the row above; CPU GL time). gl_test case 215 `shadowmap` (the scene's two passes a frame on a 1600x1200 depth texture, 20 frames) read on the board 355.20 ms a frame (5.4 Mpx/s) from main `c5dcf5e8` plus the case alone (`records/am62p/shadowmap-base/`), 27.75 ms (69.1 Mpx/s) from `c999f2f7` (`records/am62p/shadowmap-c999f2f7/`), the GPU's busy time 6.35 and 6.37 ms of it (TA|3D), the four picture points equal in both, `depth sampled from the buffer 20 (refused 0)` in the second. The `bc43ea09` image includes the PowerVR `glGenerateMipmap` on the GPU (`d3b8d4b2`). Before it, at `ab43a20c` (`records/am62p/gm-kt-e9d63d06`), terrain took 1,466.6 ms a frame and refract 2,041.9 ms, all CPU time.
+- AM62P glmark2 shadow and refract (353 and 375 ms a frame at `445c5653`, #40) were the CPU resolve of the 1600x1200 depth texture every frame (`docs/notes/pvr-depth-sample.md`): with the TPU sampling the depth buffer (main `86d0b482`, 2026-10-28) shadow is 10.63 ms (33x) and refract 37.05 ms (10.1x); terrain stays slow (90.9 ms then, 83.1 ms at `6a7021ec`, the row above; CPU GL time). gl_test case 215 `shadowmap` (the scene's two passes a frame on a 1600x1200 depth texture, 20 frames) read on the board 355.20 ms a frame (5.4 Mpx/s) from main `c5dcf5e8` plus the case alone (`records/am62p/shadowmap-base/`), 27.75 ms (69.1 Mpx/s) from `c999f2f7` (`records/am62p/shadowmap-c999f2f7/`), the GPU's busy time 6.35 and 6.37 ms of it (TA|3D), the four picture points equal in both, `depth sampled from the buffer 20 (refused 0)` in the second. The `bc43ea09` image includes the PowerVR `glGenerateMipmap` on the GPU (`d3b8d4b2`). Before it, at `ab43a20c` (`records/am62p/gm-kt-e9d63d06`), terrain took 1,466.6 ms a frame and refract 2,041.9 ms, all CPU time.
 - AM62P pictures by eye (the 33 scenes of GM `bc43ea09` `-1739`, the column
   `am62p` until `445c5653`, whose run now gives it and matches it in 29 of
   33 scenes, the 4 others being animated probe c values). Looked at on
@@ -370,13 +370,13 @@ is from the two-row set.
   was the plane's position at the last frame, not a wrong picture. The tally's
   `--gm-pictures ... am62p` reads `33 scenes, match 33`; that is the column
   against the run it was made from, not a check.
-- i.MX8MP glmark2 GL errors (#814): the cause is the GC7000's 64 MiB GPU
+- i.MX8MP glmark2 GL errors: the cause is the GC7000's 64 MiB GPU
   carve-out, from which every GC allocation (the board layer's 800x600 window
   and 1280x800 screen copy included) is taken. A diagnostic run from branch
   `b421b447` (main `ab43a20c` plus the 240 MiB carve-out of the glmark2
   image's overlay and the first-GL-errors instrumentation), `board-stage.sh
   imx8mp common` twice, read GM `594b120e fc3f002a 6184003f 00258320`: score
-  42, 33 ran, 0 failed, **0 GL errors**, in both runs; GT 48 of 49 (case 44, #6) then 49 of 49. The glmark2 cell above is
+  42, 33 ran, 0 failed, **0 GL errors**, in both runs; GT 48 of 49 (case 44) then 49 of 49. The glmark2 cell above is
   now a run from main (`bebce725`, GL errors raised 0 in all three arms).
 
 ## Mali: NanoPC-T6 (RK3588, Valhall v10, panthor), gl_test sweep

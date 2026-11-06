@@ -3,7 +3,7 @@
 # PowerVR partial render: depth and stencil (`pr-zs`)
 
 Status: decision, host-read only; nothing here is measured on the board.
-Written 2026-10-30 for plan #148 (issue #3), core part 3c. Lines are as they
+Written 2026-10-30 for plan #148, core part 3c. Lines are as they
 are at the tip d296b722. The reading it rests on is
 `docs/notes/pvr-render-pool.md`, "The PR frame side, read (Mesa 26.2.1)"
 (cited below as RP), parts (1) and (2). Marks as in RP: **read**,

@@ -9,14 +9,14 @@
 
 The AM62P glmark2 score fell from 462 (`fb9107af`) to 289 (`1d54a4eb`,
 again at `c854e0ae`). The Pi 4 score fell from 188 to 157 (`c854e0ae`).
-Both drops lie across `0247ac66` (#925: a window swap completes its
+Both drops lie across `0247ac66` (a window swap completes its
 frame). After that, `1eb9783d` (the EGL double buffer) landed. It is meant
 to bring the CPU/GPU overlap back. Is there a wait in the new swap that
 the old one did not have?
 
 ## Which swap the scores were measured with
 
-| run | tree | #925 | EGL double buffer | glmark2 |
+| run | tree | `0247ac66` | EGL double buffer | glmark2 |
 |---|---|---|---|---|
 | AM62P | `fb9107af` | no | no | 462 |
 | AM62P | `1d54a4eb` (`dd48294b`) | yes | no | 289 |
@@ -26,7 +26,7 @@ the old one did not have?
 
 `git merge-base --is-ancestor 1eb9783d c854e0ae` is false: **no glmark2
 score has been measured under the EGL double buffer yet.** Both low scores
-were measured with the #925 swap alone.
+were measured with the `0247ac66` swap alone.
 
 ## The timelines
 
@@ -38,15 +38,15 @@ their code:
 |---|---|---|
 | AM62P | DSS plane flip by address, latched at the next vsync, no wait (`soc/am62p/dss.rs` `set_app_buffer`) | none (weak `yakogl_zephyr_wait_vblank` in `src/osal/zephyr.c`) |
 | Pi 4 (GM image) | copy into the firmware framebuffer (no `SCANOUT_VIEW`), no wait | none (`src/osal/zephyr_v3d.c` has no `.wait_vblank`) |
-| i.MX8MP | waits for the LCDIF latch (`SCREEN_BUFFERS` 1) | none yet (`zephyr_gc.c`, #737) |
+| i.MX8MP | waits for the LCDIF latch (`SCREEN_BUFFERS` 1) | none yet (`zephyr_gc.c`) |
 
 Frame N's swap, per window kind (N-1 is the frame before):
 
-1. **Before #925** (the 462 and the 188; today `GLES_NATIVE_WINDOW_PIPELINED`):
+1. **Before `0247ac66`** (the 462 and the 188; today `GLES_NATIVE_WINDOW_PIPELINED`):
    submit N, wait for N-1, return. The application shows the window
    itself. The CPU records N+1 while the GPU draws N. The window that is
    shown is the one the GPU is drawing (the i.MX8MP's black band).
-2. **#925, in place** (the 289 and the 157; today `EGL_SINGLE_BUFFER`):
+2. **`0247ac66`, in place** (the 289 and the 157; today `EGL_SINGLE_BUFFER`):
    submit N, **wait for N's end**, return, the application shows N. The
    CPU work of N+1 starts on an idle GPU. A frame costs CPU + GPU, not
    max(CPU, GPU).
@@ -71,7 +71,7 @@ in the double-buffered swap on the AM62P or the Pi 4.**
 
 ## Cause
 
-The drops are the overlap that #925 removed: every swap waited for its
+The drops are the overlap that `0247ac66` removed: every swap waited for its
 frame's end (timeline 2). (The Pi 4's "end waited for in N of N" was read
 as this wait. It is not: the counter stays N of N under the double buffer
 for another reason, see "Why the Pi 4 still reads 'end waited for in N of
@@ -93,7 +93,7 @@ glmark2's score.
    (`finish`). glmark2 clears every frame, so it never takes this path.
 2. **A show that waits plus swap interval 1 waited two periods.** The
    i.MX8MP's show waits for the LCDIF latch. Once its OSAL gets
-   `.wait_vblank` (#737), the interval loop would wait a second period:
+   `.wait_vblank`, the interval loop would wait a second period:
    30 fps on a 60 Hz panel. `present` may now return 1, "shown, and I
    waited for a vertical period" (`gles_osal.h`). The swap counts that
    period as the first of its interval. 0, which every board returns

@@ -104,7 +104,7 @@ fn every_source_use_bit_we_emit_is_the_references() {
      * table's texldl once came only from GLSL ES 3.00 sources (es300/cube.frag
      * and its kin), which a report-es2 build refuses in the front end (pp.rs
      * out_of_scope); es100/cubelod.* and cubebias.*, appended to the table
-     * with textureCube / textureCubeLod translated (2026-10-12, issue #22),
+     * with textureCube / textureCubeLod translated (2026-10-12),
      * give an ES 1.00 source with texldl, so a report-es2 build checks it too.
      * dEQP's ES 1.00 shapes below check texldl and texldb in both. */
     assert!(ours.get("texld").is_some_and(|p| !p.is_empty()), "no texld reached the check");

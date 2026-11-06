@@ -79,8 +79,8 @@ const LATER_VERSION_TYPES: [&str; 9] = [
 /// Such a table row cannot be agreed with, because it disagrees with itself:
 /// `glGetActiveAttrib` would name that attribute at two indices and never
 /// name the one it displaced. A Qt Quick 3D material vertex shader was the
-/// case in the GC7000 table while the Qt shaders were in the corpus (until
-/// #1509) -- it declared `attr_pos, attr_norm, attr_uv0, attr_textan,
+/// case in the GC7000 table while the Qt shaders were in the corpus (until their removal)
+/// -- it declared `attr_pos, attr_norm, attr_uv0, attr_textan,
 /// attr_binormal` and its third row read
 /// `location: 0, components: 0, name: "attr_pos"`, with no row for
 /// `attr_uv0` at all.

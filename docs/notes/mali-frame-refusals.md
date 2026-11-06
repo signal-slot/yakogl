@@ -2,7 +2,7 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Mali (Valhall, v10): the frame-side refusals, Mesa's design per case
 
-The six refusals of issue #1386 (the NanoPC-T6's `gpu-mali` backend) and how
+The six refusals of issue #33 (the NanoPC-T6's `gpu-mali` backend) and how
 Mesa 26.2.1's panfrost builds each one on v10: the code it runs, the
 descriptor fields and program bytes that differ from what `src/mali` packs
 today, where the change lands in our tree, and the `gl_test` case that checks
@@ -723,7 +723,7 @@ compares offsets (`link.rs:496-505`): equal passes, unequal is refused.
    instruction words; not recommended.
 
 The change is in `link_shaders_mali` (`src/shaderc/online/mali/link.rs`; it was in
-`src/shaderc/link.rs` before #1387): `MALI_LAYOUTS_DIFFER` is
+`src/shaderc/link.rs` before the file moved): `MALI_LAYOUTS_DIFFER` is
 replaced by the rebuild and kept only for what the rebuild cannot do;
 `MALI_PARTIAL_READ` (components read in part) is the neighbouring gap and shares
 the machinery. Whatever is rebuilt, the layout rule is the producer's: the
@@ -772,7 +772,7 @@ halves read `0xffbfbf40` (`mesa/mesa-varyorder.stdout:8-10`, PASS). Ours
 reads PASS too since `link-varying-order`
 (`0dce654a8:tools/mali/board-ref/2026-10-23-varying-order/README.md:104`).
 
-## 7. A frame's data past its first chunk (cases 197 and 56, #1385 (b))
+## 7. A frame's data past its first chunk (cases 197 and 56, #32 (b))
 
 **Ours, before.** The frame's `data` arena (client vertex arrays, staged
 indices, texel row copies) was one fixed 256 KiB region of the slot
@@ -984,7 +984,7 @@ refuses a 3D binding of more than one level by name.
   section 5, which can be taken with a colour-only 4x frame before any depth.
 - `frame-a2c`'s case 198 needs `frame-msaa-preload` if its frame splits, and
   `frame-msaa-zs` if its depth clear opens an attachment on the 4x frame.
-- `link-varying-order` follows #1387 (the file moves).
+- `link-varying-order` follows the move of the file.
 - None of the six changes a vertex program, a fragment program (but for the
   link rebuild) or the FBD of a 1x frame.
 

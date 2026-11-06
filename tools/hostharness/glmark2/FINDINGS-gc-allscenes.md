@@ -13,7 +13,7 @@ non-cacheable GPU memory. Never read them as fps.
 
 * yakogl: `8f0643c20f697e602f6c7da60c121bd4b5763233` (origin/main). It
   includes `dc033dc4`, the change that offers glmark2's rendered-into RGBA8
-  chains to the GC7000's GPU mipmap path (issue #1106).
+  chains to the GC7000's GPU mipmap path.
 * glmark2: `22c527cb0556f3a1ac4445aaa52cc532760928d5`, a checkout without
   local changes, as `README.md` documents.
 * Command, run twice on the same x86-64 host (20 frames per scene, one
@@ -115,11 +115,11 @@ function shares.)
 | rank | scene | cost, GL wall ms a frame (run 1 / run 2) | covered by running work? |
 |---|---|---|---|
 | 1 | `shadow` | `glDrawArrays` 2.35 / 3.96 (3 calls) | yes: the CPU depth resolve (`docs/notes/gc-depth-resolve.md`; sampling the surface instead, `docs/notes/gc-depth-sample.md`) |
-| 2 | `refract` | `glDrawArrays` 2.22 / 3.48 (2 calls) | yes: the same CPU depth resolve. Its `glGenerateMipmap` is now 0.015 ms a frame: the CPU box filter is gone (issue #1106) |
+| 2 | `refract` | `glDrawArrays` 2.22 / 3.48 (2 calls) | yes: the same CPU depth resolve. Its `glGenerateMipmap` is now 0.015 ms a frame: the CPU box filter is gone |
 | 3 | `build:use-vbo=false` | `glDrawArrays` 0.52 / 0.87 (1 call) | no; under 1 ms (candidate A below) |
 | 4 | `ideas:speed=duration` | `glDrawElements` 0.50 / 0.50 (162 calls, 3 us each) | no; under 1 ms |
 | 5 | `desktop:windows=4:effect=shadow` | 0.60 / 0.62 over about 360 calls, `glDrawArrays` 0.11 (26 calls) | no; under 1 ms, mostly the profile's per-call cost |
-| 6 | `terrain` | `glDrawArrays` 0.22 / 0.24 (8 calls), `glGenerateMipmap` 0.05 (5 calls) | the mipmap: yes, issue #1106 (no longer the CPU filter). The draws: under 1 ms |
+| 6 | `terrain` | `glDrawArrays` 0.22 / 0.24 (8 calls), `glGenerateMipmap` 0.05 (5 calls) | the mipmap: yes (no longer the CPU filter). The draws: under 1 ms |
 | 7 | `buffer ... subdata` | `glBufferSubData` 0.13 / 0.21 (40 calls) | no; under 1 ms |
 | 8 | `buffer ... map` | `glMapBufferOES` 0.045 and 0.035 | no; under 1 ms |
 

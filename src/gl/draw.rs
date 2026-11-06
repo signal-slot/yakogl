@@ -2830,7 +2830,7 @@ static INCOMPLETE_TEXTURE_WARNED: Global<bool> = Global::zeroed();
 /// least one unit, a texture that is incomplete under the filters the draw
 /// uses, and so reads (0,0,0,1) (ES 2.0 3.8.2). The warning above names only
 /// the first; this counts every one, for a run whose only result is a
-/// record (issue #13). Saturates at u32::MAX. Counted when the draw's
+/// record. Saturates at u32::MAX. Counted when the draw's
 /// textures are resolved, before the backend: a draw refused later
 /// (backend::draws_refused) is still counted here.
 static INCOMPLETE_TEXTURE_DRAWS: AtomicU32 = AtomicU32::new(0);
@@ -12924,7 +12924,7 @@ mod tests {
     /// attachment itself, with its CPU view -- the GC7000 tiles a 64-bit
     /// target through a shadow that needs one (vivante::wide_target::wanted
     /// wants `target_cpu`, and writing such a target linearly puts the
-    /// pixels in the wrong places, #6) -- and its own format (review).
+    /// pixels in the wrong places) -- and its own format (review).
     #[test]
     fn a_shifted_64bit_target_carries_the_attachments_own_storage() {
         if crate::REPORT_ES2 {
@@ -13635,7 +13635,7 @@ mod tests {
         assert_eq!(draw_tri(&gl).draw.textures[0].incomplete, 0);
     }
 
-    /// The counters a board record carries (issue #13: the i.MX8MP has no
+    /// The counters a board record carries (the i.MX8MP has no
     /// console, so its glmark2 record said "0 failed" while terrain raised
     /// GL errors and sampled an incomplete texture). Read as differences:
     /// they are process-wide totals.

@@ -83,7 +83,7 @@ impl Sysval {
     /// the order the vertex shader's `nir_lower_viewport_transform` asks
     /// for them (scale, then offset; pan_shc measured the layout: scale at
     /// byte 0, offset at byte 16, tools/mali/testdata/pan_shc-out/*.json on
-    /// PR #1072's branch).
+    /// the pan_shc branch).
     pub const fn base_word(self) -> u16 {
         match self {
             Sysval::ViewportScale => 0,

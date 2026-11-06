@@ -3,8 +3,8 @@
 # Pi 4 glmark2: terrain, shadow and refract CPU time on the V3D host build
 
 On the Pi 4, glmark2 terrain, shadow and refract run at about 6 fps, with
-170 to 188 ms of GL-call time a frame (`c854e0ae`; #1209,
-#995). This note is the host profile of those three scenes: where the CPU time
+170 to 188 ms of GL-call time a frame (`c854e0ae`).
+This note is the host profile of those three scenes: where the CPU time
 of a frame goes, per GL entry point and per function of the GL core and the
 V3D back end.
 
@@ -110,7 +110,7 @@ remaining CPU work would be row 3, about 0.2 ms on the host.
 
 Whether the Pi 4 takes the TFU path is **not known**. The glmark2 image
 turns the TFU on (`driver/samples/zephyr/glmark2/boards/rpi_4b.conf`,
-`CONFIG_YAKOGL_V3D_TFU=y`). But #1209 records that
+`CONFIG_YAKOGL_V3D_TFU=y`). But the record shows that
 the `c854e0ae` console did not print refract's "the TFU made the 11-level
 chain of a 1600x1200 render image" line. If the board also answers 0 (for
 any of the reasons at `src/v3d/backend.rs:1914-1949`), the board does what
@@ -555,7 +555,7 @@ Score 193 -> 195; the 33 scenes sum 370.50 -> 347.45 ms a frame.
   CPU waits are one per job: 9 jobs a frame (560 over 62), and the swap
   waits in every frame. The GPU work of frame 10 is 29.1 ms (8 jobs; 4 TFU
   jobs 1.8 ms of it). So about 130 ms of the 161.8 ms is CPU time that no
-  step lap times, not GPU time and not the TFU wait (#1209).
+  step lap times, not GPU time and not the TFU wait.
 - **refract: 18.7 -> 17.3 ms.** GL time fell from 11.6 to 1.8 ms and the
   swap rose from 7.2 to 15.4 ms: the wait for the render that the TFU
   chain reads left `glGenerateMipmap` and now falls at the swap, as the
@@ -584,7 +584,7 @@ Score 193 -> 195; the 33 scenes sum 370.50 -> 347.45 ms a frame.
 ## What the host does not show
 
 - GPU waits: the job waits before a depth resolve and before a TFU mipmap,
-  and the swap's wait for its frame (#925). Only the board shows them.
+  and the swap's wait for its frame (`0247ac66`). Only the board shows them.
 - The board's memory: storage, copies and images are non-cacheable on the
   Pi 4, malloc'd here. The CPU tiling and filtering rows are relatively
   more expensive on the board.

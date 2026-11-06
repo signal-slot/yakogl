@@ -56,7 +56,7 @@ if(EXISTS "${SLINT_NOSTD_DIR}/.git" AND GIT_EXECUTABLE)
       message(FATAL_ERROR
         "slint: SLINT_NOSTD_DIR='${SLINT_NOSTD_DIR}' is at ${rev}, not at ${SLINT_BASE_REV}, "
         "the revision nostd/README.md patches. Recreate the tree as it says. The Pi 4 picture "
-        "changed between images that nothing in the repository explains (issue #1284); "
+        "changed between images that nothing in the repository explains; "
         "the base of the Slint tree is pinned for that.")
     endif()
     string(SUBSTRING "${rev}" 0 8 head)

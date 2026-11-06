@@ -276,7 +276,7 @@ In the order the implementation should take them; each with its host evidence.
    `cube_noseam` key for binding 0 so the variant, not the base program, is
    what runs.
 8. **docs/online-shaderc/v3d-backend.md**: a section pointing here;
-   **issue #12**; tools/cts/RESULTS.md's "Reference-selection
+   tools/cts/RESULTS.md's "Reference-selection
    difference" paragraph gets its closing line after the board run (the
    docs-sync item).
 

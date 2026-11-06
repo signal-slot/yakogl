@@ -42,7 +42,7 @@
  * scene (firmware, parameter buffer, freelists, HWRT sets;
  * docs/notes/pvr-render-pool.md), so terrain's 5.6 MB
  * NPOT mip chain and shadow's 22 MB depth chain cannot fit and refract's
- * target allocations are refused (issues #1, #2). The board's 64 MiB region
+ * target allocations are refused. The board's 64 MiB region
  * stays reserved but unused. */
 / {
 	reserved-memory {

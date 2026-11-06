@@ -377,7 +377,7 @@ fn no_allocated_register_is_overwritten_while_its_value_is_live() {
      * it. Per build: a report-es2 build refuses GLSL ES 3.00 in the front end
      * (pp.rs out_of_scope). Measured 2026-10-24; 536 / 352 programs and
      * 39 / 29 loops while the Qt shaders were in the GC7000 table, until
-     * #1509. */
+     * their removal. */
     let es2 = cfg!(feature = "report-es2");
     assert_eq!(checked, if es2 { 182 } else { 225 }, "the population moved: {checked} programs reached the check");
     assert_eq!(looped, if es2 { 27 } else { 33 }, "the loop population moved: {looped} programs with a back edge");

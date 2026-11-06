@@ -1087,7 +1087,7 @@ Mesa keys `fs_key.cbufs`. Two findings go to the lead:
 v3d-m5, 2026-09-26. `gl_FragData[n > 0]` (and an ES 3.00 output at location
 n > 0) is refused today: "gl_FragData[n > 0]", 18 corpus pairs after flat varyings
 (Qt Quick 3D's MRT clear, its lightmap rasteriser and 16 particle shaders, all in
-the corpus until #1509). The backend also
+the corpus until their removal). The backend also
 refuses `num_targets > 1` ("more than one colour attachment is not written yet").
 Board cases that exist: gl_test 55 es3mrt (two attachments) and 106 mrt3 (three,
 then `glDrawBuffers(ATT0, NONE, ATT2)`). Sources: Mesa b739817b
@@ -1316,7 +1316,7 @@ with data = the sampler's reflection binding (the number P0/P1 carry in bits
 samplers are refused by name ("textureSize of a 3D or array sampler", 2 corpus
 pairs). Evidence: `chain.rs texture_size_is_the_base_size_minified` (a 64x16
 texture at levels 0, 1, 5 in the interpreter; it fails without the clamp), and
-Qt Quick 3D's lightmap dilation shader (in the corpus until #1509) compiled
+Qt Quick 3D's lightmap dilation shader (in the corpus until its removal) compiled
 and agreed with the IR and with Mesa in tests/v3d_sim_mesa.rs.
 
 ## Open reports to the front end
@@ -4537,7 +4537,7 @@ chain" in the log, says the TFU refused the job and the CPU filtered.
 
 ## Depth textures sampled from their depth buffer (pi4-depth-resolve-gpu)
 
-**The problem** (docs/notes/pi4-glmark2-cpu.md; issue #1209, Pi 4).
+**The problem** (docs/notes/pi4-glmark2-cpu.md; Pi 4).
 glmark2's shadow and refract render a depth pass into a
 GL_DEPTH_COMPONENT texture (1600x1200 at 800x600) and sample it in the main
 pass. The GL core keeps a depth texture as R32F texels, and the depth a job

@@ -4,7 +4,7 @@
 
 2026-10-22, host only. Branch `work/pvr-fragment-tail` (`fbfbca3e`). The
 investigation changed nothing under `src/` and used no board; the H1 guard
-(last section) is host-verified only. Issue #1635.
+(last section) is host-verified only.
 
 ## The defect
 

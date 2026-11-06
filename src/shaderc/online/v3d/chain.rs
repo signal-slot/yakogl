@@ -1523,8 +1523,8 @@ mod tests {
     /// corpus's GLSL ES 3.00 sources in the front end (pp.rs out_of_scope), so
     /// it compiles fewer pairs, by design; each build has its own pin.
     /* 2026-10-25: the fixture's 242 real pairs, once sim_fixture.py paired
-     * the gl_test sources again (128 after the Qt shaders left the tree,
-     * #1509; 287 pairs and 163 / 217 compiled before). 2026-11-03: the ES
+     * the gl_test sources again (128 after the Qt shaders left the tree;
+     * 287 pairs and 163 / 217 compiled before). 2026-11-03: the ES
      * 3.00 build compiles gltest/isamp.frag (texelFetch, TMUSF) too, 193;
      * its NotYet is textureSize of an array sampler (es300/array.frag,
      * es300/vol.frag). */
@@ -1627,7 +1627,7 @@ mod tests {
          * source, so a report-es2 build does not compile it)
          * (the known positive for reading Z is a_shader_that_reads_z_writes_it;
          * the Qt Quick 3D depth pre-pass and particle shaders, in the corpus
-         * until #1509, were the corpus's ones). */
+         * until their removal, were the corpus's ones). */
         assert_eq!(
             (late_z, reads_z_only, no_colour),
             (20, 0, usize::from(!cfg!(feature = "report-es2"))),
@@ -1635,7 +1635,7 @@ mod tests {
         );
         /* es100/varyings15's fragment shader (60 varying components) is the
          * one stage at 2 threads (49 while the Qt shaders were in the corpus,
-         * until #1509). */
+         * until their removal). */
         assert_eq!(two_threads.len(), 2, "the stages at 2 threads changed: {two_threads:#?}");
     }
 
@@ -1646,7 +1646,7 @@ mod tests {
     /// through FFI (docs/source-form.md, F1): the digest staying the same is
     /// what shows the switch changed no word the compiler emits. A change of
     /// the compiler that changes code re-derives it, deliberately; so does a
-    /// change of the fixture's pairs (2026-10-24: the Qt pairs left, #1509).
+    /// change of the fixture's pairs (2026-10-24: the Qt pairs left).
     #[test]
     fn compiled_corpus_words_are_pinned() {
         let pairs: Vec<(&str, &str)> = MESA_PAIRS

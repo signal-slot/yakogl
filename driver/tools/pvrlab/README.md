@@ -36,7 +36,7 @@ it once held a Linux kernel-module harness for the PowerVR, now removed.
 
 ## Case 217 (`forcedpr`): a forced partial render, read back whole
 
-The minimal repro of the firmware's partial render (issue #3; design:
+The minimal repro of the firmware's partial render (design:
 `docs/notes/pvr-render-pool.md`, "Design: the firmware's partial render", "The
 first board measurement", step 1). PowerVR only. Case 175 (`refusehang`) shows
 a refused grow; this case checks the picture. In one kick, with the global free

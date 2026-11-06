@@ -29,7 +29,7 @@ fn usc_bytes(i: usize) -> Vec<u8> {
 
 /// The groups of every program in the PowerVR reference table (pco's,
 /// `tests/reference/blobs.rs`): the population the corpus pins below are
-/// measured over. 685_564 until the Qt shaders left the tree (#1509).
+/// measured over. 685_564 until the Qt shaders left the tree.
 const CORPUS_GROUPS: usize = 141_325;
 
 /// M1's acceptance: decode every blob into instruction groups and write
@@ -278,7 +278,7 @@ fn the_group_length_and_da_rules_hold_for_every_group() {
     // is exactly what happened once.
     // The 20 matattr rows (es100/matattr*.vert, matattr.frag and its 16 blend
     // variants) added 297 main and 102 control groups to 539_747 / 42_625.
-    // 571_305 / 69_192 / 45_067 until the Qt shaders left the tree (#1509).
+    // 571_305 / 69_192 / 45_067 until the Qt shaders left the tree.
     assert_eq!(main_groups, 121_368, "main groups");
     assert_eq!(bitwise_groups, 7_867, "bitwise groups");
     assert_eq!(control_groups, 12_090, "control groups");
@@ -666,7 +666,7 @@ fn every_destination_in_the_corpus_is_fully_written() {
         partial.len(),
         partial[..partial.len().min(5)].join("\n")
     );
-    // 51_473 until the Qt shaders left the tree (#1509).
+    // 51_473 until the Qt shaders left the tree.
     assert_eq!(movc, 15_886, "the movc population changed; re-read the assumption above");
 }
 
@@ -794,7 +794,7 @@ fn what_the_corpus_says_about_the_register_files() {
 
     /* Demonstrated LOWER BOUNDS on the files, not limits. The highest index a
      * shipped shader names is a floor under the file's size and says nothing
-     * about its ceiling. (The Qt shaders, in the corpus until #1509, named
+     * about its ceiling. (The Qt shaders, in the corpus until their removal, named
      * temp 123, shared 254 and vtxin 33.) */
     assert!(max_index[1] >= 32, "temp floor moved: {}", max_index[1]);
     assert!(max_index[4] >= 93, "shared floor moved: {}", max_index[4]);
@@ -802,7 +802,7 @@ fn what_the_corpus_says_about_the_register_files() {
 
     /* Indexed addressing is REAL in shipped shaders: `idx0` carries hundreds
      * of operands (es300/uniidx.frag and es300/dynidx.frag among them; tens
-     * of thousands while the Qt shaders were in the corpus, until #1509). `sel::Bank` cannot name it, which is a seam gap
+     * of thousands while the Qt shaders were in the corpus). `sel::Bank` cannot name it, which is a seam gap
      * rather than an oversight -- nothing our kernel produces needs it yet --
      * but "nothing uses it" would have been wrong. */
     assert!(seen_bank[6] > 100, "idx0 was expected to be used by the corpus");
@@ -2236,7 +2236,7 @@ fn pcos_own_groups_rebuilt_through_the_builder_are_byte_identical() {
      * printout, a later table change could quietly remove the ground under
      * the pin and the gate would still read 0. */
     assert!(uvsw_variants.contains_key("1lo_1b6i"), "the backend phase would then be the axis, not the operation");
-    // 798 until the Qt shaders left the tree (#1509).
+    // 798 until the Qt shaders left the tree.
     assert_eq!(uvsw_ops.get("uvsw.write"), Some(&50), "the population the pin was measured over changed");
     assert_eq!(
         uvsw_variants.get("1lo_3b11i_2m").copied(),

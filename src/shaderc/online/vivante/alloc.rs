@@ -2041,7 +2041,7 @@ const QUEUED: u8 = 1 << 4;
 /// to it) until a write kills them. The work is the value's live range, not
 /// the program: sweeping every instruction for every value until nothing
 /// changed was 63% of a 1.4 s compile with 6,816 values over 3,782
-/// instructions (issue #101). Which order the gains are passed in does not
+/// instructions. Which order the gains are passed in does not
 /// change the least fixed point.
 fn dead_after_liveness(sel: &[SelInstr], dead: &mut [u64], work: &mut Liveness<'_>) -> usize {
     let n = sel.len();
@@ -3892,7 +3892,7 @@ mod address_register_tests {
     /// alias -- twice already in this file's history.
     ///
     /// The corpus holds no address write since the Qt particle rows left the
-    /// tree (#1509): they were the only rows still compiled by an etna_shc
+    /// tree: they were the only rows still compiled by an etna_shc
     /// from before the uniform-block lowering (tools/vivante/README.md), and
     /// our selection emits none. An address write a regenerated row brings
     /// must have the shape this builds.
@@ -5859,7 +5859,7 @@ pub fn last_split_capped() -> usize {
 }
 
 /// The worklist solve of `extend_across_back_edges` against the equations it
-/// solves, written out as the sweep it replaced (issue #101): both must give
+/// solves, written out as the sweep it replaced: both must give
 /// every range the same hull, on random programs with forward and backward
 /// branches, guarded writes, and outputs.
 #[cfg(test)]

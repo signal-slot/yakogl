@@ -237,7 +237,7 @@ Zephyr image's features) and requires that it defines none.
 **Test knobs**, only with the crate's `test-knobs` feature
 (`CONFIG_YAKOGL_TEST_KNOBS`, which the gl_test, gc_gl_test and deqp samples
 select): `gc_debug_msaa` with `gc_debug_set_msaa` and the scratch probes
-`gc_debug_msaa_scratch`, `_map` and `_zero` (case 16, issue #8);
+`gc_debug_msaa_scratch`, `_map` and `_zero` (case 16, issue #4);
 `gc_debug_flip_experiment` with its setter (case 88, the flip study);
 `gc_debug_narrow_la` with its setter (case 132's RGBA8 arm). Without the
 feature each reads as its default (MSAA and the flip study off, the narrow
@@ -1160,16 +1160,16 @@ byte-identical in the command stream.
 LINEAR_PE; RT_CONFIG has no linear bit -- linear is the absence of
 SUPER_TILED).
 
-## Draw, resolve, read back: our sync sequence against etnaviv's (2026-10-07, #9 and #25)
+## Draw, resolve, read back: our sync sequence against etnaviv's (2026-10-07, #5 and #10)
 
 **The defect.** gl_test case 10 fails about one run in three on the i.MX8MP
-(#9): 14 of 30 runs after the 8 regression-set cases before it, 8 of 70 as
+(#5): 14 of 30 runs after the 8 regression-set cases before it, 8 of 70 as
 the first case after boot. The failing check is 23 (frame 5, the 1 px point's
 centre reads the clear colour, `0xff000000`; tools/cts/RESULTS.md, the
 04a0e2c2 sweep). A KICK_DIFF record of a failing run (`vivante/gc-ab-knobs`,
 a branch that is **not in this repository**; tools/cts/STATUS.md) says the
 points were rasterised and their colour never reached memory: the write is
-short by exactly their 4 rows. Case 2 (#25) fails the same way since
+short by exactly their 4 rows. Case 2 (#10) fails the same way since
 05f8f749, with the command streams of all 24 `cs_ours` modes byte-identical
 to 72d16864. The question here: does our draw -> read-back path miss a stall,
 a flush or a CPU cache operation that etnaviv has?
@@ -1256,8 +1256,8 @@ record (`gc_result.h`, kind SWEEP). Read w3, the bitmap of the cases that
 passed:
 
 - `0x0000077e`: every case passed;
-- `0x0000037e`: case 10 failed (#9);
-- bit 2 (`0x4`) clear: case 2 failed (#25), which this list also reaches.
+- `0x0000037e`: case 10 failed (#5);
+- bit 2 (`0x4`) clear: case 2 failed (#10), which this list also reaches.
 
 w1 must be 0 (no lost work, no resets, no fence timeouts), or the run is not
 a reading.
@@ -1279,7 +1279,7 @@ record: the first failing check, what it read, and what it wanted. It costs
 one boot a run. Use it for the "first after boot" rate only: at 8/70 it
 needs about 40 runs to see any failure.
 
-## 4x MSAA, gl_test case 16 (#8): what "check 255" is, and the board recipe (2026-10-07)
+## 4x MSAA, gl_test case 16 (#4): what "check 255" is, and the board recipe (2026-10-07)
 
 **"First failure case 16, check 255" is not a check.** `gc_result_case`
 (driver/zephyr/lib/board/imx8mp/gc_result.h) stores the first bad check in
@@ -1367,7 +1367,7 @@ UNK24 = 5) and SINGLE_BUFFER 2 for the supertiled target (bit 4, new). The
 next board arms are 1, 3, 17 and 19; that record has the commands and the
 reading of each outcome.
 
-## RGBA16F targets, gl_test case 44 `es3hdr` (#6, 2026-10-10)
+## RGBA16F targets, gl_test case 44 `es3hdr` (2026-10-10)
 
 Case 44 clears an RGBA8 and then an RGBA16F texture through an FBO, draws
 into the RGBA16F one, and samples each back at a quarter scale into the
@@ -1391,7 +1391,7 @@ reads them out of the vendored header, and
 `a_float_target_goes_through_the_extended_format_field` pins the whole word
 for five formats.
 
-**A LINEAR texture of 64-bit texels.** Issue #6's probes found that the
+**A LINEAR texture of 64-bit texels.** The case 44 probes found that the
 texture unit reads the first 64 bytes of a LINEAR RGBA16F texture as 0 and,
 at a 64-byte row stride, misreads the edge texels of other rows, while the
 CPU reads the same memory right and RGBA8 is not affected; with the
@@ -1411,7 +1411,7 @@ makes the question moot for sampling.
 **Open: the pixel engine's 64-bit LINEAR write.** The board run of the
 two fixes (`f2a13877`, case 44 alone, `records/imx8mp/gc44-f2a13877/`)
 fails at check 3, "drawn: bottom-right ~ green", with the same value the
-probes of #6 read with only a page-aligned base: `0x40042814` for
+probes of case 44 read with only a page-aligned base: `0x40042814` for
 `0x40043904`. Worked through step 2's triangle (red, green, blue at (-1,-1),
 (1,-1), (1,1)), that is exactly texel (5,0)'s colour where (7,0) is wanted:
 blue 1/16 (row 0 is right), red 5/16 and green 10/16 (x is two texels
@@ -1446,7 +1446,7 @@ Ranked hypotheses, each with the fix it calls for:
 3. **The rasteriser shifts a 64-bit target's pixels two to the right**
    (slots 0 and 1 of every row never drawn). Fix: a per-format window
    offset; nothing in etnaviv suggests one, so it is a last resort.
-4. **The target's base alignment.** Mostly ruled out: #6's probes saw the
+4. **The target's base alignment.** Mostly ruled out: the case 44 probes saw the
    same value with a page-aligned base.
 
 **The probe (gl_test 44, check 3 on the GC7000 only).** After step 2's draw,

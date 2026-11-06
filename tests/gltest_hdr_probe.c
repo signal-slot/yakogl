@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 /* SPDX-FileCopyrightText: 2026 Signal Slot, Inc. */
-/* gl_test case 44's GC7000 layout probe (hdr_layout_probe, #6 item 3): the
+/* gl_test case 44's GC7000 layout probe (hdr_layout_probe): the
  * slot codes it records in the i.MX8MP's CASE record, worked on stored
  * pictures of the three layouts the one board datum allows -- every pixel in
  * place, the 16-byte halves of each 32-byte group swapped (pixel x stored at

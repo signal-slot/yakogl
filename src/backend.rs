@@ -458,7 +458,7 @@ pub const fn gles_surf_name(format: u8) -> &'static str {
 
 /// The integer colour surfaces this build's back end can render into: bit
 /// `format - GLES_SURF_INT_FIRST`. A back end that learns one sets its bits
-/// here (int-rt: #1229, #1230, #1231) and it stops being refused at
+/// here (int-rt: #20) and it stops being refused at
 /// the draw; until then the GL core accepts the renderbuffer (ES 3.0
 /// requires the formats) and refuses to draw into it, by name, rather than
 /// render garbage. The PowerVR renders all nineteen (src/pvr/backend.rs

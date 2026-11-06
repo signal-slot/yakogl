@@ -1806,7 +1806,7 @@ mod lowered_ops {
     /// program reads `t1.xxxx` before anything writes t1 (the reference's
     /// first instruction is `iabs.s32 t1._y__, void, void, t1.xxxx`). The
     /// online compiler refused it until this ("this built-in input is not
-    /// selected yet", GitHub issue #11).
+    /// selected yet").
     /* ES 3.00 sources: a report-es2 build refuses them in the front end. */
     #[cfg(not(feature = "report-es2"))]
     #[test]

@@ -3,7 +3,7 @@
 # Mali: several fragment outputs (case 55) and the fragment operand shapes of cases 91 and 192
 
 Study for plan #153 (the sweep refusals of `0dce654a8:tools/mali/board-ref/2026-10-23-s6-discard/`,
-issue #1384). Mesa 26.2.1, `$CONNECTED_DEPS_DIR/mesa-pan/mesa-26.2.1`; `M/` below
+issue #31). Mesa 26.2.1, `$CONNECTED_DEPS_DIR/mesa-pan/mesa-26.2.1`; `M/` below
 is its `src/`. Every word quoted is from a reference recorded with
 `tools/mali/drm_shim_ref.sh` (Mesa's panfrost on drm-shim, GPU id 0xa867):
 
@@ -54,7 +54,7 @@ $T/pan_ref_diff.py extract $D/fsout_<name>.trace --draw > $D/fsout_<name>.expect
 **Shader.** `tools/shaders/es300/mrt2.frag` (= `gl_test_mrt_fs_src`): highp,
 `layout(location = 0) out vec4 o_first; layout(location = 1) out vec4 o_second;`
 `o_first = u_clear.first; o_second = u_clear.second;`. The `fsout_55_es3mrt`
-reference was recorded from the shader case 55 linked before (#1509): the
+reference was recorded from the shader case 55 linked before it left the tree: the
 same shape (a struct of two vec4 uniforms, two outputs), other names
 (`ubuf.clearColor0/1`, `fragOutput0/1`). Record it again with the command
 above when the shim is at hand. Case 106

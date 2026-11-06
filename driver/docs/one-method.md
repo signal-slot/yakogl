@@ -249,7 +249,7 @@ host's table; 1 is not used), w1 the fence, w2 the GPU recoveries so far (the ru
 
 **Added:** kind 22 DISPLAY, the i.MX8MP display chain while it scans a
 window (the i.MX8MP board layer, `CONFIG_YAKOGL_BOARD_IMX8MP_DISPLAY_RECORD`,
-default n; issue #23). w1 is the pixel clock in kHz with bit 31 set when the LCDIF was
+default n; issue #8). w1 is the pixel clock in kHz with bit 31 set when the LCDIF was
 already scanning, w2 the DSI lane rate in kHz, w3 the SN65DSI84's IRQ_STAT a
 second into the picture and at the start, the display health and the
 LCDIF's format and pitch (record.rs has the bits; `yd_record_display_words`
@@ -257,7 +257,7 @@ packs them). board_finish() writes it after a passed run's verdict, so on
 the i.MX8MP it is the record the SNVS keeps; its status is n/a, like PICTURE's.
 
 **Added:** kind 23 GL_ERROR, one of the first GL errors a run raised, by
-name (issue #814). The GL core keeps the first eight errors with the entry
+name. The GL core keeps the first eight errors with the entry
 point that raised them and the client's tag (`yakogl_gl_error_tag`;
 glmark2 sets its benchmark-list entry). glmark2 prints them all; with the
 selector `GL_ERROR_SEL | k` (0x800 | k) it also stores error k as a GL_ERROR

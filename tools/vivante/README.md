@@ -53,7 +53,7 @@ appended rows). That is how a new shader gets a row on a host whose etna_shc
 does not reproduce the committed table: this laptop's (e224bebc...) reproduces
 none of the 324 rows, so a regeneration there would be a new reference. The
 FemtoVG NO_SCISSOR programs were added this way on 2026-10-02, and on
-2026-10-12 every table-directory source that compiles (219, issue #22; see
+2026-10-12 every table-directory source that compiles (219; see
 "The table against its sources" below). A fragment shader that reads
 `gl_FrontFacing` is appended with its second row, as a full run places it.
 
@@ -74,19 +74,18 @@ them (`es300/dynidx.frag`, `qt3d/e0880dcd5582d4de.frag`) were replaced, and
 the two Qt particle vertex shaders are refused by the generator's layout
 check (their `ubuf.sizetable` is packed in the GL core's block where Mesa's
 offsets assume a vec4 per element) and kept `movar`. Those two rows left
-with the Qt shaders (#1509), so no row reads a uniform array through `movar`
+with the Qt shaders, so no row reads a uniform array through `movar`
 now (`no_table_row_indexes_a_uniform_array_through_the_address_register`).
 
 `--remove <directory under tools/shaders>...` drops every row of those
 directories: the row, its numbered arrays, its source entry and its header
 listing lines. It needs no compiler. The rows that stay keep their bytes and
 their symbol numbers, and it refuses the result if any other row changed.
-That is how a directory leaves the tree: `qt/` and `qt3d/` left this way
-(#1509).
+That is how a directory leaves the tree: `qt/` and `qt3d/` left this way.
 
-### The table against its sources (issue #22, 2026-10-12)
+### The table against its sources (2026-10-12)
 
-Issue #22 was "the GC7000 table lags the shader sources". Measured on the
+The issue was "the GC7000 table lags the shader sources". Measured on the
 main tip `ba25def7` (2026-10-13) before this change, by comparing each
 source's SHA-256 with the row keys: the table had 330 rows (325 distinct
 keys); of the 714 sources in the `gc7000` directories of
@@ -190,7 +189,7 @@ counts are the same: 550 rows, 544 keys; 714 sources, 546 with a current row,
 0 with a stale key, 168 without a row, and those 168 are exactly the six
 classes above (3 + 2 + 2 + 14 + 83 + 64).
 
-### The Qt shaders leave (issue #1509, 2026-10-24)
+### The Qt shaders leave (2026-10-24)
 
 `tools/shaders/qt/` and `qt3d/` left the tree (their text is Qt's). Their
 342 rows left the table with `--remove qt qt3d`; the other 208 rows stayed
@@ -202,9 +201,9 @@ in the tree; their counts were not measured again (the three etna_shc,
 reflection and glslang classes were Qt sources only). Every appended
 source compiled.
 
-### The `matattr` rows (issue #22, settled 2026-10-14)
+### The `matattr` rows (settled 2026-10-14)
 
-Issue #22 first said "the GC7000 table lags on `matattr`". The keys of the
+The issue first said "the GC7000 table lags on `matattr`". The keys of the
 four rows (`es100/matattr.frag`, `matattr2.vert`, `matattr3.vert`,
 `matattr4.vert`) match the files, and `check_gl_test_blobs.py` finds them, so
 gl_test case 63 has no table miss. The other half of the question was

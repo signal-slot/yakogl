@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-//! ES 2.0 error rules, texture part (issue #128; the audit is
+//! ES 2.0 error rules, texture part (the audit is
 //! docs/notes/es2-error-rules.md, Table A "Textures").
 //!
 //! A `report-es2` build refuses what ES 2.0 does not define; an ES 3.0 build

@@ -262,12 +262,11 @@ for Slint on none.
    Status: open. `f007eeea`, `docs/notes/slint-pi4-fingerprint.md`: the
    reference stays (c592, `0xfaa46995`); the Pi 4 gave it at `c854e0ae`. The
    312b came back at `499b946e` and at `33a0f264` (`a8fdc9f0`,
-   `tools/cts/RESULTS.md`, Pi 4 row and its notes; #1284),
+   `tools/cts/RESULTS.md`, Pi 4 row and its notes),
    so it is a regression, not a one-off. No commit is named for the move;
    the bisect over `c854e0ae..499b946e` is not run (first suspect
    `c6f17516`, the note). Withdrawn from stage 2 on 2026-10-19: the Slint
-   sample is a demo; its Pi 4 picture stays a known defect of the demo
-   (#1284).
+   sample is a demo; its Pi 4 picture stays a known defect of the demo.
 9. **Define "same picture" for the cluster.** The panels differ in size:
    either render at a common size or compare per-panel probes against a
    resolution-independent reference; implement in `common-tally.py` and the
@@ -306,9 +305,9 @@ Items 1, 2, 3, 5 and 10 are done at main `445c5653`. Item 7 is done by value.
   `[texture] texture-filter=mipmap` picture changed at `0d21ab47`, and which
   picture is right is not known (`tools/cts/RESULTS.md`, i.MX8MP notes).
 - Speed: terrain, shadow and refract on the AM62P (94, 353 and 376 ms a
-  frame, CPU GL-call time). Terrain on the Pi 4 (179 ms; #1209). Terrain,
+  frame, CPU GL-call time). Terrain on the Pi 4 (179 ms). Terrain,
   shadow and refract on the i.MX8MP (1 to 2 FPS; the GPU mipmap chain is not
-  reached from GL, #1106).
+  reached from GL).
 - AM62P display: a camera look at the panel for torn frames in a light
   scene, the line-buffer read-ahead question, and whether to wire
   `am62p_dss_wait_vsync` as `wait_vblank` (`docs/notes/am62p-flip-latch.md`).

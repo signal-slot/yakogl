@@ -4193,8 +4193,8 @@ fn ds_bytes(w: u32, h: u32, samples: u32) -> Option<usize> {
 /// kicks (a full arena, the draw cap, a glFinish or glReadPixels before more
 /// drawing) handed the next kick one colour per pixel, and that kick's
 /// load quad wrote it to every sample: a sample the later draws left
-/// uncovered held the average, not its own colour (#1289,
-/// pvr-msaa-split; dEQP's multisample.constancy_* before `a4f64950`).
+/// uncovered held the average, not its own colour
+/// (pvr-msaa-split; dEQP's multisample.constancy_* before `a4f64950`).
 ///
 /// Now a multisampled kick that may not be the frame's last (no swap) emits
 /// each tile twice: resolved into the target as before, and unresolved
@@ -4210,7 +4210,7 @@ fn ds_bytes(w: u32, h: u32, samples: u32) -> Option<usize> {
 /// most recent such kick's: ES 2.0's one multisampled target is the window
 /// surface, and a second 4x target's split takes the store for itself.
 ///
-/// Unmeasured on the board (#1289): that
+/// Unmeasured on the board: that
 /// the PBE's unresolved layout is the TPU's `smpcnt` layout over the same
 /// stride, and that a per-sample fetch of it reads the running instance's
 /// sample.

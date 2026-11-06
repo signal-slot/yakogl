@@ -142,7 +142,7 @@ satisfies four limits:
    figure is measured, not derived (how `MHPORCH`'s word counts map onto the
    line has no RM basis): no margin broke the picture twice -- 71.43 MHz on
    428.6 Mbit/s (2026-09-23, "disturbed, flickers, as if not in sync") and
-   71.1 MHz on 426.6 Mbit/s (2026-10-06, issue #23: one and a half copies of
+   71.1 MHz on 426.6 Mbit/s (2026-10-06, issue #8: one and a half copies of
    the frame across each line, on gc_gl_triangle's window and on the panel
    console of gc_gl_test alike) -- and 69.3 MHz on 426.6, 25.97 per mille, is
    the plan the panel was seen right at (2026-09-24, and under Linux).
@@ -165,12 +165,12 @@ asked for the panel's typical 71.1 MHz (VIDEO_PLL1 1066.5 MHz, m 178,
 k -16384; 60.286 Hz) on the same 426.6 Mbit/s link: 71.1 x 24 / 4 = 426.6
 exactly, no margin. Its runs measured the refresh (60.28 Hz) and PASS records,
 but nobody looked at the panel until 2026-10-06, which showed the defect of
-issue #23. A 60 Hz plan needs a faster link: the bridge's divider 4 (DSI
+issue #8. A 60 Hz plan needs a faster link: the bridge's divider 4 (DSI
 clock 284.4 MHz, 568.8 Mbit/s a lane, `CHA_DSI_CLK_RANGE` 56, DSIM PLL p 5
 m 474 s 1) would give 33 % -- unmeasured. **The M7 still re-tunes
 VIDEO_PLL1 to 71.1 MHz when it adopts the panel** (its `src/pixclk_m7.c`,
 `CONFIG_YAKOGL_DRV_M7_PIXEL_CLOCK_HZ`): on this 426.6 Mbit/s link that is the same
-no-margin plan, and route 3 is exposed to issue #23 until that repository
+no-margin plan, and route 3 is exposed to issue #8 until that repository
 sets it to 0 or to 69.3 MHz.
 
 Without `video-pll1-frequency` (risk R4 in docs/source-form.md) the nearest is
@@ -562,7 +562,7 @@ earlier bring-up.
 
 1. **Does the panel light up at 71.43 MHz?** Answered: the picture broke up
    (2026-09-23): a lane rate of exactly pixel x 24 / 4 leaves no room for the
-   packet overhead. **Sequel (2026-10-06, issue #23):** the 71.1 MHz plan of
+   packet overhead. **Sequel (2026-10-06, issue #8):** the 71.1 MHz plan of
    2026-10-02 was the same condition on the 426.6 Mbit/s link (71.1 x 24 / 4
    = 426.6) and the panel showed 1.5 copies of the frame across each line,
    while the LCDIF, DSIM and bridge registers matched Linux's register for

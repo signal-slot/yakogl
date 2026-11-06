@@ -157,8 +157,8 @@ kinds! {
          entry << 16 | why it failed (GLMARK2_WHY_*) << 22 | the first unsupported entry << \
          26; w2 = flags << 28 | status << 24 | ran << 18 | failed << 12 | unsupported << 6 | \
          the second unsupported entry; counts saturate at 63, an entry is the index in the \
-         benchmark list (GLMARK2_ENTRY_NONE none). With GLMARK2_GL as well (2026-10-12, \
-         issue #13): w3 = W (12 bits) | H << 12 (12 bits) | the GL errors the entry points \
+         benchmark list (GLMARK2_ENTRY_NONE none). With GLMARK2_GL as well (2026-10-12): \
+         w3 = W (12 bits) | H << 12 (12 bits) | the GL errors the entry points \
          raised (yakogl_gl_errors_raised) << 24 | the draws that sampled an incomplete \
          texture (yakogl_incomplete_texture_draws) << 28, 4 bits each, saturating at 15 \
          (15 or more); without GLMARK2_GL the counters were not recorded. Without \
@@ -200,7 +200,7 @@ kinds! {
          display health (IMX8MP_DISPLAY_HEALTH_*) << 16 | the LCDIF's CTRLDESCL0_5 BPP code \
          << 24 | its pitch in KiB << 28 (saturating at 15)";
     GL_ERROR = 23, Tag,
-        "one of the first GL errors a run raised, by name (issue #814); not a verdict of its \
+        "one of the first GL errors a run raised, by name; not a verdict of its \
          own: written after the run's verdict when the runner's selector asks for it \
          (GL_ERROR_SEL | k: driver/samples/zephyr/glmark2), so a runner that keeps only the \
          last record (the i.MX8MP) reads it. tag = k, the error's index (0 the first). w1 = \
@@ -2595,7 +2595,7 @@ mod tests {
         assert_eq!(d.as_str(), "APP (2) seq 3: stage 7 status 2 (fail) frames 0 app 0x00000000");
     }
 
-    /// GL_ERROR (issue #814): the hash is FNV-1a (the published test
+    /// GL_ERROR: the hash is FNV-1a (the published test
     /// vectors), each field decodes, and an error not kept says so.
     #[test]
     fn gl_error_words_and_their_decode() {

@@ -28,9 +28,9 @@ the code.
 ## Common failures and how to avoid them
 
 - **Two green pull requests, red main.** Each pull request's CI checks it
-  against the main it was based on. On 2026-10-14 #787 added two fields to
-  `YakoglBackend` (`generate_mipmap`, `return_mipmap_chain`) while #772 and
-  #782 had just added `tests/es3_caps.rs` and `tests/es3_blit_ds.rs` with
+  against the main it was based on. On 2026-10-14 one change added two fields to
+  `YakoglBackend` (`generate_mipmap`, `return_mipmap_chain`) while two others
+  had just added `tests/es3_caps.rs` and `tests/es3_blit_ds.rs` with
   struct literals that lacked them: main then failed to compile those tests
   in 5 rows of `--quick`. When you add a field to a table struct, grep
   `tests/` for every literal of it (`grep -rl 'YakoglBackend {' tests src`)

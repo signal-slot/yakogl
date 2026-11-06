@@ -33,7 +33,7 @@ A fourth back end, `gpu-mali`, is in progress for the Arm Mali-G610 of the
 FriendlyElec NanoPC-T6 (Rockchip RK3588). It is not one of the three boards
 above: so far it runs `gl_test` cases on the board's own Linux, through the
 panthor kernel driver, not on Zephyr (`driver/docs/nanopc-t6-mali.md`,
-`tools/cts/RESULTS.md`, issue #20).
+`tools/cts/RESULTS.md`, issue #7).
 
 ## Status
 
@@ -167,7 +167,7 @@ turn it into a header with `driver/tools/mkfwblob.sh`.
   `vivante_blobs.rs`, generated; host tests and `mesa-reference-table` only).
 - `src/osal/` the OS abstraction: `mod.rs` (`g_osal`, `osal_set_ops`) and the three
   OSALs, which are C for now (thin glue over C APIs; their move to Rust is open
-  work, #1225): Zephyr, one translation unit per GPU (`zephyr.c`
+  work, #19): Zephyr, one translation unit per GPU (`zephyr.c`
   over the PowerVR render service, `zephyr_gc.c` for the GC7000, `zephyr_v3d.c`
   for the V3D) with `zephyr_shaderc_scratch.c` (the compiler's regions) and
   `zephyr_timing.c`; `baremetal.c`; `linux.c` (a host build with no GPU, for

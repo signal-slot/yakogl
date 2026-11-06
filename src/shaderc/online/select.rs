@@ -3352,7 +3352,7 @@ impl<'a> Sel<'a> {
     /// the least fixed point, so it does not depend on the order instructions
     /// are looked at; the order only decides how many rounds it takes.
     ///
-    /// The cost, measured (issue #101): asking "does any other survivor read
+    /// The cost, measured: asking "does any other survivor read
     /// this register?" by scanning the whole program for every instruction
     /// made a round O(n^2), and visiting in program order needed one round
     /// per link of a producer-to-consumer chain: 20 rounds over the 4,018
@@ -7151,7 +7151,7 @@ mod dead_marking_tests {
     /// A chain of producers, each read only by the next, ending in a value
     /// nobody reads: all of it is dead. Visited backwards the consumer goes
     /// before its producer is asked about, so one round deletes the whole
-    /// chain and a second finds nothing more (issue #101: in program order
+    /// chain and a second finds nothing more (in program order
     /// this took one round per link).
     #[test]
     fn a_forward_chain_nobody_reads_goes_in_one_round() {

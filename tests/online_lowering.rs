@@ -58,7 +58,7 @@ const SCRATCH: usize = 4 << 20;
 /// sources the PowerVR corpus simply does not contain.
 ///
 /// Lowered once, by the corpus and not by the front end: the Qt shaders left
-/// both tables with #1509 (2026-10-24), and every ES 1.00 source of each
+/// both tables on 2026-10-24, and every ES 1.00 source of each
 /// table now lowers (175 of 175 on the GC7000, 72 of 72 on the PowerVR,
 /// whose floor was 235 with them).
 #[cfg(feature = "gpu-vivante")]

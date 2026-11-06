@@ -1150,7 +1150,7 @@ pub static mut g_gl_error_log_limit: core::ffi::c_uint = 16;
 /* ---- the GL error counters ---------------------------------------------------
  * How many GL errors the entry points raised, for a run whose only result is
  * a record (the i.MX8MP has no console, so the "GL error" lines below are
- * lost there; issue #13). Two counts, because GL keeps only the first error
+ * lost there). Two counts, because GL keeps only the first error
  * since the last glGetError (ES 2.0 2.5):
  *
  *   raised    every error an entry point raised, with or without a current
@@ -1223,7 +1223,7 @@ fn note_raised(e: GLenum, func: &str) {
  * first FIRST_ERRORS errors of the process, each with its code, the entry
  * point that raised it and the client's tag at that moment
  * (yakogl_gl_error_tag; glmark2 sets the benchmark-list entry it is running).
- * For a run whose console is lost (the i.MX8MP's glmark2, issue #814) the
+ * For a run whose console is lost (the i.MX8MP's glmark2) the
  * client puts them in its record; a console only shows the first
  * g_gl_error_log_limit lines, without the tag. Process-global like the
  * counters; never cleared. */
@@ -2824,7 +2824,7 @@ mod tests {
         reset_error_log_cap();
     }
 
-    /// Issue #814: the first errors are kept by name, with the client's tag
+    /// The first errors are kept by name, with the client's tag
     /// (glmark2's entry), for a record to name them; later ones only count.
     #[test]
     fn the_first_errors_are_kept_with_their_entry_point_and_tag() {

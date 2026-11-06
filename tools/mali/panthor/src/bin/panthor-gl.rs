@@ -259,7 +259,7 @@
 //!   hash Mesa's.
 //! - `--fragcoord`, `--fragcoord-flip`: the program of the board's Mesa
 //!   reference 0dce654a8:tools/mali/board-ref/2026-10-22-s4-fragcoord/fragcoord.c
-//!   (#1384 S4, gl_FragCoord): gl_FragCoord.xy copied to a highp variable,
+//!   (#31 S4, gl_FragCoord): gl_FragCoord.xy copied to a highp variable,
 //!   times 1/64, into red and green, a full-screen quad into a 64x48 FBO
 //!   (`--fragcoord`, the y transform (1, 0)) or into the 64x48 top-down
 //!   default surface as the `--flip-*` modes make it (`--fragcoord-flip`,
@@ -404,13 +404,13 @@ enum Mode {
     Fneg(usize),
     /// An fabs.c mode, by its index in [`FABS_MODES`].
     Fabs(usize),
-    /// femtovg's solid fill (fill_color.nodiscard.noscissor), #1384 S4.
+    /// femtovg's solid fill (fill_color.nodiscard.noscissor), #31 S4.
     FvgFillColor,
     /// femtovg's solid fill under a scissor (fill_color.nodiscard, the
-    /// `if` of scissorMask), #1384 S5.
+    /// `if` of scissorMask), #31 S5.
     FvgFillColorScissor,
     /// fragcoord.c's draw into the FBO (false) or the top-down default
-    /// surface (true), #1384 S4.
+    /// surface (true), #31 S4.
     FragCoord(bool),
 }
 
@@ -1558,7 +1558,7 @@ unsafe fn fragcoord_frame(flip: bool, lost0: u32, refused0: u32) -> Result<bool,
 }
 
 /// `--fvg-fill-color`: femtovg's solid fill, main.vert with
-/// fill_color.nodiscard.noscissor.frag (tools/mali/testdata; #1384 S4), as
+/// fill_color.nodiscard.noscissor.frag (tools/mali/testdata; #31 S4), as
 /// 0dce654a8:tools/mali/board-ref/2026-10-21-s4-alu/fvgfc.c draws it through the
 /// board's Mesa: one full-screen triangle into the 64x64 FBO, `vertex` in
 /// pixels and `tcoord` = vertex / 64, so u is the column and v the row in
@@ -1656,7 +1656,7 @@ unsafe fn fvg_fill_color_frame(lost0: u32, refused0: u32) -> Result<bool, String
 }
 
 /// `--fvg-fill-color-scissor`: femtovg's solid fill under a scissor,
-/// main.vert with fill_color.nodiscard.frag (tools/mali/testdata; #1384
+/// main.vert with fill_color.nodiscard.frag (tools/mali/testdata; #31
 /// S5, the `if` of scissorMask), as 0dce654a8:tools/mali/board-ref/2026-10-22-s5-if/
 /// fvgfcs.c draws it through the board's Mesa: `--fvg-fill-color`'s
 /// triangle and uniforms, plus the scissor: scissorMat the translation by

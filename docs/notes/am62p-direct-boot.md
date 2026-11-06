@@ -437,7 +437,7 @@ the laptop, the console through the ESP32 bridge with host time stamps):**
    triangle's 482 ms too, and the first thing to fix.
    The Qt scene itself did not render on this build (the offline shader
    table lacks seven of today's Qt shaders; the online path stalls the GPU
-   on the IBL prefilter): #1635.
+   on the IBL prefilter).
 
 7. **23:50: principledmaterial renders at power-on** (the offline-table Qt
    build with the ES 3.0 report; the ES 2.0 report of item 6 was the black

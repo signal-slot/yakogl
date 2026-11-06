@@ -34,7 +34,7 @@ buffers 1..3) and the fragment stage's output mode (`shader.rs`
 
 **The 64-bit ones: the tiled shadow.** They were held back (item
 int-rt-gc) while gl_test case 44 had the PE's 64-bit LINEAR write open. The
-probe settled it (`src/vivante/wide_target.rs`, module doc; #6, `cba8b199`,
+probe settled it (`src/vivante/wide_target.rs`, module doc; `cba8b199`,
 record `got 0x20000004 want 0x00c2073e`): the PE misplaces 64-bit pixels in a
 LINEAR target (16-byte pixel pairs move inside a row, at every pitch), so a
 draw into any 64-bit-pixel colour target renders into a 4x4-tiled shadow

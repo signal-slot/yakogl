@@ -9,10 +9,10 @@ F2 is wired in (item imx8mp-wait-vblank): the GC7000's OSAL has
 swap").** The cause below is a prediction from the code; the board recipe
 has not run.
 
-- The first F1 (#793, merged 2026-10-16) let `board_show` return at once
+- The first F1 (merged 2026-10-16) let `board_show` return at once
   when the LCDIF already scanned the shown buffer, in every path. The owner
   saw glmark2 draw wrong on the board the same day and reverted it
-  (`faee8812`, #923). Why the picture broke is not confirmed: see
+  (`faee8812`). Why the picture broke is not confirmed: see
   "Proposed fix" below. That form of F1 is not coming back.
 - F1 now: the LCDIF's latch (the VSYNC wait inside
   `imx8mp_display_set_fb`) runs on a thread of the board layer
@@ -305,7 +305,7 @@ that the LCDIF already scans, and the GPU already draws into the scanned
 buffer today. This makes the i.MX8MP present like the AM62P (3 us) and the
 Pi 4 (a pan without a VSYNC wait).
 
-The board refused this form (#923, `faee8812`): #793 merged it on
+The board refused this form (`faee8812`): it was merged on
 2026-10-16 with a green gate and nothing run on a board, and the owner saw
 glmark2 draw wrong on the i.MX8MP the same day, where the common set had
 read 5 of 5 rows green at `ab43a20c5`. **Why the picture broke is not
@@ -313,7 +313,7 @@ confirmed.** The revert's reading, "with one buffer scanned in place, a
 show that returns at once lets the GPU draw the next frame into the buffer
 the LCDIF is scanning", holds for a window scanned in place (the panel's
 size, a view). But the common GM row's 800x600 glmark2 window is COPIED
-into a panel-sized screen buffer, and at #793 that copy still went into the
+into a panel-sized screen buffer, and in that form that copy still went into the
 one buffer the LCDIF scanned, every frame, at the frame's rate instead of
 once a period. So for glmark2 the candidates are (a) the copy itself,
 written over the buffer being scanned several times a period, and (b)
@@ -355,8 +355,8 @@ record below measures.
 Board layer only: `driver/zephyr/lib/board/imx8mp/board_imx8mp.c` and the
 option in `driver/zephyr/lib/board/Kconfig`. `src/osal/zephyr.c`,
 `driver/rust/**`, `driver/src/**` and the samples are unchanged. The first
-form (#793) was reverted by `faee8812` after the board showed a broken
-glmark2 picture (#923, "Proposed fix" above).
+form was reverted by `faee8812` after the board showed a broken
+glmark2 picture ("Proposed fix" above).
 
 - F1, the latch thread
   (`driver/zephyr/lib/board/imx8mp/board_imx8mp.c:46-227`; the `:N` ranges
@@ -368,7 +368,7 @@ glmark2 picture (#923, "Proposed fix" above).
   and either waits for it (`latched`, `:160-176`) or returns.
   - A window scanned IN PLACE (`:318-326`: the panel's size, the cluster's
     two halves, a `CONFIG_YAKOGL_BOARD_SCANOUT_VIEW` view) asks for its
-    latch and waits for it, as it did before #793: it is the buffer the
+    latch and waits for it, as it did before the first form: it is the buffer the
     GPU draws into next. The SV row and the CL row are unchanged in timing.
   - A COPIED window (`:327-359`) is copied into one of
     `CONFIG_YAKOGL_BOARD_IMX8MP_SCREEN_BUFFERS` panel-sized carve-out
@@ -427,7 +427,7 @@ glmark2 picture (#923, "Proposed fix" above).
   - 3: a copied window's show returns once the copy is done (one buffer on
     the panel, one on its way, one to copy into). The arm whose glmark2
     light scenes should pass 58 FPS, and whose picture the board run must
-    check (#923).
+    check.
   - 2: a copied frame faster than the panel waits for the latch in flight:
     paced at the panel's rate, no per-frame wait below it.
   - A window scanned in place waits whatever the value.
@@ -905,10 +905,10 @@ The picture, which no record shows: a person at the panel (or ccfarm's
 camera, as the Pi 4 sessions used) watches GM-clear-3buf and GM-3buf for a
 few scenes, and GM for comparison. Expected: each scene whole, as at
 `b421b447`, no bands of another frame, no pieces of a clear. This is the
-check #923 asked for before F1 comes back, and the check of the hypothesis
+check asked for before F1 comes back, and the check of the hypothesis
 in "Proposed fix" (a copy into a buffer the LCDIF does not scan keeps the
 picture whole). If GM-3buf shows pieces of several frames while GM is
-whole, the hypothesis is wrong: the cause of #923 is not the scanned buffer
+whole, the hypothesis is wrong: the cause of the broken picture is not the scanned buffer
 being written, and the 3-buffer arm must not become the default. Check too
 that the copy path is what the GM row runs (`board: a copied window is
 shown through 3 1280x800 screen buffer(s)` on the panel console, or the APP
@@ -940,7 +940,7 @@ What the run decides:
   (show us) and page 2 (frames per bin) say where.
 - A broken picture in the 3-buffer arm: the default stays 1, and the next
   item is the second window buffer EGL owns (since built:
-  `include/gles_osal.h`; the panel look is #1207), with step 3's
+  `include/gles_osal.h`; the panel look is #17), with step 3's
   record to see what the LCDIF scans while the GPU draws.
 
 ### Step 2 result (2026-10-18, main `45dc44a8`, `.wait_vblank` wired)
@@ -960,12 +960,12 @@ half (main `bebce725`) is in the same table of `tools/cts/RESULTS.md`.
 
 What this shows: the probes do not move (SO / SV `c592`, CL `0406`, which
 are the panel-independent cluster probes, not the older `b107`); GM raises
-0 GL errors in all arms (#814); no Slint or cluster row took twice as long
+0 GL errors in all arms; no Slint or cluster row took twice as long
 (a second wait per frame would have), though the return time is a
 fixed-length run and a weak proxy. What it cannot show: the i.MX8MP has no
 console and the record carries no frame count for Slint, so "SO-3buf and
 SO-2buf are paced, no unpaced swap" is **not measured**; nobody watched the
-panel, so #923's tearing and half-drawn frames are **not ruled out** at 3 or
+panel, so the broken picture's tearing and half-drawn frames are **not ruled out** at 3 or
 2 buffers.
 
 Decision: `CONFIG_YAKOGL_BOARD_IMX8MP_SCREEN_BUFFERS` stays **1**. The rule
@@ -1097,7 +1097,7 @@ So the floor of a light glmark2 frame at 3 buffers is the window's copy in
 the present path (about 12.5 ms), not the GPU (2 to 3 ms) and not the
 latch. This is why step 2's 3-buffer score gain was small (42 to 49).
 What was not done here: the picture at 3 buffers was not looked at
-(#923 is still not ruled out), and the default stays 1.
+(the broken picture is still not ruled out), and the default stays 1.
 
 ## What this does not show
 
@@ -1107,7 +1107,7 @@ What was not done here: the picture at 3 buffers was not looked at
   with the option at 3 and 2. They say nothing about timing or the picture.
 - No board run was made. The per-scene split (18 / 10 / 9 scenes at one
   period) is inferred from the scores, not measured.
-- The cause of #923 is not confirmed ("Proposed fix"). That the LCDIF
+- The cause of the broken picture is not confirmed ("Proposed fix"). That the LCDIF
   scanning only complete frames keeps the picture whole rests on the copy
   path's reading of the code (the window is copied after `eglSwapBuffers`
   completed the frame, `0247ac66`; a screen buffer is never copied into

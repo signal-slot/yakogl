@@ -101,7 +101,7 @@ first swap returns (`glGenerateMipmap` 22 to 26 ms for 14 calls, `glCompileShade
 (`glGenerateMipmap` 21 to 26 ms); jellyfish 21 ms (`glTexImage2D` 10 ms for
 33 calls). Not part of the score.
 
-## After: glGenerateMipmap on the GPU (#1106)
+## After: glGenerateMipmap on the GPU
 
 The GL core now offers glmark2's rendered-into RGBA8 chains (`pe_order`,
 at level 0's pitch) to `src/vivante/mipmap.rs`, which draws them
@@ -109,7 +109,7 @@ at level 0's pitch) to `src/vivante/mipmap.rs`, which draws them
 mode, `terrain` and `refract`, 20 frames, ms a frame over frames 2 to 20,
 wall, the median of three interleaved runs, on another x86-64 host than
 the table above (so the before column is not that table's). Before: main
-`b4e5f46e`; after: the same plus the `src/gl/texture.rs` change of #1106.
+`b4e5f46e`; after: the same plus the `src/gl/texture.rs` change of `dc033dc4`.
 Built with run.sh's sources and flags by hand (run.sh itself could not be
 started in that session; the `yakogl` crate linked as an rlib, release
 without LTO, instead of the assembled `libyakogl.a`; the note says how):

@@ -190,7 +190,7 @@ Estimates are of the draw call's host CPU time; the board's will be larger.
 
 Not proposed: the first-draw gap (1 to 4%, no code path to change), any step of
 the record (0.04 to 0.09 ms a frame), the flush and finish (host: 0; on the board
-they are the GPU's time, the lead's), anything about glGenerateMipmap (#916).
+they are the GPU's time, the lead's), anything about glGenerateMipmap.
 
 ## Suggested updates elsewhere (not made here)
 

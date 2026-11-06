@@ -2,8 +2,8 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # The partial render, parts 1 and 4: what has landed
 
-Host-only reading, no code, 2026-10-30 (plan #148 item pr-landed-note, issue
-#3). It records what the code does at the integration tip (e9e1600a) so the
+Host-only reading, no code, 2026-10-30 (plan #148 item pr-landed-note).
+It records what the code does at the integration tip (e9e1600a) so the
 audit of parts 1 and 4 (pr-parts14-audit, whose report is not in the tree)
 has a durable result. The design is "Design: the firmware's partial
 render" in docs/notes/pvr-render-pool.md; this note is not a replacement of

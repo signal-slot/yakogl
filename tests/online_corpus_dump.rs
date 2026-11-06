@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-//! An A/B instrument for a compiler change that must not change its output
-//! (issue #101): every corpus source through this build's online compiler,
+//! An A/B instrument for a compiler change that must not change its output:
+//! every corpus source through this build's online compiler,
 //! written to a file to diff against the other arm. A test binary of its
 //! own, because it resets the compiler (`src/test_rules.rs`).
 #![cfg(all(feature = "shaderc-online", any(feature = "gpu-powervr", feature = "gpu-vivante")))]

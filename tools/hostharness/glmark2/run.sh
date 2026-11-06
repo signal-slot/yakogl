@@ -105,8 +105,8 @@ while IFS='=' read -r name value; do
 done < <(grep -E '^CONFIG_YAKOGL_V3D_[A-Z0-9_]+=' "$PI4_CONF")
 [ -n "${YAKOGL_V3D_CARVEOUT_BYTES:-}" ] || die "$PI4_CONF sets no CONFIG_YAKOGL_V3D_CARVEOUT_BYTES"
 
-# The GC7000's GPU memory as the i.MX8MP's glmark2 image has it (issue
-# #814): the size of the gpu-carveout node of the image's board overlay, else
+# The GC7000's GPU memory as the i.MX8MP's glmark2 image has it:
+# the size of the gpu-carveout node of the image's board overlay, else
 # of the board's own device tree, less what the board layer keeps there
 # itself (the 800x600 window and the 1280x800 panel-sized screen copy,
 # driver/zephyr/lib/board/imx8mp/board_imx8mp.c). src/osal/linux.c refuses an

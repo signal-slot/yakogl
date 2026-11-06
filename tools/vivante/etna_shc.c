@@ -189,7 +189,7 @@ int main(int argc, char **argv)
 	 * location + k. The table keeps a matrix attribute as one input with its
 	 * columns in vi_reg + k, which is what src/vivante/shader.rs binds, and
 	 * a column at a location no declaration names cannot be reflected (the
-	 * matattr rows, issue #22). Mesa's PowerVR compiler makes the same
+	 * matattr rows). Mesa's PowerVR compiler makes the same
 	 * choice (pco_nir.c: outputs_only for MESA_SHADER_VERTEX). */
 	NIR_PASS(_, nir, nir_lower_io_array_vars_to_elements_no_indirects,
 	         stage == MESA_SHADER_VERTEX);

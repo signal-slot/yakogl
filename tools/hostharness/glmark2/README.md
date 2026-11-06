@@ -23,7 +23,7 @@ On the V3D it also records the GPU memory: linux.c models the Pi 4's
 carve-out (its size from the Pi 4's glmark2 image), so an allocation the
 board would refuse is refused here, with the board's "out of GPU memory"
 line, and each entry's high-water is listed. On the GC7000 it models the
-i.MX8MP's carve-out (its size from the i.MX8MP glmark2 image, issue #814):
+i.MX8MP's carve-out (its size from the i.MX8MP glmark2 image):
 an allocation past it fails as `gc_render_alloc` fails on the board, which
 the GL core turns into a GL error.
 
@@ -112,7 +112,7 @@ and also on an entry whose GC peak (the sum of its heaps' high-waters) is
 above 3/4 of the modelled carve-out: at the board's 64 MiB, terrain peaked
 at 83% (51 MB) and refract at 79% here with no error, while every i.MX8MP
 common set raised GL errors; with the glmark2 image's 240 MiB the board
-raised none (b421b447, issue #814).
+raised none (b421b447).
 
 ## Profile
 

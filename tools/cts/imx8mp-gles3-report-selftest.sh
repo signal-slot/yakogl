@@ -78,7 +78,7 @@ for h in 'RESULTS.md' 'STATUS.md' 'ROADMAP.md' 'issue #2'; do
 	grep -q "^--- .*$h" "$work/full.out"; expect "block headed $h" $?
 done
 grep -q 'リセット0' "$work/full.out"; expect "STATUS line is Japanese with 0 resets" $?
-grep -q '(#1262)' "$work/full.out"; expect "ROADMAP line cites #1262" $?
+grep -q '(#24)' "$work/full.out"; expect "ROADMAP line cites #24" $?
 
 echo "== incomplete run (entries 90-132 missing)"
 python3 "$REPORT" --date 2026-11-10 "${S[0]}" "${S[1]}" > "$work/part.out" 2> "$work/part.err"; rc=$?

@@ -2556,7 +2556,7 @@ mod gl {
 
     /// femtovg's solid fill through the GL API reaches the descriptors as
     /// Mesa's board dump has them: fill_color.nodiscard.noscissor with
-    /// femtovg's vertex shader (#1384 S4: the stroke mask `min(1, (1 -
+    /// femtovg's vertex shader (#31 S4: the stroke mask `min(1, (1 -
     /// |2u - 1|) * strokeMult) * min(1, v)` scales innerCol), viewSize (64,
     /// 64), frag[6] = (0, 1, 0, 1), frag[10].x = 1, drawn by the board's
     /// Mesa 25.0.7 into 0dce654a8:tools/mali/board-ref/2026-10-21-s4-alu
@@ -2731,7 +2731,7 @@ mod gl {
 
     /// femtovg's solid fill under a scissor through the GL API reaches the
     /// descriptors as Mesa's board dump has them: fill_color.nodiscard
-    /// (#1384 S5: scissorMask's `if (scissorRadius > 0.0)` kept as real
+    /// (#31 S5: scissorMask's `if (scissorRadius > 0.0)` kept as real
     /// blocks, since its sides read uniforms, which bifrost's peephole may
     /// not speculate, and run past the GL front end's limit of 8), the
     /// first frame of 0dce654a8:tools/mali/board-ref/2026-10-22-s5-if/fvgfcs.c
@@ -2978,7 +2978,7 @@ mod gl {
         }
     }
 
-    /// gl_FragCoord (#1384 S4) through the GL API reaches the descriptors
+    /// gl_FragCoord (#31 S4) through the GL API reaches the descriptors
     /// as Mesa's board dumps have them (0dce654a8:tools/mali/board-ref/
     /// 2026-10-22-s4-fragcoord, fragcoord.c through the board's Mesa
     /// 25.0.7: tools/mali/board-dump/fcfbo-2026-10-22.txt into a 64x48 FBO,

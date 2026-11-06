@@ -15,7 +15,7 @@ main's full run 32 minutes on runner C, writing the caches.)
 ## 1. What a run costs today
 
 Measured on 2026-10-11 from the gate logs of main `ea984992` (run
-38117870891, runner B) and pull request #48 (run 38120375054, runner A),
+38117870891, runner B) and a pull request (run 38120375054, runner A),
 141 rows each, both green. The self-hosted runners are named A, B and C in
 this file.
 
@@ -180,7 +180,7 @@ runs no faster; under nextest each test is its own process.
 `online_corpus` and `gc_const_map` (GC7000) are not split: each runs in
 about 0.1 s on the 324 sources of `tools/shaders` (measured 2026-10-24).
 They took about 33 s and 31 s while the Qt Quick 3D sources were in the
-corpus (until #1509), most of it the GC7000 selection's dead-code pass on
+corpus (until their removal), most of it the GC7000 selection's dead-code pass on
 their largest material shaders.
 
 `tools/check.sh --changed` (the scope map) does not help a shared-layer
@@ -340,10 +340,10 @@ has no priority among runners, so the faster one is not preferred.
 Runner C is a mini PC (Ryzen 9 5900HX, 8 cores / 16 threads, 16 GB,
 Gentoo, no swap). Measured there on 2026-10-12, every row: 2009 s cold on
 its first run (five rows red for the host, since fixed: the table proofs
-needed the library's `.rmeta`, #222, and a glmark2 tree copied with two
+needed the library's `.rmeta`, and a glmark2 tree copied with two
 directories missing) and 1900 s green on main `bf6c98ca6` (run
 38248051277, 144 ok, the cache-writing run); runner A's run of the same main
-took 2261 s. A document pull request's gate took 4 s there (#225).
+took 2261 s. A document pull request's gate took 4 s there.
 
 ### 3.4 Make the slow tests faster
 

@@ -2,7 +2,7 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # ES 3.0 occlusion queries: design for PowerVR, V3D 4.2 and GC7000UL
 
-Design for occlusion-query (open: #1236), written
+Design for occlusion-query (open), written
 2026-10-08 (`d3037128`) and built on all three back ends (section 2 says
 where). Everything in it is proven on the host only; nothing has been
 measured on a board yet (gl_test 196 `occl` is the first board test, section

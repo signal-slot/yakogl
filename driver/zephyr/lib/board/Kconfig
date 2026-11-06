@@ -173,8 +173,8 @@ config YAKOGL_BOARD_IMX8MP_SCREEN_BUFFERS
 	  latch is dropped. With 2 a frame faster than the panel waits for the
 	  latch in flight: paced at the panel's rate (58.76 Hz). 2 and 3 are
 	  the opt-in arms of that note's board recipe, not the default, until a
-	  board run has checked the picture: #793 let a show return without the
-	  wait and glmark2 drew wrong (#923, reverted); why is not confirmed,
+	  board run has checked the picture: an earlier form let a show return without the
+	  wait and glmark2 drew wrong (reverted); why is not confirmed,
 	  and that a copy into a buffer the LCDIF does not scan keeps the
 	  picture whole is the hypothesis the run checks. With 2 or 3, an
 	  application at swap interval 1 (Slint without the view) is paced by
@@ -188,7 +188,7 @@ config YAKOGL_BOARD_IMX8MP_DISPLAY_RECORD
 	default n
 	depends on YAKOGL_BOARD_IMX8MP && YAKOGL_DRV_DISPLAY_IMX8MP && YAKOGL_DRV_GPU_VIVANTE
 	help
-	  A diagnostic for issue #23 (the panel showed a picture the records
+	  A diagnostic for issue #8 (the panel showed a picture the records
 	  could not see). When a run passes and its window is on the panel,
 	  board_finish() waits about a second and then writes a DISPLAY record
 	  (driver/rust/src/board/record.rs): the pixel clock and the DSI lane

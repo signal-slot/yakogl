@@ -59,7 +59,7 @@ figure exists — `tools/cts/RESULTS.md:459-473`, fails
   `:191`.
 - **HOST3**: `tools/cts/log/es3-host-run.md`, the whole dEQP-GLES3 mustpass
   host run of item `host-gles3-run` at `522c41f` (2026-10-09) — the record of
-  PR #46 (branch `ccfarm/01a11dcf-05a5-759b-ac85-6632d0ce2cd8`) this file's
+  a pull request (branch `ccfarm/01a11dcf-05a5-759b-ac85-6632d0ce2cd8`) this file's
   §5 reading comes from. The 2026-10-16 clean-up removed it from the tree, so
   it is read as `ab43a20c5:tools/cts/log/es3-host-run.md` and every line below
   cites that record. It is used only in §5, every figure from it marked

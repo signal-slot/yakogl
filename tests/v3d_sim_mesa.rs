@@ -734,7 +734,7 @@ const TEXTURE_SIZE: u32 = 5;
 /// carries it unrounded. EVERY channel names the unit (distinct across the
 /// 16 at every texel), so a program that reads only one channel still sees
 /// a wrong texture (a program reading only .x, as the Qt distance-field text
-/// did while it was in the corpus, until #1509); red names the row as well
+/// did while it was in the corpus, until their removal); red names the row as well
 /// as the column, so two look-ups one row apart differ in .x too (the Qt
 /// outlined text read .x at sampleCoord and one row up: with red
 /// naming the column only, its first two results were equal and trading
@@ -2224,7 +2224,7 @@ fn the_interpreter_runs_mesas_code_as_the_ir_says() {
     println!(
         "  pairs that read each cube face (+X -X +Y -Y +Z -Z): {face_pairs:?}; each level (0 1 2): {level_pairs:?}"
     );
-    // Pinned. Since #1509 took the Qt cube and skybox programs out, the own
+    // Pinned. Since the Qt cube and skybox programs were taken out, the own
     // cube sources (es100/cubelod, cubebias, es300/cube*) carry this: every
     // face and level 1 are read by an agreeing pair of Mesa's (level 2 by
     // none).
@@ -2858,7 +2858,7 @@ fn our_programs_agree_with_the_ir_and_with_mesa() {
     );
     // The pairs whose output the language does not fix (a pseudo-random
     // fract(sin(dot(co, k)) * 43758.5)): none since the Qt particle pairs
-    // left (#1509). A pair entering this bucket is re-measured, never
+    // left. A pair entering this bucket is re-measured, never
     // re-pinned on sight.
     let trig_want: &[&str] = &[];
     let mut trig_sorted = trig.clone();
@@ -2897,7 +2897,7 @@ fn our_programs_agree_with_the_ir_and_with_mesa() {
     // and level 1 by cubelod (an explicit level, TMUSLOD / P2
     // disable_autolod); level 2 by none, so the level choice past the first
     // mipmap is pinned by texref's C fixture alone. (The Qt cube programs
-    // were the readers of -X until #1509; the own es300/cube sources took
+    // were the readers of -X until their removal; the own es300/cube sources took
     // over once the fixture could pair them.) A change that stops our cube
     // code reaching a face, or reaching it with the right values, moves this.
     assert_eq!(
@@ -2914,7 +2914,7 @@ fn our_programs_agree_with_the_ir_and_with_mesa() {
     // (sim::NO_SWITCH_HANG), and the interpreter now refuses such a read in
     // a threaded program, so the last two numbers can only move with one
     // thread. Measured 2026-10-25 (602 / 192 while the Qt pairs were in the
-    // fixture, until #1509).
+    // fixture, until their removal).
     assert_eq!(
         (ours_ldtmus, ours_without_total, ours_without_switch.len()),
         if es2 { (124, 0, 0) } else { (132, 0, 0) },
@@ -2946,7 +2946,7 @@ fn our_programs_agree_with_the_ir_and_with_mesa() {
     );
     let ours_counts: Vec<(&str, usize, usize)> = ours_pieces.iter().map(|(k, (c, na, _))| (*k, *c, *na)).collect();
     // Pinned, measured 2026-10-24 (108 / 76 while the Qt pairs were in the
-    // fixture, until #1509).
+    // fixture, until their removal).
     assert_eq!(ours_sampled.len(), if es2 { 50 } else { 54 }, "our texture pairs moved: {ours_sampled:?}");
     // TMU_EQUIVALENT's entry, ES 3.00: es300/idxtex's s == t, reached by
     // ours since its vertex shader's textureLod compiles.
@@ -2955,7 +2955,7 @@ fn our_programs_agree_with_the_ir_and_with_mesa() {
         if es2 { Vec::<&str>::new() } else { std::vec!["es300/idxtex.vert + es300/idxtex.frag TMUT <-> TMUS sources"] },
         "our texture pieces a draw cannot tell apart moved"
     );
-    /* Measured 2026-10-24 (the Qt pairs left the fixture with #1509). The
+    /* Measured 2026-10-24 (the Qt pairs left the fixture). The
      * LDTMU trades not applicable are pairs with one LDTMU. */
     assert_eq!(
         ours_counts,
@@ -3081,7 +3081,7 @@ fn back_to_back_loop_exits_are_counted() {
 /// gradients 4-5 each); the window removed, they cost one word in all
 /// (es300 divnest 131 -> 130, ES 3 only; no executed run moves) and 37%
 /// more test time, so the window stays. Since the Qt pairs left the fixture
-/// (#1509, 2026-10-24): 51 cuts, all in fragment shaders. 2026-11-03,
+/// (2026-10-24): 51 cuts, all in fragment shaders. 2026-11-03,
 /// texelFetch (TMUSF), ES 3 build: gltest/isamp.frag compiles and adds its
 /// hoists (fs 5, vs 2, cs 6, no cut); the pairs compiled before keep theirs.
 /// Pinned: a change to hoist or to what reaches it moves these.
@@ -3491,7 +3491,7 @@ const FEMTOVG_FS_COUNTS: &[(&str, usize)] = &[
 /// program rises); step (p), two loop exits in one branch: [5637, 3287,
 /// 2623] / ES2 [4583, 2458, 2055] (filter_image both forms, es100 deadloop
 /// and loopcarry 4 fewer each; nothing else moves); the Qt pairs left the
-/// fixture (#1509, 2026-10-24): 91 programs [5025, 2781, 2225] / ES2 79
+/// fixture (2026-10-24): 91 programs [5025, 2781, 2225] / ES2 79
 /// [4569, 2370, 1965], the per-program words above of the Qt programs gone
 /// with them. 2026-11-03, texelFetch (TMUSF): gltest/isamp.frag compiles,
 /// 193 programs [10939, 5537, 4530], the new pair's own words (fs 119, vs

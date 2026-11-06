@@ -150,7 +150,7 @@ struct Gate {
 /// with its reason, and each checked to still fall short (the survey fails
 /// when one no longer does, so the list cannot go stale).
 ///
-/// Empty since the Qt shaders left the tree (#1509): their volume ray march
+/// Empty since the Qt shaders left the tree: their volume ray march
 /// and scene post-process were the two.
 const IFS_BEYOND_THE_INPUTS: &[&str] = &[];
 
@@ -160,7 +160,7 @@ const IFS_BEYOND_THE_INPUTS: &[&str] = &[];
 /// admitted only while that holds exactly, and leaves the list the moment
 /// it does not (or the difference goes away).
 ///
-/// Empty since the Qt shaders left the tree (#1509): a lit material on a
+/// Empty since the Qt shaders left the tree: a lit material on a
 /// back face and the environment-map prefilter were the two, each an open
 /// question between pco's program and the model's reading of it.
 const PCO_ALONE_DIFFERS: &[&str] = &[];
@@ -2542,7 +2542,7 @@ fn what_the_usc_path_asks_of_the_machine_over_every_source_it_accepts() {
      * That is exactly the `uvsw.write` the epilogue used to emit (is4 = ft0
      * where every reference write has fte), so a set that could not tell the
      * two apart would have passed it. */
-    // 685_564 until the Qt shaders left the tree (#1509), with their rows.
+    // 685_564 until the Qt shaders left the tree, with their rows.
     assert_eq!(corpus_groups, 141_325, "the reference corpus changed size; re-derive this gate's pins");
     let real = corpus
         .iter()

@@ -68,7 +68,7 @@
  * change the verdict), the run's last record, which the i.MX8MP keeps
  * in its SNVS (it has no UART); board_finish then keeps it as the verdict.
  *
- * The first GL errors by name (issue #814): the GL core keeps the first
+ * The first GL errors by name: the GL core keeps the first
  * eight with the entry point that raised them and a tag, which this file sets
  * to the benchmark-list entry at each entry's setup (yakogl_gl_error_tag).
  * Each is printed as a "glmark2: GL error K of N:" line. A runner without a
@@ -129,11 +129,11 @@ extern "C" {
 }
 #include "osal_internal.h" /* YakoGL src/osal: osal_mem_line (its own extern "C") */
 extern "C" {
-/* the GL core's counters for the record (issue #13), totals since start */
+/* the GL core's counters for the record, totals since start */
 uint32_t yakogl_gl_errors_raised(void);         /* src/gl/context.rs */
 uint32_t yakogl_gl_errors_recorded(void);       /* src/gl/context.rs */
 uint32_t yakogl_incomplete_texture_draws(void); /* src/gl/draw.rs */
-/* the first GL errors, by name (issue #814): src/gl/context.rs */
+/* the first GL errors, by name: src/gl/context.rs */
 void yakogl_gl_error_tag(uint32_t tag);
 uint32_t yakogl_gl_errors_kept(void);
 int yakogl_gl_error_first(uint32_t i, uint32_t *code, uint32_t *tag, char *name, size_t cap);
@@ -641,7 +641,7 @@ private:
 SetupErrors s_setup_errors;
 std::ostream s_setup_log(&s_setup_errors);
 
-/* ---- the first GL errors, by name (issue #814) -------------------------- */
+/* ---- the first GL errors, by name -------------------------- */
 
 /* FNV-1a, 32 bits, of an entry point's name: record.rs fnv1a32, which the
  * decoder matches against the GL headers' names. */
@@ -1506,7 +1506,7 @@ int run()
     const bool pass = seen != 0 && out.ran != 0 && out.failed == 0 && score != 0;
     /* What the GL core counted over the whole run: glmark2 never calls
      * glGetError, so a GL error it hits is otherwise only a console line,
-     * and the i.MX8MP has no console (issue #13). Recorded is the part
+     * and the i.MX8MP has no console. Recorded is the part
      * glGetError could have returned (the first error masks the rest). */
     const uint32_t gl_errors = yakogl_gl_errors_raised();
     const uint32_t incomplete_draws = yakogl_incomplete_texture_draws();

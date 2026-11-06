@@ -4,7 +4,7 @@
 
 **Status (2026-10-25): every row with an enum rule is gated** (see the
 tranche table at the end); no dEQP-GLES2 case reaches them (finding 3 below).
-The proposed `src/gl/es2_rules.rs` does not exist. #1246 tracks it.
+The proposed `src/gl/es2_rules.rs` does not exist.
 
 Static audit for plan #4 item `es2-error-rules-diag`, written 2026-10-09 at
 the integration tip `334d4e6`. **Nothing was built or run for this file.** It
@@ -40,8 +40,8 @@ where the repository already cites a rule I say so.
    `fbo.completeness.renderable.*` (table B). By the code every row is
    handled, which agrees with the board record: the last full trees have
    `fbo` at 711 of 711 except the one `depth_component24` case, fixed on the
-   host in `4e9397c` and not yet run on a board. #1246 (ES 3.0
-   renderbuffer formats still accepted) is row 36 here.
+   host in `4e9397c` and not yet run on a board. The ES 3.0
+   renderbuffer formats still accepted are row 36 here.
 5. Fix: one predicate file `src/gl/es2_rules.rs` and a guard
    `if crate::REPORT_ES2 && !es2_rules::x(v)` at each entry point
    (section "Fix proposal"). It is a `const` branch, not a `cfg`, so the ES 3.0
@@ -193,7 +193,7 @@ advertised extensions).
 |---|---|---|---|---|---|---|
 | 34 | `glBindFramebuffer` (`framebuffer.rs:1244-1286`), `glCheckFramebufferStatus` (`:1515`), `glFramebufferTexture2D` (`:1343`), `glFramebufferRenderbuffer` (`:1485`), `glFramebufferTextureLayer` (`:1423`), `glGetFramebufferAttachmentParameteriv` (`:1685`) through `is_fb_target` (`:283`) | `GL_READ_FRAMEBUFFER`, `GL_DRAW_FRAMEBUFFER` | 4.4.1, 4.4.3, 4.4.5: target is `GL_FRAMEBUFFER` | accepted | `bind_framebuffer` `NegativeBuffer:225` and `check_framebuffer_status` `:241` use `-1` | `GL_INVALID_ENUM` |
 | 35 | `glFramebufferTexture2D`, `glFramebufferRenderbuffer`, `glGetFramebufferAttachmentParameteriv` (`is_attachment_point` `framebuffer.rs:275-281`, `:1731`) | `GL_DEPTH_STENCIL_ATTACHMENT` (0x821A) | 4.4.3: `COLOR_ATTACHMENT0`, `DEPTH_ATTACHMENT`, `STENCIL_ATTACHMENT` (+ `COLOR_ATTACHMENTi_NV`, advertised) | accepted: sets depth and stencil together (`set_attachment` `:290`) | `framebuffer_renderbuffer` `NegativeBuffer:274`, `framebuffer_texture2d` `:315` use `-1` | `GL_INVALID_ENUM` |
-| 36 | `glRenderbufferStorage` (`framebuffer.rs:2018`, `is_renderable_format` `:1990`, `is_depth_format` `:533`, `is_color_format` `:466`) | `GL_DEPTH_COMPONENT32F`, `GL_DEPTH32F_STENCIL8`, `GL_R32F` | 4.4.2: `RGBA4`, `RGB5_A1`, `RGB565`, `DEPTH_COMPONENT16`, `STENCIL_INDEX8` (+ advertised: `DEPTH24_STENCIL8_OES`, `RGB8_OES`, `RGBA8_OES`, `R8_EXT`, `RG8_EXT`, `RGBA16F_EXT` family, `BGRA8_EXT`) | accepted. This is #1246 | not in the DB of D3 (`glsFboCompletenessTests.cpp:56-122` has `DEPTH_COMPONENT32`, not `32F`), so no case iterates them | `GL_INVALID_ENUM` |
+| 36 | `glRenderbufferStorage` (`framebuffer.rs:2018`, `is_renderable_format` `:1990`, `is_depth_format` `:533`, `is_color_format` `:466`) | `GL_DEPTH_COMPONENT32F`, `GL_DEPTH32F_STENCIL8`, `GL_R32F` | 4.4.2: `RGBA4`, `RGB5_A1`, `RGB565`, `DEPTH_COMPONENT16`, `STENCIL_INDEX8` (+ advertised: `DEPTH24_STENCIL8_OES`, `RGB8_OES`, `RGBA8_OES`, `R8_EXT`, `RG8_EXT`, `RGBA16F_EXT` family, `BGRA8_EXT`) | accepted. | not in the DB of D3 (`glsFboCompletenessTests.cpp:56-122` has `DEPTH_COMPONENT32`, not `32F`), so no case iterates them | `GL_INVALID_ENUM` |
 | 37 | the same call | `GL_DEPTH_COMPONENT24` | `GL_OES_depth24`, not advertised | **refused** (`renderbuffer_format_advertised` `:2000`, `4e9397c`) | D3 `renderbuffer.depth.depth_component24` | `GL_INVALID_ENUM` |
 | 38 | the same call | `GL_SRGB8_ALPHA8` | `GL_EXT_sRGB`, not advertised | **refused** (`:507`) | D3 | `GL_INVALID_ENUM` |
 | 39 | the same call | `GL_RGB10_A2`, `GL_RGB10`, `GL_SRGB8`, `GL_R11F_G11F_B10F`, `GL_DEPTH_COMPONENT32`, `GL_RGBA32F`, `GL_RGB16F`... integer formats | not names / not advertised | **refused** (not in `is_color_format`/`is_depth_format`) | D3 | `GL_INVALID_ENUM` |
@@ -255,8 +255,8 @@ the spec and invisible to dEQP-GLES2.
 **Scope decision first.** The ungated rows cannot fail a dEQP-GLES2 case, so
 the reason to fix them is spec conformance, and the plan's zero-failure goal
 does not depend on it. Two things do: `es2-host-deqp` must confirm D3 with a
-real run (this file predicts all-pass for the DB), and #1246
-(row 36) is cheap. Suggested order: rows 36, 14-16, 1-2, 34-35, 6, 11,
+real run (this file predicts all-pass for the DB), and row 36
+is cheap. Suggested order: rows 36, 14-16, 1-2, 34-35, 6, 11,
 17, 19, 20-21, 24-27; leave 4, 7, 8, 10, 33, 43, 44 (entry points, no enum).
 
 **Files and functions.**
@@ -357,7 +357,7 @@ proposed.
 
 Five tranches are done (vertex, state/program, buffer, framebuffer,
 texture). Each test asserts the error in `report-es2` and the unchanged result in the ES 3.0 build. (Status rewritten 2026-10-12 from the
-integration results of old PRs #35 and #64.)
+integration results of two old PRs.)
 
 | Rows | State | File |
 |---|---|---|

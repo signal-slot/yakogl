@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 
-> Record landed from `ccfarm/integration` (old PR #44, ccfarm `01a11d80-bb8a-7598-8efd-71e4b54b42be`, commit `e0473221c`). Written on 2026-10-09 against the integration tip `cc27948`, not on main; the text is as written, only file paths are changed to main's layout. **Status (2026-10-12): fixed on main, differently.** Main took the alternative this record lists in section 5, Mesa's rule: `f9688bc5` (merged by `e17fb6a7`) marks the sums on the way to an `invariant` output exact and does not fuse them; the AM62P board passed image 1 on `e17fb6a7` (1,379 / 0). The "proposed fix" below was not made. `tests/es2_invariance.rs` now runs all twelve cases on every back end with no `#[ignore]`.
+> Record landed from `ccfarm/integration` (old PR, ccfarm `01a11d80-bb8a-7598-8efd-71e4b54b42be`, commit `e0473221c`). Written on 2026-10-09 against the integration tip `cc27948`, not on main; the text is as written, only file paths are changed to main's layout. **Status (2026-10-12): fixed on main, differently.** Main took the alternative this record lists in section 5, Mesa's rule: `f9688bc5` (merged by `e17fb6a7`) marks the sums on the way to an `invariant` output exact and does not fuse them; the AM62P board passed image 1 on `e17fb6a7` (1,379 / 0). The "proposed fix" below was not made. `tests/es2_invariance.rs` now runs all twelve cases on every back end with no `#[ignore]`.
 # dEQP-GLES2 `shaders.invariance.*.common_subexpression_{1,2,3}`: the 9 AM62P regressions
 
 Item `es2-invariance-repro` of plan #4. Host only; no file under `src/`, `tools/` or `Cargo.toml` changed.

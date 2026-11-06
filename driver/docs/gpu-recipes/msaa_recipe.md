@@ -42,7 +42,7 @@ Mesa (`pvr_arch_job_render.c`, `pvr_arch_srv_job_render.c`, `pvr_arch_job_common
   target's stride and extent, four images' worth of bytes. The next kick's load quad
   binds the store as the target's multisampled image (`TEXSTATE_IMAGE_WORD0.smpcnt` =
   log2 4) and runs at the full sample rate, so each sample reloads itself. Unmeasured on
-  the board (#1289): the unresolved layout and the
+  the board: the unresolved layout and the
   per-sample fetch.
 - ZLS: the depth/stencil buffer is `align16(w) * 2` by `align16(h) * 2` samples of packed
   D24S8; `zlsextent` (tiles) is unchanged. 1024x600 needs 9.5 MiB, hence the 64 MiB carveout.

@@ -125,7 +125,7 @@ pub fn wanted(t: &GlesTextureBind) -> bool {
 }
 
 /// Texels of 64 bits (RGBA16F) are never sampled from the GL core's linear
-/// storage. On the i.MX8MP (gl_test 44's probes, #6) the texture unit read
+/// storage. On the i.MX8MP (gl_test 44's probes) the texture unit read
 /// the first 64 bytes of such a LINEAR texture as 0 and misread the edge
 /// texels of other rows at a 64-byte row stride, while CPU reads of the same
 /// memory were right and RGBA8 was not affected; both went away with the

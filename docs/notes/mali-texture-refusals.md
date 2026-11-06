@@ -2,7 +2,7 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Mali (Valhall, v10): the texture refusals, Mesa's design per case
 
-The texture refusals of issue #1385 (the NanoPC-T6's `gpu-mali` backend), one
+The texture refusals of issue #32 (the NanoPC-T6's `gpu-mali` backend), one
 section per item: `tex-vs` (vertex-shader look-ups, gl_test cases 113 and
 197), `tex-coord-122` (the coordinate form of case 122) and `tex-depth-169`
 (the depth texture of case 169, and the `depth_resolve` hook it needs), and
@@ -11,8 +11,8 @@ programs, section (d), which has its own citation rule). For
 each: what Mesa 26.2.1's panfrost does on v10, where the change lands in our
 tree, and which refusal it removes. It is a reading of Mesa's source and ours;
 nothing here was run on the board. A fact only the board can settle is marked
-**pin on the board**. The frame-side refusals (#1386) are
-`docs/notes/mali-frame-refusals.md`; the general lowering (#1384) is
+**pin on the board**. The frame-side refusals (#33) are
+`docs/notes/mali-frame-refusals.md`; the general lowering (#31) is
 `driver/docs/nanopc-t6-mali.md`, "The general lowering (approved
 2026-10-19)", and `docs/notes/mali-lowering-map.md`.
 
@@ -23,7 +23,7 @@ nothing here was run on the board. A fact only the board can settle is marked
   26.2.1). `third_party/mesa-26.2.1/` holds no gallium panfrost files, so it
   is not the tree cited.
 - Ours: `<path>:<line>` from the repository root, at `main` 445c5653.
-- PR #1389: `a0aff40b6:<path>:<line>` (the tip of `work/mali-row-align`).
+- The row-alignment change: `a0aff40b6:<path>:<line>` (the tip of `work/mali-row-align`).
 
 Every citation is written with its whole path, never as a bare `:line`
 continuing an earlier one, so each can be checked on its own. The compiler
@@ -237,7 +237,7 @@ stage, and the vertex stage fills the same tables the fragment stage does.
   The general lowering's steps S1-S6 do not list a vertex look-up
   (`driver/docs/nanopc-t6-mali.md:300-314`), so this is a step of its own
   after them, with one shim reference per form (2D `txl` at a uniform LOD,
-  2D `txl` at 0, cube `txl`) as #1384 does for its rows.
+  2D `txl` at 0, cube `txl`) as #31 does for its rows.
 - **Frame.** The vertex resource table has UBO, ATTRIBUTE, ATTRIBUTE_BUFFER
   and a one-entry SAMPLER, and **no TEXTURE entry**
   (`src/mali/frame.rs:2466-2470`); the fragment table has one when the draw
@@ -354,7 +354,7 @@ So 122 moves to that string, not to PASS. The run-time index is outside
 S1-S6, which read the uniform array at constant indices only
 (`driver/docs/nanopc-t6-mali.md:239-240`; the uniform block's fallback is
 named there as `LD_BUF`, `driver/docs/nanopc-t6-mali.md:280-281`).
-Recommendation: #1385 owns 122's coordinate refusal; 122's PASS belongs to
+Recommendation: #32 owns 122's coordinate refusal; 122's PASS belongs to
 the item that takes the run-time uniform index, with the other `uniidx`
 cases.
 
@@ -470,7 +470,7 @@ PowerVR's with the Mali's buffer:
   frame (`g.open`) still draws into that pair's buffer, a defect check (the
   GL core submits and waits first);
 - 1 for a multisampled buffer; the Mali refuses 4x with depth/stencil today
-  (#1386), so none exists yet;
+  (#33), so none exists yet;
 - **pin on the board** that row 0 of our buffer is GL's y 0 for an FBO, as
   the V3D notes for its own (`src/v3d/backend.rs:4227-4228`): step 3 of 169
   reads the ramp and the top quarter at known rows. Mesa's own buffer has
@@ -596,7 +596,7 @@ renders into the depth-stencil texture; frame 3 (5870-9149) samples it.
    0x55, 0xaa, 0xff` and `0x80, 0x48, 0x4a, 0xb5`): Mesa is no reference for
    the channels. Frame 1's ramp is `Z16 UNORM RGBA` (352), `RRR1` (355),
    `RAW16` (396), `Size: 64` (397), `Row stride: 64` (399): a 4 x 1 texture
-   of 8 bytes padded to a 64-byte linear row, the rule #1389 gives our rows.
+   of 8 bytes padded to a 64-byte linear row, the rule the row-alignment change gives our rows.
 5. **The sampler** (frame 3, 6086-6111, the fragment table's entry 3, 6082).
    `Minify nearest: true` (6098), `Magnify nearest: true` (6099), `Mipmap
    Mode: None` (6101), `Compare Function: Never` (6103), `Wrap Mode S/T/R:
@@ -680,7 +680,7 @@ texture stored other than RGBA8, sRGB8_A8 or ETC2 (RGB8, RGBA8, RGB8A1) is
 not built yet` (`NOT_BUILT_TEXTURE_FORMAT`); `depth_resolve: None` becomes
 the function.
 
-### Does PR #1389 (64-byte linear row alignment) change any of this?
+### Does the 64-byte linear row alignment change any of this?
 
 Read from its diff, `git diff b914d5699 a0aff40b6 -- src` (the merge base
 with main and the tip of `work/mali-row-align`); not run.
@@ -693,24 +693,24 @@ with main and the tip of `work/mali-row-align`); not run.
   multiple of 16 floats.
 - **The hook is unchanged.** `depth_resolve` is handed the level pitch the
   GL core chose (`level_pitch_at`), and a `mali_depth_resolve` written to
-  the contract (`h` rows of `pitch` floats) needs nothing from #1389.
+  the contract (`h` rows of `pitch` floats) needs nothing from it.
 - **What it changes for 169's sampling.** On main a texture whose rows are
   not a multiple of 64 bytes is sampled from a copy in the frame's data
   arena (`needs_copy`, `src/mali/backend.rs:1475-1478`); step 1's 4x1 R32F
-  texture has 16-byte rows and would be copied. With #1389 it is sampled in
+  texture has 16-byte rows and would be copied. With the change it is sampled in
   place, and copies remain only for imported images (`row_copies`). Both
   are correct. An R32F row reads its pitch from `t.stride_texels` in
-  `level_at` (`src/mali/backend.rs:1452-1454`), the branch #1389 leaves as
+  `level_at` (`src/mali/backend.rs:1452-1454`), the branch the change leaves as
   it is (it rewrites the block-format branch,
-  `src/mali/backend.rs:1455-1458` on main). So #1389 changes no design here;
+  `src/mali/backend.rs:1455-1458` on main). So the change makes no design difference here;
   building the depth work on main after it lands, as the plan says, only
   avoids editing `level_at` and `needs_copy` on both sides.
-- **The zs buffer** is the backend's own allocation, not the GL core's: #1389
+- **The zs buffer** is the backend's own allocation, not the GL core's: the change
   leaves it at `4 * w` (option B's limit stands).
 
 ## (d) A computed coordinate: case 121 and femtovg `fill_image*` / `filter_image*`
 
-The study for plan #153's `texcoord` item (#1385, #1384). Nothing in `src/`
+The study for plan #153's `texcoord` item (#32, #31). Nothing in `src/`
 was changed for it.
 
 **Citations in this section.** Mesa as `M:` above. Our code is named by file

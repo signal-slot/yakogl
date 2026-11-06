@@ -139,7 +139,7 @@ int pvr_render_map_phys(enum pvr_render_heap heap, uint64_t phys, uint32_t size,
 
 /* Give a freed block back to the bump when it is the newest allocation
  * (gpu::pvr::pool, through gpu::pvr::mem's bo_rollback). Opt-in until the
- * board has said something about it: #54 is a pool HIGH-WATER problem, and the
+ * board has said something about it: it is a pool HIGH-WATER problem, and the
  * obvious pass/fail gate for it was void (pooltest's texture workload failed
  * zero times at the board's real budget before any change), so the flag lets
  * one module run both arms.

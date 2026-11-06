@@ -1015,7 +1015,7 @@ recognised by a rule, so a new one is reported rather than predicted and a
 fixed one stops being counted on its own.
 
 1. **A table row that disagrees with itself.** A Qt Quick 3D material vertex
-   shader (in the corpus until #1509) declared `attr_pos, attr_norm,
+   shader (in the corpus until its removal) declared `attr_pos, attr_norm,
    attr_uv0, attr_textan, attr_binormal`; its third `ShcAttrib` row read
    `location: 0, components: 0, name: "attr_pos"`, and `attr_uv0` had no row
    at all. `glGetActiveAttrib(program, 2, ...)`

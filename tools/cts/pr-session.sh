@@ -3,7 +3,7 @@
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 #
 # pr-session.sh -- one AM62P board session of the PowerVR partial render
-# (issue #2, #3; driver/docs/pvr-render-pool.md "Design: the firmware's
+# (issue #2; driver/docs/pvr-render-pool.md "Design: the firmware's
 # partial render"): build the gl_test image from HEAD with the knob and
 # the probe settings, run it through tools/board.sh, keep the serial log and
 # the verdict.

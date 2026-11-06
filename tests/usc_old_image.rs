@@ -6,7 +6,7 @@
 //! back" for Qt Quick's texture-fill vertex shader, whose program
 //! `es100/texfill.vert` is (the same declarations and operations in the same
 //! order under other names, so the same bytes from either compiler; the Qt
-//! file left the tree with #1509). That check was VACUOUS: it compared
+//! file left the tree). That check was VACUOUS: it compared
 //! the decoded destination bank with the expected one translated by the same
 //! `Bank as u32` cast the builder had encoded it with, so a wrong mapping
 //! agreed with itself -- every destination was a special register -- and it

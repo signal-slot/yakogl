@@ -3,7 +3,7 @@
 # Valhall fragment stage: highp fp32 arithmetic (S2) and gl_FragCoord (S4)
 
 Date 2026-10-20, tip `fc2f48f3a`. Plan #152 item `notes-highp-fragcoord`, for
-issue #1384 (`gh` was not readable from the worker; the scope is
+issue #31 (`gh` was not readable from the worker; the scope is
 `driver/docs/nanopc-t6-mali.md`, "The general lowering (approved 2026-10-19)",
 and the gap list of `docs/notes/mali-lowering-map.md`, "Gaps this note found in
 the design", item 1). It closes the two holes that map left: it has sections
@@ -514,9 +514,9 @@ transform sits behind), inside S4 after the rows it shares (`fadd`, `ffma`).
      | `fvgtest_ftcoord.frag` | default, varying copy | `LD_VAR_BUF_IMM.f32, V2F32_TO_V2F16, ATEST, MOV.i32, BLEND` | `fvgtest_ftcoord.expect.json`, `cases.txt:82` `equal` |
      | `es300/cubelodv.frag` | default, vec4 varying copy | `LD_VAR_BUF_IMM.f32 (v3), V2F32_TO_V2F16 x2, ATEST, BLEND` | none; same words as `sel_whole_vec4_same` pattern |
      | `gltest/es3trunc_vary_fs.frag` | default, vec4 varying copy | as `cubelodv` | none; same |
-     | `qt/smoothcolor.frag` (Qt; left the tree, #1509) | default, vec4 varying copy | as `cubelodv` | none; same |
-     | `qt3d/debugobject.frag` (Qt; left the tree, #1509) | default, `vec4(vec3 varying, 1.0)` | `LD_VAR_BUF_IMM.f32 (v2), V2F32_TO_V2F16, FADD.f32 .h0, ATEST, MKVEC.v2i16, BLEND` | none; the `sel_whole_vec3_loc1` pattern |
-     | `qt3d/clearshadowmap_300.frag` (Qt; left the tree, #1509) | default, constant `vec4(1.0)` | `NOP, ATEST, MOV.i32 x2, BLEND` | none; the `fvgtest_green` pattern |
+     | `qt/smoothcolor.frag` (Qt; left the tree) | default, vec4 varying copy | as `cubelodv` | none; same |
+     | `qt3d/debugobject.frag` (Qt; left the tree) | default, `vec4(vec3 varying, 1.0)` | `LD_VAR_BUF_IMM.f32 (v2), V2F32_TO_V2F16, FADD.f32 .h0, ATEST, MKVEC.v2i16, BLEND` | none; the `sel_whole_vec3_loc1` pattern |
+     | `qt3d/clearshadowmap_300.frag` (Qt; left the tree) | default, constant `vec4(1.0)` | `NOP, ATEST, MOV.i32 x2, BLEND` | none; the `fvgtest_green` pattern |
      | `es100/light_amount.frag` | `varying highp vec3` under mediump | as `debugobject` | none; same pattern |
 
      In all 8 the only 16-bit operations are the colour-store conversions

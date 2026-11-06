@@ -8,7 +8,7 @@ passes:
 
 - **Part 4** (first section): the re-run with `tools/release/redaction-scan.py`
   on `origin/main` `984f897c` (2026-11-05), the current state of the tree.
-- **Part 3**: the re-run on the tree after the scope cut of #1606 step 5
+- **Part 3**: the re-run on the tree after the scope cut of step 5
   (2026-10-26).
 - **Part 1** ("Part 1", down to "Notes for other items"): read-only
   audit of the tree and of every ref of the clone. Base: `5f8fff01`
@@ -30,7 +30,7 @@ their own bases; many of those files have left the tree since.
 |---|---|
 | Date | 2026-11-05 |
 | Base | `origin/main` `984f897caa7148292455c96b7b740c86612e490b` (`984f897c`, "v3d C reference: ETC2/EAC rows, block layout and bounded texel stores"), 3,601 text files scanned (the tool skips binaries and `third_party/` and this file). `git fetch origin` failed in the audit clone (no access), so "current" is that clone's copy of the main ref. An earlier hand-made pass of this part used `f3ec9117`; this version replaces it. Part 3's scanned tree was main `1ccb1a1b9` plus the step-5 change ("before" below = Part 3's "after", all zero) |
-| History | not scanned (decision 1 of #1606: the public history is one fresh commit of the cleaned tree) |
+| History | not scanned (decision 1: the public history is one fresh commit of the cleaned tree) |
 | Command | `YAKOGL_REDACTION_PRIVATE_FILE=<file outside the repo> python3 -I tools/release/redaction-scan.py <rev>`, `<rev>` the full ref or hash above. The tool is `tools/release/redaction-scan.py` (classes, masking and exit codes in its `--help`; look-alikes in `tools/release/redaction-scan.allow`); its `--self-test` passed (exit 0) before the run. The tool reads the tree of `<rev>` with `git ls-tree` / `git cat-file`, so the working tree is not involved |
 | Private values | in a file outside the repository (alternatively `YAKOGL_REDACTION_PRIVATE`); none is written here or in the tree. The file held: the owner's login and public name (1 + 1), one farm user account, and 8 lab names: the gate runners, the developer laptop, the Pi 4 resource, a ThinkCentre host, and the farm's board-lab hosts. It did not hold the two serial-bridge host names, the tailnet name of a bridge, or the device resource ids (the farm's notes do not give them to this item), so those names are not covered by this run (see the verdict) |
 | Exit status | with the private values: 1 (12 findings, 0 classes not run). With neither variable set: 1 as well (the same 12 findings), and `owner-login` and `lab-host` are reported as `not run (no private values)`, `login-at-host` as `not run for the private logins (root only)`, the summary says `3 class(es) not run`: the private classes are never reported as passed. A clean tree with no private values exits 3 (`--self-test` checks it) |
@@ -142,12 +142,12 @@ with the full private file on the snapshot commit.
 | Date | 2026-10-27 |
 | Base | `origin/main` `0dce654a8` ("before" below) |
 | Scanned tree | main `1ccb1a1b9` with the step-5 change applied: the base, minus the scope cut, plus the fixes below ("after"); 3,316 tracked files (6,529 at the base) |
-| History | not scanned again. Owner decision 1 of #1606: the public repository gets a fresh history, one commit of the cleaned tree, so the scan of that tree is the scan of its history. Parts 1 and 2 describe the private history, which is never published |
+| History | not scanned again. Owner decision 1: the public repository gets a fresh history, one commit of the cleaned tree, so the scan of that tree is the scan of its history. Parts 1 and 2 describe the private history, which is never published |
 | Method | `git grep -n -I <pattern> <rev> -- ':!third_party' ':!docs/release/redaction-audit.md'` per class (part 2's method and exclusions), the same patterns on both trees, every hit read by hand |
 
 Values are masked as in parts 1 and 2 (first character, `***`, length).
 
-## Scope cut (decision 3 of #1606)
+## Scope cut (decision 3)
 
 Removed from the tree: `tools/mali/board-ref/` (3,136 files of Mali board
 captures) and `docs/board-sessions/` (2 session records).
@@ -203,7 +203,7 @@ lab layout that a public reader cannot use:
 
 | Where | What | Why left |
 |---|---|---|
-| `tools/check.sh:3329` (`HAL_NXP_DIR`), `tools/cts/cts-build.sh`, `cts-build-zephyr.sh`, `gen-gles3-mustpass.sh`, `host-deqp-run.sh`, `cts-selftest.sh`, `cts-summary.py`, `cts_resume.py`, `tools/es100_oracle.py`, `tools/cts/README.md` (`CTS`) | defaults under `$HOME/com/github/<org>/<repo>`, the lab's checkout layout | every one is overridable by its variable; changing the default changes the gate hosts' runs. Step 7 of #1606 (public CI rows report `gap`) and #1264 (README walkthrough, `docs/release/readme-walkthrough.md:128`) own them |
+| `tools/check.sh:3329` (`HAL_NXP_DIR`), `tools/cts/cts-build.sh`, `cts-build-zephyr.sh`, `gen-gles3-mustpass.sh`, `host-deqp-run.sh`, `cts-selftest.sh`, `cts-summary.py`, `cts_resume.py`, `tools/es100_oracle.py`, `tools/cts/README.md` (`CTS`) | defaults under `$HOME/com/github/<org>/<repo>`, the lab's checkout layout | every one is overridable by its variable; changing the default changes the gate hosts' runs. Step 7 of the owner's plan (public CI rows report `gap`) and the README walkthrough (`docs/release/readme-walkthrough.md:128`) own them |
 | `tools/yakogl-tools/src/glsl2usc.rs:69-73` | `PCO_SHC_CANDIDATES`: two lab-host search paths, one into the non-public `yakogl-in-rust` checkout | `PCO_SHC` comes first; the candidates are only a fallback on the lab hosts. Same owner as the row above |
 
 ## Verdict of part 3

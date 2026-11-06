@@ -125,7 +125,7 @@ the `inputs` that build downloads (url and sha256) and the distribution
   committed), `deps-env.sh --build-missing`, then `deps-env.sh --check`.
 - A change that adds a gate row needing an external tree adds its `[[dep]]` in
   the same commit. Without it a host or an image cannot learn from the
-  repository what to install and build (PR #1078 needed the `MESA_PAN_TREE`
+  repository what to install and build (a pull request needed the `MESA_PAN_TREE`
   entry fixed by hand on every runner). A tree that cannot be rebuilt (the
   firmware header) has no `build` and a `note` saying why.
 - `deps-selftest.sh` checks all of this against a fake `deps.toml`.
@@ -638,7 +638,7 @@ committed reference is `imx8mp-full-tree-29460f96.results.tsv`
 table. Compare with `diff <(cut -f1-8 <that file>) <(cut -f1-8 <rec>/full/results.tsv)`
 or `tools/board.sh imx8mp diff <earlier tree dir> <rec>/full` when the
 earlier tree's directory is kept. Known intermittent rows: see
-issues #25, #9, #8.
+issues #10, #5, #4.
 
 **Raspberry Pi 4** (`BOARD=rpi_4b` for stage 1; backend tryboot, so no
 `BOARD_BOOT`; `BOARD_UART` the debug probe's by-id device or its bridge's `host:port`,
@@ -924,4 +924,4 @@ From 2026-10-01 until the commit that disabled Zephyr's own mailbox driver in
 af17c0c8 ran that way (the mailbox replies were taken by Zephyr's ISR;
 `driver/docs/rpi4-v3d.md`, "Measured on the board").
 
-A leftover `/boot/firmware/yakogl-*.bin` or a non-empty `tryboot.txt` refuses the next run; `tools/board.sh pi4 status` shows both. `BOARD_HDMI_TIMINGS` must be the lab's 17 fields (never `1920x720`; `board.sh` refuses anything that is not 17 integers, #905). If the cube rows of the GLES2 tree (T3, T4) fail, read `docs/v3d-noseamless-cube.md`.
+A leftover `/boot/firmware/yakogl-*.bin` or a non-empty `tryboot.txt` refuses the next run; `tools/board.sh pi4 status` shows both. `BOARD_HDMI_TIMINGS` must be the lab's 17 fields (never `1920x720`; `board.sh` refuses anything that is not 17 integers). If the cube rows of the GLES2 tree (T3, T4) fail, read `docs/v3d-noseamless-cube.md`.

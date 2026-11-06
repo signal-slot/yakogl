@@ -449,7 +449,7 @@ is now reached by 27 matrix products, the instruction table by 21.
 
 ## Case 195 (`ifbranch`): what it refuses and its reference
 
-Plan #153 item `study-matdyn-ifbranch`, issue #1386. Case 195 draws 193's four
+Plan #153 item `study-matdyn-ifbranch`, issue #33. Case 195 draws 193's four
 programs (offarm0, 8, 32, 128) with `femtovg/main.vert`, each once compiled for
 PowerVR as predicated and once as branched (`PVR_BACKEND_OPT_IF_LOWERING`; a
 PowerVR option Mesa does not have, so the Mali back end sees the same four

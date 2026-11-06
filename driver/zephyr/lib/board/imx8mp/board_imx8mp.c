@@ -70,9 +70,9 @@ static size_t s_view_bytes;
  * Whether a show waits for it is decided here:
  *
  *  - A window scanned in place (the panel's size, a view) is the buffer the
- *    GPU draws into next, so its show always waits for its latch. #793 let
- *    such a show return at once and glmark2 drew wrong on the board (#923,
- *    reverted by faee8812). Why the picture broke is not confirmed: the GM
+ *    GPU draws into next, so its show always waits for its latch. An earlier form let
+ *    such a show return at once and glmark2 drew wrong on the board
+ *    (reverted by faee8812). Why the picture broke is not confirmed: the GM
  *    row's 800x600 window is copied, not scanned in place, so "the GPU drew
  *    into the buffer on the panel" does not explain the glmark2 picture by
  *    itself. The in-place show keeps its wait until a board run says more.
@@ -516,7 +516,7 @@ int yakogl_zephyr_wait_vblank(int64_t timeout_us)
 }
 
 #ifdef CONFIG_YAKOGL_BOARD_IMX8MP_DISPLAY_RECORD
-/* The DISPLAY record (record.rs, kind DISPLAY; issue #23): the chain as it
+/* The DISPLAY record (record.rs, kind DISPLAY; issue #8): the chain as it
  * scans the window, after a second of it, so the bridge's IRQ_STAT has had
  * about 60 frames to latch a link error. Only after a pass, and only once a
  * show put the window on the panel: a failed run keeps its verdict. */

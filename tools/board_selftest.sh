@@ -315,12 +315,12 @@ out=$(NETBOOT_ROUTE=typed BOARD_BOOT=uboot-mmc dry am62p run "$S/img/am62p.bin" 
 rc=$?
 check "am62p uboot-mmc refuses the typed route (rc 2)" eval '[ "$rc" = 2 ] && grep -q "typed is a TFTP route" <<<"$out"'
 # BOARD_HDMI_TIMINGS is written into tryboot.txt as it is; a value the firmware
-# cannot read left the board at the firmware for 15 h (#905). 17 integers, or rc 3
+# cannot read left the board at the firmware for 15 h. 17 integers, or rc 3
 # before any board command.
 out=$(BOARD_HDMI_TIMINGS=1920x720 dry pi4 run "$S/img/pi4.bin" "$S/logs" 2>&1)
 rc=$?
-check "pi4 run BOARD_HDMI_TIMINGS=1920x720: rc 3, names the 17 integers and #905, no tryboot.txt written, no reboot" \
-    eval '[ "$rc" = 3 ] && grep -q "17 integers" <<<"$out" && grep -q "#905" <<<"$out" &&
+check "pi4 run BOARD_HDMI_TIMINGS=1920x720: rc 3, names the 17 integers, no tryboot.txt written, no reboot" \
+    eval '[ "$rc" = 3 ] && grep -q "17 integers" <<<"$out" &&
           ! grep -q "tee /boot/firmware/tryboot.txt" <<<"$out" && ! grep -q "reboot" <<<"$out"'
 out=$(BOARD_HDMI_TIMINGS="1920 1 50 44 50 720 1 10 20 50 0 0 0 60 0 99070000" dry pi4 run "$S/img/pi4.bin" "$S/logs" 2>&1)
 rc=$?

@@ -3,7 +3,7 @@
 /* The display chain of the Verdin iMX8M Plus on a Mallow carrier. */
 #include "../../common/verdin_imx8mp_display.dtsi"
 
-/* A 240 MiB GPU carve-out instead of the board's 64 MiB one (issue #814).
+/* A 240 MiB GPU carve-out instead of the board's 64 MiB one.
  * Every GC7000 allocation comes from this one pool (src/osal/zephyr_gc.c),
  * and so do the board layer's 800x600 window and its 1280x800 screen copy
  * (5.7 MiB). At 64 MiB the GC's own peak in terrain is 51 MB on the host

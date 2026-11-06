@@ -9,9 +9,9 @@ returned through PSCI `SYSTEM_RESET` in 45 s (records:
 been exercised (no hang has been left to WDT0 yet).
 
 Status, 2026-10-18: **designed; the first parts are built.** On main: the `gpu-mali`
-skeleton and packers (#1073), the Valhall v10 ISA table, encoder and decoder (#1101),
-`pan_shc` and the drm-shim byte reference (#1072), the frame builder (#1102). Open:
-the development OSAL over panthor (#1068), L1 (our frame through panthor on the board)
+skeleton and packers, the Valhall v10 ISA table, encoder and decoder,
+`pan_shc` and the drm-shim byte reference, the frame builder. Open:
+the development OSAL over panthor, L1 (our frame through panthor on the board)
 and L3 (our Valhall back end). This page was written before the code, so it could be
 reviewed against the target first. Facts carry a citation; what is not
 measured yet is under "Open"; the user's decisions are under "Decisions".
@@ -530,7 +530,7 @@ fragment population. The switch-over was one commit; deleting the old plan
 was the next.
 
 **Steps.** Each is one or more PRs on Mali paths only. S1 to S5 have landed
-on main; S6 remains (#1384).
+on main; S6 remains (#31).
 - **S1** the shared selector and passes, then the fragment stage on the
   graph, then the switch-over and the deletion. Landed.
   - S1a: `emit.rs` and `opt.rs`, with the vertex stage selecting through
@@ -674,13 +674,13 @@ milestones (Zephyr booted by U-Boot), as on every board.
   the 1x1 faces of a cube level through an FBO, twelve read-backs exact),
   149 REFUSED, 7 SKIP (gl_test's own, by name) and 5 FAULT (SIGSEGV:
   `src/backend.h` `yakogl_heap_base()` calls the Mali table's empty
-  `heap_base`, which the Rust side reads as 0; fixed by #1314, re-run
+  `heap_base`, which the Rust side reads as 0; fixed, re-run
   pending). Each sweep twice with the
   same verdict lines; the 50-case regression set twice, its verdicts
   equal to the sweep's. 0 kernel messages in every run window. The board
   rebooted between the set runs (boot 5605f19e) and the sweeps (boot
-  8d64eba7): another session's kexec jump at 03:26:39 (the Z1 record in
-  #1315), not these runs. A third set run with the UART and a 2-minute
+  8d64eba7): another session's kexec jump at 03:26:39 (the Z1 record),
+  not these runs. A third set run with the UART and a 2-minute
   dmesg tail captured (boot 9552855b throughout) gave the same 50 verdict
   lines, 0 kernel messages and 0 UART bytes. The refusals by whole string, the
   largest first: more than one varying (32), a multiply by a constant
@@ -748,7 +748,7 @@ milestones (Zephyr booted by U-Boot), as on every board.
   color_uv pair, with both varyings affine in the window position, read
   back every one of 4096 pixels equal to the per-pixel prediction written
   before the run, twice; this is the first measure of interpolation
-  across a triangle. On the tree merged with #1318 the gl_test sweep
+  across a triangle. On the merged tree the gl_test sweep
   (twice, identical) moved 63 verdicts from main's own sweep, none to
   PASS: 33 cases compile both stages now and stop in the frame (a vertex
   attribute from a buffer object 21, a frame without a colour clear 2,
@@ -1742,7 +1742,7 @@ build line, the PASS or FAIL line and the record reference go into Z2's
 row in `tools/cts/RESULTS.md` (current results only: the run replaces
 the row, no run log) and the summary in `tools/cts/STATUS.md`;
 `uart.log` and the record directory stay out of the tree, in
-`T6_RECORD_DIR`. The run is reported to #20 as a comment naming the
+`T6_RECORD_DIR`. The run is reported to #7 as a comment naming the
 build and the record, and every new defect opens an issue; a person
 posts both. A run that did not happen is not a row: a gap is never a
 pass.
@@ -1753,7 +1753,7 @@ Not run. Written 2026-11-05 from `board::nanopc_t6_fw` and the host tests
 over the MCU model, before any run; no value in it is measured on the
 board. A run whose record differs is a finding: record it as it came,
 never by changing the prediction. Z3 runs only after Z2 has passed, and
-reports to #20 (milestones: #1281).
+reports to #7 (milestones: #26).
 
 **Preconditions** — all of them, or no run:
 
@@ -1927,7 +1927,7 @@ here is a finding, not a defect of the prediction.
 **Recording the result.** As Z2's: the build line and the PASS or FAIL
 line into Z3's row in `tools/cts/RESULTS.md` and the summary in
 `tools/cts/STATUS.md`, `uart.log` and the record directory out of the
-tree, one comment for #20 naming the build and the record, a new issue
+tree, one comment for #7 naming the build and the record, a new issue
 for each defect; a person posts them. A run that did not happen is not a
 row.
 
@@ -1953,7 +1953,7 @@ Measured under Armbian over ssh on 2026-10-26 and moved to their sections: the l
 `AS_MEMATTR` ("MMU (Z2)"), `TIMESTAMP_OFFSET` and the runtime CS/CSG values ("The
 firmware (Z3)"), Mesa 25.0.7 against 26.2.1 ("The command stream and descriptors
 (L1)"), the Linux QoS words ("The GPU power-on"). What is left needs U-Boot or a job
-from Zephyr; a UART / U-Boot session reads exactly this (issue #1281 names them as
+from Zephyr; a UART / U-Boot session reads exactly this (issue #26 names them as
 Z-prerequisites), each with the board in U-Boot's prompt, before `bootm` / `booti`,
 and nothing written:
 

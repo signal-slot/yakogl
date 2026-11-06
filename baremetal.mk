@@ -31,8 +31,7 @@
 # scratch or keep region (Zephyr's comes from
 # src/osal/zephyr_shaderc_scratch.c, 4 MiB + 1 MiB), and it needs 256 KiB of
 # stack on the thread that compiles, which is the application's here. Moving
-# it (or onto the precompiled table, tools/precompile) is open
-# (#1223).
+# it (or onto the precompiled table, tools/precompile) is open.
 # Output: $(BUILD)/libyakogl.a, or with RUST_LINKAGE=external only
 # $(BUILD)/libyakogl_c.a (the C parts; the application's own Rust staticlib
 # links the yakogl crate, README.md "Linking").

@@ -325,7 +325,7 @@ Which existing back end is nearest, by structure and by method: the **Mali**.
 The Mali port runs on the board's Linux through the panthor uapi first
 (`driver/docs/nanopc-t6-mali.md`; `CHANGELOG.md` "Known limits": "The `gpu-mali`
 back end runs only on the NanoPC-T6's own Linux, through the panthor kernel
-driver, not on Zephyr yet (#1281)"), and builds its byte reference from
+driver, not on Zephyr yet (#26)"), and builds its byte reference from
 Mesa's own driver on a drm-shim. Adreno has the same two properties the
 Mali has: a firmware microcontroller between the host and the shader cores,
 and Mesa's userspace already running on a shim (`freedreno_noop.c`, with the

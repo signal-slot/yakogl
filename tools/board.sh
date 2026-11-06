@@ -868,7 +868,7 @@ take_lock() {
     lease_take
 }
 
-# ---- the board lease: one run at a time per board, whichever host runs it (#867) ----
+# ---- the board lease: one run at a time per board, whichever host runs it ----
 # board_lock.sh's flock lives on the host that runs this script, so two hosts
 # (a workstation and a farm node) never saw each other: on 2026-10-15 two farm
 # agents on another host used the AM62P during a run from this one, took its
@@ -1108,14 +1108,14 @@ pi4_config() {
 }
 
 # pi4_timings_check: BOARD_HDMI_TIMINGS goes into tryboot.txt / config.txt as it
-# is, and the firmware stops before the kernel on a value it cannot parse (#905:
-# "1920x720" left the board at the firmware for 15 h; the firmware logs nothing).
+# is, and the firmware stops before the kernel on a value it cannot parse:
+# "1920x720" left the board at the firmware for 15 h; the firmware logs nothing.
 # The panel's hdmi_timings line has 17 integers (tools/cts/README.md, section 6).
 # Refuse before any board command, so nothing is staged and no lease is taken.
 pi4_timings_check() {
     [ -z "$BOARD_HDMI_TIMINGS" ] && return 0
     [[ $BOARD_HDMI_TIMINGS =~ ^[0-9]+(\ [0-9]+){16}$ ]] ||
-        die "BOARD_HDMI_TIMINGS is '$BOARD_HDMI_TIMINGS': hdmi_timings takes 17 integers (h_active h_sync_pol h_front h_sync h_back v_active v_sync_pol v_front v_sync v_back v_off_a v_off_b pixel_rep frame_rate interlaced pixel_freq aspect; tools/cts/README.md section 6). A value the firmware cannot read leaves the board at the firmware splash (#905). Nothing was staged."
+        die "BOARD_HDMI_TIMINGS is '$BOARD_HDMI_TIMINGS': hdmi_timings takes 17 integers (h_active h_sync_pol h_front h_sync h_back v_active v_sync_pol v_front v_sync v_back v_off_a v_off_b pixel_rep frame_rate interlaced pixel_freq aspect; tools/cts/README.md section 6). A value the firmware cannot read leaves the board at the firmware splash. Nothing was staged."
 }
 
 pi4_undo() {

@@ -97,7 +97,7 @@ fn no_selected_instruction_reads_a_lane_nothing_writes() {
     /* The population: the programs selected. Per build: a report-es2 build
      * refuses GLSL ES 3.00 in the front end (pp.rs out_of_scope). Measured
      * 2026-10-24; 551 / 366 while the Qt shaders were in the GC7000 table,
-     * until #1509. */
+     * until their removal. */
     let es2 = cfg!(feature = "report-es2");
     assert_eq!(checked, if es2 { 196 } else { 239 }, "the population moved: {checked} programs selected");
     assert_eq!(source_undefined, 1, "the source-level undefined lanes (dynidx.frag's tmp) moved");

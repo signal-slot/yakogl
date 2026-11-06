@@ -181,7 +181,7 @@ expect "gl_test: no host suite" '^skip  test    host-test,gpu-powervr$' "$out"
 out=$(plan "src/gl/draw.rs docs/x.md")
 expect "a shared layer: every row" '^check.sh: [12][0-9][0-9] ok, 0 failed, [0-9] gap\(s\).*, 0 skipped \(--changed HEAD, scopes: all\)' "$out"
 expect "a shared layer: the path is named" '^      every row: src/gl/draw.rs$' "$out"
-# The tier tables are made exactly when a selected row reads them (#127):
+# The tier tables are made exactly when a selected row reads them:
 # with CONFIGS narrowed to a set without `precompiled-shaders`, the
 # no-compiler rows (not CONFIGS rows) still run, so the table row is planned,
 # once and before them.

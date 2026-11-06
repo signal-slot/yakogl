@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 #
 # yakogl-precompile: the build-time half of "compile shaders at build time
-# with our own compiler" (what is left: #1214, #1215). It reads
+# with our own compiler". It reads
 # tools/shaders/precompiled.list, drives the product's own shader back end
 # (src/shaderc/online, the in-process compiler) on the host in the order the
 # GL core calls it, and writes every record it made as a Rust table into

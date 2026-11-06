@@ -2852,7 +2852,7 @@ fn wait_kick_waits_for_the_job_in_flight_and_leaves_the_open_job_open() {
 
 /// Two jobs are outstanding at most (`flush_job`): a multi-pass frame's
 /// first off-screen submit waits for the frame before's off-screen job, no
-/// longer for its window job (#1141, docs/notes/egl-swap-timeline.md). Frame
+/// longer for its window job (docs/notes/egl-swap-timeline.md). Frame
 /// 1: an off-screen pass A, the window pass W; frame 2: an off-screen pass B.
 /// Before the queue B's submit waited for W, so the CPU recorded B's frame
 /// beside W only until then. Revert check: with `wait_in_flight` in

@@ -5,7 +5,7 @@
 
     tools/cts/pr-regress-compare.py <log or record dir> <log or record dir> [...]
 
-Acceptance criterion c3 of the PowerVR partial-render plan (issue #3): the
+Acceptance criterion c3 of the PowerVR partial-render plan: the
 regression set must be unchanged with CONFIG_YAKOGL_DRV_GPU_PVR_PARTIAL_RENDER
 on and off. A record directory is read through its console.txt, else through
 its *.txt / *.log files. Prints, per gl_test case, the verdict in each run and

@@ -154,8 +154,8 @@ done
 # check, the stage 1 check), and needed_deps against what the builders read.
 # Its count of passed checks is pinned, so a selftest that stops checking
 # reads as a failure here, not as a pass -- and a new check in
-# images-selftest.sh without a bump here is a red row too (pull request
-# #1838 failed exactly there).
+# images-selftest.sh without a bump here is a red row too (a pull request
+# failed exactly there).
 IMAGES_SELFTEST_CHECKS=138
 echo
 echo "== 20. images-selftest.sh: the image builders against a fake west"

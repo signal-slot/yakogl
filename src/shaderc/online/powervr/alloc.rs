@@ -912,7 +912,7 @@ mod declared_temps_tests {
     /// The figures moved when `Boundary` landed, because the old ones came
     /// from a picture with the output writes missing: `es100/texfill.vert`
     /// reads 7 where it read 5, and the corpus peak was 9 (a Qt text shader,
-    /// in the corpus until #1509). Both are worth stating because the
+    /// in the corpus until its removal). Both are worth stating because the
     /// DECLARED count did not move for the first: 5 and 7 are both declared
     /// as 8. A register saved inside a block buys nothing, and a register
     /// *found* inside a block costs nothing either.

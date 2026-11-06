@@ -6,7 +6,7 @@
 //! the format's channels never matter here.
 //!
 //! The pixel engine writes 64-bit pixels into a LINEAR surface at the wrong
-//! places on this core: gl_test 44's probe (#6, cba8b199, record `got
+//! places on this core: gl_test 44's probe (cba8b199, record `got
 //! 0x20000004 want 0x00c2073e`) drew one picture into RGBA16F targets 8, 4,
 //! 16, 24 and 32 pixels wide and an RGBA8 control. Only the control came back
 //! whole. In every row of every RGBA16F width, pixels 0 and 1 were right,

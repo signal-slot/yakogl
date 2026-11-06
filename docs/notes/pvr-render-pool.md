@@ -496,7 +496,7 @@ about 12 KiB unaccounted again.
   dEQP's multisample draw instead of six. The PDS high-waters above were
   measured before that and are upper bounds. A split is not free on a 4x
   target: its next kick reloads the resolved colour into every sample
-  (#1289, pvr-msaa-split), which is how six
+  (pvr-msaa-split), which is how six
   blocks a draw in this arena failed two dEQP multisample cases.
 - **Four sets, not two.** The count is load-bearing for pipelining, not
   for capacity. A set is reused only after the kick that last used it has
@@ -2941,7 +2941,7 @@ clean (472, 470).
 ## Design: the firmware's partial render (PR), for the user's go/no-go
 
 The implementation (about 12 days, sized below) was the user's decision;
-the go came from the development repository (dev #3, 2026-10-27). Parts 1
+the go came from the development repository (2026-10-27). Parts 1
 and 4 are code (b05b8008): the PR commands and the geometry timeline word
 behind the knob, the RTA arrays in `hwrt_get` and the reconstruction clear
 in `freelist::reset_hwrts`. What is not code yet: parts 2 and 3 (SPM
@@ -2954,7 +2954,7 @@ and the DDK are cited only. The reading this builds on is the section
 above. The frame side (Z/S, SPM EOT, background load) is read in "The PR
 frame side, read (Mesa 26.2.1)" below.
 
-**Status, 2026-11-01 (plan #148, issue #3).**
+**Status, 2026-11-01 (plan #148).**
 - **Landed: parts 1 and 4** (freelist grow, FENCE_PR, 3D_PR and its UPDATE,
   the RTA arrays and the HWRT clear). Verified on the AM62P by neg175-board
   (2026-10-31, `tools/cts/log/2026-10-31-pr-neg175/`, commit `d1b24389`):

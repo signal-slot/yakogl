@@ -196,7 +196,7 @@ completes every submit at once.
   black terrain and refraction seen on every board. Every ES 2.0 build now
   claims the extension, and the table above has neither the error nor the
   incomplete-texture line. Since 2026-10-12 the Scenes table also shows the
-  GL core's two counters (#13), checked by `report.py` against those lines:
+  GL core's two counters, checked by `report.py` against those lines:
   0 GL errors and 0 incomplete-texture draws in every scene on both GPUs.
 * **shadow (23) and refract (24) on the PowerVR: no depth-resolve line.**
   Before the fix (`draw::restamp_draw`, 2026-10-10) the PowerVR logged

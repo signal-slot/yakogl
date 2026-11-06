@@ -2,7 +2,7 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # sRGB render targets and sRGB texture sampling (ES 3.0): PowerVR, V3D 4.2, GC7000UL
 
-srgb (open: #1234, #1235). Built on the host: the GL core's
+srgb (open). Built on the host: the GL core's
 sRGB storage class and surface, the CPU codec, the shader back end's sRGB
 render-target class and the PowerVR's PBE and TPU gamma (render and
 sample); the GC7000UL's and the V3D's sampler decode and their sRGB render targets
