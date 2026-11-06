@@ -2,7 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 #
-# board.sh - one runner for the three boards (driver/docs/one-method.md section 4).
+# board.sh - one runner for the three boards (driver/docs/one-method.md section 4),
+# and for the Armadillo-X2 as a development board (kexec-dev only, below).
 #
 #   tools/board.sh [--dry-run] <board> status | install | uninstall | disarm
 #   tools/board.sh [--dry-run] <board> probe <logdir>
@@ -12,7 +13,7 @@
 #   tools/board.sh <board> gm-lines <outdir>
 #   tools/board.sh [--dry-run] <board> default <image> <boots|forever> | nodefault
 #   tools/board.sh <board> tally <rundir> | diff <rundir-a> <rundir-b>
-#      board = pi4 | am62p | imx8mp
+#      board = pi4 | am62p | imx8mp | x2
 #      BOARD_BOOT = tryboot | uboot-tftp | uboot-mmc | kexec-dev
 #
 # Only the boot backend differs between the boards; everything else is one
@@ -22,9 +23,14 @@
 # tools/tftp_oneshot.py), uboot-mmc (am62p, imx8mp; the same one-shot, but
 # U-Boot loads the image from the eMMC, where Linux staged it: the standalone
 # boot, docs/standalone-boot.md) and kexec-dev
-# (am62p, imx8mp; driver/tools/kexec-zephyr). A kexec-dev run is a development
+# (am62p, imx8mp, x2; driver/tools/kexec-zephyr). A kexec-dev run is a development
 # run: its verdict line says DEV and it is never a row (a bootloader boot is
-# the bar). --dry-run prints every command that would touch a board, the TFTP
+# the bar). x2 is the Armadillo-X2 (the i.MX8MP's GPU under Armadillo Base OS):
+# it has kexec-dev only, so every x2 run is a development run; root logs in
+# (no sudo), the loader and the record tool are copied to a tmpfs by each run,
+# and the record is LPGPR1..3 read through /dev/mem ("The Armadillo-X2" in
+# driver/tools/kexec-zephyr/README.md).
+# --dry-run prints every command that would touch a board, the TFTP
 # root or a serial bridge and runs none of them (board reads included); it
 # still checks the image on the host. tools/board_selftest.sh runs every verb
 # on every board this way.
@@ -160,7 +166,9 @@
 #                      host:port of a bridge or a local device; when set, a uboot-
 #                      tftp/uboot-mmc run probes it and captures the console into
 #                      the run directory (console.raw/.ts/.txt; read it with
-#                      tools/cts/imx8mp-console-scan.py), unset: no capture
+#                      tools/cts/imx8mp-console-scan.py), unset: no capture;
+#                      x2: optional in the same way (UART2, the board's own
+#                      USB serial adapter), for a kexec-dev run
 #   BOARD_BOOT         the boot backend (default: pi4 tryboot, else uboot-tftp)
 #   BOARD_PERSON_PRESENT  1: a person is at the board ("default ... forever" refuses without)
 #   NETBOOT_SERVER, NETBOOT_TFTP_ROOT, NETBOOT_TFTP_LOG (i.MX8MP), NETBOOT_ROUTE
@@ -170,8 +178,8 @@
 #   RUN_BOUND, RETURN_BOUND  seconds to the image's end and to Linux after it
 #                      (pi4 420/300, am62p U-Boot 420/180 (780/180 for a dEQP image:
 #                      600 s RTI bound + 60 s + 120 s boot), imx8mp U-Boot 600
-#                      in all, am62p kexec-dev 1500/600, imx8mp kexec-dev 1500
-#                      in all)
+#                      in all, am62p kexec-dev 1500/600, imx8mp and x2 kexec-dev
+#                      1500 in all)
 #   BOARD_END_RE       extended regex of the image's last line (pi4: PI4_END_RE
 #                      also read); BOARD_TAIL_S seconds kept after it (5)
 #   BOARD_HDMI_TIMINGS pi4: the panel's hdmi_timings, 17 integers (PI4_HDMI_TIMINGS
@@ -179,7 +187,7 @@
 #   BOARD_MUSTPASS     the mustpass list the console tally and diff read
 #                      (default tools/cts/gles2-mustpass.txt; a dEQP-GLES3
 #                      tree names tools/cts/gles3-mustpass.txt)
-#   SEL                i.MX8MP: the selector written into the cleared record
+#   SEL                i.MX8MP, x2: the selector written into the cleared record
 #   LOCK_WAIT, HOLD_MAX  see board_lock.sh
 #   YAKOGL_TOOLS       the yakogl-tools binary (default: built with cargo here)
 set -uo pipefail
@@ -195,7 +203,7 @@ done
 set -- "${args[@]+"${args[@]}"}"
 DRYFLAG=()
 [ "$DRY" = 1 ] && DRYFLAG=(--dry-run)
-usage() { sed -n '6,15p' "$SELF" >&2; exit 2; }
+usage() { sed -n '7,16p' "$SELF" >&2; exit 2; }
 [ $# -ge 2 ] || usage
 BOARD=$1 VERB=$2
 shift 2
@@ -205,6 +213,9 @@ NEW_MARKER='board: watchdog armed'   # the board layer's literal (one-method.md 
 NV=
 GPU_DEV=
 RESET_RE=
+SU='sudo -n '       # the prefix of a root command on the board (x2: root logs in, none)
+REC_SINK=           # where the SNVS record is read: nvmem (imx8mp), devmem (x2), none
+X2_DIR=
 case "$BOARD" in
 pi4)
     BOOTS="tryboot"
@@ -254,9 +265,35 @@ imx8mp)
     MARKER='gc_wdog_arm: armed'          # CONFIG_GC_BOARD_WDOG_SELF_ARM
     NB_WATCHDOG=WDOG1
     NV=/sys/bus/nvmem/devices/30370000.snvs:snvs-lpgpr0/nvmem
+    REC_SINK=nvmem
     END_RE_DEFAULT=
     LEGACY_RE=
     TREE_RETRIES_DEFAULT=60
+    ;;
+x2)
+    # The Armadillo-X2: the same SoC and GPU as the Verdin i.MX8MP, under
+    # Armadillo Base OS. Only the crash-route kexec has run on it, so it has no
+    # boot loader backend and every run is a development run (the direct boot
+    # is an unrun plan: docs/notes/x2-direct-boot.md).
+    BOOTS="kexec-dev"
+    NB_MMC=-
+    # driver/boards/atmark/armadillo_x2 a53_ddr_section: 256 MiB at 0x60000000,
+    # the kernel's crashkernel=256M@0x60000000 reservation
+    YAKO_ADDR=0x60000000; LOAD_END=0x70000000
+    MARKER='gc_wdog_arm: armed'          # CONFIG_GC_BOARD_WDOG_SELF_ARM, as on the Verdin
+    NB_WATCHDOG=WDOG1
+    # root logs in and there is no sudo; the kernel has no SNVS LPGPR nvmem
+    # driver (CONFIG_NVMEM_SNVS_LPGPR is not set), so the record is read
+    # through /dev/mem by driver/tools/kexec-zephyr/snvs_lpgpr.c
+    SU=
+    REC_SINK=devmem
+    # the loader, the record tool and the image: /tmp is a tmpfs there, so
+    # nothing of a run outlives the reboot that ends it
+    X2_DIR=/tmp/yakogl-kexec
+    NO_CONSOLE_WHY="BOARD_UART was not set"
+    END_RE_DEFAULT=
+    LEGACY_RE='^(deqp: summary: |gl_test: all: )'
+    TREE_RETRIES_DEFAULT=0
     ;;
 *) usage ;;
 esac
@@ -565,7 +602,7 @@ verdict_line() {
     kexec-dev)
         if [ "$(mget jump "$dir")" = failed ]; then bv=no_jump; rcc=${rcc:-5}
         elif [ "$(mget back "$dir")" != 1 ]; then bv=not_back; rcc=${rcc:-5}
-        elif [ "$BOARD" = imx8mp ]; then
+        elif [ -n "$REC_SINK" ]; then
             if [ -z "$(mget lost "$dir")" ]; then bv=no_jump; else bv=complete; fi
             rec=$(cat "$dir/snvs.txt" 2>/dev/null); shown=$rec
         # a fatal error is never done, summary or not; the RTI feeder's end
@@ -692,7 +729,7 @@ write_index() {
             ytools record $rec 2>&1 | sed 's/^/  /'
         elif [ -s "$dir/console.txt" ] && grep -aq 'yk-record: ' "$dir/console.txt"; then
             ytools record --log "$dir/console.txt" 2>&1 | sed 's/^/  /'
-        elif [ "$BOARD" = imx8mp ]; then
+        elif [ -n "$REC_SINK" ]; then
             echo "  none (no SNVS record was read)"
         else
             echo "  none (the console has no yk-record line: the image prints none)"
@@ -758,7 +795,7 @@ image_build() {
 # build tree=...", "<sample>: build <hash>"), or absent with the reason
 boot_build() {
     local c=$1 l
-    if [ ! -s "$c" ]; then echo "absent (no console: the i.MX8MP has no UART)"; return; fi
+    if [ ! -s "$c" ]; then echo "absent (no console: ${NO_CONSOLE_WHY:-the i.MX8MP has no UART})"; return; fi
     # Not anchored at the line's start: the Pi 4 firmware's last line has no
     # newline, so the first Zephyr line (sample_glue.c's PRE_KERNEL_2 build
     # line) arrives glued to it ("MESS:00:00:06.210776:0:sample: build tree=...",
@@ -770,7 +807,7 @@ boot_build() {
 # ---- the pre-checks every board makes (step 2) ---------------------------------
 common_prechecks() {
     local who mine others junk holders
-    bget junk 'sudo -n true' || die "$BOARD_HOST does not answer (ssh key login and sudo -n)"
+    bget junk "${SU}true" || die "$BOARD_HOST does not answer (ssh key login${SU:+ and sudo -n})"
     bget BOOT0 'cat /proc/sys/kernel/random/boot_id' DRY-BOOT-ID || die "cannot read the board's boot_id"
     bget BHOSTNAME 'uname -n' DRY-HOSTNAME || die "cannot read the board's host name"
     bget who 'who' '' || die "cannot run who on the board"
@@ -878,8 +915,8 @@ lease_release() {
 
 # ---- the i.MX8MP record: the SNVS LPGPR words through nvmem (gc_result.h) --------
 # snvs_clear: zeroed (w1 = the selector when SEL is set), read back
-snvs_clear() {
-    local got w
+# rec0_set: REC0, the cleared record (w1 = the selector when SEL is set)
+rec0_set() {
     if [ -n "${SEL:-}" ]; then
         REC0="00000000 $(printf '%08x' $((0x53450000 | SEL))) 00000000 00000000"
     else
@@ -887,6 +924,10 @@ snvs_clear() {
     fi
     meta rec0 "$REC0"
     [ -n "${SEL:-}" ] && meta sel "$SEL"
+}
+snvs_clear() {
+    local got w
+    rec0_set
     if [ "$DRY" = 1 ]; then
         b "printf <the 16 bytes '$REC0'> | sudo -n tee $NV; sudo -n od -A n -t x4 $NV"
         return 0
@@ -898,6 +939,53 @@ snvs_clear() {
 }
 # snvs_read: the four words, "w0 w1 w2 w3", empty when the read failed
 snvs_read() { b "sudo -n od -A n -t x4 $NV" 2>/dev/null | xargs; }
+
+# ---- the Armadillo-X2 record: LPGPR1..3 through /dev/mem (snvs_lpgpr.c) -----------
+# The X2's U-Boot keeps its boot count in LPGPR0, so an X2 image stores w0..w2
+# in LPGPR1..3 and no w3 (CONFIG_GC_COMMON_RESULT_SNVS_KEEP_LPGPR0, gc_result.c),
+# and Armadillo Base OS has no nvmem driver for the registers. The tool is the
+# copy x2_stage_tools put into X2_DIR.
+# lpgpr_words: the four registers, "l0 l1 l2 l3"; empty when the read failed
+lpgpr_words() {
+    b "$X2_DIR/snvs_lpgpr" 2>/dev/null | sed -n 's/^0x303700[9][048c]: 0x\([0-9a-f]\{8\}\)$/\1/p' | xargs
+}
+# lpgpr_read: the record as the other boards' four words, "w0 w1 w2 00000000"
+lpgpr_read() {
+    local l
+    l=$(lpgpr_words)
+    # shellcheck disable=SC2086  # four words
+    set -- $l
+    [ $# = 4 ] || return 0
+    echo "$2 $3 $4 00000000"
+}
+# lpgpr_clear: the record cleared (w1 = the selector when SEL is set) and read
+# back; LPGPR0 is written back as it was read and must read back the same
+lpgpr_clear() {
+    local l got want new
+    rec0_set
+    # LPGPR1..3 = w0 w1 w2, as hexadecimal arguments (the tool reads a bare number as decimal)
+    # shellcheck disable=SC2086  # three words
+    new=$(printf ' 0x%s' ${REC0% *})
+    if [ "$DRY" = 1 ]; then
+        b "$X2_DIR/snvs_lpgpr write <LPGPR0 as read>$new; $X2_DIR/snvs_lpgpr   # LPGPR0 is U-Boot's boot count: kept"
+        return 0
+    fi
+    l=$(lpgpr_words)
+    # shellcheck disable=SC2086  # four words
+    set -- $l
+    [ $# = 4 ] || die "cannot read the SNVS LPGPR words ($X2_DIR/snvs_lpgpr on the board)"
+    want="$1 ${REC0% *}"
+    b "$X2_DIR/snvs_lpgpr write 0x$1$new" > /dev/null || die "cannot write the SNVS record"
+    got=$(lpgpr_words)
+    [ "$got" = "$want" ] || die "SNVS LPGPR0..3 read back '$got', not '$want'"
+}
+# x2_stage_tools TOOL...: the freestanding tools of driver/tools/kexec-zephyr into X2_DIR
+x2_stage_tools() {
+    local t files=()
+    for t in "$@"; do files+=("$REPO/driver/tools/kexec-zephyr/$t"); done
+    b "mkdir -p $X2_DIR" || die "cannot create $X2_DIR on the board"
+    act scp -q "${SSH_OPTS[@]}" "${files[@]}" "$BOARD_HOST:$X2_DIR/" || die "scp of $* failed"
+}
 
 # ---- tryboot (pi4) ----------------------------------------------------------------
 pi4_uart_free() {
@@ -1469,7 +1557,7 @@ run_uboot() {
     finish
 }
 
-# ---- kexec-dev (am62p, imx8mp): development runs, never rows ----------------------
+# ---- kexec-dev (am62p, imx8mp, x2): development runs, never rows ------------------
 run_kexec() {
     RUN_BOUND=${RUN_BOUND:-1500}; RETURN_BOUND=${RETURN_BOUND:-600}
     if [ "$BOARD" = am62p ]; then
@@ -1483,6 +1571,21 @@ run_kexec() {
         take_lock
         common_prechecks
         kexec_am62p
+    elif [ "$BOARD" = x2 ]; then
+        HOLD_MAX=${HOLD_MAX:-$((1500 + 600 + 300))}
+        local t
+        # the loader and the record tool are copied by each run; they are built
+        # per checkout (driver/tools/kexec-zephyr/README.md) and never committed
+        for t in kexec_zephyr snvs_lpgpr; do
+            [ "$DRY" = 1 ] || [ -x "$REPO/driver/tools/kexec-zephyr/$t" ] ||
+                die "no $REPO/driver/tools/kexec-zephyr/$t (build it: driver/tools/kexec-zephyr/README.md)"
+        done
+        # the console is opt-in (BOARD_UART): probed before the board is touched
+        UCAP=0
+        if [ -n "${BOARD_UART:-}" ]; then UCAP=1; pi4_uart_free; fi
+        take_lock
+        common_prechecks
+        kexec_x2
     else
         # 1500 s for the board to come back, 600 s of settling, the rest
         HOLD_MAX=${HOLD_MAX:-$((1500 + 600 + 300))}
@@ -1564,7 +1667,7 @@ imx8mp_kexec_ready() {
 }
 
 kexec_imx8mp() {
-    local st why rsha t0 t lost="" pb="" sb="" ip rec
+    local st why rsha t0 rec
     # 2. the board is ours to use (imx8mp_kexec_ready); is-system-running
     #    --wait returns when the boot has finished, bounded at 300 s
     bget st 'timeout 300 systemctl is-system-running --wait 2>/dev/null || true; cut -d" " -f1 /proc/uptime; cat /sys/class/remoteproc/remoteproc0/state; pgrep -c -x kexec_zephyr || true; n=0; for q in /proc/[0-9]*; do [ "${q#/proc/}" = "$$" ] && continue; c=$(tr "\0" " " < $q/cmdline 2>/dev/null) || continue; case "$c" in *"for q in /proc"*) ;; *gl_test*|*deqp*|*labrun*) n=$((n+1));; esac; done; echo $n; cat /sys/kernel/kexec_crash_size; cat /sys/kernel/kexec_crash_loaded' \
@@ -1591,25 +1694,9 @@ kexec_imx8mp() {
     timeout 120 ssh -o BatchMode=yes -o ConnectTimeout=5 -o ServerAliveInterval=3 -o ServerAliveCountMax=2 "$BOARD_HOST" \
         'sync; sync; sudo -n /usr/local/sbin/kexec-zephyr 0x60000000 --crash' < /dev/null >> "$RD/kexec.log" 2>&1 || true
     meta jump ok
-    # 7. Linux: ping lost, ping back, ssh back (cap 1500 s: the image's watchdog cap is 600 s)
-    ip=${BOARD_HOST#*@}
-    while :; do
-        t=$(($(date +%s) - t0))
-        if [ "$t" -gt 1500 ]; then break; fi
-        if ping -c1 -W1 "$ip" > /dev/null 2>&1; then
-            [ -n "$lost" ] && [ -z "$pb" ] && pb=$t
-            if [ -n "$pb" ] && timeout 10 ssh -o BatchMode=yes -o ConnectTimeout=5 "$BOARD_HOST" true < /dev/null 2>/dev/null; then
-                sb=$t
-                break
-            fi
-        else
-            [ -z "$lost" ] && lost=$t
-        fi
-        sleep 2
-    done
-    meta lost "$lost"
-    meta timeline "jump 0s, ping lost ${lost:-?}s, ping back ${pb:-?}s, ssh back ${sb:-?}s, route --crash"
-    if [ -n "$sb" ]; then
+    # 7. Linux: ping lost, ping back, ssh back
+    kexec_wait_back "$t0"
+    if [ -n "$KW_SB" ]; then
         meta back 1
         meta t_back "$(date +%s)"
         rec=$(snvs_read)
@@ -1618,6 +1705,104 @@ kexec_imx8mp() {
     else
         meta rc_cycle 5
     fi
+    finish
+}
+
+# kexec_wait_back T0: after a crash-route jump at T0, Linux again: ping lost,
+# ping back, ssh back (cap 1500 s: the image's watchdog cap is 600 s). Sets
+# KW_LOST, KW_PB and KW_SB, seconds after T0 (empty: it never happened), and
+# writes the run's lost and timeline facts.
+kexec_wait_back() {
+    local t0=$1 t ip=${BOARD_HOST#*@}
+    KW_LOST=; KW_PB=; KW_SB=
+    while :; do
+        t=$(($(date +%s) - t0))
+        if [ "$t" -gt 1500 ]; then break; fi
+        if ping -c1 -W1 "$ip" > /dev/null 2>&1; then
+            [ -n "$KW_LOST" ] && [ -z "$KW_PB" ] && KW_PB=$t
+            if [ -n "$KW_PB" ] && timeout 10 ssh -o BatchMode=yes -o ConnectTimeout=5 "$BOARD_HOST" true < /dev/null 2>/dev/null; then
+                KW_SB=$t
+                break
+            fi
+        else
+            [ -z "$KW_LOST" ] && KW_LOST=$t
+        fi
+        sleep 2
+    done
+    meta lost "$KW_LOST"
+    meta timeline "jump 0s, ping lost ${KW_LOST:-?}s, ping back ${KW_PB:-?}s, ssh back ${KW_SB:-?}s, route --crash"
+}
+
+# x2_kexec_ready STATE...: the readiness words of an Armadillo-X2 crash-route
+# jump, "<openrc> <uptime> <kexec_zephyr> <containers> <crash window>
+# <kexec_crash_loaded>"; prints nothing and returns 0 when the board is ours to
+# use, else prints the reason and returns 1. The same conditions as
+# imx8mp_kexec_ready, in Armadillo Base OS's terms:
+#   - the boot finished: OpenRC is in the runlevel "default" and no openrc
+#     process is still changing it ("settled"; the read waits up to 40 s);
+#   - no jump in progress: no kexec_zephyr process and kexec_crash_loaded 0;
+#   - nobody's application running: no podman container (a crash-route jump
+#     ends it without a shutdown);
+#   - the crash window present and large enough for the image.
+# The uptime is recorded, not judged. The board has no remoteproc for the M7.
+x2_kexec_ready() {
+    local rl=${1:-?} nk=${3:-?} nc=${4:-?} cw=${5:-?} cl=${6:-?}
+    [ "$rl" = settled ] || { echo "OpenRC is '$rl', not settled (runlevel default, no openrc process)"; return 1; }
+    { [ "$nk" = 0 ] && [ "$cl" = 0 ]; } || { echo "a jump is in progress (kexec_zephyr $nk, kexec_crash_loaded $cl)"; return 1; }
+    [ "$nc" = 0 ] || { echo "something is running (containers $nc)"; return 1; }
+    { [[ $cw =~ ^[0-9]+$ ]] && [ "$footprint" -le "$cw" ]; } ||
+        { echo "the image needs $footprint bytes and the crash window is '$cw'"; return 1; }
+    return 0
+}
+
+kexec_x2() {
+    local st why rsha t0 rec
+    # 2. the board is ours to use (x2_kexec_ready)
+    bget st 'i=0; while [ $i -lt 20 ] && { [ "$(rc-status -r 2>/dev/null)" != default ] || pgrep -x openrc >/dev/null; }; do sleep 2; i=$((i+1)); done; if [ "$(rc-status -r 2>/dev/null)" = default ] && ! pgrep -x openrc >/dev/null; then echo settled; else echo unsettled; fi; cut -d" " -f1 /proc/uptime; pgrep -x kexec_zephyr | wc -l; podman ps -q 2>/dev/null | wc -l; cat /sys/kernel/kexec_crash_size; cat /sys/kernel/kexec_crash_loaded' \
+        "settled 999.0 0 0 $((LOAD_END - YAKO_ADDR)) 0" || die "board unreachable"
+    # shellcheck disable=SC2086  # six words
+    set -- $st
+    meta board_state "openrc ${1:-?} uptime ${2%.*}s kexec=${3:-?} containers=${4:-?} crash_window=${5:-?} crash_loaded=${6:-?}"
+    # shellcheck disable=SC2086  # six words
+    why=$(x2_kexec_ready $st) || die "$why"
+    # 3. the tools and the record, 4. stage and read back
+    x2_stage_tools kexec_zephyr snvs_lpgpr
+    lpgpr_clear
+    act scp -q "${SSH_OPTS[@]}" "$IMG" "$BOARD_HOST:$X2_DIR/zephyr.bin" || die "scp failed"
+    bget rsha "sync; sha256sum $X2_DIR/zephyr.bin" "$IMG_SHA  zephyr.bin"
+    [ "${rsha%% *}" = "$IMG_SHA" ] || die "the staged image reads back as '${rsha%% *}'"
+    meta staged "$X2_DIR/zephyr.bin, read back equal"
+    # 5. the console (opt-in), before anything can print
+    if [ "$UCAP" = 1 ]; then imx8mp_capture_start kexec ""; fi
+    if [ "$DRY" != 1 ]; then
+        trap 'stop_cap; lease_release; rm -rf "$TMP"; [ -n "${BOARD_LOCK_WATCHDOG:-}" ] && kill "$BOARD_LOCK_WATCHDOG" 2>/dev/null' EXIT
+    fi
+    # 6. jump: the loader as root, bounded
+    t0=$(date +%s)
+    meta t_reboot "$t0"
+    if [ "$DRY" = 1 ]; then
+        b "sync; sync; $X2_DIR/kexec_zephyr $X2_DIR/zephyr.bin $YAKO_ADDR --crash   # timeout 120"
+        echo "DRY host\$ wait: ping lost, ping back, ssh back (<= 1500 s); then stage snvs_lpgpr again, read LPGPR1..3 and the uptime"
+        exit 0
+    fi
+    timeout 120 ssh "${SSH_OPTS[@]}" -o ServerAliveInterval=3 -o ServerAliveCountMax=2 "$BOARD_HOST" \
+        "sync; sync; $X2_DIR/kexec_zephyr $X2_DIR/zephyr.bin $YAKO_ADDR --crash" < /dev/null >> "$RD/kexec.log" 2>&1 || true
+    meta jump ok
+    # 7. Linux: ping lost, ping back, ssh back
+    kexec_wait_back "$t0"
+    if [ -n "$KW_SB" ]; then
+        meta back 1
+        meta t_back "$(date +%s)"
+        # the tmpfs went with the reboot: the record tool again, then the record
+        x2_stage_tools snvs_lpgpr
+        rec=$(lpgpr_read)
+        [ -n "$rec" ] && echo "$rec" > "$RD/snvs.txt"
+        meta up "$(b "cut -d' ' -f1 /proc/uptime")"
+    else
+        meta rc_cycle 5
+    fi
+    stop_cap
+    if [ "$UCAP" = 1 ] && uart_is_bridge; then console_from_ts; fi
     finish
 }
 
@@ -1708,6 +1893,8 @@ cmd_status() {
     kexec-dev)
         if [ "$BOARD" = imx8mp ]; then
             b 'cut -d" " -f1 /proc/uptime; cat /sys/class/remoteproc/remoteproc0/state /sys/kernel/kexec_loaded /sys/kernel/kexec_crash_loaded /sys/kernel/kexec_crash_size; ls -l ~/kexec 2>/dev/null'
+        elif [ "$BOARD" = x2 ]; then
+            b "cut -d' ' -f1 /proc/uptime; rc-status -r; cat /sys/kernel/kexec_loaded /sys/kernel/kexec_crash_loaded /sys/kernel/kexec_crash_size; podman ps -q 2>/dev/null | wc -l; ls -l $X2_DIR 2>/dev/null"
         else
             b 'cut -d" " -f1 /proc/uptime; cat /sys/kernel/kexec_loaded; ls -l ~/kexec_zephyr ~/zephyr.bin ~/kexec 2>/dev/null'
         fi
@@ -1835,6 +2022,10 @@ default_undo() {
 }
 
 cmd_default() {
+    case "$BOOTS" in
+    tryboot | *uboot-*) ;;
+    *) die "$BOARD has no boot loader backend (only: $BOOTS): '$VERB' is the boot loader's" 2 ;;
+    esac
     need_board
     RD=$TMP   # meta() writes here; nothing of it is kept
     if [ "$VERB" = default ]; then

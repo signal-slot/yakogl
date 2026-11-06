@@ -7,7 +7,7 @@
 #   tools/board_selftest.sh
 #
 # 1. Every verb on every board and backend under --dry-run (uboot-mmc, and
-#    default/nodefault, included), against fake
+#    default/nodefault, included; the Armadillo-X2's kexec-dev too), against fake
 #    images, with ssh, scp, curl, ping, fuser, flock, stty, sudo and kexec
 #    replaced by stubs that only record that they were called: each verb must
 #    exit 0 and print its board commands as "DRY ..." lines (the boot command
@@ -48,7 +48,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/.." && pwd)
 B="$HERE/board.sh"
 TD="$HERE/testdata"
-WANT_CHECKS=254
+WANT_CHECKS=282
 
 S=$(mktemp -d)
 trap 'rm -rf "$S"' EXIT
@@ -113,6 +113,7 @@ mkimg "$S/img/pi4.bin" 4194304 'board: PM watchdog resets the SoC ~50 s after bo
 mkimg "$S/img/am62p.bin" 4194304 'rti_arm: armed preload 0xef'
 mkimg "$S/img/am62p-deqp.bin" 4194304 'rti_arm: armed preload 0xef deqp: summary'
 mkimg "$S/img/imx8mp.bin" 4194304 'gc_wdog_arm: armed'
+mkimg "$S/img/x2.bin" 4194304 'gc_wdog_arm: armed'
 mkimg "$S/img/layer.bin" 4194304 'board: watchdog armed'
 mkimg "$S/img/nomarker.bin" 4194304 'nothing arms here'
 mkimg "$S/img/huge.bin" $((512 * 1024 * 1024)) 'rti_arm: armed'
@@ -134,7 +135,8 @@ am62p:uboot-mmc:sync; sudo -n systemctl reboot
 am62p:kexec-dev:kexec_run.sh
 imx8mp:uboot-tftp:sync; sudo -n systemctl reboot
 imx8mp:uboot-mmc:sync; sudo -n systemctl reboot
-imx8mp:kexec-dev:kexec-zephyr 0x60000000 --crash'
+imx8mp:kexec-dev:kexec-zephyr 0x60000000 --crash
+x2:kexec-dev:/tmp/yakogl-kexec/kexec_zephyr /tmp/yakogl-kexec/zephyr.bin 0x60000000 --crash'
 while IFS=: read -r board boot bootcmd; do
     img="$S/img/$board.bin"
     for verb in status install uninstall disarm; do
@@ -174,6 +176,37 @@ for boot in uboot-tftp uboot-mmc; do
         eval '[ "$rc" = 0 ] && grep -q "scan every /proc/<pid>/fd for /dev/ttyFAKE9" <<<"$out" && grep -q "stty -F /dev/ttyFAKE9" <<<"$out" &&
               grep -q "read /dev/ttyFAKE9 .* into <rundir>/console.txt" <<<"$out" && ! grep -q "am62p_netboot_uart.py" <<<"$out"'
 done
+# the Armadillo-X2 (kexec-dev only): root logs in, so no command goes through
+# sudo; the loader and the record tool are copied to the tmpfs; the record is
+# LPGPR1..3 through snvs_lpgpr, LPGPR0 (U-Boot's boot count) written back as read
+out=$(dry x2 run "$S/img/x2.bin" "$S/logs" 2>&1)
+check "x2 run: kexec-dev is the default backend, a DEV run, no sudo and no systemctl in any command" \
+    eval 'grep -q "boot kexec-dev (DEV)" <<<"$out" && ! grep -q "sudo" <<<"$out" && ! grep -q "systemctl" <<<"$out"'
+check "x2 run: both tools copied, the record cleared through snvs_lpgpr with LPGPR0 kept, the image read back" \
+    eval 'grep -q "scp .*/kexec_zephyr .*/snvs_lpgpr user@BOARD:/tmp/yakogl-kexec/" <<<"$out" &&
+          grep -qF "snvs_lpgpr write <LPGPR0 as read> 0x00000000 0x00000000 0x00000000" <<<"$out" &&
+          grep -q "sha256sum /tmp/yakogl-kexec/zephyr.bin" <<<"$out" && ! grep -q "/sys/bus/nvmem" <<<"$out"'
+out=$(SEL=0x8003 dry x2 run "$S/img/x2.bin" "$S/logs" 2>&1)
+check "x2: SEL=0x8003 is written as w1 = 53458003 (LPGPR2)" grep -qF "write <LPGPR0 as read> 0x00000000 0x53458003 0x00000000" <<<"$out"
+out=$(dry x2 run "$S/img/x2.bin" "$S/logs" 2>&1)
+check "x2 run, no BOARD_UART: no probe, capture, stty or fd scan" \
+    eval '! grep -q "am62p_netboot_uart.py" <<<"$out" && ! grep -q "stty" <<<"$out" && ! grep -q "/proc/<pid>/fd" <<<"$out"'
+out=$(BOARD_UART=bridge.invalid:1 dry x2 run "$S/img/x2.bin" "$S/logs" 2>&1)
+rc=$?
+check "x2 run, BOARD_UART host:port: probe and TCP capture before the jump, no stty, no fd scan" \
+    eval '[ "$rc" = 0 ] && grep -q "am62p_netboot_uart.py probe bridge.invalid:1" <<<"$out" &&
+          grep -q "am62p_netboot_uart.py capture bridge.invalid:1 <rundir>/console.raw <rundir>/console.ts" <<<"$out" &&
+          ! grep -q "stty" <<<"$out" && ! grep -q "/proc/<pid>/fd" <<<"$out" &&
+          [ "$(grep -n "capture bridge.invalid:1" <<<"$out" | cut -d: -f1)" -lt "$(grep -n "kexec_zephyr /tmp" <<<"$out" | cut -d: -f1)" ]'
+out=$(BOARD_UART=/dev/ttyFAKE9 dry x2 run "$S/img/x2.bin" "$S/logs" 2>&1)
+rc=$?
+check "x2 run, BOARD_UART a device: fd scan, stty and the line reader into console.txt, no bridge command" \
+    eval '[ "$rc" = 0 ] && grep -q "scan every /proc/<pid>/fd for /dev/ttyFAKE9" <<<"$out" && grep -q "stty -F /dev/ttyFAKE9" <<<"$out" &&
+          grep -q "read /dev/ttyFAKE9 .* into <rundir>/console.txt" <<<"$out" && ! grep -q "am62p_netboot_uart.py" <<<"$out"'
+out=$(dry x2 status 2>&1)
+check "x2 status: OpenRC's runlevel and the crash window, no remoteproc" \
+    eval 'grep -q "rc-status -r" <<<"$out" && grep -q "kexec_crash_size" <<<"$out" && ! grep -q "remoteproc" <<<"$out"'
+check "x2 runs: nothing written on the host, no stub ran" eval '[ ! -e "$S/logs" ] && untouched'
 out=$(dry pi4 run "$S/img/pi4.bin" "$S/logs" 2>&1)
 check "pi4: /boot/firmware free space read, tryboot.txt written and put back" \
     eval 'grep -q "df -B1 --output=avail /boot/firmware" <<<"$out" && [ "$(grep -c "tee /boot/firmware/tryboot.txt" <<<"$out")" = 2 ]'
@@ -506,6 +539,17 @@ rc=$?
 check "an image past the RAM window: rc 3" eval '[ "$rc" = 3 ] && grep -q "does not fit" <<<"$out"'
 out=$(BOARD_BOOT=kexec-dev dry pi4 status 2>&1)
 check "pi4 has no kexec-dev: rc 2" [ $? = 2 ]
+for boot in uboot-tftp uboot-mmc; do
+    out=$(BOARD_BOOT=$boot dry x2 status 2>&1)
+    check "x2 has no $boot: rc 2" [ $? = 2 ]
+done
+out=$(dry x2 default "$S/img/x2.bin" 2 2>&1)
+rc=$?
+check "x2 default: rc 2 (no boot loader backend), nothing done" eval '[ "$rc" = 2 ] && ! grep -q "^DRY" <<<"$out"'
+out=$(dry x2 nodefault 2>&1)
+check "x2 nodefault: rc 2" [ $? = 2 ]
+out=$(TREE_IMAGE=$S/img/x2.bin dry x2 tree "$S/img/x2.bin" "$S/tree" 2>&1)
+check "x2 tree with TREE_IMAGE (the selector form): rc 2" [ $? = 2 ]
 out=$(dry rpi5 status 2>&1)
 check "an unknown board: rc 2" [ $? = 2 ]
 out=$(dry pi4 run "$S/img/pi4.bin" "$S/logs" 'bad name' 2>&1)
@@ -595,6 +639,24 @@ out=$(BOARD_BOOT=kexec-dev dry imx8mp run "$S/img/imx8mp.bin" "$S/logs" 2>&1)
 check "imx8mp kexec-dev dry run: one readiness read, no uptime floor, no wait on the staged image's age" \
     eval 'grep -q "systemctl is-system-running --wait" <<<"$out" && grep -q "kexec_crash_loaded" <<<"$out" &&
           ! grep -q "older than 200\|stat -c %Y" <<<"$out"'
+echo "== 2b3. the Armadillo-X2 crash route's readiness (board.sh x2_kexec_ready)"
+# the same conditions in Armadillo Base OS's terms: OpenRC settled, no jump in
+# progress, no container, the crash window; no M7 word, the uptime not a gate
+eval "$(sed -n '/^x2_kexec_ready() {/,/^}/p' "$B")"
+footprint=1000
+check "x2 readiness: settled at uptime 12 s is ready" x2_kexec_ready settled 12.31 0 0 268435456 0
+check "x2 readiness refuses: OpenRC unsettled, a jump running or loaded, a container, a small or absent crash window" \
+    eval '! x2_kexec_ready unsettled 999.0 0 0 268435456 0 >/dev/null &&
+          ! x2_kexec_ready settled 999.0 1 0 268435456 0 >/dev/null &&
+          ! x2_kexec_ready settled 999.0 0 0 268435456 1 >/dev/null &&
+          ! x2_kexec_ready settled 999.0 0 1 268435456 0 >/dev/null &&
+          ! x2_kexec_ready settled 999.0 0 0 999 0 >/dev/null &&
+          ! x2_kexec_ready settled 999.0 0 0 "" 0 >/dev/null &&
+          [ "$(x2_kexec_ready settled 1 0 2 268435456 0)" = "something is running (containers 2)" ]'
+out=$(dry x2 run "$S/img/x2.bin" "$S/logs" 2>&1)
+check "x2 kexec-dev dry run: one readiness read (rc-status, podman, the crash window), bounded under the 60 s of a board command" \
+    eval '[ "$(grep -c "rc-status -r" <<<"$out")" = 1 ] && grep -q "podman ps -q" <<<"$out" && grep -q "kexec_crash_size" <<<"$out" &&
+          grep -q "\[ \$i -lt 20 \]" <<<"$out"'
 echo "== 2c. the image's build id and the build line it printed (board.sh's own functions)"
 eval "$(sed -n '/^plain() /p;/^image_build() {/,/^}/p;/^boot_build() {/,/^}/p' "$B")"
 mkdir -p "$S/bd/zephyr"
@@ -740,6 +802,21 @@ while read -r w0 w1 w2 w3 ov orc; do
     done
 done < <(gold "imx8mp netboot runner: verdict <w0..w3>")
 check "kexec-dev says DEV and never a row" grep -q " DEV .*never a row" <<<"$new"
+# the Armadillo-X2: the same record (w3 is not stored there: 00000000), kexec-dev only
+d="$S/x2/20261106-1200-app-0123abcd"
+mkrun "$d" board=x2 boot=kexec-dev name=app probe=0 back=1 lost=3 up=40 t_reboot=100 t_back=200 "rec0=00000000 00000000 00000000 00000000"
+echo "594b0202 00000001 00000001 00000000" > "$d/snvs.txt"
+check "x2 kexec-dev: an APP pass record after the jump -> done, DEV, boot_verdict complete" \
+    says x2 "$d" "rc=0 verdict=done boot=kexec-dev DEV boot_verdict=complete result=record:APP .*never a row"
+echo "00000000 00000000 00000000 00000000" > "$d/snvs.txt"
+check "x2 kexec-dev: the record still the cleared one, no console -> no_record rc 4" says x2 "$d" "rc=4 verdict=no_record"
+printf '10:00:01 gl_test: all: 0 of 40 cases failed (40 passed; 0 timed out; first failure case -1 at index -1)\n' > "$d/console.txt"
+check "x2 kexec-dev: no record but the captured console's gl_test set line -> done, result=legacy:gl_test_all" \
+    says x2 "$d" "rc=0 verdict=done .*result=legacy:gl_test_all"
+mkrun "$d" board=x2 boot=kexec-dev name=app probe=0 back=1 up=40 t_reboot=100 t_back=200 "rec0=00000000 00000000 00000000 00000000"
+check "x2 kexec-dev: the ping never lost (no jump) -> no_jump rc 4" says x2 "$d" "rc=4 verdict=no_jump"
+mkrun "$d" board=x2 boot=kexec-dev name=app probe=0 lost=3 rc_cycle=5 t_reboot=100
+check "x2 kexec-dev: Linux not back -> not_back rc 5" says x2 "$d" "rc=5 verdict=not_back"
 # the TFTP and boot verdicts the old netboot runner gave without a record (its step 9)
 d="$S/imx/x/20261003-1200-nr-0123abcd"
 mkrun "$d" board=imx8mp boot=uboot-tftp name=nr probe=0 back=1 up=40 "rec0=00000000 00000000 00000000 00000000"
