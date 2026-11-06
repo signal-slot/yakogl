@@ -1,0 +1,32 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# The STM32MP257F-DK's Cortex-A35 board layer, its core (stm32mp2.c): outside
+# the board layer YAKOGL_BOARD, as YAKOGL_NANOPC_T6 is.
+#
+# Not yet sourced by ../Kconfig: until the item zephyr-layer-hook adds it
+# there, an application sources this file itself before Kconfig.zephyr
+# (tools/probes/stm32mp257f_dk/mp2_hello/Kconfig).
+
+config YAKOGL_STM32MP2
+	bool "STM32MP257F-DK A35: early banner, hand-over record, PSCI reset at the end"
+	default y
+	depends on SOC_SERIES_STM32MP2X_A35
+	help
+	  The early banner (raw MP2:A/A1 lines on USART2 before the
+	  console), the hand-over record line (what the previous stage left:
+	  EL, SCTLR M/C/I, x0-x3 with the DTB pointer, the entry address,
+	  CNTFRQ_EL0, MPIDR_EL1, PSCI_VERSION), and
+	  mp2_reset_to_linux() (stm32mp2.h), the end of a run: PSCI
+	  SYSTEM_RESET. A fatal error and the end of the lifetime take the
+	  same way out.
+
+config YAKOGL_STM32MP2_LIFETIME_S
+	int "Seconds of uptime after which the layer resets the board through PSCI"
+	default 20
+	range 5 3600
+	depends on YAKOGL_STM32MP2
+	help
+	  The run must end before it (mp2_reset_to_linux()). A timer of the
+	  system clock: it does not cover a hang with interrupts locked, or
+	  one before the kernel runs; the OP-TEE watchdog does, once the layer
+	  arms it.
