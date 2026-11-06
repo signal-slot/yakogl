@@ -60,4 +60,27 @@ printf '# h\nbuild/f-A1.txt:Fail dEQP-GLES3.functional.q.r.s.t\nNoResult dEQP-GL
 python3 -I "$tri" "$tmp/pi4.txt" >"$tmp/pi4.md"
 [ "$(sum_cases <"$tmp/pi4.md")" = 2 ] || fail "pi4 shape"
 
+# 4. notpass --pi4 row shape: '<LABEL>.console.txt:<status> <case>' under its header.
+cat >"$tmp/pi4n.txt" <<'T'
+# Pi 4 dEQP-GLES3 at abcdef12: every case that is not Pass, per image of tools/cts/pi4-gles3-tree.txt
+# rows: <record>:<status> <case>, sorted by case name   (<image>.console.txt = the UART console of the image, the records of d1; NoResult = the case never began)
+# images run (2 of 91): A1 FO6* (*: cases of the image never began)
+A1.console.txt:Fail dEQP-GLES3.functional.a.b.c.one
+A1.console.txt:QualityWarning dEQP-GLES3.functional.a.b.c.two
+A1.console.txt:NotSupported dEQP-GLES3.functional.a.b.c.three
+FO6.console.txt:NoResult dEQP-GLES3.functional.z.y.x.four
+FO6.console.txt:NoResult dEQP-GLES3.functional.z.y.x.five
+FO6.console.txt:Fail dEQP-GLES3.functional.z.y.w.six
+T
+printf 'gpu\tgroup\tpass\tfail\tnotsupported\tcrash\tother\nv3d\tfunctional.a\t5\t0\t0\t0\t0\nv3d\tfunctional.z\t0\t4\t0\t0\t0\n' >"$tmp/hostv.tsv"
+for extra in "" "--gpu v3d" "--gpu v3d --host $tmp/hostv.tsv"; do
+  # shellcheck disable=SC2086
+  python3 -I "$tri" "$tmp/pi4n.txt" $extra >"$tmp/pi4n.md"
+  [ "$(sum_cases <"$tmp/pi4n.md")" = 6 ] || fail "pi4 console rows ($extra): expected 6 cases"
+  sec=$(awk '/^## functional.z.y.x$/{f=1;next}/^## /{f=0}f' "$tmp/pi4n.md")
+  grep -q '^- cases: 2$' <<<"$sec" || fail "pi4 console rows ($extra): NoResult rows of z.y.x"
+done
+sec=$(awk '/^## functional.z.y.w$/{f=1;next}/^## /{f=0}f' "$tmp/pi4n.md")
+grep -q '^- host-also-fails: 1$' <<<"$sec" || fail "pi4 console rows: --gpu v3d host verdict"
+
 echo "gles3-triage-selftest: ok"
