@@ -194,7 +194,8 @@ def check_repo():
     boards = {
         'AM62P': dict(base, **parse_conf(os.path.join(DEQP, 'boards/verdin_am62p_am62p54_a53.conf'))),
         'i.MX8MP': dict(base, **parse_conf(os.path.join(DEQP, 'boards/verdin_imx8mp_mimx8ml8_a53.conf'))),
-        'Pi 4': dict(base, **parse_conf(os.path.join(DEQP, 'boards/rpi_4b.conf'))),
+        'X2': dict(base, **parse_conf(os.path.join(DEQP, 'boards/armadillo_x2_mimx8ml8_a53.conf'))),
+        'Pi 4':dict(base, **parse_conf(os.path.join(DEQP, 'boards/rpi_4b.conf'))),
         'Pi 4 T5': {**base, **parse_conf(os.path.join(DEQP, 'boards/rpi_4b.conf')),
                     **parse_conf(os.path.join(DEQP, 'texture-2048.conf'))},
     }
