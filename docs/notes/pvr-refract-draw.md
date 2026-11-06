@@ -195,7 +195,7 @@ they are the GPU's time, the lead's), anything about glGenerateMipmap (#916).
 ## Suggested updates elsewhere (not made here)
 
 * `docs/README.md`: `- [pvr-refract-draw.md](notes/pvr-refract-draw.md): PowerVR host, glmark2 refract and shadow: 94 to 97% of the draw call is the CPU depth resolve, a ranked fix list.`
-* `FINDINGS-pvr-allscenes.md`, rows 1 and 2 of "The top 5 costs": where "Where
+* `tools/hostharness/glmark2/FINDINGS-pvr-allscenes.md`, rows 1 and 2 of "The top 5 costs": where "Where
   inside is not narrowed" and "The draw: unknown until the symbols are sampled" stand,
   write "`pvr_backend_depth_resolve` (the CPU conversion of the 1600 x 1200
   ZLS depth into the sampled depth texture), 94 to 97% of the draw call,
