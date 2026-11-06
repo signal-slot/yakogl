@@ -7,6 +7,17 @@
 //!     yakogl-tools record --classify <w0..w3>         one token: verdict, died_after=<stage>,
 //!                                                     ended_no_picture, fingerprint or no_magic
 //!     yakogl-tools record --line <w0..w3>             one line for a runner: class kind name resets tally
+//!     yakogl-tools record --words 3 ...               (with any of the above) a record of an image built with
+//!                                                     CONFIG_GC_COMMON_RESULT_SNVS_KEEP_LPGPR0 (the Armadillo-X2:
+//!                                                     LPGPR0 is U-Boot's boot count, w3 is never stored). Takes
+//!                                                     w0 w1 w2 (a fourth word is ignored); every field that
+//!                                                     lives in w3 prints as `-`, never a number: DEQP's cases
+//!                                                     begun and first fail, DEQP_CASES' first fail, GPU resets
+//!                                                     and fence timeouts, DEQP_STATUS bytes 9-12, PROBES p4 and
+//!                                                     crc16, ... The line gains `words=3 begun=derived|tag|-`
+//!                                                     before `tally=`: DEQP's begun is pass+fail+notsup+other
+//!                                                     (derived), DEQP_CASES' is its tag. DEQP_FAILS pages hold
+//!                                                     4 names (w1, w2; record.rs DEQP_FAILS_PER_PAGE_3W).
 //!     yakogl-tools record --nvmem <file> [--classify|--line]   the 16 bytes of the SNVS nvmem file
 //!     yakogl-tools record --log <file> [--classify|--line]     every `yk-record:` line of a console log;
 //!                                                     the last one that is not a FINGERPRINT is the verdict
@@ -52,6 +63,9 @@ const USAGE: &str = "usage: yakogl-tools record <w0> <w1> <w2> <w3>
        yakogl-tools record --classify|--line <w0> <w1> <w2> <w3>
        yakogl-tools record --nvmem <file> [--classify|--line]
        yakogl-tools record --log <file> [--classify|--line]
+       yakogl-tools record --words 3 [--classify|--line] <w0> <w1> <w2>   (also with --nvmem, --log)
+           a record of an image built with CONFIG_GC_COMMON_RESULT_SNVS_KEEP_LPGPR0 (the Armadillo-X2):
+           w3 is not stored; every w3 field prints as '-'
        yakogl-tools record crc <crc16 hex> [prefix]
        yakogl-tools record crc16 <case name>
        yakogl-tools record bitmap <prefix> <w1> <w2>
@@ -246,6 +260,252 @@ pub fn line(w: &[u32; 4]) -> String {
         unsupported(w).map(|r| r.to_string()).unwrap_or_else(|| "absent".into()),
         tally(w).map(|t| t.iter().map(u32::to_string).collect::<Vec<_>>().join(",")).unwrap_or_else(|| "-".into())
     )
+}
+
+// ---- --words 3: records of an image built with
+// CONFIG_GC_COMMON_RESULT_SNVS_KEEP_LPGPR0 (the Armadillo-X2). The record is
+// w0..w2 in LPGPR1..3; w3 is never stored, so whatever the reader was given
+// for it is ignored and every field that lives in w3 is absent (`-`, never a
+// number). The 4-word functions above are unchanged.
+
+/// Placeholder printed for a field that lives in the word a three-word record
+/// does not store.
+pub const ABSENT: &str = "-";
+
+/// The names a DEQP_FAILS page holds in a three-word record: four, in w1 and
+/// w2, the low half first (record::DEQP_FAILS_PER_PAGE_3W); 0xffff is none.
+pub fn fails_names_3w(w: &[u32; 4]) -> [u32; record::DEQP_FAILS_PER_PAGE_3W as usize] {
+    [w[1] & 0xffff, w[1] >> 16, w[2] & 0xffff, w[2] >> 16]
+}
+
+/// `tally` of a three-word record: kind DEQP's cases begun (w3) is derived as
+/// pass + fail + notsup + other, the only cases a finished tally counts;
+/// kind DEQP_CASES keeps its begun (the tag). See `begun_source`.
+pub fn tally3(w: &[u32; 4]) -> Option<[u32; 5]> {
+    let mut t = tally(w)?;
+    if kind_low(w[0]).0 == kind::DEQP {
+        t[4] = t[0] + t[1] + t[2] + t[3];
+    }
+    Some(t)
+}
+
+/// Where `tally3`'s fifth number comes from: `derived` (DEQP: the sum of the
+/// other four, w3 is gone), `tag` (DEQP_CASES) or `-` (no tally).
+pub fn begun_source(w: &[u32; 4]) -> &'static str {
+    match (magic(w), kind_low(w[0]).0) {
+        (true, kind::DEQP) => "derived",
+        (true, kind::DEQP_CASES) => "tag",
+        _ => ABSENT,
+    }
+}
+
+/// `resets` of a three-word record: DEQP_CASES keeps its GPU resets in w3,
+/// so it has none; the other kinds are as in `resets`.
+pub fn resets3(w: &[u32; 4]) -> Option<u32> {
+    if magic(w) && kind_low(w[0]).0 == kind::DEQP_CASES {
+        return None;
+    }
+    resets(w)
+}
+
+/// `status` of a three-word record: the CASE_SET summary compares passed with
+/// cases run (w3), so it cannot be read: invalid, not a guess.
+pub fn status3(w: &[u32; 4]) -> Status {
+    if magic(w) && kind_low(w[0]).0 == kind::CASE && w[1] & 0xff == record::CASE_SET {
+        return Status::Invalid;
+    }
+    status(w)
+}
+
+/// `line` for a three-word record: the 4-word line with `words=3` and
+/// `begun=<derived|tag|->` before the tally (tools/board.sh takes the rest of
+/// the line after `tally=`).
+pub fn line3(w: &[u32; 4]) -> String {
+    let (k, _) = kind_low(w[0]);
+    let name = if magic(w) { record::kind_info(k).map(|d| d.name).unwrap_or("?") } else { "?" };
+    format!(
+        "class={} kind={} name={} status={} resets={} unsupported={} words=3 begun={} tally={}",
+        classify(w),
+        if magic(w) { k.to_string() } else { "absent".into() },
+        name,
+        status3(w).word(),
+        resets3(w).map(|r| r.to_string()).unwrap_or_else(|| "absent".into()),
+        unsupported(w).map(|r| r.to_string()).unwrap_or_else(|| "absent".into()),
+        begun_source(w),
+        tally3(w).map(|t| t.iter().map(u32::to_string).collect::<Vec<_>>().join(",")).unwrap_or_else(|| ABSENT.into())
+    )
+}
+
+/// record.rs's `describe` for a three-word record: the same fields with
+/// every w3 field as `-`. Fields of w1 and w2 are unchanged.
+pub fn describe3(w: &[u32; 4]) -> String {
+    let [w0, w1, w2, _] = *w;
+    if !magic(w) {
+        return format!("NO RECORD (w0 = {w0:08x})");
+    }
+    let (k, low) = kind_low(w0);
+    let a = ABSENT;
+    let (lo, hi) = (|x: u32| x & 0xffff, |x: u32| x >> 16);
+    let Some(info) = record::kind_info(k) else {
+        return format!("kind {k} low {low}: w1 {w1:08x} w2 {w2:08x} w3 {a} (not a known kind)");
+    };
+    let mut s = format!("{} ({k}) {} {low}: ", info.name, if info.low == record::Low::Seq { "seq" } else { "tag" });
+    let none = |x: u32| if x == 0xffff { "none".to_string() } else { x.to_string() };
+    let body = match k {
+        kind::CASE if w1 & 0xff == record::CASE_SET => format!(
+            "set status {} (passed or failed: not readable without cases run); passed {} of {a} run; \
+             skipped {}, first skip case {a}; first failing case {}, second case {}",
+            record::CASE_SET,
+            lo(w2),
+            (w1 >> 8) & 0xff,
+            none(hi(w1)),
+            none(hi(w2)),
+        ),
+        kind::CASE => {
+            format!("case {} check {} status {} got 0x{w2:08x} want {a}", hi(w1), (w1 >> 8) & 0xff, w1 & 0xff)
+        }
+        kind::APP => format!("stage {} status {} frames {w2} app {a}", (w1 >> 8) & 0xff, w1 & 0xff),
+        kind::FAULT => format!("esr 0x{w1:08x} (EC 0x{:02x}) elr 0x{w2:08x} far {a}", w1 >> 26),
+        kind::PICTURE => format!("centre 0x{w1:08x} crc32 0x{w2:08x} size {a}"),
+        kind::PROGRESS => {
+            let mut t = format!("where 0x{w1:03x} (");
+            let _ = record::write_where(&mut t, w1);
+            format!("{t}) uptime {w2} ms count {a}")
+        }
+        kind::PROBES => format!(
+            "status {low} p0 {:04x} p1 {:04x} p2 {:04x} p3 {:04x} p4 {a} crc16 {a} (RGB565)",
+            lo(w1),
+            hi(w1),
+            lo(w2),
+            hi(w2)
+        ),
+        kind::SWEEP if u32::from(low) == record::SWEEP_TAG_LEAKS => format!(
+            "counters: lost work {} GPU resets {} fence timeouts {}; first leaker offset {} leakers {}; \
+             pass bits {:04x} {a}",
+            hi(w1),
+            (w1 >> 8) & 0xff,
+            w1 & 0xff,
+            (w2 >> 8) & 0xff,
+            w2 & 0xff,
+            hi(w2)
+        ),
+        kind::SWEEP => format!("cases finished {low}, two bits per case {w1:08x} {w2:08x} {a}"),
+        kind::DEQP => format!(
+            "pass {} fail {} notsup {} other {} begun {a} first fail name check {a}",
+            lo(w1),
+            hi(w1),
+            lo(w2),
+            hi(w2)
+        ),
+        kind::DEQP_CASES => {
+            let st = two_bits(&[w1, w2], usize::from(low).min(32));
+            let n = |v: u32| st.iter().filter(|&&s| s == v).count();
+            format!(
+                "begun {low}: pass {} fail {} other {}; first fail index {a} name check {a}; GPU resets {a} \
+                 fence timeouts {a}",
+                n(1),
+                n(2),
+                n(3)
+            )
+        }
+        kind::DEQP_FAILS => {
+            let v: Vec<String> = fails_names_3w(w).iter().map(|c| format!("{c:04x}")).collect();
+            format!("fails seen {low}: name checks {} (four to a page, w3 not stored)", v.join(" "))
+        }
+        kind::DEQP_STATUS => {
+            let mut t = String::new();
+            for b in w1.to_le_bytes().into_iter().chain(w2.to_le_bytes()).filter(|&b| b != 0) {
+                t.push(if b.is_ascii_graphic() || b == b' ' { b as char } else { '?' });
+            }
+            format!("case index {low} status '{t}' (first 8 of 12 bytes; bytes 9-12 {a})")
+        }
+        kind::PERF => {
+            format!("experiment {} page {}: {} {} {} {} {a} {a}", low >> 3, low & 7, lo(w1), hi(w1), lo(w2), hi(w2))
+        }
+        kind::WDOG => format!(
+            "tag {low} at uptime {a} ms; WCR found 0x{:04x} now 0x{:04x}; flags 0x{:02x} refusal {} WMCR 0x{:04x}",
+            lo(w1),
+            hi(w1),
+            w2 & 0xff,
+            (w2 >> 8) & 0xff,
+            hi(w2)
+        ),
+        kind::STAGE => {
+            let mut t = format!("0x{low:02x} ");
+            let _ = record::write_stage(&mut t, low);
+            format!("{t} value {} (0x{w1:08x}) uptime {w2} ms WDOG1 feeds {a}", w1 as i32)
+        }
+        kind::FINGERPRINT => format!("window crc32 0x{w1:08x} frames {w2} size {a}"),
+        kind::GLMARK2 => {
+            let [score, ran, failed, unsupported] = record::glmark2_counts(w1, w2);
+            format!(
+                "score {score} status {} scenes ran {ran} failed {failed} unsupported {unsupported} size {a}; \
+                 GL errors {a} incomplete-texture draws {a}",
+                (w2 >> 24) & 0xf
+            )
+        }
+        kind::GPU_STOP => format!("cause {low} fence {w1} GPU recoveries {w2} list {a} KiB {a}"),
+        kind::CHECK if u32::from(low) == record::CHECK_PROBES => format!(
+            "probes: probe {} at ({},{}) reads {},{},{}, the reference {a} (diff {a}); {} probes failing",
+            w1 >> 24,
+            (w1 >> 12) & 0xfff,
+            w1 & 0xfff,
+            (w2 >> 16) & 0xff,
+            (w2 >> 8) & 0xff,
+            w2 & 0xff,
+            w2 >> 24
+        ),
+        kind::CHECK if u32::from(low) == record::CHECK_RUN => format!(
+            "run: the check passed, the run failed later: cause {} at frame {} (detail ms {a}); rc {}; \
+             draws refused {}; keep high-water {a}, blocked on the GPU {a}",
+            (w1 >> record::CHECK_RUN_CAUSE_SHIFT) & record::CHECK_RUN_CAUSE_MAX,
+            w2 & record::CHECK_RUN_FRAME_MAX,
+            (w1 & 0xff) as u8 as i8,
+            (w1 >> record::CHECK_RUN_REFUSED_SHIFT) & record::CHECK_RUN_REFUSED_MAX
+        ),
+        kind::CHECK => format!("what {low}: {w1} (w2 {w2:08x}, w3 {a})"),
+        kind::DISPLAY => {
+            format!("pixel clock w1 0x{w1:08x} DSI lane rate {w2} kHz; IRQ_STAT {a} health {a} BPP {a} pitch {a}")
+        }
+        kind::GL_ERROR => {
+            format!("error {low}: w1 0x{w1:08x} FNV-1a of the entry point 0x{w2:08x}; GL errors raised {a}")
+        }
+        kind::GM_PAGE => format!("tag 0x{low:02x}: w1 {w1:08x} w2 {w2:08x} w3 {a}"),
+        kind::RATE => format!("status {low} frames {w1} in {w2} ms size {a}"),
+        _ => String::new(),
+    };
+    s.push_str(&body);
+    s
+}
+
+/// `decode` for a three-word record: `describe3`, then the case names behind
+/// the name checks the record still holds (DEQP's first fail and DEQP_CASES'
+/// are in w3: none), the DEQP_CASES bits and a DEQP_FAILS page's four names.
+pub fn decode3(w: &[u32; 4], cases: &CaseList) -> Vec<String> {
+    let mut out = vec![describe3(w)];
+    if !magic(w) {
+        return out;
+    }
+    let (k, low) = kind_low(w[0]);
+    match k {
+        kind::DEQP => out.push("  begun derived: pass + fail + notsup + other (w3 not stored)".to_string()),
+        kind::DEQP_CASES => {
+            let bits: String =
+                two_bits(&[w[1], w[2]], usize::from(low)).iter().map(|&s| ['.', 'P', 'F', '?'][s as usize]).collect();
+            out.push(format!("  bits per case (the filter's names in sorted order): {bits}"));
+        }
+        kind::DEQP_FAILS => {
+            for c in fails_names_3w(w).into_iter().filter(|&c| c != 0xffff) {
+                let n = cases.by_crc(c as u16, "");
+                out.push(format!(
+                    "  {c:04x} {}",
+                    if n.is_empty() { "(no name in the case list)".to_string() } else { n.join(" ") }
+                ));
+            }
+        }
+        _ => {}
+    }
+    out
 }
 
 fn wcr(v: u32) -> String {
@@ -465,9 +725,12 @@ fn parse_word(s: &str) -> R<u32> {
     u32::from_str_radix(t, 16).map_err(|_| Error::Usage(format!("{USAGE}\n\n'{s}' is not a 32-bit hex word")))
 }
 
-fn words(a: &[String]) -> R<[u32; 4]> {
+fn words(a: &[String], three: bool) -> R<[u32; 4]> {
+    if three && a.len() == 3 {
+        return Ok([parse_word(&a[0])?, parse_word(&a[1])?, parse_word(&a[2])?, 0]);
+    }
     if a.len() != 4 {
-        return Err(Error::Usage(format!("{USAGE}\n\na record is four words")));
+        return Err(Error::Usage(format!("{USAGE}\n\na record is four words (three with --words 3)")));
     }
     Ok([parse_word(&a[0])?, parse_word(&a[1])?, parse_word(&a[2])?, parse_word(&a[3])?])
 }
@@ -479,16 +742,28 @@ enum Mode {
     Line,
 }
 
-fn emit(w: &[u32; 4], mode: Mode, cases: &mut Option<CaseList>) -> R<()> {
+/// A record's words as text: w3 is `-` for a three-word record.
+fn words_text(w: &[u32; 4], three: bool) -> String {
+    if three {
+        format!("{:08x} {:08x} {:08x} {ABSENT}", w[0], w[1], w[2])
+    } else {
+        format!("{:08x} {:08x} {:08x} {:08x}", w[0], w[1], w[2], w[3])
+    }
+}
+
+fn emit(w: &[u32; 4], mode: Mode, three: bool, cases: &mut Option<CaseList>) -> R<()> {
+    // a three-word record has no w3: whatever the reader gave is not read
+    let w = &if three { [w[0], w[1], w[2], 0] } else { *w };
     match mode {
         Mode::Classify => println!("{}", classify(w)),
+        Mode::Line if three => println!("{}", line3(w)),
         Mode::Line => println!("{}", line(w)),
         Mode::Decode => {
             if cases.is_none() {
                 *cases = Some(CaseList::load()?);
             }
             if let Some(c) = cases.as_ref() {
-                for l in decode(w, c) {
+                for l in if three { decode3(w, c) } else { decode(w, c) } {
                     println!("{l}");
                 }
             }
@@ -552,6 +827,7 @@ pub fn main(args: &[String]) -> R<()> {
         _ => {}
     }
     let mut mode = Mode::Decode;
+    let mut three = false;
     let mut source: Option<(&str, &str)> = None;
     let mut rest: Vec<String> = Vec::new();
     let mut it = args.iter();
@@ -559,6 +835,13 @@ pub fn main(args: &[String]) -> R<()> {
         match a.as_str() {
             "--classify" => mode = Mode::Classify,
             "--line" => mode = Mode::Line,
+            "--words" => {
+                three = match it.next().map(String::as_str) {
+                    Some("3") => true,
+                    Some("4") => false,
+                    _ => return Err(Error::Usage(format!("{USAGE}\n\n--words takes 3 or 4"))),
+                }
+            }
             "--nvmem" | "--log" => {
                 let f = it.next().ok_or_else(|| Error::Usage(USAGE.into()))?;
                 source = Some((a.as_str(), f.as_str()));
@@ -568,9 +851,9 @@ pub fn main(args: &[String]) -> R<()> {
     }
     let mut cases = None;
     match source {
-        None => emit(&words(&rest)?, mode, &mut cases),
+        None => emit(&words(&rest, three)?, mode, three, &mut cases),
         Some((_, _)) if !rest.is_empty() => Err(Error::Usage(format!("{USAGE}\n\nwords and a file together"))),
-        Some(("--nvmem", f)) => emit(&from_nvmem(&py::read_bytes(f)?)?, mode, &mut cases),
+        Some(("--nvmem", f)) => emit(&from_nvmem(&py::read_bytes(f)?)?, mode, three, &mut cases),
         Some((_, f)) => {
             let recs = from_log(&py::lossy_text(&py::read_bytes(f)?));
             let Some(v) = verdict_record(&recs) else {
@@ -587,16 +870,16 @@ pub fn main(args: &[String]) -> R<()> {
             };
             if mode == Mode::Decode {
                 for (i, w) in recs.iter().enumerate() {
-                    println!("record {}/{}: {:08x} {:08x} {:08x} {:08x}", i + 1, recs.len(), w[0], w[1], w[2], w[3]);
-                    emit(w, mode, &mut cases)?;
+                    println!("record {}/{}: {}", i + 1, recs.len(), words_text(w, three));
+                    emit(w, mode, three, &mut cases)?;
                 }
-                println!("verdict record: {:08x} {:08x} {:08x} {:08x}", v[0], v[1], v[2], v[3]);
+                println!("verdict record: {}", words_text(&v, three));
                 if let Some(t) = throughput_line(&recs) {
                     println!("{t}");
                 }
                 Ok(())
             } else {
-                emit(&v, mode, &mut cases)
+                emit(&v, mode, three, &mut cases)
             }
         }
     }
@@ -922,5 +1205,113 @@ mod tests {
             line(&[0x594b1201, 0x0000_0215, 0x021e_0102, 0x0320_0258]),
             "class=verdict kind=18 name=GLMARK2 status=fail resets=absent unsupported=2 tally=-"
         );
+    }
+
+    /// --words 3: w3 is never stored, so nothing may depend on it. Every
+    /// kind of record.rs's table (and one unknown), every variant a tag
+    /// picks: the same text whatever w3 holds.
+    #[test]
+    fn words3_ignores_w3_for_every_kind() {
+        let cases = CaseList::from_text("dEQP-GLES2.a\n");
+        for k in record::KINDS.iter().map(|k| k.value).chain([32]) {
+            for low in [1u32, record::SWEEP_TAG_LEAKS, record::CHECK_PROBES, record::CHECK_RUN] {
+                for w1 in [0x1234_5601u32, record::CASE_SET | 0x0001_0000] {
+                    let w = |w3: u32| [0x594b0000 | u32::from(k) << 8 | low, w1, 0x0002_0001, w3];
+                    // emit() zeroes w3 for --words 3: the functions are fed what it feeds
+                    let z = |mut x: [u32; 4]| {
+                        x[3] = 0;
+                        x
+                    };
+                    let (a, b) = (z(w(0)), z(w(0xdead_beef)));
+                    assert_eq!(describe3(&a), describe3(&b));
+                    assert_eq!(line3(&a), line3(&b));
+                    let d = decode3(&b, &cases).join("\n");
+                    assert!(!d.to_lowercase().contains("deadbeef"), "kind {k}: {d}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn words3_marks_the_w3_fields_absent() {
+        let a = ABSENT;
+        let d = |w: [u32; 4]| describe3(&w);
+        // DEQP: cases begun and the first failing name check are w3's
+        let w = [0x594b0801, 0x0002_0064, 0x0001_0003, 0];
+        assert!(d(w).ends_with(&format!("begun {a} first fail name check {a}")), "{}", d(w));
+        // DEQP_CASES: the first failure and the counters are w3's, begun is the tag
+        assert_eq!(
+            d([0x594b0904, 0b01_10_01_01, 0, 0]),
+            format!(
+                "DEQP_CASES (9) tag 4: begun 4: pass 3 fail 1 other 0; first fail index {a} name check {a}; \
+                 GPU resets {a} fence timeouts {a}"
+            )
+        );
+        // DEQP_STATUS: bytes 9-12 are w3's
+        let w = [0x594b0b05, u32::from_le_bytes(*b"Inte"), u32::from_le_bytes(*b"rnal"), 0];
+        assert!(d(w).contains("status 'Internal' (first 8 of 12 bytes; bytes 9-12 -)"), "{}", d(w));
+        // PROBES: p4 and the crc
+        let w = [0x594b0601, 0x2222_1111, 0x4444_3333, 0];
+        assert_eq!(d(w), "PROBES (6) tag 1: status 1 p0 1111 p1 2222 p2 3333 p3 4444 p4 - crc16 - (RGB565)");
+        // kinds whose w3 is a size, a count, an uptime, a want value
+        assert!(d([0x594b040e, 1, 2, 0]).contains("size -"));
+        assert!(d([0x594b0503, 0x0a0, 77, 0]).ends_with("count -"));
+        assert!(d([0x594b0d01, 0, 0, 0]).contains("uptime - ms"));
+        assert!(d([0x594b0c00, 1, 2, 0]).ends_with("- -"));
+        assert!(d([0x594b0701, 1, 2, 0]).ends_with(" -"));
+        assert!(d([0x594b0201, 0x0000_0201, 3, 0]).ends_with("frames 3 app -"));
+        assert!(d([0x594b0103, 0x0003_0001, 5, 0]).ends_with("want -"));
+        // a bad magic is as before
+        assert_eq!(d([0x12345678, 0, 0, 0]), "NO RECORD (w0 = 12345678)");
+    }
+
+    #[test]
+    fn words3_tally_line_and_fails_pages() {
+        // DEQP: begun is derived and the line says so
+        let w = [0x594b0801, 0x0002_0064, 0x0001_0003, 0];
+        assert_eq!(tally3(&w), Some([100, 2, 3, 1, 106]));
+        assert_eq!(
+            line3(&w),
+            "class=verdict kind=8 name=DEQP status=n/a resets=absent unsupported=absent words=3 begun=derived \
+             tally=100,2,3,1,106"
+        );
+        // the 4-word reading is unchanged: w3 there is cases begun
+        assert_eq!(tally(&[0x594b0801, 0x0002_0064, 0x0001_0003, 0x94050067]), Some([100, 2, 3, 1, 0x67]));
+        // DEQP_CASES: begun is the tag, resets are absent (w3's)
+        let w = [0x594b0904, 0b01_10_01_01, 0, 0];
+        assert_eq!(tally3(&w), Some([3, 1, 0, 0, 4]));
+        assert_eq!(resets3(&w), None);
+        assert_eq!(
+            line3(&w),
+            "class=verdict kind=9 name=DEQP_CASES status=n/a resets=absent unsupported=absent words=3 begun=tag \
+             tally=3,1,0,0,4"
+        );
+        // no tally
+        assert!(line3(&[0x594b0202, 0x0000_0602, 1, 0]).contains("words=3 begun=- tally=-"));
+        // DEQP_FAILS: four names, w1 low first, then w2; 0xffff none
+        let w = [0x594b0a07, 0x2222_1111, 0xffff_3333, 0];
+        assert_eq!(fails_names_3w(&w), [0x1111, 0x2222, 0x3333, 0xffff]);
+        let cl = CaseList::from_text("dEQP-GLES2.x\n");
+        let crc = u32::from(record::crc16_ccitt_false(b"dEQP-GLES2.x"));
+        let out = decode3(&[0x594b0a07, 0xffff_0000 | crc, 0xffff_ffff, 0], &cl);
+        assert_eq!(
+            out[0],
+            format!("DEQP_FAILS (10) tag 7: fails seen 7: name checks {crc:04x} ffff ffff ffff (four to a page, w3 not stored)")
+        );
+        assert_eq!(out[1..], [format!("  {crc:04x} dEQP-GLES2.x")]);
+        assert_eq!(record::DEQP_FAILS_PER_PAGE_3W, 4);
+        // CASE_SET cannot be read without cases run
+        assert_eq!(status3(&[0x594b010e, 0xffff_0107, 0xffff_0030, 0]), Status::Invalid);
+        assert_eq!(status3(&[0x594b0300, 0, 0, 0]), Status::Fail);
+    }
+
+    #[test]
+    fn words3_arguments() {
+        let a = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        assert_eq!(words(&a(&["594b0801", "1", "2"]), true).unwrap(), [0x594b0801, 1, 2, 0]);
+        assert_eq!(words(&a(&["594b0801", "1", "2", "dead"]), true).unwrap()[3], 0xdead);
+        assert!(words(&a(&["594b0801", "1", "2"]), false).is_err());
+        assert_eq!(words_text(&[1, 2, 3, 0], true), "00000001 00000002 00000003 -");
+        assert_eq!(words_text(&[1, 2, 3, 0], false), "00000001 00000002 00000003 00000000");
     }
 }

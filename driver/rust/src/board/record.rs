@@ -357,6 +357,12 @@ values! {
     DEQP_SEL_PROBE = 0x4000;
     DEQP_SEL_STATUS = 0x2000;
     DEQP_FAILS_PER_PAGE = 6;
+    // kind DEQP_FAILS under CONFIG_GC_COMMON_RESULT_SNVS_KEEP_LPGPR0 (the
+    // Armadillo-X2: LPGPR0 is U-Boot's boot count, the record lives in
+    // LPGPR1..3 = w0..w2 and w3 is never stored): names 5 and 6 of a page
+    // would be in w3, so a page holds four, in w1 and w2 (low half first),
+    // page p covering fails 4p..4p+3. The X2 has no console to name by.
+    DEQP_FAILS_PER_PAGE_3W = 4;
     // kind PERF: the selector.
     PERF_SEL = 0x1000;
     // kind GLMARK2: w2's flags (bits 28..31).
