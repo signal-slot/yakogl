@@ -45,6 +45,17 @@ if(CONFIG_YAKOGL_RPI5_WDOG)
   endif()
 endif()
 
+# The Raspberry Pi 5's property mailbox (rpi4/rpi_mbox.c, the SoC a parameter):
+# the firmware clock 5 and the clock reads, polling, for the probes.
+if(CONFIG_YAKOGL_RPI5_MBOX)
+  zephyr_library_named(yakogl_board_rpi5_mbox)
+  zephyr_library_sources(rpi4/rpi_mbox.c)
+  zephyr_library_include_directories(rpi4)
+  if(YAKOGL_WERROR)
+    zephyr_library_compile_options(-Werror)
+  endif()
+endif()
+
 # The record writer (common/record.c over the Rust rules): for the board
 # layer, and for the i.MX8MP's gc_result.c, which is its sink.
 if(CONFIG_YAKOGL_BOARD OR CONFIG_GC_COMMON_RESULT_SNVS)

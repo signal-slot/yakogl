@@ -20,6 +20,17 @@ config YAKOGL_RPI5_WDOG_HOLD_S
 	range 10 3600
 	depends on YAKOGL_RPI5_WDOG
 
+# The Raspberry Pi 5's firmware property mailbox (rpi4/rpi_mbox.c with the SoC
+# as its parameter): clock 5 of the V3D, polling. Zephyr's own mailbox driver
+# (mbox0, brcm,bcm2711-mbox) must stay disabled with it: only one of the two
+# may run (driver/samples/zephyr/common/rpi_4b_sram.dtsi).
+config YAKOGL_RPI5_MBOX
+	bool "Raspberry Pi 5: the firmware property mailbox client (clock 5, clock reads)"
+	depends on SOC_BCM2712
+	help
+	  rpi_mbox_init() maps the mailbox; rpi_clock_*() ask the firmware. The
+	  message buffer is in the image and below 4 GiB.
+
 menuconfig YAKOGL_BOARD
 	bool "YakoGL board layer (yakogl_board.h)"
 	depends on SOC_SERIES_AM62PX_A53 || SOC_MIMX8ML8_A53 || SOC_BCM2711

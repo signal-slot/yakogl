@@ -1,7 +1,9 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 /* SPDX-FileCopyrightText: 2026 Signal Slot, Inc. */
 /*
- * The VideoCore firmware's property mailbox on the BCM2711 (Raspberry Pi 4):
+ * The VideoCore firmware's property mailbox on the BCM2711 (Raspberry Pi 4)
+ * and the BCM2712 (Pi 5; CONFIG_SOC_BCM2712 picks its base and bus view in
+ * rpi_mbox.c; the framebuffer calls are the Pi 4's, untried on the Pi 5):
  * the one channel through which the ARM asks the firmware for a framebuffer
  * and switches the V3D clock.
  *
@@ -16,7 +18,9 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#define RPI_FW_CLK_V3D 5 /* raspberrypi-firmware.h:144, bcm2711-rpi.dtsi:96 */
+/* raspberrypi-firmware.h:144, bcm2711-rpi.dtsi:96; the BCM2712's V3D node has
+ * clocks = <&firmware_clocks 5> too (driver/docs/rpi5-v3d71-facts.md). */
+#define RPI_FW_CLK_V3D 5
 
 /* Map the mailbox. Returns 0 or a negative errno. */
 int rpi_mbox_init(void);
@@ -106,5 +110,11 @@ int rpi_clock_state(uint32_t id, bool on);
 int rpi_clock_rate(uint32_t id, uint32_t *hz);     /* current rate */
 int rpi_clock_max_rate(uint32_t id, uint32_t *hz);
 int rpi_clock_set_rate(uint32_t id, uint32_t hz);
+/* GET_CLOCK_STATE (0x00030001): *on is bit 0, *exists is false when the
+ * firmware reports bit 1 ("no such clock"). Either pointer may be NULL. */
+int rpi_clock_state_get(uint32_t id, bool *on, bool *exists);
+/* GET_CLOCK_RATE_MEASURED (0x00030047, raspberrypi-firmware.h): the rate the
+ * firmware measures, not the one it set. */
+int rpi_clock_measured_rate(uint32_t id, uint32_t *hz);
 
 #endif

@@ -1,8 +1,12 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 /* SPDX-FileCopyrightText: 2026 Signal Slot, Inc. */
 /*
- * The BCM2711 property mailbox (see rpi_mbox.h). One request in flight at a
- * time; the sample is single-threaded.
+ * The BCM2711 and BCM2712 property mailbox (see rpi_mbox.h). One request in
+ * flight at a time; the sample is single-threaded.
+ *
+ * The SoC is a parameter (CONFIG_SOC_BCM2712 or the Pi 4's). The register block
+ * is the same on both (the BCM2712 node is `brcm,bcm2835-mbox`); the address
+ * and the bus view of memory differ.
  */
 #include <zephyr/kernel.h>
 #include <zephyr/cache.h>
@@ -15,7 +19,15 @@
 
 #include "rpi_mbox.h"
 
+#ifdef CONFIG_SOC_BCM2712
+/* mailbox@7c013880, reg <0x7c013880 0x40> under soc@107c000000, whose ranges
+ * <0x0 0x10 0x0 0x80000000> put it at ARM 0x10_7c013880 (rpi:arch/arm64/boot/
+ * dts/broadcom/bcm2712.dtsi, nodes `mailbox` and `soc`, rpi-6.12.y; Zephyr
+ * dts/arm64/broadcom/bcm2712.dtsi:61-69, mbox@107c013880, size 0x40). */
+#define MBOX_BASE      0x107c013880ull
+#else
 #define MBOX_BASE      0xfe00b880u   /* bcm283x.dtsi:100, bus 0x7e00b880 */
+#endif
 #define MAIL0_RD       0x00          /* bcm2835-mailbox.c:41, VC -> ARM */
 #define MAIL0_STA      0x18          /* :43 */
 #define MAIL1_WRT      0x20          /* :45, ARM -> VC */
@@ -27,8 +39,16 @@
 #define STATUS_SUCCESS 0x80000000u   /* :16 */
 #define TAG_RESPONSE   BIT(31)       /* the firmware sets it in a tag it answered */
 
+#ifdef CONFIG_SOC_BCM2712
+/* No alias on the BCM2712: the `axi` node's dma-ranges map the first 64 GiB
+ * one to one (<0x0 0x0 0x0 0x10 0x0>, bcm2712.dtsi, rpi-6.12.y), so the bus
+ * address the firmware gets is the ARM physical address, which must fit the
+ * mailbox word (below 4 GiB; the image's sram0 is). */
+#define BUS_ALIAS      0x00000000u
+#else
 /* The VC sees ARM physical memory at bus 0xc0000000 (bcm2711.dtsi:45). */
 #define BUS_ALIAS      0xc0000000u
+#endif
 
 static mm_reg_t mbox;
 static uint32_t buf[64] __aligned(64);
@@ -41,7 +61,10 @@ int rpi_mbox_init(void)
 
 static int transact(void)
 {
-	uint32_t phys = (uint32_t)k_mem_phys_addr(buf);
+	uintptr_t phys64 = (uintptr_t)k_mem_phys_addr(buf);
+	uint32_t phys = (uint32_t)phys64;
+	if ((uint64_t)phys64 != phys)
+		return -ERANGE; /* the mailbox word holds 32 bits */
 	sys_cache_data_flush_range(buf, sizeof(buf));
 
 	for (int t = 0; sys_read32(mbox + MAIL1_STA) & MBOX_FULL; t++) {
@@ -69,7 +92,10 @@ static int transact(void)
 static int transact_timed(struct rpi_mbox_timing *tm)
 {
 	uint64_t t0 = k_cycle_get_64();
-	uint32_t phys = (uint32_t)k_mem_phys_addr(buf);
+	uintptr_t phys64 = (uintptr_t)k_mem_phys_addr(buf);
+	uint32_t phys = (uint32_t)phys64;
+	if ((uint64_t)phys64 != phys)
+		return -ERANGE; /* the mailbox word holds 32 bits */
 	sys_cache_data_flush_range(buf, sizeof(buf));
 
 	for (int t = 0; sys_read32(mbox + MAIL1_STA) & MBOX_FULL; t++) {
@@ -362,4 +388,23 @@ int rpi_clock_set_rate(uint32_t id, uint32_t hz)
 	/* SET_CLOCK_RATE: id, rate, skip-turbo (clk-raspberrypi.c:163-167) */
 	uint32_t v[3] = { id, hz, 0 };
 	return rpi_mbox_tag(0x00038002, v, 3);
+}
+
+int rpi_clock_state_get(uint32_t id, bool *on, bool *exists)
+{
+	uint32_t v[2] = { id, 0 };
+	int ret = rpi_mbox_tag(0x00030001, v, 2); /* GET_CLOCK_STATE: bit 0 on, bit 1 not present */
+	if (on)
+		*on = v[1] & 1;
+	if (exists)
+		*exists = !(v[1] & 2);
+	return ret;
+}
+
+int rpi_clock_measured_rate(uint32_t id, uint32_t *hz)
+{
+	uint32_t v[2] = { id, 0 };
+	int ret = rpi_mbox_tag(0x00030047, v, 2); /* GET_CLOCK_RATE_MEASURED */
+	*hz = v[1];
+	return ret;
 }
