@@ -70,7 +70,10 @@
 
 &i2c2 {
 	status = "okay";
-	clock-frequency = <I2C_BITRATE_STANDARD>;
+	/* 400 kHz, as Linux's imx8mp-verdin.dtsi has Verdin I2C_2_DSI: at
+	 * 100 kHz the bridge start's ~70 register transfers were about 30 ms
+	 * of the cold start's 67 ms in sn65dsi8x_start (2026-11-06). */
+	clock-frequency = <I2C_BITRATE_FAST>;
 	pinctrl-0 = <&i2c2_display>;
 	pinctrl-names = "default";
 
