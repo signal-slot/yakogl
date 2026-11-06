@@ -37,8 +37,11 @@ Classes (severity H or M is a finding, L is information):
 Private values never live in the tree. They come from the environment
 variable YAKOGL_REDACTION_PRIVATE, or from the file named by
 YAKOGL_REDACTION_PRIVATE_FILE (which must lie outside the scanned
-repository). The format is one `class: value` per line (`;` also separates
-entries in the variable; `#` starts a comment):
+repository). The format is one `class: value` per line; `#` starts a
+comment that runs to the end of the line (a `;` or `:` in it is comment
+text), and in the variable only, `;` also separates entries on a line. A
+value may be quoted; an unknown class or an entry without a value stops the
+scan (exit 2) with the line number, never the entry's text:
 
     owner-login: <the owner's login>
     login: <a lab, farm or vendor-image login>     (repeatable)
@@ -61,8 +64,14 @@ drops a hit its match overlaps. Rules list patterns, never
 secrets.
 
 Every value is printed masked as in the audit: first character, `***`, the
-length, e.g. `t***[6]`; both sides of an `@` are masked separately. A path
-that contains a private value is masked the same way.
+length, e.g. `t***[6]`; both sides of an `@` are masked separately. Every
+line the tool prints (paths, hits, the revision, error messages) masks any
+private value in it the same way, in any case and inside longer words.
+
+Each file's path is scanned as well as its lines (binary files included),
+since the path is published too: a hit in the path is printed as
+`<path>:path`, e.g. a lab host's name in a file name is a lab-host finding
+even when the file's text never names it.
 
 Exit status:
   0  every class ran and there is no H/M finding
@@ -200,19 +209,32 @@ def build_classes(private):
 
 # --- private values and allow rules -----------------------------------------
 
-def parse_private(text, origin):
+def parse_private(text, origin, semicolons):
+    """{class: [values]} of `class: value` lines.
+
+    The comment (`#` to the end of the line) goes first, so a `;` or a `:`
+    inside it never makes an entry; then, with SEMICOLONS (the variable),
+    `;` separates entries on a line. Values keep their inner spaces.
+    """
     vals = {}
-    for n, raw in enumerate(re.split(r"[\n;]", text), 1):
-        line = raw.split("#", 1)[0].strip()
-        if not line:
-            continue
-        key, sep, value = line.partition(":")
-        key, value = key.strip(), value.strip()
-        if not sep or key not in PRIVATE_KEYS or not value:
-            # Never echo the entry: it may hold a private value.
-            raise ScanError("%s: entry %d is not `class: value` with class one "
-                            "of %s" % (origin, n, ", ".join(PRIVATE_KEYS)))
-        vals.setdefault(key, []).append(value)
+    text = text.lstrip("﻿")
+    for n, raw in enumerate(text.splitlines(), 1):
+        line = raw.split("#", 1)[0]
+        for entry in (line.split(";") if semicolons else [line]):
+            entry = entry.strip()
+            if not entry:
+                continue
+            key, sep, value = entry.partition(":")
+            key, value = key.strip().lower(), value.strip()
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+                value = value[1:-1].strip()
+            if not sep or key not in PRIVATE_KEYS or not value:
+                # Never echo the entry: it may hold a private value.
+                raise ScanError("%s: line %d: an entry is not `class: value` "
+                                "with class one of %s"
+                                % (origin, n, ", ".join(PRIVATE_KEYS)))
+            if value not in vals.get(key, []):
+                vals.setdefault(key, []).append(value)
     return vals
 
 
@@ -220,7 +242,7 @@ def load_private(repo_top):
     """(values, source) from the environment; ({}, None) when neither is set."""
     text = os.environ.get(ENV_VALUES)
     if text:
-        return parse_private(text, ENV_VALUES), ENV_VALUES
+        return parse_private(text, ENV_VALUES, True), ENV_VALUES
     path = os.environ.get(ENV_FILE)
     if not path:
         return {}, None
@@ -231,7 +253,9 @@ def load_private(repo_top):
                         "must live outside it" % ENV_FILE)
     try:
         with open(real, encoding="utf-8") as f:
-            return parse_private(f.read(), ENV_FILE), ENV_FILE
+            return parse_private(f.read(), ENV_FILE, False), ENV_FILE
+    except UnicodeDecodeError:
+        raise ScanError("%s: not UTF-8 text" % ENV_FILE)
     except OSError as e:
         raise ScanError("%s: cannot read: %s" % (ENV_FILE, e.strerror))
 
@@ -284,12 +308,41 @@ def mask(value):
     return mask_word(value)
 
 
-def mask_path(path, private):
+def redactor(private):
+    """A function that masks every private value inside a printed string.
+
+    Any occurrence counts, in any case and inside longer words: over-masking a
+    path or a line is harmless, printing a private value is not.
+    """
     words = [v for vs in private.values() for v in vs]
     if not words:
-        return path
+        return lambda s: s
     rx = re.compile(word_alternation(words), re.I)
-    return rx.sub(lambda m: mask_word(m.group(0)), path)
+    return lambda s: rx.sub(lambda m: mask_word(m.group(0)), s)
+
+
+class RedactingWriter:
+    """A text stream that masks private values in everything written to it.
+
+    Whole lines are masked, so a value split over two write() calls is still
+    found; flush() masks and writes the rest.
+    """
+
+    def __init__(self, stream, redact):
+        self.stream, self.redact, self.pending = stream, redact, ""
+
+    def write(self, s):
+        self.pending += s
+        head, nl, self.pending = self.pending.rpartition("\n")
+        if nl:
+            self.stream.write(self.redact(head + nl))
+        return len(s)
+
+    def flush(self):
+        if self.pending:
+            self.stream.write(self.redact(self.pending))
+            self.pending = ""
+        self.stream.flush()
 
 
 # --- git --------------------------------------------------------------------
@@ -348,25 +401,32 @@ def scan(repo, rev, rules, private):
               "the owner's public name", 0)
              for name in private.get("public-name", [])] + list(rules)
     result = {c[0]: {"hits": [], "info": [], "dropped": 0} for c in classes}
+
+    def scan_line(path, lineno, line):
+        for key, _, _, rx, check in classes:
+            if rx is None:
+                continue
+            for m in rx.finditer(line):
+                if check and not check(m):
+                    continue
+                grp = "v" if "v" in rx.groupindex and m.group("v") else 0
+                rule = allow_rule(rules, key, path, line, *m.span())
+                if rule and rule[0] == "drop":
+                    result[key]["dropped"] += 1
+                    continue
+                hit = (path, lineno, m.group(grp), rule[4] if rule else None)
+                result[key]["info" if rule else "hits"].append(hit)
+
     blobs = tree_blobs(repo, rev)
     for (path, _), data in zip(blobs, read_blobs(repo, [b for _, b in blobs])):
+        # The path is published too (binary files included): its hits are
+        # line 0, printed as `<path>:path`.
+        scan_line(path, 0, path)
         if b"\0" in data[:8000]:
             continue
         text = data.decode("utf-8", "replace")
         for lineno, line in enumerate(text.splitlines(), 1):
-            for key, _, _, rx, check in classes:
-                if rx is None:
-                    continue
-                for m in rx.finditer(line):
-                    if check and not check(m):
-                        continue
-                    grp = "v" if "v" in rx.groupindex and m.group("v") else 0
-                    rule = allow_rule(rules, key, path, line, *m.span())
-                    if rule and rule[0] == "drop":
-                        result[key]["dropped"] += 1
-                        continue
-                    hit = (path, lineno, m.group(grp), rule[4] if rule else None)
-                    result[key]["info" if rule else "hits"].append(hit)
+            scan_line(path, lineno, line)
     return result, classes, len(blobs)
 
 
@@ -402,11 +462,11 @@ def report(rev_label, nfiles, result, classes, private, source, out):
               ", %d look-alike(s) dropped" % r["dropped"] if r["dropped"] else ""),
               file=out)
         for path, lineno, value, _ in r["hits"]:
-            print("      %s:%d  %s" % (mask_path(path, private), lineno,
-                                       mask(value)), file=out)
+            print("      %s:%s  %s" % (path, lineno or "path", mask(value)),
+                  file=out)
         for path, lineno, value, reason in r["info"]:
-            print("      info %s:%d  %s  (%s)" % (mask_path(path, private),
-                                                  lineno, mask(value), reason),
+            print("      info %s:%s  %s  (%s)" % (path, lineno or "path",
+                                                  mask(value), reason),
                   file=out)
     status = (EXIT_FINDING if findings else EXIT_NOT_RUN if not_run else EXIT_OK)
     print("summary: %d H/M finding(s), %d class(es) not run, %d informational, "
@@ -418,19 +478,27 @@ def report(rev_label, nfiles, result, classes, private, source, out):
     return status
 
 
-def run(rev, allow_path, out=sys.stdout, repo="."):
+def run(rev, allow_path, out=sys.stdout, err=sys.stderr, repo="."):
+    """Scan REV; every line printed (report and errors) goes through the
+    redactor of the private values, once they are read."""
+    private = {}
     try:
         top = git(repo, "rev-parse", "--show-toplevel").decode().strip()
+        private, source = load_private(top)
         sha = git(top, "rev-parse", "--verify", "--quiet",
                   rev + "^{commit}").decode().strip()
         rules = load_allow(allow_path)
-        private, source = load_private(top)
         result, classes, nfiles = scan(top, sha, rules, private)
     except ScanError as e:
-        print("redaction-scan: %s" % e, file=sys.stderr)
+        err = RedactingWriter(err, redactor(private))
+        print("redaction-scan: %s" % e, file=err)
+        err.flush()
         return EXIT_ERROR
-    return report("%s (%s)" % (rev, sha[:12]), nfiles, result, classes,
-                  private, source, out)
+    out = RedactingWriter(out, redactor(private))
+    status = report("%s (%s)" % (rev, sha[:12]), nfiles, result, classes,
+                    private, source, out)
+    out.flush()
+    return status
 
 
 # --- self-test --------------------------------------------------------------
@@ -474,6 +542,7 @@ def self_test():
             "runner " + names["runner"],
         ]) + "\n",
         names["runner"] + ".log": "port " + j(["3593", "5"]) + " in a file named after a lab host\n",
+        "logs/" + names["owner"] + "-notes.txt": "only the path names the owner\n",
         "third_party/x.txt": "excluded " + priv4 + "\n",
         "docs/release/redaction-audit.md": "excluded " + priv4 + "\n",
         "bin.dat": "binary\0" + priv4 + "\n",
@@ -488,12 +557,20 @@ def self_test():
         "info | email | src/* | @upstream\\.example\\.org | upstream author",
         "",
     ])
-    private_text = "\n".join([
-        "# fixture private values",
-        "owner-login: " + names["owner"],
-        "public-name: " + names["public"],
-        "login: " + names["login"],
-        "lab-host: " + names["runner"],
+    entries = ["owner-login: " + names["owner"],
+               "public-name: " + names["public"],
+               "login: " + names["login"],
+               "lab-host: " + names["runner"]]
+    private_text = "\n".join(["# fixture private values"] + entries + [""])
+    # The same values, with what a hand-written file holds: a BOM, CRLF line
+    # ends, a quoted value, a repeat, and comments with `;` and `:` in them.
+    private_messy = "﻿" + "\r\n".join([
+        "# fixture; private: values",
+        entries[0] + "   # the owner; login: not an entry",
+        "Public-Name: \"" + names["public"] + "\"",
+        "  " + entries[2],
+        entries[3] + " # a runner; see: elsewhere",
+        entries[0],
         "",
     ])
     failures = []
@@ -591,24 +668,45 @@ def self_test():
         rc, out, err = scan_with({ENV_FILE: priv_path})
         check("private file: exit 1 (findings) %s" % rc, rc == EXIT_FINDING)
         check("private file: no class not run", "0 class(es) not run" in out)
-        check("owner-login hits, masked",
-              lines_of(out, "owner-login") == ["src/a.txt:18  o***[11]"])
+        check("owner-login hits in the text and in a path, masked",
+              lines_of(out, "owner-login") == [
+                  "logs/o***[11]-notes.txt:path  o***[11]",
+                  "src/a.txt:18  o***[11]"])
         check("login-at-host hits root and the private login",
               lines_of(out, "login-at-host") == [
                   "src/a.txt:18  l***[8]@l***[7]", "src/a.txt:19  r***[4]@r***[8]"])
-        check("lab-host hits as a whole word, and its file name is masked",
-              lines_of(out, "lab-host") == ["src/a.txt:20  r***[28]"]
+        check("lab-host hits as a whole word and in a file name, masked",
+              lines_of(out, "lab-host") == ["r***[28].log:path  r***[28]",
+                                            "src/a.txt:20  r***[28]"]
               and lines_of(out, "bridge-port")[0] == "r***[28].log:1  3***[5]")
         check("private values never printed",
-              not any(v in out + err for v in names.values()))
+              not any(v.lower() in (out + err).lower() for v in names.values()))
         check("the header counts entries, never values",
               "owner-login x1, public-name x1, login x1, lab-host x1" in out)
         check("owner-login inside the public name is a look-alike",
               "1 look-alike(s) dropped" in header(out, "owner-login"))
-        rc2, out2, _ = scan_with({ENV_VALUES: private_text.replace("\n", ";")})
         body = [ln for ln in out.splitlines() if ln.startswith(("[", " "))]
-        check("the variable reads the same values", rc2 == rc and body == [
-            ln for ln in out2.splitlines() if ln.startswith(("[", " "))])
+
+        def same_values(rc2, out2):
+            return rc2 == rc and body == [
+                ln for ln in out2.splitlines() if ln.startswith(("[", " "))]
+
+        rc2, out2, _ = scan_with({ENV_VALUES: ";".join(entries) +
+                                  " # a comment; with: semicolons"})
+        check("the variable reads the same values (`;` entries, a comment "
+              "with `;` and `:`)", same_values(rc2, out2))
+        with open(priv_path, "w", encoding="utf-8", newline="") as f:
+            f.write(private_messy)
+        rc2, out2, err2 = scan_with({ENV_FILE: priv_path})
+        check("a file with a BOM, CRLF, quotes, repeats and comments holding "
+              "`;` and `:` reads the same values %s" % err2.strip(),
+              same_values(rc2, out2))
+        rc2, _, err2 = scan_with({ENV_FILE: priv_path}, names["owner"] + "-rev")
+        check("an error message masks the private values (exit 2)",
+              rc2 == EXIT_ERROR and "o***[11]-rev" in err2
+              and names["owner"] not in err2)
+        with open(priv_path, "w", encoding="utf-8") as f:
+            f.write(private_text)
 
         inside = os.path.join(repo, "priv.txt")
         with open(inside, "w", encoding="utf-8") as f:
@@ -619,6 +717,12 @@ def self_test():
         rc, _, err = scan_with({ENV_VALUES: "owner: " + names["owner"]})
         check("a bad private entry is refused without echoing it",
               rc == EXIT_ERROR and names["owner"] not in err)
+        bad_path = os.path.join(tmp, "bad")
+        with open(bad_path, "w", encoding="utf-8") as f:
+            f.write("# ok\n" + entries[0] + "\nlab-host:\n")
+        rc, _, err = scan_with({ENV_FILE: bad_path})
+        check("an entry without a value is refused with its line number",
+              rc == EXIT_ERROR and "line 3:" in err)
         rc, _, _ = scan_with({}, "no-such-rev")
         check("an unknown revision exits 2", rc == EXIT_ERROR)
 
@@ -644,10 +748,45 @@ def self_test():
               p.returncode == EXIT_OK and "summary: 0 H/M" in p.stdout)
 
         try:
-            load_allow(REPO_ALLOW)
+            repo_rules = load_allow(REPO_ALLOW)
             check("tools/release/redaction-scan.allow parses", True)
         except ScanError as ex:
+            repo_rules = []
             check("tools/release/redaction-scan.allow parses: %s" % ex, False)
+
+        # The tree's allow file on look-alikes of its own rules: every hit
+        # in DROP is dropped, none in KEEP is.
+        tool = j(["tool", "x"])
+        rxs = {c[0]: c[3] for c in build_classes({"lab-host": [tool]})}
+
+        def outcome(key, path, line):
+            """[True for a dropped hit, False for a kept one] of LINE."""
+            return [(allow_rule(repo_rules, key, path, line, *m.span())
+                     or "x")[0] == "drop" for m in rxs[key].finditer(line)]
+
+        def dropped(key, path, line):
+            got = outcome(key, path, line)
+            return bool(got) and all(got)
+
+        def kept(key, path, line):
+            return False in outcome(key, path, line)
+
+        env_drop = ["`%s image build` with %s_RECIPES=tools/env" % (tool, tool.upper()),
+                    "an %s session (`%s login`; %s_URL names" % (tool, tool, tool.upper()),
+                    "command -v %s >/dev/null || echo no %s CLI" % (tool, tool),
+                    "The %s pool, `%s pool apply` (%s-complex docs)" % (tool, tool, tool)]
+        for line in env_drop:
+            check("allow: tools/env look-alike dropped: %s" % line,
+                  dropped("lab-host", "tools/env/x.sh", line))
+        for path, line in (("tools/env/x.sh", "ssh to %s first" % tool),
+                           ("tools/y.sh", "`%s image build`" % tool)):
+            check("allow: %s in %s stays a finding" % (line, path),
+                  kept("lab-host", path, line))
+        check("allow: a regex named SECRET is a look-alike",
+              dropped("password", "tools/x.py",
+                      j(["SEC", "RET = re.compile("]) + "r\"/home/\")"))
+        check("allow: a secret value in Python stays a finding",
+              kept("password", "tools/x.py", j(["SEC", "RET = \"abcdef\""])))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("%d check(s) failed" % len(failures) if failures else "self-test passed")
