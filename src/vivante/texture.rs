@@ -78,7 +78,7 @@ pub struct GcTexfmt {
 
 /// Bytes in one 4x4 block of a compressed format.
 fn block_bytes(format: u8) -> u32 {
-    if format == GLES_TEXFMT_ETC2_RGBA {
+    if matches!(format, GLES_TEXFMT_ETC2_RGBA | GLES_TEXFMT_ETC2_SRGB_RGBA) {
         16
     } else {
         8
@@ -126,9 +126,16 @@ pub fn gc_texfmt(format: u8) -> GcTexfmt {
         }
         /* no 128-bit TE format: Mesa's two G32R32 planes are not done here */
         GLES_TEXFMT_RGBA32UI | GLES_TEXFMT_RGBA32I | GLES_TEXFMT_RGBA32F => f.decoded = false,
-        /* the compressed sRGB blocks are in no GC mask (the PowerVR's set
-         * alone has them): nothing here decodes them */
-        GLES_TEXFMT_ETC2_SRGB_RGB | GLES_TEXFMT_ETC2_SRGB_RGBA => f.decoded = false,
+        /* the compressed sRGB blocks: the block row of the linear twin
+         * (etnaviv looks a format up by its linear twin, etnaviv_format.c:278,
+         * so SRGB8_ETC2 is EXT_NONE as ETC2_RGB8 is, :244, and
+         * SRGB8_ALPHA8_ETC2_EAC is EXT_RGBA8_ETC2_EAC, :246), decoded from
+         * the sRGB curve by SAMP_CTRL1's SRGB ([`samp_ctrl1`]) and, as every
+         * sRGB format, off INT_FILTER (etnaviv_format.c:317-318). Still in no
+         * GC mask: the GL core refuses the names until GC_SAMPLED_TEXFMTS
+         * holds the classes. */
+        GLES_TEXFMT_ETC2_SRGB_RGB => f = GcTexfmt { int_filter: false, ..unorm_format(GLES_TEXFMT_ETC2_RGB) },
+        GLES_TEXFMT_ETC2_SRGB_RGBA => f = GcTexfmt { int_filter: false, ..unorm_format(GLES_TEXFMT_ETC2_RGBA) },
         /* the RGBA8 texel row, decoded by SAMP_CTRL1's SRGB ([`samp_ctrl1`]) */
         GLES_TEXFMT_SRGB8_A8 => f.format = GC_TEX_FORMAT_A8B8G8R8,
         GLES_TEXFMT_RGBA16F => f.format_ext = GC_TEX_FORMAT_EXT_A16B16G16R16F,
@@ -449,8 +456,9 @@ fn build_descriptor(f: &mut GcFrame, t: &GlesTextureBind, plane: u32) -> u64 {
 /// etnaviv_texture_desc.c; tools/vivante golden mode 26 carries the bit): a
 /// UNORM, non-sRGB format that is not ASTC, R10G10B10A2 or ETC2 R11/RG11,
 /// on anything but a 3D texture, with no anisotropy. Of ours that is every
-/// 8-bit and 5/6-bit format and the ETC ones ([`GcTexfmt::int_filter`]); the
-/// float, snorm, integer, sRGB and 10-bit ones are not. In both stages. The
+/// 8-bit and 5/6-bit format and the linear ETC ones ([`GcTexfmt::int_filter`]);
+/// the float, snorm, integer, sRGB (texel or block) and 10-bit ones are not.
+/// In both stages. The
 /// GL core stores a depth texture in RGBA8 and the binding does not say so,
 /// so a depth texture takes the bit where Mesa leaves it off.
 fn int_filter_wanted(t: &GlesTextureBind) -> bool {
@@ -458,11 +466,13 @@ fn int_filter_wanted(t: &GlesTextureBind) -> bool {
 }
 
 /// SAMP_CTRL1 of a binding: Mesa's constant UNK1 (etnaviv_texture_desc.c:
-/// 116), with SRGB for the sRGB class (:246-247), whose texels are the
-/// A8B8G8R8 row's (etnaviv translates an sRGB format through its linear
-/// twin, etnaviv_format.c:278).
+/// 116), with SRGB for every sRGB class (:246-247, `util_format_is_srgb`):
+/// the texel one, whose texels are the A8B8G8R8 row's, and the two
+/// compressed ones, whose blocks are their linear twins' (etnaviv translates
+/// an sRGB format through its linear twin, etnaviv_format.c:278).
 fn samp_ctrl1(t: &GlesTextureBind) -> u32 {
-    GC_SAMP_CTRL1_UNK1 | if t.format == GLES_TEXFMT_SRGB8_A8 { GC_SAMP_CTRL1_SRGB } else { 0 }
+    let srgb = matches!(t.format, GLES_TEXFMT_SRGB8_A8 | GLES_TEXFMT_ETC2_SRGB_RGB | GLES_TEXFMT_ETC2_SRGB_RGBA);
+    GC_SAMP_CTRL1_UNK1 | if srgb { GC_SAMP_CTRL1_SRGB } else { 0 }
 }
 
 /// Program `slot` for `t`, and, for a 128-bit binding sampled as two planes,
@@ -749,7 +759,7 @@ mod tests {
     /// The sRGB class's texels are the RGBA8 row's (A8B8G8R8): etnaviv
     /// translates an sRGB format through its linear twin
     /// (etnaviv_format.c:278) and decodes with SAMP_CTRL1's SRGB bit
-    /// ([`samp_ctrl1`]), which only it sets.
+    /// ([`samp_ctrl1`]), which no linear class gets.
     #[test]
     fn the_srgb_class_is_the_rgba8_texel_row_with_the_decode_bit() {
         let (s, r) = (gc_texfmt(GLES_TEXFMT_SRGB8_A8), gc_texfmt(crate::backend::GLES_TEXFMT_RGBA8));
@@ -763,6 +773,46 @@ mod tests {
         assert_eq!(samp_ctrl1(&t), GC_SAMP_CTRL1_UNK1 | GC_SAMP_CTRL1_SRGB);
         for format in [crate::backend::GLES_TEXFMT_RGBA8, GLES_TEXFMT_RGBA16F, GLES_TEXFMT_L8, GLES_TEXFMT_ETC2_RGB] {
             assert_eq!(samp_ctrl1(&GlesTextureBind { format, ..t }), GC_SAMP_CTRL1_UNK1, "format {format}");
+        }
+    }
+
+    /// A compressed sRGB class is its linear twin's block row: etnaviv looks
+    /// a format up by its linear twin (etnaviv_format.c:278), so SRGB8_ETC2
+    /// is EXT_NONE as ETC2_RGB8 is (:244) and SRGB8_ALPHA8_ETC2_EAC is
+    /// EXT_RGBA8_ETC2_EAC (:246), the same block size, swizzle and CONFIG2;
+    /// the descriptor decodes it, through SAMP_CTRL1's SRGB bit
+    /// (etnaviv_texture_desc.c:246-247), with INT_FILTER off as for every
+    /// sRGB format (etnaviv_format.c:317-318).
+    #[test]
+    fn a_compressed_srgb_class_is_its_linear_twins_block_row_with_the_decode_bit() {
+        for (srgb, linear, ext, bytes) in [
+            (GLES_TEXFMT_ETC2_SRGB_RGB, GLES_TEXFMT_ETC2_RGB, GC_TEX_FORMAT_EXT_NONE, 8),
+            (GLES_TEXFMT_ETC2_SRGB_RGBA, GLES_TEXFMT_ETC2_RGBA, GC_TEX_FORMAT_EXT_RGBA8_ETC2_EAC, 16),
+        ] {
+            let (s, l) = (gc_texfmt(srgb), gc_texfmt(linear));
+            assert!(s.decoded && l.decoded, "class {srgb}: decoded, as its twin {linear}");
+            assert_eq!(
+                (s.format, s.format_ext, s.compressed, s.no_alpha, s.config2),
+                (l.format, l.format_ext, l.compressed, l.no_alpha, l.config2),
+                "class {srgb}: the words of {linear}"
+            );
+            assert_eq!((s.format, s.format_ext, s.compressed), (0, ext, true), "class {srgb}");
+            assert!(l.int_filter && !s.int_filter, "class {srgb}: no INT_FILTER for sRGB (etnaviv_format.c:317-318)");
+            assert!(is_block_format(srgb), "class {srgb}: a block format, sized in blocks");
+            assert_eq!((block_bytes(srgb), block_bytes(linear)), (bytes, bytes), "class {srgb}: one block's bytes");
+
+            let bind = |format| GlesTextureBind {
+                format,
+                width: 8,
+                height: 8,
+                stride_texels: 8,
+                mip_levels: 1,
+                layers: 1,
+                ..GlesTextureBind::ZERO
+            };
+            assert_eq!(format_words(&bind(srgb), true), format_words(&bind(linear), true), "class {srgb}: CONFIG0-2");
+            assert_eq!(samp_ctrl1(&bind(srgb)), GC_SAMP_CTRL1_UNK1 | GC_SAMP_CTRL1_SRGB, "class {srgb}: SRGB");
+            assert_eq!(samp_ctrl1(&bind(linear)), GC_SAMP_CTRL1_UNK1, "class {linear}: no SRGB");
         }
     }
 }
