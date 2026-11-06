@@ -75,8 +75,8 @@ core's `no_alpha` (a GL_RGB / GL_LUMINANCE base) turns the alpha swizzle into
 | `GLES_TEXFMT_ETC2_RGB` | `TEXTURE_FORMAT_EXT_NONE` | RGB1 | - | yes | yes (HALTI0) | no (block) | - | linear; none | the extended format 0 ("Extd. format NONE doubles as ETC2_RGB8") decodes ETC1 blocks and ETC2's T, H and planar modes; ES 2.0 ETC1 textures go through it too (a strict superset) | `F:237,244`; `X:65-67` |
 | `GLES_TEXFMT_ETC2_RGBA` | `TEXTURE_FORMAT_EXT_RGBA8_ETC2_EAC` | RGBA | - | yes | yes (HALTI0) | no (block) | - | linear; none | - | `F:246`; `X:68` |
 | `GLES_TEXFMT_ETC2_RGB_PT` | `TEXTURE_FORMAT_EXT_RGB8_PUNCHTHROUGH_ALPHA1_ETC2` | RGBA | - | yes | yes (HALTI0) | no (block) | - | linear; none | - | `F:245`; `X:67` |
-| `GLES_TEXFMT_ETC2_SRGB_RGB` | none | RGB1 | - | no | not here (only the PowerVR's mask has the compressed sRGB classes, `docs/es3/srgb.md` 4.3) | no | - | sRGB; none | - (etnaviv samples it as the ETC2 block format with `SAMP_CTRL1.SRGB`; not built) | `F:237`; `X:65-66` |
-| `GLES_TEXFMT_ETC2_SRGB_RGBA` | none | RGBA | - | no | not here (as the row above) | no | - | sRGB; none | - (as the row above) | `F:246`; `X:68` |
+| `GLES_TEXFMT_ETC2_SRGB_RGB` | `TEXTURE_FORMAT_EXT_NONE` | RGB1 | - | no | not here (only the PowerVR's mask has the compressed sRGB classes, `docs/es3/srgb.md` 4.3) | no | - | sRGB; none | - (etnaviv samples it as the ETC2 block format of its linear twin, `F:278`, with `SAMP_CTRL1.SRGB`, `D:246-247`; the descriptor words are built, the mask is still closed) | `F:244`, `F:278`; `X:66` |
+| `GLES_TEXFMT_ETC2_SRGB_RGBA` | `TEXTURE_FORMAT_EXT_RGBA8_ETC2_EAC` | RGBA | - | no | not here (as the row above) | no | - | sRGB; none | - (as the row above) | `F:246`, `F:278`; `X:68` |
 | `GLES_TEXFMT_RGB565` | `TEXTURE_FORMAT_R5G6B5` | RGBA | - | yes | yes (no gate) | yes | - | linear; none | - (B5G6R5_UNORM, red in the high bits as GL's 5_6_5) | `F:114`; `X:54` |
 | `GLES_TEXFMT_RGBA16F` | `TEXTURE_FORMAT_EXT_A16B16G16R16F` | RGBA | - | no | yes (HALTI2) | yes | - | linear; none | - | `F:205`; `S:419-421`; `X:75` |
 | `GLES_TEXFMT_R16F` | `TEXTURE_FORMAT_EXT_R16F` | RGBA | - | no | yes (HALTI2) | yes | - | linear; none | - (the TE fills G, B with 0 and A with 1) | `F:106`; `X:73` |
@@ -167,7 +167,7 @@ Built (host only; nothing here has run on the GPU):
 in the mask, so the GL core stores them natively on this back end;
 `GLES_TEXFMT_RGB10A2` stays out for the reason `PVR_SAMPLED_TEXFMTS` gives.
 The test fails when the mask and the `in mask` column disagree. Still unsupported
-(refused or kept in a fallback class): RGBA32F/UI/I, R32I/UI, RG32I/UI (ETC2 RGB is `EXT_NONE` and decodes all its modes; the compressed sRGB classes are not built).
+(refused or kept in a fallback class): RGBA32F/UI/I, R32I/UI, RG32I/UI (ETC2 RGB is `EXT_NONE` and decodes all its modes; the compressed sRGB classes have their descriptor words but are not in the mask yet).
 
 Left:
 
