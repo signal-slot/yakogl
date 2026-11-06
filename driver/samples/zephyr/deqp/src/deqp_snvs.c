@@ -80,16 +80,23 @@ static int fails_page(void)
 	return sel >= 0 && (sel & GC_RESULT_DEQP_SEL_FAILS) ? (sel >> 8) & 0x7f : -1;
 }
 
+/* six names a page in w1..w3; four where w3 is not stored (gc_result.h) */
 static uint16_t s_page_names[GC_RESULT_DEQP_FAILS_PER_PAGE] = {
-	0xffffu, 0xffffu, 0xffffu, 0xffffu, 0xffffu, 0xffffu,
+	[0 ... GC_RESULT_DEQP_FAILS_PER_PAGE - 1] = 0xffffu,
 };
 
 static void write_fails_page(void)
 {
+#ifdef CONFIG_GC_COMMON_RESULT_SNVS_KEEP_LPGPR0
+	gc_result_write_tag(GC_RESULT_DEQP_FAILS, (uint8_t)MIN(s_fail, 255u),
+			    s_page_names[0] | (uint32_t)s_page_names[1] << 16,
+			    s_page_names[2] | (uint32_t)s_page_names[3] << 16, 0u);
+#else
 	gc_result_write_tag(GC_RESULT_DEQP_FAILS, (uint8_t)MIN(s_fail, 255u),
 			    s_page_names[0] | (uint32_t)s_page_names[1] << 16,
 			    s_page_names[2] | (uint32_t)s_page_names[3] << 16,
 			    s_page_names[4] | (uint32_t)s_page_names[5] << 16);
+#endif
 }
 
 /* Selector GC_RESULT_DEQP_SEL_PROBE (gc_result.h): the first failing case's

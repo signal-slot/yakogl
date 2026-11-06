@@ -285,7 +285,27 @@ enum gc_result_case_status {
  * InternalError, Crash, Timeout, ...), records its status string: w0's low byte = the index of that case
  * in the run (saturating); w1..w3 = the first 12 bytes of the string, little-endian, zero-padded. */
 #define GC_RESULT_DEQP_SEL_STATUS YK_RECORD_DEQP_SEL_STATUS
+/* Names on a kind DEQP_FAILS page: six in w1..w3, four when w3 is not stored
+ * (KEEP_LPGPR0, the Armadillo-X2: w1 and w2 only). What the missing w3 costs,
+ * and why the X2 tree decodes shorter pages rather than reading names from the
+ * console (the decision, 2026-11-06):
+ *  - the row record DEQP (kind 8) loses the cases begun (w3 low half) and the
+ *    first failing name check (w3 high half). `yakogl-tools record --words 3`
+ *    prints both as `-` and derives begun as pass + fail + notsup + other, so a
+ *    case that began and left no result is not visible in an X2 row's tally;
+ *  - DEQP_CASES (kind 9) loses its GPU resets and fence timeouts, CASE_SET
+ *    summaries their cases-run count, DEQP_STATUS its last four string bytes;
+ *  - DEQP_FAILS pages hold four names a page, so the selector form needs
+ *    ceil(fails / 4) boots per failing row instead of ceil(fails / 6), with
+ *    the same names (tools/board.sh name_pages / results_tsv).
+ * The failing names stay in the record because the board has the UART2 console
+ * only when BOARD_UART is set and a run must not depend on it; with NAMES=0
+ * (or a console) tools/cts/deqp-uart-tally.py names them from the console. */
+#ifdef CONFIG_GC_COMMON_RESULT_SNVS_KEEP_LPGPR0
+#define GC_RESULT_DEQP_FAILS_PER_PAGE YK_RECORD_DEQP_FAILS_PER_PAGE_3W
+#else
 #define GC_RESULT_DEQP_FAILS_PER_PAGE YK_RECORD_DEQP_FAILS_PER_PAGE
+#endif
 
 /* kind PERF: selector GC_RESULT_PERF_SEL | exp << 3 | page runs the
  * application with performance experiment `exp` (application-defined; 0 =

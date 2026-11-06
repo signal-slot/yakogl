@@ -435,6 +435,12 @@ int imx8mp_display_set_fb(uintptr_t fb_phys)
 	return rc;
 }
 
+/* No backlight is ours (the previous kernel's stays as it is): the board
+ * layer's call after the first frame has nothing to do. */
+void imx8mp_display_backlight_on(void)
+{
+}
+
 /* Nothing downstream is ours: "off" gives the previous kernel its layer back. */
 void imx8mp_display_off(void)
 {
