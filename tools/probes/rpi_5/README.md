@@ -12,7 +12,7 @@ Each ends with a line a run can grep for.
 | `rpi5_hello` | the smallest image boots from `kernel=` and prints on uart10 | planned | planned |
 | `rpi5_dtb` (D1) | the DTB pointer the firmware passes and the V3D, SMS, HVS, clock and `pm` nodes in it; answers U6 | planned | planned |
 | `rpi5_ident` (D2) | the V3D hub and core identity and `MMU_DEBUG_INFO` read with no setup, equal to Linux's | planned | planned |
-| `rpi5_clear` (M1 to M4) | power-on, identity, MMU, empty binning and render lists, a TLB clear read back | `v3d_clear: PASS` | planned |
+| `rpi5_clear` (M1 to M4) | power-on, identity (raw, with `MMU_DEBUG_INFO`), MMU, the 7.1 clear-only frame binned and rendered, a TLB clear to a 128x64 raster target read back | `v3d_clear: PASS (...)` or `v3d_clear: FAIL (reason)` | yes (built, not run) |
 
 `common/boot` holds the shared entry-state stub (`boot_x0`) that keeps the
 firmware's x0; see its README. Details of each probe are in its own README.
