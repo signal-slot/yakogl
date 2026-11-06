@@ -236,6 +236,18 @@ def split_by_status(r, lost):
     return ", ".join("%s %d" % (k, v) for k, v in d.items() if v)
 
 
+def shown_path(path):
+    """a console path as the tally prints it: from its "records/" component on, else
+    relative to the current directory; never absolute (no home directory in a tally)"""
+    p = re.sub(r"/+", "/", path)
+    parts = p.split("/")
+    if "records" in parts[:-1]:
+        return "/".join(parts[len(parts) - 1 - parts[::-1].index("records", 1):])
+    if os.path.isabs(p):
+        p = os.path.relpath(p)
+    return os.path.normpath(p)
+
+
 def lost_lines(name, r):
     """the "Lost in capture" lines of one scanned log (none when nothing is lost)"""
     loss = r["loss"]
@@ -648,8 +660,9 @@ def main():
         lost_total += r["loss"]["lost"] if r["loss"] else 0
         if a.lost:
             continue
-        print("%s: %s%s" % (path, " | ".join(tail), (" | " if tail else "") + verdict if verdict else ""))
-        for l in lost_lines(path, r):
+        shown = shown_path(path)
+        print("%s: %s%s" % (shown, " | ".join(tail), (" | " if tail else "") + verdict if verdict else ""))
+        for l in lost_lines(shown, r):
             print(l)
         missing |= verdict is not None
         status.update(got)
