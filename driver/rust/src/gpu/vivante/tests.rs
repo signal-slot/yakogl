@@ -462,6 +462,65 @@ fn an_unknown_part_is_identified_from_registers_alone() {
     assert!(!hw::identify(&m, m.base(GC), &e).unwrap().from_table);
 }
 
+fn poke_st_identity(m: &Model) {
+    for (off, v) in [(0x20, 0x8000), (0x24, 0x6205), (0xa8, 0x80003), (0xe8, 0)] {
+        m.poke(GC, off, v);
+    }
+}
+
+#[test]
+fn every_database_row_identifies_from_the_table() {
+    for (row, poke) in [(hw::DB_IMX8MP, poke_identity as fn(&Model)), (hw::DB_STM32MP257F, poke_st_identity)] {
+        let m = Model::new();
+        let e = TestEnv::default();
+        poke_identity(&m);
+        poke(&m);
+        // the customer id is not part of either row
+        m.poke(GC, 0x30, 0x15);
+        let id = hw::identify(&m, m.base(GC), &e).unwrap();
+        assert!(id.from_table, "{}", row.name);
+        assert_eq!((id.model, id.revision, id.product_id), (row.chip_id, row.board_revision, row.product_id));
+        assert_eq!(
+            (id.stream_count, id.register_max, id.thread_count, id.shader_core_count),
+            (row.streams, row.temp_registers, row.thread_count, row.num_shader_cores)
+        );
+        assert_eq!(
+            (id.vertex_cache_size, id.vertex_output_buffer_size, id.pixel_pipes),
+            (row.vertex_cache_size, row.vertex_output_buffer_size, row.num_pixel_pipes)
+        );
+        assert_eq!(
+            (id.instruction_count, id.num_constants, id.varyings_count),
+            (row.instruction_count, row.number_of_constants, row.varying_count)
+        );
+        assert!(id.secure_ahb);
+        assert_ne!(id.minor_features[1] & regs::CHIP_MINOR_FEATURES1_MMU_VERSION, 0);
+        assert!(!e.lines.borrow().iter().any(|l| l.0 == Level::Wrn));
+    }
+    // the ST row's values
+    let m = Model::new();
+    poke_identity(&m);
+    poke_st_identity(&m);
+    let id = hw::identify(&m, m.base(GC), &TestEnv::default()).unwrap();
+    assert_eq!((id.stream_count, id.num_constants, id.instruction_count), (16, 320, 512));
+    // the i.MX8MP's stay 8 streams
+    let m = Model::new();
+    poke_identity(&m);
+    assert_eq!(hw::identify(&m, m.base(GC), &TestEnv::default()).unwrap().stream_count, 8);
+}
+
+#[test]
+fn the_st_row_wants_its_revision_product_and_eco() {
+    for (off, v) in [(0x24, 0x6204), (0x24, 0x6207), (0xa8, 0x80002), (0xe8, 1), (0x20, 0x7000)] {
+        let m = Model::new();
+        let e = TestEnv::default();
+        poke_identity(&m);
+        poke_st_identity(&m);
+        m.poke(GC, off, v);
+        assert!(!hw::identify(&m, m.base(GC), &e).unwrap().from_table, "{off:#x}={v:#x}");
+        assert!(e.lines.borrow().iter().any(|l| l.0 == Level::Wrn && l.1.contains("not in the hardware database")));
+    }
+}
+
 #[test]
 fn the_database_facts_are_folded_into_the_feature_words() {
     let m = Model::new();

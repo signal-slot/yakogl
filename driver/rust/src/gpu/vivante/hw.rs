@@ -10,7 +10,7 @@
 //!   feature word and minor feature words 0..6 as registers, and takes the
 //!   part's capabilities and limits from its feature database
 //!   (`hal/kernel/inc/gc_feature_database.h`, `gcQueryFeatureDB`). [`DB`] is
-//!   that database's entry for this part;
+//!   that database's rows for the parts this driver knows;
 //! - reset: galcore `_ResetGPU` (same file): clock gating off, pulse eater,
 //!   FSCALE load, isolate, soft reset (through MMUv2_AHB_CONTROL on a part
 //!   with the secure AHB), release, check idle, MMU off;
@@ -29,18 +29,25 @@ use crate::ylog;
 
 use super::GcIdentity;
 
-/// The part's facts from galcore's feature database, entry "gc7000UL_6200"
-/// (gc_feature_database.h, linux-imx lf-6.12.y): chipID 0x7000, product
-/// 0x70003, an informal entry (formalRelease 0) that `gcQueryFeatureDB`
-/// matches on revision & 0xfff0 == 0x6200. Field names are galcore's.
+/// One part's row of the hardware database. The i.MX8MP's is galcore's
+/// "gc7000UL_6200" (gc_feature_database.h, linux-imx lf-6.12.y): chipID
+/// 0x7000, product 0x70003, an informal entry (formalRelease 0) that
+/// `gcQueryFeatureDB` matches on revision & 0xfff0 == 0x6200. Field names
+/// are galcore's. A row matches on model, revision (under `revision_mask`),
+/// product, and eco and customer where the row gives them (`None` matches
+/// any), and then on `board_revision`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct DbEntry {
+    pub name: &'static str,
     pub chip_id: u32,
     pub revision_mask: u32,
     pub revision: u32,
     pub product_id: u32,
+    pub eco_id: Option<u32>,
+    pub customer_id: Option<u32>,
     /// The one revision this driver's init has run on (the Verdin iMX8M
-    /// Plus reports 0x6204); others are refused as "not in the database".
+    /// Plus reports 0x6204; the STM32MP257F-DK 0x6205); others are refused
+    /// as "not in the database".
     pub board_revision: u32,
     pub temp_registers: u32,
     pub thread_count: u32,
@@ -59,11 +66,28 @@ pub struct DbEntry {
     pub security_ahb: bool,
 }
 
-pub const DB: DbEntry = DbEntry {
+impl DbEntry {
+    /// The row's rule against the identity registers.
+    pub fn matches(&self, id: &GcIdentity) -> bool {
+        id.model == self.chip_id
+            && id.revision & self.revision_mask == self.revision
+            && id.product_id == self.product_id
+            && id.revision == self.board_revision
+            && self.eco_id.is_none_or(|e| e == id.eco_id)
+            && self.customer_id.is_none_or(|c| c == id.customer_id)
+    }
+}
+
+/// The i.MX8MP's row (GC7000UL, galcore's informal "gc7000UL_6200"). Eco and
+/// customer are not part of galcore's rule for it.
+pub const DB_IMX8MP: DbEntry = DbEntry {
+    name: "gc7000UL_6200",
     chip_id: 0x7000,
     revision_mask: 0xfff0,
     revision: 0x6200,
     product_id: 0x70003,
+    eco_id: None,
+    customer_id: None,
     board_revision: 0x6204,
     temp_registers: 0x40,
     thread_count: 0x200,
@@ -79,6 +103,39 @@ pub const DB: DbEntry = DbEntry {
     security: true,
     security_ahb: true,
 };
+
+/// The STM32MP257F's row, read on the DK (issue #1281): model 0x8000,
+/// revision 0x6205, product 0x80003, eco 0. The customer id was not read, so
+/// it is not matched (Mesa's st row says 0x15). Limits from Mesa's st
+/// gc_feature_database.h `GCNANOULTRA31_VIP2` row (:4720, model :4722,
+/// revision :4723, product :4724, streams :4756) and the same facts in
+/// Linux's etnaviv_hwdb.c :199-216.
+pub const DB_STM32MP257F: DbEntry = DbEntry {
+    name: "GCNANOULTRA31_VIP2",
+    chip_id: 0x8000,
+    revision_mask: 0xffff,
+    revision: 0x6205,
+    product_id: 0x80003,
+    eco_id: Some(0),
+    customer_id: None,
+    board_revision: 0x6205,
+    temp_registers: 0x40,
+    thread_count: 0x200,
+    num_shader_cores: 0x2,
+    instruction_count: 0x200,
+    number_of_constants: 0x140,
+    num_pixel_pipes: 0x1,
+    streams: 0x10,
+    varying_count: 0x10,
+    vertex_output_buffer_size: 0x400,
+    vertex_cache_size: 0x10,
+    reg_mmu: true,
+    security: true,
+    security_ahb: true,
+};
+
+/// The database: the parts this driver knows, searched in order.
+pub const DB: [DbEntry; 2] = [DB_IMX8MP, DB_STM32MP257F];
 
 /// The interconnect's answer to a read nobody decodes on this SoC
 /// (0xdeadde..). Measured on the board, 2026-09-22 (MMUv2_AHB_CONTROL reads
@@ -107,7 +164,7 @@ pub fn rd_fe(m: &impl Mmio, regs: usize, off: u32) -> u32 {
 
 /// Identify the GPU. Refuses (-ENODEV) a block that does not answer: model 0,
 /// all ones, or the interconnect's absent pattern. A part that answers but
-/// is not [`DB`]'s is identified from its registers alone (`from_table`
+/// is in no row of [`DB`] is identified from its registers alone (`from_table`
 /// false) with a warning; nothing past the reset is expected to work on it.
 pub fn identify(m: &impl Mmio, regs: usize, env: &impl Env) -> Result<GcIdentity, i32> {
     let mut id = GcIdentity::default();
@@ -161,12 +218,7 @@ pub fn identify(m: &impl Mmio, regs: usize, env: &impl Env) -> Result<GcIdentity
         id.minor_features[1]
     );
 
-    let db = &DB;
-    if id.model == db.chip_id
-        && id.revision & db.revision_mask == db.revision
-        && id.product_id == db.product_id
-        && id.revision == db.board_revision
-    {
+    if let Some(db) = DB.iter().find(|row| row.matches(&id)) {
         // The database's facts, folded into the feature words in rnndb's
         // layout so a reader of the words sees them too.
         if db.reg_mmu {

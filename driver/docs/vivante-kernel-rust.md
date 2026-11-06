@@ -151,11 +151,24 @@ registers and takes capabilities from its database, and so does the Rust:
 read by galcore but has no rnndb name, so it is not read). The database's
 REG_MMU, SECURITY and SECURITY_AHB are folded in as the rnndb bits of words
 1, 7 and 10, so `secure_ahb` and the reset's MMU check come out as before. The
-table matches on model 0x7000, revision & 0xfff0 = 0x6200 and product 0x70003
-(galcore's rule), and also requires revision 0x6204, the one revision the
-init has run on. Model 0, all ones, or the absent pattern is -ENODEV. Another
-part is identified from its registers alone, with a warning (the C did the
-same).
+database is a table of rows (`hw::DB`), each keyed on model, revision (with
+a mask where the source row is informal), product, and eco and customer where
+the row gives them (`None` matches any); a row also names the one
+`board_revision` the init has run on. Rows:
+
+- i.MX8MP, galcore's `gc7000UL_6200`: model 0x7000, revision & 0xfff0 =
+  0x6200 and = 0x6204, product 0x70003 (galcore's rule); 8 streams, every
+  value unchanged;
+- STM32MP257F-DK, `GCNANOULTRA31_VIP2`: model 0x8000, revision 0x6205,
+  product 0x80003, eco 0, customer not matched (issue #1281 did not read
+  it); Mesa st `gc_feature_database.h:4720`, Linux `etnaviv_hwdb.c:199-216`:
+  temps 64, threads 512, 2 shader cores, 512 instructions, 320 constants, 1
+  pixel pipe, **16 streams**, 16 varyings, vertex output buffer 0x400, vertex
+  cache 0x10, MMU v2, security and security AHB. The other candidate rows of
+  the pre-study are not entered (nothing read them on a board).
+
+Model 0, all ones, or the absent pattern is -ENODEV. A part in no row is
+identified from its registers alone, with a warning (the C did the same).
 
 ## Host identity with the C
 
