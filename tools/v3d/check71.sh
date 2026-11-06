@@ -10,6 +10,9 @@
 # Exit status: 0 when every script passed; 77 and "gap: <names>" when some
 # script exited 77 (an input is missing) and none failed; 1 when any failed
 # (a gap does not hide a failure).
+#
+# CHECK71_DIR names the script directory (default tools/v3d/check71.d; a
+# relative path is read from the repository root). check71_selftest.sh uses it.
 set -u
 cd "$(dirname "$0")/../.." || exit 1
 
@@ -17,7 +20,8 @@ shopt -s nullglob
 pass=0
 failed=()
 gaps=()
-for s in tools/v3d/check71.d/*.sh; do
+dir=${CHECK71_DIR:-tools/v3d/check71.d}
+for s in "$dir"/*.sh; do
   [ -x "$s" ] || continue
   name=$(basename "$s" .sh)
   out=$("$s" 2>&1)
