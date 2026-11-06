@@ -1,0 +1,4 @@
+12:00:00 boot
+12:00:01 deqp: Pass dEQP-GLES3.a.pass
+12:00:02 deqp: Fail dEQP-GLES3.a.fail
+12:00:03 deqp: summary: 2 cases begun, 2 with a result, 0 without

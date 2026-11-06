@@ -1,0 +1,9 @@
+# Synthetic tree in the pi4-gles3-tree.txt format.
+# image A1: the a group
+dEQP-GLES3.a.*
+# image B1: the b group
+dEQP-GLES3.b.*
+# image C1: the c group
+dEQP-GLES3.c.*
+# image D1: the d group, never run
+dEQP-GLES3.d.*
