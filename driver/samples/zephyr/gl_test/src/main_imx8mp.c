@@ -323,7 +323,7 @@ static int msaa_page_tag(void)
 }
 
 /*
- * KICK_DIFF pages for cases 2 and 10 (#9, #25; gl_test.c, the block above
+ * KICK_DIFF pages for cases 2 and 10 (#5, #10; gl_test.c, the block above
  * gl_test_kick_diff_page; docs/notes/gc-kick-diff.md): the
  * selector GC_RESULT_PERF_SEL | list << 8 | tag, tag 0xe0 | case (0xe2 case
  * 2, 0xea case 10), arms the instrument for that case only and ends the run

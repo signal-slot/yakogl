@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 #
-# An excerpt of a board trace of gl_test case 198 a2cconst (#1386,
+# An excerpt of a board trace of gl_test case 198 a2cconst (#33,
 # alpha-to-coverage), for the frame builder's alpha-to-coverage proof
 # (src/mali/frame_msaa_tests.rs): the first draw of the second picture's
 # frame (a green triangle, alpha to coverage on, alpha masked, depth test

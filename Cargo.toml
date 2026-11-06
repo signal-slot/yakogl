@@ -114,7 +114,7 @@ vivante-depth-guard = ["gpu-vivante"]
 # a product image never does (tools/check.sh "no test knob in the
 # artefact"). A knob's C symbol is in its GPU's debug namespace, which is
 # what that row reads: the GC7000's gc_debug_* (gc_debug_msaa and its
-# scratch probes, issue #8; gc_debug_flip_experiment; gc_debug_narrow_la),
+# scratch probes, issue #4; gc_debug_flip_experiment; gc_debug_narrow_la),
 # the PowerVR's pvr_debug_* (pvr_debug_split_zs, pvr_debug_narrow_la) and
 # its backend options marked TEST KNOB in src/pvr/pvr_backend.h, which
 # pvr_backend_set_option refuses without the feature.

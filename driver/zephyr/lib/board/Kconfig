@@ -188,7 +188,7 @@ config YAKOGL_BOARD_IMX8MP_DISPLAY_RECORD
 	default n
 	depends on YAKOGL_BOARD_IMX8MP && YAKOGL_DRV_DISPLAY_IMX8MP && YAKOGL_DRV_GPU_VIVANTE
 	help
-	  A diagnostic for issue #23 (the panel showed a picture the records
+	  A diagnostic for issue #8 (the panel showed a picture the records
 	  could not see). When a run passes and its window is on the panel,
 	  board_finish() waits about a second and then writes a DISPLAY record
 	  (driver/rust/src/board/record.rs): the pixel clock and the DSI lane

@@ -691,7 +691,7 @@ pub const ADMITTED: u128 = {
         | prod(Abs, NegSrc)
         | prod(Abs, Output)
         | prod(Tex, Output)
-        /* #1385 (b): case 122's `0.5 * (fcols[fidx] + t)` (uniidx_i), case
+        /* #32 (b): case 122's `0.5 * (fcols[fidx] + t)` (uniidx_i), case
          * 108 D's `fcols[fidx]` alone (uniidx_d) and case 197's `mix(v,
          * t, u_pick)`, `ffma(u_pick, t - v, v)` (vtl_fs) */
         | prod(Ubo, AddA)

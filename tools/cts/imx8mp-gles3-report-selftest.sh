@@ -78,7 +78,7 @@ for h in 'RESULTS.md' 'STATUS.md' 'ROADMAP.md' 'issue #2'; do
 	grep -q "^--- .*$h" "$work/full.out"; expect "block headed $h" $?
 done
 grep -q 'リセット0' "$work/full.out"; expect "STATUS line is Japanese with 0 resets" $?
-grep -q '(#1262)' "$work/full.out"; expect "ROADMAP line cites #1262" $?
+grep -q '(#24)' "$work/full.out"; expect "ROADMAP line cites #24" $?
 
 echo "== incomplete run (entries 90-132 missing)"
 python3 "$REPORT" --date 2026-11-10 "${S[0]}" "${S[1]}" > "$work/part.out" 2> "$work/part.err"; rc=$?
@@ -124,7 +124,7 @@ python3 "$REPORT" --apply "$work/r2" "${S[@]}" > "$work/miss.out" 2>&1; rc=$?
 cmp -s "$work/r2/ROADMAP.md" "$ROOT/ROADMAP.md" && cmp -s "$work/r2/tools/cts/STATUS.md" "$ROOT/tools/cts/STATUS.md" \
 	&& cmp -s "$work/r2/tools/cts/RESULTS.md" "$work/r2.orig/tools/cts/RESULTS.md"; expect "missing anchor: nothing written" $?
 
-mkroot "$work/r3"; printf '\n- i.MX8MP: not run on the board yet (#1262)\n' >> "$work/r3/ROADMAP.md"
+mkroot "$work/r3"; printf '\n- i.MX8MP: not run on the board yet (#24)\n' >> "$work/r3/ROADMAP.md"
 mkroot "$work/r3.orig"; cp "$work/r3/ROADMAP.md" "$work/r3.orig/"
 python3 "$REPORT" --apply "$work/r3" "${S[@]}" > "$work/dup.out" 2>&1; rc=$?
 { [ "$rc" != 0 ] && grep -q 'matches 2 times' "$work/dup.out"; }; expect "duplicate anchor: --apply fails and names it" $?

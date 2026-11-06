@@ -1,5 +1,5 @@
 #version 100
-/* #1385 (b), plan #153 uniarray: a float uniform array read at a run-time
+/* #32 (b), plan #153 uniarray: a float uniform array read at a run-time
  * index in the vertex stage (case 108 B's read, moved to the vertex
  * shader; tools/mali/drm_shim_ref.sh run, Mesa 26.2.1; the pair's fragment
  * shader is uniarray_vs.frag). */

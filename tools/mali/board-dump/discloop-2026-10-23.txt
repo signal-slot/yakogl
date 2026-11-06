@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 #
-# An excerpt of a board trace of gl_test case 213 discloop (#1384 S6: a
+# An excerpt of a board trace of gl_test case 213 discloop (#31 S6: a
 # fragment shader that discards, before and after a bounded loop), for the
 # frame builder's discard proof (src/mali/frame_discard_tests.rs): the
 # case's one draw (colour on, depth and stencil off, blending off, into a

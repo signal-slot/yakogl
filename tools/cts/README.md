@@ -608,7 +608,7 @@ committed reference is `imx8mp-full-tree-29460f96.results.tsv`
 table. Compare with `diff <(cut -f1-8 <that file>) <(cut -f1-8 <rec>/full/results.tsv)`
 or `tools/board.sh imx8mp diff <earlier tree dir> <rec>/full` when the
 earlier tree's directory is kept. Known intermittent rows: see
-issues #25, #9, #8.
+issues #10, #5, #4.
 
 **Raspberry Pi 4** (`BOARD=rpi_4b` for stage 1; backend tryboot, so no
 `BOARD_BOOT`; `BOARD_UART` the debug probe's by-id device or its bridge's `host:port`,

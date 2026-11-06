@@ -3,7 +3,7 @@
 # Valhall fragment stage: highp fp32 arithmetic (S2) and gl_FragCoord (S4)
 
 Date 2026-10-20, tip `fc2f48f3a`. Plan #152 item `notes-highp-fragcoord`, for
-issue #1384 (`gh` was not readable from the worker; the scope is
+issue #31 (`gh` was not readable from the worker; the scope is
 `driver/docs/nanopc-t6-mali.md`, "The general lowering (approved 2026-10-19)",
 and the gap list of `docs/notes/mali-lowering-map.md`, "Gaps this note found in
 the design", item 1). It closes the two holes that map left: it has sections

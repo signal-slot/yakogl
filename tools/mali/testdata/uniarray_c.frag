@@ -1,4 +1,4 @@
-/* #1385 (b), plan #153 uniarray: gl_test case 108 uniidx program C,
+/* #32 (b), plan #153 uniarray: gl_test case 108 uniidx program C,
  * tools/shaders/es100/uniidx_c.frag verbatim (program B's read with
  * unrelated ALU work between the movar and the read; tools/mali/
  * drm_shim_ref.sh run, Mesa 26.2.1; the pair's vertex shader is

@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 #
 # An excerpt of two board traces of a 4x frame that starts from the old
-# image (#1386, the preload of a 4x target), for the frame builder's 4x
+# image (#33, the preload of a 4x target), for the frame builder's 4x
 # preload proof (src/mali/frame_preload_tests.rs): each run's second frame,
 # the command-stream words of its draw and the raw memory of the buffer
 # that holds its framebuffer descriptor and its pre-frame draws (DCDs,

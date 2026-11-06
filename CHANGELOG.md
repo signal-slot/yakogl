@@ -184,7 +184,7 @@ state on 2026-10-26.
 
 - OpenGL ES 3.0 is not complete on any board (stage 4 of `ROADMAP.md`).
 - The `gpu-mali` back end runs only on the NanoPC-T6's own Linux, through the
-  panthor kernel driver, not on Zephyr yet (#1281). Its newest `gl_test`
+  panthor kernel driver, not on Zephyr yet (#26). Its newest `gl_test`
   sweep reads 98 of 256 cases PASS and 0 FAIL (2026-10-24).
 - Slow glmark2 scenes: terrain on the AM62P (91 ms a frame; shadow and
   refract are 10.6 and 37.1 ms since #40), terrain, shadow and refract on

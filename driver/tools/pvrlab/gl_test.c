@@ -598,7 +598,7 @@
  *               test (one frame) and by the stencil test (another), the
  *               diagonal's pixels half each colour (both tests per
  *               sample). Written for the Mali's 4x depth/stencil frame
- *               (#1386); SKIP without a 4x config (as 145). All three
+ *               (#33); SKIP without a 4x config (as 145). All three
  *               GPUs; not in the set (as 145)
  * 208 msaapre   a second frame on a 4x pbuffer that starts from the first's
  *               image (no clear): case 16's red lower-right triangle, a
@@ -607,38 +607,38 @@
  *               0x80), green inside the second, the second's edge half green
  *               over red (0x80, 0x80, 0) and over black (0, 0x80, 0): the
  *               reloaded pixels are the first frame's in every sample.
- *               Written for the Mali's preload of a 4x target (#1386); SKIP
+ *               Written for the Mali's preload of a 4x target (#33); SKIP
  *               without a 4x config (as 145). All three GPUs; not in the set
  *               (as 145)
  * 209 varyorder three varyings (vec4 v_a, vec2 v_uv, vec4 v_b) declared in
  *               the vertex shader's order by one fragment shader and in the
  *               reverse order by another, each drawing v_a * (v_uv, 1, 1) +
  *               v_b into one half (64 191 191 255). Written for the Mali's
- *               link of varyings declared in different orders (#1386); its
+ *               link of varyings declared in different orders (#33); its
  *               sources are built at run time (skipped by name in a table
  *               build). All three GPUs; not in the set
  * 210 occlacc   three occlusion queries each spanning a glFlush: pass+pass
  *               (1), pass+hidden (1: the second job's nothing does not clear
  *               the first's pass), hidden+hidden (0). Written for the Mali's
- *               accumulation across jobs (#1386); all three GPUs; not in the
+ *               accumulation across jobs (#33); all three GPUs; not in the
  *               set
  * 211 msaablend case 8's fifth frame (CONSTANT_COLOR, glBlendColor 0.25 0.5
  *               0.75 1) on a 4x pbuffer whose destination differs between
  *               the samples of a pixel: a green alpha-0.5 quad over case 16's
  *               red triangle on black, 0x800080bf over red, 0x80008000 over
  *               black, the half-red diagonal 0x80008060. Written for the
- *               Mali's blend shader at 4x (#1386); SKIP without a 4x config
+ *               Mali's blend shader at 4x (#33); SKIP without a 4x config
  *               (as 145). All three GPUs; not in the set (as 145)
  * 212 ifsel     femtovg-shaped if/else on a uniform and on the varying: a
  *               small if a select can replace (the uniform then moved, the
  *               same pixel flips) and nested if/else blocks computing
  *               different colours (four regions). Written for the Mali's
- *               if lowering (#1384 S5); all three GPUs; not in the set
+ *               if lowering (#31 S5); all three GPUs; not in the set
  * 213 discloop  a constant-bounded for-loop (four taps, filter_image's
  *               shape) with a discard before it and one after it, on
  *               coordinate conditions: kept pixels (80 159 239 255),
  *               discarded ones keep the clear colour. Written for the
- *               Mali's discard and loop unrolling (#1384 S6); all three
+ *               Mali's discard and loop unrolling (#31 S6); all three
  *               GPUs; not in the set
  * 214 splitkick case 16's white diagonal triangle on a 4x pbuffer drawn,
  *               glFinish (kick 1), drawn again with no clear (kick 2), read
@@ -1062,7 +1062,7 @@ static void dump_map(const uint32_t *px, uint32_t w, uint32_t h)
 }
 
 /*
- * KICK_DIFF (#9, #25): does the fence fire before the pixel engine's write
+ * KICK_DIFF (#5, #10): does the fence fire before the pixel engine's write
  * reaches memory? The library's instrument (src/vivante/kick.rs `diff`, a
  * test knob; docs/notes/gc-kick-diff.md) reads the render
  * target twice after the fence, KICK_DIFF_DELAY_US apart; a difference means
@@ -3417,9 +3417,9 @@ static int case_msaa(void)
 	 * CONFIG_V3D_GL_TEST_MSAA), off in products and in the default image.
 	 * The Mali has no such switch: it always offers the 4x config (4 samples
 	 * in the tile buffer, averaged on writeback; with depth/stencil since
-	 * #1386's frame-msaa-zs), so here it takes the probe's n == 1 branch.
+	 * #33's frame-msaa-zs), so here it takes the probe's n == 1 branch.
 	 * Without it "eglChooseConfig samples 4" can only read 0, which says
-	 * nothing about the draw (#8's "check 255" is the record's none marker,
+	 * nothing about the draw (#4's "check 255" is the record's none marker,
 	 * not a check): the case runs its 1x half and is skipped (neither a
 	 * pass nor a failure), as case 145 is. The PowerVR always offers 4x,
 	 * so there a missing config stays a failure. */
@@ -17503,7 +17503,7 @@ static int case_a2cconst(void)
  * colour or the other; no depth test draws the magenta triangle over the
  * red. The surface's D24S8 is the backend's single-sampled buffer; the
  * tests run on the 4x tile buffer (src/backend.h, `samples`). Written for
- * the Mali's 4x depth/stencil frame (#1386, NOT_BUILT_SAMPLES); SKIPs
+ * the Mali's 4x depth/stencil frame (#33, NOT_BUILT_SAMPLES); SKIPs
  * without a 4x config with a depth and a stencil (as case 145). The config
  * asks for 8 bits a colour channel: Mesa's first 4x config with a depth and
  * a stencil is RGB565 (0dce654a8:tools/mali/board-ref/2026-10-20-msaa-zs), whose half
@@ -17620,7 +17620,7 @@ static int case_msaazs(void)
  * pixels read otherwise. The two edges cross only at (31.5, 31.5), which
  * no check reads.
  *
- * Written for the Mali's preload of a 4x target (#1386,
+ * Written for the Mali's preload of a 4x target (#33,
  * NOT_BUILT_PRELOAD_SAMPLES): the open question of docs/notes/
  * mali-frame-refusals.md section 5, what a single-sampled preload does to a
  * 4-sample tile buffer. No depth or stencil is asked for or used, so the
@@ -17730,7 +17730,7 @@ static int case_msaapre(void)
  * a buffer, no uniform and no texture: nothing else of the Mali's gaps.
  *
  * Written for the Mali's link of varyings declared in different orders
- * (#1386; docs/notes/mali-frame-refusals.md section 6). The order is the
+ * (#33; docs/notes/mali-frame-refusals.md section 6). The order is the
  * parameter, so the sources are built at run time: a build with no
  * in-process compiler has no program for them (skipped by name in an image
  * built with CONFIG_YAKOGL_SHADERC_PRECOMPILED_ONLY, and in a table build).
@@ -17859,7 +17859,7 @@ static int case_varyorder(void)
  * z -0.8 quad (yellow) in the centre, the red occluder in a corner.
  *
  * Written for the open fact "accumulation across jobs" of docs/notes/
- * mali-frame-refusals.md section 1 and its closing table (#1386): one query
+ * mali-frame-refusals.md section 1 and its closing table (#33): one query
  * over two kicks that both draw visible pixels. Where the query is not built
  * the draw is refused, as case 196's. All three GPUs; not in the set. */
 static int case_occlacc(void)
@@ -17953,7 +17953,7 @@ out:
  * coverage at (40, 23).
  *
  * Written for the open fact "blend shader BLEND at 4x with the sample id" of
- * docs/notes/mali-frame-refusals.md section 3 and its closing table (#1386):
+ * docs/notes/mali-frame-refusals.md section 3 and its closing table (#33):
  * three different constants are the Mali's blend shader (case 8,
  * NOT_BUILT_BLEND_SHADER), which loads the destination with the sample id
  * and, at 4x, runs per sample (DCD0 Evaluate per-sample). Where the blend
@@ -18110,7 +18110,7 @@ static bool isd_draw(GLuint prog, GLuint *vbo)
  * wrong side of either condition, or the nested block run for the wrong
  * outer side, shows.
  *
- * Written for the Mali's if lowering (#1384 S5; docs/notes/
+ * Written for the Mali's if lowering (#31 S5; docs/notes/
  * mali-lowering-map.md): A is what peephole_select flattens, B is blocks
  * with a branch, a join and values live across blocks. A correct GLES2
  * draws all of it; all three GPUs; not in the set. */
@@ -18224,7 +18224,7 @@ static int case_ifsel(void)
  * cut) and the lower right. The loop count is a constant, the tap weight a
  * uniform, so a back end that unrolls the loop still has run-time values.
  *
- * Written for the Mali's discard and bounded-loop unrolling (#1384 S6;
+ * Written for the Mali's discard and bounded-loop unrolling (#31 S6;
  * docs/notes/mali-lowering-map.md): a discarded pixel must keep what the
  * framebuffer held, whether it left before the loop or after the sum. All
  * three GPUs; not in the set. */

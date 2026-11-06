@@ -1,4 +1,4 @@
-/* #1385 (b), plan #153 study-uniarray: gl_test case 108 uniidx program A,
+/* #32 (b), plan #153 study-uniarray: gl_test case 108 uniidx program A,
  * tools/shaders/es100/uniidx_a.frag verbatim (dEQP-GLES2 float_dynamic_read:
  * four reads of a float uniform array at uniform ints; tools/mali/drm_shim_ref.sh
  * run (no --uniform-values: gl_ref.py refuses them for an int uniform), Mesa 26.2.1; the pair's vertex shader is

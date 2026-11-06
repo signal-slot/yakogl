@@ -530,7 +530,7 @@ fragment population. The switch-over was one commit; deleting the old plan
 was the next.
 
 **Steps.** Each is one or more PRs on Mali paths only. S1 to S5 have landed
-on main; S6 remains (#1384).
+on main; S6 remains (#31).
 - **S1** the shared selector and passes, then the fragment stage on the
   graph, then the switch-over and the deletion. Landed.
   - S1a: `emit.rs` and `opt.rs`, with the vertex stage selecting through
@@ -1742,7 +1742,7 @@ build line, the PASS or FAIL line and the record reference go into Z2's
 row in `tools/cts/RESULTS.md` (current results only: the run replaces
 the row, no run log) and the summary in `tools/cts/STATUS.md`;
 `uart.log` and the record directory stay out of the tree, in
-`T6_RECORD_DIR`. The run is reported to #20 as a comment naming the
+`T6_RECORD_DIR`. The run is reported to #7 as a comment naming the
 build and the record, and every new defect opens an issue; a person
 posts both. A run that did not happen is not a row: a gap is never a
 pass.
@@ -1753,7 +1753,7 @@ Not run. Written 2026-11-05 from `board::nanopc_t6_fw` and the host tests
 over the MCU model, before any run; no value in it is measured on the
 board. A run whose record differs is a finding: record it as it came,
 never by changing the prediction. Z3 runs only after Z2 has passed, and
-reports to #20 (milestones: #1281).
+reports to #7 (milestones: #26).
 
 **Preconditions** — all of them, or no run:
 
@@ -1927,7 +1927,7 @@ here is a finding, not a defect of the prediction.
 **Recording the result.** As Z2's: the build line and the PASS or FAIL
 line into Z3's row in `tools/cts/RESULTS.md` and the summary in
 `tools/cts/STATUS.md`, `uart.log` and the record directory out of the
-tree, one comment for #20 naming the build and the record, a new issue
+tree, one comment for #7 naming the build and the record, a new issue
 for each defect; a person posts them. A run that did not happen is not a
 row.
 
@@ -1953,7 +1953,7 @@ Measured under Armbian over ssh on 2026-10-26 and moved to their sections: the l
 `AS_MEMATTR` ("MMU (Z2)"), `TIMESTAMP_OFFSET` and the runtime CS/CSG values ("The
 firmware (Z3)"), Mesa 25.0.7 against 26.2.1 ("The command stream and descriptors
 (L1)"), the Linux QoS words ("The GPU power-on"). What is left needs U-Boot or a job
-from Zephyr; a UART / U-Boot session reads exactly this (issue #1281 names them as
+from Zephyr; a UART / U-Boot session reads exactly this (issue #26 names them as
 Z-prerequisites), each with the board in U-Boot's prompt, before `bootm` / `booti`,
 and nothing written:
 

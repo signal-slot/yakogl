@@ -2,7 +2,7 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Mali (Valhall, v10): a second look-up, textureSize, 3D and 2D-array look-ups
 
-Plan #153, item `texmore2` (retry of `study-texmore`); issue #1385/#1384
+Plan #153, item `texmore2` (retry of `study-texmore`); issue #32/#31
 follow-ups for gl_test cases 2, 46, 48 and 206. This note is a reading of Mesa
 26.2.1's panfrost source (`MESA_PAN_TREE`, citations `M:<path under src/>:<line>`)
 and of our tree (`<path>:<line>` from the repository root). Nothing here was

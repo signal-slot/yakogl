@@ -940,7 +940,7 @@ What the run decides:
   (show us) and page 2 (frames per bin) say where.
 - A broken picture in the 3-buffer arm: the default stays 1, and the next
   item is the second window buffer EGL owns (since built:
-  `include/gles_osal.h`; the panel look is #1207), with step 3's
+  `include/gles_osal.h`; the panel look is #17), with step 3's
   record to see what the LCDIF scans while the GPU draws.
 
 ### Step 2 result (2026-10-18, main `45dc44a8`, `.wait_vblank` wired)

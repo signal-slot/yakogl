@@ -1,5 +1,5 @@
 #version 100
-/* #1385 (a): a vertex-stage look-up at a uniform level, texture2DLod's
+/* #32 (a): a vertex-stage look-up at a uniform level, texture2DLod's
  * EXPLICIT mode; gl_test case 197's tools/shaders/gltest/vtxgrid_vs.vert
  * verbatim (tools/mali/drm_shim_ref.sh run, Mesa 26.2.1, --uniform-values). */
 attribute highp vec2 a_pos;

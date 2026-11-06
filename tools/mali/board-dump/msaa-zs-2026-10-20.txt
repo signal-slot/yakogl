@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 #
-# An excerpt of two board traces of gl_test case 207 msaazs (#1386) on the
+# An excerpt of two board traces of gl_test case 207 msaazs (#33) on the
 # NanoPC-T6, for the frame builder's 4x depth/stencil proof
 # (src/mali/frame_msaa_tests.rs): a 64x64 RGBA8 texture and a 64x64
 # GL_DEPTH_STENCIL_OES texture attached with

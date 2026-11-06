@@ -2,7 +2,7 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Mali Valhall: a vertex-stage look-up at a coordinate with a constant lane
 
-Case 149 `vsunits` (sixteen vertex samplers, #1385; issue #33) refuses with
+Case 149 `vsunits` (sixteen vertex samplers, #32; issue #33) refuses with
 `MaliError::TexVertexConstant` ("a vertex shader look-up at a coordinate with
 a constant lane (a shape no reference draws) is not lowered yet"). This note
 records what Mesa 26.2.1 emits for that shape, from drm-shim references, so

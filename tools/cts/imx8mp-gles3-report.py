@@ -186,7 +186,7 @@ def main():
     print()
     print('--- ROADMAP.md (stage 4, i.MX8MP line) ---')
     roadmap_txt = ('- i.MX8MP: %sdEQP-GLES3 %s on the board at %s (%s): %s Pass / %s Fail / %s NotSupported / %s other / %s without a result '
-          'of %s mustpass cases (#1262).' % (
+          'of %s mustpass cases (#24).' % (
               partial, 'whole tree, %d entries,' % n_entries if not miss[0] else '%d of %d entries,' % (run_n, n_entries),
               short_txt, args.date, *five, n(mp)))
     print(roadmap_txt)

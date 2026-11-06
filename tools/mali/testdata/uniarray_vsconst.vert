@@ -1,5 +1,5 @@
 #version 100
-/* #1385 (b), plan #153 uniarray: a vec4 uniform array read at constant
+/* #32 (b), plan #153 uniarray: a vec4 uniform array read at constant
  * indices in the vertex stage, the shape of gl_test cases 149 vsunits
  * (`u_w[k / 4].x` weights) and 150 shprobe (`u_p[n].x * u_p[m]`) without
  * their samplers, the varying computed from the attribute so the link

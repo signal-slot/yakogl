@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! The frame builder's uniform block for a fragment shader that loads it
 //! (`LD_PKA`, a uniform array element read at a run-time index: gl_test
-//! case 122 `uniidxi`, #1385 (b)) against the board: Mesa 25.0.7's draw of
+//! case 122 `uniidxi`, #32 (b)) against the board: Mesa 25.0.7's draw of
 //! case 122 on the NanoPC-T6 (tools/mali/board-dump/uniidxi-2026-10-20.txt,
 //! cut from 0dce654a8:tools/mali/board-ref/2026-10-20-mesa-refs/mesa/
 //! mesa-uniidxi.pandecode), built again with the case's uniform values and

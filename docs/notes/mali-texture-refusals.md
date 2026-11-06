@@ -2,7 +2,7 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Mali (Valhall, v10): the texture refusals, Mesa's design per case
 
-The texture refusals of issue #1385 (the NanoPC-T6's `gpu-mali` backend), one
+The texture refusals of issue #32 (the NanoPC-T6's `gpu-mali` backend), one
 section per item: `tex-vs` (vertex-shader look-ups, gl_test cases 113 and
 197), `tex-coord-122` (the coordinate form of case 122) and `tex-depth-169`
 (the depth texture of case 169, and the `depth_resolve` hook it needs), and
@@ -11,8 +11,8 @@ programs, section (d), which has its own citation rule). For
 each: what Mesa 26.2.1's panfrost does on v10, where the change lands in our
 tree, and which refusal it removes. It is a reading of Mesa's source and ours;
 nothing here was run on the board. A fact only the board can settle is marked
-**pin on the board**. The frame-side refusals (#1386) are
-`docs/notes/mali-frame-refusals.md`; the general lowering (#1384) is
+**pin on the board**. The frame-side refusals (#33) are
+`docs/notes/mali-frame-refusals.md`; the general lowering (#31) is
 `driver/docs/nanopc-t6-mali.md`, "The general lowering (approved
 2026-10-19)", and `docs/notes/mali-lowering-map.md`.
 
@@ -237,7 +237,7 @@ stage, and the vertex stage fills the same tables the fragment stage does.
   The general lowering's steps S1-S6 do not list a vertex look-up
   (`driver/docs/nanopc-t6-mali.md:300-314`), so this is a step of its own
   after them, with one shim reference per form (2D `txl` at a uniform LOD,
-  2D `txl` at 0, cube `txl`) as #1384 does for its rows.
+  2D `txl` at 0, cube `txl`) as #31 does for its rows.
 - **Frame.** The vertex resource table has UBO, ATTRIBUTE, ATTRIBUTE_BUFFER
   and a one-entry SAMPLER, and **no TEXTURE entry**
   (`src/mali/frame.rs:2466-2470`); the fragment table has one when the draw
@@ -354,7 +354,7 @@ So 122 moves to that string, not to PASS. The run-time index is outside
 S1-S6, which read the uniform array at constant indices only
 (`driver/docs/nanopc-t6-mali.md:239-240`; the uniform block's fallback is
 named there as `LD_BUF`, `driver/docs/nanopc-t6-mali.md:280-281`).
-Recommendation: #1385 owns 122's coordinate refusal; 122's PASS belongs to
+Recommendation: #32 owns 122's coordinate refusal; 122's PASS belongs to
 the item that takes the run-time uniform index, with the other `uniidx`
 cases.
 
@@ -470,7 +470,7 @@ PowerVR's with the Mali's buffer:
   frame (`g.open`) still draws into that pair's buffer, a defect check (the
   GL core submits and waits first);
 - 1 for a multisampled buffer; the Mali refuses 4x with depth/stencil today
-  (#1386), so none exists yet;
+  (#33), so none exists yet;
 - **pin on the board** that row 0 of our buffer is GL's y 0 for an FBO, as
   the V3D notes for its own (`src/v3d/backend.rs:4227-4228`): step 3 of 169
   reads the ramp and the top quarter at known rows. Mesa's own buffer has
@@ -710,7 +710,7 @@ with main and the tip of `work/mali-row-align`); not run.
 
 ## (d) A computed coordinate: case 121 and femtovg `fill_image*` / `filter_image*`
 
-The study for plan #153's `texcoord` item (#1385, #1384). Nothing in `src/`
+The study for plan #153's `texcoord` item (#32, #31). Nothing in `src/`
 was changed for it.
 
 **Citations in this section.** Mesa as `M:` above. Our code is named by file
