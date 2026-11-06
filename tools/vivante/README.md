@@ -337,6 +337,11 @@ ninja -C <build dir>/mesa-etnaviv-host
 `-Dglvnd=disabled` is what gives a standalone `libEGL.so`/`libGLESv2.so` to
 link against instead of a GLVND vendor library.
 
+Meson also wants the Python `pycparser` module (>= 2.20) for the etnaviv hwdb.
+Built with the commands above, the patched 26.2.1 tree compiles cleanly (1022
+of 1022 steps, 2026-11-06), with both the two-entry patch of `1673798c` and the
+three-entry patch in this directory.
+
 ### Running it
 
 The commands below call two runner scripts, `build/run_cs_golden.sh` and
@@ -642,9 +647,96 @@ descriptor named from Mesa's `texdesc_3d.xml.h` -- the same header its
 identically. The addresses themselves differ (the two drivers allocate in
 different heaps); the slot number and the contents are what compare.
 
+### Another part: the ST row
+
+The shim has a third GPU, `ETNA_SHIM_GPU=GCNANOULTRA31`: the STM32MP257F's
+(model `0x8000`, revision `0x6205`, product `0x80003`, eco `0`; issue #1281,
+Q1). The customer id was **not read** from the board; the entry uses `0x15`,
+the value of the etnaviv hwdb row for these ids (the hwdb has two such rows,
+eco 0 and eco 1; eco 0 is the one matched). It sits after `GC7000UL`, so the
+default and every existing golden are unchanged. The name must not be a prefix
+of another entry's (names are matched by prefix).
+
+Measured on 2026-11-06 with Mesa 26.2.1, the default build recipe above, and
+`cs_golden` (modes 1-5, 7, 8, 10-12, 14-27, plus the new mode 28; mode 16 exits
+3 by design on every row).
+
+**The old rows are unchanged.** For every mode, the `ETNA_SHIM_CS_DUMP` and
+`ETNA_SHIM_MEM_DUMP` files of the tree patched with `1673798c`'s patch and of
+the tree patched with this one are byte-identical, both with no
+`ETNA_SHIM_GPU` and with `ETNA_SHIM_GPU=GC7000UL` (24 modes, plus mode 16 whose
+dumps are both empty).
+
+**The driver runs on the new row.** Every mode exits 0 (16: 3, as on the other
+rows), prints `renderer: Vivante GC8000 rev 6205` and `gl error 0x0`. The row is
+also `CORE_NPU`; the `get-param (1) failed` line that the GC7000UL row prints
+while probing core 1 does not appear on it (why was not traced).
+
+The streams have the same shape on both rows, same submits, same command and
+`LOAD_STATE` counts in every mode (`cs_decode.py`, GC7000UL against
+GCNANOULTRA31):
+
+| mode | submits | commands | differing state writes | memory dump |
+| --- | --- | --- | --- | --- |
+| 1, 2, 4, 7, 10, 11, 17, 18, 19, 20, 22, 23, 24 | 1 (11: 7, 17: 8) | 179-406 | 2 | identical |
+| 3 | 2 | 358 | 4 | identical |
+| 5 | 1 | 381 | 4 | identical |
+| 8, 12 | 1 | 192 | 2 | identical |
+| 14 | 5 | 948 | 10 | identical |
+| 15 | 1 | 18 | 0 | identical |
+| 21 | 2 | 424 | 4 | identical |
+| 25 | 1 | 179 | 3 | **differs** |
+| 26, 27 | 1 | 900, 904 | 8 | identical |
+| 28 | 1 | 179 | 4 | identical |
+
+Every difference but two is the same pair of registers:
+
+- `PE_MEM_CONFIG` (0x014bc): the GC7000UL writes `COLOR_TS_MODE` (bit 24, and
+  `DEPTH_TS_MODE` bit 26 where there is a depth buffer: 0x01000000 and
+  0x05000000); the ST row writes 0 -- the same bits, off.
+- `TS_MEM_CONFIG` (0x01654): the GC7000UL writes colour compression
+  (0x80, plus 0x40, 0x4000 and a format in 0x300 with depth and stencil,
+  e.g. 0x43c2 in mode 8, 0x40c2 in mode 22), the ST row writes only the colour fast clear (0x02,
+  or 0x00 for the mipmapped textures of modes 5, 26 and 27, which the
+  GC7000UL gives 0x380/0x480).
+
+So Mesa does not use tile-status compression on the ST row; nothing else in
+the common state moves.
+
+**Modes 2 and 23 (`SH_NO_ONECONST_LIMIT`) show no difference.** Their shaders
+are byte-identical on both rows (the memory dump is the same): neither reads a
+constant in a way the one-constant limit changes. The hwdb row of this part
+has `SH_NO_ONECONST_LIMIT` set (read off the row's feature table, not
+measured on the board), and the first measurement that moves is mode 25, a
+`vec4` array read at a uniform index: three words of the first shader
+instructions differ (`+0x08` 40aa0050 -> 60000850, `+0x0c` 00000002 ->
+00000007, `+0x18` 80040040 -> 80020040) and `SH_HALTI5_UNIFORMS[0]` gets
+`0x2 0xffef7000 0 0` where the GC7000UL gets `0x2 0x10 0xffef7000 0`. Read
+these shader words before trusting a diff of an indexed-uniform shader across
+the two parts.
+
+**Q11, the wide line (mode 28, `glLineWidth(4.0)` and one `GL_LINES` draw):**
+
+| | GC7000UL | GCNANOULTRA31 |
+| --- | --- | --- |
+| `ALIASED_LINE_WIDTH_RANGE` | 1 8192 | **1 1** |
+| `GL_LINE_WIDTH` after `glLineWidth(4)` | 4 | 4 |
+| `PA_LINE_WIDTH` (0x00a18) | `0x40000000` (2.0) | `0x3f000000` (0.5) |
+| `PA_WIDE_LINE_WIDTH0/1` (0x00a38/3c) | `0x40000000` (2.0) | `0x3f000000` (0.5) |
+
+The registers hold half the width. The GC7000UL gets 4.0; the ST row gets
+Mesa's clamp to 1.0, because Mesa sets `max_line_width` to 1 when the hwdb has
+`WIDELINE_TRIANGLE_EMU` (`etnaviv_screen.c`), which this row has. A client on
+Mesa sees a line range of 1..1 on this part, while GL still returns the 4 it
+was given. What the part itself does with a wider line is a board question.
+
+`cs_golden.c` mode 28 is golden-only (`cs_ours.c`'s mode list says so).
+
 ### What the patch does, and why each piece is needed
 
-Four changes, all to the shim, none to the driver:
+Four changes, all to the shim, none to the driver (`GC7000UL` is the first
+of the entries that carry ids; `GCNANOULTRA31` is the second, see "Another
+part: the ST row"):
 
 1. **A `GC7000UL` entry** with the board's ids (model `0x7000`, revision
    `0x6204`, product `0x70003`) and *no* feature words, plus DRM version 1.4

@@ -62,7 +62,7 @@
  };
  
  static const struct etna_shim_gpu gpus[] = {
-@@ -145,6 +155,24 @@
+@@ -145,6 +155,41 @@
           [ETNAVIV_PARAM_GPU_NUM_VARYINGS] = 0x10,
           [ETNAVIV_PARAM_SOFTPIN_START_ADDR] = 0x00400000,
        }
@@ -84,10 +84,27 @@
 +         [ETNAVIV_PARAM_GPU_CUSTOMER_ID] = 0x0,
 +         [ETNAVIV_PARAM_GPU_ECO_ID] = 0x0,
 +      }
++   },
++   {
++      /* The STM32MP257F's GPU, as board read (issue #1281, Q1) reports it:
++       * model 0x8000, revision 0x6205, product 0x80003, eco 0. The customer
++       * id was not read; 0x15 is the etnaviv hwdb's value for this row. The
++       * part is also CORE_NPU (a GCNanoUltra with an NN engine). */
++      .name = "GCNANOULTRA31",
++      .hwdb_ids = true,
++      .reg_map = (const uint64_t[]){
++         [ETNAVIV_PARAM_GPU_MODEL] = 0x8000,
++         [ETNAVIV_PARAM_GPU_REVISION] = 0x6205,
++         [ETNAVIV_PARAM_GPU_STREAM_COUNT] = 0x10,
++         [ETNAVIV_PARAM_SOFTPIN_START_ADDR] = 0x00400000,
++         [ETNAVIV_PARAM_GPU_PRODUCT_ID] = 0x80003,
++         [ETNAVIV_PARAM_GPU_CUSTOMER_ID] = 0x15,
++         [ETNAVIV_PARAM_GPU_ECO_ID] = 0x0,
++      }
     }
  };
  
-@@ -183,12 +211,135 @@
+@@ -183,12 +228,135 @@
     return 0;
  }
  
@@ -224,7 +241,7 @@
        fprintf(stderr, "Unknown DRM_IOCTL_ETNAVIV_GET_PARAM %d\n", gp->param);
        return -1;
     }
-@@ -204,12 +355,12 @@
+@@ -204,12 +372,12 @@
     [DRM_ETNAVIV_GEM_INFO] = etnaviv_ioctl_gem_info,
     [DRM_ETNAVIV_GEM_CPU_PREP] = etnaviv_ioctl_noop,
     [DRM_ETNAVIV_GEM_CPU_FINI] = etnaviv_ioctl_noop,
@@ -240,7 +257,7 @@
  };
  
  void
-@@ -218,11 +369,6 @@
+@@ -218,11 +386,6 @@
     shim_device.driver_ioctls = driver_ioctls;
     shim_device.driver_ioctl_count = ARRAY_SIZE(driver_ioctls);
  
@@ -252,7 +269,7 @@
     drm_shim_platform_device_setup("etnaviv", "/soc/gpu3d", "vivante,gc");
  
     /* decide what GPU to emulate */
-@@ -239,5 +385,12 @@
+@@ -239,5 +402,12 @@
     if (!shim_gpu)
        shim_gpu = &gpus[1];
  
