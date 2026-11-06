@@ -253,7 +253,9 @@ pub struct OsalOps {
  * are thin glue over C APIs (Zephyr macros and inlines, weak board hooks, a
  * variadic log) that stable Rust cannot define. Each exports its ops table;
  * the build selects one as the compile-time default of g_osal. With none
- * selected g_osal starts null and the application calls osal_set_ops() first. */
+ * selected g_osal starts null and the application calls osal_set_ops() first.
+ * Under host-test it starts null too: cargo test compiles none of the C, so
+ * a default (osal-linux) feature set would leave the symbol undefined. */
 #[allow(dead_code)]
 extern "C" {
     static osal_zephyr_ops: OsalOps;
@@ -261,13 +263,21 @@ extern "C" {
     static osal_linux_ops: OsalOps;
 }
 
-#[cfg(feature = "osal-zephyr")]
+#[cfg(all(feature = "osal-zephyr", not(feature = "host-test")))]
 const DEFAULT_OPS: *const OsalOps = &raw const osal_zephyr_ops;
-#[cfg(all(feature = "osal-baremetal", not(feature = "osal-zephyr")))]
+#[cfg(all(feature = "osal-baremetal", not(feature = "osal-zephyr"), not(feature = "host-test")))]
 const DEFAULT_OPS: *const OsalOps = &raw const osal_baremetal_ops;
-#[cfg(all(feature = "osal-linux", not(feature = "osal-zephyr"), not(feature = "osal-baremetal")))]
+#[cfg(all(
+    feature = "osal-linux",
+    not(feature = "osal-zephyr"),
+    not(feature = "osal-baremetal"),
+    not(feature = "host-test")
+))]
 const DEFAULT_OPS: *const OsalOps = &raw const osal_linux_ops;
-#[cfg(not(any(feature = "osal-zephyr", feature = "osal-baremetal", feature = "osal-linux")))]
+#[cfg(any(
+    feature = "host-test",
+    not(any(feature = "osal-zephyr", feature = "osal-baremetal", feature = "osal-linux"))
+))]
 const DEFAULT_OPS: *const OsalOps = core::ptr::null();
 
 /// The active platform ops (`extern const struct osal_ops *g_osal;`).
