@@ -471,7 +471,50 @@ def self_test():
     rc, _, err = run_cli(logs, merged, slices, "--commit", "deadbeef", "--date", "2026-10-27")
     check("the CLI refuses --commit disagreeing with the slices",
           rc == 1 and "deadbeef" in err, "(rc %d, %s)" % (rc, err[:200]))
+    pi4_self_test(check)
     return 1 if fails else 0
+
+
+def pi4_self_test(check):
+    d = os.path.join(HERE, "testdata", "gles3-notpass-pi4")
+    tree_path, must_path = os.path.join(d, "tree.txt"), os.path.join(d, "mustpass.txt")
+    tree, must = read_tree(tree_path), read_mustpass(must_path)
+    lo, hi = os.path.join(d, "s1-lo"), os.path.join(d, "s2-hi")
+
+    def bad(name):
+        return os.path.join(d, "bad", name)
+
+    def refused(name, dirs, word):
+        try:
+            pi4_rows(dirs, must, tree)
+            check(name, False, "(no error)")
+        except NotpassError as e:
+            check(name, word.lower() in str(e).lower(), "(%s lacks %r)" % (e, word))
+
+    text, run, stopped = pi4_rows([lo, hi], must, tree)
+    check("pi4: the short and the full sha of one commit are accepted, the long one is named",
+          "# Pi 4 dEQP-GLES3 at abcdef1234567890abcdef1234567890abcdef12:" in text)
+    refused("pi4: two different commits are refused", [lo, bad("commit")], "different commits")
+    refused("pi4: a label in two directories is refused", [lo, bad("dup")], "A1")
+    refused("pi4: a label not in the tree is refused", [bad("unknown")], "not in the tree")
+    refused("pi4: a directory with no console is refused", [bad("empty")], "no <LABEL>.console.txt")
+    check("pi4: a case that never began is NoResult and its image is marked *",
+          "B1.console.txt:NoResult dEQP-GLES3.b.never" in text and stopped == ["B1"]
+          and "# images run (3 of 4): A1 B1* C1 (*:" in text, "(%s, %s)" % (stopped, run))
+    rows = [l for l in text.splitlines() if not l.startswith("#")]
+    cases = [l.split()[1] for l in rows]
+    check("pi4: Pass cases are absent and rows are sorted by case name",
+          cases == sorted(cases) and not any(":Pass " in l for l in rows), "(%s)" % rows)
+    check("pi4: the header names directory basenames only",
+          "the records of s1-lo, s2-hi;" in text and d not in text)
+    with open(os.path.join(d, "expected.tsv"), encoding="utf-8") as f:
+        want = f.read()
+    check("pi4: the TSV matches testdata/gles3-notpass-pi4/expected.tsv byte for byte",
+          text == want, "(differs)")
+    r = subprocess.run([sys.executable, "-I", os.path.abspath(__file__), "--pi4", "--tree", tree_path,
+                        "--mustpass", must_path, lo, hi], capture_output=True, text=True)
+    check("pi4: the CLI form prints the same", r.returncode == 0 and r.stdout == want,
+          "(rc %d, %s)" % (r.returncode, r.stderr[:200]))
 
 
 def main():
