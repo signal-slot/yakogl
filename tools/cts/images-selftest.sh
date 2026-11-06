@@ -56,10 +56,11 @@ cp "$T/bin/west" "$T/west.fake"   # section 6 removes it; section 7 puts it back
 printf 'export PATH=%s:$PATH\n' "$T/bin" > "$T/venv/bin/activate"
 S=$R/tools/cts/am62p-deqp-images.sh
 # the caller's environment must not reach the scripts under test (the node sets WEST_VENV, a
-# TREE_ROWS in the shell would select rows, a node's DEQP_STAGE1_GLES3 would replace the
-# $IMX8MP_OUT/deqp-stage1-gles3 the X2 checks expect, ...)
+# TREE_ROWS in the shell would select rows, a node's IMX8MP_OUT / DEQP_STAGE1_GLES3 would replace
+# the stage 1 path the X2 checks expect, ...)
 unset WEST_VENV TREE_ROWS DEQP_MODULE ZEPHYR_BASE CLUSTER_DIR DEQP_GL_CONFIG_NAME BOARD IMX8MP_BOARD \
-    DEQP_STAGE1 DEQP_STAGE1_GLES3 DEQP_PVR_NATIVE_3D IMX8MP_CONSOLE WDOG_SELF_ARM DRYRUN ZEPHYR_MODULES
+    IMX8MP_OUT DEQP_STAGE1 DEQP_STAGE1_GLES3 DEQP_PVR_NATIVE_3D IMX8MP_CONSOLE WDOG_SELF_ARM DRYRUN \
+    ZEPHYR_MODULES
 export ZEPHYR_WS=$T/ws DEQP_WORK=$T/work PATH="$T/bin:$PATH"
 git init -q "$R" 2>/dev/null
 
