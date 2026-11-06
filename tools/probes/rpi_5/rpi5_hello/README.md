@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # rpi5_hello
 
 `hello_world` for the Raspberry Pi 5 (`rpi_5`, BCM2712): item H9 of
