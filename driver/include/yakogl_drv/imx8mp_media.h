@@ -36,4 +36,11 @@ uint32_t imx8mp_media_set_phy_ref_clock(const struct device *pd, uint32_t hz);
  * 0 when there is none. */
 uint32_t imx8mp_media_status(void);
 
+#ifdef CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_A53_RESTART
+/* True when the early clocks (early-ccm-roots / -gates) belong to someone
+ * else this boot and are left alone: a route-3 restart, where the M7 drives
+ * I2C2, PWM3 and GPIO4 (the board's board_route3_restart.c says). */
+bool imx8mp_media_early_clocks_skip(void);
+#endif
+
 #endif /* YAKOGL_DRV_IMX8MP_MEDIA_H */

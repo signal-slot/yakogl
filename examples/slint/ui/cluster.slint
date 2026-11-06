@@ -75,6 +75,9 @@ export component MainWindow inherits Window {
     // gradient costs the same clear (docs/notes/imx8mp-direct-boot.md,
     // "Route 3").
     background: root.standalone ? @linear-gradient(180deg, Layout.bg-top 0%, Layout.bg-bottom 100%) : Layout.bg-bottom;
+    // what the route-3 sample clears the window to itself (rust/src/lib.rs,
+    // clear_window): the background above when it is flat
+    out property <color> flat-background: Layout.bg-bottom;
 
     // --- live values (the platform snapshot) ---
     in property <int> speed_x10: 0;        // km/h x 10
@@ -223,14 +226,22 @@ export component MainWindow inherits Window {
         FrameBox { bx: Layout.power-bar-x; by: Layout.fuel-bar-y; bw: Layout.fuel-bar-w; bh: Layout.fuel-bar-h; }
         Rectangle { x: Layout.power-bar-x; y: Layout.fuel-bar-y; width: Layout.fuel-bar-w; height: Layout.fuel-bar-h; background: Layout.bg-bottom; }
         if root.power-w > 4 * Layout.u: Rectangle { x: Layout.power-bar-x; y: Layout.fuel-bar-y; width: root.power-w; height: Layout.fuel-bar-h; border-radius: 3 * Layout.u; background: Layout.accent; }
-        // fuel frame and pump (the segments and litres are the safe core's)
+        // fuel: the frame, the pump, the segments and the litres. The
+        // segments and litres were the safe core's until 2026-11-05; the
+        // fuel-low/-empty telltale stays there (the owner's call: the gauge
+        // is not a safety element, and on the M7 its changes merged with the
+        // speed read-out into renders long enough to miss vblanks). The M7
+        // still draws them while this application is down.
         FrameBox { bx: Layout.fuel-bar-x; by: Layout.fuel-bar-y; bw: Layout.fuel-bar-w; bh: Layout.fuel-bar-h; }
         PumpIcon { px: Layout.fuel-icon-x; py: Layout.fuel-icon-y; colour: Layout.text2; }
-        // brand
-        for letter[i] in ["S", "A", "F", "E", "U", "I"]: CText {
-            cx: Layout.brand-cx0 + i * Layout.brand-dx; ty: Layout.brand-cy; text: letter;
-            color: Theme.brand; font-size: Layout.label; font-weight: Layout.semibold;
+        for i in Layout.fuel-segs: Rectangle {
+            property <bool> on: root.fuel_ml > 0 && root.fuel_ml * 5 > root.tank_ml * i;
+            x: Layout.fuel-bar-x + i * Layout.fuel-seg-dx; y: Layout.fuel-bar-y;
+            width: Layout.fuel-seg-w; height: Layout.fuel-bar-h; border-radius: 3 * Layout.u;
+            background: self.on ? root.fuel-colour : Theme.seg-off;
         }
+        RText { rx: Layout.fuel-text-rx; ty: Layout.fuel-text-y; text: root.litres; font-size: Layout.label; font-weight: Layout.semibold;
+                color: root.fuel_empty ? Layout.red : root.fuel_low ? Layout.amber : Layout.text; }
         // footer frame counter
         LText { lx: Layout.footer-x; ty: Layout.footer-y; text: "frame " + root.frame; color: Layout.dim; font-size: Layout.small; font-weight: Layout.regular; }
 
@@ -258,15 +269,6 @@ export component MainWindow inherits Window {
             // speed
             CText { cx: Layout.speed-cx; ty: Layout.speed-top; text: root.speed-text; color: Layout.text; font-size: Layout.speed; font-weight: Layout.light; }
             CText { cx: Layout.speed-cx; ty: Layout.speed-unit-y; text: "km/h"; color: Layout.text2; font-size: Layout.small; font-weight: Layout.regular; }
-            // fuel: the segments and the litres
-            for i in Layout.fuel-segs: Rectangle {
-                property <bool> on: root.fuel_ml > 0 && root.fuel_ml * 5 > root.tank_ml * i;
-                x: Layout.fuel-bar-x + i * Layout.fuel-seg-dx; y: Layout.fuel-bar-y;
-                width: Layout.fuel-seg-w; height: Layout.fuel-bar-h; border-radius: 3 * Layout.u;
-                background: self.on ? root.fuel-colour : Theme.seg-off;
-            }
-            RText { rx: Layout.fuel-text-rx; ty: Layout.fuel-text-y; text: root.litres; font-size: Layout.label; font-weight: Layout.semibold;
-                    color: root.fuel_empty ? Layout.red : root.fuel_low ? Layout.amber : Layout.text; }
             // the safety layer's own frame counter
             RText { rx: Layout.footer-rx; ty: Layout.footer-y; text: root.frame; color: Layout.dim; font-size: Layout.small; font-weight: Layout.regular; }
         }

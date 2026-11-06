@@ -25,6 +25,7 @@
  * then it is stopped again, the ring dropped, and the caller flips.
  */
 #include <zephyr/kernel.h>
+#include <zephyr/drivers/uart.h>
 #include <zephyr/kernel/mm.h>
 #include <zephyr/sys/device_mmio.h>
 #include <zephyr/sys/printk.h>
@@ -38,6 +39,18 @@
 #include "yakogl_board.h"
 #include "imx8mp_display.h"
 #include "board_imx8mp_route3.h"
+#ifdef CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_CLOCK_REPORT
+#include "board_imx8mp_route3_clkdiag.h"
+#endif
+#include "gc_panel_console.h"
+#include "yakogl_record.h"
+#ifdef CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_A53_RESTART
+#include <cluster/a53_power.h>
+#else
+BUILD_ASSERT(!DT_PROP_OR(DT_NODELABEL(display0), zephyr_deferred_init, 0),
+	     "a53-restart.overlay without CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_A53_RESTART: "
+	     "nothing would initialise the display chain");
+#endif
 
 /* ---- the M7's map (the M7 firmware's m7_mem.h) ---------------- */
 
@@ -67,10 +80,16 @@
 #define ST_FB_W        12
 #define ST_FB_H        13
 #define ST_LCDIF_FLAGS 19
+#define ST_LCDIF_FB    23 /* CTRLDESCL_LOW0_4 as the M7 read it back */
 #define ST_RING_ADDR   29
 #define ST_RING_VERDICT 31
 #define ST_BUILD_ID    46
 #define ST_VERSION_WITH_PAGE 10u
+
+/* struct m7_control (at 0x8100_0800), word offsets, append-only: the
+ * session handover is word 12, after `inplace` (the M7 firmware's m7_mem.h). */
+#define M7_CTRL_ADDR         0x81000800u
+#define CTRL_A53_SESSION     12
 
 /* ---- the release (the board's BL31, lf-6.6.52-2.2.1, disassembled) -------- */
 
@@ -92,7 +111,9 @@
 #define M7_DTCM_SYS  0x00800000u
 #define M7_TCM_SIZE  0x00020000u
 
-#define WAIT_POLL_MS       1
+/* the poll of `shown`: 100 us (the A53 ticks at 10 kHz); 1 ms steps were
+ * most of what made a frame miss its vblank (2026-11-04) */
+#define WAIT_POLL_US       100
 #define SHOWN_TIMEOUT_MS   200
 
 /* The stripped M7 ELF (m7_image.py), linked in by m7_blob.S. */
@@ -110,8 +131,111 @@ static struct {
 	uint32_t shown_timeouts;
 	bool lit;                           /* imx8mp_display_backlight_on() called */
 	int64_t released_ms;
+	int64_t first_shown_ms;
+	atomic_t m7_started; /* m7_start() ran (it runs once) */
+	bool defer_wait;       /* board_route3_defer_wait(): show returns after the publish */
+	uint32_t pending_seq;  /* published, its shown wait still owed */
+	bool panel_checked;  /* the first show made sure the panel runs */
 	struct k_timer beat;
+	volatile struct cluster_boot_timeline *tl; /* in the window, once mapped */
+#ifdef CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_A53_RESTART
+	bool going_down;       /* DOWN taken: nothing more is published */
+	bool restart_published; /* a restart's first frame is out */
+	unsigned int buf_base; /* window n is ring buffer buf_base + n */
+#endif
 } R;
+
+/* ---- the cold-start timeline (<cluster/boot_timeline.h>) -------------------- */
+
+static uint64_t tl_early[CLUSTER_BOOT_TIMELINE_SLOTS];
+
+static inline uint64_t cntpct(void)
+{
+	uint64_t v;
+
+	__asm__ volatile("isb; mrs %0, cntpct_el0" : "=r"(v) : : "memory");
+	return v;
+}
+
+static inline uint32_t cntfrq(void)
+{
+	uint64_t v;
+
+	__asm__ volatile("mrs %0, cntfrq_el0" : "=r"(v));
+	return (uint32_t)v;
+}
+
+void board_route3_tl_mark(enum cluster_tl_a53 stage)
+{
+	if ((unsigned int)stage >= CLUSTER_BOOT_TIMELINE_SLOTS || tl_early[stage] != 0u) {
+		return;
+	}
+	tl_early[stage] = cntpct();
+	if (R.tl != NULL) {
+		R.tl->a53[stage] = tl_early[stage];
+	}
+}
+
+/* The page for this boot: cleared, the A53's stamps so far, the magic last
+ * (the M7 writes only m7[], and only after its release). */
+static void tl_attach(uint8_t *window)
+{
+	volatile struct cluster_boot_timeline *tl =
+		(volatile struct cluster_boot_timeline *)(window + (CLUSTER_BOOT_TIMELINE_ADDR -
+								    M7_UNCACHED_BASE));
+	volatile uint32_t *w = (volatile uint32_t *)tl;
+
+	for (size_t i = 0; i < sizeof(*tl) / 4u; i++) {
+		w[i] = 0u;
+	}
+	tl->version = CLUSTER_BOOT_TIMELINE_VERSION;
+	tl->cntfrq = cntfrq();
+	for (unsigned int i = 0; i < CLUSTER_BOOT_TIMELINE_SLOTS; i++) {
+		tl->a53[i] = tl_early[i];
+	}
+	barrier_dmem_fence_full();
+	tl->magic = CLUSTER_BOOT_TIMELINE_MAGIC;
+	R.tl = tl;
+}
+
+/* The application's progress marks (board_progress), stage n of
+ * YK_RECORD_WHERE_STAGE | n: the Slint sample's window, EGL, frame 1 and
+ * swapped marks (examples/slint/src/main.c). */
+void board_progress_hook(uint32_t where)
+{
+	/* the Slint sample's stages 1..9 (examples/slint/src/main.c,
+	 * enum stage); 5..7 (the check, the animation) are not stamped */
+	static const int at[] = {
+		CLUSTER_TL_A53_APP_WINDOW, CLUSTER_TL_A53_APP_EGL, CLUSTER_TL_A53_APP_FRAME1,
+		CLUSTER_TL_A53_APP_SWAPPED, -1, -1, -1, CLUSTER_TL_A53_APP_BUILT,
+		CLUSTER_TL_A53_APP_RENDERED};
+	const uint32_t n = where & ~YK_RECORD_WHERE_STAGE;
+
+	if ((where & YK_RECORD_WHERE_STAGE) != 0u && n >= 1u && n <= ARRAY_SIZE(at) &&
+	    at[n - 1u] >= 0) {
+		board_route3_tl_mark((enum cluster_tl_a53)at[n - 1u]);
+	}
+}
+
+static int tl_entry(void)
+{
+	board_route3_tl_mark(CLUSTER_TL_A53_ENTRY);
+#ifdef CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_A53_RESTART
+	/* The first board hook: a restart is known before anything else of
+	 * the board's runs (the WDOG1 arming at 1, the early clocks at 5, the
+	 * panel console at CONSOLE_INIT_PRIORITY, the devices). */
+	board_route3_restart_detect(tl_early[CLUSTER_TL_A53_ENTRY]);
+#endif
+	return 0;
+}
+SYS_INIT(tl_entry, PRE_KERNEL_1, 0);
+
+static int tl_kernel_up(void)
+{
+	board_route3_tl_mark(CLUSTER_TL_A53_KERNEL_UP);
+	return 0;
+}
+SYS_INIT(tl_kernel_up, APPLICATION, 0);
 
 static void *map_nc(uintptr_t phys, size_t size)
 {
@@ -127,6 +251,40 @@ static void *map_nc(uintptr_t phys, size_t size)
 		       size);
 	}
 	return cpu;
+}
+
+/*
+ * The second-stage loader's own stamps (boot_stage2/src/main.c, "the
+ * loader's own timeline"): a page of the loader's RAM, dead once this image
+ * runs. Copied into the timeline's LOADER slots, then the magic cleared so a
+ * later boot by another route does not read this one's.
+ */
+#define BS2_STAMP_ADDR  0x41000000u
+#define BS2_STAMP_MAGIC 0x54325342u /* 'BS2T' */
+#define BS2_STAMPS      8u
+
+static void tl_loader(void)
+{
+	static const enum cluster_tl_a53 at[] = {
+		CLUSTER_TL_A53_LOADER_ENTRY,     CLUSTER_TL_A53_LOADER_MAIN,
+		CLUSTER_TL_A53_LOADER_READ,      CLUSTER_TL_A53_LOADER_UNPACKED,
+		CLUSTER_TL_A53_LOADER_JUMP,      CLUSTER_TL_A53_LOADER_STORED_OK,
+		CLUSTER_TL_A53_LOADER_DECODED,   CLUSTER_TL_A53_LOADER_ZEROED};
+	volatile uint32_t *w = map_nc(BS2_STAMP_ADDR, CONFIG_MMU_PAGE_SIZE);
+
+	if (w == NULL || R.tl == NULL) {
+		return;
+	}
+	if (w[0] == BS2_STAMP_MAGIC && w[1] == BS2_STAMPS) {
+		volatile uint64_t *ts = (volatile uint64_t *)(w + 2);
+
+		for (unsigned int i = 0; i < ARRAY_SIZE(at); i++) {
+			tl_early[at[i]] = ts[i];
+			R.tl->a53[at[i]] = ts[i];
+		}
+		w[0] = 0u;
+	}
+	k_mem_unmap_phys_bare((uint8_t *)w, CONFIG_MMU_PAGE_SIZE);
 }
 
 static uintptr_t map_dev(uintptr_t phys, size_t size)
@@ -312,6 +470,7 @@ static void m7_check(void)
 		return;
 	}
 	R.state = BOARD_ROUTE3_UP;
+	board_route3_tl_mark(CLUSTER_TL_A53_M7_UP);
 	printk("route3: M7 up at +%lld ms: build 0x%08x, status v%u, lcdif_flags 0x%x\n",
 	       k_uptime_get() - R.released_ms, s[ST_BUILD_ID], s[ST_VERSION], s[ST_LCDIF_FLAGS]);
 }
@@ -329,6 +488,271 @@ static void m7_give_up(void)
 	       CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_M7_WAIT_MS);
 }
 
+#if CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_TIMELINE_REPORT_MS > 0 || \
+	defined(CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_A53_RESTART) || \
+	defined(CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_REPORT_LINE)
+/*
+ * The report goes out on a UART, written here character by character: the
+ * image keeps the UART console off so that nothing on the way to the first
+ * picture waits for a serial line, and this runs long after it.
+ */
+#if DT_NODE_HAS_STATUS(DT_ALIAS(yakogl_timeline_uart), okay)
+static const struct device *const tl_uart = DEVICE_DT_GET(DT_ALIAS(yakogl_timeline_uart));
+#else
+static const struct device *const tl_uart = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
+#endif
+
+static void tl_uart_str(const char *s)
+{
+	if (!device_is_ready(tl_uart)) {
+		return;
+	}
+	for (; *s != '\0'; s++) {
+		if (*s == '\n') {
+			uart_poll_out(tl_uart, '\r');
+		}
+		uart_poll_out(tl_uart, *s);
+	}
+}
+#endif
+
+/*
+ * A line of the application's onto the timeline UART, off its thread: the
+ * polled UART takes about 10 ms a line, so it is written from a thread of its
+ * own (below). A line that comes while the last is still going out is
+ * dropped. Only for an application that reports
+ * (CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_REPORT_LINE, selected by the Slint
+ * sample's SLINT_FRAME_REPORT): a product build has neither the function nor
+ * the thread.
+ */
+#ifdef CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_REPORT_LINE
+static char app_line[600];
+static atomic_t app_line_busy;
+
+/*
+ * On a thread of its own at the lowest preemptible priority, not the system
+ * work queue: that one is cooperative (priority -1), and its 50 ms of polled
+ * UART for a 600-character line held the frame loop when the two shared a
+ * core (2026-11-05: the cluster missed vblanks in the windows it reported).
+ */
+static K_SEM_DEFINE(app_line_go, 0, 1);
+
+static void app_line_thread(void *a, void *b, void *c)
+{
+	ARG_UNUSED(a);
+	ARG_UNUSED(b);
+	ARG_UNUSED(c);
+	for (;;) {
+		k_sem_take(&app_line_go, K_FOREVER);
+		tl_uart_str(app_line);
+		atomic_set(&app_line_busy, 0);
+	}
+}
+K_THREAD_DEFINE(route3_report, 1024, app_line_thread, NULL, NULL, NULL,
+		K_LOWEST_APPLICATION_THREAD_PRIO, 0, 0);
+
+void board_route3_report_line(const char *line)
+{
+	if (atomic_set(&app_line_busy, 1) != 0) {
+		return;
+	}
+	strncpy(app_line, line, sizeof(app_line) - 1u);
+	app_line[sizeof(app_line) - 1u] = '\0';
+	k_sem_give(&app_line_go);
+}
+#endif
+
+#if CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_TIMELINE_REPORT_MS > 0
+static void tl_uart_line(const char *who, const char *what, uint64_t t)
+{
+	char buf[96];
+
+	snprintk(buf, sizeof(buf), "TL %s %llu %s\n", who, (unsigned long long)t, what);
+	tl_uart_str(buf);
+}
+
+/*
+ * The colour of the frames as this core drew them: channel sums over every
+ * 16th pixel of every 16th row of the first three shows, before they are
+ * published (the M7 blends into the same buffer after). The first picture
+ * looked red/blue swapped on a slow-motion video (2026-10-29); this says
+ * whether frame 1 left this core that way.
+ */
+static uint64_t tl_px[3][3];
+/* The first frames, cntpct: published, the wait for it entered, seen shown. */
+#define TL_FRAMES 6u
+static uint64_t tl_f_pub[TL_FRAMES], tl_f_wait[TL_FRAMES], tl_f_shown[TL_FRAMES];
+static uint32_t tl_f_seq0; /* the ring's sequence number of the cold start's first frame */
+static uint32_t tl_desc5_first; /* LCDIF CTRLDESCL0_5 at the first show */
+
+/*
+ * The measurement report: both cores' stamps on the timeline UART, one
+ * line per stage, "TL <core> <ticks> <name>" between "TL begin hz=<Hz>"
+ * and "TL end" (read on the host from the UART log). The
+ * cluster keeps running: the report is a work item on the system work
+ * queue, so the polled UART (about 90 ms for the whole table) never holds
+ * a frame, and the panel is never taken from the M7.
+ */
+static void tl_report(struct k_work *work)
+{
+	static const char *const a53[] = {
+		"entry", "panel bring-up start", "panel on (dark)", "kernel up",
+		"window (M7 loaded)", "first board_show", "M7 released", "M7 up",
+		"first shown", "app: windows", "app: EGL", "app: frame 1",
+		"app: swapped", "loader entry", "loader main", "loader payload in RAM",
+		"loader unpacked", "loader jump", "loader stored CRC ok", "loader decoded",
+		"loader .bss zeroed", "app: built", "app: rendered (CPU)"};
+	static const char *const m7[] = {
+		"main", "safety layer ready", "loop", "first A53 frame",
+		"first composite", "first flip latched", "backlight on", "layer pre-rendered", "frame 1 layer rendered"};
+	volatile struct cluster_boot_timeline *tl = R.tl;
+	char buf[64];
+
+	ARG_UNUSED(work);
+	if (tl == NULL || tl->magic != CLUSTER_BOOT_TIMELINE_MAGIC) {
+		tl_uart_str("\nTL none: no timeline page\n");
+		return;
+	}
+	snprintk(buf, sizeof(buf), "\nTL begin hz=%u\n", tl->cntfrq != 0u ? tl->cntfrq : cntfrq());
+	tl_uart_str(buf);
+	for (unsigned int i = 0; i < ARRAY_SIZE(a53); i++) {
+		tl_uart_line("A53", a53[i], tl->a53[i]);
+	}
+	for (unsigned int i = 0; i < ARRAY_SIZE(m7); i++) {
+		tl_uart_line("M7", m7[i], tl->m7[i]);
+	}
+	for (unsigned int n = 0; n < 3u; n++) {
+		snprintk(buf, sizeof(buf), "TL px %u r %llu g %llu b %llu\n", n + 1u,
+			 (unsigned long long)tl_px[n][0], (unsigned long long)tl_px[n][1],
+			 (unsigned long long)tl_px[n][2]);
+		tl_uart_str(buf);
+	}
+	snprintk(buf, sizeof(buf), "TL lcdif desc5 first 0x%08x now 0x%08x\n", tl_desc5_first,
+		 imx8mp_display_layer_control());
+	tl_uart_str(buf);
+	tl_uart_str("TL end\n");
+#ifdef CONFIG_YAKOGL_DRV_DISPLAY_IMX8MP_STAGE_TIMES
+	{
+		extern uint64_t imx8mp_display_stage_cycles[9];
+		static const char *const st[9] = {
+			"entry", "1", "2", "3", "4 lcdif configured", "5 dsim enabled",
+			"6 bridge started", "7 lcdif on, video, link checked", "8 backlight armed"};
+
+		uint64_t a = imx8mp_display_stage_cycles[0];
+
+		for (unsigned int i = 1; i < 9 && a != 0u; i++) {
+			const uint64_t b = imx8mp_display_stage_cycles[i];
+
+			if (b == 0u) {
+				continue;
+			}
+			snprintk(buf, sizeof(buf), "TLP stage %s: %u us\n", st[i],
+				 (uint32_t)k_cyc_to_us_floor64(b - a));
+			tl_uart_str(buf);
+			a = b;
+		}
+	}
+#endif
+	for (unsigned int i = 0; i < TL_FRAMES; i++) {
+		const uint64_t e = tl_early[CLUSTER_TL_A53_ENTRY];
+		const uint32_t hz = cntfrq();
+
+		if (tl_f_pub[i] == 0u || e == 0u || hz == 0u) {
+			continue;
+		}
+		snprintk(buf, sizeof(buf), "TLF frame %u: published %u wait %u shown %u us\n", i + 1u,
+			 (uint32_t)((tl_f_pub[i] - e) * 1000000u / hz),
+			 tl_f_wait[i] ? (uint32_t)((tl_f_wait[i] - e) * 1000000u / hz) : 0u,
+			 tl_f_shown[i] ? (uint32_t)((tl_f_shown[i] - e) * 1000000u / hz) : 0u);
+		tl_uart_str(buf);
+	}
+#ifdef CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_CLOCK_REPORT
+	board_route3_clock_report(tl_uart_str);
+#endif
+}
+
+static K_WORK_DEFINE(tl_report_work, tl_report);
+
+static void tl_sample(const struct board_window *win, unsigned int n)
+{
+	const volatile uint8_t *base = (const volatile uint8_t *)win->cpu;
+
+	for (uint32_t y = 0; y < win->h; y += 16u) {
+		const volatile uint32_t *row = (const volatile uint32_t *)(base + (size_t)y * win->stride);
+
+		for (uint32_t x = 0; x < win->w; x += 16u) {
+			const uint32_t v = row[x];
+
+			tl_px[n][0] += (v >> 16) & 0xffu;
+			tl_px[n][1] += (v >> 8) & 0xffu;
+			tl_px[n][2] += v & 0xffu;
+		}
+	}
+}
+#endif
+
+#ifdef CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_A53_RESTART
+/*
+ * The restart's report, once, on the timeline UART (tl_uart_str): the power
+ * page's stamps from the M7's DOWN request to this image's first frame, as
+ * milliseconds after the request and after the stamp before, between
+ * "TLR begin" and "TLR end". A stamp nobody wrote reads "-". From the system
+ * work queue, a while after the first frame (the polled UART must not hold a
+ * frame), like tl_report.
+ */
+static void tl_restart_report(struct k_work *work)
+{
+	static const char *const what[] = {
+		"M7 DOWN request", "A53 DOWN taken", "A53 SYSTEM_SUSPEND", "M7 A53 SCU off",
+		"M7 UP request", "loader entry", "image entry", "first frame"};
+	const volatile struct cluster_a53_power *pw = board_route3_power_page();
+	const uint32_t hz = cntfrq();
+	uint64_t t[ARRAY_SIZE(what)];
+	uint64_t base = 0u, prev = 0u;
+	char buf[112];
+
+	ARG_UNUSED(work);
+	if (pw == NULL || hz == 0u) {
+		tl_uart_str("\nTLR none: no power page\n");
+		return;
+	}
+	t[0] = pw->m7_down_req;
+	t[1] = pw->a53_down_seen;
+	t[2] = pw->a53_suspend;
+	t[3] = pw->m7_scu_off;
+	t[4] = pw->m7_up_req;
+	t[5] = pw->a53_loader_in;
+	t[6] = pw->a53_image_in;
+	t[7] = pw->a53_first_frame;
+	for (unsigned int i = 0; i < ARRAY_SIZE(t) && base == 0u; i++) {
+		base = t[i];
+	}
+	snprintk(buf, sizeof(buf), "\nTLR begin hz=%u restarts=%u state=%u suspend_rc=%d\n", hz,
+		 pw->restarts, pw->a53_state, pw->suspend_rc);
+	tl_uart_str(buf);
+	for (unsigned int i = 0; i < ARRAY_SIZE(t); i++) {
+		if (t[i] == 0u) {
+			snprintk(buf, sizeof(buf), "TLR - %s\n", what[i]);
+		} else {
+			/* signed: the M7's and the A53's stamps are one counter,
+			 * but nothing orders an M7 stamp after an A53 one */
+			const int64_t at = (int64_t)(t[i] - base) * 1000000 / (int64_t)hz;
+			const int64_t step = prev != 0u ? (int64_t)(t[i] - prev) * 1000000 / (int64_t)hz : 0;
+
+			snprintk(buf, sizeof(buf), "TLR %llu %s: %lld.%03lld ms (+%lld.%03lld)\n",
+				 (unsigned long long)t[i], what[i], (long long)(at / 1000),
+				 (long long)((at < 0 ? -at : at) % 1000), (long long)(step / 1000),
+				 (long long)((step < 0 ? -step : step) % 1000));
+			prev = t[i];
+		}
+		tl_uart_str(buf);
+	}
+	tl_uart_str("TLR end\n");
+}
+
+static K_WORK_DELAYABLE_DEFINE(tl_restart_work, tl_restart_report);
+#endif
+
 /* ---- the ring ------------------------------------------------------------- */
 
 static void beat_expiry(struct k_timer *t)
@@ -338,8 +762,133 @@ static void beat_expiry(struct k_timer *t)
 	cluster_frame_ring_heartbeat(R.ring);
 }
 
+/* This boot's ring session (frame_ring.h, `session`): any non-zero value
+ * the last boot did not use -- the counter's low word is as good as any. */
+static uint32_t new_session(uint32_t stale)
+{
+	uint32_t s = (uint32_t)cntpct() ^ (uint32_t)(cntpct() >> 32);
+
+	if (s == 0u || s == stale) {
+		s = stale + 1u;
+	}
+	return s != 0u ? s : 1u;
+}
+
+/*
+ * Hand the M7 this boot's ring session (it then believes the ring on its first
+ * look instead of waiting for the beat to move), beat once so the ring reads
+ * alive at that look, start the heartbeat, and release the core.
+ */
+static void m7_start(void)
+{
+	volatile uint32_t *ctrl =
+		(volatile uint32_t *)(R.window + (M7_CTRL_ADDR - M7_UNCACHED_BASE));
+
+	ctrl[CTRL_A53_SESSION] = R.ring->session;
+	cluster_frame_ring_heartbeat(R.ring);
+	k_timer_start(&R.beat, K_MSEC(CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_BEAT_MS),
+		      K_MSEC(CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_BEAT_MS));
+	m7_release();
+	board_route3_tl_mark(CLUSTER_TL_A53_M7_RELEASED);
+}
+
+#ifdef CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_A53_RESTART
+/*
+ * Which pair of the four ring buffers a restart renders into: one that holds
+ * nothing the M7 may still read. The last boot published into its own pair,
+ * and until the M7 has seen this boot's first frame it may still be scanning
+ * (`lcdif_fb`), showing (`shown`) or holding as the newest frame one of those
+ * buffers -- the M7 keeps an A53 frame on the panel until it declares the
+ * A53 gone, CLUSTER_FRAME_RING_TIMEOUT_MS after the last beat, and a restart
+ * can come sooner. Cold boots use pair 0 as before.
+ */
+static unsigned int warm_buffer_pair(void)
+{
+	const unsigned int w = CONFIG_YAKOGL_BOARD_IMX8MP_WINDOWS;
+	const uint32_t produced = R.ring->produced;
+	const uint32_t shown = R.ring->shown;
+	const uint32_t scanned = R.status[ST_LCDIF_FB];
+	uint32_t busy = 0u, scan = 0u;
+
+	BUILD_ASSERT(2u * CONFIG_YAKOGL_BOARD_IMX8MP_WINDOWS <= RING_FB_MAX,
+		     "a restart renders into the pair the last boot did not");
+	for (unsigned int i = 0; i < RING_FB_MAX; i++) {
+		const uint32_t pa = RING_FB0_ADDR + i * M7_FB_STRIDE;
+
+		for (unsigned int k = 0; k < CLUSTER_FRAME_RING_SLOTS; k++) {
+			const uint32_t slot_pa = (uint32_t)R.ring->slot[k].pa;
+			const uint32_t seq = R.ring->slot[k].seq;
+
+			if (slot_pa == pa && produced != 0u &&
+			    (seq == produced || (shown != 0u && seq == shown))) {
+				busy |= BIT(i);
+			}
+		}
+		if (scanned >= pa && scanned < pa + M7_FB_STRIDE) {
+			scan |= BIT(i);
+		}
+	}
+	busy |= scan;
+	if ((busy & BIT_MASK(w)) == 0u) {
+		return 0u;
+	}
+	if ((busy & (BIT_MASK(w) << w)) == 0u) {
+		return w;
+	}
+	/* both pairs hold something: keep off the one being scanned */
+	return (scan & BIT_MASK(w)) != 0u ? w : 0u;
+}
+
+/*
+ * A restart's setup: the M7 runs, its ring is ours from the last boot. Map,
+ * check its map once more (m7_check, which reads only), and take the ring as
+ * it is: its counters, its session, its heartbeat count. Written here: nothing.
+ * The heartbeat starts with the first publish (board_route3_show): a beat
+ * before it would make the M7 take the last boot's newest frame for this
+ * boot's, and blend its layer into it a second time.
+ */
+static int route3_warm_setup(void)
+{
+	if (!cluster_frame_ring_attached(R.ring)) {
+		printk("route3: restart, but no ring (magic 0x%08x): publishing nothing\n",
+		       R.ring->magic);
+		R.state = BOARD_ROUTE3_MISMATCH;
+		return 0;
+	}
+	R.buf_base = warm_buffer_pair();
+	k_timer_init(&R.beat, beat_expiry, NULL);
+	atomic_set(&R.m7_started, 1); /* the M7 runs: never m7_start() */
+	R.panel_checked = true;       /* the panel is the M7's */
+	R.lit = true;                 /* and lit by it */
+	R.released_ms = k_uptime_get();
+	board_route3_tl_mark(CLUSTER_TL_A53_WINDOW);
+	R.state = BOARD_ROUTE3_STARTING;
+	m7_check();
+	if (R.state == BOARD_ROUTE3_STARTING) {
+		/* the entry saw 'SAF7' and a moving heartbeat; never wait for
+		 * the M7 here (the wait ends in m7_give_up's SiP STOP) */
+		printk("route3: restart, but the M7 status block reads 0x%08x: publishing nothing\n",
+		       R.status[ST_MAGIC]);
+		R.state = BOARD_ROUTE3_MISMATCH;
+		return 0;
+	}
+	printk("route3: restart: ring produced %u shown %u session 0x%08x, buffers %u..%u\n",
+	       R.ring->produced, R.ring->shown, R.ring->session, R.buf_base,
+	       R.buf_base + CONFIG_YAKOGL_BOARD_IMX8MP_WINDOWS - 1u);
+	return 0;
+}
+
+void board_route3_quiesce(void)
+{
+	R.going_down = true;
+	k_timer_stop(&R.beat);
+}
+#endif
+
 static int route3_setup(void)
 {
+	uint32_t stale_session;
+
 	int rc;
 
 	R.window = map_nc(M7_UNCACHED_BASE, M7_UNCACHED_SIZE);
@@ -350,12 +899,23 @@ static int route3_setup(void)
 	R.status = (const volatile uint32_t *)(R.window + (M7_STATUS_ADDR - M7_UNCACHED_BASE));
 	R.ring = (volatile struct cluster_frame_ring *)(R.window + (M7_RING_ADDR - M7_UNCACHED_BASE));
 	R.page = cluster_m7_page_of(R.ring);
+	BUILD_ASSERT(CLUSTER_BOOT_TIMELINE_ADDR + sizeof(struct cluster_boot_timeline) <=
+			     M7_UNCACHED_BASE + M7_UNCACHED_SIZE,
+		     "the timeline page is in the M7's non-cacheable window");
+#ifdef CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_A53_RESTART
+	if (board_route3_warm()) {
+		return route3_warm_setup();
+	}
+#endif
+	tl_attach(R.window);
+	tl_loader();
 
 	/* DDR keeps its contents over a warm reset: what the last boot's M7
 	 * left must not read as this boot's. Its status magic and its page
 	 * go; the M7 writes both again at its start. */
 	((volatile uint32_t *)R.status)[ST_MAGIC] = 0u;
 	R.page->magic = 0u;
+	stale_session = R.ring->session;
 	R.ring->magic = 0u;
 
 	rc = m7_load();
@@ -364,8 +924,27 @@ static int route3_setup(void)
 		return -EIO;
 	}
 	cluster_frame_ring_init(R.ring);
+	R.ring->session = new_session(stale_session);
 	k_timer_init(&R.beat, beat_expiry, NULL);
 	R.state = BOARD_ROUTE3_LOADED;
+	board_route3_tl_mark(CLUSTER_TL_A53_WINDOW);
+
+	/*
+	 * The M7 now, not after frame 1: its start, its first render of the
+	 * safety layer and its wait for our frame then run while this core
+	 * initialises the GPU and draws -- 2026-10-29's timeline had the M7
+	 * started 463 ms after it was loaded, and its ~290 ms to the first
+	 * flip all on the critical path. Even before the panel runs: the
+	 * M7 touches the LCDIF and PWM3 (MEDIAMIX, a bus fault while it is
+	 * off) only to flip, and on a handed-over start it flips nothing
+	 * before our first frame, which board_route3_show() publishes only
+	 * once the panel runs. Released after the panel instead, its first
+	 * render of the safety layer (33 ms) stood between the panel and
+	 * the first picture (2026-10-29, v12 timeline).
+	 */
+	if (atomic_cas(&R.m7_started, 0, 1)) {
+		m7_start();
+	}
 	return 0;
 }
 
@@ -386,6 +965,9 @@ int board_route3_window(unsigned int n, uint32_t w, uint32_t h, struct board_win
 	if (n >= MIN(RING_FB_MAX, (unsigned int)CONFIG_YAKOGL_BOARD_IMX8MP_WINDOWS)) {
 		return -ENOMEM;
 	}
+#ifdef CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_A53_RESTART
+	n += R.buf_base; /* 0 on a cold boot */
+#endif
 	*out = (struct board_window){
 		.phys = RING_FB0_ADDR + n * M7_FB_STRIDE,
 		.cpu = R.fb_cpu + (size_t)n * M7_FB_STRIDE,
@@ -412,29 +994,72 @@ static uint32_t publish(const struct board_window *win)
 	return cluster_frame_ring_publish(R.ring, &f);
 }
 
+static int shown_wait(uint32_t seq);
+
 int board_route3_show(const struct board_window *win)
 {
 	uint32_t seq;
-	int64_t t0;
 	int rc;
 
+#ifdef CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_A53_RESTART
+	if (R.going_down) {
+		return 0; /* DOWN taken: the A53 side is on its way off */
+	}
+#endif
+	board_route3_tl_mark(CLUSTER_TL_A53_FRAME1_DRAWN); /* the first show only */
+#if CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_TIMELINE_REPORT_MS > 0
+	{
+		static unsigned int shows;
+
+		if (shows < 3u) {
+			tl_sample(win, shows++);
+		}
+		if (shows == 1u && imx8mp_display_is_running()) {
+			tl_desc5_first = imx8mp_display_layer_control();
+		}
+	}
+#endif
+	if (!R.panel_checked && (R.state == BOARD_ROUTE3_LOADED || R.state == BOARD_ROUTE3_STARTING ||
+				 R.state == BOARD_ROUTE3_UP)) {
+		/*
+		 * Nothing is published before the panel runs: the M7 flips
+		 * (touching MEDIAMIX) only once there is a frame. The panel
+		 * console's bring-up may still be on its thread; wait for it.
+		 * Without it (or if it failed), the panel from cold on this
+		 * frame. The backlight stays off either way: the M7 turns PWM3
+		 * on itself right before its first flip of a frame it has
+		 * composited (lcdif_m7_backlight_ensure_on); lit here, the
+		 * A53's bare frame stood on the panel for the whole M7 boot
+		 * (2026-10-22, the first frames wrong).
+		 */
+		R.panel_checked = true;
+		(void)gc_panel_console_cold_wait(K_SECONDS(2));
+		if (!imx8mp_display_is_running()) {
+			rc = imx8mp_display_on(win->phys, win->stride);
+			if (rc != 0) {
+				printk("route3: no panel (%d); stopping the M7\n", rc);
+				m7_give_up();
+				return rc;
+			}
+		}
+#ifdef CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_A53_RESTART
+		/*
+		 * The bridge is written by now whichever way the panel came up
+		 * (the console's cold bring-up, which disables this line itself,
+		 * or this fallback): I2C2 is the M7's from here, so its line is
+		 * off in this core's GIC before the first publish -- the M7
+		 * starts I2C2 only after a published frame is on its panel (desk
+		 * audit D7; gc_panel_console.c says why). Idempotent.
+		 */
+		irq_disable(DT_IRQ(DT_NODELABEL(i2c2), irq));
+#endif
+	}
 	switch (R.state) {
 	case BOARD_ROUTE3_LOADED:
-		/* The panel from cold on this frame; the M7 adopts it later. The
-		 * backlight stays off (YAKOGL_DRV_DISPLAY_IMX8MP_BACKLIGHT_ON_FIRST_SHOW):
-		 * this frame has no safety layer, and the M7 turns PWM3 on itself
-		 * when it adopts the LCDIF (lcdif_m7_backlight_ensure_on), right
-		 * before its first flip of a frame it has composited. Lit here,
-		 * the A53's bare frame stood on the panel for the whole M7 boot
-		 * (2026-10-22, the first frames wrong). */
-		rc = imx8mp_display_on(win->phys, win->stride);
-		if (rc != 0) {
-			return rc;
-		}
 		(void)publish(win);
-		k_timer_start(&R.beat, K_MSEC(CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_BEAT_MS),
-			      K_MSEC(CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_BEAT_MS));
-		m7_release();
+		if (atomic_cas(&R.m7_started, 0, 1)) {
+			m7_start();
+		}
 		return 0;
 	case BOARD_ROUTE3_STARTING:
 	case BOARD_ROUTE3_UP:
@@ -446,7 +1071,71 @@ int board_route3_show(const struct board_window *win)
 	}
 
 	seq = publish(win);
+#if CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_TIMELINE_REPORT_MS > 0
+#ifdef CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_A53_RESTART
+	const bool tl_cold = !board_route3_warm();
+#else
+	const bool tl_cold = true;
+#endif
+	if (tl_cold && tl_f_seq0 == 0u) {
+		tl_f_seq0 = seq;
+	}
+	if (tl_cold && seq - tl_f_seq0 < TL_FRAMES) {
+		tl_f_pub[seq - tl_f_seq0] = cntpct();
+	}
+#endif
+#ifdef CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_A53_RESTART
+	if (board_route3_warm() && !R.restart_published) {
+		/* The restart's first frame is in the ring: now the beat, which
+		 * tells the M7 the producer is back (app_frame.c,
+		 * producer_is_beating), so the newest frame it then takes is
+		 * this one. */
+		volatile struct cluster_a53_power *pw = board_route3_power_page();
+
+		R.restart_published = true;
+		if (pw != NULL) {
+			pw->a53_first_frame = cntpct();
+		}
+		cluster_frame_ring_heartbeat(R.ring);
+		k_timer_start(&R.beat, K_MSEC(CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_BEAT_MS),
+			      K_MSEC(CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_BEAT_MS));
+		(void)k_work_schedule(&tl_restart_work,
+				      K_MSEC(MAX(CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_TIMELINE_REPORT_MS,
+						 1000)));
+	}
+#endif
+	if (R.defer_wait && R.state == BOARD_ROUTE3_UP) {
+		/* the caller waits later (board_route3_wait_shown) */
+		R.pending_seq = seq;
+		return 0;
+	}
+	return shown_wait(seq);
+}
+
+/*
+ * The second half of a show: wait until the M7 has frame `seq` on the
+ * panel, then what follows the first one (the backlight, the timeline, the
+ * restart arm).
+ */
+static int shown_wait(uint32_t seq)
+{
+	int64_t t0;
+
+#ifdef CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_A53_RESTART
+	if (R.going_down) {
+		return 0;
+	}
+#endif
 	t0 = k_uptime_get();
+#if CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_TIMELINE_REPORT_MS > 0
+	const uint32_t tl_i = seq - tl_f_seq0;
+	const bool tl_f = tl_f_seq0 != 0u && tl_i < TL_FRAMES && tl_f_pub[tl_i] != 0u &&
+			  tl_f_wait[tl_i] == 0u;
+
+	if (tl_f) {
+		tl_f_wait[tl_i] = cntpct();
+	}
+#endif
 	/* The previous window holds frame seq - 1: it is ours again once the
 	 * M7's `shown` has moved past it (frame_ring.h). Until the M7 is up,
 	 * the wait is for the M7 itself, bounded by the M7 wait. */
@@ -468,8 +1157,13 @@ int board_route3_show(const struct board_window *win)
 			break;
 		}
 		board_watchdog_feed();
-		k_sleep(K_MSEC(WAIT_POLL_MS));
+		k_sleep(K_USEC(WAIT_POLL_US));
 	}
+#if CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_TIMELINE_REPORT_MS > 0
+	if (tl_f) {
+		tl_f_shown[tl_i] = cntpct();
+	}
+#endif
 	m7_check();
 	if (!R.lit && R.state == BOARD_ROUTE3_UP && cluster_frame_ring_shown(R.ring) != 0u) {
 		/* The M7 has shown a frame, so it has lit the panel. Only the
@@ -477,15 +1171,50 @@ int board_route3_show(const struct board_window *win)
 		 * this writes nothing. */
 		imx8mp_display_backlight_on();
 		R.lit = true;
+		R.first_shown_ms = k_uptime_get();
+		board_route3_tl_mark(CLUSTER_TL_A53_FIRST_SHOWN);
 		printk("route3: the M7's first frame on the panel within %lld ms of the release\n",
 		       k_uptime_get() - R.released_ms);
 	}
+#if CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_TIMELINE_REPORT_MS > 0
+	static bool tl_reported;
+
+#ifdef CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_A53_RESTART
+	tl_reported = tl_reported || board_route3_warm(); /* its own report */
+#endif
+	if (!tl_reported && R.lit && R.state == BOARD_ROUTE3_UP &&
+	    k_uptime_get() - R.first_shown_ms >= CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_TIMELINE_REPORT_MS) {
+		tl_reported = true;
+		(void)k_work_submit(&tl_report_work);
+	}
+#endif
+#ifdef CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_A53_RESTART
+	if (R.state == BOARD_ROUTE3_UP) {
+		board_route3_restart_arm(); /* once */
+	}
+#endif
 	return 0;
 }
 
 int board_route3_state(void)
 {
 	return R.state;
+}
+
+void board_route3_defer_wait(bool on)
+{
+	R.defer_wait = on;
+}
+
+int board_route3_wait_shown(void)
+{
+	const uint32_t seq = R.pending_seq;
+
+	if (seq == 0u) {
+		return 0;
+	}
+	R.pending_seq = 0u;
+	return shown_wait(seq);
 }
 
 bool board_route3_vehicle(struct cluster_vehicle_state *out)

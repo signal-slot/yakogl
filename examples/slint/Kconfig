@@ -40,4 +40,18 @@ config SLINT_ANIMATE_FOREVER
 	  reset. Pair it with a watchdog that is fed for as long as the
 	  loop is alive (the iMX8MP: GC_BOARD_WDOG_UNBOUNDED).
 
+config SLINT_FRAME_REPORT
+	bool "Route 3 measurement: where each frame's time goes, on the timeline UART"
+	depends on YAKOGL_BOARD_IMX8MP_ROUTE3
+	select YAKOGL_BOARD_IMX8MP_ROUTE3_REPORT_LINE
+	help
+	  Every 120 frames, three lines on the timeline UART (alias
+	  yakogl-timeline-uart, tl-uart1.overlay; else the console UART),
+	  written by the board layer's lowest-priority report thread: A53F,
+	  the frame's draw, GPU, show and swap times; A53G, the GL entry
+	  points' CPU time and the Rust side's phases (set_vehicle, timers,
+	  render); A53Y, YakoGL's draw steps and the GPU's cycle counters.
+	  A measurement: off, the sample neither times its phases nor prints
+	  them, and the report thread does not exist.
+
 source "Kconfig.zephyr"

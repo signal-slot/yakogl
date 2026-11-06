@@ -3621,6 +3621,10 @@ fn build_common(
             d.vs_uniform_cpu = p.vs_uniforms as *const c_void;
         }
         if fs_dw != 0 {
+            /* a variant whose block is larger than the program's array is
+             * read from the GPU buffer (below), so that one is filled even
+             * on a host-only backend */
+            let host_only = host_only && fs_dw <= p.fs_uniform_alloc;
             if fs_app_dw != 0 && !host_only {
                 let blk = p.fs_block();
                 rc |= put(&mut pg.uniforms, fs_off, dword_bytes(&blk[..(fs_app_dw as usize).min(blk.len())]));

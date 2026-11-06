@@ -26,12 +26,33 @@ slint = { path = "@SLINT_NOSTD_DIR@/api/rs/slint", default-features = false, fea
 i-slint-renderer-femtovg = { path = "@SLINT_NOSTD_DIR@/internal/renderers/femtovg", default-features = false, features = ["opengl"] }
 i-slint-core = { path = "@SLINT_NOSTD_DIR@/internal/core", default-features = false, features = ["libm", "unsafe-single-threaded"] }
 
+[features]
+# The route-3 frame report's phase times (Kconfig SLINT_FRAME_REPORT).
+frame-report = []
+
 [build-dependencies]
 slint-build = { path = "@SLINT_NOSTD_DIR@/api/rs/build", default-features = false, features = ["compat-1-18", "renderer-software"] }
 
 [profile.release]
 panic = "abort"
-opt-level = "z"
+# For speed: Slint and FemtoVG are the CPU half of every frame (the route-3
+# cluster, 2026-11-05: 5.4 ms a frame outside GL at "z"), and YakoGL is
+# built the same way (the workspace's release profile).
+opt-level = "s"
+lto = true
+codegen-units = 1
+
+# The crates a frame's CPU time goes through at full speed, the rest (the
+# generated item tree, core and alloc, the rest of Slint) for size: the
+# image is read from eMMC by the SPL before anything runs (fb2, 2026-11-06).
+[profile.release.package.femtovg]
+opt-level = 3
+[profile.release.package.i-slint-renderer-femtovg]
+opt-level = 3
+[profile.release.package.i-slint-core]
+opt-level = 3
+[profile.release.package.glow]
+opt-level = 3
 
 [profile.dev]
 panic = "abort"

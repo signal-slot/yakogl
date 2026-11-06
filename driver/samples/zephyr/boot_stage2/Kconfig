@@ -73,9 +73,31 @@ config BOOT_STAGE2_REGION_END
 	help
 	  The overlay's stage2_payload node ends here (the GPU carveout).
 
+config BOOT_STAGE2_PROGRESS_LOG
+	bool "Log each step on the console, with a memory bandwidth probe"
+	default y
+	help
+	  The header, the read and unpack times, and a timed 1 MiB copy. The
+	  console is polled, so every line costs its length at the UART's
+	  rate before the image runs (at 115200 baud, about 87 us a
+	  character: the four lines and the probe were 31 ms of the i.MX8MP
+	  loader's 300, 2026-10-29). Errors are always printed.
+
 config BOOT_STAGE2_CHUNK_SECTORS
 	int "Sectors per disk read"
 	default 2048
+
+config BOOT_STAGE2_RESTART
+	bool "Entered again after the A53 image's SYSTEM_SUSPEND (route 3)"
+	default y if BOARD_VERDIN_IMX8MP
+	help
+	  The A53 image suspends to this loader's entry point
+	  (CLUSTER_A53_RESTART_ENTRY, cluster/a53_power.h) and TF-A resumes core
+	  0 there with the loader's RAM as the first run left it. The loader
+	  then restores its initialised RAM data from the copy taken on the
+	  first entry (src/main.c, "Every entry is a first entry") and, when
+	  the power page says so, stamps a53_loader_in. The page's address is
+	  the i.MX 8M Plus route 3's (the M7's non-cacheable window).
 
 endmenu
 

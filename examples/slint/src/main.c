@@ -38,6 +38,25 @@
 
 #include <EGL/egl.h>
 #include <GLES2/gl2.h>
+#if defined(CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3) && CONFIG_SLINT_WINDOW_BUFFERS == 2
+#include <GLES3/gl3.h> /* glFenceSync, glClientWaitSync */
+/*
+ * Route 3 with two windows overlaps the CPU and the GPU: frame N + 1 is
+ * recorded while the GPU draws N. The order, per frame k (animate()):
+ *   record k into its window (CPU only: the GPU writes a window only when
+ *     the swap submits it; YakoGL's GC backend submits a frame early only
+ *     on a new render target, a full stream or arena);
+ *   wait for k - 1's fence (glClientWaitSync, which submits nothing,
+ *     gc_wait_kick); publish k - 1; wait until the M7 has it on the panel,
+ *     so k's window, which held k - 2, is free (board_route3_wait_shown);
+ *   swap k (GLES_NATIVE_WINDOW_PIPELINED: submits, waits only for k - 1).
+ * Before: record, swap waiting for the GPU, publish, wait for the panel, in
+ * series -- 35 ms a frame on 2026-11-04 (draw 8.5, GPU 11, panel 14).
+ */
+#define R3_PIPELINE 1
+#else
+#define R3_PIPELINE 0
+#endif
 
 #include <yakogl_board.h>
 #include <yakogl_record.h>
@@ -58,6 +77,9 @@
  * (in a view they are on the screen, CONFIG_YAKOGL_BOARD_SCANOUT_VIEW). */
 static uint32_t s_guard_before[GUARD_ROWS * WIN_W];
 
+/* The first frame is checked at the design size only (first_frame_and_check). */
+#define FRAME_CHECKED (WIN_W == 1024u && WIN_H == 600u)
+
 /* Where a run that died stopped (kind PROGRESS, YK_RECORD_WHERE_STAGE | n). */
 enum stage {
 	STAGE_WINDOW = 1,
@@ -67,6 +89,8 @@ enum stage {
 	STAGE_CHECKED,
 	STAGE_ANIMATING,
 	STAGE_ANIMATED,
+	STAGE_BUILT,    /* route 3: the component built, the car at rest set */
+	STAGE_RENDERED, /* route 3: frame 1 rendered (the GPU may still run) */
 };
 
 /* ---- what the Rust archive needs from C ---------------------------------- */
@@ -97,6 +121,8 @@ struct slint_sample_result {
 BUILD_ASSERT(sizeof(struct slint_sample_result) == 28, "rust/src/lib.rs SampleResult");
 const char *slint_sample_build_inputs(void);
 int slint_sample_first_frame(slint_get_proc_fn get_proc, uint32_t w, uint32_t h);
+int slint_sample_route3_build(slint_get_proc_fn get_proc, uint32_t w, uint32_t h);
+int slint_sample_route3_render(slint_get_proc_fn get_proc, uint32_t w, uint32_t h);
 int slint_sample_animate_frame(slint_get_proc_fn get_proc, uint32_t w, uint32_t h, uint32_t t_ms,
 			       uint32_t frame);
 int slint_sample_check(const uint32_t *cpu, uint32_t w, uint32_t h, uint32_t stride, uint32_t guard_rows,
@@ -197,6 +223,9 @@ static int egl_up(void)
 			.phys = s_wins[i].phys, .width = s_wins[i].w, .height = s_wins[i].h,
 			.stride_bytes = s_wins[i].stride, .format = s_wins[i].format,
 		};
+#if R3_PIPELINE
+		nw[i].format |= GLES_NATIVE_WINDOW_PIPELINED;
+#endif
 	}
 	/* every board: the Pi 4 board layer gives the V3D OSAL its clock
 	 * switch through the OSAL's default-platform hook (db659a88) */
@@ -295,8 +324,12 @@ static int window_one(unsigned int i)
 	 * and the first GL frame. A console printk after this point goes beside
 	 * the window on the Pi 4 view, never into these rows.
 	 * Through the CPU's view (Normal non-cacheable on every board,
-	 * yakogl_board.h: no cache maintenance). */
-	for (uint32_t y = 0; y < WIN_H + GUARD_ROWS; y++) {
+	 * yakogl_board.h: no cache maintenance).
+	 * Only for the check, which runs at the design size alone (below):
+	 * elsewhere the two 1280x800 windows' fill through that view was
+	 * 10 ms on the way to the Verdin iMX8MP's first picture (2026-10-29,
+	 * route-3 timeline), for nothing. */
+	for (uint32_t y = 0; FRAME_CHECKED && y < WIN_H + GUARD_ROWS; y++) {
 		uint32_t *row = (uint32_t *)((uint8_t *)full.cpu + (size_t)y * full.stride);
 
 		if (y < WIN_H) {
@@ -332,12 +365,27 @@ static int first_frame_and_check(void)
 	int ret;
 
 	board_progress(YK_RECORD_WHERE_STAGE | STAGE_FIRST_FRAME);
+#ifdef CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3
+	/* One draw: no check here, and this frame is the panel's first. */
+	ret = slint_sample_route3_build(get_proc, WIN_W, WIN_H);
+	if (ret)
+		return ret;
+	board_progress(YK_RECORD_WHERE_STAGE | STAGE_BUILT);
+	ret = slint_sample_route3_render(get_proc, WIN_W, WIN_H);
+	if (ret)
+		return ret;
+	board_progress(YK_RECORD_WHERE_STAGE | STAGE_RENDERED);
+#else
 	ret = slint_sample_first_frame(get_proc, WIN_W, WIN_H);
 	if (ret)
 		return ret;
+#endif
 	ret = swap();
 	if (ret)
 		return ret;
+#if R3_PIPELINE
+	glFinish(); /* a pipelined swap returns with the frame still drawing */
+#endif
 	board_progress(YK_RECORD_WHERE_STAGE | STAGE_SWAPPED);
 	show();
 	/* The check's reference points (check/src/lib.rs REFERENCE) are pixel
@@ -348,7 +396,7 @@ static int first_frame_and_check(void)
 	 * memory held the picture still for about two seconds on the Verdin
 	 * iMX8MP (2026-10-22). So the check runs only at the design size;
 	 * elsewhere the frame is shown and the run goes on unchecked. */
-	if (WIN_W == 1024u && WIN_H == 600u) {
+	if (FRAME_CHECKED) {
 		ret = slint_sample_check(s_win.cpu, WIN_W, WIN_H, s_win.stride / 4u, GUARD_ROWS,
 					 s_guard_before, s_win.format, &s_result);
 		s_checked = ret >= 0;
@@ -377,6 +425,182 @@ static void fps_line(uint32_t frames, int64_t ms)
 	printk("slint-frame: frames=%u ms_per_frame=%u.%02u\n", frames, centi / 100u, centi % 100u);
 }
 
+#ifdef CONFIG_SLINT_FRAME_REPORT
+/*
+ * Where a frame's time goes, per FPS_WINDOW frames, on the timeline UART
+ * (CONFIG_SLINT_FRAME_REPORT, a measurement; without it nothing below is
+ * built, timed or printed):
+ *   A53F frames <n> ms <window> draw <avg>/<max> swap <avg>/<max>
+ *        show <avg>/<max> (us)
+ * draw: Slint's update and the GL calls (the CPU); swap: eglSwapBuffers,
+ * which submits and waits for the GPU; show: board_show, which publishes the
+ * frame and waits until the M7 has it on the panel.
+ */
+#define PHASE_REPORT 1
+/* YakoGL's own counters (src/osal/osal_internal.h, driver/src/vivante/
+ * gc_render.h): the CPU time inside glDraw* by step, and the GPU's. */
+#define OSAL_DRAW_STEPS 12u
+bool osal_draw_stats(uint64_t ns[OSAL_DRAW_STEPS], uint32_t *untimed);
+void osal_gc_gpu_stats(uint64_t *submit_us, uint64_t *gpu_busy_us, uint32_t *kicks);
+struct gc_render_perf {
+	uint64_t gpu_busy_ns;
+	uint64_t wait_ns;
+	uint32_t kicks_done;
+	uint32_t waits;
+	uint32_t wait_sleeps;
+	uint32_t hi_total_cycles;
+	uint32_t hi_idle_cycles;
+	uint32_t hi_read_bytes8;
+	uint32_t hi_write_bytes8;
+	uint32_t mc_pe;
+	uint32_t mc_sh;
+	uint32_t mc_ra;
+};
+void gc_render_perf(struct gc_render_perf *out);
+int yakogl_gl_timing_row(int i, const char **name, uint32_t *calls, uint64_t *us);
+void slint_sample_phase_ticks(uint64_t *out);
+#define GLT_ROWS 128
+static uint32_t glt_calls_prev[GLT_ROWS];
+static uint64_t glt_us_prev[GLT_ROWS];
+static uint64_t glt_total_prev;
+
+/* A third line: every GL entry point's CPU time (gl/timing.rs), the total
+ * and the five largest, us and calls per frame; and the Rust side's phases. */
+static int glcalls_line(uint32_t frames, char *b, size_t bsz)
+{
+	static uint64_t us[GLT_ROWS];
+	static uint32_t calls[GLT_ROWS];
+	static const char *name[GLT_ROWS];
+	uint64_t tot = 0, ph[3] = {0};
+	int n;
+
+	memset(name, 0, sizeof(name));
+
+	for (int i = 0; i < GLT_ROWS; i++) {
+		uint32_t c = 0;
+		uint64_t u = 0;
+
+		if (yakogl_gl_timing_row(i, &name[i], &c, &u) != 0)
+			break;
+		calls[i] = c - glt_calls_prev[i];
+		us[i] = u - glt_us_prev[i];
+		glt_calls_prev[i] = c;
+		glt_us_prev[i] = u;
+	}
+	(void)yakogl_gl_timing_row(-1, NULL, NULL, &tot);
+	slint_sample_phase_ticks(ph);
+	n = snprintk(b, bsz, "A53G gl_us %llu | rust set %llu timers %llu render %llu |",
+		     (tot - glt_total_prev) / frames, ph[0] / 8u / frames, ph[1] / 8u / frames,
+		     ph[2] / 8u / frames);
+	glt_total_prev = tot;
+	for (int k = 0; k < 6; k++) {
+		int best = -1;
+
+		for (int i = 0; i < GLT_ROWS; i++) {
+			if (name[i] != NULL && (best < 0 || us[i] > us[best]))
+				best = i;
+		}
+		if (best < 0 || us[best] == 0)
+			break;
+		n += snprintk(b + n, bsz - n, " %s %llu/%u", name[best], us[best] / frames,
+			      calls[best] / frames);
+		us[best] = 0;
+	}
+	n += snprintk(b + n, bsz - n, "\n");
+	return n;
+}
+static const char *const step_names[OSAL_DRAW_STEPS] = {
+	"prog", "unif", "attr", "tex", "state", "gcrest", "gcds", "gctile", "gcframe",
+	"gcunif", "gcvtx", "gcemit"};
+static uint64_t st_prev[OSAL_DRAW_STEPS];
+static struct gc_render_perf gp_prev;
+static bool gp_have;
+
+/* A second line: the draw steps (us per frame, the four largest and the
+ * sum), the GPU's busy share from its own cycle counters, kicks per frame
+ * and bytes per frame. */
+static void yakogl_line(uint32_t frames, char *b, size_t bsz)
+{
+	uint64_t ns[OSAL_DRAW_STEPS] = {0};
+	uint32_t untimed = 0;
+	struct gc_render_perf p;
+	uint64_t d[OSAL_DRAW_STEPS], sum = 0;
+	int n;
+
+	(void)osal_draw_stats(ns, &untimed);
+	gc_render_perf(&p);
+	for (unsigned int i = 0; i < OSAL_DRAW_STEPS; i++) {
+		d[i] = ns[i] - st_prev[i];
+		st_prev[i] = ns[i];
+		sum += d[i];
+	}
+	n = snprintk(b, bsz, "A53Y glsteps_us %llu:", sum / 1000u / frames);
+	for (unsigned int k = 0; k < 5u; k++) {
+		unsigned int best = 0;
+
+		for (unsigned int i = 1; i < OSAL_DRAW_STEPS; i++) {
+			if (d[i] > d[best])
+				best = i;
+		}
+		n += snprintk(b + n, bsz - n, " %s %llu", step_names[best],
+			      d[best] / 1000u / frames);
+		d[best] = 0;
+	}
+	if (gp_have) {
+		const uint32_t tot = p.hi_total_cycles - gp_prev.hi_total_cycles;
+		const uint32_t idle = p.hi_idle_cycles - gp_prev.hi_idle_cycles;
+
+		n += snprintk(b + n, bsz - n,
+			      " | gpu busy %u%% cyc/f %u kicks/f %u.%02u rd_kb/f %u wr_kb/f %u",
+			      tot ? (uint32_t)((uint64_t)(tot - idle) * 100u / tot) : 0u,
+			      (tot - idle) / frames,
+			      (p.kicks_done - gp_prev.kicks_done) / frames,
+			      ((p.kicks_done - gp_prev.kicks_done) * 100u / frames) % 100u,
+			      (p.hi_read_bytes8 - gp_prev.hi_read_bytes8) / 128u / frames,
+			      (p.hi_write_bytes8 - gp_prev.hi_write_bytes8) / 128u / frames);
+	}
+	snprintk(b + n, bsz - n, "\n");
+	gp_prev = p;
+	gp_have = true;
+}
+
+struct phase {
+	uint64_t sum;
+	uint32_t max;
+};
+static struct phase ph_draw, ph_swap, ph_show, ph_gpu;
+
+static void phase_add(struct phase *p, uint32_t c0, uint32_t c1)
+{
+	uint32_t us = (uint32_t)k_cyc_to_us_floor64(c1 - c0);
+
+	p->sum += us;
+	p->max = MAX(p->max, us);
+}
+
+static void phase_line(uint32_t frames, int64_t ms)
+{
+	char b[600];
+	int n;
+
+	if (!frames)
+		return;
+	n = snprintk(b, sizeof(b),
+		 "A53F frames %u ms %lld draw %llu/%u gpu %llu/%u show %llu/%u swap %llu/%u\n",
+		 frames, (long long)ms, ph_draw.sum / frames, ph_draw.max, ph_gpu.sum / frames,
+		 ph_gpu.max, ph_show.sum / frames, ph_show.max, ph_swap.sum / frames, ph_swap.max);
+	n += glcalls_line(frames, b + n, sizeof(b) - n);
+	yakogl_line(frames, b + n, sizeof(b) - n);
+	board_route3_report_line(b);
+	ph_draw = (struct phase){0};
+	ph_swap = (struct phase){0};
+	ph_show = (struct phase){0};
+	ph_gpu = (struct phase){0};
+}
+#else
+#define PHASE_REPORT 0
+#endif
+
 static int animate(void)
 {
 	const int64_t bound_ms = (int64_t)CONFIG_YAKOGL_BOARD_ANIMATE_S * 1000;
@@ -384,10 +608,18 @@ static int animate(void)
 	uint32_t frame = 1, win_frames = 0;
 	int64_t win_t0 = t0;
 	int ret = 0;
+#if R3_PIPELINE
+	GLsync prev_fence = NULL;
+	struct board_window prev_win;
+	bool have_prev = false;
+
+	board_route3_defer_wait(true);
+#endif
 
 	board_progress(YK_RECORD_WHERE_STAGE | STAGE_ANIMATING);
 	while ((now = k_uptime_get() - t0) < bound_ms || IS_ENABLED(CONFIG_SLINT_ANIMATE_FOREVER)) {
 		ret = next_window();
+		uint32_t c0 = k_cycle_get_32();
 #ifdef CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3
 		if (ret == 0)
 			ret = slint_sample_animate_frame_m7(get_proc, WIN_W, WIN_H, (uint32_t)now, frame,
@@ -396,17 +628,74 @@ static int animate(void)
 		if (ret == 0)
 			ret = slint_sample_animate_frame(get_proc, WIN_W, WIN_H, (uint32_t)now, frame);
 #endif
+		uint32_t c1 = k_cycle_get_32();
+#if R3_PIPELINE
+		/* the frame before: finished, published, on the panel */
+		uint32_t cg = c1, cs = c1;
+
+		if (ret == 0 && have_prev) {
+			if (glClientWaitSync(prev_fence, 0, GL_TIMEOUT_IGNORED) == GL_WAIT_FAILED) {
+				printk("slint: glClientWaitSync failed\n");
+			}
+			glDeleteSync(prev_fence);
+			have_prev = false;
+			cg = k_cycle_get_32();
+			ret = board_show(&prev_win);
+			if (ret == 0)
+				ret = board_route3_wait_shown();
+			if (ret) {
+				printk("slint: route 3 show = %d\n", ret);
+				ret = 0; /* as show() does: say it, go on */
+			}
+			cs = k_cycle_get_32();
+		}
 		if (ret == 0)
 			ret = swap();
+		uint32_t c3 = k_cycle_get_32();
+		if (ret)
+			break;
+		prev_fence = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+		prev_win = s_win;
+		have_prev = prev_fence != NULL;
+#if PHASE_REPORT
+		phase_add(&ph_draw, c0, c1);
+		phase_add(&ph_gpu, c1, cg);
+		phase_add(&ph_show, cg, cs);
+		phase_add(&ph_swap, cs, c3);
+#endif
+#else
+		if (ret == 0)
+			ret = swap();
+		uint32_t c2 = k_cycle_get_32();
 		if (ret)
 			break;
 		show();
+		uint32_t c3 = k_cycle_get_32();
+#endif
+#if PHASE_REPORT && !R3_PIPELINE
+		phase_add(&ph_draw, c0, c1);
+		phase_add(&ph_swap, c1, c2);
+		phase_add(&ph_show, c2, c3);
+#elif !PHASE_REPORT
+		ARG_UNUSED(c0);
+		ARG_UNUSED(c1);
+		ARG_UNUSED(c3);
+#if R3_PIPELINE
+		ARG_UNUSED(cg);
+		ARG_UNUSED(cs);
+#else
+		ARG_UNUSED(c2);
+#endif
+#endif
 		board_watchdog_feed();
 		frame++;
 		if (++win_frames == FPS_WINDOW) {
 			int64_t t = k_uptime_get();
 
 			fps_line(win_frames, t - win_t0);
+#if PHASE_REPORT
+			phase_line(win_frames, t - win_t0);
+#endif
 			win_t0 = t;
 			win_frames = 0;
 		}

@@ -1065,6 +1065,9 @@ pub const fn rs_dither(i: u32) -> u32 {
     0x00001630 + 4 * i
 }
 pub const GC_RS_CLEAR_CONTROL: u32 = 0x0000163c;
+/* state_3d.xml.h VIVS_RS_CLEAR_CONTROL_BITS(0xffff), _MODE_ENABLED1 */
+pub const GC_RS_CLEAR_CONTROL_BITS_ALL: u32 = 0x0000_ffff;
+pub const GC_RS_CLEAR_CONTROL_MODE_ENABLED1: u32 = 0x0001_0000;
 pub const fn rs_fill_value(i: u32) -> u32 {
     0x00001640 + 4 * i
 }

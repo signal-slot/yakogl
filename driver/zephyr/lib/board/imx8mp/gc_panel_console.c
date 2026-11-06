@@ -60,6 +60,9 @@
 #include "gc_result.h"
 #ifdef CONFIG_YAKOGL_DRV_DISPLAY_IMX8MP
 #include "imx8mp_display.h"
+#ifdef CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3
+#include "board_imx8mp_route3.h"
+#endif
 #endif
 /* The reachability check before any LCDIF access (Rust
  * soc::imx8mp::media::lcdif_unreachable) and, with LCDIF_RUST, the LCDIF
@@ -207,13 +210,20 @@ static void fill_rows(uint32_t y0, uint32_t n, uint32_t colour)
 		return;
 	}
 	n = MIN(n, p.height - y0);
+	if (n == 0u) {
+		return;
+	}
 
-	for (uint32_t y = y0; y < y0 + n; y++) {
-		uint8_t *row = p.fb + (size_t)y * p.pitch;
+	/* One row pixel by pixel, the others copies of it: put_pixel() for
+	 * every pixel of the whole 1280x800 buffer was 20 ms before the
+	 * panel's cold bring-up could start (2026-10-29, route-3 timeline). */
+	uint8_t *first = p.fb + (size_t)y0 * p.pitch;
 
-		for (uint32_t x = 0; x < p.width; x++) {
-			put_pixel(row, x, colour);
-		}
+	for (uint32_t x = 0; x < p.width; x++) {
+		put_pixel(first, x, colour);
+	}
+	for (uint32_t y = y0 + 1u; y < y0 + n; y++) {
+		memcpy(p.fb + (size_t)y * p.pitch, first, (size_t)p.width * p.bytes_pp);
 	}
 	sys_cache_data_flush_range(p.fb + (size_t)y0 * p.pitch, (size_t)n * p.pitch);
 }
@@ -573,6 +583,13 @@ static int panel_console_init(void)
 {
 	uint32_t done;
 
+#ifdef CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_A53_RESTART
+	/* A route-3 restart: the LCDIF that scans is the M7's, and the
+	 * take-over would flip it to this console's buffer. No console. */
+	if (board_route3_warm()) {
+		return 0;
+	}
+#endif
 	gc_result_stage(GC_RESULT_STAGE_CONSOLE_ENTER, 0u);
 	done = panel_console_take_over();
 	gc_result_stage(GC_RESULT_STAGE_CONSOLE_DONE, done);
@@ -588,7 +605,7 @@ SYS_INIT(panel_console_init, PRE_KERNEL_1, CONFIG_CONSOLE_INIT_PRIORITY);
  * Stage two, at POST_KERNEL after the display device: if stage one found
  * nothing, turn the panel on ourselves and draw into our own buffer.
  */
-static int panel_console_cold_init(void)
+static int cold_bringup(void)
 {
 	const struct imx8mp_display_info *info;
 	uint32_t width = 0, height = 0, pitch;
@@ -597,6 +614,11 @@ static int panel_console_cold_init(void)
 	if (p.ready) {
 		return 0;   /* stage one already has a console */
 	}
+#ifdef CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_A53_RESTART
+	if (board_route3_warm()) {
+		return 0;   /* a route-3 restart: the panel is the M7's */
+	}
+#endif
 	imx8mp_display_geometry(&width, &height);
 	pitch = width * 4u;
 	if (width == 0u || height == 0u ||
@@ -621,7 +643,27 @@ static int panel_console_cold_init(void)
 	fill_rows(0, p.height, p.bg);
 
 	gc_result_stage(GC_RESULT_STAGE_CONSOLE_COLD, 0u);
+#ifdef CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3
+	board_route3_tl_mark(CLUSTER_TL_A53_PANEL_START);
+#endif
 	rc = imx8mp_display_on(k_mem_phys_addr(panel_fb), pitch);
+#ifdef CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3
+	board_route3_tl_mark(CLUSTER_TL_A53_PANEL_ON);
+#endif
+#ifdef CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_A53_RESTART
+	/*
+	 * I2C2 is the M7's from here (the M7 firmware's boards/touch.overlay: it reads
+	 * the touch controller on it); this image wrote the bridge just above and
+	 * never uses I2C2 again. Its line is wired to both cores' interrupt
+	 * controllers, and this image's ii2c ISR (MCUXpresso
+	 * I2C_MasterTransferHandleIRQ) clears the flag and steps its own idle
+	 * transfer on every interrupt, which broke every M7 transfer on the
+	 * x10 board run: -EIO from the bridge (0x2c) and the touch controller
+	 * (0x41) alike, at 24 MHz / IFDR 0x0f like Linux. So the line is off
+	 * in this core's GIC from now on, as GPIO4's is.
+	 */
+	irq_disable(DT_IRQ(DT_NODELABEL(i2c2), irq));
+#endif
 	gc_result_stage(GC_RESULT_STAGE_CONSOLE_COLD_DONE, (uint32_t)rc);
 	if (rc) {
 		p.fb = NULL;
@@ -637,8 +679,88 @@ static int panel_console_cold_init(void)
 	return 0;
 }
 
+#ifdef CONFIG_GC_COMMON_PANEL_CONSOLE_COLD_THREAD
+/*
+ * The bring-up on a thread of its own (GC_COMMON_PANEL_CONSOLE_COLD_THREAD):
+ * about 85 of its 95 ms are sleeps (the bridge's EN, PLL and soft-reset
+ * waits, the DSIM FIFO reset) and the LCDIF's first frame boundary, so the
+ * kernel, the application and the GPU go on meanwhile. The GPC registers
+ * both sides power domains through are locked (gpc.rs). When it is done --
+ * whatever the result -- board_panel_cold_done() runs on this thread, and
+ * then gc_panel_console_cold_wait() returns true.
+ */
+static K_THREAD_STACK_DEFINE(cold_stack, 8192);
+static struct k_thread cold_thread;
+static K_SEM_DEFINE(cold_sem, 0, 1);
+static atomic_t cold_finished;
+
+__weak void board_panel_cold_done(void)
+{
+}
+
+static void cold_entry(void *a, void *b, void *c)
+{
+	ARG_UNUSED(a);
+	ARG_UNUSED(b);
+	ARG_UNUSED(c);
+	(void)cold_bringup();
+	board_panel_cold_done();
+	atomic_set(&cold_finished, 1);
+	k_sem_give(&cold_sem);
+}
+
+static int panel_console_cold_init(void)
+{
+	if (p.ready) {
+		atomic_set(&cold_finished, 1); /* stage one adopted a picture */
+		return 0;
+	}
+#ifdef CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_A53_RESTART
+	if (board_route3_warm()) {
+		atomic_set(&cold_finished, 1); /* a route-3 restart: no bring-up */
+		return 0;
+	}
+#endif
+	/* Cooperative, above the init and main threads: at their priority it
+	 * waited for the init thread's 20 ms time slice before its first
+	 * register write (2026-10-29, v12 timeline: started 21 ms after the
+	 * image's entry). It runs at once and gives the CPU back at each of
+	 * its sleeps; its one busy wait (the LCDIF's first frame boundary)
+	 * comes when the other CPUs are up. */
+	k_thread_create(&cold_thread, cold_stack, K_THREAD_STACK_SIZEOF(cold_stack), cold_entry,
+			NULL, NULL, NULL, K_PRIO_COOP(CONFIG_NUM_COOP_PRIORITIES - 2), 0, K_NO_WAIT);
+	k_thread_name_set(&cold_thread, "panel_cold");
+	return 0;
+}
+
+bool gc_panel_console_cold_wait(k_timeout_t timeout)
+{
+	if (atomic_get(&cold_finished) != 0) {
+		return true;
+	}
+	if (k_sem_take(&cold_sem, timeout) != 0) {
+		return false;
+	}
+	k_sem_give(&cold_sem); /* for the next waiter */
+	return true;
+}
+#else
+static int panel_console_cold_init(void)
+{
+	return cold_bringup();
+}
+#endif
+
 SYS_INIT(panel_console_cold_init, POST_KERNEL,
 	 CONFIG_GC_COMMON_PANEL_CONSOLE_COLD_PRIORITY);
+#endif
+
+#ifndef CONFIG_GC_COMMON_PANEL_CONSOLE_COLD_THREAD
+bool gc_panel_console_cold_wait(k_timeout_t timeout)
+{
+	ARG_UNUSED(timeout);
+	return true;
+}
 #endif
 
 /* ------------------------------------------------------------------ */

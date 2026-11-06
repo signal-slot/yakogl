@@ -45,6 +45,16 @@
 //! The same module serves the GPU domains (`GPU_SHARE_LOGIC`, `GPU_2D`,
 //! `GPU_3D` and the GPUMIX ADB400) for the Vivante bring-up
 //! (gpu::vivante::power).
+//!
+//! `PGC_CPU_A53_MAPPING`, `PU_PGC_SW_PUP_REQ`/`_PDN_REQ` and `PU_PWRHSK`
+//! hold every domain's bit, and step 3 refuses a trigger while another
+//! power-up is in progress. On an SMP image two drivers can power their
+//! domains at once (the route-3 panel bring-up on its own thread next to
+//! the GPU's), so [`power_up`] and [`power_down`] run under one lock, with
+//! this CPU's interrupts masked: a few microseconds normally, [`POLL_US`] at
+//! worst.
+
+use core::sync::atomic::{AtomicBool, Ordering};
 
 use super::regs::{gpc, gpc_pgc};
 use crate::env::Env;
@@ -176,6 +186,42 @@ pub struct DomainState {
     pub adb_ack: bool,
 }
 
+static LOCK: AtomicBool = AtomicBool::new(false);
+
+/// Held while a sequence writes the shared registers (the module text).
+struct Locked {
+    #[cfg(all(target_arch = "aarch64", target_os = "none"))]
+    daif: u64,
+}
+
+fn lock() -> Locked {
+    #[cfg(all(target_arch = "aarch64", target_os = "none"))]
+    let daif = {
+        let d: u64;
+        // SAFETY: reads DAIF and masks IRQs on this CPU; restored on drop.
+        unsafe { core::arch::asm!("mrs {}, daif", "msr daifset, #2", out(reg) d, options(nomem, nostack)) };
+        d
+    };
+    while LOCK.compare_exchange_weak(false, true, Ordering::Acquire, Ordering::Relaxed).is_err() {
+        core::hint::spin_loop();
+    }
+    Locked {
+        #[cfg(all(target_arch = "aarch64", target_os = "none"))]
+        daif,
+    }
+}
+
+impl Drop for Locked {
+    fn drop(&mut self) {
+        LOCK.store(false, Ordering::Release);
+        #[cfg(all(target_arch = "aarch64", target_os = "none"))]
+        // SAFETY: puts back the DAIF lock() read.
+        unsafe {
+            core::arch::asm!("msr daif, {}", in(reg) self.daif, options(nomem, nostack))
+        };
+    }
+}
+
 fn poll(m: &impl Mmio, env: &impl Env, addr: usize, mask: u32, want: u32) -> bool {
     for _ in 0..POLL_US {
         if m.read32(addr) & mask == want {
@@ -232,6 +278,7 @@ pub fn state(m: &impl Mmio, gpc_base: usize, d: &PuDomain) -> DomainState {
 /// Power a domain up (steps 1-4 of the module text). The ADB400 request is
 /// raised too when the domain has one; its acknowledge is [`adb_wait_up`]'s.
 pub fn power_up(m: &impl Mmio, gpc_base: usize, env: &impl Env, d: &PuDomain) -> Result<PowerUp, Fail> {
+    let _locked = lock();
     let sr = gpc_base + gpc_pgc::pu_sr(d.pgc) as usize;
     let was_down = m.read32(sr) & gpc_pgc::pu_sr::PSR_MASK != 0;
     set_bits(m, gpc_base + gpc::PGC_CPU_A53_MAPPING as usize, d.a53_map);
@@ -266,6 +313,7 @@ pub fn adb_wait_up(m: &impl Mmio, gpc_base: usize, env: &impl Env, d: &PuDomain)
 
 /// Power a domain down (the module text's last paragraph).
 pub fn power_down(m: &impl Mmio, gpc_base: usize, env: &impl Env, d: &PuDomain) -> Result<(), Fail> {
+    let _locked = lock();
     if let Some(a) = d.adb {
         let h = gpc_base + gpc::PU_PWRHSK as usize;
         clear_bits(m, h, a.req);

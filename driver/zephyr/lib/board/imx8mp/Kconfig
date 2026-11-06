@@ -353,6 +353,18 @@ config GC_COMMON_PANEL_CONSOLE_COLD_BRINGUP
 	  Without CONFIG_YAKOGL_DRV_DISPLAY_IMX8MP (no display node in the device
 	  tree) this compiles out and only the adopt path remains.
 
+config GC_COMMON_PANEL_CONSOLE_COLD_THREAD
+	bool "Run that bring-up on a thread of its own"
+	depends on GC_COMMON_PANEL_CONSOLE_COLD_BRINGUP && YAKOGL_DRV_DISPLAY_IMX8MP && MULTITHREADING
+	help
+	  About 85 of the bring-up's 95 ms are sleeps (the SN65DSI8x's EN,
+	  PLL and soft-reset waits, the DSIM FIFO reset) and the LCDIF's
+	  first frame boundary (2026-10-29, route-3 timeline). On a thread
+	  the kernel, the application and the GPU go on meanwhile; whoever
+	  needs the panel waits with gc_panel_console_cold_wait(), or is
+	  called back through board_panel_cold_done(). Nothing printed before
+	  it is done reaches the panel.
+
 config GC_COMMON_PANEL_CONSOLE_COLD_PRIORITY
 	int "Init priority of that second stage"
 	default 85
@@ -456,6 +468,60 @@ config YAKOGL_BOARD_IMX8MP_ROUTE3_M7_WAIT_MS
 	default 3000
 	range 100 60000
 
+config YAKOGL_BOARD_IMX8MP_ROUTE3_TIMELINE_REPORT_MS
+	int "Measurement: send the cold-start timeline this long after the first frame (ms, 0 = off)"
+	default 0
+	range 0 60000
+	help
+	  Both cores stamp their start-up stages on the system counter
+	  (<cluster/boot_timeline.h>, always on). With this set, the image
+	  writes the stamps on the timeline UART (alias yakogl-timeline-uart,
+	  tl-uart1.overlay; else the console UART) once, this long after its
+	  first frame was shown, from the system work queue. The cluster and
+	  the M7 keep running.
+
+config YAKOGL_BOARD_IMX8MP_A53_MHZ
+	int "i.MX8MP direct image: set the A53 cluster to this many MHz at boot (0 = leave the SPL's)"
+	default 0
+	help
+	  board_imx8mp_a53_clock.c. 1200 or 1600, Linux's operating points for
+	  this SoC at the VDD_ARM the SPL sets (0.95 V); the PMIC is not
+	  touched. Only for a part whose speed grade allows the rate.
+
+config YAKOGL_BOARD_IMX8MP_ROUTE3_CLOCK_REPORT
+	bool "Measurement: the A53's clock and VDD_ARM, read back, after the timeline"
+	depends on YAKOGL_BOARD_IMX8MP_ROUTE3_TIMELINE_REPORT_MS > 0
+	help
+	  board_route3_clkdiag.c: the core clock measured with the PMU cycle
+	  counter, the ARM PLL and A53 clock-root registers, and the PCA9450's
+	  registers 0x10-0x1f (BUCK2 is VDD_ARM) read over I2C1 by hand. Reads
+	  only; nothing is changed.
+
+config YAKOGL_BOARD_IMX8MP_ROUTE3_REPORT_LINE
+	bool
+	help
+	  board_route3_report_line(): an application's measurement lines onto
+	  the timeline UART (alias yakogl-timeline-uart, else the console
+	  UART), written by a thread of the lowest preemptible priority.
+	  Selected by an application that reports (the Slint sample's
+	  SLINT_FRAME_REPORT); without it neither the function nor the thread
+	  exists.
+
+config YAKOGL_BOARD_IMX8MP_BSS_CLEARED_BY_LOADER
+	bool "The second-stage loader zeroes this image's .bss"
+	select SKIP_BSS_CLEAR
+	help
+	  Zephyr's reset path zeroes .bss before the MMU is on, so with the
+	  caches off: the route-3 image's 40 MiB took 45 ms between the
+	  loader's jump and the image's first C code (2026-10-29, system
+	  counter). With this, the image leaves .bss alone and the stage2
+	  image carries it as the range the loader zeroes, with its caches on
+	  (tools/am62p-mkboot.py stage2img reads CONFIG_SKIP_BSS_CLEAR from
+	  the .config next to the zephyr.bin and the range from zephyr.elf;
+	  header version 2, which an older loader refuses). Only for an image
+	  that is started by that loader: any other route leaves .bss as it
+	  finds it.
+
 config YAKOGL_BOARD_IMX8MP_ROUTE3_BEAT_MS
 	int "Heartbeat period (ms)"
 	default 100
@@ -464,6 +530,32 @@ config YAKOGL_BOARD_IMX8MP_ROUTE3_BEAT_MS
 	  The M7 takes the A53 for gone after 1500 ms without a beat
 	  (CLUSTER_FRAME_RING_TIMEOUT_MS); the header asks for ten beats in
 	  that window.
+
+YK_DT_DEFERRED_INIT := zephyr,deferred-init
+
+config YAKOGL_BOARD_IMX8MP_ROUTE3_A53_RESTART
+	bool "Route 3: the A53 side goes down on the M7's request and boots again"
+	depends on SMP && PM_CPU_OPS_PSCI && YAKOGL_BOARD_IMX8MP_WINDOWS = 2
+	depends on $(dt_nodelabel_bool_prop,display0,$(YK_DT_DEFERRED_INIT))
+	select SCHED_CPU_MASK
+	help
+	  The protocol of <cluster/a53_power.h> (board_route3_restart.c).
+	  While the screen is touched the M7 asks the A53 side to go down
+	  (MU_1 general-purpose interrupt 1, cmd DOWN): this image stops its
+	  GPU work, turns cores 1-3 off (PSCI CPU_OFF, each from its own
+	  core) and suspends the system from core 0 (PSCI SYSTEM_SUSPEND to
+	  the loader at 0x40200000). The M7's UP wakes core 0 in TF-A, the
+	  loader inflates this image again, and the image sees at its first
+	  board hook that it is a restart: it then leaves the M7, the panel
+	  chain, I2C2, PWM3, MEDIAMIX, GPIO4 and the shared status, control
+	  and timeline pages alone, resets the GPU, and publishes into the
+	  frame ring it left, with its session.
+
+	  Needs the devicetree overlay
+	  driver/boards/toradex/verdin_imx8mp/a53-restart.overlay (the
+	  display chain's devices deferred; the cold boot initialises them in
+	  the device model's own order). Off, the image is the cold path
+	  alone.
 
 endif # YAKOGL_BOARD_IMX8MP_ROUTE3
 

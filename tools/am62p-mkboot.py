@@ -50,13 +50,18 @@ stage"): `build --load 0x80800000` with the second-stage loader
 `stage2img`, which writes the real image for the eMMC USER area: one
 512-byte YKSTAGE2 header sector (layout in
 driver/samples/zephyr/boot_stage2/loader/src/lib.rs) and the payload,
-raw-deflate compressed by default, for sector STAGE2_SECTOR (64) onwards,
+raw-deflate compressed by default (or one LZ4 frame, --compress lz4), for
+sector STAGE2_SECTOR (64) onwards,
 ending before STAGE2_END_SECTOR (8192, the first partition). `stage2check`
 re-reads one the way the loader will; `stage2-vectors` writes the images the
 loader crate's host test decodes (BS2_VECTORS), so the Python writer and the
 Rust reader are checked against each other.
 
-Standard library only. No signing: the Zephyr payload has no TI x509
+An image built with CONFIG_SKIP_BSS_CLEAR (its .config next to the
+zephyr.bin) gets a header version 2 with its .bss (from the zephyr.elf next
+to it) as the range the loader zeroes.
+
+Standard library only, plus the lz4 command for --compress lz4. No signing: the Zephyr payload has no TI x509
 certificate, so the A53 SPL on an HS-FS AM62P prints "Did not detect image
 signing certificate. Skipping authentication" and loads it. An HS-SE device
 would refuse it.
@@ -84,11 +89,13 @@ FDT_ROOM = 0x40000            # room left for that devicetree (fdt-0 with its ce
 
 # The second stage's image in the eMMC user area (boot_stage2 Kconfig defaults)
 STAGE2_MAGIC = b"YKSTAGE2"
-STAGE2_VERSION = 1
+STAGE2_VERSION = 1            # what a header without the version 2 fields is written as
+STAGE2_VERSION_ZERO_LZ4 = 2   # the zero range at 96 and LZ4 (compression 2); older loaders refuse it
 STAGE2_SECTOR = 64            # header sector: clear of the DOS table (0) and a GPT's sectors 1..33
 STAGE2_END_SECTOR = 8192      # Torizon's mmcblk0p1 starts here (sfdisk -d, 2026-10-02)
 STAGE2_STAGING = 0x90000000   # where the loader reads a compressed payload; bounds the image
-COMP_NONE, COMP_DEFLATE = 0, 1
+COMP_NONE, COMP_DEFLATE, COMP_LZ4 = 0, 1, 2
+COMP_NAMES = {COMP_NONE: "uncompressed", COMP_DEFLATE: "deflate", COMP_LZ4: "lz4"}
 
 # eMMC boot partition layout (Toradex image.json dd seek= in 512-byte sectors;
 # CONFIG_SYS_MMCSD_RAW_MODE_U_BOOT_SECTOR 0x400 in the R5 SPL, 0x1400 in the A53 SPL)
@@ -439,14 +446,18 @@ def bootpart(tiboot3, tispl, uboot, size):
 
 # --- the second stage's image in the eMMC user area --------------------------------
 
-def stage2_header(load, entry, stored, image, compression, name):
-    """The 512-byte YKSTAGE2 header (boot_stage2/loader/src/lib.rs)."""
+def stage2_header(load, entry, stored, image, compression, name, zero=(0, 0)):
+    """The 512-byte YKSTAGE2 header (boot_stage2/loader/src/lib.rs). `zero`:
+    (offset from load, bytes) the loader clears after the unpack."""
     nm = name.encode()[:32]
     h = bytearray(512)
-    struct.pack_into("<8sIIII", h, 0, STAGE2_MAGIC, STAGE2_VERSION, 512, compression, 0)
+    version = STAGE2_VERSION_ZERO_LZ4 if zero[1] or compression == COMP_LZ4 else STAGE2_VERSION
+    struct.pack_into("<8sIIII", h, 0, STAGE2_MAGIC, version, 512, compression, 0)
     struct.pack_into("<QQQQII", h, 24, load, entry, len(stored), len(image),
                      zlib.crc32(stored) & 0xFFFFFFFF, zlib.crc32(image) & 0xFFFFFFFF)
     h[64:64 + len(nm)] = nm
+    if version >= 2:
+        struct.pack_into("<QQ", h, 96, zero[0], zero[1])
     struct.pack_into("<I", h, 508, zlib.crc32(bytes(h[:508])) & 0xFFFFFFFF)
     return bytes(h)
 
@@ -461,7 +472,56 @@ def deflate_raw(data):
     return c.compress(data) + c.flush()
 
 
-def stage2img(zephyr, load, compression, name, sector=STAGE2_SECTOR, end_sector=STAGE2_END_SECTOR):
+def lz4_frame(data):
+    """One LZ4 frame of `data`, from the lz4 command (lz4 -12: the smallest
+    output; 4 MB linked blocks; no checksums, the header's CRC-32s cover it)."""
+    import shutil
+    import subprocess
+    if shutil.which("lz4") is None:
+        raise ValueError("--compress lz4 needs the lz4 command (app-arch/lz4, Debian lz4)")
+    return subprocess.run(["lz4", "-q", "-q", "-12", "-B7", "-BD", "--no-frame-crc", "-c"], input=data,
+                          stdout=subprocess.PIPE, check=True).stdout
+
+
+def elf_symbols(path, names):
+    """{name: value} of the ELF64 little-endian symbols `names` in `path`."""
+    e = open(path, "rb").read()
+    if e[:4] != b"\x7fELF" or e[4] != 2 or e[5] != 1:
+        raise ValueError("%s: not an ELF64 little-endian file" % path)
+    shoff, = struct.unpack_from("<Q", e, 0x28)
+    shentsize, shnum = struct.unpack_from("<HH", e, 0x3A)
+    secs = [struct.unpack_from("<IIQQQQIIQQ", e, shoff + i * shentsize) for i in range(shnum)]
+    found = {}
+    for s in secs:
+        if s[1] != 2:  # SHT_SYMTAB
+            continue
+        strtab = secs[s[6]]
+        for off in range(s[4], s[4] + s[5], 24):
+            st_name, _, _, _, st_value, _ = struct.unpack_from("<IBBHQQ", e, off)
+            a = strtab[4] + st_name
+            n = e[a:e.index(b"\0", a)].decode()
+            if n in names:
+                found[n] = st_value
+    missing = set(names) - set(found)
+    if missing:
+        raise ValueError("%s: no symbol %s" % (path, ", ".join(sorted(missing))))
+    return found
+
+
+def bss_zero_range(zephyr_bin, load):
+    """The (offset, bytes) the loader must zero for the image at `zephyr_bin`:
+    its .bss, when its build (.config next to the zephyr.bin) skips the clear
+    (CONFIG_SKIP_BSS_CLEAR); (0, 0) otherwise."""
+    import os
+    d = os.path.dirname(os.path.abspath(zephyr_bin))
+    cfg = os.path.join(d, ".config")
+    if not os.path.exists(cfg) or "CONFIG_SKIP_BSS_CLEAR=y" not in open(cfg).read().split("\n"):
+        return (0, 0)
+    sym = elf_symbols(os.path.join(d, "zephyr.elf"), ("__bss_start", "__bss_end"))
+    return (sym["__bss_start"] - load, sym["__bss_end"] - sym["__bss_start"])
+
+
+def stage2img(zephyr, load, compression, name, sector=STAGE2_SECTOR, end_sector=STAGE2_END_SECTOR, zero=(0, 0)):
     """Header + payload, padded to whole sectors, for user-area sector `sector`."""
     # The AM62P's DDR starts at 0x80000000; an image there must clear the A53
     # SPL's stack and the loader (SPL_STACK_TOP) and stay below the loader's
@@ -474,14 +534,16 @@ def stage2img(zephyr, load, compression, name, sector=STAGE2_SECTOR, end_sector=
     if load >= 0x80000000 and len(zephyr) > STAGE2_STAGING - load:
         raise ValueError("a %d-byte image at 0x%x reaches the loader's staging buffer at 0x%x"
                          % (len(zephyr), load, STAGE2_STAGING))
-    stored = deflate_raw(zephyr) if compression == COMP_DEFLATE else zephyr
+    if zero[1] and zero[0] < len(zephyr):
+        raise ValueError("the range to zero starts at +0x%x, inside the %d-byte image" % (zero[0], len(zephyr)))
+    stored = {COMP_DEFLATE: deflate_raw, COMP_LZ4: lz4_frame}.get(compression, bytes)(zephyr)
     cap = stage2_capacity(sector, end_sector)
     if len(stored) > cap:
         raise ValueError("the payload is %d bytes (%s), over the %d bytes of user-area sectors %d..%d after "
                          "the header: %d bytes too many"
-                         % (len(stored), "deflate" if compression == COMP_DEFLATE else "uncompressed", cap,
+                         % (len(stored), COMP_NAMES[compression], cap,
                             sector + 1, end_sector - 1, len(stored) - cap))
-    out = stage2_header(load, load, stored, zephyr, compression, name) + stored
+    out = stage2_header(load, load, stored, zephyr, compression, name, zero) + stored
     return out + bytes((-len(out)) % 512)
 
 
@@ -495,7 +557,9 @@ def stage2_parse(img):
     load, entry, nstored, nimage, scrc, icrc = struct.unpack_from("<QQQQII", img, 24)
     f = dict(version=ver, header_bytes=hb, compression=comp, load=load, entry=entry, stored_bytes=nstored,
              image_bytes=nimage, stored_crc32=scrc, image_crc32=icrc,
-             name=img[64:96].rstrip(b"\0").decode(errors="replace"))
+             name=img[64:96].rstrip(b"\0").decode(errors="replace"), zero_offset=0, zero_bytes=0)
+    if ver >= 2:
+        f["zero_offset"], f["zero_bytes"] = struct.unpack_from("<QQ", img, 96)
     stored = bytes(img[512:512 + nstored])
     if len(stored) != nstored:
         raise ValueError("the file holds %d payload bytes, the header says %d" % (len(stored), nstored))
@@ -509,7 +573,7 @@ def stage2check(img, zephyr, load=ZEPHYR_LOAD, sector=STAGE2_SECTOR, end_sector=
         f, stored = stage2_parse(img)
     except ValueError as e:
         return ["%s" % e], None
-    if f["version"] != STAGE2_VERSION or f["header_bytes"] != 512:
+    if f["version"] not in (STAGE2_VERSION, STAGE2_VERSION_ZERO_LZ4) or f["header_bytes"] != 512:
         errors.append("header version %d / size %d" % (f["version"], f["header_bytes"]))
     if f["load"] != load or f["entry"] != load:
         errors.append("load/entry 0x%x/0x%x, not 0x%x" % (f["load"], f["entry"], load))
@@ -526,6 +590,14 @@ def stage2check(img, zephyr, load=ZEPHYR_LOAD, sector=STAGE2_SECTOR, end_sector=
         except zlib.error as e:
             errors.append("raw deflate: %s" % e)
             image = b""
+    elif f["compression"] == COMP_LZ4 and f["version"] >= 2:
+        import subprocess
+        try:
+            image = subprocess.run(["lz4", "-d", "-c", "-q"], input=stored, stdout=subprocess.PIPE,
+                                   stderr=subprocess.PIPE, check=True).stdout
+        except (OSError, subprocess.CalledProcessError) as e:
+            errors.append("lz4 -d: %s" % e)
+            image = b""
     elif f["compression"] == COMP_NONE:
         image = stored
     else:
@@ -535,6 +607,8 @@ def stage2check(img, zephyr, load=ZEPHYR_LOAD, sector=STAGE2_SECTOR, end_sector=
         errors.append("the image's length or CRC-32 is not the header's")
     if image != zephyr:
         errors.append("the image is not this zephyr.bin")
+    if f["zero_bytes"] and f["zero_offset"] < f["image_bytes"]:
+        errors.append("the range to zero (+0x%x) starts inside the image" % f["zero_offset"])
     return errors, f
 
 
@@ -597,6 +671,20 @@ def stage2_vectors(outdir):
     files["bad-not-arm64.img"] = stage2_header(ZEPHYR_LOAD, ZEPHYR_LOAD, plain, plain, COMP_NONE, "plain") + plain
     files["bad-entry-outside.img"] = stage2_header(ZEPHYR_LOAD, ZEPHYR_LOAD + len(big), stored, big, COMP_DEFLATE,
                                                    "entry") + stored
+    # version 2: a zero range past the image, and one that reaches into it
+    files["ok-deflate-zero.img"] = stage2img(big, ZEPHYR_LOAD, COMP_DEFLATE, "zero", zero=(len(big) + 4096, 1 << 20))
+    b = bytearray(stage2_header(ZEPHYR_LOAD, ZEPHYR_LOAD, stored, big, COMP_DEFLATE, "zero-in", (len(big) - 8, 64)))
+    files["bad-zero-overlaps.img"] = bytes(b) + stored
+    # LZ4 frames from the lz4 command (when it is there; tools/check.sh
+    # requires it for the vector test)
+    import shutil
+    if shutil.which("lz4"):
+        files["ok-lz4-mixed.img"] = stage2img(big, ZEPHYR_LOAD, COMP_LZ4, "lz4")
+        files["ok-lz4-small.img"] = stage2img(small, ZEPHYR_LOAD, COMP_LZ4, "lz4-small")
+        f4, s4 = stage2_parse(files["ok-lz4-mixed.img"])
+        st = bytearray(s4)
+        st[len(st) // 2] ^= 0x55
+        files["bad-lz4.img"] = stage2_header(ZEPHYR_LOAD, ZEPHYR_LOAD, bytes(st), big, COMP_LZ4, "bad") + bytes(st)
     for name, data in files.items():
         with open(os.path.join(outdir, name), "wb") as fh:
             fh.write(data)
@@ -768,7 +856,8 @@ def main():
     p = sub.add_parser("stage2img", help="the second stage's image for the eMMC user area")
     p.add_argument("--zephyr", required=True, help="zephyr.bin of a direct image, linked at --load")
     p.add_argument("--load", type=lambda s: int(s, 0), default=ZEPHYR_LOAD)
-    p.add_argument("--compress", choices=("deflate", "none"), default="deflate")
+    p.add_argument("--compress", choices=("deflate", "lz4", "none"), default="deflate",
+                   help="lz4: about 10x faster to unpack on the A53 for some 15%% more stored (needs lz4)")
     p.add_argument("--name", default=None, help="name in the header (default: the zephyr.bin's directory)")
     p.add_argument("--sector", type=lambda s: int(s, 0), default=STAGE2_SECTOR,
                    help="user-area sector of the header (CONFIG_BOOT_STAGE2_SECTOR)")
@@ -813,8 +902,8 @@ def main():
         zephyr = open(a.zephyr, "rb").read()
         if a.cmd == "stage2img":
             name = a.name or os.path.basename(os.path.dirname(os.path.dirname(os.path.abspath(a.zephyr))))
-            img = stage2img(zephyr, a.load, COMP_DEFLATE if a.compress == "deflate" else COMP_NONE, name,
-                            a.sector, a.end_sector)
+            comp = {"deflate": COMP_DEFLATE, "lz4": COMP_LZ4, "none": COMP_NONE}[a.compress]
+            img = stage2img(zephyr, a.load, comp, name, a.sector, a.end_sector, bss_zero_range(a.zephyr, a.load))
         else:
             img = open(a.image, "rb").read()
         sector = getattr(a, "sector", STAGE2_SECTOR)
@@ -826,11 +915,12 @@ def main():
             return 1
         nsec = len(img) // 512
         print("%s: %d bytes = %d sectors, user-area sectors %d..%d (of %d..%d); \"%s\", %s, stored %d bytes "
-              "(CRC-32 %08x), image %d bytes (CRC-32 %08x), load = entry = 0x%x; sha256 %s" % (
+              "(CRC-32 %08x), image %d bytes (CRC-32 %08x), load = entry = 0x%x, %d bytes zeroed at +0x%x; "
+              "sha256 %s" % (
                   a.output if a.cmd == "stage2img" else a.image, len(img), nsec, sector,
                   sector + nsec - 1, sector, end_sector - 1, f["name"],
-                  "deflate" if f["compression"] == COMP_DEFLATE else "uncompressed", f["stored_bytes"],
-                  f["stored_crc32"], f["image_bytes"], f["image_crc32"], f["load"], hashlib.sha256(img).hexdigest()))
+                  COMP_NAMES.get(f["compression"], "?"), f["stored_bytes"], f["stored_crc32"], f["image_bytes"],
+                  f["image_crc32"], f["load"], f["zero_bytes"], f["zero_offset"], hashlib.sha256(img).hexdigest()))
         print("  write: dd if=IMG of=/dev/mmcblk0 bs=512 seek=%d conv=fsync   (%d sectors, %d left free)"
               % (sector, nsec, end_sector - sector - nsec))
         print("stage2check: ok")

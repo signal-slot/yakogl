@@ -1444,7 +1444,10 @@ fn emit_raster_state(c: &mut GcCmd, d: &GcDraw) {
 /// 0x01400..0x014bc.
 fn emit_pe_state(c: &mut GcCmd, d: &GcDraw, depth_stride: u32, depth_addr: u32) {
     let gl = d.gl;
-    let depth_test = if d.is_clear { true } else { gl.depth_test };
+    /* A clear of the colour alone leaves the depth unit off, so that the
+     * pixel engine has no reason to touch the depth/stencil surface: the
+     * route-3 cluster clears its window's colour every frame (2026-11-04). */
+    let depth_test = if d.is_clear { d.clear_depth || d.clear_stencil } else { gl.depth_test };
     /* GL 4.1.5: with the depth test off the buffer is not written, whatever
      * glDepthMask says. */
     let depth_write = if d.is_clear { d.clear_depth } else { gl.depth_test && gl.depth_write };
@@ -2394,6 +2397,81 @@ fn emit_clear(f: &mut GcFrame, gl: &GlesDraw, code: (u64, u64), depth: (u32, u32
     emit_draw(f, &d, depth.0, depth.1)
 }
 
+/// [`emit_rs_clear`] on (the default) or off, for a board experiment that
+/// wants the quad back.
+static RS_CLEAR: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(true);
+
+fn gc_rs_clear_on() -> bool {
+    RS_CLEAR.load(core::sync::atomic::Ordering::Relaxed)
+}
+
+/// Clears by the resolve engine's fill ([`emit_rs_clear`]) or always by the
+/// quad.
+pub extern "C" fn gc_debug_rs_clear(on: bool) {
+    RS_CLEAR.store(on, core::sync::atomic::Ordering::Relaxed);
+}
+
+/// A colour-only clear of a whole single-sampled 32-bit linear target, by
+/// the resolve engine's fill instead of the quad: etnaviv's RS clear for a
+/// surface without tile status (Mesa 26.2.1 etnaviv_rs.c
+/// etna_rs_gen_clear_cmd: A8R8G8B8, RS_CLEAR_CONTROL BITS 0xffff |
+/// MODE_ENABLED1, the value in all four RS_FILL_VALUE words, a linear
+/// destination whose width is a multiple of 16 and height of 4). The quad
+/// shaded every pixel through the pixel engine at its ~4 ns a pixel: about
+/// 4 ms of the route-3 cluster's frame for its full-window clear
+/// (2026-11-05). Returns false when the clear is not one it takes, and the
+/// caller draws the quad.
+fn emit_rs_clear(f: &mut GcFrame, gl: &GlesDraw) -> bool {
+    if !gl.do_clear || gl.do_clear_depth || gl.do_clear_stencil || !gl.color_write {
+        return false;
+    }
+    if gl.target_gpu == 0 || gl.num_targets > 1 || gl.scissor || ms_via_scratch(gl) || wide_target(gl) {
+        return false;
+    }
+    if gl.clear_color_mask != 0 && gl.clear_color_mask != 0xf {
+        return false;
+    }
+    let (fmt, ext) = pe_color_format(gl.target_format);
+    let alpha = match (fmt, ext) {
+        (GC_PE_FORMAT_A8R8G8B8, false) => None,
+        (GC_PE_FORMAT_X8R8G8B8, false) => Some(0xffu32),
+        _ => return false,
+    };
+    let (w, h) = (gl.target_w, gl.target_h);
+    if w == 0 || h == 0 || w % 16 != 0 || h % 4 != 0 || negative_stride(gl.flip_y) {
+        return false;
+    }
+    let pitch = crate::backend::draw_pitch(gl) * 4;
+    let ch = |v: f32| -> u32 { ((v.clamp(0.0, 1.0) * 255.0) + 0.5) as u32 };
+    let [r, g_, b, a] = gl.clear_rgba;
+    let value = (alpha.unwrap_or_else(|| ch(a)) << 24) | (ch(r) << 16) | (ch(g_) << 8) | ch(b);
+    let rsf = GC_RS_FORMAT_A8R8G8B8;
+    let c = &mut f.w;
+    c.state(GC_GL_FLUSH_CACHE, GC_FLUSH_COLOR | GC_FLUSH_DEPTH);
+    c.stall(GC_SYNC_RA, GC_SYNC_PE);
+    c.state(GC_RS_CONFIG, rs_source_format(rsf) | rs_dest_format(rsf));
+    c.state(GC_RS_SOURCE_STRIDE, 0);
+    c.state(GC_RS_DEST_STRIDE, pitch);
+    c.state(rs_pipe_source_addr(0), 0);
+    c.state(rs_pipe_dest_addr(0), gl.target_gpu as u32);
+    c.state(rs_pipe_offset(0), 0);
+    c.state(rs_pipe_offset(1), 0);
+    c.state(GC_RS_WINDOW_SIZE, rs_window_width(w) | rs_window_height(h));
+    c.state(rs_dither(0), 0xffff_ffff);
+    c.state(rs_dither(1), 0xffff_ffff);
+    c.state(GC_RS_CLEAR_CONTROL, GC_RS_CLEAR_CONTROL_BITS_ALL | GC_RS_CLEAR_CONTROL_MODE_ENABLED1);
+    for i in 0..4 {
+        c.state(rs_fill_value(i), value);
+    }
+    c.state(GC_RS_EXTRA_CONFIG, 0);
+    c.state(GC_RS_KICKER, GC_RS_KICKER_VALUE);
+    /* the draws after it: the colour cache holds nothing of the target, and
+     * each draw's flushes stall the pixel engine on the resolve engine */
+    c.state(GC_GL_FLUSH_CACHE, GC_FLUSH_COLOR | GC_FLUSH_DEPTH);
+    c.stall(GC_SYNC_RA, GC_SYNC_PE);
+    true
+}
+
 /* ---- the backend entry points ------------------------------------------- */
 
 pub(super) fn completed_fence() -> i64 {
@@ -3093,7 +3171,9 @@ unsafe fn record(gl: &GlesDraw, clock: &mut Timer) -> i32 {
     let depth = (g.depth_stride, g.depth.gpu as u32 + g.depth_surface_off);
     let cur = g.cur;
 
-    if (gl.do_clear || gl.do_clear_depth || gl.do_clear_stencil) && emit_clear(&mut g.frames[cur], gl, code, depth) != 0
+    if (gl.do_clear || gl.do_clear_depth || gl.do_clear_stencil)
+        && !(gc_rs_clear_on() && emit_rs_clear(&mut g.frames[cur], gl))
+        && emit_clear(&mut g.frames[cur], gl, code, depth) != 0
     {
         return -1;
     }
@@ -3259,6 +3339,36 @@ pub(super) fn kick_pending_retired(kick_id: u32) -> bool {
     kick_pending(kick_id)
 }
 
+/// Wait until kick `kick_id` has completed, submitting nothing recorded
+/// after it (`YakoglBackend::wait_kick`, for glClientWaitSync and
+/// eglClientWaitSync). Without it the sync waits finished, which submits the
+/// open frame too: a producer that records frame N + 1 into a window still on
+/// the panel and waits for frame N's fence then had the GPU writing the
+/// scanned window (the route-3 cluster, 2026-11-04). Three cases, as the V3D
+/// backend's:
+/// - a submitted kick still in `frames`: wait for its fence;
+/// - the open frame's (a fence is made after a flush, so a sync wait never
+///   names it): submit it and wait, as finish does;
+/// - an older kick, or one that does not exist: it has completed.
+pub extern "C" fn gc_wait_kick(kick_id: u32) -> i32 {
+    if kick_id == 0 {
+        return 0;
+    }
+    if kick_id == g().kick_id.wrapping_add(1) {
+        return if g().recording { gc_finish() } else { 0 };
+    }
+    let fence = g().frames.iter().find(|f| f.kick_id == kick_id && f.fence > 0).map_or(0, |f| f.fence);
+    let rc = if fence <= 0 || completed_fence() >= fence {
+        0
+    } else {
+        g().waits += 1;
+        wait_fence(fence)
+    };
+    /* what that kick rendered may be read now (gc_kick_pending's rule) */
+    retire_wide_targets();
+    rc
+}
+
 /// [`gc_kick_pending`] without writing anything back.
 fn kick_pending(kick_id: u32) -> bool {
     let g = g();
@@ -3370,14 +3480,16 @@ pub static yakogl_backend_vivante: YakoglBackend = YakoglBackend {
     generate_mipmap: Some(super::mipmap::gc_generate_mipmap),
     return_mipmap_chain: Some(super::mipmap::gc_return_mipmap_chain),
     linear_row_align: 0,
-    uniforms_host_only: false,
+    /* the backend copies the program's host arrays (vs/fs_uniform_cpu)
+     * into its frame arena and never reads the GPU copy: the GL core's
+     * upload and range flush per draw were for nothing (2026-11-05) */
+    uniforms_host_only: true,
     ds_write: None,
     stencil_resolve: None,
     /* divisor 1, as before the field (GcStream carries a divisor; whether
      * the FE takes more than 1 is unmeasured) */
     max_instance_divisor: 1,
-    /* the sync waits keep finish() until this backend waits for one kick */
-    wait_kick: None,
+    wait_kick: Some(gc_wait_kick),
     /* the texture unit reads the storage */
     samples_texel_copies: false,
     attachment_gone: Some(gc_attachment_gone),

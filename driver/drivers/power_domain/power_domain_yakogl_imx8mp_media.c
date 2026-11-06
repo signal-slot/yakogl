@@ -97,6 +97,11 @@ static int media_early_clocks(void)
 {
 	mm_reg_t ccm;
 
+#ifdef CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_A53_RESTART
+	if (imx8mp_media_early_clocks_skip()) {
+		return 0;
+	}
+#endif
 	device_map(&ccm, DT_INST_REG_ADDR_BY_NAME(0, ccm), DT_INST_REG_SIZE_BY_NAME(0, ccm),
 		   K_MEM_CACHE_NONE);
 	(void)yd_imx8mp_ccm_early_clocks(ccm, early_roots, ARRAY_SIZE(early_roots), early_gates,

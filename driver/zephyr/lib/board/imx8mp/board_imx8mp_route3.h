@@ -18,6 +18,7 @@
 #include <stdint.h>
 
 #include <cluster/frame_ring.h>
+#include <cluster/boot_timeline.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -44,6 +45,20 @@ int board_route3_state(void);
  */
 bool board_route3_vehicle(struct cluster_vehicle_state *out);
 
+/*
+ * Stamp an A53 stage of the cold-start timeline (<cluster/boot_timeline.h>)
+ * on the system counter, the first time it is reached. Callable from
+ * PRE_KERNEL_1 on: until the first board_route3_window() maps the M7's
+ * window the stamps are kept here, and that call copies them in.
+ */
+void board_route3_tl_mark(enum cluster_tl_a53 stage);
+
+/* One line onto the timeline UART (the A53 image's report UART), written
+ * from a lowest-priority thread; dropped if the last one is still going out.
+ * Only with CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_REPORT_LINE (selected by an
+ * application that reports: the Slint sample's SLINT_FRAME_REPORT). */
+void board_route3_report_line(const char *line);
+
 /* ---- board layer ---------------------------------------------------------- */
 
 /*
@@ -63,6 +78,45 @@ int board_route3_window(unsigned int n, uint32_t w, uint32_t h, struct board_win
  * on `win` already for the first show, or on the last window shown.
  */
 int board_route3_show(const struct board_window *win);
+
+/*
+ * A producer that overlaps its CPU and GPU (the slint sample, route 3): with
+ * `on`, a show once the M7 is up returns right after the publish, and
+ * board_route3_wait_shown() later waits until that frame is on the panel
+ * (and does what a show did after that wait). The window that held the frame
+ * before it is free once it returns. 0, or what the show's wait returns.
+ */
+void board_route3_defer_wait(bool on);
+int board_route3_wait_shown(void);
+
+#ifdef CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_A53_RESTART
+/* ---- the A53 restart (board_route3_restart.c, <cluster/a53_power.h>) ------ */
+
+struct cluster_a53_power;
+
+/*
+ * True when this boot is a restart after a SYSTEM_SUSPEND: the M7 runs and
+ * owns the panel chain, I2C2, PWM3, MEDIAMIX and GPIO4, and the shared
+ * status, control and timeline pages are its. Decided at PRE_KERNEL_1
+ * (board_route3_restart_detect, from board_route3.c's first hook) and
+ * constant after.
+ */
+bool board_route3_warm(void);
+
+/* The first hook: decide board_route3_warm(); `entry` is the image's entry
+ * stamp (system counter). PRE_KERNEL_1 only. */
+void board_route3_restart_detect(uint64_t entry);
+
+/* The power page (mapped at PRE_KERNEL_1), or NULL when it could not be. */
+volatile struct cluster_a53_power *board_route3_power_page(void);
+
+/* The route runs (UP, a frame published): listen for the M7's DOWN from now. */
+void board_route3_restart_arm(void);
+
+/* DOWN taken (board_route3_restart.c calls it): stop the heartbeat, publish
+ * nothing more. */
+void board_route3_quiesce(void);
+#endif
 
 #ifdef __cplusplus
 }

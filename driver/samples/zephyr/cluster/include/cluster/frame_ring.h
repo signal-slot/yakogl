@@ -53,7 +53,7 @@ extern "C" {
  *    panel. The M7 refuses such a producer with its own verdict
  *    (APP_FRAME_OLD_PRODUCER) rather than calling it "no ring".
  */
-#define CLUSTER_FRAME_RING_VERSION 3u
+#define CLUSTER_FRAME_RING_VERSION 4u
 
 /*
  * Three slots, for the same reason the AM62P compositor uses three buffers:
@@ -99,6 +99,19 @@ struct cluster_frame_ring {
 				   * publish onwards. A producer that keeps
 				   * pixels between frames (a partial redraw)
 				   * must not do so for this ring. */
+	/*
+	 * Version 4. The producer's session: a non-zero value it picks anew
+	 * every boot and writes before its first publish. A producer that
+	 * also starts the consumer hands it the same value out of band (the
+	 * M7's control block, `a53_session`), and a consumer holding that
+	 * value may believe this ring at once: it was written by the core
+	 * that started it, in this boot. Without it the consumer waits for
+	 * the heartbeat to move before it believes anything (app_frame.c),
+	 * because no-map DDR keeps the last boot's ring intact -- and on a
+	 * cold start that wait is a beat period between the producer's first
+	 * frame and the panel's first picture.
+	 */
+	uint32_t session;
 };
 
 /*
@@ -135,6 +148,7 @@ static inline void cluster_frame_ring_init(volatile struct cluster_frame_ring *r
 	r->a53_alive = 0u;
 	r->consumed = 0u;
 	r->shown = 0u;
+	r->session = 0u;
 	/*
 	 * `consumer_writes` belongs to the M7 and is deliberately not cleared
 	 * here: it is a property of the consumer, which a producer restart

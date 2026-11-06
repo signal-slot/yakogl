@@ -208,6 +208,9 @@ if(CONFIG_YAKOGL_DRV_DISPLAY_RUST OR CONFIG_YAKOGL_DRV_GPU_PVR_RUST OR CONFIG_YA
   if(CONFIG_YAKOGL_DRV_GPU_VIVANTE)
     list(APPEND _yd_features vivante)
   endif()
+  if(CONFIG_YAKOGL_DRV_GPU_VIVANTE_1000MHZ)
+    list(APPEND _yd_features vivante-1000mhz)
+  endif()
   if(CONFIG_GC_COMMON_PANEL_CONSOLE)
     # soc::imx8mp::media::lcdif_unreachable behind lib/board/imx8mp/gc_panel_console.c
     list(APPEND _yd_features imx8mp)
