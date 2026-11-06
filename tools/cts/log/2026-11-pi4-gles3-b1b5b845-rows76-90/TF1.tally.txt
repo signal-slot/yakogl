@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES3 at b1b5b845, 2026-11-06, image TF1: deqp-uart-tally.py --mustpass tools/cts/gles3-mustpass.txt --label TF1 TF1.console.txt (README.md)
+TF1.console.txt: deqp: done: 4 passed, 1 failed, 0 not supported, 0 warnings, complete=0 | deqp: summary: 5 cases begun, 5 with a result, 0 without
+mustpass cases with a result: 5 (of 5 seen)
+group                                       pass   fail    n/s  other
+transform_feedback                             4      0      0      1
+TOTAL                                          4      0      0      1
+(the pass / fail counts above are the result lines seen; the image's own counters:)
+  TF1: deqp: summary 5 cases begun, 5 with a result; deqp: done 4 passed, 1 failed, 0 not supported, 0 warnings; 5 result lines seen
+ResourceError dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_ivec4

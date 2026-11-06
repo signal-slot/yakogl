@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES3 at b1b5b845, 2026-11-06, image T17: deqp-uart-tally.py --mustpass tools/cts/gles3-mustpass.txt --label T17 T17.console.txt (README.md)
+T17.console.txt: deqp: done: 36 passed, 1 failed, 216 not supported, 0 warnings, complete=0 | deqp: summary: 253 cases begun, 253 with a result, 0 without
+mustpass cases with a result: 253 (of 253 seen)
+group                                       pass   fail    n/s  other
+texture                                       36      0    216      1
+TOTAL                                         36      0    216      1
+(the pass / fail counts above are the result lines seen; the image's own counters:)
+  T17: deqp: summary 253 cases begun, 253 with a result; deqp: done 36 passed, 1 failed, 216 not supported, 0 warnings; 253 result lines seen
+ResourceError dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.clamp_clamp_linear_npot

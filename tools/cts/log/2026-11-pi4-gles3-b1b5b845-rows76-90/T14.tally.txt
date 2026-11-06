@@ -1,0 +1,99 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES3 at b1b5b845, 2026-11-06, image T14: deqp-uart-tally.py --mustpass tools/cts/gles3-mustpass.txt --label T14 T14.console.txt (README.md)
+T14.console.txt: deqp: done: 136 passed, 89 failed, 0 not supported, 0 warnings, complete=0 | deqp: summary: 225 cases begun, 225 with a result, 0 without
+mustpass cases with a result: 225 (of 225 seen)
+group                                       pass   fail    n/s  other
+texture                                      136     88      0      1
+TOTAL                                        136     88      0      1
+(the pass / fail counts above are the result lines seen; the image's own counters:)
+  T14: deqp: summary 225 cases begun, 225 with a result; deqp: done 136 passed, 89 failed, 0 not supported, 0 warnings; 225 result lines seen
+Fail dEQP-GLES3.functional.texture.units.2_units.mixed.0
+Fail dEQP-GLES3.functional.texture.units.2_units.mixed.1
+Fail dEQP-GLES3.functional.texture.units.2_units.mixed.2
+Fail dEQP-GLES3.functional.texture.units.2_units.mixed.3
+Fail dEQP-GLES3.functional.texture.units.2_units.mixed.5
+Fail dEQP-GLES3.functional.texture.units.2_units.mixed.6
+Fail dEQP-GLES3.functional.texture.units.2_units.mixed.8
+Fail dEQP-GLES3.functional.texture.units.2_units.mixed.9
+Fail dEQP-GLES3.functional.texture.units.2_units.only_2d_array.0
+Fail dEQP-GLES3.functional.texture.units.2_units.only_2d_array.1
+Fail dEQP-GLES3.functional.texture.units.2_units.only_2d_array.2
+Fail dEQP-GLES3.functional.texture.units.2_units.only_2d_array.3
+Fail dEQP-GLES3.functional.texture.units.2_units.only_2d_array.4
+Fail dEQP-GLES3.functional.texture.units.2_units.only_2d_array.5
+Fail dEQP-GLES3.functional.texture.units.2_units.only_2d_array.6
+Fail dEQP-GLES3.functional.texture.units.2_units.only_2d_array.7
+Fail dEQP-GLES3.functional.texture.units.2_units.only_2d_array.8
+Fail dEQP-GLES3.functional.texture.units.2_units.only_2d_array.9
+Fail dEQP-GLES3.functional.texture.units.2_units.only_3d.0
+Fail dEQP-GLES3.functional.texture.units.2_units.only_3d.1
+Fail dEQP-GLES3.functional.texture.units.2_units.only_3d.2
+Fail dEQP-GLES3.functional.texture.units.2_units.only_3d.3
+Fail dEQP-GLES3.functional.texture.units.2_units.only_3d.4
+Fail dEQP-GLES3.functional.texture.units.2_units.only_3d.5
+Fail dEQP-GLES3.functional.texture.units.2_units.only_3d.6
+Fail dEQP-GLES3.functional.texture.units.2_units.only_3d.7
+Fail dEQP-GLES3.functional.texture.units.2_units.only_3d.8
+Fail dEQP-GLES3.functional.texture.units.2_units.only_3d.9
+Fail dEQP-GLES3.functional.texture.units.4_units.mixed.0
+Fail dEQP-GLES3.functional.texture.units.4_units.mixed.1
+Fail dEQP-GLES3.functional.texture.units.4_units.mixed.2
+Fail dEQP-GLES3.functional.texture.units.4_units.mixed.3
+Fail dEQP-GLES3.functional.texture.units.4_units.mixed.5
+Fail dEQP-GLES3.functional.texture.units.4_units.mixed.6
+Fail dEQP-GLES3.functional.texture.units.4_units.mixed.7
+Fail dEQP-GLES3.functional.texture.units.4_units.mixed.8
+Fail dEQP-GLES3.functional.texture.units.4_units.mixed.9
+Fail dEQP-GLES3.functional.texture.units.4_units.only_2d_array.0
+Fail dEQP-GLES3.functional.texture.units.4_units.only_2d_array.1
+Fail dEQP-GLES3.functional.texture.units.4_units.only_2d_array.2
+Fail dEQP-GLES3.functional.texture.units.4_units.only_2d_array.3
+Fail dEQP-GLES3.functional.texture.units.4_units.only_2d_array.4
+Fail dEQP-GLES3.functional.texture.units.4_units.only_2d_array.5
+Fail dEQP-GLES3.functional.texture.units.4_units.only_2d_array.6
+Fail dEQP-GLES3.functional.texture.units.4_units.only_2d_array.7
+Fail dEQP-GLES3.functional.texture.units.4_units.only_2d_array.8
+Fail dEQP-GLES3.functional.texture.units.4_units.only_2d_array.9
+Fail dEQP-GLES3.functional.texture.units.4_units.only_3d.0
+Fail dEQP-GLES3.functional.texture.units.4_units.only_3d.1
+Fail dEQP-GLES3.functional.texture.units.4_units.only_3d.2
+Fail dEQP-GLES3.functional.texture.units.4_units.only_3d.3
+Fail dEQP-GLES3.functional.texture.units.4_units.only_3d.4
+Fail dEQP-GLES3.functional.texture.units.4_units.only_3d.5
+Fail dEQP-GLES3.functional.texture.units.4_units.only_3d.6
+Fail dEQP-GLES3.functional.texture.units.4_units.only_3d.7
+Fail dEQP-GLES3.functional.texture.units.4_units.only_3d.8
+Fail dEQP-GLES3.functional.texture.units.4_units.only_3d.9
+Fail dEQP-GLES3.functional.texture.units.8_units.mixed.0
+Fail dEQP-GLES3.functional.texture.units.8_units.mixed.1
+Fail dEQP-GLES3.functional.texture.units.8_units.mixed.2
+Fail dEQP-GLES3.functional.texture.units.8_units.mixed.3
+Fail dEQP-GLES3.functional.texture.units.8_units.mixed.4
+Fail dEQP-GLES3.functional.texture.units.8_units.mixed.5
+Fail dEQP-GLES3.functional.texture.units.8_units.mixed.6
+Fail dEQP-GLES3.functional.texture.units.8_units.mixed.7
+Fail dEQP-GLES3.functional.texture.units.8_units.mixed.8
+Fail dEQP-GLES3.functional.texture.units.8_units.mixed.9
+Fail dEQP-GLES3.functional.texture.units.8_units.only_2d.7
+Fail dEQP-GLES3.functional.texture.units.8_units.only_2d_array.0
+Fail dEQP-GLES3.functional.texture.units.8_units.only_2d_array.1
+Fail dEQP-GLES3.functional.texture.units.8_units.only_2d_array.2
+Fail dEQP-GLES3.functional.texture.units.8_units.only_2d_array.3
+Fail dEQP-GLES3.functional.texture.units.8_units.only_2d_array.4
+Fail dEQP-GLES3.functional.texture.units.8_units.only_2d_array.5
+Fail dEQP-GLES3.functional.texture.units.8_units.only_2d_array.6
+Fail dEQP-GLES3.functional.texture.units.8_units.only_2d_array.7
+Fail dEQP-GLES3.functional.texture.units.8_units.only_2d_array.8
+Fail dEQP-GLES3.functional.texture.units.8_units.only_2d_array.9
+Fail dEQP-GLES3.functional.texture.units.8_units.only_3d.0
+Fail dEQP-GLES3.functional.texture.units.8_units.only_3d.1
+Fail dEQP-GLES3.functional.texture.units.8_units.only_3d.2
+Fail dEQP-GLES3.functional.texture.units.8_units.only_3d.3
+Fail dEQP-GLES3.functional.texture.units.8_units.only_3d.4
+Fail dEQP-GLES3.functional.texture.units.8_units.only_3d.5
+Fail dEQP-GLES3.functional.texture.units.8_units.only_3d.6
+Fail dEQP-GLES3.functional.texture.units.8_units.only_3d.7
+Fail dEQP-GLES3.functional.texture.units.8_units.only_3d.8
+Fail dEQP-GLES3.functional.texture.units.8_units.only_3d.9
+ResourceError dEQP-GLES3.functional.texture.units.8_units.only_cube.1

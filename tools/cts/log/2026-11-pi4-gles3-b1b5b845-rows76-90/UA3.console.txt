@@ -1,0 +1,2168 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES3 at b1b5b845, 2026-11-06, image UA3: UART console of the run, from the firmware's first line to the image's end line (README.md)
+  5.05 [sdcard] pieeprom.upd not found
+  5.06 [sdcard] recover4.elf not found
+  5.06 [sdcard] recovery.elf not found
+  5.88 Read start4.elf bytes  2299008 hnd 0x211ac
+  5.94 Read fixup4.dat bytes     5496 hnd 0x20bca
+  5.96 0x00d03114 0x00000000 0x00001fff
+  5.00 MEM GPU: 76 ARM: 948 TOTAL: 1024
+  5.36 Starting start4.elf @ 0xfec00200 partition 1
+  5.23 XHCI-STOP
+  5.23 xHC0 ver: 256 HCS: 05000420 fc000031 00e70004 HCC: 002841eb
+  5.24 USBSTS 18
+  5.24 PCI0 reset
+  5.25 +
+
+MESS:00:00:05.270722:0: arasan: arasan_emmc_open
+MESS:00:00:05.272380:0: arasan: arasan_emmc_set_clock C0: 0x00800000 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 400000 max: 400000 delay: 5
+MESS:00:00:05.392607:0: arasan: arasan_emmc_set_clock C0: 0x00800000 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 400000 max: 400000 delay: 5
+MESS:00:00:05.405476:0: arasan: arasan_emmc_set_clock C0: 0x00800f00 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 390000 max: 400000 delay: 5
+MESS:00:00:05.439747:0: boot-part: 1 fs-type: 0
+MESS:00:00:05.441160:0: boot-part: 1 fs-type: 3
+MESS:00:00:05.445543:0: arasan: arasan_emmc_set_clock C0: 0x00800f06 C1: 0x000e0207 emmc: 200000000 actual: 50000000 div: 0x00000002 target: 50000000 min: 0 max: 50000000 delay: 1
+MESS:00:00:05.606979:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:05.609860:0: brfs: File read: 256 bytes
+MESS:00:00:05.702325:0: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:05.706833:0: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:05.720425:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:06.219584:0: gpioman: gpioman_get_pin_num: pin DISPLAY_DSI_PORT not defined
+MESS:00:00:06.225131:0: gpioman: gpioman_get_pin_num: pin DISPLAY_DSI_PORT not defined
+MESS:00:00:06.234169:0: *** Restart logging
+MESS:00:00:06.235939:0: brfs: File read: 256 bytes
+MESS:00:00:06.314109:0: hdmi: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:06.319141:0: hdmi: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:06.335440:0: hdmi: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:06.341451:0: hdmi: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:06.346109:0: hdmi: HDMI:hdmi_get_state is deprecated, use hdmi_get_display_state instead
+MESS:00:00:06.354867:0: HDMI0: hdmi_pixel_encoding: 300000000
+MESS:00:00:06.360359:0: HDMI1: hdmi_pixel_encoding: 300000000
+MESS:00:00:06.382259:0: dtb_file 'bcm2711-rpi-4-b.dtb'
+MESS:00:00:06.397558:0: brfs: File read: /mfs/sd/bcm2711-rpi-4-b.dtb
+MESS:00:00:06.400847:0: Loaded 'bcm2711-rpi-4-b.dtb' to 0x100 size 0xdbb9
+MESS:00:00:06.441976:0: brfs: File read: 56249 bytes
+MESS:00:00:06.461508:0: brfs: File read: /mfs/sd/overlays/overlay_map.dtb
+MESS:00:00:06.526446:0: brfs: File read: 5971 bytes
+MESS:00:00:06.529147:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:06.572222:0: brfs: File read: 256 bytes
+MESS:00:00:06.575899:0: brfs: File read: /mfs/sd/cmdline.txt
+MESS:00:00:06.579380:0: Read command line from file 'cmdline.txt':
+MESS:00:00:06.585231:0: 'console=serial0,115200 console=tty1 root=PARTUUID=269eab4a-02 rootfstype=ext4 fsck.repair=yes rootwait cfg80211.ieee80211_regdom=JP splash quiet'
+MESS:00:00:06.742178:0: brfs: File read: 145 bytes
+MESS:00:00:08.150279:0: brfs: File read: /mfs/sd/yakogl-UA3.bin
+MESS:00:00:08.153099:0: Loaded 'yakogl-UA3.bin' to 0x200000 size 0xfc6dc0
+MESS:00:00:08.159624:0: Device tree loaded to 0x2eff1f00 (size 0xe0a1)
+MESS:00:00:08.168398:0: uart: Set PL011 baud rate to 103448.300000 Hz
+MESS:00:00:08.174927:0: uart: Baud rate change done...
+MESS:00:00:08.176950:0:board: watchdog armed
+*** Booting Zephyr OS build af17c0c8aa2a ***
+I: shader compiler scratch: 4194304 bytes, keep: 1048576 bytes
+v3d_deqp: build b1b5b845
+board: PM watchdog resets the SoC ~250 s after boot (tryboot -> Linux)
+v3d_deqp: the record at 210 s after boot at the latest
+V3D clock 250000000 -> 500000000 Hz (0)
+deqp: case filter 'dEQP-GLES3.functional.uniform_api.value.initial.*'
+Writing test log into deqp.qpa
+dEQP Core vulkan-cts-1.4.6.2-555-g93bca01861b0e3ef3c387027a9791e6d065f900c (0x93bca018) starting..
+  target implementation = 'YakoGL-Zephyr'
+I: V3D 4.2: 1 core(s), 8 QPUs, VPM 65536 bytes, PA 35 / VA 35 bits, MMU yes
+I: V3D raw: HUB_IDENT0..3 42554856 000e1124 00000100 00000e00 CTL_IDENT0..2 04443356 81001422 40078121 MMU_DEBUG_INFO 00000550
+osal(v3d): V3D 4.2, 8 QPUs, VPM 65536 bytes, MMU yes (identify 0)
+osal(v3d): UIFCFG 0x00000045
+osal(v3d): ready: carve-out 48 MiB at phys 0x2f09000, GPU VA 0x181000..0x3100000
+yakogl/v3d: depth and stencil apart (by renderbuffer), the platform's setting
+yakogl/v3d: job arenas for 1024 draws (the platform's budget): BCL 139264, indirect 458752, binner tile pool 1056768 bytes; tiled copies kept up to 16777216 bytes
+yakogl/v3d: two job arena sets (the second's texture arena 1048576 bytes): a job is recorded while the one before runs
+yakogl/v3d: clear program built: 408 bytes of code
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.array_in_struct.bool_bvec4_both'..
+yakogl/v3d: binner pool after job 1: given 0x00b96000 + 1056768, BPCA 0x00b99000 BPCS 1044480 CT0QMA 0x00b96000 CT0QMS 1056768, overflow blocks 0 of 2 (262144 bytes each)
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.array_in_struct.bool_bvec4_both
+v3d_deqp: case #0 P 156ms k2/15 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.array_in_struct.bool_bvec4_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.array_in_struct.bool_bvec4_fragment'..
+osal(v3d): BASELINE after a completed job 1: core_sts 0x0 hub_sts 0x0 err 0x1000 ct0 cs 0x0 ea 0x201011 ca 0x201011 ra 0x0 qba 0x201000 qea 0x201011 ct1 ca 0x223097 ra 0x223096 qba 0x223000 qea 0x223097
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.array_in_struct.bool_bvec4_fragment
+v3d_deqp: case #1 P 55ms k2/15 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.array_in_struct.bool_bvec4_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.array_in_struct.bool_bvec4_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.array_in_struct.bool_bvec4_vertex
+v3d_deqp: case #2 P 42ms k2/15 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.array_in_struct.bool_bvec4_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.array_in_struct.float_vec4_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.array_in_struct.float_vec4_both
+v3d_deqp: case #3 P 42ms k2/15 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.array_in_struct.float_vec4_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.array_in_struct.float_vec4_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.array_in_struct.float_vec4_fragment
+v3d_deqp: case #4 P 37ms k2/15 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.array_in_struct.float_vec4_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.array_in_struct.float_vec4_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.array_in_struct.float_vec4_vertex
+v3d_deqp: case #5 P 40ms k2/15 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.array_in_struct.float_vec4_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.array_in_struct.int_ivec4_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.array_in_struct.int_ivec4_both
+v3d_deqp: case #6 P 41ms k2/15 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.array_in_struct.int_ivec4_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.array_in_struct.int_ivec4_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.array_in_struct.int_ivec4_fragment
+v3d_deqp: case #7 P 36ms k2/15 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.array_in_struct.int_ivec4_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.array_in_struct.int_ivec4_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.array_in_struct.int_ivec4_vertex
+v3d_deqp: case #8 P 39ms k2/15 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.array_in_struct.int_ivec4_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.array_in_struct.mat4_mat2_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.array_in_struct.mat4_mat2_both
+v3d_deqp: case #9 P 71ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.array_in_struct.mat4_mat2_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.array_in_struct.mat4_mat2_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.array_in_struct.mat4_mat2_fragment
+v3d_deqp: case #10 P 44ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.array_in_struct.mat4_mat2_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.array_in_struct.mat4_mat2_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.array_in_struct.mat4_mat2_vertex
+v3d_deqp: case #11 P 62ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.array_in_struct.mat4_mat2_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.array_in_struct.sampler2D_samplerCube_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.array_in_struct.sampler2D_samplerCube_both
+v3d_deqp: case #12 P 47ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.array_in_struct.sampler2D_samplerCube_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.array_in_struct.sampler2D_samplerCube_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.array_in_struct.sampler2D_samplerCube_fragment
+v3d_deqp: case #13 P 42ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.array_in_struct.sampler2D_samplerCube_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.array_in_struct.sampler2D_samplerCube_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.array_in_struct.sampler2D_samplerCube_vertex
+v3d_deqp: case #14 P 44ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.array_in_struct.sampler2D_samplerCube_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.array_in_struct.uint_uvec4_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.array_in_struct.uint_uvec4_both
+v3d_deqp: case #15 P 41ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.array_in_struct.uint_uvec4_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.array_in_struct.uint_uvec4_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.array_in_struct.uint_uvec4_fragment
+v3d_deqp: case #16 P 38ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.array_in_struct.uint_uvec4_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.array_in_struct.uint_uvec4_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.array_in_struct.uint_uvec4_vertex
+v3d_deqp: case #17 P 38ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.array_in_struct.uint_uvec4_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bool_api_float_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bool_api_float_both
+v3d_deqp: case #18 P 34ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bool_api_float_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bool_api_float_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bool_api_float_fragment
+v3d_deqp: case #19 P 33ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bool_api_float_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bool_api_float_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bool_api_float_vertex
+v3d_deqp: case #20 P 34ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bool_api_float_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bool_api_int_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bool_api_int_both
+v3d_deqp: case #21 P 32ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bool_api_int_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bool_api_int_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bool_api_int_fragment
+v3d_deqp: case #22 P 33ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bool_api_int_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bool_api_int_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bool_api_int_vertex
+v3d_deqp: case #23 P 33ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bool_api_int_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bool_api_uint_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bool_api_uint_both
+v3d_deqp: case #24 P 32ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bool_api_uint_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bool_api_uint_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bool_api_uint_fragment
+v3d_deqp: case #25 P 33ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bool_api_uint_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bool_api_uint_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bool_api_uint_vertex
+v3d_deqp: case #26 P 33ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bool_api_uint_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec2_api_float_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec2_api_float_both
+v3d_deqp: case #27 P 34ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec2_api_float_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec2_api_float_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec2_api_float_fragment
+v3d_deqp: case #28 P 34ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec2_api_float_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec2_api_float_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec2_api_float_vertex
+v3d_deqp: case #29 P 34ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec2_api_float_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec2_api_int_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec2_api_int_both
+v3d_deqp: case #30 P 33ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec2_api_int_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec2_api_int_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec2_api_int_fragment
+v3d_deqp: case #31 P 33ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec2_api_int_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec2_api_int_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec2_api_int_vertex
+v3d_deqp: case #32 P 34ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec2_api_int_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec2_api_uint_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec2_api_uint_both
+v3d_deqp: case #33 P 33ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec2_api_uint_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec2_api_uint_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec2_api_uint_fragment
+v3d_deqp: case #34 P 33ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec2_api_uint_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec2_api_uint_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec2_api_uint_vertex
+v3d_deqp: case #35 P 34ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec2_api_uint_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec3_api_float_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec3_api_float_both
+v3d_deqp: case #36 P 34ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec3_api_float_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec3_api_float_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec3_api_float_fragment
+v3d_deqp: case #37 P 34ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec3_api_float_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec3_api_float_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec3_api_float_vertex
+v3d_deqp: case #38 P 34ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec3_api_float_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec3_api_int_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec3_api_int_both
+v3d_deqp: case #39 P 34ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec3_api_int_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec3_api_int_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec3_api_int_fragment
+v3d_deqp: case #40 P 33ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec3_api_int_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec3_api_int_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec3_api_int_vertex
+v3d_deqp: case #41 P 33ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec3_api_int_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec3_api_uint_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec3_api_uint_both
+v3d_deqp: case #42 P 34ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec3_api_uint_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec3_api_uint_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec3_api_uint_fragment
+v3d_deqp: case #43 P 34ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec3_api_uint_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec3_api_uint_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec3_api_uint_vertex
+v3d_deqp: case #44 P 34ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec3_api_uint_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec4_api_float_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec4_api_float_both
+v3d_deqp: case #45 P 34ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec4_api_float_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec4_api_float_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec4_api_float_fragment
+v3d_deqp: case #46 P 34ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec4_api_float_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec4_api_float_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec4_api_float_vertex
+v3d_deqp: case #47 P 34ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec4_api_float_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec4_api_int_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec4_api_int_both
+v3d_deqp: case #48 P 35ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec4_api_int_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec4_api_int_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec4_api_int_fragment
+v3d_deqp: case #49 P 33ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec4_api_int_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec4_api_int_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec4_api_int_vertex
+v3d_deqp: case #50 P 34ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec4_api_int_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec4_api_uint_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec4_api_uint_both
+v3d_deqp: case #51 P 34ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec4_api_uint_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec4_api_uint_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec4_api_uint_fragment
+v3d_deqp: case #52 P 34ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec4_api_uint_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec4_api_uint_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec4_api_uint_vertex
+v3d_deqp: case #53 P 34ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.bvec4_api_uint_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.float_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.float_both
+v3d_deqp: case #54 P 31ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.float_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.float_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.float_fragment
+v3d_deqp: case #55 P 31ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.float_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.float_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.float_vertex
+v3d_deqp: case #56 P 31ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.float_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.int_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.int_both
+v3d_deqp: case #57 P 30ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.int_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.int_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.int_fragment
+v3d_deqp: case #58 P 31ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.int_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.int_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.int_vertex
+v3d_deqp: case #59 P 30ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.int_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.ivec2_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.ivec2_both
+v3d_deqp: case #60 P 31ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.ivec2_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.ivec2_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.ivec2_fragment
+v3d_deqp: case #61 P 31ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.ivec2_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.ivec2_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.ivec2_vertex
+v3d_deqp: case #62 P 31ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.ivec2_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.ivec3_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.ivec3_both
+v3d_deqp: case #63 P 31ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.ivec3_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.ivec3_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.ivec3_fragment
+v3d_deqp: case #64 P 31ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.ivec3_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.ivec3_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.ivec3_vertex
+v3d_deqp: case #65 P 31ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.ivec3_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.ivec4_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.ivec4_both
+v3d_deqp: case #66 P 31ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.ivec4_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.ivec4_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.ivec4_fragment
+v3d_deqp: case #67 P 31ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.ivec4_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.ivec4_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.ivec4_vertex
+v3d_deqp: case #68 P 32ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.ivec4_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat2_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat2_both
+v3d_deqp: case #69 P 31ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat2_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat2_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat2_fragment
+v3d_deqp: case #70 P 31ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat2_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat2_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat2_vertex
+v3d_deqp: case #71 P 32ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat2_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat2x3_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat2x3_both
+v3d_deqp: case #72 P 32ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat2x3_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat2x3_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat2x3_fragment
+v3d_deqp: case #73 P 32ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat2x3_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat2x3_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat2x3_vertex
+v3d_deqp: case #74 P 32ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat2x3_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat2x4_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat2x4_both
+v3d_deqp: case #75 P 33ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat2x4_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat2x4_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat2x4_fragment
+v3d_deqp: case #76 P 32ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat2x4_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat2x4_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat2x4_vertex
+v3d_deqp: case #77 P 32ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat2x4_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat3_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat3_both
+v3d_deqp: case #78 P 33ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat3_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat3_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat3_fragment
+v3d_deqp: case #79 P 32ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat3_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat3_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat3_vertex
+v3d_deqp: case #80 P 32ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat3_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat3x2_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat3x2_both
+v3d_deqp: case #81 P 32ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat3x2_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat3x2_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat3x2_fragment
+v3d_deqp: case #82 P 32ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat3x2_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat3x2_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat3x2_vertex
+v3d_deqp: case #83 P 32ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat3x2_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat3x4_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat3x4_both
+v3d_deqp: case #84 P 35ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat3x4_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat3x4_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat3x4_fragment
+v3d_deqp: case #85 P 32ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat3x4_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat3x4_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat3x4_vertex
+v3d_deqp: case #86 P 34ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat3x4_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat4_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat4_both
+v3d_deqp: case #87 P 35ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat4_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat4_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat4_fragment
+v3d_deqp: case #88 P 32ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat4_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat4_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat4_vertex
+v3d_deqp: case #89 P 34ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat4_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat4x2_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat4x2_both
+v3d_deqp: case #90 P 33ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat4x2_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat4x2_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat4x2_fragment
+v3d_deqp: case #91 P 32ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat4x2_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat4x2_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat4x2_vertex
+v3d_deqp: case #92 P 33ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat4x2_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat4x3_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat4x3_both
+v3d_deqp: case #93 P 34ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat4x3_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat4x3_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat4x3_fragment
+v3d_deqp: case #94 P 33ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat4x3_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat4x3_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat4x3_vertex
+v3d_deqp: case #95 P 33ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.mat4x3_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.sampler2D_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.sampler2D_both
+v3d_deqp: case #96 P 33ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.sampler2D_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.sampler2D_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.sampler2D_fragment
+v3d_deqp: case #97 P 32ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.sampler2D_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.sampler2D_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.sampler2D_vertex
+v3d_deqp: case #98 P 33ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.sampler2D_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.samplerCube_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.samplerCube_both
+v3d_deqp: case #99 P 33ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.samplerCube_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.samplerCube_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.samplerCube_fragment
+v3d_deqp: case #100 P 33ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.samplerCube_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.samplerCube_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.samplerCube_vertex
+v3d_deqp: case #101 P 34ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.samplerCube_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.uint_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.uint_both
+v3d_deqp: case #102 P 31ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.uint_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.uint_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.uint_fragment
+v3d_deqp: case #103 P 30ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.uint_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.uint_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.uint_vertex
+v3d_deqp: case #104 P 31ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.uint_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.uvec2_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.uvec2_both
+v3d_deqp: case #105 P 31ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.uvec2_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.uvec2_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.uvec2_fragment
+v3d_deqp: case #106 P 31ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.uvec2_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.uvec2_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.uvec2_vertex
+v3d_deqp: case #107 P 31ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.uvec2_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.uvec3_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.uvec3_both
+v3d_deqp: case #108 P 31ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.uvec3_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.uvec3_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.uvec3_fragment
+v3d_deqp: case #109 P 31ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.uvec3_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.uvec3_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.uvec3_vertex
+v3d_deqp: case #110 P 31ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.uvec3_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.uvec4_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.uvec4_both
+v3d_deqp: case #111 P 32ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.uvec4_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.uvec4_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.uvec4_fragment
+v3d_deqp: case #112 P 31ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.uvec4_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.uvec4_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.uvec4_vertex
+v3d_deqp: case #113 P 31ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.uvec4_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.vec2_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.vec2_both
+v3d_deqp: case #114 P 31ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.vec2_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.vec2_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.vec2_fragment
+v3d_deqp: case #115 P 31ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.vec2_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.vec2_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.vec2_vertex
+v3d_deqp: case #116 P 31ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.vec2_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.vec3_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.vec3_both
+v3d_deqp: case #117 P 31ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.vec3_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.vec3_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.vec3_fragment
+v3d_deqp: case #118 P 31ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.vec3_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.vec3_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.vec3_vertex
+v3d_deqp: case #119 P 31ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.vec3_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.vec4_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.vec4_both
+v3d_deqp: case #120 P 32ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.vec4_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.vec4_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.vec4_fragment
+v3d_deqp: case #121 P 31ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.vec4_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.vec4_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.vec4_vertex
+v3d_deqp: case #122 P 31ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic.vec4_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.bool_api_float_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.bool_api_float_both
+v3d_deqp: case #123 P 34ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.bool_api_float_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.bool_api_float_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.bool_api_float_fragment
+v3d_deqp: case #124 P 36ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.bool_api_float_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.bool_api_float_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.bool_api_float_vertex
+v3d_deqp: case #125 P 35ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.bool_api_float_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.bool_api_int_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.bool_api_int_both
+v3d_deqp: case #126 P 35ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.bool_api_int_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.bool_api_int_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.bool_api_int_fragment
+v3d_deqp: case #127 P 35ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.bool_api_int_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.bool_api_int_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.bool_api_int_vertex
+v3d_deqp: case #128 P 35ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.bool_api_int_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.bool_api_uint_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.bool_api_uint_both
+v3d_deqp: case #129 P 35ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.bool_api_uint_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.bool_api_uint_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.bool_api_uint_fragment
+v3d_deqp: case #130 P 35ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.bool_api_uint_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.bool_api_uint_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.bool_api_uint_vertex
+v3d_deqp: case #131 P 35ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.bool_api_uint_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.bvec4_api_float_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.bvec4_api_float_both
+v3d_deqp: case #132 P 41ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.bvec4_api_float_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.bvec4_api_float_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.bvec4_api_float_fragment
+v3d_deqp: case #133 P 37ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.bvec4_api_float_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.bvec4_api_float_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.bvec4_api_float_vertex
+v3d_deqp: case #134 P 39ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.bvec4_api_float_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.bvec4_api_int_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.bvec4_api_int_both
+v3d_deqp: case #135 P 41ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.bvec4_api_int_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.bvec4_api_int_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.bvec4_api_int_fragment
+v3d_deqp: case #136 P 36ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.bvec4_api_int_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.bvec4_api_int_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.bvec4_api_int_vertex
+v3d_deqp: case #137 P 39ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.bvec4_api_int_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.bvec4_api_uint_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.bvec4_api_uint_both
+v3d_deqp: case #138 P 41ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.bvec4_api_uint_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.bvec4_api_uint_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.bvec4_api_uint_fragment
+v3d_deqp: case #139 P 36ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.bvec4_api_uint_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.bvec4_api_uint_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.bvec4_api_uint_vertex
+v3d_deqp: case #140 P 39ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.bvec4_api_uint_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.float_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.float_both
+v3d_deqp: case #141 P 34ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.float_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.float_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.float_fragment
+v3d_deqp: case #142 P 33ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.float_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.float_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.float_vertex
+v3d_deqp: case #143 P 33ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.float_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.int_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.int_both
+v3d_deqp: case #144 P 32ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.int_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.int_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.int_fragment
+v3d_deqp: case #145 P 33ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.int_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.int_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.int_vertex
+v3d_deqp: case #146 P 32ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.int_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.ivec4_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.ivec4_both
+v3d_deqp: case #147 P 36ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.ivec4_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.ivec4_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.ivec4_fragment
+v3d_deqp: case #148 P 33ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.ivec4_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.ivec4_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.ivec4_vertex
+v3d_deqp: case #149 P 35ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.ivec4_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.mat4_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.mat4_both
+v3d_deqp: case #150 P 52ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.mat4_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.mat4_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.mat4_fragment
+v3d_deqp: case #151 P 37ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.mat4_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.mat4_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.mat4_vertex
+v3d_deqp: case #152 P 47ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.mat4_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.sampler2D_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.sampler2D_both
+v3d_deqp: case #153 P 37ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.sampler2D_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.sampler2D_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.sampler2D_fragment
+v3d_deqp: case #154 P 35ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.sampler2D_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.sampler2D_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.sampler2D_vertex
+v3d_deqp: case #155 P 36ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.sampler2D_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.uint_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.uint_both
+v3d_deqp: case #156 P 33ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.uint_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.uint_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.uint_fragment
+v3d_deqp: case #157 P 32ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.uint_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.uint_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.uint_vertex
+v3d_deqp: case #158 P 33ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.uint_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.uvec4_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.uvec4_both
+v3d_deqp: case #159 P 35ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.uvec4_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.uvec4_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.uvec4_fragment
+v3d_deqp: case #160 P 34ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.uvec4_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.uvec4_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.uvec4_vertex
+v3d_deqp: case #161 P 35ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.uvec4_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.vec4_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.vec4_both
+v3d_deqp: case #162 P 35ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.vec4_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.vec4_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.vec4_fragment
+v3d_deqp: case #163 P 34ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.vec4_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.vec4_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.vec4_vertex
+v3d_deqp: case #164 P 35ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_array.vec4_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_struct.bool_bvec4_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_struct.bool_bvec4_both
+v3d_deqp: case #165 P 35ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_struct.bool_bvec4_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_struct.bool_bvec4_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_struct.bool_bvec4_fragment
+v3d_deqp: case #166 P 35ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_struct.bool_bvec4_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_struct.bool_bvec4_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_struct.bool_bvec4_vertex
+v3d_deqp: case #167 P 36ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_struct.bool_bvec4_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_struct.float_vec4_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_struct.float_vec4_both
+v3d_deqp: case #168 P 35ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_struct.float_vec4_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_struct.float_vec4_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_struct.float_vec4_fragment
+v3d_deqp: case #169 P 35ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_struct.float_vec4_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_struct.float_vec4_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_struct.float_vec4_vertex
+v3d_deqp: case #170 P 35ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_struct.float_vec4_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_struct.int_ivec4_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_struct.int_ivec4_both
+v3d_deqp: case #171 P 35ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_struct.int_ivec4_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_struct.int_ivec4_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_struct.int_ivec4_fragment
+v3d_deqp: case #172 P 34ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_struct.int_ivec4_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_struct.int_ivec4_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_struct.int_ivec4_vertex
+v3d_deqp: case #173 P 35ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_struct.int_ivec4_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_struct.mat4_mat2_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_struct.mat4_mat2_both
+v3d_deqp: case #174 P 41ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_struct.mat4_mat2_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_struct.mat4_mat2_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_struct.mat4_mat2_fragment
+v3d_deqp: case #175 P 36ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_struct.mat4_mat2_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_struct.mat4_mat2_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_struct.mat4_mat2_vertex
+v3d_deqp: case #176 P 39ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_struct.mat4_mat2_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_struct.sampler2D_samplerCube_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_struct.sampler2D_samplerCube_both
+v3d_deqp: case #177 P 39ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_struct.sampler2D_samplerCube_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_struct.sampler2D_samplerCube_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_struct.sampler2D_samplerCube_fragment
+v3d_deqp: case #178 P 38ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_struct.sampler2D_samplerCube_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_struct.sampler2D_samplerCube_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_struct.sampler2D_samplerCube_vertex
+v3d_deqp: case #179 P 39ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_struct.sampler2D_samplerCube_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_struct.uint_uvec4_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_struct.uint_uvec4_both
+v3d_deqp: case #180 P 36ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_struct.uint_uvec4_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_struct.uint_uvec4_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_struct.uint_uvec4_fragment
+v3d_deqp: case #181 P 34ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_struct.uint_uvec4_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_struct.uint_uvec4_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_struct.uint_uvec4_vertex
+v3d_deqp: case #182 P 35ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.basic_struct.uint_uvec4_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.multiple_basic.both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.multiple_basic.both
+v3d_deqp: case #183 P 41ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.multiple_basic.both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.multiple_basic.fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.multiple_basic.fragment
+v3d_deqp: case #184 P 34ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.multiple_basic.fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.multiple_basic.vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.multiple_basic.vertex
+v3d_deqp: case #185 P 37ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.multiple_basic.vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.multiple_basic_array.both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.multiple_basic_array.both
+v3d_deqp: case #186 P 40ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.multiple_basic_array.both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.multiple_basic_array.fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.multiple_basic_array.fragment
+v3d_deqp: case #187 P 36ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.multiple_basic_array.fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.multiple_basic_array.vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.multiple_basic_array.vertex
+v3d_deqp: case #188 P 37ms k2/19 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.multiple_basic_array.vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.multiple_nested_structs_arrays.both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.multiple_nested_structs_arrays.both
+v3d_deqp: case #189 P 64ms k2/30 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.multiple_nested_structs_arrays.both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.multiple_nested_structs_arrays.fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.multiple_nested_structs_arrays.fragment
+v3d_deqp: case #190 P 47ms k2/30 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.multiple_nested_structs_arrays.fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.multiple_nested_structs_arrays.vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.multiple_nested_structs_arrays.vertex
+v3d_deqp: case #191 P 55ms k2/30 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.multiple_nested_structs_arrays.vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.nested_structs_arrays.bool_bvec4_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.nested_structs_arrays.bool_bvec4_both
+v3d_deqp: case #192 P 47ms k2/30 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.nested_structs_arrays.bool_bvec4_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.nested_structs_arrays.bool_bvec4_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.nested_structs_arrays.bool_bvec4_fragment
+v3d_deqp: case #193 P 41ms k2/30 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.nested_structs_arrays.bool_bvec4_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.nested_structs_arrays.bool_bvec4_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.nested_structs_arrays.bool_bvec4_vertex
+v3d_deqp: case #194 P 44ms k2/30 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.nested_structs_arrays.bool_bvec4_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.nested_structs_arrays.float_vec4_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.nested_structs_arrays.float_vec4_both
+v3d_deqp: case #195 P 44ms k2/30 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.nested_structs_arrays.float_vec4_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.nested_structs_arrays.float_vec4_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.nested_structs_arrays.float_vec4_fragment
+v3d_deqp: case #196 P 39ms k2/30 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.nested_structs_arrays.float_vec4_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.nested_structs_arrays.float_vec4_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.nested_structs_arrays.float_vec4_vertex
+v3d_deqp: case #197 P 42ms k2/30 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.nested_structs_arrays.float_vec4_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.nested_structs_arrays.int_ivec4_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.nested_structs_arrays.int_ivec4_both
+v3d_deqp: case #198 P 43ms k2/30 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.nested_structs_arrays.int_ivec4_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.nested_structs_arrays.int_ivec4_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.nested_structs_arrays.int_ivec4_fragment
+v3d_deqp: case #199 P 39ms k2/30 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.nested_structs_arrays.int_ivec4_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.nested_structs_arrays.int_ivec4_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.nested_structs_arrays.int_ivec4_vertex
+v3d_deqp: case #200 P 40ms k2/30 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.nested_structs_arrays.int_ivec4_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.nested_structs_arrays.mat4_mat2_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.nested_structs_arrays.mat4_mat2_both
+v3d_deqp: case #201 P 83ms k2/30 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.nested_structs_arrays.mat4_mat2_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.nested_structs_arrays.mat4_mat2_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.nested_structs_arrays.mat4_mat2_fragment
+v3d_deqp: case #202 P 49ms k2/30 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.nested_structs_arrays.mat4_mat2_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.nested_structs_arrays.mat4_mat2_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.nested_structs_arrays.mat4_mat2_vertex
+v3d_deqp: case #203 P 71ms k2/30 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.nested_structs_arrays.mat4_mat2_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.nested_structs_arrays.sampler2D_samplerCube_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.nested_structs_arrays.sampler2D_samplerCube_both
+v3d_deqp: case #204 P 50ms k2/30 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.nested_structs_arrays.sampler2D_samplerCube_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.nested_structs_arrays.sampler2D_samplerCube_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.nested_structs_arrays.sampler2D_samplerCube_fragment
+v3d_deqp: case #205 P 45ms k2/30 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.nested_structs_arrays.sampler2D_samplerCube_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.nested_structs_arrays.sampler2D_samplerCube_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.nested_structs_arrays.sampler2D_samplerCube_vertex
+v3d_deqp: case #206 P 46ms k2/30 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.nested_structs_arrays.sampler2D_samplerCube_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.nested_structs_arrays.uint_uvec4_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.nested_structs_arrays.uint_uvec4_both
+v3d_deqp: case #207 P 43ms k2/30 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.nested_structs_arrays.uint_uvec4_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.nested_structs_arrays.uint_uvec4_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.nested_structs_arrays.uint_uvec4_fragment
+v3d_deqp: case #208 P 40ms k2/30 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.nested_structs_arrays.uint_uvec4_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.nested_structs_arrays.uint_uvec4_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.nested_structs_arrays.uint_uvec4_vertex
+v3d_deqp: case #209 P 41ms k2/30 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.nested_structs_arrays.uint_uvec4_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.struct_in_array.bool_bvec4_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.struct_in_array.bool_bvec4_both
+v3d_deqp: case #210 P 42ms k2/30 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.struct_in_array.bool_bvec4_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.struct_in_array.bool_bvec4_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.struct_in_array.bool_bvec4_fragment
+v3d_deqp: case #211 P 38ms k2/30 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.struct_in_array.bool_bvec4_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.struct_in_array.bool_bvec4_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.struct_in_array.bool_bvec4_vertex
+v3d_deqp: case #212 P 40ms k2/30 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.struct_in_array.bool_bvec4_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.struct_in_array.float_vec4_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.struct_in_array.float_vec4_both
+v3d_deqp: case #213 P 40ms k2/30 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.struct_in_array.float_vec4_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.struct_in_array.float_vec4_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.struct_in_array.float_vec4_fragment
+v3d_deqp: case #214 P 37ms k2/30 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.struct_in_array.float_vec4_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.struct_in_array.float_vec4_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.struct_in_array.float_vec4_vertex
+v3d_deqp: case #215 P 38ms k2/30 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.struct_in_array.float_vec4_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.struct_in_array.int_ivec4_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.struct_in_array.int_ivec4_both
+v3d_deqp: case #216 P 39ms k2/30 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.struct_in_array.int_ivec4_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.struct_in_array.int_ivec4_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.struct_in_array.int_ivec4_fragment
+v3d_deqp: case #217 P 37ms k2/30 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.struct_in_array.int_ivec4_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.struct_in_array.int_ivec4_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.struct_in_array.int_ivec4_vertex
+v3d_deqp: case #218 P 37ms k2/30 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.struct_in_array.int_ivec4_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.struct_in_array.mat4_mat2_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.struct_in_array.mat4_mat2_both
+v3d_deqp: case #219 P 61ms k2/30 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.struct_in_array.mat4_mat2_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.struct_in_array.mat4_mat2_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.struct_in_array.mat4_mat2_fragment
+v3d_deqp: case #220 P 42ms k2/30 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.struct_in_array.mat4_mat2_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.struct_in_array.mat4_mat2_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.struct_in_array.mat4_mat2_vertex
+v3d_deqp: case #221 P 54ms k2/30 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.struct_in_array.mat4_mat2_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.struct_in_array.sampler2D_samplerCube_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.struct_in_array.sampler2D_samplerCube_both
+v3d_deqp: case #222 P 44ms k2/30 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.struct_in_array.sampler2D_samplerCube_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.struct_in_array.sampler2D_samplerCube_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.struct_in_array.sampler2D_samplerCube_fragment
+v3d_deqp: case #223 P 41ms k2/30 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.struct_in_array.sampler2D_samplerCube_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.struct_in_array.sampler2D_samplerCube_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.struct_in_array.sampler2D_samplerCube_vertex
+v3d_deqp: case #224 P 42ms k2/30 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.struct_in_array.sampler2D_samplerCube_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.struct_in_array.uint_uvec4_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.struct_in_array.uint_uvec4_both
+v3d_deqp: case #225 P 40ms k2/30 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.struct_in_array.uint_uvec4_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.struct_in_array.uint_uvec4_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.struct_in_array.uint_uvec4_fragment
+v3d_deqp: case #226 P 37ms k2/30 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.struct_in_array.uint_uvec4_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.struct_in_array.uint_uvec4_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.struct_in_array.uint_uvec4_vertex
+v3d_deqp: case #227 P 38ms k2/30 c15532/15532 r0 dEQP-GLES3.functional.uniform_api.value.initial.get_uniform.struct_in_array.uint_uvec4_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.array_in_struct.bool_bvec4_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.array_in_struct.bool_bvec4_both
+v3d_deqp: case #228 P 44ms k2/30 c15533/15548 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.array_in_struct.bool_bvec4_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.array_in_struct.bool_bvec4_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.array_in_struct.bool_bvec4_fragment
+v3d_deqp: case #229 P 37ms k2/30 c15533/15548 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.array_in_struct.bool_bvec4_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.array_in_struct.bool_bvec4_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.array_in_struct.bool_bvec4_vertex
+v3d_deqp: case #230 P 41ms k2/30 c15533/15548 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.array_in_struct.bool_bvec4_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.array_in_struct.float_vec4_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.array_in_struct.float_vec4_both
+v3d_deqp: case #231 P 41ms k2/30 c15533/15548 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.array_in_struct.float_vec4_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.array_in_struct.float_vec4_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.array_in_struct.float_vec4_fragment
+v3d_deqp: case #232 P 36ms k2/30 c15533/15548 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.array_in_struct.float_vec4_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.array_in_struct.float_vec4_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.array_in_struct.float_vec4_vertex
+v3d_deqp: case #233 P 39ms k2/30 c15533/15548 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.array_in_struct.float_vec4_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.array_in_struct.int_ivec4_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.array_in_struct.int_ivec4_both
+v3d_deqp: case #234 P 39ms k2/30 c15533/15548 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.array_in_struct.int_ivec4_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.array_in_struct.int_ivec4_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.array_in_struct.int_ivec4_fragment
+v3d_deqp: case #235 P 36ms k2/30 c15533/15548 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.array_in_struct.int_ivec4_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.array_in_struct.int_ivec4_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.array_in_struct.int_ivec4_vertex
+v3d_deqp: case #236 P 37ms k2/30 c15533/15548 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.array_in_struct.int_ivec4_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.array_in_struct.mat4_mat2_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.array_in_struct.mat4_mat2_both
+v3d_deqp: case #237 P 71ms k2/30 c15533/15549 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.array_in_struct.mat4_mat2_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.array_in_struct.mat4_mat2_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.array_in_struct.mat4_mat2_fragment
+v3d_deqp: case #238 P 43ms k2/30 c15533/15549 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.array_in_struct.mat4_mat2_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.array_in_struct.mat4_mat2_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.array_in_struct.mat4_mat2_vertex
+v3d_deqp: case #239 P 61ms k2/30 c15533/15549 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.array_in_struct.mat4_mat2_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.array_in_struct.uint_uvec4_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.array_in_struct.uint_uvec4_both
+v3d_deqp: case #240 P 39ms k2/30 c15533/15549 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.array_in_struct.uint_uvec4_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.array_in_struct.uint_uvec4_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.array_in_struct.uint_uvec4_fragment
+v3d_deqp: case #241 P 36ms k2/30 c15533/15549 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.array_in_struct.uint_uvec4_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.array_in_struct.uint_uvec4_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.array_in_struct.uint_uvec4_vertex
+v3d_deqp: case #242 P 38ms k2/30 c15533/15549 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.array_in_struct.uint_uvec4_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.bool_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.bool_both
+v3d_deqp: case #243 P 31ms k2/30 c15533/15549 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.bool_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.bool_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.bool_fragment
+v3d_deqp: case #244 P 29ms k2/30 c15533/15549 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.bool_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.bool_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.bool_vertex
+v3d_deqp: case #245 P 30ms k2/30 c15533/15549 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.bool_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.bvec2_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.bvec2_both
+v3d_deqp: case #246 P 30ms k2/30 c15533/15549 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.bvec2_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.bvec2_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.bvec2_fragment
+v3d_deqp: case #247 P 30ms k2/30 c15533/15549 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.bvec2_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.bvec2_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.bvec2_vertex
+v3d_deqp: case #248 P 30ms k2/30 c15533/15549 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.bvec2_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.bvec3_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.bvec3_both
+v3d_deqp: case #249 P 31ms k2/30 c15533/15549 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.bvec3_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.bvec3_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.bvec3_fragment
+v3d_deqp: case #250 P 30ms k2/30 c15533/15549 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.bvec3_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.bvec3_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.bvec3_vertex
+v3d_deqp: case #251 P 30ms k2/30 c15533/15549 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.bvec3_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.bvec4_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.bvec4_both
+v3d_deqp: case #252 P 31ms k2/30 c15533/15549 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.bvec4_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.bvec4_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.bvec4_fragment
+v3d_deqp: case #253 P 30ms k2/30 c15533/15549 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.bvec4_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.bvec4_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.bvec4_vertex
+v3d_deqp: case #254 P 31ms k2/30 c15533/15549 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.bvec4_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.float_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.float_both
+v3d_deqp: case #255 P 30ms k2/30 c15533/15549 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.float_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.float_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.float_fragment
+v3d_deqp: case #256 P 30ms k2/30 c15533/15549 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.float_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.float_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.float_vertex
+v3d_deqp: case #257 P 30ms k2/30 c15533/15549 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.float_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.int_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.int_both
+v3d_deqp: case #258 P 29ms k2/30 c15533/15549 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.int_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.int_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.int_fragment
+v3d_deqp: case #259 P 29ms k2/30 c15533/15549 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.int_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.int_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.int_vertex
+v3d_deqp: case #260 P 29ms k2/30 c15533/15549 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.int_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.ivec2_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.ivec2_both
+v3d_deqp: case #261 P 30ms k2/30 c15533/15549 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.ivec2_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.ivec2_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.ivec2_fragment
+v3d_deqp: case #262 P 30ms k2/30 c15533/15549 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.ivec2_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.ivec2_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.ivec2_vertex
+v3d_deqp: case #263 P 30ms k2/30 c15533/15549 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.ivec2_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.ivec3_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.ivec3_both
+v3d_deqp: case #264 P 30ms k2/30 c15533/15549 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.ivec3_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.ivec3_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.ivec3_fragment
+v3d_deqp: case #265 P 30ms k2/30 c15533/15549 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.ivec3_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.ivec3_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.ivec3_vertex
+v3d_deqp: case #266 P 30ms k2/30 c15533/15549 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.ivec3_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.ivec4_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.ivec4_both
+v3d_deqp: case #267 P 30ms k2/30 c15533/15549 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.ivec4_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.ivec4_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.ivec4_fragment
+v3d_deqp: case #268 P 30ms k2/30 c15533/15549 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.ivec4_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.ivec4_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.ivec4_vertex
+v3d_deqp: case #269 P 31ms k2/30 c15533/15549 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.ivec4_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat2_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat2_both
+v3d_deqp: case #270 P 30ms k2/30 c15533/15549 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat2_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat2_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat2_fragment
+v3d_deqp: case #271 P 30ms k2/30 c15533/15549 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat2_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat2_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat2_vertex
+v3d_deqp: case #272 P 31ms k2/30 c15533/15549 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat2_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat2x3_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat2x3_both
+v3d_deqp: case #273 P 31ms k2/30 c15533/15549 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat2x3_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat2x3_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat2x3_fragment
+v3d_deqp: case #274 P 31ms k2/30 c15533/15549 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat2x3_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat2x3_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat2x3_vertex
+v3d_deqp: case #275 P 31ms k2/30 c15533/15549 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat2x3_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat2x4_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat2x4_both
+v3d_deqp: case #276 P 32ms k2/30 c15533/15549 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat2x4_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat2x4_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat2x4_fragment
+v3d_deqp: case #277 P 31ms k2/30 c15533/15549 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat2x4_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat2x4_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat2x4_vertex
+v3d_deqp: case #278 P 31ms k2/30 c15533/15549 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat2x4_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat3_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat3_both
+v3d_deqp: case #279 P 32ms k2/30 c15533/15549 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat3_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat3_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat3_fragment
+v3d_deqp: case #280 P 31ms k2/30 c15533/15549 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat3_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat3_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat3_vertex
+v3d_deqp: case #281 P 31ms k2/30 c15533/15549 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat3_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat3x2_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat3x2_both
+v3d_deqp: case #282 P 31ms k2/30 c15533/15549 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat3x2_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat3x2_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat3x2_fragment
+v3d_deqp: case #283 P 31ms k2/30 c15533/15549 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat3x2_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat3x2_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat3x2_vertex
+v3d_deqp: case #284 P 31ms k2/30 c15533/15549 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat3x2_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat3x4_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat3x4_both
+v3d_deqp: case #285 P 34ms k2/30 c15533/15549 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat3x4_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat3x4_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat3x4_fragment
+v3d_deqp: case #286 P 31ms k2/30 c15533/15549 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat3x4_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat3x4_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat3x4_vertex
+v3d_deqp: case #287 P 33ms k2/30 c15533/15549 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat3x4_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat4_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat4_both
+v3d_deqp: case #288 P 34ms k2/30 c15533/15549 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat4_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat4_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat4_fragment
+v3d_deqp: case #289 P 31ms k2/30 c15533/15549 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat4_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat4_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat4_vertex
+v3d_deqp: case #290 P 33ms k2/30 c15533/15549 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat4_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat4x2_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat4x2_both
+v3d_deqp: case #291 P 32ms k2/30 c15533/15549 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat4x2_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat4x2_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat4x2_fragment
+v3d_deqp: case #292 P 31ms k2/30 c15533/15549 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat4x2_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat4x2_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat4x2_vertex
+v3d_deqp: case #293 P 32ms k2/30 c15533/15549 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat4x2_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat4x3_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat4x3_both
+v3d_deqp: case #294 P 33ms k2/30 c15533/15549 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat4x3_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat4x3_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat4x3_fragment
+v3d_deqp: case #295 P 32ms k2/30 c15533/15549 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat4x3_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat4x3_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat4x3_vertex
+v3d_deqp: case #296 P 32ms k2/30 c15533/15549 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.mat4x3_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.sampler2D_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.sampler2D_both
+v3d_deqp: case #297 P 32ms k2/30 c15533/15559 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.sampler2D_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.sampler2D_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.sampler2D_fragment
+v3d_deqp: case #298 P 32ms k2/30 c15533/15559 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.sampler2D_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.sampler2D_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.sampler2D_vertex
+v3d_deqp: case #299 P 32ms k2/30 c15533/15559 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.sampler2D_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.samplerCube_both'..
+  cube-bind: 0x10ad000 unit 0 kick 301 (draw)
+  cube(draw) @0x10ad000 32x32 x6: fmt 0, cpu 0x1e1ac000 - not dumped
+  cube-bind: 0x10ad000 unit 0 kick 301 (draw)
+  cube(draw) @0x10ad000 32x32 x6: fmt 0, cpu 0x1e1ac000 - not dumped
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.samplerCube_both
+v3d_deqp: case #300 P 53ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.samplerCube_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.samplerCube_fragment'..
+  cube-bind: 0x10ad000 unit 0 kick 302 (draw)
+  cube(draw) @0x10ad000 32x32 x6: fmt 0, cpu 0x1e1ac000 - not dumped
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.samplerCube_fragment
+v3d_deqp: case #301 P 42ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.samplerCube_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.samplerCube_vertex'..
+  cube-bind: 0x10ad000 unit 0 kick 303 (draw)
+  cube(draw) @0x10ad000 32x32 x6: fmt 0, cpu 0x1e1ac000 - not dumped
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.samplerCube_vertex
+v3d_deqp: case #302 P 42ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.samplerCube_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.uint_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.uint_both
+v3d_deqp: case #303 P 30ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.uint_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.uint_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.uint_fragment
+v3d_deqp: case #304 P 30ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.uint_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.uint_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.uint_vertex
+v3d_deqp: case #305 P 29ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.uint_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.uvec2_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.uvec2_both
+v3d_deqp: case #306 P 30ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.uvec2_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.uvec2_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.uvec2_fragment
+v3d_deqp: case #307 P 30ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.uvec2_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.uvec2_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.uvec2_vertex
+v3d_deqp: case #308 P 30ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.uvec2_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.uvec3_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.uvec3_both
+v3d_deqp: case #309 P 30ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.uvec3_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.uvec3_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.uvec3_fragment
+v3d_deqp: case #310 P 30ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.uvec3_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.uvec3_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.uvec3_vertex
+v3d_deqp: case #311 P 30ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.uvec3_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.uvec4_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.uvec4_both
+v3d_deqp: case #312 P 31ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.uvec4_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.uvec4_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.uvec4_fragment
+v3d_deqp: case #313 P 30ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.uvec4_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.uvec4_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.uvec4_vertex
+v3d_deqp: case #314 P 30ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.uvec4_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.vec2_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.vec2_both
+v3d_deqp: case #315 P 30ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.vec2_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.vec2_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.vec2_fragment
+v3d_deqp: case #316 P 30ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.vec2_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.vec2_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.vec2_vertex
+v3d_deqp: case #317 P 29ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.vec2_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.vec3_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.vec3_both
+v3d_deqp: case #318 P 30ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.vec3_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.vec3_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.vec3_fragment
+v3d_deqp: case #319 P 30ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.vec3_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.vec3_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.vec3_vertex
+v3d_deqp: case #320 P 30ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.vec3_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.vec4_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.vec4_both
+v3d_deqp: case #321 P 30ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.vec4_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.vec4_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.vec4_fragment
+v3d_deqp: case #322 P 30ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.vec4_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic.vec4_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic.vec4_vertex
+v3d_deqp: case #323 P 31ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic.vec4_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.bool_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.bool_both
+v3d_deqp: case #324 P 31ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.bool_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.bool_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.bool_fragment
+v3d_deqp: case #325 P 31ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.bool_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.bool_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.bool_vertex
+v3d_deqp: case #326 P 32ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.bool_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.bvec4_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.bvec4_both
+v3d_deqp: case #327 P 37ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.bvec4_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.bvec4_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.bvec4_fragment
+v3d_deqp: case #328 P 33ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.bvec4_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.bvec4_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.bvec4_vertex
+v3d_deqp: case #329 P 36ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.bvec4_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.float_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.float_both
+v3d_deqp: case #330 P 32ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.float_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.float_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.float_fragment
+v3d_deqp: case #331 P 32ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.float_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.float_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.float_vertex
+v3d_deqp: case #332 P 31ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.float_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.int_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.int_both
+v3d_deqp: case #333 P 31ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.int_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.int_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.int_fragment
+v3d_deqp: case #334 P 32ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.int_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.int_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.int_vertex
+v3d_deqp: case #335 P 31ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.int_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.ivec4_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.ivec4_both
+v3d_deqp: case #336 P 34ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.ivec4_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.ivec4_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.ivec4_fragment
+v3d_deqp: case #337 P 33ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.ivec4_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.ivec4_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.ivec4_vertex
+v3d_deqp: case #338 P 33ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.ivec4_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.mat4_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.mat4_both
+v3d_deqp: case #339 P 51ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.mat4_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.mat4_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.mat4_fragment
+v3d_deqp: case #340 P 37ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.mat4_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.mat4_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.mat4_vertex
+v3d_deqp: case #341 P 46ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.mat4_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.sampler2D_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.sampler2D_both
+v3d_deqp: case #342 P 36ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.sampler2D_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.sampler2D_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.sampler2D_fragment
+v3d_deqp: case #343 P 34ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.sampler2D_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.sampler2D_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.sampler2D_vertex
+v3d_deqp: case #344 P 35ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.sampler2D_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.uint_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.uint_both
+v3d_deqp: case #345 P 32ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.uint_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.uint_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.uint_fragment
+v3d_deqp: case #346 P 31ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.uint_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.uint_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.uint_vertex
+v3d_deqp: case #347 P 32ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.uint_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.uvec4_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.uvec4_both
+v3d_deqp: case #348 P 34ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.uvec4_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.uvec4_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.uvec4_fragment
+v3d_deqp: case #349 P 32ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.uvec4_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.uvec4_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.uvec4_vertex
+v3d_deqp: case #350 P 34ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.uvec4_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.vec4_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.vec4_both
+v3d_deqp: case #351 P 34ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.vec4_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.vec4_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.vec4_fragment
+v3d_deqp: case #352 P 33ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.vec4_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.vec4_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.vec4_vertex
+v3d_deqp: case #353 P 33ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic_array.vec4_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic_struct.bool_bvec4_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic_struct.bool_bvec4_both
+v3d_deqp: case #354 P 35ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic_struct.bool_bvec4_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic_struct.bool_bvec4_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic_struct.bool_bvec4_fragment
+v3d_deqp: case #355 P 34ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic_struct.bool_bvec4_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic_struct.bool_bvec4_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic_struct.bool_bvec4_vertex
+v3d_deqp: case #356 P 34ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic_struct.bool_bvec4_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic_struct.float_vec4_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic_struct.float_vec4_both
+v3d_deqp: case #357 P 35ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic_struct.float_vec4_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic_struct.float_vec4_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic_struct.float_vec4_fragment
+v3d_deqp: case #358 P 33ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic_struct.float_vec4_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic_struct.float_vec4_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic_struct.float_vec4_vertex
+v3d_deqp: case #359 P 34ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic_struct.float_vec4_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic_struct.int_ivec4_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic_struct.int_ivec4_both
+v3d_deqp: case #360 P 34ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic_struct.int_ivec4_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic_struct.int_ivec4_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic_struct.int_ivec4_fragment
+v3d_deqp: case #361 P 33ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic_struct.int_ivec4_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic_struct.int_ivec4_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic_struct.int_ivec4_vertex
+v3d_deqp: case #362 P 34ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic_struct.int_ivec4_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic_struct.mat4_mat2_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic_struct.mat4_mat2_both
+v3d_deqp: case #363 P 40ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic_struct.mat4_mat2_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic_struct.mat4_mat2_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic_struct.mat4_mat2_fragment
+v3d_deqp: case #364 P 35ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic_struct.mat4_mat2_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic_struct.mat4_mat2_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic_struct.mat4_mat2_vertex
+v3d_deqp: case #365 P 38ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic_struct.mat4_mat2_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic_struct.uint_uvec4_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic_struct.uint_uvec4_both
+v3d_deqp: case #366 P 34ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic_struct.uint_uvec4_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic_struct.uint_uvec4_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic_struct.uint_uvec4_fragment
+v3d_deqp: case #367 P 33ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic_struct.uint_uvec4_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.basic_struct.uint_uvec4_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.basic_struct.uint_uvec4_vertex
+v3d_deqp: case #368 P 34ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.basic_struct.uint_uvec4_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.multiple_basic.both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.multiple_basic.both
+v3d_deqp: case #369 P 39ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.multiple_basic.both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.multiple_basic.fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.multiple_basic.fragment
+v3d_deqp: case #370 P 33ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.multiple_basic.fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.multiple_basic.vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.multiple_basic.vertex
+v3d_deqp: case #371 P 36ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.multiple_basic.vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.multiple_basic_array.both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.multiple_basic_array.both
+v3d_deqp: case #372 P 39ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.multiple_basic_array.both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.multiple_basic_array.fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.multiple_basic_array.fragment
+v3d_deqp: case #373 P 35ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.multiple_basic_array.fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.multiple_basic_array.vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.multiple_basic_array.vertex
+v3d_deqp: case #374 P 36ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.multiple_basic_array.vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.multiple_nested_structs_arrays.both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.multiple_nested_structs_arrays.both
+v3d_deqp: case #375 P 62ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.multiple_nested_structs_arrays.both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.multiple_nested_structs_arrays.fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.multiple_nested_structs_arrays.fragment
+v3d_deqp: case #376 P 46ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.multiple_nested_structs_arrays.fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.multiple_nested_structs_arrays.vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.multiple_nested_structs_arrays.vertex
+v3d_deqp: case #377 P 53ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.multiple_nested_structs_arrays.vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.nested_structs_arrays.bool_bvec4_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.nested_structs_arrays.bool_bvec4_both
+v3d_deqp: case #378 P 47ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.nested_structs_arrays.bool_bvec4_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.nested_structs_arrays.bool_bvec4_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.nested_structs_arrays.bool_bvec4_fragment
+v3d_deqp: case #379 P 39ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.nested_structs_arrays.bool_bvec4_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.nested_structs_arrays.bool_bvec4_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.nested_structs_arrays.bool_bvec4_vertex
+v3d_deqp: case #380 P 43ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.nested_structs_arrays.bool_bvec4_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.nested_structs_arrays.float_vec4_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.nested_structs_arrays.float_vec4_both
+v3d_deqp: case #381 P 43ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.nested_structs_arrays.float_vec4_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.nested_structs_arrays.float_vec4_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.nested_structs_arrays.float_vec4_fragment
+v3d_deqp: case #382 P 38ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.nested_structs_arrays.float_vec4_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.nested_structs_arrays.float_vec4_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.nested_structs_arrays.float_vec4_vertex
+v3d_deqp: case #383 P 40ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.nested_structs_arrays.float_vec4_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.nested_structs_arrays.int_ivec4_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.nested_structs_arrays.int_ivec4_both
+v3d_deqp: case #384 P 42ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.nested_structs_arrays.int_ivec4_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.nested_structs_arrays.int_ivec4_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.nested_structs_arrays.int_ivec4_fragment
+v3d_deqp: case #385 P 38ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.nested_structs_arrays.int_ivec4_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.nested_structs_arrays.int_ivec4_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.nested_structs_arrays.int_ivec4_vertex
+v3d_deqp: case #386 P 39ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.nested_structs_arrays.int_ivec4_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.nested_structs_arrays.mat4_mat2_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.nested_structs_arrays.mat4_mat2_both
+v3d_deqp: case #387 P 82ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.nested_structs_arrays.mat4_mat2_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.nested_structs_arrays.mat4_mat2_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.nested_structs_arrays.mat4_mat2_fragment
+v3d_deqp: case #388 P 48ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.nested_structs_arrays.mat4_mat2_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.nested_structs_arrays.mat4_mat2_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.nested_structs_arrays.mat4_mat2_vertex
+v3d_deqp: case #389 P 69ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.nested_structs_arrays.mat4_mat2_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.nested_structs_arrays.uint_uvec4_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.nested_structs_arrays.uint_uvec4_both
+v3d_deqp: case #390 P 42ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.nested_structs_arrays.uint_uvec4_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.nested_structs_arrays.uint_uvec4_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.nested_structs_arrays.uint_uvec4_fragment
+v3d_deqp: case #391 P 38ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.nested_structs_arrays.uint_uvec4_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.nested_structs_arrays.uint_uvec4_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.nested_structs_arrays.uint_uvec4_vertex
+v3d_deqp: case #392 P 39ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.nested_structs_arrays.uint_uvec4_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.struct_in_array.bool_bvec4_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.struct_in_array.bool_bvec4_both
+v3d_deqp: case #393 P 42ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.struct_in_array.bool_bvec4_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.struct_in_array.bool_bvec4_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.struct_in_array.bool_bvec4_fragment
+v3d_deqp: case #394 P 36ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.struct_in_array.bool_bvec4_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.struct_in_array.bool_bvec4_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.struct_in_array.bool_bvec4_vertex
+v3d_deqp: case #395 P 39ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.struct_in_array.bool_bvec4_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.struct_in_array.float_vec4_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.struct_in_array.float_vec4_both
+v3d_deqp: case #396 P 39ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.struct_in_array.float_vec4_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.struct_in_array.float_vec4_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.struct_in_array.float_vec4_fragment
+v3d_deqp: case #397 P 36ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.struct_in_array.float_vec4_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.struct_in_array.float_vec4_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.struct_in_array.float_vec4_vertex
+v3d_deqp: case #398 P 37ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.struct_in_array.float_vec4_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.struct_in_array.int_ivec4_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.struct_in_array.int_ivec4_both
+v3d_deqp: case #399 P 38ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.struct_in_array.int_ivec4_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.struct_in_array.int_ivec4_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.struct_in_array.int_ivec4_fragment
+v3d_deqp: case #400 P 35ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.struct_in_array.int_ivec4_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.struct_in_array.int_ivec4_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.struct_in_array.int_ivec4_vertex
+v3d_deqp: case #401 P 36ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.struct_in_array.int_ivec4_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.struct_in_array.mat4_mat2_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.struct_in_array.mat4_mat2_both
+v3d_deqp: case #402 P 60ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.struct_in_array.mat4_mat2_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.struct_in_array.mat4_mat2_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.struct_in_array.mat4_mat2_fragment
+v3d_deqp: case #403 P 41ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.struct_in_array.mat4_mat2_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.struct_in_array.mat4_mat2_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.struct_in_array.mat4_mat2_vertex
+v3d_deqp: case #404 P 52ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.struct_in_array.mat4_mat2_vertex
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.struct_in_array.uint_uvec4_both'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.struct_in_array.uint_uvec4_both
+v3d_deqp: case #405 P 38ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.struct_in_array.uint_uvec4_both
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.struct_in_array.uint_uvec4_fragment'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.struct_in_array.uint_uvec4_fragment
+v3d_deqp: case #406 P 36ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.struct_in_array.uint_uvec4_fragment
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.uniform_api.value.initial.render.struct_in_array.uint_uvec4_vertex'..
+deqp: Pass dEQP-GLES3.functional.uniform_api.value.initial.render.struct_in_array.uint_uvec4_vertex
+v3d_deqp: case #407 P 36ms k2/30 c15533/15606 r0 dEQP-GLES3.functional.uniform_api.value.initial.render.struct_in_array.uint_uvec4_vertex
+  Pass (Passed)
+
+DONE!
+
+Test run totals:
+  Passed:        408/408 (100.0%)
+  Failed:        0/408 (0.0%)
+  Not supported: 0/408 (0.0%)
+  Warnings:      0/408 (0.0%)
+  Waived:        0/408 (0.0%)
+deqp: done: 408 passed, 0 failed, 0 not supported, 0 warnings, complete=1
+deqp: summary: 408 cases begun, 408 with a result, 0 without
+v3d_deqp DONE, all passed: build b1b5b845, filter 'dEQP-GLES3.functional.uniform_api.value.initial.*'
+  408 cases in 14845 ms, record at 14 s after boot, reset at ~250 s
+  totals: P 408  (R: not passed, a draw was refused in it; passed with one refused: 0)
+  done: 408 passed, 0 failed, 0 not supported, 0 warnings, complete=1
+  summary: 408 cases begun, 408 with a result, 0 without
+  keep region (KiB, of 1024): after #0 2, most 2 at #0, last 2, high-water 30; slowest #0 156 ms
+  carve-out (KiB, of 48636): after #0 15532, last 15533, high-water 15606
+  jobs: slow in 0 cases; no job hung or timed out
+BASELINE (first completed) job 1: core_sts 0x0 hub_sts 0x0 err 0x1000 ct0 cs 0x0 ea 0x201011 ca 0x201011 ra 0x0 qba 0x201000 qea 0x201011 ct1 ca 0x223097 ra 0x223096 qba 0x223000 qea 0x223097
+FIRST FAILURE: none (no timeout)
+slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+binner out of memory: 0 jobs (2 overflow blocks of 256 KiB, CONFIG_YAKOGL_V3D_BIN_OVERFLOW_BLOCKS; each such job ends in a GPU reset)
+binning by interrupt (IRQ 106): 408 interrupts, 0 overflow blocks fed by the ISR
+carve-out: 15377408 bytes used now, 15980544 at most, of 49803264; 0 frees held
+osal(v3d): pending frees: high-water 0/256, waits 0 (opt-in 0), refused 0 (0 unsubmitted, 0 no wait, 0 KiB kept)
+carve-out find: 398 calls, 18568 map reads (46 a call, at most 1153 in one); free runs 2, longest 34423040 bytes; small blocks from the top: off (CONFIG_YAKOGL_V3D_CARVEOUT_TOP_BELOW 0)
+packets (packet skip on, CONFIG_YAKOGL_V3D_PACK_SKIP): 408 jobs ended; emitted 3780, skipped 0; groups compared 0, mismatches 0
+allocations refused for lack of GPU memory: 0 (0 size slots; the line is printed at each size's 1st, 10th, 100th, ... refusal)
+UIFCFG 0x00000045 (read at init)
+log: 0 causes logged once, 0 repeats not printed
+case order: P pass F fail R refused N not supported Q quality C compat E resource I internal X crash T timeout
+    0 PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP
+  128 PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP
+  256 PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP
+  384 PPPPPPPPPPPPPPPPPPPPPPPP
+driver: osal(v3d): V3D 4.2, 8 QPUs, VPM 65536 bytes, MMU yes (identify 0)
+driver: osal(v3d): UIFCFG 0x00000045
+driver: osal(v3d): ready: carve-out 48 MiB at phys 0x2f09000, GPU VA 0x181000..0x3100000
+driver: ... 6 more lines (UART)
+v3d_deqp: build b1b5b845 DONE, all passed: 408 cases, P 408 F 0 R 0 N 0 other 0
