@@ -10,8 +10,26 @@
 #   tools/cts/board-stage.sh <board> deqp     the whole dEQP-GLES2 tree
 #   tools/cts/board-stage.sh am62p ms4        the AM62P's 4x multisample tree
 #   tools/cts/board-stage.sh am62p gles3      the AM62P's whole dEQP-GLES3 tree
+#   tools/cts/board-stage.sh x2 common        the Armadillo-X2's gl_test image (build only)
+#   tools/cts/board-stage.sh x2 deqp          the Armadillo-X2's dEQP-GLES2 tree image (build only)
 #
-# <board> is am62p, imx8mp or pi4, as tools/board.sh names them. The images
+# The X2 (the Armadillo-X2, tools/board.sh's kexec-dev development board) is
+# staged as builds only: this stage runs no board command for x2. It reads no
+# BOARD_HOST and no BOARD_UART, sets no BOARD_BOOT (board.sh x2 is kexec-dev;
+# the crash route is held by a runner, never by a stage), and clears no
+# one-shot images (the X2 has no sudo and no /var/yakogl; board.sh x2 stages
+# into /tmp/yakogl-kexec itself). The images are the imx8mp build scripts with
+# their X2 selection (IMX8MP_BOARD=x2, tools/cts/imx8mp-env.sh):
+# armadillo_x2/mimx8ml8/a53 with the watchdog marker ("gc_wdog_arm: armed")
+# and the console from the sample's board conf (UART2), written under
+# $IMX8MP_OUT/x2/ (IMX8MP_IMG_OUT) -- an X2 build never writes the Verdin's
+# image directories beside it. The dependency layout is the imx8mp one (the
+# same host entries; GLMARK2_SRC is not read: glmark2 has no Armadillo-X2
+# image, so x2 common builds the gl_test row alone). The images end at
+# $IMX8MP_OUT/x2/gltest-<sha8> and $IMX8MP_OUT/x2/deqp-<sha8>; running them is
+# tools/board.sh x2 (a person or the board runner holds the board).
+#
+# <board> is am62p, imx8mp, pi4 or x2, as tools/board.sh names them. The images
 # are built from HEAD (build/common/<board>-<sha8>, build/deqp/<board>-<sha8>)
 # and the records go to records/<board>/{common,deqp,deqp-ms4}-<sha8>; a run
 # that stopped resumes there (board.sh skips a row with a finished run). The
@@ -69,17 +87,19 @@ clear_stale_once() {
     fi
     return 0
 }
-# needed_deps <layout> <what>: the deps.toml entries a stage reads, one per
-# line. Read from what the builders take from the environment:
+# needed_deps <layout> <what> [board]: the deps.toml entries a stage reads,
+# one per line. Read from what the builders take from the environment:
 #   every image   the west workspace (cts-build-zephyr.sh, common-images.sh)
-#   common        the glmark2 source (common-images.sh)
+#   common        the glmark2 source (common-images.sh; not board x2: glmark2
+#                 has no Armadillo-X2 image, x2 common builds gl_test alone)
 #   am62p         the PowerVR firmware header (copied below, never committed)
-#   imx8mp        IMX8MP_OUT, the image directory of imx8mp-env.sh
-#   deqp, ms4     stage 1: DEQP_WORK (am62p, pi4) or DEQP_STAGE1 (imx8mp)
+#   imx8mp        IMX8MP_OUT, the image directory of imx8mp-env.sh (board x2
+#                 uses the same layout: its images go to $IMX8MP_OUT/x2/)
+#   deqp, ms4     stage 1: DEQP_WORK (am62p, pi4) or DEQP_STAGE1 (imx8mp, x2)
 needed_deps() {
-    local layout=$1 what=$2
+    local layout=$1 what=$2 board=${3:-}
     printf '%s\n' ZEPHYR_WS WEST_VENV ZEPHYR_SDK_INSTALL_DIR
-    [ "$what" = common ] && echo GLMARK2_SRC
+    [ "$what" = common ] && [ "$board" != x2 ] && echo GLMARK2_SRC
     [ "$layout" = am62p ] && echo PVR_FW_BLOB
     [ "$layout" = imx8mp ] && echo IMX8MP_OUT
     if [ "$what" != common ]; then
@@ -95,7 +115,7 @@ check_deps() {
     local layout=$1 what=$2 check rc=0 need line name missing=()
     check=$(tools/cts/deps-env.sh --check "$layout") || rc=$?
     [ "$rc" = 0 ] && return 0
-    need=$(needed_deps "$layout" "$what")
+    need=$(needed_deps "$layout" "$what" "${3:-}")
     while read -r line; do
         case "$line" in
         missing*) name=$(awk '{print $2}' <<< "$line"); grep -qx "$name" <<< "$need" && missing+=("$line") ;;
@@ -112,7 +132,7 @@ check_deps() {
 }
 [ "${BOARD_STAGE_SOURCE_ONLY:-}" = 1 ] && return 0 2>/dev/null
 
-usage() { echo "usage: tools/cts/board-stage.sh am62p|imx8mp|pi4 common|deqp|ms4|gles3" >&2; exit 2; }
+usage() { echo "usage: tools/cts/board-stage.sh am62p|imx8mp|pi4 common|deqp|ms4|gles3 | x2 common|deqp" >&2; exit 2; }
 die() { echo "board-stage.sh: $1" >&2; exit "${2:-2}"; }
 [ $# -eq 2 ] || usage
 board=$1 what=$2
@@ -120,9 +140,12 @@ case "$board" in
 am62p) layout=am62p key=AM62P ;;
 imx8mp) layout=imx8mp key=IMX8MP ;;
 pi4) layout=rpi_4b key=RPI4 ;;
+x2) layout=imx8mp key=X2 ;;   # same host dependency layout as the Verdin (imx8mp-env.sh)
 *) usage ;;
 esac
-case "$what" in common | deqp) ;; ms4 | gles3) [ "$board" = am62p ] || die "$what is the AM62P's tree only" ;; *) usage ;; esac
+case "$what" in common | deqp) ;; ms4 | gles3)
+    [ "$board" = x2 ] && die "$what is the AM62P's tree; the x2 stage builds the common set's gl_test image and the dEQP-GLES2 tree image, and runs no board"
+    [ "$board" = am62p ] || die "$what is the AM62P's tree only" ;; *) usage ;; esac
 
 cd "$(git rev-parse --show-toplevel)" || die "not in the repository"
 H8=$(git rev-parse --short=8 HEAD)
@@ -148,8 +171,24 @@ if [ "$what" = gles3 ]; then
     fi
 fi
 
+# x2: its dry run names the two X2 outputs before the layout is read (as the
+# gles3 one above); nothing is built, no board is touched, no deps needed.
+if [ "$board" = x2 ] && [ "${BOARD_STAGE_DRY_RUN:-}" = 1 ]; then
+    echo "board-stage.sh: x2 $what at $H8 (dry run: nothing is built; the x2 stage runs no board)"
+    case "$what" in
+    common)
+        echo "board-stage.sh: x2 common builds the gl_test image alone: glmark2 has no Armadillo-X2 image"
+        echo "board-stage.sh\$ IMX8MP_BOARD=x2 tools/cts/imx8mp-gltest-build.sh gltest-$H8 0"
+        echo "  -> \$IMX8MP_OUT/x2/gltest-$H8/zephyr/zephyr.bin (arms WDOG1: \"gc_wdog_arm: armed\")" ;;
+    deqp)
+        echo "board-stage.sh\$ IMX8MP_BOARD=x2 tools/cts/imx8mp-deqp-build.sh deqp-$H8 'dEQP-GLES2.info.*' --table tools/cts/imx8mp-full-tree.txt"
+        echo "  -> \$IMX8MP_OUT/x2/deqp-$H8/zephyr/zephyr.bin (arms WDOG1: \"gc_wdog_arm: armed\")" ;;
+    esac
+    exit 0
+fi
+
 # the dependency layout: every entry or nothing
-if ! check_deps "$layout" "$what"; then
+if ! check_deps "$layout" "$what" "$board"; then
     die "the dependency layout is incomplete on $(hostname -s) (above)"
 fi
 set -a
@@ -162,33 +201,57 @@ if [ "$board" = am62p ] && [ ! -e driver/src/fw/pvr_fw_blob.h ]; then
     mkdir -p driver/src/fw && cp "$PVR_FW_BLOB" driver/src/fw/ || die "cannot copy PVR_FW_BLOB ($PVR_FW_BLOB) to driver/src/fw/"
 fi
 
-# the board, from the leases when not given
-ssh_var=RESOURCE_${key}_SSH
-export BOARD_HOST=${BOARD_HOST:-${!ssh_var:-}}
-[ -n "$BOARD_HOST" ] || die "no board: set BOARD_HOST, or lease target:$board ($ssh_var)"
-if [ "$board" != imx8mp ]; then
-    chost=RESOURCE_${key}_CONSOLE_HOST cport=RESOURCE_${key}_CONSOLE_PORT
-    if [ -z "${BOARD_UART:-}" ] && [ -n "${!chost:-}" ] && [ -n "${!cport:-}" ]; then
-        BOARD_UART=${!chost}:${!cport}
+# the board, from the leases when not given. The x2 stage touches no board
+# (header): no lease, no console, no BOARD_BOOT (board.sh x2 is kexec-dev), no
+# clear_stale_once (the X2 has no sudo and no /var/yakogl); its builds run
+# under the build scripts' X2 selection instead.
+if [ "$board" = x2 ]; then
+    export IMX8MP_BOARD=x2
+else
+    ssh_var=RESOURCE_${key}_SSH
+    export BOARD_HOST=${BOARD_HOST:-${!ssh_var:-}}
+    [ -n "$BOARD_HOST" ] || die "no board: set BOARD_HOST, or lease target:$board ($ssh_var)"
+    if [ "$board" != imx8mp ]; then
+        chost=RESOURCE_${key}_CONSOLE_HOST cport=RESOURCE_${key}_CONSOLE_PORT
+        if [ -z "${BOARD_UART:-}" ] && [ -n "${!chost:-}" ] && [ -n "${!cport:-}" ]; then
+            BOARD_UART=${!chost}:${!cport}
+        fi
+        export BOARD_UART=${BOARD_UART:-}
+        [ -n "$BOARD_UART" ] || die "no console: set BOARD_UART, or lease target:$board-console ($chost, $cport)"
     fi
-    export BOARD_UART=${BOARD_UART:-}
-    [ -n "$BOARD_UART" ] || die "no console: set BOARD_UART, or lease target:$board-console ($chost, $cport)"
+    [ "$board" = pi4 ] || export BOARD_BOOT=${BOARD_BOOT:-uboot-mmc}
+    if [ "$board" = pi4 ] && [ -z "${BOARD_HDMI_TIMINGS:-}" ]; then
+        die "set BOARD_HDMI_TIMINGS (the panel's hdmi_timings, tools/board.sh)"
+    fi
+    [ "$board" = pi4 ] || clear_stale_once   # the Pi 4 boots by tryboot: nothing is staged on its eMMC
 fi
-[ "$board" = pi4 ] || export BOARD_BOOT=${BOARD_BOOT:-uboot-mmc}
-if [ "$board" = pi4 ] && [ -z "${BOARD_HDMI_TIMINGS:-}" ]; then
-    die "set BOARD_HDMI_TIMINGS (the panel's hdmi_timings, tools/board.sh)"
-fi
-
-[ "$board" = pi4 ] || clear_stale_once   # the Pi 4 boots by tryboot: nothing is staged on its eMMC
 echo "board-stage.sh: $board $what at $H8 ($(git describe --always --dirty 2>/dev/null || echo unknown))"
 run() { echo "board-stage.sh\$ $*"; "$@"; }
 case "$what" in
 common)
-    run tools/cts/cts-common.sh "$board" build "build/common/$board-$H8" || die "common build failed" 1
-    run tools/cts/cts-common.sh "$board" run "build/common/$board-$H8" "records/$board/common-$H8" || die "common run failed" 1
+    if [ "$board" = x2 ]; then
+        # the common set's gl_test row for the X2 (the sweep configuration;
+        # one case with SEL=n, the set with SEL=256, tools/board.sh x2 run).
+        # glmark2 has no Armadillo-X2 image: named, not silently skipped.
+        echo "board-stage.sh: x2 common: glmark2 has no Armadillo-X2 image, building the gl_test image alone"
+        run tools/cts/imx8mp-gltest-build.sh "gltest-$H8" 0 ||
+            die "X2 gl_test image build failed ($IMX8MP_OUT/x2/gltest-$H8.log)" 1
+        echo "board-stage.sh: X2 image: $IMX8MP_OUT/x2/gltest-$H8/zephyr/zephyr.bin"
+    else
+        run tools/cts/cts-common.sh "$board" build "build/common/$board-$H8" || die "common build failed" 1
+        run tools/cts/cts-common.sh "$board" run "build/common/$board-$H8" "records/$board/common-$H8" || die "common run failed" 1
+    fi
     ;;
 deqp)
     case "$board" in
+    x2)
+        # the whole dEQP-GLES2 tree as one table image (29 rows, selector i);
+        # running it is `TREE_IMAGE=$IMX8MP_OUT/x2/deqp-$H8/zephyr/zephyr.bin
+        # tools/board.sh x2 tree` -- a board step, never this stage.
+        run tools/cts/imx8mp-deqp-build.sh "deqp-$H8" 'dEQP-GLES2.info.*' --table tools/cts/imx8mp-full-tree.txt ||
+            die "X2 dEQP image build failed ($IMX8MP_OUT/x2/deqp-$H8.log)" 1
+        echo "board-stage.sh: X2 image: $IMX8MP_OUT/x2/deqp-$H8/zephyr/zephyr.bin"
+        ;;
     am62p)
         mkdir -p "build/deqp/am62p-$H8"
         echo "board-stage.sh\$ tools/cts/am62p-deqp-images.sh tools/cts/am62p-full-tree.txt build/deqp/am62p-$H8 $H8 > build/deqp/am62p-$H8/build.out"
