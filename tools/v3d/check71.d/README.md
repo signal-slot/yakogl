@@ -38,6 +38,7 @@ Not here: the 7.1 Rust lib tests (`isa71`, `codec71`, `listing71`, `golden71`,
 
 | script | checks |
 | --- | --- |
+| `clif_cmp.sh` | self-test of `tools/v3d/clif_cmp.py` on `shim71/clear.clif`: equal to itself; a changed field, a missing packet and a changed address are found; the field and the addresses are equal once ignored |
 | `counts71.sh` | `qpu_counts_71.tsv` is the per-program count table of `qpu_corpus_71.txt` (header totals, rows, sorted unique words) |
 | `shim71.sh` | every packet in `tools/v3d/shim71/*.clif` is a command of Mesa's V3D 7.1 packet spec |
 
