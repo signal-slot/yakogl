@@ -15,6 +15,7 @@ img=$1
 for f in "$IMX8MP_OUT/$img/zephyr/zephyr.bin" "$IMX8MP_OUT/$img/zephyr/zephyr.elf" "$IMX8MP_OUT/$img.table.conf" \
 	"$s1/build/modules/gles3/libdeqp-gles3-package.a" \
 	"$s1/build/modules/gles3/functional/libdeqp-gles3-functional.a"; do
+	[ -f "$f" ] || { echo "$0: missing artefact: $f" >&2; exit 1; }
 	printf '%s %s %s\n' "$(stat -c %s "$f")" "$(sha256sum "$f" | cut -d' ' -f1)" "$f"
 done
 for k in CONFIG_DEQP_REPORT_ES2 CONFIG_YAKOGL_REPORT_ES2; do
