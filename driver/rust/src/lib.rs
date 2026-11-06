@@ -19,7 +19,8 @@
 //! - [`gpu`]: the OS layer under vendored GPU code: the PowerVR DDK's
 //!   `rgxlayer.h` ([`gpu::pvr::rgxlayer`], feature `pvr`); and the
 //!   Vivante GC7000 kernel side ([`gpu::vivante`], feature `vivante`).
-//! - [`firmware`]: the SCMI codec (Arm DEN0056), no SoC ids.
+//! - [`firmware`]: the SCMI codec (Arm DEN0056) and OP-TEE's message
+//!   protocol as its transport, no SoC ids.
 //! - [`mmio`]: register access; [`env`]: the services the OS lends.
 //! - [`aarch64`]: the CPU's own registers an image entered from Linux needs
 //!   (the GICv3 EOI mode) and PSCI `SYSTEM_RESET`.
