@@ -61,6 +61,8 @@ pub mod regs;
 mod c_golden;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_st;
 
 use core::ffi::c_void;
 
