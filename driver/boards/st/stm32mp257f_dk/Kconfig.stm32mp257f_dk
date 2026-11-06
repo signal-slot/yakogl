@@ -1,0 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+
+config BOARD_STM32MP257F_DK
+	select SOC_STM32MP257FXX_A35 if BOARD_STM32MP257F_DK_STM32MP257FXX_A35

@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+
+if SOC_SERIES_STM32MP2X_A35
+
+# GIC-400: 32 private interrupts and the SPIs; the highest SPI Linux's
+# tree names is the PMU's, 368 (stm32mp251.dtsi, "arm,cortex-a35-pmu").
+config NUM_IRQS
+	default 416
+
+# A compile-time placeholder only: the arch timer driver replaces it with
+# CNTFRQ_EL0 at boot (TIMER_READS_ITS_FREQUENCY_AT_RUNTIME, Kconfig).
+config SYS_CLOCK_HW_CYCLES_PER_SEC
+	default 64000000
+
+endif # SOC_SERIES_STM32MP2X_A35

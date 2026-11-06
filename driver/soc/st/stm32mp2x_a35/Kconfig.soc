@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+#
+# STM32MP257F: 2x Cortex-A35 (this SoC), a Cortex-M33 (Zephyr's
+# SOC_STM32MP257FXX_M33), a Vivante GC (GCNANOULTRA31_VIP2) GPU.
+
+config SOC_FAMILY_ST_MPU
+	bool
+
+config SOC_FAMILY
+	default "st_mpu" if SOC_FAMILY_ST_MPU
+
+config SOC_SERIES_STM32MP2X_A35
+	bool
+	select SOC_FAMILY_ST_MPU
+
+config SOC_SERIES
+	default "stm32mp2x_a35" if SOC_SERIES_STM32MP2X_A35
+
+config SOC_STM32MP257FXX_A35
+	bool
+	select SOC_SERIES_STM32MP2X_A35
+
+config SOC
+	default "stm32mp257fxx_a35" if SOC_STM32MP257FXX_A35

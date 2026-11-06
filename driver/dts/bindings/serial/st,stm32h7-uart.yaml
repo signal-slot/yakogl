@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+
+description: |
+  STM32 USART of the STM32H7 register layout as Linux names it on the
+  STM32MP2 (arch/arm64/boot/dts/st/stm32mp251.dtsi, "st,stm32h7-uart").
+  On the STM32MP257F's Cortex-A35 it is driven by the polled driver in
+  driver/soc/st/stm32mp2x_a35 on the line setup the previous boot stage
+  left (no clocks, resets or pins are described or touched). Zephyr's own
+  STM32 USART bindings (st,stm32-uart and friends) require the STM32 clock
+  tree, a reset controller and pinctrl, which the A35 build does not have.
+
+compatible: "st,stm32h7-uart"
+
+include: uart-controller.yaml
+
+properties:
+  reg:
+    required: true
+
+  interrupts:
+    required: true

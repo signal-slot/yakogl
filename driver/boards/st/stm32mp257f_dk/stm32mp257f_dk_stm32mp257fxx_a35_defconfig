@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+CONFIG_XIP=n
+CONFIG_SERIAL=y
+CONFIG_CONSOLE=y
+CONFIG_UART_CONSOLE=y
+
+# ARM Options
+CONFIG_AARCH64_IMAGE_HEADER=y
+CONFIG_ARMV8_A_NS=y
+CONFIG_ARM64_VA_BITS_36=y
+CONFIG_ARM64_PA_BITS_36=y
+
+# Cache Options
+CONFIG_CACHE_MANAGEMENT=y
+CONFIG_DCACHE_LINE_SIZE_DETECT=y
+CONFIG_ICACHE_LINE_SIZE_DETECT=y
+
+# PSCI over SMC to TF-A (the psci node): SYSTEM_RESET behind sys_reboot()
+# with CONFIG_REBOOT=y, CPU_ON for the second core.
+CONFIG_PM_CPU_OPS=y
+
+# One core: the second A35 stays where TF-A parked it until an image needs
+# it (CONFIG_SMP=y, CONFIG_MP_MAX_NUM_CPUS=2).

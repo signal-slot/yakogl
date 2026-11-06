@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+
+description: |
+  ARM Cortex-A35 CPU (the STM32MP257F's application cores). Zephyr carries
+  bindings for the Cortex-A53/A55/A72/... (dts/bindings/cpu/) but none for
+  the A35; without one the cpu nodes get no device_type and Zephyr counts
+  no CPU (include/zephyr/devicetree/cpu.h, DT_FOREACH_CPU_STATUS_OKAY_SEP).
+
+compatible: "arm,cortex-a35"
+
+include: cpu.yaml
