@@ -650,6 +650,22 @@ the file `YAKOGL_REDACTION_PRIVATE_FILE` names. Exit 0 clean, 1 an H/M
 finding, 3 private classes not run; `--help` has the format, `--self-test`
 the fixtures (`tests/redaction_scan.rs` runs it).
 
+## uboot_env.py — a U-Boot environment image, byte for byte
+
+`python3 -I tools/uboot_env.py print|set|unset|check|diff ...` reads and edits
+the raw image of a U-Boot environment (CRC32, for a redundant env one flag
+byte, `name=value` strings, a double NUL, 0x00 or 0xff padding kept as the
+input had it) on the host, so a board without `fw_setenv` can have its
+`u-boot-env` partition read with `dd`, edited and written back.
+`--size N` is the env or copy size (default the file's length), `--redundant`
+treats the file as two copies (or `--second FILE` as the second one): `set`
+and `unset` write the copy that is not active with flag = active + 1 and say
+which copy and bytes changed. Existing variables keep their order, new ones
+go last, bytes outside the env are untouched. A bad CRC, data that does not
+fit, or a bad name/value is refused with exit 2 and no output file; `check`
+exits 2 naming the bad copy. `tools/uboot_env_selftest.sh` runs the tests on
+synthetic images (not wired into `tools/check.sh` yet).
+
 ## land.sh — land one branch tip on main
 
 main moves through pull requests: a pull request, the full gate on it
