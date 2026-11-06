@@ -167,7 +167,7 @@ scope_of_path() {
   tools/osal/*) echo osal ;;
   driver/samples/* | examples/* | tools/slint/* | tools/probes/* | tools/host-replay/*) echo samples ;;
   driver/rust/* | driver/*) echo drivers ;;
-  tools/cts/* | tools/testdata/* | tools/*.py | tools/board.sh | tools/board_selftest.sh | tools/setup-gate-host.sh | tools/env/* | tools/uboot-netboot-lib.sh | tools/website-check.sh | tools/hostharness/* | tools/README.md) echo tools ;;
+  tools/cts/* | tools/testdata/* | tools/optee/* | tools/*.py | tools/board.sh | tools/board_selftest.sh | tools/setup-gate-host.sh | tools/env/* | tools/uboot-netboot-lib.sh | tools/website-check.sh | tools/hostharness/* | tools/README.md) echo tools ;;
   *) echo all ;;
   esac
 }
@@ -3670,6 +3670,9 @@ if command -v python3 >/dev/null 2>&1; then
   scope pvr drivers
   step "gen     driver/rust am62p ti_pr114866.rs == gen_dphy_data.py on third_party" \
     python3 tools/ti-zephyr/gen_dphy_data.py --check
+  # tools/testdata/optee-scmi/*: the SCMI-over-OP-TEE reference vectors (#7).
+  scope tools
+  step "gen     tools/testdata/optee-scmi == tools/optee/scmi_vectors.py" python3 tools/optee/scmi_vectors.py --check
   # driver/compat/pvr_rgx_core.h spells out every feature, erratum and value of
   # the vendored DDK's rgx_bvnc_defs_km.h for the rgxlayer pins; generated.
   scope pvr
