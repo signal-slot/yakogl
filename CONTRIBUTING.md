@@ -55,10 +55,13 @@ CI, a review, then the merge. Never push main by hand.
   `swi_tables.ld` not found in a worktree of another depth). A snippet that
   names a file no path resolves is left as it is and the configure warns with
   that line.
-- `tools/check.sh --quick` is for the edit loop. It runs 169 of the
-  full plan's 209 rows (counted on 2026-11-05 at main `bfd75c57` with
-  `YAKOGL_CHECK_PLAN=1`, which lists the rows and runs none;
-  `tools/check_scope_selftest.sh` pins the 209). Measured on 2026-10-25,
+- `tools/check.sh --quick` is for the edit loop. It runs 170 of the
+  full plan's 211 rows (counted on 2026-11-06 at main `14e93e64` with
+  `YAKOGL_CHECK_PLAN=1`, which lists the rows and runs none; the full plan
+  is 210 ok and 1 gap on a host without `PCO_SPM_LOAD_CAPTURE`, and
+  `tools/check_scope_selftest.sh` pins the 211, ok plus gaps). Measured on 2026-11-06 from
+  a fresh clone of `14e93e64`: "170 ok, 0 failed, 0 gap(s)" in 2309 s with
+  two compiler slots. Measured on 2026-10-25,
   when it had fewer rows (`docs/release/checklist.md` "Line 3: re-run"):
   "146 ok, 0 failed, 0 gap(s)" in 2747 s at main `8198a56f`, and "145 ok,
   0 failed, 0 gap(s)" in 1491 s from a fresh clone. It takes minutes on a warm tree (190 s on four lanes,
