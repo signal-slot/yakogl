@@ -579,6 +579,10 @@ static void tl_uart_line(const char *who, const char *what, uint64_t t)
  * whether frame 1 left this core that way.
  */
 static uint64_t tl_px[3][3];
+/* The first frames, cntpct: published, the wait for it entered, seen shown. */
+#define TL_FRAMES 6u
+static uint64_t tl_f_pub[TL_FRAMES], tl_f_wait[TL_FRAMES], tl_f_shown[TL_FRAMES];
+static uint32_t tl_f_seq0; /* the ring's sequence number of the cold start's first frame */
 static uint32_t tl_desc5_first; /* LCDIF CTRLDESCL0_5 at the first show */
 
 /*
@@ -649,6 +653,19 @@ static void tl_report(struct k_work *work)
 		}
 	}
 #endif
+	for (unsigned int i = 0; i < TL_FRAMES; i++) {
+		const uint64_t e = tl_early[CLUSTER_TL_A53_ENTRY];
+		const uint32_t hz = cntfrq();
+
+		if (tl_f_pub[i] == 0u || e == 0u || hz == 0u) {
+			continue;
+		}
+		snprintk(buf, sizeof(buf), "TLF frame %u: published %u wait %u shown %u us\n", i + 1u,
+			 (uint32_t)((tl_f_pub[i] - e) * 1000000u / hz),
+			 tl_f_wait[i] ? (uint32_t)((tl_f_wait[i] - e) * 1000000u / hz) : 0u,
+			 tl_f_shown[i] ? (uint32_t)((tl_f_shown[i] - e) * 1000000u / hz) : 0u);
+		tl_uart_str(buf);
+	}
 #ifdef CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_CLOCK_REPORT
 	board_route3_clock_report(tl_uart_str);
 #endif
@@ -1054,6 +1071,19 @@ int board_route3_show(const struct board_window *win)
 	}
 
 	seq = publish(win);
+#if CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_TIMELINE_REPORT_MS > 0
+#ifdef CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_A53_RESTART
+	const bool tl_cold = !board_route3_warm();
+#else
+	const bool tl_cold = true;
+#endif
+	if (tl_cold && tl_f_seq0 == 0u) {
+		tl_f_seq0 = seq;
+	}
+	if (tl_cold && seq - tl_f_seq0 < TL_FRAMES) {
+		tl_f_pub[seq - tl_f_seq0] = cntpct();
+	}
+#endif
 #ifdef CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_A53_RESTART
 	if (board_route3_warm() && !R.restart_published) {
 		/* The restart's first frame is in the ring: now the beat, which
@@ -1097,6 +1127,15 @@ static int shown_wait(uint32_t seq)
 	}
 #endif
 	t0 = k_uptime_get();
+#if CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_TIMELINE_REPORT_MS > 0
+	const uint32_t tl_i = seq - tl_f_seq0;
+	const bool tl_f = tl_f_seq0 != 0u && tl_i < TL_FRAMES && tl_f_pub[tl_i] != 0u &&
+			  tl_f_wait[tl_i] == 0u;
+
+	if (tl_f) {
+		tl_f_wait[tl_i] = cntpct();
+	}
+#endif
 	/* The previous window holds frame seq - 1: it is ours again once the
 	 * M7's `shown` has moved past it (frame_ring.h). Until the M7 is up,
 	 * the wait is for the M7 itself, bounded by the M7 wait. */
@@ -1120,6 +1159,11 @@ static int shown_wait(uint32_t seq)
 		board_watchdog_feed();
 		k_sleep(K_USEC(WAIT_POLL_US));
 	}
+#if CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_TIMELINE_REPORT_MS > 0
+	if (tl_f) {
+		tl_f_shown[tl_i] = cntpct();
+	}
+#endif
 	m7_check();
 	if (!R.lit && R.state == BOARD_ROUTE3_UP && cluster_frame_ring_shown(R.ring) != 0u) {
 		/* The M7 has shown a frame, so it has lit the panel. Only the
