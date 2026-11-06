@@ -338,7 +338,8 @@ entry in the list stops the run (exit 2) with the same message as before.
 | `common` (add) | `GLMARK2_SRC` |
 | `am62p` (add) | `PVR_FW_BLOB` |
 | `imx8mp` (add) | `IMX8MP_OUT` |
-| `deqp`, `ms4` (add) | `DEQP_WORK` (am62p, pi4), `DEQP_STAGE1` (imx8mp) |
+| `deqp`, `ms4` (add) | `DEQP_WORK` (am62p, pi4), `DEQP_STAGE1` (imx8mp, x2) |
+| `x2` | as `imx8mp` (`IMX8MP_OUT`); `common` does not add `GLMARK2_SRC` |
 
 The list is `needed_deps` in `board-stage.sh`; `images-selftest.sh` checks
 both directions against the real `deps.toml`, and against what the builders
@@ -351,6 +352,35 @@ a new builder joins the `builders` list of the self-test (which plants such
 a read in a scratch copy to show the guard fires). The Pi 4 uses
 `MESA_V3D_TREE` in no stage; it is not a `deps.toml` entry, so it has no
 row.
+
+### The Armadillo-X2 images
+
+The X2 (`armadillo_x2/mimx8ml8/a53`, the i.MX8MP SoC and GPU of the Verdin)
+is built by the same scripts with `IMX8MP_BOARD=x2` (`imx8mp-env.sh`). Its
+images go to `$IMX8MP_OUT/x2/<name>`, never into the Verdin's directory. Both
+images get `CONFIG_GC_BOARD_WDOG_SELF_ARM=y` (the marker `gc_wdog_arm: armed`
+that `tools/board.sh x2 run` requires); `WDOG_SELF_ARM=0` turns it off.
+
+    IMX8MP_BOARD=x2 tools/cts/imx8mp-gltest-build.sh gltest-<sha8> 0
+      -> $IMX8MP_OUT/x2/gltest-<sha8>/zephyr/zephyr.bin
+    IMX8MP_BOARD=x2 tools/cts/imx8mp-deqp-build.sh deqp-<sha8> 'dEQP-GLES2.info.*' --table tools/cts/imx8mp-full-tree.txt
+      -> $IMX8MP_OUT/x2/deqp-<sha8>/zephyr/zephyr.bin
+
+The dEQP build needs `DEQP_STAGE1` (stage 1 of `imx8mp-deqp-stage1.sh`,
+shared with the Verdin). The console is UART2 from the sample's board
+configuration, so `IMX8MP_CONSOLE=1` is refused. `DRYRUN=1` prints the west
+command and builds nothing.
+
+`tools/cts/board-stage.sh x2 common` and `x2 deqp` run exactly those two
+commands for HEAD (`<sha8>` is HEAD's abbreviated hash);
+`BOARD_STAGE_DRY_RUN=1` prints them and builds nothing. `x2 common` builds
+the gl_test image alone (glmark2 has no X2 image). The x2 stage builds only:
+it runs no board command, takes no lease, and reads no `BOARD_HOST` or
+`BOARD_UART`. `x2 gles3` and `x2 ms4` are refused (exit 2).
+
+Running an image is `tools/board.sh x2 run` (one image) or
+`TREE_IMAGE=<image> tools/board.sh x2 tree` (the table image); see "The
+Armadillo-X2" in `driver/tools/kexec-zephyr/README.md`.
 
 ### The glmark2 picture
 
