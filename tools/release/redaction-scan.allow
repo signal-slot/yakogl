@@ -26,6 +26,13 @@ drop | password | * | NOPASSWD: | sudoers keyword, not a password
 drop | lab-host | * | \barmadillo\.local\b | the vendor's mDNS default host name
 drop | lab-host | * | \byakogl-gate\b | the gate's public runner label
 drop | lab-host | * | \bccfarm\b | the name of the farm tool
+# tools/env/* drives the pool and image tool through its public interface:
+# its CLI (`<tool> image build`, `<tool> pool apply`, `<tool> login`, `command
+# -v <tool>`), its environment variables (`<TOOL>_RECIPES`, `<TOOL>_URL`), a
+# session, CLI or pool of it, and its server's docs (`<tool>-complex`).
+drop | lab-host | tools/env/* | \b[A-Za-z]+ (image|pool|login|session|CLI)\b|\bcommand -v [A-Za-z]+\b|\b[A-Z]+_(RECIPES|URL)\b|\b[A-Za-z]+-complex\b | the pool and image tool's CLI, environment variables, pools and server docs
+# A compiled pattern bound to a name that contains "secret", not a value.
+drop | password | *.py | \bSECRET\s*=\s*re\.compile\( | a regex named SECRET (the leak pattern a checker searches for)
 # The scanner's self-description: lab-layout mentions in its own class table and pattern.
 drop | lab-layout | tools/release/redaction-scan.py | \$HOME/com/github/|yakogl\-in\-rust | the class's own name, in the file that defines the class
 # E-mail shapes that are no address of a person.

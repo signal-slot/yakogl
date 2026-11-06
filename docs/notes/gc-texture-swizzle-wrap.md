@@ -446,7 +446,7 @@ compile refusals mean anything here**; every "Fail" with an image message
 below is a picture verdict and is *not* a result. Label: HOST-ONLY.
 
 Run: `tools/cts/host-deqp-run.sh --gpu=vivante --module=gles3
---cts=/home/orion/connected-deps/VK-GL-CTS --out=<dir outside the tree> <filter>`
+--cts="$CONNECTED_DEPS_DIR/VK-GL-CTS" --out=<dir outside the tree> <filter>`
 at commit **`1949cd0c`** (`git describe`: the tree was clean when the library
 was built; the per-run label later reads `-dirty` because this note was
 being written), library built with `YAKOGL_GPU=vivante`, `YAKOGL_SHADERC=online`,
