@@ -17,7 +17,7 @@
 # sample's prj.conf and boards/*.conf leave them (tools/cts/check-deqp-images.py checks that).
 # --table: one dEQP filter per line ('#' lines and blank lines skipped), the form of
 # tools/cts/imx8mp-full-tree.txt: the lines joined with ';' become CONFIG_DEQP_CASE_TABLE in
-# $IMX8MP_OUT/<name>.table.conf, the fragment then used. That image runs every row by its
+# $IMX8MP_IMG_OUT/<name>.table.conf, the fragment then used. That image runs every row by its
 # selector: `TREE_IMAGE=<image> tools/board.sh imx8mp tree <table> <outdir>` (the step the old
 # i.MX8MP tree runner did before its jumps, moved here in Step 1 of driver/docs/one-method.md).
 # DEQP_MODULE=gles3 builds the dEQP-GLES3 image (-DDEQP_MODULE=gles3 -DCONFIG_DEQP_REPORT_ES2=n
@@ -26,8 +26,13 @@
 # tools/cts/imx8mp-gles3-tree.txt is the whole GLES3 mustpass in 133 table rows (docs/es3/board-recipe-imx8mp.md).
 # Name the image after the commit it is built from: a result is reported against that hash.
 #
+# Armadillo-X2: IMX8MP_BOARD=x2 builds armadillo_x2/mimx8ml8/a53 into $IMX8MP_OUT/x2/<name> (imx8mp-env.sh; the
+# stage 1 is shared, DEQP_STAGE1 as before). The image has CONFIG_GC_BOARD_WDOG_SELF_ARM=y as the board's run needs
+# (WDOG_SELF_ARM=0 turns it off). The console is UART2 from the sample's board conf: IMX8MP_CONSOLE=1 is refused.
+# DRYRUN=1 prints the west command and builds nothing (the table form still writes its fragment only when not dry).
+#
 # Needs: the variables of imx8mp-env.sh (Zephyr part) and DEQP_STAGE1 (from imx8mp-deqp-stage1.sh).
-# Output: $IMX8MP_OUT/<name>/zephyr/zephyr.bin, log $IMX8MP_OUT/<name>.log.
+# Output: $IMX8MP_IMG_OUT/<name>/zephyr/zephyr.bin, log $IMX8MP_IMG_OUT/<name>.log.
 set -u
 # absolute, resolved before the cd to the Zephyr workspace below: the script
 # is documented as `tools/cts/imx8mp-deqp-build.sh ...` (a relative path that
@@ -44,23 +49,29 @@ if [ "${1:-}" = --gles3 ]; then
 	export DEQP_STAGE1=${DEQP_STAGE1_GLES3:-$IMX8MP_OUT/deqp-stage1-gles3}
 fi
 [ $# -ge 2 ] || { echo "usage: $0 [--gles3] <name> <case filter> [<Kconfig fragment> | --table <table file>]" >&2; exit 2; }
-imx8mp_zephyr_env
-imx8mp_need DEQP_STAGE1
+dry=${DRYRUN:-0}
+if [ "$dry" != 1 ]; then
+	imx8mp_zephyr_env
+	imx8mp_need DEQP_STAGE1
+fi
 name=$1; filter=$2; frag=${3:-}
 if [ "$frag" = --table ]; then
 	table=${4:?--table needs a table file}
 	[ -f "$table" ] || { echo "imx8mp: $table not found" >&2; exit 2; }
-	frag=$IMX8MP_OUT/$name.table.conf
-	printf 'CONFIG_DEQP_CASE_TABLE="%s"\n' "$(grep -vE '^[[:space:]]*(#|$)' "$table" | paste -sd';' -)" > "$frag"
+	frag=$IMX8MP_IMG_OUT/$name.table.conf
+	[ "$dry" = 1 ] || printf 'CONFIG_DEQP_CASE_TABLE="%s"\n' "$(grep -vE '^[[:space:]]*(#|$)' "$table" | paste -sd';' -)" > "$frag"
 	echo "imx8mp: $(grep -cvE '^[[:space:]]*(#|$)' "$table") table rows -> $frag"
 fi
 extra=()
 if [ -n "$frag" ]; then
 	frag=$(cd "$(dirname "$frag")" && pwd)/$(basename "$frag")
-	[ -f "$frag" ] || { echo "imx8mp: $frag not found" >&2; exit 2; }
+	[ -f "$frag" ] || [ "$dry" = 1 ] || { echo "imx8mp: $frag not found" >&2; exit 2; }
 	extra=(-DEXTRA_CONF_FILE="$frag")
 fi
 # IMX8MP_CONSOLE=1: the UART3 console fragment (the board devicetree already makes uart3 the console)
+if [ "${IMX8MP_CONSOLE:-}" = 1 ] && [ "${IMX8MP_BOARD:-}" = x2 ]; then
+	echo "imx8mp: IMX8MP_CONSOLE=1 is the Verdin's UART3; the X2's console is UART2 (the sample's board conf)" >&2; exit 2
+fi
 if [ "${IMX8MP_CONSOLE:-}" = 1 ]; then
 	con=$HERE/imx8mp-console.conf
 	[ -f "$con" ] || { echo "imx8mp: $con not found" >&2; exit 2; }
@@ -76,24 +87,28 @@ case "${DEQP_MODULE:-gles2}" in
 	gles3)
 		# both: YAKOGL_REPORT_ES2 is default y, so DEQP_REPORT_ES2=n alone (no select) still reports ES 2.0
 		modargs=(-DDEQP_MODULE=gles3 -DCONFIG_DEQP_REPORT_ES2=n -DCONFIG_YAKOGL_REPORT_ES2=n)
-		[ -f "$DEQP_STAGE1/build/modules/gles3/libdeqp-gles3-package.a" ] || { echo "imx8mp: $DEQP_STAGE1 has no gles3 stage 1 (DEQP_MODULE=gles3 tools/cts/imx8mp-deqp-stage1.sh)" >&2; exit 2; } ;;
+		[ "$dry" = 1 ] || [ -f "$DEQP_STAGE1/build/modules/gles3/libdeqp-gles3-package.a" ] || { echo "imx8mp: $DEQP_STAGE1 has no gles3 stage 1 (DEQP_MODULE=gles3 tools/cts/imx8mp-deqp-stage1.sh)" >&2; exit 2; } ;;
 	*) echo "imx8mp: DEQP_MODULE must be gles2 or gles3, not '$DEQP_MODULE'" >&2; exit 2 ;;
 esac
 unset DEQP_GL_CONFIG_NAME   # the Kconfig default reads it; a fragment says it explicitly
+# the X2's run needs "gc_wdog_arm: armed" (tools/board.sh x2); the Verdin's sample conf has its own setting
+if [ "${IMX8MP_BOARD:-}" = x2 ] && [ "${WDOG_SELF_ARM:-1}" != 0 ]; then modargs+=(-DCONFIG_GC_BOARD_WDOG_SELF_ARM=y); fi
+cmd=(west build -p always -b "$BOARD" -d "$IMX8MP_IMG_OUT/$name" "$YAKOGL_DIR/driver/samples/zephyr/deqp" --
+	-DZEPHYR_MODULES="${ZEPHYR_MODULES:-}"
+	-DDEQP_SRC="${DEQP_STAGE1:-}/cts" -DDEQP_BUILD="${DEQP_STAGE1:-}/build"
+	-DCONFIG_DEQP_CASE="\"$filter\"" ${modargs[@]+"${modargs[@]}"} ${extra[@]+"${extra[@]}"})
+if [ "$dry" = 1 ]; then printf '%q ' "${cmd[@]}"; echo; exit 0; fi
 cd "$ZEPHYR_WS" || exit 1
-west build -p always -b "$BOARD" -d "$IMX8MP_OUT/$name" "$YAKOGL_DIR/driver/samples/zephyr/deqp" -- \
-	-DZEPHYR_MODULES="$ZEPHYR_MODULES" \
-	-DDEQP_SRC="$DEQP_STAGE1/cts" -DDEQP_BUILD="$DEQP_STAGE1/build" \
-	-DCONFIG_DEQP_CASE="\"$filter\"" "${modargs[@]}" "${extra[@]}" > "$IMX8MP_OUT/$name.log" 2>&1
+"${cmd[@]}" > "$IMX8MP_IMG_OUT/$name.log" 2>&1
 rc=$?
 echo "rc=$rc"
-grep -E " error|Error" "$IMX8MP_OUT/$name.log" | head -10
+grep -E " error|Error" "$IMX8MP_IMG_OUT/$name.log" | head -10
 if [ "${DEQP_MODULE:-gles2}" = gles3 ]; then
 	# conformance for GLES3: the compiler, no precompiled tier, neither REPORT_ES2 y (Kconfig writes "# CONFIG_X is not set")
-	python3 "$HERE/check-deqp-images.py" --config "$IMX8MP_OUT/$name/zephyr/.config" --gles3 2>&1 || echo "imx8mp: warning: not a conformance image"
+	python3 "$HERE/check-deqp-images.py" --config "$IMX8MP_IMG_OUT/$name/zephyr/.config" --gles3 2>&1 || echo "imx8mp: warning: not a conformance image"
 	exit $rc
 fi
-grep -E "DEQP_REPORT_ES2=y" "$IMX8MP_OUT/$name/zephyr/.config" 2>/dev/null || echo "imx8mp: warning: the image does not report ES 2.0"
+grep -E "DEQP_REPORT_ES2=y" "$IMX8MP_IMG_OUT/$name/zephyr/.config" 2>/dev/null || echo "imx8mp: warning: the image does not report ES 2.0"
 # conformance: the compiler, REPORT_ES2, no precompiled tier (a fragment that asks for another is a measurement image)
-python3 "$HERE/check-deqp-images.py" --config "$IMX8MP_OUT/$name/zephyr/.config" 2>&1 || echo "imx8mp: warning: not a conformance image"
+python3 "$HERE/check-deqp-images.py" --config "$IMX8MP_IMG_OUT/$name/zephyr/.config" 2>&1 || echo "imx8mp: warning: not a conformance image"
 exit $rc

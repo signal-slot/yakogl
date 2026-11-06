@@ -19,9 +19,12 @@
 # itself (imx8mp-plan1.md, Step 3). WDOG_SELF_ARM=0 in the environment turns the default off. A
 # -DCONFIG_GC_BOARD_WDOG_SELF_ARM=... among the extra arguments wins over both.
 #
+# Armadillo-X2: IMX8MP_BOARD=x2 builds armadillo_x2/mimx8ml8/a53 (same options, watchdog default included) into
+# $IMX8MP_OUT/x2/<name> (imx8mp-env.sh); without it nothing differs from the Verdin build.
+#
 # DRYRUN=1 prints the west command and the CONFIG_ lines it asks for, and builds nothing (needs none of the variables).
 #
-# Needs: the variables of imx8mp-env.sh (Zephyr part). Output: $IMX8MP_OUT/<name>/zephyr/zephyr.bin.
+# Needs: the variables of imx8mp-env.sh (Zephyr part). Output: $IMX8MP_IMG_OUT/<name>/zephyr/zephyr.bin.
 set -u
 . "$(dirname "$0")/imx8mp-env.sh"
 [ $# -ge 2 ] || { echo "usage: $0 <name> <first case> [cmake args...]" >&2; exit 2; }
@@ -45,7 +48,7 @@ done
 if [ "$has_wdog" = 0 ] && [ "${WDOG_SELF_ARM:-1}" != 0 ]; then
 	extra+=(-DCONFIG_GC_BOARD_WDOG_SELF_ARM=y)
 fi
-cmd=(west build -p always -b "${BOARD:-}" -d "${IMX8MP_OUT:-}/$name" "${YAKOGL_DIR:-}/driver/samples/zephyr/gl_test" --
+cmd=(west build -p always -b "${BOARD:-}" -d "${IMX8MP_IMG_OUT:-}/$name" "${YAKOGL_DIR:-}/driver/samples/zephyr/gl_test" --
 	-DZEPHYR_MODULES="${ZEPHYR_MODULES:-}" -DYAKOGL_DIR="${YAKOGL_DIR:-}"
 	-DEXTRA_CONF_FILE=prj_sweep.conf -DGL_TEST_ES100=ON -DCONFIG_GC_GL_TEST_SWEEP_FIRST="$first" ${extra[@]+"${extra[@]}"})
 if [ "$dry" = 1 ]; then
@@ -59,10 +62,10 @@ if [ "$dry" = 1 ]; then
 	exit 0
 fi
 cd "$ZEPHYR_WS" || exit 1
-"${cmd[@]}" > "$IMX8MP_OUT/$name.log" 2>&1
+"${cmd[@]}" > "$IMX8MP_IMG_OUT/$name.log" 2>&1
 rc=$?
 # a build that exits 0 but wrote no image is not a build
-if [ "$rc" = 0 ] && [ ! -s "$IMX8MP_OUT/$name/zephyr/zephyr.bin" ]; then rc=no_image; fi
+if [ "$rc" = 0 ] && [ ! -s "$IMX8MP_IMG_OUT/$name/zephyr/zephyr.bin" ]; then rc=no_image; fi
 echo "rc=$rc"
-tail -3 "$IMX8MP_OUT/$name.log"
+tail -3 "$IMX8MP_IMG_OUT/$name.log"
 [ "$rc" = 0 ]
