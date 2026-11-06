@@ -30,7 +30,7 @@ R=$T/repo
 mkdir -p "$R/tools/cts" "$R/driver/src/fw" "$R/driver/samples/zephyr/deqp" \
     "$R/driver/samples/zephyr/gl_test" "$T/bin" "$T/ws/zephyr" \
     "$T/ws/modules/fs/fatfs" "$T/work/cts" "$T/work/build/modules/gles2" "$T/venv/bin"
-cp "$HERE/am62p-deqp-images.sh" "$HERE/imx8mp-gltest-build.sh" "$HERE/imx8mp-env.sh" \
+cp "$HERE/am62p-deqp-images.sh" "$HERE/imx8mp-gltest-build.sh" "$HERE/imx8mp-deqp-build.sh" "$HERE/imx8mp-env.sh" \
     "$HERE/zephyr-modules.sh" "$HERE/pi4-deqp-images.sh" "$R/tools/cts/"
 # the fake conformance check passes, and appends its arguments to $CHECK_LOG
 # when that is set (section 7 reads which flags the Pi 4 builder gave it)
@@ -57,7 +57,7 @@ printf 'export PATH=%s:$PATH\n' "$T/bin" > "$T/venv/bin/activate"
 S=$R/tools/cts/am62p-deqp-images.sh
 # the caller's environment must not reach the scripts under test (the node sets WEST_VENV, a
 # TREE_ROWS in the shell would select rows, ...)
-unset WEST_VENV TREE_ROWS DEQP_MODULE ZEPHYR_BASE CLUSTER_DIR DEQP_GL_CONFIG_NAME BOARD
+unset WEST_VENV TREE_ROWS DEQP_MODULE ZEPHYR_BASE CLUSTER_DIR DEQP_GL_CONFIG_NAME BOARD IMX8MP_BOARD
 export ZEPHYR_WS=$T/ws DEQP_WORK=$T/work PATH="$T/bin:$PATH"
 git init -q "$R" 2>/dev/null
 
@@ -158,6 +158,50 @@ out=$(ZEPHYR_WS=$T/nows "$G" zb4 96 2>&1); rc=$?
 out=$(env -u ZEPHYR_WS ZEPHYR_WORKSPACE=$T/ws "$G" old1 96 2>&1); rc=$?
 [ "$rc" = 0 ] && ok "only ZEPHYR_WORKSPACE: build rc 0" || bad "only ZEPHYR_WORKSPACE: rc=$rc: $out"
 check "only ZEPHYR_WORKSPACE: west got the workspace's zephyr" "$(cd "$T/ws/zephyr" && pwd -P)" "$(cat "$T/imx/old1/zephyr/zephyr_base" 2>&1)"
+# the Armadillo-X2: IMX8MP_BOARD=x2 selects its Zephyr board and its own output directory; unset, the Verdin
+V=verdin_imx8mp/mimx8ml8/a53 X=armadillo_x2/mimx8ml8/a53
+D=$R/tools/cts/imx8mp-deqp-build.sh
+out=$(DRYRUN=1 IMX8MP_OUT=/o "$G" s1 96 2>&1)
+check "Verdin dry run: the Verdin board" "-b $V -d /o/s1 " "$out"
+check "Verdin dry run: the watchdog" "-DCONFIG_GC_BOARD_WDOG_SELF_ARM=y" "$out"
+out=$(DRYRUN=1 IMX8MP_BOARD=x2 IMX8MP_OUT=/o "$G" s1 96 2>&1); rc=$?
+[ "$rc" = 0 ] && ok "X2 gl_test dry run rc 0" || bad "X2 gl_test dry run: rc=$rc: $out"
+check "X2 gl_test: the board" "-b $X -d /o/x2/s1 " "$out"
+check "X2 gl_test: the watchdog" "CONFIG_GC_BOARD_WDOG_SELF_ARM=y" "$out"
+check "X2 gl_test: sweep first case" "CONFIG_GC_GL_TEST_SWEEP_FIRST=96" "$out"
+absent "X2 gl_test: not the Verdin" "$V" "$out"
+out=$(DRYRUN=1 IMX8MP_BOARD=x2 WDOG_SELF_ARM=0 IMX8MP_OUT=/o "$G" s1 96 2>&1)
+absent "X2 gl_test: WDOG_SELF_ARM=0 drops the watchdog" "WDOG_SELF_ARM" "$out"
+out=$(DRYRUN=1 IMX8MP_BOARD=x2 BOARD=other/b IMX8MP_OUT=/o "$G" s1 96 2>&1)
+check "X2 gl_test: an explicit BOARD wins" "-b other/b -d /o/x2/s1 " "$out"
+out=$(IMX8MP_BOARD=foo "$G" s1 96 2>&1); rc=$?
+[ "$rc" = 2 ] && ok "IMX8MP_BOARD=foo refused (rc 2)" || bad "IMX8MP_BOARD=foo: rc=$rc: $out"
+check "IMX8MP_BOARD=foo named" "IMX8MP_BOARD must be empty or x2" "$out"
+out=$(IMX8MP_BOARD=x2 "$G" x2a 96 2>&1); rc=$?
+[ "$rc" = 0 ] && ok "X2 gl_test builds into x2/ (rc 0)" || bad "X2 gl_test build: rc=$rc: $out"
+check "X2 gl_test: image under x2/" "-b $X" "$(cat "$T/imx/x2/x2a/zephyr/zephyr.bin" 2>&1)"
+[ ! -e "$T/imx/x2a" ] && ok "X2 gl_test: nothing beside the Verdin images" || bad "X2 image dir at the Verdin place"
+out=$(DRYRUN=1 IMX8MP_BOARD=x2 IMX8MP_OUT=/o DEQP_STAGE1=/s "$D" d 'dEQP-GLES2.info.*' 2>&1); rc=$?
+[ "$rc" = 0 ] && ok "X2 deqp GLES2 dry run rc 0" || bad "X2 deqp GLES2 dry run: rc=$rc: $out"
+check "X2 deqp GLES2: the board" "-b $X -d /o/x2/d " "$out"
+check "X2 deqp GLES2: the watchdog" "-DCONFIG_GC_BOARD_WDOG_SELF_ARM=y" "$out"
+check "X2 deqp GLES2: the filter" "dEQP-GLES2.info" "$out"
+out=$(DRYRUN=1 IMX8MP_BOARD=x2 IMX8MP_OUT=/o "$D" --gles3 d 'dEQP-GLES3.info.*' 2>&1); rc=$?
+[ "$rc" = 0 ] && ok "X2 deqp GLES3 dry run rc 0" || bad "X2 deqp GLES3 dry run: rc=$rc: $out"
+check "X2 deqp GLES3: the board" "-b $X -d /o/x2/d " "$out"
+check "X2 deqp GLES3: the watchdog" "-DCONFIG_GC_BOARD_WDOG_SELF_ARM=y" "$out"
+check "X2 deqp GLES3: the module" "-DDEQP_MODULE=gles3" "$out"
+check "X2 deqp GLES3: stage 1 stays in IMX8MP_OUT" "-DDEQP_SRC=/o/deqp-stage1-gles3/cts" "$out"
+out=$(DRYRUN=1 IMX8MP_BOARD=x2 IMX8MP_OUT=/o DEQP_STAGE1=/s "$D" d 'x' --table "$T/plain.txt" 2>&1)
+check "X2 deqp table: the fragment under x2/" "/o/x2/d.table.conf" "$out"
+[ ! -e /o/x2/d.table.conf ] && ok "dry run writes no table fragment" || bad "dry run wrote a fragment"
+out=$(DRYRUN=1 IMX8MP_BOARD=x2 IMX8MP_CONSOLE=1 IMX8MP_OUT=/o DEQP_STAGE1=/s "$D" d 'x' 2>&1); rc=$?
+[ "$rc" = 2 ] && ok "X2 deqp with the Verdin's UART3 console refused" || bad "X2 + IMX8MP_CONSOLE: rc=$rc: $out"
+out=$(DRYRUN=1 IMX8MP_OUT=/o DEQP_STAGE1=/s "$D" d 'dEQP-GLES2.info.*' 2>&1)
+check "Verdin deqp dry run: the Verdin board" "-b $V -d /o/d " "$out"
+absent "Verdin deqp dry run: no watchdog option of its own" "WDOG_SELF_ARM" "$out"
+out=$(DRYRUN=1 IMX8MP_OUT=/o "$D" --gles3 d 'dEQP-GLES3.info.*' 2>&1)
+check "Verdin deqp GLES3 dry run: the Verdin board" "-b $V -d /o/d " "$out"
 rm "$T/bin/west"
 out=$(PATH="/usr/bin:/bin" "$G" n4 96 2>&1); rc=$?
 [ "$rc" = 2 ] && ok "no west: rc 2" || bad "no west: rc=$rc: $out"

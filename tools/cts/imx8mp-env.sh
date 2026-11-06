@@ -15,6 +15,12 @@
 #   CLUSTER_DIR              ignored: the Verdin iMX8M Plus A53 board is in driver/boards (a warning is printed)
 #   ZEPHYR_BASE             ignored when it is not $ZEPHYR_WS/zephyr: it is set from the workspace (a line is printed)
 #   BOARD                   Zephyr board (default verdin_imx8mp/mimx8ml8/a53)
+#   IMX8MP_BOARD            x2: the Armadillo-X2 (armadillo_x2/mimx8ml8/a53, same SoC and GPU) instead of the Verdin.
+#                           Default BOARD becomes that board (an explicit BOARD still wins), and the gl_test/deqp
+#                           images and logs go to $IMX8MP_OUT/x2/ (IMX8MP_IMG_OUT), so X2 and Verdin images never
+#                           mix; the deqp stage 1 stays in $IMX8MP_OUT (it is board independent). Console: UART2,
+#                           from the sample's board conf, so IMX8MP_CONSOLE=1 (the Verdin's UART3) is refused.
+#                           Unset or empty: nothing changes. Any other value is refused.
 # No credentials are read or written by these scripts.
 
 imx8mp_need() {
@@ -29,7 +35,15 @@ imx8mp_need() {
 
 # The repository root, from this file's location (tools/cts/).
 YAKOGL_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
-BOARD=${BOARD:-verdin_imx8mp/mimx8ml8/a53}
+case "${IMX8MP_BOARD:-}" in
+'')
+	BOARD=${BOARD:-verdin_imx8mp/mimx8ml8/a53}
+	IMX8MP_IMG_OUT=${IMX8MP_OUT:-} ;;
+x2)
+	BOARD=${BOARD:-armadillo_x2/mimx8ml8/a53}
+	IMX8MP_IMG_OUT=${IMX8MP_OUT:-}/x2 ;;
+*) echo "imx8mp: IMX8MP_BOARD must be empty or x2, not '$IMX8MP_BOARD'" >&2; exit 2 ;;
+esac
 
 imx8mp_zephyr_env() {
 	ZEPHYR_WS=${ZEPHYR_WS:-${ZEPHYR_WORKSPACE:-}}
@@ -48,7 +62,7 @@ imx8mp_zephyr_env() {
 	fi
 	export ZEPHYR_BASE=$zb
 	export ZEPHYR_SDK_INSTALL_DIR
-	mkdir -p "$IMX8MP_OUT"
+	mkdir -p "$IMX8MP_OUT" "$IMX8MP_IMG_OUT"
 	# The module list, explicitly: a workspace whose manifest is a checkout of the full platform would otherwise
 	# define the Verdin boards twice (see zephyr-modules.sh).
 	ZEPHYR_MODULES=$("$YAKOGL_DIR/tools/cts/zephyr-modules.sh" "$ZEPHYR_WS") || exit 2
