@@ -329,8 +329,9 @@ tools/cts/cts-common.sh pi4    build build/common/pi4-$(git rev-parse --short=8 
 
 One row only: add its label, for example `... build <img-dir> GM`. To print
 the `west` arguments without building: `tools/cts/cts-common.sh --dry-run
-<board> build <img-dir>`; it needs none of the inputs
-(`tools/cts/common-images.sh:20`).
+<board> build <img-dir>`; it needs none of the inputs, printing an unset one
+in its place as a `<VAR>` placeholder, for example
+`-DGLMARK2_SRC=<GLMARK2_SRC>` (`tools/cts/common-images.sh:36-39`).
 
 What each row runs, as a plain `west build` (from `$ZEPHYR_WS`, with
 `ZEPHYR_BASE=$ZEPHYR_WS/zephyr`, `MODS=$(tools/cts/zephyr-modules.sh $ZEPHYR_WS)`;
