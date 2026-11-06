@@ -3367,6 +3367,20 @@ zephyr_nanopc_t6_image() {
   marker=$(strings -n 20 "$dir/zephyr/zephyr.bin" | grep -c '^yakogl-wdt: nanopc_t6 WDT0 armed at boot; ') || true
   [ "$marker" = 1 ] || { echo "zephyr.bin carries the watchdog marker ${marker:-0} times, not once"; return 1; }
 }
+# Z3's probe (t6_fw) embeds the CSF firmware, driver/src/fw/mali_csffw_blob.h
+# (gitignored, never committed). With the board's file at <fw> the header is
+# made from it first (driver/tools/mkmalifw.sh), and replaced only when its
+# bytes differ, so a header from another file never builds the image; without
+# the file an existing header is used, as the AM62P rows use pvr_fw_blob.h.
+zephyr_nanopc_t6_fw_image() {
+  local f="$1" h=driver/src/fw/mali_csffw_blob.h t=build/zephyr-werror/mali_csffw_blob.h
+  if [ -f "$f" ]; then
+    mkdir -p build/zephyr-werror
+    bash driver/tools/mkmalifw.sh "$f" "$t" || return 1
+    cmp -s "$t" "$h" || { mkdir -p "${h%/*}" && cp "$t" "$h"; } || return 1
+  fi
+  zephyr_werror_image nanopc_t6 tools/probes/nanopc_t6/t6_fw nanopc_t6_fw
+}
 # No input key: an image's inputs include the west workspace and the Zephyr
 # SDK, thousands of files outside the checkout, and a module edited in place
 # moves no revision check.sh could read; so the images are built every time.
@@ -3435,6 +3449,15 @@ if [ "$QUICK" -eq 0 ]; then
     # Z2's probe (AS0's page tables, the cache flush round trip) likewise.
     step "zephyr  nanopc_t6 t6_mmu image (Z2, AS0 and a cache flush), -Werror on our C files" \
       zephyr_werror_image nanopc_t6 tools/probes/nanopc_t6/t6_mmu nanopc_t6_mmu
+    # Z3's probe (the firmware boot): without the board's mali_csffw.bin and
+    # without a header made from it the row is a gap naming the file. It
+    # writes that header into the checkout, so it runs alone (w:tree).
+    uses w:tree
+    if [ -f "$mali_csffw" ] || [ ! -f driver/src/fw/mali_csffw_blob.h ]; then
+      needs "$mali_csffw" "the board's CSF firmware, from which driver/tools/mkmalifw.sh makes driver/src/fw/mali_csffw_blob.h: tools/cts/deps-env.sh --build MALI_CSFFW fetches it, or name the board's file in MALI_CSFFW"
+    fi
+    step "zephyr  nanopc_t6 t6_fw image (Z3, the firmware boot), -Werror on our C files" \
+      zephyr_nanopc_t6_fw_image "$mali_csffw"
   else
     gap "zephyr images: no west workspace at ZEPHYR_WS='${ZEPHYR_WS-}' (set ZEPHYR_WS): our C files were NOT compiled with -Werror"
   fi
