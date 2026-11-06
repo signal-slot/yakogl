@@ -188,6 +188,51 @@ struct ProgGpu {
     lod_var: [ProgLodVariant; PROG_MAX_LOD_VARIANTS],
     /// Draws that asked for a variant: the variants' age.
     lod_clock: u32,
+    /// Which sampler bindings a 128-bit plane key would change in each stage
+    /// (`shaderc::wide128_sensitivity`; [vertex, fragment]), asked once after
+    /// the link ([`wide128_select`]).
+    #[cfg(all(feature = "gpu-vivante", feature = "shaderc-online"))]
+    w128_sense: [u32; 2],
+    #[cfg(all(feature = "gpu-vivante", feature = "shaderc-online"))]
+    w128_sense_known: bool,
+    /// The 128-bit plane-join variants of the program ([`w128_variant_for`]).
+    #[cfg(all(feature = "gpu-vivante", feature = "shaderc-online"))]
+    w128_var: [ProgW128Variant; PROG_MAX_W128_VARIANTS],
+    /// Draws that asked for a plane variant: the variants' age.
+    #[cfg(all(feature = "gpu-vivante", feature = "shaderc-online"))]
+    w128_clock: u32,
+    /// The plane key of the program's last draw ([vertex, fragment]; empty:
+    /// its own shaders), for the host tests.
+    #[cfg(all(feature = "gpu-vivante", feature = "shaderc-online"))]
+    w128_last: [shaderc::Wide128Planes; 2],
+}
+
+/// 128-bit plane-join variants a program keeps (GC7000): one covers a
+/// program drawn with an RGBA32F/UI/I texture, two one that alternates it
+/// with another 128-bit binding layout.
+#[cfg(all(feature = "gpu-vivante", feature = "shaderc-online"))]
+const PROG_MAX_W128_VARIANTS: usize = 2;
+
+/// One 128-bit plane-join variant (`shaderc::wide128_variant`): each stage
+/// whose plane key is not empty compiled again under it and the draw's
+/// sampler-state key, its USC uploaded once; a fragment variant linked to
+/// the draw's vertex shader. A stage whose key is empty is not held here
+/// (the draw keeps the shader it had).
+#[cfg(all(feature = "gpu-vivante", feature = "shaderc-online"))]
+struct ProgW128Variant {
+    used: bool,
+    /// [vertex, fragment] plane keys; never both empty in a used slot.
+    planes: [shaderc::Wide128Planes; 2],
+    /// The sampler-state key ([`ProgLodVariant::key`]) it was compiled for.
+    lod: [u64; 2],
+    /// Asked for and not available: its draws are refused.
+    missing: bool,
+    /// [`ProgGpu::w128_clock`] at its last use.
+    stamp: u32,
+    vs: ShcShader,
+    fs: ShcShader,
+    vs_usc: OsalGpuMem,
+    fs_usc: OsalGpuMem,
 }
 
 /// Sampler-state variants a program keeps beside its own two shaders, per
@@ -263,6 +308,11 @@ pub(crate) fn pool_owners() -> (crate::osal::OwnerTally, crate::osal::OwnerTally
             progs.add(&v.usc);
         }
         for v in &pg.lod_var {
+            progs.add(&v.vs_usc);
+            progs.add(&v.fs_usc);
+        }
+        #[cfg(all(feature = "gpu-vivante", feature = "shaderc-online"))]
+        for v in &pg.w128_var {
             progs.add(&v.vs_usc);
             progs.add(&v.fs_usc);
         }
@@ -1501,6 +1551,10 @@ pub fn invalidate_program_in(group: u8, program: GLuint) {
     for i in 0..PROG_MAX_LOD_VARIANTS {
         free_lod_variant(pg, i);
     }
+    #[cfg(all(feature = "gpu-vivante", feature = "shaderc-online"))]
+    for v in pg.w128_var.iter_mut() {
+        free_w128_variant(v);
+    }
     // SAFETY: every field of ProgGpu is valid when all-zero.
     unsafe { core::ptr::write_bytes(pg as *mut ProgGpu, 0, 1) };
 }
@@ -1950,6 +2004,261 @@ fn lod_variant_for(pg: &mut ProgGpu, rvs: &ShcShader, rfs: &ShcShader, key: [u64
         return fail(v, "out of shader memory", &[0], -util::ENOMEM);
     }
     Some(slot)
+}
+
+/* ---- 128-bit plane-join variants (GC7000, shaderc::wide128_variant) --------
+ *
+ * The GC7000 samples an RGBA32F/UI/I texture as two G32R32 planes, the B,A
+ * plane on a companion sampler slot the back end packs after the stage's
+ * own (docs/notes/gc-128bit-texture-sampling.md); the stage's look-up on
+ * that binding has to be split into the two plane look-ups and joined.
+ * Which bindings hold such a texture is the draw's to say, from the textures
+ * bound NOW -- a usampler2D names RGBA8UI and RGBA32UI alike -- so, as the
+ * sampler-state key, the plane key is worked out at every draw, once the
+ * textures are bound (`build_common`), and the variant kept per key. A
+ * program whose stages sample nothing a key could change (every program
+ * that reads no texture, every offline-table shader) costs one compare. */
+
+/// Logged once: a plane variant a draw needed could not be had.
+#[cfg(all(feature = "gpu-vivante", feature = "shaderc-online"))]
+static W128_VARIANT_LOGGED: AtomicBool = AtomicBool::new(false);
+
+/// The companion facts of one draw ([vertex, fragment], by binding): `Some(c)`
+/// when the binding's texture is sampled as two planes (`wide`) and its B,A
+/// plane has a companion slot `c`, numbered as the stage's `TEX_ID` numbers it
+/// (the vertex stage's minus its `VS_SAMPLER_BASE`); `None` otherwise,
+/// including a 128-bit binding past the 32 slots (sampled black, by name).
+///
+/// The slots are the GC7000 back end's (`vivante::texture`'s
+/// `emit_textures_inner`), worked out from the same inputs, the draw's
+/// bindings and the stages' declared samplers: the fragment stage owns slots
+/// 0.. (as many as its highest bound or declared binding), its companions
+/// follow in unit order, then the vertex stage's slots and its companions
+/// (`companion_slot`; Mesa's unified packing, etnaviv_texture.c:301-322 and
+/// 434-438). `wide` is `vivante::texture::wide128_sampled` in a draw.
+#[cfg(all(feature = "gpu-vivante", feature = "shaderc-online"))]
+pub fn wide128_companions(
+    vs_bound: &[GlesTextureBind],
+    vs: &ShcShader,
+    fs_bound: &[GlesTextureBind],
+    fs: &ShcShader,
+    wide: impl Fn(&GlesTextureBind) -> bool,
+) -> [[Option<u8>; shaderc::online::vivante::wide128::UNITS]; 2] {
+    use crate::vivante::state::GC_MAX_SAMPLERS;
+    use crate::vivante::texture::companion_slot;
+    const UNITS: usize = shaderc::online::vivante::wide128::UNITS;
+    let stage_count = |bound: &[GlesTextureBind], sh: &ShcShader| {
+        bound
+            .iter()
+            .map(|t| t.unit as u32 + 1)
+            .chain(sh.sampler_bindings().map(|(b, _)| b as u32 + 1))
+            .max()
+            .unwrap_or(0)
+            .max(bound.len() as u32)
+    };
+    let fs_count = stage_count(fs_bound, fs);
+    let fs_wide = fs_bound.iter().take(GC_MAX_SAMPLERS).filter(|t| wide(t)).count() as u32;
+    let vs_base = fs_count + fs_wide;
+    let vs_count = stage_count(vs_bound, vs);
+    let mut out = [[None; UNITS]; 2];
+    for (stage, bound, base, count) in [(1usize, fs_bound, 0u32, fs_count), (0, vs_bound, vs_base, vs_count)] {
+        let bound = &bound[..bound.len().min(GC_MAX_SAMPLERS)];
+        for t in bound.iter().filter(|t| wide(t) && (t.unit as usize) < UNITS) {
+            /* ranked in unit order, as the back end ranks them */
+            let rank = bound.iter().filter(|o| wide(o) && o.unit < t.unit).count() as u32;
+            if let Some(slot) = companion_slot(base, count, rank) {
+                out[stage][t.unit as usize] = Some((slot - base) as u8);
+            }
+        }
+    }
+    out
+}
+
+/// Empty plane variant `v`: its uploads freed, its shaders released.
+#[cfg(all(feature = "gpu-vivante", feature = "shaderc-online"))]
+fn free_w128_variant(v: &mut ProgW128Variant) {
+    for m in [&mut v.vs_usc, &mut v.fs_usc] {
+        if !m.impl_.is_null() {
+            osal::gpu_free(m);
+        }
+    }
+    shaderc::release_shader(&v.vs);
+    shaderc::release_shader(&v.fs);
+    // SAFETY: every field of ProgW128Variant is valid when all-zero.
+    unsafe { core::ptr::write_bytes(v as *mut ProgW128Variant, 0, 1) };
+}
+
+/// Point draw `d` at the plane-join variant its bound textures need, once
+/// they are bound (`d.textures`, `d.vs_textures`): the program's
+/// sensitivity is asked the first time (after a link, the cache is new),
+/// and a program whose stages answer 0 costs one compare. `lod` is the
+/// sampler-state key of the shaders the draw has (0: the program's own),
+/// `base_vs` its vertex shader before the key, `fs_blend` whether its
+/// fragment shader is a blend variant (the GC7000's front-facing twin).
+///
+/// Err: the draw needs a plane variant it cannot have, and is refused --
+/// drawn with the plain shader it would read the B,A plane as R,G.
+#[cfg(all(feature = "gpu-vivante", feature = "shaderc-online"))]
+fn wide128_select(
+    pg: &mut ProgGpu,
+    p: &GlProgram,
+    d: &mut GlesDraw,
+    lod: [u64; 2],
+    base_vs: &ShcShader,
+    fs_blend: bool,
+) -> Result<(), &'static str> {
+    if !pg.w128_sense_known {
+        let sense =
+            |sh: &ShcShader| if sh.sampler_bindings().next().is_some() { shaderc::wide128_sensitivity(sh) } else { 0 };
+        pg.w128_sense = [sense(&p.rvs), sense(&p.rfs)];
+        pg.w128_sense_known = true;
+    }
+    if pg.w128_sense == [0, 0] {
+        return Ok(());
+    }
+    let companion = wide128_companions(
+        &d.vs_textures[..(d.num_vs_textures as usize).min(d.vs_textures.len())],
+        &p.rvs,
+        &d.textures[..(d.num_textures as usize).min(d.textures.len())],
+        &p.rfs,
+        crate::vivante::texture::wide128_sampled,
+    );
+    let planes = [
+        shaderc::wide128_planes(pg.w128_sense[0], &companion[0]),
+        shaderc::wide128_planes(pg.w128_sense[1], &companion[1]),
+    ];
+    pg.w128_last = planes;
+    if planes[0].is_empty() && planes[1].is_empty() {
+        return Ok(());
+    }
+    /* a blend variant is compiled from the source and the facts alone: it
+     * would drop the split (shaderc::online::backend::wide128_variant) */
+    if fs_blend && !planes[1].is_empty() {
+        return Err("its fragment shader needs a front-facing twin and a 128-bit plane key at once");
+    }
+    let i = w128_variant_for(pg, &p.rvs, &p.rfs, base_vs, planes, lod)?;
+    let v = &pg.w128_var[i];
+    if !planes[0].is_empty() {
+        d.vs = &v.vs;
+        d.vs_usc_gpu = v.vs_usc.gpu;
+    }
+    if !planes[1].is_empty() {
+        d.fs = &v.fs;
+        d.fs_usc_gpu = v.fs_usc.gpu;
+    }
+    Ok(())
+}
+
+/// Host tests: of `program` in the current context, the 128-bit plane
+/// sensitivity ([vertex, fragment]) and the plane key of its last draw;
+/// `None` before a draw asked (or after a link).
+#[cfg(all(feature = "host-test", feature = "gpu-vivante", feature = "shaderc-online"))]
+pub fn wide128_draw_state(program: GLuint) -> Option<([u32; 2], [shaderc::Wide128Planes; 2])> {
+    let c = context::current()?;
+    if obj_index(program) >= MAX_PROGRAMS {
+        return None;
+    }
+    // SAFETY: single-threaded by contract; read between draws.
+    let pg = unsafe { &STATE.get().pg[c.group as usize][obj_index(program)] };
+    pg.w128_sense_known.then_some((pg.w128_sense, pg.w128_last))
+}
+
+/// The plane variant slot for `planes` and the sampler-state key `lod`:
+/// found, or compiled into a free or the least recently used slot. A stage
+/// is compiled from the program's own shader (`rvs`, `rfs`) when its key is
+/// not empty; a fragment variant is linked to the vertex shader the draw
+/// takes (the variant's, or `base_vs`). Err when it cannot be had: a compile
+/// the split refuses (an offset or gradient look-up, a companion the shader
+/// samples itself), a link that compiled the fragment shader again (and so
+/// without the split: the link does not know the key), or an upload that
+/// failed. A failure is remembered in the slot, except a compile refused for
+/// want of room ([`VARIANT_NO_ROOM`]) and out of memory, which free it.
+#[cfg(all(feature = "gpu-vivante", feature = "shaderc-online"))]
+fn w128_variant_for(
+    pg: &mut ProgGpu,
+    rvs: &ShcShader,
+    rfs: &ShcShader,
+    base_vs: &ShcShader,
+    planes: [shaderc::Wide128Planes; 2],
+    lod: [u64; 2],
+) -> Result<usize, &'static str> {
+    pg.w128_clock = pg.w128_clock.wrapping_add(1);
+    let now = pg.w128_clock;
+    if let Some(i) = pg.w128_var.iter().position(|v| v.used && v.planes == planes && v.lod == lod) {
+        pg.w128_var[i].stamp = now;
+        return if pg.w128_var[i].missing { Err("no 128-bit plane variant of its shaders") } else { Ok(i) };
+    }
+    let slot = pg.w128_var.iter().position(|v| !v.used).unwrap_or_else(|| {
+        (0..PROG_MAX_W128_VARIANTS).max_by_key(|&i| now.wrapping_sub(pg.w128_var[i].stamp)).unwrap_or(0)
+    });
+    let v = &mut pg.w128_var[slot];
+    free_w128_variant(v);
+    v.used = true;
+    v.planes = planes;
+    v.lod = lod;
+    v.stamp = now;
+    let mut log = [0 as core::ffi::c_char; 192];
+    let fail = |v: &mut ProgW128Variant, why: &'static str, log: &[core::ffi::c_char], rc: i32| {
+        if !W128_VARIANT_LOGGED.swap(true, Ordering::Relaxed) {
+            glog!(
+                "yakogl: no 128-bit plane variant for units {:#x}/{:#x} ({}: {}); its draws are refused",
+                v.planes[0].mask,
+                v.planes[1].mask,
+                why,
+                log_text(log)
+            );
+        }
+        let (planes, lod, stamp) = (v.planes, v.lod, v.stamp);
+        free_w128_variant(v);
+        if rc != VARIANT_NO_ROOM && rc != -util::ENOMEM {
+            /* a property of the key: remembered, not compiled again */
+            (v.used, v.planes, v.lod, v.stamp, v.missing) = (true, planes, lod, stamp, true);
+        }
+        Err(why)
+    };
+    for stage in 0..2 {
+        if planes[stage].is_empty() {
+            continue;
+        }
+        let (src, out) = if stage == 0 { (rvs, &mut v.vs) } else { (rfs, &mut v.fs) };
+        let rc = shaderc::wide128_variant(src, planes[stage], shaderc::LodKey::from_bits(lod[stage]), out, &mut log);
+        if rc != 0 {
+            let why =
+                if stage == 0 { "the vertex shader does not compile" } else { "the fragment shader does not compile" };
+            return fail(v, why, &log, rc);
+        }
+    }
+    /* A fragment variant is compiled from the source, with its own varying
+     * packing: linked to the vertex shader as glLinkProgram linked the
+     * program's (fs_variant_for, the same reason). A link that has to
+     * compile it again (a varying the vertex stage declares and never
+     * writes, read as 0) would compile it without the key: refused. */
+    if !planes[1].is_empty() {
+        if let Some(link) = shaderc::backend().and_then(|b| b.link) {
+            let split = v.fs.usc;
+            let vs: *const ShcShader = if planes[0].is_empty() { base_vs } else { &v.vs };
+            // SAFETY: two distinct valid shaders; the log is as long as said.
+            let rc = unsafe { link(vs, &mut v.fs, log.as_mut_ptr(), log.len()) };
+            if rc != 0 {
+                return fail(v, "the fragment shader does not link", &log, rc);
+            }
+            if v.fs.usc != split {
+                return fail(v, "the link compiled the fragment shader again, without its planes", &[0], -util::EINVAL);
+            }
+        }
+    }
+    for stage in 0..2 {
+        let (sh, m) = if stage == 0 { (&v.vs, &mut v.vs_usc) } else { (&v.fs, &mut v.fs_usc) };
+        if planes[stage].is_empty() || sh.usc_dw == 0 || sh.usc.is_null() {
+            continue;
+        }
+        if osal::gpu_alloc(backend::heap_base(GLES_HEAP_SHADER), sh.usc_dw as usize * 4, OSAL_MEM_DATA, m) != 0
+            || put(m, 0, dword_bytes(sh.usc_words())) != 0
+        {
+            return fail(v, "out of shader memory", &[0], -util::ENOMEM);
+        }
+    }
+    Ok(slot)
 }
 
 /// Ensure the program's USC + uniform GPU buffers exist and its USC is uploaded.
@@ -3426,6 +3735,9 @@ fn build_common(
         Some((vs, fs)) => (vs, fs),
         None => (&p.rvs, &p.rfs),
     };
+    /* what the plane key below compiles for, once the textures are bound */
+    #[cfg(all(feature = "gpu-vivante", feature = "shaderc-online"))]
+    let (w128_lod, w128_base_vs) = (lod.map_or([0, 0], |i| pg.lod_var[i].key), *base_vs);
 
     /* blending: swap in the FS variant compiled for this blend state, and
      * pass the state on as well for a backend that blends in hardware */
@@ -3440,6 +3752,8 @@ fn build_common(
     d.blend_color = c.blend_color; /* GLclampf is f32 */
     let mut stencil_only_variant = false; /* see below; folded into d.color_write */
     let mut fs: &ShcShader = base_fs;
+    /* the draw's fragment shader is a blend variant (see wide128_select) */
+    let mut fs_blend = false;
     {
         /* The V3D blends, masks colour and faces in fixed function (the TLB,
          * CFG_BITS), and its fragment shader is part of the linked program:
@@ -3504,6 +3818,7 @@ fn build_common(
             Ok(Some(slot)) => {
                 let v = &pg.fs_var[slot];
 
+                fs_blend = true;
                 fs = &v.sh;
                 d.fs = &v.sh;
                 d.fs_usc_gpu = v.usc.gpu;
@@ -4171,6 +4486,19 @@ fn build_common(
             }
         }
     }
+    /* The GC7000's 128-bit plane key, from the textures just bound: the
+     * stages that sample an RGBA32F/UI/I texture as two planes take the
+     * variant that joins them (wide128_select). */
+    #[cfg(all(feature = "gpu-vivante", feature = "shaderc-online"))]
+    {
+        let p = &context::objects(c.group).programs[obj_index(program)];
+        if let Err(why) = wide128_select(pg, p, d, w128_lod, &w128_base_vs, fs_blend) {
+            backend::note_draw_refused(why, 0);
+            return Err((GL_NO_ERROR, FUNC));
+        }
+    }
+    #[cfg(not(all(feature = "gpu-vivante", feature = "shaderc-online")))]
+    let _ = fs_blend;
     /* Not gated on the per-draw dump: that one is switched off after the
      * second frame, and a Quick 3D scene samples its prefiltered probe long
      * after. Three lines-per-level dumps of at most four cube maps is
@@ -8887,6 +9215,145 @@ mod tests {
         let c = gl.ctx();
         let p = &c.objs_ref().programs[obj_index(prog)];
         assert_eq!(stage_lod_key(c, 0, &p.rfs, &p.fs_sampler_unit), 0, "no sensitivity, no key");
+    }
+
+    /* ---- 128-bit plane-join variants (GC7000, wide128_select) ---- */
+
+    /// A 2x2 integer texture of `internal` (RGBA8UI or RGBA32UI), one level,
+    /// NEAREST (complete), bound to unit 0.
+    #[cfg(all(feature = "shaderc-online", feature = "gpu-vivante", not(feature = "report-es2")))]
+    fn uint_texture(gl: &Gl, internal: GLenum) -> GLuint {
+        let ty = if internal == GL_RGBA32UI { GL_UNSIGNED_INT } else { GL_UNSIGNED_BYTE };
+        let texels = [0x5au32; 16];
+        let mut t = 0;
+        // SAFETY: plain GL calls; `texels` holds 2x2 texels of either size.
+        unsafe {
+            glActiveTexture(GL_TEXTURE0);
+            glGenTextures(1, &mut t);
+            glBindTexture(GL_TEXTURE_2D, t);
+            glTexImage2D(
+                GL_TEXTURE_2D,
+                0,
+                internal as GLint,
+                2,
+                2,
+                0,
+                GL_RGBA_INTEGER,
+                ty,
+                texels.as_ptr() as *const c_void,
+            );
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST as GLint);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST as GLint);
+        }
+        assert_eq!(gl.error(), GL_NO_ERROR, "the 0x{internal:x} texture");
+        t
+    }
+
+    /// The GL core's half of the GC7000's 128-bit sampling, end to end
+    /// through the GL with RGBA32UI added to the sampled mask (as
+    /// wide128-flip will): a usampler2D reading an RGBA32UI texture draws
+    /// the plane-joined fragment variant, its B,A look-up on the companion
+    /// slot right after the stage's one slot; the same program reading an
+    /// RGBA8UI texture draws its own shader. The variant is compiled and
+    /// uploaded once, and the key follows glBindTexture with no hook.
+    #[cfg(all(feature = "shaderc-online", feature = "gpu-vivante", not(feature = "report-es2")))]
+    #[test]
+    fn an_rgba32ui_texture_draws_the_plane_joined_variant() {
+        const VS: &str = "#version 300 es\nin vec4 p;\nout vec2 uv;\nvoid main() { uv = p.xy; gl_Position = p; }\n";
+        const FS: &str = "#version 300 es\nprecision highp float;\nuniform highp usampler2D s;\nin vec2 uv;\n\
+                          out uvec4 o;\nvoid main() { o = texture(s, uv); }\n";
+        struct Mask;
+        impl Drop for Mask {
+            fn drop(&mut self) {
+                crate::backend::TEST_EXTRA_SAMPLED.store(0, Ordering::Relaxed);
+            }
+        }
+        let gl = Gl::new(16, 16);
+        let _be = OnlineBackEnd::install();
+        let _mask = Mask;
+        crate::backend::TEST_EXTRA_SAMPLED.store(gles_texfmt_bit(GLES_TEXFMT_RGBA32UI), Ordering::Relaxed);
+        let prog = online_program(VS, FS);
+        let own = |gl: &Gl| {
+            let p = &gl.ctx().objs_ref().programs[obj_index(prog)];
+            (&p.rfs as *const ShcShader, p.rfs.usc_words().to_vec())
+        };
+
+        let narrow = uint_texture(&gl, GL_RGBA8UI);
+        let d = draw_tri(&gl);
+        let pg = prog_gpu(&gl, prog);
+        assert_eq!(pg.w128_sense, [0, 1], "the fragment stage samples binding 0");
+        assert!(pg.w128_last.iter().all(|k| k.is_empty()), "RGBA8UI is one plane");
+        assert_eq!(d.draw.fs, own(&gl).0, "the program's own fragment shader");
+        assert!(pg.w128_var.iter().all(|v| !v.used), "nothing compiled");
+
+        let wide = uint_texture(&gl, GL_RGBA32UI);
+        let d = draw_tri(&gl);
+        assert_eq!(d.draw.num_textures, 1);
+        assert!(crate::vivante::texture::wide128_sampled(&d.draw.textures[0]), "two planes");
+        let pg = prog_gpu(&gl, prog);
+        assert_eq!(pg.w128_last[0], shaderc::Wide128Planes::NONE, "the vertex stage samples nothing");
+        assert_eq!(pg.w128_last[1], shaderc::Wide128Planes::NONE.with(0, 1), "binding 0, its B,A plane on slot 1");
+        let built: Vec<_> = pg.w128_var.iter().filter(|v| v.used).collect();
+        assert_eq!(built.len(), 1, "one variant");
+        let v = built[0];
+        assert!(!v.missing, "the variant compiled, linked and uploaded");
+        assert_eq!((d.draw.fs, d.draw.fs_usc_gpu), (&v.fs as *const ShcShader, v.fs_usc.gpu), "the variant is drawn");
+        assert_eq!(d.draw.vs_usc_gpu, pg.vs_usc.gpu, "the program's own vertex shader");
+        let code = stage_code(&gl, &d.draw, true);
+        assert_ne!(code, own(&gl).1, "the variant's code is not the program's");
+        let mut units: Vec<u32> = code
+            .chunks(4)
+            .filter_map(|c| crate::shaderc::online::vivante::decode::decode_instr(&c.try_into().unwrap()).ok())
+            .filter(|i| i.op().name.starts_with("tex"))
+            .filter_map(|i| i.get("TEX_ID"))
+            .collect();
+        units.sort();
+        assert_eq!(units, [0, 1], "the R,G plane on slot 0, the B,A plane on its companion");
+        let (gpu, stamp) = (v.fs_usc.gpu, v.stamp);
+
+        /* the same key again: the same upload, no compile */
+        let d = draw_tri(&gl);
+        let pg = prog_gpu(&gl, prog);
+        let v = pg.w128_var.iter().find(|v| v.used).unwrap();
+        assert_eq!((d.draw.fs_usc_gpu, pg.w128_var.iter().filter(|v| v.used).count()), (gpu, 1));
+        assert_ne!(v.stamp, stamp, "used again");
+
+        /* back to RGBA8UI: the program's own shader, the variant kept */
+        // SAFETY: plain GL call.
+        unsafe { glBindTexture(GL_TEXTURE_2D, narrow) };
+        let d = draw_tri(&gl);
+        let pg = prog_gpu(&gl, prog);
+        assert_eq!(d.draw.fs, own(&gl).0);
+        assert_eq!(d.draw.fs_usc_gpu, pg.fs_usc.gpu);
+        assert!(pg.w128_last[1].is_empty());
+        let _ = wide;
+    }
+
+    /// The companion facts follow the GC7000 back end's slot packing: the
+    /// fragment stage's companions after its highest bound or declared
+    /// binding, ranked in unit order; the vertex stage's after the fragment
+    /// stage's slots and companions, numbered from its VS_SAMPLER_BASE; and
+    /// none past slot 31 or for a texture that is one plane.
+    #[cfg(all(feature = "shaderc-online", feature = "gpu-vivante"))]
+    #[test]
+    fn the_companion_slots_are_the_back_ends() {
+        let t = |unit: u8, format: u8| GlesTextureBind { unit, format, ..GlesTextureBind::ZERO };
+        let wide = |t: &GlesTextureBind| crate::vivante::texture::is_wide128(t.format);
+        let none = ShcShader::ZERO;
+        let fs = [t(2, GLES_TEXFMT_RGBA32F), t(0, GLES_TEXFMT_RGBA8), t(1, GLES_TEXFMT_RGBA32UI)];
+        let vs = [t(1, GLES_TEXFMT_RGBA32I), t(0, GLES_TEXFMT_RGBA8)];
+        let c = wide128_companions(&vs, &none, &fs, &none, wide);
+        /* fragment: 3 slots, companions 3 (unit 1) and 4 (unit 2) */
+        assert_eq!(&c[1][..4], &[None, Some(3), Some(4), None]);
+        /* vertex: base 3 + 2 = 5, 2 slots, its companion at 5 + 2 = 7, stage slot 2 */
+        assert_eq!(&c[0][..3], &[None, Some(2), None]);
+        /* no slot left: 16 fragment slots, 16 companions would end at 31 */
+        let many: Vec<_> = (0..16).map(|u| t(u, GLES_TEXFMT_RGBA32F)).collect();
+        let c = wide128_companions(&[t(0, GLES_TEXFMT_RGBA32F)], &none, &many, &none, wide);
+        assert_eq!(c[1][15], Some(31), "the last slot");
+        assert_eq!(c[0][0], None, "the vertex stage's would be past slot 31");
+        let c = wide128_companions(&[], &none, &many, &none, |_| false);
+        assert!(c.iter().flatten().all(|s| s.is_none()), "one-plane textures have no companion");
     }
 
     /// Switch (b), end to end through the GL, in a build that reports ES

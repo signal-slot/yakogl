@@ -226,3 +226,324 @@ fn the_key_is_put_back_and_the_records_stay_apart() {
         release_shader(&s);
     }
 }
+
+/* ---- the GL core's draw (item wide128-shader) ----------------------------
+ *
+ * The draw picks the key from the texture bound NOW (src/gl/draw.rs,
+ * `wide128_select`): a usampler2D names RGBA8UI and RGBA32UI alike, and
+ * only the second is two planes. These run a real draw through the GL core
+ * and the Vivante back end on a stand-in OSAL (as
+ * tests/es3_wide128_planes_gc.rs) and read the key the draw chose
+ * (`gl::draw::wide128_draw_state`).
+ *
+ * RGBA32UI stays out of GC_SAMPLED_TEXFMTS until wide128-flip, and the mask
+ * hook of the in-crate tests is `#[cfg(test)]`, so here the RGBA32UI case
+ * finds the class closed, says so on stderr and checks the closed state:
+ * the GL core stores no RGBA32UI texture, and the draw keeps the program's
+ * shaders. From the flip on it checks the variant for real. The open case
+ * runs today in the in-crate test
+ * `gl::draw::tests::an_rgba32ui_texture_draws_the_plane_joined_variant`,
+ * which opens the class through that hook. */
+
+mod draw {
+    use super::serial;
+    use core::ffi::{c_char, c_void};
+    use std::collections::BTreeMap;
+    use std::ffi::CString;
+    use std::sync::Mutex;
+    use yakogl::backend::*;
+    use yakogl::gl::consts::*;
+    use yakogl::gl::draw::*;
+    use yakogl::gl::program::*;
+    use yakogl::gl::shader::*;
+    use yakogl::gl::state::*;
+    use yakogl::gl::texture::*;
+    use yakogl::gl::types::*;
+    use yakogl::gl::vertex::*;
+    use yakogl::osal::{osal_set_ops, OsalGpuMem, OsalOps};
+    use yakogl::shaderc::Wide128Planes;
+    use yakogl::vivante::kick::{GcKick, GC_KICK_MAGIC};
+
+    /* the stand-in OSAL: plain memory, every kick completes at once */
+
+    #[derive(Default)]
+    struct Platform {
+        allocs: BTreeMap<u64, Box<[u64]>>,
+        bump: BTreeMap<u64, u64>,
+        fence: i64,
+        faults: Vec<String>,
+    }
+
+    static PLATFORM: Mutex<Option<Platform>> = Mutex::new(None);
+
+    fn with_platform<R>(f: impl FnOnce(&mut Platform) -> R) -> R {
+        let mut g = PLATFORM.lock().unwrap_or_else(|e| e.into_inner());
+        f(g.get_or_insert_with(Platform::default))
+    }
+
+    unsafe extern "C" fn p_gpu_alloc(heap_base: u64, size: usize, _flags: u32, out: *mut OsalGpuMem) -> i32 {
+        if size == 0 || size > 1 << 30 {
+            return -12;
+        }
+        with_platform(|p| {
+            let mut mem = vec![0u64; size.div_ceil(8)].into_boxed_slice();
+            let at = p.bump.entry(heap_base).or_insert(0);
+            let gpu = heap_base + 0x1000 + *at;
+            *at += (size as u64).div_ceil(4096) * 4096;
+            let cpu = mem.as_mut_ptr() as *mut c_void;
+            // SAFETY: the caller passes a writable descriptor.
+            unsafe { *out = OsalGpuMem { cpu, gpu, phys: gpu, size, impl_: cpu } };
+            p.allocs.insert(gpu, mem);
+            0
+        })
+    }
+
+    unsafe extern "C" fn p_gpu_free(mem: *mut OsalGpuMem) -> i32 {
+        // SAFETY: the caller passes a live descriptor.
+        let m = unsafe { *mem };
+        with_platform(|p| {
+            if !m.impl_.is_null() && p.allocs.remove(&m.gpu).is_none() {
+                p.faults.push(format!("gpu_free of 0x{:x}, which is no live allocation", m.gpu));
+            }
+        });
+        // SAFETY: as above; a freed descriptor is cleared (the OSAL contract).
+        unsafe { *mem = OsalGpuMem::ZERO };
+        0
+    }
+
+    unsafe extern "C" fn p_cache(_cpu: *mut c_void, _n: usize) {}
+
+    unsafe extern "C" fn p_submit(kick: *const c_void, len: usize) -> i64 {
+        if len != core::mem::size_of::<GcKick>() {
+            with_platform(|p| p.faults.push(format!("submit of a {len}-byte descriptor")));
+            return -22;
+        }
+        // SAFETY: the back end passes a live GcKick of that size.
+        let k = unsafe { *(kick as *const GcKick) };
+        with_platform(|p| {
+            if k.magic != GC_KICK_MAGIC {
+                p.faults.push(format!("submit with magic 0x{:x}", k.magic));
+                return -22;
+            }
+            p.fence += 1;
+            p.fence
+        })
+    }
+
+    unsafe extern "C" fn p_wait(_fence: i64, _timeout_us: i64) -> i32 {
+        0
+    }
+
+    unsafe extern "C" fn p_completed() -> i64 {
+        with_platform(|p| p.fence)
+    }
+
+    unsafe extern "C" fn p_query(what: u32, out: *mut c_void, out_sz: usize) -> i32 {
+        use yakogl::osal::{OSAL_QUERY_DRAW_STATS, OSAL_QUERY_GC_FRAME_OPEN};
+        if (what == OSAL_QUERY_GC_FRAME_OPEN && out_sz == 4 && !out.is_null()) || what == OSAL_QUERY_DRAW_STATS {
+            return 0;
+        }
+        -22
+    }
+
+    static OSAL: OsalOps = OsalOps {
+        init: None,
+        shutdown: None,
+        gpu_alloc: Some(p_gpu_alloc),
+        gpu_free: Some(p_gpu_free),
+        mmu_map: None,
+        map_phys: None,
+        gpu_write: None,
+        gpu_read: None,
+        cache_flush: Some(p_cache),
+        cache_invd: Some(p_cache),
+        submit: Some(p_submit),
+        wait: Some(p_wait),
+        completed: Some(p_completed),
+        reg_read: None,
+        reg_write: None,
+        query: Some(p_query),
+        log: None,
+        wait_vblank: None,
+        present: None,
+        lock: None,
+        unlock: None,
+        thread_id: None,
+        display_busy: None,
+    };
+
+    /// Run `case` with the Vivante back end up on the stand-in OSAL and a
+    /// fresh 64x64 context, under the compile lock.
+    fn on_gc7000(case: impl FnOnce()) {
+        let _g = serial();
+        // SAFETY: the guard serialises the tests; the tables are statics.
+        let ctx = unsafe {
+            osal_set_ops(&OSAL);
+            yakogl::backend::g_backend = &yakogl::vivante::backend::yakogl_backend_vivante;
+            yakogl::shaderc::g_shaderc = &yakogl::shaderc::online::SHC_ONLINE;
+            assert_eq!(yakogl::vivante::backend::gc_init(), 0, "gc_init");
+            let c = yakogl::gl::context::gl_context_create(64, 64);
+            assert!(!c.is_null(), "context pool exhausted");
+            c
+        };
+        let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(case));
+        // SAFETY: the context made above.
+        unsafe {
+            yakogl::gl::context::gl_context_destroy(ctx);
+            yakogl::vivante::backend::gc_shutdown();
+        }
+        let faults = with_platform(|p| {
+            /* leaked, not freed, as in gc_npot_repeat.rs: addresses keep counting up */
+            for (_, a) in core::mem::take(&mut p.allocs) {
+                core::mem::forget(a);
+            }
+            core::mem::take(&mut p.faults)
+        });
+        if let Err(e) = r {
+            std::panic::resume_unwind(e);
+        }
+        assert!(faults.is_empty(), "the back end broke the OSAL contract: {faults:?}");
+    }
+
+    fn error() -> GLenum {
+        // SAFETY: a plain GL call.
+        unsafe { glGetError() }
+    }
+
+    fn shader(ty: GLenum, text: &str) -> GLuint {
+        let text = CString::new(text).unwrap();
+        // SAFETY: plain GL calls; one NUL-terminated source.
+        unsafe {
+            let s = glCreateShader(ty);
+            let p: [*const c_char; 1] = [text.as_ptr()];
+            glShaderSource(s, 1, p.as_ptr(), core::ptr::null());
+            glCompileShader(s);
+            let mut ok: GLint = 0;
+            glGetShaderiv(s, GL_COMPILE_STATUS, &mut ok);
+            assert_eq!(ok, 1, "{text:?} did not compile");
+            s
+        }
+    }
+
+    const VS: &str = "#version 300 es\nin vec4 p;\nout vec2 uv;\nvoid main() { uv = p.xy; gl_Position = p; }\n";
+    const FS: &str = concat!(
+        "#version 300 es\nprecision highp float;\nuniform highp usampler2D s;\nin vec2 uv;\n",
+        "out vec4 o;\nvoid main() { o = vec4(texture(s, uv)) / 255.0; }\n"
+    );
+
+    /// The program both cases draw: a usampler2D read by `texture`.
+    fn usampler_program() -> GLuint {
+        // SAFETY: plain GL calls.
+        unsafe {
+            let p = glCreateProgram();
+            glAttachShader(p, shader(GL_VERTEX_SHADER, VS));
+            glAttachShader(p, shader(GL_FRAGMENT_SHADER, FS));
+            glBindAttribLocation(p, 0, c"p".as_ptr());
+            glLinkProgram(p);
+            let mut ok: GLint = 0;
+            glGetProgramiv(p, GL_LINK_STATUS, &mut ok);
+            assert_eq!(ok, 1, "link failed");
+            p
+        }
+    }
+
+    /// A 2x2 integer texture of `internal`, NEAREST, bound to unit 0; the
+    /// error of its glTexImage2D.
+    fn uint_texture(internal: GLenum) -> GLenum {
+        let ty = if internal == GL_RGBA32UI { GL_UNSIGNED_INT } else { GL_UNSIGNED_BYTE };
+        let texels = [0x5au32; 16];
+        // SAFETY: plain GL calls; `texels` holds 2x2 texels of either size.
+        unsafe {
+            let mut t: GLuint = 0;
+            glActiveTexture(GL_TEXTURE0);
+            glGenTextures(1, &mut t);
+            glBindTexture(GL_TEXTURE_2D, t);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST as GLint);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST as GLint);
+            glTexImage2D(
+                GL_TEXTURE_2D,
+                0,
+                internal as GLint,
+                2,
+                2,
+                0,
+                GL_RGBA_INTEGER,
+                ty,
+                texels.as_ptr() as *const c_void,
+            );
+        }
+        error()
+    }
+
+    static QUAD: [f32; 16] = [-1.0, -1.0, 0.5, 1.0, 1.0, -1.0, 0.5, 1.0, -1.0, 1.0, 0.5, 1.0, 1.0, 1.0, 0.5, 1.0];
+
+    /// One quad with program `p` sampling unit 0, drawn and finished; the
+    /// plane sensitivity and key the draw worked out.
+    fn draw(p: GLuint) -> ([u32; 2], [Wide128Planes; 2]) {
+        let refused = draws_refused();
+        // SAFETY: plain GL calls; QUAD is a static.
+        unsafe {
+            glViewport(0, 0, 64, 64);
+            glUseProgram(p);
+            glUniform1i(glGetUniformLocation(p, c"s".as_ptr()), 0);
+            glEnableVertexAttribArray(0);
+            glVertexAttribPointer(0, 4, GL_FLOAT, 0, 0, QUAD.as_ptr() as *const c_void);
+            glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+        }
+        assert_eq!(error(), GL_NO_ERROR, "draw");
+        assert_eq!(draws_refused(), refused, "the draw is not refused");
+        let state = wide128_draw_state(p).expect("the draw asked the program's sensitivity");
+        // SAFETY: plain GL call.
+        unsafe { glFinish() };
+        assert_eq!(error(), GL_NO_ERROR, "glFinish");
+        state
+    }
+
+    fn open(format: u8) -> bool {
+        sampled_texfmts() & gles_texfmt_bit(format) != 0
+    }
+
+    /// An RGBA8UI texture on the usampler2D: one plane, no key, the
+    /// program's own shaders -- though the program is sensitive (its
+    /// fragment stage samples binding 0).
+    #[test]
+    fn an_rgba8ui_texture_keeps_the_programs_shaders() {
+        on_gc7000(|| {
+            let p = usampler_program();
+            assert_eq!(uint_texture(GL_RGBA8UI), GL_NO_ERROR, "RGBA8UI is sampled");
+            let (sense, key) = draw(p);
+            assert_eq!(sense, [0, 1], "the fragment stage samples binding 0");
+            assert_eq!(key, [Wide128Planes::NONE; 2], "one plane: no key");
+        });
+    }
+
+    /// An RGBA32UI texture on the same usampler2D: two planes, the fragment
+    /// stage keyed on binding 0 with its B,A plane on slot 1 (the stage's
+    /// one slot, then its companion), the variant drawn. Closed (before
+    /// wide128-flip): the GL core stores no RGBA32UI texture, and the draw
+    /// keeps the program's shaders.
+    #[test]
+    fn an_rgba32ui_texture_selects_the_plane_joined_variant() {
+        on_gc7000(|| {
+            let p = usampler_program();
+            if !open(GLES_TEXFMT_RGBA32UI) {
+                eprintln!(
+                    "RGBA32UI is not in GC_SAMPLED_TEXFMTS (wide128-flip): checking the closed state; the open \
+                     case runs in gl::draw::tests::an_rgba32ui_texture_draws_the_plane_joined_variant"
+                );
+                assert_ne!(uint_texture(GL_RGBA32UI), GL_NO_ERROR, "no class stores RGBA32UI");
+                let (sense, key) = draw(p);
+                assert_eq!(sense, [0, 1]);
+                assert_eq!(key, [Wide128Planes::NONE; 2], "nothing bound is two planes");
+                return;
+            }
+            assert_eq!(uint_texture(GL_RGBA32UI), GL_NO_ERROR, "RGBA32UI is sampled");
+            let (sense, key) = draw(p);
+            assert_eq!(sense, [0, 1]);
+            assert_eq!(key, [Wide128Planes::NONE, Wide128Planes::NONE.with(0, 1)], "binding 0, B,A on slot 1");
+            /* back to RGBA8UI on the same program: no key */
+            assert_eq!(uint_texture(GL_RGBA8UI), GL_NO_ERROR);
+            assert_eq!(draw(p).1, [Wide128Planes::NONE; 2]);
+        });
+    }
+}
