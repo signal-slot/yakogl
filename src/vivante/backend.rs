@@ -776,8 +776,9 @@ pub const DRAWS_WITHOUT_COLOUR: bool = true;
 /// claims GL_OES_texture_npot only where the feature is set
 /// (docs/es2-cts-failures.md section H), so this is the hardware fact the
 /// GC7000 build's claim rests on (`gl::state::NPOT_EXTENSION`;
-/// tests/vivante_npot.rs pins it).
-pub const NON_POWER_OF_TWO: bool = true;
+/// tests/vivante_npot.rs pins it). The bit is the built part's
+/// ([`super::profile::ACTIVE`]); the ST part's row sets it too.
+pub const NON_POWER_OF_TWO: bool = super::profile::ACTIVE.non_power_of_two;
 
 /// Bytes of the surface a draw with no colour target names: Mesa's etnaviv
 /// dummy render target, 64x64 RGBA8 (etnaviv_screen.c:1144-1151, Mesa 26.2.1).
@@ -3319,7 +3320,7 @@ pub unsafe extern "C" fn gc_counters(kicks: *mut u32, waits: *mut u32) {
 /// The Vivante implementation of the backend contract ([`crate::backend`]).
 #[no_mangle]
 pub static yakogl_backend_vivante: YakoglBackend = YakoglBackend {
-    name: c"Vivante GC7000UL (i.MX8MP)".as_ptr(),
+    name: super::profile::ACTIVE.name.as_ptr(),
     /* the front end reads byte and short arrays as they lie, so the GL core
      * does not have to convert them to float32 first */
     native_attrib_formats: gles_attribf_bit(GLES_ATTRIBF_BYTE)
