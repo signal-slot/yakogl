@@ -1,0 +1,1541 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES3 at b1b5b845, 2026-11-06, image T14: UART console of the run, from the firmware's first line to the image's end line (README.md)
+  5.05 [sdcard] pieeprom.upd not found
+  5.05 [sdcard] recover4.elf not found
+  5.06 [sdcard] recovery.elf not found
+  5.88 Read start4.elf bytes  2299008 hnd 0x211ac
+  5.94 Read fixup4.dat bytes     5496 hnd 0x20bca
+  5.96 0x00d03114 0x00000000 0x00001fff
+  5.00 MEM GPU: 76 ARM: 948 TOTAL: 1024
+  5.36 Starting start4.elf @ 0xfec00200 partition 1
+  5.23 XHCI-STOP
+  5.23 xHC0 ver: 256 HCS: 05000420 fc000031 00e70004 HCC: 002841eb
+  5.24 USBSTS 18
+  5.24 PCI0 reset
+  5.25 +
+
+MESS:00:00:05.270802:0: arasan: arasan_emmc_open
+MESS:00:00:05.272462:0: arasan: arasan_emmc_set_clock C0: 0x00800000 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 400000 max: 400000 delay: 5
+MESS:00:00:05.392688:0: arasan: arasan_emmc_set_clock C0: 0x00800000 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 400000 max: 400000 delay: 5
+MESS:00:00:05.405559:0: arasan: arasan_emmc_set_clock C0: 0x00800f00 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 390000 max: 400000 delay: 5
+MESS:00:00:05.439831:0: boot-part: 1 fs-type: 0
+MESS:00:00:05.441244:0: boot-part: 1 fs-type: 3
+MESS:00:00:05.445628:0: arasan: arasan_emmc_set_clock C0: 0x00800f06 C1: 0x000e0207 emmc: 200000000 actual: 50000000 div: 0x00000002 target: 50000000 min: 0 max: 50000000 delay: 1
+MESS:00:00:05.607678:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:05.610550:0: brfs: File read: 256 bytes
+MESS:00:00:05.703440:0: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:05.707948:0: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:05.721941:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:06.221095:0: gpioman: gpioman_get_pin_num: pin DISPLAY_DSI_PORT not defined
+MESS:00:00:06.226643:0: gpioman: gpioman_get_pin_num: pin DISPLAY_DSI_PORT not defined
+MESS:00:00:06.235678:0: *** Restart logging
+MESS:00:00:06.237450:0: brfs: File read: 256 bytes
+MESS:00:00:06.316060:0: hdmi: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:06.321092:0: hdmi: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:06.335523:0: hdmi: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:06.343394:0: hdmi: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:06.347215:0: hdmi: HDMI:hdmi_get_state is deprecated, use hdmi_get_display_state instead
+MESS:00:00:06.355973:0: HDMI0: hdmi_pixel_encoding: 300000000
+MESS:00:00:06.361464:0: HDMI1: hdmi_pixel_encoding: 300000000
+MESS:00:00:06.383717:0: dtb_file 'bcm2711-rpi-4-b.dtb'
+MESS:00:00:06.399949:0: brfs: File read: /mfs/sd/bcm2711-rpi-4-b.dtb
+MESS:00:00:06.403241:0: Loaded 'bcm2711-rpi-4-b.dtb' to 0x100 size 0xdbb9
+MESS:00:00:06.443928:0: brfs: File read: 56249 bytes
+MESS:00:00:06.462935:0: brfs: File read: /mfs/sd/overlays/overlay_map.dtb
+MESS:00:00:06.527819:0: brfs: File read: 5971 bytes
+MESS:00:00:06.530513:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:06.573585:0: brfs: File read: 256 bytes
+MESS:00:00:06.577276:0: brfs: File read: /mfs/sd/cmdline.txt
+MESS:00:00:06.580744:0: Read command line from file 'cmdline.txt':
+MESS:00:00:06.586593:0: 'console=serial0,115200 console=tty1 root=PARTUUID=269eab4a-02 rootfstype=ext4 fsck.repair=yes rootwait cfg80211.ieee80211_regdom=JP splash quiet'
+MESS:00:00:06.743179:0: brfs: File read: 145 bytes
+MESS:00:00:08.137815:0: brfs: File read: /mfs/sd/yakogl-T14.bin
+MESS:00:00:08.140635:0: Loaded 'yakogl-T14.bin' to 0x200000 size 0xfc6dc0
+MESS:00:00:08.147160:0: Device tree loaded to 0x2eff1f00 (size 0xe0a1)
+MESS:00:00:08.155929:0: uart: Set PL011 baud rate to 103448.300000 Hz
+MESS:00:00:08.162464:0: uart: Baud rate change done...
+MESS:00:00:08.164487:0:board: watchdog armed
+*** Booting Zephyr OS build af17c0c8aa2a ***
+I: shader compiler scratch: 4194304 bytes, keep: 1048576 bytes
+v3d_deqp: build b1b5b845
+board: PM watchdog resets the SoC ~250 s after boot (tryboot -> Linux)
+v3d_deqp: the record at 210 s after boot at the latest
+V3D clock 250000000 -> 500000000 Hz (0)
+deqp: case filter 'dEQP-GLES3.functional.texture.swizzle.*,dEQP-GLES3.functional.texture.units.*,dEQP-GLES3.functional.texture.vertex.*'
+Writing test log into deqp.qpa
+dEQP Core vulkan-cts-1.4.6.2-555-g93bca01861b0e3ef3c387027a9791e6d065f900c (0x93bca018) starting..
+  target implementation = 'YakoGL-Zephyr'
+I: V3D 4.2: 1 core(s), 8 QPUs, VPM 65536 bytes, PA 35 / VA 35 bits, MMU yes
+I: V3D raw: HUB_IDENT0..3 42554856 000e1124 00000100 00000e00 CTL_IDENT0..2 04443356 81001422 40078121 MMU_DEBUG_INFO 00000550
+osal(v3d): V3D 4.2, 8 QPUs, VPM 65536 bytes, MMU yes (identify 0)
+osal(v3d): UIFCFG 0x00000045
+osal(v3d): ready: carve-out 48 MiB at phys 0x2f09000, GPU VA 0x181000..0x3100000
+yakogl/v3d: depth and stencil apart (by renderbuffer), the platform's setting
+yakogl/v3d: job arenas for 1024 draws (the platform's budget): BCL 139264, indirect 458752, binner tile pool 1056768 bytes; tiled copies kept up to 16777216 bytes
+yakogl/v3d: two job arena sets (the second's texture arena 1048576 bytes): a job is recorded while the one before runs
+yakogl/v3d: clear program built: 408 bytes of code
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.multi_channel.alpha_abgr'..
+osal(v3d): BASELINE after a completed job 1: core_sts 0x0 hub_sts 0x0 err 0x1000 ct0 cs 0x0 ea 0x201085 ca 0x201085 ra 0x0 qba 0x201000 qea 0x201085 ct1 ca 0x223097 ra 0x223096 qba 0x223000 qea 0x223097
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.multi_channel.alpha_abgr
+v3d_deqp: case #0 P 150ms k2/9 c15533/15587 r0 dEQP-GLES3.functional.texture.swizzle.multi_channel.alpha_abgr
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.multi_channel.alpha_all_alpha'..
+yakogl/v3d: binner pool after job 1: given 0x00b96000 + 1056768, BPCA 0x00b99000 BPCS 1044480 CT0QMA 0x00b96000 CT0QMS 1056768, overflow blocks 0 of 2 (262144 bytes each)
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.multi_channel.alpha_all_alpha
+v3d_deqp: case #1 P 47ms k2/9 c15533/15587 r0 dEQP-GLES3.functional.texture.swizzle.multi_channel.alpha_all_alpha
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.multi_channel.alpha_all_blue'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.multi_channel.alpha_all_blue
+v3d_deqp: case #2 P 33ms k2/9 c15533/15587 r0 dEQP-GLES3.functional.texture.swizzle.multi_channel.alpha_all_blue
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.multi_channel.alpha_all_green'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.multi_channel.alpha_all_green
+v3d_deqp: case #3 P 33ms k2/9 c15533/15587 r0 dEQP-GLES3.functional.texture.swizzle.multi_channel.alpha_all_green
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.multi_channel.alpha_all_one'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.multi_channel.alpha_all_one
+v3d_deqp: case #4 P 32ms k2/9 c15533/15587 r0 dEQP-GLES3.functional.texture.swizzle.multi_channel.alpha_all_one
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.multi_channel.alpha_all_red'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.multi_channel.alpha_all_red
+v3d_deqp: case #5 P 33ms k2/9 c15533/15587 r0 dEQP-GLES3.functional.texture.swizzle.multi_channel.alpha_all_red
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.multi_channel.alpha_all_zero'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.multi_channel.alpha_all_zero
+v3d_deqp: case #6 P 32ms k2/9 c15533/15587 r0 dEQP-GLES3.functional.texture.swizzle.multi_channel.alpha_all_zero
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.multi_channel.alpha_bgra'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.multi_channel.alpha_bgra
+v3d_deqp: case #7 P 33ms k2/9 c15533/15587 r0 dEQP-GLES3.functional.texture.swizzle.multi_channel.alpha_bgra
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.multi_channel.alpha_one_one_red_green'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.multi_channel.alpha_one_one_red_green
+v3d_deqp: case #8 P 33ms k2/9 c15533/15587 r0 dEQP-GLES3.functional.texture.swizzle.multi_channel.alpha_one_one_red_green
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.multi_channel.luminance_abgr'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.multi_channel.luminance_abgr
+v3d_deqp: case #9 P 34ms k2/9 c15533/15587 r0 dEQP-GLES3.functional.texture.swizzle.multi_channel.luminance_abgr
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.multi_channel.luminance_all_alpha'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.multi_channel.luminance_all_alpha
+v3d_deqp: case #10 P 34ms k2/9 c15533/15587 r0 dEQP-GLES3.functional.texture.swizzle.multi_channel.luminance_all_alpha
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.multi_channel.luminance_all_blue'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.multi_channel.luminance_all_blue
+v3d_deqp: case #11 P 34ms k2/9 c15533/15587 r0 dEQP-GLES3.functional.texture.swizzle.multi_channel.luminance_all_blue
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.multi_channel.luminance_all_green'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.multi_channel.luminance_all_green
+v3d_deqp: case #12 P 34ms k2/9 c15533/15587 r0 dEQP-GLES3.functional.texture.swizzle.multi_channel.luminance_all_green
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.multi_channel.luminance_all_one'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.multi_channel.luminance_all_one
+v3d_deqp: case #13 P 34ms k2/9 c15533/15587 r0 dEQP-GLES3.functional.texture.swizzle.multi_channel.luminance_all_one
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.multi_channel.luminance_all_red'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.multi_channel.luminance_all_red
+v3d_deqp: case #14 P 34ms k2/9 c15533/15587 r0 dEQP-GLES3.functional.texture.swizzle.multi_channel.luminance_all_red
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.multi_channel.luminance_all_zero'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.multi_channel.luminance_all_zero
+v3d_deqp: case #15 P 33ms k2/9 c15533/15587 r0 dEQP-GLES3.functional.texture.swizzle.multi_channel.luminance_all_zero
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.multi_channel.luminance_alpha_abgr'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.multi_channel.luminance_alpha_abgr
+v3d_deqp: case #16 P 35ms k2/9 c15533/15624 r0 dEQP-GLES3.functional.texture.swizzle.multi_channel.luminance_alpha_abgr
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.multi_channel.luminance_alpha_all_alpha'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.multi_channel.luminance_alpha_all_alpha
+v3d_deqp: case #17 P 36ms k2/9 c15533/15624 r0 dEQP-GLES3.functional.texture.swizzle.multi_channel.luminance_alpha_all_alpha
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.multi_channel.luminance_alpha_all_blue'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.multi_channel.luminance_alpha_all_blue
+v3d_deqp: case #18 P 36ms k2/9 c15533/15624 r0 dEQP-GLES3.functional.texture.swizzle.multi_channel.luminance_alpha_all_blue
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.multi_channel.luminance_alpha_all_green'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.multi_channel.luminance_alpha_all_green
+v3d_deqp: case #19 P 36ms k2/9 c15533/15624 r0 dEQP-GLES3.functional.texture.swizzle.multi_channel.luminance_alpha_all_green
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.multi_channel.luminance_alpha_all_one'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.multi_channel.luminance_alpha_all_one
+v3d_deqp: case #20 P 36ms k2/9 c15533/15624 r0 dEQP-GLES3.functional.texture.swizzle.multi_channel.luminance_alpha_all_one
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.multi_channel.luminance_alpha_all_red'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.multi_channel.luminance_alpha_all_red
+v3d_deqp: case #21 P 36ms k2/9 c15533/15624 r0 dEQP-GLES3.functional.texture.swizzle.multi_channel.luminance_alpha_all_red
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.multi_channel.luminance_alpha_all_zero'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.multi_channel.luminance_alpha_all_zero
+v3d_deqp: case #22 P 36ms k2/9 c15533/15624 r0 dEQP-GLES3.functional.texture.swizzle.multi_channel.luminance_alpha_all_zero
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.multi_channel.luminance_alpha_bgra'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.multi_channel.luminance_alpha_bgra
+v3d_deqp: case #23 P 35ms k2/9 c15533/15624 r0 dEQP-GLES3.functional.texture.swizzle.multi_channel.luminance_alpha_bgra
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.multi_channel.luminance_alpha_one_one_red_green'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.multi_channel.luminance_alpha_one_one_red_green
+v3d_deqp: case #24 P 37ms k2/9 c15533/15624 r0 dEQP-GLES3.functional.texture.swizzle.multi_channel.luminance_alpha_one_one_red_green
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.multi_channel.luminance_bgra'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.multi_channel.luminance_bgra
+v3d_deqp: case #25 P 35ms k2/9 c15533/15624 r0 dEQP-GLES3.functional.texture.swizzle.multi_channel.luminance_bgra
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.multi_channel.luminance_one_one_red_green'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.multi_channel.luminance_one_one_red_green
+v3d_deqp: case #26 P 35ms k2/9 c15533/15624 r0 dEQP-GLES3.functional.texture.swizzle.multi_channel.luminance_one_one_red_green
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.multi_channel.red_abgr'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.multi_channel.red_abgr
+v3d_deqp: case #27 P 33ms k2/9 c15533/15699 r0 dEQP-GLES3.functional.texture.swizzle.multi_channel.red_abgr
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.multi_channel.red_all_alpha'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.multi_channel.red_all_alpha
+v3d_deqp: case #28 P 32ms k2/9 c15533/15699 r0 dEQP-GLES3.functional.texture.swizzle.multi_channel.red_all_alpha
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.multi_channel.red_all_blue'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.multi_channel.red_all_blue
+v3d_deqp: case #29 P 33ms k2/9 c15533/15699 r0 dEQP-GLES3.functional.texture.swizzle.multi_channel.red_all_blue
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.multi_channel.red_all_green'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.multi_channel.red_all_green
+v3d_deqp: case #30 P 32ms k2/9 c15533/15699 r0 dEQP-GLES3.functional.texture.swizzle.multi_channel.red_all_green
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.multi_channel.red_all_one'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.multi_channel.red_all_one
+v3d_deqp: case #31 P 32ms k2/9 c15533/15699 r0 dEQP-GLES3.functional.texture.swizzle.multi_channel.red_all_one
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.multi_channel.red_all_red'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.multi_channel.red_all_red
+v3d_deqp: case #32 P 33ms k2/9 c15533/15699 r0 dEQP-GLES3.functional.texture.swizzle.multi_channel.red_all_red
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.multi_channel.red_all_zero'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.multi_channel.red_all_zero
+v3d_deqp: case #33 P 32ms k2/9 c15533/15699 r0 dEQP-GLES3.functional.texture.swizzle.multi_channel.red_all_zero
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.multi_channel.red_bgra'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.multi_channel.red_bgra
+v3d_deqp: case #34 P 31ms k2/9 c15533/15699 r0 dEQP-GLES3.functional.texture.swizzle.multi_channel.red_bgra
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.multi_channel.red_one_one_red_green'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.multi_channel.red_one_one_red_green
+v3d_deqp: case #35 P 34ms k2/9 c15533/15699 r0 dEQP-GLES3.functional.texture.swizzle.multi_channel.red_one_one_red_green
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.multi_channel.rg_abgr'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.multi_channel.rg_abgr
+v3d_deqp: case #36 P 32ms k2/9 c15533/15699 r0 dEQP-GLES3.functional.texture.swizzle.multi_channel.rg_abgr
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.multi_channel.rg_all_alpha'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.multi_channel.rg_all_alpha
+v3d_deqp: case #37 P 33ms k2/9 c15533/15699 r0 dEQP-GLES3.functional.texture.swizzle.multi_channel.rg_all_alpha
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.multi_channel.rg_all_blue'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.multi_channel.rg_all_blue
+v3d_deqp: case #38 P 32ms k2/9 c15533/15699 r0 dEQP-GLES3.functional.texture.swizzle.multi_channel.rg_all_blue
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.multi_channel.rg_all_green'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.multi_channel.rg_all_green
+v3d_deqp: case #39 P 33ms k2/9 c15533/15699 r0 dEQP-GLES3.functional.texture.swizzle.multi_channel.rg_all_green
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.multi_channel.rg_all_one'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.multi_channel.rg_all_one
+v3d_deqp: case #40 P 32ms k2/9 c15533/15699 r0 dEQP-GLES3.functional.texture.swizzle.multi_channel.rg_all_one
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.multi_channel.rg_all_red'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.multi_channel.rg_all_red
+v3d_deqp: case #41 P 32ms k2/9 c15533/15699 r0 dEQP-GLES3.functional.texture.swizzle.multi_channel.rg_all_red
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.multi_channel.rg_all_zero'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.multi_channel.rg_all_zero
+v3d_deqp: case #42 P 32ms k2/9 c15533/15699 r0 dEQP-GLES3.functional.texture.swizzle.multi_channel.rg_all_zero
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.multi_channel.rg_bgra'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.multi_channel.rg_bgra
+v3d_deqp: case #43 P 32ms k2/9 c15533/15699 r0 dEQP-GLES3.functional.texture.swizzle.multi_channel.rg_bgra
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.multi_channel.rg_one_one_red_green'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.multi_channel.rg_one_one_red_green
+v3d_deqp: case #44 P 34ms k2/9 c15533/15699 r0 dEQP-GLES3.functional.texture.swizzle.multi_channel.rg_one_one_red_green
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.multi_channel.rgb_abgr'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.multi_channel.rgb_abgr
+v3d_deqp: case #45 P 32ms k2/9 c15533/15699 r0 dEQP-GLES3.functional.texture.swizzle.multi_channel.rgb_abgr
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.multi_channel.rgb_all_alpha'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.multi_channel.rgb_all_alpha
+v3d_deqp: case #46 P 32ms k2/9 c15533/15699 r0 dEQP-GLES3.functional.texture.swizzle.multi_channel.rgb_all_alpha
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.multi_channel.rgb_all_blue'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.multi_channel.rgb_all_blue
+v3d_deqp: case #47 P 33ms k2/9 c15533/15699 r0 dEQP-GLES3.functional.texture.swizzle.multi_channel.rgb_all_blue
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.multi_channel.rgb_all_green'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.multi_channel.rgb_all_green
+v3d_deqp: case #48 P 33ms k2/9 c15533/15699 r0 dEQP-GLES3.functional.texture.swizzle.multi_channel.rgb_all_green
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.multi_channel.rgb_all_one'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.multi_channel.rgb_all_one
+v3d_deqp: case #49 P 32ms k2/9 c15533/15699 r0 dEQP-GLES3.functional.texture.swizzle.multi_channel.rgb_all_one
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.multi_channel.rgb_all_red'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.multi_channel.rgb_all_red
+v3d_deqp: case #50 P 32ms k2/9 c15533/15699 r0 dEQP-GLES3.functional.texture.swizzle.multi_channel.rgb_all_red
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.multi_channel.rgb_all_zero'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.multi_channel.rgb_all_zero
+v3d_deqp: case #51 P 33ms k2/9 c15533/15699 r0 dEQP-GLES3.functional.texture.swizzle.multi_channel.rgb_all_zero
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.multi_channel.rgb_bgra'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.multi_channel.rgb_bgra
+v3d_deqp: case #52 P 31ms k2/9 c15533/15699 r0 dEQP-GLES3.functional.texture.swizzle.multi_channel.rgb_bgra
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.multi_channel.rgb_one_one_red_green'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.multi_channel.rgb_one_one_red_green
+v3d_deqp: case #53 P 34ms k2/9 c15533/15699 r0 dEQP-GLES3.functional.texture.swizzle.multi_channel.rgb_one_one_red_green
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.multi_channel.rgba_abgr'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.multi_channel.rgba_abgr
+v3d_deqp: case #54 P 33ms k2/9 c15533/15699 r0 dEQP-GLES3.functional.texture.swizzle.multi_channel.rgba_abgr
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.multi_channel.rgba_all_alpha'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.multi_channel.rgba_all_alpha
+v3d_deqp: case #55 P 32ms k2/9 c15533/15699 r0 dEQP-GLES3.functional.texture.swizzle.multi_channel.rgba_all_alpha
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.multi_channel.rgba_all_blue'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.multi_channel.rgba_all_blue
+v3d_deqp: case #56 P 33ms k2/9 c15533/15699 r0 dEQP-GLES3.functional.texture.swizzle.multi_channel.rgba_all_blue
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.multi_channel.rgba_all_green'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.multi_channel.rgba_all_green
+v3d_deqp: case #57 P 33ms k2/9 c15533/15699 r0 dEQP-GLES3.functional.texture.swizzle.multi_channel.rgba_all_green
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.multi_channel.rgba_all_one'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.multi_channel.rgba_all_one
+v3d_deqp: case #58 P 33ms k2/9 c15533/15699 r0 dEQP-GLES3.functional.texture.swizzle.multi_channel.rgba_all_one
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.multi_channel.rgba_all_red'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.multi_channel.rgba_all_red
+v3d_deqp: case #59 P 32ms k2/9 c15533/15699 r0 dEQP-GLES3.functional.texture.swizzle.multi_channel.rgba_all_red
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.multi_channel.rgba_all_zero'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.multi_channel.rgba_all_zero
+v3d_deqp: case #60 P 33ms k2/9 c15533/15699 r0 dEQP-GLES3.functional.texture.swizzle.multi_channel.rgba_all_zero
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.multi_channel.rgba_bgra'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.multi_channel.rgba_bgra
+v3d_deqp: case #61 P 32ms k2/9 c15533/15699 r0 dEQP-GLES3.functional.texture.swizzle.multi_channel.rgba_bgra
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.multi_channel.rgba_one_one_red_green'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.multi_channel.rgba_one_one_red_green
+v3d_deqp: case #62 P 34ms k2/9 c15533/15699 r0 dEQP-GLES3.functional.texture.swizzle.multi_channel.rgba_one_one_red_green
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.single_channel.a_blue'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.single_channel.a_blue
+v3d_deqp: case #63 P 33ms k2/9 c15533/15699 r0 dEQP-GLES3.functional.texture.swizzle.single_channel.a_blue
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.single_channel.a_green'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.single_channel.a_green
+v3d_deqp: case #64 P 31ms k2/9 c15533/15699 r0 dEQP-GLES3.functional.texture.swizzle.single_channel.a_green
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.single_channel.a_one'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.single_channel.a_one
+v3d_deqp: case #65 P 31ms k2/9 c15533/15699 r0 dEQP-GLES3.functional.texture.swizzle.single_channel.a_one
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.single_channel.a_red'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.single_channel.a_red
+v3d_deqp: case #66 P 31ms k2/9 c15533/15699 r0 dEQP-GLES3.functional.texture.swizzle.single_channel.a_red
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.single_channel.a_zero'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.single_channel.a_zero
+v3d_deqp: case #67 P 31ms k2/9 c15533/15699 r0 dEQP-GLES3.functional.texture.swizzle.single_channel.a_zero
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.single_channel.b_alpha'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.single_channel.b_alpha
+v3d_deqp: case #68 P 31ms k2/9 c15533/15699 r0 dEQP-GLES3.functional.texture.swizzle.single_channel.b_alpha
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.single_channel.b_green'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.single_channel.b_green
+v3d_deqp: case #69 P 32ms k2/9 c15533/15699 r0 dEQP-GLES3.functional.texture.swizzle.single_channel.b_green
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.single_channel.b_one'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.single_channel.b_one
+v3d_deqp: case #70 P 31ms k2/9 c15533/15699 r0 dEQP-GLES3.functional.texture.swizzle.single_channel.b_one
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.single_channel.b_red'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.single_channel.b_red
+v3d_deqp: case #71 P 31ms k2/9 c15533/15699 r0 dEQP-GLES3.functional.texture.swizzle.single_channel.b_red
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.single_channel.b_zero'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.single_channel.b_zero
+v3d_deqp: case #72 P 31ms k2/9 c15533/15699 r0 dEQP-GLES3.functional.texture.swizzle.single_channel.b_zero
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.single_channel.g_alpha'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.single_channel.g_alpha
+v3d_deqp: case #73 P 31ms k2/9 c15533/15699 r0 dEQP-GLES3.functional.texture.swizzle.single_channel.g_alpha
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.single_channel.g_blue'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.single_channel.g_blue
+v3d_deqp: case #74 P 31ms k2/9 c15533/15699 r0 dEQP-GLES3.functional.texture.swizzle.single_channel.g_blue
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.single_channel.g_one'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.single_channel.g_one
+v3d_deqp: case #75 P 31ms k2/9 c15533/15699 r0 dEQP-GLES3.functional.texture.swizzle.single_channel.g_one
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.single_channel.g_red'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.single_channel.g_red
+v3d_deqp: case #76 P 31ms k2/9 c15533/15699 r0 dEQP-GLES3.functional.texture.swizzle.single_channel.g_red
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.single_channel.g_zero'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.single_channel.g_zero
+v3d_deqp: case #77 P 31ms k2/9 c15533/15699 r0 dEQP-GLES3.functional.texture.swizzle.single_channel.g_zero
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.single_channel.r_alpha'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.single_channel.r_alpha
+v3d_deqp: case #78 P 32ms k2/9 c15533/15699 r0 dEQP-GLES3.functional.texture.swizzle.single_channel.r_alpha
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.single_channel.r_blue'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.single_channel.r_blue
+v3d_deqp: case #79 P 31ms k2/9 c15533/15699 r0 dEQP-GLES3.functional.texture.swizzle.single_channel.r_blue
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.single_channel.r_green'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.single_channel.r_green
+v3d_deqp: case #80 P 31ms k2/9 c15533/15699 r0 dEQP-GLES3.functional.texture.swizzle.single_channel.r_green
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.single_channel.r_one'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.single_channel.r_one
+v3d_deqp: case #81 P 31ms k2/9 c15533/15699 r0 dEQP-GLES3.functional.texture.swizzle.single_channel.r_one
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.swizzle.single_channel.r_zero'..
+deqp: Pass dEQP-GLES3.functional.texture.swizzle.single_channel.r_zero
+v3d_deqp: case #82 P 31ms k2/9 c15533/15699 r0 dEQP-GLES3.functional.texture.swizzle.single_channel.r_zero
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.units.2_units.mixed.0'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.2_units.mixed.0
+v3d_deqp: case #83 F 42ms k2/9 c15533/16301 r0 dEQP-GLES3.functional.texture.units.2_units.mixed.0
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.2_units.mixed.1'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.2_units.mixed.1
+v3d_deqp: case #84 F 42ms k2/9 c15533/16301 r0 dEQP-GLES3.functional.texture.units.2_units.mixed.1
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.2_units.mixed.2'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.2_units.mixed.2
+v3d_deqp: case #85 F 46ms k2/9 c15533/16301 r0 dEQP-GLES3.functional.texture.units.2_units.mixed.2
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.2_units.mixed.3'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.2_units.mixed.3
+v3d_deqp: case #86 F 107ms k2/9 c15533/17752 r0 dEQP-GLES3.functional.texture.units.2_units.mixed.3
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.2_units.mixed.4'..
+  cube-bind: 0x10b7000 unit 0 kick 84 (draw)
+  cube(draw) @0x10b7000 256x256 x6: fmt 21, cpu 0x1e1b6000 - not dumped
+  cube-bind: 0x10b7000 unit 1 kick 84 (draw)
+  cube(draw) @0x10b7000 256x256 x6: fmt 21, cpu 0x1e1b6000 - not dumped
+yakogl/v3d: tiled copies high-water 6295552 of 16777216 bytes
+deqp: Pass dEQP-GLES3.functional.texture.units.2_units.mixed.4
+v3d_deqp: case #87 P 174ms k2/18 c15533/29887 r0 dEQP-GLES3.functional.texture.units.2_units.mixed.4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.units.2_units.mixed.5'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.2_units.mixed.5
+v3d_deqp: case #88 F 96ms k2/18 c15533/29887 r0 dEQP-GLES3.functional.texture.units.2_units.mixed.5
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.2_units.mixed.6'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.2_units.mixed.6
+v3d_deqp: case #89 F 105ms k2/18 c15533/29887 r0 dEQP-GLES3.functional.texture.units.2_units.mixed.6
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.2_units.mixed.7'..
+deqp: Pass dEQP-GLES3.functional.texture.units.2_units.mixed.7
+v3d_deqp: case #90 P 68ms k2/18 c15533/29887 r0 dEQP-GLES3.functional.texture.units.2_units.mixed.7
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.units.2_units.mixed.8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.2_units.mixed.8
+v3d_deqp: case #91 F 39ms k2/18 c15533/29887 r0 dEQP-GLES3.functional.texture.units.2_units.mixed.8
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.2_units.mixed.9'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.2_units.mixed.9
+v3d_deqp: case #92 F 47ms k2/18 c15533/29887 r0 dEQP-GLES3.functional.texture.units.2_units.mixed.9
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.2_units.only_2d.0'..
+deqp: Pass dEQP-GLES3.functional.texture.units.2_units.only_2d.0
+v3d_deqp: case #93 P 59ms k2/18 c15533/29887 r0 dEQP-GLES3.functional.texture.units.2_units.only_2d.0
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.units.2_units.only_2d.1'..
+deqp: Pass dEQP-GLES3.functional.texture.units.2_units.only_2d.1
+v3d_deqp: case #94 P 45ms k2/18 c15533/29887 r0 dEQP-GLES3.functional.texture.units.2_units.only_2d.1
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.units.2_units.only_2d.2'..
+deqp: Pass dEQP-GLES3.functional.texture.units.2_units.only_2d.2
+v3d_deqp: case #95 P 47ms k2/18 c15533/29887 r0 dEQP-GLES3.functional.texture.units.2_units.only_2d.2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.units.2_units.only_2d.3'..
+deqp: Pass dEQP-GLES3.functional.texture.units.2_units.only_2d.3
+v3d_deqp: case #96 P 56ms k2/18 c15533/29887 r0 dEQP-GLES3.functional.texture.units.2_units.only_2d.3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.units.2_units.only_2d.4'..
+deqp: Pass dEQP-GLES3.functional.texture.units.2_units.only_2d.4
+v3d_deqp: case #97 P 47ms k2/18 c15533/29887 r0 dEQP-GLES3.functional.texture.units.2_units.only_2d.4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.units.2_units.only_2d.5'..
+deqp: Pass dEQP-GLES3.functional.texture.units.2_units.only_2d.5
+v3d_deqp: case #98 P 46ms k2/18 c15533/29887 r0 dEQP-GLES3.functional.texture.units.2_units.only_2d.5
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.units.2_units.only_2d.6'..
+deqp: Pass dEQP-GLES3.functional.texture.units.2_units.only_2d.6
+v3d_deqp: case #99 P 52ms k2/18 c15533/29887 r0 dEQP-GLES3.functional.texture.units.2_units.only_2d.6
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.units.2_units.only_2d.7'..
+deqp: Pass dEQP-GLES3.functional.texture.units.2_units.only_2d.7
+v3d_deqp: case #100 P 44ms k2/18 c15533/29887 r0 dEQP-GLES3.functional.texture.units.2_units.only_2d.7
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.units.2_units.only_2d.8'..
+deqp: Pass dEQP-GLES3.functional.texture.units.2_units.only_2d.8
+v3d_deqp: case #101 P 49ms k2/18 c15533/29887 r0 dEQP-GLES3.functional.texture.units.2_units.only_2d.8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.units.2_units.only_2d.9'..
+deqp: Pass dEQP-GLES3.functional.texture.units.2_units.only_2d.9
+v3d_deqp: case #102 P 55ms k2/18 c15533/29887 r0 dEQP-GLES3.functional.texture.units.2_units.only_2d.9
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.units.2_units.only_2d_array.0'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.2_units.only_2d_array.0
+v3d_deqp: case #103 F 41ms k2/18 c15533/29887 r0 dEQP-GLES3.functional.texture.units.2_units.only_2d_array.0
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.2_units.only_2d_array.1'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.2_units.only_2d_array.1
+v3d_deqp: case #104 F 42ms k2/18 c15533/29887 r0 dEQP-GLES3.functional.texture.units.2_units.only_2d_array.1
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.2_units.only_2d_array.2'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.2_units.only_2d_array.2
+v3d_deqp: case #105 F 42ms k2/18 c15533/29887 r0 dEQP-GLES3.functional.texture.units.2_units.only_2d_array.2
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.2_units.only_2d_array.3'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.2_units.only_2d_array.3
+v3d_deqp: case #106 F 47ms k2/18 c15533/29887 r0 dEQP-GLES3.functional.texture.units.2_units.only_2d_array.3
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.2_units.only_2d_array.4'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.2_units.only_2d_array.4
+v3d_deqp: case #107 F 43ms k2/18 c15533/29887 r0 dEQP-GLES3.functional.texture.units.2_units.only_2d_array.4
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.2_units.only_2d_array.5'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.2_units.only_2d_array.5
+v3d_deqp: case #108 F 43ms k2/18 c15533/29887 r0 dEQP-GLES3.functional.texture.units.2_units.only_2d_array.5
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.2_units.only_2d_array.6'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.2_units.only_2d_array.6
+v3d_deqp: case #109 F 47ms k2/18 c15533/29887 r0 dEQP-GLES3.functional.texture.units.2_units.only_2d_array.6
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.2_units.only_2d_array.7'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.2_units.only_2d_array.7
+v3d_deqp: case #110 F 42ms k2/18 c15533/29887 r0 dEQP-GLES3.functional.texture.units.2_units.only_2d_array.7
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.2_units.only_2d_array.8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.2_units.only_2d_array.8
+v3d_deqp: case #111 F 44ms k2/18 c15533/29887 r0 dEQP-GLES3.functional.texture.units.2_units.only_2d_array.8
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.2_units.only_2d_array.9'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.2_units.only_2d_array.9
+v3d_deqp: case #112 F 44ms k2/18 c15533/29887 r0 dEQP-GLES3.functional.texture.units.2_units.only_2d_array.9
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.2_units.only_3d.0'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.2_units.only_3d.0
+v3d_deqp: case #113 F 46ms k2/18 c15533/29887 r0 dEQP-GLES3.functional.texture.units.2_units.only_3d.0
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.2_units.only_3d.1'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.2_units.only_3d.1
+v3d_deqp: case #114 F 42ms k2/18 c15533/29887 r0 dEQP-GLES3.functional.texture.units.2_units.only_3d.1
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.2_units.only_3d.2'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.2_units.only_3d.2
+v3d_deqp: case #115 F 42ms k2/18 c15533/29887 r0 dEQP-GLES3.functional.texture.units.2_units.only_3d.2
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.2_units.only_3d.3'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.2_units.only_3d.3
+v3d_deqp: case #116 F 50ms k2/18 c15533/29887 r0 dEQP-GLES3.functional.texture.units.2_units.only_3d.3
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.2_units.only_3d.4'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.2_units.only_3d.4
+v3d_deqp: case #117 F 43ms k2/18 c15533/29887 r0 dEQP-GLES3.functional.texture.units.2_units.only_3d.4
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.2_units.only_3d.5'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.2_units.only_3d.5
+v3d_deqp: case #118 F 44ms k2/18 c15533/29887 r0 dEQP-GLES3.functional.texture.units.2_units.only_3d.5
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.2_units.only_3d.6'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.2_units.only_3d.6
+v3d_deqp: case #119 F 50ms k2/18 c15533/29887 r0 dEQP-GLES3.functional.texture.units.2_units.only_3d.6
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.2_units.only_3d.7'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.2_units.only_3d.7
+v3d_deqp: case #120 F 42ms k2/18 c15533/29887 r0 dEQP-GLES3.functional.texture.units.2_units.only_3d.7
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.2_units.only_3d.8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.2_units.only_3d.8
+v3d_deqp: case #121 F 44ms k2/18 c15533/29887 r0 dEQP-GLES3.functional.texture.units.2_units.only_3d.8
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.2_units.only_3d.9'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.2_units.only_3d.9
+v3d_deqp: case #122 F 47ms k2/18 c15533/29887 r0 dEQP-GLES3.functional.texture.units.2_units.only_3d.9
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.2_units.only_cube.0'..
+  cube-bind: 0x10b7000 unit 0 kick 96 (draw)
+  cube(draw) @0x10b7000 256x256 x6: fmt 16, cpu 0x1e1b6000 - not dumped
+  cube-bind: 0x12b7000 unit 1 kick 96 (draw)
+  cube(draw) @0x12b7000 256x256 x6: fmt 15, cpu 0x1e3b6000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.units.2_units.only_cube.0
+v3d_deqp: case #123 P 219ms k2/18 c15533/29887 r0 dEQP-GLES3.functional.texture.units.2_units.only_cube.0
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.units.2_units.only_cube.1'..
+  cube-bind: 0x10b7000 unit 0 kick 97 (draw)
+  cube(draw) @0x10b7000 256x256 x6: fmt 0, cpu 0x1e1b6000 - not dumped
+  cube-bind: 0x12b7000 unit 1 kick 97 (draw)
+  cube(draw) @0x12b7000 256x256 x6: fmt 0, cpu 0x1e3b6000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.units.2_units.only_cube.1
+v3d_deqp: case #124 P 125ms k2/18 c15533/29887 r0 dEQP-GLES3.functional.texture.units.2_units.only_cube.1
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.units.2_units.only_cube.2'..
+  cube-bind: 0x10b7000 unit 0 kick 98 (draw)
+  cube(draw) @0x10b7000 256x256 x6: fmt 0, cpu 0x1e1b6000 - not dumped
+  cube-bind: 0x12b7000 unit 1 kick 98 (draw)
+  cube(draw) @0x12b7000 256x256 x6: fmt 14, cpu 0x1e3b6000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.units.2_units.only_cube.2
+v3d_deqp: case #125 P 148ms k2/18 c15533/29887 r0 dEQP-GLES3.functional.texture.units.2_units.only_cube.2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.units.2_units.only_cube.3'..
+  cube-bind: 0x10b7000 unit 0 kick 99 (draw)
+  cube(draw) @0x10b7000 256x256 x6: fmt 15, cpu 0x1e1b6000 - not dumped
+  cube-bind: 0x12b7000 unit 1 kick 99 (draw)
+  cube(draw) @0x12b7000 256x256 x6: fmt 22, cpu 0x1e3b6000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.units.2_units.only_cube.3
+v3d_deqp: case #126 P 244ms k2/18 c15533/34003 r0 dEQP-GLES3.functional.texture.units.2_units.only_cube.3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.units.2_units.only_cube.4'..
+  cube-bind: 0x10b7000 unit 0 kick 100 (draw)
+  cube(draw) @0x10b7000 256x256 x6: fmt 21, cpu 0x1e1b6000 - not dumped
+  cube-bind: 0x10b7000 unit 1 kick 100 (draw)
+  cube(draw) @0x10b7000 256x256 x6: fmt 21, cpu 0x1e1b6000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.units.2_units.only_cube.4
+v3d_deqp: case #127 P 149ms k2/18 c15533/34003 r0 dEQP-GLES3.functional.texture.units.2_units.only_cube.4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.units.2_units.only_cube.5'..
+  cube-bind: 0x10b7000 unit 0 kick 101 (draw)
+  cube(draw) @0x10b7000 256x256 x6: fmt 23, cpu 0x1e1b6000 - not dumped
+  cube-bind: 0x12b7000 unit 1 kick 101 (draw)
+  cube(draw) @0x12b7000 256x256 x6: fmt 0, cpu 0x1e3b6000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.units.2_units.only_cube.5
+v3d_deqp: case #128 P 177ms k2/18 c15533/34003 r0 dEQP-GLES3.functional.texture.units.2_units.only_cube.5
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.units.2_units.only_cube.6'..
+  cube-bind: 0x10b7000 unit 0 kick 102 (draw)
+  cube(draw) @0x10b7000 256x256 x6: fmt 15, cpu 0x1e1b6000 - not dumped
+  cube-bind: 0x12b7000 unit 1 kick 102 (draw)
+  cube(draw) @0x12b7000 256x256 x6: fmt 7, cpu 0x1e3b6000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.units.2_units.only_cube.6
+v3d_deqp: case #129 P 202ms k2/18 c15533/34003 r0 dEQP-GLES3.functional.texture.units.2_units.only_cube.6
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.units.2_units.only_cube.7'..
+  cube-bind: 0x10b7000 unit 0 kick 103 (draw)
+  cube(draw) @0x10b7000 256x256 x6: fmt 19, cpu 0x1e1b6000 - not dumped
+  cube-bind: 0x10b7000 unit 1 kick 103 (draw)
+  cube(draw) @0x10b7000 256x256 x6: fmt 19, cpu 0x1e1b6000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.units.2_units.only_cube.7
+v3d_deqp: case #130 P 142ms k2/18 c15533/34003 r0 dEQP-GLES3.functional.texture.units.2_units.only_cube.7
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.units.2_units.only_cube.8'..
+  cube-bind: 0x10b7000 unit 0 kick 104 (draw)
+  cube(draw) @0x10b7000 256x256 x6: fmt 21, cpu 0x1e1b6000 - not dumped
+  cube-bind: 0x10b7000 unit 1 kick 104 (draw)
+  cube(draw) @0x10b7000 256x256 x6: fmt 21, cpu 0x1e1b6000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.units.2_units.only_cube.8
+v3d_deqp: case #131 P 176ms k2/18 c15533/34003 r0 dEQP-GLES3.functional.texture.units.2_units.only_cube.8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.units.2_units.only_cube.9'..
+  cube-bind: 0x10b7000 unit 0 kick 105 (draw)
+  cube(draw) @0x10b7000 256x256 x6: fmt 15, cpu 0x1e1b6000 - not dumped
+  cube-bind: 0x12b7000 unit 1 kick 105 (draw)
+  cube(draw) @0x12b7000 256x256 x6: fmt 0, cpu 0x1e3b6000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.units.2_units.only_cube.9
+v3d_deqp: case #132 P 180ms k2/18 c15533/34003 r0 dEQP-GLES3.functional.texture.units.2_units.only_cube.9
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.units.4_units.mixed.0'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.4_units.mixed.0
+v3d_deqp: case #133 F 50ms k2/18 c15533/34003 r0 dEQP-GLES3.functional.texture.units.4_units.mixed.0
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.4_units.mixed.1'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.4_units.mixed.1
+v3d_deqp: case #134 F 46ms k2/18 c15533/34003 r0 dEQP-GLES3.functional.texture.units.4_units.mixed.1
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.4_units.mixed.2'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.4_units.mixed.2
+v3d_deqp: case #135 F 73ms k2/18 c15533/34003 r0 dEQP-GLES3.functional.texture.units.4_units.mixed.2
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.4_units.mixed.3'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.4_units.mixed.3
+v3d_deqp: case #136 F 114ms k2/18 c15533/34003 r0 dEQP-GLES3.functional.texture.units.4_units.mixed.3
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.4_units.mixed.4'..
+  cube-bind: 0x110d000 unit 1 kick 106 (draw)
+  cube(draw) @0x110d000 256x256 x6: fmt 21, cpu 0x1e20c000 - not dumped
+  cube-bind: 0x190d000 unit 2 kick 106 (draw)
+  cube(draw) @0x190d000 256x256 x6: fmt 15, cpu 0x1ea0c000 - not dumped
+  cube-bind: 0x190d000 unit 3 kick 106 (draw)
+  cube(draw) @0x190d000 256x256 x6: fmt 15, cpu 0x1ea0c000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.units.4_units.mixed.4
+v3d_deqp: case #137 P 293ms k2/24 c15533/34166 r0 dEQP-GLES3.functional.texture.units.4_units.mixed.4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.units.4_units.mixed.5'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.4_units.mixed.5
+v3d_deqp: case #138 F 97ms k2/24 c15533/34166 r0 dEQP-GLES3.functional.texture.units.4_units.mixed.5
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.4_units.mixed.6'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.4_units.mixed.6
+v3d_deqp: case #139 F 175ms k2/24 c15533/34166 r0 dEQP-GLES3.functional.texture.units.4_units.mixed.6
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.4_units.mixed.7'..
+  cube-bind: 0x10b7000 unit 0 kick 107 (draw)
+  cube(draw) @0x10b7000 256x256 x6: fmt 20, cpu 0x1e1b6000 - not dumped
+  cube-bind: 0x18b7000 unit 1 kick 107 (draw)
+  cube(draw) @0x18b7000 256x256 x6, chain 9, written 9, max_level 12
+  cube(draw) level 0 (256x256 @0x0): inf inf 10581.3330 -inf -inf -inf
+  cube(draw) level 1 (128x128 @0x300000): inf inf 10581.3330 -inf -inf -inf
+  cube(draw) level 2 (64x64 @0x3c0000): inf inf 10581.3330 -inf -inf -inf
+  cube(draw) level 3 (32x32 @0x3f0000): inf inf 10581.3330 -inf -inf -inf
+  cube(draw) level 4 (16x16 @0x3fc000): inf inf 10581.3330 -inf -inf -inf
+  cube(draw) level 5 (8x8 @0x3ff000): NaN NaN 0.0000 NaN NaN NaN
+  cube(draw) level 6 (4x4 @0x3ffc00): NaN NaN 0.0000 NaN NaN NaN
+  cube(draw) level 7 (2x2 @0x3fff00): NaN NaN 0.0000 NaN NaN NaN
+  cube(draw) level 8 (1x1 @0x3fffc0): inf inf 10581.3330 -inf -inf -inf
+  cube-bind: 0x10b7000 unit 2 kick 107 (draw)
+  cube(draw) @0x10b7000 256x256 x6: fmt 20, cpu 0x1e1b6000 - not dumped
+deqp: Fail dEQP-GLES3.functional.texture.units.4_units.mixed.7
+v3d_deqp: case #140 F 496ms k2/24 c15533/39302 r0 dEQP-GLES3.functional.texture.units.4_units.mixed.7
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.texture.units.4_units.mixed.8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.4_units.mixed.8
+v3d_deqp: case #141 F 50ms k2/24 c15533/39302 r0 dEQP-GLES3.functional.texture.units.4_units.mixed.8
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.4_units.mixed.9'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.4_units.mixed.9
+v3d_deqp: case #142 F 84ms k2/24 c15533/39302 r0 dEQP-GLES3.functional.texture.units.4_units.mixed.9
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.4_units.only_2d.0'..
+deqp: Pass dEQP-GLES3.functional.texture.units.4_units.only_2d.0
+v3d_deqp: case #143 P 81ms k2/24 c15533/39302 r0 dEQP-GLES3.functional.texture.units.4_units.only_2d.0
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.units.4_units.only_2d.1'..
+deqp: Pass dEQP-GLES3.functional.texture.units.4_units.only_2d.1
+v3d_deqp: case #144 P 68ms k2/24 c15533/39302 r0 dEQP-GLES3.functional.texture.units.4_units.only_2d.1
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.units.4_units.only_2d.2'..
+deqp: Pass dEQP-GLES3.functional.texture.units.4_units.only_2d.2
+v3d_deqp: case #145 P 67ms k2/24 c15533/39302 r0 dEQP-GLES3.functional.texture.units.4_units.only_2d.2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.units.4_units.only_2d.3'..
+deqp: Pass dEQP-GLES3.functional.texture.units.4_units.only_2d.3
+v3d_deqp: case #146 P 76ms k2/24 c15533/39302 r0 dEQP-GLES3.functional.texture.units.4_units.only_2d.3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.units.4_units.only_2d.4'..
+deqp: Pass dEQP-GLES3.functional.texture.units.4_units.only_2d.4
+v3d_deqp: case #147 P 88ms k2/24 c15533/39302 r0 dEQP-GLES3.functional.texture.units.4_units.only_2d.4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.units.4_units.only_2d.5'..
+deqp: Pass dEQP-GLES3.functional.texture.units.4_units.only_2d.5
+v3d_deqp: case #148 P 55ms k2/24 c15533/39302 r0 dEQP-GLES3.functional.texture.units.4_units.only_2d.5
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.units.4_units.only_2d.6'..
+deqp: Pass dEQP-GLES3.functional.texture.units.4_units.only_2d.6
+v3d_deqp: case #149 P 80ms k2/24 c15533/39302 r0 dEQP-GLES3.functional.texture.units.4_units.only_2d.6
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.units.4_units.only_2d.7'..
+deqp: Pass dEQP-GLES3.functional.texture.units.4_units.only_2d.7
+v3d_deqp: case #150 P 68ms k2/24 c15533/39302 r0 dEQP-GLES3.functional.texture.units.4_units.only_2d.7
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.units.4_units.only_2d.8'..
+deqp: Pass dEQP-GLES3.functional.texture.units.4_units.only_2d.8
+v3d_deqp: case #151 P 66ms k2/24 c15533/39302 r0 dEQP-GLES3.functional.texture.units.4_units.only_2d.8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.units.4_units.only_2d.9'..
+deqp: Pass dEQP-GLES3.functional.texture.units.4_units.only_2d.9
+v3d_deqp: case #152 P 78ms k2/24 c15533/39302 r0 dEQP-GLES3.functional.texture.units.4_units.only_2d.9
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.units.4_units.only_2d_array.0'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.4_units.only_2d_array.0
+v3d_deqp: case #153 F 45ms k2/24 c15533/39302 r0 dEQP-GLES3.functional.texture.units.4_units.only_2d_array.0
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.4_units.only_2d_array.1'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.4_units.only_2d_array.1
+v3d_deqp: case #154 F 50ms k2/24 c15533/39302 r0 dEQP-GLES3.functional.texture.units.4_units.only_2d_array.1
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.4_units.only_2d_array.2'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.4_units.only_2d_array.2
+v3d_deqp: case #155 F 45ms k2/24 c15533/39302 r0 dEQP-GLES3.functional.texture.units.4_units.only_2d_array.2
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.4_units.only_2d_array.3'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.4_units.only_2d_array.3
+v3d_deqp: case #156 F 53ms k2/24 c15533/39302 r0 dEQP-GLES3.functional.texture.units.4_units.only_2d_array.3
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.4_units.only_2d_array.4'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.4_units.only_2d_array.4
+v3d_deqp: case #157 F 50ms k2/24 c15533/39302 r0 dEQP-GLES3.functional.texture.units.4_units.only_2d_array.4
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.4_units.only_2d_array.5'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.4_units.only_2d_array.5
+v3d_deqp: case #158 F 44ms k2/24 c15533/39302 r0 dEQP-GLES3.functional.texture.units.4_units.only_2d_array.5
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.4_units.only_2d_array.6'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.4_units.only_2d_array.6
+v3d_deqp: case #159 F 53ms k2/24 c15533/39302 r0 dEQP-GLES3.functional.texture.units.4_units.only_2d_array.6
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.4_units.only_2d_array.7'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.4_units.only_2d_array.7
+v3d_deqp: case #160 F 50ms k2/24 c15533/39302 r0 dEQP-GLES3.functional.texture.units.4_units.only_2d_array.7
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.4_units.only_2d_array.8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.4_units.only_2d_array.8
+v3d_deqp: case #161 F 46ms k2/24 c15533/39302 r0 dEQP-GLES3.functional.texture.units.4_units.only_2d_array.8
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.4_units.only_2d_array.9'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.4_units.only_2d_array.9
+v3d_deqp: case #162 F 52ms k2/24 c15533/39302 r0 dEQP-GLES3.functional.texture.units.4_units.only_2d_array.9
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.4_units.only_3d.0'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.4_units.only_3d.0
+v3d_deqp: case #163 F 53ms k2/24 c15533/39302 r0 dEQP-GLES3.functional.texture.units.4_units.only_3d.0
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.4_units.only_3d.1'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.4_units.only_3d.1
+v3d_deqp: case #164 F 54ms k2/24 c15533/39302 r0 dEQP-GLES3.functional.texture.units.4_units.only_3d.1
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.4_units.only_3d.2'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.4_units.only_3d.2
+v3d_deqp: case #165 F 47ms k2/24 c15533/39302 r0 dEQP-GLES3.functional.texture.units.4_units.only_3d.2
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.4_units.only_3d.3'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.4_units.only_3d.3
+v3d_deqp: case #166 F 60ms k2/24 c15533/39302 r0 dEQP-GLES3.functional.texture.units.4_units.only_3d.3
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.4_units.only_3d.4'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.4_units.only_3d.4
+v3d_deqp: case #167 F 54ms k2/24 c15533/39302 r0 dEQP-GLES3.functional.texture.units.4_units.only_3d.4
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.4_units.only_3d.5'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.4_units.only_3d.5
+v3d_deqp: case #168 F 45ms k2/24 c15533/39302 r0 dEQP-GLES3.functional.texture.units.4_units.only_3d.5
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.4_units.only_3d.6'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.4_units.only_3d.6
+v3d_deqp: case #169 F 61ms k2/24 c15533/39302 r0 dEQP-GLES3.functional.texture.units.4_units.only_3d.6
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.4_units.only_3d.7'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.4_units.only_3d.7
+v3d_deqp: case #170 F 53ms k2/24 c15533/39302 r0 dEQP-GLES3.functional.texture.units.4_units.only_3d.7
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.4_units.only_3d.8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.4_units.only_3d.8
+v3d_deqp: case #171 F 50ms k2/24 c15533/39302 r0 dEQP-GLES3.functional.texture.units.4_units.only_3d.8
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.4_units.only_3d.9'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.4_units.only_3d.9
+v3d_deqp: case #172 F 57ms k2/24 c15533/39302 r0 dEQP-GLES3.functional.texture.units.4_units.only_3d.9
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.4_units.only_cube.0'..
+  cube-bind: 0x10b7000 unit 0 kick 118 (draw)
+  cube(draw) @0x10b7000 256x256 x6: fmt 19, cpu 0x1e1b6000 - not dumped
+  cube-bind: 0x14b7000 unit 1 kick 118 (draw)
+  cube(draw) @0x14b7000 256x256 x6: fmt 16, cpu 0x1e5b6000 - not dumped
+  cube-bind: 0x16b7000 unit 2 kick 118 (draw)
+  cube(draw) @0x16b7000 256x256 x6: fmt 15, cpu 0x1e7b6000 - not dumped
+  cube-bind: 0x18b7000 unit 3 kick 118 (draw)
+  cube(draw) @0x18b7000 256x256 x6: fmt 17, cpu 0x1e9b6000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.units.4_units.only_cube.0
+v3d_deqp: case #173 P 412ms k2/24 c15533/39302 r0 dEQP-GLES3.functional.texture.units.4_units.only_cube.0
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.units.4_units.only_cube.1'..
+  cube-bind: 0x10b7000 unit 0 kick 119 (draw)
+  cube(draw) @0x10b7000 256x256 x6: fmt 18, cpu 0x1e1b6000 - not dumped
+  cube-bind: 0x14b7000 unit 1 kick 119 (draw)
+  cube(draw) @0x14b7000 256x256 x6: fmt 0, cpu 0x1e5b6000 - not dumped
+  cube-bind: 0x16b7000 unit 2 kick 119 (draw)
+  cube(draw) @0x16b7000 256x256 x6: fmt 0, cpu 0x1e7b6000 - not dumped
+  cube-bind: 0x18b7000 unit 3 kick 119 (draw)
+  cube(draw) @0x18b7000 256x256 x6: fmt 17, cpu 0x1e9b6000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.units.4_units.only_cube.1
+v3d_deqp: case #174 P 282ms k2/24 c15533/39302 r0 dEQP-GLES3.functional.texture.units.4_units.only_cube.1
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.units.4_units.only_cube.2'..
+  cube-bind: 0x10b7000 unit 0 kick 120 (draw)
+  cube(draw) @0x10b7000 256x256 x6: fmt 14, cpu 0x1e1b6000 - not dumped
+  cube-bind: 0x12b7000 unit 1 kick 120 (draw)
+  cube(draw) @0x12b7000 256x256 x6: fmt 16, cpu 0x1e3b6000 - not dumped
+  cube-bind: 0x14b7000 unit 2 kick 120 (draw)
+  cube(draw) @0x14b7000 256x256 x6: fmt 19, cpu 0x1e5b6000 - not dumped
+  cube-bind: 0x18b7000 unit 3 kick 120 (draw)
+  cube(draw) @0x18b7000 256x256 x6: fmt 0, cpu 0x1e9b6000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.units.4_units.only_cube.2
+v3d_deqp: case #175 P 318ms k2/24 c15533/39302 r0 dEQP-GLES3.functional.texture.units.4_units.only_cube.2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.units.4_units.only_cube.3'..
+  cube-bind: 0x10b7000 unit 0 kick 121 (draw)
+  cube(draw) @0x10b7000 256x256 x6: fmt 15, cpu 0x1e1b6000 - not dumped
+  cube-bind: 0x12b7000 unit 1 kick 121 (draw)
+  cube(draw) @0x12b7000 256x256 x6, chain 9, written 9, max_level 12
+  cube(draw) level 0 (256x256 @0x0): 102.0000 169.8750 -36.5938 198.7083 -156.8333 57.5833
+  cube(draw) level 1 (128x128 @0x300000): 102.0000 169.8750 -36.5938 198.7083 -156.8333 57.5833
+  cube(draw) level 2 (64x64 @0x3c0000): 102.0000 169.8750 -36.5938 198.7083 -156.8333 57.5833
+  cube(draw) level 3 (32x32 @0x3f0000): 102.0000 169.8750 -36.5938 198.7083 -156.8333 57.5833
+  cube(draw) level 4 (16x16 @0x3fc000): 102.0000 169.8750 -36.5938 198.7083 -156.8333 57.5833
+  cube(draw) level 5 (8x8 @0x3ff000): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 6 (4x4 @0x3ffc00): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 7 (2x2 @0x3fff00): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 8 (1x1 @0x3fffc0): 102.0000 169.8750 -36.5938 198.7083 -156.8333 57.5833
+  cube-bind: 0x16b7000 unit 2 kick 121 (draw)
+  cube(draw) @0x16b7000 256x256 x6: fmt 15, cpu 0x1e7b6000 - not dumped
+  cube-bind: 0x18b7000 unit 3 kick 121 (draw)
+  cube(draw) @0x18b7000 256x256 x6: fmt 22, cpu 0x1e9b6000 - not dumped
+yakogl/v3d: tiled copies high-water 14737408 of 16777216 bytes
+deqp: Pass dEQP-GLES3.functional.texture.units.4_units.only_cube.3
+v3d_deqp: case #176 P 523ms k2/24 c15533/46324 r0 dEQP-GLES3.functional.texture.units.4_units.only_cube.3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.units.4_units.only_cube.4'..
+  cube-bind: 0x10b7000 unit 0 kick 122 (draw)
+  cube(draw) @0x10b7000 256x256 x6: fmt 0, cpu 0x1e1b6000 - not dumped
+  cube-bind: 0x12b7000 unit 1 kick 122 (draw)
+  cube-bind: 0x16b7000 unit 2 kick 122 (draw)
+  cube(draw) @0x16b7000 256x256 x6: fmt 21, cpu 0x1e7b6000 - not dumped
+  cube-bind: 0x10b7000 unit 3 kick 122 (draw)
+  cube(draw) @0x10b7000 256x256 x6: fmt 0, cpu 0x1e1b6000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.units.4_units.only_cube.4
+v3d_deqp: case #177 P 324ms k2/24 c15533/46324 r0 dEQP-GLES3.functional.texture.units.4_units.only_cube.4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.units.4_units.only_cube.5'..
+  cube-bind: 0x10b7000 unit 0 kick 123 (draw)
+  cube(draw) @0x10b7000 256x256 x6: fmt 0, cpu 0x1e1b6000 - not dumped
+  cube-bind: 0x10b7000 unit 1 kick 123 (draw)
+  cube(draw) @0x10b7000 256x256 x6: fmt 0, cpu 0x1e1b6000 - not dumped
+  cube-bind: 0x12b7000 unit 2 kick 123 (draw)
+  cube(draw) @0x12b7000 256x256 x6: fmt 23, cpu 0x1e3b6000 - not dumped
+  cube-bind: 0x10b7000 unit 3 kick 123 (draw)
+  cube(draw) @0x10b7000 256x256 x6: fmt 0, cpu 0x1e1b6000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.units.4_units.only_cube.5
+v3d_deqp: case #178 P 208ms k2/24 c15533/46324 r0 dEQP-GLES3.functional.texture.units.4_units.only_cube.5
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.units.4_units.only_cube.6'..
+  cube-bind: 0x10b7000 unit 0 kick 124 (draw)
+  cube(draw) @0x10b7000 256x256 x6: fmt 15, cpu 0x1e1b6000 - not dumped
+  cube-bind: 0x12b7000 unit 1 kick 124 (draw)
+  cube(draw) @0x12b7000 256x256 x6: fmt 7, cpu 0x1e3b6000 - not dumped
+  cube-bind: 0x14b7000 unit 2 kick 124 (draw)
+  cube(draw) @0x14b7000 256x256 x6: fmt 21, cpu 0x1e5b6000 - not dumped
+  cube-bind: 0x1cb7000 unit 3 kick 124 (draw)
+  cube(draw) @0x1cb7000 256x256 x6: fmt 15, cpu 0x1edb6000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.units.4_units.only_cube.6
+v3d_deqp: case #179 P 427ms k2/24 c15533/46324 r0 dEQP-GLES3.functional.texture.units.4_units.only_cube.6
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.units.4_units.only_cube.7'..
+  cube-bind: 0x10b7000 unit 0 kick 125 (draw)
+  cube(draw) @0x10b7000 256x256 x6: fmt 19, cpu 0x1e1b6000 - not dumped
+  cube-bind: 0x14b7000 unit 1 kick 125 (draw)
+  cube(draw) @0x14b7000 256x256 x6: fmt 17, cpu 0x1e5b6000 - not dumped
+  cube-bind: 0x10b7000 unit 2 kick 125 (draw)
+  cube(draw) @0x10b7000 256x256 x6: fmt 19, cpu 0x1e1b6000 - not dumped
+  cube-bind: 0x16b7000 unit 3 kick 125 (draw)
+  cube(draw) @0x16b7000 256x256 x6: fmt 20, cpu 0x1e7b6000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.units.4_units.only_cube.7
+v3d_deqp: case #180 P 356ms k2/25 c15533/46324 r0 dEQP-GLES3.functional.texture.units.4_units.only_cube.7
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.units.4_units.only_cube.8'..
+  cube-bind: 0x10b7000 unit 0 kick 126 (draw)
+  cube(draw) @0x10b7000 256x256 x6: fmt 21, cpu 0x1e1b6000 - not dumped
+  cube-bind: 0x18b7000 unit 1 kick 126 (draw)
+  cube(draw) @0x18b7000 256x256 x6: fmt 15, cpu 0x1e9b6000 - not dumped
+  cube-bind: 0x10b7000 unit 2 kick 126 (draw)
+  cube(draw) @0x10b7000 256x256 x6: fmt 21, cpu 0x1e1b6000 - not dumped
+  cube-bind: 0x10b7000 unit 3 kick 126 (draw)
+  cube(draw) @0x10b7000 256x256 x6: fmt 21, cpu 0x1e1b6000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.units.4_units.only_cube.8
+v3d_deqp: case #181 P 287ms k2/25 c15533/46324 r0 dEQP-GLES3.functional.texture.units.4_units.only_cube.8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.units.4_units.only_cube.9'..
+  cube-bind: 0x10b7000 unit 0 kick 127 (draw)
+  cube(draw) @0x10b7000 256x256 x6: fmt 15, cpu 0x1e1b6000 - not dumped
+  cube-bind: 0x12b7000 unit 1 kick 127 (draw)
+  cube(draw) @0x12b7000 256x256 x6: fmt 0, cpu 0x1e3b6000 - not dumped
+  cube-bind: 0x14b7000 unit 2 kick 127 (draw)
+  cube(draw) @0x14b7000 256x256 x6: fmt 6, cpu 0x1e5b6000 - not dumped
+  cube-bind: 0x15b7000 unit 3 kick 127 (draw)
+  cube(draw) @0x15b7000 256x256 x6: fmt 21, cpu 0x1e6b6000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.units.4_units.only_cube.9
+v3d_deqp: case #182 P 355ms k2/25 c15533/46324 r0 dEQP-GLES3.functional.texture.units.4_units.only_cube.9
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.units.8_units.mixed.0'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.8_units.mixed.0
+v3d_deqp: case #183 F 60ms k2/25 c15533/46324 r0 dEQP-GLES3.functional.texture.units.8_units.mixed.0
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.8_units.mixed.1'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.8_units.mixed.1
+v3d_deqp: case #184 F 61ms k2/25 c15533/46324 r0 dEQP-GLES3.functional.texture.units.8_units.mixed.1
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.8_units.mixed.2'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.8_units.mixed.2
+v3d_deqp: case #185 F 127ms k2/25 c15533/46324 r0 dEQP-GLES3.functional.texture.units.8_units.mixed.2
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.8_units.mixed.3'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.8_units.mixed.3
+v3d_deqp: case #186 F 247ms k2/25 c15533/46324 r0 dEQP-GLES3.functional.texture.units.8_units.mixed.3
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.8_units.mixed.4'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.8_units.mixed.4
+v3d_deqp: case #187 F 218ms k2/25 c15533/46324 r0 dEQP-GLES3.functional.texture.units.8_units.mixed.4
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.8_units.mixed.5'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.8_units.mixed.5
+v3d_deqp: case #188 F 140ms k2/25 c15533/46324 r0 dEQP-GLES3.functional.texture.units.8_units.mixed.5
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.8_units.mixed.6'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.8_units.mixed.6
+v3d_deqp: case #189 F 192ms k2/25 c15533/46324 r0 dEQP-GLES3.functional.texture.units.8_units.mixed.6
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.8_units.mixed.7'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.8_units.mixed.7
+v3d_deqp: case #190 F 244ms k2/25 c15533/46324 r0 dEQP-GLES3.functional.texture.units.8_units.mixed.7
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.8_units.mixed.8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.8_units.mixed.8
+v3d_deqp: case #191 F 63ms k2/25 c15533/46324 r0 dEQP-GLES3.functional.texture.units.8_units.mixed.8
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.8_units.mixed.9'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.8_units.mixed.9
+v3d_deqp: case #192 F 100ms k2/25 c15533/46324 r0 dEQP-GLES3.functional.texture.units.8_units.mixed.9
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.8_units.only_2d.0'..
+deqp: Pass dEQP-GLES3.functional.texture.units.8_units.only_2d.0
+v3d_deqp: case #193 P 120ms k2/35 c15533/46324 r0 dEQP-GLES3.functional.texture.units.8_units.only_2d.0
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.units.8_units.only_2d.1'..
+deqp: Pass dEQP-GLES3.functional.texture.units.8_units.only_2d.1
+v3d_deqp: case #194 P 112ms k2/35 c15533/46324 r0 dEQP-GLES3.functional.texture.units.8_units.only_2d.1
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.units.8_units.only_2d.2'..
+deqp: Pass dEQP-GLES3.functional.texture.units.8_units.only_2d.2
+v3d_deqp: case #195 P 125ms k2/35 c15533/46324 r0 dEQP-GLES3.functional.texture.units.8_units.only_2d.2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.units.8_units.only_2d.3'..
+deqp: Pass dEQP-GLES3.functional.texture.units.8_units.only_2d.3
+v3d_deqp: case #196 P 119ms k2/35 c15533/46324 r0 dEQP-GLES3.functional.texture.units.8_units.only_2d.3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.units.8_units.only_2d.4'..
+deqp: Pass dEQP-GLES3.functional.texture.units.8_units.only_2d.4
+v3d_deqp: case #197 P 122ms k2/35 c15533/46324 r0 dEQP-GLES3.functional.texture.units.8_units.only_2d.4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.units.8_units.only_2d.5'..
+deqp: Pass dEQP-GLES3.functional.texture.units.8_units.only_2d.5
+v3d_deqp: case #198 P 101ms k2/35 c15533/46324 r0 dEQP-GLES3.functional.texture.units.8_units.only_2d.5
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.units.8_units.only_2d.6'..
+deqp: Pass dEQP-GLES3.functional.texture.units.8_units.only_2d.6
+v3d_deqp: case #199 P 118ms k2/35 c15533/46324 r0 dEQP-GLES3.functional.texture.units.8_units.only_2d.6
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.units.8_units.only_2d.7'..
+deqp: Fail dEQP-GLES3.functional.texture.units.8_units.only_2d.7
+v3d_deqp: case #200 F 265ms k2/35 c15533/46324 r0 dEQP-GLES3.functional.texture.units.8_units.only_2d.7
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.texture.units.8_units.only_2d.8'..
+deqp: Pass dEQP-GLES3.functional.texture.units.8_units.only_2d.8
+v3d_deqp: case #201 P 111ms k2/35 c15533/46324 r0 dEQP-GLES3.functional.texture.units.8_units.only_2d.8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.units.8_units.only_2d.9'..
+deqp: Pass dEQP-GLES3.functional.texture.units.8_units.only_2d.9
+v3d_deqp: case #202 P 124ms k2/35 c15533/46324 r0 dEQP-GLES3.functional.texture.units.8_units.only_2d.9
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.units.8_units.only_2d_array.0'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.8_units.only_2d_array.0
+v3d_deqp: case #203 F 57ms k2/35 c15533/46324 r0 dEQP-GLES3.functional.texture.units.8_units.only_2d_array.0
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.8_units.only_2d_array.1'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.8_units.only_2d_array.1
+v3d_deqp: case #204 F 62ms k2/35 c15533/46324 r0 dEQP-GLES3.functional.texture.units.8_units.only_2d_array.1
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.8_units.only_2d_array.2'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.8_units.only_2d_array.2
+v3d_deqp: case #205 F 66ms k2/35 c15533/46324 r0 dEQP-GLES3.functional.texture.units.8_units.only_2d_array.2
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.8_units.only_2d_array.3'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.8_units.only_2d_array.3
+v3d_deqp: case #206 F 64ms k2/35 c15533/46324 r0 dEQP-GLES3.functional.texture.units.8_units.only_2d_array.3
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.8_units.only_2d_array.4'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.8_units.only_2d_array.4
+v3d_deqp: case #207 F 64ms k2/35 c15533/46324 r0 dEQP-GLES3.functional.texture.units.8_units.only_2d_array.4
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.8_units.only_2d_array.5'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.8_units.only_2d_array.5
+v3d_deqp: case #208 F 55ms k2/35 c15533/46324 r0 dEQP-GLES3.functional.texture.units.8_units.only_2d_array.5
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.8_units.only_2d_array.6'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.8_units.only_2d_array.6
+v3d_deqp: case #209 F 62ms k2/35 c15533/46324 r0 dEQP-GLES3.functional.texture.units.8_units.only_2d_array.6
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.8_units.only_2d_array.7'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.8_units.only_2d_array.7
+v3d_deqp: case #210 F 69ms k2/35 c15533/46324 r0 dEQP-GLES3.functional.texture.units.8_units.only_2d_array.7
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.8_units.only_2d_array.8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.8_units.only_2d_array.8
+v3d_deqp: case #211 F 60ms k2/35 c15533/46324 r0 dEQP-GLES3.functional.texture.units.8_units.only_2d_array.8
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.8_units.only_2d_array.9'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.8_units.only_2d_array.9
+v3d_deqp: case #212 F 64ms k2/35 c15533/46324 r0 dEQP-GLES3.functional.texture.units.8_units.only_2d_array.9
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.8_units.only_3d.0'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.8_units.only_3d.0
+v3d_deqp: case #213 F 72ms k2/35 c15533/46324 r0 dEQP-GLES3.functional.texture.units.8_units.only_3d.0
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.8_units.only_3d.1'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.8_units.only_3d.1
+v3d_deqp: case #214 F 74ms k2/35 c15533/46324 r0 dEQP-GLES3.functional.texture.units.8_units.only_3d.1
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.8_units.only_3d.2'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.8_units.only_3d.2
+v3d_deqp: case #215 F 81ms k2/35 c15533/46324 r0 dEQP-GLES3.functional.texture.units.8_units.only_3d.2
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.8_units.only_3d.3'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.8_units.only_3d.3
+v3d_deqp: case #216 F 78ms k2/35 c15533/46324 r0 dEQP-GLES3.functional.texture.units.8_units.only_3d.3
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.8_units.only_3d.4'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.8_units.only_3d.4
+v3d_deqp: case #217 F 76ms k2/35 c15533/46324 r0 dEQP-GLES3.functional.texture.units.8_units.only_3d.4
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.8_units.only_3d.5'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.8_units.only_3d.5
+v3d_deqp: case #218 F 64ms k2/35 c15533/46324 r0 dEQP-GLES3.functional.texture.units.8_units.only_3d.5
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.8_units.only_3d.6'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.8_units.only_3d.6
+v3d_deqp: case #219 F 74ms k2/35 c15533/46324 r0 dEQP-GLES3.functional.texture.units.8_units.only_3d.6
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.8_units.only_3d.7'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.8_units.only_3d.7
+v3d_deqp: case #220 F 86ms k2/35 c15533/46324 r0 dEQP-GLES3.functional.texture.units.8_units.only_3d.7
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.8_units.only_3d.8'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.8_units.only_3d.8
+v3d_deqp: case #221 F 70ms k2/35 c15533/46324 r0 dEQP-GLES3.functional.texture.units.8_units.only_3d.8
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.8_units.only_3d.9'..
+yakogl: online shaderc: the code generator refused this program (vertex + fragment): Program(NotYet("a texture look-up other than 2D or cube"))
+deqp: Fail dEQP-GLES3.functional.texture.units.8_units.only_3d.9
+v3d_deqp: case #222 F 78ms k2/35 c15533/46324 r0 dEQP-GLES3.functional.texture.units.8_units.only_3d.9
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES3.functional.texture.units.8_units.only_cube.0'..
+  cube-bind: 0x10b7000 unit 0 kick 138 (draw)
+  cube(draw) @0x10b7000 256x256 x6: fmt 15, cpu 0x1e1b6000 - not dumped
+  cube-bind: 0x12b7000 unit 1 kick 138 (draw)
+  cube(draw) @0x12b7000 256x256 x6: fmt 17, cpu 0x1e3b6000 - not dumped
+  cube-bind: 0x14b7000 unit 2 kick 138 (draw)
+  cube(draw) @0x14b7000 256x256 x6: fmt 19, cpu 0x1e5b6000 - not dumped
+  cube-bind: 0x18b7000 unit 3 kick 138 (draw)
+  cube(draw) @0x18b7000 256x256 x6: fmt 0, cpu 0x1e9b6000 - not dumped
+  cube-bind: 0x1ab7000 unit 4 kick 138 (draw)
+  cube(draw) @0x1ab7000 256x256 x6: fmt 15, cpu 0x1ebb6000 - not dumped
+  cube-bind: 0x1cb7000 unit 5 kick 138 (draw)
+  cube(draw) @0x1cb7000 256x256 x6: fmt 16, cpu 0x1edb6000 - not dumped
+  cube-bind: 0x1eb7000 unit 6 kick 138 (draw)
+  cube(draw) @0x1eb7000 256x256 x6: fmt 17, cpu 0x1efb6000 - not dumped
+  cube-bind: 0x20b7000 unit 7 kick 138 (draw)
+  cube(draw) @0x20b7000 256x256 x6: fmt 12, cpu 0x1f1b6000 - not dumped
+osal(v3d): out of GPU memory for 1576960 bytes (0 frees held; this size refused 1 time)
+yakogl/v3d: no GPU memory for a tiled copy of 1576960 bytes (13713408 of 16777216 bytes of copies live, a job open)
+deqp: Pass dEQP-GLES3.functional.texture.units.8_units.only_cube.0
+v3d_deqp: case #223 P 921ms k2/35 c15533/47372 r0 dEQP-GLES3.functional.texture.units.8_units.only_cube.0
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.units.8_units.only_cube.1'..
+  cube-bind: 0x10b7000 unit 0 kick 139 (draw)
+  cube(draw) @0x10b7000 256x256 x6: fmt 0, cpu 0x1e1b6000 - not dumped
+  cube-bind: 0x12b7000 unit 1 kick 139 (draw)
+  cube(draw) @0x12b7000 256x256 x6: fmt 18, cpu 0x1e3b6000 - not dumped
+  cube-bind: 0x16b7000 unit 2 kick 139 (draw)
+  cube(draw) @0x16b7000 256x256 x6: fmt 0, cpu 0x1e7b6000 - not dumped
+  cube-bind: 0x18b7000 unit 3 kick 139 (draw)
+  cube(draw) @0x18b7000 256x256 x6: fmt 14, cpu 0x1e9b6000 - not dumped
+  cube-bind: 0x1ab7000 unit 4 kick 139 (draw)
+  cube(draw) @0x1ab7000 256x256 x6: fmt 19, cpu 0x1ebb6000 - not dumped
+  cube-bind: 0x1eb7000 unit 5 kick 139 (draw)
+  cube(draw) @0x1eb7000 256x256 x6: fmt 17, cpu 0x1efb6000 - not dumped
+  cube-bind: 0x20b7000 unit 6 kick 139 (draw)
+  cube(draw) @0x20b7000 256x256 x6: fmt 6, cpu 0x1f1b6000 - not dumped
+  cube-bind: 0x21b7000 unit 7 kick 139 (draw)
+  cube(draw) @0x21b7000 256x256 x6: fmt 20, cpu 0x1f2b6000 - not dumped
+osal(v3d): out of GPU memory for 3149824 bytes (0 frees held; this size refused 1 time)
+osal(v3d): out of GPU memory for 790528 bytes (0 frees held; this size refused 1 time)
+osal(v3d): out of GPU memory for 8409088 bytes (0 frees held; this size refused 1 time)
+yakogl/v3d: no GPU memory for a kept tiled copy with a job open (0 draws in it): the job runs first, and the draw is tried in a new one (retry 1)
+yakogl/v3d: draw refused: no GPU memory for the texture's tiled copy (the OSAL's line names the bytes), and it is larger than the texture arena (8 MiB tiled)
+yakogl: glDrawElements was not recorded (-22); the frame is missing it
+GL error 0x505 in glDrawElements
+deqp: ResourceError dEQP-GLES3.functional.texture.units.8_units.only_cube.1
+v3d_deqp: case #224 R 632ms k2/37 c48363/48363 r1 dEQP-GLES3.functional.texture.units.8_units.only_cube.1
+  ResourceError (Draw: glGetError() returned GL_OUT_OF_MEMORY at es3fTextureUnitTests.cpp:1184)
+
+DONE!
+
+Test run totals:
+  Passed:        136/225 (60.4%)
+  Failed:        89/225 (39.6%)
+  Not supported: 0/225 (0.0%)
+  Warnings:      0/225 (0.0%)
+  Waived:        0/225 (0.0%)
+Test run was ABORTED!
+deqp: done: 136 passed, 89 failed, 0 not supported, 0 warnings, complete=0
+deqp: summary: 225 cases begun, 225 with a result, 0 without
+v3d_deqp STOPPED EARLY by dEQP (complete=0; later cases never began): build b1b5b845, filter 'dEQP-GLES3.functional.texture.swizzle.*,dEQP-GLES3.functional....
+  225 cases in 19181 ms, record at 19 s after boot, reset at ~250 s
+  totals: P 136 F 88 R 1  (R: not passed, a draw was refused in it; passed with one refused: 0)
+  done: 136 passed, 89 failed, 0 not supported, 0 warnings, complete=0
+  summary: 225 cases begun, 225 with a result, 0 without
+  keep region (KiB, of 1024): after #0 2, most 2 at #0, last 2, high-water 37, before #83 (first not passed) 2; slowest #223 921 ms
+  carve-out (KiB, of 48636): after #0 15533, last 48363, high-water 48363
+  jobs: slow in 0 cases; no job hung or timed out
+BASELINE (first completed) job 1: core_sts 0x0 hub_sts 0x0 err 0x1000 ct0 cs 0x0 ea 0x201085 ca 0x201085 ra 0x0 qba 0x201000 qea 0x201085 ct1 ca 0x223097 ra 0x223096 qba 0x223000 qea 0x223097
+FIRST FAILURE: none (no timeout)
+slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+binner out of memory: 0 jobs (2 overflow blocks of 256 KiB, CONFIG_YAKOGL_V3D_BIN_OVERFLOW_BLOCKS; each such job ends in a GPU reset)
+binning by interrupt (IRQ 106): 140 interrupts, 0 overflow blocks fed by the ISR
+carve-out: 15377664 bytes used now, 49524224 at most, of 49803264; 0 frees held
+osal(v3d): pending frees: high-water 16/256, waits 0 (opt-in 0), refused 0 (0 unsubmitted, 0 no wait, 0 KiB kept)
+carve-out find: 1284 calls, 504294 map reads (392 a call, at most 4178 in one); free runs 2, longest 34425088 bytes; small blocks from the top: off (CONFIG_YAKOGL_V3D_CARVEOUT_TOP_BELOW 0)
+packets (packet skip on, CONFIG_YAKOGL_V3D_PACK_SKIP): 140 jobs ended; emitted 2898, skipped 0; groups compared 0, mismatches 0
+allocations refused for lack of GPU memory: 12 (4 size slots; the line is printed at each size's 1st, 10th, 100th, ... refusal)
+UIFCFG 0x00000045 (read at init)
+log: 1 causes logged once, 11 repeats not printed
+case order: P pass F fail R refused N not supported Q quality C compat E resource I internal X crash T timeout (letters stop before the last cases)
+    0 PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPFFFFPFFPFFPPPPPPPPPPFFFFFFFFFFFFFFFFFFFFPPPPP
+refusals: 1 draws refused by the V3D backend (v3d_refused_draws), causes:
+  r0 (first #224) no GPU memory for the texture's tiled copy (the OSAL's line names the bytes), and it is larger than the texture arena (
+driver: osal(v3d): V3D 4.2, 8 QPUs, VPM 65536 bytes, MMU yes (identify 0)
+driver: osal(v3d): UIFCFG 0x00000045
+driver: osal(v3d): ready: carve-out 48 MiB at phys 0x2f09000, GPU VA 0x181000..0x3100000
+driver: ... 100 more lines (UART)
+not passed, by group (count, letters; reasons by count, F/R before N):
+  units.2_units.mixed                                         8 F8                      8x ~agment): Program(NotYet("a texture look-up other than 2D or cube"))
+  units.2_units.only_2d_array                                10 F10                    10x ~agment): Program(NotYet("a texture look-up other than 2D or cube"))
+  units.2_units.only_3d                                      10 F10                    10x ~agment): Program(NotYet("a texture look-up other than 2D or cube"))
+  units.4_units.mixed                                         9 F9                      8x ~agment): Program(NotYet("a texture look-up other than 2D or cube"))
+                                                                                        1x Image comparison failed
+  units.4_units.only_2d_array                                10 F10                    10x ~agment): Program(NotYet("a texture look-up other than 2D or cube"))
+  units.4_units.only_3d                                      10 F10                    10x ~agment): Program(NotYet("a texture look-up other than 2D or cube"))
+  units.8_units.mixed                                        10 F10                    10x ~agment): Program(NotYet("a texture look-up other than 2D or cube"))
+  units.8_units.only_2d                                       1 F1                      1x Image comparison failed
+  units.8_units.only_2d_array                                10 F10                    10x ~agment): Program(NotYet("a texture look-up other than 2D or cube"))
+  units.8_units.only_3d                                      10 F10                    10x ~agment): Program(NotYet("a texture look-up other than 2D or cube"))
+  units.8_units.only_cube                                     1 R1                      1x ~tError() returned GL_OUT_OF_MEMORY at es3fTextureUnitTests.cpp:1184
+  ... 89 more not passed (the UART has every line)
+v3d_deqp: build b1b5b845 STOPPED EARLY by dEQP (complete=0; later cases never began): 225 cases, P 136 F 88 R 1 N 0 other 0
