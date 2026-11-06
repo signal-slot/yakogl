@@ -589,8 +589,12 @@ fn print_the_format_support_this_build_reports() {
         "SRGB8_A8",
         "ETC2_SRGB_RGB",
         "ETC2_SRGB_RGBA",
+        "R32UI",
+        "R32I",
+        "RG32UI",
+        "RG32I",
     ];
-    assert_eq!(names.len() as u8, GLES_TEXFMT_ETC2_SRGB_RGBA + 1);
+    assert_eq!(names.len() as u8, GLES_TEXFMT_RG32I + 1);
     for (i, n) in names.iter().enumerate() {
         println!("{GPU}: texel class {n:<12} sampled: {}", (sampled >> i) & 1 != 0);
     }

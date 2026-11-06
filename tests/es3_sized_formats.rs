@@ -21,7 +21,39 @@ const MASKS: [(&str, u64); 3] =
 
 /// Every class this module can write, as a back end that samples them all.
 fn all_classes() -> u64 {
-    (GLES_TEXFMT_R11G11B10F..=GLES_TEXFMT_RGBA32F).fold(PVR_SAMPLED_TEXFMTS, |m, f| m | gles_texfmt_bit(f))
+    (GLES_TEXFMT_R11G11B10F..=GLES_TEXFMT_RGBA32F)
+        .chain(GLES_TEXFMT_R32UI..=GLES_TEXFMT_RG32I)
+        .fold(PVR_SAMPLED_TEXFMTS, |m, f| m | gles_texfmt_bit(f))
+}
+
+/// The integer classes: an integer format is stored in one of them or
+/// refused, never in a float class.
+const INTEGER_CLASSES: [u8; 11] = [
+    GLES_TEXFMT_RGB10A2UI,
+    GLES_TEXFMT_RGBA8UI,
+    GLES_TEXFMT_RGBA8I,
+    GLES_TEXFMT_RGBA16UI,
+    GLES_TEXFMT_RGBA16I,
+    GLES_TEXFMT_RGBA32UI,
+    GLES_TEXFMT_RGBA32I,
+    GLES_TEXFMT_R32UI,
+    GLES_TEXFMT_R32I,
+    GLES_TEXFMT_RG32UI,
+    GLES_TEXFMT_RG32I,
+];
+
+/// The classes no back end's mask holds yet (GL-core only): their formats
+/// land in the last class of their storage list, the RGBA one.
+const NOT_SAMPLED_YET: [u8; 4] = [GLES_TEXFMT_R32UI, GLES_TEXFMT_R32I, GLES_TEXFMT_RG32UI, GLES_TEXFMT_RG32I];
+
+/// The class a back end that samples every RGBA class but none of
+/// [`NOT_SAMPLED_YET`] (the PowerVR, the V3D) stores `e` in.
+fn sampled_class(e: &Es3Format) -> Option<u8> {
+    if NOT_SAMPLED_YET.contains(&e.storage[0]) {
+        e.storage.last().copied()
+    } else {
+        Some(e.storage[0])
+    }
 }
 
 fn fmt(internalformat: u32) -> &'static Es3Format {
@@ -175,11 +207,12 @@ fn storage_per_gpu_and_the_refusals() {
             let got = e.storage_in(mask);
             let want = e.storage.iter().copied().find(|&s| mask & gles_texfmt_bit(s) != 0);
             assert_eq!(got, want, "{gpu} {}", e.name);
-            /* an integer format is held natively or refused, never faked:
-             * its only class is its own */
+            /* an integer format is held in an integer class or refused,
+             * never faked in a float one */
             if e.is_integer() {
-                assert_eq!(e.storage.len(), 1, "{gpu} {}: an integer format has one class", e.name);
-                assert!(got.is_none() || got == Some(e.storage[0]), "{gpu} {}", e.name);
+                for s in e.storage {
+                    assert!(INTEGER_CLASSES.contains(s), "{gpu} {}: class {s} is not an integer class", e.name);
+                }
             }
         }
     }
@@ -187,7 +220,7 @@ fn storage_per_gpu_and_the_refusals() {
      * which stays in RGBA8 until it is a render target there */
     let pvr = PVR_SAMPLED_TEXFMTS;
     for e in FORMATS.iter().filter(|e| e.name != "GL_RGB10_A2") {
-        assert_eq!(e.storage_in(pvr), Some(e.storage[0]), "PowerVR {}: its own class", e.name);
+        assert_eq!(e.storage_in(pvr), sampled_class(e), "PowerVR {}: its own class", e.name);
     }
     assert_eq!(fmt(GL_R11F_G11F_B10F).storage_in(pvr), Some(GLES_TEXFMT_R11G11B10F));
     assert_eq!(fmt(GL_RGB9_E5).storage_in(pvr), Some(GLES_TEXFMT_RGB9E5));
@@ -210,6 +243,26 @@ fn storage_per_gpu_and_the_refusals() {
     assert_eq!(fmt(GL_RGB10_A2).storage_in(gc), Some(GLES_TEXFMT_RGBA8));
     assert_eq!(fmt(GL_R32UI).storage_in(gc), None);
     assert_eq!(fmt(GL_RGBA32UI).storage_in(gc), None);
+    /* no mask holds the R32/RG32 integer classes yet: each format falls to
+     * its RGBA32 class, which the GC lacks too */
+    for c in NOT_SAMPLED_YET {
+        for (gpu, mask) in MASKS {
+            assert_eq!(mask & gles_texfmt_bit(c), 0, "{gpu}: class {c}");
+        }
+    }
+    for (name, want) in [
+        (GL_R32UI, GLES_TEXFMT_RGBA32UI),
+        (GL_R32I, GLES_TEXFMT_RGBA32I),
+        (GL_RG32UI, GLES_TEXFMT_RGBA32UI),
+        (GL_RG32I, GLES_TEXFMT_RGBA32I),
+    ] {
+        assert_eq!(fmt(name).storage_in(pvr), Some(want), "PowerVR 0x{name:x}");
+        assert_eq!(fmt(name).storage_in(V3D_SAMPLED_TEXFMTS), Some(want), "V3D 0x{name:x}");
+        assert_eq!(fmt(name).storage_in(gc), None, "GC7000UL 0x{name:x}");
+        assert_eq!(fmt(name).storage_in(gc | gles_texfmt_bit(want)), Some(want), "GC7000UL 0x{name:x}");
+        assert_eq!(fmt(name).storage_in(0), None, "Mali 0x{name:x}");
+        assert_eq!(fmt(name).storage_in(all_classes()), Some(fmt(name).storage[0]), "0x{name:x}");
+    }
     /* the fallbacks that exist on a back end with the original classes only */
     let orig = gc
         & ![
@@ -233,7 +286,7 @@ fn storage_per_gpu_and_the_refusals() {
      * RGB10_A2's, as the PowerVR */
     let v3d = V3D_SAMPLED_TEXFMTS;
     for e in FORMATS.iter().filter(|e| e.name != "GL_RGB10_A2") {
-        assert_eq!(e.storage_in(v3d), Some(e.storage[0]), "V3D {}: its own class", e.name);
+        assert_eq!(e.storage_in(v3d), sampled_class(e), "V3D {}: its own class", e.name);
     }
     assert_eq!(fmt(GL_R11F_G11F_B10F).storage_in(v3d), Some(GLES_TEXFMT_R11G11B10F));
     assert_eq!(fmt(GL_RGB10_A2).storage_in(v3d), Some(GLES_TEXFMT_RGBA8));
@@ -262,6 +315,10 @@ fn bytes_per_texel_of_every_pair() {
     assert_eq!(texel_bytes(GL_RGBA, GL_UNSIGNED_INT_2_10_10_10_REV), 4);
     assert_eq!(texel_bytes(GL_RGBA, GL_UNSIGNED_SHORT_4_4_4_4), 2);
     assert_eq!(texel_bytes(GL_RGBA, 0x1234), 0);
+    assert_eq!(gles_texfmt_bytes(GLES_TEXFMT_R32UI), 4);
+    assert_eq!(gles_texfmt_bytes(GLES_TEXFMT_R32I), 4);
+    assert_eq!(gles_texfmt_bytes(GLES_TEXFMT_RG32UI), 8);
+    assert_eq!(gles_texfmt_bytes(GLES_TEXFMT_RG32I), 8);
     for (i, e) in FORMATS.iter().enumerate() {
         for &s in e.storage {
             assert_eq!(storage_bytes(s) as u32, gles_texfmt_bytes(s), "{i}");
@@ -460,6 +517,19 @@ fn integer_conversion() {
         conv(fmt(GL_RG32UI), GLES_TEXFMT_RGBA32UI, &le32s(&[u32::MAX, 5]), GL_RG_INTEGER, GL_UNSIGNED_INT),
         le32s(&[u32::MAX, 5, 0, 1])
     );
+    /* the packed R32/RG32 classes hold the first 4 / 8 bytes of the RGBA32
+     * texel of the same source */
+    for (name, base, type_, native, wide, src) in [
+        (GL_R32UI, GL_RED_INTEGER, GL_UNSIGNED_INT, GLES_TEXFMT_R32UI, GLES_TEXFMT_RGBA32UI, &[0xDEAD_BEEF][..]),
+        (GL_R32I, GL_RED_INTEGER, GL_INT, GLES_TEXFMT_R32I, GLES_TEXFMT_RGBA32I, &[0x8000_0000][..]),
+        (GL_RG32UI, GL_RG_INTEGER, GL_UNSIGNED_INT, GLES_TEXFMT_RG32UI, GLES_TEXFMT_RGBA32UI, &[u32::MAX, 5][..]),
+        (GL_RG32I, GL_RG_INTEGER, GL_INT, GLES_TEXFMT_RG32I, GLES_TEXFMT_RGBA32I, &[0xFFFF_FFFB, 7][..]),
+    ] {
+        let got = conv(fmt(name), native, &le32s(src), base, type_);
+        assert_eq!(got, le32s(src), "0x{name:x}");
+        let rgba = conv(fmt(name), wide, &le32s(src), base, type_);
+        assert_eq!(got[..], rgba[..4 * src.len()], "0x{name:x}");
+    }
     assert_eq!(
         conv(fmt(GL_RGBA32UI), GLES_TEXFMT_RGBA32UI, &le32s(&[1, 2, 3, 4]), GL_RGBA_INTEGER, GL_UNSIGNED_INT),
         le32s(&[1, 2, 3, 4])

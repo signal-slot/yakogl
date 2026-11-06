@@ -97,6 +97,10 @@ core's `no_alpha` (a GL_RGB / GL_LUMINANCE base) turns the alpha swizzle into
 | `GLES_TEXFMT_RGBA32I` | none | RGBA | - | no | yes, as two planes (HALTI5) | no | not here (section 3) | linear; none | as RGBA32UI | `F:230`; `S:423-429`; `X:96` |
 | `GLES_TEXFMT_RGBA32F` | none | RGBA | - | no | yes, as two planes (HALF_FLOAT) | no | - | linear; none | two G32R32F planes, as RGBA32UI; the GL core stores RGBA32F / RGB32F / RG32F in RGBA16F on this back end meanwhile (`docs/es3/sized-formats.md`) | `F:233`; `S:423-429`; `X:77` |
 | `GLES_TEXFMT_SRGB8_A8` | `TEXTURE_FORMAT_A8B8G8R8` | RGBA | - | no | yes (HALTI0) | yes | - | `SAMP_CTRL1.SRGB`; none | - (the RGBA8 row of the linear twin, `F:278`; no INT_FILTER for sRGB, `F:317-318`) | `D:246-247`; `S:406-407` |
+| `GLES_TEXFMT_R32UI` | `TEXTURE_FORMAT_A8B8G8R8` | RGBA | - | yes | yes (HALTI5: `TEXTURE_FORMAT_EXT_R32I`, 0x23); not built yet: `gc_texfmt` has no arm and falls to the RGBA8 default (this row's words), which no texture reaches while the class is outside the mask | no (r32-rg32-classes sets it) | - | linear; none | - (GL_R32UI is stored in RGBA32UI meanwhile, which this back end refuses; one format for both signs, no CONFIG2 bit for 32-bit channels, `D:187-189`) | `F:137,286-291`; `X:95` |
+| `GLES_TEXFMT_R32I` | `TEXTURE_FORMAT_A8B8G8R8` | RGBA | - | yes | yes (HALTI5: `TEXTURE_FORMAT_EXT_R32I`, 0x23); not built yet, as R32UI | no (r32-rg32-classes sets it) | - | linear; none | - (as R32UI, in RGBA32I meanwhile) | `F:136,286-291`; `X:95` |
+| `GLES_TEXFMT_RG32UI` | `TEXTURE_FORMAT_A8B8G8R8` | RGBA | - | yes | yes (HALTI5: `TEXTURE_FORMAT_EXT_G32R32I`, 0x24); not built yet, as R32UI | no (r32-rg32-classes sets it) | - | linear; none | - (as R32UI; the table's EXT_G32R32F, `F:209`, is replaced on HALTI5) | `F:209,286-291`; `X:96` |
+| `GLES_TEXFMT_RG32I` | `TEXTURE_FORMAT_A8B8G8R8` | RGBA | - | yes | yes (HALTI5: `TEXTURE_FORMAT_EXT_G32R32I`, 0x24); not built yet, as R32UI | no (r32-rg32-classes sets it) | - | linear; none | - (as RG32UI, in RGBA32I meanwhile) | `F:210,286-291`; `X:96` |
 
 ## 3. Integer samplers
 

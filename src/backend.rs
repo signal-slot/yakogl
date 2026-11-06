@@ -139,7 +139,16 @@ pub const GLES_TEXFMT_SRGB8_A8: u8 = 23;
 /// ([`sampled_texfmts`]); elsewhere the names stay GL_INVALID_ENUM.
 pub const GLES_TEXFMT_ETC2_SRGB_RGB: u8 = 24;
 pub const GLES_TEXFMT_ETC2_SRGB_RGBA: u8 = 25;
-const _: () = assert!(GLES_TEXFMT_ETC2_SRGB_RGBA < 64, "the class masks are u64");
+/// ES 3.0's one- and two-component 32-bit integer texels (GL_R32UI, GL_R32I,
+/// GL_RG32UI, GL_RG32I), stored packed: 4 and 8 bytes a texel. A back end
+/// whose sampled set ([`sampled_texfmts`]) lacks one stores the format in
+/// [`GLES_TEXFMT_RGBA32UI`] / [`GLES_TEXFMT_RGBA32I`] instead
+/// (docs/notes/gl-texture-classes-es3.md section 2).
+pub const GLES_TEXFMT_R32UI: u8 = 26;
+pub const GLES_TEXFMT_R32I: u8 = 27;
+pub const GLES_TEXFMT_RG32UI: u8 = 28;
+pub const GLES_TEXFMT_RG32I: u8 = 29;
+const _: () = assert!(GLES_TEXFMT_RG32I < 64, "the class masks are u64");
 
 /// Is the texel format stored as four bytes R,G,B,A (RGBA8, or the sRGB
 /// class whose bytes are the same and only sample differently)?
@@ -290,7 +299,12 @@ pub fn sampled_texfmts() -> u64 {
 pub const fn gles_texfmt_bytes(f: u8) -> u32 {
     if f == GLES_TEXFMT_RGBA32F || f == GLES_TEXFMT_RGBA32UI || f == GLES_TEXFMT_RGBA32I {
         16
-    } else if f == GLES_TEXFMT_RGBA16F || f == GLES_TEXFMT_RGBA16UI || f == GLES_TEXFMT_RGBA16I {
+    } else if f == GLES_TEXFMT_RGBA16F
+        || f == GLES_TEXFMT_RGBA16UI
+        || f == GLES_TEXFMT_RGBA16I
+        || f == GLES_TEXFMT_RG32UI
+        || f == GLES_TEXFMT_RG32I
+    {
         8
     } else if f == GLES_TEXFMT_R16F || f == GLES_TEXFMT_RGB565 || f == GLES_TEXFMT_LA8 {
         2
