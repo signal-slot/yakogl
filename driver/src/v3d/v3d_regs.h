@@ -34,6 +34,20 @@
 #define BCM2711_V3D_ASB_BASE   0xfec11000u   /* the V3D's AXI bridge pair */
 #define BCM2711_V3D_GIC_SPI    74            /* one interrupt line, hub and core */
 
+/* The Raspberry Pi 5 (BCM2712, V3D 7.1): ARM physical addresses. The V3D's
+ * three regions are the fork's device tree (driver/docs/rpi5-v3d71-facts.md,
+ * section 9: hub, core0, sms). The power manager is `pm` at bus address
+ * 0x7d200000 (the same section); the ARM sees that bus window at
+ * 0x10_7cxxxxxx-0x10_7fxxxxxx, as Zephyr's bcm2712.dtsi places its neighbour
+ * rng@107d208000 (Apache-2.0). The interrupts are two: hub SPI 250, core
+ * SPI 249 (section 9). There is no AXI bridge to start on this SoC. */
+#define BCM2712_V3D_HUB_BASE   0x1002000000ull /* 16 KiB */
+#define BCM2712_V3D_CORE0_BASE 0x1002008000ull /* 24 KiB */
+#define BCM2712_V3D_SMS_BASE   0x1002030800ull /* 0x700 bytes */
+#define BCM2712_PM_BASE        0x107d200000ull /* 0x308 bytes */
+#define BCM2712_V3D_HUB_GIC_SPI  250
+#define BCM2712_V3D_CORE_GIC_SPI 249
+
 /* ======================================================================== */
 /* BCM2711 power manager and the V3D's AXI bridge (names ours)              */
 /* ======================================================================== */
@@ -57,6 +71,34 @@
 #define BCM2711_ASB_CTL_STOP_ACK_SET        V3D_BIT(1)
 /* What BCM2711_ASB_ID reads: "brdg". */
 #define BCM2711_ASB_ID_VALUE                0x62726467u
+
+/* The BCM2712's power manager: the V3D's reset in a register of its own
+ * (the fork's bcm2835-power.c names it PM_GRAFX_2712, bit PM_V3DRSTN), with
+ * the same write key. Facts file, section 9 ("The power domain and the
+ * reset"). */
+#define BCM2712_PM_GRAFX                    0x304
+#define BCM2712_PM_GRAFX_V3D_RESET_N_SET    V3D_BIT(6)
+
+/* ======================================================================== */
+/* V3D 7.1 SMS (state manager), a region of its own (facts file, section 3) */
+/* ======================================================================== */
+/* Two control/status registers of one layout: REE_CS (the normal world's)
+ * and TEE_CS (the secure world's; Linux powers the SMS up and down through
+ * it). A command bit is written, then STATE says where the SMS is. */
+#define V3D_SMS_REE_CS                 0x000
+#define V3D_SMS_TEE_CS                 0x400
+#define V3D_SMS_CS_POWER_OFF_SET       V3D_BIT(30)
+#define V3D_SMS_CS_CLEAR_POWER_OFF_SET V3D_BIT(29)
+#define V3D_SMS_CS_STATE_MASK          0xfu
+#define V3D_SMS_CS_STATE_GET(v)        ((v) & V3D_SMS_CS_STATE_MASK)
+#define V3D_SMS_STATE_IDLE                    0x0
+#define V3D_SMS_STATE_RESET_REQUEST           0x4  /* written to REE_CS by v3d_reset_sms */
+#define V3D_SMS_STATE_ISOLATING_FOR_RESET     0xa
+#define V3D_SMS_STATE_RESETTING               0xb
+#define V3D_SMS_STATE_ISOLATING_FOR_POWER_OFF 0xc
+#define V3D_SMS_STATE_POWER_OFF               0xd
+/* Linux's limit for each SMS wait: 100 ms (wait_for(COND, MS)). */
+#define V3D_SMS_TIMEOUT_US             100000u
 
 /* ======================================================================== */
 /* V3D hub                                                                  */
@@ -86,6 +128,8 @@
 #define V3D_HUB_CTL_INT_STS_INT_MMU_CAP_SET V3D_BIT(3) /* an address past the MMU's reach */
 #define V3D_HUB_CTL_INT_STS_INT_TFUC_SET    V3D_BIT(1) /* a TFU conversion completed */
 #define V3D_HUB_CTL_INT_STS_INT_TFUF_SET    V3D_BIT(0) /* the TFU's input fifo has room */
+/* 7.1 only: a memory-protection violation is the hub's (the core's on 4.x). */
+#define V3D71_HUB_CTL_INT_STS_INT_GMPV_SET  V3D_BIT(6)
 
 /* The texture formatting unit (TFU): one conversion is its input image
  * address, stride and planes (IIA, IIS, ICA, IUA), its output address and
@@ -110,6 +154,24 @@
 #define V3D_TFU_COEF0          0x00424
 #define V3D_TFU_COEF0_USECOEF_SET V3D_BIT(31) /* COEF1..3 are read */
 
+/* On 7.1 the TFU block is at 0x700, with an output configuration (IOC) of
+ * its own between IUA and IOA; COEF0_USECOEF and CRC are gone (facts file,
+ * section 2). Only the offsets: v3d_tfu_run is the 4.2 job. */
+#define V3D71_TFU_CS           0x00700
+#define V3D71_TFU_SU           0x00704
+#define V3D71_TFU_ICFG         0x00708
+#define V3D71_TFU_IIA          0x0070c
+#define V3D71_TFU_ICA          0x00710
+#define V3D71_TFU_IIS          0x00714
+#define V3D71_TFU_IUA          0x00718
+#define V3D71_TFU_IOC          0x0071c
+#define V3D71_TFU_IOA          0x00720
+#define V3D71_TFU_IOS          0x00724
+#define V3D71_TFU_COEF0        0x00728
+#define V3D71_TFU_COEF1        0x0072c
+#define V3D71_TFU_COEF2        0x00730
+#define V3D71_TFU_COEF3        0x00734
+
 /* The MMU. It walks a one-level table of 32-bit entries, one per 4 KiB page
  * of GPU virtual address, through a cache of its own (the MMU cache) and a
  * TLB; both are flushed after the table changes. A fault either aborts the
@@ -120,6 +182,10 @@
 #define V3D_MMU0_CACHE_CTL_FLUSHING_SET V3D_BIT(2)
 #define V3D_MMU0_CACHE_CTL_FLUSH_SET    V3D_BIT(1)
 #define V3D_MMU0_CACHE_CTL_ENABLE_SET   V3D_BIT(0)
+/* The cache's clear bit moves at 7.1; neither is used here (a flush is
+ * FLUSH with ENABLE, the same on both). */
+#define V3D_MMU0_CACHE_CTL_CLEAR_SET    V3D_BIT(3)
+#define V3D71_MMU0_CACHE_CTL_CLEAR_SET  V3D_BIT(11)
 
 #define V3D_MMU0_CTL                        0x01200
 #define V3D_MMU0_CTL_CAP_EXCEEDED_ABORT_SET V3D_BIT(26)
@@ -190,6 +256,13 @@
 #define V3D_CTL_0_INT_STS_INT_OUTOMEM_SET V3D_BIT(2) /* the binner needs memory */
 #define V3D_CTL_0_INT_STS_INT_FLDONE_SET  V3D_BIT(1) /* binning done */
 #define V3D_CTL_0_INT_STS_INT_FRDONE_SET  V3D_BIT(0) /* rendering done */
+/* 7.1: the compute and performance-counter bits move down one, and the
+ * core has no GMPV (it is the hub's, above); FRDONE, FLDONE and OUTOMEM
+ * stay (facts file, section 2). */
+#define V3D_CTL_0_INT_STS_INT_CSDDONE_SET   V3D_BIT(7)
+#define V3D_CTL_0_INT_STS_INT_PCTR_SET      V3D_BIT(6)
+#define V3D71_CTL_0_INT_STS_INT_CSDDONE_SET V3D_BIT(6)
+#define V3D71_CTL_0_INT_STS_INT_PCTR_SET    V3D_BIT(5)
 
 /* The control list executor: thread 0 bins, thread 1 renders. Writing a
  * thread's end address (QEA) starts it at its base (QBA); CA and RA are where

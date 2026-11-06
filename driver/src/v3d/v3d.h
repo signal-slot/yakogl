@@ -5,7 +5,10 @@
  * bring-up (docs/notes/pi4-v3d-bringup.md; the sequences
  * are driver/docs/rpi4-v3d.md). Power the V3D domain and identify the GPU
  * (M1), program its MMU (M2), and submit one binning + render job and wait for
- * it (M3).
+ * it (M3). The same sequences drive the V3D 7.1 of the Raspberry Pi 5
+ * (BCM2712) when the caller selects it (struct v3d_regs.soc; the facts are
+ * driver/docs/rpi5-v3d71-facts.md): only the power steps, the identity
+ * check and the hub's fault bits differ.
  *
  * The registers are v3d_regs.h (hardware facts, named in the vocabulary of
  * Mesa's V3D simulator glue); each sequence in v3d_hw.c says what the
@@ -24,10 +27,34 @@
 #include <stdbool.h>
 #include <zephyr/sys/sys_io.h>
 
-/* The mapped register blocks. `pm` and `asb` are only used by v3d_power_on(). */
+/*
+ * The SoC, chosen by the caller when it maps the blocks. The zero value is
+ * the BCM2711, so a caller that names none gets the Pi 4 path unchanged.
+ *
+ *   BCM2711 (Pi 4, V3D 4.2): pm + asb; the power-on releases the reset in
+ *     pm's graphics register and starts the AXI bridge.
+ *   BCM2712 (Pi 5, V3D 7.1): pm + sms, no bridge; the power-on releases the
+ *     reset in pm's 2712 register, then powers the V3D's state manager (SMS)
+ *     up and resets it, as Linux's v3d_idle_sms. The identity must be 7.1,
+ *     a hub MMU fault includes the hub's GMPV bit, and the TFU job (4.2
+ *     registers) is refused.
+ */
+enum v3d_soc {
+	V3D_SOC_BCM2711 = 0,
+	V3D_SOC_BCM2712 = 1,
+};
+
+/* The mapped register blocks. `pm`, `asb` and `sms` are only used by the
+ * power sequences (v3d_power_on, v3d_power_off); `asb` only on the BCM2711,
+ * `sms` only on the BCM2712. */
 struct v3d_regs {
 	mm_reg_t hub, core, pm, asb;
+	mm_reg_t sms;
+	enum v3d_soc soc;
 };
+
+/* TVER * 10 + REV the selected SoC's V3D must report: 42 or 71. */
+uint32_t v3d_soc_ver(const struct v3d_regs *r);
 
 /*
  * The V3D clock is a VideoCore firmware clock (id 5 in the firmware's list),
@@ -67,6 +94,12 @@ struct v3d_stall {
  * ports started. The graphics power island itself is the firmware's on the
  * BCM2711. Returns 0, -ENODEV if the bridge ID is wrong, -ETIMEDOUT if the
  * bridge does not acknowledge, or what the clock switch returned.
+ *
+ * BCM2712: the same clock and reset steps on pm's 2712 register, no bridge,
+ * then the SMS: CLEAR_POWER_OFF written to TEE_CS and STATE polled for IDLE,
+ * then a reset request in REE_CS polled until STATE leaves the reset states,
+ * each within 100 ms. -ETIMEDOUT when the SMS does not get there (the clock
+ * and the reset are put back as after a bridge that does not acknowledge).
  */
 int v3d_power_on(const struct v3d_regs *r, const struct v3d_clock_ops *clk);
 
@@ -75,19 +108,26 @@ int v3d_power_on(const struct v3d_regs *r, const struct v3d_clock_ops *clk);
  * set, acknowledge rises), the clock off, the V3D held in reset. -ETIMEDOUT
  * when a port does not stop (the slave is started again when the master
  * does not).
+ *
+ * BCM2712: POWER_OFF written to the SMS's TEE_CS and STATE polled for its
+ * power-off state (100 ms), then the clock off and the reset asserted.
+ * -ETIMEDOUT, with the clock and the reset left alone, when the SMS does not
+ * power off.
  */
 int v3d_power_off(const struct v3d_regs *r, const struct v3d_clock_ops *clk);
 
 /*
  * A GPU reset after a stage that did not end. The BCM2711's only V3D reset
- * is the power manager's reset line, so this is a power cycle: interrupts
+ * is the power manager's reset line (the BCM2712's too, with the SMS powered
+ * down and up around it), so this is a power cycle: interrupts
  * quiesced, v3d_power_off, v3d_power_on, the caches' state, the MMU on the
  * same page table, interrupts cleared. 0, or the first step's error.
  */
 int v3d_reset(const struct v3d_regs *r, const struct v3d_clock_ops *clk, uint64_t pt_pa, uint64_t scratch_pa);
 
-/* M1: read and check the identity (TVER 4, REV 2, one core, an MMU).
- * Returns 0 or -ENODEV; `id` is filled either way. */
+/* M1: read and check the identity: the selected SoC's version (4.2 on the
+ * BCM2711; 7.1 on the BCM2712, whose core IDENT0 must also say 7), one core,
+ * an MMU. Returns 0 or -ENODEV; `id` is filled either way. */
 int v3d_identify(const struct v3d_regs *r, struct v3d_identity *id);
 
 /*
@@ -198,7 +238,9 @@ struct v3d_tfu_status {
  * move by one; -EBUSY when the TFU was busy before the start (nothing
  * written); -ETIMEDOUT after `timeout_us`. After -EFAULT or -ETIMEDOUT the
  * TFU is not reset here (TFU_CS.TFURST is never written); the caller resets
- * the GPU as after a stage that did not end.
+ * the GPU as after a stage that did not end. On the BCM2712 -ENOTSUP with
+ * nothing read or written: the 7.1 TFU (at 0x700, with an IOC register) is
+ * not this job.
  */
 int v3d_tfu_run(const struct v3d_regs *r, const struct v3d_tfu_job *j, uint32_t timeout_us,
 		struct v3d_tfu_status *st);
