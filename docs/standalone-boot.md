@@ -376,6 +376,108 @@ As the default, that reset boots the same image again. A product image needs
 a watchdog without a deadline, fed only while the application is healthy;
 the board layer does not have that mode.
 
+## Raspberry Pi 5
+
+The Pi 5 (BCM2712, V3D 7.1) boots the way the Pi 4 does: the boot loader in
+the SPI EEPROM reads the SD card's first FAT partition, and a one-shot
+`tryboot.txt` replaces `config.txt` for one boot. `tools/board.sh pi5` is the
+Pi 4's tryboot backend with the three differences of
+`docs/notes/pre-study-rpi5.md` section 4, and the Pi 5's timings. The Pi 4
+section above applies wherever this one does not say otherwise (`board.sh`
+is `tools/board.sh`).
+
+### What differs from the Pi 4
+
+| | Pi 4 | Pi 5 |
+|---|---|---|
+| kernel file | `kernel=zephyr.bin`-style, written by the same function | `kernel=` must name our file: the Pi 5's default is `kernel_2712.img` |
+| `arm_64bit=1` | written | not written: the Pi 5's firmware ignores it |
+| `start4.elf`, `fixup4.dat` | in the firmware set | none: the Pi 5 has no such files, nothing to keep |
+| HDMI timings | `BOARD_HDMI_TIMINGS` into the config | not written, not read: `cmdline.txt` carries `video=` for the capture device, and is left as it is |
+| console | GPIO 14/15 | `uart10`, the 3-pin debug connector, 115200 8N1 (Linux: `ttyAMA10`) |
+| waits | 420 s for the image, 300 s for Linux | 420 s for the image, 420 s more for Linux |
+
+### What a run does
+
+The sequence is the one `board.sh --dry-run pi5 run <zephyr.bin> <logdir>`
+prints; the board-side steps in order:
+
+1. Take the board lease (`/var/tmp/yakogl-board.lease`, one holder per
+   board), check `sudo -n true`, read `boot_id`, check that nobody holds the
+   console device, that `/boot/firmware` has at least twice the image free,
+   that no `/boot/firmware/yakogl-<name>.bin` is left over and that no
+   `config-linux.txt` (a permanent default) exists.
+2. `vcgencmd get_throttled`, recorded as `throttled_before` in `meta.txt`.
+3. Read the existing `tryboot.txt` (if any), copy the image to
+   `/boot/firmware/yakogl-<name>.bin`, write `tryboot.txt`, read both back
+   (sha256 of the image, the text of `tryboot.txt`); on any mismatch, undo
+   and stop before the reboot.
+4. Start reading the console into `console.txt`, then `sudo reboot "0 tryboot"`.
+5. Wait up to 420 s for the image's end line (`v3d_clear: PASS`/`FAIL`, the
+   deqp and gl_test end lines, or a `yk-record:` line), then 5 s more.
+6. Stop the reader and wait up to 420 s more for a `boot_id` other than the
+   first. A reboot to ssh takes about 150 s on the owner's board (kernel
+   11 s, user space 98 s, measured 2026-11-06), and the SD card sits behind
+   a bridge that writes at about 0.4 MB/s, so the wait is long. `RUN_BOUND`
+   and `RETURN_BOUND` override the two limits.
+7. When Linux is back: `get_throttled` again (`throttled_after`), remove the
+   staged image, put the previous `tryboot.txt` back and read both back.
+
+`tryboot.txt` (the same lines `board.sh` would write to `config.txt` for a
+`default`; `config.txt` itself is never touched by a run):
+
+```ini
+# tools/board.sh: <name>, one-shot boot (reboot "0 tryboot"); config.txt stays the Linux default
+[all]
+kernel=yakogl-<name>.bin
+enable_uart=1
+uart_2ndstage=1
+```
+
+`kernel=` names the staged file, since the firmware would otherwise load
+`kernel_2712.img`. There is no `arm_64bit` line. `uart_2ndstage=1` puts the
+boot loader's log on the same UART before the image's banner.
+
+`get_throttled` is recorded with every run because the supply is weak (the
+boot loader reports USB-PD 3000 mA, Linux logs "Undervoltage detected", the
+value read is `0x50000`): a GPU result that looks like a hardware fault is
+checked against it first.
+
+Other verbs: `board.sh pi5 probe <logdir>` does the pre-checks of step 1 and
+reboots nothing; `status` prints the lease, `boot_id`, free space, any
+staged `yakogl-*.bin` and the current `tryboot.txt`; `disarm` lists a staged
+image and `tryboot.txt` (tryboot arms nothing that persists, so a leftover is
+removed by hand). `default <image> forever` and `nodefault` work as on the
+Pi 4, with a person at the board.
+
+### The environment
+
+`BOARD_HOST` (`user@host` of the board's Linux) and `BOARD_UART` come from the
+environment, never from a file; `PI5_HOST` and `PI5_UART` are read as well.
+`BOARD_UART` is a serial character device wired to the Pi's debug connector,
+or `host:port` of a serial bridge to it. The board has no remote power or
+reset; the console is read only (input to the board has never been seen to
+work).
+
+### The first image arms the watchdog
+
+A Zephyr image that hangs without resetting holds the board until a person
+power-cycles it. So every Pi 5 image starts by arming the BCM2712 `pm`
+watchdog (`rpi_wdog.c` of the board layer, the `board: PM watchdog resets`
+line `board.sh` checks the image for), and tryboot then boots Linux, because
+`tryboot.txt` is read once. If the board does not answer within 420 s + 420 s
+of the reboot, `board.sh` stops, retries nothing, and says that a person must
+power-cycle the board; no other run takes it until the owner says it is back.
+
+### Known and not measured
+
+| fact | state |
+|---|---|
+| tryboot works with the boot loader of 2025-06-13 | known: `reboot '0 tryboot'` booted from `tryboot.txt` (`/proc/device-tree/chosen/bootloader/tryboot` read 1) and the next plain reboot read 0 (owner's check, 2026-11-06; U7) |
+| the address the firmware loads a `kernel=` image at (Zephyr's `rpi_5` links `sram0` at 0x200000) | not measured yet (board-d1; U6) |
+| the BCM2712 PM watchdog resets the board | not measured yet (board-d1) |
+| the time from the reboot to Linux after an image | not measured yet (board-d1); only a plain Linux reboot is measured (about 150 s) |
+
 ## On the boards
 
 In order; stop at the first step that prints something else.
