@@ -1,0 +1,32 @@
+/dts-v1/;
+
+/* A cut of the Pi 5 tree: 6 nodes (root, soc, uart, watchdog, chosen,
+ * memory) and 11 properties. */
+/ {
+	model = "Raspberry Pi 5";
+	#address-cells = <1>;
+	#size-cells = <1>;
+
+	soc {
+		compatible = "simple-bus";
+		ranges;
+
+		uart@7d001000 {
+			reg = <0x7d001000 0x200>;
+			status = "okay";
+		};
+
+		watchdog@7d200000 {
+			reg = <0x7d200000 0x100>;
+		};
+	};
+
+	chosen {
+		bootargs = "console=ttyAMA10,115200";
+	};
+
+	memory@0 {
+		device_type = "memory";
+		reg = <0 0x20000000>;
+	};
+};
