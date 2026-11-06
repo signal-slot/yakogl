@@ -664,7 +664,7 @@ which copy and bytes changed. Existing variables keep their order, new ones
 go last, bytes outside the env are untouched. A bad CRC, data that does not
 fit, or a bad name/value is refused with exit 2 and no output file; `check`
 exits 2 naming the bad copy. `tools/uboot_env_selftest.sh` runs the tests on
-synthetic images (not wired into `tools/check.sh` yet).
+synthetic images (a row of `tools/check.sh`).
 
 ## land.sh — land one branch tip on main
 
