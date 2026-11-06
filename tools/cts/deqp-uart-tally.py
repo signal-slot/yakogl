@@ -30,11 +30,12 @@ status, and prints
   - every case that is neither Pass nor NotSupported, by name.
 
     tools/cts/deqp-uart-tally.py [--mustpass tools/cts/gles2-mustpass.txt]
-                                 [--depth N] log...
+                                 [--depth N] [--label LABEL] log...
 
 --depth picks the group: 3 (default) groups dEQP-GLES2.functional.<group>,
 4 adds the next component (functional.shaders.<subgroup>). dEQP-GLES2.info.*
-counts as the group "info". Exit status 1 when a log has no summary line,
+counts as the group "info". --label LABEL (one log) names the image in the
+"image's own counters" line instead of the log's directory name. Exit status 1 when a log has no summary line,
 is INCOMPLETE or is FATAL. --self-test checks both verdicts on built-in logs.
 
 The mustpass views (tools/board.sh tally and diff; the code was
@@ -637,11 +638,15 @@ def main():
     ap.add_argument("--table", action="store_true")
     ap.add_argument("--baseline")
     ap.add_argument("--statuses", action="store_true")
+    ap.add_argument("--label", help="name the image in the 'image's own counters' line "
+                    "(default: the log's directory name); one log only")
     a = ap.parse_args()
     if a.self_test:
         return self_test()
     if not a.logs:
         ap.error("no logs given")
+    if a.label and len(a.logs) != 1:
+        ap.error("--label names one image: give exactly one log")
     if a.table or a.baseline or a.statuses:
         if not a.mustpass:
             ap.error("--table, --baseline and --statuses need --mustpass")
@@ -691,7 +696,7 @@ def main():
     print("%-40s %7d %6d %6d %6d" % ("TOTAL", tot["Pass"], tot["Fail"], tot["NotSupported"], tot["other"]))
     print("(the pass / fail counts above are the result lines seen; the image's own counters:)")
     for n, r in scans:
-        print("  %s: %s; %d result lines seen%s" % (os.path.basename(os.path.dirname(os.path.abspath(n))) or n,
+        print("  %s: %s; %d result lines seen%s" % (a.label or os.path.basename(os.path.dirname(os.path.abspath(n))) or n,
               counters_text(r), len(r["got"]), "" if not r["loss"] else ", %d LOST in capture" % r["loss"]["lost"]))
     for c in sorted(cases):
         if cases[c] not in ("Pass", "NotSupported"):
