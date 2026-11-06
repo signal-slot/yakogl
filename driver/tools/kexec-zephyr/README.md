@@ -70,6 +70,67 @@ proof ..."). `--no-linux-wdt` jumps without it. The first jump (2026-10-19,
 without it) stopped before any output and held the board until its power was
 cut; that a WDT0 timeout brings this SoC back into Armbian is still unproven.
 
+## The Armadillo-X2: `tools/board.sh x2`
+
+The Armadillo-X2 has the Verdin i.MX8MP's SoC and GPU under Armadillo Base OS.
+`tools/board.sh x2` has one backend, `kexec-dev`: the crash route into the
+`crashkernel=256M@0x60000000` reservation of the board's kernel command line,
+the window `armadillo_x2/mimx8ml8/a53` links into. Every x2 run is therefore a
+development run (the direct boot is an unrun plan,
+`docs/notes/x2-direct-boot.md`).
+
+```sh
+# host, once per checkout: the loader and the record tool (never committed)
+cd driver/tools/kexec-zephyr
+for t in kexec_zephyr snvs_lpgpr; do
+  aarch64-linux-gcc -O2 -static -nostdlib -ffreestanding -fno-stack-protector -o $t $t.c
+done   # or: clang --target=aarch64-linux-gnu -fuse-ld=lld, the same flags
+BOARD_HOST=root@<x2> tools/board.sh x2 status
+BOARD_HOST=root@<x2> tools/board.sh x2 run build/x2/gl_test/zephyr/zephyr.bin <logdir>
+```
+
+What differs from the Verdin's crash route, each read on the board on
+2026-11-06 (Armadillo Base OS 3.24-at.3, kernel 6.12.105):
+
+- **root, no sudo.** root logs in over ssh and there is no `sudo`, so no
+  wrapper is installed: the run starts the loader itself,
+  `kexec_zephyr zephyr.bin 0x60000000 --crash`.
+- **Nothing is installed.** `/` is an overlay over a tmpfs and `/tmp` is a
+  tmpfs. Each run copies the loader, `snvs_lpgpr` and the image into
+  `/tmp/yakogl-kexec`; the reboot that ends the run removes them, so the
+  record tool is copied again before the record is read. `/var/tmp` is on the
+  eMMC, so the board lease (`/var/tmp/yakogl-board.lease`) survives the reboot
+  as on the other boards.
+- **The record is LPGPR1..3, through `/dev/mem`.** The kernel has no nvmem
+  driver for the SNVS LPGPR (`CONFIG_NVMEM_SNVS_LPGPR` is not set), so
+  `snvs_lpgpr` reads and writes the four registers; that works with
+  `CONFIG_IO_STRICT_DEVMEM=y`. LPGPR0 holds U-Boot's boot count (it read
+  `dead0002`), so an X2 image stores w0..w2 in LPGPR1..3 and no w3
+  (`CONFIG_GC_COMMON_RESULT_SNVS_KEEP_LPGPR0`). The runner clears LPGPR1..3
+  (the selector `SEL` goes into LPGPR2), writes LPGPR0 back as it read it, and
+  records the result as `w0 w1 w2 00000000`.
+- **OpenRC, not systemd.** The boot has finished when the runlevel is
+  `default` and no `openrc` process is left; the readiness read waits for
+  that for up to 40 s. There is no remoteproc entry for the M7.
+- **A running container refuses the run.** The crash route ends every
+  process without a shutdown.
+- **The console is opt-in.** UART2 is on the board's own USB serial adapter
+  (CON6). With `BOARD_UART` set (a local device or a bridge's `host:port`)
+  the run captures it as an i.MX8MP U-Boot run does; without it the record is
+  the only result. A character sent to that console while the board boots
+  stops U-Boot at its prompt, so the capture only reads.
+
+The image must carry the watchdog marker `gc_wdog_arm: armed`
+(`CONFIG_GC_BOARD_WDOG_SELF_ARM=y`): the board has no remote power control,
+and `board.sh` refuses an image without it.
+
+State (2026-11-06): `status`, `probe` and every step of `run` before the jump
+(the readiness read, the copy of the tools, the record cleared with and
+without a selector and read back with LPGPR0 unchanged) ran on the board. The
+jump itself has not been made through `board.sh`; the crash route ran on this
+board before from commands typed by hand (the header of
+`driver/boards/atmark/armadillo_x2/armadillo_x2_mimx8ml8_a53.dts`).
+
 ## The loader refuses to jump without a running watchdog (AM62P)
 
 A Zephyr image entered this way has exactly one way back: the RTI watchdog

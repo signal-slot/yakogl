@@ -9,3 +9,4 @@ __pycache__/
 records/*
 !records/README.md
 driver/tools/kexec-zephyr/kexec_zephyr
+driver/tools/kexec-zephyr/snvs_lpgpr

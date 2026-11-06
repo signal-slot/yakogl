@@ -320,6 +320,8 @@ and the rule "repeat work becomes one tool" covers it.
 `tools/uboot-netboot-lib.sh` and `tools/tftp_oneshot.py`) produce rows.
 `kexec-dev` (am62p, imx8mp; it keeps `driver/tools/kexec-zephyr/`) writes
 `DEV` into every row it makes (bootloader-boot rule).
+The Armadillo-X2 (`x2`) was added later as a development board with
+`kexec-dev` only (`driver/tools/kexec-zephyr/README.md`, "The Armadillo-X2").
 
 **One `run` sequence on every board** (the board supplies the parts in
 brackets):
