@@ -30,6 +30,33 @@
 //! record in the SNVS LPGPR0..3 (it survives the SoC reset), where the
 //! runner may leave a selector before a run ([`SELECTOR_MAGIC`]).
 //!
+//! # Three-word records (`--words 3`)
+//!
+//! An image built with `CONFIG_GC_COMMON_RESULT_SNVS_KEEP_LPGPR0` (the
+//! Armadillo-X2: LPGPR0 is U-Boot's boot count) keeps the record in LPGPR1..3
+//! only: w0..w2. w3 is never stored; the console line and snvs.txt show it as
+//! 00000000 or not at all, and `yakogl-tools record --words 3` ignores
+//! whatever it is given for it. The decision, so that no reader depends on a
+//! word that is gone:
+//!
+//! - Every field that lives in w3 is *not stored*, printed as `-` and never
+//!   as a number: the DEQP row's cases begun and first failing name check, the
+//!   first failure and counters of DEQP_CASES, and the other kinds' w3 fields
+//!   (`describe3` in tools/yakogl-tools/src/recordcmd.rs). The row's begun is
+//!   reported as derived (pass + fail + notsup + other), its tally line says
+//!   `begun=derived`.
+//! - An X2 tree names its failing cases from the record's own three-word
+//!   DEQP_FAILS pages, not from a console (the X2 has none): a page holds
+//!   [`DEQP_FAILS_PER_PAGE_3W`] = 4 name checks, two per word in w1 and w2,
+//!   the low half first, where the four-word page holds 6 (w3 held the last
+//!   two). A slot not used is 0xffff, so a word not used is 0xffffffff; page
+//!   p covers fails 4p..4p+3. A page with 1, 2 or 3 names has its unused
+//!   slots 0xffff and the decoder lists only the names present.
+//! - Assumption: the firmware side (deqp_snvs.c, gc_result.c) is not in this
+//!   file's tree yet; this layout follows the decode contract fixed for it
+//!   (w3 absent, unused names 0xffffffff per word). The four-word decoding is
+//!   unchanged.
+//!
 //! # Breadcrumbs
 //!
 //! PROGRESS, WDOG tag 1 (armed) and STAGE records are breadcrumbs: dropped
@@ -2064,7 +2091,13 @@ pub fn write_c_header(out: &mut impl fmt::Write) -> fmt::Result {
          \x20* w0 = YK_RECORD_MAGIC | kind << 8 | low, then w1..w3 as the kind\n\
          \x20* defines them (record.rs, KINDS). `low` is a sequence number, or the\n\
          \x20* kind's own value for the kinds marked \"tag\" below. Each stored record\n\
-         \x20* is printed as YK_RECORD_LINE_FMT. */\n\
+         \x20* is printed as YK_RECORD_LINE_FMT.\n\
+         \x20*\n\
+         \x20* With CONFIG_GC_COMMON_RESULT_SNVS_KEEP_LPGPR0 (the Armadillo-X2) the\n\
+         \x20* record is three words, w0..w2; w3 is never stored and the host reads\n\
+         \x20* every w3 field as absent (`yakogl-tools record --words 3`). Such a tree\n\
+         \x20* names failing cases from DEQP_FAILS pages of YK_RECORD_DEQP_FAILS_PER_PAGE_3W\n\
+         \x20* names (w1, w2, low half first); unused slots are 0xffff. */\n\
          #ifndef YAKOGL_RECORD_H\n\
          #define YAKOGL_RECORD_H\n\n",
     )?;

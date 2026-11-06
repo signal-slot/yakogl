@@ -1300,6 +1300,46 @@ mod tests {
         );
         assert_eq!(out[1..], [format!("  {crc:04x} dEQP-GLES2.x")]);
         assert_eq!(record::DEQP_FAILS_PER_PAGE_3W, 4);
+    }
+
+    /// A three-word name page with 1, 2, 3 and 4 names; unused slots are
+    /// 0xffff (a whole unused word 0xffffffff) and are not listed.
+    #[test]
+    fn words3_fails_pages_with_one_to_four_names() {
+        let names = ["dEQP-GLES2.a", "dEQP-GLES2.b", "dEQP-GLES2.c", "dEQP-GLES2.d"];
+        let cl = CaseList::from_text(&(names.join("\n") + "\n"));
+        let c: Vec<u32> = names.iter().map(|n| u32::from(record::crc16_ccitt_false(n.as_bytes()))).collect();
+        let pages = [
+            [0xffff_0000 | c[0], 0xffff_ffff],
+            [(c[1] << 16) | c[0], 0xffff_ffff],
+            [(c[1] << 16) | c[0], 0xffff_0000 | c[2]],
+            [(c[1] << 16) | c[0], (c[3] << 16) | c[2]],
+        ];
+        for (n, p) in pages.iter().enumerate() {
+            let w = [0x594b0a01, p[0], p[1], 0];
+            let got = fails_names_3w(&w);
+            assert_eq!(got.iter().filter(|&&x| x != 0xffff).count(), n + 1);
+            let out = decode3(&w, &cl);
+            assert_eq!(out.len(), n + 2, "{out:?}");
+            for (i, l) in out[1..].iter().enumerate() {
+                assert_eq!(*l, format!("  {:04x} {}", c[i], names[i]));
+            }
+            // w3 is never read
+            assert_eq!(decode3(&[w[0], w[1], w[2], 0x1234_5678], &cl), out);
+        }
+        // an empty page (0xffffffff twice) names nothing
+        assert_eq!(decode3(&[0x594b0a01, 0xffff_ffff, 0xffff_ffff, 0], &cl).len(), 1);
+    }
+
+    /// A four-word record decodes as before: the page holds 6 names, the row
+    /// has its cases begun and first failing check.
+    #[test]
+    fn words4_fails_page_and_row_unchanged() {
+        let cl = CaseList::from_text("dEQP-GLES2.x\n");
+        let d = decode(&[0x594b0a01, 0x2222_1111, 0x4444_3333, 0x6666_5555], &cl).join("\n");
+        assert!(d.contains("name checks 1111 2222 3333 4444 5555 6666"), "{d}");
+        let d = decode(&[0x594b0801, 0x0002_0064, 0x0001_0003, 0x94050067], &cl).join("\n");
+        assert!(d.contains("begun 103") && !d.contains("not stored"), "{d}");
         // CASE_SET cannot be read without cases run
         assert_eq!(status3(&[0x594b010e, 0xffff_0107, 0xffff_0030, 0]), Status::Invalid);
         assert_eq!(status3(&[0x594b0300, 0, 0, 0]), Status::Fail);

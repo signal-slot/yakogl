@@ -6,7 +6,13 @@
  * w0 = YK_RECORD_MAGIC | kind << 8 | low, then w1..w3 as the kind
  * defines them (record.rs, KINDS). `low` is a sequence number, or the
  * kind's own value for the kinds marked "tag" below. Each stored record
- * is printed as YK_RECORD_LINE_FMT. */
+ * is printed as YK_RECORD_LINE_FMT.
+ *
+ * With CONFIG_GC_COMMON_RESULT_SNVS_KEEP_LPGPR0 (the Armadillo-X2) the
+ * record is three words, w0..w2; w3 is never stored and the host reads
+ * every w3 field as absent (`yakogl-tools record --words 3`). Such a tree
+ * names failing cases from DEQP_FAILS pages of YK_RECORD_DEQP_FAILS_PER_PAGE_3W
+ * names (w1, w2, low half first); unused slots are 0xffff. */
 #ifndef YAKOGL_RECORD_H
 #define YAKOGL_RECORD_H
 
