@@ -181,6 +181,11 @@ static int bridge_start(struct display_ctx *c)
  * again (data sheet Init seq 8-11). Anything left is a real link error. */
 static void bridge_check(struct display_ctx *c)
 {
+#ifndef CONFIG_YAKOGL_DRV_DISPLAY_IMX8MP_LINK_CHECK
+	/* not checked (the cold start's 6 ms: YAKOGL_DRV_DISPLAY_IMX8MP_LINK_CHECK) */
+	c->info.bridge_irq_stat = 0xffu;
+	return;
+#endif
 	int rc = sn65dsi8x_check_link(c->bridge);
 
 	c->info.bridge_irq_stat = rc >= 0 ? (uint8_t)rc : 0xffu;
