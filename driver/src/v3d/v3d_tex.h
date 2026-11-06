@@ -402,6 +402,16 @@ struct v3d_sampler {
  * the s8.8 field (-128 <= bias < 128). */
 bool v3d_tex_pack_sampler(uint8_t out[V3D_SAMPLER_STATE_BYTES], const struct v3d_sampler *s);
 
+/* v3d_tex_pack_sampler plus the depth compare of a shadow sampler. compare_op
+ * is GlesTextureBind::compare_op: bits 0-2 the function in GL order (Never,
+ * Less, Equal, Lequal, Greater, NotEqual, Gequal, Always), which is the
+ * "Depth Compare Function" field's value (bits 4-6 of word 0); bit 3 (fixed
+ * depth) does not reach the record; bit 4 set: compare off, the bytes of
+ * v3d_tex_pack_sampler. V3D 4.2 has no separate enable bit. False, with `out`
+ * untouched, for what v3d_tex_pack_sampler refuses or a compare_op above 0x1f. */
+bool v3d_tex_pack_sampler_compare(uint8_t out[V3D_SAMPLER_STATE_BYTES], const struct v3d_sampler *s,
+				  uint32_t compare_op);
+
 /* The TMU configuration uniforms, as Mesa's write_tmu_p0 / write_tmu_p1
  * write them (gallium/drivers/v3d/v3d_uniforms.c:151-156, :208-215): the
  * record's address ORed with the low 24 bits of the compiler's uniform data

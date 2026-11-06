@@ -830,7 +830,8 @@ static float clampf(float v, float lo, float hi)
 	return v < lo ? lo : (v > hi ? hi : v);
 }
 
-bool v3d_tex_pack_sampler(uint8_t dst[V3D_SAMPLER_STATE_BYTES], const struct v3d_sampler *s)
+static bool pack_sampler(uint8_t dst[V3D_SAMPLER_STATE_BYTES], const struct v3d_sampler *s,
+			 uint32_t compare_fn)
 {
 	if (!dst || !s || s->wrap_s > V3D_WRAP_MODE_MIRROR || s->wrap_t > V3D_WRAP_MODE_MIRROR ||
 	    s->wrap_r > V3D_WRAP_MODE_MIRROR || s->border_color_mode > 2 ||
@@ -866,7 +867,8 @@ bool v3d_tex_pack_sampler(uint8_t dst[V3D_SAMPLER_STATE_BYTES], const struct v3d
 	p.mag_filter_nearest = s->mag_nearest;
 	p.min_filter_nearest = s->min_nearest;
 	p.mip_filter_nearest = s->mip_nearest;
-	/* anisotropy off; depth compare NEVER (0); sRGB decode on */
+	/* anisotropy off; sRGB decode on */
+	p.depth_compare_function = compare_fn;
 	p.min_level_of_detail = (float)round_half_away(min_lod * 256.0f) / 256.0f;
 	p.max_level_of_detail = (float)round_half_away(max_lod * 256.0f) / 256.0f;
 	p.fixed_bias = (float)bias / 256.0f;
@@ -880,6 +882,22 @@ bool v3d_tex_pack_sampler(uint8_t dst[V3D_SAMPLER_STATE_BYTES], const struct v3d
 		return false;
 	memcpy(dst, out, V3D_SAMPLER_STATE_BYTES);
 	return true;
+}
+
+bool v3d_tex_pack_sampler(uint8_t dst[V3D_SAMPLER_STATE_BYTES], const struct v3d_sampler *s)
+{
+	return pack_sampler(dst, s, 0); /* depth compare NEVER (0), Mesa's compare-off word */
+}
+
+bool v3d_tex_pack_sampler_compare(uint8_t dst[V3D_SAMPLER_STATE_BYTES], const struct v3d_sampler *s,
+				  uint32_t compare_op)
+{
+	if (compare_op > 0x1f)
+		return false;
+	/* bit 4: compare off, Mesa's NEVER; bit 3 (a fixed-point depth's
+	 * reference clamp) does not reach the record; V3D 4.2 has no separate
+	 * enable, the 3-bit function is the whole state (v3d_packet.xml) */
+	return pack_sampler(dst, s, (compare_op & 16) ? 0 : (compare_op & 7));
 }
 
 /* ---- the TMU configuration uniforms ---------------------------------------- */

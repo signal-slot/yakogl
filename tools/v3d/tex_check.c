@@ -409,6 +409,72 @@ static void sampler_case(const char *name, const struct v3d_sampler *s,
 			printf("  %2d: ours %02x mesa %02x\n", i, ours[i], mesa[i]);
 }
 
+/* The shadow sampler's compare (docs/notes/v3d-shadow.md (a)): all eight
+ * functions, compare off, and bit 3, under both filters, against Mesa's
+ * depth_compare_function (which is NEVER when the compare mode is off). */
+static void part_compare(void)
+{
+	static const char *const fn_names[8] = { "NEVER", "LESS", "EQUAL", "LEQUAL",
+						 "GREATER", "NOTEQUAL", "GEQUAL", "ALWAYS" };
+	static const char *const filter_names[2] = { "LINEAR", "NEAREST" };
+	char what[160];
+	for (int nearest = 0; nearest < 2; nearest++) {
+		int fails_before = failures;
+		struct v3d_sampler s = { .wrap_s = V3D_WRAP_MODE_CLAMP, .wrap_t = V3D_WRAP_MODE_CLAMP,
+					 .wrap_r = V3D_WRAP_MODE_CLAMP, .min_nearest = nearest,
+					 .mag_nearest = nearest, .mip_none = true, .mip_nearest = true,
+					 .min_lod = -1000.0f, .max_lod = 1000.0f };
+		struct V3D42_SAMPLER_STATE m = { .wrap_s = V3D_WRAP_MODE_CLAMP,
+						 .wrap_t = V3D_WRAP_MODE_CLAMP,
+						 .wrap_r = V3D_WRAP_MODE_CLAMP,
+						 .min_filter_nearest = nearest,
+						 .mag_filter_nearest = nearest,
+						 .mip_filter_nearest = true,
+						 .min_level_of_detail = 0.0f,
+						 .max_level_of_detail = 1.0f / 256.0f };
+		uint8_t ours[V3D_SAMPLER_STATE_BYTES], mesa[V3D_SAMPLER_STATE_BYTES];
+		uint8_t plain[V3D_SAMPLER_STATE_BYTES];
+		for (uint32_t fn = 0; fn < 8; fn++) {
+			m.depth_compare_function = fn;
+			V3D42_SAMPLER_STATE_pack(NULL, mesa, &m);
+			bool ok = v3d_tex_pack_sampler_compare(ours, &s, fn);
+			snprintf(what, sizeof(what), "sampler compare %s %s: our bytes are Mesa's",
+				 filter_names[nearest], fn_names[fn]);
+			check(ok && memcmp(ours, mesa, sizeof(ours)) == 0, what);
+			if (ok && memcmp(ours, mesa, sizeof(ours)) != 0)
+				for (int i = 0; i < V3D_SAMPLER_STATE_BYTES; i++)
+					printf("  %2d: ours %02x mesa %02x\n", i, ours[i], mesa[i]);
+		}
+		m.depth_compare_function = 0;
+		V3D42_SAMPLER_STATE_pack(NULL, mesa, &m);
+		bool ok = v3d_tex_pack_sampler_compare(ours, &s, 16);
+		snprintf(what, sizeof(what), "sampler compare %s off: Mesa's bytes and v3d_tex_pack_sampler's",
+			 filter_names[nearest]);
+		check(ok && v3d_tex_pack_sampler(plain, &s) && memcmp(ours, mesa, sizeof(ours)) == 0 &&
+			      memcmp(ours, plain, sizeof(ours)) == 0,
+		      what);
+		/* bit 3 (fixed depth) is not part of the record; off wins over any function bits */
+		bool bit3 = true;
+		for (uint32_t fn = 0; fn < 8; fn++) {
+			uint8_t a[V3D_SAMPLER_STATE_BYTES], b[V3D_SAMPLER_STATE_BYTES];
+			bit3 = bit3 && v3d_tex_pack_sampler_compare(a, &s, fn) &&
+			       v3d_tex_pack_sampler_compare(b, &s, fn | 8) && memcmp(a, b, sizeof(a)) == 0 &&
+			       v3d_tex_pack_sampler_compare(a, &s, fn | 16) &&
+			       memcmp(a, plain, sizeof(a)) == 0;
+		}
+		snprintf(what, sizeof(what), "sampler compare %s: bit 3 is dropped, bit 4 wins", filter_names[nearest]);
+		check(bit3, what);
+		printf("tex_check: sampler compare %s: NEVER..ALWAYS + off, %s\n", filter_names[nearest],
+		       failures == fails_before ? "all bytes are Mesa's" : "MISMATCH");
+	}
+	uint8_t o[V3D_SAMPLER_STATE_BYTES], sen[V3D_SAMPLER_STATE_BYTES];
+	struct v3d_sampler bad = { .min_lod = -1000.0f, .max_lod = 1000.0f };
+	memset(o, 0xcc, sizeof(o));
+	memset(sen, 0xcc, sizeof(sen));
+	check(!v3d_tex_pack_sampler_compare(o, &bad, 0x20) && memcmp(o, sen, sizeof(o)) == 0,
+	      "sampler compare: compare_op above 0x1f is refused, nothing written");
+}
+
 static void part_records(void)
 {
 	check(TEXTURE_DATA_FORMAT_RGBA8 == V3D_TEXTURE_DATA_FORMAT_RGBA8, "RGBA8's type is Mesa's");
@@ -1989,7 +2055,7 @@ int main(void)
 			   8 + 1;
 	const int planned = part1 + (1 + 13 * 5) + (1 + 15 + 3) + (9 * 5 * 2 + 8 * 2) +
 			    (V3D_TEX_FORMAT_COUNT * 2 + 2) + (108 + 4) + 5 +
-			    (1 + 12 + 2 + 9 + 2 + 3) + (3 + 4 + 1 + 4) + (6 * 4 + 5) + part11 + part12 + (1 + 2 * 2) + 4;
+			    (1 + 12 + 2 + 9 + 2 + 3) + (3 + 4 + 1 + 4) + (6 * 4 + 5) + part11 + part12 + (1 + 2 * 2) + 4 + (2 * (8 + 2) + 1);
 	/* the boxes part 4 must have stored: levels 1+1+3+6+1+1+9+2+2 = 26 of
 	 * the 9 sizes, x 5 cpp, x (7 fixed + 16 random) boxes a level */
 	const unsigned planned_boxes = 26 * 5 * (FIXED_BOXES + RANDOM_BOXES);
@@ -1998,6 +2064,7 @@ int main(void)
 	part_layout();
 	part_tiling();
 	part_records();
+	part_compare();
 	part_boxes();
 	part_formats();
 	part_gl_samplers();
