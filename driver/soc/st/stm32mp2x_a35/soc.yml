@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+#
+# STM32MP257F Cortex-A35 cluster (docs/notes/pre-study-stm32mp257f-dk.md,
+# section 4). Zephyr ships the STM32MP2 series for its Cortex-M33 only
+# (soc/st/stm32/soc.yml: stm32mp257fxx, cpucluster m33).
+#
+# Two entries, for two reasons:
+# - "socs: extend" adds the a35 cluster to Zephyr's stm32mp257fxx, so that
+#   Zephyr's own board stm32mp257f_dk gains the target
+#   stm32mp257f_dk/stm32mp257fxx/a35 (driver/boards/st/stm32mp257f_dk).
+# - The image itself is built for the SoC stm32mp257fxx_a35 of the family
+#   below (CONFIG_SOC, Kconfig.soc here). It cannot be Zephyr's
+#   stm32mp257fxx: Zephyr builds an SoC from the first directory naming it
+#   (cmake/modules/hwm_v2.cmake, "list(GET SOC_V2_DIR 0 ...)"), which is
+#   soc/st/stm32, whose CMakeLists.txt always compiles the STM32Cube glue
+#   (soc/st/stm32/common/CMakeLists.txt: stm32cube_hal.c, soc_config.c
+#   with the LL headers) and the M33 soc.h (CMSIS stm32mp2xx.h). None of it
+#   applies to an arm64 image, and the STM32 family Kconfig (clock tree,
+#   pinctrl, HAL) stays off because nothing here selects SOC_FAMILY_STM32.
+family:
+- name: st_mpu
+  series:
+  - name: stm32mp2x_a35
+    socs:
+    - name: stm32mp257fxx_a35
+socs:
+- extend: stm32mp257fxx
+  cpuclusters:
+  - name: a35

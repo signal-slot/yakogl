@@ -1,0 +1,111 @@
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ * SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+ *
+ * STM32MP257F Cortex-A35 cluster (SoC driver/soc/st/stm32mp2x_a35).
+ * Zephyr describes only the Cortex-M33 side of this SoC
+ * (dts/arm/st/mp2/stm32mp2_m33.dtsi); the A35 facts below are Linux
+ * mainline's (arch/arm64/boot/dts/st/stm32mp251.dtsi at master 65ba8f34,
+ * the commit docs/notes/pre-study-stm32mp257f-dk.md pins) and the board's
+ * own readings under ST's Linux (#1281).
+ */
+
+#include <mem.h>
+#include <freq.h>
+#include <arm64/armv8-a.dtsi>
+#include <zephyr/dt-bindings/interrupt-controller/arm-gic.h>
+
+/ {
+	#address-cells = <1>;
+	#size-cells = <1>;
+
+	/* stm32mp251.dtsi "cpu0: cpu@0" (arm,cortex-a35, enable-method psci);
+	 * the second core comes with the MP253/255/257 (stm32mp253.dtsi).
+	 */
+	cpus {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		cpu0: cpu@0 {
+			device_type = "cpu";
+			compatible = "arm,cortex-a35";
+			reg = <0>;
+		};
+		cpu1: cpu@1 {
+			device_type = "cpu";
+			compatible = "arm,cortex-a35";
+			reg = <1>;
+		};
+	};
+
+	/* PSCI over SMC to TF-A's BL31: stm32mp251.dtsi "psci" (method smc);
+	 * the board's TF-A v2.10 reports PSCI 1.1 (#1281), where mainline's
+	 * node says arm,psci-1.0.
+	 */
+	firmware {
+		psci: psci {
+			compatible = "arm,psci-1.1";
+			method = "smc";
+		};
+	};
+
+	/* stm32mp251.dtsi "timer": PPIs 13, 14, 11, 10, no clock-frequency.
+	 * The rate is read from CNTFRQ_EL0 at boot (the SoC's Kconfig).
+	 */
+	arch_timer: timer {
+		compatible = "arm,armv8-timer";
+		interrupts = <GIC_PPI 13 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>,
+			     <GIC_PPI 14 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>,
+			     <GIC_PPI 11 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>,
+			     <GIC_PPI 10 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>;
+		interrupt-parent = <&gic>;
+	};
+
+	/* GIC-400: stm32mp251.dtsi:123 "intc: interrupt-controller@4ac00000",
+	 * distributor at 0x4ac10000 (4 KiB) and CPU interface at 0x4ac20000
+	 * (128 KiB, the 64 KiB-aligned GIC-400 layout); the GICH and GICV
+	 * frames at 0x4ac40000 / 0x4ac60000 are not used. Zephyr's GICv2
+	 * driver ends interrupts through GICC_EOIR in EOI mode 0 and never
+	 * touches GICC_DIR, whose alias the 64 KiB layout moves.
+	 */
+	gic: interrupt-controller@4ac10000 {
+		compatible = "arm,gic-v2", "arm,gic";
+		reg = <0x4ac10000 0x1000>, /* GICD */
+		      <0x4ac20000 0x20000>; /* GICC */
+		interrupt-controller;
+		#interrupt-cells = <4>;
+		status = "okay";
+	};
+
+	soc {
+		interrupt-parent = <&gic>;
+
+		/* stm32mp251.dtsi "usart2: serial@400e0000" (st,stm32h7-uart,
+		 * GIC_SPI 115), the DK's Linux console (stm32mp257f-dk.dts:
+		 * serial0 = &usart2, stdout-path "serial0:115200n8").
+		 */
+		usart2: serial@400e0000 {
+			compatible = "st,stm32h7-uart";
+			reg = <0x400e0000 0x400>;
+			interrupts = <GIC_SPI 115 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>;
+			status = "disabled";
+		};
+
+		/* The GPU as ST's Linux describes it on the DK (#1281; mainline
+		 * has no gpu node): vivante,gc at 0x48280000 size 0x800, GIC SPI
+		 * 183, clocks <&rcc 91> bus and <&rcc 340> core, reset <&rcc 75>,
+		 * SCMI performance domain 1, SCMI power domain 0 and
+		 * /power-domain-d1, access-controllers <&rifsc 79>, no iommus.
+		 * Only the register block is named here: the power, clock and
+		 * reset path belongs to the stm32mp2 board layer, and the state
+		 * space above 0x800 is not read from the CPU.
+		 */
+		gpu: gpu@48280000 {
+			compatible = "vivante,gc";
+			reg = <0x48280000 0x800>;
+			reg-names = "gpu";
+			interrupts = <GIC_SPI 183 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>;
+			status = "disabled";
+		};
+	};
+};

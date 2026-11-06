@@ -1,0 +1,78 @@
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ * SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+ *
+ * STM32MP257F-DK Discovery Kit, Cortex-A35 cluster: an image started by
+ * the board's own U-Boot (ST's 2023.10) from the microSD.
+ *
+ * Memory map (4 GiB of DDR at 0x80000000; the board's readings under
+ * ST's Linux, #1281):
+ *   0x80000000  64 MiB     reserved below System RAM (mainline's DK tree
+ *                          has a no-map fw@80000000 of this size,
+ *                          stm32mp257f-dk.dts "reserved-memory")
+ *   0x84000000             System RAM starts; mainline U-Boot's stm32mp25
+ *                          load addresses sit at its bottom:
+ *                          kernel_comp_addr_r 0x84000000 (64 MiB),
+ *                          kernel_addr_r 0x8a000000, fdt_addr_r 0x90000000,
+ *                          scriptaddr 0x90100000, pxefile_addr_r 0x90200000,
+ *                          fdtoverlay_addr_r 0x90300000, ramdisk_addr_r
+ *                          0x90400000 (include/configs/stm32mp25_common.h,
+ *                          the __*_ADDR_R defines; ST's 2023.10 fork is
+ *                          the r-uboot study's to confirm)
+ *   0xa0000000 256 MiB     Zephyr (zephyr,sram; the link address), clear of
+ *                          those and of U-Boot proper, which relocates
+ *                          itself to the top of usable RAM
+ *   0xfa800000  64 MiB     gpu-reserved, no-map in ST's tree (#1281);
+ *                          System RAM ends at 0xfa7fffff
+ */
+
+/dts-v1/;
+
+#include <st/stm32mp257fxx_a35.dtsi>
+
+/ {
+	model = "STMicroelectronics STM32MP257F-DK Discovery Kit (Cortex-A35)";
+	compatible = "st,stm32mp257f-dk", "st,stm32mp257";
+
+	chosen {
+		zephyr,console = &usart2;
+		zephyr,shell-uart = &usart2;
+		zephyr,sram = &a35_ddr_section;
+	};
+
+	/* System RAM as ST's Linux reports it: 0x84000000-0xfa7fffff. */
+	ddr0: memory@84000000 {
+		device_type = "memory";
+		reg = <0x84000000 0x76800000>;
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		a35_ddr_section: memory@a0000000 {
+			reg = <0xa0000000 DT_SIZE_M(256)>;
+		};
+	};
+
+	reserved-memory {
+		#address-cells = <1>;
+		#size-cells = <1>;
+		ranges;
+
+		/* ST's tree: a 64 MiB no-map gpu-reserved area at 0xfa800000
+		 * (#1281). Kept out of zephyr,sram; the GPU driver maps it
+		 * itself once the board layer enables the GPU.
+		 */
+		gpu_reserved: gpu-reserved@fa800000 {
+			reg = <0xfa800000 DT_SIZE_M(64)>;
+			no-map;
+		};
+	};
+};
+
+&usart2 {
+	current-speed = <115200>;
+	status = "okay";
+};
+
+&gpu {
+	memory-region = <&gpu_reserved>;
+};

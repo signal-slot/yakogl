@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Zephyr ships the STM32MP257F-DK for its Cortex-M33 only; this extension
+# adds the Cortex-A35 cluster (docs/notes/pre-study-stm32mp257f-dk.md,
+# section 4). The target needs no variant: driver/soc/st/stm32mp2x_a35/soc.yml
+# adds the a35 cluster to Zephyr's stm32mp257fxx, which gives Zephyr's board
+# the qualifier stm32mp257fxx/a35. The dts and defconfig live next to this
+# file.
+#   stm32mp257f_dk/stm32mp257fxx/a35  an image started by the board's own
+#                                     U-Boot from the microSD
+#                                     (stm32mp257f_dk_stm32mp257fxx_a35.dts)
+board:
+  extend: stm32mp257f_dk

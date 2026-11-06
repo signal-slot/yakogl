@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+
+if SOC_SERIES_STM32MP2X_A35
+
+# Zephyr has no CPU_CORTEX_A35 symbol (arch/arm64/core/Kconfig), so the
+# compiler gets no -mcpu (cmake/gcc-m-cpu.cmake) and generates for the
+# toolchain's default ARMv8-A, which the A35 implements.
+config SOC_SERIES_STM32MP2X_A35
+	select ARM64
+	select CPU_CORTEX_A
+	select ARMV8_A
+	select ARM_ARCH_TIMER if SYS_CLOCK_EXISTS
+	# The arch timer rate is whatever TF-A wrote into CNTFRQ_EL0: Linux's
+	# timer node has no clock-frequency (stm32mp251.dtsi, "arm,armv8-timer")
+	# and the rate was not read on the board (#1281). Zephyr reads
+	# CNTFRQ_EL0 at boot (include/zephyr/arch/arm64/timer.h).
+	select TIMER_READS_ITS_FREQUENCY_AT_RUNTIME if ARM_ARCH_TIMER
+
+config UART_STM32MP2_A35_POLLED
+	bool "Polled STM32MP2 USART on the A35, on the previous stage's line setup"
+	default y
+	depends on SERIAL && DT_HAS_ST_STM32H7_UART_ENABLED
+	select SERIAL_HAS_DRIVER
+	help
+	  Transmits and receives by polling the USART's ISR, TDR and RDR, and
+	  never touches its baud rate, frame format, clocks or pins: the
+	  previous boot stage (TF-A, U-Boot) left the console USART enabled
+	  at 115200 8N1. Zephyr's STM32 serial driver (UART_STM32) needs the
+	  STM32 clock tree, pinctrl, reset controller and the STM32Cube LL
+	  headers, none of which exist for the A35 here.
+
+endif # SOC_SERIES_STM32MP2X_A35
