@@ -627,6 +627,28 @@ static void tl_report(struct k_work *work)
 		 imx8mp_display_layer_control());
 	tl_uart_str(buf);
 	tl_uart_str("TL end\n");
+#ifdef CONFIG_YAKOGL_DRV_DISPLAY_IMX8MP_STAGE_TIMES
+	{
+		extern uint64_t imx8mp_display_stage_cycles[9];
+		static const char *const st[9] = {
+			"entry", "1", "2", "3", "4 lcdif configured", "5 dsim enabled",
+			"6 bridge started", "7 lcdif on, video, link checked", "8 backlight armed"};
+
+		uint64_t a = imx8mp_display_stage_cycles[0];
+
+		for (unsigned int i = 1; i < 9 && a != 0u; i++) {
+			const uint64_t b = imx8mp_display_stage_cycles[i];
+
+			if (b == 0u) {
+				continue;
+			}
+			snprintk(buf, sizeof(buf), "TLP stage %s: %u us\n", st[i],
+				 (uint32_t)k_cyc_to_us_floor64(b - a));
+			tl_uart_str(buf);
+			a = b;
+		}
+	}
+#endif
 #ifdef CONFIG_YAKOGL_BOARD_IMX8MP_ROUTE3_CLOCK_REPORT
 	board_route3_clock_report(tl_uart_str);
 #endif
