@@ -86,6 +86,10 @@ const U16_ST: &[u8] = &[GLES_TEXFMT_RGBA16UI];
 const I16_ST: &[u8] = &[GLES_TEXFMT_RGBA16I];
 const U32_ST: &[u8] = &[GLES_TEXFMT_RGBA32UI];
 const I32_ST: &[u8] = &[GLES_TEXFMT_RGBA32I];
+const R32U_ST: &[u8] = &[GLES_TEXFMT_R32UI, GLES_TEXFMT_RGBA32UI];
+const R32I_ST: &[u8] = &[GLES_TEXFMT_R32I, GLES_TEXFMT_RGBA32I];
+const RG32U_ST: &[u8] = &[GLES_TEXFMT_RG32UI, GLES_TEXFMT_RGBA32UI];
+const RG32I_ST: &[u8] = &[GLES_TEXFMT_RG32I, GLES_TEXFMT_RGBA32I];
 
 /// The formats, in `find`'s index order (index + 1 is what a texture records).
 pub static FORMATS: [Es3Format; 35] = [
@@ -136,14 +140,14 @@ pub static FORMATS: [Es3Format; 35] = [
     f(GL_R8I, "GL_R8I", GL_RED_INTEGER, Class::Int, 1, &[GL_BYTE], I8_ST),
     f(GL_R16UI, "GL_R16UI", GL_RED_INTEGER, Class::Uint, 1, &[GL_UNSIGNED_SHORT], U16_ST),
     f(GL_R16I, "GL_R16I", GL_RED_INTEGER, Class::Int, 1, &[GL_SHORT], I16_ST),
-    f(GL_R32UI, "GL_R32UI", GL_RED_INTEGER, Class::Uint, 1, &[GL_UNSIGNED_INT], U32_ST),
-    f(GL_R32I, "GL_R32I", GL_RED_INTEGER, Class::Int, 1, &[GL_INT], I32_ST),
+    f(GL_R32UI, "GL_R32UI", GL_RED_INTEGER, Class::Uint, 1, &[GL_UNSIGNED_INT], R32U_ST),
+    f(GL_R32I, "GL_R32I", GL_RED_INTEGER, Class::Int, 1, &[GL_INT], R32I_ST),
     f(GL_RG8UI, "GL_RG8UI", GL_RG_INTEGER, Class::Uint, 2, &[GL_UNSIGNED_BYTE], U8_ST),
     f(GL_RG8I, "GL_RG8I", GL_RG_INTEGER, Class::Int, 2, &[GL_BYTE], I8_ST),
     f(GL_RG16UI, "GL_RG16UI", GL_RG_INTEGER, Class::Uint, 2, &[GL_UNSIGNED_SHORT], U16_ST),
     f(GL_RG16I, "GL_RG16I", GL_RG_INTEGER, Class::Int, 2, &[GL_SHORT], I16_ST),
-    f(GL_RG32UI, "GL_RG32UI", GL_RG_INTEGER, Class::Uint, 2, &[GL_UNSIGNED_INT], U32_ST),
-    f(GL_RG32I, "GL_RG32I", GL_RG_INTEGER, Class::Int, 2, &[GL_INT], I32_ST),
+    f(GL_RG32UI, "GL_RG32UI", GL_RG_INTEGER, Class::Uint, 2, &[GL_UNSIGNED_INT], RG32U_ST),
+    f(GL_RG32I, "GL_RG32I", GL_RG_INTEGER, Class::Int, 2, &[GL_INT], RG32I_ST),
     f(GL_RGB8UI, "GL_RGB8UI", GL_RGB_INTEGER, Class::Uint, 3, &[GL_UNSIGNED_BYTE], U8_ST),
     f(GL_RGB8I, "GL_RGB8I", GL_RGB_INTEGER, Class::Int, 3, &[GL_BYTE], I8_ST),
     f(GL_RGB16UI, "GL_RGB16UI", GL_RGB_INTEGER, Class::Uint, 3, &[GL_UNSIGNED_SHORT], U16_ST),
@@ -661,6 +665,11 @@ pub fn encode(fmt: &Es3Format, texfmt: u8, t: Texel, dst: &mut [u8]) -> bool {
             for (k, v) in ints.iter().enumerate() {
                 put32(dst, k, *v);
             }
+        }
+        GLES_TEXFMT_R32UI | GLES_TEXFMT_R32I => put32(dst, 0, ints[0]),
+        GLES_TEXFMT_RG32UI | GLES_TEXFMT_RG32I => {
+            put32(dst, 0, ints[0]);
+            put32(dst, 1, ints[1]);
         }
         _ => return false,
     }

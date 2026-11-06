@@ -47,7 +47,7 @@ fn rnndb(name: &str) -> u32 {
 }
 
 /// Every storage class by name.
-const CLASSES: [(&str, u8); 26] = [
+const CLASSES: [(&str, u8); 30] = [
     ("GLES_TEXFMT_RGBA8", GLES_TEXFMT_RGBA8),
     ("GLES_TEXFMT_ETC2_RGB", GLES_TEXFMT_ETC2_RGB),
     ("GLES_TEXFMT_ETC2_RGBA", GLES_TEXFMT_ETC2_RGBA),
@@ -74,6 +74,10 @@ const CLASSES: [(&str, u8); 26] = [
     ("GLES_TEXFMT_SRGB8_A8", GLES_TEXFMT_SRGB8_A8),
     ("GLES_TEXFMT_ETC2_SRGB_RGB", GLES_TEXFMT_ETC2_SRGB_RGB),
     ("GLES_TEXFMT_ETC2_SRGB_RGBA", GLES_TEXFMT_ETC2_SRGB_RGBA),
+    ("GLES_TEXFMT_R32UI", GLES_TEXFMT_R32UI),
+    ("GLES_TEXFMT_R32I", GLES_TEXFMT_R32I),
+    ("GLES_TEXFMT_RG32UI", GLES_TEXFMT_RG32UI),
+    ("GLES_TEXFMT_RG32I", GLES_TEXFMT_RG32I),
 ];
 
 /// One row of the doc's table.
@@ -208,6 +212,47 @@ fn the_mask_column_is_gc_sampled_texfmts() {
     }
 }
 
+/// The GL core's R32I/UI and RG32I/UI classes (26-29) are in no back end's
+/// mask yet: the four formats fall to their RGBA32 class, which the GC7000UL
+/// lacks too, so its build still refuses them at upload; the PowerVR and the
+/// V3D store them in RGBA32UI/I, the Mali refuses them. The native class
+/// holds the first 4 / 8 bytes of the RGBA32 texel of the same source.
+#[test]
+fn the_r32_and_rg32_integer_classes_are_in_no_mask_yet() {
+    use yakogl::gl::consts::*;
+    use yakogl::gl::es3_formats::{convert_row, find, storage_bytes};
+    let rows = [
+        (GL_R32UI, GL_RED_INTEGER, GL_UNSIGNED_INT, GLES_TEXFMT_R32UI, GLES_TEXFMT_RGBA32UI, 4),
+        (GL_R32I, GL_RED_INTEGER, GL_INT, GLES_TEXFMT_R32I, GLES_TEXFMT_RGBA32I, 4),
+        (GL_RG32UI, GL_RG_INTEGER, GL_UNSIGNED_INT, GLES_TEXFMT_RG32UI, GLES_TEXFMT_RGBA32UI, 8),
+        (GL_RG32I, GL_RG_INTEGER, GL_INT, GLES_TEXFMT_RG32I, GLES_TEXFMT_RGBA32I, 8),
+    ];
+    for (name, base, type_, native, wide, bytes) in rows {
+        let e = find(name).expect("an ES 3.0 format").1;
+        assert_eq!(e.storage, [native, wide], "{}: the native class, then the RGBA32 fallback", e.name);
+        assert_eq!(gles_texfmt_bytes(native), bytes, "{}", e.name);
+        assert_eq!(storage_bytes(native), bytes as usize, "{}", e.name);
+        for mask in [GC_SAMPLED_TEXFMTS, PVR_SAMPLED_TEXFMTS, V3D_SAMPLED_TEXFMTS] {
+            assert_eq!(mask & gles_texfmt_bit(native), 0, "{}: no mask has class {native}", e.name);
+        }
+        assert_eq!(e.storage_in(GC_SAMPLED_TEXFMTS), None, "{}: GC7000UL, refused as before", e.name);
+        assert_eq!(e.storage_in(GC_SAMPLED_TEXFMTS | gles_texfmt_bit(wide)), Some(wide), "{}", e.name);
+        assert_eq!(e.storage_in(PVR_SAMPLED_TEXFMTS), Some(wide), "{}: PowerVR", e.name);
+        assert_eq!(e.storage_in(V3D_SAMPLED_TEXFMTS), Some(wide), "{}: V3D", e.name);
+        assert_eq!(e.storage_in(0), None, "{}: Mali (mask 0)", e.name);
+        assert_eq!(e.storage_in(gles_texfmt_bit(native) | gles_texfmt_bit(wide)), Some(native), "{}", e.name);
+
+        let src: Vec<u8> =
+            [0x8000_0001u32, 0xffff_fffbu32][..e.comps as usize].iter().flat_map(|w| w.to_ne_bytes()).collect();
+        let mut packed = vec![0xaau8; bytes as usize];
+        let mut rgba = vec![0xaau8; 16];
+        assert!(convert_row(e, native, &src, base, type_, 1, &mut packed), "{}", e.name);
+        assert!(convert_row(e, wide, &src, base, type_, 1, &mut rgba), "{}", e.name);
+        assert_eq!(packed[..], src[..], "{}: the source words", e.name);
+        assert_eq!(packed[..], rgba[..bytes as usize], "{}: a prefix of the RGBA32 texel", e.name);
+    }
+}
+
 /// The constants regs.rs adds for this item are the header's.
 #[test]
 fn the_new_register_constants_are_the_rnndb_values() {
@@ -234,6 +279,13 @@ fn the_new_register_constants_are_the_rnndb_values() {
 fn the_binding_bits_apply_to_every_class() {
     for (name, id) in CLASSES {
         if !gc_texfmt(id).decoded {
+            continue;
+        }
+        /* no gc_texfmt arm yet (r32-rg32-classes adds it with the mask bits):
+         * they fall to the RGBA8 default, which no texture reaches while
+         * GC_SAMPLED_TEXFMTS lacks them */
+        if matches!(id, GLES_TEXFMT_R32UI | GLES_TEXFMT_R32I | GLES_TEXFMT_RG32UI | GLES_TEXFMT_RG32I) {
+            assert_eq!(GC_SAMPLED_TEXFMTS & gles_texfmt_bit(id), 0, "{name}");
             continue;
         }
         let base = format_words(&bind(id), false);

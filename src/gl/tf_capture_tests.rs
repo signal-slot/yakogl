@@ -1345,3 +1345,27 @@ fn capture_into_a_deleted_buffer_leaves_the_new_buffer_alone() {
     }
     assert_eq!(gpu_view(&gl, new, 64), [0xcd; 64], "the new buffer is untouched");
 }
+
+/// The capture's CPU texel fetch reads the packed R32/RG32 integer classes:
+/// the stored words, the missing components (0, 0, 1), as the RGBA32 class
+/// reads the same texel.
+#[test]
+fn the_packed_32_bit_integer_classes_decode() {
+    use super::es3_formats::Texel;
+    use super::tf_capture::decode;
+    use crate::backend::{
+        GLES_TEXFMT_R32I, GLES_TEXFMT_R32UI, GLES_TEXFMT_RG32I, GLES_TEXFMT_RG32UI, GLES_TEXFMT_RGBA32I,
+        GLES_TEXFMT_RGBA32UI,
+    };
+    let words = |v: &[u32]| -> Vec<u8> { v.iter().flat_map(|w| w.to_ne_bytes()).collect() };
+    let r = words(&[0xdead_beef]);
+    let rg = words(&[0xffff_fffb, 7]);
+    assert_eq!(decode(&r, GLES_TEXFMT_R32UI, false), Some(Texel::I([0xdead_beef, 0, 0, 1])));
+    assert_eq!(decode(&r, GLES_TEXFMT_R32I, false), Some(Texel::I([0xdead_beef, 0, 0, 1])));
+    assert_eq!(decode(&rg, GLES_TEXFMT_RG32UI, false), Some(Texel::I([0xffff_fffb, 7, 0, 1])));
+    assert_eq!(decode(&rg, GLES_TEXFMT_RG32I, false), Some(Texel::I([0xffff_fffb, 7, 0, 1])));
+    /* the RGBA32 class of the same texel, widened as the upload widens it */
+    let wide = words(&[0xffff_fffb, 7, 0, 1]);
+    assert_eq!(decode(&wide, GLES_TEXFMT_RGBA32I, false), decode(&rg, GLES_TEXFMT_RG32I, false));
+    assert_eq!(decode(&wide, GLES_TEXFMT_RGBA32UI, false), decode(&rg, GLES_TEXFMT_RG32UI, false));
+}
