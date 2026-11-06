@@ -14,7 +14,8 @@ tools/cts/log/<YYYY-MM>-pi4-gles3-<sha8>-rowsAA-BB/. Exit 1 when:
   a) an image label of the tree ('# image <LABEL>:' lines) has no
      <LABEL>.tally.txt in any directory (missing);
   b) a label has tallies in more than one directory (duplicated);
-  c) a README.md has no 'commit <sha>' line, or names another commit;
+  c) a README.md has no line starting 'commit: <sha>' (or 'commit <sha>'),
+     or names another commit;
   d) a tally has no complete deqp summary line (complete=1 and
      'summary: N cases begun, N with a result, 0 without'): aborted;
   e) a file holds an absolute home path (/home/, /Users/), an IPv4
@@ -32,7 +33,10 @@ import sys
 import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-SECRET = re.compile(
+# gles3-notpass.py --pi4 wants 'commit: <sha>'; 'commit <sha>' is accepted too.
+# Only line starts count, so prose such as 'fixed in commit <sha>' does not.
+COMMIT_LINE = re.compile(r"^commit:?[ \t]+([0-9a-f]{7,40})\b", re.M | re.I)
+REDACT = re.compile(
     r"/home/|/Users/|(?<![\w.-])(?:\d{1,3}\.){3}\d{1,3}(?![\w.])|\.ts\.net|/dev/tty")
 SUMMARY = re.compile(
     r"deqp: summary: (\d+) cases begun, (\d+) with a result, (\d+) without")
@@ -78,9 +82,9 @@ def check(sha, tree, dirs):
             problems.append("%s: no README.md (no commit line)" % d)
         else:
             with open(readme, encoding="utf-8", errors="replace") as f:
-                shas = re.findall(r"\bcommit\s+([0-9a-f]{7,40})\b", f.read(), re.I)
+                shas = COMMIT_LINE.findall(f.read())
             if not shas:
-                problems.append("%s: README.md has no 'commit <sha>' line" % readme)
+                problems.append("%s: README.md has no 'commit: <sha>' line" % readme)
             for s in shas:
                 s = s.lower()
                 if not (sha.startswith(s) or s.startswith(sha)):
@@ -93,7 +97,7 @@ def check(sha, tree, dirs):
                 with open(p, "rb") as f:
                     data = f.read().decode("utf-8", errors="replace")
                 for n, line in enumerate(data.splitlines(), 1):
-                    m = SECRET.search(line)
+                    m = REDACT.search(line)
                     if m:
                         problems.append("%s:%d: private detail %r" % (p, n, m.group(0)))
                         break
@@ -138,6 +142,7 @@ def self_test():
     tally = ("deqp: complete=1\n"
              "deqp: summary: 3 cases begun, 3 with a result, 0 without\n")
     fails = []
+    cases = []
 
     def run(tree, dirs):
         buf = io.StringIO()
@@ -146,6 +151,7 @@ def self_test():
         return rc, buf.getvalue()
 
     def expect(name, ok):
+        cases.append(name)
         print("%s %s" % ("ok  " if ok else "FAIL", name))
         if not ok:
             fails.append(name)
@@ -156,11 +162,11 @@ def self_test():
             f.write("# image A1: dEQP-GLES3.a\n# image B2: dEQP-GLES3.b\n"
                     "# image C3: dEQP-GLES3.c\n")
 
-        def session(name, commit, labels):
+        def session(name, commit, labels, readme=None):
             d = os.path.join(td, name)
             os.makedirs(d)
             with open(os.path.join(d, "README.md"), "w", encoding="utf-8") as f:
-                f.write("commit %s\n" % commit)
+                f.write(readme if readme is not None else "commit: %s\n" % commit)
             for lab in labels:
                 with open(os.path.join(d, lab + ".tally.txt"), "w",
                           encoding="utf-8") as f:
@@ -183,7 +189,23 @@ def self_test():
         expect("session with another commit fails",
                rc == 1 and "names commit " + other in out)
 
-    print("check-pi4-gles3-log self-test: %d of 3 cases ok" % (3 - len(fails)))
+        def readme_case(name, tag, text, want_ok):
+            d = session("r-" + tag, good, ["C3"], text)
+            rc, out = run(tree, [d1, d])
+            expect(name, (rc == 0) == want_ok)
+
+        readme_case("'commit: <sha>' line passes", "colon",
+                    "commit: %s\n" % good, True)
+        readme_case("'commit <sha>' line passes", "plain",
+                    "commit %s\n" % good, True)
+        readme_case("prose 'see commit <sha>' only fails", "prose",
+                    "see commit %s\n" % good, False)
+        readme_case("prose sha of another commit beside a commit: line passes",
+                    "both", "fixed in commit %s\ncommit: %s\n" % (other, good),
+                    True)
+
+    print("check-pi4-gles3-log self-test: %d of %d cases ok"
+          % (len(cases) - len(fails), len(cases)))
     return 1 if fails else 0
 
 
