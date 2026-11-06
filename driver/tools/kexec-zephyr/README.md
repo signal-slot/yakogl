@@ -142,6 +142,15 @@ without a selector and read back with LPGPR0 unchanged) ran on the board. The
 jump itself has not been made through `board.sh`; the crash route ran on this
 board before from commands typed by hand (the header of
 `driver/boards/atmark/armadillo_x2/armadillo_x2_mimx8ml8_a53.dts`).
+The first jump through `board.sh` was made on 2026-11-06 (main `f1eae634b44d`,
+gl_test case 0 built with `IMX8MP_BOARD=x2 tools/cts/imx8mp-gltest-build.sh
+<name> 0`, run as `SEL=0 tools/board.sh x2 run`): rc=0, verdict=done,
+boot_verdict=complete, record `594b010e,0000ff01,00000005,00000000` (case 0
+triangle pass; w3 is not stored on this board), ssh back 26 s after the jump,
+U-Boot reporting "reset cause: watchdog", LPGPR0 unchanged. Two points that run
+did not show: `gc_wdog_arm: armed` is printed before the UART2 console's first
+line, so the console does not prove the arm, and the image resets the SoC
+itself at the end, so WDOG1 expiring on a hung image has not been seen here.
 
 ## The loader refuses to jump without a running watchdog (AM62P)
 
