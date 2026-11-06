@@ -87,8 +87,8 @@ wiki, and the ST community thread about the OP-TEE panic were not read.
 RM0457 was tried by the plan's study and could not be fetched (the refusal
 comes from st.com; whether the URL is at fault was not confirmed): **every
 RCC and RIFSC offset below is unconfirmed from the manual** and rests on the
-cross-check of open sources in section 4. The panic is studied by another
-item of the plan.
+cross-check of open sources in section 4. The panic path and the OP-TEE
+message ABI are folded in at the end of section 4 and in section 7.
 Everything that would need one of them is written as a question in section
 7 with the source that answers it; a question stays a question, and no
 verdict above depends on one. Where this note repeats something the task
@@ -515,6 +515,104 @@ carveout need more than 8 MiB windows). So:
   it sets one. The `CK_SCMI_PLL3` clock and the PLL3 registers are never
   touched. Every message is logged. Our own request has not been tried on
   the board. This replaces `power.rs`'s CCM and GPC programming.
+- **The OP-TEE message ABI our transport must speak** (note-optee, read
+  from ST's `optee_os` tag `4.0.0-stm32mp-r3.1`, commit `0063536697f1`; the
+  tag the board's OP-TEE 4.0 is nearest to, not checked against the running
+  binary). Paths are in that tree.
+  - *SMC function ids* (`core/arch/arm/include/sm/optee_smc.h:36-47`, owner
+    `OPTEE_SMC_OWNER_TRUSTED_OS` 50, `:55`; owner shift 24): a fast call is
+    `0x80000000 | 50 << 24 | n`, a standard call `50 << 24 | n`. So
+    `GET_SHM_CONFIG` (n 7, `:230`) is 0xb2000007, `EXCHANGE_CAPABILITIES`
+    (n 9, `:323`) 0xb2000009, `CALL_WITH_ARG` (n 4, `:199`, via
+    `optee_msg.h:343`) 0x32000004, `CALL_WITH_RPC_ARG` (n 18, `:566`)
+    0x32000012, `CALL_WITH_REGD_ARG` (n 19, `:569`) 0x32000013. The
+    probes use owner 63: `CALLS_UID` 0xbf00ff01 (`:89-93`), UID
+    384fb3e0-e7f8-11e3-af63-0002a5d5c51b (`optee_msg.h:251-254`), revision
+    2.0 (`:262-264`). The `NSEC_NOIRQ` variants (n 56 to 58, `:641-659`) are
+    for the PTA's OCALL thread and are not needed. Return codes in a0:
+    OK 0, ETHREAD_LIMIT 1, EBUSY 2, ERESUME 3, EBADADDR 4, EBADCMD 5,
+    ENOMEM 6, ENOTAVAIL 7, unknown function 0xFFFFFFFF (`:814-824`); an
+    RPC return has the prefix 0xFFFF0000 (`:686-688`), with the function in
+    the low half, and the call must be resumed (`ALLOC`, `FREE`,
+    `FOREIGN_INTR`, `CMD`, `:723-787`).
+  - *Capability exchange* (`core/arch/arm/tee/entry_fast.c:67-123`): a1 in
+    may only be `NSEC_CAP_UNIPROCESSOR` (bit 0), any other bit returns
+    ENOTAVAIL (`:85-88`). The reply sets `DYNAMIC_SHM` (bit 2) when the
+    non-secure DDR is defined (`:99-101`), `MEMREF_NULL` (bit 4, always),
+    `ASYNC_NOTIF` (bit 5; the stm32mp2 platform forces it on,
+    `plat-stm32mp2/conf.mk:113`), `PM_NOIRQ` (bit 15, always) and `RPC_ARG`
+    (bit 6, always), and a3 = the RPC argument's parameter count
+    (`:119-122`); `HAVE_RESERVED_SHM` (bit 0) only if
+    `CFG_CORE_RESERVED_SHM`, which the platform leaves `n` (`conf.mk:157`).
+    From the source the reply value is therefore **0x8074** (bits 2, 4, 5, 6,
+    15; bit 3 is off unless `CFG_NS_VIRTUALIZATION`). That is derived, not
+    read from the board: the confirming read is the capability exchange of
+    the return trial's image (item 5), which logs a1 to a3.
+  - *Message layout* (`core/include/optee_msg.h`): `struct optee_msg_arg`
+    (`:204`) is eight 32-bit words, `cmd`, `func`, `session`, `cancel_id`,
+    `pad`, `ret`, `ret_origin`, `num_params`, then the parameters; a
+    `struct optee_msg_param` (`:176`) is 32 bytes, a 64-bit `attr` and three
+    64-bit words (`a`, `b`, `c` for a value; `buf_ptr`, `size`, `shm_ref`
+    for temporary memory; `offs`, `size`, `shm_ref` for registered memory).
+    The message is 32 + 32 × `num_params` bytes. Commands: OPEN_SESSION 0,
+    INVOKE_COMMAND 1, CLOSE_SESSION 2, CANCEL 3, REGISTER_SHM 4,
+    UNREGISTER_SHM 5 (`:341-348`); attribute types VALUE_INPUT 1, OUTPUT 2,
+    INOUT 3, RMEM_INPUT 5, OUTPUT 6, INOUT 7, TMEM_INPUT 9, OUTPUT 0xa,
+    INOUT 0xb (`:21-33`); META is bit 8, NONCONTIG bit 9 (`:43`, `:71`).
+    OPEN_SESSION carries the TA UUID in the meta `param[0]` (a, b) and the
+    client UUID and login class in the meta `param[1]` (a, b, c)
+    (`:295-308`); the session id comes back in `session`.
+  - *Shared memory.* The platform has no reserved shared memory, so the
+    message and the SCMI buffers are in registered memory: REGISTER_SHM with
+    one `TMEM_INPUT` parameter (physical address, size, `shm_ref`; with
+    NONCONTIG the address names a page list of 4 KiB pages,
+    `optee_msg.h:306-318`, `:97`). How to place the message so it can sit in
+    one page (the arg is at most `OPTEE_MSG_MAX_NUM_PARAMS` parameters,
+    `:233-236`) and whether OP-TEE wants the RPC-argument copy appended
+    (`CALL_WITH_RPC_ARG`, given capability bit 6) are open: the answer is
+    the board's reply to our first call, and the OP-TEE source for the
+    message-parsing path (`core/arch/arm/kernel/thread.c` family, not read).
+  - *The SCMI pseudo-TA* (`core/pta/scmi.c`, `lib/libutee/include/pta_scmi_client.h`):
+    UUID a8cfe406-d4f5-4a2e-9f8d-a25dc754c099 (`pta_scmi_client.h:8`); the
+    commands are CAPABILITIES 0 (value out: a = capability mask),
+    PROCESS_SMT_CHANNEL 1, PROCESS_SMT_CHANNEL_MESSAGE 2, GET_CHANNEL_HANDLE
+    3 and **PROCESS_MSG_CHANNEL 4** (`:19`, `:32`, `:47`, `:59`, `:69`), the
+    OCALL2 threads 2048 and 2049 (`:81`, `:93`). The dispatcher is
+    `scmi.c:400-424`. Command 4 takes exactly three parameters: `VALUE_INPUT`
+    with the channel in a, `MEMREF_INPUT` the SCMI request, `MEMREF_OUTPUT`
+    the reply buffer, and any other parameter type returns
+    BAD_PARAMETERS (`scmi.c:131-172`); the reply length comes back in the
+    output memref's size. The message is the SCMI one with the 32-bit message
+    header, no shared-memory-transport (SMT) header: `PTA_SCMI_CAPS_MSG_HEADER`
+    (bit 1, `pta_scmi_client.h:103`) is what the `_CFG_SCMI_PTA_MSG_HEADER`
+    build option enables (`mk/config.mk:784-787`). The platform builds the
+    server with `CFG_SCMI_SCPFW` (`plat-stm32mp2/conf.mk:205`), so the
+    message goes to `scmi_server_msg_process_thread`
+    (`core/lib/scmi-server/scmi_server.c:62-74`) and an unknown channel is
+    BAD_PARAMETERS. Opening the session requires the caller's login to be
+    `TEE_LOGIN_REE_KERNEL` (0x80000000, `scmi.c:381-396`,
+    `lib/libutee/include/tee_api_defines_extensions.h:138`), else
+    ACCESS_DENIED. Whether a non-secure agent that is not Linux can present
+    that login, and how OPEN_SESSION's login class (`optee_msg.h:87-92`
+    lists only the GlobalPlatform classes) maps to it, is **open**: it is the
+    first thing the board's reply to our OPEN_SESSION shows, and `scmi.c`
+    would show the same in a `DMSG` ("Expecting TEE_LOGIN_REE_KERNEL") on a
+    debug OP-TEE, which the board's is not known to be. The channel number
+    (0, `stm32mp251.dtsi:103-108`) and CAPABILITIES (command 0) can be
+    asked first, harmlessly.
+  - *The perf domain is OP-TEE's too.* The GPU is perf domain 1 because the
+    CPU's is registered first and the GPU's second
+    (`plat-stm32mp2/scmi_server_scpfw.c:360-381`), and OP-TEE probes the
+    `vivante,gc` node itself for it (`plat-stm32mp2/main.c:495-500`). A
+    level change goes to `stm32_gpu_opp_set_rate` and is **refused with
+    ACCESS_DENIED while the GPU's supply regulator is on**
+    (`core/drivers/stm32_gpu_opp.c:50-58`, "Change OPP not allowed when GPU
+    is used"); it sets the voltage, then the clock rate (`:60-72`). So the
+    level is requested before power domain 0 is turned on (the order
+    galcore uses), and a failed request leaves the GPU off, which is
+    harmless. The same driver `panic()`s at OP-TEE's own boot if the
+    default OPP cannot be set (`:337-340`), a boot-time failure that is not
+    reachable from a request.
 - **Memory map, interrupt, security.** The board reports (#1281, confirmed
   by ST's tree): the GPU registers at **0x48280000, size 0x800**
   (`stm32mp255.dtsi:171`; the CPU must not read above 0x800 anyway,
@@ -699,7 +797,7 @@ answer it.
 | --- | --- | --- |
 | Q1 | Which row is the MP25's GPU? | **Answered (#1281):** model 0x8000, revision 0x6205, product 0x80003, eco 0, the third candidate row (section 1); Linux's etnaviv hwdb carries exactly that id (`etnaviv_hwdb.c:199-204`). Open: the customer id was not read (the row's is 0x15) |
 | Q2 | Why do all candidate rows carry NPU fields? Is the NPU a separate block and the row naming shared? | open: RM0457 (NPU and GPU chapters; could not be fetched, so unchanged); the ST wiki |
-| Q3 | How is the GPU turned on: which ids, which rate, and does OP-TEE's PLL init panic on our request as it did when etnaviv loaded (the brief)? | **In part (#1281, ST tree):** SCMI over OP-TEE (`linaro,scmi-optee`, channel 0, `stm32mp251.dtsi:103-108`) with protocols 0x11, 0x13, 0x14, 0x16, 0x17; the GPU node uses performance (0x13, domain 1) and power domain (0x11, domain 0), and its clocks (`CK_BUS_GPU` 91, `CK_KER_GPU` 340) and reset (`GPU_R` 75) are plain `&rcc` entries (`stm32mp255.dtsi:173-176`). **Corrected (r-optee-tfa, OP-TEE 4.0.0-r3.1; board-read, 2026-11-06):** the transport is OP-TEE's message protocol to the SCMI pseudo-TA (invoke command 4), not an SMC mailbox; the board has no SMC id and no shmem node for the non-secure side. The order is performance level, power domain 0, then `RCC_GPUCFGR` (0x83C: bit 1 the clocks gate, bit 0 the reset; r-galcore; offsets unconfirmed from RM0457); galcore sets no rate and no level, and `CK_SCMI_PLL3` and the PLL3 registers are never used. Open: our own request has not been tried; which requests OP-TEE honours from a non-secure agent that is not Linux; the cause of the brief's panic (the plan's panic study; the board) |
+| Q3 | How is the GPU turned on: which ids, which rate, and does OP-TEE's PLL init panic on our request as it did when etnaviv loaded (the brief)? | **In part (#1281, ST tree):** SCMI over OP-TEE (`linaro,scmi-optee`, channel 0, `stm32mp251.dtsi:103-108`) with protocols 0x11, 0x13, 0x14, 0x16, 0x17; the GPU node uses performance (0x13, domain 1) and power domain (0x11, domain 0), and its clocks (`CK_BUS_GPU` 91, `CK_KER_GPU` 340) and reset (`GPU_R` 75) are plain `&rcc` entries (`stm32mp255.dtsi:173-176`). **Corrected (r-optee-tfa, OP-TEE 4.0.0-r3.1; board-read, 2026-11-06):** the transport is OP-TEE's message protocol to the SCMI pseudo-TA (invoke command 4), not an SMC mailbox; the board has no SMC id and no shmem node for the non-secure side. The order is performance level, power domain 0, then `RCC_GPUCFGR` (0x83C: bit 1 the clocks gate, bit 0 the reset; r-galcore; offsets unconfirmed from RM0457); galcore sets no rate and no level, and `CK_SCMI_PLL3` and the PLL3 registers are never used. **ABI (note-optee, OP-TEE `4.0.0-stm32mp-r3.1`, section 4):** SMC ids 0xb2000009 (capabilities, derived reply 0x8074), 0x32000004/12/13 (calls), SCMI pseudo-TA a8cfe406-d4f5-4a2e-9f8d-a25dc754c099, command 4 with value(channel), memref in, memref out; a level change is refused while the GPU supply is on. Open: our own request has not been tried; the 0x8074 value is derived from the source, not read from the board (the capability exchange of the return trial's image); whether a non-secure agent that is not Linux can open the session (the pseudo-TA wants `TEE_LOGIN_REE_KERNEL`); the message parsing path of OP-TEE (not read); the cause of the brief's panic (not established, section 7; the console text, `clk-stm32mp25.c`, OP-TEE's `scmi_pd_consumer.c`/`scmi_clock_consumer.c`; the board) |
 | Q4 | Is the GPU (and its DMA master) in a resource-isolation compartment that a non-secure A35 image may use, or does the secure side have to set it? Does anything else have to be programmed by the secure side first? | **In part (#1281):** it depends on the image variant; the board runs the plain `stm32mp257f-dk` variant, where RIFSC entry 79 (the GPU's, `access-controllers = <&rifsc 79>`, `stm32mp255.dtsi:178`) is open; #1281 has the table of variants. OP-TEE's `ca35tdcid` configuration agrees: entry 79 is non-secure and nothing is needed for this variant (r-optee-tfa). Open: whether anything else must be set first (the DMA master's compartment, the reserved area): RM0457 (RIFSC; not fetchable so far); the board |
 | Q5 | The GPU's base address and size, interrupt number, and power domain. | **Answered (#1281, confirmed by ST's tree `stm32mp255.dtsi:169-183`):** `vivante,gc` at 0x48280000, size 0x800; GIC SPI 183, level high; three power domains: SCMI performance 1, SCMI power domain 0 (`PD_SCMI_GPU`), and `power-domain-d1` |
 | Q6 | Interrupt controller version, how the GPU's interrupt is routed to the A35, and the arch timer rate. | **In part (#1281):** GIC-400 at 0x4ac00000 (ST `stm32mp251.dtsi:166-175`), the GPU's interrupt is SPI 183 (above). The arch timer node has no `clock-frequency` (`:261-268`); the rate is **40 MHz** (board-read, 2026-11-06) and `CNTFRQ_EL0` is expected to read the same (r-optee-tfa). The GIC is a GICv2 whose secure SGIs 8 to 15 and PPI 29 TF-A keeps. Open: `CNTFRQ_EL0` read from a CPU (the return trial prints it) |
@@ -718,6 +816,51 @@ Risks that are not questions: the finished ports took the board work
 this port adds SCMI as a new dependency on a secure-side component we do
 not own. The OP-TEE panic the brief names is a reason to put the SCMI
 request first on the day-one list and to log every message.
+
+**The etnaviv panic and what our image avoids** (note-optee). The panic
+itself is the brief's report (etnaviv loaded on the board, OP-TEE panicked);
+its console text was not read and the cause is **not established** here. The
+earlier study of the path (optee-panic) did not leave a report this item
+could read, so what follows is re-derived and marked by how well it is
+known.
+
+- *Read from the sources.* ST Linux `v6.6-stm32mp-r3.1` (tag object
+  29611595b9dc, `drivers/gpu/drm/etnaviv/etnaviv_gpu.c`): the driver's
+  runtime resume enables its clocks one by one with `clk_prepare_enable`
+  (reg, bus, core, shader; **approximately** lines 1590-1610,
+  `etnaviv_gpu_clk_enable`), and the hardware bring-up then writes
+  `HI_CLOCK_CONTROL` and polls `HI_IDLE_STATE` in `etnaviv_hw_reset`
+  (**approximately** 506-575), reads the identity registers in
+  `etnaviv_hw_identify` (**approximately** 332-360) and enables interrupts
+  in `etnaviv_gpu_hw_init` (**approximately** 716). Those line numbers come
+  from one counting pass over a web copy of the file, because git access to
+  the tag was refused on the machine that wrote this; they are to be rechecked
+  with `git show v6.6-stm32mp-r3.1:drivers/gpu/drm/etnaviv/etnaviv_gpu.c`
+  before another document quotes them. etnaviv uses no reset control in that
+  file (no `reset_control_*` call was found by that pass), unlike galcore's
+  explicit reset bit; which level request, if any, the kernel's power-domain
+  layer sent before it is not known. OP-TEE side
+  (`optee_os` `4.0.0-stm32mp-r3.1`): the level change is refused while the
+  regulator is on (`core/drivers/stm32_gpu_opp.c:50-58`), the driver `panic()`s
+  only at OP-TEE's own boot (`:337-340`); a runtime panic from a request
+  must therefore come from another path (the RCC clock handling, the power
+  domain, or a bus fault from the GPU registers), which this item did not
+  find. **Open:** the cause. The sources that would answer it: the console
+  text of the panic (the brief's report; the signature is the line OP-TEE
+  prints with `E/TC:` and the call stack), `drivers/clk/stm32/clk-stm32mp25.c`
+  and the `scmi_pd_consumer.c`/`scmi_clock_consumer.c` handlers in OP-TEE's
+  SCMI server (`core/lib/scmi-server/`, not read), and a board session that
+  loads nothing and only logs. Plan #322 never loads etnaviv.
+- *What our image avoids, whatever the cause.* It follows galcore's order,
+  not etnaviv's: the level first, power domain 0 second, then
+  `RCC_GPUCFGR`, never the clock gates before the domain; it sets no clock
+  rate; it touches no PLL and no `CK_SCMI_PLL3`; it reads nothing of the
+  GPU above offset 0x800; it requests only the two domains named in
+  section 4 and logs every request and reply before the next is sent, with
+  the reply status, so a panic leaves the last request on the console; and
+  it leaves the GPU on a failed request as it found it. The watchdog
+  (about 27 s after a panic to the reset, 32 s without one) gives the
+  board back; the return trial proves that before any request is made.
 
 ## 8. Proposed item list
 
