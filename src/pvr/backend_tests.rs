@@ -6259,3 +6259,233 @@ fn a_failed_level_draw_leaves_no_clip_on_the_next_frame() {
         "the whole target is stored"
     );
 }
+
+/* ---- the partial render's frag_pr block (PVR_BACKEND_OPT_PARTIAL_RENDER;
+ * docs/notes/pvr-pr-bgload.md 5, docs/notes/pvr-pr-spm-const.md) ---- */
+
+/// One 800x600 RGBA8 frame of a triangle, flushed; its kick.
+fn pr_frame(rig: &Rig, knob: u32) -> PvrRenderKick {
+    pvr_backend_set_option(PVR_BACKEND_OPT_PARTIAL_RENDER, knob);
+    let mut d = rig.draw(3);
+    (d.target_w, d.target_h) = (800, 600);
+    d.viewport = [0, 0, 800, 600];
+    assert_eq!(draw(&d), 0);
+    assert_eq!(pvr_backend_flush(), 0);
+    rig.kicks().last().expect("a kick").0
+}
+
+fn frag_pr_is_zero(p: &PvrRenderFragPr) -> bool {
+    p.spm_scratch_gpu == 0
+        && p.spm_scratch_bytes == 0
+        && p.reserved == 0
+        && p.pbe_word.iter().all(|w| *w == [0, 0])
+        && p.eot_pds_data == 0
+        && p.eot_pds_data_bytes == 0
+        && p.pds_pr_bgnd == [0; 3]
+}
+
+/// With the option off a kick's frag_pr block is zero and the backend
+/// builds nothing for the partial render (no allocation, no PDS program, no
+/// second end-of-tile program); with it on the frame's own words (geom,
+/// frag) are the same bytes: only frag_pr differs.
+#[test]
+fn pr_knob_off_frag_pr_zero_and_words_unchanged() {
+    let rig = Rig::new();
+    let off = pr_frame(&rig, 0);
+    assert!(frag_pr_is_zero(&off.frag_pr), "{:?}", off.frag_pr);
+    assert!(!rig.b().pr.tried, "nothing built for the partial render with the option off");
+    assert_eq!(rig.eot_emits().len(), 1, "one end-of-tile program, the frame's");
+    assert!(rig.b().pr.mems().all(|m| m.impl_.is_null()));
+
+    let on = pr_frame(&rig, 1);
+    assert!(!frag_pr_is_zero(&on.frag_pr));
+    let mut on_cleared = on;
+    on_cleared.frag_pr = PvrRenderFragPr::default();
+    let mut off_cleared = off;
+    /* the two frames ran on different frame sets: their arena addresses */
+    off_cleared.geom.vdm_ctrl_stream_base = on.geom.vdm_ctrl_stream_base;
+    off_cleared.frag.isp_dbias_base = on.frag.isp_dbias_base;
+    off_cleared.frag.isp_scissor_base = on.frag.isp_scissor_base;
+    off_cleared.frag.event_pixel_pds_data = on.frag.event_pixel_pds_data;
+    off_cleared.frag.pds_bgnd[0] = on.frag.pds_bgnd[0];
+    off_cleared.frag.pds_bgnd[1] = on.frag.pds_bgnd[1];
+    assert_eq!(kick_bytes(&on_cleared), kick_bytes(&off_cleared), "the option adds frag_pr and changes nothing else");
+}
+
+/// pds_pr_bgnd is non-zero only with the option, and only for a frame the
+/// load shader can reload (one attachment of one output dword, one sample).
+#[test]
+fn pr_pds_pr_bgnd_only_with_the_option() {
+    let rig = Rig::new();
+    assert_eq!(pr_frame(&rig, 0).frag_pr.pds_pr_bgnd, [0; 3]);
+    let on = pr_frame(&rig, 1).frag_pr.pds_pr_bgnd;
+    assert!(on.iter().all(|&w| w != 0), "{on:x?}");
+    /* a two-dword target (RGBA16F): the load shader's one dword does not
+     * cover it, so no partial-render state */
+    let mut d = rig.draw(3);
+    d.target_format = GLES_SURF_RGBA16F;
+    assert_eq!(draw(&d), 0);
+    assert_eq!(pvr_backend_flush(), 0);
+    assert!(frag_pr_is_zero(&rig.kicks().last().unwrap().0.frag_pr));
+    /* a multisampled frame: the load shader is not multisampled */
+    let mut d = rig.draw(3);
+    d.samples = 4;
+    assert_eq!(draw(&d), 0);
+    assert_eq!(pvr_backend_flush(), 0);
+    assert!(frag_pr_is_zero(&rig.kicks().last().unwrap().0.frag_pr));
+}
+
+/// The frag_pr block of an 800x600 RGBA8 frame: the scratch (Mesa's size,
+/// 1.92 MB), the PR PBE words of spm.rs over it, the PR end-of-tile data
+/// in its own slot built from the PR PBE state, and the background load
+/// (the load shader's kick, the 8-dword constants DMA, the sizes).
+#[test]
+fn pr_frag_pr_for_800x600_rgba8() {
+    let rig = Rig::new();
+    let k = pr_frame(&rig, 1);
+    let b = rig.b();
+    let p = &k.frag_pr;
+
+    /* the scratch: align(800, 2) x 600 x 4 B x 1 sample x 1 dword */
+    assert_eq!(p.spm_scratch_bytes, 1_920_000);
+    assert_eq!(p.spm_scratch_bytes as u64, crate::pvr::spm::scratch_size(800, 600, 1, 1, 0));
+    let s = p.spm_scratch_gpu;
+    assert!((HEAP_GENERAL_BASE..HEAP_GENERAL_BASE + HEAP_WINDOW).contains(&s));
+    assert_eq!(with_platform(|pl| pl.allocs.get(&s).map(|a| a.size)), Some(1_920_000));
+    assert_eq!(p.reserved, 0);
+
+    /* the PR PBE words: slot 0 the scratch's, the others zero */
+    let pbe = crate::pvr::spm::pbe_state(800, 600, 1, 0, 1, s).unwrap();
+    assert_eq!(p.pbe_word[0], [pbe.reg[0], pbe.reg[1]]);
+    assert!(p.pbe_word[1..].iter().all(|w| *w == [0, 0]));
+
+    /* the PR end-of-tile: its own slot, not the frame's, built from the PR
+     * PBE state with the one-target DOUTU */
+    assert_eq!(p.eot_pds_data, b.eot_pr_data_off);
+    assert_ne!(p.eot_pds_data, k.frag.event_pixel_pds_data);
+    assert_eq!(p.eot_pds_data_bytes, 16, "the fake generator's 4 data dwords");
+    let emits = rig.eot_emits();
+    let pr_emit = emits.last().unwrap();
+    assert_eq!(&pr_emit[..2], &pbe.state);
+    assert!(pr_emit[2..].iter().all(|&w| w == 0));
+    assert_eq!(*rig.eot_doutus().last().unwrap(), 0x1001);
+    assert_eq!(rig.gpu_u32(HEAP_PDS_BASE + b.eot_pr_data_off as u64), pbe.state[0]);
+
+    /* the background load: the three words as pr_bgnd_words packs them,
+     * pointing into the PR page, not at the clear's programs */
+    assert_eq!(p.pds_pr_bgnd, pr_bgnd_words(&b.pr, 0));
+    assert_ne!(p.pds_pr_bgnd[0], k.frag.pds_bgnd[0]);
+    assert_ne!(p.pds_pr_bgnd[1], k.frag.pds_bgnd[1]);
+    let page = heap_off_of(b.pr.pds.gpu);
+    assert_eq!(b.pr.kick_off, page);
+    assert_eq!(b.pr.dma_code_off, page + PDS_ALIGN);
+    assert_eq!(b.pr.scratch[0].dma_data_off, page + 2 * PDS_ALIGN);
+    let bg0 = csb_pack!(
+        ROGUE_CR_PDS_BGRND0_BASE_pack,
+        2,
+        csb::ROGUE_CR_PDS_BGRND0_BASE {
+            shader_addr: dev_addr(page as u64),
+            texunicode_addr: dev_addr((page + PDS_ALIGN) as u64)
+        }
+    );
+    assert_eq!(p.pds_pr_bgnd[0], dw64(bg0));
+    /* SIZEINFO: 8 constants dwords -> 1 (16s), 3 DMA data dwords -> 1 (4s,
+     * Mesa's aligned count, not the clear's 3), 1 temp -> 1 (4s) */
+    let size = csb_pack!(
+        ROGUE_CR_PDS_BGRND3_SIZEINFO_pack,
+        2,
+        csb::ROGUE_CR_PDS_BGRND3_SIZEINFO {
+            usc_sharedsize: 1,
+            pds_texturestatesize: 1,
+            pds_tempsize: 1,
+            ..Default::default()
+        }
+    );
+    assert_eq!(p.pds_pr_bgnd[2], dw64(size));
+
+    /* the load kick: the load shader's USC offset, its 6 temps, INSTANCE */
+    let usc = heap_off_of(b.pr.load_fs.gpu) as u64;
+    assert!(with_platform(|pl| pl.kick_usc_temps.contains(&(usc, 6)) && pl.kick_usc_rates.contains(&(usc, 0))));
+    assert_eq!(rig.gpu_u32(b.pr.pds.gpu), usc as u32, "the fake kick program's first data dword");
+    /* the DMA data: from the constants buffer, 8 dwords (not the clear's
+     * count, not Mesa's byte count 32) */
+    let c = b.pr.scratch[0].consts.gpu;
+    assert_eq!(rig.gpu_u32(b.pr.pds.gpu + 2 * PDS_ALIGN as u64), c as u32);
+    assert_eq!(rig.gpu_u32(b.pr.pds.gpu + 2 * PDS_ALIGN as u64 + 4), 8);
+
+    /* the constants buffer: docs/notes/pvr-pr-spm-const.md section 6 */
+    let a = s >> 2;
+    let want = [
+        0x0000_0fff,
+        0x0002_2400,
+        0,
+        0,
+        0xc000_2d84,
+        0x0257_0c7c,
+        0x0000_031f | ((a & 0xffff) << 16) as u32,
+        0x1000_0000 | (a >> 16) as u32,
+    ];
+    let got: Vec<u32> = (0..8).map(|i| rig.gpu_u32(c + 4 * i)).collect();
+    assert_eq!(got, want, "{got:08x?}");
+
+    /* a second frame of the same size reuses the scratch and the programs */
+    let allocs = with_platform(|pl| pl.allocations);
+    let k2 = pr_frame(&rig, 1);
+    assert_eq!(k2.frag_pr.spm_scratch_gpu, s);
+    assert_eq!(k2.frag_pr.pds_pr_bgnd, p.pds_pr_bgnd);
+    assert_eq!(with_platform(|pl| pl.allocations), allocs);
+}
+
+/// The partial render's blocks are claimed by the owner lines and given
+/// back at shutdown.
+#[test]
+fn pr_resources_are_owned_and_given_back() {
+    let rig = Rig::new();
+    pr_frame(&rig, 1);
+    let _ = rig.logs();
+    let kib = pvr_backend_pool_owners();
+    let live: usize = with_platform(|p| p.allocs.values().map(|a| a.size.div_ceil(4096) * 4096).sum());
+    assert_eq!(kib as usize * 1024, live, "{:?}", rig.logs());
+    pvr_backend_shutdown();
+    assert_eq!(with_platform(|p| p.allocs.len()), 0, "every block back: {:?}", rig.logs());
+    assert!(!rig.b().pr.tried);
+}
+
+/// The load shader's table entry is the generator's output: the words of
+/// tools/pco_shc/spm_load/spm_load.hex, the counts of its meta file, and
+/// (with the online compiler's decoder) a program that decodes group by
+/// group to its last byte.
+#[test]
+fn spm_load_blob_matches_its_generator() {
+    let hex = include_str!("../../tools/pco_shc/spm_load/spm_load.hex");
+    let words: Vec<u32> = hex
+        .lines()
+        .filter(|l| !l.starts_with('#'))
+        .flat_map(|l| l.split_whitespace())
+        .map(|w| u32::from_str_radix(w.trim_start_matches("0x"), 16).unwrap())
+        .collect();
+    assert_eq!(words, SPM_LOAD_USC);
+    let meta = include_str!("../../tools/pco_shc/spm_load/spm_load.meta.txt");
+    let one = |k: &str| -> u32 {
+        let v = meta.lines().find_map(|l| l.strip_prefix(k).and_then(|r| r.strip_prefix(' ')));
+        v.unwrap_or_else(|| panic!("the meta file has {k}")).trim().parse().unwrap()
+    };
+    assert_eq!(one("usc_dwords") as usize, SPM_LOAD_USC.len());
+    assert_eq!(one("usc_bytes"), 200);
+    assert_eq!(one("entry_offset"), SPM_LOAD_ENTRY);
+    assert_eq!(one("temps"), SPM_LOAD_TEMPS);
+    assert_eq!(one("consts_dwords"), SPM_LOAD_CONSTS_DWORDS);
+    #[cfg(feature = "shaderc-online")]
+    {
+        use crate::shaderc::online::powervr::decode::decode_group;
+        let bytes: Vec<u8> = SPM_LOAD_USC.iter().flat_map(|w| w.to_le_bytes()).collect();
+        let mut off = SPM_LOAD_ENTRY as usize;
+        let mut groups = 0;
+        while off < bytes.len() {
+            let g = decode_group(&bytes, off).unwrap_or_else(|e| panic!("the group at {off} does not decode: {e:?}"));
+            off += g.total;
+            groups += 1;
+        }
+        assert_eq!(off, 200, "{groups} groups end at the last byte");
+    }
+}
