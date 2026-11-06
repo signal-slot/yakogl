@@ -418,6 +418,18 @@ config YAKOGL_DRV_DISPLAY_IMX8MP_FORCE_COLD_POWER_OFF
 	  rather than finding them as Linux left them. The status word
 	  (imx8mp_media_status) reports POWERED_FROM_OFF when it did.
 
+config YAKOGL_DRV_DISPLAY_IMX8MP_LINK_CHECK
+	bool "Check the bridge's link status once the video runs"
+	depends on YAKOGL_DRV_DISPLAY_IMX8MP
+	default y
+	help
+	  The SN65DSI8x's init sequence steps 8-11 (5 ms after the video
+	  starts, clear IRQ_STAT, 1 ms, read it): the result is
+	  imx8mp_display_info()->bridge_irq_stat and a log line. A build that
+	  reads neither (the route-3 cluster, console off) saves the 6 ms on
+	  the way to its first picture by turning it off; bridge_irq_stat is
+	  then 0xff.
+
 config YAKOGL_DRV_DISPLAY_IMX8MP_STAGE_TIMES
 	bool "Measurement: time each stage of the cold display bring-up"
 	depends on YAKOGL_DRV_DISPLAY_IMX8MP
