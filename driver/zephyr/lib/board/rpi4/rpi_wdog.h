@@ -12,7 +12,11 @@
 /* Seconds after boot during which the watchdog is fed: long enough to read the
  * screen, short enough that nobody has to reach for the power switch. */
 #ifndef RPI_WDOG_HOLD_S
+#ifdef CONFIG_YAKOGL_RPI5_WDOG
+#define RPI_WDOG_HOLD_S CONFIG_YAKOGL_RPI5_WDOG_HOLD_S
+#else
 #define RPI_WDOG_HOLD_S 50
+#endif
 #endif
 
 /* Print when the reset will come. */
