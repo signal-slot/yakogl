@@ -47,6 +47,15 @@
 # or the GitHub archive directory glmark2-<pin>); --install only prints the
 # commands that fetch it. --check also reports DEQP_GLES3_TEST_DIR (the dEQP
 # shader tree es3_shaderc_corpus reads: unset skips it, a bad path fails it).
+# --check also reports the rustup target aarch64-unknown-linux-gnu (check.sh's
+# "clippy yakogl-mali-panthor (aarch64-unknown-linux-gnu)" row gaps without it
+# on the toolchain the gate runs under; the same per-toolchain rule as
+# aarch64-unknown-none applies). --check also reports PCO_SPM_LOAD_CAPTURE,
+# the capture_spm_load of PCO_SHC's Mesa build (check.sh's "gen
+# tools/pco_shc/spm_load == gen_spm_load.py capture" row gaps without it):
+# looked for in check.sh's order, only when PCO_SHC names an executable (the
+# row's own condition; PCO_SHC itself is one of the workspaces above, out of
+# scope here), and --install only prints the build that makes it.
 set -u
 
 PROG=${0##*/}
@@ -386,6 +395,39 @@ check_pvr_fw_blob() {
   fi
 }
 
+# The capture_spm_load of the Mesa build PCO_SHC came from, which check.sh's
+# "gen tools/pco_shc/spm_load == gen_spm_load.py capture" row regenerates the
+# partial render's load shader with and compares byte for byte; without a
+# program the row is a gap naming the build. Printed the way check.sh resolves
+# one (spm_load_capture): the PCO_SPM_LOAD_CAPTURE variable, then beside the
+# resolved PCO_SHC (the tools/README.md form: PCO_SHC in the build directory,
+# or a link into it), then the deps layout's Mesa tree at <PCO_SHC's
+# directory>.src. A host prepared before tools/cts/deps.toml's entry has
+# pco_shc and not this program. Without PCO_SHC the row is a gap naming
+# PCO_SHC itself, so nothing is reported in that case: PCO_SHC is a workspace
+# (the header), not a tool this script judges.
+pco_spm_load_capture_path() {
+  local p
+  for p in "${PCO_SPM_LOAD_CAPTURE-}" \
+           "$(dirname "$(readlink -f "${PCO_SHC-}")")/capture_spm_load" \
+           "$(dirname "${PCO_SHC-}").src/mesa-26.2.1/build/src/imagination/vulkan/capture_spm_load"; do
+    if [ -n "$p" ] && [ -x "$p" ]; then printf '%s' "$p"; return 0; fi
+  done
+  return 1
+}
+
+check_pco_spm_load_capture() {
+  local p
+  if [ -z "${PCO_SHC-}" ] || [ ! -x "${PCO_SHC-}" ]; then
+    return 0
+  fi
+  if p=$(pco_spm_load_capture_path); then
+    line ok PCO_SPM_LOAD_CAPTURE "$p"
+  else
+    line missing PCO_SPM_LOAD_CAPTURE "no capture_spm_load at PCO_SPM_LOAD_CAPTURE='${PCO_SPM_LOAD_CAPTURE-}' or beside PCO_SHC='${PCO_SHC-}' (the spm_load gen row would gap): tools/cts/deps-env.sh --build PCO_SPM_LOAD_CAPTURE"
+  fi
+}
+
 # A CC_aarch64_unknown_none that names no executable breaks the aarch64 rows
 # (build.rs uses it instead of clang on PATH). Silent when it is unset.
 check_cc_aarch64() {
@@ -401,6 +443,8 @@ check_cc_aarch64() {
 run_checks() {
   check_cargo
   check_rustup_target aarch64-unknown-none
+  # the board target of yakogl-mali-panthor (check.sh's mali gltest rows)
+  check_rustup_target aarch64-unknown-linux-gnu
   check_softfloat_target
   check_clippy
   check_rustfmt
@@ -414,6 +458,7 @@ run_checks() {
   check_glmark2_src
   check_deqp_gles3_dir
   check_pvr_fw_blob
+  check_pco_spm_load_capture
   check_cc_aarch64
 }
 
@@ -546,6 +591,10 @@ report_values() {
     echo "glmark2 at the pinned commit is missing (print only, not run):"
     echo "  tools/cts/deps-env.sh --build GLMARK2_SRC"
     echo "  git clone https://github.com/glmark2/glmark2 <dir> && git -C <dir> checkout --detach $(glmark2_pin), then set GLMARK2_SRC=<dir>"
+  fi
+  if [ -n "${PCO_SHC-}" ] && [ -x "${PCO_SHC-}" ] && ! pco_spm_load_capture_path >/dev/null; then
+    echo "capture_spm_load (the Mesa build PCO_SHC came from) is missing (print only, not run):"
+    echo "  tools/cts/deps-env.sh --build PCO_SPM_LOAD_CAPTURE"
   fi
   if ! probe_libclang >/dev/null 2>&1 && libdir=$(find_libclang_dir); then
     echo "libclang is on disk at $libdir (print only, not applied):"
