@@ -1,6 +1,6 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
-# gc-msaa-record: case 16's 4x probes without a console (defect #8)
+# gc-msaa-record: case 16's 4x probes without a console (defect #4)
 
 Date: 2026-10-10. Host and cross-build work only; no board run was made.
 
@@ -24,7 +24,7 @@ are in `gc-msaa-addresses.md`, "The board A/B"; the pages are read as below.
 
 ## Why
 
-The #8 A/B (the 4x MSAA step, "the `gc_debug_msaa` bit 3
+The #4 A/B (the 4x MSAA step, "the `gc_debug_msaa` bit 3
 A/B") reads its verdict from console lines: `x4: inside / outside / edge`,
 `x4 scratch`, `x4 clear only`, `x4 draw only` and their `map` lines. A board
 session without a serial capture only gets the SNVS result record: one CASE
@@ -124,9 +124,9 @@ zeros; a `clear only`/`draw only` that the run did not take is
 `record: x4 clear only: not taken`. `yakogl-tools record <w0..w3>` still
 decodes a single page generically (kind PERF, "experiment 30 page 0").
 
-## Arm 1 and arm 9 (#8, step 3) with this record
+## Arm 1 and arm 9 (#4, step 3) with this record
 
-Build one image per arm as in #8 (first case 0, so the selector in the
+Build one image per arm as in #4 (first case 0, so the selector in the
 sweep image is the page selector, not a case index):
 
 ```sh
@@ -154,7 +154,7 @@ for bits in 1 9; do
 done
 ```
 
-Compare with the table of #8:
+Compare with the table of #4:
 
 | arm | read in `record msaa` | expected |
 |---|---|---|
@@ -163,7 +163,7 @@ Compare with the table of #8:
 
 Arm 9 failing: blank target with a full scratch map -> resolve; empty
 scratch -> draw; scrambled in 64x64 or 4x4 blocks -> supertile bits;
-half or double scale -> window size or stride (#8). Arms 11 and 13 only
+half or double scale -> window size or stride (#4). Arms 11 and 13 only
 if arm 9 passes. A fence timeout or fault in a run gives no page: the record
 is then the usual breadcrumb/FAULT/UNFINISHED, and `dmesg` on the Linux side
 is next.

@@ -2,14 +2,14 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Mali (Valhall, v10): a uniform read at a run-time index, Mesa's design
 
-Issue #1385, plan #152 item `notes-uniform-index`, for the follow-up item
+Issue #32, plan #152 item `notes-uniform-index`, for the follow-up item
 `uniform-index-122`: the fragment shader of gl_test case 122 (`uniidxi`) reads
 `fcols[fidx + int(t.w * 0.0)]` after its texture look-up
 (`tools/shaders/es100/uniidx_i.frag:9`), and the back end refuses the read with
 `Valhall: a uniform read at a run-time index is not lowered yet`
 (`MaliError::UniformIndexed`, `src/shaderc/online/mali/mod.rs:281`). This note
 is what Mesa 26.2.1's panfrost does for such a read on v10, how it sits with the
-fragment uniform block pushed to the FAU (#1384 S3,
+fragment uniform block pushed to the FAU (#31 S3,
 `src/shaderc/online/mali/fau.rs`), what the frame side needs, which corpus rows
 are refused for it, and the steps. It is a reading of Mesa's source and ours,
 checked against one Mesa board recording of case 122 itself (section 6);
@@ -187,7 +187,7 @@ general lowering (approved 2026-10-19)".
 and the scaling `index * stride` (a shift or `IMUL` by a constant, plus the
 block base). Today any integer value is refused (`MaliError::IntValue`,
 `src/shaderc/online/mali/mod.rs:116`, `:276`), and `uniform int fidx` is itself
-a block word that must be read as raw bits. The ALU rows are #1384's S4 (`f2i`,
+a block word that must be read as raw bits. The ALU rows are #31's S4 (`f2i`,
 `iadd` per `docs/notes/mali-lowering-map.md:191-193`, `:272`); this note adds
 only the scaling and the `LD_PKA` row. The exact NIR the GL driver makes of the
 index (an `imul`/`ishl`, an `iadd` of the base, a 16-bit form for a mediump
@@ -364,7 +364,7 @@ holds eight rows with the refusal string:
 (`driver/tools/pvrlab/gl_test.c:21317`, `:21324`, `:21388-21392`: the case table.)
 `uniidx_i.frag` (case 122) is the ninth: its row says `a texture coordinate
 other than a vec2 varying read whole` (`tools/mali/corpus-verdicts.txt:110`)
-because the look-up comes first; once #1385's coordinate item takes the look-up,
+because the look-up comes first; once #32's coordinate item takes the look-up,
 its next refusal is this one (`docs/notes/mali-texture-refusals.md:343-358`).
 Two more fragment shaders contain a run-time uniform read behind a different
 first refusal: `tools/shaders/es100/uniform_idx.frag` (arithmetic,
@@ -411,7 +411,7 @@ from one of them (a fragment shader with an indexed read), not a new run.
 
 Prerequisites, not part of the item: `tex-coord-122` (the coordinate form,
 `docs/notes/mali-texture-refusals.md`), S3 (the fragment uniform block pushed to
-FAU, #1384) and the integer rows of S4 (`F2I32`, `IADD`; `S2`'s highp for any
+FAU, #31) and the integer rows of S4 (`F2I32`, `IADD`; `S2`'s highp for any
 fp32 array). `link-move` has landed. The item changes the Mali compiler in
 `src/shaderc/online/mali/` and the frame side after `frame-query` has merged.
 

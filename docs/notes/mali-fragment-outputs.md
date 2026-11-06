@@ -3,7 +3,7 @@
 # Mali: several fragment outputs (case 55) and the fragment operand shapes of cases 91 and 192
 
 Study for plan #153 (the sweep refusals of `0dce654a8:tools/mali/board-ref/2026-10-23-s6-discard/`,
-issue #1384). Mesa 26.2.1, `$CONNECTED_DEPS_DIR/mesa-pan/mesa-26.2.1`; `M/` below
+issue #31). Mesa 26.2.1, `$CONNECTED_DEPS_DIR/mesa-pan/mesa-26.2.1`; `M/` below
 is its `src/`. Every word quoted is from a reference recorded with
 `tools/mali/drm_shim_ref.sh` (Mesa's panfrost on drm-shim, GPU id 0xa867):
 

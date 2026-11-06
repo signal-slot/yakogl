@@ -53,7 +53,7 @@ pub const ROWS: [(Row, &str); 87] = [
     (row(Alu::Fneg, 16, 2), "nir_op_fneg: FABSNEG.v2f16 a.neg"),
     (row(Alu::Fabs, 16, 2), "nir_op_fabs: FABSNEG.v2f16 a.abs"),
     (row(Alu::Vec2, 16, 2), "nir_op_vec2 of two 16-bit halves: MKVEC.v2i16"),
-    /* the S4 rows (#1384), one shim reference each (tools/mali/testdata/s4_*) */
+    /* the S4 rows (#31), one shim reference each (tools/mali/testdata/s4_*) */
     (row(Alu::Fabs, 32, 1), "nir_op_fabs: FABSNEG.f32 a.abs"),
     (row(Alu::Fclamp(clamp::ZERO_ONE), 32, 1), "nir_op_fsat: FCLAMP.f32 .clamp_0_1"),
     (row(Alu::Frsq, 32, 1), "nir_op_frsq: FRSQ.f32"),
@@ -69,21 +69,21 @@ pub const ROWS: [(Row, &str); 87] = [
     (row(Alu::F2i, 32, 1), "nir_op_f2i32: F32_TO_S32.rtz"),
     (row(Alu::I2f, 32, 1), "nir_op_i2f32: S32_TO_F32"),
     (row(Alu::Iadd, 32, 1), "nir_op_iadd: IADD.s32"),
-    /* gl_FragCoord's x and y (#1384 S4, tools/mali/testdata/fvg_fill_gradient_*) */
+    /* gl_FragCoord's x and y (#31 S4, tools/mali/testdata/fvg_fill_gradient_*) */
     (row(Alu::U2f32, 32, 1), "nir_op_u2f32 of a 16-bit source: U16_TO_F32"),
-    /* femtovg's scissor `max(d, 0.0)` (#1384 S5, fvg_fill_color_nodiscard) */
+    /* femtovg's scissor `max(d, 0.0)` (#31 S5, fvg_fill_color_nodiscard) */
     (row(Alu::Fclamp(clamp::ZERO_INF), 32, 1), "nir_op_fclamp_pos: FCLAMP.f32 .clamp_0_inf"),
-    /* a vertex look-up's 8.8 level (#1385, tools/mali/testdata/tex_vs_lod) */
+    /* a vertex look-up's 8.8 level (#32, tools/mali/testdata/tex_vs_lod) */
     (row(Alu::Fclamp(clamp::M1_1), 32, 1), "nir_op_fsat_signed: FCLAMP.f32 .clamp_m1_1"),
     (row(Alu::F2i, 16, 1), "nir_op_f2i16 of a 32-bit source: F32_TO_S32.rtz"),
     (row(Alu::U2u32, 32, 1), "nir_op_u2u32 of a 16-bit source: U16_TO_U32"),
-    /* femtovg's `texType == 1`, `glyphTextureType == 1` (#1384 S5,
+    /* femtovg's `texType == 1`, `glyphTextureType == 1` (#31 S5,
      * fvg_texture_copy_unclipped, fvg_fill_color_glyph_nodiscard) */
     (row(Alu::Icmp(Cmpf::Eq), 32, 1), "nir_op_ieq_pan: ICMP.i32.eq.m1, ICMP_OR.u32 after va_lower_isel"),
-    /* a uniform array element read at a run-time index (#1385 (b),
+    /* a uniform array element read at a run-time index (#32 (b),
      * tools/mali/testdata/uniidx_d, uniidx_i): the byte offset */
     (row(Alu::Ishl, 32, 1), "nir_op_ishl: LSHIFT_OR.i32 a, #0, b.b0"),
-    /* a vertex cube-map look-up's coordinate (#1385 (c), tools/mali/testdata/
+    /* a vertex cube-map look-up's coordinate (#32 (c), tools/mali/testdata/
      * cube_vs: `build_cube_coord2_face` and `build_cube_desc`,
      * pan_nir_lower_tex.c:68-128, the intrinsics bifrost_compile.c:2109-2138) */
     (row(Alu::Cubeface1, 32, 1), "nir_intrinsic_cubeface_pan, lane 0: CUBEFACE1 x, y, z"),
@@ -91,7 +91,7 @@ pub const ROWS: [(Row, &str); 87] = [
     (row(Alu::CubeSsel, 32, 1), "nir_intrinsic_cube_ssel_pan: CUBE_SSEL z, x, face"),
     (row(Alu::CubeTsel, 32, 1), "nir_intrinsic_cube_tsel_pan: CUBE_TSEL y, z, face"),
     (row(Alu::BitfieldSelect, 32, 1), "nir_op_bitfield_select: MUX.i32.bit b, c, mask"),
-    /* atan's sign, `nir_copysign` (#1384 S4, fvg_fill_gradient_conic*) */
+    /* atan's sign, `nir_copysign` (#31 S4, fvg_fill_gradient_conic*) */
     (row(Alu::Iand, 32, 1), "nir_op_iand: LSHIFT_AND.i32 a, b, #0"),
     (row(Alu::Ior, 32, 1), "nir_op_ior: LSHIFT_OR.i32 a, b, #0"),
     /* the sum of a mediump float array's elements, one lane each (case 108

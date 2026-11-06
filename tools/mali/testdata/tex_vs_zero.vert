@@ -1,5 +1,5 @@
 #version 100
-/* #1385 (a): a vertex-stage look-up at the constant level 0.0, the ZERO_LOD
+/* #32 (a): a vertex-stage look-up at the constant level 0.0, the ZERO_LOD
  * mode; tools/shaders/gltest/vtl_vs_grid.vert verbatim
  * (tools/mali/drm_shim_ref.sh run, Mesa 26.2.1, --uniform-values). */
 attribute vec2 a_pos;

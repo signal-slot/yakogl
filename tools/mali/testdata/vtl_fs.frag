@@ -1,5 +1,5 @@
 #version 100
-/* #1385 (b): gl_test case 197's fragment shader,
+/* #32 (b): gl_test case 197's fragment shader,
  * tools/shaders/gltest/vtl_fs.frag verbatim: a look-up at the constant
  * coordinate vec2(0.5, 0.5) mixed with a varying by a float uniform; the
  * pair's vertex shader is tex_vs_lod.vert (case 197's vtxgrid_vs.vert)

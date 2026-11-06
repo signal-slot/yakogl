@@ -249,7 +249,7 @@ What deliberately stays C:
 - the OSALs `src/osal/{zephyr,zephyr_gc,zephyr_v3d,zephyr_shaderc_scratch,zephyr_timing,baremetal,linux}.c`:
   thin glue over C APIs (Zephyr macros and inlines, board hook pointers, a variadic log),
   none of which stable Rust can define (their move to Rust is open work,
-  #1225);
+  #19);
 - the driver's OS-free command generators in `driver/src/`
   (`pvr_vdm_ppp_gen.c`, `pvr_pds_render_gen.c`, `pvr_pds_pixel_event_gen.c`), shared
   with the driver's own render path and called through the FFI declared in

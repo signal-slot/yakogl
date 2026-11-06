@@ -1,4 +1,4 @@
-/* #1385 (b), plan #153 uniarray: case 108 A's four run-time reads of a
+/* #32 (b), plan #153 uniarray: case 108 A's four run-time reads of a
  * float array (case108_uniidx.frag) at highp: Mesa keeps the block fp32,
  * so the element is a 32-bit load (tools/mali/drm_shim_ref.sh run, Mesa
  * 26.2.1; the pair's vertex shader is case108_uniidx.vert). */

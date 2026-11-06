@@ -1,12 +1,12 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
-# i.MX8MP: gl_test cases 10 and 2 pass or fail at random (#9, #25)
+# i.MX8MP: gl_test cases 10 and 2 pass or fail at random (#5, #10)
 
 **Status (2026-10-11): open.** The first part of the board recipe ran twice
 (section "Board results"). The failure rate fell from 14 of 30 to about 1 in
 10 or less, and neither knob (page alignment, no pool reuse) removes it, so
 (b) and (c) are not separated. The second part needs the K1 knob, which does
-not exist yet. Tracked as #9 and #25.
+not exist yet. Tracked as #5 and #10.
 
 Host investigation, 2026-10-08, on integration `fdff1147`. Item `gc-case10`
 of plan #2. No code is changed. The open row is tools/cts/RESULTS.md:930
@@ -317,7 +317,7 @@ If K1 makes case 10 and case 2 stable, make K1 the default and remove the knob.
 
 ### First part: one session, 30 boots, existing knobs only
 
-This is the i.MX8MP board step of #9, with three
+This is the i.MX8MP board step of #5, with three
 changes: the arms are interleaved, the reading of the no-reuse arm is fixed
 (it does not move the target, F2), and a fourth list catches case 2's check.
 
@@ -353,8 +353,8 @@ the verdict line:
 | words | meaning |
 |---|---|
 | `594b07ff,00000000,0000ff00,0000077e` | all 9 cases passed |
-| `594b07ff,00000000,0000ff00,0000037e` | case 10 failed (#9) |
-| `594b07ff,00000000,0000ff00,0000077a` | case 2 failed (#25) |
+| `594b07ff,00000000,0000ff00,0000037e` | case 10 failed (#5) |
+| `594b07ff,00000000,0000ff00,0000077a` | case 2 failed (#10) |
 | `594b07ff,00000000,0000ff00,0000037a` | both failed |
 | w1 not `00000000` | lost work, a reset or a fence timeout: not a reading, run it again |
 | w2 low 16 bits not `ff00` | a case left a GL error unchecked: note it; the w3 reading still holds |
@@ -419,7 +419,7 @@ All on the Verdin i.MX8M Plus, `BOARD_BOOT=uboot-mmc`, integration images
 reset, no fence timeout), so every one is a reading. The records were kept
 on the workers, not committed. The session notes are in git history.
 
-| session | image | arm and list | case 10 (#9) failed | case 2 (#25) failed |
+| session | image | arm and list | case 10 (#5) failed | case 2 (#10) failed |
 |---|---|---|---|---|
 | 2026-10-08, plan #1 step 5 | `b20e4d11` | base, `1-6,8-10` | 3 / 40 (`base-20`, `base-23`, `base-35`) | 1 / 40 (`base-13`) |
 | | | page | 1 / 10 (`page-3`) | 0 / 10 |
@@ -438,7 +438,7 @@ failure) also shows case 10:
 
 | image | runs | first failure |
 |---|---|---|
-| `b20e4d11` (2026-10-08) | 3 | case 16 in all three (#8's skip, counted as a failure by the set walker then) |
+| `b20e4d11` (2026-10-08) | 3 | case 16 in all three (#4's skip, counted as a failure by the set walker then) |
 | `334d4e65` (2026-10-09) | 3 | case 16 once; case 10 twice (45 / 48) |
 | `32778b57` (2026-10-10, main) | 3 | case 10 once (45 / 48); case 16 twice (46 / 48) |
 

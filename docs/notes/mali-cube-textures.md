@@ -2,7 +2,7 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Mali (Valhall, v10): cube-map textures, Mesa's design
 
-Issue #1385, plan #152 item `notes-cube`, for the follow-up item
+Issue #32, plan #152 item `notes-cube`, for the follow-up item
 `tex-cube-113`: gl_test case 113 (`cubemap`) samples a cube map from the
 vertex shader, `v_col = textureCubeLod(u_s, u_dir, u_lod)`
 (`tools/shaders/es100/cubemap.vert:12`), 30 draws, one a (face, level) of a
@@ -432,14 +432,14 @@ touched by `frame-msaa-zs` (running): the steps wait for it.
    `CUBE_SSEL`, `CUBE_TSEL` and the whole sequence: **byte-equal** to
    step 2's `vs.position` (and `vs.varying`).
 5. **The board, last.** Case 113 on the NanoPC-T6 through `panthor-gltest`
-   (the board session of #1385): 30 fetches right, 0 kernel messages, against
+   (the board session of #32): 30 fetches right, 0 kernel messages, against
    the Mesa pictures `mesa/mesa-cubemap-rb01..30.pam`. **Pin on the board**
    what the recording left open (section (e), "The open questions, from the
    recording"): the plane's slice stride, written 0 (the recording only has
    1984), and the explicit LOD of a vertex look-up (`tex-vs`). The face
    pointer question is settled: Mesa's are 64-aligned and not 4 KiB aligned,
    and sample right (`D:402`), so ours need no more.
-6. **The issue.** A comment on #1385 with the commit and the shim words;
+6. **The issue.** A comment on #32 with the commit and the shim words;
    `tools/cts/RESULTS.md` / `STATUS.md` row for 113 only after the board
    run.
 
@@ -452,7 +452,7 @@ format cube (the plane's size and row stride differ).
 
 ## (g) A cube at a constant direction (114) and in the fragment stage (41)
 
-The study for plan #153's `fs-cube` item (#1385): gl_test case 114
+The study for plan #153's `fs-cube` item (#32): gl_test case 114
 `cubelod` and case 41 `es3cube`. Nothing in `src/` was changed for it.
 
 **Citations in this section.** Mesa as `M:` above (the 26.2.1 tarball, whose

@@ -1,6 +1,6 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
-# KICK_DIFF: the second read-back for i.MX8MP gl_test #9 and #25
+# KICK_DIFF: the second read-back for i.MX8MP gl_test #5 and #10
 
 **Status (2026-10-12): wired into gl_test, not yet run on a board.**
 The instrument was re-landed from integration (`af9767d5b`, ccfarm
@@ -18,7 +18,7 @@ this file does not change.
 
 ## What it answers
 
-gl_test case 10 (#9) and case 2 (#25) lose the pixels of a tiny draw that
+gl_test case 10 (#5) and case 2 (#10) lose the pixels of a tiny draw that
 follows a clear in one kick. The lost pixels read back as the clear colour.
 Two stories fit:
 
@@ -228,7 +228,7 @@ fence and does not look at the command stream. So the two cross as a 2x2
 
 | arm | K1 | KICK_DIFF | expect if the flush race (a1) is the cause |
 |---|---|---|---|
-| base | off | off | #9 fails about 5/10 (2 of 3 at `334d4e65`) |
+| base | off | off | #5 fails about 5/10 (2 of 3 at `334d4e65`) |
 | base+kd | off | on | same rate; each failing run says `late` or `stable` |
 | k1 | on | off | 0/10 |
 | k1+kd | on | on | 0/10, and no `late` line |
@@ -251,7 +251,7 @@ Reading:
 Interleaved boots, 40 per arm, `tools/board.sh imx8mp run` from U-Boot, images with
 `CONFIG_GC_BOARD_WDOG_SELF_ARM=y`:
 
-| image | arm | case 10 (#9) | case 2 (#25) | `late` checks |
+| image | arm | case 10 (#5) | case 2 (#10) | `late` checks |
 |---|---|---|---|---|
 | `e40e3835` | base | 5 of 80 | 0 of 80 | - |
 | `e40e3835` | KICK_DIFF | 2 of 80, all `stable` | 2 of 80, all `stable` | 0 of 160 runs |
@@ -266,7 +266,7 @@ longer `KICK_DIFF_DELAY_US` arm would only separate "lost" from "very late".
 
 ## Candidate commits between `b20e4d11` and `334d4e65`
 
-The data: #9 failed first in 2 of 3 runs at `334d4e65` and in 0 of 3 at
+The data: #5 failed first in 2 of 3 runs at `334d4e65` and in 0 of 3 at
 `b20e4d11` (`ab43a20c5:tools/cts/log/board-sessions/imx8mp-es2-r1.md`). Three runs are few:
 0 of 3 against 2 of 3 is not significant (Fisher's exact test, two-sided,
 p = 0.4), so this may be no regression at all.

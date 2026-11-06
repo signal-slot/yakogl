@@ -47,7 +47,7 @@ dEQP-GLES2.functional.clip_control.viewport_bounds  # EXT_clip_control not claim
 # multisample.* -- 16 cases. docs/es2-cts-failures.md section C: acceptable;
 # the default (1x) config has no multisample surface ("No multisample
 # buffers"); the AM62P ms4 image passes all 16 at 4x, the i.MX8MP waits on
-# 4x MSAA (#8), the Pi 4 has no 4x config.
+# 4x MSAA (#4), the Pi 4 has no 4x config.
 dEQP-GLES2.functional.multisample.common_edge_big_quad  # no multisample surface at 1x (docs/es2-cts-failures.md section C)
 dEQP-GLES2.functional.multisample.common_edge_small_quads  # no multisample surface at 1x (docs/es2-cts-failures.md section C)
 dEQP-GLES2.functional.multisample.common_edge_viewport_quad  # no multisample surface at 1x (docs/es2-cts-failures.md section C)

@@ -2,7 +2,7 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Valhall mixed highp/mediump fragment code, fp16-inexact colour constants, folded constant varyings
 
-Date 2026-10-25. Plan #153 item `study-mixprec`, for issue #1384. It builds on
+Date 2026-10-25. Plan #153 item `study-mixprec`, for issue #31. It builds on
 `docs/notes/mali-precision.md` and `docs/notes/mali-highp-fragcoord.md` (read
 them first; not edited here). Citations are Mesa 26.2.1; `G/` is
 `src/compiler/glsl/`, `N/` is `src/compiler/nir/`, `B/` is
@@ -283,7 +283,7 @@ Our refusal: `MaliError::ConstantFold` is raised by constant-vs-constant
 `Fmul`/`Fadd` in the fragment graph (`nir_fs.rs:544, 559`) and by the vertex
 `nir.rs:1241-1282`, because our NIR build does not fold. The vertex shader of
 this program also hits the 'varying lane computed from no attribute' refusal
-(`corpus-verdicts.txt:128`, `linkconst`/`study-varyconst`, #1384); the two are
+(`corpus-verdicts.txt:128`, `linkconst`/`study-varyconst`, #31); the two are
 the same cut: when Mesa's link moves a constant varying into the fragment
 shader, **the fragment compile must be the one of the program with those
 varyings substituted**. To match byte for byte:

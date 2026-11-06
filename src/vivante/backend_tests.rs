@@ -4571,7 +4571,7 @@ fn a_4x_rgb565_target_resolves_as_r5g6b5() {
     assert_eq!(cfg & (rs_source_format(0x1f) | rs_dest_format(0x1f)), want);
 }
 
-/// Issue #8's first host question: is the surface the probes read the one
+/// Issue #4's first host question: is the surface the probes read the one
 /// the frame writes? Every PE colour address of a 4x frame -- the clear
 /// quad's and the draw's, both pipes -- is the scratch allocation that
 /// `gc_debug_msaa_scratch` reads (`g().msaa`), the resolve reads that same
@@ -4750,7 +4750,7 @@ fn descriptor_addresses_come_first_then_every_invalidate() {
 }
 
 /// The synchronisation skeleton of a frame, step by step against etnaviv
-/// (issues #9 and #25, the GC7000's nondeterministic missing colour writes;
+/// (issues #5 and #10, the GC7000's nondeterministic missing colour writes;
 /// the comparison is in VIVANTE_NOTES.md, "Draw, resolve, read back: our sync
 /// sequence against etnaviv's"). gl_test case 10's failing frame is a clear
 /// and then a draw in one stream, read back after glFinish; this records the
@@ -4856,7 +4856,7 @@ fn a_frame_flushes_and_stalls_as_etnaviv_does() {
 /// gc_debug_msaa bit 3 (9): the 4x draw's viewport and clip are in the
 /// scratch surface's samples, twice the target on each axis. Without it they
 /// stay in target pixels (the board has not said which this core wants, issue
-/// #8); a single-sampled draw is never scaled.
+/// #4); a single-sampled draw is never scaled.
 #[cfg(feature = "test-knobs")]
 #[test]
 fn msaa_bit_three_scales_the_viewport_and_clip_to_the_scratch_samples() {

@@ -1,4 +1,4 @@
-/* gl_test case 209 varyorder (#1386): two vec4 and a vec2, written in this order (tools/mali/drm_shim_ref.sh run, Mesa 26.2.1). */
+/* gl_test case 209 varyorder (#33): two vec4 and a vec2, written in this order (tools/mali/drm_shim_ref.sh run, Mesa 26.2.1). */
 #version 100
 attribute vec4 a_pos;
 attribute vec4 a_a;

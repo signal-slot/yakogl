@@ -3,7 +3,7 @@
 # Valhall precision: fp16 vertex uniforms (case 19) and mediump gl_FragCoord (cases 82, 84, 119)
 
 Date 2026-10-24, tip `916266f9`. Plan #153 item `study-precision`, for issue
-#1384. It builds on `docs/notes/mali-highp-fragcoord.md` (read it first; it is
+#31. It builds on `docs/notes/mali-highp-fragcoord.md` (read it first; it is
 not edited here): its 1.1 explains how Mesa decides fp16 or fp32, its 2.1 the
 fragment-position lowering, and its open point 6 says "mediump arithmetic on
 `gl_FragCoord` is not in any reference". This note closes that point with

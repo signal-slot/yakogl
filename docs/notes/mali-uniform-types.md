@@ -2,7 +2,7 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Mali (Valhall, v10): uniforms other than float/vec/mat4, and uniforms past the FAU
 
-Issue #1384 / #1385, plan #153 item `study-unitype`. gl_test cases 100
+Issue #31 / #32, plan #153 item `study-unitype`. gl_test cases 100
 (`idxtex`) and 116 (`uniidxe`) are refused with `Valhall: a uniform other than
 a float, vec2, vec3, vec4 or mat4 is not lowered yet`; case 166 (`fshprobe`)
 with `Valhall: a uniform past the FAU's 128 words (Mesa loads it from the UBO)
@@ -431,7 +431,7 @@ locals this section describes (`IndexedLocal`, `arr[i]`, `p[i]`, `col[i -
 1]`, `v[j]`). No test pins `unitype_80` yet. The text below predates
 intbool (session 1).
 
-Plan #153 item `study-matdyn-ifbranch`, issue #1386. The newest sweep
+Plan #153 item `study-matdyn-ifbranch`, issue #33. The newest sweep
 (`0dce654a8:tools/mali/board-ref/2026-10-24-refusals/ours/15-panthor-gltest--sweep-1.log`,
 `verdict case 80`) refuses it with the same `UniformType` message as 100 and
 116, and `corpus-verdicts.txt` lists `tools/shaders/es100/matdyn.frag` the same

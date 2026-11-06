@@ -568,7 +568,7 @@ fn tri_varying_is_byte_equal_to_mesa_26_2_1() {
     assert_eq!(f.info.fau.last(), Some(&FauWord::Constant(0x3c00_3c00)));
 }
 
-/// gl_test case 209 varyorder (#1386): one vertex shader, its fragment
+/// gl_test case 209 varyorder (#33): one vertex shader, its fragment
 /// shader declaring the varyings in the vertex order and in the reverse
 /// one. Mesa's link gives the fragment shader the vertex shader's layout,
 /// so both pairs are one program, byte for byte (the shim drew each twice,
@@ -2059,7 +2059,7 @@ fn fs_reference_sources() -> Vec<&'static str> {
     srcs.extend(HIGHP_POPULATION.iter().map(|c| c.2));
     srcs.extend(S4_POPULATION.iter().map(|c| c.2));
     srcs.extend(S5_POPULATION.iter().map(|c| c.2));
-    /* the constant coordinate and the run-time index (#1385 (b)) */
+    /* the constant coordinate and the run-time index (#32 (b)) */
     srcs.extend([td!("tex_coord_const.frag"), td!("vtl_fs.frag"), td!("uniidx_d.frag"), td!("uniidx_i.frag")]);
     /* a mediump computed coordinate (plan #153 texcoord) */
     srcs.push(td!("case121.frag"));
@@ -2106,14 +2106,14 @@ fn vs_reference_sources() -> Vec<&'static str> {
         td!("cdiv_d2.vert"),
         td!("cmul_negprod.vert"),
     ]);
-    /* the vertex look-ups (the shim's, #1385), the cube's among them */
+    /* the vertex look-ups (the shim's, #32), the cube's among them */
     srcs.extend([td!("tex_vs_lod.vert"), td!("tex_vs_zero.vert"), td!("cube_vs.vert")]);
     srcs.extend([td!("case149_vstexconst.vert"), td!("case149_vstexconst_s.vert")]);
     srcs.extend(UNITYPE_POPULATION.iter().map(|c| c.1));
     srcs
 }
 
-/* ---- vertex-stage look-ups (#1385 (a)) ------------------------------ */
+/* ---- vertex-stage look-ups (#32 (a)) ------------------------------ */
 
 /// Case 197's vertex shader (gl_test `vtxgrid`), `texture2DLod` at a
 /// uniform level: the varying program holds the look-up (only `v_color`
@@ -2167,7 +2167,7 @@ fn a_vertex_look_up_at_a_constant_lane_is_byte_equal_to_mesa_26_2_1() {
     }
 }
 
-/* ---- the cube-map look-up (#1385 (c), case 113) ---------------------- */
+/* ---- the cube-map look-up (#32 (c), case 113) ---------------------- */
 
 /// gl_test case 113's vertex shader (tools/shaders/es100/cubemap.vert as
 /// tools/mali/testdata/cube_vs.vert): `textureCubeLod(u_s, u_dir, u_lod)`
@@ -2364,7 +2364,7 @@ fn a_constant_varying_lane_is_propagated_into_the_fragment_shader() {
     assert_eq!((lv.code, lf.code), (av.code, af.code));
 }
 
-/* ---- the constant coordinate and the run-time index (#1385 (b)) ------ */
+/* ---- the constant coordinate and the run-time index (#32 (b)) ------ */
 
 /// A fragment look-up at the constant coordinate `vec2(0.5)` alone
 /// (tools/mali/testdata/tex_coord_const.expect.json): the two constants
@@ -2435,7 +2435,7 @@ fn a_mediump_computed_texture_coordinate_is_byte_equal_to_mesa_26_2_1() {
     assert!(f.info.sampler == Some(0) && f.info.helper_threads);
 }
 
-/// The float uniform array population (#1385, plan #153 uniarray): gl_test
+/// The float uniform array population (#32, plan #153 uniarray): gl_test
 /// case 108 A (tools/shaders/es100/uniidx_a.frag, dEQP-GLES2
 /// float_dynamic_read: four reads of a mediump `float u_arr[4]` at four int
 /// uniforms, summed). Mesa's NIR loads the ints in one vec4 `load_ubo`,
@@ -3235,7 +3235,7 @@ fn the_fragment_productions_are_the_references() {
     fs.extend(FS_NEG_POPULATION.iter().map(|c| c.2));
     fs.extend(FS_ABS_POPULATION.iter().map(|c| c.2));
     fs.extend(TEXTURE_POPULATION.iter().map(|c| c.2));
-    /* the constant coordinate and the run-time index (#1385 (b)) */
+    /* the constant coordinate and the run-time index (#32 (b)) */
     fs.extend([td!("tex_coord_const.frag"), td!("vtl_fs.frag"), td!("uniidx_d.frag"), td!("uniidx_i.frag")]);
     fs.extend(UNIARRAY_POPULATION.iter().map(|c| c.2));
     /* the narrowed gl_FragCoord pair under a product (`Mk` at `MulA`) */
@@ -3526,7 +3526,7 @@ fn the_one_plane_zs_preloads_are_mesa_s() {
     }
 }
 
-/* ---- blend shaders (#1386, 2026-10-23) ------------------------------------ */
+/* ---- blend shaders (#33, 2026-10-23) ------------------------------------ */
 
 /// The blend shaders (`super::blend::shader`) of every equation a constant
 /// colour makes a blend shader of (glBlendFunc with `CONSTANT_COLOR` or its
@@ -3670,7 +3670,7 @@ fn the_highp_fragment_programs_are_byte_equal_to_mesa_26_2_1() {
     }
 }
 
-/// The S4 population (#1384): one minimal highp program per ALU row,
+/// The S4 population (#31): one minimal highp program per ALU row,
 /// each drawn once on the shim (`drm_shim_ref.sh run`, Mesa 26.2.1; the
 /// shim-refs item of plan #152), its vertex shader `v = c` built for the
 /// fragment shader's reads, and femtovg's `fill_color.nodiscard.noscissor`
@@ -3884,7 +3884,7 @@ fn the_s4_population_is_byte_equal_to_mesa_26_2_1() {
 
 /* ---- S5: if (2026-10-22)---------------------------------------------- */
 
-/// The S5 population (#1384): femtovg's `fill_color.nodiscard` (Slint's
+/// The S5 population (#31): femtovg's `fill_color.nodiscard` (Slint's
 /// solid fill under a scissor: the `if` of `scissorMask`, two real blocks
 /// with the varying loaded before it and the uniforms read inside, which
 /// `nir_opt_peephole_select` therefore leaves, and the phi of its result),
@@ -3947,7 +3947,7 @@ fn the_s5_population_is_byte_equal_to_mesa_26_2_1() {
 
 /* ---- S6: discard and the bounded loop (2026-10-23) --------------------- */
 
-/// The S6 population (#1384): the discard programs. gl_test's
+/// The S6 population (#31): the discard programs. gl_test's
 /// fvgtest_discard2 (case 33: one `if (ftcoord.y < -100.0) discard;`, the
 /// smallest, `DISCARD.f32.lt` carrying the program's helper discard) and
 /// fvgtest_discard (case 32: the stroke and the scissor `if`s with the

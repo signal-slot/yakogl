@@ -70,4 +70,4 @@ larger; not measured.
   `cache_invd` of the source, `cache_flush`), which a render-target-aware
   path could avoid by rendering to a tiled texture directly (what Mesa
   does). That is a back-end change outside this item.
-- Board: terrain's picture and ms a frame (#1206).
+- Board: terrain's picture and ms a frame (#16).

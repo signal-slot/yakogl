@@ -124,7 +124,7 @@ short. The instrument sits before the case's own read, so a late write is
 seen *and* is in memory when the case checks: the KICK_DIFF arm can pass.
 Compare verdicts across arms, not the KICK_DIFF arm's failure rate against
 the base arm's (`gc-kick-diff.md`, "Reading it"). The base arm's rate is the
-control: the last measurement is case 10 failing 4 of 32 (#9), so 40 base boots expect about 5 failures.
+control: the last measurement is case 10 failing 4 of 32 (#5), so 40 base boots expect about 5 failures.
 
 ### Gaps
 
