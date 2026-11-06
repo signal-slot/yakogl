@@ -314,10 +314,22 @@ Copy rules (the cube's, with `p` -> `(pw, ph)`):
 - copy texel `(x, y)` of layer `k`, level `l` from
   `level_off[l] + ((k * hl + y) * pitch + x) * bpp` (`hl = max(1, h >> l)`) to
   `layer_base + level_texel_off(pw, ph, l) * bpp + twiddle_index(x, y, pwl, phl) * bpp`;
-- compressed arrays (ETC) are not copyable at first: keep the stacked image
-  (`copyable()` false, as for a cube without a CPU view,
-  `native_cube.rs:144`), and the program must then not be a native one: see
-  section 8.
+- compressed arrays (ETC2 RGB8, RGBA8/EAC and their sRGB forms) are copied
+  too (`native_array.rs:127` `copyable()` is true for any layered, non-grid
+  texture with a CPU view, a block format included). The GL core already
+  holds each (level, layer) as the twiddled 4x4 block grid the TPU walks
+  (`texture.rs:3463` `level_block_grid`), so `copy()` (`native_array.rs:175`,
+  the block loop at `:239-248`) only moves the blocks layer-major: level `l`
+  of a layer starts at `block_layer()`'s offset (`:138-148`), the sum of the
+  earlier levels' `max(1, gw0 >> l) * max(1, gh0 >> l)` blocks (`gw0`, `gh0`
+  the power-of-two block grid of level 0, Mesa
+  `pvr_image_plane_setup_mip_levels` over the physical extent), and the
+  layer is 4 KiB aligned. The back end describes the copy as a compressed
+  TEXTYPE_2D (ETC format word, compression mode TPU, layer count in the
+  depth field, `pvr/backend.rs:1314-1346`). The program is native by the
+  same record bit as for any array. The GL core does not store EAC R11/RG11
+  or punch-through formats (`texture.rs:3374` `compressed_format_info`), so
+  there is no array of those. Pinned by `tests/es3_pvr_etc_array.rs`.
 
 ## 7. Shadow samplers (`sampler2DArrayShadow`, `sampler2DShadow`, `samplerCubeShadow`)
 
