@@ -3,6 +3,23 @@
 # The board layer (include/yakogl_board.h; driver/docs/one-method.md,
 # section 2): one implementation per board, chosen by the SoC.
 
+# The Raspberry Pi 5's PM watchdog alone (rpi4/rpi_wdog.c with the SoC as its
+# parameter), for the probes that run before there is a board layer for the
+# BCM2712 (tools/probes/rpi_5). Armed in the first PRE_KERNEL_1 hook: the
+# board has no remote power, and tryboot brings Linux back after the reset.
+config YAKOGL_RPI5_WDOG
+	bool "Raspberry Pi 5: arm the BCM2712 PM watchdog at boot, feed it for a bounded time"
+	depends on SOC_BCM2712
+	help
+	  The reset follows YAKOGL_RPI5_WDOG_HOLD_S seconds after boot plus at
+	  most one watchdog period (10 s), also when the image hangs.
+
+config YAKOGL_RPI5_WDOG_HOLD_S
+	int "Raspberry Pi 5: seconds the watchdog is fed at most"
+	default 30
+	range 10 3600
+	depends on YAKOGL_RPI5_WDOG
+
 menuconfig YAKOGL_BOARD
 	bool "YakoGL board layer (yakogl_board.h)"
 	depends on SOC_SERIES_AM62PX_A53 || SOC_MIMX8ML8_A53 || SOC_BCM2711
