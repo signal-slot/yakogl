@@ -143,6 +143,11 @@ enum pvr_backend_option {
 	 * source; its variants keep it, so one source compiles both ways on one
 	 * context. The table path ignores it. */
 	PVR_BACKEND_OPT_IF_LOWERING,
+	/* OPT-IN: 1 = a kick carries the partial-render state (the SPM colour
+	 * scratch, the PR PBE and end-of-tile words, the PR background load) in
+	 * its frag_pr block (backend.rs PVR_BACKEND_OPT_PARTIAL_RENDER). 0, the
+	 * default: frag_pr stays zero and every word is unchanged. */
+	PVR_BACKEND_OPT_PARTIAL_RENDER,
 	PVR_BACKEND_OPT_COUNT
 };
 

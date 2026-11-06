@@ -209,7 +209,15 @@ pub const PVR_BACKEND_OPT_IF_LOWERING: PvrBackendOption = 16;
 pub const PVR_IF_LOWERING_DEFAULT: u32 = 0;
 pub const PVR_IF_LOWERING_PREDICATE: u32 = 1;
 pub const PVR_IF_LOWERING_BRANCH: u32 = 2;
-pub const PVR_BACKEND_OPT_COUNT: usize = 17;
+/// OPT-IN: 1 = a kick that can be partially rendered carries the
+/// partial-render state in its `frag_pr` block ([`pr_fill`]): the SPM colour
+/// scratch for its size, the PR PBE words that store into it, the PR
+/// end-of-tile data, and the PR background-object program that loads it
+/// back (docs/notes/pvr-render-pool.md, "Design: the firmware's partial
+/// render"). Its resources are built at the first such kick, so with it 0
+/// (the default) no allocation, no PDS byte and no kick word changes.
+pub const PVR_BACKEND_OPT_PARTIAL_RENDER: PvrBackendOption = 17;
+pub const PVR_BACKEND_OPT_COUNT: usize = 18;
 
 /// Is `o` a test knob: an option that takes effect only with the
 /// `test-knobs` feature?
@@ -1680,6 +1688,10 @@ struct Backend {
     eot_pr_data_local: u32,
     bg_dma_data_dw: u32,
     bg_dma_temps: u32,
+    /// The partial render's load shader, programs and scratches
+    /// ([`PVR_BACKEND_OPT_PARTIAL_RENDER`]): all zero until the option's
+    /// first kick.
+    pr: PrLoad,
 
     /* current frame */
     frame_open: bool,
@@ -2775,8 +2787,6 @@ const _: () = assert!(PR_EOT_DATA_MAX_DW * 4 <= PDS_ALIGN);
 /// PBE state pair and the rest zero. Returns the dword count written to `out`
 /// (at least [`PR_EOT_DATA_MAX_DW`] long). `doutu_src0` is the end-of-tile
 /// program's DOUTU (eot1's).
-// pr-frame-colour wires it with the kick's frag_pr block; nothing calls it yet.
-#[allow(dead_code)]
 fn pr_eot_data_words(doutu_src0: u64, state_pair: [u32; 2], out: &mut [u32]) -> Result<u32, i32> {
     if out.len() < PR_EOT_DATA_MAX_DW as usize {
         return Err(-EINVAL);
@@ -2807,14 +2817,333 @@ fn pr_eot_data_words(doutu_src0: u64, state_pair: [u32; 2], out: &mut [u32]) -> 
 
 /// Build the partial render's end-of-tile data and write it into its slot of
 /// `pds_static`, then flush. Leaves the normal slot alone.
-// pr-frame-colour wires it; nothing calls it yet.
-#[allow(dead_code)]
 fn pr_eot_data_write(b: &Backend, doutu_src0: u64, state_pair: [u32; 2]) -> Result<u32, i32> {
     let mut ed = [0u32; PR_EOT_DATA_MAX_DW as usize];
     let n = pr_eot_data_words(doutu_src0, state_pair, &mut ed)?;
     mem_write(&b.pds_static, b.eot_pr_data_local, &ed[..n as usize]);
     cache_flush(&b.pds_static, 0, PDS_STATIC_BYTES);
     Ok(n)
+}
+
+/* ---- the partial render's background load ([`PVR_BACKEND_OPT_PARTIAL_RENDER`];
+ * docs/notes/pvr-pr-bgload.md, docs/notes/pvr-pr-spm-const.md) ---- */
+
+#[path = "spm_load_blob.rs"]
+mod spm_load_blob;
+use spm_load_blob::{SPM_LOAD_CONSTS_DWORDS, SPM_LOAD_ENTRY, SPM_LOAD_TEMPS, SPM_LOAD_USC};
+
+/// Sizes one backend keeps an SPM scratch for (the window's, an FBO's...): a
+/// kick of a further size carries no partial-render state, says so once and
+/// is counted ([`PrLoad::no_scratch`]), which is today's behaviour.
+const PR_SCRATCH_SLOTS: usize = 4;
+/// The partial render's PDS page: the load kick at 0, the constants DMA's
+/// code at [`PDS_ALIGN`], then one DMA data segment per scratch.
+const PR_PDS_BYTES: u32 = PDS_ALIGN * (2 + PR_SCRATCH_SLOTS as u32);
+/// The constants buffer the DMA copies to sh0-7 (sampler, image words).
+const PR_CONSTS_BYTES: usize = SPM_LOAD_CONSTS_DWORDS as usize * 4;
+
+/// One render size's SPM colour scratch, with the constants buffer that
+/// names it to the load shader and the DMA data that copies that buffer.
+#[derive(Clone, Copy)]
+struct PrScratch {
+    w: u32,
+    h: u32,
+    samples: u32,
+    mem: OsalGpuMem,
+    bytes: u64,
+    consts: OsalGpuMem,
+    /// PDS heap offset of the constants DMA's data segment.
+    dma_data_off: u32,
+}
+
+impl PrScratch {
+    const ZERO: PrScratch = PrScratch {
+        w: 0,
+        h: 0,
+        samples: 0,
+        mem: OsalGpuMem::ZERO,
+        bytes: 0,
+        consts: OsalGpuMem::ZERO,
+        dma_data_off: 0,
+    };
+}
+
+/// What the partial render's background load needs, built at the first kick
+/// with [`PVR_BACKEND_OPT_PARTIAL_RENDER`] ([`pr_load_init`]).
+#[derive(Clone, Copy)]
+struct PrLoad {
+    /// [`pr_load_init`] ran (`ok`: and built everything).
+    tried: bool,
+    ok: bool,
+    /// The load shader ([`SPM_LOAD_USC`]) in the USC heap.
+    load_fs: OsalGpuMem,
+    /// The PDS page ([`PR_PDS_BYTES`]).
+    pds: OsalGpuMem,
+    /// PDS heap offsets: the load kick (data then code), the DMA code.
+    kick_off: u32,
+    dma_code_off: u32,
+    /// The DMA program's data dwords and temps (the SIZEINFO word's).
+    dma_data_dw: u32,
+    dma_temps: u32,
+    scratch: [PrScratch; PR_SCRATCH_SLOTS],
+    /// Kicks that carried no partial-render state for want of a scratch.
+    no_scratch: u32,
+}
+
+impl PrLoad {
+    const ZERO: PrLoad = PrLoad {
+        tried: false,
+        ok: false,
+        load_fs: OsalGpuMem::ZERO,
+        pds: OsalGpuMem::ZERO,
+        kick_off: 0,
+        dma_code_off: 0,
+        dma_data_dw: 0,
+        dma_temps: 0,
+        scratch: [PrScratch::ZERO; PR_SCRATCH_SLOTS],
+        no_scratch: 0,
+    };
+
+    /// Every allocation it holds, for the free and the owner report.
+    fn mems(&mut self) -> impl Iterator<Item = &mut OsalGpuMem> {
+        [&mut self.load_fs, &mut self.pds]
+            .into_iter()
+            .chain(self.scratch.iter_mut().flat_map(|s| [&mut s.mem, &mut s.consts]))
+    }
+}
+
+/// The 8 constants dwords (sh0-7) the load shader reads for a `w` x `h`
+/// scratch at `scratch_gpu` (docs/notes/pvr-pr-spm-const.md, sections 2-3;
+/// Mesa pvr_arch_spm.c:638-691, :818-831): a point, clamp-to-edge sampler
+/// with non-normalised coordinates, and a linear R32_UINT image of the
+/// scratch, its row `w` aligned to the PBE's line-stride alignment (the
+/// rows the PR PBE words store, [`super::spm::pbe_state`]).
+fn pr_load_consts(w: u32, h: u32, samples: u32, scratch_gpu: u64) -> [u32; 8] {
+    let smp = csb_pack!(
+        ROGUE_TEXSTATE_SAMPLER_WORD0_pack,
+        2,
+        csb::ROGUE_TEXSTATE_SAMPLER_WORD0 {
+            non_normalized_coords: true,
+            addrmode_u: csb::ROGUE_TEXSTATE_ADDRMODE_CLAMP_TO_EDGE,
+            addrmode_v: csb::ROGUE_TEXSTATE_ADDRMODE_CLAMP_TO_EDGE,
+            minfilter: csb::ROGUE_TEXSTATE_FILTER_POINT,
+            magfilter: csb::ROGUE_TEXSTATE_FILTER_POINT,
+            maxlod: csb::ROGUE_TEXSTATE_CLAMP_MIN,
+            minlod: csb::ROGUE_TEXSTATE_CLAMP_MIN,
+            dadjust: csb::ROGUE_TEXSTATE_DADJUST_ZERO_UINT,
+            ..Default::default()
+        }
+    );
+    let img0 = csb_pack!(
+        ROGUE_TEXSTATE_IMAGE_WORD0_pack,
+        2,
+        csb::ROGUE_TEXSTATE_IMAGE_WORD0 {
+            texformat: csb::ROGUE_TEXSTATE_FORMAT_U32,
+            width: w.wrapping_sub(1),
+            height: h.wrapping_sub(1),
+            smpcnt: samples.max(1).trailing_zeros(),
+            swiz0: SWIZ_R,
+            swiz1: SWIZ_ZERO,
+            swiz2: SWIZ_ZERO,
+            swiz3: SWIZ_ONE,
+            textype: csb::ROGUE_TEXSTATE_TEXTYPE_STRIDE,
+            gamma: csb::ROGUE_TEXSTATE_GAMMA_OFF,
+            ..Default::default()
+        }
+    );
+    let stride = w.next_multiple_of(super::spm::PBE_LINESTRIDE_ALIGNMENT);
+    let img1 = tex_stride_image_word1(stride, 1, scratch_gpu, false);
+    [smp[0], smp[1], 0, 0, img0[0], img0[1], img1[0], img1[1]]
+}
+
+/// Build the load shader and its static PDS programs once: the kick of the
+/// load shader (sample rate INSTANCE, [`SPM_LOAD_TEMPS`]) and the code of
+/// the one-kick constants DMA. Refused or out of memory: no partial-render
+/// state from this backend, said once.
+fn pr_load_init(b: &mut Backend) -> bool {
+    if b.pr.tried {
+        return b.pr.ok;
+    }
+    b.pr.tried = true;
+    let mut rc = upload_words(&mut b.pr.load_fs, &SPM_LOAD_USC);
+    if rc == 0 {
+        rc = alloc_mapped(HEAP_PDS_BASE, PR_PDS_BYTES as usize, &mut b.pr.pds);
+    }
+    if rc != 0 {
+        glog_once!("pvr_backend: no memory for the partial render's background load ({}): kicks carry no PR state", rc);
+        return false;
+    }
+    let mut ki = PvrPdsRenderKickUscInfo::default();
+    let (mut kd, mut kc) = ([0u32; 8], [0u32; 1]);
+    // SAFETY: kd/kc have the sizes the generator documents (8 / 1 dwords).
+    if unsafe {
+        pvr_pds_render_kick_usc_program(
+            (heap_off_of(b.pr.load_fs.gpu) + SPM_LOAD_ENTRY) as u64,
+            SPM_LOAD_TEMPS,
+            0, /* ROGUE_PDSINST_DOUTU_SAMPLE_RATE_INSTANCE: no sample shading */
+            kd.as_mut_ptr(),
+            kc.as_mut_ptr(),
+            &mut ki,
+        )
+    } != 0
+    {
+        glog_once!("pvr_backend: the partial render's load kick program was refused: kicks carry no PR state");
+        return false;
+    }
+    let (dn, cn) = (ki.data_size_dw.min(kd.len() as u32), ki.code_size_dw.min(kc.len() as u32));
+    mem_write(&b.pr.pds, 0, &kd[..dn as usize]);
+    mem_write(&b.pr.pds, dn * 4, &kc[..cn as usize]);
+    b.pr.kick_off = heap_off_of(b.pr.pds.gpu);
+    /* the DMA's code does not depend on the source address (its data
+     * segment carries it, built per scratch in pr_scratch_for) */
+    let mut ci = PvrPdsRenderColorUploadInfo::default();
+    let (mut cd, mut cc) = ([0u32; 3], [0u32; 2]);
+    // SAFETY: cd/cc have the sizes the generator documents (3 / 2 dwords).
+    if unsafe {
+        pvr_pds_render_color_upload_program(0, SPM_LOAD_CONSTS_DWORDS, 0, 0, cd.as_mut_ptr(), cc.as_mut_ptr(), &mut ci)
+    } != 0
+    {
+        glog_once!("pvr_backend: the partial render's constants DMA program was refused: kicks carry no PR state");
+        return false;
+    }
+    let cn = ci.code_size_dw.min(cc.len() as u32);
+    mem_write(&b.pr.pds, PDS_ALIGN, &cc[..cn as usize]);
+    b.pr.dma_code_off = heap_off_of(b.pr.pds.gpu) + PDS_ALIGN;
+    b.pr.dma_data_dw = ci.data_size_dw.min(cd.len() as u32);
+    b.pr.dma_temps = ci.temps_used;
+    cache_flush(&b.pr.pds, 0, PR_PDS_BYTES);
+    b.pr.ok = true;
+    true
+}
+
+/// The scratch slot for a `w` x `h` render at `samples` samples: the one
+/// built for that size, or a new one (the scratch, its constants buffer and
+/// its DMA data). `None` when no slot or no memory is left.
+fn pr_scratch_for(b: &mut Backend, w: u32, h: u32, samples: u32) -> Option<usize> {
+    if let Some(i) = b.pr.scratch.iter().position(|s| s.bytes != 0 && (s.w, s.h, s.samples) == (w, h, samples)) {
+        return Some(i);
+    }
+    let i = b.pr.scratch.iter().position(|s| s.bytes == 0)?;
+    /* one output dword a pixel, no tile buffer: the load shader's
+     * configuration (spm_load_blob) */
+    let bytes = super::spm::scratch_size(w, h, samples, 1, 0);
+    let mut s = PrScratch { w, h, samples, bytes, ..PrScratch::ZERO };
+    let mut rc = if bytes > u32::MAX as u64 {
+        -ENOMEM
+    } else {
+        osal::gpu_alloc(HEAP_GENERAL_BASE, bytes as usize, OSAL_MEM_DATA, &mut s.mem)
+    };
+    if rc == 0 {
+        rc = alloc_mapped(HEAP_GENERAL_BASE, PR_CONSTS_BYTES, &mut s.consts);
+    }
+    let mut ci = PvrPdsRenderColorUploadInfo::default();
+    let (mut cd, mut cc) = ([0u32; 3], [0u32; 2]);
+    // SAFETY: cd/cc have the sizes the generator documents (3 / 2 dwords).
+    if rc == 0
+        && unsafe {
+            pvr_pds_render_color_upload_program(
+                s.consts.gpu,
+                SPM_LOAD_CONSTS_DWORDS,
+                0,
+                0,
+                cd.as_mut_ptr(),
+                cc.as_mut_ptr(),
+                &mut ci,
+            )
+        } != 0
+    {
+        rc = -EINVAL;
+    }
+    if rc != 0 {
+        for m in [&mut s.mem, &mut s.consts] {
+            if !m.impl_.is_null() {
+                osal::gpu_free(m);
+            }
+        }
+        return None;
+    }
+    mem_write(&s.consts, 0, &pr_load_consts(w, h, samples, s.mem.gpu));
+    cache_flush(&s.consts, 0, PR_CONSTS_BYTES as u32);
+    let local = PDS_ALIGN * (2 + i as u32);
+    mem_write(&b.pr.pds, local, &cd[..ci.data_size_dw.min(cd.len() as u32) as usize]);
+    cache_flush(&b.pr.pds, local, PDS_ALIGN);
+    s.dma_data_off = heap_off_of(b.pr.pds.gpu) + local;
+    b.pr.scratch[i] = s;
+    Some(i)
+}
+
+/// The three `pds_pr_bgnd` words (CR_PDS_BGRND0/1/3) of the load for
+/// scratch slot `i`, packed as the frame's `pds_bgnd` is
+/// (docs/notes/pvr-pr-bgload.md 4): the load kick and the DMA code, the DMA
+/// data, and the sizes in the fields' units -- the 8 constants dwords in
+/// 16s, the DMA data in 4 dwords (as Mesa, pvr_arch_spm.c:911-913) and its
+/// temps in 4s.
+fn pr_bgnd_words(pr: &PrLoad, i: usize) -> [u64; 3] {
+    [
+        dw64(csb_pack!(
+            ROGUE_CR_PDS_BGRND0_BASE_pack,
+            2,
+            csb::ROGUE_CR_PDS_BGRND0_BASE {
+                shader_addr: dev_addr(pr.kick_off as u64),
+                texunicode_addr: dev_addr(pr.dma_code_off as u64),
+            }
+        )),
+        dw64(csb_pack!(
+            ROGUE_CR_PDS_BGRND1_BASE_pack,
+            2,
+            csb::ROGUE_CR_PDS_BGRND1_BASE {
+                varying_addr: dev_addr(0),
+                texturedata_addr: dev_addr(pr.scratch[i].dma_data_off as u64),
+            }
+        )),
+        dw64(csb_pack!(
+            ROGUE_CR_PDS_BGRND3_SIZEINFO_pack,
+            2,
+            csb::ROGUE_CR_PDS_BGRND3_SIZEINFO {
+                usc_sharedsize: SPM_LOAD_CONSTS_DWORDS.div_ceil(16),
+                pds_texturestatesize: pr.dma_data_dw.div_ceil(4),
+                pds_tempsize: pr.dma_temps.div_ceil(4),
+                ..Default::default()
+            }
+        )),
+    ]
+}
+
+/// Fill the kick's `frag_pr` block ([`PVR_BACKEND_OPT_PARTIAL_RENDER`]) for
+/// a frame of one colour attachment of one output dword, one sample, no tile
+/// buffer: the configuration the load shader is built for. Any other frame,
+/// or one whose resources cannot be had, keeps the block zero (no
+/// partial-render state, today's behaviour). `doutu` is the frame's
+/// one-target end-of-tile DOUTU.
+///
+/// The depth/stencil words of the 3D_PR are not in the block: the kick ABI
+/// has no field for them, and the driver copies the frame's
+/// (docs/notes/pvr-pr-zs.md: right for an unswapped frame).
+fn pr_fill(b: &mut Backend, doutu: u64) {
+    if !pr_load_init(b) {
+        return;
+    }
+    let (w, h, samples) = (b.target_w, b.target_h, b.samples.max(1));
+    let Some(i) = pr_scratch_for(b, w, h, samples) else {
+        b.pr.no_scratch = b.pr.no_scratch.wrapping_add(1);
+        glog_once!("pvr_backend: no SPM scratch for a {}x{} render: its kicks carry no PR state", w, h);
+        return;
+    };
+    let s = b.pr.scratch[i];
+    let Some(pbe) = super::spm::pbe_state(w, h, 1, 0, samples, s.mem.gpu) else {
+        return;
+    };
+    let Ok(n) = pr_eot_data_write(b, doutu, pbe.state) else {
+        glog_once!("pvr_backend: the partial render's end-of-tile program was refused: kicks carry no PR state");
+        return;
+    };
+    let pr = &mut b.kick.frag_pr;
+    pr.spm_scratch_gpu = s.mem.gpu;
+    pr.spm_scratch_bytes = s.bytes as u32;
+    pr.pbe_word[0] = [pbe.reg[0], pbe.reg[1]];
+    pr.eot_pds_data = b.eot_pr_data_off;
+    pr.eot_pds_data_bytes = n * 4;
+    pr.pds_pr_bgnd = pr_bgnd_words(&b.pr, i);
 }
 
 /// Upload one program's words into `mem` (USC heap).
@@ -3157,6 +3486,12 @@ pub extern "C" fn pvr_backend_shutdown() {
     }
     osal::gpu_free(&mut b.ms.mem);
     b.ms = MsStore::ZERO;
+    for m in b.pr.mems() {
+        if !m.impl_.is_null() {
+            osal::gpu_free(m);
+        }
+    }
+    b.pr = PrLoad::ZERO;
     if !b.vis.impl_.is_null() {
         osal::gpu_free(&mut b.vis);
     }
@@ -8634,6 +8969,21 @@ fn flush(p: &mut Pvr) -> i32 {
             ..Default::default()
         }
     ));
+    /* The partial-render state, opt-in: only a frame the load shader can
+     * reload (one attachment of one output dword -- the one-dword clear's --
+     * one sample, no tile buffer, no sample store, not a chain level). */
+    if b.opt(PVR_BACKEND_OPT_PARTIAL_RENDER) != 0
+        && b.target_gpu != 0
+        && nrt == 1
+        && !tb_emit
+        && !store_samples
+        && b.samples <= 1
+        && shader == b.bg_kick_off
+        && b.frame_clip == (0, 0)
+    {
+        let doutu = if b.st.eot_doutu_src0_n[1] != 0 { b.st.eot_doutu_src0_n[1] } else { b.st.eot_doutu_src0 };
+        pr_fill(b, doutu);
+    }
 
     /* publish everything the GPU reads */
     cache_flush(&b.pds.mem, 0, b.pds.bump);
@@ -9053,6 +9403,11 @@ pub extern "C" fn pvr_backend_pool_owners() -> u64 {
     /* the sample store ([`MsStore`]) beside the depth/stencil buffers: the
      * per-sample memory a multisampled frame keeps across a split */
     ds.add(&b.ms.mem);
+    /* the partial render's load shader, programs and scratches: nothing
+     * unless PVR_BACKEND_OPT_PARTIAL_RENDER built them */
+    for m in b.pr.mems() {
+        statics.add(m);
+    }
     let kib =
         sets.report("backend frame sets") + statics.report("backend statics") + ds.report("backend depth/stencil");
     let size = |m: &OsalGpuMem| m.size as u32;
