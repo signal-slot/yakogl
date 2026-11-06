@@ -588,7 +588,7 @@ static uint32_t tl_desc5_first; /* LCDIF CTRLDESCL0_5 at the first show */
 /*
  * The measurement report: both cores' stamps on the timeline UART, one
  * line per stage, "TL <core> <ticks> <name>" between "TL begin hz=<Hz>"
- * and "TL end" (read on the laptop, /var/tmp/yk-spawn/tl-table.py). The
+ * and "TL end" (read on the host from the UART log). The
  * cluster keeps running: the report is a work item on the system work
  * queue, so the polled UART (about 90 ms for the whole table) never holds
  * a frame, and the panel is never taken from the M7.
