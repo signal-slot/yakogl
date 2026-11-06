@@ -2,7 +2,12 @@
 /* SPDX-FileCopyrightText: 2026 Signal Slot, Inc. */
 /*
  * Broadcom V3D 4.2 (Raspberry Pi 4) bring-up: power, identity, MMU, caches and
- * the bin/render submit (see v3d.h). The registers are v3d_regs.h. Each
+ * the bin/render submit (see v3d.h), and the same for the V3D 7.1 of the
+ * Raspberry Pi 5 where the caller selects the BCM2712: its own power steps
+ * (pm's 2712 reset register and the SMS, no bridge), its identity check and
+ * the hub's GMPV fault; the MMU, caches and submits are the 4.2 ones, which
+ * do not move at 7.1 (driver/docs/rpi5-v3d71-facts.md, sections 2 and 5 to
+ * 7). The registers are v3d_regs.h. Each
  * sequence says what the hardware needs from it; where Mesa's V3D simulator
  * glue (src/broadcom/simulator/v3dx_simulator.c, MIT) programs the same
  * thing, its function is named, and where the order is ours to choose it
@@ -54,8 +59,114 @@ static int asb_disable(const struct v3d_regs *r, uint32_t reg)
 	return poll32(r->asb + reg, BCM2711_ASB_CTL_STOP_ACK_SET, BCM2711_ASB_CTL_STOP_ACK_SET, 1);
 }
 
+uint32_t v3d_soc_ver(const struct v3d_regs *r)
+{
+	return r->soc == V3D_SOC_BCM2712 ? 71 : 42;
+}
+
+/* ---- BCM2712 (V3D 7.1): pm's own reset register and the SMS ----------- */
+
+/* The V3D's reset line in pm's 2712 register, the rest of the register kept,
+ * with the write key: the fork's bcm2835_asb_power_on/off with its register
+ * PM_GRAFX_2712 and bit PM_V3DRSTN (facts file, section 9). */
+static void pm2712_reset_n(const struct v3d_regs *r, bool released)
+{
+	uint32_t v = sys_read32(r->pm + BCM2712_PM_GRAFX);
+
+	v = released ? (v | BCM2712_PM_GRAFX_V3D_RESET_N_SET) : (v & ~BCM2712_PM_GRAFX_V3D_RESET_N_SET);
+	sys_write32(BCM2711_PM_WRITE_KEY | v, r->pm + BCM2712_PM_GRAFX);
+}
+
+/* The SMS out of power-off and reset, Linux's v3d_idle_sms with its
+ * v3d_reset_sms (facts file, section 3): CLEAR_POWER_OFF to TEE_CS, STATE
+ * polled for IDLE; then the reset request (STATE field 4) to REE_CS, polled
+ * until STATE is neither of the reset states. Each within Linux's 100 ms.
+ * Linux logs a power-up that does not reach IDLE and goes on; here it is
+ * the power-on's own outcome, so that it is not found later as a GPU that
+ * does not answer. */
+static int sms_reset(const struct v3d_regs *r)
+{
+	sys_write32(V3D_SMS_STATE_RESET_REQUEST, r->sms + V3D_SMS_REE_CS);
+	for (uint32_t t = 0;; t++) {
+		uint32_t s = V3D_SMS_CS_STATE_GET(sys_read32(r->sms + V3D_SMS_REE_CS));
+
+		if (s != V3D_SMS_STATE_ISOLATING_FOR_RESET && s != V3D_SMS_STATE_RESETTING)
+			return 0;
+		if (t >= V3D_SMS_TIMEOUT_US)
+			return -ETIMEDOUT;
+		k_busy_wait(1);
+	}
+}
+
+static int sms_power_up(const struct v3d_regs *r)
+{
+	sys_write32(V3D_SMS_CS_CLEAR_POWER_OFF_SET, r->sms + V3D_SMS_TEE_CS);
+	if (poll32(r->sms + V3D_SMS_TEE_CS, V3D_SMS_CS_STATE_MASK, V3D_SMS_STATE_IDLE, V3D_SMS_TIMEOUT_US)) {
+		LOG_ERR("V3D SMS did not power up: TEE_CS 0x%08x", sys_read32(r->sms + V3D_SMS_TEE_CS));
+		return -ETIMEDOUT;
+	}
+	if (sms_reset(r)) {
+		LOG_ERR("V3D SMS did not leave its reset: REE_CS 0x%08x", sys_read32(r->sms + V3D_SMS_REE_CS));
+		return -ETIMEDOUT;
+	}
+	return 0;
+}
+
+static int power_on_2712(const struct v3d_regs *r, const struct v3d_clock_ops *clk)
+{
+	/* The BCM2711's order without the bridge (the fork's
+	 * bcm2835_asb_power_on on a node without one): the clock runs a moment
+	 * under the reset, stops, the reset is released, the clock runs again.
+	 * Then the SMS, which Linux powers up after the domain is on and the
+	 * clock enabled (v3d_platform_drm_probe's order). */
+	int ret = clk->set(clk->ctx, true);
+	if (ret)
+		return ret;
+	k_busy_wait(1);
+	ret = clk->set(clk->ctx, false);
+	if (ret)
+		return ret;
+
+	pm2712_reset_n(r, true);
+
+	ret = clk->set(clk->ctx, true);
+	if (ret)
+		goto err_reset;
+	ret = sms_power_up(r);
+	if (ret)
+		goto err_clock;
+	return 0;
+
+err_clock:
+	clk->set(clk->ctx, false);
+err_reset:
+	pm2712_reset_n(r, false);
+	return ret;
+}
+
+static int power_off_2712(const struct v3d_regs *r, const struct v3d_clock_ops *clk)
+{
+	/* Linux's v3d_power_off_sms (POWER_OFF to TEE_CS, STATE polled for its
+	 * power-off state, 100 ms), then what the domain's power-off does:
+	 * the clock off and the reset asserted. An SMS that does not power off
+	 * leaves both alone, so the registers stay reachable. */
+	sys_write32(V3D_SMS_CS_POWER_OFF_SET, r->sms + V3D_SMS_TEE_CS);
+	if (poll32(r->sms + V3D_SMS_TEE_CS, V3D_SMS_CS_STATE_MASK, V3D_SMS_STATE_POWER_OFF, V3D_SMS_TIMEOUT_US)) {
+		LOG_ERR("V3D SMS did not power off: TEE_CS 0x%08x", sys_read32(r->sms + V3D_SMS_TEE_CS));
+		return -ETIMEDOUT;
+	}
+	int ret = clk->set(clk->ctx, false);
+	pm2712_reset_n(r, false);
+	return ret;
+}
+
+/* ---- BCM2711 (V3D 4.2) and the common entry points --------------------- */
+
 int v3d_power_off(const struct v3d_regs *r, const struct v3d_clock_ops *clk)
 {
+	if (r->soc == V3D_SOC_BCM2712)
+		return power_off_2712(r, clk);
+
 	/* Nothing may be in flight through the bridge when the V3D loses its
 	 * clock: the slave port (the CPU's side) stops first, then the master
 	 * (the GPU's own memory traffic); a master that does not stop leaves
@@ -100,6 +211,9 @@ int v3d_reset(const struct v3d_regs *r, const struct v3d_clock_ops *clk, uint64_
 
 int v3d_power_on(const struct v3d_regs *r, const struct v3d_clock_ops *clk)
 {
+	if (r->soc == V3D_SOC_BCM2712)
+		return power_on_2712(r, clk);
+
 	uint32_t id = sys_read32(r->asb + BCM2711_ASB_ID);
 	if (id != BCM2711_ASB_ID_VALUE) {
 		LOG_ERR("V3D ASB bridge ID 0x%08x, expected 0x%08x", id, BCM2711_ASB_ID_VALUE);
@@ -168,10 +282,14 @@ int v3d_identify(const struct v3d_regs *r, struct v3d_identity *id)
 		id->hub_ident[0], id->hub_ident[1], id->hub_ident[2], id->hub_ident[3],
 		id->ctl_ident[0], id->ctl_ident[1], id->ctl_ident[2], id->mmu_debug_info);
 
-	/* everything in this driver is for a V3D 4.2 with one core and an
-	 * MMU, what the BCM2711 has: anything else is refused */
-	if (id->ver != 42 || id->ncores != 1 || !id->has_mmu) {
-		LOG_ERR("not a single-core V3D 4.2 with an MMU");
+	/* everything in this driver is for the selected SoC's V3D (4.2 on the
+	 * BCM2711, 7.1 on the BCM2712) with one core and an MMU: anything else
+	 * is refused. On 7.1 the core's own version byte must agree too (the
+	 * hub's TVER alone was the only check on 4.2, and stays so). */
+	uint32_t want = v3d_soc_ver(r);
+	bool core_ok = r->soc != V3D_SOC_BCM2712 || V3D_CTL_0_IDENT0_VER_GET(id->ctl_ident[0]) == want / 10;
+	if (id->ver != want || !core_ok || id->ncores != 1 || !id->has_mmu) {
+		LOG_ERR("not a single-core V3D %u.%u with an MMU", want / 10, want % 10);
 		return -ENODEV;
 	}
 	return 0;
@@ -332,7 +450,10 @@ static int wait_bits(const struct v3d_regs *r, uint32_t bits, uint32_t timeout_u
 		     struct v3d_bin_overflow *ov)
 {
 	uint32_t seen = 0;
-	const uint32_t mmu_faults = V3D_HUB_CTL_INT_STS_INT_MMU_WRV_SET | V3D_HUB_CTL_INT_STS_INT_MMU_PTI_SET | V3D_HUB_CTL_INT_STS_INT_MMU_CAP_SET;
+	/* the MMU's faults; on 7.1 also the hub's memory-protection violation
+	 * (GMPV, the core's on 4.x, where no wait looks at it) */
+	const uint32_t mmu_faults = V3D_HUB_CTL_INT_STS_INT_MMU_WRV_SET | V3D_HUB_CTL_INT_STS_INT_MMU_PTI_SET | V3D_HUB_CTL_INT_STS_INT_MMU_CAP_SET |
+				    (r->soc == V3D_SOC_BCM2712 ? V3D71_HUB_CTL_INT_STS_INT_GMPV_SET : 0);
 
 	/* only the bits this wait is for (and the binner's out-of-memory, which
 	 * only binning raises): another stage's done bit stays for that stage,
@@ -406,6 +527,10 @@ int v3d_tfu_run(const struct v3d_regs *r, const struct v3d_tfu_job *j, uint32_t 
 	if (!st)
 		st = &none;
 	*st = (struct v3d_tfu_status){ 0 };
+	/* the 7.1 TFU is elsewhere (0x700) with a register more (IOC): this
+	 * job's 0x400 block is the 4.2 one, so nothing is touched on 7.1 */
+	if (r->soc == V3D_SOC_BCM2712)
+		return -ENOTSUP;
 	st->cs_before = HUB_RD(r, V3D_TFU_CS);
 	if (st->cs_before & V3D_TFU_CS_BUSY_SET)
 		return -EBUSY;
