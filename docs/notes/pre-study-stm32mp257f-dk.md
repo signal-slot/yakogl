@@ -2,15 +2,19 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Pre-study: STM32MP257F-DK (VeriSilicon Vivante GPU) before the board arrives
 
-Date 2026-11-06, main `1673798c`. Third pass. The first two passes (`720c8224`
+Date 2026-11-06, main `1673798c`. Fourth pass (third pass below). The first two passes (`720c8224`
 and the second, main `6a9fe4c0`, both 2026-10-28) were host research before
 the board arrived; the board is on the bench now. This pass applies the
 day-one readings taken by hand under ST's Linux on 2026-11-05 and 2026-11-06
 (issue #1281; cited below as "#1281") and reads ST's own kernel device tree
-for the DK (section "What was read", row *ST Linux*). No file under `src/`,
-`driver/` or `tools/` changed, no image ran on the board. The OP-TEE, TF-A
-and U-Boot sources of ST's chain are still unread here (other items of the
-same plan read them); every question that depends on them stays a question.
+for the DK (section "What was read", row *ST Linux*). The fourth pass folds
+in the read-only studies of plan #322 that finished since: OP-TEE's and
+TF-A's stm32mp2 code, ST's U-Boot, a second read of the board by hand
+("board-read, 2026-11-06"), the galcore power-up order, the RCC and RIFSC
+offsets, the Zephyr arm64 entry state, the GPU memory, and Q11 and Q12.
+No file under `src/`, `driver/` or `tools/` changed, no image ran on the
+board. Where a finding is cited to a study without a line, the file and line
+are in that study's report; the open sources are cited by tag.
 Repository lines cited below were read against main `6a9fe4c0` (pass two) and
 are marked where this pass re-read them. Written for the port that would
 follow the i.MX8MP's (`imx8mp-gc-bringup.md`, `imx8mp-gc-driver-notes.md`,
@@ -56,6 +60,10 @@ Read for this pass, all on this host:
 | Linux | `drivers/gpu/drm/etnaviv/`, `arch/arm64/boot/dts/st/`, `include/dt-bindings/clock/st,stm32mp25-rcc.h`, `Documentation/devicetree/bindings/gpu/vivante,gc.yaml` | master `65ba8f34ec886ec72b2c07ddc8cf3d815c32869d` (dated 2026-10-27), a depth-1 clone fetched 2026-10-28 |
 | Zephyr | `boards/st/stm32mp257f_dk`, `soc/st/stm32/stm32mp2x`, `dts/arm/st/mp2`, `dts/bindings/firmware`, `drivers/firmware/scmi`, `drivers/display` | 4.4.99 (`VERSION`, the lab workspace `ZEPHYR_WS`) |
 | ST Linux | `arch/arm64/boot/dts/st/` (`stm32mp257f-dk.dts`, `stm32mp257f-dk-resmem.dtsi`, `stm32mp251.dtsi`, `stm32mp255.dtsi`, `stm32mp25-pinctrl.dtsi`) and `include/dt-bindings/{clock,reset,power}/st,stm32mp25-*.h` | ST's `STMicroelectronics/linux`, branch `v6.6-stm32mp` (Linux 6.6.129, `Makefile:1-3`), commit `548f960c059bc4b9165cb69895fd67551f6061ca`, a depth-1 clone fetched 2026-11-06; GPL, cited as facts only. The OpenSTLinux `scarthgap` release tag was not looked up; the branch head is what was read |
+| OP-TEE, TF-A | OP-TEE `stm32mp2` platform, its SCMI server and SMC watchdog service; TF-A `plat/st/stm32mp2` (PSCI, BL2) | tags `4.0.0-r3.1` and `v2.10-r3.1`, the newest for the versions the board prints; the board's exact release is unknown. The `stm32mp257f-dk` `ca35tdcid` configuration and TF-A's defaults are taken to describe the board's plain variant. Both are open source; cited by tag |
+| ST U-Boot | the DK's boot flow: `boot.scr.uimg`, the distro loop, extlinux, the environment, `booti` | ST's U-Boot 2023.10; GPL, cited as facts only |
+| galcore | the platform code for the STM32MP25: power-up order, clocks, reset, memory | galcore 6.4.21 (GPL, facts only) |
+| RCC, RIFSC offsets | cross-checked in TF-A, OP-TEE, Zephyr, U-Boot and Linux | the trees named above |
 | ours | `src/vivante`, `src/shaderc/online/vivante`, `driver/rust/src/gpu/vivante`, `driver/rust/src/ffi/vivante.rs`, `driver/rust/src/model.rs`, `tools/vivante`, `tools/shaders`, `tests/`, the notes named in each section | main `6a9fe4c0` |
 
 The Mesa hwdb was compared field by field with `grep` over both
@@ -75,9 +83,12 @@ board answered by hand (#1281).
 **Not read, and why.** ST's reference manual RM0457, the user manual
 UM3385, the board schematic MB1605 and the datasheet (all four with public
 URLs, listed in Zephyr's board document at `index.rst:199-212`), the ST
-wiki, the ST community thread about the OP-TEE panic, and the sources of
-ST's OP-TEE (its SCMI server and watchdog service), TF-A and U-Boot were
-not read in this pass; other items of the same plan read the last three.
+wiki, and the ST community thread about the OP-TEE panic were not read.
+RM0457 was tried by the plan's study and could not be fetched (the refusal
+comes from st.com; whether the URL is at fault was not confirmed): **every
+RCC and RIFSC offset below is unconfirmed from the manual** and rests on the
+cross-check of open sources in section 4. The panic is studied by another
+item of the plan.
 Everything that would need one of them is written as a question in section
 7 with the source that answers it; a question stays a question, and no
 verdict above depends on one. Where this note repeats something the task
@@ -239,10 +250,25 @@ partition layout, whose contents were never examined. The watchdog Linux uses
 is `arm,smc-wdt` (OP-TEE's), 32 s; ST's tree has the node with
 `arm,smc-id = <0xbc000000>` and the DK file enables it with
 `timeout-sec = <32>` (`stm32mp251.dtsi:78-82`, `stm32mp257f-dk.dts:216-219`,
-confirming #1281). Whether it already runs when U-Boot hands over is not
-known (Q8). How U-Boot gets from `boot.scr.uimg` to extlinux, and what it
-leaves, are the U-Boot source's to answer (Q8, other item); nothing here
-was read from it.
+confirming #1281). OP-TEE's and TF-A's code answers the rest (r-optee-tfa, tags above): BL2
+starts the IWDG, so the watchdog is already armed and running when U-Boot
+hands over; OP-TEE's SMC service serves it, and a hang resets the board in
+about 32 s (after an OP-TEE panic at about 27 s). A client calls INIT first,
+uses timeouts of 6 s or more and never sends ENABLE with 0. The return trial
+therefore needs no arming of its own. The board's U-Boot has no `wdt`
+support (board-read, 2026-11-06).
+
+**U-Boot's flow** (r-uboot, board-read, 2026-11-06). The environment lives in
+the `u-boot-env` partition as a CRC32, a flag byte and the strings, at offset
+0x7e000 in the 512 KiB area (board-read; writing it by hand is possible but
+was not tried). U-Boot's `bootcmd` re-runs `env_check`, which saves a default
+environment when the stored one is not valid. The distro boot loop tries
+extlinux and leaves `boot.scr.uimg` alone while extlinux succeeds; if it
+falls through, `boot.scr` runs and does `env save`. Partitions are named by
+`mmcblk1pN` or PARTUUID, never by partition label (the eMMC carries the same
+labels). A key at "Hit any key to stop autoboot" (a window of about 1 s) or
+Ctrl-C at "Enter choice:" stops at a prompt; whether a key in the first
+second works was not checked.
 
 The Mali port met the same shape on the RK3588: there the GPU rate goes
 through "SCMI clock 5 (SMC 0x82000010)" (`driver/docs/nanopc-t6-mali.md:74`)
@@ -431,7 +457,8 @@ carveout need more than 8 MiB windows). So:
   A35 "64-bit dual-core Arm® Cortex®-A35", `index.rst:60`; Zephyr's
   `dts/arm64/armv8-a.dtsi` exists), the interrupt controller, the arch
   timer, the console UART, and the PSCI or secure-monitor interface the
-  firmware provides. All Q13, partly answered by ST's tree: the CPUs are
+  firmware provides. All Q13, answered in part by ST's tree and the studies
+  (below): the CPUs are
   `arm,cortex-a35` with `enable-method = "psci"` and the PSCI node is
   `arm,psci-1.0` over `smc` (`stm32mp251.dtsi:21-28`, `:195-198`; the
   board reports PSCI 1.1, #1281); the interrupt controller is a GIC-400
@@ -443,9 +470,16 @@ carveout need more than 8 MiB windows). So:
   DK's console is `usart2` (`stdout-path = "serial0:115200n8"`,
   `stm32mp257f-dk.dts:24`, `:31`) at 0x400e0000, compatible
   `st,stm32h7-uart`, RIFSC entry 32 (`stm32mp251.dtsi:861-873`), TX on PA4
-  (AF6) and RX on PA8 (AF8) (`stm32mp25-pinctrl.dtsi:845-856`). Whether
-  Zephyr's arm64 core runs here unchanged and the state U-Boot leaves
-  remain open.
+  (AF6) and RX on PA8 (AF8) (`stm32mp25-pinctrl.dtsi:845-856`). The boot-time facts (r-optee-tfa, board-read, r-zephyr-a35; TF-A and
+  OP-TEE by tag): the image enters at **EL2** at its load address (from
+  `booti` or `go`); the GIC is a **GICv2**, and TF-A keeps the secure SGIs 8
+  to 15 and the secure PPI 29, so the board layer leaves SGIs 8 to 15 and
+  PPIs 29 and 31 alone; the counter runs at 40 MHz (board-read; `CNTFRQ_EL0`
+  from a CPU was not read, so the image prints it); the watchdog is armed
+  from BL2 and has to be served from the first tick (32 s). The study of
+  Zephyr's arm64 path (its report holds the errata list) finds that the
+  GICv2 path needs no change; the SoC definition is still to be built and
+  run (item P4).
 - **Clocks, resets, power domains.** Zephyr has an SCMI subsystem
   (`drivers/firmware/scmi`: `clk.c`, `reset.c`, `power.c`, `smc.c`,
   `shmem.c`, among others) with the bindings `arm,scmi`, `arm,scmi-smc`,
@@ -465,12 +499,22 @@ carveout need more than 8 MiB windows). So:
   `include/dt-bindings/clock/st,stm32mp25-rcc.h:114`, `:362`;
   `include/dt-bindings/reset/st,stm32mp25-rcc.h:85`). So a non-secure
   agent has to ask OP-TEE for the two domains and write the RCC gates and
-  the reset itself, as far as RIFSC lets the non-secure side. Our own SCMI
-  request has not been tried; the SMC or OP-TEE transport details, which
-  requests OP-TEE accepts from a non-secure agent that is not Linux, and
-  the brief's PLL-init panic stay Q3, answered by OP-TEE's stm32mp2 SCMI
-  server (other item) and the board. This replaces `power.rs`'s CCM and
-  GPC programming.
+  the reset itself, as far as RIFSC lets the non-secure side. **The transport is not an
+  SMC mailbox with shared memory**: the DT node is `linaro,scmi-optee`
+  (channel 0, no SMC id and no `shmem` node for the non-secure side,
+  board-read), and OP-TEE's server is reached through its message protocol:
+  register a shared-memory buffer, open a session to the SCMI pseudo-TA,
+  invoke command 4 with the SCMI message (r-optee-tfa, OP-TEE 4.0.0-r3.1).
+  Zephyr's `scmi-smc` driver does not apply as it stands. Galcore's order
+  (r-galcore): the performance level is set first, the power domain 0 is
+  turned on, then the two GPU clocks are one gate bit and the reset is one
+  bit of the same RCC register, `RCC_GPUCFGR` at offset 0x83C, bit 1 the
+  clocks gate, bit 0 the reset (cross-checked in the open sources; RM0457
+  would confirm and could not be read). Galcore sets no clock rate and no
+  performance level of its own, so our image reads the current level before
+  it sets one. The `CK_SCMI_PLL3` clock and the PLL3 registers are never
+  touched. Every message is logged. Our own request has not been tried on
+  the board. This replaces `power.rs`'s CCM and GPC programming.
 - **Memory map, interrupt, security.** The board reports (#1281, confirmed
   by ST's tree): the GPU registers at **0x48280000, size 0x800**
   (`stm32mp255.dtsi:171`; the CPU must not read above 0x800 anyway,
@@ -487,9 +531,16 @@ carveout need more than 8 MiB windows). So:
   and 0xff000000 (`:175-183`). A CMA pool of 128 MiB is declared inside
   0x80000000 to 0xffffffff (`:186-193`). Whether the GPU's RIFSC entry
   is open depends on the image variant (#1281 has the table); the board runs
-  the plain `stm32mp257f-dk` variant, where entry 79 is open (#1281). That
-  settles Q4 for this board only; other variants would close it. Coherence
-  and memory attributes (Q14) are not in any tree.
+  the plain `stm32mp257f-dk` variant, where entry 79 is open (#1281). OP-TEE's
+  `ca35tdcid` configuration for the DK agrees: the GPU's entry is
+  non-secure and nothing is to be programmed for it (r-optee-tfa, tag
+  above). That settles Q4 for this variant only; others would close it.
+  The memory (gc-mem-mp2, r-galcore): the 64 MiB at 0xfa800000 lies below
+  4 GiB, the GPU's MMU maps it flat (GPU address equals physical address),
+  and our image maps it as device or write-combine memory, with a barrier
+  before the GPU is kicked. The interrupt handler reads the register at
+  0x10 once, which acknowledges it (zero means the interrupt is not ours).
+  Coherence (Q14) is in no tree.
 - **Display.** A Zephyr driver for the MP2's display controller and its
   DSI host and ADV7535 bridge (LTDC → DSI → ADV7535 → HDMI, #1281; not LVDS)
   does not exist (above); the i.MX8MP's display was a driver of ours
@@ -505,7 +556,8 @@ port ran its SCMI clock request from U-Boot, `driver/docs/nanopc-t6-mali.md`
 development only. A direct route that replaces U-Boot proper, as
 `notes/am62p-direct-boot.md` and `notes/imx8mp-direct-boot.md` did with the
 second-stage loader `driver/samples/zephyr/boot_stage2`, is a later item
-and needs the ST chain read first (Q8). Whether the image may start at the
+and needs the ST chain; its facts are now in section 1 (U-Boot's flow) and
+the return trial records the rest (Q8). Whether the image may start at the
 exception level and with the state U-Boot leaves, and whether U-Boot leaves
 the display on, are Q8 and Q13.
 
@@ -562,15 +614,19 @@ Each item has a check. All are host-side except where Zephyr is built.
    (`yd_gc_identify`, `driver/rust/src/ffi/vivante.rs:69`), built by the
    gate's Zephyr rows. Check: the build exits 0, image size and the linked
    entry points are logged. Needs `ZEPHYR_WS`; without it the row is a gap.
-6. **An SCMI client with a model.** Use Zephyr's SCMI subsystem (section 4)
-   or a small Rust client over the model bus (`driver/rust/src/model.rs`)
-   and test the message bytes of "clock enable" and "reset deassert"
-   against the SCMI specification (Arm DEN0056). Check: byte-exact host
-   tests. The agent id, channel and ids are filled in when Q3 is answered.
+6. **An SCMI client with a model, in two halves.** The transport is OP-TEE's
+   message protocol (section 4), so the client is an SCMI codec (the
+   messages of the performance and power-domain protocols, against the SCMI
+   specification, Arm DEN0056) under an OP-TEE transport (shared memory, the
+   session, invoke command 4). The two halves are byte-tested separately on
+   the host. Zephyr's SMC transport is not used. The channel is 0 and the ids
+   are those of section 4.
 7. **Read the remaining unread sources** and update this note: RM0457
    (GPU, RCC, RIFSC, LTDC/DSI chapters; URL in `index.rst:211-212`), UM3385,
    the MB1605 schematic, ST's wiki pages on the MP25 GPU and the SCMI server,
-   and the OP-TEE, TF-A and U-Boot sources of ST's chain. Done so far:
+   and the OP-TEE, TF-A and U-Boot sources of ST's chain (the last three are
+   done in the fourth pass; RM0457 could not be fetched and has to be
+   supplied as a local file or by a route st.com accepts). Done so far:
    Linux mainline (pass two: the SCMI transport, the display controller,
    the hwdb half of Q9, the candidate-row cross-check), the board's
    day-one readings (#1281: Q1, Q5, Q6, Q9, Q10 and parts of Q3, Q4, Q7,
@@ -598,10 +654,19 @@ First three things, in order:
    galcore 6.4.21, not etnaviv, so the "identity as etnaviv prints it" the
    first drafts of this item asked for does not exist; the identity was read
    under Linux by hand (#1281). The unread list is in #1281. What is still to
-   read from the board (the arch timer rate, the customer id, what U-Boot
-   hands over) is Q6, Q1 and Q8.
+   read from the board is `CNTFRQ_EL0` from a CPU (40 MHz is expected,
+   board-read), the customer id, and what U-Boot hands over (Q6, Q1, Q8).
+   **Before any GPU step**, the first board fact is the return: an image that
+   prints a banner and ends, hangs or faults must give the board back by
+   itself. The watchdog is already armed from BL2, so the smallest image
+   needs only a PSCI SYSTEM_RESET at the end and a one-shot boot so that
+   the next boot is ST's Linux (section 1).
 2. **From U-Boot, power the GPU through SCMI and read the identity** with
-   the Zephyr image (the `yd_gc_identify` sample of item 5.5). Alive if
+   the Zephyr image (the `yd_gc_identify` sample of item 5.5), in the order
+   of section 4: performance level, power domain 0, `RCC_GPUCFGR` (offset
+   unconfirmed from RM0457), then the identity registers. A result that
+   looks like a hardware fault is first checked against the supply (the
+   USB-C cable is the only one). Alive if
    `CHIP_MODEL` and `CHIP_REV` read 0x8000 and 0x6205 (#1281), `HI_INTR_ENBL`
    (0x014, `driver/rust/src/gpu/vivante/regs.rs:53`) reads back the
    0xffffffff written to it (the i.MX8MP instrument,
@@ -633,19 +698,19 @@ answer it.
 | id | question | status and what answers it |
 | --- | --- | --- |
 | Q1 | Which row is the MP25's GPU? | **Answered (#1281):** model 0x8000, revision 0x6205, product 0x80003, eco 0, the third candidate row (section 1); Linux's etnaviv hwdb carries exactly that id (`etnaviv_hwdb.c:199-204`). Open: the customer id was not read (the row's is 0x15) |
-| Q2 | Why do all candidate rows carry NPU fields? Is the NPU a separate block and the row naming shared? | open: RM0457 (NPU and GPU chapters); the ST wiki |
-| Q3 | How is the GPU turned on: which ids, which rate, and does OP-TEE's PLL init panic on our request as it did when etnaviv loaded (the brief)? | **In part (#1281, ST tree):** SCMI over OP-TEE (`linaro,scmi-optee`, channel 0, `stm32mp251.dtsi:103-108`) with protocols 0x11, 0x13, 0x14, 0x16, 0x17; the GPU node uses performance (0x13, domain 1) and power domain (0x11, domain 0), and its clocks (`CK_BUS_GPU` 91, `CK_KER_GPU` 340) and reset (`GPU_R` 75) are plain `&rcc` entries (`stm32mp255.dtsi:173-176`). Open: our own request has not been tried; the SMC function id and shared-memory or OP-TEE-session details for a non-secure agent that is not Linux, which requests OP-TEE honours, the rate, and the panic: OP-TEE's stm32mp2 SCMI server and TF-A's stm32mp2 platform (other item), then the board |
-| Q4 | Is the GPU (and its DMA master) in a resource-isolation compartment that a non-secure A35 image may use, or does the secure side have to set it? Does anything else have to be programmed by the secure side first? | **In part (#1281):** it depends on the image variant; the board runs the plain `stm32mp257f-dk` variant, where RIFSC entry 79 (the GPU's, `access-controllers = <&rifsc 79>`, `stm32mp255.dtsi:178`) is open; #1281 has the table of variants. Open: whether anything else must be set first (the DMA master's compartment, the reserved area): RM0457 (RIFSC); OP-TEE's stm32mp2 platform code (other item); the board |
+| Q2 | Why do all candidate rows carry NPU fields? Is the NPU a separate block and the row naming shared? | open: RM0457 (NPU and GPU chapters; could not be fetched, so unchanged); the ST wiki |
+| Q3 | How is the GPU turned on: which ids, which rate, and does OP-TEE's PLL init panic on our request as it did when etnaviv loaded (the brief)? | **In part (#1281, ST tree):** SCMI over OP-TEE (`linaro,scmi-optee`, channel 0, `stm32mp251.dtsi:103-108`) with protocols 0x11, 0x13, 0x14, 0x16, 0x17; the GPU node uses performance (0x13, domain 1) and power domain (0x11, domain 0), and its clocks (`CK_BUS_GPU` 91, `CK_KER_GPU` 340) and reset (`GPU_R` 75) are plain `&rcc` entries (`stm32mp255.dtsi:173-176`). **Corrected (r-optee-tfa, OP-TEE 4.0.0-r3.1; board-read, 2026-11-06):** the transport is OP-TEE's message protocol to the SCMI pseudo-TA (invoke command 4), not an SMC mailbox; the board has no SMC id and no shmem node for the non-secure side. The order is performance level, power domain 0, then `RCC_GPUCFGR` (0x83C: bit 1 the clocks gate, bit 0 the reset; r-galcore; offsets unconfirmed from RM0457); galcore sets no rate and no level, and `CK_SCMI_PLL3` and the PLL3 registers are never used. Open: our own request has not been tried; which requests OP-TEE honours from a non-secure agent that is not Linux; the cause of the brief's panic (the plan's panic study; the board) |
+| Q4 | Is the GPU (and its DMA master) in a resource-isolation compartment that a non-secure A35 image may use, or does the secure side have to set it? Does anything else have to be programmed by the secure side first? | **In part (#1281):** it depends on the image variant; the board runs the plain `stm32mp257f-dk` variant, where RIFSC entry 79 (the GPU's, `access-controllers = <&rifsc 79>`, `stm32mp255.dtsi:178`) is open; #1281 has the table of variants. OP-TEE's `ca35tdcid` configuration agrees: entry 79 is non-secure and nothing is needed for this variant (r-optee-tfa). Open: whether anything else must be set first (the DMA master's compartment, the reserved area): RM0457 (RIFSC; not fetchable so far); the board |
 | Q5 | The GPU's base address and size, interrupt number, and power domain. | **Answered (#1281, confirmed by ST's tree `stm32mp255.dtsi:169-183`):** `vivante,gc` at 0x48280000, size 0x800; GIC SPI 183, level high; three power domains: SCMI performance 1, SCMI power domain 0 (`PD_SCMI_GPU`), and `power-domain-d1` |
-| Q6 | Interrupt controller version, how the GPU's interrupt is routed to the A35, and the arch timer rate. | **In part (#1281):** GIC-400 at 0x4ac00000 (ST `stm32mp251.dtsi:166-175`), the GPU's interrupt is SPI 183 (above). Open: the arch timer node has no `clock-frequency` (`:261-268`) and the rate was not read; the architecture puts it in `CNTFRQ_EL0`, which firmware sets: the board (reading it), TF-A's stm32mp2 platform (other item) |
+| Q6 | Interrupt controller version, how the GPU's interrupt is routed to the A35, and the arch timer rate. | **In part (#1281):** GIC-400 at 0x4ac00000 (ST `stm32mp251.dtsi:166-175`), the GPU's interrupt is SPI 183 (above). The arch timer node has no `clock-frequency` (`:261-268`); the rate is **40 MHz** (board-read, 2026-11-06) and `CNTFRQ_EL0` is expected to read the same (r-optee-tfa). The GIC is a GICv2 whose secure SGIs 8 to 15 and PPI 29 TF-A keeps. Open: `CNTFRQ_EL0` read from a CPU (the return trial prints it) |
 | Q7 | The display path: controller, layers, formats and stride alignment, and the HDMI chain on the DK. | **In part (#1281, ST tree):** LTDC → DSI → ADV7535 → HDMI (`stm32mp257f-dk.dts:536-547`, `:328-350`, `:428-460`), not LVDS. Open: layers, formats, stride alignment, the DSI host and the ADV7535's setup, the backlight: UM3385, MB1605, RM0457's LTDC and DSI chapters. Not needed by plan #322 |
-| Q8 | The exact boot chain and what state U-Boot hands over (exception level, MMU, caches, display on or off), and whether the SMC interface to OP-TEE stays open after U-Boot. | **In part (#1281):** TF-A v2.10 (BL2, BL31), OP-TEE 4.0, U-Boot 2023.10 (ST's), Linux 6.6.129 via extlinux from the microSD; PSCI 1.1 over SMC; Linux's watchdog is `arm,smc-wdt` (OP-TEE's), 32 s (`stm32mp251.dtsi:78-82`, `stm32mp257f-dk.dts:216-219`). Open: whether that watchdog already runs at U-Boot's hand-over, the exception level, MMU and cache state, the DTB pointer, and how U-Boot goes from `boot.scr.uimg` to extlinux: ST's U-Boot and TF-A sources (other items); the return trial's image, which records the hand-over |
+| Q8 | The exact boot chain and what state U-Boot hands over (exception level, MMU, caches, display on or off), and whether the SMC interface to OP-TEE stays open after U-Boot. | **In part (#1281):** TF-A v2.10 (BL2, BL31), OP-TEE 4.0, U-Boot 2023.10 (ST's), Linux 6.6.129 via extlinux from the microSD; PSCI 1.1 over SMC; Linux's watchdog is `arm,smc-wdt` (OP-TEE's), 32 s (`stm32mp251.dtsi:78-82`, `stm32mp257f-dk.dts:216-219`). **Folded in (r-optee-tfa, r-uboot, board-read, 2026-11-06):** BL2 starts the IWDG, so the watchdog is armed at hand-over and a hang resets in about 32 s; the image enters at EL2; U-Boot's distro loop reaches extlinux and leaves `boot.scr.uimg` alone while extlinux succeeds (section 1); the environment is a CRC32, a flag byte and strings at offset 0x7e000 of its partition. Open: the MMU and cache state and the DTB pointer actually handed over, and whether a key in the first second stops autoboot: the return trial's image records the hand-over |
 | Q9 | Does Linux etnaviv carry the MP25 ids, and does anything in ST's Linux depend on a vendor blob? | **Answered (#1281):** mainline etnaviv's hwdb carries the exact row (`etnaviv_hwdb.c:199-204`), but ST's image does not use etnaviv: it runs **galcore 6.4.21** (out of tree) and its own OpenGL ES 3.1 user space. The kernel has etnaviv as an unloaded module; loading it reportedly panicked OP-TEE, so no etnaviv reference exists from the board and the host references are Mesa on the drm-shim |
-| Q10 | Is the GPU behind an IOMMU, and what physical address width reaches the GPU? | **Answered in part (#1281, confirmed by ST's tree):** no `iommus` on the GPU node (`stm32mp255.dtsi:169-183`), so our carveout stays identity-mapped in the GPU's own MMU v2 as on the i.MX8MP. The address width that reaches the GPU is not in any tree: RM0457 |
-| Q11 | What do wide lines do on a `WIDELINE_TRIANGLE_EMU` core when we program the wide-line registers the way the i.MX8MP backend does (`src/vivante/backend.rs:1376`, `:1425-1426`)? What should the build report as the line width range? | open: the golden stream (item 5.2); board test; Mesa `etnaviv_screen.c:366-368` |
-| Q12 | Does our compiler ever use the address-register paths or partial-component address writes that the ST rows' `SH_NO_INDEX_CONST_ON_A0` and missing `SH_MOVAI_MOVAR...FIX` suggest are unavailable or unsafe? | open: a scan of the online compiler's output (`src/shaderc/online/vivante`) over the item 5.2(b) program set for `movar` and `movai`; the board's gl_test and dEQP runs |
-| Q13 | The A35 SoC definition: cache and MMU state at entry, PSCI or the monitor interface, console UART, and whether Zephyr's arm64 core runs on this part without changes. | **In part (ST tree):** PSCI 1.0-style over SMC (the board reports 1.1, #1281), console `usart2` at 0x400e0000 on PA4/PA8, GIC-400 at 0x4ac00000 (section 4 for the lines). Open: cache and MMU state at entry (the return trial records it), the UART's kernel clock and whether U-Boot left it set up: TF-A's stm32mp2 platform and U-Boot (other items); Zephyr `arch/arm64` and `dts/arm64/armv8-a.dtsi` |
-| Q14 | The GPU's coherence with the A35 cluster, and the right memory attributes for the carveout. The i.MX8MP uses a non-cacheable mapping and no flushes (`imx8mp-gc-driver-notes.md`, "M3: the ring and one submit"). | open: RM0457 interconnect chapter; board test. The area for it is the 64 MiB `gpu-reserved` at 0xfa800000 (#1281; ST tree `stm32mp257f-dk-resmem.dtsi:170-173`) |
+| Q10 | Is the GPU behind an IOMMU, and what physical address width reaches the GPU? | **Answered in part (#1281, confirmed by ST's tree):** no `iommus` on the GPU node (`stm32mp255.dtsi:169-183`), so our carveout stays identity-mapped in the GPU's own MMU v2 as on the i.MX8MP. The 64 MiB carveout at 0xfa800000 lies below 4 GiB and the GPU's MMU maps it flat, GPU address equal to physical address (gc-mem-mp2, r-galcore). The address width that reaches the GPU is not in any tree: RM0457 |
+| Q11 | What do wide lines do on a `WIDELINE_TRIANGLE_EMU` core when we program the wide-line registers the way the i.MX8MP backend does (`src/vivante/backend.rs:1376`, `:1425-1426`)? What should the build report as the line width range? | **Answered for the reported range (q11-wideline, Mesa 26.2.1 `etnaviv_screen.c:366-368`):** the ST profile reports `GL_ALIASED_LINE_WIDTH_RANGE` as 1.0 to 1.0. Open: what the hardware does when the wide-line registers are programmed anyway: the golden stream (item 5.2); a board test |
+| Q12 | Does our compiler ever use the address-register paths or partial-component address writes that the ST rows' `SH_NO_INDEX_CONST_ON_A0` and missing `SH_MOVAI_MOVAR...FIX` suggest are unavailable or unsafe? | open: the scan of the online compiler's output (`src/shaderc/online/vivante`) for `movar` and `movai` has run (q12-scan); its verdict is in that study's report and is not folded in here. The board's gl_test and dEQP runs settle any remainder |
+| Q13 | The A35 SoC definition: cache and MMU state at entry, PSCI or the monitor interface, console UART, and whether Zephyr's arm64 core runs on this part without changes. | **In part (ST tree):** PSCI 1.0-style over SMC (the board reports 1.1, #1281), console `usart2` at 0x400e0000 on PA4/PA8, GIC-400 at 0x4ac00000 (section 4 for the lines). **Folded in (r-optee-tfa, r-zephyr-a35, board-read):** entry at EL2 at the load address, GICv2 with SGIs 8 to 15 and PPIs 29 and 31 left alone, a 40 MHz counter, USART2 at 0x400e0000, the arm64 GICv2 path unchanged. Open: cache and MMU state at entry (the return trial records it), the UART's kernel clock and whether U-Boot left it set up; whether the SoC definition runs (item P4) |
+| Q14 | The GPU's coherence with the A35 cluster, and the right memory attributes for the carveout. The i.MX8MP uses a non-cacheable mapping and no flushes (`imx8mp-gc-driver-notes.md`, "M3: the ring and one submit"). | open: RM0457 interconnect chapter (not fetchable so far); board test. The area for it is the 64 MiB `gpu-reserved` at 0xfa800000 (#1281; ST tree `stm32mp257f-dk-resmem.dtsi:170-173`) |
 | Q15 | ~~Does the 0x6207 row (one shader core, eight streams) apply?~~ | **Dropped, not applicable (#1281):** the board's revision is 0x6205, so the 0x8000/0x6207 row is not this part. The table-driven identity (item 5.3) still carries the stream count per row, which costs nothing |
 
 Risks that are not questions: the finished ports took the board work
@@ -668,15 +733,15 @@ are smaller than they were then.
 
 | # | item | check | size |
 | --- | --- | --- | --- |
-| P1 | Read the unread documents (section 5, item 7) and update this note; record the answers to Q1 to Q15 that sources give. Open GitHub issues for what stays open. **Third pass 2026-11-06: #1281 and ST's kernel tree applied; the OP-TEE, TF-A and U-Boot reads fold in later** | each question cited or left | S |
+| P1 | Read the unread documents (section 5, item 7) and update this note; record the answers to Q1 to Q15 that sources give. Open GitHub issues for what stays open. **Fourth pass 2026-11-06: #1281, ST's kernel tree and the OP-TEE, TF-A, U-Boot, galcore, RCC/RIFSC, Zephyr A35 and memory studies applied; RM0457 is still unread** | each question cited or left | S |
 | P2 | Pin the hwdb comparison (5.1) and the shim rows with goldens and an ST table (5.2) | gate rows; goldens diffed | M |
 | P3 | Table-driven identity (5.3) and the chip profile (5.4) | host tests, both profiles | M |
 | P4 | A35 SoC and board in Zephyr, identify sample built (5.5) | Zephyr build row | M |
-| P5 | The SCMI client and the ST power module with model tests (5.6) | byte-exact host tests | M |
-| P6 | Board day one (section 6, items 1 and 2): identity under Linux (**done, #1281**), power and identity from our image | the five ids read; `HI_INTR_ENBL` read-back | S, board |
+| P5 | The SCMI codec, the OP-TEE message transport and the ST power module with model tests (5.6; section 4 for the order) | byte-exact host tests | M |
+| P6 | Board day one (section 6, items 1 and 2): identity under Linux (**done, #1281**), the return trial (banner, PSCI reset, back in Linux without a person), power and identity from our image | the board returns; the ids read; `HI_INTR_ENBL` read-back | S, board |
 | P7 | `gc_fence`, `gc_clear`, `gc_triangle`, `gc_gl_triangle` | read-backs | M, board |
 | P8 | The display: LTDC, DSI, ADV7535 to HDMI, backlight; scan-out of the GPU's buffer | picture on the panel, a record like `imx8mp-display-cold.md` | L |
 | P9 | `gl_test` regression set, then the dEQP-GLES2 sweep, diffed against the i.MX8MP's failures; the line-width decision (Q11) | RESULTS rows | L, board |
-| P10 | Netboot or direct boot from the board's bootloader (`imx8mp-netboot.md` shape), sign-off from the bootloader | a run from U-Boot; `tools/board.sh` | M |
+| P10 | Netboot or direct boot from the board's bootloader (`imx8mp-netboot.md` shape), sign-off from the bootloader; the one-shot off the microSD follows U-Boot's distro loop (section 1) | a run from U-Boot; `tools/board.sh` | M |
 
 P2 to P5 can run without the board; P1 only needs documents. The board is on the bench (#1281); plan #322 narrows P2 and P3 to the 0x8000/0x6205 row.
