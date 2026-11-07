@@ -6,7 +6,7 @@
 # (docs/notes/imx8mp-frame-floor.md, "The frame-breakdown record"). Compiles
 # perf_page_test.c against src/gm_perf_page.h, the header main.cpp packs the
 # PERF page with, and checks that known totals give known words. Then it
-# decodes the four pages with `yakogl-tools record` and checks each line
+# decodes the pages with `yakogl-tools record` and checks each line
 # ("experiment 0 page p: v0 .. v5"). Host only, a few seconds once
 # yakogl-tools is built. Exit 1 on a difference.
 #
@@ -39,6 +39,8 @@ want=(
   "experiment 0 page 1: 1500 50 3 2000 100 50"
   "experiment 0 page 2: 581 7 3 17018 587 10000"
   "experiment 0 page 3: 13614 10210 2048 1875 800 0"
+  "experiment 0 page 4: 3 0 150 1536 0 0"
+  "experiment 0 page 4: 65535 65535 65535 65535 0 0"
 )
 i=0 bad=0
 while read -r _ w0 w1 w2 w3; do

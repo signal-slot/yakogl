@@ -2,7 +2,7 @@
 /* SPDX-FileCopyrightText: 2026 Signal Slot, Inc. */
 /*
  * perf_page_test.c: the frame-breakdown record's packing (src/gm_perf_page.h)
- * on the host. Known totals in, known words out, for the four pages, the
+ * on the host. Known totals in, known words out, for the five pages, the
  * saturation, the empty scene, page 2's bin edges and a page that is not
  * one. Prints each page as a record line (yk-record: w0 w1 w2 w3), the form
  * yakogl-tools record reads; run.sh decodes them. Exit 1 on a difference.
@@ -106,6 +106,39 @@ int main(void)
 	s.write_bytes = 586ull * 1920000u;            /* 1875 KiB */
 	expect_words("page 3", 3, &s, 0x594b0c03u, 0x27e2352eu, 0x07530800u, 0x00000320u, 1);
 
+	/* page 4: 100 frames; 3 GPU chains (3 per 100 frames), no CPU
+	 * mipmap, 150 waits (150 per 100 frames), 1536 KiB a frame in CPU
+	 * passes over the carve-out; w3 = 0 */
+	memset(&s, 0, sizeof(s));
+	s.frames = 100;
+	s.fb_ok = 1;
+	s.mip_gpu = 3;
+	s.gpu_waits = 150;
+	s.carveout_bytes = 100ull * 1536u * 1024u;
+	expect_words("page 4", 4, &s, 0x594b0c04u, 0x00000003u, 0x06000096u, 0x00000000u, 1);
+
+	/* page 4, the getter answered an error: not available, 0xffff x 4,
+	 * whatever the (zero) counts say; w3 still 0 */
+	s.fb_ok = 0;
+	expect_words("page 4, not available", 4, &s, 0x594b0c04u, 0xffffffffu, 0xffffffffu, 0x00000000u,
+		     1);
+
+	/* page 4 saturates: 1000 chains in one frame, 2^40 bytes a frame */
+	memset(&s, 0, sizeof(s));
+	s.frames = 1;
+	s.fb_ok = 1;
+	s.mip_gpu = 1000;
+	s.mip_cpu = 655u;      /* 65 500: just under */
+	s.gpu_waits = 656u;    /* 65 600: over */
+	s.carveout_bytes = 1ull << 40;
+	expect_words("page 4, saturated", 4, &s, 0x594b0c04u, 0xffdcffffu, 0xffffffffu, 0x00000000u, 0);
+
+	/* page 4 with no frames: every mean 0, not "not available" */
+	memset(&s, 0, sizeof(s));
+	s.fb_ok = 1;
+	s.mip_gpu = 5;
+	expect_words("page 4, no frames", 4, &s, 0x594b0c04u, 0u, 0u, 0u, 0);
+
 	/* saturation at 0xffff, and a scene without frames: every mean 0 */
 	memset(&s, 0, sizeof(s));
 	s.frames = 70000;
@@ -118,8 +151,8 @@ int main(void)
 	expect_words("page 3, no intervals", 3, &s, 0x594b0c03u, 0u, 0u, 0u, 0);
 
 	/* not a page */
-	if (gm_perf_page_words(4, &s, w) != -1) {
-		printf("FAIL page 4: packed\n");
+	if (gm_perf_page_words(5, &s, w) != -1) {
+		printf("FAIL page 5: packed\n");
 		s_failed = 1;
 	}
 
