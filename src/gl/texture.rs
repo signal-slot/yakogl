@@ -4136,6 +4136,84 @@ fn mip_step_gpu_sample(
     }
 }
 
+/// The CPU mipmap filter's totals since init: (ns of the OSAL's clock spent
+/// in the level loop of glGenerateMipmap, source bytes the filter read,
+/// calls that ran the loop). The time is short by the calls the clock could
+/// not read (the OSAL has no OSAL_QUERY_CLOCK_NS). Counters since init; read
+/// differences.
+static MIP_CPU: Global<[u64; 3]> = Global::zeroed();
+
+/// See [`MIP_CPU`]: `(ns, source bytes, calls)`.
+pub fn gl_mip_cpu_counters() -> (u64, u64, u64) {
+    // SAFETY: single-threaded by the Global contract; a copy is taken.
+    let m = unsafe { *MIP_CPU.get() };
+    (m[0], m[1], m[2])
+}
+
+/// Source rows of the box filter are read in chunks of this many output
+/// texels into a stack scratch, with 8-byte loads: the texture memory is
+/// Normal non-cacheable on the boards, where every load costs DRAM latency.
+const MIP_CHUNK: usize = 128;
+
+/// Copy `src[..dst.len()]` into `dst` in 8-byte loads (then the tail bytes).
+#[inline]
+fn load_wide(dst: &mut [u8], src: &[u8]) {
+    let n = dst.len();
+    let src = &src[..n];
+    let mut i = 0;
+    while i + 8 <= n {
+        let w = u64::from_ne_bytes([
+            src[i],
+            src[i + 1],
+            src[i + 2],
+            src[i + 3],
+            src[i + 4],
+            src[i + 5],
+            src[i + 6],
+            src[i + 7],
+        ]);
+        dst[i..i + 8].copy_from_slice(&w.to_ne_bytes());
+        i += 8;
+    }
+    while i < n {
+        dst[i] = src[i];
+        i += 1;
+    }
+}
+
+/// One destination row of the 8-bit box filter for a source level that is
+/// halved across (`sx` 2): `dw` texels of `bpp` bytes (at `dst`, from the
+/// source row at `r0` and, when `two_rows`, the row below at `r1`). Each
+/// source row is read once, wide, into a scratch; the sum and rounding are
+/// those of the per-byte filter, (sum + n / 2) / n.
+fn mip_box_row_u8(texels: &mut [u8], (r0, r1): (usize, usize), two_rows: bool, dst: usize, dw: usize, bpp: usize) {
+    let mut a = [0u8; MIP_CHUNK * 2 * 4];
+    let mut b = [0u8; MIP_CHUNK * 2 * 4];
+    let mut p0 = 0;
+    while p0 < dw {
+        let n = MIP_CHUNK.min(dw - p0);
+        let nb = 2 * n * bpp;
+        load_wide(&mut a[..nb], &texels[r0 + 2 * p0 * bpp..]);
+        if two_rows {
+            load_wide(&mut b[..nb], &texels[r1 + 2 * p0 * bpp..]);
+        }
+        let out = &mut texels[dst + p0 * bpp..dst + (p0 + n) * bpp];
+        for p in 0..n {
+            for ch in 0..bpp {
+                let i = 2 * p * bpp + ch;
+                let mut sum = a[i] as u32 + a[i + bpp] as u32;
+                if two_rows {
+                    sum += b[i] as u32 + b[i + bpp] as u32;
+                    out[p * bpp + ch] = ((sum + 2) / 4) as u8;
+                } else {
+                    out[p * bpp + ch] = sum.div_ceil(2) as u8;
+                }
+            }
+        }
+        p0 += n;
+    }
+}
+
 /// Box-filter the chain down from level 0 (CPU; the chain is CPU-visible).
 #[no_mangle]
 pub unsafe extern "C" fn glGenerateMipmap(target: GLenum) {
@@ -4341,6 +4419,9 @@ pub unsafe extern "C" fn glGenerateMipmap(target: GLenum) {
 
     // SAFETY: the whole CPU mapping of the allocation.
     osal::cache_invd(t.mem.cpu, t.mem.size);
+    let t0 = osal::clock_ns();
+    let mut read_bytes = 0u64;
+    let wide_u8 = csize == 1 && !srgb && !rgb10a2 && bpp <= 4;
     for l in first..(t.chain_levels as usize).min(CAP_MIP_LEVELS) {
         let src = t.level_off[l - 1] as usize;
         let dst = t.level_off[l] as usize;
@@ -4348,6 +4429,7 @@ pub unsafe extern "C" fn glGenerateMipmap(target: GLenum) {
         let (sx, sy) = (if w > 1 { 2usize } else { 1 }, if fh > 1 { 2usize } else { 1 });
         let (sp, dp) = (t.level_pitch_at(l as u32 - 1) as usize, t.level_pitch_at(l as u32) as usize);
 
+        read_bytes += (sx * sy * dw * dfh * layers * bpp) as u64;
         if gpu_sample {
             mip_step_gpu_sample(texels, (src, sp, w, fh), (dst, dp, dw, dfh));
             w = dw;
@@ -4360,6 +4442,11 @@ pub unsafe extern "C" fn glGenerateMipmap(target: GLenum) {
              * its 2x2 box starts at inside that face */
             let sy0 = (y / dfh) * fh + (y % dfh) * sy;
 
+            if wide_u8 && sx == 2 {
+                let r0 = src + sy0 * sp * bpp;
+                mip_box_row_u8(texels, (r0, r0 + sp * bpp), sy == 2, dst + y * dp * bpp, dw, bpp);
+                continue;
+            }
             for x in 0..dw {
                 if rgb10a2 {
                     let mut srcs = [0usize; 4];
@@ -4424,6 +4511,15 @@ pub unsafe extern "C" fn glGenerateMipmap(target: GLenum) {
         }
         w = dw;
         fh = dfh;
+    }
+    {
+        // SAFETY: single-threaded by the Global contract.
+        let m = unsafe { MIP_CPU.get() };
+        if let (Some(a), Some(b)) = (t0, osal::clock_ns()) {
+            m[0] += b.saturating_sub(a);
+        }
+        m[1] += read_bytes;
+        m[2] += 1;
     }
     // SAFETY: as above.
     osal::cache_flush(t.mem.cpu, t.mem.size);
