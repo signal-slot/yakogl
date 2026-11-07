@@ -15,9 +15,11 @@
 //! | [`ffi`] | the job builder's C types and functions, pinned to its headers |
 //! | [`state`] | the GL core's draw in gallium's terms (st/mesa's part), and the refusals |
 //! | [`backend`] | jobs, their memory, the draw, the table |
+//! | [`clear_mrt`] | the clear quad's fragment source for several colour attachments |
 //! | [`kick`] | the descriptor the OSAL's `submit()` takes |
 
 pub mod backend;
+pub mod clear_mrt;
 pub mod ffi;
 pub mod kick;
 pub mod state;
