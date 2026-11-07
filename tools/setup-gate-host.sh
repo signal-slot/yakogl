@@ -10,8 +10,9 @@
 #     Print one "ok" or "missing" line per tool. Exit 0 only when all are ok.
 #
 #   tools/setup-gate-host.sh --install
-#     Add what rustup can add (clippy, rustfmt, the two aarch64-unknown-none
-#     targets on every toolchain the gate runs under, see gate_toolchains):
+#     Add what rustup can add (clippy, rustfmt, the aarch64-unknown-none,
+#     aarch64-unknown-none-softfloat and aarch64-unknown-linux-gnu targets on
+#     every toolchain the gate runs under, see gate_toolchains):
 #     user-space, idempotent, always safe. Install distro packages
 #     only when passwordless sudo works (sudo -n true): on apt systems run
 #     it, on Gentoo-like systems print the emerge equivalents instead. When
@@ -50,7 +51,8 @@
 # --check also reports the rustup target aarch64-unknown-linux-gnu (check.sh's
 # "clippy yakogl-mali-panthor (aarch64-unknown-linux-gnu)" row gaps without it
 # on the toolchain the gate runs under; the same per-toolchain rule as
-# aarch64-unknown-none applies). --check also reports PCO_SPM_LOAD_CAPTURE,
+# aarch64-unknown-none applies, and --install adds it on those toolchains).
+# --check also reports PCO_SPM_LOAD_CAPTURE,
 # the capture_spm_load of PCO_SHC's Mesa build (check.sh's "gen
 # tools/pco_shc/spm_load == gen_spm_load.py capture" row gaps without it):
 # looked for in check.sh's order, only when PCO_SHC names an executable (the
@@ -500,7 +502,8 @@ install_rustup() {
   run rustup component add clippy rustfmt
   local tc
   for tc in $(gate_toolchains); do
-    run rustup target add --toolchain "$tc" aarch64-unknown-none aarch64-unknown-none-softfloat
+    run rustup target add --toolchain "$tc" aarch64-unknown-none \
+      aarch64-unknown-none-softfloat aarch64-unknown-linux-gnu
   done
 }
 
