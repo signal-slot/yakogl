@@ -310,6 +310,14 @@ needs terrain to run after an FBO scene in one process. That is the
 board's image, or a harness mode that runs several entries in one process,
 which run.sh does not have.
 
+`tools/hostharness/pi4-terrain/multiscene.sh <GLMARK2_SRC>` is that mode: it runs
+FBO scenes (the two `desktop` scenes by default) and then terrain in one
+process on the V3D stand-in and prints terrain's TFU chains, `unknown`
+refusals and `plain`/`first-sample` copies a frame (it rebuilds the library
+from the current tree, so run it before and after a fix). It was not run
+when it was added (no approval to run the harness); the 3/2/3 pattern on the
+host is still to be confirmed with it.
+
 ## The model
 
 The model is a script outside the tree. It replays one terrain frame on
