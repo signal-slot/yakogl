@@ -7,6 +7,16 @@
 #
 #   BOARD_HOST=root@<t6> tools/cts/mali-deqp-run.sh --build DIR --out SLICEDIR \
 #       --rows A-B [--tree tools/cts/mali-gles2-tree.txt] [--session S1..S4|smoke] [--dry-run]
+#   tools/cts/mali-deqp-run.sh --dry-run --rows A-B [--tree T] [--session S]
+#
+# --dry-run prints the plan and touches nothing: no ssh or scp, no board lock,
+# no BOARD_HOST needed. Only in a dry run are --build and --out optional (a
+# real run needs both, exit 1 without). Without --build the plan says "build:
+# not given" and the commit-on-main, library and size checks are "skipped (no
+# build)"; without --out it names the slice directory it would use,
+# build/mali-deqp-run/<session>-rows<A>-<B> (gitignored), and creates nothing.
+# The default tree is tools/cts/mali-gles2-tree.txt, or $MALI_DEQP_TREE; a
+# tree that does not exist is said so and exits 1, dry run or not.
 #
 # BOARD_HOST comes from the lease (target:nanopc-t6), never from a file;
 # BOARD_SSH_OPTS (optional) is passed to ssh and scp, as run-on-board.sh does.
@@ -70,7 +80,8 @@
 # Environment for the self-test (tools/cts/mali-deqp-selftest.sh) and odd
 # hosts: MALI_DEQP_MAIN_REPO / MALI_DEQP_MAIN_REF (the repository and ref the
 # commit must be on; default this checkout and origin/main), MALI_DEQP_MUSTPASS
-# (default tools/cts/gles2-mustpass.txt), KMSG_SETTLE_S (1), STAGE_MARGIN_KB
+# (default tools/cts/gles2-mustpass.txt), MALI_DEQP_TREE (the default tree
+# table when --tree is not given), KMSG_SETTLE_S (1), STAGE_MARGIN_KB
 # (free space wanted beyond the build's size, 1 GiB), DEQP_SURFACE (64).
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -82,7 +93,7 @@ usage() {
   exit 1
 }
 
-build= out= rows= tree=$HERE/mali-gles2-tree.txt session=adhoc dry=0
+build= out= rows= tree=${MALI_DEQP_TREE:-$HERE/mali-gles2-tree.txt} session=adhoc dry=0
 while [ $# -gt 0 ]; do
   case $1 in
     --build) build=${2:?}; shift 2 ;;
@@ -95,38 +106,44 @@ while [ $# -gt 0 ]; do
     *) echo "$me: unknown argument '$1'" >&2; usage ;;
   esac
 done
-[ -n "$build" ] && [ -n "$out" ] && [ -n "$rows" ] || usage
+[ -n "$rows" ] || usage
+[ "$dry" = 1 ] || { [ -n "$build" ] && [ -n "$out" ] || usage; }
 [[ $rows =~ ^([0-9]+)-([0-9]+)$ ]] || { echo "$me: --rows wants A-B, not '$rows'" >&2; exit 1; }
 row_a=${BASH_REMATCH[1]} row_b=${BASH_REMATCH[2]}
 case $session in
   S1 | S2 | S3 | S4 | smoke | adhoc) ;;
   *) echo "$me: --session is S1..S4 or smoke, not '$session'" >&2; exit 1 ;;
 esac
-[ -f "$tree" ] || { echo "$me: no tree table $tree" >&2; exit 1; }
+[ -f "$tree" ] || { echo "$me: no tree table $tree (the default is tools/cts/mali-gles2-tree.txt; \$MALI_DEQP_TREE or --tree name another)" >&2; exit 1; }
 mustpass=${MALI_DEQP_MUSTPASS:-$HERE/gles2-mustpass.txt}
 [ -f "$mustpass" ] || { echo "$me: no mustpass list $mustpass" >&2; exit 1; }
 
-# The build directory.
-build=$(cd "$build" 2>/dev/null && pwd) || { echo "$me: no build directory" >&2; exit 1; }
-for f in deqp-gles2 build.txt lib/libGLESv2.so.2 lib/libEGL.so.1; do
-  [ -e "$build/$f" ] || { echo "$me: the build directory lacks $f (mali-deqp-build.sh makes it)" >&2; exit 1; }
-done
-[ -d "$build/data" ] || { echo "$me: the build directory lacks data/" >&2; exit 1; }
-commit=$(sed -n 's/^commit=//p' "$build/build.txt" | head -1)
-[[ $commit =~ ^[0-9a-f]{7,40}$ ]] || { echo "$me: build.txt has no commit=<hex> line" >&2; exit 1; }
-main_repo=${MALI_DEQP_MAIN_REPO:-$REPO}
+# The build directory (a dry run may go without one).
 main_ref=${MALI_DEQP_MAIN_REF:-origin/main}
-full=$(git -C "$main_repo" rev-parse --verify -q "$commit^{commit}" 2>/dev/null) || full=
-on_main=no
-if [ -n "$full" ] && git -C "$main_repo" merge-base --is-ancestor "$full" "$main_ref" 2>/dev/null; then
-  on_main=yes
-  commit=$full
+if [ -z "$build" ]; then
+  commit='not given' on_main='skipped (no build)' lib_id='skipped (no build)' sha8='<sha8>'
+  stage=/root/yakogl-mali/$sha8
+else
+  build=$(cd "$build" 2>/dev/null && pwd) || { echo "$me: no build directory" >&2; exit 1; }
+  for f in deqp-gles2 build.txt lib/libGLESv2.so.2 lib/libEGL.so.1; do
+    [ -e "$build/$f" ] || { echo "$me: the build directory lacks $f (mali-deqp-build.sh makes it)" >&2; exit 1; }
+  done
+  [ -d "$build/data" ] || { echo "$me: the build directory lacks data/" >&2; exit 1; }
+  commit=$(sed -n 's/^commit=//p' "$build/build.txt" | head -1)
+  [[ $commit =~ ^[0-9a-f]{7,40}$ ]] || { echo "$me: build.txt has no commit=<hex> line" >&2; exit 1; }
+  main_repo=${MALI_DEQP_MAIN_REPO:-$REPO}
+  full=$(git -C "$main_repo" rev-parse --verify -q "$commit^{commit}" 2>/dev/null) || full=
+  on_main=no
+  if [ -n "$full" ] && git -C "$main_repo" merge-base --is-ancestor "$full" "$main_ref" 2>/dev/null; then
+    on_main=yes
+    commit=$full
+  fi
+  sha8=${commit:0:8}
+  stage=/root/yakogl-mali/$sha8
+  lib_id=$(for l in libGLESv2.so.2 libEGL.so.1; do
+    printf '%s:%s\n' "$l" "$(sha256sum < "$build/lib/$l" | cut -c1-12)"; done | paste -sd,)
+  lib_id=$(sed -n 's/^lib=//p' "$build/build.txt" | head -1 | grep . || echo "$lib_id")
 fi
-sha8=${commit:0:8}
-stage=/root/yakogl-mali/$sha8
-lib_id=$(for l in libGLESv2.so.2 libEGL.so.1; do
-  printf '%s:%s\n' "$l" "$(sha256sum < "$build/lib/$l" | cut -c1-12)"; done | paste -sd,)
-lib_id=$(sed -n 's/^lib=//p' "$build/build.txt" | head -1 | grep . || echo "$lib_id")
 tree_rel=$(realpath --relative-to="$REPO" "$tree")
 
 # The rows, their labels and case lists (the table's own reader,
@@ -347,6 +364,7 @@ PYEOF
 export MALI_DEQP_HERE=$HERE
 py() { python3 -I -c "$PY" "$@"; }
 
+[ -n "$out" ] || out=$REPO/build/mali-deqp-run/$session-rows$row_a-$row_b
 name=$(basename "$out")
 raw=${RAW_DIR:-$REPO/build/mali-deqp-run/$name}
 work=$raw
@@ -367,7 +385,11 @@ deqp_cmd() { # <list> <qpa> <limit>
 
 if [ "$dry" = 1 ]; then
   echo "$me: dry run: no ssh connection, nothing staged"
-  echo "$me: build $build, commit $commit, on $main_ref: $on_main$([ "$on_main" = yes ] || echo ' (a real run refuses it)')"
+  if [ -z "$build" ]; then
+    echo "$me: build: not given; commit-on-$main_ref, library and size checks: $on_main"
+  else
+    echo "$me: build $build, commit $commit, on $main_ref: $on_main$([ "$on_main" = yes ] || echo ' (a real run refuses it)')"
+  fi
   echo "$me: library $lib_id"
   echo "$me: session $session, rows $row_a-$row_b of $tree_rel: $nrows row(s), $total case(s)"
   while IFS=$'\t' read -r row lab n; do
