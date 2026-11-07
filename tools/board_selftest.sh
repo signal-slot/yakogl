@@ -48,7 +48,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/.." && pwd)
 B="$HERE/board.sh"
 TD="$HERE/testdata"
-WANT_CHECKS=312
+WANT_CHECKS=314
 
 S=$(mktemp -d)
 trap 'rm -rf "$S"' EXIT
@@ -700,6 +700,10 @@ out=$(BOARD_BOOT=kexec-dev dry imx8mp run "$S/img/imx8mp.bin" "$S/logs" 2>&1)
 check "imx8mp kexec-dev dry run: one readiness read, no uptime floor, no wait on the staged image's age" \
     eval 'grep -q "systemctl is-system-running --wait" <<<"$out" && grep -q "kexec_crash_loaded" <<<"$out" &&
           ! grep -q "older than 200\|stat -c %Y" <<<"$out"'
+check "imx8mp kexec-dev dry run: galcore's holders are checked before the board is changed" \
+    eval '[ "$(grep -n "fuser /dev/galcore" <<<"$out" | cut -d: -f1)" -lt "$(grep -n "kexec-zephyr 0x60000000" <<<"$out" | cut -d: -f1)" ]'
+check "imx8mp kexec-dev dry run: the wait names its ssh-only form" \
+    eval 'grep -q "without ping: ssh lost, ssh back with a new boot_id" <<<"$out"'
 echo "== 2b3. the Armadillo-X2 crash route's readiness (board.sh x2_kexec_ready)"
 # the same conditions in Armadillo Base OS's terms: OpenRC settled, no jump in
 # progress, no container, the crash window; no M7 word, the uptime not a gate

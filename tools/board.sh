@@ -1650,6 +1650,10 @@ run_kexec() {
     else
         # 1500 s for the board to come back, 600 s of settling, the rest
         HOLD_MAX=${HOLD_MAX:-$((1500 + 600 + 300))}
+        # the jump wrapper unloads galcore first and stops when a process
+        # still holds it (a container's GL client): refuse before the board
+        # is changed, naming the holder
+        GPU_DEV=/dev/galcore
         take_lock
         common_prechecks
         kexec_imx8mp
@@ -1744,16 +1748,25 @@ kexec_imx8mp() {
     bget rsha 'sync; sha256sum ~/kexec/zephyr.bin' "$IMG_SHA  zephyr.bin"
     [ "${rsha%% *}" = "$IMG_SHA" ] || die "the staged image reads back as '${rsha%% *}'"
     meta staged "~/kexec/zephyr.bin, read back equal"
+    # how the wait sees the board: ping, or ssh alone when the board answers
+    # ssh but not ping (a host that reaches it only through an ssh forward)
+    kexec_reach
     # 6. jump through the board's own sudo wrapper, bounded
     t0=$(date +%s)
     meta t_reboot "$t0"
     if [ "$DRY" = 1 ]; then
         b 'sync; sync; sudo -n /usr/local/sbin/kexec-zephyr 0x60000000 --crash   # timeout 120'
-        echo "DRY host\$ wait: ping lost, ping back, ssh back (<= 1500 s); then read the SNVS record and the uptime"
+        echo "DRY host\$ wait: ping lost, ping back, ssh back (<= 1500 s; without ping: ssh lost, ssh back with a new boot_id); then read the SNVS record and the uptime"
         exit 0
     fi
     timeout 120 ssh -o BatchMode=yes -o ConnectTimeout=5 -o ServerAliveInterval=3 -o ServerAliveCountMax=2 "$BOARD_HOST" \
         'sync; sync; sudo -n /usr/local/sbin/kexec-zephyr 0x60000000 --crash' < /dev/null >> "$RD/kexec.log" 2>&1 || true
+    # the wrapper prints this line just before it hands over to the loader;
+    # without it nothing jumped (an rmmod that failed), so do not wait 1500 s
+    if ! grep -q '^kexec-zephyr: jumping to ' "$RD/kexec.log"; then
+        meta jump failed
+        finish
+    fi
     meta jump ok
     # 7. Linux: ping lost, ping back, ssh back
     kexec_wait_back "$t0"
@@ -1772,14 +1785,25 @@ kexec_imx8mp() {
 # kexec_wait_back T0: after a crash-route jump at T0, Linux again: ping lost,
 # ping back, ssh back (cap 1500 s: the image's watchdog cap is 600 s). Sets
 # KW_LOST, KW_PB and KW_SB, seconds after T0 (empty: it never happened), and
-# writes the run's lost and timeline facts.
+# writes the run's lost and timeline facts. With KW_VIA=ssh (kexec_reach) the
+# board is read through ssh alone: lost when ssh stops answering, back when it
+# answers with a boot_id other than BOOT0 (common_prechecks), so a Linux that
+# has not yet gone is never taken for one that came back.
 kexec_wait_back() {
-    local t0=$1 t ip=${BOARD_HOST#*@}
+    local t0=$1 t ip=${BOARD_HOST#*@} bid
     KW_LOST=; KW_PB=; KW_SB=
     while :; do
         t=$(($(date +%s) - t0))
         if [ "$t" -gt 1500 ]; then break; fi
-        if ping -c1 -W1 "$ip" > /dev/null 2>&1; then
+        if [ "${KW_VIA:-ping}" = ssh ]; then
+            bid=$(timeout 10 ssh -o BatchMode=yes -o ConnectTimeout=5 "$BOARD_HOST" 'cat /proc/sys/kernel/random/boot_id' < /dev/null 2>/dev/null) || bid=
+            if [ -z "$bid" ]; then
+                [ -z "$KW_LOST" ] && KW_LOST=$t
+            elif [ "$bid" != "$BOOT0" ]; then
+                KW_PB=$t; KW_SB=$t
+                break
+            fi
+        elif ping -c1 -W1 "$ip" > /dev/null 2>&1; then
             [ -n "$KW_LOST" ] && [ -z "$KW_PB" ] && KW_PB=$t
             if [ -n "$KW_PB" ] && timeout 10 ssh -o BatchMode=yes -o ConnectTimeout=5 "$BOARD_HOST" true < /dev/null 2>/dev/null; then
                 KW_SB=$t
@@ -1791,7 +1815,15 @@ kexec_wait_back() {
         sleep 2
     done
     meta lost "$KW_LOST"
-    meta timeline "jump 0s, ping lost ${KW_LOST:-?}s, ping back ${KW_PB:-?}s, ssh back ${KW_SB:-?}s, route --crash"
+    meta timeline "jump 0s, ${KW_VIA:-ping} lost ${KW_LOST:-?}s, ${KW_VIA:-ping} back ${KW_PB:-?}s, ssh back ${KW_SB:-?}s, route --crash"
+}
+
+# kexec_reach: before a jump, KW_VIA=ping when the board's host answers a
+# ping, else ssh (kexec_wait_back); recorded as the run's reach fact.
+kexec_reach() {
+    KW_VIA=ping
+    if [ "$DRY" != 1 ] && ! ping -c1 -W1 "${BOARD_HOST#*@}" > /dev/null 2>&1; then KW_VIA=ssh; fi
+    meta reach "$KW_VIA"
 }
 
 # x2_kexec_ready STATE...: the readiness words of an Armadillo-X2 crash-route
