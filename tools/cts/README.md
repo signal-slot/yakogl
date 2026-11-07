@@ -198,7 +198,7 @@ board's table (or, on the i.MX8MP, one image with the table and a selector).
 
 **ES 3.0 gl_test cases.** An ES 3.0 gl_test image needs `CONFIG_GL_TEST_CASES` for `gl_test`; `tools/cts/common-images.sh --cases 202,203 am62p ...` sets `CONFIG_GL_TEST_CASES` for the gl_test row (the Pi 4's `CONFIG_V3D_GL_TEST_CASE` for one case, `CONFIG_V3D_GL_TEST_CASES` for a list; `--pipe` adds `-pipe` to the compile; use a new `<img-dir>` when the case list changes, a build directory made with other arguments is refused). The expected readings are in the cases themselves (`driver/tools/pvrlab/gl_test.c`): 196 `occl` q0 to q4 `available 1` with 0, 1, 0, 1, 1; 202 `blitconv` 12 / 12; 203 `tfcap` 9 / 9; 204 `srgb` 8 / 8; 205 `mappbo` 15 / 15. Each skips by name in an ES 2.0 context.
 
-Board rules for every run: one GL client per board (check that the board is idle first); images only from commits on origin/main, built from a detached checkout (section 2d), with the commit recorded beside each result; `BOARD_BOOT=uboot-mmc` on the two Verdins, tryboot (board.sh's default) on the Pi 4. The ES 2.0 sign-off runs are one command each, `tools/cts/board-stage.sh <board> common|deqp` (and `am62p ms4`, `am62p gles3`); that script's header names the environment.
+Board rules for every run: one GL client per board (check that the board is idle first); images only from commits on origin/main, built from a detached checkout (section 2d), with the commit recorded beside each result; `BOARD_BOOT=uboot-mmc` on the two Verdins, tryboot (board.sh's default) on the Pi 4. The ES 2.0 sign-off runs are one command each, `tools/cts/board-stage.sh <board> common|deqp` (and `am62p ms4`, `am62p gles3`; for the Armadillo-X2 `x2 common|deqp|gles3` build the images only); that script's header names the environment.
 
 ### The baseline: five groups, one command per board
 
@@ -341,12 +341,14 @@ entry in the list stops the run (exit 2) with the same message as before.
 | `deqp`, `ms4` (add) | `DEQP_WORK` (am62p, pi4), `DEQP_STAGE1` (imx8mp, x2) |
 | `x2 common` | the three of every image and `IMX8MP_OUT`; no `GLMARK2_SRC` (it builds the gl_test image alone) |
 | `x2 deqp` | the three of every image, `IMX8MP_OUT` and `DEQP_STAGE1` |
+| `x2 gles3` | the three of every image and `IMX8MP_OUT`; no `DEQP_STAGE1`: its stage 1 is the gles3 one, `DEQP_STAGE1_GLES3` (default `$IMX8MP_OUT/deqp-stage1-gles3`, not a `deps.toml` entry), which the stage checks itself (exit 2 when missing) |
 
-`board-stage.sh x2` takes the sets `common` and `deqp` only. `x2 ms4` and
-`x2 gles3` are refused with exit 2 (they are the AM62P's trees), as is any
-other board or set name (the usage line). The x2 stage runs no board command,
+`board-stage.sh x2` takes the sets `common`, `deqp` and `gles3`. `x2 ms4` is
+refused with exit 2 (the 4x multisample tree is the AM62P's), as is any other
+board or set name (the usage line); `imx8mp gles3` and `pi4 gles3` stay
+refused too. The x2 stage runs no board command,
 so it reads no `BOARD_HOST` and no `BOARD_UART` and needs no lease. Its dry
-run (`BOARD_STAGE_DRY_RUN=1`) names the two outputs before the layout is read
+run (`BOARD_STAGE_DRY_RUN=1`) names the set's output before the layout is read
 and needs none of the entries above.
 
 The list is `needed_deps` in `board-stage.sh`; `images-selftest.sh` checks
@@ -373,21 +375,30 @@ that `tools/board.sh x2 run` requires); `WDOG_SELF_ARM=0` turns it off.
       -> $IMX8MP_OUT/x2/gltest-<sha8>/zephyr/zephyr.bin
     IMX8MP_BOARD=x2 tools/cts/imx8mp-deqp-build.sh deqp-<sha8> 'dEQP-GLES2.info.*' --table tools/cts/imx8mp-full-tree.txt
       -> $IMX8MP_OUT/x2/deqp-<sha8>/zephyr/zephyr.bin
+    IMX8MP_BOARD=x2 tools/cts/imx8mp-deqp-build.sh --gles3 es3-<sha8> 'dEQP-GLES3.info.*' --table tools/cts/imx8mp-gles3-tree.txt
+      -> $IMX8MP_OUT/x2/es3-<sha8>/zephyr/zephyr.bin
 
-The dEQP build needs `DEQP_STAGE1` (stage 1 of `imx8mp-deqp-stage1.sh`,
-shared with the Verdin). The console is UART2 from the sample's board
+The dEQP-GLES2 build needs `DEQP_STAGE1` (stage 1 of `imx8mp-deqp-stage1.sh`,
+shared with the Verdin). The dEQP-GLES3 build (the whole GLES3 mustpass in
+the 133 rows of `imx8mp-gles3-tree.txt`) needs the gles3 stage 1 of
+`imx8mp-deqp-stage1.sh gles3`, `DEQP_STAGE1_GLES3` (default
+`$IMX8MP_OUT/deqp-stage1-gles3`, also shared with the Verdin). The console is UART2 from the sample's board
 configuration, so `IMX8MP_CONSOLE=1` is refused. `DRYRUN=1` prints the west
 command and builds nothing.
 
-`tools/cts/board-stage.sh x2 common` and `x2 deqp` run exactly those two
-commands for HEAD (`<sha8>` is HEAD's abbreviated hash);
+`tools/cts/board-stage.sh x2 common`, `x2 deqp` and `x2 gles3` run exactly
+those three commands for HEAD (`<sha8>` is HEAD's abbreviated hash);
 `BOARD_STAGE_DRY_RUN=1` prints them and builds nothing. `x2 common` builds
-the gl_test image alone (glmark2 has no X2 image). The x2 stage builds only:
-it runs no board command, takes no lease, and reads no `BOARD_HOST` or
-`BOARD_UART`. `x2 gles3` and `x2 ms4` are refused (exit 2).
+the gl_test image alone (glmark2 has no X2 image). `x2 gles3` stops with exit
+2 before the build when the gles3 stage 1 is missing
+(`$DEQP_STAGE1_GLES3/build/modules/gles3/libdeqp-gles3-package.a`). The x2
+stage builds only: it runs no board command, takes no lease, and reads no
+`BOARD_HOST` or `BOARD_UART`. `x2 ms4` is refused (exit 2).
 
 Running an image is `tools/board.sh x2 run` (one image) or
-`TREE_IMAGE=<image> tools/board.sh x2 tree` (the table image); see "The
+`TREE_IMAGE=<image> tools/board.sh x2 tree <table> <dir>` (a table image,
+with the table it was built from: `imx8mp-full-tree.txt` or
+`imx8mp-gles3-tree.txt`); see "The
 Armadillo-X2" in `driver/tools/kexec-zephyr/README.md`.
 
 ### The glmark2 picture

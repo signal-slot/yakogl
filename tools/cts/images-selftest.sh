@@ -440,6 +440,25 @@ rm -rf "$L/deqp-stage1-rpi_4b/build"
 out=$(deps_check rpi_4b deqp); rc=$?
 [ "$rc" = 1 ] && check "pi4 deqp without its stage 1 fails and names DEQP_WORK" "DEQP_WORK" "$out" || bad "pi4 deqp without stage 1: rc=$rc: $out"
 
+# board-stage.sh x2 gles3: the X2's GLES3 table image (build only). Its stage 1
+# is DEQP_STAGE1_GLES3, no deps.toml entry, so needed_deps leaves DEQP_STAGE1 out
+nd() { BOARD_STAGE_SOURCE_ONLY=1 bash -c ". '$HERE/board-stage.sh'; needed_deps $*" | paste -sd' '; }
+out=$(nd imx8mp gles3 x2)
+check "x2 gles3 needs IMX8MP_OUT" "IMX8MP_OUT" "$out"
+absent "x2 gles3 does not need DEQP_STAGE1" "DEQP_STAGE1" "$out"
+check "x2 deqp still needs DEQP_STAGE1" "DEQP_STAGE1" "$(nd imx8mp deqp x2)"
+check "am62p gles3 still needs DEQP_WORK" "DEQP_WORK" "$(nd am62p gles3)"
+out=$(cd "$REPO_ROOT" && BOARD_STAGE_DRY_RUN=1 tools/cts/board-stage.sh x2 gles3 2>&1); rc=$?
+[ "$rc" = 0 ] && ok "x2 gles3 dry run: rc 0" || bad "x2 gles3 dry run: rc=$rc: $out"
+check "x2 gles3 dry run: the build" "IMX8MP_BOARD=x2 tools/cts/imx8mp-deqp-build.sh --gles3 es3-" "$out"
+check "x2 gles3 dry run: the table" "--table tools/cts/imx8mp-gles3-tree.txt" "$out"
+check "x2 gles3 dry run: the output under x2/" "\$IMX8MP_OUT/x2/es3-" "$out"
+check "x2 gles3 dry run: the stage 1" "DEQP_STAGE1_GLES3" "$out"
+for t in "x2 ms4" "imx8mp gles3" "pi4 gles3"; do
+    out=$(cd "$REPO_ROOT" && BOARD_STAGE_DRY_RUN=1 tools/cts/board-stage.sh $t 2>&1); rc=$?
+    [ "$rc" = 2 ] && ok "$t refused (rc 2)" || bad "$t: rc=$rc: $out"
+done
+
 # needed_deps against the builders: a board stage runs the image builders, and
 # board-stage.sh stops only for what needed_deps lists. So every deps.toml
 # entry a builder reads (${NAME or $NAME, comment lines left out) must be in
