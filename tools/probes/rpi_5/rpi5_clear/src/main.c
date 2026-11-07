@@ -73,9 +73,22 @@ static uint32_t target[TGT_BYTES / 4] __aligned(PAGE);
 
 static uint32_t va_next = VA_FIRST;
 
+/* The cache path the run used, printed at the start and with the verdict:
+ * every sys_cache_data_*() below is this one. */
+#define CACHE_OPT                                                                                  \
+	"CONFIG_CACHE_MANAGEMENT=" STRINGIFY(IS_ENABLED(CONFIG_CACHE_MANAGEMENT)) " CONFIG_DCACHE="  \
+	STRINGIFY(IS_ENABLED(CONFIG_DCACHE)) " sys_cache_data_flush_and_invd_range"
+
+/* VA pages mapped so far, with the page table and the scratch page. */
+static unsigned int pages_used(void)
+{
+	return (va_next - VA_FIRST) / PAGE + 2u;
+}
+
 static void verdict(bool pass, const char *what)
 {
-	printk("v3d_clear: %s (%s)\n", pass ? "PASS" : "FAIL", what);
+	printk("v3d_clear: %s (%s; %u pages used incl. page table and scratch, cache: %s)\n",
+	       pass ? "PASS" : "FAIL", what, pages_used(), CACHE_OPT);
 }
 
 static void print_stall(const char *step, const struct v3d_stall *st)
@@ -129,6 +142,8 @@ int main(void)
 	int rc;
 
 	printk("v3d_clear: build %s\n", RPI5_CLEAR_BUILD);
+	printk("v3d_clear: cache: %s, data line %u bytes\n", CACHE_OPT,
+	       (unsigned int)sys_cache_data_line_size_get());
 	printk("v3d_clear: %s, V3D 7.1, target %ux%u raster RGBA8888, watchdog armed at boot\n", CONFIG_BOARD,
 	       TGT_W, TGT_H);
 

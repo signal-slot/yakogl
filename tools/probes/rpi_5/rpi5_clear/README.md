@@ -40,17 +40,21 @@ and a cache call that fails ends the run.
 
 ## The console
 
-`v3d_clear: build ...`, then one line per step with its raw result (`M1
+`v3d_clear: build ...`, `v3d_clear: cache: ...` (which cache option ran:
+`CONFIG_CACHE_MANAGEMENT`, `CONFIG_DCACHE`, the call used, the line size),
+then one line per step with its raw result (`M1
 mailbox`, `M1 power_on`, `M1 V3D clock`, three `M1 identity` lines, `M2 page
 table`, `M2 mmu_init`, `frame 128x64: tile 64x64, ... lists 19 / 99 / 27
-bytes`, `M3 bin`, `M3 render`, `M3 caches_clean`, `M4: ...`). A failed wait
+bytes` (the render list is 96 bytes for one 64x64 tile, 99 here: two
+`SUPERTILE_COORDINATES`; `clear71.sh` checks the 64x64 frame at 19 / 96 / 27), `M3 bin`, `M3 render`, `M3 caches_clean`, `M4: ...`). A failed wait
 prints the stall registers (`core_sts`, `hub_sts`, both control lists'
 current and end address, `err_stat`, `mmu_ctl`, `vio_addr`, `vio_id`).
 
 The last line is the verdict, which `tools/board.sh pi5` ends the run on:
 
-- `v3d_clear: PASS (M1 to M4, 128x64 cleared)`
-- `v3d_clear: FAIL (<reason>)`, the reason one of `M1 mailbox`,
+- `v3d_clear: PASS (M1 to M4, 128x64 cleared; N pages used incl. page table
+  and scratch, cache: ...)`
+- `v3d_clear: FAIL (<reason>; N pages used ..., cache: ...)`, the reason one of `M1 mailbox`,
   `M1 power-on`, `M1 identity`, `M2 page table`, `M2 cache clean`,
   `M2 MMU`, `frame sizes`, `frame build`, `M3 cache clean`,
   `M3 bin: out of memory`, `M3 bin: MMU fault`, `M3 bin: timeout`,
@@ -71,5 +75,6 @@ the console.
   GPU sees ARM physical addresses as they are (U4/U10: the PA width is in the
   identity line; the buffers are in `sram0`, below 34 MiB), and whether the
   7.1 interrupt bits and waits are the 4.2 ones (`v3d_hw.c`).
-- `get_throttled` is recorded by the runner (`meta.txt`), not by the image;
+- `get_throttled` is recorded by `tools/board.sh` in `meta.txt`, not by the
+  image (the image cannot read it);
   check it before reading a GPU fault as a hardware one.
