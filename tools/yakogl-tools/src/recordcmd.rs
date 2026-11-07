@@ -1345,6 +1345,37 @@ mod tests {
         assert_eq!(status3(&[0x594b0300, 0, 0, 0]), Status::Fail);
     }
 
+    /// The two records the Armadillo-X2 left on 2026-11-06 (gl_test CASE and
+    /// DEQP_CASES, three words each): `record --words 3` in its three modes,
+    /// the text it printed. w3's fields are `-`, never 0.
+    #[test]
+    fn words3_the_x2_records_of_2026_11_06() {
+        let a = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        let case = words(&a(&["594b010e", "0000ff01", "00000005"]), true).unwrap();
+        let cases = words(&a(&["594b0906", "00000555", "00000000"]), true).unwrap();
+        let cl = CaseList::from_text("dEQP-GLES2.a\n");
+        assert_eq!(describe3(&case), "CASE (1) seq 14: case 0 check 255 status 1 got 0x00000005 want -");
+        assert_eq!(decode3(&case, &cl), ["CASE (1) seq 14: case 0 check 255 status 1 got 0x00000005 want -"]);
+        assert_eq!(
+            line3(&case),
+            "class=verdict kind=1 name=CASE status=pass resets=absent unsupported=absent words=3 begun=- tally=-"
+        );
+        assert_eq!(classify(&case), "verdict");
+        assert_eq!(
+            decode3(&cases, &cl),
+            [
+                "DEQP_CASES (9) tag 6: begun 6: pass 6 fail 0 other 0; first fail index - name check -; GPU resets - fence timeouts -",
+                "  bits per case (the filter's names in sorted order): PPPPPP",
+            ]
+        );
+        assert_eq!(
+            line3(&cases),
+            "class=verdict kind=9 name=DEQP_CASES status=n/a resets=absent unsupported=absent words=3 begun=tag \
+             tally=6,0,0,0,6"
+        );
+        assert_eq!(classify(&cases), "verdict");
+    }
+
     #[test]
     fn words3_arguments() {
         let a = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
