@@ -61,6 +61,10 @@ pub mod qpu_ffi;
 /// (`tests/v3d_sim_mesa.rs`). Built like `eval.rs`: tests and `host-test`.
 #[cfg(any(test, feature = "host-test"))]
 pub mod sim;
+/// What the interpreter does differently for V3D 7.1 words
+/// (`sim::run_gen(Gen::V71, ..)`). Built with `sim`.
+#[cfg(any(test, feature = "host-test"))]
+pub mod sim71;
 
 // The back end, first cut (`docs/online-shaderc/v3d-backend.md`, order step
 // 2): IR to scalar operations (`prepare`), selection (`select`), allocation
