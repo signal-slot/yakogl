@@ -2822,6 +2822,36 @@ mod tests {
         assert_eq!(GM_F_PAGES * GM_PAGE_SCENES, GLMARK2_DEFAULT_LIST.len() as u32);
     }
 
+    /// The two real Armadillo-X2 records of 2026-11-06 (three words, w3 never
+    /// stored): a gl_test CASE (case 0, triangle, pass) and a DEQP_CASES
+    /// (begun 6, pass 6). Everything in w0..w2 is a number; the fields that
+    /// live in w3 are what `yakogl-tools record --words 3` prints as absent
+    /// (tools/yakogl-tools/src/recordcmd.rs pins that text for these same
+    /// words), so here the pin is the part both readings share.
+    #[test]
+    fn x2_records_of_2026_11_06_decode_in_w0_to_w2() {
+        let case = [0x594b_010e, 0x0000_ff01, 0x0000_0005, 0];
+        let cases = [0x594b_0906, 0x0000_0555, 0x0000_0000, 0];
+        for w in [case, cases] {
+            assert_eq!(classify(w), Class::Verdict);
+        }
+        assert_eq!(case[0], w0(kind::CASE, 0x0e));
+        assert_eq!(cases[0], w0(kind::DEQP_CASES, 0x06));
+        // CASE: w1 = case 0, bad check 255 (none), status 1; w2 = got
+        assert_eq!(case[1], case_w1(0, 255, 1));
+        let d = text(|b| describe(b, case));
+        assert!(
+            d.as_str().starts_with("CASE (1) seq 14: case 0 check 255 status 1 (pass) got 0x00000005 want "),
+            "{}",
+            d.as_str()
+        );
+        // DEQP_CASES: tag 6 = begun, w1 = 2 bits per case
+        let d = text(|b| describe(b, cases));
+        assert!(d.as_str().starts_with("DEQP_CASES (9) tag 6: begun 6: pass 6 fail 0 other 0; "), "{}", d.as_str());
+        // w1 holds the six cases, 2 bits each, 01 = pass: 0x555
+        assert_eq!(cases[1], 0b01_01_01_01_01_01);
+    }
+
     /// GLMARK2_DEFAULT_INFO is the default list as upstream's info_string
     /// prints it: the name in brackets, the options sorted by name.
     #[test]
