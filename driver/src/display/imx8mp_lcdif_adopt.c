@@ -125,14 +125,25 @@ int imx8mp_display_on(uintptr_t fb_phys, uint32_t pitch)
 			"brings a chain up)");
 		return -ENODEV;
 	}
-	if (w != DT_PROP(NODE, hactive) || h != DT_PROP(NODE, vactive)) {
-		LOG_ERR("the LCDIF runs %ux%u, the devicetree expects %ux%u", w, h,
+	/* The devicetree describes the buffer. A sink that scans less than
+	 * that (a 1920x1080 capture device behind a 1920x1200 buffer) is
+	 * scanned in place from the larger buffer: the picture is cropped,
+	 * the buffer and its pitch stay the devicetree's. A mode larger than
+	 * the buffer would read past it. */
+	if (w == 0u || h == 0u || w > DT_PROP(NODE, hactive) ||
+	    h > DT_PROP(NODE, vactive)) {
+		LOG_ERR("the LCDIF runs %ux%u, the devicetree buffer is %ux%u", w, h,
 			(unsigned int)DT_PROP(NODE, hactive),
 			(unsigned int)DT_PROP(NODE, vactive));
 		return -EINVAL;
 	}
+	if (w != DT_PROP(NODE, hactive) || h != DT_PROP(NODE, vactive)) {
+		LOG_INF("the LCDIF runs %ux%u inside the %ux%u buffer: cropped", w, h,
+			(unsigned int)DT_PROP(NODE, hactive),
+			(unsigned int)DT_PROP(NODE, vactive));
+	}
 	if (pitch == 0u) {
-		pitch = w * 4u;
+		pitch = DT_PROP(NODE, hactive) * 4u;
 	}
 	/* What the previous kernel was scanning is captured once, at the first
 	 * adopt: a second call finds our own buffer in the registers, and
@@ -143,8 +154,8 @@ int imx8mp_display_on(uintptr_t fb_phys, uint32_t pitch)
 		s_linux_desc5 = rd32(s_lcdif, LCDC_V8_CTRLDESCL0_5);
 	}
 	s_info.adopted = true;
-	s_info.width = w;
-	s_info.height = h;
+	s_info.width = DT_PROP(NODE, hactive);   /* the buffer, not the sink */
+	s_info.height = DT_PROP(NODE, vactive);
 	s_info.bytes_pp = 4;
 	s_info.on = true;
 
