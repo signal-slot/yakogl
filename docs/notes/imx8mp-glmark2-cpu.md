@@ -309,6 +309,17 @@ refract 22 18 29), not looked at by eye.
 
 Where terrain's 250 ms go (52 kicks, GPU-bound, the GPU chain taken on the board since `445c5653`): [gc-slow-terrain.md](gc-slow-terrain.md).
 
+## Slow scenes on the board (plan #328)
+
+Host breakdowns: [gc-slow-terrain.md](gc-slow-terrain.md) and
+[gc-slow-shadow-refract.md](gc-slow-shadow-refract.md); their ranked tables
+hold the numbers and the confirming records, estimates until the X2 measures.
+
+- terrain (250 ms): GPU-bound. Ranked: GPU shading of the 9 passes (early depth and tiled targets, noise-shader length), then the 52 kicks (one kick per mipmap chain), the mid-frame `finish()` with the CPU tiled copies, the 1 ms fence poll (fence-irq). The CPU mipmap fallback is ruled out.
+- shadow (500 to 1000 ms): the CPU D24S8 to R32F depth resolve over the non-cacheable carve-out, three `ldrb` loads a texel (fix: no CPU resolve, the TPU samples the depth surface, `gc-depth-sample.md`), then cache maintenance on the two 7.7 MB ranges, the CPU waits outside the swap, the GPU work.
+- refract (500 to 1000 ms): the same depth resolve first, then as shadow; its mipmap chains are on the GPU. The shared cause comes first for both scenes.
+- "500 ms" is a lower bound of the FPS rounding (2 FPS is 500 to under 1000 ms), not a fixed wait.
+
 ## What would settle the open points
 
 - A per-scene board number (fps, or ms a frame) for terrain, refract and
