@@ -219,3 +219,72 @@ rows it touches; list any other row that moved.
 - Pixels. The draw box is an upper bound; coverage is a board matter.
 - The board: the X2's numbers (x2-gm-before, x2-gm-after) set ms a frame
   beside these counts.
+
+## After tiled-copy-rs (0a922ae2)
+
+Plan #328, item host-recount. Counts only, no code changed. The tip is
+integration 0a922ae2 (2026-11-07), which holds tiled-copy-rs as c707598d
+(6e15c9fb on the integration branch before promotion); no other fix of the
+"What each fix should move" table is in it. Same glmark2 22c527cb, same two
+commands as "Run", 11 frames, frames 2 to 11. Rows from
+`<out>/gc-cost-vivante.md`; the lag run unless a row says `done`.
+
+| | terrain base | terrain after | shadow base | shadow after | refract base | refract after |
+|---|---:|---:|---:|---:|---:|---:|
+| waits in the swap (lag) | 1.8 | 1.8 | 0.9 | 0.9 | 2.3 | 2.3 |
+| **waits other (lag)** | 46.2 | **48.2** | 1.8 | **1.8** | 9.4 | **9.4** |
+| waits, all (done) | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 |
+| **kicks** | 52.0 | **52.0** | 3.0 | **3.0** | 13.0 | **13.0** |
+| draws in the streams | 59.0 | 59.0 | 5.0 | 5.0 | 14.0 | 14.0 |
+| draw box Mpx | 4.89 | 4.89 | 5.28 | 5.28 | 5.44 | 5.44 |
+| RS blits (Mpx), lag | 0.0 (0.00) | 2.0 (0.13) | 0 | 0 | 0 | 0 |
+| **invalidated KiB (calls)**, lag | 512.0 (2.0) | **0.0 (0.0)** | 7600.0 (1.0) | **7600.0 (1.0)** | 7600.0 (1.0) | **7600.0 (1.0)** |
+| **flushed KiB (calls)**, lag | 604.0 (118.0) | **92.4 (116.0)** | 7506.4 (11.0) | **7506.4 (11.0)** | 7522.2 (29.0) | **7522.2 (29.0)** |
+| foreign KiB | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 |
+| stream KiB | 74.1 | 74.4 | 5.7 | 5.7 | 17.9 | 17.9 |
+
+Terrain waits other by call site (lag, a frame): `record_level` (the
+mipmap chains' `frame_open`) 40.0 to 43.0; `gc_draw`'s `frame_open` 5.0 to
+5.0; `call<gc_draw`, the tiled copy's `finish()`, 1.0 to 0 (gone); swap 1.8
+and `glFinish` 0.2 unchanged. Kicks by entry point are unchanged
+(`glGenerateMipmap` 48.0, `glDrawArrays` 3.0, swap 0.9, `glFinish` 0.1). The
+two RS blits (0.131 Mpx) are in the 800x600 chain starts' kicks
+(`glGenerateMipmap`, 3.0 kicks, 7.0 KiB of stream).
+
+### Predictions of "What each fix should move", tiled-copy-rs
+
+| row | expected | after | held |
+|---|---:|---:|---|
+| terrain invalidated KiB (calls) | 0 (0) | 0.0 (0.0) | yes |
+| terrain flushed KiB | about 92 | 92.4 (116.0 calls, from 118.0) | yes |
+| terrain waits other, `call<gc_draw` | 0 | 0 | yes |
+| terrain waits other, total | 45.2 | **48.2** | **no**: +2.0, not -1.0 |
+| terrain RS blits | 2 (0.13 Mpx) | 2.0 (0.13 Mpx), one RS copy per map | yes |
+| terrain kicks, draws | 52, 59 | 52.0, 59.0 | yes |
+| terrain stream KiB | up, under 1 KiB | 74.1 to 74.4 (+0.3) | yes |
+| shadow, refract, all rows | no change | no change, to the digit | yes |
+
+- **The total did not hold.** The `finish()` is gone as predicted, but the
+  chains' `record_level` waits rose by 3.0 (40.0 to 43.0), so the lag count
+  went from 46.2 to 48.2. Kicks are the same 52, so the same 52 `frame_open`
+  checks are made; three more of them now find a pending kick. The likely
+  cause is the lag model: the `finish()` used to complete every pending
+  kick before the next chain start, and without it the 800x600 chain starts
+  (3 a frame) find the kick before them pending. Not traced further. On the
+  board it is the blocking waits that count (T: 5 to 7), which this run does
+  not give; the lag count is the ceiling, and it rose by 2. Fixes that remove
+  `record_level`'s waits (mip-one-kick, gc-frames-ring) should be compared to
+  48.2, not 46.2.
+- **The `done` run is no longer identical to the lag run.** The baseline
+  says every non-wait count is the same in both runs. After tiled-copy-rs the
+  terrain row of the `done` run is: RS blits 1.0 (0.07 Mpx), invalidated 256.0
+  KiB (1.0 call), flushed 348.2 KiB (117.0), stream 74.2 KiB; kicks, draws and
+  box as in the lag run. With every kick done at once, one of the two maps
+  takes the CPU copy (256 KiB read, 256 KiB copy flushed) and one the RS
+  blit. So the RS path depends on the producer kick being pending when the
+  copy is recorded, and the 0 KiB read above holds for the lag model only; on
+  the board the count lies between the two runs (0 to 256 KiB read, 92 to 348
+  KiB flushed). Not traced further. Shadow and refract are identical in both
+  runs.
+- The other fixes of the table are not filled in: none of them is in
+  0a922ae2.
