@@ -674,11 +674,17 @@ fn each_invalidating_path_writes_every_group_again() {
         // SAFETY: a plain GL call.
         unsafe { glFinish() };
         let kicks = take_kicks();
-        /* the two draws, a stream per level above 0 (64 -> 1: six), the draw */
-        assert_eq!(kicks.len(), 1 + 6 + 1, "the draws' streams and the chain's");
-        assert_eq!(draws(&kicks[0]), 2);
-        for (k, s) in kicks.iter().enumerate() {
-            assert_eq!(group_writes(s), every_group(1), "stream {k}: every group, once");
+        /* the two draws, the chain's one stream (a draw a level above 0,
+         * 64 -> 1: six), the draw */
+        assert_eq!(kicks.len(), 3, "the draws' stream, the chain's, the draw's");
+        assert_eq!((draws(&kicks[0]), draws(&kicks[1]), draws(&kicks[2])), (2, 6, 1));
+        for k in [0, 2] {
+            assert_eq!(group_writes(&kicks[k]), every_group(1), "stream {k}: every group, once");
+        }
+        /* the chain's first level writes every group, the later levels only
+         * those whose words changed */
+        for (g, n) in group_writes(&kicks[1]) {
+            assert!((1..=6).contains(&n), "the chain's stream: {g:?} written {n} times");
         }
     });
 }

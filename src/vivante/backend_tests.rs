@@ -332,6 +332,28 @@ impl Stream {
         out
     }
 
+    /// The stream up to and with its draw `n` (from 0).
+    fn upto_draw(&self, n: usize) -> Stream {
+        let (mut i, mut seen) = (0usize, 0usize);
+
+        while i < self.0.len() {
+            let w = self.0[i];
+            i += match w & 0xf800_0000 {
+                GC_OP_DRAW_INSTANCED => 4,
+                GC_OP_LOAD_STATE => 1 + ((w >> 16) & 0x3ff) as usize,
+                GC_OP_STALL => 2,
+                _ => 1,
+            };
+            if w & 0xf800_0000 == GC_OP_DRAW_INSTANCED {
+                if seen == n {
+                    return Stream(self.0[..i].to_vec());
+                }
+                seen += 1;
+            }
+        }
+        panic!("the stream has {seen} draws, not {}", n + 1)
+    }
+
     /// The 256-byte texture descriptor the stream points slot `slot` at.
     fn descriptor(&self, slot: u32) -> Vec<u32> {
         let gpu = self.reg(nte_descriptor_addr(slot)) as u64;
@@ -5167,9 +5189,9 @@ fn generate(b: &GlesTextureBind, levels: u32) -> i32 {
 
 /// A chain asked for while a frame into level 0 is still open (glmark2's
 /// terrain renders into the texture, then asks for its chain): that frame
-/// is submitted first, and the level kicks follow it in order, each a
-/// frame of its own into its level at the chain's pitch; the chain's last
-/// fence is remembered, and the frame is closed.
+/// is submitted first, and the chain follows it as one kick, a draw a level
+/// into that level at the chain's pitch, each behind the kick boundary's
+/// flushes; the chain's fence is remembered, and the frame is closed.
 #[test]
 fn a_chain_asked_for_during_a_frame_into_level_0_follows_that_frames_kick() {
     let rig = Rig::new();
@@ -5182,33 +5204,32 @@ fn a_chain_asked_for_during_a_frame_into_level_0_follows_that_frames_kick() {
     assert!(g().recording, "the frame into level 0 is open");
     let b = mip_bind(base, 64, 64, 7);
     assert_eq!(generate(&b, 7), 1);
-    assert!(!g().recording, "the chain's last frame was submitted");
-    assert_eq!(g().mip_fence, 7);
+    assert!(!g().recording, "the chain's frame was submitted");
+    assert!(!g().chain_stream, "the chain's stream is over");
+    assert_eq!(g().mip_fence, 2);
     assert_eq!((g().mip_chains, g().mip_chains_refused), (1, 0));
     let kicks = with_platform(|p| p.kicks.clone());
-    assert_eq!(kicks.len(), 7, "the frame into level 0, then six levels");
+    assert_eq!(kicks.len(), 2, "the frame into level 0, then the chain");
+    assert_eq!(u64::from(Stream(kicks[0].clone()).reg(pe_pipe_color_addr(0))), base, "the first kick's target");
     /* level l at 64-byte boundaries after the level before, 64 x (64 >> l) x 4 bytes each */
     let mut off = [0u32; 7];
     for l in 1..7 {
         off[l] = off[l - 1] + 64 * (64 >> (l - 1)) * 4;
     }
     assert_eq!(off, [0, 16384, 24576, 28672, 30720, 31744, 32256]);
-    for (k, words) in kicks.iter().enumerate() {
-        let s = Stream(words.clone());
-        assert_eq!(s.draws().len(), 1, "kick {k} holds one draw");
-        assert_eq!(u64::from(s.reg(pe_pipe_color_addr(0))), base + u64::from(off[k]), "kick {k}'s target");
-        assert_eq!(s.reg(GC_PE_COLOR_STRIDE), 64 * 4, "kick {k}'s pitch is the chain's");
-        /* the descriptor sits in the kick's frame arena, which the kick
-         * GC_FRAMES on reused: only the last GC_FRAMES kicks' are still there
-         * (tests/gc_mipmap_gpu.rs reads them at submit time instead) */
-        if k + GC_FRAMES >= kicks.len() {
-            let desc = s.descriptor(0);
-            assert_eq!(u64::from(desc[0]), base + u64::from(off[k - 1]), "kick {k} samples level {}", k - 1);
-            assert_eq!(
-                desc[GC_TEXDESC_CONFIG0 as usize / 4] & texdesc_format(0x1f),
-                texdesc_format(GC_TEX_FORMAT_A8R8G8B8)
-            );
-        }
+    let chain = Stream(kicks[1].clone());
+    assert_eq!(chain.draws().len(), 6, "the chain's kick holds a draw a level");
+    for l in 1..7 {
+        /* the stream up to level l's draw: its last writes are the draw's */
+        let s = chain.upto_draw(l - 1);
+        assert_eq!(u64::from(s.reg(pe_pipe_color_addr(0))), base + u64::from(off[l]), "level {l}'s target");
+        assert_eq!(s.reg(GC_PE_COLOR_STRIDE), 64 * 4, "level {l}'s pitch is the chain's");
+        let desc = s.descriptor(0);
+        assert_eq!(u64::from(desc[0]), base + u64::from(off[l - 1]), "level {l} samples level {}", l - 1);
+        assert_eq!(
+            desc[GC_TEXDESC_CONFIG0 as usize / 4] & texdesc_format(0x1f),
+            texdesc_format(GC_TEX_FORMAT_A8R8G8B8)
+        );
     }
     assert!(rig._gl.logs().iter().any(|l| l.contains("the GPU made the 7-level chain of a 64x64 texture")));
     assert!(rig.faults().is_empty());

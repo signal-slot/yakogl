@@ -25,9 +25,13 @@
 //! core keeps for this backend through `mip_level_align`), so the GL core
 //! asks nothing back but a wait ([`gc_return_mipmap_chain`]) before it
 //! reads or writes them on the CPU. Each level's draw goes through
-//! `super::backend::draw_one`, so the frame still open (the one that
-//! rendered level 0, or the level before) is submitted first and the level
-//! kicks follow it in order; nothing is waited for.
+//! `super::backend::draw_one`. The frame still open (the one that rendered
+//! level 0) is submitted first; the levels then share one stream, one kick
+//! for the chain, each level's draw behind the flushes and the front end's
+//! stall a kick boundary made (`backend::emit_target_boundary`), so it reads
+//! the level before as the GPU wrote it. Nothing is waited for. (One kick a
+//! level made glmark2's terrain 52 kicks a frame through the four stream
+//! slots: docs/notes/gc-slow-terrain.md, rank 2.)
 //!
 //! The channel order in memory does not matter to the filter and is kept
 //! as it is: the pixel engine writes B,G,R,A (`rt_rgba8888_is_bgra`), and
@@ -123,9 +127,8 @@ pub(super) fn mipgen_ps() -> &'static crate::shaderc::ShcShader {
 /// the level's extent, no depth or stencil, no blend, every channel, the
 /// quad vertex program and [`mipgen_ps`] with `src` bound as a one-level
 /// linear-filtered CLAMP_TO_EDGE B,G,R,A texture and 1 / the level's size
-/// as the block. Through [`backend::draw_one`]: the frame still open is
-/// submitted first, and the level's frame opens on its own target. 0, or
-/// the draw's error.
+/// as the block. Through [`backend::draw_one`], into the chain's stream
+/// ([`chain_gpu`]). 0, or the draw's error.
 fn record_level(base: u64, stride: u32, src: &MipLevel, dst: &MipLevel) -> i32 {
     let g = g();
     // SAFETY: single-threaded by contract; `d` and the block are read by
@@ -263,18 +266,27 @@ fn chain_gpu(t: &GlesTextureBind, levels: u32) -> Result<(), &'static str> {
      * current once the kicks below have run, and the GL core's stamps,
      * which the copies are keyed by, do not move for a GPU-made chain */
     super::tiled_copy::storage_rewritten(t.base_gpu, backend::kick_pending_retired);
-    /* Every level is a stream of its own (a new target), whose first draw
-     * writes every state group; forgetting them here as well keeps that
-     * true if a level ever shares a stream with the draws around it. */
+    /* The frame still open (the one that rendered level 0, or anything
+     * else) is submitted first, as a level's new target did before the
+     * chain shared a stream; then every level is recorded into one stream,
+     * each behind the flushes a kick boundary makes
+     * (`backend::emit_target_boundary`). A level that does not fit the
+     * stream starts the next kick (`draw_one`), so a chain is as few kicks
+     * as its draws fit. The chain's stream starts with every state group
+     * unknown; forgetting them here as well keeps that true. */
+    let _ = backend::gc_flush();
     super::dedup::invalidate();
+    g().chain_stream = true;
     for l in 1..n {
         if record_level(t.base_gpu, t.stride_texels, &lv[l - 1], &lv[l]) != 0 {
+            g().chain_stream = false;
             /* the levels recorded so far may be in flight, and the CPU
              * filter is about to rewrite them: wait them out first */
             let _ = backend::gc_finish();
             return Err("a level's draw was refused");
         }
     }
+    g().chain_stream = false;
     if backend::gc_flush() != 0 {
         let _ = backend::gc_finish();
         return Err("the chain's last kick did not submit");
@@ -289,15 +301,15 @@ fn chain_gpu(t: &GlesTextureBind, levels: u32) -> Result<(), &'static str> {
 /// glGenerateMipmap on the 2D texture `b` describes, whose storage holds a
 /// chain of `levels` levels (`YakoglBackend::generate_mipmap`): a 2D RGBA8
 /// texture, in either channel order, gets its levels 1.. drawn on the GPU
-/// (`chain_gpu`: one kick per level, every kick submitted before this
-/// returns) and the answer is 1: the GL core filters nothing. 0 -- the GL
-/// core's CPU box filter, as before -- for any other texture (another
-/// format, a cube or array stack), a chain whose layout this backend does
-/// not walk (`chain_layout`), a chain past the 32-bit address space, a
-/// level's draw or the last kick refused (the kicks recorded so far are
-/// waited for, since the CPU filter rewrites their levels), or a backend
-/// that is not running. Logged once with the reason, and counted
-/// ([`gc_backend_mip_chains`]).
+/// (`chain_gpu`: one kick for the chain, or as few as its draws fit,
+/// submitted before this returns) and the answer is 1: the GL core filters
+/// nothing. 0 -- the GL core's CPU box filter, as before -- for any other
+/// texture (another format, a cube or array stack), a chain whose layout
+/// this backend does not walk (`chain_layout`), a chain past the 32-bit
+/// address space, a level's draw or the last kick refused (the kicks
+/// recorded so far are waited for, since the CPU filter rewrites their
+/// levels), or a backend that is not running. Logged once with the reason,
+/// and counted ([`gc_backend_mip_chains`]).
 ///
 /// # Safety
 /// `b` is null or points at a binding that outlives the call.

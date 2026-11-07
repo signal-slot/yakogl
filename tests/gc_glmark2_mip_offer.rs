@@ -11,7 +11,7 @@
 //! the test asserts that the back end's chain was taken and the CPU box
 //! filter was not (`gc_backend_mip_chains` counted one more made and no more
 //! refused; the texture's `chain_in_backend`), the chain's level count, one
-//! kick per level above 0, and no GL error. The chain's texels are
+//! kick for the chain, and no GL error. The chain's texels are
 //! `gc_mipmap_gpu.rs`'s business, not this file's.
 //!
 //! ```text
@@ -301,7 +301,7 @@ fn render_into(w: u32, h: u32) {
 }
 
 /// One glGenerateMipmap on the texture bound, `what` named in a failure: the
-/// back end made the chain (counted, one kick per level above 0, the texture
+/// back end made the chain (counted, one kick for the chain, the texture
 /// in the back end's hands, GL's whole chain) and nothing was refused.
 fn generate_on_gpu(what: &str, w: u32, h: u32) {
     let levels = full_chain(w, h);
@@ -313,7 +313,7 @@ fn generate_on_gpu(what: &str, w: u32, h: u32) {
     assert!(t.chain_in_backend, "{what}: the GL core left the chain to the CPU filter");
     assert_eq!(u32::from(t.chain_levels), levels, "{what}: the chain's level count");
     assert_eq!(mip_counts(), (made0 + 1, refused0), "{what}: the back end counts one chain made, none refused");
-    assert_eq!(with_platform(|p| p.kicks) - kicks0, levels as usize - 1, "{what}: one kick per level above 0");
+    assert_eq!(with_platform(|p| p.kicks) - kicks0, 1, "{what}: one kick for the chain");
 }
 
 /* ---- the call shapes ----------------------------------------------------------------- */
