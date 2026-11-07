@@ -1,0 +1,8 @@
+#!/bin/bash
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# The fake board's dmesg: FAKE_BOARD/kmsg is its ring; -w follows it, for at
+# most 300 s (a board that went away is never told to stop; the self-test
+# also ends it on exit).
+if [ "${1-}" = -w ]; then exec timeout 300 tail -n +1 -f "$FAKE_BOARD/kmsg"; fi
+cat "$FAKE_BOARD/kmsg"

@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# A three-row tree table for tools/cts/mali-deqp-selftest.sh, in the form of
+# mali-gles2-tree.txt (check-gles3-tree.py's reader), against the real
+# tools/cts/gles2-mustpass.txt.
+
+# image T1: 6
+dEQP-GLES2.info.*
+# image T2: 6
+dEQP-GLES2.functional.prerequisite.*,dEQP-GLES2.functional.debug_marker.*
+# image T3: 5
+dEQP-GLES2.functional.flush_finish.*

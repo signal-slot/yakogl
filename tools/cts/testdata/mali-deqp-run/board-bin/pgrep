@@ -1,0 +1,7 @@
+#!/bin/bash
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# The fake board's pgrep: no deqp-gles2 survives (exit 1, nothing printed);
+# FAKE_WEDGED=1 makes one survive SIGKILL.
+if [ "${FAKE_WEDGED-}" = 1 ]; then echo 4242; exit 0; fi
+exit 1

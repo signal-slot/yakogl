@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# One passing case's record as dEQP writes it; @CASE@ is the case name.
+<?xml version="1.0" encoding="UTF-8"?>
+<TestCaseResult Version="0.3.4" CasePath="@CASE@" CaseType="SelfValidate">
+ <Text>fixture</Text>
+ <Result StatusCode="Pass">Pass</Result>
+</TestCaseResult>
