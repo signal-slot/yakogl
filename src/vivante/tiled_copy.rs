@@ -19,7 +19,10 @@
 //! `content_gen` (a CPU write) or `target_kick` (a render into it) differs
 //! from the copy's, before the draw starts recording: a render into the
 //! texture still in flight is finished first, and the CPU reads the storage
-//! after invalidating its cache. A texture with one level, a compressed one
+//! after invalidating its cache -- except a 2D texture of 4-byte texels the
+//! resolve engine can tile, whose new copy after a render is an RS copy
+//! recorded in the stream after the render instead (see [`rs_fits`],
+//! [`emit_pending`]). A texture with one level, a compressed one
 //! and a plain 2D one are sampled as they are -- except a 2D texture the
 //! vertex stage samples, which is copied too (see `wanted_vs`), and a
 //! texture with 64-bit texels (RGBA16F), which is copied into page-aligned
@@ -28,6 +31,9 @@
 //! halves first and its B,A halves after them (see `tile_planes`;
 //! docs/notes/gc-128bit-texture-sampling.md).
 
+use super::backend::RsBlit;
+use super::cmd::GcCmd;
+use super::regs::*;
 use crate::backend::{
     gles_texfmt_bytes, GlesDraw, GlesTextureBind, GLES_TEXTYPE_2D, GLES_TEXTYPE_2D_ARRAY, GLES_TEXTYPE_3D,
     GLES_TEXTYPE_CUBE,
@@ -80,6 +86,16 @@ struct Entry {
     /// The storage was rewritten behind the key ([`storage_rewritten`]):
     /// the copy is never matched again, and goes as soon as no kick reads it.
     stale: bool,
+    /// The resolve engine fills the copy ([`rs_fits`]): its layout is padded
+    /// to 16x4 and the descriptor says HALIGN SIXTEEN.
+    rs: bool,
+    /// ...and its RS copy is not yet in a stream that will be submitted:
+    /// every draw that samples it records the copy ([`emit_pending`]) until
+    /// one is recorded whole ([`recorded`]).
+    rs_pending: bool,
+    /// The [`prepare`] that last asked for the copy: a pending copy is not
+    /// taken back while the draw that wants it is being prepared.
+    made_in: u32,
 }
 
 struct Cache {
@@ -88,6 +104,13 @@ struct Cache {
 }
 
 static CACHE: Global<Cache> = Global::new(Cache { entries: [const { None }; ENTRIES], clock: 0 });
+/// [`prepare`] calls, for `made_in`.
+static GEN: Global<u32> = Global::new(0);
+
+fn gen() -> u32 {
+    // SAFETY: single-threaded by contract; the value is copied out.
+    unsafe { *GEN.get() }
+}
 
 fn cache() -> &'static mut Cache {
     // SAFETY: single-threaded by contract; each entry point takes it once.
@@ -344,9 +367,12 @@ unsafe fn tile_layer(src: *const u8, dst: *mut u8, (lw, lh): (u32, u32), tw: u32
 /// made -- the draw is then refused rather than sampling the linear storage,
 /// which reads the wrong faces.
 pub fn prepare(d: &GlesDraw, kick_pending: impl Fn(u32) -> bool, finish: impl Fn() -> i32) -> i32 {
-    let fs = &d.textures[..(d.num_textures as usize).min(d.textures.len())];
-    let vs = &d.vs_textures[..(d.num_vs_textures as usize).min(d.vs_textures.len())];
-    for t in fs.iter().filter(|t| wanted(t)).chain(vs.iter().filter(|t| wanted_vs(t))) {
+    // SAFETY: single-threaded by contract; no other reference to GEN is held.
+    unsafe {
+        let g = GEN.get();
+        *g = g.wrapping_add(1);
+    }
+    for t in copied(d) {
         if refresh(t, &kick_pending, &finish) != 0 {
             return -1;
         }
@@ -354,22 +380,104 @@ pub fn prepare(d: &GlesDraw, kick_pending: impl Fn(u32) -> bool, finish: impl Fn
     0
 }
 
+/// The textures of `d` that are sampled from a copy.
+fn copied(d: &GlesDraw) -> impl Iterator<Item = &GlesTextureBind> {
+    let fs = &d.textures[..(d.num_textures as usize).min(d.textures.len())];
+    let vs = &d.vs_textures[..(d.num_vs_textures as usize).min(d.vs_textures.len())];
+    fs.iter().filter(|t| wanted(t)).chain(vs.iter().filter(|t| wanted_vs(t)))
+}
+
+/// Can the resolve engine make the copy of `t`? A plain 2D texture of one
+/// level with 4-byte texels (copied as A8R8G8B8, Mesa's
+/// etna_compatible_rs_format for any 4-byte block), at least 16 wide, its
+/// width a multiple of 16 and its height of 4 (etnaviv_rs.c:87-92; the
+/// window is then the whole level and the 16x4-padded layout the RS writes
+/// is the 4x4-padded one, byte for byte), its storage on 64 bytes as a
+/// GL core level is. glmark2 terrain's 256x256 height and normal maps are.
+fn rs_fits(t: &GlesTextureBind) -> bool {
+    t.type_ == GLES_TEXTYPE_2D
+        && t.mip_levels == 1
+        && t.layers <= 1
+        && gles_texfmt_bytes(t.format) == 4
+        && !wide_texels(t)
+        && t.width >= 16
+        && t.width.is_multiple_of(16)
+        && t.height >= 4
+        && t.height.is_multiple_of(4)
+        && t.base_gpu.is_multiple_of(LEVEL_ALIGN as u64)
+        && t.stride_texels >= t.width
+}
+
+/// The RS copy of `t`'s linear level 0 into the 4x4-tiled copy at `dst`
+/// (etna_compile_rs_state, etnaviv_rs.c:76-132): a linear source at the
+/// storage's row pitch, a TILED destination whose stride is its padded row
+/// of texels times four (one row of tiles), no downsampling, no flip.
+fn rs_blit(t: &GlesTextureBind, dst: u64) -> RsBlit {
+    let fmt = GC_RS_FORMAT_A8R8G8B8;
+    RsBlit {
+        config: rs_source_format(fmt) | rs_dest_format(fmt) | GC_RS_DEST_TILED,
+        src: t.base_gpu as u32,
+        src_stride: t.stride_texels * 4,
+        dst: dst as u32,
+        dst_stride: (t.width.next_multiple_of(16) * 4) << 2,
+        w: t.width,
+        h: t.height,
+    }
+}
+
+/// Record into `c` the RS copies [`prepare`] made for `d` and no stream yet
+/// holds for sure, each once; the copies are then read by `kick`, the kick
+/// being recorded, and are not freed before it completes. Called before the
+/// draw records anything, again when the draw is recorded again in a new
+/// frame.
+pub fn emit_pending(d: &GlesDraw, c: &mut GcCmd, kick: u32) {
+    let mut done = [false; ENTRIES];
+    for t in copied(d) {
+        let key = key_of(t);
+        let entries = &mut cache().entries;
+        let Some(i) = entries.iter().position(|e| e.as_ref().is_some_and(|e| e.key == key && !e.stale)) else {
+            continue;
+        };
+        let Some(e) = entries[i].as_mut() else { continue };
+        if !e.rs_pending || done[i] {
+            continue;
+        }
+        done[i] = true;
+        super::backend::emit_rs(c, &rs_blit(t, e.gpu));
+        e.used_by = kick;
+    }
+}
+
+/// `d` was recorded whole: the RS copies [`emit_pending`] wrote for it go
+/// with that stream.
+pub fn recorded(d: &GlesDraw) {
+    for t in copied(d) {
+        let key = key_of(t);
+        if let Some(e) = cache().entries.iter_mut().flatten().find(|e| e.key == key && !e.stale) {
+            e.rs_pending = false;
+        }
+    }
+}
+
 fn refresh(t: &GlesTextureBind, kick_pending: &impl Fn(u32) -> bool, finish: &impl Fn() -> i32) -> i32 {
     let key = key_of(t);
     let c = cache();
     c.clock = c.clock.wrapping_add(1);
     let clock = c.clock;
+    let gen = gen();
     if let Some(e) = c.entries.iter_mut().flatten().find(|e| e.key == key && !e.stale) {
         e.stamp = clock;
+        e.made_in = gen;
         return 0;
     }
     /* the texels the GPU wrote must be in memory before the CPU reads them:
      * a render into the texture, and the kicks of a GPU-made mipmap chain
-     * (mipmap.rs), which no stamp of the GL core's names */
-    if (t.target_kick != 0 && kick_pending(t.target_kick)
-        || super::mipmap::chain_kick_pending(t.base_gpu, kick_pending))
-        && finish() != 0
-    {
+     * (mipmap.rs), which no stamp of the GL core's names. A render the
+     * resolve engine can tile from is not waited for: the RS copy goes into
+     * the stream after it (`emit_pending`), and no CPU pass is made. */
+    let rendered = t.target_kick != 0 && kick_pending(t.target_kick);
+    let rs = rendered && rs_fits(t);
+    if !rs && (rendered || super::mipmap::chain_kick_pending(t.base_gpu, kick_pending)) && finish() != 0 {
         return -1;
     }
     /* the older copies of this storage are stale now: free the ones no kick
@@ -417,6 +525,23 @@ fn refresh(t: &GlesTextureBind, kick_pending: &impl Fn(u32) -> bool, finish: &im
     }
     /* the CPU view and the GPU address move together: one allocation */
     let skip = base_skip(mem.gpu, align);
+    if rs {
+        /* the RS writes every byte of the copy: `rs_fits` makes the window
+         * the whole tile-padded level */
+        let gpu = mem.gpu + skip as u64;
+        c.entries[slot] = Some(Entry {
+            key,
+            mem,
+            gpu,
+            used_by: 0,
+            stamp: clock,
+            stale: false,
+            rs: true,
+            rs_pending: true,
+            made_in: gen,
+        });
+        return 0;
+    }
     let src_bytes = t.bytes as usize;
     // SAFETY: `t.cpu` is the storage's CPU view for `t.bytes` bytes (the GL
     // core's contract); `mem` was just allocated with `alloc` bytes, and
@@ -429,7 +554,17 @@ fn refresh(t: &GlesTextureBind, kick_pending: &impl Fn(u32) -> bool, finish: &im
         osal::cache_flush(dst as *mut core::ffi::c_void, total);
     }
     let gpu = mem.gpu + skip as u64;
-    c.entries[slot] = Some(Entry { key, mem, gpu, used_by: 0, stamp: clock, stale: false });
+    c.entries[slot] = Some(Entry {
+        key,
+        mem,
+        gpu,
+        used_by: 0,
+        stamp: clock,
+        stale: false,
+        rs: false,
+        rs_pending: false,
+        made_in: gen,
+    });
     0
 }
 
@@ -484,18 +619,20 @@ fn lru_idle(c: &Cache, kick_pending: &impl Fn(u32) -> bool) -> Option<usize> {
         .map(|(i, _)| i)
 }
 
-/// Does a kick still to complete sample this copy?
+/// Does a kick still to complete sample (or fill) this copy, or does the
+/// draw being prepared still have to record its RS copy?
 fn busy(e: &Entry, kick_pending: &impl Fn(u32) -> bool) -> bool {
-    e.used_by != 0 && kick_pending(e.used_by)
+    e.used_by != 0 && kick_pending(e.used_by) || e.rs_pending && e.made_in == gen()
 }
 
-/// The copy of `t` (after [`prepare`]): its GPU address, its levels' offsets
-/// and its level-0 layer size, and it is marked as used by `kick`, the kick
-/// being recorded (`gc_kick_id`). `None` when `t` wants no copy. A 2D
+/// The copy of `t` (after [`prepare`]): its GPU address, its levels' offsets,
+/// its level-0 layer size and the descriptor's HALIGN (SIXTEEN for a copy
+/// the resolve engine made, padded to 16x4; else FOUR), and it is marked as
+/// used by `kick`, the kick being recorded (`gc_kick_id`). `None` when `t` wants no copy. A 2D
 /// texture has one only when [`prepare`] made it for the vertex stage; the
 /// fragment stage then samples the same copy, which is as current as the
 /// storage (the key carries `content_gen` and `target_kick`).
-pub fn lookup(t: &GlesTextureBind, kick: u32) -> Option<(u64, [usize; 16], u32)> {
+pub fn lookup(t: &GlesTextureBind, kick: u32) -> Option<(u64, [usize; 16], u32, u32)> {
     if !wanted_vs(t) {
         return None;
     }
@@ -508,7 +645,8 @@ pub fn lookup(t: &GlesTextureBind, kick: u32) -> Option<(u64, [usize; 16], u32)>
      * G32R32 layers (Mesa's layer_stride of the 64-bit twin,
      * etnaviv_resource.c:315-331) */
     let slice = align4(t.width) * align4(t.height) * copy_bpp(t);
-    Some((e.gpu, off, slice))
+    let halign = if e.rs { GC_TEXTURE_HALIGN_SIXTEEN } else { GC_TEXTURE_HALIGN_FOUR };
+    Some((e.gpu, off, slice, halign))
 }
 
 /// Free every copy (backend shutdown).
@@ -651,6 +789,114 @@ mod tests {
         }
         let new = t.elapsed().as_secs_f64() * 1e3 / n as f64;
         println!("tile 256x256 RGBA8: per texel {old:.4} ms, per tile row {new:.4} ms");
+    }
+
+    /// Every `(register, value)` a LOAD_STATE of `words` writes, in order.
+    fn writes(words: &[u32]) -> Vec<(u32, u32)> {
+        let mut out = Vec::new();
+        let mut i = 0usize;
+        while i < words.len() {
+            let w = words[i];
+            assert_eq!(w & 0xf800_0000, GC_OP_LOAD_STATE, "word {i}: only LOAD_STATEs expected");
+            let count = ((w >> 16) & 0x3ff) as usize;
+            let base = (w & 0xffff) * 4;
+            for k in 0..count {
+                out.push((base + 4 * k as u32, words[i + 1 + k]));
+            }
+            i += 1 + count + if count & 1 == 0 { 1 } else { 0 };
+        }
+        out
+    }
+
+    /// What the resolve engine does with the registers `w` set when the
+    /// kicker is written, for the one case `rs_blit` programs: A8R8G8B8 to
+    /// A8R8G8B8, a linear source, a TILED destination (4x4 tiles row-major,
+    /// texels row-major in a tile, a row of tiles RS_DEST_STRIDE / 4 * 4
+    /// bytes, etnaviv_rs.c:76-78), no downsampling, no flip. `mem` maps a
+    /// GPU address to a byte of one of the buffers.
+    fn run_rs(w: &[(u32, u32)], src: &[u8], src_gpu: u32, dst: &mut [u8], dst_gpu: u32) {
+        let reg = |r: u32| w.iter().rev().find(|(a, _)| *a == r).map(|(_, v)| *v).expect("register not written");
+        let config = reg(GC_RS_CONFIG);
+        let fmt = GC_RS_FORMAT_A8R8G8B8;
+        assert_eq!(config, rs_source_format(fmt) | rs_dest_format(fmt) | GC_RS_DEST_TILED, "RS_CONFIG");
+        assert_eq!(reg(GC_RS_CLEAR_CONTROL), 0, "a copy, not a fill");
+        assert_eq!(reg(GC_RS_EXTRA_CONFIG), 0);
+        assert_eq!((reg(rs_pipe_offset(0)), reg(rs_pipe_offset(1))), (0, 0));
+        let ss = reg(GC_RS_SOURCE_STRIDE);
+        let ds = reg(GC_RS_DEST_STRIDE);
+        assert_eq!(ss & (GC_RS_SOURCE_STRIDE_TILING | GC_RS_SOURCE_STRIDE_SUPER_TILED_NEW), 0, "linear source");
+        let win = reg(GC_RS_WINDOW_SIZE);
+        let (ww, wh) = (win & 0xffff, win >> 16);
+        assert_eq!(win, rs_window_width(ww) | rs_window_height(wh), "window encoding");
+        assert!(ww.is_multiple_of(16) && wh.is_multiple_of(4), "{ww}x{wh} is no RS window");
+        let s0 = (reg(rs_pipe_source_addr(0)) - src_gpu) as usize;
+        let d0 = (reg(rs_pipe_dest_addr(0)) - dst_gpu) as usize;
+        for y in 0..wh {
+            for x in 0..ww {
+                let from = s0 + (y * ss + x * 4) as usize;
+                let to = d0 + ((y / 4) * ds + (x / 4) * 64 + ((y % 4) * 4 + x % 4) * 4) as usize;
+                dst[to..to + 4].copy_from_slice(&src[from..from + 4]);
+            }
+        }
+    }
+
+    /// The RS words for a copy fill it with exactly what the CPU's `tile`
+    /// writes, behind the flush and the stall, and the resolve engine is
+    /// asked only where it fits.
+    #[test]
+    fn the_rs_copy_writes_what_the_cpu_tiling_writes() {
+        let (src_gpu, dst_gpu) = (0x0010_0000u32, 0x0080_0000u32);
+        for (w, h, stride) in [(16u32, 4u32, 16u32), (32, 8, 48), (256, 256, 256), (48, 12, 64)] {
+            let t = GlesTextureBind {
+                type_: GLES_TEXTYPE_2D,
+                width: w,
+                height: h,
+                stride_texels: stride,
+                layers: 1,
+                mip_levels: 1,
+                format: crate::backend::GLES_TEXFMT_RGBA8,
+                base_gpu: src_gpu as u64,
+                ..GlesTextureBind::ZERO
+            };
+            assert!(rs_fits(&t), "{w}x{h}");
+            let src = pattern((stride * h * 4) as usize);
+            let (_, total) = tiled_layout(w, h, 1, 1, 4);
+            let mut want = vec![0u8; total];
+            // SAFETY: `src` is the linear level, `want` the tiled layout.
+            unsafe { tile(&t, src.as_ptr(), want.as_mut_ptr(), 4) };
+
+            let mut buf = vec![0u32; 256];
+            let mut c = GcCmd { words: buf.as_mut_ptr(), used: 0, cap: buf.len() as u32, overflow: false };
+            super::super::backend::emit_rs(&mut c, &rs_blit(&t, dst_gpu as u64));
+            assert!(!c.overflow);
+            let wr = writes(&buf[..c.used as usize]);
+            assert_eq!(wr[0], (GC_GL_FLUSH_CACHE, GC_FLUSH_COLOR | GC_FLUSH_DEPTH), "the PE's caches flushed first");
+            assert_eq!(wr[1], (GC_GL_SEMAPHORE_TOKEN, stall_token(GC_SYNC_RA, GC_SYNC_PE)), "then the PE drained");
+            let kicks: Vec<usize> =
+                wr.iter().enumerate().filter(|(_, (r, _))| *r == GC_RS_KICKER).map(|(i, _)| i).collect();
+            assert_eq!(kicks.len(), 1, "one RS operation");
+            assert!(wr.iter().position(|(r, _)| *r == GC_RS_CONFIG).unwrap() > 2, "the RS after the stall");
+
+            let mut got = vec![0u8; total];
+            run_rs(&wr[..kicks[0]], &src, src_gpu, &mut got, dst_gpu);
+            assert_eq!(got, want, "{w}x{h}, row pitch {stride} texels");
+        }
+        let fits = |w, h, levels, format| {
+            rs_fits(&GlesTextureBind {
+                type_: GLES_TEXTYPE_2D,
+                width: w,
+                height: h,
+                stride_texels: w,
+                layers: 1,
+                mip_levels: levels,
+                format,
+                ..GlesTextureBind::ZERO
+            })
+        };
+        assert!(!fits(24, 8, 1, crate::backend::GLES_TEXFMT_RGBA8), "width not a multiple of 16");
+        assert!(!fits(16, 6, 1, crate::backend::GLES_TEXFMT_RGBA8), "height not a multiple of 4");
+        assert!(!fits(16, 16, 2, crate::backend::GLES_TEXFMT_RGBA8), "a chain");
+        assert!(!fits(16, 16, 1, crate::backend::GLES_TEXFMT_RGBA16F), "64-bit texels");
     }
 
     #[test]

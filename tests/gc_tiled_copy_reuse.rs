@@ -15,6 +15,11 @@
 //! OSAL never reuses an address, so the same address is the same copy. The
 //! texels are read from that address in the 4x4-tiled layout.
 //!
+//! A copy made after a render the GPU has not finished is the resolve
+//! engine's, recorded in the stream after the render, with no finish():
+//! the last case counts the finishes (`gc_finishes`) and reads the RS words
+//! (docs/notes/gc-tiled-targets.md, "The change list", step 1).
+//!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-vivante,shaderc-online --test gc_tiled_copy_reuse
 //! ```
@@ -432,5 +437,127 @@ fn a_render_into_the_texture_makes_a_new_copy() {
          * is checked here. The data of a new copy is checked by the TexSubImage
          * case. */
         assert_eq!(draw_sampling(), after, "the copy was made again with no new render");
+    });
+}
+
+/// The last value `reg` had in `w`.
+fn last(w: &[(u32, u32)], reg: u32) -> Option<u32> {
+    w.iter().rev().find(|(r, _)| *r == reg).map(|(_, v)| *v)
+}
+
+/// Index in `words` of the command that holds the `n`th register write
+/// [`writes`] lists.
+fn word_of_write(words: &[u32], n: usize) -> usize {
+    let (mut seen, mut i) = (0usize, 0usize);
+    while i < words.len() {
+        let w = words[i];
+        if w & 0xf800_0000 == GC_OP_LOAD_STATE {
+            let count = ((w >> 16) & 0x3ff) as usize;
+            if seen + count > n {
+                return i;
+            }
+            seen += count;
+            i += 1 + count;
+            continue;
+        }
+        i += match w & 0xf800_0000 {
+            GC_OP_DRAW_INSTANCED => 4,
+            GC_OP_STALL => 2,
+            _ => 1,
+        };
+    }
+    panic!("write {n} is past the stream");
+}
+
+/// A fragment stage that writes one colour: terrain's passes into its maps
+/// are draws.
+const VS_PLAIN: &str = "attribute vec4 p;\nvoid main() { gl_Position = p; }\n";
+const FS_PLAIN: &str = "precision mediump float;\nvoid main() { gl_FragColor = vec4(0.5, 0.25, 0.125, 1.0); }\n";
+
+/// glmark2 terrain's shape: a draw into a 16x16 RGBA8 texture, then a draw
+/// whose vertex stage samples it, with no glFinish between. The new copy is
+/// made by the resolve engine in the stream, after the render and before the
+/// draw, and the draw waits for nothing.
+#[test]
+fn a_render_into_the_texture_is_tiled_by_the_rs_with_no_finish() {
+    on_gc7000(|| {
+        let t = make_texture(1);
+        let before = draw_sampling();
+        let plain = program(VS_PLAIN, FS_PLAIN);
+        let mut fb: GLuint = 0;
+        let kicks0 = with_platform(|p| p.kicks.len());
+        // SAFETY: plain GL calls; `t` is complete and renderable (RGBA8);
+        // QUAD is a static.
+        unsafe {
+            glGenFramebuffers(1, &mut fb);
+            glBindFramebuffer(GL_FRAMEBUFFER, fb);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, t, 0);
+            assert_eq!(glCheckFramebufferStatus(GL_FRAMEBUFFER), GL_FRAMEBUFFER_COMPLETE);
+            glViewport(0, 0, SIZE as GLsizei, SIZE as GLsizei);
+            glBindTexture(GL_TEXTURE_2D, 0);
+            glUseProgram(plain);
+            glEnableVertexAttribArray(0);
+            glVertexAttribPointer(0, 4, GL_FLOAT, 0, 0, QUAD.as_ptr() as *const c_void);
+            glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            glBindTexture(GL_TEXTURE_2D, t);
+        }
+        no_error("render into the texture");
+        let p = program(VS, FS);
+        let finishes0 = yakogl::vivante::backend::gc_finishes();
+        // SAFETY: plain GL calls; QUAD is a static.
+        unsafe {
+            glViewport(0, 0, 64, 64);
+            glUseProgram(p);
+            glUniform1i(glGetUniformLocation(p, c"s".as_ptr()), 0);
+            glEnableVertexAttribArray(0);
+            glVertexAttribPointer(0, 4, GL_FLOAT, 0, 0, QUAD.as_ptr() as *const c_void);
+            glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+        }
+        no_error("draw");
+        assert_eq!(
+            yakogl::vivante::backend::gc_finishes(),
+            finishes0,
+            "the draw after the render waited for the GPU to make the tiled copy"
+        );
+        // SAFETY: plain GL call.
+        unsafe { glFinish() };
+        let kicks = with_platform(|p| p.kicks[kicks0..].to_vec());
+        assert_eq!(kicks.len(), 2, "the render and the draw are two kicks");
+        let (render, draw) = (&kicks[0], &kicks[1]);
+        let w = writes(draw);
+        let desc = u64::from(last(&w, nte_descriptor_addr(0)).expect("no descriptor for slot 0"));
+        let copy = u64::from(u32::from_le_bytes(read_gpu(desc, 4).try_into().unwrap()));
+        assert_ne!(copy, before, "a render into the texture kept the old copy");
+
+        /* the render's kick drew into the texture's storage */
+        let storage = last(&writes(render), pe_pipe_color_addr(0)).expect("the render names no colour surface");
+        assert!(!writes(render).iter().any(|(r, _)| *r == GC_RS_KICKER), "no RS copy before the render");
+        /* the draw's kick: one RS copy, the storage into the copy */
+        let ops: Vec<usize> = w.iter().enumerate().filter(|(_, (r, _))| *r == GC_RS_KICKER).map(|(i, _)| i).collect();
+        assert_eq!(ops.len(), 1, "one RS operation in the draw's kick");
+        let r = &w[..ops[0]];
+        assert_eq!(last(r, rs_pipe_dest_addr(0)), Some(copy as u32), "into the copy the draw samples");
+        assert_eq!(last(r, rs_pipe_source_addr(0)), Some(storage), "from the rendered storage");
+        let fmt = GC_RS_FORMAT_A8R8G8B8;
+        assert_eq!(last(r, GC_RS_CONFIG), Some(rs_source_format(fmt) | rs_dest_format(fmt) | GC_RS_DEST_TILED));
+        assert_eq!(last(r, GC_RS_SOURCE_STRIDE), Some(SIZE * 4), "the storage's linear rows");
+        assert_eq!(last(r, GC_RS_DEST_STRIDE), Some((SIZE * 4) << 2), "a row of 4x4 tiles, times four");
+        assert_eq!(last(r, GC_RS_WINDOW_SIZE), Some(rs_window_width(SIZE) | rs_window_height(SIZE)));
+        /* the flush and the stall right before it */
+        let cfg = r.iter().rposition(|(a, _)| *a == GC_RS_CONFIG).unwrap();
+        assert_eq!(r[cfg - 3], (GC_GL_FLUSH_CACHE, GC_FLUSH_COLOR | GC_FLUSH_DEPTH), "the PE's caches flushed first");
+        assert_eq!(r[cfg - 2].0, GC_GL_SEMAPHORE_TOKEN, "then the PE drained");
+        /* and before the draw that samples the copy */
+        let draw_at = draw.iter().position(|w| w & 0xf800_0000 == GC_OP_DRAW_INSTANCED).expect("no draw");
+        assert!(word_of_write(draw, ops[0]) < draw_at, "the RS copy comes before the draw it feeds");
+        /* the descriptor says the copy is padded for the RS */
+        let config1 = u32::from_le_bytes(read_gpu(desc + u64::from(GC_TEXDESC_CONFIG1), 4).try_into().unwrap());
+        assert_eq!(config1 & texdesc_halign(7), texdesc_halign(GC_TEXTURE_HALIGN_SIXTEEN), "HALIGN SIXTEEN");
+        /* a second draw finds the copy made, and records no second RS copy */
+        let kicks1 = with_platform(|p| p.kicks.len());
+        assert_eq!(draw_sampling(), copy, "the copy was made again with no new render");
+        let again = with_platform(|p| p.kicks[kicks1..].concat());
+        assert!(!writes(&again).iter().any(|(r, _)| *r == GC_RS_KICKER), "the RS copy was recorded twice");
     });
 }

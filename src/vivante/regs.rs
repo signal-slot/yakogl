@@ -829,6 +829,10 @@ pub const fn texdesc_swizzle_a(x: u32) -> u32 {
 pub const fn texdesc_halign(x: u32) -> u32 {
     (x & 0x7) << 26
 }
+/// HALIGN values (common_3d.xml.h TEXTURE_HALIGN_*): a TILED texture's rows
+/// padded to 4 texels, or to 16 for the resolve engine.
+pub const GC_TEXTURE_HALIGN_FOUR: u32 = 0;
+pub const GC_TEXTURE_HALIGN_SIXTEEN: u32 = 1;
 /// CONFIG1: the layers are an array, not the slices of a volume.
 pub const GC_TEXDESC_TEXTURE_ARRAY: u32 = 0x0100_0000;
 pub const GC_TEXDESC_CONFIG2: u32 = 0x6c;

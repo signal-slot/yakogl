@@ -364,7 +364,10 @@ fn build_descriptor(f: &mut GcFrame, t: &GlesTextureBind, plane: u32) -> u64 {
     let tiled = fmt.compressed || copy.is_some();
     let [config0, config1, config2] = format_words(t, tiled);
     desc[GC_TEXDESC_CONFIG0 as usize / 4] = config0;
-    desc[GC_TEXDESC_CONFIG1 as usize / 4] = config1;
+    /* a copy the resolve engine made is padded to 16x4 (tiled_copy.rs
+     * `rs_fits`), Mesa's TILED layout when the RS may touch it
+     * (etnaviv_resource.c:382) */
+    desc[GC_TEXDESC_CONFIG1 as usize / 4] = config1 | copy.map_or(0, |(_, _, _, halign)| texdesc_halign(halign));
     desc[GC_TEXDESC_CONFIG2 as usize / 4] = config2;
     /* A block format's rows are rows of blocks, not of texels: the GL core
      * lays ceil(w/4) of them side by side
@@ -393,7 +396,7 @@ fn build_descriptor(f: &mut GcFrame, t: &GlesTextureBind, plane: u32) -> u64 {
      * 0x100, four times too far. */
     desc[GC_TEXDESC_SLICE as usize / 4] = match copy {
         /* the copy's level-0 layer, tile-padded */
-        Some((_, _, slice)) => slice,
+        Some((_, _, slice, _)) => slice,
         None => {
             desc[GC_TEXDESC_LINEAR_STRIDE as usize / 4] * if fmt.compressed { t.height.div_ceil(4) } else { t.height }
         }
@@ -419,7 +422,7 @@ fn build_descriptor(f: &mut GcFrame, t: &GlesTextureBind, plane: u32) -> u64 {
      * fragment texturecube (nine levels) failed on the i.MX8MP while the
      * vertex one (one level) passed (2026-09-24).
      */
-    if let Some((copy_gpu, off, _)) = copy {
+    if let Some((copy_gpu, off, _, _)) = copy {
         for (lod, o) in off.iter().enumerate().take(levels.min(16)) {
             let half = if plane == 1 { super::tiled_copy::second_plane_offset(t, lod as u32) } else { 0 };
             desc[texdesc_lod_addr(lod as u32) as usize / 4] = (copy_gpu + (*o + half) as u64) as u32;
