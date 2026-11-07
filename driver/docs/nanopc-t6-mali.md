@@ -784,8 +784,13 @@ milestones (Zephyr booted by U-Boot), as on every board.
   acknowledged. Host side written 2026-10-28 ("The firmware (Z3)": the
   generator, the parser, the interface, the boot over a model of the MCU);
   the map over every loaded section joined it on 2026-11-01 (8c8b8581);
-  the board run waits for Z2's board run and for the Zephyr side ("The
-  firmware (Z3)", "Open, before the board run").
+  the Zephyr side joined it 2026-11-03 to 2026-11-06: the `t6_fw` probe
+  (ceb971bb scaffold, 29756d0e the call), the C entry `yd_t6_fw_up`
+  (c022cbfc, fbbd4d71, in `driver/rust/src/ffi/rk3588.rs` and
+  `yakogl_drivers.h`), `t6_fw`'s lines in `t6-verdict.sh` (08163414) and
+  the `t6_fw` gate row (370dd06b). Host side done; **the board run has
+  not happened**: it waits for Z2's board run, the owner's go-ahead and
+  the UART (below, "Z3 board procedure").
 - **Z4**: CSG 0 / CS 0 started from our kernel side; the L1 frame renders the same
   bytes as under panthor. From here the same back end and compiler run on Zephyr,
   and gl_test and dEQP move to the product form.
