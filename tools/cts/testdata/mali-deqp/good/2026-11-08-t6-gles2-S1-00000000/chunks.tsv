@@ -1,0 +1,3 @@
+row	label	cases	status	seconds	kmsg	resets	ssh_after	boot_same	exit_line
+1	a	3	done	12	0	0	ok	yes	-
+2	b	2	done	9	1	0	ok	yes	yakogl-mali-exit: refused blend_equation_separate
