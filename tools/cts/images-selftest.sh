@@ -26,8 +26,11 @@ unset BOARD BOARD_UART DEQP_MODULE DEQP_STAGE1 DEQP_STAGE1_GLES3 DEQP_WORK \
     PCO_SHC PVR_FW_BLOB STAGE_FAKE TREE_IMAGE TREE_ROWS WDOG_SELF_ARM \
     WEST_LOG WEST_VENV YAKOGL_DIR ZEPHYR_BASE ZEPHYR_EXTRA_MODULES \
     ZEPHYR_MODULES ZEPHYR_SDK ZEPHYR_SDK_INSTALL_DIR ZEPHYR_TOOLCHAIN_VARIANT \
-    ZEPHYR_VENV ZEPHYR_WORKSPACE ZEPHYR_WS LANGUAGE LC_ALL LC_CTYPE LC_MESSAGES
-export LANG=C
+    ZEPHYR_VENV ZEPHYR_WORKSPACE ZEPHYR_WS LANGUAGE LC_CTYPE LC_MESSAGES GIT_DIR GIT_WORK_TREE GIT_TEMPLATE_DIR
+export LANG=C LC_ALL=C
+# git: the host's ~/.gitconfig (commit.gpgsign, hooks, templates, safe.directory) must not reach the
+# scratch repository; HOME is the scratch directory
+export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null
 
 HERE=$(cd "$(dirname "$0")" && pwd)
 fail=0
@@ -40,6 +43,7 @@ absent() { case "$3" in *"$2"*) bad "$1: found '$2' in: $3" ;; *) ok "$1" ;; esa
 
 T=$(mktemp -d "${TMPDIR:-/tmp}/images-selftest.XXXXXX") || exit 2
 trap 'rm -rf "$T"' EXIT
+mkdir -p "$T/home" && export HOME=$T/home
 R=$T/repo
 mkdir -p "$R/tools/cts" "$R/driver/src/fw" "$R/driver/samples/zephyr/deqp" \
     "$R/driver/samples/zephyr/gl_test" "$T/bin" "$T/ws/zephyr" \
@@ -220,7 +224,7 @@ absent "Verdin deqp dry run: no watchdog option of its own" "WDOG_SELF_ARM" "$ou
 out=$(DRYRUN=1 IMX8MP_OUT=/o "$D" --gles3 d 'dEQP-GLES3.info.*' 2>&1)
 check "Verdin deqp GLES3 dry run: the Verdin board" "-b $V -d /o/d " "$out"
 rm "$T/bin/west"
-out=$(PATH="/usr/bin:/bin" "$G" n4 96 2>&1); rc=$?
+out=$(PATH="$T/nowest" "$G" n4 96 2>&1); rc=$?
 [ "$rc" = 2 ] && ok "no west: rc 2" || bad "no west: rc=$rc: $out"
 check "names west" "west not on PATH" "$out"
 
