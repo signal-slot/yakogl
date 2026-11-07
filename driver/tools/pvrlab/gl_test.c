@@ -423,6 +423,11 @@
  *               CONFIG_YAKOGL_DRV_GPU_PVR_PARTIAL_RENDER: without it the kick
  *               hangs by design (the 10 s stop), so NOT in the default list;
  *               run it by number (README.md, "Case 217")
+ * 219 kickpair  two 64x64 renders back to back and one alone (PowerVR; fix
+ *               4 of am62p-slow-terrain.md): 20 repetitions of each, glFinish
+ *               after each. Logs the ms a repetition, the kicks a repetition
+ *               and the last kick's times (pvr_render_last_kick_us). Not in
+ *               the regression set (a measurement); the PowerVR's only
  * 218 shadowcmp a depth texture compared by sampler2DShadow (#version 300 es):
  *               a 4x4 DEPTH_COMPONENT32F texture (texel (x, y) = (1 + (7x +
  *               5y) % 16) / 17, uploaded) bound with two sampler objects,
@@ -781,6 +786,7 @@
  * GL_TEST_HOST (the PowerVR arm) and with GL_TEST_USER (the GC7000 arm), so a
  * syntax error in either GPU's code fails the gate without a board. Both log
  * with printf and keep time with clock_gettime. */
+#include <errno.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <stddef.h>
@@ -870,6 +876,8 @@ void *gl_test_v3d_osal_arg(void);
 static inline void gl_test_perf_read(uint32_t *out) { memset(out, 0, 7 * sizeof(*out)); }
 /* the kicks the GPU has completed: the PowerVR's only (0 elsewhere) */
 static inline uint32_t gl_test_kicks_done(void) { return 0; }
+/* the wait's re-posts so far (pvr_render_fl_counters word 6): the PowerVR's only */
+static inline uint32_t gl_test_reposts(void) { return 0; }
 static inline void gl_test_prim_budget(unsigned int budget) { (void)budget; }
 /* how the run-time compiler lowers an `if` with arithmetic arms: the
  * PowerVR's option only (case 195); elsewhere both forms are one program */
@@ -881,6 +889,14 @@ static inline void gl_test_if_lowering(unsigned int v) { (void)v; }
 static inline void gl_test_perf_read(uint32_t *out) { pvr_render_perf_read(out); }
 /* the render service's completed fence: one sequence a kick */
 static inline uint32_t gl_test_kicks_done(void) { return pvr_render_completed(); }
+/* the wait's re-posts so far: pvr_render_fl_counters word 6 (`reposts`) */
+static inline uint32_t gl_test_reposts(void)
+{
+	uint32_t c[9];
+
+	pvr_render_fl_counters(c);
+	return c[6];
+}
 /* PVR_BACKEND_OPT_PRIM_BUDGET is a test knob: a library without them keeps
  * its built-in budget, and the case's two halves draw the same thing */
 static inline void gl_test_prim_budget(unsigned int budget)
@@ -8524,7 +8540,7 @@ static const char *const case_names[] = {
 	 * `gl_test: case 65 polyunit: FAIL`, a line the program could not emit.
 	 * A reader grepping for it would have found nothing and concluded the
 	 * case had not run. 63 was still missing when 65/66/67 were added. */
-	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain", [185] = "kindcost", [186] = "fcsplit", [187] = "predarm", [188] = "predif", [189] = "mulone", [190] = "blendonce", [191] = "varyfma", [192] = "predlive", [193] = "offarm", [194] = "offarmn", [195] = "ifbranch", [196] = "occl", [197] = "vtxgrid", [198] = "a2cconst", [199] = "es3trunc", [200] = "intrt", [201] = "usamp", [202] = "blitconv", [203] = "tfcap", [204] = "srgb", [205] = "mappbo", [206] = "es3levels", [207] = "msaazs", [208] = "msaapre", [209] = "varyorder", [210] = "occlacc", [211] = "msaablend", [212] = "ifsel", [213] = "discloop", [214] = "splitkick", [215] = "shadowmap", [216] = "mipchains", [217] = "forcedpr", [218] = "shadowcmp",
+	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain", [185] = "kindcost", [186] = "fcsplit", [187] = "predarm", [188] = "predif", [189] = "mulone", [190] = "blendonce", [191] = "varyfma", [192] = "predlive", [193] = "offarm", [194] = "offarmn", [195] = "ifbranch", [196] = "occl", [197] = "vtxgrid", [198] = "a2cconst", [199] = "es3trunc", [200] = "intrt", [201] = "usamp", [202] = "blitconv", [203] = "tfcap", [204] = "srgb", [205] = "mappbo", [206] = "es3levels", [207] = "msaazs", [208] = "msaapre", [209] = "varyorder", [210] = "occlacc", [211] = "msaablend", [212] = "ifsel", [213] = "discloop", [214] = "splitkick", [215] = "shadowmap", [216] = "mipchains", [217] = "forcedpr", [218] = "shadowcmp", [219] = "kickpair",
 };
 
 /* ---- case 67: what a framebuffer object does NOT have -----------------------
@@ -20062,7 +20078,7 @@ static int case_mipchains(void)
 	const bool es2 = !ver || strncmp(ver, "OpenGL ES 2.", 12) == 0;
 	GLuint prog, src = 0, tex[3] = { 0, 0, 0 }, fbo[3] = { 0, 0, 0 };
 	GLenum status[3] = { 0, 0, 0 };
-	uint32_t t0 = 0, t1 = 0, pc0[7], pc1[7], complete = 0, seq0 = 0, seq1 = 0;
+	uint32_t t0 = 0, t1 = 0, pc0[7], pc1[7], complete = 0, seq0 = 0, seq1 = 0, rp0 = 0, rp1 = 0;
 	uint64_t px_frame = (uint64_t)TW * TH;
 	bool ok = true;
 
@@ -20134,6 +20150,7 @@ static int case_mipchains(void)
 	/* the frames: terrain, bloom, overlay, tilt-shift, the window */
 	glFinish();
 	seq0 = gl_test_kicks_done();
+	rp0 = gl_test_reposts();
 	gl_test_perf_read(pc0);
 	t0 = now_ms();
 	for (int f = 0; f < MIPCHAINS_FRAMES; f++) {
@@ -20150,6 +20167,7 @@ static int case_mipchains(void)
 	t1 = now_ms();
 	gl_test_perf_read(pc1);
 	seq1 = gl_test_kicks_done();
+	rp1 = gl_test_reposts();
 	/* check 3 */
 	ok &= expect_u32("mipchains: error after the frames", glGetError(), GL_NO_ERROR);
 	{
@@ -20173,6 +20191,13 @@ static int case_mipchains(void)
 			pr_info("gl_test:   per frame: %u.%02u kicks (%u over %d frames)\n",
 				(seq1 - seq0) / MIPCHAINS_FRAMES, (seq1 - seq0) * 100u / MIPCHAINS_FRAMES % 100u,
 				seq1 - seq0, MIPCHAINS_FRAMES);
+#ifdef GL_TEST_PVR
+		/* the wait's re-posts over the frames (pvr_render_fl_counters word 6) */
+		pr_info("gl_test: mipchains: reposts %u over %d frames\n", (unsigned)(rp1 - rp0), MIPCHAINS_FRAMES);
+#else
+		(void)rp0;
+		(void)rp1;
+#endif
 	}
 
 	/* the last frame's picture: the quadrant centres (checks 4..7); a
@@ -20198,6 +20223,172 @@ out:
 	glDeleteProgram(prog);
 	return ok ? 0 : -1;
 }
+
+#ifdef GL_TEST_PVR
+/* ---- case 219: two small renders back to back, and one alone (kickpair) ----
+ *
+ * The experiment that decides whether the ~0.9 ms a queued PowerVR kick takes
+ * is per render or per KCCB command (docs/notes/am62p-slow-terrain.md, fix
+ * 4; pvr-tq-mipmap.md). Two 64x64 targets, each one clear and one draw of a
+ * 64x64 source; a render is one kick (the framebuffer switch ends the
+ * first). Arrangement "two": render X, render Y, glFinish; arrangement "one":
+ * render X, glFinish. KICKPAIR_REPS repetitions of each, one untimed pair
+ * first. Per arrangement, one line: the ms a repetition, the kicks a
+ * repetition (the completed fence's move), and the means over the
+ * repetitions of the last completed kick's times (pvr_render_last_kick_us;
+ * the second render's in "two", the only one in "one"): submit entry to the
+ * post, post to the geometry fence, post to the fragment fence, the previous
+ * kick's fragment fence to this one's (valid when a kick preceded it: in
+ * "two" the first render's) and the first wait to the fence. The reader
+ * exports the LAST completed kick only, so the first render of a pair has no
+ * line of its own; it needs CONFIG_YAKOGL_DRV_GPU_PVR_KICK_TIMES, without it
+ * the lines say "kick times: not built" and keep the ms. Log only; checks: 1
+ * the program linked, 2 the two framebuffers complete, 3 no GL error. Not in
+ * the regression set (a measurement).
+ * ------------------------------------------------------------------------- */
+#define KICKPAIR_REPS 20
+
+/* gl_test_kick_us: yd_pvr_kick_us (yakogl_drivers.h; 13 words) */
+struct gl_test_kick_us {
+	uint32_t seq, submit_us, mmu_us, mmu_synced, kick_geom_us, geom_err_us, kick_frag_us, frag_err_us,
+		frag_frag_us, wait_us, flags, done, lost;
+};
+_Static_assert(sizeof(struct gl_test_kick_us) == 52, "struct yd_pvr_kick_us");
+
+static void kickpair_render(GLuint prog, GLuint fbo, GLuint src)
+{
+	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+	glViewport(0, 0, 64, 64);
+	glClear(GL_COLOR_BUFFER_BIT);
+	dst_sample(prog, src);
+}
+
+/* `renders` renders and a glFinish, KICKPAIR_REPS times; one line */
+static void kickpair_arrangement(const char *name, int renders, GLuint prog, const GLuint fbo[2], GLuint src)
+{
+	uint64_t sum[5] = { 0, 0, 0, 0, 0 };
+	uint32_t valid[5] = { 0, 0, 0, 0, 0 };
+	uint32_t seq0, rp0, t0, t1, reps_ok = 0;
+	int krc = 0;
+
+	glFinish();
+	seq0 = gl_test_kicks_done();
+	rp0 = gl_test_reposts();
+	t0 = now_ms();
+	for (int r = 0; r < KICKPAIR_REPS; r++) {
+		struct gl_test_kick_us k;
+
+		for (int i = 0; i < renders; i++)
+			kickpair_render(prog, fbo[i], src);
+		glFinish();
+		krc = pvr_render_last_kick_us((void *)&k);
+		if (krc == 0) {
+			const uint32_t v[5] = { k.submit_us, k.kick_geom_us, k.kick_frag_us, k.frag_frag_us, k.wait_us };
+			const bool has[5] = { true, (k.flags & 1u) != 0, true, (k.flags & 2u) != 0, (k.flags & 4u) != 0 };
+
+			reps_ok++;
+			for (int i = 0; i < 5; i++) {
+				if (has[i]) {
+					sum[i] += v[i];
+					valid[i]++;
+				}
+			}
+		}
+	}
+	t1 = now_ms();
+	{
+		const uint32_t ms100 = (t1 - t0) * 100u / KICKPAIR_REPS;
+		const uint32_t seq1 = gl_test_kicks_done();
+
+		pr_info("gl_test: kickpair: %s: %d reps, %u.%02u ms a rep, %u.%02u kicks a rep, reposts %u\n", name,
+			KICKPAIR_REPS, ms100 / 100u, ms100 % 100u, (seq1 - seq0) / KICKPAIR_REPS,
+			(seq1 - seq0) * 100u / KICKPAIR_REPS % 100u, (unsigned)(gl_test_reposts() - rp0));
+	}
+	if (krc == -ENOTSUP || reps_ok == 0) {
+		pr_info("gl_test: kickpair: %s: kick times: %s\n", name,
+			krc == -ENOTSUP ? "not built" : "none completed");
+		return;
+	}
+	{
+		static const char *const label[5] = { "submit", "post->geom", "post->frag", "prev frag->frag", "wait" };
+		char line[160];
+		int n = snprintf(line, sizeof(line), "gl_test: kickpair: %s: last kick, mean us over %u reps:", name, reps_ok);
+
+		for (int i = 0; i < 5 && n > 0 && n < (int)sizeof(line); i++) {
+			if (valid[i])
+				n += snprintf(line + n, sizeof(line) - (size_t)n, " %s %u;", label[i],
+					      (unsigned)(sum[i] / valid[i]));
+			else
+				n += snprintf(line + n, sizeof(line) - (size_t)n, " %s n/a;", label[i]);
+		}
+		pr_info("%s\n", line);
+	}
+}
+
+static int case_kickpair(void)
+{
+	static uint32_t src_px[64 * 64];
+	GLuint prog, src = 0, tex[2] = { 0, 0 }, fbo[2] = { 0, 0 };
+	uint32_t complete = 0;
+	bool ok = true;
+
+	free_all_objects();
+	while (glGetError() != GL_NO_ERROR)
+		;
+	prog = link_program(gl_test_uv_vs_src, gl_test_texture_fs_src);
+	/* check 1 */
+	if (!expect_u32("kickpair: program linked", prog ? 1u : 0u, 1u))
+		return -1;
+	glDisable(GL_DEPTH_TEST);
+	glDisable(GL_STENCIL_TEST);
+	glDisable(GL_CULL_FACE);
+	glDisable(GL_BLEND);
+	glClearColor(0, 0, 0, 1);
+	for (uint32_t i = 0; i < 64 * 64; i++)
+		src_px[i] = 0xff000000u | (i * 2654435761u >> 8);
+	glGenTextures(1, &src);
+	glBindTexture(GL_TEXTURE_2D, src);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 64, 64, 0, GL_RGBA, GL_UNSIGNED_BYTE, src_px);
+	for (int i = 0; i < 2; i++) {
+		glGenTextures(1, &tex[i]);
+		glBindTexture(GL_TEXTURE_2D, tex[i]);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 64, 64, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glGenFramebuffers(1, &fbo[i]);
+		glBindFramebuffer(GL_FRAMEBUFFER, fbo[i]);
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex[i], 0);
+		complete |= (glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE ? 1u : 0u) << i;
+	}
+	/* check 2 */
+	if (!expect_u32("kickpair: framebuffers complete", complete, 3u)) {
+		ok = false;
+		goto out;
+	}
+	/* one untimed pair, then the two arrangements */
+	kickpair_render(prog, fbo[0], src);
+	kickpair_render(prog, fbo[1], src);
+	glFinish();
+	kickpair_arrangement("two", 2, prog, fbo, src);
+	kickpair_arrangement("one", 1, prog, fbo, src);
+	/* check 3 */
+	ok &= expect_u32("kickpair: error after the renders", glGetError(), GL_NO_ERROR);
+out:
+	glViewport(0, 0, TW, TH);
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glBindTexture(GL_TEXTURE_2D, 0);
+	glDeleteFramebuffers(2, fbo);
+	glDeleteTextures(2, tex);
+	glDeleteTextures(1, &src);
+	glUseProgram(0);
+	glDeleteProgram(prog);
+	return ok ? 0 : -1;
+}
+#endif /* GL_TEST_PVR */
 
 /* ---- case 215: glmark2 shadow's two passes, timed (shadowmap) ----------------
  *
@@ -22995,6 +23186,7 @@ static int run_case(int c, int pretransform, int debug, int *ended)
 		break;
 	case 175: rc = case_refusehang(); break;
 	case 217: rc = case_forcedpr(); break;
+	case 219: rc = case_kickpair(); break;
 #endif
 	case 218:
 		rc = case_shadowcmp();
