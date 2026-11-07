@@ -199,8 +199,20 @@ SELF="$HERE/board.sh"
 DRY=0
 args=()
 for a in "$@"; do
-    if [ "$a" = --dry-run ]; then DRY=1; else args+=("$a"); fi
+    case "$a" in
+    --dry-run) DRY=1 ;;
+    # --set NAME=VALUE: the environment setting a few of this script's variables, for a caller (a lent machine's
+    # command filter) that cannot put them in front of the command. Only the names below.
+    --set=SEL=* | --set=BOARD_BOOT=* | --set=BOARD_HOST=* | --set=TREE_IMAGE=* | --set=TREE_ROWS=* | \
+    --set=TREE_PREV=* | --set=BOARD_STOP_CONTAINER=* |--set=NAMES=* | --set=NAME_PAGES=* |--set=TREE_IMAGE_DIR=* | --set=GM_ROWS=*)
+        a=${a#--set=}; export "${a%%=*}=${a#*=}" ;;
+    *) args+=("$a") ;;
+    esac
 done
+# a lent machine names the leased board's ssh login in RESOURCE_<ID>_SSH
+if [ "${args[0]:-}" = imx8mp ] && [ -z "${BOARD_HOST:-}" ] && [ -n "${RESOURCE_IMX8MP_SSH:-}" ]; then
+    export BOARD_HOST=$RESOURCE_IMX8MP_SSH
+fi
 set -- "${args[@]+"${args[@]}"}"
 DRYFLAG=()
 [ "$DRY" = 1 ] && DRYFLAG=(--dry-run)
@@ -1656,6 +1668,13 @@ run_kexec() {
     fi
 }
 
+# link_up <ip>: the board answers on the network: a ping, else an ssh login (a board reached through a forwarded
+# ssh port, as on a lent machine, never answers ICMP).
+link_up() {
+    ping -c1 -W1 "$1" > /dev/null 2>&1 ||
+        timeout 8 ssh -o BatchMode=yes -o ConnectTimeout=4 "$BOARD_HOST" true < /dev/null > /dev/null 2>&1
+}
+
 kexec_am62p() {
     local t0 rcc=""
     # 5. the capture (bridge_capture: 'busy' retried)
@@ -1744,6 +1763,13 @@ kexec_imx8mp() {
     bget rsha 'sync; sha256sum ~/kexec/zephyr.bin' "$IMG_SHA  zephyr.bin"
     [ "${rsha%% *}" = "$IMG_SHA" ] || die "the staged image reads back as '${rsha%% *}'"
     meta staged "~/kexec/zephyr.bin, read back equal"
+    # a container of the board's own deployment that holds /dev/galcore (the loader cannot rmmod galcore while it
+    # does, and Torizon's compose service brings it back at every boot): stop it before the jump
+    if [ -n "${BOARD_STOP_CONTAINER:-}" ]; then
+        [[ $BOARD_STOP_CONTAINER =~ ^[A-Za-z0-9_.-]+$ ]] || die "BOARD_STOP_CONTAINER '$BOARD_STOP_CONTAINER': a container name"
+        act timeout 60 ssh -o BatchMode=yes -o ConnectTimeout=5 "$BOARD_HOST" "docker stop $BOARD_STOP_CONTAINER" < /dev/null > /dev/null 2>&1 || true
+        meta stopped_container "$BOARD_STOP_CONTAINER"
+    fi
     # 6. jump through the board's own sudo wrapper, bounded
     t0=$(date +%s)
     meta t_reboot "$t0"
@@ -1779,7 +1805,7 @@ kexec_wait_back() {
     while :; do
         t=$(($(date +%s) - t0))
         if [ "$t" -gt 1500 ]; then break; fi
-        if ping -c1 -W1 "$ip" > /dev/null 2>&1; then
+        if link_up "$ip"; then
             [ -n "$KW_LOST" ] && [ -z "$KW_PB" ] && KW_PB=$t
             if [ -n "$KW_PB" ] && timeout 10 ssh -o BatchMode=yes -o ConnectTimeout=5 "$BOARD_HOST" true < /dev/null 2>/dev/null; then
                 KW_SB=$t
@@ -2219,7 +2245,7 @@ name_pages() {
     IFS=, read -r tp tf tn to tb <<<"$t"
     nr=$((tb - tp - tf - tn - to))
     [ $((tf + to + nr)) -gt 0 ] || return 0
-    for page in $(seq 0 39); do
+    for page in $(seq 0 $((${NAME_PAGES:-40} - 1))); do
         tree_run_one "$name-p$page" "$img" $((0x8000 | page << 8 | sel)) "$out"
         d=$(finished_run "$out" "$name-p$page" "$img") || break
         words=$(cat "$d/snvs.txt" 2>/dev/null)
