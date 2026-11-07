@@ -1,0 +1,617 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES3 at 009f62a5, image S5v: UART console of the run, from the firmware's first line to the image's end line (README.md)
+  5.05 [sdcard] pieeprom.upd not found
+  5.05 [sdcard] recover4.elf not found
+  5.05 [sdcard] recovery.elf not found
+  5.83 Read start4.elf bytes  2299008 hnd 0x211ac
+  5.89 Read fixup4.dat bytes     5496 hnd 0x20bca
+  5.91 0x00d03114 0x00000000 0x00001fff
+  5.95 MEM GPU: 76 ARM: 948 TOTAL: 1024
+  5.31 Starting start4.elf @ 0xfec00200 partition 1
+  5.23 XHCI-STOP
+  5.23 xHC0 ver: 256 HCS: 05000420 fc000031 00e70004 HCC: 002841eb
+  5.24 USBSTS 18
+  5.24 PCI0 reset
+  5.25 +
+
+MESS:00:00:05.265819:0: arasan: arasan_emmc_open
+MESS:00:00:05.267477:0: arasan: arasan_emmc_set_clock C0: 0x00800000 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 400000 max: 400000 delay: 5
+MESS:00:00:05.387704:0: arasan: arasan_emmc_set_clock C0: 0x00800000 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 400000 max: 400000 delay: 5
+MESS:00:00:05.400573:0: arasan: arasan_emmc_set_clock C0: 0x00800f00 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 390000 max: 400000 delay: 5
+MESS:00:00:05.434862:0: boot-part: 1 fs-type: 0
+MESS:00:00:05.436274:0: boot-part: 1 fs-type: 3
+MESS:00:00:05.440657:0: arasan: arasan_emmc_set_clock C0: 0x00800f06 C1: 0x000e0207 emmc: 200000000 actual: 50000000 div: 0x00000002 target: 50000000 min: 0 max: 50000000 delay: 1
+MESS:00:00:05.602797:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:05.605676:0: brfs: File read: 256 bytes
+MESS:00:00:05.698320:0: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:05.702828:0: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:05.716607:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:06.215778:0: gpioman: gpioman_get_pin_num: pin DISPLAY_DSI_PORT not defined
+MESS:00:00:06.221325:0: gpioman: gpioman_get_pin_num: pin DISPLAY_DSI_PORT not defined
+MESS:00:00:06.230360:0: *** Restart logging
+MESS:00:00:06.232132:0: brfs: File read: 256 bytes
+MESS:00:00:06.310479:0: hdmi: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:06.315511:0: hdmi: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:06.330554:0: hdmi: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:06.337594:0: hdmi: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:06.341415:0: hdmi: HDMI:hdmi_get_state is deprecated, use hdmi_get_display_state instead
+MESS:00:00:06.350172:0: HDMI0: hdmi_pixel_encoding: 300000000
+MESS:00:00:06.355665:0: HDMI1: hdmi_pixel_encoding: 300000000
+MESS:00:00:06.377658:0: dtb_file 'bcm2711-rpi-4-b.dtb'
+MESS:00:00:06.393000:0: brfs: File read: /mfs/sd/bcm2711-rpi-4-b.dtb
+MESS:00:00:06.396290:0: Loaded 'bcm2711-rpi-4-b.dtb' to 0x100 size 0xdbb9
+MESS:00:00:06.437374:0: brfs: File read: 56249 bytes
+MESS:00:00:06.456615:0: brfs: File read: /mfs/sd/overlays/overlay_map.dtb
+MESS:00:00:06.521531:0: brfs: File read: 5971 bytes
+MESS:00:00:06.524247:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:06.567305:0: brfs: File read: 256 bytes
+MESS:00:00:06.571045:0: brfs: File read: /mfs/sd/cmdline.txt
+MESS:00:00:06.574465:0: Read command line from file 'cmdline.txt':
+MESS:00:00:06.580314:0: 'console=serial0,115200 console=tty1 root=PARTUUID=269eab4a-02 rootfstype=ext4 fsck.repair=yes rootwait cfg80211.ieee80211_regdom=JP splash quiet'
+MESS:00:00:06.736837:0: brfs: File read: 145 bytes
+MESS:00:00:08.144271:0: brfs: File read: /mfs/sd/yakogl-S5v.bin
+MESS:00:00:08.147091:0: Loaded 'yakogl-S5v.bin' to 0x200000 size 0xfc6dc0
+MESS:00:00:08.153616:0: Device tree loaded to 0x2eff1f00 (size 0xe0a1)
+MESS:00:00:08.162400:0: uart: Set PL011 baud rate to 103448.300000 Hz
+MESS:00:00:08.168919:0: uart: Baud rate change done...
+MESS:00:00:08.170941:0:board: watchdog armed
+*** Booting Zephyr OS build af17c0c8aa2a ***
+I: shader compiler scratch: 4194304 bytes, keep: 1048576 bytes
+v3d_deqp: build 009f62a5
+board: PM watchdog resets the SoC ~250 s after boot (tryboot -> Linux)
+v3d_deqp: the record at 210 s after boot at the latest
+V3D clock 250000000 -> 500000000 Hz (0)
+deqp: case filter 'dEQP-GLES3.functional.shaders.random.all_features.vertex.*'
+Writing test log into deqp.qpa
+dEQP Core vulkan-cts-1.4.6.2-555-g93bca01861b0e3ef3c387027a9791e6d065f900c (0x93bca018) starting..
+  target implementation = 'YakoGL-Zephyr'
+I: V3D 4.2: 1 core(s), 8 QPUs, VPM 65536 bytes, PA 35 / VA 35 bits, MMU yes
+I: V3D raw: HUB_IDENT0..3 42554856 000e1124 00000100 00000e00 CTL_IDENT0..2 04443356 81001422 40078121 MMU_DEBUG_INFO 00000550
+osal(v3d): V3D 4.2, 8 QPUs, VPM 65536 bytes, MMU yes (identify 0)
+osal(v3d): UIFCFG 0x00000045
+osal(v3d): ready: carve-out 48 MiB at phys 0x2f09000, GPU VA 0x181000..0x3100000
+yakogl/v3d: depth and stencil apart (by renderbuffer), the platform's setting
+yakogl/v3d: job arenas for 1024 draws (the platform's budget): BCL 139264, indirect 458752, binner tile pool 1056768 bytes; tiled copies kept up to 16777216 bytes
+yakogl/v3d: two job arena sets (the second's texture arena 1048576 bytes): a job is recorded while the one before runs
+yakogl/v3d: clear program built: 408 bytes of code
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.0'..
+osal(v3d): BASELINE after a completed job 1: core_sts 0x0 hub_sts 0x0 err 0x1000 ct0 cs 0x0 ea 0x201085 ca 0x201085 ra 0x0 qba 0x201000 qea 0x201085 ct1 ca 0x223097 ra 0x223096 qba 0x223000 qea 0x223097
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.0
+v3d_deqp: case #0 P 155ms k2/11 c15534/15548 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.0
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.1'..
+yakogl/v3d: binner pool after job 1: given 0x00b96000 + 1056768, BPCA 0x00b99000 BPCS 1044480 CT0QMA 0x00b96000 CT0QMS 1056768, overflow blocks 0 of 2 (262144 bytes each)
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.1
+v3d_deqp: case #1 P 53ms k2/11 c15534/15548 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.1
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.10'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.10
+v3d_deqp: case #2 P 38ms k2/11 c15534/15548 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.10
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.11'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.11
+v3d_deqp: case #3 P 29ms k2/11 c15534/15548 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.11
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.12'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.12
+v3d_deqp: case #4 P 36ms k2/11 c15534/15548 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.12
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.13'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.13
+v3d_deqp: case #5 P 53ms k2/12 c15534/15548 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.13
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.14'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.14
+v3d_deqp: case #6 P 54ms k2/13 c15534/15548 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.14
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.15'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.15
+v3d_deqp: case #7 P 37ms k2/13 c15534/15548 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.15
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.16'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.16
+v3d_deqp: case #8 P 42ms k2/13 c15534/15548 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.16
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.17'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.17
+v3d_deqp: case #9 P 51ms k2/13 c15534/15548 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.17
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.18'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.18
+v3d_deqp: case #10 P 40ms k2/13 c15534/15548 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.18
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.19'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.19
+v3d_deqp: case #11 P 32ms k2/13 c15534/15548 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.19
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.2'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.2
+v3d_deqp: case #12 P 46ms k2/13 c15534/15548 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.20'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.20
+v3d_deqp: case #13 P 44ms k2/13 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.20
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.21'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.21
+v3d_deqp: case #14 P 41ms k2/13 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.21
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.22'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.22
+v3d_deqp: case #15 P 65ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.22
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.23'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.23
+v3d_deqp: case #16 P 36ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.23
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.24'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.24
+v3d_deqp: case #17 P 32ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.24
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.25'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.25
+v3d_deqp: case #18 P 30ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.25
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.26'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.26
+v3d_deqp: case #19 P 47ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.26
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.27'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.27
+v3d_deqp: case #20 P 32ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.27
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.28'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.28
+v3d_deqp: case #21 P 41ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.28
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.29'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.29
+v3d_deqp: case #22 P 46ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.29
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.3'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.3
+v3d_deqp: case #23 P 31ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.30'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.30
+v3d_deqp: case #24 P 40ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.30
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.31'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.31
+v3d_deqp: case #25 P 36ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.31
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.32'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.32
+v3d_deqp: case #26 P 43ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.32
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.33'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.33
+v3d_deqp: case #27 P 37ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.33
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.34'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.34
+v3d_deqp: case #28 P 46ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.34
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.35'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.35
+v3d_deqp: case #29 P 34ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.35
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.36'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.36
+v3d_deqp: case #30 P 30ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.36
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.37'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.37
+v3d_deqp: case #31 P 46ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.37
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.38'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.38
+v3d_deqp: case #32 P 54ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.38
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.39'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.39
+v3d_deqp: case #33 P 57ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.39
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.4'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.4
+v3d_deqp: case #34 P 39ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.40'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.40
+v3d_deqp: case #35 P 48ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.40
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.41'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.41
+v3d_deqp: case #36 P 34ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.41
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.42'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.42
+v3d_deqp: case #37 P 36ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.42
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.43'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.43
+v3d_deqp: case #38 P 29ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.43
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.44'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.44
+v3d_deqp: case #39 P 36ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.44
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.45'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.45
+v3d_deqp: case #40 P 43ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.45
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.46'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.46
+v3d_deqp: case #41 P 53ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.46
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.47'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.47
+v3d_deqp: case #42 P 45ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.47
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.48'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.48
+v3d_deqp: case #43 P 49ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.48
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.49'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.49
+v3d_deqp: case #44 P 33ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.49
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.5'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.5
+v3d_deqp: case #45 P 51ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.5
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.50'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.50
+v3d_deqp: case #46 P 44ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.50
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.51'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.51
+v3d_deqp: case #47 P 36ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.51
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.52'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.52
+v3d_deqp: case #48 P 33ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.52
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.53'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.53
+v3d_deqp: case #49 P 47ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.53
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.54'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.54
+v3d_deqp: case #50 P 44ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.54
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.55'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.55
+v3d_deqp: case #51 P 54ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.55
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.56'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.56
+v3d_deqp: case #52 P 42ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.56
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.57'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.57
+v3d_deqp: case #53 P 32ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.57
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.58'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.58
+v3d_deqp: case #54 P 50ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.58
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.59'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.59
+v3d_deqp: case #55 P 31ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.59
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.6'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.6
+v3d_deqp: case #56 P 49ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.6
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.60'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.60
+v3d_deqp: case #57 P 31ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.60
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.61'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.61
+v3d_deqp: case #58 P 43ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.61
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.62'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.62
+v3d_deqp: case #59 P 54ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.62
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.63'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.63
+v3d_deqp: case #60 P 39ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.63
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.64'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.64
+v3d_deqp: case #61 P 51ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.64
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.65'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.65
+v3d_deqp: case #62 P 34ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.65
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.66'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.66
+v3d_deqp: case #63 P 50ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.66
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.67'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.67
+v3d_deqp: case #64 P 31ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.67
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.68'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.68
+v3d_deqp: case #65 P 31ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.68
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.69'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.69
+v3d_deqp: case #66 P 54ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.69
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.7'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.7
+v3d_deqp: case #67 P 46ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.7
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.70'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.70
+v3d_deqp: case #68 P 41ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.70
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.71'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.71
+v3d_deqp: case #69 P 48ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.71
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.72'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.72
+v3d_deqp: case #70 P 53ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.72
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.73'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.73
+v3d_deqp: case #71 P 39ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.73
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.74'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.74
+v3d_deqp: case #72 P 44ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.74
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.75'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.75
+v3d_deqp: case #73 P 32ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.75
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.76'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.76
+v3d_deqp: case #74 P 45ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.76
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.77'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.77
+v3d_deqp: case #75 P 45ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.77
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.78'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.78
+v3d_deqp: case #76 P 59ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.78
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.79'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.79
+v3d_deqp: case #77 P 66ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.79
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.8'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.8
+v3d_deqp: case #78 P 40ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.80'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.80
+v3d_deqp: case #79 P 55ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.80
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.81'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.81
+v3d_deqp: case #80 P 34ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.81
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.82'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.82
+v3d_deqp: case #81 P 48ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.82
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.83'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.83
+v3d_deqp: case #82 P 32ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.83
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.84'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.84
+v3d_deqp: case #83 P 33ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.84
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.85'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.85
+v3d_deqp: case #84 P 43ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.85
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.86'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.86
+v3d_deqp: case #85 P 41ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.86
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.87'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.87
+v3d_deqp: case #86 P 41ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.87
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.88'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.88
+v3d_deqp: case #87 P 55ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.88
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.89'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.89
+v3d_deqp: case #88 P 37ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.89
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.9'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.9
+v3d_deqp: case #89 P 42ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.9
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.90'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.90
+v3d_deqp: case #90 P 42ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.90
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.91'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.91
+v3d_deqp: case #91 P 31ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.91
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.92'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.92
+v3d_deqp: case #92 P 34ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.92
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.93'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.93
+v3d_deqp: case #93 P 63ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.93
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.94'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.94
+v3d_deqp: case #94 P 52ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.94
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.95'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.95
+v3d_deqp: case #95 P 40ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.95
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.96'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.96
+v3d_deqp: case #96 P 35ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.96
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.97'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.97
+v3d_deqp: case #97 P 36ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.97
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.98'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.98
+v3d_deqp: case #98 P 41ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.98
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.random.all_features.vertex.99'..
+deqp: Pass dEQP-GLES3.functional.shaders.random.all_features.vertex.99
+v3d_deqp: case #99 P 29ms k2/15 c15534/15549 r0 dEQP-GLES3.functional.shaders.random.all_features.vertex.99
+  Pass (Pass)
+
+DONE!
+
+Test run totals:
+  Passed:        100/100 (100.0%)
+  Failed:        0/100 (0.0%)
+  Not supported: 0/100 (0.0%)
+  Warnings:      0/100 (0.0%)
+  Waived:        0/100 (0.0%)
+deqp: done: 100 passed, 0 failed, 0 not supported, 0 warnings, complete=1
+deqp: summary: 100 cases begun, 100 with a result, 0 without
+v3d_deqp DONE, all passed: build 009f62a5, filter 'dEQP-GLES3.functional.shaders.random.all_features.vertex.*'
+  100 cases in 4332 ms, record at 4 s after boot, reset at ~250 s
+  totals: P 100  (R: not passed, a draw was refused in it; passed with one refused: 0)
+  done: 100 passed, 0 failed, 0 not supported, 0 warnings, complete=1
+  summary: 100 cases begun, 100 with a result, 0 without
+  keep region (KiB, of 1024): after #0 2, most 2 at #0, last 2, high-water 15; slowest #0 155 ms
+  carve-out (KiB, of 48636): after #0 15534, last 15534, high-water 15549
+  jobs: slow in 0 cases; no job hung or timed out
+BASELINE (first completed) job 1: core_sts 0x0 hub_sts 0x0 err 0x1000 ct0 cs 0x0 ea 0x201085 ca 0x201085 ra 0x0 qba 0x201000 qea 0x201085 ct1 ca 0x223097 ra 0x223096 qba 0x223000 qea 0x223097
+FIRST FAILURE: none (no timeout)
+slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+binner out of memory: 0 jobs (2 overflow blocks of 256 KiB, CONFIG_YAKOGL_V3D_BIN_OVERFLOW_BLOCKS; each such job ends in a GPU reset)
+binning by interrupt (IRQ 106): 100 interrupts, 0 overflow blocks fed by the ISR
+carve-out: 15379200 bytes used now, 15922944 at most, of 49803264; 0 frees held
+osal(v3d): pending frees: high-water 0/256, waits 0 (opt-in 0), refused 0 (0 unsubmitted, 0 no wait, 0 KiB kept)
+carve-out find: 235 calls, 13151 map reads (55 a call, at most 1153 in one); free runs 4, longest 34423040 bytes; small blocks from the top: off (CONFIG_YAKOGL_V3D_CARVEOUT_TOP_BELOW 0)
+packets (packet skip on, CONFIG_YAKOGL_V3D_PACK_SKIP): 100 jobs ended; emitted 2100, skipped 0; groups compared 0, mismatches 0
+allocations refused for lack of GPU memory: 0 (0 size slots; the line is printed at each size's 1st, 10th, 100th, ... refusal)
+UIFCFG 0x00000045 (read at init)
+log: 0 causes logged once, 0 repeats not printed
+case order: P pass F fail R refused N not supported Q quality C compat E resource I internal X crash T timeout
+    0 PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP
+driver: osal(v3d): V3D 4.2, 8 QPUs, VPM 65536 bytes, MMU yes (identify 0)
+driver: osal(v3d): UIFCFG 0x00000045
+driver: osal(v3d): ready: carve-out 48 MiB at phys 0x2f09000, GPU VA 0x181000..0x3100000
+driver: ... 6 more lines (UART)
+v3d_deqp: build 009f62a5 DONE, all passed: 100 cases, P 100 F 0 R 0 N 0 other 0
