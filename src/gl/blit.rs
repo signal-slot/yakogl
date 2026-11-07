@@ -217,11 +217,54 @@ fn attachment_image(c: &GlContext, a: &GlAttachment) -> Option<Image> {
     })
 }
 
+/// The data type of the colour image attached at `a`, whether or not the
+/// GL core can copy it (`attachment_image` has no RGBA32I texture, for
+/// one): 4.3.3's errors are about the formats, not about the copy.
+fn attachment_kind(c: &GlContext, a: &GlAttachment) -> Option<ColorKind> {
+    let bits = match a.type_ {
+        GL_TEXTURE => {
+            let t = c.texture_ref(a.name)?;
+            if matches!(t.format, GL_DEPTH_COMPONENT | GL_DEPTH_STENCIL) {
+                return None;
+            }
+            texture_bits(t)
+        }
+        GL_RENDERBUFFER => renderbuffer_bits(attachment_storage(c, a)?.internalformat),
+        _ => return None,
+    };
+    if bits.rgba == [0; 4] {
+        return None; /* a depth or stencil renderbuffer, or no image */
+    }
+    Some(match bits.component_type {
+        GL_INT => ColorKind::Int,
+        GL_UNSIGNED_INT => ColorKind::Uint,
+        _ => ColorKind::Float,
+    })
+}
+
 /// The read buffer of framebuffer `fb` (None: GL_NONE, or nothing attached
 /// where it points).
 fn read_image(c: &GlContext, fb: GLuint) -> Option<Image> {
+    read_with(c, fb, default_image, attachment_image)
+}
+
+/// The images the bound DRAW framebuffer's draw buffers write (GL_NONE and
+/// draw buffers with nothing attached write nothing).
+fn draw_images(c: &GlContext) -> ([Option<Image>; CAP_COLOR_ATTACHMENTS], usize) {
+    draws_with(c, default_image, attachment_image)
+}
+
+/// What the read buffer of framebuffer `fb` holds, through `of` (`window`
+/// for the window surface's own; None: GL_NONE, or nothing attached where
+/// it points).
+fn read_with<T>(
+    c: &GlContext,
+    fb: GLuint,
+    window: fn(&GlContext) -> Option<T>,
+    of: fn(&GlContext, &GlAttachment) -> Option<T>,
+) -> Option<T> {
     if fb == 0 {
-        return if c.default_read_none { None } else { default_image(c) };
+        return if c.default_read_none { None } else { window(c) };
     }
     let f = c.framebuffer_ref(fb)?;
     if f.read_none {
@@ -232,17 +275,22 @@ fn read_image(c: &GlContext, fb: GLuint) -> Option<Image> {
         n if n < CAP_COLOR_ATTACHMENTS => &f.color_n[n - 1],
         _ => return None,
     };
-    attachment_image(c, a)
+    of(c, a)
 }
 
-/// The images the bound DRAW framebuffer's draw buffers write (GL_NONE and
-/// draw buffers with nothing attached write nothing).
-fn draw_images(c: &GlContext) -> ([Option<Image>; CAP_COLOR_ATTACHMENTS], usize) {
+/// What the bound DRAW framebuffer's draw buffers write, through `of`, in
+/// order (`window` for the window surface's own; GL_NONE and draw buffers
+/// with nothing attached write nothing).
+fn draws_with<T: Copy>(
+    c: &GlContext,
+    window: fn(&GlContext) -> Option<T>,
+    of: fn(&GlContext, &GlAttachment) -> Option<T>,
+) -> ([Option<T>; CAP_COLOR_ATTACHMENTS], usize) {
     let mut out = [None; CAP_COLOR_ATTACHMENTS];
     let mut n = 0;
     if c.bound_framebuffer == 0 {
         if !framebuffer::default_draw_none(c) {
-            out[0] = default_image(c);
+            out[0] = window(c);
             n = out[0].is_some() as usize;
         }
         return (out, n);
@@ -258,8 +306,8 @@ fn draw_images(c: &GlContext) -> ([Option<Image>; CAP_COLOR_ATTACHMENTS], usize)
             k if k < CAP_COLOR_ATTACHMENTS => &f.color_n[k - 1],
             _ => continue,
         };
-        if let Some(img) = attachment_image(c, a) {
-            out[n] = Some(img);
+        if let Some(v) = of(c, a) {
+            out[n] = Some(v);
             n += 1;
         }
     }
@@ -1058,6 +1106,22 @@ pub(super) fn blit_framebuffer(c: &mut GlContext, k: Corners, mut mask: GLbitfie
     }
     /* "If a buffer is specified in mask and does not exist in both the read
      * and draw framebuffers, the corresponding bit is silently ignored." */
+    /* "if mask includes COLOR_BUFFER_BIT and the read buffer contains
+     * integer data and any draw buffer does not (or the reverse), signed
+     * and unsigned integers are mixed, or filter is LINEAR and the read
+     * buffer contains integer data": taken from the formats of what is
+     * attached, before an image the GL core cannot copy (an RGBA32I
+     * texture) drops the colour bit below */
+    if mask & GL_COLOR_BUFFER_BIT != 0 {
+        let window = |_: &GlContext| Some(ColorKind::Float);
+        if let Some(s) = read_with(c, read, window, attachment_kind) {
+            let (kinds, _) = draws_with(c, window, attachment_kind);
+            if kinds.iter().flatten().any(|&d| d != s) || (filter == GL_LINEAR && s != ColorKind::Float) {
+                c.set_error(GL_INVALID_OPERATION, FN);
+                return;
+            }
+        }
+    }
     let src = read_image(c, read);
     let (dsts, ndst) = draw_images(c);
     if mask & GL_COLOR_BUFFER_BIT != 0 {
