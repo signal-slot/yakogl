@@ -21,6 +21,7 @@ set -eu
 
 GLIBC_MAX=2.41
 GLIBCXX_MAX=3.4.33
+CXXABI_MAX=1.3.15
 
 here=$(cd "$(dirname "$0")" && pwd)
 list=$here/src/deqp-entry-points.txt
@@ -137,11 +138,12 @@ for f in "$gles" "$egl"; do
 		"$objdump" -T "$f"
 	else
 		readelf -W -V "$f"
-	fi | grep -o 'GLIBC\(XX\)\{0,1\}_[0-9][0-9.]*' | sort -u >"$tmp/vers"
+	fi | grep -o '\(GLIBC\(XX\)\{0,1\}\|CXXABI\)_[0-9][0-9.]*' | sort -u >"$tmp/vers"
 	worst=
-	for lib in GLIBC GLIBCXX; do
+	for lib in GLIBC GLIBCXX CXXABI; do
 		max=$GLIBC_MAX
 		[ "$lib" = GLIBCXX ] && max=$GLIBCXX_MAX
+		[ "$lib" = CXXABI ] && max=$CXXABI_MAX
 		top=$(sed -n "s/^${lib}_//p" "$tmp/vers" | sort -V | tail -n 1)
 		[ -n "$top" ] || continue
 		if [ "$(printf '%s\n%s\n' "$top" "$max" | sort -V | tail -n 1)" = "$max" ]; then
@@ -153,7 +155,7 @@ for f in "$gles" "$egl"; do
 	done
 	case "$worst" in
 	*'(!)'*) ;;
-	*) ok "${f##*/}: highest version needs:${worst:- none} (ceiling GLIBC_$GLIBC_MAX, GLIBCXX_$GLIBCXX_MAX; ${objdump:-readelf -V})" ;;
+	*) ok "${f##*/}: highest version needs:${worst:- none} (ceiling GLIBC_$GLIBC_MAX, GLIBCXX_$GLIBCXX_MAX, CXXABI_$CXXABI_MAX; ${objdump:-readelf -V})" ;;
 	esac
 done
 
