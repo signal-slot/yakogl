@@ -1,0 +1,7 @@
+gm2: gc-kick frames glDrawArrays fence=2 bytes=2200 draws=2 box_px=3840000 target=1600x1200 stride=0 rts=0 rs=0 rs_px=0
+gm2: gc-kick frames glDrawArrays fence=3 bytes=1200 draws=1 box_px=480000 target=800x600 stride=3200 rts=1 rs=0 rs_px=0
+gm2: gc-kick frames glDrawArrays fence=4 bytes=2200 draws=2 box_px=3840000 target=1600x1200 stride=0 rts=0 rs=0 rs_px=0
+gm2: gc-kick frames glDrawArrays fence=5 bytes=1200 draws=1 box_px=480000 target=800x600 stride=3200 rts=1 rs=0 rs_px=0
+gm2: scene-end [shadow] <default>: ok frames=3 draws=6 refused=0 gl_errors=0 incomplete_draws=0
+gm2: gc-cost counted=2 gpu=done kicks=4 waits=0 swap_waits=0 invd=2,15564800 flush=20,15400000 foreign_bytes=4096 stream_bytes=6800 draws=6 box_px=8640000 rs=0 rs_px=0
+gm2: gc-cost-entry glDrawArrays waits=0 kicks=4 invd=2,15564800 flush=20,15400000

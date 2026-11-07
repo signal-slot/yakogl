@@ -14,7 +14,9 @@ rewrites DIR/*.glsl and DIR/index.txt (the README there is kept); with
 settings the run used (run.sh's v3d-settings.txt), listed in the summary.
 --profile (run.sh GM2_PROFILE=1) writes <out>/profile-<gpu>.md from shim.c's
 "gm2: gl-time", "gm2: gl-frames" and "gm2: draw-steps" lines and, where run.sh's GM2_PERF=1
-left them, logs/<gpu>/<i>.perf-{self,children}.txt.
+left them, logs/<gpu>/<i>.perf-{self,children}.txt. A GPU whose logs carry
+shim.c's "gm2: gc-cost" lines (GM2_GCCOST=1, a GC7000 build) gets
+<out>/gc-cost-<gpu>.md, with or without --profile.
 """
 import argparse
 import collections
@@ -71,7 +73,8 @@ NOISE = re.compile(
     # glGenerateMipmap's TFU counters (frame 1 and shutdown) and the jobs and
     # CPU waits of the run
     r"|TFU mipmap at (frame \d+|shutdown): |\d+ jobs submitted, \d+ CPU waits for a job$)"
-    r"|^gm2: (shader|scene-begin|scene-end|egl-config|draw|gl-time|gpu-time|gl-frames|v3d-frames|v3d-waits) ")
+    r"|^gm2: (shader|scene-begin|scene-end|egl-config|draw|gl-time|gpu-time|gl-frames|v3d-frames|v3d-waits"
+    r"|gc-cost|gc-cost-entry|gc-wait|gc-kick) ")
 SCENE_END = re.compile(r"^gm2: scene-end (.*): (ok|failed|unsupported) frames=(\d+) draws=(\d+) refused=(\d+)"
                        r" gl_errors=(\d+) incomplete_draws=(\d+)$")
 # The library's warning for the first draw that sampled an incomplete texture
@@ -99,6 +102,18 @@ GL_FRAMES = re.compile(r"^gm2: gl-frames swaps=(\d+) counted=(\d+) wall_ns=(\d+)
 DRAW_STEPS = re.compile(r"^gm2: draw-steps counted=(\d+) scopes=(\d+) untimed=(\d+) ns=(\d+(?:,\d+){11})$")
 STEP_NAMES = ("GlProgram", "GlUniforms", "GlAttribs", "GlTextures", "GlState", "GcRest", "GcDs",
               "GcTiledCopy", "GcFrame", "GcUniforms", "GcVertex", "GcEmit")
+# GM2_GCCOST (shim.c, a GC7000 build): the counted frames' GPU waits, kicks
+# and cache maintenance, the same per entry point, the waits' callers (every
+# phase) and one line per kick (every phase)
+GC_COST = re.compile(r"^gm2: gc-cost counted=(\d+) gpu=(\w+) kicks=(\d+) waits=(\d+) swap_waits=(\d+)"
+                     r" invd=(\d+),(\d+) flush=(\d+),(\d+) foreign_bytes=(\d+)"
+                     r" stream_bytes=(\d+) draws=(\d+) box_px=(\d+) rs=(\d+) rs_px=(\d+)$")
+GC_COST_KEYS = ("counted", "gpu", "kicks", "waits", "swap_waits", "invd_calls", "invd_bytes",
+                "flush_calls", "flush_bytes", "foreign_bytes", "stream_bytes", "draws", "box_px", "rs", "rs_px")
+GC_ENTRY = re.compile(r"^gm2: gc-cost-entry (\S+) waits=(\d+) kicks=(\d+) invd=(\d+),(\d+) flush=(\d+),(\d+)$")
+GC_WAIT = re.compile(r"^gm2: gc-wait (\S+) (\S+) setup=(\d+) frames=(\d+) teardown=(\d+)$")
+GC_KICK = re.compile(r"^gm2: gc-kick (setup|frames|teardown) (\S+) fence=-?\d+ bytes=(\d+) draws=(\d+)"
+                     r" box_px=(\d+) target=(\d+x\d+) stride=(\d+) rts=(\d+) rs=(\d+) rs_px=(\d+)( undecoded)?$")
 # a line of perf report --stdio --sort symbol: [children%] self% [k|.] symbol,
 # then the IPC columns ("-  -" where the samples carry no IPC)
 PERF_LINE = re.compile(r"^\s*([\d.]+)%\s+(?:([\d.]+)%\s+)?\[(.)\]\s+(.+?)(?:\s+(?:-|[\d.]+%?)\s+(?:-|[\d.]+%?))?\s*$")
@@ -131,7 +146,7 @@ def read_runs(out, gpus):
             rc = int(open(base + ".rc").read().strip() or "0")
             r = {"entry": entry, "rc": rc, "end": None, "findings": collections.Counter(), "shaders": [],
                  "configs": [], "carve": None, "gl_time": {}, "gpu_time": {}, "gl_frames": None,
-                 "draw_steps": None}
+                 "draw_steps": None, "gc": None, "gc_entry": {}, "gc_wait": [], "gc_kick": []}
             # glmark2 prints "<info string>:" without a newline before a
             # scene's frames (main-loop.cpp, log_scene_info), so the first
             # line the library or shim.c writes after it carries that prefix
@@ -170,6 +185,24 @@ def read_runs(out, gpus):
                 if m:
                     r["draw_steps"] = {"counted": int(m.group(1)), "scopes": int(m.group(2)),
                                        "untimed": int(m.group(3)), "ns": [int(x) for x in m.group(4).split(",")]}
+                    continue
+                m = GC_COST.match(ln)
+                if m:
+                    r["gc"] = {k: (v if k == "gpu" else int(v)) for k, v in zip(GC_COST_KEYS, m.groups())}
+                    continue
+                m = GC_ENTRY.match(ln)
+                if m:
+                    r["gc_entry"][m.group(1)] = tuple(int(x) for x in m.groups()[1:])
+                    continue
+                m = GC_WAIT.match(ln)
+                if m:
+                    r["gc_wait"].append((m.group(1), m.group(2)) + tuple(int(x) for x in m.groups()[2:]))
+                    continue
+                m = GC_KICK.match(ln)
+                if m:
+                    if m.group(1) == "frames":
+                        r["gc_kick"].append((m.group(2), m.group(6), int(m.group(7)), int(m.group(3)), int(m.group(4)),
+                                             int(m.group(5)), int(m.group(9)), int(m.group(10)), bool(m.group(11))))
                     continue
                 m = GL_FRAMES.match(ln)
                 if m:
@@ -446,6 +479,96 @@ def profile(args, g, entries, runs):
     return "\n".join(o)
 
 
+def gc_cost(args, g, entries, runs):
+    """GM2_GCCOST: per entry, what the counted frames made the CPU pay the
+    GC7000 on the board, per frame: the waits for a fence (in the swap and
+    elsewhere), the kicks with their draws, draw boxes and resolve blits, and
+    the bytes of cache maintenance; then each entry's kicks by target, its
+    cache maintenance and kicks by entry point, and the waits' callers."""
+    kib, mpx = 1024.0, 1e6
+    lag = sorted({runs[(g, i)]["gc"]["gpu"] for i in range(len(entries)) if runs[(g, i)]["gc"]})
+    o = ["# glmark2 host GC7000 costs: %s" % g, "",
+         "Run: glmark2 `%s`, `--size %s`, %d frames per entry, one process per entry (run.sh GM2_GCCOST=1, "
+         "README.md \"GC7000 costs\"). Counts, not times: what the counted frames (frames 2 to %d) would make "
+         "the i.MX8MP's CPU pay its GPU. GPU model: %s (`lag`: a kick completes only when the CPU waits for it "
+         "or a later one, so every fence the back end checks is a wait, the most the board can pay; `done`: "
+         "linux.c's, every kick complete at once). A wait costs the board at least one 1 ms poll "
+         "(driver/src/vivante/gc_render.c). Cache maintenance is the DC range work over the carve-out and "
+         "stands for a CPU pass over memory that is Normal non-cacheable on the board; foreign bytes are "
+         "ranges outside every GPU allocation (the window). A draw box is the draw's viewport and scissor box "
+         "in the target's samples (SE_SCISSOR_LEFT/TOP to SE_CLIP_RIGHT/BOTTOM in force at the DRAW_INSTANCED), "
+         "an upper bound of the pixels it covers, which the stream alone cannot give; a target's size is its "
+         "kick's largest box extent."
+         % (args.commit, args.size, args.frames, args.frames, ", ".join("`%s`" % x for x in lag) or "none"), "",
+         "| # | entry | frames | waits a frame: swap, other | kicks | draws | draw box Mpx "
+         "| RS blits, Mpx | invalidated KiB (calls) | flushed KiB (calls) | foreign KiB | stream KiB |",
+         "|---|---|---|---|---|---|---|---|---|---|---|---|"]
+    for i, e in enumerate(entries):
+        c = runs[(g, i)]["gc"]
+        if not c or not c["counted"]:
+            o.append("| %d | `%s` | %s |" % (i, md_escape(e), "no gc-cost line" if not c else "no counted frames")
+                     + " |" * 9)
+            continue
+        n = c["counted"]
+        o.append("| %d | `%s` | %d | %.1f, %.1f | %.1f | %.1f | %.2f | %.1f, %.2f | %.1f (%.1f) | %.1f (%.1f) "
+                 "| %.1f | %.1f |"
+                 % (i, md_escape(e), n, c["swap_waits"] / n, (c["waits"] - c["swap_waits"]) / n,
+                    c["kicks"] / n, c["draws"] / n, c["box_px"] / n / mpx, c["rs"] / n,
+                    c["rs_px"] / n / mpx, c["invd_bytes"] / n / kib, c["invd_calls"] / n,
+                    c["flush_bytes"] / n / kib, c["flush_calls"] / n, c["foreign_bytes"] / n / kib,
+                    c["stream_bytes"] / n / kib))
+    o.append("")
+    for i, e in enumerate(entries):
+        r = runs[(g, i)]
+        c = r["gc"]
+        if not c or not c["counted"]:
+            continue
+        n = c["counted"]
+        o += ["## %d `%s`" % (i, md_escape(e)), ""]
+        groups = collections.OrderedDict()
+        undecoded = 0
+        for entry, target, stride, nbytes, draws, box, rs, rs_px, und in r["gc_kick"]:
+            v = groups.setdefault((entry, target, stride), [0, 0, 0, 0, 0, 0])
+            for k, x in enumerate((1, draws, box, rs, rs_px, nbytes)):
+                v[k] += x
+            undecoded += und
+        if groups:
+            o += ["Kicks in the counted frames, by the entry point that submitted them and the target:", "",
+                  "| entry point | target | stride | kicks a frame | draws a frame | draw box Mpx a frame "
+                  "| RS blits a frame | RS Mpx a frame | stream KiB a frame |", "|---|---|---|---|---|---|---|---|---|"]
+            for (entry, target, stride), v in sorted(groups.items(), key=lambda x: (-x[1][2], -x[1][0], x[0])):
+                o.append("| `%s` | %s | %d | %.1f | %.1f | %.3f | %.1f | %.3f | %.1f |"
+                         % (entry, target, stride, v[0] / n, v[1] / n, v[2] / n / mpx, v[3] / n, v[4] / n / mpx,
+                            v[5] / n / kib))
+            if undecoded:
+                o += ["", "%d kicks could not be decoded (no CPU view of their stream)." % undecoded]
+            o.append("")
+        if r["gc_entry"]:
+            o += ["By entry point, in the counted frames:", "",
+                  "| entry point | waits a frame | kicks a frame | invalidated KiB a frame (calls) "
+                  "| flushed KiB a frame (calls) |", "|---|---|---|---|---|"]
+            for name, (w, k, ic, ib, fc, fb) in sorted(r["gc_entry"].items(), key=lambda x: (-x[1][0], -(x[1][3] + x[1][5]), x[0])):
+                o.append("| `%s` | %.1f | %.1f | %.1f (%.1f) | %.1f (%.1f) |"
+                         % (name, w / n, k / n, ib / n / kib, ic / n, fb / n / kib, fc / n))
+            o.append("")
+        if r["gc_wait"]:
+            o += ["The waits by caller (the entry point in progress, then the library's frames from the wait "
+                  "outwards, `addr2line`'s names; every phase):", "",
+                  "| entry point | caller | setup | frames, a frame | teardown |", "|---|---|---|---|---|"]
+            # one row per name chain: two call sites of one function are one caller here
+            waits = collections.Counter()
+            for entry, chain, su, fr, td in r["gc_wait"]:
+                for k, x in enumerate((su, fr, td)):
+                    waits[(entry, chain, k)] += x
+            rows = sorted({(entry, chain) for entry, chain, _ in waits},
+                          key=lambda x: (-waits[x + (1,)], -waits[x + (0,)], x))
+            for entry, chain in rows:
+                su, fr, td = (waits[(entry, chain, k)] for k in range(3))
+                o.append("| `%s` | `%s` | %d | %.1f | %d |" % (entry, md_escape(chain), su, fr / n, td))
+            o.append("")
+    return "\n".join(o)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("out")
@@ -469,6 +592,12 @@ def main():
             with open(path, "w") as f:
                 f.write(profile(args, g, entries, runs) + "\n")
             print("profile: %s" % path)
+    for g in args.gpus:
+        if any(runs[(g, i)]["gc"] for i in range(len(entries))):
+            path = os.path.join(args.out, "gc-cost-%s.md" % g)
+            with open(path, "w") as f:
+                f.write(gc_cost(args, g, entries, runs) + "\n")
+            print("gc-cost: %s" % path)
     if args.shaders:
         write_shaders(args.shaders, args.commit, entries, found, names)
     if args.findings:
