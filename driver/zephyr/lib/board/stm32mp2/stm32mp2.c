@@ -17,9 +17,11 @@
  *     with the EL found.
  *   z_arm64_el1_plat_init, the end of z_arm64_el1_init (MMU off): MP2:A1,
  *     the EL2-to-EL1 step is done.
- *   PRE_KERNEL_1 0: the watchdog's arm point (mp2_wdog_arm). The OP-TEE
- *     watchdog (arm,smc-wdt) belongs to the item after this one; until
- *     then the hook only takes the system counter.
+ *   PRE_KERNEL_1 0: the watchdog's arm point (mp2_wdog_arm): this hook
+ *     only takes the system counter. The OP-TEE watchdog (arm,smc-wdt) is
+ *     stm32mp2_wdog.c's, with its own hooks at the same three points, in
+ *     an image that has that file (CONFIG_YAKOGL_STM32MP2_WDOG); it calls
+ *     mp2_note_wdog_armed() for the report.
  *   PRE_KERNEL_1 99 (after the console at 60): MP2:B, the hand-over record
  *     line, PSCI_VERSION, the lifetime (mp2_wdog_report: the watchdog's
  *     report point).
@@ -97,6 +99,12 @@ struct mp2_handover mp2_handover __aligned(64) = {
 
 static uint64_t s_cntpct_pre_kernel;
 static int32_t s_psci_version = -1;
+static uint32_t s_wdog_armed_s;
+
+void mp2_note_wdog_armed(uint32_t timeout_s)
+{
+	s_wdog_armed_s = timeout_s;
+}
 
 const struct mp2_handover *mp2_handover_get(void)
 {
@@ -209,9 +217,15 @@ static int mp2_wdog_report(void)
 	print_handover();
 	printk("mp2: system counter at PRE_KERNEL_1: %llu ticks\n",
 	       (unsigned long long)s_cntpct_pre_kernel);
-	printk("mp2: no watchdog armed by this image; PSCI SYSTEM_RESET at %u s of uptime "
-	       "at the latest\n",
-	       CONFIG_YAKOGL_STM32MP2_LIFETIME_S);
+	if (s_wdog_armed_s != 0) {
+		printk("mp2: OP-TEE watchdog armed by this image (%u s); PSCI SYSTEM_RESET at "
+		       "%u s of uptime at the latest\n",
+		       s_wdog_armed_s, CONFIG_YAKOGL_STM32MP2_LIFETIME_S);
+	} else {
+		printk("mp2: no watchdog armed by this image; PSCI SYSTEM_RESET at %u s of "
+		       "uptime at the latest\n",
+		       CONFIG_YAKOGL_STM32MP2_LIFETIME_S);
+	}
 	return 0;
 }
 SYS_INIT(mp2_wdog_report, PRE_KERNEL_1, 99);

@@ -42,6 +42,12 @@ uint32_t mp2_lifetime_ms(void);
  * negative PSCI error. */
 int32_t mp2_psci_version(void);
 
+/* Called by the watchdog (stm32mp2_wdog.c, when it is in the image) once it
+ * armed OP-TEE's watchdog with timeout_s, before the report at PRE_KERNEL_1
+ * 99; the report then says so. Without the call the report says no watchdog
+ * is armed by the image. */
+void mp2_note_wdog_armed(uint32_t timeout_s);
+
 /* The end of a run: `why` is printed, then PSCI SYSTEM_RESET. If the firmware
  * returns, the CPU halts with interrupts off (a watchdog, when one runs, is
  * then the way out). Any context. */
