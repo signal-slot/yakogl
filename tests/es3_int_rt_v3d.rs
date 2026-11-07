@@ -118,7 +118,11 @@ fn float_rows_and_the_es2_formats() {
     assert_eq!((f(GLES_SURF_R16F).internal_bpp, f(GLES_SURF_R16F).bytes), (V3D_INTERNAL_BPP_64, 2));
     assert_eq!((f(GLES_SURF_R32F).output, f(GLES_SURF_R32F).internal_type), (11, V3D_INTERNAL_TYPE_32F));
     assert_eq!((f(GLES_SURF_R32F).internal_bpp, f(GLES_SURF_R32F).bytes), (V3D_INTERNAL_BPP_32, 4));
-    for s in [GLES_SURF_RGBA16F, GLES_SURF_R16F, GLES_SURF_R32F] {
+    /* RGB10_A2 (Mesa :71): the TLB's RGB10_A2 over a 16F tile buffer, 4 bytes */
+    let r = f(GLES_SURF_RGB10_A2);
+    assert_eq!((r.output, r.internal_type), (V3D_OUTPUT_IMAGE_FORMAT_RGB10_A2, V3D_INTERNAL_TYPE_16F));
+    assert_eq!((r.internal_bpp, r.bytes), (V3D_INTERNAL_BPP_64, 4));
+    for s in [GLES_SURF_RGBA16F, GLES_SURF_R16F, GLES_SURF_R32F, GLES_SURF_RGB10_A2] {
         assert_eq!(f(s).clamp, V3D_RENDER_TARGET_CLAMP_NONE);
         assert!(state::typed(s));
     }
@@ -142,6 +146,8 @@ fn clear_words_pack_per_internal_type() {
     assert_eq!(state::clear_words(GLES_SURF_RGB10_A2UI, ints), [0x0080_007f, 0x0002_ffff, 0, 0]);
     assert_eq!(state::clear_words(GLES_SURF_RG32I, ints), ints.map(f32::to_bits));
     assert_eq!(state::clear_words(GLES_SURF_RGBA16F, [1.0, 2.0, 0.5, -1.0]), [0x4000_3c00, 0xbc00_3800, 0, 0]);
+    /* a fixed-point surface over the 16F tile buffer clamps the clear to [0, 1], NaN to 0 */
+    assert_eq!(state::clear_words(GLES_SURF_RGB10_A2, [2.0, -1.0, f32::NAN, 0.5]), [0x0000_3c00, 0x3800_0000, 0, 0]);
     assert_eq!(state::clear_words(GLES_SURF_R32F, [0.25, 0.0, 0.0, 1.0]), [0x3e80_0000, 0, 0, 0x3f80_0000]);
     assert_eq!(state::clear_words(GLES_SURF_RGBA8888, [0.0, 1.0, 0.0, 1.0]), [0xff00_ff00, 0, 0, 0]);
 }

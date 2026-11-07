@@ -417,7 +417,7 @@ fn an_integer_texture_is_complete_only_with_nearest_filters() {
 }
 
 /// glGenerateMipmap of a format that is not renderable and filterable is
-/// GL_INVALID_OPERATION (ES 3.0 3.8.14); RGB10_A2 stored as RGBA8 has one.
+/// GL_INVALID_OPERATION (ES 3.0 3.8.14); RGB10_A2, in its class or as RGBA8, has one.
 #[test]
 fn generate_mipmap_follows_renderable_and_filterable() {
     if crate::REPORT_ES2 {

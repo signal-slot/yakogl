@@ -176,7 +176,7 @@ const XYZ1: [u8; 4] = [2, 3, 4, 1];
 /// swizzle (v3d_translate_pipe_swizzle of Mesa's), bytes a texel, return
 /// size 32). Mesa's rows, v3dx_format_table.c (Mesa 26.2.1):
 type Row = (u8, &'static str, u32, [u8; 4], u32, bool);
-const ROWS: [Row; 16] = [
+const ROWS: [Row; 17] = [
     (GLES_TEXFMT_RGBA8, "RGBA8", 4, XYZW, 4, false), /* :65 R8G8B8A8_UNORM */
     (GLES_TEXFMT_RGB565, "RGB565", 6, XYZ1, 2, false), /* :81 B5G6R5_UNORM */
     (GLES_TEXFMT_R16F, "R16F", 16, [2, 0, 0, 1], 2, false), /* :90 R16_FLOAT */
@@ -185,6 +185,7 @@ const ROWS: [Row; 16] = [
     (GLES_TEXFMT_RGBA32F, "RGBA32F", 31, XYZW, 16, true), /* :101 R32G32B32A32_FLOAT */
     (GLES_TEXFMT_R11G11B10F, "R11G11B10F", 19, XYZ1, 4, false), /* :146 R11G11B10_FLOAT */
     (GLES_TEXFMT_RGB9E5, "RGB9E5", 20, XYZ1, 4, false), /* :147 R9G9B9E5_FLOAT */
+    (GLES_TEXFMT_RGB10A2, "RGB10A2", 9, XYZW, 4, false), /* :71 R10G10B10A2_UNORM */
     (GLES_TEXFMT_RGB10A2UI, "RGB10A2UI", 114, XYZW, 4, false), /* :75 R10G10B10A2_UINT */
     (GLES_TEXFMT_RGBA8_SNORM, "RGBA8_SNORM", 5, XYZW, 4, false), /* :69 R8G8B8A8_SNORM */
     (GLES_TEXFMT_RGBA8UI, "RGBA8UI", 101, XYZW, 4, false), /* :123 R8G8B8A8_UINT */
@@ -208,9 +209,8 @@ fn bind(format: u8, w: u32, h: u32) -> GlesTextureBind {
 }
 
 /// Every class of the mask is a row above, and the rows are the mask: what
-/// the GL core stores natively on the V3D, its TMU samples. RGB10A2 (kept
-/// in RGBA8 here, as on the PowerVR) and the ETC2 formats are refused by
-/// name.
+/// the GL core stores natively on the V3D, its TMU samples. The ETC2 formats
+/// are refused by name.
 #[test]
 fn the_sampled_mask_is_the_rows() {
     let rows = ROWS.iter().fold(0u64, |m, r| m | gles_texfmt_bit(r.0));
@@ -218,7 +218,7 @@ fn the_sampled_mask_is_the_rows() {
         .iter()
         .fold(0u64, |m, &f| m | gles_texfmt_bit(f));
     assert_eq!(V3D_SAMPLED_TEXFMTS, rows | narrow, "the mask is the rows and the ES 2.0 narrow classes");
-    for f in [GLES_TEXFMT_RGB10A2, GLES_TEXFMT_ETC2_RGB, GLES_TEXFMT_ETC2_RGBA, GLES_TEXFMT_ETC2_RGB_PT] {
+    for f in [GLES_TEXFMT_ETC2_RGB, GLES_TEXFMT_ETC2_RGBA, GLES_TEXFMT_ETC2_RGB_PT] {
         let b = bind(f, 4, 4);
         let r = texture::refusal_for(&b, false).expect("refused");
         assert!(r.contains("does not sample"), "format {f}: {r}");
@@ -247,9 +247,6 @@ fn each_class_is_mesas_row_in_rust_and_in_c() {
         assert!(other.contains("look-up compiled for the"), "{name}: {other}");
         assert_eq!(texture::layout(&b).expect("lays out").cpp, bytes, "{name}: laid out at its own size");
     }
-    /* RGB10A2's row is there (Mesa's :71), though the class is not sampled */
-    assert_eq!(texture::tmu_format(&bind(GLES_TEXFMT_RGB10A2, 4, 4)), (9, XYZW));
-    assert_eq!(c_row("RGB10A2").map(|c| c.type_), Some(9));
 }
 
 /// The texture shader state record of a binding of each class, packed by
@@ -1237,6 +1234,142 @@ mod trampolines {
             status
         };
         (status, px)
+    }
+
+    /// The last draw's first texture shader state record, as the TMU reads it.
+    fn last_tmu_record() -> Option<[u8; V3D_TEX_STATE_BYTES]> {
+        let t = jobs().iter().flat_map(|j| j.tmu.iter().flatten()).last().cloned()?;
+        let mut rec = [0u8; V3D_TEX_STATE_BYTES];
+        with_platform(|p| {
+            let src = platform_cpu(p, u64::from(t.tex_state), V3D_TEX_STATE_BYTES);
+            // SAFETY: platform_cpu checked the span.
+            unsafe { core::ptr::copy_nonoverlapping(src, rec.as_mut_ptr(), V3D_TEX_STATE_BYTES) };
+        });
+        Some(rec)
+    }
+
+    /// Is `needle` anywhere in the GPU memory the back end was given?
+    fn memory_has(needle: &[u8]) -> bool {
+        with_platform(|p| {
+            p.allocs.values().any(|a| {
+                // SAFETY: the allocation's own u64 backing, `size` bytes of it in use.
+                let m = unsafe { std::slice::from_raw_parts(a.mem.as_ptr() as *const u8, a.size) };
+                m.windows(needle.len()).any(|w| w == needle)
+            })
+        })
+    }
+
+    /// A GL_RGB10_A2 texture of `words`, bound to unit 0.
+    fn upload_rgb10a2(w: i32, h: i32, words: &[u32]) -> GLuint {
+        let mut tex = 0u32;
+        let b: Vec<u8> = words.iter().flat_map(|x| x.to_le_bytes()).collect();
+        // SAFETY: plain GL calls; `b` holds w x h packed words.
+        unsafe {
+            glGenTextures(1, &mut tex);
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, tex);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST as GLint);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST as GLint);
+            glTexImage2D(
+                GL_TEXTURE_2D,
+                0,
+                GL_RGB10_A2 as GLint,
+                w,
+                h,
+                0,
+                GL_RGBA,
+                GL_UNSIGNED_INT_2_10_10_10_REV,
+                b.as_ptr() as *const c_void,
+            );
+            assert_eq!(glGetError(), GL_NO_ERROR, "{:?}", logs());
+        }
+        tex
+    }
+
+    fn word(r: u32, g: u32, b: u32, a: u32) -> u32 {
+        r | g << 10 | b << 20 | a << 30
+    }
+
+    /// GL_RGB10_A2 in its own class (docs/notes/v3d-rgb10a2.md, the flip): a
+    /// texture of 10-bit values that 8 bits lose reaches the TMU as Mesa's
+    /// R10G10B10A2_UNORM row (type 9), unrounded.
+    #[test]
+    fn an_rgb10a2_texture_keeps_its_ten_bit_words_and_samples_as_type_9() {
+        let _g = rig();
+        let words = [
+            word(0x3ff, 0x201, 0x001, 3),
+            word(0x000, 0x202, 0x002, 2),
+            word(0x0ff, 0x203, 0x003, 1),
+            word(0x100, 0x1ff, 0x3fe, 0),
+        ];
+        let tex = upload_rgb10a2(2, 2, &words);
+        let prog = program(VS, FS);
+        // SAFETY: plain GL calls; the quad lives for the call.
+        unsafe {
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            glViewport(0, 0, CANVAS.0, CANVAS.1);
+            glUseProgram(prog);
+            glUniform1i(glGetUniformLocation(prog, c"s".as_ptr()), 0);
+            glVertexAttribPointer(0, 3, GL_FLOAT, 0, 12, QUAD.as_ptr() as *const c_void);
+            glEnableVertexAttribArray(0);
+            glDrawArrays(GL_TRIANGLES, 0, 6);
+            glFinish();
+            assert_eq!(glGetError(), GL_NO_ERROR, "{:?}", logs());
+            glDeleteProgram(prog);
+        }
+        let rec = last_tmu_record().expect("the draw carries a texture record");
+        assert_eq!(decode(&rec), (9, XYZW, false), "R10G10B10A2_UNORM, not the RGBA8 row (4)");
+        for w in words {
+            assert!(memory_has(&w.to_le_bytes()), "word {w:#010x} is in the texture's memory unrounded");
+        }
+        let refused: Vec<_> = logs().into_iter().filter(|l| l.contains("does not sample")).collect();
+        assert!(refused.is_empty(), "{refused:?}");
+        // SAFETY: a name made above.
+        unsafe { glDeleteTextures(1, &tex) };
+    }
+
+    /// An RGB10_A2 attachment is a complete framebuffer and the job renders
+    /// the 10/10/10/2 output format.
+    #[test]
+    fn an_rgb10a2_attachment_renders_the_ten_bit_surface() {
+        let _g = rig();
+        let tex = upload_rgb10a2(SIDE, SIDE, &[0; (SIDE * SIDE) as usize]);
+        let mut fbo = 0u32;
+        // SAFETY: plain GL calls on names made here.
+        unsafe {
+            glGenFramebuffers(1, &mut fbo);
+            glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0);
+            assert_eq!(glCheckFramebufferStatus(GL_FRAMEBUFFER), GL_FRAMEBUFFER_COMPLETE, "{:?}", logs());
+            glViewport(0, 0, SIDE, SIDE);
+            glClearColor(0.5, 0.25, 0.75, 1.0);
+            glClear(GL_COLOR_BUFFER_BIT);
+            glFinish();
+            assert_eq!(glGetError(), GL_NO_ERROR, "{:?}", logs());
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            glDeleteFramebuffers(1, &fbo);
+            glDeleteTextures(1, &tex);
+        }
+        let t = jobs().last().map(|j| j.target).expect("the clear made a job");
+        assert!(t.typed, "a typed job");
+        assert_eq!(t.rt_format[0], V3D_OUTPUT_IMAGE_FORMAT_RGB10_A2, "the 10/10/10/2 output format");
+    }
+
+    /// glGenerateMipmap on the class averages each 10-bit field (the CPU
+    /// chain; es3_format_tests.rs has the same numbers over the GL core).
+    #[test]
+    fn generate_mipmap_of_an_rgb10a2_texture_averages_the_ten_bit_fields() {
+        let _g = rig();
+        let t = [word(1023, 512, 0, 3), word(0, 513, 1, 2), word(10, 514, 1, 2), word(20, 515, 1, 0)];
+        let tex = upload_rgb10a2(2, 2, &t);
+        // SAFETY: plain GL calls.
+        unsafe {
+            glGenerateMipmap(GL_TEXTURE_2D);
+            assert_eq!(glGetError(), GL_NO_ERROR, "{:?}", logs());
+        }
+        assert!(memory_has(&word(263, 514, 1, 2).to_le_bytes()), "level 1 is the field-wise average");
+        // SAFETY: a name made above.
+        unsafe { glDeleteTextures(1, &tex) };
     }
 
     #[test]
