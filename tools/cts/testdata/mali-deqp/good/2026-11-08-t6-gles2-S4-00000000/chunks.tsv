@@ -1,0 +1,2 @@
+row	label	cases	status	seconds	kmsg	resets	ssh_after	boot_same	exit_line
+3	c	3	crash	40	4	2	ok	no	-

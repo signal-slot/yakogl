@@ -1,0 +1,4 @@
+[  1.0] panthor: job timeout, c=0
+[  1.1] panthor: reset begin
+[  2.0] panthor: reset done
+[  3.0] x
