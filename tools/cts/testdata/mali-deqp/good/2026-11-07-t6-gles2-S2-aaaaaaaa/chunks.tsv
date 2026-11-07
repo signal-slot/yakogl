@@ -1,0 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+row	label	cases	status	seconds	kmsg	resets	ssh_after	boot_same	exit_line
+3	S2-r1	3	crash	30	4	1	lost	yes	yakogl-mali-exit: refused NOT_BUILT_MRT
+4	S2-r2	3	hang	60	9	2	ok	yes	-

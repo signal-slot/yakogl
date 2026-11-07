@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+commit=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+session=S1
+rows=1-2
+tree=tools/cts/mali-gles2-tree.txt
+boot_id_before=b0
+boot_id_after=b0
+kernel=6.1.75-fixture
+lib=yakogl-mali: loaded fixture
+started=2026-11-07T10:00:00Z
+ended=2026-11-07T10:05:00Z

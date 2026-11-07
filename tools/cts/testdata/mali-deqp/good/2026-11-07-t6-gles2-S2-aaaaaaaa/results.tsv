@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+case	status	detail
+dEQP-GLES2.functional.x.c07	Pass	
+dEQP-GLES2.functional.x.c08	Crash	process died
+dEQP-GLES2.functional.x.c09	Lost	chunk-crash
+dEQP-GLES2.functional.x.c10	Pass	
+dEQP-GLES2.functional.x.c11	Pass	
+dEQP-GLES2.functional.x.c12	Lost	not-run

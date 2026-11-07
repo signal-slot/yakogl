@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+dEQP-GLES2.functional.x.c01
+dEQP-GLES2.functional.x.c02
+dEQP-GLES2.functional.x.c03
+dEQP-GLES2.functional.x.c04
+dEQP-GLES2.functional.x.c05
+dEQP-GLES2.functional.x.c06
+dEQP-GLES2.functional.x.c07
+dEQP-GLES2.functional.x.c08
+dEQP-GLES2.functional.x.c09
+dEQP-GLES2.functional.x.c10
+dEQP-GLES2.functional.x.c11
+dEQP-GLES2.functional.x.c12

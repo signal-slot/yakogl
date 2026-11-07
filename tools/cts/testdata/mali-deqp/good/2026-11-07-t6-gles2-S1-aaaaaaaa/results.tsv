@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+case	status	detail
+dEQP-GLES2.functional.x.c01	Pass	
+dEQP-GLES2.functional.x.c02	Fail	Image comparison failed: max diff 12 at 3,4
+dEQP-GLES2.functional.x.c03	Pass	
+dEQP-GLES2.functional.x.c04	Fail	Image comparison failed: max diff 40 at 7,9
+dEQP-GLES2.functional.x.c05	InternalError	online shaderc: the code generator refused this fragment shader: Select(OutOfScratch)
+dEQP-GLES2.functional.x.c06	NotSupported	Extension not supported
