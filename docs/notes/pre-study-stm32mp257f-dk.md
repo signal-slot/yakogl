@@ -34,7 +34,9 @@ follow the i.MX8MP's (`imx8mp-gc-bringup.md`, `imx8mp-gc-driver-notes.md`,
 3. The register-level and ISA differences from the i.MX8MP's row that Mesa
    reads are three: `SH_NO_ONECONST_LIMIT` (an instruction may read two
    different uniforms), `WIDELINE_TRIANGLE_EMU` (Mesa caps the line width at
-   1.0), and NPU fields in the row. The 0x8000/0x6205 row has two shader
+   1.0), and NPU fields in the row. The golden stream against the i.MX8MP's
+   (`tools/vivante/README.md`, "Another part: the ST row" (commit `3dd64152`)) adds one that is not a feature word: Mesa
+   turns tile-status compression off on this row (section 5.2). The 0x8000/0x6205 row has two shader
    cores and 16 streams like the i.MX8MP's Mesa row (the eight-stream row
    was the 0x6207 one, which does not apply). (Section 3.)
 4. What is new is everything around the GPU: the power (an SCMI performance
@@ -680,7 +682,23 @@ Each item has a check. All are host-side except where Zephyr is built.
    golden (`tools/vivante/README.md`, "The golden command stream"). Check:
    the diff is exactly the expected one (line-width state, no
    `SH_NO_ONECONST_LIMIT` effect on the stream, nothing else); anything
-   else is a finding. (b) `etna_shc` with the ST ids compiles the whole set
+   else is a finding. **Done for the 0x8000/0x6205 row (shim-golden, `tools/vivante/README.md`, "Another part: the ST row" (commit `3dd64152`)):**
+   `ETNA_SHIM_GPU=GCNANOULTRA31` (customer id 0x15 from the hwdb, the
+   board's was not read); Mesa 26.2.1's driver runs on it in every
+   `cs_golden` mode, the i.MX8MP goldens stay byte-identical, and the
+   streams have the same shape (same submits, commands and `LOAD_STATE`
+   counts) as the GC7000UL's. The differences are not the expected ones:
+   (1) `PE_MEM_CONFIG` (0x014bc) and `TS_MEM_CONFIG` (0x01654): the i.MX8MP
+   gets colour/depth tile-status modes and compression, the ST row gets the
+   mode bits 0 and only colour fast clear (0x02, or 0 for mipmapped
+   textures), so Mesa uses no tile-status compression on this row;
+   (2) mode 25 (a `vec4` array read at a uniform index): three shader
+   words differ (`SH_NO_ONECONST_LIMIT`) and `SH_HALTI5_UNIFORMS[0]` is
+   `0x2 0xffef7000 0 0` against `0x2 0x10 0xffef7000 0`; modes 2 and 23
+   (the one-constant cases) do not move; (3) mode 28, `glLineWidth(4)`:
+   `ALIASED_LINE_WIDTH_RANGE` 1..1 against 1..8192, and `PA_LINE_WIDTH` /
+   `PA_WIDE_LINE_WIDTH0/1` hold 0.5 against 2.0 (the registers hold half
+   the width; Mesa clamps to 1.0). Nothing else in the common state moves. (b) `etna_shc` with the ST ids compiles the whole set
    the GC7000 table takes — today the committed reference is
    `tests/reference/vivante_blobs.rs`, `SHC_BLOB_TABLE` 234 rows (`:5877`),
    built from the `dir`-role `gc7000` lines of
@@ -805,8 +823,8 @@ answer it.
 | Q8 | The exact boot chain and what state U-Boot hands over (exception level, MMU, caches, display on or off), and whether the SMC interface to OP-TEE stays open after U-Boot. | **In part (#1281):** TF-A v2.10 (BL2, BL31), OP-TEE 4.0, U-Boot 2023.10 (ST's), Linux 6.6.129 via extlinux from the microSD; PSCI 1.1 over SMC; Linux's watchdog is `arm,smc-wdt` (OP-TEE's), 32 s (`stm32mp251.dtsi:78-82`, `stm32mp257f-dk.dts:216-219`). **Folded in (r-optee-tfa, r-uboot, board-read, 2026-11-06):** BL2 starts the IWDG, so the watchdog is armed at hand-over and a hang resets in about 32 s; the image enters at EL2; U-Boot's distro loop reaches extlinux and leaves `boot.scr.uimg` alone while extlinux succeeds (section 1); the environment is a CRC32, a flag byte and strings at offset 0x7e000 of its partition. Open: the MMU and cache state and the DTB pointer actually handed over, and whether a key in the first second stops autoboot: the return trial's image records the hand-over |
 | Q9 | Does Linux etnaviv carry the MP25 ids, and does anything in ST's Linux depend on a vendor blob? | **Answered (#1281):** mainline etnaviv's hwdb carries the exact row (`etnaviv_hwdb.c:199-204`), but ST's image does not use etnaviv: it runs **galcore 6.4.21** (out of tree) and its own OpenGL ES 3.1 user space. The kernel has etnaviv as an unloaded module; loading it reportedly panicked OP-TEE, so no etnaviv reference exists from the board and the host references are Mesa on the drm-shim |
 | Q10 | Is the GPU behind an IOMMU, and what physical address width reaches the GPU? | **Answered in part (#1281, confirmed by ST's tree):** no `iommus` on the GPU node (`stm32mp255.dtsi:169-183`), so our carveout stays identity-mapped in the GPU's own MMU v2 as on the i.MX8MP. The 64 MiB carveout at 0xfa800000 lies below 4 GiB and the GPU's MMU maps it flat, GPU address equal to physical address (gc-mem-mp2, r-galcore). The address width that reaches the GPU is not in any tree: RM0457 |
-| Q11 | What do wide lines do on a `WIDELINE_TRIANGLE_EMU` core when we program the wide-line registers the way the i.MX8MP backend does (`src/vivante/backend.rs:1376`, `:1425-1426`)? What should the build report as the line width range? | **Answered for the reported range (q11-wideline, Mesa 26.2.1 `etnaviv_screen.c:366-368`):** the ST profile reports `GL_ALIASED_LINE_WIDTH_RANGE` as 1.0 to 1.0. Open: what the hardware does when the wide-line registers are programmed anyway: the golden stream (item 5.2); a board test |
-| Q12 | Does our compiler ever use the address-register paths or partial-component address writes that the ST rows' `SH_NO_INDEX_CONST_ON_A0` and missing `SH_MOVAI_MOVAR...FIX` suggest are unavailable or unsafe? | open: the scan of the online compiler's output (`src/shaderc/online/vivante`) for `movar` and `movai` has run (q12-scan); its verdict is in that study's report and is not folded in here. The board's gl_test and dEQP runs settle any remainder |
+| Q11 | What do wide lines do on a `WIDELINE_TRIANGLE_EMU` core when we program the wide-line registers the way the i.MX8MP backend does (`src/vivante/backend.rs:1376`, `:1425-1426`)? What should the build report as the line width range? | **Answered for the reported range (q11-wideline, Mesa 26.2.1 `etnaviv_screen.c:366-368`):** the ST profile reports `GL_ALIASED_LINE_WIDTH_RANGE` as 1.0 to 1.0. Open: what the hardware does when the wide-line registers are programmed anyway; the golden stream shows only what Mesa writes (mode 28: `PA_LINE_WIDTH` 0.5, clamped, against 2.0 on the i.MX8MP; `tools/vivante/README.md`, "Another part: the ST row" (commit `3dd64152`)); a board test |
+| Q12 | Does our compiler ever use the address-register paths or partial-component address writes that the ST rows' `SH_NO_INDEX_CONST_ON_A0` and missing `SH_MOVAI_MOVAR...FIX` suggest are unavailable or unsafe? | open: the scan of the online compiler's output (`src/shaderc/online/vivante`) for `movar` and `movai` has run (q12-scan); its verdict is in that study's report and is not folded in here. The golden stream adds one data point: with the one-constant limit lifted, Mesa's indexed-uniform shader (mode 25) changes three words and `SH_HALTI5_UNIFORMS[0]` (`tools/vivante/README.md`, "Another part: the ST row" (commit `3dd64152`)); our compiler's output is the stricter form. The board's gl_test and dEQP runs settle any remainder |
 | Q13 | The A35 SoC definition: cache and MMU state at entry, PSCI or the monitor interface, console UART, and whether Zephyr's arm64 core runs on this part without changes. | **In part (ST tree):** PSCI 1.0-style over SMC (the board reports 1.1, #1281), console `usart2` at 0x400e0000 on PA4/PA8, GIC-400 at 0x4ac00000 (section 4 for the lines). **Folded in (r-optee-tfa, r-zephyr-a35, board-read):** entry at EL2 at the load address, GICv2 with SGIs 8 to 15 and PPIs 29 and 31 left alone, a 40 MHz counter, USART2 at 0x400e0000, the arm64 GICv2 path unchanged. Open: cache and MMU state at entry (the return trial records it), the UART's kernel clock and whether U-Boot left it set up; whether the SoC definition runs (item P4) |
 | Q14 | The GPU's coherence with the A35 cluster, and the right memory attributes for the carveout. The i.MX8MP uses a non-cacheable mapping and no flushes (`imx8mp-gc-driver-notes.md`, "M3: the ring and one submit"). | open: RM0457 interconnect chapter (not fetchable so far); board test. The area for it is the 64 MiB `gpu-reserved` at 0xfa800000 (#1281; ST tree `stm32mp257f-dk-resmem.dtsi:170-173`) |
 | Q15 | ~~Does the 0x6207 row (one shader core, eight streams) apply?~~ | **Dropped, not applicable (#1281):** the board's revision is 0x6205, so the 0x8000/0x6207 row is not this part. The table-driven identity (item 5.3) still carries the stream count per row, which costs nothing |
