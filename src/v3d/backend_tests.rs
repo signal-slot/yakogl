@@ -4950,6 +4950,32 @@ fn the_least_recently_used_render_image_goes_when_the_table_is_full() {
     assert!(rt_images().0 as usize <= RT_IMAGES);
 }
 
+/// Nine sampled targets, rendered and sampled every frame, all keep a slot:
+/// none is evicted, so none goes back to a tiled copy (terrain's 7 render
+/// targets plus the uploads that carry a stale render-into mark).
+#[test]
+fn nine_sampled_targets_keep_their_render_images() {
+    let rig = tfu_rig(Some(1), 0);
+    let mut ts: Vec<GlesTextureBind> =
+        (0..9u32).map(|i| GlesTextureBind { content_gen: 100 + i, ..texture(0, 16, 16, 3) }).collect();
+    for t in ts.iter_mut() {
+        frame(&rig, t);
+        frame(&rig, t);
+        assert_eq!(generate(t, 3), 1, "the chain is the TFU's");
+    }
+    assert_eq!(rt_images().0, 9, "every target holds an image");
+    let n = tilings();
+    let direct = rt_images().2;
+    for _ in 0..3 {
+        for t in ts.iter_mut() {
+            frame(&rig, t);
+        }
+    }
+    assert_eq!(tilings(), n, "no target went back to a tiled copy");
+    assert_eq!(rt_images().0, 9);
+    assert_eq!(rt_images().2, direct + 27, "every sample read its image");
+}
+
 /// A render into the same storage as another target (another size or pitch
 /// at the texture's address, a level above 0 attached): the raster changed
 /// under the image, which no longer holds what the storage holds, so the

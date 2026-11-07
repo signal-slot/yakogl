@@ -279,11 +279,17 @@ impl ColourStores {
 /// Render images kept at once (`RtImage`): the textures an application
 /// renders into and then samples. glmark2's desktop blurs 4 windows into 2
 /// textures, refract and shadow have 1 each, terrain 7 (its render-to-
-/// texture chain); Slint and the cluster render their layers into textures
-/// as femtovg's image render targets. The least recently used goes when the
-/// table is full; a target without a slot is sampled through a tiled copy,
-/// as before.
-pub const RT_IMAGES: usize = 8;
+/// texture chain, plus the JPEG uploads whose slot still carries the stale
+/// render-into mark: 9 sampled targets in all); Slint and the cluster render
+/// their layers into textures as femtovg's image render targets. A slot is
+/// metadata: the image is allocated when a job first renders into the target
+/// (`rt_for_render`), so a larger table moves `rt_bytes_peak` for no scene that
+/// already fit. 16 keeps a target that is rendered and mipmapped every frame
+/// from being the least recently used one when 9 are sampled
+/// (docs/notes/v3d-terrain-copies.md, design 2). The least recently used goes
+/// when the table is full; a target without a slot is sampled through a tiled
+/// copy, as before.
+pub const RT_IMAGES: usize = 16;
 
 /// A render target's second home, its render image (docs/online-shaderc/
 /// v3d-backend.md, "Render targets sampled from their render image"): a
