@@ -93,3 +93,28 @@ TPU was "not tried on either board". It needs a board check first that the
 GC7000's texture unit reads the depth surface (format, tiling, the stencil
 byte) before any code relies on it. Until then the CPU resolve stays, and this
 change only makes it cheaper.
+
+## 2026-11-07: unorm24_depth without the f64 divide
+
+`ds_retention::unorm24_depth` is the f64 multiply by the reciprocal
+`1.0 / 16_777_215.0`, rounded to f32 (the first row of
+`docs/notes/gc-unorm24.md`'s table). It is bit-identical to
+`((word & 0xff_ffff) as f64 / 16_777_215.0) as f32` for all 2^24 inputs:
+`tests/gc_unorm24_exhaustive.rs` compares them one by one (about a second at
+the test profile's opt-level 3, so it runs in every `cargo test` row, not
+`#[ignore]`d) and asserts that the crate's function is the reference.
+
+`time_one_1024_square_resolve` (release build, x86-64 host, 40 runs, two runs
+each, best of the 40):
+
+| `unorm24_depth` | best | mean |
+|---|---|---|
+| f64 divide (before) | 0.201 - 0.202 ms | 0.305 - 0.320 ms |
+| f64 reciprocal multiply (after) | 0.206 - 0.215 ms | 0.330 - 0.336 ms |
+
+The host shows no gain (its pipelined, vectorised `divpd` is as fast as the
+multiply; the difference is noise), as `gc-unorm24.md` predicted. The saving
+is for the Cortex-A53, whose f64 divide is many cycles and not pipelined; it
+is not measured here (no board run in this item). These 0.2 ms differ from the
+0.556 ms of the table above because that table is from an earlier build and
+machine.
