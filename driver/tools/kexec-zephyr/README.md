@@ -136,12 +136,23 @@ The image must carry the watchdog marker `gc_wdog_arm: armed`
 (`CONFIG_GC_BOARD_WDOG_SELF_ARM=y`): the board has no remote power control,
 and `board.sh` refuses an image without it.
 
-State (2026-11-06): `status`, `probe` and every step of `run` before the jump
-(the readiness read, the copy of the tools, the record cleared with and
-without a selector and read back with LPGPR0 unchanged) ran on the board. The
-jump itself has not been made through `board.sh`; the crash route ran on this
-board before from commands typed by hand (the header of
-`driver/boards/atmark/armadillo_x2/armadillo_x2_mimx8ml8_a53.dts`).
+State (2026-11-07): `status`, `probe` and every step of `run` before the jump
+ran on the board for two images built from main `98251549`: gl_test
+(`IMX8MP_BOARD=x2 tools/cts/imx8mp-gltest-build.sh <name> 0`, sha256
+`87a2fbca`) and the dEQP-GLES2 table image (`IMX8MP_BOARD=x2
+tools/cts/imx8mp-deqp-build.sh <name> 'dEQP-GLES2.info.*' --table
+tools/cts/imx8mp-full-tree.txt`, 29 rows, sha256 `fa58a962`). Both carry the
+marker and the Image header, end below `0x70000000` (`0x62d1f000` and
+`0x6d3a1000`) and pass `--dry-run x2 run`. On the board: the readiness read
+(OpenRC settled, no `kexec_zephyr`, no container, crash window 268435456,
+`kexec_crash_loaded` 0), the copy of the tools, the record cleared (`SEL=0`
+for gl_test, `SEL=1` for dEQP) and read back as `dead0002 00000000
+5345000<SEL> 00000000` with LPGPR0 unchanged, and the image's sha256 read back
+equal to the host's. The jump was not taken; the record was written back as
+found and the copies removed. `status` exits 1 when `/tmp/yakogl-kexec` is
+absent (its last command is busybox `ls` of it), after printing every read.
+The crash route ran on this board before from commands typed by hand (the
+header of `driver/boards/atmark/armadillo_x2/armadillo_x2_mimx8ml8_a53.dts`).
 The first jump through `board.sh` was made on 2026-11-06 (main `f1eae634b44d`,
 gl_test case 0 built with `IMX8MP_BOARD=x2 tools/cts/imx8mp-gltest-build.sh
 <name> 0`, run as `SEL=0 tools/board.sh x2 run`): rc=0, verdict=done,
