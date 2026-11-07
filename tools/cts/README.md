@@ -933,3 +933,68 @@ af17c0c8 ran that way (the mailbox replies were taken by Zephyr's ISR;
 `driver/docs/rpi4-v3d.md`, "Measured on the board").
 
 A leftover `/boot/firmware/yakogl-*.bin` or a non-empty `tryboot.txt` refuses the next run; `tools/board.sh pi4 status` shows both. `BOARD_HDMI_TIMINGS` must be the lab's 17 fields (never `1920x720`; `board.sh` refuses anything that is not 17 integers, #905). If the cube rows of the GLES2 tree (T3, T4) fail, read `docs/v3d-noseamless-cube.md`.
+
+## 6. NanoPC-T6 (Mali-G610 over panthor, Armbian)
+
+The NanoPC-T6 (RK3588) runs dEQP-GLES2 as a Linux process on the board's own
+Armbian, not in a Zephyr image: `deqp-gles2` loads `libGLESv2.so.2` and
+`libEGL.so.1` of the Mali back end (`gpu-mali`) and reaches the GPU through the
+panthor kernel driver (`/dev/dri/renderD128`). Issue #20 holds the board's open
+work; `driver/docs/nanopc-t6-mali.md` is the board note. The scripts:
+
+- `tools/mali/panthor-gles/` (`build.sh <outdir>`, `check.sh <outdir>`): the
+  `libGLESv2.so.2` / `libEGL.so.1` pair for `aarch64-unknown-linux-gnu`
+  (`tools/mali/panthor-gles/README.md`). Its constructor prints
+  `yakogl-mali: loaded` on stderr, and `yakogl-mali-exit:` when the process
+  ends.
+- `mali-deqp-run.sh`: the runner. `BOARD_HOST=<user>@<t6> tools/cts/mali-deqp-run.sh
+  --build DIR --out SLICEDIR --rows A-B [--tree F] [--session S1..S4|smoke]
+  [--dry-run]`. `DIR` is a cross-build directory (`deqp-gles2`, `data/`,
+  `build.txt` with a `commit=` line, `lib/` with the pair); a real run
+  refuses unless that commit is on `origin/main` (exit 6). One tree row is
+  one chunk: one `deqp-gles2` process over the row's mustpass cases, started
+  under `setsid` and `timeout` from `/root/yakogl-mali/<sha8>/` (staged for the
+  run and removed at its end; `/tmp` is tmpfs on the board), between
+  `/dev/kmsg` markers with a `dmesg -w` capture around them. A process that
+  stops early (a crash, the timeout) is followed by a fresh one over the cases
+  no process began. After each chunk it checks that the board still answers
+  ssh and that `boot_id` is unchanged; a board that does not ends the run
+  (exit 8 or 7, nothing retried) and the rest is `Lost board-lost`. It takes
+  the board lock and refuses while a process holds the render node (exit 3).
+  The exit codes are listed at the head of the script.
+- `mali-deqp-selftest.sh`: the runner against a fake board (a fake `ssh` and
+  `scp` on PATH, fixtures in `testdata/mali-deqp-run/`, its `README.md`): a
+  clean run, a crash with resume, a hang, a panthor job-timeout line, a missing
+  `yakogl-mali: loaded` line, lost ssh, a commit not on the main ref, `--dry-run`
+  making no ssh call, and a slice that keeps no host name or address. About
+  20 s, host only.
+- `mali-kmsg.py [--json] [FILE|-]`: classifies the panthor lines of a kernel
+  capture into one `kmsg: resets=N timeouts=N mmu_faults=N fw_faults=N
+  gpu_faults=N other_panthor=N first=<line>` line (the patterns come from the
+  panthor sources; `docs/notes/mali-panthor-kmsg.md` says what the driver logs on
+  a reset, a fault and a job timeout). `mali-kmsg-selftest.sh` checks it on the
+  captures in `testdata/mali-kmsg/`.
+- `mali-gles2-tree.txt` (the tree table of the four sessions) and
+  `mali-deqp-tally.py` (the slices -> the tally) are not in the tree yet;
+  `--tree` defaults to the former.
+
+Nothing in them names a machine. The board comes from the farm's lease
+(`target:nanopc-t6`, over ssh), and `BOARD_SSH_OPTS` (optional) is passed to
+`ssh` and `scp`; the console lease is `target:nanopc-t6-console`. The runner
+takes the same board lock as `tools/mali/panthor/run-on-board.sh`, so spell
+`BOARD_HOST` the same way as that script does.
+
+```sh
+tools/cts/mali-deqp-run.sh --dry-run --build <build dir> --out <slice dir> --rows 1-1
+tools/cts/mali-deqp-selftest.sh     # prints "mali-deqp-selftest: N checks passed"
+tools/cts/mali-kmsg-selftest.sh
+```
+
+`--dry-run` makes no ssh call and writes nothing: it lists the rows and cases it
+would run, says whether the build's commit is on `origin/main`, and goes on
+past that where a real run stops. Run it with `--rows 1-1` on a build directory
+before taking the board. A real run writes a slice (`tools/cts/log/README.md`,
+"t6-gles2 slices") and keeps its raw logs, unredacted, in `RAW_DIR` (default
+`build/mali-deqp-run/<slice name>/`, ignored by git). A crash, a hang or a GPU
+fault must leave the board usable over ssh; the chunk's `status`, `resets` and
+`ssh_after` say whether it did.

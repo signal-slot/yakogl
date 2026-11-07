@@ -87,6 +87,46 @@ board reference programs (`*.c`), scrubbed console excerpts. Every committed
 existing log text files do; the tally reads past them. Raw captures stay
 out.
 
+## t6-gles2 slices: the NanoPC-T6 dEQP-GLES2 runs
+
+`<YYYY-MM-DD>-t6-gles2-<session>` (`<session>` is `smoke`, `S1` … `S4`, as the
+runner's `--session`; the NanoPC-T6 is not a `tools/board.sh` board, so the name
+carries no `sha8`: the commit is in `meta.txt`) is what
+`tools/cts/mali-deqp-run.sh --out` writes, redacted, from a run of
+`tools/cts/mali-gles2-tree.txt` rows over the board's Armbian
+(`tools/cts/README.md` section 6). It holds no README of its own kind of
+console: the board's output is the files below, and the record's text is the
+commit message and the RESULTS.md row. Its files:
+
+- `meta.txt`: `key=value` lines: `commit` (the `origin/main` commit the
+  `deqp-gles2` and the `libGLESv2.so.2` / `libEGL.so.1` were built from; the
+  runner refuses a build whose commit is not on `origin/main`), `session`,
+  `rows` (`A-B` of the tree table), `tree`, `lib` (the libraries' build stamp or
+  sha256), `started`, then `boot_id_before`, `kernel` (`uname -r`),
+  `boot_id_after` and `ended`. `boot_id_after=unknown` marks a run that stopped
+  early.
+- `chunks.tsv`: a header line, then one line per tree row run:
+  `row label cases status seconds kmsg resets ssh_after boot_same exit_line`.
+  `status` is `done`, `crash`, `hang`, `fault` (kernel lines with panthor
+  resets or faults between the chunk's markers) or `lost`; `kmsg` is the
+  number of kernel lines between the markers, `resets` the panthor job-timeout
+  and reset lines among them, `ssh_after` whether the board answered ssh
+  after the chunk (`yes`/`no`), `boot_same` whether `boot_id` was unchanged,
+  `exit_line` the last `yakogl-mali-exit:` line. `-` is an unknown value (a row
+  never run, a lost capture).
+- `results.tsv`: a header line, then `case status detail` per case of the rows:
+  dEQP's status and its Result text, or `Lost` with `chunk-crash`,
+  `chunk-hang`, `board-lost`, `not-run` or `wrong-lib` as the detail.
+- `kmsg/<label>.txt`: the kernel lines between that chunk's markers, to be
+  classified with `tools/cts/mali-kmsg.py` (`docs/notes/mali-panthor-kmsg.md`).
+
+The raw `.qpa`, stdout and stderr and the whole `dmesg` capture stay in the
+runner's `RAW_DIR` and are never committed. A slice is checked for the
+redaction rules below by the runner itself; read it again before committing.
+`tools/cts/mali-gles2-tree.txt` (the four-session tree table) and
+`tools/cts/mali-deqp-tally.py` (the tally over slices) are coming; this
+section describes the slice, not them.
+
 ## Redaction: what must never appear
 
 Board addresses are environment (CLAUDE.md): nothing under `tools/cts/log/`
