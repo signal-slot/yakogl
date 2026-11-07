@@ -16,7 +16,8 @@
 //!    `generate_mipmap` entry is asked for the chain as the GL core would
 //!    ask it (the binding `gl::draw::texture_bind_2d` builds). The OSAL's
 //!    `submit` then does what the GPU would do with each stream, as it
-//!    arrives: it decodes each draw's LOAD_STATEs, reads the texture
+//!    arrives: it decodes each draw's LOAD_STATEs (the chain's levels are
+//!    the draws of one stream, run in order), reads the texture
 //!    descriptor and the sampler, the pixel engine's target and the
 //!    fragment program's uniforms, checks every one against the level it
 //!    should name, and runs the mipmap quad's fragment program as a model
@@ -32,7 +33,7 @@
 //! much), and against the bilinear sample the quad asks for on a
 //! non-power-of-two chain's odd steps (800x600's 75 -> 37; ES 3.0.6 3.8.9
 //! leaves that filter open). The back end must have taken the GPU path
-//! (answered 1, one kick per level, the chain counted), and left to the CPU
+//! (answered 1, one kick for the chain, the chain counted), and left to the CPU
 //! what it says it leaves.
 //!
 //! What it cannot see: the GPU. Whether the pixel engine and the texture
@@ -844,7 +845,7 @@ fn chain_case(w: u32, h: u32, seed: u32) {
             (p.kicks.len() - kicks0, p.plan.as_ref().map_or(0, |pl| pl.next), core::mem::take(&mut p.faults))
         });
         assert!(faults.is_empty(), "{w}x{h}: the model found the streams wrong: {faults:#?}");
-        assert_eq!(kicks, levels as usize - 1, "{w}x{h}: one kick per level above 0");
+        assert_eq!(kicks, 1, "{w}x{h}: one kick for the chain");
         assert_eq!(drawn, levels as usize, "{w}x{h}: every level drawn, in order");
         let chain_diff = check_gpu_levels(t, &level0, &cpu);
 
@@ -980,7 +981,7 @@ fn swap_red_blue(level0: &[u8]) -> Vec<u8> {
 /// pixel engine's order at the first draw (`pe_order`) and its chain sits
 /// at level 0's pitch (`chain_pitch`); the GL core offers that chain to
 /// the back end, which draws it: the chain is the back end's
-/// (`chain_in_backend`), counted, one kick per level above 0, and every
+/// (`chain_in_backend`), counted, one kick for the chain, and every
 /// level within 1 LSB of the quad's filter of the level above (level 1 of
 /// the GL core's CPU box filter too). Frame 1 grows a NPOT texture's
 /// storage to a chain (`grow_npot_chain`) and makes it; frame 2, on the
@@ -1023,7 +1024,7 @@ fn rendered_into_case(w: u32, h: u32, seed: u32) {
                 (p.kicks.len() - kicks0, p.plan.take().map_or(0, |pl| pl.next), core::mem::take(&mut p.faults))
             });
             assert!(faults.is_empty(), "{w}x{h} frame {frame}: the model found the streams wrong: {faults:#?}");
-            assert_eq!(kicks, levels as usize - 1, "{w}x{h} frame {frame}: one kick per level above 0");
+            assert_eq!(kicks, 1, "{w}x{h} frame {frame}: one kick for the chain");
             if frame == 2 {
                 assert_eq!(drawn, levels as usize, "{w}x{h}: every level drawn, in order");
                 let chain_diff = check_gpu_levels(t, &level0, &cpu);
@@ -1100,7 +1101,7 @@ fn chains_the_gpu_cannot_make_are_left_to_the_cpu_by_name() {
         assert_eq!(generate(&bgra, 7), 1, "a texture a draw rendered into (B,G,R,A) is made");
         assert_eq!(generate(&ok, 7), 1, "an uploaded one (R,G,B,A) too");
         assert_eq!(mip_counts(), (made0 + 2, refused0 + 5));
-        assert_eq!(with_platform(|p| p.kicks.len()), kicks0 + 12, "six kicks each");
+        assert_eq!(with_platform(|p| p.kicks.len()), kicks0 + 2, "one kick each");
     });
 }
 
@@ -1126,7 +1127,7 @@ fn asking_the_chain_back_waits_for_its_last_kick() {
         /* the chain's kicks stay in flight until waited for */
         with_platform(|p| p.hold = p.fence - fence0);
         let last = with_platform(|p| p.fence);
-        assert_eq!(last - fence0, 6, "six level kicks");
+        assert_eq!(last - fence0, 1, "the chain's one kick");
         let before = with_platform(|p| p.waits.len());
         // SAFETY: as above.
         unsafe { back(&b, 7) };

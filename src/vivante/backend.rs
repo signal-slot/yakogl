@@ -173,6 +173,10 @@ pub(crate) struct GcState {
     /// init (`gc_backend_mip_chains`).
     pub(super) mip_chains: u32,
     pub(super) mip_chains_refused: u32,
+    /// A GPU mipmap chain is being recorded (mipmap.rs): a draw into another
+    /// target continues the open stream behind [`emit_target_boundary`]
+    /// instead of ending the kick, so the chain's levels are one kick.
+    pub(super) chain_stream: bool,
     /// One opaque black RGBA8 texel: what GL's incomplete texture samples as
     /// (GL ES 2.0 section 3.7.10). Allocated once, bound in place of any
     /// texture the GL core marks incomplete.
@@ -220,6 +224,7 @@ impl GcState {
         mip_fence: 0,
         mip_chains: 0,
         mip_chains_refused: 0,
+        chain_stream: false,
         black_tex: OsalGpuMem::ZERO,
     };
 }
@@ -1802,6 +1807,28 @@ fn emit_flushes(c: &mut GcCmd) {
     c.state(GC_TS_FLUSH_CACHE, GC_TS_FLUSH);
 }
 
+/// [`emit_target_boundary`]'s length: five one-register LOAD_STATEs of two
+/// words (the semaphore token one of them) and the front end's two-word
+/// STALL.
+const TARGET_BOUNDARY_WORDS: u32 = 5 * 2 + 2;
+
+/// Where a kick would have ended and the next begun, inside one stream: a
+/// draw into another target that reads what the draws before wrote (a GPU
+/// mipmap chain's next level, mipmap.rs). The OSAL's epilogue first
+/// (driver/rust/src/gpu/vivante/cmdbuf.rs `ring_submit`: the pixel engine's
+/// colour and depth caches and the shader L1 written back, the tile status
+/// flushed, the front end held until the pixel engine has drained), then
+/// what the next stream's [`emit_context_init`] invalidates (the descriptor
+/// cache); the next draw's [`emit_flushes`] invalidates the texture caches
+/// behind it. [`TARGET_BOUNDARY_WORDS`] words.
+fn emit_target_boundary(c: &mut GcCmd) {
+    c.state(GC_GL_FLUSH_CACHE, GC_FLUSH_COLOR | GC_FLUSH_DEPTH | GC_FLUSH_SHADER_L1);
+    c.state(GC_TS_FLUSH_CACHE, GC_TS_FLUSH);
+    c.stall(GC_SYNC_FE, GC_SYNC_PE);
+    c.state(GC_NTE_DESCRIPTOR_FLUSH, 0);
+    c.state(GC_GL_FLUSH_CACHE, GC_FLUSH_DESCRIPTOR);
+}
+
 /* ---- one draw ----------------------------------------------------------- */
 
 /* ---- occlusion queries ---------------------------------------------------
@@ -2909,8 +2936,20 @@ pub(super) unsafe fn draw_one(draw: *const GlesDraw) -> i32 {
     {
         let g = g();
         let full = big || g.frames[g.cur].arena_used as usize + need > GC_ARENA_BYTES;
-        if g.recording && (gl.target_gpu != g.target_gpu || g.frames[g.cur].w.overflow || full) {
+        let w = &g.frames[g.cur].w;
+        let retarget = gl.target_gpu != g.target_gpu;
+        /* a chain's level continues the stream only with room for the
+         * boundary: the draw's own overflow is handled below */
+        let continues = retarget && g.chain_stream && w.used + TARGET_BOUNDARY_WORDS <= w.cap;
+        if g.recording && (retarget && !continues || w.overflow || full) {
             frame_submit();
+        } else if g.recording && retarget {
+            /* a mipmap chain's next level: the same stream, behind the
+             * flushes a kick's end and start would have made */
+            emit_target_boundary(&mut g.frames[g.cur].w);
+            g.target_gpu = gl.target_gpu;
+            g.target_w = gl.target_w;
+            g.target_h = gl.target_h;
         }
     }
     if !g().recording && frame_open(gl.target_gpu, gl.target_w, gl.target_h) != 0 {
