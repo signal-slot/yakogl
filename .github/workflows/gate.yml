@@ -150,6 +150,15 @@ jobs:
         if: steps.seen.outputs.run == 'true'
         run: |
           mkdir -p driver/src/fw && cp "$PVR_FW_BLOB" driver/src/fw/
+      - name: the Rust toolchain this run uses (reported, never installed or pinned)
+        if: steps.seen.outputs.run == 'true'
+        # The job installs no toolchain: the runner's rustup default decides.
+        # This step only records which one, so a result can be tied to a rustc.
+        run: |
+          rustc -V
+          cargo -V
+          rustup show active-toolchain
+          echo "RUSTUP_TOOLCHAIN=${RUSTUP_TOOLCHAIN:-unset}"
       - name: the gate host has every tool
         if: steps.seen.outputs.run == 'true'
         run: tools/setup-gate-host.sh --check
