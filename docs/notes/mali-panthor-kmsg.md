@@ -300,7 +300,22 @@ line the groups of every other client are stopped and restarted, or killed by a 
 process on the GPU (the compositor) must not be running, or the tally should
 name it.
 
-## 10. Unread and to pin on the board
+## 10. Seen on the board
+
+Status of the shapes above after the board fault rehearsal (plan #327 item
+`t6-fault-rehearsal`, NanoPC-T6, kernel 6.18.55-current-rockchip64):
+
+- **Seen:** `job timeout: pid=%d, comm=%s, seqno=%llu` (section 3). It is
+  the fixture `tools/cts/testdata/mali-kmsg/jobtimeout.txt`, classified as one
+  timeout and no reset. The fixture's line is the format string with
+  placeholder values and a dmesg timestamp; the board's pid, comm and seqno
+  were not copied.
+- **Not yet seen:** the reset shapes (section 2), the CS-fatal / CS-fault
+  shapes (section 3) and the MMU-fault shapes (section 4). The rehearsal could
+  not trigger them; their fixtures stay synthetic, built from the v6.18 format
+  strings.
+
+## 11. Unread and to pin on the board
 
 - Armbian's patches to panthor (section "Source read").
 - The exact `dmesg` device name and the `dmesg_restrict` value.
