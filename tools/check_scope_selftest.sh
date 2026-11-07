@@ -55,9 +55,20 @@ want src/shaderc/online/vivante/isa.rs vivante
 want tools/hal-nxp/gen_regs.py vivante
 want tests/gc_mipmap_gpu.rs vivante
 want src/v3d/job.rs v3d
-want src/shaderc/online/v3d/prepare.rs v3d
+want src/shaderc/online/v3d/prepare.rs "v3d v3d71"
 want src/shaderc/online/v3d_abi.rs v3d
-want tools/v3d/job_check.c v3d
+# V3D 7.1 (Raspberry Pi 5): its files and the shared V3D files reach the
+# v3d71 row too; the 4.2-only paths do not
+want src/shaderc/online/v3d/isa71.rs "v3d v3d71"
+want src/shaderc/online/v3d/golden71.rs "v3d v3d71"
+want driver/src/v3d/generated/v3d_packet_v71_pack.h "v3d v3d71"
+want driver/src/v3d/v3d_hw.c "v3d v3d71"
+want tools/v3d/check71.sh "v3d v3d71"
+want tools/v3d/check71.d/xbuild71.sh "v3d v3d71"
+want tools/v3d/shim71/clear.clif "v3d v3d71"
+want tools/v3d/pi5/v3d_ident.txt "v3d v3d71"
+want tools/v3d/qpu_counts_71.tsv "v3d v3d71"
+want tools/v3d/job_check.c "v3d v3d71"
 want tools/mali/pan_shc.c mali
 want tools/mali/gate.env mali
 want tools/mali/check.sh mali
@@ -111,7 +122,7 @@ expect() {
   printf '%s\n' "$out" | grep -qE "$pattern" || { echo "FAIL $label: no line matches '$pattern'"; fails=$((fails + 1)); }
 }
 out=$(plan docs/standalone-boot.md)
-expect "docs: only the shared rows" '^check.sh: 3 ok, 0 failed, 0 gap\(s\).*, 208 skipped \(--changed HEAD, scopes: docs' "$out"
+expect "docs: only the shared rows" '^check.sh: 3 ok, 0 failed, 0 gap\(s\).*, 209 skipped \(--changed HEAD, scopes: docs' "$out"
 out=$(plan src/v3d/job.rs)
 expect "v3d: its clippy row" '^plan  clippy  host-test,gpu-v3d,shaderc-online,no-shader-table$' "$out"
 expect "v3d: its image" '^plan  zephyr  rpi4 ' "$out"
@@ -221,18 +232,18 @@ count "narrowed CONFIGS: the table row once" "^plan  gen     precompiled tables 
 # the control: the full plan keeps its rows, the table row once, before the
 # first CONFIGS row that reads the tables
 out=$(plan src/gl/draw.rs)
-# 212 rows: ok plus gaps, because a row whose tool this host lacks is a gap
+# 213 rows: ok plus gaps, because a row whose tool this host lacks is a gap
 # here and a plan row on the gate host; the sum is the same on both. (Seven
 # more for the direct boot: am62p-mkboot.py, the second-stage vectors, the
 # yakogl-boot-stage2 clippy, test and softfloat rows, boot_stage2.h's layout
 # pins and the direct-boot images; one more for the Mali firmware row; two
 # for the partial render's load shader, tools/pco_shc/spm_load: its decode
 # row and its regenerate-and-compare row, a gap without PCO_SHC; one for
-# t6_fw's image, a gap without the Mali firmware.)
+# t6_fw's image, a gap without the Mali firmware; one for the v3d71 host checks, tools/v3d/check71.sh.)
 checks=$((checks + 1))
 line=$(printf '%s\n' "$out" | grep -E '^check.sh: [0-9]+ ok, 0 failed, [0-9]+ gap\(s\).*, 0 skipped \(--changed HEAD, scopes: all\)')
 total=$(printf '%s\n' "$line" | sed -E 's/^check.sh: ([0-9]+) ok, 0 failed, ([0-9]+) gap.*/\1 \2/' | awk '{ print $1 + $2 }')
-[ "$total" = 212 ] || { echo "FAIL full plan: its row count: ${total:-no summary line} rows (ok + gaps), expected 212:$line"; fails=$((fails + 1)); }
+[ "$total" = 213 ] || { echo "FAIL full plan: its row count: ${total:-no summary line} rows (ok + gaps), expected 213:$line"; fails=$((fails + 1)); }
 count "full plan: the table row once" "^plan  gen     precompiled tables for the tier" 1 "$out"
 order "full plan: the tables before their first reader" "$gen" \
   'plan  clippy  host-test,gpu-powervr,shaderc-online,precompiled-shaders' "$out"
