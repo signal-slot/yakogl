@@ -101,6 +101,8 @@ pub(crate) struct GcState {
     kick_id: u32,
     kicks: u32,
     pub(super) waits: u32,
+    /// [`finish`] calls since init ([`gc_finishes`]).
+    finishes: u32,
     /// The fence of the last kick submitted before the latest swap: what the
     /// next swap waits for ([`gc_finish_previous`]).
     swap_fence: i64,
@@ -186,6 +188,7 @@ impl GcState {
         kick_id: 0,
         kicks: 0,
         waits: 0,
+        finishes: 0,
         swap_fence: 0,
         component_use_marked: false,
         shader_marks_after: false,
@@ -933,23 +936,41 @@ fn negative_stride(flip_y: bool) -> bool {
     flip_y && flip_mode() == FLIP_STUDY_NEGATIVE_STRIDE
 }
 
-/// One resolve-engine copy, linear A8R8G8B8 to linear A8R8G8B8, `flip`
-/// setting RS_CONFIG_FLIP (etnaviv state_3d.xml.h: VIVS_RS_CONFIG_FLIP).
-fn emit_rs_copy(c: &mut GcCmd, src: u32, dst: u32, w: u32, h: u32, flip: bool) {
-    let fmt = GC_RS_FORMAT_A8R8G8B8;
+/// One resolve-engine copy: the registers of an RS blit, with no tile
+/// status (this backend runs none) and one pixel pipe.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(super) struct RsBlit {
+    /// RS_CONFIG: the formats, the tiling of each side, downsampling, flip.
+    pub config: u32,
+    pub src: u32,
+    /// RS_SOURCE_STRIDE as written: a tiled layout's is given times four.
+    pub src_stride: u32,
+    pub dst: u32,
+    /// RS_DEST_STRIDE as written.
+    pub dst_stride: u32,
+    /// The window, in source samples.
+    pub w: u32,
+    pub h: u32,
+}
+
+/// Record `b`: the colour and depth caches flushed and the PE drained first,
+/// so what the PE wrote before is in memory when the RS reads it
+/// (etnaviv_rs.c:845-850), then the RS block in Mesa's order
+/// (etna_submit_rs_state, etnaviv_rs.c:221-257, single buffer).
+pub(super) fn emit_rs(c: &mut GcCmd, b: &RsBlit) {
     c.state(GC_GL_FLUSH_CACHE, GC_FLUSH_COLOR | GC_FLUSH_DEPTH);
     c.stall(GC_SYNC_RA, GC_SYNC_PE);
-    c.state(GC_RS_CONFIG, rs_source_format(fmt) | rs_dest_format(fmt) | if flip { GC_RS_CONFIG_FLIP } else { 0 });
-    c.state(GC_RS_SOURCE_STRIDE, w * 4);
-    c.state(GC_RS_DEST_STRIDE, w * 4);
-    c.state(rs_pipe_source_addr(0), src);
-    c.state(rs_pipe_dest_addr(0), dst);
+    c.state(GC_RS_CONFIG, b.config);
+    c.state(GC_RS_SOURCE_STRIDE, b.src_stride);
+    c.state(GC_RS_DEST_STRIDE, b.dst_stride);
+    c.state(rs_pipe_source_addr(0), b.src);
+    c.state(rs_pipe_dest_addr(0), b.dst);
     c.state(rs_pipe_offset(0), 0);
     c.state(rs_pipe_offset(1), 0);
-    c.state(GC_RS_WINDOW_SIZE, rs_window_width(w) | rs_window_height(h));
-    c.state(rs_dither(0), 0xffff_ffff);
+    c.state(GC_RS_WINDOW_SIZE, rs_window_width(b.w) | rs_window_height(b.h));
+    c.state(rs_dither(0), 0xffff_ffff); /* dithering off */
     c.state(rs_dither(1), 0xffff_ffff);
-    c.state(GC_RS_CLEAR_CONTROL, 0);
+    c.state(GC_RS_CLEAR_CONTROL, 0); /* a copy, not a fill */
     for i in 0..4 {
         c.state(rs_fill_value(i), 0);
     }
@@ -957,6 +978,14 @@ fn emit_rs_copy(c: &mut GcCmd, src: u32, dst: u32, w: u32, h: u32, flip: bool) {
     c.state(GC_RS_SINGLE_BUFFER, GC_RS_SINGLE_BUFFER_ENABLE);
     c.state(GC_RS_KICKER, GC_RS_KICKER_VALUE);
     c.state(GC_RS_SINGLE_BUFFER, 0);
+}
+
+/// One resolve-engine copy, linear A8R8G8B8 to linear A8R8G8B8, `flip`
+/// setting RS_CONFIG_FLIP (etnaviv state_3d.xml.h: VIVS_RS_CONFIG_FLIP).
+fn emit_rs_copy(c: &mut GcCmd, src: u32, dst: u32, w: u32, h: u32, flip: bool) {
+    let fmt = GC_RS_FORMAT_A8R8G8B8;
+    let config = rs_source_format(fmt) | rs_dest_format(fmt) | if flip { GC_RS_CONFIG_FLIP } else { 0 };
+    emit_rs(c, &RsBlit { config, src, src_stride: w * 4, dst, dst_stride: w * 4, w, h });
 }
 
 /// The RS arm: [`FLIP_STUDY_COPIES`] flipped copies of the frame's target
@@ -1001,37 +1030,16 @@ fn emit_resolve(c: &mut GcCmd) {
     let dst_stride = g.ms_dest_stride;
     let fmt = ms_rs_format(g.ms_dest_surf, g.ms_dest_bpp);
     let (sw, sh) = (g.ms_dest_w * 2, g.ms_dest_h * 2);
-
-    c.state(GC_GL_FLUSH_CACHE, GC_FLUSH_COLOR | GC_FLUSH_DEPTH);
-    c.stall(GC_SYNC_RA, GC_SYNC_PE);
-
-    c.state(
-        GC_RS_CONFIG,
-        rs_source_format(fmt)
-            | rs_dest_format(fmt)
-            | GC_RS_SOURCE_TILED
-            | if GC_MSAA_RASTERISE { GC_RS_DOWNSAMPLE_X | GC_RS_DOWNSAMPLE_Y } else { 0 },
-    );
+    let config = rs_source_format(fmt)
+        | rs_dest_format(fmt)
+        | GC_RS_SOURCE_TILED
+        | if GC_MSAA_RASTERISE { GC_RS_DOWNSAMPLE_X | GC_RS_DOWNSAMPLE_Y } else { 0 };
     /* a tiled source's stride is given times four, with the supertile bits
-     * (TS mode 0: this backend runs no tile status) */
-    c.state(GC_RS_SOURCE_STRIDE, (src_pitch << 2) | GC_RS_SOURCE_STRIDE_TILING | GC_RS_SOURCE_STRIDE_SUPER_TILED_NEW);
-    c.state(GC_RS_DEST_STRIDE, dst_stride);
-    c.state(rs_pipe_source_addr(0), g.msaa.gpu as u32);
-    c.state(rs_pipe_dest_addr(0), g.ms_dest_gpu as u32);
-    c.state(rs_pipe_offset(0), 0);
-    c.state(rs_pipe_offset(1), 0);
-    /* in source samples */
-    c.state(GC_RS_WINDOW_SIZE, rs_window_width(sw) | rs_window_height(sh));
-    c.state(rs_dither(0), 0xffff_ffff); /* dithering off */
-    c.state(rs_dither(1), 0xffff_ffff);
-    c.state(GC_RS_CLEAR_CONTROL, 0); /* a copy, not a fill */
-    for i in 0..4 {
-        c.state(rs_fill_value(i), 0);
-    }
-    c.state(GC_RS_EXTRA_CONFIG, 0);
-    c.state(GC_RS_SINGLE_BUFFER, GC_RS_SINGLE_BUFFER_ENABLE);
-    c.state(GC_RS_KICKER, GC_RS_KICKER_VALUE);
-    c.state(GC_RS_SINGLE_BUFFER, 0);
+     * (TS mode 0: this backend runs no tile status); the window is in
+     * source samples */
+    let src_stride = (src_pitch << 2) | GC_RS_SOURCE_STRIDE_TILING | GC_RS_SOURCE_STRIDE_SUPER_TILED_NEW;
+    let (src, dst) = (g.msaa.gpu as u32, g.ms_dest_gpu as u32);
+    emit_rs(c, &RsBlit { config, src, src_stride, dst, dst_stride, w: sw, h: sh });
 }
 
 /// The depth canary: what the pixel engine actually writes, read back.
@@ -2867,8 +2875,9 @@ pub(super) unsafe fn draw_one(draw: *const GlesDraw) -> i32 {
     /* A mipmapped layered texture, and one with 64-bit texels, is sampled
      * from a tiled copy (tiled_copy.rs), made or refreshed now, before this
      * draw records anything: a render into the texture still in flight is
-     * finished first. Without its copy the draw would read the wrong faces
-     * (or texels), so it is refused. */
+     * finished first, unless the resolve engine can tile it in the stream
+     * (`record_all` below). Without its copy the draw would read the wrong
+     * faces (or texels), so it is refused. */
     clock.lap(Step::GcRest);
     if super::tiled_copy::prepare(gl, kick_pending_retired, finish) != 0 {
         return -1;
@@ -2937,6 +2946,11 @@ pub(super) unsafe fn draw_one(draw: *const GlesDraw) -> i32 {
         ..*gl
     });
     let record_all = |clock: &mut Timer| {
+        /* the tiled copies `prepare` left to the resolve engine first: after
+         * the render that wrote their textures (an earlier kick, or earlier
+         * in this one), before this draw samples them */
+        let g = g();
+        super::tiled_copy::emit_pending(gl, &mut g.frames[g.cur].w, gc_kick_id());
         // SAFETY: the caller's contract, passed on; `restore` is a copy of
         // the draw with only its clear fields changed.
         let rc = restore.as_ref().map_or(0, |r| unsafe { record(r, clock) });
@@ -2969,6 +2983,8 @@ pub(super) unsafe fn draw_one(draw: *const GlesDraw) -> i32 {
         }
     }
     if rc == 0 {
+        /* the RS copies are in a stream that will be submitted */
+        super::tiled_copy::recorded(gl);
         /* what the draw left in the planes: a surface with a live one is
          * never given to another pair (ds_cache.rs) */
         super::ds_cache::drawn(key, ds_retention::draw_writes(gl), ds_retention::draw_clears(gl));
@@ -3195,6 +3211,7 @@ pub extern "C" fn gc_finish() -> i32 {
 
 /// [`gc_finish`] for Rust callers, which hand it on as a closure-free `Fn`.
 pub(super) fn finish() -> i32 {
+    g().finishes += 1;
     if frame_submit() != 0 {
         return -1;
     }
@@ -3206,6 +3223,13 @@ pub(super) fn finish() -> i32 {
     }
     retire_wide_targets();
     0
+}
+
+/// [`finish`] calls since init, from glFinish and from the back end's own
+/// paths (a tiled copy, a 64-bit target, a depth surface): a host test reads
+/// whether a draw waited for the GPU.
+pub extern "C" fn gc_finishes() -> u32 {
+    g().finishes
 }
 
 /// What a pipelined swap waits for: every kick submitted before the previous
