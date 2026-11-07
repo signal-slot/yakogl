@@ -1,0 +1,293 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+//! GC7000UL (i.MX8MP): tile-status (TS) buffer sizes and fast-clear words as
+//! pure functions (groundwork for `docs/notes/gc-tiled-targets.md`).
+//!
+//! Everything here is what Mesa 26.2.1's etnaviv computes for this part
+//! (hwdb `gc7000ULN_v123`: FAST_CLEAR, CACHE128B256BPERLINE, AUTO_DISABLE,
+//! no DEC400, one pixel pipe, no BLT), worked out without a device. Citations
+//! are files under `src/gallium/drivers/etnaviv/` unless a path says
+//! otherwise. Nothing is wired to the back end yet.
+//!
+//! The module is self-contained: no `crate::` or `super::` path, so a host
+//! test can include it with `#[path]`. The register addresses are copies of
+//! the `regs.rs` constants named beside each one; the test file compares
+//! them against `regs.rs`.
+
+#![allow(dead_code)]
+
+/// `regs.rs` `GC_PE_MEM_CONFIG`.
+pub const PE_MEM_CONFIG: u32 = 0x0000_14bc;
+/// `regs.rs` `GC_TS_FLUSH_CACHE`.
+pub const TS_FLUSH_CACHE: u32 = 0x0000_1650;
+/// `regs.rs` `GC_TS_MEM_CONFIG`.
+pub const TS_MEM_CONFIG: u32 = 0x0000_1654;
+/// `regs.rs` `GC_RS_CLEAR_CONTROL`.
+pub const RS_CLEAR_CONTROL: u32 = 0x0000_163c;
+
+// PE_MEM_CONFIG fields (hw/state_3d.xml.h:1180-1185).
+pub const PE_MEM_CONFIG_COLOR_TS_MODE_SHIFT: u32 = 24;
+pub const PE_MEM_CONFIG_COLOR_TS_MODE_MASK: u32 = 0x0100_0000;
+pub const PE_MEM_CONFIG_DEPTH_TS_MODE_SHIFT: u32 = 26;
+pub const PE_MEM_CONFIG_DEPTH_TS_MODE_MASK: u32 = 0x0400_0000;
+
+// TS_MEM_CONFIG bits (hw/state_3d.xml.h:1456-1470).
+pub const TS_MEM_DEPTH_FAST_CLEAR: u32 = 0x0000_0001;
+pub const TS_MEM_COLOR_FAST_CLEAR: u32 = 0x0000_0002;
+pub const TS_MEM_DEPTH_16BPP: u32 = 0x0000_0008;
+pub const TS_MEM_DEPTH_AUTO_DISABLE: u32 = 0x0000_0010;
+pub const TS_MEM_COLOR_AUTO_DISABLE: u32 = 0x0000_0020;
+pub const TS_MEM_64BPP_FORMAT: u32 = 0x4000_0000;
+
+// RS_CLEAR_CONTROL (hw/state_3d.xml.h:1399-1406).
+pub const RS_CLEAR_BITS_MASK: u32 = 0x0000_ffff;
+pub const RS_CLEAR_MODE_ENABLED1: u32 = 0x0001_0000;
+
+/// `TS_MODE_128B` / `TS_MODE_256B` (hw/common_3d.xml.h:128-129): the value
+/// `PE_MEM_CONFIG_*_TS_MODE` takes. Only 128B applies here: the 256B mode is
+/// chosen only with compression (etnaviv_resource.c:206-217), and this part
+/// has none outside MSAA.
+pub const TS_MODE_128B: u32 = 0;
+pub const TS_MODE_256B: u32 = 1;
+
+/// Bytes of surface per TS tile on this part: `etna_screen_get_tile_size`
+/// (etnaviv_screen.h:113-126) with CACHE128B256BPERLINE set.
+pub const fn tile_size(mode: u32) -> u32 {
+    if mode == TS_MODE_256B {
+        256
+    } else {
+        128
+    }
+}
+
+/// Bits of TS per tile: 4 when CACHE128B256BPERLINE is set
+/// (etnaviv_screen.c:880-882).
+pub const BITS_PER_TILE: u32 = 4;
+
+/// The word the RS fills the TS buffer with to mark every tile "cleared":
+/// `0x11111111` for 4 bits a tile without DEC400 (etnaviv_screen.c:884-886).
+pub const TS_CLEAR_VALUE: u32 = 0x1111_1111;
+
+/// Pixel pipes of the GC7000UL (hwdb `NumPixelPipes` 1).
+pub const PIXEL_PIPES: u32 = 1;
+
+const fn align(v: u32, a: u32) -> u32 {
+    v.div_ceil(a) * a
+}
+
+/// TS buffer size in bytes for one surface layer of `layer_stride` bytes
+/// (the padded surface size), as `etna_screen_resource_alloc_ts` computes it
+/// (etnaviv_resource.c:241-249):
+/// `align(ceil(layer_stride / (tile_size * 8 / bits_per_tile)), 0x100 * pipes)`.
+/// With 128-byte tiles and 4 bits a tile that is one TS byte per 256 bytes of
+/// surface. A zero-size surface has no TS (`ts_size == 0`, :252-253).
+pub const fn ts_layer_stride(layer_stride: u32, mode: u32) -> u32 {
+    let bytes_per_ts_byte = tile_size(mode) * 8 / BITS_PER_TILE;
+    align(layer_stride.div_ceil(bytes_per_ts_byte), 0x100 * PIXEL_PIPES)
+}
+
+/// Padded size of a TILED or SUPER_TILED render surface: Mesa pads a render
+/// target to the RS alignment, 16x4 for TILED (`etna_layout_multiple`,
+/// etnaviv_resource.c:384-388) and 64x64 for SUPER_TILED (:389-393).
+pub const fn padded_dims(width: u32, height: u32, super_tiled: bool) -> (u32, u32) {
+    if super_tiled {
+        (align(width, 64), align(height, 64))
+    } else {
+        (align(width, 16), align(height, 4))
+    }
+}
+
+/// TS bytes of a `width` x `height` surface of `bpp` bytes a pixel in the
+/// given layout, in the 128B mode: the padded size through
+/// [`ts_layer_stride`]. `lvl->layer_stride` of a single-level, single-layer
+/// surface is `padded_width * padded_height * bpp`.
+pub const fn ts_size(width: u32, height: u32, bpp: u32, super_tiled: bool) -> u32 {
+    let (pw, ph) = padded_dims(width, height, super_tiled);
+    ts_layer_stride(pw * ph * bpp, TS_MODE_128B)
+}
+
+/// The RS job that fills the TS buffer with [`TS_CLEAR_VALUE`]
+/// (`etna_rs_gen_ts_clear_cmd`, etnaviv_rs.c:339-358): destination TILED,
+/// stride `0x40`, 16 wide, `align(ts_layer_stride / 0x40, 4)` high, format
+/// A8R8G8B8, clear bits `0xffff`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TsClearJob {
+    pub dest_stride: u32,
+    pub width: u32,
+    pub height: u32,
+    pub fill: u32,
+    /// `RS_CLEAR_CONTROL`: mode ENABLED1 | bits `0xffff`.
+    pub clear_control: u32,
+}
+
+pub const fn ts_clear_job(ts_layer_stride: u32) -> TsClearJob {
+    TsClearJob {
+        dest_stride: 0x40,
+        width: 16,
+        height: align(ts_layer_stride / 0x40, 4),
+        fill: TS_CLEAR_VALUE,
+        clear_control: RS_CLEAR_MODE_ENABLED1 | RS_CLEAR_BITS_MASK,
+    }
+}
+
+/// `TS_COLOR_AUTO_DISABLE_COUNT` / `TS_DEPTH_AUTO_DISABLE_COUNT` after a fast
+/// clear: `padded_width * padded_height / 16` (etnaviv_rs.c:382-387, :469-475;
+/// needs AUTO_DISABLE, which this part has).
+pub const fn auto_disable_count(padded_width: u32, padded_height: u32) -> u32 {
+    padded_width * padded_height / 16
+}
+
+// --- fast-clear words ------------------------------------------------------
+
+/// Colour formats of a render target the fast clear is packed for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ColorFormat {
+    /// A8R8G8B8 in the PE (RGBA8 data goes through the RB-swapped internal
+    /// format, `translate_pe_internal_format`, etnaviv_format.c:428-441).
+    Argb8888,
+    /// X8R8G8B8: the unused byte packs as 0xff.
+    Xrgb8888,
+    Rgb565,
+    Argb4444,
+    Argb1555,
+    R8,
+}
+
+fn unorm(v: f32, max: u32) -> u32 {
+    let v = if v.is_nan() { 0.0 } else { v.clamp(0.0, 1.0) };
+    (v * max as f32 + 0.5) as u32
+}
+
+/// `etna_clear_blit_pack_rgba` (etnaviv_clear_blit.c:91-111): pack the colour
+/// in the PE format, then replicate to fill 32 bits (1-byte and 2-byte texels
+/// are repeated), and return the `(TS_COLOR_CLEAR_VALUE,
+/// TS_COLOR_CLEAR_VALUE_EXT)` pair; for texels of up to 32 bits the extension
+/// word equals the low one (:106-109).
+pub fn color_clear_words(fmt: ColorFormat, rgba: [f32; 4]) -> (u32, u32) {
+    let [r, g, b, a] = rgba;
+    let (v, bytes) = match fmt {
+        ColorFormat::Argb8888 => (unorm(a, 255) << 24 | unorm(r, 255) << 16 | unorm(g, 255) << 8 | unorm(b, 255), 4),
+        ColorFormat::Xrgb8888 => (0xff00_0000 | unorm(r, 255) << 16 | unorm(g, 255) << 8 | unorm(b, 255), 4),
+        ColorFormat::Rgb565 => (unorm(r, 31) << 11 | unorm(g, 63) << 5 | unorm(b, 31), 2),
+        ColorFormat::Argb4444 => (unorm(a, 15) << 12 | unorm(r, 15) << 8 | unorm(g, 15) << 4 | unorm(b, 15), 2),
+        ColorFormat::Argb1555 => (unorm(a, 1) << 15 | unorm(r, 31) << 10 | unorm(g, 31) << 5 | unorm(b, 31), 2),
+        ColorFormat::R8 => (unorm(r, 255), 1),
+    };
+    let mut lo = v;
+    if bytes == 1 {
+        lo = lo << 8 | (lo & 0xff);
+    }
+    if bytes <= 2 {
+        lo = lo << 16 | (lo & 0xffff);
+    }
+    (lo, lo)
+}
+
+/// Depth/stencil surface formats of the PE.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DepthFormat {
+    /// `PIPE_FORMAT_Z16_UNORM`.
+    Z16,
+    /// `PIPE_FORMAT_X8Z24_UNORM`: depth in bits 31..8, no stencil.
+    X8Z24,
+    /// `PIPE_FORMAT_S8_UINT_Z24_UNORM` (the PE's D24S8): depth in 31..8,
+    /// stencil in 7..0. This is the surface the back end allocates.
+    S8Z24,
+}
+
+/// Which buffers a clear touches.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ClearMask {
+    pub depth: bool,
+    pub stencil: bool,
+}
+
+/// `translate_clear_depth_stencil` (etnaviv_translate.h:481-492) over
+/// `util_pack_z_stencil` (util/u_pack_color.h:546-580, :613-632): the clear
+/// word `TS_DEPTH_CLEAR_VALUE` and the RS fill take. Z16 is repeated in both
+/// halves; `z >= 1.0` saturates like Mesa's special case; X8Z24 takes no
+/// stencil.
+pub fn depth_clear_word(fmt: DepthFormat, depth: f64, stencil: u8) -> u32 {
+    match fmt {
+        DepthFormat::Z16 => {
+            let z = if depth >= 1.0 { 0xffff } else { (depth * 65535.0).round_ties_even() as u32 };
+            z | z << 16
+        }
+        DepthFormat::X8Z24 | DepthFormat::S8Z24 => {
+            let z = if depth >= 1.0 { 0xff_ffff } else { (depth * 16_777_215.0).round_ties_even() as u32 };
+            let w = z << 8;
+            if fmt == DepthFormat::S8Z24 {
+                w | stencil as u32
+            } else {
+                w
+            }
+        }
+    }
+}
+
+/// The RS clear bits a depth/stencil clear uses (`etna_blit_clear_zs_rs`,
+/// etnaviv_rs.c:446-465): Z16 and X8Z24 `0xffff` for depth; S8Z24 `0xeeee`
+/// for depth plus `0x1111` for stencil. Zero for an empty mask.
+pub const fn depth_clear_bits(fmt: DepthFormat, mask: ClearMask) -> u32 {
+    let (d, s) = match fmt {
+        DepthFormat::Z16 | DepthFormat::X8Z24 => (0xffff, 0),
+        DepthFormat::S8Z24 => (0xeeee, 0x1111),
+    };
+    (if mask.depth { d } else { 0 }) | (if mask.stencil { s } else { 0 })
+}
+
+/// A depth clear takes the TS path only when the whole word is cleared
+/// (`new_clear_bits == 0xffff`, etnaviv_rs.c:467). A depth-only clear of S8Z24
+/// is a plain RS fill with `RS_CLEAR_CONTROL = 0x0001eeee`.
+pub const fn depth_clear_uses_ts(fmt: DepthFormat, mask: ClearMask) -> bool {
+    depth_clear_bits(fmt, mask) == 0xffff
+}
+
+/// `RS_CLEAR_CONTROL` of a plain (non-TS) RS fill with `bits`.
+pub const fn rs_clear_control(bits: u32) -> u32 {
+    RS_CLEAR_MODE_ENABLED1 | (bits & RS_CLEAR_BITS_MASK)
+}
+
+// --- register values -------------------------------------------------------
+
+/// `PE_MEM_CONFIG` for a framebuffer (`etna_set_framebuffer_state`,
+/// etnaviv_state.c:233-235, :458): the TS mode of the colour target when it
+/// has TS, and of the depth target when it has TS.
+pub const fn pe_mem_config(color_ts_mode: Option<u32>, depth_ts_mode: Option<u32>) -> u32 {
+    let c = match color_ts_mode {
+        Some(m) => (m << PE_MEM_CONFIG_COLOR_TS_MODE_SHIFT) & PE_MEM_CONFIG_COLOR_TS_MODE_MASK,
+        None => 0,
+    };
+    let d = match depth_ts_mode {
+        Some(m) => (m << PE_MEM_CONFIG_DEPTH_TS_MODE_SHIFT) & PE_MEM_CONFIG_DEPTH_TS_MODE_MASK,
+        None => 0,
+    };
+    c | d
+}
+
+/// What the framebuffer has for `TS_MEM_CONFIG` (etnaviv_state.c:296-330,
+/// :440-470, `etna_update_ts_config` :877-945; the AUTO_DISABLE bits from
+/// etnaviv_rs.c:382-387, :469-475).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct TsMemConfig {
+    /// The colour target is 64 bits a texel.
+    pub color_64bpp: bool,
+    /// The depth target is 16 bits (`depth_bits == 16`, :468).
+    pub depth_16bpp: bool,
+    /// The colour level's TS is valid (a fast clear has happened).
+    pub color_valid: bool,
+    /// The depth level's TS is valid.
+    pub depth_valid: bool,
+    /// A colour fast clear was queued (AUTO_DISABLE set).
+    pub color_auto_disable: bool,
+    pub depth_auto_disable: bool,
+}
+
+pub const fn ts_mem_config(c: TsMemConfig) -> u32 {
+    (if c.color_64bpp { TS_MEM_64BPP_FORMAT } else { 0 })
+        | (if c.depth_16bpp { TS_MEM_DEPTH_16BPP } else { 0 })
+        | (if c.color_valid { TS_MEM_COLOR_FAST_CLEAR } else { 0 })
+        | (if c.depth_valid { TS_MEM_DEPTH_FAST_CLEAR } else { 0 })
+        | (if c.color_auto_disable { TS_MEM_COLOR_AUTO_DISABLE } else { 0 })
+        | (if c.depth_auto_disable { TS_MEM_DEPTH_AUTO_DISABLE } else { 0 })
+}
