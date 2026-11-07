@@ -331,6 +331,7 @@ commits on one GO drop the first; `go_stuck`).
 - Honouring `eglSwapInterval(1)` on the AM62P (wiring `am62p_dss_wait_vsync`
   as `wait_vblank`) caps every scene at the refresh rate, like option B. It
   is a separate decision and changes the benchmark; not part of this.
+  Decided in "Decision: wait_vblank (2026-11)" below: not wired.
 - `am62p_dss_plane_cfg.seq` stays unset by `plane_init`; the new fields use
   addresses, not seq.
 
@@ -500,3 +501,93 @@ reference table `tools/cts/glmark2-pictures.txt` is not changed here.
   times show no cost, and the run ended with 0 underflows and 0 sync losses.
 - Not done: a look at the panel (or the display dump) for a torn frame in a
   light scene (the first "Left" item above); the line-buffer read-ahead question.
+
+## Decision: wait_vblank (2026-11)
+
+Plan #329 item `am62p-vblank-decide`, on main `d54f710d`. The question of
+the third "Left" item: does `am62p_dss_wait_vsync` become the AM62P's
+`wait_vblank`, so that `eglSwapInterval(1)` waits one vertical period a
+swap? The rule: wire it only if no benchmark or conformance frame time
+moves, that is, only if every image either asks for interval 0 or does not
+swap.
+
+**Decision: not wired.** The AM62P keeps no vertical-sync source for EGL:
+`eglSwapInterval` is accepted and ignored, and no swap waits for a vertical
+period. glmark2 would not move, but gl_test would.
+
+What each image asks for, from the code:
+
+- **EGL's default is 1.** `src/gl/egl.rs:348` (`swap_interval: 1`, the
+  process's `EglState`; per display, not per surface, and not reset by
+  `eglTerminate`). `eglSwapInterval` stores it at `src/gl/egl.rs:2462`.
+  The swap waits it out at `src/gl/egl.rs:2438`, for **every surface kind**
+  (a pbuffer and a single-buffered window too), and stops at the first
+  -ENOTSUP. `next_window_buffer` asks `wait_vblank` once a round when the
+  display holds every buffer (`src/gl/egl.rs:2301`).
+- **The AM62P's OSAL.** `src/osal/zephyr.c:728` puts `z_wait_vblank` in the
+  table; it calls the weak `yakogl_zephyr_wait_vblank`
+  (`src/osal/zephyr.c:605`), which returns -ENOTSUP. Nothing in
+  `driver/zephyr/lib/board/am62p/` or `common/` defines a strong one. The
+  only strong one is the i.MX8MP's (`board_imx8mp.c:479`, linked with
+  `zephyr_gc.c`).
+- **glmark2: interval 0.** Upstream `GLStateEGL::valid`
+  (`$GLMARK2_SRC/src/gl-state-egl.cpp:425-428`, pinned
+  `22c527cb0556f3a1ac4445aaa52cc532760928d5` by
+  `driver/samples/zephyr/glmark2/CMakeLists.txt:2`) calls
+  `eglSwapInterval(egl_display_, 0)` unless `Options::swap_mode` is
+  `SwapModeFIFO`. The default is `SwapModeDefault`
+  (`src/options.cpp:36`), and the image passes no `--swap-mode`
+  (`CONFIG_GLMARK2_ARGS` defaults to "",
+  `driver/samples/zephyr/glmark2/Kconfig:17-19`; no board conf or tools
+  script sets it). glad loads `eglSwapInterval` because the EGL version is
+  1.5 (`src/gl/egl.rs:829`), and the sample's `dlsym` resolves it through
+  `eglGetProcAddress` (`driver/samples/zephyr/glmark2/src/platform.c`).
+  The sample's own `GLStateTimed` (`src/main.cpp:512`) does not call it.
+  So, wired or not, glmark2's swaps make no `wait_vblank` call; the 461-462
+  score would not move.
+- **gl_test: the default, 1, and it swaps.** `driver/tools/pvrlab/gl_test.c`
+  never calls `eglSwapInterval`. It calls `eglSwapBuffers` on pbuffers
+  (`gl_test.c:3083`, `3233`, `3544`, `3566`, `3580`, `3678`, `3692`,
+  `3710`), on single-buffered windows (`4508`, `4538`, `4655`, `4683`,
+  `15733`, `15741`, `15792`) and in the panel cube's loop
+  (`gl_test.c:23593`, `CUBE_FRAMES`, 120 frames "as fast as the GPU goes") and
+  the panel demo (`23748`). With the source wired, each of those swaps
+  would wait a vertical period (about 17 ms on the panel): the gl_test
+  image's frame times and its per-case times (the TIMEOUT budget) move.
+  This is what rules the wiring out.
+- **dEQP: no swap.** `driver/samples/zephyr/deqp/src/main.cpp:119` runs on
+  a pbuffer (`--deqp-surface-type=pbuffer`), and dEQP's
+  `RenderContext::postIterate` swaps windows only
+  (`framework/egl/egluGLContextFactory.cpp:540`, `if (m_window)`, as cited
+  in `pvr-fence-wait.md`; the CTS checkout was not on this node to re-read).
+  Wiring would not move dEQP.
+- The host harness `tools/hostharness/scen.c:698` calls
+  `eglSwapInterval(dpy, i)` in its scenario fuzzing; it runs on the Linux
+  OSAL (`.wait_vblank = NULL`) and is not an AM62P image.
+
+Wiring it later needs one of: gl_test asking for interval 0 (or the swap
+waiting for windows EGL shows only, a change to `src/gl/egl.rs:2438` that
+moves the i.MX8MP's pbuffer swaps too), and a `wait_vblank` that returns at
+the **next** frame end. `am62p_dss_wait_vsync`
+(`driver/drivers/display/display_am62p_dss_rust.c:185`) takes a semaphore
+that the frame-end interrupt gives (`k_sem_init(&data->vsync, 0, 1)`,
+line 357): after an idle stretch it holds a stale count and returns at
+once, so a wrapper would have to reset it first (`k_sem_reset`) to wait a
+whole period.
+
+Host test: `tests/egl_swap_vblank_am62p.rs`, on a fake of the AM62P's OSAL
+table (present that does not wait, `display_busy`, `wait_vblank` answering
+-ENOTSUP, a clock):
+
+- `interval_0_the_glmark2_path_makes_no_wait_vblank_call`
+- `interval_1_and_the_default_are_ignored_one_call_a_swap_no_wait`
+- `gl_test_swaps_pbuffers_and_single_windows_at_the_default_interval`
+- `every_buffer_held_for_a_moment_asks_again_without_a_vertical_period`
+- `every_buffer_held_for_good_gives_up_after_100_ms_of_the_clock` (the
+  `next_window_buffer` path without a source: 100 ms of the clock, not 6
+  periods)
+- `the_am62p_board_library_defines_no_wait_vblank` (the sources: a change
+  that wires it has to change this test and this section)
+
+No code changed: `tests/egl_swap_timeline.rs`, `tests/egl_swap_latch.rs`
+and `tests/es2_report_guard.rs` are unchanged and pass.
