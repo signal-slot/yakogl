@@ -1,0 +1,3 @@
+[ 1234.5] panthor fb000000.gpu: [drm] job timeout
+[ 1234.6] panthor fb000000.gpu: [drm] GPU reset
+[ 1235.0] panthor fb000000.gpu: [drm] reset done
