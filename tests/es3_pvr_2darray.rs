@@ -324,11 +324,21 @@ fn the_vertex_stage_samples_an_array_the_same_way() {
 }
 
 /// With the switch off the same sources keep the stacked image: no `tao`,
-/// a flag of 0, and the forms the stacked image cannot take are refused as
-/// before (an offset, explicit gradients, an integer sampler).
+/// a flag of 0, the offset forms included (tests/es3_pvr_texoffset.rs), and
+/// the forms the stacked image cannot take are refused as before (explicit
+/// gradients).
 #[test]
 fn off_the_stacked_image_stays_and_the_record_says_nothing() {
-    let stacked = ["texture(s, c)", "texture(s, c, l)", "textureLod(s, c, l)", "texelFetch(s, p, il)"];
+    let stacked = [
+        "texture(s, c)",
+        "texture(s, c, l)",
+        "textureLod(s, c, l)",
+        "textureOffset(s, c, ivec2(3, -2))",
+        "textureOffset(s, c, ivec2(3, -2), l)",
+        "textureLodOffset(s, c, l, ivec2(-8, 7))",
+        "texelFetch(s, p, il)",
+        "texelFetchOffset(s, p, il, ivec2(1, 1))",
+    ];
     for e in stacked {
         let src = fragment("uniform float pvr_layers_s;\nuniform highp sampler2DArray s;", &format!("o = {e};"));
         let (flag, fields) = with_native_array(false, || {

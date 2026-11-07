@@ -6072,8 +6072,9 @@ void main() { colour = texture(s, vec3(uv, 1.0), bias); }
 /// end writes as the divide and then the 2D bias, builtin_call.rs), reach
 /// the same selection, and so do ES 3.00's `textureProj(s, p, b)` (the
 /// divide in the shader, select.rs `tex_coords`) and a bias on a 3D
-/// texture; a look-up the back end has no form for -- an offset on a 3D
-/// texture's grid of slices -- is refused by name, not sampled without it.
+/// texture, with a constant offset too; a look-up the back end has no form
+/// for -- explicit gradients on a 3D texture's grid of slices -- is refused
+/// by name, not sampled without them.
 #[cfg(not(feature = "report-es2"))] // compiles GLSL ES 3.00, which a report-es2 build refuses (pp.rs out_of_scope)
 #[test]
 fn a_bias_in_es100_compiles_and_one_without_a_form_is_refused() {
@@ -6089,6 +6090,8 @@ fn a_bias_in_es100_compiles_and_one_without_a_form_is_refused() {
          out vec4 o; void main(){ o = textureProj(s, p, b); }",
         "#version 300 es\nprecision highp float; uniform highp sampler3D s; uniform float b; in vec3 p; \
          out vec4 o; void main(){ o = texture(s, p, b); }",
+        "#version 300 es\nprecision highp float; uniform highp sampler3D s; uniform float b; in vec3 p; \
+         out vec4 o; void main(){ o = textureOffset(s, p, ivec3(1, 0, 0), b); }",
     ] {
         store::with_scratch(|a| {
             let _keep = store::begin_keep().expect("keep");
@@ -6098,9 +6101,9 @@ fn a_bias_in_es100_compiles_and_one_without_a_form_is_refused() {
         })
         .unwrap();
     }
-    const WHY: &str = "an offset on a stacked texture";
-    let src = "#version 300 es\nprecision highp float; uniform highp sampler3D s; uniform float b; in vec3 p; \
-               out vec4 o; void main(){ o = textureOffset(s, p, ivec3(1, 0, 0), b); }";
+    const WHY: &str = "gradients on a cube, a 3D texture";
+    let src = "#version 300 es\nprecision highp float; uniform highp sampler3D s; in vec3 p; \
+               out vec4 o; void main(){ o = textureGrad(s, p, dFdx(p), dFdy(p)); }";
     store::with_scratch(|a| {
         let _keep = store::begin_keep().expect("keep");
         let text = a.alloc_str(src).unwrap();
