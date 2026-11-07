@@ -282,14 +282,13 @@ fn storage_per_gpu_and_the_refusals() {
     assert_eq!(fmt(GL_RGBA8_SNORM).storage_in(orig), Some(GLES_TEXFMT_RGBA16F));
     assert_eq!(fmt(GL_RGB10_A2UI).storage_in(orig), None);
     assert_eq!(fmt(GL_R8UI).storage_in(orig), None);
-    /* the V3D TMU samples every class natively (formats-v3d) but
-     * RGB10_A2's, as the PowerVR */
+    /* the V3D TMU samples every class natively (formats-v3d) */
     let v3d = V3D_SAMPLED_TEXFMTS;
-    for e in FORMATS.iter().filter(|e| e.name != "GL_RGB10_A2") {
+    for e in FORMATS.iter() {
         assert_eq!(e.storage_in(v3d), sampled_class(e), "V3D {}: its own class", e.name);
     }
     assert_eq!(fmt(GL_R11F_G11F_B10F).storage_in(v3d), Some(GLES_TEXFMT_R11G11B10F));
-    assert_eq!(fmt(GL_RGB10_A2).storage_in(v3d), Some(GLES_TEXFMT_RGBA8));
+    assert_eq!(fmt(GL_RGB10_A2).storage_in(v3d), Some(GLES_TEXFMT_RGB10A2));
     /* a back end that samples a native class gets it, ahead of the fallback */
     let native = orig | gles_texfmt_bit(GLES_TEXFMT_R11G11B10F) | gles_texfmt_bit(GLES_TEXFMT_RGBA8UI);
     assert_eq!(fmt(GL_R11F_G11F_B10F).storage_in(native), Some(GLES_TEXFMT_R11G11B10F));

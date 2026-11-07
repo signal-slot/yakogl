@@ -54,7 +54,7 @@ every one four components wide, linear rows, 4/8/16 bytes a texel).
 | `R11F_G11F_B10F`, `RGB9_E5` | its own packed word, `RGBA16F` (exact) |
 | `RGB16F` | `RGBA16F` |
 | `RG32F`, `RGB32F` | `RGBA32F`, `RGBA16F` (the same loss `RGBA32F` already has) |
-| `RGB10_A2` | `RGB10A2`, `RGBA8` (two bits lost) |
+| `RGB10_A2` | `RGB10A2`, `RGBA8` (two bits lost; the V3D samples the class) |
 | `RGB10_A2UI`, every integer format | its own class only |
 
 The PowerVR samples every new class but `RGB10A2` (`PVR_SAMPLED_TEXFMTS`; the
@@ -69,7 +69,9 @@ this back end samples none of its storage classes` and GL_INVALID_OPERATION,
 in glTexImage2D/3D, glTexStorage2D/3D and glCopyTexImage2D); the float,
 packed-float and snorm formats land in `RGBA16F` on the GC7000 and are
 refused on the V3D (whose TMU binding reads no half float yet); `RGB10_A2`
-lands in `RGBA8` everywhere.
+lands in `RGBA8` except on the V3D, which samples and renders the `RGB10A2`
+class (10/10/10/2 surface, field-wise CPU `glGenerateMipmap`;
+`docs/notes/v3d-rgb10a2.md`).
 
 **To make a back end sample a class**: make its texture state decode the class
 (`GlesTextureBind::format` carries the `GLES_TEXFMT_*`), then add the class to
@@ -89,12 +91,13 @@ change; the tests state the expectation per mask.
   NEAREST or NEAREST_MIPMAP_NEAREST minification (`incomplete_reason`,
   `draw.rs`). A sampler object's filters count.
 * `glGenerateMipmap` is GL_INVALID_OPERATION for these formats except
-  `RGB10_A2` held as `RGBA8` (3.8.14: renderable and filterable only).
+  `RGB10_A2` (3.8.14: renderable and filterable only; in its class on the
+  V3D, held as `RGBA8` elsewhere).
 * `glCopyTexImage2D`/`glCopyTexSubImage2D/3D` into an integer texture is
   GL_INVALID_OPERATION (no integer colour buffer to copy from, ES 3.0 table
   3.16); into the others it converts from the framebuffer's RGBA8.
-* A texture of these formats is no render target except `RGB10_A2` as
-  `RGBA8` (`framebuffer.rs` attachment guard).
+* A texture of these formats is no render target except `RGB10_A2` (its own
+  surface on the V3D, `RGBA8` elsewhere) (`framebuffer.rs` attachment guard).
 
 ## Not done (left to other items)
 
@@ -104,7 +107,7 @@ change; the tests state the expectation per mask.
   (`docs/es3/pvr-formats.md` section 10.1); their AM62P dEQP-GLES3
   `texture.format` run is still to do.
 * Integer render targets on the GC7000 and the V3D, and `RGB10_A2` as its
-  own render target (the PowerVR writes the nineteen integer formats since
+  own render target on the PowerVR and the GC7000 (the V3D has it; the PowerVR writes the nineteen integer formats since
   `fc658e64`, merged in `a27d69c0`; `docs/es3/pvr-formats.md` section 10).
   `glGetInternalformativ`'s texture answers (ES 3.0 knows renderbuffers only;
   the query stays as `b9b2ac00` leaves it):
