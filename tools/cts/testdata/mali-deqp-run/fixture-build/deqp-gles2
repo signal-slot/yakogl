@@ -1,0 +1,47 @@
+#!/bin/bash
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+#
+# A fake deqp-gles2 for tools/cts/mali-deqp-selftest.sh. It writes a .qpa
+# for its --deqp-caselist-file from the fixture templates in
+# FAKE_FIXTURES/qpa/, and does to each case what FAKE_SCENARIO (a
+# "<case><TAB><action>" table) says: pass (the default), fail, crash (SIGSEGV
+# inside the case), hang (never returns), jobtimeout (a panthor job-timeout
+# line into the board's kernel log, then pass), lose-ssh (the board goes away
+# inside the case). A line "-<TAB>nolib" stands for the board's own Mesa
+# answering: no "yakogl-mali: loaded" line.
+list= log=
+for a; do
+  case $a in
+    --deqp-caselist-file=*) list=${a#*=} ;;
+    --deqp-log-filename=*) log=${a#*=} ;;
+  esac
+done
+[ -n "$list" ] && [ -n "$log" ] || { echo "fake deqp-gles2: no case list or log" >&2; exit 2; }
+action() { awk -F'\t' -v c="$1" '$1 == c { print $2; exit }' "${FAKE_SCENARIO:-/dev/null}"; }
+lib=${LD_LIBRARY_PATH%%:*}/libGLESv2.so.2
+if [ "$(action -)" != nolib ] && grep -q yakogl-mali-fixture "$lib" 2>/dev/null; then
+  echo "yakogl-mali: loaded libGLESv2.so.2 (fixture build)" >&2
+fi
+tmpl() { grep -v '^# ' "$FAKE_FIXTURES/qpa/$1.qpa" | sed "s/@CASE@/$2/"; }
+printf '#sessionInfo releaseName fixture\n#beginSession\n' > "$log"
+failed=0
+while read -r c; do
+  [ -n "$c" ] || continue
+  echo "#beginTestCaseResult $c" >> "$log"
+  t=pass
+  case $(action "$c") in
+    crash) echo '<TestCaseResult Version="0.3.4" CasePath="'"$c"'" CaseType="SelfValidate">' >> "$log"
+           ulimit -c 0
+           kill -SEGV $$ ;;
+    hang) exec sleep 30 ;;
+    lose-ssh) touch "$FAKE_BOARD/down"; exit 1 ;;
+    jobtimeout) grep -v '^# ' "$FAKE_FIXTURES/kmsg/job-timeout.txt" >> "$FAKE_BOARD/kmsg" ;;
+    fail) t=fail failed=1 ;;
+  esac
+  tmpl "$t" "$c" >> "$log"
+  echo '#endTestCaseResult' >> "$log"
+done < "$list"
+echo '#endSession' >> "$log"
+echo "yakogl-mali-exit: status=$failed on board.invalid 198.51.100.7" >&2
+exit "$failed"

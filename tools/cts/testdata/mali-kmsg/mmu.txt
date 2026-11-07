@@ -1,0 +1,5 @@
+[   55.000000] panthor fb000000.gpu: [drm] *ERROR* Unhandled Page fault in AS3 at VA 0x0000000100004000
+raw fault status: 0xC2
+decoded fault status: SLAVE FAULT
+[   55.000500] panthor fb000000.gpu: [drm] CS_FAULT: pid=4321, comm=deqp-gles2
+[   55.100000] panthor fb000000.gpu: [drm] GPU Fault 0x00000088 (DATA_INVALID_FAULT) at 0x0000000000000000

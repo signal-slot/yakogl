@@ -1,0 +1,21 @@
+#!/bin/bash
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+#
+# A fake scp for tools/cts/mali-deqp-selftest.sh: a cp -r with every
+# <host>:<path> mapped into FAKE_BOARD (see the fake ssh beside it). Logged to
+# FAKE_LOG; fails while FAKE_BOARD/down exists.
+echo "scp $*" >> "${FAKE_LOG:?}"
+args=()
+while [ $# -gt 0 ]; do
+  case $1 in
+    -o | -i | -P | -F) shift 2 ;;
+    -*) shift ;;
+    /* | ./*) args+=("$1"); shift ;;
+    *:*)
+      [ ! -e "$FAKE_BOARD/down" ] || { echo "scp: lost connection" >&2; exit 1; }
+      args+=("$FAKE_BOARD${1#*:}"); shift ;;
+    *) args+=("$1"); shift ;;
+  esac
+done
+cp -r "${args[@]}"

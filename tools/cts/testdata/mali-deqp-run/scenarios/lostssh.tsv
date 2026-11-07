@@ -1,0 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# The board goes away inside row T2.
+dEQP-GLES2.functional.debug_marker.random	lose-ssh

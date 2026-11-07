@@ -1,0 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# A crash in the middle of row T1: the process dies inside info.renderer.
+dEQP-GLES2.info.renderer	crash

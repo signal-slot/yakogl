@@ -1,0 +1,30 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
+# Mali section, as tools/cts/mali-deqp-e2e-selftest.sh expects it
+
+The counts below are written by hand for the three fake-board slices the
+self-test makes (4 Pass, 1 Fail, 2 Lost of 7 cases); @SHA8@ is replaced by the
+commit of the self-test's throwaway repository. They are not read back from
+`mali-deqp-tally.py --markdown`.
+
+<!-- mali-deqp-tally begin -->
+
+Slices: `t6-gles2-e2e-clean`, `t6-gles2-e2e-crash`, `t6-gles2-e2e-hang`
+(commits `@SHA8@`).
+
+| Status | Cases |
+| --- | ---: |
+| Pass | 4 |
+| Fail | 1 |
+| Lost | 2 |
+| **Total** | **7** |
+
+| Status | Cause | Cases |
+| --- | --- | ---: |
+| Fail | Image comparison failed on <host> at <addr> & <mac> | 1 |
+| Lost | chunk-crash | 1 |
+| Lost | chunk-hang | 1 |
+
+<!-- mali-deqp-tally end -->
+
+Text after the block is not compared.
