@@ -1137,7 +1137,9 @@ impl<'a> Sel<'a> {
              * sampler (the binding's own: a combined image-sampler gets no
              * point sampler, pco_nir_vk.c) blends the four texels around it,
              * which gl_test case 48 read on the table path; at the centre
-             * every filter returns the texel exactly. */
+             * every filter returns the texel exactly. texelFetchOffset adds
+             * its offset to the integer coordinate first (ES 3.00 8.8:
+             * texelFetch(P + offset)), as the native array's fetch does. */
             ir::Op::Tex {
                 dim: ir::TexDim::D2,
                 shadow: false,
@@ -1146,7 +1148,7 @@ impl<'a> Sel<'a> {
                 sampler,
                 coord,
                 lod: ir::TexLod::Fetch(l),
-                offset: None,
+                offset,
             } => {
                 use ir::AluOp::{Fadd, I2f};
                 let g =
@@ -1155,6 +1157,7 @@ impl<'a> Sel<'a> {
                 let mut uv = [SelSrc::Imm(0); 2];
                 for (k, c) in uv.iter_mut().enumerate() {
                     let p = self.src(coord, k as u32)?;
+                    let p = self.fetch_offset(p, offset, k)?;
                     let pf = g(self, I2f, [Some(p), None, None])?;
                     *c = g(self, Fadd, [Some(pf), half, None])?;
                 }
@@ -1181,7 +1184,7 @@ impl<'a> Sel<'a> {
             ir::Op::Tex { dim: ir::TexDim::D2Array, shadow: false, proj: false, ret, sampler, coord, lod, offset }
                 if crate::shaderc::native_array_enabled() =>
             {
-                use ir::AluOp::{Fadd, I2f, Iadd};
+                use ir::AluOp::{Fadd, I2f};
                 let g = |s: &mut Self, op: ir::AluOp, x: [Option<SelSrc>; 3]| s.fresh_typed(SelOp::Alu(op), op_type(op), x);
                 let fetch = matches!(lod, ir::TexLod::Fetch(_));
                 /* texelFetch: the texel's centre, p + 0.5, as the 2D fetch
@@ -1191,10 +1194,7 @@ impl<'a> Sel<'a> {
                 for (k, c) in uv.iter_mut().enumerate() {
                     let p = self.src(coord, k as u32)?;
                     *c = if fetch {
-                        let p = match offset {
-                            Some(o) if o[k] != 0 => g(self, Iadd, [Some(p), Some(SelSrc::Imm(o[k] as i32 as u32)), None])?,
-                            _ => p,
-                        };
+                        let p = self.fetch_offset(p, offset, k)?;
                         let pf = g(self, I2f, [Some(p), None, None])?;
                         g(self, Fadd, [Some(pf), Some(SelSrc::Imm(0.5f32.to_bits())), None])?
                     } else {
@@ -1247,7 +1247,8 @@ impl<'a> Sel<'a> {
             /* `texelFetch` on a 2D array: glsl2usc's pvr_arrFetch, texel
              * (x, y + z * (h / layers)) of the stacked image at level `lod`
              * (h the image's height there), fetched at the texel's centre as
-             * a 2D texelFetch is. */
+             * a 2D texelFetch is; texelFetchOffset's offset added to x and y
+             * first, inside the layer (texelFetch(P + offset)). */
             ir::Op::Tex {
                 dim: ir::TexDim::D2Array,
                 shadow: false,
@@ -1256,7 +1257,7 @@ impl<'a> Sel<'a> {
                 sampler,
                 coord,
                 lod: ir::TexLod::Fetch(l),
-                offset: None,
+                offset,
             } => {
                 use ir::AluOp::{F2i, Fadd, I2f, Iadd, Imul};
                 let g = |s: &mut Self, op: ir::AluOp, x: [Option<SelSrc>; 3]| s.fresh_typed(SelOp::Alu(op), op_type(op), x);
@@ -1269,7 +1270,9 @@ impl<'a> Sel<'a> {
                 self.idiv_into(height, count, false, SelDst::Virtual(h))?;
                 let h = SelSrc::Virtual { v: h, mods: Mods::default() };
                 let x = self.src(coord, 0)?;
+                let x = self.fetch_offset(x, offset, 0)?;
                 let y = self.src(coord, 1)?;
+                let y = self.fetch_offset(y, offset, 1)?;
                 let z = self.src(coord, 2)?;
                 let zh = g(self, Imul, [Some(z), Some(h), None])?;
                 let row = g(self, Iadd, [Some(y), Some(zh), None])?;
@@ -1303,7 +1306,9 @@ impl<'a> Sel<'a> {
              * twiddled copy as a grid of slices. The integer sample is the
              * 2D one's (`smp_type`: no `fcnorm`). `textureGrad` is pco's
              * txd over three axes: d/dx and d/dy of u, v and w in the data
-             * block (pco_nir_tex.c:274-283), which the grid had no form for. */
+             * block (pco_nir_tex.c:274-283), which the grid had no form for.
+             * A constant offset is pco's lookup word with all three fields,
+             * w in bits 12..15 (`lookup_word_3d`, pco_nir_tex.c:306-322). */
             ir::Op::Tex {
                 dim: ir::TexDim::D3,
                 shadow: false,
@@ -1312,7 +1317,7 @@ impl<'a> Sel<'a> {
                 sampler,
                 coord,
                 lod: lod @ (ir::TexLod::Implicit | ir::TexLod::Lod(_) | ir::TexLod::Bias(_) | ir::TexLod::Grad { .. }),
-                offset: None,
+                offset,
             } if crate::shaderc::native_3d_enabled() => {
                 let [u, v, w] = self.tex_coords(coord, 3, proj)?;
                 let (mode, level) = match lod {
@@ -1322,9 +1327,10 @@ impl<'a> Sel<'a> {
                     }
                     other => self.smp_level(other)?,
                 };
+                let offset = offset.map(|[du, dv, dw]| super::sel::lookup_word_3d(du, dv, dw));
                 self.emit(SelGroup { op: SelOp::SampleZ { vol: true }, ty: OpType::F32, dst: None, srcs: [Some(w), None, None] })?;
                 self.emit(SelGroup {
-                    op: SelOp::Sample { binding: sampler, proj: false, lod: mode, fetch: false, offset: None, cube: true, layer: false, gather: false },
+                    op: SelOp::Sample { binding: sampler, proj: false, lod: mode, fetch: false, offset, cube: true, layer: false, gather: false },
                     ty: smp_type(ret),
                     dst: Some(SelDst::Virtual(self.tex_out(id))),
                     srcs: [Some(u), Some(v), level],
@@ -1339,7 +1345,8 @@ impl<'a> Sel<'a> {
              * around it (and LINEAR_MIPMAP_LINEAR's two levels coincide
              * there only because the level is replaced by an integer), at
              * the centre every filter returns the texel. Every return type,
-             * as the sample above. */
+             * as the sample above; texelFetchOffset adds its offset to the
+             * integer coordinate first (texelFetch(P + offset)). */
             ir::Op::Tex {
                 dim: ir::TexDim::D3,
                 shadow: false,
@@ -1348,7 +1355,7 @@ impl<'a> Sel<'a> {
                 sampler,
                 coord,
                 lod: ir::TexLod::Fetch(l),
-                offset: None,
+                offset,
             } if crate::shaderc::native_3d_enabled() => {
                 use ir::AluOp::{Fadd, I2f};
                 let g = |s: &mut Self, op: ir::AluOp, x: [Option<SelSrc>; 3]| s.fresh_typed(SelOp::Alu(op), op_type(op), x);
@@ -1356,6 +1363,7 @@ impl<'a> Sel<'a> {
                 let mut c = [SelSrc::Imm(0); 3];
                 for (k, ck) in c.iter_mut().enumerate() {
                     let p = self.src(coord, k as u32)?;
+                    let p = self.fetch_offset(p, offset, k)?;
                     let pf = g(self, I2f, [Some(p), None, None])?;
                     *ck = g(self, Fadd, [Some(pf), half, None])?;
                 }
@@ -1397,7 +1405,8 @@ impl<'a> Sel<'a> {
             /* texelFetch on a 3D texture: glsl2usc's pvr_volFetch, texel
              * c.xy + ivec2(c.z % cols, c.z / cols) * slice of the stacked
              * image, at level 0 whatever `lod` (as the helper does), fetched at
-             * the texel's centre as a 2D texelFetch is. */
+             * the texel's centre as a 2D texelFetch is; texelFetchOffset's
+             * offset added to c first (texelFetch(P + offset)). */
             ir::Op::Tex {
                 dim: ir::TexDim::D3,
                 shadow: false,
@@ -1406,13 +1415,14 @@ impl<'a> Sel<'a> {
                 sampler,
                 coord,
                 lod: ir::TexLod::Fetch(_),
-                offset: None,
+                offset,
             } => {
                 use ir::AluOp::{Fadd, I2f, Iadd, Imul};
                 let g = |s: &mut Self, op: ir::AluOp, x: [Option<SelSrc>; 3]| s.fresh_typed(SelOp::Alu(op), op_type(op), x);
                 let layers = SelSrc::Fixed { bank: Bank::Shared, reg: self.layers_dword(sampler)?, mods: Mods::default() };
                 let (cols, slice, _) = self.vol_grid(sampler, layers)?;
                 let z = self.src(coord, 2)?;
+                let z = self.fetch_offset(z, offset, 2)?;
                 let mut cell = [SelSrc::Imm(0); 2];
                 for (k, rem) in [(0usize, true), (1, false)] {
                     let d = VReg(self.next_vreg);
@@ -1424,6 +1434,7 @@ impl<'a> Sel<'a> {
                 let mut uv = [SelSrc::Imm(0); 2];
                 for k in 0..2 {
                     let p = self.src(coord, k as u32)?;
+                    let p = self.fetch_offset(p, offset, k)?;
                     let off = g(self, Imul, [Some(cell[k]), Some(slice[k]), None])?;
                     let t = g(self, Iadd, [Some(p), Some(off), None])?;
                     let tf = g(self, I2f, [Some(t), None, None])?;
@@ -1439,7 +1450,12 @@ impl<'a> Sel<'a> {
             /* A 3D texture, through the grid of slices it is kept in:
              * glsl2usc's pvr_vol -- the two slices around c.z * layers - 0.5
              * sampled (`vol_uv`) and mixed -- and pvr_volLod, which samples
-             * level 0 whatever level it is given, as the helper does. */
+             * level 0 whatever level it is given, as the helper does.
+             *
+             * A constant offset: u and v in the lookup word of each slice's
+             * sample (the grid image's texels are the slices' at every
+             * level), w in whole slices of level 0, the only depth the grid
+             * keeps, added to c.z * layers before the slices are chosen. */
             ir::Op::Tex {
                 dim: ir::TexDim::D3,
                 shadow: false,
@@ -1448,7 +1464,7 @@ impl<'a> Sel<'a> {
                 sampler,
                 coord,
                 lod: lod @ (ir::TexLod::Implicit | ir::TexLod::Lod(_) | ir::TexLod::Bias(_)),
-                offset: None,
+                offset,
             } => {
                 use ir::AluOp::{Fadd, Ffma, Fmax, Fmin, Fmul};
                 let f = |x: f32| Some(SelSrc::Imm(x.to_bits()));
@@ -1457,6 +1473,11 @@ impl<'a> Sel<'a> {
                 let [u0, v0, cz] = self.tex_coords(coord, 3, proj)?;
                 let uv = [u0, v0];
                 let zl = g(self, Fmul, [Some(cz), Some(layers), None])?;
+                let zl = match offset {
+                    Some([_, _, dw]) if dw != 0 => g(self, Fadd, [Some(zl), f(f32::from(dw)), None])?,
+                    _ => zl,
+                };
+                let offset = offset.map(|[du, dv, _]| super::sel::lookup_word(du, dv));
                 /* an integer texture is read at its nearest slice, whole: no
                  * half-slice shift and no mix (ES 3.0 3.8.13 allows NEAREST
                  * only) */
@@ -1487,7 +1508,7 @@ impl<'a> Sel<'a> {
                             proj: false,
                             lod: mode,
                             fetch: false,
-                            offset: None,
+                            offset,
                             cube: false,
                             layer: false,
                             gather: false,
@@ -1508,7 +1529,7 @@ impl<'a> Sel<'a> {
                             proj: false,
                             lod: mode,
                             fetch: false,
-                            offset: None,
+                            offset,
                             cube: false,
                             layer: false,
                             gather: false,
@@ -1536,7 +1557,11 @@ impl<'a> Sel<'a> {
             /* A 2D array, sampled through the stacked 2D image it is kept in
              * (`array_uv`), as glsl2usc's pvr_arr / pvr_arrLod sample it; a
              * bias applies to the stacked image's implicit level (glsl2usc
-             * has no form for it). */
+             * has no form for it). A constant offset is the 2D sample's
+             * lookup word: the stacked image's texels are the layer's at
+             * every level, so u and v move by whole texels of the level the
+             * TPU picks (across the layer's edge into the next layer, as the
+             * stacked image filters there anyway). */
             ir::Op::Tex {
                 dim: ir::TexDim::D2Array,
                 shadow: false,
@@ -1545,12 +1570,13 @@ impl<'a> Sel<'a> {
                 sampler,
                 coord,
                 lod: lod @ (ir::TexLod::Implicit | ir::TexLod::Lod(_) | ir::TexLod::Bias(_)),
-                offset: None,
+                offset,
             } => {
                 let (u, v) = self.array_uv(sampler, coord)?;
                 let (mode, level) = self.smp_level(lod)?;
+                let offset = offset.map(|[du, dv, _]| super::sel::lookup_word(du, dv));
                 self.emit(SelGroup {
-                    op: SelOp::Sample { binding: sampler, proj: false, lod: mode, fetch: false, offset: None, cube: false, layer: false, gather: false },
+                    op: SelOp::Sample { binding: sampler, proj: false, lod: mode, fetch: false, offset, cube: false, layer: false, gather: false },
                     ty: smp_type(ret),
                     dst: Some(SelDst::Virtual(self.tex_out(id))),
                     srcs: [Some(u), Some(v), level],
@@ -1654,7 +1680,7 @@ impl<'a> Sel<'a> {
                 self.shadow_compare(id, sampler, SelSrc::Virtual { v: depth, mods: Mods::default() }, reference, taps)
             }
             ir::Op::Tex { .. } => Err(SelectError::Unsupported(
-                "a texture fetch with gradients on a cube, a 3D texture or a stacked array, a projective cube or array, or an offset on a stacked texture, is not selected yet",
+                "a texture fetch with gradients on a cube, a 3D texture or a stacked array, a projective cube or array, or an offset on a cube, is not selected yet",
             )),
             /* `textureSize(s, lod)` on a 2D sampler in a fragment shader, as
              * pco computes it (usclib/tex.cl usclib_tex_state_size, MIT, for
@@ -3090,6 +3116,21 @@ impl<'a> Sel<'a> {
             ir::TexLod::Bias(b) => (SmpLod::Bias, Some(self.src(b, 0)?)),
             _ => return Err(SelectError::Unsupported("a sample level that is neither implicit, replaced nor biased")),
         })
+    }
+
+    /// Lane `k` of a texelFetchOffset's integer coordinate `p` with the
+    /// offset's lane added (ES 3.00 8.8: texelFetch(P + offset)); `p` itself
+    /// without an offset or for a zero lane.
+    fn fetch_offset(&mut self, p: SelSrc, offset: Option<[i8; 3]>, k: usize) -> Result<SelSrc, SelectError> {
+        use ir::AluOp::Iadd;
+        match offset {
+            Some(o) if o[k] != 0 => self.fresh_typed(
+                SelOp::Alu(Iadd),
+                op_type(Iadd),
+                [Some(p), Some(SelSrc::Imm(o[k] as i32 as u32)), None],
+            ),
+            _ => Ok(p),
+        }
     }
 
     /// `textureSize(s, lod)` of a 2D image, width and height, as pco computes

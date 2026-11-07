@@ -268,25 +268,34 @@ impl SmpLod {
     }
 }
 
-/// The bit [`lookup_word`] sets above the lookup word's fields, so that a
-/// zero offset is still `Some`: bit 15 is outside the fields the data word
-/// carries (u 0..5, v 6..11, w 12..15 -- rogue_hw_defs.h ROGUE_SMP_LOOKUP_*;
-/// `w` is 4 bits and ours is always 0, so [`lookup_bits`] masks the mark off
-/// with it).
-pub const LOOKUP_MARK: u16 = 0x8000;
+/// The data word [`lookup_word`] keeps behind the option's niche, so that a
+/// zero offset is still `Some`: the word is stored XORed with this one, a
+/// word no offset produces -- u = 16, outside the -8..7 the front end lets
+/// through (builtin_call, MIN/MAX_PROGRAM_TEXEL_OFFSET) -- so the stored
+/// value is never zero. The fields fill all 16 bits (u 0..5, v 6..11, w
+/// 12..15 -- rogue_hw_defs.h ROGUE_SMP_LOOKUP_*), which leaves no bit for a
+/// mark once a 3D look-up's `w` is used.
+pub const LOOKUP_NICHE: u16 = 0x0010;
 
 /// The lookup word of a constant texel offset (`textureOffset`'s), as
 /// [`SelOp::Sample`] carries it: u in bits 0..5, v in 6..11, each truncated
-/// to its width as pco's bitfield_insert does (pco_nir_tex.c:306-322), under
-/// [`LOOKUP_MARK`].
+/// to its width as pco's bitfield_insert does (pco_nir_tex.c:306-322).
 pub fn lookup_word(du: i8, dv: i8) -> core::num::NonZeroU16 {
-    let word = ((du as u16) & 0x3f) | (((dv as u16) & 0x3f) << 6) | LOOKUP_MARK;
-    core::num::NonZeroU16::new(word).expect("the mark is set")
+    lookup_word_3d(du, dv, 0)
 }
 
-/// The data word a [`lookup_word`] stands for: its u and v fields alone.
+/// [`lookup_word`] of a 3D look-up: `dw` in bits 12..15 too, as pco inserts
+/// a third offset component (pco_nir_tex.c:306-322). Each offset is held to
+/// -8..7 first (the front end's range already), so the niche stays unused.
+pub fn lookup_word_3d(du: i8, dv: i8, dw: i8) -> core::num::NonZeroU16 {
+    let [du, dv, dw] = [du, dv, dw].map(|d| d.clamp(-8, 7) as u16);
+    let word = (du & 0x3f) | ((dv & 0x3f) << 6) | ((dw & 0xf) << 12);
+    core::num::NonZeroU16::new(word ^ LOOKUP_NICHE).expect("u is never 16")
+}
+
+/// The data word a [`lookup_word`] stands for.
 pub fn lookup_bits(word: core::num::NonZeroU16) -> u32 {
-    u32::from(word.get() & 0x0fff)
+    u32::from(word.get() ^ LOOKUP_NICHE)
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -339,7 +348,7 @@ pub enum SelOp {
         proj: bool,
         lod: SmpLod,
         fetch: bool,
-        /// The lookup word with [`LOOKUP_MARK`] set ([`lookup_word`]), so
+        /// The lookup word behind [`LOOKUP_NICHE`] ([`lookup_word`]), so
         /// that the option has a niche and this variant stays 10 bytes: a
         /// [`SelGroup`] is the arena's largest population, and two bytes
         /// more here put dEQP's light_amount.14omni past its budget
@@ -661,6 +670,8 @@ mod tests {
         let w = lookup_word(3, -2);
         assert_eq!(lookup_bits(w), 3 | (0x3e << 6));
         assert_eq!(lookup_bits(lookup_word(0, 0)), 0, "a zero offset is still Some");
+        assert_eq!(lookup_bits(lookup_word_3d(-8, 7, -8)), 0x38 | (7 << 6) | (8 << 12));
+        assert_eq!(lookup_bits(lookup_word_3d(-1, -1, -1)), 0xffff);
     }
 
     /// Every bank named here must be a name the generated ISA table uses.
