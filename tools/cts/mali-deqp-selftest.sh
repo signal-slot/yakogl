@@ -9,7 +9,7 @@
 # clean run, a crash mid-row with resume, a hang hitting the timeout, a panthor
 # job-timeout line counted in resets, a missing "yakogl-mali: loaded" line
 # (wrong-lib), lost ssh, a commit not on the main ref refused, and --dry-run
-# making no ssh call; and that the slice keeps no host name or address.
+# making no ssh call (also bare, without --build and --out, with fakes that fail); and that the slice keeps no host name or address.
 #
 #   tools/cts/mali-deqp-selftest.sh      prints "mali-deqp-selftest: N checks passed"
 #
@@ -18,7 +18,7 @@ set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 FIX=$HERE/testdata/mali-deqp-run
 RUN=$HERE/mali-deqp-run.sh
-EXPECT=26
+EXPECT=31
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/mali-deqp-selftest-XXXXXX")
 # The fake board's dmesg -w of the lost-ssh case is never stopped by the
 # runner (the board is gone): end every process still reading under $tmp.
@@ -167,6 +167,34 @@ check "--dry-run prints its plan (row, case count, the deqp command) and exits 0
     grep -q 'setsid -w timeout -k 10 <limit> env LD_LIBRARY_PATH=/root/yakogl-mali/009f62a5/lib' '$tmp/dry/out.txt'"
 check "--dry-run makes no ssh or scp call and writes no slice" \
   bash -c "[ ! -s '$tmp/dry/ssh.log' ] && [ ! -e '$tmp/dry/slice' ]"
+
+echo "mali-deqp-selftest: bare --dry-run (no --build, no --out), fakes that fail if called"
+mkdir -p "$tmp/nobin" "$tmp/bare"
+for t in ssh scp; do
+  printf '#!/bin/bash\necho "%s $*" >> "%s/bare/called.log"\nexit 99\n' "$t" "$tmp" > "$tmp/nobin/$t"
+done
+chmod +x "$tmp/nobin"/*
+bare() { # <name> <args...>: a dry run in a scratch cwd; output to bare/<name>.txt, status to .rc
+  local n=$1
+  shift
+  (cd "$tmp/bare" && env PATH="$tmp/nobin:$PATH" bash "$RUN" "$@" > "$tmp/bare/$n.txt" 2>&1; echo $? > "$tmp/bare/$n.rc")
+}
+bare a --dry-run --rows 1-1 --tree "$FIX/tree.txt"
+check "--dry-run --rows 1-1 --tree T without --build/--out exits 0 and prints the plan" \
+  bash -c "[ \"\$(cat '$tmp/bare/a.rc')\" = 0 ] && grep -q 'build: not given' '$tmp/bare/a.txt' &&
+    grep -q 'skipped (no build)' '$tmp/bare/a.txt' && grep -q 'row 1 T1: 6 case(s)' '$tmp/bare/a.txt' &&
+    grep -q 'slice .*build/mali-deqp-run/adhoc-rows1-1,' '$tmp/bare/a.txt'"
+MALI_DEQP_TREE=$FIX/tree.txt bare b --dry-run --rows 1-1
+check "the bare form takes its tree from MALI_DEQP_TREE" \
+  bash -c "[ \"\$(cat '$tmp/bare/b.rc')\" = 0 ] && grep -q 'row 1 T1: 6 case(s)' '$tmp/bare/b.txt'"
+MALI_DEQP_TREE=$tmp/bare/no-such-tree.txt bare c --dry-run --rows 1-1
+check "a missing default tree is said so and exits 1" \
+  bash -c "[ \"\$(cat '$tmp/bare/c.rc')\" = 1 ] && grep -q 'no tree table' '$tmp/bare/c.txt'"
+check "a bare dry run never calls ssh or scp and creates nothing" \
+  bash -c "[ ! -e '$tmp/bare/called.log' ] && [ -z \"\$(ls -A '$tmp/bare' | grep -v '^[abc]\.')\" ]"
+bare d --rows 1-1 --tree "$FIX/tree.txt"
+check "a real run without --build or --out still exits 1 (usage)" \
+  bash -c "[ \"\$(cat '$tmp/bare/d.rc')\" = 1 ]"
 
 total=$((passed + failed))
 if [ "$failed" -ne 0 ] || [ "$total" -ne "$EXPECT" ]; then
