@@ -20,7 +20,7 @@ try:
 except ModuleNotFoundError:  # Python < 3.11
     sys.exit("deps-env.sh: python3 >= 3.11 (tomllib) is required")
 
-BOARDS = ("am62p", "imx8mp", "rpi_4b")
+BOARDS = ("am62p", "imx8mp", "rpi_4b", "nanopc_t6")
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
 TOML = Path(os.environ.get("DEPS_TOML") or HERE / "deps.toml")
