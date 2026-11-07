@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# A three-row tree table over mustpass.txt, for tools/cts/mali-deqp-e2e-selftest.sh.
+
+# image E1: 3
+dEQP-GLES2.info.*
+# image E2: 2
+dEQP-GLES2.functional.prerequisite.*
+# image E3: 2
+dEQP-GLES2.functional.flush_finish.*

@@ -1,0 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# A crash in row E3: flush_finish.finish dies.
+dEQP-GLES2.functional.flush_finish.finish	crash

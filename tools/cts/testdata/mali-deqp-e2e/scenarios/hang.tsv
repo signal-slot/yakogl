@@ -1,0 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# A hang in row E2: state_reset never returns.
+dEQP-GLES2.functional.prerequisite.state_reset	hang

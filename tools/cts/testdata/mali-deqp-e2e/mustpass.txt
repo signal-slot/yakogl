@@ -1,0 +1,7 @@
+dEQP-GLES2.info.vendor
+dEQP-GLES2.info.renderer
+dEQP-GLES2.info.version
+dEQP-GLES2.functional.prerequisite.state_reset
+dEQP-GLES2.functional.prerequisite.clear_color
+dEQP-GLES2.functional.flush_finish.wait
+dEQP-GLES2.functional.flush_finish.finish
