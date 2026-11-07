@@ -3,7 +3,8 @@
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 # imx8mp-gles3-merge-selftest.sh - the synthetic-record selftest of imx8mp-gles3-merge.py (its --selftest):
 # disjoint slices, board-form slices with '-' rows (M1), missing entries and --partial (M2), clean and
-# non-clean README verdict lines (M3). Records are written under $TMPDIR (never /tmp) and removed.
+# non-clean README verdict lines (M3), Armadillo-X2 three-word rows with begun and noresult "-" (w3 not stored).
+# Records are written under $TMPDIR (never /tmp) and removed.
 #
 #   TMPDIR=<dir> tools/cts/imx8mp-gles3-merge-selftest.sh
 set -u

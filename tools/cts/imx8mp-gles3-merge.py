@@ -13,6 +13,10 @@ origin/main commit). The commit is the first 40-hex string of the README, else t
 "commit" in it, else the 8-hex tail of a directory named es3-<hash>. Two commits agree when one is a prefix
 of the other (8 characters at least).
 
+An Armadillo-X2 tree (`tools/board.sh x2 tree`, three-word records) writes '-' in begun (w3 is not stored) and in
+noresult: '-' is unknown, not zero. Its begun is derived as passed+failed+notsup+other (+noresult when a number);
+nothing is derived for w3. A row with '-' in passed..other, or in every field, is a no-record entry.
+
 The table (tools/cts/imx8mp-gles3-tree.txt) and the mustpass list give each entry's cases, matched as
 tools/cts/check-imx8mp-gles3-tree.py does (dEQP's filter: comma-separated patterns, '*' = any run, whole name).
 
@@ -107,7 +111,12 @@ def read_rows(path):
         if idx is None:
             continue
         nums = [parse_int(x) for x in f[2:8]]
-        tally = None if any(n is None for n in nums[:5]) else [n or 0 for n in nums]
+        # An Armadillo-X2 row (three-word record) has '-' in begun: unknown, never zero. Its begun is then
+        # derived from the cells that are numbers; a '-' in passed..other leaves the row without a usable tally.
+        # Only the begun cell is derived: the record's missing w3 word is never reconstructed or printed.
+        tally = None if any(n is None for n in nums[1:5]) else [n or 0 for n in nums]
+        if tally is not None and nums[0] is None:
+            tally[0] = sum(tally[1:6])
         names = [] if f[8] in ('-', '') else [n for part in f[8].split(';') for n in part.split(',') if n]
         rows.append((idx, f[1], tally, names, f[2:8]))
     return rows
@@ -367,16 +376,16 @@ def selftest():
             fails.append(what)
         print('%-4s %s' % ('ok' if ok else 'FAIL', what))
 
-    def slice_(name, commit, rows, verdicts=None, lines=True):
+    def slice_(name, commit, rows, verdicts=None, lines=True, board='imx8mp'):
         d = os.path.join(root, name)
         os.makedirs(d)
         with open(os.path.join(d, 'README.md'), 'w') as f:
             f.write('# slice at origin/main %s\n' % commit)
             for r in rows if lines else []:
-                if r[2] != '-':
+                if any(x != '-' for x in r[2:9]):
                     v, rs = (verdicts or {}).get(r[0], ('done', 'absent'))
-                    f.write('board.sh imx8mp e%02d rc=%d verdict=%s boot=uboot-mmc row boot_verdict=cycled '
-                            'result=record:DEQP resets=%s record=x back_after=1s\n' % (r[0], 0 if v == 'done' else 4, v, rs))
+                    f.write('board.sh %s e%02d rc=%d verdict=%s boot=uboot-mmc row boot_verdict=cycled '
+                            'result=record:DEQP resets=%s record=x back_after=1s\n' % (board, r[0], 0 if v == 'done' else 4, v, rs))
         with open(os.path.join(d, 'results.tsv'), 'w') as f:
             f.write('# index\tfilter\tbegun\tpassed\tfailed\tnotsup\tother\tnoresult\tfailing names\n')
             for r in rows:
@@ -472,6 +481,49 @@ def selftest():
         expect('totals: the unusable record counts as no record', 'no record: 1 of 4 entries (3), 1 mustpass' in out)
         rc, out, _ = call(*base_args, '--totals', A)
         expect('totals: entries without a record', 'no record: 2 of 4 entries (2-3), 6 mustpass cases' in out)
+
+        # Armadillo-X2 rows: three-word records, w3 = 00000000 not stored, '-' in begun and noresult (board.sh x2 tree)
+        d4 = ['dEQP-GLES3.d.%d' % k for k in range(4)]
+        XP = slice_('x2-pass', c1, [(0, entries[0], '-', 4, 0, 0, 0, '-', '-')], board='x2')
+        XF = slice_('x2-fail', c1, [(2, entries[2], '-', 1, 4, 0, 0, '-', ';'.join(d4))], board='x2')    # one four-name page
+        XN = slice_('x2-none', c1, [(3, entries[3], '-', '-', '-', '-', '-', '-', '-')], board='x2')
+        XD = slice_('x2-died', c1, [(0, entries[0], '-', 4, 0, 0, 0, '-', '-')], {0: ('died_after=gpu_init_done', 'absent')},
+                    board='x2')
+        XH = slice_('x2-half', c1, [(0, entries[0], '-', '-', 0, 0, 0, '-', '-')], board='x2')   # '-' in passed
+        rc, out, _ = call(*base_args, '--check', '--partial', XP, XF, XN)
+        expect('x2: check --partial accepts a passing, a failing and a no-result three-word row', rc == 0)
+        rc, out, _ = call(*base_args, '--check', '--partial', XD)
+        expect('x2: a three-word row is verdict-checked like a Verdin row', rc == 1 and 'e0: verdict=died_after' in out)
+        rc, out, _ = call(*base_args, '--totals', XP)
+        expect('x2: passing row: begun derived from the numbers, no record for the rest',
+               re.search(r'^e0\s+4\s+4\s+4\s+0\s+0\s+0\s+0$', out, re.M) is not None and
+               'no record: 3 of 4 entries (1-3)' in out)
+        rc, out, _ = call(*base_args, '--notpass', XP)
+        expect('x2: passing row lists nothing and is not NoResult',
+               not [l for l in out.splitlines() if l.startswith('e0:')] and not re.search(r'^# e\d+: unresolved', out, re.M))
+        rc, out, _ = call(*base_args, '--notpass', XF)
+        lines = [l for l in out.splitlines() if not l.startswith('#')]
+        expect('x2: four failing cases named from one page are Fail, each once',
+               lines == ['e2:Fail %s' % n for n in d4])
+        expect('x2: the named fails need no unresolved comment', not re.search(r'^# e\d+: unresolved', out, re.M))
+        rc, out, _ = call(*base_args, '--totals', XF)
+        expect('x2: failing row totals', re.search(r'^e2\s+5\s+5\s+1\s+4\s+0\s+0\s+0$', out, re.M) is not None)
+        rc, out, _ = call(*base_args, '--notpass', XN)
+        lines = [l for l in out.splitlines() if not l.startswith('#')]
+        expect("x2: no-result row is NoResult for the entry's mustpass case, nothing else",
+               lines == ['e3:NoResult dEQP-GLES3.e.0'] and 'e3: no usable record' in out)
+        rc, out, _ = call(*base_args, '--totals', XN)
+        expect('x2: no-result row counts as no record', 'no record: 4 of 4 entries (0-3)' in out)
+        rc, out, _ = call(*base_args, '--notpass', XH)
+        expect("x2: a row with '-' in passed is NoResult, never zero passes",
+               out.count('e0:NoResult') == 4 and 'e0: no usable record' in out)
+        rc, out, _ = call(*base_args, '--totals', XP, XF, XN)
+        expect('x2: merged three-word rows total',
+               re.search(r'^total\s+10\s+9\s+5\s+4\s+0\s+0\s+1$', out, re.M) is not None and
+               'no record: 2 of 4 entries (1,3), 5 mustpass' in out)
+        rc, out, _ = call(*base_args, '--check', '--partial', A, XF)
+        expect('x2: a Verdin slice and an x2 slice of other entries merge', rc == 0)
+        expect('x2: no w3 value is printed', 'w3' not in out and '00000000' not in out)
     finally:
         shutil.rmtree(root, ignore_errors=True)
     print('selftest: %s' % ('FAILED (%d)' % len(fails) if fails else 'OK'))
