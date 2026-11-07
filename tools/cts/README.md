@@ -339,7 +339,15 @@ entry in the list stops the run (exit 2) with the same message as before.
 | `am62p` (add) | `PVR_FW_BLOB` |
 | `imx8mp` (add) | `IMX8MP_OUT` |
 | `deqp`, `ms4` (add) | `DEQP_WORK` (am62p, pi4), `DEQP_STAGE1` (imx8mp, x2) |
-| `x2` | as `imx8mp` (`IMX8MP_OUT`); `common` does not add `GLMARK2_SRC` |
+| `x2 common` | the three of every image and `IMX8MP_OUT`; no `GLMARK2_SRC` (it builds the gl_test image alone) |
+| `x2 deqp` | the three of every image, `IMX8MP_OUT` and `DEQP_STAGE1` |
+
+`board-stage.sh x2` takes the sets `common` and `deqp` only. `x2 ms4` and
+`x2 gles3` are refused with exit 2 (they are the AM62P's trees), as is any
+other board or set name (the usage line). The x2 stage runs no board command,
+so it reads no `BOARD_HOST` and no `BOARD_UART` and needs no lease. Its dry
+run (`BOARD_STAGE_DRY_RUN=1`) names the two outputs before the layout is read
+and needs none of the entries above.
 
 The list is `needed_deps` in `board-stage.sh`; `images-selftest.sh` checks
 both directions against the real `deps.toml`, and against what the builders
