@@ -71,21 +71,27 @@ temps are the program's temporary registers. "ours" is the online compiler of th
 hardware database for the GC7000UL). Both are compiled without the link, so
 neither has the draw-time fix-ups.
 
-| shader | stage | ours | etna | ours temps | etna temps | per vertex or pixel |
-|---|---|---:|---:|---:|---:|---|
-| depth | vertex | 6 | 4 | 3 | 3 | 21,516 / 208,998 indices |
-| depth | fragment | 3 | 2 | 3 | 2 | 0.3 to 0.8 Mpx at 1600x1200 |
-| ground | vertex | 12 | 7 | 4 | 4 | 4 vertices |
-| ground | fragment | 16 | 11 | 5 | 4 | at most 0.48 Mpx; 1 `texld` in both |
-| horse | vertex | 23 | 14 | 5 | 4 | 21,516 indices |
-| horse | fragment | 1 | 1 | 2 | 2 | a `nop`: the colour is the varying's register |
-| refract | vertex | 23 | 19 | 5 | 5 | 208,998 indices |
-| refract | fragment | 86 | 48 | 12 | 6 | 0.1 to 0.2 Mpx; 3 `texld` in both |
-| clear (internal) | vertex | 1 | 1 | 1 | 1 | `nop`, equal (`tests/internal_programs.rs` holds this word for word) |
-| clear (internal) | fragment | 1 | 1 | 2 | 2 | one `mov` from the constant |
-| mipgen (internal) | fragment | 4 | 2 | 2 | 2 | 10 tiny kicks; see below |
+| shader | stage | ours | etna | ours temps | etna temps | patch (temps) | per vertex or pixel |
+|---|---|---:|---:|---:|---:|---:|---|
+| depth | vertex | 6 | 4 | 3 | 3 | 5 (3) | 21,516 / 208,998 indices |
+| depth | fragment | 3 | 2 | 3 | 2 | 3 (3) | 0.3 to 0.8 Mpx at 1600x1200 |
+| ground | vertex | 12 | 7 | 4 | 4 | 11 (5) | 4 vertices |
+| ground | fragment | 16 | 11 | 5 | 4 | 13 (5) | at most 0.48 Mpx; 1 `texld` in both |
+| horse | vertex | 23 | 14 | 5 | 4 | 21 (5) | 21,516 indices |
+| horse | fragment | 1 | 1 | 2 | 2 | 1 (2) | a `nop`: the colour is the varying's register |
+| refract | vertex | 23 | 19 | 5 | 5 | 21 (5) | 208,998 indices |
+| refract | fragment | 86 | 48 | 12 | 6 | 71 (12) | 0.1 to 0.2 Mpx; 3 `texld` in both |
+| clear (internal) | vertex | 1 | 1 | 1 | 1 | 1 | `nop`, equal (`tests/internal_programs.rs` holds this word for word) |
+| clear (internal) | fragment | 1 | 1 | 2 | 2 | 1 | one `mov` from the constant |
+| mipgen (internal) | fragment | 4 | 2 | 2 | 2 | 4 | 10 tiny kicks; see below |
 
-Totals of the eight application shaders: ours 170, etna 105 (1.6x). Shadow's
+Totals of the eight application shaders: ours 170, etna 105 (1.6x). The
+"patch" column is the code of "What to do: sr-compiler-fix" below, measured
+on the host and **not landed**: 146. `tests/gc_sr_shader_count.rs` pins the
+"ours" columns (it reads the corpus of step 1 below and prints a SKIP line
+without it) and the micro-shaders, with etna's and the patch's counts in its
+comments. Recounted at main `51fc47e6`: unchanged from `723a75c8`, because
+noise-compiler-fix committed no code. Shadow's
 frame draws 6+3 (depth), 12+16 (ground) and 23+1 (horse); refract's draws 6+3
 (depth) and 23+86 (refract).
 
@@ -298,3 +304,589 @@ must stay green.
 Nothing here replaces the chain of `gc-slow-shadow-refract.md`: the resolve,
 the cache maintenance, the waits and the clears are larger by an order of
 magnitude.
+
+## What to do: sr-compiler-fix (ranks 1, 3 and 4 inside the GC code generator)
+
+Plan #328, item sr-compiler-fix, at main `51fc47e6`. The item could edit only
+`src/shaderc/online/vivante/`, not the shared compiler files (`lower.rs`,
+`select.rs`, `fold.rs`, `codegen.rs`, ...) or `tests/fixtures/` and
+`tests/reference/`, and had to stop if a pinned fixture moved. **No compiler
+code was committed.** The part of ranks 1, 3 and 4 that can live in the code
+generator was written and measured on the host. It shortens the GC
+offline-table programs too (11.5% of their code bytes), so it moves the
+shared pin
+`tests/fixtures/precompile_counts.txt`, and the item stopped there, as
+noise-compiler-fix did (`gc-terrain-shaders.md`, "What to do"). The patch is
+at the end of this note, so the item that may re-pin can apply it as is.
+
+**The two passes** (a new `vivante/peephole.rs`, called from
+`alloc::eliminate_dead`):
+
+1. **Copy fold** (rank 1's negate half and rank 3's lane half), at the start
+   of `eliminate_dead`. Each `mov t.mask, s` of a temporary or an input, with
+   or without a negate or an absolute, is read through by the readers after
+   it: the reader's source becomes `s` with the swizzles composed and the
+   modifiers combined (the magnitude before the negate, as the hardware
+   applies them). Only in straight-line code (no branch target and no branch
+   in between, at most 512 instructions on), only while every lane the reader
+   consumes (`consumed_lanes`, over its whole write mask) was written by the
+   copy and not since, and only until the source is written. A copy with a
+   modifier goes only into F32 `mov`, `add`, `mul`, `mad`, `dp2/3/4`, `rcp`,
+   `rsq`, `sqrt`, `floor`, `ceil`, `frc` (not `select` or `cmp`, which pass
+   bits). The copy, once unread, is deleted by the liveness that follows. This
+   is noise-compiler-fix's negate fold generalised to partial-mask plain
+   copies: `vec4(v3, 1.0)`'s `mov t.xyz_, s.xyzx` disappears for the readers
+   of x, y and z.
+2. **Scalar lane merge** (rank 4), at the end of `eliminate_dead`, over the
+   survivors. Adjacent copies of one `rcp`, `rsq`, `sqrt` or `exp` that write
+   disjoint lanes of one temporary from the same source lane (same register,
+   modifiers and first swizzle lane) become one instruction with the union of
+   the masks, as etnaviv writes `rcp t1.___w`. It relies on the scalar unit
+   writing its one value to every lane of the mask, which `select.rs` states
+   from a board observation (`sin` of a vec4 emitted once) and the interpreter
+   of `tests/common` models; `sin`, `cos` and `log` (a pair of lanes on this
+   core) and the two-source `div` and `imullo0` are left alone. Not when a
+   branch goes to the later copy, nor when the copy reads the register it
+   writes.
+
+| measured on the host (main `51fc47e6`) | without | fold only | merge only | both |
+|---|---:|---:|---:|---:|
+| the eight application shaders, instructions | 170 | 155 | 161 | **146** (etna 105) |
+| refract fragment | 86 | 78 | 79 | **71** (etna 48) |
+| ground fragment | 16 | 15 | 14 | 13 (etna 11) |
+| depth vertex, ground vertex, horse vertex, refract vertex | 6, 12, 23, 23 | 5, 11, 21, 21 | 6, 12, 23, 23 | 5, 11, 21, 21 |
+| temporaries | | ground vertex 4 to 5, the rest equal | equal | ground vertex 4 to 5 |
+| micro m1, m1b, m9, m5, m8, m4, `a - b` | 5, 6, 17, 20, 8, 6, 2 | 5, 6, 16, 17, 7, 5, 1 | 2, 4, 11, 20, 8, 6, 2 | 2, 4, 10, 17, 7, 5, 1 |
+| `precompile_counts.txt` `gc7000 es2=0 app=all` code_bytes | 129376 | | 129088 | 114448 (**moves**) |
+| `precompile_counts.txt` `gc7000 es2=1 app=all` code_bytes | 109680 | | | 95344 (**moves**) |
+| `src/vivante/internal.rs` (`--internal --verify`) | | | | unchanged |
+
+With `PRECOMPILE_PIN_WRITE=1` (written, read, then restored), every gc7000
+line of the fixture moves and the PowerVR lines do not:
+
+| fixture line | rows | code_bytes now | with the patch |
+|---|---:|---:|---:|
+| `gc7000 es2=0 app=all` | 226 | 129376 | 114448 |
+| `gc7000 es2=0 app=femtovg` | 36 | 48304 | 38720 |
+| `gc7000 es2=0 app=gl_test_es100` | 111 | 32512 | 29248 |
+| `gc7000 es2=1 app=all` | 183 | 109680 | 95344 |
+| `gc7000 es2=1 app=femtovg` | 36 | 48304 | 38720 |
+| `gc7000 es2=1 app=gl_test_es100` | 82 | 25792 | 22960 |
+
+m13 stays at 6: the patch has no `mad` contraction (below).
+
+**Correctness, with both passes:** the whole GC7000 host suite
+(`cargo test --no-default-features --features host-test,gpu-vivante,shaderc-online --no-fail-fast`,
+140 test binaries) passes except three pins that the shorter code moves:
+
+- `tests/backend_differential.rs`, the value check (the IR evaluator against
+  the interpreter running the encoded program, the offline sources, the dEQP
+  sources and the long straight-line program): 9 of 9 pass.
+- `tests/internal_programs.rs`: passes (the clear shaders are etna's word for
+  word).
+- the five unit tests of `peephole.rs` (a negated copy read through an add's
+  modifier with the swizzles composed; none into a `select` nor past a write
+  of the source; a partial copy folded only for its own lanes; four `rcp` of
+  one lane become one; different lanes, a `sin`, and a self-read stay):
+  pass.
+- moved: `tests/fixtures/precompile_counts.txt` (above);
+  `tests/lane_move_equivalence.rs`'s population pin, 103 to 102 programs
+  (the `report-es2` build's 87 not measured); and the unit test
+  `alloc::loop_and_io_tests::a_seed_whose_lanes_are_replaced_before_anything_needs_them_is_dead`,
+  whose copy at 2 is now read through by 3 and dies with the seed (removed 1
+  to 2; the patch updates it).
+
+At 0.6 ns an instruction a pixel (above), the 15 instructions off refract's
+fragment shader are 0.9 to 1.8 ms of refract's frame, and the shadow side's 7
+about 0.3 to 0.6 ms: the estimate of ranks 1, 3 and 4 holds.
+
+**What landing it needs, in the shared files, and nothing else:**
+
+- `tests/fixtures/precompile_counts.txt`: every `gc7000` line re-pinned with
+  `PRECOMPILE_PIN_WRITE=1 tools/precompile/prove.sh gpu-vivante` and
+  `gpu-vivante,report-es2`, to the six values of the table above;
+- `tests/lane_move_equivalence.rs`: the population pin, 103 to 102 (and the
+  `report-es2` figure re-derived);
+- `tests/gc_sr_shader_count.rs`: the pins moved to its "patch" comments
+  (146 in all);
+- nothing in `src/vivante/internal.rs` or `tests/reference/`.
+
+**What the code generator cannot do alone:**
+
+- **`mad` contraction** (rank 1's other half; m13, and most of refract's
+  remaining `mul`+`add` pairs): needs the `invariant` outputs handed to the
+  GC passes from `codegen.rs` `assemble_from_ir_blocks` (or `select.rs`), as
+  `gc-terrain-shaders.md` says; the pairing itself can then live in
+  `vivante/`.
+- **Constant folding** (rank 2: `1.0/1.2`, `1.2*1.2`, the `const vec4`
+  light's `xyz * rcp(w)`, 11 in refract's fragment shader and 3 plus 1 in the
+  horse's vertex shader): the constants are constant-file reads by the time
+  the code generator sees them; folding belongs in `lower.rs` `alu_sized` or
+  the GC `select_blocks` with `fold::fold_float`.
+- **A negated uniform** (`mov t, -uN`): the fold would have to check the
+  one-constant-register-an-instruction rule, private to `select.rs`
+  `within_caps`.
+- **The constructor's constant lane** (rank 3's other half: `mul t0, u3,
+  t1.wwww` with `t1.w = 1.0`, the zero lane's `mad`): needs the lane's
+  constant visible to the reader, `select.rs` `fold_constant_reads` (only a
+  register written once).
+- **`refract()` at scalar width** (rank 5): `builtin_call.rs`.
+
+<details>
+<summary>The patch (against main <code>51fc47e6</code>, <code>git apply</code> from the repository root)</summary>
+
+```diff
+diff --git a/src/shaderc/online/vivante/alloc.rs b/src/shaderc/online/vivante/alloc.rs
+index 6a59d3ef..1a7ba03c 100644
+--- a/src/shaderc/online/vivante/alloc.rs
++++ b/src/shaderc/online/vivante/alloc.rs
+@@ -1902,10 +1902,15 @@ pub fn eliminate_dead(
+         return Ok(0);
+     }
+     let mem = |_: ArenaError| AllocError::OutOfScratch;
++    /* Copies read through their readers' source fields first, so the copies
++     * nobody reads any more die below (peephole.rs). */
++    let dead = scratch.alloc_filled(n.div_ceil(64), 0u64).map_err(mem)?;
++    super::peephole::mark_targets(sel, dead);
++    super::peephole::fold_copies(sel, dead);
++    dead.fill(0);
+     let values = vregs_needed(sel);
+     let need = scratch.alloc_filled(values, 0u8).map_err(mem)?;
+     lanes_needed(sel, need);
+-    let dead = scratch.alloc_filled(n.div_ceil(64), 0u64).map_err(mem)?;
+     /* The branch edges by target, counted then filled (a CSR). */
+     let pred_at = scratch.alloc_filled(n + 1, 0u16).map_err(mem)?;
+     for s in sel.iter() {
+@@ -1974,9 +1979,31 @@ pub fn eliminate_dead(
+         scratch.give_back(pred_from);
+         scratch.give_back(pred_at);
+     }
+-    if removed == 0 {
+-        return Ok(0);
++    if removed != 0 {
++        compact(sel, dead, back_edges);
++    }
++    /* Then, over the survivors (each lane a scalar copy writes is one somebody
++     * needs), the per-lane copies of one scalar join (peephole.rs); the
++     * emptied ones go the same way. */
++    let left = n - removed;
++    super::peephole::mark_targets(&sel[..left], dead);
++    let merged = super::peephole::merge_scalar_lanes(&mut sel[..left], dead);
++    if merged != 0 {
++        dead.fill(0);
++        for (i, s) in sel[..left].iter().enumerate() {
++            if matches!(s.dst, Some(SelDst::Virtual { write_mask: 0, .. })) {
++                dead[i / 64] |= 1 << (i % 64);
++            }
++        }
++        compact(&mut sel[..left], dead, back_edges);
+     }
++    Ok(removed + merged)
++}
++
++/// Delete the instructions `dead` marks, compacting `sel` in place, and remap
++/// the branch targets and `back_edges` through the survivors.
++fn compact(sel: &mut [SelInstr], dead: &[u64], back_edges: &mut [usize]) {
++    let n = sel.len();
+     let is_dead = |i: usize| dead[i / 64] >> (i % 64) & 1 != 0;
+     /* Survivors before old index i: the new index of i, or of the next
+      * survivor when i itself goes. */
+@@ -1996,7 +2023,6 @@ pub fn eliminate_dead(
+     for b in back_edges.iter_mut() {
+         *b = new_index(*b);
+     }
+-    Ok(removed)
+ }
+ 
+ /// [`dead_after_liveness`]'s working tables, lent once for every round.
+@@ -2201,7 +2227,7 @@ fn consumed_lanes_live(s: &SelInstr, swizzle: [u8; 4], eff: u8) -> u8 {
+ /// `swizzle[c]` and nothing else; every other operation (a dot product, a
+ /// texture fetch, a branch, anything not yet looked at) is taken to read all
+ /// four swizzle lanes, which over-reserves and cannot clobber.
+-fn consumed_lanes(s: &SelInstr, swizzle: [u8; 4], eff: u8) -> u8 {
++pub(super) fn consumed_lanes(s: &SelInstr, swizzle: [u8; 4], eff: u8) -> u8 {
+     /* A result nobody needs consumes nothing, whatever the operation: a dead
+      * dot product kept its sources alive until this line existed. */
+     if eff == 0 && matches!(s.dst, Some(SelDst::Virtual { .. })) {
+@@ -4824,7 +4850,8 @@ mod loop_and_io_tests {
+             SelInstr::new(mov, OpType::F32).dst(SelDst::Fixed { reg: 1, write_mask: 0x3 }).src(2, vr(2, XYZW)),
+         ];
+         let removed = eliminate_dead(&Arena::new(&mut vec![0u8; 1 << 20]), &mut sel, &mut []).unwrap();
+-        assert_eq!(removed, 1, "the seed at 0 is dead: z, w never needed, x, y replaced at 1");
++        /* The copy at 2 is read through by 3 (peephole::fold_copies) and dies with the seed. */
++        assert_eq!(removed, 2, "the seed at 0 is dead: z, w never needed, x, y replaced at 1");
+         assert!(matches!(sel[0].dst, Some(SelDst::Virtual { v: VReg(1), write_mask: 0x3 })), "the partial write stays");
+     }
+ 
+diff --git a/src/shaderc/online/vivante/mod.rs b/src/shaderc/online/vivante/mod.rs
+index 6ed67883..0dd3e0ea 100644
+--- a/src/shaderc/online/vivante/mod.rs
++++ b/src/shaderc/online/vivante/mod.rs
+@@ -34,6 +34,7 @@ pub mod isa;
+ #[rustfmt::skip]
+ pub mod isa_tables;
+ pub mod listing;
++mod peephole;
+ pub mod wide128;
+ /* The round trip and the default audit both read the offline table. */
+ #[cfg(all(test, not(feature = "no-shader-table")))]
+diff --git a/src/shaderc/online/vivante/peephole.rs b/src/shaderc/online/vivante/peephole.rs
+new file mode 100644
+index 00000000..852ce8a2
+--- /dev/null
++++ b/src/shaderc/online/vivante/peephole.rs
+@@ -0,0 +1,351 @@
++// SPDX-License-Identifier: Apache-2.0
++// SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
++//! Two rewrites of the selected program that only this machine's encoding
++//! makes possible, run by [`super::alloc::eliminate_dead`]
++//! (`docs/notes/gc-shadow-refract-shaders.md`, causes C1 and C2).
++//!
++//! **A copy read through the reader's own source fields** ([`fold_copies`]).
++//! Negate and absolute are `SRC_NEG` and `SRC_ABS` of every source, and a
++//! source has its own swizzle. So `mov t, -s` followed by `add d, a, t` is
++//! `add d, a, -s`, and `mov t.xyz_, s.xyzx` followed by `mul d, u, t.xxxx` is
++//! `mul d, u, s.xxxx`. Selection's `propagate_copies` declines both shapes (a
++//! modifier, a partial mask); here they are folded where every lane the reader
++//! consumes provably holds the copy's value. The copy itself, once nobody
++//! reads it, is deleted by the dead-code pass that runs next.
++//!
++//! **One scalar instruction for lanes that read one value**
++//! ([`merge_scalar_lanes`]). Selection emits a scalar operation once per lane
++//! (`select.rs`, "emitted once per lane"), so `a / a.w` is four
++//! `rcp t.x/y/z/w, s.wwww`. The machine computes the scalar from the first
++//! swizzle lane and writes it to every lane of the mask (the same comment: a
++//! `sin` of a vec4 emitted once was sin(u.x) in all four lanes), so adjacent
++//! copies that read the same lane are one instruction with the union of the
++//! masks, as Mesa's etnaviv writes them.
++//!
++//! Both work on straight-line code only and leave a program alone where a
++//! branch could arrive in between.
++
++use super::alloc::{consumed_lanes, SelDst, SelInstr, SelSrc, VReg};
++use super::build::Src;
++
++/// The operations a negate or absolute may be moved into: float arithmetic
++/// that applies the modifiers to the value it reads, as `Fneg`/`Fabs` mean
++/// them. Not `select` or `cmp` (they pass a source through as bits), not the
++/// texture or memory operations.
++fn takes_float_modifiers(s: &SelInstr) -> bool {
++    s.ty == super::alloc::OpType::F32
++        && matches!(
++            s.op.op().name,
++            "mov" | "add" | "mul" | "mad" | "dp2" | "dp3" | "dp4" | "rcp" | "rsq" | "sqrt" | "floor" | "ceil" | "frc"
++        )
++}
++
++/// The scalar operations [`merge_scalar_lanes`] joins: one value from the
++/// first swizzle lane, written to every lane of the mask. Not `sin`, `cos`
++/// and `log`, which write a pair of lanes on this core
++/// (`tests/common/mod.rs`), nor the two-source `div` and `imullo0`.
++fn splats(s: &SelInstr) -> bool {
++    matches!(s.op.op().name, "rcp" | "rsq" | "sqrt" | "exp")
++}
++
++fn writes_virtual(s: &SelInstr, v: VReg) -> u8 {
++    match s.dst {
++        Some(SelDst::Virtual { v: d, write_mask }) if d == v => write_mask,
++        _ => 0,
++    }
++}
++
++fn mask_of(s: &SelInstr) -> u8 {
++    match s.dst {
++        Some(SelDst::Virtual { write_mask, .. }) | Some(SelDst::Fixed { write_mask, .. }) => write_mask,
++        Some(SelDst::Address { write_mask }) => write_mask,
++        None => 0xf,
++    }
++}
++
++/// Mark in `targets` (one bit an instruction, cleared first) every
++/// instruction of `sel` a branch goes to.
++pub fn mark_targets(sel: &[SelInstr], targets: &mut [u64]) {
++    targets.fill(0);
++    for s in sel {
++        if let Some(t) = s.target.map(usize::from).filter(|&t| t < sel.len()) {
++            targets[t / 64] |= 1 << (t % 64);
++        }
++    }
++}
++
++fn is_target(targets: &[u64], j: usize) -> bool {
++    targets.get(j / 64).is_some_and(|w| w >> (j % 64) & 1 != 0)
++}
++
++/// How far past a copy [`fold_copies`] looks for its readers.
++const FOLD_REACH: usize = 512;
++
++/// The copy's source read through `outer` with the reader's own modifiers:
++/// the swizzles composed, and the magnitude taken before the negate, as the
++/// hardware applies them (`|x|` first, then `-`).
++fn through(copy: SelSrc, outer: [u8; 4], neg_r: bool, abs_r: bool) -> SelSrc {
++    let pick = |base: [u8; 4]| core::array::from_fn(|c| base[outer[c] as usize & 3]);
++    let mods = |neg_m: bool, abs_m: bool| if abs_r { (neg_r, true) } else { (neg_r ^ neg_m, abs_m) };
++    match copy {
++        SelSrc::Virtual { v, swizzle, neg, abs } => {
++            let (neg, abs) = mods(neg, abs);
++            SelSrc::Virtual { v, swizzle: pick(swizzle), neg, abs }
++        }
++        SelSrc::Input { reg, swizzle, neg, abs } => {
++            let (neg, abs) = mods(neg, abs);
++            SelSrc::Input { reg, swizzle: pick(swizzle), neg, abs }
++        }
++        other => other,
++    }
++}
++
++/// Does `s` write any lane of the register the copy source `src` reads?
++fn writes_source(s: &SelInstr, src: SelSrc) -> bool {
++    match (src, s.dst) {
++        (SelSrc::Virtual { v, .. }, Some(SelDst::Virtual { v: d, .. })) => d == v,
++        /* An input is never a selected destination; an output written over
++         * it is placed by the allocator around the input's reads. */
++        _ => false,
++    }
++}
++
++/// Fold each `mov` of a temporary or an input into the readers that follow it
++/// in straight-line code (module documentation). Returns how many source
++/// operands were rewritten.
++///
++/// A reader is rewritten only when every lane of the copy it consumes
++/// ([`consumed_lanes`] over its whole write mask, so a superset) was written
++/// by the copy and not since, the copy's source register has not been written
++/// since, and no branch leaves or arrives in between. A copy that carries a
++/// negate or an absolute goes only into [`takes_float_modifiers`] readers.
++pub fn fold_copies(sel: &mut [SelInstr], targets: &[u64]) -> usize {
++    let mut rewritten = 0usize;
++    for i in 0..sel.len() {
++        let m = sel[i];
++        if !m.op.is_mov() || m.cond.is_some() || m.saturate || m.rtz || m.target.is_some() {
++            continue;
++        }
++        let Some(SelDst::Virtual { v: t, write_mask }) = m.dst else { continue };
++        let Some(src) = m.srcs[2] else { continue };
++        let modified = match src {
++            SelSrc::Virtual { v, neg, abs, .. } if v != t => neg || abs,
++            SelSrc::Input { neg, abs, .. } => neg || abs,
++            _ => continue,
++        };
++        if modified && m.ty != super::alloc::OpType::F32 {
++            continue;
++        }
++        /* The lanes of `t` still holding the copy's value. */
++        let mut held = write_mask;
++        for k in i + 1..sel.len().min(i + 1 + FOLD_REACH) {
++            if is_target(targets, k) {
++                break;
++            }
++            let r = sel[k];
++            let eff = mask_of(&r);
++            if !modified || takes_float_modifiers(&r) {
++                let mut out = r;
++                let mut changed = false;
++                for slot in 0..3 {
++                    let Some(SelSrc::Virtual { v, swizzle, neg, abs }) = r.srcs[slot] else { continue };
++                    if v != t {
++                        continue;
++                    }
++                    let lanes = consumed_lanes(&r, swizzle, if eff == 0 { 0xf } else { eff });
++                    if lanes & !held != 0 {
++                        continue;
++                    }
++                    out.srcs[slot] = Some(through(src, swizzle, neg, abs));
++                    changed = true;
++                    rewritten += 1;
++                }
++                if changed {
++                    sel[k] = out;
++                }
++            }
++            /* What `r` writes ends the copy for those lanes, and a write of
++             * the source ends it altogether; so does a branch. */
++            held &= !writes_virtual(&r, t);
++            if held == 0 || writes_source(&r, src) || r.target.is_some() {
++                break;
++            }
++        }
++    }
++    rewritten
++}
++
++/// Two reads that give a scalar operation the same value: the same register
++/// and modifiers, the same first swizzle lane (the only one it reads).
++fn same_scalar_read(a: Option<SelSrc>, b: Option<SelSrc>) -> bool {
++    match (a, b) {
++        (None, None) => true,
++        (
++            Some(SelSrc::Virtual { v: va, swizzle: sa, neg: na, abs: aa }),
++            Some(SelSrc::Virtual { v: vb, swizzle: sb, neg: nb, abs: ab }),
++        ) => va == vb && sa[0] == sb[0] && na == nb && aa == ab,
++        (
++            Some(SelSrc::Input { reg: ra, swizzle: sa, neg: na, abs: aa }),
++            Some(SelSrc::Input { reg: rb, swizzle: sb, neg: nb, abs: ab }),
++        ) => ra == rb && sa[0] == sb[0] && na == nb && aa == ab,
++        (Some(SelSrc::Physical(pa)), Some(SelSrc::Physical(pb))) => {
++            if pa.is_immediate() || pb.is_immediate() {
++                pa == pb
++            } else {
++                Src { swizzle: [0; 4], ..pa } == Src { swizzle: [0; 4], ..pb } && pa.swizzle[0] == pb.swizzle[0]
++            }
++        }
++        _ => false,
++    }
++}
++
++/// Join adjacent copies of one scalar operation that write disjoint lanes of
++/// one temporary from the same value (module documentation). The later
++/// instruction of each pair is given an empty write mask, which is how the
++/// caller recognises it for deletion. Returns how many were emptied.
++///
++/// A copy is joined only when no branch arrives at it, and never when it
++/// reads the register it writes (the earlier copy may have changed the lane).
++pub fn merge_scalar_lanes(sel: &mut [SelInstr], targets: &[u64]) -> usize {
++    let mut merged = 0usize;
++    let mut lead = 0usize;
++    for j in 1..sel.len() {
++        let (a, b) = (sel[lead], sel[j]);
++        let join = splats(&a)
++            && a.op.0 == b.op.0
++            && a.ty == b.ty
++            && a.cond.is_none()
++            && b.cond.is_none()
++            && a.saturate == b.saturate
++            && a.rtz == b.rtz
++            && a.target.is_none()
++            && b.target.is_none()
++            && !is_target(targets, j)
++            && match (a.dst, b.dst) {
++                (Some(SelDst::Virtual { v: va, write_mask: ma }), Some(SelDst::Virtual { v: vb, write_mask: mb })) => {
++                    va == vb
++                        && ma & mb == 0
++                        && !a
++                            .srcs
++                            .iter()
++                            .chain(b.srcs.iter())
++                            .flatten()
++                            .any(|s| matches!(*s, SelSrc::Virtual { v, .. } if v == va))
++                }
++                _ => false,
++            }
++            && (0..3).all(|n| same_scalar_read(a.srcs[n], b.srcs[n]));
++        if join {
++            if let (Some(SelDst::Virtual { v, write_mask: ma }), Some(SelDst::Virtual { write_mask: mb, .. })) =
++                (a.dst, b.dst)
++            {
++                sel[lead].dst = Some(SelDst::Virtual { v, write_mask: ma | mb });
++                sel[j].dst = Some(SelDst::Virtual { v, write_mask: 0 });
++                merged += 1;
++            }
++        } else {
++            lead = j;
++        }
++    }
++    merged
++}
++
++#[cfg(test)]
++mod tests {
++    use super::super::alloc::OpType;
++    use super::super::build::op_id;
++    use super::*;
++
++    fn v(k: u32, swizzle: [u8; 4], neg: bool) -> SelSrc {
++        SelSrc::Virtual { v: VReg(k), swizzle, neg, abs: false }
++    }
++    fn d(k: u32, write_mask: u8) -> SelDst {
++        SelDst::Virtual { v: VReg(k), write_mask }
++    }
++
++    #[test]
++    fn a_negated_copy_is_read_through_the_adders_modifier() {
++        let (mov, add) = (op_id("mov").unwrap(), op_id("add").unwrap());
++        let mut sel = [
++            SelInstr::new(mov, OpType::F32).dst(d(1, 0xf)).operand(0, v(0, [3, 2, 1, 0], true)),
++            SelInstr::new(add, OpType::F32)
++                .dst(d(2, 0xf))
++                .operand(0, v(5, [0, 1, 2, 3], false))
++                .operand(1, v(1, [0, 0, 1, 1], false)),
++        ];
++        assert_eq!(fold_copies(&mut sel, &[0]), 1);
++        match sel[1].srcs[2] {
++            Some(SelSrc::Virtual { v, swizzle, neg, abs }) => {
++                assert_eq!((v, swizzle, neg, abs), (VReg(0), [3, 3, 2, 2], true, false));
++            }
++            other => panic!("{other:?}"),
++        }
++    }
++
++    #[test]
++    fn a_negated_copy_stays_for_a_select_and_after_its_source_changes() {
++        let (mov, add, sel_op) = (op_id("mov").unwrap(), op_id("add").unwrap(), op_id("select").unwrap());
++        let mut sel = [
++            SelInstr::new(mov, OpType::F32).dst(d(1, 0xf)).operand(0, v(0, [0, 1, 2, 3], true)),
++            SelInstr::new(sel_op, OpType::F32)
++                .dst(d(3, 0xf))
++                .operand(0, v(1, [0, 1, 2, 3], false))
++                .operand(1, v(4, [0, 1, 2, 3], false))
++                .operand(2, v(4, [0, 1, 2, 3], false)),
++            SelInstr::new(add, OpType::F32)
++                .dst(d(0, 0x1))
++                .operand(0, v(4, [0; 4], false))
++                .operand(1, v(4, [0; 4], false)),
++            SelInstr::new(add, OpType::F32)
++                .dst(d(2, 0xf))
++                .operand(0, v(1, [0, 1, 2, 3], false))
++                .operand(1, v(4, [0; 4], false)),
++        ];
++        assert_eq!(fold_copies(&mut sel, &[0]), 0, "a select passes bits; v0 was written before the add");
++    }
++
++    #[test]
++    fn a_partial_copy_folds_only_for_the_lanes_it_wrote() {
++        let (mov, mul) = (op_id("mov").unwrap(), op_id("mul").unwrap());
++        let mut sel = [
++            SelInstr::new(mov, OpType::F32).dst(d(1, 0x7)).operand(0, v(0, [0, 1, 2, 0], false)),
++            SelInstr::new(mul, OpType::F32)
++                .dst(d(2, 0xf))
++                .operand(0, v(1, [1, 1, 1, 1], false))
++                .operand(1, v(6, [0, 1, 2, 3], false)),
++            SelInstr::new(mul, OpType::F32)
++                .dst(d(3, 0xf))
++                .operand(0, v(1, [3, 3, 3, 3], false))
++                .operand(1, v(6, [0, 1, 2, 3], false)),
++        ];
++        assert_eq!(fold_copies(&mut sel, &[0]), 1, "the .wwww read is not the copy's");
++        assert!(matches!(sel[1].srcs[0], Some(SelSrc::Virtual { v: VReg(0), swizzle: [1, 1, 1, 1], .. })));
++        assert!(matches!(sel[2].srcs[0], Some(SelSrc::Virtual { v: VReg(1), .. })));
++    }
++
++    #[test]
++    fn four_reciprocals_of_one_lane_are_one() {
++        let rcp = op_id("rcp").unwrap();
++        let mut sel: [SelInstr; 4] = core::array::from_fn(|l| {
++            SelInstr::new(rcp, OpType::F32).dst(d(1, 1 << l)).operand(0, v(0, [3, 3, 3, 3], false))
++        });
++        assert_eq!(merge_scalar_lanes(&mut sel, &[0]), 3);
++        assert!(matches!(sel[0].dst, Some(SelDst::Virtual { write_mask: 0xf, .. })));
++        assert!(sel[1..].iter().all(|s| matches!(s.dst, Some(SelDst::Virtual { write_mask: 0, .. }))));
++    }
++
++    #[test]
++    fn reciprocals_of_different_lanes_or_a_pair_writer_stay() {
++        let (rcp, sin) = (op_id("rcp").unwrap(), op_id("sin").unwrap());
++        let mut sel: [SelInstr; 2] = core::array::from_fn(|l| {
++            SelInstr::new(rcp, OpType::F32).dst(d(1, 1 << l)).operand(0, v(0, [l as u8; 4], false))
++        });
++        assert_eq!(merge_scalar_lanes(&mut sel, &[0]), 0);
++        let mut sel: [SelInstr; 2] =
++            core::array::from_fn(|l| SelInstr::new(sin, OpType::F32).dst(d(1, 1 << l)).operand(0, v(0, [0; 4], false)));
++        assert_eq!(merge_scalar_lanes(&mut sel, &[0]), 0);
++        let mut sel: [SelInstr; 2] =
++            core::array::from_fn(|l| SelInstr::new(rcp, OpType::F32).dst(d(0, 2 << l)).operand(0, v(0, [0; 4], false)));
++        assert_eq!(merge_scalar_lanes(&mut sel, &[0]), 0, "reads the register it writes");
++    }
++}
+```
+
+</details>
