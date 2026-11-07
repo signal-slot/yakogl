@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# One failing case's record; its Result text names a host and an address
+# (documentation ones), which the slice must not keep.
+<?xml version="1.0" encoding="UTF-8"?>
+<TestCaseResult Version="0.3.4" CasePath="@CASE@" CaseType="SelfValidate">
+ <Text>fixture</Text>
+ <Result StatusCode="Fail">Image comparison failed on board.invalid at 198.51.100.7 &amp; 02:00:5e:00:53:01</Result>
+</TestCaseResult>

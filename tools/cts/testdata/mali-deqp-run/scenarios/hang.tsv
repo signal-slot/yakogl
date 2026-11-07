@@ -1,0 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# A hang in row T1: info.vendor never returns, the timeout ends it.
+dEQP-GLES2.info.vendor	hang

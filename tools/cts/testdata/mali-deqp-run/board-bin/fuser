@@ -1,0 +1,5 @@
+#!/bin/bash
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# The fake board's fuser: nobody holds the render node (exit 1, as fuser).
+exit 1

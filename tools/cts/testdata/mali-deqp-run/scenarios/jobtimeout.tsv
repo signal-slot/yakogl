@@ -1,0 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# A panthor job timeout in the kernel log during row T2.
+dEQP-GLES2.functional.prerequisite.read_pixels	jobtimeout

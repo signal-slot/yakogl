@@ -1,0 +1,6 @@
+#!/bin/bash
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# The fake board's pkill: never kills a process of the host running the
+# self-test; timeout has already ended the fake deqp-gles2.
+exit 1

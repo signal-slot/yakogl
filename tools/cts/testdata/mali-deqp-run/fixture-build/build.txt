@@ -1,0 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# The fixture build directory of tools/cts/mali-deqp-selftest.sh (the layout
+# mali-deqp-build.sh makes). The commit is one of origin/main's, so the dry
+# run says "on origin/main: yes"; the self-test rewrites it for its own runs.
+commit=009f62a5f8e66357fc22d7d1e708943513c94467
