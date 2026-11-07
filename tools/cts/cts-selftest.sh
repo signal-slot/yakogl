@@ -735,7 +735,7 @@ else
     printf '%s\n' "$npout" | tail -8 | sed 's/^/        | /'
 fi
 
-# ---- 32-38: the i.MX8MP GLES3 tree tools' own selftests ----------------------
+# ---- 32-39: the i.MX8MP GLES3 tree tools' own selftests ----------------------
 #
 # Each runs with bash and is judged by its exit status only (their ok counts
 # move as the tools grow). They write synthetic records, so they get a scratch
@@ -804,6 +804,15 @@ gl3check 37 imx8mp-gles3-preflight-selftest.sh "the session preflight on a fake 
 # merge --totals; an incomplete run exits 1, prints PARTIAL and names the
 # missing entries while still drafting; a reset verdict reads as incomplete.
 gl3check 38 imx8mp-gles3-report-selftest.sh "slice records drafted into the RESULTS, STATUS and ROADMAP lines"
+
+# 39: imx8mp-gles3-sessions.py on a synthetic 5-row table, a 15-case mustpass
+# list and a synthetic Pi 4 record: the per-row case counts, the board-second
+# estimates (the Pi 4 lifetime row's measured per-case seconds, the assumed
+# defaults for the other groups) and their source column, the watchdog risk
+# flag (raised for an at-risk row only with --window and --margin), and the
+# --sessions / --session-budget row ranges: contiguous, overlap-free, covering
+# the table once, one range for a huge budget.
+gl3check 39 imx8mp-gles3-sessions-selftest.sh "case counts, board-second estimates, the risk flag and contiguous session ranges"
 
 if [ "$fail" -eq 0 ]; then
     echo "== all checks passed"
