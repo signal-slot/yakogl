@@ -28,7 +28,8 @@
 #             has (an empty directory or a venv without west is "missing").
 #             "." is the layout directory itself.
 #   board     the entry belongs to a board's set only: a board name
-#             (am62p | imx8mp | rpi_4b), or "*" for every named board.
+#             (am62p | imx8mp | rpi_4b | nanopc_t6), or "*" for every
+#             named board.
 #             Without it the entry is in every set.
 #   create    deps-env.sh (printing) makes the directory when it is absent.
 #   requires  entries that must be present before this one is built.
@@ -413,3 +414,120 @@ board = "imx8mp"
 requires = ["DEQP_WORK"]
 note = "the i.MX8MP dEQP stage-1 tree, the same directory as DEQP_WORK of that board (tools/cts/imx8mp-deqp-stage1.sh builds it too)"
 build = 'true'
+
+[[dep]]
+name = "MALI_DEQP_TOOLCHAIN"
+path = "debian-trixie-arm64-cross"
+marker = "debian-trixie-arm64-cross/bin/aarch64-linux-gnu-g++"
+board = "nanopc_t6"
+note = "Debian trixie's own arm64 cross toolchain (g++-14-aarch64-linux-gnu 14.2.0-19cross1, binutils 2.44-3, the cross glibc 2.41-11cross1 and libstdc++ 14.2.0), which tools/cts/mali-deqp-build.sh builds deqp-gles2 with for the NanoPC-T6's Armbian trixie: its floors are GLIBC 2.41, GLIBCXX 3.4.33, CXXABI 1.3.15. The packages of `apt install g++-aarch64-linux-gnu` in a debian:trixie image, unpacked without root or docker: the .debs of snapshot.debian.org at 20261101T000000Z (trixie 13.7), with the trixie amd64 libraries the compiler and binutils load (isl, mpc, mpfr, gmp, jansson, sframe) in usr/lib/x86_64-linux-gnu. bin/ holds the drivers to use: each sets LD_LIBRARY_PATH to those libraries and --sysroot to this directory. Runs on an x86_64 host with glibc >= 2.38, zstd and zlib"
+build = '''
+part="$DEPS/debian-trixie-arm64-cross.part"
+rm -rf "$part"
+mkdir -p "$part/bin"
+for deb in \
+  gcc-14-aarch64-linux-gnu-base_14.2.0-19cross1_amd64.deb cpp-14-aarch64-linux-gnu_14.2.0-19cross1_amd64.deb \
+  gcc-14-aarch64-linux-gnu_14.2.0-19cross1_amd64.deb g++-14-aarch64-linux-gnu_14.2.0-19cross1_amd64.deb \
+  binutils-aarch64-linux-gnu_2.44-3_amd64.deb \
+  libc6-arm64-cross_2.41-11cross1_all.deb libc6-dev-arm64-cross_2.41-11cross1_all.deb \
+  linux-libc-dev-arm64-cross_6.12.38-1cross1_all.deb \
+  libgcc-s1-arm64-cross_14.2.0-19cross1_all.deb libgcc-14-dev-arm64-cross_14.2.0-19cross1_all.deb \
+  libatomic1-arm64-cross_14.2.0-19cross1_all.deb \
+  libstdc++6-arm64-cross_14.2.0-19cross1_all.deb libstdc++-14-dev-arm64-cross_14.2.0-19cross1_all.deb \
+  libisl23_0.27-1_amd64.deb libmpc3_1.3.1-1+b3_amd64.deb libmpfr6_4.2.2-1_amd64.deb \
+  libgmp10_6.3.0+dfsg-3_amd64.deb libjansson4_2.14-2+b3_amd64.deb libsframe1_2.44-3_amd64.deb; do
+  member=$(ar t "$DEPS/downloads/$deb" | grep '^data\.tar')
+  case "$member" in *.xz) z=-J ;; *.zst) z=--zstd ;; *.gz) z=-z ;; *) z= ;; esac
+  ar p "$DEPS/downloads/$deb" "$member" | tar -x $z -f - -C "$part"
+done
+for t in gcc g++ ar ranlib strip nm objdump readelf; do
+  real=aarch64-linux-gnu-$t
+  case $t in gcc | g++) real=$real-14 ;; esac
+  [ -x "$part/usr/bin/$real" ] || { echo "MALI_DEQP_TOOLCHAIN: no usr/bin/$real in the packages" >&2; exit 1; }
+  sysroot=
+  case $t in gcc | g++) sysroot='--sysroot="$root"' ;; esac
+  printf '#!/bin/sh\n# MALI_DEQP_TOOLCHAIN (tools/cts/deps.toml): Debian trixie'"'"'s %s with its own host libraries.\nroot=$(cd "$(dirname "$0")/.." && pwd)\nLD_LIBRARY_PATH="$root/usr/lib/x86_64-linux-gnu${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" exec "$root/usr/bin/%s" %s "$@"\n' \
+    "$real" "$real" "$sysroot" > "$part/bin/aarch64-linux-gnu-$t"
+  chmod +x "$part/bin/aarch64-linux-gnu-$t"
+done
+"$part/bin/aarch64-linux-gnu-g++" --version > /dev/null
+mv "$part" "$DEPS/debian-trixie-arm64-cross"
+'''
+packages.apt = ["binutils", "xz-utils", "zstd", "libzstd1", "zlib1g", "cmake", "ninja-build", "python3", "git"]
+packages.portage = ["sys-devel/binutils", "app-arch/xz-utils", "app-arch/zstd", "sys-libs/zlib", "dev-build/cmake", "dev-build/ninja", "dev-vcs/git"]
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/g/gcc-14-cross/gcc-14-aarch64-linux-gnu-base_14.2.0-19cross1_amd64.deb"
+sha256 = "4a40a7a5429a03f58bdb1f49df9b7aeecb86770f5585d88dcf6a27b5979a6d5d"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/g/gcc-14-cross/cpp-14-aarch64-linux-gnu_14.2.0-19cross1_amd64.deb"
+sha256 = "6610dda7938376fefcbc3b49c81cd23c82e86411a488e4c9a69c082f2acd714e"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/g/gcc-14-cross/gcc-14-aarch64-linux-gnu_14.2.0-19cross1_amd64.deb"
+sha256 = "489acd3a7479d7e55c01e7f3af10176b70a99ec8c2230ba63cacdbcf2e6e0692"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/g/gcc-14-cross/g++-14-aarch64-linux-gnu_14.2.0-19cross1_amd64.deb"
+sha256 = "edbb7ab8e432a4a5b2ca2b7cce97bb643bd6fb1ae75e65bb0e889bae1c6d40eb"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/b/binutils/binutils-aarch64-linux-gnu_2.44-3_amd64.deb"
+sha256 = "6e5a9be38121213dda42189a525db01aad4dc52194b577d7d73d659a5843ce6c"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/c/cross-toolchain-base/libc6-arm64-cross_2.41-11cross1_all.deb"
+sha256 = "82cd3a0c6754d36cb5a7acbd9fa64c38080a681608c41165736dc88438acfc71"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/c/cross-toolchain-base/libc6-dev-arm64-cross_2.41-11cross1_all.deb"
+sha256 = "61e0b87dec4929abc9fb345ef324139498bf23ddbf0b10ca3a743b59c8ddf8bb"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/c/cross-toolchain-base/linux-libc-dev-arm64-cross_6.12.38-1cross1_all.deb"
+sha256 = "fd77c13fedf057038732ef1c4fc06edd753d08092fd5f92c4629551f1f69870f"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/g/gcc-14-cross/libgcc-s1-arm64-cross_14.2.0-19cross1_all.deb"
+sha256 = "272751f04dc1669c6368005ccea3496b28626c720c64c98980f705350f4c6b6b"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/g/gcc-14-cross/libgcc-14-dev-arm64-cross_14.2.0-19cross1_all.deb"
+sha256 = "44d31567993f2f138638e3088cc75240d13c7d8a2ebe69032aafd37bc35c7a6f"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/g/gcc-14-cross/libatomic1-arm64-cross_14.2.0-19cross1_all.deb"
+sha256 = "4a8636b3c0ab2b0a568d0b7fc6ab089d5b22f7a3e696fe8784acef594c88dc1c"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/g/gcc-14-cross/libstdc++6-arm64-cross_14.2.0-19cross1_all.deb"
+sha256 = "81e667b7dad2d378defcc502e9772fe4f435a27e62b7a33a20576885b02e9693"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/g/gcc-14-cross/libstdc++-14-dev-arm64-cross_14.2.0-19cross1_all.deb"
+sha256 = "dc2d2e1e59f2687a6cb30f3f5ed25e795f2769482ee8f7c5835f00481bf5ad65"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/i/isl/libisl23_0.27-1_amd64.deb"
+sha256 = "ac8518042e81c00de1effb72bba7e88ac4ecd488f7ea8b9e3ebc63159cb53b35"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/m/mpclib3/libmpc3_1.3.1-1+b3_amd64.deb"
+sha256 = "2af0a5c128e03694a41c0b011bd8a958b7297436cdb3a15ddad7866dae8c300b"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/m/mpfr4/libmpfr6_4.2.2-1_amd64.deb"
+sha256 = "75dddce11dabc7fc543712c33dc27b7f2ee66a111763eb5eac654d010b42cd92"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/g/gmp/libgmp10_6.3.0+dfsg-3_amd64.deb"
+sha256 = "d0d0265eb01770f17afd0f7c8c0622f80479dcfbbe13653a0debeec61464e622"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/j/jansson/libjansson4_2.14-2+b3_amd64.deb"
+sha256 = "60707a62fe6c1228c3389b12a13ca4efd76defc5532473e547a29e99cf7d2a6e"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/b/binutils/libsframe1_2.44-3_amd64.deb"
+sha256 = "38f625dfdc582717029ac3a3e97c51d994ec2e7a0e9b230c6b44e40d1276311f"

@@ -18,7 +18,8 @@
 #
 #   tools/cts/deps-env.sh [board]
 #     Print NAME=value lines for `$GITHUB_ENV` or `export $(...)`: the gate's
-#     entries, and with a board (am62p | imx8mp | rpi_4b) that board's too.
+#     entries, and with a board (am62p | imx8mp | rpi_4b | nanopc_t6) that
+#     board's too.
 #   tools/cts/deps-env.sh --layout
 #     Print the layout directory (for scripts that need a path in it).
 #   tools/cts/deps-env.sh --check [board]

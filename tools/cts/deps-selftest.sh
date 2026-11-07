@@ -63,6 +63,22 @@ check "a board adds a board=\"*\" entry" "NOSTD_PATCH_DIR=$L/nostd" "$out"
 check "imx8mp adds IMX8MP_OUT" "IMX8MP_OUT=$L/imx8mp-out" "$out"
 out=$("$ENV_SH" rpi_4b 2>&1)
 absent "rpi_4b has no IMX8MP_OUT" IMX8MP_OUT "$out"
+absent "rpi_4b has no MALI_DEQP_TOOLCHAIN" MALI_DEQP_TOOLCHAIN "$out"
+out=$("$ENV_SH" nanopc_t6 2>&1)
+check "nanopc_t6 adds MALI_DEQP_TOOLCHAIN" "MALI_DEQP_TOOLCHAIN=$L/debian-trixie-arm64-cross" "$out"
+out=$("$ENV_SH" --check 2>&1)
+absent "--check without a board has no MALI_DEQP_TOOLCHAIN" MALI_DEQP_TOOLCHAIN "$out"
+# MALI_DEQP_TOOLCHAIN's build unpacks its .debs by name: every pinned input is
+# unpacked, and every package it unpacks is a pinned input.
+out=$(python3 -I - "$HERE/deps.toml" <<'PY' 2>&1
+import re, sys, tomllib
+d = next(e for e in tomllib.load(open(sys.argv[1], "rb"))["dep"] if e["name"] == "MALI_DEQP_TOOLCHAIN")
+pinned = {i["url"].rsplit("/", 1)[1] for i in d["inputs"]}
+used = set(re.findall(r"[\w.+-]+\.deb", d["build"]))
+print("same" if pinned == used else f"pinned only: {sorted(pinned - used)} built only: {sorted(used - pinned)}")
+PY
+)
+check "MALI_DEQP_TOOLCHAIN unpacks exactly its pinned packages" "same" "$out"
 out=$("$ENV_SH" nosuchboard 2>&1); rc=$?
 [ "$rc" -eq 2 ] && ok "an unknown board exits 2" || bad "an unknown board: rc $rc"
 
