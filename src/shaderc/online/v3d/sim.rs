@@ -218,9 +218,18 @@
 //! writes, RSQRT2 (Mesa 26.2.1 defines it, `VIR_SFU(RSQRT2)`, but nothing
 //! calls it and nothing states how it differs from RSQRT; the corpus has
 //! none), and the 7.x operations.
+//!
+//! # V3D 7.1
+//!
+//! [`run_gen`] takes the generation: [`run`] is `run_gen(Gen::V42, ..)`,
+//! and `Gen::V71` runs Raspberry Pi 5 words through this same machine (its
+//! state, TLB, VPM, TMU and SFU models). What 7.1 changes is in
+//! [`super::sim71`], which this loop calls where the generations differ.
 
 use super::decode::decode;
 use super::isa::*;
+use super::qpu_ffi::Gen;
+use super::sim71;
 use std::format;
 use std::string::String;
 use std::vec::Vec;
@@ -242,7 +251,7 @@ pub struct Varying {
 /// A fragment shader's per-lane inputs.
 #[derive(Clone, Debug)]
 pub struct FsInputs {
-    /// rf0 at entry.
+    /// rf0 at entry (rf3 on 7.1).
     pub w: [u32; LANES],
     /// rf1 at entry.
     pub w_centroid: [u32; LANES],
@@ -368,7 +377,7 @@ pub struct Outcome {
     pub ldtmus_without_switch: usize,
 }
 
-type R<T> = Result<T, String>;
+pub(super) type R<T> = Result<T, String>;
 
 /// Why an LDTMU with no thread switch since its request is refused in a
 /// program of more than one thread. Not a rule Mesa states (its LDTMU may
@@ -391,17 +400,17 @@ fn rf_write(alu: &Alu) -> bool {
 
 /// The peripherals of Mesa's `qpu_peripherals` (qpu_schedule.c:840-893),
 /// one bit each, in its order.
-const P_VPM_READ: u32 = 1 << 0;
-const P_VPM_WRITE: u32 = 1 << 1;
-const P_VPM_WAIT: u32 = 1 << 2;
-const P_SFU: u32 = 1 << 3;
-const P_TMU_WRITE: u32 = 1 << 4;
-const P_TMU_READ: u32 = 1 << 5;
-const P_TMU_WAIT: u32 = 1 << 6;
-const P_WRTMUC: u32 = 1 << 7;
-const P_TSY: u32 = 1 << 8;
-const P_TLB_READ: u32 = 1 << 9;
-const P_TLB_WRITE: u32 = 1 << 10;
+pub(super) const P_VPM_READ: u32 = 1 << 0;
+pub(super) const P_VPM_WRITE: u32 = 1 << 1;
+pub(super) const P_VPM_WAIT: u32 = 1 << 2;
+pub(super) const P_SFU: u32 = 1 << 3;
+pub(super) const P_TMU_WRITE: u32 = 1 << 4;
+pub(super) const P_TMU_READ: u32 = 1 << 5;
+pub(super) const P_TMU_WAIT: u32 = 1 << 6;
+pub(super) const P_WRTMUC: u32 = 1 << 7;
+pub(super) const P_TSY: u32 = 1 << 8;
+pub(super) const P_TLB_READ: u32 = 1 << 9;
+pub(super) const P_TLB_WRITE: u32 = 1 << 10;
 const P_NAMES: [&str; 11] = [
     "VPM read",
     "VPM write",
@@ -416,7 +425,7 @@ const P_NAMES: [&str; 11] = [
     "TLB write",
 ];
 
-fn peripheral_names(p: u32) -> std::string::String {
+pub(super) fn peripheral_names(p: u32) -> std::string::String {
     let n: Vec<&str> = (0..P_NAMES.len()).filter(|k| p & (1 << k) != 0).map(|k| P_NAMES[k]).collect();
     n.join(" + ")
 }
@@ -493,13 +502,13 @@ fn peripherals_compatible(p: u32, alu: &Alu) -> bool {
 /// [`Machine::operand`].
 const UNDEF_STAND_IN: u32 = 0x3f80_0000;
 
-fn unmodelled<T>(why: impl Into<String>) -> R<T> {
+pub(super) fn unmodelled<T>(why: impl Into<String>) -> R<T> {
     Err(why.into())
 }
 
 /// A register a write can land on.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Reg {
+pub(super) enum Reg {
     Acc(u8),
     Rf(u8),
 }
@@ -588,12 +597,12 @@ fn is_nan(x: u32) -> bool {
     x & 0x7f80_0000 == 0x7f80_0000 && x & 0x7f_ffff != 0
 }
 
-fn fl(x: u32) -> f32 {
+pub(super) fn fl(x: u32) -> f32 {
     f32::from_bits(x)
 }
 
 /// A float operand after its input unpack.
-fn f32_unpack(v: u32, u: Unpack, what: &str) -> R<u32> {
+pub(super) fn f32_unpack(v: u32, u: Unpack, what: &str) -> R<u32> {
     let r = match u {
         Unpack::None => v,
         Unpack::Abs => v & 0x7fff_ffff,
@@ -624,23 +633,23 @@ fn f32_result(r: f32, what: &str) -> R<u32> {
 
 /// The three flags an op can push, per lane; `None` = not described for it.
 #[derive(Clone, Copy, Default)]
-struct FlagVals {
-    z: Option<bool>,
-    n: Option<bool>,
-    c: Option<bool>,
+pub(super) struct FlagVals {
+    pub(super) z: Option<bool>,
+    pub(super) n: Option<bool>,
+    pub(super) c: Option<bool>,
 }
 
-struct Machine<'c> {
+pub(super) struct Machine<'c> {
     uniforms: &'c [u32],
     uni: usize,
     acc: [Lanes; 6],
-    rf: [Lanes; 64],
+    pub(super) rf: [Lanes; 64],
     flag_a: [Option<bool>; LANES],
     flag_b: [Option<bool>; LANES],
     msf: [u32; LANES],
     pending: Vec<Pending>,
     /// Instructions executed so far (the clock).
-    tick: usize,
+    pub(super) tick: usize,
     out: Outcome,
     fs: Option<FsInputs>,
     vs: Option<VsInputs>,
@@ -673,6 +682,9 @@ struct Machine<'c> {
     /// undefined: such a lane computes on a stand-in and its result is
     /// undefined, which is refused only where it is used (the module notes).
     undef_read: core::cell::Cell<[bool; LANES]>,
+    /// A 7.1 run's own state, and the instruction being run ([`sim71`]);
+    /// `None` on 4.2.
+    pub(super) v71: Option<sim71::State71>,
 }
 
 /// The rtop register between a MULTOP and the UMUL24 that reads it. Mesa
@@ -711,6 +723,9 @@ impl Machine<'_> {
 
     /// One operand, every lane, before its unpack.
     fn operand(&self, alu: &Alu, mux: Mux, what: &str) -> R<[u32; LANES]> {
+        if let Some(st) = &self.v71 {
+            return sim71::operand(self, st, mux, what);
+        }
         let reg = match mux {
             Mux::A => Reg::Rf(alu.raddr_a),
             Mux::B if alu.sig.small_imm_b => {
@@ -722,6 +737,12 @@ impl Machine<'_> {
             Mux::B => Reg::Rf(alu.raddr_b),
             m => Reg::Acc(m as u8),
         };
+        self.read(reg, what)
+    }
+
+    /// One register, every lane: an undefined lane reads as the stand-in
+    /// and is marked in `undef_read`.
+    pub(super) fn read(&self, reg: Reg, what: &str) -> R<[u32; LANES]> {
         if self.pending.iter().any(|p| p.sfu && p.reg == reg && p.at > self.tick) {
             return unmodelled(format!("{what}: reads {reg:?} before its SFU result lands"));
         }
@@ -746,6 +767,9 @@ impl Machine<'_> {
     /// One operand as it is, undefined lanes included: only for a MOV
     /// straight to the TLB (see [`TlbWrite`]).
     fn operand_lanes(&self, alu: &Alu, mux: Mux, what: &str) -> R<Lanes> {
+        if let Some(st) = &self.v71 {
+            return sim71::operand_lanes(self, st, mux, what);
+        }
         match mux {
             Mux::A => Ok(self.rf[alu.raddr_a as usize]),
             Mux::B if !alu.sig.small_imm_b => Ok(self.rf[alu.raddr_b as usize]),
@@ -1190,15 +1214,15 @@ impl Machine<'_> {
 }
 
 /// What an ALU half computes, before its output pack, with its flags.
-struct Computed {
-    vals: [u32; LANES],
-    flags: [FlagVals; LANES],
-    sfu: Option<&'static str>,
-    float: bool,
+pub(super) struct Computed {
+    pub(super) vals: [u32; LANES],
+    pub(super) flags: [FlagVals; LANES],
+    pub(super) sfu: Option<&'static str>,
+    pub(super) float: bool,
 }
 
 impl Computed {
-    fn new(float: bool) -> Computed {
+    pub(super) fn new(float: bool) -> Computed {
         Computed { vals: [0; LANES], flags: [FlagVals::default(); LANES], sfu: None, float }
     }
 }
@@ -1218,7 +1242,7 @@ fn uniform_row(row: &[u32; LANES], what: &str) -> R<usize> {
 }
 
 /// The add ALU.
-fn add_op(m: &mut Machine, alu: &Alu) -> R<Option<Computed>> {
+pub(super) fn add_op(m: &mut Machine, alu: &Alu) -> R<Option<Computed>> {
     use AddOp::*;
     let op = alu.add.op;
     let what = format!("add {op:?}");
@@ -1468,7 +1492,7 @@ fn add_op(m: &mut Machine, alu: &Alu) -> R<Option<Computed>> {
 }
 
 /// The mul ALU.
-fn mul_op(m: &mut Machine, alu: &Alu) -> R<Option<Computed>> {
+pub(super) fn mul_op(m: &mut Machine, alu: &Alu) -> R<Option<Computed>> {
     let op = alu.mul.op;
     let what = format!("mul {op:?}");
     let n = num_src(mul_op_args(op));
@@ -1628,7 +1652,7 @@ fn apply_flags(m: &mut Machine, pf: Pf, uf: Uf, res: Option<&Computed>, undef: [
 }
 
 /// Where one ALU half's write goes.
-enum Dest {
+pub(super) enum Dest {
     Reg(Reg),
     Nop,
     Tlb,
@@ -1637,7 +1661,7 @@ enum Dest {
     Tmu(u8),
 }
 
-fn dest(waddr: u8, magic: bool, what: &str) -> R<Dest> {
+pub(super) fn dest(waddr: u8, magic: bool, what: &str) -> R<Dest> {
     if !magic {
         return Ok(Dest::Reg(Reg::Rf(waddr)));
     }
@@ -1652,13 +1676,18 @@ fn dest(waddr: u8, magic: bool, what: &str) -> R<Dest> {
     }
 }
 
-/// The register a signal with an address writes.
-fn sig_dest(alu: &Alu, what: &str) -> R<Reg> {
+/// The register a signal with an address writes. 7.1 has no accumulators:
+/// every magic signal address is unmodelled there.
+fn sig_dest(alu: &Alu, v71: bool, what: &str) -> R<Reg> {
     if !alu.sig_magic {
         return Ok(Reg::Rf(alu.sig_addr));
     }
     match alu.sig_addr {
-        0..=5 => Ok(Reg::Acc(alu.sig_addr)),
+        0..=5 if !v71 => Ok(Reg::Acc(alu.sig_addr)),
+        a if v71 => unmodelled(format!(
+            "{what}: a signal writing magic register {}",
+            super::isa71::magic_waddr_name(a).unwrap_or("?")
+        )),
         a => unmodelled(format!("{what}: a signal writing magic register {}", magic_waddr_name(a).unwrap_or("?"))),
     }
 }
@@ -1671,8 +1700,21 @@ enum Event {
 }
 
 /// Run `code` with `uniforms` (already resolved to values), `inputs`, and
-/// what the program may read besides them (`env`).
+/// what the program may read besides them (`env`). V3D 4.2 words: this is
+/// `run_gen(Gen::V42, ..)`.
 pub fn run(code: &[u64], uniforms: &[u32], inputs: &Inputs, env: &Env) -> Result<Outcome, String> {
+    run_gen(Gen::V42, code, uniforms, inputs, env)
+}
+
+/// [`run`] for words of the generation `gen` (7.1: [`super::sim71`]).
+pub fn run_gen(gen: Gen, code: &[u64], uniforms: &[u32], inputs: &Inputs, env: &Env) -> Result<Outcome, String> {
+    let v71 = gen == Gen::V71;
+    // One word as the loop runs it: the 4.2 model, or a 7.1 instruction in
+    // the 4.2 model's shape with the 7.1 one beside it (sim71::lower).
+    let decode_word = |w: u64| match gen {
+        Gen::V42 => decode(w).map(|i| (i, None)),
+        Gen::V71 => sim71::decode(w),
+    };
     let mut m = Machine {
         uniforms,
         uni: 0,
@@ -1700,17 +1742,19 @@ pub fn run(code: &[u64], uniforms: &[u32], inputs: &Inputs, env: &Env) -> Result
         switches: 0,
         tmu_data: None,
         scratch: std::collections::BTreeMap::new(),
+        v71: v71.then(sim71::State71::new),
     };
     match inputs {
         Inputs::Fragment(f) => {
-            m.rf[0] = f.w.map(Some);
+            m.rf[if v71 { sim71::PAYLOAD_W } else { 0 }] = f.w.map(Some);
             m.rf[1] = f.w_centroid.map(Some);
             m.rf[2] = f.z.map(Some);
             m.fs = Some((**f).clone());
         }
         Inputs::Vertex(v) => m.vs = Some(v.clone()),
     }
-    let thrsw: Vec<bool> = code.iter().map(|&w| matches!(decode(w), Ok(Instr::Alu(a)) if a.sig.thrsw)).collect();
+    let thrsw: Vec<bool> =
+        code.iter().map(|&w| matches!(decode_word(w), Ok((Instr::Alu(a), _)) if a.sig.thrsw)).collect();
     let mut last_section = !thrsw.windows(2).any(|p| p[0] && p[1]);
     let mut prev_thrsw_pc: Option<usize> = None;
     let mut events: Vec<(usize, Event)> = Vec::new();
@@ -1733,7 +1777,10 @@ pub fn run(code: &[u64], uniforms: &[u32], inputs: &Inputs, env: &Env) -> Result
                     if m.unifa.is_some_and(|(at, _)| m.tick <= at + 3) {
                         return unmodelled("a UNIFA write within 3 instructions of a thread switch");
                     }
-                    m.thread_switch()
+                    m.thread_switch();
+                    if v71 {
+                        sim71::thread_switch(&mut m);
+                    }
                 }
                 Event::End => {
                     if m.unifa.is_some_and(|(at, _)| m.tick <= at + 3) {
@@ -1769,7 +1816,11 @@ pub fn run(code: &[u64], uniforms: &[u32], inputs: &Inputs, env: &Env) -> Result
         let Some(&w) = code.get(pc) else {
             return unmodelled(format!("ran off the end of the program at {pc} without a thread end"));
         };
-        let instr = decode(w).map_err(|e| format!("instruction {pc} ({w:#018x}) does not decode: {e:?}"))?;
+        let (instr, alu71) =
+            decode_word(w).map_err(|e| format!("instruction {pc} ({w:#018x}) does not decode: {e:?}"))?;
+        if let (Some(st), Some(a)) = (m.v71.as_mut(), alu71) {
+            st.alu = a;
+        }
         let this_pc = pc;
         pc += 1;
         let tick = m.tick;
@@ -1846,11 +1897,16 @@ pub fn run(code: &[u64], uniforms: &[u32], inputs: &Inputs, env: &Env) -> Result
                             || matches!(n, "vpm" | "vpmu" | "tlb" | "tlbu" | "sync" | "syncu" | "syncb"),
                     )
                 };
-                let units = unit_uses(alu.add.op == AddOp::Nop, alu.add.magic, alu.add.waddr)
-                    + unit_uses(alu.mul.op == MulOp::Nop, alu.mul.magic, alu.mul.waddr)
-                    + usize::from(s.ldtmu)
-                    + usize::from(s.ldtlb)
-                    + usize::from(s.ldtlbu); // (LDVPM is V3D 3.x: not on 4.2)
+                let units = match &m.v71 {
+                    Some(st) => sim71::units(&st.alu),
+                    None => {
+                        unit_uses(alu.add.op == AddOp::Nop, alu.add.magic, alu.add.waddr)
+                            + unit_uses(alu.mul.op == MulOp::Nop, alu.mul.magic, alu.mul.waddr)
+                            + usize::from(s.ldtmu)
+                            + usize::from(s.ldtlb)
+                            + usize::from(s.ldtlbu) // (LDVPM is V3D 3.x: not on 4.2)
+                    }
+                };
                 if units > 1 {
                     return unmodelled(format!("{what}: {units} of TMU, SFU, TSY, TLB, VPM, LDTMU in one instruction"));
                 }
@@ -1859,8 +1915,15 @@ pub fn run(code: &[u64], uniforms: &[u32], inputs: &Inputs, env: &Env) -> Result
                 // sharing its word with an SFU op or a VPM read made the Pi 4's
                 // L2T fault while the validator's count above let it through
                 // (v3d-m5, 2026-09-25).
+                if let Some(st) = &m.v71 {
+                    // The second delay slot of a THRSW: its switch or end is
+                    // the next instruction.
+                    let last_slot =
+                        events.iter().any(|(t, e)| *t == tick + 1 && matches!(e, Event::Switch | Event::End));
+                    sim71::check(&st.alu, last_slot, &what)?;
+                }
                 let p = peripherals(&alu);
-                if !peripherals_compatible(p, &alu) {
+                if !v71 && !peripherals_compatible(p, &alu) {
                     return unmodelled(format!(
                         "{what}: the peripherals {} in one instruction (V3D 4.2 allows one, or WRTMUC with a TMU \
                          write other than TMUC, or LDTMU with a VPM read or write)",
@@ -1869,8 +1932,11 @@ pub fn run(code: &[u64], uniforms: &[u32], inputs: &Inputs, env: &Env) -> Result
                 }
                 // The thread end's THRSW and its two delay slots write no
                 // register file, and the last instruction is no TMUWT
-                // (qpu_validate.c:373-427; GFXH-1625).
-                if m.thrend.is_some_and(|t| tick <= t + 2) {
+                // (qpu_validate.c:373-427; GFXH-1625). 7.1's rules differ.
+                let after_thrend = m.thrend.is_some_and(|t| tick <= t + 2);
+                if let Some(st) = m.v71.as_ref().filter(|_| after_thrend) {
+                    sim71::after_thrend(&st.alu, &what)?;
+                } else if after_thrend {
                     if rf_write(&alu) {
                         return unmodelled(format!("{what}: a register-file write after the thread end"));
                     }
@@ -1882,12 +1948,16 @@ pub fn run(code: &[u64], uniforms: &[u32], inputs: &Inputs, env: &Env) -> Result
                 // (v3d_qpu_magic_waddr_loads_unif; VPMU and SYNCU are not
                 // modelled). One instruction reads at most one.
                 let loads_unif = |magic: bool, waddr: u8| magic && matches!(waddr, 8 | 13);
+                let (add_on, mul_on) = match &m.v71 {
+                    Some(st) => sim71::ops_on(&st.alu),
+                    None => (alu.add.op != AddOp::Nop, alu.mul.op != MulOp::Nop),
+                };
                 let uniform_reads = [
                     s.wrtmuc,
                     s.ldunif,
                     s.ldunifrf,
-                    alu.add.op != AddOp::Nop && loads_unif(alu.add.magic, alu.add.waddr),
-                    alu.mul.op != MulOp::Nop && loads_unif(alu.mul.magic, alu.mul.waddr),
+                    add_on && loads_unif(alu.add.magic, alu.add.waddr),
+                    mul_on && loads_unif(alu.mul.magic, alu.mul.waddr),
                 ]
                 .iter()
                 .filter(|x| **x)
@@ -1916,19 +1986,32 @@ pub fn run(code: &[u64], uniforms: &[u32], inputs: &Inputs, env: &Env) -> Result
                     m.tmu_config.push(v);
                 }
                 m.undef_read.set([false; LANES]);
-                let add_res = add_op(&mut m, &alu).map_err(|e| format!("{what}: {e}"))?;
+                let add_res = match m.v71.as_ref().map(|st| st.alu) {
+                    Some(a) => sim71::add_op(&mut m, &a, &alu),
+                    None => add_op(&mut m, &alu),
+                }
+                .map_err(|e| format!("{what}: {e}"))?;
                 let add_undef = m.undef_read.get();
                 // A MOV straight to the TLB may carry an undefined value
                 // (see TlbWrite); it is recorded as it is.
-                let tlb_mov = alu.mul.op == MulOp::Mov
-                    && alu.mul.magic
-                    && matches!(alu.mul.waddr, 7 | 8)
-                    && alu.mul.a.unpack == Unpack::None
-                    && alu.flags.mpf == Pf::None
-                    && alu.flags.muf == Uf::None;
+                let tlb_mov = match &m.v71 {
+                    Some(st) => sim71::tlb_mov(&st.alu),
+                    None => {
+                        alu.mul.op == MulOp::Mov
+                            && alu.mul.magic
+                            && matches!(alu.mul.waddr, 7 | 8)
+                            && alu.mul.a.unpack == Unpack::None
+                            && alu.flags.mpf == Pf::None
+                            && alu.flags.muf == Uf::None
+                    }
+                };
                 let tlb_mov_vals = if tlb_mov { Some(m.operand_lanes(&alu, alu.mul.a.mux, &what)?) } else { None };
                 m.undef_read.set([false; LANES]);
-                let mul_res = if tlb_mov { None } else { mul_op(&mut m, &alu).map_err(|e| format!("{what}: {e}"))? };
+                let mul_res = match (tlb_mov, m.v71.as_ref().map(|st| st.alu)) {
+                    (true, _) => None,
+                    (false, Some(a)) => sim71::mul_op(&mut m, &a, &alu).map_err(|e| format!("{what}: {e}"))?,
+                    (false, None) => mul_op(&mut m, &alu).map_err(|e| format!("{what}: {e}"))?,
+                };
                 let mul_undef = m.undef_read.get();
                 for (res, waddr, magic, pack, (mask, unknown, undef), half) in [
                     (&add_res, alu.add.waddr, alu.add.magic, alu.add.pack, (add_mask, add_unknown, add_undef), "add"),
@@ -1947,7 +2030,8 @@ pub fn run(code: &[u64], uniforms: &[u32], inputs: &Inputs, env: &Env) -> Result
                         m.out.approximate.push(op);
                     }
                     let mut vals = r.vals;
-                    match dest(waddr, magic, &what)? {
+                    let to = if v71 { sim71::dest(waddr, magic, &what)? } else { dest(waddr, magic, &what)? };
+                    match to {
                         Dest::Nop if pack == OutPack::None => {}
                         Dest::Nop => return unmodelled(format!("{what}: an output pack to NOP")),
                         Dest::Tlb | Dest::Tlbu => {
@@ -2006,9 +2090,12 @@ pub fn run(code: &[u64], uniforms: &[u32], inputs: &Inputs, env: &Env) -> Result
                 apply_flags(&mut m, alu.flags.apf, alu.flags.auf, add_res.as_ref(), add_undef, &format!("{what} add"))?;
                 apply_flags(&mut m, alu.flags.mpf, alu.flags.muf, mul_res.as_ref(), mul_undef, &format!("{what} mul"))?;
 
+                // Where LDUNIF, LDUNIFA and LDVARY's C coefficient land: r5,
+                // or rf0 on 7.1 (sim71::IMPLICIT).
+                let implicit = if v71 { sim71::IMPLICIT } else { Reg::Acc(5) };
                 if s.ldunif {
                     let v = m.next_uniform(&what)?;
-                    m.schedule(tick + 1, Reg::Acc(5), [v; LANES], [true; LANES], [false; LANES], false);
+                    m.schedule(tick + 1, implicit, [v; LANES], [true; LANES], [false; LANES], false);
                 }
                 if s.ldunifrf {
                     let v = m.next_uniform(&what)?;
@@ -2016,7 +2103,7 @@ pub fn run(code: &[u64], uniforms: &[u32], inputs: &Inputs, env: &Env) -> Result
                         // Straight into UNIFA (nir_to_vir.c:3348-3360).
                         m.unifa = Some((tick, v));
                     } else {
-                        let r = sig_dest(&alu, &what)?;
+                        let r = sig_dest(&alu, v71, &what)?;
                         m.schedule(tick + 1, r, [v; LANES], [true; LANES], [false; LANES], false);
                     }
                 }
@@ -2031,16 +2118,16 @@ pub fn run(code: &[u64], uniforms: &[u32], inputs: &Inputs, env: &Env) -> Result
                         }
                         m.out.ldtmus_without_switch += 1;
                     }
-                    let r = sig_dest(&alu, &what)?;
+                    let r = sig_dest(&alu, v71, &what)?;
                     m.schedule(tick + 1, r, v, [true; LANES], [false; LANES], false);
                 }
                 if s.ldunifa {
                     let v = m.ldunifa(&what)?;
-                    m.schedule(tick + 1, Reg::Acc(5), [v; LANES], [true; LANES], [false; LANES], false);
+                    m.schedule(tick + 1, implicit, [v; LANES], [true; LANES], [false; LANES], false);
                 }
                 if s.ldunifarf {
                     let v = m.ldunifa(&what)?;
-                    let r = sig_dest(&alu, &what)?;
+                    let r = sig_dest(&alu, v71, &what)?;
                     m.schedule(tick + 1, r, [v; LANES], [true; LANES], [false; LANES], false);
                 }
                 if s.ldvary {
@@ -2051,9 +2138,12 @@ pub fn run(code: &[u64], uniforms: &[u32], inputs: &Inputs, env: &Env) -> Result
                         return unmodelled(format!("{what}: LDVARY number {} has no varying supplied", m.next_varying));
                     };
                     m.next_varying += 1;
-                    let r = sig_dest(&alu, &what)?;
+                    let r = sig_dest(&alu, v71, &what)?;
                     m.schedule(tick + 1, r, v.vary, [true; LANES], [false; LANES], false);
-                    m.schedule(tick + 2, Reg::Acc(5), v.c, [true; LANES], [false; LANES], false);
+                    m.schedule(tick + 2, implicit, v.c, [true; LANES], [false; LANES], false);
+                }
+                if v71 {
+                    sim71::signals_done(&mut m, tick);
                 }
                 if s.thrsw {
                     if prev_thrsw_pc.is_some_and(|p| p + 1 == this_pc) {
@@ -2063,7 +2153,9 @@ pub fn run(code: &[u64], uniforms: &[u32], inputs: &Inputs, env: &Env) -> Result
                     } else {
                         events.push((tick + 3, if last_section { Event::End } else { Event::Switch }));
                         if last_section {
-                            if rf_write(&alu) {
+                            if let Some(st) = &m.v71 {
+                                sim71::at_thrend(&st.alu, &what)?;
+                            } else if rf_write(&alu) {
                                 return unmodelled(format!("{what}: a register-file write at the thread end"));
                             }
                             m.thrend = Some(tick);
