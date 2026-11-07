@@ -940,9 +940,47 @@ static void t71_tfu(void) /* 1 check */
 	      ret, nlog);
 }
 
+/* The BCM2712 values as literals, not through the macros v3d_hw.c reads, so
+ * a wrong macro cannot pass both sides. Each literal cites its source:
+ * driver/docs/rpi5-v3d71-facts.md (F) section, and the file:line it gives. */
+static void t71_literals(void) /* 6 checks */
+{
+	/* F section 3: STATE values (linux:v3d_drv.h:287-291) and the value 4
+	 * v3d_reset_sms writes to REE_CS (linux:v3d_gem.c:107-121) */
+	CHECK(V3D_SMS_STATE_IDLE == 0x0 && V3D_SMS_STATE_RESET_REQUEST == 0x4 && V3D_SMS_STATE_ISOLATING_FOR_RESET == 0xa &&
+		      V3D_SMS_STATE_RESETTING == 0xb && V3D_SMS_STATE_ISOLATING_FOR_POWER_OFF == 0xc &&
+		      V3D_SMS_STATE_POWER_OFF == 0xd && V3D_SMS_CS_STATE_MASK == 0xf,
+	      "an SMS STATE value differs from F section 3");
+	/* F section 3: REE_CS 0x000, TEE_CS 0x400 (linux:v3d_regs.h:518-519),
+	 * POWER_OFF bit 30, CLEAR_POWER_OFF bit 29 (:520-532), 100 ms
+	 * (linux:v3d_drv.h:529) */
+	CHECK(V3D_SMS_REE_CS == 0x000 && V3D_SMS_TEE_CS == 0x400 && V3D_SMS_CS_POWER_OFF_SET == 0x40000000u &&
+		      V3D_SMS_CS_CLEAR_POWER_OFF_SET == 0x20000000u && V3D_SMS_TIMEOUT_US == 100000u,
+	      "an SMS offset, command bit or timeout differs from F section 3");
+	/* F section 9 (rpi:drivers/pmdomain/bcm/bcm2835-power.c:83,88,102,111-112):
+	 * password 0x5a000000, PM_GRAFX_2712 0x304, PM_V3DRSTN bit 6 */
+	CHECK(BCM2711_PM_WRITE_KEY == 0x5a000000u && BCM2712_PM_GRAFX == 0x304 &&
+		      BCM2712_PM_GRAFX_V3D_RESET_N_SET == 0x40u,
+	      "the PM password, PM_GRAFX_2712 or its reset bit differs from F section 9");
+	/* F section 9 (rpi:bcm2712-ds.dtsi:412-414): hub 0x10_0200_0000,
+	 * core0 0x10_0200_8000, sms 0x10_0203_0800 */
+	CHECK(BCM2712_V3D_HUB_BASE == 0x1002000000ull && BCM2712_V3D_CORE0_BASE == 0x1002008000ull &&
+		      BCM2712_V3D_SMS_BASE == 0x1002030800ull,
+	      "a V3D region base differs from F section 9");
+	/* F section 9 (rpi:bcm2712-ds.dtsi:122): pm at bus 0x7d200000; the ARM
+	 * sees bus 0x7cxxxxxx-0x7fxxxxxx at 0x10_7cxxxxxx (F section 10: HVS
+	 * bus 0x7c580000 at 0x10_7c580000), so 0x10_7d20_0000 */
+	CHECK(BCM2712_PM_BASE == 0x107d200000ull, "BCM2712_PM_BASE is 0x%llx, not 0x107d200000",
+	      (unsigned long long)BCM2712_PM_BASE);
+	/* F section 9 (rpi:bcm2712-ds.dtsi:421-422; linux:v3d_irq.c:260,272):
+	 * index 0 is the hub, SPI 250; index 1 the core, SPI 249 */
+	CHECK(BCM2712_V3D_HUB_GIC_SPI == 250 && BCM2712_V3D_CORE_GIC_SPI == 249, "hub SPI %d, core SPI %d",
+	      BCM2712_V3D_HUB_GIC_SPI, BCM2712_V3D_CORE_GIC_SPI);
+}
+
 static int main71(void)
 {
-	const int planned = 4 + 9 + 5 + 5 + 3 + 10 + 1;
+	const int planned = 4 + 9 + 5 + 5 + 3 + 10 + 1 + 6;
 	t71_map();
 	t71_power_on();
 	t71_power_off_reset();
@@ -950,6 +988,7 @@ static int main71(void)
 	t71_mmu();
 	t71_job();
 	t71_tfu();
+	t71_literals();
 	printf("hw_mock_test 7.1: %d checks run (planned %d), %d failed\n", checks, planned, failed);
 	return (failed == 0 && checks == planned) ? 0 : 1;
 }
