@@ -41,6 +41,7 @@ Not here: the 7.1 Rust lib tests (`isa71`, `codec71`, `listing71`, `golden71`,
 | `clear71.sh` | the lists `tools/probes/rpi_5/rpi5_clear` writes (`src/frame71.c`) equal, byte for byte, the same clear frame packed with Mesa's 7.1 packers, for sizes on and next to the tile edges; the 64x64 frame is 19 / 96 / 27 bytes; refused frames are refused |
 | `clif_cmp.sh` | self-test of `tools/v3d/clif_cmp.py` on `shim71/clear.clif`: equal to itself; a changed field, a missing packet and a changed address are found; the field and the addresses are equal once ignored |
 | `counts71.sh` | `qpu_counts_71.tsv` is the per-program count table of `qpu_corpus_71.txt` (header totals, rows, sorted unique words) |
+| `mbox_mock.sh` | `driver/zephyr/lib/board/rpi4/rpi_mbox.c`, unchanged, for the BCM2711 and the BCM2712 against a mocked mailbox and firmware model (`driver/zephyr/lib/board/test/rpi_mbox_mock.c`): the mailbox base, the MAIL1 word (bus address without the 0xc0000000 alias on the BCM2712), cache maintenance, the clock tags, the framebuffer's address and mapping, -ERANGE above 4 GiB, -EIO, -ETIMEDOUT |
 | `shim71.sh` | every packet in `tools/v3d/shim71/*.clif` is a command of Mesa's V3D 7.1 packet spec |
 
 Planned (other items): `cl_golden.sh` (7.1 packet encoders against Mesa),
