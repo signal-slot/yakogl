@@ -95,3 +95,25 @@ differ in one line:
 It needs `ZEPHYR_WS` (and `WEST_VENV`) as `tools/cts/common-images.sh` does and
 `driver/src/fw/pvr_fw_blob.h` (`driver/tools/mkfwblob.sh`). Run an image with
 `tools/board.sh am62p run <out-dir>/<off|on>/zephyr/zephyr.bin <logdir>`.
+
+## Case 220 (`lodtime`): a 1:1 quad, LINEAR against LINEAR_MIPMAP_LINEAR
+
+Answers the question of `docs/notes/v3d-terrain-gpu.md` ("Fix candidates after
+the fix", 1): does a draw that reaches level 0 only cost less when sampled with
+`GL_LINEAR` than with `GL_LINEAR_MIPMAP_LINEAR` (terrain's blur jobs 7 and 8)?
+A 512x512 RGBA8 texture of one colour with its whole chain is drawn over a
+512x512 framebuffer, a 1:1 mapping, so the level of detail is 0 everywhere. It
+runs 100 draws with each `GL_TEXTURE_MIN_FILTER`, each run started and ended
+by a `glFinish`, and prints:
+
+```
+gl_test: lodtime: LINEAR: 100 draws, N ms (X.XX ms a draw)
+gl_test: lodtime: LINEAR_MIPMAP_LINEAR: 100 draws, M ms (Y.YY ms a draw)
+gl_test: lodtime: mipmap/linear time ratio R.RR
+```
+
+Log only; the checks are the link, the framebuffer, the centre pixel of each
+run (the texture's colour) and no GL error. All three GPUs. It is a
+measurement, not in the default list: run it by number
+(`CONFIG_GL_TEST_CASES="220"`, or `gl_test_set_list`). Board figures go into
+`docs/notes/v3d-terrain-gpu.md`, not here.
