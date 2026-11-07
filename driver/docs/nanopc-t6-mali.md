@@ -212,11 +212,23 @@ After Z3 the kernel side must ping at least every 12 s (`PING_INTERVAL_MS`).
 - **Done: the cache flush after the load** — answered, in the paragraph
   "Settled: no GPU cache flush after the load, beyond the CPU clean"
   below (7f35d633).
-- **Open: the gate row for the `t6_fw` image** (`tools/check.sh`, next to
-  the `t6_hello`, `t6_gpu` and `t6_mmu` rows). It needs the header, and
-  must be a gap without it, like the firmware row (`needs`).
+- **Done: the gate row for the `t6_fw` image** (370dd06b), under
+  "Closed on main, host side" below.
 
 **Closed on main, host side:**
+
+- **The `t6_fw` gate row** (370dd06b): `zephyr  nanopc_t6 t6_fw image
+  (Z3, the firmware boot), -Werror on our C files` in `tools/check.sh`,
+  after the `t6_mmu` row. It builds `tools/probes/nanopc_t6/t6_fw` with
+  `-Werror` on our C files (`zephyr_nanopc_t6_fw_image`); with the board's
+  file at `MALI_CSFFW` it first makes `mali_csffw_blob.h` from it with
+  `driver/tools/mkmalifw.sh` and replaces `driver/src/fw/mali_csffw_blob.h`
+  only when the bytes differ. The header is never committed. A gap, not a
+  pass: without a west workspace at `ZEPHYR_WS` (the one gap line for every
+  Zephyr image), or with neither the file at `MALI_CSFFW` nor a header
+  (`needs` names the file; `tools/cts/deps-env.sh --build MALI_CSFFW`
+  fetches it). Locally: `ZEPHYR_WS=<ws> MALI_CSFFW=<mali_csffw.bin>
+  tools/check.sh --changed origin/main`.
 
 - **Z2's map, extended to every section** (8c8b8581):
   `board::nanopc_t6_sections` maps each section `fw::parse` keeps at its
