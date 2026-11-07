@@ -293,3 +293,7 @@ rsource "imx8mp/Kconfig"
 # The NanoPC-T6 (RK3588) glue: on every image built for the board, outside the
 # board layer above (Z1 has no screen or record yet; nanopc_t6/Kconfig).
 rsource "nanopc_t6/Kconfig"
+
+# The STM32MP257F-DK (A35) board layer core, outside the board layer above
+# (stm32mp2/Kconfig).
+rsource "stm32mp2/Kconfig"

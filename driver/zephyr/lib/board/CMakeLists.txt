@@ -35,6 +35,10 @@ if(CONFIG_YAKOGL_NANOPC_T6)
   endif()
 endif()
 
+# The STM32MP257F-DK's A35 board layer core (stm32mp2/stm32mp2.c): every image
+# for the board (stm32mp2/Kconfig).
+add_subdirectory_ifdef(CONFIG_YAKOGL_STM32MP2 stm32mp2)
+
 # The Raspberry Pi 5's PM watchdog alone (rpi4/rpi_wdog.c, the SoC a parameter).
 if(CONFIG_YAKOGL_RPI5_WDOG)
   zephyr_library_named(yakogl_board_rpi5_wdog)

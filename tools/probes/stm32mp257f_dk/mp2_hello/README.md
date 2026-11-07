@@ -94,10 +94,9 @@ runs `check_early_hooks.cmake`, which fails the build in two cases: the
 image header does not branch to `__wrap___start`, or the hand-over record is
 not in line-aligned `.data`.
 
-The probe adds the board layer itself, from its `CMakeLists.txt`
-(`add_subdirectory`) and its `Kconfig` (`rsource`). The item
-zephyr-layer-hook moves both into `driver/zephyr/lib/board/` and removes them
-here.
+The board layer (`driver/zephyr/lib/board/stm32mp2`) comes from the shared
+board library, as the other boards' do: `CONFIG_YAKOGL_STM32MP2` is on by
+default for the SoC.
 
 ## Running it
 
