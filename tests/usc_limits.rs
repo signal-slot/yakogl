@@ -6072,12 +6072,12 @@ void main() { colour = texture(s, vec3(uv, 1.0), bias); }
 /// end writes as the divide and then the 2D bias, builtin_call.rs), reach
 /// the same selection, and so do ES 3.00's `textureProj(s, p, b)` (the
 /// divide in the shader, select.rs `tex_coords`) and a bias on a 3D
-/// texture, with a constant offset too; a look-up the back end has no form
-/// for -- explicit gradients on a 3D texture's grid of slices -- is refused
-/// by name, not sampled without them.
+/// texture, with a constant offset too, and explicit gradients on a 3D
+/// texture's grid of slices, which the back end refused by name until each
+/// slice's sample took them (select.rs, the grid arm).
 #[cfg(not(feature = "report-es2"))] // compiles GLSL ES 3.00, which a report-es2 build refuses (pp.rs out_of_scope)
 #[test]
-fn a_bias_in_es100_compiles_and_one_without_a_form_is_refused() {
+fn a_bias_in_es100_and_gradients_on_the_grid_compile() {
     let _scratch = scratch_lock();
     for src in [
         "precision highp float; uniform sampler2D s; uniform float b; varying vec2 uv; \
@@ -6092,6 +6092,8 @@ fn a_bias_in_es100_compiles_and_one_without_a_form_is_refused() {
          out vec4 o; void main(){ o = texture(s, p, b); }",
         "#version 300 es\nprecision highp float; uniform highp sampler3D s; uniform float b; in vec3 p; \
          out vec4 o; void main(){ o = textureOffset(s, p, ivec3(1, 0, 0), b); }",
+        "#version 300 es\nprecision highp float; uniform highp sampler3D s; in vec3 p; \
+         out vec4 o; void main(){ o = textureGrad(s, p, dFdx(p), dFdy(p)); }",
     ] {
         store::with_scratch(|a| {
             let _keep = store::begin_keep().expect("keep");
@@ -6101,17 +6103,6 @@ fn a_bias_in_es100_compiles_and_one_without_a_form_is_refused() {
         })
         .unwrap();
     }
-    const WHY: &str = "gradients on a cube, a 3D texture";
-    let src = "#version 300 es\nprecision highp float; uniform highp sampler3D s; in vec3 p; \
-               out vec4 o; void main(){ o = textureGrad(s, p, dFdx(p), dFdy(p)); }";
-    store::with_scratch(|a| {
-        let _keep = store::begin_keep().expect("keep");
-        let text = a.alloc_str(src).unwrap();
-        let l = lower::compile_to_ir(a, Stage::Fragment, text).map_err(|e| e.msg).unwrap();
-        let err = compile_fragment(&l.module, &l.reflection, a).err();
-        assert!(format!("{err:?}").contains(WHY), "{src}: {err:?}");
-    })
-    .unwrap();
 }
 
 /// `pvr_proj_lod`: an implicit-level sample of a smooth varying read as it is

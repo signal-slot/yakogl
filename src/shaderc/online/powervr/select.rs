@@ -292,6 +292,10 @@ fn fold_mods(bits: u32, m: Mods) -> u32 {
 /// A look-up's gradients: d/dx and d/dy of up to three coordinates.
 type Gradients = [[Option<SelSrc>; 2]; 3];
 
+/// A stacked image's gradients, computed in the shader: `[[du/dx, du/dy],
+/// [dv/dx, dv/dy]]` ([`Sel::sample_grads`]).
+type UvGradients = [[SelSrc; 2]; 2];
+
 struct Sel<'a> {
     m: &'a ir::Module<'a>,
     /// The attribute locations that get registers (`abi::attribs_placed`):
@@ -768,9 +772,10 @@ impl<'a> Sel<'a> {
     /// Not guarded:
     /// - an operand that is the same whether the arm runs or not: an
     ///   immediate, a uniform, an input (`Sel::is_input`), and exact plane
-    ///   gradients, made of a varying and its planes alone (a `textureGrad`
-    ///   is refused before selection reaches it). Guarding the gradients
-    ///   moved femtovg's programs (Slint's) by 392 bytes for nothing;
+    ///   gradients, made of a varying and its planes alone. Guarding the
+    ///   gradients moved femtovg's programs (Slint's) by 392 bytes for
+    ///   nothing. A `textureGrad`'s explicit gradients (and a stacked
+    ///   image's, computed from them) are not guarded either;
     /// - the coordinates of a constant level (`textureLod(s, p, 0.0)`): the
     ///   TPU reads that level of the chain and wraps or clamps within it.
     ///   Guarding them as well put 96bc0c44f5554256.frag (a Qt Quick 3D
@@ -841,11 +846,12 @@ impl<'a> Sel<'a> {
             level_guarded = l != g.srcs[2];
             g.srcs[2] = l;
         }
-        /* Gradients are left: every `SelOp::SampleGrad` is an exact plane
-         * gradient of a varying read as it is (`plane_gradients`; a
-         * `textureGrad` is refused before selection), made of the varying,
-         * its plane coefficients and the W plane alone -- the same whether
-         * the arm runs or not -- and so is that look-up's coordinate. */
+        /* Gradients are left: an exact plane gradient of a varying read as
+         * it is (`plane_gradients`) is made of the varying, its plane
+         * coefficients and the W plane alone -- the same whether the arm
+         * runs or not -- and so is that look-up's coordinate; a
+         * `textureGrad`'s are the program's own values
+         * (`explicit_gradients`, `sample_grads`). */
         /* the coordinates, where the arm also makes the level, and a cube's
          * direction (the face is chosen from it) whatever the level; where
          * the arm is off, a cube's direction is (1, 0, 0), a texelFetch's
@@ -1455,7 +1461,15 @@ impl<'a> Sel<'a> {
              * A constant offset: u and v in the lookup word of each slice's
              * sample (the grid image's texels are the slices' at every
              * level), w in whole slices of level 0, the only depth the grid
-             * keeps, added to c.z * layers before the slices are chosen. */
+             * keeps, added to c.z * layers before the slices are chosen.
+             *
+             * `textureGrad` (and its projective and offset forms): each
+             * slice's sample takes the explicit gradients of u and v in the
+             * grid image's coordinates, du / cols and dv / rows (`vol_cells`;
+             * a slice is the grid's 1 / cols by 1 / rows, so the TPU's level
+             * is the slice's), as pco's txd over two axes. d/dw has no word:
+             * the grid keeps one level of depth, and the slices are chosen
+             * from c.z alone. */
             ir::Op::Tex {
                 dim: ir::TexDim::D3,
                 shadow: false,
@@ -1463,7 +1477,7 @@ impl<'a> Sel<'a> {
                 ret,
                 sampler,
                 coord,
-                lod: lod @ (ir::TexLod::Implicit | ir::TexLod::Lod(_) | ir::TexLod::Bias(_)),
+                lod: lod @ (ir::TexLod::Implicit | ir::TexLod::Lod(_) | ir::TexLod::Bias(_) | ir::TexLod::Grad { .. }),
                 offset,
             } => {
                 use ir::AluOp::{Fadd, Ffma, Fmax, Fmin, Fmul};
@@ -1498,10 +1512,28 @@ impl<'a> Sel<'a> {
                 let (mode, level) = match lod {
                     ir::TexLod::Lod(_) => (SmpLod::Replace, Some(SelSrc::Imm(0.0f32.to_bits()))),
                     ir::TexLod::Bias(b) => (SmpLod::Bias, Some(self.src(b, 0)?)),
+                    ir::TexLod::Grad { .. } => (SmpLod::Gradients, None),
                     _ => (SmpLod::Implicit, None),
+                };
+                let grads = match lod {
+                    ir::TexLod::Grad { ddx, ddy } => {
+                        let (_, rcols, rrows) = self.vol_cells(layers)?;
+                        let mut d = [[SelSrc::Imm(0); 2]; 2];
+                        for (k, r) in [rcols, rrows].into_iter().enumerate() {
+                            for (j, dd) in [ddx, ddy].into_iter().enumerate() {
+                                let x = self.src(ir::Src::id(dd), k as u32)?;
+                                d[k][j] = g(self, Fmul, [Some(x), Some(r), None])?;
+                            }
+                        }
+                        Some(d)
+                    }
+                    _ => None,
                 };
                 if integer {
                     let [u, v] = self.vol_uv(sampler, layers, uv, z0)?;
+                    if let Some(d) = grads {
+                        self.sample_grads(&d)?;
+                    }
                     return self.emit(SelGroup {
                         op: SelOp::Sample {
                             binding: sampler,
@@ -1523,6 +1555,9 @@ impl<'a> Sel<'a> {
                     let [u, v] = self.vol_uv(sampler, layers, uv, k)?;
                     *tap = VReg(self.next_vreg);
                     self.next_vreg += LANES;
+                    if let Some(d) = grads {
+                        self.sample_grads(&d)?;
+                    }
                     self.emit(SelGroup {
                         op: SelOp::Sample {
                             binding: sampler,
@@ -1561,7 +1596,12 @@ impl<'a> Sel<'a> {
              * lookup word: the stacked image's texels are the layer's at
              * every level, so u and v move by whole texels of the level the
              * TPU picks (across the layer's edge into the next layer, as the
-             * stacked image filters there anyway). */
+             * stacked image filters there anyway).
+             *
+             * `textureGrad` (and `textureGradOffset`): the explicit gradients
+             * in the stacked image's coordinates, du and dv / layers (a
+             * layer is 1 / layers of the image's height), as pco's txd over
+             * two axes; the TPU's level is then the layer's. */
             ir::Op::Tex {
                 dim: ir::TexDim::D2Array,
                 shadow: false,
@@ -1569,11 +1609,27 @@ impl<'a> Sel<'a> {
                 ret,
                 sampler,
                 coord,
-                lod: lod @ (ir::TexLod::Implicit | ir::TexLod::Lod(_) | ir::TexLod::Bias(_)),
+                lod: lod @ (ir::TexLod::Implicit | ir::TexLod::Lod(_) | ir::TexLod::Bias(_) | ir::TexLod::Grad { .. }),
                 offset,
             } => {
                 let (u, v) = self.array_uv(sampler, coord)?;
-                let (mode, level) = self.smp_level(lod)?;
+                let (mode, level) = match lod {
+                    ir::TexLod::Grad { ddx, ddy } => {
+                        use ir::AluOp::{Fmul, Frcp};
+                        let layers =
+                            SelSrc::Fixed { bank: Bank::Shared, reg: self.layers_dword(sampler)?, mods: Mods::default() };
+                        let rl = self.fresh_typed(SelOp::Alu(Frcp), op_type(Frcp), [Some(layers), None, None])?;
+                        let mut d = [[SelSrc::Imm(0); 2]; 2];
+                        for (j, dd) in [ddx, ddy].into_iter().enumerate() {
+                            d[0][j] = self.src(ir::Src::id(dd), 0)?;
+                            let y = self.src(ir::Src::id(dd), 1)?;
+                            d[1][j] = self.fresh_typed(SelOp::Alu(Fmul), op_type(Fmul), [Some(y), Some(rl), None])?;
+                        }
+                        self.sample_grads(&d)?;
+                        (SmpLod::Gradients, None)
+                    }
+                    other => self.smp_level(other)?,
+                };
                 let offset = offset.map(|[du, dv, _]| super::sel::lookup_word(du, dv));
                 self.emit(SelGroup {
                     op: SelOp::Sample { binding: sampler, proj: false, lod: mode, fetch: false, offset, cube: false, layer: false, gather: false },
@@ -1585,7 +1641,13 @@ impl<'a> Sel<'a> {
             /* A cube, sampled through the stacked 2D image it is kept in
              * (`cube_uv`), with the implicit level or a replacing one, as
              * glsl2usc's pvr_cube / pvr_cubeLod sample it, or a bias on the
-             * stacked image's implicit level (glsl2usc has no form for it). */
+             * stacked image's implicit level (glsl2usc has no form for it).
+             *
+             * `textureGrad`: on the native cube, pco's txd over three axes,
+             * d/dx and d/dy of the direction as they are (pco_nir_tex.c
+             * :274-283), as the exact plane gradients of a native cube are
+             * given; on the stacked image, the direction's gradients carried
+             * through the face projection `cube_uv` makes (`cube_grads`). */
             ir::Op::Tex {
                 dim: ir::TexDim::Cube,
                 shadow: false,
@@ -1593,10 +1655,13 @@ impl<'a> Sel<'a> {
                 ret,
                 sampler,
                 coord,
-                lod: lod @ (ir::TexLod::Implicit | ir::TexLod::Lod(_) | ir::TexLod::Bias(_)),
+                lod: lod @ (ir::TexLod::Implicit | ir::TexLod::Lod(_) | ir::TexLod::Bias(_) | ir::TexLod::Grad { .. }),
                 offset: None,
             } => {
-                let (mode, level) = self.smp_level(lod)?;
+                let (mode, level) = match lod {
+                    ir::TexLod::Grad { .. } => (SmpLod::Gradients, None),
+                    other => self.smp_level(other)?,
+                };
                 /* The TPU's own cube (`gl::native_cube`, switch
                  * `pvr_native_cube` at compile time): the direction as it
                  * is, three coordinates, as pco's program for a samplerCube
@@ -1605,7 +1670,9 @@ impl<'a> Sel<'a> {
                 if crate::shaderc::native_cube_enabled() {
                     let (x, y, z) = (self.src(coord, 0)?, self.src(coord, 1)?, self.src(coord, 2)?);
                     let mut mode = mode;
-                    if self.gradients_for(op).is_some() {
+                    if let ir::TexLod::Grad { ddx, ddy } = lod {
+                        self.explicit_gradients(ddx, ddy, 3)?;
+                    } else if self.gradients_for(op).is_some() {
                         self.plane_gradients(coord, 3)?;
                         mode = SmpLod::Gradients;
                     }
@@ -1619,7 +1686,14 @@ impl<'a> Sel<'a> {
                 }
                 /* an explicit level clamps to that level's face (`cube_uv`) */
                 let explicit = if matches!(lod, ir::TexLod::Lod(_)) { level } else { None };
-                let (u, v) = self.cube_uv(sampler, coord, explicit)?;
+                let grads = match lod {
+                    ir::TexLod::Grad { ddx, ddy } => Some((ddx, ddy)),
+                    _ => None,
+                };
+                let (u, v, d) = self.cube_uv(sampler, coord, explicit, grads)?;
+                if let Some(d) = d {
+                    self.sample_grads(&d)?;
+                }
                 self.emit(SelGroup {
                     op: SelOp::Sample { binding: sampler, proj: false, lod: mode, fetch: false, offset: None, cube: false, layer: false, gather: false },
                     ty: smp_type(ret),
@@ -1680,7 +1754,7 @@ impl<'a> Sel<'a> {
                 self.shadow_compare(id, sampler, SelSrc::Virtual { v: depth, mods: Mods::default() }, reference, taps)
             }
             ir::Op::Tex { .. } => Err(SelectError::Unsupported(
-                "a texture fetch with gradients on a cube, a 3D texture or a stacked array, a projective cube or array, or an offset on a cube, is not selected yet",
+                "a texture fetch no GLSL ES 3.00 function makes (a projective cube or array, an offset on a cube), is not selected",
             )),
             /* `textureSize(s, lod)` on a 2D sampler in a fragment shader, as
              * pco computes it (usclib/tex.cl usclib_tex_state_size, MIT, for
@@ -3175,7 +3249,21 @@ impl<'a> Sel<'a> {
     /// uv = (uv / ma) * 0.5 + 0.5, clamped half a texel of the face's height
     /// (textureSize(s, 0).y / 6) in from its edges, v = (v + face) / 6
     /// ```
-    fn cube_uv(&mut self, sampler: u8, coord: ir::Src, lod: Option<SelSrc>) -> Result<(SelSrc, SelSrc), SelectError> {
+    ///
+    /// With `grads` (a `textureGrad`'s d/dx and d/dy of the direction), also
+    /// the gradients of the stacked image's u and v, `[[du/dx, du/dy],
+    /// [dv/dx, dv/dy]]`, for [`Self::sample_grads`]: the quotient rule on
+    /// the face's projection, the same major axis and signs chosen for the
+    /// gradient as for the direction (the derivative of `sc / |ma|` is
+    /// `(dsc - (sc / |ma|) d|ma|) / |ma|`), times 0.5, and dv also / 6 --
+    /// the face's u spans the stack's width, its v a sixth of its height.
+    fn cube_uv(
+        &mut self,
+        sampler: u8,
+        coord: ir::Src,
+        lod: Option<SelSrc>,
+        grads: Option<(ir::ValueId, ir::ValueId)>,
+    ) -> Result<(SelSrc, SelSrc, Option<UvGradients>), SelectError> {
         use ir::AluOp::{Bcsel, Fadd, Fceil, Fexp2, Ffma, Fle, Flt, Fmax, Fmin, Fmul, Frcp, I2f, Iand};
         let f = |x: f32| Some(SelSrc::Imm(x.to_bits()));
         let mut d = [SelSrc::Imm(0); 3];
@@ -3225,9 +3313,45 @@ impl<'a> Sel<'a> {
         /* uv = (uv / ma) * 0.5 + 0.5 */
         let r = g(self, Frcp, [Some(ma), None, None])?;
         let mut uv = [u, v];
-        for c in uv.iter_mut() {
+        let mut quot = [SelSrc::Imm(0); 2];
+        for (c, qk) in uv.iter_mut().zip(quot.iter_mut()) {
             let q = g(self, Fmul, [Some(*c), Some(r), None])?;
+            *qk = q;
             *c = g(self, Ffma, [Some(q), f(0.5), f(0.5)])?;
+        }
+        /* the gradients of u and v, for each of d/dx and d/dy: the
+         * direction's derivative D picked as the direction is, then
+         * (dsc - (sc / ma) dma) * 0.5 / ma (and / 6 for v) */
+        let mut out_grads = None;
+        if let Some((ddx, ddy)) = grads {
+            let half_r = g(self, Fmul, [Some(r), f(0.5), None])?;
+            let sixth_r = g(self, Fmul, [Some(r), f(0.5 / 6.0), None])?;
+            let mut out = [[SelSrc::Imm(0); 2]; 2];
+            for (j, dd) in [ddx, ddy].into_iter().enumerate() {
+                let mut dv = [SelSrc::Imm(0); 3];
+                let mut dn = [SelSrc::Imm(0); 3];
+                for k in 0..3 {
+                    let c = self.src(ir::Src::id(dd), k as u32)?;
+                    dv[k] = self.fresh_typed(SelOp::Copy, OpType::F32, [Some(c), None, None])?;
+                    dn[k] = self.fresh_typed(SelOp::Copy, OpType::F32, [modded(dv[k], true, false), None, None])?;
+                }
+                let dsc_x = pick(self, pos[0], Some(dn[2]), Some(dv[2]))?;
+                let dsc_z = pick(self, pos[2], Some(dv[0]), Some(dn[0]))?;
+                let dtc_y = pick(self, pos[1], Some(dv[2]), Some(dn[2]))?;
+                let mut dma = [SelSrc::Imm(0); 3];
+                for k in 0..3 {
+                    dma[k] = pick(self, pos[k], Some(dv[k]), Some(dn[k]))?;
+                }
+                let dsc = choose(self, dsc_x, dv[0], dsc_z)?;
+                let dtc = choose(self, dn[1], dtc_y, dn[1])?;
+                let dm = choose(self, dma[0], dma[1], dma[2])?;
+                for (k, (ds, scale)) in [(dsc, half_r), (dtc, sixth_r)].into_iter().enumerate() {
+                    let nq = self.fresh_typed(SelOp::Copy, OpType::F32, [modded(quot[k], true, false), None, None])?;
+                    let t = g(self, Ffma, [Some(nq), Some(dm), Some(ds)])?;
+                    out[k][j] = g(self, Fmul, [Some(t), Some(scale), None])?;
+                }
+            }
+            out_grads = Some(out);
         }
         /* h = float(textureSize(s, 0).y) / 6.0; clamp(uv, 0.5 / h, 1.0 - 0.5 / h)
          *
@@ -3268,7 +3392,7 @@ impl<'a> Sel<'a> {
         /* v = (v + face) / 6.0 */
         let vf = g(self, Fadd, [Some(uv[1]), Some(face), None])?;
         let v = g(self, Fmul, [Some(vf), f(1.0 / 6.0), None])?;
-        Ok((uv[0], v))
+        Ok((uv[0], v, out_grads))
     }
 
     /// The block dword the GL core writes sampler `binding`'s layer count to:
@@ -3418,6 +3542,23 @@ impl<'a> Sel<'a> {
         Ok(())
     }
 
+    /// Gradients computed in the shader, `[[du/dx, du/dy], [dv/dx, dv/dy]]`
+    /// in the coordinates the sample takes (a stacked image's), as the
+    /// [`SelOp::SampleGrad`] groups of a [`SmpLod::Gradients`] sample, in
+    /// [`Self::explicit_gradients`]' order. Nothing may come between them
+    /// and the sample.
+    fn sample_grads(&mut self, d: &UvGradients) -> Result<(), SelectError> {
+        for [dx, dy] in *d {
+            self.emit(SelGroup {
+                op: SelOp::SampleGrad,
+                ty: OpType::F32,
+                dst: None,
+                srcs: [Some(dx), Some(dy), None],
+            })?;
+        }
+        Ok(())
+    }
+
     /// The first `n` lanes of a look-up's coordinate, divided by lane 3 (the
     /// IR's divisor lane) when the look-up is projective: the divide in
     /// the shader, as `shaderc::pvr_proj_divide` does for `texture2DProj`
@@ -3483,6 +3624,25 @@ impl<'a> Sel<'a> {
         Ok((cols, [sw, sh], n))
     }
 
+    /// A 3D texture's slice grid in floats, as glsl2usc's pvr_volUV computes
+    /// it: `cols = ceil(sqrt(layers - 0.5))`, `rows = ceil(layers / cols)`.
+    /// Returns (cols, 1 / cols, 1 / rows).
+    fn vol_cells(&mut self, layers: SelSrc) -> Result<(SelSrc, SelSrc, SelSrc), SelectError> {
+        use ir::AluOp::{Fadd, Fceil, Fmul, Frcp, Frsq};
+        let f = |x: f32| Some(SelSrc::Imm(x.to_bits()));
+        let g = |s: &mut Self, op: ir::AluOp, x: [Option<SelSrc>; 3]| s.fresh_typed(SelOp::Alu(op), op_type(op), x);
+        let lm = g(self, Fadd, [Some(layers), f(-0.5), None])?;
+        /* sqrt is frcp(frsq(x)), as pco lowers it (nir lower_fsqrt) */
+        let rs = g(self, Frsq, [Some(lm), None, None])?;
+        let sq = g(self, Frcp, [Some(rs), None, None])?;
+        let cols = g(self, Fceil, [Some(sq), None, None])?;
+        let rcols = g(self, Frcp, [Some(cols), None, None])?;
+        let lc = g(self, Fmul, [Some(layers), Some(rcols), None])?;
+        let rows = g(self, Fceil, [Some(lc), None, None])?;
+        let rrows = g(self, Frcp, [Some(rows), None, None])?;
+        Ok((cols, rcols, rrows))
+    }
+
     /// Slice `k` of a 3D texture, at `(u, v)`, in the stacked 2D image YakoGL
     /// keeps it in (the slices in a grid, `cols` across): glsl2usc's
     /// `pvr_volUV` (tools/yakogl-tools/src/glsl.rs EMU_HELPERS), one
@@ -3495,20 +3655,12 @@ impl<'a> Sel<'a> {
     /// (vec2(mod(k, cols), floor(k / cols)) + st) / vec2(cols, rows)
     /// ```
     fn vol_uv(&mut self, sampler: u8, layers: SelSrc, uv: [SelSrc; 2], k: SelSrc) -> Result<[SelSrc; 2], SelectError> {
-        use ir::AluOp::{Fadd, Fceil, Ffma, Fmax, Fmin, Fmul, Frcp, Frsq, I2f};
+        use ir::AluOp::{Fadd, Ffma, Fmax, Fmin, Fmul, Frcp, I2f};
         let f = |x: f32| Some(SelSrc::Imm(x.to_bits()));
         let g = |s: &mut Self, op: ir::AluOp, x: [Option<SelSrc>; 3]| s.fresh_typed(SelOp::Alu(op), op_type(op), x);
         let flr = Mods { neg: false, abs: false, flr: true };
         let neg = Mods { neg: true, abs: false, flr: false };
-        let lm = g(self, Fadd, [Some(layers), f(-0.5), None])?;
-        /* sqrt is frcp(frsq(x)), as pco lowers it (nir lower_fsqrt) */
-        let rs = g(self, Frsq, [Some(lm), None, None])?;
-        let sq = g(self, Frcp, [Some(rs), None, None])?;
-        let cols = g(self, Fceil, [Some(sq), None, None])?;
-        let rcols = g(self, Frcp, [Some(cols), None, None])?;
-        let lc = g(self, Fmul, [Some(layers), Some(rcols), None])?;
-        let rows = g(self, Fceil, [Some(lc), None, None])?;
-        let rrows = g(self, Frcp, [Some(rows), None, None])?;
+        let (cols, rcols, rrows) = self.vol_cells(layers)?;
         let size = self.tex_size_2d(sampler, SelSrc::Imm(0))?;
         let mut st = [SelSrc::Imm(0); 2];
         for (lane, r) in [(0usize, rcols), (1, rrows)] {

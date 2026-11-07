@@ -324,9 +324,9 @@ fn the_vertex_stage_samples_an_array_the_same_way() {
 }
 
 /// With the switch off the same sources keep the stacked image: no `tao`,
-/// a flag of 0, the offset forms included (tests/es3_pvr_texoffset.rs), and
-/// the forms the stacked image cannot take are refused as before (explicit
-/// gradients).
+/// a flag of 0, the offset forms (tests/es3_pvr_texoffset.rs) and the
+/// gradient forms (tests/es3_pvr_texgrad.rs) included: every form of the
+/// table compiles on the stacked image.
 #[test]
 fn off_the_stacked_image_stays_and_the_record_says_nothing() {
     let stacked = [
@@ -338,7 +338,10 @@ fn off_the_stacked_image_stays_and_the_record_says_nothing() {
         "textureLodOffset(s, c, l, ivec2(-8, 7))",
         "texelFetch(s, p, il)",
         "texelFetchOffset(s, p, il, ivec2(1, 1))",
+        "textureGrad(s, c, g, g.yx)",
+        "textureGradOffset(s, c, g, g.yx, ivec2(2, 2))",
     ];
+    assert!(FORMS.iter().all(|f| stacked.contains(&f.0)), "every form of the table");
     for e in stacked {
         let src = fragment("uniform float pvr_layers_s;\nuniform highp sampler2DArray s;", &format!("o = {e};"));
         let (flag, fields) = with_native_array(false, || {
@@ -347,11 +350,6 @@ fn off_the_stacked_image_stays_and_the_record_says_nothing() {
         });
         assert_eq!(flag, 0, "{e}: off, the stacked array");
         assert_eq!(fields[0]["tao"], 0, "{e}: off, no address override");
-    }
-    for (e, _, _, _, _) in FORMS.iter().filter(|f| !stacked.contains(&f.0)) {
-        let src = fragment("uniform float pvr_layers_s;\nuniform highp sampler2DArray s;", &format!("o = {e};"));
-        let got = with_native_array(false, || compile_with(Stage::Fragment, &src, |_, _| ()));
-        assert!(got.is_err(), "{e}: off, the stacked image refuses it as before");
     }
 }
 
