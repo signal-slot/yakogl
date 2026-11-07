@@ -1520,8 +1520,13 @@ pub unsafe extern "C" fn glProgramParameteri(program: GLuint, pname: GLenum, val
     }
     if value != GL_TRUE as GLint && value != GL_FALSE as GLint {
         context::set_error_no_ctx(GL_INVALID_VALUE, FUNC);
+        return;
     }
-    /* Otherwise accepted and ignored: there are no binary formats to retrieve into. */
+    /* stored for glGetProgramiv (dEQP state_query.shader.program_binary);
+     * it changes nothing else: there are no binary formats to retrieve into */
+    if let Some(c) = context::current() {
+        super::program::set_binary_retrievable_hint(c.group, program, value == GL_TRUE as GLint);
+    }
 }
 
 #[no_mangle]
@@ -3098,7 +3103,7 @@ mod tests {
     }
 
     #[test]
-    fn the_program_binary_hint_is_accepted_and_ignored() {
+    fn the_program_binary_hint_is_accepted_and_stored() {
         let gl = fresh();
         // SAFETY: plain GL calls.
         unsafe {

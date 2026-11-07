@@ -101,6 +101,10 @@ struct ProgState {
     /// to capture (interleaved). This GPU path captures none, so a link
     /// with any fails (`glLinkProgram`).
     tf_varyings: [[u32; MAX_PROGRAMS]; MAX_CONTEXTS],
+    /// GL_PROGRAM_BINARY_RETRIEVABLE_HINT as glProgramParameteri last set
+    /// it (GL_FALSE at creation); only stored and answered, as no binary
+    /// format exists to retrieve into.
+    binary_retrievable: [[bool; MAX_PROGRAMS]; MAX_CONTEXTS],
     /// The last link compiled the vertex shader again with the attribute
     /// layout (`attrib_layout`): its record has one row per active location,
     /// so an aliased name may have no row, and glGetAttribLocation answers
@@ -376,6 +380,14 @@ pub(super) fn set_transform_feedback_varyings(group: u8, program: GLuint, count:
     // SAFETY: as in `prog_tables`; the only writer of this field.
     let st = unsafe { STATE.get() };
     st.tf_varyings[usize::from(group)][obj_index(program)] = count;
+}
+
+/// glProgramParameteri(GL_PROGRAM_BINARY_RETRIEVABLE_HINT): remember the
+/// hint for glGetProgramiv.
+pub(super) fn set_binary_retrievable_hint(group: u8, program: GLuint, hint: bool) {
+    // SAFETY: as in `prog_tables`; the only writer of this field.
+    let st = unsafe { STATE.get() };
+    st.binary_retrievable[usize::from(group)][obj_index(program)] = hint;
 }
 
 /// The blocks of `program` and their binding points, for the draw-time fill.
@@ -900,6 +912,7 @@ pub unsafe extern "C" fn glCreateProgram() -> GLuint {
             st.delete_pending[c.group as usize][h] = false;
             st.validated[c.group as usize][h] = false;
             st.tf_varyings[c.group as usize][h] = 0;
+            st.binary_retrievable[c.group as usize][h] = false;
             super::tf::program_reset(c.group, obj_name(h, OBJ_PROGRAM));
             return obj_name(h, OBJ_PROGRAM);
         }
@@ -2982,7 +2995,7 @@ pub unsafe extern "C" fn glGetProgramiv(program: GLuint, pname: GLenum, params: 
             return;
         }
         GL_PROGRAM_BINARY_LENGTH => 0,
-        GL_PROGRAM_BINARY_RETRIEVABLE_HINT => 0,
+        GL_PROGRAM_BINARY_RETRIEVABLE_HINT => st.binary_retrievable[ctx][h] as GLint,
         GL_ATTACHED_SHADERS => (p.vs != 0) as GLint + (p.fs != 0) as GLint,
         GL_ACTIVE_UNIFORMS => active_total(p, &st.loc[ctx][h], &st.blocks[ctx][h]) as GLint,
         GL_ACTIVE_UNIFORM_BLOCKS => GLint::from(st.blocks[ctx][h].count),
