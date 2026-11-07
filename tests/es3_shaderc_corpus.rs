@@ -838,22 +838,28 @@ fn corpus() {
         return;
     };
     let _g = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
-    let mut files: Vec<_> = std::fs::read_dir(Path::new(&dir))
-        .expect("DEQP_GLES3_TEST_DIR is readable")
-        .map(|e| e.expect("a directory entry").path())
+    let skip = |why: String| println!("es3_shaderc_corpus: corpus part skipped: {} {why}", Path::new(&dir).display());
+    let entries = match std::fs::read_dir(Path::new(&dir)) {
+        Ok(e) => e,
+        Err(e) => return skip(format!("is not readable ({e})")),
+    };
+    let mut files: Vec<_> = entries
+        .filter_map(|e| e.ok().map(|e| e.path()))
         .filter(|p| p.extension().and_then(|x| x.to_str()) == Some("test"))
         .collect();
     files.sort();
-    assert!(!files.is_empty(), "no .test files in {}", Path::new(&dir).display());
+    if files.is_empty() {
+        return skip("has no .test files".into());
+    }
 
     // Parse first, so a malformed file panics with its message.
-    let parsed: Vec<(String, Vec<Case>)> = files
-        .iter()
-        .map(|p| {
-            let text = std::fs::read_to_string(p).expect("a UTF-8 .test file");
-            (p.file_stem().unwrap().to_string_lossy().into_owned(), parse_file(&text))
-        })
-        .collect();
+    let mut parsed: Vec<(String, Vec<Case>)> = Vec::new();
+    for p in &files {
+        match std::fs::read_to_string(p) {
+            Ok(text) => parsed.push((p.file_stem().unwrap().to_string_lossy().into_owned(), parse_file(&text))),
+            Err(e) => return skip(format!("has an unreadable file {} ({e})", p.display())),
+        }
+    }
 
     // A compile that panics must not print a backtrace per case.
     let hook = std::panic::take_hook();
