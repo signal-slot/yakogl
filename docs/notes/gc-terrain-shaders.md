@@ -29,6 +29,11 @@ only. No compiler code changed, nothing ran on a board. Code is cited at
   0.8 ns** of terrain's 140 to 205 ms of GPU time. The noise pass alone is 17
   to 22 ms of it. Terrain's 250 ms frame would go to about 175 to 195 ms with
   Mesa-sized shaders (a model, not a measurement).
+- Rank 1's negate half, written in the GC code generator, takes the noise
+  shader from 840 to 767 and changes no value the host interpreter
+  computes. It is not committed: it moves the shared pin
+  `tests/fixtures/precompile_counts.txt`. The `mad` half needs `codegen.rs`
+  or `select.rs` to say which outputs are `invariant` ("What to do", below).
 - The gap is large, so it is worth its own issue: "the online GC compiler
   emits about twice Mesa's instructions for the glmark2 terrain shaders"
   (text in the report that comes with this note).
@@ -316,6 +321,77 @@ about 45 to 31 ms, the mesh's vertex work from about 13 to 9 ms: about 57 ms
 a frame (76 at 0.8 ns), or terrain from 250 ms to about 175 to 195 ms. It does
 not make terrain reach the panel's rate (`gc-slow-terrain.md`: early depth and
 fast clears, the other half of rank 1, are separate).
+
+## What to do: rank 1 in the vivante code generator (noise-compiler-fix)
+
+Plan #328, item noise-compiler-fix, at main `31869a4c`. The item could edit
+only the GC code generator (`src/shaderc/online/vivante/`), not the shared
+compiler files or `tests/fixtures/`. **No code change was committed.** The
+negate half of rank 1 was written inside the code generator and measured on
+the host. It moves the shared pin `tests/fixtures/precompile_counts.txt`,
+so the item stopped. The contraction half cannot be written there at all.
+
+**Negate fold: written, measured, not committed.** A pass that runs at the
+start of `alloc::eliminate_dead` (a new `vivante/negate_fold.rs`) rewrites
+each reader of a `mov` that only negates or takes the magnitude of a
+temporary, so that the reader reads the source through its own `SRC_NEG` and
+`SRC_ABS` bits. The swizzles are composed, and the magnitude is taken before
+the negate, as the hardware does. The pass works on straight-line code only.
+It stops at a branch target, after a branch, after a write of the source,
+and once every lane the `mov` wrote has been overwritten. It rewrites a
+reader only when every lane the reader consumes holds the `mov`'s value,
+and only into float operations that take the modifiers as `Fneg`/`Fabs`
+mean them. The `mov`, once unread, is deleted by `eliminate_dead`'s
+liveness.
+
+| measured on the host | without | with |
+|---|---:|---:|
+| noise shader (`terrain-1637be2eef2e8a5e`), instructions | 840 | **767** (Mesa 414) |
+| noise shader, temporaries | 14 | 14 |
+| negate-only `mov`s left in it | 66 | 5 (all `mov t, -uN`: a constant-file source) |
+| offline-table programs it shortens | | 55, 494 instructions |
+| of those, run bit-identical by the host interpreter (`tests/common` `run_mem`), 8 random input sets each | | 52 (3 `loop_nested*` programs cannot be run) |
+| `src/vivante/internal.rs` (`--internal --verify`) | | unchanged |
+| `tests/fixtures/precompile_counts.txt` `gc7000 es2=0 app=all` | code_bytes=129376 | code_bytes=122656 (**moves**) |
+| `tests/lane_move_equivalence.rs` population pin | 103 | 102 (moves) |
+
+At the note's 0.6 / 0.8 ns an instruction a pixel, the 73 instructions are
+about 2.9 / 3.8 ms of the noise pass. The fold also reaches terrain's other
+shaders; that was not counted here.
+
+The other GC7000 host tests pass with the fold. That run was
+`cargo test --no-default-features --features host-test,gpu-vivante,shaderc-online`,
+with the test file reduced to one `#[test]` as `src/test_rules.rs` requires.
+The patch, with its unit tests and `tests/gc_noise_shader_count.rs` (it
+pins 840 without the fold and 767 with it, and runs the value check), is
+kept outside the tree on the machine that measured it. Landing it is one
+item that may also re-pin the shared files:
+
+- `tests/fixtures/precompile_counts.txt`: every `gc7000` line, re-pinned
+  with `PRECOMPILE_PIN_WRITE=1 tools/precompile/prove.sh gpu-vivante` and
+  `gpu-vivante,report-es2` (only the first line was read here: 129376 to
+  122656);
+- `tests/lane_move_equivalence.rs`: the population pin, 103 to 102 (the
+  `report-es2` build's 87 not measured);
+- nothing in `src/vivante/internal.rs` or `tests/reference/`.
+
+**Contraction (`a*b + c` to `mad`): needs a shared file.** The rule is "not on
+the way to an `invariant` output" (`ir.rs` `IoDecl::invariant`). That flag
+lives in the IR's io declarations. The GC code generator's passes only see
+the selected instructions (`SelInstr`), where an output is a `Fixed`
+register with no flag. `codegen.rs` `assemble_from_ir_blocks` (or
+`select.rs`) must hand the pass the output registers whose declaration is
+`invariant`, as `powervr/prepare.rs` `fusion_pairs` receives its
+`invariant: &[IoSlot]`. Then the pass itself (pairing a single-use `mul`
+with its `add`, through `alloc.rs`'s lane rules) can live in `vivante/`.
+Whether the GC7000's `mad` rounds once or twice is not known. If it rounds
+twice, contraction is exact and the rule would not be needed, but nothing
+in this tree measures it.
+
+**The five uniform negates** (`mov t, -u4.xzxx`) would need the fold to
+check the "one constant register an instruction" rule, `select.rs`
+`within_caps`. It is private there, and a second copy in `vivante/` would
+be two records of one fact.
 
 ## What this does not show
 
