@@ -167,6 +167,11 @@ waited kick has not been taken, and make the spin finer for this wait.
    gl_test case 216's per-case line (`driver/tools/pvrlab/gl_test.c`) and
    in the render service's end-of-run line, so the board run can read H1 or
    H2 without the rate-limited console.
+   Case 216 now prints `gl_test: case 216 reposts: N over F frames (R a
+   frame)` from `pvr_render_reposts` (the true total, not the log lines):
+   with path B on, H1 predicts R near 2.5 (about 50 over 20 frames, one
+   stalled post a frame's waited chain), H2 predicts R at or under 0.05
+   (0 to 1 over 20), whatever the wait's poll costs.
 4. If H2 holds instead, the waited chain's cost is the firmware's take-up
    from idle and no host change to the wait removes it: path B stays off,
    and the lever for the kicks is path A (one transfer submit for the chain,
