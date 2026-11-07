@@ -1,6 +1,5 @@
-<!--
-SPDX-License-Identifier: MIT
--->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 
 # Which hwdb row the i.MX8MP's GC7000UL is: customer id 0 or 0x11
 
