@@ -307,6 +307,8 @@ run; a run that prints the frame-1 arena line would show it. The pictures
 match the earlier column in all 33 scenes by value (terrain mean 119 129 45,
 refract 22 18 29), not looked at by eye.
 
+Where terrain's 250 ms go (52 kicks, GPU-bound, the GPU chain taken on the board since `445c5653`): [gc-slow-terrain.md](gc-slow-terrain.md).
+
 ## What would settle the open points
 
 - A per-scene board number (fps, or ms a frame) for terrain, refract and
