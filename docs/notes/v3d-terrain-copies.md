@@ -256,6 +256,10 @@ non-cacheable on the Pi 4.
      every frame.
    - Or `rt_eligible` requires a render newer than the texture's upload: the
      binding's `target_kick` against the kick of its `content_gen`.
+   - **Done:** the first option, `RT_IMAGES` = 16. `rt_bytes_peak` is
+     unchanged for a scene that fits (images are made in `rt_for_render`); the
+     host test is `nine_sampled_targets_keep_their_render_images`
+     (`src/v3d/backend_tests.rs`). Board record values are not measured.
    - Risk: low. A missed registration falls back to today's tiled copy.
    - Test: `tests/v3d_copy_reasons.rs` style, 9 sampled targets in one
      frame, 0 `first-sample` after the first frame.
