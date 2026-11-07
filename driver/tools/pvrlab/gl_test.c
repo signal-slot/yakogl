@@ -878,6 +878,8 @@ static inline void gl_test_perf_read(uint32_t *out) { memset(out, 0, 7 * sizeof(
 static inline uint32_t gl_test_kicks_done(void) { return 0; }
 /* the wait's re-posts so far (pvr_render_fl_counters word 6): the PowerVR's only */
 static inline uint32_t gl_test_reposts(void) { return 0; }
+/* the true total of the wait's re-posts (pvr_render_reposts): the PowerVR's only */
+static inline uint32_t gl_test_reposts_total(void) { return 0; }
 static inline void gl_test_prim_budget(unsigned int budget) { (void)budget; }
 /* how the run-time compiler lowers an `if` with arithmetic arms: the
  * PowerVR's option only (case 195); elsewhere both forms are one program */
@@ -897,6 +899,8 @@ static inline uint32_t gl_test_reposts(void)
 	pvr_render_fl_counters(c);
 	return c[6];
 }
+/* the true total of the wait's re-posts, whatever the console's rate limit */
+static inline uint32_t gl_test_reposts_total(void) { return pvr_render_reposts; }
 /* PVR_BACKEND_OPT_PRIM_BUDGET is a test knob: a library without them keeps
  * its built-in budget, and the case's two halves draw the same thing */
 static inline void gl_test_prim_budget(unsigned int budget)
@@ -20078,7 +20082,7 @@ static int case_mipchains(void)
 	const bool es2 = !ver || strncmp(ver, "OpenGL ES 2.", 12) == 0;
 	GLuint prog, src = 0, tex[3] = { 0, 0, 0 }, fbo[3] = { 0, 0, 0 };
 	GLenum status[3] = { 0, 0, 0 };
-	uint32_t t0 = 0, t1 = 0, pc0[7], pc1[7], complete = 0, seq0 = 0, seq1 = 0, rp0 = 0, rp1 = 0;
+	uint32_t t0 = 0, t1 = 0, pc0[7], pc1[7], complete = 0, seq0 = 0, seq1 = 0, rp0 = 0, rp1 = 0, rt0 = 0, rt1 = 0;
 	uint64_t px_frame = (uint64_t)TW * TH;
 	bool ok = true;
 
@@ -20151,6 +20155,7 @@ static int case_mipchains(void)
 	glFinish();
 	seq0 = gl_test_kicks_done();
 	rp0 = gl_test_reposts();
+	rt0 = gl_test_reposts_total();
 	gl_test_perf_read(pc0);
 	t0 = now_ms();
 	for (int f = 0; f < MIPCHAINS_FRAMES; f++) {
@@ -20168,6 +20173,7 @@ static int case_mipchains(void)
 	gl_test_perf_read(pc1);
 	seq1 = gl_test_kicks_done();
 	rp1 = gl_test_reposts();
+	rt1 = gl_test_reposts_total();
 	/* check 3 */
 	ok &= expect_u32("mipchains: error after the frames", glGetError(), GL_NO_ERROR);
 	{
@@ -20194,7 +20200,15 @@ static int case_mipchains(void)
 #ifdef GL_TEST_PVR
 		/* the wait's re-posts over the frames (pvr_render_fl_counters word 6) */
 		pr_info("gl_test: mipchains: reposts %u over %d frames\n", (unsigned)(rp1 - rp0), MIPCHAINS_FRAMES);
+		{
+			const uint32_t rt = rt1 - rt0, r100 = rt * 100u / MIPCHAINS_FRAMES;
+
+			pr_info("gl_test: case 216 reposts: %u over %d frames (%u.%02u a frame)\n", (unsigned)rt,
+				MIPCHAINS_FRAMES, r100 / 100u, r100 % 100u);
+		}
 #else
+		(void)rt0;
+		(void)rt1;
 		(void)rp0;
 		(void)rp1;
 #endif
