@@ -91,7 +91,7 @@ tools/mali/panthor-gles/build.sh [--debug] [--es3] <outdir>
 
 Needs cargo with the `aarch64-unknown-linux-gnu` target, clang, and for the
 first build curl or python3, `ar` and `tar` with xz. The board's ABI floors
-are GLIBC 2.41 and GLIBCXX 3.4.33 (Debian trixie), so the objects are linked
+are GLIBC 2.41, GLIBCXX 3.4.33 and CXXABI 1.3.15 (Debian trixie), so the objects are linked
 against a Debian trixie arm64 sysroot: four pinned packages (libc6,
 libc6-dev, libgcc-s1, libgcc-14-dev; versions and sha256 in `build.sh`),
 fetched from deb.debian.org (snapshot.debian.org once they leave the pool)
@@ -116,7 +116,7 @@ cargo test --manifest-path tools/mali/panthor-gles/Cargo.toml
 their SONAMEs (`readelf -d`); libEGL.so.1 needs libGLESv2.so.2 with
 `RUNPATH $ORIGIN`; libGLESv2.so.2 has its constructor; every name of
 `src/deqp-entry-points.txt` is a defined function where dEQP looks for it;
-no version need above `GLIBC_2.41` or `GLIBCXX_3.4.33` (`objdump -T` when
+no version need above `GLIBC_2.41`, `GLIBCXX_3.4.33` or `CXXABI_1.3.15` (`objdump -T` when
 an objdump reads AArch64, else `readelf -V`); the contract lines' text is in
 the object. Exit 0 when every check passed.
 
