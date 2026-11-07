@@ -290,8 +290,8 @@ fn a_float_and_an_integer_volume_in_one_program_both_sample_the_copy() {
 
 /// `textureGrad` on a native volume: pco's txd, `lodm` gradients, the six
 /// gradient words after the three coordinates (d/dx then d/dy of u, v, w),
-/// in the selection's order. With the switch off the grid has no form for
-/// it and the compile is refused, as before.
+/// in the selection's order. With the switch off the grid's two slice
+/// samples take two gradient pairs each, u's and v's (tests/es3_pvr_texgrad.rs).
 #[test]
 fn texture_grad_samples_the_volume_with_three_axes_of_gradients() {
     let src =
@@ -308,7 +308,12 @@ fn texture_grad_samples_the_volume_with_three_axes_of_gradients() {
         })
     });
     assert_eq!(grads, 3, "one gradient pair per axis");
-    assert!(with_native_3d(false, || compile_with(&src, |_, _| ())).is_err(), "the grid refuses it");
+    let f = with_native_3d(false, || compile_with(&src, |_, image| smps(image)).unwrap());
+    assert_eq!(f.len(), 2, "the grid's two slices");
+    assert!(
+        f.iter().all(|s| (s["dmn"], s["lodm"]) == (enum_value("dmn", "2d"), enum_value("lodm", "gradients"))),
+        "{f:?}"
+    );
 }
 
 /// The group that defines virtual register `v`.
