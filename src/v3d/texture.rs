@@ -130,10 +130,11 @@ pub fn refusal_for(b: &GlesTextureBind, ret32: bool) -> Option<Refusal> {
             }
         }
         GLES_TEXTYPE_CUBE => return Some("a cube map binding without its six faces"),
-        /* the layout, the image and the record of both are in place
-         * ([`layout`], [`image_offset`], [`state`], [`tile`]); the look-ups
-         * (the TMU's 2D-array and 3D coordinates, textureSize) are not */
-        _ => return Some("a 2D array or 3D texture is not sampled yet"),
+        /* the layout, the image and the record ([`layout`], [`image_offset`],
+         * [`state`], [`tile`]); the compiler writes the layer to TMUI, a 3D
+         * look-up's r to TMUR (src/shaderc/online/v3d/prepare.rs) */
+        GLES_TEXTYPE_2D_ARRAY | GLES_TEXTYPE_3D if b.layers >= 1 => {}
+        _ => return Some("a texture binding of a type or layer count the V3D does not sample"),
     }
     if V3D_SAMPLED_TEXFMTS & gles_texfmt_bit(b.format) == 0 {
         return Some(
@@ -610,9 +611,8 @@ mod tests {
         }
     }
 
-    /// A cube is sampled only whole and square; 2D arrays and 3D are still
-    /// refused by name, and its storage spans every face of the sampled
-    /// levels (to the start of the next level).
+    /// A cube is sampled only whole and square, and its storage spans every
+    /// face of the sampled levels (to the start of the next level).
     #[test]
     fn a_cube_is_sampled_whole_and_square() {
         assert_eq!(refusal(&cube(8, 4)), None);
@@ -622,7 +622,7 @@ mod tests {
         let one = GlesTextureBind { layers: 1, ..cube(8, 1) };
         assert_eq!(refusal(&one), Some("a cube map binding without its six faces"));
         let arr = GlesTextureBind { type_: GLES_TEXTYPE_2D_ARRAY, ..cube(8, 1) };
-        assert_eq!(refusal(&arr), Some("a 2D array or 3D texture is not sampled yet"));
+        assert_eq!(refusal(&arr), None, "six layers of a 2D array");
         assert_eq!(gl_bytes(&cube(8, 4)), gl_level_layered(8, 8, 6, 4, 4).0);
         assert_eq!(gl_bytes(&cube(12, 1)), 12 * 12 * 6 * 4, "one level, not a chain: packed");
     }
@@ -794,15 +794,23 @@ mod tests {
         GlesTextureBind { type_: GLES_TEXTYPE_3D, ..array(w, h, depth, levels) }
     }
 
-    /// Both are still refused by name, with one reason, whatever their
-    /// layer count; their layout and record are reachable all the same.
+    /// Both are sampled whatever their layer count (one layer or slice
+    /// included), with the format checks of a 2D texture; a binding with no
+    /// layer, or a 2D one with more than one, is refused by name.
     #[test]
-    fn an_array_and_a_volume_are_still_refused_by_name() {
+    fn an_array_and_a_volume_are_sampled() {
         for b in [array(64, 32, 4, 7), array(8, 8, 1, 1), vol(32, 32, 8, 6), vol(4, 4, 1, 1)] {
-            assert_eq!(refusal(&b), Some("a 2D array or 3D texture is not sampled yet"));
-            assert_eq!(refusal_for(&b, true), Some("a 2D array or 3D texture is not sampled yet"));
-            assert!(layout(&b).is_some(), "laid out all the same");
+            assert_eq!(refusal(&b), None);
+            assert_eq!(
+                refusal_for(&b, true),
+                Some("a look-up compiled for the 32-bit TMU output reads a texture of a 16-bit format")
+            );
+            assert!(layout(&b).is_some(), "laid out");
         }
+        let what = Some("a texture binding of a type or layer count the V3D does not sample");
+        assert_eq!(refusal(&array(8, 8, 0, 1)), what);
+        assert_eq!(refusal(&vol(8, 8, 0, 1)), what);
+        assert_eq!(refusal(&GlesTextureBind { layers: 2, ..bind(8, 8) }), what);
     }
 
     /// `layers` is the GL core's count for an array and the level 0 depth for

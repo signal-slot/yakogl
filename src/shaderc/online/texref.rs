@@ -63,6 +63,18 @@
 //! a cube texture (the V3D's TMUI on the cube's own record) reads one face
 //! as an independent 2D texture with the sampler's wrap modes: that is ES
 //! 2.0's non-seamless rule (3.7.5), and the emulation's path.
+//!
+//! The ES 3.0 forms (2026-11-07): a level's images are a 2D array's layers
+//! or a 3D texture's slices as well as a cube's faces ([`Level::faces`]; the
+//! look-up decides which, the texture does not say). [`layer_of`] is the
+//! layer of a 2D-array coordinate (3.8.9: the nearest, clamped);
+//! [`sample_layer_offset`] and [`sample_3d`] add a constant texel offset
+//! (`textureOffset` and its forms) to the texel coordinates of each level
+//! read before the wrap (3.8.10); [`sample_3d`] picks the slice NEAREST
+//! along r with CLAMP_TO_EDGE and refuses a LINEAR filter (no blend across
+//! slices is modelled); [`fetch`] is `texelFetch`'s texel of its level and
+//! image, no filter and no wrap, refused by name outside the texture (8.8
+//! leaves it undefined).
 
 /// The cube faces in GL's order: `GL_TEXTURE_CUBE_MAP_POSITIVE_X + n`, which
 /// is also the layer order of the V3D texture record (a cube is six layers
@@ -324,6 +336,23 @@ pub enum Refusal {
     LevelBlend(f32),
     /// A 2D-array look-up whose layer is not finite.
     LayerNotFinite,
+    /// A LINEAR filter on a 3D look-up: a blend across two slices, which
+    /// [`sample_3d`] does not model (NEAREST along r only).
+    VolumeLinear,
+    /// A texel fetch of a level the texture has not (the level, the count).
+    FetchLevel(i32, usize),
+    /// A texel fetch outside its level's image: the texel, the level and
+    /// the level's size.
+    FetchTexel {
+        i: i32,
+        j: i32,
+        level: i32,
+        width: u32,
+        height: u32,
+    },
+    /// A texel fetch of a layer (or a 3D texture's slice) the level has not
+    /// (the image index, the count).
+    FetchLayer(i32, usize),
 }
 
 impl core::fmt::Display for Refusal {
@@ -344,6 +373,14 @@ impl core::fmt::Display for Refusal {
                 write!(f, "a level of detail {l} that blends two levels under a mipmap-LINEAR filter")
             }
             Refusal::LayerNotFinite => write!(f, "a 2D-array layer that is not finite"),
+            Refusal::VolumeLinear => {
+                write!(f, "a LINEAR filter on a 3D look-up (a blend across slices is not modelled)")
+            }
+            Refusal::FetchLevel(l, n) => write!(f, "a texel fetch of level {l} on a texture of {n} levels"),
+            Refusal::FetchTexel { i, j, level, width, height } => {
+                write!(f, "a texel fetch of ({i}, {j}) outside level {level}'s {width}x{height}")
+            }
+            Refusal::FetchLayer(k, n) => write!(f, "a texel fetch of layer {k} on a texture of {n} layers"),
         }
     }
 }
@@ -581,12 +618,113 @@ fn over_levels(
 /// texture has layer 0. The layer is clamped to the texture's, as GL does.
 /// Non-seamless by construction: the wrap modes apply within the layer.
 pub fn sample_layer(t: &Texture, sp: &Sampler, layer: usize, s: f32, tc: f32, lod: Lod) -> Result<[f32; 4], Refusal> {
+    sample_layer_offset(t, sp, layer, s, tc, lod, [0, 0])
+}
+
+/// [`sample_layer`] with a constant texel offset (`textureOffset` and its
+/// forms; the V3D's TMU P2 Offset S / T): GL ES 3.0 3.8.10 adds the offset
+/// to the texel coordinates (u, v) = (s w, t h) of the level sampled,
+/// before the wrap, so each level read is sampled at s + offset_s / w of
+/// that level, under the sampler's filter and wrap modes ([`over_levels`]).
+/// A zero offset is [`sample_layer`] as it always was.
+pub fn sample_layer_offset(
+    t: &Texture,
+    sp: &Sampler,
+    layer: usize,
+    s: f32,
+    tc: f32,
+    lod: Lod,
+    offset: [i32; 2],
+) -> Result<[f32; 4], Refusal> {
     let faces = t.levels.first().map_or(0, |l| l.faces.len());
     if faces == 0 {
         return Err(Refusal::NoLevel);
     }
     let layer = layer.min(faces - 1);
-    over_levels(t, sp, lod, |l, filter| sample_face(l, layer, filter, sp, s, tc))
+    over_levels(t, sp, lod, |l, filter| {
+        if offset == [0, 0] {
+            return sample_face(l, layer, filter, sp, s, tc);
+        }
+        let (s, tc) = (s + offset[0] as f32 / l.width as f32, tc + offset[1] as f32 / l.height as f32);
+        sample_face(l, layer, filter, sp, s, tc)
+    })
+}
+
+/// The layer a 2D-array look-up at coordinate `z` reads on `layers` images:
+/// GL ES 3.0 3.8.9's clamp(floor(z + 1/2), 0, d - 1), the nearest layer (the
+/// V3D's TMUI is ASSUMED to take the float coordinate and round it so,
+/// `v3d::sim`'s module doc). Refused when `z` is not finite.
+pub fn layer_of(z: f32, layers: usize) -> Result<usize, Refusal> {
+    if !z.is_finite() {
+        return Err(Refusal::LayerNotFinite);
+    }
+    if layers == 0 {
+        return Err(Refusal::NoLevel);
+    }
+    Ok(((z + 0.5).floor().max(0.0) as usize).min(layers - 1))
+}
+
+/// A 3D look-up at (s, t, r) under sampler `sp`: on each level read
+/// ([`over_levels`]; a level's images are its slices, so its depth is
+/// `faces.len()`, minified with the level), the slice NEAREST picks along r
+/// with CLAMP_TO_EDGE (w = r d plus `offset[2]`, floor, clamped: GL ES 3.0
+/// 3.8.10's equation for the third coordinate, the offset added before
+/// the wrap), then [`sample_face`] on that slice with the sampler's filter
+/// and wrap modes for s and t (and the offset's S and T, as
+/// [`sample_layer_offset`] adds them). Only NEAREST is modelled along r: a
+/// LINEAR filter (a blend of two slices) is refused by name, and so is a w
+/// within 1e-3 of a slice boundary inside the volume, as a texel edge is.
+/// The wrap mode along r is CLAMP_TO_EDGE always (the only one the callers
+/// bind).
+pub fn sample_3d(
+    t: &Texture,
+    sp: &Sampler,
+    s: f32,
+    tc: f32,
+    r: f32,
+    lod: Lod,
+    offset: [i32; 3],
+) -> Result<[f32; 4], Refusal> {
+    if !r.is_finite() {
+        return Err(Refusal::NotFinite);
+    }
+    over_levels(t, sp, lod, |l, filter| {
+        if filter == Filter::Linear {
+            return Err(Refusal::VolumeLinear);
+        }
+        let depth = l.faces.len();
+        if depth == 0 {
+            return Err(Refusal::NoLevel);
+        }
+        let w = r * depth as f32 + offset[2] as f32;
+        if w > 0.0 && w < depth as f32 && (w - w.round()).abs() < 1e-3 {
+            return Err(Refusal::TexelEdge(r));
+        }
+        let slice = (floor_i(w).max(0) as usize).min(depth - 1);
+        let (s, tc) = (s + offset[0] as f32 / l.width as f32, tc + offset[1] as f32 / l.height as f32);
+        sample_face(l, slice, filter, sp, s, tc)
+    })
+}
+
+/// The texel `texelFetch` reads: texel (i, j) of image `k` of `level` (a 2D
+/// array's layer, a 3D texture's slice; 0 for a 2D texture or a cube's +X
+/// face), no filter, no wrap, whatever the sampler. GL ES 3.0 8.8 leaves a
+/// fetch outside the level, its images or the chain undefined, and what a
+/// TMU returns there is not measured: each is refused by name.
+pub fn fetch(t: &Texture, level: i32, i: i32, j: i32, k: i32) -> Result<[f32; 4], Refusal> {
+    let n = t.levels.len();
+    if level < 0 || level as usize >= n {
+        return Err(Refusal::FetchLevel(level, n));
+    }
+    let l = &t.levels[level as usize];
+    if i < 0 || j < 0 || i >= l.width as i32 || j >= l.height as i32 {
+        return Err(Refusal::FetchTexel { i, j, level, width: l.width, height: l.height });
+    }
+    let images = l.faces.len();
+    if k < 0 || k as usize >= images {
+        return Err(Refusal::FetchLayer(k, images));
+    }
+    Ok(l.faces[k as usize][(j as u32 * l.width + i as u32) as usize])
 }
 
 /// A cube look-up at direction (x, y, z) under sampler `sp`, SEAMLESS (the

@@ -62,6 +62,18 @@ import gl_test_pairs as gp  # noqa: E402  (table_arms)
 
 VPM_SIZE = 65536
 FEMTOVG_VS = "femtovg/main.vert"
+# Pairs the V3D's Mesa pins need that neither rule forms: fragment shaders
+# written for the compiler's ES 3.00 texture forms (texelFetch, textureOffset
+# and textureLodOffset) that no gl_test site links and that have no namesake
+# vertex shader, each with the quad vertex shader gl_test links their es300
+# siblings with (es300/cube.vert + array.frag, texsize.frag, vol.frag). A pair
+# here is real for the three-way check (tests/v3d_sim_mesa.rs) like any other;
+# the corpus (qpu_corpus.py) pairs these fragment shaders by glsl2v3d.py's
+# rule 3 already, and this list changes nothing there.
+EXTRA_REAL = (
+    ("es300/cube.vert", "es300/texfetch.frag"),
+    ("es300/cube.vert", "es300/texoffset.frag"),
+)
 FS_KEYS = ("threads", "num_inputs", "input_slots", "flat_shade_flags", "noperspective_flags",
            "centroid_flags", "writes_z", "uses_discard", "uses_center_w")
 VS_KEYS = ("threads", "vattr_sizes", "vpm_output_size", "uses_vid", "uses_iid")
@@ -173,6 +185,10 @@ def main():
     if unresolved:
         raise SystemExit("sim_fixture: gl_test pairing could not resolve: %s" % unresolved)
     real = {(vs, fs) for vs, fs, _ in pairs + g.name_pairs(files) if vs in fset and fs in fset}
+    for vs, fs in EXTRA_REAL:
+        if vs not in fset or fs not in fset:
+            raise SystemExit("sim_fixture: EXTRA_REAL names a source not in the corpus: %s + %s" % (vs, fs))
+        real.add((vs, fs))
     # femtovg: main.vert with every fragment shader (see the module notes).
     if FEMTOVG_VS not in fset:
         raise SystemExit("sim_fixture: %s is not in the corpus" % FEMTOVG_VS)

@@ -2216,29 +2216,25 @@ fn a_3d_texture_does_not_find_an_arrays_kept_copy() {
     assert_layers_at_their_offsets(&rig, &vol, &layout, at_vol, |level| (4 >> level).max(1));
 }
 
-/// The upload is in place, the sampling is not: a draw binding a 2D array or
-/// a 3D texture is still refused by that name (texture.rs keeps the
-/// refusal until the look-ups are in), with no draw and nothing tiled.
-/// Revert check: without the refusal both draws tile their copies.
+/// The upload and the look-ups are in place: a draw binding a 2D array or
+/// a 3D texture is drawn, its copy tiled, with nothing refused (texture.rs
+/// refused both by name until the compiler wrote TMUI and a 3D's TMUR).
 #[test]
-fn a_2d_array_or_3d_binding_is_still_refused() {
+fn a_2d_array_or_3d_binding_is_drawn() {
     let rig = Rig::new();
     rig.init();
     for type_ in [GLES_TEXTYPE_2D_ARRAY, GLES_TEXTYPE_3D] {
         let mut d = rig.draw();
         d.textures[0] = GlesTextureBind { unit: 1, ..layered_texture(type_, 4, 4, 3, 2, 5) };
         d.num_textures = 1;
-        assert_eq!(draw(&d), -EINVAL);
+        assert_eq!(draw(&d), 0, "{:?}", rig.gl.logs());
     }
-    /* one cause, logged the first time (`count_refusal`), counted twice */
-    assert_eq!(rig.logs_with("draw refused: a 2D array or 3D texture is not sampled yet"), 1);
-    assert_eq!(g().refused, 2);
-    assert!(rig.draws().is_empty());
+    assert_eq!(g().refused, 0);
+    assert_eq!(rig.draws().len(), 2);
     let mut tilings = 0u32;
     // SAFETY: a live out-parameter.
     unsafe { v3d_texture_counters(&mut tilings, core::ptr::null_mut()) };
-    assert_eq!(tilings, 0, "the refusal comes before any tiling");
-    assert_eq!((g().j.tex_used, g().j.ntex), (0, 0));
+    assert_eq!(tilings, 2, "each binding's copy tiled once");
 }
 
 /* ---- the clear quad ------------------------------------------------------------ */

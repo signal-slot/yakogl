@@ -232,12 +232,22 @@ pub trait TexelSource {
     fn size(&mut self, sampler: u8, dim: ir::TexDim, lod: i32) -> Result<[u32; 4], Fault>;
 }
 
-/// A texture for [`run_with_textures`]: 2D or cube, its levels and its
-/// minification filter, as the V3D interpreter reads it (one model,
-/// [`super::texref`]). Every value must be exact in f16 (an RGBA16F
-/// texture, so a GPU returns it unrounded) and finite.
+/// A texture for [`run_with_textures`]: 2D, cube, 2D array or 3D (a level's
+/// images are its faces, layers or slices; the look-up's dimension says
+/// which), its levels and its minification filter, as the V3D interpreter
+/// reads it (one model, [`super::texref`]). Every value must be exact in
+/// f16 (an RGBA16F texture, so a GPU returns it unrounded) and finite.
 #[cfg(any(test, feature = "host-test"))]
 pub use super::texref::Texture;
+
+/// The level a [`run_with_textures`] look-up reads: a level of detail
+/// (filtered, [`super::texref::Lod`]) or `texelFetch`'s integer level.
+#[cfg(any(test, feature = "host-test"))]
+#[derive(Clone, Copy)]
+enum RefLevel {
+    Lod(super::texref::Lod),
+    Fetch(i32),
+}
 
 /// Four float lanes as bit patterns.
 pub fn f32x4(v: [f32; 4]) -> [u32; 4] {
@@ -290,10 +300,12 @@ pub fn run(m: &Module<'_>, input: &Inputs<'_>) -> Result<Outcome, String> {
 /// 2.0 does with TEXTURE_MAG_FILTER NEAREST, the texture's
 /// TEXTURE_MIN_FILTER (NEAREST or NEAREST_MIPMAP_NEAREST) and both wrap
 /// modes CLAMP_TO_EDGE (the sampler state is the caller's, not the
-/// module's, so these are this evaluator's). Normalized 2D and cube
-/// look-ups of a float sampler are evaluated; the level is dEQP's for an
-/// explicit level of detail ([`super::texref`]), and an implicit one (the
-/// derivatives) is read only on a texture of one level.
+/// module's, so these are this evaluator's). Normalized 2D, cube, 2D-array
+/// and 3D look-ups of a float sampler are evaluated, with a constant
+/// offset, and so is `texelFetch`; the level is dEQP's for an explicit
+/// level of detail ([`super::texref`]), and an implicit one (the
+/// derivatives) is read only on a texture of one level. A shadow or an
+/// integer sampler stops the run by name.
 #[cfg(any(test, feature = "host-test"))]
 pub fn run_with_textures(m: &Module<'_>, input: &Inputs<'_>, textures: &[Texture]) -> Result<Outcome, String> {
     run_with_trig_error(m, input, textures, 0.0)
@@ -314,13 +326,15 @@ pub fn run_with_trig_error(
     trig: f32,
 ) -> Result<Outcome, String> {
     for t in textures {
-        let faces = if t.cube { 6 } else { 1 };
         if t.levels.is_empty() {
             return Err("a texture with no level".into());
         }
         for (k, l) in t.levels.iter().enumerate() {
             let n = (l.width * l.height) as usize;
-            if l.width == 0 || l.height == 0 || l.faces.len() != faces || l.faces.iter().any(|f| f.len() != n) {
+            /* a cube's six faces; else the one image of a 2D texture, a 2D
+             * array's layers or a 3D texture's slices (at least one) */
+            let images = if t.cube { l.faces.len() == 6 } else { !l.faces.is_empty() };
+            if l.width == 0 || l.height == 0 || !images || l.faces.iter().any(|f| f.len() != n) {
                 return Err(std::format!(
                     "level {k}: a {}x{} level with {} images of {:?} texels",
                     l.width,
@@ -559,51 +573,70 @@ impl Machine<'_, '_, '_> {
             }
             #[cfg(any(test, feature = "host-test"))]
             Op::Tex { dim, shadow, proj, ret, sampler, coord, lod, offset } if !self.textures.is_empty() => {
-                let cube = dim == ir::TexDim::Cube;
-                if !(dim == ir::TexDim::D2 || cube) || shadow || ret != ir::ScalarType::F32 || offset.is_some() {
-                    return self
-                        .stop(format_args!("the evaluator samples only a float 2D or cube texture, without offsets"));
+                if shadow || ret != ir::ScalarType::F32 {
+                    return self.stop(format_args!(
+                        "the evaluator samples only a float texture (no shadow or integer sampler)"
+                    ));
                 }
-                if cube && proj {
-                    return self.stop(format_args!("a projected cube look-up"));
+                /* GLSL ES 3.00 8.8 projects a 2D or 3D look-up only */
+                if proj && !matches!(dim, ir::TexDim::D2 | ir::TexDim::D3) {
+                    return self.stop(format_args!(
+                        "a projected {} look-up",
+                        if dim == ir::TexDim::Cube { "cube" } else { "2D-array" }
+                    ));
                 }
+                /* the coordinate's base width (ir.rs, `Op::Tex`) */
+                let width = if dim == ir::TexDim::D2 { 2 } else { 3 };
                 let cd = self.read_def(coord);
-                if !(cd[0] && cd[1] && (!cube || cd[2]) && (!proj || cd[3])) {
+                if !(cd[..width].iter().all(|&d| d) && (!proj || cd[3])) {
                     return self.stop(format_args!("unset lane: a texture coordinate no instruction defined"));
                 }
                 /* An implicit level of detail, with or without a bias, is
                  * the derivatives': texref reads it only on one level. */
-                let lod = match lod {
-                    ir::TexLod::Implicit | ir::TexLod::Bias(_) => super::texref::Lod::Implicit,
+                let level = match lod {
+                    ir::TexLod::Implicit | ir::TexLod::Bias(_) => RefLevel::Lod(super::texref::Lod::Implicit),
                     ir::TexLod::Lod(l) => {
                         if !self.read_def(l)[0] {
                             return self.stop(format_args!("unset lane: a level of detail no instruction defined"));
                         }
-                        super::texref::Lod::Explicit(f32::from_bits(self.read(l)[0]))
+                        RefLevel::Lod(super::texref::Lod::Explicit(f32::from_bits(self.read(l)[0])))
                     }
                     ir::TexLod::Grad { .. } => return self.stop(format_args!("a look-up with explicit gradients")),
-                    /* integer coordinates and level, no filtering: not a
-                     * normalised look-up, so never read as one */
-                    ir::TexLod::Fetch(_) => return self.stop(format_args!("a texelFetch (integer coordinates)")),
+                    /* integer coordinates and level, no filtering */
+                    ir::TexLod::Fetch(l) => {
+                        if !self.read_def(l)[0] {
+                            return self.stop(format_args!("unset lane: a texelFetch level no instruction defined"));
+                        }
+                        RefLevel::Fetch(self.read(l)[0] as i32)
+                    }
                 };
-                match self.tex(sampler, self.read(coord), proj, cube, lod) {
+                match self.tex(sampler, self.read(coord), proj, dim, level, offset.unwrap_or([0; 3])) {
                     Ok(v) => (v, all),
                     Err(why) => return self.stop(format_args!("{why}")),
                 }
             }
             /* textureSize of a level (GLSL ES 3.00 8.8: the dimensions of
-             * level lod); a cube's is one face's. */
+             * level lod); a cube's is one face's; a 3D texture's depth is
+             * the level's slices (minified with it), a 2D array's layer
+             * count is the same at every level. */
             #[cfg(any(test, feature = "host-test"))]
-            Op::TexSize { sampler, dim: ir::TexDim::D2 | ir::TexDim::Cube, lod } if !self.textures.is_empty() => {
+            Op::TexSize { sampler, dim, lod } if !self.textures.is_empty() => {
                 if !self.read_def(lod)[0] {
                     return self.stop(format_args!("unset lane: a textureSize level no instruction defined"));
                 }
                 let l = self.read(lod)[0];
-                match self.textures.get(usize::from(sampler)).map(|t| t.levels.get(l as usize)) {
-                    Some(Some(lv)) => ([lv.width, lv.height, 0, 0], Self::first(2)),
-                    None => return self.stop(format_args!("no texture at sampler binding {sampler}")),
-                    Some(None) => return self.stop(format_args!("textureSize of level {l}: the texture has fewer")),
-                }
+                let Some(t) = self.textures.get(usize::from(sampler)) else {
+                    return self.stop(format_args!("no texture at sampler binding {sampler}"));
+                };
+                let Some(lv) = t.levels.get(l as usize) else {
+                    return self.stop(format_args!("textureSize of level {l}: the texture has fewer"));
+                };
+                let (third, lanes) = match dim {
+                    ir::TexDim::D3 => (lv.faces.len() as u32, 3),
+                    ir::TexDim::D2Array => (t.levels[0].faces.len() as u32, 3),
+                    ir::TexDim::D2 | ir::TexDim::Cube => (0, 2),
+                };
+                ([lv.width, lv.height, third, 0], Self::first(lanes))
             }
             Op::Tex { dim, shadow, proj, ret, sampler, coord, lod, offset } if self.texels.is_some() => {
                 match self.look_up(dim, shadow, proj, ret, sampler, coord, lod, offset) {
@@ -636,26 +669,38 @@ impl Machine<'_, '_, '_> {
 
     #[cfg(any(test, feature = "host-test"))]
     /// One NEAREST look-up with CLAMP_TO_EDGE, GL ES 2.0.25 sections 3.7.6
-    /// and 3.7.7. Both filters NEAREST always read the level zero array
-    /// (3.7.7 for minification; 3.7.8: magnification "behaves exactly as
-    /// NEAREST for TEXTURE_MIN_FILTER"), so the level or bias does not matter.
+    /// and 3.7.7 (and ES 3.0's 2D-array, 3D, texelFetch and offset forms,
+    /// through the same model, [`super::texref`]). Both filters NEAREST
+    /// always read the level zero array (3.7.7 for minification; 3.7.8:
+    /// magnification "behaves exactly as NEAREST for TEXTURE_MIN_FILTER"),
+    /// so the level or bias does not matter on a texture of one level.
     fn tex(
         &self,
         sampler: u8,
         c: [u32; 4],
         proj: bool,
-        cube: bool,
-        lod: super::texref::Lod,
+        dim: ir::TexDim,
+        level: RefLevel,
+        offset: [i8; 3],
     ) -> Result<[u32; 4], String> {
-        use super::texref::{sample_2d, sample_cube, Refusal};
+        use super::texref::{self, sample_2d, sample_cube, Refusal, Sampler};
         let t = self
             .textures
             .get(usize::from(sampler))
             .ok_or_else(|| std::format!("no texture at sampler binding {sampler}"))?;
-        if t.cube != cube {
+        let cube = dim == ir::TexDim::Cube;
+        /* a cube look-up needs a cube texture, a 2D or 3D look-up a texture
+         * that is not one; a 2D-array look-up reads a cube's faces as its
+         * layers, as the V3D's TMUI does on a cube record */
+        if t.cube != cube && dim != ir::TexDim::D2Array {
+            let kind = match dim {
+                ir::TexDim::Cube => "cube",
+                ir::TexDim::D2 => "2D",
+                ir::TexDim::D3 => "3D",
+                ir::TexDim::D2Array => "2D-array",
+            };
             return Err(std::format!(
-                "a {} look-up on a {} texture at sampler binding {sampler}",
-                if cube { "cube" } else { "2D" },
+                "a {kind} look-up on a {} texture at sampler binding {sampler}",
                 if t.cube { "cube" } else { "2D" }
             ));
         }
@@ -668,11 +713,31 @@ impl Machine<'_, '_, '_> {
             e => std::format!("{e}"),
         };
         let f = f32::from_bits;
-        let v = if cube {
-            sample_cube(t, f(c[0]), f(c[1]), f(c[2]), lod).map(|(v, _)| v)
-        } else {
-            let q = if proj { f(c[3]) } else { 1.0 };
-            sample_2d(t, f(c[0]) / q, f(c[1]) / q, lod)
+        let q = if proj { f(c[3]) } else { 1.0 };
+        let o = offset.map(i32::from);
+        let sp = Sampler::of(t);
+        let images = t.levels.first().map_or(0, |l| l.faces.len());
+        let v = match level {
+            /* texelFetch: the integer texel (plus the offset) of the
+             * integer level; the image is a 2D array's layer or a 3D
+             * texture's slice (plus Offset R) */
+            RefLevel::Fetch(level) => {
+                let (i, j) = (c[0] as i32 + o[0], c[1] as i32 + o[1]);
+                let k = match dim {
+                    ir::TexDim::D2Array => c[2] as i32,
+                    ir::TexDim::D3 => c[2] as i32 + o[2],
+                    ir::TexDim::D2 | ir::TexDim::Cube => 0,
+                };
+                texref::fetch(t, level, i, j, k)
+            }
+            RefLevel::Lod(lod) => match dim {
+                ir::TexDim::Cube => sample_cube(t, f(c[0]), f(c[1]), f(c[2]), lod).map(|(v, _)| v),
+                ir::TexDim::D2 if o == [0; 3] => sample_2d(t, f(c[0]) / q, f(c[1]) / q, lod),
+                ir::TexDim::D2 => texref::sample_layer_offset(t, &sp, 0, f(c[0]) / q, f(c[1]) / q, lod, [o[0], o[1]]),
+                ir::TexDim::D2Array => texref::layer_of(f(c[2]), images)
+                    .and_then(|layer| texref::sample_layer_offset(t, &sp, layer, f(c[0]), f(c[1]), lod, [o[0], o[1]])),
+                ir::TexDim::D3 => texref::sample_3d(t, &sp, f(c[0]) / q, f(c[1]) / q, f(c[2]) / q, lod, o),
+            },
         };
         v.map(|v| v.map(f32::to_bits)).map_err(why)
     }
@@ -1242,6 +1307,143 @@ mod texture_tests {
         };
         run_with_textures(&m, &Inputs { io: &[], uniforms: &[] }, textures)
             .map(|o| o.output_f32(IoSlot::FragColor(0)).expect("stored"))
+    }
+
+    /// A look-up of `dim` at `c` (float bits, or texel indices for a fetch)
+    /// with `level`: implicit (`None`), an explicit level of detail
+    /// (`Some(Ok(lod))`) or a `texelFetch` of that level (`Some(Err(l))`);
+    /// and a constant `offset`.
+    fn look(
+        textures: &[Texture],
+        dim: TexDim,
+        c: [u32; 3],
+        level: Option<Result<f32, i32>>,
+        offset: Option<[i8; 3]>,
+    ) -> Result<[f32; 4], String> {
+        let level_const = match level {
+            Some(Ok(l)) => Op::ConstF32([l.to_bits(); 4]),
+            Some(Err(l)) => Op::ConstI32([l; 4]),
+            None => Op::ConstF32([0; 4]),
+        };
+        let lod = match level {
+            None => TexLod::Implicit,
+            Some(Ok(_)) => TexLod::Lod(Src::id(ValueId(1))),
+            Some(Err(_)) => TexLod::Fetch(Src::id(ValueId(1))),
+        };
+        let instrs = [
+            Op::ConstF32([c[0], c[1], c[2], 1.0f32.to_bits()]),
+            level_const,
+            Op::Tex {
+                dim,
+                shadow: false,
+                proj: false,
+                ret: ScalarType::F32,
+                sampler: 0,
+                coord: Src::id(ValueId(0)),
+                lod,
+                offset,
+            },
+            Op::StoreOutput { slot: IoSlot::FragColor(0), src: Src::id(ValueId(2)) },
+        ];
+        let nodes: std::vec::Vec<Node> = (0..4).map(|i| Node::Instr(InstrId(i))).collect();
+        let m = Module {
+            instrs: &instrs,
+            nodes: &nodes,
+            body: Range { first: 0, len: 4 },
+            ..Module::empty(SHC_STAGE_FRAGMENT)
+        };
+        run_with_textures(&m, &Inputs { io: &[], uniforms: &[] }, textures)
+            .map(|o| o.output_f32(IoSlot::FragColor(0)).expect("stored"))
+    }
+
+    /// Three levels (4x4, 2x2, 1x1) of `images` images each, or of the
+    /// count minified with the level when `volume` (a 3D texture's slices):
+    /// every texel of image f of level k is 10k + f, plus the texel's
+    /// column over 8 on level 0 (exact in f16).
+    fn stack(images: u32, volume: bool) -> Texture {
+        use super::super::texref::{Level, MinFilter};
+        let lv = |k: u32| {
+            let w = 4 >> k;
+            let n = if volume { (images >> k).max(1) } else { images };
+            let image = |f: u32| {
+                (0..w * w).map(|x| [(10 * k + f) as f32 + if k == 0 { (x % w) as f32 / 8.0 } else { 0.0 }; 4]).collect()
+            };
+            Level { width: w, height: w, faces: (0..n).map(image).collect() }
+        };
+        Texture { cube: false, min: MinFilter::NearestMipmapNearest, levels: (0..3).map(lv).collect() }
+    }
+
+    /// The ES 3.0 forms through the shared model: a 2D-array look-up reads
+    /// the nearest layer, clamped; a 3D one the slice NEAREST picks along
+    /// r; both minify with an explicit level; a constant offset moves the
+    /// texel of the level read (S, T, and R for a 3D look-up); a
+    /// `texelFetch` reads its integer texel, layer or slice, and is
+    /// refused outside the texture; textureSize gives the layer count,
+    /// unminified, or the level's depth. A 3D look-up on a cube texture
+    /// and an integer sampler stop by name.
+    #[test]
+    fn array_3d_fetch_and_offset_look_ups_go_through_the_shared_model() {
+        let fb = |x: f32| x.to_bits();
+        let arr = [stack(3, false)];
+        let at = |z: f32, lod: Option<Result<f32, i32>>, off: Option<[i8; 3]>| {
+            look(&arr, TexDim::D2Array, [fb(0.3), fb(0.6), fb(z)], lod, off).map(|v| v[0])
+        };
+        assert_eq!(at(1.2, Some(Ok(0.0)), None), Ok(1.125), "layer 1, column 1");
+        assert_eq!(
+            at(1.2, None, None).unwrap_err(),
+            "an implicit level of detail on a texture of 3 levels (derivatives are not modelled)"
+        );
+        assert_eq!(at(1.2, Some(Ok(0.0)), Some([1, 0, 0])), Ok(1.25), "Offset S +1: column 2");
+        assert_eq!(at(1.2, Some(Ok(0.9)), None), Ok(11.0), "level 1, layer 1");
+        assert_eq!(at(7.0, Some(Ok(0.0)), None), Ok(2.125), "clamped to the last layer");
+        assert_eq!(at(-3.0, Some(Ok(0.0)), None), Ok(0.125), "clamped to layer 0");
+        assert_eq!(at(0.5, Some(Ok(0.0)), None), Ok(1.125), "floor(0.5 + 0.5)");
+        let fetch = |c: [u32; 3], l: i32, off: Option<[i8; 3]>| look(&arr, TexDim::D2Array, c, Some(Err(l)), off);
+        assert_eq!(fetch([2, 1, 1], 0, None).map(|v| v[0]), Ok(1.25));
+        assert_eq!(fetch([0, 0, 1], 1, None).map(|v| v[0]), Ok(11.0));
+        assert_eq!(fetch([1, 1, 1], 0, Some([1, 0, 0])).map(|v| v[0]), Ok(1.25), "texelFetchOffset");
+        assert_eq!(fetch([4, 1, 1], 0, None).unwrap_err(), "a texel fetch of (4, 1) outside level 0's 4x4");
+        assert_eq!(fetch([1, 1, 3], 0, None).unwrap_err(), "a texel fetch of layer 3 on a texture of 3 layers");
+        assert_eq!(fetch([0, 0, 0], 3, None).unwrap_err(), "a texel fetch of level 3 on a texture of 3 levels");
+        let vol = [stack(4, true)];
+        let at3 = |r: f32, lod: Option<Result<f32, i32>>, off: Option<[i8; 3]>| {
+            look(&vol, TexDim::D3, [fb(0.3), fb(0.6), fb(r)], lod, off).map(|v| v[0])
+        };
+        assert_eq!(at3(0.8, Some(Ok(0.0)), None), Ok(3.125), "slice 3 of 4");
+        assert_eq!(at3(0.8, Some(Ok(0.0)), Some([0, 0, -2])), Ok(1.125), "Offset R -2: slice 1");
+        assert_eq!(at3(0.8, Some(Ok(0.9)), None), Ok(11.0), "level 1: slice 1 of 2");
+        assert_eq!(at3(0.5, Some(Ok(0.0)), None).unwrap_err(), "a texture coordinate within 1e-3 of a texel edge");
+        let fetch3 = |c: [u32; 3], l: i32, off: Option<[i8; 3]>| look(&vol, TexDim::D3, c, Some(Err(l)), off);
+        assert_eq!(fetch3([2, 1, 1], 0, Some([0, 0, 1])).map(|v| v[0]), Ok(2.25), "slice 1 + Offset R 1");
+        assert_eq!(fetch3([0, 0, 2], 1, None).unwrap_err(), "a texel fetch of layer 2 on a texture of 2 layers");
+        /* a 2D look-up with an offset: texel (0, 0) of tex2x2 plus Offset S
+         * +1 is (1, 0); -1 clamps to (0, 0) */
+        let t = [tex2x2()];
+        let two = |off: [i8; 3]| look(&t, TexDim::D2, [fb(0.25), fb(0.25), 0], None, Some(off));
+        assert_eq!(two([1, 0, 0]), Ok([1.0, 0.0, 0.5, 1.0]));
+        assert_eq!(two([-1, 0, 0]), Ok([0.0, 0.0, 0.5, 1.0]));
+        assert_eq!(two([0, 1, 0]), Ok([0.0, 1.0, 0.5, 1.0]));
+        let e = look(&[mips(true)], TexDim::D3, [fb(0.3), fb(0.6), fb(0.8)], Some(Ok(0.0)), None).unwrap_err();
+        assert!(e.contains("a 3D look-up on a cube texture"), "{e}");
+        let size = |t: &[Texture], dim: TexDim, lod: i32| {
+            let instrs = [
+                Op::ConstI32([lod; 4]),
+                Op::TexSize { sampler: 0, dim, lod: Src::id(ValueId(0)) },
+                Op::StoreOutput { slot: IoSlot::FragColor(0), src: Src::id(ValueId(1)) },
+            ];
+            let nodes: std::vec::Vec<Node> = (0..3).map(|i| Node::Instr(InstrId(i))).collect();
+            let m = Module {
+                instrs: &instrs,
+                nodes: &nodes,
+                body: Range { first: 0, len: 3 },
+                ..Module::empty(SHC_STAGE_FRAGMENT)
+            };
+            run_with_textures(&m, &Inputs { io: &[], uniforms: &[] }, t).map(|o| o.output(IoSlot::FragColor(0)))
+        };
+        assert_eq!(size(&arr, TexDim::D2Array, 0).unwrap(), Some([4, 4, 3, 0]));
+        assert_eq!(size(&arr, TexDim::D2Array, 1).unwrap(), Some([2, 2, 3, 0]), "the layer count is not minified");
+        assert_eq!(size(&vol, TexDim::D3, 0).unwrap(), Some([4, 4, 4, 0]));
+        assert_eq!(size(&vol, TexDim::D3, 1).unwrap(), Some([2, 2, 2, 0]), "the depth is");
     }
 
     /// Three levels, level k's every texel of face f all 10k + f.
