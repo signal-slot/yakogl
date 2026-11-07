@@ -84,6 +84,7 @@ tools/mali/panthor/uapi_pins.expected | Apache-2.0 | expected output of the pant
 tools/mali/isa-ref/board-2026-10-18.txt | Apache-2.0 | disassembly of our board run
 tools/mali/board-dump/*.txt | Apache-2.0 | records of our board runs
 tools/hostharness/glmark2/testdata/* | Apache-2.0 | fixtures of the host harness's report tools: logs and reports the harness wrote
+tools/hostharness/terrain-records/testdata/* | Apache-2.0 | synthetic console and INDEX.txt fixtures of parse.py, in the shape of our board runs
 tools/shaders/known-uncompilable-v3d.txt | Apache-2.0 | list of our own shader table
 driver/rust/tests/gm-record/* | Apache-2.0 | recorded page lists and SNVS captures of our board runs
 #
