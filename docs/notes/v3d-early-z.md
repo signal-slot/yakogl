@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # V3D early Z: when it may be on, what yakogl does, what it would save
 
 Plan #329, item `v3d-early-z-study` (Pi 4; #1209). A study: no code was
