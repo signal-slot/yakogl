@@ -210,64 +210,78 @@ of "Steps run" above (`aarch64.cmake` not found, no GCC on the host, the clang
 header error, Zephyr not run), which were measured at `a63fcc5b48c5` with the
 README as it was then; those rows stay as the earlier record.
 
-Every command was run as `sh -c '...; echo EXIT=$?'`. Builds went into `build/` of
-the workspace. Commit `6ad0f777` is the tip the rows marked so were measured at.
-Host: Linux 7.0.0 x86-64, rustc 1.101.0-nightly (`5d8fec066`, 2026-10-16) with the
-`aarch64-unknown-none` target, cmake 4.2.3, ninja 1.13.2, GNU make.
+Every command was run as `sh -c '...; echo EXIT=$?'` with the output in a file (never
+through a pipe, which would hide the exit code). Builds went into `build/` of the
+workspace, one `BUILD=` directory per row, each from an empty directory. Rows 1-3c and
+V1-V3 were measured at **`f652d6dc`**, the integration tip of 2026-11-07, which holds the
+`DRVSRC` fix (`9c736975`, `baremetal.mk:73` reads `DRVSRC  ?= $(HERE)/driver/src`). Main
+(`80c486d2`) differs from it only in README.md, checklist.md and two docs notes, none in
+a build input. Host: Linux 7.0.0 x86-64, rustc 1.101.0-nightly (`5d8fec066`, 2026-10-16)
+with the `aarch64-unknown-none` target, cmake 4.2.3, ninja 1.13.2, GNU Make 4.4.1.
 
-Toolchain for the gcc-prefix rows: the **Zephyr SDK 1.0.1** (`$ZEPHYR_SDK_INSTALL_DIR`),
-`aarch64-zephyr-elf-gcc` 14.3.0 and its binutils. The Arm GNU Toolchain
-(`aarch64-none-elf-`) was not used on this host. Prefix with SDK 1.0:
+Acceptance checks on `f652d6dc`, under `sh` with GNU grep 3.12: c1 (`baremetal.mk` has
+the line `DRVSRC ?= $(HERE)/driver/src`) exit **0**; c2 (no `../src` left in
+`baremetal.mk`, `grep -q` finds none) exit **1** (nothing found, as required).
+
+Toolchain of the gcc-prefix rows: the **Zephyr SDK 1.0.1** (`$ZEPHYR_SDK_INSTALL_DIR`):
+`aarch64-zephyr-elf-gcc (Zephyr SDK 1.0.1) 14.3.0`, GNU ar and objcopy 2.43.1. The prefix
+with SDK 1.0 is
 `$ZEPHYR_SDK_INSTALL_DIR/gnu/aarch64-zephyr-elf/bin/aarch64-zephyr-elf-` (the pre-1.0
-path `$ZEPHYR_SDK_INSTALL_DIR/aarch64-zephyr-elf/bin/` fails).
+path `$ZEPHYR_SDK_INSTALL_DIR/aarch64-zephyr-elf/bin/` fails). The Arm GNU Toolchain
+`aarch64-none-elf-` prefix is row 2a (the same toolchain download as the clang sysroot, below).
+
+Toolchain of the clang rows: Ubuntu clang 21.1.8 (`6ubuntu1`) and Ubuntu LLVM 21.1.8
+`llvm-ar`, `llvm-nm`, `llvm-objcopy`, all with `--target=aarch64-none-elf`, run as the
+README's **unversioned** names: `/usr/lib/llvm-21/bin` (which has `clang`, `llvm-ar`,
+`llvm-nm`, `llvm-objcopy` unversioned) was put first on `PATH`. Sysroot: the
+`aarch64-none-elf` directory of the Arm GNU Toolchain 14.3.rel1
+(`arm-gnu-toolchain-14.3.rel1-x86_64-aarch64-none-elf`, newlib; tarball downloaded from
+developer.arm.com into `$CONNECTED_DEPS_DIR/arm-gnu-dl`, sha256
+`ebaf2d47f2e7f7b645864c5c8cf839e526daed83a2e675a3525d03f5ba3d2be9`, equal to the
+published value). `<sysroot>` in the table is that directory.
 
 | Row | Command | Exit | Commit | Compiler and tools | Sysroot / SDK | Output |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1. CMake toolchain build | `cmake -S . -B build/a64 --toolchain <toolchain.cmake> -DYAKOGL_OSAL=baremetal`, then `cmake --build build/a64`. The toolchain file is the reader's own: `CMAKE_SYSTEM_NAME Generic`, `CMAKE_SYSTEM_PROCESSOR aarch64`, `CMAKE_C_COMPILER`/`CMAKE_AR`/`CMAKE_NM`/`CMAKE_OBJCOPY` set to the SDK prefix below, `CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY` | configure 0, build 0 | `6ad0f777` | aarch64-zephyr-elf-gcc 14.3.0, cmake 4.2.3, ninja 1.13.2, rustc 1.101.0-nightly; Rust target derived: `aarch64-unknown-none` | Zephyr SDK 1.0.1 | `build/a64/libyakogl.a` 41,945,730 bytes (default `online` shader back end; "133 runtime symbols made local") |
-| 2. `baremetal.mk`, gcc prefix, with `DRVSRC=driver/src` | `make -f baremetal.mk CROSS_COMPILE=$ZEPHYR_SDK_INSTALL_DIR/gnu/aarch64-zephyr-elf/bin/aarch64-zephyr-elf- DRVSRC=driver/src` | 0 | `6ad0f777` | aarch64-zephyr-elf-gcc 14.3.0, rustc 1.101.0-nightly, cmake 4.2.3 | Zephyr SDK 1.0.1 (freestanding; no libc needed to build) | `libyakogl.a` 27,493,510 bytes ("133 runtime symbols made local") |
-| 2'. the same without `DRVSRC` | `make -f baremetal.mk CROSS_COMPILE=$ZEPHYR_SDK_INSTALL_DIR/gnu/aarch64-zephyr-elf/bin/aarch64-zephyr-elf-` | tip: **2**. With the `DRVSRC` fix applied: **0** | `964f50f0` (this walkthrough's own commit on top changes no source); fix = `f82cfcce`'s change to `baremetal.mk` applied by hand, not committed. Earlier: step2-nodrvsrc, `0a7a0a84` plus `f82cfcce` (blob `9681986a`): 0 | aarch64-zephyr-elf-gcc 14.3.0 | Zephyr SDK 1.0.1 prefix; the Arm GNU `aarch64-none-elf-` prefix was not measured for step 2 | tip: `pvr_render.h: No such file or directory` at `src/abi_layout_check.c:17`. With the fix: `libyakogl.a` 27,636,622 bytes; the archive member list is identical with and without `DRVSRC=driver/src`. With `DRVSRC=driver/src`, tip: exit 0, 27,636,238 bytes |
-| 3. clang form, README literal (no `--sysroot`) | `make -f baremetal.mk CC='clang --target=aarch64-none-elf' AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy` (here with `clang-21` and the `-21` tool names, `DRVSRC=driver/src`) | **2** | `964f50f0`. Earlier: clang-sysroot-pre `14e93e64`: 2 | Ubuntu clang 21.1.8; llvm-ar-21, llvm-nm-21, llvm-objcopy-21 (Ubuntu LLVM 21.1.8); the `-21` names were passed because the host has no unversioned `llvm-ar` etc. | none | `'string.h' file not found` at `src/osal/baremetal.c:25`: a host requirement, a newlib sysroot must be in `CC` |
-| 3a. clang form with a sysroot, GPU=powervr | `make -f baremetal.mk CC='clang-21 --target=aarch64-none-elf --sysroot=<sysroot>' AR=llvm-ar-21 NM=llvm-nm-21 OBJCOPY=llvm-objcopy-21 DRVSRC=driver/src` | 0 | `964f50f0`. Earlier: `14e93e64`: 0, 26,794,518 bytes | Ubuntu clang 21.1.8; llvm-ar-21, llvm-nm-21, llvm-objcopy-21 (Ubuntu LLVM 21.1.8); the `-21` names were passed because the host has no unversioned `llvm-ar` etc. | `$CONNECTED_DEPS_DIR/arm-gnu-dl/arm-gnu-toolchain-14.3.rel1-x86_64-aarch64-none-elf/aarch64-none-elf` (Arm GNU Toolchain 14.3.rel1, tarball sha256 `ebaf2d47…2be9` equal to the published value) | `libyakogl.a` 26,936,654 bytes |
-| 3b. the same, `GPU=vivante` | row 3a plus `GPU=vivante` | 0 | `964f50f0`. Earlier: `14e93e64`: 0, 22,785,282 bytes | as 3a | as 3a | `libyakogl.a` 22,781,802 bytes (same with the fix applied) |
-| 3c. the same, powervr, no `DRVSRC` | row 3a without `DRVSRC=driver/src` | tip: **2**. With the fix applied: **0** | `964f50f0`, fix applied by hand. Earlier: `14e93e64` plus `f82cfcce`: 0, 26,795,574 bytes | as 3a | as 3a | tip: `pvr_render.h` not found at `src/abi_layout_check.c:17`. With the fix: `libyakogl.a` 26,937,358 bytes |
-| 4a. Zephyr, `ZEPHYR_EXTRA_MODULES` | `west build -b rpi_4b examples/triangle` with yakogl and `driver/` in `ZEPHYR_EXTRA_MODULES`, `CONFIG_YAKOGL=y` | 0 | `b60224da` | rustc 1.101.0-nightly, cmake 4.2.3, ninja 1.13.2, west 1.5.0 | Zephyr 4.4.99 (`af17c0c8aa2a`), Zephyr SDK 1.0.1 | not recorded |
-| 4b. Zephyr, form (a): a fresh west workspace from yakogl's `west.yml` | a fresh west workspace from `west.yml`, `west update` (3 m 21.8 s), then the sample build | 0 | `d055a0b` | as 4a | Zephyr `af17c0c8` (equal to the `west.yml` pin), Zephyr SDK 1.0.1 | `zephyr.elf` 20,174,808 bytes; `libyakogl.a` 1,944,368 bytes |
-| V1. `GPU=vivante` | row 2 plus `GPU=vivante` | 0 | `6ad0f777` | as row 2 | Zephyr SDK 1.0.1 | `libyakogl.a` 22,951,578 bytes |
-| V2. `REPORT_ES2=0` | row 2 plus `REPORT_ES2=0` | 0 | `606343ff` (`DRVSRC=driver/src` given explicitly) | as row 2 | Zephyr SDK 1.0.1 | `libyakogl.a` 28,291,846 bytes |
-| V3. `RUST_LINKAGE=external` | row 2 plus `RUST_LINKAGE=external` | 0 | `6ad0f777` | as row 2 | Zephyr SDK 1.0.1 | `libyakogl_c.a` 659,340 bytes (C parts only) |
+| 1. CMake toolchain build | `cmake -S . -B build/a64 --toolchain <toolchain.cmake> -DYAKOGL_OSAL=baremetal`, then `cmake --build build/a64`. The toolchain file is the reader's own: `CMAKE_SYSTEM_NAME Generic`, `CMAKE_SYSTEM_PROCESSOR aarch64`, `CMAKE_C_COMPILER`/`CMAKE_AR`/`CMAKE_NM`/`CMAKE_OBJCOPY` set to the SDK prefix below, `CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY` | configure 0, build 0 | `f652d6dc`. Earlier: `6ad0f777`: 0, 41,945,730 bytes | aarch64-zephyr-elf-gcc 14.3.0, cmake 4.2.3, ninja 1.13.2, rustc 1.101.0-nightly; Rust target derived: `aarch64-unknown-none` | Zephyr SDK 1.0.1 | `build/a64/libyakogl.a` 42,130,018 bytes (default `online` shader back end) |
+| 2. `baremetal.mk`, gcc prefix, with `DRVSRC=driver/src` | `make -f baremetal.mk CROSS_COMPILE=$ZEPHYR_SDK_INSTALL_DIR/gnu/aarch64-zephyr-elf/bin/aarch64-zephyr-elf- DRVSRC=driver/src` | 0 | `f652d6dc`. Earlier: `6ad0f777`: 0, 27,493,510 bytes | aarch64-zephyr-elf-gcc 14.3.0, rustc 1.101.0-nightly, cmake 4.2.3 | Zephyr SDK 1.0.1 (freestanding; no libc needed to build) | `libyakogl.a` 27,643,406 bytes ("133 runtime symbols made local" in the earlier runs) |
+| 2'. the same without `DRVSRC` | `make -f baremetal.mk CROSS_COMPILE=$ZEPHYR_SDK_INSTALL_DIR/gnu/aarch64-zephyr-elf/bin/aarch64-zephyr-elf-` | **0** | `f652d6dc` (the `DRVSRC` default is committed there, `9c736975`). Earlier: `964f50f0` without the fix: 2, `pvr_render.h: No such file or directory` at `src/abi_layout_check.c:17` | aarch64-zephyr-elf-gcc 14.3.0 | Zephyr SDK 1.0.1 | `libyakogl.a` 27,643,790 bytes (384 bytes more than row 2: the path strings differ; the member list was identical with and without `DRVSRC=driver/src` at the earlier commits) |
+| 2a. rows 2 and 2' with the Arm GNU prefix | row 2 and row 2' with `CROSS_COMPILE=<Arm GNU Toolchain 14.3.rel1>/bin/aarch64-none-elf-` | 0 with `DRVSRC`, 0 without | `f652d6dc`. Earlier: `98251549`: 0, 0 | aarch64-none-elf-gcc (Arm GNU Toolchain 14.3.Rel1, Build arm-14.174) 14.3.1 20250623 | the toolchain's newlib | `libyakogl.a` 27,661,518 bytes with `DRVSRC`, 27,661,966 without |
+| 3. clang form, README literal (no `--sysroot`) | `make -f baremetal.mk CC='clang --target=aarch64-none-elf' AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy` | **2** | `f652d6dc`. Earlier: `964f50f0`, `14e93e64`: 2 | clang 21.1.8, llvm-ar, llvm-nm, llvm-objcopy 21.1.8, unversioned names via `PATH` | none | `'string.h' file not found` at `src/osal/baremetal.c:25` (`baremetal.mk:184`): a host requirement, a newlib sysroot must be in `CC`; no tree defect |
+| 3a. clang form with a sysroot, GPU=powervr | `make -f baremetal.mk CC='clang --target=aarch64-none-elf --sysroot=<sysroot>' AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy DRVSRC=driver/src` | 0 | `f652d6dc`. Earlier: `964f50f0`: 0, 26,936,654 bytes | as row 3 | Arm GNU Toolchain 14.3.rel1 newlib, `<sysroot>` as above | `libyakogl.a` 26,943,854 bytes |
+| 3b. the same, `GPU=vivante` | row 3a plus `GPU=vivante` | 0 | `f652d6dc`. Earlier: `964f50f0`: 0, 22,781,802 bytes | as row 3 | as 3a | `libyakogl.a` 22,822,930 bytes |
+| 3c. the same, powervr, no `DRVSRC` | row 3a without `DRVSRC=driver/src` | **0** | `f652d6dc`. Earlier: `964f50f0` without the fix: 2, `pvr_render.h` not found at `src/abi_layout_check.c:17` | as row 3 | as 3a | `libyakogl.a` 26,944,542 bytes |
+| 4a. Zephyr, `ZEPHYR_EXTRA_MODULES` | `west build -b rpi_4b examples/triangle` with yakogl and `driver/` in `ZEPHYR_EXTRA_MODULES`, `CONFIG_YAKOGL=y` | 0 | `b60224da` (zephyr-step4; **not** re-run at `f652d6dc`, see below) | rustc 1.101.0-nightly, cmake 4.2.3, ninja 1.13.2, west 1.5.0 | Zephyr 4.4.99 (`af17c0c8aa2a`), Zephyr SDK 1.0.1 | `zephyr.elf` 20,159,608 bytes; `libyakogl.a` 1,942,720 bytes |
+| 4b. Zephyr, form (a): a fresh west workspace from yakogl's `west.yml` | a fresh west workspace from `west.yml`, `west update` (3 m 21.8 s), then the sample build | 0 | `d055a0b` (not re-run) | as 4a | Zephyr `af17c0c8` (equal to the `west.yml` pin), Zephyr SDK 1.0.1 | `zephyr.elf` 20,174,808 bytes; `libyakogl.a` 1,944,368 bytes |
+| V1. `GPU=vivante` | row 2 plus `GPU=vivante` | 0 | `f652d6dc`. Earlier: `6ad0f777`: 0, 22,951,578 bytes | as row 2 | Zephyr SDK 1.0.1 | `libyakogl.a` 22,992,970 bytes |
+| V2. `REPORT_ES2=0` | `make -f baremetal.mk CROSS_COMPILE=<SDK prefix> REPORT_ES2=0` (no `DRVSRC`) | 0 | `f652d6dc`. Earlier: `606343ff`: 0, 28,291,846 bytes | as row 2 | Zephyr SDK 1.0.1 | `libyakogl.a` 28,442,126 bytes |
+| V3. `RUST_LINKAGE=external` | row 2' plus `RUST_LINKAGE=external` | 0 | `f652d6dc`. Earlier: `6ad0f777`, `964f50f0`: 0, 659,340 bytes | as row 2 | Zephyr SDK 1.0.1 | `libyakogl_c.a` 659,724 bytes (C parts only) |
 
-Sources of the rows: rows 1, 2, V1 and V3 were measured for this record at `6ad0f777`
-(no earlier record of their exit codes exists in the repository). Rows 4a, 4b and V2
-come from the plan's earlier measurements (zephyr-step4, zephyr-west-init and
-west-venv-e2e, mv-es3); their commands and outputs are not stored in the repository, so
-the cells are as those items reported them.
+Sources of the rows: rows 1, 2, 2', 2a, 3, 3a-3c and V1-V3 were all re-run for this record at
+`f652d6dc`, each into an empty `BUILD=` directory, so the exit codes are those of the
+first, complete `make`/`cmake` run. The "Earlier" numbers are the previous measurements
+at `6ad0f777`, `964f50f0`, `606343ff` and `14e93e64`; sizes differ from the current ones
+because the sources moved. Rows 4a and 4b come from earlier items (
+zephyr-step4/zephyr-4a-rerun, zephyr-west-init/west-venv-e2e); their commands and
+outputs are not stored in the repository, so those cells are as the items reported them.
+Of steps 2 and 4 only step 2 with the SDK prefix was re-run at the tip (rows 2, 2', 2a): the
+re-run of step 4 needs `west`, a venv with `requirements-base.txt` and a Zephyr
+workspace, none of which this host had, so row 4 keeps its older commits (the Zephyr
+build does not read `baremetal.mk`; the `DRVSRC` change cannot reach it).
 
 Host quirks seen:
 
 - With Zephyr SDK 1.0 the step-2 prefix is
   `$ZEPHYR_SDK_INSTALL_DIR/gnu/aarch64-zephyr-elf/bin/aarch64-zephyr-elf-`; the pre-1.0
   path fails.
-- A stale `ZEPHYR_BASE` in the environment breaks step 4 form (a); unset it first.
+- The clang form needs a newlib sysroot in `CC` (`--sysroot=<Arm GNU
+  Toolchain>/aarch64-none-elf`); without it step 3 stops at `string.h` (row 3).
+- Ubuntu installs the unversioned `llvm-ar`, `llvm-nm`, `llvm-objcopy` only under
+  `/usr/lib/llvm-21/bin`, not in `/usr/bin` (there only the `-21` names); that directory
+  has to be on `PATH` for README's literal names, or the `-21` names passed.
+- A stale `ZEPHYR_BASE` in the environment breaks step 4 form (a); unset it first. The
+  sample also needs `RUSTUP_TOOLCHAIN=nightly`.
 - On hosts that refuse `$?` in a command line, put `echo EXIT=$?` inside `sh -c '...'`.
-- README's step 1 needs a toolchain file of the reader's own; the one used here is five
-  `set()` lines (listed in row 1).
-
-Rows 2', 3 and 3a to 3c were re-measured for this record (item walkthrough-cells) at
-`964f50f0` with the exit code of each `make` taken through `sh -c '...; echo EXIT=$?'`.
-The "fix applied" runs used the one-line `DRVSRC ?= $(HERE)/driver/src` change of
-`f82cfcce` applied by hand to `baremetal.mk` (the comment line above it was not copied,
-so the blob is not `9681986a`) and reverted afterwards; nothing of it is committed here.
-The earlier numbers (step2-nodrvsrc, clang-sysroot-pre at `14e93e64`, clang-walk) are
-quoted in the Commit column. Their sizes differ from these because the sources moved
-between `14e93e64` and `964f50f0`.
-
-Versions of the clang rows: clang 21.1.8 (Ubuntu, x86_64 host, `--target=aarch64-none-elf`),
-llvm-ar, llvm-nm and llvm-objcopy Ubuntu LLVM 21.1.8, sysroot the `aarch64-none-elf`
-directory of the Arm GNU Toolchain 14.3.rel1 (`x86_64-aarch64-none-elf`, downloaded from
-developer.arm.com into `$CONNECTED_DEPS_DIR/arm-gnu-dl` and extracted; sha256
-`ebaf2d47f2e7f7b645864c5c8cf839e526daed83a2e675a3525d03f5ba3d2be9` equals the published
-`.sha256asc`). The host has only the `-21` tool names, so `clang-21`, `llvm-ar-21`,
-`llvm-nm-21` and `llvm-objcopy-21` were passed instead of the README's unversioned names.
-
-Host quirk: the clang form needs a newlib sysroot in `CC` (`--sysroot=<Arm GNU
-Toolchain>/aarch64-none-elf`); without it step 3 stops at `string.h`.
+  Some hosts also refuse a direct call of the toolchain binaries; a call through `make`
+  or `sh -c` works.
+- README's step 1 needs a toolchain file of the reader's own; the one used here is eight
+  lines (listed in row 1).
