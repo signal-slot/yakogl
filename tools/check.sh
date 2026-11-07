@@ -2698,7 +2698,7 @@ key_release_archives() {
   key_tree "${RELEASE_KEY_PATHS[@]}" || return 1
   key_table build/precompiled/check-powervr.rs
   key_table build/precompiled/check-gc7000.rs
-  declare -f table_symbols mesa_reference_symbols knob_symbols knob_sets dep_info_within
+  declare -f cargo_artifact artifact_dep_info table_symbols mesa_reference_symbols knob_symbols knob_sets dep_info_within
   declare -f artefact_worker check_no_mesa_reference
   echo "quick $QUICK; knobs $KNOB_VIVANTE_SYMBOLS / $KNOB_POWERVR_SYMBOLS"
 }
@@ -2755,13 +2755,47 @@ if outside:
 PY
 }
 
+# cargo_artifact <crate> <ext> <cargo build args...>: build, and print the
+# file of that extension (rlib, a) cargo's own `compiler-artifact` message
+# names for the library target <crate>. The path is cargo's to choose.
+cargo_artifact() {
+  local crate=$1 ext=$2
+  shift 2
+  cargo build --message-format=json-render-diagnostics "$@" 2>/dev/null |
+    python3 -c '
+import json, sys
+crate, ext = sys.argv[1:]
+found = None
+for line in sys.stdin:
+    try:
+        m = json.loads(line)
+    except ValueError:
+        continue
+    if m.get("reason") == "compiler-artifact" and m["target"]["name"] == crate:
+        for f in m["filenames"]:
+            if f.endswith("." + ext):
+                found = f
+if found is None:
+    sys.exit(1)
+print(found)' "$crate" "$ext"
+  local st=("${PIPESTATUS[@]}")
+  [ "${st[0]}" -eq 0 ] && [ "${st[1]}" -eq 0 ]
+}
+
+# artifact_dep_info <artifact>: its dep-info, beside it. Cargo writes
+# <stem>.d for a file in the target directory (libyakogl_capi.d) and
+# <crate>-<hash>.d, without the `lib` prefix, in a build/<crate>/<hash>/out
+# directory (the rlib on nightly-2026-11-04 and later).
+artifact_dep_info() {
+  local d=${1%/*} b=${1##*/}
+  b=${b%.*}
+  if [ -f "$d/$b.d" ]; then echo "$d/$b.d"; else echo "$d/${b#lib}.d"; fi
+}
+
 table_symbols() {
-  local dir
-  dir=$(cargo metadata --no-deps --format-version 1 |
-    python3 -c 'import json, sys; print(json.load(sys.stdin)["target_directory"])') || return 1
-  cargo build --release --no-default-features --features "$1" >/dev/null 2>&1 || return 1
-  dep_info_within "$dir/release/libyakogl.d" || return 1
-  local rlib="$dir/release/libyakogl.rlib" n
+  local rlib n
+  rlib=$(cargo_artifact yakogl rlib --release --no-default-features --features "$1") || return 1
+  dep_info_within "$(artifact_dep_info "$rlib")" || return 1
   n=$(nm --defined-only "$rlib" 2>/dev/null | grep -cE '14mesa_reference|SHC_BLOB_TABLE' || true)
   # The release profile is `lto = true`, and cargo may then build the rlib's
   # object as LLVM bitcode alone, which an nm without the LLVM plugin (GNU
@@ -2812,22 +2846,21 @@ step "no table in the artefact" check_table_absent
 # mesa_reference_symbols <target|host> <features> <target dir>: build the
 # archive into that cargo target directory and count the reference's symbols.
 mesa_reference_symbols() {
-  local target="$1" features="$2" dir="$3" lib table=()
+  local target="$1" features="$2" dir="$3" lib table=""
   case "$features" in
   *precompiled-shaders*gpu-vivante* | *gpu-vivante*precompiled-shaders*)
-    table=(env "YAKOGL_PRECOMPILED_TABLE=$PWD/build/precompiled/check-gc7000.rs") ;;
-  *precompiled-shaders*) table=(env "YAKOGL_PRECOMPILED_TABLE=$PWD/build/precompiled/check-powervr.rs") ;;
+    table="$PWD/build/precompiled/check-gc7000.rs" ;;
+  *precompiled-shaders*) table="$PWD/build/precompiled/check-powervr.rs" ;;
   esac
+  [ -z "$table" ] || export YAKOGL_PRECOMPILED_TABLE="$table"  # a subshell: the caller substitutes this
   if [ "$target" = host ]; then
-    "${table[@]}" cargo build -q -p yakogl-capi --release --no-default-features --features "$features" \
-      --target-dir "$dir" >/dev/null 2>&1 || return 1
-    lib="$dir/release/libyakogl_capi.a"
+    lib=$(cargo_artifact yakogl_capi a -p yakogl-capi --release --no-default-features \
+      --features "$features" --target-dir "$dir") || return 1
   else
-    "${table[@]}" cargo build -q -p yakogl-capi --release --target "$target" --no-default-features \
-      --features "$features" --target-dir "$dir" >/dev/null 2>&1 || return 1
-    lib="$dir/$target/release/libyakogl_capi.a"
+    lib=$(cargo_artifact yakogl_capi a -p yakogl-capi --release --target "$target" \
+      --no-default-features --features "$features" --target-dir "$dir") || return 1
   fi
-  dep_info_within "${lib%.a}.d" || return 1
+  dep_info_within "$(artifact_dep_info "$lib")" || return 1
   nm "$lib" 2>/dev/null |
     grep -cE '14mesa_reference|13mesa_internal|17mesa_clear_shader|SHC_BLOB_TABLE|SHC_SOURCE_TABLE' || true
 }
@@ -2948,12 +2981,10 @@ step "no Mesa reference in the artefact" check_no_mesa_reference
 # knob_symbols <features> <awk pattern>: the archive's defined globals that
 # match
 knob_symbols() {
-  local dir
-  dir=$(cargo metadata --no-deps --format-version 1 |
-    python3 -c 'import json, sys; print(json.load(sys.stdin)["target_directory"])') || return 1
-  cargo build -p yakogl-capi --release --no-default-features --features "$1" >/dev/null 2>&1 || return 1
-  dep_info_within "$dir/release/libyakogl_capi.d" || return 1
-  nm --defined-only -g "$dir/release/libyakogl_capi.a" 2>/dev/null |
+  local lib
+  lib=$(cargo_artifact yakogl_capi a -p yakogl-capi --release --no-default-features --features "$1") || return 1
+  dep_info_within "$(artifact_dep_info "$lib")" || return 1
+  nm --defined-only -g "$lib" 2>/dev/null |
     awk -v pat="$2" 'NF == 3 && $3 ~ pat { print $3 }' | sort -u
 }
 
