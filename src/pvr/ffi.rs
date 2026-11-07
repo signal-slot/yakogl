@@ -72,6 +72,11 @@ pub const PVR_TA_CLIP_MODE_FRONT_REAR: u32 = 1;
 pub const PVR_TA_CLIP_MODE_FRONT_REAR_DEPTH: u32 = 2;
 
 pub const PVR_TA_FLATSHADE_VERTEX_0: u32 = 1;
+/// GL's provoking vertex is the last one (Mesa's LAST_VERTEX mode: VERTEX_2
+/// for every topology, pvr_arch_cmd_buffer.c).
+pub const PVR_TA_FLATSHADE_VERTEX_2: u32 = 3;
+/// VDM_STATE0.flatshade_control, VDMCTRL_FLATSHADE_CONTROL_VERTEX_2.
+pub const PVR_VDM_FLATSHADE_CONTROL_VERTEX_2: u32 = 2;
 
 /* VDMCTRL_INDEX_LIST0 primitive topology (vdm.xml:117-130). */
 pub const PVR_VDM_TOPOLOGY_POINT_LIST: u32 = 0;

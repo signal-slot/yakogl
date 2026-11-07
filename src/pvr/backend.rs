@@ -8193,7 +8193,7 @@ fn record_draw(b: &mut Backend, s: &mut Scratch, d: &GlesDraw, first: u32, count
         st.pretransform = 0;
         st.drawclippededges = 1;
         st.wclampen = 1;
-        st.flatshade_vtx = PVR_TA_FLATSHADE_VERTEX_0;
+        st.flatshade_vtx = PVR_TA_FLATSHADE_VERTEX_2;
         /* Near/far clipping is ON by default now that the TA clips GL's
          * volume ([`ppp_ctrl`]'s `opengl` bit). The knob keeps the values
          * z_probe and gl_test case 62 already pass -- 1 FRONT_REAR,
@@ -8438,7 +8438,7 @@ fn record_draw(b: &mut Backend, s: &mut Scratch, d: &GlesDraw, first: u32, count
             }
             vss.vs_input_size_bytes = vin * 4;
         }
-        vss.flatshade_control = 0;
+        vss.flatshade_control = PVR_VDM_FLATSHADE_CONTROL_VERTEX_2;
 
         let base = b.vdm.cpu as *mut u32;
         let mut dw = b.vdm_dw as usize;
