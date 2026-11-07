@@ -220,10 +220,13 @@ cmake --build build
 # Further options: the table below.
 cmake -S . -B build/a64 --toolchain <your-toolchain.cmake> -DYAKOGL_OSAL=baremetal
 # bare metal (RUST_TARGET defaults to aarch64-unknown-none); needs an aarch64-none-elf GCC on PATH, or use the clang form below
-make -f baremetal.mk CROSS_COMPILE=aarch64-none-elf- DRVSRC=driver/src
-make -f baremetal.mk CC='clang --target=aarch64-none-elf' AR=llvm-ar NM=llvm-nm \
-     OBJCOPY=llvm-objcopy DRVSRC=driver/src
-# clang needs bare-metal C headers (a newlib sysroot, given with --sysroot in CC)
+make -f baremetal.mk CROSS_COMPILE=aarch64-none-elf-
+# clang needs bare-metal C headers: a newlib sysroot, e.g. the aarch64-none-elf
+# directory of the Arm GNU toolchain; distributions ship the LLVM tools versioned
+# (llvm-ar-21, ...), so AR, NM and OBJCOPY may need those names
+make -f baremetal.mk \
+     CC='clang --target=aarch64-none-elf --sysroot=<arm-gnu>/aarch64-none-elf' \
+     AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy
 # Zephyr: a workspace from west.yml (driver/samples/zephyr/README.md), or add this
 # directory and driver/ to ZEPHYR_EXTRA_MODULES,
 # CONFIG_YAKOGL=y (zephyr/Kconfig lists the FPU and libc requirements)
@@ -238,7 +241,7 @@ has the make variables in parentheses):
 | `YAKOGL_SHADERC` (Zephyr `CONFIG_YAKOGL_SHADERC_ONLINE` / `_OFFLINE` / `_PRECOMPILED_ONLY`) | `online` (make: the Mesa reference, see `baremetal.mk`) | the shader back end: our compiler, or `offline`, the Mesa reference as the table (measurement images only), or `precompiled`, the table alone with no compiler |
 | `YAKOGL_PRECOMPILED_SHADERS` (Zephyr `CONFIG_YAKOGL_PRECOMPILED_SHADERS`) | `OFF` (`n`) | the precompiled tier in front of the compiler: the build runs `yakogl-precompile` on the named apps first and links its table (`zephyr/Kconfig` records what the table costs) |
 | `YAKOGL_PRECOMPILED_APPS` (Zephyr `CONFIG_YAKOGL_PRECOMPILED_APPS`) | empty, and empty with the tier on is a build error | the list's apps to precompile, e.g. `gl_test_es100`, `femtovg` (Zephyr also `CONFIG_YAKOGL_PRECOMPILED_LIST`, another list) |
-| `YAKOGL_PVR_DRIVER_DIR` (`DRVSRC`) | `driver/src` (make: `../src`, the old two-repository layout, so pass `DRVSRC=driver/src`) | the PowerVR driver sources |
+| `YAKOGL_PVR_DRIVER_DIR` (`DRVSRC`) | `driver/src` (CMake and make) | the PowerVR driver sources |
 | `YAKOGL_RUST_LINKAGE` (`RUST_LINKAGE`) | `staticlib` | `external`: C parts only (`libyakogl_c.a`), see "Linking" |
 | `YAKOGL_RUST_TARGET` (`RUST_TARGET`) | host / derived; Zephyr and make: `aarch64-unknown-none` | Rust target triple (64-bit only) |
 | `YAKOGL_RUST_TARGET_CPU` (`RUST_TARGET_CPU`) | none; Zephyr: `cortex-a53` | `-C target-cpu` |
