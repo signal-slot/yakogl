@@ -405,6 +405,75 @@ pub fn emit_shader_code(c: &mut GcCmd, d: &GcDraw) {
     c.state(GC_PS_ICACHE_COUNT, fs_instr.saturating_sub(1));
 }
 
+/// The TEXKILL opcode (`isa_tables.rs` `texkill*`, `bits: 0x17`): the low six
+/// bits of instruction word 0 plus bit 6, which sits in word 2 bit 16.
+const OPCODE_TEXKILL: u32 = 0x17;
+
+/// Does this fragment program hold a TEXKILL (a `discard`)?
+///
+/// A shader is a whole number of 128-bit instructions, four words each. The
+/// opcode is the same bits in every form of the instruction, so the scan needs
+/// no decode. Early depth needs the answer (`shader_discards`,
+/// docs/notes/gc-tiled-wire.md): a fragment that can be killed must not write
+/// depth before the shader has run.
+///
+/// A trailing partial instruction is ignored.
+pub fn discards(words: &[u32]) -> bool {
+    words.as_chunks::<4>().0.iter().any(|i| ((i[0] & 0x3f) | (((i[2] >> 16) & 1) << 6)) == OPCODE_TEXKILL)
+}
+
+/// [`discards`] of a program, cached by its code address: the scan reads the
+/// whole program and a draw asks again for the same program every frame. A
+/// fixed table of direct-mapped slots, so it needs no allocator and `ShcViv`
+/// (pinned by `src/abi_layout.rs`) gains no field.
+///
+/// The key is the address the program was uploaded to, so the owner calls
+/// [`DiscardCache::forget`] when that memory is freed or reused.
+pub struct DiscardCache {
+    slots: [Option<(u64, bool)>; Self::SLOTS],
+}
+
+impl DiscardCache {
+    const SLOTS: usize = 16;
+
+    pub const fn new() -> Self {
+        Self { slots: [None; Self::SLOTS] }
+    }
+
+    fn slot(code_addr: u64) -> usize {
+        // Code is 16-byte aligned (one instruction), so drop those bits.
+        ((code_addr >> 4) as usize) % Self::SLOTS
+    }
+
+    /// Whether the program at `code_addr` holds a TEXKILL; scans `words` only
+    /// when the address is not cached.
+    pub fn discards(&mut self, code_addr: u64, words: &[u32]) -> bool {
+        let i = Self::slot(code_addr);
+        if let Some((a, d)) = self.slots[i] {
+            if a == code_addr {
+                return d;
+            }
+        }
+        let d = discards(words);
+        self.slots[i] = Some((code_addr, d));
+        d
+    }
+
+    /// Drop the answer for `code_addr`: its memory was freed or reused.
+    pub fn forget(&mut self, code_addr: u64) {
+        let i = Self::slot(code_addr);
+        if matches!(self.slots[i], Some((a, _)) if a == code_addr) {
+            self.slots[i] = None;
+        }
+    }
+}
+
+impl Default for DiscardCache {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Start both stages fetching. This runs after the uniforms, and the order is
 /// the whole point.
 ///
