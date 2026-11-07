@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 /* SPDX-FileCopyrightText: 2026 Signal Slot, Inc. */
-/* Host stub: the timer and uptime calls rpi_wdog.c makes. A timer fires only
- * when the test calls its handler. */
+/* Host stub: the timer and uptime calls rpi_wdog.c makes (a timer fires only
+ * when the test calls its handler) and the waits rpi_mbox.c makes. */
 #ifndef STUB_ZEPHYR_KERNEL_H
 #define STUB_ZEPHYR_KERNEL_H
 #include <stdint.h>
@@ -26,4 +26,7 @@ static inline void k_timer_stop(struct k_timer *t)
 	t->running = false;
 }
 int64_t k_uptime_get(void);
+/* rpi_mbox.c's waits and its timed split (rpi_mbox_mock.c defines them) */
+void k_busy_wait(uint32_t usec);
+uint64_t k_cycle_get_64(void);
 #endif
