@@ -19,28 +19,40 @@ unless another path is given. Of that directory only `v3dx_format_table.c`,
 
 ## What is true today
 
-- No `RGB10A2_RT` constant exists, and no render-target mask has an RGB10A2
-  bit. The names that exist are `INTEGER_RT_FORMATS` (`src/backend.rs:455`)
-  and `SRGB_RT` (`src/backend.rs:488`). `rt_format_drawable`
-  (`src/backend.rs:498-516`) says yes to every surface that is neither
-  integer nor sRGB. A new surface value is therefore "drawable" on every back
-  end unless it gets its own test there.
-- No `GLES_SURF_*` value exists for RGB10A2. The surfaces end at
-  `GLES_SURF_RGB10_A2UI = 24` (the last integer one, `src/backend.rs:344-346`)
-  and `GLES_SURF_SRGB8_A8 = 25` (`src/backend.rs:358`).
-- Sampling is mostly in place. The GL core has the class
-  (`GLES_TEXFMT_RGB10A2 = 13`, `src/backend.rs:117`; its word, R in the low
-  10 bits, `:110`), the upload conversion (`src/gl/es3_formats.rs:633`) and
-  the decode (`src/gl/tf_capture.rs:1146`). The V3D has the TMU row
-  (`src/v3d/texture.rs:207`) and the C row (`driver/src/v3d/v3d_tex.c:468`).
-  Only the bit in `V3D_SAMPLED_TEXFMTS` is missing (`src/backend.rs:233-247`).
-  The doc comment above it says why (`:230-232`, pointing at the PowerVR's
-  reason, `:186-189`): a texture of the class is no render target and has no
-  `glGenerateMipmap`.
-- The output image format enum the render target needs is not in Rust yet.
-  `src/v3d/ffi.rs:272` has `RGB10_A2UI = 2` but no `RGB10_A2`. Its value is
-  3 (`third_party/mesa-26.2.1/src/broadcom/cle/v3d_packet.xml:230`,
-  `driver/src/v3d/generated/v3d_packet_v42_pack.h:176`).
+Steps 1 to 3 of (e) are on main; step 4 (the TFU) is not.
+
+- **Step 1, the surface and its words** (`735e24e8`): `GLES_SURF_RGB10_A2` = 26
+  with its name, 4 bytes a pixel and `rt_format_drawable` arm; the
+  `V3D_OUTPUT_IMAGE_FORMAT_RGB10_A2` = 3 constant with its
+  `ffi_layout_check.c` assert; the `state::rt_format` row (16F, 64 bpp, clamp
+  NONE); the `v3d_job.c` `rt_internal` case; the `clear_words` clamp to [0, 1].
+- **Step 2, the GL core** (`089cf587`): `attachment_storage`, the renderbuffer
+  surface and bits, `glGenerateMipmap` with the CPU box filter
+  (`box_average_rgb10a2`), all keyed on `rt_format_drawable(GLES_SURF_RGB10_A2)`.
+- **Step 3, the flip** (`03f4bbd9`): `GLES_TEXFMT_RGB10A2` is in
+  `V3D_SAMPLED_TEXFMTS`. A `GL_RGB10_A2` texture, renderbuffer and attachment
+  is the 10/10/10/2 class on the V3D; the PowerVR and GC7000 masks do not hold
+  it and keep the RGBA8 fallback.
+- **Tests on the V3D**: `tests/es3_int_rt_v3d.rs` (the row, clamp NONE, the
+  clamped clear words), `tests/es3_formats_v3d.rs` (the TMU row, type 9 XYZW,
+  16-bit return; and through the GL API over the real back end with the job
+  builder faked: an attachment and a renderbuffer give output format 3, the
+  job's target and clear words are the row's, an out-of-range clear colour
+  arrives clamped, RGB10_A2 beside an RGBA8 attachment keeps each render
+  target's output format and clear words, the CPU mipmap chain averages each
+  field). The one thing the host cannot pin is the C `rt_internal` case
+  (`v3d_job.c`) from the GL level, because the file fakes `v3d_job_*`; it is
+  covered by `src/v3d/state.rs` and the `tests/v3d_*` job rows only for the
+  surfaces they build.
+- **Not done**: step 4. `rt_texture` (`src/v3d/backend.rs`) still requires
+  `GLES_TEXFMT_RGBA8`, the TFU has no 10/10/10/2 input type
+  (`V3D_TFU_TTYPE_*` are R8, RG8, RGBA8, R16F, R32F), and the GL core offers
+  a chain to the back end only for RGBA8 (`src/gl/texture.rs`). The mipmap
+  chain of the class is the CPU's. The TFU input-type value is in Mesa's
+  `v3dx_tfu.c`, which is not vendored (see (f)).
+
+The paragraphs below are the design as written before steps 1 to 3, kept
+for the sites and the words they name; line numbers have drifted.
 
 ## (a) The gate and every site it reaches
 

@@ -61,6 +61,7 @@ use yakogl::shaderc::online::v3d::sim::{self, Env, FsInputs, Inputs, Texture, LA
 use yakogl::shaderc::online::{lower, sema};
 use yakogl::shaderc::{set_compile_lod_key, LodKey};
 use yakogl::v3d::ffi::*;
+use yakogl::v3d::state;
 use yakogl::v3d::texture;
 
 /* ---- the real layout and packers, built from driver/src/v3d/v3d_tex.c ------ */
@@ -1353,6 +1354,153 @@ mod trampolines {
         let t = jobs().last().map(|j| j.target).expect("the clear made a job");
         assert!(t.typed, "a typed job");
         assert_eq!(t.rt_format[0], V3D_OUTPUT_IMAGE_FORMAT_RGB10_A2, "the 10/10/10/2 output format");
+    }
+
+    /// A framebuffer of `texs` as colour attachments 0.., bound and sized.
+    fn attach(texs: &[GLuint]) -> GLuint {
+        let mut fbo = 0u32;
+        // SAFETY: plain GL calls on names made here.
+        unsafe {
+            glGenFramebuffers(1, &mut fbo);
+            glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+            for (i, &t) in texs.iter().enumerate() {
+                glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + i as u32, GL_TEXTURE_2D, t, 0);
+            }
+            assert_eq!(glCheckFramebufferStatus(GL_FRAMEBUFFER), GL_FRAMEBUFFER_COMPLETE, "{:?}", logs());
+            glViewport(0, 0, SIDE, SIDE);
+        }
+        fbo
+    }
+
+    fn detach(fbo: GLuint, texs: &[GLuint]) {
+        // SAFETY: names made by the caller.
+        unsafe {
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            glDeleteFramebuffers(1, &fbo);
+            glDeleteTextures(texs.len() as i32, texs.as_ptr());
+        }
+    }
+
+    /// The job of an RGB10_A2 target holds Mesa's tile-buffer words for the
+    /// output format (v3dx_format_table.c:71, :250-260): output 3 over a 16F,
+    /// 64-bpp tile buffer, clamp NONE, four bytes a pixel in memory. The job
+    /// builder takes the output format; `state::rt_format` is the row it (and
+    /// v3d_job.c's `rt_internal`) derive the rest from.
+    #[test]
+    fn an_rgb10a2_jobs_tlb_words_are_the_16f_64_bpp_none_row() {
+        let _g = rig();
+        let tex = upload_rgb10a2(SIDE, SIDE, &[0; (SIDE * SIDE) as usize]);
+        let fbo = attach(&[tex]);
+        // SAFETY: plain GL calls on names made here.
+        unsafe {
+            glClearColor(0.5, 0.25, 0.75, 1.0);
+            glClear(GL_COLOR_BUFFER_BIT);
+            glFinish();
+            assert_eq!(glGetError(), GL_NO_ERROR, "{:?}", logs());
+        }
+        let j = jobs().last().cloned().expect("the clear made a job");
+        let r = state::rt_format(GLES_SURF_RGB10_A2).expect("a row");
+        assert_eq!(j.target.rt_format[0], r.output);
+        assert_eq!(
+            (r.output, r.internal_type, r.internal_bpp, r.clamp, r.bytes),
+            (3, V3D_INTERNAL_TYPE_16F, V3D_INTERNAL_BPP_64, V3D_RENDER_TARGET_CLAMP_NONE, 4)
+        );
+        assert!(!gles_surf_is_integer(GLES_SURF_RGB10_A2), "not an integer class");
+        /* the clear colour as the 16F tile buffer holds it: four halves */
+        let c = j.clear.expect("the job ended");
+        assert_eq!(c.clear_rt[0][..2], [0x3400_3800, 0x3c00_3a00], "0.5, 0.25, 0.75, 1.0 as halves");
+        detach(fbo, &[tex]);
+    }
+
+    /// The clear colour of a fixed-point buffer is clamped to [0, 1] (ES 3.0
+    /// 4.2.3), so the 16F words are the clamped ones, never 2.0 or -1.0.
+    #[test]
+    fn an_rgb10a2_clear_is_clamped_to_unit_range() {
+        let _g = rig();
+        let tex = upload_rgb10a2(SIDE, SIDE, &[0; (SIDE * SIDE) as usize]);
+        let fbo = attach(&[tex]);
+        // SAFETY: plain GL calls on names made here.
+        unsafe {
+            glClearColor(2.0, -1.0, 0.5, 4.0);
+            glClear(GL_COLOR_BUFFER_BIT);
+            glFinish();
+            assert_eq!(glGetError(), GL_NO_ERROR, "{:?}", logs());
+        }
+        let c = jobs().last().and_then(|j| j.clear).expect("a clear");
+        assert_eq!(c.clear_rt[0][..2], [0x0000_3c00, 0x3c00_3800], "1.0, 0.0, 0.5, 1.0 as halves");
+        detach(fbo, &[tex]);
+    }
+
+    /// A GL_RGB10_A2 renderbuffer is the same surface as the texture level.
+    #[test]
+    fn an_rgb10a2_renderbuffer_renders_the_ten_bit_surface() {
+        let _g = rig();
+        let (mut rb, mut fbo) = (0u32, 0u32);
+        // SAFETY: plain GL calls on names made here.
+        unsafe {
+            glGenRenderbuffers(1, &mut rb);
+            glBindRenderbuffer(GL_RENDERBUFFER, rb);
+            glRenderbufferStorage(GL_RENDERBUFFER, GL_RGB10_A2, SIDE, SIDE);
+            glGenFramebuffers(1, &mut fbo);
+            glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+            glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, rb);
+            assert_eq!(glCheckFramebufferStatus(GL_FRAMEBUFFER), GL_FRAMEBUFFER_COMPLETE, "{:?}", logs());
+            glViewport(0, 0, SIDE, SIDE);
+            glClearColor(0.0, 1.0, 0.0, 1.0);
+            glClear(GL_COLOR_BUFFER_BIT);
+            glFinish();
+            assert_eq!(glGetError(), GL_NO_ERROR, "{:?}", logs());
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            glDeleteFramebuffers(1, &fbo);
+            glDeleteRenderbuffers(1, &rb);
+        }
+        let t = jobs().last().map(|j| j.target).expect("a job");
+        assert!(t.typed);
+        assert_eq!(t.rt_format[0], V3D_OUTPUT_IMAGE_FORMAT_RGB10_A2);
+    }
+
+    /// RGB10_A2 beside an RGBA8 attachment: each render target carries its
+    /// own output format and its own clear words (RT 0 two words of halves,
+    /// RT 1 the RGBA8 word).
+    #[test]
+    fn an_rgb10a2_attachment_beside_an_rgba8_one_keeps_each_targets_words() {
+        let _g = rig();
+        let t0 = upload_rgb10a2(SIDE, SIDE, &[0; (SIDE * SIDE) as usize]);
+        let mut t1 = 0u32;
+        // SAFETY: plain GL calls on names made here.
+        unsafe {
+            glGenTextures(1, &mut t1);
+            glBindTexture(GL_TEXTURE_2D, t1);
+            glTexImage2D(
+                GL_TEXTURE_2D,
+                0,
+                GL_RGBA8 as GLint,
+                SIDE,
+                SIDE,
+                0,
+                GL_RGBA,
+                GL_UNSIGNED_BYTE,
+                core::ptr::null(),
+            );
+        }
+        let fbo = attach(&[t0, t1]);
+        // SAFETY: plain GL calls on names made here.
+        unsafe {
+            let bufs = [GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1];
+            glDrawBuffers(2, bufs.as_ptr());
+            glClearColor(1.0, 0.0, 0.5, 1.0);
+            glClear(GL_COLOR_BUFFER_BIT);
+            glFinish();
+            assert_eq!(glGetError(), GL_NO_ERROR, "{:?}", logs());
+        }
+        let j = jobs().last().cloned().expect("a job");
+        assert!(j.target.typed);
+        assert_eq!(j.target.rts, 2);
+        assert_eq!(j.target.rt_format[..2], [V3D_OUTPUT_IMAGE_FORMAT_RGB10_A2, V3D_OUTPUT_IMAGE_FORMAT_RGBA8]);
+        let c = j.clear.expect("the job ended");
+        assert_eq!(c.clear_rt[0][..2], [0x0000_3c00, 0x3c00_3800], "RT 0: 16F halves");
+        assert_eq!(c.clear_rt[1][0], 0xff80_00ff, "RT 1: the RGBA8 word");
+        detach(fbo, &[t0, t1]);
     }
 
     /// glGenerateMipmap on the class averages each 10-bit field (the CPU
