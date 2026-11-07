@@ -182,14 +182,18 @@ config YAKOGL_DRV_GPU_PVR_RENDER_VERBOSE
 
 config YAKOGL_DRV_GPU_PVR_FINE_WAIT
 	bool "Read the frame fence every 20 us instead of once per ms"
+	default y if SOC_SERIES_AM62PX_A53
 	help
 	  The render service's fence wait reads the fragment UFO once per
 	  millisecond, so every wait ends on a whole millisecond (glmark2 on
 	  the AM62P, 2026-10-03: six scenes at exactly 2,016-2,017 us per
 	  swap). With this option it reads it every 20 us (the yakogl-drivers
 	  feature pvr-fine-wait); the FWCCB service, the HWR check and the
-	  timeout stay per millisecond. Opt-in until gl_test and glmark2 have
-	  run with it (docs/notes/pvr-fence-wait.md).
+	  timeout stay per millisecond. On by default for the AM62P (the only
+	  SoC with this GPU): gl_test and glmark2 ran with it without a
+	  failure, and terrain went 83.08 -> 81.67 ms. The wait spins either
+	  way (k_busy_wait), so the poll adds no CPU time, only more reads of
+	  one 4-byte word (docs/notes/pvr-fence-wait.md).
 
 config YAKOGL_DRV_GPU_PVR_KICK_TIMES
 	bool "Keep per-kick timestamps (instrument)"
