@@ -350,6 +350,32 @@ zephyr.bin), `stage2check` re-reads a file, `stage2-vectors` writes the test
 images that the crate's host test decodes (`tools/check.sh` row "am62p
 second stage": Python's zlib against the loader's Rust).
 
+**Version 2, several segments (2026-11-07).** A payload can carry up to
+eight segments, each with its own load address, the way `kexec_zephyr`
+takes `FILE@ADDR` segments: the mixed-criticality showcase needs three (the
+A53 Supervisor at 0x82000000, the R5F's DDR image at 0x90000000 and its TCM
+blob at 0x90c00000; the Supervisor copies the DDR image into the R5F carveout
+and starts the R5F). The header sector then holds a segment table (layout in
+`loader/src/lib.rs`): per segment the load address, image and stored sizes,
+a footprint (segment 0: the arm64 header's `image_size`, so its .bss counts),
+the stored offset (sector aligned, in table order), the compression and both
+CRC-32s. The loader refuses a table whose stored ranges are unaligned, out of
+order or past the payload, a segment outside its region (0x82000000 up to the
+GPU carveout) or overlapping another one or the staging buffer, and, after
+placing segment 0, an `image_size` over its footprint. Then each segment is
+read and inflated (or read in place, uncompressed) in turn and the jump goes
+to the entry in segment 0. Version 1 is still read, and `stage2img` without
+`--segment` still writes it, so a loader on a board from before reads what
+it wrote. With the R5F segments at 0x90000000, the showcase's loader moves the
+staging buffer to 0x91000000 (`CONFIG_BOOT_STAGE2_STAGING`; `stage2img
+--staging` checks the same rule):
+
+```sh
+tools/am62p-mkboot.py stage2img --zephyr sup.bin --segment r5_ddr.bin@0x90000000 \
+    --segment r5_tcm.bin@0x90c00000 --sector 21073376 --end-sector 21204448 \
+    --staging 0x91000000 --name showcase -o stage2-showcase.img
+```
+
 Building:
 
 ```sh
