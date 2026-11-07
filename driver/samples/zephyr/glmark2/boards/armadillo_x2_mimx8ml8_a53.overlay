@@ -1,0 +1,30 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-FileCopyrightText: 2026 Signal Slot, Inc. */
+/*
+ * Armadillo-X2 (board definition: driver/boards/atmark/armadillo_x2). Two
+ * changes for glmark2, neither in the board's own files.
+ *
+ * GPU carve-out: 240 MiB instead of the board's 128 MiB, as the Verdin's
+ * glmark2 overlay has (issue #814: every GC7000 allocation of all the scenes
+ * of a run comes from this one pool, and a refused allocation is a GL error).
+ * It stays inside the 256 MiB at 0x80000000 that the board's map gives
+ * galcore (gcContMem, no-map for Linux), ends at 0x8f000000 below Linux's
+ * 0x90000000, and is 4 MiB aligned below 4 GiB as the GC's MMU needs. 240 MiB
+ * is 60 of the 64 slave tables (gc_internal.h GC_STLB_COUNT). The image itself
+ * stays in a53_ddr_section, 256 MiB at 0x60000000, the window tools/board.sh
+ * x2 checks.
+ *
+ * Display: the board's devicetree expects the 1920x1200 that Linux ran on the
+ * monitor; the HDMI sink now is a 1920x1080 capture device, and the adopt
+ * driver refuses a LCDIF that runs another mode ("the LCDIF runs 1920x1080,
+ * the devicetree expects 1920x1200"). It adopts the running mode and only
+ * checks it against these two properties, so they say what runs.
+ */
+&gpu_carveout {
+	reg = <0x80000000 0x0f000000>;
+};
+
+&display0 {
+	hactive = <1920>;
+	vactive = <1080>;
+};
