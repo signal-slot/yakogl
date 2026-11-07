@@ -650,6 +650,25 @@ the file `YAKOGL_REDACTION_PRIVATE_FILE` names. Exit 0 clean, 1 an H/M
 finding, 3 private classes not run; `--help` has the format, `--self-test`
 the fixtures (`tests/redaction_scan.rs` runs it).
 
+## uboot_env.py — a U-Boot environment image, byte for byte
+
+`python3 -I tools/uboot_env.py print|set|unset|check|diff ...` reads and edits
+a raw U-Boot environment (a little-endian CRC-32, one flag byte in a
+redundant copy, `name=value` strings, an extra NUL, 0x00 or 0xff padding) on
+the host, for a board whose Linux has `fw_printenv` but no `fw_setenv` (the
+STM32MP257F-DK, #1281): the runner reads the `u-boot-env` partition with
+`dd`, edits it here and writes it back. `--size` is one copy's size (default
+the file's length); `--redundant` takes two copies at `--offset` and
+`--offset2` (default 0 and `--size`), `--second FILE` a copy 2 in its own
+file. `set` and `unset` write the inactive copy with flags = active + 1, as
+U-Boot's `env save` does, and print the copy and byte range they changed;
+variables keep their order, new ones go last, nothing outside that copy
+moves, so a `set` and an `unset` of a new variable give the input back byte
+for byte. A bad CRC, strings that do not fit, or a name with `=` or NUL is
+refused with exit 2 and no output file. `python3 -I -B
+tools/testdata/uboot-env/test_uboot_env.py` runs the tests on images it
+builds itself; it is not a `tools/check.sh` row yet.
+
 ## land.sh — land one branch tip on main
 
 main moves through pull requests: a pull request, the full gate on it
