@@ -374,6 +374,9 @@ bool gc_irq_handle(struct gc_dev *g)
 	while (freed-- > 0) {
 		k_sem_give(&g->event_room);
 	}
+	if (ours) {
+		gc_render_irq_wake(g);
+	}
 	return ours;
 }
 
