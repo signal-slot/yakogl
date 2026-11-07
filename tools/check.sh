@@ -2523,6 +2523,9 @@ if command -v python3 >/dev/null 2>&1; then
   # behind an exit status of 0).
   scope tools
   step "tools   deqp-uart-tally log verdicts" python3 tools/cts/deqp-uart-tally.py --self-test
+  # The NanoPC-T6 dEQP-GLES2 slices' cover, tally and doc checks, on the
+  # fixtures under tools/cts/testdata/mali-deqp (no git, no board).
+  step "tools   mali-deqp-tally cover, tally and doc checks" python3 -I tools/cts/mali-deqp-tally.py --self-test
   # The common set's tally: board.sh's verdict per row and what it does not
   # say (glmark2 score and scenes, slint probes, gl_test passed of run and the
   # failing cases), on synthetic runs through board.sh's own tally.
