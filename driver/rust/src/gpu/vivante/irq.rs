@@ -15,8 +15,9 @@
 //! fences.)
 //!
 //! The kernel objects stay in C: the shim holds the spinlock around
-//! [`claim`] and [`handle`], and gives the event semaphore once per event
-//! [`handle`] freed.
+//! [`claim`] and [`handle`], gives the event semaphore once per event
+//! [`handle`] freed, and wakes `gc_render_wait()` (`gc_render_irq_wake`)
+//! after every interrupt [`Handled::ours`] says was this GPU's.
 
 use super::regs::*;
 use super::{GcCore, EVENT_COUNT};

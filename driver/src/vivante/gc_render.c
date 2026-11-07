@@ -506,6 +506,7 @@ int gc_render_init_dev(struct gc_dev *g)
 	g->fence_done = 0;
 	gc_pool_init(&g_pool, GC_OFF_POOL, g->carveout_size);
 	k_sem_init(&g->event_room, 0, GC_EVENT_COUNT);
+	k_sem_init(&g->fence_wake, 0, 1);
 	k_mutex_init(&g->submit_lock);
 
 	rc = map_carveout(g);
@@ -819,6 +820,9 @@ int gc_render_recover(const char *why)
 		"fences through %u report a lost context",
 		g->resets, abandoned);
 	k_mutex_unlock(&g->submit_lock);
+	/* fence_done moved with no interrupt: a waiter on another thread
+	 * hears it now rather than on its next poll. */
+	gc_render_irq_wake(g);
 	return 0;
 }
 
@@ -874,13 +878,19 @@ uint32_t gc_render_max_quiet_ms(void)
 	return gc_dev_get()->max_quiet_ms;
 }
 
+void gc_render_irq_wake(struct gc_dev *g)
+{
+	k_sem_give(&g->fence_wake);
+}
+
 int gc_render_wait(uint32_t fence, uint32_t timeout_ms)
 {
 	struct gc_dev *g = gc_dev_get();
 	uint32_t errors_before = g->irq_errors;
-	/* Time is the clock's, never a count of sleeps. The loop sleeps "1 ms",
-	 * which on Zephyr is a millisecond and on the Linux harness is
-	 * msleep(1): at least two jiffies, 20..32 ms measured at CONFIG_HZ=100.
+	/* Time is the clock's, never a count of sleeps. The loop blocks up to
+	 * "1 ms" (less when the interrupt wakes it), which on Zephyr is a
+	 * millisecond and on the Linux harness was msleep(1): at least two
+	 * jiffies, 20..32 ms measured at CONFIG_HZ=100.
 	 * Counting iterations made every bound ~30x its stated value there --
 	 * "did not complete in 1000 ms" was logged 32 s after the wait began
 	 * (dmesg, 2026-09-23 05:51:50 -> 05:52:22 JST). */
@@ -965,8 +975,19 @@ int gc_render_wait(uint32_t fence, uint32_t timeout_ms)
 				return -EINTR;
 			}
 		}
+		/* Block until the interrupt says fence_done or irq_errors
+		 * moved, or 1 ms passes. This was k_sleep(K_MSEC(1)): 1.0 to
+		 * 1.1 ms at 10 000 ticks a second, so a fence that retired
+		 * just after the check cost up to a millisecond more than
+		 * the GPU took (docs/notes/imx8mp-frame-floor.md, F3). The
+		 * 1 ms bound stays as the poll a missed wake falls back on
+		 * (a give another waiter took: one give wakes one thread),
+		 * and keeps the deadline, hang and abort checks above at
+		 * their old granularity. A stale give
+		 * from an earlier interrupt costs one pass through them.
+		 * wait_sleeps counts the blocks, woken or polled. */
 		g->perf_wait_sleeps++;
-		k_sleep(K_MSEC(1));
+		(void)k_sem_take(&g->fence_wake, K_MSEC(1));
 	}
 	g->perf_wait_ns += gc_now_ns() - perf_t0;
 	if (fence_done(g, fence)) {

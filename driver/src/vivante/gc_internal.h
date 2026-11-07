@@ -151,6 +151,11 @@ struct gc_dev {
 	uint32_t  dump_fence;
 	bool      dump_seen;
 	struct k_sem event_room;           /* signalled when an event is freed */
+	/* Given by every interrupt of ours and by a recovery, taken by
+	 * gc_render_wait(): fence_done (or irq_errors) may have moved.
+	 * Binary: one give wakes one waiter, and a waiter it missed still
+	 * ends on its 1 ms poll. */
+	struct k_sem fence_wake;
 	struct k_mutex submit_lock;        /* one writer of the ring at a time */
 	struct k_spinlock lock;
 };
@@ -223,6 +228,10 @@ void gc_idle_state_decode(uint32_t idle);  /* names the busy modules */
  * without which a stuck line is never detected) can call it directly.
  * Returns true when this GPU raised something. */
 bool gc_irq_handle(struct gc_dev *g);
+
+/* Wake a gc_render_wait() (gc_render.c): the interrupt calls it after
+ * yd_gc_irq_handle() moved fence_done or irq_errors. ISR-safe. */
+void gc_render_irq_wake(struct gc_dev *g);
 
 /* --- kernel side, M3: the FE ring (gpu::vivante::cmdbuf) --- */
 /* Start the front end on a command buffer. `prefetch` is in 64-bit words, the

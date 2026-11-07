@@ -356,7 +356,9 @@ void gc_render_counters(uint32_t *fence_timeouts, uint32_t *event_busy,
  *   kicks_done    kicks retired
  *   wait_ns       time spent inside gc_render_wait() (any caller), waits the
  *                 number of waits that found the fence not yet done, and
- *                 wait_sleeps the 1 ms sleeps they took
+ *                 wait_sleeps the times they blocked: until the GPU's
+ *                 interrupt woke them, or at most 1 ms (a 1 ms sleep each
+ *                 before the wait was woken by the interrupt)
  *   hi_*          the GPU's own free-running 32-bit counters, read now:
  *                 HI_PROFILE TOTAL_CYCLES, IDLE_CYCLES, READ_BYTES8 and
  *                 WRITE_BYTES8 (units of 8 bytes)
