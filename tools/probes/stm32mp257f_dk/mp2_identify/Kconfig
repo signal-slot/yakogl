@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+
+# The stm32mp2 board layer's options (with YAKOGL_STM32MP2_WDOG), sourced by
+# this probe itself for now, as mp2_hello does: the item zephyr-layer-hook
+# moves this into driver/zephyr/lib/board/Kconfig and removes it here.
+rsource "../../../../driver/zephyr/lib/board/stm32mp2/Kconfig"
+
+source "Kconfig.zephyr"

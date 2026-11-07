@@ -13,6 +13,8 @@ bring-up samples `gc_fence` and `gc_clear`; `triangle` and `slint` are under
 - `nanopc_t6/t6_gpu`: the second half of Z1, the GPU's power at hand-over.
 - `nanopc_t6/t6_mmu`: milestone Z2, AS0's page tables from the image and a
   GPU cache flush round trip, after Z1's power-on.
+- `stm32mp257f_dk/mp2_identify`: the STM32MP257F-DK's return-trial image, the
+  hand-over record and OP-TEE's watchdog armed at boot, then PSCI reset.
 
 Build (from the west workspace):
 
