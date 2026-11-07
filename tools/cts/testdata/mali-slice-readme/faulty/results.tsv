@@ -1,0 +1,9 @@
+case	status	detail
+dEQP-GLES2.p.one	Pass	Pass
+dEQP-GLES2.p.two	Lost	chunk-crash
+dEQP-GLES2.p.three	Pass	Pass
+dEQP-GLES2.d.one	Lost	chunk-hang
+dEQP-GLES2.d.two	Lost	not-run
+dEQP-GLES2.d.three	Lost	not-run
+dEQP-GLES2.b.one	Pass	Pass
+dEQP-GLES2.b.two	Pass	Pass

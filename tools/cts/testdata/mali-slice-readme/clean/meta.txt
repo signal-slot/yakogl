@@ -1,0 +1,10 @@
+commit=aaaabbbbccccddddeeeeffff00001111aaaabbbb
+session=smoke
+rows=1-2
+tree=tools/cts/mali-gles2-tree.txt
+boot_id_before=11111111-2222-3333-4444-555555555555
+boot_id_after=11111111-2222-3333-4444-555555555555
+kernel=6.1.75-vendor
+lib=libGLESv2.so.2:0123456789ab,libEGL.so.1:ba9876543210
+started=2026-11-07T10:00:00Z
+ended=2026-11-07T10:04:00Z

@@ -1,0 +1,4 @@
+row	label	cases	status	seconds	kmsg	resets	ssh_after	boot_same	exit_line
+3	poly	3	crash	40	0	0	yes	yes	yakogl-mali-exit: signal 11
+4	depth	3	hang	610	6	1	yes	yes	-
+5	blend	2	done	8	0	0	yes	yes	yakogl-mali-exit: 0
