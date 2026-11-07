@@ -1,0 +1,54 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+#
+# yakogl-mali-gles: libGLESv2.so.2 (and, through build.sh, libEGL.so.1) of
+# YakoGL's Mali-G610 back end over panthor, for dEQP on the NanoPC-T6's
+# Armbian (README.md). The library crate `yakogl` with the Mali feature set,
+# on the development OSAL of `yakogl-mali-panthor`, as one shared object.
+#
+# Outside the root workspace on purpose: its own `[workspace]` table and its
+# own Cargo.lock, so building it changes neither the root Cargo.toml nor its
+# lock file. Build and test it by manifest path:
+#
+#   cargo test --manifest-path tools/mali/panthor-gles/Cargo.toml
+#   tools/mali/panthor-gles/build.sh <outdir>
+[workspace]
+
+[package]
+name = "yakogl-mali-gles"
+description = "libGLESv2.so.2 + libEGL.so.1 of YakoGL's Mali back end over panthor (dEQP on the NanoPC-T6)"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.88"
+license = "Apache-2.0 AND MIT"
+publish = false
+build = "src/build.rs"
+
+[lib]
+# build.sh links libyakogl_mali_gles.so with the DT_SONAME libGLESv2.so.2 and
+# installs it under that name. The rlib is for the tests.
+name = "yakogl_mali_gles"
+path = "src/lib.rs"
+crate-type = ["cdylib", "rlib"]
+
+[features]
+# ES 2.0 reporting (the yakogl crate's `report-es2`): what a dEQP-GLES2 run
+# needs (tools/cts/host-deqp-run.sh builds its gles2 pair with it). Without
+# it, `--no-default-features`, the pair reports ES 3.0.
+default = ["report-es2"]
+report-es2 = ["yakogl/report-es2"]
+
+[dependencies]
+libc = "0.2"
+# MALI_CONFIG of tools/check.sh (host-test,gpu-mali,shaderc-online,
+# no-shader-table) with host-test replaced by the panthor OSAL, which is
+# yakogl-mali-panthor's: no `osal-*` feature, so `g_osal` starts null and this
+# library installs the OSAL before the first EGL call.
+yakogl = { path = "../../..", default-features = false, features = ["gpu-mali", "shaderc-online", "no-shader-table"] }
+yakogl-mali-panthor = { path = "../panthor" }
+
+[profile.release]
+# The library's own rule (capi): every panic is fatal. In a shared object an
+# unwinding panic across an extern "C" entry point aborts anyway.
+panic = "abort"
+debug = 1
