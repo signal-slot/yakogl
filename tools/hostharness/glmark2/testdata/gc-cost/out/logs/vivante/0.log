@@ -1,0 +1,21 @@
+gm2: egl-config window id=0x1 buf=0x20 r=0x8 g=0x8 b=0x8 a=0x8 depth=0x18 stencil=0x8 samples=0x0 surface=0x5 renderable=0x4 visual=0x0
+gm2: gc-kick setup glGenerateMipmap fence=1 bytes=1200 draws=1 box_px=65536 target=256x256 stride=1024 rts=1 rs=0 rs_px=0
+gm2: gc-kick frames glGenerateMipmap fence=2 bytes=1200 draws=1 box_px=65536 target=256x256 stride=1024 rts=1 rs=0 rs_px=0
+gm2: gc-kick frames glGenerateMipmap fence=3 bytes=1200 draws=1 box_px=16384 target=128x128 stride=1024 rts=1 rs=0 rs_px=0
+gm2: gc-kick frames glDrawArrays fence=4 bytes=4096 draws=3 box_px=1440000 target=800x600 stride=3200 rts=1 rs=1 rs_px=480000
+gm2: gc-kick frames eglSwapBuffers fence=5 bytes=512 draws=1 box_px=480000 target=800x600 stride=3200 rts=1 rs=0 rs_px=0
+[terrain] <default>:gm2: gc-kick frames glGenerateMipmap fence=6 bytes=1200 draws=1 box_px=65536 target=256x256 stride=1024 rts=1 rs=0 rs_px=0
+gm2: gc-kick frames glGenerateMipmap fence=7 bytes=1200 draws=1 box_px=16384 target=128x128 stride=1024 rts=1 rs=0 rs_px=0
+gm2: gc-kick frames glDrawArrays fence=8 bytes=4096 draws=3 box_px=1440000 target=800x600 stride=3200 rts=1 rs=1 rs_px=480000
+gm2: gc-kick frames eglSwapBuffers fence=9 bytes=512 draws=1 box_px=480000 target=800x600 stride=3200 rts=1 rs=0 rs_px=0
+gm2: gc-kick frames glDrawArrays fence=10 bytes=0 draws=0 box_px=0 target=0x0 stride=0 rts=0 rs=0 rs_px=0 undecoded
+gm2: gc-kick teardown glDeleteTextures fence=11 bytes=256 draws=0 box_px=0 target=0x0 stride=0 rts=0 rs=0 rs_px=0
+gm2: scene-end [terrain] <default>: ok frames=3 draws=12 refused=0 gl_errors=0 incomplete_draws=0
+gm2: gc-cost counted=2 gpu=lag kicks=9 waits=9 swap_waits=2 invd=2,1048576 flush=24,1048576 foreign_bytes=0 stream_bytes=13312 draws=12 box_px=4063840 rs=2 rs_px=960000
+gm2: gc-cost-entry glGenerateMipmap waits=4 kicks=4 invd=0,0 flush=16,32768
+gm2: gc-cost-entry glDrawArrays waits=3 kicks=3 invd=2,1048576 flush=6,1014784
+gm2: gc-cost-entry eglSwapBuffers waits=2 kicks=2 invd=0,0 flush=2,1024
+gm2: gc-wait glGenerateMipmap wait_fence<draw_one<record_level<generate_mipmap<gc_generate_mipmap<glGenerateMipmap setup=1 frames=3 teardown=0
+gm2: gc-wait glGenerateMipmap wait_fence<draw_one<record_level<generate_mipmap<gc_generate_mipmap<glGenerateMipmap setup=0 frames=1 teardown=0
+gm2: gc-wait glDrawArrays wait_fence<draw_one<gc_draw<{closure#1}<draw<glDrawArrays setup=2 frames=3 teardown=0
+gm2: gc-wait eglSwapBuffers wait_fence<{closure#1}<eglSwapBuffers<p_eglSwapBuffers<+0x1234<+0x0 setup=1 frames=2 teardown=1

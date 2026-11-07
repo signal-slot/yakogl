@@ -67,7 +67,8 @@ entry, default 600), `GM2_KICKS=1` (PowerVR: a `gm2: draw <n> fb <fb> kick <k>
 submitted <s>` line after every draw, the framebuffer it rendered into, the
 kick holding it and the kicks submitted so far, to read a scene's pass
 order; `shim.c`), `GM2_PROFILE`, `GM2_PERF` and `GM2_ENTRIES` (Profile,
-below), the V3D's settings `YAKOGL_V3D_*` and the GC7000's `YAKOGL_GC_CARVEOUT_BYTES`
+below), `GM2_GCCOST=1` (GC7000: per-frame GPU waits, cache maintenance
+bytes, kicks and their targets; GC7000 costs, below), the V3D's settings `YAKOGL_V3D_*` and the GC7000's `YAKOGL_GC_CARVEOUT_BYTES`
 (below). It needs
 gcc, g++, cmake, cargo, objcopy and python3, and no network.
 
@@ -173,6 +174,70 @@ GM2_WRITE=0 GM2_PERF=1 GM2_FRAMES=20 GM2_ENTRIES='^(terrain|shadow|refract)$' \
 * `GM2_ENTRIES=RE` runs the list entries matching the extended regex only,
   and needs `GM2_WRITE=0`.
 
+### GC7000 costs
+
+What the i.MX8MP pays on top of the GL calls' CPU time, which the host's
+clocks cannot show: the CPU's waits for the GPU (each at least one 1 ms
+poll on the board, `driver/src/vivante/gc_render.c`), the CPU's passes over
+the GPU carve-out (Normal non-cacheable on the board), and the GPU's work.
+Counts, per scene and frame, without temporary prints:
+
+```sh
+GM2_WRITE=0 GM2_GCCOST=1 GM2_FRAMES=11 GM2_ENTRIES='^(terrain|shadow|refract)$' \
+  tools/hostharness/glmark2/run.sh "$GLMARK2_SRC" build/glmark2-gccost vivante
+```
+
+`report.py` writes `<out>/gc-cost-vivante.md` from the logs (with or
+without `GM2_PROFILE`): per entry, a frame's waits (in the swap and
+elsewhere), kicks, draws, draw-box megapixels, resolve-engine (RS) blits,
+invalidated and flushed KiB, and the stream's KiB; then per entry its kicks
+by the entry point that submitted them and their target, its waits, kicks
+and cache bytes by entry point, and the waits by caller.
+
+* `shim.c` puts a table of its own in front of linux.c's OSAL table
+  (`osal_set_ops`, before the library's first call) and counts through it:
+  `submit` (each kick), `wait` and `completed` (the waits), `cache_flush`
+  and `cache_invd` (calls and bytes), `gpu_alloc` and `gpu_free` (the CPU
+  views it decodes the streams through, and which ranges are GPU memory:
+  a range outside every allocation is *foreign*, the window). The timing
+  wrappers of the profile are on too, so each count is charged to the entry
+  point in progress, and the frames are cut at `eglSwapBuffers` as in the
+  profile (frames 2 to `GM2_FRAMES`). Nothing is printed and nothing changes
+  until a kick with the GC7000's descriptor (`GC_KICK_MAGIC`) is submitted,
+  so the switch does nothing on a PowerVR or V3D build.
+* The GPU model. linux.c completes every kick at once, so the back end never
+  reaches a wait. `GM2_GCCOST_GPU=lag` (the default) has the GPU complete a
+  kick only when the CPU waits for it or for a later one: every point where
+  the back end checks a fence is then a wait, the most the board's CPU can
+  pay, which is the board's case when its GPU takes longer than the CPU's
+  recording (terrain, shadow, refract). It changes what the back end and the
+  GL core see (`gc_kick_pending`), as a busy GPU does on the board.
+  `GM2_GCCOST_GPU=done` keeps linux.c's answer.
+* A kick's stream is decoded before it is submitted: each `DRAW_INSTANCED`
+  with its draw box, the `SE_SCISSOR_LEFT`/`TOP` to `SE_CLIP_RIGHT`/`BOTTOM`
+  state in force (followed across the kick, as the back end writes a state
+  once a kick, `dedup.rs`): the viewport and scissor box in the target's
+  samples, an upper bound of the pixels the draw covers, which the stream
+  alone cannot give. The target's size is the kick's largest box extent;
+  its stride `PE_COLOR_STRIDE` (0: no colour target, a depth-only pass); the
+  RS blits are the `RS_KICKER` writes with the `RS_WINDOW_SIZE` in force.
+* The waits' callers are `backtrace(3)` frames resolved with `addr2line`
+  at exit (binutils; without it the chain is program offsets).
+* The figures are counts, not times; the cache bytes stand for CPU passes
+  over the carve-out (on the board each range is DC maintenance over memory
+  the CPU just read or wrote through a non-cacheable mapping). The record
+  for terrain, shadow and refract is [FINDINGS-gc-costs.md](FINDINGS-gc-costs.md).
+
+The lines, on stderr with the library's: `gm2: gc-kick <phase> <entry point>
+fence= bytes= draws= box_px= target=<w>x<h> stride= rts= rs= rs_px=` per kick
+(`undecoded` when the stream had no CPU view); at exit `gm2: gc-cost
+counted= gpu=<lag|done> kicks= waits= swap_waits= invd=<calls>,<bytes>
+flush=<calls>,<bytes> foreign_bytes= stream_bytes= draws= box_px= rs= rs_px=`
+over the counted frames, a `gm2: gc-cost-entry <entry point> waits= kicks=
+invd= flush=` per entry point (counted frames), and a `gm2: gc-wait <entry
+point> <caller chain> setup= frames= teardown=` per call site.
+`report-selftest.sh` runs `report.py` on the fixture in `testdata/gc-cost/`.
+
 ### Before and after
 
 `compare.py` turns two output directories of `GM2_PROFILE=1` runs (same
@@ -233,7 +298,7 @@ V3D's job order.
 |---|---|
 | `run.sh` | Compiles glmark2's sources unchanged (the list the Zephyr image compiles, with upstream's own `libmatrix/util.cc`), builds `libyakogl.a` per GPU with the top-level CMake (`YAKOGL_OSAL=linux`, `YAKOGL_GPU=powervr\|vivante\|v3d`, `YAKOGL_SHADERC=online`, `YAKOGL_REPORT_ES2=ON`, release: the board images' shader back end and reported version), links, and runs one process per list entry: `--size 800x600 -b :nframes=3 -b <entry>`. Then it calls `report.py`, once for the PowerVR and the GC7000 and once for the V3D. |
 | `host_main.cpp` | Upstream's `main.cpp` with a window system of its own. The native window is a `struct gles_native_window` over a malloc'd XRGB8888 buffer, which linux.c maps at its host address (the V3D: with `map_phys`, at a GPU VA of its own, as the Pi 4's OSAL does). A `MainLoop` subclass prints `gm2: scene-begin` and `gm2: scene-end <scene>: <status> frames= draws= refused= gl_errors= incomplete_draws=` (the last two are the GL core counters the board's GLMARK2 record carries; `report.py` checks them against the library's own lines). |
-| `shim.c`, `shim.h` | `dlopen`/`dlsym` for glmark2's `SharedLibrary` (renamed in `shared-library.o` only, with `objcopy --redefine-sym`): YakoGL is linked in, as on the Zephyr image. Every symbol is a wrapper of this file or what `eglGetProcAddress` answers. The wrappers log `gm2:` lines on stderr, where linux.c logs the library's own lines, so the order is kept. They also write each shader text to `out/capture/<gpu>/<fnv64>.<stage>`. With `GM2_PROFILE=1` every symbol is wrapped once more in a timing wrapper (Profile, above). |
+| `shim.c`, `shim.h` | `dlopen`/`dlsym` for glmark2's `SharedLibrary` (renamed in `shared-library.o` only, with `objcopy --redefine-sym`): YakoGL is linked in, as on the Zephyr image. Every symbol is a wrapper of this file or what `eglGetProcAddress` answers. The wrappers log `gm2:` lines on stderr, where linux.c logs the library's own lines, so the order is kept. They also write each shader text to `out/capture/<gpu>/<fnv64>.<stage>`. With `GM2_PROFILE=1` every symbol is wrapped once more in a timing wrapper (Profile, above). With `GM2_GCCOST=1` it also puts an OSAL table of its own in front of linux.c's (GC7000 costs, above). |
 | `gen_timed.py` | Writes the timing wrappers' entry-point list (`gm2-timed.h`) from YakoGL's GLES2 and EGL headers; `run.sh` runs it at every build. |
 | `report.py` | Reads the logs and captures. It writes `<out>/shaders/*.glsl` and `index.txt` (with `--shaders`), and the generated parts of `FINDINGS.md` and `FINDINGS-v3d.md` (the V3D's with a GPU memory table: each entry's carve-out high-water, the longest free run at exit, the allocations refused). |
 
