@@ -62,9 +62,14 @@ config BOOT_STAGE2_STAGING
 	default 0x90000000
 	help
 	  Inside the mapped region (the overlay's stage2_payload node), above
-	  the largest image (it bounds the image: STAGING - LOAD bytes) and
-	  below the region's end with room for the largest payload the
-	  user-area range holds.
+	  the largest image (it bounds a version-1 image: STAGING - LOAD bytes)
+	  and below the region's end with room for the largest payload the
+	  user-area range holds. A version-2 (multi-segment) payload's
+	  segments may lie anywhere in the region except STAGING .. STAGING +
+	  the range's bytes (eMMC source); with the default 0x90000000 the
+	  showcase's R5F segments at 0x90000000 would collide, so its loader
+	  moves the staging buffer above them (am62p-mkboot.py stage2img
+	  --staging checks the same rule).
 
 config BOOT_STAGE2_REGION_END
 	hex "End of the mapped region (exclusive)"
