@@ -194,19 +194,27 @@ print the same lines with GLES2 names):
   deqp: summary: <b> cases begun, <r> with a result, 0 without
   v3d_deqp DONE...: build <describe>, filter dEQP-GLES3.functional.attribute_location.*,...
   recoveries: 0
-board.sh pi4 A1 rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:deqp_summary resets=0 record=absent back_after=<s>s
+board.sh pi4 A1 rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:v3d_deqp_0 resets=0 record=absent back_after=<s>s
 === A1 rc=0 2026-10-DD HH:MM:SS
 ```
 
 (The verdict line's form was checked on a synthetic A1 record through
-`tools/board.sh pi4 tally`; `result=legacy:deqp_summary` is what a deqp
-console without a `yk-record:` line yields, and `record=absent` is expected.)
+`tools/board.sh pi4 tally`; `result=legacy:v3d_deqp_0` is what a deqp
+console without a `yk-record:` line yields: `legacy_result` takes the last
+line matching the Pi 4's end pattern, the image's `v3d_deqp: build <describe>
+DONE` line, and names it `v3d_deqp_<its last word>` (`0` for a run with no
+recoveries); `record=absent` is expected.)
 
 The fields that matter: `rc=0 verdict=done` and `resets=0`. Each image costs
 its 240 s lifetime plus the two boots, about 5 min 24 s (sweep 30), so the 91
 images are about 8 h 15 min; the tree is resumable (`TREE_ROWS=<a>-<b>`,
 rows counted from 0 in table order; a finished run of the same image is
-skipped), and a session that cannot stay that long runs it in halves. At the
+skipped), and a session that cannot stay that long runs it in halves. A session
+names its rows as a closed range, `TREE_ROWS=0-15`, then `16-30`, ...
+(or a list such as `1,4,19`): an open range such as `3-` is refused with rc 2
+(`tools/cts/images-selftest.sh` checks it). Every image of the range must
+already be built (section 3), and `TREE_IMAGE_DIR` must be set for the tree
+step, or `board.sh` runs the row from no image directory. At the
 end `board.sh` prints its tally (section 5) and `TREE-EXIT`.
 
 What a row can say instead, and what to do:
@@ -269,7 +277,7 @@ The verdict lines to expect, one per image (A1's shown; every other label
 the same form):
 
 ```
-board.sh pi4 A1 rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:deqp_summary resets=0 record=absent back_after=<s>s
+board.sh pi4 A1 rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:v3d_deqp_0 resets=0 record=absent back_after=<s>s
 === A1 rc=0 <date> <time>
 ```
 
@@ -292,8 +300,8 @@ board.
 The authoritative command, over every record's console:
 
 ```sh
-python3 tools/cts/deqp-uart-tally.py --mustpass tools/cts/gles3-mustpass.txt --table \
-    records/pi4/gles3-$HEAD8/*/console.txt
+(cd records/pi4/gles3-$HEAD8 && python3 ../../../tools/cts/deqp-uart-tally.py \
+    --mustpass ../../../tools/cts/gles3-mustpass.txt --table */console.txt)
 ```
 
 Expected head and tail (the group rows between them, one per
@@ -321,8 +329,15 @@ lines and the recoveries per record, and `tools/board.sh pi4 diff <earlier>
 The per-image verdicts without the table:
 
 ```sh
-python3 tools/cts/deqp-uart-tally.py --mustpass tools/cts/gles3-mustpass.txt records/pi4/gles3-$HEAD8/*/console.txt
+(cd records/pi4/gles3-$HEAD8 && python3 ../../../tools/cts/deqp-uart-tally.py \
+    --mustpass ../../../tools/cts/gles3-mustpass.txt */console.txt)
 ```
+
+Run from inside the session directory, with relative console paths: the tally
+prints each path as given, so an absolute one would put the worker's home
+path into the tally files (`tools/release/redaction-scan.py` flags it). For
+one log, `--label LABEL` names the image instead of taking it from the log's
+directory.
 
 prints one line per log (`<path>: deqp: done: ... | deqp: summary: ...`, or
 `| MISSING: no summary line`, `| INCOMPLETE: ...`, `| FATAL: ...`), then
