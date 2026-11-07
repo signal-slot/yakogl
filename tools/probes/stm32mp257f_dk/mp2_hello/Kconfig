@@ -1,9 +1,0 @@
-# SPDX-License-Identifier: Apache-2.0
-# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-
-# The stm32mp2 board layer's options, sourced by this probe itself for now:
-# the item zephyr-layer-hook moves this into driver/zephyr/lib/board/Kconfig
-# (as nanopc_t6/Kconfig is sourced there) and removes it here.
-rsource "../../../../driver/zephyr/lib/board/stm32mp2/Kconfig"
-
-source "Kconfig.zephyr"

@@ -2,10 +2,6 @@
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 # The STM32MP257F-DK's Cortex-A35 board layer, its core (stm32mp2.c): outside
 # the board layer YAKOGL_BOARD, as YAKOGL_NANOPC_T6 is.
-#
-# Not yet sourced by ../Kconfig: until the item zephyr-layer-hook adds it
-# there, an application sources this file itself before Kconfig.zephyr
-# (tools/probes/stm32mp257f_dk/mp2_hello/Kconfig).
 
 config YAKOGL_STM32MP2
 	bool "STM32MP257F-DK A35: early banner, hand-over record, PSCI reset at the end"

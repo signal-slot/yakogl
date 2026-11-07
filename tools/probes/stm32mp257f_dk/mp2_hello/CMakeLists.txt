@@ -15,13 +15,6 @@ list(APPEND ZEPHYR_EXTRA_MODULES "${PVR_REPO}")
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(mp2_hello)
 
-# The stm32mp2 board layer, added by this probe itself for now: the item
-# zephyr-layer-hook moves this into driver/zephyr/lib/board/CMakeLists.txt
-# (as nanopc_t6 is added there) and removes it here. Added this late, its
-# sources go into app (YAKOGL_STM32MP2_IN_APP; the layer's CMakeLists.txt).
-set(YAKOGL_STM32MP2_IN_APP ON)
-add_subdirectory("${PVR_REPO}/zephyr/lib/board/stm32mp2" "${CMAKE_CURRENT_BINARY_DIR}/yakogl_board_stm32mp2")
-
 # The build prints its own commit first (a result row names its build).
 execute_process(COMMAND git -C "${PVR_REPO}" describe --always --dirty
                 OUTPUT_VARIABLE MP2_HELLO_BUILD OUTPUT_STRIP_TRAILING_WHITESPACE
