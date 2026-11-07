@@ -1,0 +1,6 @@
+12:00:01 yakogl/v3d: TFU mipmap at frame 441: 1 chains (0 queued behind a job, 0 waited), refused: unknown 14
+12:00:01 yakogl/v3d: tiled copies for draws at frame 441, by reason: plain 11, r32f 0, first-sample 20
+12:00:09 [terrain] <default>: FPS: 6 FrameTime: 161.800 ms
+12:00:09 glmark2-frame: [terrain] <default>: 61 frames; us per frame: gl 156000, swap 154200, show 320, other 3027, frame 166667 (end waited for in 61 of 61)
+12:00:09 yakogl/v3d: TFU mipmap at frame 461: 58 chains (0 queued behind a job, 0 waited), refused: unknown 52
+12:00:09 yakogl/v3d: tiled copies for draws at frame 461, by reason: plain 11, r32f 0, first-sample 77

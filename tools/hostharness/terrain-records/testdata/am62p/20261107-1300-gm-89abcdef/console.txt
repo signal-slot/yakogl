@@ -1,0 +1,5 @@
+13:00:01 W: render: fence 1 (frame fence) not moved at 20 ms, re-posted 1 kick(s) (1 so far)
+13:00:02 W: render: fence 2 (frame fence) not moved at 20 ms, re-posted 1 kick(s) (2 so far)
+13:00:05 [terrain] <default>: FPS: 12 FrameTime: 83.100 ms
+13:00:05 glmark2-frame: [terrain] <default>: 61 frames; us per frame: gl 3000, swap 70000, show 300, other 3000, frame 83100 (end waited for in 61 of 61)
+13:00:05 pvr last completed kick per frame: kick->geom 100 frag->frag 200 wait 15000
