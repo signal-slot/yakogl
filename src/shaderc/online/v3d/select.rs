@@ -89,8 +89,14 @@ pub const QUNIFORM_TMU_CONFIG_P1: u32 = 41;
 /// (v3d_uniforms.c:50-90: u_minify(width0, first_level)). Mesa's values:
 /// printed by a program compiled against v3d_compiler.h (Mesa 26.2.1),
 /// with QUNIFORM_TEXTURE_DEPTH 46, _ARRAY_SIZE 47 and _LEVELS 48 after.
+/// `SOp::TexSizeWord`'s lane `l` is the contents WIDTH + `l`.
 pub const QUNIFORM_TEXTURE_WIDTH: u32 = 44;
 pub const QUNIFORM_TEXTURE_HEIGHT: u32 = 45;
+/// A 3D texture's base-level depth, and a 2D array's layer count, for
+/// textureSize (Mesa's QUNIFORM_TEXTURE_DEPTH and _ARRAY_SIZE, the same
+/// `data`; nir_to_vir.c ntq_emit_txs).
+pub const QUNIFORM_TEXTURE_DEPTH: u32 = 46;
+pub const QUNIFORM_TEXTURE_ARRAY_SIZE: u32 = 47;
 /// gl_FragCoord.y's window transform, two V3D-private codes above Mesa's
 /// enum (Mesa's gallium path gets the pair from st/mesa's
 /// FB_WPOS_Y_TRANSFORM state uniform instead, which the V3D compiler never
@@ -869,8 +875,8 @@ impl<'a> Sel<'a> {
                     }
                 }
             }
-            if let SOp::Tex { srcs, cube, layer, bias, lod, .. } = *op {
-                for x in srcs.iter().take(super::prepare::tex_operands(cube || layer, bias || lod)) {
+            if let SOp::Tex { srcs, cube, layer, vol, bias, lod, .. } = *op {
+                for x in srcs.iter().take(super::prepare::tex_operands(cube || layer || vol, bias || lod)) {
                     as_value[x.0 as usize] = true;
                 }
             }
@@ -896,7 +902,7 @@ impl<'a> Sel<'a> {
                  * look-up (TMUSLOD for an explicit level: `txl`, v3d_tex.c:
                  * 374-375, which a vertex shader's every look-up is); then
                  * one ldtmu per word asked for. */
-                SOp::Tex { sampler, srcs, cube, layer, bias, lod, fetch, offset } => {
+                SOp::Tex { sampler, srcs, cube, layer, vol, bias, lod, fetch, offset } => {
                     /* A binding the draw keyed for a 32-bit output
                      * (`LodKey::ret32`: an R32F texture, Mesa's return size
                      * 32): one word per channel, lane l is word l, instead
@@ -950,23 +956,25 @@ impl<'a> Sel<'a> {
                     }
                     let (s, t) = (self.val(a, srcs[0])?, self.val(a, srcs[1])?);
                     self.push(a, VOp::Mul { op: MulOp::Mov, dst: Dst::Magic(WADDR_TMUT), a: t, b: Operand::None })?;
-                    if cube {
+                    /* r: a cube's direction z, or a 3D texture's r */
+                    if cube || vol {
                         let r = self.val(a, srcs[2])?;
                         self.push(a, VOp::Mul { op: MulOp::Mov, dst: Dst::Magic(WADDR_TMUR), a: r, b: Operand::None })?;
                     }
                     /* a 2D-array look-up's layer (Mesa's `is_array` write,
-                     * v3d_tex.c): the face of a cube record */
+                     * v3d_tex.c): a 2D array's z, or the face of a cube
+                     * record */
                     if layer {
                         let i = self.val(a, srcs[2])?;
                         self.push(a, VOp::Mul { op: MulOp::Mov, dst: Dst::Magic(WADDR_TMUI), a: i, b: Operand::None })?;
                     }
                     if bias || lod {
-                        let b = self.val(a, srcs[2 + usize::from(cube || layer)])?;
+                        let b = self.val(a, srcs[2 + usize::from(cube || layer || vol)])?;
                         self.push(a, VOp::Mul { op: MulOp::Mov, dst: Dst::Magic(WADDR_TMUB), a: b, b: Operand::None })?;
                     }
                     /* the retiring S write (v3d_tex.c:371-381): TMUSF for a
-                     * texelFetch, TMUSCM for a cube, TMUSLOD for a 2D
-                     * explicit level, else TMUS */
+                     * texelFetch, TMUSCM for a cube, TMUSLOD for an explicit
+                     * level of any other (2D, 2D array, 3D), else TMUS */
                     let retire = if fetch {
                         WADDR_TMUSF
                     } else if cube {

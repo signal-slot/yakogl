@@ -39,7 +39,7 @@
 use std::collections::BTreeMap;
 use yakogl::shaderc::online::arena::Arena;
 use yakogl::shaderc::online::eval;
-use yakogl::shaderc::online::ir::{IoDecl, IoKind, IoSlot, Module};
+use yakogl::shaderc::online::ir::{IoDecl, IoKind, IoSlot, Module, TexDim};
 use yakogl::shaderc::online::v3d::select::{
     QUNIFORM_FB_PNTC_Y_OFFSET, QUNIFORM_FB_PNTC_Y_SCALE, QUNIFORM_FB_WPOS_Y_OFFSET, QUNIFORM_FB_WPOS_Y_SCALE,
 };
@@ -402,7 +402,62 @@ const UNIFORM_OVERRIDES: &[(&str, &str, u32, u32, u32, &str)] = &[
          set to vec4(1)); random draws never hit it, and the TMUT/TMUS piece \
          control of this pair survived until they did (caught with it, measured)",
     ),
+    (
+        "es300/vol.frag",
+        "zz",
+        0,
+        0,
+        0x3f00_0000, // 0.5
+        "texelFetch(vol, ivec3(0, 0, int(zz * textureSize(vol, 0).z)), 0) is undefined outside the \
+         harness volume's TEXTURE_LAYERS slices (GL ES 3.0 8.8) and refused by the interpreter and the \
+         evaluator; 0.5 fetches slice 1 and samples it (w = 1.5, inside a slice)",
+    ),
+    (
+        "es300/array.frag",
+        "layer",
+        0,
+        0,
+        0x3f80_0000, // 1.0
+        "texelFetch(layers, ivec3(..., int(layer)), 0) is undefined outside the harness array's \
+         TEXTURE_LAYERS layers and refused; 1.0 fetches and samples layer 1",
+    ),
+    (
+        "es300/texfetch.frag",
+        "lvl",
+        0,
+        0,
+        0,
+        "texelFetch(s, p, lvl) and (s, p + (1, 0), lvl) are undefined outside the texture and refused by \
+         the interpreter and the evaluator: the index is read by fetches alone, so pair_textures gives it \
+         the TEXTURE_LEVELS chain (7x7, 3x3, 1x1), and level 0 with p = (2, 1) keeps both fetches inside; \
+         the TMUT <-> TMUB control then fetches (2, 0) of level 1, inside too, and is caught",
+    ),
+    ("es300/texfetch.frag", "p", 0, 0, 2, "see lvl"),
+    ("es300/texfetch.frag", "p", 0, 1, 1, "see lvl"),
 ];
+
+/// Attribute values the draw must keep inside a program's defined
+/// behaviour, like [`UNIFORM_OVERRIDES`]: a stage source, the attribute, the
+/// factor the drawn values ([`Rng::attr`]) are scaled by, and the reason.
+/// Only the pairs whose source is named are scaled, so no other pair's draw
+/// moves.
+const ATTRIBUTE_SCALES: &[(&str, &str, f32, &str)] = &[(
+    "es300/array.frag",
+    "pos",
+    0.4,
+    "texelFetch(layers, ivec3(int(uv.x * sz.x), int(uv.y * sz.y), ...), 0) with uv = pos * 0.5 + 0.5 \
+     names a texel outside the 5x5 harness level unless |pos| < 1 (undefined in GL, refused by the \
+     interpreter and the evaluator); the drawn values are in [0.25, 2], so 0.4 keeps every lane's fetch \
+     inside (|pos| <= 0.8)",
+)];
+
+/// The factor [`ATTRIBUTE_SCALES`] gives attribute `name` of pair `p`.
+fn attribute_scale(p: &Pair, name: &str) -> f32 {
+    ATTRIBUTE_SCALES
+        .iter()
+        .find(|(src, a, _, _)| (p.fs_path == *src || p.vs_path == *src) && *a == name)
+        .map_or(1.0, |(_, _, s, _)| *s)
+}
 
 /// One uniform value a scenario sets: (uniform, element, component, bits).
 type ScenarioValue = (&'static str, u32, u32, u32);
@@ -646,15 +701,15 @@ fn eval_textures(
     m: &Module,
     all: &[sim::Texture],
 ) -> Result<Vec<eval::Texture>, Skip> {
+    // (A program with sampler uniforms and no look-up, es300/texsize.frag's
+    // textureSize alone, has no P0 word: its samplers are bound all the
+    // same, for the sizes.)
     let indices: std::collections::BTreeSet<u32> =
         st.uniforms.iter().filter(|(c, _)| *c == 40).map(|(_, d)| d >> 24).collect();
-    if indices.is_empty() {
-        return Ok(Vec::new());
-    }
     // Of the sampler's kind, so a look-up through it reaches its texels
     // (and disagrees) rather than stopping on the kind.
-    let unbound = |cube: bool| {
-        let mut t = texture(0, cube, false);
+    let unbound = |dim: TexDim| {
+        let mut t = texture(0, dim, false);
         for l in &mut t.levels {
             for f in &mut l.faces {
                 f.fill([-1.0; 4]);
@@ -674,13 +729,13 @@ fn eval_textures(
         } else {
             p.bindings.get(&(stage.to_string(), d.name.to_string())).copied()
         };
-        let cube = d.gl_type == GL_SAMPLER_CUBE;
+        let dim = sampler_dim(d.gl_type);
         for k in 0..u32::from(d.array_len.max(1)) {
             let b = usize::from(d.binding) + k as usize;
             while out.len() <= b {
-                out.push(unbound(false));
+                out.push(unbound(TexDim::D2));
             }
-            out[b] = unbound(cube);
+            out[b] = unbound(dim);
             if let Some(t) = mesa.and_then(|mb| all.get((mb + k) as usize)) {
                 listed.insert(mesa.unwrap() + k);
                 out[b] = t.clone();
@@ -725,9 +780,12 @@ const TEXTURE_SIZE: u32 = 5;
 /// allows 3.98). The TMU's rounding of an 8-bit texel n/255 to f16 is a
 /// board question too; these texels are exact.
 ///
-/// The texture bound to unit `u` (2D or cube, one level or TEXTURE_LEVELS,
-/// as [`pair_textures`] decides): one level is 5x5 RGBA, texel (i, j) of
-/// face f (0 for 2D, the GL face index for a cube) is
+/// The texture bound to unit `u` (2D, cube, 2D array or 3D by `dim`, one
+/// level or TEXTURE_LEVELS, as [`pair_textures`] decides): one level is 5x5
+/// RGBA, texel (i, j) of image f (0 for 2D; the GL face index for a cube;
+/// the layer of a 2D array, TEXTURE_LAYERS of them at every level; the
+/// slice of a 3D texture, TEXTURE_LAYERS at level 0 and minified with the
+/// level) is
 /// ((8u + i + 1)/128 + j/1024, (8u + j + 1)/128, (32u + i + 5j)/512 + f/4,
 /// 1 - (32u + i + 5j)/1024); a mipmapped one is TEXTURE_MIP_SIZE wide (see
 /// TEXTURE_LEVELS). Every value is exact in f16, so a 16-bit TMU result
@@ -738,14 +796,20 @@ const TEXTURE_SIZE: u32 = 5;
 /// as the column, so two look-ups one row apart differ in .x too (the Qt
 /// outlined text read .x at sampleCoord and one row up: with red
 /// naming the column only, its first two results were equal and trading
-/// their LDTMU destinations survived, 2026-09-29); blue names the face and
-/// alpha the level, so a wrong face or level shows; and none is symmetric
-/// in i and j, so a swapped coordinate shows.
-fn texture(u: u32, cube: bool, mip: bool) -> sim::Texture {
+/// their LDTMU destinations survived, 2026-09-29); blue names the face,
+/// layer or slice and alpha the level, so a wrong image or level shows; and
+/// none is symmetric in i and j, so a swapped coordinate shows.
+fn texture(u: u32, dim: TexDim, mip: bool) -> sim::Texture {
     use yakogl::shaderc::online::texref::{Level, MinFilter};
     let levels = if mip { TEXTURE_LEVELS } else { 1 };
     let level = |k: u32| {
         let n = ((if mip { TEXTURE_MIP_SIZE } else { TEXTURE_SIZE }) >> k).max(1);
+        let images = match dim {
+            TexDim::D2 => 1,
+            TexDim::Cube => 6,
+            TexDim::D2Array => TEXTURE_LAYERS,
+            TexDim::D3 => (TEXTURE_LAYERS >> k).max(1),
+        };
         let face = |f: u32| -> Vec<[f32; 4]> {
             (0..n * n)
                 .map(|x| {
@@ -771,12 +835,31 @@ fn texture(u: u32, cube: bool, mip: bool) -> sim::Texture {
                 })
                 .collect()
         };
-        Level { width: n, height: n, faces: (0..if cube { 6 } else { 1 }).map(face).collect() }
+        Level { width: n, height: n, faces: (0..images).map(face).collect() }
     };
     sim::Texture {
-        cube,
+        cube: dim == TexDim::Cube,
         min: if mip { MinFilter::NearestMipmapNearest } else { MinFilter::Nearest },
         levels: (0..levels).map(level).collect(),
+    }
+}
+
+/// The layers of a harness 2D array, and the level-0 depth of a harness 3D
+/// texture: three, so a layer or slice coordinate has an inside and two
+/// clamped ends, and TEXTURE_SIZE's odd rule holds for the slices too (a
+/// coordinate of 0.5 is slice 1's middle, not an edge).
+const TEXTURE_LAYERS: u32 = 3;
+
+/// The dimension of a sampler uniform's GL type: GL_SAMPLER_CUBE,
+/// GL_SAMPLER_2D_ARRAY and its int/uint forms (0x8dc1, 0x8dcf, 0x8dd7),
+/// GL_SAMPLER_3D and its int/uint forms (0x8b5f, 0x8dcb, 0x8dd3); the rest
+/// are 2D.
+fn sampler_dim(gl_type: u16) -> TexDim {
+    match gl_type {
+        GL_SAMPLER_CUBE => TexDim::Cube,
+        0x8dc1 | 0x8dcf | 0x8dd7 => TexDim::D2Array,
+        0x8b5f | 0x8dcb | 0x8dd3 => TexDim::D3,
+        _ => TexDim::D2,
     }
 }
 
@@ -797,25 +880,34 @@ const GL_SAMPLER_CUBE: u16 = 0x8b60;
 
 /// The textures a pair's two programs read, by the index their P0 names:
 /// for each index its kind and its levels, decided from the IR's look-ups
-/// through it (both stages). A cube sampler's index is a cube; an index
-/// every look-up of which has an explicit level of detail (`TexLod::Lod`,
-/// and every vertex look-up is one: the front end makes an implicit one
-/// `Lod(0.0)`) gets TEXTURE_LEVELS levels and NEAREST_MIPMAP_NEAREST, so
-/// the level a program asks for shows in the value; every other index has
-/// one level, read the same at any level of detail, so an implicit
-/// look-up (the derivatives', which neither side models) stays comparable.
-/// An index read both as 2D and as cube is not tried. An index the programs
-/// do not read takes the kind and levels of its neighbour `u ^ 1`, so the
-/// P0 control (texture index bit 24 flipped, tmu_mutants) reads a texture
-/// of the kind its look-up asks for, with other texels, and must disagree
-/// on the values; of the other kind, every draw would stop on the kind and
-/// the control could only read "unmeasured".
+/// through it (both stages). The look-up's dimension is the texture's (a
+/// cube, a 2D array of TEXTURE_LAYERS layers, a 3D texture TEXTURE_LAYERS
+/// deep, else 2D); an index every look-up of which has an explicit level
+/// of detail (`TexLod::Lod`, and every vertex look-up is one: the front
+/// end makes an implicit one `Lod(0.0)`) gets TEXTURE_LEVELS levels and
+/// NEAREST_MIPMAP_NEAREST, so the level a program asks for shows in the
+/// value; every other index (a `texelFetch`'s included: its level is an
+/// integer the draw must keep inside, UNIFORM_OVERRIDES) has one level,
+/// read the same at any level of detail, so an implicit look-up (the
+/// derivatives', which neither side models) stays comparable. An index
+/// read as two dimensions is not tried. An index the programs do not read
+/// takes the kind and levels of its neighbour `u ^ 1`, so the P0 control
+/// (texture index bit 24 flipped, tmu_mutants) reads a texture of the kind
+/// its look-up asks for, with other texels, and must disagree on the
+/// values; of another kind, every draw would stop on the kind and the
+/// control could only read "unmeasured".
 fn pair_textures(p: &Pair, fsm: &Module, vsm: &Module) -> Result<Vec<sim::Texture>, Skip> {
-    use yakogl::shaderc::online::ir::{Op, TexDim, TexLod};
-    let mut plan: BTreeMap<u32, (bool, bool)> = BTreeMap::new();
+    use yakogl::shaderc::online::ir::{Op, TexLod};
+    let mut plan: BTreeMap<u32, (TexDim, bool)> = BTreeMap::new();
     for (stage, m) in [("frag", fsm), ("vert", vsm)] {
         for op in m.instrs {
-            let Op::Tex { dim, sampler, lod, .. } = *op else { continue };
+            /* a textureSize names the index's dimension too (and no level
+             * of detail: it leaves the mipmap choice to the look-ups) */
+            let (dim, sampler, lod) = match *op {
+                Op::Tex { dim, sampler, lod, .. } => (dim, sampler, Some(lod)),
+                Op::TexSize { dim, sampler, .. } => (dim, sampler, None),
+                _ => continue,
+            };
             let Some((d, k)) =
                 m.uniforms.iter().filter(|d| d.dword_off == yakogl::shaderc::SHC_UNIFORM_NO_BLOCK).find_map(|d| {
                     let k = u32::from(sampler).checked_sub(u32::from(d.binding))?;
@@ -830,18 +922,20 @@ fn pair_textures(p: &Pair, fsm: &Module, vsm: &Module) -> Result<Vec<sim::Textur
                 p.bindings.get(&(stage.to_string(), d.name.to_string())).map(|b| b + k)
             };
             let Some(index) = index else { continue };
-            let (cube, explicit) = (dim == TexDim::Cube, matches!(lod, TexLod::Lod(_)));
-            let e = plan.entry(index).or_insert((cube, true));
-            if e.0 != cube {
-                return Err(Skip::NotTried(format!("texture index {index} is read as 2D and as cube")));
+            let e = plan.entry(index).or_insert((dim, true));
+            if e.0 != dim {
+                return Err(Skip::NotTried(format!("texture index {index} is read as {:?} and as {dim:?}", e.0)));
             }
-            e.1 &= explicit;
+            if let Some(lod) = lod {
+                /* a texelFetch's integer level is explicit too */
+                e.1 &= matches!(lod, TexLod::Lod(_) | TexLod::Fetch(_));
+            }
         }
     }
     Ok((0..TEXTURE_UNITS)
         .map(|u| {
-            let (cube, mip) = plan.get(&u).or_else(|| plan.get(&(u ^ 1))).copied().unwrap_or((false, false));
-            texture(u, cube, mip)
+            let (dim, mip) = plan.get(&u).or_else(|| plan.get(&(u ^ 1))).copied().unwrap_or((TexDim::D2, false));
+            texture(u, dim, mip)
         })
         .collect())
 }
@@ -875,8 +969,9 @@ const Z_SCALE: f32 = 0.5;
 const Z_OFFSET: f32 = 0.5;
 
 /// Mesa's uniform stream for one stage, resolved to values. Contents that
-/// feed an I/O path the interpreter does not model are named.
-fn stream(st: &Stage, stage: &str, u: &Uniforms, ours: bool) -> Result<Vec<u32>, Skip> {
+/// feed an I/O path the interpreter does not model are named. `texs` are
+/// the draw's textures by index ([`pair_textures`]), for the size words.
+fn stream(st: &Stage, stage: &str, u: &Uniforms, ours: bool, texs: &[sim::Texture]) -> Result<Vec<u32>, Skip> {
     let mut out = Vec::new();
     for &(contents, data) in &st.uniforms {
         out.push(match contents {
@@ -921,8 +1016,19 @@ fn stream(st: &Stage, stage: &str, u: &Uniforms, ours: bool) -> Result<Vec<u32>,
             c if ours && c == QUNIFORM_FB_PNTC_Y_OFFSET && data == 0 => PNTC_OFFSET.to_bits(),
             40 | 41 => return Err(Skip::NotTried(format!("{stage}: TMU config for unit {}", data >> 24))),
             // QUNIFORM_TEXTURE_WIDTH/HEIGHT of unit `data` (v3d_uniforms.c:
-            // 58-68, level 0).
-            44 | 45 if data < TEXTURE_UNITS => TEXTURE_SIZE,
+            // 58-68, level 0): the unit's texture's (TEXTURE_SIZE, or
+            // TEXTURE_MIP_SIZE when pair_textures gave it a chain).
+            44 | 45 if data < TEXTURE_UNITS => texs
+                .get(data as usize)
+                .and_then(|t| t.levels.first())
+                .map_or(TEXTURE_SIZE, |l| if contents == 44 { l.width } else { l.height }),
+            // QUNIFORM_TEXTURE_DEPTH / _ARRAY_SIZE of unit `data`
+            // (v3d_uniforms.c get_texture_size: depth0, or array_size): the
+            // unit's level-0 image count, a 3D texture's slices or a 2D
+            // array's layers (TEXTURE_LAYERS), 1 for a 2D texture.
+            46 | 47 if data < TEXTURE_UNITS => {
+                texs.get(data as usize).and_then(|t| t.levels.first()).map_or(1, |l| l.faces.len() as u32)
+            }
             // QUNIFORM_SPILL_OFFSET / _SIZE_PER_THREAD (v3d_compiler.h;
             // vir_register_allocate.c:426-455: spill_base = TIDX * size +
             // EIDX * 4 + offset): the harness's scratch buffer, which the
@@ -1218,9 +1324,10 @@ fn run_pair_inner(p: &Pair, seed: u64, positive: bool, zeros: bool) -> Result<Op
     let mut attr_vals: BTreeMap<(String, u32, usize), [u32; 4]> = BTreeMap::new();
     let mut vs_io: Vec<Vec<(IoSlot, [u32; 4])>> = vec![Vec::new(); LANES];
     for d in vsm.inputs.iter().filter(|d| d.kind == IoKind::Attribute) {
+        let scale = attribute_scale(p, d.name);
         for k in 0..locations(d.gl_type) {
             for (l, io) in vs_io.iter_mut().enumerate() {
-                let v: [u32; 4] = core::array::from_fn(|c| f(rng.attr(c)));
+                let v: [u32; 4] = core::array::from_fn(|c| f(rng.attr(c) * scale));
                 attr_vals.insert((d.name.to_string(), k as u32, l), v);
                 io.push((IoSlot::Attrib(d.location + k), v));
             }
@@ -1302,7 +1409,7 @@ fn run_pair_inner(p: &Pair, seed: u64, positive: bool, zeros: bool) -> Result<Op
                 rows.push(row);
             }
         }
-        let s = stream(st, "vert", &u, p.ours)?;
+        let s = stream(st, "vert", &u, p.ours, &texs)?;
         let got = sim::run(&st.code, &s, &Inputs::Vertex(VsInputs { vpm: rows }), &env(&u, "vert", st, &texs))
             .map_err(sim_err(stname))?;
         let approx = !got.approximate.is_empty();
@@ -1537,7 +1644,7 @@ fn run_pair_inner(p: &Pair, seed: u64, positive: bool, zeros: bool) -> Result<Op
         }
         varyings.push(v);
     }
-    let fs_stream = stream(&p.fs, "frag", &u, p.ours)?;
+    let fs_stream = stream(&p.fs, "frag", &u, p.ours, &texs)?;
     if debug() {
         println!("FS uniform stream: {:?}", fs_stream.iter().map(|x| f32::from_bits(*x)).collect::<Vec<_>>());
     }
@@ -1719,12 +1826,22 @@ fn mutate(code: &[u64], nth: usize) -> Option<(Vec<u64>, String)> {
 /// can tell them apart (an equivalent mutant is not a gap in the
 /// instrument): (fragment source, piece, why). Their own outcome, never
 /// "caught"; every entry must match a mutant, or the test fails.
-const TMU_EQUIVALENT: &[(&str, &str, &str)] = &[(
-    "es300/idxtex.frag",
-    "TMUT <-> TMUS sources",
-    "texture(ftex, vec2(0.75, 0.75)): s == t, so trading their sources \
+const TMU_EQUIVALENT: &[(&str, &str, &str)] = &[
+    (
+        "es300/idxtex.frag",
+        "TMUT <-> TMUS sources",
+        "texture(ftex, vec2(0.75, 0.75)): s == t, so trading their sources \
          changes nothing",
-)];
+    ),
+    (
+        "es300/vol.frag",
+        "LDTMU destinations",
+        "texture(vol, p).r and textureLod(vol, p, 0.0).r read the same texel of the harness volume, which \
+         has one level (an implicit level of detail reads level 0 there), and Mesa's first two LDTMUs are \
+         theirs, so trading their destinations changes nothing (ours order the texelFetch first and are \
+         caught; measured 2026-11-07)",
+    ),
+];
 
 /// Texture pieces of OUR code no control draw can compare: (pair, piece,
 /// why), each established by printing every control draw's verdict. Their
@@ -1760,6 +1877,20 @@ const TMU_UNMEASURED: &[(&str, &str, &str)] = &[
         "as es100/vtex_struct_sampler: the traded TMUT reads the old VPM row number, a coordinate on a \
          texel edge on every draw (measured 2026-09-29)",
     ),
+    (
+        "es300/cube.vert + es300/texfetch.frag",
+        "TMUT <-> TMUB sources",
+        "the level's uniform (lvl) is loaded after the TMUT write (a uniform lands at its first read, \
+         select.rs Sel::val), so the traded TMUT reads a register nothing wrote yet: every one of the 16 \
+         control draws stops with \"an undefined lane reaches a TMU write\" (measured 2026-11-07)",
+    ),
+    (
+        "es300/cube.vert + es300/texoffset.frag",
+        "TMUT <-> TMUS sources",
+        "as texfetch's TMUB: the S coordinate's uniform (uv.x) is loaded after the TMUT write, so the \
+         traded TMUT reads a register nothing wrote yet, \"an undefined lane reaches a TMU write\" on \
+         every draw (measured 2026-11-07)",
+    ),
 ];
 
 /// Texture pieces of MESA's code no control draw can compare: (pair, piece,
@@ -1778,6 +1909,13 @@ const TMU_MESA_UNMEASURED: &[(&str, &str, &str)] = &[
         "TMUT <-> TMUS sources",
         "as TMUT <-> TMUB: the traded source is a register nothing wrote yet, \"an undefined lane reaches \
          a TMU write\" on every draw",
+    ),
+    (
+        "es300/cube.vert + es300/texfetch.frag",
+        "TMUT <-> TMUB sources",
+        "Mesa's ldunif of the level (lvl) comes after its TMUT write, so the traded TMUT reads a register \
+         nothing wrote yet: \"an undefined lane reaches a TMU write\" on every one of the 16 draws \
+         (measured 2026-11-07; ours stops the same way, TMU_UNMEASURED)",
     ),
 ];
 
@@ -2209,17 +2347,29 @@ fn the_interpreter_runs_mesas_code_as_the_ir_says() {
     // 2026-10-04 (work/online-only, ES 3 build): es300/texsize.frag now
     // declares its sampler2DArray's precision (GLSL ES 3.00 4.5.4), so the
     // front end takes it: tried +1, as unmodelled (uniform contents 47,
-    // Mesa's texture size), not tried -1.
+    // Mesa's texture size), not tried -1. 2026-11-07 (2D-array and 3D
+    // look-ups and their Mesa pins, ES 3 build; the ES 2 build refuses the
+    // new sources in the front end and keeps its pins): the fixture carries
+    // two more pairs (sim_fixture.py EXTRA_REAL: es300/cube.vert +
+    // texfetch.frag, texoffset.frag), 240 -> 242; the stream gives contents
+    // 44..47 from the draw's textures (a 2D array of TEXTURE_LAYERS layers
+    // or a 3D texture that deep for a sampler of that kind), and the
+    // interpreter and the evaluator sample both (texref), so Mesa's
+    // es300/array.frag, texsize.frag and vol.frag and the two new pairs are
+    // tried and agree: tried 179 -> 184, agree 178 -> 183, unmodelled 3 ->
+    // 1 (gltest/intrt.frag's denormal stays), not tried 61 -> 58.
     let es2 = cfg!(feature = "report-es2");
     assert_eq!(
         (pairs.len(), tried, agree.len(), n_un, n_nt),
-        if es2 { (240, 161, 161, 0, 79) } else { (240, 181, 178, 3, 59) },
+        if es2 { (242, 161, 161, 0, 81) } else { (242, 184, 183, 1, 58) },
         "the population moved; re-derive the pins"
     );
     assert_eq!(retried.len(), if es2 { 2 } else { 4 }, "the positive-input retries moved: {retried:?}");
-    assert_eq!(total, if es2 { 35_766 } else { 39_574 }, "the compared values moved");
+    assert_eq!(total, if es2 { 35_766 } else { 40_694 }, "the compared values moved");
     println!("  agreeing pairs that sampled a texture: {sampled:?}");
-    assert_eq!(sampled.len(), if es2 { 47 } else { 51 }, "the texture pairs moved: {sampled:?}");
+    // 2026-11-07: es300/array.frag, vol.frag, texfetch.frag and texoffset.frag
+    // sample (51 -> 55), all on level 0; texsize.frag reads sizes alone.
+    assert_eq!(sampled.len(), if es2 { 47 } else { 55 }, "the texture pairs moved: {sampled:?}");
     println!("  their LDTMUs: {ldtmus}; pairs reading with no switch since the request: {without_switch:?}");
     println!(
         "  pairs that read each cube face (+X -X +Y -Y +Z -Z): {face_pairs:?}; each level (0 1 2): {level_pairs:?}"
@@ -2230,14 +2380,17 @@ fn the_interpreter_runs_mesas_code_as_the_ir_says() {
     // none).
     assert_eq!(
         (face_pairs, level_pairs),
-        if es2 { ([4, 2, 4, 4, 3, 3], [46, 1, 0]) } else { ([6, 2, 6, 6, 5, 5], [50, 1, 0]) },
+        if es2 { ([4, 2, 4, 4, 3, 3], [46, 1, 0]) } else { ([6, 2, 6, 6, 5, 5], [54, 1, 0]) },
         "the cube faces and levels Mesa's agreeing pairs read moved"
     );
     // Pinned, measured on f44e20fe: Mesa switches threads between every
     // request and its LDTMUs (ntq_flush_tmu), so none reads without one.
     // The same counter read every one of ours before e1165634, so it can
     // see both.
-    assert_eq!(ldtmus, if es2 { 116 } else { 124 }, "the LDTMUs of Mesa's texture pairs moved");
+    // 2026-11-07: 124 -> 142 with array.frag (4 words of 2 look-ups),
+    // vol.frag (4: three look-ups of one word, plus one), texfetch.frag (4)
+    // and texoffset.frag (8: four look-ups of two words).
+    assert_eq!(ldtmus, if es2 { 116 } else { 142 }, "the LDTMUs of Mesa's texture pairs moved");
     assert!(without_switch.is_empty(), "Mesa read a TMU word with no switch since its request: {without_switch:?}");
     // The texture pieces, each mutated in every pair that sampled: each
     // must be caught (a disagreement on a draw on which the pair agrees).
@@ -2275,7 +2428,8 @@ fn the_interpreter_runs_mesas_code_as_the_ir_says() {
     }
     assert_eq!(
         mesa_unmeasured.len(),
-        TMU_MESA_UNMEASURED.len(),
+        // GLSL ES 3.00 pairs are not tried by a report-es2 build.
+        TMU_MESA_UNMEASURED.iter().filter(|(pair, _, _)| !(es2 && pair.starts_with("es300/"))).count(),
         "Mesa's texture pieces no draw compares moved: {mesa_unmeasured:?}"
     );
     for (piece, (c, na, other)) in &pieces {
@@ -2311,13 +2465,19 @@ fn the_interpreter_runs_mesas_code_as_the_ir_says() {
         } else {
             [
                 /* the one left has one LDTMU; the own cube programs (bias,
-                 * lod) make the TMUB and TMUR swaps observable in 4 and 7 */
-                ("LDTMU destinations", 50, 1),
-                ("P0 texture index", 51, 0),
-                ("P1 output type", 51, 0),
-                ("TMUT <-> TMUB sources", 4, 46),
-                ("TMUT <-> TMUR sources", 7, 44),
-                ("TMUT <-> TMUS sources", 28, 21),
+                 * lod) make the TMUB and TMUR swaps observable in 4 and 7.
+                 * 2026-11-07: array.frag, vol.frag, texfetch.frag and
+                 * texoffset.frag sample (+4 on P0 and P1; vol.frag's LDTMU
+                 * trade is TMU_EQUIVALENT, texfetch's TMUB trade
+                 * TMU_MESA_UNMEASURED, and texfetch.frag has no P1 word:
+                 * a fetch takes the 16-bit default); vol.frag's TMUR trade
+                 * (a 3D look-up's r) is caught, +1 */
+                ("LDTMU destinations", 53, 1),
+                ("P0 texture index", 55, 0),
+                ("P1 output type", 54, 1),
+                ("TMUT <-> TMUB sources", 4, 49),
+                ("TMUT <-> TMUR sources", 8, 47),
+                ("TMUT <-> TMUS sources", 31, 22),
             ]
         },
         "the texture piece controls moved"
@@ -2329,11 +2489,20 @@ fn the_interpreter_runs_mesas_code_as_the_ir_says() {
     // u_k.x < 0, so no trip) are caught on the control's other draws.
     assert_eq!(survived, MESA_SURVIVORS, "the mutants of Mesa's code that survived every draw moved");
     assert!(unmeasured.is_empty(), "a mutant of Mesa's code was never compared: {unmeasured:?}");
-    assert_eq!((caught, none), if es2 { (284, 36) } else { (313, 41) }, "the negative control moved");
-    /* The one mutant no draw could compare is in an ES 3.00 pair, which a
-     * report-es2 build does not try. */
-    let want_skipped: &[&str] =
-        if es2 { &[] } else { &["es300/flatlast.vert + es300/flatlast.frag vs instruction 3: fmul a -> a.l"] };
+    assert_eq!((caught, none), if es2 { (284, 36) } else { (323, 41) }, "the negative control moved");
+    /* The two mutants no draw could compare are in ES 3.00 pairs, which a
+     * report-es2 build does not try: array.frag's first FMUL (uv = v_xy *
+     * 0.5, read as its low f16 half) puts its texelFetch outside the 5x5
+     * harness level on every draw, which the interpreter refuses (GL leaves
+     * it undefined); the next mutant is caught. */
+    let want_skipped: &[&str] = if es2 {
+        &[]
+    } else {
+        &[
+            "es300/cube.vert + es300/array.frag fs instruction 1: fmul a -> a.l",
+            "es300/flatlast.vert + es300/flatlast.frag vs instruction 3: fmul a -> a.l",
+        ]
+    };
     assert_eq!(skipped, want_skipped, "the mutants no draw could compare moved (each stops the run on every draw)");
 }
 
@@ -2845,15 +3014,32 @@ fn our_programs_agree_with_the_ir_and_with_mesa() {
     // the pair is not tried (5 -> 6) and not compared with Mesa's program
     // (15 -> 16); nothing else moves (the 192 pairs compiled before keep
     // their words: chain.rs compiled_corpus_words_are_pinned).
+    // 2026-11-07 (2D-array and 3D look-ups and their Mesa pins, ES 3 build
+    // only; the ES 2 build refuses the new sources in the front end, 70 ->
+    // 72, and keeps its other pins): the fixture carries two more real
+    // pairs (sim_fixture.py EXTRA_REAL: es300/cube.vert + texfetch.frag,
+    // texoffset.frag), 271 -> 273; NotYet 3 -> 0, compiled 222 -> 227:
+    // es300/array.frag, texsize.frag, vol.frag, texfetch.frag and
+    // texoffset.frag. All five are tried and agree with the IR (216/215 ->
+    // 221/220; the harness binds a 2D array of TEXTURE_LAYERS layers or a
+    // 3D texture that deep to a sampler of that kind, the evaluator and the
+    // interpreter sample both through texref, and vol.frag's zz, array.frag's
+    // layer and pos and texfetch.frag's lvl are kept inside the texture:
+    // UNIFORM_OVERRIDES, ATTRIBUTE_SCALES) and with Mesa's programs (177 ->
+    // 182): the 2D-array and 3D look-ups, their textureSize, texelFetch,
+    // textureOffset and textureLodOffset are pinned against Mesa's own code
+    // on the same draws. gltest/isamp.frag and usamp.frag (integer samplers)
+    // stay not tried (the evaluator samples float textures); not tried
+    // 9 -> 6, not compared 19 -> 16.
     let es2 = cfg!(feature = "report-es2");
     assert_eq!(
         (reals.len(), front_end, n_not_yet, n_other, compiled.len()),
-        if es2 { (271, 70, 0, 2, 199) } else { (271, 44, 3, 2, 222) },
+        if es2 { (273, 72, 0, 2, 199) } else { (273, 44, 0, 2, 227) },
         "our compiler's coverage moved; re-derive the pins"
     );
     assert_eq!(
         (tried, agree.len(), n_un, n_nt),
-        if es2 { (197, 197, 0, 2) } else { (216, 215, 1, 6) },
+        if es2 { (197, 197, 0, 2) } else { (221, 220, 1, 6) },
         "(a) vs (b) moved"
     );
     // The pairs whose output the language does not fix (a pseudo-random
@@ -2866,12 +3052,12 @@ fn our_programs_agree_with_the_ir_and_with_mesa() {
     assert_eq!(trig_sorted, trig_want, "the undefined-precision trig bucket moved");
     assert_eq!(
         (vs_mesa_agree.len(), vs_mesa_skipped.len(), vs_mesa_absent.len()),
-        if es2 { (160, 10, 29) } else { (177, 16, 29) },
+        if es2 { (160, 10, 29) } else { (182, 16, 29) },
         "(a) vs (c) moved"
     );
     assert_eq!(
         (compared_total, mutants_caught, mutants_none),
-        if es2 { (44_182, 365, 27) } else { (48406, 398, 30) },
+        if es2 { (44_182, 365, 27) } else { (49_526, 408, 30) },
         "the controls moved"
     );
     // A mutant no draw could compare is a blind spot, so each pair that has
@@ -2902,7 +3088,7 @@ fn our_programs_agree_with_the_ir_and_with_mesa() {
     // code reaching a face, or reaching it with the right values, moves this.
     assert_eq!(
         (ours_face_pairs, ours_level_pairs),
-        if es2 { ([4, 2, 4, 4, 3, 3], [49, 1, 0]) } else { ([6, 2, 6, 6, 5, 5], [53, 1, 0]) },
+        if es2 { ([4, 2, 4, 4, 3, 3], [49, 1, 0]) } else { ([6, 2, 6, 6, 5, 5], [57, 1, 0]) },
         "the cube faces and levels our agreeing pairs read moved"
     );
     println!(
@@ -2917,7 +3103,7 @@ fn our_programs_agree_with_the_ir_and_with_mesa() {
     // fixture, until #1509).
     assert_eq!(
         (ours_ldtmus, ours_without_total, ours_without_switch.len()),
-        if es2 { (124, 0, 0) } else { (132, 0, 0) },
+        if es2 { (124, 0, 0) } else { (150, 0, 0) },
         "our LDTMUs read with no switch since their request moved: {ours_without_switch:?}"
     );
     for (piece, (c, na, other)) in &ours_pieces {
@@ -2947,16 +3133,31 @@ fn our_programs_agree_with_the_ir_and_with_mesa() {
     let ours_counts: Vec<(&str, usize, usize)> = ours_pieces.iter().map(|(k, (c, na, _))| (*k, *c, *na)).collect();
     // Pinned, measured 2026-10-24 (108 / 76 while the Qt pairs were in the
     // fixture, until #1509).
-    assert_eq!(ours_sampled.len(), if es2 { 50 } else { 54 }, "our texture pairs moved: {ours_sampled:?}");
-    // TMU_EQUIVALENT's entry, ES 3.00: es300/idxtex's s == t, reached by
-    // ours since its vertex shader's textureLod compiles.
+    // 2026-11-07: es300/array.frag, vol.frag, texfetch.frag and texoffset.frag
+    // sample (54 -> 58), like Mesa's.
+    assert_eq!(ours_sampled.len(), if es2 { 50 } else { 58 }, "our texture pairs moved: {ours_sampled:?}");
+    // TMU_EQUIVALENT's entries, ES 3.00: es300/idxtex's s == t, reached by
+    // ours since its vertex shader's textureLod compiles; es300/vol's two
+    // look-ups of one texel (Mesa's first two LDTMUs; ours are caught, but
+    // the entry is keyed by the source and counts for both).
     assert_eq!(
         ours_equivalent.iter().map(|e| e.split(':').next().unwrap_or("")).collect::<Vec<_>>(),
-        if es2 { Vec::<&str>::new() } else { std::vec!["es300/idxtex.vert + es300/idxtex.frag TMUT <-> TMUS sources"] },
+        if es2 {
+            Vec::<&str>::new()
+        } else {
+            std::vec![
+                "es300/cube.vert + es300/vol.frag LDTMU destinations",
+                "es300/idxtex.vert + es300/idxtex.frag TMUT <-> TMUS sources"
+            ]
+        },
         "our texture pieces a draw cannot tell apart moved"
     );
     /* Measured 2026-10-24 (the Qt pairs left the fixture with #1509). The
-     * LDTMU trades not applicable are pairs with one LDTMU. */
+     * LDTMU trades not applicable are pairs with one LDTMU. 2026-11-07:
+     * array.frag, vol.frag, texfetch.frag and texoffset.frag sample (+4 on
+     * P0 and P1, +3 LDTMU trades with vol.frag's TMU_EQUIVALENT; vol.frag's
+     * TMUR trade, a 3D look-up's r, is caught, +1; texfetch's TMUB and
+     * texoffset's TMUS trades are TMU_UNMEASURED). */
     assert_eq!(
         ours_counts,
         if es2 {
@@ -2970,12 +3171,12 @@ fn our_programs_agree_with_the_ir_and_with_mesa() {
             ]
         } else {
             [
-                ("LDTMU destinations", 52, 2),
-                ("P0 texture index", 54, 0),
-                ("P1 output type", 54, 0),
-                ("TMUT <-> TMUB sources", 5, 47),
-                ("TMUT <-> TMUR sources", 7, 47),
-                ("TMUT <-> TMUS sources", 30, 21),
+                ("LDTMU destinations", 55, 2),
+                ("P0 texture index", 58, 0),
+                ("P1 output type", 58, 0),
+                ("TMUT <-> TMUB sources", 5, 50),
+                ("TMUT <-> TMUR sources", 8, 50),
+                ("TMUT <-> TMUS sources", 32, 22),
             ]
         },
         "our texture piece controls moved"
@@ -2986,14 +3187,23 @@ fn our_programs_agree_with_the_ir_and_with_mesa() {
 /// why). Each entry was established by printing every control draw's verdict,
 /// never assumed.
 // A new blind spot is added here with its count and its measured reason.
-const MUTANTS_SKIPPED: &[(&str, usize, &str)] = &[(
-    "es300/flatlast.vert + es300/flatlast.frag",
-    /* GLSL ES 3.00: not compiled by a report-es2 build */
-    if cfg!(feature = "report-es2") { 0 } else { 1 },
-    "the VS's first mutant reads col.a as its low f16 half, so uint(col.a * 4.0 + 0.5) converts a negative \
-     float or a NaN, undefined in ES 3.00, and the interpreter stops every draw (Ftouz out of the u32 range, \
-     or a NaN operand; measured 2026-09-26); the next mutant is caught",
-)];
+const MUTANTS_SKIPPED: &[(&str, usize, &str)] = &[
+    (
+        "es300/flatlast.vert + es300/flatlast.frag",
+        /* GLSL ES 3.00: not compiled by a report-es2 build */
+        if cfg!(feature = "report-es2") { 0 } else { 1 },
+        "the VS's first mutant reads col.a as its low f16 half, so uint(col.a * 4.0 + 0.5) converts a negative \
+         float or a NaN, undefined in ES 3.00, and the interpreter stops every draw (Ftouz out of the u32 range, \
+         or a NaN operand; measured 2026-09-26); the next mutant is caught",
+    ),
+    (
+        "es300/cube.vert + es300/array.frag",
+        if cfg!(feature = "report-es2") { 0 } else { 1 },
+        "the FS's first mutant reads v_xy as its low f16 half in uv = v_xy * 0.5 + 0.5, so the texelFetch at \
+         int(uv * textureSize) names a texel outside the 5x5 harness level on every draw, undefined in GL ES \
+         3.0 8.8 and refused by the interpreter (measured 2026-11-07); the next mutant is caught",
+    ),
+];
 
 /// Our instruction counts, pinned, beside Mesa's for the same pairs (the
 /// fixture's programs): the compiler-performance work (docs, "Code size
@@ -3084,6 +3294,10 @@ fn back_to_back_loop_exits_are_counted() {
 /// (#1509, 2026-10-24): 51 cuts, all in fragment shaders. 2026-11-03,
 /// texelFetch (TMUSF), ES 3 build: gltest/isamp.frag compiles and adds its
 /// hoists (fs 5, vs 2, cs 6, no cut); the pairs compiled before keep theirs.
+/// 2026-11-07, 2D-array and 3D look-ups, ES 3 build: es300/array.frag,
+/// texsize.frag and vol.frag add theirs (fs 7, vs 2, cs 18, no cut), and
+/// the fixture's two EXTRA_REAL pairs (texfetch.frag, texoffset.frag) vs 4
+/// and cs 12 (their fragment shaders hoist nothing).
 /// Pinned: a change to hoist or to what reaches it moves these.
 #[test]
 fn the_hoist_windows_cuts_are_counted() {
@@ -3114,7 +3328,7 @@ fn the_hoist_windows_cuts_are_counted() {
     }
     assert_eq!(
         (hoists, cuts),
-        if es2 { ([1074, 2227, 166], [48, 0, 0]) } else { ([1146, 2406, 230], [59, 0, 0]) },
+        if es2 { ([1074, 2227, 166], [48, 0, 0]) } else { ([1153, 2412, 260], [59, 0, 0]) },
         "the hoist counts moved"
     );
 }
@@ -3495,6 +3709,12 @@ const FEMTOVG_FS_COUNTS: &[(&str, usize)] = &[
 /// [4569, 2370, 1965], the per-program words above of the Qt programs gone
 /// with them. 2026-11-03, texelFetch (TMUSF): gltest/isamp.frag compiles,
 /// 193 programs [10939, 5537, 4530], the new pair's own words (fs 119, vs
-/// 18, cs 21; ES 3 build only); no other program moves.
-const OURS_TOTALS: (usize, [usize; 3]) = (193, [10939, 5537, 4530]);
+/// 18, cs 21; ES 3 build only); no other program moves. 2026-11-07,
+/// 2D-array and 3D look-ups and their textureSize: es300/array.frag,
+/// texsize.frag and vol.frag compile, and the fixture carries the two
+/// EXTRA_REAL pairs es300/cube.vert + texfetch.frag and texoffset.frag
+/// (sim_fixture.py): 198 programs [11079, 5631, 4635], the five pairs' own
+/// words (fs 29 + 16 + 29 + 21 + 45, vs 94, cs 105; ES 3 build only); no
+/// other program moves (chain.rs compiled_corpus_words_are_pinned).
+const OURS_TOTALS: (usize, [usize; 3]) = (198, [11079, 5631, 4635]);
 const OURS_TOTALS_ES2: (usize, [usize; 3]) = (170, [9823, 4840, 4039]);

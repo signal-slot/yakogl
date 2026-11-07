@@ -118,6 +118,55 @@ fn integer_shift_by_constant_builds() {
     build(vs, FS_VEC4).unwrap_or_else(|e| panic!("{e}"));
 }
 
+/// The 2D-array and 3D look-ups of GLSL ES 3.00 8.8 (refused by name until
+/// the compiler wrote an array's layer to TMUI and a 3D's r to TMUR), and
+/// their textureSize: every form, in the fragment and the vertex stage,
+/// with float and integer samplers. Shadow and textureGrad forms are other
+/// items' (still refused by name).
+#[test]
+fn array_and_3d_look_ups_build() {
+    let vs_pass = "#version 300 es\nin highp vec4 a_pos;\nout highp vec3 v;\n\
+                   void main() {\n  v = a_pos.xyz;\n  gl_Position = a_pos;\n}\n";
+    let forms = [
+        ("sampler2DArray", "vec4", "texture(t, v)"),
+        ("sampler2DArray", "vec4", "texture(t, v, 0.5)"),
+        ("sampler2DArray", "vec4", "textureLod(t, v, 1.0)"),
+        ("sampler2DArray", "vec4", "textureOffset(t, v, ivec2(-8, 7))"),
+        ("sampler2DArray", "vec4", "textureLodOffset(t, v, 1.0, ivec2(1, -1))"),
+        ("sampler2DArray", "vec4", "texelFetch(t, ivec3(v), 1)"),
+        ("sampler2DArray", "vec4", "texelFetchOffset(t, ivec3(v), 0, ivec2(2, 3))"),
+        ("sampler2DArray", "vec4", "vec4(vec3(textureSize(t, 1)), 1.0)"),
+        ("sampler3D", "vec4", "texture(t, v)"),
+        ("sampler3D", "vec4", "texture(t, v, -0.5)"),
+        ("sampler3D", "vec4", "textureLod(t, v, 2.0)"),
+        ("sampler3D", "vec4", "textureProj(t, vec4(v, 2.0))"),
+        ("sampler3D", "vec4", "textureProjLod(t, vec4(v, 2.0), 1.0)"),
+        ("sampler3D", "vec4", "textureOffset(t, v, ivec3(1, -2, 3))"),
+        ("sampler3D", "vec4", "texelFetch(t, ivec3(v), 0)"),
+        ("sampler3D", "vec4", "texelFetchOffset(t, ivec3(v), 0, ivec3(0, 0, -1))"),
+        ("sampler3D", "vec4", "vec4(vec3(textureSize(t, 2)), 1.0)"),
+        ("isampler2DArray", "vec4", "vec4(texelFetch(t, ivec3(v), 0))"),
+        ("usampler3D", "vec4", "vec4(texture(t, v))"),
+    ];
+    for (sampler, ty, expr) in forms {
+        let fs = format!(
+            "#version 300 es\nprecision highp float;\nuniform highp {sampler} t;\nin highp vec3 v;\n\
+             out {ty} o;\nvoid main() {{\n  o = {expr};\n}}\n"
+        );
+        build(vs_pass, &fs).unwrap_or_else(|e| panic!("fragment {sampler} {expr}: {e}\n{fs}"));
+        /* a vertex look-up: an implicit level is level 0 there */
+        let vs = format!(
+            "#version 300 es\nuniform highp {sampler} t;\nin highp vec4 a_pos;\nout highp vec4 c;\n\
+             void main() {{\n  highp vec3 v = a_pos.xyz;\n  c = {expr};\n  gl_Position = a_pos;\n}}\n"
+        );
+        let fs_c = "#version 300 es\nprecision mediump float;\nin vec4 c;\nout vec4 o;\nvoid main() { o = c; }\n";
+        if expr.starts_with("texture(t, v, ") {
+            continue; /* a bias is fragment-only (GLSL ES 3.00 8.8) */
+        }
+        build(&vs, fs_c).unwrap_or_else(|e| panic!("vertex {sampler} {expr}: {e}\n{vs}"));
+    }
+}
+
 #[test]
 fn trunc_builds() {
     for body in ["float r = trunc(a.x); v = vec4(r);", "v = trunc(a);"] {

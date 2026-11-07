@@ -99,21 +99,35 @@ pub enum SOp {
     /// reflection binding, what P0/P1's bits 24..31 carry): `srcs` are s and
     /// t, and the bias when `bias`, or the explicit level when `lod` (never
     /// both). `cube`: r follows t. `layer`: a 2D-array look-up whose layer
-    /// (the face of a cube record, `cube_noseam`) follows t, written to TMUI;
-    /// never with `cube`. `fetch`: a `texelFetch`, s, t and the level are
+    /// (a 2D array's z, or the face of a cube record, `cube_noseam`)
+    /// follows t, written to TMUI; never with `cube`. `vol`: a 3D look-up,
+    /// r follows t, written to TMUR (retired by TMUS, not TMUSCM); never
+    /// with `cube` or `layer`. `fetch`: a `texelFetch`, s, t and the level are
     /// integers (texel and level indices, no filter, no wrap), retired by
     /// TMUSF; always with `lod`, never with `cube` or `bias`. `offset`: the
     /// constant texel offset (s, t, r) of `textureOffset` and its forms,
     /// TMU config parameter 2's 4-bit signed fields (0 without one; r is 0
-    /// until 3D look-ups). Its result is read through [`SOp::TexLane`].
-    Tex { sampler: u8, srcs: [S; 4], cube: bool, layer: bool, bias: bool, lod: bool, fetch: bool, offset: [i8; 3] },
+    /// but for a 3D look-up). Its result is read through [`SOp::TexLane`].
+    Tex {
+        sampler: u8,
+        srcs: [S; 4],
+        cube: bool,
+        layer: bool,
+        vol: bool,
+        bias: bool,
+        lod: bool,
+        fetch: bool,
+        offset: [i8; 3],
+    },
     /// Lane `lane` (r, g, b, a) of the look-up `tex[0]`, of the sampler's
     /// result type `ret` (a float, or an integer sampler's raw integer).
     TexLane { tex: [S; 1], lane: u8, ret: TexRet },
-    /// The width (`lane` 0) or height (1) of the base level of the texture at
-    /// sampler binding `sampler`, an integer: a word of the uniform stream
-    /// the driver fills (Mesa's QUNIFORM_TEXTURE_WIDTH / _HEIGHT,
-    /// get_texture_size, v3d_uniforms.c:50-90). textureSize minifies it.
+    /// The width (`lane` 0), height (1) or depth (2) of the base level of the
+    /// texture at sampler binding `sampler`, or its layer count (3), an
+    /// integer: a word of the uniform stream the driver fills (Mesa's
+    /// QUNIFORM_TEXTURE_WIDTH / _HEIGHT / _DEPTH / _ARRAY_SIZE, the
+    /// contents WIDTH + `lane`; get_texture_size, v3d_uniforms.c:50-90).
+    /// textureSize minifies the first three.
     TexSizeWord { sampler: u8, lane: u8 },
     /// Lane `lane` (x, y, z, w) of `gl_FragCoord`, a fragment input: x and y
     /// the pixel centre in window coordinates (y lower left, through the
@@ -173,7 +187,9 @@ impl SOp {
         match self {
             SOp::Alu(op, s) => &s[..op.arity()],
             SOp::Fsub(s) => s,
-            SOp::Tex { srcs, cube, layer, bias, lod, .. } => &srcs[..tex_operands(*cube || *layer, *bias || *lod)],
+            SOp::Tex { srcs, cube, layer, vol, bias, lod, .. } => {
+                &srcs[..tex_operands(*cube || *layer || *vol, *bias || *lod)]
+            }
             SOp::TexLane { tex, .. } => tex,
             SOp::Phi { init } => init,
             SOp::PhiNext { ops } => ops,
@@ -1331,11 +1347,25 @@ impl<'m, 'a> Walk<'m, 'a> {
              * its reciprocal, the way Mesa lowers it (nir_lower_tex's txp). */
             Op::Tex { dim, shadow, proj, ret, sampler, coord, lod, offset } => {
                 let cube = dim == ir::TexDim::Cube;
-                if !(dim == ir::TexDim::D2 || cube) {
-                    return Err(PrepError::NotYet("a texture look-up other than 2D or cube"));
-                }
+                /* A 2D array's layer is the coordinate's z, written to TMUI
+                 * as it is: Mesa's v3d_tex.c handle_tex_src (the `is_array`
+                 * write of coord[coord_components - 1]) neither rounds nor
+                 * clamps it, and nothing in v3d_lower_nir or st/mesa does
+                 * either (nir_lower_tex's lower_array_layer_round_even is
+                 * not set); the TMU takes the nearest layer and clamps it to
+                 * the record's Image Depth itself (GL ES 3.0 3.8.9's
+                 * clamp(floor(layer + 0.5), 0, d - 1)). A texelFetch's layer
+                 * is the integer. A 3D look-up's r is the coordinate's z on
+                 * TMUR, retired by TMUS (TMUSLOD at a level, TMUSF for a
+                 * fetch), never TMUSCM: Mesa's non_array_components > 2. */
+                let array = dim == ir::TexDim::D2Array;
+                let vol = dim == ir::TexDim::D3;
                 if cube && proj {
                     return Err(PrepError::NotYet("a projected cube look-up"));
+                }
+                /* GLSL ES 3.00 8.8 has no textureProj of a 2D array */
+                if array && proj {
+                    return Err(PrepError::NotYet("a projected 2D-array look-up"));
                 }
                 if shadow {
                     return Err(PrepError::NotYet("a shadow look-up"));
@@ -1356,13 +1386,14 @@ impl<'m, 'a> Walk<'m, 'a> {
                  * .offset_s/_t for a constant nir_tex_src_offset, v3d_tex.c
                  * handle_tex_src); the range is MIN/MAX_PROGRAM_TEXEL_OFFSET's
                  * -8..7, which the front end has checked. GLSL ES 3.00 has
-                 * no cube form with an offset (section 8.8), and a 2D offset
-                 * has no r. */
+                 * no cube form with an offset (section 8.8), and a 2D or
+                 * 2D-array offset has no r; a 3D one's r is Offset R
+                 * (Mesa's offset_r, non_array_components >= 3). */
                 let offset = offset.unwrap_or([0; 3]);
                 if cube && offset != [0; 3] {
                     return Err(PrepError::NotYet("a cube look-up with an offset"));
                 }
-                if offset[2] != 0 {
+                if offset[2] != 0 && !vol {
                     return Err(PrepError::NotYet("a texture offset with a third lane"));
                 }
                 /* texelFetch (Mesa's txf): integer texel coordinates and an
@@ -1396,15 +1427,20 @@ impl<'m, 'a> Walk<'m, 'a> {
                     ir::TexLod::Grad { .. } => return Err(PrepError::NotYet("a texture look-up with gradients")),
                 };
                 let (mut s, mut t) = (self.src(coord, 0)?, self.src(coord, 1)?);
+                /* s, t, then r for a cube (the direction's z) or a 3D
+                 * texture, or a 2D array's layer, then the bias or level:
+                 * packed, so the operands are srcs[..n]. */
+                let mut r = if cube || vol { Some(self.src(coord, 2)?) } else { None };
                 if proj {
+                    /* textureProj of a sampler3D divides r too */
                     let q = self.src(coord, 3)?;
-                    let r = self.push(a, SOp::Alu(AluOp::Frcp, [q, S(0), S(0)]))?;
-                    s = self.push(a, SOp::Alu(AluOp::Fmul, [s, r, S(0)]))?;
-                    t = self.push(a, SOp::Alu(AluOp::Fmul, [t, r, S(0)]))?;
+                    let inv = self.push(a, SOp::Alu(AluOp::Frcp, [q, S(0), S(0)]))?;
+                    s = self.push(a, SOp::Alu(AluOp::Fmul, [s, inv, S(0)]))?;
+                    t = self.push(a, SOp::Alu(AluOp::Fmul, [t, inv, S(0)]))?;
+                    if let Some(z) = r {
+                        r = Some(self.push(a, SOp::Alu(AluOp::Fmul, [z, inv, S(0)]))?);
+                    }
                 }
-                /* s, t, then r for a cube (the direction's z), then the bias
-                 * or level: packed, so the operands are srcs[..n]. */
-                let mut r = if cube { Some(self.src(coord, 2)?) } else { None };
                 /* A cube direction is divided by its major axis first, so
                  * that its largest component is +-1: Mesa does it for every
                  * cube look-up (nir_normalize_cubemap_coords, run by the
@@ -1417,10 +1453,10 @@ impl<'m, 'a> Walk<'m, 'a> {
                  * texture_functions' directions (1.01) passed. The host's
                  * cube model (texref::project_to_face) divides by the major
                  * axis itself, so it cannot see the difference. */
-                let mut layer = None;
+                let mut layer = if array { Some(self.src(coord, 2)?) } else { None };
                 let mut third = third;
                 let mut is_lod = is_lod;
-                if let Some(z) = r {
+                if let (true, Some(z)) = (cube, r) {
                     let abs = |w: &mut Self, x: S| w.push(a, SOp::Alu(AluOp::Fabs, [x, S(0), S(0)]));
                     let (s0, t0, z0) = (s, t, z);
                     let (ax, ay, az) = (abs(self, s)?, abs(self, t)?, abs(self, z)?);
@@ -1466,6 +1502,7 @@ impl<'m, 'a> Walk<'m, 'a> {
                         srcs,
                         cube: cube && layer.is_none(),
                         layer: layer.is_some(),
+                        vol,
                         bias: third.is_some() && !is_lod,
                         lod: is_lod,
                         fetch,
@@ -1476,22 +1513,33 @@ impl<'m, 'a> Walk<'m, 'a> {
                     *o = Some(self.push(a, SOp::TexLane { tex: [tex], lane: lane as u8, ret: lane_ret })?);
                 }
             }
-            /* textureSize of a 2D or cube sampler (GLSL ES 3.00 8.8: the
-             * size of level `lod`; a cube's is one face's): Mesa's
-             * ntq_emit_txs (nir_to_vir.c:915-956), each lane the base
-             * level's size minified, ntq_minify: max(size >> lod, 1), a
-             * logical shift (the V3D's SHR takes the low five bits of the
-             * shift, as GLSL leaves a level past the chain undefined). */
-            Op::TexSize { sampler, dim: ir::TexDim::D2 | ir::TexDim::Cube, lod } => {
+            /* textureSize (GLSL ES 3.00 8.8: the size of level `lod`; a
+             * cube's is one face's): Mesa's ntq_emit_txs (nir_to_vir.c:
+             * 915-956), each lane the base level's size minified,
+             * ntq_minify: max(size >> lod, 1), a logical shift (the V3D's
+             * SHR takes the low five bits of the shift, as GLSL leaves a
+             * level past the chain undefined). A 3D sampler's third lane is
+             * the depth (QUNIFORM_TEXTURE_DEPTH, WIDTH + 2), minified like
+             * the others; a 2D array's is the layer count
+             * (QUNIFORM_TEXTURE_ARRAY_SIZE, word lane 3), which a level
+             * does not change ("Don't minify the array size"). */
+            Op::TexSize { sampler, dim, lod } => {
                 let lod = self.src(lod, 0)?;
                 let one = self.push(a, SOp::Const(1))?;
-                for (lane, o) in out.iter_mut().enumerate().take(2) {
+                let lanes = match dim {
+                    ir::TexDim::D2 | ir::TexDim::Cube => 2,
+                    ir::TexDim::D3 | ir::TexDim::D2Array => 3,
+                };
+                for (lane, o) in out.iter_mut().enumerate().take(lanes) {
+                    if lane == 2 && dim == ir::TexDim::D2Array {
+                        *o = Some(self.push(a, SOp::TexSizeWord { sampler, lane: 3 })?);
+                        continue;
+                    }
                     let size = self.push(a, SOp::TexSizeWord { sampler, lane: lane as u8 })?;
                     let shifted = self.push(a, SOp::Alu(AluOp::Ushr, [size, lod, S(0)]))?;
                     *o = Some(self.push(a, SOp::Alu(AluOp::Imax, [shifted, one, S(0)]))?);
                 }
             }
-            Op::TexSize { .. } => return Err(PrepError::NotYet("textureSize of a 3D or array sampler")),
             /* The rest of the lane's work is dead, and the TLB drops it
              * (select.rs: SETMSF); what is kept is where it happened. */
             Op::Discard => {
@@ -2244,11 +2292,11 @@ fn compact<'a>(ops: &[SOp], roots: &mut [S], a: &Arena<'a>) -> Result<&'a [SOp],
                 }
                 SOp::Alu(alu, s)
             }
-            SOp::Tex { sampler, mut srcs, cube, layer, bias, lod, fetch, offset } => {
-                for x in srcs.iter_mut().take(tex_operands(cube || layer, bias || lod)) {
+            SOp::Tex { sampler, mut srcs, cube, layer, vol, bias, lod, fetch, offset } => {
+                for x in srcs.iter_mut().take(tex_operands(cube || layer || vol, bias || lod)) {
                     *x = S(map[x.0 as usize]);
                 }
-                SOp::Tex { sampler, srcs, cube, layer, bias, lod, fetch, offset }
+                SOp::Tex { sampler, srcs, cube, layer, vol, bias, lod, fetch, offset }
             }
             SOp::Fsub(s) => SOp::Fsub(s.map(|x| S(map[x.0 as usize]))),
             SOp::TexLane { tex, lane, ret } => SOp::TexLane { tex: [S(map[tex[0].0 as usize])], lane, ret },
@@ -2513,7 +2561,8 @@ mod tests {
     /// The texelFetch and offset forms GLSL ES 3.00 has not (section 8.8: no
     /// cube texelFetch, no cube offset, a 2D offset of two lanes), refused
     /// by name should an IR carry them; and a 2D fetch prepares as a look-up
-    /// with the level and no bias, `fetch` set, the offset carried.
+    /// with the level and no bias, `fetch` set, the offset carried; a 2D
+    /// array's with `layer`, a 3D one's with its Offset R.
     #[test]
     fn a_cube_fetch_or_offset_is_refused_by_name() {
         use crate::shaderc::online::ir::{
@@ -2563,6 +2612,21 @@ mod tests {
         assert_eq!(prepared(TexDim::D2, level, None), Ok(Some((3, false, false, false, true, false, [0; 3]))));
         /* a cube at a level, with no offset: as before */
         assert_eq!(prepared(TexDim::Cube, level, Some([0; 3])), Ok(Some((3, true, false, false, true, false, [0; 3]))));
+        /* a 2D array: the layer on TMUI, its offset of two lanes; a 3D
+         * look-up (not `cube`, not `layer`: `vol`) carries Offset R */
+        assert_eq!(
+            prepared(TexDim::D2Array, fetch, Some([1, 2, 0])),
+            Ok(Some((3, false, true, false, true, true, [1, 2, 0])))
+        );
+        assert_eq!(
+            prepared(TexDim::D2Array, level, Some([0, 0, 1])),
+            Err(PrepError::NotYet("a texture offset with a third lane"))
+        );
+        assert_eq!(
+            prepared(TexDim::D3, fetch, Some([1, -2, 3])),
+            Ok(Some((3, false, false, false, true, true, [1, -2, 3])))
+        );
+        assert_eq!(prepared(TexDim::D3, level, None), Ok(Some((3, false, false, false, true, false, [0; 3]))));
     }
 
     /// Common subexpressions (Walk::push, Mesa's nir_opt_cse): the same
