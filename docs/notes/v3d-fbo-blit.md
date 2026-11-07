@@ -268,52 +268,60 @@ with, not before, G6.
 
 ## 4. Mesa's v3d blit paths against these rows
 
-`v3d_blit.c`, `v3dx_tfu.c` and `v3d_context.c` are not in `third_party/`
-(only the format tables are, `docs/notes/v3d-sampled-copies.md:64-71`);
-a `MESA_V3D_TREE` is not set here, GitLab refused a fetch (Anubis) and the
-GitHub mirror had no such path, so **the statements about the file below that
-carry no line number are from memory of Mesa 26.2.1 and unchecked [U]**; the
-line numbers are those other notes of this repository already quote.
+`v3d_blit.c` is not in `third_party/` (only the format tables are). It was
+read from a sparse partial clone of the tag `mesa-26.2.1` (commit `da14d65e`)
+in `$CONNECTED_DEPS_DIR`; the line numbers below are that file's.
 
-- `v3d_blit()` tries, in order, the TFU (`v3d_tfu_blit`, `v3d_blit.c:279-320`),
-  the TLB (`v3d_tlb_blit`: a multisample resolve or a same-format copy, its
-  gate for the resolve is `v3d_format_supports_tlb_resolve_and_blend`, types
-  `8` and `16F` only, `v3d_blit.c:382-387` / `v3d_formats.c:148-163`, quoted
-  in `docs/notes/v3d-msaa-es3.md`) and finally a render blit through
-  `util_blitter` (a draw of a quad that samples the source) [U].
-- **TFU**: a scaled or 1:1 copy of colour between two images by the TFU unit.
-  On V3D 4.2 the TFU writes UIF or LT, never a raster destination
-  (`v3dx_tfu.c:58-62`, `docs/notes/v3d-tfu-raster-chain.md:72-84`); a
-  raster *source* is supported at `NUMMM = 0`. yakogl's colour images are
-  raster (renderbuffers, the window, texture storage), so the TFU could only
-  write a sampled texture's UIF `RtImage`, which the next sample reads; the
-  raster storage would still be untiled by the CPU for a read-back. It also
-  does not convert between unlike formats, filter anything but its own
-  bilinear, flip about the source's y reliably for the GL rectangles, nor
-  touch depth/stencil, nor decode sRGB into float formats [U]. It is a
-  speed path for a sampled-texture destination, not a way to fix a row.
-- **TLB blit**: resolve and same-format copy through a job that loads
-  the source and stores the destination. A single-sample, converting,
-  scaling or flipping blit is not its case [U]. For yakogl it is the
-  multisample resolve of `v3d-msaa-es3.md`, whose rows are `fbo.msaa.*`,
-  not `fbo.blit.*`.
-- **Render blit**: Mesa's general path, a shader draw with a sampler; it
-  converts any pair, decodes sRGB by sampling and encodes by the TLB, writes
-  depth through a fragment depth output and stencil bit by bit [U]. For
-  yakogl it needs the source as a texture (tiled copy or `RtImage`), a blit
-  program per format class in the online compiler, and the sRGB render target
-  (G2, G5) to work first. It would replace the CPU codec with the GPU, and the
-  CPU codec is correct today.
+`v3d_blit()` (`:1221-1252`) tries, in this order: the SAND blits (NV12, not
+relevant), `v3d_tlb_blit_fast` (`:395`), `v3d_tfu_blit` (`:279`),
+`v3d_tlb_blit` (`:511`), `v3d_stencil_blit` (`:168`) and `v3d_render_blit`
+(`:87`, `util_blitter`). Each clears the bits of `info->mask` it handled.
 
-Which groups a V3D-side blit would fix: **none of G1-G5, G7**. Their cause
-is not that the copy is made on the CPU. It would fix G6 only as the
-CPU entries of 3.4 (a `ds_write` / `stencil_resolve` in the back end, the
-Mesa-independent route the PowerVR already took); a GPU depth/stencil blit
-(render blit with depth export, stencil per bit) is far more work for the
-same 16 rows. The reasons to build a GPU blit later are speed and nothing in
-this tsv: a 1920x1080 CPU copy per frame (a compositor-style use) is slow
-(the per-pixel `load`/`store` of `copy_colour`), where the TFU into a sampled
-texture's UIF image or a render-pass blit would not be.
+- **TFU** (`:279-325`): colour only, and only a whole-level copy: no scissor,
+  both boxes at (0, 0), source and destination boxes the size of the
+  destination level, no scaling, identical formats (`:287-302`). No flip, no
+  sub-rectangle, no format change, no depth/stencil. Its destination cannot
+  be raster on V3D 4.2 (`v3dx_tfu.c:58-62`, see `v3d-tfu-raster-chain.md`).
+  Only a `glBlitFramebuffer` with equal full-size rectangles between
+  textures could use it; none of the dEQP rows is that (all but `basic`
+  scale, offset or convert), and yakogl's colour images are raster.
+- **TLB blit** (`check_tlb_blit_ok`, `:334-389`; `v3d_tlb_blit`): no scissor,
+  no swizzle, same RT format on both sides, no emulated formats, colour to
+  colour or depth/stencil to depth/stencil (never mixed), a multisample
+  resolve only for formats with `v3d_format_supports_tlb_resolve_and_blend`
+  (`:382-387`). `v3d_tlb_blit` is a job that loads the source and stores the
+  destination, so a depth/stencil blit is possible there (`:534-616`,
+  `is_depth_blit`/`is_stencil_blit`), but with the TLB's limits (no scaling,
+  which the `scale` cases need). `v3d_tlb_blit_fast` is colour-only ("FIXME:
+  support depth/stencil", `:405`) and needs the job that rendered the source
+  still open (`write_jobs`), the full resource and a stored colour buffer.
+- **Stencil** (`v3d_stencil_blit`, `:168-232`): a draw through
+  `util_blitter_blit_generic` that reads the stencil as `RGBA8888_UINT` (or
+  `R8_UINT` from the separate stencil buffer) and writes it as colour: a
+  render blit with NEAREST, scissor allowed.
+- **Render blit** (`v3d_render_blit`): everything else, through
+  `util_blitter`: a draw of a quad sampling the source, so conversions, sRGB
+  decode (sampling) and encode (TLB store), scaling, flips and filters are
+  the sampler's and the shader's. This is the path dEQP's `scale`,
+  `out_of_bounds` and unlike-format cases take on a Mesa V3D.
+
+Against yakogl: the Mesa paths are GPU draws and jobs on resources whose
+storage is UIF; yakogl's colour images are raster and its depth/stencil is a
+back-end buffer the GL core cannot address. A V3D-side blit would therefore
+be a render blit (a sampler, a blit program per format class in the online
+compiler, the source as a texture) plus, for depth, a fragment depth export
+and, for stencil, Mesa's reinterpretation as colour.
+
+Which groups a V3D-side blit would fix: **none of G1-G5 or G7**. Their cause
+is not that the copy is made on the CPU. G2 and G5 need the sRGB render
+target to work whichever side copies (a render blit would draw into it too).
+G6 is fixed by the CPU entries of 3.4 (`ds_write`, `stencil_resolve`), the
+route the PowerVR already took; a GPU depth/stencil blit (Mesa's TLB blit
+cannot scale; the stencil trick needs a render blit) is far more work for
+the same 16 rows. The reason to build a GPU blit later is speed, and nothing
+in this tsv: a 1920x1080 CPU copy per frame (the per-pixel `load`/`store` of
+`copy_colour`) is slow, where a TFU whole-level copy into a sampled texture,
+or a render blit, would not be.
 
 ## 5. Ranked issue drafts
 
