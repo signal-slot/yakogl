@@ -90,7 +90,7 @@
  *
  * The frame-breakdown record on the GC7000 (the i.MX8MP, docs/notes/
  * imx8mp-frame-floor.md, "The frame-breakdown record"): with the selector
- * YK_RECORD_PERF_SEL | page (experiment 0, page 0..3) each scene's frames
+ * YK_RECORD_PERF_SEL | page (experiment 0, page 0..4) each scene's frames
  * are also counted for that page (the frame, the swap, the display, the
  * GPU; src/gm_perf_page.h), one "glmark2-perf:" line per scene, and after
  * GLMARK2 the run stores the last scene's page as a kind PERF record, its
@@ -152,6 +152,7 @@ extern "C" {
 /* the frame-breakdown record (YK_RECORD_PERF_SEL) */
 #define GM_PERF 1
 #include "gm_perf_page.h"
+#include "gm_gc_fallback.h"
 extern "C" {
 #include <gc_render.h> /* gc_render_perf: the driver's counters and HI_PROFILE */
 /* the board layer's VSYNC wait (board_imx8mp.c; the GC7000 OSAL's .wait_vblank) */
@@ -747,6 +748,14 @@ void store_gm_page(const GmPageAsk &page, const std::vector<struct yd_gm_scene> 
 #if defined(GM_PERF)
 /* ---- the frame-breakdown record (YK_RECORD_PERF_SEL) --------------------- */
 
+/* No library counters yet: page 4 then reads "not available". The library's
+ * strong definition (gm_gc_fallback.h) replaces this one. */
+extern "C" __weak int yakogl_gc_fallback_stats(struct yakogl_gc_fallback_stats *out)
+{
+    (void)out;
+    return -ENOTSUP;
+}
+
 /* The counters page 1 takes differences of: the GC7000 OSAL's waits for
  * kicks and its time in submits, the driver's 1 ms sleeps in
  * gc_render_wait, GPU busy time and completed kicks. Each field keeps its
@@ -792,6 +801,10 @@ struct PerfPage {
     /* page 1: the counters when the scene's frames started, and what the
      * last frame's picture readback (glReadPixels waits for the GPU) added */
     GcCounts c0, readback;
+    /* page 4: the fallback counters when the scene's frames started;
+     * fb0_ok false when the getter had none */
+    bool fb0_ok = false;
+    struct yakogl_gc_fallback_stats fb0 {};
     /* page 2: the frame-to-frame times (gm_perf_page.h, GM_PERF_BUCKET_US) */
     uint32_t hist[GM_PERF_BUCKETS] = {};
     /* the last scene's page, stored after GLMARK2 */
@@ -833,6 +846,8 @@ void perf_scene_begin()
     memset(p.hist, 0, sizeof(p.hist));
     p.readback = GcCounts();
     p.c0 = GcCounts::now();
+    p.fb0 = {};
+    p.fb0_ok = yakogl_gc_fallback_stats(&p.fb0) == 0;
 }
 
 /* Page 3, before a frame's t0 (the register reads stay out of t0..t2): the
@@ -910,9 +925,17 @@ void perf_scene_end(const char *scene)
         gm_perf_bins(p.hist, GM_PERF_BUCKETS, GM_PERF_BUCKET_US, p.s.period_us, p.s.bins);
     }
     p.s.ticks_per_sec = CONFIG_SYS_CLOCK_TICKS_PER_SEC;
+    struct yakogl_gc_fallback_stats fb1 {};
+    p.s.fb_ok = p.fb0_ok && yakogl_gc_fallback_stats(&fb1) == 0;
+    if (p.s.fb_ok) {
+        p.s.mip_gpu = fb1.gpu_mip_chains - p.fb0.gpu_mip_chains;
+        p.s.mip_cpu = fb1.cpu_mip_calls - p.fb0.cpu_mip_calls;
+        p.s.gpu_waits = fb1.gpu_waits - p.fb0.gpu_waits;
+        p.s.carveout_bytes = fb1.carveout_cpu_bytes - p.fb0.carveout_cpu_bytes;
+    }
     uint32_t w[4];
     if (gm_perf_page_words(p.page, &p.s, w) != 0) {
-        return; /* not reached: perf_page_asked took pages 0..3 only */
+        return; /* not reached: perf_page_asked took pages 0..4 only */
     }
     memcpy(p.w, w, sizeof(w));
     p.ready = true;

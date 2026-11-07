@@ -433,13 +433,13 @@ Where one i.MX8MP frame's time goes, one page a boot (the design and the
 step-3 board command: `docs/notes/imx8mp-frame-floor.md`, "The
 frame-breakdown record"). Only in a GC7000 build (`CONFIG_YAKOGL_DRV_GPU_VIVANTE`);
 the AM62P and Pi 4 images do not compile it. With the selector
-`PERF_SEL | page` (`PERF_SEL` = 0x1000; experiment 0, page 0..3: 0x1000,
-0x1001, 0x1002, 0x1003), read once before the benchmark loop, the image runs
+`PERF_SEL | page` (`PERF_SEL` = 0x1000; experiment 0, page 0..4: 0x1000,
+0x1001, 0x1002, 0x1003, 0x1004), read once before the benchmark loop, the image runs
 its list as always, counts each scene's frames for that page, prints one
 `glmark2-perf: <scene>: page p: w0 w1 w2 w3` line per scene, stores GLMARK2
 and then the last scene's page as the run's last record. So it is meant
 for an image of one scene (`CONFIG_GLMARK2_ARGS="-b <scene>"`). Another
-`0x10xx` selector (experiment 1 and up, or page 4 to 7) is refused: the run
+`0x10xx` selector (experiment 1 and up, or page 5 to 7) is refused: the run
 ends at once with `-EINVAL`. Without a PERF selector nothing of it runs.
 
 w0 = `0x594b0c00 | page`; w1..w3 = six 16-bit values, v0 in w1's low half
@@ -456,6 +456,7 @@ known words, then each page decoded by `yakogl-tools record`).
 | 1: the swap (per frame) | wait us | waits per 100 frames | `gc_render_wait` sleeps per 100 frames | GPU busy us | kicks per 100 frames | submit us |
 | 2: the display | intervals under 1.5 T | in [1.5 T, 2.5 T) | at 2.5 T or more | T, us (0: not measured) | frames with present >= 1000 us | `CONFIG_SYS_CLOCK_TICKS_PER_SEC` |
 | 3: the GPU (per interval) | HI total kcycles | HI idle kcycles | KiB read | KiB written | core MHz | 0 |
+| 4: the fallbacks (w1, w2 only; w3 = 0) | GPU mipmap chains per 100 frames | `glGenerateMipmap` calls on the CPU filter per 100 frames | CPU waits on the GPU outside the swap per 100 frames | KiB per frame of CPU passes over the GPU carve-out | 0 | 0 |
 
 - **t0, t1, t2** are the `glmark2-frame:` line's stamps (`RecordingLoop::draw`);
   frame, gl, swap and show are that line's means, the picture readback left
@@ -477,6 +478,16 @@ known words, then each page decoded by `yakogl-tools record`).
   and `_WRITE_BYTES8` before every frame's t0 (32-bit, they wrap in about
   5 s at 800 MHz) and adds the differences; bytes = BYTES8 x 8; core MHz =
   total cycles / frame-to-frame us.
+- **Page 4** (selector 0x1004, w0 = 0x594b0c04) is the means over the
+  scene's frames of the differences of `yakogl_gc_fallback_stats`
+  (`src/gm_gc_fallback.h`: cumulative 64-bit `gpu_mip_chains`,
+  `cpu_mip_calls`, `gpu_waits`, `carveout_cpu_bytes`), read where page 1's
+  counters are. It uses w1 and w2 only (v4 = v5 = 0, w3 = 0) because the
+  Armadillo-X2 stores w0..w2. The sample's `__weak` definition returns
+  `-ENOTSUP` until the library's strong one is linked; when the getter fails
+  (at the scene's start or end) v0..v3 are all **0xffff**, "not available",
+  which no real count reaches, so an image without the counters cannot be
+  read as zero. A scene with no frames gives 0, as on the other pages.
 
 ## 3. Public scores (opened 2026-10-03)
 

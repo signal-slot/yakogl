@@ -27,6 +27,12 @@
  *   page 3, the GPU (per frame-to-frame interval):
  *     v0 HI total kcycles, v1 HI idle kcycles, v2 KiB read, v3 KiB written,
  *     v4 core MHz (total cycles / frame-to-frame us), v5 0
+ *   page 4, the back end's fallbacks (gm_gc_fallback.h; v4 = v5 = 0, so
+ *     w3 = 0, and only w1 and w2 are stored on the Armadillo-X2):
+ *     v0 GPU mipmap chains per 100 frames, v1 glGenerateMipmap calls that
+ *     took the CPU filter per 100 frames, v2 CPU waits on the GPU outside the
+ *     swap per 100 frames, v3 KiB per frame of CPU passes over the GPU
+ *     carve-out. With no counters (fb_ok = 0) v0..v3 are all 0xffff.
  */
 #ifndef GM_PERF_PAGE_H
 #define GM_PERF_PAGE_H
@@ -39,7 +45,7 @@
 extern "C" {
 #endif
 
-#define GM_PERF_PAGES 4u
+#define GM_PERF_PAGES 5u
 
 /* page 2's histogram of frame-to-frame times: bucket b holds the intervals
  * of b * GM_PERF_BUCKET_US us up to the next bucket; the last one holds
@@ -66,6 +72,10 @@ struct gm_perf_scene {
 	uint32_t ticks_per_sec;
 	/* page 3: HI_PROFILE sums over the intervals; bytes = BYTES8 x 8 */
 	uint64_t hi_total_cycles, hi_idle_cycles, read_bytes, write_bytes;
+	/* page 4: the differences over the scene of gm_gc_fallback.h's counters;
+	 * fb_ok 0 when the getter answered an error ("not available") */
+	int fb_ok;
+	uint64_t mip_gpu, mip_cpu, gpu_waits, carveout_bytes;
 };
 
 static inline uint32_t gm_perf_sat(uint64_t v)
@@ -98,7 +108,7 @@ static inline void gm_perf_bins(const uint32_t *hist, uint32_t buckets, uint32_t
 	}
 }
 
-/* The six values of `page`. -1 for a page that is not 0..3. */
+/* The six values of `page`. -1 for a page that is not 0..4. */
 static inline int gm_perf_page_values(uint32_t page, const struct gm_perf_scene *s, uint32_t v[6])
 {
 	const uint64_t f = s->frames, k = s->intervals;
@@ -136,6 +146,16 @@ static inline int gm_perf_page_values(uint32_t page, const struct gm_perf_scene 
 		x[3] = gm_perf_mean(s->write_bytes / 1024u, k);
 		x[4] = gm_perf_mean(s->hi_total_cycles, s->interval_us); /* cycles per us = MHz */
 		break;
+	case 4:
+		if (!s->fb_ok) {
+			x[0] = x[1] = x[2] = x[3] = 0xffffu;
+			break;
+		}
+		x[0] = gm_perf_mean(s->mip_gpu * 100u, f);
+		x[1] = gm_perf_mean(s->mip_cpu * 100u, f);
+		x[2] = gm_perf_mean(s->gpu_waits * 100u, f);
+		x[3] = gm_perf_mean(s->carveout_bytes / 1024u, f);
+		break;
 	default:
 		return -1;
 	}
@@ -146,7 +166,7 @@ static inline int gm_perf_page_values(uint32_t page, const struct gm_perf_scene 
 }
 
 /* The record's four words for `page`: w[0] as board_result_tag stores it
- * (tag = page), w[1..3] the values. -1 for a page that is not 0..3. */
+ * (tag = page), w[1..3] the values. -1 for a page that is not 0..4. */
 static inline int gm_perf_page_words(uint32_t page, const struct gm_perf_scene *s, uint32_t w[4])
 {
 	uint32_t v[6];
