@@ -1,0 +1,52 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES3 at 8990a5cc, 2026-11-07, the sixteen tryboot cycles: image sha256, boot_id before, reboot time, seconds to Linux, clean-up, run and end lines (README.md)
+== cycles
+S01 sha256=da97d48b847dc60239189fdbb6370adff331f9780503f522620469d6df0249f8 boot0=8e91d479-34d7-42c3-a6e2-ee75de1d315a t_reboot=1794043846 back_after=299s cleanup=undo: staged image removed, tryboot.txt removed: read back as before
+   1309 cases in 46886 ms, record at 46 s after boot, reset at ~250 s
+   v3d_deqp: build 8990a5cc DONE: 1309 cases, P 1307 F 2 R 0 N 0 other 0
+S02 sha256=9275be79662bbed3714c24041297d45b5f1178e6b19e1a1355c6e01c1a4db47a boot0=b49d4f19-5367-454b-a040-6c955ace5c7e t_reboot=1794044168 back_after=297s cleanup=undo: staged image removed, tryboot.txt removed: read back as before
+   392 cases in 12619 ms, record at 12 s after boot, reset at ~250 s
+   v3d_deqp: build 8990a5cc DONE, all passed: 392 cases, P 392 F 0 R 0 N 0 other 0
+S03 sha256=515c078e2b64f7b06f8d013d4cead018d808363e2b7d67b3fd364c5720cf3a4f boot0=26cfc07d-be4d-4a3e-a4b5-04b2738a53a3 t_reboot=1794044475 back_after=299s cleanup=undo: staged image removed, tryboot.txt removed: read back as before
+   1 cases in 232 ms, record at 0 s after boot, reset at ~250 s
+   v3d_deqp: build 8990a5cc STOPPED EARLY by dEQP (complete=0; later cases never began): 1 cases, P 0 F 0 R 1 N 0 other 0
+S04 sha256=e0fbfe6b658362985ad3f40ebf5b36707ba851719fc094789dd8ce88d6b1d97b boot0=d4807825-df42-4412-bbb8-bbf4cb89de55 t_reboot=1794044783 back_after=300s cleanup=undo: staged image removed, tryboot.txt removed: read back as before
+   1 cases in 234 ms, record at 0 s after boot, reset at ~250 s
+   v3d_deqp: build 8990a5cc STOPPED EARLY by dEQP (complete=0; later cases never began): 1 cases, P 0 F 0 R 1 N 0 other 0
+S05 sha256=b50d1044e93817797f8a97f6d5813822d02ccce9af9f7bd2a1e5e0bca5d2e03b boot0=f1c43266-084e-4aad-87a3-e5d3cca3273a t_reboot=1794045092 back_after=300s cleanup=undo: staged image removed, tryboot.txt removed: read back as before
+   1 cases in 223 ms, record at 0 s after boot, reset at ~250 s
+   v3d_deqp: build 8990a5cc STOPPED EARLY by dEQP (complete=0; later cases never began): 1 cases, P 0 F 0 R 1 N 0 other 0
+S06 sha256=83cd1037385952a883358637976e266ee6515d02df2807451a8a83f83c1fa20e boot0=89029a6b-fc34-453b-a0d6-a8267d984f5b t_reboot=1794045400 back_after=299s cleanup=undo: staged image removed, tryboot.txt removed: read back as before
+   1 cases in 256 ms, record at 0 s after boot, reset at ~250 s
+   v3d_deqp: build 8990a5cc STOPPED EARLY by dEQP (complete=0; later cases never began): 1 cases, P 0 F 0 R 1 N 0 other 0
+S07 sha256=28757363aaf09e9fcdd4653ca0e5842eb61e0a1cff52bbcec4ce2db4b7a244b6 boot0=cc3dcef6-3126-4bd9-a6b3-65db175aa706 t_reboot=1794045708 back_after=298s cleanup=undo: staged image removed, tryboot.txt removed: read back as before
+   1 cases in 249 ms, record at 0 s after boot, reset at ~250 s
+   v3d_deqp: build 8990a5cc STOPPED EARLY by dEQP (complete=0; later cases never began): 1 cases, P 0 F 0 R 1 N 0 other 0
+S08 sha256=fc77fa87071781b277fe4f55794446716bdb56a77a4931ae3a5c299d38eb588d boot0=2211b3ec-d545-4517-8458-2f8f337797e0 t_reboot=1794046014 back_after=298s cleanup=undo: staged image removed, tryboot.txt removed: read back as before
+   1 cases in 217 ms, record at 0 s after boot, reset at ~250 s
+   v3d_deqp: build 8990a5cc STOPPED EARLY by dEQP (complete=0; later cases never began): 1 cases, P 0 F 0 R 1 N 0 other 0
+S09 sha256=2e43f3961676a8cd2395e644aff9254ea4120384ea48b0dda802a611e96b41e6 boot0=901b0572-2b4c-460f-9804-03a12274b3c1 t_reboot=1794046320 back_after=297s cleanup=undo: staged image removed, tryboot.txt removed: read back as before
+   1156 cases in 43235 ms, record at 43 s after boot, reset at ~250 s
+   v3d_deqp: build 8990a5cc DONE, all passed: 1156 cases, P 1156 F 0 R 0 N 0 other 0
+S10 sha256=e5cfa933dd041d9fe53e13d844f4aeef5ae0e1dc31f8fc789bec481138045f9b boot0=02e2b463-5342-4023-9225-5fc23b9441e3 t_reboot=1794046625 back_after=298s cleanup=undo: staged image removed, tryboot.txt removed: read back as before
+   1032 cases in 39343 ms, record at 39 s after boot, reset at ~250 s
+   v3d_deqp: build 8990a5cc DONE: 1032 cases, P 800 F 232 R 0 N 0 other 0
+S11 sha256=4903843a7a140cc20063d9d4cb90b4a90581e43b140fecdb38f8414c3987aa61 boot0=755616bf-b77a-45d8-8c41-ad58313061b1 t_reboot=1794046932 back_after=299s cleanup=undo: staged image removed, tryboot.txt removed: read back as before
+   756 cases in 39217 ms, record at 39 s after boot, reset at ~250 s
+   v3d_deqp: build 8990a5cc DONE, all passed: 756 cases, P 756 F 0 R 0 N 0 other 0
+S12 sha256=ac5aa8fc5cb1d5e2355621d36d689e9f94ac15997e9dbc0e268e034f02098430 boot0=7753556b-49c1-46a3-aee7-23e67bd08706 t_reboot=1794047242 back_after=298s cleanup=undo: staged image removed, tryboot.txt removed: read back as before
+   1295 cases in 55098 ms, record at 55 s after boot, reset at ~250 s
+   v3d_deqp: build 8990a5cc DONE, all passed: 1295 cases, P 1295 F 0 R 0 N 0 other 0
+S13 sha256=03c2078b66bbb790f05b3e3fec0bfcdad8a46f97c843c219703aee71cceae922 boot0=cb8667ec-4bc7-4f3a-ab29-765b3c7d0e59 t_reboot=1794047549 back_after=301s cleanup=undo: staged image removed, tryboot.txt removed: read back as before
+   957 cases in 42336 ms, record at 42 s after boot, reset at ~250 s
+   v3d_deqp: build 8990a5cc DONE, all passed: 957 cases, P 957 F 0 R 0 N 0 other 0
+S14 sha256=57b80f5e34fdf6237afdcb9b2ac2b75ca9d0a75cd2d550f4d72da9ba8eb67548 boot0=cf72308c-4877-4020-916b-3ff28517fec7 t_reboot=1794047861 back_after=304s cleanup=undo: staged image removed, tryboot.txt removed: read back as before
+   594 cases in 25512 ms, record at 25 s after boot, reset at ~250 s
+   v3d_deqp: build 8990a5cc DONE, all passed: 594 cases, P 594 F 0 R 0 N 0 other 0
+S15 sha256=d0a2c52785f0f0fe5bbdb3e5ea84042d6a61836546cc607fc1d691bccee007c0 boot0=c573cc2c-02f1-457a-ada8-01d537062085 t_reboot=1794048174 back_after=299s cleanup=undo: staged image removed, tryboot.txt removed: read back as before
+   972 cases in 40758 ms, record at 40 s after boot, reset at ~250 s
+   v3d_deqp: build 8990a5cc DONE, all passed: 972 cases, P 972 F 0 R 0 N 0 other 0
+S16 sha256=39fcf64756a3d1d98e5343323e227e202adde9925421bc0c3bffc9bebac047da boot0=19cb31f1-2b58-4538-9883-5fdda90de23d t_reboot=1794048482 back_after=301s cleanup=undo: staged image removed, tryboot.txt removed: read back as before
+   720 cases in 31741 ms, record at 31 s after boot, reset at ~250 s
+   v3d_deqp: build 8990a5cc DONE: 720 cases, P 719 F 1 R 0 N 0 other 0

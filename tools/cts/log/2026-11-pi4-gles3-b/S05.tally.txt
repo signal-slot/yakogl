@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES3 at 8990a5cc, 2026-11-07, image S05: deqp-uart-tally.py --mustpass tools/cts/gles3-mustpass.txt S05.console.txt (README.md)
+S05.console.txt: deqp: done: 0 passed, 1 failed, 0 not supported, 0 warnings, complete=0 | deqp: summary: 1 cases begun, 1 with a result, 0 without
+mustpass cases with a result: 1 (of 1 seen)
+group                                       pass   fail    n/s  other
+shaders                                        0      0      0      1
+TOTAL                                          0      0      0      1
+(the pass / fail counts above are the result lines seen; the image's own counters:)
+  2026-11-pi4-gles3-b: deqp: summary 1 cases begun, 1 with a result; deqp: done 0 passed, 1 failed, 0 not supported, 0 warnings; 1 result lines seen
+ResourceError dEQP-GLES3.functional.shaders.builtin_functions.precision.fract.highp_fragment.scalar

@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES3 at 8990a5cc, 2026-11-07, image S15: deqp-uart-tally.py --mustpass tools/cts/gles3-mustpass.txt S15.console.txt (README.md)
+S15.console.txt: deqp: done: 972 passed, 0 failed, 0 not supported, 0 warnings, complete=1 | deqp: summary: 972 cases begun, 972 with a result, 0 without
+mustpass cases with a result: 972 (of 972 seen)
+group                                       pass   fail    n/s  other
+shaders                                      972      0      0      0
+TOTAL                                        972      0      0      0
+(the pass / fail counts above are the result lines seen; the image's own counters:)
+  2026-11-pi4-gles3-b: deqp: summary 972 cases begun, 972 with a result; deqp: done 972 passed, 0 failed, 0 not supported, 0 warnings; 8990a5cc DONE, all passed: 972 cases, P 972 F 0 R 0 N 0 other 0; 972 result lines seen

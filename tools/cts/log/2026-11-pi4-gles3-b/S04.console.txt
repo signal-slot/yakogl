@@ -1,0 +1,131 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES3 at 8990a5cc, 2026-11-07, image S04: UART console of the run, from the firmware's first line to the image's end line (README.md)
+  4.09 [sdcard] pieeprom.upd not found
+  4.10 [sdcard] recover4.elf not found
+  4.10 [sdcard] recovery.elf not found
+  4.30 Read start4.elf bytes  2299008 hnd 0x211ac
+  4.36 Read fixup4.dat bytes     5496 hnd 0x20bca
+  4.38 0x00d03114 0x00000000 0x00001fff
+  4.41 MEM GPU: 76 ARM: 948 TOTAL: 1024
+  4.78 Starting start4.elf @ 0xfec00200 partition 1
+  4.27 XHCI-STOP
+  4.28 xHC0 ver: 256 HCS: 05000420 fc000031 00e70004 HCC: 002841eb
+  4.28 USBSTS 18
+  4.29 PCI0 reset
+  4.30 +
+
+MESS:00:00:04.312450:0: arasan: arasan_emmc_open
+MESS:00:00:04.314108:0: arasan: arasan_emmc_set_clock C0: 0x00800000 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 400000 max: 400000 delay: 5
+MESS:00:00:04.434337:0: arasan: arasan_emmc_set_clock C0: 0x00800000 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 400000 max: 400000 delay: 5
+MESS:00:00:04.447207:0: arasan: arasan_emmc_set_clock C0: 0x00800f00 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 390000 max: 400000 delay: 5
+MESS:00:00:04.481475:0: boot-part: 1 fs-type: 0
+MESS:00:00:04.482887:0: boot-part: 1 fs-type: 3
+MESS:00:00:04.487271:0: arasan: arasan_emmc_set_clock C0: 0x00800f06 C1: 0x000e0207 emmc: 200000000 actual: 50000000 div: 0x00000002 target: 50000000 min: 0 max: 50000000 delay: 1
+MESS:00:00:04.649187:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:04.652064:0: brfs: File read: 256 bytes
+MESS:00:00:04.744591:0: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:04.749099:0: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:04.762746:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:05.261899:0: gpioman: gpioman_get_pin_num: pin DISPLAY_DSI_PORT not defined
+MESS:00:00:05.267446:0: gpioman: gpioman_get_pin_num: pin DISPLAY_DSI_PORT not defined
+MESS:00:00:05.276482:0: *** Restart logging
+MESS:00:00:05.278253:0: brfs: File read: 256 bytes
+MESS:00:00:05.356507:0: hdmi: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:05.361540:0: hdmi: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:05.377166:0: hdmi: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:05.383851:0: hdmi: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:05.387836:0: hdmi: HDMI:hdmi_get_state is deprecated, use hdmi_get_display_state instead
+MESS:00:00:05.396593:0: HDMI0: hdmi_pixel_encoding: 300000000
+MESS:00:00:05.402086:0: HDMI1: hdmi_pixel_encoding: 300000000
+MESS:00:00:05.423961:0: dtb_file 'bcm2711-rpi-4-b.dtb'
+MESS:00:00:05.440189:0: brfs: File read: /mfs/sd/bcm2711-rpi-4-b.dtb
+MESS:00:00:05.443479:0: Loaded 'bcm2711-rpi-4-b.dtb' to 0x100 size 0xdbb9
+MESS:00:00:05.484627:0: brfs: File read: 56249 bytes
+MESS:00:00:05.503756:0: brfs: File read: /mfs/sd/overlays/overlay_map.dtb
+MESS:00:00:05.568698:0: brfs: File read: 5971 bytes
+MESS:00:00:05.571401:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:05.614470:0: brfs: File read: 256 bytes
+MESS:00:00:05.618158:0: brfs: File read: /mfs/sd/cmdline.txt
+MESS:00:00:05.621630:0: Read command line from file 'cmdline.txt':
+MESS:00:00:05.627480:0: 'console=serial0,115200 console=tty1 root=PARTUUID=269eab4a-02 rootfstype=ext4 fsck.repair=yes rootwait cfg80211.ieee80211_regdom=JP splash quiet'
+MESS:00:00:05.784449:0: brfs: File read: 145 bytes
+MESS:00:00:07.178139:0: brfs: File read: /mfs/sd/yakogl-S04.bin
+MESS:00:00:07.180958:0: Loaded 'yakogl-S04.bin' to 0x200000 size 0xfc7dc0
+MESS:00:00:07.187484:0: Device tree loaded to 0x2eff1f00 (size 0xe0a1)
+MESS:00:00:07.196250:0: uart: Set PL011 baud rate to 103448.300000 Hz
+MESS:00:00:07.202787:0: uart: Baud rate change done...
+MESS:00:00:07.204810:0:board: watchdog armed
+*** Booting Zephyr OS build af17c0c8aa2a ***
+I: shader compiler scratch: 4194304 bytes, keep: 1048576 bytes
+v3d_deqp: build 8990a5cc
+board: PM watchdog resets the SoC ~250 s after boot (tryboot -> Linux)
+v3d_deqp: the record at 210 s after boot at the latest
+V3D clock 250000000 -> 500000000 Hz (0)
+deqp: case filter 'dEQP-GLES3.functional.shaders.builtin_functions.precision.cosh.*,dEQP-GLES3.functional.shaders.builtin_functions.precision.cross.*,dEQP-GLES3.functional.shaders.builtin_functions.precision.degrees.*,dEQP-GLES3.functional.shaders.builtin_functions.precision.determinant.*,dEQP-GLES3.functional.shaders.builtin_functions.precision.distance.*,dEQP-GLES3.functional.shaders.builtin_functions.precision.div.*,dEQP-GLES3.functional.shaders.builtin_functions.precision.dot.*,dEQP-GLES3.functional.shaders.builtin_functions.precision.exp.*,dEQP-GLES3.functional.shaders.builtin_functions.precision.exp2.*,dEQP-GLES3.functional.shaders.builtin_functions.precision.faceforward.*,dEQP-GLES3.functional.shaders.builtin_functions.precision.floor.*'
+Writing test log into deqp.qpa
+dEQP Core vulkan-cts-1.4.6.2-555-g93bca01861b0e3ef3c387027a9791e6d065f900c (0x93bca018) starting..
+  target implementation = 'YakoGL-Zephyr'
+I: V3D 4.2: 1 core(s), 8 QPUs, VPM 65536 bytes, PA 35 / VA 35 bits, MMU yes
+I: V3D raw: HUB_IDENT0..3 42554856 000e1124 00000100 00000e00 CTL_IDENT0..2 04443356 81001422 40078121 MMU_DEBUG_INFO 00000550
+osal(v3d): V3D 4.2, 8 QPUs, VPM 65536 bytes, MMU yes (identify 0)
+osal(v3d): UIFCFG 0x00000045
+osal(v3d): ready: carve-out 48 MiB at phys 0x2f0a000, GPU VA 0x181000..0x3100000
+yakogl/v3d: depth and stencil apart (by renderbuffer), the platform's setting
+yakogl/v3d: job arenas for 1024 draws (the platform's budget): BCL 139264, indirect 458752, binner tile pool 1056768 bytes; tiled copies kept up to 16777216 bytes
+yakogl/v3d: two job arena sets (the second's texture arena 1048576 bytes): a job is recorded while the one before runs
+yakogl/v3d: clear program built: 408 bytes of code
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.cosh.highp_fragment.scalar'..
+yakogl/v3d: draw refused: a target larger than the tile memory is sized for (2048x2048), or empty
+yakogl: glDrawArrays was not recorded (-22); the frame is missing it
+GL error 0x505 in glDrawArrays
+deqp: ResourceError dEQP-GLES3.functional.shaders.builtin_functions.precision.cosh.highp_fragment.scalar
+v3d_deqp: case #0 R 234ms k2/8 c15875/15875 r1 dEQP-GLES3.functional.shaders.builtin_functions.precision.cosh.highp_fragment.scalar
+  ResourceError (Error in draw: glGetError() returned GL_OUT_OF_MEMORY at glsShaderExecUtil.cpp:684)
+
+DONE!
+
+Test run totals:
+  Passed:        0/1 (0.0%)
+  Failed:        1/1 (100.0%)
+  Not supported: 0/1 (0.0%)
+  Warnings:      0/1 (0.0%)
+  Waived:        0/1 (0.0%)
+Test run was ABORTED!
+deqp: done: 0 passed, 1 failed, 0 not supported, 0 warnings, complete=0
+yakogl/v3d: binner pool after job 1: given 0x00b96000 + 1056768, BPCA 0x00b99000 BPCS 1044480 CT0QMA 0x00b96000 CT0QMS 1056768, overflow blocks 0 of 2 (262144 bytes each)
+osal(v3d): BASELINE after a completed job 1: core_sts 0x0 hub_sts 0x0 err 0x1000 ct0 cs 0x0 ea 0x201011 ca 0x201011 ra 0x0 qba 0x201000 qea 0x201011 ct1 ca 0x223097 ra 0x223096 qba 0x223000 qea 0x223097
+deqp: summary: 1 cases begun, 1 with a result, 0 without
+v3d_deqp STOPPED EARLY by dEQP (complete=0; later cases never began): build 8990a5cc, filter 'dEQP-GLES3.functional.shaders.builtin_functions.precision.cosh...
+  1 cases in 234 ms, record at 0 s after boot, reset at ~250 s
+  totals: R 1  (R: not passed, a draw was refused in it; passed with one refused: 0)
+  done: 0 passed, 1 failed, 0 not supported, 0 warnings, complete=0
+  summary: 1 cases begun, 1 with a result, 0 without
+  keep region (KiB, of 1024): after #0 2, most 2 at #0, last 2, high-water 8, before #0 (first not passed) 0; slowest #0 234 ms
+  carve-out (KiB, of 48636): after #0 15875, last 15875, high-water 15875
+  jobs: slow in 0 cases; no job hung or timed out
+BASELINE (first completed) job 1: core_sts 0x0 hub_sts 0x0 err 0x1000 ct0 cs 0x0 ea 0x201011 ca 0x201011 ra 0x0 qba 0x201000 qea 0x201011 ct1 ca 0x223097 ra 0x223096 qba 0x223000 qea 0x223097
+FIRST FAILURE: none (no timeout)
+slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+binner out of memory: 0 jobs (2 overflow blocks of 256 KiB, CONFIG_YAKOGL_V3D_BIN_OVERFLOW_BLOCKS; each such job ends in a GPU reset)
+binning by interrupt (IRQ 106): 1 interrupts, 0 overflow blocks fed by the ISR
+carve-out: 15649536 bytes used now, 16256512 at most, of 49803264; 0 frees held
+osal(v3d): pending frees: high-water 3/256, waits 0 (opt-in 0), refused 0 (0 unsubmitted, 0 no wait, 0 KiB kept)
+carve-out find: 23 calls, 4229 map reads (183 a call, at most 1153 in one); free runs 3, longest 33536768 bytes; small blocks from the top: off (CONFIG_YAKOGL_V3D_CARVEOUT_TOP_BELOW 0)
+packets (packet skip on, CONFIG_YAKOGL_V3D_PACK_SKIP): 1 jobs ended; emitted 0, skipped 0; groups compared 0, mismatches 0
+allocations refused for lack of GPU memory: 0 (0 size slots; the line is printed at each size's 1st, 10th, 100th, ... refusal)
+UIFCFG 0x00000045 (read at init)
+log: 0 causes logged once, 0 repeats not printed
+case order: P pass F fail R refused N not supported Q quality C compat E resource I internal X crash T timeout
+    0 R
+refusals: 1 draws refused by the V3D backend (v3d_refused_draws), causes:
+  r0 (first #0) a target larger than the tile memory is sized for (2048x2048), or empty
+driver: osal(v3d): V3D 4.2, 8 QPUs, VPM 65536 bytes, MMU yes (identify 0)
+driver: osal(v3d): UIFCFG 0x00000045
+driver: osal(v3d): ready: carve-out 48 MiB at phys 0x2f0a000, GPU VA 0x181000..0x3100000
+driver: ... 6 more lines (UART)
+not passed, by group (count, letters; reasons by count, F/R before N):
+  cosh.highp_fragment                                         1 R1                      1x ~glGetError() returned GL_OUT_OF_MEMORY at glsShaderExecUtil.cpp:684
+    0 R cosh.highp_fragment.scalar                       234ms k2/8 c15875/15875 r0      ~: glGetError() returned GL_OUT_OF_MEMORY at glsShaderExecUtil.cpp:684
+v3d_deqp: build 8990a5cc STOPPED EARLY by dEQP (complete=0; later cases never began): 1 cases, P 0 F 0 R 1 N 0 other 0
