@@ -930,7 +930,15 @@ struct Counts {
 
 fn counts() -> Counts {
     assert_eq!((V3D_COPY_REASONS, V3D_MIP_REFUSALS), (16, 14), "a counter was added: name it above");
-    let mut c = Counts { kicks: 0, waits: 0, chains: 0, refused: [0; 14], copies: [0; 16], events: events().len(), seen: jobs().len() };
+    let mut c = Counts {
+        kicks: 0,
+        waits: 0,
+        chains: 0,
+        refused: [0; 14],
+        copies: [0; 16],
+        events: events().len(),
+        seen: jobs().len(),
+    };
     // SAFETY: live out-parameters of the sizes the counters document; the others null.
     unsafe {
         v3d_counters(&mut c.kicks, &mut c.waits);
