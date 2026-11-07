@@ -155,7 +155,13 @@ scope_of_path() {
   case "$1" in
   docs/* | */*.md | *.md | website/* | NOTICE | LICENSE* | .github/* | records/* | .gitignore | .ccfarm/*) echo docs ;;
   tools/precompile/* | tools/shaders/* | tests/fixtures/precompile*) echo precompile ;;
-  src/shaderc/online/v3d/* | src/shaderc/online/v3d_abi.rs | src/v3d/* | driver/src/v3d/* | tools/v3d/* | tests/v3d_* | tests/depth_resolve_v3d*) echo v3d ;;
+  # V3D 7.1 (Raspberry Pi 5): the v3d71 row (tools/v3d/check71.sh) is reached by
+  # its own files (src/shaderc/online/v3d/*71*.rs, driver/src/v3d/generated/
+  # v3d_packet_v71_pack.h, tools/v3d/check71.sh, check71.d/*, shim71/*, pi5/*,
+  # *_71*) and by the shared V3D files 7.1 builds from; all of them are
+  # under the three directories below, and the 4.2 rows are reached as before.
+  src/shaderc/online/v3d/* | driver/src/v3d/* | tools/v3d/*) echo "v3d v3d71" ;;
+  src/shaderc/online/v3d_abi.rs | src/v3d/* | tests/v3d_* | tests/depth_resolve_v3d*) echo v3d ;;
   src/shaderc/online/mali/* | src/mali/* | tools/mali/*) echo mali ;;
   # glsl2pan.py and gl_ref.py import it: the mali row is reached as well
   tools/vivante/es100.py) echo "vivante mali" ;;
@@ -569,6 +575,8 @@ run_row() (
     # than no gate, because it is believed. Anything but a summary counts.
     warns=$(grep -E '^warning: ' "$ROWS/$n.out" | grep -cvE 'generated [0-9]+ warning')
     if [ "$warns" -gt 0 ]; then echo "warn $warns"; else echo ok; fi > "$ROWS/$n.verdict"
+  elif [ -e "$ROWS/$n.gap" ]; then
+    echo gap > "$ROWS/$n.verdict"
   else
     echo fail > "$ROWS/$n.verdict"
   fi
@@ -588,6 +596,12 @@ report_row() {
   ok)
     green "ok    $label $t"
     oks=$((oks + 1))
+    ;;
+  gap)
+    printf '\033[33mgap   %s: an input is missing (a gap is not a pass) %s\033[0m\n' "$label" "$t"
+    tail -5 "$out"
+    gaps=$((gaps + 1))
+    rc=1
     ;;
   cached\ *)
     printf '\033[2mskip  %s (passed on main %s)\033[0m\n' "$label" "${verdict#cached }"
@@ -2210,6 +2224,19 @@ if command -v cc >/dev/null 2>&1; then
   else
     gap "v3d tex_check, cl_golden, job_check: MESA_V3D_TREE='$v3d_mesa_tree' has no build-v3d (see tools/v3d/README.md; unset MESA_V3D_TREE for the reference build): the V3D texture and CL packers were NOT compared with Mesa"
   fi
+  # The V3D 7.1 (Raspberry Pi 5) host checks: tools/v3d/check71.sh runs each
+  # script of tools/v3d/check71.d (its README is the convention). Exit 77 is a
+  # missing input (it prints `gap: <names>`): the row is a gap, not a pass and
+  # not a failure of the code; the marker file tells run_row.
+  v3d71_checks() {
+    local status
+    tools/v3d/check71.sh
+    status=$?
+    [ "$status" -eq 77 ] && : > "$ROWS/$ROW_SEQ.gap"
+    return "$status"
+  }
+  scope v3d71
+  step "run     v3d71 host checks (tools/v3d/check71.sh)" v3d71_checks
   # pan_shc, the Mali-G610 reference shader tool (tools/mali/README-pan_shc.md),
   # built from this checkout inside MESA_PAN_TREE (a Mesa 26.2.1 tree made by
   # tools/mali/build_pan_shc.sh) and run on the board's two reference programs
