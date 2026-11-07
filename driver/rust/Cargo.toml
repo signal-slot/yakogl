@@ -40,6 +40,8 @@ am62p = []
 # The RK3588 (NanoPC-T6): the WDT0 self-arm and the board glue's CPU
 # helpers (driver/zephyr/lib/board/nanopc_t6).
 rk3588 = []
+# The STM32MP257F (STM32MP257F-DK): the SMC watchdog (soc::stm32mp2).
+stm32mp2 = []
 # The Mali-G610's kernel side (gpu::mali); the NanoPC-T6 images.
 mali = []
 # The PowerVR GPU's rgxlayer (gpu::pvr::rgxlayer), under the vendored DDK's
