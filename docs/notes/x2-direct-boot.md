@@ -14,8 +14,8 @@ tree: `driver/boards/atmark/armadillo_x2/`, `tools/x2-mkflash.py`,
 `driver/samples/zephyr/gl_test/boards/armadillo_x2_direct.conf`.
 
 State: the image is built and checked offline. **It has not run on the
-board**, and the board's eMMC has not been read (see "Risks and open
-questions"). The first image is `gl_test` (it was `gc_gl_triangle` until the samples were
+board**. The read-only checks of step 1 below were made on 2026-11-07 (see
+"Answers from the board"); the eMMC contents have not been read. The first image is `gl_test` (it was `gc_gl_triangle` until the samples were
 cut down to one per purpose), which renders off-screen and reports on UART2. It shows no picture: the HDMI bring-up from cold (LCDIF3 ->
 PVI -> DW-HDMI) is written, with host tests, but has never run and is not
 part of this chain (`driver/drivers/display/display_yakogl_imx8mp_hdmi.c`,
@@ -201,12 +201,14 @@ uboot-1 word 0: 0x14012be3 = b 0x4024af8c = __start; "ARM\x64" at 0x38
 ### 1. Read-only checks (root shell on ABOS)
 
 ```sh
-cat /sys/block/mmcblk2boot0/size /sys/block/mmcblk2boot1/size   # 512-byte sectors; 8192 = 4 MiB expected
+cat /sys/block/mmcblk2boot0/size /sys/block/mmcblk2boot1/size   # 512-byte sectors; 64512 = 31.5 MiB (read 2026-11-07)
 mmc extcsd read /dev/mmcblk2 | grep -i -A2 'PARTITION_CONFIG'    # "Boot partition N enabled" = active copy
 dd if=/dev/mmcblk2boot0 bs=4 count=1 2>/dev/null | xxd             # d1002041 = an IVT at offset 0
 dd if=/dev/mmcblk2boot1 bs=4 count=1 2>/dev/null | xxd
 hexdump -C -s 0x1c -n 4 /sys/bus/nvmem/devices/imx-ocotp0/nvmem  # bank 1 word 3: bit 25 (0x02000000) set = HAB CLOSED
 ```
+
+The answers of 2026-11-07 are in "Answers from the board" below.
 
 **Stop if HAB is closed.** SPL would then refuse the unsigned FIT. Otherwise,
 call the active boot partition A (N = 1 means boot0, 2 means boot1) and the
@@ -290,24 +292,49 @@ at the verdict.
 - **Restore a backup:** `dd if=mmcblk2bootN.bak of=/dev/mmcblk2bootN bs=1M conv=fsync`
   after `echo 0 > /sys/block/mmcblk2bootN/force_ro`.
 
+## Answers from the board
+
+Read on the running ABOS 3.24 (kernel 6.12.105) on 2026-11-07, read-only:
+sysfs, nvmem, `mmc extcsd read` and `/etc/sw-versions`. Nothing was written
+and no boot partition was read with `dd`.
+
+| question | command | answer |
+|---|---|---|
+| HAB state | `hexdump -C -s 0x1c -n 4 /sys/bus/nvmem/devices/imx-ocotp0/nvmem` (OCOTP bank 1 word 3) | `00 00 00 88`, the word 0x88000000: bit 25 (0x02000000) is clear, so **HAB is open**; an unsigned FIT is accepted |
+| boot partition size | `mmc extcsd read /dev/mmcblk2 \| grep BOOT_SIZE_MULT`; `cat /sys/block/mmcblk2boot0/size /sys/block/mmcblk2boot1/size` | `BOOT_SIZE_MULTI: 0xfc` = 252 x 128 KiB; both files say 64512 sectors of 512 bytes = **31.5 MiB** each (not the 4 MiB assumed) |
+| active boot partition | `mmc extcsd read /dev/mmcblk2 \| grep PARTITION_CONFIG` | `PARTITION_CONFIG: 0x10`: BOOT_PARTITION_ENABLE (bits 6:3) = 2, so **boot1 (`mmcblk2boot1`) is active**, boot0 is the other copy; PARTITION_ACCESS (bits 2:0) = 0 |
+| boot loader version | `cat /etc/sw-versions` | `boot 2020.4-at.30` (also `base_os 3.24-at.3`, `extra_os.kernel 6.12.105-0`), matching the at30 of the table above |
+
+Also read: `BOOT_BUS_CONDITIONS: 0x00`, `BOOT_WP: 0x00` (no boot-area write
+protection), and `force_ro` is 1 on both boot partitions, as the step 2 writes
+expect.
+
+What follows for the plan: step 1 does not stop on HAB; the inactive copy B
+is boot0 (write boot0, then `mmc bootpart enable 1 0`), and the example of
+step 2 (which writes boot1) is the reverse of the board's current state. The
+image size limit is unchanged, for the environment's sake, not the partition's.
+
 ## Risks and open questions
 
 - **Not run.** Every statement above about runtime behaviour comes from
   Atmark's source and the prebuilt image's bytes, not from the board.
-- **The board's real boot image was not read.** On 2026-10-01 reading
-  `mmcblk2boot*` and `/proc/iomem` over ssh was denied by the session's
-  permission check. The at30 in the table is what the board's U-Boot version
-  string says, not a byte comparison. Step 1 confirms where the image is.
-- **The HAB state is assumed open.** It is checked in step 1.
+- **The board's real boot image was not read.** The at30 in the table is what
+  the board's `/etc/sw-versions` says (see "Answers from the board"), not a
+  byte comparison. The `dd` of the first word of each boot partition in step 1
+  has not been made.
+- **The HAB state** is open, read on 2026-11-07 (see below).
 - **OP-TEE** stays, because BL31 is built with `SPD=opteed`. It costs boot
   time; measure it from the gap between the BL31 and Zephyr lines. Dropping it
   needs a BL31 without opteed, which means building TF-A ourselves.
 - **0x43200000 / zephyr.bin size**: TF-A and OP-TEE write there before Zephyr
   runs. A zephyr.bin over 48 MiB would be corrupted, so the limit is checked
   by eye for now (the Slint sample is larger than gl_test).
-- **Boot partition size**: assumed 4 MiB, because of the environment at
-  0x3FE000. The tool refuses images over 0x3FA000; for an SD card use
-  `--limit 0`.
+- **Boot partition size**: 31.5 MiB, not 4 MiB (see below). The limit of
+  0x3FA000 that the tool enforces does not come from the partition size but
+  from U-Boot's environment copies at 0x3FA000 and 0x3FE000, which sit in the
+  first 4 MiB of the partition; the same limit holds. The room above 0x3FE000
+  is unused by Atmark's layout, but nothing here relies on it. For an SD card
+  use `--limit 0`.
 - **Cortex-M7**: BL31 releases it from reset with whatever is in its TCM.
   ABOS does the same today.
 - **The display**: the cold LCDIF3 -> PVI -> DW-HDMI bring-up is separate
