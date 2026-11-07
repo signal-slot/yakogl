@@ -1533,6 +1533,11 @@ step "test    $V3D_CONFIG (tests/v3d_tfu_host.rs)" \
 # TFU run when that job is finished, before the job sampling the chain).
 step "test    $V3D_CONFIG (tests/v3d_tfu_mipmap_nowait.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test v3d_tfu_mipmap_nowait
+# A CPU mipmap filter of a just-rendered target sees the render, no glFinish
+# before it (the order settle_texture's drain guarantees; its PowerVR half
+# runs in the PowerVR rows).
+step "test    $V3D_CONFIG (tests/gl_settle_order_pin.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test gl_settle_order_pin
 # Every CPU reader of a sampled render target's level 0 (the lazy raster
 # storage: a reader sees what the last job rendered), on the real backend.
 step "test    $V3D_CONFIG (tests/v3d_lazy_raster_readers.rs)" \
