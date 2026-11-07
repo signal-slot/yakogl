@@ -32,11 +32,19 @@ conventions of the generated PowerVR table, tests/reference/blobs.rs.
 Usage:
   ETNA_SHC=<mesa>/build-etnaviv/src/gallium/drivers/etnaviv/etna_shc \\
       python3 tools/vivante/gen_shader_table.py
+
+The same rows for another GPU (`--st`, see GPU_ST and main_st): the
+committed table's rows compiled for the STM32MP257F's ids, written to
+tests/reference/vivante_blobs_st.rs; `--st --check` regenerates that file in
+memory and compares it byte for byte (exit 2, a gap, when there is no
+etna_shc: $ETNA_SHC, or $MESA_ETNA_TREE's build-etnaviv). The i.MX8MP table
+is never written by `--st`.
 """
 import os
 import re
 import sys
 import json
+import shutil
 import hashlib
 import subprocess
 
@@ -144,6 +152,10 @@ ROW_NAME_RE = re.compile(r'name: "(.*?)\\0"')
 # `static CODE_<n>: [u32; N] = [ ... ];` and the reference to it inside a row.
 CODE_DEF_RE = re.compile(r"static (CODE_\d+|[A-Z_]*CODE_[A-Z0-9_]+): \[u32; \d+\] = \[(.*?)\];", re.S)
 CODE_REF_RE = re.compile(r"(CODE_\d+|[A-Z_]*CODE_[A-Z0-9_]+)\.as_ptr\(\)")
+# Every numbered array a row points at: its code, its constant file (CC_,
+# CD_) and its uniform reflection (UNI_). A ShcUniform line holds no `];`.
+SYM_DEF_RE = re.compile(r"static ((?:CODE|CC|CD|UNI)_[A-Z0-9_]+): \[[^;]*; \d+\] = \[(.*?)\];", re.S)
+SYM_REF_RE = re.compile(r"((?:CODE|CC|CD|UNI)_[A-Z0-9_]+)\.as_ptr\(\)")
 
 
 def rows_that_change(old_text, new_text):
@@ -160,16 +172,22 @@ def rows_that_change(old_text, new_text):
     "0 of 324 reproduced" -- a toolchain verdict drawn from the emitter's
     numbering. Measured 2026-09-22, and the third instrument of mine that day
     to name what it could see and treat the rest as one thing.
+
+    The same for the row's other arrays (`UNI_<n>`, `CC_<n>`, `CD_<n>`):
+    until 2026-11-07 only the code symbol was resolved, so the 95 rows the
+    `--append` blocks left numbered from 330 up read as changed against a
+    full emit that numbers them from 0, with every word and every uniform
+    equal (found by `--st`, whose i.MX8MP compile remakes all 234 rows).
     """
     def rows(text):
-        code = {m.group(1): " ".join(m.group(2).split()) for m in CODE_DEF_RE.finditer(text)}
+        sym = {m.group(1): " ".join(m.group(2).split()) for m in SYM_DEF_RE.finditer(text)}
         out = {}
         for m in ROW_RE.finditer(text):
             body = m.group(1)
             n = ROW_NAME_RE.search(body)
             if not n:
                 continue
-            body = CODE_REF_RE.sub(lambda r: "CODE[" + code.get(r.group(1), "?") + "]", body)
+            body = SYM_REF_RE.sub(lambda r: r.group(1).split("_")[0] + "[" + sym.get(r.group(1), "?") + "]", body)
             out[n.group(1)] = body
         return out
 
@@ -260,6 +278,35 @@ def _self_test():
         assert len(same2) == len(same) - len(dropped) and "es300/" not in cut.split("pub static")[0], \
             "--remove left es300/ rows or header lines behind"
         print("gen_shader_table: --remove of es300/ keeps the other %d rows" % len(same2))
+        # --st reads the committed rows back (committed_rows) and counts the
+        # words that differ (words_that_differ) the way the test does; the
+        # ST table, when it exists, holds exactly the i.MX8MP's rows.
+        assert words_that_differ([1, 2, 3], [1, 9, 3, 4]) == 2 and words_that_differ([], [7]) == 1, \
+            "words_that_differ does not count a changed word and a longer program as it should"
+        rows = committed_rows(committed)
+        assert len(rows) == len(same), \
+            "committed_rows reads %d rows where rows_that_change sees %d" % (len(rows), len(same))
+        assert all(len(r["sha256"]) == 32 and r["code"] for r in rows), "a committed row has no key or no code"
+        assert all((r["key"] == KEY_FRONT_FLIPPED) == r["name"].endswith(" @front_cw") for r in rows), \
+            "a row's blend key does not follow its @front_cw name"
+        # The stored sources are the rows' texts: each hashes to its row's key
+        # (what --st compiles from), and the literal decoder is exact.
+        assert _unquote('a\\\\b\\"c\\nd') == 'a\\b"c\nd', "the string-literal decoder is wrong"
+        srcs = committed_sources(committed)
+        assert len(srcs) == len(rows), "%d source entries for %d rows" % (len(srcs), len(rows))
+        # (a ` @front_cw` row stores the negated text under its base row's key)
+        key_of = {r["name"]: hashlib.sha256(t.encode()).digest() for r, (_, t) in zip(rows, srcs)}
+        stale = [r["name"] for r in rows
+                 if key_of[r["name"].replace(" @front_cw", "")] != r["sha256"]]
+        assert not stale, "source entries that do not hash to their row's key: %s" % stale
+        if os.path.exists(OUT_TABLE_ST):
+            with open(OUT_TABLE_ST) as f:
+                st = committed_rows(f.read())
+            assert [(r["name"], r["sha256"], r["key"]) for r in st] == \
+                [(r["name"], r["sha256"], r["key"]) for r in rows], \
+                "the ST table's rows are not the i.MX8MP table's (name, key, blend key, order)"
+            print("gen_shader_table: the ST table holds the %d rows of the i.MX8MP's, %d with other "
+                  "instruction words" % (len(st), sum(1 for a, b in zip(rows, st) if a["code"] != b["code"])))
 
     ident = tool_identity()
     print("gen_shader_table: this host's tools: etna_shc %s, %s"
@@ -277,6 +324,21 @@ READS_FRONT_FACING = "gl_FrontFacing"
 KEY_FRONT_FLIPPED = 1
 OUT_TABLE = os.path.join(HERE, "..", "..", "tests", "reference", "vivante_blobs.rs")
 OUT_CLEAR = os.path.join(HERE, "..", "..", "tests", "reference", "gc_clear_shader.rs")
+
+# The GPUs etna_shc compiles for, as the five ids its hardware-database lookup
+# matches (model, revision, product, eco, customer; etna_shc.c's usage line).
+#
+# The i.MX8MP's GC7000UL is the tool's default (no ids on the command line),
+# and OUT_TABLE is its reference. The STM32MP257F's row is the one issue
+# #1281 read on the board under ST's Linux (model 0x8000, revision 0x6205,
+# product 0x80003, eco 0); the customer id was NOT read there, and 0x15 is
+# what the etnaviv hwdb row with those four ids carries
+# (tools/vivante/hwdb_compare.py, and the drm-shim entry of
+# mesa-cs-golden.patch uses the same value). Mesa's lookup matches all five,
+# so the row is not found without it.
+GPU_IMX8MP = None
+GPU_ST = ("0x8000", "0x6205", "0x80003", "0x0", "0x15")
+OUT_TABLE_ST = os.path.join(HERE, "..", "..", "tests", "reference", "vivante_blobs_st.rs")
 
 SHC_UNIFORM_NO_BLOCK = 0xffff
 SHC_VIV_NO_REG = 0xff
@@ -459,7 +521,7 @@ def uniform_index_to_block_dword(var, index):
 
 # ---- one shader ------------------------------------------------------------
 
-def compile_one(path, text=None):
+def compile_one(path, text=None, gpu=GPU_IMX8MP):
     stage = u.stage_of(path)
     if text is None:
         text = open(path).read()
@@ -467,7 +529,7 @@ def compile_one(path, text=None):
     translated = (v.translate_es100_gl(text, stage) if version == 100 else
                   v.translate_es300_gl(text, stage) if version in (300, 310) else
                   v.translate_450_gl(text))
-    js, err = v.compile_one(path, text)
+    js, err = v.compile_one(path, text, gpu)
     if err:
         raise Fail(err)
     return stage, text, translated, js
@@ -487,12 +549,13 @@ def io_list(entries, names_by_slot, what):
     return out
 
 
-def reflect(path, text=None, sha_text=None):
+def reflect(path, text=None, sha_text=None, gpu=GPU_IMX8MP):
     """Reflect one shader. `text` compiles something other than the file (a
     variant); `sha_text` is what the table is keyed by, which for a variant is
     still the original source, because that is what the application hands
-    glShaderSource and what the lookup hashes."""
-    stage, text, translated, js = compile_one(path, text)
+    glShaderSource and what the lookup hashes. `gpu` is one of the id tuples
+    above (GPU_IMX8MP, the default, or GPU_ST)."""
+    stage, text, translated, js = compile_one(path, text, gpu)
     vs = stage == "vs"
 
     # names, by the slot the compiler reports
@@ -873,25 +936,65 @@ unsafe impl Sync for ClearShader {}
 """
 
 
+ST_TABLE_HEADER = """// SPDX-License-Identifier: Apache-2.0
+//
+// vivante_blobs_st.rs - GENERATED by tools/vivante/gen_shader_table.py --st. DO NOT EDIT.
+// Re-run the generator (see tools/vivante/README.md); `--st --check`
+// regenerates this file in memory and compares it byte for byte.
+//
+// The rows of vivante_blobs.rs (the i.MX8MP's Mesa reference table: the same
+// sources, keys, blend keys and order) compiled by the same etna_shc for the
+// STM32MP257F's GPU: model 0x8000, revision 0x6205, product 0x80003, eco 0
+// (issue #1281, Q1) and customer 0x15 (the etnaviv hwdb row's; not read on
+// the board). Reference material for tests/vivante_st_blobs.rs, which pins
+// how many rows and instruction words the ids move (the hwdb row's
+// SH_NO_ONECONST_LIMIT lets one instruction read two uniforms). No product
+// build compiles it and nothing under src/ names it: the `use` lines below
+// take the types through the crate, so a test includes it with `#[path]`.
+//
+// toolchain: etna_shc built from tools/vivante/etna_shc.c of this tree in
+// Mesa 26.2.1 (tools/vivante/README.md, "Set up once"), fed glslangValidator
+// -G output. The host's binary digest and glslang version are printed by the
+// generator and not written here, so that --check is a byte comparison
+// across hosts; a host whose tools make other words fails it by name."""
+
+ST_TABLE_PRELUDE = """#![allow(clippy::all)]
+#![cfg_attr(rustfmt, rustfmt_skip)]
+
+#[allow(unused_imports)]
+use yakogl::shaderc::{
+    pad_attribs, pad_io, ShcAttrib, ShcBlob, ShcShader, ShcSource, ShcUniform, ShcVarying, ShcViv,
+    ShcVivIo, SHC_NO_BLEND_CONSTS, SHC_STAGE_FRAGMENT, SHC_STAGE_VERTEX, SHC_VIV_MAX_IO,
+};
+#[allow(unused_imports)]
+use yakogl::util::cname;
+"""
+
+
 def stage_const(stage):
     return "SHC_STAGE_VERTEX" if stage == "vs" else "SHC_STAGE_FRAGMENT"
 
 
-def emit_table(shaders):
-    """The whole of tests/reference/vivante_blobs.rs, as text."""
-    out = [TABLE_HEADER]
-    # Which toolchain built these bytes, in the same shape the PowerVR
-    # generator records (`// toolchain: pco_shc=... glslang=...`). The
-    # committed table predates this line and therefore carries none, which is
-    # itself the fact worth having: an unlabelled table is one whose origin
-    # nobody can check.
-    ident = tool_identity()
-    out.append("// toolchain: etna_shc=%s glslang=%s" % (ident["etna_shc"], ident["glslang"]))
+def emit_table(shaders, gpu=GPU_IMX8MP):
+    """The whole of tests/reference/vivante_blobs.rs, as text (or, for
+    GPU_ST, of vivante_blobs_st.rs: the same rows under the ST header and a
+    prelude that reaches the types through the crate)."""
+    if gpu is GPU_ST:
+        out = [ST_TABLE_HEADER]
+    else:
+        out = [TABLE_HEADER]
+        # Which toolchain built these bytes, in the same shape the PowerVR
+        # generator records (`// toolchain: pco_shc=... glslang=...`). The
+        # committed table predates this line and therefore carries none, which is
+        # itself the fact worth having: an unlabelled table is one whose origin
+        # nobody can check.
+        ident = tool_identity()
+        out.append("// toolchain: etna_shc=%s glslang=%s" % (ident["etna_shc"], ident["glslang"]))
     out.append("// Shaders in this table:")
     for sh in shaders:
         out.append("//   %-20s %-2s  sha256=%s"
                    % (sh["name"], sh["stage"], sh["sha256"].hex()))
-    out.append(TABLE_PRELUDE)
+    out.append(ST_TABLE_PRELUDE if gpu is GPU_ST else TABLE_PRELUDE)
 
     bodies = []
     for i, sh in enumerate(shaders):
@@ -988,14 +1091,14 @@ def append_rows(old_text, shaders):
     return text
 
 
-def front_flipped(p, sh):
+def front_flipped(p, sh, gpu=GPU_IMX8MP):
     """The second binary of a fragment shader that reads gl_FrontFacing:
     compiled from the source with the sense negated and keyed under the
     ORIGINAL source's sha256, so the runtime finds it from the shader the
     application actually compiled."""
     text = open(p).read()
     var = reflect(p, text.replace(READS_FRONT_FACING, "(!%s)" % READS_FRONT_FACING),
-                  sha_text=text)
+                  sha_text=text, gpu=gpu)
     var["key"] = KEY_FRONT_FLIPPED
     var["name"] = sh["name"] + " @front_cw"
     return var
@@ -1218,7 +1321,234 @@ def main_remove(dirs):
     return 0
 
 
+# ---- the same rows for the STM32MP257F (--st) ------------------------------
+
+def committed_rows(text):
+    """The rows of an emitted table in order: name, key (sha256 bytes),
+    blend key and instruction words. Read back from the generator's own
+    output (ROW_RE), as rows_that_change does."""
+    code = {m.group(1): [int(w, 16) for w in m.group(2).replace(",", " ").split()]
+            for m in CODE_DEF_RE.finditer(text)}
+    blob_at = text.index("pub static SHC_BLOB_TABLE")
+    src_at = text.index("pub static SHC_SOURCE_TABLE")
+    out = []
+    for m in ROW_RE.finditer(text):
+        if not blob_at < m.start() < src_at:
+            continue
+        body = m.group(1)
+        name = ROW_NAME_RE.search(body)
+        sha = re.search(r"sha256: \[([^\]]*)\]", body)
+        # the row's blend_key (8 spaces), not the ShcShader's (12)
+        key = re.search(r"\n        blend_key: (\d+),", body)
+        ref = CODE_REF_RE.search(body)
+        if not (name and sha and key and ref and ref.group(1) in code):
+            raise SystemExit("gen_shader_table: a committed row does not parse: %s" % body[:80])
+        out.append({"name": name.group(1), "key": int(key.group(1)),
+                    "sha256": bytes(int(x, 16) for x in sha.group(1).split(", ")),
+                    "code": code[ref.group(1)]})
+    return out
+
+
+SRC_ENTRY_RE = re.compile(r'    ShcSource \{\n        name: "(.*?)",\n        text: concat!\(\n(.*?)\n        \),\n    \},', re.S)
+
+
+def _unquote(lit):
+    """The text of a Rust string literal rs_string wrote (it escapes only the
+    backslash, the quote and the newline, and ends the source with `\\0`)."""
+    out, i = [], 0
+    while i < len(lit):
+        if lit[i] == "\\":
+            out.append({"\\": "\\", '"': '"', "n": "\n", "0": "\0"}[lit[i + 1]])
+            i += 2
+        else:
+            out.append(lit[i])
+            i += 1
+    return "".join(out)
+
+
+def committed_sources(text):
+    """The source entries of an emitted table in order: (name, text), the
+    text being what each row was compiled from and keyed by. The source table
+    runs in the blob table's order (emit_table, append_rows, replace_rows)."""
+    at = text.index("pub static SHC_SOURCE_TABLE")
+    out = []
+    for m in SRC_ENTRY_RE.finditer(text[at:]):
+        parts = []
+        for line in m.group(2).split("\n"):
+            line = line.strip()
+            if not (line.startswith('"') and line.endswith('",')):
+                raise SystemExit("gen_shader_table: a source entry line does not parse: %r" % line[:80])
+            parts.append(_unquote(line[1:-2]))
+        s = "".join(parts)
+        if not s.endswith("\0"):
+            raise SystemExit("gen_shader_table: source entry %s does not end with a NUL" % m.group(1))
+        out.append((m.group(1), s[:-1]))
+    return out
+
+
+def words_that_differ(a, b):
+    """Instruction words of `b` that are not `a`'s: the positions that differ
+    over the common length, plus the words one program has beyond the
+    other's. tests/vivante_st_blobs.rs counts the same way."""
+    n = min(len(a), len(b))
+    return sum(1 for i in range(n) if a[i] != b[i]) + abs(len(a) - len(b))
+
+
+def st_tool():
+    """The etna_shc the ST table is made with: $ETNA_SHC, else the build
+    tools/vivante/README.md makes under $MESA_ETNA_TREE, else glsl2vivante's
+    default path. None when none of them is an executable (or there is no
+    glslangValidator): the gate's row is a gap then, never a pass."""
+    cands = []
+    if os.environ.get("ETNA_SHC"):
+        cands.append(os.environ["ETNA_SHC"])
+    if os.environ.get("MESA_ETNA_TREE"):
+        cands.append(os.path.join(os.environ["MESA_ETNA_TREE"], "build-etnaviv", "src", "gallium",
+                                  "drivers", "etnaviv", "etna_shc"))
+    cands.append(v.ETNA_SHC)
+    if shutil.which(v.GLSLANG) is None:
+        return None
+    for c in cands:
+        if os.path.isfile(c) and os.access(c, os.X_OK):
+            return c
+    return None
+
+
+def st_rows(rows, sources, gpu, what):
+    """`rows` (committed_rows of the i.MX8MP table) compiled for `gpu`, in
+    order, from the source text the table stores for each (committed_sources:
+    the text the row was keyed by, which is the row whether or not the file
+    under tools/shaders has moved since), with the same variant
+    (` @front_cw`). Stops if any row cannot be made: the ST table holds
+    every row of the i.MX8MP's or it is not that table."""
+    if len(sources) != len(rows):
+        raise SystemExit("gen_shader_table --st: %d rows but %d source entries" % (len(rows), len(sources)))
+    out, failed = [], []
+    text_of = {}
+    for r, (sname, stext) in zip(rows, sources):
+        flipped = r["name"].endswith(" @front_cw")
+        base = r["name"][:-len(" @front_cw")] if flipped else r["name"]
+        # A ` @front_cw` row stores the text it was compiled from (the sense
+        # negated) under its base row's key (front_flipped); the base row
+        # comes first.
+        key_text = text_of.get(base) if flipped else stext
+        if os.path.basename(r["name"]) != sname or key_text is None or \
+                hashlib.sha256(key_text.encode()).digest() != r["sha256"] or \
+                (flipped and stext != key_text.replace(READS_FRONT_FACING, "(!%s)" % READS_FRONT_FACING)):
+            raise SystemExit("gen_shader_table --st: %s: the source entry (%s) is not the row's "
+                             "text (its SHA-256 is not the row's key)" % (r["name"], sname))
+        text_of[r["name"]] = stext
+        p = os.path.join(SHADERS, base)
+        try:
+            if flipped:
+                sh = reflect(p, stext, sha_text=key_text, gpu=gpu)
+                sh["key"] = KEY_FRONT_FLIPPED
+                sh["name"] = r["name"]
+            else:
+                sh = reflect(p, stext, gpu=gpu)
+        except (Fail, SystemExit) as e:
+            failed.append((r["name"], str(e)))
+            continue
+        if sh["key"] != r["key"]:
+            failed.append((r["name"], "blend key %d, the committed row has %d" % (sh["key"], r["key"])))
+            continue
+        out.append(sh)
+    for rel, why in failed:
+        print("FAIL %-52s %s" % (rel, why))
+    if failed:
+        raise SystemExit("gen_shader_table --st: %d of %d committed rows cannot be made for the %s ids"
+                         % (len(failed), len(rows), what))
+    return out
+
+
+def main_st(check):
+    """`--st [--check]`: the committed i.MX8MP table's rows compiled for
+    GPU_ST, written to OUT_TABLE_ST, or (--check) regenerated in memory and
+    compared with the committed OUT_TABLE_ST byte for byte.
+
+    The i.MX8MP table is never written here. What is printed: how many rows
+    and instruction words the ST table differs from the committed i.MX8MP
+    table by (the number tests/vivante_st_blobs.rs pins), and, when writing,
+    how many committed i.MX8MP rows this host's etna_shc remakes byte for
+    byte with the i.MX8MP ids in the same run -- a row it does not remake
+    would differ in the ST table for a reason other than the ids, so that
+    count is the drift the comparison carries.
+
+    Exit 2 with a `gap:` line when there is no etna_shc (st_tool): the
+    gate's row is a gap then. Exit 1 when --check finds other bytes."""
+    tool = st_tool()
+    if tool is None:
+        print("gap: no etna_shc (set ETNA_SHC, or MESA_ETNA_TREE with the build-etnaviv of "
+              "tools/vivante/README.md) or no %s" % v.GLSLANG, file=sys.stderr)
+        return 2
+    v.ETNA_SHC = tool
+    ident = tool_identity()
+    print("gen_shader_table --st: etna_shc %s (%s), %s; ids %s"
+          % (ident["etna_shc"][:16], tool, ident["glslang"], " ".join(GPU_ST)))
+    with open(OUT_TABLE) as f:
+        mx_text = f.read()
+    rows = committed_rows(mx_text)
+    sources = committed_sources(mx_text)
+    if len(rows) < 100:
+        raise SystemExit("gen_shader_table --st: only %d rows parsed from %s" % (len(rows), OUT_TABLE))
+    new_text = emit_table(st_rows(rows, sources, GPU_ST, "ST"), GPU_ST)
+    st = committed_rows(new_text)
+    same, changed, added, removed = rows_that_change(mx_text, new_text)
+    if added or removed or len(st) != len(rows):
+        raise SystemExit("gen_shader_table --st: the ST table does not hold the i.MX8MP rows "
+                         "(%d added, %d removed)" % (len(added), len(removed)))
+    code_rows = sum(1 for a, b in zip(rows, st) if a["code"] != b["code"])
+    words = sum(words_that_differ(a["code"], b["code"]) for a, b in zip(rows, st))
+    print("ST table: %d rows; %d rows differ from the committed i.MX8MP table (%d in their "
+          "instruction words, %d words); the other %d rows are byte for byte the i.MX8MP's"
+          % (len(st), len(changed), code_rows, words, len(same)))
+    for n in changed:
+        print("    differs: %s" % n)
+
+    if check:
+        if not os.path.exists(OUT_TABLE_ST):
+            print("gen_shader_table --st --check: %s does not exist; run --st to make it"
+                  % os.path.relpath(OUT_TABLE_ST, os.path.join(HERE, "..", "..")))
+            return 1
+        with open(OUT_TABLE_ST) as f:
+            old_text = f.read()
+        if old_text == new_text:
+            print("vivante_blobs_st.rs: regenerated byte for byte (%d rows)" % len(st))
+            return 0
+        same2, changed2, added2, removed2 = rows_that_change(old_text, new_text)
+        print("vivante_blobs_st.rs: this host regenerates %d of %d committed rows byte for byte; "
+              "%d changed, %d added, %d removed" % (len(same2), len(same2) + len(changed2) + len(removed2),
+                                                  len(changed2), len(added2), len(removed2)))
+        for n in changed2[:10]:
+            print("    changed: %s" % n)
+        old_lines, new_lines = old_text.split("\n"), new_text.split("\n")
+        first = next((i for i, (a, b) in enumerate(zip(old_lines, new_lines)) if a != b),
+                     min(len(old_lines), len(new_lines)))
+        print("    first differing line %d: committed %r, regenerated %r"
+              % (first + 1, (old_lines[first:first + 1] or [""])[0][:100],
+                 (new_lines[first:first + 1] or [""])[0][:100]))
+        print("    this host's tools: etna_shc %s, %s" % (ident["etna_shc"][:16], ident["glslang"]))
+        return 1
+
+    # The drift: this host's i.MX8MP compile against the committed rows.
+    mx_today = emit_table(st_rows(rows, sources, GPU_IMX8MP, "i.MX8MP"))
+    same_mx, changed_mx, _, _ = rows_that_change(mx_text, mx_today)
+    print("this host's etna_shc remakes %d of %d committed i.MX8MP rows byte for byte with the "
+          "i.MX8MP ids%s" % (len(same_mx), len(rows),
+                              "" if not changed_mx else "; the ST table's difference carries %d rows of "
+                              "toolchain drift: %s" % (len(changed_mx), ", ".join(changed_mx[:10]))))
+    with open(OUT_TABLE_ST, "w") as f:
+        f.write(new_text)
+    print("wrote %s (%d rows)" % (os.path.relpath(OUT_TABLE_ST, os.path.join(HERE, "..", "..")), len(st)))
+    return 0
+
+
 def main():
+    if "--st" in sys.argv[1:]:
+        extra = [a for a in sys.argv[1:] if a not in ("--st", "--check")]
+        if extra:
+            raise SystemExit("gen_shader_table --st takes only --check, not %s" % " ".join(extra))
+        return main_st("--check" in sys.argv[1:])
     if "--append" in sys.argv[1:]:
         return main_append(sys.argv[sys.argv.index("--append") + 1:])
     if "--replace" in sys.argv[1:]:

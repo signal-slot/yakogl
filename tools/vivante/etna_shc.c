@@ -8,7 +8,12 @@
  * (input/output registers, uniform layout, texture units) as JSON. The GPU
  * specs come from the database entry alone: no device is needed.
  *
- *   etna_shc vert|frag in.spv > out.json
+ *   etna_shc vert|frag in.spv [model rev product [eco customer]] > out.json
+ *
+ * Without ids it compiles for the i.MX8MP's GC7000UL. The hardware database
+ * matches all five ids (hwdb.h.py gcQueryFeatureDB), so a row whose customer
+ * id is not 0 -- the STM32MP257F's 0x8000/0x6205/0x80003 row carries 0x15 --
+ * needs the last two as well.
  */
 #include <stdio.h>
 #include <stdint.h>
@@ -80,7 +85,11 @@ static void assign_locations(nir_shader *nir, nir_variable_mode mode, bool unifo
 int main(int argc, char **argv)
 {
 	if (argc < 3) {
-		fprintf(stderr, "usage: etna_shc vert|frag in.spv [model rev productid]\n");
+		fprintf(stderr, "usage: etna_shc vert|frag in.spv [model rev productid [ecoid customerid]]\n");
+		return 2;
+	}
+	if (argc == 4 || argc == 5 || argc == 7 || argc > 8) {
+		fprintf(stderr, "etna_shc: the ids are three (model rev productid) or five (+ ecoid customerid)\n");
 		return 2;
 	}
 	mesa_shader_stage stage = strcmp(argv[1], "vert") == 0 ? MESA_SHADER_VERTEX : MESA_SHADER_FRAGMENT;
@@ -89,16 +98,21 @@ int main(int argc, char **argv)
 	if (!spv)
 		return 1;
 
-	/* The GPU: i.MX8MP's GC7000UL unless told otherwise (model rev product) */
+	/* The GPU: i.MX8MP's GC7000UL unless told otherwise (model rev product,
+	 * then eco and customer, which stay 0 when not given) */
 	struct etna_core_info info = { .model = 0x7000, .revision = 0x6204, .product_id = 0x70003 };
 	if (argc >= 6) {
 		info.model = strtoul(argv[3], NULL, 0);
 		info.revision = strtoul(argv[4], NULL, 0);
 		info.product_id = strtoul(argv[5], NULL, 0);
 	}
+	if (argc >= 8) {
+		info.eco_id = strtoul(argv[6], NULL, 0);
+		info.customer_id = strtoul(argv[7], NULL, 0);
+	}
 	if (!etna_query_feature_db(&info)) {
-		fprintf(stderr, "hwdb: no entry for model 0x%x rev 0x%x product 0x%x\n", info.model,
-			info.revision, info.product_id);
+		fprintf(stderr, "hwdb: no entry for model 0x%x rev 0x%x product 0x%x eco 0x%x customer 0x%x\n",
+			info.model, info.revision, info.product_id, info.eco_id, info.customer_id);
 		return 1;
 	}
 	/* the gross architecture level, as src/etnaviv/drm/etnaviv_gpu.c derives it */
@@ -266,8 +280,9 @@ int main(int argc, char **argv)
 	}
 
 	printf("{\n  \"stage\": \"%s\",\n", stage == MESA_SHADER_VERTEX ? "vert" : "frag");
-	printf("  \"gpu\": { \"model\": \"0x%x\", \"revision\": \"0x%x\", \"halti\": %d },\n",
-	       info.model, info.revision, info.halti);
+	printf("  \"gpu\": { \"model\": \"0x%x\", \"revision\": \"0x%x\", \"product\": \"0x%x\", "
+	       "\"eco\": \"0x%x\", \"customer\": \"0x%x\", \"halti\": %d },\n",
+	       info.model, info.revision, info.product_id, info.eco_id, info.customer_id, info.halti);
 	printf("  \"code_size\": %u,\n  \"num_temps\": %u,\n", v.code_size, v.num_temps);
 	printf("  \"vs_pos_out_reg\": %d,\n  \"vs_pointsize_out_reg\": %d,\n  \"vs_id_in_reg\": %d,\n",
 	       v.vs_pos_out_reg, v.vs_pointsize_out_reg, v.vs_id_in_reg);
