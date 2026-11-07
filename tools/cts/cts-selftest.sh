@@ -814,6 +814,12 @@ gl3check 38 imx8mp-gles3-report-selftest.sh "slice records drafted into the RESU
 # the table once, one range for a huge budget.
 gl3check 39 imx8mp-gles3-sessions-selftest.sh "case counts, board-second estimates, the risk flag and contiguous session ranges"
 
+# 40: mali-deqp-tally.py --self-test on the synthetic NanoPC-T6 dEQP-GLES2
+# slices of testdata/mali-deqp/ (good slices cover, tally and match the pinned
+# markdown; each bad fixture fails naming its rule). The selftest pins its own
+# count of passed checks, so a check that stops running is a failure here too.
+gl3check 40 mali-deqp-tally-selftest.sh "NanoPC-T6 slices covered, tallied and the doc block matched"
+
 if [ "$fail" -eq 0 ]; then
     echo "== all checks passed"
 else

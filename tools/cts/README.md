@@ -974,9 +974,13 @@ work; `driver/docs/nanopc-t6-mali.md` is the board note. The scripts:
   panthor sources; `docs/notes/mali-panthor-kmsg.md` says what the driver logs on
   a reset, a fault and a job timeout). `mali-kmsg-selftest.sh` checks it on the
   captures in `testdata/mali-kmsg/`.
-- `mali-gles2-tree.txt` (the tree table of the four sessions) and
-  `mali-deqp-tally.py` (the slices -> the tally) are not in the tree yet;
-  `--tree` defaults to the former.
+- `mali-gles2-tree.txt`: the tree table of the four sessions; `--tree`
+  defaults to it.
+- `mali-deqp-tally.py --check-cover|--tally [--markdown]|--check-doc`: the
+  slices -> the cover check, the tally by status and cause, and the
+  `docs/es2-cts-failures.md` block (`docs/es2/board-recipe-mali.md` section
+  7). `mali-deqp-tally-selftest.sh` runs its `--self-test` on
+  `testdata/mali-deqp/` (`cts-selftest.sh` check 40).
 
 Nothing in them names a machine. The board comes from the farm's lease
 (`target:nanopc-t6`, over ssh), and `BOARD_SSH_OPTS` (optional) is passed to

@@ -123,9 +123,10 @@ commit message and the RESULTS.md row. Its files:
 The raw `.qpa`, stdout and stderr and the whole `dmesg` capture stay in the
 runner's `RAW_DIR` and are never committed. A slice is checked for the
 redaction rules below by the runner itself; read it again before committing.
-`tools/cts/mali-gles2-tree.txt` (the four-session tree table) and
-`tools/cts/mali-deqp-tally.py` (the tally over slices) are coming; this
-section describes the slice, not them.
+`tools/cts/mali-gles2-tree.txt` is the four-session tree table and
+`tools/cts/mali-deqp-tally.py` the cover check and tally over slices
+(`docs/es2/board-recipe-mali.md` section 7); this section describes the
+slice, not them.
 
 ## Redaction: what must never appear
 

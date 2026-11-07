@@ -22,7 +22,7 @@ deliberately not described here.
 | `tools/cts/mali-deqp-run.sh` | on main | the runner: one chunk per row, a slice per session (section 4) |
 | `tools/cts/mali-deqp-selftest.sh` | on main | its self-test, no board (section 5) |
 | `tools/cts/mali-kmsg.py`, `mali-kmsg-selftest.sh` | on main | the panthor message classifier (section 6) |
-| `tools/cts/mali-deqp-tally.py` | to be completed | the tally over slices (section 7) |
+| `tools/cts/mali-deqp-tally.py`, `mali-deqp-tally-selftest.sh` | on main | the tally over slices (section 7) |
 | the board rules | on main | section 8 |
 
 ## 1. The library: `tools/mali/panthor-gles/`
@@ -335,12 +335,30 @@ unusable until the module is reloaded, which the runner never does: later
 chunks then fail to draw and the session stops there for a person (note
 section 1, item 5).
 
-## 7. The tally: to be completed
+## 7. The tally
 
-`tools/cts/mali-deqp-tally.py` (item `mali-deqp-tally`, not merged) reads the
-slices of section 4 and checks cover, tally and the doc rows. Its options, the
-causes it separates and the lines it adds to `docs/es2-cts-failures.md`,
-`tools/cts/RESULTS.md` and `tools/cts/STATUS.md` are added when it is on main.
+`tools/cts/mali-deqp-tally.py` (stdlib, run with `python3 -I`) reads the
+slices of section 4:
+
+- `--check-cover MUSTPASS SLICE...` exits 0 only when every mustpass case is
+  in exactly one slice with a status (`Lost` with one of `chunk-crash`,
+  `chunk-hang`, `board-lost`, `not-run`), every `chunks.tsv` row has its
+  `kmsg`, `resets`, `ssh_after` and `boot_same` fields, and every slice's
+  `commit` is an ancestor of `origin/main` (`--no-git` skips that, for
+  fixtures; `--main-ref` names another ref).
+- `--tally [--markdown] SLICE...` prints the counts by status and the non-Pass
+  counts by cause: the detail with numbers and case names stripped, or
+  `refused:<name>` when the detail or the chunk's exit line names a back-end
+  refusal. `--markdown` prints the table that goes into
+  `docs/es2-cts-failures.md` between `<!-- mali-deqp-tally begin -->` and
+  `<!-- mali-deqp-tally end -->`.
+- `--check-doc DOC SLICE...` exits 0 only when that block equals the
+  `--markdown` output.
+
+`tools/cts/mali-deqp-tally-selftest.sh` runs `--self-test` on the synthetic
+slices of `tools/cts/testdata/mali-deqp/` and pins its count of passed checks;
+`tools/cts/cts-selftest.sh` runs it as check 40, so the gate's
+`cts-selftest.sh` row covers it.
 
 ## 8. The board rules
 
