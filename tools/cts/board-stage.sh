@@ -12,6 +12,7 @@
 #   tools/cts/board-stage.sh am62p gles3      the AM62P's whole dEQP-GLES3 tree
 #   tools/cts/board-stage.sh x2 common        the Armadillo-X2's gl_test image (build only)
 #   tools/cts/board-stage.sh x2 deqp          the Armadillo-X2's dEQP-GLES2 tree image (build only)
+#   tools/cts/board-stage.sh x2 gles3         the Armadillo-X2's dEQP-GLES3 tree image (build only)
 #
 # The X2 (the Armadillo-X2, tools/board.sh's kexec-dev development board) is
 # staged as builds only: this stage runs no board command for x2. It reads no
@@ -26,8 +27,14 @@
 # image directories beside it. The dependency layout is the imx8mp one (the
 # same host entries; GLMARK2_SRC is not read: glmark2 has no Armadillo-X2
 # image, so x2 common builds the gl_test row alone). The images end at
-# $IMX8MP_OUT/x2/gltest-<sha8> and $IMX8MP_OUT/x2/deqp-<sha8>; running them is
-# tools/board.sh x2 (a person or the board runner holds the board).
+# $IMX8MP_OUT/x2/gltest-<sha8>, $IMX8MP_OUT/x2/deqp-<sha8> and
+# $IMX8MP_OUT/x2/es3-<sha8>; running them is tools/board.sh x2 (a person or
+# the board runner holds the board). x2 gles3 is the whole GLES3 mustpass as
+# one table image (tools/cts/imx8mp-gles3-tree.txt, imx8mp-deqp-build.sh
+# --gles3): its stage 1 is the gles3 one of imx8mp-deqp-stage1.sh gles3,
+# DEQP_STAGE1_GLES3 (default $IMX8MP_OUT/deqp-stage1-gles3, shared with the
+# Verdin), not the layout's DEQP_STAGE1; a missing one stops the stage (exit 2)
+# before any build. ms4 has no X2 tree and is refused (exit 2).
 #
 # <board> is am62p, imx8mp, pi4 or x2, as tools/board.sh names them. The images
 # are built from HEAD (build/common/<board>-<sha8>, build/deqp/<board>-<sha8>)
@@ -38,7 +45,7 @@
 # once-*.bin in the board's stage directory (the Verdins' eMMC route); the run
 # removes it before it starts and says so in one line.
 #
-# gles3 (AM62P only) builds the 46 images of tools/cts/am62p-gles3-tree.txt
+# gles3 on the AM62P builds the 46 images of tools/cts/am62p-gles3-tree.txt
 # (DEQP_MODULE=gles3, REPORT_ES2 off, each image checked with --gles3) into
 # build/deqp/am62p-gles3-<sha8> and runs `board.sh am62p tree` into
 # records/am62p/deqp-gles3-<sha8>. It needs a gles3 stage 1, which is not the
@@ -96,13 +103,16 @@ clear_stale_once() {
 #   imx8mp        IMX8MP_OUT, the image directory of imx8mp-env.sh (board x2
 #                 uses the same layout: its images go to $IMX8MP_OUT/x2/)
 #   deqp, ms4     stage 1: DEQP_WORK (am62p, pi4) or DEQP_STAGE1 (imx8mp, x2)
+#   gles3         DEQP_WORK on the am62p (its gles3 stage 1 sits beside it);
+#                 not board x2: its stage 1 is DEQP_STAGE1_GLES3, no deps.toml
+#                 entry (default under IMX8MP_OUT), checked by the stage itself
 needed_deps() {
     local layout=$1 what=$2 board=${3:-}
     printf '%s\n' ZEPHYR_WS WEST_VENV ZEPHYR_SDK_INSTALL_DIR
     [ "$what" = common ] && [ "$board" != x2 ] && echo GLMARK2_SRC
     [ "$layout" = am62p ] && echo PVR_FW_BLOB
     [ "$layout" = imx8mp ] && echo IMX8MP_OUT
-    if [ "$what" != common ]; then
+    if [ "$what" != common ] && ! { [ "$what" = gles3 ] && [ "$board" = x2 ]; }; then
         if [ "$layout" = imx8mp ]; then echo DEQP_STAGE1; else echo DEQP_WORK; fi
     fi
     return 0
@@ -132,7 +142,7 @@ check_deps() {
 }
 [ "${BOARD_STAGE_SOURCE_ONLY:-}" = 1 ] && return 0 2>/dev/null
 
-usage() { echo "usage: tools/cts/board-stage.sh am62p|imx8mp|pi4 common|deqp|ms4|gles3 | x2 common|deqp" >&2; exit 2; }
+usage() { echo "usage: tools/cts/board-stage.sh am62p|imx8mp|pi4 common|deqp|ms4|gles3 | x2 common|deqp|gles3" >&2; exit 2; }
 die() { echo "board-stage.sh: $1" >&2; exit "${2:-2}"; }
 [ $# -eq 2 ] || usage
 board=$1 what=$2
@@ -144,14 +154,14 @@ x2) layout=imx8mp key=X2 ;;   # same host dependency layout as the Verdin (imx8m
 *) usage ;;
 esac
 case "$what" in common | deqp) ;; ms4 | gles3)
-    [ "$board" = x2 ] && die "$what is the AM62P's tree; the x2 stage builds the common set's gl_test image and the dEQP-GLES2 tree image, and runs no board"
-    [ "$board" = am62p ] || die "$what is the AM62P's tree only" ;; *) usage ;; esac
+    [ "$board:$what" = x2:ms4 ] && die "ms4 is the AM62P's tree; the x2 stage builds the gl_test image, the dEQP-GLES2 and the dEQP-GLES3 tree images, and runs no board"
+    [ "$board" = am62p ] || [ "$board:$what" = x2:gles3 ] || die "$what is the AM62P's tree only" ;; *) usage ;; esac
 
 cd "$(git rev-parse --show-toplevel)" || die "not in the repository"
 H8=$(git rev-parse --short=8 HEAD)
 
 # gles3: the arm and the directories, and the dry run, before the layout is read
-if [ "$what" = gles3 ]; then
+if [ "$what" = gles3 ] && [ "$board" = am62p ]; then
     arm=
     case "${DEQP_PVR_NATIVE_3D:-}" in
     '') ;;
@@ -171,7 +181,7 @@ if [ "$what" = gles3 ]; then
     fi
 fi
 
-# x2: its dry run names the two X2 outputs before the layout is read (as the
+# x2: its dry run names the X2 outputs before the layout is read (as the
 # gles3 one above); nothing is built, no board is touched, no deps needed.
 if [ "$board" = x2 ] && [ "${BOARD_STAGE_DRY_RUN:-}" = 1 ]; then
     echo "board-stage.sh: x2 $what at $H8 (dry run: nothing is built; the x2 stage runs no board)"
@@ -183,6 +193,10 @@ if [ "$board" = x2 ] && [ "${BOARD_STAGE_DRY_RUN:-}" = 1 ]; then
     deqp)
         echo "board-stage.sh\$ IMX8MP_BOARD=x2 tools/cts/imx8mp-deqp-build.sh deqp-$H8 'dEQP-GLES2.info.*' --table tools/cts/imx8mp-full-tree.txt"
         echo "  -> \$IMX8MP_OUT/x2/deqp-$H8/zephyr/zephyr.bin (arms WDOG1: \"gc_wdog_arm: armed\")" ;;
+    gles3)
+        echo "board-stage.sh: x2 gles3 needs the gles3 stage 1 at \${DEQP_STAGE1_GLES3:-\$IMX8MP_OUT/deqp-stage1-gles3} (tools/cts/imx8mp-deqp-stage1.sh gles3)"
+        echo "board-stage.sh\$ IMX8MP_BOARD=x2 tools/cts/imx8mp-deqp-build.sh --gles3 es3-$H8 'dEQP-GLES3.info.*' --table tools/cts/imx8mp-gles3-tree.txt"
+        echo "  -> \$IMX8MP_OUT/x2/es3-$H8/zephyr/zephyr.bin (arms WDOG1: \"gc_wdog_arm: armed\")" ;;
     esac
     exit 0
 fi
@@ -282,6 +296,20 @@ ms4)
         run tools/board.sh am62p tree tools/cts/am62p-ms4-tree.txt "records/am62p/deqp-ms4-$H8" || die "ms4 tree failed" 1
     ;;
 gles3)
+    if [ "$board" = x2 ]; then
+        # the whole GLES3 mustpass as one table image (133 rows, selector i);
+        # running it is `TREE_IMAGE=$IMX8MP_OUT/x2/es3-$H8/zephyr/zephyr.bin
+        # tools/board.sh x2 tree tools/cts/imx8mp-gles3-tree.txt <dir>` -- a
+        # board step, never this stage. The stage 1 is the one --gles3 takes.
+        X2_S1=${DEQP_STAGE1_GLES3:-$IMX8MP_OUT/deqp-stage1-gles3}
+        [ -f "$X2_S1/build/modules/gles3/libdeqp-gles3-package.a" ] ||
+            die "no gles3 stage 1 at $X2_S1 (tools/cts/imx8mp-deqp-stage1.sh gles3, or set DEQP_STAGE1_GLES3)"
+        run tools/cts/imx8mp-deqp-build.sh --gles3 "es3-$H8" 'dEQP-GLES3.info.*' --table tools/cts/imx8mp-gles3-tree.txt ||
+            die "X2 dEQP-GLES3 image build failed ($IMX8MP_OUT/x2/es3-$H8.log)" 1
+        echo "board-stage.sh: X2 image: $IMX8MP_OUT/x2/es3-$H8/zephyr/zephyr.bin"
+        echo "board-stage.sh: $board $what at $H8 done"
+        exit 0
+    fi
     # the gles3 stage 1: GLES3_WORK, else beside the GLES2 one
     G3_WORK=${GLES3_WORK:-${DEQP_WORK%/}-gles3}
     if [ ! -f "$G3_WORK/build/modules/gles3/libdeqp-gles3-package.a" ]; then

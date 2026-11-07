@@ -151,12 +151,13 @@ done
 # a failed or image-less build, the WDOG self-arm flag, refused arguments),
 # pi4-deqp-images.sh against a fake cmake/ninja (the gles2 dry run and
 # build exactly as before, the gles3 path's three arguments and --gles3
-# check, the stage 1 check), and needed_deps against what the builders read.
+# check, the stage 1 check), needed_deps against what the builders read, and
+# board-stage.sh x2 gles3 (its deps, its dry run, the sets still refused).
 # Its count of passed checks is pinned, so a selftest that stops checking
 # reads as a failure here, not as a pass -- and a new check in
 # images-selftest.sh without a bump here is a red row too (pull request
 # #1838 failed exactly there).
-IMAGES_SELFTEST_CHECKS=138
+IMAGES_SELFTEST_CHECKS=150
 echo
 echo "== 20. images-selftest.sh: the image builders against a fake west"
 iout=$("$HERE/images-selftest.sh" 2>&1)
