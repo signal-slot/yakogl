@@ -382,53 +382,45 @@ is from the two-row set.
 ## Mali: NanoPC-T6 (RK3588, Valhall v10, panthor), gl_test sweep
 
 `panthor-gltest --sweep` on the board's own Linux (panthor, not Zephyr), the
-newest record: `tools/cts/log/2026-11-01-final3/` (board clock 2026-11-01,
-20:13 UTC; plan #154 full-gate-final, after cubebias101, loops-rt,
-frame-tex2darray, ubo166 and 606ce713 merged). Code: main `0ff58329` plus
-the record's predictions commit `8222fff1`, built on the board itself
-(`yakogl-build=v0.1.0-131-g8222fff`).
+newest record: `tools/cts/log/2026-11-07-t6-step4a/` (board clock 2026-11-07,
+15:25 UTC; plan #309 fix-matattr-63, after the step-4 lowerings merged).
+Code: the integration tip `44f7b508` plus the record's predictions commit
+`e8199bf4`, built on the board itself (`yakogl-build=v0.1.0-479-ge8199bf`).
 
 | Runs | Cases | PASS | REFUSED | NO-CASE | SKIP | FAIL | FAULT | Kernel messages |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| sweep 1 and 2, equal (the 256 verdict lines are identical) | 256 | **132** | 27 | 84 | 9 | 3 | 1 | 1 (case 104's job timeout) |
+| sweep 1 and 2, equal (the 256 verdict lines are identical) | 256 | **147** | 15 | 83 | 9 | 2 | 0 | 0 |
 
-- The PASS set is the previous record's 126 (`2026-10-28-final`) to the
-  string, plus 6:
-  - `verdict case 214 splitkick: PASS` (was `FAIL rc -1, first bad check 5
-    got 0xffc0c0c0 want 0xff808080`; #32, the sample store ea3424fc).
-  - `verdict case 2 texture: PASS` (was `FAIL rc -1, first bad check 26 got
-    0xff000080 want 0xff0040bf`) and `verdict case 42 es3array: PASS` (was
-    `REFUSED draw: mali: a texture other than one 2D image or a cube map of
-    six faces (an array, a 3D texture) is not built yet`; frame-tex2darray).
-  - `verdict case 45 es3dyn: PASS` (was `REFUSED compile: ... a loop other
-    than one a constant bound ends within 32 passes ...`; loops-rt).
-  - `verdict case 166 fshprobe: PASS` (was `REFUSED compile: ... a uniform
-    past the FAU's 128 words (Mesa loads it from the UBO) is not lowered
-    yet`; ubo166).
-  - `verdict case 216 mipchains: PASS` (was `NO-CASE`: a case added to
-    gl_test since).
-
-  Against the frameboard record's 102 it adds 30. Every earlier PASS set
-  (frameboard, tip, mid, final) is a subset of this one
-  (`tools/mali/sweep_passsets.py --require
-  8,28,29,30,113,122,169,196,197,198,207,208,209 --delta tools/cts/log`:
-  exit 0). Cases 8, 28, 29, 30, 113, 122, 169, 196, 197, 198, 207, 208 and
-  209 PASS in both sweeps.
-- Two cases loops-rt let compile now fail on the board (#33), were REFUSED
-  by the loop line:
-  - `verdict case 98 uniloop: FAIL rc -1, first bad check 4 got 0xfff00010
-    want 0xfff00000`.
-  - `verdict case 104 divloop: FAULT work lost 2, group state/fatal queues
-    0x1/0x0, vm usable true` (`work lost 1` in the first 10-case run), with
-    the kernel's `panthor fb000000.gpu: [drm] job timeout` once per run; the
-    GPU stays usable and the cases after it are unaffected.
-- Unchanged FAILs: `verdict case 63 matattr: FAIL rc -1, first bad check 1
-  got 0xff800000 want 0xff804000` (matrix attribute columns 1..n read 0,
-  #32) and `verdict case 141 es3instdiv: FAIL rc -1, first bad check 2 got
-  0xff00ff00 want 0x80008000` (a divisor-2 instanced attribute, #32).
-- Cases 2, 42, 45, 91, 98, 104, 149, 166, 214 and 216 also ran twice on
-  their own (`cases-1.txt`, `cases-2.txt`), with the sweeps' lines (case
-  104's count of lost work aside).
+- The PASS set is the previous record's 132 (`2026-11-01-final3`) to the
+  string, plus 15, each `verdict case <n> <name>: PASS`: 46 es3size, 48
+  es3vol, 49 es3facing, 63 matattr, 68 armselect, 71 deadloop, 74 ifoutput,
+  76 boolany, 81 branchquad, 89 flatlast, 98 uniloop, 104 divloop, 141
+  es3instdiv, 142 unibranch, 148 texbranch (was REFUSED compile, or for 63,
+  98, 104 and 141 the FAIL/FAULT lines of final3). Every earlier PASS set
+  (frameboard, tip, mid, final, final3) is a subset of this one
+  (`tools/mali/sweep_passsets.py --delta tools/cts/log`: exit 0).
+- FAIL (#32): `verdict case 55 es3mrt: FAIL rc -1, first bad check -1 got
+  0x00000000 want 0x00000000` (GL error 0x500 from
+  `glFramebufferTexture2D(GL_COLOR_ATTACHMENT1)`, before any draw) and
+  `verdict case 206 es3levels: FAIL rc -1, first bad check 2 got 0x04602020
+  want 0x04602090` (3D levels 1 and 2 read level 0).
+- REFUSED, the 15 lines (#33 unless named): 19 (`REFUSED link: ... reads
+  part of a varying ... ('Tint')`), 44 and 91 (`REFUSED draw: mali: a
+  texture stored other than RGBA8, sRGB8_A8, R32F or ETC2 ... is not built
+  yet`, #32: sampling an RGBA16F texture), 70 (a constant product), 77, 86,
+  138, 181, 182, 188, 199 (arithmetic), 80 (an indexed local), 101 (a vertex
+  look-up at a constant lane), 149 (a second vertex look-up), 218 (fp16
+  arithmetic on gl_FragCoord; a case added since final3).
+- Mesa 26.2.1 references of 63, 141, 55 and 91 on the board (record README
+  section 2): 141's Attributes and Buffers, 55's blend descriptors and FBD,
+  91's two RGBA16F blend descriptors, DCD0/DCD1 and render target are ours
+  byte for byte, the addresses and the render targets' `Surface stride`
+  aside; 63's programs are byte-equal to the in-tree references, its
+  records differ in where the column offset goes (Attribute `Offset` in
+  ours, the Buffer's address and size in Mesa's).
+- The 20 cases predicted to pass, with 80, 101 and 149, also ran twice on their own
+  (`cases-1.txt`, `cases-2.txt`, identical): `23 case(s) run: FAIL 2, PASS
+  15, REFUSED 6`.
 
 ## ES 3.0: dEQP-GLES3 (stage 4)
 
