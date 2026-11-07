@@ -520,7 +520,7 @@ fn still_usable() {
 fn refused_target_larger_than_2048() -> GLenum {
     let fb = fbo(&[GL_RGBA8], 4096, 16);
     // SAFETY: plain GL calls.
-    let e = unsafe {
+    unsafe {
         glClearColor(1.0, 0.0, 0.0, 1.0);
         glClear(GL_COLOR_BUFFER_BIT);
         glFinish();
@@ -528,8 +528,7 @@ fn refused_target_larger_than_2048() -> GLenum {
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glDeleteFramebuffers(1, &fb);
         e
-    };
-    e
+    }
 }
 
 /// "a colour output with no attachment slot": a fragment shader writes
@@ -540,14 +539,13 @@ fn refused_output_without_a_slot() -> GLenum {
     program(FS2);
     draw_triangle();
     // SAFETY: plain GL calls.
-    let e = unsafe {
+    unsafe {
         glFinish();
         let e = err();
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glDeleteFramebuffers(1, &fb);
         e
-    };
-    e
+    }
 }
 
 /// "draw buffer 0 is GL_NONE while a later draw buffer is written": the list
@@ -563,14 +561,13 @@ fn refused_draw_buffer_zero_none() -> GLenum {
     }
     draw_triangle();
     // SAFETY: plain GL calls.
-    let e = unsafe {
+    unsafe {
         glFinish();
         let e = err();
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glDeleteFramebuffers(1, &fb);
         e
-    };
-    e
+    }
 }
 
 /* ---- refused with -EINVAL today: the application sees GL_OUT_OF_MEMORY ---- */
