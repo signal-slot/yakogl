@@ -57,9 +57,10 @@ compiles and the first frame (terrain 513 M, shadow 38 M, refract 1501 M).
 6 937 384 to 6 937 645). The tables use `cg.out.4`. `cg.out.8` is the last
 frame plus glmark2's teardown, and `cg.out` is the exit; neither is used.
 
-The tables come from `callgrind_annotate --inclusive=yes build/cg/<scene>/cg.out.4`,
-or, as here (`callgrind_annotate` could not be run in this session), from the
-dump itself with the script in the appendix:
+What was run: valgrind's callgrind, as above, on all three scenes. The tables
+were made from the dumps with the script in the appendix (`cgrep.py`), not
+with `callgrind_annotate`; `callgrind_annotate --inclusive=yes
+build/cg/<scene>/cg.out.4` reads the same dumps and is the way to check them:
 
 ```sh
 python3 -I cgrep.py build/cg/terrain/cg.out.4 10 0x0000000000198400 0x0000000000197a00
