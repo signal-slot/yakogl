@@ -80,12 +80,22 @@ the chain, `backend.rs:6124-6131`, `:6151-6152`, `:6268-6269`):
 | tilt-shift horizontal | 800x600 | 1 |
 | its chain | 400x300 | 9 |
 | tilt-shift vertical (the window) | 800x600 | 1 |
-| **total** | 4 sizes | **51** |
+| one more kick before the next frame's height map (host run below) | taken as 800x600 | 1 |
+| **total** | 4 sizes | **52** |
 
-The 43 chain kicks match the "43 of its 53 kicks a frame" counted on the
-board (`backend.rs:6213-6215`; `am62p-pvr-mipmap-kicks.md`, "The cost", 53
-at `d3b8d4b2`). The two kicks this table lacks are scene kicks (splits or
-resolves) and do not change the counts below. The 512x512 specular map and
+The host harness confirms the order and the count:
+`GM2_KICKS=1 GM2_WRITE=0 GM2_FRAMES=4 GM2_ENTRIES='^terrain$'
+tools/hostharness/glmark2/run.sh <glmark2> build/gm2-hwrt powervr` at
+`d83e25b5`. Its `gm2: draw` lines step through framebuffers
+1, 2, 4, 5, 6, 4, 7, 0 a frame, at kick ids 136, 137, 138, 148, 157, 166,
+176, 186, then 188 for the next frame's first draw. So a frame is 52 kicks:
+9 between terrain and bloom, 8 after each bloom pass, 9 after the overlay
+and after tilt-shift, and one kick (187) after the window's draw that holds
+no glmark2 draw. The 43 chain kicks also match the "43 of its 53 kicks a
+frame" counted on the board (`backend.rs:6213-6215`;
+`am62p-pvr-mipmap-kicks.md`, "The cost", 53 at `d3b8d4b2`). The extra kick's
+size is not printed. The model takes it as 800x600; the counts at main do
+not depend on it (the argument under the table holds for any size). The 512x512 specular map and
 its chain (level 1 256x256) are rendered in the scene's setup only
 (`scene-terrain.cpp:300`).
 
@@ -96,7 +106,7 @@ The glmark2 host harness cannot measure these holds. Its OSAL
 `driver/rust/src/gpu/pvr/render.rs`. The counts therefore come from a
 replay of the code above: `hwrt_get`'s loop line for line (`:716-772`, the
 recycle `:779-792`), the throttle at `:1394-1398`, and the frame-set rule
-from limit 1, fed with the 51 kicks of the table for 20 frames. The case
+from limit 1, fed with the 52 kicks of the table for 20 frames. The case
 taken is the worst one for the holds: the GPU slower than the CPU, so at
 each submit only the kicks before N - nsets have completed. The board
 supports this case: GL time is 81.9 of terrain's 83.06 ms a frame
@@ -115,8 +125,8 @@ Counts a steady frame (in brackets: the first frame of the scene):
 | 6 or 8 | 4 | 31 | 0 | 0 / 0 |
 | 8 | 8 | 0 | 0 | 0 / 0 (20 / 0) |
 | 12 | 12 | 0 | 0 | 0 / 0 |
-| 16 | 16 | 17 | 0 | 0 / 0 |
-| 17 | 16 | 17 | 28 | 0 / 0 |
+| 16 | 16 | 10 | 0 | 0 / 0 |
+| 17 | 16 | 10 | 27 | 0 / 0 |
 
 Why main has none:
 
@@ -230,8 +240,8 @@ the render pool at the defaults (`zephyr/Kconfig:104-116`: 4 sets are
   example a per-caller entry in `wait_for`'s `kick_times::wait_begins`,
   would turn them into a record value. That is code in
   `driver/rust/src/gpu/pvr/`, #301's.
-- The 2 kicks a frame that the table lacks (53 on the board) and the
-  window's sample count are taken from the board's count and the default
-  configuration, not read from a terrain kick log. A `GM2_KICKS=1` host
-  run of terrain (`tools/hostharness/glmark2/README.md`) lists the passes.
-  It could not be run for this note.
+- The host run counts 52 kicks a frame and the board counted 53 at
+  `d3b8d4b2`. The board's extra kick was not identified. The size of
+  kick 187 and the window's sample count are not in the `GM2_KICKS` lines,
+  so the model takes 800x600 and one sample for both. None of the zeros at
+  main depends on them.
