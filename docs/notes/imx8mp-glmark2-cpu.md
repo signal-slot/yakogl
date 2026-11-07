@@ -315,10 +315,26 @@ Host breakdowns: [gc-slow-terrain.md](gc-slow-terrain.md) and
 [gc-slow-shadow-refract.md](gc-slow-shadow-refract.md); their ranked tables
 hold the numbers and the confirming records, estimates until the X2 measures.
 
-- terrain (250 ms): GPU-bound. Ranked: GPU shading of the 9 passes (early depth and tiled targets, noise-shader length), then the 52 kicks (one kick per mipmap chain), the mid-frame `finish()` with the CPU tiled copies, the 1 ms fence poll (fence-irq). The CPU mipmap fallback is ruled out.
+- terrain (250 ms): GPU-bound. Ranked: GPU shading of the 9 passes (early depth and tiled targets, noise-shader length), then the 52 kicks, 48 of them `glGenerateMipmap`'s one-level kicks ([gc-slow-host-counts.md](gc-slow-host-counts.md); fix: one kick per mipmap chain), the mid-frame `finish()` with the CPU tiled copies, the 1 ms fence poll (fence-irq). The CPU mipmap fallback is ruled out.
 - shadow (500 to 1000 ms): the CPU D24S8 to R32F depth resolve over the non-cacheable carve-out, three `ldrb` loads a texel (fix: no CPU resolve, the TPU samples the depth surface, `gc-depth-sample.md`), then cache maintenance on the two 7.7 MB ranges, the CPU waits outside the swap, the GPU work.
 - refract (500 to 1000 ms): the same depth resolve first, then as shadow; its mipmap chains are on the GPU. The shared cause comes first for both scenes.
 - "500 ms" is a lower bound of the FPS rounding (2 FPS is 500 to under 1000 ms), not a fixed wait.
+
+### Further notes
+
+- [gc-terrain-shaders.md](gc-terrain-shaders.md): terrain's noise shader is 840 GC instructions in ours against 414 in Mesa etnaviv, and the five compiler causes.
+- [gc-terrain-shaders-rest.md](gc-terrain-shaders-rest.md): the same count for terrain's other shaders (terrain, tilt-shift, bloom, normal map), priced per pass.
+- [gc-shadow-refract-shaders.md](gc-shadow-refract-shaders.md): shadow's and refract's shaders against etnaviv's (2 to 2.2x on the larger ones) and what that is worth in ms a frame.
+- [gc-slow-stream-diff.md](gc-slow-stream-diff.md): the three scenes' command streams against Mesa's, kick by kick (Mesa submits a frame once: shadow 1 against 3, refract 1 against 13, terrain 2 against 52).
+- [gc-slow-terrain-stream-diff.md](gc-slow-terrain-stream-diff.md): terrain's streams against Mesa's, pass by pass and register by register, ranked and mapped to the plan's items.
+- [gc-tiled-targets.md](gc-tiled-targets.md): what tiled targets, tile status, fast clear and early depth are on the GC7000UL, what the back end needs, and what each saves.
+- [gc-tiled-wire.md](gc-tiled-wire.md): the design that turns that study into fix items, file by file.
+- [gc-depth-sample.md](gc-depth-sample.md): whether the texture unit can sample the D24S8 depth surface (yes on paper, from Mesa's format; one board case decides).
+- [gc-depth-sample-wire.md](gc-depth-sample-wire.md): the code of depth-sample-gc for each answer of that board case.
+- [gc-depth-resolve.md](gc-depth-resolve.md): the CPU depth resolve on whole rows with plain slices (item 2's cheap step).
+- [gc-slow-host-counts.md](gc-slow-host-counts.md): the harness's GC cost counts a frame (waits, kicks, draws, cache KiB) before the fixes, and what each fix should move.
+- [gc-slow-glcore-cpu.md](gc-slow-glcore-cpu.md): callgrind of the GL core: `src/gl` is under 3% of a frame's instructions in all three scenes.
+- [gc-kick-continue.md](gc-kick-continue.md): the design of a render-target change that does not end the GC kick.
 
 ## What would settle the open points
 
