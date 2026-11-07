@@ -1,0 +1,7 @@
+[    4.100000] panthor fb000000.gpu: [drm] clock rate = 198000000
+[    4.200000] panthor fb000000.gpu: EM: created perf domain
+[    4.300000] panthor fb000000.gpu: [drm] mali-g610 id 0xa867 major 0x0 minor 0x0 status 0x5
+[    4.400000] panthor fb000000.gpu: [drm] Firmware git sha: 0123456789abcdef
+[    4.500000] panthor fb000000.gpu: [drm] CSF FW using interface v1.1.0, Features 0x0 Instrumentation features 0x71
+[    4.600000] [drm] Initialized panthor 1.5.0 for fb000000.gpu on minor 0
+[  120.000000] usb 1-1: new high-speed USB device number 2

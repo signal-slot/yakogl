@@ -1,0 +1,7 @@
+<6>[    4.100000] panthor fb000000.gpu: [drm] clock rate = 198000000
+<4>[  310.250000] panthor fb000000.gpu: [drm] job timeout: pid=1234, comm=deqp-gles2, seqno=77
+<4>[  310.250100] panthor fb000000.gpu: [drm] CSG_PROGRESS_TIMER_EVENT: pid=1234, comm=deqp-gles2
+<4>[  310.250200] panthor fb000000.gpu: [drm] CSG slot 1 progress timeout
+<3>[  310.750000] panthor fb000000.gpu: [drm] *ERROR* FW ping timeout, scheduling a reset
+<3>[  311.250000] panthor fb000000.gpu: [drm] *ERROR* Fast reset failed, trying a slow reset
+<6>[  311.500000] panthor fb000000.gpu: [drm] CSF FW using interface v1.1.0, Features 0x0 Instrumentation features 0x71

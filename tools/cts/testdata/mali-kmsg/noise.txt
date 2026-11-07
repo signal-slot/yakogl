@@ -1,0 +1,5 @@
+[    1.000000] Linux version 6.18.0 (build@host) #1 SMP
+[    2.000000] usb 1-1: new high-speed USB device number 2
+[    3.000000] job timeout: pid=1, comm=other, seqno=1
+[    4.000000] mali: some other driver, GPU Fault 0x1 (X) at 0x0
+[    5.000000] mmc0: Unhandled Page fault in AS1 at VA 0x0
