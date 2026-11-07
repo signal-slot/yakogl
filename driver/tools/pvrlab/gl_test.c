@@ -442,6 +442,14 @@
  *               The V3D refuses the shader by name today ("a shadow
  *               look-up"): FAIL at the link, not a wrong picture. Skipped
  *               in an ES 2.0 library. All three GPUs; not in the set
+ * 220 lodtime   a 1:1 full-window textured quad timed twice on a mipmapped
+ *               texture, GL_LINEAR against GL_LINEAR_MIPMAP_LINEAR (the
+ *               question of v3d-terrain-gpu.md, "Fix candidates after the
+ *               fix", 1): LODTIME_DRAWS draws of each, one glFinish at the
+ *               end of each; logs the ms a draw per filter and the ratio.
+ *               Log only, not in the regression set (a measurement); checks
+ *               the program, the framebuffer, both pictures and no GL error.
+ *               All three GPUs
  * 180 teardown  a 1024x1024 texture sampled, the job flushed and left to
  *               finish unobserved, the texture deleted and one of the same
  *               size made: both read back (red, then green); on the V3D
@@ -8544,7 +8552,7 @@ static const char *const case_names[] = {
 	 * `gl_test: case 65 polyunit: FAIL`, a line the program could not emit.
 	 * A reader grepping for it would have found nothing and concluded the
 	 * case had not run. 63 was still missing when 65/66/67 were added. */
-	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain", [185] = "kindcost", [186] = "fcsplit", [187] = "predarm", [188] = "predif", [189] = "mulone", [190] = "blendonce", [191] = "varyfma", [192] = "predlive", [193] = "offarm", [194] = "offarmn", [195] = "ifbranch", [196] = "occl", [197] = "vtxgrid", [198] = "a2cconst", [199] = "es3trunc", [200] = "intrt", [201] = "usamp", [202] = "blitconv", [203] = "tfcap", [204] = "srgb", [205] = "mappbo", [206] = "es3levels", [207] = "msaazs", [208] = "msaapre", [209] = "varyorder", [210] = "occlacc", [211] = "msaablend", [212] = "ifsel", [213] = "discloop", [214] = "splitkick", [215] = "shadowmap", [216] = "mipchains", [217] = "forcedpr", [218] = "shadowcmp", [219] = "kickpair",
+	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain", [185] = "kindcost", [186] = "fcsplit", [187] = "predarm", [188] = "predif", [189] = "mulone", [190] = "blendonce", [191] = "varyfma", [192] = "predlive", [193] = "offarm", [194] = "offarmn", [195] = "ifbranch", [196] = "occl", [197] = "vtxgrid", [198] = "a2cconst", [199] = "es3trunc", [200] = "intrt", [201] = "usamp", [202] = "blitconv", [203] = "tfcap", [204] = "srgb", [205] = "mappbo", [206] = "es3levels", [207] = "msaazs", [208] = "msaapre", [209] = "varyorder", [210] = "occlacc", [211] = "msaablend", [212] = "ifsel", [213] = "discloop", [214] = "splitkick", [215] = "shadowmap", [216] = "mipchains", [217] = "forcedpr", [218] = "shadowcmp", [219] = "kickpair", [220] = "lodtime",
 };
 
 /* ---- case 67: what a framebuffer object does NOT have -----------------------
@@ -20404,6 +20412,119 @@ out:
 }
 #endif /* GL_TEST_PVR */
 
+/* ---- case 220: a 1:1 quad, LINEAR against LINEAR_MIPMAP_LINEAR (lodtime) ---
+ *
+ * v3d-terrain-gpu.md ("Fix candidates after the fix", 1) says that a draw
+ * which reaches level 0 only, sampled from the base level alone, would take
+ * half the samples of one sampled with LINEAR_MIPMAP_LINEAR (terrain's blur
+ * jobs 7 and 8: 18 samples a pixel against 9), and that no record in the tree
+ * shows it. A LODTIME_SIZE square RGBA8 texture of one colour with its whole
+ * chain (glGenerateMipmap) is drawn over a framebuffer of the same size, a
+ * 1:1 mapping, so the level of detail is 0 at every pixel: LODTIME_DRAWS
+ * draws with GL_TEXTURE_MIN_FILTER GL_LINEAR, then as many with
+ * GL_LINEAR_MIPMAP_LINEAR, each run started after a glFinish and ended by
+ * one. Log only: "gl_test: lodtime: <filter>: <n> draws, <ms> ms (<h> ms a
+ * draw)" per filter, and the ratio of the two. Checks: 1 the program linked,
+ * 2 the framebuffer complete, 3 and 4 the centre pixel is the texture's colour
+ * with each filter, 5 no GL error.
+ * ------------------------------------------------------------------------- */
+#define LODTIME_DRAWS 100
+#define LODTIME_SIZE  512
+
+static uint32_t lodtime_run(GLuint prog, GLuint tex, GLint filter)
+{
+	uint32_t t0;
+
+	glBindTexture(GL_TEXTURE_2D, tex);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filter);
+	dst_sample(prog, tex);
+	glFinish();
+	t0 = now_ms();
+	for (int i = 0; i < LODTIME_DRAWS; i++)
+		dst_sample(prog, tex);
+	glFinish();
+	return now_ms() - t0;
+}
+
+static int case_lodtime(void)
+{
+	static uint32_t px[LODTIME_SIZE * LODTIME_SIZE];
+	const uint32_t colour = 0xff3070c0u;
+	uint32_t ms_lin, ms_mip, got = 0;
+	GLuint prog, src = 0, dst = 0, fbo = 0;
+	GLenum status;
+	bool ok = true;
+
+	free_all_objects();
+	while (glGetError() != GL_NO_ERROR)
+		;
+	prog = link_program(gl_test_uv_vs_src, gl_test_texture_fs_src);
+	/* check 1 */
+	if (!expect_u32("lodtime: program linked", prog ? 1u : 0u, 1u))
+		return -1;
+	glDisable(GL_DEPTH_TEST);
+	glDisable(GL_STENCIL_TEST);
+	glDisable(GL_CULL_FACE);
+	glDisable(GL_BLEND);
+
+	for (uint32_t i = 0; i < LODTIME_SIZE * LODTIME_SIZE; i++)
+		px[i] = colour;
+	glGenTextures(1, &src);
+	glBindTexture(GL_TEXTURE_2D, src);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, LODTIME_SIZE, LODTIME_SIZE, 0, GL_RGBA, GL_UNSIGNED_BYTE, px);
+	glGenerateMipmap(GL_TEXTURE_2D);
+
+	glGenTextures(1, &dst);
+	glBindTexture(GL_TEXTURE_2D, dst);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, LODTIME_SIZE, LODTIME_SIZE, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+	glGenFramebuffers(1, &fbo);
+	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, dst, 0);
+	status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+	/* check 2 */
+	if (!expect_u32("lodtime: framebuffer complete", status == GL_FRAMEBUFFER_COMPLETE ? 1u : 0u, 1u)) {
+		ok = false;
+		goto out;
+	}
+	glViewport(0, 0, LODTIME_SIZE, LODTIME_SIZE);
+
+	ms_lin = lodtime_run(prog, src, GL_LINEAR);
+	glReadPixels(LODTIME_SIZE / 2, LODTIME_SIZE / 2, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, &got);
+	/* check 3 */
+	ok &= expect_u32("lodtime: LINEAR centre", got, colour);
+	ms_mip = lodtime_run(prog, src, GL_LINEAR_MIPMAP_LINEAR);
+	glReadPixels(LODTIME_SIZE / 2, LODTIME_SIZE / 2, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, &got);
+	/* check 4 */
+	ok &= expect_u32("lodtime: LINEAR_MIPMAP_LINEAR centre", got, colour);
+	{
+		const uint32_t l100 = ms_lin * 100u / LODTIME_DRAWS, m100 = ms_mip * 100u / LODTIME_DRAWS;
+		const uint32_t r100 = ms_lin ? ms_mip * 100u / ms_lin : 0u;
+
+		pr_info("gl_test: lodtime: LINEAR: %d draws, %u ms (%u.%02u ms a draw)\n", LODTIME_DRAWS, ms_lin,
+			l100 / 100u, l100 % 100u);
+		pr_info("gl_test: lodtime: LINEAR_MIPMAP_LINEAR: %d draws, %u ms (%u.%02u ms a draw)\n",
+			LODTIME_DRAWS, ms_mip, m100 / 100u, m100 % 100u);
+		pr_info("gl_test: lodtime: mipmap/linear time ratio %u.%02u\n", r100 / 100u, r100 % 100u);
+	}
+	/* check 5 */
+	ok &= expect_u32("lodtime: error after the draws", glGetError(), GL_NO_ERROR);
+out:
+	glViewport(0, 0, TW, TH);
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glBindTexture(GL_TEXTURE_2D, 0);
+	glDeleteFramebuffers(1, &fbo);
+	glDeleteTextures(1, &dst);
+	glDeleteTextures(1, &src);
+	glUseProgram(0);
+	glDeleteProgram(prog);
+	return ok ? 0 : -1;
+}
+
 /* ---- case 215: glmark2 shadow's two passes, timed (shadowmap) ----------------
  *
  * The reproducer of glmark2 shadow's 353 ms a frame on the AM62P (#40): the
@@ -23453,6 +23574,7 @@ static int run_case(int c, int pretransform, int debug, int *ended)
 		if (rc == -3)
 			return -3; /* skipped by name: as case 177 */
 		break;
+	case 220: rc = case_lodtime(); break;
 	case 216:
 		rc = case_mipchains();
 		if (rc == -3)
