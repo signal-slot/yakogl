@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# pi4-console-scan.py fixture: a Zephyr fatal error in the run, the record's FATAL heading, then the watchdog reset; no time stamps
+  5.05 [sdcard] pieeprom.upd not found
+  5.88 Read start4.elf bytes  2299008 hnd 0x211ac
+MESS:00:00:08.129767:0:board: watchdog armed
+*** Booting Zephyr OS build af17c0c8aa2a ***
+v3d_deqp: build 0ff58329
+board: PM watchdog resets the SoC ~250 s after boot (tryboot -> Linux)
+v3d_deqp: the record at 210 s after boot at the latest
+deqp: case filter 'dEQP-GLES3.functional.shaders.loops.*'
+deqp: Pass dEQP-GLES3.functional.shaders.loops.for_constant_iterations.basic_lowp_int_vertex
+v3d_deqp: case #0 P 80ms k2/8 c15533/15546 r0 dEQP-GLES3.functional.shaders.loops.for_constant_iterations.basic_lowp_int_vertex
+
+Test case 'dEQP-GLES3.functional.shaders.loops.for_constant_iterations.basic_lowp_int_fragment'..
+E: ***** SYNCHRONOUS EXCEPTION *****
+E: >>> ZEPHYR FATAL ERROR 0: CPU exception on CPU 0
+v3d_deqp FATAL (reason 0, pc 0x2a1b40 lr 0x2a1b10 far 0x0): build 0ff58329, filter 'dEQP-GLES3.functional.shaders.loops.*'
+  1 cases in 2310 ms, record at 3 s after boot, reset at ~250 s
+  totals: P 1  (R: not passed, a draw was refused in it; passed with one refused: 0)
+  in progress: dEQP-GLES3.functional.shaders.loops.for_constant_iterations.basic_lowp_int_fragment
+  jobs: slow in 0 cases; no job hung or timed out
+slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+v3d_deqp: build 0ff58329 FATAL (reason 0, pc 0x2a1b40 lr 0x2a1b10 far 0x0): 1 cases, P 1 F 0 R 0 N 0 other 0
+  5.05 [sdcard] pieeprom.upd not found
+  5.88 Read start4.elf bytes  2299008 hnd 0x211ac
+[    0.000000] Booting Linux on physical CPU 0x0000000000 [0x410fd083]

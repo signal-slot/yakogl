@@ -1,0 +1,50 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# pi4-console-scan.py fixture: two GPU recoveries (one an MMU fault) and a slow job, which the record repeats; "HH:MM:SS " stamps as tools/board.sh pi4 writes
+10:00:00   5.05 [sdcard] pieeprom.upd not found
+10:00:00   5.88 Read start4.elf bytes  2299008 hnd 0x211ac
+10:00:03 MESS:00:00:08.129767:0:board: watchdog armed
+10:00:04 *** Booting Zephyr OS build af17c0c8aa2a ***
+10:00:04 v3d_deqp: build 0ff58329
+10:00:04 board: PM watchdog resets the SoC ~250 s after boot (tryboot -> Linux)
+10:00:04 v3d_deqp: the record at 210 s after boot at the latest
+10:00:05 deqp: case filter 'dEQP-GLES3.functional.texture.format.*'
+10:00:06 deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rgba8_pot
+10:00:06 v3d_deqp: case #0 P 300ms k2/8 c15533/15546 r0 dEQP-GLES3.functional.texture.format.sized.2d.rgba8_pot
+10:00:08 osal(v3d): job 7 render took 1400 ms (slow; past 1000 ms)
+10:00:08 deqp: Pass dEQP-GLES3.functional.texture.format.sized.2d.rgba8_npot
+10:00:08 v3d_deqp: case #1 P 1500ms k2/8 c15533/15546 r0 S1 dEQP-GLES3.functional.texture.format.sized.2d.rgba8_npot
+10:00:12 osal(v3d): job 9 render did not end (-110, after 4000 ms, 4000 ms of it in this wait)
+10:00:12 osal(v3d): FIRST FAILURE: render, rc -110, bcl 0x201000..0x2010af rcl 0x223000..0x223097 job 9: core_sts 0x0 hub_sts 0x0 err 0x1000 ct0 cs 0x0 ea 0x2010af ca 0x2010af ra 0x0 qba 0x201000 qea 0x2010af ct1 ca 0x223050 ra 0x223040 qba 0x223000 qea 0x223097
+10:00:12 osal(v3d): render: -110 core_sts 0x0 hub_sts 0x0 ct0 ca 0x2010af ra 0x0 ct1 ca 0x223050 ra 0x223040 err 0x1000 mmu_ctl 0x0 vio 0x0 vio_id 0x0
+10:00:12 osal(v3d): job 9: GPU reset (recovery 1)
+10:00:12 deqp: Fail dEQP-GLES3.functional.texture.format.sized.2d.rgba16f_pot
+10:00:12 v3d_deqp: case #2 F 4100ms k2/8 c15533/15546 r0 H dEQP-GLES3.functional.texture.format.sized.2d.rgba16f_pot
+10:00:20 osal(v3d): job 14 bin did not end (-14, after 120 ms)
+10:00:20 osal(v3d): bin: -14 core_sts 0x0 hub_sts 0x4 ct0 ca 0x2020a0 ra 0x0 ct1 ca 0x0 ra 0x0 err 0x0 mmu_ctl 0x10d00 vio 0x3f00 vio_id 0x41
+10:00:20 osal(v3d): job 14: GPU reset (recovery 2)
+10:00:20 deqp: Fail dEQP-GLES3.functional.texture.format.sized.2d.rgba16f_npot
+10:00:20 v3d_deqp: case #3 F 130ms k2/8 c15533/15546 r0 H dEQP-GLES3.functional.texture.format.sized.2d.rgba16f_npot
+10:00:35 deqp: done: 2 passed, 2 failed, 0 not supported, 0 warnings, complete=1
+10:00:36 deqp: summary: 4 cases begun, 4 with a result, 0 without
+10:00:36 v3d_deqp DONE: build 0ff58329, filter 'dEQP-GLES3.functional.texture.format.*'
+10:00:36   4 cases in 30500 ms, record at 32 s after boot, reset at ~250 s
+10:00:36   totals: P 2 F 2  (R: not passed, a draw was refused in it; passed with one refused: 0)
+10:00:36   done: 2 passed, 2 failed, 0 not supported, 0 warnings, complete=1
+10:00:36   summary: 4 cases begun, 4 with a result, 0 without
+10:00:36   jobs: slow in 1 cases (first #1); the first hung or timed-out job in #2
+10:00:36   osal(v3d): job 9 render did not end (-110, after 4000 ms, 4000 ms of it in this wait)
+10:00:36 BASELINE (first completed) job 1: core_sts 0x0 hub_sts 0x0 err 0x1000 ct0 cs 0x0 ea 0x2010af ca 0x2010af ra 0x0 qba 0x201000 qea 0x2010af ct1 ca 0x223097 ra 0x223096 qba 0x223000 qea 0x223097
+10:00:36 osal(v3d): FIRST FAILURE: render, rc -110, bcl 0x201000..0x2010af rcl 0x223000..0x223097 job 9: core_sts 0x0 hub_sts 0x0 err 0x1000 ct0 cs 0x0 ea 0x2010af ca 0x2010af ra 0x0 qba 0x201000 qea 0x2010af ct1 ca 0x223050 ra 0x223040 qba 0x223000 qea 0x223097
+10:00:36 slow jobs: 1 (past 1000 ms, ended; the slowest 1400 ms); MMU faults: 1; recoveries: 2; hung: none
+10:00:36 binner out of memory: 0 jobs (2 overflow blocks of 256 KiB, CONFIG_YAKOGL_V3D_BIN_OVERFLOW_BLOCKS; each such job ends in a GPU reset)
+10:00:36 case order: P pass F fail R refused N not supported Q quality C compat E resource I internal X crash T timeout
+10:00:36     0 PPFF
+10:00:36 driver: osal(v3d): job 7 render took 1400 ms (slow; past 1000 ms)
+10:00:36 driver: osal(v3d): job 9 render did not end (-110, after 4000 ms, 4000 ms of it in this wait)
+10:00:36 driver: osal(v3d): job 9: GPU reset (recovery 1)
+10:00:36 driver: osal(v3d): job 14 bin did not end (-14, after 120 ms)
+10:00:36 driver: osal(v3d): job 14: GPU reset (recovery 2)
+10:00:36 not passed, by group (count, letters; reasons by count, F/R before N):
+10:00:36   texture.format.sized.2d                                     2 F2                      2x Image comparison failed
+10:00:36 v3d_deqp: build 0ff58329 DONE: 4 cases, P 2 F 2 R 0 N 0 other 0
