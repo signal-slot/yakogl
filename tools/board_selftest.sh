@@ -16,7 +16,9 @@
 #    stty, no fd scan), with a device path as before.
 # 2. The refusals that need no board: an image without the watchdog marker,
 #    one too big for the board's RAM window, a backend the board has not, an
-#    unknown board, a bad run name.
+#    unknown board, a bad run name. The pi5 against a fake board (pi5-fake):
+#    its dry run prints the tryboot.txt it writes, and neither its output (dry,
+#    or an ssh refusal) nor its record names the host, an address or the UART.
 # 3. Replays of real captures through the verdict, tally and diff, each against
 #    what the old runners printed for the same input. The old runners are gone
 #    (Step 1, driver/docs/one-method.md section 5); what they printed was
@@ -40,15 +42,21 @@
 #    with a pass, a fail and an undefined status, and the gl_test set's CASE
 #    records (CASE_SET passed, failed and inconsistent; the earlier
 #    CASE_SET_FAIL form), on the Pi 4 console and in the i.MX8MP SNVS: done,
-#    failed (rc 4) and bad_record (rc 4).
+#    failed (rc 4) and bad_record (rc 4). The end line of each Pi 5 probe
+#    (tools/probes/rpi_5): its verdict, a FAIL line failed.
 # Prints "board_selftest: N checks, F failed"; exit 0 only when F is 0 and N is
 # the pinned count (a check that silently stops running fails the pin).
 set -uo pipefail
+# One locale for every check, whatever the host's: a LANG or LC_ALL that names
+# a locale the host has not installed (LC_ALL=ja_JP.UTF-8 without it) makes
+# every bash the checks start print "warning: setlocale: ..." on stderr, which
+# lands in the 2>&1 outputs the checks compare (2026-11-08: 7 checks failed so)
+export LC_ALL=C
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/.." && pwd)
 B="$HERE/board.sh"
 TD="$HERE/testdata"
-WANT_CHECKS=312
+WANT_CHECKS=333
 
 S=$(mktemp -d)
 trap 'rm -rf "$S"' EXIT
@@ -367,9 +375,9 @@ rc=$?
 check "pi5 run: rc 0, tryboot.txt written and put back, the reboot is '0 tryboot', a default set refuses, config.txt not written" \
     eval '[ "$rc" = 0 ] && grep -qF "sudo reboot \"0 tryboot\"" <<<"$out" && [ "$(grep -c "tee /boot/firmware/tryboot.txt" <<<"$out")" = 2 ] &&
           grep -q "test ! -e /boot/firmware/config-linux.txt" <<<"$out" && ! grep -q "tee /boot/firmware/config.txt" <<<"$out"'
-check "pi5 run: the console is only read (stty and the fd scan, no write to the device)" \
-    eval 'grep -qF "stty -F /dev/ttyACM9 115200 cs8 -cstopb -parenb raw -echo" <<<"$out" && grep -q "scan every /proc/<pid>/fd for /dev/ttyACM9" <<<"$out" &&
-          ! grep -q "> /dev/ttyACM9" <<<"$out"'
+check "pi5 run: the console is only read (stty and the fd scan, no write to the device), printed as <BOARD_UART>" \
+    eval 'grep -qF "stty -F <BOARD_UART> 115200 cs8 -cstopb -parenb raw -echo" <<<"$out" && grep -q "scan every /proc/<pid>/fd for <BOARD_UART>" <<<"$out" &&
+          ! grep -q "> <BOARD_UART>" <<<"$out" && ! grep -q "ttyACM9" <<<"$out"'
 check "pi5 run: get_throttled read before staging and after the board is back" \
     eval '[ "$(grep -c "vcgencmd get_throttled" <<<"$out")" = 2 ] &&
           [ "$(grep -n "vcgencmd get_throttled" <<<"$out" | head -1 | cut -d: -f1)" -lt "$(grep -n "install -m 0755" <<<"$out" | cut -d: -f1)" ]'
@@ -380,9 +388,10 @@ check "pi5 run: RUN_BOUND and RETURN_BOUND override the defaults" eval 'grep -q 
 out=$(BOARD_HDMI_TIMINGS=1920x720 dry pi5 run "$S/img/pi5.bin" "$S/logs" 2>&1)
 rc=$?
 check "pi5 run: BOARD_HDMI_TIMINGS is not read (no refusal, rc 0)" eval '[ "$rc" = 0 ]'
-out=$(PI5_UART=/dev/ttyACM8 dry pi5 run "$S/img/pi5.bin" "$S/logs" 2>&1)
+# (the dry run's own default is a device, so a bridge in PI5_UART shows it was read)
+out=$(PI5_UART=bridge.invalid:1 dry pi5 run "$S/img/pi5.bin" "$S/logs" 2>&1)
 rc=$?
-check "pi5 run: PI5_UART is read as BOARD_UART" eval '[ "$rc" = 0 ] && grep -q "for /dev/ttyACM8" <<<"$out"'
+check "pi5 run: PI5_UART is read as BOARD_UART" eval '[ "$rc" = 0 ] && grep -q "am62p_netboot_uart.py probe <BOARD_UART>" <<<"$out"'
 out=$(BOARD_UART=bridge:40001 dry pi5 probe "$S/logs" 2>&1)
 rc=$?
 check "pi5 probe on a bridge BOARD_UART: rc 0, no fd scan" eval '[ "$rc" = 0 ] && ! grep -q "/proc/<pid>/fd" <<<"$out"'
@@ -408,6 +417,62 @@ check "pi5 nodefault: config-linux.txt put back as config.txt" eval '[ "$rc" = 0
 BOARD=pi5
 check "pi5_config: [all], kernel= the staged file, no arm_64bit, the UART lines, no hdmi lines (BOARD_HDMI_TIMINGS unset for pi5)" \
     eval '[ "$(BOARD_HDMI_TIMINGS= pi4_config k.bin | tr "\n" "|")" = "[all]|kernel=k.bin|enable_uart=1|uart_2ndstage=1|" ]'
+BOARD=pi4
+
+# pi5 with a fake board (pi5-fake): the dry run prints the tryboot.txt it would
+# write, and nothing the pi5 prints names its host, an address or the UART
+# (CLAUDE.md: they live in the environment only); the pi4 prints as before
+mkdir -p "$S/img/rpi5_dtb/zephyr"
+cp "$S/img/pi5.bin" "$S/img/rpi5_dtb/zephyr/zephyr.bin"
+out=$(BOARD_HOST=tester@pi5-fake.example BOARD_UART=/dev/ttyFAKE5 dry pi5 run "$S/img/rpi5_dtb/zephyr/zephyr.bin" "$S/logs" 2>&1)
+rc=$?
+# the lines between the tee into tryboot.txt and the next DRY line
+tb=$(awk '/tee \/boot\/firmware\/tryboot.txt/ { on = 1; next } /^DRY / { on = 0 } on' <<<"$out" | tr '\n' '|')
+want='    # tools/board.sh: zephyr, one-shot boot (reboot "0 tryboot"); config.txt stays the Linux default|    [all]|    kernel=yakogl-zephyr.bin|    enable_uart=1|    uart_2ndstage=1|'
+check "pi5-fake dry run of rpi5_dtb's zephyr.bin: rc 0, tryboot.txt printed after its write: the comment, [all], kernel=yakogl-zephyr.bin, the UART lines" \
+    eval '[ "$rc" = 0 ] && [ "$tb" = "$want" ]'
+check "pi5-fake dry run, BOARD_UART a device: no host name, user or UART path in the output" \
+    eval '! grep -q "pi5-fake\|tester@\|ttyFAKE5" <<<"$out" && grep -q "stty -F <BOARD_UART> " <<<"$out"'
+out=$(BOARD_HOST=tester@pi5-fake.example BOARD_UART=pi5-bridge.example:40005 dry pi5 run "$S/img/rpi5_dtb/zephyr/zephyr.bin" "$S/logs" 2>&1)
+rc=$?
+check "pi5-fake dry run, BOARD_UART a bridge: rc 0, the probe and the capture of <BOARD_UART>, no host or port" \
+    eval '[ "$rc" = 0 ] && grep -q "am62p_netboot_uart.py probe <BOARD_UART> " <<<"$out" && grep -q "am62p_netboot_uart.py capture <BOARD_UART> " <<<"$out" &&
+          ! grep -q "pi5-fake\|pi5-bridge\|40005\|tester@" <<<"$out"'
+out=$(BOARD_HOST=tester@pi5-fake.example BOARD_UART=/dev/ttyFAKE5 dry pi4 run "$S/img/pi4.bin" "$S/logs" 2>&1)
+check "pi4 with the same environment: the UART path printed as before, no tryboot.txt lines printed" \
+    eval 'grep -qF "stty -F /dev/ttyFAKE5 115200" <<<"$out" && grep -q "scan every /proc/<pid>/fd for /dev/ttyFAKE5" <<<"$out" && ! grep -q "^    kernel=" <<<"$out"'
+check "pi5-fake dry runs: nothing written on the host, no stub ran" eval '[ ! -e "$S/logs" ] && untouched'
+# not a dry run: an ssh that fails as a real one does, naming the host and its
+# address; the pi5's refusal names neither, the pi4's is as it was
+mkdir -p "$S/stub-fail"
+printf '#!/bin/sh\necho "ssh: connect to host pi5-fake.example (100.64.7.9) port 22: Connection refused" >&2\nexit 255\n' > "$S/stub-fail/ssh"
+chmod +x "$S/stub-fail/ssh"
+for board in pi5 pi4; do
+    LOCK="$S/fake-$board.lock" LOCK_WAIT=0 BOARD_HOST=tester@pi5-fake.example BOARD_UART=/dev/ttyFAKE5 PATH="$S/stub-fail:$PATH" \
+        "$B" "$board" probe "$S/logs-fake-$board" > "$S/fake-$board.out" 2>&1
+    echo "rc=$?" >> "$S/fake-$board.out"
+done
+check "pi5-fake, ssh refused: rc 3, ssh's own error printed with <board-host> and <address>, neither value anywhere" \
+    eval 'grep -q "^rc=3$" "$S/fake-pi5.out" && grep -qF "connect to host <board-host> (<address>) port 22" "$S/fake-pi5.out" &&
+          ! grep -q "pi5-fake\|100\.64\.7\.9\|tester@" "$S/fake-pi5.out"'
+check "pi4, ssh refused: rc 3, ssh's error as it was (pi4 output unchanged)" \
+    eval 'grep -q "^rc=3$" "$S/fake-pi4.out" && grep -qF "connect to host pi5-fake.example (100.64.7.9) port 22" "$S/fake-pi4.out"'
+# the record: finish's redact_run on a pi5 run directory (the console path,
+# the bridge, the host names, the addresses; INDEX.txt is written after it)
+eval "$(sed -n '/^redact_run() {/,/^}/p; /^redact_dir() {/,/^}/p; /^redact_words() {/,/^}/p; /^uart_is_bridge() /p' "$B")"
+mkdir -p "$S/redact5" "$S/redact4"
+printf '%s\n' "12:00:00 console /dev/ttyFAKE5 by-id /dev/serial/by-id/usb-fake-if00" "12:00:00 pi5-fake.example login: raspi5fake" \
+    "12:00:00 eth0: 10.20.30.40 up" "12:00:00 relay pi5-bridge.example:40005 and pi5-bridge.example" > "$S/redact5/console.txt"
+cp "$S/redact5/console.txt" "$S/redact4/console.txt"
+BOARD=pi5 BOARD_UART=/dev/serial/by-id/usb-fake-if00 UART_REAL=/dev/ttyFAKE5 BOARD_HOST=tester@pi5-fake.example BHOSTNAME=raspi5fake redact_run "$S/redact5"
+check "pi5 record redaction: the UART path and the device it resolves to are <BOARD_UART>, host names <board-host>, the address 192.0.2.1" \
+    eval '[ "$(head -3 "$S/redact5/console.txt" | tr "\n" "|")" = "12:00:00 console <BOARD_UART> by-id <BOARD_UART>|12:00:00 <board-host> login: <board-host>|12:00:00 eth0: 192.0.2.1 up|" ]'
+BOARD=pi5 BOARD_UART=pi5-bridge.example:40005 UART_REAL= BOARD_HOST=tester@pi5-fake.example BHOSTNAME=raspi5fake redact_run "$S/redact5"
+check "pi5 record redaction, BOARD_UART a bridge: host:port <BOARD_UART>, the bridge's host alone <uart-bridge>" \
+    eval '[ "$(sed -n 4p "$S/redact5/console.txt")" = "12:00:00 relay <BOARD_UART> and <uart-bridge>" ]'
+BOARD=pi4 BOARD_UART=/dev/ttyFAKE5 UART_REAL= BOARD_HOST=tester@pi5-fake.example BHOSTNAME=raspi5fake redact_run "$S/redact4"
+check "pi4 record redaction as before: host names and addresses, the UART path kept" \
+    eval '[ "$(head -3 "$S/redact4/console.txt" | tr "\n" "|")" = "12:00:00 console /dev/ttyFAKE5 by-id /dev/serial/by-id/usb-fake-if00|12:00:00 <board-host> login: <board-host>|12:00:00 eth0: 192.0.2.1 up|" ]'
 BOARD=pi4
 
 # tree: the three table forms
@@ -1139,9 +1204,9 @@ printf '594b0a02 %s%s ffffffff ffffffff\n' "$cB" "$cA" > "$p3/snvs.txt"
 check "GLES3 table image: the tally names both failures ($nA; $nB), no crc: left" \
     eval 'grep -qF "$nA;$nB" "$T3/results.tsv" && ! grep -q "crc:" "$T3/results.tsv"'
 check "record crc on a known GLES3 check ($cA) prints its name, no list and no prefix given" \
-    eval '"$YAKOGL_TOOLS" record crc "$cA" | grep -qxF "$nA"'
+    eval 'o=$("$YAKOGL_TOOLS" record crc "$cA") && grep -qxF "$nA" <<<"$o"'
 check "the decoded GLES3 row record names its first fail ($nA)" \
-    eval '"$YAKOGL_TOOLS" record 594b0801 00020001 00000000 "${cA}0003" | grep -qF "$nA"'
+    eval 'o=$("$YAKOGL_TOOLS" record 594b0801 00020001 00000000 "${cA}0003") && grep -qF "$nA" <<<"$o"'
 
 echo "== 3g. Armadillo-X2 tree: three-word records (LPGPR1..3, w3 never stored) decoded without a w3"
 # the record of the same one-image selector tree on the X2: snvs.txt holds three words,
@@ -1169,7 +1234,34 @@ check "x2 tally: begun is the sum (8), no-result is '-' (not 0), the five failin
 check "x2 tally: all five names in results.tsv, none as crc:"     eval 'for k in "${x2n[@]}"; do grep -qF "dEQP-GLES3.functional.attribute_location.bind.$k" "$TX/results.tsv" || exit 1; done; ! grep -q "crc:" "$TX/results.tsv"'
 check "x2 tally: the TALLY line has no-result 0 from the '-' (absent is not counted)" grep -q '^TALLY (1 entries): begun 8 passed 3 failed 5 notsup 0 other 0 noresult 0' "$S/new-x2.txt"
 check "record --words 3 on that row prints w3 as '-', the line says begun=derived" \
-    eval '"$YAKOGL_TOOLS" record --words 3 594b0801 00050003 00000000 | grep -q " -$" && "$YAKOGL_TOOLS" record --words 3 --line 594b0801 00050003 00000000 | grep -q "begun=derived tally=3,5,0,0,8"'
+    eval 'o=$("$YAKOGL_TOOLS" record --words 3 594b0801 00050003 00000000) && grep -q " -$" <<<"$o" &&
+          o=$("$YAKOGL_TOOLS" record --words 3 --line 594b0801 00050003 00000000) && grep -q "begun=derived tally=3,5,0,0,8" <<<"$o"'
+
+echo "== 3h. Pi 5 probes: the end line of each tools/probes/rpi_5 probe ends the run with its own verdict"
+# each probe's last line as its source prints it (rpi5_ident's from its branch,
+# 87694ec8); a FAIL line is the verdict failed, not done. rpi5_wdog's pass is the
+# reset (the console goes quiet), and a read that faulted cuts rpi5_ident's line
+# after "= ": neither is an end. The pi4 reads none of them.
+p5=0
+while IFS='|' read -r board line want; do
+    p5=$((p5 + 1))
+    d="$S/pi5probes/20261108-1200-p5x$p5-0123abcd"
+    mkrun "$d" board="$board" boot=tryboot "name=p5x$p5" probe=0 back=1 t_reboot=100 t_back=290
+    printf '12:00:00 board: PM watchdog resets the SoC ~50 s after boot\n12:00:01 %s\n' "$line" > "$d/console.txt"
+    check "$board console ending '$line': $want" says "$board" "$d" "$want"
+done <<'EOF'
+pi5|rpi5_hello: counted 10 s in 10003 ms|rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:rpi5_hello_counted
+pi5|rpi5_dtb: done|rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:rpi5_dtb_done
+pi5|rpi5_dtb: FAIL: no GPU node in the device tree|rc=4 verdict=failed boot=tryboot row boot_verdict=complete result=legacy:rpi5_dtb_fail
+pi5|rpi5_ident: done|rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:rpi5_ident_done
+pi5|rpi5_ident: CORE_IDENT0 @0x1002008000 = |rc=4 verdict=no_end_line boot=tryboot row boot_verdict=no_end_line result=none
+pi5|v3d_clear: PASS (128x64 read back 0xff336699; 9 pages used incl. page table and scratch, cache: 1 sys_cache_data_flush_and_invd_range)|rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:v3d_clear_pass
+pi5|v3d_clear: FAIL (render: no frame done in 1000 ms; 9 pages used incl. page table and scratch, cache: 1 sys_cache_data_flush_and_invd_range)|rc=4 verdict=failed boot=tryboot row boot_verdict=complete result=legacy:v3d_clear_fail
+pi5|rpi5_wdog: FAIL no reset|rc=4 verdict=failed boot=tryboot row boot_verdict=complete result=legacy:rpi5_wdog_fail
+pi5|rpi5_wdog: feeding stopped, reset expected within 10 s|rc=4 verdict=no_end_line boot=tryboot row boot_verdict=no_end_line result=none
+pi4|v3d_clear: FAIL (render: no frame done in 1000 ms)|rc=4 verdict=no_end_line boot=tryboot row boot_verdict=no_end_line result=none
+pi4|rpi5_dtb: done|rc=4 verdict=no_end_line boot=tryboot row boot_verdict=no_end_line result=none
+EOF
 
 echo "board_selftest: $n checks, $fails failed (pinned: $WANT_CHECKS)"
 [ "$fails" = 0 ] && [ "$n" = "$WANT_CHECKS" ]

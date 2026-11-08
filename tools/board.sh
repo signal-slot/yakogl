@@ -105,8 +105,9 @@
 # build, the image's sha256 and build line, board, backend, times, the verdict
 # line, the decoded records, every file with its sha256 and line count;
 # records/README.md). Addresses in the copies are redacted (IPv4 -> 192.0.2.n,
-# MAC -> 02:00:00:00:00:nn, the board's host name -> <board-host>); BOARD_HOST
-# is never written.
+# MAC -> 02:00:00:00:00:nn, the board's host name -> <board-host>; pi5: also
+# BOARD_UART -> <BOARD_UART>); BOARD_HOST is never written. The pi5's own output,
+# its dry run included, names no host, address or UART path either (scrub).
 #
 # "tree" runs a table of images one after the other (resumable: a row whose
 # run directory has an INDEX.txt is skipped), then tallies. The table is one
@@ -212,6 +213,7 @@ shift 2
 # ---- the board facts: everything that differs per board is here ----------
 NEW_MARKER='board: watchdog armed'   # the board layer's literal (one-method.md section 4, step 1)
 NV=
+UART_VAR=           # the Pis' own name for BOARD_UART (PI4_UART, PI5_UART)
 GPU_DEV=
 RESET_RE=
 SU='sudo -n '       # the prefix of a root command on the board (x2: root logs in, none)
@@ -231,6 +233,7 @@ pi4)
     LEGACY_RE=$END_RE_DEFAULT
     BOARD_HOST=${BOARD_HOST:-${PI4_HOST:-}}
     BOARD_UART=${BOARD_UART:-${PI4_UART:-}}
+    UART_VAR=PI4_UART
     BOARD_END_RE=${BOARD_END_RE:-${PI4_END_RE:-}}
     BOARD_HDMI_TIMINGS=${BOARD_HDMI_TIMINGS:-${PI4_HDMI_TIMINGS:-}}
     RUN_BOUND_DEFAULT=420; RETURN_BOUND_DEFAULT=300
@@ -251,10 +254,15 @@ pi5)
     MARKER='board: PM watchdog resets'   # driver/zephyr/lib/board/rpi4/rpi_wdog.c, built for the Pi 5 with the same literal
     NB_WATCHDOG="the PM watchdog"
     RESET_RE='GPU reset (recovery'
-    END_RE_DEFAULT='^(deqp: summary: |v3d_deqp: build [^ ]+ (DONE|INCOMPLETE|STOPPED)|v3d_gl_test RECORD end|v3d_clear: (PASS|FAIL))'
+    # the Pi 4 samples' end lines and every tools/probes/rpi_5 probe's (its
+    # README's table): rpi5_hello's count, rpi5_dtb's and rpi5_ident's done or
+    # FAIL, rpi5_clear's v3d_clear verdict, rpi5_wdog's FAIL (its pass is the
+    # reset itself: the console goes quiet, so that run ends at RUN_BOUND)
+    END_RE_DEFAULT='^(deqp: summary: |v3d_deqp: build [^ ]+ (DONE|INCOMPLETE|STOPPED)|v3d_gl_test RECORD end|v3d_clear: (PASS|FAIL)|rpi5_hello: counted |rpi5_(dtb|ident): (done|FAIL)|rpi5_wdog: FAIL)'
     LEGACY_RE=$END_RE_DEFAULT
     BOARD_HOST=${BOARD_HOST:-${PI5_HOST:-}}
     BOARD_UART=${BOARD_UART:-${PI5_UART:-}}
+    UART_VAR=PI5_UART
     BOARD_END_RE=${BOARD_END_RE:-}
     # no HDMI timings: cmdline.txt carries video= for the capture device, and
     # the pi4's hdmi_timings lines are not written (nor required)
@@ -344,7 +352,52 @@ NB_RECORDS="records/$BOARD/netboot"
 # shellcheck source=tools/uboot-netboot-lib.sh
 . "$HERE/uboot-netboot-lib.sh"
 
-note() { echo "board.sh $BOARD: $*"; }
+note() {
+    if [ "$BOARD" = pi5 ]; then echo "board.sh $BOARD: $*" | scrub; else echo "board.sh $BOARD: $*"; fi
+}
+
+# scrub: stdin to stdout with the pi5's host names, addresses and UART paths
+# replaced (BOARD_HOST -> <BOARD_HOST>, its host part and the board's own host
+# name -> <board-host>, BOARD_UART and the device it resolves to ->
+# <BOARD_UART>, a bridge's host -> <uart-bridge>, every IPv4 address ->
+# <address>): the pi5 runner's own messages, its dry run and the board's ssh
+# errors name none of them (CLAUDE.md, "Do not touch"). The other boards print
+# as before. A name, like redact_dir's, is replaced as a whole word, and the
+# host names only from six characters ("pi5" in an alias would rewrite
+# "board.sh pi5:").
+scrub() {
+    if [ "$BOARD" != pi5 ]; then cat; return; fi
+    local e=() pair s esc
+    for pair in "${BOARD_HOST:-}|<BOARD_HOST>" "${BOARD_UART:-}|<BOARD_UART>" "${UART_REAL:-}|<BOARD_UART>" \
+        "$(uart_is_bridge && echo "${BOARD_UART%:*}")|<uart-bridge>" "${BOARD_HOST#*@}|<board-host>" "${BHOSTNAME:-}|<board-host>"; do
+        s=${pair%|*}
+        [ -n "$s" ] || continue
+        case "${pair##*|}" in "<board-host>") [ ${#s} -ge 6 ] || continue ;; esac
+        esc=$(printf '%s' "$s" | sed 's/[][\\.*^$/|(){}+?]/\\&/g')
+        # twice, as redact_dir does: a match consumes the character after it
+        e+=(-e "s/(^|[^A-Za-z0-9_.-])$esc([^A-Za-z0-9_-]|$)/\\1${pair##*|}\\2/g"
+            -e "s/(^|[^A-Za-z0-9_.-])$esc([^A-Za-z0-9_-]|$)/\\1${pair##*|}\\2/g")
+    done
+    LC_ALL=C sed -E "${e[@]}" -e 's/(^|[^0-9.])([0-9]{1,3}\.){3}[0-9]{1,3}([^0-9.]|$)/\1<address>\3/g' \
+        -e 's/(^|[^0-9.])([0-9]{1,3}\.){3}[0-9]{1,3}([^0-9.]|$)/\1<address>\3/g'
+}
+# uart_shown: BOARD_UART as the dry run and the messages print it
+uart_shown() { if [ "$BOARD" = pi5 ]; then echo '<BOARD_UART>'; else echo "$BOARD_UART"; fi; }
+UART_REAL=
+if [ "$BOARD" = pi5 ]; then
+    # the library's die, act and b, with what they print scrubbed: the
+    # messages, the dry run's host commands and ssh's own errors
+    die() { echo "$NB_TAG: $1" | scrub >&2; exit "${2:-3}"; }
+    act() {
+        if [ "$DRY" = 1 ]; then echo "DRY host\$ $*" | scrub; return 0; fi
+        "$@" 2> >(scrub >&2)
+    }
+    b() {
+        if [ "$DRY" = 1 ]; then echo "DRY board\$ $*"; return 0; fi
+        # ssh's stderr through scrub, its stdout and exit status as they are
+        { timeout 60 ssh "${SSH_OPTS[@]}" "$BOARD_HOST" "$@" 2>&1 1>&3 3>&- | scrub >&2; } 3>&1
+    }
+fi
 
 # uart_is_bridge: BOARD_UART is host:port of a serial bridge (a raw TCP stream
 # of the board's UART, one client at a time), not a local device
@@ -357,11 +410,16 @@ uart_is_bridge() { [[ $BOARD_UART =~ ^[^/:]+:[0-9]+$ ]]; }
 bridge_capture() {
     local try
     if [ "$DRY" = 1 ]; then
-        echo "DRY host\$ python3 tools/am62p_netboot_uart.py capture $BOARD_UART <rundir>/console.raw <rundir>/console.ts &   # 'busy' retried 12 x 10 s"
+        echo "DRY host\$ python3 tools/am62p_netboot_uart.py capture $(uart_shown) <rundir>/console.raw <rundir>/console.ts &   # 'busy' retried 12 x 10 s"
         return 0
     fi
     for try in $(seq 1 12); do
-        python3 "$HERE/am62p_netboot_uart.py" capture "$BOARD_UART" "$RD/console.raw" "$RD/console.ts" &
+        # (the pi5: its errors name the bridge, so they go through scrub)
+        if [ "$BOARD" = pi5 ]; then
+            python3 "$HERE/am62p_netboot_uart.py" capture "$BOARD_UART" "$RD/console.raw" "$RD/console.ts" 2> >(scrub >&2) &
+        else
+            python3 "$HERE/am62p_netboot_uart.py" capture "$BOARD_UART" "$RD/console.raw" "$RD/console.ts" &
+        fi
         CAP=$!
         sleep 3
         if kill -0 "$CAP" 2>/dev/null; then return 0; fi
@@ -428,21 +486,12 @@ is_run_of() {
 # host name, BOARD_HOST's host part) <board-host>. Binary files included (GNU
 # sed in the C locale passes NULs through).
 redact_dir() {
-    local dir=$1 f n=0 ip mac s esc
+    local dir=$1 f n=0 ip mac
     shift
     local files=()
     for f in "$dir"/*; do [ -f "$f" ] && [ "${f##*/}" != INDEX.txt ] && files+=("$f"); done
     [ ${#files[@]} -gt 0 ] || return 0
-    for s in "$@"; do
-        # a short alias ("pi4") would rewrite ordinary console text: whole words
-        # of six characters or more only (an address is caught below anyway)
-        [ ${#s} -ge 6 ] || continue
-        esc=$(printf '%s' "$s" | sed 's/[][\\.*^$/|(){}+?]/\\&/g')
-        # twice: a match consumes the character after it, which the next
-        # match needs in front ("a.b.c.d a.b.c.d")
-        LC_ALL=C sed -i -E "s/(^|[^A-Za-z0-9_.-])$esc([^A-Za-z0-9_-]|$)/\\1<board-host>\\2/g;
-            s/(^|[^A-Za-z0-9_.-])$esc([^A-Za-z0-9_-]|$)/\\1<board-host>\\2/g" "${files[@]}"
-    done
+    redact_words "$dir" "<board-host>" "$@"
     while read -r ip; do
         n=$((n + 1))
         LC_ALL=C sed -i -E "s/(^|[^0-9.])${ip//./\\.}([^0-9]|$)/\\1192.0.2.$n\\2/g;
@@ -455,6 +504,37 @@ redact_dir() {
         LC_ALL=C sed -i "s/$mac/02:00:00:00:00:$(printf '%02x' "$n")/g" "${files[@]}"
     done < <(LC_ALL=C grep -aohE '([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}' "${files[@]}" |
         grep -v '^02:00:00:00:00:' | awk '!seen[$0]++')
+}
+
+# redact_words DIR PLACEHOLDER STRING...: each STRING, a whole word, becomes
+# PLACEHOLDER in DIR's files (INDEX.txt aside, as redact_dir)
+redact_words() {
+    local dir=$1 as=$2 f s esc
+    shift 2
+    local files=()
+    for f in "$dir"/*; do [ -f "$f" ] && [ "${f##*/}" != INDEX.txt ] && files+=("$f"); done
+    [ ${#files[@]} -gt 0 ] || return 0
+    for s in "$@"; do
+        # a short alias ("pi4") would rewrite ordinary console text: whole words
+        # of six characters or more only (an address is caught below anyway)
+        [ ${#s} -ge 6 ] || continue
+        esc=$(printf '%s' "$s" | sed 's/[][\\.*^$/|(){}+?]/\\&/g')
+        # twice: a match consumes the character after it, which the next
+        # match needs in front ("a.b.c.d a.b.c.d")
+        LC_ALL=C sed -i -E "s/(^|[^A-Za-z0-9_.-])$esc([^A-Za-z0-9_-]|$)/\\1$as\\2/g;
+            s/(^|[^A-Za-z0-9_.-])$esc([^A-Za-z0-9_-]|$)/\\1$as\\2/g" "${files[@]}"
+    done
+}
+
+# redact_run DIR: a run's copies redacted (finish): the board's host names and
+# every address; the pi5's console path and bridge too (its console is a
+# farm device, named in no record)
+redact_run() {
+    if [ "$BOARD" = pi5 ]; then
+        redact_words "$1" "<BOARD_UART>" "$BOARD_UART" "${UART_REAL:-}"
+        if uart_is_bridge; then redact_words "$1" "<uart-bridge>" "${BOARD_UART%:*}"; fi
+    fi
+    redact_dir "$1" "${BHOSTNAME:-}" "${BOARD_HOST#*@}"
 }
 
 # plain CONSOLE: the console's lines without their stamp ("HH:MM:SS ", or the
@@ -495,6 +575,13 @@ legacy_result() {
     "gl_test: all: "*) echo gl_test_all ;;
     *"RECORD end"*) echo gl_test_record_end ;;
     v3d_deqp:*) echo "v3d_deqp_${l##* }" ;;
+    # the Pi 5 probes (only the pi5's LEGACY_RE has them): a label ending in
+    # _fail is the verdict failed (verdict_line)
+    "v3d_clear: PASS"*) echo v3d_clear_pass ;;
+    "v3d_clear: FAIL"*) echo v3d_clear_fail ;;
+    "rpi5_hello: counted "*) echo rpi5_hello_counted ;;
+    rpi5_dtb:\ done* | rpi5_ident:\ done*) echo "${l%%:*}_done" ;;
+    rpi5_dtb:\ FAIL* | rpi5_ident:\ FAIL* | rpi5_wdog:\ FAIL*) echo "${l%%:*}_fail" ;;
     *) echo other ;;
     esac
 }
@@ -693,7 +780,14 @@ verdict_line() {
                     if [ "${sc%% *}" = pass ]; then verdict=done; else verdict=failed; fi
                 else
                     result=$(legacy_result "$console")
-                    if [ -n "$result" ]; then verdict=$(gl_test_set_verdict "$console"); result="legacy:$result"; else verdict=no_record; result=none; fi
+                    if [ -n "$result" ]; then
+                        # a probe's own FAIL line (pi5); every other label: the set's rule
+                        case "$result" in
+                        *_fail) verdict=failed ;;
+                        *) verdict=$(gl_test_set_verdict "$console") ;;
+                        esac
+                        result="legacy:$result"
+                    else verdict=no_record; result=none; fi
                 fi
             fi
             ;;
@@ -779,7 +873,7 @@ write_index() {
 # the line, exit with its code.
 finish() {
     meta ended "$(date '+%F %T')"
-    redact_dir "$RD" "${BHOSTNAME:-}" "${BOARD_HOST#*@}"
+    redact_run "$RD"
     verdict_line "$RD"
     write_index "$RD"
     # what the record says (the summary lines the old tryboot runner printed; every console board)
@@ -1037,14 +1131,18 @@ pi4_uart_free() {
         # no device on this host: the bridge must accept a connection and not
         # answer "busy" (the capture retries "busy" later; this refuses early)
         if [ "$DRY" = 1 ]; then
-            echo "DRY host\$ python3 tools/am62p_netboot_uart.py probe $BOARD_UART   # the bridge must accept and not be busy"
+            echo "DRY host\$ python3 tools/am62p_netboot_uart.py probe $(uart_shown)   # the bridge must accept and not be busy"
             return 0
         fi
         # rc 4/5: an earlier client may still hold the relay, so retry a few times;
         # rc 3 is a wrong route to the relay and retrying will not help
         for try in 1 2 3 4 5; do
             rc=0
-            python3 "$HERE/am62p_netboot_uart.py" probe "$BOARD_UART" || rc=$?
+            if [ "$BOARD" = pi5 ]; then
+                python3 "$HERE/am62p_netboot_uart.py" probe "$BOARD_UART" 2> >(scrub >&2) || rc=$?
+            else
+                python3 "$HERE/am62p_netboot_uart.py" probe "$BOARD_UART" || rc=$?
+            fi
             [ "$rc" = 0 ] && return 0
             if [ "$rc" = 4 ] || [ "$rc" = 5 ]; then
                 [ "$try" -lt 5 ] && sleep 3
@@ -1060,11 +1158,12 @@ pi4_uart_free() {
         esac
     fi
     if [ "$DRY" = 1 ]; then
-        echo "DRY host\$ scan every /proc/<pid>/fd for $BOARD_UART (nobody may hold it)"
+        echo "DRY host\$ scan every /proc/<pid>/fd for $(uart_shown) (nobody may hold it)"
         return 0
     fi
     [ -c "$BOARD_UART" ] || die "BOARD_UART is not a character device"
     uart=$(readlink -f "$BOARD_UART")
+    UART_REAL=$uart
     # Who holds the UART: every fd of every process, resolved, compared exactly.
     for p in /proc/[0-9]*; do
         for f in "$p"/fd/*; do
@@ -1139,6 +1238,9 @@ $(pi4_config "$STAGED")"
     # exits first (the dry run's b reads nothing) failed the step at random
     b 'sudo tee /boot/firmware/tryboot.txt >/dev/null && sync' <<<"$TRY" ||
         { pi4_undo; die "writing tryboot.txt failed (previous one put back)"; }
+    # the pi5's dry run shows the file it would write (the firmware boots
+    # kernel= from it; a line it cannot read leaves the board at the firmware)
+    if [ "$DRY" = 1 ] && [ "$BOARD" = pi5 ]; then sed 's/^/    /' <<<"$TRY" | scrub; fi
     bget got "sha256sum /boot/firmware/$STAGED" "$IMG_SHA  /boot/firmware/$STAGED"
     got=${got%% *}
     [ "$got" = "$IMG_SHA" ] || { pi4_undo; die "staged image reads back as '$got', not $IMG_SHA (removed again; no reboot)"; }
@@ -1155,7 +1257,7 @@ pi4_capture_start() {
     fi
     act stty -F "$BOARD_UART" 115200 cs8 -cstopb -parenb raw -echo || { pi4_undo; die "stty on BOARD_UART failed"; }
     if [ "$DRY" = 1 ]; then
-        echo "DRY host\$ read $BOARD_UART line by line into <rundir>/console.txt as 'HH:MM:SS line' &"
+        echo "DRY host\$ read $(uart_shown) line by line into <rundir>/console.txt as 'HH:MM:SS line' &"
         return 0
     fi
     # One reader (two would split the bytes): every line, CRs and NULs dropped,
@@ -1915,8 +2017,8 @@ cmd_run() {
         case "$BOOT" in
         tryboot)
             STAGED="yakogl-probe.bin"
-            if [ "$DRY" = 1 ]; then BOARD_UART=${BOARD_UART:-/dev/PI4_UART}; fi
-            : "${BOARD_UART:?set BOARD_UART (or PI4_UART)=the serial device wired to the Pi, or host:port of a serial bridge}"
+            if [ "$DRY" = 1 ]; then BOARD_UART=${BOARD_UART:-/dev/${UART_VAR}}; fi
+            : "${BOARD_UART:?set BOARD_UART (or ${UART_VAR})=the serial device wired to the Pi, or host:port of a serial bridge}"
             pi4_prechecks
             ;;
         kexec-dev)
@@ -1929,8 +2031,8 @@ cmd_run() {
     fi
     case "$BOOT" in
     tryboot)
-        if [ "$DRY" = 1 ]; then BOARD_UART=${BOARD_UART:-/dev/PI4_UART}; fi
-        : "${BOARD_UART:?set BOARD_UART (or PI4_UART)=the serial device wired to the Pi, or host:port of a serial bridge}"
+        if [ "$DRY" = 1 ]; then BOARD_UART=${BOARD_UART:-/dev/${UART_VAR}}; fi
+        : "${BOARD_UART:?set BOARD_UART (or ${UART_VAR})=the serial device wired to the Pi, or host:port of a serial bridge}"
         run_tryboot
         ;;
     uboot-tftp | uboot-mmc) run_uboot ;;
