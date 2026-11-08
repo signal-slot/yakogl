@@ -8,10 +8,11 @@
 //! compared in the shader against the sampler meta's op; and for a 2D
 //! sampler and a native 2D array the compare per texel (PCF) that a LINEAR
 //! filter asks for -- the bilinear footprint gathered raw (pco's `tg4`:
-//! `smp` with `sbmode` rawdata, one channel, the level replaced by 0, the
+//! `smp` with `sbmode` rawdata, one channel, the level replaced, the
 //! layer's address for an array), each tap compared, the four results
 //! weighted by `fract(coord * size - 0.5)` -- taken when sampler meta dword
-//! 13 bit 0 says so. The programs run in the byte model against the IR over
+//! 13 bit 0 says so (bit 0 alone: LINEAR/LINEAR over one level; the mipmap
+//! filters are tests/es3_pvr_pcf.rs'). The programs run in the byte model against the IR over
 //! every compare op, the fixed-point clamp, no compare, and the per-texel
 //! bit on and off.
 //!
@@ -174,10 +175,11 @@ fn every_shadow_form_of_deqp_compiles() {
     }
 }
 
-/// A 2D shadow look-up is two samples: the plain one (the look-up's own
-/// level mode, offset and gradients) and the gather -- `sbmode` rawdata,
+/// A 2D shadow look-up is three samples: the plain one (the look-up's own
+/// level mode, offset and gradients) and two gathers, one per level a
+/// MIPMAP_LINEAR filter blends (tests/es3_pvr_pcf.rs) -- `sbmode` rawdata,
 /// one channel, `lodm` replace with `pplod`, the same `soo`, no `tao` --
-/// reading its own data block; on a native 2D array both carry `tao`; a
+/// reading its own data block; on a native 2D array all carry `tao`; a
 /// cube shadow look-up has the plain sample alone (no cube gather).
 #[test]
 fn a_shadow_look_up_is_the_plain_sample_and_a_one_channel_gather() {
@@ -195,34 +197,38 @@ fn a_shadow_look_up_is_the_plain_sample_and_a_one_channel_gather() {
         let fields = with_native_array(true, || {
             compile_with(Stage::Fragment, &fs, |_, image| smps(image)).unwrap_or_else(|m| panic!("{e}: {m}"))
         });
-        assert_eq!(fields.len(), 2, "{sampler} {e}: the plain sample and the gather");
-        let (plain, gather) = (&fields[0], &fields[1]);
+        assert_eq!(fields.len(), 3, "{sampler} {e}: the plain sample and the two gathers");
+        let plain = &fields[0];
         let tao = u32::from(*sampler == "sampler2DArrayShadow");
         assert_eq!(
             (plain["sbmode"], plain["chan"], plain["lodm"], plain["pplod"], plain["soo"], plain["tao"], plain["proj"]),
             (0, 4, enum_value("lodm", plain_lodm), *plain_pplod, *soo, tao, 0),
             "{sampler} {e}: the plain sample"
         );
-        assert_eq!(
-            (gather["sbmode"], gather["chan"], gather["lodm"], gather["pplod"], gather["soo"], gather["tao"]),
-            (rawdata, 1, enum_value("lodm", "replace"), 1, *soo, tao),
-            "{sampler} {e}: the gather"
-        );
-        assert_eq!(
-            (gather["fcnorm"], gather["dmn"], gather["proj"], gather["nncoords"]),
-            (1, enum_value("dmn", "2d"), 0, 0)
-        );
-        assert_eq!(plain["data"], gather["data"], "both read the one data block");
+        for gather in &fields[1..] {
+            assert_eq!(
+                (gather["sbmode"], gather["chan"], gather["lodm"], gather["pplod"], gather["soo"], gather["tao"]),
+                (rawdata, 1, enum_value("lodm", "replace"), 1, *soo, tao),
+                "{sampler} {e}: the gather"
+            );
+            assert_eq!(
+                (gather["fcnorm"], gather["dmn"], gather["proj"], gather["nncoords"]),
+                (1, enum_value("dmn", "2d"), 0, 0)
+            );
+            assert_eq!(plain["data"], gather["data"], "all read the one data block");
+        }
     }
     let fs = fragment("samplerCubeShadow", "o = vec4(texture(s, c));");
     let fields = with_native_array(true, || compile_with(Stage::Fragment, &fs, |_, image| smps(image)).unwrap());
     assert_eq!(fields.len(), 1, "a cube shadow look-up: the plain sample alone");
     assert_eq!((fields[0]["sbmode"], fields[0]["dmn"]), (0, enum_value("dmn", "3d")));
-    /* the stacked array (switch off) keeps the one filtered sample */
+    /* the stacked array (switch off): the gathers of the stacked image,
+     * without `tao` */
     let fs = fragment("sampler2DArrayShadow", "o = vec4(texture(s, c));")
         .replace("uniform highp", "uniform float pvr_layers_s;\nuniform highp");
     let fields = with_native_array(false, || compile_with(Stage::Fragment, &fs, |_, image| smps(image)).unwrap());
-    assert_eq!(fields.len(), 1, "the stacked array shadow look-up: no gather");
+    assert_eq!(fields.len(), 3, "the stacked array shadow look-up: the plain sample and two gathers");
+    assert!(fields[1..].iter().all(|g| g["sbmode"] == rawdata && g["tao"] == 0), "{fields:?}");
 }
 
 type InputFn<'a> = dyn Fn(&str, u32) -> u32 + 'a;

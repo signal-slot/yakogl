@@ -296,6 +296,19 @@ type Gradients = [[Option<SelSrc>; 2]; 3];
 /// [dv/dx, dv/dy]]` ([`Sel::sample_grads`]).
 type UvGradients = [[SelSrc; 2]; 2];
 
+/// What a shadow look-up's compare per texel reads ([`Sel::pcf_taps`]):
+/// the footprints gathered at the two levels (the same one twice unless a
+/// MIPMAP_LINEAR filter blends), those levels as integers, the blend
+/// weight of the second, whether the filter within the level is NEAREST,
+/// and the coordinate the footprints are at.
+struct Pcf {
+    taps: [VReg; 2],
+    levels: [SelSrc; 2],
+    t: SelSrc,
+    nearest: SelSrc,
+    uv: [SelSrc; 2],
+}
+
 struct Sel<'a> {
     m: &'a ir::Module<'a>,
     /// The attribute locations that get registers (`abi::attribs_placed`):
@@ -1709,16 +1722,16 @@ impl<'a> Sel<'a> {
              * follows the coordinate: lane 2 for a 2D sampler, lane 3 for a
              * cube or a 2D array (ir::Op::Tex).
              *
-             * And, for a 2D sampler and a native 2D array, the compare per
-             * texel (PCF) that ES 3.0 asks of a LINEAR filter: the four
-             * texels of the bilinear footprint gathered raw (pco's tg4,
-             * `gather`), each compared, the four results weighted as the
-             * TPU would weight the depths (docs/es3/pvr-2darray.md section
-             * 7.2). Which of the two the pixel takes is the sampler's to say
-             * when the shader runs (sampler meta dword 13 bit 0, set by the
-             * back end for a LINEAR/LINEAR sampler over one level), so one
-             * program serves every filter; the mipmap filters keep the
-             * filtered-then-compared result. */
+             * And, for a 2D sampler and a 2D array (native or stacked), the
+             * compare per texel (PCF) that ES 3.0 asks of a filter that
+             * blends: the four texels of the bilinear footprint gathered raw
+             * (pco's tg4, `gather`) at the level -- or the two levels of a
+             * MIPMAP_LINEAR filter -- the program chooses (`pcf_taps`), each
+             * compared, the four results weighted as the TPU would weight
+             * the depths (docs/es3/pvr-2darray.md section 7.2). Which of the
+             * two the pixel takes, and the filter, are the sampler's to say
+             * when the shader runs (sampler meta dword 13, the back end's
+             * `shadow_filter_word`), so one program serves every filter. */
             ir::Op::Tex {
                 dim: dim @ (ir::TexDim::D2 | ir::TexDim::Cube | ir::TexDim::D2Array),
                 shadow: true,
@@ -1744,14 +1757,31 @@ impl<'a> Sel<'a> {
                     (ir::TexDim::D2, false) => self.src(coord, 2)?,
                     _ => self.src(coord, 3)?,
                 };
-                let taps = match dim {
-                    ir::TexDim::D2 => Some(self.gather_taps(sampler, coord, proj, false, offset)?),
+                let pcf = match dim {
+                    ir::TexDim::D2 => {
+                        let [u, v, _] = self.tex_coords(coord, 2, proj)?;
+                        Some(self.pcf_taps(sampler, lod, [u, v], [u, v], None, None, offset)?)
+                    }
                     ir::TexDim::D2Array if crate::shaderc::native_array_enabled() => {
-                        Some(self.gather_taps(sampler, coord, false, true, offset)?)
+                        let (u, v, z) = (self.src(coord, 0)?, self.src(coord, 1)?, self.src(coord, 2)?);
+                        let addr = self.array_layer_addr(sampler, z, false)?;
+                        Some(self.pcf_taps(sampler, lod, [u, v], [u, v], None, Some(addr), offset)?)
+                    }
+                    /* the stacked image: the footprint at the clamped
+                     * coordinate `array_uv` gives stays in the layer, and a
+                     * layer is 1 / layers of the image's height */
+                    ir::TexDim::D2Array => {
+                        let (u, v) = self.array_uv(sampler, coord)?;
+                        let raw = [self.src(coord, 0)?, self.src(coord, 1)?];
+                        let layers =
+                            SelSrc::Fixed { bank: Bank::Shared, reg: self.layers_dword(sampler)?, mods: Mods::default() };
+                        let frcp = ir::AluOp::Frcp;
+                        let rl = self.fresh_typed(SelOp::Alu(frcp), op_type(frcp), [Some(layers), None, None])?;
+                        Some(self.pcf_taps(sampler, lod, [u, v], raw, Some(rl), None, offset)?)
                     }
                     _ => None,
                 };
-                self.shadow_compare(id, sampler, SelSrc::Virtual { v: depth, mods: Mods::default() }, reference, taps)
+                self.shadow_compare(id, sampler, SelSrc::Virtual { v: depth, mods: Mods::default() }, reference, pcf)
             }
             ir::Op::Tex { .. } => Err(SelectError::Unsupported(
                 "a texture fetch no GLSL ES 3.00 function makes (a projective cube or array, an offset on a cube), is not selected",
@@ -3027,27 +3057,33 @@ impl<'a> Sel<'a> {
     /// it, and depth is stored as floats whatever its internal format, so
     /// the GL core says which it was (GlesTextureBind::compare_op).
     ///
-    /// `taps`: the bilinear footprint's four depths ([`Self::gather_taps`])
-    /// and the coordinate they were gathered at. With them, the compare per
-    /// texel (ES 3.0.6 3.8.15.1: "the comparison is done for each texel,
-    /// and the filter then weights the comparison results"): each tap
-    /// compared as above, the four results bilinearly weighted by
-    /// `fract(coord * size - 0.5)` at level 0 -- the weights the TPU's
-    /// LINEAR filter uses on a REPEAT or CLAMP_TO_EDGE sampler (a mirrored
-    /// repeat's weights follow the mirrored coordinate, which this does not
-    /// mirror). Taken when sampler meta dword 13 bit 0 says so
-    /// (`PCO_SAMPLER_META_RSVD0`, which pco never reads: the back end sets
-    /// it for a LINEAR/LINEAR sampler over one level), else the filtered
-    /// depth's compare.
+    /// `pcf`: the bilinear footprints' depths at the level(s) the filter
+    /// reads ([`Self::pcf_taps`]). With them, the compare per texel (ES
+    /// 3.0.6 3.8.15.1: "the comparison is done for each texel, and the
+    /// filter then weights the comparison results"): each tap compared as
+    /// above, the four results of a level bilinearly weighted by
+    /// `fract(coord * size - 0.5)` at that level's size -- or, for a NEAREST
+    /// filter within the level, the one tap the coordinate falls in, the
+    /// weights rounded to 0 or 1 (floor(c * size) is i0 plus one where the
+    /// fraction is at least 0.5) -- and the two levels' results mixed by the
+    /// MIPMAP_LINEAR weight. The weights are those of the unwrapped
+    /// coordinate under every wrap mode, MIRRORED_REPEAT included: the
+    /// gather's taps are i0 and i0 + 1 each wrapped (pco's tg4 changes
+    /// neither coordinate nor order, pco_nir_tex.c lower_tex_gather, and
+    /// its sampler keeps the address modes, pvr_arch_sampler.c:220-232; dEQP
+    /// tcuTexture.cpp sampleLinear2DCompare weights frac(u - 0.5) of the
+    /// unwrapped u). Taken when sampler meta dword 13 bit 0 says so
+    /// (`PCO_SAMPLER_META_RSVD0`, which pco never reads; the back end's
+    /// `shadow_filter_word`), else the filtered depth's compare.
     fn shadow_compare(
         &mut self,
         id: ir::InstrId,
         sampler: u8,
         d: SelSrc,
         r: SelSrc,
-        taps: Option<(VReg, [SelSrc; 2])>,
+        pcf: Option<Pcf>,
     ) -> Result<(), SelectError> {
-        use ir::AluOp::{Bcsel, Fadd, Feq, Ffma, Flt, Fmax, Fmin, I2f, Iand, Ine, Ior};
+        use ir::AluOp::{Bcsel, Fadd, Feq, Ffma, Fle, Flt, Fmax, Fmin, I2f, Iand, Ine, Ior};
         let imm = |x: u32| Some(SelSrc::Imm(x));
         let f = |x: f32| Some(SelSrc::Imm(x.to_bits()));
         let g = |s: &mut Self, op: ir::AluOp, x: [Option<SelSrc>; 3]| s.fresh_typed(SelOp::Alu(op), op_type(op), x);
@@ -3078,32 +3114,40 @@ impl<'a> Sel<'a> {
             g(s, Bcsel, [Some(pass), f(1.0), f(0.0)])
         };
         let mut compared = compare(self, d)?;
-        if let Some((taps, [u, v])) = taps {
-            /* the four compares: (i0, j0), (i1, j0), (i0, j1), (i1, j1) */
-            let mut c = [SelSrc::Imm(0); 4];
-            for (k, ck) in c.iter_mut().enumerate() {
-                *ck = compare(self, SelSrc::Virtual { v: VReg(taps.0 + k as u32), mods: Mods::default() })?;
-            }
-            /* the weights: fract(coord * size - 0.5) per axis, size at level
-             * 0 (one layer's for an array); fract(x) = x - floor(x), floor a
-             * source modifier on this machine */
-            let [w, h] = self.tex_size_2d(sampler, SelSrc::Imm(0))?;
-            let mut fr = [SelSrc::Imm(0); 2];
-            for (k, (c, n)) in [(u, w), (v, h)].into_iter().enumerate() {
-                let nf = g(self, I2f, [Some(n), None, None])?;
-                let s = g(self, Ffma, [Some(c), Some(nf), f(-0.5)])?;
-                let fl = self.modified(s, Mods { neg: true, abs: false, flr: true })?;
-                fr[k] = g(self, Fadd, [Some(s), Some(fl), None])?;
-            }
+        if let Some(Pcf { taps, levels, t, nearest, uv: [u, v] }) = pcf {
             /* mix(a, b, t) = ffma(t, b - a, a), as the front end lowers it */
             let mix = |s: &mut Self, a: SelSrc, b: SelSrc, t: SelSrc| -> Result<SelSrc, SelectError> {
                 let na = s.modified(a, Mods { neg: true, abs: false, flr: false })?;
                 let d = g(s, Fadd, [Some(b), Some(na), None])?;
                 g(s, Ffma, [Some(t), Some(d), Some(a)])
             };
-            let x0 = mix(self, c[0], c[1], fr[0])?;
-            let x1 = mix(self, c[2], c[3], fr[0])?;
-            let pcf = mix(self, x0, x1, fr[1])?;
+            let mut at_level = [SelSrc::Imm(0); 2];
+            for (k, (taps, level)) in taps.into_iter().zip(levels).enumerate() {
+                /* the four compares: (i0, j0), (i1, j0), (i0, j1), (i1, j1) */
+                let mut c = [SelSrc::Imm(0); 4];
+                for (j, cj) in c.iter_mut().enumerate() {
+                    *cj = compare(self, SelSrc::Virtual { v: VReg(taps.0 + j as u32), mods: Mods::default() })?;
+                }
+                /* the weights: fract(coord * size - 0.5) per axis, size at
+                 * the level (the layer's for a native array, the stacked
+                 * image's for a stacked one); fract(x) = x - floor(x), floor
+                 * a source modifier on this machine; 0 or 1 for NEAREST */
+                let [w, h] = self.tex_size_2d(sampler, level)?;
+                let mut fr = [SelSrc::Imm(0); 2];
+                for (axis, (coord, n)) in [(u, w), (v, h)].into_iter().enumerate() {
+                    let nf = g(self, I2f, [Some(n), None, None])?;
+                    let s = g(self, Ffma, [Some(coord), Some(nf), f(-0.5)])?;
+                    let fl = self.modified(s, Mods { neg: true, abs: false, flr: true })?;
+                    let fract = g(self, Fadd, [Some(s), Some(fl), None])?;
+                    let upper = g(self, Fle, [f(0.5), Some(fract), None])?;
+                    let step = g(self, Bcsel, [Some(upper), f(1.0), f(0.0)])?;
+                    fr[axis] = g(self, Bcsel, [Some(nearest), Some(step), Some(fract)])?;
+                }
+                let x0 = mix(self, c[0], c[1], fr[0])?;
+                let x1 = mix(self, c[2], c[3], fr[0])?;
+                at_level[k] = mix(self, x0, x1, fr[1])?;
+            }
+            let pcf = mix(self, at_level[0], at_level[1], t)?;
             let meta = word(self, 13)?;
             let pcf_bit = g(self, Iand, [Some(meta), imm(1), None])?;
             let per_texel = g(self, Ine, [Some(pcf_bit), imm(0), None])?;
@@ -3120,50 +3164,165 @@ impl<'a> Sel<'a> {
         })
     }
 
-    /// The four depths of the bilinear footprint of a shadow look-up at
-    /// `coord` (pco's `tg4`: `smp` with `sbmode` rawdata, one channel, the
-    /// level replaced by 0, the same lookup word as the look-up and, for a
-    /// native 2D array, the same layer address), in four consecutive
-    /// registers as (i0, j0), (i1, j0), (i0, j1), (i1, j1); and the
-    /// coordinate the footprint is at, for the weights.
-    fn gather_taps(
+    /// The footprints a shadow look-up's compare per texel weighs
+    /// ([`Self::shadow_compare`]), at the level(s) its filter reads, the
+    /// filter as sampler meta dword 13 (the back end's `shadow_filter_word`)
+    /// describes it when the shader runs:
+    ///
+    /// ```text
+    /// lambda   = lod                         textureLod
+    ///          = log2(rho) (+ bias)          otherwise; 0 in a vertex shader
+    /// rho^2    = max(|duv/dx * size|^2, |duv/dy * size|^2), level 0's size,
+    ///            the derivatives textureGrad's or the quad's (dFdx, dFdy)
+    /// minified = lambda > 0                  (ES 3.0.6 3.8.11, c = 0)
+    /// nearest  = minified ? bit 2 : bit 1    the filter within the level
+    /// bit 3 (MIPMAP_NEAREST): d1 = d2 = clamp(ceil(lambda + 0.5) - 1, 0, top)
+    /// bit 4 (MIPMAP_LINEAR):  l = clamp(lambda, 0, top), d1 = floor(l),
+    ///                         d2 = min(d1 + 1, top), t = l - d1
+    /// magnified, or neither:  d1 = d2 = 0, t = 0
+    /// ```
+    ///
+    /// `top` is bits 8..11, the last level. dEQP's reference picks the same
+    /// levels (tcuTexture.cpp sampleLevelArray2DCompare; texref.rs `levels`).
+    /// A NaN lambda (a NaN derivative) is not minified, so every level word
+    /// is a number: a NaN level stalled the TPU before (`smp_level`).
+    ///
+    /// Each footprint is a gather (pco's `tg4`: `smp` with `sbmode` rawdata,
+    /// one channel, `lodm` replace) at `uv` and its level, with the
+    /// look-up's lookup word and, for a native 2D array, its layer address
+    /// `layer`: four consecutive registers, (i0, j0), (i1, j0), (i0, j1),
+    /// (i1, j1). `duv` is the coordinate the quad's derivatives are taken
+    /// of, and `v_scale` (1 / layers for a stacked array, whose `uv` is the
+    /// stacked image's) scales the image height to its v.
+    #[allow(clippy::too_many_arguments)]
+    fn pcf_taps(
         &mut self,
         sampler: u8,
-        coord: ir::Src,
-        proj: bool,
-        layer: bool,
+        lod: ir::TexLod,
+        uv: [SelSrc; 2],
+        duv: [SelSrc; 2],
+        v_scale: Option<SelSrc>,
+        layer: Option<(SelSrc, SelSrc)>,
         offset: Option<[i8; 3]>,
-    ) -> Result<(VReg, [SelSrc; 2]), SelectError> {
-        let [u, v, _] = self.tex_coords(coord, 2, proj)?;
+    ) -> Result<Pcf, SelectError> {
+        use ir::AluOp::{Bcsel, F2i, Fadd, Fddx, Fddy, Ffma, Flog2, Flt, Fmax, Fmin, Fmul, I2f, Iand, Ine};
+        let imm = |x: u32| Some(SelSrc::Imm(x));
+        let f = |x: f32| Some(SelSrc::Imm(x.to_bits()));
+        let g = |s: &mut Self, op: ir::AluOp, x: [Option<SelSrc>; 3]| s.fresh_typed(SelOp::Alu(op), op_type(op), x);
+        let grads = match lod {
+            ir::TexLod::Grad { ddx, ddy } => {
+                let mut d = [[SelSrc::Imm(0); 2]; 2];
+                for (k, dd) in [ddx, ddy].into_iter().enumerate() {
+                    for j in 0..2 {
+                        d[k][j] = self.src(ir::Src::id(dd), j as u32)?;
+                    }
+                }
+                Some(d)
+            }
+            ir::TexLod::Implicit | ir::TexLod::Bias(_) if self.m.stage == SHC_STAGE_FRAGMENT => {
+                let mut d = [[SelSrc::Imm(0); 2]; 2];
+                for (k, op) in [Fddx, Fddy].into_iter().enumerate() {
+                    for j in 0..2 {
+                        d[k][j] = g(self, op, [Some(duv[j]), None, None])?;
+                    }
+                }
+                Some(d)
+            }
+            _ => None,
+        };
+        let lambda = match (lod, grads) {
+            (ir::TexLod::Lod(l), _) => self.src(l, 0)?,
+            (_, Some(d)) => {
+                let [w, h] = self.tex_size_2d(sampler, SelSrc::Imm(0))?;
+                let wf = g(self, I2f, [Some(w), None, None])?;
+                let mut hf = g(self, I2f, [Some(h), None, None])?;
+                if let Some(r) = v_scale {
+                    hf = g(self, Fmul, [Some(hf), Some(r), None])?;
+                }
+                let mut len2 = [SelSrc::Imm(0); 2];
+                for (k, [du, dv]) in d.into_iter().enumerate() {
+                    let a = g(self, Fmul, [Some(du), Some(wf), None])?;
+                    let b = g(self, Fmul, [Some(dv), Some(hf), None])?;
+                    let aa = g(self, Fmul, [Some(a), Some(a), None])?;
+                    len2[k] = g(self, Ffma, [Some(b), Some(b), Some(aa)])?;
+                }
+                let m = g(self, Fmax, [Some(len2[0]), Some(len2[1]), None])?;
+                let l2 = g(self, Flog2, [Some(m), None, None])?;
+                match lod {
+                    ir::TexLod::Bias(b) => {
+                        let b = self.src(b, 0)?;
+                        g(self, Ffma, [Some(l2), f(0.5), Some(b)])?
+                    }
+                    _ => g(self, Fmul, [Some(l2), f(0.5), None])?,
+                }
+            }
+            /* a vertex shader's implicit level: 0 */
+            _ => self.fresh_typed(SelOp::Copy, OpType::F32, [f(0.0), None, None])?,
+        };
+        let meta = self.fresh_group(SelOp::TexWord { binding: sampler, word: 13 }, [None; 3])?;
+        let bit = |s: &mut Self, b: u32| -> Result<SelSrc, SelectError> {
+            let x = g(s, Iand, [Some(meta), imm(b), None])?;
+            g(s, Ine, [Some(x), imm(0), None])
+        };
+        let minified = g(self, Flt, [f(0.0), Some(lambda), None])?;
+        let (mag_nearest, min_nearest) = (bit(self, 2)?, bit(self, 4)?);
+        let nearest = g(self, Bcsel, [Some(minified), Some(min_nearest), Some(mag_nearest)])?;
+        let top = self.meta_field(meta, (8, 4))?;
+        let top = g(self, I2f, [Some(top), None, None])?;
+        /* MIPMAP_LINEAR: the clamped level of detail's two levels and the
+         * fraction between them; floor a source modifier */
+        let lo = g(self, Fmax, [Some(lambda), f(0.0), None])?;
+        let clamped = g(self, Fmin, [Some(lo), Some(top), None])?;
+        let neg_floor = self.modified(clamped, Mods { neg: true, abs: false, flr: true })?;
+        let fraction = g(self, Fadd, [Some(clamped), Some(neg_floor), None])?;
+        let first = self.modified(clamped, Mods { neg: false, abs: false, flr: true })?;
+        let next = g(self, Fadd, [Some(first), f(1.0), None])?;
+        let second = g(self, Fmin, [Some(next), Some(top), None])?;
+        /* MIPMAP_NEAREST: ceil(lambda + 0.5) - 1 = -floor(-lambda - 0.5) - 1 */
+        let q = g(self, Ffma, [Some(lambda), f(-1.0), f(-0.5)])?;
+        let ceil = self.modified(q, Mods { neg: true, abs: false, flr: true })?;
+        let below = g(self, Fadd, [Some(ceil), f(-1.0), None])?;
+        let pos = g(self, Fmax, [Some(below), f(0.0), None])?;
+        let nearest_level = g(self, Fmin, [Some(pos), Some(top), None])?;
+        let (mip_nearest, mip_linear) = (bit(self, 8)?, bit(self, 16)?);
+        let blend = g(self, Bcsel, [Some(minified), Some(mip_linear), imm(0)])?;
+        let one = g(self, Bcsel, [Some(mip_nearest), Some(nearest_level), f(0.0)])?;
+        let pick = g(self, Bcsel, [Some(mip_linear), Some(first), Some(one)])?;
+        let d1 = g(self, Bcsel, [Some(minified), Some(pick), f(0.0)])?;
+        let d2 = g(self, Bcsel, [Some(blend), Some(second), Some(d1)])?;
+        let t = g(self, Bcsel, [Some(blend), Some(fraction), f(0.0)])?;
+
         let offset = offset.map(|[du, dv, _]| super::sel::lookup_word(du, dv));
-        if layer {
-            let z = self.src(coord, 2)?;
-            let (lo, hi) = self.array_layer_addr(sampler, z, false)?;
+        let mut taps = [VReg(0); 2];
+        for (tap, level) in taps.iter_mut().zip([d1, d2]) {
+            if let Some((lo, hi)) = layer {
+                self.emit(SelGroup {
+                    op: SelOp::SampleAddr,
+                    ty: OpType::U32,
+                    dst: None,
+                    srcs: [Some(lo), Some(hi), None],
+                })?;
+            }
+            *tap = VReg(self.next_vreg);
+            self.next_vreg += LANES;
             self.emit(SelGroup {
-                op: SelOp::SampleAddr,
-                ty: OpType::U32,
-                dst: None,
-                srcs: [Some(lo), Some(hi), None],
+                op: SelOp::Sample {
+                    binding: sampler,
+                    proj: false,
+                    lod: SmpLod::Replace,
+                    fetch: false,
+                    offset,
+                    cube: false,
+                    layer: layer.is_some(),
+                    gather: true,
+                },
+                ty: OpType::F32,
+                dst: Some(SelDst::Virtual(*tap)),
+                srcs: [Some(uv[0]), Some(uv[1]), Some(level)],
             })?;
         }
-        let taps = VReg(self.next_vreg);
-        self.next_vreg += LANES;
-        self.emit(SelGroup {
-            op: SelOp::Sample {
-                binding: sampler,
-                proj: false,
-                lod: SmpLod::Replace,
-                fetch: false,
-                offset,
-                cube: false,
-                layer,
-                gather: true,
-            },
-            ty: OpType::F32,
-            dst: Some(SelDst::Virtual(taps)),
-            srcs: [Some(u), Some(v), Some(SelSrc::Imm(0.0f32.to_bits()))],
-        })?;
-        Ok((taps, [u, v]))
+        let levels = [g(self, F2i, [Some(d1), None, None])?, g(self, F2i, [Some(d2), None, None])?];
+        Ok(Pcf { taps, levels, t, nearest, uv })
     }
 
     fn fresh_group(&mut self, op: SelOp, srcs: [Option<SelSrc>; 3]) -> Result<SelSrc, SelectError> {
@@ -5485,6 +5644,13 @@ void main() {{ colour = vec4(0.0); {body} }}
                                 SelOp::Alu(ir::AluOp::Fadd) => (fl(x[0]) + fl(x[1])).to_bits(),
                                 SelOp::Alu(ir::AluOp::Ffma) => (fl(x[0]) * fl(x[1]) + fl(x[2])).to_bits(),
                                 SelOp::Alu(ir::AluOp::I2f) => (x[0] as i32 as f32).to_bits(),
+                                /* the PCF arm's level of detail: the
+                                 * coordinate is a constant, so its quad
+                                 * derivatives are 0 */
+                                SelOp::Alu(ir::AluOp::Fddx | ir::AluOp::Fddy) => 0,
+                                SelOp::Alu(ir::AluOp::Flog2) => fl(x[0]).log2().to_bits(),
+                                SelOp::Alu(ir::AluOp::Fle) => u32::from(fl(x[0]) <= fl(x[1])),
+                                SelOp::Alu(ir::AluOp::F2i) => (fl(x[0]) as i32) as u32,
                                 SelOp::Alu(ir::AluOp::Iadd) => x[0].wrapping_add(x[1]),
                                 SelOp::Alu(ir::AluOp::Ieq) => u32::from(x[0] == x[1]),
                                 SelOp::Machine(MachineOp::Ubfe) => (x[0] >> x[1]) & ((1u32 << x[2]) - 1),

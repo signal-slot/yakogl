@@ -181,11 +181,8 @@ fn old_build_tex_desc(w: &mut [u32], t: &GlesTextureBind, warned: &mut u32) {
 /// PCO_SAMPLER_META_COMPARE_OP; the online compiler's shadow_compare).
 fn old_tex_desc_sampler(w: &mut [u32], t: &GlesTextureBind, levels: u32) {
     w[12] = t.compare_op as u32;
-    /* sampler meta word 1 bit 0: the per-texel shadow compare of a
-     * LINEAR/LINEAR sampler over one level (tex_desc_sampler) */
-    if levels == 1 && t.linear_filter != 0 && t.min_linear != 0 {
-        w[13] = 1;
-    }
+    /* sampler meta word 1: the shadow look-up's filter (tex_desc_sampler) */
+    w[13] = shadow_filter_word(t, levels);
     w[8] = TEX_SAMPLER_WORD0_LO;
     w[9] = (tpu_addrmode(t.wrap_s) << TEX_SAMPLER_ADDRMODE_U_SHIFT)
         | (tpu_addrmode(t.wrap_t) << TEX_SAMPLER_ADDRMODE_V_SHIFT)
