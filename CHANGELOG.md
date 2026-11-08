@@ -32,6 +32,12 @@ the project was developed in.
   `docs/notes/gc-128bit-texture-sampling.md`); the four 64-bit integer
   render targets (RGBA16I/UI, RG32I/UI) drawn through
   a tiled shadow, 17 of the 19 integer surfaces (RGBA32I/UI stay refused).
+- PowerVR: end-of-tile programs for four colour targets (`eot4`, and
+  `eot4_tb`..`eot4_tb3` with the last one to three targets from tile
+  buffers, each spilled emit patched with its own buffer's address), three
+  tile buffers, and four PBE pairs in the render kick (344 bytes, `frag_pr`
+  at 232 and 112 bytes). Draws still write at most three targets
+  (`PVR_RENDER_MAX_RT`); the capacity is `PVR_RENDER_EOT_MAX_RT` (RC14).
 - PowerVR: the groundwork of the firmware's partial render (#2, #3), all
   off by default: the render kick's zeroed `frag_pr` block
   (`PvrRenderFragPr`, 96 bytes), the SPM scratch size and PBE store words

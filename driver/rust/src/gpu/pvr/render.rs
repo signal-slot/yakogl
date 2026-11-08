@@ -55,10 +55,13 @@ pub const GEOM_UFO_SLOTS: u32 = 16;
 /// Two PBE register words per colour attachment in this firmware's 3D
 /// command, four dwords apart (measured on the board).
 const PBE_STRIDE_DW: usize = 4;
-/// How many colour attachments one render can write: the PBE words above
-/// cover it, and it is the size of the partial render's RTA arrays
-/// (`sRTACtl.ui32MaxRTs`).
+/// How many colour attachments one render writes (`PVR_RENDER_MAX_RT`): the
+/// size of the partial render's RTA arrays (`sRTACtl.ui32MaxRTs`).
 pub const MAX_RT: usize = 3;
+/// How many colour attachments the kick's PBE words and the end-of-tile
+/// programs cover (`PVR_RENDER_EOT_MAX_RT`): one more than a render writes
+/// yet.
+pub const EOT_MAX_RT: usize = 4;
 /// Render-target tiling constants for this core (Mesa bxs-4-64.h): 16x16
 /// tiles, simple internal parameter format v2, 4x4 macrotiles.
 const TILE_SIZE: u32 = 16;
@@ -133,7 +136,7 @@ pub struct PvrRenderFragRegs {
     pub isp_ctl: u32,
     pub event_pixel_pds_info: u32,
     pub event_pixel_pds_data: u32,
-    pub pbe_word: [[u64; 2]; MAX_RT],
+    pub pbe_word: [[u64; 2]; EOT_MAX_RT],
     pub num_rt: u32,
     pub pds_bgnd: [u64; 3],
     pub isp_scissor_base: u64,
@@ -165,7 +168,7 @@ pub struct PvrRenderFragPr {
     /// Padding, zero.
     pub reserved: u32,
     /// PBE REG_WORD0/1 per slot of the PR command (the whole array).
-    pub pbe_word: [[u64; 2]; MAX_RT],
+    pub pbe_word: [[u64; 2]; EOT_MAX_RT],
     /// The PR EOT program's PDS DATA segment: heap offset and bytes.
     pub eot_pds_data: u32,
     pub eot_pds_data_bytes: u32,
@@ -199,24 +202,24 @@ impl PvrRenderFragPr {
 const FRAG_FLAGS_SPMSCRATCHBUFFER: u32 = 0x0008_0000;
 
 const _: () = {
-    assert!(size_of::<PvrRenderKick>() == 312);
+    assert!(size_of::<PvrRenderKick>() == 344);
     assert!(offset_of!(PvrRenderKick, geom) == 16);
     assert!(offset_of!(PvrRenderKick, frag) == 32);
     assert!(offset_of!(PvrRenderKick, frag) + offset_of!(PvrRenderFragRegs, pbe_word) == 80);
-    assert!(offset_of!(PvrRenderKick, frag) + offset_of!(PvrRenderFragRegs, num_rt) == 128);
-    assert!(offset_of!(PvrRenderKick, frag) + offset_of!(PvrRenderFragRegs, pds_bgnd) == 136);
-    assert!(offset_of!(PvrRenderKick, frag) + offset_of!(PvrRenderFragRegs, isp_scissor_base) == 160);
-    assert!(offset_of!(PvrRenderKick, frag) + offset_of!(PvrRenderFragRegs, cmd_flags) == 200);
-    assert!(offset_of!(PvrRenderKick, frag) + offset_of!(PvrRenderFragRegs, isp_oclqry_base) == 208);
-    assert!(offset_of!(PvrRenderKick, frag_pr) == 216);
-    assert!(size_of::<PvrRenderFragPr>() == 96);
+    assert!(offset_of!(PvrRenderKick, frag) + offset_of!(PvrRenderFragRegs, num_rt) == 144);
+    assert!(offset_of!(PvrRenderKick, frag) + offset_of!(PvrRenderFragRegs, pds_bgnd) == 152);
+    assert!(offset_of!(PvrRenderKick, frag) + offset_of!(PvrRenderFragRegs, isp_scissor_base) == 176);
+    assert!(offset_of!(PvrRenderKick, frag) + offset_of!(PvrRenderFragRegs, cmd_flags) == 216);
+    assert!(offset_of!(PvrRenderKick, frag) + offset_of!(PvrRenderFragRegs, isp_oclqry_base) == 224);
+    assert!(offset_of!(PvrRenderKick, frag_pr) == 232);
+    assert!(size_of::<PvrRenderFragPr>() == 112);
     assert!(offset_of!(PvrRenderFragPr, spm_scratch_gpu) == 0);
     assert!(offset_of!(PvrRenderFragPr, spm_scratch_bytes) == 8);
     assert!(offset_of!(PvrRenderFragPr, reserved) == 12);
     assert!(offset_of!(PvrRenderFragPr, pbe_word) == 16);
-    assert!(offset_of!(PvrRenderFragPr, eot_pds_data) == 64);
-    assert!(offset_of!(PvrRenderFragPr, eot_pds_data_bytes) == 68);
-    assert!(offset_of!(PvrRenderFragPr, pds_pr_bgnd) == 72);
+    assert!(offset_of!(PvrRenderFragPr, eot_pds_data) == 80);
+    assert!(offset_of!(PvrRenderFragPr, eot_pds_data_bytes) == 84);
+    assert!(offset_of!(PvrRenderFragPr, pds_pr_bgnd) == 88);
 };
 
 /// `struct yd_pvr_hwrt`: one render-target dataset (an HWRT data and its
@@ -1489,7 +1492,7 @@ pub fn submit(k: &mut YdPvrKm, r: &mut YdPvrRender, kick: &PvrRenderKick, fence_
         lohi(&mut dk, 26, f.isp_zload_store_base);
         lohi(&mut dk, 28, f.isp_stencil_load_store_base);
         // pbe_word[8][3] in the firmware's 3D registers, PBE_STRIDE_DW apart
-        let nrt = (if f.num_rt != 0 { f.num_rt } else { 1 }).min(MAX_RT as u32) as usize;
+        let nrt = (if f.num_rt != 0 { f.num_rt } else { 1 }).min(EOT_MAX_RT as u32) as usize;
         for (i, pbe) in f.pbe_word.iter().enumerate().take(nrt) {
             let o = 30 + i * PBE_STRIDE_DW;
             lohi(&mut dk, o, pbe[0]);
@@ -4095,7 +4098,7 @@ mod submit_tests {
         let mut c = kick(1);
         c.frag_pr.spm_scratch_gpu = GENERAL_HEAP_BASE + 0xA000;
         c.frag_pr.spm_scratch_bytes = 1_920_000;
-        c.frag_pr.pbe_word = [[0xB0, 0xB1], [0xB2, 0xB3], [0xB4, 0xB5]];
+        c.frag_pr.pbe_word = [[0xB0, 0xB1], [0xB2, 0xB3], [0xB4, 0xB5], [0xB6, 0xB7]];
         c.frag_pr.eot_pds_data = 0xC0;
         c.frag_pr.eot_pds_data_bytes = 44;
         c.frag_pr.pds_pr_bgnd = [0xD0, 0xD1, 0xD2];
@@ -4126,9 +4129,10 @@ mod submit_tests {
             unsafe { core::slice::from_raw_parts(c as *const PvrRenderKick as *const u8, size_of::<PvrRenderKick>()) }
                 .to_vec()
         };
-        assert!(bytes(&zero)[216..].iter().all(|&b| b == 0), "kick() leaves the block zero");
+        let pr_at = offset_of!(PvrRenderKick, frag_pr);
+        assert!(bytes(&zero)[pr_at..].iter().all(|&b| b == 0), "kick() leaves the block zero");
         let filled = filled_frag_pr();
-        assert_eq!(bytes(&filled)[..216], bytes(&zero)[..216], "the block is past every other field");
+        assert_eq!(bytes(&filled)[..pr_at], bytes(&zero)[..pr_at], "the block is past every other field");
 
         for knob in [0u32, 1] {
             let mut z = rig(knob);
@@ -4196,7 +4200,7 @@ mod submit_tests {
         assert_eq!(pr[76], d3[76]);
         assert_eq!((d3[2], d3[3], pr[2], pr[3]), (0, 0, 0, 0), "CMDTA3D_SHARED.asPRBuffer");
         // ... and nothing else differs (pds_pr_bgnd is not written).
-        let pbe = 30..30 + MAX_RT * PBE_STRIDE_DW;
+        let pbe = 30..30 + EOT_MAX_RT * PBE_STRIDE_DW;
         for i in (0..80).filter(|&i| i != 15 && !pbe.contains(&i)) {
             assert_eq!(pr[i], d3[i], "3D_PR dw{i}");
         }
@@ -4204,47 +4208,41 @@ mod submit_tests {
         assert_eq!(t.r.last_frag_cmd.to_vec(), d3);
     }
 
-    /// G4 (pr-frame-colour): a 3-target frame's scratch PR writes the PR
-    /// array whole: slots 1 and 2 are the block's zeros, not the frame's
+    /// G4 (pr-frame-colour): a 4-target frame's scratch PR writes the PR
+    /// array whole: slots 1 to 3 are the block's zeros, not the frame's
     /// real targets the 3D command keeps.
     #[test]
-    fn g4_the_pr_pbe_array_replaces_every_slot_of_a_three_target_frame() {
+    fn g4_the_pr_pbe_array_replaces_every_slot_of_a_four_target_frame() {
         let mut c = filled_frag_pr();
-        c.frag.num_rt = 3;
+        c.frag.num_rt = 4;
         c.frag.pbe_word[1] = [0xE0_0000_0001, 0xE1_0000_0002];
         c.frag.pbe_word[2] = [0xE2_0000_0003, 0xE3_0000_0004];
-        c.frag_pr.pbe_word = [[0xB0, 0xB1], [0, 0], [0, 0]];
+        c.frag.pbe_word[3] = [0xE4_0000_0005, 0xE5_0000_0006];
+        c.frag_pr.pbe_word = [[0xB0, 0xB1], [0, 0], [0, 0], [0, 0]];
         let mut t = rig(1);
         let mut f1 = 0u32;
         assert_eq!(submit(&mut t.k, &mut t.r, &c, &mut f1), 0, "log:\n{}", t.log());
         let (d3, pr) = threed_bodies(&t);
         let pr = pr.expect("a 3D_PR with the knob");
         assert_eq!(pr[30..34], [0xB0, 0, 0xB1, 0]);
-        assert_eq!(pr[34..42], [0; 8], "PR slots 1 and 2");
-        assert_eq!(d3[34..42], [1, 0xE0, 2, 0xE1, 3, 0xE2, 4, 0xE3], "the frame's slots 1 and 2");
+        assert_eq!(pr[34..46], [0; 12], "PR slots 1 to 3");
+        assert_eq!(d3[34..46], [1, 0xE0, 2, 0xE1, 3, 0xE2, 4, 0xE3, 5, 0xE4, 6, 0xE5], "the frame's slots 1 to 3");
     }
 
     /// G2 (kick-abi): the block's size and every offset, as bytes: each
     /// field written with its own value lands where pvr_render.h,
     /// src/abi_layout.rs and src/pvr/ffi_layout_check.c say it does (the
     /// kick crosses the OSAL as raw bytes, so the C and the Rust must agree
-    /// without compiler help).
+    /// without compiler help; the numbers are pinned once, in the layout
+    /// assertions above).
     #[test]
-    fn g2_the_frag_pr_block_sits_at_216_and_is_96_bytes_of_fixed_offsets() {
-        assert_eq!(size_of::<PvrRenderKick>(), 312);
-        assert_eq!(offset_of!(PvrRenderKick, frag_pr), 216);
-        assert_eq!(size_of::<PvrRenderFragPr>(), 96);
+    fn g2_the_frag_pr_block_is_the_last_field_and_fixed_width() {
+        let pr_at = offset_of!(PvrRenderKick, frag_pr);
+        assert_eq!(pr_at + size_of::<PvrRenderFragPr>(), size_of::<PvrRenderKick>(), "the block ends the kick");
         assert_eq!(
-            [
-                offset_of!(PvrRenderFragPr, spm_scratch_gpu),
-                offset_of!(PvrRenderFragPr, spm_scratch_bytes),
-                offset_of!(PvrRenderFragPr, reserved),
-                offset_of!(PvrRenderFragPr, pbe_word),
-                offset_of!(PvrRenderFragPr, eot_pds_data),
-                offset_of!(PvrRenderFragPr, eot_pds_data_bytes),
-                offset_of!(PvrRenderFragPr, pds_pr_bgnd),
-            ],
-            [0, 8, 12, 16, 64, 68, 72]
+            offset_of!(PvrRenderFragPr, pbe_word) + EOT_MAX_RT * 16,
+            offset_of!(PvrRenderFragPr, eot_pds_data),
+            "PBE pairs for every end-of-tile target, no padding"
         );
         // SAFETY: every field is a plain integer or an array of them.
         let mut c: PvrRenderKick = unsafe { core::mem::zeroed() };
@@ -4260,21 +4258,24 @@ mod submit_tests {
         // SAFETY: a repr(C) struct of integers, read as its own bytes.
         let b =
             unsafe { core::slice::from_raw_parts(&c as *const PvrRenderKick as *const u8, size_of::<PvrRenderKick>()) };
-        let u32_at = |o: usize| u32::from_le_bytes(b[o..o + 4].try_into().unwrap());
-        let u64_at = |o: usize| u64::from_le_bytes(b[o..o + 8].try_into().unwrap());
-        assert!(b[..216].iter().all(|&x| x == 0), "nothing before the block");
-        assert_eq!(u64_at(216), 0x1111_1111_1111_1111);
-        assert_eq!(u32_at(224), 0x2222_2222);
-        assert_eq!(u32_at(228), 0x3333_3333);
-        for i in 0..MAX_RT {
-            assert_eq!(u64_at(232 + 16 * i), 0x4040_4040_4040_4040 + i as u64, "pbe_word[{i}][0]");
-            assert_eq!(u64_at(240 + 16 * i), 0x5050_5050_5050_5050 + i as u64, "pbe_word[{i}][1]");
+        let at = |o: usize| pr_at + o;
+        let u32_at = |o: usize| u32::from_le_bytes(b[at(o)..at(o) + 4].try_into().unwrap());
+        let u64_at = |o: usize| u64::from_le_bytes(b[at(o)..at(o) + 8].try_into().unwrap());
+        assert!(b[..pr_at].iter().all(|&x| x == 0), "nothing before the block");
+        assert_eq!(u64_at(offset_of!(PvrRenderFragPr, spm_scratch_gpu)), 0x1111_1111_1111_1111);
+        assert_eq!(u32_at(offset_of!(PvrRenderFragPr, spm_scratch_bytes)), 0x2222_2222);
+        assert_eq!(u32_at(offset_of!(PvrRenderFragPr, reserved)), 0x3333_3333);
+        let pbe = offset_of!(PvrRenderFragPr, pbe_word);
+        for i in 0..EOT_MAX_RT {
+            assert_eq!(u64_at(pbe + 16 * i), 0x4040_4040_4040_4040 + i as u64, "pbe_word[{i}][0]");
+            assert_eq!(u64_at(pbe + 16 * i + 8), 0x5050_5050_5050_5050 + i as u64, "pbe_word[{i}][1]");
         }
-        assert_eq!(u32_at(280), 0x6666_6666);
-        assert_eq!(u32_at(284), 0x7777_7777);
-        assert_eq!(u64_at(288), 0x8080_8080_8080_8080);
-        assert_eq!(u64_at(296), 0x8181_8181_8181_8181);
-        assert_eq!(u64_at(304), 0x8282_8282_8282_8282);
+        assert_eq!(u32_at(offset_of!(PvrRenderFragPr, eot_pds_data)), 0x6666_6666);
+        assert_eq!(u32_at(offset_of!(PvrRenderFragPr, eot_pds_data_bytes)), 0x7777_7777);
+        let bg = offset_of!(PvrRenderFragPr, pds_pr_bgnd);
+        assert_eq!(u64_at(bg), 0x8080_8080_8080_8080);
+        assert_eq!(u64_at(bg + 8), 0x8181_8181_8181_8181);
+        assert_eq!(u64_at(bg + 16), 0x8282_8282_8282_8282);
     }
 
     /// Without the knob, none of that is written: the sRTACtl words and the

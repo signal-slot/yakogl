@@ -51,14 +51,19 @@ enum pvr_render_heap {
 	PVR_RENDER_HEAP_USC,         /* USC shader code */
 };
 
-/* Colour attachments one render may write (the hardware allows eight; the
- * end-of-tile programs captured for this driver cover three, which is what a
- * Quick 3D G-buffer pass asks for). */
+/* Colour attachments one render may write (the hardware allows eight; three
+ * is what a Quick 3D G-buffer pass asks for). The static end-of-tile PDS
+ * program and the draws stay at this count. */
 #define PVR_RENDER_MAX_RT 3
+/* Colour attachments the end-of-tile USC programs and the kick's PBE words
+ * cover: one more than a draw writes yet, the capacity a four-target render
+ * (ES 3.0 GL_MAX_DRAW_BUFFERS) grows into. */
+#define PVR_RENDER_EOT_MAX_RT 4
 
 /* Tile buffers: one per colour attachment that does not fit the pixel's four
- * output registers. Three RGBA16F attachments (a Quick 3D G-buffer) spill one. */
-#define PVR_RENDER_TILE_BUFFERS 2
+ * output registers. Three RGBA16F attachments (a Quick 3D G-buffer) spill
+ * one; four of them spill up to three. */
+#define PVR_RENDER_TILE_BUFFERS 3
 /* One tile's worth of spilled outputs: tile_size_x (16) * tile_size_y (16) *
  * max_partitions (16) * usc_min_output_registers_per_pix (2) dwords, times the
  * one cluster this core has (Mesa pvr_get_tile_buffer_size_per_core). */
@@ -68,16 +73,21 @@ enum pvr_render_heap {
 struct pvr_render_static {
 	uint64_t eot_doutu_src0;        /* DOUTU task control of the EOT USC program */
 	uint32_t event_pixel_pds_info;  /* CR_EVENT_PIXEL_PDS_INFO for that program */
-	/* The same two, per colour-attachment count (index 1..PVR_RENDER_MAX_RT):
-	 * one end-of-tile program per count, each emitting that many surfaces. */
-	uint64_t eot_doutu_src0_n[PVR_RENDER_MAX_RT + 1];
-	uint32_t event_pixel_pds_info_n[PVR_RENDER_MAX_RT + 1];
+	/* The same two, per colour-attachment count (index
+	 * 1..PVR_RENDER_EOT_MAX_RT): one end-of-tile program per count, each
+	 * emitting that many surfaces. */
+	uint64_t eot_doutu_src0_n[PVR_RENDER_EOT_MAX_RT + 1];
+	uint32_t event_pixel_pds_info_n[PVR_RENDER_EOT_MAX_RT + 1];
 	/* The same, for a render whose LAST attachment comes from a tile buffer:
 	 * a pixel has four output registers, so a fragment shader with more
 	 * outputs than fit stores the rest to memory and the end-of-tile program
 	 * loads each one back before emitting it. */
-	uint64_t eot_doutu_src0_tb_n[PVR_RENDER_MAX_RT + 1];
-	uint32_t event_pixel_pds_info_tb_n[PVR_RENDER_MAX_RT + 1];
+	uint64_t eot_doutu_src0_tb_n[PVR_RENDER_EOT_MAX_RT + 1];
+	uint32_t event_pixel_pds_info_tb_n[PVR_RENDER_EOT_MAX_RT + 1];
+	/* Four attachments, the last k (index 1..PVR_RENDER_TILE_BUFFERS) from
+	 * tile buffers 0..k-1; [1] is eot_doutu_src0_tb_n[4]. The PDS info is
+	 * event_pixel_pds_info_tb_n[4]. */
+	uint64_t eot_doutu_src0_tb4_k[PVR_RENDER_TILE_BUFFERS + 1];
 	/* Tile buffers the fragment shader may store outputs into; their
 	 * addresses go to the shared registers the shader reads them from. */
 	uint64_t tile_buffer_gpu[PVR_RENDER_TILE_BUFFERS];
@@ -104,9 +114,9 @@ struct pvr_render_frag_regs {
 	uint32_t event_pixel_pds_data;  /* PDS-heap offset of the EOT data segment */
 	/* PBE REG_WORD0/1 per colour attachment (the firmware's 3D registers
 	 * hold pbe_word[8][3]; this driver fills the first two words of the
-	 * first PVR_RENDER_MAX_RT). num_rt 0 means one, for callers written
+	 * first PVR_RENDER_EOT_MAX_RT). num_rt 0 means one, for callers written
 	 * before multi-target rendering. */
-	uint64_t pbe_word[PVR_RENDER_MAX_RT][2];
+	uint64_t pbe_word[PVR_RENDER_EOT_MAX_RT][2];
 	uint32_t num_rt;
 	uint64_t pds_bgnd[3];           /* background-object PDS (CR_PDS_BGRND0/1/3) */
 	/* ISP Z load/store (depth/stencil to memory, cr.xml ISP_ZLSCTL /
@@ -137,7 +147,7 @@ struct pvr_render_frag_regs {
  * every firmware word is without the partial-render knob. With the knob a
  * filled block gives the 3D_PR its pbe_word and eot_pds_data (and both
  * commands the SPM scratch flag); pds_pr_bgnd is not written yet. Fixed-width
- * fields with explicit padding (96 bytes), mirrored by src/osal/render.rs and
+ * fields with explicit padding (112 bytes), mirrored by src/osal/render.rs and
  * driver/rust/src/gpu/pvr/render.rs. */
 struct pvr_render_frag_pr {
 	/* The SPM colour scratch the PR EOT stores the tiles to and the
@@ -151,7 +161,7 @@ struct pvr_render_frag_pr {
 	/* PBE REG_WORD0/1 per slot of the PR command, written whole (Mesa
 	 * copies the whole array): slot 0 the scratch's pair (identity swizzle,
 	 * LINEAR, the scratch's own stride, no downscale), the others zero. */
-	uint64_t pbe_word[PVR_RENDER_MAX_RT][2];
+	uint64_t pbe_word[PVR_RENDER_EOT_MAX_RT][2];
 	/* The PR EOT program: the PDS-heap offset of its DATA segment (what the
 	 * PR command's CR_EVENT_PIXEL_PDS_DATA names; the CODE and the info word
 	 * are the frame's) and that segment's size in bytes. */

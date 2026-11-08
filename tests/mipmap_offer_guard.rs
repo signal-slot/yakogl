@@ -273,11 +273,16 @@ mod pvr {
         let st = PvrRenderStatic {
             eot_doutu_src0: 0x1234,
             event_pixel_pds_info: 0x55,
-            eot_doutu_src0_n: [0, 0x1001, 0x1002, 0x1003],
-            event_pixel_pds_info_n: [0, 0x61, 0x62, 0x63],
-            eot_doutu_src0_tb_n: [0, 0x2001, 0x2002, 0x2003],
-            event_pixel_pds_info_tb_n: [0, 0x71, 0x72, 0x73],
-            tile_buffer_gpu: [HEAP_GENERAL_BASE + 0x3E00_0000, HEAP_GENERAL_BASE + 0x3E00_8000],
+            eot_doutu_src0_n: [0, 0x1001, 0x1002, 0x1003, 0x1004],
+            event_pixel_pds_info_n: [0, 0x61, 0x62, 0x63, 0x64],
+            eot_doutu_src0_tb_n: [0, 0x2001, 0x2002, 0x2003, 0x2004],
+            event_pixel_pds_info_tb_n: [0, 0x71, 0x72, 0x73, 0x74],
+            eot_doutu_src0_tb4_k: [0, 0x2004, 0x3002, 0x3003],
+            tile_buffer_gpu: [
+                HEAP_GENERAL_BASE + 0x3E00_0000,
+                HEAP_GENERAL_BASE + 0x3E00_8000,
+                HEAP_GENERAL_BASE + 0x3E01_0000,
+            ],
             border_gpu: HEAP_GENERAL_BASE + 0x3F00_0000,
             heap_base: HEAPS,
         };

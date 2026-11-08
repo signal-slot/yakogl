@@ -57,6 +57,13 @@ a build proves the list is what this Mesa's pco makes. Last full run
 (2026-10-01): every program reproduced, usc_blobs.txt sha256
 f9a0dc0adff79149a4b4cb713628631082c086ab63b5ec7555f6228e154701fc, identical
 with and without usclib-tex.cl.patch (none of these programs samples).
+2026-11-08 (Ubuntu, gcc 15.2.0, LLVM/clang 21.1.8, `deps-env.sh --build
+PCO_SPM_LOAD_CAPTURE`'s tree): the 2026-10-01 list reproduced with that
+build, then the four-target programs (`eot4`, `eot4_tb`, `eot4_tb2`,
+`eot4_tb3`) and the `tile_buffer_dwords` suffix were added with each spilled
+emit's own sentinel (`capture_usc.c`); the earlier programs' words did not
+move. usc_blobs.txt sha256
+8e2b510ee9269d83ef581e010e85300e031766410ebd5da859d9003b266130da.
 
 ## The partial render's background-object load shader
 
