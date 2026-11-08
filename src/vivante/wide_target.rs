@@ -130,6 +130,58 @@ const fn tiled_offset(x: u32, y: u32, tw: u32) -> usize {
     ((tile * 16 + (y % 4) * 4 + x % 4) * BPP) as usize
 }
 
+/// Bytes a texel of a 128-bit target takes in the linear storage.
+const WIDE_BPP: usize = 16;
+
+/// Where the second (B,A) plane of a 128-bit target starts in its two-plane
+/// image, `tw` pixels wide (a multiple of 4) and `h` tall: half-way, Mesa's
+/// `etna_resource_level_second_plane_offset`. Asked of
+/// [`super::tiled_copy::second_plane_offset`], the texture side's rule.
+pub fn plane_offset(tw: u32, h: u32) -> usize {
+    let t =
+        crate::backend::GlesTextureBind { width: tw, height: h, layers: 1, ..crate::backend::GlesTextureBind::ZERO };
+    super::tiled_copy::second_plane_offset(&t, 0)
+}
+
+/// Bytes of the two-plane image of a `tw` x `h` 128-bit target.
+pub fn planes_bytes(tw: u32, h: u32) -> usize {
+    2 * plane_offset(tw, h)
+}
+
+/// A linear image of 16-byte pixels (R,G,B,A as four 32-bit words, rows
+/// `pitch` bytes apart) into the two 4x4-tiled 8-byte planes Mesa renders a
+/// 128-bit target into: bytes 0-7 of each pixel (R,G) tiled into the first
+/// plane, bytes 8-15 (B,A) into the second at [`plane_offset`]. Mesa's
+/// `etna_texture_tile_rgba32f` (etnaviv_tiling.c:137-158). `tw` is the tiled
+/// width, at least `w` and a multiple of 4; the padding stays as `dst` had
+/// it. Inert: nothing draws through it yet.
+pub fn split_planes(src: &[u8], pitch: usize, (w, h): (u32, u32), tw: u32, dst: &mut [u8]) {
+    let second = plane_offset(tw, h.next_multiple_of(4));
+    for y in 0..h {
+        for x in 0..w {
+            let from = y as usize * pitch + x as usize * WIDE_BPP;
+            let to = tiled_offset(x, y, tw);
+            dst[to..to + 8].copy_from_slice(&src[from..from + 8]);
+            dst[second + to..second + to + 8].copy_from_slice(&src[from + 8..from + 16]);
+        }
+    }
+}
+
+/// The inverse of [`split_planes`]: the two tiled planes joined back into
+/// interleaved 16-byte pixels (`etna_texture_untile_rgba32f`). Bytes of `dst`
+/// outside the `w` x `h` pixels are left alone.
+pub fn join_planes(src: &[u8], tw: u32, (w, h): (u32, u32), pitch: usize, dst: &mut [u8]) {
+    let second = plane_offset(tw, h.next_multiple_of(4));
+    for y in 0..h {
+        for x in 0..w {
+            let to = y as usize * pitch + x as usize * WIDE_BPP;
+            let from = tiled_offset(x, y, tw);
+            dst[to..to + 8].copy_from_slice(&src[from..from + 8]);
+            dst[to + 8..to + 16].copy_from_slice(&src[second + from..second + from + 8]);
+        }
+    }
+}
+
 /// Does this draw render into a shadow? One colour target (`single`: the
 /// caller's count of hardware targets is 1), with 64-bit pixels, a CPU view
 /// of its storage, and drawn with a positive stride straight into it (not
@@ -348,5 +400,99 @@ mod tests {
         assert_eq!(tiled_offset(4, 0, 16), 128);
         assert_eq!(tiled_offset(0, 4, 16), 512);
         assert_eq!(tiled_offset(7, 5, 16), 512 + 128 + 32 + 24);
+    }
+
+    /// R,G,B,A: negative, above 2^24 (the float mantissa), and a pattern.
+    fn texel(x: u32, y: u32) -> [u8; 16] {
+        let words = [
+            (-(x as i32) - 1 - 1000 * y as i32) as u32,
+            0x0100_0001 + x + 77 * y,
+            0xffff_ff00 - x,
+            0x8000_0000 | (y << 8) | x,
+        ];
+        let mut b = [0u8; 16];
+        for (i, v) in words.iter().enumerate() {
+            b[i * 4..i * 4 + 4].copy_from_slice(&v.to_le_bytes());
+        }
+        b
+    }
+
+    fn image(w: u32, h: u32, pitch: usize) -> std::vec::Vec<u8> {
+        let mut v = std::vec![0xa5u8; pitch * h as usize];
+        for y in 0..h {
+            for x in 0..w {
+                let at = y as usize * pitch + x as usize * 16;
+                v[at..at + 16].copy_from_slice(&texel(x, y));
+            }
+        }
+        v
+    }
+
+    #[test]
+    fn the_second_plane_starts_half_way() {
+        assert_eq!(plane_offset(16, 8), 16 * 8 * 8);
+        assert_eq!(planes_bytes(16, 8), 2 * 16 * 8 * 8);
+        assert_eq!(plane_offset(4, 4), 128);
+    }
+
+    #[test]
+    fn a_texel_splits_rg_into_plane_0_and_ba_into_plane_1() {
+        let (w, h, tw) = (8u32, 8u32, 16u32);
+        let src = image(w, h, 8 * 16);
+        let mut dst = std::vec![0u8; planes_bytes(tw, h)];
+        split_planes(&src, 8 * 16, (w, h), tw, &mut dst);
+        let second = plane_offset(tw, h);
+        for (x, y) in [(0, 0), (1, 0), (0, 1), (4, 0), (0, 4), (7, 5), (7, 7)] {
+            let at = tiled_offset(x, y, tw);
+            let t = texel(x, y);
+            assert_eq!(&dst[at..at + 8], &t[..8], "RG of ({x},{y})");
+            assert_eq!(&dst[second + at..second + at + 8], &t[8..], "BA of ({x},{y})");
+        }
+        /* the padding columns stay as they were */
+        assert!(dst[tiled_offset(8, 0, tw)..][..8].iter().all(|&b| b == 0));
+    }
+
+    #[test]
+    fn split_then_join_gives_every_pixel_back_bit_for_bit() {
+        for (w, h) in [(8u32, 8u32), (16, 4), (1, 1), (5, 3), (7, 9), (13, 6), (17, 17)] {
+            let tw = align_up(w, 4);
+            let pitch = (w as usize + 3) * 16;
+            let src = image(w, h, pitch);
+            let mut planes = std::vec![0u8; planes_bytes(tw, align_up(h, 4))];
+            split_planes(&src, pitch, (w, h), tw, &mut planes);
+            let mut back = std::vec![0xa5u8; pitch * h as usize];
+            join_planes(&planes, tw, (w, h), pitch, &mut back);
+            assert_eq!(back, src, "{w}x{h}");
+        }
+    }
+
+    #[test]
+    fn the_render_target_padding_round_trips_too() {
+        /* the shadow's own padding: width to 16, height to 4 */
+        let (w, h) = (21u32, 10u32);
+        let (tw, th) = padded(w, h);
+        let pitch = w as usize * 16;
+        let src = image(w, h, pitch);
+        let mut planes = std::vec![0u8; planes_bytes(tw, th)];
+        split_planes(&src, pitch, (w, h), tw, &mut planes);
+        let mut back = std::vec![0u8; src.len()];
+        join_planes(&planes, tw, (w, h), pitch, &mut back);
+        assert_eq!(back, src);
+    }
+
+    #[test]
+    fn negative_values_and_values_above_2_pow_24_keep_all_32_bits() {
+        let t = [i32::MIN as u32, -1i32 as u32, 0x0100_0001, u32::MAX];
+        let mut px = [0u8; 16];
+        for (i, v) in t.iter().enumerate() {
+            px[i * 4..i * 4 + 4].copy_from_slice(&v.to_le_bytes());
+        }
+        let mut planes = std::vec![0u8; planes_bytes(4, 4)];
+        split_planes(&px, 16, (1, 1), 4, &mut planes);
+        assert_eq!(&planes[..8], &px[..8]);
+        assert_eq!(&planes[128..136], &px[8..]);
+        let mut back = [0u8; 16];
+        join_planes(&planes, 4, (1, 1), 16, &mut back);
+        assert_eq!(back, px);
     }
 }
