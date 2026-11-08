@@ -5610,16 +5610,7 @@ fn build_tex_desc(w: &mut [u32], t: &GlesTextureBind, warned: &mut u32) {
 /// PCO_SAMPLER_META_COMPARE_OP; the online compiler's shadow_compare).
 fn tex_desc_sampler(w: &mut [u32], t: &GlesTextureBind, levels: u32) {
     w[12] = t.compare_op as u32;
-    /* Sampler meta word 1 (dword 13, Mesa's PCO_SAMPLER_META_RSVD0, which
-     * no pco program reads), bit 0: the shadow look-up compares per texel
-     * (the online compiler's PCF arm, select.rs shadow_compare) -- a
-     * LINEAR/LINEAR sampler over one level, where the bilinear footprint
-     * at level 0 is the whole filter (docs/es3/pvr-2darray.md section 7.2).
-     * A mipmap filter, and a sampler whose min and mag filters differ,
-     * keep the filtered-then-compared depth. */
-    if levels == 1 && t.linear_filter != 0 && t.min_linear != 0 {
-        w[13] = 1;
-    }
+    w[13] = shadow_filter_word(t, levels);
     let filter =
         |linear: u8| if linear != 0 { csb::ROGUE_TEXSTATE_FILTER_LINEAR } else { csb::ROGUE_TEXSTATE_FILTER_POINT };
     let mut maxlod = 0;
@@ -5666,6 +5657,41 @@ fn tex_desc_sampler(w: &mut [u32], t: &GlesTextureBind, levels: u32) {
     );
     w[8] = w0[0];
     w[9] = w0[1];
+}
+
+/// Sampler meta word 1 (dword 13, Mesa's PCO_SAMPLER_META_RSVD0, which no
+/// pco program reads): the filter a shadow look-up applies to the compare
+/// results (the online compiler's PCF arm, select.rs shadow_compare;
+/// docs/es3/pvr-2darray.md section 7.2), over the `levels` levels the
+/// sampler walks. Bit 0: compare per texel -- some filter of the sampler
+/// blends texels or levels; 0 for NEAREST both ways with no mipmap filter
+/// or NEAREST_MIPMAP_NEAREST, where the TPU's one texel compared is the
+/// whole filter, and then the word is 0. With bit 0: bit 1 the
+/// magnification filter is NEAREST, bit 2 the minification filter's
+/// within-level filter is NEAREST, bit 3 the level is the nearest one
+/// (`*_MIPMAP_NEAREST`), bit 4 two levels are blended (`*_MIPMAP_LINEAR`),
+/// bits 8..11 the last level, `levels - 1`. Bit 0 alone is LINEAR/LINEAR
+/// over one level.
+fn shadow_filter_word(t: &GlesTextureBind, levels: u32) -> u32 {
+    let chain = levels > 1;
+    let mip_linear = chain && t.mip_filter == 2;
+    if t.linear_filter == 0 && t.min_linear == 0 && !mip_linear {
+        return 0;
+    }
+    let mut m = 1;
+    if t.linear_filter == 0 {
+        m |= 2;
+    }
+    if t.min_linear == 0 {
+        m |= 4;
+    }
+    if chain && t.mip_filter == 1 {
+        m |= 8;
+    }
+    if mip_linear {
+        m |= 16;
+    }
+    m | (levels.max(1) - 1).min(15) << 8
 }
 
 /* ------------------------------------------------------------------------- *
@@ -9960,14 +9986,16 @@ mod tests {
         assert_eq!(&desc(&GlesTextureBind { compare_op: 3, ..t })[13..16], &[0, 0, 0], "the other meta words stay 0");
     }
 
-    /// Sampler meta word 1 (dword 13) bit 0 asks the shadow look-up for the
-    /// compare per texel (select.rs shadow_compare's PCF arm): a
-    /// LINEAR/LINEAR sampler over one level, and nothing else -- a mipmap
-    /// filter over a chain, a NEAREST filter, or min and mag that differ
-    /// keep the filtered depth's compare. A compare-less sampler gets the
-    /// bit too: the shader's final select on bit 4 of word 0 wins.
+    /// Sampler meta word 1 (dword 13) is the shadow look-up's filter
+    /// (select.rs shadow_compare's PCF arm, `shadow_filter_word`): bit 0 the
+    /// compare per texel, bits 1 and 2 a NEAREST magnification and
+    /// minification filter, bit 3 the nearest level, bit 4 two levels
+    /// blended, bits 8..11 the last level. Bit 0 alone is LINEAR/LINEAR over
+    /// one level; NEAREST both ways and NEAREST_MIPMAP_NEAREST give 0 (the
+    /// filtered depth's compare is exact). A compare-less sampler gets the
+    /// word too: the shader's final select on bit 4 of word 0 wins.
     #[test]
-    fn the_per_texel_compare_bit_is_sampler_meta_word_1_for_linear_over_one_level() {
+    fn the_shadow_filter_is_sampler_meta_word_1() {
         let t = GlesTextureBind {
             format: GLES_TEXFMT_R32F,
             type_: GLES_TEXTYPE_2D,
@@ -9983,15 +10011,46 @@ mod tests {
         };
         assert_eq!(desc(&t)[13], 1, "LINEAR/LINEAR, one level");
         assert_eq!(desc(&GlesTextureBind { mip_levels: 6, ..t })[13], 1, "a chain the sampler does not walk");
-        assert_eq!(desc(&GlesTextureBind { mip_filter: 1, mip_levels: 6, ..t })[13], 0, "a mipmap filter: no");
-        assert_eq!(desc(&GlesTextureBind { mip_filter: 2, mip_levels: 6, ..t })[13], 0, "trilinear: no");
+        assert_eq!(
+            desc(&GlesTextureBind { mip_filter: 1, mip_levels: 6, ..t })[13],
+            1 | 8 | 5 << 8,
+            "LINEAR_MIPMAP_NEAREST over six levels"
+        );
+        assert_eq!(
+            desc(&GlesTextureBind { mip_filter: 2, mip_levels: 6, ..t })[13],
+            1 | 16 | 5 << 8,
+            "trilinear over six levels"
+        );
         assert_eq!(
             desc(&GlesTextureBind { mip_filter: 2, mip_levels: 1, ..t })[13],
             1,
             "a mipmap filter over one level"
         );
-        assert_eq!(desc(&GlesTextureBind { linear_filter: 0, ..t })[13], 0, "NEAREST mag: no");
-        assert_eq!(desc(&GlesTextureBind { min_linear: 0, ..t })[13], 0, "NEAREST min: no");
+        assert_eq!(desc(&GlesTextureBind { linear_filter: 0, ..t })[13], 1 | 2, "NEAREST mag");
+        assert_eq!(desc(&GlesTextureBind { min_linear: 0, ..t })[13], 1 | 4, "NEAREST min");
+        let nearest = GlesTextureBind { linear_filter: 0, min_linear: 0, ..t };
+        assert_eq!(desc(&nearest)[13], 0, "NEAREST both ways: the filtered compare");
+        assert_eq!(
+            desc(&GlesTextureBind { mip_filter: 1, mip_levels: 6, ..nearest })[13],
+            0,
+            "NEAREST_MIPMAP_NEAREST: one texel, the filtered compare"
+        );
+        assert_eq!(
+            desc(&GlesTextureBind { mip_filter: 2, mip_levels: 6, ..nearest })[13],
+            1 | 2 | 4 | 16 | 5 << 8,
+            "NEAREST_MIPMAP_LINEAR blends two levels"
+        );
+        assert_eq!(
+            desc(&GlesTextureBind {
+                mip_filter: 2,
+                mip_levels: 6,
+                wrap_s: GLES_WRAP_MIRRORED_REPEAT,
+                wrap_t: GLES_WRAP_MIRRORED_REPEAT,
+                ..t
+            })[13],
+            1 | 16 | 5 << 8,
+            "the wrap modes are not in the word: the TPU's gather wraps"
+        );
         assert_eq!(desc(&GlesTextureBind { compare_op: 16, ..t })[13], 1, "no compare: the bit stands, bit 4 wins");
         assert_eq!(desc(&GlesTextureBind { format: GLES_TEXFMT_RGBA8, ..t })[13], 1, "any format: the sampler decides");
     }
