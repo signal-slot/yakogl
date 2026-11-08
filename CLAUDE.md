@@ -11,8 +11,8 @@ defects and the next board sessions. This file is the short list.
 - `tools/check.sh --changed origin/main`: the rows your diff reaches. Run it
   against the **current** main tip, right before the result is handed in,
   not against the commit you started from (see the first failure below).
-- `tools/check.sh --quick`: 169 of the full plan's 209 rows (counted at
-  `bfd75c57`, see CONTRIBUTING.md), the edit loop. Not the gate.
+- `tools/check.sh --quick`: 173 of the full plan's 215 rows (counted at
+  `bd10208a`, see CONTRIBUTING.md), the edit loop. Not the gate.
 - `tools/check.sh --local <base>`: the local set when a diff reaches
   everything (`src/gl`, `src/shaderc`, `tools/check.sh`, `Cargo.toml`, ...).
 - `tools/check.sh`: every row, what the CI (`.github/workflows/gate.yml`)
