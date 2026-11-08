@@ -16,7 +16,11 @@
 //! cube's or a 2D array's trees, a 3D texture's stack of slices:
 //! docs/notes/v3d-tex-layout-es3.md) are placed here, over the C's one-slice
 //! levels, by Mesa's rules; tests/es3_formats_v3d.rs pins them against the
-//! real C and Mesa's numbers.
+//! real C and Mesa's numbers. The ETC2/EAC formats are laid out in 4x4
+//! blocks ([`layout_compressed`], the C's v3d_tex_layout_compressed
+//! transcribed and pinned on its numbers here), and a depth binding's
+//! sampler record carries GL's compare function ([`compare_function`],
+//! `v3d_tex_pack_sampler_compare`).
 
 use super::ffi::*;
 use super::state::Refusal;
@@ -111,6 +115,234 @@ pub fn level_depth(depth: u32, level: u32) -> u32 {
     (pot_depth >> level.min(31)).max(1)
 }
 
+/// The ES 3.0 compressed formats, the rows of driver/src/v3d/v3d_tex.c's
+/// table (`V3D_TEX_FORMAT_ETC2_*`, in its order), which tools/v3d/tex_check.c
+/// compares with Mesa's built V3D 4.2 table and util_format.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Etc2 {
+    /// COMPRESSED_RGB8_ETC2 (and ETC1, whose blocks are ETC2's)
+    Rgb8,
+    /// COMPRESSED_SRGB8_ETC2
+    Srgb8,
+    /// COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2
+    Rgb8A1,
+    /// COMPRESSED_SRGB8_PUNCHTHROUGH_ALPHA1_ETC2
+    Srgb8A1,
+    /// COMPRESSED_RGBA8_ETC2_EAC
+    Rgba8,
+    /// COMPRESSED_SRGB8_ALPHA8_ETC2_EAC
+    Srgba8,
+    /// COMPRESSED_R11_EAC
+    R11,
+    /// COMPRESSED_SIGNED_R11_EAC
+    R11Snorm,
+    /// COMPRESSED_RG11_EAC
+    Rg11,
+    /// COMPRESSED_SIGNED_RG11_EAC
+    Rg11Snorm,
+}
+
+/// Every [`Etc2`] row, in the C table's order.
+pub const ETC2_FORMATS: [Etc2; 10] = [
+    Etc2::Rgb8,
+    Etc2::Srgb8,
+    Etc2::Rgb8A1,
+    Etc2::Srgb8A1,
+    Etc2::Rgba8,
+    Etc2::Srgba8,
+    Etc2::R11,
+    Etc2::R11Snorm,
+    Etc2::Rg11,
+    Etc2::Rg11Snorm,
+];
+
+/// The block side of every ETC2/EAC format, in texels.
+pub const ETC2_BLOCK: u32 = 4;
+
+/// One ETC2/EAC row: the TMU's texture data type, the swizzle, the bytes of
+/// one 4x4 block (Mesa's rsc->cpp for the format, v3d_resource.c:797: the
+/// tiling's texel) and the state's sRGB bit (util_format_is_srgb,
+/// v3dx_state.c:1023-1025; the type is the linear row's). Mesa's rows
+/// (v3dx_format_table.c, return size 16 each):
+///   ETC2_RGB8 / ETC2_SRGB8        RGB8_ETC2                 XYZ1   8
+///   ETC2_RGB8A1 / ETC2_SRGB8A1    RGB8_PUNCHTHROUGH_ALPHA1  XYZW   8
+///   ETC2_RGBA8 / ETC2_SRGBA8      RGBA8_ETC2_EAC            XYZW  16
+///   ETC2_R11_UNORM / _SNORM       R11_EAC / SIGNED_R11_EAC  X001   8
+///   ETC2_RG11_UNORM / _SNORM      RG11_EAC / SIGNED_RG11_EAC XY01 16
+pub const fn etc2_row(e: Etc2) -> (u32, [u8; 4], u32, bool) {
+    const X001: [u8; 4] = [V3D_SWIZZLE_RED, V3D_SWIZZLE_ZERO, V3D_SWIZZLE_ZERO, V3D_SWIZZLE_ONE];
+    const XY01: [u8; 4] = [V3D_SWIZZLE_RED, V3D_SWIZZLE_GREEN, V3D_SWIZZLE_ZERO, V3D_SWIZZLE_ONE];
+    match e {
+        Etc2::Rgb8 => (V3D_TEXTURE_DATA_FORMAT_RGB8_ETC2, XYZ1, 8, false),
+        Etc2::Srgb8 => (V3D_TEXTURE_DATA_FORMAT_RGB8_ETC2, XYZ1, 8, true),
+        Etc2::Rgb8A1 => (V3D_TEXTURE_DATA_FORMAT_RGB8_PUNCHTHROUGH_ALPHA1, XYZW, 8, false),
+        Etc2::Srgb8A1 => (V3D_TEXTURE_DATA_FORMAT_RGB8_PUNCHTHROUGH_ALPHA1, XYZW, 8, true),
+        Etc2::Rgba8 => (V3D_TEXTURE_DATA_FORMAT_RGBA8_ETC2_EAC, XYZW, 16, false),
+        Etc2::Srgba8 => (V3D_TEXTURE_DATA_FORMAT_RGBA8_ETC2_EAC, XYZW, 16, true),
+        Etc2::R11 => (V3D_TEXTURE_DATA_FORMAT_R11_EAC, X001, 8, false),
+        Etc2::R11Snorm => (V3D_TEXTURE_DATA_FORMAT_SIGNED_R11_EAC, X001, 8, false),
+        Etc2::Rg11 => (V3D_TEXTURE_DATA_FORMAT_RG11_EAC, XY01, 16, false),
+        Etc2::Rg11Snorm => (V3D_TEXTURE_DATA_FORMAT_SIGNED_RG11_EAC, XY01, 16, false),
+    }
+}
+
+/// The [`Etc2`] row of a GL core texel format, `None` for an uncompressed
+/// one. The GL core has a class for five of the ten rows today
+/// (`GLES_TEXFMT_ETC2_*`, src/backend.rs; gl::texture::compressed_format_info);
+/// punch-through sRGB and the four EAC formats have none yet.
+pub const fn etc2_of(format: u8) -> Option<Etc2> {
+    match format {
+        GLES_TEXFMT_ETC2_RGB => Some(Etc2::Rgb8),
+        GLES_TEXFMT_ETC2_SRGB_RGB => Some(Etc2::Srgb8),
+        GLES_TEXFMT_ETC2_RGB_PT => Some(Etc2::Rgb8A1),
+        GLES_TEXFMT_ETC2_RGBA => Some(Etc2::Rgba8),
+        GLES_TEXFMT_ETC2_SRGB_RGBA => Some(Etc2::Srgba8),
+        _ => None,
+    }
+}
+
+/// The bytes of one 4x4 block of `b`'s format, `None` for an uncompressed
+/// format ([`etc2_row`]).
+pub const fn block_bytes(b: &GlesTextureBind) -> Option<u32> {
+    match etc2_of(b.format) {
+        Some(e) => Some(etc2_row(e).2),
+        None => None,
+    }
+}
+
+/// Level `level` of a compressed texture of `layers` stacked layers in the
+/// GL core's storage when the backend reads its blocks in raster rows
+/// (`YakoglBackend::compressed_blocks_in_rows`, `linear_row_align` and
+/// `mip_level_align` 0: gl::texture::compressed_chain_layout and
+/// level_block_grid): (byte offset of the level, row pitch in BLOCKS, rows of
+/// blocks of ONE layer). Level `l` is `ceil(max(w >> l, 1) / 4)` x
+/// `ceil(max(h >> l, 1) / 4)` blocks of `block_bytes`, packed; its layers
+/// one after the other, layer `f` `f * rows * pitch * block_bytes` after the
+/// level, as [`gl_level_layered`]'s.
+pub fn gl_level_blocks(width: u32, height: u32, layers: u32, block_bytes: u32, level: u32) -> (u32, u32, u32) {
+    let grid = |l: u32| ((width >> l).max(1).div_ceil(ETC2_BLOCK), (height >> l).max(1).div_ceil(ETC2_BLOCK));
+    let mut off = 0u32;
+    for k in 0..level {
+        let (gw, gh) = grid(k);
+        off += gw * gh * layers * block_bytes;
+    }
+    let (gw, gh) = grid(level);
+    (off, gw, gh)
+}
+
+/* Mesa's tiling constants (v3d_resource.c, v3d_tiling.c; driver/src/v3d/
+ * v3d_tex.c holds the same): a UIF block row is 4 UIF blocks of 256 bytes,
+ * a page 4 KiB, the page cache 8 banks of a page. */
+const UIF_PAGE: u32 = 4096;
+const PAGE_UB_ROWS: u32 = UIF_PAGE / 1024;
+const PAGE_UB_ROWS_TIMES_1_5: u32 = (PAGE_UB_ROWS * 3) >> 1;
+const PAGE_CACHE_UB_ROWS: u32 = UIF_PAGE * 8 / 1024;
+const PAGE_CACHE_MINUS_1_5_UB_ROWS: u32 = PAGE_CACHE_UB_ROWS - PAGE_UB_ROWS_TIMES_1_5;
+
+/// Mesa's v3d_get_ub_pad (v3d_resource.c; `get_ub_pad` in v3d_tex.c): the
+/// UIF block rows of padding a UIF level of `height` rows of a `uif_block_h`
+/// block takes.
+const fn ub_pad(uif_block_h: u32, height: u32) -> u32 {
+    let height_ub = height / uif_block_h;
+    let in_pc = height_ub % PAGE_CACHE_UB_ROWS;
+    if in_pc == 0 {
+        0
+    } else if in_pc < PAGE_UB_ROWS_TIMES_1_5 {
+        if height_ub < PAGE_CACHE_UB_ROWS {
+            0
+        } else {
+            PAGE_UB_ROWS_TIMES_1_5 - in_pc
+        }
+    } else if in_pc > PAGE_CACHE_MINUS_1_5_UB_ROWS {
+        PAGE_CACHE_UB_ROWS - in_pc
+    } else {
+        0
+    }
+}
+
+/// The layout of a compressed `width` x `height` image (in texels) of
+/// `levels` levels of `block_w` x `block_h` blocks of `block_bytes` bytes:
+/// `v3d_tex_layout_compressed` (driver/src/v3d/v3d_tex.c, Mesa's
+/// v3d_setup_slices for a compressed resource, v3d_resource.c:582-768, with
+/// rsc->cpp the block's bytes, :797) transcribed, because the 2D layout
+/// (`v3d_tex_layout`) cannot give it: the power-of-two padding of the levels
+/// from 2 is taken in whole blocks (v3d_get_dimension_mpad with the block,
+/// :573-581: 36 texels wide has 4 blocks at level 2 where 36 >> 2 = 9 texels
+/// is 3), a level is counted in blocks (:646-647), and from there a block is
+/// one texel of `block_bytes` bytes for the tiling choice, the alignment and
+/// the sizes. `width` and `height` stay in texels, `cpp` is `block_bytes`,
+/// as the C's. tools/v3d/tex_check.c pins the C's layouts (the cases the
+/// tests below repeat) by hand from v3d_setup_slices and tiles them with
+/// Mesa's own v3d_store_tiled_image. `None` where the C returns false: a
+/// block side of 0 or past 16, a block other than 8 or 16 bytes, a size of 0
+/// or 16384 and more, a level count of 0 or past 15, or past 32 bits.
+pub fn layout_compressed(
+    width: u32,
+    height: u32,
+    levels: u32,
+    block_w: u32,
+    block_h: u32,
+    block_bytes: u32,
+) -> Option<V3dTexLayout> {
+    if block_w == 0 || block_w > 16 || block_h == 0 || block_h > 16 || !matches!(block_bytes, 8 | 16) {
+        return None;
+    }
+    if width == 0 || height == 0 || width >= 1 << 14 || height >= 1 << 14 {
+        return None;
+    }
+    if levels == 0 || levels as usize > V3D_TEX_MAX_LEVELS {
+        return None;
+    }
+    let cpp = block_bytes;
+    /* v3d_utile_width / _height of cpp 8 and 16: a 64-byte utile */
+    let (utile_w, utile_h) = if cpp == 8 { (4, 2) } else { (2, 2) };
+    let (ub_w, ub_h) = (2 * utile_w, 2 * utile_h);
+    let minify = |v: u32, l: u32| (v >> l).max(1);
+    /* 2 * v3d_get_dimension_mpad(dimension, 1, block) (:596-608) */
+    let pot = |d: u32, block: u32| 2 * block * minify(d, 1).div_ceil(block).next_power_of_two();
+    let (pot_w, pot_h) = (pot(width, block_w), pot(height, block_h));
+    let mut l = V3dTexLayout { width, height, levels, cpp, ..V3dTexLayout::default() };
+    let mut offset = 0u64;
+    for i in (0..levels).rev() {
+        let (lw, lh) = if i < 2 { (minify(width, i), minify(height, i)) } else { (minify(pot_w, i), minify(pot_h, i)) };
+        let (mut lw, mut lh) = (lw.div_ceil(block_w), lh.div_ceil(block_h));
+        let s = &mut l.slices[i as usize];
+        if lw <= utile_w || lh <= utile_h {
+            s.tiling = V3D_TEX_TILING_LINEARTILE;
+            (lw, lh) = (lw.next_multiple_of(utile_w), lh.next_multiple_of(utile_h));
+        } else if lw <= ub_w {
+            s.tiling = V3D_TEX_TILING_UBLINEAR_1_COLUMN;
+            (lw, lh) = (lw.next_multiple_of(ub_w), lh.next_multiple_of(ub_h));
+        } else if lw <= 2 * ub_w {
+            s.tiling = V3D_TEX_TILING_UBLINEAR_2_COLUMN;
+            (lw, lh) = (lw.next_multiple_of(2 * ub_w), lh.next_multiple_of(ub_h));
+        } else {
+            (lw, lh) = (lw.next_multiple_of(4 * ub_w), lh.next_multiple_of(ub_h));
+            s.ub_pad = ub_pad(ub_h, lh);
+            lh += s.ub_pad * ub_h;
+            s.tiling =
+                if (lh / ub_h) % PAGE_CACHE_UB_ROWS == 0 { V3D_TEX_TILING_UIF_XOR } else { V3D_TEX_TILING_UIF_NO_XOR };
+        }
+        s.offset = u32::try_from(offset).ok()?;
+        s.stride = lw * cpp;
+        s.padded_height = lh;
+        s.size = lh * s.stride;
+        let mut total = u64::from(s.size);
+        /* level 1's base is page aligned if it could be UIF XOR (:729-734) */
+        if i == 1 && lw > 4 * ub_w && lh > PAGE_CACHE_MINUS_1_5_UB_ROWS * ub_h {
+            total = total.next_multiple_of(u64::from(UIF_PAGE));
+        }
+        offset += total;
+    }
+    /* level 0 to a page, every level with it (:749-755) */
+    let pad = l.slices[0].offset.next_multiple_of(UIF_PAGE) - l.slices[0].offset;
+    l.size = u32::try_from(offset + u64::from(pad)).ok()?;
+    for s in &mut l.slices[..levels as usize] {
+        s.offset += pad;
+    }
+    Some(l)
+}
+
 /// What this cut samples, refused by name otherwise.
 pub fn refusal(b: &GlesTextureBind) -> Option<Refusal> {
     refusal_for(b, false)
@@ -122,6 +354,14 @@ pub fn refusal(b: &GlesTextureBind) -> Option<Refusal> {
 /// agree with the format's return size ([`return_32`]): an R32F texture read
 /// at 16 bits, or a 16-bit format read at 32, is not a measured behaviour.
 pub fn refusal_for(b: &GlesTextureBind, ret32: bool) -> Option<Refusal> {
+    refusal_in(b, ret32, V3D_SAMPLED_TEXFMTS)
+}
+
+/// [`refusal_for`] with the formats sampled (`sampled`, a mask of
+/// [`gles_texfmt_bit`]) given: [`V3D_SAMPLED_TEXFMTS`] for the backend, a
+/// wider set where a test asks what the rest of the rules say of a format
+/// the set does not hold yet (the ETC2 classes).
+fn refusal_in(b: &GlesTextureBind, ret32: bool, sampled: u64) -> Option<Refusal> {
     match b.type_ {
         GLES_TEXTYPE_2D if b.layers <= 1 => {}
         GLES_TEXTYPE_CUBE if b.layers == 6 => {
@@ -136,10 +376,8 @@ pub fn refusal_for(b: &GlesTextureBind, ret32: bool) -> Option<Refusal> {
         GLES_TEXTYPE_2D_ARRAY | GLES_TEXTYPE_3D if b.layers >= 1 => {}
         _ => return Some("a texture binding of a type or layer count the V3D does not sample"),
     }
-    if V3D_SAMPLED_TEXFMTS & gles_texfmt_bit(b.format) == 0 {
-        return Some(
-            "a texel format the V3D does not sample (ETC2, or the RGB10A2 class the GL core keeps in RGBA8 here)",
-        );
+    if sampled & gles_texfmt_bit(b.format) == 0 {
+        return Some("a texel format the V3D does not sample");
     }
     if return_32(b) != ret32 {
         return Some(if ret32 {
@@ -157,6 +395,16 @@ pub fn refusal_for(b: &GlesTextureBind, ret32: bool) -> Option<Refusal> {
      * and the tiled copy as Mesa's v3d_setup_slices does (levels 0 and 1 at
      * their own size, the rest of the power-of-two-rounded level 1,
      * driver/src/v3d/v3d_tex.c `layout`). */
+    if block_bytes(b).is_some() {
+        /* ES 3.0 has no compressed 3D texture (3.8.6: ETC2/EAC take
+         * TEXTURE_2D, TEXTURE_2D_ARRAY and the cube faces); the GL core's
+         * blocks lie in rows of their own, which `stride_texels` (a texel
+         * pitch) does not describe ([`gl_level_blocks`]) */
+        if b.type_ == GLES_TEXTYPE_3D {
+            return Some("a 3D texture of a compressed format");
+        }
+        return None;
+    }
     if b.stride_texels != tex_pitch(b.width) {
         return Some("a texture whose level 0 pitch is not the GL core's pair-padded width");
     }
@@ -167,9 +415,13 @@ pub fn refusal_for(b: &GlesTextureBind, ret32: bool) -> Option<Refusal> {
 /// image: 4 for RGBA8, 1 for L8 and A8, 2 for LA8, R16F and RGB565, 8 for
 /// the 16-bit-channel classes and 16 for the 32-bit ones
 /// (`gles_texfmt_bytes`; the V3D tiles each format at its own size, as
-/// Mesa's resources are: `v3d_tex_layout` takes cpp 1, 2, 4, 8 and 16).
+/// Mesa's resources are: `v3d_tex_layout` takes cpp 1, 2, 4, 8 and 16). For
+/// an ETC2/EAC format, the bytes of one 4x4 block ([`block_bytes`]: 8 or
+/// 16), the "texel" its tiled image is laid out and tiled in, as Mesa's
+/// rsc->cpp is (v3d_resource.c:797); the TFU's byte-copy types (1, 2 and 4
+/// bytes) then never take it.
 pub fn texel_bytes(b: &GlesTextureBind) -> u32 {
-    gles_texfmt_bytes(b.format)
+    block_bytes(b).unwrap_or(gles_texfmt_bytes(b.format))
 }
 
 /// The TMU's texture data type for `b` and the swizzle that makes a program
@@ -193,6 +445,11 @@ pub fn texel_bytes(b: &GlesTextureBind) -> u32 {
 pub fn tmu_format(b: &GlesTextureBind) -> (u32, [u8; 4]) {
     const R: u8 = V3D_SWIZZLE_RED;
     const Z: u8 = V3D_SWIZZLE_ZERO;
+    /* the ETC2/EAC rows ([`etc2_row`]) */
+    if let Some(e) = etc2_of(b.format) {
+        let (type_, swizzle, _, _) = etc2_row(e);
+        return (type_, swizzle);
+    }
     match b.format {
         /* A depth texture as the GL core keeps it (texture.rs: DEPTH_COMPONENT
          * is an R32F look-up). Mesa's row: R32_FLOAT -> R32F, SWIZ_X001,
@@ -331,6 +588,74 @@ pub fn sampler(b: &GlesTextureBind) -> V3dSampler {
     }
 }
 
+/// `GlesTextureBind::compare_op`'s bit 4: no compare (GL_NONE).
+pub const COMPARE_OFF: u32 = 16;
+
+/// The first bit of SAMPLER_STATE's "Depth Compare Function" (start 4, size
+/// 3, v3d_packet.xml:1728), in the record's first 32-bit word.
+pub const SAMPLER_COMPARE_SHIFT: u32 = 4;
+
+/// The `compare_op` of `b` as `v3d_tex_pack_sampler_compare` takes it:
+/// the binding's own for a depth binding, [`COMPARE_OFF`] for any other. A
+/// depth texture is R32F in the GL core (DEPTH_COMPONENT is an R32F
+/// look-up, [`tmu_format`]), and sampled either from those texels or from
+/// its D24S8 buffer ([`depth_buffer_state`], the same R32F binding with
+/// `depth_id`); ES 3.0.6 3.8.15 bypasses the compare for any other base
+/// format, and no other class is a depth class here. The GL core sets the
+/// compare from the texture's (or the sampler object's) mode and function
+/// whatever the format (gl::draw::compare_op), so the format is asked here.
+/// A depth binding is read at the TMU's 32-bit output ([`return_32`]): its
+/// look-up writes TMU Config Parameter 1's payload 0x5 (output type 32-bit,
+/// bit 0, and the per-pixel mask, bit 2, as Mesa's), which the compiler
+/// writes for every ret32 binding (select.rs).
+pub fn compare_op(b: &GlesTextureBind) -> u32 {
+    if b.format == GLES_TEXFMT_R32F {
+        u32::from(b.compare_op)
+    } else {
+        COMPARE_OFF
+    }
+}
+
+/// The "Depth Compare Function" field `b`'s sampler record carries, as
+/// `v3d_tex_pack_sampler_compare` sets it (docs/notes/v3d-shadow.md (a)):
+/// with the compare off ([`COMPARE_OFF`], or not a depth binding,
+/// [`compare_op`]) NEVER (0), Mesa's compare-off word (v3dx_state.c:598-600,
+/// tree); otherwise bits 0-2, GL's order NEVER, LESS, EQUAL, LEQUAL,
+/// GREATER, NOTEQUAL, GEQUAL, ALWAYS, which is the field's enum
+/// (v3d_packet.xml:3-12). Bit 3 (a fixed-point depth, whose reference GL
+/// clamps to [0, 1]) is not part of the record. V3D 4.2 has no enable bit:
+/// the three bits are the whole state.
+pub fn compare_function(b: &GlesTextureBind) -> u32 {
+    let op = compare_op(b);
+    if op & COMPARE_OFF != 0 {
+        0
+    } else {
+        op & 7
+    }
+}
+
+/// The bits [`compare_function`] adds to the first word of the sampler
+/// record over the compare-off record of the same [`sampler`] (the rest of
+/// the 24 bytes is the same): tools/v3d/tex_check.c checks on Mesa's own
+/// SAMPLER_STATE packer that this is all a function changes.
+pub fn sampler_compare_bits(b: &GlesTextureBind) -> u32 {
+    compare_function(b) << SAMPLER_COMPARE_SHIFT
+}
+
+/// Pack `b`'s sampler record, its depth compare included ([`sampler`],
+/// [`compare_op`]), with `v3d_tex_pack_sampler_compare`; false, nothing
+/// written, for a field that does not fit. Its key, for a cache of packed
+/// records, is ([`sampler`], [`compare_function`]): two bindings that differ
+/// only in the compare need two records.
+///
+/// # Safety
+/// `out` is writable for `V3D_SAMPLER_STATE_BYTES` bytes.
+pub unsafe fn pack_sampler(b: &GlesTextureBind, out: *mut u8) -> bool {
+    let s = sampler(b);
+    // SAFETY: the caller's contract; `s` is a live sampler.
+    unsafe { v3d_tex_pack_sampler_compare(out, &s, compare_op(b)) }
+}
+
 /// The texture shader state of a binding whose image (`layout`) starts at
 /// `image_gpu` (`v3d_setup_texture_shader_state` and
 /// `create_texture_shader_state_bo`): the base pointer at level 0's slice
@@ -356,8 +681,8 @@ pub fn state(b: &GlesTextureBind, layout: &V3dTexLayout, image_gpu: u32) -> V3dT
         /* TEXTURE_SHADER_STATE.sRGB (v3d_packet.xml:1627, V3D 4.2): the TMU
          * decodes red, green and blue before it filters; Mesa sets it from
          * util_format_is_srgb (v3dx_state.c:1023-1028), the texels being
-         * the RGBA8 row's */
-        srgb: b.format == GLES_TEXFMT_SRGB8_A8,
+         * the RGBA8 row's, or an sRGB ETC2 row's ([`etc2_row`]) */
+        srgb: b.format == GLES_TEXFMT_SRGB8_A8 || etc2_of(b.format).is_some_and(|e| etc2_row(e).3),
         ..V3dTexState::default()
     };
     // SAFETY: both are live values of the mirrored types.
@@ -392,8 +717,13 @@ pub fn depth_buffer_state(b: &GlesTextureBind, layout: &V3dTexLayout, buffer_gpu
 /// mip tree of one layer (a 2D texture; a cube's or an array's layers are
 /// each this tree, `v3d_tex_layer_stride` apart, [`image_offset`]), or for
 /// a 3D texture the whole stack of its slices ([`stack_3d`]; a depth of 1
-/// is one slice a level, the tree as laid out).
+/// is one slice a level, the tree as laid out). An ETC2/EAC binding's tree
+/// is [`layout_compressed`]'s, in 4x4 blocks (a cube's or an array's layers
+/// each that tree, as above).
 pub fn layout(b: &GlesTextureBind) -> Option<V3dTexLayout> {
+    if let Some(bb) = block_bytes(b) {
+        return layout_compressed(b.width, b.height, levels_sampled(b), ETC2_BLOCK, ETC2_BLOCK, bb);
+    }
     let mut l = V3dTexLayout::default();
     // SAFETY: `l` is a live value of the mirrored type.
     if !unsafe { v3d_tex_layout(b.width, b.height, levels_sampled(b), texel_bytes(b), &mut l) } {
@@ -524,8 +854,12 @@ pub fn image_bytes(b: &GlesTextureBind, layout: &V3dTexLayout) -> Option<u32> {
 }
 
 /// The GL core's storage bytes the sampled levels span, every layer: the
-/// start of the level after the last one sampled.
+/// start of the level after the last one sampled ([`gl_level_blocks`]'s for
+/// an ETC2/EAC binding).
 pub fn gl_bytes(b: &GlesTextureBind) -> u32 {
+    if let Some(bb) = block_bytes(b) {
+        return gl_level_blocks(b.width, b.height, layers(b), bb, levels_sampled(b)).0;
+    }
     gl_level_layered(b.width, b.height, layers(b), texel_bytes(b), levels_sampled(b)).0
 }
 
@@ -573,6 +907,38 @@ pub unsafe fn tile(b: &GlesTextureBind, layout: &V3dTexLayout, image: *mut u8, s
     }
     // SAFETY: a live layout.
     let stride = if n > 1 { unsafe { v3d_tex_layer_stride(layout) } } else { 0 };
+    if let Some(bb) = block_bytes(b) {
+        /* An ETC2/EAC level: its grid of blocks from the GL core's rows of
+         * blocks (`gl_level_blocks`), each block one texel of `bb` bytes as
+         * `layout_compressed` lays it out. The box is the grid at (0, 0),
+         * which v3d_tex_store_box takes on the texel grid (the level's
+         * texel size is at least its block count) and inside the slice (the
+         * layout allocated the grid and its padding): the same move as the
+         * C's v3d_tex_store_level_blocks, whose grid is this one. The
+         * padding blocks Mesa allocates past the grid stay as they are. */
+        for f in 0..n {
+            for level in 0..layout.levels {
+                let (off, gw, gh) = gl_level_blocks(b.width, b.height, n, bb, level);
+                // SAFETY: the caller's contract; layer f's grid is f grids
+                // after the level in the GL core's storage and its tree f *
+                // stride into the image; the box is checked by the C.
+                unsafe {
+                    v3d_tex_store_box(
+                        image.add((f * stride) as usize),
+                        layout,
+                        level,
+                        0,
+                        0,
+                        gw,
+                        gh,
+                        src.add((off + f * gw * gh * bb) as usize),
+                        gw * bb,
+                    )
+                };
+            }
+        }
+        return;
+    }
     for f in 0..n {
         for level in 0..layout.levels {
             let (off, pitch, rows) = gl_level_layered(b.width, b.height, n, bpp, level);
@@ -1075,7 +1441,7 @@ mod tests {
         type Case = (fn(&mut GlesTextureBind), &'static str);
         let cases: [Case; 4] = [
             (|b| b.type_ = GLES_TEXTYPE_CUBE, "cube"),
-            (|b| b.format = GLES_TEXFMT_ETC2_RGB, "ETC2"),
+            (|b| b.format = GLES_TEXFMT_R32UI, "does not sample"),
             (|b| b.width = 16384, "16384"),
             (|b| b.stride_texels = 70, "pitch"),
         ];
@@ -1088,6 +1454,358 @@ mod tests {
             assert!(!seen.contains(&r), "{r} twice");
             seen.push(r);
         }
+    }
+
+    /// A binding of an ETC2 class (`GLES_TEXFMT_ETC2_*`), `levels` levels.
+    fn etc2(format: u8, w: u32, h: u32, levels: u32) -> GlesTextureBind {
+        GlesTextureBind { format, mip_levels: levels as u8, mip_filter: (levels > 1) as u8, ..bind(w, h) }
+    }
+
+    /// The GL core's ETC2 classes, with their rows.
+    const ETC2_CLASSES: [(u8, Etc2); 5] = [
+        (GLES_TEXFMT_ETC2_RGB, Etc2::Rgb8),
+        (GLES_TEXFMT_ETC2_SRGB_RGB, Etc2::Srgb8),
+        (GLES_TEXFMT_ETC2_RGB_PT, Etc2::Rgb8A1),
+        (GLES_TEXFMT_ETC2_RGBA, Etc2::Rgba8),
+        (GLES_TEXFMT_ETC2_SRGB_RGBA, Etc2::Srgba8),
+    ];
+
+    /// Every ETC2/EAC row is driver/src/v3d/v3d_tex.c's (`formats[]`,
+    /// V3D_TEX_FORMAT_ETC2_*), which tools/v3d/tex_check.c compares with
+    /// Mesa's built V3D 4.2 table (type, swizzle, return size 16, cpp) and
+    /// util_format (4x4 block, sRGB): v3d_packet.xml's types RGB8_ETC2 32,
+    /// RGB8_PUNCHTHROUGH_ALPHA1 33, R11_EAC 34, SIGNED_R11_EAC 35, RG11_EAC
+    /// 36, SIGNED_RG11_EAC 37, RGBA8_ETC2_EAC 38; swizzles XYZ1, XYZW, X001,
+    /// XY01 (X..W -> 2..5); 8 or 16 bytes a block; the sRGB rows the linear
+    /// type with the state's bit.
+    #[test]
+    fn each_etc2_row_is_the_c_tables() {
+        let want: [(Etc2, u32, [u8; 4], u32, bool); 10] = [
+            (Etc2::Rgb8, 32, [2, 3, 4, 1], 8, false),
+            (Etc2::Srgb8, 32, [2, 3, 4, 1], 8, true),
+            (Etc2::Rgb8A1, 33, [2, 3, 4, 5], 8, false),
+            (Etc2::Srgb8A1, 33, [2, 3, 4, 5], 8, true),
+            (Etc2::Rgba8, 38, [2, 3, 4, 5], 16, false),
+            (Etc2::Srgba8, 38, [2, 3, 4, 5], 16, true),
+            (Etc2::R11, 34, [2, 0, 0, 1], 8, false),
+            (Etc2::R11Snorm, 35, [2, 0, 0, 1], 8, false),
+            (Etc2::Rg11, 36, [2, 3, 0, 1], 16, false),
+            (Etc2::Rg11Snorm, 37, [2, 3, 0, 1], 16, false),
+        ];
+        for (i, (e, type_, swizzle, bytes, srgb)) in want.into_iter().enumerate() {
+            assert_eq!(ETC2_FORMATS[i], e, "the C table's order");
+            assert_eq!(etc2_row(e), (type_, swizzle, bytes, srgb), "{e:?}");
+        }
+        assert_eq!(ETC2_BLOCK, 4);
+    }
+
+    /// The GL core's five ETC2 classes sample as their rows: the record's
+    /// type and swizzle, the sRGB bit for the two sRGB ones only, a block
+    /// for a texel ([`texel_bytes`]: never a TFU byte-copy type), the 16-bit
+    /// TMU output (return size 16), and every rule but the sampled set
+    /// passes. Until src/backend.rs's V3D_SAMPLED_TEXFMTS lists them, the
+    /// set refuses them, with the one message every format outside it gets.
+    #[test]
+    fn the_gl_cores_etc2_classes_sample_as_their_rows() {
+        let wider = V3D_SAMPLED_TEXFMTS | ETC2_CLASSES.iter().fold(0, |m, &(f, _)| m | gles_texfmt_bit(f));
+        for (format, e) in ETC2_CLASSES {
+            let b = etc2(format, 36, 36, 6);
+            let (type_, swizzle, bytes, srgb) = etc2_row(e);
+            assert_eq!(etc2_of(format), Some(e));
+            assert_eq!(tmu_format(&b), (type_, swizzle), "format {format}");
+            assert_eq!((texel_bytes(&b), block_bytes(&b)), (bytes, Some(bytes)), "format {format}");
+            assert!(!return_32(&b) && !format_is_integer(format), "format {format}");
+            assert_eq!(refusal_in(&b, false, wider), None, "format {format}");
+            assert_eq!(
+                refusal_in(&b, true, wider),
+                Some("a look-up compiled for the 32-bit TMU output reads a texture of a 16-bit format")
+            );
+            let set = V3D_SAMPLED_TEXFMTS & gles_texfmt_bit(format) != 0;
+            assert_eq!(refusal(&b), (!set).then_some("a texel format the V3D does not sample"), "format {format}");
+            let l = layout(&b).unwrap();
+            assert_eq!(l, layout_compressed(36, 36, 6, 4, 4, bytes).unwrap(), "format {format}: the block layout");
+            let s = state(&b, &l, 0x10_0000);
+            assert_eq!((s.type_, s.swizzle, s.srgb), (type_, swizzle, srgb), "format {format}");
+            assert_eq!((s.base, s.width, s.height, s.max_level), (0x10_0000 + 4096, 36, 36, 5), "format {format}");
+        }
+        /* the texel pitch is not the blocks' (`gl_level_blocks`): not asked */
+        let odd = GlesTextureBind { stride_texels: 3, ..etc2(GLES_TEXFMT_ETC2_RGB, 36, 36, 1) };
+        assert_eq!(refusal_in(&odd, false, wider), None);
+        /* ES 3.0 has no compressed 3D texture; an array or a cube is laid out */
+        let vol = GlesTextureBind { type_: GLES_TEXTYPE_3D, layers: 4, ..etc2(GLES_TEXFMT_ETC2_RGB, 8, 8, 1) };
+        assert_eq!(refusal_in(&vol, false, wider), Some("a 3D texture of a compressed format"));
+        let arr = GlesTextureBind { type_: GLES_TEXTYPE_2D_ARRAY, ..vol };
+        assert_eq!(refusal_in(&arr, false, wider), None);
+        let cube = GlesTextureBind { type_: GLES_TEXTYPE_CUBE, layers: 6, ..vol };
+        assert_eq!(refusal_in(&cube, false, wider), None);
+        /* uncompressed formats have no block */
+        for format in [GLES_TEXFMT_RGBA8, GLES_TEXFMT_RGBA32F, GLES_TEXFMT_R32F, GLES_TEXFMT_SRGB8_A8] {
+            assert_eq!((etc2_of(format), block_bytes(&GlesTextureBind { format, ..bind(4, 4) })), (None, None));
+        }
+    }
+
+    /// `layout_compressed` is the C reference's v3d_tex_layout_compressed:
+    /// the nine layouts tools/v3d/tex_check.c derives by hand from Mesa's
+    /// v3d_setup_slices (part 12, `clayout_case`) and checks on the C, then
+    /// tiles with Mesa's own v3d_store_tiled_image. (size, then per level
+    /// offset, stride, padded height, ub_pad, tiling.)
+    #[test]
+    fn the_etc2_layouts_are_the_c_references() {
+        const LT: u32 = V3D_TEX_TILING_LINEARTILE;
+        const UB1: u32 = V3D_TEX_TILING_UBLINEAR_1_COLUMN;
+        const UB2: u32 = V3D_TEX_TILING_UBLINEAR_2_COLUMN;
+        const UIF: u32 = V3D_TEX_TILING_UIF_NO_XOR;
+        const UIFX: u32 = V3D_TEX_TILING_UIF_XOR;
+        type Case = (u32, u32, u32, u32, u32, &'static [(u32, u32, u32, u32, u32)]);
+        let cases: [Case; 9] = [
+            (
+                17,
+                9,
+                5,
+                8,
+                4352,
+                &[
+                    (4096, 64, 4, 0, UB1),
+                    (4032, 32, 2, 0, LT),
+                    (3968, 32, 2, 0, LT),
+                    (3904, 32, 2, 0, LT),
+                    (3840, 32, 2, 0, LT),
+                ],
+            ),
+            (
+                17,
+                9,
+                5,
+                16,
+                4608,
+                &[
+                    (4096, 128, 4, 0, UB2),
+                    (4032, 32, 2, 0, LT),
+                    (3968, 32, 2, 0, LT),
+                    (3904, 32, 2, 0, LT),
+                    (3840, 32, 2, 0, LT),
+                ],
+            ),
+            (
+                36,
+                36,
+                6,
+                8,
+                5632,
+                &[
+                    (4096, 128, 12, 0, UB2),
+                    (3584, 64, 8, 0, UB1),
+                    (3456, 32, 4, 0, LT),
+                    (3392, 32, 2, 0, LT),
+                    (3328, 32, 2, 0, LT),
+                    (3264, 32, 2, 0, LT),
+                ],
+            ),
+            (
+                36,
+                36,
+                6,
+                16,
+                7168,
+                &[
+                    (4096, 256, 12, 0, UIF),
+                    (3072, 128, 8, 0, UB2),
+                    (2816, 64, 4, 0, UB1),
+                    (2752, 32, 2, 0, LT),
+                    (2688, 32, 2, 0, LT),
+                    (2624, 32, 2, 0, LT),
+                ],
+            ),
+            (1, 1, 1, 8, 64, &[(0, 32, 2, 0, LT)]),
+            (1, 1, 1, 16, 64, &[(0, 32, 2, 0, LT)]),
+            (
+                256,
+                256,
+                9,
+                16,
+                90112,
+                &[
+                    (24576, 1024, 64, 0, UIF),
+                    (8192, 512, 32, 0, UIF),
+                    (4096, 256, 16, 0, UIF),
+                    (3072, 128, 8, 0, UB2),
+                    (2816, 64, 4, 0, UB1),
+                    (2752, 32, 2, 0, LT),
+                    (2688, 32, 2, 0, LT),
+                    (2624, 32, 2, 0, LT),
+                    (2560, 32, 2, 0, LT),
+                ],
+            ),
+            (1024, 1056, 1, 16, 4096 * 280, &[(0, 4096, 280, 4, UIF)]),
+            (64, 960, 1, 16, 65536, &[(0, 256, 256, 4, UIFX)]),
+        ];
+        for (w, h, levels, cpp, size, want) in cases {
+            let l = layout_compressed(w, h, levels, 4, 4, cpp).unwrap();
+            assert_eq!(
+                (l.width, l.height, l.levels, l.cpp, l.size),
+                (w, h, levels, cpp, size),
+                "{w}x{h} x{levels} cpp {cpp}"
+            );
+            for (i, &(offset, stride, padded_height, ub_pad, tiling)) in want.iter().enumerate() {
+                let s = l.slices[i];
+                assert_eq!(
+                    s,
+                    V3dTexSlice { offset, stride, padded_height, size: stride * padded_height, ub_pad, tiling },
+                    "{w}x{h} x{levels} cpp {cpp} level {i}"
+                );
+            }
+        }
+        /* the block-aware padding (tex_check's control): 36x36 level 2 is 9
+         * texels, 3 blocks, in Mesa's 4 (64 >> 2 = 16 texels); level 1 is 5
+         * blocks wide (18 texels), where level 0's 9 blocks minified are 4 */
+        let l = layout_compressed(36, 36, 6, 4, 4, 8).unwrap();
+        assert_eq!((l.slices[2].stride / 8, l.slices[2].padded_height), (4, 4));
+        assert_eq!(gl_level_blocks(36, 36, 1, 8, 2).1, 3, "GL's blocks of level 2");
+        assert_eq!(gl_level_blocks(36, 36, 1, 8, 1).1, 5, "GL's blocks of level 1");
+    }
+
+    /// The UIF padding and the XOR in blocks: cpp 16 (UIF block 4x4 blocks),
+    /// 1024x1024 x2: level 1 is 128x128 blocks, UIF, 32 UB rows (32 % 32 =
+    /// 0: no pad, XOR), stride 2048, 256 KiB; level 0 256x256 blocks, 64 UB
+    /// rows, XOR, at 262144. 1024x1040 x2: level 1 is 130 blocks high, 132
+    /// rows, 33 UB rows (33 % 32 = 1 < 6 and 33 >= 32: pad 5, 152 rows, no
+    /// XOR); level 0 260 blocks, 65 UB rows, pad 5, 280 rows.
+    ///
+    /// Level 1's TOTAL rounded to a page where it could be UIF XOR
+    /// (v3d_resource.c:729-734: wider than 4 UIF blocks, higher than 26 UB
+    /// rows), seen where it is no page multiple and the levels below are not
+    /// either: 256x1248 x11, cpp 16. Level 1 is 32x156 blocks (39 UB rows,
+    /// 39 % 32 = 7: no pad, no XOR), stride 512, 79872 bytes (19.5 pages).
+    /// Below it, level 2 (pot 256 x 2048: 16x128 blocks, UIF XOR, 32768),
+    /// level 3 (8x64, UB2, 8192), level 4 (4x32, UB1, 2048), levels 5..10
+    /// (LT: 512, 256, 128, 64, 64, 64): 44096. Level 1 at 44096, its total
+    /// rounded to 81920, level 0 at 126016; to a page: +960. Without the
+    /// rule level 0 would be at 123968 and the pad 3008. Level 0: 64x312
+    /// blocks, UIF, 78 UB rows (78 % 32 = 14: no pad), 1024 x 312 bytes.
+    #[test]
+    fn an_etc2_level_1_that_could_be_xor_starts_a_page() {
+        const XOR: u32 = V3D_TEX_TILING_UIF_XOR;
+        const NO_XOR: u32 = V3D_TEX_TILING_UIF_NO_XOR;
+        let l = layout_compressed(1024, 1024, 2, 4, 4, 16).unwrap();
+        assert_eq!(
+            l.slices[1],
+            V3dTexSlice { offset: 0, stride: 2048, padded_height: 128, size: 262144, ub_pad: 0, tiling: XOR }
+        );
+        assert_eq!((l.slices[0].offset, l.slices[0].padded_height, l.slices[0].tiling), (262144, 256, XOR));
+        assert_eq!(l.size, 262144 + 4096 * 256);
+        let l = layout_compressed(1024, 1040, 2, 4, 4, 16).unwrap();
+        assert_eq!((l.slices[1].padded_height, l.slices[1].ub_pad, l.slices[1].tiling), (152, 5, NO_XOR));
+        assert_eq!((l.slices[0].offset, l.slices[0].padded_height, l.slices[0].ub_pad), (311296, 280, 5));
+        let l = layout_compressed(256, 1248, 11, 4, 4, 16).unwrap();
+        let (s0, s1) = (l.slices[0], l.slices[1]);
+        assert_eq!((s1.stride, s1.padded_height, s1.size, s1.ub_pad, s1.tiling), (512, 156, 79872, 0, NO_XOR));
+        assert_eq!((s1.offset, s0.offset), (44096 + 960, 126016 + 960));
+        assert_eq!(s0.offset - s1.offset, 81920, "level 1's total, rounded to a page");
+        assert_eq!((s0.stride, s0.padded_height, s0.tiling), (1024, 312, NO_XOR));
+        assert_eq!(l.size, s0.offset + 1024 * 312);
+        assert_eq!((l.slices[2].size, l.slices[2].tiling, l.slices[10].offset), (32768, XOR, 960));
+    }
+
+    /// The refusals of v3d_tex_layout_compressed (tex_check part 12): a
+    /// block side of 0 or past 16, a block of other than 8 or 16 bytes, a
+    /// size of 0 or 16384, a level count of 0 or past 15.
+    #[test]
+    fn layout_compressed_refuses_what_the_c_refuses() {
+        assert!(layout_compressed(36, 36, 1, 0, 4, 8).is_none());
+        assert!(layout_compressed(36, 36, 1, 4, 17, 8).is_none());
+        assert!(layout_compressed(36, 36, 1, 4, 4, 4).is_none());
+        assert!(layout_compressed(16384, 4, 1, 4, 4, 8).is_none());
+        assert!(layout_compressed(4, 0, 1, 4, 4, 8).is_none());
+        assert!(layout_compressed(4, 4, 0, 4, 4, 8).is_none());
+        assert!(layout_compressed(4, 4, 16, 4, 4, 8).is_none());
+        assert!(layout_compressed(16383, 16383, 14, 4, 4, 16).is_some());
+    }
+
+    /// The GL core's raster rows of blocks (`gl_level_blocks`): 36x36 x3 of
+    /// 8-byte blocks is 9x9 (648 B), 5x5 (200 B), 3x3 (72 B); a cube's six
+    /// faces are stacked in each level. `tile` puts block (bx, by) of layer f
+    /// at the level's slice in layer f's tree, at the fake store's packed
+    /// rows (backend_tests.rs: a box's rows at the slice's stride).
+    #[test]
+    fn tile_puts_each_etc2_block_grid_into_its_layers_tree() {
+        assert_eq!(gl_level_blocks(36, 36, 1, 8, 0), (0, 9, 9));
+        assert_eq!(gl_level_blocks(36, 36, 1, 8, 1), (648, 5, 5));
+        assert_eq!(gl_level_blocks(36, 36, 1, 8, 2), (848, 3, 3));
+        assert_eq!(gl_level_blocks(36, 36, 6, 16, 1), (6 * 81 * 16, 5, 5));
+        assert_eq!(gl_bytes(&etc2(GLES_TEXFMT_ETC2_RGB, 36, 36, 3)), 920);
+        assert_eq!(gl_bytes(&etc2(GLES_TEXFMT_ETC2_RGB, 36, 36, 1)), 648, "no mip filter: level 0");
+        /* a 1x1 level is one block */
+        assert_eq!(gl_level_blocks(1, 1, 1, 16, 0), (0, 1, 1));
+        let b = GlesTextureBind { type_: GLES_TEXTYPE_CUBE, layers: 6, ..etc2(GLES_TEXFMT_ETC2_RGBA, 36, 36, 3) };
+        let l = layout(&b).unwrap();
+        let stride = (l.slices[0].offset + l.slices[0].size).next_multiple_of(64);
+        assert_eq!(image_bytes(&b, &l), Some(l.size + 5 * stride));
+        let n = gl_bytes(&b) as usize;
+        assert_eq!(n, 6 * (81 + 25 + 9) * 16);
+        let src: std::vec::Vec<u8> = (0..n).map(|i| (i * 13 + 5) as u8).collect();
+        let mut image = std::vec![0u8; image_bytes(&b, &l).unwrap() as usize];
+        // SAFETY: the image is image_bytes long and the source gl_bytes.
+        unsafe { tile(&b, &l, image.as_mut_ptr(), src.as_ptr()) };
+        for level in 0..3u32 {
+            let (off, gw, gh) = gl_level_blocks(36, 36, 6, 16, level);
+            let s = l.slices[level as usize];
+            for f in 0..6u32 {
+                for (bx, by) in [(0, 0), (gw - 1, 0), (0, gh - 1), (gw - 1, gh - 1)] {
+                    let from = (off + ((f * gh + by) * gw + bx) * 16) as usize;
+                    let at = (image_offset(&b, &l, level, f).unwrap() + by * s.stride + bx * 16) as usize;
+                    assert_eq!(&image[at..at + 16], &src[from..from + 16], "level {level} face {f} block ({bx}, {by})");
+                }
+            }
+        }
+    }
+
+    /// A depth binding (R32F, from its texels or its D24S8 buffer) carries
+    /// GL's compare function in the record's "Depth Compare Function" (bits
+    /// 4-6 of word 0): GlesTextureBind::compare_op bits 0-2, GL's order,
+    /// which is the field's (v3d_packet.xml:3-12); bit 3 (a fixed-point
+    /// depth) does not reach it; bit 4 is compare off, NEVER, Mesa's
+    /// compare-off word. tools/v3d/tex_check.c checks on Mesa's packer that
+    /// Mesa's record of each function is the compare-off one with the
+    /// function at bit 4 of word 0 (0x00100007 | f << 4 for a nearest,
+    /// unmipmapped sampler, 0x00100004 | f << 4 for a linear one), and that
+    /// v3d_tex_pack_sampler_compare packs Mesa's bytes for each `compare_op`
+    /// given here. The record is read at the TMU's 32-bit output (P1 payload
+    /// 0x5, select.rs).
+    #[test]
+    fn a_depth_binding_carries_its_compare_function() {
+        let depth = GlesTextureBind { format: GLES_TEXFMT_R32F, ..bind(64, 64) };
+        let buffer = GlesTextureBind { depth_id: 0x4000_0001, ..depth };
+        for f in 0..8u8 {
+            for (op, what) in [(f, "float depth"), (f | 8, "fixed-point depth")] {
+                for b in [GlesTextureBind { compare_op: op, ..depth }, GlesTextureBind { compare_op: op, ..buffer }] {
+                    assert_eq!(compare_op(&b), u32::from(op), "{what} {f}");
+                    assert_eq!(compare_function(&b), u32::from(f), "{what} {f}");
+                    assert_eq!(sampler_compare_bits(&b), u32::from(f) << 4, "{what} {f}");
+                    assert!(return_32(&b));
+                    assert_eq!(4 | u32::from(return_32(&b)), 0x5, "P1's payload for the binding");
+                }
+            }
+            let off = GlesTextureBind { compare_op: f | 16, ..depth };
+            assert_eq!(
+                (compare_op(&off), compare_function(&off), sampler_compare_bits(&off)),
+                (u32::from(f) | 16, 0, 0)
+            );
+        }
+        /* the GL core's compare-off value, and its fixed-depth variant */
+        for op in [16u8, 24] {
+            assert_eq!(compare_function(&GlesTextureBind { compare_op: op, ..depth }), 0);
+        }
+        /* ES 3.0.6 3.8.15: no compare for a texture of another base format */
+        for format in [GLES_TEXFMT_RGBA8, GLES_TEXFMT_R16F, GLES_TEXFMT_RGBA32F, GLES_TEXFMT_ETC2_RGB] {
+            let b = GlesTextureBind { format, compare_op: 1, ..bind(64, 64) };
+            assert_eq!((compare_op(&b), compare_function(&b), sampler_compare_bits(&b)), (COMPARE_OFF, 0, 0));
+        }
+        /* the compare is not in the V3dSampler (the C struct is unchanged):
+         * a cache keyed by it alone would give two compares one record */
+        let less = GlesTextureBind { compare_op: 1, ..depth };
+        let greater = GlesTextureBind { compare_op: 4, ..depth };
+        assert_eq!(sampler(&less), sampler(&greater));
+        assert_ne!(compare_function(&less), compare_function(&greater));
     }
 
     /// The GL filters and wrap modes to the TMU's, as st/mesa and

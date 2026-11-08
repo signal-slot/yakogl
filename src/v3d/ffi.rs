@@ -464,6 +464,15 @@ pub const V3D_TEXTURE_DATA_FORMAT_RGBA16F: u32 = 18;
 pub const V3D_TEXTURE_DATA_FORMAT_R11F_G11F_B10F: u32 = 19;
 pub const V3D_TEXTURE_DATA_FORMAT_RGB9_E5: u32 = 20;
 pub const V3D_TEXTURE_DATA_FORMAT_RGBA32F: u32 = 31;
+/* ETC2 and EAC (v3d_packet.xml:371-379; the sRGB ones are the linear type
+ * with the state's sRGB bit) */
+pub const V3D_TEXTURE_DATA_FORMAT_RGB8_ETC2: u32 = 32;
+pub const V3D_TEXTURE_DATA_FORMAT_RGB8_PUNCHTHROUGH_ALPHA1: u32 = 33;
+pub const V3D_TEXTURE_DATA_FORMAT_R11_EAC: u32 = 34;
+pub const V3D_TEXTURE_DATA_FORMAT_SIGNED_R11_EAC: u32 = 35;
+pub const V3D_TEXTURE_DATA_FORMAT_RG11_EAC: u32 = 36;
+pub const V3D_TEXTURE_DATA_FORMAT_SIGNED_RG11_EAC: u32 = 37;
+pub const V3D_TEXTURE_DATA_FORMAT_RGBA8_ETC2_EAC: u32 = 38;
 pub const V3D_TEXTURE_DATA_FORMAT_RGBA8I: u32 = 100;
 pub const V3D_TEXTURE_DATA_FORMAT_RGBA8UI: u32 = 101;
 pub const V3D_TEXTURE_DATA_FORMAT_RGBA16I: u32 = 106;
@@ -486,6 +495,8 @@ pub const V3D_BORDER_COLOR_0000: u32 = 0;
 /// "Memory Format" numbering of the load/store packets (Mesa passes a
 /// slice's tiling straight into them, v3dx_rcl.c:89, :151).
 pub const V3D_TEX_TILING_LINEARTILE: u32 = 1;
+pub const V3D_TEX_TILING_UBLINEAR_1_COLUMN: u32 = 2;
+pub const V3D_TEX_TILING_UBLINEAR_2_COLUMN: u32 = 3;
 pub const V3D_TEX_TILING_UIF_NO_XOR: u32 = 4;
 pub const V3D_TEX_TILING_UIF_XOR: u32 = 5;
 
@@ -786,6 +797,11 @@ extern "C" {
     /// supported format has (v3d-tex, 6320fb26).
     pub fn v3d_tex_pack_state(out: *mut u8, s: *const V3dTexState) -> bool;
     pub fn v3d_tex_pack_sampler(out: *mut u8, s: *const V3dSampler) -> bool;
+    /// [`v3d_tex_pack_sampler`] with the depth compare of a shadow sampler:
+    /// `compare_op` is `GlesTextureBind::compare_op` (bits 0-2 the function,
+    /// bit 3 ignored, bit 4 compare off); false, writing nothing, for what
+    /// v3d_tex_pack_sampler refuses or a `compare_op` above 0x1f (v3d_tex.h).
+    pub fn v3d_tex_pack_sampler_compare(out: *mut u8, s: *const V3dSampler, compare_op: u32) -> bool;
     pub fn v3d_frame_alloc_sizes(
         t: *const V3dTiling,
         draws: u32,
