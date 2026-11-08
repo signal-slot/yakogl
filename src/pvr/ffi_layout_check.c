@@ -36,16 +36,16 @@
  * pvr_render_kick: the numbers src/osal/render.rs (src/abi_layout.rs) and the
  * driver's own mirror (driver/rust/src/gpu/pvr/render.rs, PvrRenderFragPr)
  * assert, so a header change mirrored on one Rust side only fails here. */
-_Static_assert(sizeof(struct pvr_render_frag_pr) == 96, "struct pvr_render_frag_pr");
+_Static_assert(sizeof(struct pvr_render_frag_pr) == 112, "struct pvr_render_frag_pr");
 _Static_assert(offsetof(struct pvr_render_frag_pr, spm_scratch_gpu) == 0, "pvr_render_frag_pr.spm_scratch_gpu");
 _Static_assert(offsetof(struct pvr_render_frag_pr, spm_scratch_bytes) == 8, "pvr_render_frag_pr.spm_scratch_bytes");
 _Static_assert(offsetof(struct pvr_render_frag_pr, reserved) == 12, "pvr_render_frag_pr.reserved");
 _Static_assert(offsetof(struct pvr_render_frag_pr, pbe_word) == 16, "pvr_render_frag_pr.pbe_word");
-_Static_assert(offsetof(struct pvr_render_frag_pr, eot_pds_data) == 64, "pvr_render_frag_pr.eot_pds_data");
-_Static_assert(offsetof(struct pvr_render_frag_pr, eot_pds_data_bytes) == 68, "pvr_render_frag_pr.eot_pds_data_bytes");
-_Static_assert(offsetof(struct pvr_render_frag_pr, pds_pr_bgnd) == 72, "pvr_render_frag_pr.pds_pr_bgnd");
-_Static_assert(offsetof(struct pvr_render_kick, frag_pr) == 216, "pvr_render_kick.frag_pr");
-_Static_assert(sizeof(struct pvr_render_kick) == 312, "struct pvr_render_kick");
+_Static_assert(offsetof(struct pvr_render_frag_pr, eot_pds_data) == 80, "pvr_render_frag_pr.eot_pds_data");
+_Static_assert(offsetof(struct pvr_render_frag_pr, eot_pds_data_bytes) == 84, "pvr_render_frag_pr.eot_pds_data_bytes");
+_Static_assert(offsetof(struct pvr_render_frag_pr, pds_pr_bgnd) == 88, "pvr_render_frag_pr.pds_pr_bgnd");
+_Static_assert(offsetof(struct pvr_render_kick, frag_pr) == 232, "pvr_render_kick.frag_pr");
+_Static_assert(sizeof(struct pvr_render_kick) == 344, "struct pvr_render_kick");
 
 /* ffi.rs mirrors C `int` as i32 and the pvr_ppp_passtype / pvr_pds_coeff_interp
  * enumerators as u32 values. */

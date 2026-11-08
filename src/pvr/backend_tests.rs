@@ -655,11 +655,12 @@ unsafe extern "C" fn p_query(what: u32, out: *mut c_void, out_sz: usize) -> i32 
         event_pixel_pds_info: 0x55,
         /* one end-of-tile program per attachment count, and a second set for
          * a render whose last attachment comes back from a tile buffer */
-        eot_doutu_src0_n: [0, 0x1001, 0x1002, 0x1003],
-        event_pixel_pds_info_n: [0, 0x61, 0x62, 0x63],
-        eot_doutu_src0_tb_n: [0, 0x2001, 0x2002, 0x2003],
-        event_pixel_pds_info_tb_n: [0, 0x71, 0x72, 0x73],
-        tile_buffer_gpu: [TILE_BUFFER_GPU, TILE_BUFFER_GPU + 0x8000],
+        eot_doutu_src0_n: [0, 0x1001, 0x1002, 0x1003, 0x1004],
+        event_pixel_pds_info_n: [0, 0x61, 0x62, 0x63, 0x64],
+        eot_doutu_src0_tb_n: [0, 0x2001, 0x2002, 0x2003, 0x2004],
+        event_pixel_pds_info_tb_n: [0, 0x71, 0x72, 0x73, 0x74],
+        eot_doutu_src0_tb4_k: [0, 0x2004, 0x3002, 0x3003],
+        tile_buffer_gpu: [TILE_BUFFER_GPU, TILE_BUFFER_GPU + 0x8000, TILE_BUFFER_GPU + 0x1_0000],
         border_gpu: BORDER_GPU,
         heap_base: [HEAP_GENERAL_BASE, HEAP_PDS_BASE, HEAP_USC_BASE],
     };

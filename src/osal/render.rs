@@ -14,14 +14,19 @@ pub const PVR_RENDER_HEAP_USC: usize = 2;
 /// PDS-heap offset of the static EOT (pixel-event) PDS code the firmware runs.
 pub const PVR_RENDER_EOT_PDS_CODE_OFF: u32 = 0x80;
 
-/// Colour attachments one render may write. The hardware allows eight; the
-/// end-of-tile programs captured for this driver cover three, which is what a
-/// Quick 3D G-buffer pass asks for.
+/// Colour attachments one render may write. The hardware allows eight; three
+/// is what a Quick 3D G-buffer pass asks for. The draws and the driver's
+/// static end-of-tile PDS program stay at this count.
 pub const PVR_RENDER_MAX_RT: usize = 3;
 
+/// Colour attachments the end-of-tile USC programs and the kick's PBE words
+/// cover: one more than a draw writes yet.
+pub const PVR_RENDER_EOT_MAX_RT: usize = 4;
+
 /// Tile buffers: one per colour attachment that does not fit the pixel's four
-/// output registers. Three RGBA16F attachments (a Quick 3D G-buffer) spill one.
-pub const PVR_RENDER_TILE_BUFFERS: usize = 2;
+/// output registers. Three RGBA16F attachments (a Quick 3D G-buffer) spill
+/// one; four of them spill up to three.
+pub const PVR_RENDER_TILE_BUFFERS: usize = 3;
 
 /// One tile's worth of spilled outputs: `tile_size_x` (16) * `tile_size_y`
 /// (16) * `max_partitions` (16) * `usc_min_output_registers_per_pix` (2)
@@ -32,20 +37,23 @@ pub const PVR_TILE_BUFFER_BYTES: u32 = 8192 * 4;
 
 /// `struct pvr_render_static`.
 ///
-/// The `*_n` arrays are indexed by the colour-attachment count (1..=3): one
+/// The `*_n` arrays are indexed by the colour-attachment count (1..=4): one
 /// end-of-tile program per count, each emitting that many surfaces. The `_tb_`
 /// pair is the same for a render whose LAST attachment comes from a tile
 /// buffer (the shader stored it there because a pixel has only four output
 /// registers, and the program loads it back before emitting it).
+/// `eot_doutu_src0_tb4_k[k]` (k 1..=3) is the four-target program whose last
+/// k attachments come from tile buffers 0..k-1.
 #[repr(C)]
 #[derive(Clone, Copy, Default, Debug)]
 pub struct PvrRenderStatic {
     pub eot_doutu_src0: u64,
     pub event_pixel_pds_info: u32,
-    pub eot_doutu_src0_n: [u64; PVR_RENDER_MAX_RT + 1],
-    pub event_pixel_pds_info_n: [u32; PVR_RENDER_MAX_RT + 1],
-    pub eot_doutu_src0_tb_n: [u64; PVR_RENDER_MAX_RT + 1],
-    pub event_pixel_pds_info_tb_n: [u32; PVR_RENDER_MAX_RT + 1],
+    pub eot_doutu_src0_n: [u64; PVR_RENDER_EOT_MAX_RT + 1],
+    pub event_pixel_pds_info_n: [u32; PVR_RENDER_EOT_MAX_RT + 1],
+    pub eot_doutu_src0_tb_n: [u64; PVR_RENDER_EOT_MAX_RT + 1],
+    pub event_pixel_pds_info_tb_n: [u32; PVR_RENDER_EOT_MAX_RT + 1],
+    pub eot_doutu_src0_tb4_k: [u64; PVR_RENDER_TILE_BUFFERS + 1],
     /// Tile buffers the fragment shader may store outputs into; their
     /// addresses go to the shared registers the shader reads them from.
     pub tile_buffer_gpu: [u64; PVR_RENDER_TILE_BUFFERS],
@@ -76,8 +84,8 @@ pub struct PvrRenderFragRegs {
     pub event_pixel_pds_data: u32,
     /// PBE REG_WORD0/1 per colour attachment (the firmware's 3D registers hold
     /// `pbe_word[8][3]`; this driver fills the first two words of the first
-    /// [`PVR_RENDER_MAX_RT`]). `num_rt` 0 means one.
-    pub pbe_word: [[u64; 2]; PVR_RENDER_MAX_RT],
+    /// [`PVR_RENDER_EOT_MAX_RT`]). `num_rt` 0 means one.
+    pub pbe_word: [[u64; 2]; PVR_RENDER_EOT_MAX_RT],
     pub num_rt: u32,
     pub pds_bgnd: [u64; 3],
     /// CR_ISP_SCISSOR_BASE: the scissor table (2 dwords per entry).
@@ -119,7 +127,7 @@ pub struct PvrRenderFragPr {
     /// PBE REG_WORD0/1 per slot of the PR command, written whole (Mesa copies
     /// the whole array): slot 0 the scratch's pair (identity swizzle, LINEAR,
     /// the scratch's own stride, no downscale), the other slots zero.
-    pub pbe_word: [[u64; 2]; PVR_RENDER_MAX_RT],
+    pub pbe_word: [[u64; 2]; PVR_RENDER_EOT_MAX_RT],
     /// The PR EOT program: the PDS-heap offset of its DATA segment (what the
     /// PR command's `CR_EVENT_PIXEL_PDS_DATA` names; the CODE and the info
     /// word are the frame's) and that segment's size in bytes.

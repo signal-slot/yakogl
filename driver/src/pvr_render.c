@@ -46,6 +46,14 @@ _Static_assert(PVR_USC_EOT_TEMPS <= PVR_PDS_DOUTU_MAX_TEMPS,
 	       "EOT shader needs more temporaries than the DOUTU field can hold");
 _Static_assert(PVR_USC_EOT_TB_TEMPS <= PVR_PDS_DOUTU_MAX_TEMPS,
 	       "EOT tile-buffer shader needs more temporaries than the DOUTU field can hold");
+_Static_assert(PVR_USC_EOT_MAX_RT == PVR_RENDER_EOT_MAX_RT,
+	       "one end-of-tile program per colour-attachment count");
+_Static_assert(PVR_USC_EOT_TB_MAX_SPILLS <= PVR_RENDER_TILE_BUFFERS,
+	       "each spilled end-of-tile emit reads a tile buffer of its own");
+
+/* One tile buffer: the core's tile of spilled outputs, and at least what one
+ * spilled end-of-tile emit flushes (PVR_USC_EOT_TB_DWORDS). */
+#define TILE_BUFFER_ALLOC_BYTES MAX(PVR_TILE_BUFFER_BYTES, PVR_USC_EOT_TB_DWORDS * 4u)
 
 LOG_MODULE_DECLARE(gpu_pvr, CONFIG_YAKOGL_DRV_GPU_PVR_LOG_LEVEL);
 
@@ -75,12 +83,16 @@ static struct {
 	uint32_t pds_b, usc_b;
 	struct pvr_gpu_bo pbuf, border, usc0, pds0, eot;
 	uint64_t eot_doutu;
-	struct pvr_gpu_bo eot_n[PVR_RENDER_MAX_RT + 1];
-	uint64_t eot_doutu_n[PVR_RENDER_MAX_RT + 1];
+	struct pvr_gpu_bo eot_n[PVR_RENDER_EOT_MAX_RT + 1];
+	uint64_t eot_doutu_n[PVR_RENDER_EOT_MAX_RT + 1];
 	/* the same programs for a render whose last attachment comes from a
-	 * tile buffer, and the tile buffers themselves */
-	struct pvr_gpu_bo eot_tb_n[PVR_RENDER_MAX_RT + 1];
-	uint64_t eot_doutu_tb_n[PVR_RENDER_MAX_RT + 1];
+	 * tile buffer, the four-target ones with the last k from tile buffers
+	 * (k = 1 is eot_tb_n[4], not uploaded twice), and the tile buffers
+	 * themselves */
+	struct pvr_gpu_bo eot_tb_n[PVR_RENDER_EOT_MAX_RT + 1];
+	uint64_t eot_doutu_tb_n[PVR_RENDER_EOT_MAX_RT + 1];
+	struct pvr_gpu_bo eot_tb4_k[PVR_RENDER_TILE_BUFFERS + 1];
+	uint64_t eot_doutu_tb4_k[PVR_RENDER_TILE_BUFFERS + 1];
 	struct pvr_gpu_bo tile_buf[PVR_RENDER_TILE_BUFFERS];
 } R;
 
@@ -253,7 +265,7 @@ uint64_t pvr_render_pool_owners(void)
 			n++;
 		}
 	}
-	for (unsigned n_rt = 1; n_rt <= PVR_RENDER_MAX_RT; n_rt++) {
+	for (unsigned n_rt = 1; n_rt <= PVR_RENDER_EOT_MAX_RT; n_rt++) {
 		if (R.eot_n[n_rt].cpu) {
 			st[2] += ROUND_UP(pvr_usc_eot_n_dwords[n_rt] * 4u, 0x1000);
 			n++;
@@ -263,9 +275,15 @@ uint64_t pvr_render_pool_owners(void)
 			n++;
 		}
 	}
+	for (unsigned k = 2; k <= PVR_RENDER_TILE_BUFFERS; k++) {
+		if (R.eot_tb4_k[k].cpu) {
+			st[2] += ROUND_UP(pvr_usc_eot4_tb_k_dwords[k] * 4u, 0x1000);
+			n++;
+		}
+	}
 	for (unsigned i = 0; i < PVR_RENDER_TILE_BUFFERS; i++) {
 		if (R.tile_buf[i].cpu) {
-			st[0] += ROUND_UP(PVR_TILE_BUFFER_BYTES, 0x1000);
+			st[0] += ROUND_UP(TILE_BUFFER_ALLOC_BYTES, 0x1000);
 			n++;
 		}
 	}
@@ -480,15 +498,19 @@ int pvr_render_static_get(struct pvr_render_static *out)
 	}
 	out->eot_doutu_src0 = R.eot_doutu;
 	out->event_pixel_pds_info = pvr_cr_event_pixel_pds_info(1);
-	for (unsigned n = 1; n <= PVR_RENDER_MAX_RT; n++) {
+	for (unsigned n = 1; n <= PVR_RENDER_EOT_MAX_RT; n++) {
 		out->eot_doutu_src0_n[n] = R.eot_doutu_n[n];
 		/* The PDS DATA is always the largest count's (the program at
 		 * the fixed offset moves all PVR_RENDER_MAX_RT pairs), and so
-		 * are the shared registers it fills. */
+		 * are the shared registers it fills. A four-target program
+		 * reads a fourth pair that program does not move yet: no draw
+		 * asks for one (PVR_RENDER_MAX_RT). */
 		out->event_pixel_pds_info_n[n] = pvr_cr_event_pixel_pds_info(PVR_RENDER_MAX_RT);
 		out->eot_doutu_src0_tb_n[n] = R.eot_doutu_tb_n[n];
 		out->event_pixel_pds_info_tb_n[n] = out->event_pixel_pds_info_n[n];
 	}
+	for (unsigned k = 1; k <= PVR_RENDER_TILE_BUFFERS; k++)
+		out->eot_doutu_src0_tb4_k[k] = R.eot_doutu_tb4_k[k];
 	for (unsigned i = 0; i < PVR_RENDER_TILE_BUFFERS; i++)
 		out->tile_buffer_gpu[i] = R.tile_buf[i].gpu;
 	out->border_gpu = R.border.gpu;
@@ -501,6 +523,37 @@ int pvr_render_static_get(struct pvr_render_static *out)
 /* ---------------------------------------------------------------------- *
  * One-time objects
  * ---------------------------------------------------------------------- */
+
+/* Upload one end-of-tile program that reads tile buffers: the program carries
+ * each buffer's address as two immediates, so each one is a patched copy.
+ * Its k-th spilled emit reads tile buffer k, the immediates at the byte
+ * offsets addr[k] = { lo, hi } (not dword aligned in a program with several
+ * spilled emits). Leaves *bo zero when there is no program or no buffer. */
+static void eot_tb_upload(const uint32_t *words, uint32_t dwords,
+			  const uint16_t addr[PVR_USC_EOT_TB_MAX_SPILLS][2], unsigned spills,
+			  struct pvr_gpu_bo *bo, uint64_t *doutu)
+{
+	uint32_t bytes = dwords * 4;
+
+	if (!words || !bytes)
+		return;
+	for (unsigned k = 0; k < spills; k++) {
+		if (!R.tile_buf[k].cpu)
+			return;
+	}
+	*bo = pvr_gpu_bo_alloc(PVR_USCCODE_HEAP_BASE, &R.usc_b, bytes);
+	memcpy(bo->cpu, words, bytes);
+	for (unsigned k = 0; k < spills; k++) {
+		uint32_t lo = (uint32_t)(R.tile_buf[k].gpu & 0xFFFFFFFFu);
+		uint32_t hi = (uint32_t)(R.tile_buf[k].gpu >> 32);
+
+		memcpy(bo->cpu + addr[k][0], &lo, 4);
+		memcpy(bo->cpu + addr[k][1], &hi, 4);
+	}
+	*doutu = pvr_pds_pe_build_doutu_src0(bo->heap_off, PVR_USC_EOT_TB_TEMPS,
+					     PVR_PDS_PE_SAMPLE_RATE_INSTANCE, 0);
+	flush_bo(bo, bytes);
+}
 
 static void static_areas_init(void)
 {
@@ -532,7 +585,7 @@ static void static_areas_init(void)
 	 * count -- it then moves all six words, and a program that emits fewer
 	 * simply does not read the rest. Which program runs is chosen per render
 	 * through the DOUTU in the PDS DATA segment. */
-	for (unsigned n = 1; n <= PVR_RENDER_MAX_RT; n++) {
+	for (unsigned n = 1; n <= PVR_RENDER_EOT_MAX_RT; n++) {
 		uint32_t bytes = pvr_usc_eot_n_dwords[n] * 4;
 
 		R.eot_n[n] = pvr_gpu_bo_alloc(PVR_USCCODE_HEAP_BASE, &R.usc_b, bytes);
@@ -546,31 +599,19 @@ static void static_areas_init(void)
 	 * buffer holds one tile's worth of the outputs that did not fit the
 	 * pixel output registers: tile_size_x * tile_size_y * max_partitions *
 	 * usc_min_output_registers_per_pix dwords for this core's one cluster
-	 * (Mesa pvr_get_tile_buffer_size_per_core). The program carries the
-	 * buffer's address as two immediates, so each one is a patched copy. */
+	 * (Mesa pvr_get_tile_buffer_size_per_core), and no less than one
+	 * spilled emit's flush. */
 	for (unsigned i = 0; i < PVR_RENDER_TILE_BUFFERS; i++)
 		R.tile_buf[i] = pvr_gpu_bo_alloc(PVR_GENERAL_HEAP_BASE, &RR.gen_b,
-						 PVR_TILE_BUFFER_BYTES);
-	for (unsigned n = 1; n <= PVR_RENDER_MAX_RT; n++) {
-		uint32_t bytes = pvr_usc_eot_tb_n_dwords[n] * 4;
-		uint32_t *w;
-
-		if (!bytes || !R.tile_buf[0].cpu)
-			continue;
-		R.eot_tb_n[n] = pvr_gpu_bo_alloc(PVR_USCCODE_HEAP_BASE, &R.usc_b, bytes);
-		memcpy(R.eot_tb_n[n].cpu, pvr_usc_eot_tb_n_words[n], bytes);
-		w = (uint32_t *)R.eot_tb_n[n].cpu;
-		for (uint32_t k = 0; k < bytes / 4; k++) {
-			if (w[k] == PVR_USC_EOT_TB_ADDR_LO)
-				w[k] = (uint32_t)(R.tile_buf[0].gpu & 0xFFFFFFFFu);
-			else if (w[k] == PVR_USC_EOT_TB_ADDR_HI)
-				w[k] = (uint32_t)(R.tile_buf[0].gpu >> 32);
-		}
-		R.eot_doutu_tb_n[n] = pvr_pds_pe_build_doutu_src0(R.eot_tb_n[n].heap_off,
-								  PVR_USC_EOT_TB_TEMPS,
-								  PVR_PDS_PE_SAMPLE_RATE_INSTANCE, 0);
-		flush_bo(&R.eot_tb_n[n], bytes);
-	}
+						 TILE_BUFFER_ALLOC_BYTES);
+	for (unsigned n = 1; n <= PVR_RENDER_EOT_MAX_RT; n++)
+		eot_tb_upload(pvr_usc_eot_tb_n_words[n], pvr_usc_eot_tb_n_dwords[n],
+			      pvr_usc_eot_tb_n_addr_bytes[n], 1, &R.eot_tb_n[n], &R.eot_doutu_tb_n[n]);
+	R.eot_tb4_k[1] = R.eot_tb_n[PVR_RENDER_EOT_MAX_RT];
+	R.eot_doutu_tb4_k[1] = R.eot_doutu_tb_n[PVR_RENDER_EOT_MAX_RT];
+	for (unsigned k = 2; k <= PVR_RENDER_TILE_BUFFERS; k++)
+		eot_tb_upload(pvr_usc_eot4_tb_k_words[k], pvr_usc_eot4_tb_k_dwords[k],
+			      pvr_usc_eot4_tb_k_addr_bytes[k], k, &R.eot_tb4_k[k], &R.eot_doutu_tb4_k[k]);
 	R.eot = R.eot_n[1];
 	R.eot_doutu = R.eot_doutu_n[1];
 	{
@@ -724,17 +765,17 @@ int pvr_render_init(void)
 /* ---------------------------------------------------------------------- *
  * Submit / wait: gpu::pvr::render (render.rs has the sequences and why).
  * ---------------------------------------------------------------------- */
-BUILD_ASSERT(sizeof(struct pvr_render_kick) == 312, "gpu::pvr::render::PvrRenderKick");
+BUILD_ASSERT(sizeof(struct pvr_render_kick) == 344, "gpu::pvr::render::PvrRenderKick");
 BUILD_ASSERT(offsetof(struct pvr_render_kick, frag) == 32, "PvrRenderKick.frag");
 BUILD_ASSERT(offsetof(struct pvr_render_kick, frag.pbe_word) == 80, "PvrRenderKick.frag.pbe_word");
-BUILD_ASSERT(offsetof(struct pvr_render_kick, frag.num_rt) == 128, "PvrRenderKick.frag.num_rt");
-BUILD_ASSERT(offsetof(struct pvr_render_kick, frag.pds_bgnd) == 136, "PvrRenderKick.frag.pds_bgnd");
-BUILD_ASSERT(offsetof(struct pvr_render_kick, frag.isp_scissor_base) == 160,
+BUILD_ASSERT(offsetof(struct pvr_render_kick, frag.num_rt) == 144, "PvrRenderKick.frag.num_rt");
+BUILD_ASSERT(offsetof(struct pvr_render_kick, frag.pds_bgnd) == 152, "PvrRenderKick.frag.pds_bgnd");
+BUILD_ASSERT(offsetof(struct pvr_render_kick, frag.isp_scissor_base) == 176,
 	     "PvrRenderKick.frag.isp_scissor_base");
-BUILD_ASSERT(offsetof(struct pvr_render_kick, frag.cmd_flags) == 200, "PvrRenderKick.frag.cmd_flags");
-BUILD_ASSERT(offsetof(struct pvr_render_kick, frag.isp_oclqry_base) == 208, "PvrRenderKick.frag.isp_oclqry_base");
-BUILD_ASSERT(offsetof(struct pvr_render_kick, frag_pr) == 216, "PvrRenderKick.frag_pr");
-BUILD_ASSERT(sizeof(struct pvr_render_frag_pr) == 96, "gpu::pvr::render::PvrRenderFragPr");
+BUILD_ASSERT(offsetof(struct pvr_render_kick, frag.cmd_flags) == 216, "PvrRenderKick.frag.cmd_flags");
+BUILD_ASSERT(offsetof(struct pvr_render_kick, frag.isp_oclqry_base) == 224, "PvrRenderKick.frag.isp_oclqry_base");
+BUILD_ASSERT(offsetof(struct pvr_render_kick, frag_pr) == 232, "PvrRenderKick.frag_pr");
+BUILD_ASSERT(sizeof(struct pvr_render_frag_pr) == 112, "gpu::pvr::render::PvrRenderFragPr");
 
 int pvr_render_submit(const struct pvr_render_kick *k, uint32_t *fence_out)
 {
