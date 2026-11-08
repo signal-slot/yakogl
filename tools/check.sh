@@ -173,7 +173,7 @@ scope_of_path() {
   tools/osal/*) echo osal ;;
   driver/samples/* | examples/* | tools/slint/* | tools/probes/* | tools/host-replay/*) echo samples ;;
   driver/rust/* | driver/*) echo drivers ;;
-  tools/cts/* | tools/testdata/* | tools/*.py | tools/board.sh | tools/board_selftest.sh | tools/setup-gate-host.sh | tools/env/* | tools/uboot-netboot-lib.sh | tools/website-check.sh | tools/hostharness/* | tools/README.md) echo tools ;;
+  tools/cts/* | tools/testdata/* | tools/*.py | tools/board.sh | tools/board_selftest.sh | tools/board-stm32mp2.sh | tools/board_stm32mp2_selftest.sh | tools/setup-gate-host.sh | tools/env/* | tools/uboot-netboot-lib.sh | tools/website-check.sh | tools/hostharness/* | tools/README.md) echo tools ;;
   *) echo all ;;
   esac
 }
@@ -3160,6 +3160,17 @@ step "gen     src/vivante/internal.rs == yakogl-precompile --internal (our compi
 # every board and backend), so it runs every time.
 scope tools
 step "tools   board.sh dry-run matrix and replays" tools/board_selftest.sh
+# tools/board-stm32mp2.sh, the STM32MP257F-DK's one-shot runner (its U-Boot
+# environment edited on the host with tools/uboot_env.py: the board has no
+# fw_setenv, #1281), without a board: every verb under --dry-run with ssh,
+# scp, stty, flock, sudo and fuser stubbed (none may run; no host, address
+# or console path in the output), the refusals, the environment edits on a
+# synthetic redundant image (hook, unhook, arm, disarm, byte for byte, the
+# hook strings pinned), synthetic consoles through the verdict, and the
+# redaction of a run directory. 68 checks, pinned in the script (about 10 s).
+# No input key: it runs the runner on fake images every time, as the row above.
+scope tools
+step "tools   board-stm32mp2.sh dry-run matrix, env edits and replays" tools/board_stm32mp2_selftest.sh
 # The board lock every board runner takes (driver/tools/kexec-zephyr/
 # board_lock.sh), without a board: a second taker refuses at once and names
 # the holder's pid and script, and nanopc-t6.sh sources it with LOCK_WAIT 0

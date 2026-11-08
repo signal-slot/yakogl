@@ -669,6 +669,28 @@ refused with exit 2 and no output file. `python3 -I -B
 tools/testdata/uboot-env/test_uboot_env.py` runs the tests on images it
 builds itself; it is not a `tools/check.sh` row yet.
 
+## board-stm32mp2.sh — the STM32MP257F-DK one-shot runner
+
+`tools/board-stm32mp2.sh [--dry-run] status|install|uninstall|disarm`,
+`probe <logdir>`, `run <image> <logdir> [name]`, `env-edit ...`, `tally
+<rundir>`: the STM32MP257F-DK's return trial and later images, booted once
+from the board's own U-Boot off the microSD and back in ST's Linux without a
+person (`docs/notes/pre-study-stm32mp257f-dk.md` section 6, #1281). It is
+self-contained (not a `tools/board.sh` backend yet: the board.sh dispatch is
+a later item) because the board's Linux has no `fw_setenv`: `install` reads
+the card's `u-boot-env` partition with `dd`, puts the standalone-boot hook in
+front of `bootcmd` with `uboot_env.py` on the host, writes the two copies'
+range back and proves it with the board's `fw_printenv` (the pristine image
+goes back on any mismatch; the undo is printed first, the image kept under
+`records/stm32mp257f-dk/uboot-env/` and on the card). `run` stages the image
+on bootfs (`/boot/yakogl/`), arms `yako_once`, reboots, waits for a new boot
+and reads the console (`BOARD_UART`: a serial bridge or a device) for the
+layer's `mp2: ...: PSCI SYSTEM_RESET` end line and the probe's `PASS`/`FAIL`
+line; the verdict line has board.sh's shape. `tools/board_stm32mp2_selftest.sh`
+runs every verb under `--dry-run` with the board tools stubbed, the
+environment edits on a synthetic image and synthetic consoles through the
+verdict (a `tools/check.sh` row, scope tools).
+
 ## land.sh — land one branch tip on main
 
 main moves through pull requests: a pull request, the full gate on it
