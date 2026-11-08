@@ -1,0 +1,12 @@
+# tools/cts/mali-glmark2-build.sh: glmark2-es2 (pbuffer) for the NanoPC-T6's Armbian trixie
+commit=78c917aabbdf6b85d96d99be29e5ce39a41d83c1
+dev=yes (--dev: a local test build, not a record)
+glmark2=22c527cb0556f3a1ac4445aaa52cc532760928d5
+glmark2_patch=mali-glmark2-pbuffer.patch sha256 34c0d59c3179133c2a145348b512ed34f7746c87b14e7dcd8651498321e6afb5
+flavour=pbuffer
+toolchain=aarch64-linux-gnu-g++-14 (Debian 14.2.0-19) 14.2.0, Debian trixie MALI_DEQP_TOOLCHAIN (tools/cts/deps.toml)
+gles_lib=tools/mali/panthor-gles/build.sh
+glibc_max=2.38
+glibcxx_max=3.4.32
+cxxabi_max=1.3.9
+floors=GLIBC_2.41 GLIBCXX_3.4.33 CXXABI_1.3.15

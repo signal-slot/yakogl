@@ -1,0 +1,526 @@
+glmark2 22c527cb (2023.01): the pbuffer-glesv2 flavour, glmark2-es2-pbuffer,
+for YakoGL's Mali pair on the NanoPC-T6 (tools/cts/mali-glmark2-build.sh).
+
+- native-state-pbuffer.{h,cpp}: a native system with no window system; its
+  "window" is the size of an EGL pbuffer surface on EGL_DEFAULT_DISPLAY.
+- gl-state-egl.cpp: with GLMARK2_USE_PBUFFER, configs with EGL_PBUFFER_BIT
+  and eglCreatePbufferSurface(EGL_WIDTH, EGL_HEIGHT) instead of
+  eglCreateWindowSurface.
+- main-loop-picture.h: the main loop with the per-scene picture line of
+  driver/docs/glmark2.md "The picture value" on stderr (glReadPixels at the
+  scene's last frame, before its swap).
+- main.cpp: the pbuffer native state and loop; the data directory beside the
+  program (<dir>/bin/.., share/glmark2) unless --data-path is given.
+- meson_options.txt, meson.build, src/meson.build: the flavour.
+
+diff --git a/meson.build b/meson.build
+index c04135fd..ef6ae80a 100644
+--- a/meson.build
++++ b/meson.build
+@@ -34,6 +34,7 @@ need_drm = flavors_str.contains('drm-')
+ need_gbm = flavors_str.contains('gbm-')
+ need_wayland = flavors_str.contains('wayland-')
+ need_null = flavors_str.contains('null-')
++need_pbuffer = flavors_str.contains('pbuffer-')
+ need_gl = flavors_str.contains('-gl')
+ need_glesv2 = flavors_str.contains('-glesv2')
+ need_egl = need_drm or need_wayland or need_glesv2 or need_null or flavors_str.contains('-egl')
+diff --git a/meson_options.txt b/meson_options.txt
+index 4f9b2581..f67128e2 100644
+--- a/meson_options.txt
++++ b/meson_options.txt
+@@ -5,6 +5,7 @@ option('flavors', type : 'array',
+            'drm-glesv2',
+            'null-gl',
+            'null-glesv2',
++           'pbuffer-glesv2',
+            'gbm-gl',
+            'gbm-glesv2',
+            'wayland-gl',
+diff --git a/src/gl-state-egl.cpp b/src/gl-state-egl.cpp
+index 61d7f068..24cd90d5 100644
+--- a/src/gl-state-egl.cpp
++++ b/src/gl-state-egl.cpp
+@@ -28,6 +28,9 @@
+ #include <iomanip>
+ #include <sstream>
+ #include <cstring>
++#if GLMARK2_USE_PBUFFER
++#include "native-state-pbuffer.h"
++#endif
+ 
+ using std::vector;
+ using std::string;
+@@ -743,6 +746,9 @@ GLStateEGL::gotValidConfig()
+         // we request a pbuffer so that we get a valid config, although we
+         // are not actually going to use a pbuffer.
+         EGL_SURFACE_TYPE, EGL_PBUFFER_BIT,
++#elif GLMARK2_USE_PBUFFER
++        // The pbuffer native system renders into an EGL pbuffer surface.
++        EGL_SURFACE_TYPE, EGL_PBUFFER_BIT,
+ #endif
+         EGL_NONE
+     };
+@@ -825,11 +831,31 @@ GLStateEGL::gotValidSurface()
+     if (!gotValidConfig())
+         return false;
+ 
++#if GLMARK2_USE_PBUFFER
++    // The native window is the pbuffer's size (native-state-pbuffer.h).
++    const PbufferWindow *pbuffer = reinterpret_cast<const PbufferWindow *>(native_window_);
++    if (!pbuffer) {
++        Log::error("pbuffer native system: no surface size\n");
++        return false;
++    }
++    const EGLint pbuffer_attribs[] = {
++        EGL_WIDTH, pbuffer->width,
++        EGL_HEIGHT, pbuffer->height,
++        EGL_NONE
++    };
++    egl_surface_ = eglCreatePbufferSurface(egl_display_, egl_config_, pbuffer_attribs);
++    if (!egl_surface_) {
++        Log::error("eglCreatePbufferSurface(%dx%d) failed with error: 0x%x\n",
++                   pbuffer->width, pbuffer->height, eglGetError());
++        return false;
++    }
++#else
+     egl_surface_ = eglCreateWindowSurface(egl_display_, egl_config_, native_window_, 0);
+     if (!egl_surface_) {
+         Log::error("eglCreateWindowSurface failed with error: 0x%x\n", eglGetError());
+         return false;
+     }
++#endif
+ 
+     return true;
+ #endif
+diff --git a/src/main-loop-picture.h b/src/main-loop-picture.h
+new file mode 100644
+index 00000000..d7f84117
+--- /dev/null
++++ b/src/main-loop-picture.h
+@@ -0,0 +1,183 @@
++/*
++ * Copyright © 2026 Signal Slot, Inc.
++ *
++ * This file is part of the glmark2 OpenGL (ES) 2.0 benchmark.
++ *
++ * glmark2 is free software: you can redistribute it and/or modify it under the
++ * terms of the GNU General Public License as published by the Free Software
++ * Foundation, version 3.
++ *
++ * glmark2 is distributed in the hope that it will be useful, but WITHOUT ANY
++ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
++ * FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
++ * details.
++ *
++ * You should have received a copy of the GNU General Public License along with
++ * glmark2.  If not, see <http://www.gnu.org/licenses/>.
++ */
++
++/*
++ * The main loop with YakoGL's picture value: for every scene that ran, one
++ * line on stderr after the scene's own result line (stdout is flushed first),
++ *
++ *   glmark2-picture: <scene info string>: WxH; probes c RRGGBBAA, tl RRGGBBAA,
++ *     tr RRGGBBAA, bl RRGGBBAA, br RRGGBBAA; crc16 XXXX, crc16q XXXX;
++ *     mean R G B; black yes|no                                    (one line)
++ *   glmark2-picture: <scene info string>: absent (the readback failed)
++ *
++ * read with glReadPixels after the scene's last update() and before its last
++ * swap. The probes, the 40x30 grid, the crcs and the mean are the code of
++ * YakoGL's glmark2 board images (driver/samples/zephyr/glmark2/src/main.cpp,
++ * capture_picture; the format is driver/docs/glmark2.md, "The picture
++ * value"); change them together.
++ */
++#ifndef GLMARK2_MAIN_LOOP_PICTURE_H_
++#define GLMARK2_MAIN_LOOP_PICTURE_H_
++
++#include "main-loop.h"
++#include "canvas.h"
++#include "gl-headers.h"
++#include "scene.h"
++
++#include <cstdint>
++#include <cstdio>
++#include <vector>
++
++class MainLoopPicture : public MainLoop
++{
++public:
++    MainLoopPicture(Canvas &canvas, const std::vector<Benchmark *> &benchmarks) :
++        MainLoop(canvas, benchmarks) {}
++
++    /* MainLoop::draw with the scene's last frame read back before its swap */
++    void draw() override
++    {
++        canvas_.clear();
++
++        scene_->draw();
++        scene_->update();
++
++        if (!scene_->running() && scene_setup_status_ == SceneSetupStatusSuccess)
++            capture(canvas_.width(), canvas_.height());
++
++        canvas_.update();
++    }
++
++    void before_scene_setup() override
++    {
++        picture_ = Picture();
++    }
++
++    void log_scene_result() override
++    {
++        MainLoop::log_scene_result();
++        if (scene_setup_status_ != SceneSetupStatusSuccess)
++            return;
++        char text[256];
++        picture_text(text, sizeof(text));
++        std::fflush(stdout);
++        std::fprintf(stderr, "glmark2-picture: %s: %s\n", scene_->info_string().c_str(), text);
++        std::fflush(stderr);
++    }
++
++private:
++    struct Picture {
++        static constexpr int GRID_X = 40, GRID_Y = 30, PROBES = 5;
++        bool valid = false;
++        int width = 0, height = 0;
++        uint32_t probe[PROBES] = {}; /* RGBA, R in the top byte */
++        uint16_t crc = 0;            /* crc16 of the grid's RGB, exact */
++        uint16_t crc_q = 0;          /* the same with each channel >> 4 */
++        uint32_t mean[3] = {};       /* mean R, G, B over the grid */
++        bool black = true;           /* every sampled pixel has R = G = B = 0 */
++    };
++
++    /* CRC-16/CCITT-FALSE (poly 0x1021, init 0xffff), one byte at a time. */
++    static uint16_t crc16_byte(uint16_t crc, uint8_t b)
++    {
++        crc ^= static_cast<uint16_t>(b << 8);
++        for (int i = 0; i < 8; i++) {
++            crc = (crc & 0x8000u) ? static_cast<uint16_t>((crc << 1) ^ 0x1021u)
++                                  : static_cast<uint16_t>(crc << 1);
++        }
++        return crc;
++    }
++
++    /* row y (0 is the top) of the current framebuffer as RGBA bytes */
++    static bool picture_row(int w, int h, int y, std::vector<uint8_t> &row)
++    {
++        row.assign(static_cast<size_t>(w) * 4u, 0);
++        glReadPixels(0, h - 1 - y, w, 1, GL_RGBA, GL_UNSIGNED_BYTE, row.data());
++        return glGetError() == GL_NO_ERROR;
++    }
++
++    void capture(int w, int h)
++    {
++        Picture p;
++        p.width = w;
++        p.height = h;
++        picture_ = p;
++        if (w < Picture::GRID_X || h < Picture::GRID_Y)
++            return;
++        std::vector<uint8_t> row;
++        /* an error the scene left is not the readback's */
++        while (glGetError() != GL_NO_ERROR) {
++        }
++        /* the probes: the centre, then the four quarter points */
++        const int px[Picture::PROBES] = {w / 2, w / 4, w * 3 / 4, w / 4, w * 3 / 4};
++        const int py[Picture::PROBES] = {h / 2, h / 4, h / 4, h * 3 / 4, h * 3 / 4};
++        for (int i = 0; i < Picture::PROBES; i++) {
++            if (!picture_row(w, h, py[i], row))
++                return;
++            const uint8_t *q = &row[static_cast<size_t>(px[i]) * 4u];
++            p.probe[i] = static_cast<uint32_t>(q[0]) << 24 | static_cast<uint32_t>(q[1]) << 16 |
++                         static_cast<uint32_t>(q[2]) << 8 | q[3];
++            p.black = p.black && !q[0] && !q[1] && !q[2];
++        }
++        /* the grid: the centres of 40x30 equal cells, row by row, left to right */
++        uint16_t crc = 0xffffu, crc_q = 0xffffu;
++        uint64_t sum[3] = {};
++        for (int gy = 0; gy < Picture::GRID_Y; gy++) {
++            if (!picture_row(w, h, (2 * gy + 1) * h / (2 * Picture::GRID_Y), row))
++                return;
++            for (int gx = 0; gx < Picture::GRID_X; gx++) {
++                const uint8_t *q = &row[static_cast<size_t>((2 * gx + 1) * w / (2 * Picture::GRID_X)) * 4u];
++                for (int c = 0; c < 3; c++) {
++                    crc = crc16_byte(crc, q[c]);
++                    crc_q = crc16_byte(crc_q, static_cast<uint8_t>(q[c] >> 4));
++                    sum[c] += q[c];
++                }
++                p.black = p.black && !q[0] && !q[1] && !q[2];
++            }
++        }
++        p.crc = crc;
++        p.crc_q = crc_q;
++        for (int c = 0; c < 3; c++)
++            p.mean[c] = static_cast<uint32_t>(sum[c] / (Picture::GRID_X * Picture::GRID_Y));
++        p.valid = true;
++        picture_ = p;
++    }
++
++    /* the picture line's text after "glmark2-picture: <scene>: " */
++    void picture_text(char *out, size_t n) const
++    {
++        const Picture &p = picture_;
++        if (!p.valid) {
++            std::snprintf(out, n, "absent (the readback failed)");
++            return;
++        }
++        std::snprintf(out, n,
++                      "%dx%d; probes c %08x, tl %08x, tr %08x, bl %08x, br %08x; crc16 %04x, crc16q %04x; "
++                      "mean %u %u %u; black %s",
++                      p.width, p.height, static_cast<unsigned>(p.probe[0]), static_cast<unsigned>(p.probe[1]),
++                      static_cast<unsigned>(p.probe[2]), static_cast<unsigned>(p.probe[3]),
++                      static_cast<unsigned>(p.probe[4]), static_cast<unsigned>(p.crc),
++                      static_cast<unsigned>(p.crc_q), static_cast<unsigned>(p.mean[0]),
++                      static_cast<unsigned>(p.mean[1]), static_cast<unsigned>(p.mean[2]),
++                      p.black ? "yes" : "no");
++    }
++
++    Picture picture_;
++};
++
++#endif /* GLMARK2_MAIN_LOOP_PICTURE_H_ */
+diff --git a/src/main.cpp b/src/main.cpp
+index 3d6fff82..0cea26ac 100644
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -49,6 +49,9 @@
+ #include "native-state-win32.h"
+ #elif GLMARK2_USE_NULL
+ #include "native-state-null.h"
++#elif GLMARK2_USE_PBUFFER
++#include "native-state-pbuffer.h"
++#include "main-loop-picture.h"
+ #endif
+ 
+ #if GLMARK2_USE_EGL
+@@ -121,7 +124,11 @@ do_benchmark(Canvas &canvas)
+     if (benchmark_collection.needs_decoration())
+         loop = new MainLoopDecoration(canvas, benchmark_collection.benchmarks());
+     else
++#if GLMARK2_USE_PBUFFER
++        loop = new MainLoopPicture(canvas, benchmark_collection.benchmarks());
++#else
+         loop = new MainLoop(canvas, benchmark_collection.benchmarks());
++#endif
+ 
+     while (loop->step());
+ 
+@@ -174,11 +181,24 @@ main(int argc, char *argv[])
+     NativeStateWin32 native_state;
+ #elif GLMARK2_USE_NULL
+     NativeStateNull native_state;
++#elif GLMARK2_USE_PBUFFER
++    NativeStatePbuffer native_state;
+ #endif
+ 
+     if (!Options::parse_args(argc, argv))
+         return 1;
+ 
++#if GLMARK2_USE_PBUFFER
++    /* The data beside the program (<dir>/bin/<program>, <dir>/share/glmark2),
++     * so the tree runs from wherever it is copied; --data-path still wins. */
++    if (Options::data_path == GLMARK_DATA_PATH) {
++        std::error_code ec;
++        std::filesystem::path exe = std::filesystem::read_symlink("/proc/self/exe", ec);
++        if (!ec)
++            Options::data_path = (exe.parent_path().parent_path() / "share" / "glmark2").string();
++    }
++#endif
++
+     /* Initialize Log class */
+     Log::init(std::filesystem::path(argv[0]).stem().string(), Options::show_debug);
+ 
+diff --git a/src/meson.build b/src/meson.build
+index 4196de02..6bd3cfde 100644
+--- a/src/meson.build
++++ b/src/meson.build
+@@ -151,6 +151,20 @@ else
+     native_null_dep = declare_dependency()
+ endif
+ 
++if need_pbuffer
++    native_pbuffer_lib = static_library(
++        'native-pbuffer',
++        'native-state-pbuffer.cpp',
++        dependencies: [libmatrix_headers_dep],
++        )
++    native_pbuffer_dep = declare_dependency(
++        link_with: native_pbuffer_lib,
++        compile_args: ['-DGLMARK2_USE_PBUFFER'],
++        )
++else
++    native_pbuffer_dep = declare_dependency()
++endif
++
+ if need_wayland
+     wayland_scanner = find_program(wayland_scanner_dep.get_pkgconfig_variable('wayland_scanner'))
+     wayland_protocols_dir = wayland_protocols_dep.get_pkgconfig_variable('pkgdatadir')
+@@ -333,6 +347,7 @@ flavor_info = {
+   'gbm-glesv2' : ['glmark2-es2-gbm', native_gbm_dep, gl_glesv2_dep, wsi_egl_dep],
+   'null-gl' : ['glmark2-null', native_null_dep, gl_gl_dep, wsi_egl_dep],
+   'null-glesv2' : ['glmark2-es2-null', native_null_dep, gl_glesv2_dep, wsi_egl_dep],
++  'pbuffer-glesv2' : ['glmark2-es2-pbuffer', native_pbuffer_dep, gl_glesv2_dep, wsi_egl_dep],
+   'wayland-gl' : ['glmark2-wayland', native_wayland_dep, gl_gl_dep, wsi_egl_dep],
+   'wayland-glesv2' : ['glmark2-es2-wayland', native_wayland_dep, gl_glesv2_dep, wsi_egl_dep],
+   'win32-gl' : ['glmark2-win32', native_win32_dep, gl_gl_dep, wsi_wgl_dep],
+diff --git a/src/native-state-pbuffer.cpp b/src/native-state-pbuffer.cpp
+new file mode 100644
+index 00000000..bd45e812
+--- /dev/null
++++ b/src/native-state-pbuffer.cpp
+@@ -0,0 +1,85 @@
++/*
++ * Copyright © 2026 Signal Slot, Inc.
++ *
++ * This file is part of the glmark2 OpenGL (ES) 2.0 benchmark.
++ *
++ * glmark2 is free software: you can redistribute it and/or modify it under the
++ * terms of the GNU General Public License as published by the Free Software
++ * Foundation, version 3.
++ *
++ * glmark2 is distributed in the hope that it will be useful, but WITHOUT ANY
++ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
++ * FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
++ * details.
++ *
++ * You should have received a copy of the GNU General Public License along with
++ * glmark2.  If not, see <http://www.gnu.org/licenses/>.
++ */
++
++#include "native-state-pbuffer.h"
++#include "log.h"
++
++bool
++NativeStatePbuffer::init_display()
++{
++    signal(SIGINT, &NativeStatePbuffer::quit_handler);
++    signal(SIGTERM, &NativeStatePbuffer::quit_handler);
++    return true;
++}
++
++/* EGL_DEFAULT_DISPLAY */
++void*
++NativeStatePbuffer::display()
++{
++    return nullptr;
++}
++
++bool
++NativeStatePbuffer::create_window(WindowProperties const& properties)
++{
++    if (properties.fullscreen) {
++        Log::error("Fullscreen not supported (a pbuffer has the size it is given)\n");
++        return false;
++    }
++
++    if (properties.width <= 0 || properties.height <= 0) {
++        Log::error("Invalid surface size\n");
++        return false;
++    }
++    properties_ = WindowProperties(properties.width, properties.height, false, 0, {});
++    window_.width = properties.width;
++    window_.height = properties.height;
++
++    return true;
++}
++
++void*
++NativeStatePbuffer::window(WindowProperties& properties)
++{
++    properties = properties_;
++    return window_.width > 0 ? &window_ : nullptr;
++}
++
++void
++NativeStatePbuffer::visible(bool /*v*/)
++{
++}
++
++volatile std::sig_atomic_t NativeStatePbuffer::should_quit_(false);
++
++void
++NativeStatePbuffer::quit_handler(int /*signo*/)
++{
++    should_quit_ = true;
++}
++
++bool
++NativeStatePbuffer::should_quit()
++{
++    return should_quit_;
++}
++
++void
++NativeStatePbuffer::flip()
++{
++}
+diff --git a/src/native-state-pbuffer.h b/src/native-state-pbuffer.h
+new file mode 100644
+index 00000000..c7091aac
+--- /dev/null
++++ b/src/native-state-pbuffer.h
+@@ -0,0 +1,61 @@
++/*
++ * Copyright © 2026 Signal Slot, Inc.
++ *
++ * This file is part of the glmark2 OpenGL (ES) 2.0 benchmark.
++ *
++ * glmark2 is free software: you can redistribute it and/or modify it under the
++ * terms of the GNU General Public License as published by the Free Software
++ * Foundation, version 3.
++ *
++ * glmark2 is distributed in the hope that it will be useful, but WITHOUT ANY
++ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
++ * FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
++ * details.
++ *
++ * You should have received a copy of the GNU General Public License along with
++ * glmark2.  If not, see <http://www.gnu.org/licenses/>.
++ */
++
++/*
++ * The pbuffer native system: no window system at all. The "window" is the
++ * size of an EGL pbuffer surface, which gl-state-egl.cpp creates with
++ * eglCreatePbufferSurface on the default display (GLMARK2_USE_PBUFFER), for
++ * an EGL that offers pbuffer surfaces only (YakoGL's Mali pair,
++ * tools/mali/panthor-gles). Unlike the null system it needs neither
++ * EGL_MESA_platform_surfaceless nor a surfaceless context, and it renders
++ * on-screen in glmark2's sense: into the surface's own colour buffer, which
++ * glReadPixels reads and eglSwapBuffers submits.
++ */
++#ifndef GLMARK2_NATIVE_STATE_PBUFFER_H_
++#define GLMARK2_NATIVE_STATE_PBUFFER_H_
++
++#include "native-state.h"
++#include <csignal>
++
++/* What window() hands gl-state-egl.cpp as the native window. */
++struct PbufferWindow
++{
++    int width;
++    int height;
++};
++
++class NativeStatePbuffer : public NativeState
++{
++public:
++    bool init_display() override;
++    void* display() override;
++    bool create_window(WindowProperties const& properties) override;
++    void* window(WindowProperties& properties) override;
++    void visible(bool v) override;
++    bool should_quit() override;
++    void flip() override;
++
++private:
++    static void quit_handler(int signum);
++    static volatile std::sig_atomic_t should_quit_;
++
++    WindowProperties properties_;
++    PbufferWindow window_ = {0, 0};
++};
++
++#endif /* GLMARK2_NATIVE_STATE_PBUFFER_H_ */

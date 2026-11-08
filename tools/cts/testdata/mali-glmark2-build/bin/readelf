@@ -1,0 +1,15 @@
+#!/bin/bash
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+#
+# A fake readelf for tools/cts/mali-glmark2-build-selftest.sh: for
+# `readelf <options> <file>` it prints $FAKE_READELF_DIR/<basename of file>.txt,
+# the fixture of what the real readelf -hldVW printed for such a file.
+# A file with no fixture is "not an ELF file" (exit 1), as readelf says.
+f=${!#}
+fx=${FAKE_READELF_DIR:?FAKE_READELF_DIR is not set}/$(basename "$f").txt
+if [ ! -f "$fx" ]; then
+	echo "readelf: Error: Not an ELF file - it has the wrong magic bytes at the start" >&2
+	exit 1
+fi
+cat "$fx"
