@@ -1,0 +1,37 @@
+run clean: commit 099b5df61f7a59b654e02479cdaf657d16715d26, board nanopc-t6, kernel 6.18.55-current-rockchip64, pair sha256 3f6c0a1d9e2b4c5a8f7e6d5c4b3a29180716253443526170819a0b1c2d3e4f50
+#  scene                                                                                                  verdict    ms/frame   FPS  picture                      judgement    kmsg
+01 [build] use-vbo=false                                                                                  ok             2.08   480  crc16 1eef mean 29 13 17     match        0
+02 [build] use-vbo=true                                                                                   ok             2.13   470  crc16 3dde mean 58 26 34     match        0
+03 [texture] texture-filter=nearest                                                                       ok             1.64   610  crc16 5ccd mean 87 39 51     match        0
+04 [texture] texture-filter=linear                                                                        ok             1.67   600  crc16 7bbc mean 116 52 68    match        0
+05 [texture] texture-filter=mipmap                                                                        ok             1.70   590  crc16 9aab mean 145 65 85    match        0
+06 [shading] shading=gouraud                                                                              ok             2.38   420  crc16 b99a mean 174 78 102   match        0
+07 [shading] shading=blinn-phong-inf                                                                      ok             2.50   400  crc16 d889 mean 203 91 119   match        0
+08 [shading] shading=phong                                                                                ok             2.63   380  crc16 f778 mean 232 104 136  match        0
+09 [shading] shading=cel                                                                                  ok             2.44   410  crc16 1667 mean 5 117 153    match        0
+10 [bump] bump-render=high-poly                                                                           ok             3.33   300  crc16 3556 mean 34 130 170   match        0
+11 [bump] bump-render=normals                                                                             ok             1.92   520  crc16 5445 mean 63 143 187   match        0
+12 [bump] bump-render=height                                                                              ok             2.00   500  crc16 7334 mean 92 156 204   match        0
+13 [effect2d] kernel=0,1,0;1,-4,1;0,1,0;                                                                  ok             5.00   200  crc16 9223 mean 121 169 221  match        0
+14 [effect2d] kernel=1,1,1,1,1;1,1,1,1,1;1,1,1,1,1;                                                       ok            11.11    90  crc16 b112 mean 150 182 238  match        0
+15 [pulsar] light=false:quads=5:texture=false                                                             ok             2.86   350  crc16 d001 mean 179 195 255  match        0
+16 [desktop] blur-radius=5:effect=blur:passes=1:separable=true:windows=4                                  ok             6.25   160  crc16 eef0 mean 208 208 16   match        0
+17 [desktop] effect=shadow:windows=4                                                                      ok             4.17   240  crc16 0ddf mean 237 221 33   match        0
+18 [buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=map      ok             4.35   230  crc16 2cce mean 10 234 50    match        0
+19 [buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=subdata  ok             4.54   220  crc16 4bbd mean 39 247 67    match        0
+20 [buffer] columns=200:interleave=true:update-dispersion=0.9:update-fraction=0.5:update-method=map       ok             4.44   225  crc16 6aac mean 68 4 84      match        0
+21 [ideas] speed=duration                                                                                 ok             9.09   110  crc16 899b mean 97 17 101    match        0
+22 [jellyfish] <default>                                                                                  ok            16.67    60  crc16 a88a mean 126 30 118   match        0
+23 [terrain] <default>                                                                                    ok            71.43    14  crc16 c779 mean 155 43 135   match        0
+24 [shadow] <default>                                                                                     ok             8.33   120  crc16 e668 mean 184 56 152   match        0
+25 [refract] <default>                                                                                    ok            25.00    40  crc16 0557 mean 213 69 169   match        0
+26 [conditionals] fragment-steps=0:vertex-steps=0                                                         ok             3.03   330  crc16 2446 mean 242 82 186   match        0
+27 [conditionals] fragment-steps=5:vertex-steps=0                                                         ok             4.00   250  crc16 4335 mean 15 95 203    match        0
+28 [conditionals] fragment-steps=0:vertex-steps=5                                                         ok             3.85   260  crc16 6224 mean 44 108 220   match        0
+29 [function] fragment-complexity=low:fragment-steps=5                                                    ok             4.17   240  crc16 8113 mean 73 121 237   match        0
+30 [function] fragment-complexity=medium:fragment-steps=5                                                 ok             5.26   190  crc16 a002 mean 102 134 254  match        0
+31 [loop] fragment-loop=false:fragment-steps=5:vertex-steps=5                                             ok             5.88   170  crc16 bef1 mean 131 147 15   match        0
+32 [loop] fragment-steps=5:fragment-uniform=false:vertex-steps=5                                          ok             5.71   175  crc16 dde0 mean 160 160 32   match        0
+33 [loop] fragment-steps=5:fragment-uniform=true:vertex-steps=5                                           ok             5.81   172  crc16 fccf mean 189 173 49   match        0
+scenes run 33 of 33; ok 33; GL error lines 0, out of GPU memory lines 0, panthor kernel lines 0 (resets 0); 237.38 ms/frame summed over 33 scenes; score 288 (glmark2's rule over the per-scene processes)
+pictures against column mali: 33 scenes, match 33

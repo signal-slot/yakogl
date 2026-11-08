@@ -1,0 +1,88 @@
+glmark2-mali-tally: causes of faults (main `099b5df6`): 6
+
+## Draft issue 1
+
+Title: gpu-mali: glmark2-es2 buffer columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=map on the NanoPC-T6: oom: yakogl: out of GPU memory for # bytes (# frees held)
+
+Cause 1: oom: yakogl: out of GPU memory for # bytes (# frees held)
+
+The first glmark2-es2 run on the NanoPC-T6 (Mali-G610, panthor, back end gpu-mali, #20) from main `099b5df6` (kernel 6.18.55-current-rockchip64, the tools/mali/panthor-gles pair, libGLESv2.so.2 sha256 `3f6c0a1d9e2b4c5a`), one glmark2-es2 process per scene at 800x600 on an EGL pbuffer, gives verdict oom in 1 scene(s): `[buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=map`.
+
+- `[buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=map`: exit 0, timeout 0, panthor kernel lines 0; 4.35 ms a frame
+  > yakogl: out of GPU memory for 7684096 bytes (1 frees held)
+  > yakogl-mali-exit: draws=2300 refused=0 first_refused=- gpu_faults=0 job_timeouts=0
+
+Run directory `faults`, tallied by `tools/cts/glmark2-mali-tally.py`. Rerun the scene alone with tools/cts/mali-glmark2-run.sh to reproduce. ROADMAP.md stage 2 asks for all 33 scenes with no failed scene, no GL error and no scene out of GPU memory.
+
+## Draft issue 2
+
+Title: gpu-mali: glmark2-es2 jellyfish on the NanoPC-T6: crash: signal 11
+
+Cause 2: crash: signal 11
+
+The first glmark2-es2 run on the NanoPC-T6 (Mali-G610, panthor, back end gpu-mali, #20) from main `099b5df6` (kernel 6.18.55-current-rockchip64, the tools/mali/panthor-gles pair, libGLESv2.so.2 sha256 `3f6c0a1d9e2b4c5a`), one glmark2-es2 process per scene at 800x600 on an EGL pbuffer, gives verdict crash in 1 scene(s): `[jellyfish] <default>`.
+
+- `[jellyfish] <default>`: exit 139, timeout 0, panthor kernel lines 0
+  > Segmentation fault (core dumped), seen over <addr> and <uart>
+
+Run directory `faults`, tallied by `tools/cts/glmark2-mali-tally.py`. Rerun the scene alone with tools/cts/mali-glmark2-run.sh to reproduce. ROADMAP.md stage 2 asks for all 33 scenes with no failed scene, no GL error and no scene out of GPU memory.
+
+## Draft issue 3
+
+Title: gpu-mali: glmark2-es2 terrain on the NanoPC-T6: gpu-fault: panthor fb000000.gpu: [drm] *ERROR* Unhandled Page fault in AS3 at VA <hex>
+
+Cause 3: gpu-fault: panthor fb000000.gpu: [drm] *ERROR* Unhandled Page fault in AS3 at VA <hex>
+
+The first glmark2-es2 run on the NanoPC-T6 (Mali-G610, panthor, back end gpu-mali, #20) from main `099b5df6` (kernel 6.18.55-current-rockchip64, the tools/mali/panthor-gles pair, libGLESv2.so.2 sha256 `3f6c0a1d9e2b4c5a`), one glmark2-es2 process per scene at 800x600 on an EGL pbuffer, gives verdict gpu-fault in 1 scene(s): `[terrain] <default>`.
+
+- `[terrain] <default>`: exit 0, timeout 0, panthor kernel lines 3; 333.33 ms a frame
+  > yakogl-mali-exit: draws=40 refused=0 first_refused=- gpu_faults=1 job_timeouts=0
+  > kmsg: panthor fb000000.gpu: [drm] *ERROR* Unhandled Page fault in AS3 at VA 0x0000000100004000
+
+Run directory `faults`, tallied by `tools/cts/glmark2-mali-tally.py`. Rerun the scene alone with tools/cts/mali-glmark2-run.sh to reproduce. ROADMAP.md stage 2 asks for all 33 scenes with no failed scene, no GL error and no scene out of GPU memory.
+
+## Draft issue 4
+
+Title: gpu-mali: glmark2-es2 shadow on the NanoPC-T6: gl-error: GL error 0x502 in glGenerateMipmap, GL error 0x506 in glDrawArrays
+
+Cause 4: gl-error: GL error 0x502 in glGenerateMipmap, GL error 0x506 in glDrawArrays
+
+The first glmark2-es2 run on the NanoPC-T6 (Mali-G610, panthor, back end gpu-mali, #20) from main `099b5df6` (kernel 6.18.55-current-rockchip64, the tools/mali/panthor-gles pair, libGLESv2.so.2 sha256 `3f6c0a1d9e2b4c5a`), one glmark2-es2 process per scene at 800x600 on an EGL pbuffer, gives verdict gl-error in 1 scene(s): `[shadow] <default>`.
+
+- `[shadow] <default>`: exit 0, timeout 0, panthor kernel lines 0; 8.33 ms a frame
+  > yakogl: GL error 0x502 in glGenerateMipmap (the level's format) (3 times)
+  > yakogl: GL error 0x506 in glDrawArrays (framebuffer incomplete)
+  > yakogl-mali-exit: draws=1200 refused=0 first_refused=- gpu_faults=0 job_timeouts=0
+
+Run directory `faults`, tallied by `tools/cts/glmark2-mali-tally.py`. Rerun the scene alone with tools/cts/mali-glmark2-run.sh to reproduce. ROADMAP.md stage 2 asks for all 33 scenes with no failed scene, no GL error and no scene out of GPU memory.
+
+## Draft issue 5
+
+Title: gpu-mali: glmark2-es2 refract on the NanoPC-T6: hang: no exit within the runner's time limit; kernel: panthor fb000000.gpu: [drm] job timeout: pid=#, comm=glmark2-es2-mal, seqno=#
+
+Cause 5: hang: no exit within the runner's time limit; kernel: panthor fb000000.gpu: [drm] job timeout: pid=#, comm=glmark2-es2-mal, seqno=#
+
+The first glmark2-es2 run on the NanoPC-T6 (Mali-G610, panthor, back end gpu-mali, #20) from main `099b5df6` (kernel 6.18.55-current-rockchip64, the tools/mali/panthor-gles pair, libGLESv2.so.2 sha256 `3f6c0a1d9e2b4c5a`), one glmark2-es2 process per scene at 800x600 on an EGL pbuffer, gives verdict hang in 1 scene(s): `[refract] <default>`.
+
+- `[refract] <default>`: exit 124, timeout 1, panthor kernel lines 2; also gpu-fault: panthor fb000000.gpu: [drm] job timeout: pid=#, comm=glmark2-es2-mal, seqno=#
+  > kmsg: panthor fb000000.gpu: [drm] job timeout: pid=2841, comm=glmark2-es2-mal, seqno=1042
+
+Run directory `faults`, tallied by `tools/cts/glmark2-mali-tally.py`. Rerun the scene alone with tools/cts/mali-glmark2-run.sh to reproduce. ROADMAP.md stage 2 asks for all 33 scenes with no failed scene, no GL error and no scene out of GPU memory.
+
+## Draft issue 6
+
+Title: gpu-mali: glmark2-es2 conditionals fragment-steps=5:vertex-steps=0 on the NanoPC-T6: fail: refused: compile: not lowered yet: loop with # steps in a fragment shader
+
+Cause 6: fail: refused: compile: not lowered yet: loop with # steps in a fragment shader
+
+The first glmark2-es2 run on the NanoPC-T6 (Mali-G610, panthor, back end gpu-mali, #20) from main `099b5df6` (kernel 6.18.55-current-rockchip64, the tools/mali/panthor-gles pair, libGLESv2.so.2 sha256 `3f6c0a1d9e2b4c5a`), one glmark2-es2 process per scene at 800x600 on an EGL pbuffer, gives verdict fail in 1 scene(s): `[conditionals] fragment-steps=5:vertex-steps=0`.
+
+- `[conditionals] fragment-steps=5:vertex-steps=0`: exit 0, timeout 0, panthor kernel lines 0; also fail: set up failed
+  > [conditionals] fragment-steps=5:vertex-steps=0: Set up failed
+  > yakogl-mali-exit: draws=0 refused=2 first_refused=compile: not lowered yet: loop with 5 steps in a fragment shader gpu_faults=0 job_timeouts=0
+
+Run directory `faults`, tallied by `tools/cts/glmark2-mali-tally.py`. Rerun the scene alone with tools/cts/mali-glmark2-run.sh to reproduce. ROADMAP.md stage 2 asks for all 33 scenes with no failed scene, no GL error and no scene out of GPU memory.
+
+A refusal of the Mali back end or its compiler: plan #309 owns these; cross-reference its issue rather than opening a new one.
+
+not run, no issue (the run is incomplete: rerun them): `[loop] fragment-steps=5:fragment-uniform=false:vertex-steps=5`, `[loop] fragment-steps=5:fragment-uniform=true:vertex-steps=5`

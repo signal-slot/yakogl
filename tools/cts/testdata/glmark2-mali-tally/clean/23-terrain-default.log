@@ -1,0 +1,17 @@
+yakogl-mali: loaded build=099b5df6 lib=/opt/yakogl-glmark2/lib/libGLESv2.so.2
+=======================================================
+    glmark2 2023.01
+=======================================================
+    OpenGL Information
+    GL_VENDOR:      Signal Slot
+    GL_RENDERER:    YakoGL gpu-mali
+    GL_VERSION:     OpenGL ES 2.0 YakoGL
+    Surface Config: buf=32 r=8 g=8 b=8 a=8 depth=24 stencil=8 samples=0
+    Surface Size:   800x600 pbuffer
+=======================================================
+[terrain] <default>: FPS: 14 FrameTime: 71.429 ms
+glmark2-picture: [terrain] <default>: 800x600; probes c 53c361ff, tl 5eca66ff, tr 69d16bff, bl 74d870ff, br 7fdf75ff; crc16 c779, crc16q c798; mean 155 43 135; black no
+=======================================================
+                                  glmark2 Score: 14 
+=======================================================
+yakogl-mali-exit: draws=140 refused=0 first_refused=- gpu_faults=0 job_timeouts=0

@@ -1,0 +1,17 @@
+yakogl-mali: loaded build=099b5df6 lib=/opt/yakogl-glmark2/lib/libGLESv2.so.2
+=======================================================
+    glmark2 2023.01
+=======================================================
+    OpenGL Information
+    GL_VENDOR:      Signal Slot
+    GL_RENDERER:    YakoGL gpu-mali
+    GL_VERSION:     OpenGL ES 2.0 YakoGL
+    Surface Config: buf=32 r=8 g=8 b=8 a=8 depth=24 stencil=8 samples=0
+    Surface Size:   800x600 pbuffer
+=======================================================
+[pulsar] light=false:quads=5:texture=false: FPS: 350 FrameTime: 2.857 ms
+glmark2-picture: [pulsar] light=false:quads=5:texture=false: 800x600; probes c 2b1b29ff, tl 36222eff, tr 412933ff, bl 4c3038ff, br 57373dff; crc16 d001, crc16q d020; mean 179 195 255; black no
+=======================================================
+                                  glmark2 Score: 350 
+=======================================================
+yakogl-mali-exit: draws=3500 refused=0 first_refused=- gpu_faults=0 job_timeouts=0
