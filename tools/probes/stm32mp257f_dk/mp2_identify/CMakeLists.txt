@@ -15,21 +15,6 @@ list(APPEND ZEPHYR_EXTRA_MODULES "${PVR_REPO}")
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(mp2_identify)
 
-# The stm32mp2 board layer, added by this probe itself as mp2_hello adds it:
-# the item zephyr-layer-hook moves this into driver/zephyr/lib/board/
-# CMakeLists.txt and removes it here (and the rsource in Kconfig). Added this
-# late, its sources go into app (YAKOGL_STM32MP2_IN_APP; the layer's
-# CMakeLists.txt).
-set(YAKOGL_STM32MP2_IN_APP ON)
-add_subdirectory("${PVR_REPO}/zephyr/lib/board/stm32mp2" "${CMAKE_CURRENT_BINARY_DIR}/yakogl_board_stm32mp2")
-
-# The OP-TEE watchdog (stm32mp2_wdog.c), compiled here for now: the layer's
-# own CMakeLists.txt takes the source over after zephyr-layer-hook merges
-# (the item st-customer-id), and this line goes then.
-if(CONFIG_YAKOGL_STM32MP2_WDOG)
-  target_sources(app PRIVATE "${PVR_REPO}/zephyr/lib/board/stm32mp2/stm32mp2_wdog.c")
-endif()
-
 # The build prints its own commit first (a result row names its build).
 execute_process(COMMAND git -C "${PVR_REPO}" describe --always --dirty
                 OUTPUT_VARIABLE MP2_IDENTIFY_BUILD OUTPUT_STRIP_TRAILING_WHITESPACE
