@@ -1,0 +1,8 @@
+case	status	detail
+dEQP-GLES2.info.vendor	Pass
+dEQP-GLES2.info.renderer	Pass
+dEQP-GLES2.info.version	Fail	Image comparison failed
+dEQP-GLES2.functional.prerequisite.state_reset	Lost	chunk-hang
+dEQP-GLES2.functional.prerequisite.clear_color	Lost	not-run
+dEQP-GLES2.functional.flush_finish.wait	Lost	not-run
+dEQP-GLES2.functional.flush_finish.finish	Lost	chunk-crash

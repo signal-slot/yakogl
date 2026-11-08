@@ -1,0 +1,5 @@
+case	status	detail
+dEQP-GLES2.functional.flush_finish.wait	Lost	board-lost
+dEQP-GLES2.functional.buffer.objects.write	Lost	board-lost
+dEQP-GLES2.functional.shaders.basic.pass	Pass
+dEQP-GLES2.functional.shaders.basic.other	Lost	not-run

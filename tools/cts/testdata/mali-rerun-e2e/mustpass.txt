@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Ten cases for tools/cts/mali-rerun-e2e-selftest.sh.
+dEQP-GLES2.info.vendor
+dEQP-GLES2.info.renderer
+dEQP-GLES2.info.version
+dEQP-GLES2.functional.prerequisite.state_reset
+dEQP-GLES2.functional.prerequisite.clear_color
+dEQP-GLES2.functional.flush_finish.wait
+dEQP-GLES2.functional.flush_finish.finish
+dEQP-GLES2.functional.buffer.objects.write
+dEQP-GLES2.functional.shaders.basic.pass
+dEQP-GLES2.functional.shaders.basic.other
