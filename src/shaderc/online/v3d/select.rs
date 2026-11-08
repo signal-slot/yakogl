@@ -477,8 +477,9 @@ struct Sel<'a> {
     /// 32-bit output). [`Sel::flush_tmu`] gives them one thread switch.
     pending: AVec<'a, (u32, u32, bool)>,
     /// The bindings whose look-ups take the 32-bit TMU output
-    /// (`LodKey::ret32` of the compile, fragment stage only: the two stages
-    /// number their bindings apart, and the key is the fragment's).
+    /// (`LodKey::ret32` of the stage: the fragment stage's from the
+    /// compile's key, the vertex stage's from the program's vertex key,
+    /// [`select_vertex`]; the two stages number their bindings apart).
     ret32: u32,
     /// Look-ups share a switch ([`Pressure::Serial`] turns it off).
     pipelined: bool,
@@ -2374,11 +2375,18 @@ pub fn vattr_sizes(p: &Prepared<'_>, records: &[u8]) -> Result<[u8; 16], SelectE
 /// true) of the same source. `records` is the attribute records' locations,
 /// in record order (the vertex shader's; the coordinate shader reads a
 /// subset through the same records).
+/// `ret32`: the vertex stage's bindings whose texture is of a 32-bit class
+/// (`LodKey::ret32` of the vertex key, never the ambient compile key, which
+/// is the fragment stage's): their look-ups take the 32-bit TMU output, a
+/// word per channel, as a fragment look-up does (Mesa keys each stage's
+/// samplers with their return size, docs/notes/v3d-vs-ret32.md). The
+/// vertex and the coordinate shader take the same mask.
 /// `pressure`: see [`Pressure`].
 pub fn select_vertex<'a>(
     p: &Prepared<'_>,
     records: &[u8],
     coord: bool,
+    ret32: u32,
     pressure: Pressure,
     a: &Arena<'a>,
 ) -> Result<Selected<'a>, SelectError> {
@@ -2417,7 +2425,7 @@ pub fn select_vertex<'a>(
         of: a.alloc_filled(p.ops.len(), Operand::None)?,
         tex_words: AVec::new(),
         pending: AVec::new(),
-        ret32: 0,
+        ret32,
         pipelined: pressure < Pressure::Serial,
         attr_rows: &mut [],
         loop_counters: AVec::new(),

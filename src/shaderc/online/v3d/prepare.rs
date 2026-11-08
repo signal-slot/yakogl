@@ -847,8 +847,21 @@ impl<'m, 'a> Walk<'m, 'a> {
     /// of the direction is continuous across faces, so each pixel's level
     /// is its own face's, as in the reference. Clamped to [-16, 16]: a
     /// constant direction gives log2(0).
-    fn cube_lod(&mut self, a: &Arena<'a>, sampler: u8, d: [S; 3], inv: S, f: &CubeFace) -> Result<S, PrepError> {
-        let (is_x, is_y) = (f.is_x, f.is_y);
+    ///
+    /// `(is_x, is_y)`: the major axis ([`CubeFace`]'s flags). `grads`: the
+    /// direction's derivatives along x and y as `textureGrad` gives them
+    /// (docs/notes/v3d-qpu-grad.md: Mesa's lower_gradient_cube_map is the
+    /// same level up to the signs, which a length does not see), or `None`
+    /// for FDX / FDY of `d`.
+    fn cube_lod(
+        &mut self,
+        a: &Arena<'a>,
+        sampler: u8,
+        d: [S; 3],
+        inv: S,
+        (is_x, is_y): (S, S),
+        grads: Option<[[S; 3]; 2]>,
+    ) -> Result<S, PrepError> {
         /* (ma, sc, tc) of a vector: (x, z, y), (y, x, z), (z, x, y) by the
          * major axis (dEQP's maNdx / sNdx / tNdx; the signs do not matter
          * for the level, the formula takes |ma| and |dma|) */
@@ -879,12 +892,18 @@ impl<'m, 'a> Walk<'m, 'a> {
             }
             w.op2(a, AluOp::Fadd, sq[0], sq[1])
         };
-        let mut dd = [[S(0); 3]; 2];
-        for (row, op) in dd.iter_mut().zip([AluOp::Fddx, AluOp::Fddy]) {
-            for (o, v) in row.iter_mut().zip(d) {
-                *o = self.op1(a, op, v)?;
+        let dd = match grads {
+            Some(g) => g,
+            None => {
+                let mut dd = [[S(0); 3]; 2];
+                for (row, op) in dd.iter_mut().zip([AluOp::Fddx, AluOp::Fddy]) {
+                    for (o, v) in row.iter_mut().zip(d) {
+                        *o = self.op1(a, op, v)?;
+                    }
+                }
+                dd
             }
-        }
+        };
         let px = len2(self, dd[0])?;
         let py = len2(self, dd[1])?;
         let p2 = self.op2(a, AluOp::Fmax, px, py)?;
@@ -899,6 +918,44 @@ impl<'m, 'a> Walk<'m, 'a> {
         let l2 = self.op1(a, AluOp::Flog2, rho2)?;
         let half = self.push(a, SOp::Const(0.5f32.to_bits()))?;
         self.op2(a, AluOp::Fmul, l2, half)
+    }
+
+    /// The level of a `textureGrad` look-up of a 2D, 2D-array or 3D
+    /// texture (docs/notes/v3d-qpu-grad.md): the V3D 4.2 TMU has no
+    /// gradient operand, so the level is computed here and the look-up
+    /// takes it as an explicit one, as Mesa's lower_gradient
+    /// (nir_lower_tex.c, `lower_txd`) does: each of the `lanes` gradient
+    /// lanes scaled by level 0's size on that axis (`TexSizeWord`, the
+    /// textureSize words; a 2D array's layer count is not one of them), and
+    /// lambda = log2(max(|dPdx * size|, |dPdy * size|)), the exact norm
+    /// (GL ES 3.0.6 3.8.10). Folded to 0.5 log2(max(|..|^2, |..|^2)), one
+    /// SFU operation instead of two RSQRT/RECIP pairs and a LOG, as
+    /// [`Self::cube_lod`] does. No bias (ES 3.00 has no textureGrad with
+    /// one); the TMU clamps to the texture's levels and the sampler's
+    /// MIN/MAX_LOD. Clamped to [-16, 16] here: a zero gradient (a constant
+    /// coordinate) gives log2(0) = -inf, which becomes -16, the magnified
+    /// base level, rather than an unmeasured TMU input.
+    fn grad_lod(&mut self, a: &Arena<'a>, sampler: u8, lanes: usize, g: [[S; 3]; 2]) -> Result<S, PrepError> {
+        let mut size = [S(0); 3];
+        for (lane, o) in size.iter_mut().enumerate().take(lanes) {
+            let w = self.push(a, SOp::TexSizeWord { sampler, lane: lane as u8 })?;
+            *o = self.op1(a, AluOp::U2f, w)?;
+        }
+        let mut len2 = [S(0); 2];
+        for (o, d) in len2.iter_mut().zip(g) {
+            let mut sum = S(0);
+            for lane in 0..lanes {
+                let u = self.op2(a, AluOp::Fmul, d[lane], size[lane])?;
+                let sq = self.op2(a, AluOp::Fmul, u, u)?;
+                sum = if lane == 0 { sq } else { self.op2(a, AluOp::Fadd, sum, sq)? };
+            }
+            *o = sum;
+        }
+        let p2 = self.op2(a, AluOp::Fmax, len2[0], len2[1])?;
+        let l2 = self.op1(a, AluOp::Flog2, p2)?;
+        let half = self.push(a, SOp::Const(0.5f32.to_bits()))?;
+        let l = self.op2(a, AluOp::Fmul, l2, half)?;
+        self.clamp_lod(a, l)
     }
 
     /// `l` clamped to [-16, 16].
@@ -1386,15 +1443,18 @@ impl<'m, 'a> Walk<'m, 'a> {
                  * .offset_s/_t for a constant nir_tex_src_offset, v3d_tex.c
                  * handle_tex_src); the range is MIN/MAX_PROGRAM_TEXEL_OFFSET's
                  * -8..7, which the front end has checked. GLSL ES 3.00 has
-                 * no cube form with an offset (section 8.8), and a 2D or
-                 * 2D-array offset has no r; a 3D one's r is Offset R
-                 * (Mesa's offset_r, non_array_components >= 3). */
-                let offset = offset.unwrap_or([0; 3]);
+                 * no cube form with an offset (section 8.8). A 3D one's r
+                 * is Offset R (P2 bits 16..19, Mesa's offset_r, written
+                 * only when non_array_components >= 3, v3d_tex.c); a 2D or
+                 * 2D-array offset is an ivec2 (the checker matched the
+                 * signature), so its r is kept 0 as Mesa keeps it, whatever
+                 * a hand-built IR carries there. */
+                let mut offset = offset.unwrap_or([0; 3]);
                 if cube && offset != [0; 3] {
                     return Err(PrepError::NotYet("a cube look-up with an offset"));
                 }
-                if offset[2] != 0 && !vol {
-                    return Err(PrepError::NotYet("a texture offset with a third lane"));
+                if !vol {
+                    offset[2] = 0;
                 }
                 /* texelFetch (Mesa's txf): integer texel coordinates and an
                  * integer level, both written to the TMU as they are (the
@@ -1411,6 +1471,9 @@ impl<'m, 'a> Walk<'m, 'a> {
                 /* The front end gives a vertex shader's implicit look-up as
                  * Lod(0.0) (ir.rs TexLod), Mesa's lower_invalid_implicit_lod
                  * (vir.c:808): the base level. */
+                /* textureGrad of a cube: its gradients, whose level is
+                 * computed once the direction's major axis is known */
+                let mut cube_grads = None;
                 let (third, is_lod) = match lod {
                     /* No derivatives outside the fragment stage: Mesa's
                      * lower_invalid_implicit_lod (vir.c:808) makes such a
@@ -1422,9 +1485,28 @@ impl<'m, 'a> Walk<'m, 'a> {
                     ir::TexLod::Implicit => (None, false),
                     ir::TexLod::Bias(b) => (Some(self.src(b, 0)?), false),
                     ir::TexLod::Lod(l) | ir::TexLod::Fetch(l) => (Some(self.src(l, 0)?), true),
-                    /* textureGrad: the V3D 4.2 TMU has no gradient operand
-                     * (docs/notes/v3d-qpu-grad.md lowers it to a level). */
-                    ir::TexLod::Grad { .. } => return Err(PrepError::NotYet("a texture look-up with gradients")),
+                    /* textureGrad: the V3D 4.2 TMU has no gradient operand,
+                     * so it is an explicit level computed from the gradients
+                     * (docs/notes/v3d-qpu-grad.md, Mesa's lower_txd), as
+                     * textureLod's. The gradients have the coordinate's base
+                     * width (ir.rs TexLod::Grad): 3 lanes for a cube or a 3D
+                     * texture, else 2. Not divided by a projective q (Mesa
+                     * projects first and uses the gradients as given). */
+                    ir::TexLod::Grad { ddx, ddy } => {
+                        let lanes = if cube || vol { 3 } else { 2 };
+                        let mut g = [[S(0); 3]; 2];
+                        for (row, id) in g.iter_mut().zip([ddx, ddy]) {
+                            for (lane, o) in row.iter_mut().enumerate().take(lanes) {
+                                *o = self.src(ir::Src::id(id), lane)?;
+                            }
+                        }
+                        if cube {
+                            cube_grads = Some(g);
+                            (None, true)
+                        } else {
+                            (Some(self.grad_lod(a, sampler, lanes, g)?), true)
+                        }
+                    }
                 };
                 let (mut s, mut t) = (self.src(coord, 0)?, self.src(coord, 1)?);
                 /* s, t, then r for a cube (the direction's z) or a 3D
@@ -1466,6 +1548,18 @@ impl<'m, 'a> Walk<'m, 'a> {
                     s = self.push(a, SOp::Alu(AluOp::Fmul, [s, inv, S(0)]))?;
                     t = self.push(a, SOp::Alu(AluOp::Fmul, [t, inv, S(0)]))?;
                     let z = self.push(a, SOp::Alu(AluOp::Fmul, [z, inv, S(0)]))?;
+                    if let Some(g) = cube_grads {
+                        /* the major axis: x if it is the largest, else y if
+                         * it is not below z, else z. A tie is a direction on
+                         * an edge, where both faces give the same level
+                         * (docs/notes/v3d-qpu-grad.md (c)). */
+                        let le = |w: &mut Self, p: S, q: S| w.op2(a, AluOp::Fle, p, q);
+                        let (yx, zx) = (le(self, ay, ax)?, le(self, az, ax)?);
+                        let is_x = self.op2(a, AluOp::Iand, yx, zx)?;
+                        let is_y = le(self, az, ay)?;
+                        let l = self.cube_lod(a, sampler, [s0, t0, z0], inv, (is_x, is_y), Some(g))?;
+                        third = Some(self.clamp_lod(a, l)?);
+                    }
                     if sampler < 15 && self.cube_noseam & (1 << sampler) != 0 {
                         /* GL ES 2.0 3.7.5: the face and its (s, t), looked
                          * up as a layer of the cube's 2D-array record
@@ -1478,7 +1572,7 @@ impl<'m, 'a> Walk<'m, 'a> {
                          * the TMU's own, from the per-face (s, t), is wrong
                          * in every quad that straddles a face edge. */
                         if self.m.stage == SHC_STAGE_FRAGMENT && !is_lod {
-                            let mut l = self.cube_lod(a, sampler, dir, inv, &f)?;
+                            let mut l = self.cube_lod(a, sampler, dir, inv, (f.is_x, f.is_y), None)?;
                             if let Some(b) = third {
                                 l = self.op2(a, AluOp::Fadd, l, b)?;
                             }
@@ -2558,11 +2652,105 @@ mod tests {
         .unwrap()
     }
 
+    /// The one look-up of a GLSL ES 3.00 shader of `stage` (its sampler `t`,
+    /// uniform gradients `gx`, `gy`; `p` the coordinate), prepared: its
+    /// `lod` and `bias` flags, its Offset (s, t, r), its level as text, and
+    /// whether any prepared op is a derivative.
+    #[cfg(not(feature = "report-es2"))] // GLSL ES 3.00, which a report-es2 build refuses
+    fn look_up_of(
+        stage: Stage,
+        sampler: &str,
+        gw: u8,
+        expr: &str,
+    ) -> Result<(bool, bool, [i8; 3], String, bool), PrepError> {
+        let decl = format!("uniform highp {sampler} t;\nuniform highp vec{gw} gx, gy;");
+        let src = match stage {
+            Stage::Fragment => format!(
+                "#version 300 es\nprecision highp float;\n{decl}\nin highp vec4 p;\nout vec4 o;\n\
+                 void main() {{ o = vec4({expr}); }}\n"
+            ),
+            _ => format!(
+                "#version 300 es\n{decl}\nin highp vec4 p;\nout highp vec4 o;\n\
+                 void main() {{ o = vec4({expr}); gl_Position = p; }}\n"
+            ),
+        };
+        store::with_scratch(|a| {
+            let m = lower::compile_to_ir(a, stage, a.alloc_str(&src).unwrap()).map_err(|e| e.msg).unwrap();
+            let p = match stage {
+                Stage::Fragment => prepare_fragment(&m.module, a)?,
+                _ => prepare_vertex(&m.module, &[(0, 0)], a)?,
+            };
+            let derivative = p.ops.iter().any(|o| matches!(o, SOp::Alu(AluOp::Fddx | AluOp::Fddy, _)));
+            let (srcs, cube, layer, vol, bias, lod, offset) = p
+                .ops
+                .iter()
+                .find_map(|o| match *o {
+                    SOp::Tex { srcs, cube, layer, vol, bias, lod, offset, .. } => {
+                        Some((srcs, cube, layer, vol, bias, lod, offset))
+                    }
+                    _ => None,
+                })
+                .expect("a look-up");
+            /* the level follows s, t and r or the layer */
+            let k = 2 + usize::from(cube || layer || vol);
+            Ok((lod, bias, offset, show(p.ops, srcs[k]), derivative))
+        })
+        .unwrap()
+    }
+
+    /// textureGrad (docs/notes/v3d-qpu-grad.md): every form is an explicit
+    /// level (`lod`, no bias, no derivative op), computed as
+    /// clamp(0.5 log2(max(|dPdx * size|^2, |dPdy * size|^2)), -16, 16) from
+    /// the texture's size words: width and height for 2D and 2D array (not
+    /// the layer count, word 3), with the depth for 3D; a cube's from its
+    /// face width (word 0) through the cube rule, the gradients in place of
+    /// FDX / FDY. In both stages, and composed with an offset (a 3D one's r
+    /// on Offset R). Revert check: the old arm refused each by name.
+    #[cfg(not(feature = "report-es2"))] // GLSL ES 3.00, which a report-es2 build refuses
+    #[test]
+    fn a_texture_grad_is_an_explicit_level() {
+        let word = |l: u8| format!("U2f(TexSizeWord {{ sampler: 0, lane: {l} }})");
+        for stage in [Stage::Fragment, Stage::Vertex] {
+            let (lod, bias, offset, level, derivative) =
+                look_up_of(stage, "sampler2D", 2, "textureGrad(t, p.xy, gx, gy)").expect("2D");
+            assert!(lod && !bias && !derivative && offset == [0; 3], "{stage:?} 2D");
+            /* clamp, the half, the log of the larger square length */
+            assert!(level.starts_with("Fmin(Fmax(Fmul(Flog2(Fmax(Fadd(Fmul(Fmul("), "{stage:?}: {level}");
+            assert!(level.contains(&word(0)) && level.contains(&word(1)) && !level.contains("lane: 2"), "{level}");
+            let (_, _, offset, level, _) =
+                look_up_of(stage, "sampler2DArray", 2, "textureGradOffset(t, p.xyz, gx, gy, ivec2(1, -2))")
+                    .expect("2D array");
+            assert_eq!(offset, [1, -2, 0], "{stage:?} 2D array");
+            assert!(level.contains(&word(1)) && !level.contains("lane: 2") && !level.contains("lane: 3"), "{level}");
+            let (lod, _, offset, level, _) =
+                look_up_of(stage, "sampler3D", 3, "textureGradOffset(t, p.xyz, gx, gy, ivec3(1, 2, -3))").expect("3D");
+            assert!(lod && offset == [1, 2, -3], "{stage:?} 3D");
+            assert!(level.contains(&word(2)), "{stage:?} 3D: the depth scales r: {level}");
+            let (lod, bias, _, level, derivative) =
+                look_up_of(stage, "samplerCube", 3, "textureGrad(t, p.xyz, gx, gy)").expect("cube");
+            assert!(lod && !bias && !derivative, "{stage:?} cube");
+            assert!(level.starts_with("Fmin(Fmax(Fmul(Flog2(") && level.contains(&word(0)), "{level}");
+            assert!(!level.contains("lane: 1"), "a cube's face width only: {level}");
+            let (lod, _, _, _, _) =
+                look_up_of(stage, "isampler2D", 2, "textureGrad(t, p.xy, gx, gy)").expect("an integer sampler");
+            assert!(lod, "{stage:?} isampler2D");
+            let (lod, _, _, _, _) =
+                look_up_of(stage, "sampler2D", 2, "textureProjGrad(t, p.xyw, gx, gy)").expect("projected");
+            assert!(lod, "{stage:?} textureProjGrad");
+        }
+        /* the shadow forms stay another item's refusal */
+        assert_eq!(
+            look_up_of(Stage::Fragment, "sampler2DShadow", 2, "textureGrad(t, p.xyz, gx, gy)").map(|r| r.0),
+            Err(PrepError::NotYet("a shadow look-up"))
+        );
+    }
+
     /// The texelFetch and offset forms GLSL ES 3.00 has not (section 8.8: no
-    /// cube texelFetch, no cube offset, a 2D offset of two lanes), refused
-    /// by name should an IR carry them; and a 2D fetch prepares as a look-up
-    /// with the level and no bias, `fetch` set, the offset carried; a 2D
-    /// array's with `layer`, a 3D one's with its Offset R.
+    /// cube texelFetch, no cube offset), refused by name should an IR carry
+    /// them, and a third offset lane on a 2D or 2D-array look-up dropped (an
+    /// ivec2 there); a 2D fetch prepares as a look-up with the level and no
+    /// bias, `fetch` set, the offset carried; a 2D array's with `layer`, a 3D
+    /// one's with its Offset R, at a level and in a fetch.
     #[test]
     fn a_cube_fetch_or_offset_is_refused_by_name() {
         use crate::shaderc::online::ir::{
@@ -2601,9 +2789,11 @@ mod tests {
             prepared(TexDim::Cube, level, Some([1, 0, 0])),
             Err(PrepError::NotYet("a cube look-up with an offset"))
         );
+        /* a 2D offset has no r: Offset R stays 0, as Mesa writes it only
+         * for a 3D look-up */
         assert_eq!(
             prepared(TexDim::D2, fetch, Some([0, 0, 1])),
-            Err(PrepError::NotYet("a texture offset with a third lane"))
+            Ok(Some((3, false, false, false, true, true, [0; 3])))
         );
         assert_eq!(
             prepared(TexDim::D2, fetch, Some([-8, 7, 0])),
@@ -2619,14 +2809,18 @@ mod tests {
             Ok(Some((3, false, true, false, true, true, [1, 2, 0])))
         );
         assert_eq!(
-            prepared(TexDim::D2Array, level, Some([0, 0, 1])),
-            Err(PrepError::NotYet("a texture offset with a third lane"))
+            prepared(TexDim::D2Array, level, Some([2, 0, 1])),
+            Ok(Some((3, false, true, false, true, false, [2, 0, 0])))
         );
         assert_eq!(
             prepared(TexDim::D3, fetch, Some([1, -2, 3])),
             Ok(Some((3, false, false, false, true, true, [1, -2, 3])))
         );
         assert_eq!(prepared(TexDim::D3, level, None), Ok(Some((3, false, false, false, true, false, [0; 3]))));
+        assert_eq!(
+            prepared(TexDim::D3, level, Some([-8, 7, -8])),
+            Ok(Some((3, false, false, false, true, false, [-8, 7, -8])))
+        );
     }
 
     /// Common subexpressions (Walk::push, Mesa's nir_opt_cse): the same
