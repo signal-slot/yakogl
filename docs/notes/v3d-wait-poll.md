@@ -89,7 +89,7 @@ only time function is the busy wait and `k_cycle_get_32` stamps.
 - `driver/zephyr/lib/board/rpi4/app.conf` has no tick or timer line, and
   neither does `driver/samples/zephyr/glmark2/prj.conf` or its
   `boards/rpi_4b.conf` (grep for TICK, SYS_CLOCK, TIMER, SLEEP: none).
-- The pinned Zephyr (`/home/orion/connected-deps/zephyr-ws/zephyr`) does the
+- The pinned Zephyr (`$CONNECTED_DEPS_DIR/zephyr-ws/zephyr`) does the
   rest: `soc/brcm/bcm2711/Kconfig` selects `ARM_ARCH_TIMER`;
   `drivers/timer/Kconfig.arm_arch` makes that `TICKLESS_CAPABLE` and
   `ARCH_HAS_CUSTOM_BUSY_WAIT`; `kernel/Kconfig:1043` makes
