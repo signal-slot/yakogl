@@ -19,7 +19,7 @@
 use core::ffi::c_void;
 
 use super::consts::*;
-use super::context::{self, gl_trace, GlContext, MAX_VERTEX_ATTRIBS};
+use super::context::{self, gl_trace, GlContext, CURRENT_FLOAT, CURRENT_INT, CURRENT_UINT, MAX_VERTEX_ATTRIBS};
 use super::types::*;
 
 /// ES 3.0 2.9: with a vertex array object other than the default bound, an
@@ -175,6 +175,7 @@ fn set_current(index: GLuint, x: GLfloat, y: GLfloat, z: GLfloat, w: GLfloat) {
         return;
     }
     c.current_attrib[index as usize] = [x, y, z, w];
+    c.current_attrib_type[index as usize] = CURRENT_FLOAT;
 }
 
 #[no_mangle]
@@ -302,10 +303,16 @@ pub unsafe extern "C" fn glGetVertexAttribfv(index: GLuint, pname: GLenum, param
         return;
     }
     if pname == GL_CURRENT_VERTEX_ATTRIB {
-        for (i, v) in c.current_attrib[index as usize].iter().enumerate() {
+        let ty = c.current_attrib_type[index as usize];
+        for (i, v) in current_bits(c, index as usize).iter().enumerate() {
+            let f = match ty {
+                CURRENT_INT => *v as i32 as GLfloat,
+                CURRENT_UINT => *v as GLfloat,
+                _ => GLfloat::from_bits(*v),
+            };
             // SAFETY: CURRENT_VERTEX_ATTRIB returns four values; the
             // application passes room for them, not necessarily aligned.
-            params.wrapping_add(i).write_unaligned(*v);
+            params.wrapping_add(i).write_unaligned(f);
         }
         return;
     }
@@ -330,10 +337,10 @@ pub unsafe extern "C" fn glGetVertexAttribiv(index: GLuint, pname: GLenum, param
     if pname == GL_CURRENT_VERTEX_ATTRIB {
         /* the float value read as integers (ES 3.0 6.1.14: GetVertexAttribiv
          * "reads them as floating-point values and converts them") */
-        for (i, v) in c.current_attrib[index as usize].iter().enumerate() {
+        for (i, v) in current_as_int(c, index as usize).iter().enumerate() {
             // SAFETY: CURRENT_VERTEX_ATTRIB returns four values; the
             // application passes room for them, not necessarily aligned.
-            params.wrapping_add(i).write_unaligned(round_to_int(*v));
+            params.wrapping_add(i).write_unaligned(*v);
         }
         return;
     }
@@ -358,35 +365,58 @@ pub unsafe extern "C" fn glGetVertexAttribiv(index: GLuint, pname: GLenum, param
  * glGetVertexAttribfv/iv on a value set with glVertexAttribI4*, or an
  * integer input or glGetVertexAttribI{i,ui}v on a value set with
  * glVertexAttrib*f (the initial (0, 0, 0, 1) included). Here such a read
- * returns the stored bits reinterpreted; the context does not record which
- * family set a value (docs/es3-cts-failures.md, Appendix A, task T1). */
+ * converts by `GlContext::current_attrib_type`, which records which family
+ * set the value (docs/es3-cts-failures.md, Appendix A, task T1). */
 
 /// The dwords `index`'s input reads while its array is disabled, set from a
 /// pure-integer value: `[x, y, z, w]` as 32-bit patterns.
-fn set_current_bits(index: GLuint, v: [u32; 4], func: &str) {
+fn set_current_bits(index: GLuint, v: [u32; 4], ty: u8, func: &str) {
     let Some(c) = context::current() else { return };
     if index as usize >= MAX_VERTEX_ATTRIBS {
         c.set_error(GL_INVALID_VALUE, func);
         return;
     }
     c.current_attrib[index as usize] = v.map(GLfloat::from_bits);
+    c.current_attrib_type[index as usize] = ty;
 }
 
-/// The current value's dwords, for the pure-integer getters.
+/// The current value's dwords.
 fn current_bits(c: &GlContext, index: usize) -> [u32; 4] {
     c.current_attrib[index].map(GLfloat::to_bits)
+}
+
+/// The current value as GLints (glGetVertexAttribiv/Iiv): an int value as it
+/// is, a uint one saturated to GLint, a float one rounded to nearest.
+fn current_as_int(c: &GlContext, index: usize) -> [GLint; 4] {
+    let ty = c.current_attrib_type[index];
+    current_bits(c, index).map(|b| match ty {
+        CURRENT_INT => b as GLint,
+        CURRENT_UINT => b.min(GLint::MAX as u32) as GLint,
+        _ => round_to_int(GLfloat::from_bits(b)),
+    })
+}
+
+/// The current value as GLuints (glGetVertexAttribIuiv): a uint value as it
+/// is, an int or float one rounded and clamped at 0.
+fn current_as_uint(c: &GlContext, index: usize) -> [GLuint; 4] {
+    let ty = c.current_attrib_type[index];
+    current_bits(c, index).map(|b| match ty {
+        CURRENT_UINT => b,
+        CURRENT_INT => (b as GLint).max(0) as GLuint,
+        _ => round_to_int(GLfloat::from_bits(b)).max(0) as GLuint,
+    })
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn glVertexAttribI4i(index: GLuint, x: GLint, y: GLint, z: GLint, w: GLint) {
     gl_trace!(glVertexAttribI4i);
-    set_current_bits(index, [x as u32, y as u32, z as u32, w as u32], "glVertexAttribI4i");
+    set_current_bits(index, [x as u32, y as u32, z as u32, w as u32], CURRENT_INT, "glVertexAttribI4i");
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn glVertexAttribI4ui(index: GLuint, x: GLuint, y: GLuint, z: GLuint, w: GLuint) {
     gl_trace!(glVertexAttribI4ui);
-    set_current_bits(index, [x, y, z, w], "glVertexAttribI4ui");
+    set_current_bits(index, [x, y, z, w], CURRENT_UINT, "glVertexAttribI4ui");
 }
 
 /// # Safety
@@ -430,10 +460,10 @@ pub unsafe extern "C" fn glGetVertexAttribIiv(index: GLuint, pname: GLenum, para
         return;
     }
     if pname == GL_CURRENT_VERTEX_ATTRIB {
-        /* the value glVertexAttribI4i* stored, exactly (see set_current_bits) */
-        for (i, v) in current_bits(c, index as usize).iter().enumerate() {
+        /* an int value exactly, a uint or float one converted */
+        for (i, v) in current_as_int(c, index as usize).iter().enumerate() {
             // SAFETY: the caller's contract (four values, any alignment).
-            unsafe { params.wrapping_add(i).write_unaligned(*v as GLint) };
+            unsafe { params.wrapping_add(i).write_unaligned(*v) };
         }
         return;
     }
@@ -458,8 +488,8 @@ pub unsafe extern "C" fn glGetVertexAttribIuiv(index: GLuint, pname: GLenum, par
         return;
     }
     if pname == GL_CURRENT_VERTEX_ATTRIB {
-        /* the value glVertexAttribI4ui* stored, exactly (see set_current_bits) */
-        for (i, v) in current_bits(c, index as usize).iter().enumerate() {
+        /* a uint value exactly, an int or float one converted (negatives to 0) */
+        for (i, v) in current_as_uint(c, index as usize).iter().enumerate() {
             // SAFETY: the caller's contract (four values, any alignment).
             unsafe { params.wrapping_add(i).write_unaligned(*v) };
         }

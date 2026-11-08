@@ -336,6 +336,7 @@ struct gl_context {
 	bool     default_y_up;        /* the default surface is stored bottom-up (a pbuffer) */
 
 	GLenum   error;               /* first GL error since last glGetError */
+	uint8_t  current_attrib_type[GL_CAP_VERTEX_ATTRIBS]; /* 0 float, 1 int, 2 uint */
 };
 
 /* the current context (single-context bring-up; EGL makeCurrent later). */
