@@ -1,0 +1,3 @@
+[ 1234.567890] panthor fb000000.gpu: GPU fault 0x00000088 at 0x0000000000001000
+[ 1234.567999] panthor fb000000.gpu: [drm] reset requested, loopback 127.0.0.1, any 0.0.0.0
+[ 1235.100000] panthor fb000000.gpu: mali-g610 id 0xa867 r0p0 at 12:34:56
