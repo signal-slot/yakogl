@@ -243,3 +243,108 @@ colour with values above 2^24 and negative values, read back untiled
 items 1 to 3 above are a sequence of three small items; if it does not,
 the refusal stays and the cause (UIF32 on an MRT plane, the second
 target's tiling) is the finding.
+
+## Implementation sequence
+
+Can a two-plane or shadow path like RGBA16I/UI and RG32I/UI's 64-bit
+tiled shadow (`0087345f`) take RGBA32I/UI? On paper yes, and it is Mesa's
+own: each plane is a 64-bit `G32R32F` target with `UIF32`, the very
+format RG32I/UI already draws, and the shadow's 4x4 tiling serves both
+planes if the shadow holds two of them half and half. No hardware word is
+new. On the host nothing blocks the pure part (the split and join, below,
+are done and tested); what blocks the draw is that it cannot be judged
+without the board (does `UIF32` keep 32 bits on a plane of an MRT, is the
+8-RT bank's second slot tiled under `SINGLE_BUFFER(2)`: the open questions
+above), and that every file the draw needs belongs to another plan:
+`backend.rs` (#328, #333), the shader key in `src/gl/draw.rs`,
+`src/shaderc/online/vivante/` (#328). So the refusal by name stays until
+the probe below says yes.
+
+Done (inert, `src/vivante/wide_target.rs`): `split_planes` and
+`join_planes`, a linear image of 16-byte pixels into two 4x4-tiled 8-byte
+planes (R,G then B,A) and back, with `plane_offset` / `planes_bytes`. The
+plane offset is `tiled_copy::second_plane_offset`, the texture side's rule,
+called and not copied (`tile_planes` there is private, so the per-pixel
+copy is `wide_target`'s own, over its own `tiled_offset`). Mesa's
+`etna_texture_tile_rgba32f` / untile (`etnaviv_tiling.c:137-158`). Nothing
+in the draw path calls them.
+
+The rest, in order. Step 0 and 7 need the board; 1 to 6 are host-testable.
+
+0. **Board probe** (below). If the bits do not match, stop: the finding is
+   the cause, the refusal stays.
+1. `src/vivante/backend.rs` (#328, #333): `GC_INT_RT_128BPP` out of the
+   refusal (`pe_color_format`, `GC_INTEGER_RT_FORMATS`, the `draw_one`
+   check); `mrt_targets` / `hw_targets` clamp from 4 to the 8-RT bank (up
+   to four attachments give up to eight targets, a 128-bit one takes two).
+   Plane address = shadow gpu + `plane_offset`, in `pe_rt_addr_8_pipe` for
+   both pipes.
+2. `src/vivante/wide_target.rs` (free of other plans): the multi-target
+   shadow. `wanted` accepts more than one target, because SINGLE_BUFFER
+   tiles every target of the draw, so a mixed 128-bit + 32-bit draw puts
+   all of them on shadows. A 128-bit entry's size is `planes_bytes`,
+   `tile_in` calls `split_planes`, `retire` calls `join_planes`; `Key`
+   gains the pixel size.
+3. Shader output split, `src/shaderc/online/vivante/` beside `wide128.rs`
+   (#328): the analogue of `lower_128bit_output`, `(r,g)` to the output and
+   `(b,a)` to output `4 + k`; and its draw key (`rt_is_128bit`, companion
+   index) in `src/gl/draw.rs` (GL core), compiled as a variant like the
+   sampler side's `wide128::Planes`. `shader.rs` `PS_OUTPUT_REG` follows
+   the remap.
+4. Colour mask: plane 1 takes `(mask >> 2) & 3`
+   (`etnaviv_blend.c:153-163`), in the per-target mask words of
+   `backend.rs`.
+5. Clear and read-back: `glClear` as two plane clears with a flush and a
+   PE-to-RA stall between (`etnaviv_rs.c:399-419`), or by a draw;
+   `glReadPixels` joins through `retire` (step 2).
+6. GL-core name lists: `refuse_undrawable_targets` in `src/gl/draw.rs` and
+   `rt_format_drawable` in `src/backend.rs`.
+7. Tests and docs: `tests/es3_int_rt_gc.rs` (the refusal tests become draw
+   tests: PE_COLOR_FORMAT / PE_RT_CONFIG words, `PS_OUTPUT_REG`, plane
+   address), `docs/es3/int-rt-gc.md` section 2 (gc-docs), then a board run
+   of dEQP `fbo.completeness` and `renderable.texture.*32*`.
+
+### The board probe: a gl_test case
+
+One RGBA32UI attachment as two `G32R32F` tiled targets with `UIF32`, a
+constant colour with values above 2^24 and negative ones, read back
+untiled, compared bit for bit. Hand-written in
+`driver/samples/zephyr/gl_test/src` (#328's directory for now), built for
+the i.MX8MP / X2, not run here. Raw command stream, so it does not depend
+on steps 1 to 6:
+
+- One page-aligned allocation of 1024 bytes, zero-filled and flushed: two
+  planes of 16 x 4 pixels of 8 bytes (`tw` 16, stride 128), plane 0 at +0,
+  plane 1 at +512 (`wide_target::plane_offset(16, 4)`).
+- Slot 0 in `PE_COLOR_FORMAT` = `G32R32F`, address +0. Slot 1 in the 8-RT
+  bank (`PE_RT_CONFIG`, `PE_RT_ADDR`, both pipes) = `G32R32F`, address
+  +512. `RT_COUNT` 2. `PS_CONTROL_EXT` output mode `UIF32` for both.
+  `PE_LOGIC_OP.SINGLE_BUFFER` = 2. No tile status, blend or saturation;
+  colour mask all on.
+- A fragment shader writing raw bits: output 0 = `(R, G)`, output 1 =
+  `(B, A)` (`PS_OUTPUT_REG` slot 1 reads output 1), no int-to-float
+  conversion. One 16 x 4 rectangle, viewport 16 x 4.
+- Colour (R,G,B,A) = `0x80000000`, `0xFFFFFFFF`, `0x01000001` (2^24 + 1),
+  `0xDEADBEEF`. Repeat with `0x7FFFFFFF`, `0`, `0xFFFFFF01`, `0x12345678`.
+- A second draw with colour mask `R|B` only (plane 0 `0b01`, plane 1 `0b01`
+  as step 4 will program it) over the first result with a different
+  constant: G and A (word 1 of each plane) must keep the first draw's bits.
+
+Read back: cache invalidate after the PE-to-RA stall, then untile both
+planes on the CPU with `join_planes`' rule (`tile = (y/4)*(tw/4) + x/4`,
+texel at `(tile*16 + (y%4)*4 + x%4) * 8`).
+
+Expected output (all 64 pixels equal):
+
+```
+gc rt128 probe: 64/64 pixels bit-exact
+  plane0 px(0,0)  = 80000000 ffffffff  want 80000000 ffffffff
+  plane1 px(0,0)  = 01000001 deadbeef  want 01000001 deadbeef
+  plane0 px(15,3) = 80000000 ffffffff  want 80000000 ffffffff
+  plane1 px(15,3) = 01000001 deadbeef  want 01000001 deadbeef
+```
+
+Anything else is the finding: which word changed, at which pixel. Pixels
+moved in 16-byte pairs is gl_test 44's PE fault again (tiling not honoured
+by the slot); `01000001` read as `01000000` is a 24-bit path (UIF32 not
+raw on an MRT plane).
