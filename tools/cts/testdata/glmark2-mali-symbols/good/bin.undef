@@ -1,0 +1,4 @@
+                 U __cxa_atexit@GLIBC_2.17
+                 U dlopen@GLIBC_2.34
+                 U dlsym@GLIBC_2.34
+                 U malloc@GLIBC_2.17
