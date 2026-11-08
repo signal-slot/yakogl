@@ -9,16 +9,15 @@ board yet.** Only `gl_test` sweeps are recorded (`tools/cts/RESULTS.md`, "Mali")
 Every "expected" line below is the form the tools print, taken from their
 sources and from a run of their self-tests on a host, not a board result.
 
-This is the first part: the pieces already on main (the library, the runner,
-the kernel message classifier, the board rules). Three sections are marked
-**to be completed**; their tools are not merged yet and their options are
-deliberately not described here.
+The pieces, in the order a session uses them: the library (section 1), the
+build (2), the tree table (3), the runner (4) and its self-test (5), the
+kernel message classifier (6), the tally (7) and the board rules (8).
 
 | piece | state | what |
 |---|---|---|
 | `tools/mali/panthor-gles/` | on main | `libGLESv2.so.2` and `libEGL.so.1` over panthor (section 1) |
-| `tools/cts/mali-deqp-build.sh` | to be completed | cross-builds `deqp-gles2` for the board's Armbian (section 2) |
-| `tools/cts/mali-gles2-tree.txt` | to be completed | the tree table: the mustpass list in rows (section 3) |
+| `tools/cts/mali-deqp-build.sh` | on main | cross-builds `deqp-gles2` for the board's Armbian (section 2) |
+| `tools/cts/mali-gles2-tree.txt` | on main | the tree table: the mustpass list in rows (section 3) |
 | `tools/cts/mali-deqp-run.sh` | on main | the runner: one chunk per row, a slice per session (section 4) |
 | `tools/cts/mali-deqp-selftest.sh` | on main | its self-test, no board (section 5) |
 | `tools/cts/mali-kmsg.py`, `mali-kmsg-selftest.sh` | on main | the panthor message classifier (section 6) |
@@ -81,22 +80,110 @@ The host test of the library: `cargo test --manifest-path
 tools/mali/panthor-gles/Cargo.toml` (the lines' formats, the refusal names,
 the wait classification, the two lines end to end with no device).
 
-## 2. The deqp-gles2 build: to be completed
+## 2. The deqp-gles2 build: `tools/cts/mali-deqp-build.sh`
 
-`tools/cts/mali-deqp-build.sh` (item `mali-deqp-build`, not merged) makes the
-build directory the runner reads. What the runner requires of that directory
-is in section 4; the build's options, its time and its expected output are
-added when the script is on main.
+```sh
+tools/cts/mali-deqp-build.sh --out DIR [--gles-lib DIR] [--dry-run] [--allow-dirty]
+```
 
-## 3. The tree table: to be completed
+It cross-builds `deqp-gles2` (VK-GL-CTS at its pinned `CTS_COMMIT` with
+`tools/cts/cts-yakogl-target.patch`, the `yakogl` target: no GL or EGL library
+is linked, both are `dlopen()`ed) on an x86_64 host for the board's Armbian
+trixie (aarch64), and writes the build directory section 4 reads.
 
-`tools/cts/mali-gles2-tree.txt` (item `mali-gles2-tree`, not merged) splits
-the 17,165-case `tools/cts/gles2-mustpass.txt` into rows, one chunk each, in
-the form of `check-gles3-tree.py`'s reader (`# image <LABEL>: <count>` then a
-`dEQP-GLES2....*` filter line; labels `[A-Za-z0-9]+`). The real rows, their
-counts and the four sessions S1..S4 are added when it is on main. The runner
-and its self-test use a three-row table of the same form,
-`tools/cts/testdata/mali-deqp-run/tree.txt`.
+| option | meaning |
+|---|---|
+| `--out DIR` | the build directory; absent or empty beforehand, written as `DIR.part` and renamed at the end |
+| `--gles-lib DIR` | where `libGLESv2.so.2` and `libEGL.so.1` are (`tools/mali/panthor-gles/build.sh` makes them; this script does not); copied to `DIR/lib/`. Without it `DIR/lib/` is absent and the runner refuses the directory |
+| `--dry-run` | check the arguments and the working tree, print every step, run none: no toolchain, CTS clone or build tree is needed |
+| `--allow-dirty` | build from a tree with changes to tracked files; `build.txt` then says `dirty=yes` and the result is not a record |
+
+The working tree must be clean, so `build.txt`'s `commit=` is the commit the
+code came from; the runner refuses a build whose commit is not on
+`origin/main`. Environment: `CTS` (a VK-GL-CTS clone holding `CTS_COMMIT`
+with its `external/fetch_sources.py` sources; never written to), `TOOLCHAIN`,
+`BUILD` (default `build/cts/mali-aarch64`) and `JOBS` (default `nproc`).
+
+The inputs come from `tools/cts/deps.toml` through `tools/cts/deps-env.sh`:
+`DEQP_WORK` makes the CTS clone, and `MALI_DEQP_TOOLCHAIN` (`board =
+"nanopc_t6"`) unpacks Debian trixie's own `g++-14-aarch64-linux-gnu` 14.2.0
+with its cross glibc 2.41 from pinned `.deb`s, without root or docker (an
+x86_64 host with glibc 2.38 or newer). When the default toolchain directory is
+absent the script runs `tools/cts/deps-env.sh --build --board nanopc_t6
+MALI_DEQP_TOOLCHAIN` itself.
+
+The board's floors are GLIBC 2.41, GLIBCXX 3.4.33, CXXABI 1.3.15. After the
+build the script reads `objdump -T` of `deqp-gles2` and fails (nothing is
+written to `DIR`) when a version is newer than a floor, when the program is
+not AArch64 or does not use `/lib/ld-linux-aarch64.so.1`, or when
+`libGLESv2`, `libEGL` or `libGL` is a NEEDED entry. On success it prints
+`GLIBC_x GLIBCXX_y CXXABI_z: within the floors`.
+
+The dry run, on a host with the tip checked out and clean (paths are the
+host's; each `==` line is followed by the `+ command` lines the step would
+run):
+
+```sh
+tools/cts/mali-deqp-build.sh --out build/x-b --dry-run
+```
+
+```text
+mali-deqp-build: --dry-run: the steps below are printed, none is run
+mali-deqp-build: commit=<40 hex> dirty=no cts=93bca01861b0e3ef3c387027a9791e6d065f900c
+mali-deqp-build: CTS=<deps>/VK_GL_CTS TOOLCHAIN=<deps>/debian-trixie-arm64-cross BUILD=<repo>/build/cts/mali-aarch64
+== 1. the Debian trixie arm64 cross toolchain (MALI_DEQP_TOOLCHAIN, tools/cts/deps.toml)
+== 2. VK-GL-CTS 93bca01861b0e3ef3c387027a9791e6d065f900c with cts-yakogl-target.patch in <BUILD>/cts
+== 3. configure and build deqp-gles2 in <BUILD>/build
+== 4. check <BUILD>/build/modules/gles2/deqp-gles2: AArch64, /lib/ld-linux-aarch64.so.1, no GL/EGL link, objdump -T within GLIBC 2.41, GLIBCXX 3.4.33, CXXABI 1.3.15
+== 5. write <repo>/build/x-b (through <repo>/build/x-b.part)
+```
+
+The real build was not run for this recipe. Its time, the measured symbol
+floors and the program's size are in `build.txt` of the directory a real run
+makes (`build_seconds=`, `glibc_max=`, `glibcxx_max=`, `cxxabi_max=`,
+`deqp_gles2_bytes=`, with `commit=`, `cts=`, `cts_patch=`, `toolchain=` and
+`floors=`). Check that directory with the runner's dry run (section 4) before
+a session.
+
+## 3. The tree table: `tools/cts/mali-gles2-tree.txt`
+
+The 17,165-case `tools/cts/gles2-mustpass.txt` in 75 rows, one chunk (one
+dEQP process, at most 400 cases) each, in the form of `check-gles3-tree.py`'s
+reader: `# image T6S<session>R<row>: <count>`, then one comma-separated
+`dEQP-GLES2....*` filter line. Labels restart in each session (`T6S2R01`); the
+runner's `--rows A-B` counts rows over the whole file, 1-based.
+
+| session | rows | cases | what |
+|---|---|---|---|
+| S1 | 1-24 | 5,141 | everything but `functional.shaders` and `functional.fragment_ops` |
+| S2 | 25-38 | 4,872 | `fragment_ops` and `shaders.operator` |
+| S3 | 39-67 | 4,477 | shaders: random, matrix, swizzles, loops, indexing |
+| S4 | 68-75 | 2,675 | the other shaders groups |
+
+The groups that hang or fault on other boards (loops, indexing, random,
+texture, `fbo.render`, `draw`) stand alone in their rows, so a crash or GPU
+hang loses one row. The table's header holds the same sessions as
+`# session S<n>: rows A-B, N cases` lines.
+
+Check it against the mustpass list (no board, a second or two):
+
+```sh
+python3 tools/cts/check-gles3-tree.py --mustpass tools/cts/gles2-mustpass.txt \
+    --max 400 tools/cts/mali-gles2-tree.txt
+```
+
+It prints one `<label> <count>` line per row (`T6S1R01 224` ... `T6S4R08
+119`) and ends with
+
+```text
+check-gles3-tree: tools/cts/mali-gles2-tree.txt: 75 images, 17165 matched once, 0 not matched, 0 matched more than once, 0 empty images
+```
+
+It exits non-zero when a mustpass name is in no row or in two rows, a row
+selects nothing, or a row has more than `--max` cases. If
+`gles2-mustpass.txt` changes, the table and the counts above change with it.
+The runner and its self-test use the three-row
+`tools/cts/testdata/mali-deqp-run/tree.txt` of the same form.
 
 ## 4. The runner: `tools/cts/mali-deqp-run.sh`
 
@@ -354,6 +441,55 @@ slices of section 4:
   `<!-- mali-deqp-tally end -->`.
 - `--check-doc DOC SLICE...` exits 0 only when that block equals the
   `--markdown` output.
+
+Commands and expected output, run on a host with no board, on the synthetic
+slices of `tools/cts/testdata/mali-deqp/good/` (two slices, eight cases, a toy
+mustpass list; `--no-git` because their commit is not on main):
+
+```sh
+python3 -I tools/cts/mali-deqp-tally.py --self-test     # ends: 22 checks passed
+python3 -I tools/cts/mali-deqp-tally.py --check-cover tools/cts/testdata/mali-deqp/mustpass.txt \
+    --no-git tools/cts/testdata/mali-deqp/good/*         # no output, exit 0
+python3 -I tools/cts/mali-deqp-tally.py --tally --no-git tools/cts/testdata/mali-deqp/good/*
+```
+
+```text
+slices: 2
+Pass                   3
+Fail                   1
+NotSupported           1
+InternalError          1
+Crash                  1
+Lost                   1
+TOTAL                  8
+cause Crash               1  segfault
+cause Fail                1  Image comparison failed: max difference = (#, #, #)
+cause InternalError       1  refused:blend_equation_separate
+cause Lost                1  chunk-crash
+cause NotSupported        1  not supported
+```
+
+`--check-doc` prints nothing and exits 0 on `doc-current.md` of that
+directory; on `doc-stale.md` it prints `RULE doc-stale: <doc>: the
+mali-deqp-tally block differs from --markdown of the slices` and exits 1.
+Every failed rule prints `RULE <name>: ...`: `--check-cover` with the real
+mustpass list over these slices prints `RULE cover-unknown: <slice>
+results.tsv:<n>: <case> is not in the mustpass list` and `RULE cover-missing:
+<case> is in no slice` (then `... and N more`).
+
+After the four sessions, from the repository root and without `--no-git`
+(`S1` to `S4` stand for the four slice directories
+`tools/cts/log/<date>-t6-gles2-S<n>-<sha8>`):
+
+```sh
+python3 -I tools/cts/mali-deqp-tally.py --check-cover tools/cts/gles2-mustpass.txt S1 S2 S3 S4
+python3 -I tools/cts/mali-deqp-tally.py --tally S1 S2 S3 S4
+python3 -I tools/cts/mali-deqp-tally.py --tally --markdown S1 S2 S3 S4   # the block for the doc
+python3 -I tools/cts/mali-deqp-tally.py --check-doc docs/es2-cts-failures.md S1 S2 S3 S4
+```
+
+The first must print nothing. `docs/es2-cts-failures.md` has no tally block
+yet; the first real tally adds it.
 
 `tools/cts/mali-deqp-tally-selftest.sh` runs `--self-test` on the synthetic
 slices of `tools/cts/testdata/mali-deqp/` and pins its count of passed checks;
