@@ -13,14 +13,8 @@
 # results.tsv) and --check-doc (a hand-written fixture section passes, a wrong
 # count fails).
 #
-# Known disagreement, marked XFAIL below and not hidden: chunks.tsv's ssh_after
-# is yes|no as the runner writes it (mali-deqp-run.sh, header comment and the
-# printf of the chunk row) but ok|lost as the tally reads it (CHUNK_COLS check
-# in check_cover), so --check-cover rejects every chunk of an unmodified slice.
-# The checks after it run on copies of the slices with ssh_after mapped
-# yes->ok, no->lost, so that they test what they say. When either side is
-# fixed the XFAIL turns into an unexpected pass and fails the script: drop the
-# mapping and the XFAIL then.
+# chunks.tsv's ssh_after is yes|no on every chunk the runner ran, '-' on a row
+# it never ran (status lost), as the runner's header and the tally's agree.
 #
 #   tools/cts/mali-deqp-e2e-selftest.sh    prints "mali-deqp-e2e-selftest: N checks passed"
 #
@@ -34,7 +28,7 @@ RUNFIX=$HERE/testdata/mali-deqp-run
 FIX=$HERE/testdata/mali-deqp-e2e
 RUN=$HERE/mali-deqp-run.sh
 TALLY=$HERE/mali-deqp-tally.py
-EXPECT=29
+EXPECT=27
 base=${TMPDIR:-$REPO/build}
 mkdir -p "$base"
 tmp=$(mktemp -d "$base/mali-deqp-e2e-selftest-XXXXXX")
@@ -53,19 +47,6 @@ check() { # <what> <command...>
   else
     failed=$((failed + 1))
     echo "  FAIL  $what"
-  fi
-}
-# xfail <what> <command...>: a check known to fail until the owning side is
-# fixed. It counts as passed while the command fails, and fails when it passes.
-xfail() {
-  local what=$1
-  shift
-  if "$@" > /dev/null 2>&1; then
-    failed=$((failed + 1))
-    echo "  FAIL  XPASS $what: the known mismatch is gone; drop the XFAIL and the ssh_after mapping"
-  else
-    passed=$((passed + 1))
-    echo "  ok    XFAIL $what (known runner/tally mismatch, see the header)"
   fi
 }
 
@@ -144,66 +125,50 @@ tally() { (cd "$tmp/repo" && python3 -I "$TALLY" "$@"); }
 cover() { tally --check-cover --main-ref main "$FIX/mustpass.txt" "$@"; }
 SL=("$S/t6-gles2-e2e-clean" "$S/t6-gles2-e2e-crash" "$S/t6-gles2-e2e-hang")
 
-echo "mali-deqp-e2e-selftest: the runner's slices against --check-cover, as written"
-cover "${SL[@]}" > "$tmp/raw.out" 2> "$tmp/raw.err"
-raw_rc=$?
-xfail "--check-cover accepts the slices as the runner wrote them" test "$raw_rc" = 0
-check "the mismatch is exactly ssh_after yes|no vs ok|lost: 3 chunk-field lines, nothing else" \
-  bash -c "[ \$(wc -l < '$tmp/raw.err') = 3 ] && ! grep -v -E \"^RULE chunk-field: .* ssh_after 'yes' is not ok\\|lost\$\" '$tmp/raw.err' | grep -q ."
-
-# Copies with ssh_after mapped to the tally's vocabulary.
-mkdir -p "$tmp/ok"
-for d in "${SL[@]}"; do
-  cp -r "$d" "$tmp/ok/"
-  awk -F'\t' -v OFS='\t' 'NR > 1 { $8 = ($8 == "yes" ? "ok" : $8 == "no" ? "lost" : $8) } { print }' \
-    "$d/chunks.tsv" > "$tmp/ok/$(basename "$d")/chunks.tsv"
-done
-OK=("$tmp/ok/t6-gles2-e2e-clean" "$tmp/ok/t6-gles2-e2e-crash" "$tmp/ok/t6-gles2-e2e-hang")
-
-echo "mali-deqp-e2e-selftest: --check-cover on the slices (ssh_after mapped)"
-check "--check-cover passes on the three slices against the tiny mustpass" cover "${OK[@]}"
+echo "mali-deqp-e2e-selftest: --check-cover on the slices as the runner wrote them"
+check "--check-cover passes on the three slices against the tiny mustpass" cover "${SL[@]}"
 check "the meta.txt commit is the full 40-hex commit of the throwaway main" \
-  bash -c "grep -qx 'commit=$c1' '${OK[0]}/meta.txt'"
-cover "${OK[0]}" > /dev/null 2> "$tmp/one.err"
+  bash -c "grep -qx 'commit=$c1' '${SL[0]}/meta.txt'"
+cover "${SL[0]}" > /dev/null 2> "$tmp/one.err"
 check "--check-cover fails on one slice alone: RULE cover-missing for the 4 cases of E2 and E3" \
   bash -c "[ \$(grep -c '^RULE cover-missing: ' '$tmp/one.err') = 4 ]"
 
 # A case removed from results.tsv of the crash slice.
-cp -r "${OK[1]}" "$tmp/minus-case"
-grep -v '^dEQP-GLES2.functional.flush_finish.wait	' "${OK[1]}/results.tsv" > "$tmp/minus-case/results.tsv"
-cover "${OK[0]}" "$tmp/minus-case" "${OK[2]}" > "$tmp/minus-case.out" 2> "$tmp/minus-case.err"
+cp -r "${SL[1]}" "$tmp/minus-case"
+grep -v '^dEQP-GLES2.functional.flush_finish.wait	' "${SL[1]}/results.tsv" > "$tmp/minus-case/results.tsv"
+cover "${SL[0]}" "$tmp/minus-case" "${SL[2]}" > "$tmp/minus-case.out" 2> "$tmp/minus-case.err"
 check "--check-cover fails when a case is removed from results.tsv" test $? = 1
 check "...and names it: RULE cover-missing: dEQP-GLES2.functional.flush_finish.wait" \
   grep -qx 'RULE cover-missing: dEQP-GLES2.functional.flush_finish.wait is in no slice' "$tmp/minus-case.err"
 check "...and only that one RULE line" bash -c "[ \$(wc -l < '$tmp/minus-case.err') = 1 ]"
 
 # A case added twice (a duplicated results row).
-cp -r "${OK[0]}" "$tmp/dup"
-{ cat "${OK[0]}/results.tsv"; sed -n 2p "${OK[0]}/results.tsv"; } > "$tmp/dup/results.tsv"
+cp -r "${SL[0]}" "$tmp/dup"
+{ cat "${SL[0]}/results.tsv"; sed -n 2p "${SL[0]}/results.tsv"; } > "$tmp/dup/results.tsv"
 check "--check-cover fails on a duplicated case (RULE cover-duplicate)" \
-  rule_fail cover-duplicate cover "$tmp/dup" "${OK[1]}" "${OK[2]}"
+  rule_fail cover-duplicate cover "$tmp/dup" "${SL[1]}" "${SL[2]}"
 
 # A chunk row lacking its kmsg/resets/ssh_after (and the rest) fields.
-cp -r "${OK[0]}" "$tmp/short"
-awk -F'\t' -v OFS='\t' 'NR > 1 { print $1, $2, $3, $4, $5; next } { print }' "${OK[0]}/chunks.tsv" > "$tmp/short/chunks.tsv"
-cover "$tmp/short" "${OK[1]}" "${OK[2]}" > /dev/null 2> "$tmp/short.err"
+cp -r "${SL[0]}" "$tmp/short"
+awk -F'\t' -v OFS='\t' 'NR > 1 { print $1, $2, $3, $4, $5; next } { print }' "${SL[0]}/chunks.tsv" > "$tmp/short/chunks.tsv"
+cover "$tmp/short" "${SL[1]}" "${SL[2]}" > /dev/null 2> "$tmp/short.err"
 check "--check-cover fails on a chunk row cut after seconds" test $? = 1
 check "...with chunk-field errors for kmsg, resets and ssh_after" \
   bash -c "for c in kmsg resets ssh_after; do grep -q \"^RULE chunk-field: .* \$c is empty\" '$tmp/short.err' || exit 1; done"
-cp -r "${OK[0]}" "$tmp/empty"
-awk -F'\t' -v OFS='\t' 'NR > 1 { $6 = ""; $7 = ""; $8 = "" } { print }' "${OK[0]}/chunks.tsv" > "$tmp/empty/chunks.tsv"
-cover "$tmp/empty" "${OK[1]}" "${OK[2]}" > /dev/null 2> "$tmp/empty.err"
+cp -r "${SL[0]}" "$tmp/empty"
+awk -F'\t' -v OFS='\t' 'NR > 1 { $6 = ""; $7 = ""; $8 = "" } { print }' "${SL[0]}/chunks.tsv" > "$tmp/empty/chunks.tsv"
+cover "$tmp/empty" "${SL[1]}" "${SL[2]}" > /dev/null 2> "$tmp/empty.err"
 check "--check-cover fails on empty kmsg/resets/ssh_after fields" test $? = 1
 check "...one chunk-field line for each of the three" \
   bash -c "[ \$(grep -c '^RULE chunk-field: ' '$tmp/empty.err') = 3 ]"
 
 echo "mali-deqp-e2e-selftest: --tally against the slices"
-tally --tally "${OK[@]}" > "$tmp/tally.txt"
-cat "${OK[@]/%//results.tsv}" | awk -F'\t' '$1 ~ /^dEQP/ { n[$2]++; t++ } END { for (s in n) print s, n[s]; print "TOTAL", t }' | sort > "$tmp/want.status"
+tally --tally "${SL[@]}" > "$tmp/tally.txt"
+cat "${SL[@]/%//results.tsv}" | awk -F'\t' '$1 ~ /^dEQP/ { n[$2]++; t++ } END { for (s in n) print s, n[s]; print "TOTAL", t }' | sort > "$tmp/want.status"
 awk '$1 ~ /^(Pass|Fail|Lost|TOTAL)$/ && NF == 2 { print $1, $2 }' "$tmp/tally.txt" | sort > "$tmp/got.status"
 check "tally: the status counts and the total are awk's over results.tsv (4 Pass, 1 Fail, 2 Lost, 7)" \
   bash -c "diff '$tmp/want.status' '$tmp/got.status' && grep -qx 'Pass 4' '$tmp/got.status' && grep -qx 'TOTAL 7' '$tmp/got.status'"
-cat "${OK[@]/%//results.tsv}" | awk -F'\t' '$2 == "Lost" { n[$3]++ } END { for (r in n) print "Lost", r, n[r] }' | sort > "$tmp/want.lost"
+cat "${SL[@]/%//results.tsv}" | awk -F'\t' '$2 == "Lost" { n[$3]++ } END { for (r in n) print "Lost", r, n[r] }' | sort > "$tmp/want.lost"
 awk '$1 == "cause" && $2 == "Lost" { print "Lost", $4, $3 }' "$tmp/tally.txt" | sort > "$tmp/got.lost"
 check "tally: each Lost reason counted as in results.tsv (chunk-crash 1, chunk-hang 1)" \
   bash -c "diff '$tmp/want.lost' '$tmp/got.lost' && [ \$(wc -l < '$tmp/got.lost') = 2 ]"
@@ -213,7 +178,7 @@ check "tally: the cause counts add up to the non-Pass cases (3)" \
   bash -c "[ \$(awk '\$1 == \"cause\" { s += \$3 } END { print s }' '$tmp/tally.txt') = 3 ]"
 chunk_sums() {
   local d
-  for d in "${OK[@]}"; do
+  for d in "${SL[@]}"; do
     [ "$(awk -F'\t' 'NR > 1 { s += $3 } END { print s }' "$d/chunks.tsv")" = "$(($(wc -l < "$d/results.tsv") - 1))" ] || return 1
   done
 }
@@ -226,12 +191,12 @@ sed 's/^| Lost | chunk-hang | 1 |$/| Lost | chunk-hang | 2 |/' "$tmp/doc-right.m
 check "the wrong-count fixtures differ from the right one" \
   bash -c "! cmp -s '$tmp/doc-right.md' '$tmp/doc-wrong.md' && ! cmp -s '$tmp/doc-right.md' '$tmp/doc-wrong-cause.md'"
 check "--check-doc passes on the hand-written section for these counts" \
-  tally --check-doc "$tmp/doc-right.md" "${OK[@]}"
+  tally --check-doc "$tmp/doc-right.md" "${SL[@]}"
 check "--check-doc fails on a wrong status count (RULE doc-stale)" \
-  rule_fail doc-stale tally --check-doc "$tmp/doc-wrong.md" "${OK[@]}"
+  rule_fail doc-stale tally --check-doc "$tmp/doc-wrong.md" "${SL[@]}"
 check "--check-doc fails on a wrong cause count (RULE doc-stale)" \
-  rule_fail doc-stale tally --check-doc "$tmp/doc-wrong-cause.md" "${OK[@]}"
-tally --tally --markdown "${OK[@]}" > "$tmp/md.out"
+  rule_fail doc-stale tally --check-doc "$tmp/doc-wrong-cause.md" "${SL[@]}"
+tally --tally --markdown "${SL[@]}" > "$tmp/md.out"
 check "the hand-written section is byte for byte the tally's own --markdown" \
   bash -c "sed -n '/mali-deqp-tally begin/,/mali-deqp-tally end/p' '$tmp/doc-right.md' | cmp - '$tmp/md.out'"
 
