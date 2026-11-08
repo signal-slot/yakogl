@@ -141,6 +141,22 @@ struct osal_v3d_cpu_of {
  * -ENOTSUP where it runs no TFU jobs. A queued job that fails is the OSAL's
  * to log and recover from; the job's fence keeps the render's result. */
 #define OSAL_QUERY_V3D_TFU_QUEUE 17u
+/* in = uint32_t (out pointer, 4 bytes): the site of the next wait(), one of
+ * OSAL_WAIT_SITE_*: the render service's 20 ms re-post line names it. Only the
+ * log differs. The Rust side is OSAL_WAIT_SITE_* in src/osal/mod.rs. */
+#define OSAL_QUERY_WAIT_SITE 18u
+#define OSAL_WAIT_SITE_SHUTDOWN 1u
+#define OSAL_WAIT_SITE_VIS_SLOT 2u
+#define OSAL_WAIT_SITE_FRAME_SET 3u
+#define OSAL_WAIT_SITE_MIP_ERR 4u
+#define OSAL_WAIT_SITE_MIP_TAIL 5u
+#define OSAL_WAIT_SITE_SETTLE 6u
+#define OSAL_WAIT_SITE_DS_DUMP 7u
+#define OSAL_WAIT_SITE_FINISH 8u
+#define OSAL_WAIT_SITE_SWAP 9u
+/* The OSAL's own waits (C only): the pending frees' full queue, a reclaim. */
+#define OSAL_WAIT_SITE_PENDING 10u
+#define OSAL_WAIT_SITE_RECLAIM 11u
 /* The steps, in src/draw_steps.rs Step order; record.rs numbers them from
  * CHECK_RUN_STEP_GL_PROGRAM. */
 #define OSAL_DRAW_STEPS 12u

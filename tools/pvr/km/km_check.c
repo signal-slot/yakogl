@@ -242,7 +242,7 @@ static int r_render_submit(const struct pvr_render_kick *k, uint32_t *fence)
 }
 static int r_render_wait(uint32_t fence, uint32_t timeout_ms)
 {
-	return yd_pvr_render_wait(&km, &rr, fence, timeout_ms, "frame fence");
+	return yd_pvr_render_wait(&km, &rr, fence, timeout_ms, "frame fence", NULL);
 }
 static uint32_t r_render_completed(void) { return yd_pvr_render_completed(&km, &rr); }
 static void r_render_offsets(uint32_t o[8])

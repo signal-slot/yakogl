@@ -2324,7 +2324,7 @@ impl Backend {
         }
     }
 
-    fn wait_fence(&mut self, fence: i64) -> i32 {
+    fn wait_fence(&mut self, fence: i64, site: u32) -> i32 {
         if fence <= 0 || fence <= self.completed_fence() {
             return 0;
         }
@@ -2332,6 +2332,7 @@ impl Backend {
         let Some(wait) = osal::ops().and_then(|o| o.wait) else {
             return -ENODEV; /* pvr_backend_init() checked it */
         };
+        osal::set_wait_site(site);
         // SAFETY: an OSAL entry of the documented signature.
         let rc = unsafe { wait(fence, WAIT_MS as i64 * 1000) };
         if rc != 0 {
@@ -3439,7 +3440,7 @@ pub extern "C" fn pvr_backend_shutdown() {
     }
     let b = &mut p.b;
     let last = b.last_fence;
-    if b.wait_fence(last) != 0 {
+    if b.wait_fence(last, osal::OSAL_WAIT_SITE_SHUTDOWN) != 0 {
         glog!("pvr_backend: shutdown: kick {} did not complete: the backend's pool memory is kept", last);
         b.inited = false;
         return;
@@ -3550,7 +3551,7 @@ fn vis_take_slot(b: &mut Backend) -> Option<usize> {
         return Some(i);
     }
     let oldest = (0..VIS_SLOTS).min_by_key(|&i| b.vis_fence[i])?;
-    if b.wait_fence(b.vis_fence[oldest]) != 0 {
+    if b.wait_fence(b.vis_fence[oldest], osal::OSAL_WAIT_SITE_VIS_SLOT) != 0 {
         return None;
     }
     vis_fold(b);
@@ -5286,7 +5287,7 @@ fn frame_begin_with(p: &mut Pvr, d: &GlesDraw, (frame_ds, frame_s): (DsStore, Ds
      * cursors replace them */
     note_arena_hw(b);
     b.cur = (b.cur + 1) % b.nsets;
-    if b.wait_fence(b.sets[b.cur].fence) != 0 {
+    if b.wait_fence(b.sets[b.cur].fence, osal::OSAL_WAIT_SITE_FRAME_SET) != 0 {
         glog_once!("pvr_backend: reusing frame set {} before its kick completed", b.cur);
     }
     b.frame_set_activate(b.cur);
@@ -6272,13 +6273,13 @@ fn mip_chain_gpu(p: &mut Pvr, t: &GlesTextureBind, levels: u32) -> Result<Option
              * filter is about to rewrite them: wait them out first */
             let _ = flush(p);
             let last = p.b.last_fence;
-            let _ = p.b.wait_fence(last);
+            let _ = p.b.wait_fence(last, osal::OSAL_WAIT_SITE_MIP_ERR);
             return Err("a level's draw was refused");
         }
     }
     if flush(p) != 0 {
         let last = p.b.last_fence;
-        let _ = p.b.wait_fence(last);
+        let _ = p.b.wait_fence(last, osal::OSAL_WAIT_SITE_MIP_ERR);
         return Err("the chain's last kick did not submit");
     }
     p.b.mip_fence = p.b.last_fence;
@@ -6288,7 +6289,7 @@ fn mip_chain_gpu(p: &mut Pvr, t: &GlesTextureBind, levels: u32) -> Result<Option
     /* the GL core filters the tail from level `last` on the CPU: it must be
      * in the storage first */
     let fence = p.b.mip_fence;
-    if p.b.wait_fence(fence) != 0 {
+    if p.b.wait_fence(fence, osal::OSAL_WAIT_SITE_MIP_TAIL) != 0 {
         return Err("the chain's kicks did not complete");
     }
     Ok(Some(last))
@@ -6368,7 +6369,7 @@ pub unsafe extern "C" fn pvr_return_mipmap_chain(_b: *const GlesTextureBind, _le
         return;
     }
     let fence = b.mip_fence;
-    if b.wait_fence(fence) != 0 {
+    if b.wait_fence(fence, osal::OSAL_WAIT_SITE_SETTLE) != 0 {
         glog_once!("pvr_backend: the kicks that made a mipmap chain did not complete: the CPU reads what they left");
     }
 }
@@ -9119,7 +9120,7 @@ fn flush(p: &mut Pvr) -> i32 {
     if let Some(i) = b.frame_ds.buf() {
         b.ds[i].valid = true; /* the ISP stores this kick's depth/stencil */
         if b.opt(PVR_BACKEND_OPT_DS_DUMP) != 0 {
-            let rc = b.wait_fence(fence);
+            let rc = b.wait_fence(fence, osal::OSAL_WAIT_SITE_DS_DUMP);
             if rc != 0 {
                 return rc;
             }
@@ -9167,7 +9168,7 @@ pub extern "C" fn pvr_backend_finish() -> i32 {
     // SAFETY: single-threaded by contract; taken once per entry point.
     let b = unsafe { &mut PVR.get().b };
 
-    b.wait_fence(b.last_fence)
+    b.wait_fence(b.last_fence, osal::OSAL_WAIT_SITE_FINISH)
 }
 
 #[no_mangle]
@@ -9187,7 +9188,7 @@ pub extern "C" fn pvr_backend_finish_previous() -> i32 {
     } else {
         0
     };
-    let rc = b.wait_fence(target);
+    let rc = b.wait_fence(target, osal::OSAL_WAIT_SITE_SWAP);
     if rc != 0 && one {
         glog_once!("pvr_backend: one kick in flight: the swap's own kick {} did not complete ({})", target, rc);
     }

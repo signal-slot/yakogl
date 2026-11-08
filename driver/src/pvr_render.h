@@ -216,6 +216,9 @@ int pvr_render_map_phys(enum pvr_render_heap heap, uint64_t phys, uint32_t size,
 int pvr_render_submit(const struct pvr_render_kick *kick, uint32_t *fence_out);
 /* Wait for a fence: 0 done, -ETIMEDOUT, -EIO on a firmware HWR. */
 int pvr_render_wait(uint32_t fence, uint32_t timeout_ms);
+/* Name the call site of the next pvr_render_wait (1..11, the OSAL_WAIT_SITE_*
+ * of osal_internal.h; 0 none): its 20 ms re-post line says it. Only the log. */
+void pvr_render_wait_site(uint32_t site);
 /* The highest fence the GPU has completed (no wait). */
 uint32_t pvr_render_completed(void);
 /* Instrument: the last completed kick's times in microseconds (struct
