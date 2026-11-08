@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 /* ---- case 221: a mixed-divisor instanced draw with gl_InstanceID (instmix) --
  * Included by gl_test.c after case 220 (it uses that file's static helpers and
  * is built wherever gl_test.c is, with no build-file change).
