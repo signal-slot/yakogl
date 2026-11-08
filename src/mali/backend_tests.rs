@@ -2400,6 +2400,57 @@ mod gl {
         });
     }
 
+    /// gl_test case 55 (es3mrt) attaches two textures to GL_COLOR_ATTACHMENT0
+    /// and 1 of one FBO before any draw. With `DRAW_TARGETS` at 1 the GL core
+    /// answered GL_INVALID_ENUM for the second (issue #32); now both attach
+    /// with no GL error, the framebuffer is complete and the queries say four
+    /// (docs/notes/mali-mrt-attachments.md).
+    #[test]
+    fn case_55s_second_colour_attachment_raises_no_gl_error() {
+        use crate::gl::state::glGetIntegerv;
+        let _rig = Rig::new(true);
+        assert_eq!(backend::init(), 0);
+        // SAFETY: the rig serialises the library; plain GL calls.
+        unsafe {
+            let ctx = context::gl_context_create(64, 64);
+            assert!(!ctx.is_null());
+            let (mut tex, mut fbo) = ([0; 2], 0);
+            glGenTextures(2, tex.as_mut_ptr());
+            for t in tex {
+                glBindTexture(GL_TEXTURE_2D, t);
+                glTexImage2D(
+                    GL_TEXTURE_2D,
+                    0,
+                    GL_RGBA as GLint,
+                    64,
+                    64,
+                    0,
+                    GL_RGBA,
+                    GL_UNSIGNED_BYTE,
+                    core::ptr::null(),
+                );
+            }
+            glGenFramebuffers(1, &mut fbo);
+            glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex[0], 0);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, tex[1], 0);
+            assert_eq!(glGetError(), GL_NO_ERROR, "case 55's attach");
+            assert_eq!(glCheckFramebufferStatus(GL_FRAMEBUFFER), GL_FRAMEBUFFER_COMPLETE);
+            for q in [GL_MAX_COLOR_ATTACHMENTS, GL_MAX_DRAW_BUFFERS] {
+                let mut n: GLint = 0;
+                glGetIntegerv(q, &mut n);
+                assert_eq!(n, DRAW_TARGETS as GLint);
+            }
+            assert_eq!(DRAW_TARGETS, 4);
+            /* the last point is an attachment too, the one past it is not */
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + 3, GL_TEXTURE_2D, tex[1], 0);
+            assert_eq!(glGetError(), GL_NO_ERROR);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + 4, GL_TEXTURE_2D, tex[1], 0);
+            assert_ne!(glGetError(), GL_NO_ERROR);
+            context::gl_context_destroy(ctx);
+        }
+    }
+
     /// One stage's push block as the frame names it: its FAU register
     /// (`reg`), the words it counts.
     fn push_block(words: &[u64], reg: u32) -> Vec<u32> {
