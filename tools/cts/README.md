@@ -346,7 +346,14 @@ entry in the list stops the run (exit 2) with the same message as before.
 `board-stage.sh x2` takes the sets `common`, `deqp` and `gles3`. `x2 ms4` is
 refused with exit 2 (the 4x multisample tree is the AM62P's), as is any other
 board or set name (the usage line); `imx8mp gles3` and `pi4 gles3` stay
-refused too. The x2 stage runs no board command,
+refused too. `tools/cts/board-stage.sh x2 gles3` checks the gles3 stage 1
+(`libdeqp-gles3-package.a` under `$DEQP_STAGE1_GLES3/build/modules/gles3/`;
+exit 2 when it is missing), then runs `IMX8MP_BOARD=x2
+tools/cts/imx8mp-deqp-build.sh --gles3 es3-<sha8> 'dEQP-GLES3.info.*' --table
+tools/cts/imx8mp-gles3-tree.txt` and writes the image to
+`$IMX8MP_OUT/x2/es3-<sha8>/zephyr/zephyr.bin` (the build log is
+`$IMX8MP_OUT/x2/es3-<sha8>.log`; a failed build exits 1). The x2 stage runs no
+board command,
 so it reads no `BOARD_HOST` and no `BOARD_UART` and needs no lease. Its dry
 run (`BOARD_STAGE_DRY_RUN=1`) names the set's output before the layout is read
 and needs none of the entries above.
