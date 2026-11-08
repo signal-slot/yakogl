@@ -56,7 +56,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/.." && pwd)
 B="$HERE/board.sh"
 TD="$HERE/testdata"
-WANT_CHECKS=333
+WANT_CHECKS=338
 
 S=$(mktemp -d)
 trap 'rm -rf "$S"' EXIT
@@ -1236,6 +1236,45 @@ check "x2 tally: the TALLY line has no-result 0 from the '-' (absent is not coun
 check "record --words 3 on that row prints w3 as '-', the line says begun=derived" \
     eval 'o=$("$YAKOGL_TOOLS" record --words 3 594b0801 00050003 00000000) && grep -q " -$" <<<"$o" &&
           o=$("$YAKOGL_TOOLS" record --words 3 --line 594b0801 00050003 00000000) && grep -q "begun=derived tally=3,5,0,0,8" <<<"$o"'
+# the page count is page 0's own (its w0 low byte counts a Fail and any other status
+# alike): e01 has no Fail and one other status, e02 lost its second page, e03 is e00 as
+# a run directory before 15e7d174 wrote it (a stand-in fourth word 00000000, row and pages)
+TY="$S/x2tree2"
+mkdir -p "$TY"
+printf 'e0%s\t%s\t%s\tdEQP-GLES3.functional.attribute_location.*\n' 1 "$S/one.bin" 1 2 "$S/one.bin" 2 3 "$S/one.bin" 3 > "$TY/tree.txt"
+xpage() { mkrun "$TY/20261106-1600-$1-$sha8" board=x2 boot=kexec-dev "name=$1" probe=0 back=1 lost=3 up=40; echo "$2" > "$TY/20261106-1600-$1-$sha8/snvs.txt"; : > "$TY/20261106-1600-$1-$sha8/INDEX.txt"; }
+xpage e01 '594b0801 00000002 00010000'
+xpage e01-p0 "594b0a01 ffff${xc[0]} ffffffff"
+xpage e02 '594b0801 00050003 00000000'
+xpage e02-p0 "594b0a05 ${xc[1]}${xc[0]} ${xc[3]}${xc[2]}"
+xpage e03 '594b0801 00050003 00000000 00000000'
+xpage e03-p0 "594b0a05 ${xc[1]}${xc[0]} ${xc[3]}${xc[2]} 00000000"
+xpage e03-p1 "594b0a05 ffff${xc[4]} ffffffff 00000000"
+"$B" x2 tally "$TY" > "$S/new-x2b.txt" 2>&1
+check "x2 tally: a row with 0 failed and 1 other reads its page: the name in results.tsv" \
+    eval 'grep -qP "^1\t[^\t]*\t3\t2\t0\t0\t1\t-\tdEQP-GLES3.functional.attribute_location.bind.float$" "$TY/results.tsv"'
+check "x2 tally: page 0 says five names (two pages of four), page 1 never finished: PAGE1-ABSENT after the four" \
+    eval 'grep -qP "^2\t.*\t8\t3\t5\t0\t0\t-\t([^;\t]+;){4}PAGE1-ABSENT$" "$TY/results.tsv"'
+check "x2 tally: the four-word form (w3 a stand-in 00000000) reads as three words: begun 8, no-result '-', five names, no crc:" \
+    eval 'l=$(grep -P "^3\t" "$TY/results.tsv") && grep -qP "\t8\t3\t5\t0\t0\t-\t" <<<"$l" && ! grep -q "crc:" <<<"$l" &&
+          for k in "${x2n[@]}"; do grep -qF "bind.$k" <<<"$l" || exit 1; done'
+check "x2: the TALLY line counts the other status and no no-result; the four-word row's verdict is the three-word row's" \
+    eval 'grep -q "^TALLY (3 entries): begun 19 passed 8 failed 10 notsup 0 other 1 noresult 0" "$S/new-x2b.txt" &&
+          a=$("$B" x2 tally "$TY/20261106-1600-e02-$sha8" 2>&1); b=$("$B" x2 tally "$TY/20261106-1600-e03-$sha8" 2>&1)
+          grep -q "boot_verdict=complete .*record=594b0801,00050003,00000000 " <<<"$b" && [ "${a//e02/e03}" = "$b" ]'
+# the same count on the i.MX8MP: page 0 of six names says seven, page 1 never finished
+TZ="$S/imxtree2"
+mkdir -p "$TZ"
+printf 'e00\t%s\t0\tdEQP-GLES3.functional.attribute_location.*\n' "$S/one.bin" > "$TZ/tree.txt"
+mkrun "$TZ/20261003-1600-e00-$sha8" board=imx8mp boot=uboot-tftp name=e00 probe=0 back=1 up=40
+printf '594b0801 00070001 00000000 %s0008\n' "${xc[0]}" > "$TZ/20261003-1600-e00-$sha8/snvs.txt"
+mkrun "$TZ/20261003-1600-e00-p0-$sha8" board=imx8mp boot=uboot-tftp name=e00-p0 probe=0 back=1
+printf '594b0a07 %s%s %s%s ffff%s\n' "${xc[1]}" "${xc[0]}" "${xc[3]}" "${xc[2]}" "${xc[4]}" > "$TZ/20261003-1600-e00-p0-$sha8/snvs.txt"
+: > "$TZ/20261003-1600-e00-$sha8/INDEX.txt"
+: > "$TZ/20261003-1600-e00-p0-$sha8/INDEX.txt"
+"$B" imx8mp tally "$TZ" > /dev/null 2>&1
+check "imx8mp tally: page 0 says seven names, page 1 never finished: PAGE1-ABSENT after the five" \
+    eval 'grep -qP "\t([^;\t]+;){5}PAGE1-ABSENT$" "$TZ/results.tsv"'
 
 echo "== 3h. Pi 5 probes: the end line of each tools/probes/rpi_5 probe ends the run with its own verdict"
 # each probe's last line as its source prints it (rpi5_ident's from its branch,

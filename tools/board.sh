@@ -667,7 +667,8 @@ verdict_line() {
     # a capture whose console.txt was never derived (an imported bridge log)
     [ -f "$console" ] || [ ! -f "$dir/console.ts" ] || console=$dir/console.ts
     name=$(mget name "$dir"); boot=$(mget boot "$dir"); probe=$(mget probe "$dir"); rcc=$(mget rc_cycle "$dir")
-    rec0=$(mget rec0 "$dir")
+    # shellcheck disable=SC2046  # the words of the cleared record
+    rec0=$(rec_args $(mget rec0 "$dir"))
     case "$boot" in
     tryboot)
         if [ "$(mget back "$dir")" != 1 ]; then bv=not_back; rcc=${rcc:-5}
@@ -693,7 +694,7 @@ verdict_line() {
         elif [ "$boot" = uboot-mmc ]; then
             # no console and no server log: the board came back from a new boot
             # with the one-shot cleared (rc_cycle 6 otherwise), and the record
-            rec=$(cat "$dir/snvs.txt" 2>/dev/null); shown=$rec
+            rec=$(rec_file "$dir"); shown=$rec
             up=$(mget up "$dir")
             if [ "$rcc" = 5 ]; then
                 if [ -n "$up" ]; then bv=no_reboot; else bv=no_answer; fi
@@ -707,7 +708,7 @@ verdict_line() {
                 tftp="done:$(sed -n 's/.* done .* bytes=\([0-9]*\) .*seconds=\([0-9.]*\).*/\1B\/\2s/p' <<<"$tl" | head -1)"
             elif grep -q " refused .*cause=not_found" <<<"$tl"; then tftp=not_found
             elif [ -n "$tl" ]; then tftp=failed; fi
-            rec=$(cat "$dir/snvs.txt" 2>/dev/null); shown=$rec
+            rec=$(rec_file "$dir"); shown=$rec
             up=$(mget up "$dir")
             if [ "$rcc" = 5 ]; then
                 if [ -n "$up" ]; then bv=no_reboot; else bv=no_answer; fi
@@ -724,7 +725,7 @@ verdict_line() {
         elif [ "$(mget back "$dir")" != 1 ]; then bv=not_back; rcc=${rcc:-5}
         elif [ -n "$REC_SINK" ]; then
             if [ -z "$(mget lost "$dir")" ]; then bv=no_jump; else bv=complete; fi
-            rec=$(cat "$dir/snvs.txt" 2>/dev/null); shown=$rec
+            rec=$(rec_file "$dir"); shown=$rec
         # a fatal error is never done, summary or not; the RTI feeder's end
         # (the image outlived its bounded feeding) only counts without a result
         elif grep -aq 'ZEPHYR FATAL ERROR' < <(plain "$console" 2>/dev/null); then bv=fatal
@@ -850,7 +851,7 @@ write_index() {
         echo "verdict: $V_LINE"
         [ -n "$V_SCAN" ] && echo "phase scan: $V_SCAN"
         echo "records:"
-        rec=$(cat "$dir/snvs.txt" 2>/dev/null)
+        rec=$(rec_file "$dir")
         if [ -n "$rec" ]; then
             # shellcheck disable=SC2086  # four words, three on the X2
             yrec $rec 2>&1 | sed 's/^/  /'
@@ -1072,6 +1073,21 @@ yrec() {
     local mode=
     case ${1:-} in --*) mode=$1; shift ;; esac
     if [ $# = 3 ]; then ytools record --words 3 ${mode:+"$mode"} "$@"; else ytools record ${mode:+"$mode"} "$@"; fi
+}
+# rec_args WORDS...: a record's words as the board stores them. The X2 stores
+# w0..w2 only; a fourth word 00000000 there is the stand-in that run directories
+# written before 15e7d174 carry (the first lpgpr_read), not a stored w3: it is
+# dropped, so every reader decodes such a record as three words (yrec --words 3)
+# and no value stands in for the missing word
+rec_args() {
+    if [ "$REC_SINK" = devmem ] && [ $# = 4 ] && [ "$4" = 00000000 ]; then echo "$1 $2 $3"; else echo "$*"; fi
+}
+# rec_file DIR: the record of the run DIR (its snvs.txt) through rec_args; empty when none
+rec_file() {
+    local w
+    w=$(cat "$1/snvs.txt" 2>/dev/null)
+    # shellcheck disable=SC2086  # the words
+    [ -z "$w" ] || rec_args $w
 }
 # snvs_read: the four words, "w0 w1 w2 w3", empty when the read failed
 snvs_read() { b "sudo -n od -A n -t x4 $NV" 2>/dev/null | xargs; }
@@ -2313,7 +2329,7 @@ tree_run_one() {
 name_pages() {
     local name=$1 img=$2 sel=$3 out=$4 d words t tp tf tn to tb nr page low per
     d=$(finished_run "$out" "$name" "$img") || return 0
-    words=$(cat "$d/snvs.txt" 2>/dev/null)
+    words=$(rec_file "$d")
     [ -n "$words" ] || return 0
     # shellcheck disable=SC2086  # four words, three on the X2
     t=$(yrec --line $words | sed -n 's/.* tally=//p')
@@ -2324,10 +2340,11 @@ name_pages() {
     for page in $(seq 0 39); do
         tree_run_one "$name-p$page" "$img" $((0x8000 | page << 8 | sel)) "$out"
         d=$(finished_run "$out" "$name-p$page" "$img") || break
-        words=$(cat "$d/snvs.txt" 2>/dev/null)
+        words=$(rec_file "$d")
         [ -n "$words" ] && [ $(((0x${words%% *} >> 8) & 255)) = 10 ] || break
         low=$((0x${words%% *} & 255))
-        # a page holds two names a word after w0: six, or four on the X2 (no w3)
+        # a page holds two names a word after w0: six, or four on the X2 (no w3;
+        # rec_file drops the stand-in of an older X2 page file)
         # shellcheck disable=SC2086
         set -- $words; per=$((($# - 1) * 2))
         [ $((per * (page + 1))) -ge "$low" ] && break
@@ -2461,12 +2478,12 @@ py_list() { local s="" x; for x in "$@"; do s+="${s:+, }'$x'"; done; echo "[$s]"
 # wrote them (results.tsv, rows.md, the TALLY line): begun passed failed notsup
 # other noresult and the failing names; '-' is absent, never 0
 results_tsv() {
-    local dir=$1 name img sel filt d words t tp tf tn to tb nr page c w p f n inside joined line derived fs=() names=()
+    local dir=$1 name img sel filt d words t tp tf tn to tb nr page last per c w p f n inside joined line derived fs=() names=() ws=()
     printf '# index\tfilter\tbegun\tpassed\tfailed\tnotsup\tother\tnoresult\tfailing names (%s-separated)\n' "';'" > "$dir/results.tsv"
     while IFS=$'\t' read -r name img sel filt; do
         d=$(finished_run "$dir" "$name" "$img") || d=
         words=
-        [ -n "$d" ] && words=$(cat "$d/snvs.txt" 2>/dev/null)
+        [ -n "$d" ] && words=$(rec_file "$d")
         t=
         derived=0
         # shellcheck disable=SC2086  # four words, three on the X2
@@ -2487,10 +2504,24 @@ results_tsv() {
         if [ "$derived" = 1 ]; then nr=-; fi
         names=()
         IFS=, read -ra fs <<<"$filt"
+        # the row's pages: as many as page 0 itself says, ceil(low / per) with low its
+        # w0 low byte (every case that is neither Pass nor NotSupported, a Fail and any
+        # other status alike, deqp_snvs.c) and per its names (six, four on the X2); a
+        # page below that count that did not finish is PAGE<n>-ABSENT. No page 0: the
+        # names were not read (NAMES=0, or the row's page boots did not run)
+        last=0
         for page in $(seq 0 39); do
-            p=$(finished_run "$dir" "$name-p$page" "$img") || break
-            words=$(cat "$p/snvs.txt" 2>/dev/null)
-            if [ -z "$words" ] || [ $(((0x${words%% *} >> 8) & 255)) != 10 ]; then names+=("PAGE$page-NOT-KIND-10"); break; fi
+            if ! p=$(finished_run "$dir" "$name-p$page" "$img"); then
+                [ "$page" -lt "$last" ] && names+=("PAGE$page-ABSENT")
+                break
+            fi
+            words=$(rec_file "$p")
+            read -ra ws <<<"$words"
+            if [ "${#ws[@]}" -lt 3 ] || [ $(((0x${words%% *} >> 8) & 255)) != 10 ]; then names+=("PAGE$page-NOT-KIND-10"); break; fi
+            if [ "$page" = 0 ]; then
+                per=$(((${#ws[@]} - 1) * 2))
+                last=$((((0x${words%% *} & 255) + per - 1) / per))
+            fi
             for w in ${words#* }; do
                 for c in $(printf '%04x %04x' $((0x$w & 0xffff)) $((0x$w >> 16))); do
                     [ "$c" = ffff ] && continue
@@ -2501,6 +2532,7 @@ results_tsv() {
                     names+=("${inside:-crc:$c}")
                 done
             done
+            [ $((page + 1)) -ge "$last" ] && break
         done
         joined=$(IFS=';'; echo "${names[*]}")
         printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$sel" "$filt" "$tb" "$tp" "$tf" "$tn" "$to" "$nr" "${joined:--}" >> "$dir/results.tsv"
