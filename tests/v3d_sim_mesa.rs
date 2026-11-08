@@ -40,6 +40,7 @@ use std::collections::BTreeMap;
 use yakogl::shaderc::online::arena::Arena;
 use yakogl::shaderc::online::eval;
 use yakogl::shaderc::online::ir::{IoDecl, IoKind, IoSlot, Module, TexDim};
+use yakogl::shaderc::online::v3d::qpu_ffi::Gen;
 use yakogl::shaderc::online::v3d::select::{
     QUNIFORM_FB_PNTC_Y_OFFSET, QUNIFORM_FB_PNTC_Y_SCALE, QUNIFORM_FB_WPOS_Y_OFFSET, QUNIFORM_FB_WPOS_Y_SCALE,
 };
@@ -47,6 +48,9 @@ use yakogl::shaderc::online::v3d::sim::{self, FsInputs, Inputs, Varying, VsInput
 use yakogl::shaderc::online::{lower, sema};
 
 static FIXTURE: &str = include_str!("fixtures/v3d_mesa_programs.txt");
+/// The same pairs compiled by Mesa for V3D 7.1 (`sim_fixture.py --device
+/// 71`), for the 7.1 pass ([`the_interpreter_runs_mesas_7_1_code_as_the_ir_says`]).
+static FIXTURE_71: &str = include_str!("fixtures/v3d_mesa_programs_71.txt");
 
 // ---------------------------------------------------------------------------
 // The fixture.
@@ -85,11 +89,27 @@ struct Pair {
     /// A mutant of a fixture program (tmu_mutants): its stream may name a
     /// texture the fixture's bindings do not, on purpose.
     mutant: bool,
+    /// V3D 7.1 words (FIXTURE_71), run through `sim::run_gen(Gen::V71, ..)`.
+    v71: bool,
+}
+
+impl Pair {
+    fn gen(&self) -> Gen {
+        if self.v71 {
+            Gen::V71
+        } else {
+            Gen::V42
+        }
+    }
 }
 
 fn header(key: &str) -> usize {
+    header_in(FIXTURE, key)
+}
+
+fn header_in(fixture: &str, key: &str) -> usize {
     let p = format!("# {key}: ");
-    FIXTURE
+    fixture
         .lines()
         .find_map(|l| l.strip_prefix(p.as_str()))
         .unwrap_or_else(|| panic!("no '{key}' header"))
@@ -115,15 +135,19 @@ fn real_pairs() -> Vec<(String, String)> {
 }
 
 fn parse() -> Vec<Pair> {
+    parse_in(FIXTURE, false)
+}
+
+fn parse_in(fixture: &str, v71: bool) -> Vec<Pair> {
     let mut out = Vec::new();
     let mut p: Option<Pair> = None;
-    for line in FIXTURE.lines() {
+    for line in fixture.lines() {
         if line.starts_with('#') || line.is_empty() || line.starts_with("real ") {
             continue;
         }
         let w: Vec<&str> = line.split(' ').collect();
         if w[0] == "pair" {
-            p = Some(Pair { vs_path: w[1].into(), fs_path: w[2].into(), ..Default::default() });
+            p = Some(Pair { vs_path: w[1].into(), fs_path: w[2].into(), v71, ..Default::default() });
             continue;
         }
         let cur = p.as_mut().unwrap_or_else(|| panic!("a line outside a pair: {line}"));
@@ -1306,11 +1330,19 @@ fn run_pair_inner(p: &Pair, seed: u64, positive: bool, zeros: bool) -> Result<Op
         for (st, code) in [("fs", &p.fs.code), ("vs", &p.vs.code)] {
             println!("--- {} {st}", if p.ours { "ours" } else { "Mesa" });
             for (i, w) in code.iter().enumerate() {
-                let t = yakogl::shaderc::online::v3d::decode::decode(*w).map(|i| {
-                    let mut s = String::new();
-                    yakogl::shaderc::online::v3d::listing::write_instr(&mut s, &i).unwrap();
-                    s
-                });
+                let t = if p.v71 {
+                    yakogl::shaderc::online::v3d::codec71::decode71(*w).map(|i| {
+                        let mut s = String::new();
+                        yakogl::shaderc::online::v3d::listing71::write_instr71(&mut s, &i).unwrap();
+                        s
+                    })
+                } else {
+                    yakogl::shaderc::online::v3d::decode::decode(*w).map(|i| {
+                        let mut s = String::new();
+                        yakogl::shaderc::online::v3d::listing::write_instr(&mut s, &i).unwrap();
+                        s
+                    })
+                };
                 println!("{i:4} {t:?}");
             }
         }
@@ -1410,8 +1442,9 @@ fn run_pair_inner(p: &Pair, seed: u64, positive: bool, zeros: bool) -> Result<Op
             }
         }
         let s = stream(st, "vert", &u, p.ours, &texs)?;
-        let got = sim::run(&st.code, &s, &Inputs::Vertex(VsInputs { vpm: rows }), &env(&u, "vert", st, &texs))
-            .map_err(sim_err(stname))?;
+        let got =
+            sim::run_gen(p.gen(), &st.code, &s, &Inputs::Vertex(VsInputs { vpm: rows }), &env(&u, "vert", st, &texs))
+                .map_err(sim_err(stname))?;
         let approx = !got.approximate.is_empty();
         let row = |r: usize| got.vpm_out.get(r).copied().flatten();
         RECORD.with(|rec| {
@@ -1436,7 +1469,11 @@ fn run_pair_inner(p: &Pair, seed: u64, positive: bool, zeros: bool) -> Result<Op
             };
             let pf = pos.map(f32::from_bits);
             let rcp = 1.0 / pf[3];
-            let scaled = |c: usize, s: f32| ((pf[c] * s) * rcp).floor();
+            // The scaled coordinates' rounding: ffloor on 4.2, fround_even
+            // on 7.1 (v3d_nir_lower_io.c:529-543, the 4.2 double-rounding
+            // quirk).
+            let fixed = |x: f32| if p.v71 { x.round_ties_even() } else { x.floor() };
+            let scaled = |c: usize, s: f32| fixed((pf[c] * s) * rcp);
             let (sx, sy) = (scaled(0, X_SCALE), scaled(1, Y_SCALE));
             if !(-2.0e9..2.0e9).contains(&sx) || !(-2.0e9..2.0e9).contains(&sy) {
                 return Err(Skip::NotTried("scaled position out of the i32 range".into()));
@@ -1479,8 +1516,8 @@ fn run_pair_inner(p: &Pair, seed: u64, positive: bool, zeros: bool) -> Result<Op
                         let pos = o.output(IoSlot::Position)?.map(f32::from_bits);
                         let rcp = 1.0 / pos[3];
                         Some(match (r, what) {
-                            (_, "scaled x") => ((pos[0] * X_SCALE) * rcp).floor() as i32 as u32,
-                            (_, "scaled y") => ((pos[1] * Y_SCALE) * rcp).floor() as i32 as u32,
+                            (_, "scaled x") => fixed((pos[0] * X_SCALE) * rcp) as i32 as u32,
+                            (_, "scaled y") => fixed((pos[1] * Y_SCALE) * rcp) as i32 as u32,
                             (_, "Zs") => f((pos[2] * Z_SCALE) * rcp + Z_OFFSET),
                             (_, "1/Wc") => f(rcp),
                             (c, "clip position") => pos[c].to_bits(),
@@ -1653,7 +1690,13 @@ fn run_pair_inner(p: &Pair, seed: u64, positive: bool, zeros: bool) -> Result<Op
     // eval.rs has no textures): that is not a validation, and it stays
     // "not tried", but it names the next refusal.
     let fs_inputs = FsInputs { w, w_centroid: wc, z, x, y, back_facing: core::array::from_fn(back_facing), varyings };
-    let got = sim::run(&p.fs.code, &fs_stream, &Inputs::Fragment(Box::new(fs_inputs)), &env(&u, "frag", &p.fs, &texs));
+    let got = sim::run_gen(
+        p.gen(),
+        &p.fs.code,
+        &fs_stream,
+        &Inputs::Fragment(Box::new(fs_inputs)),
+        &env(&u, "frag", &p.fs, &texs),
+    );
     let fs_tex = eval_textures(p, &p.fs, "frag", fsm, &texs)?;
     let mut fs_want = Vec::new();
     for io in &fs_io {
@@ -2505,6 +2548,175 @@ fn the_interpreter_runs_mesas_code_as_the_ir_says() {
     };
     assert_eq!(skipped, want_skipped, "the mutants no draw could compare moved (each stops the run on every draw)");
 }
+
+/// The 7.1 pass: the same comparison as
+/// [`the_interpreter_runs_mesas_code_as_the_ir_says`] on the same pairs as
+/// Mesa compiles them for V3D 7.1 (FIXTURE_71), run through
+/// `sim::run_gen(Gen::V71, ..)` (sim71.rs). The negative and texture
+/// controls stay with the 4.2 pass: their mutants are 4.2 words.
+#[test]
+fn the_interpreter_runs_mesas_7_1_code_as_the_ir_says() {
+    let pairs = parse_in(FIXTURE_71, true);
+    assert_eq!(
+        pairs.len(),
+        header_in(FIXTURE_71, "compiled"),
+        "the 7.1 fixture holds as many pairs as its header says"
+    );
+    assert_eq!(header_in(FIXTURE_71, "device"), 71, "the 7.1 fixture says it is 7.1 code");
+    assert_eq!(
+        FIXTURE_71.lines().filter(|l| l.starts_with("real ")).collect::<Vec<_>>(),
+        FIXTURE.lines().filter(|l| l.starts_with("real ")).collect::<Vec<_>>(),
+        "the 7.1 fixture lists the 4.2 fixture's real pairs"
+    );
+    let (mut agree, mut disagree) = (Vec::new(), Vec::new());
+    let mut unmodelled: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let mut not_tried: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let (mut retried, mut sampled) = (Vec::new(), Vec::new());
+    let mut total = 0usize;
+    for p in pairs.iter() {
+        let name = format!("{} + {}", p.vs_path, p.fs_path);
+        if let Ok(only) = std::env::var("V3D_SIM_PAIR") {
+            if !name.contains(&only) {
+                continue;
+            }
+        }
+        COMPARED.with(|c| c.set(0));
+        let (verdict, positive) = run_pair(p, seed_of(&name));
+        if positive {
+            retried.push(name.clone());
+        }
+        match verdict {
+            Verdict::Agree => {
+                let n = COMPARED.with(|c| c.get());
+                assert!(n > 0, "{name} agrees having compared nothing");
+                total += n;
+                if RECORD.with(|r| r.borrow().tmu_lookups) > 0 {
+                    sampled.push(name.clone());
+                }
+                agree.push(name)
+            }
+            Verdict::Disagree(d) => disagree.push(format!("{name}: {d}")),
+            Verdict::Unmodelled(w) => unmodelled.entry(w).or_default().push(name),
+            Verdict::NotTried(w) => not_tried.entry(w).or_default().push(name),
+        }
+    }
+    let n_un: usize = unmodelled.values().map(Vec::len).sum();
+    let n_nt: usize = not_tried.values().map(Vec::len).sum();
+    let tried = agree.len() + disagree.len() + n_un;
+    println!(
+        "v3d interpreter on Mesa's 7.1 code: {} pairs; {tried} tried: {} agree, {} disagree, {n_un} unmodelled; {n_nt} not tried",
+        pairs.len(),
+        agree.len(),
+        disagree.len()
+    );
+    println!("  decided on the positive-input retry: {} {retried:?}", retried.len());
+    println!("  values compared over the agreeing pairs: {total}");
+    println!("  agreeing pairs that sampled a texture: {}", sampled.len());
+    for d in &disagree {
+        println!("  DISAGREE {d}");
+    }
+    for (w, ps) in &unmodelled {
+        println!("  unmodelled {} x {w}  {ps:?}", ps.len());
+    }
+    for (w, ps) in &not_tried {
+        println!("  not tried {} x {w}  (e.g. {})", ps.len(), ps[0]);
+    }
+    if debug() {
+        return;
+    }
+    assert_eq!(tried + n_nt, pairs.len());
+    assert!(disagree.is_empty(), "{} 7.1 pairs disagree", disagree.len());
+    let es2 = cfg!(feature = "report-es2");
+    // Pinned, measured 2026-11-08 on b585deb5 with the fixture of Mesa
+    // 26.2.1's v3d_shc --device 71 (rev 7). Every pair the harness tries
+    // stops in sim71 at its VS's or CS's thread end (SIM71_UNMODELLED), so
+    // none agrees yet and nothing is compared: the pins say so until sim71
+    // reads Mesa's thread end as Mesa's validator does.
+    assert_eq!(
+        (pairs.len(), tried, agree.len(), n_un, n_nt),
+        if es2 { (242, 164, 0, 164, 78) } else { (242, 191, 0, 191, 51) },
+        "the 7.1 population moved; re-derive the pins"
+    );
+    assert_eq!(retried.len(), if es2 { 0 } else { 2 }, "the 7.1 positive-input retries moved: {retried:?}");
+    assert_eq!((total, sampled.len()), (0, 0), "the 7.1 compared values or texture pairs moved");
+    let unmodelled_by = by_reason(&unmodelled);
+    let want: Vec<(String, usize)> = SIM71_UNMODELLED
+        .iter()
+        .map(|(w, n, n_es2, _)| (w.to_string(), if es2 { *n_es2 } else { *n }))
+        .filter(|(_, n)| *n > 0)
+        .collect();
+    assert_eq!(unmodelled_by, want, "the 7.1 pairs the interpreter stops on moved (SIM71_UNMODELLED)");
+    assert_eq!(
+        by_reason(&not_tried),
+        if es2 { SIM71_NOT_TRIED_ES2 } else { SIM71_NOT_TRIED }
+            .iter()
+            .map(|(w, n)| (w.to_string(), *n))
+            .collect::<Vec<_>>(),
+        "the 7.1 pairs the harness does not try moved"
+    );
+}
+
+/// A verdict map with each reason's instruction index dropped
+/// ("VS: instruction 12: x" -> "VS: x"), so a reason stays one row when
+/// Mesa's code moves by an instruction: (reason, pairs), sorted.
+fn by_reason(m: &BTreeMap<String, Vec<String>>) -> Vec<(String, usize)> {
+    let mut out: BTreeMap<String, usize> = BTreeMap::new();
+    for (w, ps) in m {
+        let key = match w.split_once(": instruction ") {
+            Some((stage, rest)) => match rest.split_once(": ") {
+                Some((n, why)) if n.bytes().all(|b| b.is_ascii_digit()) => format!("{stage}: {why}"),
+                _ => w.clone(),
+            },
+            None => w.clone(),
+        };
+        *out.entry(key).or_default() += ps.len();
+    }
+    out.into_iter().collect()
+}
+
+/// Where the interpreter stops on Mesa's 7.1 code: (reason without the
+/// instruction index, pairs, pairs in a report-es2 build, why). Not fixed
+/// here (sim71.rs is another item's); each is a skip with its cause.
+const SIM71_UNMODELLED: &[(&str, usize, usize, &str)] = &[
+    (
+        "CS: an ALU register-file write at the thread end",
+        8,
+        6,
+        "as the VS row: the coordinate shader ends with the same `stvpmv ; thrsw` (the 8 pairs whose VS gets through)",
+    ),
+    (
+        "VS: an ALU register-file write at the thread end",
+        183,
+        158,
+        "sim71::alu_rf_writes takes every non-NOP op as writing its waddr, also one with no destination \
+         (add_op_args without ARG_D): Mesa ends a VS with `stvpmv ; thrsw`, the STVPMV's waddr field 0 \
+         and not magic, which qpu_validate.c:373-420 accepts because STVPMV writes nothing. With that \
+         op excluded (measured, not applied) 136 of 183 tried pairs agree and none disagrees; the rest \
+         stop on the FMOV unpacks Max0 (34) and Sat (12) and on intrt.frag's denormal VFPACK (1)",
+    ),
+];
+
+/// The 7.1 pairs this harness does not try, by reason (as for 4.2: the
+/// front end, the fixture's uniform lists and the streams the harness
+/// builds; nothing here is the interpreter's).
+const SIM71_NOT_TRIED: &[(&str, usize)] = &[
+    ("Mesa lists frag uniform u_fade 2 times", 1),
+    ("Mesa lists frag uniform u_q 2 times", 1),
+    ("Mesa lists vert uniform axis 2 times", 1),
+    ("Mesa lists vert uniform u_bias 4 times", 1),
+    ("front end: desktop GLSL source; this is an OpenGL ES compiler", 44),
+    ("state uniform FB_PNTC_Y_TRANSFORM", 2),
+    ("vert QUNIFORM_UNIFORM dword 4 maps to no uniform", 1),
+];
+const SIM71_NOT_TRIED_ES2: &[(&str, usize)] = &[
+    ("Mesa lists frag uniform u_fade 2 times", 1),
+    ("Mesa lists frag uniform u_q 2 times", 1),
+    ("Mesa lists vert uniform u_bias 4 times", 1),
+    ("front end: GLSL ES 3.00 source; this build reports OpenGL ES 2.0", 28),
+    ("front end: desktop GLSL source; this is an OpenGL ES compiler", 44),
+    ("state uniform FB_PNTC_Y_TRANSFORM", 2),
+    ("vert QUNIFORM_UNIFORM dword 4 maps to no uniform", 1),
+];
 
 // ---------------------------------------------------------------------------
 // The three-way check (docs/online-shaderc/v3d-backend.md, "How it is
