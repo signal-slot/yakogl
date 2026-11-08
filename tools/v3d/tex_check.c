@@ -464,6 +464,23 @@ static void part_compare(void)
 		}
 		snprintf(what, sizeof(what), "sampler compare %s: bit 3 is dropped, bit 4 wins", filter_names[nearest]);
 		check(bit3, what);
+		/* What a function changes in Mesa's record, the numbers
+		 * src/v3d/texture.rs pins (sampler_compare_bits): word 0 is the
+		 * compare-off word (mip nearest, the filters, max LOD 1/256 at
+		 * bit 20: 0x00100004, | 3 nearest) with the function at bits
+		 * 4-6, and bytes 4..23 are the compare-off record's */
+		bool bits = true;
+		const uint32_t word0_off = 0x00100004u | (nearest ? 3u : 0u);
+		for (uint32_t fn = 0; fn < 8; fn++) {
+			uint8_t a[V3D_SAMPLER_STATE_BYTES];
+			m.depth_compare_function = fn;
+			V3D42_SAMPLER_STATE_pack(NULL, a, &m);
+			uint32_t w0 = (uint32_t)a[0] | (uint32_t)a[1] << 8 | (uint32_t)a[2] << 16 | (uint32_t)a[3] << 24;
+			bits = bits && w0 == (word0_off | fn << 4) && memcmp(a + 4, mesa + 4, sizeof(a) - 4) == 0;
+		}
+		snprintf(what, sizeof(what), "sampler compare %s: Mesa's word 0 is 0x%08x | function << 4, the rest the off record's",
+			 filter_names[nearest], word0_off);
+		check(bits, what);
 		printf("tex_check: sampler compare %s: NEVER..ALWAYS + off, %s\n", filter_names[nearest],
 		       failures == fails_before ? "all bytes are Mesa's" : "MISMATCH");
 	}
@@ -2048,14 +2065,15 @@ int main(void)
 	 * sizes tiled + 4 box cases x 2 (store, load) + 10 records + 4 layout
 	 * refusals + 1 layout + 8 texel/block refusals + 1 TFU refusal;
 	 * the depth records (1 DEPTH24_X8 state + 2 formats x 2 gap checks);
-	 * and the 4 population checks below */
+	 * the 4 population checks below; and the sampler compare (2 filters x
+	 * (8 functions + off + bit 3 + Mesa's word 0) + 1 refusal) */
 	const int part1 = (3 + 3 + 3 + 3 + 3 + 3) + (2 + 9) + (2 + 2) + (2 + 3) + (3 + 3) + 4 + 5;
 	const int part11 = (2 + 2 + 1) + (8 + 6 + 7 + 4) + 1 + 1 + 1 + 4 + 1 + 1 + 5;
 	const int part12 = (7 + 7 + 8 + 8 + 3 + 3 + 11 + 3 + 3) + 1 + 1 + 1 + 10 * 3 + 4 * 2 + 10 + 4 + 1 +
 			   8 + 1;
 	const int planned = part1 + (1 + 13 * 5) + (1 + 15 + 3) + (9 * 5 * 2 + 8 * 2) +
 			    (V3D_TEX_FORMAT_COUNT * 2 + 2) + (108 + 4) + 5 +
-			    (1 + 12 + 2 + 9 + 2 + 3) + (3 + 4 + 1 + 4) + (6 * 4 + 5) + part11 + part12 + (1 + 2 * 2) + 4 + (2 * (8 + 2) + 1);
+			    (1 + 12 + 2 + 9 + 2 + 3) + (3 + 4 + 1 + 4) + (6 * 4 + 5) + part11 + part12 + (1 + 2 * 2) + 4 + (2 * (8 + 3) + 1);
 	/* the boxes part 4 must have stored: levels 1+1+3+6+1+1+9+2+2 = 26 of
 	 * the 9 sizes, x 5 cpp, x (7 fixed + 16 random) boxes a level */
 	const unsigned planned_boxes = 26 * 5 * (FIXED_BOXES + RANDOM_BOXES);
