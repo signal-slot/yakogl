@@ -190,6 +190,111 @@ class LogLayout(unittest.TestCase):
         self.assertIn("--delta needs two records", out)
 
 
+class NextT6Record(unittest.TestCase):
+    """The shape the next board record has: <date>-t6-<name>/ with sweep-1 and
+    sweep-2 verdicts files, next to a README, and earlier t6 records."""
+
+    setUp = LogLayout.setUp
+    tearDown = LogLayout.tearDown
+    record = LogLayout.record
+
+    def test_identical_sweeps_strict_superset_exit_0(self):
+        self.record("2026-11-07-t6-step4a", [{1, 2}, {1, 2}])
+        self.record("2026-11-12-t6-next", [{1, 2, 3, 4}, {1, 2, 3, 4}])
+        rc, out = tool("--delta", self.root)
+        self.assertEqual(rc, 0, out)
+        self.assertNotIn("SHRINK", out)
+        self.assertIn("delta 2026-11-07-t6-step4a -> 2026-11-12-t6-next: 2 case(s) differ", out)
+        self.assertIn("case 3: panthor-gltest: verdict case 3 name3: REFUSED rc 0 -> "
+                      "panthor-gltest: verdict case 3 name3: PASS rc 0", out)
+        self.assertIn("case 4:", out)
+
+    def test_differing_sweeps_pass_set_is_the_intersection(self):
+        # case 3 passes in sweep-1 only: not in the record's set, and a later
+        # record without it does not shrink.
+        self.record("2026-11-07-t6-step4a", [{1, 2, 3}, {1, 2}])
+        self.record("2026-11-12-t6-next", [{1, 2}, {1, 2}])
+        rc, out = tool(self.root)
+        self.assertEqual(rc, 0, out)
+        self.assertRegex(out, r"2026-11-07-t6-step4a\s+2 PASS")
+
+    def test_differing_sweeps_delta_joins_lines(self):
+        self.record("2026-11-07-t6-step4a", [{1}, {1}])
+        self.record("2026-11-12-t6-next", [{1, 2}, {1}])
+        rc, out = tool("--delta", self.root)
+        self.assertEqual(rc, 0, out)
+        self.assertIn("case 2: panthor-gltest: verdict case 2 name2: REFUSED rc 0 -> "
+                      "panthor-gltest: verdict case 2 name2: PASS rc 0 || "
+                      "panthor-gltest: verdict case 2 name2: REFUSED rc 0", out)
+
+    def test_differing_sweeps_require_names_the_failing_log(self):
+        self.record("2026-11-12-t6-next", [{1, 2}, {1}])
+        rc, out = tool("--require", "2", self.root)
+        self.assertEqual(rc, 1, out)
+        self.assertIn("REQUIRED case 2: not PASS in", out)
+        self.assertIn("sweep-2.verdicts.txt", out)
+        self.assertNotIn("sweep-1.verdicts.txt: panthor", out)
+
+    def test_pass_dropping_to_refused_or_fail_exits_1_and_names_it(self):
+        self.record("2026-11-07-t6-step4a", [{1, 2, 3}, {1, 2, 3}])
+        fail = {n: ("PASS" if n in (1, 3) else "FAIL" if n == 2 else "REFUSED")
+                for n in range(6)}
+        self.record("2026-11-12-t6-next", [fail, fail])
+        rc, out = tool("--delta", self.root)
+        self.assertEqual(rc, 1, out)
+        self.assertIn("SHRINK 2026-11-07-t6-step4a has 1 PASS case(s) the newest "
+                      "(2026-11-12-t6-next) lacks: 2", out)
+        self.assertIn("case 2: panthor-gltest: verdict case 2 name2: PASS rc 0 -> "
+                      "panthor-gltest: verdict case 2 name2: FAIL rc 0", out)
+
+        self.record("2026-11-13-t6-later", [{1, 3}, {1, 3}])
+        rc, out = tool(self.root)
+        self.assertEqual(rc, 1, out)
+        self.assertIn("SHRINK 2026-11-07-t6-step4a has 1 PASS case(s) the newest "
+                      "(2026-11-13-t6-later) lacks: 2", out)
+
+    def test_every_earlier_record_is_checked(self):
+        self.record("2026-11-07-t6-a", [{1, 2}, {1, 2}])
+        self.record("2026-11-09-t6-b", [{1, 2, 3}, {1, 2, 3}])
+        self.record("2026-11-12-t6-c", [{1, 3}, {1, 3}])
+        rc, out = tool(self.root)
+        self.assertEqual(rc, 1, out)
+        self.assertIn("SHRINK 2026-11-07-t6-a has 1 PASS case(s) the newest (2026-11-12-t6-c) lacks: 2", out)
+        self.assertIn("SHRINK 2026-11-09-t6-b has 1 PASS case(s) the newest (2026-11-12-t6-c) lacks: 2", out)
+        self.assertIn("2 of 2 earlier record(s)", out)
+
+    def test_order_is_by_date_directory(self):
+        # 2026-11-12 is created first but sorts after 2026-11-07.
+        self.record("2026-11-12-t6-next", [{1, 2, 3}, {1, 2, 3}])
+        self.record("2026-11-07-t6-step4a", [{1, 2}, {1, 2}])
+        rc, out = tool("--delta", self.root)
+        self.assertEqual(rc, 0, out)
+        self.assertIn("delta 2026-11-07-t6-step4a -> 2026-11-12-t6-next:", out)
+        # swapped contents: the 11-12 record is the newest, so it must not shrink
+        self.record("2026-11-12-t6-next", [{1}, {1}])
+        rc, out = tool(self.root)
+        self.assertEqual(rc, 1, out)
+        self.assertIn("SHRINK 2026-11-07-t6-step4a", out)
+        self.assertNotIn("SHRINK 2026-11-12", out)
+
+    def test_other_directories_and_readmes_are_ignored(self):
+        self.record("2026-11-07-t6-step4a", [{1}, {1}])
+        self.record("2026-11-12-t6-next", [{1, 2}, {1, 2}])
+        write(os.path.join(self.root, "README.md"), "index\n")
+        write(os.path.join(self.root, "2026-11-30-notes", "README.md"), "no sweep\n")
+        write(os.path.join(self.root, "2026-11-30-notes", "predictions.txt"),
+              "panthor-gltest: verdict case 1 x: PASS\n")
+        write(os.path.join(self.root, "2026-11-pi4-gltest", "run.txt"), "pi4\n")
+        # a record whose only log is a one-case run is not a sweep
+        write(os.path.join(self.root, "2026-11-30-pi4-x", "gl_test.log"),
+              sweep_log({0: "PASS"}, run=1))
+        rc, out = tool("--delta", self.root)
+        self.assertEqual(rc, 0, out)
+        for name in ("notes", "pi4"):
+            self.assertNotIn(name, out)
+        self.assertIn("delta 2026-11-07-t6-step4a -> 2026-11-12-t6-next:", out)
+
+
 class CorpusMode(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
