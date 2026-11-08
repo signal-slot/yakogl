@@ -9,7 +9,8 @@
 # clean run, a crash mid-row with resume, a hang hitting the timeout, a panthor
 # job-timeout line counted in resets, a missing "yakogl-mali: loaded" line
 # (wrong-lib), lost ssh, a commit not on the main ref refused, and --dry-run
-# making no ssh call (also bare, without --build and --out, with fakes that fail); and that the slice keeps no host name or address.
+# making no ssh call (also bare, without --build and --out, with fakes that fail); that the slice keeps no host name or address;
+# and the default 256x256 pbuffer.
 #
 #   tools/cts/mali-deqp-selftest.sh      prints "mali-deqp-selftest: N checks passed"
 #
@@ -18,7 +19,7 @@ set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 FIX=$HERE/testdata/mali-deqp-run
 RUN=$HERE/mali-deqp-run.sh
-EXPECT=31
+EXPECT=32
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/mali-deqp-selftest-XXXXXX")
 # The fake board's dmesg -w of the lost-ssh case is never stopped by the
 # runner (the board is gone): end every process still reading under $tmp.
@@ -111,6 +112,8 @@ check "the stage is deleted from the board at the end" \
 check "the run staged only under /root/yakogl-mali/<sha8>/" \
   bash -c "grep '^scp' '$tmp/clean/ssh.log' | grep -o 'board.invalid:[^ ]*' | grep -v '^board.invalid:/root/yakogl-mali/${c1:0:8}/' | grep -q . && exit 1; grep -q 'board.invalid:/root/yakogl-mali/${c1:0:8}/' '$tmp/clean/ssh.log'"
 check "the slice keeps no host name, address or MAC" clean_slice clean
+check "deqp-gles2 draws on a 256x256 pbuffer by default (clipping needs 200x200)" \
+  bash -c "grep -q -- '--deqp-surface-type=pbuffer --deqp-surface-width=256 --deqp-surface-height=256 ' '$tmp/clean/ssh.log'"
 check "the board lock is released (its record emptied)" bash -c "[ ! -s '$tmp/board.lock' ]"
 
 echo "mali-deqp-selftest: a crash inside info.renderer, row 1"

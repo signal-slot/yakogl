@@ -207,7 +207,7 @@ file; `BOARD_SSH_OPTS` is passed to ssh and scp. Spell `BOARD_HOST` the way
 one file per `BOARD_HOST` string. Environment knobs: `CHUNK_LIMIT` (seconds a
 process may run, default `600 + 3 s a case`), `MAX_ATTEMPTS` (processes a
 chunk, 100), `LOCK_WAIT` (0), `HOLD_MAX` (21600 s), `RAW_DIR` (raw logs),
-`KMSG_SETTLE_S` (1), `STAGE_MARGIN_KB` (1 GiB), `DEQP_SURFACE` (64),
+`KMSG_SETTLE_S` (1), `STAGE_MARGIN_KB` (1 GiB), `DEQP_SURFACE` (256),
 `REDACT_EXTRA`, and for odd hosts `MALI_DEQP_MAIN_REPO`, `MALI_DEQP_MAIN_REF`
 (default this checkout and `origin/main`) and `MALI_DEQP_MUSTPASS`.
 
@@ -239,7 +239,7 @@ mali-deqp-run: slice build/x-slice, raw logs <repo>/build/mali-deqp-run/x-slice
 mali-deqp-run: per chunk <label>, process <k> (over ssh to $BOARD_HOST):
   nohup dmesg -w > /root/yakogl-mali/009f62a5/dmesg-<label>.log 2>&1 < /dev/null &
   echo 'yakogl-run-start mali-deqp <label> <stamp>' >> /dev/kmsg
-  cd /root/yakogl-mali/009f62a5 && setsid -w timeout -k 10 <limit> env LD_LIBRARY_PATH=/root/yakogl-mali/009f62a5/lib /root/yakogl-mali/009f62a5/deqp-gles2 --deqp-caselist-file=/root/yakogl-mali/009f62a5/<label>.r<k>.txt --deqp-log-filename=/root/yakogl-mali/009f62a5/<label>.r<k>.qpa --deqp-archive-dir=/root/yakogl-mali/009f62a5/data --deqp-surface-type=pbuffer --deqp-surface-width=64 --deqp-surface-height=64 --deqp-log-images=disable --deqp-log-shader-sources=enable > /root/yakogl-mali/009f62a5/<label>.r<k>.out 2> /root/yakogl-mali/009f62a5/<label>.r<k>.err
+  cd /root/yakogl-mali/009f62a5 && setsid -w timeout -k 10 <limit> env LD_LIBRARY_PATH=/root/yakogl-mali/009f62a5/lib /root/yakogl-mali/009f62a5/deqp-gles2 --deqp-caselist-file=/root/yakogl-mali/009f62a5/<label>.r<k>.txt --deqp-log-filename=/root/yakogl-mali/009f62a5/<label>.r<k>.qpa --deqp-archive-dir=/root/yakogl-mali/009f62a5/data --deqp-surface-type=pbuffer --deqp-surface-width=256 --deqp-surface-height=256 --deqp-log-images=disable --deqp-log-shader-sources=enable > /root/yakogl-mali/009f62a5/<label>.r<k>.out 2> /root/yakogl-mali/009f62a5/<label>.r<k>.err
   echo 'yakogl-run-end mali-deqp <label> <stamp>' >> /dev/kmsg; kill <dmesg pid>
   cat /proc/sys/kernel/random/boot_id
 ```
