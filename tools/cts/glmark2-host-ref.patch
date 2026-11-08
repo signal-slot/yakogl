@@ -1,0 +1,174 @@
+glmark2 22c527cb0556f3a1ac4445aaa52cc532760928d5 for tools/cts/glmark2-host-ref.sh:
+the yakogl glmark2 image's frame dump and picture line (driver/docs/glmark2.md,
+"The frame dump", "The picture value") after each scene's last update(), and the
+bundled zlib, libpng and libjpeg-turbo on every host.
+
+--- a/meson.build
++++ b/meson.build
+@@ -87,11 +87,17 @@
+ dl_dep = cpp.find_library('dl', required : false)
+ thread_dep = dependency('threads')
+ 
+-if host_machine.system() == 'windows'
++# yakogl glmark2-host-ref: the bundled zlib, libpng and libjpeg-turbo on every
++# host, as the yakogl Zephyr image builds them, so the textures decode the same.
++if true
+     if cpp.get_id() == 'msvc'
+         add_global_arguments('/EHsc', '/wd4146', '/wd4244', '/wd4305', '/wd4312',
+                              language: 'cpp')
+     endif
++    if host_machine.system() != 'windows'
++        # zlib's gz* need read, lseek and close
++        add_global_arguments('-DHAVE_UNISTD_H', language : 'c')
++    endif
+     subdir('src/zlib')
+     subdir('src/libpng')
+     subdir('src/libjpeg-turbo')
+--- a/src/main-loop.cpp
++++ b/src/main-loop.cpp
+@@ -27,6 +27,134 @@
+ 
+ #include <string>
+ #include <sstream>
++#include <cstdint>
++#include <cstdio>
++#include <vector>
++
++/*
++ * yakogl glmark2-host-ref (tools/cts/glmark2-host-ref.patch in yakogl): the
++ * scene's last frame, read after its last update() and before its last swap,
++ * printed as the yakogl glmark2 image's frame dump and picture line
++ * (driver/docs/glmark2.md, "The frame dump" and "The picture value"), so that
++ * tools/cts/glmark2-fb.py decodes it unchanged:
++ *   glmark2-fb: <scene> <w>x<h> begin
++ *   glmark2-fb: <y> <crc16 of the row's RGB, hex> <base64 of the row's RGB888>
++ *   glmark2-fb: end crc32 <hex>
++ *   glmark2-picture: <scene>: <w>x<h>; probes c RRGGBBAA, ...; black yes|no
++ * y = 0 is the top row; crc16 is CRC-16/CCITT-FALSE, crc32 the IEEE one over
++ * all rows' RGB, top row first. The probes and the 40x30 grid are the image's
++ * capture_picture.
++ */
++namespace {
++
++uint16_t
++yk_crc16(uint16_t crc, uint8_t b)
++{
++    crc ^= static_cast<uint16_t>(b << 8);
++    for (int i = 0; i < 8; i++)
++        crc = (crc & 0x8000u) ? static_cast<uint16_t>((crc << 1) ^ 0x1021u)
++                              : static_cast<uint16_t>(crc << 1);
++    return crc;
++}
++
++uint32_t
++yk_crc32(uint32_t crc, const uint8_t *p, size_t n)
++{
++    while (n--) {
++        crc ^= *p++;
++        for (int i = 0; i < 8; i++)
++            crc = (crc >> 1) ^ (0xedb88320u & (0u - (crc & 1u)));
++    }
++    return crc;
++}
++
++void
++yk_frame_dump(Canvas &canvas, const std::string &scene)
++{
++    static const char b64[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
++    const int w = canvas.width(), h = canvas.height();
++    if (w < 40 || h < 30)
++        return;
++    std::vector<uint8_t> rgba(static_cast<size_t>(w) * h * 4u, 0);
++    while (glGetError() != GL_NO_ERROR) {
++    }
++    GLExtensions::BindFramebuffer(GL_FRAMEBUFFER, canvas.fbo());
++    glPixelStorei(GL_PACK_ALIGNMENT, 4);
++    glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, rgba.data());
++    if (glGetError() != GL_NO_ERROR) {
++        fflush(stdout);
++        printf("\nglmark2-picture: %s: absent (the readback failed)\n", scene.c_str());
++        fflush(stdout);
++        return;
++    }
++    /* top row first: glReadPixels counts rows from the bottom */
++    auto px = [&](int x, int y) { return &rgba[(static_cast<size_t>(h - 1 - y) * w + x) * 4u]; };
++
++    Log::flush();
++    fflush(stdout);
++    printf("\nglmark2-fb: %s %dx%d begin\n", scene.c_str(), w, h);
++    std::vector<uint8_t> rgb(static_cast<size_t>(w) * 3u);
++    std::string text;
++    uint32_t crc = 0xffffffffu;
++    for (int y = 0; y < h; y++) {
++        for (int x = 0; x < w; x++)
++            for (int c = 0; c < 3; c++)
++                rgb[static_cast<size_t>(x) * 3u + c] = px(x, y)[c];
++        uint16_t c16 = 0xffffu;
++        for (uint8_t b : rgb)
++            c16 = yk_crc16(c16, b);
++        crc = yk_crc32(crc, rgb.data(), rgb.size());
++        text.clear();
++        for (size_t i = 0; i < rgb.size(); i += 3) {
++            const size_t left = rgb.size() - i;
++            const uint32_t v = static_cast<uint32_t>(rgb[i]) << 16 |
++                               (left > 1 ? static_cast<uint32_t>(rgb[i + 1]) << 8 : 0u) |
++                               (left > 2 ? rgb[i + 2] : 0u);
++            text += b64[v >> 18 & 63u];
++            text += b64[v >> 12 & 63u];
++            text += left > 1 ? b64[v >> 6 & 63u] : '=';
++            text += left > 2 ? b64[v & 63u] : '=';
++        }
++        printf("glmark2-fb: %d %04x %s\n", y, static_cast<unsigned>(c16), text.c_str());
++    }
++    printf("glmark2-fb: end crc32 %08x\n", static_cast<unsigned>(~crc));
++
++    /* the picture value: the centre and the four quarter points, then the
++     * centres of 40x30 equal cells, row by row, left to right */
++    const int pxs[5] = {w / 2, w / 4, w * 3 / 4, w / 4, w * 3 / 4};
++    const int pys[5] = {h / 2, h / 4, h / 4, h * 3 / 4, h * 3 / 4};
++    uint32_t probe[5];
++    bool black = true;
++    for (int i = 0; i < 5; i++) {
++        const uint8_t *q = px(pxs[i], pys[i]);
++        probe[i] = static_cast<uint32_t>(q[0]) << 24 | static_cast<uint32_t>(q[1]) << 16 |
++                   static_cast<uint32_t>(q[2]) << 8 | q[3];
++        black = black && !q[0] && !q[1] && !q[2];
++    }
++    uint16_t c = 0xffffu, cq = 0xffffu;
++    uint64_t sum[3] = {};
++    for (int gy = 0; gy < 30; gy++) {
++        for (int gx = 0; gx < 40; gx++) {
++            const uint8_t *q = px((2 * gx + 1) * w / 80, (2 * gy + 1) * h / 60);
++            for (int k = 0; k < 3; k++) {
++                c = yk_crc16(c, q[k]);
++                cq = yk_crc16(cq, static_cast<uint8_t>(q[k] >> 4));
++                sum[k] += q[k];
++            }
++            black = black && !q[0] && !q[1] && !q[2];
++        }
++    }
++    printf("glmark2-picture: %s: %dx%d; probes c %08x, tl %08x, tr %08x, bl %08x, br %08x; "
++           "crc16 %04x, crc16q %04x; mean %u %u %u; black %s\n",
++           scene.c_str(), w, h, static_cast<unsigned>(probe[0]), static_cast<unsigned>(probe[1]),
++           static_cast<unsigned>(probe[2]), static_cast<unsigned>(probe[3]),
++           static_cast<unsigned>(probe[4]), static_cast<unsigned>(c), static_cast<unsigned>(cq),
++           static_cast<unsigned>(sum[0] / 1200u), static_cast<unsigned>(sum[1] / 1200u),
++           static_cast<unsigned>(sum[2] / 1200u), black ? "yes" : "no");
++    fflush(stdout);
++}
++
++} // namespace
+ 
+ /************
+  * MainLoop *
+@@ -134,6 +262,10 @@
+     scene_->draw();
+     scene_->update();
+ 
++    /* yakogl glmark2-host-ref: the scene's last frame, before its last swap */
++    if (!scene_->running())
++        yk_frame_dump(canvas_, scene_->info_string());
++
+     canvas_.update();
+ }
+ 
