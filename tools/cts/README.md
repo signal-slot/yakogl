@@ -966,6 +966,20 @@ work; `driver/docs/nanopc-t6-mali.md` is the board note. The scripts:
   (`tools/mali/panthor-gles/README.md`). Its constructor prints
   `yakogl-mali: loaded` on stderr, and `yakogl-mali-exit:` when the process
   ends.
+- `mali-deqp-build.sh --out DIR [--gles-lib DIR] [--dry-run] [--allow-dirty]`:
+  cross-builds `deqp-gles2` (VK-GL-CTS at `CTS_COMMIT` with
+  `cts-yakogl-target.patch`) for the board's Armbian into the `DIR` the runner
+  takes as `--build`: `deqp-gles2`, `data/gles2/`, `mustpass`, `lib/` (the pair
+  of `tools/mali/panthor-gles`, copied from `--gles-lib`, not built here) and
+  `build.txt` (`commit=`, `dirty=`, `cts=`, `toolchain=`, `glibc_max=`,
+  `glibcxx_max=`, `cxxabi_max=`, `build_seconds=`). It uses Debian trixie's
+  `g++-14-aarch64-linux-gnu` (`MALI_DEQP_TOOLCHAIN` in `deps.toml`) and fails
+  when a symbol of `deqp-gles2` needs more than the board's GLIBC 2.41,
+  GLIBCXX 3.4.33 or CXXABI 1.3.15, or when the program links `libGLESv2` or
+  `libEGL` directly. The tree must be clean (`--allow-dirty` is for local tests
+  and marks `build.txt` `dirty=yes`). `--dry-run` prints every step and runs
+  none. `CTS`, `TOOLCHAIN`, `BUILD` and `JOBS` are environment; the script's
+  header lists them. It has no self-test.
 - `mali-deqp-run.sh`: the runner. `BOARD_HOST=<user>@<t6> tools/cts/mali-deqp-run.sh
   --build DIR --out SLICEDIR --rows A-B [--tree F] [--session S1..S4|smoke]
   [--dry-run]`. `DIR` is a cross-build directory (`deqp-gles2`, `data/`,
@@ -1000,6 +1014,32 @@ work; `driver/docs/nanopc-t6-mali.md` is the board note. The scripts:
   `docs/es2-cts-failures.md` block (`docs/es2/board-recipe-mali.md` section
   7). `mali-deqp-tally-selftest.sh` runs its `--self-test` on
   `testdata/mali-deqp/` (`cts-selftest.sh` check 40).
+- `mali-slice-readme.py [--write|--check] SLICEDIR`: the `README.md` of a
+  committed `t6-gles2` slice, from its `meta.txt`, `chunks.tsv`, `results.tsv`
+  and `kmsg/`: session, rows, commit, kernel and library, the dEQP status
+  counts, the Lost counts by reason, the chunks that were not done or had
+  kernel lines, resets or a changed `ssh_after`/`boot_same`, and the runner
+  command with `BOARD_HOST` left as a placeholder. Bare it prints, `--write`
+  writes `SLICEDIR/README.md`, `--check` exits 1 unless that file equals the
+  output; input with an address or `user@host` is refused (exit 2).
+  `mali-slice-readme-selftest.sh` checks it on `testdata/mali-slice-readme/`.
+- `python3 -I mali-rerun-tree.py [--mustpass FILE] [--max N] [--reason R]...
+  SLICE... > rerun.txt`: a tree table (the form of `mali-gles2-tree.txt`,
+  labels `T6RR001`...) of the Lost cases of the slices, once each and in
+  mustpass order, for a rerun session read with the runner's `--tree`. A
+  `chunk-crash` or `chunk-hang` case is a row of its own; `board-lost` and
+  `not-run` cases fill rows of at most `--max` (default 400); `--reason`
+  keeps only the Lost cases with that reason. A Lost case missing from the
+  mustpass list exits 1, an unreadable slice 2. Run its rows with the
+  runner's default session (`adhoc`) or `smoke`.
+  `mali-rerun-tree-selftest.sh` compares its table with
+  `testdata/mali-rerun-tree/expected.txt`.
+- `mali-deqp-e2e-selftest.sh`: the runner's slices on its fake board (three
+  runs over a 7-case tree in `testdata/mali-deqp-e2e/`: clean with a dEQP
+  Fail, a hang, a crash) through `mali-deqp-tally.py`: `--check-cover` passes
+  and fails on a removed case, a short chunk row or emptied `kmsg`/`resets`/
+  `ssh_after`; `--tally` agrees with awk over `results.tsv`; `--check-doc`
+  passes a fixture section and fails a wrong count. About 15 s, host only.
 
 Nothing in them names a machine. The board comes from the farm's lease
 (`target:nanopc-t6`, over ssh), and `BOARD_SSH_OPTS` (optional) is passed to
@@ -1011,7 +1051,14 @@ takes the same board lock as `tools/mali/panthor/run-on-board.sh`, so spell
 tools/cts/mali-deqp-run.sh --dry-run --build <build dir> --out <slice dir> --rows 1-1
 tools/cts/mali-deqp-selftest.sh     # prints "mali-deqp-selftest: N checks passed"
 tools/cts/mali-kmsg-selftest.sh
+tools/cts/mali-slice-readme-selftest.sh
+tools/cts/mali-rerun-tree-selftest.sh
+tools/cts/mali-deqp-e2e-selftest.sh
 ```
+
+Of these self-tests the gate runs one: `cts-selftest.sh` check 40
+(`mali-deqp-tally-selftest.sh`). `tools/check.sh` has no row for the others;
+run them by hand.
 
 `--dry-run` makes no ssh call and writes nothing: it lists the rows and cases it
 would run, says whether the build's commit is on `origin/main`, and goes on
