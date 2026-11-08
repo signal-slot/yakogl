@@ -51,6 +51,8 @@ pub mod model;
 pub mod model_am62p;
 #[cfg(test)]
 pub mod model_hdmi;
+#[cfg(test)]
+pub mod model_stm32mp2;
 
 /// errno numbers, one table per C library ([`errno_numbers`]).
 pub mod errno_numbers;
