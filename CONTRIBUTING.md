@@ -26,10 +26,11 @@ CI, a review, then the merge. Never push main by hand.
    row. Keep the tree clean, and keep scratch files in `build/`; the first
    lines the script prints name each path that forces "every row".
 2. Open the pull request. The CI is the gate: `.github/workflows/gate.yml`
-   runs `tools/check.sh` on the pull request (the merge of the branch into
-   main), again on main after the merge, and nightly, on self-hosted runners
-   that have the environment below. The file's header says which rows each
-   event runs.
+   runs `tools/check.sh --changed <merge base>` on the pull request (the
+   merge of the branch into main), and every row nightly on main's tip and
+   when started by hand; main is not run on each merge. It runs on
+   self-hosted runners that have the environment below. The file's header
+   says which rows each event runs.
 3. The review reads the commit; it runs no check.
 4. Merge when the CI is green and the review approves.
 
@@ -39,9 +40,10 @@ CI, a review, then the merge. Never push main by hand.
 - The full run checks formatting, clippy (no warnings), the tests in every
   feature configuration, the C check programs, the generated files, the
   product archives, the Python tools, and the Zephyr image builds. It takes
-  35 to 50 minutes, depending on the host (measured: 36 minutes from a cold
-  tree and 49 minutes on another host;
-  `docs/release/readme-walkthrough.md`).
+  35 to 80 minutes, depending on the host (measured: 36 minutes from a cold
+  tree and 49 minutes on another host, `docs/release/readme-walkthrough.md`;
+  76 minutes on 4 cores with two compiler slots, after a `--quick` in the
+  same clone of `e3e8d777`, 2026-11-08).
 - It is green only at "N ok, 0 failed, 0 gap(s)". A step that could not run
   is a **gap**, and a gap makes the gate red. These need setup: `ZEPHYR_WS`,
   `HAL_NXP_DIR`, `PCO_SHC` (with `GLSLANG`, `GLSL2USC_CACHE`), the PowerVR
@@ -53,24 +55,34 @@ CI, a review, then the merge. Never push main by hand.
   the `shaderc-online` tests: `tools/cts/deps-env.sh --check` says which
   entries this host's dependency layout has, and
   `export $(tools/cts/deps-env.sh)` sets them all from it before the run.
-  `ZEPHYR_WS` may be given
+  On a new host, fetch the Mali firmware first,
+  `tools/cts/deps-env.sh --build MALI_CSFFW` ("The PowerVR firmware",
+  below): `--quick` runs its row too. Then, after the export and the
+  PowerVR header copy, as the CI does, `tools/setup-gate-host.sh --check`
+  says whether this host has every tool and file the gate needs (it reads
+  the same variables, so run before the export it reports a stale one as
+  missing). `ZEPHYR_WS` may be given
   through a symbolic link: the gate resolves it to the real path first, and
   every Zephyr build rewrites its generated linker snippets' `#include` paths
   to absolute at the end of the configure (`zephyr/linker_snippets.cmake`), so
   the image rows build from a checkout at any depth (they once failed with
   `swi_tables.ld` not found in a worktree of another depth). A snippet that
   names a file no path resolves is left as it is and the configure warns with
-  that line.
-- `tools/check.sh --quick` is for the edit loop. It runs 170 of the
-  full plan's 211 rows (counted on 2026-11-06 at main `14e93e64` with
-  `YAKOGL_CHECK_PLAN=1`, which lists the rows and runs none; the full plan
-  is 210 ok and 1 gap on a host without `PCO_SPM_LOAD_CAPTURE`, and
-  `tools/check_scope_selftest.sh` pins the 211, ok plus gaps). Measured on 2026-11-06 from
-  a fresh clone of `14e93e64`: "170 ok, 0 failed, 0 gap(s)" in 2309 s with
-  two compiler slots. Measured on 2026-10-25,
-  when it had fewer rows (`docs/release/checklist.md` "Line 3: re-run"):
-  "146 ok, 0 failed, 0 gap(s)" in 2747 s at main `8198a56f`, and "145 ok,
-  0 failed, 0 gap(s)" in 1491 s from a fresh clone. It takes minutes on a warm tree (190 s on four lanes,
+  that line. The checkout itself is not resolved: run the gate from its
+  canonical path (`cd "$(pwd -P)"` first), not through a symbolic link, until
+  that is fixed; from a linked path the three artefact rows ("no table",
+  "no Mesa reference", "no test knob in the artefact") fail.
+- `tools/check.sh --quick` is for the edit loop. It runs 173 of the
+  full plan's 215 rows (counted on 2026-11-08 at main `e3e8d777` with
+  `YAKOGL_CHECK_PLAN=1`, which lists the rows and runs none; a row whose
+  tool or file the host lacks is listed as a gap, and
+  `tools/check_scope_selftest.sh` pins the 215, ok plus gaps). Measured on
+  2026-11-08 from a fresh clone of `e3e8d777` at a canonical path, the
+  layout exported and `MALI_CSFFW` fetched as above: "173 ok, 0 failed,
+  0 gap(s)" in 2334 s with two compiler slots (4 cores). Earlier, with
+  fewer rows: "170 ok, 0 failed, 0 gap(s)" in 2309 s from a fresh clone of
+  `14e93e64` (2026-11-06), and "146 ok, 0 failed, 0 gap(s)" in 2747 s at
+  `8198a56f` (2026-10-25). It takes minutes on a warm tree (190 s on four lanes,
   `tools/check.sh` header, 2026-10-25) and up to an hour from a cold one (59
   minutes with two compiler slots, `CLAUDE.md`). If `MESA_V3D_TREE` is set on
   your host to a Mesa tree without `build-v3d`, the three v3d rows (tex_check,
