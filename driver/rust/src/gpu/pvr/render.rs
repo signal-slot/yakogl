@@ -2328,6 +2328,14 @@ fn stopped(k: &mut YdPvrKm, fence: u32, who: &str) -> i32 {
 /// recovery during the wait, -ESHUTDOWN once the render service stopped
 /// ([`stopped`]), -ETIMEDOUT.
 pub fn wait_for(k: &mut YdPvrKm, r: &mut YdPvrRender, fence: u32, timeout_ms: u32, who: &str) -> i32 {
+    wait_for_at(k, r, fence, timeout_ms, who, who)
+}
+
+/// [`wait_for`] with the backend's wait site (`site`: frame set, swap,
+/// finish, ...), which the 20 ms re-post line adds after its "(M so far)"
+/// as ` site=<site> last_posted=<newest posted fence>`; only the log
+/// differs from `wait_for`.
+pub fn wait_for_at(k: &mut YdPvrKm, r: &mut YdPvrRender, fence: u32, timeout_ms: u32, who: &str, site: &str) -> i32 {
     if r.inited == 0 {
         return -errno::EINVAL;
     }
@@ -2375,11 +2383,13 @@ pub fn wait_for(k: &mut YdPvrKm, r: &mut YdPvrRender, fence: u32, timeout_ms: u3
                 km_log!(
                     k,
                     Wrn,
-                    "render: fence {} ({}) not moved at 20 ms, re-posted {} kick(s) ({} so far)",
+                    "render: fence {} ({}) not moved at 20 ms, re-posted {} kick(s) ({} so far) site={} last_posted={}",
                     fence,
                     who,
                     r.last_kick_n,
-                    r.reposts
+                    r.reposts,
+                    site,
+                    r.seq
                 );
             }
         }
@@ -2678,7 +2688,7 @@ pub unsafe extern "C" fn yd_pvr_render_submit(
 }
 
 /// # Safety
-/// See the section comment; `who` a NUL-terminated string (or null).
+/// See the section comment; `who` and `site` NUL-terminated strings (or null; a null `site` is `who`).
 #[no_mangle]
 pub unsafe extern "C" fn yd_pvr_render_wait(
     k: *mut YdPvrKm,
@@ -2686,15 +2696,20 @@ pub unsafe extern "C" fn yd_pvr_render_wait(
     fence: u32,
     timeout_ms: u32,
     who: *const c_char,
+    site: *const c_char,
 ) -> i32 {
-    let who = if who.is_null() {
-        ""
-    } else {
-        // SAFETY: the caller's contract.
-        unsafe { CStr::from_ptr(who) }.to_str().unwrap_or("?")
+    let name = |p: *const c_char| {
+        if p.is_null() {
+            ""
+        } else {
+            // SAFETY: the caller's contract.
+            unsafe { CStr::from_ptr(p) }.to_str().unwrap_or("?")
+        }
     };
+    let who = name(who);
+    let site = if site.is_null() { who } else { name(site) };
     // SAFETY: the caller's contract.
-    unsafe { wait_for(km(k), &mut *r, fence, timeout_ms, who) }
+    unsafe { wait_for_at(km(k), &mut *r, fence, timeout_ms, who, site) }
 }
 
 /// # Safety
@@ -3220,6 +3235,35 @@ mod wait_tests {
         #[cfg(not(feature = "pvr-fine-wait"))]
         assert_eq!(t.waited_us(), 2000);
         assert!(t.log().is_empty(), "a clean wait logs nothing: {}", t.log());
+    }
+
+    #[test]
+    fn the_20_ms_repost_line_names_the_site_and_the_last_posted_fence() {
+        // A fence that moves at 30 ms: the wait re-posts once at 20 ms.
+        let mut t = rig(7, 6, Some(30_000));
+        // The re-post writes a KCCB slot and rings the doorbell register.
+        let mut regs = vec![0u32; 0x400];
+        t.k.regs = regs.as_mut_ptr() as usize;
+        (t.k.kccb_ctl_off, t.k.kccb_cmds_off, t.k.kccb_rtn_off) = (0x400, 0x500, 0x800);
+        t.r.cfg.wait_repost = 1;
+        t.r.last_kick_n = 1;
+        t.r.seq = 9;
+        let fence = t.sim.fence;
+        assert_eq!(wait_for_at(&mut t.k, &mut t.r, fence, 100, "frame fence", "swap"), 0, "log:\n{}", t.log());
+        assert_eq!(t.r.reposts, 1);
+        let want =
+            "render: fence 7 (frame fence) not moved at 20 ms, re-posted 1 kick(s) (1 so far) site=swap last_posted=9";
+        assert!(t.log().lines().any(|l| l == want), "log:\n{}", t.log());
+        // `wait_for` keeps its caller's label as the site.
+        let mut u = rig(7, 6, Some(30_000));
+        u.k.regs = regs.as_mut_ptr() as usize;
+        (u.k.kccb_ctl_off, u.k.kccb_cmds_off, u.k.kccb_rtn_off) = (0x400, 0x500, 0x800);
+        u.r.cfg.wait_repost = 1;
+        u.r.last_kick_n = 1;
+        u.r.seq = 8;
+        assert_eq!(u.wait(100), 0);
+        let want = "render: fence 7 (test) not moved at 20 ms, re-posted 1 kick(s) (1 so far) site=test last_posted=8";
+        assert!(u.log().lines().any(|l| l == want), "log:\n{}", u.log());
     }
 
     #[test]

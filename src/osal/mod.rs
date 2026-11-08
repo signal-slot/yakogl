@@ -107,6 +107,20 @@ pub const OSAL_QUERY_V3D_S8_STENCIL: u32 = 13;
 /// the OSAL's queue is full, -ENOTSUP without TFU jobs.
 pub const OSAL_QUERY_V3D_TFU_QUEUE: u32 = 17;
 
+/// in = `u32`: the site of the next `wait` (one of `OSAL_WAIT_SITE_*`), so
+/// the render service's 20 ms re-post line names the wait it met. Only the
+/// log differs; -ENOTSUP where the OSAL keeps no such line.
+pub const OSAL_QUERY_WAIT_SITE: u32 = 18;
+pub const OSAL_WAIT_SITE_SHUTDOWN: u32 = 1;
+pub const OSAL_WAIT_SITE_VIS_SLOT: u32 = 2;
+pub const OSAL_WAIT_SITE_FRAME_SET: u32 = 3;
+pub const OSAL_WAIT_SITE_MIP_ERR: u32 = 4;
+pub const OSAL_WAIT_SITE_MIP_TAIL: u32 = 5;
+pub const OSAL_WAIT_SITE_SETTLE: u32 = 6;
+pub const OSAL_WAIT_SITE_DS_DUMP: u32 = 7;
+pub const OSAL_WAIT_SITE_FINISH: u32 = 8;
+pub const OSAL_WAIT_SITE_SWAP: u32 = 9;
+
 /// in = [`crate::draw_steps::OsalDrawStats`] through the out pointer: one
 /// timed scope's draw steps, added to the OSAL's totals; -ENOTSUP where the
 /// OSAL keeps none.
@@ -439,6 +453,16 @@ pub fn thread_id() -> u32 {
         // precondition.
         Some(f) => unsafe { f() },
         None => 0,
+    }
+}
+
+/// Name the next wait's call site to the OSAL ([`OSAL_QUERY_WAIT_SITE`]); the
+/// answer is not needed, a log line is all it changes.
+pub fn set_wait_site(site: u32) {
+    if let Some(query) = ops().and_then(|o| o.query) {
+        let mut v = site;
+        // SAFETY: a u32 in-parameter of the size passed.
+        let _ = unsafe { query(OSAL_QUERY_WAIT_SITE, &mut v as *mut u32 as *mut c_void, 4) };
     }
 }
 

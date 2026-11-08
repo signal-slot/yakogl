@@ -816,12 +816,29 @@ void pvr_render_fl_counters(uint32_t out[YD_PVR_FL_COUNTERS])
 /* The application waiting for its own frame: the OSAL's wait, and the
  * chardev's WAIT ioctl and close-time drain. The submit path waits inside
  * gpu::pvr::render with its own labels. */
+static uint32_t wait_site;
+
+void pvr_render_wait_site(uint32_t site)
+{
+	wait_site = site;
+}
+
+/* The names of OSAL_WAIT_SITE_* (osal_internal.h), index = the number */
+static const char *const wait_site_names[] = {
+	"osal wait", "shutdown", "visibility slot", "frame set", "mip prefix error",
+	"mip tail", "settle texture", "ds dump", "finish", "swap",
+	"pending frees", "reclaim",
+};
+
 int pvr_render_wait(uint32_t fence, uint32_t timeout_ms)
 {
+	const char *site = wait_site < sizeof(wait_site_names) / sizeof(wait_site_names[0]) ?
+			   wait_site_names[wait_site] : "?";
 	int rc;
 
+	wait_site = 0;
 	rr_sync_cfg();
-	rc = yd_pvr_render_wait(pvr_km(), &RR, fence, timeout_ms, "frame fence");
+	rc = yd_pvr_render_wait(pvr_km(), &RR, fence, timeout_ms, "frame fence", site);
 	pvr_render_reposts = RR.reposts;
 	if (rc == -ESHUTDOWN) {
 		render_stopped();
