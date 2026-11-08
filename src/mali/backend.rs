@@ -209,7 +209,7 @@ pub const NOT_BUILT_ATTRIBUTE_RECORDS: &str =
 pub const NOT_BUILT_TEXTURE_FORMAT: &str =
     "mali: a texture stored other than RGBA8, sRGB8_A8, R32F or ETC2 (RGB8, RGBA8, RGB8A1) is not built yet";
 pub const NOT_BUILT_TEXTURE_TYPE: &str =
-    "mali: a texture other than one 2D image, a cube map of six faces, a 2D array of at most 256 layers or a one-level 3D texture of at most 256 4-byte slices (a 3D chain) is not built yet";
+    "mali: a texture other than one 2D image, a cube map of six faces, a 2D array of at most 256 layers or a 3D texture of at most 256 4-byte slices is not built yet";
 /// A mip chain of a non-power-of-two image: the GL core lays none out for
 /// this backend (`npot_mip_chains`), so one would not be where
 /// [`chain_level`] looks.
@@ -1832,12 +1832,14 @@ fn level_at(t: &backend::GlesTextureBind, f: &TexelFormat, l: u32) -> Option<Lev
 }
 
 /// A 3D texture as the GL core hands this backend one
-/// (`native_layered_textures` false): level 0 alone, its `layers` slices
-/// tiled `cols` across in one 2D image of `width` x `height` on the
+/// (`native_layered_textures` false): level 0's `layers` slices tiled
+/// `cols` across in one 2D image of `width` x `height` on the
 /// `stride_texels` pitch (`texture_alloc_storage_3d`, `grid_cols_for`:
 /// the least `cols` with `cols * cols >= depth`, src/gl/texture.rs; the
 /// binding's sides are the grid's, src/gl/draw.rs). Slice `k` is at column
-/// `k % cols`, row `k / cols` of slices `w` x `h` each.
+/// `k % cols`, row `k / cols` of slices `w` x `h` each. Each level after
+/// it is a grid of its own slices in the same `cols` columns on the same
+/// pitch ([`grid_level_at`]).
 #[derive(Clone, Copy)]
 struct SliceGrid {
     cols: u32,
@@ -1870,6 +1872,43 @@ fn levels_of(t: &backend::GlesTextureBind) -> u32 {
     u32::from(t.mip_levels.max(1))
 }
 
+/// Level `l` of a 3D binding's grid ([`SliceGrid`]) where the GL core keeps
+/// it: its byte offset, its slices' sides and their count. Level 0 is the
+/// grid itself; level l+1 starts on the next [`MIP_LEVEL_ALIGN`] bytes
+/// after level l's `ceil(depth_l / cols)` rows of slices, every level on
+/// level 0's pitch (`texture_alloc_storage_3d`: `chain_pitch`, `align`,
+/// `lrows`, src/gl/texture.rs), each side and the depth halved down to 1
+/// (`pot_level_side`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct GridLevel {
+    off: usize,
+    w: u32,
+    h: u32,
+    depth: u32,
+}
+
+fn grid_level_at(t: &backend::GlesTextureBind, g: SliceGrid, l: u32) -> Option<GridLevel> {
+    let pitch = (t.stride_texels as usize).checked_mul(4)?;
+    let depth = u32::from(t.layers.max(1));
+    let mut off = 0usize;
+    for k in 0..=l {
+        let side = |s: u32| crate::gl::context::pot_level_side(s, k);
+        let at = GridLevel { off, w: side(g.w), h: side(g.h), depth: side(depth) };
+        if k == l {
+            return Some(at);
+        }
+        let rows = (at.h as usize).checked_mul(at.depth.div_ceil(g.cols) as usize)?;
+        off = off.checked_add(pitch.checked_mul(rows)?)?.checked_next_multiple_of(MIP_LEVEL_ALIGN as usize)?;
+    }
+    None
+}
+
+/// The levels a 3D texture's chain has: log2 of its largest side or its
+/// depth, plus one (ES 3.0.6 3.8.14; `chain_levels_3d`, src/gl/texture.rs).
+fn volume_chain_levels(g: SliceGrid, depth: u32) -> u32 {
+    32 - g.w.max(g.h).max(depth).max(1).leading_zeros()
+}
+
 /// Whether the texture unit cannot read the texture's storage in place: a
 /// level's rows are not a multiple of [`TEXTURE_ROW_ALIGN`] bytes, which
 /// only an imported image's can be (the GL core lays its own storage out on
@@ -1886,8 +1925,11 @@ fn needs_copy(t: &backend::GlesTextureBind) -> bool {
 /// The end of the storage a copy reads: the last level's (every face's).
 fn storage_end(t: &backend::GlesTextureBind) -> Option<usize> {
     if is_volume(t) {
-        /* the grid: level 0 alone */
-        return (t.stride_texels as usize).checked_mul(4)?.checked_mul(t.height as usize);
+        /* the last level's grid: its rows of slices on the grid's pitch */
+        let g = slice_grid(t)?;
+        let a = grid_level_at(t, g, levels_of(t) - 1)?;
+        let rows = (a.h as usize).checked_mul(a.depth.div_ceil(g.cols) as usize)?;
+        return a.off.checked_add((t.stride_texels as usize).checked_mul(4)?.checked_mul(rows)?);
     }
     let f = texel_format(t.format)?;
     let a = level_at(t, &f, levels_of(t) - 1)?;
@@ -2003,16 +2045,15 @@ fn texture_of(bind: Option<&backend::GlesTextureBind>, data: &mut Pool) -> Resul
      * on one pitch, `chain_layout_npot`), described as Mesa describes its
      * own (a plane a layer and level, `Array size` the layers; the shim's
      * texmore_46 and texmore_206_array traces); a 3D texture comes as a
-     * grid of its level 0 slices ([`SliceGrid`]) and is copied with its
-     * slices stacked, described as Mesa describes its own (one plane a
+     * grid of its slices a level ([`SliceGrid`], [`grid_level_at`]) and
+     * each level is copied with its slices stacked, described as Mesa describes its own (one plane a
      * level, its slice stride one slice; the shim's texmore_48 and
      * texmore_206_vol traces) */
     let layers = layers_of(t);
     let cube = t.type_ == backend::GLES_TEXTYPE_CUBE && layers == 6;
     let array = t.type_ == backend::GLES_TEXTYPE_2D_ARRAY && layers as u32 <= frame::MAX_ARRAY_LAYERS;
     let f = texel_format(t.format);
-    let volume =
-        is_volume(t) && layers as u32 <= frame::MAX_3D_DEPTH && levels == 1 && f.is_some_and(|f| f.block_bytes == 0);
+    let volume = is_volume(t) && layers as u32 <= frame::MAX_3D_DEPTH && f.is_some_and(|f| f.block_bytes == 0);
     if volume {
         let f = f.ok_or(FrameError::NotBuilt(NOT_BUILT_TEXTURE_FORMAT))?;
         return volume_of(t, f, data);
@@ -2126,49 +2167,58 @@ fn sampled(
     }
 }
 
-/// A one-level 3D texture ([`SliceGrid`]): its slices copied from the GL
-/// core's grid into the frame's `data` arena one under the other, each
-/// row on [`TEXTURE_ROW_ALIGN`] bytes, so slice `k` is at `k * h` rows
-/// ([`frame::SampledTexture::face_gpu`]) and the plane's slice stride is
-/// one slice (`emit_generic_plane`, Mesa 26.2.1 pan_texture.c:410-416;
+/// A 3D texture ([`SliceGrid`]) and the levels its binding names: each
+/// level's slices copied from the GL core's grid of that level
+/// ([`grid_level_at`]) into the frame's `data` arena one under the other,
+/// each row on [`TEXTURE_ROW_ALIGN`] bytes, so slice `k` of level `l` is at
+/// `k * h_l` rows of the level ([`frame::SampledTexture::face_gpu`]) and the
+/// level's plane's slice stride is one of its slices (`emit_generic_plane`,
+/// Mesa 26.2.1 pan_texture.c:410-416; docs/notes/mali-3d-levels.md;
 /// [`texture_ready`] made the storage current).
 fn volume_of(
     t: &backend::GlesTextureBind,
     f: TexelFormat,
     data: &mut Pool,
 ) -> Result<frame::SampledTexture, FrameError> {
-    let g = slice_grid(t).ok_or(FrameError::Invalid(INVALID_TEXTURE_STORAGE))?;
+    let invalid = FrameError::Invalid(INVALID_TEXTURE_STORAGE);
+    let g = slice_grid(t).ok_or(invalid)?;
     let depth = u32::from(t.layers.max(1));
+    let levels = levels_of(t);
     let too_big = FrameError::NotBuilt(frame::NOT_BUILT_TEXTURE_SIZE);
+    /* no more levels than the chain has: the GL core keeps no others */
+    if levels > volume_chain_levels(g, depth) || levels as usize > frame::MAX_TEXTURE_LEVELS {
+        return Err(invalid);
+    }
     let pitch = (t.stride_texels as usize).checked_mul(4).ok_or(too_big)?;
     let end = storage_end(t).ok_or(too_big)?;
-    let row = g.w as usize * 4;
-    if t.cpu.is_null() || (t.bytes as usize) < end || (t.width as usize) * 4 > pitch {
-        return Err(FrameError::Invalid(INVALID_TEXTURE_STORAGE));
+    /* level 0 is what `bytes` names; the levels after it are the chain the
+     * GL core allocated with it (`grid_level_at`), as a 2D chain's are */
+    let end0 = pitch.checked_mul(t.height as usize).ok_or(too_big)?;
+    if t.cpu.is_null() || (t.bytes as usize) < end0 || (t.width as usize) * 4 > pitch {
+        return Err(invalid);
     }
-    // SAFETY: the GL core's CPU view of the grid: `bytes` of it, which hold
-    // `end` (checked above), live until the draw returns.
+    // SAFETY: the GL core's CPU view of the grid: level 0's `bytes`, which
+    // hold `end0` (checked above), and the levels laid out after it in the
+    // same allocation (`grid_level_at`, up to `end`), live until the draw
+    // returns.
     let texels = unsafe { core::slice::from_raw_parts(t.cpu.cast::<u8>(), end) };
-    let dst = row.next_multiple_of(TEXTURE_ROW_ALIGN as usize);
-    let h = g.h as usize;
-    let b = data.alloc(dst.checked_mul(h * depth as usize).ok_or(too_big)?, u64::from(TEXTURE_ROW_ALIGN))?;
-    for k in 0..depth as usize {
-        let (col, grid_row) = (k % g.cols as usize, k / g.cols as usize);
-        for y in 0..h {
-            let at = (grid_row * h + y) * pitch + col * row;
-            data.write(b, (k * h + y) * dst, &texels[at..at + row])?;
-        }
-    }
     let mut level = [frame::TextureLevel::default(); frame::MAX_TEXTURE_LEVELS];
-    level[0] = frame::TextureLevel { gpu: b.gpu, row_stride: dst as u32 };
-    Ok(frame::SampledTexture {
-        width: g.w,
-        height: g.h,
-        levels: 1,
-        faces: depth,
-        volume: true,
-        ..sampled(t, &f, level)
-    })
+    for (l, lv) in level.iter_mut().enumerate().take(levels as usize) {
+        let a = grid_level_at(t, g, l as u32).ok_or(too_big)?;
+        let row = a.w as usize * 4;
+        let dst = row.next_multiple_of(TEXTURE_ROW_ALIGN as usize);
+        let h = a.h as usize;
+        let b = data.alloc(dst.checked_mul(h * a.depth as usize).ok_or(too_big)?, u64::from(TEXTURE_ROW_ALIGN))?;
+        for k in 0..a.depth as usize {
+            let (col, grid_row) = (k % g.cols as usize, k / g.cols as usize);
+            for y in 0..h {
+                let at = a.off + (grid_row * h + y) * pitch + col * row;
+                data.write(b, (k * h + y) * dst, &texels[at..at + row])?;
+            }
+        }
+        *lv = frame::TextureLevel { gpu: b.gpu, row_stride: dst as u32 };
+    }
+    Ok(frame::SampledTexture { width: g.w, height: g.h, levels, faces: depth, volume: true, ..sampled(t, &f, level) })
 }
 
 /// An indexed draw's u16 indices where the frame reads them: the GL core's
