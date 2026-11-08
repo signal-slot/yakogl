@@ -8,11 +8,13 @@
 # tools/cts/testdata/mali-deqp/: the good slices must cover, tally and match
 # the pinned markdown, and each failing fixture (duplicate case, missing case,
 # missing chunk field, non-ancestor commit, stale doc block, ...) must make
-# its mode exit non-zero naming the rule. Nothing here is a real run.
+# its mode exit non-zero naming the rule. A rerun slice (meta.txt reruns=)
+# replaces the Lost rows of the slice it names (rerun/ pair); a rerun of a
+# non-Lost case or of a slice not given fails. Nothing here is a real run.
 set -u
 
 HERE=$(dirname "$0")
-WANT=25
+WANT=31
 OUT=$(python3 -I "$HERE/mali-deqp-tally.py" --self-test 2>&1)
 RC=$?
 printf '%s\n' "$OUT"

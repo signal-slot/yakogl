@@ -24,6 +24,20 @@ A slice is tools/cts/log/<YYYY-MM-DD>-t6-gles2-<session>-<sha8>/ with
                chunk-crash, chunk-hang, board-lost, not-run)
   kmsg/<label>.txt   the redacted kernel lines of the chunk
 
+A session the runner ends on board-lost or a wedged process marks the rest
+Lost (board-lost, not-run); those cases are rerun in a new slice whose
+meta.txt carries one more, optional key
+
+  reruns=<dir name of the earlier slice>   (that slice must be among the
+               slices given)
+
+A case may then appear in both slices, and only so: the earlier slice has it
+as Lost and the rerunning slice is the one named by reruns. The later status
+wins: the earlier Lost row is dropped from the tally and the cover. Chains
+work (C reruns B reruns A), each link by the same rule. Any other duplicate
+is RULE cover-duplicate; a reruns naming a slice not given, itself, or
+forming a cycle is RULE rerun-target.
+
 results.tsv lists the cases in mustpass order, chunk after chunk, so the
 chunks' `cases` counts split it; a chunk whose exit line names a refusal
 gives that refusal as the cause of its non-Pass cases.
@@ -111,9 +125,64 @@ def is_ancestor(commit, ref, cwd):
     return r.returncode == 0
 
 
+def order_reruns(slices):
+    """Slices with every rerun after the slice it reruns, plus the errors of
+    a reruns key that names no given slice, itself, or a cycle."""
+    errs = []
+    by_name = {s["name"]: s for s in slices}
+    done = []
+    names = set()
+    pending = list(slices)
+    while pending:
+        moved = False
+        for s in list(pending):
+            r = s["meta"].get("reruns", "")
+            if r and r not in by_name:
+                errs.append("RULE rerun-target: %s: reruns %r is not a slice "
+                            "given" % (s["name"], r))
+            elif r == s["name"]:
+                errs.append("RULE rerun-target: %s: reruns itself" % r)
+            elif not r or r in names:
+                done.append(s)
+                names.add(s["name"])
+            else:
+                continue
+            pending.remove(s)
+            moved = True
+        if not moved:
+            for s in pending:
+                errs.append("RULE rerun-target: %s: reruns cycle" % s["name"])
+            break
+    return done, errs
+
+
+def resolve(slices):
+    """(ordered slices, superseded {slice name: set of result indexes},
+    {(slice name, result index): earlier 'where'} for the duplicates no
+    rerun explains, errors of the reruns keys)."""
+    ordered, errs = order_reruns(slices)
+    owner = {}
+    superseded = {s["name"]: set() for s in ordered}
+    dups = {}
+    for s in ordered:
+        r = s["meta"].get("reruns", "")
+        for i, (_ln, f, _w) in enumerate(s["results"]):
+            prev = owner.get(f[0])
+            if prev is not None:
+                ps, pi = prev
+                if ps["name"] == r and ps["results"][pi][1][1] == "Lost":
+                    superseded[ps["name"]].add(pi)
+                else:
+                    dups[(s["name"], i)] = "%s results.tsv:%d" % (
+                        ps["name"], ps["results"][pi][0])
+                    continue
+            owner[f[0]] = (s, i)
+    return ordered, superseded, dups, errs
+
+
 def check_cover(mustpass, slices, git=True, main_ref="origin/main", cwd=None):
     """Returns the list of 'RULE name: text' errors."""
-    errs = []
+    slices, _sup, dups, errs = resolve(slices)
     want = set(mustpass)
     seen = {}
     for s in slices:
@@ -151,7 +220,7 @@ def check_cover(mustpass, slices, git=True, main_ref="origin/main", cwd=None):
                 if v and v not in ok:
                     errs.append("RULE chunk-field: %s: %s %r is not %s"
                                 % (row, col, v, "|".join(ok)))
-        for ln, f, whole in s["results"]:
+        for ri, (ln, f, whole) in enumerate(s["results"]):
             case, st, detail = f
             where = "%s results.tsv:%d" % (n, ln)
             if not whole or not st:
@@ -166,9 +235,9 @@ def check_cover(mustpass, slices, git=True, main_ref="origin/main", cwd=None):
             if case not in want:
                 errs.append("RULE cover-unknown: %s: %s is not in the mustpass "
                             "list" % (where, case))
-            elif case in seen:
+            elif (n, ri) in dups:
                 errs.append("RULE cover-duplicate: %s: %s is also in %s"
-                            % (where, case, seen[case]))
+                            % (where, case, dups[(n, ri)]))
             else:
                 seen[case] = where
     miss = [c for c in mustpass if c not in seen]
@@ -213,9 +282,12 @@ def cause(status, detail, exit_line):
 def tally(slices):
     by_status = {}
     by_cause = {}
-    for s in slices:
+    ordered, superseded, _d, _e = resolve(slices)
+    for s in ordered:
         ex = chunk_exit_lines(s)
         for i, (_, f, _w) in enumerate(s["results"]):
+            if i in superseded[s["name"]]:
+                continue
             st = f[1]
             by_status[st] = by_status.get(st, 0) + 1
             if st != "Pass":
@@ -360,6 +432,24 @@ def self_test():
          os.path.join(FIXTURES, "doc-stale.md"), *good)
     must("doc without block", "doc-block", "--check-doc",
          os.path.join(FIXTURES, "doc-noblock.md"), *good)
+    # reruns: a later slice replaces the Lost rows of the one it names
+    rr = os.path.join(FIXTURES, "rerun", "2026-11-08-t6-gles2-S5-00000000")
+    lostd = os.path.join(FIXTURES, "lost")
+    rc, _o, _e = run("--check-cover", "--no-git", mp, good[0], lostd, rr)
+    chk("rerun pair: Lost rows replaced, cover holds", rc == 0)
+    chk("rerun pair: argument order does not matter",
+        run("--check-cover", "--no-git", mp, rr, lostd, good[0])[0] == 0)
+    rc, o, _e = run("--tally", "--no-git", good[0], lostd, rr)
+    chk("rerun tally: Lost rows gone, total 8, later status counted",
+        rc == 0 and re.search(r"^TOTAL +8$", o, re.M) is not None
+        and re.search(r"^Pass +4$", o, re.M) is not None
+        and re.search(r"^Lost ", o, re.M) is None)
+    must("rerun of a case that is not Lost", "cover-duplicate",
+         "--check-cover", "--no-git", mp, good[0], lostd, b("rerunnonlost"))
+    must("rerun of a slice not given", "rerun-target", "--check-cover",
+         "--no-git", mp, good[0], lostd, b("reruntarget"))
+    must("plain duplicate still fails beside a rerun", "cover-duplicate",
+         "--check-cover", "--no-git", mp, good[0], lostd, rr, b("dup"))
     rc, _o, e = run("--check-cover", "--no-git", mp, os.path.join(FIXTURES, "nope"))
     chk("unreadable slice exits 2", rc == 2)
     # ancestor rule, in a throwaway repository
