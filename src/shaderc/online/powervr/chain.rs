@@ -636,23 +636,6 @@ pub fn build_fragment_for<'a>(
     if !sel.outputs.iter().all(|(slot, _)| matches!(slot, ir::IoSlot::FragColor(_) | ir::IoSlot::FragDepth)) {
         return Err(ChainError::FragmentOutputsNotBuilt);
     }
-    if depth_comps.is_some() {
-        /* The depth tail exists only on the plain single-colour tail this
-         * builder assembles. The combinations it does not reach are refused
-         * by name, not silently dropped: Mesa predicates `depthf` under the
-         * kill (its DEPTH_FEEDBACK pass covers a shader that also discards)
-         * and blends around it, and this tail has neither. */
-        let unsupported = |why| ChainError::Build(BuildError::Unsupported(why));
-        if !single {
-            return Err(unsupported("gl_FragDepth in a shader that does not write colour output 0 alone"));
-        }
-        if sel.discard.is_some() {
-            return Err(unsupported("gl_FragDepth in a shader that discards"));
-        }
-        if blend_key != 0 {
-            return Err(unsupported("gl_FragDepth in a blend variant"));
-        }
-    }
     let bbuf = a.alloc_filled(4 * sel.outputs.len() + 3, VReg(0)).map_err(oom)?;
     let boundary = boundary_of(&sel, bbuf).map_err(ChainError::Alloc)?;
     let al =
@@ -820,18 +803,20 @@ pub fn build_fragment_for<'a>(
         if alpha_to_one.is_some() {
             return Err(unsupported("alpha-to-one in a shader with more than one colour output"));
         }
-        if sel.outputs.len() > MAX_RGBA8_OUTPUTS {
+        if n_colour > MAX_RGBA8_OUTPUTS {
             return Err(unsupported("more colour outputs than the pixel's four output registers"));
         }
         let mut outs = [(0u16, [(Bank::Temp, 0u16); 4]); MAX_RGBA8_OUTPUTS];
-        for (o, (slot, comps)) in outs.iter_mut().zip(sel.outputs.iter()) {
-            let ir::IoSlot::FragColor(loc) = *slot else { return Err(ChainError::FragmentOutputsNotBuilt) };
-            *o = (u16::from(loc), resolve(comps)?);
+        let mut placed = 0;
+        for (slot, comps) in sel.outputs.iter() {
+            let ir::IoSlot::FragColor(loc) = *slot else { continue };
+            outs[placed] = (u16::from(loc), resolve(comps)?);
+            placed += 1;
         }
-        let outs = &mut outs[..sel.outputs.len()];
+        let outs = &mut outs[..placed];
         outs.sort_unstable_by_key(|(loc, _)| *loc);
         output_regs = outs.last().map(|(loc, _)| *loc as u8 + 1);
-        super::assemble::build_fragment_shader_outputs(iterated, al.groups, outs, discard, free, buf)
+        super::assemble::build_fragment_shader_outputs(iterated, al.groups, outs, discard, depth, free, buf)
             .map_err(ChainError::Build)?
     };
     /* YAKOGL_FRAGMENT_TEMPS_DUMP=1 (host tests): where a fragment program's
