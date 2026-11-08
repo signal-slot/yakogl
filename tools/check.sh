@@ -2637,6 +2637,12 @@ print(len(l), "cases"); sys.exit(0 if ok else 1)'
   # the image .config check, the tallies, the GLES3 tables, and check 20:
   # images-selftest.sh, the image builders against a fake west). Host only.
   step "tools   cts-selftest.sh (the CTS tools' checks, images-selftest included)" tools/cts/cts-selftest.sh
+  # tools/cts/mali-deqp-selftest.sh: the NanoPC-T6 dEQP-GLES2 runner against a
+  # fake board (no ssh). Host only.
+  step "tools   mali-deqp-selftest.sh (NanoPC-T6 dEQP-GLES2 runner, fake board)" tools/cts/mali-deqp-selftest.sh
+  # tools/cts/mali-kmsg-selftest.sh: the panthor kmsg classifier on fixtures
+  # (mode 100644, so run through bash). Host only.
+  step "tools   mali-kmsg-selftest.sh (panthor kmsg classifier, fixtures)" bash tools/cts/mali-kmsg-selftest.sh
   # The licence audit (check 25 of the script above) on its own, so that a diff
   # which reaches no `tools` path (a data file under tools/v3d, 7bd8a8e94) still
   # meets it: every added or changed file is a tracked file the audit reads.
