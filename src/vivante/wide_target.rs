@@ -51,12 +51,20 @@
 //! under (2) is unmeasured, which matters only to `depth_resolve` and to a
 //! depth buffer shared with draws into 32-bit targets (logged once when a
 //! draw reaches it). ES 2.0 has no 64-bit colour format to render into.
+//!
+//! Prepared, not reached: a draw described target by target ([`Target`],
+//! [`wanted_targets`], [`prepare_targets`], [`bind_targets`]), every target
+//! of it on a shadow of its own pixel size, and a 128-bit target (RGBA32I/UI)
+//! as one shadow of two 8-byte planes (`split_planes` in, `join_planes` out),
+//! Mesa's two G32R32F render targets. `backend.rs` still refuses RGBA32I/UI
+//! and calls only the one-target functions; docs/notes/gc-128bit-render-targets.md,
+//! "Implementation sequence", step 1 says what it must call.
 
 use crate::backend::{gles_surf_bytes_per_pixel, GlesDraw};
 use crate::osal::{self, OsalGpuMem, OSAL_MEM_DATA};
 use crate::util::Global;
 
-/// Bytes a pixel of a target this module takes.
+/// Bytes a pixel of a target the one-target path ([`wanted`]) takes.
 const BPP: u32 = 8;
 /// Where the shadow starts: a page.
 const BASE_ALIGN: usize = 4096;
@@ -72,6 +80,8 @@ struct Key {
     h: u32,
     /// The linear storage's row pitch in bytes.
     pitch: u32,
+    /// Bytes a pixel: 8 on the one-target path; 16 is a two-plane entry.
+    bpp: u32,
 }
 
 struct Entry {
@@ -126,8 +136,13 @@ pub const fn stride(w: u32) -> u32 {
 /// Byte offset of pixel (x, y) in a tiled surface `tw` pixels wide (a
 /// multiple of 4): 4x4 tiles row-major, pixels row-major inside a tile.
 const fn tiled_offset(x: u32, y: u32, tw: u32) -> usize {
+    tiled_offset_bpp(x, y, tw, BPP)
+}
+
+/// [`tiled_offset`] for pixels of `bpp` bytes.
+const fn tiled_offset_bpp(x: u32, y: u32, tw: u32, bpp: u32) -> usize {
     let tile = (y / 4) * (tw / 4) + x / 4;
-    ((tile * 16 + (y % 4) * 4 + x % 4) * BPP) as usize
+    ((tile * 16 + (y % 4) * 4 + x % 4) * bpp) as usize
 }
 
 /// Bytes a texel of a 128-bit target takes in the linear storage.
@@ -195,7 +210,130 @@ pub fn wanted(gl: &GlesDraw, single: bool, straight: bool) -> bool {
 }
 
 fn key_of(gl: &GlesDraw) -> Key {
-    Key { gpu: gl.target_gpu, w: gl.target_w, h: gl.target_h, pitch: crate::backend::draw_pitch(gl) * BPP }
+    Key { gpu: gl.target_gpu, w: gl.target_w, h: gl.target_h, pitch: crate::backend::draw_pitch(gl) * BPP, bpp: BPP }
+}
+
+/// Bytes a shadow of `key` takes from its page boundary on: the padded
+/// pixels, and for a 128-bit target its two planes ([`planes_bytes`]).
+fn shadow_bytes(key: &Key) -> usize {
+    let (pw, ph) = padded(key.w, key.h);
+    if key.bpp as usize == WIDE_BPP {
+        planes_bytes(pw, ph)
+    } else {
+        (pw * ph * key.bpp) as usize
+    }
+}
+
+/// GL attachments one draw describes at most ([`Target`]). A 128-bit one
+/// takes two hardware targets, so up to twice as many PE slots.
+pub const MAX_TARGETS: usize = crate::backend::GLES_MAX_TARGETS;
+
+/// One colour target of a draw, for the multi-target shadow. The caller
+/// fills it: `GlesDrawTarget` carries no CPU view or pitch of the
+/// attachments after the first, so only `target_of` builds one from a draw.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Target {
+    /// The linear storage: GPU address and CPU view.
+    pub gpu: u64,
+    pub cpu: *mut u8,
+    pub w: u32,
+    pub h: u32,
+    /// The linear storage's row pitch in bytes.
+    pub pitch: u32,
+    /// Bytes a pixel (`gles_surf_bytes_per_pixel`): 2, 4, 8 or 16.
+    pub bpp: u32,
+}
+
+/// The draw's own target (`target_*`, attachment 0) as a [`Target`].
+pub fn target_of(gl: &GlesDraw) -> Target {
+    let bpp = gles_surf_bytes_per_pixel(gl.target_format);
+    Target {
+        gpu: gl.target_gpu,
+        cpu: gl.target_cpu as *mut u8,
+        w: gl.target_w,
+        h: gl.target_h,
+        pitch: crate::backend::draw_pitch(gl) * bpp,
+        bpp,
+    }
+}
+
+const fn target_key(t: &Target) -> Key {
+    Key { gpu: t.gpu, w: t.w, h: t.h, pitch: t.pitch, bpp: t.bpp }
+}
+
+/// PE_COLOR_STRIDE / PE_RT_CONFIG stride of a shadow of `t`: the padded
+/// width in pixels of its size, for a 128-bit target of one 8-byte plane
+/// (Mesa's 64-bit twin's `level->stride`).
+pub const fn target_stride(t: &Target) -> u32 {
+    let bpp = if t.bpp as usize == WIDE_BPP { BPP } else { t.bpp };
+    padded(t.w, 1).0 * bpp
+}
+
+/// Does a draw into `targets` render into shadows, one a target? Every
+/// target with a CPU view and a pixel size the shadow copies, at least one
+/// of them 64 or 128 bits (SINGLE_BUFFER then tiles all of them, a 32-bit
+/// target beside a 128-bit one too), drawn `straight` as in [`wanted`]. For
+/// one 64-bit target, the same answer as [`wanted`] with `single`.
+pub fn wanted_targets(targets: &[Target], straight: bool) -> bool {
+    straight
+        && !targets.is_empty()
+        && targets.len() <= MAX_TARGETS
+        && targets.iter().all(|t| t.gpu != 0 && !t.cpu.is_null() && matches!(t.bpp, 2 | 4 | 8 | 16))
+        && targets.iter().any(|t| t.bpp >= BPP)
+}
+
+/// Make the shadows of every target of a draw current ([`prepare`], one a
+/// target); none of them pushes out another of the same draw. Non-zero
+/// when one has no shadow: the draw is then refused.
+pub fn prepare_targets(targets: &[Target], finish: impl Fn() -> i32) -> i32 {
+    let mut keys = [Key { gpu: 0, w: 0, h: 0, pitch: 0, bpp: 0 }; MAX_TARGETS];
+    if targets.len() > MAX_TARGETS {
+        return -1;
+    }
+    for (i, t) in targets.iter().enumerate() {
+        keys[i] = target_key(t);
+        if prepare_key(keys[i], t.cpu, &keys[..i], &finish) != 0 {
+            return -1;
+        }
+    }
+    0
+}
+
+/// Where a target of a draw renders: its shadow's GPU address, the second
+/// (B,A) plane's for a 128-bit target (0 otherwise), and the stride.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Bound {
+    pub gpu: u64,
+    pub plane1: u64,
+    pub stride: u32,
+}
+
+impl Bound {
+    pub const ZERO: Bound = Bound { gpu: 0, plane1: 0, stride: 0 };
+}
+
+/// The shadows `targets` render into, all marked as written by `kick` (the
+/// kick being recorded), in the order of `targets`. `None`, and nothing
+/// marked, when [`prepare_targets`] left one without a shadow.
+pub fn bind_targets(targets: &[Target], kick: u32) -> Option<[Bound; MAX_TARGETS]> {
+    if targets.len() > MAX_TARGETS {
+        return None;
+    }
+    let s = shadows();
+    let mut slots = [0usize; MAX_TARGETS];
+    for (i, t) in targets.iter().enumerate() {
+        let key = target_key(t);
+        slots[i] = s.entries.iter().position(|e| e.as_ref().is_some_and(|e| e.key == key))?;
+    }
+    let mut out = [Bound::ZERO; MAX_TARGETS];
+    for (i, t) in targets.iter().enumerate() {
+        let e = s.entries[slots[i]].as_mut()?;
+        e.kick = kick;
+        let (pw, ph) = padded(t.w, t.h);
+        let plane1 = if t.bpp as usize == WIDE_BPP { e.gpu + plane_offset(pw, ph) as u64 } else { 0 };
+        out[i] = Bound { gpu: e.gpu, plane1, stride: target_stride(t) };
+    }
+    Some(out)
 }
 
 /// Make the shadow for `gl`'s target current, before the draw records
@@ -205,7 +343,12 @@ fn key_of(gl: &GlesDraw) -> Key {
 /// Non-zero when there is no shadow; the draw is then refused rather than
 /// rendered into the linear storage, which the PE writes wrong.
 pub fn prepare(gl: &GlesDraw, finish: impl Fn() -> i32) -> i32 {
-    let key = key_of(gl);
+    prepare_key(key_of(gl), gl.target_cpu as *mut u8, &[], &finish)
+}
+
+/// [`prepare`] of one target, `keep` the shadows of the same draw already
+/// prepared, which no slot is taken from.
+fn prepare_key(key: Key, cpu: *mut u8, keep: &[Key], finish: &impl Fn() -> i32) -> i32 {
     let s = shadows();
     s.clock = s.clock.wrapping_add(1);
     let clock = s.clock;
@@ -219,13 +362,13 @@ pub fn prepare(gl: &GlesDraw, finish: impl Fn() -> i32) -> i32 {
         return -1;
     }
     for e in s.entries.iter_mut() {
-        if e.as_ref().is_some_and(|e| e.key.gpu == key.gpu) {
+        if e.as_ref().is_some_and(|e| e.key.gpu == key.gpu && !keep.contains(&e.key)) {
             if let Some(mut old) = e.take() {
                 osal::gpu_free(&mut old.mem);
             }
         }
     }
-    let slot = match free_slot(s) {
+    let slot = match free_slot(s, keep) {
         Some(i) => i,
         None => {
             /* every shadow is the newer copy of its target: let the kicks
@@ -233,7 +376,7 @@ pub fn prepare(gl: &GlesDraw, finish: impl Fn() -> i32) -> i32 {
             if finish() != 0 {
                 return -1;
             }
-            match free_slot(s) {
+            match free_slot(s, keep) {
                 Some(i) => i,
                 None => return -1,
             }
@@ -242,8 +385,7 @@ pub fn prepare(gl: &GlesDraw, finish: impl Fn() -> i32) -> i32 {
     if let Some(mut old) = s.entries[slot].take() {
         osal::gpu_free(&mut old.mem);
     }
-    let (pw, ph) = padded(key.w, key.h);
-    let bytes = (pw * ph * BPP) as usize;
+    let bytes = shadow_bytes(&key);
     let mut mem = OsalGpuMem::ZERO;
     if osal::gpu_alloc(super::backend::heap_data(), bytes + BASE_ALIGN - 1, OSAL_MEM_DATA, &mut mem) != 0 {
         crate::glog_once!("vivante: no GPU memory for a {bytes}-byte tiled colour target");
@@ -256,7 +398,7 @@ pub fn prepare(gl: &GlesDraw, finish: impl Fn() -> i32) -> i32 {
     let skip = (mem.gpu.wrapping_neg() & (BASE_ALIGN as u64 - 1)) as usize;
     let e = Entry {
         key,
-        cpu: gl.target_cpu as *mut u8,
+        cpu,
         gpu: mem.gpu + skip as u64,
         // SAFETY: `skip` is below BASE_ALIGN, inside the allocation.
         shadow: unsafe { (mem.cpu as *mut u8).add(skip) },
@@ -272,8 +414,8 @@ pub fn prepare(gl: &GlesDraw, finish: impl Fn() -> i32) -> i32 {
 }
 
 /// An empty slot, else the least recently used one whose shadow is not the
-/// newer copy of its target.
-fn free_slot(s: &Shadows) -> Option<usize> {
+/// newer copy of its target, nor one of `keep`.
+fn free_slot(s: &Shadows, keep: &[Key]) -> Option<usize> {
     if let Some(i) = s.entries.iter().position(|e| e.is_none()) {
         return Some(i);
     }
@@ -281,31 +423,43 @@ fn free_slot(s: &Shadows) -> Option<usize> {
         .iter()
         .enumerate()
         .filter_map(|(i, e)| e.as_ref().map(|e| (i, e)))
-        .filter(|(_, e)| e.kick == 0)
+        .filter(|(_, e)| e.kick == 0 && !keep.contains(&e.key))
         .min_by_key(|(_, e)| e.stamp)
         .map(|(i, _)| i)
 }
 
+/// Bytes of the linear storage `key`'s pixels span: `h` rows of `pitch`,
+/// the last one only as far as its last pixel.
+fn linear_bytes(key: &Key) -> usize {
+    (key.pitch as usize) * (key.h as usize - 1) + (key.w * key.bpp) as usize
+}
+
 /// The linear storage into the shadow (the storage is the newer copy, and
-/// no kick writes either).
+/// no kick writes either). A 128-bit target splits into its two planes.
 fn tile_in(e: &mut Entry) -> i32 {
-    let Key { w, h, pitch, .. } = e.key;
+    let Key { w, h, pitch, bpp, .. } = e.key;
     let tw = padded(w, h).0;
-    let rows = (pitch as usize) * (h as usize - 1) + (w * BPP) as usize;
+    let rows = linear_bytes(&e.key);
+    let bytes = shadow_bytes(&e.key);
     // SAFETY: the storage holds `h` rows of `pitch` bytes (the GL core's
-    // target), the shadow `padded(w, h)` pixels; both CPU views are live.
+    // target), the shadow `shadow_bytes`; both CPU views are live.
     unsafe {
         osal::cache_invd(e.cpu as *mut core::ffi::c_void, rows);
-        for y in 0..h {
-            for x in 0..w {
-                let from = (y * pitch + x * BPP) as usize;
-                core::ptr::copy_nonoverlapping(e.cpu.add(from), e.shadow.add(tiled_offset(x, y, tw)), BPP as usize);
+        if bpp as usize == WIDE_BPP {
+            let src = core::slice::from_raw_parts(e.cpu, rows);
+            split_planes(src, pitch as usize, (w, h), tw, core::slice::from_raw_parts_mut(e.shadow, bytes));
+        } else {
+            for y in 0..h {
+                for x in 0..w {
+                    let from = (y * pitch + x * bpp) as usize;
+                    let to = tiled_offset_bpp(x, y, tw, bpp);
+                    core::ptr::copy_nonoverlapping(e.cpu.add(from), e.shadow.add(to), bpp as usize);
+                }
             }
         }
-        let (pw, ph) = padded(w, h);
-        osal::cache_flush(e.shadow as *mut core::ffi::c_void, (pw * ph * BPP) as usize);
+        osal::cache_flush(e.shadow as *mut core::ffi::c_void, bytes);
     }
-    shadows().tiled += u64::from(w * h * BPP);
+    shadows().tiled += u64::from(w * h * bpp);
     0
 }
 
@@ -320,7 +474,7 @@ pub fn bind(gl: &GlesDraw, kick: u32) -> Option<u64> {
 
 /// Every shadow whose last rendering kick has completed (`pending` says it
 /// has not) goes back into its linear storage, which is the newer copy from
-/// then on.
+/// then on. A 128-bit target's two planes join into its 16-byte pixels.
 pub fn retire(pending: impl Fn(u32) -> bool) {
     let s = shadows();
     let mut untiled = 0u64;
@@ -328,21 +482,28 @@ pub fn retire(pending: impl Fn(u32) -> bool) {
         if e.kick == 0 || pending(e.kick) {
             continue;
         }
-        let Key { w, h, pitch, .. } = e.key;
-        let (pw, ph) = padded(w, h);
-        let rows = (pitch as usize) * (h as usize - 1) + (w * BPP) as usize;
+        let Key { w, h, pitch, bpp, .. } = e.key;
+        let pw = padded(w, h).0;
+        let rows = linear_bytes(&e.key);
+        let bytes = shadow_bytes(&e.key);
         // SAFETY: as in `tile_in`; the kick that wrote the shadow completed.
         unsafe {
-            osal::cache_invd(e.shadow as *mut core::ffi::c_void, (pw * ph * BPP) as usize);
-            for y in 0..h {
-                for x in 0..w {
-                    let to = (y * pitch + x * BPP) as usize;
-                    core::ptr::copy_nonoverlapping(e.shadow.add(tiled_offset(x, y, pw)), e.cpu.add(to), BPP as usize);
+            osal::cache_invd(e.shadow as *mut core::ffi::c_void, bytes);
+            if bpp as usize == WIDE_BPP {
+                let src = core::slice::from_raw_parts(e.shadow, bytes);
+                join_planes(src, pw, (w, h), pitch as usize, core::slice::from_raw_parts_mut(e.cpu, rows));
+            } else {
+                for y in 0..h {
+                    for x in 0..w {
+                        let to = (y * pitch + x * bpp) as usize;
+                        let from = tiled_offset_bpp(x, y, pw, bpp);
+                        core::ptr::copy_nonoverlapping(e.shadow.add(from), e.cpu.add(to), bpp as usize);
+                    }
                 }
             }
             osal::cache_flush(e.cpu as *mut core::ffi::c_void, rows);
         }
-        untiled += u64::from(w * h * BPP);
+        untiled += u64::from(w * h * bpp);
         e.kick = 0;
     }
     s.untiled += untiled;
@@ -494,5 +655,409 @@ mod tests {
         let mut back = [0u8; 16];
         join_planes(&planes, 4, (1, 1), 16, &mut back);
         assert_eq!(back, px);
+    }
+
+    /* ---- the shadow itself, on a host OSAL ---------------------------- */
+
+    use crate::backend::{GLES_SURF_RGBA16F, GLES_SURF_RGBA8888};
+    use crate::osal::OsalOps;
+    use crate::testutil::TestGl;
+    use core::ffi::c_void;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    /// Live allocations of [`HOST_OSAL`].
+    static LIVE: AtomicUsize = AtomicUsize::new(0);
+
+    /// Host memory with the CPU address as the GPU address, so a test reads
+    /// a shadow at the address [`bind`] hands out; filled with 0x5a.
+    unsafe extern "C" fn h_alloc(_heap: u64, size: usize, _flags: u32, out: *mut OsalGpuMem) -> i32 {
+        let cpu = std::boxed::Box::into_raw(std::vec![0x5au8; size].into_boxed_slice()) as *mut u8;
+        LIVE.fetch_add(1, Ordering::Relaxed);
+        // SAFETY: the caller's out-parameter.
+        unsafe {
+            *out = OsalGpuMem { cpu: cpu as *mut c_void, gpu: cpu as u64, phys: 0, size, impl_: core::ptr::null_mut() };
+        }
+        0
+    }
+
+    unsafe extern "C" fn h_free(mem: *mut OsalGpuMem) -> i32 {
+        // SAFETY: the caller's descriptor, made by `h_alloc` or empty.
+        let m = unsafe { &mut *mem };
+        if !m.cpu.is_null() {
+            // SAFETY: `h_alloc`'s box of `size` bytes.
+            drop(unsafe { std::boxed::Box::from_raw(core::ptr::slice_from_raw_parts_mut(m.cpu as *mut u8, m.size)) });
+            LIVE.fetch_sub(1, Ordering::Relaxed);
+        }
+        *m = OsalGpuMem::ZERO;
+        0
+    }
+
+    unsafe extern "C" fn h_cache(_cpu: *mut c_void, _n: usize) {}
+
+    static HOST_OSAL: OsalOps = OsalOps {
+        init: None,
+        shutdown: None,
+        gpu_alloc: Some(h_alloc),
+        gpu_free: Some(h_free),
+        mmu_map: None,
+        map_phys: None,
+        gpu_write: None,
+        gpu_read: None,
+        cache_flush: Some(h_cache),
+        cache_invd: Some(h_cache),
+        submit: None,
+        wait: None,
+        completed: None,
+        reg_read: None,
+        reg_write: None,
+        query: None,
+        log: None,
+        wait_vblank: None,
+        present: None,
+        lock: None,
+        unlock: None,
+        thread_id: None,
+        display_busy: None,
+    };
+
+    /// The serialising guard, [`HOST_OSAL`] installed and no shadow.
+    struct Rig {
+        prev: *const OsalOps,
+        _gl: TestGl,
+    }
+
+    impl Rig {
+        fn new() -> Rig {
+            let gl = TestGl::new(4, 4);
+            // SAFETY: tests are serialised by the TestGl guard.
+            let prev = unsafe {
+                let prev = crate::osal::g_osal;
+                crate::osal::osal_set_ops(&HOST_OSAL);
+                prev
+            };
+            release_all();
+            LIVE.store(0, Ordering::Relaxed);
+            Rig { prev, _gl: gl }
+        }
+    }
+
+    impl Drop for Rig {
+        fn drop(&mut self) {
+            release_all();
+            // SAFETY: as in `new`.
+            unsafe { crate::osal::osal_set_ops(self.prev) };
+        }
+    }
+
+    /// (key, allocation bytes, shadow gpu, kick) of every shadow, by slot.
+    fn entries() -> std::vec::Vec<(Key, usize, u64, u32)> {
+        shadows().entries.iter().flatten().map(|e| (e.key, e.mem.size, e.gpu, e.kick)).collect()
+    }
+
+    /// `n` bytes of the shadow at `gpu` (an `h_alloc` address).
+    fn shadow_at(gpu: u64, n: usize) -> std::vec::Vec<u8> {
+        // SAFETY: an `h_alloc` address with at least `n` bytes after it.
+        unsafe { core::slice::from_raw_parts(gpu as *const u8, n) }.to_vec()
+    }
+
+    /// A 64-bit pixel's bytes: (x, y) and a generation.
+    fn px8(x: u32, y: u32, g: u8) -> [u8; 8] {
+        [x as u8, y as u8, g, 0x80, 0xff, 0x01, !(x as u8), g ^ 0x55]
+    }
+
+    #[test]
+    fn a_single_64_bit_target_keeps_its_entry_and_bytes() {
+        /* pinned before the multi-target shadow: what backend.rs's draw of an
+         * RGBA16I/UI, RG32I/UI or RGBA16F target reaches */
+        let _rig = Rig::new();
+        let (w, h, pitch_px) = (5u32, 3u32, 6u32);
+        let pitch = (pitch_px * 8) as usize;
+        let mut linear = std::vec![0xeeu8; pitch * h as usize];
+        for y in 0..h {
+            for x in 0..w {
+                let at = y as usize * pitch + x as usize * 8;
+                linear[at..at + 8].copy_from_slice(&px8(x, y, 1));
+            }
+        }
+        let mut gl = GlesDraw::ZERO;
+        gl.target_gpu = 0x4010_0000;
+        gl.target_cpu = linear.as_mut_ptr() as *mut c_void;
+        gl.target_w = w;
+        gl.target_h = h;
+        gl.target_pitch = pitch_px;
+        gl.target_format = GLES_SURF_RGBA16F;
+        assert!(wanted(&gl, true, true));
+        assert!(!wanted(&gl, false, true), "more than one hardware target");
+        assert!(!wanted(&gl, true, false), "through the scratch or bottom-up");
+        let mut rgba8 = gl;
+        rgba8.target_format = GLES_SURF_RGBA8888;
+        assert!(!wanted(&rgba8, true, true), "a 32-bit target stays linear");
+        assert_eq!(stride(w), 128);
+
+        let (tiled0, untiled0) = counts();
+        assert_eq!(prepare(&gl, || panic!("no finish with free slots")), 0);
+        let e = entries();
+        assert_eq!(e.len(), 1);
+        let key = Key { gpu: 0x4010_0000, w, h, pitch: pitch as u32, bpp: 8 };
+        assert_eq!(e[0].0, key);
+        assert_eq!(e[0].1, 16 * 4 * 8 + BASE_ALIGN - 1, "padded 16 x 4, 8 bytes a pixel, plus the page");
+        assert_eq!(e[0].3, 0);
+        assert_eq!(counts(), (tiled0 + 5 * 3 * 8, untiled0));
+        assert_eq!(LIVE.load(Ordering::Relaxed), 1);
+
+        let gpu = bind(&gl, 7).expect("the shadow");
+        assert_eq!(gpu, e[0].2);
+        assert_eq!(gpu % BASE_ALIGN as u64, 0);
+        let mut want = std::vec![0u8; 16 * 4 * 8];
+        for y in 0..h {
+            for x in 0..w {
+                let at = tiled_offset(x, y, 16);
+                want[at..at + 8].copy_from_slice(&px8(x, y, 1));
+            }
+        }
+        assert_eq!(shadow_at(gpu, want.len()), want, "tiled in, the padding zero");
+
+        /* the same target again while kick 7 is pending: no second tile-in */
+        assert_eq!(prepare(&gl, || panic!("no finish")), 0);
+        assert_eq!(counts(), (tiled0 + 120, untiled0));
+
+        /* the GPU renders generation 2; the kick completes */
+        for y in 0..h {
+            for x in 0..w {
+                let at = tiled_offset(x, y, 16);
+                // SAFETY: inside the shadow.
+                unsafe { core::ptr::copy_nonoverlapping(px8(x, y, 2).as_ptr(), (gpu as *mut u8).add(at), 8) };
+            }
+        }
+        retire(|k| k == 7);
+        assert_eq!(counts().1, untiled0, "still pending");
+        retire(|_| false);
+        assert_eq!(counts(), (tiled0 + 120, untiled0 + 120));
+        assert_eq!(entries()[0].3, 0);
+        for y in 0..h {
+            for x in 0..pitch_px {
+                let at = y as usize * pitch + x as usize * 8;
+                let want = if x < w { px8(x, y, 2) } else { [0xee; 8] };
+                assert_eq!(linear[at..at + 8], want, "({x},{y})");
+            }
+        }
+
+        /* the storage is the newer copy again: the next prepare tiles in */
+        assert_eq!(prepare(&gl, || panic!("no finish")), 0);
+        assert_eq!(counts().0, tiled0 + 240);
+
+        /* specified again at another size: the old shadow goes */
+        gl.target_w = 2;
+        assert_eq!(prepare(&gl, || panic!("no finish")), 0);
+        let e = entries();
+        assert_eq!(e.len(), 1);
+        assert_eq!(e[0].0.w, 2);
+        assert_eq!(e[0].1, 16 * 4 * 8 + BASE_ALIGN - 1);
+        assert_eq!(LIVE.load(Ordering::Relaxed), 1);
+
+        released(0x4010_0000, 64);
+        assert!(entries().is_empty());
+        assert_eq!(LIVE.load(Ordering::Relaxed), 0);
+    }
+
+    /// A target over `buf`, `pitch` bytes a row.
+    fn target(buf: &mut [u8], gpu: u64, (w, h): (u32, u32), pitch: u32, bpp: u32) -> Target {
+        assert!(buf.len() >= (pitch * (h - 1) + w * bpp) as usize);
+        Target { gpu, cpu: buf.as_mut_ptr(), w, h, pitch, bpp }
+    }
+
+    #[test]
+    fn one_64_bit_target_described_as_targets_is_the_one_target_path() {
+        let _rig = Rig::new();
+        let mut linear = std::vec![0u8; 6 * 8 * 3];
+        let mut gl = GlesDraw::ZERO;
+        gl.target_gpu = 0x4020_0000;
+        gl.target_cpu = linear.as_mut_ptr() as *mut c_void;
+        gl.target_w = 5;
+        gl.target_h = 3;
+        gl.target_pitch = 6;
+        gl.target_format = GLES_SURF_RGBA16F;
+        let t = target_of(&gl);
+        assert_eq!(t, target(&mut linear, 0x4020_0000, (5, 3), 48, 8));
+        for straight in [true, false] {
+            assert_eq!(wanted_targets(&[t], straight), wanted(&gl, true, straight));
+        }
+        assert_eq!(target_key(&t), key_of(&gl));
+        assert_eq!(target_stride(&t), stride(5));
+
+        assert_eq!(prepare_targets(&[t], || panic!("no finish")), 0);
+        let e = entries();
+        assert_eq!(e.len(), 1);
+        assert_eq!((e[0].0, e[0].1), (key_of(&gl), 16 * 4 * 8 + BASE_ALIGN - 1));
+        let b = bind_targets(&[t], 9).expect("bound");
+        assert_eq!(b[0], Bound { gpu: e[0].2, plane1: 0, stride: 128 });
+        assert_eq!(b[1..], [Bound::ZERO; MAX_TARGETS - 1]);
+        /* the one-target functions find the same shadow */
+        assert_eq!(bind(&gl, 9), Some(e[0].2));
+        assert_eq!(prepare(&gl, || panic!("no finish")), 0);
+        assert_eq!(entries().len(), 1);
+    }
+
+    /// RGBA32I/UI words: negative, above 2^24, and both ends.
+    fn wide(x: u32, y: u32, g: u32) -> [u8; 16] {
+        let words = [
+            i32::MIN as u32 + x + g,
+            (-(1 + x as i32 + 16 * y as i32)) as u32,
+            0x0100_0001 + (g << 26) + x,
+            0xffff_ff01 - y - g,
+        ];
+        let mut b = [0u8; 16];
+        for (i, v) in words.iter().enumerate() {
+            b[i * 4..i * 4 + 4].copy_from_slice(&v.to_le_bytes());
+        }
+        b
+    }
+
+    #[test]
+    fn a_128_bit_target_round_trips_through_its_two_planes_bit_for_bit() {
+        let _rig = Rig::new();
+        let (w, h, pitch) = (5u32, 3u32, 6 * 16usize);
+        let mut linear = std::vec![0xeeu8; pitch * h as usize];
+        let image = |g: u32| {
+            let mut v = std::vec![0xeeu8; pitch * h as usize];
+            for y in 0..h {
+                for x in 0..w {
+                    let at = y as usize * pitch + x as usize * 16;
+                    v[at..at + 16].copy_from_slice(&wide(x, y, g));
+                }
+            }
+            v
+        };
+        linear.copy_from_slice(&image(1));
+        let t = target(&mut linear, 0x4030_0000, (w, h), pitch as u32, 16);
+        assert!(wanted_targets(&[t], true));
+        assert_eq!(target_stride(&t), 16 * 8, "one 8-byte plane a row");
+
+        let (tiled0, untiled0) = counts();
+        assert_eq!(prepare_targets(&[t], || panic!("no finish")), 0);
+        let e = entries();
+        assert_eq!(e.len(), 1);
+        assert_eq!(e[0].0, Key { gpu: 0x4030_0000, w, h, pitch: pitch as u32, bpp: 16 });
+        assert_eq!(e[0].1, planes_bytes(16, 4) + BASE_ALIGN - 1);
+        assert_eq!(counts(), (tiled0 + 5 * 3 * 16, untiled0));
+
+        let b = bind_targets(&[t], 3).expect("bound")[0];
+        assert_eq!(b, Bound { gpu: e[0].2, plane1: e[0].2 + plane_offset(16, 4) as u64, stride: 128 });
+        assert_eq!(plane_offset(16, 4), 512);
+        /* R,G in plane 0 and B,A in plane 1, at the same tiled place */
+        let planes = shadow_at(b.gpu, planes_bytes(16, 4));
+        for (x, y) in [(0, 0), (4, 0), (1, 2), (4, 2)] {
+            let at = tiled_offset(x, y, 16);
+            assert_eq!(planes[at..at + 8], wide(x, y, 1)[..8], "R,G of ({x},{y})");
+            assert_eq!(planes[512 + at..512 + at + 8], wide(x, y, 1)[8..], "B,A of ({x},{y})");
+        }
+
+        /* the GPU renders generation 2 into both planes; the kick completes */
+        let mut drawn = std::vec![0u8; planes_bytes(16, 4)];
+        split_planes(&image(2), pitch, (w, h), 16, &mut drawn);
+        // SAFETY: the shadow holds `planes_bytes(16, 4)` bytes.
+        unsafe { core::ptr::copy_nonoverlapping(drawn.as_ptr(), b.gpu as *mut u8, drawn.len()) };
+        retire(|_| false);
+        assert_eq!(counts(), (tiled0 + 240, untiled0 + 240));
+        assert_eq!(linear, image(2), "every word back, the pitch padding untouched");
+        let px = &linear[pitch + 3 * 16..][..16];
+        assert_eq!(i32::from_le_bytes(px[4..8].try_into().unwrap()), -(1 + 3 + 16));
+        assert_eq!(u32::from_le_bytes(px[8..12].try_into().unwrap()), 0x0100_0001 + (2 << 26) + 3);
+
+        /* in and straight back out, nothing drawn: bit for bit */
+        assert_eq!(prepare_targets(&[t], || panic!("no finish")), 0);
+        bind_targets(&[t], 4).expect("bound");
+        retire(|_| false);
+        assert_eq!(linear, image(2));
+    }
+
+    #[test]
+    fn a_mixed_128_and_32_bit_draw_gets_one_shadow_a_target() {
+        let _rig = Rig::new();
+        let (w, h) = (21u32, 10u32);
+        let mut wide_buf = std::vec![0u8; (w * 16 * h) as usize];
+        let mut rgba8 = std::vec![0u8; (w * 4 * h) as usize];
+        for (i, b) in rgba8.iter_mut().enumerate() {
+            *b = i as u8 ^ 0x3c;
+        }
+        let before8 = rgba8.clone();
+        let t128 = target(&mut wide_buf, 0x4040_0000, (w, h), w * 16, 16);
+        let t32 = target(&mut rgba8, 0x4050_0000, (w, h), w * 4, 4);
+
+        assert!(wanted_targets(&[t128, t32], true));
+        assert!(wanted_targets(&[t32, t128], true));
+        assert!(!wanted_targets(&[t128, t32], false));
+        assert!(!wanted_targets(&[t32], true), "32-bit targets alone stay linear");
+        assert!(!wanted_targets(&[t32, t32], true));
+        assert!(!wanted_targets(&[t128; MAX_TARGETS + 1], true));
+        assert!(!wanted_targets(&[t128, Target { cpu: core::ptr::null_mut(), ..t32 }], true));
+        assert!(!wanted_targets(&[], true));
+
+        assert_eq!(prepare_targets(&[t128, t32], || panic!("no finish")), 0);
+        let e = entries();
+        assert_eq!(e.len(), 2, "one shadow a target");
+        let (pw, ph) = padded(w, h);
+        assert_eq!((pw, ph), (32, 12));
+        assert_eq!(e[0].0.bpp, 16);
+        assert_eq!(e[0].1, planes_bytes(32, 12) + BASE_ALIGN - 1);
+        assert_eq!(planes_bytes(32, 12), 32 * 12 * 16);
+        assert_eq!(e[1].0.bpp, 4);
+        assert_eq!(e[1].1, 32 * 12 * 4 + BASE_ALIGN - 1);
+
+        let b = bind_targets(&[t128, t32], 5).expect("bound");
+        assert_eq!(b[0], Bound { gpu: e[0].2, plane1: e[0].2 + 32 * 12 * 8, stride: 32 * 8 });
+        assert_eq!(b[1], Bound { gpu: e[1].2, plane1: 0, stride: 32 * 4 });
+        assert!(b[..2].iter().all(|b| b.gpu % BASE_ALIGN as u64 == 0));
+        assert!(entries().iter().all(|e| e.3 == 5), "both written by the kick");
+        /* the 32-bit shadow is 4x4-tiled at 4 bytes a pixel */
+        let s32 = shadow_at(b[1].gpu, 32 * 12 * 4);
+        for (x, y) in [(0u32, 0u32), (3, 1), (4, 0), (20, 9)] {
+            let at = tiled_offset_bpp(x, y, 32, 4);
+            let from = (y * w * 4 + x * 4) as usize;
+            assert_eq!(s32[at..at + 4], before8[from..from + 4], "({x},{y})");
+        }
+        assert_eq!(tiled_offset_bpp(4, 0, 32, 4), 64);
+        assert_eq!(tiled_offset_bpp(0, 4, 32, 4), 8 * 64);
+
+        /* the GPU leaves both alone; both come back as they were */
+        retire(|_| false);
+        assert_eq!(rgba8, before8);
+        assert!(wide_buf.iter().all(|&b| b == 0));
+        assert!(entries().iter().all(|e| e.3 == 0));
+
+        /* a target missing its shadow binds nothing */
+        let other = Target { gpu: 0x4060_0000, ..t32 };
+        assert_eq!(bind_targets(&[t128, other], 6), None);
+        assert!(entries().iter().all(|e| e.3 == 0), "nothing marked");
+    }
+
+    #[test]
+    fn a_draw_does_not_push_out_its_own_shadows() {
+        let _rig = Rig::new();
+        let mut bufs = std::vec![std::vec![0u8; 4 * 8 * 4]; ENTRIES - 2 + 3];
+        let mut all: std::vec::Vec<Target> = bufs
+            .iter_mut()
+            .enumerate()
+            .map(|(i, b)| target(b, 0x4100_0000 + 0x1_0000 * i as u64, (4, 4), 32, 8))
+            .collect();
+        let draw = all.split_off(ENTRIES - 2);
+        /* six shadows a pending kick renders into, two slots free */
+        for (i, t) in all.iter().enumerate() {
+            assert_eq!(prepare_targets(&[*t], || panic!("no finish")), 0);
+            assert!(bind_targets(&[*t], 10 + i as u32).is_some());
+        }
+        let finishes = core::cell::Cell::new(0);
+        let finish = || {
+            finishes.set(finishes.get() + 1);
+            retire(|_| false);
+            0
+        };
+        /* the third target finds no free slot but the draw's own two */
+        assert_eq!(prepare_targets(&draw, finish), 0);
+        assert_eq!(finishes.get(), 1, "the kicks complete instead");
+        let b = bind_targets(&draw, 20).expect("all three shadows");
+        assert!(b[..3].iter().all(|b| b.gpu != 0));
+        assert_eq!(entries().len(), ENTRIES);
+        assert_eq!(LIVE.load(Ordering::Relaxed), ENTRIES);
     }
 }
