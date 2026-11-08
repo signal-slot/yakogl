@@ -1,0 +1,11 @@
+#!/bin/bash
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# The fake board's fuser: the render node is free (exit 1, as fuser says for
+# no user) unless FAKE_BOARD/busy exists.
+if [ -e "$FAKE_BOARD/busy" ]; then
+  echo "                     USER        PID ACCESS COMMAND"
+  echo "/dev/dri/renderD128: selftest   4242 F.... glmark2-es2-way"
+  exit 0
+fi
+exit 1

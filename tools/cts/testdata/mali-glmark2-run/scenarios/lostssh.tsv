@@ -1,0 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# The board goes away during scene 2 and does not come back.
+build:use-vbo=true	lostssh

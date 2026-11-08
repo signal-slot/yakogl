@@ -1,0 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Scene 1's loaded line names a libGLESv2.so.2 outside the stage.
+build:use-vbo=false	foreignlib

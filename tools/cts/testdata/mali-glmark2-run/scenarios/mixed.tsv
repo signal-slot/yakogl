@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Scenes 1-10 of the default list, each with another outcome (scene 1 is clean).
+build:use-vbo=true	glerror
+texture:texture-filter=nearest	oom
+texture:texture-filter=linear	refused
+texture:texture-filter=mipmap	gpufault
+shading:shading=gouraud	jobtimeout
+shading:shading=blinn-phong-inf	setupfail
+shading:shading=phong	crash
+shading:shading=cel	hang
+bump:bump-render=high-poly	fpsonly

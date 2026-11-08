@@ -1,0 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# The panthor job-timeout wording of the NanoPC-T6's kernel (as
+# tools/cts/testdata/mali-deqp-run/kmsg/job-timeout.txt).
+[ 4343.123456] panthor fb000000.gpu: [drm] job timeout: pid=4343, comm=glmark2-es2-mal, seqno=17

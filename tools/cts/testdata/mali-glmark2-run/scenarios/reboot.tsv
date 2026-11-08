@@ -1,0 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# The board reboots during scene 1: it answers ssh with another boot_id.
+build:use-vbo=false	reboot

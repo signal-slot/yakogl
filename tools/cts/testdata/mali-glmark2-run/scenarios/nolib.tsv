@@ -1,0 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Scene 1 prints no "yakogl-mali: loaded" line (the board's own Mesa answered).
+build:use-vbo=false	nolib

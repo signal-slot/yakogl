@@ -1,0 +1,31 @@
+#!/bin/bash
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+#
+# A fake ssh for tools/cts/mali-glmark2-selftest.sh: it runs the remote command
+# on this host, in FAKE_BOARD/home (the login's home: a real directory of this
+# host, so the paths the runner sees are the paths it stages to), with the
+# boot_id mapped to FAKE_BOARD/boot_id and FAKE_BOARD_BIN's fake board tools
+# first on PATH. Every call is logged to FAKE_LOG. While FAKE_BOARD/down exists
+# the board is gone: exit 255, as ssh says for a lost connection.
+echo "ssh $*" >> "${FAKE_LOG:?}"
+while [ $# -gt 0 ]; do
+  case $1 in
+    -o | -i | -p | -F | -l) shift 2 ;;
+    -*) shift ;;
+    *) break ;;
+  esac
+done
+host=$1
+shift
+[ ! -e "$FAKE_BOARD/down" ] || { echo "ssh: connect to host $host port 22: No route to host" >&2; exit 255; }
+cmd="$*"
+cmd=${cmd//\/proc\/sys\/kernel\/random\/boot_id/$FAKE_BOARD/boot_id}
+cd "$FAKE_BOARD/home" || exit 255
+# The output is held back until the command ends: a board that went away
+# meanwhile returns nothing of it, as a dropped connection does.
+out=$(HOME=$FAKE_BOARD/home PATH=$FAKE_BOARD_BIN:$PATH bash -c "$cmd")
+rc=$?
+[ ! -e "$FAKE_BOARD/down" ] || exit 255
+[ -z "$out" ] || printf '%s\n' "$out"
+exit $rc
