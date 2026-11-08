@@ -285,3 +285,65 @@ Host quirks seen:
   or `sh -c` works.
 - README's step 1 needs a toolchain file of the reader's own; the one used here is eight
   lines (listed in row 1).
+
+## Line 6: texts to paste (#1606, checklist State, README)
+
+Three texts for places this record cannot edit (checklist.md and README.md are held by
+other plans). All hashes and versions are from the section "Line 6: cross builds" above.
+
+### #1606 (comment for GitHub issue #1606)
+
+```
+Checklist line 6 (README walkthrough): both open points are closed.
+
+1. DRVSRC default: baremetal.mk:73 now reads `DRVSRC ?= $(HERE)/driver/src`
+   (commit 9c736975, the cherry-pick of f82cfcce). `make -f baremetal.mk` no
+   longer needs `DRVSRC=driver/src`: step 2 exits 0 with and without it, and the
+   clang form too.
+2. README step 3, clang form: exit 0 with a newlib sysroot (Arm GNU Toolchain
+   14.3.rel1, aarch64-none-elf directory, via --sysroot in CC) for GPU=powervr
+   and GPU=vivante, with the unversioned llvm-ar, llvm-nm, llvm-objcopy of
+   Ubuntu LLVM 21.1.8 (clang 21.1.8). The README literal without a sysroot exits 2
+   ('string.h' file not found at src/osal/baremetal.c:25): a host requirement,
+   not a tree defect.
+
+Also: step 1 (CMake toolchain build) exit 0, step 2 with the Zephyr SDK 1.0.1
+prefix (gcc 14.3.0) exit 0, step 4 (Zephyr) exit 0 (earlier commits b60224da,
+d055a0b; the Zephyr build does not read baremetal.mk).
+
+Evidence: docs/release/readme-walkthrough.md, section "Line 6: cross builds
+(README steps 1-4)". Rows 1-3c and V1-V3 were measured at f652d6dc.
+```
+
+### checklist State (replacement for the State cell of row 6)
+
+```
+**done** (2026-11-08; the cross builds at `f652d6dc`, line 3 at `14e93e64`, GCC form at `22265e87`, base `40eb8d00`). The criterion is that a new reader following README then CONTRIBUTING reaches a passing `tools/check.sh --quick` with no gap: a fresh clone does (line 3, 170 ok, 0 failed, 0 gap(s) at `14e93e64`), and every cross build README lists builds as README writes it (`docs/release/readme-walkthrough.md`, "Line 6: cross builds": CMake step 1 exit 0; `baremetal.mk` step 2 exit 0 with and without `DRVSRC`, since `baremetal.mk:73` defaults `DRVSRC` to `$(HERE)/driver/src`, commit `9c736975`; clang form of step 3 exit 0 with a newlib sysroot (Arm GNU Toolchain 14.3.rel1, clang 21.1.8) and exit 2 without one, a host requirement; Zephyr step 4 exit 0). `CONTRIBUTING.md` gives the `--quick` size and the `MESA_V3D_TREE` gap.
+```
+
+### README (cross-build wording)
+
+`grep -n DRVSRC README.md` finds only line 244, the option table row
+`YAKOGL_PVR_DRIVER_DIR` (`DRVSRC`) with default `driver/src`. `git log --oneline -S
+'DRVSRC=driver/src' -- README.md` lists `d254d172` ("docs: README bare-metal commands use
+baremetal.mk's in-tree DRVSRC default"), which removed the `DRVSRC=driver/src` argument.
+The current lines are:
+
+```
+make -f baremetal.mk CROSS_COMPILE=aarch64-none-elf-
+...
+make -f baremetal.mk \
+     CC='clang --target=aarch64-none-elf --sysroot=<arm-gnu>/aarch64-none-elf' \
+     AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy
+```
+
+No change is needed for the `DRVSRC` wording. Optional sentence for step 3, replacing the
+comment above the clang form (the README already says sysroot and versioned names; this
+adds that the unversioned names must be on `PATH`):
+
+```
+# clang needs bare-metal C headers: a newlib sysroot for aarch64-none-elf in CC (for
+# example --sysroot=<arm-gnu-toolchain>/aarch64-none-elf) and unversioned llvm-ar,
+# llvm-nm, llvm-objcopy on PATH (distributions ship them versioned, llvm-ar-21, ...:
+# pass those names as AR, NM and OBJCOPY)
+```
