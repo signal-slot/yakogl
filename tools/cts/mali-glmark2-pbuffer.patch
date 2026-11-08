@@ -8,7 +8,11 @@ for YakoGL's Mali pair on the NanoPC-T6 (tools/cts/mali-glmark2-build.sh).
   eglCreateWindowSurface.
 - main-loop-picture.h: the main loop with the per-scene picture line of
   driver/docs/glmark2.md "The picture value" on stderr (glReadPixels at the
-  scene's last frame, before its swap).
+  scene's last frame, before its swap). With GLMARK2_FB=1 in the environment
+  it also prints the scene's whole frame on stderr as the "glmark2-fb:" dump
+  of driver/docs/glmark2.md "The frame dump" (the code and format of
+  glmark2-host-ref.patch, which tools/cts/glmark2-fb.py decodes); unset or
+  any other value, nothing more is printed.
 - main.cpp: the pbuffer native state and loop; the data directory beside the
   program (<dir>/bin/.., share/glmark2) unless --data-path is given.
 - meson_options.txt, meson.build, src/meson.build: the flavour.
@@ -98,7 +102,7 @@ new file mode 100644
 index 00000000..d7f84117
 --- /dev/null
 +++ b/src/main-loop-picture.h
-@@ -0,0 +1,183 @@
+@@ -0,0 +1,264 @@
 +/*
 + * Copyright © 2026 Signal Slot, Inc.
 + *
@@ -131,6 +135,19 @@ index 00000000..d7f84117
 + * YakoGL's glmark2 board images (driver/samples/zephyr/glmark2/src/main.cpp,
 + * capture_picture; the format is driver/docs/glmark2.md, "The picture
 + * value"); change them together.
++ *
++ * With GLMARK2_FB=1 in the environment the scene's frame is also printed on
++ * stderr, at the same place, as the frame dump of driver/docs/glmark2.md
++ * "The frame dump" (the code and format of tools/cts/glmark2-host-ref.patch,
++ * which tools/cts/glmark2-fb.py decodes):
++ *
++ *   glmark2-fb: <scene info string> WxH begin
++ *   glmark2-fb: <y> <crc16 of the row's RGB, hex> <base64 of the row's RGB888>
++ *   glmark2-fb: end crc32 <hex>
++ *
++ * It is off unless the variable is exactly "1"; then each scene prints its
++ * whole window (about 1.9 MB at 800x600), so name one scene or expect a log
++ * of that size per scene.
 + */
 +#ifndef GLMARK2_MAIN_LOOP_PICTURE_H_
 +#define GLMARK2_MAIN_LOOP_PICTURE_H_
@@ -142,6 +159,9 @@ index 00000000..d7f84117
 +
 +#include <cstdint>
 +#include <cstdio>
++#include <cstdlib>
++#include <cstring>
++#include <string>
 +#include <vector>
 +
 +class MainLoopPicture : public MainLoop
@@ -204,6 +224,69 @@ index 00000000..d7f84117
 +        return crc;
 +    }
 +
++    static uint32_t crc32_update(uint32_t crc, const uint8_t *p, size_t n)
++    {
++        while (n--) {
++            crc ^= *p++;
++            for (int i = 0; i < 8; i++)
++                crc = (crc >> 1) ^ (0xedb88320u & (0u - (crc & 1u)));
++        }
++        return crc;
++    }
++
++    /* GLMARK2_FB=1: the frame dump (off for unset and for any other value) */
++    static bool frame_dump_wanted()
++    {
++        const char *v = std::getenv("GLMARK2_FB");
++        return v && std::strcmp(v, "1") == 0;
++    }
++
++    /* The scene's last frame as glmark2-host-ref.patch's yk_frame_dump prints
++     * it: top row first, crc16 per row, crc32 over all rows' RGB. A failed
++     * readback prints nothing (the picture line then says absent). */
++    void frame_dump(int w, int h)
++    {
++        static const char b64[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
++        std::vector<uint8_t> rgba(static_cast<size_t>(w) * h * 4u, 0);
++        while (glGetError() != GL_NO_ERROR) {
++        }
++        glPixelStorei(GL_PACK_ALIGNMENT, 4);
++        glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, rgba.data());
++        if (glGetError() != GL_NO_ERROR)
++            return;
++
++        std::fflush(stdout);
++        std::fprintf(stderr, "\nglmark2-fb: %s %dx%d begin\n", scene_->info_string().c_str(), w, h);
++        std::vector<uint8_t> rgb(static_cast<size_t>(w) * 3u);
++        std::string text;
++        uint32_t crc = 0xffffffffu;
++        for (int y = 0; y < h; y++) {
++            /* glReadPixels counts rows from the bottom */
++            const uint8_t *src = &rgba[static_cast<size_t>(h - 1 - y) * w * 4u];
++            for (int x = 0; x < w; x++)
++                for (int c = 0; c < 3; c++)
++                    rgb[static_cast<size_t>(x) * 3u + c] = src[static_cast<size_t>(x) * 4u + c];
++            uint16_t c16 = 0xffffu;
++            for (uint8_t b : rgb)
++                c16 = crc16_byte(c16, b);
++            crc = crc32_update(crc, rgb.data(), rgb.size());
++            text.clear();
++            for (size_t i = 0; i < rgb.size(); i += 3) {
++                const size_t left = rgb.size() - i;
++                const uint32_t v = static_cast<uint32_t>(rgb[i]) << 16 |
++                                   (left > 1 ? static_cast<uint32_t>(rgb[i + 1]) << 8 : 0u) |
++                                   (left > 2 ? rgb[i + 2] : 0u);
++                text += b64[v >> 18 & 63u];
++                text += b64[v >> 12 & 63u];
++                text += left > 1 ? b64[v >> 6 & 63u] : '=';
++                text += left > 2 ? b64[v & 63u] : '=';
++            }
++            std::fprintf(stderr, "glmark2-fb: %d %04x %s\n", y, static_cast<unsigned>(c16), text.c_str());
++        }
++        std::fprintf(stderr, "glmark2-fb: end crc32 %08x\n", static_cast<unsigned>(~crc));
++        std::fflush(stderr);
++    }
++
 +    /* row y (0 is the top) of the current framebuffer as RGBA bytes */
 +    static bool picture_row(int w, int h, int y, std::vector<uint8_t> &row)
 +    {
@@ -220,6 +303,8 @@ index 00000000..d7f84117
 +        picture_ = p;
 +        if (w < Picture::GRID_X || h < Picture::GRID_Y)
 +            return;
++        if (frame_dump_wanted())
++            frame_dump(w, h);
 +        std::vector<uint8_t> row;
 +        /* an error the scene left is not the readback's */
 +        while (glGetError() != GL_NO_ERROR) {

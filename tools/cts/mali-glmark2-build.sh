@@ -22,6 +22,11 @@
 # read with glReadPixels at the scene's last frame, before its swap (the code
 # of driver/samples/zephyr/glmark2/src/main.cpp, capture_picture), and finds
 # its data beside itself (<outdir>/share/glmark2; --data-path still wins).
+# With GLMARK2_FB=1 in the environment it also prints each scene's frame on
+# stderr, the 'glmark2-fb:' dump of driver/docs/glmark2.md "The frame dump"
+# (the format of glmark2-host-ref.patch; tools/cts/glmark2-fb.py decodes it,
+# one scene per process: about 1.9 MB of text per scene at 800x600). Unset, or
+# any other value, the output is the picture line alone.
 #
 # glmark2 links no GL or EGL library: it dlopen()s libEGL.so.1 and
 # libGLESv2.so.2, which its RUNPATH $ORIGIN/../lib finds in <outdir>/lib
