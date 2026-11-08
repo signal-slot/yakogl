@@ -99,11 +99,16 @@ pub const SAMPLED_TEXFMTS: u32 = 0;
 /// none.
 pub const INTEGER_RT_FORMATS: u32 = 0;
 
-/// Colour targets one draw writes (`backend::DRAW_TARGETS`): one, the
-/// least the GL core takes. The hardware has eight
+/// Colour targets one draw writes (`backend::DRAW_TARGETS`): four, ES 3.0's
+/// minimum and the most the GL core carries. The hardware has eight
 /// (`MALI_BIFROST_BLEND_MAX_RT`, v10.xml:1034; Mesa 26.2.1's `pan_get_max_cbufs`,
-/// src/gallium/drivers/panfrost/pan_screen.c:700-701); none is written yet.
-pub const DRAW_TARGETS: usize = 1;
+/// src/gallium/drivers/panfrost/pan_screen.c:700-701). This is what the GL
+/// core reports as GL_MAX_COLOR_ATTACHMENTS / GL_MAX_DRAW_BUFFERS, so
+/// glFramebufferTexture2D(GL_COLOR_ATTACHMENT1) is not GL_INVALID_ENUM
+/// (docs/notes/mali-mrt-attachments.md). The frame builder takes several
+/// targets ([`frame::begin_frame_targets`]); [`check`] still refuses the
+/// draw itself ([`NOT_BUILT_TARGET_COUNT`]) until the backend opens one.
+pub const DRAW_TARGETS: usize = 4;
 
 /// Vertex-stage texture units (`backend::GLES_VS_TEX_UNITS`): 16, the most
 /// the GL core binds; a vertex shader reads one of them (its look-up's
