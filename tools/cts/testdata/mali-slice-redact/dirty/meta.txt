@@ -1,0 +1,4 @@
+commit=0000000000000000000000000000000000000000
+session=S1
+rows=1-2
+host=board-1.example.ts.net

@@ -1,0 +1,9 @@
+[ 1.000000] clean line: panthor fb000000.gpu: GPU reset
+[ 2.000000] ipv4: eth0 link up at 192.0.2.7
+[ 3.000000] ipv6: eth0 inet6 2001:db8::2/64
+[ 4.000000] mac: eth0 hwaddr 00:00:5e:00:53:01
+[ 5.000000] userhost: prompt root@board:~#
+[ 6.000000] serial-path: /dev/serial/by-id/usb-Example_Adapter-if00-port0
+[ 7.000000] uart: converter now attached to ttyUSB0
+[ 8.000000] usb-serial: usb 1-1: SerialNumber: EX000001
+[ 9.000000] url: fetch http://192.0.2.7:8000/x
