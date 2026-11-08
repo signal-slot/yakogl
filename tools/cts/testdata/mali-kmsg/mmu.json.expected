@@ -1,1 +1,1 @@
-{"resets": 0, "timeouts": 0, "mmu_faults": 1, "fw_faults": 0, "gpu_faults": 1, "other_panthor": 1, "first": "panthor fb000000.gpu: [drm] *ERROR* Unhandled Page fault in AS3 at VA 0x0000000100004000"}
+{"resets": 0, "timeouts": 0, "mmu_faults": 1, "fw_faults": 0, "gpu_faults": 1, "cs_faults": 1, "other_panthor": 0, "first": "panthor fb000000.gpu: [drm] *ERROR* Unhandled Page fault in AS3 at VA 0x0000000100004000"}

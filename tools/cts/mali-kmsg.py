@@ -8,13 +8,15 @@
 Reads a kernel message capture (dmesg text with or without timestamps, or
 `dmesg -r` with <N> prefixes) and prints one line:
 
-  kmsg: resets=N timeouts=N mmu_faults=N fw_faults=N gpu_faults=N other_panthor=N first=<line|->
+  kmsg: resets=N timeouts=N mmu_faults=N fw_faults=N gpu_faults=N cs_faults=N other_panthor=N first=<line|->
 
 Only panthor's lines count: those naming 'panthor' or the device fb000000.gpu.
 Each such line falls in exactly one class (first matching row of PATTERNS).
 Benign lines (BENIGN: probe and info messages) are not counted. other_panthor
-is every panthor line that no row matches, e.g. the CS_FATAL / CS_FAULT
-reports of panthor_sched.c. first= is the first counted panthor line, with the
+is every panthor line that no row matches. cs_faults counts the header line
+of each CS_FATAL / CS_FAULT report and the tiler heap failure of
+panthor_sched.c; the detail lines of those reports name no device in dmesg and
+are not counted. first= is the first counted panthor line, with the
 <N> prefix and timestamp removed, cut to FIRST_MAX characters.
 
 Importable: classify(lines) -> dict with the same keys.
@@ -22,6 +24,7 @@ Importable: classify(lines) -> dict with the same keys.
 The patterns come from the Linux v6.18 drivers/gpu/drm/panthor sources. The
 format strings were read from the v6.18 tag; the tail of panthor_sched.c past
 panthor_group_create() was not read, so messages there land in other_panthor.
+No board run has produced a cs_faults line yet: its fixture is synthetic.
 Multi-line messages (one drm_err with embedded newlines) are counted once, on
 the line that names the device.
 """
@@ -66,6 +69,12 @@ PATTERNS = [
     ('mmu_faults', r'failed to unmap range'),
     # panthor_gpu.c: panthor_gpu_irq_handler
     ('gpu_faults', r'GPU Fault 0x[0-9a-fA-F]+ \(|GPU Fault in protected mode'),
+    # panthor_sched.c: cs_slot_process_fatal_event_locked
+    ('cs_faults', r'CS_FATAL: pid='),
+    # panthor_sched.c: cs_slot_process_fault_event_locked
+    ('cs_faults', r'CS_FAULT: pid='),
+    # panthor_sched.c: group_process_tiler_oom
+    ('cs_faults', r'Failed to extend the tiler heap'),
     # panthor_fw.c: panthor_fw_start, panthor_fw_stop, panthor_fw_pre_reset,
     # panthor_fw_load*, panthor_fw_read_build_info, panthor_fw_init_ifaces,
     # panthor_init_cs_iface, panthor_init_csg_iface
@@ -86,7 +95,7 @@ PATTERNS = [(c, re.compile(r)) for c, r in PATTERNS]
 # messages of panthor_drv.c.
 BENIGN = re.compile(r'EM: created perf domain|clock rate = |Firmware git sha|CSF FW using interface|using only 1st core group|Initialized panthor|GPU information|mali-g\d+|Mali-G\d+')
 
-KEYS = ('resets', 'timeouts', 'mmu_faults', 'fw_faults', 'gpu_faults', 'other_panthor')
+KEYS = ('resets', 'timeouts', 'mmu_faults', 'fw_faults', 'gpu_faults', 'cs_faults', 'other_panthor')
 
 
 def classify(lines):
