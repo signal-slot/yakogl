@@ -14,8 +14,12 @@ A slice is tools/cts/log/<YYYY-MM-DD>-t6-gles2-<session>-<sha8>/ with
                boot_id_before, boot_id_after, kernel, lib, started, ended
   chunks.tsv   row label cases status seconds kmsg resets ssh_after boot_same
                exit_line   (status done|crash|hang|fault|lost; ssh_after
-               ok|lost; boot_same yes|no; exit_line is the library's
-               yakogl-mali-exit line or -)
+               yes|no: did the board answer ssh after the chunk; boot_same
+               yes|no; exit_line is the library's yakogl-mali-exit line or -)
+               A row the runner never ran has status lost and '-' for kmsg,
+               resets, ssh_after and boot_same (nothing was measured); '-' is
+               accepted there and nowhere else, so a done/crash/hang/fault
+               row with '-' or an empty field is rejected.
   results.tsv  case status detail   (a dEQP status, or Lost with a reason:
                chunk-crash, chunk-hang, board-lost, not-run)
   kmsg/<label>.txt   the redacted kernel lines of the chunk
@@ -130,15 +134,20 @@ def check_cover(mustpass, slices, git=True, main_ref="origin/main", cwd=None):
             for i, col in enumerate(CHUNK_COLS):
                 if not f[i]:
                     errs.append("RULE chunk-field: %s: %s is empty" % (row, col))
+            unrun = f[CHUNK_COLS.index("status")] == "lost"
             for col in ("kmsg", "resets", "cases", "seconds"):
                 v = f[CHUNK_COLS.index(col)]
+                if unrun and v == "-" and col in ("kmsg", "resets"):
+                    continue
                 if v and not v.isdigit():
                     errs.append("RULE chunk-field: %s: %s %r is not a count"
                                 % (row, col, v))
-            for col, ok in (("ssh_after", ("ok", "lost")),
+            for col, ok in (("ssh_after", ("yes", "no")),
                             ("boot_same", ("yes", "no")),
                             ("status", CHUNK_STATUS)):
                 v = f[CHUNK_COLS.index(col)]
+                if unrun and v == "-" and col != "status":
+                    continue
                 if v and v not in ok:
                     errs.append("RULE chunk-field: %s: %s %r is not %s"
                                 % (row, col, v, "|".join(ok)))
@@ -334,6 +343,13 @@ def self_test():
          *good, b("unknown"))
     must("missing chunk field", "chunk-field", "--check-cover", "--no-git",
          mp, good[0], b("nofield"))
+    chk("never-run row ('-' fields, status lost) is accepted",
+        run("--check-cover", "--no-git", mp, good[0],
+            os.path.join(FIXTURES, "lost"))[0] == 0)
+    must("ssh_after 'ok' (the old vocabulary)", "chunk-field", "--check-cover",
+         "--no-git", mp, good[0], b("sshold"))
+    must("ssh_after '-' on a done row", "chunk-field", "--check-cover",
+         "--no-git", mp, good[0], b("sshdash"))
     must("Lost without a reason", "lost-reason", "--check-cover", "--no-git",
          mp, good[0], b("lostnoreason"))
     must("unknown status", "result-status", "--check-cover", "--no-git", mp,
