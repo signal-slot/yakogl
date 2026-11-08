@@ -3026,7 +3026,16 @@ pub(super) unsafe fn draw_one(draw: *const GlesDraw) -> i32 {
         super::tiled_copy::recorded(gl);
         /* what the draw left in the planes: a surface with a live one is
          * never given to another pair (ds_cache.rs) */
-        super::ds_cache::drawn(key, ds_retention::draw_writes(gl), ds_retention::draw_clears(gl));
+        super::ds_cache::drawn(
+            key,
+            /* the kick the draw is in now: `select`'s finish, a new target,
+             * or a full stream or arena may have submitted the one open
+             * before */
+            gc_kick_id(),
+            restore.is_some(),
+            ds_retention::draw_writes(gl),
+            ds_retention::draw_clears(gl),
+        );
     }
     clock.lap(Step::GcRest);
     rc
@@ -3055,7 +3064,7 @@ pub unsafe extern "C" fn gc_depth_resolve(id: u32, dst: *mut f32, w: u32, h: u32
      * writes the stream from being skipped over */
     dedup::invalidate();
     // SAFETY: the caller's contract.
-    unsafe { super::ds_cache::resolve_depth(id, dst, w, h, pitch, GC_DEPTH_GUARD_BYTES, kick_pending_retired) }
+    unsafe { super::ds_cache::resolve_depth(id, dst, w, h, pitch, GC_DEPTH_GUARD_BYTES, super::kick::wait_kick) }
 }
 
 /// The open frame's `extra` block holds at least `need` bytes: a draw's copies
@@ -3323,6 +3332,21 @@ pub(super) fn kick_pending_retired(kick_id: u32) -> bool {
     kick_pending(kick_id)
 }
 
+/// The fence kick `kick_id` was submitted under, while its stream slot
+/// still holds it; 0 otherwise (not submitted, or too old).
+pub(super) fn kick_fence(kick_id: u32) -> i64 {
+    g().frames.iter().find(|f| kick_id != 0 && f.kick_id == kick_id).map_or(0, |f| f.fence)
+}
+
+/// [`kick::wait_kick`](super::kick::wait_kick) for the GL core
+/// (`YakoglBackend::wait_kick`).
+pub extern "C" fn gc_wait_kick(kick_id: u32) -> i32 {
+    if !g().inited {
+        return -1;
+    }
+    super::kick::wait_kick(kick_id)
+}
+
 /// [`gc_kick_pending`] without writing anything back.
 fn kick_pending(kick_id: u32) -> bool {
     let g = g();
@@ -3440,8 +3464,9 @@ pub static yakogl_backend_vivante: YakoglBackend = YakoglBackend {
     /* divisor 1, as before the field (GcStream carries a divisor; whether
      * the FE takes more than 1 is unmeasured) */
     max_instance_divisor: 1,
-    /* the sync waits keep finish() until this backend waits for one kick */
-    wait_kick: None,
+    /* one kick's fence, the open frame submitted first (kick.rs): the sync
+     * waits and the GL core's wait before a depth resolve */
+    wait_kick: Some(gc_wait_kick),
     /* the texture unit reads the storage */
     samples_texel_copies: false,
     attachment_gone: Some(gc_attachment_gone),

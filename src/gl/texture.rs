@@ -687,7 +687,8 @@ fn stamp_texels(t: &mut GlTexture) {
 /// (draw.rs `resolve_sampled_depth`, unless the backend samples the buffer
 /// itself), and before the CPU writes it ([`settle_texture`], so a
 /// sub-image keeps the rendered rest).
-/// The kick that rendered it is waited for, then the backend writes the
+/// The kick that rendered it is waited for (`backend::wait_kick`, or a
+/// finish), then the backend writes the
 /// level the draw rendered (`backend::depth_resolve`, which answers 1 when
 /// it keeps nothing for the texture: the texels stay as they are). The
 /// texels' stamp moves, so a backend copy of them is made again.
@@ -706,7 +707,11 @@ pub(crate) fn resolve_depth(c: &mut GlContext, ti: usize) {
     if !depth_texture_rendered(t) || level >= t.chain_levels as usize || level >= CAP_MIP_LEVELS {
         return;
     }
-    if backend::kick_pending(kick) && (backend::flush() != 0 || backend::finish() != 0) {
+    /* that kick alone where the backend can wait for one (the later kicks
+     * keep running); a backend without that wait finishes */
+    let wait =
+        || backend::wait_kick(kick).unwrap_or_else(|| if backend::flush() != 0 { -1 } else { backend::finish() });
+    if backend::kick_pending(kick) && wait() != 0 {
         glog!("texture {}: the kick rendering its depth did not complete; its texels keep what they held", ti);
         return;
     }

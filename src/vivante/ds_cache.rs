@@ -85,6 +85,10 @@ struct Surface {
     rows: u32,
     /// The kick that last used it: not freed until that one completed.
     used_by: u32,
+    /// The kick that last wrote it (either plane; 0: none since it was
+    /// allocated): what a CPU read of its words waits for
+    /// ([`resolve_depth`]), and nothing after it.
+    written_by: u32,
     stamp: u32,
     /// What each plane holds for its object: Live or a clear value when
     /// this surface has the object's latest contents, Undefined otherwise.
@@ -320,8 +324,16 @@ pub fn select(
                 c.counts.no_surface = c.counts.no_surface.wrapping_add(1);
                 return Err(-1);
             }
-            c.entries[i] =
-                Some(Surface { key, mem, stride, rows, used_by: 0, stamp: 0, planes: [Plane::UNDEFINED; 2] });
+            c.entries[i] = Some(Surface {
+                key,
+                mem,
+                stride,
+                rows,
+                used_by: 0,
+                written_by: 0,
+                stamp: 0,
+                planes: [Plane::UNDEFINED; 2],
+            });
             note_peak(c);
             fresh = true;
             i
@@ -394,12 +406,27 @@ pub fn select(
 
 /// What a recorded draw left in the planes of `key`'s surface: its whole
 /// clears (before its geometry) and what its state let it write.
-pub fn drawn(key: DsKey, writes: [bool; 2], clears: [Option<u32>; 2]) {
+///
+/// `kick` is the kick the draw WAS recorded in, read after it was recorded
+/// (`gc_kick_id`), not the one [`select`] was given: a new target, a full
+/// stream or arena, or `select`'s own `finish` (a plane copied or seeded)
+/// submit the frame that was open, and the draw goes into the next kick. The
+/// surface's `used_by` and, for a draw that writes or clears a plane (or
+/// was recorded behind a clear restoring one, `restored`:
+/// [`Selected::restore`]), its `written_by` move to that kick.
+pub fn drawn(key: DsKey, kick: u32, restored: bool, writes: [bool; 2], clears: [Option<u32>; 2]) {
     let c = cache();
     let Some(e) = c.entries.iter_mut().flatten().find(|e| e.key == key) else { return };
+    e.used_by = kick;
+    if restored {
+        e.written_by = kick;
+    }
     for p in [DEPTH, STENCIL] {
         if key.plane(p).is_some() {
             e.planes[p] = e.planes[p].after(clears[p], writes[p]);
+            if writes[p] || clears[p].is_some() {
+                e.written_by = kick;
+            }
         }
     }
 }
@@ -554,8 +581,14 @@ fn seed_depth(
 /// case 169 at another pixel's depth. No tile status (TS mode 0), so memory
 /// holds every pixel. A plane that holds a whole clear only (here or
 /// parked) is that value everywhere. 1 when nothing holds it or it
-/// is multisampled; -EBUSY when a pending kick still uses its surface (the
-/// GL core waits for the kicks rendering into it first).
+/// is multisampled.
+///
+/// Before the words are read, `wait_kick` waits for the kick that last
+/// wrote the surface (`written_by`, [`drawn`]) and for nothing after it
+/// (`kick::wait_kick`): a kick that only tests against the depth, or renders
+/// elsewhere, keeps running. This used to answer -EBUSY while any pending
+/// kick used the surface, and the GL core finished every kick slot first
+/// (docs/notes/gc-depth-resolve.md). A failed wait is its return code.
 ///
 /// # Safety
 /// `dst` holds `h` rows of `pitch` floats, `w <= pitch`.
@@ -566,7 +599,7 @@ pub unsafe fn resolve_depth(
     h: u32,
     pitch: u32,
     guard: usize,
-    pending: impl Fn(u32) -> bool,
+    wait_kick: impl Fn(u32) -> i32,
 ) -> i32 {
     if id == 0 || dst.is_null() || w > pitch {
         return 1;
@@ -587,12 +620,14 @@ pub unsafe fn resolve_depth(
     if let Some(v) = e.planes[DEPTH].cleared_value() {
         return fill(f32::from_bits(v));
     }
-    if e.used_by != 0 && pending(e.used_by) {
-        return -crate::util::EBUSY;
+    /* the wait may submit the open frame: nothing in the cache moves */
+    let rc = wait_kick(e.written_by);
+    if rc != 0 {
+        return rc;
     }
     let bytes = e.stride as usize * e.rows as usize;
     // SAFETY: a live allocation of this cache, guard + stride * rows + guard
-    // bytes, which no pending kick uses (checked above).
+    // bytes, which no pending kick writes (waited for above).
     let Some(all) = (unsafe { e.mem.bytes_mut() }) else { return 1 };
     // SAFETY: the whole CPU mapping.
     unsafe { osal::cache_invd(e.mem.cpu, e.mem.size) };
