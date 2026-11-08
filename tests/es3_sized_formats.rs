@@ -22,13 +22,13 @@ const MASKS: [(&str, u64); 3] =
 /// Every class this module can write, as a back end that samples them all.
 fn all_classes() -> u64 {
     (GLES_TEXFMT_R11G11B10F..=GLES_TEXFMT_RGBA32F)
-        .chain(GLES_TEXFMT_R32UI..=GLES_TEXFMT_RG32I)
+        .chain(GLES_TEXFMT_R32UI..=GLES_TEXFMT_RG16I)
         .fold(PVR_SAMPLED_TEXFMTS, |m, f| m | gles_texfmt_bit(f))
 }
 
 /// The integer classes: an integer format is stored in one of them or
 /// refused, never in a float class.
-const INTEGER_CLASSES: [u8; 11] = [
+const INTEGER_CLASSES: [u8; 19] = [
     GLES_TEXFMT_RGB10A2UI,
     GLES_TEXFMT_RGBA8UI,
     GLES_TEXFMT_RGBA8I,
@@ -40,20 +40,39 @@ const INTEGER_CLASSES: [u8; 11] = [
     GLES_TEXFMT_R32I,
     GLES_TEXFMT_RG32UI,
     GLES_TEXFMT_RG32I,
+    GLES_TEXFMT_R8UI,
+    GLES_TEXFMT_R8I,
+    GLES_TEXFMT_RG8UI,
+    GLES_TEXFMT_RG8I,
+    GLES_TEXFMT_R16UI,
+    GLES_TEXFMT_R16I,
+    GLES_TEXFMT_RG16UI,
+    GLES_TEXFMT_RG16I,
 ];
 
 /// The classes no back end's mask holds yet (GL-core only): their formats
 /// land in the last class of their storage list, the RGBA one.
-const NOT_SAMPLED_YET: [u8; 4] = [GLES_TEXFMT_R32UI, GLES_TEXFMT_R32I, GLES_TEXFMT_RG32UI, GLES_TEXFMT_RG32I];
+const NOT_SAMPLED_YET: [u8; 14] = [
+    GLES_TEXFMT_R32UI,
+    GLES_TEXFMT_R32I,
+    GLES_TEXFMT_RG32UI,
+    GLES_TEXFMT_RG32I,
+    GLES_TEXFMT_R8_SNORM,
+    GLES_TEXFMT_RG8_SNORM,
+    GLES_TEXFMT_R8UI,
+    GLES_TEXFMT_R8I,
+    GLES_TEXFMT_RG8UI,
+    GLES_TEXFMT_RG8I,
+    GLES_TEXFMT_R16UI,
+    GLES_TEXFMT_R16I,
+    GLES_TEXFMT_RG16UI,
+    GLES_TEXFMT_RG16I,
+];
 
 /// The class a back end that samples every RGBA class but none of
 /// [`NOT_SAMPLED_YET`] (the PowerVR, the V3D) stores `e` in.
 fn sampled_class(e: &Es3Format) -> Option<u8> {
-    if NOT_SAMPLED_YET.contains(&e.storage[0]) {
-        e.storage.last().copied()
-    } else {
-        Some(e.storage[0])
-    }
+    e.storage.iter().copied().find(|s| !NOT_SAMPLED_YET.contains(s))
 }
 
 fn fmt(internalformat: u32) -> &'static Es3Format {
@@ -116,7 +135,7 @@ fn the_table_is_consistent() {
             assert!(e.storage.iter().all(|&s| s != GLES_TEXFMT_RGBA8 && s != GLES_TEXFMT_RGBA16F), "{}", e.name);
         }
         for &s in e.storage {
-            assert!(gles_texfmt_bytes(s) >= 4, "{}", e.name);
+            assert!(gles_texfmt_bytes(s) >= u32::from(e.comps).min(4), "{}", e.name);
         }
     }
     assert_eq!(by_index(0).map(|e| e.name), None);
@@ -318,6 +337,10 @@ fn bytes_per_texel_of_every_pair() {
     assert_eq!(gles_texfmt_bytes(GLES_TEXFMT_R32I), 4);
     assert_eq!(gles_texfmt_bytes(GLES_TEXFMT_RG32UI), 8);
     assert_eq!(gles_texfmt_bytes(GLES_TEXFMT_RG32I), 8);
+    /* the narrow classes, in id order */
+    for (c, bytes) in (GLES_TEXFMT_R8_SNORM..=GLES_TEXFMT_RG16I).zip([1, 2, 1, 1, 2, 2, 2, 2, 4, 4]) {
+        assert_eq!(gles_texfmt_bytes(c), bytes, "class {c}");
+    }
     for (i, e) in FORMATS.iter().enumerate() {
         for &s in e.storage {
             assert_eq!(storage_bytes(s) as u32, gles_texfmt_bytes(s), "{i}");

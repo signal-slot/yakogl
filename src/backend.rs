@@ -148,7 +148,22 @@ pub const GLES_TEXFMT_R32UI: u8 = 26;
 pub const GLES_TEXFMT_R32I: u8 = 27;
 pub const GLES_TEXFMT_RG32UI: u8 = 28;
 pub const GLES_TEXFMT_RG32I: u8 = 29;
-const _: () = assert!(GLES_TEXFMT_RG32I < 64, "the class masks are u64");
+/// ES 3.0's narrow one- and two-component snorm and integer texels, stored
+/// packed (1, 2 or 4 bytes a texel). A back end whose sampled set lacks one
+/// stores the format in the matching RGBA class instead
+/// (docs/notes/gl-texture-classes-es3.md section 2.7). No back end offers
+/// them yet.
+pub const GLES_TEXFMT_R8_SNORM: u8 = 30;
+pub const GLES_TEXFMT_RG8_SNORM: u8 = 31;
+pub const GLES_TEXFMT_R8UI: u8 = 32;
+pub const GLES_TEXFMT_R8I: u8 = 33;
+pub const GLES_TEXFMT_RG8UI: u8 = 34;
+pub const GLES_TEXFMT_RG8I: u8 = 35;
+pub const GLES_TEXFMT_R16UI: u8 = 36;
+pub const GLES_TEXFMT_R16I: u8 = 37;
+pub const GLES_TEXFMT_RG16UI: u8 = 38;
+pub const GLES_TEXFMT_RG16I: u8 = 39;
+const _: () = assert!(GLES_TEXFMT_RG16I < 64, "the class masks are u64");
 
 /// Is the texel format stored as four bytes R,G,B,A (RGBA8, or the sRGB
 /// class whose bytes are the same and only sample differently)?
@@ -307,9 +322,22 @@ pub const fn gles_texfmt_bytes(f: u8) -> u32 {
         || f == GLES_TEXFMT_RG32I
     {
         8
-    } else if f == GLES_TEXFMT_R16F || f == GLES_TEXFMT_RGB565 || f == GLES_TEXFMT_LA8 {
+    } else if f == GLES_TEXFMT_R16F
+        || f == GLES_TEXFMT_RGB565
+        || f == GLES_TEXFMT_LA8
+        || f == GLES_TEXFMT_R16UI
+        || f == GLES_TEXFMT_R16I
+        || f == GLES_TEXFMT_RG8UI
+        || f == GLES_TEXFMT_RG8I
+        || f == GLES_TEXFMT_RG8_SNORM
+    {
         2
-    } else if f == GLES_TEXFMT_L8 || f == GLES_TEXFMT_A8 {
+    } else if f == GLES_TEXFMT_L8
+        || f == GLES_TEXFMT_A8
+        || f == GLES_TEXFMT_R8UI
+        || f == GLES_TEXFMT_R8I
+        || f == GLES_TEXFMT_R8_SNORM
+    {
         1
     } else {
         4
