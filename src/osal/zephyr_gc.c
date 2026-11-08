@@ -59,6 +59,7 @@
 #include "gc_kick.h"
 #include "gc_render.h"
 #include "gc_frees.h"
+#include "gc_cache_range.h"
 int yakogl_osal_zephyr_present(const struct osal_gpu_mem *mem, uint32_t width, uint32_t height,
 			       uint32_t stride_bytes, uint32_t format); /* zephyr_timing.c */
 
@@ -113,6 +114,35 @@ static void z_shutdown(void)
 }
 
 /* ---- GPU memory + MMU --------------------------------------------- */
+
+/* The carve-out's CPU view (non-cacheable): the span of every CPU address
+ * the driver has handed out from it. The carve-out is one contiguous region
+ * and each block lies inside it, so the span never reaches outside it.
+ * Cache maintenance inside the span does nothing and is skipped. */
+static uintptr_t s_co_lo, s_co_hi;   /* [lo, hi); lo == hi: none seen yet */
+
+static void note_carveout_view(const void *cpu, size_t size)
+{
+	uintptr_t lo = (uintptr_t)cpu, hi;
+
+	if (!cpu || size == 0 || size > UINTPTR_MAX - lo)
+		return;
+	hi = lo + size;
+	if (s_co_lo == s_co_hi) {
+		s_co_lo = lo;
+		s_co_hi = hi;
+		return;
+	}
+	if (lo < s_co_lo)
+		s_co_lo = lo;
+	if (hi > s_co_hi)
+		s_co_hi = hi;
+}
+
+static bool in_carveout(const void *cpu, size_t n)
+{
+	return gc_cache_range_inside(s_co_lo, (size_t)(s_co_hi - s_co_lo), (uintptr_t)cpu, n);
+}
 
 /* struct gc_bo and struct osal_gpu_mem hold the same four things; the GPU
  * address is 32-bit here because the GC7000's MMU is. */
@@ -172,6 +202,7 @@ static int z_gpu_alloc(uint64_t heap_base, size_t size, uint32_t flags,
 	if (rc)
 		return rc;
 	bo_to_mem(&bo, out);
+	note_carveout_view(bo.cpu, bo.size);
 	return 0;
 }
 
@@ -324,6 +355,7 @@ static int z_map_phys(uint64_t heap_base, uint64_t phys, size_t size, uint32_t f
 	if (rc)
 		return rc;
 	bo_to_mem(&bo, out);
+	note_carveout_view(out->cpu, size);
 	/* A window surface inside the carveout comes back with the carveout's
 	 * own CPU view, which is what glReadPixels reads through. A buffer
 	 * outside it has none, and the GL core falls back to gpu_read -- which
@@ -340,9 +372,10 @@ static int z_gpu_write(struct osal_gpu_mem *mem, size_t off, const void *src, si
 	if (!osal_gpu_copy_ok(mem, off, src, n))
 		return -EINVAL;
 	memcpy((uint8_t *)mem->cpu + off, src, n);
-	/* A no-op on the carveout's non-cacheable mapping, kept so the call is
-	 * correct if a cached buffer is ever handed in. */
-	gc_render_cache_flush((uint8_t *)mem->cpu + off, n);
+	/* Nothing to flush on the carveout's non-cacheable mapping; anything
+	 * outside it keeps the call. */
+	if (!in_carveout((uint8_t *)mem->cpu + off, n))
+		gc_render_cache_flush((uint8_t *)mem->cpu + off, n);
 	return 0;
 }
 
@@ -350,7 +383,8 @@ static int z_gpu_read(struct osal_gpu_mem *mem, size_t off, void *dst, size_t n)
 {
 	if (!osal_gpu_copy_ok(mem, off, dst, n))
 		return -EINVAL;
-	gc_render_cache_invd((uint8_t *)mem->cpu + off, n);
+	if (!in_carveout((uint8_t *)mem->cpu + off, n))
+		gc_render_cache_invd((uint8_t *)mem->cpu + off, n);
 	memcpy(dst, (uint8_t *)mem->cpu + off, n);
 	return 0;
 }
@@ -358,13 +392,13 @@ static int z_gpu_read(struct osal_gpu_mem *mem, size_t off, void *dst, size_t n)
 /* ---- cache maintenance -------------------------------------------- */
 static void z_cache_flush(void *cpu, size_t n)
 {
-	if (cpu && n)
+	if (cpu && n && !in_carveout(cpu, n))
 		gc_render_cache_flush(cpu, n);
 }
 
 static void z_cache_invd(void *cpu, size_t n)
 {
-	if (cpu && n)
+	if (cpu && n && !in_carveout(cpu, n))
 		gc_render_cache_invd(cpu, n);
 }
 
