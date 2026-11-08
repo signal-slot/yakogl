@@ -1,0 +1,5 @@
+PRETTY_NAME="Armbian 26.8.10 trixie"
+NAME="Debian GNU/Linux"
+VERSION_ID="13"
+VERSION_CODENAME=trixie
+ID=debian

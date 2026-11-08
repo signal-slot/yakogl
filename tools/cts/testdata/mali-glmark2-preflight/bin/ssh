@@ -1,0 +1,31 @@
+#!/bin/bash
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+#
+# The fake ssh of tools/cts/mali-glmark2-preflight-selftest.sh: logs the remote
+# command (the last argument) to $FAKE_LOG and serves it from the case
+# directory $FAKE_CASE: <key>.out is the output, <key>.rc (optional) the exit
+# status. A case with a file "unreachable" fails like a lost connection.
+cmd=${*: -1}
+printf '%s\n' "$cmd" >> "$FAKE_LOG"
+[ ! -e "$FAKE_CASE/unreachable" ] || { echo "ssh: connect to host board.invalid port 22: No route to host" >&2; exit 255; }
+case $cmd in
+  'echo yakogl-preflight-ok') key=reach ;;
+  'cat /etc/os-release') key=os-release ;;
+  'uname -r'*) key=uname ;;
+  *GLIBC_*) key=glibc ;;
+  *"GLIBCXX|CXXABI"*) key=glibcxx ;;
+  'test -c /dev/dri/renderD128'*) key=node ;;
+  *renderD128/device/driver*) key=driver ;;
+  *sys/module/panthor*) key=module ;;
+  *'df -Pk "$d"') key=df-stage ;;
+  'df -Pk /boot') key=df-boot ;;
+  'dmesg '*) key=dmesg ;;
+  'ldconfig -p'*) key=libs ;;
+  *) echo "fake ssh: unknown command: $cmd" >&2; exit 99 ;;
+esac
+if [ "$key" = reach ] && [ ! -e "$FAKE_CASE/reach.out" ]; then echo yakogl-preflight-ok; exit 0; fi
+[ ! -e "$FAKE_CASE/$key.out" ] || cat "$FAKE_CASE/$key.out"
+rc=0
+[ ! -e "$FAKE_CASE/$key.rc" ] || rc=$(cat "$FAKE_CASE/$key.rc")
+exit "$rc"
