@@ -1421,7 +1421,7 @@ pub fn build_fragment_shader_blended(
                 SHC_RT_F32 => 0,
                 _ => 1,
             };
-            let kills: u8 = if discard.is_some() { 3 } else { 0 };
+            let kills: u8 = if discard.is_some() { 3 + u8::from(depth.is_some()) } else { 0 };
             let t = tail;
             if t <= packs {
                 return match (class, t) {
@@ -1434,6 +1434,8 @@ pub fn build_fragment_shader_blended(
             }
             if t <= packs + kills {
                 let flag = discard.ok_or(BuildError::Unsupported("a kill test with no flag"))?;
+                /* With a depth too: tstz, alphaf, depthf (both under p0),
+                 * then the one wdf. */
                 return match t - packs {
                     1 => super::shapes::build_opt(
                         &super::shapes::KILL_TEST,
@@ -1441,6 +1443,11 @@ pub fn build_fragment_shader_blended(
                         None,
                     ),
                     2 => super::shapes::build_opt(&super::shapes::ALPHA_FEEDBACK, &[None; 3], None),
+                    3 if depth.is_some() => super::shapes::build_opt(
+                        &super::shapes::DEPTH_FEEDBACK_KEPT,
+                        &[Some(Operand { bank: TEMP, index: depth.unwrap_or(0) as u32 }), None, None],
+                        None,
+                    ),
                     _ => super::fragment::wait_data(),
                 }
                 .map(Some);
@@ -1450,7 +1457,7 @@ pub fn build_fragment_shader_blended(
              * the wait for it, before the pixel write -- as pco orders the
              * feedback ahead of the first colour store, and the kill path
              * above ends its feedback with the same `wdf`. */
-            let depth_steps: u8 = if depth.is_some() { 2 } else { 0 };
+            let depth_steps: u8 = if depth.is_some() && discard.is_none() { 2 } else { 0 };
             let t = t - packs - kills;
             if t <= depth_steps {
                 let src = depth.ok_or(BuildError::Unsupported("a depth feedback with no depth"))?;
@@ -1556,6 +1563,9 @@ pub fn build_fragment_shader_outputs(
     arithmetic: &[super::sel::SelGroup],
     outputs: &[(u16, [(super::sel::Bank, u16); 4])],
     discard: Option<u16>,
+    /* The clamped depth of a `gl_FragDepth`, fed back after the kill test
+     * (under it when the shader discards) and before the pixel writes. */
+    depth: Option<u16>,
     free: u16,
     buf: &mut [u8],
 ) -> Result<(usize, u16), BuildError> {
@@ -1573,6 +1583,8 @@ pub fn build_fragment_shader_outputs(
     /* moves: output j component c at step 4j + c; then packs, kills, writes */
     let mut step = 0u16;
     let kills: u16 = if discard.is_some() { 3 } else { 0 };
+    let dsteps: u16 = if depth.is_some() && discard.is_none() { 2 } else { 0 };
+    let kills = kills + u16::from(discard.is_some() && depth.is_some());
     let len = encode_closed(
         || {
             if let Some(g) = pro.group()? {
@@ -1599,6 +1611,16 @@ pub fn build_fragment_shader_outputs(
             if s < kills {
                 const TEMP: u32 = 1;
                 let flag = discard.ok_or(BuildError::Unsupported("a kill test with no flag"))?;
+                /* with a depth: tstz, alphaf, depthf (under p0), wdf */
+                let s = if depth.is_some() && s >= 2 {
+                    if s == 2 {
+                        3
+                    } else {
+                        2
+                    }
+                } else {
+                    s
+                };
                 return match s {
                     0 => super::shapes::build_opt(
                         &super::shapes::KILL_TEST,
@@ -1606,11 +1628,29 @@ pub fn build_fragment_shader_outputs(
                         None,
                     ),
                     1 => super::shapes::build_opt(&super::shapes::ALPHA_FEEDBACK, &[None; 3], None),
+                    3 => super::shapes::build_opt(
+                        &super::shapes::DEPTH_FEEDBACK_KEPT,
+                        &[Some(Operand { bank: TEMP, index: depth.unwrap_or(0) as u32 }), None, None],
+                        None,
+                    ),
                     _ => super::fragment::wait_data(),
                 }
                 .map(Some);
             }
             let s = s - kills;
+            if s < dsteps {
+                let src = depth.ok_or(BuildError::Unsupported("a depth feedback with no depth"))?;
+                return match s {
+                    0 => super::shapes::build_opt(
+                        &super::shapes::DEPTH_FEEDBACK,
+                        &[Some(Operand { bank: 1, index: src as u32 }), None, None],
+                        None,
+                    ),
+                    _ => super::fragment::wait_data(),
+                }
+                .map(Some);
+            }
+            let s = s - dsteps;
             if s < n {
                 return build_pixout_write_to(outputs[s as usize].0, base(s) + 4, s + 1 == n).map(Some);
             }
