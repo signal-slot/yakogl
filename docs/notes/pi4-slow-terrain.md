@@ -395,6 +395,161 @@ printed, and needed for a clean per-scene split:
   in `wait_job` (`src/v3d/backend.rs:3051`-`3057`) summed per scene;
 - the CPU mipmap filter's time and bytes (candidate 3).
 
+## Board runs
+
+Two GM images, run on 2026-11-08 one after the other on the same Pi 4,
+each with `tools/board.sh pi4 run <image> records/pi4 glmark2-<commit>`
+(the GM image of `tools/cts/cts-common.sh pi4 build`, label `GM`). The
+runner was main's `tools/board.sh` at the after commit. Records are kept on
+the runner host (gitignored), as every board record is.
+
+- **Before**: `c707598d`, the first parent of `31a4cf8d` (v3d-rt-evict). On
+  main's first-parent chain, `31a4cf8d` is the first commit that contains
+  itself, so the commit before it is its parent. It has none of this plan's
+  V3D or GL fixes.
+- **After**: `17e91019`, the origin/main tip at the session. It has
+  `31a4cf8d` (v3d-rt-evict, `RT_IMAGES` 16), `21a236e5` (mip-filter-wide)
+  and `8d1488cd` (v3d_wait_time). Between the two commits, those three are
+  the only commits that touch `src/gl/texture.rs`, `src/gl/framebuffer.rs`
+  or `src/v3d/backend.rs`. **The render-into mark fix
+  (`gl: clear a texture slot's render-into mark when the slot is freed`,
+  plan item pi4-target-mark-clear, `9b6b99d1` on its own branch) is not on
+  that tip.** `free_texture` still leaves the entry, so this pair measures
+  candidate 2 without candidate 1.
+
+Before, commit `c707598d`, `records/pi4/20261108-1522-glmark2-c707598d-dbcff325/`, terrain 161.923 ms a frame:
+
+```
+board.sh pi4 glmark2-c707598d rc=0 verdict=done boot=tryboot row boot_verdict=complete result=record:GLMARK2 resets=0 record=594b1201,fc3f00c3,6184003f,00258320 back_after=420s unsupported=0
+```
+
+After, commit `17e91019`, `records/pi4/20261108-1513-glmark2-17e91019-fc6f17b0/`, terrain 35.720 ms a frame:
+
+```
+board.sh pi4 glmark2-17e91019 rc=0 verdict=done boot=tryboot row boot_verdict=complete result=record:GLMARK2 resets=0 record=594b1201,fc3f00c4,6184003f,00258320 back_after=488s unsupported=0
+```
+
+(The last eight hex digits of a records directory name are the image's
+sha256, not the commit.)
+
+| | before `c707598d` | after `17e91019` |
+|---|---|---|
+| boot build line | `sample: build tree=c707598d table=6c5b8a70` | `sample: build tree=17e91019-dirty table=6c5b8a70` (*) |
+| **terrain** | **161.923 ms a frame, 7 FPS** | **35.720 ms a frame, 28 FPS** |
+| `glmark2-frame` gl / swap / frame us | 156087 / 5619 / 161708 over 62 frames | 27374 / 8283 / 35659 over 281 frames |
+| jobs a frame, end waited for | 560 over 62 (9.0), 62 of 62 | 2531 over 281 (9.0), 281 of 281 |
+| `glmark2-steps` sum | 176 us | 111 us |
+| `glmark2-jobs` frame 10: render sum, TFU | 8 jobs, 23.49 ms render; 4 TFU jobs (`2/911us`, `1/113us`, `1/804us`) 1.83 ms | 8 jobs, 23.49 ms render; 5 TFU jobs (`806`, `114`, `114`, `804`, `804` us) 2.64 ms |
+| TFU chains a frame (terrain frame 1 to shadow frame 1) | 1 to 184: 3.0 a frame (183 over 61) | 1 to 1401: 5.0 a frame (1400 over 280) |
+| `unknown` refusals a frame | 14 to 136: 2.0 | 14 to 14: 0 |
+| `first-sample` copies a frame | 29 to 212: 3.0 | 29 to 29: 0 |
+| `image-store` a frame | 9584 to 9828: 4.0 | 9581 to 11541: 7.0 |
+| `level0-back`, `chain-back` | 0, 0 | 0, 0 |
+| glmark2 score, scenes, GL errors, resets | 195, 33 ran 0 failed, 0, 0 | 196, 33 ran 0 failed, 0, 0 |
+| shadow / refract | 7.342 / 17.275 ms | 7.342 / 17.247 ms |
+
+(*) `-dirty` is the runner patch below, uncommitted in the after commit's
+worktree when the image was built. `tools/board.sh` is not part of the
+image.
+
+The counter rows are differences of the cumulative `yakogl/v3d:` lines
+printed at terrain's frame 1 (frame 44400 before, 44544 after) and shadow's
+frame 1 (44462, 44825). The arena lines are printed only when a high-water
+grows. Terrain printed nothing between those two lines in either run, so
+the steady frame logs nothing (the "Logging" row above: 0 a frame).
+
+**Not readable from either image**: the `v3d_wait_time` sums and the CPU
+mipmap filter's time and bytes (`gl_mip_cpu_counters`). `8d1488cd` and
+`21a236e5` export them, but nothing in the GM image prints them
+(`driver/samples/zephyr/glmark2/src/main.cpp` has no caller). The CPU
+filter's share is read from the `unknown` count instead: a refused chain is
+the only way into the filter, and after frame 1 the count is flat.
+
+`tools/hostharness/terrain-records/parse.py <before> <after>` was checked
+against these two consoles. The verdict line, the `glmark2-frame` fields
+and the highest-frame `TFU mipmap` and `tiled copies` lines are right; its
+`diff` gives gl -128713 us and frame -126049 us. Two fields are wrong on a
+real console. `fps`/`ms` read `absent`: on the board a back-end line is
+printed between `[terrain] <default>:` and ` FPS: 28 FrameTime: 35.720 ms`,
+so the scene name and the FPS are on different lines. `FPS` in parse.py
+wants them on one. `commit` reads the image's sha256 prefix (`dbcff325`,
+`fc6f17b0`), not the commit. The values above were read from the console.
+
+### Measured cause and gain, per ranked candidate
+
+- **The 130 ms.** Before: the arena lines grow by 2 `unknown`, 3
+  `first-sample` and 3 chains a frame. These are the rates the host model
+  predicted for a thrashing table ("(2) The board's order"). The `c4af4917`
+  record had the same rates and frame (161.79 ms). After: the same lines are
+  flat and the frame is 126.2 ms shorter (gl -128.7 ms). **The measured
+  cause is the render-image table thrash**, the CPU box filter and CPU chain
+  tiling it caused (section "CPU loops over GPU memory").
+- **Candidate 2 (render-image table, `31a4cf8d`): measured gain 126.2 ms a
+  frame** (161.92 to 35.72 ms, 4.5x). Every confirming value from
+  `terrain-board-readout.md` was read: chains 5 a frame, `unknown` and
+  `first-sample` flat after frame 1, `image-store` 7 a frame
+  (`v3d-frame-cpu-model.md` 1), `level0-back` and `chain-back` 0 (so the
+  board's eviction order matches the host's), 5 TFU jobs at 2.64 ms
+  (`v3d-terrain-gpu.md`: 2.64 ms) and 9.0 jobs a frame. The eviction counter
+  the candidate asked for does not exist, so the zero evictions are inferred
+  from those counters.
+- **Candidate 1 (render-into mark): not measured, not on the tip.** With 16
+  slots, terrain's 9 targets fit even with the two stale entries, so its
+  confirming counters are already met without it. Expected speed gain on
+  terrain after candidate 2: about 0 (no `unknown` or `first-sample` left
+  to remove). It remains a correctness fix: a stale kick sends an uploaded
+  texture down the render-target paths. A board run of a main that has it
+  should read the same counters and a terrain frame within run-to-run
+  spread of 35.7 ms.
+- **Candidate 3a (`21a236e5`, wide loads in the CPU filter): measured no-gain
+  on terrain, because the path is not taken.** `unknown` is flat after
+  frame 1, so no chain reaches the filter. Its time and bytes are not
+  printed. Its gain is for frames that still fall back. Both changes are in
+  the after image, so the 126.2 ms belongs to candidate 2, not 3a.
+- **Candidate 3b (`tfu_tile` level by level): not built; nothing to gain
+  here.** `first-sample` is flat after frame 1.
+- **Candidate 4 (no full drain before a CPU filter): not on the tip; nothing
+  to gain here.** No filter runs.
+- **What is left (new).** The after frame is 35.7 ms against about 26.1 ms
+  of GPU work at frame 10 (23.49 ms render plus 2.64 ms TFU). Predicted:
+  30 to 35 ms here, 30 to 31 in `v3d-terrain-gpu.md`. The split is gl 27.4
+  ms and swap 8.3 ms. It is closer to `v3d-terrain-gpu.md`'s "gl about 20,
+  swap about 9" than to this note's "gl under 3 ms". The 9 waits a frame
+  sit in the calls that end a job (`terrain-board-readout.md`,
+  "Discrepancies"). The other ~9.6 ms is CPU time that does not overlap the
+  GPU, and no counter splits it on the board. The timed draw steps are 0.11
+  ms. The last job's `prep` is 2.56 ms, before and after. The next session
+  needs the `v3d_wait_time` sum printed per scene (item
+  `glmark2-scene-counters-design`) to tell waiting from CPU work. The
+  GPU-side candidates of `v3d-terrain-gpu.md` (the blur passes sampling one
+  level, the dead window clear) are now the larger part. The second and fourth
+  entries of the frame-10 `glmark2-jobs` line (`render` 7930 and 9352 us)
+  are 74 % of the render sum.
+
+### How the console was captured (session-specific)
+
+connected's serial MCP server held the console bridge's one client for this
+lease, so the runner's own bridge capture got `busy` (`probe: busy (another
+client holds the bridge)`, rc 3, first attempt
+`records/pi4/20261108-1511-glmark2-17e91019-fc6f17b0/`). For both runs the
+runner was given a local pty as `BOARD_UART` (`pi4_capture_start`'s local
+device path). The console text read from the MCP server was written into
+that pty while the run was going, from the firmware's image-load line to
+`board: holding 20 s, then the reset`. The Linux shutdown and boot text
+around the image was not passed on. All of it reached the runner inside the
+420 s bound (after: last chunk 15:19:46 for a 15:13:36 tryboot; before:
+15:28:23 for 15:22:14), so `end_seen`, the `yk-record:` decode and the
+verdict are the runner's own. The `HH:MM:SS` stamps in `console.txt` are
+when each chunk was passed on, not when the board printed the line. CRs are
+dropped as the runner drops them.
+
+The runner also ran with an uncommitted guard patch in `common_prechecks`.
+The board's `who` listed one remote session, and its address was the
+client address of the board's own `SSH_CONNECTION` for this connection:
+our own ssh session through the lease forwarder, not one of this host's
+`ip -o addr` addresses. The patch adds that address to `mine`. No other
+session was on the board.
+
 ## Not in this note
 
 - `DEPTH_TARGET` (`src/gl/framebuffer.rs:108`) has the same lifetime as
@@ -402,5 +557,4 @@ printed, and needed for a clean per-scene split:
   inherits its level and resolved kick. Whether that can make a resolve
   skip or read the wrong plane was not checked. It is a correctness
   question for the fix of candidate 1.
-- The AM62P's terrain (plan item am62p-breakdown) and the board runs
-  (pi4-board-before).
+- The AM62P's terrain (plan item am62p-breakdown).
