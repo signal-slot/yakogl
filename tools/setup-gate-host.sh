@@ -40,7 +40,7 @@
 # it); --install only prints the command that fetches it, as that is a
 # download, not a package. --check also reports whether
 # driver/src/fw/pvr_fw_blob.h is there (the AM62P image rows gap without it;
-# it is copied in by hand, never fetched, copied or committed by this script)
+# it is never fetched or committed; --install copies it from the layout, see below)
 # and a CC_aarch64_unknown_none that names no executable. --check also
 # reports GLMARK2_SRC (check.sh's glmark2 corpus row gaps unless it names a
 # glmark2 tree at the commit tools/hostharness/glmark2/run.sh pins, tested
@@ -58,18 +58,43 @@
 # looked for in check.sh's order, only when PCO_SHC names an executable (the
 # row's own condition; PCO_SHC itself is one of the workspaces above, out of
 # scope here), and --install only prints the build that makes it.
+#
+# --install also makes the dependency entries (the gate's workspaces
+# included) and prints the gate's environment:
+#   - after the packages, `tools/cts/deps-env.sh --build-missing` makes every
+#     entry that is absent from the layout directory ($CONNECTED_DEPS_DIR, else
+#     deps-env.sh --layout): ZEPHYR_WS, HAL_NXP_DIR, PCO_SHC,
+#     PCO_SPM_LOAD_CAPTURE, MESA_PAN_TREE, GLMARK2_SRC, DEQP_GLES3_TEST_DIR,
+#     MALI_CSFFW, ... Present entries are never touched; the builds are
+#     deps-env.sh's, none is repeated here. It can take hours on a cold host.
+#     `--install --no-deps` skips it.
+#   - driver/src/fw/pvr_fw_blob.h (gitignored) is copied from the layout's
+#     pvr_fw_blob.h when that exists and the header is absent. The blob cannot
+#     be fetched or made here (the board's firmware): without it, --install
+#     says to copy it into the layout, and --check keeps reporting it missing.
+#   - the gate's environment is written to <layout>/gate-env.sh and printed:
+#     deps-env.sh's NAME=value lines as exports (check.sh reads only the
+#     environment), an `unset` for a CC_aarch64_unknown_none that names no
+#     executable, and an `unset` of a MESA_V3D_TREE without build-v3d.
+#     `tools/setup-gate-host.sh --env` prints just those lines, to eval:
+#       eval "$(tools/setup-gate-host.sh --env)"
+#     --install applies them to its own final check, never to your shell.
 set -u
 
 PROG=${0##*/}
 
 usage() {
   cat <<EOF
-usage: $PROG --check | --install
+usage: $PROG --check | --install [--no-deps] | --env
 
   --check    print one ok/missing line per tool; exit non-zero if any is missing
   --install  add rustup components and targets; install distro packages only
              through passwordless sudo (sudo -n); print owner commands and
-             user-space fallback values otherwise. Never edits an rc file.
+             user-space fallback values otherwise. Then make the missing
+             dependency entries (deps-env.sh --build-missing; --no-deps skips
+             it), copy the layout's pvr_fw_blob.h in, and write and print the
+             gate's exports (<layout>/gate-env.sh). Never edits an rc file.
+  --env      print the gate's exports as eval-able shell and nothing else
 EOF
 }
 
@@ -606,6 +631,52 @@ report_values() {
 }
 
 # ---------------------------------------------------------------------------
+# dependency entries and the gate's environment
+# ---------------------------------------------------------------------------
+
+deps_env() { "$(dirname "$0")/cts/deps-env.sh" "$@"; }
+
+# Make what the layout lacks; deps-env.sh does the work and says per entry what
+# it did. Its exit status only says some entry was not made.
+install_deps() {
+  echo "dependency entries (tools/cts/deps-env.sh --build-missing):"
+  if ! deps_env --build-missing; then
+    echo "some entries were not made (see the failed/nobuild lines above); the packages above are what the builds need"
+  fi
+}
+
+# driver/src/fw/pvr_fw_blob.h: copied from the layout, never fetched or made.
+install_pvr_fw_blob() {
+  local dst src
+  dst=$(dirname "$0")/../driver/src/fw/pvr_fw_blob.h
+  [ -f "$dst" ] && return 0
+  src=$(deps_env --layout 2>/dev/null)/pvr_fw_blob.h
+  if [ -f "$src" ]; then
+    mkdir -p "$(dirname "$dst")" && cp "$src" "$dst" &&
+      echo "copied $src to $dst (gitignored, never commit it)"
+  else
+    echo "pvr_fw_blob.h cannot be fetched (the board's PowerVR firmware, driver/README.md): copy the host's existing one to $src and run $PROG --install again, or into $dst"
+  fi
+}
+
+# The gate's environment as eval-able shell. check.sh reads only the
+# environment, so deps-env.sh's values must be exported.
+gate_exports() {
+  local l t
+  while IFS= read -r l; do
+    printf 'export %s=%q\n' "${l%%=*}" "${l#*=}"
+  done < <(deps_env 2>/dev/null)
+  t=${CC_aarch64_unknown_none-}
+  if [ -n "$t" ] && ! command -v "${t%% *}" >/dev/null 2>&1; then
+    echo "unset CC_aarch64_unknown_none"
+  fi
+  t=${MESA_V3D_TREE-}
+  if [ -n "$t" ] && [ ! -d "$t/build-v3d" ]; then
+    echo "unset MESA_V3D_TREE"
+  fi
+}
+
+# ---------------------------------------------------------------------------
 # main
 # ---------------------------------------------------------------------------
 
@@ -618,11 +689,37 @@ case ${1-} in
     fi
     exit 0
     ;;
+  --env)
+    gate_exports
+    exit 0
+    ;;
   --install)
+    nodeps=0
+    case ${2-} in
+      "") ;;
+      --no-deps) nodeps=1 ;;
+      *) usage; exit 2 ;;
+    esac
     install_rustup
     install_distro
+    if [ "$nodeps" -eq 0 ]; then
+      echo
+      install_deps
+    fi
+    install_pvr_fw_blob
     echo
-    echo "after install:"
+    envfile=$(deps_env --layout 2>/dev/null)/gate-env.sh
+    if gate_exports > "$envfile.part" 2>/dev/null && [ -s "$envfile.part" ]; then
+      mv "$envfile.part" "$envfile"
+      echo "the gate's environment, also in $envfile (eval \"\$($PROG --env)\" or . $envfile):"
+      sed 's/^/  /' "$envfile"
+      eval "$(cat "$envfile")"
+    else
+      rm -f "$envfile.part"
+      echo "no dependency layout to export from"
+    fi
+    echo
+    echo "after install (with the exports above applied):"
     run_checks
     report_values
     if [ "$missing_count" -gt 0 ]; then
