@@ -1533,6 +1533,11 @@ step "test    $V3D_CONFIG (tests/v3d_tfu_host.rs)" \
 # TFU run when that job is finished, before the job sampling the chain).
 step "test    $V3D_CONFIG (tests/v3d_tfu_mipmap_nowait.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test v3d_tfu_mipmap_nowait
+# The CPU time inside the backend's waits for the GPU (v3d_wait_time, beside
+# v3d_counters): a known number of waits shows the count and a time that
+# adds up, on an OSAL with a stepping clock and on one with none.
+step "test    $V3D_CONFIG (tests/v3d_wait_time.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test v3d_wait_time
 # A CPU mipmap filter of a just-rendered target sees the render, no glFinish
 # before it (the order settle_texture's drain guarantees; its PowerVR half
 # runs in the PowerVR rows).
