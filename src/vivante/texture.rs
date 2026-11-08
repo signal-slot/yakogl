@@ -14,13 +14,13 @@
 //! its own start.
 
 use crate::backend::{
-    gles_texfmt_bit, gles_texfmt_bytes, GlesTextureBind, GLES_TEXFMT_A8, GLES_TEXFMT_ETC2_RGB, GLES_TEXFMT_ETC2_RGBA,
-    GLES_TEXFMT_ETC2_RGB_PT, GLES_TEXFMT_ETC2_SRGB_RGB, GLES_TEXFMT_ETC2_SRGB_RGBA, GLES_TEXFMT_L8, GLES_TEXFMT_LA8,
-    GLES_TEXFMT_R11G11B10F, GLES_TEXFMT_R16F, GLES_TEXFMT_R32F, GLES_TEXFMT_RGB10A2, GLES_TEXFMT_RGB10A2UI,
-    GLES_TEXFMT_RGB565, GLES_TEXFMT_RGB9E5, GLES_TEXFMT_RGBA16F, GLES_TEXFMT_RGBA16I, GLES_TEXFMT_RGBA16UI,
-    GLES_TEXFMT_RGBA32F, GLES_TEXFMT_RGBA32I, GLES_TEXFMT_RGBA32UI, GLES_TEXFMT_RGBA8I, GLES_TEXFMT_RGBA8UI,
-    GLES_TEXFMT_RGBA8_SNORM, GLES_TEXFMT_SRGB8_A8, GLES_TEXTYPE_2D_ARRAY, GLES_TEXTYPE_3D, GLES_TEXTYPE_CUBE,
-    GLES_WRAP_CLAMP_TO_EDGE, GLES_WRAP_MIRRORED_REPEAT,
+    gles_texfmt_bit, gles_texfmt_bytes, swizzle_source, GlesTextureBind, GLES_TEXFMT_A8, GLES_TEXFMT_ETC2_RGB,
+    GLES_TEXFMT_ETC2_RGBA, GLES_TEXFMT_ETC2_RGB_PT, GLES_TEXFMT_ETC2_SRGB_RGB, GLES_TEXFMT_ETC2_SRGB_RGBA,
+    GLES_TEXFMT_L8, GLES_TEXFMT_LA8, GLES_TEXFMT_R11G11B10F, GLES_TEXFMT_R16F, GLES_TEXFMT_R32F, GLES_TEXFMT_RGB10A2,
+    GLES_TEXFMT_RGB10A2UI, GLES_TEXFMT_RGB565, GLES_TEXFMT_RGB9E5, GLES_TEXFMT_RGBA16F, GLES_TEXFMT_RGBA16I,
+    GLES_TEXFMT_RGBA16UI, GLES_TEXFMT_RGBA32F, GLES_TEXFMT_RGBA32I, GLES_TEXFMT_RGBA32UI, GLES_TEXFMT_RGBA8I,
+    GLES_TEXFMT_RGBA8UI, GLES_TEXFMT_RGBA8_SNORM, GLES_TEXFMT_SRGB8_A8, GLES_TEXTYPE_2D_ARRAY, GLES_TEXTYPE_3D,
+    GLES_TEXTYPE_CUBE, GLES_WRAP_CLAMP_TO_EDGE, GLES_WRAP_MIRRORED_REPEAT,
 };
 use crate::shaderc::{ShcShader, SHC_UNIFORM_NO_BLOCK};
 use crate::util::{Global, ENOMEM};
@@ -242,6 +242,37 @@ fn unorm_format(format: u8) -> GcTexfmt {
     f
 }
 
+/// The four swizzle fields of CONFIG1: the format's own channels (`base`: the
+/// depth-luminance (d, d, d, 1) and the no-alpha ONE) with the binding's
+/// GL_TEXTURE_SWIZZLE_* composed on top. A component reads the channel
+/// [`swizzle_source`] names, taken as the format supplies it; ZERO and ONE go
+/// in as the constants. Mesa takes the view's swizzle the same way
+/// (etnaviv_format.c:346-384, etnaviv_texture_desc.c:150-152). The identity
+/// swizzle gives the format's own.
+///
+/// A 128-bit class keeps the identity: the descriptor is copied whole into
+/// both planes (etnaviv_texture_desc.c:404-415), so a swizzle could only
+/// permute inside each plane's (r, g) pair, and one reading the other
+/// plane's channels cannot be done. The swizzle is ignored there until the
+/// plane join learns it (docs/notes/gc-texture-swizzle-wrap.md section 4).
+pub fn descriptor_swizzle(fmt: &GcTexfmt, t: &GlesTextureBind) -> [u32; 4] {
+    const _: () = assert!(GC_SWIZZLE_0 == 4 && GC_SWIZZLE_1 == 5);
+    let lum = t.depth_luminance != 0;
+    let base = [
+        GC_SWIZZLE_R,
+        if lum { GC_SWIZZLE_R } else { GC_SWIZZLE_G },
+        if lum { GC_SWIZZLE_R } else { GC_SWIZZLE_B },
+        if fmt.no_alpha || t.no_alpha != 0 { GC_SWIZZLE_1 } else { GC_SWIZZLE_A },
+    ];
+    if is_wide128(t.format) {
+        return base;
+    }
+    core::array::from_fn(|k| match swizzle_source(k, t.swizzle[k]) {
+        c @ 0..=3 => base[c],
+        c => c as u32,
+    })
+}
+
 /// TEXDESC_CONFIG0, CONFIG1 and CONFIG2 of a binding: type, format,
 /// addressing, swizzle, array bit and the integer sign. `tiled` is the
 /// addressing of what is sampled (a block format, or the tiled copy).
@@ -288,12 +319,12 @@ pub fn format_words(t: &GlesTextureBind, tiled: bool) -> [u32; 3] {
      * (d, d, d, 1) (`GlesTextureBind::depth_luminance`): green and blue read
      * the red channel of its R32F texels (alpha is already 1: `no_alpha`, or
      * the one-channel format's own). */
-    let lum = t.depth_luminance != 0;
+    let sw = descriptor_swizzle(&fmt, t);
     let config1 = texdesc_format_ext(fmt.format_ext)
-        | texdesc_swizzle_r(GC_SWIZZLE_R)
-        | texdesc_swizzle_g(if lum { GC_SWIZZLE_R } else { GC_SWIZZLE_G })
-        | texdesc_swizzle_b(if lum { GC_SWIZZLE_R } else { GC_SWIZZLE_B })
-        | texdesc_swizzle_a(if fmt.no_alpha || t.no_alpha != 0 { GC_SWIZZLE_1 } else { GC_SWIZZLE_A })
+        | texdesc_swizzle_r(sw[0])
+        | texdesc_swizzle_g(sw[1])
+        | texdesc_swizzle_b(sw[2])
+        | texdesc_swizzle_a(sw[3])
         | if t.type_ == GLES_TEXTYPE_2D_ARRAY { GC_TEXDESC_TEXTURE_ARRAY } else { 0 }
         | texdesc_halign(0);
     [config0, config1, GC_TEXDESC_CONFIG2_BASE | fmt.config2]
@@ -561,6 +592,10 @@ fn emit_slot(f: &mut GcFrame, slot: u32, t: &GlesTextureBind, companion: Option<
     };
     let uwrap = gc_wrap(t.wrap_s, t.width <= 1);
     let vwrap = gc_wrap(t.wrap_t, t.height <= 1);
+    /* W is the third axis of a 3D texture. A 2D, cube or array lookup has no
+     * third coordinate and keeps S there (tests/gc_npot_repeat.rs pins it);
+     * a 2D array's layer is selected, not wrapped. */
+    let wwrap = if t.type_ == GLES_TEXTYPE_3D { gc_wrap(t.wrap_r, t.layers <= 1) } else { uwrap };
     let mip = match t.mip_filter {
         2 => GC_TEX_FILTER_LINEAR,
         1 => GC_TEX_FILTER_NEAREST,
@@ -580,7 +615,7 @@ fn emit_slot(f: &mut GcFrame, slot: u32, t: &GlesTextureBind, companion: Option<
     }
     let samp_ctrl0 = samp_uwrap(uwrap)
         | samp_vwrap(vwrap)
-        | samp_wwrap(uwrap)
+        | samp_wwrap(wwrap)
         | samp_min(if t.min_linear != 0 { GC_TEX_FILTER_LINEAR } else { GC_TEX_FILTER_NEAREST })
         | samp_mip(mip)
         | samp_mag(if t.linear_filter != 0 { GC_TEX_FILTER_LINEAR } else { GC_TEX_FILTER_NEAREST })
@@ -817,5 +852,67 @@ mod tests {
             assert_eq!(samp_ctrl1(&bind(srgb)), GC_SAMP_CTRL1_UNK1 | GC_SAMP_CTRL1_SRGB, "class {srgb}: SRGB");
             assert_eq!(samp_ctrl1(&bind(linear)), GC_SAMP_CTRL1_UNK1, "class {linear}: no SRGB");
         }
+    }
+
+    fn swz_bind(format: u8, swizzle: [u8; 4]) -> GlesTextureBind {
+        GlesTextureBind { format, swizzle, ..GlesTextureBind::ZERO }
+    }
+    fn swz(t: &GlesTextureBind) -> [u32; 4] {
+        descriptor_swizzle(&gc_texfmt(t.format), t)
+    }
+    const IDENT: [u32; 4] = [GC_SWIZZLE_R, GC_SWIZZLE_G, GC_SWIZZLE_B, GC_SWIZZLE_A];
+
+    #[test]
+    fn the_identity_swizzle_is_the_formats_own() {
+        assert_eq!(swz(&swz_bind(crate::backend::GLES_TEXFMT_RGBA8, [0; 4])), IDENT);
+    }
+
+    #[test]
+    fn zero_and_one_are_constants_and_a_permutation_reads_channels() {
+        use crate::backend::*;
+        let f = |sw| swz(&swz_bind(GLES_TEXFMT_RGBA8, sw));
+        let (r, g, b, a) = (GLES_SWIZZLE_RED, GLES_SWIZZLE_GREEN, GLES_SWIZZLE_BLUE, GLES_SWIZZLE_ALPHA);
+        let (zero, one) = (GLES_SWIZZLE_ZERO, GLES_SWIZZLE_ONE);
+        assert_eq!(f([zero, one, 0, 0]), [GC_SWIZZLE_0, GC_SWIZZLE_1, GC_SWIZZLE_B, GC_SWIZZLE_A]);
+        assert_eq!(f([b, g, r, a]), [GC_SWIZZLE_B, GC_SWIZZLE_G, GC_SWIZZLE_R, GC_SWIZZLE_A]);
+        assert_eq!(f([a, b, g, r]), [GC_SWIZZLE_A, GC_SWIZZLE_B, GC_SWIZZLE_G, GC_SWIZZLE_R]);
+        assert_eq!(f([one, one, r, g]), [GC_SWIZZLE_1, GC_SWIZZLE_1, GC_SWIZZLE_R, GC_SWIZZLE_G]);
+        assert_eq!(f([r, g, b, a]), IDENT, "an explicit own channel is the identity");
+    }
+
+    #[test]
+    fn depth_luminance_composes_under_the_swizzle() {
+        use crate::backend::*;
+        let mut t = swz_bind(GLES_TEXFMT_R32F, [0; 4]);
+        t.depth_luminance = 1;
+        t.no_alpha = 1;
+        assert_eq!(swz(&t), [GC_SWIZZLE_R, GC_SWIZZLE_R, GC_SWIZZLE_R, GC_SWIZZLE_1]);
+        t.swizzle = [GLES_SWIZZLE_ALPHA, GLES_SWIZZLE_BLUE, GLES_SWIZZLE_GREEN, 0];
+        assert_eq!(swz(&t), [GC_SWIZZLE_1, GC_SWIZZLE_R, GC_SWIZZLE_R, GC_SWIZZLE_1]);
+    }
+
+    #[test]
+    fn no_alpha_is_the_base_alpha_a_swizzle_reads() {
+        use crate::backend::*;
+        let (r, a) = (GLES_SWIZZLE_RED, GLES_SWIZZLE_ALPHA);
+        let mut t = swz_bind(GLES_TEXFMT_RGBA8, [0; 4]);
+        t.no_alpha = 1;
+        assert_eq!(swz(&t)[3], GC_SWIZZLE_1);
+        t.swizzle = [a, 0, 0, r];
+        assert_eq!(swz(&t), [GC_SWIZZLE_1, GC_SWIZZLE_G, GC_SWIZZLE_B, GC_SWIZZLE_R]);
+        t.swizzle = [0, 0, 0, GLES_SWIZZLE_ZERO];
+        assert_eq!(swz(&t)[3], GC_SWIZZLE_0);
+        /* a format that carries no alpha itself (ETC2 RGB) */
+        assert_eq!(
+            swz(&swz_bind(GLES_TEXFMT_ETC2_RGB, [a, 0, 0, a])),
+            [GC_SWIZZLE_1, GC_SWIZZLE_G, GC_SWIZZLE_B, GC_SWIZZLE_1]
+        );
+    }
+
+    #[test]
+    fn a_128_bit_class_ignores_the_swizzle() {
+        let t = swz_bind(GLES_TEXFMT_RGBA32F, [4, 3, 2, 1]);
+        assert_eq!(swz(&t), IDENT);
+        assert_eq!(format_words(&t, false), format_words(&swz_bind(GLES_TEXFMT_RGBA32F, [0; 4]), false));
     }
 }
