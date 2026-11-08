@@ -1086,16 +1086,17 @@ fn terrain_after_an_fbo_scene_that_deletes_its_textures() {
     let (f, after) = steady(&t, 8);
     show("stale", &f, after);
     assert_eq!((f.jobs, f.draws), (9, 8), "{f:?}");
-    /* CHANGES (pi4-target-mark-clear, v3d-rt-evict): the clean frame's values
-     * below. Stale marks make the stale uploads render images, the table
-     * (8 slots) is overfilled and evicts a target every frame: 3 chains
-     * refused `unknown` (the CPU filter, with its GPU drain), 4 tiled copies
-     * `first-sample`, 4 jobs store an image where the clean frame has 7. */
-    assert_eq!((f.chains, f.tfu_queued, f.tfu_run), (2, 2, 0), "{f:?}");
-    assert_eq!(f.refused, [("unknown", 3)], "{f:?}");
-    assert_eq!(f.imaged, 4, "{f:?}");
-    assert_eq!(f.copies, [("first-sample", 4), ("image-store", 4)], "{f:?}");
+    /* CHANGES (pi4-target-mark-clear, v3d-rt-evict): the frame equals the
+     * clean one. The slot's render-into mark is cleared when it is freed, and
+     * the table of 16 images holds terrain's 9 targets even with stale marks:
+     * 5 chains by TFU, none refused, no `first-sample` copy, 7 jobs store an
+     * image. Before the two items (table of 8, stale marks): 2 chains, 3
+     * refused `unknown`, 4 `first-sample` copies, 4 image stores. */
+    assert_eq!((f.chains, f.tfu_queued, f.tfu_run), (5, 5, 0), "{f:?}");
+    assert!(f.refused.is_empty(), "{f:?}");
+    assert_eq!(f.imaged, 7, "{f:?}");
+    assert_eq!(f.copies, [("image-store", 7)], "{f:?}");
     /* CHANGES (the same two items): the clean frame's 1 swap wait; the total
      * stays the double's artifact (see the first test) */
-    assert_eq!((f.waits, f.backend_waits, f.swap_waits), (9, 9, 0), "{f:?}");
+    assert_eq!((f.waits, f.backend_waits, f.swap_waits), (9, 9, 1), "{f:?}");
 }
