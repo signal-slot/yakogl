@@ -514,9 +514,9 @@ mod gl_api {
         /// the format lacks 0,0,0,1, a signed channel sign-extended.
         fn expect(&self, x: usize, y: usize) -> [u32; 4] {
             let mut w = [0, 0, 0, 1];
-            for ch in 0..self.channels {
+            for (ch, slot) in w.iter_mut().enumerate().take(self.channels) {
                 let v = self.value(x, y, ch);
-                w[ch] = if self.signed && self.bits < 32 {
+                *slot = if self.signed && self.bits < 32 {
                     let s = 32 - self.bits;
                     (((v << s) as i32) >> s) as u32
                 } else {
@@ -1143,6 +1143,6 @@ mod gl_api {
             }
         }
         assert_eq!(out[0..4], [0xdead_beef; 4], "before the skipped pixels");
-        assert_eq!(out[(1 * 8 + 4) * 4], 0xdead_beef, "past the row's width");
+        assert_eq!(out[(8 + 4) * 4], 0xdead_beef, "past the row's width");
     }
 }
