@@ -60,11 +60,13 @@ use super::es3_formats::Texel;
 use super::tf::TfRow;
 use super::types::*;
 use crate::backend::{
-    self, GLES_TEXFMT_A8, GLES_TEXFMT_L8, GLES_TEXFMT_LA8, GLES_TEXFMT_R11G11B10F, GLES_TEXFMT_R16F, GLES_TEXFMT_R32F,
-    GLES_TEXFMT_R32I, GLES_TEXFMT_R32UI, GLES_TEXFMT_RG32I, GLES_TEXFMT_RG32UI, GLES_TEXFMT_RGB10A2,
-    GLES_TEXFMT_RGB10A2UI, GLES_TEXFMT_RGB565, GLES_TEXFMT_RGB9E5, GLES_TEXFMT_RGBA16F, GLES_TEXFMT_RGBA16I,
-    GLES_TEXFMT_RGBA16UI, GLES_TEXFMT_RGBA32F, GLES_TEXFMT_RGBA32I, GLES_TEXFMT_RGBA32UI, GLES_TEXFMT_RGBA8,
-    GLES_TEXFMT_RGBA8I, GLES_TEXFMT_RGBA8UI, GLES_TEXFMT_RGBA8_SNORM, GLES_TEXFMT_SRGB8_A8,
+    self, GLES_TEXFMT_A8, GLES_TEXFMT_L8, GLES_TEXFMT_LA8, GLES_TEXFMT_R11G11B10F, GLES_TEXFMT_R16F, GLES_TEXFMT_R16I,
+    GLES_TEXFMT_R16UI, GLES_TEXFMT_R32F, GLES_TEXFMT_R32I, GLES_TEXFMT_R32UI, GLES_TEXFMT_R8I, GLES_TEXFMT_R8UI,
+    GLES_TEXFMT_R8_SNORM, GLES_TEXFMT_RG16I, GLES_TEXFMT_RG16UI, GLES_TEXFMT_RG32I, GLES_TEXFMT_RG32UI,
+    GLES_TEXFMT_RG8I, GLES_TEXFMT_RG8UI, GLES_TEXFMT_RG8_SNORM, GLES_TEXFMT_RGB10A2, GLES_TEXFMT_RGB10A2UI,
+    GLES_TEXFMT_RGB565, GLES_TEXFMT_RGB9E5, GLES_TEXFMT_RGBA16F, GLES_TEXFMT_RGBA16I, GLES_TEXFMT_RGBA16UI,
+    GLES_TEXFMT_RGBA32F, GLES_TEXFMT_RGBA32I, GLES_TEXFMT_RGBA32UI, GLES_TEXFMT_RGBA8, GLES_TEXFMT_RGBA8I,
+    GLES_TEXFMT_RGBA8UI, GLES_TEXFMT_RGBA8_SNORM, GLES_TEXFMT_SRGB8_A8,
 };
 use crate::shaderc::online::arena::{AVec, Arena};
 use crate::shaderc::online::eval::{self, Fault, Frame, Inputs, Sink, TexLevel, TexLookup, TexelSource};
@@ -1118,6 +1120,7 @@ pub(super) fn decode(p: &[u8], texfmt: u8, bgra: bool) -> Option<Texel> {
     let h = |o: usize| half_to_f32(u16_at(o));
     let f = |o: usize| f32::from_bits(u32_at(o));
     let n8 = |b: u8| f32::from(b) / 255.0;
+    let sn8 = |b: u8| (b as i8 as f32 / 127.0).max(-1.0);
     let swap = |v: [f32; 4]| if bgra { [v[2], v[1], v[0], v[3]] } else { v };
     Some(match texfmt {
         GLES_TEXFMT_RGBA8 => Texel::F(swap([n8(p[0]), n8(p[1]), n8(p[2]), n8(p[3])])),
@@ -1162,6 +1165,16 @@ pub(super) fn decode(p: &[u8], texfmt: u8, bgra: bool) -> Option<Texel> {
         GLES_TEXFMT_RGBA32UI | GLES_TEXFMT_RGBA32I => Texel::I(core::array::from_fn(|k| u32_at(4 * k))),
         GLES_TEXFMT_R32UI | GLES_TEXFMT_R32I => Texel::I([u32_at(0), 0, 0, 1]),
         GLES_TEXFMT_RG32UI | GLES_TEXFMT_RG32I => Texel::I([u32_at(0), u32_at(4), 0, 1]),
+        GLES_TEXFMT_R8_SNORM => Texel::F([sn8(p[0]), 0.0, 0.0, 1.0]),
+        GLES_TEXFMT_RG8_SNORM => Texel::F([sn8(p[0]), sn8(p[1]), 0.0, 1.0]),
+        GLES_TEXFMT_R8UI => Texel::I([u32::from(p[0]), 0, 0, 1]),
+        GLES_TEXFMT_R8I => Texel::I([p[0] as i8 as i32 as u32, 0, 0, 1]),
+        GLES_TEXFMT_RG8UI => Texel::I([u32::from(p[0]), u32::from(p[1]), 0, 1]),
+        GLES_TEXFMT_RG8I => Texel::I([p[0] as i8 as i32 as u32, p[1] as i8 as i32 as u32, 0, 1]),
+        GLES_TEXFMT_R16UI => Texel::I([u32::from(u16_at(0)), 0, 0, 1]),
+        GLES_TEXFMT_R16I => Texel::I([u16_at(0) as i16 as i32 as u32, 0, 0, 1]),
+        GLES_TEXFMT_RG16UI => Texel::I([u32::from(u16_at(0)), u32::from(u16_at(2)), 0, 1]),
+        GLES_TEXFMT_RG16I => Texel::I([u16_at(0) as i16 as i32 as u32, u16_at(2) as i16 as i32 as u32, 0, 1]),
         _ => return None,
     })
 }

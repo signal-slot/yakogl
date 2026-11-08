@@ -593,8 +593,18 @@ fn print_the_format_support_this_build_reports() {
         "R32I",
         "RG32UI",
         "RG32I",
+        "R8_SNORM",
+        "RG8_SNORM",
+        "R8UI",
+        "R8I",
+        "RG8UI",
+        "RG8I",
+        "R16UI",
+        "R16I",
+        "RG16UI",
+        "RG16I",
     ];
-    assert_eq!(names.len() as u8, GLES_TEXFMT_RG32I + 1);
+    assert_eq!(names.len() as u8, GLES_TEXFMT_RG16I + 1);
     for (i, n) in names.iter().enumerate() {
         println!("{GPU}: texel class {n:<12} sampled: {}", (sampled >> i) & 1 != 0);
     }

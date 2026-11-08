@@ -1369,3 +1369,30 @@ fn the_packed_32_bit_integer_classes_decode() {
     assert_eq!(decode(&wide, GLES_TEXFMT_RGBA32I, false), decode(&rg, GLES_TEXFMT_RG32I, false));
     assert_eq!(decode(&wide, GLES_TEXFMT_RGBA32UI, false), decode(&rg, GLES_TEXFMT_RG32UI, false));
 }
+
+/// The narrow snorm and integer classes decode to the texel the RGBA class
+/// of the same source decodes to: the stored components, the missing ones
+/// (0, 0, 1), integers sign-extended for the signed classes.
+#[test]
+fn the_narrow_classes_decode() {
+    use super::es3_formats::Texel;
+    use super::tf_capture::decode;
+    use crate::backend::*;
+    let h = |v: &[u16]| -> Vec<u8> { v.iter().flat_map(|w| w.to_ne_bytes()).collect() };
+    assert_eq!(decode(&[0x81], GLES_TEXFMT_R8_SNORM, false), Some(Texel::F([-1.0, 0.0, 0.0, 1.0])));
+    assert_eq!(decode(&[0x7f, 0x81], GLES_TEXFMT_RG8_SNORM, false), Some(Texel::F([1.0, -1.0, 0.0, 1.0])));
+    assert_eq!(decode(&[0xfb], GLES_TEXFMT_R8UI, false), Some(Texel::I([0xfb, 0, 0, 1])));
+    assert_eq!(decode(&[0xfb], GLES_TEXFMT_R8I, false), Some(Texel::I([0xffff_fffb, 0, 0, 1])));
+    assert_eq!(decode(&[0xfb, 7], GLES_TEXFMT_RG8UI, false), Some(Texel::I([0xfb, 7, 0, 1])));
+    assert_eq!(decode(&[0xfb, 7], GLES_TEXFMT_RG8I, false), Some(Texel::I([0xffff_fffb, 7, 0, 1])));
+    assert_eq!(decode(&h(&[0xfffb]), GLES_TEXFMT_R16UI, false), Some(Texel::I([0xfffb, 0, 0, 1])));
+    assert_eq!(decode(&h(&[0xfffb]), GLES_TEXFMT_R16I, false), Some(Texel::I([0xffff_fffb, 0, 0, 1])));
+    assert_eq!(decode(&h(&[0xfffb, 7]), GLES_TEXFMT_RG16UI, false), Some(Texel::I([0xfffb, 7, 0, 1])));
+    assert_eq!(decode(&h(&[0xfffb, 7]), GLES_TEXFMT_RG16I, false), Some(Texel::I([0xffff_fffb, 7, 0, 1])));
+    /* the RGBA class of the same texel */
+    assert_eq!(decode(&[0xfb, 7, 0, 1], GLES_TEXFMT_RGBA8I, false), decode(&[0xfb, 7], GLES_TEXFMT_RG8I, false));
+    assert_eq!(
+        decode(&[0x7f, 0x81, 0, 0x7f], GLES_TEXFMT_RGBA8_SNORM, false),
+        decode(&[0x7f, 0x81], GLES_TEXFMT_RG8_SNORM, false)
+    );
+}

@@ -154,14 +154,10 @@ fn integer_texels_are_stored_as_integers() {
     let name = new_tex(GL_TEXTURE_2D);
     tex_image_2d(GL_R8I, 1, 1, GL_RED_INTEGER, GL_BYTE, &[0xFB]);
     assert_eq!(gl.error(), GL_NO_ERROR);
-    assert_eq!(first_row(&gl, name, 1).0, vec![0xFB, 0, 0, 1]);
+    assert_eq!(first_row(&gl, name, 1).0, vec![0xFB]);
     tex_image_2d(GL_R16UI, 1, 1, GL_RED_INTEGER, GL_UNSIGNED_SHORT, &0xBEEFu16.to_ne_bytes());
     assert_eq!(gl.error(), GL_NO_ERROR);
-    let mut want = Vec::new();
-    for v in [0xBEEFu16, 0, 0, 1] {
-        want.extend(v.to_ne_bytes());
-    }
-    assert_eq!(first_row(&gl, name, 1).0, want);
+    assert_eq!(first_row(&gl, name, 1).0, 0xBEEFu16.to_ne_bytes().to_vec());
     let m1: Vec<u8> = (0..16).map(|_| 0xFF).collect();
     tex_image_2d(GL_RGBA32I, 1, 1, GL_RGBA_INTEGER, GL_INT, &m1);
     assert_eq!(gl.error(), GL_NO_ERROR);
@@ -295,10 +291,10 @@ fn storage_and_sub_images_convert() {
         /* layer 1, row 1, column 1 of a stack of 2-row layers */
         let o = ((2 + 1) * pitch + 1) * bpp;
         let mut want = Vec::new();
-        for x in [7u16, 9, 0, 1] {
+        for x in [7u16, 9] {
             want.extend(x.to_ne_bytes());
         }
-        assert_eq!(&all[o..o + 8], &want[..]);
+        assert_eq!(&all[o..o + 4], &want[..]);
     }
 }
 
@@ -629,4 +625,26 @@ fn levels_of_another_es3_format_are_a_mismatch() {
     }
     assert_eq!(gl.error(), GL_NO_ERROR);
     assert_ne!(gl.ctx().objs().textures[name as usize].level_bad & 2, 0);
+}
+
+/// A back end that samples the narrow classes (30-39) stores the formats
+/// packed, in 1, 2 or 4 bytes a texel.
+#[test]
+fn narrow_formats_upload_into_their_own_class() {
+    if crate::REPORT_ES2 {
+        return;
+    }
+    use crate::backend::{GLES_TEXFMT_R16I, GLES_TEXFMT_R8UI, GLES_TEXFMT_RG8I};
+    let gl = TestGl::new(4, 4);
+    let _s = Sampled::also(ALL_NEW);
+    let name = new_tex(GL_TEXTURE_2D);
+    tex_image_2d(GL_R8UI, 1, 1, GL_RED_INTEGER, GL_UNSIGNED_BYTE, &[0xFB]);
+    assert_eq!(gl.error(), GL_NO_ERROR);
+    assert_eq!(first_row(&gl, name, 1), (vec![0xFB], GLES_TEXFMT_R8UI));
+    tex_image_2d(GL_RG8I, 1, 1, GL_RG_INTEGER, GL_BYTE, &[0xFB, 7]);
+    assert_eq!(gl.error(), GL_NO_ERROR);
+    assert_eq!(first_row(&gl, name, 1), (vec![0xFB, 7], GLES_TEXFMT_RG8I));
+    tex_image_2d(GL_R16I, 1, 1, GL_RED_INTEGER, GL_SHORT, &(-5i16).to_ne_bytes());
+    assert_eq!(gl.error(), GL_NO_ERROR);
+    assert_eq!(first_row(&gl, name, 1), ((-5i16).to_ne_bytes().to_vec(), GLES_TEXFMT_R16I));
 }
