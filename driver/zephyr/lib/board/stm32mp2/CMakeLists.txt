@@ -6,6 +6,7 @@
 if(CONFIG_YAKOGL_STM32MP2)
   zephyr_library_named(yakogl_board_stm32mp2)
   zephyr_library_sources(stm32mp2.c stm32mp2_entry.S)
+  zephyr_library_sources_ifdef(CONFIG_YAKOGL_STM32MP2_WDOG stm32mp2_wdog.c)
   zephyr_include_directories(.)
   # tools/check.sh builds the probes with -DYAKOGL_WERROR=ON.
   if(YAKOGL_WERROR)

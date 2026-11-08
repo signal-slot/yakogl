@@ -83,8 +83,6 @@ mods=$(PATH="$ZEPHYR_WS/.venv/bin:$PATH" tools/cts/zephyr-modules.sh "$ZEPHYR_WS
 ```
 
 The image is `build/zephyr-werror/mp2_identify/zephyr/zephyr.bin`, linked to
-run at 0xa0000000. As for `mp2_hello`, the probe adds the board layer
-itself (`add_subdirectory` in `CMakeLists.txt`, `rsource` in `Kconfig`), and
-also compiles `stm32mp2_wdog.c` into its app; the item zephyr-layer-hook
-moves the layer into `driver/zephyr/lib/board/`, and the layer's own
-`CMakeLists.txt` takes the watchdog source over after that.
+run at 0xa0000000. The board layer comes from `driver/zephyr/lib/board/stm32mp2/` as for
+`mp2_hello`; `prj.conf` turns on `CONFIG_YAKOGL_STM32MP2_WDOG`, which the layer
+builds (`stm32mp2_wdog.c`).

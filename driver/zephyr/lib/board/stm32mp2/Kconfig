@@ -29,13 +29,12 @@ config YAKOGL_STM32MP2_LIFETIME_S
 
 config YAKOGL_STM32MP2_WDOG
 	bool "STM32MP257F-DK A35: arm OP-TEE's watchdog (arm,smc-wdt) at boot and feed it"
-	default y
+	default n
 	depends on YAKOGL_STM32MP2
 	help
 	  stm32mp2_wdog.c: SET_TIMEOUT 32, ENABLE 1, PET at PRE_KERNEL_1 0
 	  over SMC (function id 0xbc000000, ST's arm,smc-id), the line
 	  "gc_wdog_arm: armed" (the literal tools/board.sh requires) at 99,
 	  or on a refusal what refused and PSCI SYSTEM_RESET at once, and a
-	  1 s PET until the lifetime. Its source is compiled only where an
-	  application adds it (tools/probes/stm32mp257f_dk/mp2_identify)
-	  until the layer's CMakeLists.txt takes it over.
+	  1 s PET until the lifetime. Off by default; an image asks for it
+	  (tools/probes/stm32mp257f_dk/mp2_identify).
