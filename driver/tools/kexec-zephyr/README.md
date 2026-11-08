@@ -117,10 +117,15 @@ What differs from the Verdin's crash route, each read on the board on
   counted), DEQP_CASES its GPU resets, and the DEQP_FAILS pages hold four
   names instead of six (the X2 image writes them so, `GC_RESULT_DEQP_FAILS_PER_PAGE`).
   Decision: an X2 tree names its failing cases from those shorter pages in the
-  selector form (`TREE_IMAGE`, `results_tsv` reads `ceil(fails / 4)` pages per
-  failing row), because the record is the only result a run without
-  `BOARD_UART` has; with a console (`NAMES=0`) the names come from
-  `tools/cts/deqp-uart-tally.py` instead and no page boots are spent.
+  selector form (`TREE_IMAGE`), because the record is the only result a run
+  without `BOARD_UART` has; with a console (`NAMES=0`) the names come from
+  `tools/cts/deqp-uart-tally.py` instead and no page boots are spent. A row's
+  pages hold every case that was neither Pass nor NotSupported (`deqp_snvs.c`
+  pages the other statuses too), so `results_tsv` expects pages `p0` up to
+  `p<ceil((failed + other) / 4) - 1>`, or more when the count byte of page 0
+  says so (`MIN(fails, 255)`, the tag's count), and names a page it expects
+  but does not find `PAGE<n>-ABSENT` rather than dropping its names; a row
+  without any page boot keeps `-`.
 - **OpenRC, not systemd.** The boot has finished when the runlevel is
   `default` and no `openrc` process is left; the readiness read waits for
   that for up to 40 s. There is no remoteproc entry for the M7.

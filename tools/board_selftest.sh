@@ -56,7 +56,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/.." && pwd)
 B="$HERE/board.sh"
 TD="$HERE/testdata"
-WANT_CHECKS=333
+WANT_CHECKS=336
 
 S=$(mktemp -d)
 trap 'rm -rf "$S"' EXIT
@@ -1236,6 +1236,35 @@ check "x2 tally: the TALLY line has no-result 0 from the '-' (absent is not coun
 check "record --words 3 on that row prints w3 as '-', the line says begun=derived" \
     eval 'o=$("$YAKOGL_TOOLS" record --words 3 594b0801 00050003 00000000) && grep -q " -$" <<<"$o" &&
           o=$("$YAKOGL_TOOLS" record --words 3 --line 594b0801 00050003 00000000) && grep -q "begun=derived tally=3,5,0,0,8" <<<"$o"'
+# the page count is fail + other (deqp_snvs.c pages every status but Pass and
+# NotSupported): e00 has 3 fails and 2 others, five names on two pages where
+# ceil(fails / 4) is one; e01 is the same row with its second page boot absent;
+# e02 failed without page boots (NAMES=0): '-', no page claimed absent
+TP="$S/x2pages"
+mkdir -p "$TP"
+for e in e00 e01 e02; do printf '%s\t%s\t0\tdEQP-GLES3.functional.attribute_location.*\n' "$e" "$S/one.bin"; done > "$TP/tree.txt"
+for e in e00 e01 e02; do
+    d="$TP/20261106-1600-$e-$sha8"
+    mkrun "$d" board=x2 boot=kexec-dev "name=$e" probe=0 back=1 up=40
+    printf '594b0801 00030003 00020000\n' > "$d/snvs.txt"
+    : > "$d/INDEX.txt"
+    [ "$e" = e02 ] && continue
+    for pg in 0 1; do
+        [ "$e$pg" = e011 ] && continue
+        px="$TP/20261106-1600-$e-p$pg-$sha8"
+        mkrun "$px" board=x2 boot=kexec-dev "name=$e-p$pg" probe=0 back=1
+        if [ "$pg" = 0 ]; then printf '594b0a05 %s%s %s%s\n' "${xc[1]}" "${xc[0]}" "${xc[3]}" "${xc[2]}" > "$px/snvs.txt"
+        else printf '594b0a05 ffff%s ffffffff\n' "${xc[4]}" > "$px/snvs.txt"; fi
+        : > "$px/INDEX.txt"
+    done
+done
+"$B" x2 tally "$TP" > "$S/new-x2p.txt" 2>&1
+check "x2 tally: a row with other > 0 takes its names from ceil((fail + other) / 4) pages (the fifth name on page 1)" \
+    eval 'r=$(grep -P "^0\t" "$TP/results.tsv" | sed -n 1p) && grep -qP "\t8\t3\t3\t0\t2\t-\t.*bind\.ivec4$" <<<"$r" && ! grep -q -e ABSENT -e "crc:" <<<"$r"'
+check "x2 tally: the row whose page 1 boot is absent names PAGE1-ABSENT after page 0's four names" \
+    eval 'grep -P "^0\t" "$TP/results.tsv" | sed -n 2p | grep -qP "bind\.ivec3;PAGE1-ABSENT$"'
+check "x2 tally: a failing row without page boots (NAMES=0) names '-', no page absent" \
+    eval 'grep -P "^0\t" "$TP/results.tsv" | sed -n 3p | grep -qP "\t-\t-$"'
 
 echo "== 3h. Pi 5 probes: the end line of each tools/probes/rpi_5 probe ends the run with its own verdict"
 # each probe's last line as its source prints it (rpi5_ident's from its branch,

@@ -2461,7 +2461,7 @@ py_list() { local s="" x; for x in "$@"; do s+="${s:+, }'$x'"; done; echo "[$s]"
 # wrote them (results.tsv, rows.md, the TALLY line): begun passed failed notsup
 # other noresult and the failing names; '-' is absent, never 0
 results_tsv() {
-    local dir=$1 name img sel filt d words t tp tf tn to tb nr page c w p f n inside joined line derived fs=() names=()
+    local dir=$1 name img sel filt d words t tp tf tn to tb nr page c w p f n inside joined line derived per want fs=() names=()
     printf '# index\tfilter\tbegun\tpassed\tfailed\tnotsup\tother\tnoresult\tfailing names (%s-separated)\n' "';'" > "$dir/results.tsv"
     while IFS=$'\t' read -r name img sel filt; do
         d=$(finished_run "$dir" "$name" "$img") || d=
@@ -2487,8 +2487,27 @@ results_tsv() {
         if [ "$derived" = 1 ]; then nr=-; fi
         names=()
         IFS=, read -ra fs <<<"$filt"
+        # the pages the row needs: every case that was neither Pass nor NotSupported
+        # (fail + other, deqp_snvs.c counts both into the pages), or the count byte of
+        # the first page when it says more; six names a page, four on the X2 (no w3)
+        per=6
+        [ "$REC_SINK" = devmem ] && per=4
+        c=$((tf + to))
+        if p=$(finished_run "$dir" "$name-p0" "$img"); then
+            words=$(cat "$p/snvs.txt" 2>/dev/null)
+            [ -n "$words" ] && [ $((0x${words%% *} & 255)) -gt "$c" ] && c=$((0x${words%% *} & 255))
+        fi
+        want=$(((c + per - 1) / per))
+        [ "$want" -gt 40 ] && want=40
+        # no page boot at all (NAMES=0: the names come from the console, or none was
+        # run): the names are '-', not a page absent
+        for p in "$dir"/*/; do is_run_of "$name-p0" "$p" && break; p=; done
+        [ -n "$p" ] || want=0
         for page in $(seq 0 39); do
-            p=$(finished_run "$dir" "$name-p$page" "$img") || break
+            if ! p=$(finished_run "$dir" "$name-p$page" "$img"); then
+                [ "$page" -lt "$want" ] && { names+=("PAGE$page-ABSENT"); continue; }
+                break
+            fi
             words=$(cat "$p/snvs.txt" 2>/dev/null)
             if [ -z "$words" ] || [ $(((0x${words%% *} >> 8) & 255)) != 10 ]; then names+=("PAGE$page-NOT-KIND-10"); break; fi
             for w in ${words#* }; do
