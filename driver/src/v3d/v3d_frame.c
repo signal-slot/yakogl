@@ -8,9 +8,13 @@
  * changes are Apache-2.0. See NOTICE.
  */
 /*
- * V3D 4.2 frame builder (see v3d_frame.h). Each step names the Mesa 26.2.1
+ * V3D frame builder (see v3d_frame.h). Each step names the Mesa 26.2.1
  * function it follows; the packets are packed by Mesa's own generated
- * packers (v3d_packet_v42_pack.h, through v3d_cl.h's v3d_cl_emit).
+ * packers (v3d_packet_v42_pack.h, or v3d_packet_v71_pack.h when built with
+ * -DV3D_CL_VER=71, through v3d_cl.h's v3d_cl_emit). The generation is
+ * V3D_CL_VER: where 7.1 writes other packets or fields than 4.2 the code
+ * says so in place (docs/notes/v3d71-clear-frame.md section 1). The
+ * triangle (M5) is 4.2 only.
  */
 #include "v3d_frame.h"
 
@@ -122,9 +126,35 @@ void v3d_frame_alloc_sizes(const struct v3d_tiling *t, uint32_t draws, uint32_t 
 	*tile_state_size = t->tiles_x * t->tiles_y * 256;
 }
 
-/* v3dx_draw.c v3dX(start_binning), V3D_VERSION 42: the BCL prologue. */
-static void emit_start_binning(uint32_t width, uint32_t height, struct v3d_cl *bcl)
+#if V3D_CL_VER == 71
+/* The Log2 Tile Width/Height fields (v3d_packet.xml): 8 pixels 0 .. 64 pixels 3. */
+static uint32_t log2_tile(uint32_t edge)
 {
+	return edge == 64 ? 3 : edge == 32 ? 2 : edge == 16 ? 1 : 0;
+}
+#endif
+
+/* v3dx_draw.c v3dX(start_binning): the BCL prologue. */
+static void emit_start_binning(uint32_t width, uint32_t height, const struct v3d_tiling *t,
+			       struct v3d_cl *bcl)
+{
+#if V3D_CL_VER == 71
+	/* job->num_layers is at least 1 for a plain target (v3dx_draw.c:61-65);
+	 * Mesa emits it at 4.2 too, our 4.2 frame does not */
+	v3d_cl_emit(bcl, NUMBER_OF_LAYERS, layers) {
+		layers.number_of_layers = 1;
+	}
+	/* 7.1 gives the tile size itself; the RT count and max bpp are gone */
+	v3d_cl_emit(bcl, TILE_BINNING_MODE_CFG, bin) {
+		bin.width_in_pixels = width;
+		bin.height_in_pixels = height;
+		bin.log2_tile_width = log2_tile(t->tile_w);
+		bin.log2_tile_height = log2_tile(t->tile_h);
+		bin.tile_allocation_initial_block_size = V3D_TILE_ALLOC_BLOCK_128B;
+		bin.tile_allocation_block_size = V3D_TILE_ALLOC_BLOCK_64B;
+	}
+#else
+	(void)t; /* 4.2: the hardware derives the tile size from these fields */
 	v3d_cl_emit(bcl, TILE_BINNING_MODE_CFG, bin) {
 		bin.width_in_pixels = width;
 		bin.height_in_pixels = height;
@@ -133,6 +163,7 @@ static void emit_start_binning(uint32_t width, uint32_t height, struct v3d_cl *b
 		bin.tile_allocation_initial_block_size = V3D_TILE_ALLOC_BLOCK_128B;
 		bin.tile_allocation_block_size = V3D_TILE_ALLOC_BLOCK_64B;
 	}
+#endif
 	v3d_cl_emit(bcl, FLUSH_VCD_CACHE, flush);
 	v3d_cl_emit(bcl, OCCLUSION_QUERY_COUNTER, oq);
 	v3d_cl_emit(bcl, START_TILE_BINNING, start);
@@ -162,10 +193,14 @@ static void emit_tile_list(const struct v3d_clear_frame *f, struct v3d_cl *list,
 		st.decimate_mode = V3D_DECIMATE_MODE_SAMPLE_0;
 	}
 	/* job->clear_tlb: clear after the store, ready for the next tile */
+#if V3D_CL_VER == 71
+	v3d_cl_emit(list, CLEAR_RENDER_TARGETS, clear); /* no flags at 7.1 */
+#else
 	v3d_cl_emit(list, CLEAR_TILE_BUFFERS, clear) {
 		clear.clear_all_render_targets = true;
 		clear.clear_z_stencil_buffer = true;
 	}
+#endif
 	v3d_cl_emit(list, END_OF_TILE_MARKER, eot);
 	v3d_cl_emit(list, RETURN_FROM_SUB_LIST, ret);
 	*end = v3d_cl_gpu_next(list);
@@ -181,12 +216,35 @@ static void emit_rcl(const struct v3d_clear_frame *f, const struct v3d_tiling *t
 		common.number_of_render_targets = 1;
 		common.image_width_pixels = f->width;
 		common.image_height_pixels = f->height;
+#if V3D_CL_VER == 71
+		/* the tile size, as in TILE_BINNING_MODE_CFG (v3dx_rcl.c:770-773);
+		 * Depth-buffer disable stays 0, as Mesa leaves it for a clear */
+		common.log2_tile_width = log2_tile(t->tile_w);
+		common.log2_tile_height = log2_tile(t->tile_h);
+		common.internal_depth_type = V3D_INTERNAL_TYPE_DEPTH_32F;
+#else
 		common.maximum_bpp_of_all_render_targets = V3D_INTERNAL_BPP_32;
+#endif
 		/* no depth buffer: v3d_update_job_ez sets first_ez_state to
 		 * V3D_EZ_DISABLED (v3dx_draw.c:941-945), and emit_rcl then
 		 * disables early Z (v3dx_rcl.c:730-747) */
 		common.early_z_disable = true;
 	}
+#if V3D_CL_VER == 71
+	/* render target 0 (v3dx_rcl.c:864-875): TLB base 0, the row stride in
+	 * 128-bit units tile_w * words / 2 (v3d_util.c
+	 * v3d_compute_rt_row_row_stride_128_bits, one word at 32 bpp), the
+	 * 7.1 type-and-clamp value of RGBA8 (8, not 4.2's internal type), and
+	 * the R8G8B8A8_UNORM clear colour's 32 bits; no parts 2 and 3 at 32 bpp */
+	v3d_cl_emit(rcl, TILE_RENDERING_MODE_CFG_RENDER_TARGET_PART1, rt) {
+		rt.render_target_number = 0;
+		rt.base_address = 0;
+		rt.stride = t->tile_w / 2;
+		rt.internal_bpp = V3D_INTERNAL_BPP_32;
+		rt.internal_type_and_clamping = V3D_RENDER_TARGET_TYPE_CLAMP_8;
+		rt.clear_color_low_bits = f->clear_rgba8;
+	}
+#else
 	/* R8G8B8A8_UNORM clear colour, internal type 8: 32 bits (v3d_tlb_clear) */
 	v3d_cl_emit(rcl, TILE_RENDERING_MODE_CFG_CLEAR_COLORS_PART1, clear) {
 		clear.render_target_number = 0;
@@ -197,6 +255,7 @@ static void emit_rcl(const struct v3d_clear_frame *f, const struct v3d_tiling *t
 		color.render_target_0_internal_type = V3D_INTERNAL_TYPE_8;
 		color.render_target_0_clamp = V3D_RENDER_TARGET_CLAMP_NONE;
 	}
+#endif
 	v3d_cl_emit(rcl, TILE_RENDERING_MODE_CFG_ZS_CLEAR_VALUES, zs) {
 		zs.z_clear_value = 0.0f;
 		zs.stencil_clear_value = 0;
@@ -228,10 +287,14 @@ static void emit_rcl(const struct v3d_clear_frame *f, const struct v3d_tiling *t
 			none.buffer_to_store = V3D_STORE_BUFFER_NONE;
 		}
 		if (i == 0) {
+#if V3D_CL_VER == 71
+			v3d_cl_emit(rcl, CLEAR_RENDER_TARGETS, clear_tlb);
+#else
 			v3d_cl_emit(rcl, CLEAR_TILE_BUFFERS, clear_tlb) {
 				clear_tlb.clear_all_render_targets = true;
 				clear_tlb.clear_z_stencil_buffer = true;
 			}
+#endif
 		}
 		v3d_cl_emit(rcl, END_OF_TILE_MARKER, eot);
 	}
@@ -259,10 +322,12 @@ bool v3d_frame_build_clear(const struct v3d_clear_frame *f, struct v3d_cl *bcl, 
 	if (f->width == 0 || f->height == 0)
 		return false;
 
+	/* one RGBA8 target: 32 bpp, 4 bytes a pixel (4.2 reads the former, 7.1
+	 * the latter); at 4.2 this is v3d_frame_tiling */
 	struct v3d_tiling t;
-	v3d_frame_tiling(f->width, f->height, &t);
+	v3d_frame_tiling_gen(V3D_CL_VER, f->width, f->height, 1, false, V3D_INTERNAL_BPP_32, 4, &t);
 
-	emit_start_binning(f->width, f->height, bcl);
+	emit_start_binning(f->width, f->height, &t, bcl);
 	/* no draws; FLUSH makes the binner cap every tile list with a return
 	 * (v3dx_job.c v3dX(bcl_epilogue)) */
 	v3d_cl_emit(bcl, FLUSH, flush);
@@ -331,6 +396,7 @@ bool v3d_wpos_uniform(const struct v3d_wpos *w, uint32_t fb_height, uint32_t con
 	return true;
 }
 
+#if V3D_CL_VER == 42 /* the triangle frame (M5) is 4.2's only */
 static float abs_f(float v)
 {
 	return v < 0.0f ? -v : v;
@@ -584,7 +650,7 @@ bool v3d_frame_build_triangle(const struct v3d_triangle_frame *f, struct v3d_cl 
 	v3d_frame_tiling(c->width, c->height, &t);
 
 	/* --- BCL: start_binning, then v3d_draw_vbo --- */
-	emit_start_binning(c->width, c->height, bcl);
+	emit_start_binning(c->width, c->height, &t, bcl);
 	if (!emit_state(f, bcl))
 		return false;
 
@@ -715,3 +781,4 @@ bool v3d_frame_build_triangle(const struct v3d_triangle_frame *f, struct v3d_cl 
 
 	return v3d_cl_ok(bcl) && v3d_cl_ok(rcl) && v3d_cl_ok(indirect);
 }
+#endif /* V3D_CL_VER == 42 */

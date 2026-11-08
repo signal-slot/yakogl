@@ -8,7 +8,7 @@
  * changes are Apache-2.0. See NOTICE.
  */
 /*
- * V3D 4.2 frame builder: the binning and render control lists of one frame.
+ * V3D frame builder: the binning and render control lists of one frame.
  *
  * Milestones M3/M4 of the bring-up
  * (docs/notes/pi4-v3d-bringup.md): a frame with no draws that
@@ -21,6 +21,14 @@
  * bcl_epilogue, v3dx_rcl.c emit_rcl / emit_render_layer /
  * v3d_rcl_emit_generic_per_tile_list), so a V3D_DEBUG=clif dump of Mesa doing
  * the same clear on the board is the byte reference.
+ *
+ * The V3D generation is v3d_cl.h's V3D_CL_VER, one per translation unit: 42
+ * (the Pi 4, the default) or 71 (the Pi 5, built with -DV3D_CL_VER=71). At
+ * 7.1 the clear frame is Mesa's for version 71
+ * (docs/notes/v3d71-clear-frame.md section 1: NUMBER_OF_LAYERS, the tile
+ * size in the binning and common packets, RENDER_TARGET_PART1,
+ * CLEAR_RENDER_TARGETS) with the 7.1 tile size (v3d_frame_tiling_gen); the
+ * triangle (M5) exists at 4.2 only. The 4.2 output does not depend on this.
  *
  * No OS calls: the caller owns the memory and the addresses.
  */
@@ -226,6 +234,7 @@ struct v3d_triangle_frame {
 	struct v3d_wpos wpos;           /* zeroed: absent (v3d_wpos_uniform) */
 };
 
+#if V3D_CL_VER == 42 /* the triangle frame is 4.2's only */
 /* Where the builder put what it wrote into the indirect list (GPU addresses),
  * so that a checker can find the records again. */
 struct v3d_triangle_layout {
@@ -253,5 +262,6 @@ struct v3d_triangle_layout {
 bool v3d_frame_build_triangle(const struct v3d_triangle_frame *f, struct v3d_cl *bcl,
 			      struct v3d_cl *rcl, struct v3d_cl *indirect,
 			      struct v3d_triangle_layout *layout);
+#endif /* V3D_CL_VER == 42 */
 
 #endif
