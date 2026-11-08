@@ -1,0 +1,14 @@
+# The Lost cases of 2 slice(s): 9 case(s) in 6 row(s), mustpass order.
+# One case per row for chunk-crash and chunk-hang; at most 3 per row otherwise.
+# image T6RR001: 2
+dEQP-GLES2.functional.a.lost1,dEQP-GLES2.functional.a.lost2
+# image T6RR002: 1
+dEQP-GLES2.functional.b.crash1
+# image T6RR003: 1
+dEQP-GLES2.functional.b.lost3
+# image T6RR004: 1
+dEQP-GLES2.functional.c.hang1
+# image T6RR005: 3
+dEQP-GLES2.functional.c.lost4,dEQP-GLES2.functional.c.lost5,dEQP-GLES2.functional.d.lost6
+# image T6RR006: 1
+dEQP-GLES2.functional.d.lost7
