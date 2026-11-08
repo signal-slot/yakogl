@@ -1,0 +1,7 @@
+case	status	detail
+dEQP-GLES2.functional.b.lost3	Lost	not-run
+dEQP-GLES2.functional.c.lost4	Lost	not-run
+dEQP-GLES2.functional.c.lost5	Lost	board-lost
+dEQP-GLES2.functional.d.lost6	Lost	board-lost
+dEQP-GLES2.functional.d.lost7	Lost	board-lost
+dEQP-GLES2.functional.d.ok	Pass	Pass

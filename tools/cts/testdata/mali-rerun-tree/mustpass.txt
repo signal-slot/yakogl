@@ -1,0 +1,9 @@
+dEQP-GLES2.functional.a.lost1
+dEQP-GLES2.functional.a.lost2
+dEQP-GLES2.functional.b.crash1
+dEQP-GLES2.functional.b.lost3
+dEQP-GLES2.functional.c.hang1
+dEQP-GLES2.functional.c.lost4
+dEQP-GLES2.functional.c.lost5
+dEQP-GLES2.functional.d.lost6
+dEQP-GLES2.functional.d.lost7
