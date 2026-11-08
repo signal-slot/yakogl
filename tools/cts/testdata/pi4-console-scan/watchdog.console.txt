@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# pi4-console-scan.py fixture: the PM watchdog resets the SoC with the run open (no summary, no record), then the firmware and Linux boot again
+11:00:00   5.05 [sdcard] pieeprom.upd not found
+11:00:00   5.88 Read start4.elf bytes  2299008 hnd 0x211ac
+11:00:03 MESS:00:00:08.129767:0:board: watchdog armed
+11:00:04 *** Booting Zephyr OS build af17c0c8aa2a ***
+11:00:04 v3d_deqp: build 0ff58329
+11:00:04 board: PM watchdog resets the SoC ~250 s after boot (tryboot -> Linux)
+11:00:04 v3d_deqp: the record at 210 s after boot at the latest
+11:00:05 deqp: case filter 'dEQP-GLES3.functional.texture.filtering.2d.*'
+11:00:06 deqp: Pass dEQP-GLES3.functional.texture.filtering.2d.formats.rgba8_nearest
+11:00:06 v3d_deqp: case #0 P 900ms k2/8 c15533/15546 r0 dEQP-GLES3.functional.texture.filtering.2d.formats.rgba8_nearest
+11:00:08 deqp: Pass dEQP-GLES3.functional.texture.filtering.2d.formats.rgba8_linear
+11:00:08 v3d_deqp: case #1 P 1600ms k2/8 c15533/15546 r0 dEQP-GLES3.functional.texture.filtering.2d.formats.rgba8_linear
+
+11:00:08 Test case 'dEQP-GLES3.functional.texture.filtering.2d.formats.rgba8_nearest_mipmap_nearest'..
+11:04:10   5.04 [sdcard] pieeprom.upd not found
+11:04:10   5.87 Read start4.elf bytes  2299008 hnd 0x211ac
+11:04:13 [    0.000000] Booting Linux on physical CPU 0x0000000000 [0x410fd083]

@@ -1,0 +1,52 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# pi4-console-scan.py fixture: a clean image, no time stamps (as tools/cts/log/2026-10-31-pi4-gles3-a/FO2.console.txt, cut short)
+  5.05 [sdcard] pieeprom.upd not found
+  5.88 Read start4.elf bytes  2299008 hnd 0x211ac
+  5.36 Starting start4.elf @ 0xfec00200 partition 1
+MESS:00:00:05.607537:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:08.105916:0: Loaded 'yakogl-clean.bin' to 0x200000 size 0xfc47e0
+MESS:00:00:08.129767:0:board: watchdog armed
+*** Booting Zephyr OS build af17c0c8aa2a ***
+I: shader compiler scratch: 4194304 bytes, keep: 1048576 bytes
+v3d_deqp: build 0ff58329
+board: PM watchdog resets the SoC ~250 s after boot (tryboot -> Linux)
+v3d_deqp: the record at 210 s after boot at the latest
+V3D clock 250000000 -> 500000000 Hz (0)
+deqp: case filter 'dEQP-GLES3.functional.fragment_ops.blend.default_framebuffer.rgb_equation_alpha_equation.*'
+Writing test log into deqp.qpa
+osal(v3d): V3D 4.2, 8 QPUs, VPM 65536 bytes, MMU yes (identify 0)
+osal(v3d): ready: carve-out 48 MiB at phys 0x2f07000, GPU VA 0x181000..0x3100000
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.default_framebuffer.rgb_equation_alpha_equation.add_add'..
+osal(v3d): BASELINE after a completed job 1: core_sts 0x0 hub_sts 0x0 err 0x1000 ct0 cs 0x0 ea 0x2010af ca 0x2010af ra 0x0 qba 0x201000 qea 0x2010af ct1 ca 0x223097 ra 0x223096 qba 0x223000 qea 0x223097
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.default_framebuffer.rgb_equation_alpha_equation.add_add
+v3d_deqp: case #0 P 170ms k2/8 c15533/15546 r0 dEQP-GLES3.functional.fragment_ops.blend.default_framebuffer.rgb_equation_alpha_equation.add_add
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.default_framebuffer.rgb_equation_alpha_equation.add_max'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.default_framebuffer.rgb_equation_alpha_equation.add_max
+v3d_deqp: case #1 P 51ms k2/8 c15533/15546 r0 dEQP-GLES3.functional.fragment_ops.blend.default_framebuffer.rgb_equation_alpha_equation.add_max
+  Pass (Passed)
+DONE!
+
+Test run totals:
+  Passed:        475/475 (100.0%)
+deqp: done: 475 passed, 0 failed, 0 not supported, 0 warnings, complete=1
+deqp: summary: 475 cases begun, 475 with a result, 0 without
+v3d_deqp DONE, all passed: build 0ff58329, filter 'dEQP-GLES3.functional.fragment_ops.blend.default_framebuffer.rgb_equation_alpha_equation.*'
+  475 cases in 21965 ms, record at 22 s after boot, reset at ~250 s
+  totals: P 475  (R: not passed, a draw was refused in it; passed with one refused: 0)
+  done: 475 passed, 0 failed, 0 not supported, 0 warnings, complete=1
+  summary: 475 cases begun, 475 with a result, 0 without
+  jobs: slow in 0 cases; no job hung or timed out
+BASELINE (first completed) job 1: core_sts 0x0 hub_sts 0x0 err 0x1000 ct0 cs 0x0 ea 0x2010af ca 0x2010af ra 0x0 qba 0x201000 qea 0x2010af ct1 ca 0x223097 ra 0x223096 qba 0x223000 qea 0x223097
+FIRST FAILURE: none (no timeout)
+slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+binner out of memory: 0 jobs (2 overflow blocks of 256 KiB, CONFIG_YAKOGL_V3D_BIN_OVERFLOW_BLOCKS; each such job ends in a GPU reset)
+UIFCFG 0x00000045 (read at init)
+case order: P pass F fail R refused N not supported Q quality C compat E resource I internal X crash T timeout
+    0 PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP
+driver: osal(v3d): V3D 4.2, 8 QPUs, VPM 65536 bytes, MMU yes (identify 0)
+driver: ... 6 more lines (UART)
+v3d_deqp: build 0ff58329 DONE, all passed: 475 cases, P 475 F 0 R 0 N 0 other 0

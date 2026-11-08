@@ -1,0 +1,58 @@
+== tools/cts/testdata/pi4-console-scan/clean.console.txt (52 lines, 1 firmware boot(s), 1 Zephyr boot(s), 1 run(s))
+--:--:-- BOOT  5.88 Read start4.elf bytes  2299008 hnd 0x211ac
+--:--:-- WDOG  MESS:00:00:08.129767:0:board: watchdog armed
+--:--:-- BOOT  *** Booting Zephyr OS build af17c0c8aa2a ***
+--:--:-- WDOG  board: PM watchdog resets the SoC ~250 s after boot (tryboot -> Linux)
+--:--:-- WDOG  v3d_deqp: the record at 210 s after boot at the latest
+--:--:-- START deqp: case filter 'dEQP-GLES3.functional.fragment_ops.blend.default_framebuffer.rgb_equation_alpha_equation.*'
+--:--:-- END   deqp: done: 475 passed, 0 failed, 0 not supported, 0 warnings, complete=1
+--:--:-- END   deqp: summary: 475 cases begun, 475 with a result, 0 without
+--:--:-- END   v3d_deqp DONE, all passed: build 0ff58329, filter 'dEQP-GLES3.functional.fragment_ops.blend.default_framebuffer.rgb_equation_alpha_equation.*'
+--:--:-- END   v3d_deqp: build 0ff58329 DONE, all passed: 475 cases, P 475 F 0 R 0 N 0 other 0
+clean  start @0s       finish @22s      board ?       run 22.0 s     cases   475  recoveries 0  job timeouts 0  hung -  MMU faults 0  slow 0  resets 0  faults 0  finish   deqp: summary: 475 cases begun, 475 with a result, 0 without; record: DONE, all passed
+== tools/cts/testdata/pi4-console-scan/fatal.console.txt (27 lines, 2 firmware boot(s), 1 Zephyr boot(s), 1 run(s))
+--:--:-- BOOT  5.88 Read start4.elf bytes  2299008 hnd 0x211ac
+--:--:-- WDOG  MESS:00:00:08.129767:0:board: watchdog armed
+--:--:-- BOOT  *** Booting Zephyr OS build af17c0c8aa2a ***
+--:--:-- WDOG  board: PM watchdog resets the SoC ~250 s after boot (tryboot -> Linux)
+--:--:-- WDOG  v3d_deqp: the record at 210 s after boot at the latest
+--:--:-- START deqp: case filter 'dEQP-GLES3.functional.shaders.loops.*'
+--:--:-- FAULT E: >>> ZEPHYR FATAL ERROR 0: CPU exception on CPU 0
+--:--:-- FAULT v3d_deqp FATAL (reason 0, pc 0x2a1b40 lr 0x2a1b10 far 0x0): build 0ff58329, filter 'dEQP-GLES3.functional.shaders.loops.*'
+--:--:-- END   v3d_deqp: build 0ff58329 FATAL (reason 0, pc 0x2a1b40 lr 0x2a1b10 far 0x0): 1 cases, P 1 F 0 R 0 N 0 other 0
+--:--:-- BOOT  5.88 Read start4.elf bytes  2299008 hnd 0x211ac
+--:--:-- BOOT  [    0.000000] Booting Linux on physical CPU 0x0000000000 [0x410fd083]
+fatal  start @1s       finish none      board ?       run 2.3 s      cases     1  recoveries 0  job timeouts 0  hung -  MMU faults 0  slow 0  resets 1  faults 1  !! NO FINISH (fatal, then reset); record: FATAL (reason 0, pc 0x2a1b40 lr 0x2a1b10 far 0x0)
+         last result: dEQP-GLES3.functional.shaders.loops.for_constant_iterations.basic_lowp_int_vertex; in progress: dEQP-GLES3.functional.shaders.loops.for_constant_iterations.basic_lowp_int_fragment
+== tools/cts/testdata/pi4-console-scan/recovery.console.txt (50 lines, 1 firmware boot(s), 1 Zephyr boot(s), 1 run(s))
+10:00:00 BOOT  5.88 Read start4.elf bytes  2299008 hnd 0x211ac
+10:00:03 WDOG  MESS:00:00:08.129767:0:board: watchdog armed
+10:00:04 BOOT  *** Booting Zephyr OS build af17c0c8aa2a ***
+10:00:04 WDOG  board: PM watchdog resets the SoC ~250 s after boot (tryboot -> Linux)
+10:00:04 WDOG  v3d_deqp: the record at 210 s after boot at the latest
+10:00:05 START deqp: case filter 'dEQP-GLES3.functional.texture.format.*'
+10:00:08 SLOW  osal(v3d): job 7 render took 1400 ms (slow; past 1000 ms)
+10:00:12 HANG  osal(v3d): job 9 render did not end (-110, after 4000 ms, 4000 ms of it in this wait)
+10:00:12 HANG  osal(v3d): FIRST FAILURE: render, rc -110, bcl 0x201000..0x2010af rcl 0x223000..0x223097 job 9: core_sts 0x0 hub_sts 0x0 err 0x1000 ct0 cs 0x0 ea 0x2010af ca 0x2010af ra 0x0 qba 0x201000 qea 0x2010af ct1 ca 0x223050 ra 0x223040 qba 0x223000 qea 0x223097
+10:00:12 REC   osal(v3d): job 9: GPU reset (recovery 1)
+10:00:20 HANG  osal(v3d): job 14 bin did not end (-14, after 120 ms)
+10:00:20 REC   osal(v3d): job 14: GPU reset (recovery 2)
+10:00:35 END   deqp: done: 2 passed, 2 failed, 0 not supported, 0 warnings, complete=1
+10:00:36 END   deqp: summary: 4 cases begun, 4 with a result, 0 without
+10:00:36 END   v3d_deqp DONE: build 0ff58329, filter 'dEQP-GLES3.functional.texture.format.*'
+10:00:36 END   v3d_deqp: build 0ff58329 DONE: 4 cases, P 2 F 2 R 0 N 0 other 0
+recovery start 10:00:05  finish 10:00:36  board 31s     run 30.5 s     cases     4  recoveries 2  job timeouts 2  hung -  MMU faults 1  slow 1  resets 0  faults 0  finish   deqp: summary: 4 cases begun, 4 with a result, 0 without; record: DONE
+== tools/cts/testdata/pi4-console-scan/watchdog.console.txt (20 lines, 2 firmware boot(s), 1 Zephyr boot(s), 1 run(s))
+11:00:00 BOOT  5.88 Read start4.elf bytes  2299008 hnd 0x211ac
+11:00:03 WDOG  MESS:00:00:08.129767:0:board: watchdog armed
+11:00:04 BOOT  *** Booting Zephyr OS build af17c0c8aa2a ***
+11:00:04 WDOG  board: PM watchdog resets the SoC ~250 s after boot (tryboot -> Linux)
+11:00:04 WDOG  v3d_deqp: the record at 210 s after boot at the latest
+11:00:05 START deqp: case filter 'dEQP-GLES3.functional.texture.filtering.2d.*'
+11:04:10 BOOT  5.87 Read start4.elf bytes  2299008 hnd 0x211ac
+11:04:13 BOOT  [    0.000000] Booting Linux on physical CPU 0x0000000000 [0x410fd083]
+watchdog start 11:00:05  finish none      board 245s+   run 2.5 s+     cases     2  recoveries 0  job timeouts 0  hung -  MMU faults 0  slow 0  resets 1  faults 0  !! NO FINISH (watchdog reset)
+         last result: dEQP-GLES3.functional.texture.filtering.2d.formats.rgba8_linear
+-- 4 image run(s): 2 finished, 2 without a finish line; recoveries 2, job timeouts 2, hung 0, MMU faults 1, resets 2, faults 1
+!! NO FINISH fatal (fatal, then reset); last result dEQP-GLES3.functional.shaders.loops.for_constant_iterations.basic_lowp_int_vertex; 1 result(s), 0 recovery(ies), 0 job timeout(s)
+!! NO FINISH watchdog (watchdog reset); last result dEQP-GLES3.functional.texture.filtering.2d.formats.rgba8_linear; 2 result(s), 0 recovery(ies), 0 job timeout(s)
