@@ -103,21 +103,26 @@ uniforms; the compiler rounds each to whole registers), etnaviv's the length
 of its `uniforms` list. The model column is the shading cost at 0.6 ns an
 instruction on `pixels` (480 000 for the 800x600 passes, 65 536 for the 256x256
 bloom and normal-map passes, 393 216 vertices for terrain at cover x overdraw
-1.0) with the instruction counts of the table.
+1.0) with the instruction counts of the table. The "sr patch" column is
+`gc-shadow-refract-shaders.md`'s measured, not landed patch (copy fold and
+scalar lane merge in `src/shaderc/online/vivante/`), recounted by item
+terrain-compiler-fix at main `abfac1ed` ("What to do" below);
+`tests/gc_terrain_shader_count.rs` pins the "ours" column and carries the
+other two as comments.
 
-| shader (program of) | stage | ours | etnaviv | ratio | temps ours / etna | constant dwords ours / etna | model ms ours / etna |
-|---|---|---:|---:|---:|---:|---:|---:|
-| `terrain.vert` (terrain pass) | vertex | 56 | 39 | 1.44 | 9 / 9 | 52 / 52 | 13.2 / 9.2 |
-| `terrain.frag` (terrain pass) | fragment | 148 | 72 | 2.06 | 19 / 11 | 56 / 52 | 42.6 / 20.7 |
-| `terrain-blur.frag`, tilt_h (radius 4, 9 taps) | fragment | 66 | 46 | 1.43 | 12 / 5 | 24 / 12 | 19.0 / 13.2 |
-| `terrain-blur.frag`, tilt_v (radius 4, 9 taps) | fragment | 75 | 46 | 1.63 | 12 / 5 | 24 / 12 | 21.6 / 13.2 |
-| `terrain-blur.frag`, bloom_h (radius 2, 5 taps) | fragment | 42 | 24 | 1.75 | 8 / 5 | 16 / 8 | 1.65 / 0.94 |
-| `terrain-blur.frag`, bloom_v (radius 2, 5 taps) | fragment | 47 | 24 | 1.96 | 8 / 5 | 16 / 8 | 1.85 / 0.94 |
-| `terrain-normalmap.frag` (normal map) | fragment | 25 | 21 | 1.19 | 5 / 4 | 4 / 4 | 0.98 / 0.83 |
-| `terrain-overlay.frag` (bloom overlay) | fragment | 2 | 2 | 1.00 | 2 / 2 | 4 / 4 | 0.58 / 0.58 |
-| `terrain-texture.vert` (every quad pass) | vertex | 7 | 4 | 1.75 | 3 / 2 | 4 / 4 | 6 vertices: 0 |
-| `terrain-luminance.frag` (specular map) | fragment | 7 | 3 | 2.33 | 4 / 3 | 4 / 4 | not in the 52-kick frame |
-| **sum of the drawn ones** | | | | | | | **101.5 / 59.6** |
+| shader (program of) | stage | ours | sr patch | etnaviv | ratio | temps ours / etna | constant dwords ours / etna | model ms ours / etna |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| `terrain.vert` (terrain pass) | vertex | 56 | 48 | 39 | 1.44 | 9 / 9 | 52 / 52 | 13.2 / 9.2 |
+| `terrain.frag` (terrain pass) | fragment | 148 | 127 | 72 | 2.06 | 19 / 11 | 56 / 52 | 42.6 / 20.7 |
+| `terrain-blur.frag`, tilt_h (radius 4, 9 taps) | fragment | 66 | 62 | 46 | 1.43 | 12 / 5 | 24 / 12 | 19.0 / 13.2 |
+| `terrain-blur.frag`, tilt_v (radius 4, 9 taps) | fragment | 75 | 71 | 46 | 1.63 | 12 / 5 | 24 / 12 | 21.6 / 13.2 |
+| `terrain-blur.frag`, bloom_h (radius 2, 5 taps) | fragment | 42 | 38 | 24 | 1.75 | 8 / 5 | 16 / 8 | 1.65 / 0.94 |
+| `terrain-blur.frag`, bloom_v (radius 2, 5 taps) | fragment | 47 | 43 | 24 | 1.96 | 8 / 5 | 16 / 8 | 1.85 / 0.94 |
+| `terrain-normalmap.frag` (normal map) | fragment | 25 | 23 | 21 | 1.19 | 5 / 4 | 4 / 4 | 0.98 / 0.83 |
+| `terrain-overlay.frag` (bloom overlay) | fragment | 2 | 2 | 2 | 1.00 | 2 / 2 | 4 / 4 | 0.58 / 0.58 |
+| `terrain-texture.vert` (every quad pass) | vertex | 7 | 7 | 4 | 1.75 | 3 / 2 | 4 / 4 | 6 vertices: 0 |
+| `terrain-luminance.frag` (specular map) | fragment | 7 | 7 | 3 | 2.33 | 4 / 3 | 4 / 4 | not in the 52-kick frame |
+| **sum of the drawn ones** | | | | | | | | **101.5 / 59.6** |
 
 For reference the same run compiled `terrain-noise.frag` (item
 noise-shader-count's): 840 against 414 instructions, 14 against 12 temps.
@@ -307,6 +312,72 @@ How sure each is:
   itself reach the 60 FPS target; it is one of several terms (the noise
   shader's 840 against 414 is the next: 426 instructions x 0.039 ms =
   16.7 ms, item noise-shader-count's).
+
+## What to do: terrain-compiler-fix (no code change could land here)
+
+Plan #328, item terrain-compiler-fix, at main `abfac1ed`. The item could
+edit only `src/shaderc/online/vivante/`, not the shared compiler files
+(`select.rs`, `lower.rs`, `fold.rs`, `codegen.rs`, `loop_count.rs`,
+`powervr/unroll.rs`) or `tests/fixtures/` and `tests/reference/`, and had to
+stop if a pinned fixture moved. **No compiler code was committed**, for two
+reasons that hold for every rank:
+
+- **Where the causes are.** Rank 1 (the unroll before the selection reads
+  the index, `select.rs` `loop_convert` and the run-time array read of
+  `select.rs:2455-2530`), the partial-mask half of rank 2
+  (`select.rs` `propagate_copies`), rank 4 (`fold::fold_float` called from
+  the GC `select_blocks`) and rank 5 (a vectorising pass over the IR) all
+  change shared files. Rank 3 (`mad` contraction) can be paired in
+  `vivante/`, but it needs the `invariant` outputs handed to the GC passes
+  from `codegen.rs` `assemble_from_ir_blocks` (`gc-terrain-shaders.md`, "What
+  to do"). Only the coalescer half of rank 2 (`alloc.rs` `coalesce_copies`
+  past a branch) and the copy fold of sr-compiler-fix lie wholly inside
+  `vivante/`.
+- **The shared pin.** Any shortening inside `vivante/` also shortens the
+  GC offline-table programs, so it moves `tests/fixtures/precompile_counts.txt`
+  (every `gc7000` line), as noise-compiler-fix and sr-compiler-fix measured.
+  Their patches are not landed for that reason, and a third pass in the same
+  allocator would move the same lines.
+
+What the item measured instead: sr-compiler-fix's patch
+(`gc-shadow-refract-shaders.md`, "The patch", applies as is to `abfac1ed`)
+on terrain's ten shaders, the "sr patch" column of the table. The ten go
+from **475 to 428 instructions** (etnaviv 279): terrain.frag 148 to 127
+(temporaries 19 to 16), terrain.vert 56 to 48, tilt 66 and 75 to 62 and 71,
+bloom 42 and 47 to 38 and 43, normal map 25 to 23. At the model's cost
+(above) that is about **10.6 ms a frame** (terrain.frag 21 x 0.288 = 6.0,
+terrain.vert 8 x 0.236 = 1.9, tilt 8 x 0.288 = 2.3, bloom and normal map
+0.4), taken from the copies of ranks 2 and 4 (8.4 and 6.4 ms in the
+ranking): the fold reads the `mov -x` and the partial-mask copies through,
+and the merge joins the per-lane `rcp`/`rsq`.
+tilt_v keeps its 9 more than tilt_h with the patch (71 against 62): the
+per-tap `vec2(0.0, k * stepY)` copies survive it. Why was not read out of
+the listing in this item; the item that lands the patch should look.
+
+The micro-shaders of `tests/gc_terrain_shader_count.rs`, ours and with the
+patch: t1 (rank 1, a one-iteration loop over `uniform vec4 P[1]`) 23 and 19;
+t3 (rank 3, `texture2D(T, a.xy) * 0.25 + b`) 3 and 3; t4 (rank 4,
+`abs(S - a.y) / abs(1.0 - S)` with `const float S = 0.5`) 9 and 5; t5 (rank
+5, two taps' offsets from one scalar) 8 and 8. Ranks 1, 3 and 5 are
+untouched by anything inside `vivante/`; t4 shrinks only by the copies.
+
+What landing the terrain part needs, in this order:
+
+1. sr-compiler-fix's patch with its re-pins (`precompile_counts.txt`,
+   `lane_move_equivalence.rs`, `gc_sr_shader_count.rs`, the
+   `gc_terrain_shader_count.rs` pins to the "patch" comments): the 10.6 ms
+   above, by one item allowed to move the fixture.
+2. Rank 1 in `select.rs`: call the shared unroller (`powervr/unroll.rs`
+   `unroll`, the count from `loop_count.rs` `constant_loop_entries`, limit 32
+   as etnaviv's) on the GC path before `loop_convert`, so the array index is
+   a constant and `lower.rs`'s constant-index path reads the constant file.
+   terrain.frag's 54 instructions, 15.6 ms; t1 to 1 or 2.
+3. Rank 4 in the GC `select_blocks`: `fold::fold_float` on constant
+   operands. t4 to 2; terrain.vert's `vec4(p, 1.0)` product 8.
+4. Rank 3: `codegen.rs` hands the `invariant` output registers to the GC
+   passes, then a `mul` + `add` to `mad` pairing in `vivante/`. t3 to 2.
+5. Rank 5: a lane-packing pass of the per-tap offsets (shared IR). t5 to 1
+   `mul`.
 
 ## Not done, and what would settle the open ends
 
