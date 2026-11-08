@@ -764,7 +764,7 @@ _Static_assert(offsetof(struct gl_objects, renderbuffers) == 3019776, "struct gl
 #if defined(YAKOGL_GPU_MALI)
 _Static_assert(offsetof(struct gl_objects, renderbuffers) == 2737152, "struct gl_objects.renderbuffers");
 #endif
-_Static_assert(sizeof(struct gl_context) == 39960, "struct gl_context");
+_Static_assert(sizeof(struct gl_context) == 39976, "struct gl_context");
 _Static_assert(offsetof(struct gl_context, group) == 0, "struct gl_context.group");
 _Static_assert(offsetof(struct gl_context, framebuffers) == 4, "struct gl_context.framebuffers");
 _Static_assert(offsetof(struct gl_context, bound_array_buffer) == 27652, "struct gl_context.bound_array_buffer");

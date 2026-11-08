@@ -599,7 +599,7 @@ const _: () = assert!(offset_of!(crate::gl::context::GlObjects, shaders) == 1853
 #[cfg(feature = "gpu-vivante")] const _: () = assert!(offset_of!(crate::gl::context::GlObjects, renderbuffers) == 4592640);
 #[cfg(feature = "gpu-v3d")] const _: () = assert!(offset_of!(crate::gl::context::GlObjects, renderbuffers) == 3019776);
 #[cfg(feature = "gpu-mali")] const _: () = assert!(offset_of!(crate::gl::context::GlObjects, renderbuffers) == 2737152);
-const _: () = assert!(size_of::<crate::gl::context::GlContext>() == 39960);
+const _: () = assert!(size_of::<crate::gl::context::GlContext>() == 39976);
 const _: () = assert!(offset_of!(crate::gl::context::GlContext, group) == 0);
 const _: () = assert!(offset_of!(crate::gl::context::GlContext, framebuffers) == 4);
 const _: () = assert!(offset_of!(crate::gl::context::GlContext, bound_array_buffer) == 27652);

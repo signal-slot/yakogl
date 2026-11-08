@@ -970,7 +970,18 @@ pub struct GlContext {
 
     /// First GL error since the last glGetError.
     pub error: GLenum,
+    /// Which command set each `current_attrib` value: a `CURRENT_*` constant
+    /// (float, int or uint). Last, so no pinned offset moves.
+    pub current_attrib_type: [u8; MAX_VERTEX_ATTRIBS],
 }
+
+/// `GlContext::current_attrib_type`: set by glVertexAttrib{1..4}f[v]
+/// (the reset value, so a zeroed context reads float).
+pub const CURRENT_FLOAT: u8 = 0;
+/// ... by glVertexAttribI4i[v].
+pub const CURRENT_INT: u8 = 1;
+/// ... by glVertexAttribI4ui[v].
+pub const CURRENT_UINT: u8 = 2;
 
 /* ---- the pool and the current context ------------------------------------ */
 
@@ -1732,6 +1743,7 @@ impl GlContext {
         for a in self.current_attrib.iter_mut() {
             *a = [0.0, 0.0, 0.0, 1.0];
         }
+        self.current_attrib_type = [CURRENT_FLOAT; MAX_VERTEX_ATTRIBS];
         self.unpack_alignment = 4;
         self.pack_alignment = 4;
         self.dither = true;
@@ -2502,6 +2514,7 @@ mod tests {
             c.error = GL_INVALID_ENUM;
             c.viewport = [1, 2, 3, 4];
             c.current_attrib[2] = [9.0; 4];
+            c.current_attrib_type[2] = CURRENT_UINT;
         }
         let y = Extra::owned(&gl, 4, 4);
         let c = y.get();
@@ -2509,6 +2522,7 @@ mod tests {
         assert_eq!(c.error, GL_NO_ERROR);
         assert_eq!(c.viewport, [0, 0, 4, 4]);
         assert_eq!(c.current_attrib[2], [0.0, 0.0, 0.0, 1.0]);
+        assert_eq!(c.current_attrib_type[2], CURRENT_FLOAT);
     }
 
     #[test]
