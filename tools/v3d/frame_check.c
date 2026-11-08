@@ -33,6 +33,18 @@
  *      -lexpat -lz -lzstd -lm -lpthread -o frame_check
  *   ./frame_check [W H]      (FRAME_CHECK_DUMP=1 prints the decoded lists)
  *
+ * V3D 7.1 (the Pi 5): the same cc line plus -DV3D_CL_VER=71 builds the
+ * builder and this check at 7.1 (tools/v3d/check71.d/frame_check.sh does,
+ * against the vendored reference build or MESA_V3D_TREE). ./frame_check
+ * [W H] then checks the 7.1 clear frame (docs/notes/v3d71-clear-frame.md
+ * section 1) with a version 71 decoder: the 7.1 census, no packet outside it,
+ * and no byte of the lists left undecoded (no "@format binary" section). The
+ * buffers sit at the addresses and under the names of Mesa's own drm-shim dump
+ * of the clear (tools/v3d/shim71/clear.clif), and the decoder writes the CLIF
+ * form V3D_DEBUG=clif writes, so that tools/v3d/clif_cmp.py compares the two;
+ * FRAME_CHECK_CLIF=<file> stores it there. FRAME_CHECK_CLEAR=<0xAABBGGRR>
+ * sets the clear colour (default 0xff00ff00). The triangle is 4.2's only.
+ *
  * The triangle mode needs the generated program header on the include path:
  *
  *   python3 tools/v3d/v3d_prog_header.py \
@@ -54,11 +66,33 @@
 
 #include "v3d_frame.h"
 
+#if V3D_CL_VER == 71 && defined(FRAME_CHECK_TRIANGLE)
+#error "the triangle frame (M5) is 4.2's only: build --triangle without -DV3D_CL_VER=71"
+#endif
+
+#if V3D_CL_VER == 71
+/* The buffers of Mesa's 7.1 clear dump (tools/v3d/shim71/clear.clif), each
+ * where that dump has it and under its name: the binning list, the render
+ * list, the generic tile list, the target, the tile allocation and the tile
+ * state. The last three are referenced, not followed; their size here is the
+ * window the decoder names them in, not the frame's. */
+#define BCL_GPU     0x8000u
+#define RCL_GPU     0xd000u
+#define LIST_GPU    0xe000u
+#define CL_SIZE     0x1000u
+#define TARGET_GPU  0x3000u
+#define TARGET_SIZE 0x5000u
+#define TILE_GPU    0x9000u
+#define TILE_SIZE   0x3000u
+#define TSDA_GPU    0xc000u
+#define TSDA_SIZE   0x1000u
+#else
 #define BO_GPU   0x00100000u
 #define BO_SIZE  0x00010000u
 #define BCL_OFF  0x0000u
 #define RCL_OFF  0x1000u
 #define LIST_OFF 0x3000u
+#endif
 
 /* Lines whose first word is exactly `name`. */
 static int census(const char *text, const char *name)
@@ -81,7 +115,20 @@ static int census(const char *text, const char *name)
 
 static int run_clear(uint32_t w, uint32_t h)
 {
+#if V3D_CL_VER == 71
+	static uint8_t bcl_bo[CL_SIZE], rcl_bo[CL_SIZE], list_bo[CL_SIZE];
+	struct v3d_cl bcl, rcl, list;
+	v3d_cl_init(&bcl, bcl_bo, BCL_GPU, CL_SIZE);
+	v3d_cl_init(&rcl, rcl_bo, RCL_GPU, CL_SIZE);
+	v3d_cl_init(&list, list_bo, LIST_GPU, CL_SIZE);
 
+	const char *clear = getenv("FRAME_CHECK_CLEAR");
+	struct v3d_clear_frame f = {
+		.width = w, .height = h,
+		.clear_rgba8 = clear ? (uint32_t)strtoul(clear, NULL, 0) : 0xff00ff00u,
+		.target = TARGET_GPU, .stride = w * 4, .tile_alloc = TILE_GPU,
+	};
+#else
 	static uint8_t bo[BO_SIZE];
 	struct v3d_cl bcl, rcl, list;
 	v3d_cl_init(&bcl, bo + BCL_OFF, BO_GPU + BCL_OFF, RCL_OFF - BCL_OFF);
@@ -92,12 +139,14 @@ static int run_clear(uint32_t w, uint32_t h)
 		.width = w, .height = h, .clear_rgba8 = 0xff00ff00u,
 		.target = 0x00400000u, .stride = w * 4, .tile_alloc = 0x00800000u,
 	};
+#endif
 	if (!v3d_frame_build_clear(&f, &bcl, &rcl, &list)) {
 		printf("frame_check: FAIL the builder refused %ux%u\n", w, h);
 		return 1;
 	}
+	/* the builder's tiling: one 32 bpp target, 4 bytes a pixel */
 	struct v3d_tiling t;
-	v3d_frame_tiling(w, h, &t);
+	v3d_frame_tiling_gen(V3D_CL_VER, w, h, 1, false, 0, 4, &t);
 
 	/* Mesa's logger writes the decoded lists to this file, unprefixed. */
 	const char *dir = getenv("TMPDIR") ? getenv("TMPDIR") : "/tmp";
@@ -107,6 +156,31 @@ static int run_clear(uint32_t w, uint32_t h)
 	setenv("MESA_LOG_LEVEL", "info", 1);
 	setenv("MESA_LOG_PREFIX", "", 1);
 
+#if V3D_CL_VER == 71
+	/* clif_dump reads ver and cle_readahead; 7.1 has no accumulators. Not
+	 * pretty: the CLIF form of V3D_DEBUG=clif, the form of the references. */
+	struct v3d_device_info devinfo = { .ver = 71, .has_accumulators = false,
+					   .cle_readahead = 256 };
+	struct log_stream *stream = mesa_log_streami();
+	struct clif_dump *clif = clif_dump_init(&devinfo, stream, false, false);
+	/* in the dump's order (its @createbuf lines) */
+	static uint8_t target[TARGET_SIZE], tile_alloc[TILE_SIZE], tsda[TSDA_SIZE];
+	clif_dump_add_bo(clif, "resource_0x3000", TARGET_GPU, TARGET_SIZE, target);
+	clif_dump_add_bo(clif, "CL_0x8000", BCL_GPU, CL_SIZE, bcl_bo);
+	clif_dump_add_bo(clif, "tile_alloc_0x9000", TILE_GPU, TILE_SIZE, tile_alloc);
+	clif_dump_add_bo(clif, "TSDA_0xc000", TSDA_GPU, TSDA_SIZE, tsda);
+	clif_dump_add_bo(clif, "CL_0xd000", RCL_GPU, CL_SIZE, rcl_bo);
+	clif_dump_add_bo(clif, "CL_0xe000", LIST_GPU, CL_SIZE, list_bo);
+	/* the submit as Mesa's v3d_job_submit fills it: the tile allocation
+	 * (v3d_frame_alloc_sizes, no draws) and the tile state */
+	uint32_t tile_alloc_size, tile_state_size;
+	v3d_frame_alloc_sizes(&t, 0, 4096, &tile_alloc_size, &tile_state_size);
+	struct drm_v3d_submit_cl submit = {
+		.bcl_start = bcl.gpu, .bcl_end = bcl.gpu + bcl.used,
+		.rcl_start = rcl.gpu, .rcl_end = rcl.gpu + rcl.used,
+		.qma = TILE_GPU, .qms = tile_alloc_size, .qts = TSDA_GPU,
+	};
+#else
 	/* clif_dump reads ver and cle_readahead */
 	struct v3d_device_info devinfo = { .ver = 42, .has_accumulators = true,
 					   .cle_readahead = 256 };
@@ -122,6 +196,7 @@ static int run_clear(uint32_t w, uint32_t h)
 		.bcl_start = bcl.gpu, .bcl_end = bcl.gpu + bcl.used,
 		.rcl_start = rcl.gpu, .rcl_end = rcl.gpu + rcl.used,
 	};
+#endif
 	clif_dump(clif, &submit);
 	clif_dump_destroy(clif);
 	mesa_log_stream_destroy(stream);
@@ -142,6 +217,17 @@ static int run_clear(uint32_t w, uint32_t h)
 
 	if (getenv("FRAME_CHECK_DUMP"))
 		fputs(text, stdout);
+#if V3D_CL_VER == 71
+	const char *clif_out = getenv("FRAME_CHECK_CLIF");
+	if (clif_out) {
+		FILE *out = fopen(clif_out, "w");
+		if (!out || fputs(text, out) < 0 || fclose(out) != 0) {
+			printf("frame_check: FAIL cannot write %s\n", clif_out);
+			free(text);
+			return 1;
+		}
+	}
+#endif
 
 	/* What Mesa emits for this frame, and how often, under the name the
 	 * decoder prints: the XML shortname upper-cased when there is one
@@ -149,14 +235,21 @@ static int run_clear(uint32_t w, uint32_t h)
 	uint32_t supertiles = ((h - 1) / (t.tile_h * t.supertile_h) + 1) *
 			      ((w - 1) / (t.tile_w * t.supertile_w) + 1);
 	const struct { const char *name; int n; } want[] = {
+#if V3D_CL_VER == 71
+		{ "NUMBER_OF_LAYERS", 1 },
+#endif
 		{ "TILE_BINNING_MODE_CFG", 1 },
 		{ "CLEAR_VCD_CACHE", 2 },           /* Flush VCD cache: BCL once, RCL once */
 		{ "OCCLUSION_QUERY_COUNTER_ENABLE", 1 },
 		{ "START_TILE_BINNING", 1 },
 		{ "FLUSH", 1 },
 		{ "TILE_RENDERING_MODE_CFG_COMMON", 1 },
+#if V3D_CL_VER == 71
+		{ "TILE_RENDERING_MODE_CFG_RENDER_TARGET_PART1", 1 },
+#else
 		{ "TILE_RENDERING_MODE_CFG_CLEAR_COLORS_PART1", 1 },
 		{ "TILE_RENDERING_MODE_CFG_COLOR", 1 },
+#endif
 		{ "TILE_RENDERING_MODE_CFG_ZS_CLEAR_VALUES", 1 },
 		{ "TILE_LIST_INITIAL_BLOCK_SIZE", 1 },
 		{ "MULTICORE_RENDERING_TILE_LIST_BASE", 1 },
@@ -164,7 +257,11 @@ static int run_clear(uint32_t w, uint32_t h)
 		{ "TILE_COORDS", 2 },               /* the two dummy tiles */
 		{ "END_LOADS", 3 },
 		{ "STORE", 3 },                     /* two dummy tiles + the list */
+#if V3D_CL_VER == 71
+		{ "CLEAR_RT", 2 },                  /* Clear Render Targets, no flags */
+#else
 		{ "CLEAR", 2 },
+#endif
 		{ "END_TILE", 3 },
 		{ "GENERIC_TILE_LIST", 1 },
 		{ "IMPLICIT_TILE_COORDS", 1 },
@@ -194,6 +291,39 @@ static int run_clear(uint32_t w, uint32_t h)
 		printf("frame_check: FAIL nothing was decoded\n");
 		failures++;
 	}
+#if V3D_CL_VER == 71
+	/* Read in full: the three lists are control lists, no packet outside
+	 * the census (a packet is an unindented upper-case name in the CLIF
+	 * text), and no byte of a list left over as binary data. */
+	int lists = 0, packets = 0;
+	for (const char *line = text; *line;) {
+		const char *nl = strchr(line, '\n');
+		size_t len = nl ? (size_t)(nl - line) : strlen(line);
+		if (len >= 16 && strncmp(line, "@format ctrllist", 16) == 0)
+			lists++;
+		size_t k = 0;
+		while (k < len && ((line[k] >= 'A' && line[k] <= 'Z') || line[k] == '_' ||
+				   (k > 0 && line[k] >= '0' && line[k] <= '9')))
+			k++;
+		if (k > 0 && k == len)
+			packets++;
+		if (!nl)
+			break;
+		line = nl + 1;
+	}
+	if (lists != 3) {
+		printf("frame_check: FAIL %d control lists decoded, expected 3\n", lists);
+		failures++;
+	}
+	if (packets != total) {
+		printf("frame_check: FAIL %d packets decoded, the census has %d\n", packets, total);
+		failures++;
+	}
+	if (strstr(text, "@format binary")) {
+		printf("frame_check: FAIL bytes left undecoded (@format binary)\n");
+		failures++;
+	}
+#endif
 	printf("frame_check: %ux%u, %ux%u tiles, %u supertile(s), BCL %u RCL %u list %u bytes, "
 	       "%d packets decoded: %s\n",
 	       w, h, t.tiles_x, t.tiles_y, supertiles, bcl.used, rcl.used, list.used, total,
