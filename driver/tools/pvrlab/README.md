@@ -117,3 +117,36 @@ run (the texture's colour) and no GL error. All three GPUs. It is a
 measurement, not in the default list: run it by number
 (`CONFIG_GL_TEST_CASES="220"`, or `gl_test_set_list`). Board figures go into
 `docs/notes/v3d-terrain-gpu.md`, not here.
+
+## Case 221 (`instmix`): a mixed-divisor instanced draw with `gl_InstanceID`
+
+dEQP's `instanced.{draw_arrays,draw_elements}_instanced.mixed` shape in one
+case (code and shader in `gl_test_instmix.inc`, which `gl_test.c` includes: the
+case needs that file's static helpers, so it is not a separate translation
+unit). A per-vertex position, an attribute with divisor 1 and one with divisor
+3, 4 instances, drawn once with `glDrawArraysInstanced` and once with
+`glDrawElementsInstanced`. The vertex shader puts instance `gl_InstanceID` in
+quadrant `(id & 1, id >> 1)` of the 64x64 target and colours it
+`r` = divisor-1 value `{1, .5, .25, .75}`, `g` = divisor-3 value `{.25, 1}[id / 3]`,
+`b` = `gl_InstanceID / 4`. One pixel per instance is read back (tolerance 3):
+
+| draw | pixel (top-down) | R G B A |
+| --- | --- | --- |
+| instance 0 | (16,48) | 255 64 0 255 |
+| instance 1 | (48,48) | 128 64 64 255 |
+| instance 2 | (16,16) | 64 64 128 255 |
+| instance 3 | (48,16) | 191 255 191 255 |
+
+Log, for each of `arrays` and `elements`, four lines
+`gl_test:   <kind>: instance N  (x,y) = 0x........  want 0x........  ok  [check C]`
+and the case ends without a `MISMATCH`. Run it by number (SEL = 221 minus the
+image's first case number in a sweep image; `CONFIG_GL_TEST_CASES="221"` or
+`gl_test_set_list` otherwise). Opt-in, not in the default list.
+
+It passes only where the back end takes both divisors in one instanced draw: the
+V3D, and the GC7000UL once its stream divisor (V1 of
+`docs/notes/instanceid-per-draw.md`) is on. On a back end that takes divisor 1
+only, the GL core draws instance by instance and `gl_InstanceID` reads 0 in each
+draw: the GC refuses the draw (V0, a GL error or a MISMATCH on every instance but
+0), or a back end that does not refuse draws wrong. Case 141 (`es3instdiv`) is
+the divisor-2 case on its own.
