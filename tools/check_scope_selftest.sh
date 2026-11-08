@@ -122,7 +122,7 @@ expect() {
   printf '%s\n' "$out" | grep -qE "$pattern" || { echo "FAIL $label: no line matches '$pattern'"; fails=$((fails + 1)); }
 }
 out=$(plan docs/standalone-boot.md)
-expect "docs: only the shared rows" '^check.sh: 3 ok, 0 failed, 0 gap\(s\).*, 210 skipped \(--changed HEAD, scopes: docs' "$out"
+expect "docs: only the shared rows" '^check.sh: 3 ok, 0 failed, 0 gap\(s\).*, 212 skipped \(--changed HEAD, scopes: docs' "$out"
 out=$(plan src/v3d/job.rs)
 expect "v3d: its clippy row" '^plan  clippy  host-test,gpu-v3d,shaderc-online,no-shader-table$' "$out"
 expect "v3d: its image" '^plan  zephyr  rpi4 ' "$out"
@@ -232,18 +232,21 @@ count "narrowed CONFIGS: the table row once" "^plan  gen     precompiled tables 
 # the control: the full plan keeps its rows, the table row once, before the
 # first CONFIGS row that reads the tables
 out=$(plan src/gl/draw.rs)
-# 214 rows: ok plus gaps, because a row whose tool this host lacks is a gap
+# 216 rows: ok plus gaps, because a row whose tool this host lacks is a gap
 # here and a plan row on the gate host; the sum is the same on both. (Seven
 # more for the direct boot: am62p-mkboot.py, the second-stage vectors, the
 # yakogl-boot-stage2 clippy, test and softfloat rows, boot_stage2.h's layout
 # pins and the direct-boot images; one more for the Mali firmware row; two
 # for the partial render's load shader, tools/pco_shc/spm_load: its decode
 # row and its regenerate-and-compare row, a gap without PCO_SHC; one for
-# t6_fw's image, a gap without the Mali firmware; one for the v3d71 host checks, tools/v3d/check71.sh.)
+# t6_fw's image, a gap without the Mali firmware; one for the v3d71 host checks,
+# tools/v3d/check71.sh; two for the NanoPC-T6 dEQP-GLES2 runner and panthor
+# kmsg classifier self-tests, tools/cts/mali-deqp-selftest.sh and
+# tools/cts/mali-kmsg-selftest.sh.)
 checks=$((checks + 1))
 line=$(printf '%s\n' "$out" | grep -E '^check.sh: [0-9]+ ok, 0 failed, [0-9]+ gap\(s\).*, 0 skipped \(--changed HEAD, scopes: all\)')
 total=$(printf '%s\n' "$line" | sed -E 's/^check.sh: ([0-9]+) ok, 0 failed, ([0-9]+) gap.*/\1 \2/' | awk '{ print $1 + $2 }')
-[ "$total" = 214 ] || { echo "FAIL full plan: its row count: ${total:-no summary line} rows (ok + gaps), expected 214:$line"; fails=$((fails + 1)); }
+[ "$total" = 216 ] || { echo "FAIL full plan: its row count: ${total:-no summary line} rows (ok + gaps), expected 216:$line"; fails=$((fails + 1)); }
 count "full plan: the table row once" "^plan  gen     precompiled tables for the tier" 1 "$out"
 order "full plan: the tables before their first reader" "$gen" \
   'plan  clippy  host-test,gpu-powervr,shaderc-online,precompiled-shaders' "$out"
