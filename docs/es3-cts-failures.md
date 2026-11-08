@@ -78,7 +78,7 @@ Host numbers are HOST-ONLY: the Linux OSAL runs no command stream, so only API e
 | fragment_out | 583 | basic and array `int` / `uint` 456, array `float` 36, array `fixed` 12, random 79 ("Image comparison failed") | RC1 (integer targets beside another, partial masks), RC14 |
 | shaders | 410 | texture_functions 297 (compile refusals: `textureGrad`, `textureProjGrad`, offsets, `texelFetchOffset`; 38 `texturesize` "Got unexpected texture size"), builtin_functions 40 (`common.round` / `roundeven` 16, `modf` 24), precision 24 (`int` / `uint` program does not link), derivate 23 (15 float framebuffer incomplete), fragdepth 15 (compile), qualification_order 7, uniform_block 2, metamorphic 2 | RC13, RC1, RC16 |
 | fbo | 367 | color 147, render 68, completeness 56, msaa 34, invalidate 33, blit 19 (16 `blit.depth_stencil`), depth 10. 146 are `GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT` | RC1, RC8, RC17 |
-| attribute_location | 48 | `mixed.*` and `mixed_time.*` 28, `mixed_max_attributes.*` 20 | Appendix A, task T4 |
+| attribute_location | 48 | `mixed.*` and `mixed_time.*` 28, `mixed_max_attributes.*` 20 (all fixed on the host in `381b0f09`, 9 unit tests pass; dEQP host run of `mixed_max_attributes` pending, no board run) | Appendix A, task T4 |
 | vertex_arrays | 41 | packed `int2_10_10_10` in a buffer 20, `components{2,3}_{i,u}vec4` 21 | Appendix A, tasks T2 and T3 |
 | state_query | 25 | 64-bit and float reads of ES 3.0 limits, `rbo` component size, `program_binary` | RC10 |
 | draw | 14 | `random.*` image comparison | not classified |
@@ -407,16 +407,17 @@ refuses `GL_HALF_FLOAT` and the packed types, and the getters refuse
   `glBindAttribLocation` no longer moves an input that has
   `layout(location = N)` (`src/gl/program.rs`, `ExplicitAttribs::scan`,
   `build_attrib_indices`, `link_attrib_layout`; `tests/es3_attrib_location.rs`):
-  the 28 `mixed` / `mixed_time` cases. (b) open: the 20
-  `mixed_max_attributes.*` cases. An input without a qualifier must take the
-  lowest run of free locations that no `layout(location)` uses and no earlier
-  input took; `src/shaderc/online/reflect.rs` (`reflect()`, the
-  `StorageQualifier::Attribute` branch) gives it the running counter instead,
-  which collides with a later qualifier. With that change,
+  the 28 `mixed` / `mixed_time` cases. (b) done on the host (`381b0f09`): an
+  input without a qualifier takes the lowest run of free locations that no
+  `layout(location)` uses and no earlier input took
+  (`src/shaderc/online/reflect.rs`). `tests/es3_attrib_location.rs` has no
+  `#[ignore]` left and its 9 tests pass, among them
   `mixed_max_attributes_vec4` and
-  `unqualified_unbound_inputs_avoid_every_qualifier` in
-  `tests/es3_attrib_location.rs` pass: remove their `#[ignore]` in the same
-  change. The Pi 4 fails the same 48.
+  `unqualified_unbound_inputs_avoid_every_qualifier` (run at `0b3698e5`).
+  The dEQP `attribute_location.mixed_max_attributes.*` run (20 cases,
+  `tools/cts/host-deqp-run.sh`) is **not recorded yet**: the VK-GL-CTS
+  checkout could not be fetched in the session that wrote this, so T4(b) is
+  not claimed closed on dEQP. The Pi 4 failed the same 48 before the fix.
 - **T5, the indexed draws under capture** (closed): the 6
   `negative_api.vertex_array` indexed-draw cases need transform feedback,
   which is built; they pass.
