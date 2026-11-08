@@ -269,7 +269,9 @@ copy is `wide_target`'s own, over its own `tiled_offset`). Mesa's
 `etna_texture_tile_rgba32f` / untile (`etnaviv_tiling.c:137-158`). Nothing
 in the draw path calls them.
 
-The rest, in order. Step 0 and 7 need the board; 1 to 6 are host-testable.
+Step 2 is done too (inert, `src/vivante/wide_target.rs`, described below).
+The rest, in order. Step 0 and 7 need the board; 1 and 3 to 6 are
+host-testable.
 
 0. **Board probe** (below). If the bits do not match, stop: the finding is
    the cause, the refusal stays.
@@ -278,13 +280,38 @@ The rest, in order. Step 0 and 7 need the board; 1 to 6 are host-testable.
    check); `mrt_targets` / `hw_targets` clamp from 4 to the 8-RT bank (up
    to four attachments give up to eight targets, a 128-bit one takes two).
    Plane address = shadow gpu + `plane_offset`, in `pe_rt_addr_8_pipe` for
-   both pipes.
-2. `src/vivante/wide_target.rs` (free of other plans): the multi-target
-   shadow. `wanted` accepts more than one target, because SINGLE_BUFFER
-   tiles every target of the draw, so a mixed 128-bit + 32-bit draw puts
-   all of them on shadows. A 128-bit entry's size is `planes_bytes`,
-   `tile_in` calls `split_planes`, `retire` calls `join_planes`; `Key`
-   gains the pixel size.
+   both pipes. What it calls of step 2, in place of today's one-target
+   `wanted` / `prepare` / `bind` (which stay, unchanged, for the live
+   RGBA16F, RGBA16I/UI and RG32I/UI draw):
+   - a `wide_target::Target` per GL attachment of the draw (GPU address,
+     CPU view, size, pitch in bytes, bytes a pixel). `target_of(gl)` builds
+     attachment 0's from `target_*`; the others need a CPU view and a pitch
+     that `GlesDrawTarget` does not carry today (`gpu`, `w`, `h`, `format`
+     only), so step 1 also needs those from the GL core (`src/backend.rs`,
+     `src/gl/`), or the back end's own map of target storage.
+   - `wanted_targets(&targets, straight)`: every target has a CPU view and
+     2, 4, 8 or 16 bytes a pixel, at least one is 64 or 128 bits, at most
+     `MAX_TARGETS` (4). For one 64-bit target it answers as `wanted`.
+   - `prepare_targets(&targets, finish)` before the draw records anything
+     (non-zero: refuse the draw), then `bind_targets(&targets, kick)` while
+     recording: one `Bound { gpu, plane1, stride }` per target, in order.
+     A 128-bit target's `gpu` is plane 0 (R,G) and `plane1` plane 1 (B,A),
+     the two hardware slots; `plane1` is 0 for any other target. `stride`
+     is PE_COLOR_STRIDE / the PE_RT_CONFIG stride (the 8-byte plane's for a
+     128-bit target). `None`: a target has no shadow, nothing was marked.
+   - `retire` and `released` as today; they serve every entry.
+2. Done (inert), `src/vivante/wide_target.rs`: the multi-target shadow
+   above. `Key` carries the pixel size; a 128-bit entry is `planes_bytes`
+   of the padded size, `tile_in` calls `split_planes`, `retire` calls
+   `join_planes`; other sizes tile 4x4 at their own bytes a pixel (a 32-bit
+   or 16-bit target beside a 128-bit one, since SINGLE_BUFFER tiles every
+   target of the draw). `prepare_targets` never evicts a shadow of the same
+   draw for another (it lets the kicks complete instead). Unit tests in
+   the module pin the one-target path's entries and bytes, round-trip a
+   128-bit target bit for bit (negative words, words above 2^24), and check
+   a mixed 128-bit + 32-bit draw's sizes, plane offsets and strides. No
+   draw reaches the new functions: `backend.rs` refuses
+   `GC_INT_RT_128BPP` by name and calls only the one-target ones.
 3. Shader output split, `src/shaderc/online/vivante/` beside `wide128.rs`
    (#328): the analogue of `lower_128bit_output`, `(r,g)` to the output and
    `(b,a)` to output `4 + k`; and its draw key (`rt_is_128bit`, companion
