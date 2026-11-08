@@ -1,0 +1,5 @@
+SPDX-License-Identifier: MIT
+SPDX-FileCopyrightText: 2014-2017 Broadcom
+SPDX-FileCopyrightText: 2016 Intel Corporation
+Output of Mesa 26.2.1's gen_pack_header.py on its v3d_packet.xml for V3D 7.1
+(NOTICE 1b), never edited; tools/v3d/check71.d/gen71.sh regenerates it.
