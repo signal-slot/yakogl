@@ -1,0 +1,2 @@
+[    0.000000] Booting Linux on physical CPU 0x0
+[    5.100000] panthor fb000000.gpu: [drm] mali-g610 id 0xa867 major 0x0 minor 0x0 status 0x5
