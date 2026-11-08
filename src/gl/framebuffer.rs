@@ -1411,7 +1411,27 @@ pub fn texture_orphan_moved(c: &mut GlContext, from: GLuint, to: GLuint) {
 /// rather than be freed (ES 2.0 3.7.13; the orphan rule above).
 pub fn texture_deleted(c: &mut GlContext, texture: GLuint) -> bool {
     detach_from_bound(c, GL_TEXTURE, texture);
-    attachment_refs(c, GL_TEXTURE, texture) != 0
+    let held = attachment_refs(c, GL_TEXTURE, texture) != 0;
+    if !held {
+        /* the slot is freed by the caller: no kick renders into what is made there next */
+        clear_target_mark(c, texture as usize);
+    }
+    held
+}
+
+/// Forget the render-into marks of texture slot `ti` of `c` ([`TARGET_USE`],
+/// [`DEPTH_TARGET`]): its texture is freed, and the next one handed the slot
+/// (glGenTextures takes the lowest free) must not look like a render target.
+fn clear_target_mark(c: &GlContext, ti: usize) {
+    let ctx = c.index as usize % MAX_CONTEXTS;
+    // SAFETY: single-threaded by contract; no other reference is live.
+    if let Some(e) = unsafe { TARGET_USE.get() }[ctx].get_mut(ti) {
+        *e = 0;
+    }
+    // SAFETY: as above.
+    if let Some(e) = unsafe { DEPTH_TARGET.get() }[ctx].get_mut(ti) {
+        *e = DepthTarget { level: 0, resolved: 0 };
+    }
 }
 
 /// Detach a deleted renderbuffer from the bound framebuffer (ES 2.0 4.4.3);
@@ -1440,7 +1460,10 @@ fn attachment_released(c: &mut GlContext, type_: GLenum, name: GLuint) {
     }
     match type_ {
         GL_RENDERBUFFER if c.renderbuffer_ref(name).is_some_and(|rb| rb.orphan) => free_renderbuffer(c, name),
-        GL_TEXTURE if c.texture_ref(name).is_some_and(|t| t.orphan) => super::texture::free_texture(c, name),
+        GL_TEXTURE if c.texture_ref(name).is_some_and(|t| t.orphan) => {
+            clear_target_mark(c, name as usize);
+            super::texture::free_texture(c, name)
+        }
         _ => {}
     }
 }
@@ -8282,5 +8305,44 @@ mod tests {
         unsafe { gc_kick_diff_enable(core::ptr::null(), 0, 0, 0, None) };
         assert_eq!(gc_kick_diff_after_fence(), 0);
         KICK_DIFF_TARGET.store(0, core::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// The kick that rendered into a texture is no mark on the texture the
+    /// next glGenTextures puts in the freed slot (docs/notes/v3d-terrain-copies.md).
+    #[test]
+    fn a_freed_texture_slot_gives_the_next_texture_no_render_into_mark() {
+        let gl = TestGl::new(4, 4);
+        let a = tex_with_storage(4, 4);
+        set_target_use(gl.ctx().index as usize, a as usize, 7);
+        set_depth_resolved(gl.ctx(), a as usize, 7);
+        assert_eq!(texture_target_use(gl.ctx(), a as usize), 7);
+        // SAFETY: plain GL calls.
+        unsafe { glDeleteTextures(1, &a) };
+        let b = tex_with_storage(4, 4);
+        assert_eq!(b, a, "the lowest free slot is handed out again");
+        assert_eq!(texture_target_use(gl.ctx(), b as usize), 0);
+        assert_eq!(depth_target(gl.ctx(), b as usize).resolved, 0);
+    }
+
+    /// An orphan (deleted while another framebuffer holds it) keeps its mark
+    /// until it is freed, and the free clears it.
+    #[test]
+    fn an_orphan_keeps_its_mark_until_freed() {
+        let gl = TestGl::new(4, 4);
+        let fb1 = bound_fb();
+        let a = tex_with_storage(4, 4);
+        // SAFETY: plain GL calls.
+        unsafe { glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, a, 0) };
+        let fb2 = bound_fb();
+        set_target_use(gl.ctx().index as usize, a as usize, 9);
+        // SAFETY: plain GL calls.
+        unsafe { glDeleteTextures(1, &a) };
+        assert_eq!(texture_target_use(gl.ctx(), a as usize), 9, "still in fb1");
+        // SAFETY: plain GL calls.
+        unsafe {
+            glDeleteFramebuffers(1, &fb1);
+            glDeleteFramebuffers(1, &fb2);
+        }
+        assert_eq!(texture_target_use(gl.ctx(), a as usize), 0, "freed with its last framebuffer");
     }
 }
