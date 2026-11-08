@@ -1120,7 +1120,14 @@ fn each_refusal_is_the_exact_line_of_its_cause() {
                 why(&volume(|t| t.bytes = 64 * 7)),
                 invalid(INVALID_TEXTURE_STORAGE),
             ),
-            ("a 3D chain", why(&volume(|t| (t.mip_filter, t.mip_levels) = (1, 2))), not_built(NOT_BUILT_TEXTURE_TYPE)),
+            /* its chain: each level's grid copied stacked
+             * (`a_volume_chain_is_copied_level_by_level`) */
+            ("a 3D chain of 4 levels", why(&volume(|t| (t.mip_filter, t.mip_levels) = (1, 4))), built),
+            (
+                "a 3D chain past its last level",
+                why(&volume(|t| (t.mip_filter, t.mip_levels) = (1, 5))),
+                invalid(INVALID_TEXTURE_STORAGE),
+            ),
             (
                 "a 3D texture of 257 slices",
                 why(&volume(|t| (t.layers, t.width, t.height) = (257, 8 * 17, 8 * 16))),
@@ -3082,6 +3089,114 @@ mod gl {
     fn a_gl_mip_chain_reaches_one_plane_a_level() {
         for side in [32usize, 8] {
             gl_mip_chain_of_side(side);
+        }
+    }
+
+    /// gl_test case 206's volume through the GL API: 16x16x4 RGBA8, levels
+    /// 0, 1 and 2 from glTexImage3D (16x16x4, 8x8x2, 4x4x1), every texel its
+    /// own bytes (level, slice, x, y). The GL core keeps it for this backend
+    /// as a grid of level 0's slices and a grid a level after it
+    /// (`texture_alloc_storage_3d`). A binding of that storage the way the
+    /// draw makes one for a grid (src/gl/draw.rs: the grid's sides, its
+    /// pitch, level 0's bytes), naming the three levels, is copied level by
+    /// level: each level's planes name its slices one under the other on
+    /// 64-byte rows, and every row is the texels glTexImage3D wrote for it.
+    /// So [`grid_level_at`] finds each level where the GL core put it.
+    #[test]
+    fn a_gl_volume_chain_is_copied_level_by_level() {
+        use crate::gl::names::{self, Kind};
+        use crate::gl::texture::glTexImage3D;
+        let (side, depth, levels) = (16usize, 4usize, 3usize);
+        let texel = |l: usize, k: usize, x: usize, y: usize| [l as u8 + 1, k as u8, x as u8, y as u8];
+        let level_texels = |l: usize| -> Vec<u8> {
+            let (s, d) = ((side >> l).max(1), (depth >> l).max(1));
+            (0..d).flat_map(|k| (0..s).flat_map(move |y| (0..s).flat_map(move |x| texel(l, k, x, y)))).collect()
+        };
+        let _rig = Rig::new(true);
+        assert_eq!(backend::init(), 0);
+        // SAFETY: the rig serialises the library; plain GL calls, and the
+        // texture object read while the context is current.
+        unsafe {
+            let ctx = context::gl_context_create(64, 64);
+            assert!(!ctx.is_null());
+            let mut tex = 0;
+            glGenTextures(1, &mut tex);
+            glBindTexture(GL_TEXTURE_3D, tex);
+            for l in 0..levels {
+                let (s, d) = ((side >> l).max(1) as GLsizei, (depth >> l).max(1) as GLsizei);
+                let texels = level_texels(l);
+                let f = GL_RGBA8 as GLint;
+                glTexImage3D(
+                    GL_TEXTURE_3D,
+                    l as GLint,
+                    f,
+                    s,
+                    s,
+                    d,
+                    0,
+                    GL_RGBA,
+                    GL_UNSIGNED_BYTE,
+                    texels.as_ptr().cast(),
+                );
+            }
+            assert_eq!(glGetError(), GL_NO_ERROR, "the uploads");
+            let c = context::current().expect("a current context");
+            let slot = names::slot_of(c, Kind::Texture, tex).expect("a texture name");
+            let t = c.texture_object(slot).expect("a texture object");
+            let cols = u32::from(t.grid_cols);
+            assert_eq!(cols, 2, "four slices in a grid of two columns");
+            let (gw, gh) = (t.width * cols, t.height * (depth as u32).div_ceil(cols));
+            let bind = backend::GlesTextureBind {
+                format: backend::GLES_TEXFMT_RGBA8,
+                type_: backend::GLES_TEXTYPE_3D,
+                layers: depth as u16,
+                base_gpu: t.mem.gpu,
+                width: gw,
+                height: gh,
+                stride_texels: t.level_pitch(gw),
+                bytes: t.level_pitch(gw) * gh * 4,
+                mip_filter: 1,
+                mip_levels: levels as u8,
+                wrap_r: backend::GLES_WRAP_CLAMP_TO_EDGE,
+                cpu: t.mem.cpu.cast_const(),
+                ..backend::GlesTextureBind::ZERO
+            };
+            let g = slice_grid(&bind).expect("whole slices");
+            for l in 1..levels {
+                assert_eq!(
+                    grid_level_at(&bind, g, l as u32).map(|a| a.off),
+                    Some(t.level_off[l] as usize),
+                    "level {l}: where the GL core keeps it"
+                );
+            }
+            let base = 0x20_0000u64;
+            let mut data_m = vec![0u8; 0x2000];
+            let v = {
+                let mut data = Pool::new("data", base, &mut data_m).unwrap();
+                texture_of(Some(&bind), &mut data).unwrap()
+            };
+            assert!(v.volume);
+            assert_eq!((v.width, v.height, v.faces, v.levels, v.mipmap), (16, 16, 4, 3, MipmapMode::NEAREST));
+            let d = v.texture(0);
+            assert_eq!((d.levels, d.depth, d.maximum_lod), (3, 4, 2.0));
+            for l in 0..levels {
+                let (s, slices) = ((side >> l).max(1), (depth >> l).max(1));
+                let p = v.plane(0, l as u32);
+                let lv = v.level[l];
+                assert_eq!((p.width, p.height, p.row_stride), (s as u32, s as u32, 64), "level {l}");
+                assert_eq!((p.slice_stride, p.size), (64 * s as u32, 64 * (s * slices) as u32), "level {l}");
+                assert_eq!(lv.gpu % 64, 0, "level {l} on 64 bytes");
+                let mut got = Vec::new();
+                for k in 0..slices as u32 {
+                    for y in 0..s {
+                        let at = (v.face_gpu(k, l as u32) - base) as usize + 64 * y;
+                        got.extend_from_slice(&data_m[at..at + 4 * s]);
+                    }
+                }
+                assert_eq!(got, level_texels(l), "level {l}'s slices are its glTexImage3D texels");
+            }
+            glDeleteTextures(1, &tex);
+            context::gl_context_destroy(ctx);
         }
     }
 

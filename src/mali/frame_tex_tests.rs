@@ -1851,6 +1851,86 @@ fn a_volume_chain_is_the_shim_s() {
     assert_eq!(check_shim_tables("texmore_206_vol", TEXMORE_206_VOL, &textures), 2 + 6 + 4 + 1);
 }
 
+/// Levels 1 and 2 of gl_test case 206's volume (texmore_206_vol), the
+/// levels the board read as level 0 before the backend copied them: each
+/// level's plane against Mesa 26.2.1's, the bytes that differ named with the
+/// values both hold, every other byte equal. The volume is the one the
+/// backend copies from the GL core's grid (`volume_of`; backend_tests.rs
+/// `a_gl_volume_chain_is_copied_level_by_level`): level 0's four 16x16
+/// slices from Mesa's level 0 pointer (0x1000 bytes), level 1's two 8x8 on
+/// the next 64 bytes (0x400), level 2's one 4x4 after it, each on 64-byte
+/// rows. Width, height, clump format and plane type are Mesa's; level 1's
+/// pointer is Mesa's too (Mesa's level 0 is 4 slices of one 0x400 tile row
+/// each, 0x1000 bytes as ours). docs/notes/mali-3d-levels.md.
+#[test]
+fn a_volume_chain_s_levels_1_and_2_are_the_shim_s() {
+    let shim = shim_fragment_tables(TEXMORE_206_VOL);
+    let base = hex(&shim.planes[0][0]["Pointer"]);
+    let v = volume(base, 16, 4, 3, false);
+    let t = v.texture(0);
+    let m_t = shim_texture(shim.textures[0].clone());
+    assert_eq!(
+        (t.levels, t.depth, t.maximum_lod),
+        (m_t.levels, m_t.depth, m_t.maximum_lod),
+        "Levels 3, Depth 4, LOD 2"
+    );
+    /* (level, Mesa's size, slice stride and pointer; ours) */
+    let want = [
+        (1u32, (0x800u32, 0x400u32, base + 0x1000), (0x400u32, 0x200u32, base + 0x1000)),
+        (2, (0x400, 0x400, base + 0x1800), (0x100, 0x100, base + 0x1400)),
+    ];
+    for (l, (m_size, m_slice, m_ptr), (o_size, o_slice, o_ptr)) in want {
+        let m_p = shim_plane(shim.planes[0][l as usize].clone());
+        let o_p = v.plane(0, l);
+        assert_eq!((o_p.width, o_p.height), (m_p.width, m_p.height), "level {l}: its sides are Mesa's");
+        assert_eq!((m_p.size, m_p.slice_stride, m_p.pointer), (m_size, m_slice, m_ptr), "level {l}: Mesa's");
+        assert_eq!((o_p.size, o_p.slice_stride, o_p.pointer), (o_size, o_slice, o_ptr), "level {l}: ours");
+        assert_eq!((m_p.row_stride, o_p.row_stride), (0x400, 64), "level {l}: row strides");
+        let (m_b, o_b) = (m_p.pack().unwrap(), o_p.pack().unwrap());
+        let mut diffs = vec![
+            Difference {
+                block: "Plane",
+                at: 0x01,
+                dump: vec![m_b[1]],
+                ours: vec![o_b[1]],
+                cause: "Clump ordering: Mesa's image is U-interleaved 16x16 tiles, ours linear rows",
+            },
+            Difference {
+                block: "Plane",
+                at: 0x04,
+                dump: m_size.to_le_bytes().to_vec(),
+                ours: o_size.to_le_bytes().to_vec(),
+                cause: "Size: Mesa's level is its slices of one 0x400 tile row each, ours their linear rows",
+            },
+            Difference {
+                block: "Plane",
+                at: 0x10,
+                dump: 0x400u32.to_le_bytes().to_vec(),
+                ours: 64u32.to_le_bytes().to_vec(),
+                cause: "Row stride: Mesa's a row of 16x16 tiles, ours one linear row on 64 bytes",
+            },
+            Difference {
+                block: "Plane",
+                at: 0x18,
+                dump: m_slice.to_le_bytes().to_vec(),
+                ours: o_slice.to_le_bytes().to_vec(),
+                cause: "Slice stride: Mesa's slice is one tile row, ours the level's own rows of a slice",
+            },
+        ];
+        if m_ptr != o_ptr {
+            diffs.push(Difference {
+                block: "Plane",
+                at: 0x08,
+                dump: m_ptr.to_le_bytes().to_vec(),
+                ours: o_ptr.to_le_bytes().to_vec(),
+                cause: "Pointer: level 2 follows level 1's 0x800 tiled bytes in Mesa's, its 0x400 linear in ours",
+            });
+        }
+        compare("Plane", &o_b, &m_b, &diffs).unwrap_or_else(|e| panic!("level {l}: {e}"));
+        eprintln!("mali texmore_206_vol level {l} vs the shim: {} differences named", diffs.len());
+    }
+}
+
 /// A 3D texture's planes and descriptor against a cube's and an array's:
 /// a 2D array or a cube of the same stack is not a volume, a volume of six
 /// slices is not a cube, and a level's plane names every slice of it.
