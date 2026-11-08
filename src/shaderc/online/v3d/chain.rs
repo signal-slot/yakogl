@@ -254,14 +254,16 @@ fn under_pressure<'a>(
     Err(V3dError::NotYet(DOES_NOT_FIT))
 }
 
-/// A vertex or coordinate shader all the way to its words.
+/// A vertex or coordinate shader all the way to its words; `ret32` is the
+/// vertex key's (`LodKey::ret32`, [`select_vertex`]).
 fn vertex<'a>(
     p: &super::prepare::Prepared<'_>,
     records: &[u8],
     coord: bool,
+    ret32: u32,
     a: &Arena<'a>,
 ) -> Result<(Selected<'a>, (Code<'a>, u32)), V3dError> {
-    under_pressure(&PRESSURES, |pr| select_vertex(p, records, coord, pr, a), true, a)
+    under_pressure(&PRESSURES, |pr| select_vertex(p, records, coord, ret32, pr, a), true, a)
 }
 
 /// A program all the way to its words, and the thread count it runs at: 4
@@ -373,8 +375,9 @@ pub fn compile_program<'a>(
 /// [`compile_program`] with each stage's [`crate::shaderc::LodKey`]: what a
 /// draw's bound samplers ask of the stage's code. The V3D's keys are
 /// `cube_noseam` (both stages: the cube look-ups of those bindings are
-/// emulated per face, docs/v3d-noseamless-cube.md) and, of the fragment
-/// key, `ret32` (read by select.rs from the compile's key). The `mag_switch`
+/// emulated per face, docs/v3d-noseamless-cube.md) and `ret32` (both
+/// stages: the fragment key's read by select.rs from the compile's key, the
+/// vertex key's passed to the vertex and coordinate shaders here). The `mag_switch`
 /// remap is IR to IR and applied to the vertex module by the caller
 /// (`codegen::link_sources`).
 pub fn compile_program_keyed<'a>(
@@ -492,8 +495,10 @@ pub fn compile_program_keyed<'a>(
         false,
         a,
     )?;
-    let (vsel, vs_code) = vertex(&vsp, records, false, a)?;
-    let (csel, cs_code) = vertex(&csp, records, true, a)?;
+    /* both with the vertex key's ret32: the driver loads one set of
+     * texture records for the vertex and the coordinate shader */
+    let (vsel, vs_code) = vertex(&vsp, records, false, vs_key.ret32, a)?;
+    let (csel, cs_code) = vertex(&csp, records, true, vs_key.ret32, a)?;
 
     let slots = a.alloc_filled(inputs.len(), (0u8, 0u8))?;
     for (s, &(loc, comp)) in slots.iter_mut().zip(inputs) {
@@ -3549,6 +3554,68 @@ mod tests {
         assert!(count(&plain, "r0.l, r0.h") == 1 && count(&keyed, ".l") == 0 && count(&keyed, ".h") == 0, "{keyed:?}");
         assert_eq!(count(&keyed, "vfpack tlb, r0, r1"), 1, "{keyed:?}");
         assert_eq!((other_cfg, other), (plain_cfg, plain), "a key bit at a binding not read changes nothing");
+    }
+
+    /// The vertex twin of [`a_ret32_binding_reads_one_32_bit_word_per_channel`]
+    /// (docs/notes/v3d-vs-ret32.md): the vertex key's `ret32` reaches both the
+    /// vertex and the coordinate shader (the position reads the look-up, so
+    /// the coordinate shader samples too): P0 0xf, P1 0x5, four ldtmu and no
+    /// f16 half read in each, where key 0 keeps 0x3 / 0x4 and two ldtmu. The
+    /// ambient (fragment) key does not key the vertex stage: the stages
+    /// number their bindings apart. A key bit at a binding the vertex shader
+    /// does not read changes nothing. Revert checks: `Sel::ret32` left 0 in
+    /// select_vertex fails the keyed assertions; the coordinate shader
+    /// compiled without the key fails its half.
+    #[test]
+    fn a_ret32_vertex_binding_reads_one_32_bit_word_per_channel() {
+        const VS: &str = "attribute vec4 p;\nuniform sampler2D s;\nvarying vec4 v;\n\
+            void main() { v = texture2DLod(s, p.xy, 0.0); gl_Position = p + v; }\n";
+        const FS: &str = "precision mediump float;\nvarying vec4 v;\nvoid main() { gl_FragColor = v; }\n";
+        type Streams = (Vec<(u32, u32)>, Vec<String>);
+        let compile = |vs_ret32: u32, fs_ret32: u32| -> [Streams; 2] {
+            let _serial = store::test_lock();
+            store::with_scratch(|a| {
+                let vs = a.alloc_str(VS).unwrap();
+                let fs = a.alloc_str(FS).unwrap();
+                let v = lower::compile_to_ir(a, Stage::Vertex, vs).map_err(|e| e.msg).unwrap();
+                let fr = lower::compile_to_ir(a, Stage::Fragment, fs).map_err(|e| e.msg).unwrap();
+                let key = |ret32| crate::shaderc::LodKey { ret32, ..crate::shaderc::LodKey::NONE };
+                let p = compile_program_keyed(
+                    &v.module,
+                    &fr.module,
+                    Prim::Triangles,
+                    TARGET,
+                    key(vs_ret32),
+                    key(fs_ret32),
+                    a,
+                )
+                .expect("compiles");
+                check_all(&p);
+                let of = |c: &Code<'_>| -> Streams {
+                    (
+                        c.uniforms
+                            .iter()
+                            .filter(|u| u.contents == 40 || u.contents == 41)
+                            .map(|u| (u.contents, u.data))
+                            .collect(),
+                        c.instrs.iter().map(text).collect(),
+                    )
+                };
+                [of(&p.vs.code), of(&p.cs.code)]
+            })
+            .expect("scratch")
+        };
+        let count = |ops: &[String], w: &str| ops.iter().filter(|o| o.contains(w)).count();
+        let plain = compile(0, 0);
+        let keyed = compile(1, 0);
+        for (which, (p, k)) in ["vs", "cs"].iter().zip(plain.iter().zip(keyed.iter())) {
+            assert_eq!(p.0, [(40, 0x3), (41, 0x4)], "{which}: f16, two words, 16-bit output");
+            assert_eq!(k.0, [(40, 0xf), (41, 0x5)], "{which}: 32-bit, four words, Output Type 32-bit");
+            assert_eq!((count(&p.1, "ldtmu"), count(&k.1, "ldtmu")), (2, 4), "{which}");
+            assert!(count(&k.1, ".l") == 0 && count(&k.1, ".h") == 0, "{which}: no f16 half read {:?}", k.1);
+        }
+        assert_eq!(compile(0, 1), plain, "the fragment key does not key the vertex stage");
+        assert_eq!(compile(2, 0), plain, "a key bit at a binding not read changes nothing");
     }
 
     /// abs() is an input unpack on the operation that reads it (select.rs

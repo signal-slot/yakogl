@@ -1953,9 +1953,9 @@ const SAMPLE_KILL_VARIANTS: bool = !cfg!(not(feature = "gpu-powervr"));
 /// the two switches say.
 /// On the V3D a program record ([`link_program`]) is sensitive to the
 /// format of every fragment binding below 16 a look-up reads
-/// ([`LodKey::ret32`]: an R32F texture needs the 32-bit TMU output) (a vertex
-/// look-up of a depth texture is refused at the draw,
-/// `v3d::texture::refusal_for`), and in a build that reports ES 2.0 both
+/// ([`LodKey::ret32`]: an R32F texture needs the 32-bit TMU output), a
+/// vertex record likewise to its own bindings (docs/notes/v3d-vs-ret32.md),
+/// and in a build that reports ES 2.0 both
 /// stages to their cube bindings ([`LodKey::cube_noseam`]) and the vertex
 /// stage's explicit-level cube look-ups to the c = 0.5 switch
 /// ([`LodKey::mag_switch`]). [`LodKey::NONE`] for a source the front end
@@ -2023,11 +2023,11 @@ fn sensitivity_of(rec: &Base) -> LodKey {
     .unwrap_or(LodKey::NONE)
 }
 
-/// A V3D stage's [`LodKey`] sensitivity (see [`sensitivity_of`]): of the
-/// fragment stage, the bindings below 16 it reads with a look-up
+/// A V3D stage's [`LodKey`] sensitivity (see [`sensitivity_of`]): of
+/// either stage, the bindings below 16 it reads with a look-up
 /// ([`LodKey::ret32`]), and in an ES 2.0 build the cube bindings below 15
-/// ([`LodKey::cube_noseam`]); of the vertex stage the same cube bindings, and
-/// those among them read at an explicit level ([`LodKey::mag_switch`]).
+/// ([`LodKey::cube_noseam`]); of the vertex stage also those cube bindings
+/// read at an explicit level ([`LodKey::mag_switch`]).
 #[cfg(feature = "gpu-v3d")]
 fn v3d_sensitivity(source: &[u8], stage: super::sema::Stage) -> LodKey {
     struct Restore(LodKey);
@@ -2049,7 +2049,7 @@ fn v3d_sensitivity(source: &[u8], stage: super::sema::Stage) -> LodKey {
         let (mut ret32, mut cube) = (0u32, 0u32);
         for op in l.module.instrs.iter() {
             if let ir::Op::Tex { sampler, dim, .. } = *op {
-                if fragment && sampler < 16 {
+                if sampler < 16 {
                     ret32 |= 1 << sampler;
                 }
                 if dim == ir::TexDim::Cube && sampler < 15 && crate::REPORT_ES2 {
@@ -2956,8 +2956,8 @@ void main (void)
     /// stage compiled with the key, which the link builds into a program of
     /// its own whose look-up asks for the 32-bit output (P1 bit 0) and four
     /// words (P0 0xf for a vec4). The base program keeps 0x3 / 0x4. A key with
-    /// any other bit is refused on the V3D, and a vertex shader is sensitive to
-    /// nothing. Revert checks: without the key in link_program's compile the
+    /// any other bit is refused on the V3D, and a vertex shader with no look-up
+    /// is sensitive to nothing. Revert checks: without the key in link_program's compile the
     /// variant's P1 is 0x4; without it in the cache key the variant is the
     /// base program's record.
     #[cfg(feature = "gpu-v3d")]
@@ -2986,7 +2986,11 @@ void main (void)
         assert_eq!(sense, LodKey { ret32: 1, ..LodKey::NONE }, "binding 0, the one look-up");
         let vsh = compile_out(SHC_STAGE_VERTEX, vs);
         // SAFETY: a vertex shader record.
-        assert_eq!(unsafe { online_lod_sensitivity(&vsh) }, 0, "a vertex shader is sensitive to nothing on the V3D");
+        assert_eq!(
+            unsafe { online_lod_sensitivity(&vsh) },
+            0,
+            "a vertex shader with no look-up is sensitive to nothing on the V3D"
+        );
         release(&vsh);
         let key = LodKey { ret32: 1, ..LodKey::NONE };
         let mut var = ShcShader::ZERO;
@@ -3011,6 +3015,60 @@ void main (void)
         }
         assert_eq!(v3d_sampler_variants(), (built + 1, refused + 3), "each refused key is counted refused");
         release(&keyed);
+        release(&prog);
+        assert_eq!(store::keep_in_use(), before, "the records went with their holders");
+    }
+
+    /// `LodKey::ret32` of the VERTEX stage on the V3D (docs/notes/v3d-vs-ret32.md):
+    /// a vertex record is sensitive at every binding below 16 its look-ups
+    /// read, and its variant for a key, linked with the base fragment stage
+    /// (the fragment "variant" of key 0, the program record itself), builds
+    /// a program of its own whose vertex AND coordinate shaders ask for the
+    /// 32-bit output (P1 bit 0) and a word per channel (P0 0xf); the base
+    /// program keeps 0x3 / 0x4 in both. A key bit at a binding the vertex
+    /// shader does not read changes no word. Revert checks: without the
+    /// vertex key in compile_program_keyed both streams keep 0x4; with
+    /// `fragment &&` back in v3d_sensitivity the vertex record is NONE.
+    #[cfg(feature = "gpu-v3d")]
+    #[test]
+    fn a_v3d_vertex_record_has_a_ret32_variant() {
+        let _serial = test_lock();
+        cache_clear();
+        let before = store::keep_in_use();
+        let vs = "attribute vec4 p;\nuniform sampler2D t;\nvarying vec4 v;\n\
+                  void main() { v = texture2DLod(t, p.xy, 0.0); gl_Position = p + v; }";
+        let fs_src = "precision mediump float;\nvarying vec4 v;\nvoid main() { gl_FragColor = v; }";
+        let cfg = |s: &[crate::shaderc::ShcV3dUniform]| -> Vec<(u32, u32)> {
+            s.iter().filter(|u| u.contents == 40 || u.contents == 41).map(|u| (u.contents, u.data)).collect()
+        };
+        let (rc, text, prog) = link(vs, compile_out(SHC_STAGE_FRAGMENT, fs_src));
+        assert_eq!(rc, 0, "link: {text}");
+        assert_eq!(cfg(prog.v3d.vs.uniform_stream()), [(40, 0x3), (41, 0x4)], "the base vertex shader");
+        assert_eq!(cfg(prog.v3d.cs.uniform_stream()), [(40, 0x3), (41, 0x4)], "the base coordinate shader");
+        let vsh = compile_out(SHC_STAGE_VERTEX, vs);
+        // SAFETY: a vertex shader record.
+        let sense = LodKey::from_bits(unsafe { online_lod_sensitivity(&vsh) });
+        assert_eq!(sense, LodKey { ret32: 1, ..LodKey::NONE }, "binding 0, the vertex look-up");
+        for (vkey, want) in [(1u32, [(40, 0xf), (41, 0x5)]), (4, [(40, 0x3), (41, 0x4)])] {
+            let mut vvar = ShcShader::ZERO;
+            let key = LodKey { ret32: vkey, ..LodKey::NONE };
+            // SAFETY: a vertex record and a real output.
+            assert_eq!(unsafe { online_sampler_variant(&vsh, key.bits(), &mut vvar, core::ptr::null_mut(), 0) }, 0);
+            let mut base = ShcShader::ZERO;
+            // SAFETY: the program record and a real output.
+            assert_eq!(unsafe { online_sampler_variant(&prog, 0, &mut base, core::ptr::null_mut(), 0) }, 0);
+            let mut log = [0 as c_char; 512];
+            // SAFETY: two distinct valid shaders and a log of the announced size.
+            let rc = unsafe { online_link(&vvar, &mut base, log.as_mut_ptr(), log.len()) };
+            // SAFETY: the writer NUL-terminated the log.
+            let text = String::from_utf8_lossy(unsafe { cstr_bytes(log.as_ptr()) }).into_owned();
+            assert_eq!(rc, 0, "{key:?}: {text}");
+            assert_eq!(cfg(base.v3d.vs.uniform_stream()), want, "{key:?}: the vertex shader");
+            assert_eq!(cfg(base.v3d.cs.uniform_stream()), want, "{key:?}: the coordinate shader");
+            release(&base);
+            release(&vvar);
+        }
+        release(&vsh);
         release(&prog);
         assert_eq!(store::keep_in_use(), before, "the records went with their holders");
     }
@@ -3045,10 +3103,14 @@ void main (void)
         };
         assert_eq!(
             sense(vs, SHC_STAGE_VERTEX),
-            LodKey { cube_noseam: u32::from(es2), mag_switch: u32::from(es2), ..LodKey::NONE },
+            LodKey { ret32: 1, cube_noseam: u32::from(es2), mag_switch: u32::from(es2), ..LodKey::NONE },
             "the vertex stage, binding 0"
         );
-        assert_eq!(sense(vs2d, SHC_STAGE_VERTEX), LodKey::NONE, "a 2D vertex sampler is never keyed");
+        assert_eq!(
+            sense(vs2d, SHC_STAGE_VERTEX),
+            LodKey { ret32: 1, ..LodKey::NONE },
+            "a 2D vertex sampler is keyed by its format only, never for the cube rule"
+        );
         let (rc, text, prog) = link(vs, compile_out(SHC_STAGE_FRAGMENT, fs_src));
         assert_eq!(rc, 0, "link: {text}");
         // SAFETY: a linked program record.
