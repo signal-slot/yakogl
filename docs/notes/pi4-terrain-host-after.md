@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Pi 4 terrain: host counts around the render-into mark fix
 
 Plan #329, item `pi4-terrain-host-after` (#1209). Host only, nothing ran on
