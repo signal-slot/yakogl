@@ -73,8 +73,12 @@ NOISE = re.compile(
     # glGenerateMipmap's TFU counters (frame 1 and shutdown) and the jobs and
     # CPU waits of the run
     r"|TFU mipmap at (frame \d+|shutdown): |\d+ jobs submitted, \d+ CPU waits for a job$)"
+    # the Mali back end's bring-up (its OSAL's answers, the built-in
+    # programs built) and its exit report (arena and compiler-table
+    # high-waters, src/mali), and shim.c's GM2_MALI OSAL counts
+    r"|^mali: (gpu_id 0x[0-9a-f]+, |[a-z/ -]+ program built: )|^mali (arena|shaderc table) '[^']+': high-water "
     r"|^gm2: (shader|scene-begin|scene-end|egl-config|draw|gl-time|gpu-time|gl-frames|v3d-frames|v3d-waits"
-    r"|gc-cost|gc-cost-entry|gc-wait|gc-kick) ")
+    r"|gc-cost|gc-cost-entry|gc-wait|gc-kick|mali-osal) ")
 SCENE_END = re.compile(r"^gm2: scene-end (.*): (ok|failed|unsupported) frames=(\d+) draws=(\d+) refused=(\d+)"
                        r" gl_errors=(\d+) incomplete_draws=(\d+)$")
 # The library's warning for the first draw that sampled an incomplete texture

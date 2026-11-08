@@ -27,9 +27,10 @@ i.MX8MP's carve-out (its size from the i.MX8MP glmark2 image, issue #814):
 an allocation past it fails as `gc_render_alloc` fails on the board, which
 the GL core turns into a GL error.
 
-The results are in [FINDINGS.md](FINDINGS.md) (PowerVR, GC7000) and
-[FINDINGS-v3d.md](FINDINGS-v3d.md) (V3D), beside this file because the run
-rewrites their generated parts. The de-duplicated shader texts
+The results are in [FINDINGS.md](FINDINGS.md) (PowerVR, GC7000),
+[FINDINGS-v3d.md](FINDINGS-v3d.md) (V3D) and
+[FINDINGS-mali-allscenes.md](FINDINGS-mali-allscenes.md) (Mali-G610, opt-in,
+below), beside this file because the run rewrites their generated parts. The de-duplicated shader texts
 are written to `build/glmark2-host/shaders/` by the run and never committed
 ([`tools/shaders/glmark2/README.md`](../../shaders/glmark2/README.md)).
 
@@ -60,7 +61,9 @@ curl -fsSL -o glmark2.tar.gz \
 The script builds everything in `build/glmark2-host/`, runs the three GPUs,
 writes the shader corpus to `build/glmark2-host/shaders/` and rewrites the
 generated parts of `FINDINGS.md` and `FINDINGS-v3d.md`. Arguments: `run.sh <GLMARK2_SRC> [out] [powervr]
-[vivante] [v3d]`. Environment: `GM2_FRAMES` (frames per entry, default 3),
+[vivante] [v3d] [mali]`; the Mali is not in the default three and is named
+to run (`run.sh "$GLMARK2_SRC" build/glmark2-mali mali`), which rewrites the
+generated part of `FINDINGS-mali-allscenes.md`. Environment: `GM2_FRAMES` (frames per entry, default 3),
 `GM2_SIZE` (default `800x600`, glmark2's default and the boards'),
 `GM2_WRITE=0` (leave the findings files alone), `GM2_JOBS`, `GM2_TIMEOUT` (seconds per
 entry, default 600), `GM2_KICKS=1` (PowerVR: a `gm2: draw <n> fb <fb> kick <k>
@@ -329,6 +332,27 @@ entry, from an empty carve-out.
   a model of the unit (`src/osal/linux.c`, "the TFU"): the bytes the
   library's CPU path writes (`tests/v3d_tfu_host.rs`), timed as GPU work.
   Not modelled: the binner (no pool reading), hangs and resets.
+* **gpu-mali** (the NanoPC-T6's Mali-G610, opt-in): the top-level CMake takes
+  powervr|vivante|v3d only, so `mali/CMakeLists.txt` builds the same archive
+  (the `yakogl-capi` crate through `capi/yakogl_capi.cmake`'s
+  `yakogl_add_rust_archive` and `capi/assemble.cmake`) with `MALI_CONFIG`'s
+  features of `tools/check.sh` (`gpu-mali`, `shaderc-online`,
+  `no-shader-table`) on `osal-linux`, plus `report-es2`. linux.c answers the
+  PowerVR's contract on such a build, so `shim.c`, compiled with `GM2_MALI`
+  for this GPU only, puts a table in front of it with what
+  `src/osal/mali.rs` asks of an OSAL, as `src/mali/backend_tests.rs`'s mock
+  answers it: `OSAL_QUERY_MALI_GPU` with the T6's counts (GPU_ID
+  0xa8670005, 96 command-stream registers, 4 of them the kernel's),
+  `OSAL_QUERY_MALI_TILER_HEAP` with a context page and one 2 MiB chunk of
+  linux.c's GPU memory, `gpu_alloc` of the back end's heap label 0 from
+  linux.c's general heap, and a submit of a `struct osal_mali_kick` that
+  completes at once (`gm2: mali-osal submits= stream_bytes= refused=` at
+  exit). It also lends the compiler its scratch and keep regions, as the
+  board's panthor pair does (an image build has no built-in ones), and on
+  a crash prints the stack as one `gm2: mali-crash signal <n>: <module>+<offset> ...`
+  line (`addr2line -e <module> <offset>`). Nothing runs the command
+  streams: no tiler, no heap growth, no GPU fault. The powervr, vivante and
+  v3d builds keep `shim.o` without it.
 
 ## Limits
 

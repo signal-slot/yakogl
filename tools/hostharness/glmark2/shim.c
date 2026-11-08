@@ -1173,6 +1173,178 @@ __attribute__((constructor)) static void gccost_init(void)
 	gccost_on();
 }
 
+#if defined(GM2_MALI)
+#include <signal.h>
+
+/* ---- the Mali-G610's OSAL contract (run.sh builds shim.c with GM2_MALI for
+ * the mali GPU only) ---------------------------------------------------------
+ *
+ * linux.c answers the PowerVR's contract on a build that is neither the
+ * GC7000's nor the V3D's: it takes a pvr_render_kick, answers no
+ * OSAL_QUERY_MALI_* and refuses heap label 0, the one the Mali back end
+ * allocates from (src/mali/backend.rs alloc). This table goes in front of
+ * linux.c's before the library's first call and gives the back end what
+ * src/osal/mali.rs asks of an OSAL, the way src/mali/backend_tests.rs's
+ * mock does: the Mali-G610's counts, a tiler heap in GPU memory (a context
+ * page and one 2 MiB chunk, malloc'd by linux.c), and a submit of a
+ * struct osal_mali_kick that completes at once. Nothing runs the stream.
+ * At exit: gm2: mali-osal submits=<n> stream_bytes=<b> refused=<n>
+ *
+ * The build is an image's (no-shader-table without host-test), which has no
+ * built-in compiler regions: the OSAL lends them. They are lent here as the
+ * pair the board runs lends them (tools/mali/panthor/src/osal.rs), at the
+ * library's sizes (src/shaderc/online/store.rs SCRATCH_BYTES, KEEP_BYTES).
+ */
+extern int shc_online_lend_scratch(unsigned char *buf, size_t len);
+extern int shc_online_lend_keep(unsigned char *buf, size_t len);
+#define GM2_MALI_SCRATCH_BYTES (4u << 20)
+#define GM2_MALI_KEEP_BYTES (512u << 10)
+/* osal_internal.h's query ids and structs (src/osal/mali.rs), mirrored as
+ * gc_kick_desc is: the shim takes only include/ */
+#define OSAL_QUERY_MALI_GPU 15u
+#define OSAL_QUERY_MALI_TILER_HEAP 16u
+struct osal_mali_gpu {
+	uint32_t gpu_id, tiler_features, cs_reg_count, unpreserved_cs_reg_count;
+};
+struct osal_mali_heap {
+	uint64_t ctx_gpu, first_chunk_gpu;
+	uint32_t chunk_size, reserved;
+};
+struct osal_mali_kick {
+	uint64_t stream_gpu;
+	uint32_t stream_bytes, reserved;
+};
+#define GM2_MALI_HEAP_LABEL 0x8000000000ULL /* linux.c's HEAP_GENERAL */
+#define GM2_MALI_CHUNK_BYTES (2u << 20)
+
+static const struct osal_ops *mali_real;
+static struct osal_ops mali_ops;
+static int64_t mali_fence;
+static unsigned long mali_submits, mali_refused;
+static uint64_t mali_stream_bytes;
+static struct osal_gpu_mem mali_heap_ctx, mali_heap_chunk;
+
+static int mali_alloc(uint64_t heap_base, size_t size, uint32_t flags, struct osal_gpu_mem *out)
+{
+	return mali_real->gpu_alloc(heap_base ? heap_base : GM2_MALI_HEAP_LABEL, size, flags, out);
+}
+
+static int64_t mali_submit(const void *desc, size_t len)
+{
+	const struct osal_mali_kick *k = desc;
+
+	if (!desc || len != sizeof(*k) || k->stream_bytes == 0 || k->stream_bytes % 8 ||
+	    k->stream_gpu % 64) {
+		mali_refused++;
+		return -22;
+	}
+	mali_submits++;
+	mali_stream_bytes += k->stream_bytes;
+	return ++mali_fence;
+}
+
+static int mali_wait(int64_t fence, int64_t timeout_us)
+{
+	(void)timeout_us;
+	return (fence <= 0 || fence > mali_fence) ? -22 : 0;
+}
+
+static int64_t mali_completed(void)
+{
+	return mali_fence;
+}
+
+static int mali_query(uint32_t what, void *out, size_t out_sz)
+{
+	if (what == OSAL_QUERY_MALI_GPU) {
+		/* the T6's, as src/mali/backend_tests.rs's GPU */
+		static const struct osal_mali_gpu gpu = {
+			.gpu_id = 0xa8670005u, .tiler_features = 0x809,
+			.cs_reg_count = 96, .unpreserved_cs_reg_count = 4,
+		};
+
+		if (!out || out_sz != sizeof(gpu))
+			return -22;
+		memcpy(out, &gpu, sizeof(gpu));
+		return 0;
+	}
+	if (what == OSAL_QUERY_MALI_TILER_HEAP) {
+		struct osal_mali_heap *h = out;
+
+		if (!out || out_sz != sizeof(*h))
+			return -22;
+		if (!mali_heap_ctx.cpu &&
+		    (mali_alloc(0, 4096, OSAL_MEM_DATA, &mali_heap_ctx) != 0 ||
+		     mali_alloc(0, GM2_MALI_CHUNK_BYTES, OSAL_MEM_DATA, &mali_heap_chunk) != 0))
+			return -12;
+		memset(h, 0, sizeof(*h));
+		h->ctx_gpu = mali_heap_ctx.gpu;
+		h->first_chunk_gpu = mali_heap_chunk.gpu;
+		h->chunk_size = GM2_MALI_CHUNK_BYTES;
+		return 0;
+	}
+	return mali_real->query(what, out, out_sz);
+}
+
+static void mali_report(void)
+{
+	fprintf(stderr, "gm2: mali-osal submits=%lu stream_bytes=%llu refused=%lu\n", mali_submits,
+		(unsigned long long)mali_stream_bytes, mali_refused);
+}
+
+/* A crash (a scene of the Mali run that died, exit 139) leaves its stack on
+ * stderr as one line, each frame as module+offset (addr2line -e <module>
+ * <offset> names it): the host has no debugger to ask, and the line is the
+ * same in every run. */
+static void mali_crash(int sig)
+{
+	void *pc[48];
+	int n = backtrace(pc, 48);
+
+	fprintf(stderr, "gm2: mali-crash signal %d:", sig);
+	for (int i = 0; i < n; i++) {
+		Dl_info d;
+
+		if (dladdr(pc[i], &d) && d.dli_fname) {
+			const char *base = strrchr(d.dli_fname, '/');
+
+			fprintf(stderr, " %s+0x%lx", base ? base + 1 : d.dli_fname,
+				(unsigned long)((char *)pc[i] - (char *)d.dli_fbase));
+		} else {
+			fprintf(stderr, " ?");
+		}
+	}
+	fprintf(stderr, "\n");
+	signal(sig, SIG_DFL);
+	raise(sig);
+}
+
+/* before gccost_init (a default-priority constructor), which then chains on
+ * this table */
+__attribute__((constructor(200))) static void mali_init(void)
+{
+	static uint64_t scratch[GM2_MALI_SCRATCH_BYTES / 8], keep[GM2_MALI_KEEP_BYTES / 8];
+	int rs = shc_online_lend_scratch((unsigned char *)scratch, sizeof(scratch));
+	int rk = shc_online_lend_keep((unsigned char *)keep, sizeof(keep));
+
+	if (rs || rk)
+		fprintf(stderr, "gm2: mali-osal: the compiler refused its regions (scratch %d, keep %d)\n", rs, rk);
+	signal(SIGSEGV, mali_crash);
+	signal(SIGBUS, mali_crash);
+	if (!g_osal)
+		return;
+	mali_real = g_osal;
+	mali_ops = *mali_real;
+	mali_ops.gpu_alloc = mali_alloc;
+	mali_ops.submit = mali_submit;
+	mali_ops.wait = mali_wait;
+	mali_ops.completed = mali_completed;
+	mali_ops.query = mali_query;
+	osal_set_ops(&mali_ops);
+	atexit(mali_report);
+}
+#endif /* GM2_MALI */
+
 /* ---- dlopen / dlsym / eglGetProcAddress ----------------------------------- */
 
 static __eglMustCastToProperFunctionPointerType w_eglGetProcAddress(const char *name);
