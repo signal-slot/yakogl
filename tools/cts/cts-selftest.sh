@@ -822,6 +822,28 @@ gl3check 39 imx8mp-gles3-sessions-selftest.sh "case counts, board-second estimat
 # count of passed checks, so a check that stops running is a failure here too.
 gl3check 40 mali-deqp-tally-selftest.sh "NanoPC-T6 slices covered, tallied and the doc block matched"
 
+# 41: check-pi4-gles3-log.py --self-test (Pi 4 GLES3 record checker on
+# synthetic records). Python runs isolated; ok carries its count of cases.
+echo
+echo "== 41. check-pi4-gles3-log.py --self-test"
+pl_out=$(python3 -I "$HERE/check-pi4-gles3-log.py" --self-test 2>&1)
+pl_rc=$?
+if [ "$pl_rc" -eq 0 ]; then
+    ok "check-pi4-gles3-log.py --self-test: $(printf '%s\n' "$pl_out" | grep -Eo '[0-9]+ of [0-9]+ cases ok' | tail -1)"
+else
+    bad "check-pi4-gles3-log.py --self-test failed: $(printf '%s\n' "$pl_out" | grep FAIL | head -3 | paste -sd';' -)"
+fi
+
+# 42: pi4-gles3-acceptance-selftest.sh, run like the gl3check rows; ok carries
+# the count of its ok lines.
+echo
+echo "== 42. pi4-gles3-acceptance-selftest.sh"
+if pa_out=$(cd "$gl3tmp" && TMPDIR="$gl3tmp" bash "$ROOT/tools/cts/pi4-gles3-acceptance-selftest.sh" 2>&1); then
+    ok "pi4-gles3-acceptance-selftest.sh: $(printf '%s\n' "$pa_out" | grep -c '^ *ok') checks passed"
+else
+    bad "pi4-gles3-acceptance-selftest.sh failed: $(printf '%s\n' "$pa_out" | grep FAIL | head -3 | paste -sd';' -)"
+fi
+
 if [ "$fail" -eq 0 ]; then
     echo "== all checks passed"
 else
