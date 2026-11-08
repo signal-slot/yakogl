@@ -1,0 +1,6 @@
+
+Dynamic section at offset 0x4e0 contains 3 entries:
+  Tag        Type                         Name/Value
+ 0x0000000000000001 (NEEDED)             Shared library: [libGLESv2.so.2]
+ 0x000000000000000e (SONAME)             Library soname: [libEGL.so.1]
+ 0x000000000000001d (RUNPATH)            Library runpath: [$ORIGIN]
