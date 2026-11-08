@@ -7,11 +7,11 @@ source was changed.** Plan #144 item `instanceid-design`, a follow-up to
 `es3-instanced` (`6730b25` and its hand-over note,
 `tests/es3_instanced.rs`).
 
-**Update (2026-10-27): V0 has landed** -- the GC7000UL online compiler now
+**Update (2026-10-27): V0 has landed in `7897e809`** -- the GC7000UL online compiler now
 records a program that reads `gl_InstanceID` (`select.rs` names the read
 apart from `gl_VertexID`, `abi.rs` writes `vs_instance_id_reg1`, and
 `src/vivante/backend_tests.rs` keeps the scratch check of section 4 as a
-permanent test: instances 1..3 of the mixed shader are refused and
+permanent test, `the_real_compiler_refuses_a_split_instanced_draw_that_reads_gl_instance_id`: instances 1..3 of the mixed shader are refused and
 counted). P1, P3 and V1 remain open; the section 5 board re-check is due
 after they land.
 
@@ -232,8 +232,8 @@ must be re-run on the board.
 
 | Rank | Option | What changes | Size | Files | Owner |
 |---|---|---|---|---|---|
-| **V0** (do with V1) | Make the refusal work: give GC7000UL programs `vs_instance_id_reg1` | In selection, record `InstanceId` reads apart from `VertexId` reads (`select.rs:3983-3987`). Set `ShcShader::vs_instance_id_reg1 = vs_id_in_reg + 1` (or any non-zero value) when `gl_InstanceID` is read. Test with real compiler output in `src/vivante/backend_tests.rs`: instance 2 is refused and counted. Without V0, a draw that is still split into instances (divisor > `max_instance_divisor`) is drawn wrong without any message. | ~20 lines + test | `src/shaderc/online/select.rs`, `src/shaderc/online/abi.rs` (and the `ShcShader` fill for the GC7000UL output), `src/vivante/backend_tests.rs` | compiler: plan #19 (the online compiler; `select.rs`/`abi.rs` are not in the files #19 marks as held, so the owner must confirm) + #18 for the test |
-| V0' (if the compiler cannot change) | Back-end-only refusal on `viv.vs_id_in_reg != SHC_VIV_NO_REG` | One line at `backend.rs:2353`. It also refuses programs that read only `gl_VertexID`, which are drawn correctly today. That is a regression, so this is a stop-gap only. | 1 line + test | `src/vivante/backend.rs` | #18 |
+| **V0** (done, `7897e809`) | Make the refusal work: give GC7000UL programs `vs_instance_id_reg1` | In selection, record `InstanceId` reads apart from `VertexId` reads (`select.rs:3983-3987`). Set `ShcShader::vs_instance_id_reg1 = vs_id_in_reg + 1` (or any non-zero value) when `gl_InstanceID` is read. Test with real compiler output in `src/vivante/backend_tests.rs`: instance 2 is refused and counted. **Landed in `7897e809`** (test `the_real_compiler_refuses_a_split_instanced_draw_that_reads_gl_instance_id`, `src/vivante/backend_tests.rs`: it compiles a real program, checks `vs_instance_id_reg1 == viv.vs_id_in_reg + 1` and counts 3 refused draws). Without V0, a draw that is still split into instances (divisor > `max_instance_divisor`) is drawn wrong without any message. | ~20 lines + test | `src/shaderc/online/select.rs`, `src/shaderc/online/abi.rs` (and the `ShcShader` fill for the GC7000UL output), `src/vivante/backend_tests.rs` | compiler: plan #19 (the online compiler; `select.rs`/`abi.rs` are not in the files #19 marks as held, so the owner must confirm) + #18 for the test |
+| V0' (not needed: V0 landed) | Back-end-only refusal on `viv.vs_id_in_reg != SHC_VIV_NO_REG` | One line at `backend.rs:2353`. It also refuses programs that read only `gl_VertexID`, which are drawn correctly today. That is a regression, so this is a stop-gap only. | 1 line + test | `src/vivante/backend.rs` | #18 |
 | **V1** (cheapest real fix) | Hardware divisor | `backend.rs:2261`: `divisor: if a.per_instance != 0 { u32::from(a.divisor.max(1)) } else { 0 }`. `backend.rs:2886`: `max_instance_divisor: 0xffff`. Test: the 0x14680 state words are 2 and 1 for the mixed draw, with one DRAW_INSTANCED of n instances. Then the FE gives `gl_InstanceID` 0..n-1 in one draw. **Not measured**: the comment at 2884 says no one knows if the GC7000UL FE takes a divisor > 1. etnaviv relies on it on every HALTI2+ part, and this GPU is HALTI5 (it uses `FE_HALTI5_ID_CONFIG`). | ~5 lines + ~40 test lines | `src/vivante/backend.rs`, `src/vivante/backend_tests.rs` | #18 |
 | V2 (only for divisor > 0xffff) | Per-draw uniform for split draws | The compiler loads `gl_InstanceID` from a constant register (a new `ShcViv` field, ABI change) instead of the FE's `.y`, and the back end writes `instance_id` there for each draw. There is no FE base-instance state (section 2), so there is no register-only way. | ~150-200 lines | `src/shaderc/online/select.rs`, `src/shaderc/mod.rs`, `src/abi_layout.rs`, `src/abi_layout_check.c`, `src/vivante/{backend,shader}.rs` | #19 + #18. Not recommended now: after V1 it only matters for divisors > 65535. |
 
