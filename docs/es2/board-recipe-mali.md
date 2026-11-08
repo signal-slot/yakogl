@@ -524,3 +524,97 @@ slices of `tools/cts/testdata/mali-deqp/` and pins its count of passed checks;
 - Board results replace their row in `tools/cts/RESULTS.md` (current results
   only) and the summary in `tools/cts/STATUS.md`; no per-session records.
   Open work and defects are GitHub issues, never a file in the tree.
+
+## 9. Rerunning Lost cases
+
+### When
+
+A `Lost` case (section 4, Lost reasons) is a case the board did not answer.
+`--check-cover` (section 7) accepts the four reasons `chunk-crash`,
+`chunk-hang`, `board-lost` and `not-run`, but a record that is to stand for a
+whole tree must not leave cases in them: criterion c3's cover check wants a
+status for every mustpass case, and a Lost case is no result. So after the four
+sessions, a rerun is needed when any `results.tsv` holds `Lost`. A `Lost
+wrong-lib` chunk is not rerun: the runner stopped (exit 9) because the library
+was wrong; fix that first. After exit 7, 8 or 10 the board needs a person
+(section 8) before any rerun.
+
+### The table: `tools/cts/mali-rerun-tree.py`
+
+```sh
+python3 -I tools/cts/mali-rerun-tree.py [--mustpass FILE] [--max N] \
+    [--reason R]... SLICE... > build/rerun-tree.txt
+```
+
+`SLICE...` are the committed slice directories
+(`tools/cts/log/<date>-t6-gles2-<session>/`). The table holds every Lost case
+of them once, in mustpass order, in the form of `mali-gles2-tree.txt`:
+`# image T6RR<nnn>: <cases>` and a line of case names. Options:
+
+| option | meaning |
+|---|---|
+| `--reason R` | repeatable; keep only the Lost cases with that reason (`chunk-crash`, `chunk-hang`, `board-lost`, `not-run`); another value exits 2 |
+| `--max N` | at most `N` cases in a row of `board-lost`/`not-run` cases (default 400, the tree check's `--max`); `N` must be a positive number |
+| `--mustpass FILE` | the mustpass list the cases must be in (default `tools/cts/gles2-mustpass.txt`) |
+
+A `chunk-crash` or `chunk-hang` case is a row of its own, so it cannot take
+neighbours down again; `board-lost` and `not-run` cases fill rows. Labels are
+`T6RR001`, `T6RR002`, ... and are never a label of the first-run tree
+(`T6S<session>R<row>`), so a rerun chunk shares no kmsg file or case list with
+a first-run chunk. A Lost case that is not in the mustpass list exits 1; an
+unreadable slice, a bad option or no slice exits 2. Example on the synthetic
+slices of section 7:
+
+```sh
+python3 -I tools/cts/mali-rerun-tree.py --mustpass tools/cts/testdata/mali-deqp/mustpass.txt \
+    tools/cts/testdata/mali-deqp/good/*
+```
+
+```text
+# The Lost cases of 2 slice(s): 1 case(s) in 1 row(s), mustpass order.
+# One case per row for chunk-crash and chunk-hang; at most 400 per row otherwise.
+# image T6RR001: 1
+dEQP-GLES2.functional.c.eight
+```
+
+Read the table before the run: the row count is the `--rows` range, and the
+case counts are what the dry run below must show.
+
+### The run
+
+The runner takes the table with `--tree` and runs all its rows under the
+`adhoc` session (the default, or `smoke`): it refuses a session other than
+`S1`..`S4`, `smoke` and `adhoc`, and `S1`..`S4` name the first-run tree.
+
+```sh
+tools/cts/mali-deqp-run.sh --build DIR --out SLICEDIR --rows 1-N \
+    --tree build/rerun-tree.txt --session adhoc --dry-run
+BOARD_HOST=root@<t6> tools/cts/mali-deqp-run.sh --build DIR --out SLICEDIR \
+    --rows 1-N --tree build/rerun-tree.txt --session adhoc
+```
+
+`N` is the table's row count. The dry run prints the same plan as in section
+4 (the rows are `T6RR<nnn>`), touches no board and writes nothing; run it
+first. Everything of sections 4 and 8 applies unchanged: the build comes from
+one origin/main commit (the runner refuses another, exit 6), `BOARD_HOST` from
+the lease, a crash, hang or fault leaves the board usable over ssh, and exit
+7, 8 or 10 stops the run for a person.
+
+### The slice and its commit
+
+`--out SLICEDIR` is written in the format of section 4, with `session=adhoc`
+in `meta.txt` and the rerun table's path as `tree`. Commit it under
+`tools/cts/log/` named `<YYYY-MM-DD>-t6-gles2-adhoc` (the pattern of
+`tools/cts/log/README.md`, with the runner's session name), redacted by the
+runner as any slice, with the raw logs left in `RAW_DIR`. The first
+slices are not edited.
+
+### The board
+
+One lease on `target:nanopc-t6`, as section 8: a rerun session takes the
+board only through it, and never a board another plan (#309, #311) holds. The
+runner's board lock and render-node check are the second guard.
+
+### The tally
+
+On main, `tools/cts/mali-deqp-tally.py` does not merge rerun slices yet: `--check-cover` over a first slice and its rerun reports `RULE cover-duplicate` for every rerun case.
