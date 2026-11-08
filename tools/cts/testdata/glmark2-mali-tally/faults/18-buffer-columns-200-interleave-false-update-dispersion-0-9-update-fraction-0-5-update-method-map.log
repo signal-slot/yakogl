@@ -1,0 +1,18 @@
+yakogl-mali: loaded build=099b5df6 lib=/opt/yakogl-glmark2/lib/libGLESv2.so.2
+=======================================================
+    glmark2 2023.01
+=======================================================
+    OpenGL Information
+    GL_VENDOR:      Signal Slot
+    GL_RENDERER:    YakoGL gpu-mali
+    GL_VERSION:     OpenGL ES 2.0 YakoGL
+    Surface Config: buf=32 r=8 g=8 b=8 a=8 depth=24 stencil=8 samples=0
+    Surface Size:   800x600 pbuffer
+=======================================================
+yakogl: out of GPU memory for 7684096 bytes (1 frees held)
+[buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=map: FPS: 230 FrameTime: 4.348 ms
+glmark2-picture: [buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=map: 800x600; probes c 9abafeff, tl a5c103ff, tr b0c808ff, bl bbcf0dff, br c6d612ff; crc16 2cce, crc16q 2ced; mean 10 234 50; black no
+=======================================================
+                                  glmark2 Score: 230 
+=======================================================
+yakogl-mali-exit: draws=2300 refused=0 first_refused=- gpu_faults=0 job_timeouts=0

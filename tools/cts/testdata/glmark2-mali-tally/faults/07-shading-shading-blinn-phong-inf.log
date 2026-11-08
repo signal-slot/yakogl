@@ -1,0 +1,17 @@
+yakogl-mali: loaded build=099b5df6 lib=/opt/yakogl-glmark2/lib/libGLESv2.so.2
+=======================================================
+    glmark2 2023.01
+=======================================================
+    OpenGL Information
+    GL_VENDOR:      Signal Slot
+    GL_RENDERER:    YakoGL gpu-mali
+    GL_VERSION:     OpenGL ES 2.0 YakoGL
+    Surface Config: buf=32 r=8 g=8 b=8 a=8 depth=24 stencil=8 samples=0
+    Surface Size:   800x600 pbuffer
+=======================================================
+[shading] shading=blinn-phong-inf: FPS: 400 FrameTime: 2.500 ms
+glmark2-picture: [shading] shading=blinn-phong-inf: 800x600; probes c 0373f1ff, tl 0e7af6ff, tr 1981fbff, bl 248800ff, br 2f8f05ff; crc16 d889, crc16q d8a8; mean 203 91 119; black no
+=======================================================
+                                  glmark2 Score: 400 
+=======================================================
+yakogl-mali-exit: draws=4000 refused=0 first_refused=- gpu_faults=0 job_timeouts=0

@@ -1,0 +1,51 @@
+run faults: commit 099b5df61f7a59b654e02479cdaf657d16715d26, board nanopc-t6, kernel 6.18.55-current-rockchip64, pair sha256 3f6c0a1d9e2b4c5a8f7e6d5c4b3a29180716253443526170819a0b1c2d3e4f50
+#  scene                                                                                                  verdict    ms/frame   FPS  picture                      judgement    kmsg
+01 [build] use-vbo=false                                                                                  ok             2.08   480  crc16 1eef mean 29 13 17     match        0
+02 [build] use-vbo=true                                                                                   ok             2.13   470  crc16 3dde mean 58 26 34     match        0
+03 [texture] texture-filter=nearest                                                                       ok             1.64   610  crc16 5ccd mean 87 39 51     match        0
+04 [texture] texture-filter=linear                                                                        ok             1.67   600  crc16 7bbc mean 116 52 68    match        0
+05 [texture] texture-filter=mipmap                                                                        ok             1.70   590  crc16 9aab mean 145 65 85    match        0
+06 [shading] shading=gouraud                                                                              ok             2.38   420  crc16 b99a mean 174 78 102   match        0
+07 [shading] shading=blinn-phong-inf                                                                      ok             2.50   400  crc16 d889 mean 203 91 119   match        0
+08 [shading] shading=phong                                                                                ok             2.63   380  crc16 f778 mean 232 104 136  match        0
+09 [shading] shading=cel                                                                                  ok             2.44   410  crc16 1667 mean 5 117 153    match        0
+10 [bump] bump-render=high-poly                                                                           ok             3.33   300  crc16 3556 mean 34 130 170   match        0
+11 [bump] bump-render=normals                                                                             ok             1.92   520  crc16 5445 mean 63 143 187   match        0
+12 [bump] bump-render=height                                                                              ok             2.00   500  crc16 7334 mean 92 156 204   match        0
+13 [effect2d] kernel=0,1,0;1,-4,1;0,1,0;                                                                  ok             5.00   200  crc16 9223 mean 121 169 221  match        0
+14 [effect2d] kernel=1,1,1,1,1;1,1,1,1,1;1,1,1,1,1;                                                       ok            11.11    90  crc16 b112 mean 150 182 238  match        0
+15 [pulsar] light=false:quads=5:texture=false                                                             ok             2.86   350  crc16 d001 mean 179 195 255  match        0
+16 [desktop] blur-radius=5:effect=blur:passes=1:separable=true:windows=4                                  ok             6.25   160  crc16 eef0 mean 228 208 16   mismatch     0
+17 [desktop] effect=shadow:windows=4                                                                      ok             4.17   240  crc16 0ddf mean 1 221 33     mismatch     0
+18 [buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=map      oom            4.35   230  crc16 2cce mean 10 234 50    match        0
+19 [buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=subdata  ok             4.54   220  crc16 4bbd mean 39 247 67    match        0
+20 [buffer] columns=200:interleave=true:update-dispersion=0.9:update-fraction=0.5:update-method=map       ok             4.44   225  crc16 6aac mean 68 4 84      match        0
+21 [ideas] speed=duration                                                                                 ok             9.09   110  crc16 899b mean 97 17 101    match        0
+22 [jellyfish] <default>                                                                                  crash             -     -  -                            absent       0
+23 [terrain] <default>                                                                                    gpu-fault    333.33     3  crc16 7282 mean 0 0 0 black  black        3
+24 [shadow] <default>                                                                                     gl-error       8.33   120  crc16 e668 mean 184 56 152   match        0
+25 [refract] <default>                                                                                    hang              -     -  -                            absent       2
+26 [conditionals] fragment-steps=0:vertex-steps=0                                                         ok             3.03   330  crc16 2446 mean 242 82 186   match        0
+27 [conditionals] fragment-steps=5:vertex-steps=0                                                         fail              -     -  -                            absent       0
+28 [conditionals] fragment-steps=0:vertex-steps=5                                                         ok             3.85   260  crc16 6224 mean 44 108 220   match        0
+29 [function] fragment-complexity=low:fragment-steps=5                                                    ok             4.17   240  crc16 8113 mean 73 121 237   match        0
+30 [function] fragment-complexity=medium:fragment-steps=5                                                 ok             5.26   190  crc16 a002 mean 102 134 254  match        0
+31 [loop] fragment-loop=false:fragment-steps=5:vertex-steps=5                                             ok             5.88   170  crc16 bef1 mean 131 147 15   match        0
+32 [loop] fragment-steps=5:fragment-uniform=false:vertex-steps=5                                          not-run           -     -  -                            not-run      0
+33 [loop] fragment-steps=5:fragment-uniform=true:vertex-steps=5                                           not-run           -     -  -                            not-run      0
+scenes run 31 of 33; not-run 2, hang 1, gpu-fault 1, crash 1, oom 1, gl-error 1, fail 1, ok 25; GL error lines 4, out of GPU memory lines 1, panthor kernel lines 5 (resets 1); 442.09 ms/frame summed over 28 scenes; score absent (not every scene has an FPS)
+pictures against column mali: 31 scenes, absent 3, black 1, match 25, mismatch 2
+scene [buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=map: oom (oom: yakogl: out of GPU memory for # bytes (# frees held))
+scene [jellyfish] <default>: crash (crash: signal 11)
+scene [terrain] <default>: gpu-fault (gpu-fault: panthor fb000000.gpu: [drm] *ERROR* Unhandled Page fault in AS3 at VA <hex>)
+scene [shadow] <default>: gl-error (gl-error: GL error 0x502 in glGenerateMipmap, GL error 0x506 in glDrawArrays)
+scene [refract] <default>: hang (hang: no exit within the runner's time limit; kernel: panthor fb000000.gpu: [drm] job timeout: pid=#, comm=glmark2-es2-mal, seqno=#); also gpu-fault: panthor fb000000.gpu: [drm] job timeout: pid=#, comm=glmark2-es2-mal, seqno=#
+scene [conditionals] fragment-steps=5:vertex-steps=0: fail (fail: refused: compile: not lowered yet: loop with # steps in a fragment shader); also fail: set up failed
+scene [loop] fragment-steps=5:fragment-uniform=false:vertex-steps=5: not-run (not run: no log, kmsg or status file)
+scene [loop] fragment-steps=5:fragment-uniform=true:vertex-steps=5: not-run (not run: no log, kmsg or status file)
+scene [desktop] blur-radius=5:effect=blur:passes=1:separable=true:windows=4: picture mismatch (probe c 645070 vs 505070 (off 20); probe tl 6f5775 vs 5b5775 (off 20); probe tr 7a5e7a vs 665e7a (off 20); probe bl 85657f vs 71657f (off 20); probe br 906c84 vs 7c6c84 (off 20); mean 228 208 16 vs 208 208 16 (off 20))
+scene [desktop] effect=shadow:windows=4: picture mismatch (probe c 8985b7 vs 7585b7 (off 20); probe tl 948cbc vs 808cbc (off 20); probe tr 9f93c1 vs 8b93c1 (off 20); probe bl aa9ac6 vs 969ac6 (off 20); probe br b5a1cb vs a1a1cb (off 20); mean 1 221 33 vs 237 221 33 (off 236))
+scene [jellyfish] <default>: picture absent (no picture line)
+scene [terrain] <default>: picture black (all black, the reference is not)
+scene [refract] <default>: picture absent (no picture line)
+scene [conditionals] fragment-steps=5:vertex-steps=0: picture absent (no picture line)

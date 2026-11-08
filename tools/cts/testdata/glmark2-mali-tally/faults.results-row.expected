@@ -1,0 +1,39 @@
+| NanoPC-T6 | no score (not every scene has an FPS), 31 of 33 scenes ran, 6 failed, 4 GL errors, 1 out of GPU memory; main `099b5df6`, 2026-11-08 (`faults`, kernel 6.18.55-current-rockchip64, pair libGLESv2.so.2 sha256 `3f6c0a1d9e2b4c5a`), one glmark2-es2 process per scene, 800x600 on an EGL pbuffer; **terrain 333.33 ms a frame (3 FPS), gpu-fault, shadow 8.33 ms a frame (120 FPS), gl-error, refract hang**; failed: buffer columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=map: oom: yakogl: out of GPU memory for # bytes (# frees held); jellyfish: crash: signal 11; terrain: gpu-fault: panthor fb000000.gpu: [drm] *ERROR* Unhandled Page fault in AS3 at VA <hex>; shadow: gl-error: GL error 0x502 in glGenerateMipmap, GL error 0x506 in glDrawArrays; refract: hang: no exit within the runner's time limit; kernel: panthor fb000000.gpu: [drm] job timeout: pid=#, comm=glmark2-es2-mal, seqno=#; conditionals fragment-steps=5:vertex-steps=0: fail: refused: compile: not lowered yet: loop with # steps in a fragment shader; per-scene ms/frame and verdict below; pictures against column mali: 31 scenes, absent 3, black 1, match 25, mismatch 2; not run: loop fragment-steps=5:fragment-uniform=false:vertex-steps=5, loop fragment-steps=5:fragment-uniform=true:vertex-steps=5 | see "Mali: NanoPC-T6 (RK3588, Valhall v10, panthor), gl_test sweep" | 1 (panthor resets in the per-scene kernel lines) |
+
+- NanoPC-T6 glmark2-es2 per scene (main `099b5df6`, 2026-11-08; ms a frame is glmark2's FrameTime; picture against column `mali`):
+
+  | # | Scene | ms/frame | FPS | Verdict | Picture | panthor lines |
+  | ---: | --- | ---: | ---: | --- | --- | ---: |
+  | 1 | `[build] use-vbo=false` | 2.08 | 480 | ok | match | 0 |
+  | 2 | `[build] use-vbo=true` | 2.13 | 470 | ok | match | 0 |
+  | 3 | `[texture] texture-filter=nearest` | 1.64 | 610 | ok | match | 0 |
+  | 4 | `[texture] texture-filter=linear` | 1.67 | 600 | ok | match | 0 |
+  | 5 | `[texture] texture-filter=mipmap` | 1.70 | 590 | ok | match | 0 |
+  | 6 | `[shading] shading=gouraud` | 2.38 | 420 | ok | match | 0 |
+  | 7 | `[shading] shading=blinn-phong-inf` | 2.50 | 400 | ok | match | 0 |
+  | 8 | `[shading] shading=phong` | 2.63 | 380 | ok | match | 0 |
+  | 9 | `[shading] shading=cel` | 2.44 | 410 | ok | match | 0 |
+  | 10 | `[bump] bump-render=high-poly` | 3.33 | 300 | ok | match | 0 |
+  | 11 | `[bump] bump-render=normals` | 1.92 | 520 | ok | match | 0 |
+  | 12 | `[bump] bump-render=height` | 2.00 | 500 | ok | match | 0 |
+  | 13 | `[effect2d] kernel=0,1,0;1,-4,1;0,1,0;` | 5.00 | 200 | ok | match | 0 |
+  | 14 | `[effect2d] kernel=1,1,1,1,1;1,1,1,1,1;1,1,1,1,1;` | 11.11 | 90 | ok | match | 0 |
+  | 15 | `[pulsar] light=false:quads=5:texture=false` | 2.86 | 350 | ok | match | 0 |
+  | 16 | `[desktop] blur-radius=5:effect=blur:passes=1:separable=true:windows=4` | 6.25 | 160 | ok | mismatch | 0 |
+  | 17 | `[desktop] effect=shadow:windows=4` | 4.17 | 240 | ok | mismatch | 0 |
+  | 18 | `[buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=map` | 4.35 | 230 | oom: yakogl: out of GPU memory for # bytes (# frees held) | match | 0 |
+  | 19 | `[buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=subdata` | 4.54 | 220 | ok | match | 0 |
+  | 20 | `[buffer] columns=200:interleave=true:update-dispersion=0.9:update-fraction=0.5:update-method=map` | 4.44 | 225 | ok | match | 0 |
+  | 21 | `[ideas] speed=duration` | 9.09 | 110 | ok | match | 0 |
+  | 22 | `[jellyfish] <default>` | - | - | crash: signal 11 | absent | 0 |
+  | 23 | `[terrain] <default>` | 333.33 | 3 | gpu-fault: panthor fb000000.gpu: [drm] *ERROR* Unhandled Page fault in AS3 at VA <hex> | black | 3 |
+  | 24 | `[shadow] <default>` | 8.33 | 120 | gl-error: GL error 0x502 in glGenerateMipmap, GL error 0x506 in glDrawArrays | match | 0 |
+  | 25 | `[refract] <default>` | - | - | hang: no exit within the runner's time limit; kernel: panthor fb000000.gpu: [drm] job timeout: pid=#, comm=glmark2-es2-mal, seqno=# | absent | 2 |
+  | 26 | `[conditionals] fragment-steps=0:vertex-steps=0` | 3.03 | 330 | ok | match | 0 |
+  | 27 | `[conditionals] fragment-steps=5:vertex-steps=0` | - | - | fail: refused: compile: not lowered yet: loop with # steps in a fragment shader | absent | 0 |
+  | 28 | `[conditionals] fragment-steps=0:vertex-steps=5` | 3.85 | 260 | ok | match | 0 |
+  | 29 | `[function] fragment-complexity=low:fragment-steps=5` | 4.17 | 240 | ok | match | 0 |
+  | 30 | `[function] fragment-complexity=medium:fragment-steps=5` | 5.26 | 190 | ok | match | 0 |
+  | 31 | `[loop] fragment-loop=false:fragment-steps=5:vertex-steps=5` | 5.88 | 170 | ok | match | 0 |
+  | 32 | `[loop] fragment-steps=5:fragment-uniform=false:vertex-steps=5` | - | - | not run: no log, kmsg or status file | not-run | 0 |
+  | 33 | `[loop] fragment-steps=5:fragment-uniform=true:vertex-steps=5` | - | - | not run: no log, kmsg or status file | not-run | 0 |
