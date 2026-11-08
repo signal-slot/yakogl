@@ -1,0 +1,4 @@
+SPDX-License-Identifier: GPL-3.0-only
+SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+SPDX-FileCopyrightText: 2010-2025 glmark2 contributors (Linaro Limited, Alexandros Frantzis, Collabora Ltd and others)
+A patch to glmark2 22c527cb (GPL-3.0-or-later, taken here as GPL-3.0-only, as tools/shaders/glmark2/README.md does for its corpus); glmark2 itself is fetched, not vendored (NOTICE 8).
