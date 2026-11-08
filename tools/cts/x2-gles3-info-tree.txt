@@ -1,0 +1,3 @@
+# The dEQP-GLES3.info slice as a one-row selector table for the Armadillo-X2: a development table for kexec-dev runs of the selector tree (TREE_IMAGE=<image> tools/board.sh x2 tree tools/cts/x2-gles3-info-tree.txt <dir>), not a conformance table. It does not cover the mustpass (tools/cts/check-imx8mp-gles3-tree.py reports every mustpass case unmatched); the whole tree is tools/cts/imx8mp-gles3-tree.txt.
+# To build: IMX8MP_BOARD=x2 DEQP_MODULE=gles3 tools/cts/imx8mp-deqp-build.sh <name> 'dEQP-GLES3.info.*' --table tools/cts/x2-gles3-info-tree.txt
+dEQP-GLES3.info.*
