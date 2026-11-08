@@ -47,7 +47,13 @@ CI, a review, then the merge. Never push main by hand.
   `HAL_NXP_DIR`, `PCO_SHC` (with `GLSLANG`, `GLSL2USC_CACHE`), the PowerVR
   firmware header, and the `aarch64-unknown-none-softfloat` Rust target
   (`rustup target add`). Without them you get a red run with named gaps;
-  read which rows failed and which were gaps. `ZEPHYR_WS` may be given
+  read which rows failed and which were gaps. The gate reads `ZEPHYR_WS`,
+  `HAL_NXP_DIR` and `PCO_SHC` from the environment only, so a stale value
+  (a moved checkout) is a gap too, and a stale `DEQP_GLES3_TEST_DIR` fails
+  the `shaderc-online` tests: `tools/cts/deps-env.sh --check` says which
+  entries this host's dependency layout has, and
+  `export $(tools/cts/deps-env.sh)` sets them all from it before the run.
+  `ZEPHYR_WS` may be given
   through a symbolic link: the gate resolves it to the real path first, and
   every Zephyr build rewrites its generated linker snippets' `#include` paths
   to absolute at the end of the configure (`zephyr/linker_snippets.cmake`), so
@@ -132,7 +138,10 @@ RESULTS.md; a design or a finding that code relies on goes into
 Never commit it, in any form. `rgx.fw` comes from TI's Processor SDK under
 its own licence. Turn it into a header locally with `driver/tools/mkfwblob.sh`
 (the header is `driver/src/fw/pvr_fw_blob.h`). Do not attach it to issues or
-pull requests.
+pull requests. The full gate builds the am62p images only with the header
+in that place; a host whose dependency layout holds it (`PVR_FW_BLOB`)
+copies it there first, as the CI does:
+`mkdir -p driver/src/fw && cp "$PVR_FW_BLOB" driver/src/fw/`.
 
 The Mali CSF firmware (`mali_csffw.bin`, Arm's; the NanoPC-T6's Armbian file
 is linux-firmware's) is never committed either; `driver/tools/mkmalifw.sh`
