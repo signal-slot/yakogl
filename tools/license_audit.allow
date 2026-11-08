@@ -35,6 +35,7 @@ tests/fixtures/*.txt | Apache-2.0 | text fixtures: output of our own tools
 tools/cts/*-tree.txt | Apache-2.0 | test lists, results of our board runs
 tools/cts/*-mustpass.txt | Apache-2.0 | case-name lists derived from the VK-GL-CTS mustpass lists (Apache-2.0)
 tools/cts/*.results.tsv | Apache-2.0 | our board run results
+tools/cts/log/*-t6-gles2-*/* | Apache-2.0 | our board run results: the NanoPC-T6 slices mali-deqp-run.sh writes (TSV, key=value and kernel lines the tally reads; no comment header)
 docs/es3/*.tsv | Apache-2.0 | our board run results
 tools/cts/testdata/*.qpa | Apache-2.0 | test data: result logs of our runs
 tools/cts/testdata/ladder/* | Apache-2.0 | probe shaders written for this project
