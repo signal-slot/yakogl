@@ -82,7 +82,10 @@
 # commit must be on; default this checkout and origin/main), MALI_DEQP_MUSTPASS
 # (default tools/cts/gles2-mustpass.txt), MALI_DEQP_TREE (the default tree
 # table when --tree is not given), KMSG_SETTLE_S (1), STAGE_MARGIN_KB
-# (free space wanted beyond the build's size, 1 GiB), DEQP_SURFACE (64).
+# (free space wanted beyond the build's size, 1 GiB), DEQP_SURFACE (256, the
+# pbuffer's width and height, as CONFIG_DEQP_SURFACE_SIZE of the other boards'
+# runs: at 64 about half of T6S1R01, all of clipping, ends NotSupported with
+# "Render target size must be at least 200x200").
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/../.." && pwd)
@@ -375,7 +378,7 @@ py plan "$tree" "$mustpass" "$row_a" "$row_b" "$work/cases" > "$work/plan.tsv"
 total=$(awk -F'\t' '{ s += $3 } END { print s + 0 }' "$work/plan.tsv")
 nrows=$(wc -l < "$work/plan.tsv")
 limit_for() { echo "${CHUNK_LIMIT:-$((600 + 3 * $1))}"; }
-surface=${DEQP_SURFACE:-64}
+surface=${DEQP_SURFACE:-256}
 deqp_cmd() { # <list> <qpa> <limit>
   echo "cd $stage && setsid -w timeout -k 10 $3 env LD_LIBRARY_PATH=$stage/lib $stage/deqp-gles2" \
     "--deqp-caselist-file=$stage/$1 --deqp-log-filename=$stage/$2 --deqp-archive-dir=$stage/data" \
