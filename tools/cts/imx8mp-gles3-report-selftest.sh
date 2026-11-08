@@ -95,7 +95,9 @@ python3 "$REPORT" "${S[0]}" "$rs" "${S[2]}" > "$work/rs.out" 2>&1; rc=$?
 { [ "$rc" = 1 ] && grep -q PARTIAL "$work/rs.out" && grep -q 'e46' "$work/rs.out"; }; expect "reset verdict: exit 1, PARTIAL, e46 named" $?
 
 echo "== anchors and --apply (scratch copy of the three docs)"
-ROOT=$(cd "$HERE/../.." && pwd)
+# A fixture tree, not the repository's own docs: the anchors are the lines the first i.MX8MP run
+# replaces, and once a run has landed the live docs no longer hold them.
+ROOT=$HERE/testdata/imx8mp-gles3-report
 mkroot() { rm -rf "$1"; mkdir -p "$1/tools/cts"; cp "$ROOT/ROADMAP.md" "$1/"; cp "$ROOT/tools/cts/RESULTS.md" "$ROOT/tools/cts/STATUS.md" "$1/tools/cts/"; }
 mkroot "$work/r1"; mkroot "$work/r1.orig"
 grep -q '^--- anchors' "$work/full.out"; expect "anchors block printed" $?
@@ -115,7 +117,7 @@ for f in ROADMAP.md tools/cts/RESULTS.md tools/cts/STATUS.md; do
 	[ "$(grep -c '^[<>]' "$work/d.diff")" -gt 0 ] || { bad "$f changed by --apply"; continue; }
 	[ "$(grep -c '^[0-9]' "$work/d.diff")" = 1 ]; expect "$f: exactly one changed hunk" $?
 done
-cmp -s "$work/r1.orig/ROADMAP.md" "$ROOT/ROADMAP.md"; expect "the scratch original is the repository's ROADMAP.md" $?
+cmp -s "$work/r1.orig/ROADMAP.md" "$ROOT/ROADMAP.md"; expect "the scratch original is the fixture's ROADMAP.md" $?
 
 mkroot "$work/r2"; sed -i '/^\*\*i\.MX8MP\*\*: not run on the board/d' "$work/r2/tools/cts/RESULTS.md"
 mkroot "$work/r2.orig"; cp "$work/r2/tools/cts/RESULTS.md" "$work/r2.orig/tools/cts/RESULTS.md"

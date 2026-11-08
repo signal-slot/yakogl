@@ -494,4 +494,41 @@ refusals 448 -> 141 (compile 0, image 1,013, framebuffer incomplete 3).
 Per-group host verdicts on the three GPUs: `docs/es3/host-gles3-tip.tsv`
 (`70142d35`).
 
-**i.MX8MP**: not run on the board (recipe `docs/es3/board-recipe-imx8mp.md`).
+**i.MX8MP, whole tree** on main `cd9ebb5c`, 2026-11-07/08: the 133-entry
+table image (`tools/cts/imx8mp-gles3-tree.txt`, sha256 `2a256596...`), one boot an
+entry on the crash-route kexec from Torizon (`BOARD_BOOT=kexec-dev`, so every line
+is a development run), no console (the SNVS record only). Record:
+`tools/cts/log/2026-11-07-imx8mp-es3/`; recipe `docs/es3/board-recipe-imx8mp.md`.
+
+| Begun | Pass | Fail | NotSupported | Other | Mustpass without a result |
+|---:|---:|---:|---:|---:|---:|
+| 44,439 | 37,555 | 4,660 | 2,197 | 27 | 178 |
+
+- 133 of 133 entries `rc=0 verdict=done`, back after 31 to 231 s (median 41 s):
+  no entry hung and none reached the 600 s WDOG1 bound, the pre-triaged ones
+  included. Begun counts every case an entry's patterns began (42,810 mustpass,
+  1,807 outside it). GPU recoveries not counted (no console).
+- Other 27: `QualityWarning` in e24 (7), e27 (4) and e84 (14); a
+  `ResourceError` ends e26 (`shaders.builtin_functions.precision`, 123 mustpass
+  cases never begin) and e105 (`texture.units`, 55).
+- Failing cases with a name: `docs/es3/imx8mp-gles3-fails.tsv` (700 of the
+  4,660 Fails, and 1,418 NotSupported). Name paging (six a boot) had named
+  1,439 when the machine running the session was replaced and its run
+  directories were lost; the per-entry counts are in the record.
+- Largest groups: `shaders` 1,535, `fragment_ops.blend.fbo_srgb` about 1,106,
+  `texture.shadow` 432 of 432, `fbo` 400, `texture.filtering`/`mipmap`/`vertex`
+  (3D and cube wrap) 315, `texture.specification` 217, `fragment_out` 215,
+  `texture.swizzle`/`units` 177, `texture.format` 88. By cause:
+  `docs/es3-cts-failures.md`.
+- `texture.format` agrees with the host measurement of `541975a2`: none of the
+  eight classes it added fails; the 88 Fails are R/RG/RGB/RGBA 32I/UI (the 64
+  host refusals) and RG32F, RGB32F, RGBA32F (24).
+- The redo on 2026-11-08 (same image bytes) gave e00 to e03 the same records;
+  after e04's jump the board stopped answering and did not come back (WDOG1
+  did not return it to Linux); it needs a power cycle.
+
+**i.MX8MP, gl_test ES 3.0 cases** on main `cd9ebb5c` (2026-11-07 and again
+2026-11-08, each case alone and twice in each session, `kexec-dev`): 196
+`occl`, 202 `blitconv`, 203 `tfcap`, 204 `srgb` and 205 `mappbo` all pass,
+every boot `rc=0 verdict=done`, the same CASE records in all four runs of each
+case.

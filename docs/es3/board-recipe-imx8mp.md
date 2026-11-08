@@ -2,9 +2,11 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # dEQP-GLES3 on the Verdin i.MX8M Plus (GC7000UL): board recipe
 
-The i.MX8MP has never run dEQP-GLES3. This is the recipe for the first run. **The gles3 stage 1 and the
-133-row table image were built once (host only; the figures are quoted below); nothing has run on the
-board yet.** Board results are recorded under `tools/cts/log/<date>-imx8mp-gles3-<slice>/`; open work is
+**First run: 2026-11-07/08 on main `cd9ebb5c`, all 133 entries, on the crash-route kexec from Torizon
+(`BOARD_BOOT=kexec-dev`) without a console** (`tools/cts/log/2026-11-07-imx8mp-es3/README.md`, which
+also says what that route needs: the board's demo container stopped before each boot, and a name page
+from 32 on reads as the status selector, so pages stop at 31). The sections below are still the
+U-Boot route as written before it; the board's own lines there are unverified. Board results are recorded under `tools/cts/log/<date>-imx8mp-gles3-<slice>/`; open work is
 issue #2 of signal-slot/yakogl. The commands are
 the existing gles2 ones plus the gles3 switch. The expected lines have the shape of real gles2 lines from
 the i.MX8MP gles2 runs, which went through the same `board.sh` code path. The first board session

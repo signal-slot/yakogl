@@ -1,0 +1,35 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# i.MX8MP ES 3.0 at cd9ebb5c, session 2 (2026-11-08): every board run's verdict line and decoded records, verbatim from tools/board.sh INDEX.txt
+board.sh imx8mp c196-r1 rc=0 verdict=done boot=kexec-dev DEV boot_verdict=complete result=record:CASE resets=absent record=594b010e,00c4ff01,00000002,00000000 back_after=34s (kexec-dev: a development run, never a row)
+  CASE (1) seq 14: case 196 check 255 status 1 (pass) got 0x00000002 want 0x00000000
+board.sh imx8mp c202-r1 rc=0 verdict=done boot=kexec-dev DEV boot_verdict=complete result=record:CASE resets=absent record=594b010e,00caff01,0000000c,00000000 back_after=28s (kexec-dev: a development run, never a row)
+  CASE (1) seq 14: case 202 check 255 status 1 (pass) got 0x0000000c want 0x00000000
+board.sh imx8mp c203-r1 rc=0 verdict=done boot=kexec-dev DEV boot_verdict=complete result=record:CASE resets=absent record=594b010e,00cbff01,00000009,00000000 back_after=34s (kexec-dev: a development run, never a row)
+  CASE (1) seq 14: case 203 check 255 status 1 (pass) got 0x00000009 want 0x00000000
+board.sh imx8mp c204-r1 rc=0 verdict=done boot=kexec-dev DEV boot_verdict=complete result=record:CASE resets=absent record=594b010e,00ccff01,00000002,00000000 back_after=26s (kexec-dev: a development run, never a row)
+  CASE (1) seq 14: case 204 check 255 status 1 (pass) got 0x00000002 want 0x00000000
+board.sh imx8mp c205-r1 rc=0 verdict=done boot=kexec-dev DEV boot_verdict=complete result=record:CASE resets=absent record=594b010e,00cdff01,0000000f,00000000 back_after=33s (kexec-dev: a development run, never a row)
+  CASE (1) seq 14: case 205 check 255 status 1 (pass) got 0x0000000f want 0x00000000
+board.sh imx8mp c196-r2 rc=0 verdict=done boot=kexec-dev DEV boot_verdict=complete result=record:CASE resets=absent record=594b010e,00c4ff01,00000002,00000000 back_after=28s (kexec-dev: a development run, never a row)
+  CASE (1) seq 14: case 196 check 255 status 1 (pass) got 0x00000002 want 0x00000000
+board.sh imx8mp c202-r2 rc=0 verdict=done boot=kexec-dev DEV boot_verdict=complete result=record:CASE resets=absent record=594b010e,00caff01,0000000c,00000000 back_after=29s (kexec-dev: a development run, never a row)
+  CASE (1) seq 14: case 202 check 255 status 1 (pass) got 0x0000000c want 0x00000000
+board.sh imx8mp c203-r2 rc=0 verdict=done boot=kexec-dev DEV boot_verdict=complete result=record:CASE resets=absent record=594b010e,00cbff01,00000009,00000000 back_after=26s (kexec-dev: a development run, never a row)
+  CASE (1) seq 14: case 203 check 255 status 1 (pass) got 0x00000009 want 0x00000000
+board.sh imx8mp c204-r2 rc=0 verdict=done boot=kexec-dev DEV boot_verdict=complete result=record:CASE resets=absent record=594b010e,00ccff01,00000002,00000000 back_after=33s (kexec-dev: a development run, never a row)
+  CASE (1) seq 14: case 204 check 255 status 1 (pass) got 0x00000002 want 0x00000000
+board.sh imx8mp c205-r2 rc=0 verdict=done boot=kexec-dev DEV boot_verdict=complete result=record:CASE resets=absent record=594b010e,00cdff01,0000000f,00000000 back_after=27s (kexec-dev: a development run, never a row)
+  CASE (1) seq 14: case 205 check 255 status 1 (pass) got 0x0000000f want 0x00000000
+board.sh imx8mp e00 rc=0 verdict=done boot=kexec-dev DEV boot_verdict=complete result=record:DEQP resets=absent record=594b0814,0000012a,00000000,ffff012a back_after=36s (kexec-dev: a development run, never a row)
+  DEQP (8) seq 20: pass 298 fail 0 notsup 0 other 0 begun 298 first fail name check ffff
+board.sh imx8mp e01 rc=0 verdict=done boot=kexec-dev DEV boot_verdict=complete result=record:DEQP resets=absent record=594b082e,000002b7,00000000,ffff02b7 back_after=40s (kexec-dev: a development run, never a row)
+  DEQP (8) seq 46: pass 695 fail 0 notsup 0 other 0 begun 695 first fail name check ffff
+board.sh imx8mp e02 rc=0 verdict=done boot=kexec-dev DEV boot_verdict=complete result=record:DEQP resets=absent record=594b087a,001802c5,00000000,6bd902dd back_after=63s (kexec-dev: a development run, never a row)
+  DEQP (8) seq 122: pass 709 fail 24 notsup 0 other 0 begun 733 first fail name check 6bd9
+    first fail 6bd9: dEQP-GLES3.functional.default_vertex_attrib.mat2x3.vertex_attrib_1f
+board.sh imx8mp e03 rc=0 verdict=done boot=kexec-dev DEV boot_verdict=complete result=record:DEQP resets=absent record=594b08e0,0007013d,0000004c,ff380190 back_after=47s (kexec-dev: a development run, never a row)
+  DEQP (8) seq 224: pass 317 fail 7 notsup 76 other 0 begun 400 first fail name check ff38
+    first fail ff38: dEQP-GLES3.functional.draw.random.14 dEQP-GLES3.functional.shaders.texture_functions.textureprojgradoffset.usampler3d_fragment
+board.sh imx8mp e04 rc=5 verdict=not_back boot=kexec-dev DEV boot_verdict=not_back result=none resets=absent record=absent back_after=?s (kexec-dev: a development run, never a row)
+  none (no SNVS record was read)

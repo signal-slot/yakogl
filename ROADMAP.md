@@ -146,9 +146,11 @@ On the boards (`tools/cts/RESULTS.md`, "ES 3.0"):
   cases, 5,343 pass / 97 fail / 204 NotSupported / 4 QualityWarning /
   2 ResourceError, 99 never began (a scissored or masked clear of an integer
   target aborts images FO6 and M1).
-- i.MX8MP: not run on the board yet (#24); the recipe
-  (`docs/es3/board-recipe-imx8mp.md`) and the preflight
-  (`tools/cts/imx8mp-gles3-preflight.sh`) are in the tree.
+- i.MX8MP: dEQP-GLES3 whole tree on the board at main `cd9ebb5c`
+  (2026-11-07/08, crash-route kexec, #24): all 133 entries ran, begun
+  44,439: 37,555 pass / 4,660 fail / 2,197 NotSupported / 27 other, 178
+  mustpass cases without a result (`tools/cts/RESULTS.md`). gl_test 196 and
+  202-205 pass (#28). Left: the rest of the failing names, the triage.
 
 The per-cause inventory is `docs/es3-cts-failures.md`.
 

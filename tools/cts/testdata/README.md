@@ -22,6 +22,12 @@ row. The fixture pins:
 - a case dEQP marked `Pass` is counted as a **correct** refusal, not a gap
 - one message over two different tokens splits by construct
 
+`imx8mp-gles3-report/`: a tree of three docs (`ROADMAP.md`,
+`tools/cts/RESULTS.md`, `tools/cts/STATUS.md`) that still hold the lines
+`imx8mp-gles3-report.py --apply` rewrites (the i.MX8MP "not run on the board"
+lines). `imx8mp-gles3-report-selftest.sh` checks `--apply` against copies of
+it: the repository's own docs lost those lines with the first board run.
+
 `refusals-text-and-notsupported.qpa`: the other refusal forms
 `cts-refusals.py` reads. A code-generator refusal written in a `<Text>`
 element (not an `<InfoLog>`), one in an `<InfoLog>` with an

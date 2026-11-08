@@ -43,7 +43,28 @@ upload refusals 200 -> 64 (compile 0, image 434); `texture.specification`
 1,163 cases, 6 pass / 1,157 fail, upload refusals 448 -> 141 (compile 0,
 image 1,013, framebuffer incomplete 3). `docs/es3/gc-formats.md` section 5.
 
-**i.MX8MP**: never run on the board (`docs/es3/board-recipe-imx8mp.md`).
+**i.MX8MP**, whole tree on main `cd9ebb5c`, 2026-11-07/08 (`kexec-dev`, no
+console; `tools/cts/RESULTS.md`, record `tools/cts/log/2026-11-07-imx8mp-es3/`):
+**begun 44,439: 37,555 pass / 4,660 fail / 2,197 NotSupported / 27 other**
+(QualityWarning, and a `ResourceError` that ends e26 and e105), 178 mustpass
+cases without a result. Every case with a name: `docs/es3/imx8mp-gles3-fails.tsv`
+(700 of the Fails). By group and cause:
+
+| Group | Fail | Cause |
+|---|---:|---|
+| `shaders` | 1,535 | RC13 (integer `common` built-ins, `precision`, `texelFetchOffset` and `textureGrad`, `derivate`); RC16 (`precision` ends at a `ResourceError`) |
+| `fragment_ops.blend.fbo_srgb` | about 1,106 | RC7 (blending into sRGB on the GC7000UL; the AM62P passes 1,152 / 1,152) |
+| `texture.shadow` | 432 of 432 | RC5 |
+| `fbo` | 400 | RC1, RC8, RC17 |
+| `texture.filtering` 3D and cube, `mipmap`, `vertex` | 315 | RC18 (wrap R, mirror and repeat), cube |
+| `texture.specification`, `texture.format` | 217, 88 | RC2: the 32-bit formats (R/RG/RGB/RGBA 32I/UI, RG/RGB/RGBA32F) |
+| `fragment_out` | 215 | RC1, RC14 |
+| `texture.swizzle`, `texture.units` | 177 | RC18 (swizzle); `units` ends at a `ResourceError` |
+| `transform_feedback` | 71 | `mat4` point outputs, not classified |
+| other | 104 | `default_vertex_attrib` non-square matrices, `read_pixels` int/uint, `state_query` (RC10), `negative_api`, `draw.random`, `instanced` |
+
+The eight classes of `541975a2` sample on the board: none of them fails in
+`texture.format`.
 
 ## Feature state
 
@@ -53,7 +74,7 @@ Host numbers are HOST-ONLY: the Linux OSAL runs no command stream, so only API e
 |---|---|---|
 | Transform feedback | GL core on the CPU for the three GPUs: the vertex shader runs for every captured vertex, with its texture look-ups on 2D, cube, 3D and 2D-array samplers (`src/shaderc/online/eval.rs` `TexelSource`, `src/gl/tf_capture.rs` `GlTexels`). Host `transform_feedback` 882 / 882; board: AM62P rows pass, gl_test 203 on the AM62P and the Pi 4 | `docs/es3/transform-feedback.md` |
 | Uniform blocks | host `tests/es3_ubo.rs` (dEQP `functional.ubo`, 2,032 cases); the GC7000 reads user blocks from memory with `load` (the four former link refusals pass on the host; the i.MX8MP constant-offset `load` run is open) | `docs/notes/gc-ubo-const-limit.md` |
-| Sized internal formats | the 35 colour formats of ES 3.0 table 3.2, converted at upload; the PowerVR samples every class but `RGB10A2`, and the V3D samples every class (`cc1c6ede`, then `RGB10A2` in its own class with the commit that adds it to `V3D_SAMPLED_TEXFMTS`); the GC7000UL samples eight more classes (`dc83be67`, `541975a2`: R11G11B10F, RGB9E5, RGB10A2UI, RGBA8_SNORM, RGBA8UI/I, RGBA16UI/I) and refuses or keeps in a fallback class RGBA32F/UI/I, R32I/UI and RG32I/UI (ETC2 RGB now samples as `EXT_NONE`); host only, no board has run the V3D or GC7000UL classes | `docs/es3/sized-formats.md`, `docs/es3/pvr-formats.md`, `docs/es3/gc-formats.md` |
+| Sized internal formats | the 35 colour formats of ES 3.0 table 3.2, converted at upload; the PowerVR samples every class but `RGB10A2`, and the V3D samples every class (`cc1c6ede`, then `RGB10A2` in its own class with the commit that adds it to `V3D_SAMPLED_TEXFMTS`); the GC7000UL samples eight more classes (`dc83be67`, `541975a2`: R11G11B10F, RGB9E5, RGB10A2UI, RGBA8_SNORM, RGBA8UI/I, RGBA16UI/I) and refuses or keeps in a fallback class RGBA32F/UI/I, R32I/UI and RG32I/UI (ETC2 RGB now samples as `EXT_NONE`); the GC7000UL's eight pass `texture.format` on the board (2026-11-07, its 88 Fails are the 32-bit formats), the V3D classes are host only | `docs/es3/sized-formats.md`, `docs/es3/pvr-formats.md`, `docs/es3/gc-formats.md` |
 | Occlusion queries | counted on the three back ends; board: AM62P passes, Pi 4 read 0 (gl_test 196) until `9b1ce2ff`, board rerun left | `docs/es3/occlusion-query.md` |
 | Integer colour render targets | PowerVR: all nineteen as a draw's one colour attachment (board: gl_test 200); V3D: all nineteen, the float ones and the ES 2.0 formats on any attachment, host only (`src/v3d/state.rs` `rt_format`, `tests/es3_int_rt_v3d.rs`); GC7000UL: 17 of the 19 (`0087345f`, `docs/es3/int-rt-gc.md`: RGBA16I/UI and RG32I/UI drawn through the 64-bit tiled shadow, RGBA32I/UI refused by name, no hardware format), host only | `docs/es3/pvr-formats.md` section 10, `docs/es3/int-rt-gc.md`, `docs/online-shaderc/v3d-backend.md` |
 | `glBlitFramebuffer` | colour on the CPU, shared by the three back ends; depth on the CPU into a depth texture from a depth texture or renderbuffer (host only, `tests/es3_blit_ds.rs`); depth into a renderbuffer or the window, depth from the window, and all stencil refused by name | `src/gl/blit.rs`, RC8 |
