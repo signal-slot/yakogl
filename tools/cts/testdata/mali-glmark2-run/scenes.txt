@@ -1,0 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# A --scenes file: an index, a scene as -b takes it, and an option-less scene.
+1
+effect2d:kernel=0,1,0;1,-4,1;0,1,0;   # a scene with ';' in it
+refract

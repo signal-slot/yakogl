@@ -1,0 +1,83 @@
+#!/bin/bash
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+#
+# A fake glmark2-es2-mali for tools/cts/mali-glmark2-selftest.sh. It takes
+# --size WxH and -b <scene> as the real one, prints glmark2's result line on
+# stdout and on stderr the pair's "yakogl-mali: loaded" line (when the
+# libGLESv2.so.2 its LD_LIBRARY_PATH finds is the fixture's), the
+# "glmark2-picture:" line and the "yakogl-mali-exit:" line, and does to the
+# scene what FAKE_SCENARIO (a "<scene><TAB><action>" table) says: ok (the
+# default), fpsonly (no FrameTime), glerror, oom, refused, gpufault and
+# jobtimeout (kernel lines from FAKE_FIXTURES/kmsg/ into the board's ring),
+# setupfail, crash (SIGSEGV), hang (never returns), lostssh (the board goes
+# away), reboot (a new boot_id), nolib (no loaded line), foreignlib (a loaded
+# line naming the board's own library). Each call is logged to
+# FAKE_BOARD/glmark2.calls.
+size= scene=
+while [ $# -gt 0 ]; do
+  case $1 in
+    --size | -s) size=$2; shift 2 ;;
+    -b | --benchmark) scene=$2; shift 2 ;;
+    *) shift ;;
+  esac
+done
+echo "$scene" >> "$FAKE_BOARD/glmark2.calls"
+[ "$size" = 800x600 ] || { echo "Error: the fixture wants --size 800x600, not '$size'" >&2; exit 1; }
+[ -n "$scene" ] || { echo "Error: no -b scene" >&2; exit 1; }
+action=$(awk -F'\t' -v s="$scene" '$1 == s { print $2; exit }' "${FAKE_SCENARIO:-/dev/null}")
+action=${action:-ok}
+
+# The scene's info string: [name] and the options sorted, or <default>.
+name=${scene%%:*} opts=
+[ "$name" = "$scene" ] || opts=$(tr ':' '\n' <<< "${scene#*:}" | sort | paste -sd:)
+info="[$name] ${opts:-<default>}"
+
+lib=
+IFS=: read -r -a dirs <<< "${LD_LIBRARY_PATH-}"
+for d in "${dirs[@]}"; do
+  if [ -f "$d/libGLESv2.so.2" ]; then lib=$(readlink -f "$d/libGLESv2.so.2"); break; fi
+done
+case $action in
+  nolib) ;;
+  foreignlib) echo "yakogl-mali: loaded build=fixture lib=/usr/lib/aarch64-linux-gnu/libGLESv2.so.2" >&2 ;;
+  *) if [ -n "$lib" ] && grep -q yakogl-mali-fixture "$lib"; then
+       echo "yakogl-mali: loaded build=fixture lib=$lib" >&2
+     fi ;;
+esac
+kmsg() { grep -v '^#' "$FAKE_FIXTURES/kmsg/$1.txt" >> "$FAKE_BOARD/kmsg"; }
+
+cat <<EOF
+=======================================================
+    glmark2 2023.01
+=======================================================
+    OpenGL Information
+    GL_VENDOR:      YakoGL
+    GL_RENDERER:    YakoGL Mali-G610 (fixture)
+    GL_VERSION:     OpenGL ES 2.0 YakoGL
+    Surface Size:   800x600 pbuffer
+=======================================================
+EOF
+draws=600 refused=0 first=- gpu=0 jt=0 result="FPS: 1250 FrameTime: 0.800 ms"
+case $action in
+  fpsonly) result="FPS: 250" ;;
+  glerror) echo "yakogl: GL error 0x502 in glGenerateMipmap" >&2 ;;
+  oom) echo "yakogl: mali: out of GPU memory for 7684096 bytes (1 frees held)" >&2 ;;
+  refused) echo "yakogl/mali: draw refused: a varying of 5 components" >&2
+    refused=600 first="draw: a varying of 5 components" draws=0 ;;
+  gpufault) kmsg gpu-fault; gpu=1 result="FPS: 40 FrameTime: 25.000 ms" ;;
+  jobtimeout) kmsg job-timeout; jt=1 result="FPS: 2 FrameTime: 500.000 ms" ;;
+  setupfail) printf '%s: Set up failed\n' "$info"
+    echo "yakogl-mali-exit: draws=0 refused=0 first_refused=- gpu_faults=0 job_timeouts=0" >&2
+    exit 0 ;;
+  crash) printf '%s:' "$info"; kill -SEGV $$ ;;
+  hang) printf '%s:' "$info"; sleep 600 ;;
+  lostssh) touch "$FAKE_BOARD/down" ;;
+  reboot) echo 5a1e0000-0000-4000-8000-00000000beef > "$FAKE_BOARD/boot_id" ;;
+esac
+printf '%s: %s\n' "$info" "$result"
+echo "glmark2-picture: $info: 800x600; probes c 336699ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 1a2b, crc16q 3c4d; mean 51 102 153; black no" >&2
+echo "======================================================="
+echo "                                  glmark2 Score: 1250"
+echo "yakogl-mali-exit: draws=$draws refused=$refused first_refused=$first gpu_faults=$gpu job_timeouts=$jt" >&2
+exit 0

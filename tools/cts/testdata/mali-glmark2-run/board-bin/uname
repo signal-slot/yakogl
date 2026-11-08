@@ -1,0 +1,5 @@
+#!/bin/bash
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# The fake board's uname -r: the NanoPC-T6 Armbian kernel.
+echo 6.18.55-current-rockchip64

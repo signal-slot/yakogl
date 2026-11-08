@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# A panthor MMU fault and GPU fault in the wording of drivers/gpu/drm/panthor
+# (v6.18, as tools/cts/mali-kmsg.py reads it), and a line with an address and
+# a MAC the run directory must not keep.
+[ 4242.100000] panthor fb000000.gpu: [drm] *ERROR* Unhandled Page fault in AS1 at VA 0x0000000000401000
+[ 4242.100100] panthor fb000000.gpu: GPU Fault 0x00000088 (TRANSLATION_FAULT) at 0x0000000000401000
+[ 4242.200000] end1: link up, peer 198.51.100.7 02:00:5e:00:53:01
