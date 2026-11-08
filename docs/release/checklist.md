@@ -28,7 +28,7 @@ commit that touched the file (`git log -1 --format=%h -- <path>`).
 |---|---|---|---|---|
 | 1 | CHANGELOG current | `CHANGELOG.md` says what the project is and has at the tip, in one `[Unreleased]` section with no stale entry; its dEQP-GLES2 line equals line 13. With a fresh one-commit history (#1606, decision 1) there is no merged-change list to keep; the first version section and the tag are #1606 step 8 | `CHANGELOG.md`, "Results"; `tools/cts/RESULTS.md` | **met** (2026-10-26, main `5ac5ac23c` plus #1606 step 6). The section was rewritten as an inventory: results, what the library, compilers, boards, tools and docs have, known limits. Its dEQP-GLES2 line is line 13's (one tree per board at `e9901869a`, 0 Fail; AM62P 17,140, i.MX8MP 17,318, Pi 4 17,126) plus the later re-runs RESULTS.md gives (`25cce714`, `d0c5dc48`, `46f93767`, the same counts). Its glmark2 line gives the README table (`445c5653`) and the Pi 4's newer 195 (`c4af4917`); one commit for all three is #1196. Every path it names exists (checked with `ls`). The 0.1.0 section exists, dated 2026-10-27; the tag follows. |
 | 2 | README status tables | The dEQP-GLES2 table equals the newest whole tree of each board (line 13); the glmark2 table equals the benchmark records; no row is composed of several commits | `README.md` "Status"; `tools/cts/RESULTS.md` | **met** (2026-10-16). The dEQP-GLES2 table reads 0 failures on the three boards at `e9901869a`; the glmark2 table gives AM62P 462 and Pi 4 188 at `e9901869a`, i.MX8MP 43 at `a63fcc5b` (no console at `e9901869a`). |
-| 3 | CONTRIBUTING.md | The build, test and gate commands in it run as written on a fresh host; it names `tools/check.sh` | `docs/release/readme-walkthrough.md` (`5b83614c`), table "Checklist: what can change" | **partial** (2026-11-07, walked at `8e81ea9e`: `--quick` red, 166 ok, 3 failed, 1 gap(s), from a symlinked path and a missing `MALI_CSFFW`; the failing step is `--quick`). A fresh clone of `14e93e64` reached "170 ok, 0 failed, 0 gap(s)" from `tools/check.sh --quick` on 2026-11-06 ("Line 3: re-run (2026-11)" below). The per-step exit codes and times of the README and CONTRIBUTING.md commands before it were not recorded in a place this item could read, so "run as written" is shown for `--quick` only; README steps 2 and 3 are in line 6. Earlier: README steps 4-6 failed as written (walk at `a63fcc5b`). N4 is decided (D6: rebase); N10 is documented in CONTRIBUTING.md step 1. Re-run evidence: "Line 3: re-run" below. |
+| 3 | CONTRIBUTING.md | The build, test and gate commands in it run as written on a fresh host; it names `tools/check.sh` | `docs/release/readme-walkthrough.md` (`5b83614c`), table "Checklist: what can change" | **partial** (2026-11-08, a fresh clone of `ccc51125` at a canonical path, every step's exit code and time in "Line 3: re-run (2026-11)" below). As written, `tools/check.sh --quick` is red, "170 ok, 0 failed, 1 gap(s)" (a stale `HAL_NXP_DIR` in the host environment); the two README `shaderc-online` `cargo test` commands exit 101 (a stale `DEQP_GLES3_TEST_DIR`); the full gate gives 5 gaps (no `driver/src/fw/pvr_fw_blob.h`); README's `baremetal.mk` commands exit 2 on this host's tool names (no `aarch64-none-elf-gcc`, LLVM only as `llvm-ar-21` and the like). CONTRIBUTING.md now says to `export $(tools/cts/deps-env.sh)` and to copy `PVR_FW_BLOB` into `driver/src/fw/`; from that text `--quick` gives "171 ok, 0 failed, 0 gap(s)" and the full gate "213 ok, 0 failed, 0 gap(s)". The state stays partial until a walk exits 0 at every step as written. Before: 2026-11-07, walked at `8e81ea9e`: `--quick` red, 166 ok, 3 failed, 1 gap(s), from a symlinked path and a missing `MALI_CSFFW`. A fresh clone of `14e93e64` reached "170 ok, 0 failed, 0 gap(s)" from `tools/check.sh --quick` on 2026-11-06 ("Line 3: re-run (2026-11)" below). README steps 2 and 3 are also in line 6. Earlier: README steps 4-6 failed as written (walk at `a63fcc5b`). N4 is decided (D6: rebase); N10 is documented in CONTRIBUTING.md step 1. Re-run evidence: "Line 3: re-run" below. |
 | 4 | SECURITY.md | Names a reachable private contact, the scope and the response times; no `TODO(owner)` or placeholder left | `grep -n "example.invalid\|TODO(owner)" SECURITY.md` | **done**. Owner decision D5 (#1266): GitHub private vulnerability reporting (enabled when the repository goes public), no committed response time, only `main` supported until the first release. |
 | 5 | DESIGN.md | Every path it names exists in the tree; every number in it equals the code or the records at the tip | `DESIGN.md`; the commands in the State column | **met** (2026-10-26, main `5ac5ac23c` plus #1606 step 6). Paths: every path of the layout block and the text exists (`ls` over the names, brace lists expanded); `src/mali/` and `src/osal/mali.rs` were missing from the layout and are added. Numbers: the dEQP-GLES2 paragraph now gives line 13 (`e9901869a`, 0 Fail, 17,140 / 17,318 / 17,126) instead of the old `32778b57` figures (walk finding N7); the layout pins are 38 structs and 590 fields (the distinct `size_of` and `offset_of` lines of `src/abi_layout.rs`; it said 35 and 563); the backend table has 21 entries (`src/backend.h`; it listed 9 as the whole table); `g_backend` names one of four tables (`src/backend.rs`); "no dependencies" is now "no runtime dependencies" (`Cargo.toml` has the build dependency `cc`); layer 5a has three implementations, not two. Also removed: an unexplained project name (renamed away by #1224) and "F1". |
 | 6 | README walkthrough | A new reader follows README then CONTRIBUTING on a host and reaches a passing `tools/check.sh --quick` with no gap | `docs/release/readme-walkthrough.md`; "Line 3: re-run" and "Line 6: re-read" below | **met** (2026-11-07, base `40eb8d00`; clang form at `14e93e64`, GCC form at `22265e87`). The criterion is that a new reader following README then CONTRIBUTING reaches a passing `tools/check.sh --quick` with no gap: a fresh clone does (line 3, 170 ok, 0 failed, 0 gap(s) at `14e93e64`), and both toolchain forms of README step 3 now build as README writes them (subsection "Line 6: clang form" below: clang exit 0 in 98.80 s, GCC exit 0 in 26.8 s, the CMake aarch64 build exit 0 on 2026-11-05). Caveat: README works only because it passes `DRVSRC=driver/src`; `baremetal.mk:73` still defaults `DRVSRC` to `../src` and the same command without it exits 2. The default change is pending (plan #324, item drvsrc-fix); README is not edited by this record. `CONTRIBUTING.md` gives the `--quick` size and the `MESA_V3D_TREE` gap. |
@@ -82,6 +82,89 @@ host Linux 7.2.8 x86-64, rustc 1.98.0-nightly (2026-07-01):
 - Not recorded here: the per-step exit codes and times of the README steps and of the other CONTRIBUTING.md commands in the 2026-11-07 walk. The walk's step tables did not reach this record, so none are stated; they stay open for line 3.
 - To close line 3: run `tools/check.sh --quick` from a canonical path with `MALI_CSFFW` fetched (about 90 minutes on a 4-core host) and record each step's exit code and time as it runs.
 - README steps 2 and 3 were run separately on 2026-11-06/07: see "Line 6: clang form".
+
+#### 2026-11-08: fresh clone of `ccc51125`, every step recorded
+
+`tools/check.sh --quick` as written: "170 ok, 0 failed, 1 gap(s)"; from
+the fixed CONTRIBUTING.md text: "171 ok, 0 failed, 0 gap(s)".
+A `git clone` of origin/main `ccc51125` into a canonical path (`realpath`
+equal to the path, no symbolic link on it), host Linux 7.0 x86-64, 4 cores,
+"2 compiler slot(s)" (check.sh), rustc 1.101.0-nightly (2026-10-16), clang
+21.1.8, GCC 15.2.0. `MESA_V3D_TREE` unset. The host environment carried two
+stale values from its project settings: `HAL_NXP_DIR` and
+`DEQP_GLES3_TEST_DIR` named directories that do not exist, while
+`tools/cts/deps-env.sh --check` reports every entry of the layout `ok`
+(`MALI_CSFFW` included). Commands ran in the clone's root in this order;
+times are wall seconds of the whole command.
+
+| # | Step | Command | Exit | Time |
+|---|---|---|---|---|
+| 1 | clone | `git clone https://github.com/signal-slot/yakogl.git` | 0 | 4.0 |
+| 2 | README, Rust version | `rustc --version` | 0 | 0.0 |
+| 3 | README, host library | `cmake -S . -B build -G Ninja -DYAKOGL_OSAL=linux` | 0 | 0.3 |
+| 4 | README, host library | `cmake --build build` | 0 | 34.1 |
+| 5 | README, cross build | `cmake -S . -B build/a64 --toolchain <own file: Zephyr SDK 1.0.1 aarch64-zephyr-elf GCC 14.3.0> -DYAKOGL_OSAL=baremetal` | 0 | 0.2 |
+| 6 | README, cross build | `cmake --build build/a64` | 0 | 38.3 |
+| 7 | README, bare metal | `make -f baremetal.mk CROSS_COMPILE=aarch64-none-elf-` | **2** | 1.0 |
+| 7' | the same, the host's aarch64 GCC | `make -f baremetal.mk CROSS_COMPILE=<Zephyr SDK>/aarch64-zephyr-elf- BUILD=build/bm-zsdk` | 0 | 18.7 |
+| 8 | README, bare metal, clang | `make -f baremetal.mk CC='clang --target=aarch64-none-elf --sysroot=<sysroot>' AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy` | **2** | 1.4 |
+| 8' | the same, versioned LLVM names | `... AR=llvm-ar-21 NM=llvm-nm-21 OBJCOPY=llvm-objcopy-21` | 0 | 18.8 |
+| 9 | README, Zephyr | (a workspace from `west.yml`) | not run | |
+| 10 | README, API coverage | `cargo build -p yakogl-capi --features gpu-powervr,mesa-reference-table` | 0 | 10.2 |
+| 11 | README, API coverage | `tools/api_coverage.py` | 0 | 0.1 |
+| 12 | README, testing | `tools/check.sh --changed origin/main` | 0 | 4.7 |
+| 13 | README, testing | `tools/check.sh --quick` | **1** | 2253.1 |
+| 14 | README, testing | `cargo test --no-default-features --features host-test,gpu-powervr` | 0 | 43.7 |
+| 15 | README, testing | `... host-test,gpu-powervr,report-es2` | 0 | 37.2 |
+| 16 | README, testing | `... host-test,gpu-vivante` | 0 | 40.3 |
+| 17 | README, testing | `... host-test,gpu-powervr,shaderc-online` | **101** | 101.3 |
+| 18 | README, testing | `... host-test,gpu-vivante,shaderc-online` | **101** | 103.0 |
+| 19 | README, testing | `cargo test -p yakogl-tools` | 0 | 9.3 |
+| 20 | README, open defects | `git grep -n 'ignore = "BUG' -- src tests` | 1 (no match: none open) | 0.0 |
+| 21 | README, host harness | `HH_TIMEOUT=60 tools/hostharness/compare.sh ...` | not run | |
+| 22 | CONTRIBUTING step 1 | `tools/check.sh --changed origin/main` | 0 | 6.4 |
+| 23 | CONTRIBUTING, branches | `git rebase origin/main` | 0 | 0.0 |
+| 24 | CONTRIBUTING, the gate | `tools/check.sh --quick` (warm) | **1** | 852.2 |
+| 25 | CONTRIBUTING, the gate | `YAKOGL_CHECK_PLAN=1 tools/check.sh --quick` | 1 (the plan holds the gap row) | 0.6 |
+| 26 | CONTRIBUTING, the gate | `tools/check.sh --local origin/main` | 0 | 6.2 |
+| 27 | CONTRIBUTING, the gate | `tools/check_scope_selftest.sh` | 0 | 28.9 |
+| 28 | CONTRIBUTING, firmware | `tools/cts/deps-env.sh --build MALI_CSFFW` | 0 (`present`) | 0.1 |
+| 29 | CONTRIBUTING, fixed text | `tools/cts/deps-env.sh --check` | 0 | 0.2 |
+| 30 | CONTRIBUTING, fixed text | `export $(tools/cts/deps-env.sh); tools/check.sh --quick` | 0 | 1010.1 |
+| 31 | README 17, re-run | `export $(tools/cts/deps-env.sh); cargo test ... host-test,gpu-powervr,shaderc-online` | 0 | 135.7 |
+| 32 | README 18, re-run | `export $(tools/cts/deps-env.sh); cargo test ... host-test,gpu-vivante,shaderc-online` | 0 | 33.1 |
+| 33 | README and CONTRIBUTING, full gate | `export $(tools/cts/deps-env.sh); tools/check.sh` | **1** | 3342.3 |
+| 34 | CONTRIBUTING, fixed text | `mkdir -p driver/src/fw && cp "$PVR_FW_BLOB" driver/src/fw/` (layout exported) | 0 | 0.2 |
+| 35 | CONTRIBUTING, fixed text | `export $(tools/cts/deps-env.sh); tools/check.sh` | 0 | 2625.9 |
+
+- `--quick` as written (steps 13 and 24): "170 ok, 0 failed, 1 gap(s)". The
+  gap is `imx8mp regs.rs: no hal_nxp at <the stale HAL_NXP_DIR> (set
+  HAL_NXP_DIR)`: `tools/check.sh` reads `HAL_NXP_DIR`, `ZEPHYR_WS` and
+  `PCO_SHC` from the environment only (only `MALI_CSFFW` falls back to the
+  layout), and CONTRIBUTING.md said these "need setup" without saying how.
+  Its wording now gives `export $(tools/cts/deps-env.sh)`.
+- `--quick` from the fixed text (step 30): "171 ok, 0 failed, 0 gap(s)" in
+  1010 s (a warm tree; step 13, the cold run, took 2253 s). The plan is 171
+  rows at `ccc51125` (step 25), one more than CONTRIBUTING.md's 170.
+- Steps 17 and 18: the `es3_shaderc_corpus` test `corpus` panics with
+  "DEQP_GLES3_TEST_DIR is readable: ... No such file or directory": a stale
+  `DEQP_GLES3_TEST_DIR` fails the test (unset, it skips). With the layout
+  exported both pass (steps 31 and 32: 3515 and 3408 passed, 0 failed).
+- Steps 7 and 8 fail on the host's tool names, which README's own comments
+  name: no `aarch64-none-elf-gcc` on `PATH`, and LLVM installed only as
+  `llvm-ar-21` and the like. With this host's names both build (7', 8').
+  The sysroot of 8' is the Zephyr SDK's (picolibc), not a newlib one;
+  `baremetal.mk` builds without `DRVSRC`.
+- Full gate (step 33): "208 ok, 0 failed, 5 gap(s)". All five gaps are the
+  am62p Zephyr images: "driver/src/fw/pvr_fw_blob.h is missing (make it with
+  driver/tools/mkfwblob.sh): not built". The layout holds the header
+  (`PVR_FW_BLOB`), and the CI copies it into `driver/src/fw/`
+  (`.github/workflows/gate.yml`); CONTRIBUTING.md did not say so. Its
+  firmware section now gives the copy. From the fixed text (steps 34, 35):
+  "213 ok, 0 failed, 0 gap(s)" in 2626 s.
+- Not run: README's Zephyr build (step 9) and host-harness compare (step 21,
+  40 to 60 minutes and up to 50 GB), `tools/board.sh`, `driver/tools/mkfwblob.sh`
+  (TI's firmware), `git push --force-with-lease`.
 
 ### Line 6: clang form (2026-11-07)
 
