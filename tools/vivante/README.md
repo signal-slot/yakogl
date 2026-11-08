@@ -732,6 +732,13 @@ was given. What the part itself does with a wider line is a board question.
 
 `cs_golden.c` mode 28 is golden-only (`cs_ours.c`'s mode list says so).
 
+`gate_st.sh hwdb|golden` runs the two checks of this section against a Mesa
+26.2.1 tree (`MESA_ETNA_TREE`, built per "Building it" for `golden`): the hwdb
+comparison against `testdata/hwdb-compare-st-6205.txt`, and the signature of
+modes 1, 8 and 15 on the two shim rows. Exit 0 pass, 1 mismatch, 2 gap (no
+tree: the check was not run), 64 usage. `gate_st_selftest.sh` checks the
+script without a tree.
+
 ### What the patch does, and why each piece is needed
 
 Four changes, all to the shim, none to the driver (`GC7000UL` is the first
