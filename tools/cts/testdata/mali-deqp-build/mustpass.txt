@@ -1,0 +1,3 @@
+dEQP-GLES2.info.vendor
+dEQP-GLES2.info.renderer
+dEQP-GLES2.info.version
