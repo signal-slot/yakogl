@@ -389,8 +389,9 @@ command and builds nothing.
 `tools/cts/board-stage.sh x2 common`, `x2 deqp` and `x2 gles3` run exactly
 those three commands for HEAD (`<sha8>` is HEAD's abbreviated hash);
 `BOARD_STAGE_DRY_RUN=1` prints them and builds nothing. `x2 common` builds
-the gl_test image alone (glmark2 has no X2 image). `x2 gles3` stops with exit
-2 before the build when the gles3 stage 1 is missing
+the gl_test image alone (the glmark2 X2 image is built with west, see
+`driver/samples/zephyr/glmark2/boards/armadillo_x2_mimx8ml8_a53.conf`).
+`x2 gles3` stops with exit 2 before the build when the gles3 stage 1 is missing
 (`$DEQP_STAGE1_GLES3/build/modules/gles3/libdeqp-gles3-package.a`). The x2
 stage builds only: it runs no board command, takes no lease, and reads no
 `BOARD_HOST` or `BOARD_UART`. `x2 ms4` is refused (exit 2).
