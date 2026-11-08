@@ -226,3 +226,150 @@ A pixel-level check (that an unnamed RT keeps its value) is a board item; the
 host tests above pin the recorded state. Gate with
 `tools/check.sh --changed origin/main`; the change touches `src/v3d/**` and
 this note.
+
+## 5. Open points, answered
+
+Open points (a) and (b) of section 3, read in code. The vendored Mesa under
+`third_party/mesa-26.2.1` holds only the packet XML
+(`src/broadcom/cle/v3d_packet.xml`) and `v3dx_format_table.c`; the compiler
+(`nir_to_vir.c`, `vir_emit_tlb_color_write`), `v3dx_rcl.c` and `v3dx_emit.c`
+are **not** vendored. A Mesa line number below that is not in those two files
+is the one yakogl's own comments cite, not a line read here. Point (c) stays
+as section 3 says.
+
+### (a) An RT the quad's program does not write keeps its tile-buffer value
+
+**Answer: yes, by everything the code shows. No yakogl code writes or clears
+an RT the program leaves out. A Pi 4 pixel check is still open.**
+
+Read in code:
+
+- *Mesa's side* (cited, not vendored): `vir_emit_tlb_color_write` is called
+  per RT from `emit_frag_end` and emits nothing for an RT with no colour
+  output (nir_to_vir.c:1952-1990, 2038-2141, as `select.rs:2302-2304` and
+  section 2 cite them). No TLB write reaches that RT.
+- *yakogl's code generator*: `select.rs:2312` skips every RT whose bit is
+  clear in `p.rt_mask` (`continue`), before both write paths (32-bit
+  `:2315-2325`, f16 pair `:2327-2335`). `rt_mask` is built in
+  `prepare.rs:2372-2376`: bit n is set only if a lane of colour output n was
+  assigned. The zero constants `prepare.rs:2377-2387` gives an unwritten RT's
+  roots are, by that comment, never read: the write loop does not reach them.
+  A program with `rt_mask == 0` writes only the pass-through Z
+  (`select.rs:2289`). `clear_mrt.rs` emits no output for a `NotCleared` RT,
+  so its `rt_mask()` (`clear_mrt.rs:139-141`) is the cleared set exactly.
+- *The TLB config*: a TLBU config names the RT of the writes after it
+  (`tlb_config_f16`, `tlb_config_32b`, `select.rs:1810`, `:1839`,
+  `(7 - rt) << 3`). Only a float RT 0 goes without one (the TLB's default,
+  `:2329-2331`); a program whose first written RT is not RT 0 always has a
+  config, so a quad that clears RT 2 only does not write RT 0 through the
+  default.
+- *The job builder* does not touch an unwritten RT. `v3d_job.c` loads each RT
+  that has a buffer and `load_rt` set (`:1066`; RT 0 at `:1023-1052`), stores
+  each RT that has a buffer (`:1128-1163`), and arms a clear colour only for
+  an RT with `load_rt` false (`:1261-1277`). `backend.rs:6120-6173` unsets
+  `load_rt` only on the TLB path, `tlb_colour = d.do_clear && !quad_colour`;
+  a scissored or masked clear has `quad_colour` true, so the defaults
+  `load_rt0: true`, `load_rt: [true; 3]` (`backend.rs:957`, `:973`) stand and
+  every RT is loaded. The unwritten RT is loaded, left alone and stored
+  back. `CLEAR_TILE_BUFFERS` (`v3d_job.c:1205`, `clear_all_render_targets`;
+  `v3d_packet.xml:480-483`) ends the tile list for the next tile and is
+  not part of the quad.
+- *Job-wide state*: `COLOR_WRITE_MASKS` (`v3d_job.c:698-706`,
+  `v3d_packet.xml:804-806`: one 32-bit word, four disable bits per RT) gates
+  channels of an RT only where a write reaches it. A blend over the quad
+  (`v3d_job.c:612-629`, `BLEND_CFG` with `render_target_mask = 0xf`) likewise
+  acts on writes only; the code item's quad is drawn with the clear's own
+  state, so check its `blend` is off in test 1.
+- *Existing tests* touching an unwritten RT record the configuration only:
+  `a_none_draw_buffer_is_configured_and_never_given_an_address`
+  (`backend_tests.rs:3710`, `program_writing(0b101)` on three targets, RT 1
+  not written) and `a_colour_output_with_no_attachment_slot_is_refused`
+  (`:3736`). Neither says the unwritten RT's bytes survive.
+
+Needs a board pixel check (the host has no TLB model): a job of 2 or 3
+attachments whose quad writes RT 1 only leaves RT 0 and RT 2 equal to what was
+loaded, bit for bit, inside and outside the scissor; and that an RT of an
+integer internal type (8I, 32UI), loaded and not written, is not disturbed by
+a TLBU config naming another RT (`0xffffff37` for RT 1). The host tests pin
+the recorded state (section 4, tests 1 and 2: `rt_mask == 1 << n`, `load_rt*`
+true); the issue carries the board check.
+
+**The code item must:** change nothing in the generator or the job builder;
+build one program per written RT (`rt_mask == 1 << n`), keep `load_rt*` true
+on the quad path, and assert both in test 1. If the board ever shows an
+unwritten RT changing, the fallback is a per-RT disable nibble in
+`COLOR_WRITE_MASKS` for the RTs the clear does not name (the packet carries
+one per RT; `wm.mask` repeats RT 0's today, `v3d_job.c:703-705`). The code
+gives no reason to build it now.
+
+### (b) The float clear program and a 32-bit float attachment
+
+**Answer: `mediump` against `highp` changes nothing, and the word size comes
+from the output's declared type only. A float output to an R32F attachment is
+written as f16 pairs, which loses precision and range. The code item must
+class an R32F attachment as `Uint` (raw 32-bit words): no `highp`, no per-RT
+key.**
+
+Read in code:
+
+- *The precision qualifier is ignored.* `CLEAR_FS` is `mediump`
+  (`backend.rs:816-817`), `clear_mrt.rs` writes `highp` (`clear_mrt.rs:192`).
+  No non-test code under `src/shaderc/online/v3d/` reads a precision (the
+  only `mediump` matches are test sources, e.g. `chain.rs:1114`), so both
+  compile to the same writes.
+- *The word size is the declared type.* `prepare.rs:2398-2406` sets `rt_int`
+  for an output `integer_output` (`:2424-2426`: `int`, `uint`, `ivec`,
+  `uvec`) accepts; `select.rs:2316-2325` then writes one 32-bit word per
+  declared component under `tlb_config_32b` (`:1839`); every other output is
+  two `VFPACK` half pairs under `tlb_config_f16` (`:2327-2335`). The
+  generator never sees the attachment's format: "the V3D program is not keyed
+  by the target's class, so a float output always writes f16 pairs"
+  (`select.rs:1826-1838`). There is no per-RT 32-bit shader key in yakogl.
+  `rt_format().clamp` (`state.rs:445`) is not one: it is the RCL's per-RT
+  clamp (`v3d_job.c:1254-1285`, `TILE_RENDERING_MODE_CFG_COLOR`), not a write
+  width.
+- *Mesa differs*, as `docs/notes/v3d-format-matrix.md` §5 M1 records: it
+  keys `f32_color_rb` for a 32-bit float colour buffer (`v3d_program.c:683-686`,
+  cited) and writes `TLB_TYPE_F32_COLOR`. The R32F row is
+  `v3dx_format_table.c:91` (`FORMAT(R32_FLOAT, R32F, R32F, SWIZ_X001, 32, 1)`).
+- *Who is affected*: `state.rs:445-480` has one 32F row, R32F. RG32F and
+  RGBA32F have no `rt_format` row and `extra_targets` refuses them
+  (`backend.rs:5979-5981`). The 16F rows (R16F, RGBA16F, sRGB, RGB10_A2) hold
+  f16 exactly. R32F is the only attachment where the float program's word
+  size matters.
+- *What an f16 write costs on R32F*: the word size is not wrong (no spill into
+  the next pixel or RT; the tile buffer converts), but the value has an
+  11-bit significand and a range of +-65504 (more becomes infinity). A
+  `glClearBufferfv` of 1.0e10 on a scissored R32F attachment would not read
+  back as given. The TLB clear is exact (`clear_words`, `state.rs:523`, its
+  test `state.rs:1110`), so only the quad is lossy.
+
+**The code item must:** leave `CLEAR_FS` and `highp` alone and add no key.
+In the class choice for `clear_mrt_source` an R32F attachment is `Uint`
+(`clear_mrt.rs:50-53` already says so): `layout(location = n) out uvec4`, four
+32-bit words that are the float's own bits. `GlesDraw::clear_rgba` already
+holds f32 bit patterns (`clear_mrt.rs:46-48`), so the uniform words need no
+conversion. The class is per RT from the format:
+`rt_format(f).internal_type == V3D_INTERNAL_TYPE_32F` gives `Uint`, an integer
+internal type gives `Int`/`Uint`, anything else `Float`. Four words to a
+one-channel 32-bpp RT is what `CLEAR_FS_INT` already does for R32I and R8I
+(`backend.rs:831`). The existing one-target float quad keeps writing f16 to an
+R32F RT 0; that is the same loss (M1), not this item's.
+
+Tests that pin it today: `tests/v3d_clear_mrt.rs` pins the source and TLB
+writes of each class (`float_then_int` `:170`, `int_float_uint` `:177`,
+`float_kept_int` `:187`, `kept_first_then_float_and_uint` `:211`;
+`expected` `:106` gives f16 pairs for `Float`, 32-bit words for `Uint`), but it
+takes the class as an input, so it cannot tell that R32F was mapped to
+`Uint`. `a_scissored_integer_clear_is_the_integer_programs_quad`
+(`backend_tests.rs:2533`) and `writes_32bit_words` (`:2514`, RT 0's
+`0xffffff3f`) pin the one-target integer program. No test names an R32F quad.
+
+**Test the code item should add** (`backend_tests.rs`, beside test 1 of
+section 4): targets `[RGBA8888, R32F]` and `[R32F, RGBA8I]`, scissored
+`clear_quad`, `clear_rgba = [1.0e10, 0.0, 0.0, 1.0]`. Assert that the R32F
+RT's quad carries the 32-bit config for its RT number (RT 1 `0xffffff37`,
+RT 0 `0xffffff3f` = `TLB_CONFIG_32B_RT0_VEC4`) and that the fragment block
+holds `1.0e10f32.to_bits()` (an f16 write would hold infinity), while the
+RGBA8 RT keeps the f16 pair config. A case with an R16F attachment pins that
+a half-float attachment stays `Float`.
