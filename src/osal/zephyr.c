@@ -328,7 +328,10 @@ static void drain_pending_frees(uint32_t completed)
 static int wait_pending(uint32_t fence, uint32_t *completed)
 {
 	uint32_t done;
-	int rc = pvr_render_wait(fence, PENDING_FREES_WAIT_MS);
+	int rc;
+
+	pvr_render_wait_site(OSAL_WAIT_SITE_PENDING);
+	rc = pvr_render_wait(fence, PENDING_FREES_WAIT_MS);
 
 	if (rc == -ETIMEDOUT)
 		return 1;
@@ -389,6 +392,7 @@ static int reclaim_and_retry(enum pvr_render_heap heap, uint32_t size, struct pv
 	}
 	before = pending_kib();
 	t0 = k_uptime_get();
+	pvr_render_wait_site(OSAL_WAIT_SITE_RECLAIM);
 	wrc = pvr_render_wait(s_last_submitted, PENDING_FREES_WAIT_MS);
 	if (wrc == 0)
 		kt_completed(s_last_submitted);
@@ -661,6 +665,11 @@ static int z_query(uint32_t what, void *out, size_t out_sz)
 		if (out_sz < sizeof(struct pvr_render_static))
 			return -EINVAL;
 		return pvr_render_static_get((struct pvr_render_static *)out);
+	case OSAL_QUERY_WAIT_SITE:
+		if (out_sz < sizeof(uint32_t))
+			return -EINVAL;
+		pvr_render_wait_site(*(const uint32_t *)out);
+		return 0;
 	case OSAL_QUERY_CLOCK_NS:
 	case OSAL_QUERY_DRAW_STATS:
 		return osal_zephyr_timing_query(what, out, out_sz);

@@ -894,7 +894,7 @@ void yd_pvr_render_ctx_init(struct yd_pvr_km *km, struct yd_pvr_render *r);
 int yd_pvr_render_submit(struct yd_pvr_km *km, struct yd_pvr_render *r, const void *kick,
 			 uint32_t *fence_out);
 int yd_pvr_render_wait(struct yd_pvr_km *km, struct yd_pvr_render *r, uint32_t fence,
-		       uint32_t timeout_ms, const char *who);
+		       uint32_t timeout_ms, const char *who, const char *site);
 uint32_t yd_pvr_render_completed(const struct yd_pvr_km *km, const struct yd_pvr_render *r);
 /* the firmware's HWR counter (recoveries since it booted) */
 uint32_t yd_pvr_render_hwr_counter(const struct yd_pvr_km *km);
