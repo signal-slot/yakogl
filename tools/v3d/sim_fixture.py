@@ -41,7 +41,12 @@ counts, pinned by the test); then per pair:
   <fs|vs|cs> uniforms <contents>:<hex> ...
   end
 
-Usage: sim_fixture.py [--out FILE] [--remove DIR...]
+`--device 71` writes the V3D 7.1 (Raspberry Pi 5) twin,
+tests/fixtures/v3d_mesa_programs_71.txt: the same pairs and lines from
+`v3d_shc --device 71` (tools/v3d/README.md, H2), with `# device: 71` in the
+header; the 4.2 default writes what it wrote before the option existed.
+
+Usage: sim_fixture.py [--device 42|71] [--out FILE] [--remove DIR...]
 """
 import argparse
 import json
@@ -53,7 +58,8 @@ import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.normpath(os.path.join(HERE, "..", ".."))
-DEFAULT_OUT = os.path.join(REPO, "tests", "fixtures", "v3d_mesa_programs.txt")
+DEFAULT_OUT = {"42": os.path.join(REPO, "tests", "fixtures", "v3d_mesa_programs.txt"),
+               "71": os.path.join(REPO, "tests", "fixtures", "v3d_mesa_programs_71.txt")}
 sys.path.insert(0, HERE)
 import glsl2v3d as g  # noqa: E402
 
@@ -155,10 +161,15 @@ def remove(path, dirs):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("--out", default=DEFAULT_OUT)
+    ap.add_argument("--device", choices=("42", "71"), default="42",
+                    help="V3D generation v3d_shc compiles for (default 42)")
+    ap.add_argument("--out", help="the fixture (default: the device's under tests/fixtures)")
     ap.add_argument("--remove", nargs="+", metavar="DIR",
                     help="drop the pairs of these directories from --out instead of writing it")
     args = ap.parse_args()
+    args.out = args.out or DEFAULT_OUT[args.device]
+    # Empty for 4.2, so a 4.2 run is exactly what it was before --device.
+    shc_flags = ["--device", "71"] if args.device == "71" else []
     if args.remove:
         return remove(args.out, args.remove)
     if not os.path.isfile(g.V3D_SHC):
@@ -210,8 +221,10 @@ def main():
             continue
         # The VPM size of the V3D 4.2 on the Raspberry Pi 4, measured on the
         # board 2026-09-24 (IDENT1.VPM_SIZE: 65536 bytes); v3d_shc otherwise
-        # assumes 16384 and its JSON says so.
-        r = subprocess.run([g.V3D_SHC, rv["spv"], rf["spv"], "--vpm-size", str(VPM_SIZE)],
+        # assumes 16384 and its JSON says so. 7.1 is given the same: it is
+        # what `--device 71` assumes (Mesa's drm-shim), the Pi 5's own is
+        # not measured yet.
+        r = subprocess.run([g.V3D_SHC, rv["spv"], rf["spv"], "--vpm-size", str(VPM_SIZE)] + shc_flags,
                            capture_output=True, text=True)
         if r.returncode != 0:
             failed.append((vs, fs, "v3d_shc exit %d" % r.returncode))
@@ -232,11 +245,13 @@ def main():
         reasons.setdefault(why, []).append("%s + %s" % (vs, fs))
     for why, ps in sorted(reasons.items(), key=lambda kv: -len(kv[1])):
         print("not compiled: %d x %s (e.g. %s)" % (len(ps), why, ps[0]))
-    lines = ["# V3D 4.2 Mesa programs for the QPU interpreter's validation; written by",
+    lines = ["# V3D %s Mesa programs for the QPU interpreter's validation; written by" % ".".join(args.device),
              "# tools/v3d/sim_fixture.py, read by tests/v3d_sim_mesa.rs.",
              "# build: %s" % build_id(),
-             "# v3d_shc: %s" % os.path.basename(g.V3D_SHC),
-             "# vpm size: %d" % VPM_SIZE,
+             "# v3d_shc: %s" % os.path.basename(g.V3D_SHC)]
+    if shc_flags:
+        lines.append("# device: %s" % args.device)
+    lines += ["# vpm size: %d" % VPM_SIZE,
              "# real pairs: %d" % len(real),
              "# compiled: %d" % len(out),
              "# not compiled: %d" % len(failed)]
