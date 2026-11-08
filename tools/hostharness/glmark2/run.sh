@@ -13,13 +13,16 @@
 #                checkout, which is verified, or the GitHub archive of that
 #                commit, which cannot be)
 #   out          work directory (default: build/glmark2-host)
-#   gpu          powervr vivante v3d (default: all three)
+#   gpu          powervr vivante v3d (default: those three), mali (opt-in:
+#                its archive is built by mali/CMakeLists.txt, and shim.c
+#                answers its OSAL contract, README.md "GPUs")
 #
 # environment:
 #   GM2_FRAMES=3     frames per scene (glmark2's nframes option)
 #   GM2_SIZE=800x600 window size (glmark2's default, and the boards')
-#   GM2_WRITE=1      write FINDINGS.md (powervr, vivante) and FINDINGS-v3d.md
-#                    (v3d) from the run (default); 0 leaves the tree alone.
+#   GM2_WRITE=1      write FINDINGS.md (powervr, vivante), FINDINGS-v3d.md
+#                    (v3d) and FINDINGS-mali-allscenes.md (mali) from the run
+#                    (default); 0 leaves the tree alone.
 #                    The shader corpus is written to <out>/shaders either
 #                    way (powervr, vivante runs); it is GPL-3.0 text and is
 #                    never committed (tools/shaders/glmark2/README.md)
@@ -50,7 +53,7 @@ VERSION=2023.01 # meson.build's project version at that commit
 
 die() { echo "glmark2/run.sh: $*" >&2; exit 1; }
 
-[ $# -ge 1 ] || { sed -n '3,44p' "$0"; exit 2; }
+[ $# -ge 1 ] || { sed -n '3,47p' "$0"; exit 2; }
 # The physical path: the tree is often reached through a symlink (the
 # dependency layout's glmark2-src, tools/cts/deps-env.sh --layout, is one), and git reports its top level resolved, so the comparison below
 # must see the same spelling on both sides.
@@ -87,8 +90,8 @@ else
 fi
 for g in "${GPUS[@]}"; do
   case "$g" in
-    powervr | vivante | v3d) ;;
-    *) die "unknown gpu '$g' (powervr, vivante, v3d)" ;;
+    powervr | vivante | v3d | mali) ;;
+    *) die "unknown gpu '$g' (powervr, vivante, v3d, mali)" ;;
   esac
 done
 
@@ -224,6 +227,12 @@ g++ -O1 -g -Wall -std=c++17 "${gm_inc[@]}" "${gm_def[@]}" -I"$HERE" -c "$HERE/ho
 python3 -I "$HERE/gen_timed.py" "$ROOT/include/GLES2/gl2.h" "$ROOT/include/GLES2/gl2ext.h" \
   "$ROOT/include/EGL/egl.h" "$ROOT/include/EGL/eglext.h" > "$GMO/gm2-timed.h"
 gcc -O1 -g -Wall -std=gnu11 -I"$ROOT/include" -I"$HERE" -I"$GMO" -c "$HERE/shim.c" -o "$GMO/shim.o"
+# the Mali's: with the table that answers its OSAL contract (shim.c GM2_MALI)
+for g in "${GPUS[@]}"; do
+  if [ "$g" = mali ]; then
+    gcc -O1 -g -Wall -std=gnu11 -DGM2_MALI -I"$ROOT/include" -I"$HERE" -I"$GMO" -c "$HERE/shim.c" -o "$GMO/shim-mali.o"
+  fi
+done
 
 # ---------------------------------------------------------------------------
 # Per GPU: the library (the top-level CMake host build: Linux OSAL, the
@@ -243,12 +252,17 @@ done
 for g in "${GPUS[@]}"; do
   B="$OUT/lib-$g"
   echo "glmark2: libyakogl.a for $g ($CARGO_BIN)"
-  cmake -S "$ROOT" -B "$B" -DYAKOGL_OSAL=linux -DYAKOGL_GPU="$g" -DYAKOGL_SHADERC=online \
+  # the Mali: the top-level CMake takes powervr|vivante|v3d only, so its
+  # archive comes from mali/CMakeLists.txt (the same crate and assembly,
+  # MALI_CONFIG's features of tools/check.sh on the Linux OSAL)
+  src="$ROOT" shim="$GMO/shim.o"
+  [ "$g" = mali ] && src="$HERE/mali" shim="$GMO/shim-mali.o"
+  cmake -S "$src" -B "$B" -DYAKOGL_OSAL=linux -DYAKOGL_GPU="$g" -DYAKOGL_SHADERC=online \
     -DYAKOGL_REPORT_ES2=ON -DYAKOGL_CARGO_PROFILE=release -DYAKOGL_CARGO="$CARGO_BIN" > "$B.cmake.log" 2>&1 ||
     { tail -20 "$B.cmake.log"; die "cmake ($g) failed"; }
   cmake --build "$B" --target yakogl_archive -j "$(nproc)" >> "$B.cmake.log" 2>&1 ||
     { tail -30 "$B.cmake.log"; die "building libyakogl.a ($g) failed"; }
-  g++ -o "$OUT/glmark2-host-$g" "$GMO/host_main.o" "$GMO/shim.o" "${gm_objs[@]}" "$B/libyakogl.a" \
+  g++ -o "$OUT/glmark2-host-$g" "$GMO/host_main.o" "$shim" "${gm_objs[@]}" "$B/libyakogl.a" \
     -lm -lpthread -ldl || die "linking glmark2-host-$g failed"
 done
 
@@ -307,12 +321,17 @@ if [ -d "$OUT/logs/vivante" ]; then
   echo
 fi
 
-# Two reports: the PowerVR and the GC7000 in FINDINGS.md (with the shader
+# Three reports: the PowerVR and the GC7000 in FINDINGS.md (with the shader
 # corpus), the V3D in FINDINGS-v3d.md (its run models the Pi 4's carve-out,
-# which the other two do not model for their boards).
-pvr_gc=() v3d=()
+# which the other two do not model for their boards), the Mali in
+# FINDINGS-mali-allscenes.md.
+pvr_gc=() v3d=() mali=()
 for g in "${GPUS[@]}"; do
-  if [ "$g" = v3d ]; then v3d=(v3d); else pvr_gc+=("$g"); fi
+  case "$g" in
+    v3d) v3d=(v3d) ;;
+    mali) mali=(mali) ;;
+    *) pvr_gc+=("$g") ;;
+  esac
 done
 profile=()
 [ "$PROFILE" = 1 ] && profile=(--profile)
@@ -331,5 +350,12 @@ if [ ${#v3d[@]} -gt 0 ]; then
     report --findings "$HERE/FINDINGS-v3d.md" --settings "$OUT/v3d-settings.txt" v3d
   else
     report --settings "$OUT/v3d-settings.txt" v3d
+  fi
+fi
+if [ ${#mali[@]} -gt 0 ]; then
+  if [ "${GM2_WRITE:-1}" = 1 ]; then
+    report --findings "$HERE/FINDINGS-mali-allscenes.md" mali
+  else
+    report mali
   fi
 fi
