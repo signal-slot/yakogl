@@ -545,7 +545,7 @@ Every other test run here passed with the patch applied:
 
 ### Kicks a terrain frame
 
-`tools/hostharness/am62p-terrain/run.sh /home/orion/connected-deps/glmark2-src
+`tools/hostharness/am62p-terrain/run.sh $CONNECTED_DEPS_DIR/glmark2-src
 build/e1-<x> kicks` (glmark2 at `22c527cb`, `GM2_FRAMES=20`, `kicks.py`).
 Each draw is listed as its framebuffer and the kicks since the draw before
 it.
