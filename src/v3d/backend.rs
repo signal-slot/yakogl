@@ -1253,6 +1253,11 @@ struct V3dState {
     /// so it stays pending until that job has run.
     open_alias: u32,
     waits: u32,
+    /// The CPU time inside those waits since init (`v3d_wait_time`), in ns
+    /// of the OSAL's clock; and the waits the clock could not time, which
+    /// have no time in `wait_ns` rather than a time of zero.
+    wait_ns: u64,
+    wait_untimed: u32,
     /// Draws that waited for the job rendering into a texture they sample
     /// (`tex_state_for`), since init, and how many of those named that job
     /// only by its alias (`InFlight::alias`): `v3d_tex_waits`.
@@ -1406,6 +1411,8 @@ impl V3dState {
         kicks: 0,
         open_alias: 0,
         waits: 0,
+        wait_ns: 0,
+        wait_untimed: 0,
         tex_waits: 0,
         tex_waits_alias: 0,
         tilings: 0,
@@ -3058,9 +3065,14 @@ fn wait_job(g: &mut V3dState, f: InFlight) -> i32 {
     let Some(wait) = osal::ops().and_then(|o| o.wait) else {
         return -ENODEV;
     };
+    let t0 = osal::clock_ns();
     // SAFETY: a wait on a fence the OSAL returned.
     let rc = unsafe { wait(f.fence, JOB_TIMEOUT_US) };
     g.waits += 1;
+    match (t0, osal::clock_ns()) {
+        (Some(a), Some(b)) => g.wait_ns += b.saturating_sub(a),
+        _ => g.wait_untimed += 1,
+    }
     if rc != 0 {
         glog_once!("yakogl/v3d: job {} did not complete ({})", f.kick, rc);
         if rc == -EFAULT {
@@ -6361,6 +6373,28 @@ pub unsafe extern "C" fn v3d_counters(kicks: *mut u32, waits: *mut u32) {
         }
         if let Some(w) = waits.as_mut() {
             *w = g.waits;
+        }
+    }
+}
+
+/// The CPU time spent in the waits `v3d_counters` counts, since init, in ns of
+/// the OSAL's clock (OSAL_QUERY_CLOCK_NS); `untimed`: waits the clock could
+/// not time, which are in the count and not in `ns`. While `untimed` is not
+/// zero `ns` is short by those waits and is not a measurement. Either
+/// pointer is null or writable. Counters since init; read differences.
+///
+/// # Safety
+/// Each pointer is null or writable.
+#[no_mangle]
+pub unsafe extern "C" fn v3d_wait_time(ns: *mut u64, untimed: *mut u32) {
+    let g = g();
+    // SAFETY: the caller's contract.
+    unsafe {
+        if let Some(n) = ns.as_mut() {
+            *n = g.wait_ns;
+        }
+        if let Some(u) = untimed.as_mut() {
+            *u = g.wait_untimed;
         }
     }
 }
