@@ -93,6 +93,13 @@ the timestamp.
 | `fw-load` | firmware image problems | only at probe | 6 |
 | `info` | probe-time facts | no | 7 |
 
+`tools/cts/mali-kmsg.py` counts these as `resets`, `timeouts`, `mmu_faults`,
+`fw_faults`, `gpu_faults`, `cs_faults` and `other_panthor` (the rest). The
+`cs_faults` key counts the `CS_FATAL: pid=` and `CS_FAULT: pid=` header lines
+(section 3) and `Failed to extend the tiler heap`; the detail lines carry no
+device name in `dmesg` and are not counted. Its fixture `csfault.txt` is
+synthetic (section 10).
+
 ## 2. Reset: `panthor_device_schedule_reset` and `panthor_device_reset_work`
 
 ### 2.1 What schedules a reset (the cause lines)
@@ -312,8 +319,8 @@ Status of the shapes above after the board fault rehearsal (plan #327 item
   were not copied.
 - **Not yet seen:** the reset shapes (section 2), the CS-fatal / CS-fault
   shapes (section 3) and the MMU-fault shapes (section 4). The rehearsal could
-  not trigger them; their fixtures stay synthetic, built from the v6.18 format
-  strings.
+  not trigger them; their fixtures (`reset.txt`, `mmu.txt`, `csfault.txt`)
+  stay synthetic, built from the v6.18 format strings.
 
 ## 11. Unread and to pin on the board
 

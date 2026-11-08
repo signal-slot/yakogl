@@ -1,0 +1,11 @@
+[  120.000000] panthor fb000000.gpu: [drm] CS_FATAL: pid=4321, comm=deqp-gles2
+CSG slot 1 CS slot: 0
+CS_FATAL.EXCEPTION_TYPE: 0x48 (CS_INHERIT_FAULT)
+CS_FATAL.EXCEPTION_DATA: 0x0
+CS_FATAL_INFO.EXCEPTION_DATA: 0x0
+[  120.000200] panthor fb000000.gpu: [drm] CS_FAULT: pid=4321, comm=deqp-gles2
+CSG slot 1 CS slot: 1
+CS_FAULT.EXCEPTION_TYPE: 0x4a (CS_BUS_FAULT)
+CS_FAULT.EXCEPTION_DATA: 0x0
+CS_FAULT_INFO.EXCEPTION_DATA: 0x0
+[  120.000400] panthor fb000000.gpu: [drm] Failed to extend the tiler heap

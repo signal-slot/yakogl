@@ -1,1 +1,1 @@
-kmsg: resets=2 timeouts=3 mmu_faults=0 fw_faults=0 gpu_faults=0 other_panthor=0 first=panthor fb000000.gpu: [drm] job timeout: pid=1234, comm=deqp-gles2, seqno=77
+kmsg: resets=2 timeouts=3 mmu_faults=0 fw_faults=0 gpu_faults=0 cs_faults=0 other_panthor=0 first=panthor fb000000.gpu: [drm] job timeout: pid=1234, comm=deqp-gles2, seqno=77
