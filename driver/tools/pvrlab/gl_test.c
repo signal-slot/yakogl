@@ -458,6 +458,17 @@
  *               back end takes both divisors (V3D; GC7000UL after V1); a
  *               back end that splits per instance reads gl_InstanceID 0
  *               (refused on the GC, V0). Opt-in, by number
+ * 222 dtpu      the GC7000 texture unit samples the D24S8 depth surface in
+ *               place (docs/notes/gc-depth-sample.md, the board experiment):
+ *               case 177's ramp into a 64x64 depth texture, sampled four
+ *               times over the window: through a decoding shader with the
+ *               CPU resolve (P0), with the surface bound as Mesa's D24X8
+ *               (P1, gc_debug_set_depth_tpu 1) and again with no glFinish
+ *               between the ramp and the sampling (P3), and the raw
+ *               A8R8G8B8 words (P2, knob 2). Check 4, P1 == P0 bit for bit,
+ *               is the verdict; 5, 6 and 7 grade a miss. GC7000 with the
+ *               test knobs; SKIP by name elsewhere. Not in the set (an
+ *               experiment, built for the Armadillo-X2; not run yet)
  * 180 teardown  a 1024x1024 texture sampled, the job flushed and left to
  *               finish unobserved, the texture deleted and one of the same
  *               size made: both read back (red, then green); on the V3D
@@ -8560,7 +8571,7 @@ static const char *const case_names[] = {
 	 * `gl_test: case 65 polyunit: FAIL`, a line the program could not emit.
 	 * A reader grepping for it would have found nothing and concluded the
 	 * case had not run. 63 was still missing when 65/66/67 were added. */
-	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain", [185] = "kindcost", [186] = "fcsplit", [187] = "predarm", [188] = "predif", [189] = "mulone", [190] = "blendonce", [191] = "varyfma", [192] = "predlive", [193] = "offarm", [194] = "offarmn", [195] = "ifbranch", [196] = "occl", [197] = "vtxgrid", [198] = "a2cconst", [199] = "es3trunc", [200] = "intrt", [201] = "usamp", [202] = "blitconv", [203] = "tfcap", [204] = "srgb", [205] = "mappbo", [206] = "es3levels", [207] = "msaazs", [208] = "msaapre", [209] = "varyorder", [210] = "occlacc", [211] = "msaablend", [212] = "ifsel", [213] = "discloop", [214] = "splitkick", [215] = "shadowmap", [216] = "mipchains", [217] = "forcedpr", [218] = "shadowcmp", [219] = "kickpair", [220] = "lodtime", [221] = "instmix",
+	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain", [185] = "kindcost", [186] = "fcsplit", [187] = "predarm", [188] = "predif", [189] = "mulone", [190] = "blendonce", [191] = "varyfma", [192] = "predlive", [193] = "offarm", [194] = "offarmn", [195] = "ifbranch", [196] = "occl", [197] = "vtxgrid", [198] = "a2cconst", [199] = "es3trunc", [200] = "intrt", [201] = "usamp", [202] = "blitconv", [203] = "tfcap", [204] = "srgb", [205] = "mappbo", [206] = "es3levels", [207] = "msaazs", [208] = "msaapre", [209] = "varyorder", [210] = "occlacc", [211] = "msaablend", [212] = "ifsel", [213] = "discloop", [214] = "splitkick", [215] = "shadowmap", [216] = "mipchains", [217] = "forcedpr", [218] = "shadowcmp", [219] = "kickpair", [220] = "lodtime", [221] = "instmix", [222] = "dtpu",
 };
 
 /* ---- case 67: what a framebuffer object does NOT have -----------------------
@@ -19153,6 +19164,311 @@ out:
 	return ok ? 0 : -1;
 }
 
+/* ---- case 222: the GC7000 texture unit samples the D24S8 depth surface (dtpu)
+ *
+ * The board experiment of docs/notes/gc-depth-sample.md ("The board
+ * experiment that decides the verdict"). glmark2's shadow and refract sample
+ * a depth texture a kick rendered; on the GC7000 that depth reaches the
+ * texture unit through a CPU resolve of the D24S8 surface behind a glFinish
+ * (vivante/ds_cache.rs resolve_depth), once a frame. Mesa's etnaviv samples
+ * such a texture in place as TEXTURE_FORMAT_D24X8 (0x11), with no copy;
+ * whether this part's TPU reads the back end's row-linear surface that way
+ * is what this case measures. GC7000 with the test knobs only:
+ * gc_debug_set_depth_tpu (vivante/depth_sample.rs) switches what the
+ * sampling draw's descriptor points at: 0 today's CPU resolve (the texels),
+ * 1 the surface as D24X8, 2 the surface as A8R8G8B8 with the identity
+ * swizzle (the word's bytes as they are). SKIP by name elsewhere.
+ *
+ * A 64x64 GL_DEPTH_COMPONENT / GL_UNSIGNED_INT texture (depth_target_format)
+ * alone in an FBO, NEAREST, CLAMP_TO_EDGE: one texel is one window pixel.
+ * Each pass clears the depth to 1.0 and draws case 177's ramp (zonly_ramp,
+ * depth LESS), whose measured words are depth n / 128 at GL pixel (x, y),
+ * n = x + y + 1 in 1..127 (ds_cache.rs resolve_depth: gl_test 169 on the
+ * i.MX8MP, 2026-09-30), then samples the texture over the window and reads
+ * the window back:
+ *   P0  knob 0, glFinish after the ramp, the decoding shader below: the
+ *       reference, today's CPU resolve of the words;
+ *   P1  knob 1, the same: the D24X8 view;
+ *   P2  knob 2, the plain texture shader: the raw bytes, (D1, D0, S, D2) in
+ *       (R, G, B, A) for the little-endian word D2 D1 D0 S;
+ *   P3  knob 1, the ramp with every z raised by 0.5 (depth + 0.25; the part
+ *       past the far plane is clipped and keeps the clear, 1.0) and NO
+ *       glFinish before the sampling draw: glmark2's frame, the depth
+ *       cache's writes against the texture cache.
+ * The decoding shader (tools/shaders/gltest/dtpu_decode_fs.frag) rebuilds the
+ * 24-bit depth word from the sampled .r:
+ * k = floor(r * 16777215 + 0.5), written as (k >> 16, k >> 8 & 255,
+ * k & 255, 255) / 255, so a pixel's kd = R * 65536 + G * 256 + B is the
+ * word within 2 (two fp32 roundings near 2^24). The pixel engine's word for
+ * n is n * 2^17 or n * 2^17 - 1 (16777215 * n / 128, rounded either way;
+ * the 2026-09-30 words were not kept per bit, so neither is assumed).
+ *
+ * Checks (the CASE record is the first failing one: check, got, want; a
+ * pixel check's got and want are top-down index << 20 | its 24-bit value
+ * >> 4, check 5's index << 16 | value >> 8; 0 and 0 when every pixel passed):
+ *   1 the three programs linked (bit 0 the sampler, 1 the ramp, 2 the decoder)
+ *   2 no GL error and the framebuffer complete (got: the error, else the
+ *     status; GL_FRAMEBUFFER_UNSUPPORTED is a SKIP by name, as case 177)
+ *   3 P0: every pixel |kd - n * 2^17| <= 3 (the reference's sanity)
+ *   4 P1 == P0 at every pixel, bit for bit: THE VERDICT for Mesa's route.
+ *     The same shader decoded both, so equal pixels mean the TPU's D24X8
+ *     returned the CPU resolve's value at every texel
+ *   5 P1 within 2^8 of P0 everywhere (the top 16 bits agree: fewer than 24
+ *     bits, still enough for glmark2's 0.1505 bias, not for dEQP)
+ *   6 P2: A * 65536 + R * 256 + G is n * 2^17 or n * 2^17 - 1 at every pixel
+ *     and within 2 of P0's kd: the bytes are addressable through the LINEAR
+ *     descriptor, in the order the 8888 fallback assumes
+ *   7 P3: n' = n + 32: |kd - n' * 2^17| <= 3 where n' < 128, kd within 3 of
+ *     0xffffff where n' >= 128
+ *   8 no GL error after the passes
+ * The note's verdict table reads checks 4, 5, 6 and 7. Not in the
+ * regression set (an experiment); run it by number from a sweep image
+ * (tools/cts/imx8mp-gltest-build.sh, SEL = 222 - the sweep's first case).
+ * ------------------------------------------------------------------------- */
+#if defined(GL_TEST_VIVANTE) && defined(GL_TEST_KNOBS)
+/* the switch (vivante/depth_sample.rs, a test knob): returns the previous value */
+extern int gc_debug_set_depth_tpu(int mode);
+
+/* the four read-backs P0..P3, kept whole for the comparisons (64 KiB) */
+static uint32_t s_dtpu_px[4][TW * TH];
+
+/* n of top-down pixel i: x + y + 1 at GL pixel (x, y), y from the bottom */
+static uint32_t dtpu_n(uint32_t i)
+{
+	return i % TW + (TH - 1 - i / TW) + 1;
+}
+
+/* the word the decoding shader wrote into a pixel: R * 65536 + G * 256 + B */
+static uint32_t dtpu_kd(uint32_t px)
+{
+	return (px & 0xffu) * 65536u + ((px >> 8) & 0xffu) * 256u + ((px >> 16) & 0xffu);
+}
+
+/* the depth of a raw-view pixel, (R, G, B, A) = (D1, D0, S, D2): A * 65536 + R * 256 + G */
+static uint32_t dtpu_raw(uint32_t px)
+{
+	return (px >> 24) * 65536u + (px & 0xffu) * 256u + ((px >> 8) & 0xffu);
+}
+
+static uint32_t dtpu_absdiff(uint32_t a, uint32_t b)
+{
+	return a > b ? a - b : b - a;
+}
+
+/* case 177's ramp (zonly_ramp) with every z raised by dz */
+static void dtpu_ramp(GLuint prog, float dz)
+{
+	float v[18] = { -1, -1, -1, 1, -1, 0, -1, 1, 0, -1, 1, 0, 1, -1, 0, 1, 1, 1 };
+
+	for (int i = 2; i < 18; i += 3)
+		v[i] += dz;
+	glUseProgram(prog);
+	glUniform4f(glGetUniformLocation(prog, "u_color"), 0.0f, 0.0f, 1.0f, 1.0f);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 12, v);
+	glEnableVertexAttribArray(0);
+	glDisableVertexAttribArray(1);
+	glDrawArrays(GL_TRIANGLES, 0, 6);
+	glDisableVertexAttribArray(0);
+}
+
+/* One pass: the depth of `fbo` cleared to 1.0 and the ramp drawn into it
+ * (dz on z), glFinish when asked, the knob set to `mode`, the texture
+ * sampled over the window with `sprog`, glFinish, and the window read back
+ * into `dst`. The knob is back at 0 when this returns. */
+static void dtpu_pass(GLuint fbo, GLuint dprog, GLuint sprog, GLuint tex, float dz, bool finish, int mode,
+		      uint32_t *dst)
+{
+	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+	glViewport(0, 0, TW, TH);
+	glClearDepthf(1.0f);
+	glDepthMask(GL_TRUE);
+	glClear(GL_DEPTH_BUFFER_BIT);
+	glEnable(GL_DEPTH_TEST);
+	glDepthFunc(GL_LESS);
+	dtpu_ramp(dprog, dz);
+	glDisable(GL_DEPTH_TEST);
+	if (finish)
+		glFinish();
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glViewport(0, 0, TW, TH);
+	glClearColor(0, 0, 0, 1);
+	glClear(GL_COLOR_BUFFER_BIT);
+	gc_debug_set_depth_tpu(mode);
+	dst_sample(sprog, tex);
+	glFinish();
+	gc_debug_set_depth_tpu(0);
+	read_topdown();
+	memcpy(dst, s_px, sizeof(s_px));
+}
+
+/* Every decoded pixel of `px` within 3 of the ramp's word for n + offset
+ * (0xffffff where n + offset >= 128, the clear); the first miss is the
+ * record's got and want. */
+static bool dtpu_expect_ramp(const char *what, const uint32_t *px, uint32_t offset)
+{
+	uint32_t bad = 0, got = 0, want = 0;
+
+	for (uint32_t i = 0; i < TW * TH; i++) {
+		uint32_t n = dtpu_n(i) + offset;
+		uint32_t k = n < 128 ? n << 17 : 0xffffffu;
+		uint32_t kd = dtpu_kd(px[i]);
+
+		if (dtpu_absdiff(kd, k) > 3 && bad++ == 0) {
+			got = i << 20 | kd >> 4;
+			want = i << 20 | k >> 4;
+		}
+	}
+	pr_info("gl_test:   %s: %u of %u pixels off the ramp\n", what, bad, TW * TH);
+	return expect_u32(what, got, want);
+}
+
+/* `a` == `b` at every pixel, bit for bit (check 4); the first difference is
+ * the record's got (a's decoded word) and want (b's). */
+static bool dtpu_expect_equal(const char *what, const uint32_t *a, const uint32_t *b)
+{
+	uint32_t bad = 0, got = 0, want = 0, first = 0;
+
+	for (uint32_t i = 0; i < TW * TH; i++) {
+		if (a[i] != b[i] && bad++ == 0) {
+			first = i;
+			got = i << 20 | dtpu_kd(a[i]) >> 4;
+			want = i << 20 | dtpu_kd(b[i]) >> 4;
+		}
+	}
+	pr_info("gl_test:   %s: %u of %u pixels differ", what, bad, TW * TH);
+	if (bad)
+		pr_info(", first top-down (%u,%u) = 0x%08x want 0x%08x (n %u)", first % TW, first / TW, a[first],
+			b[first], dtpu_n(first));
+	pr_info("\n");
+	return expect_u32(what, got, want);
+}
+
+/* `a`'s decoded words within 2^8 of `b`'s everywhere (check 5): the top 16 bits agree. */
+static bool dtpu_expect_near(const char *what, const uint32_t *a, const uint32_t *b)
+{
+	uint32_t bad = 0, got = 0, want = 0;
+
+	for (uint32_t i = 0; i < TW * TH; i++) {
+		uint32_t ka = dtpu_kd(a[i]), kb = dtpu_kd(b[i]);
+
+		if (dtpu_absdiff(ka, kb) >= 256 && bad++ == 0) {
+			got = i << 16 | ka >> 8;
+			want = i << 16 | kb >> 8;
+		}
+	}
+	pr_info("gl_test:   %s: %u of %u pixels more than 255 apart\n", what, bad, TW * TH);
+	return expect_u32(what, got, want);
+}
+
+/* The raw view's words (check 6): n * 2^17 or n * 2^17 - 1 at every pixel,
+ * within 2 of the reference's decoded word. Logs the words and stencil
+ * bytes at three pixels, GL (0, 0), (31, 32) and (63, 63). */
+static bool dtpu_expect_raw(const char *what, const uint32_t *raw, const uint32_t *ref)
+{
+	static const uint32_t at[3] = { (TH - 1) * TW, (TH - 1 - 32) * TW + 31, 63 };
+	uint32_t bad = 0, got = 0, want = 0;
+
+	for (uint32_t i = 0; i < TW * TH; i++) {
+		uint32_t n = dtpu_n(i), k = n << 17, k2 = dtpu_raw(raw[i]);
+		bool ok = (k2 == k || k2 == k - 1) && dtpu_absdiff(k2, dtpu_kd(ref[i])) <= 2;
+
+		if (!ok && bad++ == 0) {
+			got = i << 20 | k2 >> 4;
+			want = i << 20 | k >> 4;
+		}
+	}
+	for (int j = 0; j < 3; j++)
+		pr_info("gl_test:   %s: GL (%u,%u) n %u: word 0x%06x, stencil 0x%02x, reference 0x%06x\n", what,
+			at[j] % TW, TH - 1 - at[j] / TW, dtpu_n(at[j]), dtpu_raw(raw[at[j]]), (raw[at[j]] >> 16) & 0xffu,
+			dtpu_kd(ref[at[j]]));
+	pr_info("gl_test:   %s: %u of %u pixels off\n", what, bad, TW * TH);
+	return expect_u32(what, got, want);
+}
+
+static int case_dtpu(void)
+{
+	GLuint tprog, dprog, cprog, d = 0, fbo = 0;
+	GLenum status, err;
+	bool es2, ok = true, skip = false;
+
+	if (!zonly_supported(222, "dtpu", &es2))
+		return -3;
+	free_all_objects();
+	while (glGetError() != GL_NO_ERROR)
+		;
+	tprog = link_program(gl_test_uv_vs_src, gl_test_texture_fs_src);
+	dprog = link_program(gl_test_passthrough_vs_src, gl_test_uniform_fs_src);
+	cprog = link_program(gl_test_uv_vs_src, gl_test_dtpu_decode_fs_src);
+	/* check 1: got = which linked (bit 0 the sampler, 1 the ramp, 2 the decoder) */
+	if (!expect_u32("dtpu: programs linked", (tprog ? 1u : 0u) | (dprog ? 2u : 0u) | (cprog ? 4u : 0u), 7u))
+		return -1;
+	glDisable(GL_STENCIL_TEST);
+	glDisable(GL_CULL_FACE);
+
+	/* 1. the depth texture alone in a framebuffer, one texel a window pixel */
+	glGenTextures(1, &d);
+	glBindTexture(GL_TEXTURE_2D, d);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexImage2D(GL_TEXTURE_2D, 0, depth_target_format(GL_DEPTH_COMPONENT, GL_UNSIGNED_INT), TW, TH, 0,
+		     GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, NULL);
+	glBindTexture(GL_TEXTURE_2D, 0);
+	glGenFramebuffers(1, &fbo);
+	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, d, 0);
+	status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+	err = glGetError();
+	if (err == GL_NO_ERROR && status == GL_FRAMEBUFFER_UNSUPPORTED) {
+		pr_info("gl_test: case 222 dtpu: SKIP (GL_FRAMEBUFFER_UNSUPPORTED: this GPU renders only "
+			"with a colour buffer)\n");
+		skip = true;
+		goto out;
+	}
+	/* check 2: got = the GL error, else the status */
+	if (!expect_u32("dtpu: setup", err != GL_NO_ERROR ? err : status, GL_FRAMEBUFFER_COMPLETE)) {
+		ok = false;
+		goto out;
+	}
+
+	/* 2. the four passes and their checks */
+	dtpu_pass(fbo, dprog, cprog, d, 0.0f, true, 0, s_dtpu_px[0]);
+	ok &= dtpu_expect_ramp("dtpu: P0 CPU resolve ramp", s_dtpu_px[0], 0);       /* check 3 */
+	dtpu_pass(fbo, dprog, cprog, d, 0.0f, true, 1, s_dtpu_px[1]);
+	ok &= dtpu_expect_equal("dtpu: P1 D24X8 == P0", s_dtpu_px[1], s_dtpu_px[0]); /* check 4 */
+	ok &= dtpu_expect_near("dtpu: P1 top 16 bits", s_dtpu_px[1], s_dtpu_px[0]);  /* check 5 */
+	dtpu_pass(fbo, dprog, tprog, d, 0.0f, true, 2, s_dtpu_px[2]);
+	ok &= dtpu_expect_raw("dtpu: P2 raw words", s_dtpu_px[2], s_dtpu_px[0]);      /* check 6 */
+	dtpu_pass(fbo, dprog, cprog, d, 0.5f, false, 1, s_dtpu_px[3]);
+	ok &= dtpu_expect_ramp("dtpu: P3 +0.25 no finish", s_dtpu_px[3], 32);       /* check 7 */
+	ok &= expect_u32("dtpu: error after the passes", glGetError(), GL_NO_ERROR); /* check 8 */
+out:
+	gc_debug_set_depth_tpu(0);
+	glDepthFunc(GL_LESS);
+	glViewport(0, 0, TW, TH);
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glBindTexture(GL_TEXTURE_2D, 0);
+	glDeleteFramebuffers(1, &fbo);
+	glDeleteTextures(1, &d);
+	glUseProgram(0);
+	glDeleteProgram(tprog);
+	glDeleteProgram(dprog);
+	glDeleteProgram(cprog);
+	if (skip)
+		return -3;
+	return ok ? 0 : -1;
+}
+#else
+static int case_dtpu(void)
+{
+	pr_info("gl_test: case 222 dtpu: SKIP (the GC7000's depth-sampling switch, gc_debug_set_depth_tpu, "
+		"is not in this build)\n");
+	return -3;
+}
+#endif
+
 /* ---- case 200: an integer render target, drawn and read back (intrt) -----
  *
  * ES 3.0's integer colour buffers on the PowerVR (docs/es3/pvr-formats.md,
@@ -23586,6 +23902,11 @@ static int run_case(int c, int pretransform, int debug, int *ended)
 		break;
 	case 220: rc = case_lodtime(); break;
 	case 221: rc = case_instmix(); break;
+	case 222:
+		rc = case_dtpu();
+		if (rc == -3)
+			return -3; /* skipped by name: not a GC7000 build with the test knobs, or as case 177 */
+		break;
 	case 216:
 		rc = case_mipchains();
 		if (rc == -3)

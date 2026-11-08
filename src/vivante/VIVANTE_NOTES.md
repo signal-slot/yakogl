@@ -239,9 +239,12 @@ Zephyr image's features) and requires that it defines none.
 select): `gc_debug_msaa` with `gc_debug_set_msaa` and the scratch probes
 `gc_debug_msaa_scratch`, `_map` and `_zero` (case 16, issue #4);
 `gc_debug_flip_experiment` with its setter (case 88, the flip study);
-`gc_debug_narrow_la` with its setter (case 132's RGBA8 arm). Without the
-feature each reads as its default (MSAA and the flip study off, the narrow
-store on) and none of the 9 symbols is in the archive.
+`gc_debug_narrow_la` with its setter (case 132's RGBA8 arm);
+`gc_debug_depth_tpu` with its setter `gc_debug_set_depth_tpu` (case 222: the
+texture unit sampling the D24S8 depth surface in place, `depth_sample.rs`,
+docs/notes/gc-depth-sample.md). Without the feature each reads as its
+default (MSAA, the flip study and the depth views off, the narrow store on)
+and none of the 11 symbols is in the archive.
 
 **What used to be a switch is the design now:**
 

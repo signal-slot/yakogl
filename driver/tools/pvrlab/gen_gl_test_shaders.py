@@ -255,6 +255,10 @@ ENTRIES = [('gl_test_vs_src', 'color_uv.vert'), ('gl_test_fs_src', 'color_uv.fra
                 ('gl_test_dep_vs_src', 'gltest/position_only2.vert'),
                 ('gl_test_dsk_fs_src', 'gltest/uniform_color.frag'),
                 ('gl_test_dsk_vs_src', 'gltest/position_only.vert'),
+                ('gl_test_dtpu_decode_fs_src', 'gltest/dtpu_decode_fs.frag',
+                 'gl_test 222 dtpu: the sampled depth rebuilt as its 24-bit word, one byte a\n'
+                 ' * channel, so the CPU resolve and the texture unit\'s D24X8 view are compared\n'
+                 ' * bit for bit.'),
                 ('gl_test_f1_edge_fs_src', 'gltest/f1_edge_fs.frag'),
                 ('gl_test_f1_fs_src', 'gltest/f1_fs.frag'),
                 ('gl_test_f1_mid_fs_src', 'gltest/f1_mid_fs.frag'),

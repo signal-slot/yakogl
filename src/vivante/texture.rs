@@ -26,6 +26,7 @@ use crate::shaderc::{ShcShader, SHC_UNIFORM_NO_BLOCK};
 use crate::util::{Global, ENOMEM};
 
 use super::cmd::GcCmd;
+use super::depth_sample::DepthView;
 use super::regs::*;
 use super::state::*;
 
@@ -302,12 +303,16 @@ pub fn format_words(t: &GlesTextureBind, tiled: bool) -> [u32; 3] {
 /// Build one descriptor in the frame arena. Returns its GPU address, or 0.
 /// `plane` 1 is the companion of a 128-bit binding: the same words, its
 /// level addresses each the level's second plane (Mesa's companion,
-/// etnaviv_texture_desc.c:404-415); 0 is every other descriptor.
-fn build_descriptor(f: &mut GcFrame, t: &GlesTextureBind, plane: u32) -> u64 {
+/// etnaviv_texture_desc.c:404-415); 0 is every other descriptor. `view`
+/// is the depth surface a binding with a `depth_id` samples in place
+/// (`depth_sample::descriptor`, gl_test 222's experiment; `None` for every
+/// other binding): its words replace the texture's own.
+fn build_descriptor(f: &mut GcFrame, t: &GlesTextureBind, plane: u32, view: Option<&DepthView>) -> u64 {
     let fmt = wide128_plane_format(t.format).unwrap_or_else(|| gc_texfmt(t.format));
     /* a mipmapped layered texture, and one with 64-bit texels, is sampled
-     * from its tiled copy (tiled_copy.rs) */
-    let copy = super::tiled_copy::lookup(t, super::backend::gc_kick_id());
+     * from its tiled copy (tiled_copy.rs); the depth surface is read where
+     * it is, linear, in either stage */
+    let copy = if view.is_some() { None } else { super::tiled_copy::lookup(t, super::backend::gc_kick_id()) };
     let levels = t.mip_levels.max(1) as usize;
     /* A cube map, a 2D array and a 3D texture are one stack of layers here and
      * the texture unit walks it: the type says which, SLICE is the step from
@@ -360,6 +365,25 @@ fn build_descriptor(f: &mut GcFrame, t: &GlesTextureBind, plane: u32) -> u64 {
     // size, so it holds this many dwords and nothing else refers to them.
     let desc: &mut [u32] = unsafe { core::slice::from_raw_parts_mut(cpu as *mut u32, GC_TEXDESC_BYTES / 4) };
     desc.fill(0);
+
+    if let Some(v) = view {
+        /* the depth surface in place (depth_sample.rs): its format and
+         * swizzle, LINEAR at the surface's row stride, the texture's size,
+         * one level whose LOD 0 is the surface's first pixel word */
+        desc[GC_TEXDESC_CONFIG0 as usize / 4] = v.words[0];
+        desc[GC_TEXDESC_CONFIG1 as usize / 4] = v.words[1];
+        desc[GC_TEXDESC_CONFIG2 as usize / 4] = v.words[2];
+        desc[GC_TEXDESC_LINEAR_STRIDE as usize / 4] = v.stride;
+        desc[GC_TEXDESC_SIZE as usize / 4] = texdesc_size_width(t.width) | texdesc_size_height(t.height);
+        desc[GC_TEXDESC_LOG_SIZE_EXT as usize / 4] =
+            texdesc_log_width(log2_fixp88(t.width)) | texdesc_log_height(log2_fixp88(t.height));
+        desc[GC_TEXDESC_BASELOD as usize / 4] = texdesc_baselod_base(0) | texdesc_baselod_max(0);
+        desc[GC_TEXDESC_VOLUME as usize / 4] = log2_fixp88(1);
+        desc[GC_TEXDESC_SLICE as usize / 4] = v.stride.saturating_mul(t.height);
+        desc[GC_TEXDESC_3D_CONFIG as usize / 4] = texdesc_3d_depth(1);
+        desc[texdesc_lod_addr(0) as usize / 4] = v.lod0 as u32;
+        return gpu;
+    }
 
     let tiled = fmt.compressed || copy.is_some();
     let [config0, config1, config2] = format_words(t, tiled);
@@ -524,13 +548,29 @@ fn emit_slot(f: &mut GcFrame, slot: u32, t: &GlesTextureBind, companion: Option<
     } else {
         t
     };
-    let desc_gpu = build_descriptor(f, t, 0);
+    /* A binding that samples rendered depth from the depth surface itself
+     * (depth_sample.rs; `depth_id` is set only under gl_test 222's switch).
+     * The GL core left its texels stale on the strength of the answer, so
+     * a surface that is gone fails the draw by name: nothing stale is
+     * sampled. */
+    let depth = match super::depth_sample::descriptor(t) {
+        Ok(d) => d,
+        Err(rc) => {
+            crate::glog_once!(
+                "vivante: unit {}'s depth texture {:#x} has no live depth surface to sample; the draw is refused",
+                t.unit,
+                t.depth_id
+            );
+            return rc;
+        }
+    };
+    let desc_gpu = build_descriptor(f, t, 0, depth.as_ref());
     /* The companion: plane 1's descriptor where there are planes; the black
      * texel's where a reserved companion has none, so the slot never keeps
      * the previous draw's descriptor. Built straight after plane 0's, as
      * Mesa allocates the two together (etnaviv_texture_desc.c:378-379). */
     let companion_gpu = match companion {
-        Some(_) if planes => build_descriptor(f, t, 1),
+        Some(_) if planes => build_descriptor(f, t, 1, None),
         Some(_) => desc_gpu,
         None => 1, /* nothing to build: never 0 */
     };
@@ -585,7 +625,7 @@ fn emit_slot(f: &mut GcFrame, slot: u32, t: &GlesTextureBind, companion: Option<
         | samp_mip(mip)
         | samp_mag(if t.linear_filter != 0 { GC_TEX_FILTER_LINEAR } else { GC_TEX_FILTER_NEAREST })
         | GC_SAMP_CTRL0_UNK21
-        | if int_filter_wanted(t) { GC_SAMP_INT_FILTER } else { 0 };
+        | if depth.as_ref().map_or_else(|| int_filter_wanted(t), |v| v.int_filter) { GC_SAMP_INT_FILTER } else { 0 };
     write_sampler(c, slot, samp_ctrl0, samp_ctrl1(t), desc_gpu as u32);
     /* the companion takes the same sampler state, written right after its
      * binding's, as Mesa writes it (etnaviv_texture_desc.c:499-513) */
@@ -659,8 +699,9 @@ fn emit_invalidates(c: &mut GcCmd) {
     }
 }
 
-/// `-ENOMEM` when a descriptor did not fit; the draw is then refused rather
-/// than emitted without its texture.
+/// `-ENOMEM` when a descriptor did not fit, `-ENOTSUP` when a binding's
+/// depth surface is gone (`depth_sample::descriptor`); the draw is then
+/// refused rather than emitted without its texture.
 pub fn emit_textures(f: &mut GcFrame, d: &GcDraw) -> i32 {
     // SAFETY: single-threaded by contract; nothing else holds INVAL_PENDING.
     unsafe { *INVAL_PENDING.get() = 0 };
@@ -708,8 +749,9 @@ fn emit_textures_inner(f: &mut GcFrame, d: &GcDraw) -> i32 {
             } else {
                 None
             };
-            if emit_slot(f, base + t.unit as u32, t, companion) != 0 {
-                return -ENOMEM;
+            let rc = emit_slot(f, base + t.unit as u32, t, companion);
+            if rc != 0 {
+                return rc;
             }
         }
     }
@@ -727,8 +769,9 @@ fn emit_textures_inner(f: &mut GcFrame, d: &GcDraw) -> i32 {
             if bound.iter().any(|t| t.unit == binding) || binding as usize >= GC_MAX_SAMPLERS {
                 continue;
             }
-            if emit_slot(f, base + binding as u32, &GlesTextureBind { unit: binding, ..black }, None) != 0 {
-                return -ENOMEM;
+            let rc = emit_slot(f, base + binding as u32, &GlesTextureBind { unit: binding, ..black }, None);
+            if rc != 0 {
+                return rc;
             }
         }
     }

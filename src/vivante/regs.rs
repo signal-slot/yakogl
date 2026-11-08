@@ -893,6 +893,12 @@ pub const GC_TEX_FORMAT_A8B8G8R8: u32 = 0x09;
 pub const GC_TEX_FORMAT_X8B8G8R8: u32 = 0x0a;
 /// Mesa X:54, F:114
 pub const GC_TEX_FORMAT_R5G6B5: u32 = 0x0b;
+/// The depth view of a Z24 surface: Mesa samples a rendered
+/// `X8Z24_UNORM` or `S8_UINT_Z24_UNORM` texture in place with it, the
+/// 24-bit depth in X (etnaviv_format.c:179-180; docs/notes/gc-depth-sample.md).
+/// Written by `depth_sample.rs` alone, under gl_test 222's switch.
+/// Mesa X:60, F:179
+pub const GC_TEX_FORMAT_D24X8: u32 = 0x11;
 /// R9G9B9E5_FLOAT (Mesa etnaviv_format.c:186): a CONFIG0 format, not an
 /// extended one.
 /// Mesa X:64, F:186

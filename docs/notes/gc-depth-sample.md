@@ -300,6 +300,27 @@ LINEAR, NEAREST, CLAMP_TO_EDGE, LOD 0 = surface + guard,
 `LINEAR_STRIDE` = surface stride. The knob is the only code; it is not in the
 product archive (the `tools/check.sh` row "no test knob in the artefact").
 
+**[2026-11-08, item gt-depth-tpu: built, not run.]** The case is **gl_test
+222 `dtpu`** (`driver/tools/pvrlab/gl_test.c`, `driver/tools/pvrlab/README.md`
+"Case 222"). The switch is `src/vivante/depth_sample.rs`: `gc_debug_set_depth_tpu`
+and the getter `gc_debug_depth_tpu` (both in `tools/check.sh`'s
+`KNOB_VIVANTE_SYMBOLS`), `gc_depth_sampled` as the GC7000 arm of
+`backend::samples_rendered_depth`, and `descriptor`, which `texture.rs`
+`build_descriptor` writes in place of the texture's own words when the
+binding carries `depth_id`; a surface that is gone fails the draw with
+`-ENOTSUP`, named. One departure from the paragraph above: route 2's swizzle
+is R, R, R, 1 only under GL_OES_depth_texture (`depth_luminance`); on the ES
+3.0 context the images run (`CONFIG_YAKOGL_REPORT_ES2=n`) it is **R, 0, 0, 1**,
+the (d, 0, 0, 1) of point 6, so nothing reads what the TPU puts in Y, Z, W.
+The host test `tests/gc_depth_sample.rs` is section (d)'s steps 2, 3 and 6
+(the answer, the descriptor's every field against the table, no wait and no
+CPU read of the surface under either view, the CPU read under mode 0); step 4
+has no model (route 2) and step 5's recycled surface is tested at the
+`descriptor` level (`-ENOTSUP`). Checks 1-7 below are the case's, plus a
+check 8, no GL error after the passes. The X2 image is a sweep from case 177
+(`IMX8MP_BOARD=x2 tools/cts/imx8mp-gltest-build.sh dtpu-<commit> 177`,
+`SEL=45` runs 222 alone); a later board item runs it.
+
 Steps, at the window size `TW` = `TH` = 64 (`gl_test.c:956-957`), so one
 texel is one pixel:
 

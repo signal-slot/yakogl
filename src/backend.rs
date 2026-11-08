@@ -1860,9 +1860,12 @@ pub fn narrow_la_texels() -> bool {
 /// `id` holds stored depth of that size, single-sampled. The PowerVR's
 /// (`pvr_depth_sampled`): yes when the buffer owned by `id` holds depth a
 /// submitted kick stored, single-sampled, at that size; the TPU reads the
-/// ISP's packed D24S8 as X8U24 (docs/notes/pvr-depth-sample.md). The GC7000
-/// and the Mali keep the CPU resolve (their texture units are not known to
-/// read their depth layouts, `gl::texture::resolve_depth`). Not an entry of
+/// ISP's packed D24S8 as X8U24 (docs/notes/pvr-depth-sample.md). The
+/// GC7000's (`vivante::depth_sample::gc_depth_sampled`) is no in every GL
+/// use, and yes only under gl_test 222's switch, the board experiment that
+/// asks whether its texture unit reads the row-linear D24S8 surface as
+/// Mesa's D24X8 (docs/notes/gc-depth-sample.md); until then it and the Mali
+/// keep the CPU resolve (`gl::texture::resolve_depth`). Not an entry of
 /// the table: the backends with an answer are named here, as
 /// `DEPTH_ONLY_TARGETS` and `narrow_la_texels` name theirs, and the host
 /// tests' mock tables (`testutil`) keep the resolve. Each answers only
@@ -1879,7 +1882,11 @@ pub fn samples_rendered_depth(id: u32, w: u32, h: u32) -> bool {
     {
         crate::pvr::backend::pvr_depth_sampled(id, w, h)
     }
-    #[cfg(not(any(feature = "gpu-v3d", feature = "gpu-powervr")))]
+    #[cfg(feature = "gpu-vivante")]
+    {
+        crate::vivante::depth_sample::gc_depth_sampled(id, w, h)
+    }
+    #[cfg(not(any(feature = "gpu-v3d", feature = "gpu-powervr", feature = "gpu-vivante")))]
     {
         let _ = (id, w, h);
         false

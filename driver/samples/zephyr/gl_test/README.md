@@ -78,7 +78,8 @@ The AM62P and i.MX8MP images select `CONFIG_YAKOGL_TEST_KNOBS` (`GL_TEST_KNOBS`)
 library's `test-knobs` feature: the GC7000 switches and probes the suite sets
 to run an experiment's arms (`gc_debug_set_msaa` and the 4x scratch probes
 for case 16, `gc_debug_set_narrow_la` for case 132's RGBA8 arm,
-`gc_debug_set_flip_experiment` for case 88). gl_test.c calls them only under
+`gc_debug_set_flip_experiment` for case 88, `gc_debug_set_depth_tpu` for
+case 222's views of the depth surface). gl_test.c calls them only under
 that define, and a product image has none of them (`tools/check.sh`, "no test
 knob in the artefact").
 

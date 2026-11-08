@@ -614,6 +614,20 @@ pub unsafe fn resolve_depth(
     0
 }
 
+/// The surface that holds depth object `id`'s plane Live at scale 1, for
+/// the texture unit to sample in place (`depth_sample`): the GPU address of
+/// its first pixel word (`guard` bytes into the allocation, where
+/// [`resolve_depth`] reads), its row stride in bytes and its rows. `None`
+/// when nothing holds the plane Live: a whole clear's value only (no words
+/// behind it, here or parked), or a multisampled surface. Pending kicks are
+/// not asked about: a draw that samples the surface is ordered after them
+/// in the same ring, and only a CPU read needs to wait.
+pub fn live_depth_surface(id: u32, guard: usize) -> Option<(u64, u32, u32)> {
+    let mine = |k: Option<PlaneKey>| k.is_some_and(|k| k.id == id && k.scale == 1 && k.plane == DEPTH as u8);
+    let e = cache().entries.iter().flatten().find(|e| mine(e.key.plane(DEPTH)) && e.planes[DEPTH].is_live())?;
+    Some((e.mem.gpu + guard as u64, e.stride, e.rows))
+}
+
 /// Keep the clear values of a surface that is let go.
 fn park(parked: &mut Parked<PlaneKey, Plane, PARKED>, e: &Surface) {
     for p in [DEPTH, STENCIL] {

@@ -236,14 +236,14 @@ parts! {
     the_compilers_stack_by_phase_shaders_es300: "tools/shaders/es300", 43;
     the_compilers_stack_by_phase_shaders_femtovg: "tools/shaders/femtovg", 36;
     the_compilers_stack_by_phase_shaders_gl_test_es100: "tools/shaders/gl_test_es100", 14;
-    the_compilers_stack_by_phase_shaders_gltest: "tools/shaders/gltest", 63;
+    the_compilers_stack_by_phase_shaders_gltest: "tools/shaders/gltest", 64;
     the_compilers_stack_by_phase_shaders_internal: "tools/shaders/internal", 9;
     the_compilers_stack_by_phase_shaders_offarm: "tools/shaders/offarm", 13;
     the_compilers_stack_by_phase_adversarial: "adversarial", 10;
 }
 /* Measured 2026-10-24, the sum of the parts (1359 / 1363 while the Qt
  * shaders were in the corpus and the tables, until #1509). */
-const TOTAL: usize = if cfg!(feature = "gpu-vivante") { 568 } else { 447 };
+const TOTAL: usize = if cfg!(feature = "gpu-vivante") { 569 } else { 448 };
 
 /// The parts together are the whole corpus: every source is in exactly one
 /// part (`corpus` refuses a directory no part names), each part holds the

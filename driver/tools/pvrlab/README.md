@@ -150,3 +150,28 @@ only, the GL core draws instance by instance and `gl_InstanceID` reads 0 in each
 draw: the GC refuses the draw (V0, a GL error or a MISMATCH on every instance but
 0), or a back end that does not refuse draws wrong. Case 141 (`es3instdiv`) is
 the divisor-2 case on its own.
+
+## Case 222 (`dtpu`): the GC7000 texture unit samples the D24S8 depth surface
+
+The board experiment of `docs/notes/gc-depth-sample.md` ("The board experiment
+that decides the verdict"): can the GC7000UL's texture unit read the pixel
+engine's row-linear D24S8 depth surface in place, as Mesa's etnaviv samples a
+depth texture (`TEXTURE_FORMAT_D24X8`), instead of the CPU resolve glmark2's
+shadow and refract pay once a frame? Case 177's depth ramp goes into a 64x64
+depth texture and is sampled over the window four times (P0..P3), the sampling
+draw's descriptor switched by the test knob `gc_debug_set_depth_tpu`
+(`src/vivante/depth_sample.rs`; 0 the CPU resolve, 1 the surface as D24X8, 2
+the raw A8R8G8B8 words). Every pixel is compared; the checks and the expected
+values are in the comment at the case. Check 4, the D24X8 picture equal to the
+CPU resolve's bit for bit, is the verdict; the note's verdict table reads
+checks 4 to 7. GC7000 with the test knobs only (SKIP by name elsewhere); not in
+the default list. Build a sweep image that holds it and run it alone:
+
+```sh
+IMX8MP_BOARD=x2 tools/cts/imx8mp-gltest-build.sh dtpu-<commit> 177   # cases 177..224
+SEL=45 tools/board.sh x2 run $IMX8MP_OUT/x2/dtpu-<commit>/zephyr/zephyr.bin <logdir>
+```
+
+The run ends with the case's CASE record (the first failing check, got, want;
+a pixel check's got and want are its top-down index `<< 20 | value >> 4`).
+Board results go into the note and issue #1204, not here.

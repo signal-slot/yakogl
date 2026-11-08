@@ -28,7 +28,8 @@ config GL_TEST_KNOBS
 	help
 	  The suite sets the library's test knobs (CONFIG_YAKOGL_TEST_KNOBS).
 	  On the GC7000: case 16's 4x scratch probes, case 132's two narrow-L8
-	  arms, case 88's flip study. On the PowerVR: the bring-up options
+	  arms, case 88's flip study, case 222's views of the depth surface
+	  (gc_debug_set_depth_tpu). On the PowerVR: the bring-up options
 	  (gl_test_run's pretransform and debug arguments, case 62's clip
 	  sweep, the primitive budget of the split cases), and the arms of
 	  case 123 (pvr_debug_set_split_zs) and case 132

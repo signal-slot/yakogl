@@ -7703,6 +7703,26 @@ static const char gl_test_dsk_vs_src[] =
 	"attribute vec4 a_pos;\n"
 	"void main() { gl_Position = a_pos; }\n";
 
+/* gl_test 222 dtpu: the sampled depth rebuilt as its 24-bit word, one byte a
+ * channel, so the CPU resolve and the texture unit's D24X8 view are compared
+ * bit for bit. */
+static const char gl_test_dtpu_decode_fs_src[] =
+	"#version 100\n"
+	"/* gl_test 222 dtpu: the sampled depth .r rebuilt as its 24-bit word, k = round(r * (2^24 - 1)),\n"
+	" * written as (k >> 16, k >> 8 & 255, k & 255, 255) / 255 so the read-back's R * 65536 + G * 256 + B\n"
+	" * is the word within 2 (two fp32 roundings near 2^24). The same shader decodes the CPU resolve and\n"
+	" * the texture unit's D24X8 view, so equal pixels mean equal sampled values (docs/notes/gc-depth-sample.md). */\n"
+	"precision highp float;\n"
+	"uniform sampler2D u_tex;\n"
+	"varying vec2 v_uv;\n"
+	"void main() {\n"
+	"    float k = floor(texture2D(u_tex, v_uv).r * 16777215.0 + 0.5);\n"
+	"    float hi = floor(k / 65536.0);\n"
+	"    float mid = floor((k - hi * 65536.0) / 256.0);\n"
+	"    float lo = k - hi * 65536.0 - mid * 256.0;\n"
+	"    gl_FragColor = vec4(hi, mid, lo, 255.0) / 255.0;\n"
+	"}\n";
+
 static const char gl_test_f1_edge_fs_src[] =
 	"precision mediump float;\n"
 	"uniform sampler2D l;\n"
