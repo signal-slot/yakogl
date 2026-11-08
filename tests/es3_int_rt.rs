@@ -406,8 +406,10 @@ mod es3 {
     /// at colour attachment 0 and beyond it.
     ///
     /// The R and RG classes are held widened to four channels (`es3_formats`),
-    /// a store that is not the layout of their surface, so they stay
-    /// incomplete until the back end writes the narrow surface into it.
+    /// a store that is not the layout of their surface: the PowerVR draws
+    /// them as the four-channel surface of the store
+    /// (tests/es3_pvr_fbo_int_rg.rs), the other back ends keep them
+    /// incomplete.
     #[test]
     fn completeness_takes_four_channel_integer_texture_attachments() {
         let _g = context();
@@ -416,7 +418,11 @@ mod es3 {
         for (f, name, channels, ..) in INT_FORMATS {
             let Some(tex) = int_texture(f) else { continue };
             made += 1;
-            let want = if channels == 4 { GL_FRAMEBUFFER_COMPLETE } else { GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT };
+            let want = if channels == 4 || cfg!(feature = "gpu-powervr") {
+                GL_FRAMEBUFFER_COMPLETE
+            } else {
+                GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT
+            };
             let mut fb = 0;
             // SAFETY: room for one name; tex is a level the framebuffer takes.
             unsafe {

@@ -394,18 +394,38 @@ fn storage_holds_at(mem: &OsalGpuMem, offset: u32, w: u32, h: u32, bpp: u32, pit
 /// colour-renderable (table 3.13) and whose store the back end can write as
 /// a surface ([`backend::rt_format_drawable`]); None for any other texture.
 ///
-/// Only the four-channel classes (RGBA8I .. RGB10_A2UI) qualify. `es3_formats`
-/// widens an R or RG integer texture to a four-channel store, so the surface
-/// of its internal format (`GLES_SURF_R8I` ..) has a different texel size than
-/// the store: drawing it would write the wrong layout, and the channels the
-/// format lacks would not read 0, 0, 1. Those stay incomplete until the back
-/// end writes the narrow surface into the wide store. The texture-only RGB
-/// integer formats have no surface and stay incomplete too.
+/// The four-channel classes (RGBA8I .. RGB10_A2UI) qualify everywhere.
+/// `es3_formats` widens an R or RG integer texture to the four-channel store
+/// of the same channel type and width (R8I in RGBA8I, RG32UI in RGBA32UI), so
+/// the surface of its internal format (`GLES_SURF_R8I` ..) has a different
+/// texel size than the store. Where [`WIDE_INT_RT`] says so, such a texture is
+/// drawn as the wide surface of its store ([`fb_target_format_n`]) with the
+/// channels the format lacks out of the write mask ([`fb_target_channel_mask_n`])
+/// and read back as 0, 0, 1 ([`read_pixels`]); elsewhere it stays incomplete.
+/// The texture-only RGB integer formats have no surface and stay incomplete too.
 fn integer_texture_internalformat(t: &context::GlTexture) -> Option<GLenum> {
     let e = super::es3_formats::by_index(t.es3_fmt)?;
     let surf = integer_texture_surface(t.texfmt)?;
-    (e.is_integer() && integer_surf_format(e.internalformat) == Some(surf) && backend::rt_format_drawable(surf))
+    let own = integer_surf_format(e.internalformat)?;
+    (e.is_integer() && (own == surf || (WIDE_INT_RT && widened_into(own, surf))) && backend::rt_format_drawable(surf))
         .then_some(e.internalformat)
+}
+
+/// Does this build draw an R or RG integer texture as the four-channel surface
+/// of its widened store? The PowerVR does: its PBE writes the wide integer
+/// surfaces (`pbe_int_packmode`) and the online compiler packs all four
+/// channels of the output for them. The V3D and the GC7000 keep such a texture
+/// incomplete until their own runs check a narrow format beside other targets
+/// (one `GlesDraw::color_mask` is the whole draw's there).
+const WIDE_INT_RT: bool = cfg!(feature = "gpu-powervr");
+
+/// Is `wide` the four-channel integer surface an R or RG integer surface
+/// `narrow` is widened into: the same channel width and signedness?
+fn widened_into(narrow: u8, wide: u8) -> bool {
+    match (gles_surf_int_layout(narrow), gles_surf_int_layout(wide)) {
+        (Some(n), Some(w)) => n.channels < 4 && w.channels == 4 && n.bits == w.bits && n.signed == w.signed,
+        _ => false,
+    }
 }
 
 /// Is GL_RGB10_A2 its own render surface in this build ([`GLES_SURF_RGB10_A2`],
@@ -956,6 +976,26 @@ pub fn fb_target_format_n(c: &GlContext, n: u8) -> u8 {
         }
     }
     GLES_SURF_RGBA8888
+}
+
+/// The channels (bit 0 R .. bit 3 A) colour attachment `n` of the bound
+/// framebuffer has in a surface with more: those of an R or RG integer
+/// texture drawn as the four-channel surface of its store
+/// ([`integer_texture_internalformat`]), 0xf for every other target. A draw
+/// writes only these; the others read 0, 0, 1 (ES 3.0 4.3.2).
+pub fn fb_target_channel_mask_n(c: &GlContext, n: u8) -> u8 {
+    if c.bound_framebuffer == 0 {
+        return 0xf;
+    }
+    let Some(a) = c.framebuffer_ref(c.bound_framebuffer).and_then(|fb| color_attachment(fb, n)) else { return 0xf };
+    if a.type_ != GL_TEXTURE {
+        return 0xf;
+    }
+    c.texture_ref(a.name)
+        .and_then(integer_texture_internalformat)
+        .and_then(integer_surf_format)
+        .and_then(gles_surf_int_layout)
+        .map_or(0xf, |l| (1u8 << l.channels.min(4)) - 1)
 }
 
 /// How many alpha bits the bound colour target really has.
@@ -3017,6 +3057,7 @@ pub unsafe fn read_pixels(
      * GL_INT (signed) or GL_UNSIGNED_INT (unsigned), and only so; every other
      * read buffer refuses GL_RGBA_INTEGER */
     let int_layout = gles_surf_int_layout(fmt);
+    let own = fb_target_channel_mask_n(c, 0);
     let accepted = match int_layout {
         Some(l) => format == GL_RGBA_INTEGER && type_ == if l.signed { GL_INT } else { GL_UNSIGNED_INT },
         None => format == GL_RGBA && (type_ == GL_UNSIGNED_BYTE || (float_target && type_ == GL_FLOAT)),
@@ -3118,6 +3159,15 @@ pub unsafe fn read_pixels(
 
         if let Some(l) = int_layout {
             io_failed |= !read_int_row(ops, m, cpu, src_off, l, count, o);
+            /* an R or RG texture held in a four-channel surface: the channels
+             * its format lacks read 0, 0, 1 whatever the store holds */
+            if own != 0xf {
+                for px in o.as_chunks_mut::<16>().0 {
+                    for ch in (0..4).filter(|ch| own & (1 << ch) == 0) {
+                        px[ch * 4..ch * 4 + 4].copy_from_slice(&u32::from(ch == 3).to_ne_bytes());
+                    }
+                }
+            }
             continue;
         }
         if float_target {

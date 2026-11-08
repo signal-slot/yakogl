@@ -1405,14 +1405,17 @@ fn current_blend_key(c: &GlContext) -> u32 {
     /* the render target the fragment output lands in: attachment 0, or the
      * one the draw buffers select (framebuffer::frame_attachment) -- the
      * variant packs the output for the image actually written */
-    let fmt = framebuffer::fb_target_format_n(c, framebuffer::frame_attachment(c));
+    let n = framebuffer::frame_attachment(c);
+    let fmt = framebuffer::fb_target_format_n(c, n);
 
     /* an integer target: the variant that packs the integer output for its
      * layout (never blended, ES 3.0 4.1.7), with the mask of the channels it
-     * has (a channel it lacks is never written, masked or not) */
+     * has (a channel it lacks is never written, masked or not; an R or RG
+     * texture in a four-channel surface has the channels of its format,
+     * `fb_target_channel_mask_n`) */
     if let Some(l) = gles_surf_int_layout(fmt) {
         let rt = ShcIntRt { channels: l.channels, bits: l.bits, signed: l.signed };
-        let own = (1u32 << l.channels) - 1;
+        let own = ((1u32 << l.channels) - 1) & u32::from(framebuffer::fb_target_channel_mask_n(c, n));
         let off = off & own;
         /* every channel off is the ISP's (`GlesDraw::color_write`), as below */
         let mask = if off != 0 && disabled_channels(c) != 0xf { shc_blend_key_mask_off(off) } else { 0 };
@@ -4563,6 +4566,9 @@ fn build_common(
     d.color_write = disabled_channels(c) != 0xf || stencil_only_variant;
     /* and the mask itself, for a backend that masks in hardware */
     d.color_mask = (!disabled_channels(c) & 0xf) as u8;
+    /* an R or RG integer texture drawn as its four-channel surface: only the
+     * format's channels (the others read 0, 0, 1) */
+    d.color_mask &= framebuffer::fb_target_channel_mask_n(c, framebuffer::frame_attachment(c));
     /* no colour target (a depth/stencil-only framebuffer): nothing of colour
      * is written, whatever glColorMask says */
     if d.target_gpu == 0 {
