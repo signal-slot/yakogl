@@ -24,9 +24,12 @@
 //!   recorded in docs/notes/pre-study-stm32mp257f-dk.md section 4 (lines
 //!   511-515) and Q3; the clock and reset ids from the device tree (#1281;
 //!   `stm32mp255.dtsi:173-175`, `include/dt-bindings/clock/st,stm32mp25-rcc.h:114`,
-//!   `:362`, `include/dt-bindings/reset/st,stm32mp25-rcc.h:85`). The file and
-//!   line of galcore's and r-rcc-src's own sources are in those studies'
-//!   reports, which this item could not read; the note is the record.
+//!   `:362`, `include/dt-bindings/reset/st,stm32mp25-rcc.h:85`). Read here
+//!   from TF-A tag `v2.10-stm32mp-r1`, `include/drivers/st/stm32mp25_rcc.h`:
+//!   `RCC_GPUCFGR` `U(0x83C)` (`:440`), `RCC_GPUCFGR_GPURST` `BIT(0)` and
+//!   `RCC_GPUCFGR_GPUEN` `BIT(1)` (`:3533-3534`; `GPULPEN` `BIT(2)`, `:3535`,
+//!   is not modelled). The file and line of galcore's own source are in
+//!   r-galcore's report, which this item could not read.
 //!   **None of this is confirmed by RM0457, which could not be fetched**
 //!   (r-rm0457). The reset bit's polarity is open too: the model follows the
 //!   MP2 RCC's `xxRST` convention, 1 = held in reset. The register's reset
