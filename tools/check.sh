@@ -2120,8 +2120,13 @@ if command -v cc >/dev/null 2>&1; then
   # The one gpu_write / gpu_read argument check all seven OSALs make
   # (src/osal/osal_bounds.h): off + n wrapping, the edges, NULL buffers.
   scope osal
-  step "run     osal_bounds_check (gpu_write/gpu_read refuse a wrapped range)" \
-    osal_host_check osal_bounds_check
+  # And the carve-out range test that lets zephyr_gc.c skip data-cache
+  # maintenance on the non-cacheable GPU memory (src/osal/gc_cache_range.h).
+  osal_range_checks() {
+    osal_host_check osal_bounds_check && osal_host_check gc_cache_range_check
+  }
+  step "run     osal_bounds_check + gc_cache_range_check (wrapped ranges refused; cache skipped only inside the carve-out)" \
+    osal_range_checks
   # The line buffer of the Zephyr OSALs' log() (src/osal/osal_log.h): a line
   # of OSAL_LOG_LINE_MAX - 1 bytes, glog!'s longest, comes out whole.
   step "run     osal_log_check (a 255-byte log line survives the Zephyr OSAL buffer)" \
