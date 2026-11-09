@@ -479,6 +479,9 @@ fn compile_linked(vs: &str, fs: &str) -> (Stage, Stage) {
     .expect("the scratch arena is free")
     .expect("the fragment shader compiles for the vertex shader");
     let pr = super::fragment_reads(&f.info.shader()).expect("the record's moved expressions encode");
+    /* at the vertex shader's locations, paired by name (backend.rs
+     * `vs_for_fragment`) */
+    let pr = super::link::reads_at_vertex_locations(vs.as_bytes(), fs.as_bytes(), pr);
     let v = store::with_scratch(|s| {
         super::compile_vs_for_reads(vs.as_bytes(), pr.reads(), pr.moved(), s, store::keep())
             .map(|(sh, _)| stage_of(&sh))
@@ -4648,27 +4651,50 @@ const VSFP16_POPULATION: [(&str, &str, &str, &str); 4] = [
 
 #[test]
 fn the_fp16_vertex_uniforms_are_byte_equal_to_mesa_26_2_1() {
-    for (name, vs, fs, json) in VSFP16_POPULATION {
+    for (_, vs, fs, json) in VSFP16_POPULATION {
+        /* tex's stages declare `TexCoord` and `Tint` in the other order:
+         * the link builds its vertex shader for the fragment shader's reads
+         * at the vertex locations of their names (case 19,
+         * `case_19_textured_pair_reads_its_varyings_by_name`) */
         let (v, f) = compile_linked(vs, fs);
-        /* tex's stages declare `TexCoord` and `Tint` in the other order,
-         * and the varying locations are each stage's declaration order: the
-         * fragment shader's reads are given at the vertex shader's
-         * locations, as Mesa's link matches them by name (`Tint` at offset
-         * 0, `TexCoord` at 16, the fragment's order; `Unused` is no read) */
-        let v = if name == "vsfp16_19_tex" {
-            let _k = store::test_keep();
-            store::with_scratch(|s| {
-                super::compile_vs_for_reads(vs.as_bytes(), &[(1, 0b1111), (0, 0b0011)], &[], s, store::keep())
-                    .map(|(sh, _)| stage_of(&sh))
-            })
-            .expect("the scratch arena is free")
-            .expect("the vertex shader compiles for the program's reads")
-        } else {
-            v
-        };
         check_vs_stage(&v, vs, fs, json, VIEWPORT_64X64);
         check_fs_stage(&f, vs, fs, json, VIEWPORT_64X64);
     }
+}
+
+/// Case 19's textured pair (es100/textured.vert and .frag, #33): the
+/// stages declare `TexCoord` and `Tint` in the other order, so the
+/// fragment record reads `Tint` (location 0, whole) and `TexCoord.xy`
+/// (location 1), which are the vertex shader's locations 1 and 0. Mesa's
+/// link pairs them by name: the program's vertex shader stores `Tint` at
+/// offset 0 and `TexCoord` at 16 and drops `Unused`, the fragment shader's
+/// order (docs/notes/mali-partial-varyings.md). Built for the fragment
+/// locations it stored `TexCoord.xy` and `Tint.xy`, and the link refused
+/// the pair as a partial read. Both stages, every fact and the layouts
+/// against vsfp16_19_tex.expect.json (drm-shim, `--uniform-values`).
+#[test]
+fn case_19_textured_pair_reads_its_varyings_by_name() {
+    let (vs, fs, json) = (td!("vsfp16_19_tex.vert"), td!("vsfp16_19_tex.frag"), td!("vsfp16_19_tex.expect.json"));
+    assert_eq!(vs, include_str!("../../../../tools/shaders/es100/textured.vert"));
+    assert_eq!(fs, include_str!("../../../../tools/shaders/es100/textured.frag"));
+    let (v, f) = compile_linked(vs, fs);
+    let pr = super::fragment_reads(&f.info.shader()).expect("the record's moved expressions encode");
+    assert_eq!(pr.reads(), [(0, 0xf), (1, 0x3)], "the fragment record's reads, at its own locations");
+    let at = super::link::reads_at_vertex_locations(vs.as_bytes(), fs.as_bytes(), pr);
+    assert_eq!(at.reads(), [(1, 0xf), (0, 0x3)], "at the vertex locations");
+    check_vs_stage(&v, vs, fs, json, VIEWPORT_64X64);
+    check_fs_stage(&f, vs, fs, json, VIEWPORT_64X64);
+    let generic = |s: &Stage| {
+        s.info
+            .varyings
+            .iter()
+            .filter(|x| x.section == Section::Generic && x.mask != 0)
+            .map(|x| (x.varying, x.offset, x.mask))
+            .collect::<Vec<_>>()
+    };
+    /* Tint, TexCoord: vertex locations 1 and 0, fragment 0 and 1 */
+    assert_eq!(generic(&v), [(Some(1), 0, 0xf), (Some(0), 16, 0x3)]);
+    assert_eq!(generic(&f), [(Some(0), 0, 0xf), (Some(1), 16, 0x3)]);
 }
 
 /// Case 199's vertex shader (es3trunc_vsc.vert, #33): `trunc` is

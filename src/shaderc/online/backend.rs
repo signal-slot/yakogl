@@ -1906,6 +1906,9 @@ fn vs_for_fragment(text: &[u8], fs: &ShcShader, out: *mut ShcShader, log: &mut C
              * defect, reported as one, never the plain vertex shader */
             Err(e) => return report(log, SHC_STAGE_VERTEX, CompileError::BackEnd(codegen::BackEndError::Mali(e))),
         };
+        /* the reads are at the fragment shader's locations; the vertex
+         * shader is built for its own, paired by name (case 19) */
+        let pr = base_of(fs).map_or(pr, |fr| super::mali::link::reads_at_vertex_locations(text, fr.source, pr));
         /* the moved bytes are borrowed from `pr` for the compile; the record
          * gets its own copy (`publish_as`) */
         let mut reads = FsReads { moved: pr.moved(), ..FsReads::NONE };
@@ -4379,6 +4382,27 @@ void main (void)
                 for sh in [&v, &f, &object] {
                     release(sh);
                 }
+            }
+        }
+
+        /// gl_test case 19's textured pair (es100/textured.*, #33), whose
+        /// stages declare `TexCoord` and `Tint` in the other order, through
+        /// the GL core's calls: the program's vertex shader is built for the
+        /// fragment shader's reads at its own locations, paired by name
+        /// (`mali::link::reads_at_vertex_locations`), and the link pairs
+        /// every read at its offset. It refused the pair as a partial read
+        /// of `Tint` before. Mesa 26.2.1's programs to the byte
+        /// (vsfp16_19_tex.expect.json).
+        #[test]
+        fn case_19_textured_pair_links_through_the_entry_points() {
+            let _serial = test_lock();
+            let (v, f, object) = link_through_the_entry_points(
+                include_str!("../../../tools/shaders/es100/textured.vert"),
+                include_str!("../../../tools/shaders/es100/textured.frag"),
+            );
+            assert_mali_program(&v, &f, include_str!("../../../tools/mali/testdata/vsfp16_19_tex.expect.json"));
+            for sh in [&v, &f, &object] {
+                release(sh);
             }
         }
 

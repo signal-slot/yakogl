@@ -36,8 +36,11 @@ pub const MALI_LAYOUTS_DIFFER: &str =
     "a Mali link whose stages place a varying at different offsets is not lowered yet";
 /// A fragment shader that reads part of a varying: Mesa's link keeps only
 /// the components read (`compact_varyings`), so the vertex shader's layout
-/// is the program's, built from the fragment shader's reads. A gap until the
-/// vertex shader is built per program.
+/// is the program's, built from the fragment shader's reads at the vertex
+/// locations of their names ([`reads_at_vertex_locations`],
+/// backend.rs `vs_for_fragment`). Met only by a vertex shader not built for
+/// the program (no source to build it from, or a read with no vertex output
+/// of its name).
 pub const MALI_PARTIAL_READ: &str =
     "a Mali link whose fragment shader reads part of a varying (the link keeps only those components) is not lowered yet";
 /// The vertex output a fragment input reads is listed by the vertex record
@@ -348,6 +351,62 @@ fn pair(vs: &ShcShader, fs: &ShcShader, log: &mut CStrWriter, who: &str) -> Pair
     }
 }
 
+/// The fragment record's reads `pr` ([`fragment_reads`]) at the vertex
+/// shader's locations: a record's locations are its own stage's
+/// declaration order, and Mesa's link pairs the varyings by name
+/// (`nir_assign_io_var_locations` after the link's matching), so a read of
+/// fragment location `l` is one of the vertex output of that name, at the
+/// same element and column of it. The moved expressions' lanes and slots
+/// are moved alike. Case 19's textured pair declares `Tint` and `TexCoord`
+/// in the other order in each stage: built for the fragment locations, the
+/// vertex shader stored `TexCoord.xy` and `Tint.xy` where the fragment
+/// shader reads `Tint` whole (docs/notes/mali-partial-varyings.md).
+///
+/// `pr` as it is when the two sources do not reflect or a read has no
+/// vertex output of its name: the link then refuses the pair by its own
+/// rules (a varying not written), as before.
+///
+/// [`fragment_reads`]: crate::shaderc::online::mali::fragment_reads
+pub fn reads_at_vertex_locations(
+    vs_glsl: &[u8],
+    fs_glsl: &[u8],
+    pr: crate::shaderc::online::mali::ProgramReads,
+) -> crate::shaderc::online::mali::ProgramReads {
+    use crate::shaderc::online::mali::motion;
+    use crate::shaderc::online::reflect::interface;
+    use crate::shaderc::online::sema::Stage;
+    let map = |a: &crate::shaderc::online::arena::Arena<'_>| -> Option<crate::shaderc::online::mali::ProgramReads> {
+        let text = |t: &[u8]| core::str::from_utf8(t).ok().and_then(|s| a.alloc_str(s).ok());
+        let (vi, fi) =
+            (interface(a, Stage::Vertex, text(vs_glsl)?).ok()?, interface(a, Stage::Fragment, text(fs_glsl)?).ok()?);
+        let (vv, fv) = (vi.reflection.varyings, fi.reflection.varyings);
+        /* the fragment row holding location `l` (rows ascend by location,
+         * each spans its columns and elements up to the next) */
+        let at = |l: u8| -> Option<u8> {
+            let f = fv.iter().rev().find(|f| f.location <= l)?;
+            let v = vv.iter().find(|v| v.name == f.name)?;
+            v.location.checked_add(l - f.location)
+        };
+        let mut out = pr;
+        for r in out.reads.iter_mut().take(out.n) {
+            r.0 = at(r.0)?;
+        }
+        let mut mv = [motion::Moved::NONE; motion::MAX_MOVED];
+        let n = motion::decode(pr.moved(), &mut mv).ok()?;
+        for m in mv.iter_mut().take(n) {
+            m.location = at(m.location)?;
+            for nd in m.nodes.iter_mut().take(m.n as usize) {
+                if let motion::Node::Lane { location, .. } = nd {
+                    *location = at(*location)?;
+                }
+            }
+        }
+        out.nmoved = motion::encode(&mv[..n], &mut out.moved).ok()?;
+        Some(out)
+    };
+    crate::shaderc::online::store::with_scratch(map).flatten().unwrap_or(pr)
+}
+
 /// The Mali's link on the Valhall back end's own records (the code
 /// generator's, `codegen::compile_linked_blocks`): every outcome of
 /// [`link_shaders_mali`] by its line.
@@ -483,6 +542,48 @@ mod tests {
         for (what, (rc, log), want_rc, want_log) in &cases {
             assert_eq!((rc, log.as_str()), (want_rc, *want_log), "{what}");
         }
+    }
+
+    /// The fragment record's reads and moved lanes at the vertex locations
+    /// of their names: a matrix's columns keep their place in it, a moved
+    /// expression's slot and lanes move alike, and a read of a name the
+    /// vertex shader lacks leaves the reads as they were (the link refuses
+    /// the pair, "not written").
+    #[test]
+    fn fragment_reads_move_to_the_vertex_locations_of_their_names() {
+        use crate::shaderc::online::mali::motion::{self, Moved, Node};
+        use crate::shaderc::online::mali::ProgramReads;
+        const VS: &str = "attribute vec4 p; varying vec2 a; varying mat2 m; varying vec4 b; \
+                          void main(){ a = p.xy; m = mat2(p); b = p; gl_Position = p; }";
+        const FS: &str = "precision mediump float; varying vec4 b; varying mat2 m; varying vec2 a; \
+                          void main(){ gl_FragColor = b + vec4(m[1], a); }";
+        let mut pr = ProgramReads {
+            reads: [(0, 0); super::super::select::MAX_VARYINGS],
+            n: 3,
+            moved: [0; motion::MAX_BYTES],
+            nmoved: 0,
+        };
+        /* b (fragment 0), m[1] (2), a.x (3) */
+        pr.reads[..3].copy_from_slice(&[(0, 0xf), (2, 0x3), (3, 0x1)]);
+        let mut m = Moved { location: 3, comp: 1, ..Moved::NONE };
+        m.nodes[0] = Node::Lane { location: 1, comp: 0 };
+        m.n = 1;
+        pr.nmoved = motion::encode(&[m], &mut pr.moved).expect("encodes");
+        let at = reads_at_vertex_locations(VS.as_bytes(), FS.as_bytes(), pr);
+        /* the vertex locations: a 0, m 1-2, b 3 */
+        assert_eq!(at.reads(), [(3, 0xf), (2, 0x3), (0, 0x1)]);
+        let mut out = [Moved::NONE; motion::MAX_MOVED];
+        assert_eq!(motion::decode(at.moved(), &mut out).expect("decodes"), 1);
+        assert_eq!((out[0].location, out[0].comp, out[0].nodes()), (0, 1, &[Node::Lane { location: 1, comp: 0 }][..]));
+        /* the fragment shader's order in both: as it is */
+        let ordered = "attribute vec4 p; varying vec4 b; varying mat2 m; varying vec2 a; \
+                       void main(){ a = p.xy; m = mat2(p); b = p; gl_Position = p; }";
+        let same = reads_at_vertex_locations(ordered.as_bytes(), FS.as_bytes(), pr);
+        assert_eq!((same.reads(), same.moved()), (pr.reads(), pr.moved()));
+        /* `b` not in the vertex shader */
+        let lacking = VS.replace("varying vec4 b;", "").replace("b = p;", "");
+        let kept = reads_at_vertex_locations(lacking.as_bytes(), FS.as_bytes(), pr);
+        assert_eq!((kept.reads(), kept.moved()), (pr.reads(), pr.moved()));
     }
 
     #[test]
