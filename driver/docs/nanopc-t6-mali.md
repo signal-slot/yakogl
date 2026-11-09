@@ -795,6 +795,76 @@ milestones (Zephyr booted by U-Boot), as on every board.
   bytes as under panthor. From here the same back end and compiler run on Zephyr,
   and gl_test and dEQP move to the product form.
 
+### The Z4 frame against the trace
+
+What Z4 submits is the frame `l1::build_triangle_frame`
+(tools/mali/panthor/src/l1.rs, 6dd3dc48) builds, so the frame is compared
+here with the board trace once, word by word, before the Z4 record is
+predicted. The reference is `tools/mali/testdata/board-25.0.7/tri.pandecode`
+(Mesa 25.0.7, the default AFBC run, 1735 lines, text only: the decoded
+descriptors and the CS words, no memory), frame 1 = lines 1-815 (6 vertices;
+lines 816-1735 are a second frame of another program, not compared), and for
+the raw bytes the linear run's dump `tools/mali/board-dump/tri-frame-2026-10-18.txt`,
+which has the same VAs but for the descriptor base (`...d4000` there, `...d3000` in
+`tri.pandecode`) and the same line numbers. **Mesa 26.2.1's trace
+(`mesa-26.2.1.pandecode`) is under the gitignored `records/` and is not in the
+tree, so nothing below was measured against 26.2.1**: the 26.2.1 column is the
+25.0.7 result plus the table of choices in "The command stream and descriptors
+(L1)", read from the source, never a byte equality.
+
+The frame was built at the trace's VAs (descriptors `0x7ffffffd3000`, code
+`0x7fffffffc000`, SPDs `0x7fffffffd020`, heap descriptor `0x7fffffffb000`,
+geometry `0x7ffffffeb000`, target `0x7ffffffe3000`, vertices `0x7fffffecb000`,
+first chunk `0x800000a00000` of 2 MiB, heap context `0x800000015000`, 92 user
+registers). Results: **equal** (same bytes), **reloc** (only an address that
+moves with the VA or with the layout, the value checked), **choice** (a
+documented difference), **GPU** (written by the GPU before the dump), **not
+built** (Mesa emits it, the frame does not). No difference is unexplained.
+
+| Part | Size | Result | Rests on (`tri.pandecode` line, or `tri-frame-2026-10-18.txt`) |
+|---|---|---|---|
+| Queue-init stream | 2 words | equal: `MOVE d72, #0x800000015000`, `HEAP_SET d72` (the heap context is the kernel's) | 1-2 |
+| OOM handler install and body | 3 + 40 words | not built (`SET_EXCEPTION_HANDLER`, the handler, `queue_init` doc above) | 3-45 |
+| Draw stream, `REQ_RESOURCE` to `RUN_IDVS` | 33 words | 30 equal, 3 reloc: SRT `d0`/`d4` (`...3307`/`...3387` against `...3647`/`...36c7`, table count 7 kept; 26.2.1 would write 8, doc table) and the tiler `d40` (`...3280` against `...32c0`: no OOM context or incremental FBDs before it); `MOVE d30` (TSD_3) is in both, the 25.0.7 choice, 26.2.1 drops it | 46-79 |
+| Not built in the draw stream | 5 words | `MOVE d76` (OOM context), `LOAD_MULTIPLE r78`, `WAIT #1`, `BRANCH.le r78`, and the `MOVE d40` the branch skips (not printed; raw CS buffer) | 48, 570-572 |
+| `FINISH_TILING` to `RUN_FRAGMENT`, then `FINISH_FRAGMENT` to `FLUSH_CACHE2` | 18 words | 16 equal, 2 differ: `MOVE d40` (FBD pointer `...3001` against `...3003`, tag 3 = ZS/CRC extension: choice, linear and no CRC) and `MOVE d90` (tiler, reloc as above) | 562-573, 803-813 |
+| Not built at the end | 2 words | `MOVE d90` error-state word, `STORE_STATE.ERROR_STATE` (`PAN_MESA_DEBUG=sync` only) | 809-810 |
+| Whole stream | 51 words | 47 equal as dumped, 4 reloc; 7 of Mesa's 58 not emitted (the list above) | `frame_tests.rs`, the raw CS buffer |
+| Framebuffer | 128 B | equal but the sample-locations pointer (`+0x10`, `...b040` against `...f000`: our context arena packs the heap descriptor and the samples together, reloc) and the tiler pointer (`+0x38`, reloc); AFBC run: `Has ZS CRC Extension: true` and `CRC Write Enable: true` (choice) | 654-728 |
+| Render target | 64 B | equal but the target pointer (input VA); AFBC run has AFBC block format, header, `Row stride 64`, `Body offset 256` and `Surface stride 256` where the frame writes linear, `Row Stride 256` (choice: "Linear render targets, no AFBC, no CRC") | 752-801 |
+| ZS/CRC extension | 64 B | not built (room only, `Has ZS CRC Extension: false`); the AFBC run has CRC row stride 32, base `...7100` (choice) | 730-750 |
+| Shader programs (2 SPDs) and binaries (2 x 7 words) | 32 B x 2, 56 B x 2 | equal (the trace's own programs, `tri_shaders`) | 317-383 |
+| TLS (position, varying, fragment: one block) | 32 B | equal | 388-411 |
+| Depth/stencil, blend, DCD/primitive flags | 32 B, 16 B | equal (the decoded text of lines 459-558 is identical in both runs; the bytes are equal to the linear dump) | 459-561 |
+| Attribute and varying descriptor, vertex buffer | 32 B, 32 B | attribute equal; buffer: address (input VA) and **size 48 against 1048576**: `l1.rs` passes the bytes it uploaded, Mesa the whole 1 MiB BO (`frame_tests.rs` passes `1 << 20`); the six vertices lie inside either | 93-123 |
+| Samplers (VS, FS), UBO tables, sysval block, push | 32 B x 4, 24 B | equal but the pointers inside the UBO table and resource tables (reloc) and the sysval block's offset lane `+0x1c`, which Mesa fills from its stack (4 bytes, `frame_tests.rs`) | 80-306 |
+| Resource tables (VS 112 B, FS 112 B) | 112 B x 2 | equal but the four VS and one FS entry pointers (reloc, `...e0/...60/...80/...a0` keep their low bytes) | 80-306 |
+| Tiler context | 128 B | equal but the polygon list (`+0x0`) and private state word 0 (`+0x60`), GPU-written | 427-450, 705-728 |
+| Tiler heap descriptor | 32 B | equal but Bottom/Top (`+0x10`, `+0x18`), GPU-written | 418-426 |
+| Sample positions | 193 B | equal (at `...b040`, not `...f000`: reloc) | 620-653 |
+
+The raw-byte rows rest on `src/mali/frame_tests.rs` ("24 compared, 20 equal as
+dumped, 24 equal with the 6 named differences, 0 differing", and the stream
+"51 ours, 47 equal as dumped, 4 relocated, 7 of Mesa's not emitted, 0
+differing"); the AFBC-run rows rest on the line-by-line diff of the decoded
+text of `tri.pandecode` against `tri-linear-2026-10-18.txt` (same line numbers),
+which differs only at the VA (lines 68-69, 654), `Has ZS CRC Extension` (689)
+and the extension and render target (730-781), and on the CS words printed in
+the trace. The 26.2.1 reading of the table: the frame as built equals 26.2.1's
+only after the three choices (TSD_3, table count 8, OOM slot 4 in the handler,
+which the frame does not install) are made in `src/mali/frame.rs`; that change
+is not part of Z4 and waits for the 26.2.1 trace on the board.
+
+To reproduce: `cargo test --no-default-features --features
+host-test,gpu-mali,shaderc-online,no-shader-table --lib -- mali::frame_tests
+--nocapture` prints the two summary lines and the named differences. The
+`tri.pandecode` VAs need a throwaway program that is not committed: it calls
+`l1::build_context` (heap descriptor at `...b000`), `frame::queue_init` and
+`l1::build_triangle_frame` with the arenas at the VAs above and the 92 user
+registers, prints the words, and compares them with
+`Trace::parse(tri.pandecode)` (`tools/mali/panthor/src/pandecode.rs`, the
+depth-1 words of lines 1-815) and the descriptor bytes with the linear dump.
+
 ### What L1 must provide
 
 The frame builder (`src/mali/frame.rs`) builds a frame in memory it is
