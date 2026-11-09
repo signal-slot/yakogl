@@ -9,6 +9,16 @@
 #   tools/setup-gate-host.sh --check
 #     Print one "ok" or "missing" line per tool. Exit 0 only when all are ok.
 #
+#   tools/setup-gate-host.sh --install-packages
+#     The distro packages alone: the gate's own list and the packages of
+#     every tools/cts/deps.toml entry (`deps-env.sh --packages`). Nothing
+#     runs when every package is installed; otherwise the missing ones are
+#     installed through passwordless sudo on apt systems, and the owner
+#     command is printed (exit 1) where that is not possible. The gate job
+#     (.github/workflows/gate.yml) runs this before its host check, so a
+#     package that joins deps.toml reaches the runners before the gate image
+#     is built again.
+#
 #   tools/setup-gate-host.sh --install
 #     Add what rustup can add (clippy, rustfmt, the aarch64-unknown-none,
 #     aarch64-unknown-none-softfloat and aarch64-unknown-linux-gnu targets on
@@ -85,9 +95,12 @@ PROG=${0##*/}
 
 usage() {
   cat <<EOF
-usage: $PROG --check | --install [--no-deps] | --env
+usage: $PROG --check | --install-packages | --install [--no-deps] | --env
 
   --check    print one ok/missing line per tool; exit non-zero if any is missing
+  --install-packages
+             the distro packages only (the gate's and deps.toml's), the missing
+             ones through passwordless sudo on apt; exit 1 when some stay missing
   --install  add rustup components and targets; install distro packages only
              through passwordless sudo (sudo -n); print owner commands and
              user-space fallback values otherwise. Then make the missing
@@ -532,15 +545,32 @@ install_rustup() {
   done
 }
 
+# apt_missing: the apt packages of the list that dpkg does not have installed.
+apt_missing() {
+  local p
+  for p in "${apt_packages[@]}"; do
+    [ "$(dpkg-query -W -f='${Status}' "$p" 2>/dev/null)" = "install ok installed" ] || echo "$p"
+  done
+}
+
+# install_distro: returns 1 when packages stay missing (no passwordless sudo
+# on apt, or no apt at all), 0 when every package is installed.
 install_distro() {
+  local missing
   if command -v apt-get >/dev/null 2>&1; then
-    if sudo -n true 2>/dev/null; then
-      run sudo -n apt-get install -y "${apt_packages[@]}"
-    else
-      echo "no passwordless sudo here; owner command:"
-      echo "  sudo apt-get install -y ${apt_packages[*]}"
+    missing=$(apt_missing)
+    if [ -z "$missing" ]; then
+      echo "distro packages: all ${#apt_packages[@]} installed"
+      return 0
     fi
-    return
+    if sudo -n true 2>/dev/null; then
+      # shellcheck disable=SC2086 # the names are one per line, no spaces
+      run sudo -n apt-get install -y $missing && return 0
+      return 1
+    fi
+    echo "no passwordless sudo here; owner command:"
+    echo "  sudo apt-get install -y $(printf '%s\n' $missing | paste -sd' ')"
+    return 1
   fi
   if command -v emerge >/dev/null 2>&1 || [ -d /var/db/portage ]; then
     echo "Gentoo-like system detected; the emerge equivalents are:"
@@ -548,10 +578,11 @@ install_distro() {
     if sudo -n true 2>/dev/null; then
       echo "with passwordless sudo: sudo -n emerge -1 --noreplace ${emerge_packages[*]}"
     fi
-    return
+    return 1
   fi
   echo "no apt-get or emerge found: install clang, libclang, PyYAML, glslang,"
   echo "pkg-config, expat and zlib with this distribution's package manager."
+  return 1
 }
 
 # A clang already on disk but not on PATH (a versioned or slotted install):
@@ -692,6 +723,10 @@ case ${1-} in
   --env)
     gate_exports
     exit 0
+    ;;
+  --install-packages)
+    install_distro
+    exit $?
     ;;
   --install)
     nodeps=0
