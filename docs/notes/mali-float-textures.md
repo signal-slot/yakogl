@@ -218,6 +218,16 @@ own and compares them by cause, as `src/mali/frame_tex_tests.rs` does.
 Sampler, all six `nocrc` runs (nearest, clamp to edge on S and T, GL's default
 REPEAT on R): `06A99901 00000000 00000000 00000000 00000000 00000000 00000000 00000000`.
 
+(frame-texfmt: these sampler words do not decode to that state. By
+`src/mali/genxml/v10.rs`'s Sampler fields, word 0 `06A99901` is wrap S, T
+**and R** clamp to edge (9), round-to-nearest-even set, minify and magnify
+nearest **clear** (linear), mipmap mode 0 (NEAREST), and word 1 `00000000`
+a maximum LOD of 0. src/mali's sampler for the state above is `5E899801
+1FFF0000 ..` (nearest, R REPEAT, mipmap NONE, maximum LOD 8191/256), which
+the board and shim sampler tests of `frame_tex_tests.rs` already pin. The
+sampler does not depend on the texture's format, so the format tests do not
+compare it; see section 6.)
+
 Decoded (pandecode of the RGBA16F 8x8 run): Texture `Type: Texture`,
 `Dimension: 2D`, `Format (v7): RGBA16F RGBA`, `Width: 8`, `Height: 8`,
 `Swizzle: 1672 (RGBA)`, `Texel interleave: false`, `Levels: 1`, `Minimum
@@ -294,6 +304,34 @@ the RGBA8 and RGBA16F textures, and the compiler's verdict for both cases'
 programs is already `ok` (they are refused at draw time only).
 
 ## 4. The fix (item frame-texfmt)
+
+**Done by frame-texfmt** (on the integration tip `d512696b`). What was made,
+against the steps below:
+
+- Steps 1 and 2: `TexelFormat` has `texel_bytes` (4 for RGBA8, sRGB8_A8,
+  R32F; 0 for the ETC2 block formats), and `texel_format` the two rows as
+  written: RGBA16F `Format::RGBA16F << 12 | RGBA`, RAW64, identity, 8 bytes;
+  R16F `Format::R16F << 12 | RGB1`, RAW16, `swizzle4(0, 4, 4, 5)` (0xB20),
+  2 bytes. RGB16F and RG16F reach the back end as RGBA16F storage and take
+  its row.
+- Step 3: `level_at` uses `texel_bytes`, so do `needs_copy`, `storage_end`'s
+  2D branch and the copy through it. The 3D path keeps 4-byte texels:
+  `is_volume_texel` (block 0, 4 bytes) gates `volume` in `texture_of` and
+  `needs_copy`'s 3D branch, so a 3D RGBA16F/R16F texture is refused as a
+  type (`NOT_BUILT_TEXTURE_TYPE`, whose text already says "4-byte slices").
+  The reference has no 3D float texture; building one is left for later.
+- Step 4: `sampled` takes the format's own swizzle for a block format or any
+  format whose swizzle is not the identity (R16F); R32F and RGBA16F keep the
+  flag-derived one (identity, or RRR1 for a depth view).
+- Step 5: `SampledTexture::texel_bytes()` (from the clump: RAW16 2, RAW64 8,
+  else 4) gives `check_draw`'s row check its bytes; no new struct field.
+- Step 6: `NOT_BUILT_TEXTURE_FORMAT` is unchanged, text included (the item's
+  instruction was to keep the refused formats' existing message); RGBA32F,
+  L8/A8/LA8, RGB565, the integers, R11G11B10F/RGB9E5 storage stay refused.
+  `texture_of` is `pub(super)` so `frame_tex_tests.rs` can build a binding's
+  descriptors through it.
+
+The plan as written before the change:
 
 All in `src/mali/backend.rs`, plus one line of `src/mali/frame.rs`
 (frame-3dlevels has merged; nothing holds the file for this note).
@@ -374,6 +412,36 @@ the sampling is the existing `target_kick` path (`texture_ready`,
 
 ## 5. Tests the fix brings
 
+**What frame-texfmt added** (`src/mali/frame_tex_tests.rs`): the trace files
+below are **deferred**: `tools/mali/testdata/**` was held by another item, so
+no trace and no `drm_shim_ref.sh` / `gl_ref.py` change was committed. The
+tests quote section 2's words inline instead, and build them through
+`backend::texture_of` from a GL core binding at the shim's addresses
+(`Surfaces` 0x7fffffffd080, texels 0x7ffffffe6000), so every word compares
+equal with no listed cause (the Texture and the Generic Plane; the sampler
+is not compared, section 2's remark under its words):
+
+- `an_rgba16f_texture_is_the_shim_s`: 8x8, `stride_texels` 8, in place;
+  Texture, Plane and Sampler words; the frame builder accepts it and writes
+  the same descriptors.
+- `a_1x1_rgba16f_texture_is_the_shim_s`: 1x1, `stride_texels` 8 (the GL
+  core's), in place.
+- `a_1x1_rgba16f_texel_off_64_bytes_is_copied_to_the_shim_s_words`: 1x1 on a
+  hand-made pitch of 1 texel, copied to a 64-byte row; same words, the
+  texel's 8 bytes at the copy's start.
+- `an_r16f_texture_is_the_shim_s`: 8x8, `stride_texels` 32; swizzle 0xB20.
+- `float_storage_the_shim_does_not_draw_is_refused`: RGBA32F storage
+  (`NOT_BUILT_TEXTURE_FORMAT`) and a 3D RGBA16F texture
+  (`NOT_BUILT_TEXTURE_TYPE`).
+
+RGB16F and RG16F get no test of their own: the back end sees only the
+RGBA16F storage, which the RGBA16F tests pin. The `backend_tests.rs` rows
+named below were not added (the item's files were frame.rs, backend.rs,
+frame_tex_tests.rs and this note); the refusal and copy cases are in
+`frame_tex_tests.rs` instead.
+
+The plan as written before the change:
+
 - `tools/mali/testdata/frame_rgba16f_tex.trace` (and `_r16f`, `_1x1`): the
   `nocrc` traces of section 2, from `DRM_SHIM_REF_PAN_DEBUG=trace,linear,nocrc,dump
   tools/mali/drm_shim_ref.sh run <work> hdr.vert hdr.frag <out> --tex-format
@@ -398,6 +466,14 @@ the sampling is the existing `target_kick` path (`texture_ready`,
   forecast), and case 91's blends are already built.
 
 ## 6. Open points
+
+- The sampler words of section 2 (`06A99901 00000000 ..`) are not the
+  state the section names (see the remark under them): they may be another
+  32-byte entry of the dump, or the throwaway `gl_ref.py`'s own sampler
+  state (linear, clamped on R) under Mesa 26.2.1's rule for a filter without
+  mipmaps (maximum LOD 0, mipmap NEAREST). Neither was rerun by
+  frame-texfmt (no shim run, item scope); the shim's next run for this
+  note's traces should settle it.
 
 - The words are Mesa **26.2.1**'s on the shim; no board (Mesa 25.0.7) dump of
   a sampled RGBA16F texture exists. The render-target formats differed
