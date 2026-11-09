@@ -28,8 +28,8 @@
 window.YAKOGL_DATA = {
   "repo": "https://github.com/signal-slot/yakogl",
   "checkedAgainst": {
-    "commit": "93ada07490dae879f9fb3903eafb8d66e1ddfc7e",
-    "date": "2026-11-07",
+    "commit": "6d360a03c21f935f9de51cf60ea4048204e42f9f",
+    "date": "2026-11-10",
     "source": "tools/cts/RESULTS.md"
   },
   "boards": [
@@ -187,18 +187,18 @@ window.YAKOGL_DATA = {
     "gltest.am62p": {
       "label": "gl_test regression set",
       "board": "am62p",
-      "value": "50 / 50",
-      "unit": "cases passed, 0 GPU resets",
-      "commit": "445c5653",
-      "onMain": false,
-      "date": "2026-10-20",
+      "value": "49 / 50",
+      "unit": "cases passed; case 20 fails one check",
+      "commit": "86d0b482",
+      "onMain": true,
+      "date": "2026-10-28",
       "source": "tools/cts/RESULTS.md",
       "section": "Common set (stage 2 input)",
-      "status": "pass",
-      "note": "The common regression set, run from the same build as the AM62P benchmark below.",
+      "status": "warn",
+      "note": "Run from the same build as the AM62P benchmark below. Case 20 (etc) fails its first check alone: the test wants 3 compressed formats, and the image, which reports ES 3.0, stores 5 (the sRGB ETC2 pair, the intended ES 3.0 list). The test's expectation is stale, not the back end; the case's other 16 checks pass. The 2026-10-20 run at 445c5653 read 50 of 50.",
       "provenance": {
-        "kind": "pre-publication",
-        "recordCommit": "381b0f09e9c8e7b3d437946c888224f12a27b367"
+        "kind": "repository",
+        "recordCommit": "93ada07490dae879f9fb3903eafb8d66e1ddfc7e"
       }
     },
     "gltest.imx8mp": {
@@ -238,18 +238,18 @@ window.YAKOGL_DATA = {
     "glmark2.am62p": {
       "label": "glmark2-es2",
       "board": "am62p",
-      "value": 461,
+      "value": 467,
       "unit": "score at 800x600; 33 scenes, 0 failed, 0 GL errors",
-      "commit": "445c5653",
-      "onMain": false,
-      "date": "2026-10-20",
+      "commit": "86d0b482",
+      "onMain": true,
+      "date": "2026-10-28",
       "source": "tools/cts/RESULTS.md",
       "section": "Common set (stage 2 input)",
       "status": "warn",
-      "note": "All 33 scene picture values are recorded; none is black. Twenty-nine match the earlier run inspected on the panel, with four differences in animated scenes. Heavy scenes remain slow: terrain about 94 ms, shadow 353 ms, refract 376 ms per frame.",
+      "note": "This main commit holds the PowerVR depth-texture fix: shadow 10.63 ms and refract 37.05 ms a frame (353 and 375 ms at 445c5653). Terrain stays slow at 90.94 ms, mostly GL-call time on the CPU. All 33 picture values are recorded and none is black; 28 match the reference column, the other 5 are animated scenes sampled at another frame. A later branch build (6a7021ec, 2026-11-01, not a main commit) read 468, terrain 83.06 ms.",
       "provenance": {
-        "kind": "pre-publication",
-        "recordCommit": "381b0f09e9c8e7b3d437946c888224f12a27b367"
+        "kind": "repository",
+        "recordCommit": "93ada07490dae879f9fb3903eafb8d66e1ddfc7e"
       }
     },
     "glmark2.imx8mp": {

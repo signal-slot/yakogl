@@ -106,8 +106,9 @@ see the <a href="https://github.com/signal-slot/yakogl/blob/main/docs/standalone
 <h3 id="es3">OpenGL ES 3.0</h3>
 <p>Product builds report ES 2.0 by default. The AM62P full-tree baseline is shown above;
 later targeted reruns improve individual groups, but do not constitute a new complete result.
-The Pi 4 has partial hardware results, with failures still present. i.MX8MP host capability
-work is recorded separately from hardware validation.
+The Pi 4 has partial hardware results, with failures still present. The i.MX8MP has not
+run dEQP-GLES3 on the board yet; its host capability work is recorded separately from
+hardware validation.
 <a href="https://github.com/signal-slot/yakogl/blob/main/tools/cts/RESULTS.md#es-30-deqp-gles3-stage-4">Read the ES 3.0 record</a>.</p>
 
 <h3 id="mali">Mali-G610 / NanoPC-T6 <span class="badge">WIP</span></h3>
@@ -117,8 +118,10 @@ work is recorded separately from hardware validation.
 2026-11-07 sweep records 147 of 256 cases PASS and 2 FAIL (a second color
 attachment, and 3D texture levels); of the others, 15 are refused, 83 not
 present and 9 skipped. Zephyr board support, board glue and
-GPU bring-up probes are already in the tree, while the complete Zephyr graphics
-path and board-level validation are still in progress. This is therefore a WIP
+GPU bring-up probes are already in the tree. Under Zephyr, an image started by
+kexec has powered the GPU on and read its ID (2026-10-19); the MMU and firmware
+steps are written on the host side and have not run on the board yet. The
+complete Zephyr graphics path and board-level validation are still in progress. This is therefore a WIP
 target, not yet one of the three supported Zephyr boards.
 <a href="https://github.com/signal-slot/yakogl/blob/main/driver/docs/nanopc-t6-mali.md">Mali bring-up details</a> ·
 <a href="https://github.com/signal-slot/yakogl/blob/main/ROADMAP.md#5-more-boards">support criteria</a>.</p>
