@@ -2318,12 +2318,12 @@ if command -v cc >/dev/null 2>&1; then
   }
   scope mali
   # sweep_passsets.py (sweep PASS sets across board records, corpus
-  # verdicts between revisions) on synthetic records; 17 planned tests.
+  # verdicts between revisions) on synthetic records; 25 planned tests.
   sweep_passsets_selftest() {
     local out
     out=$(python3 -I tools/mali/test_sweep_passsets.py 2>&1) || { printf '%s\n' "$out" | tail -30; return 1; }
     printf '%s\n' "$out" | tail -4
-    printf '%s\n' "$out" | grep -q '^Ran 17 tests in ' || { echo "sweep_passsets: not the 17 planned tests"; return 1; }
+    printf '%s\n' "$out" | grep -q '^Ran 25 tests in ' || { echo "sweep_passsets: not the 25 planned tests"; return 1; }
   }
   step "run     mali pan_ref_diff and ref_cases self-test (no Mesa tree)" pan_ref_diff_selftest
   step "run     mali sweep_passsets self-test" sweep_passsets_selftest
