@@ -1,0 +1,4 @@
+case	status	detail
+dEQP-GLES2.functional.shaders.matrix.add.a	InternalError	link failed: refused ARITH
+dEQP-GLES2.functional.shaders.matrix.add.b	Pass	Pass
+dEQP-GLES2.functional.shaders.matrix.add.c	Lost	not-run
