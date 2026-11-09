@@ -41,9 +41,12 @@
 //! `carveout.rs` replays the same sequence with the NPOT mip chains at
 //! their power-of-two extent on carve-outs of other sizes, the freelists
 //! sized as `driver/src/pvr_render.c` sizes them per carve-out
-//! (docs/notes/am62p-render-pool-glmark2.md).
+//! (docs/notes/am62p-render-pool-glmark2.md). `pr_scratch.rs` replays it
+//! with the partial render's scratch blocks reserved at the window's size
+//! before the first scene (the design's third risk).
 
 mod carveout;
+mod pr_scratch;
 
 use super::*;
 use crate::gpu::pvr::fwif::{PDSCODEDATA_HEAP_BASE, PMMETA_PROTECT_HEAP_BASE, USCCODE_HEAP_BASE};
@@ -154,6 +157,10 @@ struct Replay {
     /// scenes were first seen; `LIFE` is the boot and the blocks between
     /// scenes.
     live_hw: Vec<(u32, u32)>,
+    /// GENERAL after each scene's ops, before its teardown: the state its
+    /// frames are kicked in, where the firmware's freelist grows ask the
+    /// bump for a refill (`pr_scratch.rs`).
+    frame_shots: Vec<(u32, Shot)>,
 }
 
 impl Replay {
@@ -172,6 +179,7 @@ impl Replay {
             refused: Vec::new(),
             refused_at: Vec::new(),
             live_hw: Vec::new(),
+            frame_shots: Vec::new(),
         }
     }
 
@@ -343,6 +351,8 @@ impl Replay {
                 Draw => {}
             }
         }
+        let s = self.shot();
+        self.frame_shots.push((n, s));
     }
 
     /// Scene `n`'s texture `what` grows from its one-level storage to a
@@ -508,7 +518,13 @@ const UNNAMED_AT_THE_BOARD: u32 = 24;
 fn glmark2(top_above: u32, unnamed: u32) -> Glmark2 {
     let mut rp = Replay::new(top_above);
     rp.boot();
-    before_jellyfish(&mut rp);
+    glmark2_scenes(&mut rp, unnamed)
+}
+
+/// [`glmark2`]'s scenes on a booted replay (`pr_scratch.rs` reserves its
+/// blocks between the boot and this).
+fn glmark2_scenes(rp: &mut Replay, unnamed: u32) -> Glmark2 {
+    before_jellyfish(rp);
     /* 21 jellyfish: 32 caustic frames of 256x256 with mips (344 KiB), the
      * rest: 45 blocks, 11576 KiB */
     rp.scene = 21;
@@ -530,8 +546,11 @@ fn glmark2(top_above: u32, unnamed: u32) -> Glmark2 {
     rp.scene(24, REFRACT_SETUP);
     let at_depth_buffer = rp.shot();
     let depth_buffer_served = rp.a(24, "1600x1216 depth buffer", GEN, DS_1600);
+    /* the state refract's frames are kicked in, with its depth buffer */
+    let s = rp.shot();
+    rp.frame_shots.push((24, s));
     rp.teardown();
-    Glmark2 { before_refract, at_depth_buffer, depth_buffer_served, refused: rp.refused }
+    Glmark2 { before_refract, at_depth_buffer, depth_buffer_served, refused: rp.refused.clone() }
 }
 
 /// Refract's three large blocks (depth and colour textures, the depth

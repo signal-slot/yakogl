@@ -2399,11 +2399,14 @@ if command -v cc >/dev/null 2>&1; then
   # or matched fails here instead of shrinking the row. A full table puts the
   # free on the overflow chain, never drops it (a code review finding). The
   # top region's tests and the glmark2/Slint/cluster replays on the AM62P's
-  # layout (pool/tests/replay.rs) are among them, and glmark2's replay with
+  # layout (pool/tests/replay.rs) are among them, glmark2's replay with
   # the POT-extent NPOT chains per carve-out (pool/tests/replay/carveout.rs:
-  # refused at 64 MiB, fits the glmark2 image's overlay carve-out).
+  # refused at 64 MiB, fits the glmark2 image's overlay carve-out), and the
+  # same with the partial render's scratch reserved at the window's size
+  # (pool/tests/replay/pr_scratch.rs: the colour scratch fits at 800x600 and
+  # costs terrain its last HWRT block, the depth/stencil one costs refract).
   pvr_pool_tests() {
-    local out want=33
+    local out want=38
     out=$(cargo_test --libtest --no-fail-fast -p yakogl-drivers --all-features gpu::pvr::pool:: 2>&1) ||
       { printf '%s\n' "$out" | tail -20; return 1; }
     printf '%s\n' "$out" | grep -qE "^test result: ok\. $want passed; 0 failed; 0 ignored;" || {
@@ -2417,7 +2420,7 @@ if command -v cc >/dev/null 2>&1; then
     }
   }
   scope pvr drivers
-  step "test    pvr render pool (Rust; the C pool's golden trace replayed, 33 tests)" pvr_pool_tests
+  step "test    pvr render pool (Rust; the C pool's golden trace replayed, 38 tests)" pvr_pool_tests
   # The AM62P RTI arming arithmetic (driver/zephyr/lib/board/am62p/rti_arm.h):
   # the preload for 60 s at each clock rate the board reported, and the
   # refusal of the MHz parents. The row requires its line.

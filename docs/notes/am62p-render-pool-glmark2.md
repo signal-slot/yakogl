@@ -262,7 +262,7 @@ in place.
 `pool/tests/replay.rs` (it uses the replay's private `Replay`, `Rig`,
 `before_jellyfish`, `TERRAIN`, `SHADOW`, `REFRACT_SETUP`). It runs in the
 `tools/check.sh` row `test    pvr render pool (Rust; the C pool's golden
-trace replayed, 33 tests)`, which asserts the count, and in the
+trace replayed, 38 tests)`, which asserts the count, and in the
 `test    yakogl-drivers` row. Alone:
 
 ```text
