@@ -267,6 +267,32 @@ int yd_psci_system_reset(void);
 uint32_t yd_t6_feed_verdict(int64_t now_ms, int64_t alive_at_ms, bool released, uint32_t deadline_ms,
 			    uint32_t alive_ms);
 
+/* ---- STM32MP2 OP-TEE watchdog (soc::stm32mp2::smc_wdt; feature stm32mp2) --
+ * The arm,smc-wdt service by SMC, func_id the board's arm,smc-id (0xbc000000
+ * on the DK, lib/board/stm32mp2/stm32mp2_wdog.h). Each call returns 0, -EIO
+ * when the firmware refused (the command and its code in *out), -EINVAL for a
+ * zero timeout with no call made; out may be NULL. aarch64 only.
+ * yd_mp2_wdt_arm: SET_TIMEOUT timeout_s, ENABLE 1, PET, stopping at the first
+ * refusal. yd_mp2_wdt_ping: PET; 0 does not say the watchdog runs, OP-TEE
+ * answers PET with success when it is disabled too: yd_mp2_wdt_time_left
+ * (GET_TIMELEFT, the seconds in out->value) tells. yd_mp2_wdt_disable:
+ * ENABLE 0, never sent by an image's run. yd_mp2_psci_system_reset: PSCI
+ * SYSTEM_RESET; returns only when the firmware did not reset, with the PSCI
+ * return code. */
+#define YD_MP2_WDT_NO_CMD 0xffffffffu /* cmd when no call was made */
+
+struct yd_mp2_wdt {
+	uint64_t value; /* x1 of the answer (GET_TIMELEFT's seconds), 0 on a refusal */
+	uint32_t cmd;   /* the last command sent (on -EIO the refusing one), or YD_MP2_WDT_NO_CMD */
+	int32_t code;   /* its code: 0 or the firmware's refusal (-1 .. -3) */
+};
+
+int yd_mp2_wdt_arm(uint32_t func_id, uint32_t timeout_s, struct yd_mp2_wdt *out);
+int yd_mp2_wdt_ping(uint32_t func_id, struct yd_mp2_wdt *out);
+int yd_mp2_wdt_time_left(uint32_t func_id, struct yd_mp2_wdt *out);
+int yd_mp2_wdt_disable(uint32_t func_id, struct yd_mp2_wdt *out);
+int yd_mp2_psci_system_reset(void);
+
 /* The early banner (board::nanopc_t6_early): raw "T6:<tag>" lines on uart2
  * before Zephyr's console. yd_t6_early_entry is not called from C: nanopc_t6.c
  * makes reset.S's z_arm64_el2/el1_plat_prep_c branch to it with the flags in
@@ -1471,6 +1497,10 @@ _Static_assert(offsetof(struct yd_imx_wdog_arm, wcr_now) == 4, "yd_imx_wdog_arm.
 _Static_assert(offsetof(struct yd_imx_wdog_arm, flags) == 8, "yd_imx_wdog_arm.flags");
 _Static_assert(offsetof(struct yd_imx_wdog_arm, refusal) == 12, "yd_imx_wdog_arm.refusal");
 _Static_assert(offsetof(struct yd_imx_wdog_arm, timeout_ms) == 16, "yd_imx_wdog_arm.timeout_ms");
+_Static_assert(sizeof(struct yd_mp2_wdt) == 16, "struct yd_mp2_wdt");
+_Static_assert(offsetof(struct yd_mp2_wdt, value) == 0, "yd_mp2_wdt.value");
+_Static_assert(offsetof(struct yd_mp2_wdt, cmd) == 8, "yd_mp2_wdt.cmd");
+_Static_assert(offsetof(struct yd_mp2_wdt, code) == 12, "yd_mp2_wdt.code");
 _Static_assert(sizeof(struct yd_dw_wdt_arm) == 44, "struct yd_dw_wdt_arm");
 _Static_assert(offsetof(struct yd_dw_wdt_arm, comp_type) == 0, "yd_dw_wdt_arm.comp_type");
 _Static_assert(offsetof(struct yd_dw_wdt_arm, cr_found) == 12, "yd_dw_wdt_arm.cr_found");
