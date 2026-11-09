@@ -245,6 +245,13 @@ pub struct Prepared<'a> {
     /// It is kept in the VPM output for every primitive (select.rs
     /// select_vertex): measured on the Pi 4, gl_test case 110.
     pub psiz: Option<S>,
+    /// Fragment shaders: the `gl_FragDepth` value, when the shader writes
+    /// it (ES 3.00 section 7.2): select.rs writes it to the TLB as the
+    /// fragment's depth in place of the FEP's Z (Mesa emit_frag_end's
+    /// per-pixel depth write, nir_to_vir.c:2097-2108). A path that does
+    /// not write it leaves the lane as the last store merged in (GLSL ES
+    /// 3.00 7.2: the depth is then undefined, and any value is correct).
+    pub depth: Option<S>,
 }
 
 /// Why a stage was not prepared. One variant per cause.
@@ -447,6 +454,9 @@ struct Walk<'m, 'a> {
     /// Vertex shaders: gl_PointSize as written so far (merged after an
     /// `if` as gl_Position is).
     psiz: Option<S>,
+    /// Fragment shaders: gl_FragDepth as written so far (merged after an
+    /// `if` as gl_PointSize is).
+    depth: Option<S>,
     /// The loops the unroller kept, each with its pass count (`Trip`).
     trips: &'m [Trip],
     /// [`crate::shaderc::LodKey::cube_noseam`]: the cube bindings whose
@@ -1282,6 +1292,11 @@ impl<'m, 'a> Walk<'m, 'a> {
                     (SHC_STAGE_VERTEX, IoSlot::PointSize) => {
                         self.psiz = Some(self.src(src, 0)?);
                     }
+                    /* gl_FragDepth: one lane, the fragment's depth (select.rs
+                     * writes it to the TLB in place of the FEP's Z). */
+                    (SHC_STAGE_FRAGMENT, IoSlot::FragDepth) => {
+                        self.depth = Some(self.src(src, 0)?);
+                    }
                     (SHC_STAGE_VERTEX, IoSlot::Varying(loc)) => {
                         let comps = self
                             .m
@@ -1680,6 +1695,7 @@ impl<'m, 'a> Walk<'m, 'a> {
         let mut written: AVec<'a, (u32, usize)> = AVec::new();
         self.written_lanes(a, body, &mut written)?;
         let (position0, color0, discard0, psiz0) = (self.position, self.color, self.discard, self.psiz);
+        let depth0 = self.depth;
         let stored0 = self.stored.len();
         /* The discard flag, carried round a loop whose body can discard: a
          * lane discarded in one pass stays discarded (dEQP discard.*loop*).
@@ -1693,6 +1709,22 @@ impl<'m, 'a> Walk<'m, 'a> {
             };
             let p = self.push(a, SOp::Phi { init: [init] })?;
             self.discard = Some(p);
+            Some(p)
+        } else {
+            None
+        };
+        /* gl_FragDepth, carried round a loop whose body writes it (dEQP
+         * fragdepth.*.uniform_loop_write: `gl_FragDepth += x` per pass), as
+         * the discard flag is: a phi of the value before the loop (GLSL
+         * leaves an unwritten depth undefined, so 0 serves when there is
+         * none), its next value the body's last store. */
+        let depth_phi = if self.stores_depth(body) {
+            let init = match depth0 {
+                Some(d) => d,
+                None => self.push(a, SOp::Const(0))?,
+            };
+            let p = self.push(a, SOp::Phi { init: [init] })?;
+            self.depth = Some(p);
             Some(p)
         } else {
             None
@@ -1750,8 +1782,20 @@ impl<'m, 'a> Walk<'m, 'a> {
         while self.enclosing_exits.len() > enclosing {
             self.enclosing_exits.pop();
         }
-        if self.position != position0 || self.color != color0 || self.psiz != psiz0 || self.stored.len() != stored0 {
+        if self.position != position0
+            || self.color != color0
+            || self.psiz != psiz0
+            || (depth_phi.is_none() && self.depth != depth0)
+            || self.stored.len() != stored0
+        {
             return Err(PrepError::NotYet("an output written inside a loop that can leave on data"));
+        }
+        if let Some(p) = depth_phi {
+            let next = self.depth.ok_or(PrepError::NotYet("a loop's depth with no value"))?;
+            if next != p {
+                self.push(a, SOp::PhiNext { ops: [p, next] })?;
+            }
+            self.depth = Some(p);
         }
         match discard_phi {
             Some(p) => {
@@ -1810,6 +1854,16 @@ impl<'m, 'a> Walk<'m, 'a> {
             Node::Instr(id) => matches!(self.m.instr(id), Some(Op::Discard)),
             Node::If { then_, else_, .. } => self.discards(then_) || self.discards(else_),
             Node::Loop { body } => self.discards(body),
+            _ => false,
+        })
+    }
+
+    /// Does `range` store `gl_FragDepth` anywhere, nested arms included?
+    fn stores_depth(&self, range: ir::Range) -> bool {
+        self.m.nodes_of(range).iter().any(|node| match *node {
+            Node::Instr(id) => matches!(self.m.instr(id), Some(Op::StoreOutput { slot: IoSlot::FragDepth, .. })),
+            Node::If { then_, else_, .. } => self.stores_depth(then_) || self.stores_depth(else_),
+            Node::Loop { body } => self.stores_depth(body),
             _ => false,
         })
     }
@@ -2028,6 +2082,7 @@ impl<'m, 'a> Walk<'m, 'a> {
         let break0 = self.break_to.take();
         let locals0 = a.alloc_copy(self.locals)?;
         let (position0, color0, psiz0, discard0) = (self.position, self.color, self.psiz, self.discard);
+        let depth0 = self.depth;
         let stored0 = a.alloc_copy(self.stored.as_slice())?;
         for (region, arm) in [(DRY_THEN, then_), (DRY_ELSE, else_)] {
             self.open_loops.push(a, region)?;
@@ -2038,6 +2093,7 @@ impl<'m, 'a> Walk<'m, 'a> {
             }
             self.locals.copy_from_slice(locals0);
             (self.position, self.color, self.psiz, self.discard) = (position0, color0, psiz0, discard0);
+            self.depth = depth0;
             let mut stored = AVec::with_capacity(a, stored0.len())?;
             stored.extend_from_slice(a, stored0)?;
             self.stored = stored;
@@ -2182,14 +2238,14 @@ impl<'m, 'a> Walk<'m, 'a> {
         let break0 = self.break_to.take();
         /* the state before the `if` */
         let locals0 = a.alloc_copy(self.locals)?;
-        let (position0, color0, psiz0) = (self.position, self.color, self.psiz);
+        let (position0, color0, psiz0, depth0) = (self.position, self.color, self.psiz, self.depth);
         let stored0 = a.alloc_copy(self.stored.as_slice())?;
         let discard0 = self.discard;
 
         self.nodes(a, then_, false)?;
         let discard_t = self.discard;
         let locals_t = a.alloc_copy(self.locals)?;
-        let (position_t, color_t, psiz_t) = (self.position, self.color, self.psiz);
+        let (position_t, color_t, psiz_t, depth_t) = (self.position, self.color, self.psiz, self.depth);
         let stored_t = a.alloc_copy(self.stored.as_slice())?;
 
         /* back to the state before, for the else arm */
@@ -2197,6 +2253,7 @@ impl<'m, 'a> Walk<'m, 'a> {
         self.position = position0;
         self.color = color0;
         self.psiz = psiz0;
+        self.depth = depth0;
         let mut stored = AVec::with_capacity(a, stored0.len())?;
         stored.extend_from_slice(a, stored0)?;
         self.stored = stored;
@@ -2241,6 +2298,7 @@ impl<'m, 'a> Walk<'m, 'a> {
             }
         }
         self.psiz = self.merge(a, c, psiz_t, self.psiz, branch)?;
+        self.depth = self.merge(a, c, depth_t, self.depth, branch)?;
         for &(loc, comp, t) in stored_t.iter() {
             let e = self.stored.as_slice().iter().find(|x| x.0 == loc && x.1 == comp).map(|x| x.2);
             let Some(m) = self.merge(a, c, Some(t), e, branch)? else { continue };
@@ -2295,6 +2353,7 @@ fn walk<'m, 'a>(
         stored: AVec::new(),
         discard: None,
         psiz: None,
+        depth: None,
         trips,
         cube_noseam,
         enclosing_exits: AVec::new(),
@@ -2469,9 +2528,10 @@ pub fn prepare_fragment_with<'a>(
             rt_mask |= 1 << rt;
         }
     }
-    /* The colours of every RT, then the discard condition: roots kept
-     * through compact (an RT not written holds zeros, never read). */
-    let mut roots = [S(0); 4 * MAX_RTS + 1];
+    /* The colours of every RT, then the discard condition, then the depth:
+     * roots kept through compact (an RT not written holds zeros, never
+     * read; a root not present is left out of the compacted range). */
+    let mut roots = [S(0); 4 * MAX_RTS + 2];
     for rt in 0..MAX_RTS {
         for lane in 0..4 {
             roots[4 * rt + lane] = match w.color[rt][lane] {
@@ -2480,12 +2540,22 @@ pub fn prepare_fragment_with<'a>(
             };
         }
     }
-    roots[4 * MAX_RTS] = w.discard.unwrap_or(S(0));
-    let n = if w.discard.is_some() { 4 * MAX_RTS + 1 } else { 4 * MAX_RTS };
+    let mut n = 4 * MAX_RTS;
+    let discard_root = w.discard.map(|d| {
+        roots[n] = d;
+        n += 1;
+        n - 1
+    });
+    let depth_root = w.depth.map(|d| {
+        roots[n] = d;
+        n += 1;
+        n - 1
+    });
     let ops = compact(w.ops.as_slice(), &mut roots[..n], a)?;
     refuse_undef(ops)?;
     let color: [[S; 4]; MAX_RTS] = core::array::from_fn(|rt| core::array::from_fn(|lane| roots[4 * rt + lane]));
-    let discard = w.discard.map(|_| roots[4 * MAX_RTS]);
+    let discard = discard_root.map(|r| roots[r]);
+    let depth = depth_root.map(|r| roots[r]);
     /* The declared type and width of each ES 3.00 output: an integer one
      * is written to the TLB as 32-bit words (select.rs). gl_FragColor and
      * gl_FragData[n] are vec4 (their declaration says GL_FLOAT_VEC4). */
@@ -2509,6 +2579,7 @@ pub fn prepare_fragment_with<'a>(
         rt_comps,
         discard,
         psiz: None,
+        depth,
     })
 }
 
@@ -2588,6 +2659,7 @@ pub fn prepare_vertex_with<'a>(
         position,
         varyings: vary,
         color: [[S(0); 4]; MAX_RTS],
+        depth: None,
         rt_mask: 0,
         rt_int: 0,
         rt_comps: [4; MAX_RTS],

@@ -450,10 +450,11 @@ pub struct Selected<'a> {
     /// shader reads gl_PointCoord, and the program is for points draws.
     pub implicit_point_varyings: bool,
     /// Fragment shaders: the program writes Z to the TLB itself (the pass-
-    /// through Z from FEP), prog_data `writes_z`.
+    /// through Z from FEP, or its own `gl_FragDepth`), prog_data `writes_z`.
     pub writes_z: bool,
     /// Fragment shaders: early Z/stencil tests are off (prog_data
-    /// `disable_ez`, `!early_fragment_tests`).
+    /// `disable_ez`, `!early_fragment_tests`): a discard, no colour write,
+    /// or a `gl_FragDepth` write.
     pub disable_ez: bool,
 }
 
@@ -462,6 +463,13 @@ pub struct Selected<'a> {
 /// used") | TLB_SAMPLE_MODE_PER_PIXEL (1 << 2), in 0xffffff00
 /// (nir_to_vir.c:1934-1946, 2110-2129, Mesa 26.2.1).
 pub const TLB_Z_FROM_FEP: u32 = 0xffff_ff00 | (2 << 6) | (1 << 2);
+
+/// The TLB specifier of the shader's own depth write (`gl_FragDepth`):
+/// TLB_TYPE_DEPTH (2 << 6) | TLB_V42_DEPTH_TYPE_PER_PIXEL (1 << 3, "QPU
+/// result used") | TLB_SAMPLE_MODE_PER_PIXEL (1 << 2), in 0xffffff00:
+/// 0xffffff8c (emit_frag_end, nir_to_vir.c:2097-2108, Mesa 26.2.1; the
+/// `ver >= 42` branch, so V3D 4.2 and 7.1 take the same byte).
+pub const TLB_Z_PER_PIXEL: u32 = 0xffff_ff00 | (2 << 6) | (1 << 3) | (1 << 2);
 
 struct Sel<'a> {
     ops: AVec<'a, VOp>,
@@ -2286,10 +2294,25 @@ pub fn select_fragment<'a>(
     let reads_z = p.ops.contains(&SOp::FragCoord { lane: 2 });
     /* No colour write: Mesa writes Z and flags the shader as possibly
      * discarding, so it takes the late path too (nir_to_vir.c:2120-2126, and
-     * no early-tests promotion without a colour write, :2067-2078). */
-    let disable_ez = p.discard.is_some() || p.rt_mask == 0;
+     * no early-tests promotion without a colour write, :2067-2078).
+     * A shader that writes gl_FragDepth writes its own depth to the TLB
+     * (emit_frag_end's first branch, nir_to_vir.c:2097-2108: `mov tlbu,
+     * <depth>` with TLB_V42_DEPTH_TYPE_PER_PIXEL, `c->writes_z`), in place
+     * of the pass-through write, and early tests are off (prog_data
+     * `disable_ez` is `!early_fragment_tests`, which ES 3.00 has no way to
+     * declare). Mesa's compiler does not clamp the value to [0, 1] (ES
+     * 3.00 section 7.2): the move takes it as it is, and so does this,
+     * leaving the clamp where Mesa leaves it, past the QPU; the dEQP
+     * fbo.depth write_clamp cases are the board's to measure. */
+    let disable_ez = p.discard.is_some() || p.rt_mask == 0 || p.depth.is_some();
     let writes_z = disable_ez || reads_z;
-    if writes_z {
+    if let Some(d) = p.depth {
+        let z = s.val(a, d)?;
+        s.push(
+            a,
+            VOp::Mul { op: MulOp::Mov, dst: Dst::Tlbu(Uniform::constant(TLB_Z_PER_PIXEL)), a: z, b: Operand::None },
+        )?;
+    } else if writes_z {
         s.push(
             a,
             VOp::Mul {

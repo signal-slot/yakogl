@@ -138,7 +138,12 @@ pub struct FsProg<'a> {
     pub flat_shade_flags: u32,
     pub noperspective_flags: u32,
     pub centroid_flags: u32,
+    /// The shader writes Z to the TLB (prog_data `writes_z`): the pass-
+    /// through Z (a discard, no colour write, a read of gl_FragCoord.z) or
+    /// its own `gl_FragDepth` (select.rs `TLB_Z_PER_PIXEL`).
     pub writes_z: bool,
+    /// Early Z/stencil tests are off (prog_data `disable_ez`): a discard,
+    /// no colour write, or a `gl_FragDepth` write.
     pub disable_ez: bool,
     pub uses_center_w: bool,
     pub lock_scoreboard_on_first_thrsw: bool,
@@ -515,7 +520,8 @@ pub fn compile_program_keyed<'a>(
             flat_shade_flags: flat,
             noperspective_flags: 0,
             centroid_flags: centroid,
-            /* select.rs select_fragment: a discard or a read of Z */
+            /* select.rs select_fragment: a discard, a read of Z, or a
+             * gl_FragDepth write */
             writes_z: fsel.writes_z,
             disable_ez: fsel.disable_ez,
             uses_center_w: fsel.uses_center_w,
@@ -543,7 +549,9 @@ mod tests {
     use crate::shaderc::online::v3d::decode::{decode, same_instr};
     use crate::shaderc::online::v3d::isa::{AddOp, Alu, BranchCond, MulOp, Mux};
     use crate::shaderc::online::v3d::listing::write_instr;
-    use crate::shaderc::online::v3d::select::{QUNIFORM_FB_WPOS_Y_OFFSET, QUNIFORM_FB_WPOS_Y_SCALE, TLB_Z_FROM_FEP};
+    use crate::shaderc::online::v3d::select::{
+        QUNIFORM_FB_WPOS_Y_OFFSET, QUNIFORM_FB_WPOS_Y_SCALE, TLB_Z_FROM_FEP, TLB_Z_PER_PIXEL,
+    };
     use crate::shaderc::online::{lower, store};
     use std::string::String;
     use std::vec::Vec;
@@ -861,15 +869,26 @@ mod tests {
         out
     }
 
-    /// The TLBU writes of `c` whose specifier is the pass-through Z.
-    fn z_from_fep_writes(what: &str, c: &Code<'_>) -> usize {
+    /// The TLBU writes of `c` whose specifier is `spec`.
+    fn tlbu_writes(what: &str, c: &Code<'_>, spec: u32) -> usize {
         uniform_consumers(what, c)
             .iter()
             .filter(|(i, u)| {
                 let tlbu = matches!(i, Instr::Alu(a) if (a.add.magic && a.add.waddr == 8) || (a.mul.magic && a.mul.waddr == 8));
-                tlbu && *u == Uniform::constant(TLB_Z_FROM_FEP)
+                tlbu && *u == Uniform::constant(spec)
             })
             .count()
+    }
+
+    /// The TLBU writes of `c` whose specifier is the pass-through Z.
+    fn z_from_fep_writes(what: &str, c: &Code<'_>) -> usize {
+        tlbu_writes(what, c, TLB_Z_FROM_FEP)
+    }
+
+    /// The TLBU writes of `c` whose specifier is the shader's own depth
+    /// (gl_FragDepth).
+    fn z_per_pixel_writes(what: &str, c: &Code<'_>) -> usize {
+        tlbu_writes(what, c, TLB_Z_PER_PIXEL)
     }
 
     fn check_all(p: &V3dProgram<'_>) {
@@ -903,13 +922,18 @@ mod tests {
             assert_eq!(seg, thrsw == 1, "{what}: single_seg and the code's {thrsw} THRSW signals disagree");
         }
         /* A discarding shader runs with late tests and writes the pass-
-         * through Z, once; one that reads Z writes it too (select.rs
-         * select_fragment); no vertex or coordinate shader writes Z. */
-        assert_eq!(p.fs.disable_ez, p.fs.uses_discard, "disable_ez is the discard");
+         * through Z, once; one that reads Z writes it too; one that writes
+         * gl_FragDepth writes its own depth instead, once, with late tests
+         * (select.rs select_fragment); no vertex or coordinate shader
+         * writes Z. */
+        let own_z = z_per_pixel_writes("fs", &p.fs.code);
+        assert!(own_z <= 1, "fs depth writes");
+        assert_eq!(p.fs.disable_ez, p.fs.uses_discard || own_z == 1, "disable_ez is the discard or the depth write");
         assert!(p.fs.writes_z || !p.fs.uses_discard, "a discard writes Z");
-        assert_eq!(z_from_fep_writes("fs", &p.fs.code), usize::from(p.fs.writes_z), "fs Z writes");
-        assert_eq!(z_from_fep_writes("vs", &p.vs.code), 0, "vs Z writes");
-        assert_eq!(z_from_fep_writes("cs", &p.cs.code), 0, "cs Z writes");
+        assert_eq!(z_from_fep_writes("fs", &p.fs.code) + own_z, usize::from(p.fs.writes_z), "fs Z writes");
+        for (what, c) in [("vs", &p.vs.code), ("cs", &p.cs.code)] {
+            assert_eq!(z_from_fep_writes(what, c) + z_per_pixel_writes(what, c), 0, "{what} Z writes");
+        }
     }
 
     #[test]
@@ -2225,6 +2249,46 @@ mod tests {
             let p = p.expect("compiles");
             check_all(p);
             assert!(!p.fs.writes_z && !p.fs.disable_ez);
+        });
+    }
+
+    #[test]
+    fn a_shader_that_writes_gl_fragdepth_writes_its_own_z() {
+        /* GLSL ES 3.00 (gl_FragDepth is ES 3.00's): a report-es2 build
+         * refuses it in the front end */
+        if cfg!(feature = "report-es2") {
+            return;
+        }
+        /* emit_frag_end's first branch (nir_to_vir.c:2097-2108): `mov tlbu,
+         * <depth>` with TLB_V42_DEPTH_TYPE_PER_PIXEL, after the last thread
+         * switch and before the colour; writes_z, and disable_ez for the
+         * late tests; no discard, so uses_discard stays false and there is
+         * no pass-through write. tests/es3_fragdepth_v3d.rs runs it. */
+        let vs = "#version 300 es\nin vec4 a_position;\nvoid main() { gl_Position = a_position; }\n";
+        let fs = "#version 300 es\nprecision mediump float;\nout vec4 o;\n\
+                  void main() { o = vec4(1.0); gl_FragDepth = 0.25; }\n";
+        with_program(vs, fs, Prim::Triangles, |p| {
+            let p = p.expect("compiles");
+            check_all(p);
+            assert!((p.fs.uses_discard, p.fs.writes_z, p.fs.disable_ez) == (false, true, true));
+            assert_eq!(z_per_pixel_writes("fs", &p.fs.code), 1);
+            assert_eq!(z_from_fep_writes("fs", &p.fs.code), 0);
+            let ops: Vec<String> = p.fs.code.instrs.iter().map(text).collect();
+            let z = ops.iter().position(|o| o.contains("tlbu") && o.contains("mov")).expect("the Z write");
+            let colour = ops.iter().position(|o| o.contains("vfpack")).expect("a colour write");
+            assert!(z < colour, "{ops:#?}");
+        });
+        /* With a discard too: one depth write, still per pixel, and the
+         * discard's late tests. */
+        let fs = "#version 300 es\nprecision mediump float;\nin vec4 v;\nout vec4 o;\n\
+                  void main() { if (v.x > 0.5) discard; o = v; gl_FragDepth = v.y; }\n";
+        let vs = "#version 300 es\nin vec4 a_position;\nout vec4 v;\n\
+                  void main() { gl_Position = a_position; v = a_position; }\n";
+        with_program(vs, fs, Prim::Triangles, |p| {
+            let p = p.expect("compiles");
+            check_all(p);
+            assert!((p.fs.uses_discard, p.fs.writes_z, p.fs.disable_ez) == (true, true, true));
+            assert_eq!((z_per_pixel_writes("fs", &p.fs.code), z_from_fep_writes("fs", &p.fs.code)), (1, 0));
         });
     }
 
