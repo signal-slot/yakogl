@@ -25,6 +25,7 @@ pub mod es3;
 pub mod es3_formats;
 pub mod etc1;
 pub mod framebuffer;
+pub(crate) mod msaa;
 pub mod names;
 pub mod native_array;
 pub mod native_cube;
