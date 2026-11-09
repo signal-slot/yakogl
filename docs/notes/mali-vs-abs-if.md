@@ -2,8 +2,9 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Mali (Valhall): the vertex `abs`/`floor` and the if-converted vertex `if` (cases 181 and 188)
 
-**Status: design, implementation in vs-abs-if** (plan #336, issue #33). This
-note changes no code. It maps gl_test case 181 `fusemad` (the control half,
+**Status: implemented in vs-abs-if** (plan #336, issue #33); section 6 says
+what the code does where it differs from this design. Sections 1-5 are the
+design as written before it. It maps gl_test case 181 `fusemad` (the control half,
 `fma_vs_ctrl.vert`) and case 188 `predif` (`predif_vs_uni.vert`) to the Mesa
 26.2.1 / drm-shim references, names where in `src/shaderc/online/mali` each
 instruction is made, and the tests to add. Both are the "ranked items 3 and 5"
@@ -206,3 +207,65 @@ refusals named in `notes/mali-vs-alu-ops.md` (`Fabs`, `Ffloor`, `Flt`,
 4. No frame-side change: the draw of both is a position shader, a varying
    shader and a flat fragment, all existing. The sweep's delta
    (`tools/mali/sweep_passsets.py --delta tools/cts/log`) is the board item's.
+
+## 6. As implemented (vs-abs-if)
+
+Both programs are byte-equal to the shim (`a_vertex_abs_and_floor_are_byte_equal_to_mesa_26_2_1`,
+`a_vertex_if_over_uniforms_is_byte_equal_to_mesa_26_2_1`, every region of
+`vsarith_181_fmactrl` / `vsarith_188_predif`). No reference was made: both
+were present. All references below are to `src/shaderc/online/mali/nir.rs`.
+
+- **Section 2** went as designed: two arms, `Fabs` and `Ffloor`, through
+  `Nir::alu`. The shared-product rule, the `.neg.abs` fold, `FROUND.f32.rtn`
+  and `FADD_IMM` came from the existing passes. `Flt` (section 3, step 3) was
+  already in the walk from vs-cmp-clamp.
+- **Restructure (step 1).** The walk loop was not turned into a recursive
+  `walk_nodes`. `vs_steps` flattens the body into a list of `Step`s instead:
+  `Instr`, `If(cond)`, `Else`, `EndIf`, or `Refuse(err)`. `Refuse` is put
+  where a loop, a jump or an `if` that cannot be flattened stands, so the walk
+  refuses in the same order as before (`light_amount_*.vert` still stops at
+  its uniform type). An `if` is flattened when each side is straight code with
+  no look-up, no `LoadUniformIdx` and at most `PEEPHOLE_LIMIT_GL` (8)
+  `IrOp::Alu` instructions. That count is of the front end's IR, not of NIR's
+  scalar instructions: it is an approximation that no reference has tested
+  near the limit.
+- **The join (step 2)** is `vs_join` over a `VsState` (locals, position,
+  point size, varyings). It makes one `bcsel` per differing lane, in
+  varying-location then lane order. A local that one side leaves undefined is
+  undefined after the `if`. An output stored by one side only, with nothing
+  stored before, is `ControlFlow`.
+- **Compare order (step 4).** `opt_move` alone left the `FCMP` before the
+  arms. When an `if` was flattened, `build` runs `move_compares`
+  (`nir_move_comparisons`) after `opt_move`, which puts the compare after both
+  sides, as in the reference. A shader with no `if` is not moved, so no
+  earlier reference changes.
+- **The 1.0 lane (the open decision): "constant by `if`".** `build` keeps a
+  bit per varying lane written under a flattened `if` (`phis`). A
+  `Val::Const` lane with its bit set is a stored flat lane (`push_flat`)
+  rather than a propagated constant. The `konst` layout and the store loop
+  read the same bit. The store's constant data becomes
+  `IADD_IMM.i32 r2, 0x0, #0x3F800000` through the existing `va_mov_imm`
+  path, so no new node kind was needed. `vs_constants` and the program build
+  share the walk, so they agree.
+- **The 0.25 / 0.75 lane** carries no `ffma(x, 0.0, x)`. nir_opt_algebraic
+  moves the `ffma` into the select's constant sources, where it folds. The
+  walk pushes a fresh `bcsel` of the same constants in the `ffma`'s place,
+  which gives the reference's `FMA`, `FMA`, `MOV`, `CSEL` order, and leaves
+  the first `bcsel` to `dce`.
+- **Refused (section 5, item 3):** a look-up under the `if`, a nested `if`,
+  more than 8 operations on a side, and `psiz_if` (a point size the sides set
+  apart) stay `ControlFlow` (`vertex_ifs_no_reference_draws_are_refused`).
+  For `psiz_if`, a trial without the refusal was not byte-equal: Mesa loads
+  `a_color` before the position and ends on `NOP.end` after the point-size
+  `LEA_BUF_IMM`. `es100/partial_varying.vert` does **not** keep its line,
+  against section 5: the `if` is now flattened, its `tt.x` is undefined on
+  the other side, and the unwritten lane refuses it as `VaryingForm` ("a
+  varying lane left unwritten") instead of `ControlFlow`. Mesa drops the
+  write altogether (item 6 of `notes/mali-vs-alu-ops.md`).
+- **Tests:** the two byte-equal tests and the refusal test (`MALI_TESTS`
+  382 -> 385). Both vertex shaders are added to `vs_reference_sources()`,
+  and the gap list's vertex arithmetic example is now `fract` (it was
+  `abs`). In `tools/mali/corpus-verdicts.txt`, `gltest/fma_vs_ctrl.vert` and
+  `gltest/predif_vs_uni.vert` are `ok`, and so is every other source of
+  cases 181 and 188 (`fma_vs_fused`, `fma_fs_{ctrl,fused,varying}`,
+  `predif_fs_{uni,coord}`).

@@ -1066,7 +1066,8 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
         (0..33).map(|i| format!("vec4 a{i} = {}; ", if i == 0 { "p".into() } else { format!("a{}", i - 1) })).collect();
     let varyings: String = (0..17).map(|i| format!("varying float v{i}; ")).collect();
     let mut v: Vec<(u32, String, MaliError)> = [
-        (VS, "attribute vec4 p; void main(){ gl_Position = abs(p); }", MaliError::Arithmetic),
+        /* `abs` is taken (vs-abs-if); `fract` is not */
+        (VS, "attribute vec4 p; void main(){ gl_Position = fract(p); }", MaliError::Arithmetic),
         /* a constant times a product with a constant across a change of
          * width: GLSL's reassociate_constant moves it (glsl.rs), which is
          * not transcribed for a vector times a scalar product */
@@ -2113,6 +2114,8 @@ fn vs_reference_sources() -> Vec<&'static str> {
     srcs.extend(UNITYPE_POPULATION.iter().map(|c| c.1));
     /* the vertex compares, reductions and clamps (cases 86 and 182) */
     srcs.extend([td!("vsarith_86_anyall.vert"), td!("vsarith_182_fsat.vert"), td!("vsarith_182_fsatfolded.vert")]);
+    /* vertex abs/floor and the flattened if (cases 181 and 188) */
+    srcs.extend([td!("vsarith_181_fmactrl.vert"), td!("vsarith_188_predif.vert")]);
     srcs
 }
 
@@ -2173,6 +2176,50 @@ fn vertex_reductions_and_bounds_no_reference_draws_are_refused() {
         "attribute vec4 p; attribute vec2 n; varying vec4 v; void main(){ gl_Position = p; v = vec4(any(greaterThan(n, vec2(0.5))) ? 1.0 : 0.0); }",
     ] {
         assert_eq!(gap(SHC_STAGE_VERTEX, src), MaliError::Arithmetic, "{src}");
+    }
+}
+
+/* ---- vertex abs/floor and the if-converted vertex if (#33, cases 181
+ * and 188) ---------------------------------------------------------- */
+
+/// gl_test case 181's control (tools/shaders/gltest/fma_vs_ctrl.vert):
+/// the shared product `u_a*u_b` one `FMA` with `-0`, `u_x - abs(p)` one
+/// `FADD` with the `.neg.abs` modifier, `floor(p*4.0)` one
+/// `FROUND.f32.rtn`; every lane flat (docs/notes/mali-vs-abs-if.md,
+/// vsarith_181_fmactrl.expect.json, traced with every uniform 0).
+#[test]
+fn a_vertex_abs_and_floor_are_byte_equal_to_mesa_26_2_1() {
+    let (vs, fs) = (td!("vsarith_181_fmactrl.vert"), td!("vsarith_181_fmactrl.frag"));
+    check_linked_for("181 fmactrl", vs, fs, td!("vsarith_181_fmactrl.expect.json"));
+}
+
+/// gl_test case 188 (tools/shaders/gltest/predif_vs_uni.vert): the vertex
+/// `if` over `u_x > 0.0` flattened, both sides computed, the compare one
+/// `FCMP_OR.f32.lt.m1` with the 0 on the left, one `CSEL.u32.eq` per lane
+/// the sides differ in, the 1.0 both store kept a stored flat lane
+/// (vsarith_188_predif.expect.json, the 26 words of alu_predif).
+#[test]
+fn a_vertex_if_over_uniforms_is_byte_equal_to_mesa_26_2_1() {
+    let (vs, fs) = (td!("vsarith_188_predif.vert"), td!("vsarith_188_predif.frag"));
+    check_linked_for("188 predif", vs, fs, td!("vsarith_188_predif.expect.json"));
+}
+
+/// The vertex `if`s no reference of this walk draws stay refused at the
+/// control-flow gap: a point size set apart by the sides (es100/psiz_if.vert,
+/// vsarith_psiz_if's other load and store order), a look-up under the `if`,
+/// a nested `if`. A varying lane one side leaves undefined
+/// (es100/partial_varying.vert) is the unwritten lane's gap.
+#[test]
+fn vertex_ifs_no_reference_draws_are_refused() {
+    assert_eq!(gap(SHC_STAGE_VERTEX, td!("vsarith_partial_varying.vert")), MaliError::VaryingForm);
+    for src in [
+        td!("vsarith_psiz_if.vert"),
+        "attribute vec4 p; uniform sampler2D s; uniform float u; varying vec4 v; void main(){ gl_Position = p; if (u > 0.0) v = texture2DLod(s, p.xy, 0.0); else v = p; }",
+        "attribute vec4 p; uniform float u; varying vec4 v; void main(){ gl_Position = p; v = p; if (u > 0.0) { if (u > 1.0) v = p * 2.0; } }",
+        /* nine operations on a side, past the peephole's eight */
+        "attribute vec4 p; uniform float u; varying vec4 v; void main(){ gl_Position = p; v = p; if (u > 0.0) { float a = u + 1.0; a = a * u + 2.0; a = a * u + 3.0; a = a * u + 4.0; a = a * u + 5.0; v = vec4(a); } }",
+    ] {
+        assert_eq!(gap(SHC_STAGE_VERTEX, src), MaliError::ControlFlow, "{src}");
     }
 }
 
