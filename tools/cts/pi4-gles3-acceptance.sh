@@ -24,7 +24,8 @@
 #       '<N> images, <M> matched once, 0 not matched, 0 matched more than
 #       once, 0 empty images' with <M> the whole mustpass (42810 cases).
 #   c3  python3 tools/release/redaction-scan.py HEAD 2>&1 | grep -c
-#       pi4-gles3 prints 0 (the scan must have run: its report header).
+#       pi4-gles3 prints 0 (the scan must have run: its report header), in a
+#       --root that is a git repository of its own (not a directory inside one).
 #   c4  head -3 docs/es3/pi4-gles3-fails.tsv names <sha8> and no
 #       925dbca9/0ff58329, states 'images run (N of N)', and the whole file
 #       names neither old sha.
@@ -128,7 +129,16 @@ else
 fi
 
 # --- c3: the redaction scan of HEAD names no pi4-gles3 file ------------------
-c3_out=$(cd "$ROOT" && python3 -I "$HERE/../release/redaction-scan.py" HEAD 2>&1)
+# The scan reads the repository that holds $ROOT (git rev-parse), so a $ROOT
+# that is not a repository of its own would have the scan run on whatever
+# repository encloses it (a fixture under build/ or target/: this checkout)
+# and report that HEAD. The check requires $ROOT to be its own top.
+c3_top=$(cd "$ROOT" && git rev-parse --show-toplevel 2>/dev/null) || c3_top=
+if [ "$c3_top" != "$(cd "$ROOT" && pwd -P)" ]; then
+	c3_out="redaction-scan: not run: $ROOT is not a git repository of its own${c3_top:+ (git would read $c3_top)}"
+else
+	c3_out=$(cd "$ROOT" && python3 -I "$HERE/../release/redaction-scan.py" HEAD 2>&1)
+fi
 if ! printf '%s\n' "$c3_out" | grep -Eq '^redaction-scan: .*, [0-9]+ files '; then
 	printf '%s\n' "$c3_out" >&2
 	line 3 FAIL "redaction-scan.py HEAD did not run in $ROOT: $(printf '%s\n' "$c3_out" | head -1)"
