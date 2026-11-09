@@ -283,7 +283,12 @@ at the first frame past that (`scene.cpp:116`).
     fence-irq): it removes the up to 1 ms of rounding per wait.
   - The resolve waits for its own kick, not for all four slots: the table's
     `wait_kick: None` (`backend.rs:3380`), so `finish()` at `texture.rs:709`
-    waits for refract's chain as well.
+    waits for refract's chain as well. Done (item resolve-own-kick): the
+    table takes `gc_wait_kick` (`kick::wait_kick`, one kick's fence, the
+    open frame submitted first), the GL core's resolve waits with it, and
+    the back end's resolve waits for the surface's `written_by`, the kick
+    the last depth-writing draw was recorded in (ds_cache.rs `drawn`).
+    Host test `tests/gc_resolve_wait_kick.rs`; not measured on a board.
   - The chain in one kick, not ten (`mipmap.rs:270-281`), which also removes
     refract's `frame_open` waits.
 
