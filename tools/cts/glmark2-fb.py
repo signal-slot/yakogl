@@ -4,6 +4,7 @@
 """Decode a glmark2 image's frame dump (CONFIG_GLMARK2_FRAME_DUMP) to a PNG.
 
     tools/cts/glmark2-fb.py <console log> <out.png> [--scene SUBSTRING]
+    tools/cts/glmark2-fb.py --rundir <run directory> <png directory>
     tools/cts/glmark2-fb.py --self-test
 
 The log has, per scene (driver/docs/glmark2.md, "The frame dump"):
@@ -17,6 +18,13 @@ not match is reported and drawn magenta; the frame crc32 and the scene's
 `glmark2-picture:` line (probes, crc16 grid) are checked when every row is
 good. Exit 0: a complete picture that agrees; 1: damaged or missing rows or a
 disagreement (rerun the board, never patch pixels); 2: no dump in the log.
+
+--rundir: a mali-glmark2-run.sh run directory (log/<n>.out and .err, scenes.tsv).
+Every scene whose log holds a dump is written to <png directory>/<NN>-<slug>.png
+(NN: the scene's number, two digits; slug: its scene text from scenes.tsv, or
+none without one) and prints one line: `glmark2-fb: <log>: <w>x<h> crc32 <hex>
+ok`, `... no dump` or `... damaged (<reason>)`. Exit 0 when no dump is damaged,
+whether or not some scenes have none; 1 when one is; 2 on a bad directory.
 Stdlib only.
 """
 import base64
@@ -192,6 +200,67 @@ def run(log, png, scene=None):
     return 0
 
 
+def slug(text):
+    return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")[:48]
+
+
+def run_dir(rundir, pngdir):
+    import os
+    logdir = os.path.join(rundir, "log")
+    if not os.path.isdir(logdir):
+        print("glmark2-fb: no log directory in " + rundir)
+        return 2
+    scenes = {}
+    try:
+        with open(os.path.join(rundir, "scenes.tsv"), errors="replace") as f:
+            rows = [x.split("\t")[0] for x in f.read().splitlines()]
+        for n, scene in enumerate(rows[1:] if rows and rows[0] == "scene" else rows, 1):
+            scenes[n] = scene
+    except OSError:
+        pass
+    ids = {}
+    for fn in os.listdir(logdir):
+        stem, _, ext = fn.rpartition(".")
+        if stem.isdigit() and ext in ("out", "err"):
+            ids.setdefault(int(stem), []).append(fn)
+    os.makedirs(pngdir, exist_ok=True)
+    rc = 0
+    for n in sorted(ids):
+        fns = sorted(ids[n])
+        name = fns[0] if len(fns) == 1 else "%d.out" % n
+        text = ""
+        for fn in fns:
+            with open(os.path.join(logdir, fn), errors="replace") as f:
+                text += f.read() + "\n"
+        r = decode(text)
+        if r is None:
+            print("glmark2-fb: %s: no dump" % name)
+            continue
+        _, w, h, rows, problems, end, pic = r
+        reason = None
+        if problems:
+            reason = problems[0] + ("" if len(problems) == 1 else " and %d more" % (len(problems) - 1))
+        elif end is None:
+            reason = "no end line"
+        else:
+            crc = binascii.crc32(b"".join(rows)) & 0xFFFFFFFF
+            if crc != end:
+                reason = "frame crc32 %08x, board %08x" % (crc, end)
+            elif pic is not None:
+                diff = check_picture(w, h, rows, pic)
+                if diff:
+                    reason = "picture value differs: " + diff[0]
+        s = slug(scenes.get(n, ""))
+        png = os.path.join(pngdir, "%02d%s.png" % (n, "-" + s if s else ""))
+        write_png(png, w, h, [x if x is not None else bytes(DAMAGED) * w for x in rows])
+        if reason:
+            print("glmark2-fb: %s: damaged (%s)" % (name, reason))
+            rc = 1
+        else:
+            print("glmark2-fb: %s: %dx%d crc32 %08x ok" % (name, w, h, end))
+    return rc
+
+
 def self_test():
     import os
     import tempfile
@@ -241,6 +310,37 @@ def self_test():
     expect("picture disagrees", run(log, png), 1)
     put(["nothing"])
     expect("no dump", run(log, png), 2)
+    # --rundir: two scenes with dumps, one without, one damaged
+    import io
+    import contextlib
+    rd = os.path.join(d, "run")
+    os.makedirs(os.path.join(rd, "log"))
+    with open(os.path.join(rd, "scenes.tsv"), "w") as f:
+        f.write("scene\tcommit\n[build] use-vbo=false\tx\n[texture] t=1\tx\n[shading]\tx\n[jellyfish]\tx\n")
+    dam = list(lines)
+    del dam[10]
+    for n, ls in ((1, lines), (2, lines), (3, ["no dump here"]), (4, dam)):
+        with open(os.path.join(rd, "log", "%d.out" % n), "w") as f:
+            f.write("\n".join(ls) + "\n")
+    open(os.path.join(rd, "log", "3.err"), "w").close()
+    pd = os.path.join(d, "pngs")
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        rc = run_dir(rd, pd)
+    out = buf.getvalue().splitlines()
+    expect("rundir exit (a damaged dump)", rc, 1)
+    ok_line = "%dx%d crc32 %08x ok" % (w, h, binascii.crc32(b"".join(rows)) & 0xFFFFFFFF)
+    expect("rundir lines", [x.split(" (")[0] for x in out],
+           ["glmark2-fb: 1.out: " + ok_line, "glmark2-fb: 2.out: " + ok_line,
+            "glmark2-fb: 3.out: no dump", "glmark2-fb: 4.out: damaged"])
+    expect("rundir pngs", sorted(os.listdir(pd)),
+           ["01-build-use-vbo-false.png", "02-texture-t-1.png", "04-jellyfish.png"])
+    with open(os.path.join(pd, "01-build-use-vbo-false.png"), "rb") as f:
+        expect("rundir png", f.read(8), b"\x89PNG\r\n\x1a\n")
+    os.remove(os.path.join(rd, "log", "4.out"))
+    with contextlib.redirect_stdout(io.StringIO()):
+        expect("rundir exit (none damaged, one no dump)", run_dir(rd, pd), 0)
+        expect("rundir bad directory", run_dir(os.path.join(d, "nope"), pd), 2)
     print("self-test: " + ("ok" if ok else "FAILED"))
     return 0 if ok else 1
 
@@ -248,6 +348,8 @@ def self_test():
 def main(argv):
     if argv[1:] == ["--self-test"]:
         return self_test()
+    if len(argv) == 4 and argv[1] == "--rundir":
+        return run_dir(argv[2], argv[3])
     scene = None
     if "--scene" in argv:
         i = argv.index("--scene")
