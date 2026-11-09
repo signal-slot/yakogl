@@ -44,7 +44,7 @@ REFUSED with the same text. **Case 71 deadloop is the same program without
 
 So the target program is 71's, already byte-equal in
 `tests.rs` `the_flattened_ifs_are_byte_equal_to_mesa_26_2_1`
-(`CFLOW_FLATTEN`, `:6047`). The whole of case 70 is that Mesa **removes the
+(`CFLOW_FLATTEN`, `:6021`, the test `:6055`). The whole of case 70 is that Mesa **removes the
 `* 2.0 * 0.5` pair**; nothing in the reference is new. Its words, for the
 record (mediump, `v2f16`): `FMA.v2f16 r0, u2.w0, u2.w1, r0^.neg` is
 `(u_k.x * 3.0, u_k.y * 2.0)` in `.h0`/`.h1` (the `* 2.0` is `acc` after two
@@ -93,7 +93,7 @@ unrolled chain per trip and give the same values: trip 2's
 `fmul(2.0, k)` -- the node trip 2's `fadd(k, k)` already made, which
 `node()` CSEs (`nir_fs.rs:971`). Every intermediate constant (`1.0`, `4.0`,
 `2.0`, `3.0 * 0.5 = 1.5`...) is exact in fp16; a product that is not is the
-`ConstantFold` refusal that already exists (`nir_fs.rs:4038-4056`, the check at `:4052`).
+`ConstantFold` refusal that already exists (`nir_fs.rs:4041-4056`, the refusal at `:4053`).
 
 No other rule fires. The `distributive` rules (`:246`, `:3614`) need two
 products of one factor; `k` is not a product. `fceil` (`ceil(u_k.x * 3.0)`),
@@ -101,40 +101,40 @@ products of one factor; `k` is not a product. `fceil` (`ceil(u_k.x * 3.0)`),
 
 ## 3. Where our compiler stands, and where the fold goes
 
-The refusal site is **`ladder_forms`** (`nir_fs.rs:7096-7120`), called from
+The refusal site is **`ladder_forms`** (`nir_fs.rs:7096-7120`; `guarded16` is `:6973`), called from
 `select_highp`'s prelude (`:7502`, `if guarded16(f)`, after `nir::dce` and
 `dead_cf`): it looks at the 16-bit `Fmul`/`Fadd` nodes of the unrolled
 ladder and returns `MaliError::ArithConstant` for any whose one operand is a
 constant and whose other is a node of the same op with a constant (its doc
 comment: "`(acc * 2.0) * 0.5` is `acc`, case 70's loopcarry"). The walk
-builds that chain because `Fs::op` (`nir_fs.rs:982-1033`, the 16-bit scalar
+builds that chain because `Fs::op` (`nir_fs.rs:982-1034`, the 16-bit scalar
 rules) has no rule for it:
 
 | `Fs::op` rule (Fmul/Fadd, 16-bit) | NIR rule |
 |---|---|
-| `IdentitySecond`/`IdentityFirst`, `Zero`, `Negate` (`:984-998`) | `fmul(a, 1.0)` `:292`, `fmul(a, 0.0)` (inexact), `fmul(a, -1.0)` `:296`; `fadd(a, 0.0)` |
+| `IdentitySecond`/`IdentityFirst`, `Zero`, `Negate` (`:989-997`, `:1001`) | `fmul(a, 1.0)` `:292`, `fmul(a, 0.0)` (inexact), `fmul(a, -1.0)` `:296`; `fadd(a, 0.0)` |
 | two constants: `ConstantFold` (`:999`) | `nir_opt_constant_folding` |
-| `fmul(fneg a, b)` -> `fneg(fmul(a, b))`; both negated: `ArithConstant` (`:1003-1012`) | `:2387`, `:230` |
-| `fadd(fmul(a, b), fmul(a, c))` (`factor`, `:1018-1027`, helper `:1038`) | `:246` |
+| `fmul(fneg a, b)` -> `fneg(fmul(a, b))`; both negated: `ArithConstant` (`:1003-1010`) | `:2387`, `:230` |
+| `fadd(fmul(a, b), fmul(a, c))` (`factor`, `:1018-1024`, helper `:1038`) | `:246` |
 | `fadd(a, a)` -> `fmul(a, 2.0)` (`:1030`) | `:274` |
 
 Similar folds elsewhere, none of which this case reaches:
 
-* `nir_fs.rs:1959-2010` (`alu32`, the **32-bit** `Fmul` arm): rule `:2406`,
+* `nir_fs.rs:1960-2009` (`alu32`, the **32-bit** `Fmul` arm): rule `:2406`,
   `fmul(#a, fmul(b, #c))` -> `fmul(fmul(a, c), b)` with the folded constant
   first (measured: `s6_discloop`, `fbload_predlive_fs_coord`, prec_82). It
   is the model for the 16-bit rule, but it is gated on `self.loops > 0 ||
   y is Const || kept_local` and builds through `op32`; the mediump lanes go
   through `Fs::op`.
-* `glsl.rs:642-760` (`reassociate_constant`, GLSL IR's `opt_algebraic.cpp:
-  175-216`): `op(const, tree)` swaps the constants in the *front end's*
+* `glsl.rs:1399` (`Gl::reassociate`, header `:23-28`; GLSL IR's
+  `reassociate_constant`, `opt_algebraic.cpp:175-216`): `op(const, tree)` swaps the constants in the *front end's*
   trees. It does not see this program: `t` is a local, the product is
   built in the loop through the local, and a mixed-width or multi-use shape
-  is refused (`:706`, `Rebalance`).
-* `nir.rs:2044-2054`: the **vertex** `Alu::Fmul` refusal of a constant times
+  is refused (`MaliError::Rebalance`, `:1226`, `:1241`, `:1281`...).
+* `nir.rs:2044-2056` (`Nir::alu`, `:2052` the test, `is_const_product` `:2114`): the **vertex** `Alu::Fmul` refusal of a constant times
   a product with a constant (`is_const_product`), unreached by a mediump
   fragment shader.
-* `nir_fs.rs:4736-` (`MatSum`): `:2398-2412` are "not transcribed"; the
+* `nir_fs.rs:4736-` (`MatSum`, doc comment): `:2398-2412` are "not transcribed"; the
   matrix-term sums only.
 * `opt.rs` is the BIR pass list (`mod_prop`, `fuse_add_imm`, `cse`); it
   holds no NIR algebra and gets no change.
@@ -184,7 +184,7 @@ In `src/shaderc/online/mali/tests.rs`:
    `.expect.json`, asserted equal to `tools/shaders/es100/loopcarry.frag`
    and to `td!("alu_loopcarry.frag")` (the `deadloop` assertion at
    `:6081` is the pattern); `check_linked_for("70", vs, fs, json)`
-   (`:3824`: both IDVS programs and the 29-word fragment program with all
+   (`:3824`; `compile_linked` is `:471`: both IDVS programs and the 29-word fragment program with all
    facts, no uniform values). Or add it to `CFLOW_FLATTEN` (`:6047`) *if* the
    helper there can take a no-values json: it draws with
    `--uniform-values`, so use `check_linked_for`.
@@ -213,8 +213,10 @@ In `src/shaderc/online/mali/tests.rs`:
 
 ## 5. Open points
 
-* The NIR of the draw is not recorded: re-draw `fsarith_70_loopcarry` with
-  the shim (`tools/mali/drm_shim_ref.sh run`, mali-alu-ops.md `:259-263`)
+* (Section 6: the draw was redone at `04ac35d3` and its final NIR read;
+  the choice between the two routes below is still open.) The NIR of the
+  draw was not recorded: re-draw `fsarith_70_loopcarry` with
+  the shim (`tools/mali/drm_shim_ref.sh run`, mali-alu-ops.md `:283-286`)
   and keep `fsarith_70_loopcarry.stderr`/`.nir` beside it, to confirm that
   rule `:2406` fires before the unroll (§2) and to rule out the GLSL-IR
   route (`t` grafted into `acc = t * 0.5`, `reassociate_constant` giving
@@ -230,3 +232,115 @@ In `src/shaderc/online/mali/tests.rs`:
   chains; the new rule changes the former for them too, correctly (Mesa
   folds all of them) but unmeasured. Run `tools/mali/corpus-verdicts.sh`
   before and after and look at the diff.
+
+## 6. Checked at 04ac35d3
+
+Checked on the integration tip `04ac35d3` (plan #336, item fold-check; the
+line numbers in sections 1-5 are that commit's, corrected in place above).
+`origin/main` is 21 commits ahead (`032bae69`); against it only `nir.rs` and
+`tests.rs` of `src/shaderc/online/mali` differ (+148 and +65 lines, the
+vertex work), so the `nir_fs.rs`, `opt.rs` and `glsl.rs` lines hold there
+and the `nir.rs` and `tests.rs` ones move: look those up by name.
+
+**What moved.** Only line numbers, none of the steps: `CFLOW_FLATTEN` `:6047`
+is `:6021` (test `:6055`), the `ConstantFold` check `:4038-4056` is
+`:4041-4056` (refusal `:4053`), the `Fs::op` rule lines `:984-998` are
+`:989-1001`, `alu32`'s `Fmul` arm is `:1960-2009`, `reassociate_constant` is
+now `Gl::reassociate` (`glsl.rs:1399`, not `:642-760`), mali-alu-ops.md
+`:259-263` is `:283-286`. Unchanged: `ladder_forms` (`:7096-7120`),
+`guarded16` (`:6973`), the call in `select_highp` (`:7501-7502`),
+`nir::dce` (`:7499`), `alu_of` (`:959`), `node` (`:971`), `walk_loop`
+(`:3271`), `Nir::alu`'s vertex refusal (`nir.rs:2044-2056`),
+`check_linked_for` (`tests.rs:3824`), `corpus-verdicts.txt:72` and
+mali-alu-ops.md `:57-58`. `opt.rs` still holds no NIR algebra (`mod_prop_*`,
+`fuse_add_imm`, `cse`): no change there. trunc-motion (`motion.rs`),
+indexlocal-glsl (`glsl.rs`, `ilt_trees`) and the vertex notes touch none of
+this item's code: the `Fs::op` rules, `ladder_forms` and the `algfold_*`
+references are as written. Every line of `nir_opt_algebraic.py` cited here
+(`:161`, `:167`, `:230`, `:246`, `:274`, `:275`, `:292`, `:296`, `:2387`,
+`:2394`, `:2398`, `:2406`, `:2410`, `:2411`, `:2419`, `:3614`) was read in
+the 26.2.1 tree and is the rule the text names.
+
+**The reference, rerun.** Built the shim as `drm_shim_ref.sh build` does
+(its meson options, the unpacked `mesa-pan/mesa-26.2.1` tree, a separate
+build dir: `$CONNECTED_DEPS_DIR/mesa-shim/{build,inst}`), then drew
+`fsarith_70_loopcarry` (`drm_shim_ref.sh run`, no `--uniform-values`) and
+`cflow_71_deadloop` (`--uniform-values`) and extracted both with
+`pan_ref_diff.py extract --draw`. Both regenerate the committed
+`.expect.json` **byte for byte** (only the `trace` name differs). The
+fragment words of 70 and 71 are equal, as section 1 says: 29 words, the
+first `FMA.v2f16 r0, u2.w0, u2.w1, r0^.neg`. The final NIR
+(`BIFROST_MESA_DEBUG=shaders`, not recorded before) shows the order of
+section 2's result: `%3 = fmul %1, (3.0, 2.0)`, `%7 = fadd %3.y, %1.y`
+(trip 3), then `fadd %1.y, ..` for trips 4-8, with no `2.0` or `0.5`
+product left. **Which route removed the pair** (NIR `:2406` then `:292`, or
+GLSL IR's `reassociate_constant`) is still not told apart: that needs
+`NIR_DEBUG=print` before the algebraic pass. Either gives the same graph,
+and the `Fs::op` fold is enough for the bytes.
+
+**Next after the refusal, measured.** A throwaway (not committed): a test
+of `compile_linked` + `check_stages_for` of the case 70 sources against
+`fsarith_70_loopcarry.expect.json`, run three ways:
+
+1. As committed: `ArithConstant` from `ladder_forms` (REFUSED, as the sweep).
+2. `ladder_forms`'s `ArithConstant` return disabled, no fold: **no other
+   refusal.** It compiles, to **45 fragment words against 29**. Words 0-3
+   (`MOV`, `FMA`, `FROUND`, `FMIN`) are equal; word 4 is the first
+   difference (`FMA.v2f16 r0, r0^.h11, 0x38000000.h11, 0x0.neg`, a `* 0.5`,
+   where the reference has `FADD.v2f16 r2, r0.h11, u2.w0.h11`), and every
+   later trip carries an `FMA .. 0x40000000` (`* 2.0`) and an
+   `FMA .. 0x38000000` (`* 0.5`) around its `FADD`.
+3. The refusal disabled **and** section 3's fold added (about 10 lines in
+   `Fs::op`, before the last `Fmul` arm: one operand a constant `c2`, the
+   other a 16-bit `Fmul` with a constant `c1` and a non-constant `b`;
+   `c1 * c2` required `f16_exact`; `1.0` gives `b`, else
+   `node(Fmul, [b, Const(r)])`, variable first): **case 70 is byte-equal
+   to the reference**: both vertex programs, the 29 fragment words and
+   every fact (registers, preload, FAU words) that `check_stages_for`
+   compares. So the next refusal case 70 meets after the fold is **none**,
+   and no byte difference either; fs-fold's host test (section 4, item 1)
+   should pass as written. Not run with the prototype: the other Mali
+   tests and `corpus-verdicts.sh` (section 4 items 2 and 4 and section 5's
+   last bullet are still to do). The prototype also kept `ladder_forms`'s
+   `Fmul` arm off, so that it stays silent for 70 after the fold is
+   inferred (the chain it looks for, a constant `Fmul` over a constant
+   `Fmul`, no longer exists); keep it, as section 3 item 5 says.
+
+## 7. The boundary with the vertex constant-product fold
+
+mali-vs-constant-products.md found that the vertex "constant product"
+refusal is **not a fold of constants** and sits at a different site, so the
+two items do not overlap in code:
+
+| | fs-fold (this note) | vertex item (mali-vs-constant-products.md) |
+|---|---|---|
+| Stage | fragment, **mediump** (16-bit lanes), the unrolled-loop route (`guarded16`) | vertex, 32-bit |
+| Site | `Fs::op` (`nir_fs.rs:982`) and `ladder_forms` (`:7096`) | the `AluOp::Ffma` arm of the vertex `IrOp::Alu` match (`nir.rs:2326-2336`) |
+| Shape | `(x * c1) * c2` (rule `:2406`, then `:292`); the `fadd` twin (`:2410`) stays refused | `M * vec4(v, 1.0)`: `ffma(c3, 1.0, acc)` becomes `fadd(acc, c3)` (S1); `vec4(v2, 0.0, 1.0)` pushes `c3` into the first `ffma` (S2, rule `:4358`, inferred) |
+| Reference | cases 70 and 71 (`fsarith_70_loopcarry`, `cflow_71_deadloop`) | `vsfold_*`, to be drawn (bump51, shadowb, sh37, shade) |
+| Corpus | `es100/loopcarry.frag` (`corpus-verdicts.txt:72`) | `es100/mvstruct.vert` (`:80`), `es100/xlink.vert` (`:134`) |
+| gl_test cases | 70 | none |
+| glmark2 | none known | 13 vertex shaders: bump-51d0, bump-270a, pulsar-9d75, shadow-37f4, shadow-6964, shadow-b9d1, shading-83cd, shading-78e3, shading-e5f2, refract-7215, build-ace2, buffer-7234, terrain-18bc |
+
+fs-fold covers a **fragment** `fmul` of a constant by an `fmul` (either
+operand order) of a constant and a non-constant, at fp16, when the folded
+product is an fp16-exact value (`1.0` gives the operand, `-1.0` its `fneg`,
+`0.0` the `Zero` rule), including the products an unrolled loop builds per
+trip (section 2). It does **not** change the 32-bit fragment arm (`alu32`,
+`:1960-2009`), the `Fadd` twins (`:2410-2411`, no reference), `MatSum` (the
+fragment matrix-term sums, `:2398-2412` not transcribed), the vertex
+`Nir::alu` arms (`nir.rs:2018`, `:2054`, `:2326-2336`) or `glsl.rs`.
+
+Left for the vertex item: everything in the right column, i.e. all 13 of
+glmark2's vertex shaders. Its S1 arm needs no fold at all (acc first, then
+the column), only S2's term-major issue order. The only vertex sites that
+*are* constant products (`nir.rs:2018`, a negation of a negation, and
+`:2044-2056`, a constant times a product with a constant) fire for no
+glmark2 shader and no sweep case; neither item touches them.
+
+glmark2 fragment shaders: `tools/mali/corpus-verdicts.txt` lists only the
+repo's own sources, none of glmark2's. A grep of the glmark2 checkout's
+`data/shaders/*.{vert,frag}` (`22c527cb`) for a product with two constants
+on one line (`x * c1 * c2`, `c * (x * c)`) finds none, so no glmark2
+fragment shape is known to need fs-fold; those shaders' next refusals are
+`pow`, `normalize`, `reflect`, `length` and `fract` (ana-fsvec).
