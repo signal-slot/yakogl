@@ -478,6 +478,72 @@ power-cycle the board; no other run takes it until the owner says it is back.
 | the BCM2712 PM watchdog resets the board | not measured yet (board-d1) |
 | the time from the reboot to Linux after an image | not measured yet (board-d1); only a plain Linux reboot is measured (about 150 s) |
 
+## NanoPC-T6
+
+The NanoPC-T6 (RK3588, Mali-G610) has no boot loader step of ours: its
+standalone path is a development route. A `nanopc_t6` Zephyr image is
+started by kexec from the board's Armbian, and the board comes back to Armbian
+through the watchdog or PSCI `SYSTEM_RESET`. The facts, the memory window and
+the per-stage procedures are in `driver/docs/nanopc-t6-mali.md` ("Z1",
+"Z2 board procedure", "Z3 board procedure"); this section is the overview.
+A kexec run is a development result, as `driver/tools/kexec-zephyr/README.md`
+says.
+
+### The boot form
+
+- `driver/tools/kexec-zephyr/nanopc-t6.sh <zephyr.bin>` checks the image and
+  the board read-only and prints the plan; with `--go` it jumps. It refuses an
+  image without the board glue's watchdog marker, because Armbian leaves WDT0
+  stopped and only the image arms it.
+- Nothing is staged under `/boot` and no boot file changes. The runner copies
+  the loader (`kexec_zephyr`), the register reader and the image to
+  `/tmp/yakogl-kexec` on the board, loads the image at its link address
+  (0x10000000, inside System RAM) with `kexec_load`, and jumps. The staging
+  directory goes with the reboot (the next boot clears `/tmp`).
+- By default it opens `/dev/watchdog0` for the jump, so Linux's watchdog
+  covers the image's pre-arm window, and jumps only after `WDT_CR.WDT_EN` read
+  back as 1. `--no-linux-wdt` skips that. That a WDT0 timeout brings the board
+  back into Armbian is not proven; Z1 returned through PSCI `SYSTEM_RESET`.
+- `--go` needs the name of the person at the power switch (`T6_HAND`), a
+  record directory outside the checkout (`T6_RECORD_DIR`) and the host's
+  read-only tty on the debug UART (`T6_UART`); the board is reached through
+  `BOARD_HOST`. All of them come from the environment, never from a file.
+- The probes print on uart2 (1500000 baud, the board's debug UART): the early
+  banner `T6:A` .. `T6:C`, the board glue's lines (marker, GIC, watchdog
+  armed), the probe's own lines (`t6_fw: build ...`, `t6_fw: PASS`, ...) and
+  the reset line. `driver/tools/kexec-zephyr/t6-verdict.sh <probe> <uart.log>`
+  checks the log against those lines and prints `VERDICT <probe> PASS` or
+  `FAIL`.
+
+### Z1 to Z4
+
+| Stage | What | Probe (`tools/probes/nanopc_t6/`) | Board module (`driver/rust/src/board/`) | `tools/check.sh` row | State |
+|---|---|---|---|---|---|
+| Z1 | the image, its watchdog, GPU power-on | `t6_hello`, `t6_gpu` | `nanopc_t6.rs`, `nanopc_t6_early.rs`, `nanopc_t6_gpu.rs` | `zephyr  nanopc_t6 t6_hello image (Z1, the watchdog glue)`, `... t6_gpu image (Z1, GPU power-on)` | `t6_hello` passed on the board by kexec (2026-10-19). `t6_gpu`: host side done, board run not recorded here |
+| Z2 | AS0 and a cache flush | `t6_mmu` | `nanopc_t6_mmu.rs` | `zephyr  nanopc_t6 t6_mmu image (Z2, AS0 and a cache flush)` | host side done with a gate row; board run not done |
+| Z3 | the CSF firmware boot | `t6_fw` | `nanopc_t6_fw.rs` | `zephyr  nanopc_t6 t6_fw image (Z3, the firmware boot)` | host side done with a gate row; board run not done |
+| Z4 | CSG 0 / CS 0, tiler heap, the L1 frame, the sync wait | `t6_submit` (not yet in the tree) | `nanopc_t6_submit.rs` (`board::nanopc_t6_submit`, not yet in the tree) with the C entry `yd_t6_submit` (not yet in `driver/rust/src/ffi/rk3588.rs`) | `zephyr  nanopc_t6 t6_submit image (Z4), -Werror on our C files` (not yet in `tools/check.sh`) | host side in progress; board run not done |
+
+Each of the rows is `step "..., -Werror on our C files"` in `tools/check.sh`.
+The Z2, Z3 and Z4 board runs have not happened. Each needs the owner's
+go-ahead and a person at the power switch (`driver/docs/nanopc-t6-mali.md`),
+and Z3 runs only after Z2 has passed. Z4's kernel side exists over the host
+MCU model (`driver/rust/src/gpu/mali/sched.rs`, `sched/job.rs`, `heap.rs`,
+with `csf.rs` and `fw.rs` from Z3); the frame it submits is built by
+`src/mali/frame.rs`.
+
+### What a run needs from the host
+
+- `ZEPHYR_WS`: the pinned west workspace (`west.yml`). The image rows are a
+  gap without it, and a gap is not a pass.
+- For Z3 and Z4 images, the CSF firmware header
+  `driver/src/fw/mali_csffw_blob.h`, made by `driver/tools/mkmalifw.sh` from
+  Arm's `mali_csffw.bin` (the board's Armbian carries the file). The header
+  is gitignored and never committed. `tools/cts/deps-env.sh --build
+  MALI_CSFFW` fetches the pinned file (`tools/cts/deps.toml`), or name it in
+  `MALI_CSFFW`; `CONTRIBUTING.md` has the details. Without it the firmware
+  rows are a gap.
+
 ## On the boards
 
 In order; stop at the first step that prints something else.
@@ -540,3 +606,10 @@ In order; stop at the first step that prints something else.
 2. `forever`: **a person** at the board.
    `BOARD_PERSON_PRESENT=1 tools/board.sh pi4 default <zephyr.bin> forever`,
    reboot, watch the panel or the UART; undo with the card in a PC.
+
+### NanoPC-T6
+
+No install step and no `board.sh` backend: the runner is
+`driver/tools/kexec-zephyr/nanopc-t6.sh`, run with the owner's go-ahead and a
+person at the power switch. See "NanoPC-T6" above and
+`driver/docs/nanopc-t6-mali.md`.
