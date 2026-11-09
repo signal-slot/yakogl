@@ -8,7 +8,7 @@ tools/shaders/color_uv.vert: front end: Rejected { line: 1, tok: "#version", msg
 tools/shaders/compact.frag: front end: Rejected { line: 1, tok: "#version", msg: "desktop GLSL source; this is an OpenGL ES compiler" }
 tools/shaders/es100/absadd.frag: ok
 tools/shaders/es100/affectand.frag: ok
-tools/shaders/es100/anyall.vert: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
+tools/shaders/es100/anyall.vert: ok
 tools/shaders/es100/attrib.frag: ok
 tools/shaders/es100/attrib_hole_float.vert: ok
 tools/shaders/es100/attrib_max_vec4.vert: ok
@@ -79,10 +79,10 @@ tools/shaders/es100/matvary.frag: ok
 tools/shaders/es100/matvary.vert: ok
 tools/shaders/es100/mvstruct.vert: Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add) is not lowered yet
 tools/shaders/es100/partial_varying.frag: ok
-tools/shaders/es100/partial_varying.vert: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
+tools/shaders/es100/partial_varying.vert: Valhall: control flow (if, a loop, a return before the end) is not lowered yet
 tools/shaders/es100/pointcoord.frag: ok
 tools/shaders/es100/pointcoordvary.frag: ok
-tools/shaders/es100/psiz_if.vert: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
+tools/shaders/es100/psiz_if.vert: Valhall: control flow (if, a loop, a return before the end) is not lowered yet
 tools/shaders/es100/rasterization.frag: ok
 tools/shaders/es100/rasterization.vert: ok
 tools/shaders/es100/ret_dynloop_never.frag: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet
@@ -254,8 +254,8 @@ tools/shaders/gltest/fma_vs_ctrl.vert: Valhall: arithmetic other than +, -, * an
 tools/shaders/gltest/fma_vs_fused.vert: ok
 tools/shaders/gltest/fsat_fs_ctrl.frag: ok
 tools/shaders/gltest/fsat_fs_folded.frag: ok
-tools/shaders/gltest/fsat_vs_ctrl.vert: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
-tools/shaders/gltest/fsat_vs_folded.vert: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
+tools/shaders/gltest/fsat_vs_ctrl.vert: ok
+tools/shaders/gltest/fsat_vs_folded.vert: ok
 tools/shaders/gltest/fshp_vs.vert: ok
 tools/shaders/gltest/intrt.frag: ok
 tools/shaders/gltest/isamp.frag: ok
@@ -271,7 +271,7 @@ tools/shaders/gltest/position_only.vert: ok
 tools/shaders/gltest/position_only2.vert: ok
 tools/shaders/gltest/predif_fs_coord.frag: ok
 tools/shaders/gltest/predif_fs_uni.frag: ok
-tools/shaders/gltest/predif_vs_uni.vert: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
+tools/shaders/gltest/predif_vs_uni.vert: Valhall: control flow (if, a loop, a return before the end) is not lowered yet
 tools/shaders/gltest/predlive_fs_coord.frag: ok
 tools/shaders/gltest/predlive_fs_uni.frag: ok
 tools/shaders/gltest/psizvpm_plain_vs.vert: ok

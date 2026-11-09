@@ -2178,6 +2178,133 @@ pub(super) fn is_mat_term(m: &Module<'_>, srcs: &[ir::Src; 3]) -> bool {
     is_mat && splat && acc
 }
 
+/// The ALU node a vertex value is, with its sources.
+fn vs_alu_of(vs: &Nir<'_>, v: Val) -> Option<(Alu, [Val; 3])> {
+    match v {
+        Val::Lane(n, 0) => match vs.nodes.get(n as usize) {
+            Some(NirNode { kind: Kind::Alu(op), src, width: 1, .. }) => Some((*op, *src)),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+/// A constant in [0, 1] (`is_zero_to_one`).
+fn zero_to_one(v: Val) -> bool {
+    matches!(v, Val::Const(c) if (0.0..=1.0).contains(&f32::from_bits(c)))
+}
+
+/// A vertex `fmax(p, q)` or `fmin(p, q)` as NIR's rules leave it
+/// (docs/notes/mali-vs-compare-clamp.md section 3, vsarith_182_fsat and
+/// _fsatfolded): `fmax(a, 0.0)` is `fclamp_pos(a)` (bifrost_nir_algebraic.py:34),
+/// `fmin(fclamp_pos(a), 1.0)` and `fmax(fmin(a, 1.0), 0.0)` are `fsat(a)`
+/// (nir_opt_algebraic.py:1088, :1091); with a bound `b` in [0, 1] on the
+/// other side, `fmin(fmax(a, 0.0), b)` is `fsat(fmin(a, b))` and
+/// `fmin(fmax(a, b), 1.0)` `fsat(fmax(a, b))` (the `FMIN.f32.clamp_0_1` and
+/// `FMAX.f32.clamp_0_1` of the reference: opt.rs folds the saturate into
+/// its producer). The node an outer rule replaces is left to [`dce`]. A
+/// bound is a constant: two computed operands are a plain `FMAX`/`FMIN`
+/// no vertex reference draws.
+fn vs_clamp(vs: &mut Nir<'_>, a: AluOp, p: Val, q: Val) -> Result<Val, MaliError> {
+    let u = Val::Undef;
+    let (x, k) = match (p, q) {
+        (_, Val::Const(_)) => (p, q),
+        (Val::Const(_), _) => (q, p),
+        _ => return Err(MaliError::Arithmetic),
+    };
+    let inner = vs_alu_of(vs, x);
+    if a == AluOp::Fmax {
+        if k == Val::Const(F32_ZERO) {
+            return match inner {
+                Some((Alu::Fmin, [b, Val::Const(F32_ONE), _])) => vs.alu(Alu::Fclamp(clamp::ZERO_ONE), b, u, u),
+                Some((Alu::Fmin, [_, c, _])) if zero_to_one(c) => vs.alu(Alu::Fclamp(clamp::ZERO_ONE), x, u, u),
+                _ => vs.alu(Alu::Fclamp(clamp::ZERO_INF), x, u, u),
+            };
+        }
+        /* `fmax(fmin(a, 1.0), b)`, a clamp to [b, 1]: no reference */
+        return match inner {
+            Some((Alu::Fmin, [_, Val::Const(F32_ONE), _])) if zero_to_one(k) => Err(MaliError::Arithmetic),
+            _ => vs.alu(Alu::Fmax, x, k, u),
+        };
+    }
+    match inner {
+        Some((Alu::Fclamp(clamp::ZERO_INF), [b, ..])) if k == Val::Const(F32_ONE) => {
+            vs.alu(Alu::Fclamp(clamp::ZERO_ONE), b, u, u)
+        }
+        Some((Alu::Fclamp(clamp::ZERO_INF), [b, ..])) if zero_to_one(k) => {
+            let n = vs.alu(Alu::Fmin, b, k, u)?;
+            vs.alu(Alu::Fclamp(clamp::ZERO_ONE), n, u, u)
+        }
+        Some((Alu::Fclamp(clamp::ZERO_INF), _)) => Err(MaliError::Arithmetic),
+        Some((Alu::Fmax, [_, c, _])) if k == Val::Const(F32_ONE) && zero_to_one(c) => {
+            vs.alu(Alu::Fclamp(clamp::ZERO_ONE), x, u, u)
+        }
+        _ => vs.alu(Alu::Fmin, x, k, u),
+    }
+}
+
+/// A vertex `any` / `all` of a compare vector, as Mesa's passes leave the
+/// reduction (docs/notes/mali-vs-compare-clamp.md section 2,
+/// vsarith_86_anyall): `all(equal(v.xy, 0.0))` is `feq(fadd(fabs(y),
+/// fabs(x)), 0.0)` (nir_opt_algebraic.py:1213) and `any(lessThan(c,
+/// v.xyz))` of a constant `c` is `flt(c, fmax(fmax(z, x), y))` (:1178,
+/// then :1150). The compare's sources are read here; its own nodes are
+/// left to [`dce`]. Other widths, compares and lane orders are shapes no
+/// vertex reference draws.
+fn vs_reduce(vs: &mut Nir<'_>, m: &Module<'_>, w: &Walk<'_>, a: AluOp, s: ir::Src) -> Result<Val, MaliError> {
+    let u = Val::Undef;
+    /* the front end repeats the last lane read into the spare ones */
+    let n = (1..=4).find(|&n| s.swizzle[n - 1..].iter().all(|&c| c == s.swizzle[3])).unwrap_or(4);
+    let (op, cs) = match m.def(s.val) {
+        Some(&IrOp::Alu(op, cs)) => (op, cs),
+        _ => return Err(MaliError::Arithmetic),
+    };
+    /* lane i of the reduction: the compare's lane, of one vector's lane i
+     * against a constant on the side `side` */
+    let side = |k: usize| -> Option<[Val; 4]> {
+        let mut v = [u; 4];
+        let mut c = None;
+        let mut node = None;
+        for (i, o) in v.iter_mut().enumerate().take(n) {
+            let j = s.swizzle[i] as usize;
+            let (p, q) = (lane(w, cs[k], j), lane(w, cs[1 - k], j));
+            match (p, q) {
+                (Val::Lane(nd, l), Val::Const(_)) if l as usize == i && node.is_none_or(|x| x == nd) => {
+                    if c.is_some_and(|c| c != q) {
+                        return None;
+                    }
+                    (node, c, *o) = (Some(nd), Some(q), p);
+                }
+                _ => return None,
+            }
+        }
+        c.map(|c| {
+            v[3] = c;
+            v
+        })
+    };
+    match (a, op, n) {
+        (AluOp::Ball, AluOp::Feq, 2) => {
+            let v = side(0).or_else(|| side(1)).ok_or(MaliError::Arithmetic)?;
+            if v[3] != Val::Const(F32_ZERO) {
+                return Err(MaliError::Arithmetic);
+            }
+            let y = vs.alu(Alu::Fabs, v[1], u, u)?;
+            let x = vs.alu(Alu::Fabs, v[0], u, u)?;
+            let sum = vs.alu(Alu::Fadd, y, x, u)?;
+            vs.alu(Alu::Fcmp(Cmpf::Eq), sum, Val::Const(F32_ZERO), u)
+        }
+        (AluOp::Bany, AluOp::Flt, 3) => {
+            /* `c < v`: the vector on the right */
+            let v = side(1).ok_or(MaliError::Arithmetic)?;
+            let mx = vs.alu(Alu::Fmax, v[2], v[0], u)?;
+            let mx = vs.alu(Alu::Fmax, mx, v[1], u)?;
+            vs.alu(Alu::Fcmp(Cmpf::Lt), v[3], mx, u)
+        }
+        _ => Err(MaliError::Arithmetic),
+    }
+}
+
 /// Build the program of a vertex shader. `reads`: the fragment shader's
 /// reads of the program (location, component mask), when the vertex shader
 /// is built for one: then only those components are stored, compacted as
@@ -2375,6 +2502,22 @@ pub fn build<'s>(
                             vs.alu(Alu::B2f, x(0), Val::Undef, Val::Undef)?
                         }
                         AluOp::Bcsel => vs.alu(Alu::Bcsel, x(0), x(1), x(2))?,
+                        /* the clamps of vsarith_182_fsat and _fsatfolded
+                         * (docs/notes/mali-vs-compare-clamp.md section 3) */
+                        AluOp::Fmax | AluOp::Fmin => vs_clamp(&mut vs, a, x(0), x(1))?,
+                        /* a lane past the compared vector's (a vec2 or vec3
+                         * compared as the front end's four lanes) */
+                        AluOp::Feq | AluOp::Flt | AluOp::Fle if x(0) == Val::Undef || x(1) == Val::Undef => Val::Undef,
+                        /* a compare that only an `any` / `all` reads is not
+                         * kept: [`vs_reduce`] reads its sources, and
+                         * [`dce`] drops these */
+                        AluOp::Feq => vs.alu(Alu::Fcmp(Cmpf::Eq), x(0), x(1), Val::Undef)?,
+                        AluOp::Flt => vs.alu(Alu::Fcmp(Cmpf::Lt), x(0), x(1), Val::Undef)?,
+                        /* GLSL's `<=` is `fge` with its sources swapped
+                         * (glsl_to_nir.cpp:2488), as nir_fs.rs */
+                        AluOp::Fle => vs.alu(Alu::Fcmp(Cmpf::Ge), x(1), x(0), Val::Undef)?,
+                        AluOp::Bany | AluOp::Ball if l == 0 => vs_reduce(&mut vs, m, w, a, s[0])?,
+                        AluOp::Bany | AluOp::Ball => Val::Undef,
                         /* the 32-bit conversions and shifts of
                          * intbool_199_vsc and intbool_89_flatlast
                          * (docs/notes/mali-int-and-size.md, vs-int-convert):
@@ -2470,8 +2613,9 @@ pub fn build<'s>(
                         _ => return Err(MaliError::Arithmetic),
                     };
                 }
-                /* a dot product is one value, whatever width the IR gives it */
-                if matches!(a, AluOp::Fdot2 | AluOp::Fdot3 | AluOp::Fdot4) {
+                /* a dot product (and a reduction) is one value, whatever
+                 * width the IR gives it */
+                if matches!(a, AluOp::Fdot2 | AluOp::Fdot3 | AluOp::Fdot4 | AluOp::Bany | AluOp::Ball) {
                     out = [out[0]; 4];
                 }
             }
