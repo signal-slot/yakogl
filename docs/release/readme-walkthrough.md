@@ -250,6 +250,7 @@ published value). `<sysroot>` in the table is that directory.
 | 3a. clang form with a sysroot, GPU=powervr | `make -f baremetal.mk CC='clang --target=aarch64-none-elf --sysroot=<sysroot>' AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy DRVSRC=driver/src` | 0 | `f652d6dc`. Earlier: `964f50f0`: 0, 26,936,654 bytes | as row 3 | Arm GNU Toolchain 14.3.rel1 newlib, `<sysroot>` as above | `libyakogl.a` 26,943,854 bytes |
 | 3b. the same, `GPU=vivante` | row 3a plus `GPU=vivante` | 0 | `f652d6dc`. Earlier: `964f50f0`: 0, 22,781,802 bytes | as row 3 | as 3a | `libyakogl.a` 22,822,930 bytes |
 | 3c. the same, powervr, no `DRVSRC` | row 3a without `DRVSRC=driver/src` | **0** | `f652d6dc`. Earlier: `964f50f0` without the fix: 2, `pvr_render.h` not found at `src/abi_layout_check.c:17` | as row 3 | as 3a | `libyakogl.a` 26,944,542 bytes |
+| 3d. clang form with a distribution libc, `GPU=powervr` and `GPU=vivante` | `make -f baremetal.mk CC='clang --target=aarch64-none-elf -isystem <picolibc include dir>' AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy`, plus a link of a minimal test program against `libyakogl.a`; `-isystem` is the only change to the README's `CC` string (no `--sysroot`), and no Arm GNU toolchain is used | 0 (the archive build and the test link, for `GPU=powervr` and for `GPU=vivante`) | `8d1488cd` (item picolibc-link; measured there) | clang 21.1.8, `ld.lld` 21.1.8; `lld-21` and `liblld-21` are not installed by default on this host and were fetched the same no-root way | Ubuntu picolibc: package `picolibc-aarch64-linux-gnu` 1.8.10-3 from the Ubuntu archive pool (universe/p/picolibc), unpacked without root with `apt-get download` and `dpkg-deb -x` | archive sizes not recorded; no libc symbol that `libyakogl.a` needs is missing from picolibc, so the tree needs no change; the test link needs `stdout`, `stderr` and `_exit` from the integrator; the handoff reported an lld linker-script quirk, its details were not recorded |
 | 4a. Zephyr, `ZEPHYR_EXTRA_MODULES` | `west build -b rpi_4b examples/triangle` with yakogl and `driver/` in `ZEPHYR_EXTRA_MODULES`, `CONFIG_YAKOGL=y` | 0 | `b60224da` (zephyr-step4; **not** re-run at `f652d6dc`, see below) | rustc 1.101.0-nightly, cmake 4.2.3, ninja 1.13.2, west 1.5.0 | Zephyr 4.4.99 (`af17c0c8aa2a`), Zephyr SDK 1.0.1 | `zephyr.elf` 20,159,608 bytes; `libyakogl.a` 1,942,720 bytes |
 | 4b. Zephyr, form (a): a fresh west workspace from yakogl's `west.yml` | a fresh west workspace from `west.yml`, `west update` (3 m 21.8 s), then the sample build | 0 | `d055a0b` (not re-run) | as 4a | Zephyr `af17c0c8` (equal to the `west.yml` pin), Zephyr SDK 1.0.1 | `zephyr.elf` 20,174,808 bytes; `libyakogl.a` 1,944,368 bytes |
 | V1. `GPU=vivante` | row 2 plus `GPU=vivante` | 0 | `f652d6dc`. Earlier: `6ad0f777`: 0, 22,951,578 bytes | as row 2 | Zephyr SDK 1.0.1 | `libyakogl.a` 22,992,970 bytes |
@@ -275,6 +276,11 @@ Host quirks seen:
   path fails.
 - The clang form needs a newlib sysroot in `CC` (`--sysroot=<Arm GNU
   Toolchain>/aarch64-none-elf`); without it step 3 stops at `string.h` (row 3).
+- The same clang form also works with a distribution C library, without the Arm GNU
+  toolchain: Ubuntu's `picolibc-aarch64-linux-gnu`, `-isystem <picolibc include dir>`
+  in `CC` in place of `--sysroot` (the only change to the README's `CC` string); the
+  link step needs `ld.lld` (`lld-21` and `liblld-21` are not installed by default), and
+  `stdout`, `stderr` and `_exit` for the test link come from the integrator (row 3d).
 - Ubuntu installs the unversioned `llvm-ar`, `llvm-nm`, `llvm-objcopy` only under
   `/usr/lib/llvm-21/bin`, not in `/usr/bin` (there only the `-21` names); that directory
   has to be on `PATH` for README's literal names, or the `-21` names passed.
@@ -305,7 +311,11 @@ Checklist line 6 (README walkthrough): both open points are closed.
    and GPU=vivante, with the unversioned llvm-ar, llvm-nm, llvm-objcopy of
    Ubuntu LLVM 21.1.8 (clang 21.1.8). The README literal without a sysroot exits 2
    ('string.h' file not found at src/osal/baremetal.c:25): a host requirement,
-   not a tree defect.
+   not a tree defect. A distribution route works too, without the Arm GNU
+   toolchain: Ubuntu's picolibc (package picolibc-aarch64-linux-gnu 1.8.10-3,
+   unpacked no-root), -isystem <picolibc include dir> in CC in place of
+   --sysroot, ld.lld for the link: exit 0 for GPU=powervr and GPU=vivante at
+   8d1488cd (row 3d).
 
 Also: step 1 (CMake toolchain build) exit 0, step 2 with the Zephyr SDK 1.0.1
 prefix (gcc 14.3.0) exit 0, step 4 (Zephyr) exit 0 (earlier commits b60224da,
@@ -339,11 +349,17 @@ make -f baremetal.mk \
 
 No change is needed for the `DRVSRC` wording. Optional sentence for step 3, replacing the
 comment above the clang form (the README already says sysroot and versioned names; this
-adds that the unversioned names must be on `PATH`):
+adds that the unversioned names must be on `PATH`, and a commented `CC` line as an
+alternative to the newlib sysroot):
 
 ```
 # clang needs bare-metal C headers: a newlib sysroot for aarch64-none-elf in CC (for
 # example --sysroot=<arm-gnu-toolchain>/aarch64-none-elf) and unversioned llvm-ar,
 # llvm-nm, llvm-objcopy on PATH (distributions ship them versioned, llvm-ar-21, ...:
 # pass those names as AR, NM and OBJCOPY)
+# alternative without the Arm GNU toolchain, with a distribution libc (Ubuntu's
+# picolibc-aarch64-linux-gnu):
+# CC='clang --target=aarch64-none-elf -isystem <picolibc include dir>'
 ```
+
+The distribution-route line is the measured alternative of row 3d (`8d1488cd`).
