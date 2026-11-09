@@ -788,6 +788,54 @@ def self_test():
                       j(["SEC", "RET = re.compile("]) + "r\"/home/\")"))
         check("allow: a secret value in Python stays a finding",
               kept("password", "tools/x.py", j(["SEC", "RET = \"abcdef\""])))
+        # The narrow rules for fixtures of held files: the value in its path
+        # is dropped; the same value elsewhere and another value in the same
+        # path stay findings.  Every value is assembled from parts.
+        other = "tools/y.sh"
+        board = "tools/board_selftest.sh"
+        readme = "tools/cts/mali-slice-readme-selftest.sh"
+        triage = "tools/cts/mali-fail-triage.py"
+        c_txt = ("tools/cts/testdata/mali-fail-triage/slices/"
+                 "2026-11-09-t6-gles2-S1-11111111/kmsg/c.txt")
+        redact = "tools/cts/mali-slice-redact.py"
+        fixtures = [
+            ("email", board, ["tester", "@pi5-fake.example"],
+             ["tester", "@pi5-other.example"]),
+            ("private-ipv4", board, ["100.64", ".7.9"], ["100.64", ".7.10"]),
+            ("private-ipv4", board, ["10.20", ".30.40"], ["10.20", ".30.41"]),
+            ("private-ipv4", readme, ["10.1", ".2.3"], ["10.1", ".2.30"]),
+            ("login-at-host", readme, ["root", "@board"], ["root", "@board2"]),
+            ("email", "tools/cts/x2-glmark2-scenes-selftest.sh",
+             ["t", "@example.com"], ["t", "@example.net"]),
+            ("home-path", "tools/cts/mali-glmark2-selftest.sh",
+             ["/ho", "me/yakogl-mali-glmark2"], ["/ho", "me/yakogl-other"]),
+            ("private-ipv4", triage, ["10.1", ".2.3"], ["10.1", ".2.30"]),
+            ("login-at-host", triage, ["root", "@nano"], ["root", "@nano2"]),
+            ("private-ipv4", c_txt, ["10.9", ".8.7"], ["10.9", ".8.70"]),
+            ("login-at-host", c_txt, ["root", "@board"], ["root", "@board2"]),
+            ("login-at-host", "tools/cts/testdata/mali-slice-redact/dirty/kmsg/a.txt",
+             ["root", "@board"], ["root", "@board2"]),
+            ("tailnet-dns", "tools/cts/testdata/mali-slice-redact/dirty/meta.txt",
+             ["board-1", ".example.ts.net"], ["board-2", ".example.ts.net"]),
+            ("private-ipv4", redact, ["100.64", ".0.0"], ["100.64", ".0.1"]),
+            ("private-ipv4", redact, ["100.64", ".0.9"], ["100.64", ".0.1"]),
+            ("ipv6-local", redact, ["fe80", "::1"], ["fe80", "::2"]),
+            ("login-at-host", redact, ["root", "@board"], ["root", "@board2"]),
+            ("login-at-host", redact, ["root", "@192.0", ".2.7"],
+             ["root", "@192.0", ".2.8"]),
+            ("tailnet-dns", redact, ["board-1", ".example.ts.net"],
+             ["board-2", ".example.ts.net"]),
+            ("email", redact, ["serial-getty", "@ttyS2.service"],
+             ["serial-getty", "@ttyS3.service"]),
+        ]
+        for key, path, val, near in fixtures:
+            line = "fixture %s end" % j(val)
+            check("allow: %s %s in %s is dropped" % (key, path, "its path"),
+                  dropped(key, path, line))
+            check("allow: %s %s elsewhere stays a finding" % (key, path),
+                  kept(key, other, line))
+            check("allow: another %s in %s stays a finding" % (key, path),
+                  kept(key, path, "fixture %s end" % j(near)))
         check("a comparison (`==`) is no password value",
               not rxs["password"].search("CHECK(bad_" + j(["pass", "word == 0"])
                                           + " && PM_" + j(["PASS", "WORD == 0x5a"])
