@@ -60,6 +60,10 @@ pub struct Selected<'a> {
     pub vs_pos_out_reg: Option<u8>,
     /// The register the fragment colour was written to.
     pub ps_color_out_reg: Option<u8>,
+    /// The register `gl_FragDepth` was written to, when the shader writes it:
+    /// always [`FS_DEPTH_REG`] (`.z` only), where the hardware reads the
+    /// pixel's depth. Never placed by the allocator, unlike the colour.
+    pub ps_depth_out_reg: Option<u8>,
     /// The register `gl_PointSize` was written to, when the shader writes it.
     pub vs_pointsize_out_reg: Option<u8>,
     /// The input register `gl_VertexID` (`.x`) and `gl_InstanceID` (`.y`)
@@ -413,6 +417,16 @@ fn note_site(f: impl FnOnce(&mut MovSites)) {
 /// [`FS_COLOR_MIN_REG`] is 1 rather than 0.
 const FS_FRAGCOORD_REG: u8 = 0;
 
+/// Where a fragment shader writes `gl_FragDepth`: lane `.z` of
+/// [`FS_FRAGCOORD_REG`], the lane the rasteriser put the pixel's own depth in.
+/// Mesa's etnaviv pins the depth output there (etnaviv_compiler_nir_ra.c,
+/// REG_FRAG_DEPTH, and `ps_depth_out_reg = 0` in etnaviv_compiler_nir.c), so
+/// it is a hardware register and not an allocation result.
+pub const FS_DEPTH_REG: u8 = FS_FRAGCOORD_REG;
+
+/// The lane of [`FS_DEPTH_REG`] that holds the depth: `.z`, alone.
+const FS_DEPTH_WRITE_MASK: u8 = 0b0100;
+
 /// The most io registers the shader ABI holds.
 const MAX_IO: usize = crate::shaderc::SHC_VIV_MAX_IO;
 
@@ -527,6 +541,15 @@ struct Sel<'a> {
     /// The register each colour output location was stored to (MRT): index
     /// is the location, 0 as `ps_color_reg`.
     colour_regs: [Option<u8>; MAX_COLOUR_OUTPUTS as usize],
+    /// A `gl_FragDepth` store was selected: [`Selected::ps_depth_out_reg`].
+    writes_depth: bool,
+    /// The copy of `gl_FragCoord`'s register every `gl_FragCoord` read takes,
+    /// when the shader also writes `gl_FragDepth`: that write lands in the
+    /// same register's `.z` ([`FS_DEPTH_REG`]), so a read after it would see
+    /// the written depth instead of the pixel's. Made before the first
+    /// instruction (`select_blocks`), which orders it ahead of any depth
+    /// write whatever the shader's control flow.
+    fragcoord_copy: Option<VReg>,
     /// `mov`, resolved once rather than by name per instruction. The name is
     /// the key and the mnemonic is not unique (`branch_unary` and
     /// `branch_binary` both print `branch`), so an `OpId` cannot be ambiguous
@@ -1366,6 +1389,7 @@ impl<'a> Sel<'a> {
                 Ok((idx + 1) as u8)
             }
             ir::IoSlot::PointSize => Ok(self.vs_pointsize_reg()),
+            ir::IoSlot::FragDepth => Ok(FS_DEPTH_REG),
             _ => Err(SelectError::Unsupported("this output is not selected yet")),
         }
     }
@@ -2191,7 +2215,11 @@ impl<'a> Sel<'a> {
             p.swizzle = [l; 4];
             SelSrc::Physical(p)
         };
-        let t0 = |sw: [u8; 4]| SelSrc::Input { reg: FS_FRAGCOORD_REG, swizzle: sw, neg: false, abs: false };
+        let copy = self.fragcoord_copy;
+        let t0 = |sw: [u8; 4]| match copy {
+            Some(v) => SelSrc::Virtual { v, swizzle: sw, neg: false, abs: false },
+            None => SelSrc::Input { reg: FS_FRAGCOORD_REG, swizzle: sw, neg: false, abs: false },
+        };
         let v = VReg(id.0);
         self.emit(
             SelInstr::new(self.mov, OpType::F32)
@@ -2337,6 +2365,41 @@ impl<'a> Sel<'a> {
                 self.lower_one(
                     ir::AluOp::Fmin,
                     SelDst::Fixed { reg, write_mask: build::WRITE_MASK_ALL },
+                    &[whole, hi_bound],
+                )
+            }
+            ir::Op::StoreOutput { slot: ir::IoSlot::FragDepth, src } => {
+                /* gl_FragDepth is clamped to [0, 1] here (ES 3.00 7.2: the
+                 * value written is clamped to the depth range's [0, 1] before
+                 * the test), max against 0 then min against 1 as gl_PointSize
+                 * is above, and only the LAST instruction writes the depth
+                 * register, lane .z alone: x, y and w of r0 stay what the
+                 * rasteriser left. Mesa's etnaviv writes it there and nowhere
+                 * else (FS_DEPTH_REG). Whether the PE clamps by itself is not
+                 * known from source, and a clamp too many costs one
+                 * instruction where a missing one is a wrong depth. */
+                if self.m.stage != SHC_STAGE_FRAGMENT {
+                    return Err(SelectError::Unsupported("gl_FragDepth written outside a fragment shader"));
+                }
+                let s = splat_first_lane(self.src(src)?);
+                let imm = |v: f32| {
+                    build::Src::imm_f32(v)
+                        .map(SelSrc::Physical)
+                        .map_err(|_| SelectError::Unsupported("a depth bound that is not an immediate"))
+                };
+                let (lo_bound, hi_bound) = (imm(0.0)?, imm(1.0)?);
+                let lo = VReg(self.next_vreg);
+                self.next_vreg += 1;
+                let whole = SelSrc::Virtual { v: lo, swizzle: ir::SWIZZLE_IDENTITY, neg: false, abs: false };
+                self.lower_one(
+                    ir::AluOp::Fmax,
+                    SelDst::Virtual { v: lo, write_mask: build::WRITE_MASK_ALL },
+                    &[s, lo_bound],
+                )?;
+                self.writes_depth = true;
+                self.lower_one(
+                    ir::AluOp::Fmin,
+                    SelDst::Fixed { reg: FS_DEPTH_REG, write_mask: FS_DEPTH_WRITE_MASK },
                     &[whole, hi_bound],
                 )
             }
@@ -4043,6 +4106,8 @@ pub fn select_blocks<'a>(
         next_vreg: m.instrs.len() as u32 + m.locals.len() as u32,
         ps_color_reg: None,
         colour_regs: [None; MAX_COLOUR_OUTPUTS as usize],
+        writes_depth: false,
+        fragcoord_copy: None,
         back_edges: AVec::new(),
         breaks: AVec::new(),
         loop_tops: AVec::new(),
@@ -4053,6 +4118,23 @@ pub fn select_blocks<'a>(
         first_literal: 0,
     };
     s.uniform_block(members)?;
+    /* gl_FragDepth and gl_FragCoord share r0 (FS_DEPTH_REG): a shader doing
+     * both reads gl_FragCoord from a copy made here, before any instruction
+     * can have written the depth, so `gl_FragDepth = x; ... gl_FragCoord.z`
+     * reads the pixel's depth as GLSL says, in a loop as much as in a line. */
+    let has = |want: fn(&ir::Op) -> bool| m.instrs.iter().any(want);
+    if m.stage == SHC_STAGE_FRAGMENT
+        && has(|op| matches!(op, ir::Op::StoreOutput { slot: ir::IoSlot::FragDepth, .. }))
+        && has(|op| matches!(op, ir::Op::LoadInput { slot: ir::IoSlot::FragCoord, .. }))
+    {
+        let v = VReg(s.next_vreg);
+        s.next_vreg += 1;
+        s.emit(SelInstr::new(mov, OpType::F32).dst(SelDst::Virtual { v, write_mask: build::WRITE_MASK_ALL }).operand(
+            MOV_OPERAND,
+            SelSrc::Input { reg: FS_FRAGCOORD_REG, swizzle: ir::SWIZZLE_IDENTITY, neg: false, abs: false },
+        ))?;
+        s.fragcoord_copy = Some(v);
+    }
     s.nodes(m.body)?;
     s.propagate_copies()?;
     s.fold_constant_reads()?;
@@ -4215,6 +4297,7 @@ pub fn select_blocks<'a>(
         vregs: s.next_vreg,
         vs_pos_out_reg,
         ps_color_out_reg,
+        ps_depth_out_reg: s.writes_depth.then_some(FS_DEPTH_REG),
         vs_pointsize_out_reg,
         vs_id_in_reg,
         vs_reads_instance_id: m.stage == SHC_STAGE_VERTEX && reads_instance_id,
