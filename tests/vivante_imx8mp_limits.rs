@@ -388,7 +388,7 @@ fn the_vivante_table_and_flags_are_pinned() {
     assert!(b.front_facing_shader_variant); // :3350
     assert!(!b.etc1_decoded_at_upload); // :3351
     assert_eq!(b.linear_row_align, 0); // :3372
-    assert!(!b.uniforms_host_only); // :3373
+    assert!(b.uniforms_host_only); // :3550 (route 3: the host arrays are copied into the arena)
     assert_eq!(b.max_instance_divisor, 1); // :3378
     assert!(!b.samples_texel_copies); // :3382
 
