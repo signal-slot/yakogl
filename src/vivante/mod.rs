@@ -21,6 +21,7 @@
 //! | [`backend`] | frames, the render target, the rasteriser and pixel engine, the clear quad |
 //! | [`dedup`] | the state groups as the open stream last wrote them: a draw writes only the ones that differ |
 //! | [`depth_format`] | the depth surface format, size and clear word per GL depth attachment (not yet used) |
+//! | [`early_z`] | the early-depth rule: whether a draw may use it and the PE_DEPTH_CONFIG and RA_EARLY_DEPTH words for it (not yet used) |
 //! | [`shader`] | the register wiring of the two stages, the instruction cache, the uniforms |
 //! | [`texture`] | texture descriptors and sampler state |
 //! | [`kick`] | the descriptor the OSAL's `submit()` takes |
@@ -29,6 +30,8 @@
 //! | [`profile`] | the part: the ids, limits and feature bits of its hardware database row |
 //! | [`tiled_copy`] | the tiled copies the texture unit samples instead of some linear textures |
 //! | [`wide_target`] | the tiled shadow a 64-bit colour target is rendered into |
+//! | [`layout`] | the address map of the 4x4-tiled and 64x64 super-tiled layouts: offsets, padding, stride, and whole-buffer linear-to-tiled conversion (not yet used) |
+//! | [`ts`] | tile-status buffer sizes, fast-clear words, and the PE_MEM_CONFIG and TS_MEM_CONFIG values Mesa writes (not yet used) |
 #![cfg(feature = "gpu-vivante")]
 
 pub mod backend;
@@ -42,6 +45,7 @@ pub mod early_z;
 /// --internal` from the list's `internal gc7000` lines.
 pub mod internal;
 pub mod kick;
+pub mod layout;
 /// Etnaviv's clear shaders (etna_shc, gen_shader_table.py), which the host
 /// tests hold ours to: reference material, in no product image.
 #[cfg(mesa_reference)]
@@ -54,4 +58,5 @@ pub mod shader;
 pub mod state;
 pub mod texture;
 pub mod tiled_copy;
+pub mod ts;
 pub mod wide_target;

@@ -7,10 +7,9 @@
 //! item ts-golden (`tools/vivante/testdata/ts-clear*`) was not on the
 //! integration tip when this was written, so no check against it is made.
 
-#[path = "../src/vivante/ts.rs"]
-mod ts;
+#![cfg(all(feature = "host-test", feature = "gpu-vivante"))]
 
-use ts::*;
+use yakogl::vivante::ts::*;
 
 #[test]
 fn register_addresses_match_regs_rs() {
