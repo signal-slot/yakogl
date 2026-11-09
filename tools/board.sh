@@ -30,6 +30,11 @@
 # (no sudo), the loader and the record tool are copied to a tmpfs by each run,
 # and the record is LPGPR1..3 read through /dev/mem ("The Armadillo-X2" in
 # driver/tools/kexec-zephyr/README.md).
+#   tools/board.sh [--dry-run] x2 stage <image> <logdir> [name]
+#      every step of an x2 run up to the jump (image checks, readiness, the
+#      tools and the image copied, the record cleared and read back, the
+#      image's sha256 read back), then the tmpfs copies removed and one
+#      "verdict=staged" line; kexec_zephyr is never run. x2 only (others: rc 2).
 # --dry-run prints every command that would touch a board, the TFTP
 # root or a serial bridge and runs none of them (board reads included); it
 # still checks the image on the host. tools/board_selftest.sh runs every verb
@@ -1761,7 +1766,7 @@ run_kexec() {
         done
         # the console is opt-in (BOARD_UART): probed before the board is touched
         UCAP=0
-        if [ -n "${BOARD_UART:-}" ]; then UCAP=1; pi4_uart_free; fi
+        if [ -n "${BOARD_UART:-}" ] && [ "$VERB" != stage ]; then UCAP=1; pi4_uart_free; fi
         take_lock
         common_prechecks
         kexec_x2
@@ -1934,8 +1939,10 @@ x2_kexec_ready() {
     return 0
 }
 
-kexec_x2() {
-    local st why rsha t0 rec
+# x2_stage_steps: steps 2-4 of an x2 run, shared by run and stage: the board
+# is ours to use, the tools and the record, the image staged and read back
+x2_stage_steps() {
+    local st why rsha
     # 2. the board is ours to use (x2_kexec_ready)
     bget st 'i=0; while [ $i -lt 20 ] && { [ "$(rc-status -r 2>/dev/null)" != default ] || pgrep -x openrc >/dev/null; }; do sleep 2; i=$((i+1)); done; if [ "$(rc-status -r 2>/dev/null)" = default ] && ! pgrep -x openrc >/dev/null; then echo settled; else echo unsettled; fi; cut -d" " -f1 /proc/uptime; pgrep -x kexec_zephyr | wc -l; podman ps -q 2>/dev/null | wc -l; cat /sys/kernel/kexec_crash_size; cat /sys/kernel/kexec_crash_loaded' \
         "settled 999.0 0 0 $((LOAD_END - YAKO_ADDR)) 0" || die "board unreachable"
@@ -1951,6 +1958,30 @@ kexec_x2() {
     bget rsha "sync; sha256sum $X2_DIR/zephyr.bin" "$IMG_SHA  zephyr.bin"
     [ "${rsha%% *}" = "$IMG_SHA" ] || die "the staged image reads back as '${rsha%% *}'"
     meta staged "$X2_DIR/zephyr.bin, read back equal"
+}
+
+# x2_stage_finish: the end of `x2 stage`: the tmpfs copies removed, one verdict
+# line; the jump is never made
+x2_stage_finish() {
+    local rec
+    if [ "$DRY" = 1 ]; then
+        b "$X2_DIR/snvs_lpgpr   # the record read back"
+        b "rm -rf $X2_DIR   # cleanup: the tmpfs copies"
+        echo "verdict=staged board=x2 sha256=$IMG_SHA record=<LPGPR1..3 as read> kexec=not-called (dry run)"
+        exit 0
+    fi
+    trap 'lease_release; rm -rf "$TMP"; [ -n "${BOARD_LOCK_WATCHDOG:-}" ] && kill "$BOARD_LOCK_WATCHDOG" 2>/dev/null' EXIT
+    rec=$(lpgpr_read)
+    b "rm -rf $X2_DIR" || die "cannot remove $X2_DIR on the board"
+    meta cleaned "$X2_DIR removed"
+    echo "verdict=staged board=x2 sha256=$IMG_SHA record=${rec:-unread} kexec=not-called"
+    exit 0
+}
+
+kexec_x2() {
+    local t0 rec
+    x2_stage_steps
+    [ "$VERB" != stage ] || x2_stage_finish
     # 5. the console (opt-in), before anything can print
     if [ "$UCAP" = 1 ]; then imx8mp_capture_start kexec ""; fi
     if [ "$DRY" != 1 ]; then
@@ -1989,6 +2020,7 @@ kexec_x2() {
 cmd_run() {
     local sha8
     PROBE=0
+    [ "$VERB" != stage ] || [ "$BOARD" = x2 ] || die "stage is for the Armadillo-X2 (x2) only: $BOARD has no staging without its jump" 2
     if [ "$VERB" = probe ]; then
         [ $# -ge 1 ] || usage
         PROBE=1; IMG=; LOGDIR=$1; NAME=probe
@@ -2625,7 +2657,7 @@ cmd_diff() {
 case "$VERB" in
 status) cmd_status ;;
 install | uninstall | disarm) cmd_setup ;;
-probe | run) cmd_run "$@" ;;
+probe | run | stage) cmd_run "$@" ;;
 default | nodefault) cmd_default "$@" ;;
 tree) cmd_tree "$@" ;;
 gm) cmd_gm "$@" ;;
