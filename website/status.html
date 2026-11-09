@@ -114,10 +114,13 @@ work is recorded separately from hardware validation.
 <p>The fourth GPU back end is actively being brought up on the FriendlyElec NanoPC-T6
 (Rockchip RK3588, Arm Mali-G610). The <code>gpu-mali</code> back end already runs
 <code>gl_test</code> on the board's Linux through the panthor kernel driver; the
-2026-10-24 sweep records 98 of 256 cases PASS and 0 FAIL, with the remaining
-cases refused, not present, or skipped. Zephyr board support, board glue and
-GPU bring-up probes are already in the tree, while the complete Zephyr graphics
-path and board-level validation are still in progress. This is therefore a WIP
+2026-11-01 sweep (main 0ff58329, run twice with identical verdicts) records
+132 of 256 cases PASS, 3 FAIL and 1 FAULT (two loop cases and two vertex
+attribute cases, issues #32 and #33), 27 refused by the compiler or the frame
+builder, 84 without a case and 9 skipped. On Zephyr, milestone Z1 (boot, GPU
+power-on) passed by kexec on 2026-10-19; Z2 (the MCU's page tables) and Z3 (the
+CSF firmware boot) are written and tested on the host, and their board runs are
+next; Z4 (our own command-stream submit) is in progress. This is therefore a WIP
 target, not yet one of the three supported Zephyr boards.
 <a href="https://github.com/signal-slot/yakogl/blob/main/driver/docs/nanopc-t6-mali.md">Mali bring-up details</a> ·
 <a href="https://github.com/signal-slot/yakogl/blob/main/ROADMAP.md#5-more-boards">support criteria</a>.</p>

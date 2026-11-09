@@ -28,8 +28,8 @@
 window.YAKOGL_DATA = {
   "repo": "https://github.com/signal-slot/yakogl",
   "checkedAgainst": {
-    "commit": "08163414b656836b0d5e00260992f5d033e63a74",
-    "date": "2026-11-05",
+    "commit": "66162840fdc94b7655573640e7eac758d15459e3",
+    "date": "2026-11-10",
     "source": "tools/cts/RESULTS.md"
   },
   "boards": [
@@ -187,18 +187,18 @@ window.YAKOGL_DATA = {
     "gltest.am62p": {
       "label": "gl_test regression set",
       "board": "am62p",
-      "value": "50 / 50",
+      "value": "49 / 50",
       "unit": "cases passed, 0 GPU resets",
-      "commit": "445c5653",
-      "onMain": false,
-      "date": "2026-10-20",
+      "commit": "86d0b482",
+      "onMain": true,
+      "date": "2026-10-28",
       "source": "tools/cts/RESULTS.md",
       "section": "Common set (stage 2 input)",
-      "status": "pass",
-      "note": "The common regression set, run from the same build as the AM62P benchmark below.",
+      "status": "warn",
+      "note": "The common regression set, run from the same build as the AM62P benchmark below. Case 20 (etc) fails its first check alone: it expects 3 compressed texture formats and the build stores 5, the intended ES 3.0 list on the PowerVR; the test's expectation is stale and its other 16 checks pass. 50 / 50 at 445c5653 (2026-10-20).",
       "provenance": {
-        "kind": "pre-publication",
-        "recordCommit": "381b0f09e9c8e7b3d437946c888224f12a27b367"
+        "kind": "repository",
+        "recordCommit": "965ac247d6c5f06f86b4f12078f0c8486cc8cc5a"
       }
     },
     "gltest.imx8mp": {
@@ -238,18 +238,18 @@ window.YAKOGL_DATA = {
     "glmark2.am62p": {
       "label": "glmark2-es2",
       "board": "am62p",
-      "value": 461,
+      "value": 467,
       "unit": "score at 800x600; 33 scenes, 0 failed, 0 GL errors",
-      "commit": "445c5653",
-      "onMain": false,
-      "date": "2026-10-20",
+      "commit": "86d0b482",
+      "onMain": true,
+      "date": "2026-10-28",
       "source": "tools/cts/RESULTS.md",
       "section": "Common set (stage 2 input)",
       "status": "warn",
-      "note": "All 33 scene picture values are recorded; none is black. Twenty-nine match the earlier run inspected on the panel, with four differences in animated scenes. Heavy scenes remain slow: terrain about 94 ms, shadow 353 ms, refract 376 ms per frame.",
+      "note": "All 33 scene picture values are recorded; none is black. Twenty-eight match the earlier run inspected on the panel (445c5653, score 461), with five differences in animated scenes. The heavy scenes: terrain 90.9 ms, shadow 10.6 ms and refract 37.1 ms per frame; shadow and refract were 353 and 376 ms before the depth texture was sampled on the GPU (issue #40).",
       "provenance": {
-        "kind": "pre-publication",
-        "recordCommit": "381b0f09e9c8e7b3d437946c888224f12a27b367"
+        "kind": "repository",
+        "recordCommit": "965ac247d6c5f06f86b4f12078f0c8486cc8cc5a"
       }
     },
     "glmark2.imx8mp": {
@@ -257,16 +257,16 @@ window.YAKOGL_DATA = {
       "board": "imx8mp",
       "value": 42,
       "unit": "score at 800x600; 33 scenes, 0 failed, 0 GL errors",
-      "commit": "a917d123",
-      "onMain": false,
-      "date": "2026-10-20",
+      "commit": "f87dde43",
+      "onMain": true,
+      "date": "2026-11-07",
       "source": "tools/cts/RESULTS.md",
       "section": "Common set (stage 2 input)",
       "status": "warn",
-      "note": "Default one-buffer configuration. All 33 picture values match the earlier 445c5653 run; they have not been visually reviewed on the panel. Terrain is 4 FPS, shadow and refract 2 FPS. The texture/mipmap picture change remains unexplained. Extra display-buffer configurations are separate experiments.",
+      "note": "Default one-buffer configuration, booted from the eMMC by U-Boot; the score has read 42 since 445c5653 (2026-10-20). All 33 picture values match the earlier runs; they have not been visually reviewed on the panel. Terrain is 4 FPS, shadow and refract 2 FPS (per-scene record of 2026-10-20). The texture/mipmap picture change remains unexplained. Extra display-buffer configurations are separate experiments.",
       "provenance": {
-        "kind": "pre-publication",
-        "recordCommit": "381b0f09e9c8e7b3d437946c888224f12a27b367"
+        "kind": "repository",
+        "recordCommit": "8737e5a36e6b386340c7f3b5b11b078a32df0865"
       }
     },
     "glmark2.pi4": {
