@@ -1,0 +1,10 @@
+commit=04ac35d3ccd4b3b9950ef4c6e61477b22b78f7ba
+session=S1
+rows=1-24
+tree=tools/cts/mali-gles2-tree.txt
+boot_id_before=5c5c0878-ebda-4b0e-8067-10d33325851b
+boot_id_after=5c5c0878-ebda-4b0e-8067-10d33325851b
+kernel=6.18.55-current-rockchip64
+lib=libGLESv2.so.2:0724e9006db3,libEGL.so.1:2fc978783738
+started=2026-11-09T04:50:26Z
+ended=2026-11-09T04:53:22Z
