@@ -1142,6 +1142,14 @@ fn uniform_precision(decls: &[super::reflect::UniformDecl<'_>], name: &str) -> O
     }
 }
 
+/// `gl_type` is not an int, uint or bool (scalar or vector) uniform: those
+/// are one 32-bit word at any precision (Mesa's `LowerPrecisionFloat16Uniforms`
+/// touches float uniforms only), so only a float one can make a highp shader
+/// mixed. An unknown type counts as float.
+fn is_float_uniform(gl_type: u16) -> bool {
+    !matches!(gl_type, 0x1404 | 0x1405 | 0x8B53..=0x8B58 | 0x8DC6..=0x8DC8)
+}
+
 fn compile_stage<'s>(
     m: &ir_mod::Module<'_>,
     precision: &[super::reflect::UniformDecl<'_>],
@@ -1349,7 +1357,8 @@ fn compile_stage<'s>(
                     uniform_precision(precision, u.name)
                         .map(|p| if p == Precision::Default { Precision::High } else { p })
                 };
-                f.mixed |= !matches!(prec(u.name).or_else(member), Some(Precision::High));
+                f.mixed |=
+                    is_float_uniform(u.gl_type) && !matches!(prec(u.name).or_else(member), Some(Precision::High));
             }
             nir_fs::select_highp(&mut p, &mut f, m, &ubo, scratch).map(|()| ubo)
         } else if nir_fs::mask_colour(&f) || nir_fs::array_look_ups(&f) {
@@ -1696,6 +1705,8 @@ pub fn compile_vs_mapped_blocks<'s>(
 
 /* the test modules last: clippy's items_after_test_module (a newer clippy
  * than the gate host's flagged them at the top of the file) */
+#[cfg(test)]
+mod mixprec_tests;
 #[cfg(test)]
 mod tests;
 /// The expect.json reader the tests share (the triangle sample's test too).
