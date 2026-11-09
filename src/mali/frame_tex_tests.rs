@@ -1973,3 +1973,167 @@ fn several_textures_planes_follow_one_another() {
     assert_eq!((at(1).surfaces, at(1).array_size), (planes.gpu + 6 * 32, 6));
     assert_eq!(b.layout.fs_sampler.expect("the samplers").len, 2 * Sampler::LENGTH);
 }
+
+/* Sampling RGBA16F and R16F (gl_test cases 44 and 91): the descriptors the
+ * back end builds for a GL core binding of each, against Mesa 26.2.1's on
+ * the drm-shim, word for word (docs/notes/mali-float-textures.md section 2,
+ * "The descriptor words": `PAN_MESA_DEBUG=trace,linear,nocrc,dump`, 8x8
+ * unless stated). The binding's texels and the descriptor's planes are at
+ * the shim's own addresses, so no word differs. The sampler is not
+ * compared: the words section 2 quotes for it decode to another state than
+ * the runs' (linear, clamped on R, mipmap NEAREST, maximum LOD 0; the
+ * note's section 6), and it does not depend on the texture's format.
+ * The shim traces the note's section 5 named for tools/mali/testdata are
+ * deferred (section 5); the quoted words stand in for them. */
+
+/// The shim's `Surfaces` address (the planes) and plane `Pointer`.
+const SHIM_SURFACES: u64 = 0x7fff_ffff_d080;
+const SHIM_TEXELS: u64 = 0x7fff_fffe_6000;
+
+/// A descriptor's 32-bit words as the note quotes them, little-endian bytes.
+fn quoted_words(words: &str) -> Vec<u8> {
+    words.split_whitespace().flat_map(|w| u32::from_str_radix(w, 16).unwrap().to_le_bytes()).collect()
+}
+
+/// A GL core binding of a `side` x `side` texture stored as `format` on a
+/// pitch of `stride_texels` texels of it, at the shim's texel address,
+/// nearest and clamped on S and T (case 91's state).
+fn float_bind(format: u8, side: u32, stride_texels: u32, cpu: &[u8]) -> crate::backend::GlesTextureBind {
+    use crate::backend;
+    backend::GlesTextureBind {
+        format,
+        base_gpu: SHIM_TEXELS,
+        width: side,
+        height: side,
+        stride_texels,
+        bytes: cpu.len() as u32,
+        wrap_s: backend::GLES_WRAP_CLAMP_TO_EDGE,
+        wrap_t: backend::GLES_WRAP_CLAMP_TO_EDGE,
+        cpu: cpu.as_ptr().cast(),
+        ..backend::GlesTextureBind::ZERO
+    }
+}
+
+/// The back end's texture for `bind`, a copy (if it makes one) in a data
+/// pool at the shim's texel address; with the pool's bytes.
+fn float_texture(bind: &crate::backend::GlesTextureBind) -> (Result<SampledTexture, FrameError>, Vec<u8>) {
+    let mut data_m = vec![0u8; 0x1000];
+    let t = {
+        let mut data = super::arena::Pool::new("data", SHIM_TEXELS, &mut data_m).unwrap();
+        super::backend::texture_of(Some(bind), &mut data)
+    };
+    (t, data_m)
+}
+
+/// `t`'s texture descriptor (its planes at the shim's `Surfaces`) and its
+/// one plane against the note's words.
+fn check_float_words(name: &str, t: &SampledTexture, texture: &str, plane: &str) {
+    assert_eq!(t.plane_count(), 1, "{name}: one plane");
+    assert_eq!(t.texture(SHIM_SURFACES).pack().unwrap().to_vec(), quoted_words(texture), "{name}: Texture");
+    assert_eq!(t.plane(0, 0).pack().unwrap().to_vec(), quoted_words(plane), "{name}: Generic Plane");
+}
+
+/// Case 44's and 91's 8x8 RGBA16F, sampled in place: the GL core's pitch is
+/// 8 texels, 64 bytes (`row_aligned(8, 8, 64)`, the note's section 4 step
+/// 3). Section 2, row "RGBA16F": `RGBA16F RGBA`, RAW64, Row stride 0x40.
+/// Its sampler is the binding's state (nearest, clamped on S and T).
+#[test]
+fn an_rgba16f_texture_is_the_shim_s() {
+    let texels = vec![0u8; 8 * 8 * 8];
+    let bind = float_bind(crate::backend::GLES_TEXFMT_RGBA16F, 8, 8, &texels);
+    let t = float_texture(&bind).0.expect("RGBA16F is sampled");
+    assert_eq!(t.level[0], TextureLevel { gpu: SHIM_TEXELS, row_stride: 64 }, "in place");
+    let s = t.sampler();
+    assert!(s.minify_nearest && s.magnify_nearest);
+    assert_eq!((s.wrap_mode_s, s.wrap_mode_t), (WrapMode::CLAMP_TO_EDGE, WrapMode::CLAMP_TO_EDGE));
+    check_float_words(
+        "RGBA16F 8x8",
+        &t,
+        "37C00022 00070007 00000688 00000000 FFFFD080 00007FFF 00000000 00000000",
+        "0300021A 00000200 FFFE6000 00007FFF 00000040 00000000 00000000 00070007",
+    );
+    /* the frame builder takes it: its row check counts 8 bytes a texel */
+    assert_eq!(t.texel_bytes(), 8);
+    let b = build(t);
+    let at = (b.layout.fs_texture.expect("the textures").gpu - DESC) as usize;
+    let planes = b.layout.fs_plane.expect("the planes").gpu;
+    assert_eq!(b.desc[at..at + 32], t.texture(planes).pack().unwrap(), "the frame's texture descriptor");
+    let p = (planes - DESC) as usize;
+    assert_eq!(b.desc[p..p + 32], t.plane(0, 0).pack().unwrap(), "the frame's plane");
+}
+
+/// Case 91's uploaded 1x1 RGBA16F texel. The GL core's pitch is 8 texels
+/// (`row_aligned(tex_pitch(1), 8, 64)`), so it is sampled in place. Section
+/// 2, row "RGBA16F 1x1": Width and Height 1, Row stride and Size 0x40.
+#[test]
+fn a_1x1_rgba16f_texture_is_the_shim_s() {
+    let texels = vec![0u8; 64];
+    let bind = float_bind(crate::backend::GLES_TEXFMT_RGBA16F, 1, 8, &texels);
+    check_float_words(
+        "RGBA16F 1x1",
+        &float_texture(&bind).0.expect("RGBA16F is sampled"),
+        "37C00022 00000000 00000688 00000000 FFFFD080 00007FFF 00000000 00000000",
+        "0300021A 00000040 FFFE6000 00007FFF 00000040 00000000 00000000 00000000",
+    );
+}
+
+/// The same 1x1 texel on a pitch of 1 texel (8 bytes, not on 64: a
+/// hand-made binding, as an imported image's could be): copied with its row
+/// padded to 64 bytes, which gives the same words, and the texel's 8 bytes
+/// (fp16 0.5, 0.25, 1.0, 1.0) at the copy's start.
+#[test]
+fn a_1x1_rgba16f_texel_off_64_bytes_is_copied_to_the_shim_s_words() {
+    let texel: Vec<u8> = [0x3800u16, 0x3400, 0x3C00, 0x3C00].iter().flat_map(|h| h.to_le_bytes()).collect();
+    let bind = float_bind(crate::backend::GLES_TEXFMT_RGBA16F, 1, 1, &texel);
+    let (t, data) = float_texture(&bind);
+    check_float_words(
+        "RGBA16F 1x1, copied",
+        &t.expect("RGBA16F is sampled"),
+        "37C00022 00000000 00000688 00000000 FFFFD080 00007FFF 00000000 00000000",
+        "0300021A 00000040 FFFE6000 00007FFF 00000040 00000000 00000000 00000000",
+    );
+    assert_eq!(data[..8], texel[..], "the texel at the copy's start");
+}
+
+/// An 8x8 R16F: the GL core's pitch is 32 texels, 64 bytes (`row_aligned(8,
+/// 2, 64)`). Section 2, row "R16F": `R16F RGB1`, Mesa's R001 swizzle
+/// (0xB20), RAW16, Row stride 0x40.
+#[test]
+fn an_r16f_texture_is_the_shim_s() {
+    let texels = vec![0u8; 32 * 2 * 8];
+    let bind = float_bind(crate::backend::GLES_TEXFMT_R16F, 8, 32, &texels);
+    let t = float_texture(&bind).0.expect("R16F is sampled");
+    assert_eq!((t.swizzle, t.texel_bytes()), (0xB20, 2));
+    check_float_words(
+        "R16F 8x8",
+        &t,
+        "31C04022 00070007 00000B20 00000000 FFFFD080 00007FFF 00000000 00000000",
+        "0100021A 00000200 FFFE6000 00007FFF 00000040 00000000 00000000 00070007",
+    );
+}
+
+/// What the reference does not draw stays refused: RGBA32F storage with the
+/// format's message, a 3D texture of 8-byte texels as a type (its slices
+/// are laid out for 4-byte texels only; the note's section 3 step 3).
+#[test]
+fn float_storage_the_shim_does_not_draw_is_refused() {
+    use crate::backend;
+    let texels = vec![0u8; 16 * 8 * 8];
+    let bind = float_bind(backend::GLES_TEXFMT_RGBA32F, 8, 8, &texels);
+    assert_eq!(
+        float_texture(&bind).0,
+        Err(FrameError::NotBuilt(super::backend::NOT_BUILT_TEXTURE_FORMAT)),
+        "RGBA32F storage"
+    );
+    let volume = backend::GlesTextureBind {
+        type_: backend::GLES_TEXTYPE_3D,
+        layers: 2,
+        width: 16,
+        ..float_bind(backend::GLES_TEXFMT_RGBA16F, 8, 16, &texels)
+    };
+    assert_eq!(
+        float_texture(&volume).0,
+        Err(FrameError::NotBuilt(super::backend::NOT_BUILT_TEXTURE_TYPE)),
+        "a 3D RGBA16F texture"
+    );
+}

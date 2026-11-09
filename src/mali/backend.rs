@@ -1729,12 +1729,15 @@ struct TexelFormat {
     clump: ClumpFormat,
     /// The swizzle of the view (`pan_translate_swizzle_4` of the format's).
     swizzle: u32,
-    /// 4x4 blocks of this many bytes; 0: 4-byte texels.
+    /// 4x4 blocks of this many bytes; 0: texels of `texel_bytes`.
     block_bytes: u32,
+    /// The bytes of a texel (`backend::gles_texfmt_bytes`); 0 for a block
+    /// format.
+    texel_bytes: u32,
 }
 
 /// The formats this backend samples (Mesa 26.2.1 pan_format.c:231-241, 508,
-/// 528); None for any other.
+/// 528, 538, 548); None for any other.
 fn texel_format(texfmt: u8) -> Option<TexelFormat> {
     use backend::{GLES_TEXFMT_ETC2_RGB, GLES_TEXFMT_ETC2_RGBA, GLES_TEXFMT_ETC2_RGB_PT, GLES_TEXFMT_RGBA8};
     const SRGB: u32 = 1 << 20;
@@ -1744,6 +1747,7 @@ fn texel_format(texfmt: u8) -> Option<TexelFormat> {
         clump: ClumpFormat::RAW32,
         swizzle: frame::SWIZZLE_RGBA,
         block_bytes: 0,
+        texel_bytes: 4,
     };
     Some(match texfmt {
         GLES_TEXFMT_RGBA8 => raw(0),
@@ -1759,6 +1763,29 @@ fn texel_format(texfmt: u8) -> Option<TexelFormat> {
             clump: ClumpFormat::RAW32,
             swizzle: frame::SWIZZLE_RGBA,
             block_bytes: 0,
+            texel_bytes: 4,
+        },
+        /* ES 3.0's GL_RGBA16F (and GL_RGB16F, GL_RG16F, GL_RGBA32F, which
+         * the GL core stores as RGBA16F with the missing channels filled,
+         * src/gl/texture.rs): Mesa's R16G16B16A16_FLOAT, `RGBA16F RGBA`,
+         * its 8-byte texels RAW64 (pan_format.c:548, pan_texture.c:303-316;
+         * docs/notes/mali-float-textures.md section 2) */
+        backend::GLES_TEXFMT_RGBA16F => TexelFormat {
+            format: Format::RGBA16F.0 << 12 | RgbComponentOrder::RGBA.0,
+            clump: ClumpFormat::RAW64,
+            swizzle: frame::SWIZZLE_RGBA,
+            block_bytes: 0,
+            texel_bytes: 8,
+        },
+        /* GL_R16F: Mesa's R16_FLOAT, `R16F` in the R001 order (RGB1 on
+         * v9+), RAW16, read through Mesa's R001 swizzle (0xB20,
+         * pan_format.c:538; the note's section 2) */
+        backend::GLES_TEXFMT_R16F => TexelFormat {
+            format: Format::R16F.0 << 12 | RgbComponentOrder::RGB1.0,
+            clump: ClumpFormat::RAW16,
+            swizzle: frame::swizzle4(0, 4, 4, 5),
+            block_bytes: 0,
+            texel_bytes: 2,
         },
         /* ETC1 is ETC2 RGB8's subset: the GL core keeps its blocks
          * (`etc1_decoded_at_upload` false) */
@@ -1767,18 +1794,21 @@ fn texel_format(texfmt: u8) -> Option<TexelFormat> {
             clump: ClumpFormat::ETC2_RGB8,
             swizzle: frame::SWIZZLE_RGB1,
             block_bytes: 8,
+            texel_bytes: 0,
         },
         GLES_TEXFMT_ETC2_RGBA => TexelFormat {
             format: rgba8(RgbComponentOrder::RGBA),
             clump: ClumpFormat::ETC2_RGBA8,
             swizzle: frame::SWIZZLE_RGBA,
             block_bytes: 16,
+            texel_bytes: 0,
         },
         GLES_TEXFMT_ETC2_RGB_PT => TexelFormat {
             format: rgba8(RgbComponentOrder::RGBA),
             clump: ClumpFormat::ETC2_RGB8A1,
             swizzle: frame::SWIZZLE_RGBA,
             block_bytes: 8,
+            texel_bytes: 0,
         },
         _ => return None,
     })
@@ -1818,8 +1848,11 @@ fn level_at(t: &backend::GlesTextureBind, f: &TexelFormat, l: u32) -> Option<Lev
         off = off.checked_next_multiple_of(MIP_LEVEL_ALIGN as usize)?;
         let (w, h) = ((t.width >> k).max(1) as usize, (face_h >> k).max(1) as usize);
         let at = if f.block_bytes == 0 {
-            let pitch = (t.stride_texels as usize).checked_mul(4)?;
-            LevelAt { off, pitch, rows: h, row_bytes: w.checked_mul(4)? }
+            /* `stride_texels` is in texels of the storage format
+             * (docs/notes/mali-float-textures.md section 4 step 3) */
+            let texel = f.texel_bytes as usize;
+            let pitch = (t.stride_texels as usize).checked_mul(texel)?;
+            LevelAt { off, pitch, rows: h, row_bytes: w.checked_mul(texel)? }
         } else {
             /* the GL core's raster rows of blocks, each on the linear row
              * pitch (`block_grid`, src/gl/texture.rs) */
@@ -1872,6 +1905,14 @@ fn is_volume(t: &backend::GlesTextureBind) -> bool {
     t.type_ == backend::GLES_TEXTYPE_3D
 }
 
+/// A format whose 3D textures this backend builds: 4-byte texels, the
+/// only ones [`grid_level_at`] and [`volume_of`] lay out (a 3D texture of
+/// another format is refused as a type, [`NOT_BUILT_TEXTURE_TYPE`];
+/// docs/notes/mali-float-textures.md section 3 step 3).
+fn is_volume_texel(f: &TexelFormat) -> bool {
+    f.block_bytes == 0 && f.texel_bytes == 4
+}
+
 /// The levels a binding's descriptor names.
 fn levels_of(t: &backend::GlesTextureBind) -> u32 {
     u32::from(t.mip_levels.max(1))
@@ -1922,7 +1963,7 @@ fn volume_chain_levels(g: SliceGrid, depth: u32) -> u32 {
 fn needs_copy(t: &backend::GlesTextureBind) -> bool {
     let Some(f) = texel_format(t.format) else { return false };
     if is_volume(t) {
-        return true;
+        return is_volume_texel(&f);
     }
     (0..levels_of(t)).any(|l| level_at(t, &f, l).is_none_or(|a| a.pitch % TEXTURE_ROW_ALIGN as usize != 0))
 }
@@ -2011,7 +2052,10 @@ fn sampled_texture(d: &GlesDraw, vertex: bool, data: &mut Pool) -> Result<Option
 /// storage current); a sampler with no texels (`bind` None, or
 /// incomplete) reads [`BLACK_TEXEL`]. What this backend does not sample
 /// yet is refused by name.
-fn texture_of(bind: Option<&backend::GlesTextureBind>, data: &mut Pool) -> Result<frame::SampledTexture, FrameError> {
+pub(super) fn texture_of(
+    bind: Option<&backend::GlesTextureBind>,
+    data: &mut Pool,
+) -> Result<frame::SampledTexture, FrameError> {
     let not_built = |why| Err(FrameError::NotBuilt(why));
     let wrap = wrap_of;
     let t = match bind {
@@ -2058,7 +2102,7 @@ fn texture_of(bind: Option<&backend::GlesTextureBind>, data: &mut Pool) -> Resul
     let cube = t.type_ == backend::GLES_TEXTYPE_CUBE && layers == 6;
     let array = t.type_ == backend::GLES_TEXTYPE_2D_ARRAY && layers as u32 <= frame::MAX_ARRAY_LAYERS;
     let f = texel_format(t.format);
-    let volume = is_volume(t) && layers as u32 <= frame::MAX_3D_DEPTH && f.is_some_and(|f| f.block_bytes == 0);
+    let volume = is_volume(t) && layers as u32 <= frame::MAX_3D_DEPTH && f.is_some_and(|f| is_volume_texel(&f));
     if volume {
         let f = f.ok_or(FrameError::NotBuilt(NOT_BUILT_TEXTURE_FORMAT))?;
         return volume_of(t, f, data);
@@ -2137,8 +2181,11 @@ fn sampled(
      * ES 2.0 surface reads (d, d, d, 1), GL_OES_depth_texture's luminance
      * form, which Mesa composes over .XXXX for a depth view (pan_cmdstream.c
      * `panfrost_create_sampler_view_bo`; the board's `Swizzle: 2560 (RRR1)`
-     * for case 169, tools/mali/board-dump/dstex-2026-10-20.txt) */
-    let swizzle = match (f.block_bytes != 0, t.depth_luminance != 0, t.bgra != 0, t.no_alpha != 0) {
+     * for case 169, tools/mali/board-dump/dstex-2026-10-20.txt); a block
+     * format, or a format whose own swizzle is not the identity (R16F's
+     * R001), reads through its own */
+    let own = f.block_bytes != 0 || f.swizzle != frame::SWIZZLE_RGBA;
+    let swizzle = match (own, t.depth_luminance != 0, t.bgra != 0, t.no_alpha != 0) {
         (true, _, _, _) => f.swizzle,
         (false, true, _, _) => frame::SWIZZLE_RRR1,
         (false, false, false, false) => frame::SWIZZLE_RGBA,
