@@ -816,7 +816,7 @@ def self_test():
             ("login-at-host", "tools/cts/testdata/mali-slice-redact/dirty/kmsg/a.txt",
              ["root", "@board"], ["root", "@board2"]),
             ("tailnet-dns", "tools/cts/testdata/mali-slice-redact/dirty/meta.txt",
-             ["board-1", ".example.ts", ".net"], ["board-2", ".example.ts.net"]),
+             ["board-1", ".example.ts", ".net"], ["board-2", ".example.ts", ".net"]),
             ("private-ipv4", redact, ["100.64", ".0.0"], ["100.64", ".0.1"]),
             ("private-ipv4", redact, ["100.64", ".0.9"], ["100.64", ".0.1"]),
             ("ipv6-local", redact, ["fe80", "::1"], ["fe80", "::2"]),
