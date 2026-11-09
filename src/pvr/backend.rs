@@ -5448,6 +5448,7 @@ fn build_tex_desc(w: &mut [u32], t: &GlesTextureBind, warned: &mut u32) {
         w[4] = t.bytes;
         w[7] = TEX_PCK_INFO_COMPRESSED_UNORM;
     }
+    let fmt = compose_tex_swizzle(fmt, &t.swizzle);
     if t.type_ == GLES_TEXTYPE_CUBE_TWIDDLED_PROBE {
         /* The native cube (gl::native_cube, pvr_native_cube): the TPU's own
          * cube over Mesa's twiddled face-major layout, in the format's own
@@ -5601,6 +5602,23 @@ fn build_tex_desc(w: &mut [u32], t: &GlesTextureBind, warned: &mut u32) {
     w[0..2].copy_from_slice(&iw0);
     w[2..4].copy_from_slice(&iw1);
     tex_desc_sampler(w, t, levels);
+}
+
+/// `f` with its swizzle composed with the binding's GL_TEXTURE_SWIZZLE_*
+/// (`GlesTextureBind::swizzle`), as Mesa does for an image view
+/// (image.c:166-191, `util_format_compose_swizzles`): component k reads what
+/// the format's swizzle puts in the channel the GL swizzle names, and ZERO
+/// and ONE stay constants. All [`GLES_SWIZZLE_SAME`] leaves the format's own.
+fn compose_tex_swizzle(mut f: TexFormat, gl: &[GlesSwizzle; 4]) -> TexFormat {
+    let own = f.swiz;
+    for (k, s) in f.swiz.iter_mut().enumerate() {
+        *s = match swizzle_source(k, gl[k]) {
+            c @ 0..=3 => own[c],
+            4 => SWIZ_ZERO,
+            _ => SWIZ_ONE,
+        };
+    }
+    f
 }
 
 /// Sampler words 8 and 9 of a descriptor: address modes, filters and the LOD
