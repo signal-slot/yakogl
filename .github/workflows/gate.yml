@@ -159,6 +159,16 @@ jobs:
           cargo -V
           rustup show active-toolchain
           echo "RUSTUP_TOOLCHAIN=${RUSTUP_TOOLCHAIN:-unset}"
+      - name: the distro packages deps.toml names, when the runner lacks one
+        if: steps.seen.outputs.run == 'true'
+        # A package that joins tools/cts/deps.toml (or the gate's own list in
+        # tools/setup-gate-host.sh) reaches the gate image at its next build
+        # (tools/env/build-gate-image.sh). Until then the job installs it
+        # here, as it fetches MALI_CSFFW above: nothing runs when the image
+        # has every package, and only the missing ones are installed
+        # otherwise (passwordless sudo, as the image's build has it). The
+        # step fails, naming the owner command, where that is not possible.
+        run: tools/setup-gate-host.sh --install-packages
       - name: the gate host has every tool
         if: steps.seen.outputs.run == 'true'
         run: tools/setup-gate-host.sh --check
