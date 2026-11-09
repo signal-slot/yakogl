@@ -553,6 +553,11 @@ fn refresh(t: &GlesTextureBind, kick_pending: &impl Fn(u32) -> bool, finish: &im
         tile(t, t.cpu as *const u8, dst, bpp);
         osal::cache_flush(dst as *mut core::ffi::c_void, total);
     }
+    /* the storage read, the zero fill and the tiled writes (at most the
+     * padded copy), all on the carve-out: PERF page 4 */
+    super::mipmap::fallback_counters()
+        .carveout_cpu_bytes
+        .fetch_add(src_bytes as u64 + 2 * total as u64, core::sync::atomic::Ordering::Relaxed);
     let gpu = mem.gpu + skip as u64;
     c.entries[slot] = Some(Entry {
         key,

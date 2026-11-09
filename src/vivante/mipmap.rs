@@ -49,10 +49,12 @@
 //! is non-cacheable (docs/notes/imx8mp-glmark2-cpu.md, fix item 1).
 
 use core::ffi::c_void;
+use core::sync::atomic::{AtomicU64, Ordering};
 
 use crate::backend::{
-    GlesAttrib, GlesDraw, GlesDrawTarget, GlesTextureBind, GLES_ATTRIBF_FLOAT32, GLES_CMP_ALWAYS, GLES_CULL_NONE,
-    GLES_PRIM_TRI_STRIP, GLES_SURF_RGBA8888, GLES_TEXFMT_RGBA8, GLES_TEXTYPE_2D, GLES_WRAP_CLAMP_TO_EDGE,
+    gles_texfmt_bytes, GlesAttrib, GlesDraw, GlesDrawTarget, GlesTextureBind, GLES_ATTRIBF_FLOAT32, GLES_CMP_ALWAYS,
+    GLES_CULL_NONE, GLES_PRIM_TRI_STRIP, GLES_SURF_RGBA8888, GLES_TEXFMT_RGBA8, GLES_TEXTYPE_2D,
+    GLES_WRAP_CLAMP_TO_EDGE,
 };
 use crate::gl::context::CAP_MIP_LEVELS;
 use crate::util::Global;
@@ -321,6 +323,7 @@ pub unsafe extern "C" fn gc_generate_mipmap(b: *const GlesTextureBind, levels: u
     }
     match chain_gpu(t, levels) {
         Ok(()) => {
+            FALLBACK.gpu_mip_chains.fetch_add(1, Ordering::Relaxed);
             let g = g();
             g.mip_chains = g.mip_chains.wrapping_add(1);
             if g.mip_chains == 1 {
@@ -334,6 +337,8 @@ pub unsafe extern "C" fn gc_generate_mipmap(b: *const GlesTextureBind, levels: u
             1
         }
         Err(why) => {
+            FALLBACK.cpu_mip_calls.fetch_add(1, Ordering::Relaxed);
+            FALLBACK.carveout_cpu_bytes.fetch_add(cpu_filter_bytes(t, levels), Ordering::Relaxed);
             let g = g();
             g.mip_chains_refused = g.mip_chains_refused.wrapping_add(1);
             if g.mip_chains_refused == 1 {
@@ -394,4 +399,87 @@ pub unsafe extern "C" fn gc_backend_mip_chains(made: *mut u32, refused: *mut u32
             *refused = g.mip_chains_refused;
         }
     }
+}
+
+/// The back end's fallback and wait counters since boot, behind
+/// [`yakogl_gc_fallback_stats`]: never reset, unlike `mip_chains` and
+/// `mip_chains_refused`, which [`gc_backend_mip_chains`] reads and
+/// `gc_init` clears. Each field is one of `struct yakogl_gc_fallback_stats`'s
+/// (driver/samples/zephyr/glmark2/src/gm_gc_fallback.h).
+pub(crate) struct FallbackCounters {
+    /// glGenerateMipmap chains drawn on the GPU ([`gc_generate_mipmap`] 1).
+    pub gpu_mip_chains: AtomicU64,
+    /// glGenerateMipmap calls left to the GL core's CPU filter
+    /// ([`gc_generate_mipmap`] 0 with the backend running).
+    pub cpu_mip_calls: AtomicU64,
+    /// CPU waits for the GPU outside the swap. Nothing adds to it yet: 0.
+    pub gpu_waits: AtomicU64,
+    /// Bytes the CPU read or wrote over the carve-out: the CPU mipmap filter
+    /// ([`cpu_filter_bytes`]) and the CPU tiled copy (`tiled_copy.rs`
+    /// `refresh`). The depth resolve's bytes are not counted yet.
+    pub carveout_cpu_bytes: AtomicU64,
+}
+
+static FALLBACK: FallbackCounters = FallbackCounters {
+    gpu_mip_chains: AtomicU64::new(0),
+    cpu_mip_calls: AtomicU64::new(0),
+    gpu_waits: AtomicU64::new(0),
+    carveout_cpu_bytes: AtomicU64::new(0),
+};
+
+/// The since-boot counters, for the other CPU fallbacks of this backend to
+/// add to (`fetch_add`, `Relaxed`): the tiled copy's bytes today; the waits
+/// and the depth resolve's bytes (ds_cache.rs, backend.rs) later.
+pub(crate) fn fallback_counters() -> &'static FallbackCounters {
+    &FALLBACK
+}
+
+/// The bytes the GL core's CPU box filter reads and writes for a chain of
+/// `levels` levels of `t` that [`gc_generate_mipmap`] left to it: level
+/// l - 1 read and level l written for every l in 1..`levels`, each image's
+/// texels (the row padding of the chain's pitch is not touched), every
+/// layer.
+fn cpu_filter_bytes(t: &GlesTextureBind, levels: u32) -> u64 {
+    let texel = u64::from(gles_texfmt_bytes(t.format)) * u64::from(t.layers.max(1));
+    let (mut w, mut h) = (u64::from(t.width), u64::from(t.height));
+    let mut bytes = 0u64;
+    for _ in 1..levels {
+        let (nw, nh) = ((w / 2).max(1), (h / 2).max(1));
+        bytes += (w * h + nw * nh) * texel;
+        (w, h) = (nw, nh);
+    }
+    bytes
+}
+
+/// `struct yakogl_gc_fallback_stats` (driver/samples/zephyr/glmark2/src/
+/// gm_gc_fallback.h), field for field: every count since boot.
+#[repr(C)]
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
+pub struct YakoglGcFallbackStats {
+    pub gpu_mip_chains: u64,
+    pub cpu_mip_calls: u64,
+    pub gpu_waits: u64,
+    pub carveout_cpu_bytes: u64,
+}
+
+/// The GC7000 back end's fallback counters since boot ([`FallbackCounters`]),
+/// for glmark2's PERF page 4: the strong definition of the sample's `__weak`
+/// one, which answers -ENOTSUP. `gpu_waits` is 0, and `carveout_cpu_bytes`
+/// leaves out the depth resolve, until those are counted (ds_cache.rs,
+/// backend.rs). 0, or -EINVAL (-22) for a null `out`.
+///
+/// # Safety
+/// `out` must be null or valid for a write.
+#[no_mangle]
+pub unsafe extern "C" fn yakogl_gc_fallback_stats(out: *mut YakoglGcFallbackStats) -> i32 {
+    // SAFETY: null or valid, per the contract above.
+    let Some(out) = (unsafe { out.as_mut() }) else { return -22 };
+    let f = &FALLBACK;
+    *out = YakoglGcFallbackStats {
+        gpu_mip_chains: f.gpu_mip_chains.load(Ordering::Relaxed),
+        cpu_mip_calls: f.cpu_mip_calls.load(Ordering::Relaxed),
+        gpu_waits: f.gpu_waits.load(Ordering::Relaxed),
+        carveout_cpu_bytes: f.carveout_cpu_bytes.load(Ordering::Relaxed),
+    };
+    0
 }
