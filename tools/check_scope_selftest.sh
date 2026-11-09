@@ -125,7 +125,7 @@ expect() {
   printf '%s\n' "$out" | grep -qE "$pattern" || { echo "FAIL $label: no line matches '$pattern'"; fails=$((fails + 1)); }
 }
 out=$(plan docs/standalone-boot.md)
-expect "docs: only the shared rows" '^check.sh: 3 ok, 0 failed, 0 gap\(s\).*, 214 skipped \(--changed HEAD, scopes: docs' "$out"
+expect "docs: only the shared rows" '^check.sh: 3 ok, 0 failed, 0 gap\(s\).*, 216 skipped \(--changed HEAD, scopes: docs' "$out"
 out=$(plan src/v3d/job.rs)
 expect "v3d: its clippy row" '^plan  clippy  host-test,gpu-v3d,shaderc-online,no-shader-table$' "$out"
 expect "v3d: its image" '^plan  zephyr  rpi4 ' "$out"
@@ -165,6 +165,11 @@ expect "nanopc_t6 glue: the drivers crate tests" '^plan  test    yakogl-drivers'
 # the Mali firmware row (a plan row here; on a run, `needs` makes it a gap
 # naming the file where MALI_CSFFW or deps-env.sh's place has none)
 expect "nanopc_t6 glue: the firmware row" '^plan  test    yakogl-drivers gpu::mali on the board.s mali_csffw.bin' "$out"
+out=$(plan tools/probes/rpi_5/rpi5_hello/src/main.c)
+expect "rpi_5 probe: the probe images row" '^plan  zephyr  rpi_5 probe images' "$out"
+expect "rpi_5 probe: the fdt_walk host row (or its dtc gap)" '^(plan  test    rpi_5 fdt_walk host test|gap   rpi_5 fdt_walk host test: dtc is not on PATH)' "$out"
+out=$(plan driver/zephyr/lib/board/rpi5/rpi_wdog.c)
+expect "board layer: the rpi_5 probe images row" '^plan  zephyr  rpi_5 probe images' "$out"
 # The licence audit reads every tracked file: any added or changed path reaches
 # its row, whatever scope the path has (7bd8a8e94 added data under tools/v3d
 # and no row that audits licences ran).
@@ -235,7 +240,7 @@ count "narrowed CONFIGS: the table row once" "^plan  gen     precompiled tables 
 # the control: the full plan keeps its rows, the table row once, before the
 # first CONFIGS row that reads the tables
 out=$(plan src/gl/draw.rs)
-# 218 rows: ok plus gaps, because a row whose tool this host lacks is a gap
+# 220 rows: ok plus gaps, because a row whose tool this host lacks is a gap
 # here and a plan row on the gate host; the sum is the same on both. (Seven
 # more for the direct boot: am62p-mkboot.py, the second-stage vectors, the
 # yakogl-boot-stage2 clippy, test and softfloat rows, boot_stage2.h's layout
@@ -245,11 +250,12 @@ out=$(plan src/gl/draw.rs)
 # t6_fw's image, a gap without the Mali firmware; one for the v3d71 host checks, tools/v3d/check71.sh;
 # one for the STM32MP257F-DK runner's self-test, tools/board_stm32mp2_selftest.sh;
 # two for the NanoPC-T6 dEQP runner's and kmsg classifier's self-tests,
-# tools/cts/mali-deqp-selftest.sh and mali-kmsg-selftest.sh.)
+# tools/cts/mali-deqp-selftest.sh and mali-kmsg-selftest.sh; two for the rpi_5
+# probes: their images and the fdt_walk host test.)
 checks=$((checks + 1))
 line=$(printf '%s\n' "$out" | grep -E '^check.sh: [0-9]+ ok, 0 failed, [0-9]+ gap\(s\).*, 0 skipped \(--changed HEAD, scopes: all\)')
 total=$(printf '%s\n' "$line" | sed -E 's/^check.sh: ([0-9]+) ok, 0 failed, ([0-9]+) gap.*/\1 \2/' | awk '{ print $1 + $2 }')
-[ "$total" = 218 ] || { echo "FAIL full plan: its row count: ${total:-no summary line} rows (ok + gaps), expected 218:$line"; fails=$((fails + 1)); }
+[ "$total" = 220 ] || { echo "FAIL full plan: its row count: ${total:-no summary line} rows (ok + gaps), expected 220:$line"; fails=$((fails + 1)); }
 count "full plan: the table row once" "^plan  gen     precompiled tables for the tier" 1 "$out"
 order "full plan: the tables before their first reader" "$gen" \
   'plan  clippy  host-test,gpu-powervr,shaderc-online,precompiled-shaders' "$out"

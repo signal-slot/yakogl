@@ -3390,6 +3390,33 @@ zephyr_werror_image() {
     return 1
   fi
 }
+# Every Zephyr image under tools/probes/rpi_5/ (a directory with a
+# CMakeLists.txt and a prj.conf: rpi5_hello, rpi5_wdog, rpi5_dtb, rpi5_ident,
+# rpi5_clear as present), built for rpi_5 with -Werror on our C files. One
+# row for all of them, so a new probe needs no new row.
+zephyr_rpi5_probe_images() {
+  local d name n=0
+  for d in tools/probes/rpi_5/*/; do
+    d=${d%/}
+    [ -f "$d/CMakeLists.txt" ] && [ -f "$d/prj.conf" ] || continue
+    name=${d##*/}
+    zephyr_werror_image rpi_5 "$d" "rpi_5-$name" || { echo "rpi_5 probe $name did not build"; return 1; }
+    n=$((n + 1))
+  done
+  [ "$n" -gt 0 ] || { echo "no rpi_5 probe image under tools/probes/rpi_5/"; return 1; }
+}
+# The FDT walker's host test. Without dtc it prints a SKIPPED line and passes
+# on 10 checks only, so the row is ok only with dtc and "fdt_walk: N checks,
+# 0 failed" without a SKIPPED line. If it fails, test/test_fdt.c lines 211 to
+# 231 hard-code dtc's layout of pi5_cut.dts (a different dtc may lay it out
+# differently).
+fdt_walk_test() {
+  local out
+  out=$(sh tools/probes/rpi_5/common/fdt/test/run.sh 2>&1) || { tail -20 <<<"$out"; return 1; }
+  tail -5 <<<"$out"
+  if grep -q SKIPPED <<<"$out"; then echo "the test skipped its dtc-built tree: not a pass"; return 1; fi
+  grep -qE '^fdt_walk: [0-9]+ checks, 0 failed$' <<<"$out" || { echo "no 'fdt_walk: N checks, 0 failed' line (see test/test_fdt.c lines 211 to 231)"; return 1; }
+}
 # examples/triangle-rust for one board: it builds, and its main() is the
 # Rust one. The kernel's weak main() (kernel/main_weak.c) also links, so an
 # image whose link lost the Rust main would build and boot an empty main.
@@ -3556,9 +3583,20 @@ if [ "$QUICK" -eq 0 ]; then
     fi
     step "zephyr  nanopc_t6 t6_fw image (Z3, the firmware boot), -Werror on our C files" \
       zephyr_nanopc_t6_fw_image "$mali_csffw"
+    step "zephyr  rpi_5 probe images (tools/probes/rpi_5/*), -Werror on our C files" \
+      zephyr_rpi5_probe_images
   else
     gap "zephyr images: no west workspace at ZEPHYR_WS='${ZEPHYR_WS-}' (set ZEPHYR_WS): our C files were NOT compiled with -Werror"
   fi
+fi
+
+# The FDT walker of the rpi_5 probes (host cc with ASan/UBSan, no Zephyr); its
+# full run needs dtc, so without it the row is a gap, not the 10-check pass.
+scope drivers samples
+if command -v dtc >/dev/null 2>&1; then
+  step "test    rpi_5 fdt_walk host test (ASan/UBSan, dtc-built tree)" fdt_walk_test
+else
+  gap "rpi_5 fdt_walk host test: dtc is not on PATH (install device-tree-compiler): the dtc-built tree was NOT tested"
 fi
 
 # The precompiled tables (yakogl-precompile, tools/precompile/prove.sh): for

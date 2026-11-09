@@ -15,6 +15,18 @@ bring-up samples `gc_fence` and `gc_clear`; `triangle` and `slint` are under
   GPU cache flush round trip, after Z1's power-on.
 - `stm32mp257f_dk/mp2_identify`: the STM32MP257F-DK's return-trial image, the
   hand-over record and OP-TEE's watchdog armed at boot, then PSCI reset.
+- `rpi_5/*`: the Raspberry Pi 5 probes (`tools/probes/rpi_5/README.md`).
+
+Gate rows (`tools/check.sh`, reached by a change under `tools/probes/` or
+`driver/`):
+
+- `zephyr  rpi_5 probe images`: every directory of `rpi_5/` with a
+  `CMakeLists.txt` and a `prj.conf`, `west build -b rpi_5` with
+  `-DYAKOGL_WERROR=ON`. Without `ZEPHYR_WS` it is the one gap naming it.
+- `test    rpi_5 fdt_walk host test`: `rpi_5/common/fdt/test/run.sh` (host cc,
+  ASan/UBSan, no Zephyr). Ok only with `dtc` on PATH and `fdt_walk: N checks,
+  0 failed` without a SKIPPED line; without `dtc` it is a gap naming it. If it
+  fails, `test/test_fdt.c` lines 211 to 231 hard-code dtc's layout.
 
 Build (from the west workspace):
 
