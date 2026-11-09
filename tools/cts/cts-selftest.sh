@@ -875,6 +875,18 @@ else
     bad "mali-gles2-tree.txt coverage failed: $(printf '%s\n' "$mt_out" | tail -2 | paste -sd';' -)"
 fi
 
+# 45: glmark2-picdiff.py judges synthetic picture pairs (the side-by-side, the
+# difference image and the numbers a by-eye check of a dumped picture reads).
+echo
+echo "== 45. glmark2-picdiff.py --self-test"
+if pdout=$(python3 -I "$HERE/glmark2-picdiff.py" --self-test 2>&1) \
+   && printf '%s\n' "$pdout" | grep -q '^self-test: ok$'; then
+    ok "glmark2-picdiff.py: synthetic pairs compared"
+else
+    bad "glmark2-picdiff.py --self-test failed"
+    printf '%s\n' "$pdout" | tail -8 | sed 's/^/        | /'
+fi
+
 if [ "$fail" -eq 0 ]; then
     echo "== all checks passed"
 else
