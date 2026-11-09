@@ -22,6 +22,10 @@
 # 25 the audit over the repository (fails on missing-spdx, unknown-id and the
 # mismatch classes: a new file needs an SPDX line or an allowlist row,
 # docs/release/license-audit.md).
+# Checks 40, 43 and 44 gate the NanoPC-T6 dEQP-GLES2 tools: 40 the tally
+# self-test (mali-deqp-tally-selftest.sh, its own pinned count), 43 the e2e
+# self-test (mali-deqp-e2e-selftest.sh, count pinned, no FAIL or XFAIL), 44
+# the mali-gles2-tree.txt coverage of gles2-mustpass.txt (each case once).
 set -u
 
 HERE=$(dirname "$0")
@@ -842,6 +846,33 @@ if pa_out=$(cd "$gl3tmp" && TMPDIR="$gl3tmp" bash "$ROOT/tools/cts/pi4-gles3-acc
     ok "pi4-gles3-acceptance-selftest.sh: $(printf '%s\n' "$pa_out" | grep -c '^ *ok') checks passed"
 else
     bad "pi4-gles3-acceptance-selftest.sh failed: $(printf '%s\n' "$pa_out" | grep FAIL | head -3 | paste -sd';' -)"
+fi
+
+# 43: mali-deqp-e2e-selftest.sh, the Mali runner's fake-board slices through
+# the tally tool (check 40 runs the tally self-test itself). The count of its
+# passed checks is pinned, and any FAIL or XFAIL line is a failure, so a
+# self-test that silently stops checking turns red here.
+MALI_E2E_SELFTEST_CHECKS=27
+echo
+echo "== 43. mali-deqp-e2e-selftest.sh"
+if me_out=$(cd "$gl3tmp" && TMPDIR="$gl3tmp" bash "$ROOT/tools/cts/mali-deqp-e2e-selftest.sh" 2>&1) \
+   && ! printf '%s\n' "$me_out" | grep -Eq '^ *(FAIL|XFAIL)' \
+   && [ "$(printf '%s\n' "$me_out" | sed -n 's/^mali-deqp-e2e-selftest: \([0-9]*\) checks passed$/\1/p')" = "$MALI_E2E_SELFTEST_CHECKS" ]; then
+    ok "mali-deqp-e2e-selftest.sh: $MALI_E2E_SELFTEST_CHECKS checks passed, no FAIL or XFAIL"
+else
+    bad "mali-deqp-e2e-selftest.sh failed or did not report $MALI_E2E_SELFTEST_CHECKS checks: $(printf '%s\n' "$me_out" | grep -E 'FAIL|checks passed' | head -3 | paste -sd';' -)"
+fi
+
+# 44: tools/cts/mali-gles2-tree.txt covers the whole GLES2 mustpass list: every
+# one of its 17165 cases matched by exactly one row (check-gles3-tree.py exits
+# 0 only then), --max 400 bounding the cases per image.
+echo
+echo "== 44. mali-gles2-tree.txt covers gles2-mustpass.txt once"
+if mt_out=$(python3 -I "$HERE/check-gles3-tree.py" --mustpass "$HERE/gles2-mustpass.txt" --max 400 "$HERE/mali-gles2-tree.txt" 2>&1) \
+   && printf '%s\n' "$mt_out" | grep -q '17165 matched once, 0 not matched, 0 matched more than once'; then
+    ok "mali-gles2-tree.txt: 17165 cases matched once"
+else
+    bad "mali-gles2-tree.txt coverage failed: $(printf '%s\n' "$mt_out" | tail -2 | paste -sd';' -)"
 fi
 
 if [ "$fail" -eq 0 ]; then
