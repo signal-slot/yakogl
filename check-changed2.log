@@ -1,0 +1,234 @@
+check.sh: --changed 355c034f: 363 path(s), scopes: all
+      every row: check-changed.log
+      every row: check-changed2.log
+      every row: relaunch-gate.sh
+      every row: src/backend.rs
+      every row: src/gl/es3_format_tests.rs
+      every row: src/gl/es3_formats.rs
+      every row: src/gl/framebuffer.rs
+      every row: src/gl/tf_capture.rs
+      every row: src/gl/tf_capture_tests.rs
+      every row: tests/es3_caps.rs
+      every row: tests/es3_formats_gc.rs
+      every row: tests/es3_msaa_v3d.rs
+      every row: tests/es3_rb_formats_v3d.rs
+      every row: tests/es3_samplers3d_v3d.rs
+      every row: tests/es3_sized_formats.rs
+      every row: tests/es3_srgb_blit_v3d.rs
+      every row: tools/check.sh
+      every row: tools/check_scope_selftest.sh
+check.sh: 2 compiler slot(s) (7209 MB available, 3072 MB each, 4 cores)
+[32mok    cargo fmt --check [14s][0m
+[32mok    build   yakogl-capi (no_std) [1s][0m
+[32mok    clippy  host-test,gpu-powervr [0s][0m
+[32mok    test    host-test,gpu-powervr [42s][0m
+[32mok    clippy  host-test,gpu-powervr,report-es2 [1s][0m
+[32mok    test    host-test,gpu-powervr,report-es2 [46s][0m
+[32mok    clippy  host-test,gpu-vivante [1s][0m
+[32mok    test    host-test,gpu-vivante [55s][0m
+[32mok    clippy  host-test,gpu-powervr,shaderc-online [1s][0m
+[32mok    test    host-test,gpu-powervr,shaderc-online [102s][0m
+[32mok    clippy  host-test,gpu-vivante,shaderc-online [2s][0m
+[32mok    test    host-test,gpu-vivante,shaderc-online [91s][0m
+[32mok    clippy  host-test,gpu-powervr,shaderc-online,report-es2 [2s][0m
+[32mok    test    host-test,gpu-powervr,shaderc-online,report-es2 [66s][0m
+[32mok    clippy  host-test,gpu-vivante,shaderc-online,report-es2 [1s][0m
+[32mok    test    host-test,gpu-vivante,shaderc-online,report-es2 [58s][0m
+[32mok    gen     precompiled tables for the tier configurations [10s][0m
+[32mok    clippy  host-test,gpu-powervr,shaderc-online,precompiled-shaders [1s][0m
+[32mok    test    host-test,gpu-powervr,shaderc-online,precompiled-shaders [171s][0m
+[32mok    clippy  host-test,gpu-vivante,shaderc-online,precompiled-shaders [0s][0m
+[32mok    test    host-test,gpu-vivante,shaderc-online,precompiled-shaders [110s][0m
+[32mok    clippy  host-test,gpu-powervr,precompiled-shaders,no-shader-table (no compiler; lib and its tests) [1s][0m
+[32mok    test    host-test,gpu-powervr,precompiled-shaders,no-shader-table (no compiler: shaderc::precompiled) [1s][0m
+[32mok    clippy  host-test,gpu-vivante,precompiled-shaders,no-shader-table (no compiler; lib and its tests) [0s][0m
+[32mok    test    host-test,gpu-vivante,precompiled-shaders,no-shader-table (no compiler: shaderc::precompiled) [2s][0m
+[32mok    clippy  host-test,gpu-vivante,shaderc-online,no-shader-table (no tests: see BUILD_ONLY_CONFIGS) [0s][0m
+[32mok    clippy  host-test,gpu-powervr,shaderc-online,no-shader-table (no tests: see BUILD_ONLY_CONFIGS) [0s][0m
+[32mok    clippy  host-test,gpu-vivante,shaderc-online,test-knobs [0s][0m
+[32mok    test    host-test,gpu-vivante,shaderc-online,test-knobs (--lib, 10 knob tests by name) [31s][0m
+[32mok    test    host-test,gpu-vivante,shaderc-online,test-knobs (tests/gc_kick_diff.rs, 7 tests) [1s][0m
+[32mok    clippy  host-test,gpu-powervr,shaderc-online,test-knobs [0s][0m
+[32mok    test    host-test,gpu-powervr,shaderc-online,test-knobs (--lib, 9 knob tests by name) [29s][0m
+[32mok    clippy  host-test,gpu-v3d,shaderc-online,no-shader-table [1s][0m
+      host-test,gpu-v3d,shaderc-online,no-shader-table: 4 ignored test(s), listed in build/check/v3d-ignored.txt:
+      ignored	gl::tf_capture_tests::capture_cost	a measurement, run by hand
+      ignored	shaderc::online::v3d::chain::tests::a_builtin_on_a_vec2_records_two_lanes	front-end gap: built-in widths unrecorded (comps 0 -> fallback 4); costs lanes, not pixels; see v3d-backend.md
+      ignored	shaderc::online::v3d::mesa_ref::decoder_agrees_with_mesa_on_every_field_combination	needs V3D_QPU_REF, the tools/v3d/qpu_ref.c binary
+      ignored	shaderc::online::v3d::roundtrip::listing_matches_mesa_on_the_corpus	needs V3D_KEEP_DIR, the --keep output of tools/v3d/glsl2v3d.py
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (--lib, GL suite on the online compiler) [26s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_sim_mesa.rs) [10s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_cube_noseamless.rs) [1s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_clear.rs) [1s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_glmark2_mem.rs) [3s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_rt_sample.rs) [2s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/depth_resolve_v3d.rs) [2s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/mipmap_offer_guard.rs) [3s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_tfu_host.rs) [3s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_tfu_mipmap_nowait.rs) [2s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_wait_time.rs) [3s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/gl_settle_order_pin.rs) [2s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_lazy_raster_readers.rs) [3s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_depth_storage.rs) [3s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_uniform_host.rs) [2s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_int_rt.rs) [0s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_int_rt_v3d.rs) [2s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_formats_v3d.rs) [4s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_shaderc_v3d.rs) [1s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_tf_api.rs) [0s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_srgb.rs) [0s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_occlusion_gl.rs) [1s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_mrt_gl.rs) [1s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/egl_bench_configs.rs) [1s][0m
+[32mok    test    host-test,gpu-powervr,shaderc-online (tests/es3_vertex_arrays.rs) [0s][0m
+[32mok    test    host-test,gpu-powervr,shaderc-online (tests/es3_pvr_2darray.rs) [1s][0m
+[32mok    test    host-test,gpu-powervr,shaderc-online (tests/es3_pvr_shadow.rs) [1s][0m
+[32mok    test    host-test,gpu-powervr,shaderc-online (tests/es3_pvr_3d.rs) [1s][0m
+[32mok    test    host-test,gpu-powervr,shaderc-online (tests/es3_pvr_fragdepth.rs) [1s][0m
+[32mok    clippy  host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 [0s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (--lib shaderc::online::v3d) [2s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (--lib v3d::backend_tests, separate depth/stencil) [1s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (tests/v3d_sim_mesa.rs) [5s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (tests/v3d_cube_noseamless.rs) [1s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (tests/v3d_clear.rs) [1s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (tests/es3_int_rt.rs) [1s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (tests/es3_tf_api.rs) [1s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (tests/es3_srgb.rs) [1s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (tests/es3_occlusion_gl.rs) [1s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (tests/es3_mrt_gl.rs) [1s][0m
+[32mok    clippy  host-test,gpu-mali,shaderc-online,no-shader-table [0s][0m
+[32mok    test    host-test,gpu-mali,shaderc-online,no-shader-table (--lib mali::, 372 tests: packers and ISA vs Mesa and the board) [268s][0m
+[32mok    gen     src/mali/genxml == tools/mali/gen_pack_rs.py on third_party v10.xml [0s][0m
+[32mok    gen     src/shaderc/online/mali/isa/v10.rs == tools/mali/gen_isa_rs.py on third_party [1s][0m
+[32mok    gen     driver/src/v3d/generated == Mesa's generators on third_party [0s][0m
+[32mok    gen     driver/src/pvr/generated == Mesa's csbgen on third_party [1s][0m
+[32mok    sha256  third_party files are the upstream files (UPSTREAM) [0s][0m
+[32mok    cc      v3d FFI layout pins [0s][0m
+[32mok    cc      v3d job builder [0s][0m
+[32mok    cc      v3d textures [0s][0m
+[32mok    run     v3d tex_filter_ref_check (dEQP's filters, the LINEAR plan) [1s][0m
+[32mok    run     v3d tex_tiling_bench_check (the tiling-time harness) [0s][0m
+[32mok    run     v3d tfu_case_check (the TFU probe, case 140) [1s][0m
+[32mok    run     pvr vdm_field_check (VDM/PPP fields refuse, never mask) [2s][0m
+[32mok    run     pvr render_regs_check (csbgen register words = the former literals) [1s][0m
+[32mok    run     pvr ddk_abi_check (FWIF numbers = the vendored DDK 25.2 headers) [0s][0m
+[32mok    run     v3d hw_mock_test (v3d_hw.c against the register model) [0s][0m
+[32mok    run     pvr rgxlayer_check (DDK RGXStart/RGXStop/image loader on the Rust rgxlayer) [7s][0m
+[32mok    run     pvr km_check (the Rust kernel side = the C it replaced; layouts = the DDK headers) [2s][0m
+[32mok    run     v3d tex_upload_check (eager copy = lazy copy) [2s][0m
+[32mok    run     v3d osal_frees_check (frees back at once with no job open) [0s][0m
+[32mok    run     v3d osal_granules_check (the carve-out's first fit, small blocks from the top, the STRESS1D replay) [2s][0m
+[32mok    run     osal pending_frees_check (a full queue waits, never leaks silently) [0s][0m
+[32mok    run     gc7000 osal_frees_check (frees back at once with no frame open) [0s][0m
+[32mok    run     osal_bounds_check + gc_cache_range_check (wrapped ranges refused; cache skipped only inside the carve-out) [1s][0m
+[32mok    run     osal_log_check (a 255-byte log line survives the Zephyr OSAL buffer) [0s][0m
+[32mok    run     baremetal_config_check (init refuses without a complete board) [1s][0m
+[32mok    run     linux osal linux_heap_check (finite range, reuse, no overlap) [0s][0m
+[32mok    build   v3d mesa reference (tools/v3d/mesa_ref.sh) [6s][0m
+[32mok    run     v3d tex_check (against Mesa 26.2.1) [8s][0m
+[32mok    run     v3d cl_golden (against Mesa 26.2.1) [3s][0m
+[32mok    run     v3d job_check (against Mesa 26.2.1) [3s][0m
+[33mgap   run     v3d71 host checks (tools/v3d/check71.sh): an input is missing (a gap is not a pass) [39s][0m
+ok      tiling71: tiling71: 57344 of 57344 equal, 0 failed
+ok      wdog_mock: rpi_wdog_mock: 97 of 97 checks, 0 failed
+gap     xbuild71: gap: ZEPHYR_SDK_INSTALL_DIR (no aarch64-zephyr-elf-gcc in it, no clang --target=aarch64-none-elf that finds a C library for the target, no aarch64-linux-gnu-gcc)
+check71: 12 ok, 0 failed, 1 gap(s)
+gap: xbuild71
+[32mok    run     mali pan_ref_diff and ref_cases self-test (no Mesa tree) [2s][0m
+[32mok    run     mali sweep_passsets self-test [1s][0m
+[33mgap   mali pan_shc on the tri pair: no MESA_PAN_TREE (tools/mali/build_pan_shc.sh makes one)[0m
+[32mok    cc      gl_test.c -DGL_TEST_HOST=1 [1s][0m
+[32mok    cc      gl_test.c -DGL_TEST_HOST=1 -DYAKOGL_TEST_KNOBS=1 [0s][0m
+[32mok    cc      gl_test.c -DGL_TEST_USER=1 -DYAKOGL_GPU_VIVANTE=1 [0s][0m
+[32mok    cc      gl_test.c -DGL_TEST_USER=1 -DYAKOGL_GPU_VIVANTE=1 -DYAKOGL_TEST_KNOBS=1 [0s][0m
+[32mok    run     gl_test case 44 probe decode [2s][0m
+[32mok    run     backend.h yakogl_heap_base without a heap_base (0, as the Rust side) [0s][0m
+[32mok    gen     gl_test_shaders{,_es100}.h == gen_gl_test_shaders.py on tools/shaders [0s][0m
+[32mok    test    pvr render pool (Rust; the C pool's golden trace replayed, 33 tests) [88s][0m
+[32mok    run     am62p rti_arm_check (60 s preload per reported RTI clock rate) [0s][0m
+[32mok    clippy  yakogl-gltest-runner [0s][0m
+[32mok    test    yakogl-gltest-runner (gl_test's lines and count) [4s][0m
+[32mok    clippy  osal-zephyr,gpu-vivante,shaderc-online,no-shader-table (aarch64-unknown-none, no host-test) [34s][0m
+[32mok    clippy  osal-zephyr,gpu-powervr,shaderc-online,no-shader-table (aarch64-unknown-none, no host-test) [25s][0m
+[32mok    clippy  osal-zephyr,gpu-v3d,shaderc-online,no-shader-table (aarch64-unknown-none, no host-test) [29s][0m
+[32mok    clippy  osal-zephyr,gpu-mali,shaderc-online,no-shader-table (aarch64-unknown-none, no host-test) [26s][0m
+[32mok    clippy  yakogl-gltest-runner (aarch64-unknown-none) [0s][0m
+[32mok    check   osal-zephyr,gpu-powervr,precompiled-shaders (aarch64-unknown-none, no compiler) [12s][0m
+[32mok    tools   fault-record decoder self-test [0s][0m
+[32mok    tools   fault-record matches its writer [0s][0m
+[32mok    tools   shader-table generator guards [1s][0m
+[32mok    tools   gl_test shader sources have table rows [0s][0m
+[32mok    tools   precompiled.list gl_test pairs == what gl_test.c links [1s][0m
+[32mok    gen     driver/src/pvr_usc_*_blob.h == tools/pco_shc/usc_blobs.txt [0s][0m
+[32mok    gen     tools/pco_shc/spm_load: usc-dis decodes the words, metadata holds [220s][0m
+[32mok    tools   deqp-uart-tally log verdicts [0s][0m
+[32mok    tools   common-tally row verdicts [5s][0m
+[32mok    tools   qpa-from-uart rebuild verdicts [0s][0m
+[32mok    tools   am62p netboot TFTP server [6s][0m
+[32mok    tools   am62p netboot UART phases [23s][0m
+[32mok    tools   am62p-mkboot u-boot.img and boot partition [2s][0m
+[32mok    tools   am62p second stage: mkboot images decoded by the loader's Rust [3s][0m
+[32mok    tools   gles3-mustpass: 42,810 cases, sorted, unique, all GLES3 [0s][0m
+[32mok    tools   am62p-gles3-tree: generator self-test and table check [40s][0m
+[32mok    tools   cts-selftest.sh (the CTS tools' checks, images-selftest included) [616s][0m
+[32mok    tools   licence audit (SPDX header or allowlist row for every tracked file) [2s][0m
+[32mok    tools   glmark2 compare-selftest.sh (before/after profile table) [1s][0m
+[32mok    tools   api_coverage.py self-test [0s][0m
+[32mok    tools   api coverage: gl2.h + egl.h vs exported vs eglGetProcAddress [1s][0m
+[32mok    tools   api coverage: 0 ES 2.0 core + 0 EGL 1.x core entry points missing from the exports [0s][0m
+[32mok    tools   board-sudo-setup.sh --dry-run runs from a clean environment [0s][0m
+[32mok    no table in the artefact [133s][0m
+[32mok    no Mesa reference in the artefact [1634s][0m
+[32mok    no test knob in the artefact [632s][0m
+[32mok    clippy  yakogl-tools [83s][0m
+[32mok    test    yakogl-tools [273s][0m
+[32mok    clippy  yakogl-mali-panthor [73s][0m
+[32mok    test    yakogl-mali-panthor [385s][0m
+[32mok    clippy  yakogl-mali-panthor (aarch64-unknown-linux-gnu) [71s][0m
+[32mok    clippy  yakogl-precompile gpu-powervr [45s][0m
+[32mok    clippy  yakogl-precompile gpu-vivante [36s][0m
+[32mok    clippy  yakogl-precompile gpu-powervr,report-es2 [28s][0m
+[32mok    clippy  yakogl-precompile gpu-vivante,report-es2 [23s][0m
+[32mok    test    yakogl-precompile gpu-powervr [157s][0m
+[32mok    test    yakogl-precompile gpu-vivante [150s][0m
+[32mok    gen     src/pvr/internal.rs == yakogl-precompile --internal (our compiler) [1s][0m
+[32mok    gen     src/vivante/internal.rs == yakogl-precompile --internal (our compiler) [0s][0m
+[32mok    tools   board.sh dry-run matrix and replays [124s][0m
+[32mok    tools   board_lock.sh: a refusal names the holder; nanopc-t6.sh never waits [3s][0m
+[32mok    host    imx8mp latch model: waits per swap [14s][0m
+[32mok    host    glmark2 PERF page: packed and decoded by yakogl-tools record [3s][0m
+[32mok    tools   check.sh --changed: the path-to-scope map and four plans [75s][0m
+[32mok    tools   check.sh test cache: record, skip, run again on a new key [119s][0m
+[32mok    tools   check.sh --jobs: the log in order, the counts, a lane [35s][0m
+[32mok    gen     src/pvr/csbgen.rs + csbgen_wrap.c == bindgen [11s][0m
+[32mok    clippy  yakogl-slint-check [2s][0m
+[32mok    test    yakogl-slint-check [8s][0m
+[32mok    clippy  yakogl-triangle-check [1s][0m
+[32mok    test    yakogl-triangle-check [7s][0m
+[32mok    clippy  yakogl-femtovg-check [1s][0m
+[32mok    test    yakogl-femtovg-check [10s][0m
+[32mok    clippy  yakogl-drivers [28s][0m
+[32mok    clippy  yakogl-drivers, each shipped feature arm (-D warnings) [214s][0m
+[32mok    test    yakogl-drivers (register model) [8s][0m
+[33mgap   test    yakogl-drivers gpu::mali on the board's mali_csffw.bin (MALI_CSFFW, 2 tests by name): /home/orion/connected-deps/mali-csffw/mali_csffw.bin is missing (tools/cts/deps-env.sh --build MALI_CSFFW fetches it, or name the board's file in MALI_CSFFW): not built[0m
+[32mok    check   yakogl-drivers (aarch64-unknown-none-softfloat) [15s][0m
+[32mok    clippy  yakogl-boot-stage2 [1s][0m
+[32mok    test    yakogl-boot-stage2 [0s][0m
+[32mok    clippy  yakogl-boot-stage2 (aarch64-unknown-none-softfloat) [0s][0m
+[32mok    cc      boot_stage2.h layout pins [0s][0m
+[32mok    cc      yakogl_drivers.h layout pins [1s][0m
+[33mgap   zephyr images: no west workspace at ZEPHYR_WS='' (set ZEPHYR_WS): our C files were NOT compiled with -Werror[0m
+[32mok    gen     precompiled table gpu-powervr: deterministic, rows == fresh compiles, counts pinned, compiles [140s][0m
+[32mok    gen     precompiled table gpu-vivante: deterministic, rows == fresh compiles, counts pinned, compiles [7s][0m
+[32mok    gen     precompiled table gpu-powervr,report-es2: deterministic, rows == fresh compiles, counts pinned, compiles [236s][0m
+[32mok    gen     precompiled table gpu-vivante,report-es2: deterministic, rows == fresh compiles, counts pinned, compiles [170s][0m
+[33mgap   tests/reference/blobs.rs from precompiled.list: no pco_shc at PCO_SHC='' (set PCO_SHC, GLSLANG, GLSL2USC_CACHE): the list was NOT shown to make the committed table[0m
+[33mgap   tools/pco_shc/spm_load from capture_spm_load: no pco_shc at PCO_SHC='' (set PCO_SHC): the load shader was NOT shown to be what Mesa's pco makes[0m
+[33mgap   glmark2 corpus: no glmark2 tree at GLMARK2_SRC='' (set GLMARK2_SRC): the glmark2 shaders were NOT compiled[0m
+[32mok    tools   hal-nxp gen_regs self-test [0s][0m
+[33mgap   imx8mp regs.rs: no hal_nxp at /home/orion/connected-work/01a19449-98b5-7101-86de-b2ec914a6edf/tools/hal-nxp (set HAL_NXP_DIR): the generated registers were NOT checked[0m
+[32mok    gen     driver/rust am62p ti_pr114866.rs == gen_dphy_data.py on third_party [0s][0m
+[32mok    gen     driver/compat/pvr_rgx_core.h == gen_rgx_core.py [0s][0m
+
+check.sh: 193 ok, 0 failed, 8 gap(s) (a gap was not run: it is not a pass), 0 skipped (--changed 355c034f, scopes: all), 0 not run (passed on main) in 7402s; test binaries: 1600 run, 0 skipped (passed on main); runner: cargo-nextest 0.9.148 (cd1d6d546 2026-10-07) (the rows that read libtest's output run the binaries concurrently)
+[31mcheck.sh: fix the above before pushing[0m

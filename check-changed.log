@@ -1,0 +1,97 @@
+check.sh: --changed 355c034f: 361 path(s), scopes: all
+      every row: check-changed.log
+      every row: src/backend.rs
+      every row: src/gl/es3_format_tests.rs
+      every row: src/gl/es3_formats.rs
+      every row: src/gl/framebuffer.rs
+      every row: src/gl/tf_capture.rs
+      every row: src/gl/tf_capture_tests.rs
+      every row: tests/es3_caps.rs
+      every row: tests/es3_formats_gc.rs
+      every row: tests/es3_msaa_v3d.rs
+      every row: tests/es3_rb_formats_v3d.rs
+      every row: tests/es3_samplers3d_v3d.rs
+      every row: tests/es3_sized_formats.rs
+      every row: tests/es3_srgb_blit_v3d.rs
+      every row: tools/check.sh
+      every row: tools/check_scope_selftest.sh
+check.sh: 2 compiler slot(s) (7315 MB available, 3072 MB each, 4 cores)
+[32mok    cargo fmt --check [10s][0m
+[32mok    build   yakogl-capi (no_std) [27s][0m
+[32mok    clippy  host-test,gpu-powervr [49s][0m
+[32mok    test    host-test,gpu-powervr [209s][0m
+[32mok    clippy  host-test,gpu-powervr,report-es2 [37s][0m
+[32mok    test    host-test,gpu-powervr,report-es2 [150s][0m
+[32mok    clippy  host-test,gpu-vivante [32s][0m
+[32mok    test    host-test,gpu-vivante [154s][0m
+[32mok    clippy  host-test,gpu-powervr,shaderc-online [63s][0m
+[32mok    test    host-test,gpu-powervr,shaderc-online [416s][0m
+[32mok    clippy  host-test,gpu-vivante,shaderc-online [82s][0m
+[32mok    test    host-test,gpu-vivante,shaderc-online [425s][0m
+[32mok    clippy  host-test,gpu-powervr,shaderc-online,report-es2 [119s][0m
+[32mok    test    host-test,gpu-powervr,shaderc-online,report-es2 [397s][0m
+[32mok    clippy  host-test,gpu-vivante,shaderc-online,report-es2 [57s][0m
+[32mok    test    host-test,gpu-vivante,shaderc-online,report-es2 [387s][0m
+[32mok    gen     precompiled tables for the tier configurations [133s][0m
+[32mok    clippy  host-test,gpu-powervr,shaderc-online,precompiled-shaders [152s][0m
+[32mok    test    host-test,gpu-powervr,shaderc-online,precompiled-shaders [666s][0m
+[32mok    clippy  host-test,gpu-vivante,shaderc-online,precompiled-shaders [91s][0m
+[32mok    test    host-test,gpu-vivante,shaderc-online,precompiled-shaders [599s][0m
+[32mok    clippy  host-test,gpu-powervr,precompiled-shaders,no-shader-table (no compiler; lib and its tests) [45s][0m
+[32mok    test    host-test,gpu-powervr,precompiled-shaders,no-shader-table (no compiler: shaderc::precompiled) [131s][0m
+[32mok    clippy  host-test,gpu-vivante,precompiled-shaders,no-shader-table (no compiler; lib and its tests) [29s][0m
+[32mok    test    host-test,gpu-vivante,precompiled-shaders,no-shader-table (no compiler: shaderc::precompiled) [136s][0m
+[32mok    clippy  host-test,gpu-vivante,shaderc-online,no-shader-table (no tests: see BUILD_ONLY_CONFIGS) [26s][0m
+[32mok    clippy  host-test,gpu-powervr,shaderc-online,no-shader-table (no tests: see BUILD_ONLY_CONFIGS) [27s][0m
+[32mok    clippy  host-test,gpu-vivante,shaderc-online,test-knobs [85s][0m
+[32mok    test    host-test,gpu-vivante,shaderc-online,test-knobs (--lib, 10 knob tests by name) [307s][0m
+[32mok    test    host-test,gpu-vivante,shaderc-online,test-knobs (tests/gc_kick_diff.rs, 7 tests) [84s][0m
+[32mok    clippy  host-test,gpu-powervr,shaderc-online,test-knobs [109s][0m
+[32mok    test    host-test,gpu-powervr,shaderc-online,test-knobs (--lib, 9 knob tests by name) [314s][0m
+[32mok    clippy  host-test,gpu-v3d,shaderc-online,no-shader-table [86s][0m
+      host-test,gpu-v3d,shaderc-online,no-shader-table: 4 ignored test(s), listed in build/check/v3d-ignored.txt:
+      ignored	gl::tf_capture_tests::capture_cost	a measurement, run by hand
+      ignored	shaderc::online::v3d::chain::tests::a_builtin_on_a_vec2_records_two_lanes	front-end gap: built-in widths unrecorded (comps 0 -> fallback 4); costs lanes, not pixels; see v3d-backend.md
+      ignored	shaderc::online::v3d::mesa_ref::decoder_agrees_with_mesa_on_every_field_combination	needs V3D_QPU_REF, the tools/v3d/qpu_ref.c binary
+      ignored	shaderc::online::v3d::roundtrip::listing_matches_mesa_on_the_corpus	needs V3D_KEEP_DIR, the --keep output of tools/v3d/glsl2v3d.py
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (--lib, GL suite on the online compiler) [389s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_sim_mesa.rs) [149s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_cube_noseamless.rs) [2s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_clear.rs) [3s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_glmark2_mem.rs) [4s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_rt_sample.rs) [3s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/depth_resolve_v3d.rs) [4s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/mipmap_offer_guard.rs) [5s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_tfu_host.rs) [4s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_tfu_mipmap_nowait.rs) [4s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_wait_time.rs) [3s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/gl_settle_order_pin.rs) [4s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_lazy_raster_readers.rs) [7s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_depth_storage.rs) [5s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/v3d_uniform_host.rs) [5s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_int_rt.rs) [2s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_int_rt_v3d.rs) [4s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_formats_v3d.rs) [8s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_shaderc_v3d.rs) [3s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_tf_api.rs) [2s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_srgb.rs) [1s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_occlusion_gl.rs) [2s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/es3_mrt_gl.rs) [3s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table (tests/egl_bench_configs.rs) [2s][0m
+[32mok    test    host-test,gpu-powervr,shaderc-online (tests/es3_vertex_arrays.rs) [1s][0m
+[32mok    test    host-test,gpu-powervr,shaderc-online (tests/es3_pvr_2darray.rs) [1s][0m
+[32mok    test    host-test,gpu-powervr,shaderc-online (tests/es3_pvr_shadow.rs) [1s][0m
+[32mok    test    host-test,gpu-powervr,shaderc-online (tests/es3_pvr_3d.rs) [1s][0m
+[32mok    test    host-test,gpu-powervr,shaderc-online (tests/es3_pvr_fragdepth.rs) [1s][0m
+[32mok    clippy  host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 [77s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (--lib shaderc::online::v3d) [269s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (--lib v3d::backend_tests, separate depth/stencil) [2s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (tests/v3d_sim_mesa.rs) [115s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (tests/v3d_cube_noseamless.rs) [4s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (tests/v3d_clear.rs) [3s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (tests/es3_int_rt.rs) [2s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (tests/es3_tf_api.rs) [1s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (tests/es3_srgb.rs) [1s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (tests/es3_occlusion_gl.rs) [1s][0m
+[32mok    test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 (tests/es3_mrt_gl.rs) [2s][0m
+[32mok    clippy  host-test,gpu-mali,shaderc-online,no-shader-table [91s][0m
