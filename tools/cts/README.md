@@ -567,6 +567,56 @@ and commit at once need their own `OUT=`. On 2026-10-08 the gles3 `info`
 cases reported `OpenGL ES 3.0 YakoGL` and `OpenGL ES GLSL ES 3.00`
 (HOST-ONLY).
 
+### The multisample groups, per `GPU=`, without and with `msaa-fbo`
+
+The three groups the multisample renderbuffer work moves
+(`docs/notes/es3-msaa-renderbuffers.md` (d)) are one filter each. `MODULE=gles3`
+is required; the filter is a substring of the case name. A run removes its
+`OUT`, so each run gets its own:
+
+```sh
+export CTS=<VK-GL-CTS> MODULE=gles3
+for GPU in vivante powervr v3d; do
+  for G in fbo.msaa. multisample.fbo_max_samples. rasterization.fbo.rbo_multisample_max.; do
+    GPU=$GPU OUT=$PWD/build/host-deqp/msaa-$GPU-off-${G%.} \
+      tools/cts/host-deqp-run.sh "dEQP-GLES3.functional.$G"
+  done
+done
+```
+
+This is the **without** arm: the library as it builds today (`msaa-fbo` off,
+`GL_MAX_SAMPLES` 1).
+
+**With `msaa-fbo`.** The script has no feature switch. A cargo feature reaches
+the host library only through `capi/yakogl_capi.cmake`, which maps CMake
+options to cargo features (`gpu-<GPU>`, `shaderc-online`, `report-es2`,
+`test-knobs`, ...) when `cmake -S <repo> -B <library dir>` configures
+`build/host-deqp/lib[-powervr|-v3d]-es3`. The script passes only
+`-DYAKOGL_OSAL`, `-DYAKOGL_GPU`, `-DYAKOGL_SHADERC`, `-DYAKOGL_REPORT_ES2` and
+`-DYAKOGL_SHARED`, and CMake keeps the other cache entries of an existing build
+directory. So the with arm sets the option that maps to `msaa-fbo` once in that
+library directory, then runs the script (`<OPTION>` is the option item
+`gl-msaa-cap` adds to `capi/yakogl_capi.cmake` together with the feature):
+
+```sh
+cmake -S . -B build/host-deqp/lib-v3d-es3 -D<OPTION>=ON   # lib-es3, lib-powervr-es3
+GPU=v3d OUT=$PWD/build/host-deqp/msaa-v3d-on-fbo.msaa \
+  tools/cts/host-deqp-run.sh dEQP-GLES3.functional.fbo.msaa.
+```
+
+Set it back to `OFF` before a without run: the library directory is shared,
+the run directories (`OUT=`) are not. Check that
+`build/host-deqp/lib-*-es3-build.log` shows the feature on cargo's line.
+**Until `gl-msaa-cap` adds the feature only the without run works.**
+
+**Reading the counts.** Each run ends with `OUT/summary.txt`: the per-group
+table (Pass, Fail, NotSupported, ... per case group, `--by-group 3`) and the
+failures by message; `OUT/failures.tsv` lists each failing case. A move from
+NotSupported or Fail to Pass is a status move, not a render verdict. Every
+count is **HOST-ONLY** (the linux OSAL reads black): record it in
+`docs/notes/es3-msaa-renderbuffers.md`, never in `tools/cts/RESULTS.md` or
+`STATUS.md`, which hold board results.
+
 ## 2c. The whole tree on the Verdin i.MX8M Plus, one image
 
 The i.MX8MP has no UART, so its tree is one dEQP image that carries the
