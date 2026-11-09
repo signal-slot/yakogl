@@ -270,6 +270,9 @@ copy is `wide_target`'s own, over its own `tiled_offset`). Mesa's
 in the draw path calls them.
 
 Step 2 is done too (inert, `src/vivante/wide_target.rs`, described below).
+So are the pure parts of steps 4 and 5 (inert, same file): `plane_masks`
+(`mask & 3`, `(mask >> 2) & 3`) and `plane_clears` (`g << 32 | r`,
+`a << 32 | b`), with unit tests; `backend.rs` does not call them yet.
 The rest, in order. Step 0 and 7 need the board; 1 and 3 to 6 are
 host-testable.
 

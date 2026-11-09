@@ -197,6 +197,23 @@ pub fn join_planes(src: &[u8], tw: u32, (w, h): (u32, u32), pitch: usize, dst: &
     }
 }
 
+/// The two planes' colour write masks of a 128-bit target from the GL
+/// 4-bit RGBA mask (bit 0 R, 1 G, 2 B, 3 A): plane 0 holds (R,G) and takes
+/// the low two bits, plane 1 holds (B,A) and takes the high two. Inert:
+/// `backend.rs` does not call it yet (docs/notes/gc-128bit-render-targets.md,
+/// "Implementation sequence", step 4).
+pub const fn plane_masks(mask: u8) -> (u8, u8) {
+    (mask & 3, (mask >> 2) & 3)
+}
+
+/// The two planes' 64-bit clear words of a 128-bit clear value, `rgba` the
+/// raw bits of R,G,B,A (an integer's two's complement, a float's IEEE bits):
+/// plane 0 is `g << 32 | r`, plane 1 is `a << 32 | b`, so the planes hold the
+/// pixel's own bytes. Inert (step 5 of the same sequence).
+pub const fn plane_clears(rgba: [u32; 4]) -> (u64, u64) {
+    ((rgba[1] as u64) << 32 | rgba[0] as u64, (rgba[3] as u64) << 32 | rgba[2] as u64)
+}
+
 /// Does this draw render into a shadow? One colour target (`single`: the
 /// caller's count of hardware targets is 1), with 64-bit pixels, a CPU view
 /// of its storage, and drawn with a positive stride straight into it (not
@@ -655,6 +672,46 @@ mod tests {
         let mut back = [0u8; 16];
         join_planes(&planes, 4, (1, 1), 16, &mut back);
         assert_eq!(back, px);
+    }
+
+    #[test]
+    fn a_write_mask_splits_into_the_two_planes() {
+        assert_eq!(plane_masks(0b1111), (3, 3));
+        assert_eq!(plane_masks(0b0000), (0, 0));
+        assert_eq!(plane_masks(0b0001), (1, 0), "R");
+        assert_eq!(plane_masks(0b0010), (2, 0), "G");
+        assert_eq!(plane_masks(0b0100), (0, 1), "B");
+        assert_eq!(plane_masks(0b1000), (0, 2), "A");
+        assert_eq!(plane_masks(0b1010), (2, 2));
+        for m in 0..16u8 {
+            let (a, b) = plane_masks(m);
+            assert_eq!(a | b << 2, m);
+        }
+    }
+
+    #[test]
+    fn a_clear_value_splits_into_two_plane_words() {
+        assert_eq!(plane_clears([1, 2, 3, 4]), (0x0000_0002_0000_0001, 0x0000_0004_0000_0003));
+        /* negative integers and bits above 2^24 keep all 32 bits */
+        let (p0, p1) = plane_clears([-5i32 as u32, 0x0100_0001, i32::MIN as u32, u32::MAX]);
+        assert_eq!(p0, 0x0100_0001_ffff_fffb);
+        assert_eq!(p1, 0xffff_ffff_8000_0000);
+        /* a float's bits go through unchanged */
+        let (p0, _) = plane_clears([1.0f32.to_bits(), (-2.0f32).to_bits(), 0, 0]);
+        assert_eq!(p0.to_le_bytes()[..4], 1.0f32.to_le_bytes());
+        assert_eq!(p0.to_le_bytes()[4..], (-2.0f32).to_le_bytes());
+    }
+
+    #[test]
+    fn a_clear_word_is_what_the_planes_hold_for_that_pixel() {
+        let w = [0xdead_beef, 0x0123_4567, 0x89ab_cdef, 0xffff_0001u32];
+        let mut px = [0u8; 16];
+        for (i, v) in w.iter().enumerate() {
+            px[i * 4..i * 4 + 4].copy_from_slice(&v.to_le_bytes());
+        }
+        let (p0, p1) = plane_clears(w);
+        assert_eq!(p0.to_le_bytes(), px[..8]);
+        assert_eq!(p1.to_le_bytes(), px[8..]);
     }
 
     /* ---- the shadow itself, on a host OSAL ---------------------------- */
