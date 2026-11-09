@@ -193,6 +193,10 @@
  * 106 mrt3     three draw buffers: a clear reaching all three, one draw writing
  *               each its own colour, and GL_NONE in the middle leaving it alone;
  *               SKIP below GL_MAX_DRAW_BUFFERS 3
+ * 222 mrt4     four draw buffers (the GC7000UL PE's fourth target, RC14): a clear
+ *               reaching all four, one draw writing each its own colour, and
+ *               GL_NONE in slot 2 leaving it alone while slot 3 still lands;
+ *               SKIP below GL_MAX_DRAW_BUFFERS 4, the product default
  * 128 uniidxj  108 D's fcols[fidx] in a fragment stage that also reads a
  *               varying (idxtex's shape): is a fragment stage with no varying
  *               input the class that reads element 0?
@@ -8560,7 +8564,7 @@ static const char *const case_names[] = {
 	 * `gl_test: case 65 polyunit: FAIL`, a line the program could not emit.
 	 * A reader grepping for it would have found nothing and concluded the
 	 * case had not run. 63 was still missing when 65/66/67 were added. */
-	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain", [185] = "kindcost", [186] = "fcsplit", [187] = "predarm", [188] = "predif", [189] = "mulone", [190] = "blendonce", [191] = "varyfma", [192] = "predlive", [193] = "offarm", [194] = "offarmn", [195] = "ifbranch", [196] = "occl", [197] = "vtxgrid", [198] = "a2cconst", [199] = "es3trunc", [200] = "intrt", [201] = "usamp", [202] = "blitconv", [203] = "tfcap", [204] = "srgb", [205] = "mappbo", [206] = "es3levels", [207] = "msaazs", [208] = "msaapre", [209] = "varyorder", [210] = "occlacc", [211] = "msaablend", [212] = "ifsel", [213] = "discloop", [214] = "splitkick", [215] = "shadowmap", [216] = "mipchains", [217] = "forcedpr", [218] = "shadowcmp", [219] = "kickpair", [220] = "lodtime", [221] = "instmix",
+	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain", [185] = "kindcost", [186] = "fcsplit", [187] = "predarm", [188] = "predif", [189] = "mulone", [190] = "blendonce", [191] = "varyfma", [192] = "predlive", [193] = "offarm", [194] = "offarmn", [195] = "ifbranch", [196] = "occl", [197] = "vtxgrid", [198] = "a2cconst", [199] = "es3trunc", [200] = "intrt", [201] = "usamp", [202] = "blitconv", [203] = "tfcap", [204] = "srgb", [205] = "mappbo", [206] = "es3levels", [207] = "msaazs", [208] = "msaapre", [209] = "varyorder", [210] = "occlacc", [211] = "msaablend", [212] = "ifsel", [213] = "discloop", [214] = "splitkick", [215] = "shadowmap", [216] = "mipchains", [217] = "forcedpr", [218] = "shadowcmp", [219] = "kickpair", [220] = "lodtime", [221] = "instmix", [222] = "mrt4",
 };
 
 /* ---- case 67: what a framebuffer object does NOT have -----------------------
@@ -14045,6 +14049,119 @@ static int case_mrt3(void)
 	if (!check_gl_error("mrt3 teardown"))
 		return -1;
 	return expect_int("mrt3 fail mask (0-2 clear, 3-5 draw, 6-8 NONE draw, 9-11 NONE clear)", (long)fail, 0) ? 0 : -1;
+}
+
+/* ---- case 222: four draw buffers (RC14, the GC7000UL PE's fourth target) --
+ * case 106's shape with a fourth RGBA8 attachment and a fourth output (yellow):
+ * a clear reaching all four, one draw writing red, green, blue, yellow, then
+ * GL_NONE in slot 2: a clear and a draw leave attachment 2 blue and attachment
+ * 3 (moved down to hardware target 2) still yellow. Each attachment is read
+ * back between the stages, as case 106 learned to. The fail mask: bits 0-3 the
+ * clear, 4-7 the draw, 8-11 the NONE draw, 12-15 the NONE clear, bit n of each
+ * group attachment n. SKIP below GL_MAX_DRAW_BUFFERS 4: the product library
+ * stays at three until a board draws four (docs/notes/gc-mrt4-board-check.md).
+ * ------------------------------------------------------------------------- */
+static int case_mrt4(void)
+{
+	static const float quad[6][4] = {
+		{ -1.0f, -1.0f, 0.0f, 1.0f }, { 1.0f, -1.0f, 0.0f, 1.0f }, { -1.0f, 1.0f, 0.0f, 1.0f },
+		{  1.0f, -1.0f, 0.0f, 1.0f }, { 1.0f,  1.0f, 0.0f, 1.0f }, { -1.0f, 1.0f, 0.0f, 1.0f },
+	};
+	static const GLenum all[4] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1,
+				       GL_COLOR_ATTACHMENT2, GL_COLOR_ATTACHMENT3 };
+	static const GLenum hole[4] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1,
+					GL_NONE, GL_COLOR_ATTACHMENT3 };
+	const uint32_t colour[4] = { rgba_u32(255, 0, 0, 255), rgba_u32(0, 255, 0, 255),
+				     rgba_u32(0, 0, 255, 255), rgba_u32(255, 255, 0, 255) };
+	const uint32_t grey = rgba_u32(128, 128, 128, 255), black = rgba_u32(0, 0, 0, 255);
+	GLuint prog, fbo = 0, tex[4] = { 0, 0, 0, 0 };
+	GLint maxdb = 0;
+	uint32_t fail = 0;
+
+	glGetIntegerv(GL_MAX_DRAW_BUFFERS, &maxdb);
+	if (maxdb < 4) {
+		pr_info("gl_test: case 222 mrt4: SKIP (GL_MAX_DRAW_BUFFERS %d < 4)\n", (int)maxdb);
+		return -3;
+	}
+	free_all_objects();
+	prog = link_program(gl_test_es300_mrt3_vs_src, gl_test_es300_mrt4_fs_src);
+	if (!prog)
+		return -1;
+	glGenTextures(4, tex);
+	glGenFramebuffers(1, &fbo);
+	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+	for (int n = 0; n < 4; n++) {
+		glBindTexture(GL_TEXTURE_2D, tex[n]);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, TW, TH, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+		glFramebufferTexture2D(GL_FRAMEBUFFER, all[n], GL_TEXTURE_2D, tex[n], 0);
+	}
+	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+		pr_err("gl_test: mrt4: framebuffer incomplete\n");
+		return -1;
+	}
+	glDrawBuffers(4, all);
+	if (!check_gl_error("mrt4 setup"))
+		return -1;
+	glUseProgram(prog);
+	upload_vbo(quad, sizeof(quad));
+	glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (const void *)0);
+	glEnableVertexAttribArray(0);
+	glDisable(GL_BLEND);
+	glViewport(0, 0, TW, TH);
+
+	glClearColor(128.0f / 255.0f, 128.0f / 255.0f, 128.0f / 255.0f, 1.0f);
+	glClear(GL_COLOR_BUFFER_BIT);
+	glFinish();
+	for (int n = 0; n < 4; n++) {
+		uint32_t got = mrt3_read(n);
+
+		pr_info("gl_test:   mrt4 clear   attachment %d = 0x%08x  want 0x%08x\n", n, got, grey);
+		if (chan_diff(got, grey) > 2)
+			fail |= 1u << n;
+	}
+
+	glDrawArrays(GL_TRIANGLES, 0, 6);
+	glFinish();
+	for (int n = 0; n < 4; n++) {
+		uint32_t got = mrt3_read(n);
+
+		pr_info("gl_test:   mrt4 draw    attachment %d = 0x%08x  want 0x%08x\n", n, got, colour[n]);
+		if (chan_diff(got, colour[n]) > 2)
+			fail |= 1u << (4 + n);
+	}
+
+	/* attachment 2 keeps the draw's blue; 0, 1 and 3 are cleared black, read
+	 * back as black here, then drawn red, green and yellow again */
+	glDrawBuffers(4, hole);
+	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+	glClear(GL_COLOR_BUFFER_BIT);
+	glFinish();
+	for (int n = 0; n < 4; n++) {
+		const uint32_t want = n == 2 ? colour[2] : black;
+		uint32_t got = mrt3_read(n);
+
+		pr_info("gl_test:   mrt4 hole clear attachment %d = 0x%08x  want 0x%08x\n", n, got, want);
+		if (chan_diff(got, want) > 2)
+			fail |= 1u << (12 + n);
+	}
+	glDrawArrays(GL_TRIANGLES, 0, 6);
+	glFinish();
+	for (int n = 0; n < 4; n++) {
+		uint32_t got = mrt3_read(n);
+
+		pr_info("gl_test:   mrt4 hole draw  attachment %d = 0x%08x  want 0x%08x\n",
+			n, got, colour[n]);
+		if (chan_diff(got, colour[n]) > 2)
+			fail |= 1u << (8 + n);
+	}
+
+	glReadBuffer(GL_COLOR_ATTACHMENT0);
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glDeleteFramebuffers(1, &fbo);
+	glDeleteTextures(4, tex);
+	if (!check_gl_error("mrt4 teardown"))
+		return -1;
+	return expect_int("mrt4 fail mask (0-3 clear, 4-7 draw, 8-11 NONE draw, 12-15 NONE clear)", (long)fail, 0) ? 0 : -1;
 }
 
 /* ---- case 163: draw buffer 0 GL_NONE, draw buffer 1 written (review R-09) --
@@ -23586,6 +23703,7 @@ static int run_case(int c, int pretransform, int debug, int *ended)
 		break;
 	case 220: rc = case_lodtime(); break;
 	case 221: rc = case_instmix(); break;
+	case 222: rc = case_mrt4(); break;
 	case 216:
 		rc = case_mipchains();
 		if (rc == -3)

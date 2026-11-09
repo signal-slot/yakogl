@@ -7398,6 +7398,25 @@ static const char gl_test_es300_mrt3_fs_src[] =
 	"    o2 = vec4(0.0, 0.0, 1.0, 1.0);\n"
 	"}\n";
 
+/* Four draw buffers, each its own colour (case 222); the vertex shader is mrt3's. */
+static const char gl_test_es300_mrt4_fs_src[] =
+	"#version 300 es\n"
+	"// gl_test 222 mrt4: four draw buffers, each its own colour, so a target\n"
+	"// that got another's output (or none) reads as the wrong colour. The mrt3\n"
+	"// program plus a fourth output.\n"
+	"precision mediump float;\n"
+	"layout(location = 0) out vec4 o0;\n"
+	"layout(location = 1) out vec4 o1;\n"
+	"layout(location = 2) out vec4 o2;\n"
+	"layout(location = 3) out vec4 o3;\n"
+	"void main()\n"
+	"{\n"
+	"    o0 = vec4(1.0, 0.0, 0.0, 1.0);\n"
+	"    o1 = vec4(0.0, 1.0, 0.0, 1.0);\n"
+	"    o2 = vec4(0.0, 0.0, 1.0, 1.0);\n"
+	"    o3 = vec4(1.0, 1.0, 0.0, 1.0);\n"
+	"}\n";
+
 /* Two loops, one inside the other, both per pixel (case 104). */
 static const char gl_test_es300_divnest_fs_src[] =
 	"#version 300 es\n"
