@@ -1297,10 +1297,11 @@ pub struct SampledTexture {
     pub volume: bool,
     /// The texture descriptor's format word (`MALI_PACK_FMT`).
     pub format: u32,
-    /// The planes' clump format: RAW32 for 4-byte texels, a block format's
-    /// own (ETC2).
+    /// The planes' clump format: RAW16, RAW32 or RAW64 for texels of 2, 4
+    /// or 8 bytes ([`SampledTexture::texel_bytes`]), a block format's own
+    /// (ETC2).
     pub clump: ClumpFormat,
-    /// A block format's bytes a 4x4 block, 0 for 4-byte texels: a block
+    /// A block format's bytes a 4x4 block, 0 for texels: a block
     /// format's texels are interleaved (`texel_interleave`,
     /// pan_texture.c:1310-1311) and a row stride is a row of blocks.
     pub block_bytes: u32,
@@ -1372,6 +1373,17 @@ impl SampledTexture {
             (self.faces >> l).max(1)
         } else {
             self.faces
+        }
+    }
+
+    /// The bytes of a texel of a format that is not a block format, from
+    /// its clump format (`pan_clump_format` by block size, Mesa 26.2.1
+    /// pan_texture.c:303-316).
+    pub fn texel_bytes(&self) -> u32 {
+        match self.clump {
+            ClumpFormat::RAW16 => 2,
+            ClumpFormat::RAW64 => 8,
+            _ => 4,
         }
     }
 
@@ -2412,7 +2424,11 @@ fn check_draw(
         )?;
         for l in 0..t.levels {
             let lv = t.level[l as usize];
-            let row = if t.block_bytes != 0 { t.block_bytes * t.extent(l).0.div_ceil(4) } else { 4 * t.extent(l).0 };
+            let row = if t.block_bytes != 0 {
+                t.block_bytes * t.extent(l).0.div_ceil(4)
+            } else {
+                t.texel_bytes() * t.extent(l).0
+            };
             require(lv.row_stride >= row, NOT_BUILT_TEXTURE_SIZE)?;
             /* every plane's pointer on 64 bytes: a face's too (the board's
              * Mesa samples faces at 64-byte steps, not 4 KiB ones:
