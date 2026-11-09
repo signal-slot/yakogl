@@ -181,6 +181,15 @@ fn latency(op: &VOp, res: Res) -> u32 {
 pub fn reorder<'a>(sel: &Selected<'_>, al: &Allocation<'_>, a: &Arena<'a>) -> Result<&'a [VOp], ArenaError> {
     let ops = sel.ops;
     let mut out: AVec<'a, VOp> = AVec::with_capacity(a, ops.len())?;
+    /* Everything a region allocates above this mark (its edges, tables and
+     * lists) is dead once its operations are in `out`, so the next region
+     * starts from the mark: without it the regions of one stage add up
+     * (~430 KB of a 4.2 MB peak for dEQP-GLES3 ubo single_struct_array's
+     * instance_array_both programs, past the 4 MiB scratch). Only while
+     * `out` still has the buffer reserved below the mark: a vector that
+     * moved lives above it. */
+    let mark = a.used();
+    let reserved = out.as_slice().as_ptr();
     let mut start = 0;
     while start < ops.len() {
         let end = (start..ops.len()).find(|&i| barrier(&ops[i])).unwrap_or(ops.len());
@@ -193,6 +202,11 @@ pub fn reorder<'a>(sel: &Selected<'_>, al: &Allocation<'_>, a: &Arena<'a>) -> Re
         region(&ops[start..end], al, a, conditional, &mut out)?;
         if end < ops.len() {
             out.push(a, ops[end])?;
+        }
+        if out.as_slice().as_ptr() == reserved {
+            // SAFETY: `out`'s buffer is below `mark`, and nothing `region`
+            // allocated above it is referred to after `region` returns.
+            unsafe { a.reset_to(mark) };
         }
         start = end + 1;
     }

@@ -351,8 +351,9 @@ mod es3 {
     /// GL_INVALID_ENUM (is_color_format did not know it), which failed
     /// state_query.rbo.renderbuffer_internal_format (and every RGB10_A2
     /// renderbuffer row of fbo.*). It is storage now, held as RGBA8 like its
-    /// texture, colour-renderable, unsigned normalised, and its sizes say
-    /// the eight bits it really has.
+    /// texture (or as the 10/10/10/2 surface where the back end samples the
+    /// class), colour-renderable, unsigned normalised, and its sizes say
+    /// the bits it really has.
     #[test]
     fn rgb10_a2_is_colour_renderable_renderbuffer_storage() {
         let _g = context();
@@ -373,7 +374,11 @@ mod es3 {
             rb_param(GL_RENDERBUFFER_BLUE_SIZE),
             rb_param(GL_RENDERBUFFER_ALPHA_SIZE),
         ];
-        assert_eq!(sizes, [8; 4], "held as RGBA8, and said so (not 10/10/10/2)");
+        /* a back end that samples the RGB10A2 class holds its own
+         * 10/10/10/2 surface (docs/notes/v3d-rgb10a2.md); elsewhere RGBA8 */
+        let ten = backend::rt_format_drawable(backend::GLES_SURF_RGB10_A2);
+        let want = if ten { [10, 10, 10, 2] } else { [8; 4] };
+        assert_eq!(sizes, want, "the stored resolution (10/10/10/2 surface: {ten})");
         let fb = framebuffer();
         attach_rb(GL_COLOR_ATTACHMENT0, rb);
         assert_eq!(status(), GL_FRAMEBUFFER_COMPLETE, "colour-renderable (ES 3.0 4.4.4)");
@@ -381,7 +386,7 @@ mod es3 {
             fb_param(GL_COLOR_ATTACHMENT0, GL_FRAMEBUFFER_ATTACHMENT_COMPONENT_TYPE) as GLenum,
             GL_UNSIGNED_NORMALIZED
         );
-        assert_eq!(fb_param(GL_COLOR_ATTACHMENT0, GL_FRAMEBUFFER_ATTACHMENT_ALPHA_SIZE), 8);
+        assert_eq!(fb_param(GL_COLOR_ATTACHMENT0, GL_FRAMEBUFFER_ATTACHMENT_ALPHA_SIZE), want[3]);
         /* read back as any normalised buffer is */
         assert_eq!(
             (geti(GL_IMPLEMENTATION_COLOR_READ_FORMAT) as GLenum, geti(GL_IMPLEMENTATION_COLOR_READ_TYPE) as GLenum),
