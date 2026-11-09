@@ -5360,3 +5360,93 @@ fn a_uniform_block_past_the_constant_registers_is_taken_whole() {
     // SAFETY: a null block is allowed.
     assert_eq!(unsafe { take_uniforms(core::ptr::null(), n as u16, true) }, None);
 }
+
+/// gl_test `dtpu`'s binding (depth_sample.rs) for a 64x64 depth texture of
+/// GL object `id`, as the GL core hands it over after the answer.
+fn dtpu_texture(id: u32, w: u32, h: u32) -> GlesTextureBind {
+    let mut t = bind(GC_HEAP_DATA + 0x8_0000, w, h, 1);
+    (t.format, t.no_alpha, t.depth_luminance, t.depth_id) = (GLES_TEXFMT_R32F, 1, 1, id);
+    t
+}
+
+/// The depth-sampling experiment's descriptor, read out of the stream for a
+/// surface a draw allocated (docs/notes/gc-depth-sample.md, "Descriptor
+/// fields"): the view is the PE's surface past the guard at its own stride,
+/// and a binding that carries a depth id while the knob is off is refused
+/// (-ENOTSUP), not sampled from its stale texels.
+#[test]
+fn the_depth_view_describes_the_surface_the_pe_writes() {
+    use super::super::depth_sample::{view_binding, DepthView, DEPTH_TPU_D24X8};
+    let rig = Rig::new();
+    let id = 0x4000_0064;
+    rig.submit(&pair_draw(&rig, (id, 1), (id, 1)));
+    let key = ds_key((id, 1), (id, 1));
+    let (mem, _) = ds_cache::memory_of(key).expect("a surface");
+    let stride = ds_cache::stride_of(key).expect("a surface");
+    let (gpu, s, rows) = ds_cache::depth_view(id, GC_DEPTH_GUARD_BYTES, 0).expect("a live depth plane");
+    assert_eq!((gpu, s), (mem.gpu + GC_DEPTH_GUARD_BYTES as u64, stride));
+    assert!(rows >= 64 && rows.is_multiple_of(64), "{rows}");
+    assert_eq!(ds_cache::depth_view(id + 1, GC_DEPTH_GUARD_BYTES, 0), None, "nothing held for it");
+
+    let v = DepthView { gpu, stride: s, rows };
+    let mut d = rig.draw(3);
+    d.num_textures = 1;
+    d.textures[0] = view_binding(&dtpu_texture(id, 64, 64), DEPTH_TPU_D24X8, Some(v)).expect("it fits");
+    let st = rig.submit(&d);
+    let desc = st.descriptor(0);
+    let (c0, c1) = (desc[GC_TEXDESC_CONFIG0 as usize / 4], desc[GC_TEXDESC_CONFIG1 as usize / 4]);
+    assert_eq!(((c0 >> 13) & 0x1f, (c0 >> 20) & 3, c1 & 0x3f), (0x11, GC_TEX_ADDRESSING_LINEAR, 0), "D24X8, LINEAR");
+    assert_eq!((c1 >> 8) & 0xffff, GC_SWIZZLE_R | GC_SWIZZLE_R << 4 | GC_SWIZZLE_R << 8 | GC_SWIZZLE_1 << 12);
+    assert_eq!(desc[GC_TEXDESC_LINEAR_STRIDE as usize / 4], stride);
+    assert_eq!(desc[GC_TEXDESC_SIZE as usize / 4], texdesc_size_width(64) | texdesc_size_height(64));
+    assert_eq!(desc[texdesc_lod_addr(0) as usize / 4] as u64, gpu, "LOD 0: the surface the PE writes");
+    assert_eq!(desc[texdesc_lod_addr(1) as usize / 4], 0, "one level");
+    assert_eq!(st.reg(nte_descriptor_samp_ctrl0(0)) & GC_SAMP_INT_FILTER, 0, "no INT_FILTER for a Z/S format");
+
+    /* a depth id with the knob off (the only state of a product build) */
+    d.textures[0] = dtpu_texture(id, 64, 64);
+    // SAFETY: `d` is a live draw for the length of the call.
+    assert_eq!(unsafe { gc_draw(&d) }, -crate::util::ENOTSUP);
+    assert!(rig.faults().is_empty());
+}
+
+/// With the knob (gl_test `dtpu`), the answer and the draw: yes for a live
+/// plane covering the texture, and the slot then describes the surface (mode
+/// 1 D24X8, mode 2 A8R8G8B8); a texture larger than the surface is answered
+/// no and its draw refused with -ENOTSUP; mode 0 answers no again.
+#[cfg(feature = "test-knobs")]
+#[test]
+fn the_dtpu_knob_samples_the_depth_surface_in_place() {
+    use super::super::depth_sample::{gc_debug_set_depth_tpu, gc_depth_sampled};
+    struct Off;
+    impl Drop for Off {
+        fn drop(&mut self) {
+            gc_debug_set_depth_tpu(0);
+        }
+    }
+    let rig = Rig::new();
+    let _off = Off;
+    let id = 0x4000_0065;
+    rig.submit(&pair_draw(&rig, (id, 1), (id, 1)));
+    let (gpu, stride, _) = ds_cache::depth_view(id, GC_DEPTH_GUARD_BYTES, 0).expect("a live depth plane");
+    assert!(!gc_depth_sampled(id, 64, 64), "knob 0: the CPU resolve");
+    for (mode, format) in [(1, 0x11), (2, GC_TEX_FORMAT_A8R8G8B8)] {
+        assert_eq!(gc_debug_set_depth_tpu(mode), if mode == 1 { 0 } else { 1 });
+        assert!(gc_depth_sampled(id, 64, 64), "mode {mode}");
+        assert!(crate::backend::samples_rendered_depth(id, 64, 64), "mode {mode}");
+        assert!(!gc_depth_sampled(id, stride / 4 + 1, 64), "wider than the surface");
+        let mut d = rig.draw(3);
+        d.num_textures = 1;
+        d.textures[0] = dtpu_texture(id, 64, 64);
+        let desc = rig.submit(&d).descriptor(0);
+        assert_eq!((desc[GC_TEXDESC_CONFIG0 as usize / 4] >> 13) & 0x1f, format, "mode {mode}");
+        assert_eq!(desc[texdesc_lod_addr(0) as usize / 4] as u64, gpu, "mode {mode}");
+        assert_eq!(desc[GC_TEXDESC_LINEAR_STRIDE as usize / 4], stride, "mode {mode}");
+        d.textures[0] = dtpu_texture(id, stride / 4 + 1, 64);
+        // SAFETY: `d` is a live draw for the length of the call.
+        assert_eq!(unsafe { gc_draw(&d) }, -crate::util::ENOTSUP, "mode {mode}: does not fit");
+    }
+    gc_debug_set_depth_tpu(0);
+    assert!(!gc_depth_sampled(id, 64, 64));
+    assert!(rig.faults().is_empty());
+}

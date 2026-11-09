@@ -38,6 +38,7 @@ pub mod backend;
 pub mod cmd;
 pub mod dedup;
 pub mod depth_format;
+pub mod depth_sample;
 pub mod ds_cache;
 pub mod early_z;
 /// The two shaders the clear quad draws with and the mipmap quad's fragment

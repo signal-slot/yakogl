@@ -2735,8 +2735,8 @@ step "tools   board-sudo-setup.sh --dry-run runs from a clean environment" \
 # The test knobs the "no test knob" row requires of each GPU's test-knobs
 # archive (check_knobs_absent, below); here because that row's key holds
 # them.
-KNOB_VIVANTE_SYMBOLS="gc_debug_flip_experiment gc_debug_msaa gc_debug_msaa_scratch gc_debug_msaa_scratch_map
-gc_debug_msaa_scratch_zero gc_debug_narrow_la gc_debug_set_flip_experiment gc_debug_set_msaa
+KNOB_VIVANTE_SYMBOLS="gc_debug_depth_tpu gc_debug_flip_experiment gc_debug_msaa gc_debug_msaa_scratch gc_debug_msaa_scratch_map
+gc_debug_msaa_scratch_zero gc_debug_narrow_la gc_debug_set_depth_tpu gc_debug_set_flip_experiment gc_debug_set_msaa
 gc_debug_set_narrow_la gc_kick_diff_after_fence gc_kick_diff_arm_target gc_kick_diff_enable gc_kick_diff_stats"
 KNOB_POWERVR_SYMBOLS="pvr_debug_narrow_la pvr_debug_set_narrow_la pvr_debug_set_split_zs pvr_debug_split_zs"
 RELEASE_KEY_PATHS=(Cargo.toml Cargo.lock ':(glob)**/Cargo.toml' build.rs src capi include tests/reference

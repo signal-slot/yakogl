@@ -141,6 +141,12 @@ pub fn gc_texfmt(format: u8) -> GcTexfmt {
         GLES_TEXFMT_RGBA16F => f.format_ext = GC_TEX_FORMAT_EXT_A16B16G16R16F,
         GLES_TEXFMT_R16F => f.format_ext = GC_TEX_FORMAT_EXT_R16F,
         GLES_TEXFMT_R32F => f.format_ext = GC_TEX_FORMAT_EXT_R32F,
+        /* a depth surface read in place (depth_sample.rs, test knob only): no
+         * INT_FILTER for a Z/S format (etnaviv_format.c:320) */
+        super::depth_sample::GC_TEXFMT_DEPTH_VIEW => {
+            f.format = super::depth_sample::GC_TEX_FORMAT_D24X8;
+            f.no_alpha = true;
+        }
         _ => f = unorm_format(format),
     }
     f
@@ -524,6 +530,20 @@ fn emit_slot(f: &mut GcFrame, slot: u32, t: &GlesTextureBind, companion: Option<
     } else {
         t
     };
+    /* the depth-sampling experiment's surface instead of the stale texels
+     * (depth_sample.rs; a binding carries a depth id only after its answer) */
+    let view;
+    let t = if t.depth_id != 0 && t.incomplete == 0 {
+        match super::depth_sample::binding(t, super::backend::gc_kick_id()) {
+            Ok(v) => {
+                view = v;
+                &view
+            }
+            Err(e) => return e,
+        }
+    } else {
+        t
+    };
     let desc_gpu = build_descriptor(f, t, 0);
     /* The companion: plane 1's descriptor where there are planes; the black
      * texel's where a reserved companion has none, so the slot never keeps
@@ -708,8 +728,10 @@ fn emit_textures_inner(f: &mut GcFrame, d: &GcDraw) -> i32 {
             } else {
                 None
             };
-            if emit_slot(f, base + t.unit as u32, t, companion) != 0 {
-                return -ENOMEM;
+            /* -ENOMEM, or the depth experiment's -ENOTSUP (depth_sample.rs) */
+            let rc = emit_slot(f, base + t.unit as u32, t, companion);
+            if rc != 0 {
+                return rc;
             }
         }
     }
