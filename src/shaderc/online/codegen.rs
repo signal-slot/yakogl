@@ -541,12 +541,18 @@ pub fn assemble_from_ir_blocks(
         vs_id_in_reg: sel.vs_id_in_reg,
         vs_reads_instance_id: sel.vs_reads_instance_id,
         ps_color_out_reg: sel.ps_color_out_reg.map(place),
-        ps_depth_out_reg: None,
+        /* Not placed: r0.z is where the hardware reads the depth from, so
+         * it stays out of `abi_outputs` (r0 is reserved on this stage). */
+        ps_depth_out_reg: sel.ps_depth_out_reg,
         /* Copied, never chosen: gc7000-abi.md lists both as not understood,
          * and a compiler picking them freshly is an unmeasured change to a
          * word nobody can check. Zero is what the M3 shaders carry. */
     };
-    Ok(abi::assemble(&p, uniforms, m.uniform_dwords)?)
+    let mut sh = abi::assemble(&p, uniforms, m.uniform_dwords)?;
+    /* The flag the PowerVR program carries for the same fact, so a reader of
+     * the program need not know which GPU's fields to look at. */
+    sh.writes_depth = u8::from(sel.ps_depth_out_reg.is_some());
+    Ok(sh)
 }
 
 /// Every OUTPUT register the ABI pins for this shader: these must hold their
