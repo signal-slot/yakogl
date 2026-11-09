@@ -6205,3 +6205,50 @@ fn the_kept_branches_are_byte_equal_to_mesa_26_2_1() {
 fn the_corpus_kept_branch_source_is_the_reference() {
     assert_eq!(include_str!("../../../../tools/shaders/es100/texbranch.frag"), td!("cflow_148_texbranch.frag"));
 }
+
+/// Case 70 loopcarry (docs/notes/mali-constant-products.md): each unrolled
+/// pass's `(acc * 2.0) * 0.5` is `acc` (nir_opt_algebraic.py:2406, the
+/// constants folded to 1.0, then :292), so the program is case 71
+/// deadloop's. Drawn without `--uniform-values`: both IDVS programs and the
+/// 29 fragment words with every fact, through the link.
+#[test]
+fn case_70_loopcarry_is_byte_equal_to_mesa_26_2_1() {
+    let (vs, fs, json) =
+        (td!("fsarith_70_loopcarry.vert"), td!("fsarith_70_loopcarry.frag"), td!("fsarith_70_loopcarry.expect.json"));
+    assert_eq!(include_str!("../../../../tools/shaders/es100/loopcarry.frag"), fs);
+    assert_eq!(td!("alu_loopcarry.frag"), fs);
+    /* the premise: Mesa's fragment program of 70 is 71's, word for word */
+    let words = |j: &str| region(j, "fs.fragment").expect("fs.fragment").words;
+    assert_eq!(words(json), words(td!("cflow_71_deadloop.expect.json")));
+    assert_eq!(words(json), words(td!("alu_loopcarry.expect.json")));
+    check_linked_for("70", vs, fs, json);
+}
+
+/// The fold of a constant times a product with a constant (nir_fs.rs `Fs::op`) on
+/// case 70's loop with other constants: the folded constant kept as one
+/// product per pass (`FMA.v2f16 .., 1.5`), a product not exact in fp16
+/// refused, and the shapes with no reference still refused: the folded
+/// `-1.0`'s fneg, which the unrolled ladder does not take, and the sum
+/// twin (nir_opt_algebraic.py:2410).
+#[test]
+fn the_fp16_constant_products_fold_as_mesa_s() {
+    let base = td!("fsarith_70_loopcarry.frag");
+    let with =
+        |a: &str, b: &str| base.replace("acc * 2.0;", &format!("acc {a};")).replace("t * 0.5;", &format!("t {b};"));
+    let ops = |src: &str| -> Vec<&'static str> {
+        let f = compile(SHC_STAGE_FRAGMENT, src).expect("compiles");
+        trim(&f.code).iter().map(|w| isa::decode(*w).expect("decodes").op.info().mnemonic).collect()
+    };
+    let fma = |v: &[&str]| v.iter().filter(|m| m.starts_with("FMA")).count();
+    let n = |v: &[&str], m: &str| v.iter().filter(|x| **x == m).count();
+    /* case 70: one FMA (`u_k * (3.0, 2.0)`), no product left in the passes */
+    let p = ops(&with("* 2.0", "* 0.5"));
+    assert_eq!((p.len(), fma(&p)), (29, 1), "{p:?}");
+    /* `* 3.0 * 0.5` is `* 1.5`: the first pass's `k * 1.5` pairs with
+     * `u_k.x * 3.0` in the first FMA, then a sum and a product per pass */
+    let p = ops(&with("* 3.0", "* 0.5"));
+    assert_eq!((fma(&p), n(&p, "FADD.v2f16")), (1 + 7, 7), "{p:?}");
+    assert_eq!(gap(SHC_STAGE_FRAGMENT, &with("* 0.1", "* 0.3")), MaliError::ConstantFold);
+    assert_eq!(gap(SHC_STAGE_FRAGMENT, &with("* 2.0", "* -0.5")), MaliError::Arithmetic);
+    assert_eq!(gap(SHC_STAGE_FRAGMENT, &with("+ 2.0", "+ 0.5")), MaliError::ArithConstant);
+}

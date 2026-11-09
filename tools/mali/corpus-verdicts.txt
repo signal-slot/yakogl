@@ -69,7 +69,7 @@ tools/shaders/es100/loop_nested.vert: Valhall: a loop in a vertex shader is not 
 tools/shaders/es100/loop_nested.while.frag: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet
 tools/shaders/es100/loop_uniform.dowhile.vert: Valhall: a loop in a vertex shader is not lowered yet
 tools/shaders/es100/loop_uniform.frag: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet
-tools/shaders/es100/loopcarry.frag: Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add) is not lowered yet
+tools/shaders/es100/loopcarry.frag: ok
 tools/shaders/es100/matattr.frag: ok
 tools/shaders/es100/matattr2.vert: ok
 tools/shaders/es100/matattr3.vert: ok
