@@ -102,6 +102,9 @@ pub mod ds_retention;
 pub mod gl;
 /// The NanoPC-T6's Mali-G610 backend (only in a `gpu-mali` build).
 pub mod mali;
+/// The samples every backend keeps for a multisample colour attachment
+/// between jobs, keyed by the GL object (no backend uses it yet).
+pub mod msaa_store;
 /// The PowerVR BXS-4-64 backend (only in a `gpu-powervr` build).
 pub mod pvr;
 pub mod shaderc;
