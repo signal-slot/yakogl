@@ -347,19 +347,41 @@ make -f baremetal.mk \
      AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy
 ```
 
-No change is needed for the `DRVSRC` wording. Optional sentence for step 3, replacing the
-comment above the clang form (the README already says sysroot and versioned names; this
-adds that the unversioned names must be on `PATH`, and a commented `CC` line as an
-alternative to the newlib sysroot):
+No change is needed for the `DRVSRC` wording. Three host-quirk insertions follow, each
+anchored to the README text above (grep the anchor; apply from the bottom up, or
+re-grep, because (a) adds 3 lines and (c) adds 1). They rest on the rows and the
+"Host quirks seen" notes of the section "Line 6: cross builds".
+
+**(a) Step 2, SDK 1.0 prefix** (rows 2, 2'; first quirk note). Anchor: the line
+`make -f baremetal.mk CROSS_COMPILE=aarch64-none-elf-`. Add above it:
 
 ```
-# clang needs bare-metal C headers: a newlib sysroot for aarch64-none-elf in CC (for
-# example --sysroot=<arm-gnu-toolchain>/aarch64-none-elf) and unversioned llvm-ar,
-# llvm-nm, llvm-objcopy on PATH (distributions ship them versioned, llvm-ar-21, ...:
-# pass those names as AR, NM and OBJCOPY)
-# alternative without the Arm GNU toolchain, with a distribution libc (Ubuntu's
-# picolibc-aarch64-linux-gnu):
-# CC='clang --target=aarch64-none-elf -isystem <picolibc include dir>'
+# with the Zephyr SDK 1.0 the prefix is
+# $ZEPHYR_SDK_INSTALL_DIR/gnu/aarch64-zephyr-elf/bin/aarch64-zephyr-elf-
+# (the pre-1.0 $ZEPHYR_SDK_INSTALL_DIR/aarch64-zephyr-elf/bin/ path does not exist there)
 ```
 
-The distribution-route line is the measured alternative of row 3d (`8d1488cd`).
+**(b) Step 3, clang form** (rows 3, 3a, 3d; the sysroot, picolibc and llvm-name quirk
+notes). Anchor: the three comment lines that start `# clang needs bare-metal C
+headers:`. Replace them (this replaces the older optional sentence of this section) with:
+
+```
+# clang needs bare-metal C headers: a newlib sysroot, e.g. the aarch64-none-elf
+# directory of the Arm GNU toolchain (without one the build stops at 'string.h').
+# It also needs llvm-ar, llvm-nm and llvm-objcopy under those names on PATH;
+# Ubuntu installs them unversioned only in /usr/lib/llvm-21/bin and puts just the
+# -21 names in /usr/bin, so add that directory to PATH or pass AR=llvm-ar-21 etc.
+# Without the Arm GNU toolchain Ubuntu's picolibc-aarch64-linux-gnu works too:
+# CC='clang --target=aarch64-none-elf -isystem <picolibc include dir>' in place of
+# --sysroot; linking a program against it also needs ld.lld (package lld-21 or lld)
+```
+
+**(c) Step 4, stale ZEPHYR_BASE** (the ZEPHYR_BASE quirk note; recorded for form (a), the
+`west.yml` workspace, row 4b; no row records it for the `ZEPHYR_EXTRA_MODULES` form 4a,
+so that form is not named). Anchor: the line
+`# Zephyr: a workspace from west.yml (driver/samples/zephyr/README.md), or add this`.
+Add above it:
+
+```
+# for the west.yml workspace unset a ZEPHYR_BASE left over from another workspace
+```
