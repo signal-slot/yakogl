@@ -4602,6 +4602,22 @@ fn the_frag_coord_programs_are_byte_equal_to_mesa_26_2_1() {
     }
 }
 
+/// gl_test case 218 shadowcmp's position arithmetic in a mediump ES 3.00
+/// shader (docs/notes/mali-fragcoord-fp16-ops.md): the highp read keeps
+/// every operation on it at fp32 (`step` as `FCMP_OR.f32.ge` and a `CSEL`
+/// of -32.0 and -0.0 added, the divides as products, `FROUND.f32.rtn`),
+/// narrowed where the mediump `vec2 b` takes it, then fp16 pairs. The
+/// reference is the case's shader with the two shadow look-ups replaced by
+/// the coordinates they take; the case's own program is
+/// fcfp16_218_shadowcmp.expect.json.
+#[test]
+fn the_case_218_position_arithmetic_is_byte_equal_to_mesa_26_2_1() {
+    let (vs, fs, json) =
+        (td!("fcfp16_218_coord.vert"), td!("fcfp16_218_coord.frag"), td!("fcfp16_218_coord.expect.json"));
+    let f = compile(SHC_STAGE_FRAGMENT, fs).expect("the fragment shader compiles");
+    check_fs_stage(&f, vs, fs, json, VIEWPORT_64X64);
+}
+
 /// The internal shaders under tools/shaders are the references' sources
 /// (byte copies); a fetch needs no helper threads (fbload_fbload.trace,
 /// `Requires helper threads: false`), the mip level's `texture()` does,
