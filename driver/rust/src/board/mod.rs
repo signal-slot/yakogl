@@ -24,6 +24,8 @@ pub mod nanopc_t6_gpu;
 pub mod nanopc_t6_mmu;
 #[cfg(any(all(feature = "rk3588", feature = "mali"), test))]
 pub mod nanopc_t6_sections;
+#[cfg(any(all(feature = "rk3588", feature = "mali"), test))]
+pub mod nanopc_t6_submit;
 pub mod record;
 pub mod rpi4;
 
