@@ -290,3 +290,142 @@ with sections 2 and 3 before writing the rewrite.
 `unitype_80.expect.json` is the earlier recording of the same shader
 (`tools/shaders/es100/matdyn.frag` as is); `other_80_matdyn` is the one the
 case is pinned to.
+
+## 7. Before the refusal is removed (checked at 04ac35d3)
+
+Item `indexlocal-check` (plan #336), read at `04ac35d3` (which holds
+`indexlocal-glsl`, `bdb7ba7b`) and run with the refusal disabled in a scratch
+tree (`glsl.rs` `passes`: no `indexed_read` check; nothing committed). Mesa
+26.2.1 source: `mesa-pan/mesa-26.2.1` in the deps cache. The three questions
+`fs-indexlocal` has to answer, what the scratch run found, the changes it
+needs and the next refusal.
+
+### 7.1 Does the fragment walk accept `Inot` / `Iand` / `Ior` on 32-bit masks?
+
+`glsl.rs` (`ilt_trees`, the write-tree conditions, `glsl.rs:640-660`) emits
+`Iand`, `Ior` and `Inot` as IR ops on the `ilt` masks. Case 80 is a highp
+shader (`precision highp float`), so they go through the highp path `lane32`
+-> `alu32` (`nir_fs.rs:1903`, `:2152`), **not** through `int_lane`
+(`:1440-1505`, the mediump path whose `Inot` arm at `:1467` and `bool32` at
+`:1398` section 3.4 and section 4 item 4 above point at; they do not apply):
+
+- **`Iand`**: accepted, `nir_fs.rs:2120` (`AluOp::Iand => op32(Alu::Iand,
+  ..)`) and `emit.rs:298` (`LSHIFT_AND.i32 a, b, #0`).
+- **`Ior`**: **no arm**. `alu32` has none (the `Alu::Ior` nodes highp code
+  has are the ones the walk builds itself: `nir_fs.rs:2356` copysign, `:3780`
+  loop exit, `:4154` any/all). `AluOp::Ior` falls to `_ => Err(Arithmetic)`
+  (`:2142`). The emit side exists (`emit.rs:299`, `LSHIFT_OR.i32`).
+- **`Inot`**: **no arm** in `alu32` either (`Arithmetic`, `:2142`; measured: it
+  is the first op the scratch run stops at), and **no 32-bit emit arm**:
+  `emit.rs` has `Iand`/`Ior` only (`:298-299`, and the 16-bit pair `:364`).
+  Mesa's op is `bifrost_compile.c:3387-3388`: `bi_lshift_or_to(b, sz, dst,
+  bi_zero(), bi_not(s0), bi_imm_u8(0))`, the reference's word 8 `LSHIFT_OR.i32
+  r6, 0x0, 0x0.b00, r5.not`. The `.not` is the ISA's `not2` bit on Valhall's
+  third source (BIR's second). Neither BIR nor the packer carries it:
+  `bir.rs:~866-872` gives that source `absneg = false` (a `Src::neg` is
+  refused), and `pack.rs:655` (and `:667`, the 16-bit form) put `not2` to a
+  literal 0. The only other `.not` word is `intuni_uops.expect.json` (`~u.x`);
+  no host test in `mali/tests.rs` names that reference.
+- **vertex** (`nir.rs`): case 80's vertex shader is a passthrough and compiles
+  (64 words in the scratch run), with no index tree in it. The vertex walk
+  takes `Ior` (`nir.rs:2369`) but refuses `Iand` (except as `imod` by a power
+  of two, `:2362`) and `Inot` as `IntValue` (`:2454-2469`). A vertex shader
+  that indexes an array or a vector at a run-time index meets that after the
+  rewrite; no sweep case is one (case 80's family is fragment only), so it
+  is not part of `fs-indexlocal`; it is the next gap of such a source.
+
+### 7.2 `ir_arity` and `Iand` / `Ior`
+
+Confirmed, `nir_fs.rs:8377-8396`: `ir_arity` lists `Fadd Fmul Fmin Fmax Flt Fle
+Feq Fne Iadd Idiv Ilt Ile Ieq Ine Fdot2-4` as 2, `Ffma Bcsel` as 3 and
+everything else as **1**: `Iand`, `Ior`, and also `Imul`, `Imod`, `Ishl`,
+`Ishr`, `Ushr`, `Ixor`, `Ult`, `Ule`, `Imin`, `Imax`, `Umin`, `Umax`, `Udiv`,
+`Umod`. The front end's own `AluOp::arity` (`ir.rs:340-352`, `pub`, whatever
+its doc at `nir_fs.rs:8375` says) has all of them as 2 (1 only for `Fneg ..
+F2u`, `Ineg`, `Inot`, `Bnot`, ...).
+
+Does it matter for case 80? **No**: the scratch run gives the same code with
+`Iand`/`Ior` at 2 and at 1 (80 words both). The lane loops read `s[..3]`;
+arity only bounds the checks below. It is a latent defect, each of these
+reads only `src[0]` of an `iand`/`ior`:
+
+| line | use | wrong for `iand(a, b)` |
+|---|---|---|
+| `nir_fs.rs:3356` `ir_folds` | `s[..ir_arity(a)].iter().all(..)` | a constant `a` with a run-time `b` "folds to a constant" |
+| `:3444` run comparison | `(0..ir_arity(p)).all(same_src)` | `iand(a, b)` equals `iand(a, c)` |
+| `:312` `params` | the "read twice" test | `iand(a, a)` is not seen |
+| `:2402`, `:3978` | `x[..k].contains(&Undef)` | a missing second lane goes unnoticed |
+| `:1742`, `:1765` `alu16` | operand loop, lane merge | the fp16 `Iand`/`Ior` (not reached with these ops today) |
+
+The ladder's masks (`iand(d2, inot(d1))`, `ior(d1, d2)`) reach `:3356` and
+`:3444` through the write tree's stores, so the fix goes in with the arms.
+Fix: the body of `ir_arity` becomes `a.arity()`, or the `=> 2` arm gains
+`Iand | Ior | Imul | Imod | Ishl | Ishr | Ushr | Ixor | Ult | Ule | Imin |
+Imax | Umin | Umax | Udiv | Umod`. Tests: `ir_arity(a) == a.arity()` over
+every `AluOp` (as `ir.rs:1024` pins the front end's), and an `ir_folds` case
+with `iand(const, uniform)`. A corpus verdict that moves from `ok` to a
+refusal (an `Undef` check now fires) is a regression to look at, not to hide.
+
+### 7.3 Rule 742 and case 80's tree
+
+`nir_opt_algebraic.py:742` (26.2.1): `(('inot', ('ilt(is_used_once)', a, b)),
+('ige', a, b))` (738-747 for the other compares). It needs the `ilt` to have
+**one** use. In case 80 the only `inot` is in the store tree, `inot(d1)` of
+`d1 = ilt(J, 1)` (word 8). `d1` has three uses: the `inot` (word 8), the
+`ior` (word 12) and the `CSEL` of `arr[0]'` (word 15). So the rule **does not
+fire**, and the reference keeps `inot` as the `.not` on the source, which is
+why `iand(d2, inot(d1))` costs the words 8-10. `d2 = ilt(J, 2)` has two uses,
+there is no `inot(d2)`. The read trees have no `inot` (rule 971 swaps a
+`bcsel`'s arms, section 1).
+
+So for case 80 **keep `inot` as it is; never fold it into an `ige`**. The rule
+would matter for a single-use `ilt` under an `inot` (then `Icmp(Ge)` of the
+same operands); a 4-element store tree has `iand(d, inot(c))` with every
+compare used by two leaves or more, a 2-element one has no `inot`. The
+mediump `int_lane` (`:1467`) does not apply the rule either. `fs-indexlocal`
+need not implement it, but the test of section 5 item 2 should pin that the
+`inot` of a shared compare stays.
+
+### 7.4 Changes `fs-indexlocal` needs
+
+1. `glsl.rs`: remove the `indexed_read` refusal (`passes`, `:128`) and the
+   function (`:189`); keep `MaliError::IndexedLocal` for `nir_fs.rs:3461`,
+   `:3968`, `nir.rs:2299`. Replace `case_80_is_refused_at_its_indexed_local_reads`
+   (`tests.rs:5971`) and the assert that pins the refusal at `glsl_tests.rs:116`.
+2. `nir_fs.rs` `alu32` (before `:2142`): `AluOp::Inot => self.op32(Alu::Inot,
+   [x, u, u], at)` and `AluOp::Ior => self.op32(Alu::Ior, [x, y, u], at)`,
+   beside `Iand` (`:2120`). The scratch run used exactly these two arms.
+3. `emit.rs`, beside `:298-299`: `(Alu::Inot, 32, 1) => ins(p, Op::LshiftOrI32,
+   &[ZERO, Src { neg: true, ..s[0] }, ZERO])?`, with its row at `:95-96`
+   (`row(Alu::Inot, 32, 1)`, "nir_op_inot: LSHIFT_OR.i32 0, ~a, #0").
+4. `bir.rs:~866-872`: `absneg = true` for source 1 of `LshiftOrI32` (the
+   reference needs it there; the family's other members are not measured),
+   and `pack.rs:655`: `.put("not2", u32::from(i.src[1].neg))`. The scratch run
+   packed and compiled with these; the encoding was not compared, so **add a
+   pack test of word 8** (`r5.not`, `other_80_matdyn.expect.json`).
+5. `nir_fs.rs:8377` `ir_arity`: section 7.2.
+6. The `MixedPrecision` of the `int` uniform `u_i`: `mod.rs:1352`
+   (`f.mixed |= !matches!(prec(..), High)` counts it): `indexlocal-intuni`'s
+   (section 4 item 2). The scratch run bypassed it by the name `u_i`.
+
+### 7.5 The refusal after `IndexedLocal`
+
+With the refusal disabled and nothing else changed, case 80's fragment shader
+stops at, in this order (each measured by adding the fix before it):
+
+1. `MaliError::Arithmetic` ("arithmetic other than +, -, * ..."),
+   `nir_fs.rs:2142`, on **`AluOp::Inot`** (`Ior` is the next one at the same
+   place);
+2. after the arms of 7.4 items 2-4: **`MaliError::MixedPrecision`**
+   (`mod.rs:1352`, the int uniform `u_i`: `indexlocal-intuni`);
+3. with that bypassed it compiles: **no further refusal and no panic**. The
+   code is 80 words (`code.len()`) against the reference's 61 listed
+   (`fs.fragment`); it is not byte-equal and no word was compared, so the
+   residue of section 4 items 3-6 (the zero register `MOV.i32.discard`,
+   `FMA` for `w + w`, the FAU order, the scheduling) is `fs-indexlocal`'s
+   measurement. The vertex shader compiles (64 words).
+
+The smaller shapes were not run separately: `tools/mali/testdata/` has no
+`indexlocal_*` file at `04ac35d3` (`intloop_dynidx` is a loop index into a
+uniform array, not a local); `fs-indexlocal` writes the sources of its section
+5 item 3.
