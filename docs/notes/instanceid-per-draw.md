@@ -400,3 +400,57 @@ Expected verdicts:
 The `mixed.1_instances` cases pass on every build: one instance takes the
 GPU path (`draw_instanced`, `instancecount == 1`). The Pi 4 (V3D,
 `max_instance_divisor` 0xffff) is predicted to pass already.
+
+### X2 (gl_test case 221, GC7000UL stream divisor)
+
+Whether the GC7000UL front end takes a stream divisor above 1 is not measured.
+The GL-core dEQP cases above cannot tell it apart from a wrong image, so the X2
+runs two `gl_test` cases of the same GPU (`driver/tools/pvrlab/gl_test.c`):
+
+- **Case 221 (`instmix`)**, code and shader in `gl_test_instmix.inc` (included
+  by `gl_test.c`; `driver/tools/pvrlab/README.md`, "Case 221"). One
+  mixed-divisor instanced draw, a divisor-1 and a divisor-3 attribute, 4
+  instances, with `glDrawArraysInstanced` and `glDrawElementsInstanced`, each
+  instance's colour read back.
+- **Case 141 (`es3instdiv`)**, the control from before V1: case 47's program with
+  `glVertexAttribDivisor` 2, 4 instances. It passes only where the back end
+  takes the divisor.
+
+Expected output of case 221 (copied from the README): one pixel per instance of
+the 64x64 target, tolerance 3,
+
+| draw | pixel (top-down) | R G B A |
+| --- | --- | --- |
+| instance 0 | (16,48) | 255 64 0 255 |
+| instance 1 | (48,48) | 128 64 64 255 |
+| instance 2 | (16,16) | 64 64 128 255 |
+| instance 3 | (48,16) | 191 255 191 255 |
+
+and, for each of `arrays` and `elements`, four lines
+`gl_test:   <kind>: instance N  (x,y) = 0x........  want 0x........  ok  [check C]`,
+the case ending without a `MISMATCH`.
+
+Build and run on the X2 (`tools/cts/imx8mp-gltest-build.sh` header,
+`driver/tools/kexec-zephyr/README.md`). `HEAD8` is the 8-character commit the
+image is built from. The first case of an image is its `<first case>` argument,
+and `SEL` is the case number minus it, so an image started at the case is
+`SEL=0`:
+
+```sh
+HEAD8=$(git rev-parse --short=8 HEAD)
+IMX8MP_BOARD=x2 tools/cts/imx8mp-gltest-build.sh instmix-$HEAD8 221
+BOARD_HOST=root@<x2> SEL=0 tools/board.sh x2 run \
+  "$IMX8MP_OUT/x2/instmix-$HEAD8/zephyr/zephyr.bin" <logdir>
+IMX8MP_BOARD=x2 tools/cts/imx8mp-gltest-build.sh instdiv-$HEAD8 141
+BOARD_HOST=root@<x2> SEL=0 tools/board.sh x2 run \
+  "$IMX8MP_OUT/x2/instdiv-$HEAD8/zephyr/zephyr.bin" <logdir>
+```
+
+Reading it: with V1 on and the FE taking divisors above 1, both cases pass.
+If case 221 shows every instance with the same colour, or the divisor-1 and
+divisor-3 arrays wrong (`r`, `g`) while case 141 also fails, the FE ignores
+divisors above 1: go back to `max_instance_divisor: 1` and take V2, the
+per-draw uniform of section 3.
+
+Status: the board run is pending (plan item `x2-instmix`, after V1 lands, and
+once plan #328 releases `target:x2`). No result is claimed here.
