@@ -173,6 +173,11 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   padding: 10px 14px; margin: 16px 0; border-radius: 0 6px 6px 0;
 }
 .note p { margin: 4px 0; }
+.tip {
+  border-left: 4px solid var(--info); background: var(--info-bg);
+  padding: 10px 14px; margin: 16px 0; border-radius: 0 6px 6px 0;
+}
+.tip p { margin: 4px 0; }
 .js-only { display: none; }
 .has-data .js-only { display: revert; }
 
