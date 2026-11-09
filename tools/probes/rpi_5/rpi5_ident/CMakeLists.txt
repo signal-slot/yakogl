@@ -29,6 +29,19 @@ message(STATUS "rpi5_ident build: ${RPI5_IDENT_BUILD}")
 target_sources(app PRIVATE src/main.c)
 target_include_directories(app PRIVATE ${PVR_REPO}/src/v3d)
 
+# The fallback build (-DEXTRA_CONF_FILE=fallback.conf, CONFIG_YAKOGL_RPI5_MBOX):
+# the driver's own BCM2712 power-on (v3d_hw.c) and the board layer's mailbox.
+if(CONFIG_YAKOGL_RPI5_MBOX)
+  get_filename_component(YAKOGL_ROOT "${PVR_REPO}/.." ABSOLUTE)
+  target_sources(app PRIVATE ${PVR_REPO}/src/v3d/v3d_hw.c)
+  target_include_directories(app PRIVATE
+    ${PVR_REPO}/src/v3d/generated
+    ${PVR_REPO}/zephyr/lib/board/rpi4
+    ${YAKOGL_ROOT}/third_party/mesa-26.2.1/src/broadcom
+    ${YAKOGL_ROOT}/third_party/mesa-26.2.1/src
+    ${YAKOGL_ROOT}/third_party/mesa-26.2.1/include)
+endif()
+
 # Zero warnings in our C files (-DYAKOGL_WERROR=ON, the "zephyr" rows).
 if(YAKOGL_WERROR)
   target_compile_options(app PRIVATE -Werror)
