@@ -1,0 +1,24 @@
+#!/bin/bash
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+#
+# The fake ssh of tools/cts/mali-board-state-selftest.sh: logs the remote
+# command (the last argument) to $FAKE_LOG and serves it from the case
+# directory $FAKE_CASE: <key>.out is the output, <key>.rc (optional) the exit
+# status. A case with a file "unreachable" fails like a lost connection.
+cmd=${*: -1}
+printf '%s\n' "$cmd" >> "$FAKE_LOG"
+[ ! -e "$FAKE_CASE/unreachable" ] || { echo "ssh: connect to host board.invalid port 22: No route to host" >&2; exit 255; }
+case $cmd in
+  'echo yakogl-state-ok') echo yakogl-state-ok; exit 0 ;;
+  'find /boot'*) key=boot ;;
+  *fw_printenv*) key=env ;;
+  'cat /proc/modules') key=modules ;;
+  'cat /proc/sys/kernel/random/boot_id') key=boot_id ;;
+  'uname -r') key=uname ;;
+  *) echo "fake ssh: unknown command: $cmd" >&2; exit 99 ;;
+esac
+[ ! -e "$FAKE_CASE/$key.out" ] || cat "$FAKE_CASE/$key.out"
+rc=0
+[ ! -e "$FAKE_CASE/$key.rc" ] || rc=$(cat "$FAKE_CASE/$key.rc")
+exit "$rc"
