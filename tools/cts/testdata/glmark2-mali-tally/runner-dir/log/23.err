@@ -1,0 +1,2 @@
+yakogl-mali: loaded build=099b5df6 lib=/opt/yakogl-glmark2/lib/libGLESv2.so.2
+yakogl-mali: program refused: the compiler refused the terrain vertex shader

@@ -8,6 +8,7 @@
   python3 -I tools/cts/glmark2-mali-tally.py --results-row [--column COL] [--table FILE] <rundir>
   python3 -I tools/cts/glmark2-mali-tally.py --status-row [--column COL] [--table FILE] <rundir>
   python3 -I tools/cts/glmark2-mali-tally.py --causes <rundir>
+  python3 -I tools/cts/glmark2-mali-tally.py [--allow-verdict-mismatch] ... <runner-dir>
 
 It plays for glmark2 the part tools/cts/mali-deqp-tally.py plays for dEQP-GLES2.
 The run is one glmark2-es2 process per scene (tools/cts/mali-glmark2-build.sh's
@@ -36,6 +37,47 @@ is two digits, the runner's order; it is not read (a scene is its slug). A
 scene with none of the three files is not-run; one with a .log but no .status
 or .kmsg, an unknown slug, a slug given twice, a log whose result or picture
 line names another scene, or a log with two result lines is malformed.
+
+A runner directory instead (tools/cts/mali-glmark2-run.sh's <outdir>, recognised
+by its scenes.tsv and meta.txt) is read directly:
+
+  scenes.tsv         row n is scene n: scene ("name:opts", glmark2's -b form) and
+                     the runner's verdict; the scene is matched to the --list
+                     scene of the same name and options
+  log/<n>.out+.err   the scene's log (the .out, then the .err): as <NN>-<slug>.log
+  kmsg/<n>.class     mali-kmsg.py's line (with its cs_faults, counted); the file
+                     kmsg/<n>.log supplies the kernel's memory-failure lines
+  meta.txt           commit (required), kernel and started (its date) as env.txt;
+                     there is no board address or pair sha256 in the runner's meta
+
+The runner records no exit status and no timeout flag, so the .status is made
+from the runner's verdict: hang gives timeout=1 and exit 137; crash gives exit
+139 when the log has a yakogl-mali-exit line (the process died by a signal after
+it; which signal is not recorded, the cause says so) and exit 0 when it has not
+(the tally finds that crash itself); failed-scene whose log has an FPS and no
+Set up failed or Unsupported gives exit 1; any other verdict gives exit 0. A
+scene the runner marks not-run or board-lost has no files here, so the tally
+says not-run. The tally then derives its own verdicts as above and compares
+them with the runner's:
+
+  runner               tally
+  ok                   ok
+  gl-error             gl-error
+  hang                 hang
+  crash                crash
+  gpu-fault            gpu-fault
+  job-timeout          gpu-fault   (the tally counts kmsg timeouts as gpu-fault)
+  out-of-gpu-memory    oom
+  refused-draw         fail        (plan #309's refusals)
+  failed-scene         fail
+  wrong-lib            fail        (no "yakogl-mali: loaded" line)
+  not-run, board-lost  not-run
+
+A scene whose two verdicts differ (the tally also counts GL_OUT_OF_MEMORY and the
+kernel's out of memory as oom, the runner does not yet) is printed on stderr with
+both verdicts, after the output, and the exit status is 3; with
+--allow-verdict-mismatch the same lines are printed as "allowed" and the exit
+status is 0. The tally's verdict is the one in every output.
 
 Verdict per scene, the first that holds:
   not-run    no file of the scene
@@ -79,15 +121,18 @@ Outputs:
 Nothing printed carries a board address: IPv4 addresses, user@host logins and
 UART device paths read from the run are replaced by <addr>, <login>, <uart>.
 
-Exit status: 0 the tally was produced, 1 malformed input, 2 usage.
+Exit status: 0 the tally was produced, 1 malformed input, 2 usage, 3 a runner
+directory whose verdicts disagree with the tally's (without the flag).
 """
 
 import importlib.util
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
@@ -95,10 +140,15 @@ HOST_REF = os.path.join(HERE, "glmark2-host-ref.sh")
 PICTURES = os.path.join(HERE, "glmark2-pictures.txt")
 SCENE_COUNT = 33
 VERDICTS = ("not-run", "hang", "gpu-fault", "crash", "oom", "gl-error", "fail", "ok")
-KMSG_KEYS = ("resets", "timeouts", "mmu_faults", "fw_faults", "gpu_faults", "other_panthor")
+KMSG_KEYS = ("resets", "timeouts", "mmu_faults", "fw_faults", "gpu_faults", "cs_faults", "other_panthor")
+# the mali-kmsg.py line of today and of the first fixtures (no cs_faults)
+RUNNER_VERDICTS = {"ok": "ok", "gl-error": "gl-error", "hang": "hang", "crash": "crash",
+                   "gpu-fault": "gpu-fault", "job-timeout": "gpu-fault", "out-of-gpu-memory": "oom",
+                   "refused-draw": "fail", "failed-scene": "fail", "wrong-lib": "fail",
+                   "not-run": "not-run", "board-lost": "not-run"}
 FILE_RE = re.compile(r"^(\d\d)-([a-z0-9-]+)\.(log|kmsg|status)$")
 KMSG_RE = re.compile(r"^kmsg: resets=(\d+) timeouts=(\d+) mmu_faults=(\d+) fw_faults=(\d+) "
-                     r"gpu_faults=(\d+) other_panthor=(\d+) first=(.*)$")
+                     r"gpu_faults=(\d+) (?:cs_faults=(\d+) )?other_panthor=(\d+) first=(.*)$")
 LOADED_RE = re.compile(r"yakogl-mali: loaded ")
 EXIT_RE = re.compile(r"yakogl-mali-exit: draws=(\d+) refused=(\d+) first_refused=(.*) "
                      r"gpu_faults=(\d+) job_timeouts=(\d+)\s*$")
@@ -203,7 +253,8 @@ def read_status(path):
         raise Malformed("%s: exit %r is not a number" % (path, st.get("exit", "")))
     if st.get("timeout") not in ("0", "1"):
         raise Malformed("%s: timeout %r is not 0 or 1" % (path, st.get("timeout", "")))
-    return {"exit": int(st["exit"]), "timeout": st["timeout"] == "1"}
+    return {"exit": int(st["exit"]), "timeout": st["timeout"] == "1",
+            "signal_unknown": st.get("signal_unknown") == "1"}
 
 
 def read_kmsg(path):
@@ -213,13 +264,14 @@ def read_kmsg(path):
     for line in text.splitlines():
         m = KMSG_RE.match(line.strip())
         if m:
-            k = dict(zip(KMSG_KEYS, (int(x) for x in m.groups()[:6])))
-            k["first"] = m.group(7)
+            g = m.groups()
+            k = dict(zip(KMSG_KEYS, (int(x or 0) for x in g[:7])))
+            k["first"] = g[7]
             return k
         if line.startswith("{"):
             try:
                 j = json.loads(line)
-                k = {key: int(j[key]) for key in KMSG_KEYS}
+                k = {key: int(j.get(key, 0) if key == "cs_faults" else j[key]) for key in KMSG_KEYS}
                 k["first"] = str(j["first"])
                 return k
             except (ValueError, KeyError, TypeError):
@@ -338,7 +390,8 @@ def tally_scene(index, slug, info, paths, refs, tol):
                                                        else "the pair's exit line counts a lost job"),
                       why))
     if st["exit"] >= 128 and not st["timeout"]:
-        found.append(("crash", "crash: signal %d" % (st["exit"] - 128)))
+        found.append(("crash", "crash: killed by a signal (number not recorded)" if st.get("signal_unknown")
+                      else "crash: signal %d" % (st["exit"] - 128)))
     elif ex is None and not st["timeout"] and LOADED_RE.search(text):
         # without the loaded line the board's Mesa ran (a fail below): no exit line is expected
         found.append(("crash", "crash: no yakogl-mali-exit line (the process died before atexit)"))
@@ -387,16 +440,113 @@ def tally_scene(index, slug, info, paths, refs, tol):
     return sc
 
 
+def is_runner_dir(rundir):
+    return (os.path.isfile(os.path.join(rundir, "scenes.tsv"))
+            and os.path.isfile(os.path.join(rundir, "meta.txt")))
+
+
+def runner_info(scene):
+    """the runner's 'name:opts' (glmark2's -b form) as glmark2's '[name] opts' info string"""
+    name, sep, opts = scene.partition(":")
+    return "[%s] %s" % (name, opts if sep and opts else "<default>")
+
+
+def read_runner(rundir, scenes):
+    """a mali-glmark2-run.sh directory as the tally's own layout, in a new temp directory:
+    returns (tempdir, {slug: runner verdict}); the caller removes it"""
+    meta = read_kv(os.path.join(rundir, "meta.txt"), "meta.txt")
+    try:
+        with open(os.path.join(rundir, "scenes.tsv"), encoding="utf-8", errors="replace") as f:
+            rows = [l.rstrip("\n").split("\t") for l in f if l.strip()]
+    except OSError as e:
+        raise Malformed("%s: %s" % (rundir, e.strerror))
+    if not rows or rows[0][:3] != ["scene", "commit", "verdict"]:
+        raise Malformed("%s: scenes.tsv has no 'scene commit verdict' header" % rundir)
+    by_info = {info: slug for slug, info in scenes}
+    tmp = tempfile.mkdtemp(prefix="glmark2-mali-tally.")
+    try:
+        started = meta.get("started", "")
+        env = ["commit=" + meta.get("commit", ""), "kernel=" + meta.get("kernel", "absent")]
+        if re.match(r"\d{4}-\d\d-\d\d", started):
+            env.append("date=" + started[:10])
+        with open(os.path.join(tmp, "env.txt"), "w") as f:
+            f.write("\n".join(env) + "\n")
+        runner, seen = {}, set()
+        for n, row in enumerate(rows[1:], 1):
+            if len(row) < 7:
+                raise Malformed("%s: scenes.tsv row %d has %d fields, not 7" % (rundir, n, len(row)))
+            info = runner_info(row[0])
+            slug = by_info.get(info)
+            if slug is None:
+                raise Malformed("%s: scenes.tsv row %d: %s is no scene of glmark2-host-ref.sh --list"
+                                % (rundir, n, row[0]))
+            if slug in seen:
+                raise Malformed("%s: scenes.tsv names %s twice" % (rundir, row[0]))
+            seen.add(slug)
+            verdict = row[2]
+            if verdict not in RUNNER_VERDICTS:
+                raise Malformed("%s: scenes.tsv row %d: unknown verdict %r" % (rundir, n, verdict))
+            runner[slug] = verdict
+            if RUNNER_VERDICTS[verdict] == "not-run":
+                continue
+            text = ""
+            for ext in ("out", "err"):
+                t = CT.read_text(os.path.join(rundir, "log", "%d.%s" % (n, ext)))
+                if t is None:
+                    raise Malformed("%s: log/%d.%s is unreadable" % (rundir, n, ext))
+                text += t if t.endswith("\n") or not t else t + "\n"
+            kl = CT.read_text(os.path.join(rundir, "kmsg", "%d.log" % n)) or ""
+            cls = CT.read_text(os.path.join(rundir, "kmsg", "%d.class" % n)) or ""
+            cline = next((l for l in cls.splitlines() if KMSG_RE.match(l.strip())), None)
+            if cline is None:
+                # 'kmsg: unavailable' or no file: the runner counted nothing
+                cline = "kmsg: resets=0 timeouts=0 mmu_faults=0 fw_faults=0 gpu_faults=0 other_panthor=0 first=-"
+            has_exit = any(EXIT_RE.search(l) for l in text.splitlines())
+            speed = CT.glmark2_speed(text)["scenes"]
+            code, timeout, unknown = 0, 0, 0
+            if verdict == "hang":
+                code, timeout = 137, 1
+            elif verdict == "crash" and has_exit:
+                code, unknown = 139, 1
+            elif (verdict == "failed-scene" and speed and speed[0]["fps"] is not None
+                  and not first_line(text, SETUP_RE)):
+                code = 1
+            base = os.path.join(tmp, "%02d-%s" % (n, slug))
+            with open(base + ".log", "w") as f:
+                f.write(text)
+            with open(base + ".kmsg", "w") as f:
+                f.write(cline.strip() + "\n" + "".join(
+                    l + "\n" for l in kl.splitlines() if not l.startswith("#")))
+            with open(base + ".status", "w") as f:
+                f.write("exit=%d\ntimeout=%d\n%s" % (code, timeout, "signal_unknown=1\n" if unknown else ""))
+        return tmp, runner
+    except BaseException:
+        shutil.rmtree(tmp, ignore_errors=True)
+        raise
+
+
 def tally(rundir, column="mali", table_path=PICTURES):
     scenes = scene_list()
-    env = read_env(rundir)
-    files = run_files(rundir, scenes)
     table = CT.read_picture_table(table_path)
     refs = table["columns"].get(column, {})
-    rows = [tally_scene(i, slug, info, files.get(slug, {}), refs, table["tolerance"])
-            for i, (slug, info) in enumerate(scenes, 1)]
+    tmp, runner = None, None
+    if is_runner_dir(rundir):
+        tmp, runner = read_runner(rundir, scenes)
+    try:
+        src = tmp or rundir
+        env = read_env(src)
+        files = run_files(src, scenes)
+        rows = [tally_scene(i, slug, info, files.get(slug, {}), refs, table["tolerance"])
+                for i, (slug, info) in enumerate(scenes, 1)]
+    finally:
+        if tmp:
+            shutil.rmtree(tmp, ignore_errors=True)
+    # a scene the runner list lacks (a --scenes subset) is not-run in the tally and not compared
+    mismatch = [(r, runner[r["slug"]]) for r in rows
+                if runner and r["slug"] in runner and RUNNER_VERDICTS[runner[r["slug"]]] != r["verdict"]]
     return {"rundir": rundir, "env": env, "rows": rows, "column": column,
-            "column_known": column in table["columns"], "table": table_path}
+            "column_known": column in table["columns"], "table": table_path,
+            "runner": runner, "mismatch": mismatch}
 
 
 # ---- summaries ---------------------------------------------------------------------
@@ -656,12 +806,14 @@ def render_causes(t):
 
 
 def main(argv):
-    mode, column, table, args = None, "mali", PICTURES, []
+    mode, column, table, args, allow = None, "mali", PICTURES, [], False
     i = 0
     while i < len(argv):
         a = argv[i]
         if a in ("--picture-lines", "--results-row", "--status-row", "--causes"):
             mode = a
+        elif a == "--allow-verdict-mismatch":
+            allow = True
         elif a in ("--column", "--table"):
             i += 1
             if i >= len(argv):
@@ -699,7 +851,12 @@ def main(argv):
     else:
         out = render_table(t)
     print("\n".join(out))
-    return 0
+    sys.stdout.flush()
+    for r, rv in t["mismatch"]:
+        print("glmark2-mali-tally: %sscene %s: runner verdict %s, tally verdict %s (%s)"
+              % ("allowed: " if allow else "", r["info"], rv, r["verdict"], r["cause"] or "-"),
+              file=sys.stderr)
+    return 3 if t["mismatch"] and not allow else 0
 
 
 if __name__ == "__main__":

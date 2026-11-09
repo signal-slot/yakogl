@@ -1,0 +1,15 @@
+=======================================================
+    glmark2 2023.01
+=======================================================
+    OpenGL Information
+    GL_VENDOR:      Signal Slot
+    GL_RENDERER:    YakoGL gpu-mali
+    GL_VERSION:     OpenGL ES 2.0 YakoGL
+    Surface Config: buf=32 r=8 g=8 b=8 a=8 depth=24 stencil=8 samples=0
+    Surface Size:   800x600 pbuffer
+=======================================================
+[effect2d] kernel=1,1,1,1,1;1,1,1,1,1;1,1,1,1,1;: FPS: 90 FrameTime: 11.111 ms
+glmark2-picture: [effect2d] kernel=1,1,1,1,1;1,1,1,1,1;1,1,1,1,1;: 800x600; probes c 06e6e2ff, tl 11ede7ff, tr 1cf4ecff, bl 27fbf1ff, br 3202f6ff; crc16 b112, crc16q b131; mean 150 182 238; black no
+=======================================================
+                                  glmark2 Score: 90 
+=======================================================

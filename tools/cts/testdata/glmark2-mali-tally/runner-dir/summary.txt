@@ -1,0 +1,1 @@
+mali-glmark2: 28/33 scenes ok, failed 5 (crash 2, gl-error 1, gpu-fault 1, out-of-gpu-memory 1), commit 01234567

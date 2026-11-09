@@ -1,0 +1,4 @@
+yakogl-mali: loaded build=099b5df6 lib=/opt/yakogl-glmark2/lib/libGLESv2.so.2
+yakogl: GL error 0x502 in glGenerateMipmap (the level's format)
+yakogl: GL error 0x506 in glDrawArrays (framebuffer incomplete)
+yakogl-mali-exit: draws=1200 refused=0 first_refused=- gpu_faults=0 job_timeouts=0

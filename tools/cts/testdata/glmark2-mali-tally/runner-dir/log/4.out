@@ -1,0 +1,15 @@
+=======================================================
+    glmark2 2023.01
+=======================================================
+    OpenGL Information
+    GL_VENDOR:      Signal Slot
+    GL_RENDERER:    YakoGL gpu-mali
+    GL_VERSION:     OpenGL ES 2.0 YakoGL
+    Surface Config: buf=32 r=8 g=8 b=8 a=8 depth=24 stencil=8 samples=0
+    Surface Size:   800x600 pbuffer
+=======================================================
+[texture] texture-filter=linear: FPS: 600 FrameTime: 1.667 ms
+glmark2-picture: [texture] texture-filter=linear: 800x600; probes c 94d41cff, tl 9fdb21ff, tr aae226ff, bl b5e92bff, br c0f030ff; crc16 7bbc, crc16q 7bdb; mean 116 52 68; black no
+=======================================================
+                                  glmark2 Score: 600 
+=======================================================
