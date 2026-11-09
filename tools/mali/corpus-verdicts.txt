@@ -49,7 +49,7 @@ tools/shaders/es100/hdrscale.frag: ok
 tools/shaders/es100/hello.frag: ok
 tools/shaders/es100/hello.vert: ok
 tools/shaders/es100/idiv.frag: ok
-tools/shaders/es100/ifelse_loop.frag: Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet
+tools/shaders/es100/ifelse_loop.frag: ok
 tools/shaders/es100/ifloop.frag: Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet
 tools/shaders/es100/ifoutput.frag: ok
 tools/shaders/es100/ifoutput2.frag: ok
