@@ -133,9 +133,9 @@ pub enum PtRefusal {
 
 /// The tables of one address space in a pool of pages.
 pub struct Tables<'a> {
-    pages: &'a mut [Table],
-    pa: u64,
-    used: usize,
+    pub(crate) pages: &'a mut [Table],
+    pub(crate) pa: u64,
+    pub(crate) used: usize,
 }
 
 /// What [`Tables::walk`] read: the descriptor at each level, up to the
