@@ -201,6 +201,35 @@ fw_job_bit31() { (( 16#${V[J]} & 0x80000000 )); }
 # the GLB req and ack words agree on the bits of acked (0x10e)
 fw_req_ack() { (( ((16#${V[RQ]} ^ 16#${V[AK]}) & 0x10e) == 0 )); }
 
+# table_fw_image <probe>: the lines every probe built on Z3 prints first, with
+# its own name as the prefix: build, WDT0, image/sha256, the 7 sections, the pool.
+table_fw_image() {
+	local p=$1
+	e "$p: build {s}"
+	e "$p: WDT0 period 22369 ms, fed until 60000 ms of uptime"
+	e "$p: image {d} bytes, 7 loaded sections, sha256 {s}, magic 0x{x8}"
+	local i=0 va
+	for va in 0x00400000:64 0x00410000:64 0x00000000:64 0x00800000:128 0x02000000:256 0x01000000:256 0x04000000:64; do
+		e "$p: section $i: VA ${va%:*}, ${va#*:} KiB, backing 0x{x} at PA 0x{x}" "$p: section $i:"
+		i=$((i + 1))
+	done
+	e "$p: pool 0x{x} at PA 0x{x} (16 pages)"
+}
+
+# table_z3_record <probe>: yd_t6_fw_up's "Z3: rc" line and print_record's 7
+# lines, with the probe's name as the prefix.
+table_z3_record() {
+	local p=$1
+	e "$p: Z3: rc 0 step 0, {d} ms"
+	e "$p: Z3: image version 0x01050000, 7 sections loaded, 1 protected skipped, 9 table pages, 7 flushes"
+	e "$p: Z3: GPU_ID 0xa8670005 SHADER_PRESENT 0x0000000000050005 MMU_FEATURES 0x00002830 shared PA 0x{x16} clean rc 0"
+	e "$p: Z3: MCU_STATUS 0 before, 1 after, booted in {d} us, JOB_INT_RAWSTAT 0x{@J}" '' fw_job_bit31
+	e "$p: Z3: GLB version 1.5.0 (0x01050000), features 0x00000000, instr 0x00000071, 8 groups stride 0xa0"
+	e "$p: Z3: GLB input 0x04002000 output 0x04006000, CSG0 in 0x04003000 out 0x04007000 8 streams stride 0xc, CS0 in 0x04003400 out 0x04007200 features 0x{x8}"
+	e "$p: Z3: CORE_EN 0x0000000000050005, poweroff 0x000000eb progress 0x00271000 idle 0x00000013, ack_irq_mask 0x0400050e"
+	e "$p: Z3: init req 0x0000040e acked 0x0000010e in {d} us, PING acked in {d} us, GLB req 0x{@RQ} ack 0x{@AK}" '' fw_req_ack
+}
+
 # tools/probes/nanopc_t6/t6_fw/src/main.c on the success path: build, image,
 # the 7 loaded sections (in fw::Image::sections() order), the pool, then
 # yd_t6_fw_up's one call (Z1's power-on, Z2's AS0, the load, the boot): its
@@ -212,23 +241,8 @@ fw_req_ack() { (( ((16#${V[RQ]} ^ 16#${V[AK]}) & 0x10e) == 0 )); }
 # "t6_fw: FAIL: Z3 step N (name)" in place of PASS (differs, naming the step).
 table_t6_fw() {
 	table_boot
-	e 't6_fw: build {s}'
-	e 't6_fw: WDT0 period 22369 ms, fed until 60000 ms of uptime'
-	e 't6_fw: image {d} bytes, 7 loaded sections, sha256 {s}, magic 0x{x8}'
-	local i=0 va
-	for va in 0x00400000:64 0x00410000:64 0x00000000:64 0x00800000:128 0x02000000:256 0x01000000:256 0x04000000:64; do
-		e "t6_fw: section $i: VA ${va%:*}, ${va#*:} KiB, backing 0x{x} at PA 0x{x}" "t6_fw: section $i:"
-		i=$((i + 1))
-	done
-	e 't6_fw: pool 0x{x} at PA 0x{x} (16 pages)'
-	e 't6_fw: Z3: rc 0 step 0, {d} ms'
-	e 't6_fw: Z3: image version 0x01050000, 7 sections loaded, 1 protected skipped, 9 table pages, 7 flushes'
-	e 't6_fw: Z3: GPU_ID 0xa8670005 SHADER_PRESENT 0x0000000000050005 MMU_FEATURES 0x00002830 shared PA 0x{x16} clean rc 0'
-	e 't6_fw: Z3: MCU_STATUS 0 before, 1 after, booted in {d} us, JOB_INT_RAWSTAT 0x{@J}' '' fw_job_bit31
-	e 't6_fw: Z3: GLB version 1.5.0 (0x01050000), features 0x00000000, instr 0x00000071, 8 groups stride 0xa0'
-	e 't6_fw: Z3: GLB input 0x04002000 output 0x04006000, CSG0 in 0x04003000 out 0x04007000 8 streams stride 0xc, CS0 in 0x04003400 out 0x04007200 features 0x{x8}'
-	e 't6_fw: Z3: CORE_EN 0x0000000000050005, poweroff 0x000000eb progress 0x00271000 idle 0x00000013, ack_irq_mask 0x0400050e'
-	e 't6_fw: Z3: init req 0x0000040e acked 0x0000010e in {d} us, PING acked in {d} us, GLB req 0x{@RQ} ack 0x{@AK}' '' fw_req_ack
+	table_fw_image t6_fw
+	table_z3_record t6_fw
 	e 't6_fw: PASS' 't6_fw: (PASS|FAIL)'
 	table_reset t6_fw
 }
