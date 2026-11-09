@@ -128,15 +128,31 @@ gathers of one plane, joined with `(hi << 16) | lo` (`:115-151`).
 
 ## What is left
 
-1. **The compiler join** (wide128-shader). It needs a per-draw key bit per
-   sampler, set from `wide128_sampled` by the GL core or the back end, and
-   the companion slot per sampler, both as computed in
-   `emit_textures_inner`. Each look-up of a keyed sampler becomes two, the
-   second at the companion slot, joined as `(a.x, a.y, b.x, b.y)`. A gather
-   needs Mesa's 16-bit halves. A `usampler2D` names an RGBA8UI and an
-   RGBA32UI texture alike, so the key must come from the draw, not the
-   program.
-2. **The flip** (wide128-flip): the three classes into
+1. **Done since the back end: the compiler join and the per-draw key**
+   (wide128-shader). All of it is inert: `GC_SAMPLED_TEXFMTS` still holds no
+   128-bit class, so the key is always empty on a shipped draw.
+   - `f455cc1c`, the compiler half: `wide128::split_planes`
+     (`src/shaderc/online/vivante/wide128.rs`) turns each look-up on a keyed
+     unit into two, the second at the companion slot, joined as
+     `(a.x, a.y, b.x, b.y)`. The key is `Planes` (`set_compile_planes` /
+     `compile_planes`); `compile_vivante` runs the pass only for a non-empty
+     key. It refuses shadow, gradient and offset look-ups on a keyed unit,
+     and a companion that is no unit of its own or that the shader samples.
+   - `8c8fc3b6`, `2091d22d`: `wide128_sensitivity` names the bindings a
+     program's look-ups read, `wide128_planes` builds the stage's key from
+     the per-binding companion slots, and `wide128_variant` compiles a stage
+     again under a key.
+   - `1f37cd60`, the per-draw key from the GL core: `wide128_select`
+     (`src/gl/draw.rs`) takes `wide128_companions` (the slots
+     `emit_textures_inner` computes, over `wide128_sampled`), builds the key
+     per stage and points the draw at the cached variant. It refuses a draw
+     that needs a front-facing twin and a plane key at once. A `usampler2D`
+     names an RGBA8UI and an RGBA32UI texture alike, so the key comes from
+     the draw, not the program.
+   - Host test `tests/es3_wide128_gc.rs`.
+   Left of the join: a gather (it needs Mesa's 16-bit halves; no
+   `textureGather` split exists) and the no-alpha 1 (item 3).
+2. **The flip** (gc-wide128-flip, still left): the three classes into
    `GC_SAMPLED_TEXFMTS`, the gc-formats.md rows (`none` becomes the plane
    format) and the host dEQP measurement.
 3. **Caveats for those items.**
