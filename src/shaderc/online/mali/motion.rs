@@ -69,7 +69,10 @@ use crate::shaderc::online::ir::{IoKind, Module, INTERP_FLAT};
 /// The moved expressions one program may carry.
 pub const MAX_MOVED: usize = 4;
 /// The nodes of one moved expression.
-pub const MAX_NODES: usize = 8;
+/// Case 199's lane y (`float((i >> 1) - (i << 3)) / 64.0` of `int(v.y)`,
+/// fsarith_199_es3trunc.expect.json) is 10: the lane, `F2i`, the counts 1
+/// and 3, `Ishr`, `Ishl`, `Isub`, `I2f`, 1/64 and `Fmul`.
+pub const MAX_NODES: usize = 12;
 /// One node's bytes in [`encode`].
 const NODE_BYTES: usize = 6;
 /// The bytes [`encode`] writes at most.
@@ -109,8 +112,22 @@ impl Moved {
 /// them: the index is the byte in every record key, so an operation is only
 /// ever appended. [`flag`] marks movable exactly these.
 /// `U2f` moves only off a flat varying (case 89's `float(v_idx) / 4.0`,
-/// intbool_89_flatlast).
-const OPS: [Alu; 5] = [Alu::Fadd, Alu::Fmul, Alu::Fneg, Alu::Ffma, Alu::U2f];
+/// intbool_89_flatlast); `F2i` to `Isub` (5-11) only off a flat or a
+/// convergent one (case 199's integer lanes, fsarith_199_es3trunc).
+pub(super) const OPS: [Alu; 12] = [
+    Alu::Fadd,
+    Alu::Fmul,
+    Alu::Fneg,
+    Alu::Ffma,
+    Alu::U2f,
+    Alu::F2i,
+    Alu::F2u,
+    Alu::I2f,
+    Alu::Ishl,
+    Alu::Ishr,
+    Alu::Ushr,
+    Alu::Isub,
+];
 
 /// `moved` as the bytes of a record key, into `out`; the bytes written. An
 /// operation outside [`OPS`] is a defect (it would otherwise travel as
@@ -217,7 +234,7 @@ const SINK: u16 = u16::MAX - 1;
 /// Movability (`FLAG_MOVABLE`, `FLAG_UNMOVABLE`) and interpolation
 /// (`FLAG_INTERP_CONVERGENT`, `FLAG_INTERP_FLAT`, else the varyings'
 /// interpolation) of a value.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Flag {
     Unmovable,
     Convergent,
@@ -342,14 +359,19 @@ fn dominance<'a>(nir: &'a Nir<'a>, colour: [Val; 4]) -> Dom<'a> {
 }
 
 /// `update_movable_flags` for a value: a constant is movable and
-/// convergent; a varying's lane movable and interpolated; gl_PointCoord,
+/// convergent; a varying's lane movable and flat when it is declared so,
+/// convergent when the vertex shader computes it from uniforms alone
+/// (`convergent32_mask`, nir_opt_varyings.c:4620-4654: the link's
+/// uniform-only set, which nir_fs.rs loads `.src_flat32`), else
+/// interpolated; an operation over convergent values is convergent, any
+/// one [`OPS`] numbers (:3888, fsarith_199_es3trunc); gl_PointCoord,
 /// gl_FragCoord.z, a uniform (measured, above) and a look-up are not; an
 /// operation is movable when its sources are and, on an interpolated
 /// value, when it commutes with interpolation; a dot product's lowered
 /// chain is not (module text: the linker sees the `fdot`).
 fn flag(f: &Fs<'_>, m: &Module<'_>, v: Val, depth: u8) -> Flag {
     let nir = &f.nir;
-    let Val::Lane(n, _) = v else {
+    let Val::Lane(n, comp) = v else {
         return if matches!(v, Val::Const(_)) { Flag::Convergent } else { Flag::Unmovable };
     };
     if depth > MAX_NODES as u8 {
@@ -364,6 +386,8 @@ fn flag(f: &Fs<'_>, m: &Module<'_>, v: Val, depth: u8) -> Flag {
             } else if m.inputs.iter().any(|d| d.location == loc && d.kind == IoKind::Varying && d.interp == INTERP_FLAT)
             {
                 Flag::Flat
+            } else if f.prec.consts.flat(loc, comp) {
+                Flag::Convergent
             } else {
                 Flag::Interpolated
             }
@@ -384,7 +408,7 @@ fn flag(f: &Fs<'_>, m: &Module<'_>, v: Val, depth: u8) -> Flag {
                 }
             }
             if flags[..op.arity()].iter().all(|f| *f == Flag::Convergent) {
-                return Flag::Convergent;
+                return if OPS.contains(&op) { Flag::Convergent } else { Flag::Unmovable };
             }
             /* the sources' interpolation, which must agree (:3866-3881): a
              * flat value and an interpolated one never become one input */
@@ -550,3 +574,7 @@ fn find(f: &Fs<'_>, m: &Module<'_>, colour: [Val; 4]) -> Result<Option<(u16, u8,
     }
     Ok(None)
 }
+
+#[cfg(test)]
+#[path = "motion_tests.rs"]
+mod tests;
