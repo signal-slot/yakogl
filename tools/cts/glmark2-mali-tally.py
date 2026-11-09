@@ -45,8 +45,11 @@ Verdict per scene, the first that holds:
   crash      exit >= 128 (a signal: exit - 128), or a loaded line and no
              yakogl-mali-exit line (the process died before atexit)
   oom        "out of GPU memory" or a refused tiled copy (common-tally.py's
-             GLMARK2_BAD_LINES out-of-memory, tiled-copy)
-  gl-error   "GL error 0x... in ..." (GLMARK2_BAD_LINES gl-error)
+             GLMARK2_BAD_LINES out-of-memory, tiled-copy), the back end's
+             "mali: the OSAL refused a buffer" and "mali: no sample store"
+             (MALI_OOM_LINES), "GL error 0x505" and the kernel's "Out of
+             memory:" and "page allocation failure" in the .log or .kmsg
+  gl-error   "GL error 0x... in ..." (GLMARK2_BAD_LINES gl-error) but 0x505
   fail       anything else wrong: Set up failed, Unsupported, no result line,
              exit not 0, no "yakogl-mali: loaded" line (the board's Mesa ran:
              the sonama trap), refused draws or programs (the exit line's
@@ -104,6 +107,19 @@ GL_ERROR_RE = re.compile(r"GL error (0x[0-9a-fA-F]+) in (\w+)")
 # the scenes the results row names in bold, as the other boards' rows do
 SLOW_SCENES = ("[terrain] <default>", "[shadow] <default>", "[refract] <default>")
 OWNER_309 = ("refused", "draw-refused", "draw-not-recorded")
+# the memory failures that make a scene oom besides common-tally.py's out of GPU memory and tiled
+# copy: the Mali back end's own lines (src/mali/backend.rs alloc(), "no sample store": the MSAA
+# frame is degraded, so the scene did not run as asked), GL_OUT_OF_MEMORY (0x505) and the
+# kernel's (in the scene's .log or .kmsg)
+MALI_OOM_LINES = (
+    ("osal-refused", re.compile(r"mali: the OSAL refused a buffer of \d+ bytes")),
+    ("no-sample-store", re.compile(r"mali: no sample store of \d+ bytes")),
+)
+GL_OOM_RE = re.compile(r"GL error 0x0*505 in ", re.I)
+KERNEL_OOM_RE = re.compile(r"Out of memory:|page allocation failure")
+OOM_RE = re.compile(r"out of GPU memory|no GPU memory for|%s|%s|%s" % (
+    "|".join(rx.pattern for _, rx in MALI_OOM_LINES), GL_OOM_RE.pattern, KERNEL_OOM_RE.pattern), re.I)
+STAMP_RE = re.compile(r"^\s*(?:<\d+>)?\[\s*\d+\.\d+\]\s*")
 
 
 class Malformed(Exception):
@@ -232,6 +248,16 @@ def run_files(rundir, scenes):
     return files
 
 
+def kmsg_memory_lines(path):
+    """the kernel's memory-failure lines of a .kmsg, time stamps off (not mali-kmsg.py's own line)"""
+    out = []
+    for line in CT.plain_lines(CT.read_text(path) or ""):
+        if line.startswith("{") or KMSG_RE.match(line.strip()) or not KERNEL_OOM_RE.search(line):
+            continue
+        out.append(STAMP_RE.sub("", line.strip()))
+    return out
+
+
 def first_line(text, rx):
     for line in CT.plain_lines(text):
         if rx.search(line):
@@ -284,8 +310,13 @@ def tally_scene(index, slug, info, paths, refs, tol):
         for name, rx in CT.GLMARK2_BAD_LINES:
             if rx.search(line):
                 bad[name] = bad.get(name, 0) + 1
-    sc["gl_errors"] = bad.get("gl-error", 0)
-    sc["oom_lines"] = bad.get("out-of-memory", 0) + bad.get("tiled-copy", 0)
+    all_lines = CT.plain_lines(text)
+    gl_oom = sum(1 for l in all_lines if GL_OOM_RE.search(l))
+    kmem = kmsg_memory_lines(paths["kmsg"])
+    sc["gl_errors"] = max(bad.get("gl-error", 0) - gl_oom, 0)
+    sc["oom_lines"] = (bad.get("out-of-memory", 0) + bad.get("tiled-copy", 0) + gl_oom + len(kmem)
+                       + sum(1 for l in all_lines if KERNEL_OOM_RE.search(l)
+                             or any(rx.search(l) for _, rx in MALI_OOM_LINES)))
     ex = None
     for line in CT.plain_lines(text):
         m = EXIT_RE.search(line)
@@ -312,11 +343,11 @@ def tally_scene(index, slug, info, paths, refs, tol):
         # without the loaded line the board's Mesa ran (a fail below): no exit line is expected
         found.append(("crash", "crash: no yakogl-mali-exit line (the process died before atexit)"))
     if sc["oom_lines"]:
-        l = first_line(text, re.compile(r"out of GPU memory|no GPU memory for"))
-        found.append(("oom", "oom: " + normalize(l)))
+        l = first_line(text, OOM_RE) or kmem[0]
+        found.append(("oom", "oom: " + normalize(STAMP_RE.sub("", l))))
     if sc["gl_errors"]:
         codes = sorted({"GL error %s in %s" % (m.group(1).lower(), m.group(2))
-                        for m in GL_ERROR_RE.finditer(text)})
+                        for m in GL_ERROR_RE.finditer(text) if int(m.group(1), 16) != 0x505})
         found.append(("gl-error", "gl-error: " + ", ".join(codes)))
     if not LOADED_RE.search(text):
         found.append(("fail", "fail: no 'yakogl-mali: loaded' line (not the panthor-gles pair)"))
@@ -339,7 +370,8 @@ def tally_scene(index, slug, info, paths, refs, tol):
         sc["also"] = [redact(f[1]) for f in found[1:]]
     # the lines an issue quotes: the failure lines of the log, then the kernel's first
     pat = re.compile(r"GL error|out of GPU memory|no GPU memory|refused|incomplete|Set up failed|"
-                     r"Unsupported|Error:|yakogl-mali-exit|Segmentation|Aborted|panic")
+                     r"Unsupported|Error:|yakogl-mali-exit|Segmentation|Aborted|panic|no sample store|"
+                     r"Out of memory:|page allocation failure")
     lines, seen = [], {}
     for l in CT.plain_lines(text):
         if pat.search(l):
@@ -348,7 +380,9 @@ def tally_scene(index, slug, info, paths, refs, tol):
                 lines.append(l)
             seen[l] = seen.get(l, 0) + 1
     sc["excerpt"] = [l if seen[l] == 1 else "%s (%d times)" % (l, seen[l]) for l in lines][:4]
-    if km["first"] != "-":
+    for l in list(dict.fromkeys(kmem))[:2]:
+        sc["excerpt"].append("kmsg: " + redact(l))
+    if km["first"] != "-" and "kmsg: " + redact(km["first"]) not in sc["excerpt"]:
         sc["excerpt"].append("kmsg: " + redact(km["first"]))
     return sc
 
@@ -577,6 +611,12 @@ def render_status_row(t):
     return [line]
 
 
+def owned_309(cause):
+    """a cause plan #309 owns (OWNER_309: a refused program, a refused or unrecorded draw); an
+    oom cause is not, even when its line says the OSAL refused a buffer"""
+    return any(cause.startswith("fail: " + name) for name in OWNER_309)
+
+
 def render_causes(t):
     e = t["env"]
     run = os.path.basename(os.path.normpath(t["rundir"]))
@@ -603,7 +643,7 @@ def render_causes(t):
         body += ["", "Run directory `%s`, tallied by `tools/cts/glmark2-mali-tally.py`. Rerun the scene "
                  "alone with tools/cts/mali-glmark2-run.sh to reproduce. ROADMAP.md stage 2 asks for all 33 "
                  "scenes with no failed scene, no GL error and no scene out of GPU memory." % run]
-        if any("refused" in x for r in rows for x in [r["cause"]] + r["also"]):
+        if any(owned_309(x) for r in rows for x in [r["cause"]] + r["also"]):
             body += ["", "A refusal of the Mali back end or its compiler: plan #309 owns these; "
                      "cross-reference its issue rather than opening a new one."]
         out += ["", "## Draft issue %d" % n, "", "Title: %s" % title, ""] + body

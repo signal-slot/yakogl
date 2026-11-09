@@ -1,0 +1,2 @@
+kmsg: resets=0 timeouts=0 mmu_faults=0 fw_faults=0 gpu_faults=0 other_panthor=0 first=-
+[  812.345678] Out of memory: Killed process 2841 (glmark2-es2-mal) total-vm:4194304kB
