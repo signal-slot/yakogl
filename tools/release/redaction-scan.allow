@@ -48,3 +48,28 @@ info | email | * | @kdab\.com\b | upstream: authors of the Slint sources the pat
 info | email | driver/src/vivante/hw/*.xml.h | @ | upstream: authors of the etnaviv rules-ng headers
 info | email | driver/src/v3d/* | \brobclark@freedesktop\.org\b | upstream: Mesa author of the code this file follows
 info | email | tools/vivante/*.patch | @gmail\.com\b | upstream: etnaviv author in a Mesa patch
+# Self-test fixtures of files held by other plans (their owners may drop the
+# fixture instead; see docs/release/redaction-audit.md part 4).  One rule per
+# value and exact path.  The names under .example and example.com are
+# reserved (RFC 2606); the addresses are private-range inputs of a redaction
+# or refusal test.
+drop | email | tools/board_selftest.sh | tester[@]pi5-fake\.example\b | RFC 2606 .example fake BOARD_HOST of the pi5 dry-run self-test
+drop | private-ipv4 | tools/board_selftest.sh | \b100\.64\.7\.9\b | private-range input of a redaction test: a fake ssh error that must be redacted
+drop | private-ipv4 | tools/board_selftest.sh | \b10\.20\.30\.40\b | private-range input of a redaction test: console line that redact_run rewrites
+drop | private-ipv4 | tools/cts/mali-slice-readme-selftest.sh | \b10\.1\.2\.3\b | private-range input of a refusal test: the slice check must refuse it
+drop | login-at-host | tools/cts/mali-slice-readme-selftest.sh | root[@]board\b | input of a refusal test: the slice check must refuse it
+drop | email | tools/cts/x2-glmark2-scenes-selftest.sh | \bt[@]example\.com\b | RFC 2606 example.com git identity of the self-test repository
+drop | home-path | tools/cts/mali-glmark2-selftest.sh | /ho[m]e/yakogl-mali-glmark2\b | the fake board's stage directory in a self-test, no user name
+drop | private-ipv4 | tools/cts/mali-fail-triage.py | \b10\.1\.2\.3\b | private-range input of a redaction test (the scrub self-check)
+drop | login-at-host | tools/cts/mali-fail-triage.py | root[@]nano\b | input of a redaction test (the scrub self-check)
+drop | private-ipv4 | tools/cts/testdata/mali-fail-triage/slices/2026-11-09-t6-gles2-S1-11111111/kmsg/c.txt | \b10\.9\.8\.7\b | private-range input of a redaction test: a dirty kmsg line
+drop | login-at-host | tools/cts/testdata/mali-fail-triage/slices/2026-11-09-t6-gles2-S1-11111111/kmsg/c.txt | root[@]board\b | input of a redaction test: a dirty kmsg line
+drop | login-at-host | tools/cts/testdata/mali-slice-redact/dirty/kmsg/a.txt | root[@]board\b | input of a redaction test: a dirty kmsg line
+drop | tailnet-dns | tools/cts/testdata/mali-slice-redact/dirty/meta.txt | \bboard-1\.example\.ts\.net\b | input of a redaction test under the reserved example name (RFC 2606)
+drop | private-ipv4 | tools/cts/mali-slice-redact.py | \b100\.64\.0\.0\b | private-range input of a redaction test: the tailnet range in the tool's help
+drop | private-ipv4 | tools/cts/mali-slice-redact.py | \b100\.64\.0\.9\b | private-range input of a redaction test: a tailnet address the check must report
+drop | ipv6-local | tools/cts/mali-slice-redact.py | \bfe80::1\b | link-local input of a redaction test
+drop | login-at-host | tools/cts/mali-slice-redact.py | root[@]board\b | input of a redaction test
+drop | login-at-host | tools/cts/mali-slice-redact.py | root[@]192\.0\.2\.7\b | input of a redaction test (RFC 5737 address)
+drop | tailnet-dns | tools/cts/mali-slice-redact.py | \bboard-1\.example\.ts\.net\b | input of a redaction test under the reserved example name (RFC 2606)
+drop | email | tools/cts/mali-slice-redact.py | serial-getty[@]ttyS2\.service\b | systemd unit instance in the tool's help, not an address
