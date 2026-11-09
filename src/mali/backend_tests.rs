@@ -1165,6 +1165,17 @@ fn each_refusal_is_the_exact_line_of_its_cause() {
     });
     // SAFETY: the texels the mock gave above; no frame holds them now.
     unsafe { m_free(&mut texels) };
+    /* a vertex shader reading two samplers (vslookup_149_rank: `u_s2`,
+     * `u_s0`): the vertex tables hold one */
+    let two_vs = include_str!("../../tools/mali/testdata/vslookup_149_rank.vert");
+    let two_fs = include_str!("../../tools/mali/testdata/vslookup_149_rank.frag");
+    with_programs(two_vs, two_fs, |vs, fs| {
+        let mut draw = base;
+        (draw.vs, draw.fs) = (vs, fs);
+        let got = why(&draw);
+        assert_eq!(got, not_built(NOT_BUILT_VERTEX_TEXTURES), "two vertex samplers");
+        reached.push(NOT_BUILT_VERTEX_TEXTURES);
+    });
     let lines = [
         NO_MALI_PROGRAM,
         INVALID_NO_TARGET,
@@ -1192,6 +1203,7 @@ fn each_refusal_is_the_exact_line_of_its_cause() {
         NOT_BUILT_TEXTURE_NPOT_CHAIN,
         INVALID_TEXTURE_STORAGE,
         NOT_BUILT_TEXTURE_FEEDBACK,
+        NOT_BUILT_VERTEX_TEXTURES,
         frame::INVALID_TEXTURE_ALIGN,
         frame::NOT_BUILT_TEXTURE_SIZE,
     ];

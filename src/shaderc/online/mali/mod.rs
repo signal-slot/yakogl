@@ -176,13 +176,10 @@ pub enum MaliError {
     FusedMultiplyAdd,
     /// An invariant output.
     Invariant,
-    /// A vertex shader look-up other than one 2D look-up at a level (a
-    /// second one, a size query).
+    /// A vertex shader look-up other than 2D or cube look-ups at a level (a
+    /// size query, a second look-up of one sampler at one coordinate and
+    /// level, which Mesa's CSE makes one).
     TexVertex,
-    /// A vertex shader look-up at a coordinate with a constant lane (a
-    /// cube's intrinsics fold no constant; no reference draws the shape,
-    /// for a 2D look-up either).
-    TexVertexConstant,
     /// A fragment shader look-up other than `texture2D(sampler2D, vec2)`
     /// (a bias, a level, a projection, a cube map, a texture size).
     TexKind,
@@ -298,7 +295,7 @@ pub enum MaliError {
 
 impl MaliError {
     /// Every gap, for the tests that check the messages are distinct.
-    pub const GAPS: [MaliError; 62] = [
+    pub const GAPS: [MaliError; 61] = [
         MaliError::LinkedVertexNotLowered,
         MaliError::BlendVariantNotLowered,
         MaliError::ControlFlow,
@@ -319,7 +316,6 @@ impl MaliError {
         MaliError::FusedMultiplyAdd,
         MaliError::Invariant,
         MaliError::TexVertex,
-        MaliError::TexVertexConstant,
         MaliError::TexKind,
         MaliError::TexCount,
         MaliError::TexCoord,
@@ -416,10 +412,7 @@ impl MaliError {
                 "Valhall: an invariant output (Mesa keeps its arithmetic exact, unfused) is not lowered yet"
             }
             MaliError::TexVertex => {
-                "Valhall: a vertex shader texture look-up other than one 2D look-up at a level (a second one, a size query) is not lowered yet"
-            }
-            MaliError::TexVertexConstant => {
-                "Valhall: a vertex shader look-up at a coordinate with a constant lane (a shape no reference draws) is not lowered yet"
+                "Valhall: a vertex shader texture look-up other than 2D or cube look-ups at a level (a size query, the same look-up twice) is not lowered yet"
             }
             MaliError::TexKind => {
                 "Valhall: a texture look-up other than texture2D(sampler2D, coordinate) (a bias, a level, a projection, a cube map, a size query) is not lowered yet"
@@ -640,11 +633,11 @@ pub struct MaliShader<'k> {
     /// shader's: both IDVS programs read the vertex tables). The first of
     /// [`MaliShader::samplers`].
     pub sampler: Option<u8>,
-    /// Fragment: the sampler bindings at descriptor indices 0, 1, .. of the
-    /// stage's texture and sampler tables, one per sampler the program
-    /// reads, in binding order (texmore_2: `u_tex0`, `u_tex1`; each
-    /// look-up's handle names its index, [`nir_fs::tex_handle`]); empty
-    /// for a vertex shader, whose one is [`MaliShader::sampler`].
+    /// The sampler bindings at descriptor indices 0, 1, .. of the stage's
+    /// texture and sampler tables, one per sampler the program reads, in
+    /// binding order (texmore_2: `u_tex0`, `u_tex1`; case149_vsunits:
+    /// `u_s0` .. `u_s15` of a vertex shader; each look-up's handle names
+    /// its index, [`nir_fs::tex_handle`]).
     pub samplers: &'k [u8],
     /// Fragment: the uniform block the program loads from memory (an
     /// `LD_PKA` of a uniform array element at a run-time index), in Mesa's
@@ -925,7 +918,7 @@ pub struct StageCode<'s> {
     /// The expressions moved into the vertex shader ([`MaliShader::moved`]).
     moved: [motion::Moved; motion::MAX_MOVED],
     nmoved: usize,
-    /// The fragment stage's sampler bindings ([`MaliShader::samplers`]).
+    /// The stage's sampler bindings ([`MaliShader::samplers`]).
     samplers: [u8; nir_fs::MAX_LOOK_UPS],
     nsamplers: usize,
 }
@@ -1251,7 +1244,15 @@ fn compile_stage<'s>(
         let var = finish(&mut p, &mut layout, false, &ubo, scratch, &mut out[pos_words..], marks)?;
         sc.info.preload = pos.preload;
         sc.info.work_reg_count = pos.work_reg_count;
-        sc.info.sampler = vs.sampler;
+        /* the bindings by descriptor index (`nir::build` ranks them, as
+         * the fragment's) */
+        for (index, sampler) in vs.bound_samplers() {
+            let i = usize::from(index);
+            let slot = sc.samplers.get_mut(i).ok_or(MaliError::Defect(Defect::IrIndex))?;
+            *slot = sampler;
+            sc.nsamplers = sc.nsamplers.max(i + 1);
+        }
+        sc.info.sampler = sc.samplers[..sc.nsamplers].first().copied();
         if var.words > 0 {
             sc.info.secondary = Some(Secondary {
                 offset: (pos_words * 8) as u32,

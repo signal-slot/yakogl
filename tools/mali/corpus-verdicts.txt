@@ -23,7 +23,7 @@ tools/shaders/es100/contloops.frag: Valhall: a break or continue behind a run-ti
 tools/shaders/es100/cubebias.frag: ok
 tools/shaders/es100/cubebias.vert: ok
 tools/shaders/es100/cubelod.frag: ok
-tools/shaders/es100/cubelod.vert: Valhall: a vertex shader look-up at a coordinate with a constant lane (a shape no reference draws) is not lowered yet
+tools/shaders/es100/cubelod.vert: ok
 tools/shaders/es100/cubemap.vert: ok
 tools/shaders/es100/databreak.frag: ok
 tools/shaders/es100/deadloop.frag: ok
