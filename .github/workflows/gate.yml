@@ -58,7 +58,13 @@ jobs:
     # its compilers to the host's free memory (tools/check.sh, compiler slots),
     # so a runner that shares its machine with farm agents is safe to use.
     runs-on: [self-hosted, Linux, X64, yakogl-gate]
-    timeout-minutes: 180
+    # The full set (a diff that reaches every scope) takes about 2 h 45 min
+    # on a runner VM with 8 cores and 3 compiler slots when its host is quiet
+    # (run 42599974888, 2026-11-09) and ran past 3 h when the host was busy
+    # (run 42653322316, cancelled at 180 min with the test rows still going).
+    # A cancelled run tells nothing about the code, so the limit leaves room.
+    # It is still the only guard against a hung row, so it stays bounded.
+    timeout-minutes: 300
     env:
       PYTHONDONTWRITEBYTECODE: "1"
       # Rows at once (tools/check.sh --jobs). Measured on 8 cores (runner A's
