@@ -26,11 +26,7 @@
 
 #![cfg(all(feature = "host-test", feature = "gpu-vivante"))]
 
-#[path = "../src/vivante/layout.rs"]
-#[allow(dead_code)]
-mod layout;
-
-use layout::*;
+use yakogl::vivante::layout::*;
 
 /// `etna_compute_tileoffset` (`etnaviv_rs.c:626-652`), single pipe, written
 /// out again: the byte offset of a tile- or super-tile-aligned corner.

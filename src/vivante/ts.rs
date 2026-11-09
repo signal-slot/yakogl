@@ -9,10 +9,11 @@
 //! are files under `src/gallium/drivers/etnaviv/` unless a path says
 //! otherwise. Nothing is wired to the back end yet.
 //!
-//! The module is self-contained: no `crate::` or `super::` path, so a host
-//! test can include it with `#[path]`. The register addresses are copies of
-//! the `regs.rs` constants named beside each one; the test file compares
-//! them against `regs.rs`.
+//! The module is self-contained: no `crate::` or `super::` path; the host
+//! test `tests/gc_ts_words.rs` takes it from the crate as
+//! `yakogl::vivante::ts`. The register addresses are copies of the `regs.rs`
+//! constants named beside each one; the test file compares them against
+//! `regs.rs`.
 
 #![allow(dead_code)]
 
@@ -202,6 +203,26 @@ pub struct ClearMask {
     pub stencil: bool,
 }
 
+/// Mesa's `lrint` for the scaled depth of [`depth_clear_word`]: round to
+/// nearest, ties to even (`util/u_pack_color.h:546-580`), on a value below
+/// 2^24. `f64::round_ties_even` is that rounding, but a `std` method absent
+/// from the `core` this module must compile against, so the rounding is
+/// done here: truncate, then step to the even neighbour on an exact half.
+/// NaN, 0 and negatives land on 0, as `lrint` followed by the `as u32` cast
+/// did.
+fn round_ties_even_u32(x: f64) -> u32 {
+    if x.is_nan() || x <= 0.0 {
+        return 0;
+    }
+    let i = x as u32; // truncation toward zero; x is below 2^24 in both uses
+    let t = x - i as f64;
+    if t > 0.5 || (t == 0.5 && i & 1 == 1) {
+        i + 1
+    } else {
+        i
+    }
+}
+
 /// `translate_clear_depth_stencil` (etnaviv_translate.h:481-492) over
 /// `util_pack_z_stencil` (util/u_pack_color.h:546-580, :613-632): the clear
 /// word `TS_DEPTH_CLEAR_VALUE` and the RS fill take. Z16 is repeated in both
@@ -210,11 +231,11 @@ pub struct ClearMask {
 pub fn depth_clear_word(fmt: DepthFormat, depth: f64, stencil: u8) -> u32 {
     match fmt {
         DepthFormat::Z16 => {
-            let z = if depth >= 1.0 { 0xffff } else { (depth * 65535.0).round_ties_even() as u32 };
+            let z = if depth >= 1.0 { 0xffff } else { round_ties_even_u32(depth * 65535.0) };
             z | z << 16
         }
         DepthFormat::X8Z24 | DepthFormat::S8Z24 => {
-            let z = if depth >= 1.0 { 0xff_ffff } else { (depth * 16_777_215.0).round_ties_even() as u32 };
+            let z = if depth >= 1.0 { 0xff_ffff } else { round_ties_even_u32(depth * 16_777_215.0) };
             let w = z << 8;
             if fmt == DepthFormat::S8Z24 {
                 w | stencil as u32
