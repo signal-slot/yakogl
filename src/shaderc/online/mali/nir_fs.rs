@@ -862,6 +862,9 @@ pub struct Fs<'s> {
     /// gl_FragCoord's x and y narrowed to fp16, the mediump read of an ES
     /// 1.00 shader ([`Fs::frag_coord16`]).
     frag16: Option<[Val; 2]>,
+    /// The fp32 nodes of a mediump ES 3.00 shader's arithmetic on its highp
+    /// gl_FragCoord read, one bit a node ([`Fs::pos32`]).
+    pos32: [u64; nir::MAX_NODES / 64],
     /// Each local's rank by its first load or store in the walk, and the
     /// colour's by its first store (`u32::MAX`: none yet): the order
     /// `nir_lower_vars_to_ssa` registers the variables in
@@ -1291,6 +1294,185 @@ impl<'s> Fs<'s> {
     /// for x, 1 for y.
     fn frag16_lane(&self, v: Val) -> Option<u8> {
         self.frag16?.iter().position(|&l| l == v).map(|k| k as u8)
+    }
+
+    /// `v` is an fp32 value of a mediump ES 3.00 shader's arithmetic on its
+    /// highp gl_FragCoord ([`Fs::alu_pos32`]): x, y, or a node made from them.
+    fn pos32(&self, v: Val) -> bool {
+        matches!(v, Val::Lane(n, _) if self.pos32[n as usize / 64] >> (n % 64) & 1 != 0)
+    }
+
+    fn mark_pos32(&mut self, v: Val) {
+        if let Val::Lane(n, _) = v {
+            self.pos32[n as usize / 64] |= 1 << (n % 64);
+        }
+    }
+
+    /// `v` is an fp32 value of the position ([`Fs::pos32`]) or a lane of the
+    /// `vec2` of two narrowed ones ([`Fs::narrow_pos32`]).
+    fn pos_coord(&self, v: Val) -> bool {
+        let narrowed = |f: &Self, x: Val| matches!(f.alu_of(x), Some((Alu::F2f16, [p, ..])) if f.pos32(p));
+        self.pos32(v) || matches!(self.alu_of(v), Some((Alu::Vec2, [x, ..])) if narrowed(self, x))
+    }
+
+    /// `v` is made from the fp32 position ([`Fs::pos32`]): one of its
+    /// nodes, or a node with such an operand (the narrowed lanes, their
+    /// `vec2` and the fp16 arithmetic on it). A node's operands are older
+    /// nodes, so one pass in order marks them all.
+    fn made_of_pos(&self, v: Val) -> bool {
+        match v {
+            Val::Lane(n, _) | Val::Pair(n, _) => tainted(&self.pos_taint(n as usize + 1), v),
+            _ => false,
+        }
+    }
+
+    /// The coordinates of the pixel the value `v` is computed from: bit 0
+    /// x, bit 1 y (the `U2F32` of the preload's halves, [`Fs::frag_coord`]).
+    fn pos_axes(&self, v: Val) -> u8 {
+        let Val::Lane(n, _) = v else { return 0 };
+        let mut axes = [0u8; nir::MAX_NODES];
+        for i in 0..=(n as usize).min(self.nir.n.saturating_sub(1)) {
+            let nd = self.nir.nodes[i];
+            axes[i] = match (nd.kind, nd.src[0]) {
+                (Kind::Alu(Alu::U2f32), Val::Lane(p, k)) if self.nir.nodes[p as usize].kind == Kind::PixelCoord => {
+                    1 << k
+                }
+                _ => nd.src.iter().fold(0, |a, &s| match s {
+                    Val::Lane(j, _) | Val::Pair(j, _) => a | axes[j as usize],
+                    _ => a,
+                }),
+            };
+        }
+        axes[n as usize]
+    }
+
+    /// [`Fs::made_of_pos`] of the first `n` nodes, one bit a node.
+    fn pos_taint(&self, n: usize) -> [u64; nir::MAX_NODES / 64] {
+        let mut t = [0u64; nir::MAX_NODES / 64];
+        for i in 0..n.min(self.nir.n) {
+            if self.pos32[i / 64] >> (i % 64) & 1 != 0 || self.nir.nodes[i].src.iter().any(|&s| tainted(&t, s)) {
+                t[i / 64] |= 1 << (i % 64);
+            }
+        }
+        t
+    }
+
+    /// The lane of the narrowed `vec2` ([`Fs::narrow_pos32`]) that the fp16
+    /// value `v` is computed from in case 218's form, `(b + k) * c` of two
+    /// constants (its `(b + 0.5) / 4.0`, the divide a product); `None` for
+    /// another form (`b * 0.5`, `b * 0.5 + 1.0`, a second product: a
+    /// chain of constants NIR may reassociate, no reference).
+    fn pos_lane(&self, v: Val) -> Option<u8> {
+        let Some((Alu::Fmul, [sum, Val::Const(_), _])) = self.alu_of(v) else { return None };
+        let Some((Alu::Fadd, [Val::Lane(n, k), Val::Const(_), _])) = self.alu_of(sum) else { return None };
+        let nd = self.nir.nodes[n as usize];
+        let narrowed = |s: Val| matches!(self.alu_of(s), Some((Alu::F2f16, [p, ..])) if self.pos32(p));
+        (nd.kind == Kind::Alu(Alu::Vec2) && nd.width == 2 && nd.src[..2].iter().all(|&s| narrowed(s))).then_some(k)
+    }
+
+    /// `v` is gl_FragCoord's z or w ([`Kind::FragCoordZw`]).
+    fn frag_zw_lane(&self, v: Val) -> bool {
+        matches!(v, Val::Lane(n, _) if self.nir.nodes[n as usize].kind == Kind::FragCoordZw)
+    }
+
+    /// One lane of a mediump ES 3.00 shader's operation on its highp
+    /// gl_FragCoord (builtin_variables.cpp:1333-1335), every operand an fp32
+    /// value of the read ([`Fs::pos32`]) or a constant: lower_precision
+    /// leaves it at fp32 (lower_precision.cpp:295-312, an operand is highp),
+    /// as NIR has it on v10 (gl_test case 218's `step(32.0, x)` and `(x -
+    /// 32.0 * right) / 8.0`, `floor`; fcfp16_218_coord.expect.json). A value
+    /// stored to a mediump local is narrowed there ([`Fs::narrow_pos32`]);
+    /// `step`'s `b2f`, whose narrowing NIR folds away, is kept at fp32, and
+    /// what reads it is NIR's folds of a select of constants:
+    /// * `inot(flt(a, b))` is `fge(a, b)` (nir_opt_algebraic.py:738-739; the
+    ///   position and a constant are numbers): `FCMP_OR.f32.ge`;
+    /// * `b2f32(a)` is `bcsel_pan(a, 1.0, 0.0)` (bifrost_nir_algebraic.py:128),
+    ///   a product of it by a constant `bcsel(a, b * d, 0.0 * d)` (nir_opt_
+    ///   algebraic.py:3430; `f2f32(fmul16(32.0, b2f16(a)))` exact, so at fp32)
+    ///   and its negation `bcsel(a, -b, -c)` (:1126): `CSEL.u32.eq` of
+    ///   -32.0 and -0.0, then `FADD.f32`;
+    /// * a compare of a constant with it is that of each side
+    ///   (:1050, :1044), `bcsel(a, true, false)` is `a`: `right > 0.5` is the
+    ///   `fge` itself (fcfp16_218_shadowcmp.stderr's `i2i16 %12`).
+    ///
+    /// Another operation or form is [`MaliError::FragCoordMediump`].
+    fn alu_pos32(
+        &mut self,
+        m: &Module<'_>,
+        a: AluOp,
+        srcs: &[ir::Src; 3],
+        s: [Val; 3],
+        at: usize,
+    ) -> Result<Val, MaliError> {
+        let [x, y, _] = s;
+        let u = Val::Undef;
+        let b2f = |f: &Self, v: Val| match f.alu_of(v) {
+            Some((Alu::B2f, [c, ..])) => Some(c),
+            _ => None,
+        };
+        let r = match a {
+            AluOp::Bnot => match self.alu_of(x) {
+                Some((Alu::Fcmp(Cmpf::Lt), [p, q, _])) => self.op32(Alu::Fcmp(Cmpf::Ge), [p, q, u], at)?,
+                _ => return Err(MaliError::FragCoordMediump),
+            },
+            AluOp::Flt | AluOp::Fle if b2f(self, x).or(b2f(self, y)).is_some() => {
+                let cmp = |p: f32, q: f32| if a == AluOp::Flt { p < q } else { p <= q };
+                let (c, sides) = match (x, y, b2f(self, x), b2f(self, y)) {
+                    (Val::Const(k), _, _, Some(c)) => (c, [1.0, 0.0].map(|v| cmp(f32::from_bits(k), v))),
+                    (_, Val::Const(k), Some(c), _) => (c, [1.0, 0.0].map(|v| cmp(v, f32::from_bits(k)))),
+                    _ => return Err(MaliError::FragCoordMediump),
+                };
+                if sides != [true, false] {
+                    return Err(MaliError::FragCoordMediump);
+                }
+                c
+            }
+            /* `step`'s `fge` of the position and a constant only: the
+             * `flt` of `float(x < k)` or `float(!(x >= k))`, or the
+             * constant first, Mesa may select with the arms swapped, no
+             * reference pins it */
+            AluOp::B2f => match self.alu_of(x) {
+                Some((Alu::Fcmp(Cmpf::Ge), [p, Val::Const(_), _])) if self.pos32(p) => {
+                    self.lane32(m, a, srcs, s, at)?
+                }
+                _ => return Err(MaliError::FragCoordMediump),
+            },
+            AluOp::Flt | AluOp::Fle | AluOp::Fadd | AluOp::Ffloor => self.lane32(m, a, srcs, s, at)?,
+            AluOp::Fmul => match (x, y, b2f(self, x), b2f(self, y)) {
+                (Val::Const(k), _, _, Some(c)) | (_, Val::Const(k), Some(c), _) => {
+                    let d = f32::from_bits(k);
+                    self.op32(Alu::Bcsel, [c, Val::Const(d.to_bits()), Val::Const((0.0 * d).to_bits())], at)?
+                }
+                _ if b2f(self, x).or(b2f(self, y)).is_some() => return Err(MaliError::FragCoordMediump),
+                _ => self.lane32(m, a, srcs, s, at)?,
+            },
+            AluOp::Fneg => match self.alu_of(x) {
+                Some((Alu::Bcsel, [c, Val::Const(p), Val::Const(q)])) => {
+                    self.op32(Alu::Bcsel, [c, Val::Const(p ^ F32_NEG_ZERO), Val::Const(q ^ F32_NEG_ZERO)], at)?
+                }
+                /* the negation of the position (`floor(-x)`): Mesa folds
+                 * it into the operand's modifier, no reference */
+                _ => return Err(MaliError::FragCoordMediump),
+            },
+            _ => return Err(MaliError::FragCoordMediump),
+        };
+        self.mark_pos32(r);
+        Ok(r)
+    }
+
+    /// A mediump local's lane `v` ([`Fs::alu_pos32`]): an fp32 value of the
+    /// position narrowed by `f2f16` (lower_precision's `f2fmp` at the
+    /// assignment, `FADD.f32 r0.h0, r0^, 0x0.neg`), a `b2f` kept.
+    fn narrow_pos32(&mut self, v: Val, at: usize) -> Result<Val, MaliError> {
+        if !self.pos32(v) || matches!(self.alu_of(v), Some((Alu::B2f, _))) {
+            return Ok(v);
+        }
+        match self.alu_of(v) {
+            Some((Alu::Fadd | Alu::Fmul | Alu::Ffma | Alu::Ffloor, _)) => {
+                self.node16(Alu::F2f16, [v, Val::Undef, Val::Undef], 1, at)
+            }
+            _ => Err(MaliError::FragCoordMediump),
+        }
     }
 
     /// One lane of an fp32 operation of a highp shader: the vertex stage's
@@ -2699,6 +2881,7 @@ pub fn walk<'s>(m: &Module<'_>, scratch: &Arena<'s>, prec: FsPrecision) -> Resul
         frag_xy: None,
         frag_zw: None,
         frag16: None,
+        pos32: [0; nir::MAX_NODES / 64],
         rank: [u32::MAX; MAX_LOCALS],
         colour_rank: u32::MAX,
         next_rank: 0,
@@ -3882,7 +4065,13 @@ fn walk_nodes(
                 out[2] = Val::Lane(f.input(FRAG_Z, at)?, 0);
             }
             ir::Op::LoadInput { slot: IoSlot::FragCoord, .. } if !prec.frag_coord_highp => out = f.frag_coord16(at)?,
-            ir::Op::LoadInput { slot: IoSlot::FragCoord, .. } => return Err(MaliError::FragCoordMediump),
+            /* a mediump ES 3.00 shader's highp read: x and y at fp32, the
+             * arithmetic on them too ([`Fs::alu_pos32`]) */
+            ir::Op::LoadInput { slot: IoSlot::FragCoord, .. } => {
+                out = f.frag_coord(at)?;
+                f.mark_pos32(out[0]);
+                f.mark_pos32(out[1]);
+            }
             /* `load_front_face`: `ICMP_OR.u32.eq.m1` of the primitive
              * flags and 0, the word whole on arch 10 (bifrost_compile.c:
              * 2017-2029; builtin_49.expect.json's `ICMP_OR.u32.eq.m1 r0,
@@ -3919,6 +4108,61 @@ fn walk_nodes(
                             *t = f.widen(*t, at)?;
                         }
                     }
+                } else if prec.frag_coord_highp
+                    && m.locals.get(local.0 as usize).is_some_and(|d| !d.name.is_empty())
+                    && (0..4).any(|i| write_mask & (1 << i) != 0 && !f.pos32(lanes[i]) && f.made_of_pos(lanes[i]))
+                {
+                    /* the narrowed pair, or fp16 arithmetic on it, stored to
+                     * a declared local (a copy `vec2 c = b`, `c = b * 0.5`,
+                     * `c.x = b.y`, `vec3 c = vec3(b, 1.0)`, `b = b * 0.5`):
+                     * case 218 reads `vec2 b` only in the expressions that
+                     * use it, no reference pins another local. A
+                     * constructor's temporary (no name) is the expression's
+                     * own value, checked where it is stored or read */
+                    return Err(MaliError::FragCoordMediump);
+                } else if prec.frag_coord_highp && m.locals.get(local.0 as usize).is_some_and(|d| !d.name.is_empty()) {
+                    /* a declared mediump local narrows the fp32 position
+                     * ([`Fs::narrow_pos32`]); a constructor's temporary (no
+                     * name) holds it as GLSL's rvalue is, highp. Two narrowed
+                     * lanes of a pair are one `vec2` (case 218's `vec2 b`,
+                     * `MKVEC.v2i16 r0, r0^.h0, r1^.h0`) */
+                    let mut narrowed = [false; 4];
+                    for (i, t) in lanes.iter_mut().enumerate() {
+                        if write_mask & (1 << i) != 0 {
+                            let n = f.narrow_pos32(*t, at)?;
+                            narrowed[i] = n != *t;
+                            *t = n;
+                        }
+                    }
+                    /* each lane its own expression, as a constructor of
+                     * scalars stores it (case 218's two `floor`s); one vector
+                     * operation's lanes (`gl_FragCoord.xy * 0.5`) Mesa
+                     * computes in another order, no reference pins it */
+                    let ir_op = |f: &Fs<'_>, v: Val| match f.alu_of(v) {
+                        Some((Alu::F2f16, [Val::Lane(p, _), ..])) => f.origin[p as usize],
+                        _ => u16::MAX,
+                    };
+                    for i in (0..4).step_by(2) {
+                        if narrowed[i] && narrowed[i + 1] && ir_op(f, lanes[i]) == ir_op(f, lanes[i + 1]) {
+                            return Err(MaliError::FragCoordMediump);
+                        }
+                        /* x then y, each lane of one coordinate (`vec2(floor(
+                         * gl_FragCoord.y), floor(gl_FragCoord.x))`, a `step`
+                         * of y in the x lane: no reference) */
+                        if narrowed[i] && narrowed[i + 1] && (f.pos_axes(lanes[i]), f.pos_axes(lanes[i + 1])) != (1, 2)
+                        {
+                            return Err(MaliError::FragCoordMediump);
+                        }
+                        if narrowed[i] && narrowed[i + 1] {
+                            let Val::Lane(v, _) = f.vec16(lanes[i], lanes[i + 1], at)? else {
+                                return Err(MaliError::Defect(Defect::IrIndex));
+                            };
+                            (lanes[i], lanes[i + 1]) = (Val::Lane(v, 0), Val::Lane(v, 1));
+                        } else if narrowed[i] || narrowed[i + 1] {
+                            /* a lane alone, or with another value: no reference */
+                            return Err(MaliError::FragCoordMediump);
+                        }
+                    }
                 }
                 /* a texel stored to a (highp) local: the look-up returns
                  * fp32 ([`Fs::look_up`]) */
@@ -3948,6 +4192,31 @@ fn walk_nodes(
                 if prec.highp && prec.colour_f32 {
                     for t in lanes.iter_mut() {
                         *t = f.widen_store(*t, at)?;
+                    }
+                } else if !prec.highp && lanes.iter().any(|&t| f.pos32(t)) {
+                    /* the fp32 position stored to a mediump colour without a
+                     * mediump local first ([`Fs::alu_pos32`]): no reference */
+                    return Err(MaliError::FragCoordMediump);
+                } else if !prec.highp && prec.frag_coord_highp && lanes.iter().any(|&t| f.made_of_pos(t)) {
+                    /* the colour of fp16 arithmetic on the narrowed pair:
+                     * case 218's form only (fcfp16_218_coord), each half of
+                     * the colour one vector operation on `b`, its lanes in
+                     * order, stored once to the first target. A lane of `b`
+                     * itself, a constant beside it (`vec4(b * 0.5, 0.0,
+                     * 1.0)`), a swizzle, a second store: no reference */
+                    let pair = |f: &Fs<'_>, i: usize| {
+                        let (p, q) = (lanes[i], lanes[i + 1]);
+                        match (f.alu_of(p), f.alu_of(q), p, q) {
+                            (Some(_), Some(_), Val::Lane(x, _), Val::Lane(y, _)) => {
+                                f.origin[x as usize] == f.origin[y as usize]
+                                    && f.pos_lane(p) == Some(0)
+                                    && f.pos_lane(q) == Some(1)
+                            }
+                            _ => false,
+                        }
+                    };
+                    if slot != IoSlot::FragColor(0) || f.colour.is_some() || !pair(f, 0) || !pair(f, 2) {
+                        return Err(MaliError::FragCoordMediump);
                     }
                 } else if prec.highp {
                     /* stored to a mediump colour as they are: no reference */
@@ -4008,6 +4277,36 @@ fn walk_nodes(
                 } else {
                     out = f.alu32(m, a, &s, vals, at)?
                 }
+            }
+            /* arithmetic on a mediump ES 3.00 shader's highp gl_FragCoord
+             * ([`Fs::alu_pos32`]): every operand of the read or a constant */
+            ir::Op::Alu(a, s)
+                if prec.frag_coord_highp
+                    && f.frag_xy.is_some()
+                    && (0..ir_arity(a)).any(|k| (0..4).any(|i| f.pos32(lane(vals, s[k], i)))) =>
+            {
+                let w = (m.comps_of(ir::ValueId(id.0)) as usize).min(4);
+                for i in 0..w {
+                    let x = [0, 1, 2].map(|k| if k < ir_arity(a) { lane(vals, s[k], i) } else { Val::Undef });
+                    if x[..ir_arity(a)].contains(&Val::Undef) {
+                        if i > 0 {
+                            break;
+                        }
+                        return Err(MaliError::ColourForm);
+                    }
+                    if !x[..ir_arity(a)].iter().all(|&v| f.pos32(v) || matches!(v, Val::Const(_))) {
+                        return Err(MaliError::FragCoordMediump);
+                    }
+                    out[i] = f.alu_pos32(m, a, &s, x, at)?;
+                }
+            }
+            /* any other operation on it (its z or w among them): no reference */
+            ir::Op::Alu(a, s)
+                if prec.frag_coord_highp
+                    && f.frag_xy.is_some()
+                    && (0..ir_arity(a)).any(|k| (0..4).any(|i| f.frag_zw_lane(lane(vals, s[k], i)))) =>
+            {
+                return Err(MaliError::FragCoordMediump)
             }
             /* a product or sum on an fp32 value of a mediump shader (an
              * integer's conversion, case 79's `float(q.x) / 4.0`): lower_
@@ -4302,6 +4601,20 @@ fn walk_nodes(
                 for (c, o) in out.iter_mut().enumerate().take(comps as usize) {
                     *o = Val::Lane(n, c as u8);
                 }
+            }
+            /* a look-up at the fp32 position or at its narrowed `vec2`
+             * itself ([`Fs::alu_pos32`]): Mesa's order differs from the
+             * walk's, no reference pins it (case 218's look-ups read fp16
+             * arithmetic on the `vec2`). Nor does one at that fp16
+             * arithmetic with an ordinary sampler: the shadow look-ups'
+             * own gap ([`MaliError::TexKind`]) is the next one there */
+            ir::Op::Tex { coord, shadow, .. }
+                if (0..4).any(|i| {
+                    let v = lane(vals, coord, i);
+                    f.pos_coord(v) || (!shadow && f.made_of_pos(v))
+                }) =>
+            {
+                return Err(MaliError::FragCoordMediump)
             }
             /* `textureLod` on a cube (cases 41 and 114): `va_lower_tex`
              * replaces the direction by `build_cube_desc`'s two words in
@@ -6988,6 +7301,49 @@ pub fn kept16(f: &Fs<'_>) -> bool {
     !f.prec.highp && f.nir.live_ifs().any(|r| !r.single && !r.inot)
 }
 
+/// The mediump ES 3.00 shader `f` computes on its highp gl_FragCoord
+/// ([`Fs::alu_pos32`]): fp32 nodes, narrowed where a mediump local takes
+/// them, then fp16 ones, which [`select_highp`] lays out as a highp
+/// shader's and pairs ([`vectorize16`]: gl_test case 218's `b + 0.5` and
+/// `* 0.25` of the two halves, `FADD_IMM.v2f16` and `FMA.v2f16`,
+/// fcfp16_218_coord.expect.json).
+pub fn pos16(f: &Fs<'_>) -> bool {
+    !f.prec.highp && f.pos32.iter().any(|&w| w != 0)
+}
+
+/// `v` is a node marked in `t` ([`Fs::pos_taint`]).
+fn tainted(t: &[u64], v: Val) -> bool {
+    matches!(v, Val::Lane(j, _) | Val::Pair(j, _) if t[j as usize / 64] >> (j % 64) & 1 != 0)
+}
+
+/// The program [`pos16`]'s route takes is case 218's form
+/// (fcfp16_218_coord.expect.json): no `if`, no discard, no look-up, and
+/// every fp16 node made from the narrowed position (its `f2f16`s, their
+/// `vec2`, the sums and products on it). An fp16 compare or select on the
+/// pair (`if (b.x > 2.0) discard;`, `b.x > 2.0 ? ... : ...`), another
+/// value beside it or a look-up has no reference:
+/// [`MaliError::FragCoordMediump`].
+pub fn pos16_form(f: &Fs<'_>) -> Result<(), MaliError> {
+    if f.nir.nifs != 0 || f.discards != 0 {
+        return Err(MaliError::FragCoordMediump);
+    }
+    let t = f.pos_taint(f.nir.n);
+    for (i, nd) in f.nir.nodes[..f.nir.n].iter().enumerate() {
+        let ok = match nd.kind {
+            Kind::Tex | Kind::TexDesc { .. } | Kind::Discard | Kind::Phi => false,
+            Kind::Alu(Alu::F2f16 | Alu::Vec2 | Alu::Fadd | Alu::Fmul) if nd.bits == 16 => {
+                tainted(&t, Val::Lane(i as u16, 0))
+            }
+            Kind::Alu(_) => nd.bits != 16,
+            _ => true,
+        };
+        if !ok {
+            return Err(MaliError::FragCoordMediump);
+        }
+    }
+    Ok(())
+}
+
 /// The forms [`kept16`]'s route transcribes (cflow_148_texbranch): fp16
 /// sums, products and compares over uniform lanes, constants, texels and
 /// each other, the negation of one, the look-ups' copies and the joins'
@@ -7471,7 +7827,7 @@ pub fn select_highp(
     let oom = |_| MaliError::OutOfScratch;
     let defect = MaliError::Defect(Defect::IrIndex);
     f.ubo = *ubo;
-    let c = f.colour.ok_or(MaliError::NoColour)?;
+    let mut c = f.colour.ok_or(MaliError::NoColour)?;
     /* the colour's stores, then the further targets': the fusion counts
      * them as uses */
     for (out, lanes) in core::iter::once((0, c)).chain(targets(f)) {
@@ -7530,9 +7886,16 @@ pub fn select_highp(
     /* so do the compares a mediump `any` / `all` reduces ([`masks16`]:
      * intbool_76_boolany's `greaterThan` of a vec4, two `FCMP_OR.v2f16`) */
     let masks = masks16(f);
-    let pairs16 = ladder || masks;
+    let pairs16 = ladder || masks || pos16(f);
     if pairs16 {
         vectorize16(f)?;
+        /* a colour lane of a paired operation is the pair's lane, as its
+         * store reads it now (case 218's position arithmetic) */
+        for &id in &f.nir.order[..f.nir.len] {
+            if let NirNode { kind: Kind::Store { out: 0, word }, src, .. } = f.nir.nodes[id as usize] {
+                c[word as usize & 3] = src[0];
+            }
+        }
     }
     nir::fuse(&mut f.nir);
     nir::late_rules(&mut f.nir);

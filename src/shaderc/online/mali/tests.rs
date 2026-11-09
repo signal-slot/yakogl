@@ -1240,6 +1240,83 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
             .to_string(),
         MaliError::IndexedLocal,
     ));
+    /* gl_test case 218's position arithmetic in a mediump ES 3.00 shader,
+     * whose gl_FragCoord is highp (docs/notes/mali-fragcoord-fp16-ops.md):
+     * the forms beside fcfp16_218_coord that no reference draws. `B` is
+     * the narrowed pair, `C` the reference's colour of it */
+    const B: &str = "vec2 b = vec2(floor(gl_FragCoord.x / 8.0), floor(gl_FragCoord.y / 16.0));";
+    const C: &str = "o_color = vec4((b + 0.5) / 4.0, (b + 1.0) / 4.0);";
+    const STEP: &str = "float right = step(32.0, gl_FragCoord.x);";
+    let es3 = |body: String| {
+        format!(
+            "#version 300 es\nprecision mediump float; uniform sampler2D s; out vec4 o_color; void main(){{ {body} }}"
+        )
+    };
+    let pos_rows: Vec<(String, MaliError)> = vec![
+        /* the pair's store: one vector operation's lanes, y before x, a
+         * lane of the other coordinate, a lane alone or beside a constant,
+         * z and w */
+        ("vec2 b = gl_FragCoord.xy * 0.5; o_color = vec4(b, b);".into(), MaliError::FragCoordMediump),
+        (format!("vec2 b = vec2(floor(gl_FragCoord.y), floor(gl_FragCoord.x)); {C}"), MaliError::FragCoordMediump),
+        (format!("vec2 b = vec2(floor(gl_FragCoord.x), floor(gl_FragCoord.x)); {C}"), MaliError::FragCoordMediump),
+        (format!("float right = step(32.0, gl_FragCoord.y); vec2 b = vec2(floor((gl_FragCoord.x - 32.0 * right) / 8.0), floor(gl_FragCoord.y / 16.0)); {C}"), MaliError::FragCoordMediump),
+        ("float x = floor(gl_FragCoord.x); o_color = vec4(x, 0.0, 0.0, 1.0);".into(), MaliError::FragCoordMediump),
+        (format!("vec2 b = vec2(floor(gl_FragCoord.x), 1.0); {C}"), MaliError::FragCoordMediump),
+        (format!("vec2 b = vec2(floor(gl_FragCoord.x), floor(gl_FragCoord.z)); {C}"), MaliError::FragCoordMediump),
+        /* a declared local of the read itself, not of arithmetic on it
+         * (`narrow_pos32`); the read stored to the colour */
+        ("float x = gl_FragCoord.x; o_color = vec4(x, x, x, 1.0);".into(), MaliError::FragCoordMediump),
+        ("o_color = vec4(floor(gl_FragCoord.x), 0.0, 0.0, 1.0);".into(), MaliError::FragCoordMediump),
+        /* the fp32 arithmetic: an operand of neither the read nor a
+         * constant, a `fract`, an `abs`, a negation, the `flt` forms of
+         * `b2f`, a select on `step` */
+        (format!("vec2 b = vec2(floor(gl_FragCoord.x * gl_FragCoord.y), floor(gl_FragCoord.y)); {C}"), MaliError::FragCoordMediump),
+        (format!("vec2 b = vec2(fract(gl_FragCoord.x), floor(gl_FragCoord.y)); {C}"), MaliError::FragCoordMediump),
+        (format!("vec2 b = vec2(abs(gl_FragCoord.x), floor(gl_FragCoord.y)); {C}"), MaliError::FragCoordMediump),
+        (format!("vec2 b = vec2(floor(-gl_FragCoord.x), floor(gl_FragCoord.y)); {C}"), MaliError::FragCoordMediump),
+        (format!("float r = float(gl_FragCoord.x < 32.0); vec2 b = vec2(floor((gl_FragCoord.x - 32.0 * r) / 8.0), floor(gl_FragCoord.y / 16.0)); {C}"), MaliError::FragCoordMediump),
+        (format!("float right = step(gl_FragCoord.x, 32.0); vec2 b = vec2(floor((gl_FragCoord.x - 32.0 * right) / 8.0), floor(gl_FragCoord.y / 16.0)); {C}"), MaliError::FragCoordMediump),
+        (format!("float r = float(!(gl_FragCoord.x >= 32.0)); vec2 b = vec2(floor((gl_FragCoord.x - 32.0 * r) / 8.0), floor(gl_FragCoord.y / 16.0)); {C}"), MaliError::FragCoordMediump),
+        (format!("{STEP} vec2 b = vec2(floor((gl_FragCoord.x - right * gl_FragCoord.y) / 8.0), floor(gl_FragCoord.y / 16.0)); {C}"), MaliError::FragCoordMediump),
+        (format!("{STEP} float r = right > 0.5 ? 1.0 : 0.0; vec2 b = vec2(floor((gl_FragCoord.x - 32.0 * r) / 8.0), floor(gl_FragCoord.y / 16.0)); {C}"), MaliError::FragCoordMediump),
+        /* the pair, or fp16 arithmetic on it, stored to a declared local:
+         * a copy, a product, a lane, a wider vector, the pair itself again
+         * (the earlier IrIndex defects) */
+        (format!("{B} vec2 c = b; o_color = vec4((c + 0.5) / 4.0, (c + 1.0) / 4.0);"), MaliError::FragCoordMediump),
+        (format!("{B} vec2 c = b * 0.5; o_color = vec4((c + 0.5) / 4.0, (c + 1.0) / 4.0);"), MaliError::FragCoordMediump),
+        (format!("{B} vec2 c = vec2(0.0); c.x = b.y; o_color = vec4((c + 0.5) / 4.0, (c + 1.0) / 4.0);"), MaliError::FragCoordMediump),
+        (format!("{B} vec3 c = vec3(b, 1.0); o_color = vec4(c * 0.5, 1.0);"), MaliError::FragCoordMediump),
+        (format!("{B} b = b * 0.5; {C}"), MaliError::FragCoordMediump),
+        /* the colour: the pair beside constants (the reported
+         * `vec4(b * 0.5, 0.0, 1.0)`), the pair itself, a product alone, a
+         * constant chain, a swizzle, the lanes of two operations, a
+         * negation, a second store */
+        (format!("{B} o_color = vec4(b * 0.5, 0.0, 1.0);"), MaliError::FragCoordMediump),
+        (format!("{B} o_color = vec4(b, 0.0, 1.0);"), MaliError::FragCoordMediump),
+        (format!("{B} o_color = vec4(b * 0.5, b * 0.25);"), MaliError::FragCoordMediump),
+        (format!("{B} o_color = vec4((b + 0.5) / 4.0, (b + 1.0) / 4.0) * 2.0;"), MaliError::FragCoordMediump),
+        (format!("{B} o_color = vec4((b + 0.5) / 4.0, ((b + 1.0) / 4.0).yx);"), MaliError::FragCoordMediump),
+        (format!("{B} o_color = vec4((b + 0.5) / 4.0, (b.x + 1.0) / 4.0, (b.y + 2.0) / 4.0);"), MaliError::FragCoordMediump),
+        (format!("{B} o_color = vec4(-b, (b + 1.0) / 4.0);"), MaliError::FragCoordMediump),
+        (format!("{B} {C} o_color.w = 1.0;"), MaliError::FragCoordMediump),
+        /* an `if`, a discard, a select or a look-up beside it
+         * (`pos16_form`); a look-up at the read, at the pair, at fp16
+         * arithmetic on it */
+        (format!("{B} if (b.x > 2.0) discard; {C}"), MaliError::FragCoordMediump),
+        (format!("{B} {C} if (b.x > 2.0) o_color = vec4(1.0);"), MaliError::FragCoordMediump),
+        (format!("{B} o_color = vec4((b + 0.5) / 4.0, (b + 1.0) / 4.0) + texture(s, vec2(0.5));"), MaliError::FragCoordMediump),
+        ("o_color = texture(s, gl_FragCoord.xy);".into(), MaliError::FragCoordMediump),
+        (format!("{B} o_color = texture(s, b);"), MaliError::FragCoordMediump),
+        (format!("{B} o_color = texture(s, (b + 0.5) / 4.0);"), MaliError::FragCoordMediump),
+    ];
+    v.extend(pos_rows.into_iter().map(|(body, e)| (FS, es3(body), e)));
+    /* case 218's own program stops at its shadow look-ups, past the
+     * position arithmetic (mali-fragcoord-fp16-ops.md section 5) */
+    v.push((
+        FS,
+        include_str!("../../../../tools/mali/testdata/fcfp16_218_shadowcmp.frag").to_string(),
+        MaliError::TexKind,
+    ));
     v.extend(stress_cases());
     v
 }
@@ -4537,6 +4614,22 @@ fn the_frag_coord_programs_are_byte_equal_to_mesa_26_2_1() {
         assert_facts(name, &rf, f.info.work_reg_count, f.info.preload, &f.info.fau, VIEWPORT_64X64, &|_| 0);
         assert_eq!(f.code.len(), (rf.words.len() * 8 + 16).div_ceil(128) * 16, "{name}: padding");
     }
+}
+
+/// gl_test case 218 shadowcmp's position arithmetic in a mediump ES 3.00
+/// shader (docs/notes/mali-fragcoord-fp16-ops.md): the highp read keeps
+/// every operation on it at fp32 (`step` as `FCMP_OR.f32.ge` and a `CSEL`
+/// of -32.0 and -0.0 added, the divides as products, `FROUND.f32.rtn`),
+/// narrowed where the mediump `vec2 b` takes it, then fp16 pairs. The
+/// reference is the case's shader with the two shadow look-ups replaced by
+/// the coordinates they take; the case's own program is
+/// fcfp16_218_shadowcmp.expect.json.
+#[test]
+fn the_case_218_position_arithmetic_is_byte_equal_to_mesa_26_2_1() {
+    let (vs, fs, json) =
+        (td!("fcfp16_218_coord.vert"), td!("fcfp16_218_coord.frag"), td!("fcfp16_218_coord.expect.json"));
+    let f = compile(SHC_STAGE_FRAGMENT, fs).expect("the fragment shader compiles");
+    check_fs_stage(&f, vs, fs, json, VIEWPORT_64X64);
 }
 
 /// The internal shaders under tools/shaders are the references' sources

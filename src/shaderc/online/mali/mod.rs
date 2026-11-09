@@ -151,7 +151,12 @@ pub enum MaliError {
     /// (fbload_predif_fs_coord) and `floor`, `fract` of x and y (prec_82);
     /// any other operation, lane or pairing is this gap. An operation with
     /// a highp operand, or a copy to a highp variable first (femtovg's
-    /// `ditherNoise(gl_FragCoord.xy)`), is fp32.
+    /// `ditherNoise(gl_FragCoord.xy)`), is fp32. In a mediump ES 3.00 shader
+    /// the built-in is highp: arithmetic on it is fp32, narrowed where a
+    /// mediump local takes it, in case 218's form (`step` of x, the two
+    /// `floor`s into `vec2 b`, a colour of `(b + k) * c` halves;
+    /// docs/notes/mali-fragcoord-fp16-ops.md section 4), also without the
+    /// `step` and with other constants; another form is this gap.
     FragCoordMediump,
     /// More uniform words than the FAU's 128 (Mesa loads the rest from the
     /// UBO).
@@ -1361,14 +1366,16 @@ fn compile_stage<'s>(
             nir_fs::vectorise_int_sources(&mut f)
                 .and_then(|()| select::UboLayout::fs16(m, &f.nir, &highp))
                 .and_then(|ubo| nir_fs::select_highp(&mut p, &mut f, m, &ubo, scratch).map(|()| ubo))
-        } else if nir_fs::guarded16(&f) || nir_fs::kept16(&f) {
+        } else if nir_fs::guarded16(&f) || nir_fs::kept16(&f) || nir_fs::pos16(&f) {
             /* a mediump shader's unrolled loop with run-time guards: the
              * graph's regions flattened as a highp shader's, its fp16 nodes
              * paired afterwards (cflow_71_deadloop); or its `if`s with a
              * look-up under them, kept as blocks with a branch
-             * (cflow_148_texbranch) */
+             * (cflow_148_texbranch); or its arithmetic on a highp
+             * gl_FragCoord, fp32 nodes narrowed into fp16 ones (case 218) */
             let highp = |name: &str| matches!(prec(name), Some(Precision::High));
-            select::UboLayout::fs16(m, &f.nir, &highp)
+            let form = if nir_fs::pos16(&f) { nir_fs::pos16_form(&f) } else { Ok(()) };
+            form.and_then(|()| select::UboLayout::fs16(m, &f.nir, &highp))
                 .and_then(|ubo| nir_fs::select_highp(&mut p, &mut f, m, &ubo, scratch).map(|()| ubo))
         } else {
             /* the fp16 uniform block (LowerPrecisionFloat16Uniforms); a
