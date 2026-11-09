@@ -72,11 +72,11 @@ CI, a review, then the merge. Never push main by hand.
   canonical path (`cd "$(pwd -P)"` first), not through a symbolic link, until
   that is fixed; from a linked path the three artefact rows ("no table",
   "no Mesa reference", "no test knob in the artefact") fail.
-- `tools/check.sh --quick` is for the edit loop. It runs 173 of the
-  full plan's 215 rows (counted on 2026-11-08 at main `e3e8d777` with
+- `tools/check.sh --quick` is for the edit loop. It runs 176 of the
+  full plan's 218 rows (counted on 2026-11-09 at main `60184fe5` with
   `YAKOGL_CHECK_PLAN=1`, which lists the rows and runs none; a row whose
   tool or file the host lacks is listed as a gap, and
-  `tools/check_scope_selftest.sh` pins the 215, ok plus gaps). Measured on
+  `tools/check_scope_selftest.sh` pins the count, ok plus gaps). Measured on
   2026-11-08 from a fresh clone of `e3e8d777` at a canonical path, the
   layout exported and `MALI_CSFFW` fetched as above: "173 ok, 0 failed,
   0 gap(s)" in 2334 s with two compiler slots (4 cores). Earlier, with
