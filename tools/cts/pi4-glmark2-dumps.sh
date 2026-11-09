@@ -25,10 +25,14 @@
 #            RUSTUP_TOOLCHAIN.
 # run        for each scene, `tools/board.sh pi4 run <img> <records-dir> <label>`
 #            (a record <records-dir>/<YYYYMMDD-HHMM>-<label>-<sha8>/, the
-#            records/pi4/ of .gitignore) and then glmark2-fb.py on its
-#            console.txt: <record>/<label>.png. Exit 1 when a dump is damaged
-#            (rows listed, magenta in the PNG): rerun that scene, never patch
-#            pixels. Hold the target:rpi4 and target:rpi4-console leases.
+#            records/pi4/ of .gitignore), then glmark2-fb.py --scene <the
+#            glmark2 scene name> on <record>/console-live.txt: console.txt
+#            (kept as it is) up to the image's "board: record" replay, which
+#            reprints the dump's last rows cut short. PNG: <record>/<label>.png.
+#            Exit 1 when a dump is damaged (rows listed): rerun that scene,
+#            never patch pixels; a PNG of a damaged dump is renamed
+#            <label>.damaged.png, so no bad PNG keeps the record's name.
+#            Hold the target:rpi4 and target:rpi4-console leases.
 # --dry-run  print what build or run would execute and run nothing.
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -115,6 +119,31 @@ cmd_build() {
     return $rc
 }
 
+# live_part CONSOLE: CONSOLE up to (not including) the first line of the board
+# layer's "board: record" replay (driver/zephyr/lib/board/rpi4/board_rpi4.c);
+# the whole file when it has none
+live_part() {
+    awk '/board: record/ { exit } { print }' "$1"
+}
+
+# scene_name ARG: the glmark2 scene of a "-b <scene>[:<options>]" argument, as
+# the dump's "glmark2-fb: <scene> <w>x<h> begin" line names it
+scene_name() {
+    local s=${1#-b }
+    echo "${s%%:*}"
+}
+
+# decode_live RECORD LABEL ARG: RECORD/console-live.txt, then RECORD/LABEL.png
+# for that scene; a PNG of a refused dump is renamed LABEL.damaged.png
+decode_live() {
+    local r=$1 l=$2 rc
+    live_part "$r/console.txt" > "$r/console-live.txt"
+    python3 "$HERE/glmark2-fb.py" "$r/console-live.txt" "$r/$l.png" --scene "$(scene_name "$3")"
+    rc=$?
+    if [ $rc -ne 0 ] && [ -e "$r/$l.png" ]; then mv -f "$r/$l.png" "$r/$l.damaged.png"; fi
+    return $rc
+}
+
 cmd_run() {
     [ $# -ge 2 ] || die "usage: $0 [--dry-run] run <img-dir> <records-dir> [SCENE...]"
     local img=$1 rec=$2 sel rc=0 l arg r
@@ -123,15 +152,57 @@ cmd_run() {
     while IFS=$'\t' read -r l arg; do
         if [ "$DRY" = 1 ]; then
             echo "tools/board.sh pi4 run $img/$l/zephyr/zephyr.bin $rec $l"
-            echo "tools/cts/glmark2-fb.py $rec/<record of $l>/console.txt $rec/<record of $l>/$l.png"
+            echo "awk '/board: record/ { exit } { print }' $rec/<record of $l>/console.txt > $rec/<record of $l>/console-live.txt"
+            echo "tools/cts/glmark2-fb.py $rec/<record of $l>/console-live.txt $rec/<record of $l>/$l.png --scene $(scene_name "$arg")"
             continue
         fi
         [ -s "$img/$l/zephyr/zephyr.bin" ] || { echo "$l: no image $img/$l/zephyr/zephyr.bin" >&2; rc=1; continue; }
         "$REPO/tools/board.sh" pi4 run "$img/$l/zephyr/zephyr.bin" "$rec" "$l" || { echo "$l: board run failed" >&2; rc=1; continue; }
         r=$(ls -d "$rec"/*-"$l"-* 2> /dev/null | tail -1)
         [ -s "$r/console.txt" ] || { echo "$l: no console.txt in the record" >&2; rc=1; continue; }
-        python3 "$HERE/glmark2-fb.py" "$r/console.txt" "$r/$l.png" || { echo "$l: damaged or missing dump, rerun it ($r)" >&2; rc=1; }
+        decode_live "$r" "$l" "$arg" || { echo "$l: damaged or missing dump, rerun it ($r)" >&2; rc=1; }
     done <<< "$sel"
+    return $rc
+}
+
+# replay_test: a small dump, then the board record replay repeating its last
+# rows cut short: the live part is accepted (the whole console is not); a
+# damaged live part, or another scene's dump, is still refused
+replay_test() {
+    local d rc=0 r
+    d=$(mktemp -d "${TMPDIR:-/tmp}/pi4-dumps.XXXXXX") || return 1
+    python3 - "$HERE/glmark2-fb.py" "$d" <<'PY' || return 1
+import base64, binascii, importlib.util, os, sys
+sp = importlib.util.spec_from_file_location("fb", sys.argv[1])
+fb = importlib.util.module_from_spec(sp)
+sp.loader.exec_module(fb)
+d, w, h = sys.argv[2], 8, 6
+rows = [bytes((x * 5 + y * 9 + c) & 255 for x in range(w) for c in range(3)) for y in range(h)]
+probes, c, cq, mean = fb.picture_value(w, h, rows)
+pic = ("%dx%d; probes c %s00, tl %s00, tr %s00, bl %s00, br %s00; crc16 %04x, crc16q %04x; "
+       "mean %d %d %d; black no" % ((w, h) + tuple(p.hex() for p in probes) + (c, cq) + tuple(mean)))
+head = ["noise", "glmark2-fb: [texture] texture-filter=mipmap %dx%d begin" % (w, h)]
+R = ["[0.1] glmark2-fb: %d %04x %s" % (y, fb.crc16(r), base64.b64encode(r).decode()) for y, r in enumerate(rows)]
+tail = ["glmark2-fb: end crc32 %08x" % (binascii.crc32(b"".join(rows)) & 0xFFFFFFFF),
+        "glmark2-picture: [texture] texture-filter=mipmap: " + pic]
+replay = ["board: record, 99 s after boot", R[-2], R[-1][:30]]
+bad = list(R)
+bad[2] = bad[2][:30] + "A" + bad[2][31:]
+for name, ls in (("ok", head + R + tail + replay), ("bad", head + bad + tail + replay)):
+    os.mkdir(os.path.join(d, name))
+    with open(os.path.join(d, name, "console.txt"), "w") as f:
+        f.write("\n".join(ls) + "\n")
+PY
+    # the whole console is refused: the replay's rows are damaged copies
+    python3 "$HERE/glmark2-fb.py" "$d/ok/console.txt" "$d/whole.png" > /dev/null 2>&1 && { echo "self-test: the replay does not damage the whole log" >&2; rc=1; }
+    cp "$d/ok/console.txt" "$d/ok.orig"
+    decode_live "$d/ok" gm-t "-b texture:texture-filter=mipmap" > /dev/null 2>&1 || { echo "self-test: live dump before a replay refused" >&2; rc=1; }
+    [ -s "$d/ok/gm-t.png" ] || { echo "self-test: no PNG for the live dump" >&2; rc=1; }
+    cmp -s "$d/ok.orig" "$d/ok/console.txt" || { echo "self-test: console.txt changed" >&2; rc=1; }
+    decode_live "$d/ok" gm-s "-b shading" > /dev/null 2>&1 && { echo "self-test: another scene's dump accepted" >&2; rc=1; }
+    decode_live "$d/bad" gm-t "-b texture:texture-filter=mipmap" > /dev/null 2>&1 && { echo "self-test: damaged live dump accepted" >&2; rc=1; }
+    [ ! -e "$d/bad/gm-t.png" ] || { echo "self-test: damaged PNG kept under the record's name" >&2; rc=1; }
+    rm -rf "$d"
     return $rc
 }
 
@@ -149,6 +220,7 @@ self_test() {
     *) echo "self-test: build line: $out" >&2; return 1 ;;
     esac
     python3 "$HERE/glmark2-fb.py" --self-test > /dev/null || return 1
+    replay_test || return 1
     echo "pi4-glmark2-dumps self-test: ok"
 }
 
