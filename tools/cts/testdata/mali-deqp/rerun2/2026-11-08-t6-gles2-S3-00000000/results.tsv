@@ -1,0 +1,4 @@
+case	status	detail
+dEQP-GLES2.functional.c.six	Pass	Pass
+dEQP-GLES2.functional.c.seven	Lost	board-lost
+dEQP-GLES2.functional.c.eight	Lost	board-lost

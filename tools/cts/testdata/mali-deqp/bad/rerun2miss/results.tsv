@@ -1,0 +1,6 @@
+case	status	detail
+dEQP-GLES2.functional.a.three	Pass	Pass
+dEQP-GLES2.functional.b.four	Pass	Pass
+dEQP-GLES2.functional.b.five	Fail	Image comparison failed: max difference = (1, 2, 3)
+dEQP-GLES2.functional.c.seven	Pass	Pass
+dEQP-GLES2.functional.c.eight	Pass	Pass

@@ -199,6 +199,7 @@ BOARD_HOST=root@<t6> tools/cts/mali-deqp-run.sh --build DIR --out SLICEDIR \
 | `--rows A-B` | the tree rows to run, 1-based, inclusive; outside the table is refused |
 | `--tree FILE` | the tree table (default `tools/cts/mali-gles2-tree.txt`) |
 | `--session S` | `S1`, `S2`, `S3`, `S4`, `smoke` or `adhoc` (default), recorded in `meta.txt` |
+| `--reruns NAME[,NAME...]` | mark the run as a rerun of earlier slices: each `NAME` is a slice directory name of the `t6-gles2` pattern of `tools/cts/log/README.md` (no slash); written as `reruns=NAME,NAME` in `meta.txt` after `rows`, printed by the dry run; anything else is a usage error (exit 1). Section 9 |
 | `--dry-run` | print the plan and exit 0: no ssh, nothing staged, no slice |
 
 `BOARD_HOST` is `<user>@<host>` of the lease (`target:nanopc-t6`), never a
@@ -606,14 +607,21 @@ The runner takes the table with `--tree` and runs all its rows under the
 
 ```sh
 tools/cts/mali-deqp-run.sh --build DIR --out SLICEDIR --rows 1-N \
-    --tree build/rerun-tree.txt --session adhoc --dry-run
+    --tree build/rerun-tree.txt --session adhoc --reruns NAME[,NAME...] --dry-run
 BOARD_HOST=root@<t6> tools/cts/mali-deqp-run.sh --build DIR --out SLICEDIR \
-    --rows 1-N --tree build/rerun-tree.txt --session adhoc
+    --rows 1-N --tree build/rerun-tree.txt --session adhoc --reruns NAME[,NAME...]
 ```
 
+`--reruns` names the earlier slices whose Lost rows this slice replaces: the
+directory names of the slices the rerun table was built from (for example
+`2026-11-08-t6-gles2-S1`, comma-separated for Lost cases of several sessions).
+It writes `reruns=<names>` into `meta.txt`, which the tally reads (below). A
+name that is not a `t6-gles2` slice directory name, or an empty item, is a
+usage error.
+
 `N` is the table's row count. The dry run prints the same plan as in section
-4 (the rows are `T6RR<nnn>`), touches no board and writes nothing; run it
-first. Everything of sections 4 and 8 applies unchanged: the build comes from
+4 (the rows are `T6RR<nnn>`) and the `reruns=` line, touches no board and
+writes nothing; run it first. Everything of sections 4 and 8 applies unchanged: the build comes from
 one origin/main commit (the runner refuses another, exit 6), `BOARD_HOST` from
 the lease, a crash, hang or fault leaves the board usable over ssh, and exit
 7, 8 or 10 stops the run for a person.
@@ -639,4 +647,10 @@ runner's board lock and render-node check are the second guard.
 
 ### The tally
 
-On main, `tools/cts/mali-deqp-tally.py` does not merge rerun slices yet: `--check-cover` over a first slice and its rerun reports `RULE cover-duplicate` for every rerun case.
+`tools/cts/mali-deqp-tally.py` lets a rerun slice replace the Lost rows of the
+earlier slices that its `meta.txt` names in `reruns=`: a case may appear in the
+rerun slice and in an earlier slice only if that slice is in the list and has
+the case as Lost, and the later status wins. Without the key (or with a slice
+left out of the list) `--check-cover` over the slices reports `RULE
+cover-duplicate` for every rerun case; a name that is not among the slices
+given, the slice itself, or a cycle is `RULE rerun-target`.

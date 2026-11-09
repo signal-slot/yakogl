@@ -6,7 +6,7 @@
 # Armbian), one chunk per row of a tree table, into one slice directory.
 #
 #   BOARD_HOST=root@<t6> tools/cts/mali-deqp-run.sh --build DIR --out SLICEDIR \
-#       --rows A-B [--tree tools/cts/mali-gles2-tree.txt] [--session S1..S4|smoke] [--dry-run]
+#       --rows A-B [--tree tools/cts/mali-gles2-tree.txt] [--session S1..S4|smoke] [--reruns NAME[,NAME...]] [--dry-run]
 #   tools/cts/mali-deqp-run.sh --dry-run --rows A-B [--tree T] [--session S]
 #
 # --dry-run prints the plan and touches nothing: no ssh or scp, no board lock,
@@ -17,6 +17,13 @@
 # build/mali-deqp-run/<session>-rows<A>-<B> (gitignored), and creates nothing.
 # The default tree is tools/cts/mali-gles2-tree.txt, or $MALI_DEQP_TREE; a
 # tree that does not exist is said so and exits 1, dry run or not.
+#
+# --reruns NAME[,NAME...] marks the run as a rerun of earlier slices: each NAME
+# is a slice directory basename of the t6-gles2 naming of tools/cts/log/README.md
+# (<YYYY-MM-DD>-t6-gles2-<session>[-suffix], no slash), and the list is written
+# as reruns=NAME,NAME in meta.txt, which mali-deqp-tally.py reads to let this
+# slice replace those slices' Lost rows. Anything else is a usage error (exit
+# 1). The dry run prints it. Without the option meta.txt has no reruns key.
 #
 # BOARD_HOST comes from the lease (target:nanopc-t6), never from a file;
 # BOARD_SSH_OPTS (optional) is passed to ssh and scp, as run-on-board.sh does.
@@ -58,7 +65,7 @@
 #
 # The slice (the format mali-deqp-tally.py reads), everything redacted (no
 # host names, addresses, user names or serials):
-#   meta.txt     commit, session, rows, tree, boot_id_before, boot_id_after,
+#   meta.txt     commit, session, rows, [reruns,] tree, boot_id_before, boot_id_after,
 #                kernel, lib, started, ended (key=value)
 #   chunks.tsv   row label cases status seconds kmsg resets ssh_after
 #                boot_same exit_line; status done|crash|hang|fault|lost,
@@ -110,7 +117,7 @@ usage() {
   exit 1
 }
 
-build= out= rows= tree=${MALI_DEQP_TREE:-$HERE/mali-gles2-tree.txt} session=adhoc dry=0
+build= out= rows= reruns= tree=${MALI_DEQP_TREE:-$HERE/mali-gles2-tree.txt} session=adhoc dry=0
 while [ $# -gt 0 ]; do
   case $1 in
     --build) build=${2:?}; shift 2 ;;
@@ -118,6 +125,7 @@ while [ $# -gt 0 ]; do
     --rows) rows=${2:?}; shift 2 ;;
     --tree) tree=${2:?}; shift 2 ;;
     --session) session=${2:?}; shift 2 ;;
+    --reruns) reruns=${2:?}; shift 2 ;;
     --dry-run) dry=1; shift ;;
     -h | --help) usage ;;
     *) echo "$me: unknown argument '$1'" >&2; usage ;;
@@ -131,6 +139,14 @@ case $session in
   S1 | S2 | S3 | S4 | smoke | adhoc) ;;
   *) echo "$me: --session is S1..S4 or smoke, not '$session'" >&2; exit 1 ;;
 esac
+if [ -n "$reruns" ]; then
+  # One anchored match of the whole value: a newline or a stray character fails.
+  rerun_re='[0-9]{4}-[0-9]{2}-[0-9]{2}-t6-gles2-[A-Za-z0-9]+(-[A-Za-z0-9._]+)*'
+  if [[ $reruns == *$'\n'* ]] || ! [[ $reruns =~ ^$rerun_re(,$rerun_re)*$ ]]; then
+    echo "$me: --reruns wants slice directory names <YYYY-MM-DD>-t6-gles2-<session>[-suffix], comma-separated, not '${reruns//$'\n'/ }'" >&2
+    exit 1
+  fi
+fi
 [ -f "$tree" ] || { echo "$me: no tree table $tree (the default is tools/cts/mali-gles2-tree.txt; \$MALI_DEQP_TREE or --tree name another)" >&2; exit 1; }
 mustpass=${MALI_DEQP_MUSTPASS:-$HERE/gles2-mustpass.txt}
 [ -f "$mustpass" ] || { echo "$me: no mustpass list $mustpass" >&2; exit 1; }
@@ -411,6 +427,7 @@ if [ "$dry" = 1 ]; then
   fi
   echo "$me: library $lib_id"
   echo "$me: session $session, rows $row_a-$row_b of $tree_rel: $nrows row(s), $total case(s)"
+  [ -z "$reruns" ] || echo "$me: reruns=$reruns"
   while IFS=$'\t' read -r row lab n; do
     echo "$me:   row $row $lab: $n case(s), limit $(limit_for "$n") s a process"
   done < "$work/plan.tsv"
@@ -490,7 +507,8 @@ fix_meta() {
   local k
   [ -f "$raw/meta.txt" ] || return 0
   cp "$raw/meta.txt" "$raw/meta.kv"
-  for k in commit session rows tree boot_id_before boot_id_after kernel lib started ended; do
+  for k in commit session rows reruns tree boot_id_before boot_id_after kernel lib started ended; do
+    [ "$k" != reruns ] || grep -q '^reruns=' "$raw/meta.kv" || continue
     printf '%s=%s\n' "$k" "$(sed -n "s/^$k=//p" "$raw/meta.kv" | tail -1)"
   done > "$raw/meta.txt"
 }
@@ -504,6 +522,7 @@ mkdir -p "$raw/qpa" "$raw/kmsg" "$raw/log" "$out"
   echo "commit=$commit"
   echo "session=$session"
   echo "rows=$row_a-$row_b"
+  [ -z "$reruns" ] || echo "reruns=$reruns"
   echo "tree=$tree_rel"
   echo "lib=$lib_id"
   echo "started=$(date -u +%FT%TZ)"

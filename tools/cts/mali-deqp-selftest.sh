@@ -20,7 +20,7 @@ set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 FIX=$HERE/testdata/mali-deqp-run
 RUN=$HERE/mali-deqp-run.sh
-EXPECT=38
+EXPECT=45
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/mali-deqp-selftest-XXXXXX")
 # The fake board's dmesg -w of the lost-ssh case is never stopped by the
 # runner (the board is gone): end every process still reading under $tmp.
@@ -62,6 +62,7 @@ c2=$(g rev-parse HEAD)
 
 # run <name> <scenario> <rows> [VAR=value...]: one runner run on a fresh fake
 # board; the exit status goes to $tmp/<name>/rc, the output to .../out.txt.
+RUN_ARGS=()
 run() {
   local name=$1 scen=$2 rows=$3 d=$tmp/$1
   shift 3
@@ -78,7 +79,7 @@ run() {
     MALI_DEQP_MAIN_REPO="$tmp/repo" MALI_DEQP_MAIN_REF=main RAW_DIR="$d/raw" \
     KMSG_SETTLE_S=0.3 STAGE_MARGIN_KB=0 HOLD_MAX=21600 DEADLINE_MARGIN_S=600 "$@" \
     bash "$RUN" --build "$d/build" --out "$d/slice" --rows "$rows" --tree "$FIX/tree.txt" \
-    --session smoke > "$d/out.txt" 2>&1
+    --session smoke ${RUN_ARGS[@]+"${RUN_ARGS[@]}"} > "$d/out.txt" 2>&1
   echo $? > "$d/rc"
 }
 rc_is() { [ "$(cat "$tmp/$1/rc")" = "$2" ]; }
@@ -219,6 +220,44 @@ check "a bare dry run never calls ssh or scp and creates nothing" \
 bare d --rows 1-1 --tree "$FIX/tree.txt"
 check "a real run without --build or --out still exits 1 (usage)" \
   bash -c "[ \"\$(cat '$tmp/bare/d.rc')\" = 1 ]"
+
+echo "mali-deqp-selftest: --reruns"
+pkill -f -- "$tmp/" 2>/dev/null   # the lost-ssh case's tail still holds the lock
+S1=2026-11-08-t6-gles2-S1 S2=2026-11-08-t6-gles2-S2-rerun
+RUN_ARGS=(--reruns "$S1,$S2")
+run rr clean 1-1
+RUN_ARGS=()
+check "--reruns A,B: exit 0 and meta.txt has reruns=A,B after rows, before tree" \
+  bash -c "rc_is() { [ \"\$(cat '$tmp/rr/rc')\" = 0 ]; }; rc_is && grep -qx 'reruns=$S1,$S2' '$tmp/rr/slice/meta.txt' &&
+    [ \"\$(cut -d= -f1 '$tmp/rr/slice/meta.txt' | paste -sd' ')\" = 'commit session rows reruns tree boot_id_before boot_id_after kernel lib started ended' ]"
+check "without --reruns meta.txt has no reruns key and the other keys are the same" \
+  bash -c "! grep -q reruns '$tmp/clean/slice/meta.txt' &&
+    [ \"\$(grep -vE '^(reruns|rows|started|ended)=' '$tmp/rr/slice/meta.txt')\" = \"\$(grep -vE '^(rows|started|ended)=' '$tmp/clean/slice/meta.txt')\" ]"
+mkdir -p "$tmp/rrd"
+rrdry() { # <name> <args...>
+  local n=$1
+  shift
+  bash "$RUN" --dry-run --rows 1-1 --tree "$FIX/tree.txt" "$@" > "$tmp/rrd/$n.txt" 2>&1
+  echo $? > "$tmp/rrd/$n.rc"
+}
+rrdry ok --reruns "$S1,$S2"
+check "the dry run prints reruns=A,B" \
+  bash -c "[ \"\$(cat '$tmp/rrd/ok.rc')\" = 0 ] && grep -qx 'mali-deqp-run: reruns=$S1,$S2' '$tmp/rrd/ok.txt'"
+rrdry none
+check "the dry run without --reruns prints no reruns line" \
+  bash -c "[ \"\$(cat '$tmp/rrd/none.rc')\" = 0 ] && ! grep -q reruns '$tmp/rrd/none.txt'"
+n=0
+for bad in 'a,b' "x/$S1" "../$S1" "$S1," ",$S1" "$S1,,$S2" "2026-11-08-t6-gles2-" "2026-11-08-t6-gles3-S1" "$S1 $S2" "$S1"$'\n'commit=dead; do
+  n=$((n + 1))
+  rrdry bad$n --reruns "$bad"
+  [ "$(cat "$tmp/rrd/bad$n.rc")" = 1 ] || echo "$bad" >> "$tmp/rrd/badpass"
+done
+check "ten bad --reruns values (not slice names, a slash, empty items, a space, a newline) exit 1" \
+  bash -c "[ ! -e '$tmp/rrd/badpass' ]"
+check "a bad --reruns value is a usage error on a real run too, before any ssh" \
+  bash -c "! PATH='$tmp/nobin':\$PATH bash '$RUN' --build '$FIX/fixture-build' --out '$tmp/rrd/o' --rows 1-1 --tree '$FIX/tree.txt' --reruns bad >/dev/null 2>&1 && [ ! -e '$tmp/rrd/o' ]"
+check "an empty --reruns value is treated as not given" \
+  bash -c "bash '$RUN' --dry-run --rows 1-1 --tree '$FIX/tree.txt' --reruns '' | { ! grep -q reruns; }"
 
 total=$((passed + failed))
 if [ "$failed" -ne 0 ] || [ "$total" -ne "$EXPECT" ]; then
