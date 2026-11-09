@@ -2305,6 +2305,169 @@ fn vs_reduce(vs: &mut Nir<'_>, m: &Module<'_>, w: &Walk<'_>, a: AluOp, s: ir::Sr
     }
 }
 
+/// One step of the vertex walk: an instruction, or the bounds of an `if`
+/// whose sides [`vs_steps`] flattens.
+#[derive(Clone, Copy)]
+enum Step {
+    Instr(ir::InstrId),
+    If(ir::Src),
+    Else,
+    EndIf,
+    /* a node the walk refuses, where it stands */
+    Refuse(MaliError),
+}
+
+/// The vertex shader's body as [`Step`]s. An `if` is flattened when each
+/// side is straight code without a look-up (`nir_opt_peephole_select`
+/// turns it into selects, vsarith_188_predif: docs/notes/mali-vs-abs-if.md);
+/// a nested `if`, a loop, a jump, a look-up or more than
+/// [`PEEPHOLE_LIMIT_GL`] operations under it stays refused, at
+/// the `if`'s place in the walk (an earlier refusal comes first).
+fn vs_steps<'s>(m: &Module<'_>, scratch: &Arena<'s>) -> Result<&'s [Step], MaliError> {
+    let nodes = m.nodes_of(m.body);
+    /* a side's operations, at most `PEEPHOLE_LIMIT_GL` (the GL front end's
+     * peephole limit), counted as the IR's ALU instructions */
+    let side = |r: ir::Range| -> Result<usize, MaliError> {
+        let mut alu = 0;
+        for nd in m.nodes_of(r) {
+            match *nd {
+                IrNode::Instr(id) => match m.instr(id) {
+                    Some(IrOp::Tex { .. } | IrOp::TexSize { .. } | IrOp::LoadUniformIdx { .. }) => {
+                        return Err(MaliError::ControlFlow)
+                    }
+                    Some(IrOp::Alu(..)) if alu == PEEPHOLE_LIMIT_GL => return Err(MaliError::ControlFlow),
+                    Some(IrOp::Alu(..)) => alu += 1,
+                    _ => {}
+                },
+                IrNode::Loop { .. } => return Err(MaliError::LoopVertex),
+                _ => return Err(MaliError::ControlFlow),
+            }
+        }
+        Ok(r.len as usize)
+    };
+    let flat = |then_: ir::Range, else_: ir::Range| -> Result<usize, MaliError> { Ok(side(then_)? + side(else_)?) };
+    let mut n = 0;
+    for nd in nodes {
+        n += match *nd {
+            IrNode::If { then_, else_, .. } => flat(then_, else_).map_or(1, |k| k + 3),
+            _ => 1,
+        };
+    }
+    let steps = scratch.alloc_filled(n, Step::Else).map_err(|_| MaliError::OutOfScratch)?;
+    let mut k = 0;
+    let mut put = |s: Step| {
+        steps[k] = s;
+        k += 1;
+    };
+    for (j, nd) in nodes.iter().enumerate() {
+        match *nd {
+            IrNode::Instr(id) => put(Step::Instr(id)),
+            IrNode::Return if j + 1 == nodes.len() => {}
+            /* intloop_loop_nested_vs: Mesa keeps the loops as blocks */
+            IrNode::Loop { .. } => put(Step::Refuse(MaliError::LoopVertex)),
+            IrNode::If { then_, else_, .. } if flat(then_, else_).is_err() => {
+                put(Step::Refuse(flat(then_, else_).err().unwrap_or(MaliError::ControlFlow)))
+            }
+            IrNode::If { cond, then_, else_ } => {
+                put(Step::If(cond));
+                for nd in m.nodes_of(then_) {
+                    if let IrNode::Instr(id) = *nd {
+                        put(Step::Instr(id));
+                    }
+                }
+                put(Step::Else);
+                for nd in m.nodes_of(else_) {
+                    if let IrNode::Instr(id) = *nd {
+                        put(Step::Instr(id));
+                    }
+                }
+                put(Step::EndIf);
+            }
+            _ => put(Step::Refuse(MaliError::ControlFlow)),
+        }
+    }
+    Ok(&steps[..k])
+}
+
+/// What a side of a flattened vertex `if` writes: the locals and the
+/// outputs.
+#[derive(Clone, Copy)]
+struct VsState {
+    locals: [[Val; 4]; MAX_LOCALS],
+    position: Option<[Val; 4]>,
+    point_size: Option<Val>,
+    varyings: [Option<[Val; 4]>; MAX_VARYINGS],
+}
+
+/// The join of a flattened `if` (`nir_opt_peephole_select`): a value both
+/// sides leave equal is kept, another is `bcsel(c, then, else)`, the
+/// `CSEL.u32.eq` of va_lower_isel (vsarith_188_predif: one per differing
+/// lane, in the output's lane order). A varying lane written under the `if`
+/// is a phi when Mesa's link runs (nir_opt_varyings before the select is
+/// made): `phis` gets its (location, lane), a constant there stays stored
+/// (`IADD_IMM.i32 r2, 0x0, #0x3F800000`, the 1.0 both sides store). A
+/// value one side leaves undefined (`vsarith_partial_varying`, item 6 of
+/// docs/notes/mali-vs-alu-ops.md) and a point size the sides set apart
+/// (`vsarith_psiz_if`) are refused.
+fn vs_join(
+    vs: &mut Nir<'_>,
+    c: Val,
+    pre: &VsState,
+    t: &VsState,
+    e: &mut VsState,
+    phis: &mut u64,
+) -> Result<(), MaliError> {
+    let sel = |vs: &mut Nir<'_>, a: Val, b: Val| -> Result<Val, MaliError> {
+        if a == b {
+            return Ok(a);
+        }
+        if a == Val::Undef || b == Val::Undef {
+            return Err(MaliError::ControlFlow);
+        }
+        vs.alu(Alu::Bcsel, c, a, b)
+    };
+    for loc in 0..MAX_VARYINGS {
+        let (a, b) = match (t.varyings[loc], e.varyings[loc]) {
+            (Some(a), Some(b)) => (a, b),
+            (None, None) => continue,
+            _ => return Err(MaliError::ControlFlow),
+        };
+        let mut out = [Val::Undef; 4];
+        for i in 0..4 {
+            out[i] = sel(vs, a[i], b[i])?;
+            if pre.varyings[loc].is_none_or(|p| p[i] != out[i]) && loc * 4 + i < 64 {
+                *phis |= 1 << (loc * 4 + i);
+            }
+        }
+        e.varyings[loc] = Some(out);
+    }
+    e.position = match (t.position, e.position) {
+        (Some(a), Some(b)) => {
+            let mut out = [Val::Undef; 4];
+            for i in 0..4 {
+                out[i] = sel(vs, a[i], b[i])?;
+            }
+            Some(out)
+        }
+        (None, None) => None,
+        _ => return Err(MaliError::ControlFlow),
+    };
+    /* a point size the sides set apart: vsarith_psiz_if orders its loads
+     * and stores in a way this walk does not make yet */
+    if t.point_size != e.point_size {
+        return Err(MaliError::ControlFlow);
+    }
+    for l in 0..MAX_LOCALS {
+        for i in 0..4 {
+            let (a, b) = (t.locals[l][i], e.locals[l][i]);
+            /* a local one side does not define is dead after the `if`
+             * unless read: undefined, as NIR's phi of an undef folds */
+            e.locals[l][i] = if a == Val::Undef || b == Val::Undef { Val::Undef } else { sel(vs, a, b)? };
+        }
+    }
+    Ok(())
+}
+
 /// Build the program of a vertex shader. `reads`: the fragment shader's
 /// reads of the program (location, component mask), when the vertex shader
 /// is built for one: then only those components are stored, compacted as
@@ -2331,14 +2494,45 @@ pub fn build<'s>(
     let mut position: Option<[Val; 4]> = None;
     let mut point_size: Option<Val> = None;
     let mut varyings: [Option<[Val; 4]>; MAX_VARYINGS] = [None; MAX_VARYINGS];
-    let nodes = m.nodes_of(m.body);
-    for (k, nd) in nodes.iter().enumerate() {
-        let id = match *nd {
-            IrNode::Instr(id) => id,
-            IrNode::Return if k + 1 == nodes.len() => continue,
-            /* intloop_loop_nested_vs: Mesa keeps the loops as blocks */
-            IrNode::Loop { .. } => return Err(MaliError::LoopVertex),
-            _ => return Err(MaliError::ControlFlow),
+    /* a flattened `if` ([`vs_steps`]): its condition, the state before it
+     * and its then side's; `phis`, the varying lanes it wrote ([`vs_join`]) */
+    let mut cond = Val::Undef;
+    let (mut pre, mut then) = (None::<VsState>, None::<VsState>);
+    let mut phis = 0u64;
+    let mut joined = false;
+    for step in vs_steps(m, scratch)? {
+        let id = match *step {
+            Step::Instr(id) => id,
+            Step::Refuse(e) => return Err(e),
+            Step::If(c) => {
+                cond = lane(w, c, 0);
+                pre = Some(VsState { locals: w.locals, position, point_size, varyings });
+                continue;
+            }
+            Step::Else => {
+                let p = pre.ok_or(MaliError::Defect(Defect::IrIndex))?;
+                then = Some(VsState { locals: w.locals, position, point_size, varyings });
+                (w.locals, position, point_size, varyings) = (p.locals, p.position, p.point_size, p.varyings);
+                continue;
+            }
+            Step::EndIf => {
+                let (p, t) = pre.zip(then).ok_or(MaliError::Defect(Defect::IrIndex))?;
+                let mut e = VsState { locals: w.locals, position, point_size, varyings };
+                match cond {
+                    /* a folded condition: the side it picks */
+                    Val::Const(c) => {
+                        if c != 0 {
+                            e = t;
+                        }
+                    }
+                    _ => {
+                        vs_join(&mut vs, cond, &p, &t, &mut e, &mut phis)?;
+                        joined = true;
+                    }
+                }
+                (w.locals, position, point_size, varyings) = (e.locals, e.position, e.point_size, e.varyings);
+                continue;
+            }
         };
         let op = m.instr(id).ok_or(MaliError::Defect(Defect::IrIndex))?;
         let width = m.comps_of(ValueId(id.0)) as usize;
@@ -2505,6 +2699,11 @@ pub fn build<'s>(
                         /* the clamps of vsarith_182_fsat and _fsatfolded
                          * (docs/notes/mali-vs-compare-clamp.md section 3) */
                         AluOp::Fmax | AluOp::Fmin => vs_clamp(&mut vs, a, x(0), x(1))?,
+                        /* `abs` is the `.abs` modifier on its consumer and
+                         * `floor` one `FROUND.f32.rtn` (vsarith_181_fmactrl,
+                         * docs/notes/mali-vs-abs-if.md) */
+                        AluOp::Fabs => vs.alu(Alu::Fabs, x(0), Val::Undef, Val::Undef)?,
+                        AluOp::Ffloor => vs.alu(Alu::Ffloor, x(0), Val::Undef, Val::Undef)?,
                         /* a lane past the compared vector's (a vec2 or vec3
                          * compared as the front end's four lanes) */
                         AluOp::Feq | AluOp::Flt | AluOp::Fle if x(0) == Val::Undef || x(1) == Val::Undef => Val::Undef,
@@ -2685,7 +2884,11 @@ pub fn build<'s>(
     for o in m.outputs.iter().filter(|o| o.kind == IoKind::Varying) {
         let Some(lanes) = varyings.get(o.location as usize).copied().flatten() else { continue };
         for (c, l) in lanes.iter().enumerate().take(o.components as usize) {
+            let phi = phis & (1 << (o.location as usize * 4 + c)) != 0;
             match *l {
+                /* a constant both sides of an `if` store is a phi when the
+                 * link runs: stored flat ([`vs_join`]) */
+                Val::Const(_) if phi => vs.consts.push_flat(o.location, c as u8),
                 Val::Const(bits) => vs.consts.push(o.location, c as u8, bits),
                 /* a lane of uniforms alone, which the link promotes to
                  * flat ([`super::link::VaryingConsts::push_flat`]) */
@@ -2718,6 +2921,7 @@ pub fn build<'s>(
     let mut nown = 0;
     let konst = |o: &&ir::IoDecl<'_>, c: u8| {
         varyings.get(o.location as usize).copied().flatten().is_some_and(|l| matches!(l[c as usize & 3], Val::Const(_)))
+            && phis & (1 << (o.location as usize * 4 + (c as usize & 3))) == 0
     };
     let reads = match reads {
         None if decls.clone().any(|o| (0..o.components).any(|c| konst(&o, c))) => {
@@ -2760,9 +2964,10 @@ pub fn build<'s>(
                 && lanes[..v.comps as usize].iter().enumerate().all(|(c, l)| *l == Val::Lane(id, c as u8))
         });
         let stored = (0..v.comps as usize).filter(|&c| vs.masks[k] & (1 << c) != 0);
-        for l in stored.map(|c| lanes[c]) {
+        for (c, l) in stored.map(|c| (c, lanes[c])) {
             match l {
                 Val::Undef => return Err(MaliError::VaryingForm),
+                Val::Const(_) if phis & (1 << (v.location as usize * 4 + c)) != 0 => flat = true,
                 Val::Const(_) => return Err(MaliError::VaryingNotFromAttribute),
                 /* a convergent lane (`nir_vertex_divergence_analysis`: no
                  * attribute behind it) is promoted to flat, its store
@@ -2864,6 +3069,17 @@ pub fn build<'s>(
                 if vs.masks[k] & (1 << c) == 0 || vs.reads_attribute(n) {
                     continue;
                 }
+                /* a select of two constants (an `if`'s phi, [`vs_join`]):
+                 * nir_opt_algebraic moves the `ffma` into the select's
+                 * constants, where it folds: a new select of the same
+                 * constants in the `ffma`'s place (vsarith_188_predif: the
+                 * 0.25 / 0.75 lane's `CSEL` after the other lanes' `FMA`s),
+                 * the first one left to [`dce`] */
+                if let Some((Alu::Bcsel, src @ [_, Val::Const(_), Val::Const(_)])) = vs_alu_of(&vs, *l) {
+                    let f = NirNode { kind: Kind::Alu(Alu::Bcsel), src, bits: 32, width: 1 };
+                    *l = Val::Lane(vs.push_node(f)?, 0);
+                    continue;
+                }
                 vs.note(Prod::VaryingConvergent);
                 let x = *l;
                 let f = NirNode { kind: Kind::Alu(Alu::Ffma), src: [x, Val::Const(F32_ZERO), x], bits: 32, width: 1 };
@@ -2893,6 +3109,12 @@ pub fn build<'s>(
     }
     shrink(&mut vs, m)?;
     opt_move(&mut vs, scratch)?;
+    /* a flattened `if`'s compare stands before its first select
+     * (`nir_move_comparisons`, bifrost_nir.c:375-381; vsarith_188_predif's
+     * `FCMP_OR.f32.lt.m1` after both sides' arithmetic) */
+    if joined {
+        move_compares(&mut vs, scratch)?;
+    }
     Ok(vs)
 }
 
