@@ -72,7 +72,10 @@ pixels. RGBA16F there is still drawn linear, as before this item. Drawing
 them in an MRT draw takes a tiled multi-target path (every target tiled,
 section 5); whether the GL core should report such a framebuffer
 `GL_FRAMEBUFFER_UNSUPPORTED` instead of failing the draw is open for a
-person. And the **depth surface** of a draw into a shadow is switched by
+person. The design for lifting that refusal (every target of the draw on a
+tiled shadow, the order of the steps, the questions only the board can
+answer) is `docs/notes/gc-int64-mixed-targets.md`; it is not implemented.
+And the **depth surface** of a draw into a shadow is switched by
 `SINGLE_BUFFER(2)` too; its layout under (2) is unmeasured (logged once when
 a draw reaches it), for the board (section 5).
 
@@ -170,6 +173,30 @@ still reported complete today, because turning a non-drawable surface into
 moves the V3D's and the GC7000's answers together. It is left to a GL-core
 item (handoff).
 
+The plane path is in the tree as inert code and notes; **no draw uses it, and
+RGBA32I/UI stay refused by name as above.** `src/vivante/wide_target.rs` has
+the pure parts: `split_planes` and `join_planes` (a linear image of 16-byte
+pixels into two 4x4-tiled 8-byte planes, R,G then B,A, and back, with
+`plane_offset` and `planes_bytes`), `plane_masks` and `plane_clears` (the two
+planes' colour write masks and 64-bit clear words), and a shadow that holds
+several targets (`wanted_targets`, `prepare_targets`, `bind_targets`), a
+128-bit one as two planes. `backend.rs` calls none of the new functions. The
+notes are `docs/notes/gc-128bit-render-targets.md` (the layout, the
+implementation sequence and the board probe),
+`docs/notes/gc-128bit-rt-shader.md` (the shader's colour-output split, the
+render-side analogue of the sampler join) and
+`docs/notes/gc-int64-mixed-targets.md` (the multi-target shadow's
+draw-side design). What is left, in the sequence's order: a board probe
+(one RGBA32UI attachment as two `G32R32F` tiled targets with `UIF32`; if the
+bits do not match, the refusal stays and the cause is the finding); then, in
+`backend.rs`, taking `GC_INT_RT_128BPP` out of the refusal and drawing the
+planes through the multi-target shadow; the shader output split in
+`src/shaderc/online/vivante/` and its draw key in `src/gl/draw.rs`; the plane
+masks and clears in the back end; the GL-core name lists
+(`refuse_undrawable_targets`, `rt_format_drawable`); tests that turn the
+refusal tests into draw tests; and a board run of dEQP `fbo.completeness`
+and `renderable.texture.*32*`.
+
 ## 3. The other ES 3.0 colour-renderable formats
 
 | GL format | how the GL core stores it | PE format used | PE format the hardware has |
@@ -258,4 +285,9 @@ Nothing here has run on the GPU. What a session should check, cheapest first:
    int-rt-gl): the clear quad's raw constants.
 5. `rgba32i`/`rgba32ui` cases: refused (`GL_INVALID_OPERATION`, the log line),
    so they fail rather than pass; they stop failing only with section 2's
-   two-plane path or with `FRAMEBUFFER_UNSUPPORTED` (NotSupported).
+   two-plane path or with `FRAMEBUFFER_UNSUPPORTED` (NotSupported). Lifting
+   the refusal by the plane path needs the board probe and the remaining
+   steps of `docs/notes/gc-128bit-render-targets.md` (implementation
+   sequence), the shader output split of `docs/notes/gc-128bit-rt-shader.md`,
+   and the multi-target shadow of `docs/notes/gc-int64-mixed-targets.md`;
+   section 2 lists them.
