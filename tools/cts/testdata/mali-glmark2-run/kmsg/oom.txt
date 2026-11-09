@@ -1,0 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# The kernel's memory-failure lines (mm/oom_kill.c, mm/page_alloc.c), no panthor line.
+[ 5200.000001] Out of memory: Killed process 4242 (glmark2-es2-mali) total-vm:1048576kB
+[ 5200.000002] glmark2-es2-mali: page allocation failure: order:0, mode:0x400dc0(GFP_KERNEL_ACCOUNT|__GFP_ZERO)
