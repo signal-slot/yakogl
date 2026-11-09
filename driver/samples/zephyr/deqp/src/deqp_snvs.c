@@ -10,6 +10,16 @@
  * own outcome, so one run names each failure, and the GPU driver's reset and
  * fence-timeout counters. Past 32 it becomes the DEQP tally (kind 8): counts,
  * and the first failing case's name check (gc_result.h).
+ *
+ * Every record here is built as its four-word kind defines it. On a board
+ * whose record is three words (CONFIG_GC_COMMON_RESULT_SNVS_KEEP_LPGPR0, the
+ * Armadillo-X2) the sink stores w0..w2 and drops w3 (gc_result.c), so the
+ * fields that sit in w3 (the tally's cases begun and first failing name
+ * check, DEQP_CASES' counters and first failure, DEQP_STATUS' last four
+ * bytes, the probes' p4 and CRC) are not kept: nothing of them is moved into
+ * w1 or w2, whose meaning is the same on every board (gc_result.h, "The
+ * three-word record"). The one kind written differently is DEQP_FAILS: a page
+ * holds GC_RESULT_DEQP_FAILS_PER_PAGE names, four there instead of six.
  */
 #include <stdlib.h>
 #include <string.h>
@@ -80,23 +90,24 @@ static int fails_page(void)
 	return sel >= 0 && (sel & GC_RESULT_DEQP_SEL_FAILS) ? (sel >> 8) & 0x7f : -1;
 }
 
-/* six names a page in w1..w3; four where w3 is not stored (gc_result.h) */
+/* The page's names: six in w1..w3 on a four-word record, four in w1..w2 on
+ * a three-word one (KEEP_LPGPR0, gc_result.h), 0xffff where there is none. */
 static uint16_t s_page_names[GC_RESULT_DEQP_FAILS_PER_PAGE] = {
 	[0 ... GC_RESULT_DEQP_FAILS_PER_PAGE - 1] = 0xffffu,
 };
+BUILD_ASSERT(GC_RESULT_DEQP_FAILS_PER_PAGE % 2u == 0u && GC_RESULT_DEQP_FAILS_PER_PAGE <= 6u,
+	     "a DEQP_FAILS page is whole words of two names, at most w1..w3");
 
 static void write_fails_page(void)
 {
-#ifdef CONFIG_GC_COMMON_RESULT_SNVS_KEEP_LPGPR0
-	gc_result_write_tag(GC_RESULT_DEQP_FAILS, (uint8_t)MIN(s_fail, 255u),
-			    s_page_names[0] | (uint32_t)s_page_names[1] << 16,
-			    s_page_names[2] | (uint32_t)s_page_names[3] << 16, 0u);
-#else
-	gc_result_write_tag(GC_RESULT_DEQP_FAILS, (uint8_t)MIN(s_fail, 255u),
-			    s_page_names[0] | (uint32_t)s_page_names[1] << 16,
-			    s_page_names[2] | (uint32_t)s_page_names[3] << 16,
-			    s_page_names[4] | (uint32_t)s_page_names[5] << 16);
-#endif
+	uint32_t w[3] = { 0u, 0u, 0u };
+
+	/* two names to a word, the earlier in the low half; a word past the
+	 * page's capacity (w3 of a three-word record) is 0 and not stored */
+	for (unsigned int i = 0; i < GC_RESULT_DEQP_FAILS_PER_PAGE; i++) {
+		w[i / 2u] |= (uint32_t)s_page_names[i] << (16u * (i % 2u));
+	}
+	gc_result_write_tag(GC_RESULT_DEQP_FAILS, (uint8_t)MIN(s_fail, 255u), w[0], w[1], w[2]);
 }
 
 /* Selector GC_RESULT_DEQP_SEL_PROBE (gc_result.h): the first failing case's
@@ -241,6 +252,8 @@ void deqp_snvs_progress(const char *status, const char *name)
 				    gpu_counters());
 		return;
 	}
+	/* w3 (begun, the first failing name check) is not stored on a
+	 * three-word record and the host reads it as absent (gc_result.h) */
 	gc_result_write_tag(GC_RESULT_DEQP, ++s_seq, MIN(s_pass, 0xffffu) | MIN(s_fail, 0xffffu) << 16,
 			    MIN(s_nsup, 0xffffu) | MIN(s_other, 0xffffu) << 16,
 			    MIN(s_begun, 0xffffu) | s_first_name << 16);

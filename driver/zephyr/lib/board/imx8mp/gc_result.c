@@ -147,7 +147,10 @@ void gc_result_write_tag(unsigned int kind, uint8_t tag, uint32_t w1, uint32_t w
 	board_result_tag(kind, tag, w1, w2, w3);
 }
 
-/* The sink (board_internal.h): one record into LPGPR0..3, magic last. */
+/* The sink (board_internal.h): one record into LPGPR0..3, magic last. With
+ * KEEP_LPGPR0 it is w0..w2 into LPGPR1..3 and w3 is dropped here, not moved
+ * (gc_result.h, "The three-word record"); the writer's console line above
+ * this sink (common/record.c) still prints the four words it was given. */
 void board_sink_store(const uint32_t w[4])
 {
 	mm_reg_t r = s_snvs;

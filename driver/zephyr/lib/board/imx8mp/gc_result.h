@@ -20,6 +20,11 @@
  * magic can trust what is under it. The reader zeroes all four words before
  * each jump, so a zero word 0 means "nothing was written this run" and a stale
  * record cannot pass for a fresh one.
+ *
+ * A board whose boot loader owns LPGPR0 (the Armadillo-X2) stores three of the
+ * four words, w0..w2 in LPGPR1..3, and w3 is never stored: "The three-word
+ * record" below says what each kind loses and how such a tree names its
+ * failing cases.
  */
 #ifndef GC_RESULT_H
 #define GC_RESULT_H
@@ -237,7 +242,8 @@ enum gc_result_case_status {
  * w3 = cases begun | the first failing case's name check << 16 (below;
  * 0xffff while none failed). begun greater than
  * passed + failed + not supported + other means the case at index begun - 1
- * never reached a result. */
+ * never reached a result. On a three-word record (below) w3 is not stored:
+ * the host derives begun as that sum and reads the name check as absent. */
 /* kind DEQP_CASES: a dEQP run of at most 32 cases. w0's low byte = cases
  * begun; w1..w2 = two bits per case in the order dEQP RAN them, case i at bits
  * 2*(i % 16) of word 1 + i / 16: 0 no result (not begun, or begun and never
@@ -249,7 +255,9 @@ enum gc_result_case_status {
  * reads a target nothing drew); 0 on a board whose driver has none. An image
  * built with the deqp sample's CONFIG_DEQP_SNVS_ADDRESS packs w3 differently
  * (the target's address bits and the lost work; see that option's help). A
- * run that grows past 32 cases switches to kind DEQP.
+ * run that grows past 32 cases switches to kind DEQP. On a three-word record
+ * (below) w3 is not stored: the bitmap in w1..w2 is whole, the counters and
+ * the first failure's index and name check are absent.
  *
  * The order: dEQP runs a group's cases sorted by NAME (TestNode::addChild,
  * tcuTestCase.cpp, inserts every child in name order), not in the order the
@@ -260,7 +268,8 @@ enum gc_result_case_status {
  * than trusting any assumed order. */
 #define GC_RESULT_DEQP_CASES_MAX YK_RECORD_DEQP_CASES_MAX
 
-/* kind DEQP_FAILS: names every failure of a big dEQP run, six per boot. The
+/* kind DEQP_FAILS: names every failure of a big dEQP run, six per boot (four
+ * on a three-word record, below). The
  * reader's selector GC_RESULT_DEQP_SEL_FAILS | page << 8 | table index runs
  * the same filter as the index alone, and the record is w0's low byte = Fails
  * seen (saturating at 255); w1..w3 = the name checks (CRC-16/CCITT-FALSE of
@@ -285,22 +294,81 @@ enum gc_result_case_status {
  * InternalError, Crash, Timeout, ...), records its status string: w0's low byte = the index of that case
  * in the run (saturating); w1..w3 = the first 12 bytes of the string, little-endian, zero-padded. */
 #define GC_RESULT_DEQP_SEL_STATUS YK_RECORD_DEQP_SEL_STATUS
-/* Names on a kind DEQP_FAILS page: six in w1..w3, four when w3 is not stored
- * (KEEP_LPGPR0, the Armadillo-X2: w1 and w2 only). What the missing w3 costs,
- * and why the X2 tree decodes shorter pages rather than reading names from the
- * console (the decision, 2026-11-06):
- *  - the row record DEQP (kind 8) loses the cases begun (w3 low half) and the
- *    first failing name check (w3 high half). `yakogl-tools record --words 3`
- *    prints both as `-` and derives begun as pass + fail + notsup + other, so a
- *    case that began and left no result is not visible in an X2 row's tally;
- *  - DEQP_CASES (kind 9) loses its GPU resets and fence timeouts, CASE_SET
- *    summaries their cases-run count, DEQP_STATUS its last four string bytes;
- *  - DEQP_FAILS pages hold four names a page, so the selector form needs
- *    ceil(fails / 4) boots per failing row instead of ceil(fails / 6), with
- *    the same names (tools/board.sh name_pages / results_tsv).
- * The failing names stay in the record because the board has the UART2 console
- * only when BOARD_UART is set and a run must not depend on it; with NAMES=0
- * (or a console) tools/cts/deqp-uart-tally.py names them from the console. */
+/*
+ * The three-word record (CONFIG_GC_COMMON_RESULT_SNVS_KEEP_LPGPR0: the
+ * Armadillo-X2, whose U-Boot keeps its boot count in LPGPR0):
+ *
+ *   LPGPR0        left as found (the reader writes it back as it read it)
+ *   LPGPR1  w0    magic | kind << 8 | low, written LAST as above
+ *   LPGPR2  w1    as the kind defines it, unchanged
+ *   LPGPR3  w2    as the kind defines it, unchanged
+ *   -       w3    NOT STORED: gc_result.c's sink drops it
+ *
+ * The selector travels the same way, one register up (w0 = 0 in LPGPR1, the
+ * 'SE' word in LPGPR2). Every writer (deqp_snvs.c, gc_sample.c, the fatal
+ * handler, the breadcrumbs) builds its record as the four-word kind above
+ * defines it, and the console's yk-record line prints the four words it
+ * built; only the stored record is three. The decoder of a stored record
+ * (`yakogl-tools record --words 3`, record.rs "Three-word records") reads w1
+ * and w2 by the four-word definitions and every field that lives in w3 as
+ * absent (`-`), never as a number. So no writer moves a w3 field into w1 or
+ * w2 and no reader invents one; the board-dependent difference is one
+ * constant, the DEQP_FAILS page's capacity (GC_RESULT_DEQP_FAILS_PER_PAGE,
+ * below). Why nothing moves: w1 and w2 then mean the same on every board, so
+ * one decoder reads them without knowing which board wrote them; and the
+ * host side of this contract (`yakogl-tools record --words 3`, tools/board.sh
+ * x2 tree) is on main, with the two real X2 records of 2026-11-06 as its
+ * tests (record.rs).
+ *
+ * What each kind loses without w3 (the fields are those listed above):
+ *  - DEQP, the row tally: cases begun and the first failing name check.
+ *    The host derives begun as passed + failed + not supported + other, so a
+ *    case that began and left no result is not counted; the table row's
+ *    own case count (the filter's cases) says how many never finished, and
+ *    dEQP runs them one after the other, so the first unfinished one is the
+ *    case at index sum in the order dEQP ran them. The first failure's name
+ *    comes from a DEQP_FAILS page.
+ *  - DEQP_CASES: the first failing case's index (it follows from the bitmap
+ *    in w1..w2) and name check (the reader takes the name at that index in
+ *    the table's name order instead of matching a check), and the GPU
+ *    resets and fence timeouts (a Fail cannot be told from a recovered lost
+ *    kick on such a board; the console line has them when there is one).
+ *  - DEQP_FAILS: names 5 and 6 of a page. A page holds four
+ *    (YK_RECORD_DEQP_FAILS_PER_PAGE_3W) in w1 and w2, two to a word, the
+ *    earlier in the low half, 0xffff where there is none; page p names the
+ *    Fails 4 * p .. 4 * p + 3, so a row with n Fails takes ceil(n / 4) page
+ *    boots instead of ceil(n / 6). This is the one record an X2 image writes
+ *    differently (deqp_snvs.c write_fails_page).
+ *  - DEQP_STATUS: bytes 8..11 of the status string; the first eight still
+ *    tell dEQP's statuses apart (QualityW, Compatib, Resource, Internal,
+ *    Crash, Timeout). PROBES: p4 and the CRC (four points compare, exactly,
+ *    without the CRC's check of the full 8-bit colours).
+ *  - CASE: want (a failed check's got stands alone). The CASE_SET summary:
+ *    the first skipped case and cases run, so passed cannot be compared with
+ *    run and the decoder reads the summary as invalid, not as a pass.
+ *  - FAULT: FAR. APP: the application's word. PICTURE: W << 16 | H (two
+ *    boards' CRCs are compared only with their sizes known elsewhere).
+ *    WDOG: the uptime. STAGE: the self-arm's feed count. PROGRESS: the
+ *    count of progress records.
+ *
+ * How an X2 tree names its failing cases (the decision, 2026-11-06, kept
+ * here because deqp_snvs.c's page writer and tools/board.sh's name_pages and
+ * results_tsv rely on it): from the record's own shorter DEQP_FAILS pages, in
+ * the selector form (TREE_IMAGE), decoded as four names a page; not from the
+ * console. Because:
+ *  - the record is the only result every X2 run has. The board's UART2
+ *    reaches the host only when BOARD_UART names an adapter, and a run must
+ *    not depend on it;
+ *  - the pages keep the name check (CRC-16 of the full name, matched against
+ *    the row's candidates) that makes a name exact whatever order dEQP ran
+ *    the cases in, and page 0's low byte (every case neither Pass nor
+ *    NotSupported) says how many pages the row needs;
+ *  - the cost is boots, not information: ceil(n / 4) page boots for a row
+ *    with n Fails instead of ceil(n / 6), the same names.
+ * With a console the runner may be told NAMES=0: no page boots, and
+ * tools/cts/deqp-uart-tally.py names the failing cases from the console's
+ * #beginTestCaseResult lines; the row tally is read from the record either
+ * way. */
 #ifdef CONFIG_GC_COMMON_RESULT_SNVS_KEEP_LPGPR0
 #define GC_RESULT_DEQP_FAILS_PER_PAGE YK_RECORD_DEQP_FAILS_PER_PAGE_3W
 #else
