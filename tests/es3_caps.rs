@@ -281,19 +281,17 @@ fn known_gaps() -> Vec<(&'static str, &'static str)> {
              (gl/texture.rs stored_compressed_formats); ES 3.0 needs the ten ETC2/EAC formats (formats-*)",
         ),
     ];
-    if cfg!(not(feature = "gpu-vivante")) {
-        // PowerVR and V3D carry 8 varying vectors (gl/context.rs MAX_VARYING_VECTORS), the ES 2.0 minimum
+    let fifteen = cfg!(any(feature = "gpu-vivante", feature = "gpu-powervr"));
+    if !fifteen {
+        // V3D and Mali carry 8 varying vectors (gl/context.rs MAX_VARYING_VECTORS), the ES 2.0 minimum
         v.extend_from_slice(&[
             ("MAX_VARYING_VECTORS", "8, not 15: the ES 2.0 minimum is what this back end programs (gl/context.rs)"),
             ("MAX_VARYING_COMPONENTS", "32 = 8 vectors * 4"),
             ("MAX_FRAGMENT_INPUT_COMPONENTS", "32 = 8 vectors * 4, ES 3.0 needs 60 (gl/context.rs)"),
         ]);
     }
-    // the GC7000 reports 15 varyings but 60 vertex output components
-    v.push((
-        "MAX_VERTEX_OUTPUT_COMPONENTS",
-        if cfg!(feature = "gpu-vivante") { "60 = 15 * 4, ES 3.0 needs 64" } else { "32 = 8 * 4" },
-    ));
+    // the GC7000 and the PowerVR report 15 varyings but 60 vertex output components
+    v.push(("MAX_VERTEX_OUTPUT_COMPONENTS", if fifteen { "60 = 15 * 4, ES 3.0 needs 64" } else { "32 = 8 * 4" }));
     v
 }
 
@@ -492,7 +490,8 @@ fn es2_report_answers_are_unchanged() {
         assert_eq!(error_of(p), GL_INVALID_ENUM, "{name} must be GL_INVALID_ENUM in an ES 2.0 report");
     }
     /* ES 2.0's own limits (Table 6.18 of ES 2.0.25), per GPU where they differ */
-    let varyings = if cfg!(feature = "gpu-vivante") { 15 } else { 8 }; // gl/context.rs MAX_VARYING_VECTORS
+    // gl/context.rs MAX_VARYING_VECTORS: the PowerVR's 15 is ES 3.0's answer only; it reports 8 here
+    let varyings = if cfg!(feature = "gpu-vivante") { 15 } else { 8 };
     let point_max = if cfg!(feature = "gpu-v3d") {
         512.0
     } else if cfg!(feature = "gpu-vivante") {

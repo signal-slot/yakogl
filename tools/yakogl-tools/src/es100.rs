@@ -861,6 +861,13 @@ mod tests {
     const BUDGET: &str = "ERROR: Linking vertex and fragment stages: the program's varyings do not fit \
                           MAX_VARYING_VECTORS = 8 (Appendix A packing)\n";
 
+    /// [`link`] at the appendix's own eight rows (ES 2.0's minimum), whatever
+    /// this build's GPU reports: the PowerVR this binary is built for reports
+    /// 15 under ES 3.0 (gl/context.rs MAX_VARYING_VECTORS).
+    fn link8(s: &Scratch, vs: &str, fs: &str) -> R<Result<(), Diag>> {
+        link_for(s, vs, fs, 8)
+    }
+
     /// GLSL ES 1.00 Appendix A 7's own example, a..h, fills all but one cell
     /// of the eight rows (the table the appendix prints): it links, one float
     /// more still does, and a vec2 more does not.
@@ -870,11 +877,11 @@ mod tests {
             ["vec4 a", "mat3 b", "vec2 c[3]", "vec2 d[2]", "vec2 e", "float f[3]", "float g[2]", "float h"];
         with_scratch(|s| {
             let (vs, fs) = varying_pair(&EXAMPLE);
-            assert_eq!(link(s, &vs, &fs).unwrap().map_err(|d| d.log), Ok(()));
+            assert_eq!(link8(s, &vs, &fs).unwrap().map_err(|d| d.log), Ok(()));
             let (vs, fs) = varying_pair(&[&EXAMPLE[..], &["float i"]].concat());
-            assert_eq!(link(s, &vs, &fs).unwrap().map_err(|d| d.log), Ok(()));
+            assert_eq!(link8(s, &vs, &fs).unwrap().map_err(|d| d.log), Ok(()));
             let (vs, fs) = varying_pair(&[&EXAMPLE[..], &["vec2 i"]].concat());
-            let d = link(s, &vs, &fs).unwrap().expect_err("no two cells side by side are left");
+            let d = link8(s, &vs, &fs).unwrap().expect_err("no two cells side by side are left");
             assert_eq!((d.phase, d.log.as_str()), (Phase::Link, BUDGET));
         });
     }
@@ -889,11 +896,14 @@ mod tests {
             let decls: Vec<String> = (0..9).map(|i| format!("vec4 v{i}")).collect();
             let decls: Vec<&str> = decls.iter().map(String::as_str).collect();
             let (vs, fs) = varying_pair(&decls[..8]);
-            assert_eq!(link(s, &vs, &fs).unwrap().map_err(|d| d.log), Ok(()));
+            assert_eq!(link8(s, &vs, &fs).unwrap().map_err(|d| d.log), Ok(()));
             let (vs, fs) = varying_pair(&decls);
-            assert_eq!(link(s, &vs, &fs).unwrap().map_err(|d| d.log), Err(BUDGET.to_string()));
+            assert_eq!(link8(s, &vs, &fs).unwrap().map_err(|d| d.log), Err(BUDGET.to_string()));
             /* the GC7000 reports 15, and its client says so in the request */
             assert_eq!(link_for(s, &vs, &fs, 15).unwrap().map_err(|d| d.log), Ok(()));
+            /* and so does the PowerVR this binary is built for: `link`'s own value */
+            assert_eq!(yakogl::gl::context::MAX_VARYING_VECTORS, 15);
+            assert_eq!(link(s, &vs, &fs).unwrap().map_err(|d| d.log), Ok(()));
         });
     }
 
@@ -905,9 +915,9 @@ mod tests {
             let decls: Vec<String> = (0..33).map(|i| format!("float f{i}")).collect();
             let decls: Vec<&str> = decls.iter().map(String::as_str).collect();
             let (vs, fs) = varying_pair(&decls[..32]);
-            assert_eq!(link(s, &vs, &fs).unwrap().map_err(|d| d.log), Ok(()));
+            assert_eq!(link8(s, &vs, &fs).unwrap().map_err(|d| d.log), Ok(()));
             let (vs, fs) = varying_pair(&decls);
-            assert_eq!(link(s, &vs, &fs).unwrap().map_err(|d| d.log), Err(BUDGET.to_string()));
+            assert_eq!(link8(s, &vs, &fs).unwrap().map_err(|d| d.log), Err(BUDGET.to_string()));
         });
     }
 

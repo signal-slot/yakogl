@@ -122,8 +122,29 @@ const _: () = assert!(CAP_COMBINED_TEXTURE_UNITS <= 256);
 /// the driver programs all of them. ES 3.0's minimum is 15.
 #[cfg(feature = "gpu-vivante")]
 pub const MAX_VARYING_VECTORS: usize = 15;
-/// PowerVR: 8, as before, until the USC's limit is measured (usc-backend).
-#[cfg(feature = "gpu-powervr")]
+/// PowerVR: 15, ES 3.0's minimum, which is what the compiler and the back
+/// end carry (tests/es3_pvr_varyings.rs builds and draws with it):
+///
+/// * the records and the fragment chain hold 16 varyings
+///   (shaderc/mod.rs `ShcShader::varyings`, online/powervr/abi.rs `widths`,
+///   online/powervr/chain.rs `comps`), and the PDS coefficient program
+///   iterates 16 (pvr/ffi.rs PVR_PDS_COEFF_MAX_VARYINGS, pvr/backend.rs
+///   `CoeffOnce::cv`);
+/// * the USC's `ditr`/`ditrp` coefficient offset is 6 bits in units of 4
+///   (online/powervr/isa_tables.rs `coff`, Shr2): 252 coefficients. A
+///   fragment shader lays out W, then gl_FragCoord.z's and gl_PointCoord's
+///   sets, then 16 coefficients per vec4 (online/powervr/fragment.rs
+///   `coefficient_offsets`): the fifteenth vec4 starts at 240 with all
+///   three present, a sixteenth would start at 256 and not encode;
+/// * the PPP's varying count is 8 bits (Mesa csbgen rogue/ppp.xml
+///   STATE_VARYING0 `f32_linear`) and the VDM's vertex output size 8 bits
+///   in units of 4 dwords (rogue/vdm.xml VDM_STATE4 `vs_output_size`): 60
+///   components and 64 dwords fit either.
+///
+/// Under `report-es2` 8, the ES 2.0 answer as it was (tests/es2_report_guard.rs).
+#[cfg(all(feature = "gpu-powervr", not(feature = "report-es2")))]
+pub const MAX_VARYING_VECTORS: usize = 15;
+#[cfg(all(feature = "gpu-powervr", feature = "report-es2"))]
 pub const MAX_VARYING_VECTORS: usize = 8;
 /// V3D: 8, the ES 2.0 minimum. Mesa's v3d allows 16 (V3D_MAX_FS_INPUTS, 64
 /// components), but nothing here has drawn with more than a few varyings on
