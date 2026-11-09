@@ -2018,6 +2018,104 @@ tree, one comment for #7 naming the build and the record, a new issue
 for each defect; a person posts them. A run that did not happen is not a
 row.
 
+### Z4 board procedure
+
+**Not run.** Written 2026-11-09 from the Z3 procedure above, before any
+run and before the Z4 code is on this page's base: no value in it is
+measured on the board, and the parts that wait for the probe and the
+board module are marked `PLACEHOLDER` below. A run whose record differs
+is a finding: record it as it came, never by changing the prediction. Z4
+runs only after Z3 has passed, and reports to #7 (milestones: #26).
+
+**What Z4 does.** It brings up Z3 (the firmware boot, AS0, the MCU
+acknowledging `PING`), starts CSG 0 / CS 0 from our kernel side
+(`gpu::mali::sched`), creates the tiler heap (`gpu::mali::heap`), submits
+the L1 frame that `l1::build_triangle_frame` (`src/mali/frame.rs`) builds,
+at the Z4 VAs, and waits on the sync object the frame signals; it returns
+one `#[repr(C)]` record. [The Z4 frame against the
+trace](#the-z4-frame-against-the-trace) compares the frame's bytes with
+the panthor / Mesa trace: read it first, it names the three choices that
+are not part of Z4.
+
+**Preconditions** — all of them, or no run:
+
+- The owner's go-ahead for this run, given for Z4 itself (Z3's does not
+  carry over), the T6, someone at the power switch, and
+  `resource:<board-uart>`; the named hand, the read-only UART capture,
+  the WDT_EN proof, `GLB_RST_ST` before and after, and `--go` taking the
+  board lock are Z1's procedure as the Z2 one above states them.
+- Z3's board run has passed and is recorded (its row in
+  `tools/cts/RESULTS.md`): the booted firmware is the step Z4 stands on.
+- The `t6_submit` image built from a detached checkout of a commit that
+  is on `origin/main` (the image prints it on its first line, `t6_submit:
+  build <describe>`; a result row names that build), in the west
+  workspace as for Z3:
+
+  ```sh
+  west build -p always -b nanopc_t6 -d build/t6_submit yakogl/tools/probes/nanopc_t6/t6_submit
+  ```
+
+- The firmware header made on the building host and never committed,
+  exactly as for Z3: `tools/cts/deps-env.sh --build MALI_CSFFW`, then
+  `driver/tools/mkmalifw.sh <file>` writes the gitignored
+  `driver/src/fw/mali_csffw_blob.h`. The probe prints the blob's size,
+  sha256 and magic before it touches the GPU: 282624 bytes and sha256
+  `a27847ea…a2405b`, or the result is not Z4's.
+- The gate's row `zephyr  nanopc_t6 t6_submit image (Z4), -Werror on our
+  C files` in `tools/check.sh` is green for that commit, not a gap. It
+  is a gap without `ZEPHYR_WS` or the firmware header, and a gap is not
+  the precondition met.
+
+**Run** — as Z3's, with the `t6_submit` image: ask who uses the board;
+`nanopc-t6.sh <t6_submit zephyr.bin>` (the dry run) and read its plan;
+`nm build/t6_submit/zephyr/zephyr.elf | grep 't6_submit_'` for the pool,
+the section backings and the `__nocache` shared section (the probe prints
+the same, identity mapped under 4 GiB as for Z3); then
+`T6_HAND=<name> T6_RECORD_DIR=<dir> T6_UART=$BOARD_UART nanopc-t6.sh
+<t6_submit zephyr.bin> --go`. The board's host, tty and record directory
+come from the environment, never from this page. The WDT0 feeder bounds
+every wait as for Z2 and Z3: the probe feeds around the Z4 call, and a
+wait that does not finish inside the feeder's window ends in the
+watchdog's PSCI reset, not in a hang.
+
+**Predicted record.** Z1's, Z2's and Z3's lines are as the Z3 procedure
+says; Z4 adds the fields of its own record (`board::nanopc_t6_submit`,
+C entry `yd_t6_submit`), and a `PASS` run holds `step` 0, `stop` 0 and
+`refusal` 0.
+
+> **PLACEHOLDER (predicted record).** The field table (CSG 0 / CS 0
+> started, the heap's chunks, the sync object's value, the exception and
+> fault words) and the typed `uart2` lines are filled from
+> `board::nanopc_t6_submit` and the probe's printk formats once both are
+> on main. Until then nothing here is predicted.
+
+**Verdict.** `driver/tools/kexec-zephyr/t6-verdict.sh t6_submit
+<uart.log>` judges the capture: Z1's, Z2's and Z3's lines as for `t6_fw`,
+then the Z4 lines.
+
+> **PLACEHOLDER (verdict lines).** The `t6_submit` rows of
+> `t6-verdict.sh`, each with what it expects, are filled when the probe's
+> record lines and their verdict table are on main.
+
+**What a pass and a stop look like.** A pass is the probe's `t6_submit:
+PASS` line with the verdict script reporting no failed line: the sync
+object reached its value and the record's exception words are clear.
+A stop is any of: a `t6_submit: FAIL: …` line naming the Z4 step; a
+refusal of Z3's steps (read with the Z3 procedure); a record that ends
+before the Z4 line, which means the call stopped inside and the
+watchdog's PSCI reset follows (the capture ends at the last line printed
+before it); or a wait on the sync object that times out. Every stop is
+a finding. Whether the render itself is right is not Z4's pass: the
+pixels are read back separately; a difference between the frame and the
+trace is read against "The Z4 frame against the trace".
+
+**Recording the result.** As Z3's: the build line and the PASS or FAIL
+line into Z4's row in `tools/cts/RESULTS.md` and the summary in
+`tools/cts/STATUS.md`, `uart.log` and the record directory out of the
+tree, one comment for #7 naming the build and the record, a new issue
+for each defect; a person posts them. A run that did not happen is not a
+row.
+
 ## Decisions
 
 Decided by the user on 2026-10-18:
