@@ -72,6 +72,11 @@ pub const PVR_TA_CLIP_MODE_FRONT_REAR: u32 = 1;
 pub const PVR_TA_CLIP_MODE_FRONT_REAR_DEPTH: u32 = 2;
 
 pub const PVR_TA_FLATSHADE_VERTEX_0: u32 = 1;
+/// GL's provoking vertex is the last one (Mesa's LAST_VERTEX mode: VERTEX_2
+/// for every topology, pvr_arch_cmd_buffer.c).
+pub const PVR_TA_FLATSHADE_VERTEX_2: u32 = 3;
+/// VDM_STATE0.flatshade_control, VDMCTRL_FLATSHADE_CONTROL_VERTEX_2.
+pub const PVR_VDM_FLATSHADE_CONTROL_VERTEX_2: u32 = 2;
 
 /* VDMCTRL_INDEX_LIST0 primitive topology (vdm.xml:117-130). */
 pub const PVR_VDM_TOPOLOGY_POINT_LIST: u32 = 0;
@@ -104,7 +109,7 @@ pub const PVR_PDS_NO_ID_REG: u32 = 0xff;
 pub const PVR_PDS_COEFF_SMOOTH: u32 = 0;
 /// Linear in screen space (GOURAUD, perspective=0).
 pub const PVR_PDS_COEFF_NPC: u32 = 1;
-/// FLAT_VERTEX0.
+/// FLAT_VERTEX2 (the GL last provoking vertex).
 pub const PVR_PDS_COEFF_FLAT: u32 = 2;
 
 pub const PVR_PDS_COEFF_MAX_VARYINGS: u32 = 16;
@@ -306,7 +311,7 @@ pub struct PvrVdmVsState {
     /// program DMAs into the unified store (highest register + 1, times 4);
     /// VDM_STATE5.vs_usc_unified_size is sized from it. 0 = the output size.
     pub vs_input_size_bytes: u32,
-    /// VDM_STATE0.flatshade_control (0 = VERTEX_0).
+    /// VDM_STATE0.flatshade_control (2 = VERTEX_2).
     pub flatshade_control: u32,
 }
 

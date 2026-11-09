@@ -370,7 +370,7 @@ int pvr_pds_render_coeff_program(int uses_w,
    }
    for (uint32_t v = 0; v < num_varyings; v++) {
       const struct pvr_pds_coeff_varying *cv = &varyings[v];
-      enum ROGUE_PDSINST_DOUTI_SHADEMODEL shade = ROGUE_PDSINST_DOUTI_SHADEMODEL_FLAT_VERTEX0;
+      enum ROGUE_PDSINST_DOUTI_SHADEMODEL shade = ROGUE_PDSINST_DOUTI_SHADEMODEL_FLAT_VERTEX2; /* GL: last vertex */
       bool persp = false;
       uint32_t off;
 

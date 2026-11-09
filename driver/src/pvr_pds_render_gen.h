@@ -278,7 +278,7 @@ int pvr_pds_render_vertex_program_ids(uint64_t vs_usc_exec_offset,
 enum pvr_pds_coeff_interp {
    PVR_PDS_COEFF_SMOOTH = 0,  /* perspective-correct (GOURAUD, perspective=1) */
    PVR_PDS_COEFF_NPC    = 1,  /* linear in screen space (GOURAUD, perspective=0) */
-   PVR_PDS_COEFF_FLAT   = 2,  /* FLAT_VERTEX0 */
+   PVR_PDS_COEFF_FLAT   = 2,  /* FLAT_VERTEX2 (GL's provoking vertex is the last) */
 };
 
 struct pvr_pds_coeff_varying {
