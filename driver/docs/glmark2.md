@@ -551,3 +551,47 @@ AXE-1-16M) are left out.
 - **The score leaves unsupported scenes out** (section 1). A source that
   lost a scene scores higher. Our run prints the counts. With the mapbuffer
   gap it would lose 2 of 33 on every board, and 2 more on the Pi 4.
+
+## 4. The NanoPC-T6 (Rockchip RK3588, Mali-G610, back end `gpu-mali`, issue #20)
+
+This board runs Linux (Armbian 26.8.10 trixie, kernel 6.18.55-current-rockchip64,
+the panthor driver), not Zephyr: glmark2-es2 is a Linux program here, built on
+the host and linked against YakoGL's own GL/EGL pair, not the board's glvnd
+and Mesa. `tools/cts/mali-glmark2-build.sh` makes it:
+
+```
+tools/cts/mali-glmark2-build.sh [--dev] [--dry-run] [--gles-lib DIR] <outdir>
+tools/cts/mali-glmark2-build.sh --check <outdir>
+```
+
+- **Program.** glmark2 at the pin above, with `tools/cts/mali-glmark2-pbuffer.patch`,
+  cross-compiled with Debian trixie's `g++-14-aarch64-linux-gnu`. The program
+  and the pair need no more than the board's floors: GLIBC 2.41, GLIBCXX 3.4.33,
+  CXXABI 1.3.15 (`--check` reads them with `readelf -V`).
+- **Why the pbuffer flavour.** The pair (`tools/mali/panthor-gles`) offers
+  pbuffer surfaces only. glmark2's own flavours all need a window (x11,
+  wayland), a GBM device (drm, gbm) or a surfaceless platform (null). The
+  patch adds `pbuffer-glesv2`: an 800x600 EGL pbuffer on
+  `EGL_DEFAULT_DISPLAY`, plus the `glmark2-picture:` line of "The picture
+  value" after each scene, read with `glReadPixels` before the swap. Frames
+  are not shown, so this is an off-screen score (section 3).
+- **Layout.** `<outdir>/bin/glmark2-es2-mali` (RUNPATH `$ORIGIN/../lib`),
+  `<outdir>/lib/` (exactly `libEGL.so.1` and `libGLESv2.so.2`, built by
+  `tools/mali/panthor-gles/build.sh`, or copied with `--gles-lib DIR`),
+  `<outdir>/share/glmark2/` (the data; the program finds it beside itself)
+  and `<outdir>/BUILD-INFO` (commit, pin, flavour, the version maxima). glmark2
+  `dlopen()`s the two libraries by SONAME, the board's glvnd + Mesa 25.0.7 has
+  the same names, and the RUNPATH finds ours first.
+- **Commit.** The build is refused (exit 3) unless HEAD is on the main ref and
+  the tree is clean; `--dev` builds anyway and BUILD-INFO says `dev=yes`, so
+  the tree is no record. `--dry-run` prints every step and runs none.
+- **Symbols.** `tools/cts/glmark2-mali-symbols.sh [--glmark2-src DIR]
+  <glmark2-es2> <libGLESv2.so.2> <libEGL.so.1>` (or `--from-dumps DIR`) checks
+  on the host that the program resolves GL and EGL only to the pair and that
+  the pair defines every `gl*` and `egl*` name the program imports and glad
+  loads.
+
+The per-scene runner `tools/cts/mali-glmark2-run.sh`, the results
+(`tools/cts/RESULTS.md` "Mali"; the `mali` column of
+`tools/cts/glmark2-pictures.txt`) and what the frame time measures
+(`docs/notes/mali-glmark2-frametime.md`) follow when they merge.
