@@ -2,8 +2,9 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Mali (Valhall): the vertex look-ups of cases 101 and 149
 
-**Status: design, implementation in vs-lookups** (plan #336, issue #33). This
-note changes no code. It maps the two vertex look-up refusals left in the sweep
+**Status: case 101 and the compiler half of case 149 implemented
+(vs-lookups, section 6); 149's frame half open** (plan #336, issue #33). The
+sections below are the design as written at `60184fe5`. It maps the two vertex look-up refusals left in the sweep
 (`tools/cts/log/2026-11-07-t6-step4a`) to the Mesa 26.2.1 / drm-shim
 references, says where in `src/shaderc/online/mali` and `src/mali` each part is
 made, and what is missing. It continues `notes/mali-vs-texture-lanes.md`
@@ -36,9 +37,8 @@ section 5 records how they and the references were checked there.
   `FMA`, `MUX.i32.bit`, 8.8 level sequence are `Nir::cube_desc` (`src/shaderc/online/mali/nir.rs:1814`)
   and `sfixed_8_8` (`:1831`) and are compared in the tests of
   `notes/mali-cube-textures.md`.
-* **not committed yet: the reference for `es100/cubelod.vert` with
-  `es100/cubelod.frag`** (a cube direction of three constants). It was drawn
-  for this note (section 5) and is vs-lookups' to commit, as
+* **committed by vs-lookups: the reference for `es100/cubelod.vert` with
+  `es100/cubelod.frag`** (a cube direction of three constants), as
   `tools/mali/testdata/vslookup_101_cubelod.{vert,frag,expect.json}` (the two
   sources byte copies of `tools/shaders/es100/cubelod.{vert,frag}`):
 
@@ -412,3 +412,37 @@ refusal of section 3.3 step 4), never the compiler half alone.
     passes, every region byte-equal. The next stop is therefore the frame,
     and it is not a refusal: one vertex binding is built where sixteen are
     read (section 3.3 step 4).
+
+## 6. What vs-lookups landed
+
+* **References** (Mesa 26.2.1 drm-shim, section 2.1's commands, both with
+  `--uniform-values`): `tools/mali/testdata/vslookup_101_cubelod.*` and
+  `vslookup_149_rank.*` (section 3.4 item 2's vertex shader, case 149's
+  fragment). They were drawn on a shim built from the pan_shc tree as in
+  section 5, which reproduced `case149_vsunits.expect.json` byte for byte,
+  and drawn again on a shim built from the release tarball itself (its
+  sha256 the one in `third_party/mesa-26.2.1/UPSTREAM`): both equal to the
+  committed files but for the `"trace"` name.
+* **Case 101**: the `TexVertexConstant` guard and the gap are gone (section
+  2.4 items 1-3); `a_cube_direction_of_constants_is_byte_equal_to_mesa_26_2_1`.
+* **Case 149, compiler half** (section 3.3 steps 1-3): `Kind::VsTex` carries
+  `sampler` and `index`; after DCE `nir::build` sets each index to the
+  sampler's rank by binding among the live look-ups' samplers;
+  `Nir::bound_samplers` replaces `Nir::sampler`; `select.rs` takes
+  `tex_handle(index)`; `mod.rs` fills `MaliShader::samplers` for a vertex
+  shader as for a fragment shader. Tests
+  `sixteen_vertex_look_ups_are_byte_equal_to_mesa_26_2_1` and
+  `vertex_samplers_are_ranked_by_binding_is_byte_equal_to_mesa_26_2_1`.
+* **Same sampler, same coordinate and level** (step 1's choice): kept
+  refused, `MaliError::TexVertex`, which is the gap table's source for it
+  (`w.x * texture2DLod(s, p.xy, 0.0) + w.y * texture2DLod(s, p.xy, 0.0)`).
+  The same sampler at two different coordinates compiles (two
+  `TEX_SINGLE` of one handle); no reference draws it.
+* **Frame half: not done** (step 4's fallback). `src/mali/backend.rs`
+  `sampled_texture` returns `NOT_BUILT_VERTEX_TEXTURES` ("a vertex shader that
+  reads more than one texture") when the vertex record names more than one
+  binding, so case 149 moves from `REFUSED compile` to `REFUSED draw`, not to
+  a descriptor read past the vertex tables. `sampler_bindings` now reads a
+  vertex record's `samplers` list too (one binding: as before). Step 4's
+  mirror of the fragment tables (`DrawCall::vs_textures`, the counts, the
+  literals) and step 5's board capture remain.

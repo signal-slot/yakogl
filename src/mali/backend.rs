@@ -227,6 +227,11 @@ pub const INVALID_TEXTURE_STORAGE: &str = "mali: a texture to copy without a CPU
 /// what the draw renders is undefined in GL (ES 2.0 4.4.3, a feedback loop).
 pub const NOT_BUILT_TEXTURE_FEEDBACK: &str =
     "mali: a draw that samples the texture its own frame renders into is not built yet";
+/// The vertex shader reads more than one sampler binding (case 149): the
+/// frame builds the vertex texture and sampler tables for one
+/// (`DrawCall::vs_texture`), and a look-up past it would read a descriptor
+/// out of the table (docs/notes/mali-vs-lookups.md §3.3 step 4).
+pub const NOT_BUILT_VERTEX_TEXTURES: &str = "mali: a vertex shader that reads more than one texture is not built yet";
 /// A frame starts from the old image and the preload program did not build
 /// at init (its log line says why).
 pub const NOT_BUILT_PRELOAD_PROGRAM: &str =
@@ -1684,14 +1689,15 @@ fn add_gl_draw(
 /// The sampler bindings the draw's fragment shader (or, `vertex`, its
 /// vertex shader) reads, in descriptor index order: a fragment shader's
 /// [`MaliShader::samplers`] (binding `samplers[i]` at index i of its
-/// texture and sampler tables), a vertex shader's one
-/// [`MaliShader::sampler`]; empty for a shader that samples nothing.
+/// texture and sampler tables), a vertex shader's alike (a record with no
+/// list, its one [`MaliShader::sampler`]); empty for a shader that samples
+/// nothing.
 fn sampler_bindings(d: &GlesDraw, vertex: bool) -> &[u8] {
     let sh = if vertex { d.vs } else { d.fs };
     // SAFETY: the draw's records are null or live past the draw
     // (`programs`).
     let Some(r) = unsafe { sh.as_ref() }.and_then(MaliShader::of) else { return &[] };
-    if vertex || r.samplers.is_empty() {
+    if r.samplers.is_empty() {
         r.sampler.as_slice()
     } else {
         r.samplers
@@ -2039,9 +2045,10 @@ fn fs_textures(
 /// The texture the vertex shader's look-up reads ([`texture_of`]), None
 /// for a vertex shader that samples nothing.
 fn sampled_texture(d: &GlesDraw, vertex: bool, data: &mut Pool) -> Result<Option<frame::SampledTexture>, FrameError> {
-    match sampler_bindings(d, vertex).first() {
-        Some(&b) => texture_of(sampled_bind(d, vertex, b), data).map(Some),
-        None => Ok(None),
+    match sampler_bindings(d, vertex) {
+        [b] => texture_of(sampled_bind(d, vertex, *b), data).map(Some),
+        [] => Ok(None),
+        _ => Err(FrameError::NotBuilt(NOT_BUILT_VERTEX_TEXTURES)),
     }
 }
 

@@ -645,7 +645,7 @@ pub fn vs_variant(
                 lanes[id][0] = Src::ssa(lo);
                 lanes[id][1] = Src::ssa(hi);
             }
-            nir::Kind::VsTex { explicit, cube } => {
+            nir::Kind::VsTex { explicit, cube, index, .. } => {
                 /* `bi_emit_tex_valhall` (bifrost_compile.c:3488-3574): the
                  * staging words collected (the coordinate, or a cube's
                  * descriptor pair, then the level), TEX_SINGLE of the
@@ -677,7 +677,7 @@ pub fn vs_variant(
                     m => m,
                 };
                 let op = Op::TexSingle { sr_count: n as u8, mask, f16: false, skip: false, lod, dim };
-                let handle = Src::of(Idx::Const(super::nir_fs::TEX_HANDLE));
+                let handle = Src::of(Idx::Const(super::nir_fs::tex_handle(u32::from(index))));
                 let r = alu(p, op, &[Src::ssa(c), handle, Src::of(Idx::Const(0))])?;
                 let w = match mask.count_ones() {
                     1 => [r; 4],

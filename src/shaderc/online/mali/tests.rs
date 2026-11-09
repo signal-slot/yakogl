@@ -1021,7 +1021,6 @@ fn unreachable_from_es100(e: MaliError) -> Option<&'static str> {
         | E::Invariant
         | E::FauPage
         | E::TexVertex
-        | E::TexVertexConstant
         | E::TexKind
         | E::TexCount
         | E::TexCoord
@@ -1143,11 +1142,10 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
             "precision mediump float; varying vec4 v; void main(){ int i = int(v.x); gl_FragColor = vec4(float(i)); }",
             MaliError::IntValue,
         ),
-        (VS, "uniform sampler2D s; uniform sampler2D t; attribute vec4 p; varying vec4 v; void main(){ gl_Position = p; v = texture2DLod(s, p.xy, 0.0) * texture2DLod(t, p.xy, 0.0); }", MaliError::TexVertex),
-        /* a cube look-up at a direction of constants alone (case 101's
-         * tools/shaders/es100/cubelod.vert: `vec3(1.0, 0.0, 0.0)`; one
-         * constant lane is an operand, case114_v) */
-        (VS, "uniform samplerCube s; attribute vec4 p; varying vec4 v; void main(){ gl_Position = p; v = textureCubeLod(s, vec3(0.0, 0.0, 1.0), 0.0) * p; }", MaliError::TexVertexConstant),
+        /* the same vertex look-up twice: one TEX_SINGLE in Mesa
+         * (`nir_opt_cse`) and its products factored (mali-vs-lookups.md
+         * §3.1) */
+        (VS, "uniform sampler2D s; uniform vec4 w; attribute vec4 p; varying vec4 v; void main(){ gl_Position = p; v = w.x * texture2DLod(s, p.xy, 0.0) + w.y * texture2DLod(s, p.xy, 0.0); }", MaliError::TexVertex),
         (FS, "precision mediump float; uniform sampler2D s; varying vec2 v; void main(){ gl_FragColor = texture2D(s, v, 1.0); }", MaliError::TexKind),
         (FS, "precision mediump float; uniform sampler2D s; varying vec3 v; void main(){ gl_FragColor = texture2DProj(s, v); }", MaliError::TexKind),
         (FS, "precision mediump float; uniform samplerCube s; varying vec3 v; void main(){ gl_FragColor = textureCube(s, v); }", MaliError::TexKind),
@@ -1267,7 +1265,7 @@ fn every_reachable_gap_is_reached_by_an_es100_source() {
         assert!(reached.contains(e.message()), "no case reaches {e:?}");
     }
     assert_eq!(reached.len(), reachable.len(), "a case reaches a gap classified unreachable");
-    assert_eq!((MaliError::GAPS.len(), reachable.len(), unreachable), (62, 58, 4), "gaps: all, reachable, unreachable");
+    assert_eq!((MaliError::GAPS.len(), reachable.len(), unreachable), (61, 57, 4), "gaps: all, reachable, unreachable");
 }
 
 /// The front end's verdict on gl_FragData[1] (the reason FragOutput is
@@ -2111,6 +2109,8 @@ fn vs_reference_sources() -> Vec<&'static str> {
     /* the vertex look-ups (the shim's, #32), the cube's among them */
     srcs.extend([td!("tex_vs_lod.vert"), td!("tex_vs_zero.vert"), td!("cube_vs.vert")]);
     srcs.extend([td!("case149_vstexconst.vert"), td!("case149_vstexconst_s.vert")]);
+    /* the constant cube direction (case 101), several look-ups (case 149) */
+    srcs.extend([td!("vslookup_101_cubelod.vert"), td!("case149_vsunits.vert"), td!("vslookup_149_rank.vert")]);
     srcs.extend(UNITYPE_POPULATION.iter().map(|c| c.1));
     /* the vertex compares, reductions and clamps (cases 86 and 182) */
     srcs.extend([td!("vsarith_86_anyall.vert"), td!("vsarith_182_fsat.vert"), td!("vsarith_182_fsatfolded.vert")]);
@@ -2277,6 +2277,68 @@ fn a_vertex_look_up_at_a_constant_lane_is_byte_equal_to_mesa_26_2_1() {
     }
 }
 
+/// gl_test case 149's vertex shader (`vsunits_vs_src(16)`, tools/mali/
+/// testdata/case149_vsunits.vert): sixteen `texture2DLod(u_sK, vec2(0.5),
+/// 0.0)` weighted by `u_w[K/4]`. Each look-up reads its sampler's
+/// descriptor index (handle `0x20001800 + K * 0x10001`, FAU words 28..43),
+/// so the store offsets stay FAU words as Mesa's (fau.rs's histogram);
+/// every region the shim's to the byte (docs/notes/mali-vs-lookups.md §3).
+#[test]
+fn sixteen_vertex_look_ups_are_byte_equal_to_mesa_26_2_1() {
+    let (v, _) =
+        check_linked(td!("case149_vsunits.vert"), td!("case149_vsunits.frag"), td!("case149_vsunits.expect.json"));
+    assert_eq!(v.info.samplers, (0..16).collect::<Vec<u8>>());
+    assert_eq!(v.info.sampler, Some(0));
+    let mut tail = vec![FauWord::Constant(0x3f00_0000)];
+    tail.extend((0..16).map(|k| FauWord::Constant(super::nir_fs::tex_handle(k))));
+    assert_eq!(v.info.fau[27..], tail[..], "0.5, then the sixteen handles");
+}
+
+/// Two vertex look-ups of `u_s2` then `u_s0` out of three samplers
+/// declared: each descriptor index is its sampler's rank by binding among
+/// the samplers the program reads, the fragment's rule (handles
+/// 0x20011801 then 0x20001800, tools/mali/testdata/
+/// vslookup_149_rank.expect.json).
+#[test]
+fn vertex_samplers_are_ranked_by_binding_is_byte_equal_to_mesa_26_2_1() {
+    let (v, _) = check_linked(
+        td!("vslookup_149_rank.vert"),
+        td!("vslookup_149_rank.frag"),
+        td!("vslookup_149_rank.expect.json"),
+    );
+    assert_eq!(v.info.samplers, [0, 2], "the bindings at descriptor indices 0 and 1");
+    let handles: Vec<_> = v.info.fau.iter().filter(|w| matches!(w, FauWord::Constant(c) if c >> 27 == 4)).collect();
+    assert_eq!(handles, [&FauWord::Constant(0x2001_1801), &FauWord::Constant(0x2000_1800)]);
+}
+
+/// gl_test case 101's second program (tools/shaders/es100/cubelod.{vert,frag}
+/// as tools/mali/testdata/vslookup_101_cubelod.*): `textureCubeLod(u_s,
+/// vec3(1.0, 0.0, 0.0), u_lod)`, a direction of constants. Every lane is an
+/// operand of the cube ops, an immediate (`CUBEFACE1 r0, 0x3F800000, 0x0,
+/// 0x0`); the texels are a flat varying. Both IDVS programs and the
+/// fragment program the shim's to the byte (docs/notes/mali-vs-lookups.md §2).
+#[test]
+fn a_cube_direction_of_constants_is_byte_equal_to_mesa_26_2_1() {
+    assert_eq!(include_str!("../../../../tools/shaders/es100/cubelod.vert"), td!("vslookup_101_cubelod.vert"));
+    assert_eq!(include_str!("../../../../tools/shaders/es100/cubelod.frag"), td!("vslookup_101_cubelod.frag"));
+    let (v, _) = check_linked(
+        td!("vslookup_101_cubelod.vert"),
+        td!("vslookup_101_cubelod.frag"),
+        td!("vslookup_101_cubelod.expect.json"),
+    );
+    assert_eq!(v.info.sampler, Some(0));
+    assert_eq!(
+        v.info.fau[11..],
+        [
+            FauWord::Uniform { dword: 0 },
+            FauWord::Constant(0x1fff_ffff),
+            FauWord::Constant(0x3d80_0000),
+            FauWord::Constant(0x4580_0000),
+            FauWord::Constant(0x2000_1800)
+        ]
+    );
+}
+
 /* ---- the cube-map look-up (#32 (c), case 113) ---------------------- */
 
 /// gl_test case 113's vertex shader (tools/shaders/es100/cubemap.vert as
@@ -2349,9 +2411,8 @@ fn a_vertex_cube_look_up_is_byte_equal_to_mesa_26_2_1() {
     assert_facts("fs.fragment", &rf, f.info.work_reg_count, f.info.preload, &f.info.fau, VIEWPORT_64X64, &|_| 0);
 }
 
-/// The cube look-up's gaps beside the reference: a direction with a
-/// constant lane (case 101's cubelod.vert) is refused by name; a direction
-/// from an attribute is divergent, so its varying is stored as it is (no
+/// The cube look-up beside the reference: a direction from an attribute
+/// is divergent, so its varying is stored as it is (no
 /// `FMA x, 0, x`; the shape of the reference without the level and the
 /// promotion); a uniform alone stays refused (Mesa rewrites it in an order
 /// this back end has no reference for, `varyings_mesa_s_link_moves_or_merges_are_refused`).
@@ -2366,9 +2427,6 @@ fn a_cube_direction_from_an_attribute_is_divergent() {
     for op in ["CUBEFACE1", "CUBEFACE2_V9", "CUBE_SSEL", "CUBE_TSEL", "MUX.i32.bit"] {
         assert_eq!(texts.iter().filter(|t| t.starts_with(op)).count(), 1, "{op}");
     }
-    /* tools/shaders/es100/cubelod.vert's look-up: `vec3(1.0, 0.0, 0.0)` */
-    let constant = "attribute vec4 a_pos; uniform samplerCube u_s; uniform float u_lod; varying vec4 v_col; void main(){ gl_Position = a_pos; v_col = textureCubeLod(u_s, vec3(1.0, 0.0, 0.0), u_lod); }";
-    assert_eq!(gap(SHC_STAGE_VERTEX, constant), MaliError::TexVertexConstant);
 }
 
 /// gl_test case 114's vertex stage (`cubelod`, prog[0]: tools/shaders/

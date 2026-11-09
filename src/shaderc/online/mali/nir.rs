@@ -422,10 +422,14 @@ pub enum Kind {
     /// face in its top bits and the T word, `build_cube_desc`), `src[2]`
     /// the level's signed 8.8 word when `explicit` (`EXPLICIT`), else level
     /// 0 (`ZERO_LOD`); four fp32 lanes, the texels
-    /// (pan_nir_lower_tex.c:802-973).
+    /// (pan_nir_lower_tex.c:802-973). `sampler` is the GL sampler
+    /// binding it reads, `index` its descriptor index in the vertex
+    /// tables, set after DCE ([`Nir::bound_samplers`]).
     VsTex {
         explicit: bool,
         cube: bool,
+        sampler: u8,
+        index: u8,
     },
     /// `load_pixel_coord` (nir_fs.rs): the pixel position the hardware
     /// preloads in r59 ([`super::ra::POSITION_XY`]), a 16-bit vec2, x in
@@ -700,10 +704,6 @@ pub struct Nir<'s> {
     pub nloops: usize,
     /// The regions closed so far ([`IfRegion::seq`]).
     pub nseq: u8,
-    /// A vertex shader's look-up ([`Kind::VsTex`]): the sampler binding
-    /// whose texture and sampler it reads at descriptor index
-    /// [`super::nir_fs::TEX_INDEX`].
-    pub sampler: Option<u8>,
     /// A vertex shader's varying lanes that are constants ([`build`]): the
     /// ones Mesa's link propagates into the fragment shader.
     pub consts: super::link::VaryingConsts,
@@ -1082,7 +1082,6 @@ impl<'s> Nir<'s> {
             loops: [LoopRegion::NONE; MAX_LOOPS],
             nloops: 0,
             nseq: 0,
-            sampler: None,
             consts: super::link::VaryingConsts::NONE,
             nonuniform_const: false,
             nonuniform: scratch.alloc_filled(MAX_NODES, false).map_err(oom)?,
@@ -1737,6 +1736,17 @@ impl<'s> Nir<'s> {
 
     pub fn has(&self, p: Prod) -> bool {
         self.prods & (1 << p as u32) != 0
+    }
+
+    /// A vertex shader's live look-ups ([`Kind::VsTex`]) as (descriptor
+    /// index, sampler binding), in program order: the bindings the stage
+    /// reads at indices 0, 1, .. of its tables (one pair per look-up; a
+    /// sampler read twice repeats).
+    pub fn bound_samplers(&self) -> impl Iterator<Item = (u8, u8)> + '_ {
+        self.order[..self.len].iter().filter_map(|&id| match self.nodes[id as usize].kind {
+            Kind::VsTex { sampler, index, .. } => Some((index, sampler)),
+            _ => None,
+        })
     }
 
     fn push(&mut self, kind: Kind, src: [Val; 3]) -> Result<u16, MaliError> {
@@ -2827,20 +2837,17 @@ pub fn build<'s>(
                 coord,
                 lod: TexLod::Lod(level),
                 offset: None,
-            } if vs.sampler.is_none() => {
-                vs.sampler = Some(sampler);
+            } => {
                 let cube = dim == TexDim::Cube;
                 let (s, t) = if cube {
                     /* [`Nir::cube_desc`]. A constant lane of the direction
                      * stays an operand: the intrinsics fold no constant,
                      * and `va_lower_constants` makes it an immediate
                      * (case114_v.expect.json's `CUBEFACE1 r2, 0x3F800000,
-                     * r1, r0`). A direction of constants alone is a shape
-                     * no reference draws. */
+                     * r1, r0`), every lane of a direction of constants too
+                     * (vslookup_101_cubelod.expect.json's `CUBEFACE1 r0,
+                     * 0x3F800000, 0x0, 0x0`) */
                     let (x, y, z) = (lane(w, coord, 0), lane(w, coord, 1), lane(w, coord, 2));
-                    if [x, y, z].iter().all(|v| matches!(v, Val::Const(_))) {
-                        return Err(MaliError::TexVertexConstant);
-                    }
                     vs.cube_desc(x, y, z)?
                 } else {
                     /* a constant lane: its FAU word moved to the staging
@@ -2854,12 +2861,24 @@ pub fn build<'s>(
                 };
                 let level = lane(w, level, 0);
                 /* `nir_scalar_is_zero`: the bits 0 */
-                let n = if level == Val::Const(F32_ZERO) {
-                    vs.push(Kind::VsTex { explicit: false, cube }, [s, t, Val::Undef])?
+                let (kind, src) = if level == Val::Const(F32_ZERO) {
+                    (Kind::VsTex { explicit: false, cube, sampler, index: 0 }, [s, t, Val::Undef])
                 } else {
                     let x = vs.sfixed_8_8(level)?;
-                    vs.push(Kind::VsTex { explicit: true, cube }, [s, t, x])?
+                    (Kind::VsTex { explicit: true, cube, sampler, index: 0 }, [s, t, x])
                 };
+                /* a second look-up of one sampler at one coordinate and
+                 * level is one TEX_SINGLE in Mesa (`nir_opt_cse`), and the
+                 * products of it that follow are factored (`a*t + b*t` to
+                 * `(a + b)*t`, mali-vs-lookups.md §3.1): neither is built
+                 * here */
+                if vs.order[..vs.len]
+                    .iter()
+                    .any(|&id| vs.nodes[id as usize].kind == kind && vs.nodes[id as usize].src == src)
+                {
+                    return Err(MaliError::TexVertex);
+                }
+                let n = vs.push(kind, src)?;
                 for (c, o) in out.iter_mut().enumerate() {
                     *o = Val::Lane(n, c as u8);
                 }
@@ -3103,9 +3122,21 @@ pub fn build<'s>(
     fuse(&mut vs);
     late_rules(&mut vs);
     dce(&mut vs, None);
-    /* a look-up no output reads binds nothing (`textures_used` after DCE) */
-    if !vs.order[..vs.len].iter().any(|&id| matches!(vs.nodes[id as usize].kind, Kind::VsTex { .. })) {
-        vs.sampler = None;
+    /* each live look-up's descriptor index: its sampler's rank by binding
+     * among the samplers the live look-ups read (`textures_used` after
+     * DCE; a look-up no output reads binds nothing), the fragment's rule
+     * (nir_fs.rs `layout`; vslookup_149_rank.expect.json: `u_s2` then
+     * `u_s0` read are handles 0x20011801 and 0x20001800) */
+    let mut read = 0u64;
+    for k in 0..vs.len {
+        if let Kind::VsTex { sampler, .. } = vs.nodes[vs.order[k] as usize].kind {
+            read |= 1u64.checked_shl(u32::from(sampler)).ok_or(MaliError::Defect(Defect::IrIndex))?;
+        }
+    }
+    for k in 0..vs.len {
+        if let Kind::VsTex { sampler, ref mut index, .. } = vs.nodes[vs.order[k] as usize].kind {
+            *index = (read & ((1u64 << sampler) - 1)).count_ones() as u8;
+        }
     }
     shrink(&mut vs, m)?;
     opt_move(&mut vs, scratch)?;
