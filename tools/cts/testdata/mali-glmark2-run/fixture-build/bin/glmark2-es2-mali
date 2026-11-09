@@ -46,6 +46,10 @@ case $action in
      fi ;;
 esac
 kmsg() { grep -v '^#' "$FAKE_FIXTURES/kmsg/$1.txt" >> "$FAKE_BOARD/kmsg"; }
+# The state a fault leaves behind (wedge: the device is dead, every later
+# process dies of SIGSEGV; faultdown: the board goes away at the next process).
+[ ! -e "$FAKE_BOARD/downnext" ] || touch "$FAKE_BOARD/down"
+if [ -e "$FAKE_BOARD/wedged" ]; then printf '[x]:'; kill -SEGV $$; fi
 
 cat <<EOF
 =======================================================
@@ -67,6 +71,12 @@ case $action in
     refused=600 first="draw: a varying of 5 components" draws=0 ;;
   gpufault) kmsg gpu-fault; gpu=1 result="FPS: 40 FrameTime: 25.000 ms" ;;
   jobtimeout) kmsg job-timeout; jt=1 result="FPS: 2 FrameTime: 500.000 ms" ;;
+  pagefault) kmsg page-fault ;;
+  csfatal) kmsg cs-fatal ;;
+  csfault) kmsg cs-fault ;;
+  wedge) kmsg page-fault; touch "$FAKE_BOARD/wedged" ;;
+  faultdown) kmsg page-fault; touch "$FAKE_BOARD/downnext" ;;
+  hangterm) kmsg job-timeout; printf '%s:' "$info"; trap '' TERM; sleep 600 ;;
   setupfail) printf '%s: Set up failed\n' "$info"
     echo "yakogl-mali-exit: draws=0 refused=0 first_refused=- gpu_faults=0 job_timeouts=0" >&2
     exit 0 ;;

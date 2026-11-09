@@ -1,0 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Scene 2 page-faults and leaves the device dead: every later process crashes,
+# the probe too, ssh keeps answering.
+build:use-vbo=true	wedge

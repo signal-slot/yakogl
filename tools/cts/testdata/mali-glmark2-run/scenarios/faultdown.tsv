@@ -1,0 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Scene 2 page-faults; the board goes away while the probe after it runs and
+# does not come back.
+build:use-vbo=true	faultdown

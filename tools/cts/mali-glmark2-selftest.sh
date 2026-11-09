@@ -15,7 +15,12 @@
 # node (exit 4), a commit not on the main ref or a dev build (refused before
 # any ssh, run with --dev), --scenes from a file, and --dry-run touching
 # nothing (also bare, with fakes that fail when called); that the run
-# directory keeps no host name, address or MAC.
+# directory keeps no host name, address or MAC. And the panthor fault paths
+# (v6.18 message formats, classified by mali-kmsg.py as it is): a page fault,
+# CS_FATAL, CS_FAULT and a SIGTERM-proof job timeout, each followed by a
+# probe of the device that passes; a fault that leaves the device dead (two
+# failed probes: exit 5, "needs a person", the final ssh-reachability line,
+# the rest not-run); a fault after which the board stops answering (no retry).
 #
 #   tools/cts/mali-glmark2-selftest.sh    prints "mali-glmark2-selftest: N checks passed"
 #
@@ -26,7 +31,7 @@ set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 FIX=$HERE/testdata/mali-glmark2-run
 RUN=$HERE/mali-glmark2-run.sh
-EXPECT=53
+EXPECT=73
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/mali-glmark2-selftest-XXXXXX")
 # MALI_GLMARK2_SELFTEST_KEEP=1 keeps the directory and says where it is.
 cleanup() {
@@ -83,6 +88,7 @@ run() {
     FAKE_FIXTURES="$FIX" FAKE_SCENARIO="$FIX/scenarios/$scen.tsv" \
     MALI_GLMARK2_REPO="$tmp/repo" MALI_GLMARK2_MAIN_REF=main RAW_DIR="$d/raw" \
     BOARD_BACK_S=2 BOARD_POLL_S=0.5 KILL_GRACE_S=1 STAGE_MARGIN_KB=0 HOLD_MAX=300 \
+    PROBE_PAUSE_S=0 PROBE_TIMEOUT_S=5 \
     bash "$RUN" "$@" "$d/build" "$d/out" > "$d/out.txt" 2>&1
   echo $? > "$d/rc"
 }
@@ -114,7 +120,7 @@ check "the summary line counts 3/3 ok" \
     grep -qx 'mali-glmark2: 3/3 scenes ok, failed 0, commit ${c1:0:8}' '$tmp/clean/out/summary.txt'"
 check "kmsg/<n>.log and .class for each scene, empty and all zero (the boot lines left out)" \
   bash -c "for n in 1 2 3; do [ -f '$tmp/clean/out/kmsg/'\$n.log ] && [ ! -s '$tmp/clean/out/kmsg/'\$n.log ] &&
-    grep -q '^kmsg: resets=0 timeouts=0 mmu_faults=0 fw_faults=0 gpu_faults=0 other_panthor=0' '$tmp/clean/out/kmsg/'\$n.class || exit 1; done"
+    grep -q '^kmsg: resets=0 timeouts=0 mmu_faults=0 fw_faults=0 gpu_faults=0 cs_faults=0 other_panthor=0' '$tmp/clean/out/kmsg/'\$n.class || exit 1; done"
 check "meta.txt has the commit, the kernel and both boot_ids" \
   bash -c "grep -qx 'commit=$c1' '$tmp/clean/out/meta.txt' && grep -qx 'kernel=6.18.55-current-rockchip64' '$tmp/clean/out/meta.txt' &&
     grep -qx 'boot_id_before=5a1e0000-0000-4000-8000-00000000b007' '$tmp/clean/out/meta.txt' &&
@@ -164,6 +170,52 @@ check "no retry: glmark2 started twice" calls lost 2
 check "no ssh call ran a scene after the loss" bash -c "[ \$(grep -c 'glmark2-es2-mali --size' '$tmp/lost/ssh.log') = 2 ]"
 check "the summary is written for what ran" \
   bash -c "grep -qx 'mali-glmark2: 1/4 scenes ok, failed 3 (board-lost 1, not-run 2), commit ${c1:0:8}' '$tmp/lost/out/summary.txt'"
+
+echo "mali-glmark2-selftest: the exact v6.18 fault messages, as mali-kmsg.py classifies them"
+for pair in page-fault:mmu_faults cs-fatal:cs_faults cs-fault:cs_faults job-timeout:timeouts; do
+  f=${pair%%:*} k=${pair##*:}
+  check "kmsg/$f.txt counts one $k (the unprefixed detail lines are not counted)" \
+    bash -c "grep -v '^#' '$FIX/kmsg/$f.txt' | python3 -I '$HERE/mali-kmsg.py' --json - | python3 -I -c \
+\"import json,sys; r=json.load(sys.stdin); sys.exit(0 if r['$k']==1 and sum(v for x,v in r.items() if x!='first')==1 else 1)\""
+done
+
+echo "mali-glmark2-selftest: faults the board survives (scenes 2-6, --timeout 2)"
+run faults faults --scenes 2-6 --timeout 2
+check "a page fault, CS_FATAL, CS_FAULT and a SIGTERM-proof job timeout, then a clean scene: exit 0" rc_is faults 0
+check "the verdicts: three gpu-fault, the TERM-proof hang, ok" verdicts faults gpu-fault,gpu-fault,gpu-fault,hang,ok
+check "a CS_FATAL or CS_FAULT alone counts (kmsg 1) and the page fault is one count, not six" \
+  bash -c "[ '$(col faults 1 6) $(col faults 2 6) $(col faults 3 6)' = '1 1 1' ] &&
+    grep -q 'mmu_faults=1' '$tmp/faults/out/kmsg/1.class' && grep -q 'cs_faults=1' '$tmp/faults/out/kmsg/2.class' &&
+    grep -q 'source id 0x2200' '$tmp/faults/out/kmsg/1.log'"
+check "the process that ignores SIGTERM was killed and nothing of it is left" \
+  bash -c "! pgrep -f '[${tmp:0:1}]${tmp:1}/faults/board/home/yakogl-mali-glmark2'"
+check "each faulting scene was followed by a probe that passed (4 probes, build:use-vbo=false)" \
+  bash -c "[ \$(grep -c -- \"-b \\\"\\\$1\\\"' glmark2 'build:use-vbo=false'\" '$tmp/faults/ssh.log') = 4 ] &&
+    [ \"\$(awk -F'\t' 'NR > 1 { print \$1 \$2 \$3 }' '$tmp/faults/out/probes.tsv' | paste -sd,)\" = 11pass,21pass,31pass,41pass ]"
+check "5 scenes and 4 probes ran; the clean scene was not probed" calls faults 9
+check "no 'needs a person' for a board that came back" bash -c "! grep -q 'needs a person' '$tmp/faults/out.txt'"
+check "the hang's own kmsg lines are kept" bash -c "grep -q 'job timeout: pid=' '$tmp/faults/out/kmsg/4.log'"
+
+echo "mali-glmark2-selftest: a page fault that leaves the device dead (scenes 2-5)"
+run wedge wedge --scenes 2-5
+check "the probe fails twice: exit 5, 'needs a person' and the final ssh-reachability line" \
+  bash -c "[ \"\$(cat '$tmp/wedge/rc')\" = 5 ] && grep -q 'needs a person' '$tmp/wedge/out.txt' &&
+    grep -q 'final ssh reachability: answers, boot_id unchanged' '$tmp/wedge/out.txt'"
+check "scene 2 gpu-fault, scenes 3-5 not-run" verdicts wedge gpu-fault,not-run,not-run,not-run
+check "one scene and exactly two probes ran, no third" calls wedge 3
+check "probes.tsv records two failed probes (crash)" \
+  bash -c "[ \"\$(awk -F'\t' 'NR > 1 { print \$1 \$2 \$3 \$4 }' '$tmp/wedge/out/probes.tsv' | paste -sd,)\" = 11failcrash,12failcrash ]"
+check "the stage is removed although the run needs a person" stage_gone wedge
+
+echo "mali-glmark2-selftest: a page fault, and the board does not come back (scenes 2-5)"
+run faultdown faultdown --scenes 2-5
+check "ssh stops answering in the probe: exit 5, 'needs a person', final line says it does not answer" \
+  bash -c "[ \"\$(cat '$tmp/faultdown/rc')\" = 5 ] && grep -q 'needs a person' '$tmp/faultdown/out.txt' &&
+    grep -q 'final ssh reachability: does not answer' '$tmp/faultdown/out.txt'"
+check "scene 2 gpu-fault, the rest not-run" verdicts faultdown gpu-fault,not-run,not-run,not-run
+check "never retried: one scene and one probe, no second probe, no later scene" \
+  bash -c "[ \$(grep -c 'glmark2-es2-mali --size' '$tmp/faultdown/ssh.log') = 2 ] && [ \"\$(wc -l < '$tmp/faultdown/out/probes.tsv')\" = 2 ] &&
+    grep -q 'board-lost' '$tmp/faultdown/out/probes.tsv'"
 
 echo "mali-glmark2-selftest: the board reboots in scene 1 of 1-2"
 run reboot reboot --scenes 1-2

@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# cs_slot_process_fault_event_locked of Linux v6.18 (panthor_sched.c).
+[ 5300.000001] panthor fb000000.gpu: [drm] CS_FAULT: pid=4343, comm=glmark2-es2-mal
+CS_FAULT.EXCEPTION_TYPE: 0x55 (CS_BUS_FAULT)
+CS_FAULT.EXCEPTION_DATA: 0x0
+CS_FAULT_INFO.EXCEPTION_DATA: 0x0

@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# panthor_mmu_irq_handler of Linux v6.18 (panthor_mmu.c): one drm_err with the
+# header and five detail lines; dmesg prints the detail lines without a prefix.
+[ 5100.000001] panthor fb000000.gpu: [drm] *ERROR* Unhandled Page fault in AS2 at VA 0x0000000000401000
+raw fault status: 0x2C1
+decoded fault status: SLAVE FAULT
+exception type 0xC1: TRANSLATION_FAULT_1
+access type 0x1: READ
+source id 0x2200

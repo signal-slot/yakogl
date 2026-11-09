@@ -29,7 +29,13 @@ NanoPC-T6 glmark2-es2 runner `tools/cts/mali-glmark2-run.sh` without a board.
   (`<scene><TAB><action>`): `glerror`, `oom`, `refused`, `gpufault` and
   `jobtimeout` (with `kmsg/gpu-fault.txt` or `kmsg/job-timeout.txt` written
   to the board's ring), `setupfail`, `crash`, `hang`, `fpsonly`, `lostssh`,
-  `reboot`, `nolib`, `foreignlib`; a scene without a line draws cleanly.
+  `reboot`, `nolib`, `foreignlib`, and the fault paths: `pagefault`,
+  `csfatal`, `csfault` (the v6.18 messages of `kmsg/page-fault.txt`,
+  `cs-fatal.txt`, `cs-fault.txt`: a prefixed header, unprefixed detail
+  lines), `hangterm` (a job timeout, then a hang that ignores SIGTERM),
+  `wedge` (a page fault, then every later process dies: the dead device),
+  `faultdown` (a page fault, then the board goes away at the next process);
+  a scene without a line draws cleanly.
 - `scenes.txt`: a `--scenes` file (an index, a scene with `;`, a scene
   without options).
 
