@@ -7,10 +7,13 @@ read from Mesa 26.2.1 etnaviv (`third_party/mesa-26.2.1/UPSTREAM`; the
 etnaviv sources are not vendored. Citations are to the release tarball,
 `src/gallium/drivers/etnaviv/` unless a path says otherwise). Three parts:
 the back end (planes, descriptor pair, companion slot), the compiler (two
-look-ups joined) and the mask flip. Only the first is in the tree. It is
-kept inert: `GC_SAMPLED_TEXFMTS` holds no 128-bit class, so the GL core
-never stores one for this back end, and a binding of one still samples the
-black texel, by name.
+look-ups joined) and the mask flip. The first two are in the tree: the back
+end (`67b27e26`) and the compiler join (`f455cc1c`, `8c8fc3b6`, `2091d22d`,
+`1f37cd60`). The path stays unreachable: `GC_SAMPLED_TEXFMTS` holds no
+128-bit class, so the GL core never stores one for this back end, and
+`emit_slot` (`src/vivante/texture.rs`) still samples the black texel, by
+name, for a binding of one. What is left is the flip: gc-wide128-flip adds
+RGBA32F/UI/I to `GC_SAMPLED_TEXFMTS`.
 
 ## Mesa's design
 
