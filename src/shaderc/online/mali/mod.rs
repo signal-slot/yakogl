@@ -1099,7 +1099,7 @@ fn compile_module_on<'s>(
 ) -> Result<StageCode<'s>, MaliError> {
     /* GLSL's do_rebalance_tree and do_algebraic, ahead of NIR (glsl.rs) */
     let rw = glsl::passes(m, scratch)?;
-    let rewritten = rw.map(|(instrs, comps)| ir_mod::Module { instrs, comps, ..*m });
+    let rewritten = rw.map(|(instrs, shape)| shape.module(instrs, m));
     let m = rewritten.as_ref().unwrap_or(m);
     let mut marks = Marks::default();
     if m.instrs.len() <= Table::IrValues.capacity() {
@@ -1573,7 +1573,7 @@ pub fn vs_constants(glsl: &[u8], scratch: &Arena<'_>) -> Result<link::VaryingCon
     /* built as for a fragment shader that reads nothing: no lane is stored,
      * so none is refused for what it holds */
     let rw = glsl::passes(&l.module, scratch).map_err(refused)?;
-    let m = rw.map_or(l.module, |(instrs, comps)| ir_mod::Module { instrs, comps, ..l.module });
+    let m = rw.map_or(l.module, |(instrs, shape)| shape.module(instrs, &l.module));
     /* the fp16 uniforms as the program's build takes them
      * ([`compile_vs_for_reads`]); a source the interface does not read
      * has none */
