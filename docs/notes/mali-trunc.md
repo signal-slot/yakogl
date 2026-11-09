@@ -186,8 +186,7 @@ case 89's flat-uint one). Add, with `op32` (`:1299`) and the node CSE:
    directly stays in the fragment shader) while the text of
    `nir_opt_varyings.c` was not at hand; with the 26.2.1 text the reason
    is found, and it is the operation and the lane's class, not the sink.
-   **The rule (Mesa 26.2.1, read; not yet drawn, see "What the shim did
-   not show")**:
+   **The rule (Mesa 26.2.1 source, confirmed by the shim pairs below)**:
 
    * `backward_inter_shader_code_motion` walks from each movable load up
      the immediate use dominators (`nir_opt_varyings.c:4711-4786`). It
@@ -239,12 +238,11 @@ case 89's flat-uint one). Add, with `op32` (`:1299`) and the node CSE:
    **or is not in the `:3753-3787` list**, and `Convergent`/`Flat` nodes
    subject to no op test (only to `OPS`, what `encode` can number, and to
    the float-result test at the post-dominator). **Delete the
-   `d.up(pd) == SINK && f.prec.highp` test.** Precision plays no part in
-   Mesa's text: a mediump shader's chain ends at the `f2fmp` narrowing
-   (a `mov`-class step with a 16-bit result of a 32-bit source, which
-   the up-conversion test `:4747-4757` and the bit-size filter
-   `:4780-4782` handle), as `intbool_89_flatlast` shows; that is the
-   user the chain stops at, and no sink test is needed for it either.
+   `d.up(pd) == SINK && f.prec.highp` test.** Precision is not a rule of the
+   pass: a mediump shader moves nothing in the pairs below because its
+   arithmetic is 16-bit (`:4780-4782`), and `intbool_89_flatlast`'s
+   alpha stops at the `f2fmp` narrowing, which is outside `OPS`; neither
+   needs a sink test.
    The measured references reproduce under it:
 
    | Reference | Lane class | Op | Rule says | Reference |
@@ -259,35 +257,47 @@ case 89's flat-uint one). Add, with `op32` (`:1299`) and the node CSE:
    Sentinels `s4_motion_sum`/`s4_motion_dot` are unaffected (affine chain,
    resp. vector-sourced `fdot2`).
 
-   **What the shim did not show.** The shim (`drm_shim_ref.sh build`) was
-   not built on the machine that wrote this paragraph (the build command
-   was refused there; the Mesa tree is
-   `/home/orion/connected-deps/mesa-pan/mesa-26.2.1`, the tarball
-   `/home/orion/connected-deps/downloads/mesa-26.2.1.tar.xz`), so the rule
-   above is the *source* reading, checked against the six recorded
-   references, and the two discriminating pairs below are **not drawn**.
-   fs-trunc draws them first (commit as `tools/mali/testdata/
-   motion_guard_*`), and if any verdict differs from the prediction the
-   source reading above is wrong and this point must be rewritten from the
-   measurement. Each is `tools/mali/drm_shim_ref.sh run <shim dir> <vs>
-   <fs> <out>` (`<shim dir>` from `drm_shim_ref.sh build
-   <mesa-26.2.1.tar.xz> <dir>`), then `tools/mali/pan_ref_diff.py
-   extract` as the other rows do:
+   **The shim pairs** (Mesa 26.2.1 built with `tools/mali/drm_shim_ref.sh
+   build mesa-26.2.1.tar.xz <dir>`, drawn on 2026-11-09). Each is
+   `tools/mali/drm_shim_ref.sh run <dir> <name>.vert <name>.frag <out>`
+   (the default 64x64 triangle draw); the verdict is read from the
+   `shaderdb` disassembly in `<out>.stderr` (the vertex shader's varying
+   program and the fragment shader). Vertex shaders: `U` =
+   `attribute vec4 p; uniform vec4 u; varying vec4 v; void main(){
+   gl_Position = p; v = u; }`; `UX` = the same with `v = u * 2.0;`; `A` =
+   `s4_fneg.vert` (`v = c` from an attribute). Fragment shaders are
+   `s4_fneg.frag` with the precision given, and `float r = v.x * 2.0;`
+   for the product.
 
-   | Name | Vertex | Fragment (highp) | Prediction |
-   |---|---|---|---|
-   | `motion_guard_conv_fneg` | `attribute vec4 p; uniform vec4 u; varying vec4 v; void main(){ gl_Position = p; v = u; }` | `precision highp float; varying vec4 v; void main(){ float r = -v.x; gl_FragColor = vec4(r, 0.0, 0.0, 1.0); }` | **moved**: `v` uniform-only is convergent (`:1739`), a convergent node skips `:3745`; the fragment shader has no `FADD`/neg, the vertex shader negates |
-   | `motion_guard_interp_mul` | `attribute vec4 p; attribute vec4 c; varying vec4 v; void main(){ gl_Position = p; v = c; }` | `precision highp float; varying vec4 v; void main(){ float r = v.x * 2.0; gl_FragColor = vec4(r, 0.0, 0.0, 1.0); }` | **moved**: `fmul` is fast-math, source 1 is the constant (convergent, `:3772`); the vertex shader gets `FMA`/`FMUL` by 2.0 and the fragment shader a plain varying load (the sink does not matter) |
-   | `motion_guard_interp_fneg` | as `s4_fneg.vert` | `s4_fneg.frag` | **kept** (already recorded) |
-   | `motion_guard_mediump` | `s4_fneg.vert` | the `conv_fneg` fragment with `precision mediump float;` | open: a mediump result is narrowed by `f2fmp` after the `fneg`; if the chain stops there the `fneg` is the post-dominator and moves (convergent), else kept |
+   | Shape (fragment) | Vertex | Lane class | Verdict | Evidence in the disassembly |
+   |---|---|---|---|---|
+   | highp `r = -v.x` | `U` | convergent | **moved** | VS `FMA.f32 r0, u5.w1.neg, 0x0, u5.w1.neg` (the negation); FS `LD_VAR_BUF_IMM.f32...src_flat32` then only the fp16 narrowing `FADD.f32 r0.h0, r0^, 0x0.neg`, no `.neg` operand |
+   | highp `r = -v.x` | `UX` | convergent | **moved** | VS `FADD.f32 r0, u5.w1, u5.w1` then `FMA.f32 r0, r0^.neg, 0x0, r0^.neg`; FS as above |
+   | highp `r = -v.x` | `A` | interpolated | **kept** | VS only `LD_ATTR_IMM.f32`; FS `LD_VAR_BUF_IMM.f32.src_f32` then `FADD.f32 r0.h0, r0^.neg, 0x0.neg` (= `s4_fneg.expect.json`) |
+   | highp `r = v.x * 2.0` | `A` | interpolated | **moved** | VS `LD_ATTR_IMM.f32` then `FADD.f32 r0, r0^, r0^`; FS the plain load and the narrowing only: the sink does not matter |
+   | mediump `r = -v.x` | `UX` | convergent | **kept** | FS loads `v4`, narrows with `FADD.f32 r0.h0` and negates in fp16 (`FADD.v2f16 r0, r0^.neg.h00`); VS has only the `u * 2.0` program |
+   | mediump `r = -v.x` | `A` | interpolated | **kept** | FS the same fp16 `.neg.h00` |
+   | mediump `r = v.x * 2.0` | `A` | interpolated | **kept** | FS `FADD.v2f16 r0, r0^.h00, r0^.h00` |
 
-   With a uniform `u` the "uniform-only" lane is Mesa's `propagate_uniform_
-   expressions` (`:2888-2900`, `output_equal_mask`) first: it may replace
-   the varying by the uniform itself in the fragment shader, in which case
-   the pair shows no varying at all and the discriminating shape must use
-   a uniform *expression* (`v = u * 2.0;`, still convergent) instead. 199
-   is that shape (`:1739`, divergence analysis), which is what its
-   reference already records.
+   Every prediction above held: the sink is irrelevant (the moved
+   highp product is stored straight into the colour), `fneg` is moved
+   exactly when its lane is convergent, and a mediump shader moves
+   nothing (the varying is loaded and narrowed first; an fp16 value is a
+   16-bit load that `nir_opt_varyings` skips at `:4780-4782` for a
+   driver without `nir_io_16bit_input_output_support`). The mediump
+   rows do **not** show the `intbool_89` store-after-`f2fmp` stop: there
+   the arithmetic is 32-bit on a flat integer varying and is narrowed
+   afterwards, a different shape that the 89 reference already pins; the
+   guard rule above does not need a precision test for it because
+   `f2fmp` itself is outside `OPS`.
+
+   For fs-trunc to commit under `tools/mali/testdata/` (the vertex and
+   fragment texts are the ones above; names suggested):
+   `motion_guard_conv_fneg` (`U` + highp `-v.x`, moved),
+   `motion_guard_interp_mul` (`A` + highp `v.x * 2.0`, moved),
+   `motion_guard_mediump_fneg` (`UX` + mediump `-v.x`, kept). The
+   interpolated `fneg` is already `s4_fneg`.
+
 5. `apply()` (`motion.rs:185`) already runs `vs.alu(op, ..)` for each node
    in dependence order and stores the result in the lane; the vertex `Nir`
    has all of these ops (`nir.rs:1900-1917`). The **emission order**
