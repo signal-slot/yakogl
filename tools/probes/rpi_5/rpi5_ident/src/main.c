@@ -24,9 +24,49 @@
 #include <zephyr/sys/sys_io.h>
 
 #include "v3d_regs.h"
+#ifdef CONFIG_YAKOGL_RPI5_MBOX
+#include "rpi_mbox.h"
+#include "v3d.h"
+#endif
 
 #define HUB_SIZE  0x4000
 #define CORE_SIZE 0x6000
+
+#ifdef CONFIG_YAKOGL_RPI5_MBOX
+static int clock_set(void *ctx, bool on)
+{
+	ARG_UNUSED(ctx);
+	return rpi_clock_state(RPI_FW_CLK_V3D, on);
+}
+
+/* The fallback of section 3.4 and section 9, before any read: firmware clock 5
+ * through the mailbox, SMS CLEAR_POWER_OFF and pm's reset bit, in the order
+ * v3d_power_on has for the BCM2712 (v3d_hw.c). Returns 0 or a negative errno. */
+static int power_fallback(void)
+{
+	struct v3d_regs r = { .soc = V3D_SOC_BCM2712 };
+	struct v3d_clock_ops clk = { .set = clock_set, .ctx = NULL };
+	uint32_t hz = 0;
+	int rc = rpi_mbox_init();
+
+	printk("rpi5_ident: fallback: mailbox %d\n", rc);
+	if (rc) {
+		return rc;
+	}
+	device_map(&r.hub, BCM2712_V3D_HUB_BASE, HUB_SIZE, K_MEM_CACHE_NONE);
+	device_map(&r.core, BCM2712_V3D_CORE0_BASE, CORE_SIZE, K_MEM_CACHE_NONE);
+	device_map(&r.pm, BCM2712_PM_BASE, 0x1000, K_MEM_CACHE_NONE);
+	device_map(&r.sms, BCM2712_V3D_SMS_BASE, 0x700, K_MEM_CACHE_NONE);
+	printk("rpi5_ident: fallback: PM_GRAFX before 0x%08x\n", sys_read32(r.pm + BCM2712_PM_GRAFX));
+	rc = v3d_power_on(&r, &clk);
+	printk("rpi5_ident: fallback: power_on %d, PM_GRAFX 0x%08x, SMS REE_CS 0x%08x TEE_CS 0x%08x\n", rc,
+	       sys_read32(r.pm + BCM2712_PM_GRAFX), sys_read32(r.sms + V3D_SMS_REE_CS),
+	       sys_read32(r.sms + V3D_SMS_TEE_CS));
+	rc = rpi_clock_rate(RPI_FW_CLK_V3D, &hz);
+	printk("rpi5_ident: fallback: V3D clock rate %d (%u Hz)\n", rc, hz);
+	return 0;
+}
+#endif
 
 int main(void)
 {
@@ -34,7 +74,12 @@ int main(void)
 	uint32_t hub_ident[4], core_ident[3], mmu;
 
 	printk("rpi5_ident: build %s\n", RPI5_IDENT_BUILD);
+#ifdef CONFIG_YAKOGL_RPI5_MBOX
+	printk("rpi5_ident: %s, V3D 7.1, power and clock fallback first, watchdog armed at boot\n", CONFIG_BOARD);
+	power_fallback();
+#else
 	printk("rpi5_ident: %s, V3D 7.1, no power or clock setup, watchdog armed at boot\n", CONFIG_BOARD);
+#endif
 
 	device_map(&hub, BCM2712_V3D_HUB_BASE, HUB_SIZE, K_MEM_CACHE_NONE);
 	device_map(&core, BCM2712_V3D_CORE0_BASE, CORE_SIZE, K_MEM_CACHE_NONE);

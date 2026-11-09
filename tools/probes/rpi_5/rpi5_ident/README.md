@@ -54,10 +54,32 @@ unlike D3's (all zeros, for example) is a result too; it is printed as read
 and the image still ends with `done` (it never prints `FAIL`: the comparison
 with D3 is made off the board).
 
-Not here: the power and clock fallback of section 3.4 and section 9 (SMS
-`CLEAR_POWER_OFF`, firmware clock 5 through the mailbox, the `pm` reset bit)
-comes in probe-d2 (D2 part 2), after the mailbox lands in this probe. This
-image does no power, clock or reset setup at all.
+**The fallback build (D2 part 2).** The default image above does no power,
+clock or reset setup at all and is the first run. If it faults, build the
+second configuration, which adds `fallback.conf` (`CONFIG_YAKOGL_RPI5_MBOX=y`):
+
+```sh
+west build -p always -b rpi_5 -d build/rpi5_ident_fb yakogl/tools/probes/rpi_5/rpi5_ident -- -DYAKOGL_WERROR=ON -DEXTRA_CONF_FILE=$PWD/yakogl/tools/probes/rpi_5/rpi5_ident/fallback.conf
+```
+
+Before any read it runs the sequence of section 3.4 and section 9 with the
+driver's own `v3d_power_on` (`driver/src/v3d/v3d_hw.c`, BCM2712 path, as
+`rpi5_clear` uses it): firmware clock 5 on through the mailbox
+(`rpi_mbox.c`), a short run under reset and off, the `pm` reset bit released,
+the clock on again, then SMS `CLEAR_POWER_OFF` and the wait for the SMS's idle
+state. Its lines, before the `HUB_IDENT0` line of the list above:
+
+```
+rpi5_ident: fallback: mailbox <rc>
+rpi5_ident: fallback: PM_GRAFX before 0x........
+rpi5_ident: fallback: power_on <rc>, PM_GRAFX 0x........, SMS REE_CS 0x........ TEE_CS 0x........
+rpi5_ident: fallback: V3D clock rate <rc> (<Hz> Hz)
+```
+
+The clock rate is what the firmware returns (`GET_CLOCK_RATE`, clock 5). The
+identity and `MMU_DEBUG_INFO` lines and `done` are the same as in the default
+image; a failed `power_on` is printed and the reads still follow. The proof is
+the same: the words equal D3's `v3d_ident`.
 
 `get_throttled` is recorded by `tools/board.sh` in `meta.txt`, not by the
 image (the image cannot read it); check it before reading a fault as a
