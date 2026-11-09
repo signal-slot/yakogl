@@ -75,14 +75,28 @@
 # dmesg, fuser, df, uname, mkdir/rm under its stage, echo into /dev/kmsg, and
 # deqp-gles2. Exit 0: every chunk ran (whatever dEQP said); 1 usage or a
 # refusal, 3 render node busy, 4 the board or its tools, 6 not origin/main,
-# 7 the boot_id changed, 8 ssh lost, 9 wrong library, 10 wedged process.
+# 7 the boot_id changed, 8 ssh lost, 9 wrong library, 10 wedged process,
+# 11 the hold deadline: the run starts no chunk that could pass HOLD_MAX.
+#
+# The hold deadline: board_lock.sh's watchdog kills the whole script HOLD_MAX
+# seconds after the lock is taken, and then no slice is written. So before each
+# chunk the runner adds the time since it took the lock, that chunk's limit
+# (limit_for, one process) and DEADLINE_MARGIN_S (600 s, for collecting the
+# results and kmsg and removing the stage); when the sum passes HOLD_MAX it
+# starts no more chunks. The unstarted rows are lost chunks (status lost, no
+# kmsg) and every case in them Lost not-run, the slice is written as usual, the
+# lock released, and the exit is 11. A chunk that restarts its process may
+# still use more than its limit; the margin is what covers that. HOLD_MAX=0
+# (watchdog off) turns the deadline off. --dry-run says whether the plan's
+# worst case (every chunk using its whole limit) fits and where it would cut.
 #
 # Environment for the self-test (tools/cts/mali-deqp-selftest.sh) and odd
 # hosts: MALI_DEQP_MAIN_REPO / MALI_DEQP_MAIN_REF (the repository and ref the
 # commit must be on; default this checkout and origin/main), MALI_DEQP_MUSTPASS
 # (default tools/cts/gles2-mustpass.txt), MALI_DEQP_TREE (the default tree
 # table when --tree is not given), KMSG_SETTLE_S (1), STAGE_MARGIN_KB
-# (free space wanted beyond the build's size, 1 GiB), DEQP_SURFACE (256, the
+# (free space wanted beyond the build's size, 1 GiB), HOLD_MAX (21600) and
+# DEADLINE_MARGIN_S (600), CHUNK_LIMIT (seconds a process, all chunks), DEQP_SURFACE (256, the
 # pbuffer's width and height, as CONFIG_DEQP_SURFACE_SIZE of the other boards'
 # runs: at 64 about half of T6S1R01, all of clipping, ends NotSupported with
 # "Render target size must be at least 200x200").
@@ -378,6 +392,8 @@ py plan "$tree" "$mustpass" "$row_a" "$row_b" "$work/cases" > "$work/plan.tsv"
 total=$(awk -F'\t' '{ s += $3 } END { print s + 0 }' "$work/plan.tsv")
 nrows=$(wc -l < "$work/plan.tsv")
 limit_for() { echo "${CHUNK_LIMIT:-$((600 + 3 * $1))}"; }
+HOLD_MAX=${HOLD_MAX:-21600}
+margin=${DEADLINE_MARGIN_S:-600}
 surface=${DEQP_SURFACE:-256}
 deqp_cmd() { # <list> <qpa> <limit>
   echo "cd $stage && setsid -w timeout -k 10 $3 env LD_LIBRARY_PATH=$stage/lib $stage/deqp-gles2" \
@@ -398,6 +414,21 @@ if [ "$dry" = 1 ]; then
   while IFS=$'\t' read -r row lab n; do
     echo "$me:   row $row $lab: $n case(s), limit $(limit_for "$n") s a process"
   done < "$work/plan.tsv"
+  # The worst case: every chunk uses its whole limit, one process each.
+  worst=0 cut=
+  while IFS=$'\t' read -r row lab n; do
+    l=$(limit_for "$n")
+    if [ -z "$cut" ] && [ "$HOLD_MAX" -gt 0 ] && [ $((worst + l + margin)) -gt "$HOLD_MAX" ]; then cut="row $row $lab"; fi
+    worst=$((worst + l))
+  done < "$work/plan.tsv"
+  if [ "$HOLD_MAX" -le 0 ]; then
+    echo "$me: hold deadline: off (HOLD_MAX 0), worst case $worst s of limits"
+  elif [ -z "$cut" ]; then
+    echo "$me: hold deadline: fits: worst case $worst s of limits + $margin s margin <= HOLD_MAX $HOLD_MAX s"
+  else
+    echo "$me: hold deadline: does not fit: worst case $worst s of limits + $margin s margin > HOLD_MAX $HOLD_MAX s;" \
+      "no chunk would start from $cut on if every chunk used its whole limit (the rest Lost not-run, exit 11)"
+  fi
   echo "$me: stage \$BOARD_HOST:$stage/ (deqp-gles2, data/, lib/), removed at the end"
   echo "$me: slice $out, raw logs $raw"
   echo "$me: per chunk <label>, process <k> (over ssh to \$BOARD_HOST):"
@@ -429,7 +460,6 @@ REDACT_WORDS=$(printf '%s\n' "$host" "${host#*@}" "${host%@*}" "$(hostname 2>/de
 export REDACT_WORDS
 
 LOCK_WAIT=${LOCK_WAIT:-0}
-HOLD_MAX=${HOLD_MAX:-21600}
 finalized=0 cpid= staged=0 board_ok=1
 rm -f "$raw/meta.txt"   # a stale one must not become a slice on an early exit
 on_exit() {
@@ -449,9 +479,10 @@ on_exit() {
   fi
 }
 trap on_exit EXIT
+t_lock=$(date +%s)
 # shellcheck source=../../driver/tools/kexec-zephyr/board_lock.sh
 . "$REPO/driver/tools/kexec-zephyr/board_lock.sh"
-echo "$me: holding the board lock $BOARD_LOCK (pid $$, HOLD_MAX $HOLD_MAX s)"
+echo "$me: holding the board lock $BOARD_LOCK (pid $$, HOLD_MAX $HOLD_MAX s, deadline margin $margin s)"
 
 rssh() { bssh "${opts[@]}" "$host" "$@"; }
 # meta.txt in the order of the format, from raw/meta.kv (last value wins).
@@ -510,7 +541,7 @@ echo "$me: staged under $stage ($need_kb KiB with the margin, $free_kb free)"
 
 settle=${KMSG_SETTLE_S:-1}
 max_attempts=${MAX_ATTEMPTS:-100}
-stop=          # why the run stopped: board-lost | wrong-lib | wedged
+stop=          # why the run stopped: board-lost | wrong-lib | wedged | deadline
 exit_rc=0
 alive() { # sets board_ok and boot_same; 0 when the board answers with the same boot
   local b
@@ -534,6 +565,13 @@ while IFS=$'\t' read -r row lab n; do
     continue
   fi
   t0=$(date +%s)
+  if [ "$HOLD_MAX" -gt 0 ] && [ $((t0 - t_lock + $(limit_for "$n") + margin)) -gt "$HOLD_MAX" ]; then
+    echo "$me: row $row $lab: $((t0 - t_lock)) s held + limit $(limit_for "$n") s + margin $margin s would pass HOLD_MAX $HOLD_MAX s: starting no more chunks; the rest is Lost not-run" >&2
+    stop=deadline exit_rc=11
+    mark_rest "$raw/cases/$lab.txt" not-run
+    printf '%s\t%s\t%s\tlost\t0\t-\t-\tyes\t-\t-\tnot-run\n' "$row" "$lab" "$n" >> "$raw/chunks.tsv"
+    continue
+  fi
   stamp=$(date +%Y%m%d-%H%M%S)-$row
   start="yakogl-run-start mali-deqp $lab $stamp" end="yakogl-run-end mali-deqp $lab $stamp"
   echo "$me: row $row $lab: $n case(s)"

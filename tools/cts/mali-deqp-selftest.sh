@@ -10,7 +10,8 @@
 # job-timeout line counted in resets, a missing "yakogl-mali: loaded" line
 # (wrong-lib), lost ssh, a commit not on the main ref refused, and --dry-run
 # making no ssh call (also bare, without --build and --out, with fakes that fail); that the slice keeps no host name or address;
-# and the default 256x256 pbuffer.
+# and the default 256x256 pbuffer; and the hold deadline (exit 11, the cut rows
+# Lost not-run, the slice written, the lock released).
 #
 #   tools/cts/mali-deqp-selftest.sh      prints "mali-deqp-selftest: N checks passed"
 #
@@ -19,7 +20,7 @@ set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 FIX=$HERE/testdata/mali-deqp-run
 RUN=$HERE/mali-deqp-run.sh
-EXPECT=32
+EXPECT=38
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/mali-deqp-selftest-XXXXXX")
 # The fake board's dmesg -w of the lost-ssh case is never stopped by the
 # runner (the board is gone): end every process still reading under $tmp.
@@ -75,7 +76,7 @@ run() {
     FAKE_BOARD="$d/board" FAKE_BOARD_BIN="$tmp/board-bin" FAKE_LOG="$d/ssh.log" \
     FAKE_FIXTURES="$FIX" FAKE_SCENARIO="$FIX/scenarios/$scen.tsv" \
     MALI_DEQP_MAIN_REPO="$tmp/repo" MALI_DEQP_MAIN_REF=main RAW_DIR="$d/raw" \
-    KMSG_SETTLE_S=0.3 STAGE_MARGIN_KB=0 HOLD_MAX=300 "$@" \
+    KMSG_SETTLE_S=0.3 STAGE_MARGIN_KB=0 HOLD_MAX=21600 DEADLINE_MARGIN_S=600 "$@" \
     bash "$RUN" --build "$d/build" --out "$d/slice" --rows "$rows" --tree "$FIX/tree.txt" \
     --session smoke > "$d/out.txt" 2>&1
   echo $? > "$d/rc"
@@ -144,6 +145,22 @@ check "wrong-lib: exit 9, row 1 lost and all its cases Lost wrong-lib, row 2 Los
   bash -c "[ \"\$(cat '$tmp/wl/rc')\" = 9 ] && [ \"\$(awk -F'\t' 'NR > 1 { print \$4 }' '$tmp/wl/slice/chunks.tsv' | paste -sd,)\" = lost,lost ] &&
     [ \$(grep -cP '\tLost\twrong-lib$' '$tmp/wl/slice/results.tsv') = 6 ] && [ \$(grep -cP '\tLost\tnot-run$' '$tmp/wl/slice/results.tsv') = 6 ]"
 
+echo "mali-deqp-selftest: the hold deadline cuts after row 1 of 1-3 (HOLD_MAX 300, CHUNK_LIMIT 8, margin 285)"
+# (Before the lost-ssh run: its dmesg reader outlives it and holds the lock file open.)
+# Row 1 hangs for its whole 8 s limit, so row 2 sees >= 8 s held: 8 + 8 + 285 > 300.
+run dl hang 1-3 HOLD_MAX=300 CHUNK_LIMIT=8 DEADLINE_MARGIN_S=285
+check "the deadline: exit 11, the slice written, row 1 hang, rows 2 and 3 lost without a run, no row invented" \
+  bash -c "[ \"\$(cat '$tmp/dl/rc')\" = 11 ] && [ -s '$tmp/dl/slice/meta.txt' ] && [ -s '$tmp/dl/slice/results.tsv' ] &&
+    [ \"\$(awk -F'\t' 'NR > 1 { print \$2, \$4, \$5, \$6 }' '$tmp/dl/slice/chunks.tsv' | tail -2 | paste -sd,)\" = 'T2 lost 0 -,T3 lost 0 -' ] &&
+    [ \"\$(awk -F'\t' 'NR > 1' '$tmp/dl/slice/chunks.tsv' | wc -l)\" = 3 ] && [ \"\$(awk -F'\t' 'NR == 2 { print \$4 }' '$tmp/dl/slice/chunks.tsv')\" = hang ]"
+check "the 11 cut cases are Lost not-run; row 1 has 1 Lost chunk-hang and 5 Pass" \
+  bash -c "[ \$(grep -cP '\tLost\tnot-run\$' '$tmp/dl/slice/results.tsv') = 11 ] && [ \$(grep -cP '\tLost\t' '$tmp/dl/slice/results.tsv') = 12 ] && [ \$(grep -cP '\tPass\t' '$tmp/dl/slice/results.tsv') = 5 ]"
+check "no chunk ran after the cut: no marker for rows 2 and 3, the deadline said, no kmsg capture" \
+  bash -c "! grep -q 'yakogl-run-start mali-deqp T[23] ' '$tmp/dl/board/kmsg' && grep -q 'starting no more chunks' '$tmp/dl/out.txt' &&
+    grep -q 'kernel capture unavailable' '$tmp/dl/slice/kmsg/T2.txt'"
+check "the deadline run removed the stage and released the lock" \
+  bash -c "[ -z \"\$(ls -A '$tmp/dl/board/root/yakogl-mali')\" ] && [ ! -s '$tmp/board.lock' ]"
+
 echo "mali-deqp-selftest: the board goes away inside row 2 of 1-3"
 run lost lostssh 1-3
 check "lost ssh: exit 8, the board reported as needing a person" \
@@ -168,6 +185,10 @@ echo $? > "$tmp/dry/rc"
 check "--dry-run prints its plan (row, case count, the deqp command) and exits 0" \
   bash -c "[ \"\$(cat '$tmp/dry/rc')\" = 0 ] && grep -q 'row 1 T1: 6 case(s)' '$tmp/dry/out.txt' &&
     grep -q 'setsid -w timeout -k 10 <limit> env LD_LIBRARY_PATH=/root/yakogl-mali/009f62a5/lib' '$tmp/dry/out.txt'"
+check "--dry-run says whether the plan fits HOLD_MAX (default 21600 s)" \
+  bash -c "grep -q 'hold deadline: fits: .* <= HOLD_MAX 21600 s' '$tmp/dry/out.txt'"
+check "--dry-run says where the deadline would cut when it does not fit" \
+  bash -c "HOLD_MAX=1500 bash '$RUN' --dry-run --rows 1-3 --tree '$FIX/tree.txt' | grep -q 'does not fit: .*no chunk would start from row 2 T2 on'"
 check "--dry-run makes no ssh or scp call and writes no slice" \
   bash -c "[ ! -s '$tmp/dry/ssh.log' ] && [ ! -e '$tmp/dry/slice' ]"
 

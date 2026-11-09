@@ -80,7 +80,7 @@ run() {
     FAKE_FIXTURES="$RUNFIX" FAKE_SCENARIO="$FIX/scenarios/$scen.tsv" \
     MALI_DEQP_MAIN_REPO="$tmp/repo" MALI_DEQP_MAIN_REF=main \
     MALI_DEQP_MUSTPASS="$FIX/mustpass.txt" RAW_DIR="$d/raw" \
-    KMSG_SETTLE_S=0.3 STAGE_MARGIN_KB=0 HOLD_MAX=300 "$@" \
+    KMSG_SETTLE_S=0.3 STAGE_MARGIN_KB=0 HOLD_MAX=21600 "$@" \
     bash "$RUN" --build "$d/build" --out "$tmp/slices/t6-gles2-e2e-$name" --rows "$rows" \
     --tree "$FIX/tree.txt" --session smoke > "$d/out.txt" 2>&1
   echo $? > "$d/rc"

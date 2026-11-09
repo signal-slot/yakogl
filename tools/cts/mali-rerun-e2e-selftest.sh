@@ -92,7 +92,7 @@ env PATH="$tmp/bin:$PATH" BOARD_HOST=root@board.invalid BOARD_LOCK="$tmp/board.l
   FAKE_BOARD="$tmp/b/board" FAKE_BOARD_BIN="$tmp/board-bin" FAKE_LOG="$tmp/b/ssh.log" \
   FAKE_FIXTURES="$RUNFIX" FAKE_SCENARIO="$FIX/scenarios/clean.tsv" \
   MALI_DEQP_MAIN_REPO="$tmp/repo" MALI_DEQP_MAIN_REF=main MALI_DEQP_MUSTPASS="$MP" \
-  RAW_DIR="$tmp/b/raw" KMSG_SETTLE_S=0.3 STAGE_MARGIN_KB=0 HOLD_MAX=300 \
+  RAW_DIR="$tmp/b/raw" KMSG_SETTLE_S=0.3 STAGE_MARGIN_KB=0 HOLD_MAX=21600 \
   bash "$RUN" --build "$tmp/b/build" --out "$tmp/slice" --rows 1-4 --tree "$tmp/table.txt" \
   --session adhoc > "$tmp/b/out.txt" 2>&1
 check "the runner exits 0 on the rerun table" test $? -eq 0
