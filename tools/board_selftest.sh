@@ -56,7 +56,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/.." && pwd)
 B="$HERE/board.sh"
 TD="$HERE/testdata"
-WANT_CHECKS=338
+WANT_CHECKS=341
 
 S=$(mktemp -d)
 trap 'rm -rf "$S"' EXIT
@@ -213,6 +213,18 @@ rc=$?
 check "x2 run, BOARD_UART a device: fd scan, stty and the line reader into console.txt, no bridge command" \
     eval '[ "$rc" = 0 ] && grep -q "scan every /proc/<pid>/fd for /dev/ttyFAKE9" <<<"$out" && grep -q "stty -F /dev/ttyFAKE9" <<<"$out" &&
           grep -q "read /dev/ttyFAKE9 .* into <rundir>/console.txt" <<<"$out" && ! grep -q "am62p_netboot_uart.py" <<<"$out"'
+out=$(dry x2 stage "$S/img/x2.bin" "$S/logs" 2>&1)
+rc=$?
+check "x2 stage dry run: rc 0, every step before the jump (tools, record cleared, image read back), no kexec_zephyr run" \
+    eval '[ "$rc" = 0 ] && grep -q "scp .*/kexec_zephyr .*/snvs_lpgpr user@BOARD:/tmp/yakogl-kexec/" <<<"$out" &&
+          grep -qF "snvs_lpgpr write <LPGPR0 as read>" <<<"$out" && grep -q "sha256sum /tmp/yakogl-kexec/zephyr.bin" <<<"$out" &&
+          ! grep -q "kexec_zephyr /tmp" <<<"$out" && ! grep -q "ping lost" <<<"$out"'
+check "x2 stage dry run: the tmpfs copies removed after the read-back, one verdict=staged line" \
+    eval 'grep -q "rm -rf /tmp/yakogl-kexec" <<<"$out" && [ "$(grep -c "^verdict=staged " <<<"$out")" = 1 ] &&
+          [ "$(grep -n "sha256sum" <<<"$out" | cut -d: -f1)" -lt "$(grep -n "rm -rf /tmp/yakogl-kexec" <<<"$out" | cut -d: -f1)" ]'
+out=$(dry imx8mp stage "$S/img/imx8mp.bin" "$S/logs" 2>&1)
+rc=$?
+check "imx8mp stage: rc 2 with an explanation, nothing done" eval '[ "$rc" = 2 ] && grep -q "stage is for the Armadillo-X2" <<<"$out" && ! grep -q "^DRY" <<<"$out"'
 out=$(dry x2 status 2>&1)
 check "x2 status: OpenRC's runlevel and the crash window, no remoteproc" \
     eval 'grep -q "rc-status -r" <<<"$out" && grep -q "kexec_crash_size" <<<"$out" && ! grep -q "remoteproc" <<<"$out"'
