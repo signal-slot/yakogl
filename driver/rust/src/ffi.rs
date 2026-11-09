@@ -27,6 +27,8 @@ pub use imx_wdog::*;
 #[cfg(any(feature = "rk3588", test))]
 pub use rk3588::*;
 pub use sn65dsi8x::*;
+#[cfg(any(feature = "stm32mp2", test))]
+pub use stm32mp2::*;
 #[cfg(any(feature = "vivante", test))]
 pub use vivante::*;
 
@@ -56,6 +58,10 @@ mod imx_wdog;
 /// driver/zephyr/lib/board/nanopc_t6/nanopc_t6.c): src/ffi/rk3588.rs.
 #[cfg(any(feature = "rk3588", test))]
 mod rk3588;
+/// OP-TEE's SMC watchdog and PSCI reset on the STM32MP257F-DK
+/// (soc::stm32mp2::smc_wdt, aarch64): src/ffi/stm32mp2.rs.
+#[cfg(any(feature = "stm32mp2", test))]
+mod stm32mp2;
 /// The Vivante GC7000 kernel side (gpu::vivante; the shim is
 /// driver/drivers/gpu/gpu_vivante_gc_rust.c): src/ffi/vivante.rs.
 #[cfg(any(feature = "vivante", test))]
