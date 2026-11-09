@@ -28,8 +28,8 @@
 window.YAKOGL_DATA = {
   "repo": "https://github.com/signal-slot/yakogl",
   "checkedAgainst": {
-    "commit": "08163414b656836b0d5e00260992f5d033e63a74",
-    "date": "2026-11-05",
+    "commit": "93ada07490dae879f9fb3903eafb8d66e1ddfc7e",
+    "date": "2026-11-07",
     "source": "tools/cts/RESULTS.md"
   },
   "boards": [
@@ -206,16 +206,16 @@ window.YAKOGL_DATA = {
       "board": "imx8mp",
       "value": "49 / 49",
       "unit": "cases run passed; case 16 skipped (4x multisampling)",
-      "commit": "445c5653",
-      "onMain": false,
-      "date": "2026-10-20",
+      "commit": "f87dde43",
+      "onMain": true,
+      "date": "2026-11-07",
       "source": "tools/cts/RESULTS.md",
       "section": "Common set (stage 2 input)",
       "status": "warn",
       "note": "This run passes every case that was run. Earlier repeated boots expose intermittent failures in cases 10 and 17; the record does not establish that those defects are fixed.",
       "provenance": {
-        "kind": "pre-publication",
-        "recordCommit": "381b0f09e9c8e7b3d437946c888224f12a27b367"
+        "kind": "repository",
+        "recordCommit": "8737e5a36e6b386340c7f3b5b11b078a32df0865"
       }
     },
     "gltest.pi4": {
@@ -257,16 +257,16 @@ window.YAKOGL_DATA = {
       "board": "imx8mp",
       "value": 42,
       "unit": "score at 800x600; 33 scenes, 0 failed, 0 GL errors",
-      "commit": "a917d123",
-      "onMain": false,
-      "date": "2026-10-20",
+      "commit": "f87dde43",
+      "onMain": true,
+      "date": "2026-11-07",
       "source": "tools/cts/RESULTS.md",
       "section": "Common set (stage 2 input)",
       "status": "warn",
-      "note": "Default one-buffer configuration. All 33 picture values match the earlier 445c5653 run; they have not been visually reviewed on the panel. Terrain is 4 FPS, shadow and refract 2 FPS. The texture/mipmap picture change remains unexplained. Extra display-buffer configurations are separate experiments.",
+      "note": "Default one-buffer configuration; the same score as the 2026-10-20 runs at 445c5653 and a917d123. The per-scene figures and pictures come from the a917d123 run: all 33 picture values match the 445c5653 run; they have not been visually reviewed on the panel. Terrain is 4 FPS, shadow and refract 2 FPS. The texture/mipmap picture change remains unexplained. Extra display-buffer configurations are separate experiments.",
       "provenance": {
-        "kind": "pre-publication",
-        "recordCommit": "381b0f09e9c8e7b3d437946c888224f12a27b367"
+        "kind": "repository",
+        "recordCommit": "8737e5a36e6b386340c7f3b5b11b078a32df0865"
       }
     },
     "glmark2.pi4": {
