@@ -49,9 +49,26 @@
 #     and takes the kernel lines the scene added (the ring after its last
 #     line before the scene: dmesg only reads, nothing is written to the
 #     kernel log), classified by tools/cts/mali-kmsg.py as it is;
-#   - a scene that outlives its timeout is a hang: its process group gets
-#     SIGKILL over ssh, then anything left of the program; one that survives
-#     SIGKILL (a wedged ioctl) ends the run (exit 5, the board needs a person);
+#   - a scene that outlives its timeout is a hang: `timeout` sends SIGTERM at
+#     the limit and SIGKILL KILL_GRACE_S later; the runner then SIGKILLs the
+#     process group over ssh and anything left of the program, and waits up
+#     to 5 s for the kernel's teardown. One that survives (a wedged ioctl)
+#     ends the run (exit 5, the board needs a person). The default limit,
+#     180 s, is far above panthor 6.18's job timeout (5 s per job, then
+#     queue_timedout_job logs "job timeout" and schedules a reset), so a
+#     kernel-side timeout shows up as a job-timeout scene, not as a hang;
+#   - after a scene whose kernel lines show a page fault, CS_FATAL/CS_FAULT, a
+#     GPU fault, a timeout or a reset, or that hung or died by a signal, a probe
+#     runs before the next scene: PROBE_SCENE (default build:use-vbo=false, an
+#     unprivileged glmark2 scene) with a PROBE_TIMEOUT_S (60) bound. It passes
+#     unless it hangs, crashes, faults or times out. A probe that fails is
+#     asked once more; a second failure, a wedged process, or a board that
+#     stops answering ssh ends the run (exit 5): the rest is not-run, the
+#     runner prints "needs a person" and a final ssh-reachability line, and
+#     nothing is retried. probes.tsv in the run directory lists the probes.
+#     Panthor does not reset the device on an unhandled page fault (it marks
+#     the address space faulty, kills its jobs and reports the fault), so a
+#     faulting scene normally leaves the board usable; the probe proves it;
 #   - after each scene: does the board answer ssh with the same boot_id? It
 #     is asked again every 5 s for BOARD_BACK_S (120) seconds; a board that
 #     does not answer, or comes back with another boot_id, ends the run: the
@@ -115,7 +132,8 @@
 # commit must be on; default this checkout and origin/main, as
 # mali-glmark2-build.sh), MALI_GLMARK2_STAGE_ROOT, BOARD_BACK_S (120),
 # KILL_GRACE_S (10), STAGE_MARGIN_KB (free space wanted beyond the build's
-# size, 256 MiB), HOLD_MAX (default: the scenes' worst case), RAW_DIR.
+# size, 256 MiB), HOLD_MAX (default: the scenes' worst case), RAW_DIR,
+# PROBE_SCENE, PROBE_TIMEOUT_S (60), PROBE_PAUSE_S (5, between two probes).
 #
 # Its gate row (the self-test, in tools/check.sh) is added by a separate item
 # of plan #332, after #327's mali-gate-rows.
@@ -258,8 +276,8 @@ esac
 
 stamp=$(date -u +%Y%m%d-%H%M%S)
 stage_root_given=${MALI_GLMARK2_STAGE_ROOT-}
-gm_cmd() { # <stage> <n> <scene>: the board's command for one scene
-  echo "cd $1 && setsid -w sh -c 'echo \$\$ > $1/run/$2.pgid; exec timeout -k ${KILL_GRACE_S:-10} $limit" \
+gm_cmd() { # <stage> <id> <scene> [seconds]: the board's command for one process
+  echo "cd $1 && setsid -w sh -c 'echo \$\$ > $1/run/$2.pgid; exec timeout -k ${KILL_GRACE_S:-10} ${4:-$limit}" \
     "env LD_LIBRARY_PATH=$1/lib $1/bin/$PROGRAM --size $SIZE -b \"\$1\"' glmark2 '$3'" \
     "> $1/run/$2.out 2> $1/run/$2.err < /dev/null"
 }
@@ -284,6 +302,7 @@ if [ "$dry" = 1 ]; then
   echo "  dmesg | tail -n 1"
   echo "  $(gm_cmd '<stage>' '<n>' '<scene>')"
   echo "  dmesg; cat /proc/sys/kernel/random/boot_id   (every 5 s for ${BOARD_BACK_S:-120} s until it answers)"
+  echo "  after a fault, hang or crash: the same command for ${PROBE_SCENE:-build:use-vbo=false} (bound ${PROBE_TIMEOUT_S:-60} s), twice at most; then 'needs a person'"
   echo "  on a hang: kill -KILL -- -<pgid>; pkill -KILL -f <stage>/bin/$PROGRAM; pgrep -f <stage>/bin/$PROGRAM"
   exit 0
 fi
@@ -395,8 +414,11 @@ def judge(rc, elapsed, limit, out, err, klog, libdir, kclass):
         line = subprocess.run([sys.executable, '-I', os.path.join(HERE, 'mali-kmsg.py'), klog],
                               capture_output=True, text=True, check=True).stdout.strip()
         open(kclass, 'w').write(line + '\n')
-        kcount = sum(r[k] for k in ('resets', 'timeouts', 'mmu_faults', 'fw_faults', 'gpu_faults', 'other_panthor'))
-        faults = sum(r[k] for k in ('resets', 'mmu_faults', 'fw_faults', 'gpu_faults', 'other_panthor'))
+        # cs_faults (CS_FATAL, CS_FAULT, tiler heap) counts as a GPU fault too;
+        # .get: a copy of mali-kmsg.py without that key still works
+        keys = ('resets', 'timeouts', 'mmu_faults', 'fw_faults', 'gpu_faults', 'cs_faults', 'other_panthor')
+        kcount = sum(r.get(k, 0) for k in keys)
+        faults = sum(r.get(k, 0) for k in keys if k != 'timeouts')
         timeouts = r['timeouts']
         kstr = str(kcount)
     else:
@@ -456,9 +478,13 @@ py() { python3 -I -c "$PY" "$@"; }
 # ---- the board -----------------------------------------------------------------
 LOCK_WAIT=${LOCK_WAIT:-0}
 back_s=${BOARD_BACK_S:-120}
-HOLD_MAX=${HOLD_MAX:-$((nscenes * (limit + ${KILL_GRACE_S:-10} + back_s + 120) + 1800))}
+probe_s=${PROBE_TIMEOUT_S:-60}
+PROBE_SCENE=${PROBE_SCENE:-build:use-vbo=false}
+[[ $probe_s =~ ^[1-9][0-9]*$ ]] || { echo "$me: PROBE_TIMEOUT_S wants whole seconds, not '$probe_s'" >&2; exit 1; }
+[[ $PROBE_SCENE =~ ^[A-Za-z0-9_:=.,\;-]+$ ]] || { echo "$me: PROBE_SCENE: letters, digits and _:=.,;- only" >&2; exit 1; }
+HOLD_MAX=${HOLD_MAX:-$((nscenes * (limit + ${KILL_GRACE_S:-10} + back_s + 120 + 2 * (probe_s + ${KILL_GRACE_S:-10} + back_s + 120)) + 1800))}
 staged=0 board_ok=1 stage= stage_root= made_root=0 finished=0
-rows=()
+rows=() probes=()
 on_exit() {
   set +e
   if [ "$finished" = 0 ] && [ -f "$raw/meta.txt" ]; then
@@ -576,9 +602,126 @@ write_tables() {
     END { for (v in c) print o[v] "\t" v " " c[v] }' "$out/scenes.tsv" | sort -n | cut -f2 | paste -sd, | sed 's/,/, /g')
   summary="mali-glmark2: $nok/$nscenes scenes ok, failed $((nscenes - nok))${breakdown:+ ($breakdown)}, commit $sha8"
   echo "$summary" > "$out/summary.txt"
+  if [ "${#probes[@]}" -gt 0 ]; then
+    { printf 'after_scene\tattempt\tresult\tverdict\tkmsg\n'; printf '%s\n' "${probes[@]}"; } > "$out/probes.tsv"
+  fi
 }
 
 stop= exit_rc=0
+
+# run_one <id> <scene> <seconds>: one glmark2 process on the board, its raw
+# files, kernel window and verdict. Sets rrc lost wedged klog verdict ms pic
+# kcount exit_line info lib (globals).
+run_one() {
+  local id=$1 scene=$2 lim=$3 o t0 elapsed ext
+  wedged=
+  rssh 'dmesg | tail -n 1' > "$raw/kmsg/$id.before" 2>/dev/null || : > "$raw/kmsg/$id.before"
+  t0=$(date +%s)
+  o=$(bssh -t $((lim + ${KILL_GRACE_S:-10} + 60)) "${opts[@]}" "$host" "$(gm_cmd "$stage" "$id" "$scene" "$lim"); echo yakogl-glmark2-rc=\$?") || true
+  elapsed=$(($(date +%s) - t0))
+  rrc=$(printf '%s\n' "$o" | sed -n 's/^yakogl-glmark2-rc=//p' | tail -1)
+  lost=0
+  if ! alive; then
+    lost=1
+  fi
+  if [ "$lost" = 0 ] && { [ -z "$rrc" ] || [ "$rrc" = 124 ] || [ "$rrc" = 137 ]; }; then
+    # A hang (timeout sent SIGTERM at the limit, SIGKILL KILL_GRACE_S later), or
+    # an ssh cut off by the host-side bound: SIGKILL the process group and what
+    # is left of the program, then wait up to 5 s for the kernel to finish the
+    # teardown (panthor destroys the process's groups and VM in the file
+    # release). A process still there after that is stuck in an ioctl.
+    [ -n "$rrc" ] || rrc=124 elapsed=$lim
+    wedged=$(rssh "pg=\$(cat '$stage/run/$id.pgid' 2>/dev/null); [ -z \"\$pg\" ] || kill -KILL -- -\$pg 2>/dev/null;
+      pkill -KILL -f '[${stage:0:1}]${stage:1}/bin/$PROGRAM'; p=; for k in 1 2 3 4 5; do sleep 1; p=\$(pgrep -f '[${stage:0:1}]${stage:1}/bin/$PROGRAM') || break; done; echo \$p" || true)
+    if [ -n "$wedged" ]; then
+      echo "$me: $id: $PROGRAM survives SIGKILL on the board (a wedged ioctl?): the board needs a person" >&2
+    fi
+  fi
+  for ext in out err; do
+    if [ "$lost" = 1 ] || ! bscp -q "${opts[@]}" "$host:$stage/run/$id.$ext" "$raw/run/$id.$ext" 2>/dev/null; then
+      : > "$raw/run/$id.$ext"
+    fi
+  done
+  klog=$raw/kmsg/$id.log
+  if [ "$lost" = 0 ] && rssh dmesg > "$raw/kmsg/$id.after" 2>/dev/null; then
+    py window "$raw/kmsg/$id.before" "$raw/kmsg/$id.after" "$klog" 2>> "$raw/kmsg/$id.note"
+  else
+    klog=$raw/kmsg/$id.none
+  fi
+  IFS=$'\t' read -r verdict ms pic kcount exit_line info lib < <(py judge "${rrc:-255}" "$elapsed" "$lim" \
+    "$raw/run/$id.out" "$raw/run/$id.err" "$klog" "$stage/lib" "$raw/kmsg/$id.class")
+  [ -z "$wedged" ] || verdict=hang
+}
+
+# save_one <id>: the redacted log and kernel files of one process.
+save_one() {
+  local id=$1 ext
+  for ext in out err; do py redact "$raw/run/$id.$ext" "$out/log/$id.$ext"; done
+  if [ -f "$klog" ]; then
+    py redact "$klog" "$out/kmsg/$id.log"
+    cp "$raw/kmsg/$id.class" "$out/kmsg/$id.class"
+  else
+    echo '# kernel capture unavailable: the board was lost' > "$out/kmsg/$id.log"
+  fi
+}
+
+board_gone_msg() { # <what>
+  if [ "$board_ok" = 1 ]; then
+    echo "$me: $1: the board came back with another boot_id ($boot0 -> $boot_now): it rebooted; the board needs a person, not retried" >&2
+  else
+    echo "$me: $1: the board does not answer ssh after ${back_s} s: the board needs a person, not retried" >&2
+  fi
+}
+
+# After a fault, a hang or a crash: is the device still usable? An
+# unprivileged short scene (PROBE_SCENE) runs as the next process; it passes
+# when it neither hangs, crashes, faults nor times out. A failed probe is
+# asked once more; a second failure, a wedged process, or a board that stops
+# answering ssh ends the run (needs a person). Nothing is retried after the
+# board is gone.
+probe_device() { # <n>
+  local n=$1 k good
+  for k in 1 2; do
+    echo "$me: scene $n: probing the device with $PROBE_SCENE ($k/2, bound $probe_s s)"
+    run_one "probe$n-$k" "$PROBE_SCENE" "$probe_s"
+    save_one "probe$n-$k"
+    if [ "$lost" = 1 ]; then
+      probes+=("$n	$k	board-lost	-	-")
+      board_gone_msg "scene $n: probe"
+      stop=board-lost exit_rc=5
+      return
+    fi
+    case $verdict in
+      hang | crash | gpu-fault | job-timeout | wrong-lib) good=fail ;;
+      *) good=pass ;;
+    esac
+    probes+=("$n	$k	$good	$verdict	$kcount")
+    echo "$me: scene $n: probe $k: $good ($verdict, kmsg $kcount)"
+    [ "$good" = fail ] || return 0
+    if [ -n "$wedged" ]; then
+      stop=wedged exit_rc=5
+      return
+    fi
+    [ "$k" = 2 ] || sleep "${PROBE_PAUSE_S:-5}"
+  done
+  echo "$me: scene $n: the device failed its probe twice: the board needs a person, not retried" >&2
+  stop=probe-failed exit_rc=5
+}
+
+# One try at ssh for the closing line of a stop that needs a person.
+final_reach() {
+  local b
+  if b=$(bssh -t 30 "${opts[@]}" "$host" 'cat /proc/sys/kernel/random/boot_id' 2> /dev/null) && [ -n "$b" ]; then
+    if [ "$b" = "$boot0" ]; then
+      echo "$me: final ssh reachability: answers, boot_id unchanged"
+    else
+      echo "$me: final ssh reachability: answers, boot_id changed (rebooted)"
+    fi
+  else
+    echo "$me: final ssh reachability: does not answer"
+  fi
+}
+
 for ((i = 0; i < nscenes; i++)); do
   n=$((i + 1)) scene=${SCENES[i]}
   if [ -n "$stop" ]; then
@@ -587,62 +730,28 @@ for ((i = 0; i < nscenes; i++)); do
     continue
   fi
   echo "$me: scene $n/$nscenes $scene"
-  rssh 'dmesg | tail -n 1' > "$raw/kmsg/$n.before" 2>/dev/null || : > "$raw/kmsg/$n.before"
-  t0=$(date +%s)
-  o=$(bssh -t $((limit + ${KILL_GRACE_S:-10} + 60)) "${opts[@]}" "$host" "$(gm_cmd "$stage" "$n" "$scene"); echo yakogl-glmark2-rc=\$?") || true
-  elapsed=$(($(date +%s) - t0))
-  rrc=$(printf '%s\n' "$o" | sed -n 's/^yakogl-glmark2-rc=//p' | tail -1)
-  lost=0
-  if ! alive; then
-    lost=1
-  fi
-  if [ "$lost" = 0 ] && { [ -z "$rrc" ] || [ "$rrc" = 124 ] || [ "$rrc" = 137 ]; }; then
-    # a hang (or an ssh cut off by the host-side bound): kill what is left
-    [ -n "$rrc" ] || rrc=124 elapsed=$limit
-    wedged=$(rssh "pg=\$(cat '$stage/run/$n.pgid' 2>/dev/null); [ -z \"\$pg\" ] || kill -KILL -- -\$pg 2>/dev/null;
-      pkill -KILL -f '[${stage:0:1}]${stage:1}/bin/$PROGRAM'; sleep 1; pgrep -f '[${stage:0:1}]${stage:1}/bin/$PROGRAM'" || true)
-    if [ -n "$wedged" ]; then
-      echo "$me: scene $n: $PROGRAM survives SIGKILL on the board (a wedged ioctl?): the board needs a person" >&2
-      stop=wedged exit_rc=5
-    fi
-  fi
-  for ext in out err; do
-    if [ "$lost" = 1 ] || ! bscp -q "${opts[@]}" "$host:$stage/run/$n.$ext" "$raw/run/$n.$ext" 2>/dev/null; then
-      : > "$raw/run/$n.$ext"
-    fi
-  done
-  klog=$raw/kmsg/$n.log
-  if [ "$lost" = 0 ] && rssh dmesg > "$raw/kmsg/$n.after" 2>/dev/null; then
-    py window "$raw/kmsg/$n.before" "$raw/kmsg/$n.after" "$klog" 2>> "$raw/kmsg/$n.note"
-  else
-    klog=$raw/kmsg/$n.none
-  fi
-  IFS=$'\t' read -r verdict ms pic kcount exit_line info lib < <(py judge "${rrc:-255}" "$elapsed" "$limit" \
-    "$raw/run/$n.out" "$raw/run/$n.err" "$klog" "$stage/lib" "$raw/kmsg/$n.class")
+  run_one "$n" "$scene" "$limit"
   if [ "$lost" = 1 ]; then
     verdict=board-lost stop=board-lost exit_rc=5
-    if [ "$board_ok" = 1 ]; then
-      echo "$me: scene $n: the board came back with another boot_id ($boot0 -> $boot_now): it rebooted; the board needs a person, not retried" >&2
-    else
-      echo "$me: scene $n: the board does not answer ssh after ${back_s} s: the board needs a person, not retried" >&2
-    fi
+    board_gone_msg "scene $n"
   elif [ "$verdict" = wrong-lib ]; then
     stop=wrong-lib exit_rc=3
     why="a 'yakogl-mali: loaded' line naming a library outside $stage/lib"
     [ "$lib" != missing ] || why="no 'yakogl-mali: loaded' line"
     echo "$me: scene $n: refused: stderr has $why: the board's own libGLESv2.so.2 ran, not the staged pair; stopping" >&2
   fi
-  [ "$stop" != wedged ] || verdict=hang
+  [ -z "$wedged" ] || stop=wedged exit_rc=5
   rows+=("$scene	$commit	$verdict	$ms	$pic	$kcount	$exit_line")
   [ "$pic" = - ] || [ "$info" = - ] || printf 'mali | %s | %s\n' "$info" "$pic" >> "$raw/pictures.txt"
-  for ext in out err; do py redact "$raw/run/$n.$ext" "$out/log/$n.$ext"; done
-  if [ -f "$klog" ]; then
-    py redact "$klog" "$out/kmsg/$n.log"
-    cp "$raw/kmsg/$n.class" "$out/kmsg/$n.class"
-  else
-    echo '# kernel capture unavailable: the board was lost' > "$out/kmsg/$n.log"
-  fi
+  save_one "$n"
   echo "$me: scene $n: $verdict, ms/frame $ms, kmsg $kcount, rc ${rrc:--}"
+  if [ -z "$stop" ]; then
+    probe=0
+    case $verdict in hang | crash | gpu-fault | job-timeout) probe=1 ;; esac
+    [ "$kcount" = - ] || [ "$kcount" = 0 ] || probe=1
+    [ "${rrc:-0}" -lt 128 ] 2> /dev/null || probe=1
+    [ "$probe" = 0 ] || probe_device "$n"
+  fi
 done
 
 if [ "$board_ok" = 1 ] && [ "$stop" != board-lost ]; then alive || true; fi
@@ -650,4 +759,8 @@ write_tables
 finished=1
 echo "$me: boot_id after ${boot_now:-unknown}; run directory $out (raw files $raw, never committed)"
 echo "$summary"
+if [ "$exit_rc" = 5 ]; then
+  echo "$me: needs a person: the run stopped ($stop); the scenes after it are not-run and nothing is retried"
+  final_reach
+fi
 exit "$exit_rc"

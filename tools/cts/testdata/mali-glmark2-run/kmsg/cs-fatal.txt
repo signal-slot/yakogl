@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# cs_slot_process_fatal_event_locked of Linux v6.18 (panthor_sched.c): one
+# drm_warn, the detail lines unprefixed in dmesg.
+[ 5200.000001] panthor fb000000.gpu: [drm] CS_FATAL: pid=4343, comm=glmark2-es2-mal
+CS_FATAL.EXCEPTION_TYPE: 0x48 (CS_INHERIT_FAULT)
+CS_FATAL.EXCEPTION_DATA: 0x0
+CS_FATAL_INFO.EXCEPTION_DATA: 0x0

@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Scenes 2-6: every kind of panthor fault the board survives, then a clean scene.
+# Scene 5 is a job timeout whose process ignores SIGTERM (SIGKILL after the grace).
+build:use-vbo=true	pagefault
+texture:texture-filter=nearest	csfatal
+texture:texture-filter=linear	csfault
+texture:texture-filter=mipmap	hangterm
