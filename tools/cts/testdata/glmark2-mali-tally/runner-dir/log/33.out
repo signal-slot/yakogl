@@ -1,0 +1,15 @@
+=======================================================
+    glmark2 2023.01
+=======================================================
+    OpenGL Information
+    GL_VENDOR:      Signal Slot
+    GL_RENDERER:    YakoGL gpu-mali
+    GL_VERSION:     OpenGL ES 2.0 YakoGL
+    Surface Config: buf=32 r=8 g=8 b=8 a=8 depth=24 stencil=8 samples=0
+    Surface Size:   800x600 pbuffer
+=======================================================
+[loop] fragment-steps=5:fragment-uniform=true:vertex-steps=5: FPS: 172 FrameTime: 5.814 ms
+glmark2-picture: [loop] fragment-steps=5:fragment-uniform=true:vertex-steps=5: 800x600; probes c c5d527ff, tl d0dc2cff, tr dbe331ff, bl e6ea36ff, br f1f13bff; crc16 fccf, crc16q fcee; mean 189 173 49; black no
+=======================================================
+                                  glmark2 Score: 172 
+=======================================================

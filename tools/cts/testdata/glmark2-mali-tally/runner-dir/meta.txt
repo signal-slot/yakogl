@@ -1,0 +1,11 @@
+commit=0123456789abcdef0123456789abcdef01234567
+dev=no
+glmark2=22c527cb
+flavour=pbuffer-glesv2
+scenes=33
+timeout=120
+boot_id_before=5a1e0000-0000-4000-8000-00000000b007
+kernel=6.18.55-current-rockchip64
+started=2026-11-09T10:00:00Z
+boot_id_after=5a1e0000-0000-4000-8000-00000000b007
+ended=2026-11-09T10:20:00Z

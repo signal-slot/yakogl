@@ -1,0 +1,15 @@
+=======================================================
+    glmark2 2023.01
+=======================================================
+    OpenGL Information
+    GL_VENDOR:      Signal Slot
+    GL_RENDERER:    YakoGL gpu-mali
+    GL_VERSION:     OpenGL ES 2.0 YakoGL
+    Surface Config: buf=32 r=8 g=8 b=8 a=8 depth=24 stencil=8 samples=0
+    Surface Size:   800x600 pbuffer
+=======================================================
+[shading] shading=phong: FPS: 380 FrameTime: 2.632 ms
+glmark2-picture: [shading] shading=phong: 800x600; probes c 28a838ff, tl 33af3dff, tr 3eb642ff, bl 49bd47ff, br 54c44cff; crc16 f778, crc16q f797; mean 232 104 136; black no
+=======================================================
+                                  glmark2 Score: 380 
+=======================================================

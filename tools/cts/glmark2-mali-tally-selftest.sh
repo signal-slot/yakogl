@@ -20,6 +20,12 @@
 #   malformed-log/     a log whose result line names another scene
 #   malformed-status/  exit=x
 #   malformed-kmsg/    a .kmsg without mali-kmsg.py's line
+#   runner-dir/        33 scenes in tools/cts/mali-glmark2-run.sh's layout (scenes.tsv,
+#                      meta.txt, log/<n>.out|.err, kmsg/<n>.log|.class): ok, an
+#                      out-of-gpu-memory, a gl-error, a crash after an exit line
+#                      (jellyfish), terrain's crash without one, a gpu-fault; the
+#                      runner's verdicts agree with the tally's, and the cases
+#                      below change one to see the disagreement (exit 3)
 #   pictures.txt       a 'mali' column: the clean run's pictures
 # Each output is compared with its *.expected byte for byte (the table without
 # its first line, the tool's build); the clean run's picture lines must be the
@@ -132,6 +138,44 @@ check "oom: the missing sample store is not plan #309's" \
   sh -c "! awk -v n=2 '/^## Draft issue /{on = (\$4 == n)} on' '$T/oom.causes.expected' | grep -q 'plan #309'"
 check "oom: the draw refused line is still plan #309's" \
   sh -c "awk -v n=7 '/^## Draft issue /{on = (\$4 == n)} on' '$T/oom.causes.expected' | grep -q 'plan #309 owns these'"
+
+# runner-dir: a mali-glmark2-run.sh run directory, read directly
+R="$T/runner-dir"
+check "runner-dir: table matches" same "$T/runner-dir.table.expected" table --table "$T/pictures.txt" "$R"
+check "runner-dir: picture lines match" same "$T/runner-dir.picture-lines.expected" tally --picture-lines "$R"
+check "runner-dir: results row matches" same "$T/runner-dir.results-row.expected" \
+  tally --results-row --table "$T/pictures.txt" "$R"
+check "runner-dir: the runner's verdicts agree, exit 0" rc_is 0 tally "$R"
+check "runner-dir: no disagreement on stderr" test ! -s "$WORK/err"
+for want in '^18 .* oom ' '^22 .* crash ' '^23 .* crash ' '^24 .* gl-error ' '^25 .* gpu-fault '; do
+  check "runner-dir: /$want/" grep -Eq "$want" "$T/runner-dir.table.expected"
+done
+check "runner-dir: gpu-fault, crash x2, oom, gl-error, 28 ok" \
+  grep -q 'gpu-fault 1, crash 2, oom 1, gl-error 1, ok 28;' "$T/runner-dir.table.expected"
+check "runner-dir: the kmsg line is counted" grep -Eq '^25 .* 3$' "$T/runner-dir.table.expected"
+check "runner-dir: a crash after the exit line has no signal number invented" \
+  grep -q 'crash: killed by a signal (number not recorded)' "$T/runner-dir.table.expected"
+check "runner-dir: terrain's crash without an exit line is found by the tally" \
+  grep -q 'crash: no yakogl-mali-exit line' "$T/runner-dir.table.expected"
+check "runner-dir: 31 picture lines" test "$(tally --picture-lines "$R" 2>/dev/null | grep -c '^mali | ')" -eq 31
+check "runner-dir: the run's own pictures.txt is the picture lines" \
+  same <(grep '^mali | ' "$R/pictures.txt") tally --picture-lines "$R"
+cp -r "$R" "$WORK/mismatch"
+awk -F'\t' -v OFS='\t' 'NR == 20 { $3 = "gl-error" } { print }' "$R/scenes.tsv" >"$WORK/mismatch/scenes.tsv"
+check "runner-dir: a differing verdict exits 3" rc_is 3 tally "$WORK/mismatch"
+check "runner-dir: the scene and both verdicts on stderr" \
+  grep -q 'scene \[buffer\] .*update-method=subdata: runner verdict gl-error, tally verdict ok' "$WORK/err"
+check "runner-dir: the table is still printed" grep -q '^scenes run 33 of 33' "$WORK/out"
+check "runner-dir: --allow-verdict-mismatch exits 0" rc_is 0 tally --allow-verdict-mismatch "$WORK/mismatch"
+check "runner-dir: ... and still names it" \
+  grep -q '^glmark2-mali-tally: allowed: scene .*runner verdict gl-error' "$WORK/err"
+cp -r "$R" "$WORK/notrun"
+awk -F'\t' -v OFS='\t' 'NR == 34 { $3 = "not-run"; $4 = $5 = $6 = $7 = "-" } { print }' "$R/scenes.tsv" >"$WORK/notrun/scenes.tsv"
+check "runner-dir: a not-run scene gives no disagreement" rc_is 0 tally "$WORK/notrun"
+check "runner-dir: ... and the table says not-run" grep -Eq '^33 .* not-run ' "$WORK/out"
+cp -r "$R" "$WORK/badrow"
+sed -i '2s/^build:use-vbo=false/nosuch:scene/' "$WORK/badrow/scenes.tsv"
+check "runner-dir: an unknown scene exits 1" rc_is 1 tally "$WORK/badrow"
 
 # malformed input exits 1, usage 2
 for m in log status kmsg; do

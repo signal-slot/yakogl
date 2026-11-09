@@ -1,0 +1,2 @@
+yakogl-mali: loaded build=099b5df6 lib=/opt/yakogl-glmark2/lib/libGLESv2.so.2
+yakogl-mali-exit: draws=3800 refused=0 first_refused=- gpu_faults=0 job_timeouts=0
