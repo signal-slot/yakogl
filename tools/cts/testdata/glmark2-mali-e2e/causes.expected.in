@@ -1,0 +1,27 @@
+glmark2-mali-tally: causes of t6-glmark2-e2e (main `@SHA8@`): 2
+
+## Draft issue 1
+
+Title: gpu-mali: glmark2-es2 texture texture-filter=mipmap on the NanoPC-T6: gpu-fault: panthor fb000000.gpu: [drm] *ERROR* Unhandled Page fault in AS1 at VA <hex>
+
+Cause 1: gpu-fault: panthor fb000000.gpu: [drm] *ERROR* Unhandled Page fault in AS1 at VA <hex>
+
+The first glmark2-es2 run on the NanoPC-T6 (Mali-G610, panthor, back end gpu-mali, #20) from main `@SHA8@` (kernel 6.18.55-current-rockchip64, the tools/mali/panthor-gles pair, libGLESv2.so.2 sha256 `@PAIR16@`), one glmark2-es2 process per scene at 800x600 on an EGL pbuffer, gives verdict gpu-fault in 1 scene(s): `[texture] texture-filter=mipmap`.
+
+- `[texture] texture-filter=mipmap`: exit 0, timeout 0, panthor kernel lines 2; 25.00 ms a frame
+  > yakogl-mali-exit: draws=600 refused=0 first_refused=- gpu_faults=1 job_timeouts=0
+  > kmsg: panthor fb000000.gpu: [drm] *ERROR* Unhandled Page fault in AS1 at VA 0x0000000000401000
+
+Run directory `t6-glmark2-e2e`, tallied by `tools/cts/glmark2-mali-tally.py`. Rerun the scene alone with tools/cts/mali-glmark2-run.sh to reproduce. ROADMAP.md stage 2 asks for all 33 scenes with no failed scene, no GL error and no scene out of GPU memory.
+
+## Draft issue 2
+
+Title: gpu-mali: glmark2-es2 terrain on the NanoPC-T6: hang: no exit within the runner's time limit
+
+Cause 2: hang: no exit within the runner's time limit
+
+The first glmark2-es2 run on the NanoPC-T6 (Mali-G610, panthor, back end gpu-mali, #20) from main `@SHA8@` (kernel 6.18.55-current-rockchip64, the tools/mali/panthor-gles pair, libGLESv2.so.2 sha256 `@PAIR16@`), one glmark2-es2 process per scene at 800x600 on an EGL pbuffer, gives verdict hang in 1 scene(s): `[terrain] <default>`.
+
+- `[terrain] <default>`: exit 124, timeout 1, panthor kernel lines 0
+
+Run directory `t6-glmark2-e2e`, tallied by `tools/cts/glmark2-mali-tally.py`. Rerun the scene alone with tools/cts/mali-glmark2-run.sh to reproduce. ROADMAP.md stage 2 asks for all 33 scenes with no failed scene, no GL error and no scene out of GPU memory.
