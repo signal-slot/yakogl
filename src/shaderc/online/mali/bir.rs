@@ -446,6 +446,26 @@ pub enum Op {
         round: Round,
     },
     FrsqF32,
+    /// `FSIN_TABLE.u6 dest, x`: the sine table of `bi_lower_fsincos_32`'s
+    /// argument in sixty-fourths of a quarter turn (offset 0).
+    FsinTableU6,
+    /// `FCOS_TABLE.u6 dest, x`: the cosine table, as [`Op::FsinTableU6`].
+    FcosTableU6,
+    /// `FMA_RSCALE.f32 dest, a, b, c, scale`: `a * b + c` scaled by 2^scale
+    /// (an integer source; `bi_fexp_32`, `bi_lower_fsincos_32`).
+    FmaRscaleF32,
+    /// `FREXPE.f32 dest, x` with `special` `.log` (`log`) or none: the
+    /// exponent of `x` as an integer (`bi_flog2_32`).
+    FrexpeF32 {
+        log: bool,
+    },
+    /// `FADD_LSCALE.f32 dest, a, b`: `a + b` with the scale of `bi_flog2_32`.
+    FaddLscaleF32,
+    /// `FLOGD.f32 dest, x`: the log2 mantissa step of `bi_flog2_32`.
+    FlogdF32,
+    /// `FEXP.f32 dest, fixed, scale`: the exp2 of a fixed-point integer and
+    /// its float, for NaN propagation (`bi_fexp_32`).
+    FexpF32,
     /// `F32_TO_S32.rtz` (`nir_op_f2i32`).
     F32ToS32,
     /// `S32_TO_F32` (`nir_op_i2f32`).
@@ -792,6 +812,18 @@ pub const fn src_info(op: Op, s: usize) -> SrcInfo {
         (Op::FmaxV2f16 | Op::FminV2f16, 0..=1) => info(true, true, false, false, 16),
         (Op::FrcpF32 | Op::FrsqF32 | Op::FroundF32 { .. }, 0) => info(true, true, false, false, 32),
         (Op::FroundV2f16 { .. }, 0) => info(true, true, false, false, 16),
+        /* FSIN_TABLE and FCOS_TABLE read a plain word; FREXPE widens only
+         * (widen0); FLOGD has widen and absneg (valhall.c) */
+        (Op::FsinTableU6 | Op::FcosTableU6, 0) => info(false, false, false, false, 32),
+        (Op::FrexpeF32 { .. }, 0) => info(false, true, false, false, 32),
+        (Op::FlogdF32, 0) => info(true, true, false, false, 32),
+        /* FMA_RSCALE has absneg but no widen; the scale is a plain integer */
+        (Op::FmaRscaleF32, 0..=2) => info(true, false, false, false, 32),
+        (Op::FmaRscaleF32, 3) => info(false, false, false, false, 32),
+        (Op::FaddLscaleF32, 0..=1) => info(true, true, false, false, 32),
+        /* FEXP: the fixed-point integer, then the float */
+        (Op::FexpF32, 0) => info(false, false, false, false, 32),
+        (Op::FexpF32, 1) => info(true, true, false, false, 32),
         /* a pseudo-op (IR_pseudo.xml:139-147: a plain source) */
         (Op::FclampF32, 0) => info(false, false, false, false, 32),
         (Op::FclampV2f16, 0) => info(false, false, false, false, 16),
@@ -929,6 +961,10 @@ pub const fn nr_srcs(op: Op) -> usize {
         | Op::FclampV2f16
         | Op::FrcpF32
         | Op::FrsqF32
+        | Op::FsinTableU6
+        | Op::FcosTableU6
+        | Op::FrexpeF32 { .. }
+        | Op::FlogdF32
         | Op::FroundF32 { .. }
         | Op::FroundV2f16 { .. }
         | Op::F32ToS32
@@ -953,6 +989,8 @@ pub const fn nr_srcs(op: Op) -> usize {
         | Op::FmaxV2f16
         | Op::FminF32
         | Op::FminV2f16
+        | Op::FaddLscaleF32
+        | Op::FexpF32
         | Op::IaddS32
         | Op::IsubS32
         | Op::ImulI32
@@ -971,6 +1009,7 @@ pub const fn nr_srcs(op: Op) -> usize {
         | Op::ArshiftOrI32
         | Op::MkvecV2i8
         | Op::LdTile { .. } => 3,
+        Op::FmaRscaleF32 => 4,
         Op::FmaF32 | Op::FmaV2f16 | Op::Atest | Op::ZsEmit { .. } => 3,
         Op::FcmpOrF32 { .. } | Op::IcmpOrS32 { .. } | Op::IcmpOrU32 { .. } | Op::MuxI32 | Op::MuxV2i16 => 3,
         Op::FcmpOrV2f16 { .. } | Op::IcmpOrV2u16 { .. } => 3,

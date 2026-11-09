@@ -379,6 +379,50 @@ pub fn pack_one(i: &Ins, branch: i32) -> Result<u64, MaliError> {
             fsrc(&mut f, i, 0)?;
             alu_dest(&mut f, i, "dest_width")?;
         }
+        Op::FsinTableU6 | Op::FcosTableU6 => {
+            f = Fill::new(if matches!(i.op, Op::FsinTableU6) { IsaOp::FsinTableU6 } else { IsaOp::FcosTableU6 });
+            f.put("src0", src_byte(&i.src[0])?)?.put("offset", 0)?;
+            alu_dest(&mut f, i, "dest_width")?;
+        }
+        Op::FlogdF32 => {
+            f = Fill::new(IsaOp::FlogdF32);
+            fsrc(&mut f, i, 0)?;
+            alu_dest(&mut f, i, "dest_width")?;
+        }
+        Op::FrexpeF32 { log } => {
+            f = Fill::new(IsaOp::FrexpeF32);
+            f.put("src0", src_byte(&i.src[0])?)?.put("widen0", widen(i.src[0].swz)?)?;
+            /* frexp_special_m: none 0, log 2 */
+            f.put("special", if log { 2 } else { 0 })?.put("neg_result", 0)?;
+            alu_dest(&mut f, i, "dest_width")?;
+        }
+        Op::FaddLscaleF32 => {
+            f = Fill::new(IsaOp::FaddLscaleF32);
+            for s in 0..2 {
+                fsrc(&mut f, i, s)?;
+            }
+            f.put("round", 0)?.put("clamp", 0)?.put("sticky", 0)?;
+            alu_dest(&mut f, i, "dest_width_narrow")?;
+        }
+        Op::FmaRscaleF32 => {
+            f = Fill::new(IsaOp::FmaRscaleF32);
+            for s in 0..3 {
+                let x = &i.src[s];
+                f.put(["src0", "src1", "src2"][s], src_byte(x)?)?;
+                f.put(["neg0", "neg1", "neg2"][s], x.neg as u32)?;
+                f.put(["abs0", "abs1", "abs2"][s], x.abs as u32)?;
+            }
+            f.put("src3", src_byte(&i.src[3])?)?;
+            f.put("special", 0)?.put("round", 0)?.put("clamp", i.clamp as u32)?;
+            alu_dest(&mut f, i, "dest_width")?;
+        }
+        Op::FexpF32 => {
+            f = Fill::new(IsaOp::FexpF32);
+            let x = &i.src[1];
+            f.put("src0", src_byte(&i.src[0])?)?.put("src1", src_byte(x)?)?;
+            f.put("widen1", widen(x.swz)?)?.put("neg1", x.neg as u32)?.put("abs1", x.abs as u32)?;
+            alu_dest(&mut f, i, "dest_width")?;
+        }
         Op::F32ToS32 => {
             f = Fill::new(IsaOp::F32ToS32);
             f.put("src0", src_byte(&i.src[0])?)?;
@@ -865,4 +909,69 @@ pub fn pack(p: &Prog<'_>, out: &mut [u64]) -> Result<usize, MaliError> {
         *w = 0;
     }
     Ok(padded)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::shaderc::online::mali::bir::Dest;
+
+    fn r(n: u8) -> Src {
+        Src::of(Idx::Reg(n))
+    }
+
+    fn last(n: u8) -> Src {
+        Src { discard: true, ..r(n) }
+    }
+
+    fn lut(i: u8) -> Src {
+        Src::of(Idx::Lut(i))
+    }
+
+    fn neg(s: Src) -> Src {
+        Src { neg: true, ..s }
+    }
+
+    fn pack(op: Op, dest: u8, srcs: &[Src]) -> u64 {
+        pack_one(&Ins::new(op, &[Dest { idx: Idx::Reg(dest), swz: Swz::H01 }], srcs), 0).unwrap()
+    }
+
+    /// The words are `fsarith_77_transc.expect.json`'s (docs/notes/
+    /// mali-transcendentals.md, "Instruction by instruction"), Mesa 26.2.1.
+    #[test]
+    fn the_sin_and_cos_tables_are_byte_equal_to_mesa_26_2_1() {
+        /* 4 FSIN_TABLE.u6 r2, r1 */
+        assert_eq!(pack(Op::FsinTableU6, 2, &[r(1)]), 0x009cc20000040001);
+        /* 5 FCOS_TABLE.u6 r1, r1^ */
+        assert_eq!(pack(Op::FcosTableU6, 1, &[last(1)]), 0x009cc10000050041);
+        /* 15, 16: the cos lane's pair */
+        assert_eq!(pack(Op::FsinTableU6, 3, &[r(2)]), 0x009cc30000040002);
+        assert_eq!(pack(Op::FcosTableU6, 2, &[last(2)]), 0x009cc20000050042);
+    }
+
+    #[test]
+    fn fma_rscale_is_byte_equal_to_mesa_26_2_1() {
+        /* 6 FMA_RSCALE.f32 r3, r0, r0, 0x0.neg, 0xFFFFFFFF */
+        assert_eq!(pack(Op::FmaRscaleF32, 3, &[r(0), r(0), neg(lut(0)), lut(1)]), 0x0160c304c1c00000);
+        /* 17 */
+        assert_eq!(pack(Op::FmaRscaleF32, 4, &[r(1), r(1), neg(lut(0)), lut(1)]), 0x0160c404c1c00101);
+        /* 32 FMA_RSCALE.f32 r3, r3^, 0x3F800000, 0x0.neg, r4^ */
+        assert_eq!(pack(Op::FmaRscaleF32, 3, &[last(3), lut(16), neg(lut(0)), last(4)]), 0x0160c30444c0d043);
+    }
+
+    #[test]
+    fn the_log2_ops_are_byte_equal_to_mesa_26_2_1() {
+        /* 23 FREXPE.f32.log r3, r2 */
+        assert_eq!(pack(Op::FrexpeF32 { log: true }, 3, &[r(2)]), 0x0099c30002020002);
+        /* 25 FADD_LSCALE.f32 r4, 0x3F800000.neg, r2 */
+        assert_eq!(pack(Op::FaddLscaleF32, 4, &[neg(lut(16)), r(2)]), 0x00a4c440000902d0);
+        /* 26 FLOGD.f32 r2, r2^ */
+        assert_eq!(pack(Op::FlogdF32, 2, &[last(2)]), 0x009cc20000080042);
+    }
+
+    #[test]
+    fn fexp_is_byte_equal_to_mesa_26_2_1() {
+        /* 34 FEXP.f32 r3, r4^, r3^ */
+        assert_eq!(pack(Op::FexpF32, 3, &[last(4), last(3)]), 0x00a4c30000084344);
+    }
 }
