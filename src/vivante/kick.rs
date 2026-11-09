@@ -54,6 +54,39 @@ impl GcKick {
     pub const ZERO: GcKick = GcKick { magic: 0, stream_bytes: 0, stream_gpu: 0 };
 }
 
+/// Wait until kick `stamp` (a `gc_kick_id` a caller noted when something
+/// was recorded in it) has completed, and for nothing after it: 0, or the
+/// OSAL wait's error (-1 when the open frame could not be submitted).
+///
+/// - 0, a kick that completed, or one too old to be in a stream slot: no
+///   wait.
+/// - The kick being recorded: it is submitted, then waited for.
+/// - A submitted kick: its own fence is waited for. Kicks complete in
+///   order on the one front end, so the ones before it are done too; the
+///   ones after it keep running.
+///
+/// `finish` waits for every slot instead. The depth resolve waits this way
+/// for the kick that wrote the surface (ds_cache.rs `resolve_depth`).
+pub fn wait_kick(stamp: u32) -> i32 {
+    use super::backend;
+
+    if !backend::kick_pending_retired(stamp) {
+        return 0;
+    }
+    if stamp == backend::gc_kick_id() && backend::gc_flush() != 0 {
+        return -1;
+    }
+    let fence = backend::kick_fence(stamp);
+    if fence <= 0 || backend::completed_fence() >= fence {
+        return 0;
+    }
+    backend::g().waits += 1;
+    let rc = backend::wait_fence(fence);
+    /* what the kick rendered into a 64-bit target goes back to its storage */
+    let _ = backend::kick_pending_retired(stamp);
+    rc
+}
+
 /// KICK_DIFF: read the render target twice after a kick, to tell a late
 /// write from a wrong one (docs/notes/gc-kick-diff.md).
 ///

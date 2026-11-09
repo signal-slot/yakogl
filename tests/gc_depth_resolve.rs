@@ -114,7 +114,7 @@ fn with_surface(w: u32, h: u32, case: impl FnOnce(&mut [u32], u32)) {
         assert_eq!(yakogl::vivante::backend::gc_init(), 0, "gc_init");
     }
     ds_cache::select(KEY, w, h, GUARD, 1, None, |_| false, || 0).expect("a surface");
-    ds_cache::drawn(KEY, [true, false], [None, None]);
+    ds_cache::drawn(KEY, 1, false, [true, false], [None, None]);
     /* the surface: 64-aligned width in words, 64-aligned rows (ds_cache.rs `select`) */
     let (stride, rows) = (w.div_ceil(64) * 64 * 4, h.div_ceil(64) * 64);
     let bytes = stride as usize * rows as usize;
@@ -134,7 +134,7 @@ fn with_surface(w: u32, h: u32, case: impl FnOnce(&mut [u32], u32)) {
 fn resolve(dst: &mut [f32], w: u32, h: u32, pitch: u32) -> i32 {
     assert!(dst.len() >= (h * pitch) as usize);
     // SAFETY: `h` rows of `pitch` floats.
-    unsafe { ds_cache::resolve_depth(ID, dst.as_mut_ptr(), w, h, pitch, GUARD, |_| false) }
+    unsafe { ds_cache::resolve_depth(ID, dst.as_mut_ptr(), w, h, pitch, GUARD, |_| 0) }
 }
 
 /// Every texel of the resolve is the rule's value of the word at its place;
@@ -253,7 +253,7 @@ fn depth_texels_need_no_copy_from_a_surface_of_another_stride() {
     }
     let first = DsKey { stencil_id: 0x65, ..KEY };
     ds_cache::select(first, 90, 70, GUARD, 1, None, |_| false, || 0).expect("the first surface");
-    ds_cache::drawn(first, [true, false], [None, None]);
+    ds_cache::drawn(first, 1, false, [true, false], [None, None]);
     let plain = ds_cache::select(KEY, 200, 70, GUARD, 2, None, |_| false, || 0);
     assert_eq!(plain, Err(-95), "a plain draw would copy across strides: refused");
     let (w, h) = (200u32, 70u32);
