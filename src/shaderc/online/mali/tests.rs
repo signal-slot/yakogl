@@ -4399,7 +4399,7 @@ fn a_moved_expression_s_operations_round_trip_by_number() {
     /* bytes encode never writes */
     let defect = Err(MaliError::Defect(Defect::IrIndex));
     assert_eq!(motion::decode(&[1, 2, 0], &mut back), defect, "an entry of no node");
-    assert_eq!(motion::decode(&[1, 2, 1, 2, 5, 0, 0, 0, 0], &mut back), defect, "a number past the table");
+    assert_eq!(motion::decode(&[1, 2, 1, 2, 12, 0, 0, 0, 0], &mut back), defect, "a number past the table");
     assert_eq!(motion::decode(&[1, 2, 1, 2, 3, 0, 1, 2, 0], &mut back), Ok(1), "ffma's number");
     assert_eq!(back[0].nodes(), &[op(Alu::Ffma, [0, 1, 2])]);
     /* `u2f32`, appended for case 89: the numbers before it stand */
