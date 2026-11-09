@@ -13,8 +13,10 @@
 #   tools/cts/pi4-glmark2-dumps.sh [--dry-run] run <img-dir> <records-dir> [SCENE...]
 #   tools/cts/pi4-glmark2-dumps.sh --self-test
 #
-# SCENE      a scene's number (1-33, as `scenes` lists them) or its label
-#            (gm01-build, ...): all scenes when none.
+# SCENE      a scene's number (1-33, as `scenes` lists them), its label
+#            (gm01-build, ...) or its glmark2 -b argument without the "-b "
+#            (texture:texture-filter=mipmap), an exact match that must name
+#            one scene: all scenes when none.
 # scenes     "<label> <scene info string> -b <glmark2 argument>" per scene.
 # build      one west build directory per scene, <img-dir>/<label>/, board
 #            rpi_4b, from this checkout as it is (build it from an origin/main
@@ -69,9 +71,10 @@ selected() {
         num=
         [[ $s =~ ^[0-9]+$ ]] && num=$(printf %02d "$((10#$s))")
         hit=$(printf '%s\n' "$rows" | while IFS=$'\t' read -r l info arg; do
-            if [ "${l%%-*}" = "$num" ] || [ "${l#*-}" = "$s" ]; then printf '%s\t%s\n' "${l#*-}" "$arg"; fi
+            if [ "${l%%-*}" = "$num" ] || [ "${l#*-}" = "$s" ] || [ "${arg#-b }" = "$s" ]; then printf '%s\t%s\n' "${l#*-}" "$arg"; fi
         done)
         [ -n "$hit" ] || die "no scene '$s' (scenes lists them)"
+        [ "$(printf '%s\n' "$hit" | wc -l)" = 1 ] || die "'$s' names several scenes (scenes lists them)"
         printf '%s\n' "$hit"
     done
 }
@@ -213,6 +216,10 @@ self_test() {
     [ "$n" = 33 ] || { echo "self-test: $n pi4 scenes, expected 33" >&2; return 1; }
     grep -q ' -b terrain$' <<< "$all" || { echo "self-test: terrain's argument missing" >&2; return 1; }
     grep -q ' -b texture:texture-filter=mipmap$' <<< "$all" || { echo "self-test: mipmap's argument missing" >&2; return 1; }
+    (selected build > /dev/null 2>&1) && { echo "self-test: bare scene name accepted" >&2; return 1; }
+    [ "$(selected texture:texture-filter=mipmap 2> /dev/null)" = "$(selected gm05-texture 2> /dev/null)" ] || { echo "self-test: -b argument selection" >&2; return 1; }
+    [ "$(selected texture:texture-filter=mipmap 2> /dev/null | wc -l)" = 1 ] || { echo "self-test: -b argument names several rows" >&2; return 1; }
+    (selected nosuch:scene > /dev/null 2>&1) && { echo "self-test: unknown SCENE accepted" >&2; return 1; }
     [ "$(selected 5 gm33-loop 2> /dev/null | wc -l)" = 2 ] || { echo "self-test: SCENE selection" >&2; return 1; }
     out=$(DRY=1 cmd_build /nonexistent-dir 5)
     case $out in
