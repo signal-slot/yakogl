@@ -20,6 +20,7 @@
 
 use core::ffi::c_void;
 
+use super::clear_mrt::{self, ClearClass};
 use super::ffi::*;
 use super::kick::{V3dKick, V3D_KICK_MAGIC};
 use super::state;
@@ -860,6 +861,55 @@ impl ClearProgram {
     const FAILED: ClearProgram = ClearProgram { status: ClearStatus::Failed, ..ClearProgram::NOT_BUILT };
 }
 
+/// The class of each render target of a clear quad over several colour
+/// attachments (`clear_mrt::clear_mrt_source`), and its key in the table of
+/// built programs (`V3dState::clear_program_mrt`).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+struct MrtPattern {
+    classes: [ClearClass; clear_mrt::MAX_RTS],
+}
+
+impl MrtPattern {
+    /// The pattern as one byte: two bits per RT (0 not cleared, 1 float, 2
+    /// integer). `Int` and `Uint` are one program (the same `uvec4` output,
+    /// the 32-bit TLB write carries no signedness), so they share a key:
+    /// 3^4 = 81 keys at most, 80 of them with a cleared RT.
+    fn key(&self) -> u8 {
+        self.classes.iter().enumerate().fold(0, |k, (n, c)| {
+            let bits = match c {
+                ClearClass::NotCleared => 0,
+                ClearClass::Float => 1,
+                ClearClass::Uint | ClearClass::Int => 2,
+            };
+            k | bits << (2 * n)
+        })
+    }
+
+    /// Does the quad write any RT?
+    fn clears_any(&self) -> bool {
+        self.classes.iter().any(|&c| c != ClearClass::NotCleared)
+    }
+}
+
+/// A clear program for several colour attachments: the quad of one class
+/// pattern, which `key` names while `prog.status` is not `NotBuilt`.
+#[derive(Clone, Copy)]
+struct MrtClearProgram {
+    key: u8,
+    prog: ClearProgram,
+}
+
+impl MrtClearProgram {
+    const NOT_BUILT: MrtClearProgram = MrtClearProgram { key: 0, prog: ClearProgram::NOT_BUILT };
+}
+
+/// How many several-attachment clear programs the backend keeps at once
+/// (1.5 KiB of state each). A frame clears a handful of attachment sets,
+/// each one pattern; when the table is full the oldest slot is given up
+/// and its pattern costs a compile again when it returns
+/// (`mrt_clear_program`).
+const MRT_CLEAR_PROGRAMS: usize = 8;
+
 /* ---- state ---------------------------------------------------------------- */
 
 /// The open job and everything it writes into.
@@ -1142,6 +1192,11 @@ struct V3dState {
     clear_program: ClearProgram,
     /// The integer clear program (`CLEAR_FS_INT`), built on first use.
     clear_program_int: ClearProgram,
+    /// The clear programs for several colour attachments (`clear_mrt`), one
+    /// per class pattern, each built on first use; `clear_program_mrt_next`
+    /// is the slot given up next when every one is taken.
+    clear_program_mrt: [MrtClearProgram; MRT_CLEAR_PROGRAMS],
+    clear_program_mrt_next: usize,
     zs: [ZsEntry; ZS_TARGETS],
     nzs: usize,
     /// The depth/stencil buffers kept between jobs, the slot given up next
@@ -1369,6 +1424,8 @@ impl V3dState {
         j: Job::ZERO,
         clear_program: ClearProgram::NOT_BUILT,
         clear_program_int: ClearProgram::NOT_BUILT,
+        clear_program_mrt: [MrtClearProgram::NOT_BUILT; MRT_CLEAR_PROGRAMS],
+        clear_program_mrt_next: 0,
         zs: [ZsEntry { target: 0, z: ZsKnown::Untouched, s: ZsKnown::Untouched }; ZS_TARGETS],
         nzs: 0,
         zsbufs: [ZsBuf::NONE; ZS_BUFS],
@@ -3864,7 +3921,7 @@ fn record_arrays_and_draw(
 /// build logged the chain's error, once.
 fn clear_program(g: &mut V3dState, integer: bool) -> Result<state::ClearProg<'static>, state::Refusal> {
     if integer && g.clear_program_int.status == ClearStatus::NotBuilt {
-        g.clear_program_int = made_clear_program("integer ", CLEAR_VS_INT, CLEAR_FS_INT);
+        g.clear_program_int = made_clear_program("integer ", CLEAR_VS_INT, CLEAR_FS_INT, &[(b"u_color", 0)], 1);
     }
     let p = if integer { &g.clear_program_int } else { &g.clear_program };
     if p.status != ClearStatus::Built {
@@ -3874,10 +3931,77 @@ fn clear_program(g: &mut V3dState, integer: bool) -> Result<state::ClearProg<'st
             "the clear program did not build, so a clear the TLB cannot do is not drawn"
         });
     }
+    Ok(clear_prog_of(p))
+}
+
+/// `p` (built) as a draw uses it.
+fn clear_prog_of(p: &ClearProgram) -> state::ClearProg<'static> {
     // SAFETY: the program lives in the backend's static state until shutdown,
     // which no draw outlives.
     let fs: &'static ShcShader = unsafe { &*(&p.fs as *const ShcShader) };
-    Ok(state::ClearProg { fs, code_gpu: p.code.gpu, location: p.location })
+    state::ClearProg { fs, code_gpu: p.code.gpu, location: p.location }
+}
+
+/// The clear program of a quad over several colour attachments: the one for
+/// `pattern` (`clear_mrt::clear_mrt_source`, a `vec4` or `uvec4` output per
+/// cleared RT), built the first time the pattern is asked for and kept in
+/// `V3dState::clear_program_mrt`. When the table is full the oldest slot is
+/// given up, with no flush: the OSAL holds a freed block until every job
+/// that may read it has completed (the one being recorded and the one in
+/// flight, src/osal/v3d_frees.h), and the job builder copied the program's
+/// record when the quad was recorded, so the next pattern's program takes
+/// the slot while the old one's code is still fetched. `Err` is the refusal
+/// every such quad gets when its program did not build; the build logged
+/// the chain's error, once per pattern.
+fn mrt_clear_program(g: &mut V3dState, pattern: MrtPattern) -> Result<state::ClearProg<'static>, state::Refusal> {
+    const DID_NOT_BUILD: state::Refusal = "the several-attachment clear program did not build, so a clear the TLB \
+                                           cannot do of several colour attachments is not drawn";
+    let key = pattern.key();
+    let built = g.clear_program_mrt.iter().position(|e| e.prog.status != ClearStatus::NotBuilt && e.key == key);
+    let slot = match built {
+        Some(i) => i,
+        None => {
+            let m = clear_mrt::clear_mrt_source(&pattern.classes)
+                .map_err(|_| "a clear quad over several colour attachments that writes none of them")?;
+            let i = match g.clear_program_mrt.iter().position(|e| e.prog.status == ClearStatus::NotBuilt) {
+                Some(i) => i,
+                None => {
+                    /* the oldest slot */
+                    let i = g.clear_program_mrt_next;
+                    g.clear_program_mrt_next = (i + 1) % MRT_CLEAR_PROGRAMS;
+                    release_clear_program(&mut g.clear_program_mrt[i].prog);
+                    i
+                }
+            };
+            let mut uniforms = [(&b""[..], 0u16); clear_mrt::MAX_RTS];
+            for (u, cu) in uniforms.iter_mut().zip(m.uniforms()) {
+                *u = (cu.name.as_bytes(), cu.dword_off);
+            }
+            let prog = made_clear_program(
+                "several-attachment ",
+                clear_mrt::CLEAR_VS,
+                m.source(),
+                &uniforms[..m.uniforms().len()],
+                m.rt_mask(),
+            );
+            g.clear_program_mrt[i] = MrtClearProgram { key, prog };
+            i
+        }
+    };
+    let p = &g.clear_program_mrt[slot].prog;
+    if p.status != ClearStatus::Built {
+        return Err(DID_NOT_BUILD);
+    }
+    Ok(clear_prog_of(p))
+}
+
+/// Give a built clear program's shader and code back; the slot is `NOT_BUILT`.
+fn release_clear_program(p: &mut ClearProgram) {
+    if p.status == ClearStatus::Built {
+        crate::shaderc::release_shader(&p.fs);
+        osal::gpu_free(&mut p.code);
+    }
+    *p = ClearProgram::NOT_BUILT;
 }
 
 /// The text of a compiler log (NUL-terminated in `log`).
@@ -3890,11 +4014,12 @@ fn log_text(log: &[core::ffi::c_char]) -> &str {
 
 /// Build one clear program and say once what happened: its code size, or
 /// the stage that failed and the compiler's own error. `what` prefixes the
-/// line ("" or "integer ").
-fn made_clear_program(what: &str, vs: &[u8], fs: &[u8]) -> ClearProgram {
+/// line ("", "integer " or "several-attachment "); `uniforms` and `rt_mask`
+/// are what the program must read and write (`build_clear_program`).
+fn made_clear_program(what: &str, vs: &[u8], fs: &[u8], uniforms: &[(&[u8], u16)], rt_mask: u8) -> ClearProgram {
     use core::ffi::c_char;
     let mut log = [0 as c_char; 256];
-    match build_clear_program(&mut log, vs, fs) {
+    match build_clear_program(&mut log, vs, fs, uniforms, rt_mask) {
         Ok(p) => {
             glog!("yakogl/v3d: {}clear program built: {} bytes of code", what, p.fs.usc_dw * 4);
             p
@@ -3910,17 +4035,21 @@ fn made_clear_program(what: &str, vs: &[u8], fs: &[u8]) -> ClearProgram {
 /// quad that needs it (`clear_program`), so a back end that never clears an
 /// integer target part-way spends neither the compile nor its code memory.
 fn init_clear_program(g: &mut V3dState) {
-    g.clear_program = made_clear_program("", CLEAR_VS, CLEAR_FS);
+    g.clear_program = made_clear_program("", CLEAR_VS, CLEAR_FS, &[(b"u_color", 0)], 1);
 }
 
 /// Compile and link a clear program (`vs`, `fs`: NUL-terminated sources)
 /// through the shader back end, as the GL core compiles an application's,
-/// and upload its code. The compiler's error, when there is one, is left in
-/// `log`.
+/// and upload its code. The program must read each of `uniforms` (name,
+/// first dword) as four dwords of its fragment block and write the colour
+/// targets of `rt_mask` and no other. The compiler's error, when there is
+/// one, is left in `log`.
 fn build_clear_program(
     log: &mut [core::ffi::c_char; 256],
     vs_src: &[u8],
     fs_src: &[u8],
+    uniforms: &[(&[u8], u16)],
+    rt_mask: u8,
 ) -> Result<ClearProgram, &'static str> {
     use core::ffi::c_char;
     let be = crate::shaderc::backend().ok_or("no shader back end")?;
@@ -3954,17 +4083,26 @@ fn build_clear_program(
         give_back(&fs);
         return Err("the program did not link");
     }
-    /* The quad hands the colour as a four-dword fragment block; the program
-     * must read it from dwords 0..3 (the job builder refuses a uniform past
-     * the block, so a different layout could not draw a wrong colour either,
-     * but it would refuse every quad). */
-    let at_zero = fs
-        .uniform_table()
-        .iter()
-        .any(|u| crate::util::name_bytes(&u.name) == b"u_color" && u.dword_off == 0 && u.dwords == 4);
-    if !at_zero {
+    /* The quad hands the colours as a fragment block of four dwords per
+     * cleared target; the program must read each from the dwords the caller
+     * fills (the job builder refuses a uniform past the block, so a
+     * different layout could not draw a wrong colour either, but it would
+     * refuse every quad). */
+    let placed = |&(name, off): &(&[u8], u16)| {
+        fs.uniform_table()
+            .iter()
+            .any(|u| crate::util::name_bytes(&u.name) == name && u.dword_off == off && u.dwords == 4)
+    };
+    if !uniforms.iter().all(placed) {
         give_back(&fs);
-        return Err("u_color is not the fragment block's dwords 0..3");
+        return Err("a colour uniform is not at its four dwords of the fragment block");
+    }
+    /* and write exactly the targets the quad clears: an RT it left out
+     * keeps its tile-buffer colour (clear_mrt.rs), one it wrote by mistake
+     * would be cleared */
+    if fs.v3d.fs.rt_mask != rt_mask {
+        give_back(&fs);
+        return Err("the program does not write exactly the colour targets of the clear");
     }
     let rec = fs.v3d.record_of_location;
     let location = match rec.iter().position(|&r| r != SHC_V3D_NO_RECORD) {
@@ -5550,18 +5688,94 @@ fn draw_in_job(g: &mut V3dState, target: Target, d: &GlesDraw, st: &V3dJobState,
     -E2BIG
 }
 
+/// The class of a colour attachment to the several-attachment clear quad
+/// (`clear_mrt`): an integer surface by its signedness; a 32-bit float one
+/// (R32F) as `Uint`, its four words the float's own bits, which the 32-bit
+/// TLB write stores whole where a `vec4` output's f16 pairs would round them
+/// (docs/notes/v3d-mrt-clear.md, 5b); anything else `Float`.
+fn clear_class(surf: u8) -> ClearClass {
+    match state::rt_format(surf).map(|f| f.internal_type) {
+        Some(V3D_INTERNAL_TYPE_8I) | Some(V3D_INTERNAL_TYPE_16I) | Some(V3D_INTERNAL_TYPE_32I) => ClearClass::Int,
+        Some(V3D_INTERNAL_TYPE_8UI)
+        | Some(V3D_INTERNAL_TYPE_16UI)
+        | Some(V3D_INTERNAL_TYPE_32UI)
+        | Some(V3D_INTERNAL_TYPE_32F) => ClearClass::Uint,
+        _ => ClearClass::Float,
+    }
+}
+
+/// The class pattern of `d`'s colour clear over `target`'s render targets:
+/// the RTs `clear_target_mask` names (every one for a glClear, whose mask is
+/// 0; glClearBuffer names one), each in its own format's class. A GL_NONE
+/// draw buffer (an RT with no address) is not written: it has nothing to
+/// store to, and the quad leaves an RT it does not write alone.
+fn mrt_pattern(target: &Target, d: &GlesDraw) -> MrtPattern {
+    let rts = usize::from(target.rts.max(1)).min(clear_mrt::MAX_RTS);
+    let named = if d.clear_target_mask == 0 { 0xf } else { d.clear_target_mask };
+    let addressed = [target.gpu != 0, target.rt[0] != 0, target.rt[1] != 0, target.rt[2] != 0];
+    let mut classes = [ClearClass::NotCleared; clear_mrt::MAX_RTS];
+    for (n, c) in classes.iter_mut().enumerate().take(rts) {
+        if named & (1 << n) != 0 && addressed[n] {
+            *c = clear_class(target.formats()[n]);
+        }
+    }
+    MrtPattern { classes }
+}
+
 /// Draw the part of `d`'s clear the TLB cannot do as the clear quad
-/// (`state::clear_quad_draw`).
+/// (`state::clear_quad_draw`): one quad, whose program is RT 0's float or
+/// integer one on a single attachment, and on several the one of their
+/// class pattern (`mrt_clear_program`), which writes every RT the clear
+/// names in its own class and leaves the others their tile-buffer colour.
+/// The depth and stencil halves of the clear ride on the same quad.
 fn draw_clear_quad(g: &mut V3dState, target: Target, d: &GlesDraw, b: state::QuadBuffers) -> i32 {
-    /* an integer RT 0 takes the integer program's four raw words; a quad
-     * that writes no colour keeps the float one (its mask is 0) */
-    let p = match clear_program(g, b.colour && gles_surf_is_integer(target.format)) {
-        Ok(p) => p,
-        Err(why) => return refuse(g, why),
+    let mut b = b;
+    /* The fragment block: the clear's four words (a float colour's f32 bits,
+     * an integer one's raw words, `GlesDraw::clear_rgba` holds both as
+     * bits), once for RT 0's program and once per cleared RT for the
+     * several-attachment one, at the dwords its uniforms read
+     * (`clear_mrt::ClearUniform::dword_off`, 4k for the k-th cleared RT).
+     * Every RT of one glClear takes the same words: a float RT the colour,
+     * an integer RT its bits (ES 3.0 4.2.3 leaves the value undefined);
+     * a glClearBuffer names one RT, whose class the words are in. */
+    let mut block = [0u32; 4 * clear_mrt::MAX_RTS];
+    block[..4].copy_from_slice(&d.clear_rgba.map(f32::to_bits));
+    let mut dwords = 4;
+    let several = b.colour && target.rts > 1;
+    let pattern = if several { Some(mrt_pattern(&target, d)).filter(MrtPattern::clears_any) } else { None };
+    if several && pattern.is_none() {
+        /* every RT the clear names is a GL_NONE draw buffer: no colour to
+         * write; what is left of the clear is the depth and stencil quad */
+        b.colour = false;
+        if !b.depth && !b.stencil {
+            return 0;
+        }
+    }
+    let p = match pattern {
+        Some(pat) => {
+            let p = match mrt_clear_program(g, pat) {
+                Ok(p) => p,
+                Err(why) => return refuse(g, why),
+            };
+            let cleared = pat.classes.iter().filter(|&&c| c != ClearClass::NotCleared).count();
+            for k in 1..cleared {
+                block.copy_within(0..4, 4 * k);
+            }
+            dwords = 4 * cleared;
+            p
+        }
+        /* an integer RT 0 takes the integer program's four raw words; a
+         * quad that writes no colour keeps the float one (its mask is 0) */
+        None => match clear_program(g, b.colour && gles_surf_is_integer(target.format)) {
+            Ok(p) => p,
+            Err(why) => return refuse(g, why),
+        },
     };
     let vertices = state::clear_quad_vertices(d.clear_depth);
-    let colour = d.clear_rgba;
-    let q = state::clear_quad_draw(d, b, d.clear_quad, &p, &vertices, &colour);
+    let mut q = state::clear_quad_draw(d, b, d.clear_quad, &p, &vertices, &d.clear_rgba);
+    /* the block above in place of the four words clear_quad_draw hands over */
+    q.fs_uniform_cpu = block.as_ptr() as *const c_void;
+    q.fs_uniform_dwords = dwords as u16;
     let st = match state::job_state(&q) {
         Ok(st) => st,
         Err(why) => return refuse(g, why),
@@ -5751,13 +5965,12 @@ pub extern "C" fn v3d_shutdown() {
     }
     let _ = flush_job(g);
     let _ = wait_in_flight(g);
-    for p in [&mut g.clear_program, &mut g.clear_program_int] {
-        if p.status == ClearStatus::Built {
-            crate::shaderc::release_shader(&p.fs);
-            osal::gpu_free(&mut p.code);
-        }
-        *p = ClearProgram::NOT_BUILT;
+    release_clear_program(&mut g.clear_program);
+    release_clear_program(&mut g.clear_program_int);
+    for e in g.clear_program_mrt.iter_mut() {
+        release_clear_program(&mut e.prog);
     }
+    g.clear_program_mrt_next = 0;
     glog!(
         "yakogl/v3d: tiled copies high-water {} of {} bytes ({} tilings, {} of them at upload, {} bytes tiled; \
          {} draws tried again after the open job ran for want of memory, {} of them drawn)",
@@ -6067,12 +6280,6 @@ unsafe fn draw_call(draw: *const GlesDraw) -> i32 {
      * RGBA8 (v3d_job.h); nothing in the GL core makes such a surface */
     if target.msaa && target.typed() {
         return refuse(g, "4x multisampling of an ES 3.0 colour format");
-    }
-    /* The clear quad writes gl_FragColor, RT 0 only, so a colour clear it
-     * would do (scissored, or with a partial colour mask) cannot reach the
-     * other attachments: refused, before anything is recorded. */
-    if rts > 1 && d.do_clear && (d.clear_quad || state::colour_needs_quad(d)) {
-        return refuse(g, "a scissored or masked colour clear of several colour attachments");
     }
     /* The draw's own state, checked before anything is recorded, so a
      * refused draw leaves its fused clear unrecorded too. A clear-only draw

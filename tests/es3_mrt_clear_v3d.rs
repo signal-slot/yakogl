@@ -7,14 +7,14 @@
 //! `v3d_job_begin`/`v3d_job_draw`/`v3d_job_end` that records, the layout code
 //! of `v3d_tex.c` dlopen'd, a platform whose memory answers).
 //!
-//! Today the whole-target clear (no scissor, full mask) is the TLB's: one
-//! clear word per RT in `V3dJobClear::clear_rt`, and that is held here
+//! The whole-target clear (no scissor, full mask) is the TLB's: one clear
+//! word per RT in `V3dJobClear::clear_rt`, and that is held here
 //! (`unscissored_*`). A scissored or colour-masked clear of two or three
-//! attachments is refused by name ("a scissored or masked colour clear of
-//! several colour attachments", `src/v3d/backend.rs`, `state::colour_needs_quad`):
-//! the quad writes RT 0 only. `the_refusal_today_is_pinned_by_name` pins
-//! that. The cases the fix (v3d-mrt-clear) must satisfy are the `#[ignore]`d
-//! tests, each asserting what the job must hold once fixed, in terms that fit
+//! attachments is one clear quad whose program writes every RT the clear
+//! names in its own class (`src/v3d/clear_mrt.rs`, `draw_clear_quad`;
+//! docs/notes/v3d-mrt-clear.md); until it landed the back end refused it by
+//! name ("a scissored or masked colour clear of several colour
+//! attachments"). The tests assert what the job holds, in terms that fit
 //! either design (a quad per class, or one quad writing every RT):
 //!
 //! - no refusal is logged and the GL reports no error;
@@ -22,11 +22,11 @@
 //!   quad writing an integer RT uses 32-bit TLB words with the raw clear
 //!   words, a float one f16 pairs;
 //! - a RT the clear does not name (glClearBuffer of one drawbuffer) is left
-//!   loaded (`load_rt0` / `load_rt`), never cleared by the TLB.
+//!   loaded (`load_rt0` / `load_rt`), never cleared by the TLB, and no quad
+//!   writes it.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table --test es3_mrt_clear_v3d
-//! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table --test es3_mrt_clear_v3d -- --ignored
 //! ```
 #![cfg(all(feature = "shaderc-online", feature = "gpu-v3d", not(feature = "report-es2")))]
 
@@ -459,7 +459,7 @@ fn rig() -> MutexGuard<'static, ()> {
 
 const W: GLsizei = 24;
 const H: GLsizei = 16;
-/// The refusal the fix removes.
+/// The refusal v3d-mrt-clear removed; no test may see it logged.
 const REFUSAL: &str = "a scissored or masked colour clear of several colour attachments";
 /// Raw clear words for integer targets, and a float colour.
 const WORDS: [u32; 4] = [0x7fff_fff1, 0x0000_0002, 0xffff_fffd, 0x0000_0004];
@@ -777,11 +777,10 @@ fn full_clear_fused_with_a_draw_stays_the_tlbs() {
     }
 }
 
-/// The refusal of today, by name: a scissored or colour-masked clear of
-/// several attachments is logged, records nothing, and the application sees
-/// an error. Replaced by the ignored tests below once v3d-mrt-clear lands.
+/// The refusal that is gone stays gone: no scene below logs it, and the
+/// application sees no error (the clear of each is asserted by its test).
 #[test]
-fn the_refusal_today_is_pinned_by_name() {
+fn the_refusal_of_several_attachments_is_never_logged() {
     let _g = rig();
     let scenes: [(&str, Scene); 5] = [
         ("scissored", Scene { scissor: Some([3, 2, 9, 7]), ..PLAIN }),
@@ -790,30 +789,27 @@ fn the_refusal_today_is_pinned_by_name() {
         ("one drawbuffer, scissored", Scene { scissor: Some([0, 4, 10, 5]), clear: Clear::One(1), ..PLAIN }),
         ("masked and scissored", Scene { scissor: Some([1, 1, 5, 5]), mask: [false, true, true, false], ..PLAIN }),
     ];
-    let mut named = false;
     for (name, formats) in sets() {
         for (what, sc) in &scenes {
             let r = run(&formats, sc);
             let s = &r.seen;
-            assert!(refusals(&r) >= 1, "{name}, {what}: refused: {:?}", s.log);
-            named |= s.log.iter().any(|l| l.contains(REFUSAL));
-            assert!(s.draws.is_empty(), "{name}, {what}: nothing recorded");
-            assert_ne!(r.error, GL_NO_ERROR, "{name}, {what}: the application sees it today");
+            assert_eq!(refusals(&r), 0, "{name}, {what}: {:?}", s.log);
+            assert!(!s.log.iter().any(|l| l.contains(REFUSAL)), "{name}, {what}: {:?}", s.log);
+            assert!(!s.draws.is_empty(), "{name}, {what}: the clear is drawn");
+            assert_eq!(r.error, GL_NO_ERROR, "{name}, {what}");
         }
     }
-    /* the back end names a cause once per process: this test is the only one that hits it today */
-    assert!(named, "the refusal is logged by name: {REFUSAL}");
 }
 
-/* ---- after v3d-mrt-clear: what the job must hold --------------------------- */
+/* ---- the drawn clear: what the job holds ---------------------------------- */
 
-/// The common post-fix assertions of a quad-drawn clear of the `cleared`
-/// drawbuffers of `formats`: no refusal and no GL error; every RT loaded (the
-/// TLB clears none of them); the clear quads (every draw but a fused draw's
-/// own) are one per class or one in all, carry the GL's scissor box and
-/// colour mask; an integer RT is written by a quad with 32-bit TLB words for
-/// it and the raw clear words in a fragment block (glClear's integer values
-/// are undefined, so not asserted for it).
+/// The common assertions of a quad-drawn clear of the `cleared` drawbuffers
+/// of `formats`: no refusal and no GL error; every RT loaded (the TLB
+/// clears none of them); the clear quads (every draw but a fused draw's own)
+/// are one per class or one in all, carry the GL's scissor box and colour
+/// mask; an integer RT is written by a quad with 32-bit TLB words for it and
+/// the raw clear words in a fragment block (glClear's integer values are
+/// undefined, so not asserted for it).
 fn assert_quad_clear(name: &str, formats: &[GLenum], r: &Run, sc: &Scene, cleared: &[usize]) {
     let s = &r.seen;
     assert_eq!(r.error, GL_NO_ERROR, "{name}: {:?}", s.log);
@@ -855,7 +851,6 @@ fn all(formats: &[GLenum]) -> Vec<usize> {
 
 /// (b) A scissored clear of every attachment.
 #[test]
-#[ignore = "v3d-mrt-clear: refused today"]
 fn scissored_clear_of_all_attachments_is_drawn() {
     let _g = rig();
     for (name, formats) in sets() {
@@ -866,7 +861,6 @@ fn scissored_clear_of_all_attachments_is_drawn() {
 
 /// (b) glClear of every attachment, scissored.
 #[test]
-#[ignore = "v3d-mrt-clear: refused today"]
 fn scissored_glclear_of_all_attachments_is_drawn() {
     let _g = rig();
     for (name, formats) in sets() {
@@ -877,7 +871,6 @@ fn scissored_glclear_of_all_attachments_is_drawn() {
 
 /// (c) A partially masked clear (R and A only), unscissored.
 #[test]
-#[ignore = "v3d-mrt-clear: refused today"]
 fn masked_clear_of_all_attachments_is_drawn() {
     let _g = rig();
     for (name, formats) in sets() {
@@ -888,7 +881,6 @@ fn masked_clear_of_all_attachments_is_drawn() {
 
 /// (b)+(c) Scissored and masked together.
 #[test]
-#[ignore = "v3d-mrt-clear: refused today"]
 fn scissored_and_masked_clear_of_all_attachments_is_drawn() {
     let _g = rig();
     for (name, formats) in sets() {
@@ -901,7 +893,6 @@ fn scissored_and_masked_clear_of_all_attachments_is_drawn() {
 /// is cleared by a quad, the others stay loaded, and no quad writes an
 /// integer RT the clear does not name.
 #[test]
-#[ignore = "v3d-mrt-clear: refused today"]
 fn scissored_clearbuffer_of_one_drawbuffer_is_drawn() {
     let _g = rig();
     for (name, formats) in sets() {
@@ -922,7 +913,6 @@ fn scissored_clearbuffer_of_one_drawbuffer_is_drawn() {
 
 /// (d) The same, masked instead of scissored.
 #[test]
-#[ignore = "v3d-mrt-clear: refused today"]
 fn masked_clearbuffer_of_one_drawbuffer_is_drawn() {
     let _g = rig();
     for (name, formats) in sets() {
@@ -936,7 +926,6 @@ fn masked_clearbuffer_of_one_drawbuffer_is_drawn() {
 /// (e) A scissored, masked clear fused with a draw into every attachment:
 /// the clear quad(s) first, in the same job, then the application's draw last.
 #[test]
-#[ignore = "v3d-mrt-clear: refused today"]
 fn scissored_masked_clear_fused_with_a_draw() {
     let _g = rig();
     for (name, formats) in sets() {
