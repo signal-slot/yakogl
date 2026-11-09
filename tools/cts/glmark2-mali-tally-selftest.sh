@@ -13,6 +13,10 @@
 #                      crash (jellyfish, signal 11, a documentation address
 #                      in its log), out of GPU memory, a refused program and
 #                      two scenes not run
+#   oom/               seven scenes: the back end's OSAL refusal and missing sample
+#                      store, GL error 0x505, the kernel's Out of memory (.kmsg) and
+#                      page allocation failure (.log) are oom; 0x506 stays gl-error;
+#                      a 'draw refused' line is fail with plan #309's note
 #   malformed-log/     a log whose result line names another scene
 #   malformed-status/  exit=x
 #   malformed-kmsg/    a .kmsg without mali-kmsg.py's line
@@ -103,6 +107,31 @@ check "faults: no address, login or UART in any output" \
 check "faults: the log does hold the address" grep -q '192\.0\.2\.7' "$T"/faults/22-jellyfish-default.log
 check "faults: picture lines skip the scenes without a value" \
   test "$(tally --picture-lines "$T/faults" 2>/dev/null | grep -c '^mali | ')" -eq 28
+
+# oom: the memory failures of the back end, GL_OUT_OF_MEMORY and the kernel
+check "oom: table matches" same "$T/oom.table.expected" table --table "$T/pictures.txt" "$T/oom"
+check "oom: causes match" same "$T/oom.causes.expected" tally --causes "$T/oom"
+for want in '^01 .* oom ' '^02 .* oom ' '^03 .* oom ' '^04 .* oom ' '^05 .* oom ' \
+            '^06 .* gl-error ' '^07 .* fail '; do
+  check "oom: /$want/" grep -Eq "$want" "$T/oom.table.expected"
+done
+check "oom: the OSAL refusal, the missing sample store, GL 0x505 and both kernel lines are oom" \
+  grep -q 'oom 5, gl-error 1, fail 1;' "$T/oom.table.expected"
+check "oom: the .kmsg line is the cause, its time stamp off" \
+  grep -q 'oom: Out of memory: Killed process # ' "$T/oom.causes.expected"
+check "oom: the .kmsg line is in the excerpt" \
+  grep -q '^  > kmsg: Out of memory: Killed process 2841' "$T/oom.causes.expected"
+check "oom: the .log kernel line's time stamp is off the cause" \
+  grep -q 'oom: glmark2-es2-mal: page allocation failure' "$T/oom.causes.expected"
+check "oom: GL 0x505 is no gl-error cause" \
+  sh -c "! grep -q 'gl-error: .*0x505' '$T/oom.causes.expected'"
+check "oom: GL 0x506 stays gl-error" grep -q 'gl-error: GL error 0x506 in glDrawArrays' "$T/oom.causes.expected"
+check "oom: the OSAL refusal is not plan #309's" \
+  sh -c "! awk -v n=1 '/^## Draft issue /{on = (\$4 == n)} on' '$T/oom.causes.expected' | grep -q 'plan #309'"
+check "oom: the missing sample store is not plan #309's" \
+  sh -c "! awk -v n=2 '/^## Draft issue /{on = (\$4 == n)} on' '$T/oom.causes.expected' | grep -q 'plan #309'"
+check "oom: the draw refused line is still plan #309's" \
+  sh -c "awk -v n=7 '/^## Draft issue /{on = (\$4 == n)} on' '$T/oom.causes.expected' | grep -q 'plan #309 owns these'"
 
 # malformed input exits 1, usage 2
 for m in log status kmsg; do

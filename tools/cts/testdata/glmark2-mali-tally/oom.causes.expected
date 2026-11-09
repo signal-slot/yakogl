@@ -1,0 +1,103 @@
+glmark2-mali-tally: causes of oom (main `099b5df6`): 7
+
+## Draft issue 1
+
+Title: gpu-mali: glmark2-es2 build use-vbo=false on the NanoPC-T6: oom: mali: the OSAL refused a buffer of # bytes (#)
+
+Cause 1: oom: mali: the OSAL refused a buffer of # bytes (#)
+
+The first glmark2-es2 run on the NanoPC-T6 (Mali-G610, panthor, back end gpu-mali, #20) from main `099b5df6` (kernel 6.18.55-current-rockchip64, the tools/mali/panthor-gles pair, libGLESv2.so.2 sha256 `3f6c0a1d9e2b4c5a`), one glmark2-es2 process per scene at 800x600 on an EGL pbuffer, gives verdict oom in 1 scene(s): `[build] use-vbo=false`.
+
+- `[build] use-vbo=false`: exit 0, timeout 0, panthor kernel lines 0; 2.08 ms a frame
+  > mali: the OSAL refused a buffer of 7684096 bytes (-12)
+  > yakogl-mali-exit: draws=4800 refused=0 first_refused=- gpu_faults=0 job_timeouts=0
+
+Run directory `oom`, tallied by `tools/cts/glmark2-mali-tally.py`. Rerun the scene alone with tools/cts/mali-glmark2-run.sh to reproduce. ROADMAP.md stage 2 asks for all 33 scenes with no failed scene, no GL error and no scene out of GPU memory.
+
+## Draft issue 2
+
+Title: gpu-mali: glmark2-es2 build use-vbo=true on the NanoPC-T6: oom: mali: no sample store of # bytes: a #x frame averages into its target
+
+Cause 2: oom: mali: no sample store of # bytes: a #x frame averages into its target
+
+The first glmark2-es2 run on the NanoPC-T6 (Mali-G610, panthor, back end gpu-mali, #20) from main `099b5df6` (kernel 6.18.55-current-rockchip64, the tools/mali/panthor-gles pair, libGLESv2.so.2 sha256 `3f6c0a1d9e2b4c5a`), one glmark2-es2 process per scene at 800x600 on an EGL pbuffer, gives verdict oom in 1 scene(s): `[build] use-vbo=true`.
+
+- `[build] use-vbo=true`: exit 0, timeout 0, panthor kernel lines 0; 2.13 ms a frame
+  > mali: no sample store of 1920000 bytes: a 4x frame averages into its target
+  > yakogl-mali-exit: draws=4700 refused=0 first_refused=- gpu_faults=0 job_timeouts=0
+
+Run directory `oom`, tallied by `tools/cts/glmark2-mali-tally.py`. Rerun the scene alone with tools/cts/mali-glmark2-run.sh to reproduce. ROADMAP.md stage 2 asks for all 33 scenes with no failed scene, no GL error and no scene out of GPU memory.
+
+## Draft issue 3
+
+Title: gpu-mali: glmark2-es2 texture texture-filter=nearest on the NanoPC-T6: oom: yakogl: GL error <hex> in glBufferData (out of memory)
+
+Cause 3: oom: yakogl: GL error <hex> in glBufferData (out of memory)
+
+The first glmark2-es2 run on the NanoPC-T6 (Mali-G610, panthor, back end gpu-mali, #20) from main `099b5df6` (kernel 6.18.55-current-rockchip64, the tools/mali/panthor-gles pair, libGLESv2.so.2 sha256 `3f6c0a1d9e2b4c5a`), one glmark2-es2 process per scene at 800x600 on an EGL pbuffer, gives verdict oom in 1 scene(s): `[texture] texture-filter=nearest`.
+
+- `[texture] texture-filter=nearest`: exit 0, timeout 0, panthor kernel lines 0; 1.64 ms a frame
+  > yakogl: GL error 0x505 in glBufferData (out of memory)
+  > yakogl-mali-exit: draws=6100 refused=0 first_refused=- gpu_faults=0 job_timeouts=0
+
+Run directory `oom`, tallied by `tools/cts/glmark2-mali-tally.py`. Rerun the scene alone with tools/cts/mali-glmark2-run.sh to reproduce. ROADMAP.md stage 2 asks for all 33 scenes with no failed scene, no GL error and no scene out of GPU memory.
+
+## Draft issue 4
+
+Title: gpu-mali: glmark2-es2 texture texture-filter=linear on the NanoPC-T6: oom: Out of memory: Killed process # (glmark2-es2-mal) total-vm:#kB
+
+Cause 4: oom: Out of memory: Killed process # (glmark2-es2-mal) total-vm:#kB
+
+The first glmark2-es2 run on the NanoPC-T6 (Mali-G610, panthor, back end gpu-mali, #20) from main `099b5df6` (kernel 6.18.55-current-rockchip64, the tools/mali/panthor-gles pair, libGLESv2.so.2 sha256 `3f6c0a1d9e2b4c5a`), one glmark2-es2 process per scene at 800x600 on an EGL pbuffer, gives verdict oom in 1 scene(s): `[texture] texture-filter=linear`.
+
+- `[texture] texture-filter=linear`: exit 0, timeout 0, panthor kernel lines 0; 1.67 ms a frame
+  > yakogl-mali-exit: draws=6000 refused=0 first_refused=- gpu_faults=0 job_timeouts=0
+  > kmsg: Out of memory: Killed process 2841 (glmark2-es2-mal) total-vm:4194304kB
+
+Run directory `oom`, tallied by `tools/cts/glmark2-mali-tally.py`. Rerun the scene alone with tools/cts/mali-glmark2-run.sh to reproduce. ROADMAP.md stage 2 asks for all 33 scenes with no failed scene, no GL error and no scene out of GPU memory.
+
+## Draft issue 5
+
+Title: gpu-mali: glmark2-es2 texture texture-filter=mipmap on the NanoPC-T6: oom: glmark2-es2-mal: page allocation failure: order:#, mode:<hex>(GFP_KERNEL)
+
+Cause 5: oom: glmark2-es2-mal: page allocation failure: order:#, mode:<hex>(GFP_KERNEL)
+
+The first glmark2-es2 run on the NanoPC-T6 (Mali-G610, panthor, back end gpu-mali, #20) from main `099b5df6` (kernel 6.18.55-current-rockchip64, the tools/mali/panthor-gles pair, libGLESv2.so.2 sha256 `3f6c0a1d9e2b4c5a`), one glmark2-es2 process per scene at 800x600 on an EGL pbuffer, gives verdict oom in 1 scene(s): `[texture] texture-filter=mipmap`.
+
+- `[texture] texture-filter=mipmap`: exit 0, timeout 0, panthor kernel lines 0; 1.70 ms a frame
+  > [  901.250000] glmark2-es2-mal: page allocation failure: order:4, mode:0xcc0(GFP_KERNEL)
+  > yakogl-mali-exit: draws=5900 refused=0 first_refused=- gpu_faults=0 job_timeouts=0
+
+Run directory `oom`, tallied by `tools/cts/glmark2-mali-tally.py`. Rerun the scene alone with tools/cts/mali-glmark2-run.sh to reproduce. ROADMAP.md stage 2 asks for all 33 scenes with no failed scene, no GL error and no scene out of GPU memory.
+
+## Draft issue 6
+
+Title: gpu-mali: glmark2-es2 shading shading=gouraud on the NanoPC-T6: gl-error: GL error 0x506 in glDrawArrays
+
+Cause 6: gl-error: GL error 0x506 in glDrawArrays
+
+The first glmark2-es2 run on the NanoPC-T6 (Mali-G610, panthor, back end gpu-mali, #20) from main `099b5df6` (kernel 6.18.55-current-rockchip64, the tools/mali/panthor-gles pair, libGLESv2.so.2 sha256 `3f6c0a1d9e2b4c5a`), one glmark2-es2 process per scene at 800x600 on an EGL pbuffer, gives verdict gl-error in 1 scene(s): `[shading] shading=gouraud`.
+
+- `[shading] shading=gouraud`: exit 0, timeout 0, panthor kernel lines 0; 2.38 ms a frame
+  > yakogl: GL error 0x506 in glDrawArrays (framebuffer incomplete)
+  > yakogl-mali-exit: draws=4200 refused=0 first_refused=- gpu_faults=0 job_timeouts=0
+
+Run directory `oom`, tallied by `tools/cts/glmark2-mali-tally.py`. Rerun the scene alone with tools/cts/mali-glmark2-run.sh to reproduce. ROADMAP.md stage 2 asks for all 33 scenes with no failed scene, no GL error and no scene out of GPU memory.
+
+## Draft issue 7
+
+Title: gpu-mali: glmark2-es2 shading shading=blinn-phong-inf on the NanoPC-T6: fail: draw-refused (1 lines)
+
+Cause 7: fail: draw-refused (1 lines)
+
+The first glmark2-es2 run on the NanoPC-T6 (Mali-G610, panthor, back end gpu-mali, #20) from main `099b5df6` (kernel 6.18.55-current-rockchip64, the tools/mali/panthor-gles pair, libGLESv2.so.2 sha256 `3f6c0a1d9e2b4c5a`), one glmark2-es2 process per scene at 800x600 on an EGL pbuffer, gives verdict fail in 1 scene(s): `[shading] shading=blinn-phong-inf`.
+
+- `[shading] shading=blinn-phong-inf`: exit 0, timeout 0, panthor kernel lines 0; 2.50 ms a frame
+  > yakogl/mali: draw refused: unsupported blend state
+  > yakogl-mali-exit: draws=4000 refused=0 first_refused=- gpu_faults=0 job_timeouts=0
+
+Run directory `oom`, tallied by `tools/cts/glmark2-mali-tally.py`. Rerun the scene alone with tools/cts/mali-glmark2-run.sh to reproduce. ROADMAP.md stage 2 asks for all 33 scenes with no failed scene, no GL error and no scene out of GPU memory.
+
+A refusal of the Mali back end or its compiler: plan #309 owns these; cross-reference its issue rather than opening a new one.
+
+not run, no issue (the run is incomplete: rerun them): `[shading] shading=phong`, `[shading] shading=cel`, `[bump] bump-render=high-poly`, `[bump] bump-render=normals`, `[bump] bump-render=height`, `[effect2d] kernel=0,1,0;1,-4,1;0,1,0;`, `[effect2d] kernel=1,1,1,1,1;1,1,1,1,1;1,1,1,1,1;`, `[pulsar] light=false:quads=5:texture=false`, `[desktop] blur-radius=5:effect=blur:passes=1:separable=true:windows=4`, `[desktop] effect=shadow:windows=4`, `[buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=map`, `[buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=subdata`, `[buffer] columns=200:interleave=true:update-dispersion=0.9:update-fraction=0.5:update-method=map`, `[ideas] speed=duration`, `[jellyfish] <default>`, `[terrain] <default>`, `[shadow] <default>`, `[refract] <default>`, `[conditionals] fragment-steps=0:vertex-steps=0`, `[conditionals] fragment-steps=5:vertex-steps=0`, `[conditionals] fragment-steps=0:vertex-steps=5`, `[function] fragment-complexity=low:fragment-steps=5`, `[function] fragment-complexity=medium:fragment-steps=5`, `[loop] fragment-loop=false:fragment-steps=5:vertex-steps=5`, `[loop] fragment-steps=5:fragment-uniform=false:vertex-steps=5`, `[loop] fragment-steps=5:fragment-uniform=true:vertex-steps=5`

@@ -1,0 +1,18 @@
+yakogl-mali: loaded build=099b5df6 lib=/opt/yakogl-glmark2/lib/libGLESv2.so.2
+=======================================================
+    glmark2 2023.01
+=======================================================
+    OpenGL Information
+    GL_VENDOR:      Signal Slot
+    GL_RENDERER:    YakoGL gpu-mali
+    GL_VERSION:     OpenGL ES 2.0 YakoGL
+    Surface Config: buf=32 r=8 g=8 b=8 a=8 depth=24 stencil=8 samples=0
+    Surface Size:   800x600 pbuffer
+=======================================================
+mali: the OSAL refused a buffer of 7684096 bytes (-12)
+[build] use-vbo=false: FPS: 480 FrameTime: 2.083 ms
+glmark2-picture: [build] use-vbo=false: 800x600; probes c 253547ff, tl 303c4cff, tr 3b4351ff, bl 464a56ff, br 51515bff; crc16 1eef, crc16q 1f0e; mean 29 13 17; black no
+=======================================================
+                                  glmark2 Score: 480 
+=======================================================
+yakogl-mali-exit: draws=4800 refused=0 first_refused=- gpu_faults=0 job_timeouts=0
