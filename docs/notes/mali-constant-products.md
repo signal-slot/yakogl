@@ -2,8 +2,8 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Mali: case 70 loopcarry, the constant products Mesa folds
 
-**Design, implementation in fs-fold** (plan #336, issue #33). Nothing here
-changes the compiler. Mesa 26.2.1 is `MESA_PAN_TREE`
+**Design, implemented in fs-fold** (plan #336, issue #33; section 8 is
+what landed). Mesa 26.2.1 is `MESA_PAN_TREE`
 (`$CCFARM_DEPS_DIR/mesa-pan/mesa-26.2.1`); `nir_opt_algebraic.py` line
 numbers are that file's. This continues mali-algebraic-folds.md (shapes 1-3
 of cases 189 and 192, lowered in plan #154) for the one refusal left in a
@@ -344,3 +344,43 @@ repo's own sources, none of glmark2's. A grep of the glmark2 checkout's
 on one line (`x * c1 * c2`, `c * (x * c)`) finds none, so no glmark2
 fragment shape is known to need fs-fold; those shaders' next refusals are
 `pow`, `normalize`, `reflect`, `length` and `fract` (ana-fsvec).
+
+## 8. Implemented (fs-fold)
+
+Section 3's rule is in `Fs::op` (`nir_fs.rs`), the arm after the `fneg`
+arms and before the last `Fmul` arm, with its matcher `Fs::const_product`
+beside `Fs::factor`: one operand a constant `c2`, the other a 16-bit `Fmul`
+node of a constant `c1` and a non-constant `b` (either order on both
+levels). `c1 * c2` is folded in f32; not `f16_exact` is
+`MaliError::ConstantFold`; `1.0` gives `b`, `-1.0` `neg(b)`, `0.0`/`-0.0`
+`Const(0)`, anything else `node(Fmul, [b, Const(r)])`, variable first. As
+section 6 measured, nothing else was needed: case 70's fragment program is
+the reference's 29 words. `ladder_forms` is unchanged (its doc comment now
+says the `Fmul` arm is a guard); the `Fadd` twin stays `ArithConstant`.
+`alu32`, `glsl.rs`, `nir.rs` and `opt.rs` are untouched (section 2's open
+route question did not need settling for the bytes).
+
+Tests (`src/shaderc/online/mali/tests.rs`):
+
+* `case_70_loopcarry_is_byte_equal_to_mesa_26_2_1`: the sources are
+  `es100/loopcarry.frag` and `alu_loopcarry.frag`; the `fs.fragment` words
+  of `fsarith_70_loopcarry`, `alu_loopcarry` and `cflow_71_deadloop` are
+  asserted equal (the premise of section 1); `check_linked_for("70", ..)`.
+* `the_fp16_constant_products_fold_as_mesa_s`, on case 70's loop with the
+  two constants changed: `* 2.0 * 0.5` is 29 words with one `FMA`;
+  `* 3.0 * 0.5` is `* 1.5`, 8 `FMA` and 7 `FADD.v2f16` (the first pass's
+  `k * 1.5` pairs with `u_k.x * 3.0` in the first `FMA`); `* 0.1 * 0.3` is
+  `ConstantFold`; `+ 2.0 + 0.5` is `ArithConstant`. No reference is drawn
+  for the last three or for `* 1.5`: they pin the walk, not Mesa.
+* `* 2.0 * -0.5` (`-1.0`, an `fneg` of the sum each pass) is
+  `MaliError::Arithmetic`: the fold makes the `fneg`, but `ladder_forms`
+  takes no `Fneg` node (no reference has one in an unrolled ladder). It is
+  pinned in the same test as the next refusal of that shape, not a fold
+  defect.
+* Unchanged and passing: `the_flattened_ifs_are_byte_equal_to_mesa_26_2_1`
+  (case 71), the `algfold_*` sentinels and the rest of the Mali lib tests
+  (`MALI_TESTS` 386 -> 388, `tools/mali/gate.env`).
+
+Corpus (`tools/mali/corpus-verdicts.sh --write`): only
+`es100/loopcarry.frag` moves, to `ok`; no other source reached the new rule
+in a way that changed its verdict.

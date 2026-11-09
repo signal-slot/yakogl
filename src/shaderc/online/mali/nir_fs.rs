@@ -1008,6 +1008,25 @@ impl<'s> Fs<'s> {
                 let m = self.node(Alu::Fmul, [a, b, Val::Undef], at)?;
                 self.neg(m, at)
             }
+            /* `fmul(#a, fmul(b, #c))` is `fmul(fmul(a, c), b)`
+             * (nir_opt_algebraic.py:2406), the constants folded and the
+             * product run through the rules of a constant: case 70's
+             * unrolled `(acc * 2.0) * 0.5` is `acc` (:292, :161-167;
+             * fsarith_70_loopcarry.expect.json, docs/notes/mali-constant-products.md).
+             * A folded constant not exact in fp16 has no reference */
+            (AluOp::Fmul, _) if self.const_product(x, y).is_some() => {
+                let (b, c1, c2) = self.const_product(x, y).ok_or(MaliError::Defect(Defect::IrIndex))?;
+                let r = (f32::from_bits(c1) * f32::from_bits(c2)).to_bits();
+                if f16_exact(r).is_none() {
+                    return Err(MaliError::ConstantFold);
+                }
+                match r {
+                    F32_ONE => Ok(b),
+                    F32_MINUS_ONE => self.neg(b, at),
+                    0 | F32_NEG_ZERO => Ok(Val::Const(0)),
+                    _ => self.node(Alu::Fmul, [b, Val::Const(r), Val::Undef], at),
+                }
+            }
             (AluOp::Fmul, _) => self.node(Alu::Fmul, [x, y, Val::Undef], at),
             (AluOp::Fadd, Rule::IdentitySecond) => Ok(x),
             (AluOp::Fadd, Rule::IdentityFirst) => Ok(y),
@@ -1042,6 +1061,28 @@ impl<'s> Fs<'s> {
         };
         let ((a, b), (a2, c)) = (prod(x)?, prod(y)?);
         (a == a2 && !matches!(a, Val::Const(_))).then_some((a, b, c))
+    }
+
+    /// One of `x` and `y` is a constant `c2` and the other a 16-bit product
+    /// of a non-constant `b` with a constant `c1`: `(b, c1, c2)`
+    /// ([`Fs::op`]'s reassociation).
+    fn const_product(&self, x: Val, y: Val) -> Option<(Val, u32, u32)> {
+        let (c2, p) = match (x, y) {
+            (Val::Const(c), p) | (p, Val::Const(c)) => (c, p),
+            _ => return None,
+        };
+        let Val::Lane(n, _) = p else { return None };
+        if self.nir.nodes[n as usize].bits != 16 {
+            return None;
+        }
+        match self.alu_of(p)? {
+            (Alu::Fmul, [b, Val::Const(c1), _]) | (Alu::Fmul, [Val::Const(c1), b, _])
+                if !matches!(b, Val::Const(_)) =>
+            {
+                Some((b, c1, c2))
+            }
+            _ => None,
+        }
     }
 
     /// One lane of `fneg`: a constant's is folded, `fneg(fneg(a))` is
@@ -7089,10 +7130,12 @@ fn revector_coords(f: &mut Fs<'_>) -> Result<(), MaliError> {
 /// sums, products, `fceil`, `fmin`, compares and the selects of the
 /// flattening, over uniform lanes, constants and each other. Mesa folds a
 /// constant into a product or a sum that already has one
-/// (nir_opt_algebraic.py:2405-2410: `(acc * 2.0) * 0.5` is `acc`, case 70's
-/// loopcarry, fsarith_70_loopcarry.expect.json), which the walk does not:
-/// such a chain is refused ([`MaliError::ArithConstant`]), and any other
-/// operation has no reference here ([`MaliError::Arithmetic`]).
+/// (nir_opt_algebraic.py:2406-2411). [`Fs::op`] folds the product (`(acc *
+/// 2.0) * 0.5` is `acc`, case 70's loopcarry,
+/// fsarith_70_loopcarry.expect.json), so a product's chain is left here
+/// only as a guard; the sum's has no reference and is refused
+/// ([`MaliError::ArithConstant`]), and any other operation has no
+/// reference here ([`MaliError::Arithmetic`]).
 fn ladder_forms(f: &Fs<'_>) -> Result<(), MaliError> {
     let with_const = |op: Alu, v: Val| match v {
         Val::Lane(n, _) => matches!(
