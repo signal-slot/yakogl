@@ -90,6 +90,24 @@ pub fn colour_needs_quad(d: &GlesDraw) -> bool {
     d.do_clear && (d.clear_quad || d.clear_color_mask & 0xf != 0xf)
 }
 
+/// What a colour attachment of surface `surf` is to the clear quad of
+/// several attachments (`clear_mrt::clear_mrt_source`): an integer internal
+/// type takes the raw words as 32-bit TLB writes (`Int` or `Uint`, the same
+/// output); so does a 32F one (R32F), whose float written as f16 pairs would
+/// lose precision and range (the TLB clear of it is exact,
+/// [`clear_words`]): its words are the float's own bits
+/// (docs/notes/v3d-mrt-clear.md section 5 (b)). Everything else is `Float`.
+pub fn clear_class(surf: u8) -> super::clear_mrt::ClearClass {
+    use super::clear_mrt::ClearClass;
+    match rt_row(surf).internal_type {
+        V3D_INTERNAL_TYPE_8I | V3D_INTERNAL_TYPE_16I | V3D_INTERNAL_TYPE_32I => ClearClass::Int,
+        V3D_INTERNAL_TYPE_8UI | V3D_INTERNAL_TYPE_16UI | V3D_INTERNAL_TYPE_32UI | V3D_INTERNAL_TYPE_32F => {
+            ClearClass::Uint
+        }
+        _ => ClearClass::Float,
+    }
+}
+
 /// The backend's clear program, as a draw uses it.
 #[derive(Clone, Copy)]
 pub struct ClearProg<'a> {
@@ -147,7 +165,9 @@ pub fn clear_quad_vertices(depth: f32) -> [[f32; 4]; 6] {
 /// `p` is the float clear program, or for a quad that writes an integer
 /// colour target the integer one (`backend.rs: CLEAR_FS_INT`); either reads
 /// `colour` as the four dwords of its fragment block, which for an integer
-/// target are glClearBuffer{i,ui}v's raw words, handed over as bits.
+/// target are glClearBuffer{i,ui}v's raw words, handed over as bits. The
+/// program of several attachments (`clear_mrt`) reads four dwords per
+/// attachment it clears, so `colour` is that whole block.
 ///
 /// Only the target and the clear's values are taken from `d`; everything
 /// else starts from zero, because `d` may be an application's draw.
@@ -157,7 +177,7 @@ pub fn clear_quad_draw(
     scissored: bool,
     p: &ClearProg<'_>,
     vertices: &[[f32; 4]; 6],
-    colour: &[f32; 4],
+    colour: &[f32],
 ) -> GlesDraw {
     let mut q = GlesDraw::ZERO;
     (q.target_gpu, q.target_w, q.target_h) = (d.target_gpu, d.target_w, d.target_h);
@@ -178,7 +198,7 @@ pub fn clear_quad_draw(
     };
     q.num_attribs = 1;
     q.fs_uniform_cpu = colour.as_ptr() as *const core::ffi::c_void;
-    q.fs_uniform_dwords = 4;
+    q.fs_uniform_dwords = colour.len() as u16;
     q.viewport = [0, 0, d.target_w as i32, d.target_h as i32];
     q.depth_range = [0.0, 1.0];
     q.line_width = 1.0;

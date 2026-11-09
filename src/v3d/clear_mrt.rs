@@ -5,12 +5,13 @@
 //! float and integer classes, in one quad.
 //!
 //! The one-target programs, `backend.rs` `CLEAR_FS` and `CLEAR_FS_INT`, write
-//! RT 0 only, so the back end refuses such a clear of several attachments by
-//! name. [`clear_mrt_source`] writes the GLSL ES 3.00 fragment shader that
-//! clears a given set of them; it links with `backend.rs` `CLEAR_VS_INT` (the
-//! position passed through, in the same language), duplicated here as
-//! [`CLEAR_VS`]. Building and drawing it is the back end's (the item that
-//! lifts the refusal); this module is the source and what the caller fills.
+//! RT 0 only. [`clear_mrt_source`] writes the GLSL ES 3.00 fragment shader
+//! that clears a given set of several attachments; it links with `backend.rs`
+//! `CLEAR_VS_INT` (the position passed through, in the same language),
+//! duplicated here as [`CLEAR_VS`]. Building and drawing it is the back
+//! end's (`backend.rs` `clear_mrt_program`, `draw_clear_quad`;
+//! docs/notes/v3d-mrt-clear.md section 6); this module is the source and what
+//! the caller fills.
 //!
 //! Per cleared target `n`, in RT order:
 //!

@@ -3,7 +3,8 @@
 # V3D: a scissored or masked colour clear of several colour attachments
 
 Design, written before the code item `v3d-mrt-clear`, from reading only (no
-board, no run). Today `draw_call` refuses the clear by name
+board, no run). The item has landed with the one-quad design (section 6), not
+section 3's quad per attachment; sections 1-5 are the design as written. Today `draw_call` refuses the clear by name
 (`src/v3d/backend.rs:6062`, "a scissored or masked colour clear of several
 colour attachments") because the clear quad's programs write RT 0 only. The
 single-attachment integer quad is [v3d-int-clear.md](v3d-int-clear.md); read
@@ -373,3 +374,46 @@ RT 0 `0xffffff3f` = `TLB_CONFIG_32B_RT0_VEC4`) and that the fragment block
 holds `1.0e10f32.to_bits()` (an f16 write would hold infinity), while the
 RGBA8 RT keeps the f16 pair config. A case with an R16F attachment pins that
 a half-float attachment stays `Float`.
+
+## 6. What landed
+
+The refusal is gone. `draw_call` takes a colour clear the quad does
+(`state::colour_needs_quad`) of several attachments as **one quad** whose
+program is `clear_mrt::clear_mrt_source` of the job's class pattern: the
+alternative section 3 rejected, without its per-RT mask, because ES 3.0 has
+one colour mask for every draw buffer, so the job-wide `COLOR_WRITE_MASKS` of
+section 2 is right for every RT the quad writes and no C-driver ABI change is
+needed.
+
+- **Classes** (`state::clear_class`, per RT from its surface): an integer
+  internal type is `Int`/`Uint`, a 32F one (R32F) `Uint` with the float's
+  bits as its words (section 5 (b)), everything else `Float`.
+  `clear_mrt_classes` names the RTs: `clear_target_mask` when non-zero, else
+  every RT below `target.rts`; a GL_NONE draw buffer (`gpu == 0`) is
+  `NotCleared`. A clear that names no RT with a buffer draws no colour.
+- **Programs** (`clear_mrt_program`): built on the first quad of a pattern
+  through `build_clear_program`, which now checks each uniform `u_color<n>`
+  at its own four dwords (`ClearUniform::dword_off`) and that the compiled
+  `rt_mask` is the cleared set, and kept in an 8-slot table keyed by the
+  pattern (`clear_mrt_key`, base 3 per RT, Int and Uint one digit). With
+  every slot taken, the open job runs, the GPU finishes and the table starts
+  empty again. The program is found before anything of the draw is
+  recorded, so a build failure refuses by its own name and records nothing.
+  `CLEAR_FS` and `CLEAR_FS_INT` are unchanged and still draw every clear of
+  one attachment.
+- **The quad** (`draw_clear_quad`): the fragment block is the clear's one
+  colour (`GlesDraw::clear_rgba`, bits as given) at every cleared RT's four
+  dwords (`state::clear_quad_draw` takes the block as a slice). Depth and
+  stencil go with it as with one attachment: a scissored clear's Z/S is in
+  the quad, a masked clear with no scissor leaves Z/S to the TLB
+  (`tests/es3_mrt_ds_clear_v3d.rs`).
+- **Unchanged**: the unscissored, unmasked clear is the TLB's (no quad); 4x
+  of several attachments and attachments of different sizes keep their
+  refusals.
+
+Host tests: `src/v3d/backend_tests.rs` (section 4's tests 1-4 and 6, the
+R32F/R16F case of section 5 (b), the GL_NONE slot, the table refill and a
+failed build), `tests/es3_mrt_clear_v3d.rs`, `tests/es3_mrt_ds_clear_v3d.rs`,
+`tests/es3_fragops_scissor_v3d.rs` and `tests/es3_four_rt_v3d.rs`. Still a
+board item: the pixel check of section 5 (a), that an RT the quad does not
+write keeps its tile-buffer value.

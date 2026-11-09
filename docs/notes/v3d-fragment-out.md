@@ -172,7 +172,7 @@ before its GL half, otherwise no draw reaches them.
    before the arm moves: "a colour output with no attachment slot"
    (`draw_call`, rt_mask against `rts`), "4x multisampling of several colour
    attachments", "a scissored or masked colour clear of several colour
-   attachments" (the item that is in flight, `v3d-mrt-clear`), and
+   attachments" (gone: `v3d-mrt-clear` draws it as one quad), and
    "colour attachments of different sizes" (`docs/notes/v3d-mrt-sizes.md`).
    dEQP's random cases clear nothing and use one size, so only the first
    matters for G5.
