@@ -1109,7 +1109,8 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
         (FS, "precision highp float; uniform sampler2D s; varying vec2 v; void main(){ gl_FragColor = texture2D(s, v) * vec4(0.5, 0.25, 0.5, 0.5); }", MaliError::MixedPrecision),
         (FS, "precision highp float; uniform sampler2D s; varying vec2 v; void main(){ gl_FragColor = texture2D(s, v) * 0.5 + texture2D(s, v) * v.x; }", MaliError::MixedPrecision),
         (FS, "precision highp float; uniform sampler2D s; varying vec2 v; void main(){ gl_FragColor = texture2D(s, v) * 0.5; }", MaliError::MixedPrecision),
-        (VS, "attribute vec4 p; void main(){ if (p.x > 0.0) gl_Position = p; }", MaliError::Arithmetic),
+        /* the compare is lowered (vs-cmp-clamp); the `if` is not */
+        (VS, "attribute vec4 p; void main(){ if (p.x > 0.0) gl_Position = p; }", MaliError::ControlFlow),
         (VS, "attribute vec4 p; void main(){ while (true) { gl_Position = p; break; } }", MaliError::LoopVertex),
         /* a mediump `if` with a look-up under it keeps its branch
          * (cflow_148_texbranch, nir_fs.rs `kept16`): one over a varying,
@@ -2110,7 +2111,69 @@ fn vs_reference_sources() -> Vec<&'static str> {
     srcs.extend([td!("tex_vs_lod.vert"), td!("tex_vs_zero.vert"), td!("cube_vs.vert")]);
     srcs.extend([td!("case149_vstexconst.vert"), td!("case149_vstexconst_s.vert")]);
     srcs.extend(UNITYPE_POPULATION.iter().map(|c| c.1));
+    /* the vertex compares, reductions and clamps (cases 86 and 182) */
+    srcs.extend([td!("vsarith_86_anyall.vert"), td!("vsarith_182_fsat.vert"), td!("vsarith_182_fsatfolded.vert")]);
     srcs
+}
+
+/* ---- vertex compares, any/all and clamps (#33, cases 86 and 182) ---- */
+
+/// gl_test case 86 (tools/shaders/es100/anyall.vert): `all(equal(a_uv,
+/// vec2(0.0)))` is one `FCMP_OR.f32.eq.f1` of `|y| + |x|` against 0, and
+/// `any(greaterThan(a_n, vec3(0.5)))` one `FCMP_OR.f32.lt.f1` of 0.5
+/// against `max(max(z, x), y)` (nir_opt_algebraic.py:1213, :1178, :1150;
+/// docs/notes/mali-vs-compare-clamp.md section 2): both IDVS programs and
+/// the fragment's the shim's to the byte (vsarith_86_anyall.expect.json,
+/// the `.v2` and `.v3` attribute loads among them).
+#[test]
+fn a_vertex_any_and_all_over_vectors_is_byte_equal_to_mesa_26_2_1() {
+    check_linked(td!("vsarith_86_anyall.vert"), td!("vsarith_86_anyall.frag"), td!("vsarith_86_anyall.expect.json"));
+}
+
+/// gl_test case 182's control (tools/shaders/gltest/fsat_vs_ctrl.vert):
+/// `min(max(q, 0), 1)` is `FADD.clamp_0_1` of the uniform, `max(q, 0)`'s
+/// other use `FADD.clamp_0_inf`, and the bounds 0.8 and 0.2 `FMIN`/`FMAX`
+/// carrying the `.clamp_0_1` of the 0/1 side, the bound a `MOV` of its FAU
+/// word: every lane flat, the program pair the shim's to the byte
+/// (vsarith_182_fsat.expect.json, traced with every uniform 0; section 3
+/// of the note).
+#[test]
+fn a_vertex_saturate_is_byte_equal_to_mesa_26_2_1() {
+    let (vs, fs) = (td!("vsarith_182_fsat.vert"), td!("vsarith_182_fsat.frag"));
+    check_linked_for("182 fsat", vs, fs, td!("vsarith_182_fsat.expect.json"));
+    let (v, _) = compile_linked(vs, fs);
+    assert!(v.info.fau.contains(&FauWord::Constant(0x3f4c_cccd)), "the bound 0.8: {:?}", v.info.fau);
+    assert!(v.info.fau.contains(&FauWord::Constant(0x3e4c_cccd)), "the bound 0.2: {:?}", v.info.fau);
+}
+
+/// Case 182's folded form (fsat_vs_folded.vert): the four spellings of a
+/// saturate, `clamp(x, 0, 1)`, `min(max(q, 0), 1)`, `max(min(a, 1), 0)`
+/// and `min(1, max(0, a - 1.1))`, each one `FADD.f32.clamp_0_1`, the last
+/// the clamp folded into the sum's own `FADD` (vsarith_182_fsatfolded.expect.json).
+#[test]
+fn a_vertex_folded_saturate_is_byte_equal_to_mesa_26_2_1() {
+    let (vs, fs) = (td!("vsarith_182_fsatfolded.vert"), td!("vsarith_182_fsatfolded.frag"));
+    check_linked_for("182 fsatfolded", vs, fs, td!("vsarith_182_fsatfolded.expect.json"));
+    let (v, _) = compile_linked(vs, fs);
+    assert!(v.info.fau.contains(&FauWord::Constant(0xbf8c_cccd)), "the addend -1.1: {:?}", v.info.fau);
+}
+
+/// The reductions and clamps no reference draws stay refused, at the
+/// arithmetic gap, rather than guessed: a plain two-operand `max`, `any`
+/// of a four-lane compare, `all` over three lanes, `any` read in another
+/// lane order than the reference's.
+#[test]
+fn vertex_reductions_and_bounds_no_reference_draws_are_refused() {
+    for src in [
+        "attribute vec4 p; attribute vec4 q; varying vec4 v; void main(){ gl_Position = p; v = max(p, q); }",
+        "attribute vec4 p; attribute vec4 q; varying vec4 v; void main(){ gl_Position = p; v = min(p, q); }",
+        "attribute vec4 p; varying vec4 v; void main(){ gl_Position = p; v = vec4(any(greaterThan(p, vec4(0.5))) ? 1.0 : 0.0); }",
+        "attribute vec4 p; attribute vec3 n; varying vec4 v; void main(){ gl_Position = p; v = vec4(all(equal(n, vec3(0.0))) ? 1.0 : 0.0); }",
+        "attribute vec4 p; attribute vec3 n; varying vec4 v; void main(){ gl_Position = p; v = vec4(any(greaterThan(n.zyx, vec3(0.5))) ? 1.0 : 0.0); }",
+        "attribute vec4 p; attribute vec2 n; varying vec4 v; void main(){ gl_Position = p; v = vec4(any(greaterThan(n, vec2(0.5))) ? 1.0 : 0.0); }",
+    ] {
+        assert_eq!(gap(SHC_STAGE_VERTEX, src), MaliError::Arithmetic, "{src}");
+    }
 }
 
 /* ---- vertex-stage look-ups (#32 (a)) ------------------------------ */
