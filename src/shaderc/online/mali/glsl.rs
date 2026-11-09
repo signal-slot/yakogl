@@ -29,6 +29,14 @@
 //!    NIR folds them (`nir_opt_constant_folding`); this pass folds them in
 //!    place, the value fp32 as NIR computes it.
 //!
+//! Ahead of them, a pass of Mali's NIR on the front end's run-time index
+//! ladders ([`ilt_trees`]): the `ieq` ladders of an element, column or lane
+//! read or written at a run-time index become Mesa's `ilt` binary search,
+//! the shape nir_lower_indirect_derefs_to_if_else_trees and
+//! `nir_vector_extract` give them (docs/notes/mali-indexed-locals.md).
+//! The ladders are lower.rs's, which the four back ends share; only this
+//! one rewrites them.
+//!
 //! The IR keeps what these passes need: a local, a uniform and an input
 //! are loads at each read (GLSL's variable dereferences), a value with one
 //! use by an ALU operation is an operand expression, and a value stored
@@ -42,7 +50,7 @@
 use super::{Defect, MaliError};
 use crate::shaderc::online::arena::Arena;
 use crate::shaderc::online::ir::{
-    AluOp, IoKind, IoSlot, Module, Node as IrNode, Op as IrOp, Src, ValueId, VarDecl, SWIZZLE_IDENTITY,
+    AluOp, IoKind, IoSlot, Module, Node as IrNode, Op as IrOp, Range, Src, ValueId, VarDecl, SWIZZLE_IDENTITY,
 };
 
 /// A value's uses, by kind.
@@ -91,16 +99,44 @@ enum Reduction {
 /// The most expressions of one tree the passes rebuild.
 const MAX_TREE: usize = 64;
 
-/// A stage's instructions and their widths, rewritten.
-pub(super) type Rewritten<'s> = (&'s [IrOp], &'s [u8]);
+/// A stage's instructions, and the rest of its [`Shape`], rewritten.
+pub(super) type Rewritten<'s> = (&'s [IrOp], Shape<'s>);
 
-/// Run the two passes on `m`. `None`: they change nothing (and refuse
-/// nothing); otherwise the stage's instructions and widths after them,
-/// in the same node order.
+/// What [`passes`] rewrites besides the instructions: their widths, and
+/// the node list when [`ilt_trees`] renumbered the stage.
+#[derive(Clone, Copy, Debug)]
+pub(super) struct Shape<'s> {
+    pub comps: &'s [u8],
+    pub nodes: Option<(&'s [IrNode], Range)>,
+}
+
+impl<'s> Shape<'s> {
+    /// `m` with the rewritten `instrs` and this shape.
+    pub(super) fn module<'x>(self, instrs: &'x [IrOp], m: &Module<'x>) -> Module<'x>
+    where
+        's: 'x,
+    {
+        let (nodes, body) = self.nodes.unwrap_or((m.nodes, m.body));
+        Module { instrs, comps: self.comps, nodes, body, ..*m }
+    }
+}
+
+/// Run the passes on `m`: the run-time index trees ([`ilt_trees`]), then
+/// GLSL's two. `None`: they change nothing (and refuse nothing);
+/// otherwise the stage's instructions and their shape after them.
 pub(super) fn passes<'s>(m: &Module<'_>, scratch: &Arena<'s>) -> Result<Option<Rewritten<'s>>, MaliError> {
     if indexed_read(m) {
         return Err(MaliError::IndexedLocal);
     }
+    let trees = ilt_trees(m, scratch)?;
+    let shaped;
+    let m = match trees {
+        Some(t) => {
+            shaped = Module { instrs: t.instrs, comps: t.comps, nodes: t.nodes, body: t.body, ..*m };
+            &shaped
+        }
+        None => m,
+    };
     let n = m.instrs.len();
     let oom = |_| MaliError::OutOfScratch;
     let instrs = scratch.alloc_copy(m.instrs).map_err(oom)?;
@@ -116,11 +152,11 @@ pub(super) fn passes<'s>(m: &Module<'_>, scratch: &Arena<'s>) -> Result<Option<R
     t.rebalance()?;
     t.reassociate()?;
     t.negneg();
-    if !t.changed {
+    if !t.changed && trees.is_none() {
         return Ok(None);
     }
     let Tree { instrs, comps, .. } = t;
-    Ok(Some((&*instrs, &*comps)))
+    Ok(Some((&*instrs, Shape { comps: &*comps, nodes: trees.map(|t| (t.nodes, t.body)) })))
 }
 
 /// Locals `a` and `b` (`a < b`) are slots of one variable: the front end
@@ -158,6 +194,727 @@ fn indexed_read(m: &Module<'_>) -> bool {
         let Some(&IrOp::Alu(AluOp::Ieq, [x, y, _])) = op(c.val) else { return false };
         konst(x.val) != konst(y.val) && a.val == b.val && a.swizzle[0] != b.swizzle[0]
     })
+}
+
+/// The most elements of one run-time index tree: Mesa lowers an array of
+/// up to 8 so (bifrost_nir.c:978-994), a longer one goes to scratch.
+const MAX_LADDER: usize = 8;
+/// The most ladders of one stage [`ilt_trees`] rewrites; the rest stay.
+const MAX_LADDERS: usize = 32;
+/// The instructions one ladder may add: a constant per compare, and per
+/// slot of a write two per level of the tree.
+const LADDER_GROWTH: usize = 64;
+/// No ladder, no value.
+const NONE: u32 = u32::MAX;
+
+/// A stage after [`ilt_trees`]: renumbered, in a node list of its own.
+#[derive(Clone, Copy)]
+struct Trees<'s> {
+    instrs: &'s [IrOp],
+    comps: &'s [u8],
+    nodes: &'s [IrNode],
+    body: Range,
+}
+
+/// One `ieq` ladder of the front end (lower.rs) over the `n` elements of a
+/// run-time index.
+#[derive(Clone, Copy)]
+struct Ladder {
+    /// Its nodes, `m.nodes[span.0..=span.1]`, in one block: its own
+    /// instructions and constants, nothing else.
+    span: (u32, u32),
+    /// A write (`store_among`, `store_lref` of whole slots): slot `k` of a
+    /// local's run takes `v` where the index is `k`, `xs[k]` its old value.
+    /// Otherwise a read (`select_among`, `vector_lane_select`): `xs[k]`
+    /// where the index is `k`, `xs[n - 1]` past the compares.
+    write: bool,
+    n: usize,
+    /// The index, its one lane splat.
+    i: Src,
+    /// The selects' width.
+    w: u8,
+    xs: [Src; MAX_LADDER],
+    v: Src,
+    /// The `ieq` of element `k` and its select (a read's `sels[0]` its
+    /// root, the outermost), a write's load of the old value and store.
+    conds: [ValueId; MAX_LADDER],
+    sels: [ValueId; MAX_LADDER],
+    loads: [ValueId; MAX_LADDER],
+    stores: [ValueId; MAX_LADDER],
+    /// Its new nodes: `seq[seq.0..seq.0 + seq.1]` of [`ilt_trees`].
+    seq: (u32, u32),
+}
+
+impl Ladder {
+    const EMPTY: Ladder = Ladder {
+        span: (0, 0),
+        write: false,
+        n: 0,
+        i: Src { val: ValueId(0), swizzle: SWIZZLE_IDENTITY },
+        w: 1,
+        xs: [Src { val: ValueId(0), swizzle: SWIZZLE_IDENTITY }; MAX_LADDER],
+        v: Src { val: ValueId(0), swizzle: SWIZZLE_IDENTITY },
+        conds: [ValueId(0); MAX_LADDER],
+        sels: [ValueId(0); MAX_LADDER],
+        loads: [ValueId(0); MAX_LADDER],
+        stores: [ValueId(0); MAX_LADDER],
+        seq: (0, 0),
+    };
+
+    /// The `ieq`s the ladder has: one per slot of a write, one per element
+    /// but the last of a read.
+    fn ncond(&self) -> usize {
+        if self.write {
+            self.n
+        } else {
+            self.n - 1
+        }
+    }
+}
+
+/// The nodes of block `r`.
+fn block(nodes: &[IrNode], r: Range) -> &[IrNode] {
+    nodes.get(r.first as usize..(r.first as usize).saturating_add(r.len as usize)).unwrap_or(&[])
+}
+
+/// Each value of block `r` and its nested blocks once, in ascending order
+/// as the stage runs (the front end's numbering, which [`ilt_trees`]
+/// keeps).
+fn ascending(nodes: &[IrNode], r: Range, last: &mut Option<u32>, count: &mut usize, depth: usize) -> bool {
+    if depth > MAX_TREE {
+        return false;
+    }
+    for nd in block(nodes, r) {
+        let ok = match *nd {
+            IrNode::Instr(id) => {
+                let ok = last.is_none_or(|l| id.0 > l);
+                *last = Some(id.0);
+                *count += 1;
+                ok
+            }
+            IrNode::If { then_, else_, .. } => {
+                ascending(nodes, then_, last, count, depth + 1) && ascending(nodes, else_, last, count, depth + 1)
+            }
+            IrNode::Loop { body } => ascending(nodes, body, last, count, depth + 1),
+            _ => true,
+        };
+        if !ok {
+            return false;
+        }
+    }
+    true
+}
+
+/// `c`, the condition of a select of `w` lanes, is the front end's `ieq(i,
+/// k)` of a run-time `i` and a constant `k`, one compare for every lane of
+/// the select: `i` (its lane splat), `k`, the compare. A lane of the
+/// condition that reads no lane of `i` is no compare (`vector_lane_select`
+/// compares the lanes of a one-lane index past its first, which nothing
+/// defines).
+fn ieq_of(m: &Module<'_>, c: Src, w: u8) -> Option<(Src, i32, ValueId)> {
+    let IrOp::Alu(AluOp::Ieq, [a, b, _]) = *m.instrs.get(c.val.0 as usize)? else { return None };
+    let IrOp::ConstI32(k) = *m.instrs.get(b.val.0 as usize)? else { return None };
+    if matches!(m.instrs.get(a.val.0 as usize), Some(IrOp::ConstI32(_))) {
+        return None;
+    }
+    let lane = |j: usize| {
+        let s = c.swizzle[j] as usize & 3;
+        let i = a.swizzle[s] as usize & 3;
+        (s < m.comps_of(c.val) as usize && i < m.comps_of(a.val) as usize).then(|| (i, k[b.swizzle[s] as usize & 3]))
+    };
+    let (i, k) = lane(0)?;
+    if (1..w.clamp(1, 4) as usize).any(|j| lane(j).is_some_and(|x| x != (i, k))) {
+        return None;
+    }
+    Some((Src { val: a.val, swizzle: [i as u8; 4] }, k, c.val))
+}
+
+/// The read ladder at its root `root` (`select_among`,
+/// `vector_lane_select`): `bcsel(ieq(i, 0), x0, bcsel(ieq(i, 1), x1, ..
+/// x_{n-1}))`, one `i`, the constants ascending from 0, each link read
+/// once and whole. Built from the last element back after every element:
+/// each compare's id is below the one before, every element's below them
+/// all, and `i` is one value -- a `?:` chain of the source evaluates its
+/// compares, each with its own load of `i`, before its arms.
+fn read_ladder(m: &Module<'_>, uses: &[u16], root: ValueId) -> Option<Ladder> {
+    let w = m.comps_of(root);
+    let mut l = Ladder { w, ..Ladder::EMPTY };
+    let mut cur = Src::id(root);
+    let mut k = 0usize;
+    loop {
+        let level = match m.instrs.get(cur.val.0 as usize) {
+            Some(&IrOp::Alu(AluOp::Bcsel, [c, x, e])) => ieq_of(m, c, w).map(|(i, kk, cv)| (i, kk, cv, x, e)),
+            _ => None,
+        };
+        let Some((i, kk, cv, x, e)) = level else { break };
+        let whole = (0..w as usize).all(|j| cur.swizzle[j] as usize == j);
+        let link = k == 0 || (uses[cur.val.0 as usize] == 1 && m.comps_of(cur.val) == w && whole);
+        let same = k == 0 || (i.val == l.i.val && i.swizzle[0] == l.i.swizzle[0]);
+        if kk != k as i32 || !link || !same || uses[cv.0 as usize] != 1 {
+            break;
+        }
+        if k + 1 == MAX_LADDER {
+            return None;
+        }
+        l.i = i;
+        l.conds[k] = cv;
+        l.sels[k] = cur.val;
+        l.xs[k] = x;
+        cur = e;
+        k += 1;
+    }
+    if k == 0 {
+        return None;
+    }
+    l.n = k + 1;
+    l.xs[k] = cur;
+    let low = l.conds[..k].iter().map(|c| c.0).min()?;
+    let before = l.xs[..l.n].iter().all(|x| x.val.0 < low) && l.i.val.0 < low;
+    let descending = l.conds[..k].windows(2).all(|p| p[0].0 > p[1].0);
+    /* slot 0 of a write ([`write_ladder`]): its old value stored back */
+    let slot = match m.instrs.get(l.xs[k].val.0 as usize) {
+        Some(&IrOp::LoadLocal { local, index: None, .. }) => m.instrs.iter().any(
+            |o| matches!(*o, IrOp::StoreLocal { local: to, index: None, src, .. } if to == local && src.val == root),
+        ),
+        _ => false,
+    };
+    (before && descending && !slot).then_some(l)
+}
+
+/// A write's slot at store `id`: `store(L, bcsel(ieq(i, k), v, load(L)))`
+/// -- its local, `k`, `i`, `v`, the old value, and the compare, select
+/// and load.
+#[allow(clippy::type_complexity)]
+fn write_slot(m: &Module<'_>, id: ValueId) -> Option<(u32, i32, Src, Src, Src, ValueId, ValueId, ValueId)> {
+    let IrOp::StoreLocal { local, index: None, src, .. } = *m.instrs.get(id.0 as usize)? else { return None };
+    let IrOp::Alu(AluOp::Bcsel, [c, v, old]) = *m.instrs.get(src.val.0 as usize)? else { return None };
+    let IrOp::LoadLocal { local: from, index: None, .. } = *m.instrs.get(old.val.0 as usize)? else { return None };
+    if from != local {
+        return None;
+    }
+    let (i, k, cv) = ieq_of(m, c, m.comps_of(src.val))?;
+    Some((local.0, k, i, v, old, cv, src.val, old.val))
+}
+
+/// The write ladder whose first store is node `j` of `nodes` (a block):
+/// every slot of one local's run (lower.rs `alloc_var`, [`same_run`]) in
+/// order, each `bcsel(ieq(i, k), v, old)` with one `i` and one `v` (the
+/// front end evaluates both once; a source's statements would load each
+/// anew).
+fn write_ladder(m: &Module<'_>, uses: &[u16], nodes: &[IrNode], j: usize) -> Option<Ladder> {
+    let IrNode::Instr(first) = *nodes.get(j)? else { return None };
+    let first = id_of(first);
+    let (l0, k0, i, v, old, cv, sel, load) = write_slot(m, first)?;
+    let l0u = l0 as usize;
+    if k0 != 0 || (l0u > 0 && same_run(m.locals, l0u - 1, l0u)) {
+        return None;
+    }
+    let w = m.comps_of(sel);
+    let mut l = Ladder { write: true, i, v, w, ..Ladder::EMPTY };
+    let put = |l: &mut Ladder, k: usize, old: Src, cv: ValueId, sel: ValueId, load: ValueId, store: ValueId| {
+        l.xs[k] = old;
+        l.conds[k] = cv;
+        l.sels[k] = sel;
+        l.loads[k] = load;
+        l.stores[k] = store;
+    };
+    put(&mut l, 0, old, cv, sel, load, first);
+    let mut n = 1usize;
+    for nd in &nodes[j + 1..] {
+        let IrNode::Instr(id) = *nd else { break };
+        let id = id_of(id);
+        if !matches!(m.instrs.get(id.0 as usize), Some(IrOp::StoreLocal { .. })) {
+            continue;
+        }
+        let Some((lk, k, ik, vk, old, cv, sel, load)) = write_slot(m, id) else { break };
+        let next = k == n as i32 && lk as usize == l0u + n && same_run(m.locals, l0u, l0u + n);
+        if !next || ik.val != i.val || ik.swizzle[0] != i.swizzle[0] || vk != v || m.comps_of(sel) != w {
+            break;
+        }
+        if n == MAX_LADDER {
+            return None;
+        }
+        put(&mut l, n, old, cv, sel, load, id);
+        n += 1;
+    }
+    if n < 2 || same_run(m.locals, l0u, l0u + n) {
+        return None;
+    }
+    l.n = n;
+    let once = (0..n).all(|k| [l.conds[k], l.sels[k], l.loads[k]].iter().all(|x| uses[x.0 as usize] == 1));
+    let low = (0..n).flat_map(|k| [l.conds[k], l.loads[k]]).map(|x| x.0).min()?;
+    (once && i.val.0 < low && v.val.0 < low).then_some(l)
+}
+
+/// `l`'s nodes: from its first instruction to its last (the root of a
+/// read, the last store of a write), all in block `r` of `m`, nothing
+/// between them but its own and constants.
+fn span_of(m: &Module<'_>, pos: &[u32], r: Range, l: &Ladder) -> Option<(u32, u32)> {
+    let k = l.ncond();
+    let mut ids = [ValueId(0); 4 * MAX_LADDER];
+    let mut nids = 0usize;
+    let groups: [&[ValueId]; 4] = if l.write {
+        [&l.conds[..k], &l.sels[..l.n], &l.loads[..l.n], &l.stores[..l.n]]
+    } else {
+        [&l.conds[..k], &l.sels[..k], &[], &[]]
+    };
+    for g in groups {
+        for &id in g {
+            ids[nids] = id;
+            nids += 1;
+        }
+    }
+    let ids = &ids[..nids];
+    let at = |id: ValueId| pos.get(id.0 as usize).copied().unwrap_or(NONE);
+    let lo = ids.iter().map(|&id| at(id)).min()?;
+    let hi = ids.iter().map(|&id| at(id)).max()?;
+    if hi == NONE || lo < r.first || hi >= r.first + r.len {
+        return None;
+    }
+    let own = m.nodes.get(lo as usize..=hi as usize)?.iter().all(|nd| match *nd {
+        IrNode::Instr(id) => ids.contains(&id_of(id)) || matches!(m.instrs.get(id.0 as usize), Some(IrOp::ConstI32(_))),
+        _ => false,
+    });
+    own.then_some((lo, hi))
+}
+
+fn id_of(id: crate::shaderc::online::ir::InstrId) -> ValueId {
+    ValueId(id.0)
+}
+
+/// What [`ilt_trees`] finds: the ladders and the node each one owns.
+struct Found<'f> {
+    ladders: &'f mut [Ladder],
+    n: usize,
+    owner: &'f mut [u32],
+}
+
+/// The ladders of block `r` and its nested blocks.
+fn find(m: &Module<'_>, uses: &[u16], pos: &[u32], r: Range, f: &mut Found<'_>, depth: usize) {
+    if depth > MAX_TREE {
+        return;
+    }
+    let nodes = block(m.nodes, r);
+    for (j, nd) in nodes.iter().enumerate() {
+        let l = match *nd {
+            IrNode::Instr(id) => match m.instrs.get(id.0 as usize) {
+                Some(IrOp::Alu(AluOp::Bcsel, _)) => read_ladder(m, uses, id_of(id)),
+                Some(IrOp::StoreLocal { .. }) => write_ladder(m, uses, nodes, j),
+                _ => None,
+            },
+            IrNode::If { then_, else_, .. } => {
+                find(m, uses, pos, then_, f, depth + 1);
+                find(m, uses, pos, else_, f, depth + 1);
+                None
+            }
+            IrNode::Loop { body } => {
+                find(m, uses, pos, body, f, depth + 1);
+                None
+            }
+            _ => None,
+        };
+        let Some(mut l) = l else { continue };
+        let Some(span) = span_of(m, pos, r, &l) else { continue };
+        let owned = &mut f.owner[span.0 as usize..=span.1 as usize];
+        if f.n == f.ladders.len() || owned.iter().any(|&o| o != NONE) {
+            continue;
+        }
+        owned.fill(f.n as u32);
+        l.span = span;
+        f.ladders[f.n] = l;
+        f.n += 1;
+    }
+}
+
+/// The instructions [`ilt_trees`] writes, and the new nodes of each
+/// ladder.
+struct Build<'b> {
+    instrs: &'b mut [IrOp],
+    comps: &'b mut [u8],
+    next: usize,
+    seq: &'b mut [u32],
+    ns: usize,
+}
+
+impl Build<'_> {
+    fn push(&mut self, id: ValueId) -> Result<(), MaliError> {
+        *self.seq.get_mut(self.ns).ok_or(MaliError::Defect(Defect::IrIndex))? = id.0;
+        self.ns += 1;
+        Ok(())
+    }
+
+    fn set(&mut self, id: ValueId, op: IrOp, w: u8) -> Result<(), MaliError> {
+        *self.instrs.get_mut(id.0 as usize).ok_or(MaliError::Defect(Defect::IrIndex))? = op;
+        self.comps[id.0 as usize] = w;
+        self.push(id)
+    }
+
+    /// A new instruction, as a node of the ladder.
+    fn add(&mut self, op: IrOp, w: u8) -> Result<ValueId, MaliError> {
+        let id = ValueId(self.next as u32);
+        self.next += 1;
+        self.set(id, op, w)?;
+        Ok(id)
+    }
+
+    /// `ilt(i, mid)` of a new constant `mid` (`nir_ilt_imm`), into `c`.
+    fn ilt(&mut self, i: Src, mid: usize, c: ValueId) -> Result<(), MaliError> {
+        let k = Src::id(self.add(IrOp::ConstI32([mid as i32; 4]), 4)?);
+        self.set(c, IrOp::Alu(AluOp::Ilt, [i, k, k]), 1)
+    }
+
+    /// `_nir_select_from_array_helper(xs, i, start, end)`
+    /// (nir_builder.h:947-958) as the deref tree's `if` nest leaves it
+    /// (nir_lower_indirect_derefs_to_if_else_trees.c:47-63): the compare,
+    /// the lower half, the upper half, then the select. The compares take
+    /// the ladder's `ieq`s, the selects its selects, the root its root.
+    fn read_tree(&mut self, l: &Ladder, start: usize, end: usize, used: &mut (usize, usize)) -> Result<Src, MaliError> {
+        if end - start == 1 {
+            return Ok(l.xs[start]);
+        }
+        let mid = start + (end - start) / 2;
+        let c = l.conds[used.0];
+        used.0 += 1;
+        self.ilt(l.i, mid, c)?;
+        let lo = self.read_tree(l, start, mid, used)?;
+        let hi = self.read_tree(l, mid, end, used)?;
+        let s = if start == 0 && end == l.n {
+            l.sels[0]
+        } else {
+            used.1 += 1;
+            l.sels[used.1]
+        };
+        self.set(s, IrOp::Alu(AluOp::Bcsel, [Src { val: c, swizzle: [0; 4] }, lo, hi]), l.w)?;
+        Ok(Src::id(s))
+    }
+
+    /// The compares of a write's tree, in the order of the deref tree's
+    /// `if`s: each internal node's `(start, end, compare)`.
+    fn write_cmps(
+        &mut self,
+        l: &Ladder,
+        start: usize,
+        end: usize,
+        cmps: &mut [(usize, usize, ValueId); MAX_LADDER],
+        nc: &mut usize,
+    ) -> Result<(), MaliError> {
+        if end - start == 1 {
+            return Ok(());
+        }
+        let mid = start + (end - start) / 2;
+        let c = l.conds[*nc];
+        self.ilt(l.i, mid, c)?;
+        cmps[*nc] = (start, end, c);
+        *nc += 1;
+        self.write_cmps(l, start, mid, cmps, nc)?;
+        self.write_cmps(l, mid, end, cmps, nc)
+    }
+
+    /// Slot `k`'s condition: the `if` nest's phis
+    /// (nir_lower_indirect_derefs_to_if_else_trees.c:54-63, a store in the
+    /// leaf only) as `bcsel`s, from the leaf up, each level folded by
+    /// nir_opt_algebraic.py:2486-2489 into one select. `true` when the
+    /// select takes the stored value where the condition holds, `false`
+    /// when it keeps the old one there.
+    fn slot_cond(
+        &mut self,
+        l: &Ladder,
+        k: usize,
+        cmps: &[(usize, usize, ValueId); MAX_LADDER],
+    ) -> Result<(Src, bool), MaliError> {
+        let mut path = [(ValueId(0), false); MAX_LADDER];
+        let mut np = 0usize;
+        let (mut start, mut end) = (0usize, l.n);
+        while end - start > 1 {
+            let mid = start + (end - start) / 2;
+            let c = cmps.iter().find(|x| x.0 == start && x.1 == end).ok_or(MaliError::Defect(Defect::IrIndex))?.2;
+            path[np] = (c, k < mid);
+            np += 1;
+            if k < mid {
+                end = mid;
+            } else {
+                start = mid;
+            }
+        }
+        let splat = |v: ValueId| Src { val: v, swizzle: [0; 4] };
+        let mut at: Option<(Src, bool)> = None;
+        for &(c, left) in path[..np].iter().rev() {
+            let c = splat(c);
+            let and = |b: &mut Self, x: Src, y: Src| b.add(IrOp::Alu(AluOp::Iand, [x, y, y]), 1).map(splat);
+            let not = |b: &mut Self, x: Src| b.add(IrOp::Alu(AluOp::Inot, [x, x, x]), 1).map(splat);
+            at = Some(match (left, at) {
+                (true, None) => (c, true),
+                (false, None) => (c, false),
+                /* bcsel(a, bcsel(b, c, d), d) -> bcsel(a & b, c, d) (:2486) */
+                (true, Some((b, true))) => (and(self, c, b)?, true),
+                /* bcsel(a, bcsel(b, d, c), d) -> bcsel(a & ~b, c, d) (:2487) */
+                (true, Some((b, false))) => {
+                    let nb = not(self, b)?;
+                    (and(self, c, nb)?, true)
+                }
+                /* bcsel(a, b, bcsel(c, b, d)) -> bcsel(a | c, b, d) (:2488) */
+                (false, Some((b, false))) => (self.add(IrOp::Alu(AluOp::Ior, [c, b, b]), 1).map(splat)?, false),
+                /* bcsel(a, b, bcsel(c, d, b)) -> bcsel(c & ~a, d, b) (:2489) */
+                (false, Some((b, true))) => {
+                    let na = not(self, c)?;
+                    (and(self, b, na)?, true)
+                }
+            });
+        }
+        at.ok_or(MaliError::Defect(Defect::IrIndex))
+    }
+}
+
+/// Mesa's binary search for an element at a run-time index, in place of the
+/// front end's `ieq` ladders (docs/notes/mali-indexed-locals.md, sections 1
+/// and 3): bifrost_nir.c:978-994 lowers a local read or written at a
+/// run-time index by nir_lower_indirect_derefs_to_if_else_trees (`ilt(i,
+/// mid)`, `mid = start + (end - start) / 2`, a leaf per element), and a
+/// vector's component read so is `nir_vector_extract`'s
+/// `_nir_select_from_array_helper`, the same search as `bcsel`s. The
+/// front end (lower.rs, shared by the four back ends, whose references are
+/// made from the ladder) builds `bcsel(ieq(i, k), ..)` instead:
+///
+/// * a read, `bcsel(ieq(i, 0), x0, bcsel(ieq(i, 1), x1, .. x_{n-1}))`,
+///   becomes the tree `bcsel(ilt(i, mid), lower, upper)`;
+/// * a write, `bcsel(ieq(i, k), v, old_k)` into each slot `k`, takes the
+///   condition of the tree's path to leaf `k` after nir_opt_algebraic.py's
+///   select rules (:2486-2489): for three slots `ilt(i, 1)`,
+///   `iand(ilt(i, 2), inot(ilt(i, 1)))` and, the old value first,
+///   `ior(ilt(i, 1), ilt(i, 2))`.
+///
+/// An index out of range now reads or writes element 0 below and the last
+/// above, as Mesa's tree does (undefined in GLSL ES; the reference is the
+/// oracle). A component written at a run-time index stays an `ieq` lane
+/// mask (section 3.3: no reference has one). The fragment stage only: the
+/// vertex walk takes no `ilt` (nir.rs, `IntValue`). The stage is
+/// renumbered in the order it runs, as the front end numbers it, with the
+/// new nodes where the ladder was. `None`: no ladder.
+fn ilt_trees<'s>(m: &Module<'_>, scratch: &Arena<'s>) -> Result<Option<Trees<'s>>, MaliError> {
+    if m.stage != crate::shaderc::SHC_STAGE_FRAGMENT || m.body.len == 0 {
+        return Ok(None);
+    }
+    let n = m.instrs.len();
+    let oom = |_| MaliError::OutOfScratch;
+    let uses = scratch.alloc_filled(n, 0u16).map_err(oom)?;
+    {
+        let mut note = |v: ValueId| {
+            if let Some(u) = uses.get_mut(v.0 as usize) {
+                *u = u.saturating_add(1);
+            }
+        };
+        for op in m.instrs {
+            op.for_each_src(|s| note(s.val));
+        }
+        for nd in m.nodes {
+            if let IrNode::If { cond, .. } = *nd {
+                note(cond.val);
+            }
+        }
+    }
+    let pos = scratch.alloc_filled(n, NONE).map_err(oom)?;
+    for (k, nd) in m.nodes.iter().enumerate() {
+        if let IrNode::Instr(id) = *nd {
+            if let Some(p) = pos.get_mut(id.0 as usize) {
+                *p = k as u32;
+            }
+        }
+    }
+    let (mut last, mut count) = (None, 0usize);
+    if !ascending(m.nodes, m.body, &mut last, &mut count, 0) || count != n {
+        return Ok(None);
+    }
+    let ladders = scratch.alloc_filled(MAX_LADDERS, Ladder::EMPTY).map_err(oom)?;
+    let owner = scratch.alloc_filled(m.nodes.len(), NONE).map_err(oom)?;
+    let mut f = Found { ladders, n: 0, owner };
+    find(m, uses, pos, m.body, &mut f, 0);
+    let Found { ladders, n: nl, owner } = f;
+    if nl == 0 {
+        return Ok(None);
+    }
+    let ladders = &mut ladders[..nl];
+
+    /* the new nodes of each ladder */
+    let cap = n + nl * LADDER_GROWTH;
+    let instrs = scratch.alloc_filled(cap, IrOp::ConstI32([0; 4])).map_err(oom)?;
+    instrs[..n].copy_from_slice(m.instrs);
+    let comps = scratch.alloc_filled(cap, 4u8).map_err(oom)?;
+    for (i, c) in comps[..n].iter_mut().enumerate() {
+        *c = m.comps_of(ValueId(i as u32));
+    }
+    let nseq: usize = ladders.iter().map(|l| (l.span.1 - l.span.0 + 1) as usize + LADDER_GROWTH * 2).sum();
+    let seq = scratch.alloc_filled(nseq, 0u32).map_err(oom)?;
+    let mut b = Build { instrs, comps, next: n, seq, ns: 0 };
+    for l in ladders.iter_mut() {
+        let first = b.ns;
+        let k = l.ncond();
+        /* the span's constants first, but those only the ladder's
+         * compares read (nir_opt_dce) */
+        for p in l.span.0..=l.span.1 {
+            let IrNode::Instr(id) = m.nodes[p as usize] else { continue };
+            if !matches!(m.instrs[id.0 as usize], IrOp::ConstI32(_)) {
+                continue;
+            }
+            let by_ladder = l.conds[..k]
+                .iter()
+                .filter(|c| matches!(m.instrs[c.0 as usize], IrOp::Alu(_, [_, s, _]) if s.val.0 == id.0))
+                .count();
+            if uses[id.0 as usize] as usize != by_ladder {
+                b.push(id_of(id))?;
+            }
+        }
+        if l.write {
+            let mut cmps = [(0usize, 0usize, ValueId(0)); MAX_LADDER];
+            let mut nc = 0usize;
+            b.write_cmps(l, 0, l.n, &mut cmps, &mut nc)?;
+            for s in 0..l.n {
+                b.push(l.loads[s])?;
+                let (c, stored) = b.slot_cond(l, s, &cmps)?;
+                let arms = if stored { [l.v, l.xs[s]] } else { [l.xs[s], l.v] };
+                b.set(l.sels[s], IrOp::Alu(AluOp::Bcsel, [c, arms[0], arms[1]]), l.w)?;
+                b.push(l.stores[s])?;
+            }
+        } else {
+            b.read_tree(l, 0, l.n, &mut (0, 0))?;
+        }
+        l.seq = (first as u32, (b.ns - first) as u32);
+    }
+    let Build { instrs, comps, next: ext, seq, .. } = b;
+
+    /* renumbered in the order the stage runs */
+    let map = scratch.alloc_filled(ext, NONE).map_err(oom)?;
+    let r = Renumber { nodes: m.nodes, owner, ladders, seq };
+    let mut total = 0u32;
+    r.number(m.body, map, &mut total, 0);
+    let out = scratch.alloc_filled(m.nodes.len() + nseq, IrNode::Break).map_err(oom)?;
+    let mut nout = 0usize;
+    let Some(body) = r.layout(m.body, map, out, &mut nout, 0) else { return Ok(None) };
+    let fin = scratch.alloc_filled(total as usize, IrOp::ConstI32([0; 4])).map_err(oom)?;
+    let fcomps = scratch.alloc_filled(total as usize, 4u8).map_err(oom)?;
+    for (old, &new) in map.iter().enumerate() {
+        if new == NONE {
+            continue;
+        }
+        let mut op = instrs[old];
+        let lost = core::cell::Cell::new(false);
+        let to = |s: &mut Src| match map.get(s.val.0 as usize) {
+            Some(&v) if v != NONE => s.val = ValueId(v),
+            _ => lost.set(true),
+        };
+        match &mut op {
+            IrOp::Alu(a, s) => {
+                let k = a.arity();
+                for j in 0..3 {
+                    if j < k {
+                        to(&mut s[j]);
+                    } else {
+                        s[j] = s[k - 1];
+                    }
+                }
+            }
+            o => remap_srcs(o, &to),
+        }
+        if lost.get() {
+            return Ok(None);
+        }
+        fin[new as usize] = op;
+        fcomps[new as usize] = comps[old];
+    }
+    Ok(Some(Trees { instrs: fin, comps: fcomps, nodes: &out[..nout], body }))
+}
+
+/// The stage's nodes with each ladder's span replaced by its new nodes.
+struct Renumber<'r> {
+    nodes: &'r [IrNode],
+    owner: &'r [u32],
+    ladders: &'r [Ladder],
+    seq: &'r [u32],
+}
+
+impl Renumber<'_> {
+    /// The ladder whose span node `p` is, and whether `p` is its first.
+    fn at(&self, p: usize) -> Option<(&[u32], bool)> {
+        let o = *self.owner.get(p)?;
+        let l = self.ladders.get(o as usize)?;
+        let s = self.seq.get(l.seq.0 as usize..(l.seq.0 + l.seq.1) as usize)?;
+        Some((s, p == l.span.0 as usize))
+    }
+
+    /// Each value's new id, in the order the stage runs.
+    fn number(&self, r: Range, map: &mut [u32], next: &mut u32, depth: usize) {
+        if depth > MAX_TREE {
+            return;
+        }
+        for (j, nd) in block(self.nodes, r).iter().enumerate() {
+            if let Some((s, first)) = self.at(r.first as usize + j) {
+                if first {
+                    for &id in s {
+                        map[id as usize] = *next;
+                        *next += 1;
+                    }
+                }
+                continue;
+            }
+            match *nd {
+                IrNode::Instr(id) => {
+                    map[id.0 as usize] = *next;
+                    *next += 1;
+                }
+                IrNode::If { then_, else_, .. } => {
+                    self.number(then_, map, next, depth + 1);
+                    self.number(else_, map, next, depth + 1);
+                }
+                IrNode::Loop { body } => self.number(body, map, next, depth + 1),
+                _ => {}
+            }
+        }
+    }
+
+    /// Block `r` written at `out[*n..]`, then its nested blocks after it.
+    fn layout(&self, r: Range, map: &[u32], out: &mut [IrNode], n: &mut usize, depth: usize) -> Option<Range> {
+        if depth > MAX_TREE {
+            return None;
+        }
+        let first = *n;
+        let mut put = |nd: IrNode, n: &mut usize| -> Option<()> {
+            *out.get_mut(*n)? = nd;
+            *n += 1;
+            Some(())
+        };
+        let id = |v: u32| map.get(v as usize).copied().filter(|&x| x != NONE);
+        for (j, nd) in block(self.nodes, r).iter().enumerate() {
+            if let Some((s, first)) = self.at(r.first as usize + j) {
+                if first {
+                    for &v in s {
+                        put(IrNode::Instr(crate::shaderc::online::ir::InstrId(id(v)?)), n)?;
+                    }
+                }
+                continue;
+            }
+            let nd = match *nd {
+                IrNode::Instr(v) => IrNode::Instr(crate::shaderc::online::ir::InstrId(id(v.0)?)),
+                IrNode::If { cond, then_, else_ } => {
+                    IrNode::If { cond: Src { val: ValueId(id(cond.val.0)?), swizzle: cond.swizzle }, then_, else_ }
+                }
+                o => o,
+            };
+            put(nd, n)?;
+        }
+        let r2 = Range { first: first as u32, len: (*n - first) as u32 };
+        for q in first..*n {
+            let nd = match out[q] {
+                IrNode::If { cond, then_, else_ } => {
+                    let then_ = self.layout(then_, map, out, n, depth + 1)?;
+                    let else_ = self.layout(else_, map, out, n, depth + 1)?;
+                    IrNode::If { cond, then_, else_ }
+                }
+                IrNode::Loop { body } => IrNode::Loop { body: self.layout(body, map, out, n, depth + 1)? },
+                o => o,
+            };
+            out[q] = nd;
+        }
+        Some(r2)
+    }
 }
 
 fn is_const(op: &IrOp) -> bool {
@@ -901,3 +1658,7 @@ fn vine_to_tree(rec: &mut [(u32, [Child; 2])], size: usize) {
         m = n / 2;
     }
 }
+
+#[cfg(test)]
+#[path = "glsl_tests.rs"]
+mod tests;
