@@ -1682,6 +1682,99 @@ pub fn fragment_reads(r: &MaliShader<'_>) -> Result<ProgramReads, MaliError> {
     Ok(out)
 }
 
+/// A location map between the stages' varyings of the same names: each
+/// stage numbers its varyings in its own declaration order, and Mesa's link
+/// pairs them by name (case 19, textured.vert and .frag: `Tint` is location
+/// 1 of the vertex shader and 0 of the fragment shader).
+struct Locations<'a> {
+    from: &'a [super::reflect::VaryingRow<'a>],
+    to: &'a [super::reflect::VaryingRow<'a>],
+}
+
+impl<'a> Locations<'a> {
+    /// The vertex and fragment varyings of `vs_glsl` and `fs_glsl`, or None
+    /// when the front end does not read a source here.
+    fn rows(
+        vs_glsl: &[u8],
+        fs_glsl: &[u8],
+        scratch: &'a Arena<'_>,
+    ) -> Option<(&'a [super::reflect::VaryingRow<'a>], &'a [super::reflect::VaryingRow<'a>])> {
+        use super::sema::Stage;
+        let rows = |glsl: &[u8], stage| {
+            let src = scratch.alloc_str(core::str::from_utf8(glsl).ok()?).ok()?;
+            super::reflect::interface(scratch, stage, src).ok().map(|i| i.reflection.varyings)
+        };
+        Some((rows(vs_glsl, Stage::Vertex)?, rows(fs_glsl, Stage::Fragment)?))
+    }
+
+    /// The location in `to` of the varying that holds `loc` in `from` (a
+    /// row holds its locations up to the next row's: rows are in ascending
+    /// location), or None when `to` declares no varying of its name.
+    fn at(&self, loc: u8) -> Option<u8> {
+        let i = self.from.iter().rposition(|r| r.location <= loc)?;
+        if self.from.get(i + 1).is_some_and(|n| loc >= n.location) {
+            return None;
+        }
+        let r = &self.from[i];
+        self.to.iter().find(|v| v.name == r.name).and_then(|v| v.location.checked_add(loc - r.location))
+    }
+}
+
+/// `pr`, a fragment shader's reads and moved expressions at its own
+/// locations ([`fragment_reads`] of `fs_glsl`), at the locations vertex
+/// shader `vs_glsl` gives the varyings of the same names ([`Locations`]).
+/// A location whose name the vertex shader does not declare, or a source
+/// the front end does not read here, is left as it is: the link then
+/// refuses the pair by name.
+pub fn reads_at_vertex_locations(
+    pr: &mut ProgramReads,
+    vs_glsl: &[u8],
+    fs_glsl: &[u8],
+    scratch: &Arena<'_>,
+) -> Result<(), MaliError> {
+    let Some((vv, fv)) = Locations::rows(vs_glsl, fs_glsl, scratch) else {
+        return Ok(());
+    };
+    let map = Locations { from: fv, to: vv };
+    let at = |loc: u8| map.at(loc).unwrap_or(loc);
+    for r in &mut pr.reads[..pr.n] {
+        r.0 = at(r.0);
+    }
+    if pr.nmoved == 0 {
+        return Ok(());
+    }
+    let mut mv = [motion::Moved::NONE; motion::MAX_MOVED];
+    let n = motion::decode(pr.moved(), &mut mv)?;
+    for m in &mut mv[..n] {
+        m.location = at(m.location);
+        for node in &mut m.nodes[..m.n as usize] {
+            if let motion::Node::Lane { location, .. } = node {
+                *location = at(*location);
+            }
+        }
+    }
+    pr.nmoved = motion::encode(&mv[..n], &mut pr.moved)?;
+    Ok(())
+}
+
+/// `consts`, vertex shader `vs_glsl`'s constant lanes ([`vs_constants`], at
+/// its own locations), at the locations fragment shader `fs_glsl` gives the
+/// varyings of the same names ([`Locations`]), which is where the fragment
+/// shader looks them up (nir_fs.rs, motion.rs); a lane of a varying the
+/// fragment shader does not declare is left out (it reads no such lane).
+/// As they are when the front end does not read a source here.
+pub fn consts_at_fragment_locations(
+    consts: link::VaryingConsts,
+    vs_glsl: &[u8],
+    fs_glsl: &[u8],
+    scratch: &Arena<'_>,
+) -> link::VaryingConsts {
+    match Locations::rows(vs_glsl, fs_glsl, scratch) {
+        Some((vv, fv)) => consts.relocated(|loc| Locations { from: vv, to: fv }.at(loc)),
+        None => consts,
+    }
+}
+
 /// A vertex shader at the attribute locations the link chose: the front
 /// end's verdict, then the gap.
 pub fn compile_vs_mapped_blocks<'s>(
