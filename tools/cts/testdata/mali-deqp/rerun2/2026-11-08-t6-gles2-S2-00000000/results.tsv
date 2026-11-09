@@ -1,0 +1,6 @@
+case	status	detail
+dEQP-GLES2.functional.a.one	Pass	Pass
+dEQP-GLES2.functional.a.two	Pass	Pass
+dEQP-GLES2.functional.a.three	Lost	chunk-crash
+dEQP-GLES2.functional.b.four	Lost	not-run
+dEQP-GLES2.functional.b.five	Lost	not-run

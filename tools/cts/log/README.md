@@ -101,7 +101,9 @@ commit message and the RESULTS.md row. Its files:
 - `meta.txt`: `key=value` lines: `commit` (the `origin/main` commit the
   `deqp-gles2` and the `libGLESv2.so.2` / `libEGL.so.1` were built from; the
   runner refuses a build whose commit is not on `origin/main`), `session`,
-  `rows` (`A-B` of the tree table), `tree`, `lib` (the libraries' build stamp or
+  `rows` (`A-B` of the tree table), `reruns` (only in a rerun slice:
+  the earlier slice directory names it replaces the Lost rows of, comma-separated;
+  the runner's `--reruns`), `tree`, `lib` (the libraries' build stamp or
   sha256), `started`, then `boot_id_before`, `kernel` (`uname -r`),
   `boot_id_after` and `ended`. `boot_id_after=unknown` marks a run that stopped
   early.

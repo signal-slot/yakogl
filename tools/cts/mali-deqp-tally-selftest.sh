@@ -14,7 +14,7 @@
 set -u
 
 HERE=$(dirname "$0")
-WANT=31
+WANT=37
 OUT=$(python3 -I "$HERE/mali-deqp-tally.py" --self-test 2>&1)
 RC=$?
 printf '%s\n' "$OUT"
