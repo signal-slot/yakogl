@@ -1,0 +1,20 @@
+case	status	detail
+dEQP-GLES2.functional.shaders.operator.add.float_vertex	InternalError	link failed: refused Arithmetic
+dEQP-GLES2.functional.shaders.operator.add.vec2_vertex	InternalError	link failed: refused ARITH
+dEQP-GLES2.functional.shaders.operator.mix.a	InternalError	link failed: refused MixedPrecision
+dEQP-GLES2.functional.shaders.operator.cmp.a	InternalError	link failed: refused CompareForm
+dEQP-GLES2.functional.shaders.conditionals.msg.a	InternalError	link failed: Valhall: a made-up form is not lowered yet
+dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.x	InternalError	draw: mali frame: a blend shader other than a constant colour's (min/max, SRC_ALPHA_SATURATE, unmatched factors, separate colour and alpha, a masked, 4x or non-RGBA8 target) is not built yet
+dEQP-GLES2.functional.fragment_ops.blend.rgb_func_alpha_func.y	InternalError	glDrawArrays: refused blend_equation_separate
+dEQP-GLES2.functional.fragment_ops.blend.rgb_func_alpha_func.z	Fail	Image comparison failed: max difference = (3, 0, 0)
+dEQP-GLES2.functional.texture.mipmap.bias	InternalError	link failed
+dEQP-GLES2.functional.texture.mipmap.plain	Pass	Pass
+dEQP-GLES2.functional.shaders.loops.for_dynamic_iterations.basic_fragment	Timeout	timed out
+dEQP-GLES2.functional.shaders.loops.while_uniform_iterations.basic_fragment	Lost	chunk-crash
+dEQP-GLES2.functional.shaders.loops.for_constant_iterations.basic_fragment	Lost	chunk-crash
+dEQP-GLES2.functional.draw.first	Pass	Pass
+dEQP-GLES2.functional.draw.second	Crash	segfault
+dEQP-GLES2.functional.attribute_location.bind_attrib.mat2	Fail	Image comparison failed: max difference = (255, 0, 0)
+dEQP-GLES2.functional.attribute_location.bind_attrib.vec4	Pass	Pass
+dEQP-GLES2.functional.multisample.a	NotSupported	not supported
+dEQP-GLES2.functional.multisample.b	Pass	Pass

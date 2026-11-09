@@ -1,0 +1,5 @@
+row	label	cases	status	seconds	kmsg	resets	ssh_after	boot_same	exit_line
+1	a	8	done	30	0	0	yes	yes	-
+2	b	2	done	9	0	0	yes	yes	yakogl-mali-exit: draws=4 refused=1 first_refused=TEX_KIND gpu_faults=0 job_timeouts=0
+3	c	5	fault	60	2	1	yes	yes	-
+4	d	4	done	12	0	0	yes	yes	-
