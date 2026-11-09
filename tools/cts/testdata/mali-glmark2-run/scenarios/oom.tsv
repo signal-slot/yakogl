@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Scenes 2-8: every memory-failure line that gives out-of-gpu-memory (scene 1 is clean).
+# Scene 6 is a GL_OUT_OF_MEMORY and scene 4 a refusal line: the memory verdict wins over gl-error and refused-draw.
+build:use-vbo=true	oom
+texture:texture-filter=nearest	oomosal
+texture:texture-filter=linear	oomsample
+texture:texture-filter=mipmap	oomzs
+shading:shading=gouraud	oomalloc
+shading:shading=blinn-phong-inf	oomgl
+shading:shading=phong	oomkernel

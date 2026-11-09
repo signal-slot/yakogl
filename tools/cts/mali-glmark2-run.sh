@@ -86,7 +86,15 @@
 #   gpu-fault          mali-kmsg.py counts a reset, MMU, firmware, GPU or
 #                      other panthor line, or the exit line gpu_faults > 0
 #   job-timeout        mali-kmsg.py counts a timeout, or job_timeouts > 0
-#   out-of-gpu-memory  an "out of GPU memory" line
+#   out-of-gpu-memory  a memory-failure line, the set glmark2-mali-tally.py
+#                      counts as oom: on the scene's output "out of GPU
+#                      memory", "no GPU memory for" (the depth/stencil
+#                      buffer refusal), "gpu_alloc of", "mali: the OSAL
+#                      refused a buffer", "mali: no sample store" and a
+#                      GL error 0x505 (GL_OUT_OF_MEMORY); in its kernel lines
+#                      "Out of memory:" and "page allocation failure". After
+#                      job-timeout and before refused-draw and gl-error, so
+#                      a GL_OUT_OF_MEMORY is this verdict, not gl-error
 #   refused-draw       the exit line's refused > 0, or a "draw refused" or
 #                      "was not recorded" line
 #   gl-error           a "GL error 0x.. in gl.." line
@@ -394,6 +402,12 @@ def exit_fields(line):
     return f
 
 
+# the memory failures of the Mali back end and panthor (glmark2-mali-tally.py's oom set)
+OOM_RE = (r'out of GPU memory|no GPU memory for|gpu_alloc of \d+|mali: the OSAL refused a buffer|'
+          r'mali: no sample store|GL error 0x0*505 in ')
+KERNEL_OOM_RE = r'Out of memory:|page allocation failure'
+
+
 def judge(rc, elapsed, limit, out, err, klog, libdir, kclass):
     """One scene: prints verdict, ms_frame, picture, kmsg count, exit line,
     info string and the picture line form, tab-separated."""
@@ -408,6 +422,7 @@ def judge(rc, elapsed, limit, out, err, klog, libdir, kclass):
     exits = [l.strip() for l in lines if 'yakogl-mali-exit:' in l]
     exit_line = exits[-1].replace('\t', ' ') if exits else '-'
     ef = exit_fields(exit_line)
+    kernel = read(klog) if os.path.exists(klog) else ''
     if os.path.exists(klog):
         r = json.loads(subprocess.run([sys.executable, '-I', os.path.join(HERE, 'mali-kmsg.py'), '--json', klog],
                                       capture_output=True, text=True, check=True).stdout)
@@ -454,7 +469,7 @@ def judge(rc, elapsed, limit, out, err, klog, libdir, kclass):
         v = 'gpu-fault'
     elif timeouts or ef['job_timeouts']:
         v = 'job-timeout'
-    elif re.search(r'out of GPU memory', text):
+    elif re.search(OOM_RE, text) or re.search(KERNEL_OOM_RE, kernel):
         v = 'out-of-gpu-memory'
     elif ef['refused'] or re.search(r'draw refused|was not recorded \(-?\d+\)', text):
         v = 'refused-draw'

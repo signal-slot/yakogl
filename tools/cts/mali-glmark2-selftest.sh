@@ -31,7 +31,7 @@ set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 FIX=$HERE/testdata/mali-glmark2-run
 RUN=$HERE/mali-glmark2-run.sh
-EXPECT=73
+EXPECT=78
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/mali-glmark2-selftest-XXXXXX")
 # MALI_GLMARK2_SELFTEST_KEEP=1 keeps the directory and says where it is.
 cleanup() {
@@ -160,6 +160,17 @@ check "pictures.txt leaves out the scenes without a picture line (setup, crash, 
 check "the summary line names each failure cause in run order" \
   bash -c "grep -qx 'mali-glmark2: 2/10 scenes ok, failed 8 (gl-error 1, out-of-gpu-memory 1, refused-draw 1, gpu-fault 1, job-timeout 1, failed-scene 1, crash 1, hang 1), commit ${c1:0:8}' '$tmp/mixed/out.txt'"
 check "the stage is removed and the run directory is clean" bash -c "[ ! -e '$tmp/mixed/board/home/yakogl-mali-glmark2' ] && ! grep -rqiE 'board\.invalid|198\.51\.100|02:00:5e' '$tmp/mixed/out'"
+
+echo "mali-glmark2-selftest: scenes 1-8, each with another memory failure (--timeout 2)"
+run oom oom --scenes 1-8 --timeout 2
+check "every scene ran: exit 0" rc_is oom 0
+check "scene 1 ok, scenes 2-8 out-of-gpu-memory: the back end's lines, GL_OUT_OF_MEMORY (not gl-error), a depth/stencil refusal (not refused-draw), the kernel's lines" \
+  verdicts oom ok,out-of-gpu-memory,out-of-gpu-memory,out-of-gpu-memory,out-of-gpu-memory,out-of-gpu-memory,out-of-gpu-memory,out-of-gpu-memory
+check "the kernel's memory lines are kept in kmsg/8.log" \
+  bash -c "grep -q 'Out of memory: Killed' '$tmp/oom/out/kmsg/8.log' && grep -q 'page allocation failure' '$tmp/oom/out/kmsg/8.log'"
+check "the summary names out-of-gpu-memory 7 times" \
+  bash -c "grep -qx 'mali-glmark2: 1/8 scenes ok, failed 7 (out-of-gpu-memory 7), commit ${c1:0:8}' '$tmp/oom/out.txt'"
+check "the run directory is clean" clean_out oom
 
 echo "mali-glmark2-selftest: the board goes away in scene 2 of 1-4"
 run lost lostssh --scenes 1-4

@@ -8,7 +8,8 @@
 # libGLESv2.so.2 its LD_LIBRARY_PATH finds is the fixture's), the
 # "glmark2-picture:" line and the "yakogl-mali-exit:" line, and does to the
 # scene what FAKE_SCENARIO (a "<scene><TAB><action>" table) says: ok (the
-# default), fpsonly (no FrameTime), glerror, oom, refused, gpufault and
+# default), fpsonly (no FrameTime), glerror, oom (and oomosal, oomsample, oomzs,
+# oomalloc, oomgl: GL_OUT_OF_MEMORY; oomkernel: the kernel's lines), refused, gpufault and
 # jobtimeout (kernel lines from FAKE_FIXTURES/kmsg/ into the board's ring),
 # setupfail, crash (SIGSEGV), hang (never returns), lostssh (the board goes
 # away), reboot (a new boot_id), nolib (no loaded line), foreignlib (a loaded
@@ -67,7 +68,13 @@ case $action in
   fpsonly) result="FPS: 250" ;;
   glerror) echo "yakogl: GL error 0x502 in glGenerateMipmap" >&2 ;;
   oom) echo "yakogl: mali: out of GPU memory for 7684096 bytes (1 frees held)" >&2 ;;
-  refused) echo "yakogl/mali: draw refused: a varying of 5 components" >&2
+  oomosal) echo "yakogl: mali: the OSAL refused a buffer of 7684096 bytes (-12)" >&2 ;;
+  oomsample) echo "yakogl: mali: no sample store of 1920000 bytes: a 4x frame averages into its target" >&2 ;;
+  oomzs) echo "yakogl/mali: draw refused: no GPU memory for its 1920000 byte depth/stencil buffer" >&2 ;;
+  oomalloc) echo "yakogl: gpu_alloc of 7684096 bytes failed" >&2 ;;
+  oomgl) echo "yakogl: GL error 0x505 in glBufferData (out of memory)" >&2 ;;
+  oomkernel) kmsg oom ;;
+  refused) echo "yakogl/mali: draw refused: a varying refused: a varying of 5 components" >&2
     refused=600 first="draw: a varying of 5 components" draws=0 ;;
   gpufault) kmsg gpu-fault; gpu=1 result="FPS: 40 FrameTime: 25.000 ms" ;;
   jobtimeout) kmsg job-timeout; jt=1 result="FPS: 2 FrameTime: 500.000 ms" ;;
