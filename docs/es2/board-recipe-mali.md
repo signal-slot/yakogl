@@ -339,6 +339,24 @@ capture) go to `RAW_DIR`, default `build/mali-deqp-run/<slice name>/` (ignored
 by git). They are **not redacted and never committed**. This is the format
 the tally (section 7) reads.
 
+### Before the slice is committed
+
+Write its `README.md`, then check the slice for addresses, host names and
+serials, from the repository root:
+
+```sh
+python3 -I tools/cts/mali-slice-readme.py --write tools/cts/log/<date>-t6-gles2-S<n>-<sha8>
+python3 -I tools/cts/mali-slice-redact.py tools/cts/log/<date>-t6-gles2-S<n>-<sha8>
+```
+
+Exit 0 prints nothing and the slice may be committed. Exit 1 prints
+`REDACT <file>:<line>: <kind>` for each hit and never the matched text:
+redact those lines by hand and rerun until it exits 0. Exit 2: a path cannot
+be read. Every file under the slice is scanned, `README.md` included. An
+IPv4 address is a hit even in a documentation range (192.0.2.x); only
+0.0.0.0, 127.x and version-like quads are not. Board addresses, host names,
+UART paths and serials never go in a file or a commit (section 8).
+
 ## 5. The self-test: `tools/cts/mali-deqp-selftest.sh`
 
 ```sh
@@ -607,7 +625,11 @@ in `meta.txt` and the rerun table's path as `tree`. Commit it under
 `tools/cts/log/` named `<YYYY-MM-DD>-t6-gles2-adhoc` (the pattern of
 `tools/cts/log/README.md`, with the runner's session name), redacted by the
 runner as any slice, with the raw logs left in `RAW_DIR`. The first
-slices are not edited.
+slices are not edited. Write its `README.md` with `mali-slice-readme.py
+--write` and run `python3 -I tools/cts/mali-slice-redact.py <slice dir>` on
+it before the commit, as section 4 says: exit 1 means redact the named lines
+by hand and rerun until 0; board addresses, host names, UART paths and
+serials never go in a file or a commit.
 
 ### The board
 
