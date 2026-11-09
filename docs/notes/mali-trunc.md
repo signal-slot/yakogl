@@ -180,18 +180,114 @@ case 89's flat-uint one). Add, with `op32` (`:1299`) and the node CSE:
    `motion` tests at `tests.rs:4288/4386/4427` use the constant. Two moved
    expressions (y and z) are within `MAX_MOVED = 4`.
 4. **The sink guard (`motion.rs:535`, `d.up(pd) == SINK && f.prec.highp`)
-   contradicts this reference.** It was pinned by `s4_fneg` (a highp
-   `-v.x` stored directly stays in the fragment shader) and by reading
-   Mesa's text no rule gives it. Here the moved `fmul`'s only user is the
-   colour's `vec4`, in a highp shader, and Mesa moves it. The two references
-   differ in the lane's class: `s4_fneg` is *interpolated* (a `fneg`), 199
-   is *convergent*. Narrow the guard to lanes whose flag is
-   `Flag::Interpolated` (the only family it was measured on); 89 (flat,
-   mediump) is unaffected. **Open point:** the reason for the `s4_fneg`
-   result is not in `nir_opt_varyings.c`'s text as read; fs-trunc should
-   draw one discriminating pair (a highp `-v.x` of a uniform-only varying,
-   and a highp `v.x * 2.0` of an attribute-fed one) on the shim before
-   widening the guard further.
+   has no basis in Mesa and contradicts this reference.** Here the moved
+   `fmul`'s only user is the colour's `vec4`, in a highp shader, and Mesa
+   moves it. The guard was pinned by `s4_fneg` (a highp `-v.x` stored
+   directly stays in the fragment shader) while the text of
+   `nir_opt_varyings.c` was not at hand; with the 26.2.1 text the reason
+   is found, and it is the operation and the lane's class, not the sink.
+   **The rule (Mesa 26.2.1, read; not yet drawn, see "What the shim did
+   not show")**:
+
+   * `backward_inter_shader_code_motion` walks from each movable load up
+     the immediate use dominators (`nir_opt_varyings.c:4711-4786`). It
+     stops at the first `FLAG_UNMOVABLE` and keeps the farthest movable
+     one. A store (`store_output`) is not a barrier by itself: an
+     intrinsic other than `load_deref` is `FLAG_UNMOVABLE` only as a
+     *step* (`:3898-3925`), so the ALU below it is the post-dominator. A
+     vector ALU is unmovable (`:3845-3848`), which is why the colour's
+     `vec4` ends the chain. Nothing in `:4706-4803` or in
+     `try_move_postdominator` (`:4090-4494`) tests "the only user is a
+     store".
+   * `update_movable_flags` (`:3820-3896`) gives an ALU node the common
+     class of its sources (`:3850-3883`; two different interpolated
+     classes are unmovable, convergent mixes with anything) and then
+     applies **`can_move_alu_across_interp` only when the class is
+     interpolated, `alu_interp > FLAG_INTERP_FLAT` (`:3888-3892`)**. A
+     *convergent* or *flat* node (including one over only constants) skips
+     it, so every op that is vector-free moves.
+   * `can_move_alu_across_interp` (`:3733-3793`) refuses an exact ALU
+     (`:3731`), one that preserves inf or nan (`:3745`), and every op
+     except `fadd`, `fsub`, `fneg`, `mov` (`:3753-3759`), `fmul`,
+     `fmulz`, `ffma`, `ffma_weak`, `ffmaz`, `fmad`, `fmadz` (needs a
+     convergent source 0 or 1, `:3765-3773`), `fdiv` (convergent source
+     1, `:3775-3778`), `flrp` (`:3780-3784`) and `bcsel` (convergent
+     condition, `:3786-3787`).
+   * **The reason for `s4_fneg`**: Mesa's GLSL front end builds a
+     negation with `nir_fp_preserve_inf` (`glsl_to_nir.cpp:2152-2156`,
+     likewise `abs` `:2157-2160`, `clamp`/saturate `:2165-2168`, `min`,
+     `max`, `<`, `>=`, `==`, `!=`, `all_equal` `:2435-2515`), and
+     `:3745` then refuses the node when its class is interpolated. `+`,
+     `-`, `*`, `/` and the conversions (`f2i`, `i2f`, shifts) carry the
+     fast-math default (`glsl_to_nir.cpp:1901`, `nir_fp_fast_math`) and
+     are not refused. An assignment to an `invariant` or `precise`
+     variable is exact (`:1901`): then nothing is moved across an
+     interpolation.
+   * `try_move_postdominator` refuses a **convergent** result that cannot
+     be interpolated (`:4176-4187`) only when the driver's
+     `can_mix_convergent_flat_with_interpolated` is false (`:4181-4182`):
+     the node must be an ALU op with a 16- or 32-bit float result
+     (`:4183-4185`). Case 199's moved `y` and `z` are integer-valued
+     steps ending in `i2f`/`fmul` with a float result, so they pass; an
+     integer or boolean result (`ishl` alone, a compare) would not be
+     moved. This is a check on the *last* node, the post-dominator.
+
+   So the guard to implement is, for a candidate chain over lane `n`:
+   walk up as now and stop at the first node that is `Unmovable`, with
+   **`Flag::Interpolated` nodes additionally unmovable when the op
+   preserves inf/nan** (`Fneg`, `Fabs`, `Fsat`, `Fmin`, `Fmax`, compares)
+   **or is not in the `:3753-3787` list**, and `Convergent`/`Flat` nodes
+   subject to no op test (only to `OPS`, what `encode` can number, and to
+   the float-result test at the post-dominator). **Delete the
+   `d.up(pd) == SINK && f.prec.highp` test.** Precision plays no part in
+   Mesa's text: a mediump shader's chain ends at the `f2fmp` narrowing
+   (a `mov`-class step with a 16-bit result of a 32-bit source, which
+   the up-conversion test `:4747-4757` and the bit-size filter
+   `:4780-4782` handle), as `intbool_89_flatlast` shows; that is the
+   user the chain stops at, and no sink test is needed for it either.
+   The measured references reproduce under it:
+
+   | Reference | Lane class | Op | Rule says | Reference |
+   |---|---|---|---|---|
+   | `s4_fneg` (`-v.x`) | interpolated | `fneg`, preserve inf | kept (`:3745`) | kept |
+   | `s4_fsat` (`clamp`) | interpolated | `fsat`, preserve | kept | kept |
+   | `s4_fceil`, `s4_ffloor` | interpolated | not listed (`:3789`) | kept | kept |
+   | `s4_ffma` (`v.x*v.y+v.z`) | interpolated | `fmul` of two interpolated (`:3772`) | kept | kept |
+   | 199 `y`, `z` (`v` uniform-only) | convergent | `f2i`..`fmul` | moved (`:3888`) | moved |
+   | 89 (flat, mediump) | flat | `i2f`, `fmul`, then `f2fmp` | chain ends at the narrowing | as before |
+
+   Sentinels `s4_motion_sum`/`s4_motion_dot` are unaffected (affine chain,
+   resp. vector-sourced `fdot2`).
+
+   **What the shim did not show.** The shim (`drm_shim_ref.sh build`) was
+   not built on the machine that wrote this paragraph (the build command
+   was refused there; the Mesa tree is
+   `/home/orion/connected-deps/mesa-pan/mesa-26.2.1`, the tarball
+   `/home/orion/connected-deps/downloads/mesa-26.2.1.tar.xz`), so the rule
+   above is the *source* reading, checked against the six recorded
+   references, and the two discriminating pairs below are **not drawn**.
+   fs-trunc draws them first (commit as `tools/mali/testdata/
+   motion_guard_*`), and if any verdict differs from the prediction the
+   source reading above is wrong and this point must be rewritten from the
+   measurement. Each is `tools/mali/drm_shim_ref.sh run <shim dir> <vs>
+   <fs> <out>` (`<shim dir>` from `drm_shim_ref.sh build
+   <mesa-26.2.1.tar.xz> <dir>`), then `tools/mali/pan_ref_diff.py
+   extract` as the other rows do:
+
+   | Name | Vertex | Fragment (highp) | Prediction |
+   |---|---|---|---|
+   | `motion_guard_conv_fneg` | `attribute vec4 p; uniform vec4 u; varying vec4 v; void main(){ gl_Position = p; v = u; }` | `precision highp float; varying vec4 v; void main(){ float r = -v.x; gl_FragColor = vec4(r, 0.0, 0.0, 1.0); }` | **moved**: `v` uniform-only is convergent (`:1739`), a convergent node skips `:3745`; the fragment shader has no `FADD`/neg, the vertex shader negates |
+   | `motion_guard_interp_mul` | `attribute vec4 p; attribute vec4 c; varying vec4 v; void main(){ gl_Position = p; v = c; }` | `precision highp float; varying vec4 v; void main(){ float r = v.x * 2.0; gl_FragColor = vec4(r, 0.0, 0.0, 1.0); }` | **moved**: `fmul` is fast-math, source 1 is the constant (convergent, `:3772`); the vertex shader gets `FMA`/`FMUL` by 2.0 and the fragment shader a plain varying load (the sink does not matter) |
+   | `motion_guard_interp_fneg` | as `s4_fneg.vert` | `s4_fneg.frag` | **kept** (already recorded) |
+   | `motion_guard_mediump` | `s4_fneg.vert` | the `conv_fneg` fragment with `precision mediump float;` | open: a mediump result is narrowed by `f2fmp` after the `fneg`; if the chain stops there the `fneg` is the post-dominator and moves (convergent), else kept |
+
+   With a uniform `u` the "uniform-only" lane is Mesa's `propagate_uniform_
+   expressions` (`:2888-2900`, `output_equal_mask`) first: it may replace
+   the varying by the uniform itself in the fragment shader, in which case
+   the pair shows no varying at all and the discriminating shape must use
+   a uniform *expression* (`v = u * 2.0;`, still convergent) instead. 199
+   is that shape (`:1739`, divergence analysis), which is what its
+   reference already records.
 5. `apply()` (`motion.rs:185`) already runs `vs.alu(op, ..)` for each node
    in dependence order and stores the result in the lane; the vertex `Nir`
    has all of these ops (`nir.rs:1900-1917`). The **emission order**
