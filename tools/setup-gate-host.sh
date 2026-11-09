@@ -299,6 +299,18 @@ check_glslang() {
   line ok glslangValidator "${out%%$'\n'*}"
 }
 
+# lz4: the second-stage LZ4 vectors of tools/check.sh (am62p-mkboot.py
+# stage2-vectors, --compress lz4). It is in the ZEPHYR_WS entry's packages
+# (tools/cts/deps.toml), so --install brings it with that entry's set.
+check_lz4() {
+  local out
+  out=$(lz4 --version 2>&1) || {
+    line missing lz4 "lz4 not on PATH (Debian lz4, Gentoo app-arch/lz4): the second-stage LZ4 vectors"
+    return
+  }
+  line ok lz4 "${out%%$'\n'*}"
+}
+
 check_pkgconfig() {
   local m out
   if ! command -v pkg-config >/dev/null 2>&1; then
@@ -493,6 +505,7 @@ run_checks() {
   check_libclang
   check_yaml
   check_glslang
+  check_lz4
   check_pkgconfig
   check_mali_csffw
   check_glmark2_src
