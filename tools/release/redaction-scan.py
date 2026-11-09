@@ -783,6 +783,58 @@ def self_test():
                            ("tools/y.sh", "`%s image build`" % tool)):
             check("allow: %s in %s stays a finding" % (line, path),
                   kept("lab-host", path, line))
+        # The held files' fixture rules: each fixture line is dropped, the
+        # same line in another file and a near value stay findings.
+        at = "@".join
+        bs, slr = "tools/board_selftest.sh", "tools/cts/mali-slice-readme-selftest.sh"
+        x2, msr = "tools/cts/x2-glmark2-scenes-selftest.sh", "tools/cts/mali-slice-redact.py"
+        msd = "tools/cts/testdata/mali-slice-redact/dirty/"
+        fake = at(["tester", j(["pi5-fake", ".example"])])
+        ssh_err = "connect to host pi5-fake.example (%s) port 22"
+        tail9 = dot(["100", "64", "0", "9"])
+        prompt = "('prompt %s:~#', ['userhost'])"
+        dns = j(["board-1.example", ".ts", ".net"])
+        held = [
+            ("email", bs, "BOARD_HOST=%s BOARD_UART=x" % fake,
+             "BOARD_HOST=%s" % at(["tester", j(["pi5-real", ".example"])])),
+            ("private-ipv4", bs, ssh_err % dot(["100", "64", "7", "9"]),
+             ssh_err % dot(["100", "64", "7", "10"])),
+            ("private-ipv4", bs, ssh_err.replace(".example", ".example.invalid")
+             % dot(["100", "64", "7", "9"]), ssh_err % dot(["100", "64", "9", "9"])),
+            ("private-ipv4", bs, "12:00:00 eth0: %s up" % dot(["10", "20", "30", "40"]),
+             "12:00:00 eth1: %s up" % dot(["10", "20", "30", "40"])),
+            ("private-ipv4", slr, 'ip="%s"' % dot(["10", "1", "2", "3"]),
+             'ip="%s"' % dot(["10", "1", "2", "30"])),
+            ("login-at-host", slr, '"userhost:meta.txt:kernel=%s" \\' % at(["root", "board"]),
+             '"userhost:meta.txt:kernel=%s" \\' % at(["root", "board2"])),
+            ("email", x2, "git -C \"$R\" config user.email " + at(["t", j(["example", ".com"])]),
+             "git -C \"$R\" config user.email " + at(["t", j(["example", ".net"])])),
+            ("private-ipv4", msr, "address in %s/10 (Tailscale)" % dot(["100", "64", "0", "0"]),
+             "address in %s/10" % dot(["100", "65", "0", "0"])),
+            ("private-ipv4", msr, "('peer %s', ['tailnet'])," % tail9,
+             "('peer %s', ['tailnet'])," % dot(["100", "64", "0", "90"])),
+            ("ipv6-local", msr, "('addr %s%%eth0', ['ipv6'])," % j(["fe80", "::1"]),
+             "('addr %s%%eth0', ['ipv6'])," % j(["fe80", "::12"])),
+            ("login-at-host", msr, prompt % at(["root", "board"]),
+             prompt % at(["root", "board2"])),
+            ("login-at-host", msr, "('ssh %s via %s', [...])," % (at(["root", "192.0.2.7"]), tail9),
+             "('ssh %s via x', [...])," % at(["root", "192.0.2.8"])),
+            ("login-at-host", msd + "kmsg/a.txt", "[ 5.0] userhost: prompt %s:~#" % at(["root", "board"]),
+             "[ 5.0] userhost: prompt %s:~#" % at(["root", "board2"])),
+            ("email", msr, "units such as %s: failing safe" % at(["serial-getty", j(["ttyS2", ".service"])]),
+             "units such as %s:" % at(["serial-getty", j(["ttyS3", ".service"])])),
+            ("tailnet-dns", msr, "('host %s up', ['tailnet'])," % dns,
+             "('host %s up', ['tailnet'])," % j(["board-2.example", ".ts", ".net"])),
+            ("tailnet-dns", msd + "meta.txt", "host=" + dns,
+             "host=" + j(["board-2.example", ".ts", ".net"])),
+        ]
+        for key, path, line, near in held:
+            check("allow: %s fixture in %s dropped" % (key, path),
+                  dropped(key, path, line))
+            check("allow: the %s fixture in another file stays a finding" % key,
+                  kept(key, "tools/other.sh", line))
+            check("allow: a near %s value in %s stays a finding" % (key, path),
+                  kept(key, path, near))
         check("allow: a regex named SECRET is a look-alike",
               dropped("password", "tools/x.py",
                       j(["SEC", "RET = re.compile("]) + "r\"/home/\")"))

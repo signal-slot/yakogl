@@ -18,6 +18,24 @@ drop | * | * | <(user|login)@(host|board)> | placeholder
 # The RFC 1918 fixtures that the console redaction self-test rewrites.
 drop | private-ipv4 | tools/board_selftest.sh | \b(10\.11\.12\.(1|13)|172\.16\.0\.9)\b | redact_dir fixture input (RFC 1918)
 drop | private-ipv4 | tools/cts/pr-session-selftest.sh | secret-user@10\.9\.8\.7\b | fixture of the self-test's BOARD_HOST refusal
+# Self-test fixtures in files other plans hold (the redaction audit, part 4).
+# A redaction or refusal test needs a private-range input (an RFC 5737
+# address would not exercise the code under test); each rule names one value
+# in one file, most with the words around it.
+drop | email | tools/board_selftest.sh | \btester[@]pi5-fake\.example\b | the pi5 tests' fake BOARD_HOST, an RFC 2606 .example name
+drop | private-ipv4 | tools/board_selftest.sh | pi5-fake\.example(\.invalid)? \(100\.64\.7\.9\) | the fake ssh error the pi5 path must redact (RFC 6598 input)
+drop | private-ipv4 | tools/board_selftest.sh | eth0: 10\.20\.30\.40 up | the console line redact_run must rewrite to the RFC 5737 address (RFC 1918 input)
+drop | private-ipv4 | tools/cts/mali-slice-readme-selftest.sh | ^ip="10\.1\.2\.3"$ | the address the slice check must refuse (RFC 1918 input)
+drop | login-at-host | tools/cts/mali-slice-readme-selftest.sh | :kernel=root[@]board\b | the user@host the slice check must refuse
+drop | email | tools/cts/x2-glmark2-scenes-selftest.sh | user\.email t[@]example\.com\b | the scratch repository's committer, an RFC 2606 example.com address
+drop | private-ipv4 | tools/cts/mali-slice-redact.py | \b100\.64\.0\.0/10\b | the Tailscale range the checker's help names (RFC 6598)
+drop | private-ipv4 | tools/cts/mali-slice-redact.py | \b100\.64\.0\.9\b | the tailnet input of the checker's self-test (RFC 6598)
+drop | ipv6-local | tools/cts/mali-slice-redact.py | fe8[0]::1(?![0-9A-Fa-f:]) | the link-local input of the checker's help and self-test
+drop | login-at-host | tools/cts/mali-slice-redact.py | prompt root[@]board:~#|ssh root[@]192\.0\.2\.7 via | the user@host inputs of the checker's self-test (RFC 5737 address)
+drop | login-at-host | tools/cts/testdata/mali-slice-redact/dirty/kmsg/a.txt | prompt root[@]board:~# | the checker's dirty fixture, the user@host it must report
+drop | email | tools/cts/mali-slice-redact.py | \bserial-getty[@]ttyS2\.service\b | a unit instance the checker's help names, no address
+drop | tailnet-dns | tools/cts/mali-slice-redact.py | \bboard-1\.example\.ts\.net\b | the tailnet input of the checker's self-test (RFC 2606 .example label)
+drop | tailnet-dns | tools/cts/testdata/mali-slice-redact/dirty/meta.txt | ^host=board-1\.example\.ts\.net$ | the checker's dirty fixture, the tailnet name it must report
 # The preflight selftest's fake BOARD_UART canary (a look-alike, never a real value).
 drop | password | tools/cts/imx8mp-gles3-preflight-selftest.sh | SECRET\=ttyUSB | selftest fixture: the fake UART string the test asserts the preflight never prints
 # Product defaults and keywords.
