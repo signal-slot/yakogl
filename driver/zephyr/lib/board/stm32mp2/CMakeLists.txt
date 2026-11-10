@@ -8,6 +8,9 @@ if(CONFIG_YAKOGL_STM32MP2)
   zephyr_library_sources(stm32mp2.c stm32mp2_entry.S)
   zephyr_library_sources_ifdef(CONFIG_YAKOGL_STM32MP2_WDOG stm32mp2_wdog.c)
   zephyr_include_directories(.)
+  # stm32mp2_gpu.h: the crate's GPU power C ABI (soc/stm32mp2/gpu_ffi.rs),
+  # for the images that link the crate with it (mp2_gpu).
+  zephyr_include_directories(include)
   # tools/check.sh builds the probes with -DYAKOGL_WERROR=ON.
   if(YAKOGL_WERROR)
     zephyr_library_compile_options(-Werror)
