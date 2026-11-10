@@ -4500,6 +4500,30 @@ fn walk_nodes(
                     };
                 }
             }
+            /* `sin`, `cos`, `log2` of an fp16 uniform's component: evaluated
+             * at fp32 and narrowed (`bi_lower_bit_size`), one 16-bit node a
+             * lane, so a reader stays fp16 (case 77's `log2(u_a.z) * 0.25`,
+             * `FMA.v2f16` after the narrowing, fsarith_77_transc.expect.json).
+             * Another operand (a constant the front end left, gltest's
+             * f1_fs `log2(16.0)` in a global's initialiser) has no
+             * reference. `exp2` stays refused: `bi_fexp_32`'s `F32_TO_S32`
+             * has no rounding mode (word 33, `0090c400000c0003`), which
+             * bir.rs's `.rtz`-only op cannot write */
+            ir::Op::Alu(a @ (AluOp::Fsin | AluOp::Fcos | AluOp::Flog2), s) => {
+                let op = match a {
+                    AluOp::Fsin => Alu::Fsin,
+                    AluOp::Fcos => Alu::Fcos,
+                    _ => Alu::Flog2,
+                };
+                let w = m.comps_of(ir::ValueId(id.0)) as usize;
+                for (i, o) in out.iter_mut().enumerate().take(w) {
+                    let x = lane(vals, s[0], i);
+                    if f.alu_of(x).is_some() || f.uniform_dword(x).is_none() {
+                        return Err(MaliError::Arithmetic);
+                    }
+                    *o = f.node(op, [x, Val::Undef, Val::Undef], at)?;
+                }
+            }
             ir::Op::Alu(..) => return Err(MaliError::Arithmetic),
             /* fp32: the load Mesa makes, as the vertex stage builds it
              * (nir.rs), CSE'd by what it loads */
@@ -5944,6 +5968,8 @@ impl Pairs {
                 Alu::Fneg => &[Place::NegSrc],
                 /* a select's sources are the forms [`vectorise`] admits */
                 Alu::Bcsel | Alu::Fcmp(_) => &[],
+                /* read at fp32 by its expansion ([`transc_rows`]) */
+                Alu::Fsin | Alu::Fcos | Alu::Flog2 => &[],
                 _ => &[Place::AbsSrc],
             };
             for (k, p) in places.iter().enumerate() {
@@ -5967,6 +5993,15 @@ fn vectorise(f: &mut Fs<'_>, pr: &mut Pairs, a: Val, b: Val, pair: u8, ubo: &Ubo
          * `vec2(x, 0.0)` (case108_uniidx, uniarray_b) */
         (Some((Alu::Fadd, _)) | None, _) if b == Val::Const(0) && sum_of_reads(f, a) => {
             P::Leaf(Leaf::Zext(scalar(f, pr, a, pair)?))
+        }
+        /* a lane computed by `sin`, `cos` or `log2` (or read by a product
+         * of one) and another computed lane: each lane alone, the word
+         * packed (fsarith_77_transc: `(sin, cos)` and `(log2 * 0.25, exp2)`
+         * as `MKVEC.v2i16 r0, r0^.h0, r1^.h0` after ATEST) */
+        _ if f.alu_of(a).is_some() && f.alu_of(b).is_some() && (has_transc(f, a, 0) || has_transc(f, b, 0)) => {
+            let x = lane_tree(f, pr, a, pair, ubo)?;
+            let y = lane_tree(f, pr, b, pair, ubo)?;
+            P::Leaf(Leaf::Pack { x, y })
         }
         /* a flattened `if`'s selects ([`walk_if16`]) of one compare: of a
          * uniform's aligned pairs, one `bcsel_pan` of two lanes
@@ -6113,6 +6148,23 @@ fn vectorise(f: &mut Fs<'_>, pr: &mut Pairs, a: Val, b: Val, pair: u8, ubo: &Ubo
         },
     };
     pr.push(p, place)
+}
+
+/// `op` is `sin`, `cos` or `log2` ([`transc_rows`]).
+const fn is_transc(op: Alu) -> bool {
+    matches!(op, Alu::Fsin | Alu::Fcos | Alu::Flog2)
+}
+
+/// Lane `v` is one of [`is_transc`]'s, or sums, products and fnegs with one
+/// among them ([`lane_tree`]'s forms).
+fn has_transc(f: &Fs<'_>, v: Val, depth: u8) -> bool {
+    match f.alu_of(v) {
+        Some((op, _)) if is_transc(op) => true,
+        Some((Alu::Fadd | Alu::Fmul | Alu::Fneg, s)) if depth < 8 => {
+            s[..2].iter().any(|&x| x != Val::Undef && has_transc(f, x, depth + 1))
+        }
+        _ => false,
+    }
 }
 
 /// Lane `v` is fadds whose leaves are a float array's indexed reads
@@ -6291,6 +6343,9 @@ fn lane_tree(f: &Fs<'_>, pr: &mut Pairs, v: Val, pair: u8, ubo: &UboLayout) -> R
         /* an fneg of a uniform's component, a source modifier of its
          * reader (75: `FADD.v2f16 r1, 0x3C000000.h11, u2.w1.neg.h00`) */
         (Some((Alu::Fneg, s)), ..) => P::Op(Alu::Fneg, [lane_tree(f, pr, s[0], pair, ubo)?, 0, 0]),
+        /* `sin`, `cos`, `log2` of a uniform's component, its 32-bit
+         * expansion and narrowing ([`transc_rows`]) */
+        (Some((op, s)), ..) if is_transc(op) => P::Op(op, [lane_tree(f, pr, s[0], pair, ubo)?, 0, 0]),
         (Some((Alu::Fadd, s)), ..) => {
             let x = lane_tree(f, pr, s[0], pair, ubo)?;
             let y = lane_tree(f, pr, s[1], pair, ubo)?;
@@ -6853,6 +6908,9 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
         (None, P::Leaf(Leaf::Uniform { base, comp, swz })) => {
             Src::of(Idx::Ubo { base, comp }).swz(if swz == Swz::H00 { Swz::H00 } else { Swz::H11 })
         }
+        /* a packed word is made after ATEST, which reads its high lane's
+         * half (fsarith_77_transc: `ATEST .. r3.h0`, then `MKVEC.v2i16`) */
+        (None, P::Leaf(Leaf::Pack { y, .. })) => operand(&pr, y, &lv, &val)?.swz(Swz::H00),
         (None, _) => operand(&pr, roots[1], &lv, &val)?.swz(Swz::H11),
     };
     let t = alu(p, Op::Atest, &[Src::of(Idx::Reg(60)), at, Src::of(Idx::Special(Special::AtestDatum, false))])?;
@@ -9162,7 +9220,59 @@ fn op(
             s[k] = s[k].swz(Swz::H00);
         }
     }
+    if is_transc(a) {
+        val[x as usize] = Some(Src::ssa(transc_rows(p, rows, a, s[0])?));
+        return Ok(());
+    }
     let width = if pr.scalar[x as usize] { 1 } else { 2 };
     val[x as usize] = Some(Src::ssa(row(p, rows, Row { op: a, bits: 16, width }, &s)?));
     Ok(())
+}
+
+/// `bi_lower_fsincos_32`'s constants (bifrost_compile.c:2547-2549): the f32
+/// roundings of `2.0f / 3.14159f`, `-3.14159f / 2.0` and the bias that puts
+/// the argument's sixty-fourths of a quarter turn in the low bits.
+const TWO_OVER_PI: u32 = 0x3f22_f98c;
+const MPI_OVER_TWO: u32 = 0xbfc9_0fd0;
+const SINCOS_BIAS: u32 = 0x4940_0000;
+
+/// `sin`, `cos` or `log2` of the 16-bit lane `x`, as `bi_lower_bit_size`
+/// and `bi_emit_alu` make it: `F16_TO_F32`, the 32-bit expansion, then the
+/// narrowing to the low half (`FADD.f32 r.h0, r, -0.0`). The expansions are
+/// `bi_lower_fsincos_32` (bifrost_compile.c:2552) and `bi_flog2_32` (:2499),
+/// in their call order (fsarith_77_transc.expect.json words 0-28;
+/// docs/notes/mali-transcendentals.md).
+fn transc_rows(p: &mut Prog<'_>, rows: &mut u128, a: Alu, x: Src) -> Result<u16, MaliError> {
+    let c = |bits: u32| Src::of(Idx::Const(bits));
+    let neg = |s: Src| Src { neg: !s.neg, ..s };
+    let neg_zero = neg(c(0));
+    let x = Src::ssa(row(p, rows, Row { op: Alu::F2f32, bits: 32, width: 1 }, &[x])?);
+    let mut ins = |op: Op, s: &[Src]| -> Result<Src, MaliError> { Ok(Src::ssa(alu(p, op, s)?)) };
+    let r = match a {
+        Alu::Fsin | Alu::Fcos => {
+            let cos = a == Alu::Fcos;
+            let x_u6 = ins(Op::FmaF32, &[x, c(TWO_OVER_PI), c(SINCOS_BIAS)])?;
+            /* `FADD_IMM` once fused (opt.rs `fuse_add_imm`) */
+            let t = ins(Op::FaddF32, &[x_u6, neg(c(SINCOS_BIAS))])?;
+            let e = ins(Op::FmaF32, &[t, c(MPI_OVER_TWO), x])?;
+            let sinx = ins(Op::FsinTableU6, &[x_u6])?;
+            let cosx = ins(Op::FcosTableU6, &[x_u6])?;
+            /* e * e * 2^-1, the scale an integer source */
+            let e2h = ins(Op::FmaRscaleF32, &[e, e, neg_zero, c(0xffff_ffff)])?;
+            let quad = ins(Op::FmaF32, &[neg(e2h), if cos { cosx } else { sinx }, neg_zero])?;
+            let t = p.temp()?;
+            let mut i = Ins::new(Op::FmaF32, &[Dest::ssa(t)], &[e, if cos { neg(sinx) } else { cosx }, quad]);
+            i.clamp = clamp::M1_1;
+            p.push(i)?;
+            Src::ssa(alu(p, Op::FaddF32, &[Src::ssa(t), if cos { cosx } else { sinx }])?)
+        }
+        _ => {
+            let e = ins(Op::FrexpeF32 { log: true }, &[x])?;
+            let ef = ins(Op::S32ToF32, &[e])?;
+            let add = ins(Op::FaddLscaleF32, &[neg(c(F32_ONE)), x])?;
+            let d = ins(Op::FlogdF32, &[x])?;
+            ins(Op::FmaF32, &[d, add, ef])?
+        }
+    };
+    row(p, rows, Row { op: Alu::F2f16, bits: 16, width: 1 }, &[r])
 }
