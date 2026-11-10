@@ -1683,6 +1683,8 @@ step "test    $V3D_CONFIG (tests/egl_bench_configs.rs)" \
 # report row: the test compiles to nothing under report-es2.
 step "test    host-test,gpu-powervr,shaderc-online (tests/es3_vertex_arrays.rs)" \
   cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_vertex_arrays
+step "test    host-test,gpu-powervr,shaderc-online (tests/es3_tf_lifetime.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_tf_lifetime
 # The PowerVR's native 2D array (docs/es3/pvr-2darray.md): the texture-state
 # words of the layer-major copy, the smp each form compiles to and the layer
 # arithmetic run in the byte model. Compiles to nothing under report-es2.

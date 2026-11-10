@@ -385,6 +385,11 @@ pub unsafe extern "C" fn glBindBuffer(target: GLenum, buffer: GLuint) {
         return;
     };
     if buffer != 0 {
+        /* a deleted name an unbound object still holds is free: binding it
+         * creates a new object, the orphan moves off the slot */
+        if super::tf::is_orphan(c, buffer) {
+            move_orphan(c, buffer);
+        }
         let b = &mut c.objs().buffers[buffer as usize];
         if !b.used {
             /* first bind creates the name */
@@ -602,6 +607,27 @@ fn free_buffer_storage(c: &mut GlContext, h: GLuint) {
         osal::gpu_free(&mut b.mem);
     }
     c.objs().buffers[h as usize] = zeroed_buffer();
+}
+
+/// The name of orphan slot `from` (a deleted buffer a transform feedback
+/// object or a vertex array object still holds) is bound again: the orphan
+/// moves to a free slot, with its storage, retired storages and holders, and
+/// `from` is left empty for the new object (ES 3.0 D.1.2, as the texture
+/// orphan of `glBindTexture`). With no free slot the orphan is freed and its
+/// holders lose it.
+fn move_orphan(c: &mut GlContext, from: GLuint) {
+    if let Some(to) = (1..MAX_BUFFERS).find(|&i| !c.objs_ref().buffers[i].used) {
+        let objs = c.objs();
+        objs.buffers[to] = core::mem::replace(&mut objs.buffers[from as usize], zeroed_buffer());
+        retired_moved(c.group, from, to as GLuint);
+        super::tf::orphan_moved(c, from, to as GLuint);
+        super::vao::orphan_moved(c, from, to as GLuint);
+    } else {
+        glog!("buffer {}: no free slot for its orphan; the holders lose it", from);
+        super::tf::orphan_dropped(c, from);
+        super::vao::orphan_dropped(c, from);
+        free_buffer_storage(c, from);
+    }
 }
 
 /// The last transform feedback object holding a deleted buffer let go of it.
@@ -1017,6 +1043,15 @@ fn retire(group: u8, h: GLuint, kick: u32, mem: &mut OsalGpuMem) {
     }
     *r = Retired { group, buffer: h, kick, mem: *mem, dirty: Dirty { n: 0, r: [(0, 0); DIRTY_RANGES] } };
     *mem = OsalGpuMem::ZERO;
+}
+
+/// Buffer `from` of `group` moved to slot `to`: its retired storages follow.
+fn retired_moved(group: u8, from: GLuint, to: GLuint) {
+    // SAFETY: single-threaded by contract.
+    let slots = unsafe { RETIRED.get() };
+    for r in slots.iter_mut().filter(|r| r.buffer == from && r.group == group && from != 0) {
+        r.buffer = to;
+    }
 }
 
 /// Free the retired storages of buffer `h` of `group`, or of every buffer of

@@ -357,6 +357,35 @@ pub(super) fn on_buffer_delete(c: &mut GlContext, slot: GLuint) -> bool {
     held
 }
 
+/// Is buffer slot `slot` a deleted buffer an object still holds?
+pub(super) fn is_orphan(c: &GlContext, slot: GLuint) -> bool {
+    slot != 0 && (slot as usize) < MAX_BUFFERS && orphans(c.index)[slot as usize]
+}
+
+/// The orphan `from` moved to slot `to` (`buffer::move_orphan`): the flag
+/// and the transform feedback objects' bindings follow.
+pub(super) fn orphan_moved(c: &mut GlContext, from: GLuint, to: GLuint) {
+    let o = orphans(c.index);
+    o[from as usize] = false;
+    o[to as usize] = true;
+    for b in objects(c.index).iter_mut().filter(|o| o.used).flat_map(|o| o.bind.iter_mut()) {
+        if b.buffer == from {
+            b.buffer = to;
+        }
+    }
+}
+
+/// The orphan `from` is freed (`buffer::move_orphan`, no free slot): the
+/// objects lose it.
+pub(super) fn orphan_dropped(c: &mut GlContext, from: GLuint) {
+    orphans(c.index)[from as usize] = false;
+    for b in objects(c.index).iter_mut().filter(|o| o.used).flat_map(|o| o.bind.iter_mut()) {
+        if b.buffer == from {
+            *b = TfBinding::NONE;
+        }
+    }
+}
+
 /// An object let go of `slot` (a transform feedback object or a vertex array
 /// object): free an orphaned buffer once nobody holds it.
 pub(super) fn release_slot(c: &mut GlContext, slot: GLuint) {
