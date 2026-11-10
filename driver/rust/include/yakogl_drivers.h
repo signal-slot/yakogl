@@ -505,6 +505,144 @@ int yd_t6_fw_up(uintptr_t cru, uintptr_t pmu, uintptr_t spi2, uintptr_t qos, uin
 		void (*delay_us)(uint32_t us),
 		void (*on_handover)(const struct yd_t6_gpu_up *h), struct yd_t6_fw_up *out);
 
+/* Z4, in one run (board::nanopc_t6_submit over gpu::mali::sched, heap and
+ * the generated frame board::nanopc_t6_frame; feature mali): Z3 as
+ * yd_t6_fw_up runs it, with the same arguments; then the queue's AS0 memory
+ * (mem->queue: the 8 KiB user pages, then CSG 0's suspend buffers, each
+ * rounded up to 4 KiB; at YD_T6_SUBMIT_QUEUE_MCU_VA) added to Z3's tables
+ * and flushed; the group VM built in mem->vm_pool from the six regions
+ * (mem->regions, in the YD_T6_SUBMIT_REGION_* order, each at least its
+ * *_SIZE at its *_VA, cpu uncached; the queue's region no-exec and
+ * uncached, the heap's no-exec, the rest user buffers) and enabled in
+ * address space 1; the tiler heap made (the pool at the heap pool region,
+ * one 2 MiB chunk at the chunk region); CSG 0 / CS 0 started; the frame's
+ * blocks and its YD_T6_SUBMIT_CS_WORDS words (MOVE48 d72 of the heap
+ * context, HEAP_SET d72, then the generated stream) written at their VAs
+ * with the target filled first; one job submitted that calls the stream;
+ * its sync object waited for (5 s); the group stopped and terminated; the
+ * target read back and counted. 0 when every step ran (out->step
+ * YD_T6_SUBMIT_STEP_NONE), -EIO when one stopped (out->step says which;
+ * out->fw is Z3's record), -EINVAL for a null or misaligned argument. */
+#define YD_T6_SUBMIT_STEP_NONE       0
+#define YD_T6_SUBMIT_STEP_FRAME      1 /* the frame or its memory refused (refusal: YD_T6_FRAME_*, detail: the value) */
+#define YD_T6_SUBMIT_STEP_FW         2 /* Z3 stopped (refusal: fw.step; fw holds Z3's record) */
+#define YD_T6_SUBMIT_STEP_IFACE      3 /* reading the interface again refused (refusal: CsfRefusal) */
+#define YD_T6_SUBMIT_STEP_IDENT      4 /* AS_PRESENT has no address space 1 (detail: the word) */
+#define YD_T6_SUBMIT_STEP_QUEUE_MEM  5 /* mem->queue too small (refusal 1, detail: bytes needed) or misaligned (2) */
+#define YD_T6_SUBMIT_STEP_AS0_MAP    6 /* adding the queue memory to AS0 refused (refusal: YD_MALI_PT_*, detail: the MCU VA) */
+#define YD_T6_SUBMIT_STEP_CLEAN      7 /* a clean() of table pages failed (refusal 1 AS0, 2 the group VM; detail: rc) */
+#define YD_T6_SUBMIT_STEP_AS0_FLUSH  8 /* AS0's FLUSH_PT stopped (refusal: YD_MALI_FLUSH_*) */
+#define YD_T6_SUBMIT_STEP_VM_MAP     9 /* the group VM's tables refused (refusal: YD_MALI_PT_*, detail: the VA) */
+#define YD_T6_SUBMIT_STEP_VM_ENABLE 10 /* address space 1's enable stopped (refusal: YD_MALI_*) */
+#define YD_T6_SUBMIT_STEP_HEAP      11 /* the tiler heap refused (refusal: HeapError 1-17 in heap.rs's order, 8 = the pool, 9 = the chunk not inside its region) */
+#define YD_T6_SUBMIT_STEP_START     12 /* sched::start refused (refusal: SchedRefusal) */
+#define YD_T6_SUBMIT_STEP_SUBMIT    13 /* sched::submit refused */
+#define YD_T6_SUBMIT_STEP_WAIT      14 /* sched::wait refused (19 = the 5 s timeout; status_cmd_ptr, info read) */
+#define YD_T6_SUBMIT_STEP_STOP      15 /* the job completed, CS 0's stop was refused */
+#define YD_T6_SUBMIT_STEP_TERMINATE 16 /* the job completed, CSG 0's terminate was refused: reset */
+
+/* refusal of YD_T6_SUBMIT_STEP_FRAME (board::nanopc_t6_submit::FrameRefusal) */
+#define YD_T6_FRAME_RANGE     1 /* a region misaligned, empty, out of the 48-bit VA or overlapping (detail: its VA) */
+#define YD_T6_FRAME_MEMORY    2 /* a backing smaller than its region or misaligned (detail: the bytes needed) */
+#define YD_T6_FRAME_EMPTY     3
+#define YD_T6_FRAME_UNALIGNED 4
+#define YD_T6_FRAME_OUTSIDE   5 /* a range not inside one region (detail: its VA) */
+#define YD_T6_FRAME_OVERLAP   6
+#define YD_T6_FRAME_TARGET    7
+#define YD_T6_FRAME_MAPPING   8 /* the queue not in the queue's region, or another range in it */
+
+/* The queue's AS0 memory: mapped at this MCU address, at least this many
+ * bytes (the user pages) plus CSG 0's suspend buffers. */
+#define YD_T6_SUBMIT_QUEUE_MCU_VA  0x05000000u
+#define YD_T6_SUBMIT_QUEUE_MCU_MIN 0x2000u
+
+/* The group VM's regions (board::nanopc_t6_submit::REGIONS): index, VA,
+ * least size. */
+#define YD_T6_SUBMIT_REGIONS 6
+#define YD_T6_SUBMIT_REGION_QUEUE      0 /* the ring (4 KiB) and the sync object's page */
+#define YD_T6_SUBMIT_REGION_ARENAS     1 /* ctx, desc, code, spds, data (nanopc_t6_frame's *_VA), the stream at YD_T6_SUBMIT_CS_VA */
+#define YD_T6_SUBMIT_REGION_GEOMETRY   2 /* the 64 KiB geometry buffer */
+#define YD_T6_SUBMIT_REGION_TARGET     3 /* the 64 x 64 RGBA8 target, rows 256 bytes apart */
+#define YD_T6_SUBMIT_REGION_HEAP_POOL  4 /* the heap pool; its first slot is HEAP_SET's operand */
+#define YD_T6_SUBMIT_REGION_HEAP_CHUNK 5 /* the heap's one 2 MiB chunk */
+#define YD_T6_SUBMIT_QUEUE_VA        0x100800000ull
+#define YD_T6_SUBMIT_QUEUE_SIZE      0x2000u
+#define YD_T6_SUBMIT_ARENAS_VA       0x102000000ull
+#define YD_T6_SUBMIT_ARENAS_SIZE     0x60000u
+#define YD_T6_SUBMIT_GEOMETRY_VA     0x102100000ull
+#define YD_T6_SUBMIT_GEOMETRY_SIZE   0x10000u
+#define YD_T6_SUBMIT_TARGET_VA       0x103000000ull
+#define YD_T6_SUBMIT_TARGET_SIZE     0x4000u
+#define YD_T6_SUBMIT_HEAP_POOL_VA    0x800000015000ull
+#define YD_T6_SUBMIT_HEAP_POOL_SIZE  0x2000u
+#define YD_T6_SUBMIT_HEAP_CHUNK_VA   0x800000a00000ull
+#define YD_T6_SUBMIT_HEAP_CHUNK_SIZE 0x200000u
+/* The stream the job calls, its length in 64-bit words, the target's
+ * pixels, and the digest of the frame's blocks and stream (out->digest). */
+#define YD_T6_SUBMIT_CS_VA     0x102050000ull
+#define YD_T6_SUBMIT_CS_WORDS  53
+#define YD_T6_SUBMIT_WIDTH     64
+#define YD_T6_SUBMIT_HEIGHT    64
+#define YD_T6_SUBMIT_DIGEST    0xa4db81a9d39bfdccull
+
+struct yd_t6_submit_mem {
+	struct yd_t6_fw_backing queue;
+	struct yd_t6_fw_backing regions[YD_T6_SUBMIT_REGIONS];
+	void *vm_pool;          /* vm_pool_pages 4 KiB pages at physical vm_tables_pa, 4 KiB aligned */
+	uint32_t vm_pool_pages;
+	uint64_t vm_tables_pa;
+};
+
+struct yd_t6_submit_up {
+	uint32_t step;          /* YD_T6_SUBMIT_STEP_* */
+	uint32_t refusal;
+	uint64_t detail;
+	struct yd_t6_fw_up fw;  /* Z3's record, whole */
+	uint32_t as_present;    /* after Z3 */
+	uint32_t l2_features;
+	uint32_t as0_tables_used; /* AS0's table pages after the queue memory's map */
+	uint32_t vm_tables_used;  /* the group VM's */
+	uint32_t suspend_size;  /* CSG 0's */
+	uint32_t protm_suspend_size;
+	uint64_t heap_ctx;      /* HEAP_SET's operand */
+	uint64_t heap_chunk;    /* the first chunk */
+	uint32_t heap_chunk_size;
+	uint32_t heap_stride;   /* the pool's slot stride */
+	uint32_t csg_req;       /* after the start */
+	uint32_t csg_ack;
+	uint32_t cs_req;
+	uint32_t cs_ack;
+	uint32_t csg_ack_us;
+	uint32_t cs_ack_us;
+	uint32_t latest_flush;  /* the job's */
+	uint32_t sync_updates;  /* CSG_SYNC_UPDATE events the wait acknowledged */
+	uint64_t insert;        /* after the wait */
+	uint64_t extract;
+	uint64_t seqno;         /* the sync object's */
+	uint32_t sync_status;
+	uint32_t wait_us;
+	uint64_t status_cmd_ptr; /* on a refused wait: CS 0's */
+	uint64_t info;          /* fault_info or fatal_info */
+	uint32_t stop_us;       /* the group's end */
+	uint32_t stop_refusal;
+	uint32_t terminate_us;
+	uint32_t terminate_refusal;
+	uint32_t cleared[3];    /* events cleared after it: CSG 0's, CS 0's cs_irq bit, CS 0's */
+	uint32_t red;           /* the target read back: opaque red, opaque blue, the fill, the rest */
+	uint32_t blue;
+	uint32_t fill;
+	uint32_t other;
+	uint32_t pixels;        /* read (0 when the run stopped before the blocks) */
+	uint64_t digest;        /* YD_T6_SUBMIT_DIGEST */
+};
+
+int yd_t6_submit(uintptr_t cru, uintptr_t pmu, uintptr_t spi2, uintptr_t qos, uintptr_t gpu,
+		 const void *blob, size_t blob_len, const struct yd_t6_fw_backing *backings,
+		 uint32_t n_backings, void *pool, uint32_t pool_pages, uint64_t tables_pa,
+		 uint32_t timer_hz, const struct yd_t6_submit_mem *mem,
+		 int (*clean)(uintptr_t addr, size_t len), void (*delay_us)(uint32_t us),
+		 void (*on_handover)(const struct yd_t6_gpu_up *h), struct yd_t6_submit_up *out);
+
 /* ---- TI SN65DSI83/84 (ip::sn65dsi8x; yakogl,sn65dsi8x) ------------------
  * I2C bus 0 of the env is the bridge; GPIO line 0 its EN pin, line 1 the
  * display adapter's reset (logical, 1 = asserted). */
@@ -1526,6 +1664,53 @@ _Static_assert(offsetof(struct yd_t6_fw_up, csg0) == 112, "yd_t6_fw_up.csg0");
 _Static_assert(offsetof(struct yd_t6_fw_up, core_en_mask) == 140, "yd_t6_fw_up.core_en_mask");
 _Static_assert(offsetof(struct yd_t6_fw_up, acked) == 168, "yd_t6_fw_up.acked");
 _Static_assert(offsetof(struct yd_t6_fw_up, glb_ack) == 188, "yd_t6_fw_up.glb_ack");
+_Static_assert(sizeof(struct yd_t6_submit_mem) == 192, "struct yd_t6_submit_mem");
+_Static_assert(offsetof(struct yd_t6_submit_mem, queue) == 0, "yd_t6_submit_mem.queue");
+_Static_assert(offsetof(struct yd_t6_submit_mem, regions) == 24, "yd_t6_submit_mem.regions");
+_Static_assert(offsetof(struct yd_t6_submit_mem, vm_pool) == 168, "yd_t6_submit_mem.vm_pool");
+_Static_assert(offsetof(struct yd_t6_submit_mem, vm_pool_pages) == 176, "yd_t6_submit_mem.vm_pool_pages");
+_Static_assert(offsetof(struct yd_t6_submit_mem, vm_tables_pa) == 184, "yd_t6_submit_mem.vm_tables_pa");
+_Static_assert(sizeof(struct yd_t6_submit_up) == 392, "struct yd_t6_submit_up");
+_Static_assert(offsetof(struct yd_t6_submit_up, step) == 0, "yd_t6_submit_up.step");
+_Static_assert(offsetof(struct yd_t6_submit_up, refusal) == 4, "yd_t6_submit_up.refusal");
+_Static_assert(offsetof(struct yd_t6_submit_up, detail) == 8, "yd_t6_submit_up.detail");
+_Static_assert(offsetof(struct yd_t6_submit_up, fw) == 16, "yd_t6_submit_up.fw");
+_Static_assert(offsetof(struct yd_t6_submit_up, as_present) == 208, "yd_t6_submit_up.as_present");
+_Static_assert(offsetof(struct yd_t6_submit_up, l2_features) == 212, "yd_t6_submit_up.l2_features");
+_Static_assert(offsetof(struct yd_t6_submit_up, as0_tables_used) == 216, "yd_t6_submit_up.as0_tables_used");
+_Static_assert(offsetof(struct yd_t6_submit_up, vm_tables_used) == 220, "yd_t6_submit_up.vm_tables_used");
+_Static_assert(offsetof(struct yd_t6_submit_up, suspend_size) == 224, "yd_t6_submit_up.suspend_size");
+_Static_assert(offsetof(struct yd_t6_submit_up, protm_suspend_size) == 228, "yd_t6_submit_up.protm_suspend_size");
+_Static_assert(offsetof(struct yd_t6_submit_up, heap_ctx) == 232, "yd_t6_submit_up.heap_ctx");
+_Static_assert(offsetof(struct yd_t6_submit_up, heap_chunk) == 240, "yd_t6_submit_up.heap_chunk");
+_Static_assert(offsetof(struct yd_t6_submit_up, heap_chunk_size) == 248, "yd_t6_submit_up.heap_chunk_size");
+_Static_assert(offsetof(struct yd_t6_submit_up, heap_stride) == 252, "yd_t6_submit_up.heap_stride");
+_Static_assert(offsetof(struct yd_t6_submit_up, csg_req) == 256, "yd_t6_submit_up.csg_req");
+_Static_assert(offsetof(struct yd_t6_submit_up, csg_ack) == 260, "yd_t6_submit_up.csg_ack");
+_Static_assert(offsetof(struct yd_t6_submit_up, cs_req) == 264, "yd_t6_submit_up.cs_req");
+_Static_assert(offsetof(struct yd_t6_submit_up, cs_ack) == 268, "yd_t6_submit_up.cs_ack");
+_Static_assert(offsetof(struct yd_t6_submit_up, csg_ack_us) == 272, "yd_t6_submit_up.csg_ack_us");
+_Static_assert(offsetof(struct yd_t6_submit_up, cs_ack_us) == 276, "yd_t6_submit_up.cs_ack_us");
+_Static_assert(offsetof(struct yd_t6_submit_up, latest_flush) == 280, "yd_t6_submit_up.latest_flush");
+_Static_assert(offsetof(struct yd_t6_submit_up, sync_updates) == 284, "yd_t6_submit_up.sync_updates");
+_Static_assert(offsetof(struct yd_t6_submit_up, insert) == 288, "yd_t6_submit_up.insert");
+_Static_assert(offsetof(struct yd_t6_submit_up, extract) == 296, "yd_t6_submit_up.extract");
+_Static_assert(offsetof(struct yd_t6_submit_up, seqno) == 304, "yd_t6_submit_up.seqno");
+_Static_assert(offsetof(struct yd_t6_submit_up, sync_status) == 312, "yd_t6_submit_up.sync_status");
+_Static_assert(offsetof(struct yd_t6_submit_up, wait_us) == 316, "yd_t6_submit_up.wait_us");
+_Static_assert(offsetof(struct yd_t6_submit_up, status_cmd_ptr) == 320, "yd_t6_submit_up.status_cmd_ptr");
+_Static_assert(offsetof(struct yd_t6_submit_up, info) == 328, "yd_t6_submit_up.info");
+_Static_assert(offsetof(struct yd_t6_submit_up, stop_us) == 336, "yd_t6_submit_up.stop_us");
+_Static_assert(offsetof(struct yd_t6_submit_up, stop_refusal) == 340, "yd_t6_submit_up.stop_refusal");
+_Static_assert(offsetof(struct yd_t6_submit_up, terminate_us) == 344, "yd_t6_submit_up.terminate_us");
+_Static_assert(offsetof(struct yd_t6_submit_up, terminate_refusal) == 348, "yd_t6_submit_up.terminate_refusal");
+_Static_assert(offsetof(struct yd_t6_submit_up, cleared) == 352, "yd_t6_submit_up.cleared");
+_Static_assert(offsetof(struct yd_t6_submit_up, red) == 364, "yd_t6_submit_up.red");
+_Static_assert(offsetof(struct yd_t6_submit_up, blue) == 368, "yd_t6_submit_up.blue");
+_Static_assert(offsetof(struct yd_t6_submit_up, fill) == 372, "yd_t6_submit_up.fill");
+_Static_assert(offsetof(struct yd_t6_submit_up, other) == 376, "yd_t6_submit_up.other");
+_Static_assert(offsetof(struct yd_t6_submit_up, pixels) == 380, "yd_t6_submit_up.pixels");
+_Static_assert(offsetof(struct yd_t6_submit_up, digest) == 384, "yd_t6_submit_up.digest");
 _Static_assert(sizeof(struct yd_sn65dsi8x_config) == 8, "struct yd_sn65dsi8x_config");
 _Static_assert(offsetof(struct yd_sn65dsi8x_config, flags) == 0, "yd_sn65dsi8x_config.flags");
 _Static_assert(offsetof(struct yd_sn65dsi8x_config, lanes) == 4, "yd_sn65dsi8x_config.lanes");
