@@ -36,8 +36,10 @@ pub const MALI_LAYOUTS_DIFFER: &str =
     "a Mali link whose stages place a varying at different offsets is not lowered yet";
 /// A fragment shader that reads part of a varying: Mesa's link keeps only
 /// the components read (`compact_varyings`), so the vertex shader's layout
-/// is the program's, built from the fragment shader's reads. A gap until the
-/// vertex shader is built per program.
+/// is the program's, built from the fragment shader's reads at its own
+/// locations of their names (`compile_vs_for_reads`, mod.rs
+/// `reads_at_vertex_locations`). Met by a vertex shader not built for this
+/// fragment shader.
 pub const MALI_PARTIAL_READ: &str =
     "a Mali link whose fragment shader reads part of a varying (the link keeps only those components) is not lowered yet";
 /// The vertex output a fragment input reads is listed by the vertex record
@@ -184,6 +186,20 @@ impl VaryingConsts {
 
     pub fn as_slice(&self) -> &[(u8, u8, u32)] {
         &self.at[..self.n]
+    }
+
+    /// The set with each lane's location `l` at `at(l)`, a lane `at` gives
+    /// no location for left out: the vertex shader's constant lanes at the
+    /// fragment shader's locations of the same names
+    /// (mod.rs `consts_at_fragment_locations`).
+    pub fn relocated(&self, at: impl Fn(u8) -> Option<u8>) -> VaryingConsts {
+        let mut out = VaryingConsts { full: self.full, ..VaryingConsts::NONE };
+        for &(loc, comp, bits) in self.as_slice() {
+            if let Some(l) = at(loc) {
+                out.push(l, comp, bits);
+            }
+        }
+        out
     }
 }
 

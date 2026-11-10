@@ -1085,11 +1085,15 @@ fn or_without_consts<'s>(
 
 /// The constant varying lanes of vertex shader `text` that the Mali's link
 /// folds into the program's fragment shader (`codegen::vs_constants`, Mesa's
-/// nir_opt_varyings); [`LinkConsts::NONE`] when it stores none, or when the
-/// front end cannot run here (the plain link then decides).
+/// nir_opt_varyings), at the locations fragment shader `fsrc` gives the
+/// varyings of their names (`mali::consts_at_fragment_locations`);
+/// [`LinkConsts::NONE`] when it stores none, or when the front end cannot
+/// run here (the plain link then decides).
 #[cfg(feature = "gpu-mali")]
-fn vs_consts_of(text: &[u8]) -> LinkConsts {
-    match store::with_scratch(|a| codegen::vs_constants(text, a)) {
+fn vs_consts_of(text: &[u8], fsrc: &[u8]) -> LinkConsts {
+    match store::with_scratch(|a| {
+        codegen::vs_constants(text, a).map(|c| super::mali::consts_at_fragment_locations(c, text, fsrc, a))
+    }) {
         Some(Ok(c)) => LinkConsts(c),
         _ => LinkConsts::NONE,
     }
@@ -1644,7 +1648,7 @@ fn link_by_sources(vs: &ShcShader, vr: &Base, fr: &Base, fs: &mut ShcShader, log
          * list: a vertex shader that leaves a varying unwritten is refused
          * at its compile on this GPU. */
         #[cfg(feature = "gpu-mali")]
-        let consts = if zero.n == 0 { vs_consts_of(vsrc) } else { LinkConsts::NONE };
+        let consts = if zero.n == 0 { vs_consts_of(vsrc, fr.source) } else { LinkConsts::NONE };
         #[cfg(not(feature = "gpu-mali"))]
         let consts = LinkConsts::NONE;
         let rc = link_substituted(fr, &zero, affine, consts, fs, log);
@@ -1873,8 +1877,11 @@ unsafe extern "C" fn online_compile_vs_linked(
 /// before it calls the link, so that fragment shader is compiled here first,
 /// under the record key the link's compile finds again.
 fn vs_for_fragment(text: &[u8], fs: &ShcShader, out: *mut ShcShader, log: &mut CStrWriter) -> i32 {
+    /* the fragment shader's source: its varyings' locations by name */
     #[cfg(feature = "gpu-mali")]
-    let consts = vs_consts_of(text);
+    let fsrc = base_of(fs).map_or(&[][..], |fr| fr.source);
+    #[cfg(feature = "gpu-mali")]
+    let consts = vs_consts_of(text, fsrc);
     #[cfg(feature = "gpu-mali")]
     let reads = match base_of(fs) {
         Some(fr) if !consts.is_none() => {
@@ -1900,6 +1907,12 @@ fn vs_for_fragment(text: &[u8], fs: &ShcShader, out: *mut ShcShader, log: &mut C
     };
     #[cfg(feature = "gpu-mali")]
     if let Some(pr) = reads {
+        /* the reads at the vertex shader's locations of their names */
+        let pr = pr.and_then(|mut pr| {
+            store::with_scratch(|a| super::mali::reads_at_vertex_locations(&mut pr, text, fsrc, a))
+                .unwrap_or(Ok(()))
+                .map(|()| pr)
+        });
         let pr = match pr {
             Ok(pr) => pr,
             /* the record's moved expressions do not encode: the back end's
