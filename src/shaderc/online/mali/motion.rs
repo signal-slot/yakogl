@@ -34,11 +34,15 @@
 //!   in the fragment shader (fvg_fill_gradient_nodiscard_noscissor.expect.json,
 //!   its `FMA.f32 r1, u2.w0, r2, u2.w1`), so a chain with a uniform stops
 //!   (Mesa's `can_move_uniforms`, :2006, is false for these programs);
-//! * a post-dominator whose only users are the colour's stores is not moved
+//! * a GLSL negation of an interpolated value is not moved
 //!   (s4_fneg.expect.json: `-v.x` stored stays an `FADD.f32 ... .neg` in the
-//!   fragment shader, and the varying program is the plain copy), where
-//!   `ftcoord.x * 2.0 - 1.0` feeding `abs` is. The rule as read gives no
-//!   such condition; it is pinned by the two references and named here;
+//!   fragment shader, and the varying program is the plain copy): the front
+//!   end makes it preserve inf (glsl_to_nir.cpp:2152), which :3745 refuses.
+//!   The same negation of a convergent lane moves
+//!   (motion_guard_conv_fneg.expect.json), and so does an interpolated
+//!   `v.x * 2.0` stored straight into the colour
+//!   (motion_guard_interp_mul.expect.json): the colour's stores are no
+//!   condition (docs/notes/mali-trunc.md);
 //! * a dot product is not moved: the linker runs before the back end's
 //!   `nir_lower_alu_width`, so it sees one `fdot2` over vector sources,
 //!   which `can_move_alu_across_interp` refuses (its `default:`), where
@@ -393,6 +397,10 @@ fn flag(f: &Fs<'_>, m: &Module<'_>, v: Val, depth: u8) -> Flag {
             }
         }
         Kind::Alu(_) if f.is_dot_node(m, n) => Flag::Unmovable,
+        /* a vector operation (:3845-3848): varyorder_rev's `v_a * vec4(v_uv,
+         * 1.0, 1.0) + v_b` stays whole in the fragment shader, its varying
+         * program the plain copies */
+        Kind::Alu(_) if f.is_vector_node(n) => Flag::Unmovable,
         /* an operation inside an `if`: no reference moves one (every
          * femtovg chain the link moves stands before the scissor `if`) */
         Kind::Alu(_) if nir.block[n as usize] != 0 => Flag::Unmovable,
@@ -422,9 +430,16 @@ fn flag(f: &Fs<'_>, m: &Module<'_>, v: Val, depth: u8) -> Flag {
             if flat {
                 return if OPS.contains(&op) { Flag::Flat } else { Flag::Unmovable };
             }
-            /* `can_move_alu_across_interp` (every arm an [`OPS`] member) */
+            /* `can_move_alu_across_interp` (every arm an [`OPS`] member). A
+             * GLSL negation preserves inf and nan (glsl_to_nir.cpp:2152,
+             * `nir_fp_preserve_inf`), which :3745 refuses: s4_fneg's `-v.x`
+             * stays in the fragment shader, where motion_guard_conv_fneg's of
+             * a convergent lane moves. The front end's `a - b` is `fadd(a,
+             * fneg(b))` here and `fsub` there (fast math, :3753), so an
+             * `fneg` every user of which is an `fadd` is the subtraction's */
             let ok = match op {
-                Alu::Fadd | Alu::Fneg => true,
+                Alu::Fadd => true,
+                Alu::Fneg => is_subtrahend(f, n),
                 Alu::Fmul | Alu::Ffma => flags[0] == Flag::Convergent || flags[1] == Flag::Convergent,
                 _ => false,
             };
@@ -436,6 +451,29 @@ fn flag(f: &Fs<'_>, m: &Module<'_>, v: Val, depth: u8) -> Flag {
         }
         _ => Flag::Unmovable,
     }
+}
+
+/// Whether node `n` (an `fneg`) has users, every one an `fadd`, and is no
+/// colour lane: the front end's subtraction, Mesa's `fsub`.
+fn is_subtrahend(f: &Fs<'_>, n: u16) -> bool {
+    let nir = &f.nir;
+    if f.colour.is_some_and(|c| c.contains(&Val::Lane(n, 0))) {
+        return false;
+    }
+    let mut users = nir.order[..nir.len].iter().map(|&u| nir.nodes[u as usize]).filter(|nd| {
+        let arity = match nd.kind {
+            Kind::Alu(op) => op.arity(),
+            Kind::Phi => 2,
+            Kind::Discard => 1,
+            _ => 0,
+        };
+        nd.src[..arity].contains(&Val::Lane(n, 0))
+    });
+    let mut any = false;
+    users.all(|nd| {
+        any = true;
+        matches!(nd.kind, Kind::Alu(Alu::Fadd))
+    }) && any
 }
 
 /// The nodes under `root` in dependence order, as a [`Moved`] (the clone
@@ -502,7 +540,10 @@ pub fn move_into_producer(f: &mut Fs<'_>, m: &Module<'_>) -> Result<(), MaliErro
                 }
             }
         }
-        let mut col = colour;
+        /* the colour as the earlier moves left it (case 199 moves two
+         * lanes: from the first colour the second move would undo the
+         * first, and the first be found again) */
+        let mut col = f.colour.unwrap_or(colour);
         for l in col.iter_mut() {
             if *l == Val::Lane(root, 0) {
                 *l = Val::Lane(n, c);
@@ -551,12 +592,14 @@ fn find(f: &Fs<'_>, m: &Module<'_>, colour: [Val; 4]) -> Result<Option<(u16, u8,
                 iter = d.up(iter);
             }
             let Some(pd) = postdom else { continue };
-            /* measured (module text): not when the colour's stores are
-             * its only users. A mediump shader's fp32 value is stored
-             * through its narrowing (`f2fmp`, no [`OPS`] member), which is
-             * the user the chain stops at (intbool_89_flatlast: `float(v_idx)
-             * / 4.0` stored as the alpha moves) */
-            if d.up(pd) == SINK && f.prec.highp {
+            /* a subtraction's `fneg` alone is half of Mesa's `fsub`, whose
+             * `fadd` did not move: nothing moves. That the colour's stores
+             * are the only users is no condition (motion_guard_interp_mul:
+             * a highp `v.x * 2.0` stored moves; s4_fneg's `-v.x` stays by
+             * [`flag`]'s negation rule) */
+            if matches!(f.nir.nodes[pd as usize].kind, Kind::Alu(Alu::Fneg))
+                && flag(f, m, Val::Lane(pd, 0), 0) == Flag::Interpolated
+            {
                 continue;
             }
             /* measured, as the stores above: nor when a look-up's computed
