@@ -83,6 +83,17 @@ fn name_maxes_field(field: &[c_char]) -> bool {
 }
 
 /// Every name of one stage, refused if any may have been truncated.
+///
+/// A uniform row that fills a member of one of the stage's uniform blocks is
+/// the exception: the GL core names, matches and reports a block member by
+/// the block table's GL name (`Block.member`, `shaderc::uniform_blocks`),
+/// never by the row's field, and the online compiler resolved the member's
+/// row by the row's whole name (its name pool), so a member whose row is
+/// known is right however its field was cut. That is what dEQP's
+/// `uniform_block.valid.long_instance_name_*` declare: a 1,024-character
+/// instance name in the row `inst.uniformMember`, the GL names short. Every
+/// other uniform row is still named by its field in the GL core, so a full
+/// one is still refused (docs/notes/reflection-long-names.md).
 pub(crate) fn reject_truncated_names(sh: &ShcShader, log: &mut CStrWriter, who: &str, stage: &str) -> i32 {
     let varyings = &sh.varyings[..(sh.num_varyings as usize).min(sh.varyings.len())];
     if let Some(v) = varyings.iter().find(|v| name_maxes_field(&v.name)) {
@@ -92,7 +103,10 @@ pub(crate) fn reject_truncated_names(sh: &ShcShader, log: &mut CStrWriter, who: 
     if let Some(a) = attribs.iter().find(|a| name_maxes_field(&a.name)) {
         return reject_truncated(log, who, stage, "attribute", &a.name);
     }
-    if let Some(u) = sh.uniform_table().iter().find(|u| name_maxes_field(&u.name)) {
+    let members = super::uniform_blocks(sh).members;
+    let is_member = |k: usize| members.iter().any(|m| usize::from(m.row) == k);
+    let table = sh.uniform_table();
+    if let Some(u) = (0..table.len()).find(|&k| name_maxes_field(&table[k].name) && !is_member(k)).map(|k| &table[k]) {
         return reject_truncated(log, who, stage, "uniform", &u.name);
     }
     0

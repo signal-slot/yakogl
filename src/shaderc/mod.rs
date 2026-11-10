@@ -896,6 +896,11 @@ pub fn uniform_blocks(sh: &ShcShader) -> ShcBlocks {
     }
 }
 
+/// The whole name of a uniform row the 64-byte name field cut, from the
+/// online compiler's name pool (docs/notes/reflection-long-names.md).
+#[cfg(feature = "shaderc-online")]
+pub use online::backend::uniform_row_name;
+
 /// Whether the in-process (online) compiler made `sh`. Its uniform rows are
 /// one per array, element by element (`s[1].b[0].b`, the member's own
 /// array), never the offline table's per-member flattening of an array of
