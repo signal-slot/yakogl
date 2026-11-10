@@ -87,9 +87,9 @@ const GC_ARENA_BYTES: usize = 1024 * 1024;
 /// which is what makes an overrun readable instead of a fatal somewhere else
 /// entirely.
 #[cfg(feature = "vivante-depth-guard")]
-const GC_DEPTH_GUARD_BYTES: usize = 256 * 1024;
+pub(super) const GC_DEPTH_GUARD_BYTES: usize = 256 * 1024;
 #[cfg(not(feature = "vivante-depth-guard"))]
-const GC_DEPTH_GUARD_BYTES: usize = 0;
+pub(super) const GC_DEPTH_GUARD_BYTES: usize = 0;
 
 pub(crate) struct GcState {
     pub(super) inited: bool,
@@ -2198,8 +2198,9 @@ fn emit_draw(f: &mut GcFrame, d: &GcDraw, depth_stride: u32, depth_addr: u32) ->
     /* The shader and sampler state is not self-synchronising: hold the front
      * end until the pixel engine has finished the draw already in flight. */
     f.w.stall(GC_SYNC_FE, GC_SYNC_PE);
-    if texture::emit_textures(f, d) != 0 {
-        return -ENOMEM;
+    let rc = texture::emit_textures(f, d);
+    if rc != 0 {
+        return rc;
     }
     dedup::group_keyed(
         &mut f.w,

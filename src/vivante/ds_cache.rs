@@ -690,6 +690,25 @@ fn resolve_row(src: &[u8], out: &mut [f32]) {
     narrow(out_tail, tail);
 }
 
+/// The surface of GL object `id`'s depth plane, for the depth-sampling
+/// experiment (depth_sample.rs): its GPU address past `guard`, its row
+/// stride in bytes and its rows. `None` unless the plane is Live here (not a
+/// clear value, parked or undefined) and single-sampled (`resolve_depth`'s
+/// `mine`). `kick` != 0 is a draw that samples it: the surface is not given
+/// away until that kick completed. No wait and no CPU access.
+pub fn depth_view(id: u32, guard: usize, kick: u32) -> Option<(u64, u32, u32)> {
+    let mine = |k: Option<PlaneKey>| k.is_some_and(|k| k.id == id && k.scale == 1 && k.plane == DEPTH as u8);
+    let e = cache()
+        .entries
+        .iter_mut()
+        .flatten()
+        .find(|e| id != 0 && mine(e.key.plane(DEPTH)) && e.planes[DEPTH].is_live())?;
+    if kick != 0 {
+        e.used_by = kick;
+    }
+    Some((e.mem.gpu + guard as u64, e.stride, e.rows))
+}
+
 /// Keep the clear values of a surface that is let go.
 fn park(parked: &mut Parked<PlaneKey, Plane, PARKED>, e: &Surface) {
     for p in [DEPTH, STENCIL] {

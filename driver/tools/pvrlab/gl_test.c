@@ -458,6 +458,14 @@
  *               back end takes both divisors (V3D; GC7000UL after V1); a
  *               back end that splits per instance reads gl_InstanceID 0
  *               (refused on the GC, V0). Opt-in, by number
+ * 222 dtpu      the GC7000's texture unit samples the D24S8 depth surface
+ *               (docs/notes/gc-depth-sample.md, plan #328, #1204): case 177's
+ *               ramp in a 64x64 depth texture sampled with the test knob
+ *               gc_debug_set_depth_tpu at 0 (the CPU resolve, the
+ *               reference), 1 (D24X8 on the surface), 2 (raw A8R8G8B8), and
+ *               1 again 0.25 deeper with no glFinish; checks 3-7 are the
+ *               note's, and a verdict line names its row. GC7000 with the
+ *               knobs only, SKIP by name elsewhere. Opt-in, by number
  * 180 teardown  a 1024x1024 texture sampled, the job flushed and left to
  *               finish unobserved, the texture deleted and one of the same
  *               size made: both read back (red, then green); on the V3D
@@ -8560,7 +8568,7 @@ static const char *const case_names[] = {
 	 * `gl_test: case 65 polyunit: FAIL`, a line the program could not emit.
 	 * A reader grepping for it would have found nothing and concluded the
 	 * case had not run. 63 was still missing when 65/66/67 were added. */
-	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain", [185] = "kindcost", [186] = "fcsplit", [187] = "predarm", [188] = "predif", [189] = "mulone", [190] = "blendonce", [191] = "varyfma", [192] = "predlive", [193] = "offarm", [194] = "offarmn", [195] = "ifbranch", [196] = "occl", [197] = "vtxgrid", [198] = "a2cconst", [199] = "es3trunc", [200] = "intrt", [201] = "usamp", [202] = "blitconv", [203] = "tfcap", [204] = "srgb", [205] = "mappbo", [206] = "es3levels", [207] = "msaazs", [208] = "msaapre", [209] = "varyorder", [210] = "occlacc", [211] = "msaablend", [212] = "ifsel", [213] = "discloop", [214] = "splitkick", [215] = "shadowmap", [216] = "mipchains", [217] = "forcedpr", [218] = "shadowcmp", [219] = "kickpair", [220] = "lodtime", [221] = "instmix",
+	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain", [185] = "kindcost", [186] = "fcsplit", [187] = "predarm", [188] = "predif", [189] = "mulone", [190] = "blendonce", [191] = "varyfma", [192] = "predlive", [193] = "offarm", [194] = "offarmn", [195] = "ifbranch", [196] = "occl", [197] = "vtxgrid", [198] = "a2cconst", [199] = "es3trunc", [200] = "intrt", [201] = "usamp", [202] = "blitconv", [203] = "tfcap", [204] = "srgb", [205] = "mappbo", [206] = "es3levels", [207] = "msaazs", [208] = "msaapre", [209] = "varyorder", [210] = "occlacc", [211] = "msaablend", [212] = "ifsel", [213] = "discloop", [214] = "splitkick", [215] = "shadowmap", [216] = "mipchains", [217] = "forcedpr", [218] = "shadowcmp", [219] = "kickpair", [220] = "lodtime", [221] = "instmix", [222] = "dtpu",
 };
 
 /* ---- case 67: what a framebuffer object does NOT have -----------------------
@@ -20535,6 +20543,268 @@ out:
 
 #include "gl_test_instmix.inc"
 
+/* ---- case 222: the texture unit samples the D24S8 depth surface (dtpu) -----
+ *
+ * The board experiment of docs/notes/gc-depth-sample.md (plan #328, #1204;
+ * the code each answer leads to is gc-depth-sample-wire.md): can the GC7000's
+ * texture unit read the row-linear D24S8 surface the PE wrote, so glmark2's
+ * shadow and refract drop the CPU depth resolve? The test knob
+ * gc_debug_set_depth_tpu (src/vivante/depth_sample.rs) points the sampling
+ * draw's descriptor at the depth surface: mode 1 as TEXTURE_FORMAT_D24X8
+ * (0x11, Mesa's route), mode 2 as raw A8R8G8B8 with the identity swizzle;
+ * mode 0 is today's CPU resolve. A 64x64 GL_DEPTH_COMPONENT / GL_UNSIGNED_INT
+ * texture alone in an FBO (case 177's), NEAREST, CLAMP_TO_EDGE; each arm
+ * clears it to 1, draws case 177's ramp (depth (x + y + 1) / 128 at GL pixel
+ * (x, y)) and samples it over the window:
+ *   P0  knob 0, glFinish, the decoding shader: today's path, the reference;
+ *   P1  knob 1, the same;
+ *   P2  knob 2, glFinish, a plain texture2D (the word's bytes: R = depth
+ *       bits 15..8, G = 7..0, B = the stencil byte, A = 23..16);
+ *   P3  knob 1, the ramp 0.25 deeper (vertex z + 0.5; clipped past the far
+ *       plane, which keeps the clear), sampled with NO glFinish between the
+ *       depth pass and the sample (glmark2's frame): cache coherence.
+ * Each arm draws the ramp again: after a resolve the GL core holds the
+ * texels current and would not ask the back end. The decoding shader writes
+ * the 24-bit depth k = round(d * 16777215) as (k >> 16, k >> 8 & 255,
+ * k & 255, 255); kd below is that k read back.
+ * Checks (CASE record: check, got, want; got is the first failing pixel,
+ * top-down index y * 64 + x, 4096 when none): 1 the three programs linked
+ * (got: a bit each), 2 no GL error and the FBO complete, 3 P0's kd within 3
+ * of n * 2^17 (n = x + y + 1), 4 P1 == P0 at every pixel (the verdict for
+ * D24X8), 5 P1's kd within 255 of P0's (D24X8 with fewer bits), 6 P2's
+ * word A * 65536 + R * 256 + G is n * 2^17 or n * 2^17 - 1 and within 2 of
+ * P0's kd (the raw view addresses the surface), 7 P3 against n + 32 (and
+ * 0xffffff where n + 32 >= 128), 8 no GL error in the arms (got: the first).
+ * The verdict line names the row of the note's table. GC7000 with the test
+ * knobs only, SKIP by name elsewhere; the in-process compiler (the sweep
+ * image, prj_sweep.conf). Not in the set: a board experiment, run by number.
+ * ------------------------------------------------------------------------- */
+#if defined(GL_TEST_VIVANTE) && defined(GL_TEST_KNOBS)
+extern int gc_debug_set_depth_tpu(int mode);
+
+#define DTPU_NONE ((uint32_t)(TW * TH))
+
+/* the decoded 24-bit depth of a P0 / P1 / P3 pixel: R * 65536 + G * 256 + B */
+static uint32_t dtpu_kd(uint32_t px)
+{
+	return (px & 0xffu) << 16 | ((px >> 8) & 0xffu) << 8 | ((px >> 16) & 0xffu);
+}
+
+/* the depth bits of a P2 pixel (the raw word's): A * 65536 + R * 256 + G */
+static uint32_t dtpu_word(uint32_t px)
+{
+	return (px >> 24) << 16 | (px & 0xffu) << 8 | ((px >> 8) & 0xffu);
+}
+
+static uint32_t dtpu_dist(uint32_t a, uint32_t b)
+{
+	return a > b ? a - b : b - a;
+}
+
+/* n = x + y + 1 at top-down index i (GL y = TH - 1 - row) */
+static uint32_t dtpu_n(uint32_t i)
+{
+	return i % TW + (TH - 1 - i / TW) + 1;
+}
+
+/* Case 177's ramp, `dz` deeper in clip z, into the depth texture of `fbo`
+ * cleared to 1 */
+static void dtpu_depth(GLuint fbo, GLuint dprog, float dz)
+{
+	const float v[18] = { -1, -1, -1 + dz, 1, -1, dz, -1, 1, dz, -1, 1, dz, 1, -1, dz, 1, 1, 1 + dz };
+
+	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+	glViewport(0, 0, TW, TH);
+	glClearDepthf(1.0f);
+	glDepthMask(GL_TRUE);
+	glClear(GL_DEPTH_BUFFER_BIT);
+	glEnable(GL_DEPTH_TEST);
+	glDepthFunc(GL_LESS);
+	glUseProgram(dprog);
+	glUniform4f(glGetUniformLocation(dprog, "u_color"), 0.0f, 0.0f, 1.0f, 1.0f);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 12, v);
+	glEnableVertexAttribArray(0);
+	glDisableVertexAttribArray(1);
+	glDrawArrays(GL_TRIANGLES, 0, 6);
+	glDisableVertexAttribArray(0);
+	glDisable(GL_DEPTH_TEST);
+}
+
+/* One arm: the knob at `mode`, the ramp, `d` sampled over the window through
+ * `prog`, read back top-down into `out`. Returns the first GL error. */
+static GLenum dtpu_arm(int mode, float dz, bool finish, GLuint fbo, GLuint dprog, GLuint prog, GLuint d, uint32_t *out)
+{
+	GLenum err;
+
+	gc_debug_set_depth_tpu(mode);
+	dtpu_depth(fbo, dprog, dz);
+	if (finish)
+		glFinish();
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glViewport(0, 0, TW, TH);
+	glClearColor(0, 0, 0, 1);
+	glClear(GL_COLOR_BUFFER_BIT);
+	dst_sample(prog, d);
+	glFinish();
+	err = glGetError();
+	memcpy(out, read_topdown(), sizeof(s_px));
+	if (err != GL_NO_ERROR)
+		pr_info("gl_test: dtpu: knob %d%s: GL error 0x%04x\n", mode, finish ? "" : " (no glFinish)", err);
+	return err;
+}
+
+static void dtpu_log_px(const char *what, uint32_t i, const uint32_t *p0, const uint32_t *p)
+{
+	if (i == DTPU_NONE)
+		return;
+	pr_info("gl_test: dtpu: %s: first at GL (%u, %u), n %u: P0 0x%08x kd 0x%06x, got 0x%08x\n", what,
+		(unsigned)(i % TW), (unsigned)(TH - 1 - i / TW), (unsigned)dtpu_n(i), (unsigned)p0[i],
+		(unsigned)dtpu_kd(p0[i]), (unsigned)p[i]);
+}
+#endif
+
+static int case_dtpu(void)
+{
+#if defined(GL_TEST_VIVANTE) && defined(GL_TEST_KNOBS)
+	static const char *const decode_fs =
+		"#version 100\n"
+		"precision highp float;\n"
+		"uniform sampler2D u_tex;\n"
+		"varying vec2 v_uv;\n"
+		"void main() {\n"
+		"    float k = floor(texture2D(u_tex, v_uv).r * 16777215.0 + 0.5);\n"
+		"    float hi = floor(k / 65536.0);\n"
+		"    float mid = floor((k - hi * 65536.0) / 256.0);\n"
+		"    float lo = k - hi * 65536.0 - mid * 256.0;\n"
+		"    gl_FragColor = vec4(hi, mid, lo, 255.0) / 255.0;\n"
+		"}\n";
+	static const char *const raw_fs =
+		"#version 100\n"
+		"precision highp float;\n"
+		"uniform sampler2D u_tex;\n"
+		"varying vec2 v_uv;\n"
+		"void main() {\n"
+		"    gl_FragColor = texture2D(u_tex, v_uv);\n"
+		"}\n";
+	static uint32_t p0[TW * TH], p1[TW * TH], p2[TW * TH], p3[TW * TH];
+	static const uint32_t at[3][2] = { { 0, 0 }, { 31, 32 }, { 63, 63 } };
+	uint32_t bad3 = DTPU_NONE, bad4 = DTPU_NONE, bad5 = DTPU_NONE, bad6 = DTPU_NONE, bad7 = DTPU_NONE;
+	GLuint dprog, kprog, rprog, d = 0, fbo = 0;
+	GLenum status, err, first_err = GL_NO_ERROR;
+	bool es2, ok = true;
+	int was;
+
+	if (!zonly_supported(222, "dtpu", &es2))
+		return -3;
+	free_all_objects();
+	while (glGetError() != GL_NO_ERROR)
+		;
+	dprog = link_program(gl_test_passthrough_vs_src, gl_test_uniform_fs_src);
+	kprog = link_program(gl_test_uv_vs_src, decode_fs);
+	rprog = link_program(gl_test_uv_vs_src, raw_fs);
+	/* check 1 */
+	if (!expect_u32("dtpu: programs linked", (dprog ? 1u : 0u) | (kprog ? 2u : 0u) | (rprog ? 4u : 0u), 7u))
+		return -1;
+	glDisable(GL_STENCIL_TEST);
+	glDisable(GL_CULL_FACE);
+	glDisable(GL_BLEND);
+
+	glGenTextures(1, &d);
+	glBindTexture(GL_TEXTURE_2D, d);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexImage2D(GL_TEXTURE_2D, 0, depth_target_format(GL_DEPTH_COMPONENT, GL_UNSIGNED_INT), TW, TH, 0,
+		     GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, NULL);
+	glBindTexture(GL_TEXTURE_2D, 0);
+	glGenFramebuffers(1, &fbo);
+	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, d, 0);
+	status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+	err = glGetError();
+	/* check 2: got = the GL error, else the status */
+	if (!expect_u32("dtpu: depth FBO complete", err != GL_NO_ERROR ? err : status, GL_FRAMEBUFFER_COMPLETE)) {
+		ok = false;
+		goto out;
+	}
+
+	was = gc_debug_set_depth_tpu(0);
+	err = dtpu_arm(0, 0.0f, true, fbo, dprog, kprog, d, p0);
+	first_err = first_err != GL_NO_ERROR ? first_err : err;
+	err = dtpu_arm(1, 0.0f, true, fbo, dprog, kprog, d, p1);
+	first_err = first_err != GL_NO_ERROR ? first_err : err;
+	err = dtpu_arm(2, 0.0f, true, fbo, dprog, rprog, d, p2);
+	first_err = first_err != GL_NO_ERROR ? first_err : err;
+	err = dtpu_arm(1, 0.5f, false, fbo, dprog, kprog, d, p3);
+	first_err = first_err != GL_NO_ERROR ? first_err : err;
+	gc_debug_set_depth_tpu(was);
+
+	for (uint32_t i = 0; i < DTPU_NONE; i++) {
+		const uint32_t n = dtpu_n(i), k = n << 17, kd0 = dtpu_kd(p0[i]), w = dtpu_word(p2[i]);
+		const uint32_t n3 = n + 32, k3 = n3 < 128 ? n3 << 17 : 0xffffffu;
+
+		if (bad3 == DTPU_NONE && dtpu_dist(kd0, k) > 3)
+			bad3 = i;
+		if (bad4 == DTPU_NONE && p1[i] != p0[i])
+			bad4 = i;
+		if (bad5 == DTPU_NONE && dtpu_dist(dtpu_kd(p1[i]), kd0) > 255)
+			bad5 = i;
+		if (bad6 == DTPU_NONE && ((w != k && w != k - 1) || dtpu_dist(w, kd0) > 2))
+			bad6 = i;
+		if (bad7 == DTPU_NONE && dtpu_dist(dtpu_kd(p3[i]), k3) > 3)
+			bad7 = i;
+	}
+	/* the words the PE wrote, by the raw view (depth bits, stencil byte), at
+	 * the note's three points */
+	for (int j = 0; j < 3; j++) {
+		const uint32_t i = (TH - 1 - at[j][1]) * TW + at[j][0];
+
+		pr_info("gl_test: dtpu: GL (%u, %u) n %u: P0 0x%08x P1 0x%08x P2 0x%08x (depth 0x%06x stencil 0x%02x) "
+			"P3 0x%08x\n", (unsigned)at[j][0], (unsigned)at[j][1], (unsigned)dtpu_n(i), (unsigned)p0[i],
+			(unsigned)p1[i], (unsigned)p2[i], (unsigned)dtpu_word(p2[i]), (unsigned)((p2[i] >> 16) & 0xffu),
+			(unsigned)p3[i]);
+	}
+	dtpu_log_px("P0 off the ramp", bad3, p0, p0);
+	dtpu_log_px("P1 != P0", bad4, p0, p1);
+	dtpu_log_px("P1 beyond 255 of P0", bad5, p0, p1);
+	dtpu_log_px("P2 not the word", bad6, p0, p2);
+	dtpu_log_px("P3 off the deeper ramp", bad7, p0, p3);
+	ok &= expect_u32("dtpu: P0 is the ramp", bad3, DTPU_NONE);		 /* check 3 */
+	ok &= expect_u32("dtpu: P1 (D24X8) == P0", bad4, DTPU_NONE);		 /* check 4 */
+	ok &= expect_u32("dtpu: P1 within 255 of P0", bad5, DTPU_NONE);	 /* check 5 */
+	ok &= expect_u32("dtpu: P2 (8888) is the word", bad6, DTPU_NONE);	 /* check 6 */
+	ok &= expect_u32("dtpu: P3 no wait, coherent", bad7, DTPU_NONE);	 /* check 7 */
+	ok &= expect_u32("dtpu: no GL error in the arms", first_err, GL_NO_ERROR); /* check 8 */
+	pr_info("gl_test: dtpu: verdict: %s\n",
+		bad3 != DTPU_NONE ? "no verdict: the reference (check 3) failed" :
+		bad4 == DTPU_NONE && bad7 == DTPU_NONE ? "D24X8 samples the linear surface exactly (check 4)" :
+		bad4 == DTPU_NONE ? "D24X8 exact, but a stale texture cache without a wait (check 7)" :
+		bad5 == DTPU_NONE ? "D24X8 reads the surface with fewer than 24 bits (check 5)" :
+		bad6 == DTPU_NONE ? "D24X8 does not read a linear surface; the raw view does (check 6)" :
+		"the LINEAR descriptor does not address the surface (check 6 failed)");
+out:
+	glDepthFunc(GL_LESS);
+	glViewport(0, 0, TW, TH);
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glBindTexture(GL_TEXTURE_2D, 0);
+	glDeleteFramebuffers(1, &fbo);
+	glDeleteTextures(1, &d);
+	glUseProgram(0);
+	glDeleteProgram(dprog);
+	glDeleteProgram(kprog);
+	glDeleteProgram(rprog);
+	return ok ? 0 : -1;
+#elif defined(GL_TEST_VIVANTE)
+	pr_info("gl_test: case 222 dtpu: SKIP (the depth-sampling knob needs CONFIG_YAKOGL_TEST_KNOBS)\n");
+	return -3;
+#else
+	pr_info("gl_test: case 222 dtpu: SKIP (the GC7000's depth surface and texture unit)\n");
+	return -3;
+#endif
+}
+
 /* ---- case 215: glmark2 shadow's two passes, timed (shadowmap) ----------------
  *
  * The reproducer of glmark2 shadow's 353 ms a frame on the AM62P (#40): the
@@ -23586,6 +23856,11 @@ static int run_case(int c, int pretransform, int debug, int *ended)
 		break;
 	case 220: rc = case_lodtime(); break;
 	case 221: rc = case_instmix(); break;
+	case 222:
+		rc = case_dtpu();
+		if (rc == -3)
+			return -3; /* skipped by name: not the GC7000 with the test knobs, or no extension */
+		break;
 	case 216:
 		rc = case_mipchains();
 		if (rc == -3)
