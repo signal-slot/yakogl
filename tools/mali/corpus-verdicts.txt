@@ -158,7 +158,7 @@ tools/shaders/es300/int_div.frag: Valhall: arithmetic other than +, -, * and a d
 tools/shaders/es300/int_div.vert: ok
 tools/shaders/es300/ishr.frag: ok
 tools/shaders/es300/layers2.frag: Valhall: a texture look-up other than texture2D(sampler2D, coordinate) (a bias, a level, a projection, a cube map, a size query) is not lowered yet
-tools/shaders/es300/layersunused.frag: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
+tools/shaders/es300/layersunused.frag: ok
 tools/shaders/es300/loop_exit.frag: ok
 tools/shaders/es300/loop_exit.vert: ok
 tools/shaders/es300/mrt2.frag: ok

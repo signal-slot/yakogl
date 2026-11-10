@@ -59,7 +59,15 @@ pub fn colour<'s>(out: &'s mut [u64], scratch: &Arena<'_>) -> Result<Preload<'s>
     let c = split(&mut p, ld, 2)?;
     let sr = alu(&mut p, Op::Collect, &[Src::ssa(c[0]), Src::ssa(c[1])])?;
     /* txl at level 0: an fp32 vec4 */
-    let op = Op::TexSingle { sr_count: 2, mask: 0xf, f16: false, skip: false, lod: LodMode::Zero, dim: TexDim::D2 };
+    let op = Op::TexSingle {
+        sr_count: 2,
+        mask: 0xf,
+        f16: false,
+        skip: false,
+        lod: LodMode::Zero,
+        dim: TexDim::D2,
+        shadow: false,
+    };
     let t = alu(&mut p, op, &[Src::ssa(sr), Src::of(Idx::Const(PRELOAD_TEX_HANDLE)), Src::of(Idx::Const(0))])?;
     let w = split(&mut p, t, 4)?;
     let col = alu(&mut p, Op::Collect, &[Src::ssa(w[0]), Src::ssa(w[1]), Src::ssa(w[2]), Src::ssa(w[3])])?;
@@ -103,7 +111,15 @@ pub fn colour_samples<'s>(out: &'s mut [u64], scratch: &Arena<'_>) -> Result<Pre
     let hi = alu(&mut p, Op::MkvecV2i8, &[Src::ssa(id).swz(Swz::B0), c(0), c(0)])?;
     let offset = alu(&mut p, Op::MkvecV2i8, &[c(0), c(0), Src::ssa(hi)])?;
     let sr = alu(&mut p, Op::Collect, &[Src::ssa(x), Src::ssa(y), Src::ssa(offset)])?;
-    let op = Op::TexSingle { sr_count: 3, mask: 0xf, f16: false, skip: false, lod: LodMode::Fetch, dim: TexDim::D2Ms };
+    let op = Op::TexSingle {
+        sr_count: 3,
+        mask: 0xf,
+        f16: false,
+        skip: false,
+        lod: LodMode::Fetch,
+        dim: TexDim::D2Ms,
+        shadow: false,
+    };
     let t = alu(&mut p, op, &[Src::ssa(sr), c(PRELOAD_TEX_HANDLE), c(0)])?;
     let w = split(&mut p, t, 4)?;
     let col = alu(&mut p, Op::Collect, &[Src::ssa(w[0]), Src::ssa(w[1]), Src::ssa(w[2]), Src::ssa(w[3])])?;
@@ -148,7 +164,15 @@ pub fn zs<'s>(out: &'s mut [u64], scratch: &Arena<'_>, z: bool, s: bool) -> Resu
     let c = split(&mut p, ld, 2)?;
     let sr = alu(&mut p, Op::Collect, &[Src::ssa(c[0]), Src::ssa(c[1])])?;
     let look = |p: &mut Prog<'_>, mask: u8, handle: u32| {
-        let op = Op::TexSingle { sr_count: 2, mask, f16: false, skip: false, lod: LodMode::Zero, dim: TexDim::D2 };
+        let op = Op::TexSingle {
+            sr_count: 2,
+            mask,
+            f16: false,
+            skip: false,
+            lod: LodMode::Zero,
+            dim: TexDim::D2,
+            shadow: false,
+        };
         alu(p, op, &[Src::ssa(sr), Src::of(Idx::Const(handle)), Src::of(Idx::Const(0))])
     };
     let none = Src::of(Idx::Const(0));

@@ -676,7 +676,7 @@ pub fn vs_variant(
                     0 => 0xf,
                     m => m,
                 };
-                let op = Op::TexSingle { sr_count: n as u8, mask, f16: false, skip: false, lod, dim };
+                let op = Op::TexSingle { sr_count: n as u8, mask, f16: false, skip: false, lod, dim, shadow: false };
                 let handle = Src::of(Idx::Const(super::nir_fs::tex_handle(u32::from(index))));
                 let r = alu(p, op, &[Src::ssa(c), handle, Src::of(Idx::Const(0))])?;
                 let w = match mask.count_ones() {

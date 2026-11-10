@@ -786,13 +786,14 @@ pub fn pack_one(i: &Ins, branch: i32) -> Result<u64, MaliError> {
             f.put("staging_register_index", reg(i.src[0].idx)?)?;
             f.put("staging_register_write_index", reg(i.dest[0].idx)?)?;
         }
-        Op::TexSingle { mask, f16, skip, lod, dim, .. } => {
+        Op::TexSingle { mask, f16, skip, lod, dim, shadow, .. } => {
             f = Fill::new(IsaOp::TexSingle);
             /* the handle pair (`va_pack_src` of source 1, its register
              * pair after va_lower_split_64bit), the look-up of every
              * channel at the LOD mode and the texture's dimension, no
-             * array, offset, compare or wide indices (va_pack.c:1052-1077
-             * with pan_nir_lower_tex.c's flags) */
+             * array, offset or wide indices, the compare of a shadow
+             * sampler's (va_pack.c:1052-1077 with pan_nir_lower_tex.c's
+             * flags; fsarith_218_shadowcmp.expect.json's `.shadow`) */
             let lod = match lod {
                 LodMode::Computed => TEX_LOD_COMPUTED,
                 LodMode::Zero => TEX_LOD_ZERO,
@@ -809,7 +810,7 @@ pub fn pack_one(i: &Ins, branch: i32) -> Result<u64, MaliError> {
             };
             let array = matches!(i.op, Op::TexSingle { dim: TexDim::D2Array, .. }) as u32;
             f.put("src0", src_byte(&i.src[1])?)?;
-            f.put("array_enable", array)?.put("texel_offset", 0)?.put("compare_enable", 0)?;
+            f.put("array_enable", array)?.put("texel_offset", 0)?.put("compare_enable", shadow as u32)?;
             f.put("wide_indices", 0)?.put("lod_mode", lod)?;
             f.put("dimensionality", dim)?.put("write_mask", mask as u32)?;
             f.put("register_width", if f16 { 0 } else { 1 })?.put("skip", skip as u32)?;
