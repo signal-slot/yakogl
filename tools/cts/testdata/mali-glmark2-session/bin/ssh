@@ -1,0 +1,39 @@
+#!/bin/bash
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+#
+# The fake ssh of tools/cts/mali-glmark2-session-selftest.sh: one board for the
+# four scripts the session wrapper calls, by handing each command to the fake
+# ssh of that script's own self-test (not copied: FAKE_PREFLIGHT_SSH,
+# FAKE_STATE_SSH, FAKE_RUN_SSH name them).
+#   - before the first state snapshot (no "echo yakogl-state-ok" yet): the
+#     preflight's fake, case directory FAKE_PREFLIGHT_CASE;
+#   - the snapshot and boot_id commands: the state fake, case directory
+#     FAKE_STATE_CASE up to the second snapshot, FAKE_STATE_AFTER (the case
+#     after the run) from the second snapshot on. FAKE_AFTER=lost makes the
+#     board vanish at the second snapshot;
+#   - everything else (the runner's commands): the runner's fake ssh.
+# While FAKE_BOARD/down exists nothing answers (exit 255). Every call is
+# logged by the fakes it reaches (FAKE_LOG) and by this one (FAKE_SESSION_LOG).
+cmd=${*: -1}
+echo "ssh $cmd" >> "${FAKE_SESSION_LOG:?}"
+[ ! -e "$FAKE_BOARD/down" ] || { echo "ssh: connect to host board.invalid port 22: No route to host" >&2; exit 255; }
+n=$(cat "$FAKE_SESSION_DIR/state-calls" 2> /dev/null || echo 0)
+if [ "$cmd" = 'echo yakogl-state-ok' ]; then
+  n=$((n + 1))
+  echo "$n" > "$FAKE_SESSION_DIR/state-calls"
+  if [ "$n" -ge 2 ] && [ "${FAKE_AFTER-}" = lost ]; then
+    touch "$FAKE_BOARD/down"
+    echo "ssh: connect to host board.invalid port 22: No route to host" >&2
+    exit 255
+  fi
+fi
+if [ "$n" = 0 ]; then
+  FAKE_CASE=$FAKE_PREFLIGHT_CASE exec bash "$FAKE_PREFLIGHT_SSH" "$@"
+fi
+case $cmd in
+  'echo yakogl-state-ok' | 'find /boot'* | *fw_printenv* | 'cat /proc/modules' | 'cat /proc/sys/kernel/random/boot_id' | 'uname -r')
+    if [ "$n" -ge 2 ]; then case_dir=$FAKE_STATE_AFTER; else case_dir=$FAKE_STATE_CASE; fi
+    FAKE_CASE=$case_dir exec bash "$FAKE_STATE_SSH" "$@" ;;
+esac
+exec bash "$FAKE_RUN_SSH" "$@"
