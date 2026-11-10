@@ -2022,10 +2022,9 @@ row.
 
 **Not run.** Written 2026-11-09 from the Z3 procedure above, before any
 run and before the Z4 code is on this page's base: no value in it is
-measured on the board, and the parts that wait for the probe and the
-board module are marked `PLACEHOLDER` below. A run whose record differs
-is a finding: record it as it came, never by changing the prediction. Z4
-runs only after Z3 has passed, and reports to #7 (milestones: #26).
+measured on the board. A run whose record differs is a finding: record
+it as it came, never by changing the prediction. Z4 runs only after Z3
+has passed, and reports to #7 (milestones: #26).
 
 **What Z4 does.** It brings up Z3 (the firmware boot, AS0, the MCU
 acknowledging `PING`), starts CSG 0 / CS 0 from our kernel side
@@ -2207,12 +2206,84 @@ image does. Whether the probe also feeds inside the wait is not
 assumed here.
 
 **Verdict.** `driver/tools/kexec-zephyr/t6-verdict.sh t6_submit
-<uart.log>` judges the capture: Z1's, Z2's and Z3's lines as for `t6_fw`,
-then the Z4 lines.
+<uart.log>` judges the capture with the table `table_t6_submit` of that
+script (not run on a board; its self-test, `t6-verdict-test.sh`, runs it
+over fixtures). It looks for each line in order, each after the one
+before it, and prints `ok`, `differs` or `missing` per line, then
+`VERDICT t6_submit PASS` (exit 0) or `VERDICT t6_submit FAIL (<n> of <m>)`
+(exit 1). The lines, as the table writes them, in the order `uart2` must
+carry them:
 
-> **PLACEHOLDER (verdict lines).** The `t6_submit` rows of
-> `t6-verdict.sh`, each with what it expects, are filled when the probe's
-> record lines and their verdict table are on main.
+1. Z1's lines as for `t6_fw`: the early banner `T6:A` to `T6:A3`, `T6:B`,
+   the `yakogl-wdt: nanopc_t6` marker, the GIC line, the arming line,
+   `T6:C` and `board: watchdog armed` (`table_boot`).
+2. Z2's and Z3's lines as for `t6_fw`, with the prefix `t6_submit:`:
+   build, WDT0, image, the 7 sections and the pool (`table_fw_image`),
+   then `Z3: rc` and its seven record lines (`table_z3_record`). The Z3
+   procedure above gives them; they are not repeated here.
+3. The nine Z4 lines (`SubmitUp`, 392 bytes; 64-bit words print as
+   `%016llx`, 32-bit words as `%08x`, counts as `%u`), then `PASS`:
+
+```
+t6_submit: Z4a: step 0 refusal 0 detail 0x0000000000000000
+t6_submit: Z4b: AS_PRESENT 0x000000ff L2_FEATURES 0x07120306 as0_tables_used {d} vm_tables_used 10 suspend_size 0 protm_suspend_size 0
+t6_submit: Z4c: heap ctx 0x0000800000015000 chunk 0x0000800000a00000 chunk_size 2097152 stride 64
+t6_submit: Z4d: CSG0 req 0x00000011 ack 0x00000011 CS0 req 0x00000511 ack 0x00000511, acked in {d}/{d} us
+t6_submit: Z4e: insert 0x0000000000000080 extract 0x0000000000000080 seqno 0x0000000000000001 sync_status 0x00000000, wait {d} us
+t6_submit: Z4f: latest_flush 0x{x8} sync_updates {d} status_cmd_ptr 0x0000000000000000 info 0x0000000000000000
+t6_submit: Z4g: stop {d} us refusal 0, terminate {d} us refusal 0, cleared {d} {d} {d}
+t6_submit: Z4h: target red {@R} blue {@B} fill {@F} other {@O} of {@P} pixels
+t6_submit: Z4i: frame digest 0xa4db81a9d39bfdcc
+t6_submit: PASS
+```
+
+The glue's `t6: t6_submit done: PSCI SYSTEM_RESET at {d} ms ({d} feeds)`
+closes the capture. Tokens, explained once: `{d}` a decimal number
+(optionally negative); `{x8}` exactly 8 lower-case hex digits (`{x16}`:
+16, used in the early banner); `{@R}`, `{@B}`, `{@F}`, `{@O}` and `{@P}` the
+target's red, blue, fill, other and total pixel counts (`@` captures the value), each a decimal
+number: the verdict adds the first four and compares the sum with `{@P}`.
+
+**Pinned**, written out above and compared exactly: `step`, `refusal`
+and `detail` 0 (Z4a: a stopped run differs here); `vm_tables_used` 10;
+`heap_ctx` 0x0000800000015000, the heap chunk 0x0000800000a00000,
+`chunk_size` 2097152, stride 64; the CSG 0 request and acknowledge words
+0x00000011 and CS 0's 0x00000511; `insert` and `extract` 0x80, `seqno`
+1, `sync_status` 0; `status_cmd_ptr` and `info` 0; the stop's and the
+terminate's `refusal` 0; the frame digest 0xa4db81a9d39bfdcc. **Any value
+of its form**, checked for presence and form only: `as0_tables_used` (the
+board's file sizes Z3's tables: the model's 8 is not the board's, 10 is
+predicted above), the timings (`acked in`, `wait`, `stop` and `terminate`
+µs), `latest_flush`, `sync_updates`, the three `cleared` words, and the
+four pixel counts (only their sum is checked against the total).
+
+Where the verdict and the prediction table above differ in strength
+(reported, the table is not changed): the table pins `sync_updates` 1,
+`cleared` 0 0 0 and the red and blue counts at 2048 each, while the
+verdict checks them for form only, so read them against the table by
+eye; the table calls `suspend_size` and `protm_suspend_size`
+board-dependent, while the verdict writes both as 0 (and `AS_PRESENT`
+0x000000ff, `L2_FEATURES` 0x07120306 as Z1 measured them): a board that
+reports other values makes Z4b differ, a finding to record, not a defect
+of the verdict. Every pinned value in the list above agrees with the
+table.
+
+**A stopped Z4 run.** The probe prints its record anyway, with the
+fields after the stop at 0, and in place of `t6_submit: PASS` the line
+`t6_submit: FAIL: Z4 step N (name)`. Z4a then differs (step, refusal or
+detail not 0), as do the fields the run left at 0, and the `PASS` line is
+reported as differing; a `t6_submit: Z3: stop …` line counts as one more
+differing line. A watchdog reset during Z4 is not a PASS either: the
+capture ends after the last Z3 line with a fresh boot banner, and Z4a to
+Z4i, `PASS` and the reset line are `missing`, the first of them Z4a (the
+fixture `testdata/t6_submit-z4-reset.uart` of the self-test).
+
+To judge a captured log, as step 4 of the runner's commands above (it
+only reads the file):
+
+```sh
+driver/tools/kexec-zephyr/t6-verdict.sh t6_submit <dir>/<date>-t6/uart.log
+```
 
 **What a pass and a stop look like.** A pass is the probe's `t6_submit:
 PASS` line with the verdict script reporting no failed line: the sync
