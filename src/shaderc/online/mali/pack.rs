@@ -30,6 +30,8 @@ fn src_byte(s: &Src) -> Result<u32, MaliError> {
         Idx::Special(Special::BlendDescriptor(rt), hi) if rt < 8 => 0xc0 | (32 + 2 * (8 + rt as u32) + hi as u32),
         /* page 3, entry 15 ([`tail`] names the page) */
         Idx::Special(Special::ProgramCounter, hi) => 0xc0 | (32 + 2 * 15 + hi as u32),
+        /* page 3, entry 1 */
+        Idx::Special(Special::LaneId, hi) => 0xc0 | (32 + 2 + hi as u32),
         _ => return Err(MaliError::Defect(Defect::Operand)),
     })
 }
@@ -170,10 +172,11 @@ impl Fill {
 }
 
 /// The common tail: the FAU page (page 0, or page 3 for an instruction that
-/// reads `program_counter`, `VA_FAU_SPECIAL_PAGE_3_PROGRAM_COUNTER`,
+/// reads `program_counter` or `lane_id`, `VA_FAU_SPECIAL_PAGE_3_*`,
 /// va_pack.c:95-96) and the flow.
 fn tail(f: &mut Fill, i: &Ins) -> Result<(), MaliError> {
-    let page = if i.srcs().iter().any(|s| s.idx == Idx::Special(Special::ProgramCounter, false)) { 3 } else { 0 };
+    let page3 = |s: &Src| matches!(s.idx, Idx::Special(Special::ProgramCounter | Special::LaneId, false));
+    let page = if i.srcs().iter().any(page3) { 3 } else { 0 };
     f.put("fau_page_index", page)?.put("flow", i.flow as u32)?;
     Ok(())
 }
@@ -701,8 +704,20 @@ pub fn pack_one(i: &Ins, branch: i32) -> Result<u64, MaliError> {
             f.put("not_result", 0)?;
             alu_dest(&mut f, i, "dest_width")?;
         }
-        Op::LshiftAndV2i16 | Op::LshiftOrV2i16 => {
-            f = Fill::new(if i.op == Op::LshiftAndV2i16 { IsaOp::LshiftAndV2i16 } else { IsaOp::LshiftOrV2i16 });
+        Op::Clper => {
+            f = Fill::new(IsaOp::Clper);
+            /* xor, subgroup4 (the quad), the lane a byte of its source */
+            f.put("src0", src_byte(&i.src[0])?)?.put("src1", src_byte(&i.src[1])?)?;
+            f.put("lanes1", byte_lane(i.src[1].swz)?)?.put("lane_op", 1)?.put("subgroup", 1)?;
+            f.put("inactive_result", 0)?;
+            alu_dest(&mut f, i, "dest_width")?;
+        }
+        Op::LshiftAndV2i16 | Op::LshiftOrV2i16 | Op::LshiftXorV2i16 => {
+            f = Fill::new(match i.op {
+                Op::LshiftAndV2i16 => IsaOp::LshiftAndV2i16,
+                Op::LshiftOrV2i16 => IsaOp::LshiftOrV2i16,
+                _ => IsaOp::LshiftXorV2i16,
+            });
             /* as the 32-bit form (`va_swap_12`), the value's halves its
              * `swz0` (`swiz_int_m`: h00 0, h10 1, h01 2, h11 3), the shift
              * a byte pair (`shift_bitwise_i16_lanes_m`: b00 4, as the
@@ -973,5 +988,37 @@ mod tests {
     fn fexp_is_byte_equal_to_mesa_26_2_1() {
         /* 34 FEXP.f32 r3, r4^, r3^ */
         assert_eq!(pack(Op::FexpF32, 3, &[last(4), last(3)]), 0x00a4c30000084344);
+    }
+
+    fn lane_id() -> Src {
+        Src::of(Idx::Special(Special::LaneId, false))
+    }
+
+    /// The words are `fsarith_138_deriv.expect.json`'s (docs/notes/
+    /// mali-derivatives.md, section 4), Mesa 26.2.1.
+    #[test]
+    fn the_clper_words_are_byte_equal_to_mesa_26_2_1() {
+        let b2 = Src { swz: Swz::B2, ..lut(8) };
+        let b3 = Src { swz: Swz::B3, ..lut(4) };
+        assert_eq!(pack(Op::Clper, 3, &[r(1), b2]), 0x00a0c311180fc801);
+        assert_eq!(pack(Op::Clper, 3, &[r(2), b2]), 0x00a0c311180fc802);
+        assert_eq!(pack(Op::Clper, 4, &[r(3), b3]), 0x00a0c4111c0fc403);
+        /* the last one, with the helper flow */
+        let mut last = Ins::new(Op::Clper, &[Dest { idx: Idx::Reg(4), swz: Swz::H01 }], &[r(0), b3]);
+        last.flow = flow::DISCARD;
+        assert_eq!(pack_one(&last, 0).unwrap(), 0x68a0c4111c0fc400);
+    }
+
+    #[test]
+    fn the_lane_id_words_are_byte_equal_to_mesa_26_2_1() {
+        let h00 = |s: Src| Src { swz: Swz::H00, ..s };
+        let b2 = Src { swz: Swz::B2, ..lut(11) };
+        let b3 = Src { swz: Swz::B3, ..lut(11) };
+        assert_eq!(pack(Op::LshiftXorV2i16, 1, &[h00(r(4)), last(1), b2]), 0x00b5c1011a41cb04);
+        assert_eq!(pack(Op::LshiftXorV2i16, 2, &[h00(last(4)), last(2), b2]), 0x00b5c2011a42cb44);
+        assert_eq!(pack(Op::LshiftXorV2i16, 3, &[h00(lane_id()), last(3), b3]), 0x06b5c3011e43cbe2);
+        assert_eq!(pack(Op::LshiftXorV2i16, 0, &[h00(lane_id()), last(0), b3]), 0x06b5c0011e40cbe2);
+        let b0 = Src { swz: Swz::B0, ..lut(0) };
+        assert_eq!(pack(Op::LshiftAndI32, 4, &[lane_id(), last(4), b0]), 0x06b4c4011044c0e2);
     }
 }

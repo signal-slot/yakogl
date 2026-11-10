@@ -31,10 +31,10 @@ use super::MaliError;
 
 /// `bi_instr_uses_helpers` (bi_helper_invocations.c) for the ops here:
 /// a look-up whose level of detail comes from the derivatives (a level-0
-/// one does not).
+/// one does not), and a `CLPER` (a derivative reads the other lanes).
 pub fn uses_helpers(i: &Ins) -> bool {
     use super::bir::LodMode;
-    matches!(i.op, Op::TexSingle { lod: LodMode::Computed | LodMode::ComputedBias, .. })
+    matches!(i.op, Op::TexSingle { lod: LodMode::Computed | LodMode::ComputedBias, .. } | Op::Clper)
 }
 
 /// `bi_analyze_helper_requirements` (bi_helper_invocations.c) over the
@@ -621,4 +621,47 @@ pub fn preload_mask(p: &Prog<'_>, fragment: bool) -> u64 {
         live |= (1 << 60) | (1 << 61);
     }
     live
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::shaderc::online::mali::bir::{Dest, Src, Swz};
+
+    fn run(ops: &[Op]) -> Vec<(Op, u8)> {
+        let mut ins = vec![Ins::new(Op::Nop, &[], &[]); 16];
+        let mut p = Prog::new(&mut ins);
+        for (k, &op) in ops.iter().enumerate() {
+            let d = Dest { idx: Idx::Reg(3 + k as u8), swz: Swz::H01 };
+            let lane = Src { swz: Swz::B2, ..Src::of(Idx::Lut(8)) };
+            let one = Src::of(Idx::Reg(1));
+            let s: &[Src] = if op == Op::Clper { &[one, lane] } else { &[one, one] };
+            p.push(Ins::new(op, &[d], s)).unwrap();
+        }
+        insert_flow_control_nops(&mut p, true).unwrap();
+        merge_flow(&mut p, true);
+        p.as_slice().iter().map(|i| (i.op, i.flow)).collect()
+    }
+
+    /// docs/notes/mali-derivatives.md, section 4: the last `CLPER` ends the
+    /// helper lanes (`.discard`); with none, the program keeps its leading
+    /// `.discard` (merged into its first instruction).
+    #[test]
+    fn a_clper_is_a_helper_user() {
+        let mut i = Ins::new(Op::Clper, &[], &[]);
+        assert!(uses_helpers(&i));
+        i.op = Op::FaddF32;
+        assert!(!uses_helpers(&i));
+
+        let with = run(&[Op::Clper, Op::Clper, Op::FaddF32]);
+        let discards: Vec<_> = with.iter().filter(|x| x.1 == flow::DISCARD).collect();
+        assert_eq!(discards.len(), 1, "{with:?}");
+        assert_eq!(discards[0].0, Op::Clper);
+        let k = with.iter().rposition(|x| x.0 == Op::Clper).unwrap();
+        assert_eq!(with[k].1, flow::DISCARD);
+        assert_ne!(with[0].1, flow::DISCARD, "{with:?}");
+
+        let without = run(&[Op::FaddF32, Op::FaddF32]);
+        assert_eq!(without[0].1, flow::DISCARD, "{without:?}");
+    }
 }
