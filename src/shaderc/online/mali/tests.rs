@@ -6357,3 +6357,54 @@ fn the_fp16_constant_products_fold_as_mesa_s() {
     assert_eq!(gap(SHC_STAGE_FRAGMENT, &with("* 2.0", "* -0.5")), MaliError::Arithmetic);
     assert_eq!(gap(SHC_STAGE_FRAGMENT, &with("+ 2.0", "+ 0.5")), MaliError::ArithConstant);
 }
+
+/// Case 218 shadowcmp (docs/notes/mali-fragcoord-fp16-ops.md): a mediump
+/// ES 3.00 shader's arithmetic on the highp gl_FragCoord, an island of
+/// fp32 in the fp16 shader (nir_fs.rs `Fs::fc32`): `step(32.0,
+/// gl_FragCoord.x)` as `FCMP_OR.f32.ge.m1`, `x - 32.0 * right` as the
+/// select of the negated constants (`CSEL.u32.eq r3, r2, 0x0, u3.w1,
+/// r3^` then `FADD.f32`), the products `FMA.f32 .., 0x0.neg`, the floors
+/// `FROUND.f32.rtn`, the narrowing to the mediump `b` at its assignment
+/// (`FADD.f32 rN.h0` twice, after both floors), then fp16 vectors on it
+/// (`MKVEC.v2i16`, `FADD_IMM.v2f16 #0x38003800`, `FMA.v2f16 ..
+/// 0x34000000.h11`), two `sampler2DShadow` look-ups (`TEX_SINGLE .. .16.r
+/// .2d.shadow.computed` of the widened lanes and the pushed reference
+/// 0.5, `sr_count:3`), the select of the texels on `step`'s own mask
+/// (`MUX.v2i16 .., r2^.h00`) and the colour `(r, r, r, 1.0)`. Both IDVS
+/// programs (no varying program) and every fact, through the link, with
+/// the FAU words in Mesa's order (the transform, 32.0, -0.0, -32.0,
+/// 0.125, 0.0625, 0.5, the two handles, the fp16 1.0 pair).
+#[test]
+fn case_218_shadowcmp_is_byte_equal_to_mesa_26_2_1() {
+    let (vs, fs, json) = (
+        td!("fsarith_218_shadowcmp.vert"),
+        td!("fsarith_218_shadowcmp.frag"),
+        td!("fsarith_218_shadowcmp.expect.json"),
+    );
+    check_linked_for("218", vs, fs, json);
+    let f = compile(SHC_STAGE_FRAGMENT, fs).expect("the fragment shader compiles");
+    assert!(f.info.helper_threads, "the look-ups' level needs helpers");
+    let shadow = trim(&f.code).iter().filter(|w| text(**w).contains(".shadow.")).count();
+    assert_eq!(shadow, 2, "two shadow look-ups");
+    /* the shapes beside the reference's stay refused: a computed reference,
+     * and a highp shader's shadow look-up */
+    let computed = fs.replace("vec3((b + 0.5) / 4.0, 0.5)", "vec3((b + 0.5) / 4.0, b.x)");
+    assert_eq!(gap(SHC_STAGE_FRAGMENT, &computed), MaliError::TexKind);
+    let highp = fs.replace("precision mediump float;", "precision highp float;");
+    assert_eq!(gap(SHC_STAGE_FRAGMENT, &highp), MaliError::TexKind);
+}
+
+/// es300/layersunused (docs/notes/mali-alu-ops.md's `step` row, reference
+/// fsarith_layersunused.*): a highp shader's `tint * step(bias, v_xy.x)`.
+/// `step`'s `!(x < edge)` is the inverse compare (nir_fs.rs `Fs::lane32`,
+/// the `Bnot` arm case 218 brought: `FCMP_OR.f32.ge.m1`), and the
+/// product of its `b2f` with each uniform lane the select `CSEL.u32.eq r,
+/// m, 0x0, 0x0, u.wN` ([`b2f_products`]); the unused `sampler2DArray`
+/// leaves no instruction. Both stages, every fact.
+#[test]
+fn es300_layersunused_step_is_byte_equal_to_mesa_26_2_1() {
+    let (vs, fs, json) =
+        (td!("fsarith_layersunused.vert"), td!("fsarith_layersunused.frag"), td!("fsarith_layersunused.expect.json"));
+    assert_eq!(include_str!("../../../../tools/shaders/es300/layersunused.frag"), fs);
+    check_program_for("layersunused", vs, fs, json, false);
+}

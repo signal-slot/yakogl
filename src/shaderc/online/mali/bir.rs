@@ -665,7 +665,10 @@ pub enum Op {
     /// written. `skip`: helper invocations need not run it
     /// (`bi_analyze_helper_requirements`, bi_helper_invocations.c).
     /// `lod`: how the level of detail is chosen ([`LodMode`]); `dim` the
-    /// texture's dimension ([`TexDim`]).
+    /// texture's dimension ([`TexDim`]). `shadow`: a shadow sampler's
+    /// compare (`compare_enable`, the `.shadow` flag; `nir_tex_src_comparator`
+    /// as the staging word after the coordinate, bifrost_compile.c
+    /// `bi_emit_tex_valhall`: `sr_count:3` of a 2D look-up).
     TexSingle {
         sr_count: u8,
         /// The channels written (`write_mask`, bit 0 red): one register
@@ -675,6 +678,7 @@ pub enum Op {
         skip: bool,
         lod: LodMode,
         dim: TexDim,
+        shadow: bool,
     },
     Collect,
     Split,

@@ -86,7 +86,9 @@ r too) and `sampler2DArray` an 8x8x3 RGBA8 array (case 46, GL_NEAREST).
 `--levels N` (N > 1) gives both a chain of N levels at 16x16 (3D depth 4,
 halving; the array 2 layers) with GL_NEAREST_MIPMAP_NEAREST (case 206). A
 program without that first line takes the ES 2.0 path above unchanged.
-`usampler2D` / `isampler2D` get a 2x2 RGBA8UI / RGBA8I texture (nearest), and
+`usampler2D` / `isampler2D` get a 2x2 RGBA8UI / RGBA8I texture (nearest),
+`sampler2DShadow` gl_test case 218's 4x4 DEPTH_COMPONENT32F texture (nearest,
+GL_COMPARE_REF_TO_TEXTURE with GL_LESS), and
 `--uniform-values` sets `int` / `ivecN` uniforms with glUniform*iv (the same
 16*(k+1)+c values, as integers).
 
@@ -140,7 +142,10 @@ GL_TEXTURE_MIN_FILTER, GL_TEXTURE_MAG_FILTER, GL_TEXTURE_WRAP_S, GL_TEXTURE_WRAP
 GL_TEXTURE_CUBE_MAP, GL_TEXTURE_CUBE_MAP_POSITIVE_X, GL_NEAREST_MIPMAP_NEAREST = 0x8513, 0x8515, 0x2700
 GL_TEXTURE_3D, GL_TEXTURE_2D_ARRAY, GL_RGBA8, GL_LINEAR = 0x806F, 0x8C1A, 0x8058, 0x2601
 GL_TEXTURE_WRAP_R, GL_TEXTURE_MAX_LEVEL = 0x8072, 0x813D
-SAMPLERS = ("sampler2D", "samplerCube", "sampler3D", "sampler2DArray", "usampler2D", "isampler2D")
+GL_DEPTH_COMPONENT, GL_DEPTH_COMPONENT32F = 0x1902, 0x8CAC
+GL_TEXTURE_COMPARE_MODE, GL_TEXTURE_COMPARE_FUNC, GL_COMPARE_REF_TO_TEXTURE = 0x884C, 0x884D, 0x884E
+SAMPLERS = ("sampler2D", "samplerCube", "sampler3D", "sampler2DArray", "usampler2D", "isampler2D",
+            "sampler2DShadow")
 # integer samplers: (internal format, format, type) of a 2x2 texture
 INT_SAMPLERS = {"usampler2D": (0x8D7C, 0x8D99, 0x1401), "isampler2D": (0x8D8E, 0x8D99, 0x1400)}
 PRIMS = {"triangles": 0x0004, "lines": 0x0001, "points": 0x0000}
@@ -467,6 +472,19 @@ def main():
             gl.glTexImage2D(target, 0, ifmt, 2, 2, 0, fmt, gty, texels)
             min_filter = GL_NEAREST
             what = "a 2x2 %s texture" % ("RGBA8UI" if ty == "usampler2D" else "RGBA8I")
+        elif ty == "sampler2DShadow":
+            # gl_test case 218's depth texture (4x4 DEPTH_COMPONENT32F) compared
+            # against the reference with GL_LESS (ES 3 path). The program's
+            # bytes do not depend on it (st_program.c:1239 lowers the compare
+            # for ARB programs only); the units the two samplers take do.
+            target = GL_TEXTURE_2D
+            gl.glBindTexture(target, t)
+            depth = (C.c_float * 16)(*[(1 + (x * 7 + y * 5) % 16) / 17.0 for y in range(4) for x in range(4)])
+            gl.glTexImage2D(target, 0, GL_DEPTH_COMPONENT32F, 4, 4, 0, GL_DEPTH_COMPONENT, GL_FLOAT, depth)
+            gl.glTexParameteri(target, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE)
+            gl.glTexParameteri(target, GL_TEXTURE_COMPARE_FUNC, GL_LESS)
+            min_filter = GL_NEAREST
+            what = "a 4x4 DEPTH_COMPONENT32F texture compared with GL_LESS"
         else:
             target = GL_TEXTURE_2D
             gl.glBindTexture(target, t)
