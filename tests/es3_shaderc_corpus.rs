@@ -820,6 +820,279 @@ fn inline_cases() {
     }
 }
 
+/// gl_FragDepth, in the shapes of dEQP-GLES3 shaders.fragdepth.write (a
+/// constant, a varying, a uniform, a conditional, a loop) and .compare (the
+/// written value combined with gl_FragCoord.z), plus a discard before the
+/// write. Authored here (not copied); each is a complete pass case.
+const FRAGDEPTH_CASES: &str = r#"
+group fragdepth "gl_FragDepth"
+    case write_constant
+        version 300 es
+        expect pass
+        vertex ""
+            #version 300 es
+            in highp vec4 a_position;
+            in highp float a_depth;
+            out highp float v_d;
+            void main()
+            {
+                gl_Position = a_position;
+                v_d = a_depth;
+            }
+        ""
+        fragment ""
+            #version 300 es
+            precision mediump float;
+            in highp float v_d;
+            layout(location = 0) out mediump vec4 o_color;
+            uniform highp float u_depth;
+            void main()
+            {
+                o_color = vec4(1.0, 0.0, 0.0, 1.0);
+                gl_FragDepth = 0.5;
+            }
+        ""
+    end
+
+    case write_varying
+        version 300 es
+        expect pass
+        vertex ""
+            #version 300 es
+            in highp vec4 a_position;
+            in highp float a_depth;
+            out highp float v_d;
+            void main()
+            {
+                gl_Position = a_position;
+                v_d = a_depth;
+            }
+        ""
+        fragment ""
+            #version 300 es
+            precision mediump float;
+            in highp float v_d;
+            layout(location = 0) out mediump vec4 o_color;
+            uniform highp float u_depth;
+            void main()
+            {
+                o_color = vec4(0.0, 1.0, 0.0, 1.0);
+                gl_FragDepth = v_d;
+            }
+        ""
+    end
+
+    case write_uniform
+        version 300 es
+        expect pass
+        vertex ""
+            #version 300 es
+            in highp vec4 a_position;
+            in highp float a_depth;
+            out highp float v_d;
+            void main()
+            {
+                gl_Position = a_position;
+                v_d = a_depth;
+            }
+        ""
+        fragment ""
+            #version 300 es
+            precision mediump float;
+            in highp float v_d;
+            layout(location = 0) out mediump vec4 o_color;
+            uniform highp float u_depth;
+            void main()
+            {
+                o_color = vec4(0.0, 0.0, 1.0, 1.0);
+                gl_FragDepth = u_depth;
+            }
+        ""
+    end
+
+    case write_conditional
+        version 300 es
+        expect pass
+        vertex ""
+            #version 300 es
+            in highp vec4 a_position;
+            in highp float a_depth;
+            out highp float v_d;
+            void main()
+            {
+                gl_Position = a_position;
+                v_d = a_depth;
+            }
+        ""
+        fragment ""
+            #version 300 es
+            precision mediump float;
+            in highp float v_d;
+            layout(location = 0) out mediump vec4 o_color;
+            uniform highp float u_depth;
+            void main()
+            {
+                o_color = vec4(1.0);
+                if (v_d > 0.5)
+                    gl_FragDepth = v_d;
+                else
+                    gl_FragDepth = 1.0 - v_d;
+            }
+        ""
+    end
+
+    case write_conditional_partial
+        version 300 es
+        expect pass
+        vertex ""
+            #version 300 es
+            in highp vec4 a_position;
+            in highp float a_depth;
+            out highp float v_d;
+            void main()
+            {
+                gl_Position = a_position;
+                v_d = a_depth;
+            }
+        ""
+        fragment ""
+            #version 300 es
+            precision mediump float;
+            in highp float v_d;
+            layout(location = 0) out mediump vec4 o_color;
+            uniform highp float u_depth;
+            void main()
+            {
+                o_color = vec4(1.0);
+                gl_FragDepth = gl_FragCoord.z;
+                if (v_d > 0.5)
+                    gl_FragDepth = u_depth;
+            }
+        ""
+    end
+
+    case write_loop
+        version 300 es
+        expect pass
+        vertex ""
+            #version 300 es
+            in highp vec4 a_position;
+            in highp float a_depth;
+            out highp float v_d;
+            void main()
+            {
+                gl_Position = a_position;
+                v_d = a_depth;
+            }
+        ""
+        fragment ""
+            #version 300 es
+            precision mediump float;
+            in highp float v_d;
+            layout(location = 0) out mediump vec4 o_color;
+            uniform highp float u_depth;
+            void main()
+            {
+                highp float d = 0.0;
+                for (int i = 0; i < 4; i++)
+                {
+                    d += v_d * 0.25;
+                    gl_FragDepth = d;
+                }
+                o_color = vec4(d);
+            }
+        ""
+    end
+
+    case write_discard
+        version 300 es
+        expect pass
+        vertex ""
+            #version 300 es
+            in highp vec4 a_position;
+            in highp float a_depth;
+            out highp float v_d;
+            void main()
+            {
+                gl_Position = a_position;
+                v_d = a_depth;
+            }
+        ""
+        fragment ""
+            #version 300 es
+            precision mediump float;
+            in highp float v_d;
+            layout(location = 0) out mediump vec4 o_color;
+            uniform highp float u_depth;
+            void main()
+            {
+                o_color = vec4(1.0);
+                if (v_d < 0.25)
+                    discard;
+                gl_FragDepth = v_d;
+            }
+        ""
+    end
+
+    case compare_frag_coord
+        version 300 es
+        expect pass
+        vertex ""
+            #version 300 es
+            in highp vec4 a_position;
+            in highp float a_depth;
+            out highp float v_d;
+            void main()
+            {
+                gl_Position = a_position;
+                v_d = a_depth;
+            }
+        ""
+        fragment ""
+            #version 300 es
+            precision mediump float;
+            in highp float v_d;
+            layout(location = 0) out mediump vec4 o_color;
+            uniform highp float u_depth;
+            void main()
+            {
+                o_color = vec4(gl_FragCoord.z);
+                gl_FragDepth = gl_FragCoord.z * 0.5 + v_d * 0.5;
+            }
+        ""
+    end
+end
+"#;
+
+/// Each `FRAGDEPTH_CASES` program compiles and links on the back end this
+/// build carries (the corpus is one GPU per build: PowerVR, GC7000UL, V3D).
+#[test]
+fn fragdepth_cases() {
+    let _g = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
+    let cases = parse_file(FRAGDEPTH_CASES);
+    let names: Vec<&str> = cases.iter().map(|c| c.name.as_str()).collect();
+    assert_eq!(
+        names,
+        [
+            "fragdepth.write_constant",
+            "fragdepth.write_varying",
+            "fragdepth.write_uniform",
+            "fragdepth.write_conditional",
+            "fragdepth.write_conditional_partial",
+            "fragdepth.write_loop",
+            "fragdepth.write_discard",
+            "fragdepth.compare_frag_coord",
+        ]
+    );
+    for c in &cases {
+        let units = run_case(c);
+        assert_eq!(units.len(), 1, "{}", c.name);
+        let u = &units[0];
+        assert_eq!(u.verdict, Verdict::PassCompiled, "{}: {}", u.name, u.detail);
+        assert_eq!(u.detail, "built", "{}", u.name);
+    }
+}
+
 // ---- part (b): the corpus ----------------------------------------------------
 
 #[derive(Default)]
