@@ -7,7 +7,7 @@
 #   driver/tools/kexec-zephyr/t6-verdict.sh <probe> <uart.log>
 #   T6_POOL_PA=<hex> T6_BACKING_PA=<hex> t6-verdict.sh t6_mmu <uart.log>
 #
-# probe: t6_hello, t6_gpu, t6_mmu or t6_fw. The expected lines are in order: the
+# probe: t6_hello, t6_gpu, t6_mmu, t6_fw or t6_submit. The expected lines are in order: the
 # early banner (T6:A .. T6:A3, board::nanopc_t6_early), the board glue's
 # lines (T6:B, the marker, the GIC line, the arming, T6:C, "board: watchdog
 # armed"; driver/zephyr/lib/board/nanopc_t6/nanopc_t6.c), the probe's own
@@ -42,10 +42,18 @@
 #
 # t6_fw: JOB_INT_RAWSTAT must have bit 31 set and the GLB req and ack words
 # agree on the acknowledged bits; hooks check both.
+#
+# t6_submit: Z3's lines as t6_fw's, then the Z4 record's nine lines (Z4a ..
+# Z4i, board::nanopc_t6_submit::SubmitUp). The status line (Z4a) pins step 0,
+# refusal 0, detail 0, so a stopped run (wait timeout, Z3 stopped) differs
+# there and on the fields it left at 0, and its FAIL line stands for PASS. The
+# record's timing (*_us), latest_flush, sync_updates, cleared and the digest
+# are tokens; the target's pixel counts are tokens whose sum must equal the
+# pixels read.
 set -euo pipefail
 export LC_ALL=C
 
-usage() { echo "usage: $0 {t6_hello|t6_gpu|t6_mmu|t6_fw} <uart.log>" >&2; exit 2; }
+usage() { echo "usage: $0 {t6_hello|t6_gpu|t6_mmu|t6_fw|t6_submit} <uart.log>" >&2; exit 2; }
 [ $# -eq 2 ] || usage
 PROBE=$1
 LOG=$2
@@ -247,8 +255,38 @@ table_t6_fw() {
 	table_reset t6_fw
 }
 
+# the target's counts (printed in decimal) add up to the pixels read
+z4_pixels() {
+	local k
+	for k in R B F O P; do [[ ${V[$k]} =~ ^[0-9]+$ ]] || return 1; done
+	(( 10#${V[R]} + 10#${V[B]} + 10#${V[F]} + 10#${V[O]} == 10#${V[P]} ))
+}
+
+# tools/probes/nanopc_t6/t6_submit/src/main.c: Z3's lines as t6_fw's, then
+# yd_t6_submit's record (SubmitUp, 392 bytes) in nine lines, %016llx for the
+# 64-bit words, %08x for the 32-bit words, %u for counts. The predicted values
+# are the_frame_runs_on_csg0_cs0_and_the_record_is_as_predicted's, over the MCU
+# model, not run on the board. A stopped run prints its record too (the
+# fields after the stop at 0) and "t6_submit: FAIL: Z4 step N (name)".
+table_t6_submit() {
+	table_boot
+	table_fw_image t6_submit
+	table_z3_record t6_submit
+	e 't6_submit: Z4a: step 0 refusal 0 detail 0x0000000000000000' 't6_submit: Z4a:'
+	e 't6_submit: Z4b: AS_PRESENT 0x000000ff L2_FEATURES 0x07120306 as0_tables_used 8 vm_tables_used 5 suspend_size 0 protm_suspend_size 0' 't6_submit: Z4b:'
+	e 't6_submit: Z4c: heap ctx 0x0000800000015000 chunk 0x0000800000100000 chunk_size 131072 stride 64' 't6_submit: Z4c:'
+	e 't6_submit: Z4d: CSG0 req 0x00000011 ack 0x00000011 CS0 req 0x00000511 ack 0x00000511, acked in {d}/{d} us' 't6_submit: Z4d:'
+	e 't6_submit: Z4e: insert 0x0000000000000080 extract 0x0000000000000080 seqno 0x0000000000000001 sync_status 0x00000000, wait {d} us' 't6_submit: Z4e:'
+	e 't6_submit: Z4f: latest_flush 0x{x8} sync_updates {d} status_cmd_ptr 0x0000000000000000 info 0x0000000000000000' 't6_submit: Z4f:'
+	e 't6_submit: Z4g: stop {d} us refusal 0, terminate {d} us refusal 0, cleared {d} {d} {d}' 't6_submit: Z4g:'
+	e 't6_submit: Z4h: target red {@R} blue {@B} fill {@F} other {@O} of {@P} pixels' 't6_submit: Z4h:' z4_pixels
+	e 't6_submit: Z4i: frame digest 0x{x16}' 't6_submit: Z4i:'
+	e 't6_submit: PASS' 't6_submit: (PASS|FAIL)'
+	table_reset t6_submit
+}
+
 case "$PROBE" in
-t6_hello | t6_gpu | t6_mmu | t6_fw) "table_$PROBE" ;;
+t6_hello | t6_gpu | t6_mmu | t6_fw | t6_submit) "table_$PROBE" ;;
 *) usage ;;
 esac
 
@@ -338,11 +376,11 @@ for ((i = 0; i < total; i++)); do
 	fi
 done
 
-# t6_fw: the stop line of a run that did not reach the end (the stop, the
-# refusal and what it was about) is a differing line too
-if [ "$PROBE" = t6_fw ]; then
+# t6_fw, t6_submit: the stop line of a run that did not reach the end (the
+# stop, the refusal and what it was about) is a differing line too
+if [ "$PROBE" = t6_fw ] || [ "$PROBE" = t6_submit ]; then
 	for ((j = 0; j < ${#LINES[@]}; j++)); do
-		if [[ ${LINES[j]} == 't6_fw: Z3: stop '* ]]; then
+		if [[ ${LINES[j]} == "$PROBE: Z3: stop "* ]]; then
 			printf 'differs  expected no stop line; seen "%s" (line %d)\n' "${LINES[j]}" $((j + 1))
 			bad=$((bad + 1))
 		fi

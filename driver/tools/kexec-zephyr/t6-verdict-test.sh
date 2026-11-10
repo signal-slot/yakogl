@@ -103,6 +103,25 @@ check t6_fw-job-bit 1 "VERDICT t6_fw FAIL (1 of $FW)" "$((FW - 1)) 0 1" t6_fw "$
 sed 's/GLB version 1.5.0 (0x01050000)/GLB version 1.4.0 (0x01040000)/' "$D/t6_fw-pass.uart" >"$WORK/ver.log"
 check t6_fw-version 1 "VERDICT t6_fw FAIL (1 of $FW)" "$((FW - 1)) 0 1" t6_fw "$WORK/ver.log"
 
+# t6_submit: t6_fw's 31 lines (the Z3 record) + 9 Z4 lines = 40. The Z4 lines
+# are the pinning test's record (board::nanopc_t6_submit); a stopped run prints
+# its record too and is judged by its status fields.
+SUB=40
+check t6_submit-pass 0 'VERDICT t6_submit PASS' "$SUB 0 0" t6_submit "$D/t6_submit-pass.uart"
+# wait timeout (step 14, refusal 19): Z4a, Z4e (extract and seqno 0) and the FAIL line differ
+check t6_submit-wait-timeout 1 "VERDICT t6_submit FAIL (3 of $SUB)" "$((SUB - 3)) 0 3" t6_submit "$D/t6_submit-wait-timeout.uart"
+# Z3 stopped (Z1 refused): the rc line, Z4a..Z4e (zeros), the FAIL line and the
+# stop line differ, the 7 record lines are missing
+check t6_submit-z3-stop 1 "VERDICT t6_submit FAIL (15 of $SUB)" "26 7 8" t6_submit "$D/t6_submit-z3-stop.uart"
+# cut after Z4f: Z4g, Z4h, Z4i, PASS and the reset line missing
+check t6_submit-missing 1 "VERDICT t6_submit FAIL (5 of $SUB)" "$((SUB - 5)) 5 0" t6_submit "$D/t6_submit-missing.uart"
+# the target's counts must add up to the pixels read
+sed 's/other 0 of 4096 pixels/other 0 of 4095 pixels/' "$D/t6_submit-pass.uart" >"$WORK/pix.log"
+check t6_submit-pixels 1 "VERDICT t6_submit FAIL (1 of $SUB)" "$((SUB - 1)) 0 1" t6_submit "$WORK/pix.log"
+# a Z3 stop line is a differing line for t6_submit as for t6_fw
+sed '/Z3: rc 0/a t6_submit: Z3: stop 5 refusal 5 detail 0x0000000000000000 acked 0x00000000' "$D/t6_submit-pass.uart" >"$WORK/stop.log"
+check t6_submit-stop-line 1 "VERDICT t6_submit FAIL (1 of $SUB)" "$SUB 0 1" t6_submit "$WORK/stop.log"
+
 # usage
 rc=0
 bash "$V" t6_nonesuch "$D/t6_mmu-pass.uart" >/dev/null 2>&1 || rc=$?
