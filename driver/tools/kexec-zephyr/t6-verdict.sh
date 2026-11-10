@@ -47,8 +47,10 @@
 # Z4i, board::nanopc_t6_submit::SubmitUp). The status line (Z4a) pins step 0,
 # refusal 0, detail 0, so a stopped run (wait timeout, Z3 stopped) differs
 # there and on the fields it left at 0, and its FAIL line stands for PASS. The
-# record's timing (*_us), latest_flush, sync_updates, cleared and the digest
-# are tokens; the target's pixel counts are tokens whose sum must equal the
+# record's timing (*_us), latest_flush, sync_updates, cleared and as0_tables_used
+# (the board's file sizes Z3's tables: the model's 8 is not the board's) are
+# tokens; vm_tables_used, the heap chunk and the digest are pinned as the
+# generated frame's record in nanopc_t6_submit pins them; the target's pixel counts are tokens whose sum must equal the
 # pixels read.
 set -euo pipefail
 export LC_ALL=C
@@ -273,14 +275,14 @@ table_t6_submit() {
 	table_fw_image t6_submit
 	table_z3_record t6_submit
 	e 't6_submit: Z4a: step 0 refusal 0 detail 0x0000000000000000' 't6_submit: Z4a:'
-	e 't6_submit: Z4b: AS_PRESENT 0x000000ff L2_FEATURES 0x07120306 as0_tables_used 8 vm_tables_used 5 suspend_size 0 protm_suspend_size 0' 't6_submit: Z4b:'
-	e 't6_submit: Z4c: heap ctx 0x0000800000015000 chunk 0x0000800000100000 chunk_size 131072 stride 64' 't6_submit: Z4c:'
+	e 't6_submit: Z4b: AS_PRESENT 0x000000ff L2_FEATURES 0x07120306 as0_tables_used {d} vm_tables_used 10 suspend_size 0 protm_suspend_size 0' 't6_submit: Z4b:'
+	e 't6_submit: Z4c: heap ctx 0x0000800000015000 chunk 0x0000800000a00000 chunk_size 2097152 stride 64' 't6_submit: Z4c:'
 	e 't6_submit: Z4d: CSG0 req 0x00000011 ack 0x00000011 CS0 req 0x00000511 ack 0x00000511, acked in {d}/{d} us' 't6_submit: Z4d:'
 	e 't6_submit: Z4e: insert 0x0000000000000080 extract 0x0000000000000080 seqno 0x0000000000000001 sync_status 0x00000000, wait {d} us' 't6_submit: Z4e:'
 	e 't6_submit: Z4f: latest_flush 0x{x8} sync_updates {d} status_cmd_ptr 0x0000000000000000 info 0x0000000000000000' 't6_submit: Z4f:'
 	e 't6_submit: Z4g: stop {d} us refusal 0, terminate {d} us refusal 0, cleared {d} {d} {d}' 't6_submit: Z4g:'
 	e 't6_submit: Z4h: target red {@R} blue {@B} fill {@F} other {@O} of {@P} pixels' 't6_submit: Z4h:' z4_pixels
-	e 't6_submit: Z4i: frame digest 0x{x16}' 't6_submit: Z4i:'
+	e 't6_submit: Z4i: frame digest 0xa4db81a9d39bfdcc' 't6_submit: Z4i:'
 	e 't6_submit: PASS' 't6_submit: (PASS|FAIL)'
 	table_reset t6_submit
 }
