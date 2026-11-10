@@ -1,8 +1,0 @@
-# SPDX-License-Identifier: Apache-2.0
-# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-# All 33 default scenes, for the fake glmark2-es2-mali of
-# tools/cts/testdata/mali-glmark2-run/: a GPU fault in scene 5 (panthor MMU
-# and GPU fault lines into the board's ring), a hang in scene 23 (killed by the
-# runner's timeout); every other scene draws cleanly.
-texture:texture-filter=mipmap	gpufault
-terrain	hang
