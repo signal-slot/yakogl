@@ -367,12 +367,14 @@ What landing the terrain part needs, in this order:
 1. sr-compiler-fix's patch with its re-pins (`precompile_counts.txt`,
    `lane_move_equivalence.rs`, `gc_sr_shader_count.rs`, the
    `gc_terrain_shader_count.rs` pins to the "patch" comments): the 10.6 ms
-   above, by one item allowed to move the fixture.
+   above, by one item allowed to move the fixture. Landed by item
+   x2-tiled-probe-run ("Landed" below).
 2. Rank 1 in `select.rs`: call the shared unroller (`powervr/unroll.rs`
    `unroll`, the count from `loop_count.rs` `constant_loop_entries`, limit 32
    as etnaviv's) on the GC path before `loop_convert`, so the array index is
    a constant and `lower.rs`'s constant-index path reads the constant file.
-   terrain.frag's 54 instructions, 15.6 ms; t1 to 1 or 2.
+   terrain.frag's 54 instructions, 15.6 ms; t1 to 1 or 2. Landed with step 1
+   by item x2-tiled-probe-run ("Landed" below: 46 instructions, t1 to 1).
 3. Rank 4 in the GC `select_blocks`: `fold::fold_float` on constant
    operands. t4 to 2; terrain.vert's `vec4(p, 1.0)` product 8.
 4. Rank 3: `codegen.rs` hands the `invariant` output registers to the GC
@@ -404,6 +406,55 @@ t4.xyzw`, listing 48), consumes every lane of `t4`, and the copy wrote only
 y (lane x is the `0.0`), so no single source can stand in for the copy. Removing it needs the producer written into the
 copy's destination lane (`mul t4._y__` directly), which is the coalescer of
 rank 2, not a read-through; item pe-wire has the analysis.
+
+**Step 2, rank 1: constant-count loops unrolled on the GC7000.**
+`select.rs` `select_blocks` hands the module to `unrolled` first: when it
+has a constant `for` loop of 1 to 32 passes (`UNROLL_PASSES_MAX`, etnaviv's
+`max_unroll_iterations`; the count from `loop_count.rs`
+`constant_loop_entries`), the shared unroller runs under its new
+`Rules::Counted { max: 32 }` (`powervr/unroll.rs` `unroll_with`). That rule
+expands only such a loop, and only one whose single way out is its head
+test (no other `break`, no `continue` or `return`). Every other loop is
+copied as it is, `break`s and `continue`s included, for `loop_convert`. A
+`LoadUniformIdx` whose index the walk knows becomes `LoadUniform` of that
+element, clamped to the array as the run-time read clamps, so it is read
+from the constant file and not through the clamp, `imullo0` and `load` of
+`select.rs:2455-2530`. `select_blocks` keeps the module it was given when
+nothing qualifies, when the walk refuses, and when the expansion would
+change the set of inputs and outputs the program touches (the io lists are
+decided from the instructions). The PowerVR and the V3D call `unroll` as
+before (`Rules::Shared`): their fixtures and `tests/reference/` stay byte
+for byte. `select::select_rolled` is selection without the expansion, for
+the tests whose subject is a loop that stays a loop (select.rs's guard
+tests, `tests/alloc_clobber.rs`'s named loop shapes).
+
+Measured at main `4c19d79f` with step 1 in:
+
+| | step 1 | step 2 | etnaviv |
+|---|---:|---:|---:|
+| `terrain.frag` instructions (temporaries) | 127 (16) | **81** (12) | 72 (11) |
+| the ten shaders | 428 | **382** | 279 |
+| micro t1 (`tests/gc_unroll.rs`, `tests/gc_terrain_shader_count.rs`) | 19 | **1** (one `add` of the constant register) | |
+| the other nine shaders, shadow's and refract's eight (146) | | unchanged (no loop) | |
+| `precompile_counts.txt` gc7000, es2=0: all, femtovg, gl_test_es100 | 114448, 38720, 29248 | **142320**, 38720, 29056 | |
+| the same, es2=1 | 95344, 38720, 22960 | **123216**, 38720, 22768 | |
+
+The whole GC offline table grows by 27,872 code bytes in both builds (24 %
+and 29 %): its loops of up to 32 passes are now their passes, as etnaviv
+compiles them, where they were one body and a guard. gl_test's ES 1.00 set
+shrinks by 192 bytes and femtovg's does not move. `src/vivante/internal.rs`
+does not move.
+
+terrain.frag loses **46** instructions: the six `branch`es, the counter,
+`i`'s set-up and step, the `cmp`s, and the five run-time array reads
+(`imullo0`, `load`, the clamp's `cmp`s and `select`s): none of them is left
+in the listing (`mul` 24, `add` 13, `mov` 11, `dp3` 8, `mad` 6, `texld` 5,
+`rsq` 5, `select` 4, `cmp` 1, `rcp`, `sqrt`, `exp`, `log`). The ranking's
+54 was read off the 148-instruction listing; the sr patch had already
+taken some of the loop's copies, so 46 is the drop from step 1's count. At
+the model's cost (0.23 to 0.35 ms an instruction for terrain.frag) that is
+**about 10.6 to 16 ms** a frame (13.2 at cover x overdraw 1.0), to be
+checked on the X2. terrain.frag is now 9 instructions from etnaviv's 72.
 
 ## Not done, and what would settle the open ends
 
