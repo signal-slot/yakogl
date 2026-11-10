@@ -1844,7 +1844,12 @@ impl<'a> Sel<'a> {
             /* textureSize of a stacked texture, as glsl2usc's pvr_arrSize and
              * pvr_cubeSize read the stacked 2D image: a 2D array is (w,
              * h / layers, layers), a cube (w, h / 6), integer divisions
-             * (`idiv_into`, nir_lower_idiv's). */
+             * (`idiv_into`, nir_lower_idiv's). The layer's height is at
+             * least 1 (ES 3.0.6 3.8.11, floor(h / 2^lod) at least 1, as the
+             * image word's own sizes are in `tex_size_2d`): the stacked
+             * image's height at the level divides to 0 once it is below the
+             * layer count (dEQP texturesize's 100x31x18 at levels 5 and 6,
+             * 17 / 18 and 8 / 18). */
             ir::Op::TexSize { sampler, dim: dim @ (ir::TexDim::D2Array | ir::TexDim::Cube), lod } => {
                 let lod = self.src(lod, 0)?;
                 let [w, h] = self.tex_size_2d(sampler, lod)?;
@@ -1855,10 +1860,12 @@ impl<'a> Sel<'a> {
                         SelSrc::Fixed { bank: Bank::Shared, reg: self.layers_dword(sampler)?, mods: Mods::default() };
                     self.fresh_typed(SelOp::Alu(ir::AluOp::F2i), op_type(ir::AluOp::F2i), [Some(layers), None, None])?
                 };
-                let per = SelDst::Virtual(Self::reg(ir::ValueId(id.0), 1));
-                self.idiv_into(h, count, false, per)?;
+                let quotient = VReg(self.next_vreg);
+                self.next_vreg += 1;
+                self.idiv_into(h, count, false, SelDst::Virtual(quotient))?;
+                let per = self.at_least_one(SelSrc::Virtual { v: quotient, mods: Mods::default() })?;
                 /* lane 2, the layer count, for an array only (no_std: no Vec) */
-                let lanes = [Some((0u32, w)), (dim == ir::TexDim::D2Array).then_some((2, count))];
+                let lanes = [Some((0u32, w)), Some((1, per)), (dim == ir::TexDim::D2Array).then_some((2, count))];
                 for (lane, r) in lanes.into_iter().flatten() {
                     self.emit(SelGroup {
                         op: SelOp::Copy,
@@ -1869,18 +1876,27 @@ impl<'a> Sel<'a> {
                 }
                 Ok(())
             }
-            /* textureSize of a 3D texture: glsl2usc's pvr_volSize, one
-             * slice's size and the slice count (level 0 whatever `lod`, as
-             * the helper does). */
-            ir::Op::TexSize { sampler, dim: ir::TexDim::D3, .. } => {
+            /* textureSize of a 3D texture kept as a grid of slices: glsl2usc's
+             * pvr_volSize gives one slice's size and the slice count at level
+             * 0; here each is then halved `lod` times and kept at least 1
+             * (ES 3.0.6 3.8.11: level l of a w x h x d texture is
+             * max(1, floor(w / 2^l)) x ..., the depth halving with the sides).
+             * The helper ignored the level, so textureSize(s, 1) of a 64^3
+             * texture was 64^3, not 32^3 (dEQP texturesize.sampler3d_*, every
+             * row with a level above 0). The grid itself has one level: the
+             * size is GL's answer whatever the image holds. */
+            ir::Op::TexSize { sampler, dim: ir::TexDim::D3, lod } => {
+                let lod = self.src(lod, 0)?;
                 let layers = SelSrc::Fixed { bank: Bank::Shared, reg: self.layers_dword(sampler)?, mods: Mods::default() };
                 let (_, [sw, sh], n) = self.vol_grid(sampler, layers)?;
                 for (lane, r) in [sw, sh, n].into_iter().enumerate() {
+                    let at = self.fresh_group(SelOp::Machine(MachineOp::Ushr), [Some(r), Some(lod), None])?;
+                    let size = self.at_least_one(at)?;
                     self.emit(SelGroup {
                         op: SelOp::Copy,
                         ty: OpType::U32,
                         dst: Some(SelDst::Virtual(Self::reg(ir::ValueId(id.0), lane as u32))),
-                        srcs: [Some(r), None, None],
+                        srcs: [Some(size), None, None],
                     })?;
                 }
                 Ok(())
@@ -3416,6 +3432,13 @@ impl<'a> Sel<'a> {
             out[lane] = self.fresh_group(SelOp::Alu(Bcsel), [Some(some), Some(at), imm(1)])?;
         }
         Ok(out)
+    }
+
+    /// `max(x, 1)` of an unsigned size: a level's side is at least one texel
+    /// (the select pco's usclib_tex_state_size ends each component with).
+    fn at_least_one(&mut self, x: SelSrc) -> Result<SelSrc, SelectError> {
+        let some = self.fresh_group(SelOp::Machine(MachineOp::Uge), [Some(x), Some(SelSrc::Imm(1)), None])?;
+        self.fresh_group(SelOp::Alu(ir::AluOp::Bcsel), [Some(some), Some(x), Some(SelSrc::Imm(1))])
     }
 
     /// Where a cube look-up samples the stacked 2D image YakoGL keeps a cube
