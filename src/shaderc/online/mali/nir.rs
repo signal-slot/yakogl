@@ -246,6 +246,14 @@ pub enum Alu {
     /// cflow_148_texbranch.expect.json's `U16_TO_U32 r1, r1^.h0` after each
     /// look-up under an `if`).
     Mov,
+    /// `fsin`, `fcos`, `flog2` of a mediump fragment shader's 16-bit lane,
+    /// as `bi_lower_bit_size` leaves them (bifrost_nir.c:42-49):
+    /// `f2f16(op(f2f32(a)))`, one 16-bit node that `bi_emit_alu`'s 32-bit
+    /// expansion stands for at selection (nir_fs.rs `transc_rows`;
+    /// docs/notes/mali-transcendentals.md).
+    Fsin,
+    Fcos,
+    Flog2,
 }
 
 impl Alu {
@@ -276,7 +284,10 @@ impl Alu {
             | Alu::F2u
             | Alu::Extract16(_)
             | Alu::Mov
-            | Alu::B2i => 1,
+            | Alu::B2i
+            | Alu::Fsin
+            | Alu::Fcos
+            | Alu::Flog2 => 1,
             Alu::Ffma
             | Alu::Bcsel
             | Alu::Cubeface1
@@ -1928,7 +1939,10 @@ impl<'s> Nir<'s> {
                 | Alu::F2u
                 | Alu::Extract16(_)
                 | Alu::B2i
-                | Alu::Ucmp(_) => return Err(MaliError::ConstantFold),
+                | Alu::Ucmp(_)
+                | Alu::Fsin
+                | Alu::Fcos
+                | Alu::Flog2 => return Err(MaliError::ConstantFold),
                 Alu::F2f16
                 | Alu::Fneg
                 | Alu::Fabs

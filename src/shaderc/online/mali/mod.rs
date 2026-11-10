@@ -1708,6 +1708,8 @@ pub fn compile_vs_mapped_blocks<'s>(
 /* the test modules last: clippy's items_after_test_module (a newer clippy
  * than the gate host's flagged them at the top of the file) */
 #[cfg(test)]
+mod fs_transc_tests;
+#[cfg(test)]
 mod mixprec_tests;
 #[cfg(test)]
 mod tests;
