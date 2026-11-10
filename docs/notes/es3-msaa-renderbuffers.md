@@ -438,6 +438,84 @@ it per back end and records HOST-ONLY counts of statuses (NotSupported to
 Fail/Pass moves), not render verdicts; board counts wait for the board
 sessions (#313, #316, #320).
 
+### (d1) HOST-ONLY baseline of the three groups, `msaa-fbo` absent (2026-11-10)
+
+**HOST-ONLY: the linux OSAL keeps the command stream and every read-back is
+black, so no Pass or Fail from a case that compares pixels is a render
+verdict; the statuses that do mean something are NotSupported and the API
+errors (`Got GL_INVALID_OPERATION`).** Not a board result: nothing here belongs
+in `tools/cts/RESULTS.md`.
+
+- yakogl commit `6770479e` (the library as built, `GL_MAX_SAMPLES` 1; the
+  script printed `library and harness from 6770479e`).
+- VK-GL-CTS `93bca01861b0e3ef3c387027a9791e6d065f900c`, `fetch_sources.py`, the
+  `targets/yakogl` files of `tools/cts/cts-yakogl-target.patch`.
+- Commands (README section 2b, `MODULE=gles3`, one `OUT` per run), for
+  `GPU` in `vivante powervr v3d` and `G` in the three filters below:
+
+```sh
+tools/cts/host-deqp-run.sh --module=gles3 --gpu=$GPU --cts=<VK-GL-CTS> \
+  --out=build/host-deqp/msaa-$GPU-off-<name> dEQP-GLES3.functional.<G>
+# G: fbo.msaa.   multisample.fbo_max_samples.   rasterization.fbo.rbo_multisample_max.
+```
+
+The three back ends gave the same counts and the same messages in every
+group (a per-back-end table each, as the plan asks):
+
+| vivante (`GPU=vivante`) | cases | Pass | Fail | NotSupported | QualityWarning |
+|---|---:|---:|---:|---:|---:|
+| `fbo.msaa.` | 70 | 0 | 38 | 32 | 0 |
+| `multisample.fbo_max_samples.` | 16 | 9 | 7 | 0 | 0 |
+| `rasterization.fbo.rbo_multisample_max.` | 12 | 5 | 7 | 0 | 0 |
+
+| powervr (`GPU=powervr`) | cases | Pass | Fail | NotSupported | QualityWarning |
+|---|---:|---:|---:|---:|---:|
+| `fbo.msaa.` | 70 | 0 | 38 | 32 | 0 |
+| `multisample.fbo_max_samples.` | 16 | 9 | 7 | 0 | 0 |
+| `rasterization.fbo.rbo_multisample_max.` | 12 | 5 | 7 | 0 | 0 |
+
+| v3d (`GPU=v3d`) | cases | Pass | Fail | NotSupported | QualityWarning |
+|---|---:|---:|---:|---:|---:|
+| `fbo.msaa.` | 70 | 0 | 38 | 32 | 0 |
+| `multisample.fbo_max_samples.` | 16 | 9 | 7 | 0 | 0 |
+| `rasterization.fbo.rbo_multisample_max.` | 12 | 5 | 7 | 0 | 0 |
+
+Failures by message, the same on all three back ends:
+
+| group | count | message |
+|---|---:|---|
+| `fbo.msaa.` | 34 | `Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154` (the 2- and 4-sample `glRenderbufferStorageMultisample`, samples > 1) |
+| `fbo.msaa.` | 4 | `compareThreshold(color, green)` at `es3fFboMultisampleTests.cpp:346` (`renderbuffer_resize.*`; a black read-back, meaningless) |
+| `multisample.fbo_max_samples.` | 7 | `Failed` (pixel comparison against black, meaningless) |
+| `rasterization.fbo.rbo_multisample_max.` | 4 / 2 / 1 | `Incorrect rasterization` / `Found invalid pixel values` / `Found invalid pixels` (black read-back, meaningless) |
+
+**Why the NotSupported ones end so.** The 32 `fbo.msaa.` NotSupported are 20
+`Sample count not supported` and 12 `Format not supported` (the float colour
+formats). `FboTestCase::checkSampleCount` (`es3fFboTestCase.cpp:363`) only
+asks `glGetInternalformativ(GL_SAMPLES)` for a count above the spec minimum
+of 4, so the 8-sample cases end NotSupported at once, while the 2- and
+4-sample cases skip the check, call `glRenderbufferStorageMultisample` and
+get `GL_INVALID_OPERATION` from the core (`GL_MAX_SAMPLES` 1): those are the
+34 Fails. Both move with the capability: 4 keeps the 8-sample ones
+NotSupported and turns the 34 into allocations. The `fbo_max_samples` and
+`rbo_multisample_max` cases show no NotSupported and no API error; what they
+request from `GL_MAX_SAMPLES` was not read for this baseline, and their
+Pass/Fail split is black-readback noise that moves only on a board. The
+groups of (d) that are NotSupported on the boards for `GL_MAX_SAMPLES` 1
+(`multisample.fbo_4_samples`, `rbo_multisample_4`, `completeness.samples`)
+are not among these three filters and are not re-measured here.
+
+(d) counts rows of the board inventories; this counts the cases each filter
+selects as the script ran them (`fbo.msaa.` 70, `fbo_max_samples.` 16,
+`rbo_multisample_max.` 12), so the totals differ from (d)'s Fail counts for
+the same group names.
+
+### (d2) HOST-ONLY rerun with `msaa-fbo` (to be filled by item `deqp-rerun`)
+
+Same three tables per back end and the same filters, one `OUT` per run, with
+the option of README section 2b on; the Pass/Fail/NotSupported moves against
+(d1) are the point, not the render verdicts. Placeholder: no rerun yet.
+
 ## (e) Open points and the RC8 row draft
 
 1. **Size cap.** (b)3 sets `width * height > 2048 * 2048` as
