@@ -11,6 +11,11 @@
 //!   glVertexAttribDivisor(1, 1): the per-vertex stream's word is 0, the
 //!   per-instance one's is 1, and the instances are ONE DRAW_INSTANCED that
 //!   carries all of them, not a draw per instance.
+//! * V1, the hardware divisor: an attribute at glVertexAttribDivisor(1, 3)
+//!   gets word 3 in ONE DRAW_INSTANCED of the 4 instances, and the dEQP
+//!   `instanced.*.mixed.4_instances` shape (a program that reads
+//!   gl_InstanceID, two arrays at divisor 2) is one DRAW_INSTANCED, not
+//!   split into draws the back end refuses (`gc_refused_draws` unchanged).
 //!
 //! How it runs: the real GL core and the real Vivante back end over a
 //! stand-in OSAL that keeps every submitted stream (as
@@ -359,5 +364,74 @@ fn divisor_one_stream_has_word_one_in_one_instanced_draw() {
         let (pairs, counts) = divisor_words_and_draws(&take_kicks());
         assert_eq!(pairs, [[0, 1]], "stream 0 per vertex, stream 1 per instance");
         assert_eq!(counts, [3], "ONE instanced draw of the 3 instances, not one draw per instance");
+    });
+}
+
+/// V1: the array's own divisor, not 1, in the stream's divisor word, and the
+/// instances in one DRAW_INSTANCED. Revert check: with `max_instance_divisor`
+/// 1 the GL core draws the 4 instances one by one (four draws, the attribute
+/// a constant, word 0); with the word from `per_instance` alone it reads 1.
+#[test]
+fn divisor_three_stream_has_word_three_in_one_instanced_draw() {
+    let _g = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    with_backend(|| {
+        setup();
+        // SAFETY: plain GL call.
+        unsafe { glVertexAttribDivisor(1, 3) };
+        let _ = take_kicks();
+        // SAFETY: plain GL calls on the bound arrays.
+        unsafe {
+            glDrawArraysInstanced(GL_TRIANGLES, 0, 3, 4);
+            glFinish();
+        }
+        no_error("glDrawArraysInstanced");
+        let (pairs, counts) = divisor_words_and_draws(&take_kicks());
+        assert_eq!(pairs, [[0, 3]], "stream 0 per vertex, stream 1 one element per 3 instances");
+        assert_eq!(counts, [4], "ONE instanced draw of the 4 instances");
+    });
+}
+
+/// The vertex shader of dEQP-GLES3
+/// `functional.instanced.draw_arrays_instanced.mixed.4_instances`
+/// (`es3fInstancedRenderingTests.cpp`, TYPE_FLOAT), one attribute fewer:
+/// it reads gl_InstanceID and an array at divisor 2.
+#[cfg(not(feature = "report-es2"))]
+const MIXED_VS: &str = "#version 300 es\nin highp vec4 p;\nin mediump vec4 q;\nout mediump vec4 v;\n\
+                        void main()\n{\n    gl_Position = p + vec4(float(gl_InstanceID) * 2.0 / 4.0, 0.0, 0.0, 0.0);\n    \
+                        v = vec4(float(gl_InstanceID) / 4.0, q.g, q.b, 1.0);\n}\n";
+#[cfg(not(feature = "report-es2"))]
+const MIXED_FS: &str = "#version 300 es\nprecision mediump float;\nin mediump vec4 v;\nout vec4 o;\n\
+                        void main() { o = v; }\n";
+
+/// The mixed case of the six failing dEQP cases: a program that reads
+/// gl_InstanceID with an array at divisor 2. Before V1 the GL core drew it
+/// instance by instance and the back end refused instances 1..3 (V0, counted
+/// in `gc_refused_draws`); now it is one DRAW_INSTANCED of the 4 instances
+/// with word 2, the FE counting gl_InstanceID 0..3, and nothing refused.
+/// Not in a report-es2 build: its front end refuses GLSL ES 3.00.
+#[test]
+#[cfg(not(feature = "report-es2"))]
+fn a_mixed_draw_reading_gl_instance_id_is_one_instanced_draw() {
+    let _g = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    with_backend(|| {
+        setup();
+        // SAFETY: plain GL calls.
+        unsafe {
+            glUseProgram(program(MIXED_VS, MIXED_FS));
+            glVertexAttribDivisor(1, 2);
+        }
+        no_error("the mixed program");
+        let _ = take_kicks();
+        let refused = yakogl::vivante::backend::gc_refused_draws();
+        // SAFETY: plain GL calls on the bound arrays.
+        unsafe {
+            glDrawArraysInstanced(GL_TRIANGLES, 0, 3, 4);
+            glFinish();
+        }
+        no_error("glDrawArraysInstanced");
+        assert_eq!(yakogl::vivante::backend::gc_refused_draws().wrapping_sub(refused), 0, "no instance refused");
+        let (pairs, counts) = divisor_words_and_draws(&take_kicks());
+        assert_eq!(pairs, [[0, 2]], "stream 0 per vertex, stream 1 one element per 2 instances");
+        assert_eq!(counts, [4], "ONE instanced draw of the 4 instances");
     });
 }

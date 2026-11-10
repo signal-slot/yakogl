@@ -2759,7 +2759,9 @@ fn build_vertex_input(f: &mut GcFrame, d: &mut GcDraw, gl: &GlesDraw) -> i32 {
                 return -1;
             }
         }
-        d.streams[i] = GcStream { gpu: base + off as u64, stride: a.stride, divisor: u32::from(a.per_instance != 0) };
+        /* the array's divisor (GlesAttrib: 0 means 1), 0 per vertex */
+        let divisor = if a.per_instance != 0 { u32::from(a.divisor.max(1)) } else { 0 };
+        d.streams[i] = GcStream { gpu: base + off as u64, stride: a.stride, divisor };
         d.elems[i] = GcElem {
             stream: i as u8,
             type_: attrib_data_type(a.format),
@@ -2876,7 +2878,7 @@ pub(super) unsafe fn draw_one(draw: *const GlesDraw) -> i32 {
      * that it left the field 0 and these draws went through with
      * gl_InstanceID reading 0 in every instance. */
     if gl.instance_id != 0 && !gl.vs.is_null() && unsafe { (*gl.vs).vs_instance_id_reg1 } != 0 {
-        glog_once!("yakogl/vivante: draw refused: an instance drawn on its own (a divisor past 1) whose program reads gl_InstanceID");
+        glog_once!("yakogl/vivante: draw refused: an instance drawn on its own (a divisor past 0xffff) whose program reads gl_InstanceID");
         return -crate::util::EINVAL;
     }
     /* ES 3.0 4.4.4.2 lets colour attachments differ in size; the render
@@ -3544,9 +3546,12 @@ pub static yakogl_backend_vivante: YakoglBackend = YakoglBackend {
     uniforms_host_only: true,
     ds_write: None,
     stencil_resolve: None,
-    /* divisor 1, as before the field (GcStream carries a divisor; whether
-     * the FE takes more than 1 is unmeasured) */
-    max_instance_divisor: 1,
+    /* the array's own divisor in the stream's divisor state (0x14680 + 4i),
+     * as Mesa etnaviv programs it on every HALTI2+ part (this GPU is HALTI5):
+     * one DRAW_INSTANCED, gl_InstanceID 0..n-1. Whether this FE takes more
+     * than 1 is not measured on the board yet (gl_test x2-instmix,
+     * docs/notes/instanceid-per-draw.md V1) */
+    max_instance_divisor: 0xffff,
     /* one kick's fence, the open frame submitted first (kick.rs): the sync
      * waits and the GL core's wait before a depth resolve */
     wait_kick: Some(gc_wait_kick),
