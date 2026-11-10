@@ -69,9 +69,8 @@ fn no_ieq(ir: &[Op]) -> bool {
 /// The front end's read ladders become Mesa's binary search: a run of three
 /// (`arr[i]`: `ilt(i, 1)` over `ilt(i, 2)`), a matrix's two columns (`p[i]`,
 /// `ilt(i, 1)`), four (`t[i]`: `ilt(i, 2)` over `ilt(i, 1)` and `ilt(i,
-/// 3)`), a vector's four lanes (`v[j]`, the same tree; [`super::passes`]
-/// still refuses it, `IndexedLocal`, until fs-indexlocal) -- no `ieq`
-/// left. A `?:` chain of the source's own compares is no ladder and stays.
+/// 3)`), a vector's four lanes (`v[j]`, the same tree, which
+/// [`super::passes`] takes since fs-indexlocal) -- no `ieq` left. A `?:` chain of the source's own compares is no ladder and stays.
 #[test]
 fn glsl_rewrites_a_read_ladder_into_the_ilt_search() {
     let read = |src: &str, n: i32, leaf: &dyn Fn(&[Op], i32, Src)| {
@@ -113,7 +112,7 @@ fn glsl_rewrites_a_read_ladder_into_the_ilt_search() {
     let lanes = "precision highp float; uniform int u_j; uniform vec4 u_k; void main() { vec4 v = u_k * u_k; \
                  gl_FragColor = vec4(v[u_j]); }";
     let (passes, ir) = rewrite(SHC_STAGE_FRAGMENT, lanes);
-    assert_eq!(passes, Err(MaliError::IndexedLocal));
+    assert!(passes.is_ok(), "{passes:?}");
     assert!(no_ieq(&ir), "{ir:?}");
     let root = (0..ir.len())
         .rev()

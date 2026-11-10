@@ -2046,6 +2046,48 @@ impl<'s> Fs<'s> {
         (self.nir.nodes[n as usize].kind == Kind::PixelCoord && half > 0.0 && half < 1.0).then_some(p)
     }
 
+    /// The sum `fadd(x, y)` (IR sources `srcs`) as nir_opt_algebraic.py:2419
+    /// takes it: one operand a front-end `ffma(c0, x0, fmul(c1, y1))` read
+    /// once, the other `c` no product; `(c0, x0, c1, y1, c)`.
+    fn mat_sum(&self, m: &Module<'_>, srcs: &[ir::Src; 3], x: Val, y: Val) -> Option<(Val, Val, Val, Val, Val)> {
+        [(0, x, y), (1, y, x)].into_iter().find_map(|(k, t, c)| {
+            let (Alu::Ffma, [c0, x0, acc]) = self.alu_of(t)? else { return None };
+            let (Alu::Fmul, [c1, y1, _]) = self.alu_of(acc)? else { return None };
+            let konst = [c0, x0, c1, y1].iter().any(|v| matches!(v, Val::Const(_)));
+            (ir_uses(m, srcs[k].val) == 1 && !konst && !self.is_fmul(c) && !matches!(c, Val::Const(_)))
+                .then_some((c0, x0, c1, y1, c))
+        })
+    }
+
+    /// `v` is a select of constants, or of such selects `depth` deep at
+    /// most: a run-time index's read tree over constant elements (glsl.rs
+    /// `ilt_trees`, case 80's `arr[i]`).
+    fn const_select(&self, v: Val, depth: u8) -> bool {
+        match (v, self.alu_of(v)) {
+            (Val::Const(_), _) => true,
+            (_, Some((Alu::Bcsel, [_, p, q]))) if depth > 0 => {
+                self.const_select(p, depth - 1) && self.const_select(q, depth - 1)
+            }
+            _ => false,
+        }
+    }
+
+    /// [`Fs::const_select`] `v` times the constant `k`: the selects' tree
+    /// over the products of its constants (nir_opt_algebraic.py:1032,
+    /// `op(bcsel(a, #b, #c), #d)` to `bcsel(a, op(b, d), op(c, d))`, from
+    /// the innermost select out).
+    fn scaled_select(&mut self, v: Val, k: u32, at: usize) -> Result<Val, MaliError> {
+        match (v, self.alu_of(v)) {
+            (Val::Const(c), _) => Ok(Val::Const((f32::from_bits(c) * f32::from_bits(k)).to_bits())),
+            (_, Some((Alu::Bcsel, [c, p, q]))) => {
+                let p = self.scaled_select(p, k, at)?;
+                let q = self.scaled_select(q, k, at)?;
+                self.op32(Alu::Bcsel, [c, p, q], at)
+            }
+            _ => Err(MaliError::Defect(Defect::IrIndex)),
+        }
+    }
+
     /// `v` is `fneg(b2f(c))`.
     fn is_neg_b2f(&self, v: Val) -> bool {
         matches!(self.alu_of(v), Some((Alu::Fneg, [inner, ..])) if matches!(self.alu_of(inner), Some((Alu::B2f, _))))
@@ -2085,6 +2127,23 @@ impl<'s> Fs<'s> {
              * `fract(52.98 * t) - 0.5`, whose lowered `ffract` is `fadd(p,
              * fneg(ffloor(p)))`: `FADD -floor, -0.5` then `FADD .., p`
              * (fvg_fill_gradient*.expect.json) */
+            /* a matrix product's lane, the front end's `ffma(c0, x0,
+             * fmul(c1, y1))` (GLSL's `fadd(fmul(c0, x0), fmul(c1, y1))`,
+             * lower_mat_op_to_vec.cpp:132-150), used once, plus a value that
+             * is not a product: `fadd(fadd(a(is_fmul), b(is_fmul)), c)` is
+             * `fadd(fadd(a, c), b)` (nir_opt_algebraic.py:2419), which the
+             * late fusion makes `ffma(c1, y1, ffma(c0, x0, c))`, the inner
+             * term first ([`Fs::alu32`]'s `mat3 * vec3(p, 1.0)` is the same
+             * rule). Measured: case 80's `m[1][0] - m[0][0]` of `m *= m`,
+             * `FMA.f32 r3, r9^, r6, r3^.neg` then `FMA.f32 r3, r6^, r9^, r3^`
+             * (other_80_matdyn.expect.json words 29 and 31) */
+            AluOp::Fadd if self.mat_sum(m, srcs, x, y).is_some() => match self.mat_sum(m, srcs, x, y) {
+                Some((c0, x0, c1, y1, c)) => {
+                    let inner = self.op32(Alu::Ffma, [c0, x0, c], at)?;
+                    self.op32(Alu::Ffma, [c1, y1, inner], at)
+                }
+                None => Err(MaliError::Defect(Defect::IrIndex)),
+            },
             AluOp::Fadd => {
                 let once = |k: usize| ir_uses(m, srcs[k].val) == 1;
                 let inner = match (x, y) {
@@ -2104,6 +2163,14 @@ impl<'s> Fs<'s> {
                         let s = self.op32(Alu::Fadd, [a, c, u], at)?;
                         self.op32(Alu::Fadd, [s, b, u], at)
                     }
+                    /* `fadd(a, a)` is `fmul(a, 2.0)` (nir_opt_algebraic.py:274),
+                     * which fuses with its sum: case 80's `s[1][1]` of `s = m +
+                     * m`, `FMA.f32 r3, u3.w1, 0x40000000, r3^`
+                     * (other_80_matdyn.expect.json word 43). Not in an
+                     * unrolled loop, whose passes' sums of products the
+                     * reassociation above folds as they are (s6_discloop's
+                     * byte-equal `fmul u_w, 10.0`) */
+                    None if x == y && self.loops == 0 => self.op32(Alu::Fmul, [x, Val::Const(F32_TWO), u], at),
                     None => self.op32(Alu::Fadd, [x, y, u], at),
                 }
             }
@@ -2132,6 +2199,22 @@ impl<'s> Fs<'s> {
                 let (k, b) = if matches!(x, Val::Const(_)) { (x, y) } else { (y, x) };
                 match self.alu_of(b) {
                     Some((Alu::B2f, [c, ..])) => self.op32(Alu::Bcsel, [c, k, Val::Const(0)], at),
+                    _ => Err(MaliError::Defect(Defect::IrIndex)),
+                }
+            }
+            /* a select of constants times a constant is the select of the
+             * products (nir_opt_algebraic.py:1032, then each enclosing
+             * select): case 80's `arr[i] * 0.5` over `(0.125, 0.25, 0.5)` is
+             * `bcsel(ilt(i, 1), 0.0625, bcsel(ilt(i, 2), 0.125, 0.25))`,
+             * other_80_matdyn.expect.json words 1-5 */
+            AluOp::Fmul
+                if [(x, y), (y, x)].iter().any(|&(t, k)| {
+                    matches!(k, Val::Const(_)) && !matches!(t, Val::Const(_)) && self.const_select(t, 3)
+                }) =>
+            {
+                let (t, k) = if matches!(y, Val::Const(_)) { (x, y) } else { (y, x) };
+                match k {
+                    Val::Const(k) => self.scaled_select(t, k, at),
                     _ => Err(MaliError::Defect(Defect::IrIndex)),
                 }
             }
@@ -2376,6 +2459,12 @@ impl<'s> Fs<'s> {
              * `step(e, x)`'s `!(x < e)` is `fge_pan x, e`, `FCMP_OR.f32.ge.m1`
              * (case 218, fsarith_218_shadowcmp.expect.json) */
             AluOp::Bnot | AluOp::Inot if ir_uses(m, srcs[0].val) == 1 => self.inverse_compare(x),
+            /* the masks of a run-time index's store tree (glsl.rs
+             * `ilt_trees`): `iand(d2, inot(d1))` and `ior(d1, d2)` of a
+             * compare used more than once, which nir_opt_algebraic.py:742
+             * leaves (other_80_matdyn.expect.json words 8-12) */
+            AluOp::Inot => self.op32(Alu::Inot, [x, u, u], at),
+            AluOp::Ior => self.op32(Alu::Ior, [x, y, u], at),
             _ => Err(MaliError::Arithmetic),
         }
     }
@@ -8957,30 +9046,11 @@ fn int_op(a: AluOp) -> bool {
     )
 }
 
-/// The sources a front-end operation reads (`AluOp::arity` is private to
-/// the front end's own walk).
+/// The sources a front-end operation reads: the front end's own
+/// [`AluOp::arity`] (`iand`, `ior` and the other two-source integer ops
+/// read two; docs/notes/mali-indexed-locals.md 7.2).
 pub(super) fn ir_arity(a: AluOp) -> usize {
-    match a {
-        AluOp::Fadd
-        | AluOp::Fmul
-        | AluOp::Fmin
-        | AluOp::Fmax
-        | AluOp::Flt
-        | AluOp::Fle
-        | AluOp::Feq
-        | AluOp::Fne
-        | AluOp::Iadd
-        | AluOp::Idiv
-        | AluOp::Ilt
-        | AluOp::Ile
-        | AluOp::Ieq
-        | AluOp::Ine
-        | AluOp::Fdot2
-        | AluOp::Fdot3
-        | AluOp::Fdot4 => 2,
-        AluOp::Ffma | AluOp::Bcsel => 3,
-        _ => 1,
-    }
+    a.arity()
 }
 
 /// [`emit::emit`], noting the row in `rows`.

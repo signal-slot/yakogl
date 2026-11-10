@@ -46,9 +46,10 @@ fn a_mediump_float_uniform_in_a_highp_shader_still_does() {
     assert_eq!(verdict(g), Some(MaliError::MixedPrecision));
 }
 
-/// Case 80 still refuses first at the indexed local, not at the uniform.
+/// Case 80 meets no refusal at its int uniform: it compiles (byte-equal,
+/// tests.rs `the_indexed_local_population_is_byte_equal_to_mesa_26_2_1`).
 #[test]
-fn case_80_refuses_at_the_indexed_local() {
+fn case_80_compiles_past_the_int_uniform() {
     let src = include_str!("../../../../tools/mali/testdata/other_80_matdyn.frag");
-    assert_eq!(verdict(src), Some(MaliError::IndexedLocal));
+    assert_eq!(verdict(src), None);
 }

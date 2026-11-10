@@ -125,9 +125,6 @@ impl<'s> Shape<'s> {
 /// GLSL's two. `None`: they change nothing (and refuse nothing);
 /// otherwise the stage's instructions and their shape after them.
 pub(super) fn passes<'s>(m: &Module<'_>, scratch: &Arena<'s>) -> Result<Option<Rewritten<'s>>, MaliError> {
-    if indexed_read(m) {
-        return Err(MaliError::IndexedLocal);
-    }
     let trees = ilt_trees(m, scratch)?;
     let shaped;
     let m = match trees {
@@ -168,32 +165,6 @@ pub(super) fn passes<'s>(m: &Module<'_>, scratch: &Arena<'s>) -> Result<Option<R
 fn same_run(locals: &[VarDecl<'_>], a: usize, b: usize) -> bool {
     let Some(d) = locals.get(a) else { return false };
     !d.name.is_empty() && a < b && locals.get(a..=b).is_some_and(|r| r.iter().all(|o| core::ptr::eq(o.name, d.name)))
-}
-
-/// A vector's component read at a run-time index (case 80's `col[i - 1]`
-/// and `v[j]`): the front end lowers it to a ladder of `bcsel(ieq(i, k),
-/// v.k, ..)` over the lanes of the value. Mesa reads it, as it reads an
-/// array's element at a run-time index, by a binary search
-/// (`nir_vector_extract`, `_nir_select_from_array_helper`,
-/// nir_builder.h:947-958: `bcsel(ilt(i, mid), ..)` and each half;
-/// other_80_matdyn.expect.json's `ICMP_OR.s32.lt.m1 .., 0x3020100.b2` and
-/// `0x1000000.b3`), so the ladder is not Mesa's program and is refused
-/// ([`MaliError::IndexedLocal`]). The array element's ladder, the same
-/// `ieq` over the variable's slots, is not Mesa's either, but a corpus
-/// source compiles it today (es300/tmpidx.frag, no reference) and the
-/// corpus verdicts move forward only: it is left as it was
-/// (docs/notes/mali-remaining-families.md F1). A write at a run-time index
-/// is an `ieq` ladder in both and is not this. The test is on the shape: a
-/// select between two lanes of one value under an `ieq` of a run-time int
-/// written as such in the source is refused too.
-fn indexed_read(m: &Module<'_>) -> bool {
-    let op = |v: ValueId| m.instrs.get(v.0 as usize);
-    let konst = |v: ValueId| matches!(op(v), Some(IrOp::ConstI32(_)));
-    m.instrs.iter().any(|o| {
-        let IrOp::Alu(AluOp::Bcsel, [c, a, b]) = *o else { return false };
-        let Some(&IrOp::Alu(AluOp::Ieq, [x, y, _])) = op(c.val) else { return false };
-        konst(x.val) != konst(y.val) && a.val == b.val && a.swizzle[0] != b.swizzle[0]
-    })
 }
 
 /// The most elements of one run-time index tree: Mesa lowers an array of
@@ -269,6 +240,14 @@ impl Ladder {
         } else {
             self.n - 1
         }
+    }
+
+    /// A read of a vector's lanes (`vector_lane_select`): every element a
+    /// lane of one value, not a slot of a run of locals.
+    fn lanes(&self) -> bool {
+        !self.write
+            && self.n > 1
+            && self.xs[1..self.n].iter().all(|x| x.val == self.xs[0].val && x.swizzle[0] != self.xs[0].swizzle[0])
     }
 }
 
@@ -568,6 +547,12 @@ impl Build<'_> {
     /// (nir_lower_indirect_derefs_to_if_else_trees.c:47-63): the compare,
     /// the lower half, the upper half, then the select. The compares take
     /// the ladder's `ieq`s, the selects its selects, the root its root.
+    /// A vector's lane (`nir_vector_extract`) is the helper itself, a call
+    /// `nir_bcsel(b, nir_ilt_imm(b, idx, mid), helper(start, mid),
+    /// helper(mid, end))` whose arguments the compiler Mesa was built with
+    /// evaluates last to first: the upper half, the lower half, then the
+    /// compare (measured: indexlocal_lanes.stderr, `v[j]`'s `ilt(j, 3)`
+    /// and its select, `ilt(j, 1)` and its, then `ilt(j, 2)`).
     fn read_tree(&mut self, l: &Ladder, start: usize, end: usize, used: &mut (usize, usize)) -> Result<Src, MaliError> {
         if end - start == 1 {
             return Ok(l.xs[start]);
@@ -575,9 +560,16 @@ impl Build<'_> {
         let mid = start + (end - start) / 2;
         let c = l.conds[used.0];
         used.0 += 1;
-        self.ilt(l.i, mid, c)?;
-        let lo = self.read_tree(l, start, mid, used)?;
-        let hi = self.read_tree(l, mid, end, used)?;
+        let (lo, hi) = if l.lanes() {
+            let hi = self.read_tree(l, mid, end, used)?;
+            let lo = self.read_tree(l, start, mid, used)?;
+            self.ilt(l.i, mid, c)?;
+            (lo, hi)
+        } else {
+            self.ilt(l.i, mid, c)?;
+            let lo = self.read_tree(l, start, mid, used)?;
+            (lo, self.read_tree(l, mid, end, used)?)
+        };
         let s = if start == 0 && end == l.n {
             l.sels[0]
         } else {
