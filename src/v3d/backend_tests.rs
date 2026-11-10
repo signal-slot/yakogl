@@ -3787,8 +3787,9 @@ fn a_program_reading_a_texture_size_gets_the_bindings_size() {
 
 /// What the job builder cannot take is refused by name before anything is
 /// recorded: an attachment of another size, one of a format with no TLB
-/// row (a surface number none names), and a colour clear the quad would do
-/// (scissored), which writes RT 0 only.
+/// row (a surface number none names), and 4x of several attachments. A
+/// colour clear the quad would do (scissored) is not among them any more:
+/// it is drawn (`a_scissored_clear_of_mixed_attachments_is_one_quad_of_every_class`).
 #[test]
 fn attachments_the_job_builder_cannot_take_are_refused_by_name() {
     let rig = Rig::new();
@@ -3803,10 +3804,389 @@ fn attachments_the_job_builder_cannot_take_are_refused_by_name() {
     assert_eq!(draw(&d), -EINVAL);
     assert_eq!(rig.logs_with("a colour attachment past the first of a format the backend does not render"), 1);
     let mut d = mrt_draw(&rig, &p, 2);
-    d.clear_quad = true;
+    d.samples = 4;
     assert_eq!(draw(&d), -EINVAL);
-    assert_eq!(rig.logs_with("a scissored or masked colour clear of several colour attachments"), 1);
+    assert_eq!(rig.logs_with("4x multisampling of several colour attachments"), 1);
     assert!(rig.draws().is_empty() && rig.jobs().is_empty(), "nothing was recorded");
+    let mut d = mrt_draw(&rig, &p, 2);
+    d.clear_quad = true;
+    (d.scissor, d.scissor_rect) = (true, [8, 4, 16, 32]);
+    assert_eq!(draw(&d), 0, "{:?}", rig.gl.logs());
+    assert_eq!(rig.logs_with("a scissored or masked colour clear of several colour attachments"), 0);
+    assert_eq!(rig.draws().len(), 2, "the clear quad, then the draw");
+}
+
+/* ---- a scissored or masked colour clear of several attachments ------------------ */
+
+/// RT 3 of a four-attachment draw (a stand-in's count: the GL core's limit
+/// is three, tests/es3_four_rt_v3d.rs).
+const RT3: u64 = TARGET + 0x0030_0000;
+
+/// A clear-only draw (glClear: every draw buffer, mask 0xf, no scissor) on
+/// one attachment per format, RT 0 first, all at RT 0's size.
+fn mrt_clear(rig: &Rig, formats: &[u8]) -> GlesDraw {
+    let mut c = clear_only(rig);
+    c.num_targets = formats.len() as u8;
+    c.target_format = formats[0];
+    for (n, (&f, gpu)) in formats.iter().zip([TARGET, RT1, RT2, RT3]).enumerate() {
+        c.targets[n] = GlesDrawTarget { gpu, w: 64, h: 64, format: f, out_shift: 0 };
+    }
+    c
+}
+
+/// Scissor `c` to a box inside the target (the GL core's `clear_quad`).
+fn scissored(c: &mut GlesDraw) {
+    c.clear_quad = true;
+    (c.scissor, c.scissor_rect) = (true, [8, 4, 16, 32]);
+}
+
+/// The TLBU configs among the quad's constant uniforms, sorted: one per RT
+/// whose write needs one (every 32-bit write; an f16 write to any RT but 0).
+fn tlb_configs(q: &SeenDraw) -> Vec<u32> {
+    use crate::shaderc::online::v3d::select::{tlb_config_32b, tlb_config_f16};
+    let known: Vec<u32> = (0..4).flat_map(|rt| [tlb_config_32b(rt, 4), tlb_config_f16(rt, 4)]).collect();
+    let found = q.fs_uniforms.iter().filter(|u| u.contents == V3D_QUNIFORM_CONSTANT && known.contains(&u.data));
+    let mut v: Vec<u32> = found.map(|u| u.data).collect();
+    v.sort_unstable();
+    v.dedup();
+    v
+}
+
+/// The configs a quad is expected to carry, in `tlb_configs`' order.
+fn configs(c: &[u32]) -> Vec<u32> {
+    let mut v = c.to_vec();
+    v.sort_unstable();
+    v
+}
+
+fn config_32b(rt: u32) -> u32 {
+    crate::shaderc::online::v3d::select::tlb_config_32b(rt, 4)
+}
+
+fn config_f16(rt: u32) -> u32 {
+    crate::shaderc::online::v3d::select::tlb_config_f16(rt, 4)
+}
+
+/// What every several-attachment clear quad has in common with the one-RT
+/// quad (`assert_is_the_quad`), with the fragment block holding the clear's
+/// four words once per cleared RT (`cleared` of them), read as dwords
+/// `0..4 * cleared`.
+fn assert_is_the_mrt_quad(rig: &Rig, q: &SeenDraw, c: &GlesDraw, cleared: usize) {
+    assert_ne!(q.fs_code, FS_USC as u32, "the clear program's code, not the application's");
+    assert_eq!((q.prim, q.count, q.indexed), (V3D_PRIM_TRIANGLES, 6, false));
+    assert_eq!(q.attrs.len(), 1);
+    assert_eq!(vertices_at(rig, q.attrs[0].address, 6), state::clear_quad_vertices(c.clear_depth).to_vec());
+    let words = c.clear_rgba.map(f32::to_bits).repeat(cleared);
+    assert_eq!(q.fs_storage, words, "the block is the clear's words once per cleared RT");
+    let mut read: Vec<u32> =
+        q.fs_uniforms.iter().filter(|u| u.contents == V3D_QUNIFORM_UNIFORM).map(|u| u.data).collect();
+    read.sort_unstable();
+    read.dedup();
+    assert_eq!(read, (0..4 * cleared as u32).collect::<Vec<_>>(), "the program reads every uniform of the block");
+    assert!(!q.st.blend_enabled && !q.st.cull_front && !q.st.cull_back && !q.st.offset_tri);
+}
+
+/// A scissored glClear of three attachments of mixed classes (RGBA8,
+/// RGBA8I, R32F) is one quad in one job, no longer refused: the TLB clears
+/// nothing (every RT is loaded), the quad's program writes RT 0 as f16
+/// pairs (no config: the TLB's default), RT 1 and RT 2 as 32-bit words (the
+/// R32F one as `Uint`, its float's bits whole; docs/notes/v3d-mrt-clear.md
+/// 5b), inside the clear's box with the full mask, and the block holds the
+/// four words three times. Revert check: with the refusal back the draw is
+/// -EINVAL and nothing is recorded.
+#[test]
+fn a_scissored_clear_of_mixed_attachments_is_one_quad_of_every_class() {
+    let rig = Rig::new();
+    rig.init();
+    let mut c = mrt_clear(&rig, &[GLES_SURF_RGBA8888, GLES_SURF_RGBA8I, GLES_SURF_R32F]);
+    scissored(&mut c);
+    c.clear_rgba = [1.0e10, 0.0, 0.5, 1.0];
+    assert_eq!(draw(&c), 0, "{:?}", rig.gl.logs());
+    assert_eq!(v3d_flush(), 0);
+    assert_eq!(rig.logs_with("a scissored or masked colour clear of several colour attachments"), 0);
+    let (jobs, draws) = (rig.jobs(), rig.draws());
+    assert_eq!((jobs.len(), draws.len()), (1, 1), "one job, one quad");
+    assert_eq!(jobs[0].target.rts, 3);
+    let clear = jobs[0].clear.expect("ended");
+    assert!(clear.load_rt0 && clear.load_rt[0] && clear.load_rt[1], "the TLB clears no RT: {clear:?}");
+    let q = &draws[0];
+    assert_is_the_mrt_quad(&rig, q, &c, 3);
+    assert_eq!(q.fs_storage[8..12], [1.0e10f32.to_bits(), 0, 0.5f32.to_bits(), 1.0f32.to_bits()], "R32F's bits whole");
+    assert_eq!(tlb_configs(q), configs(&[config_32b(1), config_32b(2)]), "RT 1 and RT 2 as 32-bit words, RT 0 f16");
+    assert_eq!(q.st.colormask, 0xf);
+    assert!(q.st.scissor);
+    let expect = state::scissor(&c).expect("the clear's box");
+    assert_eq!([q.st.scissor_minx, q.st.scissor_miny, q.st.scissor_maxx, q.st.scissor_maxy], expect);
+    assert!(!q.st.depth_enabled && !q.st.stencil_enabled);
+}
+
+/// glClearBuffer of one attachment of several (`clear_target_mask`), under
+/// a scissor: one quad whose program writes that RT alone, in its class,
+/// with the four raw words as the block; the other RTs get no TLB write and
+/// stay loaded. The class is per RT: an integer RT 1 of three, then a float
+/// RT 2 behind an integer RT 0.
+#[test]
+fn a_clear_buffer_of_one_attachment_of_several_writes_that_rt_alone() {
+    let rig = Rig::new();
+    rig.init();
+    let mut c = mrt_clear(&rig, &[GLES_SURF_RGBA8888, GLES_SURF_RGBA8I, GLES_SURF_RGBA8888]);
+    scissored(&mut c);
+    c.clear_target_mask = 0b010;
+    c.clear_rgba = INT_CLEAR_BITS.map(f32::from_bits);
+    assert_eq!(draw(&c), 0, "{:?}", rig.gl.logs());
+    let mut f = mrt_clear(&rig, &[GLES_SURF_RGBA8I, GLES_SURF_RGBA8888, GLES_SURF_RGBA8888]);
+    scissored(&mut f);
+    f.clear_target_mask = 0b100;
+    f.clear_rgba = [0.25, 0.5, 0.75, 1.0];
+    assert_eq!(draw(&f), 0, "{:?}", rig.gl.logs());
+    assert_eq!(v3d_flush(), 0);
+    let (jobs, draws) = (rig.jobs(), rig.draws());
+    assert_eq!((jobs.len(), draws.len()), (2, 2), "another attachment set is another job");
+    for j in &jobs {
+        let clear = j.clear.expect("ended");
+        assert!(clear.load_rt0 && clear.load_rt[0] && clear.load_rt[1], "every RT is loaded: {clear:?}");
+    }
+    let q = &draws[0];
+    assert_is_the_mrt_quad(&rig, q, &c, 1);
+    assert_eq!(q.fs_storage, INT_CLEAR_BITS.to_vec(), "the raw words, the NaN pattern included");
+    assert_eq!(tlb_configs(q), configs(&[config_32b(1)]), "RT 1 alone, as 32-bit words");
+    let q = &draws[1];
+    assert_is_the_mrt_quad(&rig, q, &f, 1);
+    assert_eq!(tlb_configs(q), configs(&[config_f16(2)]), "RT 2 alone, as f16 pairs");
+    assert_ne!(draws[0].fs_code, draws[1].fs_code, "two patterns, two programs");
+}
+
+/// A colour mask that leaves channels out turns a background clear of
+/// several attachments into the quad (`colour_needs_quad`): one quad with
+/// the GL mask as the job-wide COLOR_WRITE_MASKS (ES 3.0 has one mask for
+/// every draw buffer) and no scissor; with a scissor too, the same quad
+/// scissored; fused into a draw, the quad first with the clear's mask, then
+/// the draw with its own, in one job.
+#[test]
+fn a_masked_clear_of_several_attachments_is_one_quad_with_the_job_wide_mask() {
+    let rig = Rig::new();
+    rig.init();
+    let formats = [GLES_SURF_RGBA8888, GLES_SURF_RGBA16UI, GLES_SURF_RGBA8888];
+    let mut c = mrt_clear(&rig, &formats);
+    c.clear_color_mask = 0b0101;
+    assert_eq!(draw(&c), 0, "{:?}", rig.gl.logs());
+    let mut both = mrt_clear(&rig, &formats);
+    both.clear_color_mask = 0b0101;
+    scissored(&mut both);
+    assert_eq!(draw(&both), 0);
+    let p = program_writing(0b111);
+    let mut d = mrt_draw(&rig, &p, 3);
+    d.targets[1].format = GLES_SURF_RGBA16UI;
+    d.clear_color_mask = 0b0101;
+    assert_eq!(draw(&d), 0, "{:?}", rig.gl.logs());
+    assert_eq!(v3d_flush(), 0);
+    let (jobs, draws) = (rig.jobs(), rig.draws());
+    assert_eq!((jobs.len(), draws.len()), (1, 4), "one job: three quads and the draw");
+    assert!(jobs[0].clear.unwrap().load_rt0, "the colour is loaded");
+    for q in &draws[..3] {
+        assert_is_the_mrt_quad(&rig, q, &c, 3);
+        assert_eq!(q.st.colormask, 0b0101, "R and B only, for every RT");
+        assert_eq!(tlb_configs(q), configs(&[config_32b(1), config_f16(2)]));
+    }
+    assert!(!draws[0].st.scissor, "a background clear has no scissor");
+    assert!(draws[1].st.scissor, "the scissored one has the box");
+    assert!(!draws[2].st.scissor, "the fused clear's quad: the draw's scissor is the draw's");
+    assert_eq!(draws[0].fs_code, draws[1].fs_code, "one pattern, one program");
+    assert_eq!((draws[3].fs_code, draws[3].st.colormask), (FS_USC as u32, 0xf), "the draw, with its own mask");
+}
+
+/// The unscissored, unmasked clear of several attachments is the TLB's as
+/// before: no quad, each RT's clear words in its own format, none loaded;
+/// glClearBuffer of one arms that RT alone and loads the others.
+#[test]
+fn an_unscissored_unmasked_clear_of_several_attachments_stays_the_tlbs() {
+    let rig = Rig::new();
+    rig.init();
+    let formats = [GLES_SURF_RGBA8888, GLES_SURF_RGBA8I, GLES_SURF_R32F];
+    let c = mrt_clear(&rig, &formats);
+    assert_eq!(draw(&c), 0, "{:?}", rig.gl.logs());
+    assert_eq!(v3d_flush(), 0);
+    let mut one = mrt_clear(&rig, &formats);
+    one.clear_target_mask = 0b100;
+    assert_eq!(draw(&one), 0);
+    assert_eq!(v3d_flush(), 0);
+    assert!(rig.draws().is_empty(), "no quad");
+    assert_eq!(rig.logs_with("several-attachment clear program built"), 0, "no program was built for it");
+    let jobs = rig.jobs();
+    assert_eq!(jobs.len(), 2);
+    let clear = jobs[0].clear.expect("ended");
+    assert!(!clear.load_rt0 && !clear.load_rt[0] && !clear.load_rt[1], "every RT starts from the clear: {clear:?}");
+    for (n, &f) in formats.iter().enumerate() {
+        assert_eq!(clear.clear_rt[n], state::clear_words(f, c.clear_rgba), "RT {n}");
+    }
+    let clear = jobs[1].clear.expect("ended");
+    assert!(clear.load_rt0 && clear.load_rt[0] && !clear.load_rt[1], "RT 2 alone is armed: {clear:?}");
+}
+
+/// Depth and stencil cleared with the several-attachment colour clear ride
+/// on the one quad: depth test ALWAYS with the write, stencil REPLACE, the
+/// colour of every RT.
+#[test]
+fn depth_and_stencil_ride_on_the_several_attachment_quad() {
+    let rig = Rig::new();
+    rig.init();
+    let mut c = mrt_clear(&rig, &[GLES_SURF_RGBA8888, GLES_SURF_RGBA8I]);
+    scissored(&mut c);
+    (c.do_clear_depth, c.clear_depth) = (true, 0.5);
+    (c.do_clear_stencil, c.clear_stencil) = (true, 0x5a);
+    assert_eq!(draw(&c), 0, "{:?}", rig.gl.logs());
+    assert_eq!(v3d_flush(), 0);
+    let draws = rig.draws();
+    assert_eq!(draws.len(), 1, "one quad for colour, depth and stencil");
+    let q = &draws[0];
+    assert_is_the_mrt_quad(&rig, q, &c, 2);
+    assert_eq!(tlb_configs(q), configs(&[config_32b(1)]));
+    assert!(q.st.depth_enabled && q.st.depth_writemask && q.st.depth_func == V3D_COMPARE_FUNC_ALWAYS);
+    assert!(q.st.stencil_enabled);
+    assert_eq!((q.st.stencil_front.ref_, q.st.stencil_front.zpass_op), (0x5a, V3D_STENCIL_OP_REPLACE));
+    assert_eq!(q.st.colormask, 0xf);
+}
+
+/// A 32-bit float attachment is cleared as `Uint`, its float's bits as four
+/// 32-bit words (an f16 write would make 1.0e10 infinity), at RT 0
+/// (`TLB_CONFIG_32B_RT0_VEC4`) as at RT 1; a half-float attachment stays
+/// `Float` (f16 pairs).
+#[test]
+fn a_32bit_float_attachment_is_cleared_as_raw_words_and_a_half_float_one_as_halves() {
+    let rig = Rig::new();
+    rig.init();
+    let big = [1.0e10f32, 0.0, 0.0, 1.0];
+    let mut a = mrt_clear(&rig, &[GLES_SURF_RGBA8888, GLES_SURF_R32F]);
+    scissored(&mut a);
+    a.clear_rgba = big;
+    assert_eq!(draw(&a), 0, "{:?}", rig.gl.logs());
+    let mut b = mrt_clear(&rig, &[GLES_SURF_R32F, GLES_SURF_RGBA8I]);
+    scissored(&mut b);
+    b.clear_rgba = big;
+    assert_eq!(draw(&b), 0, "{:?}", rig.gl.logs());
+    let mut h = mrt_clear(&rig, &[GLES_SURF_RGBA8888, GLES_SURF_R16F]);
+    scissored(&mut h);
+    assert_eq!(draw(&h), 0, "{:?}", rig.gl.logs());
+    assert_eq!(v3d_flush(), 0);
+    let draws = rig.draws();
+    assert_eq!(draws.len(), 3);
+    assert_eq!(tlb_configs(&draws[0]), configs(&[config_32b(1)]), "R32F at RT 1: 32-bit words");
+    assert_eq!(draws[0].fs_storage[4..8], big.map(f32::to_bits), "the float's bits, whole");
+    assert_eq!(config_32b(0), TLB_CONFIG_32B_RT0_VEC4);
+    assert_eq!(tlb_configs(&draws[1]), configs(&[config_32b(0), config_32b(1)]), "R32F at RT 0, RGBA8I at RT 1");
+    assert_eq!(tlb_configs(&draws[2]), configs(&[config_f16(1)]), "R16F at RT 1: f16 pairs");
+}
+
+/// A GL_NONE draw buffer among the attachments (no address) is not written
+/// by the quad: the program leaves its RT out, and a glClearBuffer that
+/// names it alone draws nothing at all.
+#[test]
+fn a_none_draw_buffer_is_left_out_of_the_several_attachment_quad() {
+    let rig = Rig::new();
+    rig.init();
+    let mut c = mrt_clear(&rig, &[GLES_SURF_RGBA8888, GLES_SURF_RGBA8888, GLES_SURF_RGBA8I]);
+    c.targets[1] = GlesDrawTarget { gpu: 0, w: 0, h: 0, format: 0, out_shift: 0 };
+    scissored(&mut c);
+    assert_eq!(draw(&c), 0, "{:?}", rig.gl.logs());
+    assert_eq!(v3d_flush(), 0);
+    let draws = rig.draws();
+    assert_eq!(draws.len(), 1);
+    assert_is_the_mrt_quad(&rig, &draws[0], &c, 2);
+    assert_eq!(tlb_configs(&draws[0]), configs(&[config_32b(2)]), "RT 0 (default f16) and RT 2; nothing names RT 1");
+    let mut none = c;
+    none.clear_target_mask = 0b010;
+    assert_eq!(draw(&none), 0, "{:?}", rig.gl.logs());
+    assert_eq!(v3d_flush(), 0);
+    assert_eq!((rig.draws().len(), rig.jobs().len()), (1, 1), "nothing more: no quad, no job");
+    none.do_clear_depth = true;
+    assert_eq!(draw(&none), 0, "{:?}", rig.gl.logs());
+    assert_eq!(v3d_flush(), 0);
+    let draws = rig.draws();
+    assert_eq!(draws.len(), 2, "the depth half is still a quad");
+    assert_eq!((draws[1].st.colormask, draws[1].st.depth_writemask), (0, true), "which writes no colour");
+}
+
+/// The several-attachment programs are built once per class pattern and
+/// kept: the same pattern draws with the same code, a signed and an
+/// unsigned integer RT are one pattern (one `uvec4` output), another pattern
+/// is another program. When the table is full the oldest is given up
+/// without a flush (the OSAL holds its freed code for the jobs that may
+/// fetch it) and built again when asked.
+#[test]
+fn several_attachment_clear_programs_are_kept_per_pattern_and_the_oldest_given_up() {
+    let rig = Rig::new();
+    rig.init();
+    let mut a = mrt_clear(&rig, &[GLES_SURF_RGBA8888, GLES_SURF_RGBA8I]);
+    scissored(&mut a);
+    let mut u = mrt_clear(&rig, &[GLES_SURF_RGBA8888, GLES_SURF_RGBA32UI]);
+    scissored(&mut u);
+    assert_eq!(draw(&a), 0, "{:?}", rig.gl.logs());
+    assert_eq!(draw(&a), 0);
+    assert_eq!(draw(&u), 0);
+    assert_eq!(rig.logs_with("several-attachment clear program built:"), 1, "Int and Uint share one program");
+    let draws = rig.draws();
+    assert_eq!(draws.len(), 3);
+    assert!(draws[0].fs_code == draws[1].fs_code && draws[1].fs_code == draws[2].fs_code, "one program");
+    /* MRT_CLEAR_PROGRAMS more patterns: RT 1 and RT 2 float or integer on
+     * three attachments, then one or two RTs of the same three named; the
+     * last two share one target, so nothing but the table submits a job
+     * between them */
+    let mut patterns = Vec::new();
+    for f1 in [GLES_SURF_RGBA8888, GLES_SURF_RGBA8I] {
+        for f2 in [GLES_SURF_RGBA8888, GLES_SURF_RGBA8I] {
+            let mut c = mrt_clear(&rig, &[GLES_SURF_RGBA8888, f1, f2]);
+            scissored(&mut c);
+            patterns.push(c);
+        }
+    }
+    /* (0b011 would be a's own pattern, float RT 0 and integer RT 1: the
+     * key is the classes, whatever the job's RT count) */
+    for mask in [0b001, 0b010, 0b100, 0b110] {
+        let mut c = mrt_clear(&rig, &[GLES_SURF_RGBA8888, GLES_SURF_RGBA8I, GLES_SURF_RGBA8888]);
+        scissored(&mut c);
+        c.clear_target_mask = mask;
+        patterns.push(c);
+    }
+    assert_eq!(patterns.len(), MRT_CLEAR_PROGRAMS);
+    for c in &patterns[..MRT_CLEAR_PROGRAMS - 1] {
+        assert_eq!(draw(c), 0, "{:?}", rig.gl.logs());
+    }
+    assert_eq!(rig.logs_with("several-attachment clear program built:"), MRT_CLEAR_PROGRAMS - 1, "the table is full");
+    let (kicks, jobs) = (rig.kicks().len(), rig.jobs().len());
+    /* one more pattern: the first (a's) is given up for it, in the open job */
+    assert_eq!(draw(&patterns[MRT_CLEAR_PROGRAMS - 1]), 0, "{:?}", rig.gl.logs());
+    assert_eq!(rig.logs_with("several-attachment clear program built:"), 1);
+    assert_eq!((rig.kicks().len(), rig.jobs().len()), (kicks, jobs), "no job was submitted or begun for it");
+    /* a's pattern, asked again, is built again */
+    assert_eq!(draw(&a), 0, "{:?}", rig.gl.logs());
+    assert_eq!(rig.logs_with("several-attachment clear program built:"), 1, "built again");
+    assert_eq!(v3d_flush(), 0);
+    assert_eq!(rig.draws().len(), 3 + MRT_CLEAR_PROGRAMS + 1, "every clear was drawn");
+}
+
+/// A several-attachment program that did not build refuses the quads of
+/// its pattern by its own name, and only those: another pattern and the
+/// one-attachment quad still draw.
+#[test]
+fn a_failed_several_attachment_clear_program_refuses_only_its_pattern() {
+    let rig = Rig::new();
+    rig.init();
+    let classes = [ClearClass::Float, ClearClass::Int, ClearClass::NotCleared, ClearClass::NotCleared];
+    g().clear_program_mrt[0] = MrtClearProgram { key: MrtPattern { classes }.key(), prog: ClearProgram::FAILED };
+    let base = v3d_refused_draws();
+    let mut c = mrt_clear(&rig, &[GLES_SURF_RGBA8888, GLES_SURF_RGBA8I]);
+    scissored(&mut c);
+    assert_eq!(draw(&c), -EINVAL);
+    assert_eq!(rig.logs_with("the several-attachment clear program did not build, so a clear"), 1);
+    assert_eq!(v3d_refused_draws().wrapping_sub(base), 1, "counted");
+    assert!(rig.draws().is_empty(), "nothing was recorded");
+    let mut other = mrt_clear(&rig, &[GLES_SURF_RGBA8888, GLES_SURF_RGBA8888]);
+    scissored(&mut other);
+    assert_eq!(draw(&other), 0, "{:?}", rig.gl.logs());
+    let mut one = clear_only(&rig);
+    scissored(&mut one);
+    assert_eq!(draw(&one), 0, "{:?}", rig.gl.logs());
+    assert_eq!(rig.draws().len(), 2, "the other pattern's quad and the one-attachment quad");
 }
 
 /// Another set of attachments is another job, as another RT 0 is: the RCL

@@ -19,7 +19,10 @@ How to read the row counts:
   each and says so.
 - The runs are older than e883be8f (the integer clear program). The one
   refusal seen in a console, `a scissored or masked colour clear of an
-  integer colour target` (FO6, M1), no longer exists in the code.
+  integer colour target` (FO6, M1), no longer exists in the code. Neither
+  does A8 since v3d-mrt-clear (the several-attachment clear quad,
+  `src/v3d/clear_mrt.rs`, docs/notes/v3d-mrt-clear.md section 0); its row
+  stays as the census read it.
 - A refusal returns `-EINVAL` (`refuse`) or `-ENOTSUP` (`refuse_unsupported`);
   the GL core turns the former into `GL_OUT_OF_MEMORY` for a pending clear
   (README of the 2026-10-31 run), which dEQP records as ResourceError and

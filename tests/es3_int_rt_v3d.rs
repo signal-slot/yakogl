@@ -1308,21 +1308,17 @@ mod gl_api {
             drop(f);
         }
 
-        /// The one refusal an sRGB attachment meets, and it is not sRGB's: a
-        /// scissored (or masked) colour clear of several colour attachments
-        /// is refused by that name whatever their classes
-        /// (`src/v3d/backend.rs` `draw_call`, the quad writes RT 0 alone;
-        /// tests/es3_mrt_clear_v3d.rs pins it for the integer/float pairs and
-        /// holds the post-fix cases). Today: the refusal, logged by that exact
-        /// name, counted in `v3d_refused_draws`, nothing recorded, the
-        /// application sees an error. Once v3d-mrt-clear lands, the same scene
-        /// must be drawn: both RTs loaded, a quad per class or one for both,
-        /// each with the GL's box, the float one writing f16 pairs with the
-        /// colour as f32 words into a job whose RTs are still
-        /// [SRGB8_ALPHA8, RGBA8]. Both states are held here so the fix does not
-        /// have to touch this file; delete the first arm with it.
+        /// A scissored (or masked) colour clear of an sRGB attachment beside
+        /// another is drawn as the several-attachment clear quad
+        /// (`src/v3d/clear_mrt.rs`, `draw_clear_quad`; until v3d-mrt-clear
+        /// the back end refused it by name, "a scissored or masked colour
+        /// clear of several colour attachments", whatever the classes):
+        /// no refusal, both RTs loaded, one quad for both with the GL's box,
+        /// writing f16 pairs (both RTs are float class) with the colour as
+        /// f32 words once per RT it writes, into a job whose RTs are still
+        /// [SRGB8_ALPHA8, RGBA8].
         #[test]
-        fn a_scissored_clear_of_srgb_beside_another_is_the_mrt_refusal_today() {
+        fn a_scissored_clear_of_srgb_beside_another_is_the_several_attachment_quad() {
             const REFUSAL: &str = "a scissored or masked colour clear of several colour attachments";
             let _g = rig();
             let f = fbo(&[GL_SRGB8_ALPHA8, GL_RGBA8]);
@@ -1335,34 +1331,18 @@ mod gl_api {
                     glClear(GL_COLOR_BUFFER_BIT);
                 }
             });
-            if r.refused != 0 {
-                /* today */
-                assert_eq!(r.refused, 1, "one draw refused: {:?}", r.seen.log);
-                let line = format!("yakogl/v3d: draw refused: {REFUSAL}");
-                assert!(r.seen.log.contains(&line), "the refusal by its exact name: {:?}", r.seen.log);
-                assert!(r.seen.draws.is_empty(), "nothing recorded");
-                assert_ne!(r.error, GL_NO_ERROR, "the application sees it");
-            } else {
-                /* after v3d-mrt-clear */
-                the_typed_job(&r, &[V3D_OUTPUT_IMAGE_FORMAT_SRGB8_ALPHA8, V3D_OUTPUT_IMAGE_FORMAT_RGBA8]);
-                assert_eq!(r.seen.clears.len(), 1);
-                assert!(r.seen.clears[0].load_rt0 && r.seen.clears[0].load_rt[0], "loaded, the quad writes them");
-                assert!(
-                    !r.seen.draws.is_empty() && r.seen.draws.len() <= 2,
-                    "a quad per class or one: {:?}",
-                    r.seen.log
-                );
-                for q in &r.seen.draws {
-                    assert_eq!(q.count, 6);
-                    assert!(!writes_32bit_words(q), "both RTs are float class");
-                    assert_eq!(q.fs_storage, COLOUR.map(f32::to_bits).to_vec());
-                    assert!(q.st.scissor);
-                    assert_eq!(
-                        [q.st.scissor_minx, q.st.scissor_miny, q.st.scissor_maxx, q.st.scissor_maxy],
-                        [3, 2, 12, 9]
-                    );
-                }
-            }
+            assert!(!r.seen.log.iter().any(|l| l.contains(REFUSAL)), "the refusal is gone: {:?}", r.seen.log);
+            assert_eq!(r.error, GL_NO_ERROR, "{:?}", r.seen.log);
+            the_typed_job(&r, &[V3D_OUTPUT_IMAGE_FORMAT_SRGB8_ALPHA8, V3D_OUTPUT_IMAGE_FORMAT_RGBA8]);
+            assert_eq!(r.seen.clears.len(), 1);
+            assert!(r.seen.clears[0].load_rt0 && r.seen.clears[0].load_rt[0], "loaded, the quad writes them");
+            assert_eq!(r.seen.draws.len(), 1, "one quad for both: {:?}", r.seen.log);
+            let q = &r.seen.draws[0];
+            assert_eq!(q.count, 6);
+            assert!(!writes_32bit_words(q), "both RTs are float class");
+            assert_eq!(q.fs_storage, COLOUR.map(f32::to_bits).repeat(2), "the colour's words, once per RT");
+            assert!(q.st.scissor);
+            assert_eq!([q.st.scissor_minx, q.st.scissor_miny, q.st.scissor_maxx, q.st.scissor_maxy], [3, 2, 12, 9]);
             drop(f);
         }
     }

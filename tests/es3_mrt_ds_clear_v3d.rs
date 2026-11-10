@@ -13,10 +13,12 @@
 //!   every colour attachment and the Z/S buffer;
 //! - a Z/S-only clear, scissored, beside colour attachments is a quad of the
 //!   Z/S buffer alone; the colour attachments are loaded, not cleared;
-//! - a scissored or masked colour clear of several colour attachments is
-//!   refused, 'a scissored or masked colour clear of several colour
-//!   attachments' (`draw_call`, src/v3d/backend.rs). The drawn result is the
-//!   `#[ignore = "v3d-mrt-clear"]` tests.
+//! - a scissored or masked colour clear of several colour attachments
+//!   beside a Z/S clear is one quad: its program writes every colour
+//!   attachment in its own class (`src/v3d/clear_mrt.rs`,
+//!   `draw_clear_quad`), its state clears the depth and the stencil with it.
+//!   Until v3d-mrt-clear the back end refused it by name ('a scissored or
+//!   masked colour clear of several colour attachments').
 //!
 //! Mesa 26.2.1 (third_party, v3dx_draw.c `v3d_clear`, v3dx_rcl.c) is the
 //! reference: the Z/S clear value goes into the job's clear Z/S words, and
@@ -502,9 +504,6 @@ fn scene(colours: &[GLenum], ds: GLenum, f: impl FnOnce()) -> (Seen, Vec<GLenum>
         (s, errs)
     }
 }
-/// The refusal's name, as `draw_call` words it.
-const REFUSAL: &str = "a scissored or masked colour clear of several colour attachments";
-
 /// The (colour attachments, depth/stencil) combinations of the cases: the
 /// ES 3.0 integer and float classes beside RGBA8, with the packed
 /// depth/stencil and the depth-only format.
@@ -523,19 +522,6 @@ fn name(cols: &[GLenum], ds: GLenum) -> String {
 
 fn has_stencil(ds: GLenum) -> bool {
     ds == GL_DEPTH24_STENCIL8
-}
-
-/// The refusal as the application sees it today: GL_OUT_OF_MEMORY (-EINVAL
-/// from the back end; v3d-refuse-enotsup makes it GL_INVALID_OPERATION),
-/// nothing recorded, one refused draw. The log names the cause the first time
-/// only (`count_refusal`), so a line, when there is one, is this one.
-fn assert_refused(what: &str, s: &Seen, errs: &[GLenum]) {
-    assert_eq!(errs, [GL_OUT_OF_MEMORY], "{what}: {:?}", s.log);
-    assert_eq!(s.refused, 1, "{what}: one refused draw");
-    assert!(s.jobs.is_empty() && s.draws.is_empty() && s.clears.is_empty(), "{what}: nothing recorded");
-    for l in s.log.iter().filter(|l| l.contains("draw refused")) {
-        assert!(l.ends_with(REFUSAL), "{what}: {l}");
-    }
 }
 
 fn clear_all() {
@@ -732,43 +718,13 @@ fn a_scissored_depth_clear_after_a_whole_clear_loads_the_colours() {
     }
 }
 
-/* ---- the colour clear of several attachments: refused today ---------------- */
+/* ---- the colour clear of several attachments beside the Z/S clear ---------- */
 
-/// glClear(COLOR|DEPTH|STENCIL) under a scissor with several colour
-/// attachments is refused: the clear quad writes RT 0 only, and the Z/S
-/// half goes with the colour half (it is one draw).
+/// Scissor and mask together on glClear(COLOR) alone (no Z/S in the call):
+/// one quad of the colours alone, the colour mask and the scissor box its
+/// own, neither depth nor stencil written, the colours loaded.
 #[test]
-fn a_scissored_clear_of_several_colour_attachments_and_depth_stencil_is_refused() {
-    let _g = rig();
-    for (cols, ds) in combos() {
-        let w = name(&cols, ds);
-        let (s, errs) = scene(&cols, ds, || {
-            scissor();
-            clear_all();
-        });
-        assert_refused(&w, &s, &errs);
-    }
-}
-
-/// The same under a partial colour mask, with no scissor.
-#[test]
-fn a_masked_clear_of_several_colour_attachments_and_depth_stencil_is_refused() {
-    let _g = rig();
-    for (cols, ds) in combos() {
-        let w = name(&cols, ds);
-        for mask in [[1u8, 0, 1, 0], [0, 1, 1, 1], [1, 1, 1, 0]] {
-            let (s, errs) = scene(&cols, ds, || unsafe {
-                glColorMask(mask[0], mask[1], mask[2], mask[3]);
-                clear_all();
-            });
-            assert_refused(&format!("{w} mask {mask:?}"), &s, &errs);
-        }
-    }
-}
-
-/// Scissor and mask together, and glClear(COLOR) alone (no Z/S in the call).
-#[test]
-fn a_scissored_and_masked_colour_only_clear_is_refused_too() {
+fn a_scissored_and_masked_colour_only_clear_is_one_quad_of_the_colours() {
     let _g = rig();
     for (cols, ds) in combos() {
         let w = name(&cols, ds);
@@ -777,20 +733,27 @@ fn a_scissored_and_masked_colour_only_clear_is_refused_too() {
             glColorMask(0, 1, 0, 1);
             glClear(GL_COLOR_BUFFER_BIT);
         });
-        assert_refused(&w, &s, &errs);
+        assert!(errs.is_empty() && s.refused == 0, "{w}: {errs:x?} {:?}", s.log);
+        assert_eq!((s.jobs.len(), s.draws.len(), s.clears.len()), (1, 1, 1), "{w}: one job, one quad");
+        let q = &s.draws[0];
+        assert_eq!((q.st.colormask, q.st.scissor), (0b1010, true), "{w}");
+        assert_eq!(quad_box(q), BOX, "{w}");
+        assert!(!q.st.depth_enabled && !q.st.stencil_enabled, "{w}: the colours alone");
+        let c = &s.clears[0];
+        assert!(c.load_rt0 && c.load_rt[..cols.len() - 1].iter().all(|l| *l), "{w}: the colours are loaded");
     }
 }
 
-/// After a refusal the context stays usable: the next clear is recorded.
+/// After such a clear the context goes on: the next whole clear is the
+/// TLB's again, with nothing drawn.
 #[test]
-fn the_context_works_after_the_refusal() {
+fn a_whole_clear_after_a_drawn_one_is_the_tlbs_again() {
     let _g = rig();
     let (cols, ds) = (vec![GL_RGBA8, GL_RGBA32UI], GL_DEPTH24_STENCIL8);
     let (s, errs) = scene(&cols, ds, || unsafe {
         scissor();
         clear_all();
         glFinish();
-        while glGetError() != GL_NO_ERROR {}
         glDisable(GL_SCISSOR_TEST);
         seen(|s| *s = Seen::default());
         clear_all();
@@ -799,28 +762,38 @@ fn the_context_works_after_the_refusal() {
     assert_eq!((s.jobs.len(), s.draws.len(), s.clears.len()), (1, 0, 1), "{:?}", s.log);
 }
 
-/* ---- the drawn result: not until the fix (v3d-mrt-clear) -------------------- */
+/* ---- the drawn result ------------------------------------------------------- */
 
-/// What the several-attachment clear must become, as Mesa's st does it
-/// (st_cb_clear.c:440-528): one quad over the scissor box that writes every
-/// colour attachment (its mask), the depth and the stencil together, the
-/// colours loaded by the job, the Z/S stored; no refusal, no error.
+/// The several-attachment clear as Mesa's st does it (st_cb_clear.c:440-528):
+/// one quad that writes every colour attachment (its mask), the colours
+/// loaded by the job; no refusal, no error. Scissored, the quad covers the
+/// box and clears the depth and the stencil with the colour, and the Z/S is
+/// stored; a colour mask alone leaves the Z/S to the TLB (whole tiles, as
+/// the one-attachment masked clear does), the quad writing colour only.
 fn assert_drawn(w: &str, s: &Seen, errs: &[GLenum], cols: usize, ds: GLenum, mask: u32, scissored: bool) {
     assert!(errs.is_empty() && s.refused == 0, "{w}: {errs:x?} {:?}", s.log);
     assert_eq!((s.jobs.len(), s.draws.len(), s.clears.len()), (1, 1, 1), "{w}: one job, one quad");
     let q = &s.draws[0];
     assert_eq!(q.st.colormask, mask, "{w}");
     assert_eq!(q.st.scissor, scissored, "{w}");
-    assert!(q.st.depth_enabled && q.st.depth_writemask, "{w}: depth");
-    assert_eq!(q.st.stencil_enabled, has_stencil(ds), "{w}: stencil");
     assert_eq!(s.jobs[0].rts as usize, cols, "{w}");
     let c = &s.clears[0];
     assert!(c.load_rt0 && c.load_rt[..cols - 1].iter().all(|l| *l), "{w}: the colours are loaded");
-    assert!(c.zs_store, "{w}");
+    if scissored {
+        assert!(q.st.depth_enabled && q.st.depth_writemask, "{w}: depth");
+        assert_eq!(q.st.stencil_enabled, has_stencil(ds), "{w}: stencil");
+        assert!(c.zs_store, "{w}");
+    } else {
+        assert!(!q.st.depth_enabled && !q.st.stencil_enabled, "{w}: the quad writes colour only");
+        assert_eq!(c.z, 0.25, "{w}: the Z clear is the TLB's");
+        if has_stencil(ds) {
+            assert_eq!(c.stencil, 0x5a, "{w}: the stencil clear is the TLB's");
+        }
+        assert!(!c.zs_load && !c.zs_store, "{w}: cleared, not loaded, not stored");
+    }
 }
 
 #[test]
-#[ignore = "v3d-mrt-clear"]
 fn a_scissored_clear_of_several_attachments_and_depth_stencil_is_one_quad() {
     let _g = rig();
     for (cols, ds) in combos() {
@@ -835,7 +808,6 @@ fn a_scissored_clear_of_several_attachments_and_depth_stencil_is_one_quad() {
 }
 
 #[test]
-#[ignore = "v3d-mrt-clear"]
 fn a_masked_clear_of_several_attachments_and_depth_stencil_is_one_quad() {
     let _g = rig();
     for (cols, ds) in combos() {
@@ -849,7 +821,6 @@ fn a_masked_clear_of_several_attachments_and_depth_stencil_is_one_quad() {
 }
 
 #[test]
-#[ignore = "v3d-mrt-clear"]
 fn a_scissored_and_masked_clear_of_several_attachments_and_depth_stencil_is_one_quad() {
     let _g = rig();
     for (cols, ds) in combos() {

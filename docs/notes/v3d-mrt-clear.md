@@ -3,14 +3,58 @@
 # V3D: a scissored or masked colour clear of several colour attachments
 
 Design, written before the code item `v3d-mrt-clear`, from reading only (no
-board, no run). Today `draw_call` refuses the clear by name
+board, no run), and, in section 0, what the item built. Before it,
+`draw_call` refused the clear by name
 (`src/v3d/backend.rs:6062`, "a scissored or masked colour clear of several
-colour attachments") because the clear quad's programs write RT 0 only. The
+colour attachments") because the clear quad's programs wrote RT 0 only. The
 single-attachment integer quad is [v3d-int-clear.md](v3d-int-clear.md); read
 its "which clears take the quad" table first, this note does not repeat it.
 Attachments of different sizes are [v3d-mrt-sizes.md](v3d-mrt-sizes.md) (a
 refusal that stays), 4x of several attachments is
 [v3d-msaa-es3.md](v3d-msaa-es3.md) (stays refused, `backend.rs:6048-6050`).
+
+## 0. What landed (`v3d-mrt-clear`)
+
+The refusal is gone. The clear is **one quad from `clear_mrt.rs`** (the
+alternative section 3 rejects, minus the per-RT mask it rejected it for),
+not section 3's one quad per attachment:
+
+- `draw_clear_quad` (`backend.rs`) classes every RT of the job
+  (`mrt_pattern`): an RT `clear_target_mask` names (every one for glClear)
+  and that has an address takes its format's class (`clear_class`:
+  integer by signedness, R32F as `Uint`, section 5b; anything else
+  `Float`); a GL_NONE draw buffer or an RT the clear does not name is
+  `NotCleared` and gets no output. `clear_mrt_source` writes the program,
+  `build_clear_program` checks each `u_color<n>` at its four dwords and
+  that the compiled `rt_mask` is exactly the cleared set, and the fragment
+  block is `clear_rgba`'s four words once per cleared RT (dwords `4k..4k+3`).
+  A single-attachment job keeps `CLEAR_FS` / `CLEAR_FS_INT` byte for byte.
+- One program per class pattern, built on first use and kept in
+  `V3dState::clear_program_mrt` (`MRT_CLEAR_PROGRAMS` = 8 slots of 1.5 KiB;
+  `Int` and `Uint` are one `uvec4` output, so one key: 3^4 patterns at
+  most, too many to keep them all in static state). When the table is full
+  the oldest slot is given up with no flush: the OSAL holds a freed block
+  until every job that may read it has completed (`src/osal/v3d_frees.h`),
+  and the job builder copied the program's record when the quad was
+  recorded. The pattern costs a compile again when it returns.
+- The colour mask is the job's one `COLOR_WRITE_MASKS` (section 2: ES 3.0
+  has one mask for every draw buffer); no per-RT mask ABI change. The
+  depth and stencil halves ride on the same quad. The unscissored, unmasked
+  clear is the TLB's as before.
+- Why one quad and not k: tests/es3_mrt_ds_clear_v3d.rs and
+  tests/es3_fragops_scissor_v3d.rs pin "one job, one quad", and k quads cost
+  k draws' fixed cost (section 3, "Cost") for the same pixels.
+
+The host tests are `src/v3d/backend_tests.rs` (the mixed-class quad, one
+RT of several, the job-wide mask, the TLB fast path, depth/stencil with it,
+R32F and R16F, a GL_NONE slot, the program table and its eviction, a
+program that did not build), the un-ignored tests of
+tests/es3_mrt_clear_v3d.rs, tests/es3_mrt_ds_clear_v3d.rs,
+tests/es3_fragops_scissor_v3d.rs and tests/es3_four_rt_v3d.rs, and the sRGB
+pair of tests/es3_int_rt_v3d.rs (a gate row: its fragment block is the
+colour's four words once per RT the quad writes, the one-quad design's
+shape). The board pixel check of section 5a (an RT the program leaves out
+keeps its bytes) is still open; it is the Pi 4 rerun of FO6 and M1.
 
 Line numbers are main at `9af85cd5` and drift; the names are the address.
 Mesa is 26.2.1. `third_party/mesa-26.2.1` holds only the v3d format table;
