@@ -285,6 +285,36 @@ gap() {
   rc=1
 }
 
+# no_board_env <command...>: the command without the board and image
+# variables an operator's or a farm host's shell exports. The board and CTS
+# self-tests (tools/board_selftest.sh, tools/cts/cts-selftest.sh with
+# images-selftest.sh) drive tools/board.sh and the image builders
+# (tools/cts/*.sh), which read them: BOARD and BOARD_* (BOARD_UART,
+# BOARD_HOST, BOARD_BOOT, BOARD_MUSTPASS, ...), TREE_* (TREE_IMAGE,
+# TREE_IMAGE_DIR, TREE_ROWS, ...), SEL, REC_SINK, NAMES, DEQP_*, IMX8MP_*
+# (IMX8MP_BOARD, IMX8MP_OUT, ...), PI4_*, PI5_*, NETBOOT_*, UART_ADDR,
+# UART_REAL, RUN_BOUND, RETURN_BOUND, LOCK, LOCK_WAIT, HOLD_MAX, LEASE_HELD,
+# GM_ROWS, MMC_STAGED, REBOOTED, NO_CONSOLE_WHY, WDOG_SELF_ARM, ZEPHYR_* and
+# WEST_* (the output directories derive from them), YAKOGL_DIR,
+# YAKOGL_TOOLS (board_selftest builds its own), GLMARK2_SRC, HAL_NXP_DIR,
+# X2SC_*, RESOURCE_*. Junk values of these exported on a host failed 12 of
+# board_selftest's 341 checks (2026-11-10). The self-tests unset most of these themselves;
+# this keeps a variable a later board.sh change reads from reaching them
+# first. PATH, HOME, TMPDIR, CTS (cts-selftest's VK-GL-CTS checkout) and the
+# toolchain's (CARGO_*, RUSTUP_*, RUSTFLAGS) stay.
+no_board_env() {
+  local v drop=()
+  for v in $(compgen -e); do
+    case "$v" in
+    BOARD | BOARD_* | TREE_* | SEL | REC_SINK | NAMES | DEQP_* | IMX8MP_* | PI4_* | PI5_* | NETBOOT_* | \
+      UART_ADDR | UART_REAL | RUN_BOUND | RETURN_BOUND | LOCK | LOCK_WAIT | HOLD_MAX | LEASE_HELD | GM_ROWS | \
+      MMC_STAGED | REBOOTED | NO_CONSOLE_WHY | WDOG_SELF_ARM | ZEPHYR_* | WEST_* | YAKOGL_DIR | YAKOGL_TOOLS | \
+      GLMARK2_SRC | HAL_NXP_DIR | X2SC_* | RESOURCE_*) drop+=(-u "$v") ;;
+    esac
+  done
+  env "${drop[@]+"${drop[@]}"}" "$@"
+}
+
 # The scopes a cargo feature set reaches: its GPU, and the precompiled tier.
 config_scopes() {
   local out=""
@@ -2680,7 +2710,7 @@ print(len(l), "cases"); sys.exit(0 if ok else 1)'
   # tools/cts/cts-selftest.sh: the CTS tools' own checks (refusal parsing,
   # the image .config check, the tallies, the GLES3 tables, and check 20:
   # images-selftest.sh, the image builders against a fake west). Host only.
-  step "tools   cts-selftest.sh (the CTS tools' checks, images-selftest included)" tools/cts/cts-selftest.sh
+  step "tools   cts-selftest.sh (the CTS tools' checks, images-selftest included)" no_board_env tools/cts/cts-selftest.sh
   # The NanoPC-T6's dEQP-GLES2 runner, tools/cts/mali-deqp-run.sh, against a
   # fake board (ssh, scp and deqp-gles2 stubs: a clean run, a crash with
   # resume, a hang, a panthor reset, lost ssh, --dry-run without ssh, the hold
@@ -3211,7 +3241,7 @@ step "gen     src/vivante/internal.rs == yakogl-precompile --internal (our compi
 # No input key: what it reads has not been traced (it runs board.sh on
 # every board and backend), so it runs every time.
 scope tools
-step "tools   board.sh dry-run matrix and replays" tools/board_selftest.sh
+step "tools   board.sh dry-run matrix and replays" no_board_env tools/board_selftest.sh
 # tools/board-stm32mp2.sh, the STM32MP257F-DK's one-shot runner (its U-Boot
 # environment edited on the host with tools/uboot_env.py: the board has no
 # fw_setenv, #1281), without a board: every verb under --dry-run with ssh,
