@@ -1906,6 +1906,18 @@ fn vs_for_fragment(text: &[u8], fs: &ShcShader, out: *mut ShcShader, log: &mut C
              * defect, reported as one, never the plain vertex shader */
             Err(e) => return report(log, SHC_STAGE_VERTEX, CompileError::BackEnd(codegen::BackEndError::Mali(e))),
         };
+        /* the record's reads are at the fragment shader's varying
+         * locations; the vertex shader is built at its own, paired by name
+         * (`mali::reads_at_vertex_locations`, case 19) */
+        let at = base_of(fs)
+            .and_then(|fr| store::with_scratch(|a| super::mali::reads_at_vertex_locations(&pr, fr.source, text, a)));
+        let pr = match at {
+            Some(Ok(Some(pr))) => pr,
+            /* a read the vertex shader does not write: the link refuses it */
+            Some(Ok(None)) => return 1,
+            Some(Err(e)) => return report(log, SHC_STAGE_VERTEX, e),
+            None => pr,
+        };
         /* the moved bytes are borrowed from `pr` for the compile; the record
          * gets its own copy (`publish_as`) */
         let mut reads = FsReads { moved: pr.moved(), ..FsReads::NONE };

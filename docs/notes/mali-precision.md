@@ -178,9 +178,11 @@ a mediump vec4 alone.
   does (each before its `FMA`, `r7` reused), with no change to either.
 
 The `tex` pair declares `TexCoord` and `Tint` in the opposite order in each
-stage. Our varying locations follow each stage's declaration order, so the
-test gives `compile_vs_for_reads` the fragment shader's reads at the vertex
-shader's locations (Mesa's link matches them by name).
+stage. Our varying locations follow each stage's declaration order, so
+`compile_vs_for_reads` is given the fragment shader's reads at the vertex
+shader's locations (Mesa's link matches them by name); the link does this
+itself since case 19's link was lowered (`mod.rs`
+`reads_at_vertex_locations`, `mali-partial-varyings.md`).
 
 `es100/texfill.vert` (`uniform Fill u_fill`, a struct with default highp
 members) was refused with the same text only because the precision lookup

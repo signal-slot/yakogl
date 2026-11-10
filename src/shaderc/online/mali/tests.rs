@@ -479,6 +479,11 @@ fn compile_linked(vs: &str, fs: &str) -> (Stage, Stage) {
     .expect("the scratch arena is free")
     .expect("the fragment shader compiles for the vertex shader");
     let pr = super::fragment_reads(&f.info.shader()).expect("the record's moved expressions encode");
+    /* at the vertex shader's own locations, paired by name (case 19's tex) */
+    let pr = store::with_scratch(|s| super::reads_at_vertex_locations(&pr, fs.as_bytes(), vs.as_bytes(), s))
+        .expect("the scratch arena is free")
+        .expect("both stages lower")
+        .expect("every read is a vertex output");
     let v = store::with_scratch(|s| {
         super::compile_vs_for_reads(vs.as_bytes(), pr.reads(), pr.moved(), s, store::keep())
             .map(|(sh, _)| stage_of(&sh))
@@ -4912,26 +4917,86 @@ const VSFP16_POPULATION: [(&str, &str, &str, &str); 4] = [
 
 #[test]
 fn the_fp16_vertex_uniforms_are_byte_equal_to_mesa_26_2_1() {
-    for (name, vs, fs, json) in VSFP16_POPULATION {
+    for (_, vs, fs, json) in VSFP16_POPULATION {
+        /* tex's stages declare `TexCoord` and `Tint` in the other order:
+         * the link gives the vertex shader the fragment shader's reads at
+         * its own locations, by name (`reads_at_vertex_locations`; `Tint`
+         * at offset 0, `TexCoord` at 16; `Unused` is no read) */
         let (v, f) = compile_linked(vs, fs);
-        /* tex's stages declare `TexCoord` and `Tint` in the other order,
-         * and the varying locations are each stage's declaration order: the
-         * fragment shader's reads are given at the vertex shader's
-         * locations, as Mesa's link matches them by name (`Tint` at offset
-         * 0, `TexCoord` at 16, the fragment's order; `Unused` is no read) */
-        let v = if name == "vsfp16_19_tex" {
-            let _k = store::test_keep();
-            store::with_scratch(|s| {
-                super::compile_vs_for_reads(vs.as_bytes(), &[(1, 0b1111), (0, 0b0011)], &[], s, store::keep())
-                    .map(|(sh, _)| stage_of(&sh))
-            })
-            .expect("the scratch arena is free")
-            .expect("the vertex shader compiles for the program's reads")
-        } else {
-            v
-        };
         check_vs_stage(&v, vs, fs, json, VIEWPORT_64X64);
         check_fs_stage(&f, vs, fs, json, VIEWPORT_64X64);
+    }
+}
+
+/// Case 19's tex pair (#33) through the back end's entry points in the GL
+/// core's order (glCompileShader of each stage, `compile_vs_linked` with no
+/// map, the link), as the board's sweep runs it: the vertex shader is built
+/// for the fragment shader's reads at its own locations, paired by name
+/// (`Tint` is fragment location 0 and vertex location 1, `TexCoord` 1 and
+/// 0), so it stores `Tint` and `TexCoord` and not the unread `Unused`, and
+/// both stages, their facts and each read's slot are Mesa's
+/// (docs/notes/mali-partial-varyings.md).
+#[test]
+fn case_19_s_program_through_the_entry_points_is_byte_equal_to_mesa_26_2_1() {
+    use crate::shaderc::online::backend::{release, SHC_ONLINE};
+    use crate::shaderc::ShcShader;
+    let (_, vs, fs, json) = VSFP16_POPULATION[2];
+    let _serial = store::test_lock();
+    let mut log = [0 as core::ffi::c_char; 512];
+    let text = |log: &[core::ffi::c_char; 512]| {
+        // SAFETY: the writer NUL-terminated the log.
+        String::from_utf8_lossy(unsafe { crate::util::cstr_bytes(log.as_ptr()) }).into_owned()
+    };
+    let (vsrc, fsrc) = (format!("{vs}\0"), format!("{fs}\0"));
+    let mut compile = |stage: u32, src: &str| {
+        let mut sh = ShcShader::ZERO;
+        // SAFETY: a NUL-terminated source, a real output, a log of the announced size.
+        let rc = unsafe { (SHC_ONLINE.compile.unwrap())(stage, src.as_ptr().cast(), &mut sh, log.as_mut_ptr(), 512) };
+        assert_eq!(rc, 0, "compiles: {}", text(&log));
+        sh
+    };
+    let (own, mut f) = (compile(SHC_STAGE_VERTEX, &vsrc), compile(SHC_STAGE_FRAGMENT, &fsrc));
+    let mut v = ShcShader::ZERO;
+    // SAFETY: a NUL-terminated source, the program's fragment shader, a real
+    // output and a log of the announced size.
+    let rc = unsafe {
+        (SHC_ONLINE.compile_vs_linked.unwrap())(
+            vsrc.as_ptr().cast(),
+            core::ptr::null(),
+            &f,
+            &mut v,
+            log.as_mut_ptr(),
+            512,
+        )
+    };
+    assert_eq!(rc, 0, "the program's vertex shader is built for the reads: {}", text(&log));
+    // SAFETY: two shaders of this back end and a log of the announced size.
+    let rc = unsafe { (SHC_ONLINE.link.unwrap())(&v, &mut f, log.as_mut_ptr(), 512) };
+    assert_eq!(rc, 0, "the program links: {}", text(&log));
+    let (vst, fst) = (stage_of(&v), stage_of(&f));
+    check_vs_stage(&vst, vs, fs, json, VIEWPORT_64X64);
+    check_fs_stage(&fst, vs, fs, json, VIEWPORT_64X64);
+    let generic = |s: &Stage| {
+        let mut g: Vec<_> = s
+            .info
+            .varyings
+            .iter()
+            .filter(|x| x.section == Section::Generic)
+            .map(|x| (x.varying, x.offset, x.mask))
+            .collect();
+        g.sort_by_key(|x| x.1);
+        g
+    };
+    /* Tint at 0, TexCoord's two lanes at 16, Unused (vertex location 2)
+     * kept in the record with no component (mask 0, no store) */
+    assert_eq!(generic(&vst), [(Some(1), 0, 0xf), (Some(0), 16, 0x3), (Some(2), 24, 0)], "the vertex layout");
+    assert_eq!(generic(&fst), [(Some(0), 0, 0xf), (Some(1), 16, 0x3)], "the fragment layout");
+    /* a vertex's generic varyings are the six stored words (pan_csf.c
+     * `generic_size_B`, the frame's VARY_SIZE): Unused adds none */
+    let meta = crate::mali::program::StageMeta::of(&vst.info.shader()).expect("the frame builder takes the record");
+    assert_eq!(meta.meta().varying_bytes, 24, "VARY_SIZE");
+    for sh in [&f, &v, &own] {
+        release(sh);
     }
 }
 
