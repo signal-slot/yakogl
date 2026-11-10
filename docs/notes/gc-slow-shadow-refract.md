@@ -245,6 +245,15 @@ at the first frame past that (`scene.cpp:116`).
   this note read it. The same `as_chunks::<4>` and `from_ne_bytes` form is in
   `copy_plane` (`ds_cache.rs:474-475`) and `seed_depth` (`:533-534`); they
   are not per frame here.
+  **Done on the host** (item resolve-wide): `resolve_row` in `ds_cache.rs`
+  reads the 16-byte aligned middle of each row with one volatile `u128`
+  load (`ldp x, x`) per four words and the head and tail with one `ldr w`
+  a word; only a row off the 4-byte boundary (no surface of the cache) keeps
+  the `ldrb` loop. Checked with
+  `cargo rustc -p yakogl --release --lib --no-default-features --features
+  osal-zephyr,gpu-vivante,shaderc-online,no-shader-table --target
+  aarch64-unknown-none -- --emit=asm` and the loads of `resolve_row` in the
+  `.s` file. The X2's ms a frame is still to be measured.
 - **Fix, real.** No CPU resolve at all: the texture unit samples the D24S8
   surface, as the PowerVR does since `86d0b482` (AM62P shadow 353 -> 10.6 ms,
   refract 375 -> 37 ms; `pvr-depth-sample.md`). The GC needs the board

@@ -642,11 +642,52 @@ pub unsafe fn resolve_depth(
         let src = &px[y * stride..y * stride + cols * 4];
         // SAFETY: the caller's contract: `h` rows of `pitch` floats, `cols <= w <= pitch`.
         let out = unsafe { core::slice::from_raw_parts_mut(dst.add(y * pitch as usize), cols) };
-        for (o, s) in out.iter_mut().zip(src.as_chunks::<4>().0) {
-            *o = ds_retention::unorm24_depth(u32::from_ne_bytes(*s) >> 8);
-        }
+        resolve_row(src, out);
     }
     0
+}
+
+/// One row of D24S8 words at `src` into `out`'s depth floats, `src` holding
+/// `4 * out.len()` bytes. The surface lives in the non-cacheable carve-out:
+/// every load is a bus read, and `as_chunks::<4>` with `u32::from_ne_bytes`
+/// came out as four `ldrb` a word on aarch64-unknown-none (about 5.76 M
+/// uncached loads a shadow or refract frame, docs/notes/gc-slow-shadow-refract.md).
+/// The 16-byte aligned middle of the row is read with one volatile `u128`
+/// load (`ldp`) per four words, volatile so that the compiler cannot split
+/// it back into narrow loads; the head and tail around it, three words at
+/// most each, take one volatile `u32` load a word. A row that is not 4-byte
+/// aligned (no surface of this cache is) takes the old byte-wise loop. The
+/// values are the old loop's, bit for bit (tests/gc_depth_resolve.rs).
+fn resolve_row(src: &[u8], out: &mut [f32]) {
+    let n = out.len().min(src.len() / 4);
+    let (src, out) = (&src[..n * 4], &mut out[..n]);
+    let depth = |w: u32| ds_retention::unorm24_depth(w >> 8);
+    // SAFETY: every bit pattern is a valid u32 and u128.
+    let ((pre, words, post), (head, mid, tail)) = unsafe { (src.align_to::<u32>(), src.align_to::<u128>()) };
+    if !pre.is_empty() || !post.is_empty() {
+        for (o, s) in out.iter_mut().zip(src.as_chunks::<4>().0) {
+            *o = depth(u32::from_ne_bytes(*s));
+        }
+        return;
+    }
+    let (head, tail) = (&words[..head.len() / 4], &words[words.len() - tail.len() / 4..]);
+    let (out_head, rest) = out.split_at_mut(head.len());
+    let (out_mid, out_tail) = rest.split_at_mut(mid.len() * 4);
+    let narrow = |out: &mut [f32], words: &[u32]| {
+        for (o, w) in out.iter_mut().zip(words) {
+            // SAFETY: `w` is an aligned, live word of the row.
+            *o = depth(unsafe { core::ptr::read_volatile(w) });
+        }
+    };
+    narrow(out_head, head);
+    for (o, q) in out_mid.as_chunks_mut::<4>().0.iter_mut().zip(mid) {
+        // SAFETY: `q` is an aligned, live u128 of the row.
+        let v = unsafe { core::ptr::read_volatile(q) }.to_ne_bytes();
+        for (o, s) in o.iter_mut().zip(v.as_chunks::<4>().0) {
+            *o = depth(u32::from_ne_bytes(*s));
+        }
+    }
+    narrow(out_tail, tail);
 }
 
 /// Keep the clear values of a surface that is let go.

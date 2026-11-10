@@ -106,6 +106,16 @@ fn pattern(i: usize) -> u32 {
 /// Run `case` on the pixel words of a `w` x `h` surface that a draw wrote
 /// depth to, and the surface's row stride in words.
 fn with_surface(w: u32, h: u32, case: impl FnOnce(&mut [u32], u32)) {
+    with_surface_at(GUARD, w, h, |px, stride| {
+        // SAFETY: GUARD keeps the pixels word-aligned; the bytes are the surface's.
+        let words = unsafe { core::slice::from_raw_parts_mut(px.as_mut_ptr() as *mut u32, px.len() / 4) };
+        case(words, stride / 4)
+    });
+}
+
+/// [`with_surface`] at `guard` bytes into the allocation (8-byte aligned
+/// here, as on the board): the pixel bytes and the row stride in bytes.
+fn with_surface_at(guard: usize, w: u32, h: u32, case: impl FnOnce(&mut [u8], u32)) {
     let _g = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
     // SAFETY: the guard serialises the tests; the tables are statics.
     unsafe {
@@ -113,37 +123,59 @@ fn with_surface(w: u32, h: u32, case: impl FnOnce(&mut [u32], u32)) {
         yakogl::backend::g_backend = &yakogl::vivante::backend::yakogl_backend_vivante;
         assert_eq!(yakogl::vivante::backend::gc_init(), 0, "gc_init");
     }
-    ds_cache::select(KEY, w, h, GUARD, 1, None, |_| false, || 0).expect("a surface");
+    ds_cache::select(KEY, w, h, guard, 1, None, |_| false, || 0).expect("a surface");
     ds_cache::drawn(KEY, 1, false, [true, false], [None, None]);
     /* the surface: 64-aligned width in words, 64-aligned rows (ds_cache.rs `select`) */
     let (stride, rows) = (w.div_ceil(64) * 64 * 4, h.div_ceil(64) * 64);
     let bytes = stride as usize * rows as usize;
     let mut allocs = ALLOCS.lock().unwrap_or_else(|e| e.into_inner());
     /* gc_init has made its own allocations: the surface is the one of this size */
-    let mut of_size = allocs.values_mut().filter(|m| m.len() * 8 == bytes + 2 * GUARD);
+    let mut of_size = allocs.values_mut().filter(|m| m.len() == (bytes + 2 * guard).div_ceil(8));
     let mem = of_size.next().expect("the surface");
     assert!(of_size.next().is_none(), "one allocation of the surface's size");
     // SAFETY: the allocation holds guard + bytes + guard bytes.
-    let words =
-        unsafe { core::slice::from_raw_parts_mut((mem.as_mut_ptr() as *mut u8).add(GUARD) as *mut u32, bytes / 4) };
-    case(words, stride / 4);
+    let px = unsafe { core::slice::from_raw_parts_mut((mem.as_mut_ptr() as *mut u8).add(guard), bytes) };
+    case(px, stride);
     drop(allocs);
     yakogl::vivante::backend::gc_shutdown();
 }
 
 fn resolve(dst: &mut [f32], w: u32, h: u32, pitch: u32) -> i32 {
+    resolve_at(GUARD, dst, w, h, pitch)
+}
+
+fn resolve_at(guard: usize, dst: &mut [f32], w: u32, h: u32, pitch: u32) -> i32 {
     assert!(dst.len() >= (h * pitch) as usize);
     // SAFETY: `h` rows of `pitch` floats.
-    unsafe { ds_cache::resolve_depth(ID, dst.as_mut_ptr(), w, h, pitch, GUARD, |_| 0) }
+    unsafe { ds_cache::resolve_depth(ID, dst.as_mut_ptr(), w, h, pitch, guard, |_| 0) }
 }
 
 /// Every texel of the resolve is the rule's value of the word at its place;
 /// a texel outside the surface and the pitch's padding keep their sentinel.
+///
+/// The row loop reads four words at a time where the row is 16-byte aligned
+/// and one at a time around that (ds_cache.rs `resolve_row`): the asks below
+/// end a row at every remainder of four words (odd widths among them), and
+/// all of them are narrower than the surface's row stride. A 129-texel ask
+/// on a 128-word surface takes the stride's limit.
 #[test]
 fn every_texel_is_the_rule_of_its_word() {
     /* a 90 x 70 surface is 128 words a row and 128 rows; some asks hold more than that */
-    for (w, h, pitch) in [(90u32, 70u32, 90u32), (90, 70, 97), (128, 128, 129), (1, 1, 1), (150, 140, 160), (3, 5, 64)]
-    {
+    for (w, h, pitch) in [
+        (90u32, 70u32, 90u32),
+        (90, 70, 97),
+        (128, 128, 129),
+        (1, 1, 1),
+        (150, 140, 160),
+        (3, 5, 64),
+        (89, 70, 89),
+        (91, 33, 95),
+        (7, 3, 9),
+        (5, 2, 5),
+        (2, 4, 3),
+        (127, 70, 127),
+        (129, 1, 131),
+    ] {
         with_surface(90, 70, |words, tw| {
             for (i, v) in words.iter_mut().enumerate() {
                 *v = pattern(i);
@@ -164,6 +196,39 @@ fn every_texel_is_the_rule_of_its_word() {
                 }
             }
         });
+    }
+}
+
+/// A surface whose pixels start off the 16-byte boundary (a guard of 4100
+/// bytes: rows 4-byte aligned only) resolves through the word loads at the
+/// head and tail of each row, and one off the 4-byte boundary (a guard of
+/// 4097) through the byte loop; both answer the rule at every texel. The
+/// board's guards keep the rows 64-byte aligned; this is the fallback.
+#[test]
+fn a_row_off_the_16_byte_boundary_resolves_the_same() {
+    for guard in [GUARD + 4, GUARD + 8, GUARD + 12, GUARD + 1, GUARD + 3] {
+        for (w, h, pitch) in [(90u32, 70u32, 90u32), (89, 70, 93), (7, 3, 7), (1, 2, 1), (128, 128, 128)] {
+            with_surface_at(guard, 90, 70, |px, stride| {
+                for (i, s) in px.as_chunks_mut::<4>().0.iter_mut().enumerate() {
+                    *s = pattern(i).to_ne_bytes();
+                }
+                let word = |x: u32, y: u32| {
+                    let at = (y * stride + x * 4) as usize;
+                    u32::from_ne_bytes(px[at..at + 4].try_into().unwrap())
+                };
+                let (tw, rows) = (stride / 4, px.len() as u32 / stride);
+                let mut dst = vec![7.5f32; (h * pitch) as usize];
+                assert_eq!(resolve_at(guard, &mut dst, w, h, pitch), 0, "guard {guard}, {w}x{h}/{pitch}");
+                for y in 0..h {
+                    for x in 0..pitch {
+                        let got = dst[(y * pitch + x) as usize];
+                        let inside = x < w && x < tw && y < rows;
+                        let want = if inside { rule(word(x, y)) } else { 7.5 };
+                        assert_eq!(got.to_bits(), want.to_bits(), "guard {guard}, {w}x{h}/{pitch} at ({x}, {y})");
+                    }
+                }
+            });
+        }
     }
 }
 
