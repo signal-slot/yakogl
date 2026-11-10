@@ -17,8 +17,8 @@
 #     the schema's fields and a public source snapshot. Public build commits
 #     exist and onMain is true exactly for ancestors of HEAD. Unpublished
 #     build hashes must occur in their cited first-public-commit record;
-#   - every data-fig / data-prov / data-note / data-tiles / data-status hook
-#     the pages use resolves to figures in data.js;
+#   - every data-fig / data-prov / data-note / data-tiles / data-status /
+#     data-summary hook the pages use resolves to figures in data.js;
 #   - no placeholder text from the drafts is left (TBD, photo or screenshot
 #     slots, "Draft site") and no home or /tmp path.
 #
@@ -93,7 +93,7 @@ class Page(HTMLParser):
         if tag == "title":
             self._in_title = True
             self.title = ""
-        for h in ("data-fig", "data-prov", "data-note", "data-tiles", "data-status"):
+        for h in ("data-fig", "data-prov", "data-note", "data-tiles", "data-status", "data-summary"):
             if h in a:
                 self.hooks.append((h, a[h]))
 
@@ -370,6 +370,14 @@ if data is not None:
             elif hook == "data-tiles":
                 if not any(fid == f"{val}.{b}" for fid in figs for b in boards):
                     err(f"{name}: data-tiles=\"{val}\" matches no figure")
+            elif hook == "data-summary":
+                # site.js fills one row per board from these three figures.
+                if val != "boards":
+                    err(f"{name}: data-summary=\"{val}\" is not \"boards\"")
+                for b in sorted(boards):
+                    for kind in ("deqp2", "glmark2", "boot"):
+                        if f"{kind}.{b}" not in figs:
+                            err(f"{name}: data-summary needs the figure {kind}.{b}")
     nfig = len(figs)
 else:
     nfig = 0
