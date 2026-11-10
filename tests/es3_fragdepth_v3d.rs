@@ -18,7 +18,10 @@
 //! (what glCompileShader and glLinkProgram reach); the code has one TLBU
 //! depth write with its config word and no pass-through write; the written
 //! value comes out of the QPU interpreter (`sim::run`), for a constant, a
-//! varying, a conditional and a loop-carried depth, lane by lane; and the
+//! varying, a conditional and a loop-carried depth, lane by lane, with a
+//! depth written before a uniform `break` and before a `break` on data (a
+//! branch out of the loop may only leave with the phis' values, prepare.rs
+//! `uniform_break`); and the
 //! 7.1 interpreter (`sim71::run71`) records the same specifier and value
 //! for Mesa's 7.1 form of the write. The interpreters have no depth buffer,
 //! so the depth test itself is not modelled; the shader-record and config
@@ -397,6 +400,70 @@ fn a_conditional_depth_takes_each_lanes_arm() {
 #[test]
 fn a_loop_carried_depth_comes_out_summed() {
     assert_eq!(depth_of(&run_fs(&body_of("uniform_loop_write"), coords(|_| [0.0, 0.0]), 0.75)), [0.5; LANES]);
+}
+
+/// A `break` on a uniform condition is a branch out of the loop
+/// (prepare.rs `uniform_break`, `SOp::LoopBreak`) only while every phi the
+/// loop carries still holds the pass's start value, the depth phi among
+/// them: a branch leaves the phi registers as they are, before the pass's
+/// `PhiNext` copies. A depth written earlier in the pass must leave with
+/// the pass.
+///
+/// `gl_FragDepth = float(i) * 0.25; if (i == 1) break;` (the second pass's
+/// 0.25, not 0.0): the per-pass value happens to be allocated into the phi
+/// register (alloc.rs, a Copy that is its source's last read), so this
+/// case came out right even as a branch. `gl_FragDepth = v_coord.x; if (i
+/// == 1) break; gl_FragDepth = 1.0;` does not: the source is defined before
+/// the loop, so the copy stays at the pass's end, and a branch left with
+/// the first pass's 1.0 (every lane 1.0, measured before the check). With
+/// the depth in the check the `break` stays the unroller's flag and each
+/// lane leaves with its own `v_coord.x`.
+#[test]
+fn a_depth_written_before_a_uniform_break_leaves_the_loop_with_it() {
+    let fs = fragdepth(
+        "void main (void)\n{\n    o_color = u_color;\n    gl_FragDepth = 0.0;\n    for (int i = 0; i < ui_two + 2; i++)\n    {\n        gl_FragDepth = float(i) * 0.25;\n        if (i == 1)\n            break;\n    }\n}",
+    );
+    with_program(VS_COORD, &fs, |p, _| {
+        assert_eq!((p.fs.writes_z, p.fs.disable_ez), (true, true));
+        assert_eq!(tlbu_configs(&p.fs.code), [TLB_Z_PER_PIXEL]);
+    });
+    assert_eq!(depth_of(&run_fs(&fs, coords(|_| [0.0, 0.0]), 0.75)), [0.25; LANES]);
+    let c = coords(|l| [l as f32 / 16.0, 0.0]);
+    let want: [f32; LANES] = core::array::from_fn(|l| c[l][0]);
+    let fs = fragdepth(
+        "void main (void)\n{\n    o_color = u_color;\n    gl_FragDepth = 0.0;\n    for (int i = 0; i < ui_two + 2; i++)\n    {\n        gl_FragDepth = v_coord.x;\n        if (i == 1)\n            break;\n        gl_FragDepth = 1.0;\n    }\n}",
+    );
+    assert_eq!(depth_of(&run_fs(&fs, c, 0.75)), want);
+    /* a uniform in place of the varying: the same shape, the uniform's 0.25 */
+    let fs = fragdepth(
+        "void main (void)\n{\n    o_color = u_color;\n    gl_FragDepth = 0.0;\n    for (int i = 0; i < ui_two + 2; i++)\n    {\n        gl_FragDepth = uf_fourth;\n        if (i == 1)\n            break;\n        gl_FragDepth = 1.0;\n    }\n}",
+    );
+    assert_eq!(depth_of(&run_fs(&fs, c, 0.75)), [0.25; LANES]);
+}
+
+/// The `break` before the write: the depth phi still holds the pass's start
+/// value at the `break`, so it is a branch, and the breaking pass's write
+/// is skipped (two passes of `float(i) * 0.25 + uf_fourth`: 0.5).
+#[test]
+fn a_uniform_break_before_the_depth_write_skips_the_write() {
+    let fs = fragdepth(
+        "void main (void)\n{\n    o_color = u_color;\n    gl_FragDepth = 0.0;\n    for (int i = 0; i < ui_two + 2; i++)\n    {\n        if (i == 2)\n            break;\n        gl_FragDepth = float(i) * 0.25 + uf_fourth;\n    }\n}",
+    );
+    assert_eq!(depth_of(&run_fs(&fs, coords(|_| [0.0, 0.0]), 0.75)), [0.5; LANES]);
+}
+
+/// `gl_FragDepth += uf_fourth; if (float(i) >= v_coord.x) break;`: a break
+/// on data, so a flag per lane (the guarded-store path, no branch), each
+/// lane leaving with the sum of its own passes. v_coord.x of lane n is
+/// n / 4, so lane n runs min(n / 4 + 1, 4) passes of a loop of four.
+#[test]
+fn a_depth_written_before_a_divergent_break_is_each_lanes_own() {
+    let fs = fragdepth(
+        "void main (void)\n{\n    o_color = u_color;\n    gl_FragDepth = 0.0;\n    for (int i = 0; i < ui_two + 2; i++)\n    {\n        gl_FragDepth += uf_fourth;\n        if (float(i) >= v_coord.x)\n            break;\n    }\n}",
+    );
+    let c = coords(|l| [(l / 4) as f32, 0.0]);
+    let want: [f32; LANES] = core::array::from_fn(|l| ((l / 4 + 1).min(4)) as f32 * 0.25);
+    assert_eq!(depth_of(&run_fs(&fs, c, 0.75)), want);
 }
 
 /// A depth write with a discard: the discard's late tests, and still the
