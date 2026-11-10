@@ -19,6 +19,11 @@
 #     build hashes must occur in their cited first-public-commit record;
 #   - every data-fig / data-prov / data-note / data-tiles / data-status /
 #     data-summary hook the pages use resolves to figures in data.js;
+#   - the glmark2.<board> figures (value, commit, date) equal README.md's
+#     glmark2 table ('| Board | Score |'), and the deqp2.<board> counts (fail,
+#     pass, notSupported, warnings) equal its dEQP-GLES2 table ('| Board |
+#     Failures | Notes |'); a missing or unparsable README row also fails
+#     (deqp2.am62p.ms4 has no README row and is not compared);
 #   - no placeholder text from the drafts is left (TBD, photo or screenshot
 #     slots, "Draft site") and no home or /tmp path.
 #
@@ -378,6 +383,87 @@ if data is not None:
                     for kind in ("deqp2", "glmark2", "boot"):
                         if f"{kind}.{b}" not in figs:
                             err(f"{name}: data-summary needs the figure {kind}.{b}")
+
+    # ---- README.md Status tables ---------------------------------------
+    # The glmark2 and dEQP-GLES2 figures follow README's Status tables. Of a
+    # glmark2 score cell the first number, the first `commit` and the first
+    # date are the current figure; older runs follow it in the same cell.
+    README_BOARDS = {"AM62P": "am62p", "Raspberry Pi 4": "pi4", "i.MX8MP": "imx8mp"}
+    try:
+        with open(os.path.join(ROOT, "README.md"), encoding="utf-8") as f:
+            readme = f.read()
+    except OSError as e:
+        readme = None
+        err(f"README.md: cannot be read: {e}")
+
+    def readme_table(header):
+        # Rows of the table whose header line is exactly `header`, as cell lists.
+        lines = readme.splitlines()
+        for i, line in enumerate(lines):
+            if line.strip() == header:
+                rows = []
+                for row in lines[i + 2:]:
+                    if not row.lstrip().startswith("|"):
+                        break
+                    rows.append([c.strip() for c in row.strip().strip("|").split("|")])
+                return rows
+        err(f"README.md: no table with the header '{header}'")
+        return None
+
+    def count(text):
+        return int(text.replace(",", ""))
+
+    def compare(fid, field, have, want):
+        if fid not in figs or not isinstance(figs[fid], dict):
+            err(f"data.js: {fid}: missing, but README.md has a figure for it")
+        elif have != want:
+            err(f"data.js: {fid}: {field} is {have!r}, README.md has {want!r}")
+
+    if readme is not None:
+        rows = readme_table("| Board | Score |")
+        if rows is not None:
+            seen = set()
+            for cells in rows:
+                board = README_BOARDS.get(cells[0])
+                m = re.match(r"(\d[\d,]*)\b.*?`([0-9a-f]{7,40})`.*?(\d{4}-\d{2}-\d{2})", cells[1]) if len(cells) == 2 else None
+                if board is None or m is None:
+                    err(f"README.md: glmark2 row cannot be parsed: | {' | '.join(cells)} |")
+                    continue
+                seen.add(board)
+                fid = f"glmark2.{board}"
+                f = figs.get(fid) if isinstance(figs.get(fid), dict) else {}
+                compare(fid, "value", f.get("value"), count(m.group(1)))
+                c = f.get("commit")
+                if fid in figs and not (isinstance(c, str) and len(c) >= 7
+                                        and (c.startswith(m.group(2)) or m.group(2).startswith(c))):
+                    err(f"data.js: {fid}: commit is {c!r}, README.md has {m.group(2)!r}")
+                compare(fid, "date", f.get("date"), m.group(3))
+            for board in sorted(set(README_BOARDS.values()) - seen):
+                err(f"README.md: glmark2 table has no row for {board}")
+        rows = readme_table("| Board | Failures | Notes |")
+        if rows is not None:
+            seen = set()
+            for cells in rows:
+                board = README_BOARDS.get(cells[0])
+                if board is None or len(cells) != 3 or not re.fullmatch(r"\d[\d,]*", cells[1]):
+                    err(f"README.md: dEQP-GLES2 row cannot be parsed: | {' | '.join(cells)} |")
+                    continue
+                want = {"fail": count(cells[1])}
+                for field, pat in (("pass", r"(\d[\d,]*)(?: of \d[\d,]* cases begun)? pass\b"),
+                                   ("notSupported", r"(\d[\d,]*) not supported\b"),
+                                   ("warnings", r"(\d[\d,]*) (?:quality )?warnings\b")):
+                    m = re.search(pat, cells[2])
+                    if m is None:
+                        err(f"README.md: dEQP-GLES2 row {cells[0]}: no {field} count in the notes")
+                    else:
+                        want[field] = count(m.group(1))
+                seen.add(board)
+                fid = f"deqp2.{board}"
+                v = figs.get(fid, {}).get("value") if isinstance(figs.get(fid), dict) else None
+                for field, n in want.items():
+                    compare(fid, f"value.{field}", v.get(field) if isinstance(v, dict) else None, n)
+            for board in sorted(set(README_BOARDS.values()) - seen):
+                err(f"README.md: dEQP-GLES2 table has no row for {board}")
     nfig = len(figs)
 else:
     nfig = 0
