@@ -18,6 +18,28 @@ drop | * | * | <(user|login)@(host|board)> | placeholder
 # The RFC 1918 fixtures that the console redaction self-test rewrites.
 drop | private-ipv4 | tools/board_selftest.sh | \b(10\.11\.12\.(1|13)|172\.16\.0\.9)\b | redact_dir fixture input (RFC 1918)
 drop | private-ipv4 | tools/cts/pr-session-selftest.sh | secret-user@10\.9\.8\.7\b | fixture of the self-test's BOARD_HOST refusal
+# Fixtures of the redaction self-tests and dry-run matrices that landed
+# 2026-11-07 to 2026-11-09 (board.sh's pi5 rows, the NanoPC-T6 slice tools).
+# A redaction test has to hold the input it redacts (an RFC 1918 or tailnet
+# address, root@<placeholder>, an invented *.ts.net name), and a dry run has
+# to name a fake board. Each rule is the fixture's own literal or an RFC 2606
+# placeholder shape, so the same class anywhere else stays a finding.
+drop | private-ipv4 | tools/board_selftest.sh | \b(100\.64\.7\.9|10\.20\.30\.40)\b | pi5 fixtures: the stub ssh's refused address and the console redaction input
+drop | email | * | @[A-Za-z0-9.-]+\.example(?![A-Za-z0-9.-]) | .example placeholder host (RFC 2606), e.g. the dry runs' fake BOARD_HOST
+drop | email | * | \bt@example\.com\b | a self-test's git identity (RFC 2606)
+drop | home-path | tools/cts/mali-glmark2-selftest.sh | /board/home[/]yakogl-mali-glmark2\b | the fake board's home under the self-test's temp dir: the stage root, not a user
+drop | private-ipv4 | tools/cts/mali-fail-triage.py | \b10\.1\.2\.3:22\b | scrub() self-test input
+drop | login-at-host | tools/cts/mali-fail-triage.py | ssh root[@]nano at 10\.1\.2\.3:22 | scrub() self-test input: the whole invented string the test redacts
+drop | private-ipv4 | tools/cts/mali-slice-readme-selftest.sh | ip="10\.1\.2\.3" | the dirty slice's address the README self-test expects reported
+drop | login-at-host | * | root@board\b | placeholder for the board's prompt or ssh target (lower case)
+drop | private-ipv4 | tools/cts/mali-slice-redact.py | \b100\.64\.0\.0/10\b | the tailnet range as a CIDR, in the class table
+drop | private-ipv4 | tools/cts/mali-slice-redact.py | \b100\.64\.0\.9\b | self-test fixture of the tailnet class
+drop | ipv6-local | tools/cts/mali-slice-redact.py | fe80:[:]1\b | the ipv6 class's example and fixture: the link-local prefix with no host part
+drop | tailnet-dns | * | \bboard-1\.example\.ts\.net\b | an invented tailnet name with the RFC 2606 label, in the fixtures
+drop | login-at-host | tools/cts/mali-slice-redact.py | root[@]192\.0\.2\.7\b | fixture: root at a documentation address (RFC 5737)
+drop | email | tools/cts/mali-slice-redact.py | serial-getty@ttyS2\.service\b | a systemd unit instance named in the class table
+drop | private-ipv4 | tools/cts/testdata/mali-fail-triage/* | \b10\.9\.8\.7\b | slice fixture: the address the triage redacts
+drop | email | docs/notes/*.md | \b[A-Za-z_][A-Za-z0-9_]*@[0-9]+\.[xyzw]{1,4}\b | an IR operand reference (name, @, index, swizzle) in a quoted compiler dump
 # The preflight selftest's fake BOARD_UART canary (a look-alike, never a real value).
 drop | password | tools/cts/imx8mp-gles3-preflight-selftest.sh | SECRET\=ttyUSB | selftest fixture: the fake UART string the test asserts the preflight never prints
 # Product defaults and keywords.
