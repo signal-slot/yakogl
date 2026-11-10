@@ -15,8 +15,14 @@
 //! `gl_FragCoord` read takes the copy: the pixel's depth, as GLSL says.
 //!
 //! The values are checked by running the ENCODED program in the
-//! lane-faithful interpreter of `tests/common`. The PE and early-Z words a
-//! depth-writing draw needs are `src/vivante`'s (item gc-fragdepth-earlyz).
+//! lane-faithful interpreter of `tests/common`.
+//!
+//! Early Z is pinned through the rule: `writes_z` is derived from the compiled
+//! record (`ps_depth_out_reg != SHC_VIV_NO_REG`, as the back end will) and fed
+//! to `yakogl::vivante::early_z::early_z`, whose early test, early write,
+//! PE_DEPTH_CONFIG bits and RA_EARLY_DEPTH word are asserted. The back end
+//! does not call the rule yet: the PE/RA words it EMITS are pinned by item
+//! gc-fragdepth-earlyz.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-vivante,shaderc-online --test es3_fragdepth_gc
@@ -32,6 +38,7 @@ use yakogl::shaderc::online::backend::{forget_compiled, SHC_ONLINE};
 use yakogl::shaderc::online::vivante::isa::Instr;
 use yakogl::shaderc::online::vivante::{decode, listing};
 use yakogl::shaderc::{ShcShader, SHC_STAGE_FRAGMENT, SHC_VIV_NO_REG};
+use yakogl::vivante::early_z::{early_z, ColorLayout, EarlyZInput};
 
 /// The compiler keeps its output in one arena that every compile resets.
 static ONE_AT_A_TIME: Mutex<()> = Mutex::new(());
@@ -244,5 +251,81 @@ fn the_deqp_fragdepth_shaders_build() {
             "fragdepth.{name}: r0 writes {w:?}:\n{}",
             listing_of(&c)
         );
+    }
+}
+
+/// `writes_z` as the back end derives it from the record, cross-checked
+/// against `writes_depth`.
+fn writes_z(c: &Compiled) -> bool {
+    let z = c.ps_depth_out_reg != SHC_VIV_NO_REG;
+    assert_eq!(z, c.writes_depth != 0, "ps_depth_out_reg and writes_depth disagree");
+    z
+}
+
+const NO_DEPTH: &str = "#version 300 es\nprecision highp float;\nin float v_d;\nout vec4 o_color;\n\
+    void main()\n{\n    o_color = vec4(v_d);\n}\n";
+
+/// The three draws a fragdepth dEQP case makes, on a tiled target (a linear
+/// one denies early Z for every program): depth LESS with write, LESS with no
+/// write, and ALWAYS with write.
+fn draws(writes_z: bool) -> [(&'static str, EarlyZInput); 3] {
+    let base = EarlyZInput { writes_z, ..EarlyZInput::gc7000(ColorLayout::Tiled) };
+    [
+        ("less+write", EarlyZInput { depth_enabled: true, depth_func_always: false, depth_write: true, ..base }),
+        ("less, no write", EarlyZInput { depth_enabled: true, depth_func_always: false, ..base }),
+        ("always+write", EarlyZInput { depth_enabled: true, depth_write: true, ..base }),
+    ]
+}
+
+/// A program that writes depth turns early test and early write off, on
+/// every draw; one that does not keeps them where the rule allows.
+///
+/// Words: `RA_EARLY_DEPTH` = BASE 0x30 | FORWARD_W 0x04000000 | FORWARD_Z
+/// 0x01000000 = 0x05000030, `| WRITE_DISABLE 0x10000000` when the write is not
+/// early, `| TEST_ENABLE 1` for an early test (etnaviv_state.c:1055-1074);
+/// `PE_DEPTH_CONFIG` bits EARLY_Z 0x10000 for an early test and DISABLE_ZS
+/// 0x01000000 when nothing is late (:1045-1051). The `writes_z` rows are
+/// etnaviv_state.c:1029 (early write) and :1039 (early test).
+#[test]
+fn early_z_is_off_for_a_depth_writing_program_and_on_for_one_that_is_not() {
+    let w = compile(WRITE).unwrap_or_else(|e| panic!("refused: {e}"));
+    let n = compile(NO_DEPTH).unwrap_or_else(|e| panic!("refused: {e}"));
+    assert!(writes_z(&w));
+    assert!(!writes_z(&n));
+    // (early_test, early_write, pe_bits, ra_word)
+    let writes: [(bool, bool, u32, u32); 3] =
+        [(false, false, 0, 0x1500_0030), (false, false, 0, 0x1500_0030), (false, false, 0, 0x1500_0030)];
+    let plain: [(bool, bool, u32, u32); 3] = [
+        (true, true, 0x0101_0000, 0x0500_0031),
+        (true, false, 0x0101_0000, 0x1500_0031),
+        (false, true, 0x0100_0000, 0x0500_0030),
+    ];
+    for (c, want) in [(&w, writes), (&n, plain)] {
+        for ((name, inp), (t, wr, pe, ra)) in draws(writes_z(c)).into_iter().zip(want) {
+            let r = early_z(&inp);
+            assert!(r.allowed, "{name}: a tiled target allows early Z");
+            assert_eq!((r.early_test, r.early_write), (t, wr), "{name}: writes_z={}", inp.writes_z);
+            assert_eq!(r.pe_bits, pe, "{name}: PE_DEPTH_CONFIG bits {:#x}", r.pe_bits);
+            assert_eq!(r.ra_word, ra, "{name}: RA_EARLY_DEPTH {:#x}", r.ra_word);
+        }
+    }
+}
+
+/// On a linear target nothing is early either way (etnaviv_state.c:1018-1019),
+/// and the words are the ones the back end writes today.
+#[test]
+fn a_linear_target_keeps_early_z_off_for_both_programs() {
+    for src in [WRITE, NO_DEPTH] {
+        let c = compile(src).unwrap_or_else(|e| panic!("refused: {e}"));
+        let inp = EarlyZInput {
+            depth_enabled: true,
+            depth_func_always: false,
+            depth_write: true,
+            writes_z: writes_z(&c),
+            ..EarlyZInput::gc7000(ColorLayout::Linear)
+        };
+        let r = early_z(&inp);
+        assert!(!r.allowed && !r.early_test && !r.early_write);
+        assert_eq!((r.pe_bits, r.ra_word), (0, 0x1500_0030));
     }
 }
