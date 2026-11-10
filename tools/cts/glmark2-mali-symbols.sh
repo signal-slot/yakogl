@@ -6,8 +6,8 @@
 # resolves GL and EGL only to YakoGL's Mali pair (tools/mali/panthor-gles), and
 # the pair exports every entry point glmark2 imports.
 #
-#   tools/cts/glmark2-mali-symbols.sh [--glmark2-src DIR] <glmark2-es2> <libGLESv2.so.2> <libEGL.so.1>
-#   tools/cts/glmark2-mali-symbols.sh [--glmark2-src DIR] --from-dumps DIR
+#   tools/cts/glmark2-mali-symbols.sh [--glmark2-src DIR] [--libdir DIR] <glmark2-es2> <libGLESv2.so.2> <libEGL.so.1>
+#   tools/cts/glmark2-mali-symbols.sh [--glmark2-src DIR] [--libdir DIR] --from-dumps DIR
 #
 # The three files are AArch64 ELF; readelf -d and nm -D read them on any host.
 # --from-dumps DIR reads text instead (no tool is run): DIR/{bin,gles,egl}.dynamic
@@ -33,23 +33,37 @@
 #             by the pair (glmark2 dlopen()s and calls what glad loaded: a name
 #             the pair lacks is a null call)
 #
+#   dlopen    with --glmark2-src DIR and the build tree's lib directory (--libdir
+#             DIR, else <glmark2-es2's directory>/../lib, what RUNPATH
+#             $ORIGIN/../lib names): glmark2's src/gl-state-egl.cpp dlopen()s
+#             libEGL.so... and libGLESv2.so... in a list, the first name that
+#             loads wins. One line per library: it fails unless the first name
+#             of the list exists in that directory (an unversioned libEGL.so
+#             missing there lets the system's glvnd libEGL.so load first). No
+#             lib directory known (--from-dumps without --libdir): skipped
+#
 # Exit: 0 every check passed, 1 a check failed, 2 usage, an unreadable file or
 # a missing tool.
 set -uo pipefail
 
 usage() {
-  echo "usage: ${0##*/} [--glmark2-src DIR] <glmark2-es2> <libGLESv2.so.2> <libEGL.so.1>" >&2
-  echo "       ${0##*/} [--glmark2-src DIR] --from-dumps DIR" >&2
+  echo "usage: ${0##*/} [--glmark2-src DIR] [--libdir DIR] <glmark2-es2> <libGLESv2.so.2> <libEGL.so.1>" >&2
+  echo "       ${0##*/} [--glmark2-src DIR] [--libdir DIR] --from-dumps DIR" >&2
   exit 2
 }
 
-SRC= DUMPS= MODE=files
+SRC= LIBDIR= DUMPS= MODE=files
 pos=()
 while [ $# -gt 0 ]; do
   case $1 in
     --glmark2-src)
       [ $# -ge 2 ] && [ -n "$2" ] || usage
       SRC=$2
+      shift 2
+      ;;
+    --libdir)
+      [ $# -ge 2 ] && [ -n "$2" ] || usage
+      LIBDIR=$2
       shift 2
       ;;
     --from-dumps)
@@ -175,6 +189,29 @@ if [ -n "$SRC" ]; then
     missing=$(comm -23 "$tmp/glad" "$tmp/pair.defs" | tr '\n' ' ')
     [ -z "$missing" ] || fail source "glad loads, the pair does not export: ${missing}"
     [ $fails -eq $before ] && ok source "$n names glad loads (EGL 1.0-1.4, GL_ES_VERSION_2_0), all exported by the pair"
+  fi
+fi
+
+# dlopen
+if [ -n "$SRC" ]; then
+  if [ -z "$LIBDIR" ] && [ "$MODE" = files ]; then
+    LIBDIR=$(dirname "$BIN")/../lib
+  fi
+  if [ -z "$LIBDIR" ]; then
+    echo "skip dlopen: no build-tree lib directory (give --libdir)"
+  elif [ ! -f "$SRC/src/gl-state-egl.cpp" ]; then
+    fail dlopen "$SRC/src/gl-state-egl.cpp is missing"
+  else
+    for lib in libEGL libGLESv2; do
+      first=$(grep -o "\"$lib\\.so[0-9.]*\"" "$SRC/src/gl-state-egl.cpp" | head -n 1 | tr -d '"')
+      if [ -z "$first" ]; then
+        fail dlopen "no \"$lib.so...\" name in gl-state-egl.cpp"
+      elif [ -e "$LIBDIR/$first" ]; then
+        ok dlopen "$lib: first name $first exists in $LIBDIR"
+      else
+        fail dlopen "$lib: glmark2 dlopen()s $first first and $LIBDIR has none: the system $lib loads"
+      fi
+    done
   fi
 fi
 

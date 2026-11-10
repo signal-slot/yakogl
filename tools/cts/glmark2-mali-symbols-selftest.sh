@@ -18,7 +18,7 @@ set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 FIX=$HERE/testdata/glmark2-mali-symbols
 SYM=$HERE/glmark2-mali-symbols.sh
-EXPECT=27
+EXPECT=36
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/glmark2-mali-symbols-selftest-XXXXXX")
 trap 'rm -rf "$tmp"' EXIT
 passed=0 failed=0
@@ -57,6 +57,16 @@ mkdir -p "$tmp/glmark2/src/glad/src"
   grep '^gl' "$FIX/glad-names.txt" | sed 's/.*/    glad_& = load(userptr, "&");/'
   echo '}'
 } > "$tmp/glmark2/src/glad/src/gles2.c"
+
+cp "$FIX/src/gl-state-egl.cpp" "$tmp/glmark2/src/"
+# Build trees: lib/ with the unversioned links, and with the versioned names only.
+mkdir -p "$tmp/tree-ok/lib" "$tmp/tree-ver/lib"
+for t in ok ver; do
+  : > "$tmp/tree-$t/lib/libEGL.so.1"
+  : > "$tmp/tree-$t/lib/libGLESv2.so.2"
+done
+ln -s libEGL.so.1 "$tmp/tree-ok/lib/libEGL.so"
+ln -s libGLESv2.so.2 "$tmp/tree-ok/lib/libGLESv2.so"
 
 echo "dumps:"
 check "good set passes" 0 'glmark2-mali-symbols: ok' sym --from-dumps "$FIX/good"
@@ -118,7 +128,24 @@ check "a missing dump file is a usage error" 2 'is not a directory' sym --from-d
 rm -f "$tmp/short/bin.undef"
 check "a dump set without bin.undef exits 2" 2 'bin.undef is missing' sym --from-dumps "$tmp/short"
 
+echo "dlopen order:"
+check "unversioned links in lib/ pass" 0 'ok   dlopen: libEGL: first name libEGL\.so exists' \
+  sym --glmark2-src "$tmp/glmark2" --libdir "$tmp/tree-ok/lib" --from-dumps "$FIX/good"
+check "only libEGL.so.1 and libGLESv2.so.2 in lib/ fail, one line each" 1 'FAIL dlopen: libEGL: glmark2 dlopen\(\)s libEGL\.so first' \
+  sym --glmark2-src "$tmp/glmark2" --libdir "$tmp/tree-ver/lib" --from-dumps "$FIX/good"
+check "the GLES library is reported too" 1 'FAIL dlopen: libGLESv2: glmark2 dlopen\(\)s libGLESv2\.so first' \
+  sym --glmark2-src "$tmp/glmark2" --libdir "$tmp/tree-ver/lib" --from-dumps "$FIX/good"
+rm -f "$tmp/tree-ok/lib/libGLESv2.so"
+check "one missing link fails only that library" 1 'FAIL dlopen: libGLESv2' sym --glmark2-src "$tmp/glmark2" --libdir "$tmp/tree-ok/lib" --from-dumps "$FIX/good"
+check "dumps without --libdir skip the check" 0 'skip dlopen' sym --glmark2-src "$tmp/glmark2" --from-dumps "$FIX/good"
+check "without --glmark2-src the check does not run" 0 'glmark2-mali-symbols: ok' sym --libdir "$tmp/tree-ver/lib" --from-dumps "$FIX/good"
+rm -f "$tmp/glmark2/src/gl-state-egl.cpp"
+check "a source without gl-state-egl.cpp fails" 1 'FAIL dlopen:.*gl-state-egl.cpp is missing' sym --glmark2-src "$tmp/glmark2" --libdir "$tmp/tree-ok/lib" --from-dumps "$FIX/good"
+echo 'int x;' > "$tmp/glmark2/src/gl-state-egl.cpp"
+check "a source without the name lists fails" 1 'FAIL dlopen: no' sym --glmark2-src "$tmp/glmark2" --libdir "$tmp/tree-ok/lib" --from-dumps "$FIX/good"
+
 echo "usage:"
+check "--libdir without its value exits 2" 2 'usage' sym --libdir
 check "--from-dumps without its value exits 2" 2 'usage' sym --from-dumps
 check "--glmark2-src without its value exits 2" 2 'usage' sym --glmark2-src
 check "--glmark2-src with an empty value exits 2" 2 'usage' sym --glmark2-src '' --from-dumps "$FIX/good"
