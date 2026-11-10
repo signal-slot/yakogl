@@ -161,10 +161,12 @@ def translate_450_gl(text):
     return re.sub(r"layout\s*\(\s*set\s*=\s*\d+\s*,\s*binding", "layout(binding", text)
 
 
-def compile_one(path, text=None):
+def compile_one(path, text=None, gpu=None):
     """Compile one shader. `text` overrides the file's contents, which is how
     a variant is built: the caller rewrites the source and the path is then
-    only used to decide the stage."""
+    only used to decide the stage. `gpu` names the GPU as etna_shc's ids
+    (model, revision, product, eco, customer; see etna_shc.c's usage line),
+    None for the tool's default, the i.MX8MP's GC7000UL."""
     stage = u.stage_of(path)
     if text is None:
         text = open(path).read()
@@ -183,7 +185,7 @@ def compile_one(path, text=None):
         r = subprocess.run([GLSLANG, "-G", src, "-o", spv], capture_output=True, text=True)
         if r.returncode != 0:
             return None, "glslang: " + r.stdout.strip().splitlines()[-1][:120]
-        r = subprocess.run([ETNA_SHC, "vert" if stage == "vs" else "frag", spv],
+        r = subprocess.run([ETNA_SHC, "vert" if stage == "vs" else "frag", spv] + list(gpu or ()),
                            capture_output=True, text=True)
         if r.returncode != 0:
             return None, "etna_shc: " + (r.stderr.strip().splitlines() or ["?"])[-1][:120]
