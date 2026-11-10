@@ -5998,11 +5998,21 @@ fn es3_sub_image_check(c: &mut GlContext, ti: usize, format: GLenum, type_: GLen
     if crate::REPORT_ES2 {
         return true;
     }
+    let texfmt = c.objs_ref().textures[ti].texfmt;
     let ok = match es3_formats::by_index(c.objs_ref().textures[ti].es3_fmt) {
         Some(e) => e.accepts(format, type_),
         /* (a texture does not record RGB5_A1 apart from RGBA8, so the word
          * is taken into either) */
-        None => !es3_formats::only_for_new_formats(format, type_) || is_rgb5_a1_word(format, type_),
+        None => {
+            (!es3_formats::only_for_new_formats(format, type_) || is_rgb5_a1_word(format, type_))
+                /* GL_FLOAT pairs only with the sized float formats (table
+                 * 3.2: R16F, R32F, RGBA16F, RGBA32F here, the rest are in
+                 * es3_formats) and depth, all stored as a float texel
+                 * format; GL_OES_texture_float is not claimed, so an
+                 * unsized or 8-bit colour texture refuses it (dEQP-GLES3
+                 * negative_api.texture.texsubimage2d/3d) */
+                && (type_ != GL_FLOAT || matches!(texfmt, GLES_TEXFMT_RGBA16F | GLES_TEXFMT_R16F | GLES_TEXFMT_R32F))
+        }
     };
     if !ok {
         c.set_error(GL_INVALID_OPERATION, func);
