@@ -503,6 +503,11 @@ struct BreakTo<'a> {
     carried: &'a [(S, u32, usize)],
     /// The discard flag as each pass starts.
     discard: Option<S>,
+    /// `gl_FragDepth` as each pass starts (the loop's phi of it when the
+    /// body writes it). A branch out of the loop leaves the phi registers
+    /// as they are, before the pass's [`SOp::PhiNext`]s, so a depth written
+    /// earlier in the pass may only leave with it when it is still this.
+    depth: Option<S>,
 }
 
 /// Per local of `m`: every value it holds is the same in every fragment of
@@ -1772,7 +1777,7 @@ impl<'m, 'a> Walk<'m, 'a> {
             for (c, (&p, &(l, k))) in carried.iter_mut().zip(phis.iter().zip(written.as_slice())) {
                 *c = (p, l, k);
             }
-            self.break_to = Some(BreakTo { flag, phi, carried, discard: self.discard });
+            self.break_to = Some(BreakTo { flag, phi, carried, discard: self.discard, depth: self.depth });
         }
         self.nodes(a, body, false)?;
         self.break_to = break0;
@@ -1957,12 +1962,15 @@ impl<'m, 'a> Walk<'m, 'a> {
     /// step 3"; Mesa's structured break): `Some(when)` for an `if` one arm
     /// of which only sets the loop's break flag ([`Walk::break_arm`]) and
     /// the other is empty, when the condition is uniform and every lane the
-    /// loop carries, the flag and the discard flag still hold their values
-    /// from the start of the pass. The pass then leaves where `c == when`
-    /// and the phis hold the values the loop leaves with, as its back edge
-    /// leaves them. The flag stays clear on the path that goes on, so the
-    /// unroller's guard round the rest of the pass is that code
-    /// (`clear_at_pass_start`).
+    /// loop carries, the flag, the discard flag and `gl_FragDepth` still
+    /// hold their values from the start of the pass. The pass then leaves
+    /// where `c == when` and the phis hold the values the loop leaves with,
+    /// as its back edge leaves them. The flag stays clear on the path that
+    /// goes on, so the unroller's guard round the rest of the pass is that
+    /// code (`clear_at_pass_start`). A value written in the pass before the
+    /// `break` (a depth: `gl_FragDepth = x; if (i == 1) break;`) is not in
+    /// its phi yet, so such a `break` stays the unroller's flag (`None`),
+    /// whose guarded stores leave the value with the pass.
     fn uniform_break(
         &self,
         a: &Arena<'a>,
@@ -1981,6 +1989,7 @@ impl<'m, 'a> Walk<'m, 'a> {
         };
         let unchanged = self.locals[b.flag.0 as usize][0] == Some(b.phi)
             && self.discard == b.discard
+            && self.depth == b.depth
             && b.carried.iter().all(|&(p, l, k)| self.locals[l as usize][k] == Some(p));
         if !unchanged || !self.is_uniform(a, c)? {
             return Ok(None);
