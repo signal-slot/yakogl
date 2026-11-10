@@ -229,7 +229,7 @@ window.YAKOGL_DATA = {
       "source": "tools/cts/RESULTS.md",
       "section": "Common set (stage 2 input)",
       "status": "pass",
-      "note": "The gl_test result was not rerun with the newer Pi 4 glmark2 build below.",
+      "note": "Run from the same 445c5653 build as the Pi 4 benchmark below. A later glmark2-only run from main c4af4917 (2026-10-22) did not rerun gl_test.",
       "provenance": {
         "kind": "pre-publication",
         "recordCommit": "381b0f09e9c8e7b3d437946c888224f12a27b367"
