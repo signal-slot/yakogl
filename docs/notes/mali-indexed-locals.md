@@ -2,8 +2,9 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Mali Valhall: locals indexed at run time (case 80 matdyn)
 
-**Status: design, implementation in `fs-indexlocal`** (plan #336, issue #33).
-No code changed by this note. It maps `tools/mali/testdata/other_80_matdyn.expect.json`
+**Status: done** (plan #336 `fs-indexlocal`, issue #33): case 80 is
+byte-equal to the reference, section 8. Sections 1-7 are the design as written
+before it. It maps `tools/mali/testdata/other_80_matdyn.expect.json`
 (`fs.fragment`, 61 words listed, Mesa 26.2.1 on drm-shim) to the places in
 `src/shaderc/online/mali/` that will produce each word, and lists what still
 stands between case 80 and the reference once the indexed locals are lowered.
@@ -429,3 +430,68 @@ The smaller shapes were not run separately: `tools/mali/testdata/` has no
 `indexlocal_*` file at `04ac35d3` (`intloop_dynidx` is a loop index into a
 uniform array, not a local); `fs-indexlocal` writes the sources of its section
 5 item 3.
+
+## 8. Done (`fs-indexlocal`)
+
+Case 80's fragment program is byte-equal to `other_80_matdyn.expect.json`
+(61 words, FAU, registers and preload, through the link), and so are its two
+parts drawn for this item. Section 4, item by item:
+
+1. **Refusal.** `indexed_read` and its call are gone from `glsl::passes`;
+   `MaliError::IndexedLocal` stays for an indexed `LoadLocal`/`StoreLocal`
+   (`nir_fs.rs`, `nir.rs`), which the front end never emits: the gap is now
+   unreachable from ES 1.00 source (`unreachable_from_es100`, 61/56/5).
+   With it, 7.4 items 2-5: the highp `alu32` arms `Inot` and `Ior`,
+   `emit.rs` row `(Inot, 32, 1)` as `LSHIFT_OR.i32 #0, a.not, #0`, `pack.rs`
+   `not2` from BIR source 1's `neg` (BIR `absneg` left false: Mesa's
+   constant lookup gives the source no negated entries), and `ir_arity` is
+   `AluOp::arity`. Rule 742 stays as it was (only for a compare read once).
+2. Done before, by `indexlocal-intuni`.
+3. **FAU zero (word 0).** No change: the existing selection and FAU code
+   already give `MOV.i32.discard r0, 0x0` and the `0x0` immediate from word
+   7 on (and `indexlocal_lanes`' `MOV.i32 r1, 0x0` form).
+4. **`fadd(a, a)`** is `fmul(a, 2.0)` in the highp `Fadd` (word 43), except
+   inside an unrolled loop, where `s6_discloop`'s byte-equal sums rely on
+   the old form.
+5. **Push order.** No change: once 3.4's fold below was in, the uniforms
+   (`x, z, y, w`) and constants are pushed in Mesa's order.
+6. **Residue.** None is left for case 80. Measured on the way, three
+   differences no note predicted, each fixed:
+   - 3.4's fold was absent: `fmul(bcsel tree of constants, #k)` is now the
+     tree of the products (`Fs::scaled_select`; :1032 applied from the inner
+     select out), words 1-5.
+   - `m[1][0] - m[0][0]` of `m *= m` (words 24-31): Mesa reassociates
+     `fadd(fadd(a@fmul, b@fmul), c@not_fmul)` to `fadd(fadd(a, c), b)`
+     (nir_opt_algebraic.py:2419). The front end's column is `ffma(c0, x0,
+     fmul(c1, y1))`, so the highp `Fadd` makes `ffma(c1, y1, ffma(c0, x0,
+     c))` when that `ffma` is read once (`Fs::mat_sum`, the rule
+     `alu32`'s `mat3 * vec3(p, 1.0)` arm already applied).
+   - A vector lane read (`nir_vector_extract`) is emitted upper half, lower
+     half, then the compare (the helper's call arguments evaluated last to
+     first); `glsl.rs` `read_tree` now does so for lane ladders
+     (`Ladder::lanes`), the array and column trees keep their order. Case
+     80 hides it (its `v[J]` compares are CSE'd with the store tree's);
+     `indexlocal_lanes` shows it.
+
+Tests (`src/shaderc/online/mali/tests.rs`):
+`the_indexed_local_population_is_byte_equal_to_mesa_26_2_1` over
+`indexlocal_array` (section 5 item 3's array part), `indexlocal_lanes` (its
+`p[i]`/`col[i - 1]`/`v[j]` part) and `other_80_matdyn` (item 4);
+`the_constant_read_tree_takes_the_product_and_the_shared_inot_stays` (item
+6, and 7.3's `inot` pin); `the_corpus_matdyn_source_is_the_reference`;
+`case_80_is_refused_at_its_indexed_local_reads` and the `gap_cases` row are
+gone. Corpus (item 5): `es100/matdyn.frag` is `ok`, `dynidx.frag` moves to
+`Arithmetic`, `dynidx_loop.frag` to the mediump kept loop; `es300/tmpidx.frag`
+and `es300/dynidx.frag` stay `ok`.
+
+The references were made with Mesa 26.2.1 configured with `drm_shim_ref.sh
+build`'s options from the source tree in the deps cache, then
+`drm_shim_ref.sh run <work> indexlocal_X.vert indexlocal_X.frag <out>` and
+`pan_ref_diff.py extract <out>.trace --draw`; the same build reproduces
+`other_80_matdyn.expect.json` byte for byte (`pan_ref_diff.py diff-ref`).
+
+Left open: a vertex shader's index trees (the vertex walk takes no `ilt`,
+`Iand` or `Inot`, 7.1); a component written at a run-time index (3.3,
+still an `ieq` lane mask, no reference); rule 742 for an `inot` of a
+compare read once outside `alu32`'s existing arm; `mat_sum` counts uses
+on the IR (a column lane read elsewhere through another load is not seen).

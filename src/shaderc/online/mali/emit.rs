@@ -36,7 +36,7 @@ const fn row(op: Alu, bits: u8, width: u8) -> Row {
 }
 
 /// The rows [`emit`] selects, each with the `bi_emit_alu` case it is.
-pub const ROWS: [(Row, &str); 89] = [
+pub const ROWS: [(Row, &str); 90] = [
     (row(Alu::Fadd, 32, 1), "nir_op_fadd: FADD.f32"),
     (row(Alu::Fmul, 32, 1), "nir_op_fmul: FMA.f32 a, b, -0.0"),
     (row(Alu::Ffma, 32, 1), "nir_op_ffma: FMA.f32"),
@@ -94,6 +94,8 @@ pub const ROWS: [(Row, &str); 89] = [
     /* atan's sign, `nir_copysign` (#31 S4, fvg_fill_gradient_conic*) */
     (row(Alu::Iand, 32, 1), "nir_op_iand: LSHIFT_AND.i32 a, b, #0"),
     (row(Alu::Ior, 32, 1), "nir_op_ior: LSHIFT_OR.i32 a, b, #0"),
+    /* a run-time index's store tree (case 80, other_80_matdyn word 8) */
+    (row(Alu::Inot, 32, 1), "nir_op_inot: LSHIFT_OR.i32 #0, a.not, #0"),
     /* the sum of a mediump float array's elements, one lane each (case 108
      * A, tools/mali/testdata/case108_uniidx: `FADD.v2f16 r1, r1^.h00,
      * r2^.h00`) */
@@ -305,6 +307,10 @@ pub fn emit(p: &mut Prog<'_>, row: Row, s: &[Src]) -> Result<u16, MaliError> {
          * bi_imm_u8(0))` (bifrost_compile.c:3375-3381) */
         (Alu::Iand, 32, 1) => ins(p, Op::LshiftAndI32, &[s[0], s[1], ZERO])?,
         (Alu::Ior, 32, 1) => ins(p, Op::LshiftOrI32, &[s[0], s[1], ZERO])?,
+        /* `bi_lshift_or_to(b, sz, dst, bi_zero(), bi_not(s0),
+         * bi_imm_u8(0))` (bifrost_compile.c:3387-3388): the `.not` is
+         * Valhall's `not2`, BIR's second source with `neg` set */
+        (Alu::Inot, 32, 1) => ins(p, Op::LshiftOrI32, &[ZERO, Src { neg: true, ..s[0] }, ZERO])?,
         /* `bi_csel_to(.., s0, s1, s0, s1, BI_CMPF_GT / _LT)`
          * (bifrost_compile.c:3061-3071) */
         (Alu::Imax, 32, 1) => ins(p, Op::CselS32 { cmpf: Cmpf::Gt }, &[s[0], s[1], s[0], s[1]])?,

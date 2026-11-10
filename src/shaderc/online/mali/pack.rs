@@ -700,7 +700,8 @@ pub fn pack_one(i: &Ins, branch: i32) -> Result<u64, MaliError> {
             /* BIR (value, mask or or-value, shift) as Valhall (src0, src2,
              * src1): `va_swap_12`; the shift a byte lane of its source */
             f.put("src0", src_byte(&i.src[0])?)?.put("widen0", widen_int(i.src[0].swz)?)?;
-            f.put("src2", src_byte(&i.src[1])?)?.put("not2", 0)?;
+            /* `bi_not` of the mask or or-value (`nir_op_inot`) */
+            f.put("src2", src_byte(&i.src[1])?)?.put("not2", u32::from(i.src[1].neg))?;
             f.put("src1", src_byte(&i.src[2])?)?.put("lanes1", byte_lane(i.src[2].swz)?)?;
             f.put("not_result", 0)?;
             alu_dest(&mut f, i, "dest_width")?;

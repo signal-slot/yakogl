@@ -1001,6 +1001,11 @@ fn unreachable_from_es100(e: MaliError) -> Option<&'static str> {
             "the front end makes every if condition a comparison's value or a bool value it refuses first \
              (IntValue for a constant, Arithmetic for a boolean operator, UniformType for a bool uniform)",
         ),
+        E::IndexedLocal => Some(
+            "the front end reads and writes a local at a run-time index by a select ladder over its slots or \
+             lanes (lower.rs), which glsl.rs rewrites into Mesa's ilt trees; it emits no indexed LoadLocal or \
+             StoreLocal, the walks' guard",
+        ),
         E::LinkedVertexNotLowered
         | E::BlendVariantNotLowered
         | E::ControlFlow
@@ -1032,7 +1037,6 @@ fn unreachable_from_es100(e: MaliError) -> Option<&'static str> {
         | E::LoopMediump
         | E::GuardMediump
         | E::LoopVertex
-        | E::IndexedLocal
         | E::SpecialInput
         | E::NoPosition
         | E::PositionLane
@@ -1231,15 +1235,6 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
     /* a chain GLSL rebalances whose leaf is a local do_tree_grafting may
      * graft (glsl.rs) */
     v.push((VS, REBALANCE_GRAFT.to_string(), MaliError::Rebalance));
-    /* a vector's component read at a run-time index: the front end's `ieq`
-     * ladder, not Mesa's `ilt` search (glsl.rs `indexed_read`, case 80) */
-    v.push((
-        FS,
-        "precision highp float; uniform int i; uniform vec4 u; void main(){ vec4 v = u * u; \
-         gl_FragColor = vec4(v[i]); }"
-            .to_string(),
-        MaliError::IndexedLocal,
-    ));
     v.extend(stress_cases());
     v
 }
@@ -1265,7 +1260,7 @@ fn every_reachable_gap_is_reached_by_an_es100_source() {
         assert!(reached.contains(e.message()), "no case reaches {e:?}");
     }
     assert_eq!(reached.len(), reachable.len(), "a case reaches a gap classified unreachable");
-    assert_eq!((MaliError::GAPS.len(), reachable.len(), unreachable), (61, 57, 4), "gaps: all, reachable, unreachable");
+    assert_eq!((MaliError::GAPS.len(), reachable.len(), unreachable), (61, 56, 5), "gaps: all, reachable, unreachable");
 }
 
 /// The front end's verdict on gl_FragData[1] (the reason FragOutput is
@@ -2070,6 +2065,8 @@ fn fs_reference_sources() -> Vec<&'static str> {
     srcs.extend(UNIARRAY_POPULATION.iter().map(|c| c.2));
     srcs.extend(ALU_POPULATION.iter().map(|c| c.2));
     srcs.extend(DERIV_POPULATION.iter().map(|c| c.2));
+    /* locals at a run-time index, case 80 (the store tree's `inot`) */
+    srcs.extend(INDEXLOCAL_POPULATION.iter().map(|c| c.2));
     /* gl_FragCoord by precision class, case 192's uniform twin and the
      * rounded mediump constant (plan #153 frame-cull) */
     srcs.extend(FRAG_COORD_POPULATION.iter().map(|c| c.1));
@@ -6323,23 +6320,24 @@ fn glsl_leaves_a_chain_of_matrix_local_columns_in_order() {
 /// The chain's program in NIR's order (docs/notes/mali-remaining-families.md
 /// F1, other_80_matdyn.expect.json words 42-51): `4 - z` first, then
 /// `s11`, `frcp(y)` and `ffma(2.0, rcp, ..)`, `- z`, `ffma(4.0, z, ..)` and
-/// the product by 1 / 16. Words 1 and 2 are where it is not Mesa's yet:
-/// Mesa makes `s11 = w + w` `fmul(w, 2.0)` (nir_opt_algebraic.py:274) and
-/// fuses it, `FMA.f32 .., u3.w1, 0x40000000, ..`; nir.rs applies :274 to
-/// no source sum. (FAU words differ from case 80's: this shader reads no
-/// `u_k.x`, `u_c` or `u_i`.)
+/// the product by 1 / 16. `s11 = w + w` is `fmul(w, 2.0)`
+/// (nir_opt_algebraic.py:274), fused: `FMA.f32 .., u3.w0, 0x40000000, ..`
+/// (case 80's word 43 reads `u3.w1`). The `FRCP` stands before it here, as
+/// in Mesa's NIR (`%5 = frcp` before `%14 = ffma`); in the whole case the
+/// scheduler puts it after, which the population pins byte for byte. (FAU
+/// words differ from case 80's: this shader reads no `u_k.x`, `u_c` or
+/// `u_i`.)
 #[test]
 fn the_matrix_local_chain_compiles_in_the_source_order() {
     let f = compile(SHC_STAGE_FRAGMENT, CHAIN_80).expect("the chain compiles");
     let code = trim(&f.code);
-    let ops: Vec<String> = code.iter().take(8).map(|&w| text(w)).collect();
+    let ops: Vec<String> = code.iter().take(7).map(|&w| text(w)).collect();
     assert_eq!(
         ops,
         [
             "FADD.f32.discard r0, 0x44000000.h1, u2.w1.neg",
-            "FADD.f32 r1, u3.w0, u3.w0",
-            "FADD.f32 r0, r1^, r0^",
             "FRCP.f32 r1, u2.w0",
+            "FMA.f32 r0, u3.w0, 0x40000000, r0^",
             "FMA.f32 r0, 0x40000000, r1^, r0^",
             "FADD.f32 r0, r0^, u2.w1.neg",
             "FMA.f32 r0, 0x44000000.h1, u2.w1, r0^",
@@ -6348,13 +6346,64 @@ fn the_matrix_local_chain_compiles_in_the_source_order() {
     );
 }
 
-/// Case 80 whole stops at its vector components read at a run-time index
-/// (`col[i - 1]`, `v[j]`; glsl.rs `indexed_read`): the front end's `ieq`
-/// ladder is not Mesa's `ilt` search, other_80_matdyn.expect.json's
-/// `ICMP_OR.s32.lt.m1`.
+/// Case 80 matdyn and its two parts, each drawn on Mesa 26.2.1's drm-shim
+/// (docs/notes/mali-indexed-locals.md section 8): the array read and
+/// written at a run-time index (`arr[j] = arr[i] * 0.5`, `arr[i] +
+/// arr[2]`: the `ilt` read tree with the product folded into its
+/// constants, the store tree's `inot`/`iand`/`ior` masks), the matrix
+/// column and the vector lanes (`p[i]`, `col[i - 1]`, `v[j]`), and the
+/// whole case.
+const INDEXLOCAL_POPULATION: [(&str, &str, &str, &str); 3] = [
+    (
+        "indexlocal_array",
+        td!("indexlocal_array.vert"),
+        td!("indexlocal_array.frag"),
+        td!("indexlocal_array.expect.json"),
+    ),
+    (
+        "indexlocal_lanes",
+        td!("indexlocal_lanes.vert"),
+        td!("indexlocal_lanes.frag"),
+        td!("indexlocal_lanes.expect.json"),
+    ),
+    ("other_80_matdyn", td!("other_80_matdyn.vert"), td!("other_80_matdyn.frag"), td!("other_80_matdyn.expect.json")),
+];
+
+/// Every program of [`INDEXLOCAL_POPULATION`] and its facts, through the
+/// link, to the byte.
 #[test]
-fn case_80_is_refused_at_its_indexed_local_reads() {
-    assert_eq!(gap(SHC_STAGE_FRAGMENT, td!("other_80_matdyn.frag")), MaliError::IndexedLocal);
+fn the_indexed_local_population_is_byte_equal_to_mesa_26_2_1() {
+    for (name, vs, fs, json) in INDEXLOCAL_POPULATION {
+        check_linked_for(name, vs, fs, json);
+    }
+}
+
+/// `arr[i] * 0.5` over the constants `(0.125, 0.25, 0.5)` is a select of
+/// the products (nir_opt_algebraic.py:1032 on the inner select, then the
+/// outer): `CSEL`s of 0.0625, 0.125 and 0.25 and no `FMA` by 0.5
+/// (indexlocal_array.expect.json words 1-4). The store tree's `inot` of
+/// `ilt(j, 1)`, read three times, is no `ige` (:742 needs one use): a
+/// `.not` source, `LSHIFT_OR.i32 r5, 0x0, 0x0.b00, r4.not` (word 9).
+#[test]
+fn the_constant_read_tree_takes_the_product_and_the_shared_inot_stays() {
+    let f = compile(SHC_STAGE_FRAGMENT, td!("indexlocal_array.frag")).expect("the array part compiles");
+    let ops: Vec<String> = trim(&f.code).iter().map(|&w| text(w)).collect();
+    assert!(ops.iter().all(|o| !o.starts_with("FMA")), "{ops:#?}");
+    assert!(ops.iter().any(|o| o == "LSHIFT_OR.i32 r5, 0x0, 0x0.b00, r4.not"), "{ops:#?}");
+    let consts: Vec<u32> =
+        f.info.fau.iter().filter_map(|w| if let FauWord::Constant(c) = w { Some(*c) } else { None }).collect();
+    for k in [0.0625f32, 0.125, 0.25, 0.5] {
+        assert!(consts.contains(&k.to_bits()), "{k} pushed: {consts:x?}");
+    }
+}
+
+/// Case 80's corpus line is the reference's source (unitype_80.frag and
+/// other_80_matdyn.frag are byte copies of it), so the corpus compiles it.
+#[test]
+fn the_corpus_matdyn_source_is_the_reference() {
+    let corpus = include_str!("../../../../tools/shaders/es100/matdyn.frag");
+    assert_eq!(corpus, td!("other_80_matdyn.frag"));
+    assert_eq!(corpus, td!("unitype_80.frag"));
 }
 
 /// `do_algebraic`'s `reassociate_constant` (opt_algebraic.cpp:175-216) on
