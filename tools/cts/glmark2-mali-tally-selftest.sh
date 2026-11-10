@@ -31,11 +31,17 @@
 # its first line, the tool's build); the clean run's picture lines must be the
 # fixture table's 'mali' lines and judge as matches with common-tally.py's
 # own --gm-pictures. Exits 0 only if every check passes.
+#
+# Every tally call reads the fixture table (--table pictures.txt), never the
+# repository's tools/cts/glmark2-pictures.txt: a board column added there (the
+# mali column of a NanoPC-T6 run) must not move this test. The "no reference"
+# case is a column the fixture table lacks (--column nomali).
 set -u
 
 HERE=$(cd "$(dirname "$0")" && pwd)
 TALLY="$HERE/glmark2-mali-tally.py"
 T="$HERE/testdata/glmark2-mali-tally"
+TABLE="$T/pictures.txt"
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/glmark2-mali-tally.XXXXXX")
 trap 'rm -rf "$WORK"' EXIT
 ok=0
@@ -53,7 +59,7 @@ check() { # check <label> <command...>: passes when the command exits 0
   fi
 }
 
-tally() { python3 -I "$TALLY" "$@"; }
+tally() { python3 -I "$TALLY" --table "$TABLE" "$@"; }
 
 same() { # same <expected file> <command...>: stdout equals the file
   local want=$1
@@ -72,28 +78,28 @@ rc_is() { # rc_is <code> <command...>
 }
 
 # clean: 33 scenes ok
-check "clean: table matches" same "$T/clean.table.expected" table --table "$T/pictures.txt" "$T/clean"
+check "clean: table matches" same "$T/clean.table.expected" table "$T/clean"
 check "clean: 33 ok" grep -q '^scenes run 33 of 33; ok 33;' "$T/clean.table.expected"
 check "clean: picture lines match" same "$T/clean.picture-lines.expected" tally --picture-lines "$T/clean"
 check "clean: 33 'mali | ' lines" test "$(tally --picture-lines "$T/clean" | grep -c '^mali | ')" -eq 33
 check "clean: picture lines are the table's mali column" \
-  same <(grep '^mali | ' "$T/pictures.txt") tally --picture-lines "$T/clean"
+  same <(grep '^mali | ' "$TABLE") tally --picture-lines "$T/clean"
 cat "$T"/clean/*.log >"$WORK/console.txt"
 check "clean: common-tally.py --gm-pictures judges every scene a match" \
-  rc_is 0 python3 -I "$HERE/common-tally.py" --gm-pictures "$WORK/console.txt" mali --table "$T/pictures.txt"
+  rc_is 0 python3 -I "$HERE/common-tally.py" --gm-pictures "$WORK/console.txt" mali --table "$TABLE"
 check "clean: picture lines under --column" \
   test "$(tally --picture-lines --column mali2 "$T/clean" | grep -c '^mali2 | ')" -eq 33
 check "clean: results row, 33 of 33, none failed" \
-  sh -c "python3 -I '$TALLY' --results-row --table '$T/pictures.txt' '$T/clean' | head -1 | grep -q '33 of 33 scenes ran, 0 failed, 0 GL errors, 0 out of GPU memory'"
+  sh -c "python3 -I '$TALLY' --results-row --table '$TABLE' '$T/clean' | head -1 | grep -q '33 of 33 scenes ran, 0 failed, 0 GL errors, 0 out of GPU memory'"
 check "clean: status row, 33/33" \
-  sh -c "python3 -I '$TALLY' --status-row '$T/clean' | grep -q '実行 33/33、正常 33、失敗 0'"
+  sh -c "python3 -I '$TALLY' --status-row --table '$TABLE' '$T/clean' | grep -q '実行 33/33、正常 33、失敗 0'"
 check "clean: no cause" \
-  sh -c "python3 -I '$TALLY' --causes '$T/clean' | grep -q 'no failed scene: no issue to open'"
-check "clean: without a mali column every picture is no-reference" \
-  sh -c "python3 -I '$TALLY' '$T/clean' | grep -q '33 scenes, no-reference 33'"
+  sh -c "python3 -I '$TALLY' --causes --table '$TABLE' '$T/clean' | grep -q 'no failed scene: no issue to open'"
+check "clean: a column the table lacks makes every picture no-reference" \
+  sh -c "python3 -I '$TALLY' --table '$TABLE' --column nomali '$T/clean' | grep -q 'column nomali (not in the table: every scene no-reference): 33 scenes, no-reference 33'"
 
 # faults: each verdict, then the pinned outputs
-check "faults: table matches" same "$T/faults.table.expected" table --table "$T/pictures.txt" "$T/faults"
+check "faults: table matches" same "$T/faults.table.expected" table "$T/faults"
 for want in '^23 \[terrain\] <default> +gpu-fault ' '^25 \[refract\] <default> +hang ' \
             '^24 \[shadow\] <default> +gl-error ' '^22 \[jellyfish\] <default> +crash ' \
             '^18 \[buffer\] .*update-method=map +oom ' '^27 \[conditionals\] fragment-steps=5:vertex-steps=0 +fail ' \
@@ -102,9 +108,9 @@ for want in '^23 \[terrain\] <default> +gpu-fault ' '^25 \[refract\] <default> +
 done
 check "faults: terrain's picture black" grep -Eq '^23 .* black +3$' "$T/faults.table.expected"
 check "faults: results row matches" same "$T/faults.results-row.expected" \
-  tally --results-row --table "$T/pictures.txt" "$T/faults"
+  tally --results-row "$T/faults"
 check "faults: status row matches" same "$T/faults.status-row.expected" \
-  tally --status-row --table "$T/pictures.txt" "$T/faults"
+  tally --status-row "$T/faults"
 check "faults: causes match" same "$T/faults.causes.expected" tally --causes "$T/faults"
 check "faults: 6 causes" grep -q '): 6$' "$T/faults.causes.expected"
 check "faults: the refusal is plan #309's" grep -q 'plan #309 owns these' "$T/faults.causes.expected"
@@ -115,7 +121,7 @@ check "faults: picture lines skip the scenes without a value" \
   test "$(tally --picture-lines "$T/faults" 2>/dev/null | grep -c '^mali | ')" -eq 28
 
 # oom: the memory failures of the back end, GL_OUT_OF_MEMORY and the kernel
-check "oom: table matches" same "$T/oom.table.expected" table --table "$T/pictures.txt" "$T/oom"
+check "oom: table matches" same "$T/oom.table.expected" table "$T/oom"
 check "oom: causes match" same "$T/oom.causes.expected" tally --causes "$T/oom"
 for want in '^01 .* oom ' '^02 .* oom ' '^03 .* oom ' '^04 .* oom ' '^05 .* oom ' \
             '^06 .* gl-error ' '^07 .* fail '; do
@@ -139,12 +145,27 @@ check "oom: the missing sample store is not plan #309's" \
 check "oom: the draw refused line is still plan #309's" \
   sh -c "awk -v n=7 '/^## Draft issue /{on = (\$4 == n)} on' '$T/oom.causes.expected' | grep -q 'plan #309 owns these'"
 
+# a refused program with the GL errors that follow it (0x501 at glGetAttribLocation,
+# 0x502 at the draw, the NanoPC-T6's desktop blur and buffer scenes): the refusal is
+# the cause, fail, as the runner's refused-draw; the GL errors are "also" and counted
+mkdir -p "$WORK/refgl"
+cp "$T/clean/env.txt" "$WORK/refgl/"
+for ext in log status kmsg; do cp "$T/clean/01-build-use-vbo-false.$ext" "$WORK/refgl/"; done
+sed -i 's/refused=0 first_refused=-/refused=2 first_refused=compile: online shaderc: the code generator refused this vertex shader: Mali(x)/' \
+  "$WORK/refgl/01-build-use-vbo-false.log"
+printf 'yakogl: GL error 0x501 in glGetAttribLocation\nyakogl: GL error 0x502 in current_drawable_program\n' >> "$WORK/refgl/01-build-use-vbo-false.log"
+tally "$WORK/refgl" > "$WORK/refgl.txt" 2>&1
+check "a refused program outranks the GL errors that follow it: fail, the refusal the cause" \
+  sh -c "grep -q '^01 \[build\] use-vbo=false  *fail ' '$WORK/refgl.txt' &&
+    grep -q '^scene \[build\] use-vbo=false: fail (fail: refused: compile: online shaderc: .*Mali(x)); also gl-error: GL error 0x501 in glGetAttribLocation, GL error 0x502 in current_drawable_program' '$WORK/refgl.txt'"
+check "...and its GL error lines are still counted" grep -q 'scenes run 1 of 33; not-run 32, fail 1; GL error lines 2,' "$WORK/refgl.txt"
+
 # runner-dir: a mali-glmark2-run.sh run directory, read directly
 R="$T/runner-dir"
-check "runner-dir: table matches" same "$T/runner-dir.table.expected" table --table "$T/pictures.txt" "$R"
+check "runner-dir: table matches" same "$T/runner-dir.table.expected" table "$R"
 check "runner-dir: picture lines match" same "$T/runner-dir.picture-lines.expected" tally --picture-lines "$R"
 check "runner-dir: results row matches" same "$T/runner-dir.results-row.expected" \
-  tally --results-row --table "$T/pictures.txt" "$R"
+  tally --results-row "$R"
 check "runner-dir: the runner's verdicts agree, exit 0" rc_is 0 tally "$R"
 check "runner-dir: no disagreement on stderr" test ! -s "$WORK/err"
 for want in '^18 .* oom ' '^22 .* crash ' '^23 .* crash ' '^24 .* gl-error ' '^25 .* gpu-fault '; do

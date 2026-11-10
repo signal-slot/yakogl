@@ -43,7 +43,8 @@ by its scenes.tsv and meta.txt) is read directly:
 
   scenes.tsv         row n is scene n: scene ("name:opts", glmark2's -b form) and
                      the runner's verdict; the scene is matched to the --list
-                     scene of the same name and options
+                     scene of the same name and options (sorted: the -b form
+                     has them in upstream's order, the info string in glmark2's)
   log/<n>.out+.err   the scene's log (the .out, then the .err): as <NN>-<slug>.log
   kmsg/<n>.class     mali-kmsg.py's line (with its cs_faults, counted); the file
                      kmsg/<n>.log supplies the kernel's memory-failure lines
@@ -91,7 +92,13 @@ Verdict per scene, the first that holds:
              "mali: the OSAL refused a buffer" and "mali: no sample store"
              (MALI_OOM_LINES), "GL error 0x505" and the kernel's "Out of
              memory:" and "page allocation failure" in the .log or .kmsg
-  gl-error   "GL error 0x... in ..." (GLMARK2_BAD_LINES gl-error) but 0x505
+  gl-error   "GL error 0x... in ..." (GLMARK2_BAD_LINES gl-error) but 0x505,
+             and not when the scene also has a refused program or draw: the
+             refusal is the cause and the GL errors after it (0x501 at
+             glGetAttribLocation, 0x502 at the draw, what ES 2.0 asks for
+             when a client goes on with a program that did not link) its
+             consequence, so that scene is fail (as the runner's refused-draw)
+             with the GL errors under "also"
   fail       anything else wrong: Set up failed, Unsupported, no result line,
              exit not 0, no "yakogl-mali: loaded" line (the board's Mesa ran:
              the sonama trap), refused draws or programs (the exit line's
@@ -418,7 +425,14 @@ def tally_scene(index, slug, info, paths, refs, tol):
         if bad.get(name):
             found.append(("fail", "fail: %s (%d lines)" % (name, bad[name])))
     if found:
-        found.sort(key=lambda f: VERDICTS.index(f[0]))
+        # A refused program or draw is the cause, and the GL errors after it (0x501
+        # at glGetAttribLocation, 0x502 at the draw: what ES 2.0 asks for when a
+        # client goes on with a program that did not link) are its consequence: its
+        # fail outranks gl-error, as the runner's refused-draw does (the NanoPC-T6's
+        # desktop blur and buffer scenes). Without a refusal gl-error keeps its rank.
+        refusal = bool(ex and int(ex.group(2))) or any(bad.get(n) for n in ("draw-refused", "draw-not-recorded"))
+        found.sort(key=lambda f: VERDICTS.index("fail") + 0.5 if refusal and f[0] == "gl-error"
+                   else VERDICTS.index(f[0]))
         sc["verdict"], sc["cause"] = found[0][0], redact(found[0][1])
         sc["also"] = [redact(f[1]) for f in found[1:]]
     # the lines an issue quotes: the failure lines of the log, then the kernel's first
@@ -446,9 +460,13 @@ def is_runner_dir(rundir):
 
 
 def runner_info(scene):
-    """the runner's 'name:opts' (glmark2's -b form) as glmark2's '[name] opts' info string"""
+    """the runner's 'name:opts' (glmark2's -b form, the options in the order the
+    default list gives them) as glmark2's '[name] opts' info string: the options
+    sorted, as glmark2 prints them (upstream's pulsar:quads=5:texture=false:light=false
+    is '[pulsar] light=false:quads=5:texture=false')"""
     name, sep, opts = scene.partition(":")
-    return "[%s] %s" % (name, opts if sep and opts else "<default>")
+    opts = ":".join(sorted(o for o in opts.split(":") if o)) if sep else ""
+    return "[%s] %s" % (name, opts or "<default>")
 
 
 def read_runner(rundir, scenes):

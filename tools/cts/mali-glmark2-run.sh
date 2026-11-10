@@ -101,6 +101,11 @@
 #   failed-scene       "Set up failed", "Unsupported", no FPS, or exit status
 #                      other than 0
 #   ok                 none of these
+# The result (" FPS: N FrameTime: X ms", " Set up failed", " Unsupported") is
+# read from the scene's header line "[name] opts:" or, when the back end's
+# stdout log split them (the Mali logs its arena high-water lines during the
+# scene, so the header's line ends in a glued log line and the result stands
+# on a later line of its own), from that later line.
 # and board-lost (the board went away or rebooted during it), not-run (the
 # run had stopped before it).
 #
@@ -115,7 +120,8 @@
 #   pictures.txt   "mali | <scene info string> | <picture>", one line a scene
 #                  with a picture line: the line form of glmark2-pictures.txt
 #   kmsg/<n>.log   the kernel lines of scene n; kmsg/<n>.class mali-kmsg.py's
-#                  line for them
+#                  line for them (a dmesg read is retried once; when both fail
+#                  the .log says so, the row's kmsg is "-" and there is no .class)
 #   log/<n>.out, log/<n>.err  scene n's stdout and stderr
 #   meta.txt       commit, dev, glmark2, flavour, scenes, timeout,
 #                  boot_id_before, boot_id_after, kernel, started, ended
@@ -407,6 +413,53 @@ OOM_RE = (r'out of GPU memory|no GPU memory for|gpu_alloc of \d+|mali: the OSAL 
           r'mali: no sample store|GL error 0x0*505 in ')
 KERNEL_OOM_RE = r'Out of memory:|page allocation failure'
 
+# glmark2 prints a scene's header "[name] opt=v:opt=w:" (or "[name] <default>:")
+# without a newline, runs the scene, then its result " FPS: N FrameTime: X ms"
+# (" Set up failed", " Unsupported"). The back end logs to the same stdout
+# meanwhile (the Mali's arena and table high-water lines), so on the board the
+# header's line ends in the first log line glued to it and the result stands on
+# a later line of its own: it is the pending header's. The options are read as
+# tools/cts/common-tally.py's header_info reads them: each "name=value" or
+# "<default>", up to the first part that is not one (the glued text).
+HEADER_RE = re.compile(r'^(\[[\w-]+\]) (.*)$')
+RESULT_RE = re.compile(r'^\s*(FPS: \d+(?: FrameTime: \d+(?:\.\d+)? ms)?|Set up failed|Unsupported)')
+
+
+def results(lines):
+    """[(info, result)] of glmark2's result lines in order, a result on a line
+    of its own given to the header before it."""
+    out, pending = [], None
+    for l in lines:
+        m = HEADER_RE.match(l)
+        if m:
+            keep = []
+            for part in m.group(2).split(':'):
+                if part == '<default>':
+                    keep.append(part)
+                    continue
+                o = re.match(r'[\w-]+=\S*', part)
+                if not o:
+                    break
+                keep.append(o.group(0))
+                if o.end() != len(part):  # glued text after a space: the options end here
+                    break
+            if not keep:
+                continue
+            head = '%s %s' % (m.group(1), ':'.join(keep))
+            rest = l[len(head) + 1:] if l.startswith(head + ':') else ''
+            r = RESULT_RE.match(rest)
+            if r:
+                out.append((head, r.group(1)))
+                pending = None
+            else:
+                pending = head
+        elif pending:
+            r = RESULT_RE.match(l)
+            if r:
+                out.append((pending, r.group(1)))
+                pending = None
+    return out
+
 
 def judge(rc, elapsed, limit, out, err, klog, libdir, kclass):
     """One scene: prints verdict, ms_frame, picture, kmsg count, exit line,
@@ -445,12 +498,12 @@ def judge(rc, elapsed, limit, out, err, klog, libdir, kclass):
         m = re.search(r'glmark2-picture: (\[[\w-]+\] .*?): ((?:\d+x\d+;|absent).*)$', l)
         if m:
             info, pic = m.group(1), m.group(2).strip()
-    res = [l for l in lines if re.search(r'(\[[\w-]+\] .*?): (FPS: |FrameTime: |Set up failed|Unsupported)', l)]
+    res = results(lines)
     if info == '-' and res:
-        info = re.search(r'(\[[\w-]+\] .*?): ', res[-1]).group(1)
+        info = res[-1][0]
     ms = '-'
     fps_seen = False
-    for l in res:
+    for _, l in res:
         t = re.search(r'FrameTime: (\d+(?:\.\d+)?) ms', l)
         f = re.search(r'FPS: (\d+)', l)
         if t:
@@ -458,7 +511,7 @@ def judge(rc, elapsed, limit, out, err, klog, libdir, kclass):
         elif f and int(f.group(1)) > 0:
             ms = '%.3f' % (1000.0 / int(f.group(1)))
         fps_seen = fps_seen or bool(f or t)
-    setup_failed = any(re.search(r'Set up failed|Unsupported', l) for l in res)
+    setup_failed = any(re.search(r'Set up failed|Unsupported', l) for _, l in res)
     if rc in (124, 137) and (rc == 124 or elapsed >= limit):
         v = 'hang'
     elif lib != 'ok':
@@ -657,8 +710,21 @@ run_one() {
       : > "$raw/run/$id.$ext"
     fi
   done
+  # The ring after the scene: a dmesg read that fails or comes back empty (an
+  # ssh that dropped) is asked once more before the scene's kernel lines are
+  # given up (the first T6 run lost one scene's lines to a single failed read).
   klog=$raw/kmsg/$id.log
-  if [ "$lost" = 0 ] && rssh dmesg > "$raw/kmsg/$id.after" 2>/dev/null; then
+  dmesg_ok=0
+  if [ "$lost" = 0 ]; then
+    for try in 1 2; do
+      if rssh dmesg > "$raw/kmsg/$id.after" 2>/dev/null && [ -s "$raw/kmsg/$id.after" ]; then
+        dmesg_ok=1
+        break
+      fi
+      [ "$try" = 2 ] || sleep 2
+    done
+  fi
+  if [ "$dmesg_ok" = 1 ]; then
     py window "$raw/kmsg/$id.before" "$raw/kmsg/$id.after" "$klog" 2>> "$raw/kmsg/$id.note"
   else
     klog=$raw/kmsg/$id.none
@@ -675,8 +741,10 @@ save_one() {
   if [ -f "$klog" ]; then
     py redact "$klog" "$out/kmsg/$id.log"
     cp "$raw/kmsg/$id.class" "$out/kmsg/$id.class"
-  else
+  elif [ "$lost" = 1 ]; then
     echo '# kernel capture unavailable: the board was lost' > "$out/kmsg/$id.log"
+  else
+    echo '# kernel capture unavailable: dmesg could not be read over ssh after this scene (two tries); the board answered with its boot_id' > "$out/kmsg/$id.log"
   fi
 }
 

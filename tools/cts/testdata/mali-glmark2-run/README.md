@@ -28,7 +28,9 @@ NanoPC-T6 glmark2-es2 runner `tools/cts/mali-glmark2-run.sh` without a board.
 - `scenarios/*.tsv`: what the fake program does to a scene
   (`<scene><TAB><action>`): `glerror`, `oom`, `refused`, `gpufault` and
   `jobtimeout` (with `kmsg/gpu-fault.txt` or `kmsg/job-timeout.txt` written
-  to the board's ring), `setupfail`, `crash`, `hang`, `fpsonly`, `lostssh`,
+  to the board's ring), `setupfail`, `crash`, `hang`, `fpsonly`, `split` (the
+  result line on a line of its own after the back end's stdout log, glued to
+  the header: the NanoPC-T6's shape), `lostssh`,
   `reboot`, `nolib`, `foreignlib`, and the fault paths: `pagefault`,
   `csfatal`, `csfault` (the v6.18 messages of `kmsg/page-fault.txt`,
   `cs-fatal.txt`, `cs-fault.txt`: a prefixed header, unprefixed detail

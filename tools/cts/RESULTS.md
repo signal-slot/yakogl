@@ -83,6 +83,7 @@ is from the two-row set.
 | AM62P | 468, 33 scenes, 0 failed, 0 GL errors; `6a7021ec` (#42's path B, off by default, and the case 216 kick count; built before its rebase onto main `561bad55`, as `e4819b69` on main `61ad38a1`), 2026-11-01 (`records/am62p/common-e4819b69/20261101-1935-GM-4bcd9ff3/`, `verdict=done`, resets 0; the first run since `ce3354ac`, the HWRT second pair); **shadow 10.62 ms a frame (95 FPS), refract 35.09 ms (29 FPS), terrain 83.06 ms (13 FPS)** (10.63, 37.05, 90.94 at `86d0b482`); per-scene ms/frame below; pictures against `tools/cts/glmark2-pictures.txt` column `am62p` (the `445c5653` run's): 33 scenes, match 28, mismatch 5, each one probe of an animated scene (desktop blur tr, buffer map and interleaved map c, terrain c off 10, refract c — sampled at a different frame count), shadow a match, none black | 49 of 50 (rerun at `6a7021ec`, GT `20261101-1943-GT-0225c49e`, as at `86d0b482`): case 20 `etc` fails its first check alone — it wants 3 compressed formats, the build stores 5, the intended ES 3.0 list on the PowerVR (`tests/es3_caps.rs` `known_gaps`); the test's expectation is stale, its other 16 checks pass (below); `445c5653` read 50 of 50; case 215 `shadowmap` PASS on its own, below) | 0 |
 | i.MX8MP | 42, 33 scenes, 0 failed, 0 GL errors (#814 fixed by #922); main `445c5653`, 2026-10-20, 1 screen buffer (the default); re-run from main `a917d123` (holds the GC mipmap offer `dc033dc44`, #1106) the same day: score 42 (`records/imx8mp/common-a917d123`, GM `verdict=done`, words `fc3f002a`); re-run from main `f87dde43` on 2026-11-07 (`tools/cts/board-stage.sh imx8mp common`, `uboot-mmc`, `records/imx8mp/common-f87dde43/`): score 42, 33 scenes, 0 failed, 0 GL errors, words `fc3f002a` again, gl_test 49 of 49 run, case 16 skipped, both rows `verdict=done`, resets absent (no per-scene record: the board has no console); per-scene record `records/imx8mp/20261020-2100-glmark2-a917d123/` (66 boots, ms a frame = 1000 / the integer FPS): **terrain 250 ms (4 FPS), shadow 500 ms (2 FPS), refract 500 ms (2 FPS)**, the other 30 scenes 16.95 to 35.71 ms; 1934.56 ms summed (1932.65 at `445c5653`), so the offer moved no scene at this resolution; all 33 pictures match the `imx8mp` column, none black, terrain and refract means equal to the `445c5653` ones (not looked at by eye); per-scene FPS and picture values from the SNVS record (below: terrain 4, shadow 2, refract 2 FPS), pictures in `tools/cts/glmark2-pictures.txt` column `imx8mp` (33 from this run, none black, not looked at by eye); 49 at 3 buffers, 46 at 2 (`bebce725`, below) | 49 of 49 run, case 16 skipped (#4); cases 10 and 17 nondeterministic (#5, #3: 11 boots of `work/egl-double-buffer`'s code, case 17 failed 3, case 10 failed 1; main `0247ac665`, 10 boots: case 17 failed 3, case 10 failed 3, case 44 once) | 0 where counted |
 | Pi 4 | 195, 33 scenes, 0 failed, 0 GL errors; main `c4af4917`, 2026-10-22 (the TFU no-wait, FS dump off, uniforms from the host arrays, lazy raster, depth storage defer, copy reason counters, UIF walker and buffer retired reuse; the main tip `71c73b0f` differs from it only in `tools/check.sh` and its selftest); GM `verdict=done`, record `records/pi4/20261022-0308-glmark2-c4af4917/`: **terrain 161.79 ms (7 FPS), shadow 7.34 ms (137 FPS), refract 17.27 ms (58 FPS)** (179.26, 7.32, 18.72 at `445c5653`); per-scene ms/frame below; pictures 31 of 33 match the `pi4` column (desktop blur and jellyfish, both animated, differ in one probe each), none black | 12 of 12 (at `445c5653`; not rerun) | 0 |
+| NanoPC-T6 (Mali) | no score (1 of 33 scenes has an FPS), 33 of 33 scenes ran, 32 failed, 80 GL error lines, 0 out of GPU memory; main `da65355e`, 2026-11-10: the first glmark2-es2 record of the Mali back end, on the board's own Armbian trixie (kernel 6.18.55-current-rockchip64, panthor), `tools/cts/mali-glmark2-run.sh` over the `tools/cts/mali-glmark2-build.sh` tree (`dev=no`; one glmark2-es2 process a scene, 800x600 on an EGL pbuffer of the `tools/mali/panthor-gles` pair, libGLESv2.so.2 sha256 `392dee8d7c82878522750d0c5bad715e25de9dddd983899f470e4e7d552d3fc3`); **desktop shadow 0.98 ms a frame (1023 FPS), picture match; 31 scenes refused at `glCompileShader` by the online compiler (plan #309, #33); terrain aborts in glmark2 itself after its refusals**; per scene under "Mali: NanoPC-T6 ... glmark2-es2" below | see "Mali: NanoPC-T6 (RK3588, Valhall v10, panthor), gl_test sweep" | 0 (0 panthor kernel lines in every scene; same boot_id before and after) |
 
 - i.MX8MP glmark2 at 1, 3 and 2 screen buffers (frame-floor step 2, GM half;
   `docs/notes/imx8mp-frame-floor.md`): the GM row of
@@ -421,6 +422,102 @@ Code: the integration tip `44f7b508` plus the record's predictions commit
 - The 20 cases predicted to pass, with 80, 101 and 149, also ran twice on their own
   (`cases-1.txt`, `cases-2.txt`, identical): `23 case(s) run: FAIL 2, PASS
   15, REFUSED 6`.
+
+### Mali: NanoPC-T6 glmark2-es2 (stage 2 criterion, first run)
+
+Main `da65355e`, 2026-11-10, the board's own Armbian trixie (kernel
+6.18.55-current-rockchip64, panthor 1.5.0): `tools/cts/mali-glmark2-run.sh`
+over the `tools/cts/mali-glmark2-build.sh` tree (`dev=no`, glmark2
+`22c527cb` with `mali-glmark2-pbuffer.patch`, the `tools/mali/panthor-gles`
+pair; every process's `yakogl-mali: loaded` line names the staged
+libGLESv2.so.2, `build=da65355e`). One glmark2-es2 process a scene, 800x600
+on an EGL pbuffer, 180 s bound, the 33 default scenes in order. Tallied by
+`tools/cts/glmark2-mali-tally.py` (its verdicts agree with the runner's).
+
+| Scenes | ok | refused at compile | crash | GL error lines | out of GPU memory | panthor kernel lines | boot_id |
+|---:|---:|---:|---:|---:|---:|---:|---|
+| 33 of 33 ran | **1** | 31 | 1 | 80 | 0 | 0 | unchanged |
+
+- The outcome is the host forecast's scene for scene
+  (`docs/notes/mali-glmark2-forecast.md`, section 1): the one clean scene is
+  `desktop:windows=4:effect=shadow`, 0.98 ms a frame (1023 FPS), 271,157
+  draws, `refused=0`, picture in the `mali` column of
+  `tools/cts/glmark2-pictures.txt` (its frame looked at, four Tux windows
+  with shadows over the Linaro background; the probes c, tl, tr, br and the
+  mean agree with the AM62P column, probe bl is a moving window's edge).
+- The 31 refused scenes stop at the online compiler's first refusal, every
+  one a plan #309 cause (#33): 18 scenes `VS: a constant product in a shape
+  Mesa's algebraic rules move or fold` (build x2, texture x3, shading x4, bump x3,
+  pulsar, buffer x3, shadow, refract), 8 `VS: arithmetic other than +, -, *
+  and a dot or matrix product` (conditionals x3, function x2, loop x3), 2
+  `FS: a constant operation on or to a value that is not a finite normal
+  float` (effect2d 3x3, desktop blur), 1 `FS: a shader with more than 32
+  local variables` (effect2d 5x5), 1 `VS: a fused multiply-add other than a
+  matrix product's` (ideas), 1 `FS: a gl_FragColor lane other than the
+  varying's own lane or a constant` (jellyfish). 27 of them print `Set up
+  failed` and draw nothing; desktop blur and the three buffer scenes run on
+  without their program (16 GL error lines each: `0x501` in
+  `glGetAttribLocation`/`glGetUniformLocation`, `0x502` at the draw, what
+  ES 2.0 asks for after a failed link) and their picture values (blur drawn
+  without its blur pass; the buffer scenes all black) are no reference.
+- terrain: `glmark2-es2-mali` aborts (SIGABRT, rc 134) in libstdc++'s
+  `std::vector<int>::operator[]` assertion from `Mesh::render_vbo` after 8 of
+  its 9 programs are refused (16 GL error lines before it): glmark2 indexes
+  with an unlinked program's -1 attribute location. A consequence of the
+  refusals, in glmark2 (the forecast's SIGSEGV; Debian trixie's g++ 14
+  enables the assertion), not a YakoGL crash; no panthor line, no exit line.
+  The runner's probe after it (`build:use-vbo=false`) passed and the run
+  went on; the board answered with the same boot_id throughout.
+- `D-DEPTHONLY` (shadow's depth-only framebuffer) and `D-NPOTMIP` (refract)
+  were not reached: both scenes stop at the compile refusal first.
+- The first session of the same build (17:00 UTC) gave the same 33 outcomes;
+  it found two defects of the tools, fixed before this record and pinned by
+  their self-tests: the runner judged the clean scene `failed-scene` because
+  the back end's stdout log splits glmark2's result line from its header,
+  and the tally refused the runner's directory because the `-b` scene text
+  keeps upstream's option order (`pulsar:quads=5:texture=false:light=false`)
+  while the info string sorts it. One scene of that session lost its kernel
+  lines to a single failed `dmesg` read (now retried once); this record has
+  them for every scene.
+
+Per scene (ms a frame is glmark2's FrameTime; a refused scene has none;
+picture against the `mali` column):
+
+| # | Scene | ms/frame | FPS | Verdict | Picture | panthor lines |
+| ---: | --- | ---: | ---: | --- | --- | ---: |
+| 1 | `[build] use-vbo=false` | - | - | refused: VS constant product | absent | 0 |
+| 2 | `[build] use-vbo=true` | - | - | refused: VS constant product | absent | 0 |
+| 3 | `[texture] texture-filter=nearest` | - | - | refused: VS constant product | absent | 0 |
+| 4 | `[texture] texture-filter=linear` | - | - | refused: VS constant product | absent | 0 |
+| 5 | `[texture] texture-filter=mipmap` | - | - | refused: VS constant product | absent | 0 |
+| 6 | `[shading] shading=gouraud` | - | - | refused: VS constant product | absent | 0 |
+| 7 | `[shading] shading=blinn-phong-inf` | - | - | refused: VS constant product | absent | 0 |
+| 8 | `[shading] shading=phong` | - | - | refused: VS constant product | absent | 0 |
+| 9 | `[shading] shading=cel` | - | - | refused: VS constant product | absent | 0 |
+| 10 | `[bump] bump-render=high-poly` | - | - | refused: VS constant product | absent | 0 |
+| 11 | `[bump] bump-render=normals` | - | - | refused: VS constant product | absent | 0 |
+| 12 | `[bump] bump-render=height` | - | - | refused: VS constant product | absent | 0 |
+| 13 | `[effect2d] kernel=0,1,0;1,-4,1;0,1,0;` | - | - | refused: FS constant on a non-finite float | absent | 0 |
+| 14 | `[effect2d] kernel=1,1,1,1,1;1,1,1,1,1;1,1,1,1,1;` | - | - | refused: FS more than 32 locals | absent | 0 |
+| 15 | `[pulsar] light=false:quads=5:texture=false` | - | - | refused: VS constant product | absent | 0 |
+| 16 | `[desktop] blur-radius=5:effect=blur:passes=1:separable=true:windows=4` | 1.27 | 791 | refused: FS constant on a non-finite float (runs on, 16 GL errors) | no reference | 0 |
+| 17 | `[desktop] effect=shadow:windows=4` | 0.98 | 1023 | **ok** | match | 0 |
+| 18 | `[buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=map` | 0.65 | 1531 | refused: VS constant product (runs on, 16 GL errors) | no reference (black) | 0 |
+| 19 | `[buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=subdata` | 0.73 | 1378 | refused: VS constant product (runs on, 16 GL errors) | no reference (black) | 0 |
+| 20 | `[buffer] columns=200:interleave=true:update-dispersion=0.9:update-fraction=0.5:update-method=map` | 0.36 | 2782 | refused: VS constant product (runs on, 16 GL errors) | no reference (black) | 0 |
+| 21 | `[ideas] speed=duration` | - | - | refused: VS fused multiply-add | absent | 0 |
+| 22 | `[jellyfish] <default>` | - | - | refused: FS gl_FragColor lane | absent | 0 |
+| 23 | `[terrain] <default>` | - | - | crash: glmark2 aborts after its refusals (16 GL errors) | absent | 0 |
+| 24 | `[shadow] <default>` | - | - | refused: VS constant product | absent | 0 |
+| 25 | `[refract] <default>` | - | - | refused: VS constant product | absent | 0 |
+| 26 | `[conditionals] fragment-steps=0:vertex-steps=0` | - | - | refused: VS arithmetic | absent | 0 |
+| 27 | `[conditionals] fragment-steps=5:vertex-steps=0` | - | - | refused: VS arithmetic | absent | 0 |
+| 28 | `[conditionals] fragment-steps=0:vertex-steps=5` | - | - | refused: VS arithmetic | absent | 0 |
+| 29 | `[function] fragment-complexity=low:fragment-steps=5` | - | - | refused: VS arithmetic | absent | 0 |
+| 30 | `[function] fragment-complexity=medium:fragment-steps=5` | - | - | refused: VS arithmetic | absent | 0 |
+| 31 | `[loop] fragment-loop=false:fragment-steps=5:vertex-steps=5` | - | - | refused: VS arithmetic | absent | 0 |
+| 32 | `[loop] fragment-steps=5:fragment-uniform=false:vertex-steps=5` | - | - | refused: VS arithmetic | absent | 0 |
+| 33 | `[loop] fragment-steps=5:fragment-uniform=true:vertex-steps=5` | - | - | refused: VS arithmetic | absent | 0 |
 
 ## ES 3.0: dEQP-GLES3 (stage 4)
 
