@@ -1422,8 +1422,15 @@ fn compile_stage<'s>(
          * derivative: 0dce654a8:tools/mali/board-ref/2026-10-24-mesa-refs4/mesa/
          * mesa-es3cube.pandecode, `Requires helper threads: false`) or a
          * `texelFetch` (`TEX_FETCH` is none of `bi_instr_uses_helpers`';
-         * fbload_fbload.trace, `Requires helper threads: false`) */
-        sc.info.helper_threads = f.live_look_ups().any(|(_, t)| t.computed());
+         * fbload_fbload.trace, `Requires helper threads: false`). A
+         * derivative reads the quad's other lanes (`CLPER`, a helper user
+         * of `bi_instr_uses_helpers`, flow.rs): NIR's `ddx` / `ddy` set the
+         * same `needs_quad_helper_invocations` as an implicit-LOD look-up
+         * (nir_gather_info.c; docs/notes/mali-derivatives.md 6.5) */
+        let deriv = [nir::Alu::Fddx, nir::Alu::Fddy]
+            .iter()
+            .any(|&op| f.rows & emit::bit(emit::Row { op, bits: 16, width: 1 }) != 0);
+        sc.info.helper_threads = f.live_look_ups().any(|(_, t)| t.computed()) || deriv;
         sc.info.can_discard = f.discards > 0;
         sc.rows = f.rows;
         for r in &f.reads[..f.nreads] {

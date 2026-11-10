@@ -36,7 +36,7 @@ const fn row(op: Alu, bits: u8, width: u8) -> Row {
 }
 
 /// The rows [`emit`] selects, each with the `bi_emit_alu` case it is.
-pub const ROWS: [(Row, &str); 87] = [
+pub const ROWS: [(Row, &str); 89] = [
     (row(Alu::Fadd, 32, 1), "nir_op_fadd: FADD.f32"),
     (row(Alu::Fmul, 32, 1), "nir_op_fmul: FMA.f32 a, b, -0.0"),
     (row(Alu::Ffma, 32, 1), "nir_op_ffma: FMA.f32"),
@@ -186,6 +186,14 @@ pub const ROWS: [(Row, &str); 87] = [
      * r2^.h00, 0x0.b00, r4^` with `IADD.v2u16 r4, r1.h11, 0x0`) */
     (row(Alu::Ior, 16, 1), "nir_op_ior of one 16-bit lane: LSHIFT_OR.v2i16 a.hN, b, #0"),
     (row(Alu::Iand, 16, 1), "nir_op_iand of one 16-bit lane: LSHIFT_AND.v2i16 a.hN, b, #0"),
+    /* a mediump `dFdx` / `dFdy` of one lane (case 138 deriv, tools/mali/
+     * testdata/fsarith_138_deriv: `CLPER.i32.subgroup4.xor r4, r0,
+     * 0x1000000.b33`, `FADD.v2f16 r0, r4^, r0^.neg`, `LSHIFT_XOR.v2i16 r0,
+     * lane_id.w0.h00, 0xF0E0D0C.b33, r0^`; Y with `0x3020100.b22`, the mask
+     * `LSHIFT_AND.i32 r4, lane_id.w0, 0x0.b00, r4^` of the pushed 2 and
+     * `0xF0E0D0C.b22`; docs/notes/mali-derivatives.md 1) */
+    (row(Alu::Fddx, 16, 1), "ddx_fine of one 16-bit lane: CLPER.i32.xor a, #1; FADD.v2f16 n, a.neg; LSHIFT_XOR.v2i16 lane_id.h00, #15, d"),
+    (row(Alu::Fddy, 16, 1), "ddy_fine of one 16-bit lane: CLPER.i32.xor a, #2; FADD.v2f16 n, a.neg; LSHIFT_XOR.v2i16 (lane_id & 2).h00, #14, d"),
 ];
 
 /// A source of a one-lane 16-bit operation: its lane's half in both
@@ -368,6 +376,35 @@ pub fn emit(p: &mut Prog<'_>, row: Row, s: &[Src]) -> Result<u16, MaliError> {
             };
             let o = if op == Alu::Ior { Op::LshiftOrV2i16 } else { Op::LshiftAndV2i16 };
             ins(p, o, &[lone(s[0]), b, ZERO])?
+        }
+        /* `bi_emit_derivative` of a 16-bit lane, the fine form: the operand
+         * `a` one whole register word (the caller widens a half of a pair,
+         * `MKVEC.v2i16 a.h0, #0` as `U16_TO_U32`; a lane in its own register
+         * is read as it is), the neighbour `CLPER.i32.subgroup4.xor a, axis`
+         * (axis 1 for X, 2 for Y; the 8-bit lane source is the table's
+         * byte, fau.rs `lut8`), `FADD.v2f16 n, a.neg` (the same in both
+         * halves), then the sign fix: lane `L` computed `a(L ^ axis) -
+         * a(L)`, so the lanes with the axis bit set are XORed with the sign
+         * bit, `LSHIFT_XOR.v2i16 m, #(16 - ffs(axis)), d` with `m` the lane
+         * id (X: every bit but bit 0 shifts out) or `lane_id & 2` (Y, one
+         * `LSHIFT_AND.i32` for every Y derivative, CSE'd; the 2 a pushed FAU
+         * word moved to a register beside the special, fau.rs `repair_fau`).
+         * The fix is always emitted: the form Mesa makes when every use
+         * ignores the sign bit (`nir_def_all_uses_ignore_sign_bit`) has no
+         * reference, so an `abs` of a derivative is refused at the walk
+         * (nir_fs.rs `Fs::abs`) */
+        (op @ (Alu::Fddx | Alu::Fddy), 16, 1) => {
+            let lane_id = Src::of(Idx::Special(super::bir::Special::LaneId, false));
+            let a = s[0].swz(Swz::H01);
+            let axis = if op == Alu::Fddx { 1 } else { 2 };
+            let n = ins(p, Op::Clper, &[a, Src::of(Idx::Const(axis))])?;
+            let d = ins(p, Op::FaddV2f16, &[Src::ssa(n), Src { neg: !a.neg, ..a }])?;
+            let (m, shift) = if op == Alu::Fddx {
+                (lane_id, 15)
+            } else {
+                (Src::ssa(ins(p, Op::LshiftAndI32, &[lane_id, Src::of(Idx::Const(2)), ZERO])?), 14)
+            };
+            ins(p, Op::LshiftXorV2i16, &[m.swz(Swz::H00), Src::ssa(d), Src::of(Idx::Const(shift))])?
         }
         _ => return Err(MaliError::Defect(super::Defect::IrIndex)),
     })
