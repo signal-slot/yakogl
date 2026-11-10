@@ -4053,6 +4053,66 @@ pub fn select_keyed<'a>(
     select_blocks(m, arena, front_flipped, &[])
 }
 
+/// [`select`] without the expansion of constant-count loops ([`unrolled`]):
+/// every loop is selected as a loop, with `loop_convert`'s guard. For the
+/// tests whose subject is a loop that stays a loop (the guard, the
+/// allocator's live ranges round a back edge), on shapes short enough that
+/// [`select`] would expand them.
+pub fn select_rolled<'a>(m: &'a ir::Module<'a>, arena: &'a Arena<'a>) -> Result<Selected<'a>, SelectError> {
+    select_from(m, arena, false, &[])
+}
+
+/// The longest constant `for` loop selection expands into its passes: Mesa
+/// etnaviv's `max_unroll_iterations` (etnaviv_compiler.c:68), whose
+/// `nir_opt_loop_unroll` runs before its constant folding.
+pub const UNROLL_PASSES_MAX: u32 = 32;
+
+/// `m` with its constant `for` loops of 1 to [`UNROLL_PASSES_MAX`] passes
+/// expanded (the shared unroller under `Rules::Counted`): no counter guard, no
+/// branches, and a uniform array indexed by the loop's index read from the
+/// constant file instead of the run-time `load` (`LoadUniformIdx` below).
+/// glmark2 terrain's lighting loop (`MAX_POINT_LIGHTS` 1) was 54 of its 127
+/// instructions (docs/notes/gc-terrain-shaders-rest.md, rank 1). Every other
+/// loop is kept as it was, for `loop_convert`.
+///
+/// `m` itself when it has no such loop (the walk is not run: it copies the
+/// whole module into the scratch), when the walk refuses or runs out of
+/// scratch, and when it changed which inputs or outputs the program touches
+/// (an `if` it resolved dropped an arm with the only read of a varying):
+/// the io lists are decided from the instructions (`io_is_used`), and they
+/// are the driver's.
+fn unrolled<'a>(m: &'a ir::Module<'a>, arena: &'a Arena<'a>) -> &'a ir::Module<'a> {
+    use super::powervr::unroll::{unroll_with, Rules};
+    fn short_loop(m: &ir::Module<'_>, r: ir::Range) -> bool {
+        let nodes = m.nodes_of(r);
+        nodes.iter().enumerate().any(|(k, n)| match *n {
+            ir::Node::Loop { body } => {
+                let init = |i, float| super::loop_count::init_from_preceding(m, &nodes[..k], i, float);
+                super::loop_count::constant_loop_entries(m, body, &init)
+                    .is_some_and(|e| (2..=UNROLL_PASSES_MAX + 1).contains(&e))
+                    || short_loop(m, body)
+            }
+            ir::Node::If { then_, else_, .. } => short_loop(m, then_) || short_loop(m, else_),
+            _ => false,
+        })
+    }
+    if !short_loop(m, m.body) {
+        return m;
+    }
+    let io = |op: &ir::Op| match *op {
+        ir::Op::LoadInput { slot, .. } => Some((false, slot)),
+        ir::Op::StoreOutput { slot, .. } => Some((true, slot)),
+        _ => None,
+    };
+    let covers = |a: &ir::Module<'_>, b: &ir::Module<'_>| {
+        a.instrs.iter().filter_map(io).all(|x| b.instrs.iter().filter_map(io).any(|y| y == x))
+    };
+    match unroll_with(m, arena, Rules::Counted { max: UNROLL_PASSES_MAX }) {
+        Ok(Some(u)) if u.trips.is_empty() && covers(m, u.module) && covers(u.module, m) => u.module,
+        _ => m,
+    }
+}
+
 /// [`select_keyed`], with the uniform-block member rows of the stage:
 /// `(dword_off, dwords)` ranges of the module's uniform dwords that belong to
 /// a user block's members. A constant register all of whose dwords are
@@ -4060,6 +4120,21 @@ pub fn select_keyed<'a>(
 /// block's copy in memory (`Sel::block_read`), as Mesa's etnaviv reads every
 /// user block (docs/notes/gc-ubo-const-limit.md).
 pub fn select_blocks<'a>(
+    m: &'a ir::Module<'a>,
+    arena: &'a Arena<'a>,
+    front_flipped: bool,
+    members: &[(u16, u16)],
+) -> Result<Selected<'a>, SelectError> {
+    if m.stage != SHC_STAGE_VERTEX && m.stage != SHC_STAGE_FRAGMENT {
+        return Err(SelectError::Unsupported("a stage that is neither vertex nor fragment"));
+    }
+    /* Constant-count loops first: expanded, so `loop_convert` meets only the
+     * loops that stay loops (`unrolled`). */
+    select_from(unrolled(m, arena), arena, front_flipped, members)
+}
+
+/// [`select_blocks`] on `m` as it is.
+fn select_from<'a>(
     m: &'a ir::Module<'a>,
     arena: &'a Arena<'a>,
     front_flipped: bool,
@@ -6915,7 +6990,8 @@ mod int_literal_tests {
         (t, consts)
     }
 
-    /// `i < 3` is an integer compare against the INTEGER 3. Until
+    /// `i < 40` is an integer compare against the INTEGER 40 (40 passes: a
+    /// loop selection keeps, `UNROLL_PASSES_MAX`; it was `i < 3`). Until
     /// 2026-09-23 the front end handed the literal over as a float and this
     /// listing read `cmp.lt.s32 ..., 3.0:f20` and `add.s32 ..., 1.0:f20`:
     /// the loop ran twice and `float(k)` read 1.08e9. When the front end
@@ -6927,9 +7003,9 @@ mod int_literal_tests {
     #[test]
     fn an_int_literal_is_an_s20_immediate() {
         let (t, _) = listing_of(
-            "attribute vec4 p;\nattribute float in0;\nvarying float out0;\nvoid main(){ float a=in0; int k=3; for(int i=0;i<3;i++){ a=a+1.0; } out0=a+float(k); gl_Position=p; }",
+            "attribute vec4 p;\nattribute float in0;\nvarying float out0;\nvoid main(){ float a=in0; int k=3; for(int i=0;i<40;i++){ a=a+1.0; } out0=a+float(k); gl_Position=p; }",
         );
-        assert!(t.contains("cmp.lt.s32") && t.contains(", 3:s20,"), "the bound is the integer 3:\n{t}");
+        assert!(t.contains("cmp.lt.s32") && t.contains(", 40:s20,"), "the bound is the integer 40:\n{t}");
         assert!(t.contains("add.s32") && t.contains(", 1:s20"), "the step is the integer 1:\n{t}");
         assert!(t.contains("3:s20") && t.contains("i2f.s32"), "float(k) converts the integer 3:\n{t}");
         for line in t.lines().filter(|l| l.contains(".s32")) {
@@ -7014,7 +7090,10 @@ mod loop_guard_tests {
     use super::super::{eval, lower, store};
     use super::*;
 
-    /// Select `src` (a fragment shader) and hand `f` the IR and the selection.
+    /// Select `src` (a fragment shader) with every loop kept a loop
+    /// ([`select_rolled`]: the guard is the subject, and [`select`] expands a
+    /// constant loop of up to [`UNROLL_PASSES_MAX`] passes) and hand `f` the
+    /// IR and the selection.
     fn with_selected<T>(src: &str, f: impl FnOnce(&ir::Module<'_>, &Selected<'_>) -> T) -> T {
         let _l = store::test_lock();
         store::with_scratch(|a| {
@@ -7022,7 +7101,7 @@ mod loop_guard_tests {
             let l = lower::compile_to_ir(a, Stage::Fragment, text).map_err(|e| e.msg).unwrap();
             let m = a.alloc_copy(core::slice::from_ref(&l.module)).unwrap();
             let m: &ir::Module<'_> = &m[0];
-            let sel = select(m, a).expect("selects");
+            let sel = select_rolled(m, a).expect("selects");
             f(m, &sel)
         })
         .unwrap()
@@ -7090,6 +7169,27 @@ mod loop_guard_tests {
             assert_eq!(guard_compare(s), [5002], "guard compare = limit + 1 for limit {}", s.loop_limits[0]);
             assert_eq!(colour(m, 1.0), 5000.0, "5000 passes in the evaluator");
         });
+    }
+
+    /// [`select`] itself expands the same loop: no guard, no back edge
+    /// (`unrolled`), and 33 passes stay a loop with their exact count.
+    #[test]
+    fn select_expands_a_loop_of_up_to_32_passes_and_no_longer() {
+        let src = |n: u32| {
+            std::format!("precision highp float; uniform vec4 u; void main(){{ float s = 0.0; for (int i = 0; i < {n}; i++) {{ s += u.x; }} gl_FragColor = vec4(s); }}")
+        };
+        for (n, limits) in [(10u32, vec![]), (32, vec![]), (33, vec![34u32])] {
+            let _l = store::test_lock();
+            store::with_scratch(|a| {
+                let text = a.alloc_str(&src(n)).unwrap();
+                let l = lower::compile_to_ir(a, Stage::Fragment, text).map_err(|e| e.msg).unwrap();
+                let m = a.alloc_copy(core::slice::from_ref(&l.module)).unwrap();
+                let sel = select(&m[0], a).expect("selects");
+                assert_eq!(sel.loop_limits, limits.as_slice(), "{n} passes: guards {:?}", sel.loop_limits);
+                assert_eq!(sel.back_edges.is_empty(), limits.is_empty(), "{n} passes: back edges {:?}", sel.back_edges);
+            })
+            .unwrap();
+        }
     }
 
     /// A 10-iteration loop: recognized (11 entries), exact, and its guard

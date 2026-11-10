@@ -220,12 +220,26 @@ fn clobbers(sel: &[SelInstr], out: &[Instr]) -> Vec<String> {
 
 /// The product's passes and allocation, then the check. `defer` and `place`
 /// (outputs placed by the allocator) are off only for the control below.
+/// `rolled`: selected with every loop kept a loop (`select::select_rolled`),
+/// for the shapes whose subject is a back edge and which the product's
+/// selection would expand (a constant loop of at most 32 passes).
 fn check(name: &str, stage: sema::Stage, src: &str, defer: bool, place: bool) -> Option<(Vec<String>, bool)> {
+    check_as(name, stage, src, defer, place, false)
+}
+
+fn check_as(
+    name: &str,
+    stage: sema::Stage,
+    src: &str,
+    defer: bool,
+    place: bool,
+    rolled: bool,
+) -> Option<(Vec<String>, bool)> {
     let mut mem = vec![0u8; 8 << 20];
     let a = Arena::new(&mut mem);
     let src = a.alloc_str(src).ok()?;
     let l = lower::compile_to_ir(&a, stage, src).ok()?;
-    let sel = select::select(&l.module, &a).ok()?;
+    let sel = if rolled { select::select_rolled(&l.module, &a) } else { select::select(&l.module, &a) }.ok()?;
     if sel.instrs.is_empty() {
         /* Nothing to allocate: every output already sits in its input's
          * register. Counted by the caller, not dropped. */
@@ -348,7 +362,7 @@ fn no_allocated_register_is_overwritten_while_its_value_is_live() {
         /* four loops, each with a `continue`: a back edge per continue */
         ("es100/contloops.frag", sema::Stage::Fragment, include_str!("../tools/shaders/es100/contloops.frag"), true),
     ] {
-        let (p, l) = check(name, stage, text, false, true)
+        let (p, l) = check_as(name, stage, text, false, true, true)
             .unwrap_or_else(|| panic!("{name} must compile: it is the shape under test"));
         assert_eq!(l, loops, "{name}: a back edge after selection is what this shape is for, or is not");
         checked += 1;
@@ -375,12 +389,14 @@ fn no_allocated_register_is_overwritten_while_its_value_is_live() {
      * pass: the corpus sources that got through selection, and those that
      * loop. When coverage grows these move: re-derive the pin, do not widen
      * it. Per build: a report-es2 build refuses GLSL ES 3.00 in the front end
-     * (pp.rs out_of_scope). Measured 2026-10-24; 536 / 352 programs and
-     * 39 / 29 loops while the Qt shaders were in the GC7000 table, until
-     * #1509. */
+     * (pp.rs out_of_scope). Measured 2026-10-24; the loops 33 / 27 until
+     * 2026-11-10, when selection began to expand constant loops of at most
+     * 32 passes (select.rs `unrolled`; the named shapes above are selected
+     * rolled); 536 / 352 programs and 39 / 29 loops while the Qt shaders
+     * were in the GC7000 table, until #1509. */
     let es2 = cfg!(feature = "report-es2");
     assert_eq!(checked, if es2 { 182 } else { 225 }, "the population moved: {checked} programs reached the check");
-    assert_eq!(looped, if es2 { 27 } else { 33 }, "the loop population moved: {looped} programs with a back edge");
+    assert_eq!(looped, if es2 { 26 } else { 32 }, "the loop population moved: {looped} programs with a back edge");
     assert!(bad.is_empty(), "{} programs overwrite a live register", bad.len());
 }
 
@@ -410,7 +426,7 @@ void main ()
     }
 }
 ";
-    let (p, looped) = check("loop_2", sema::Stage::Vertex, src, false, true).expect("loop_2 compiles");
+    let (p, looped) = check_as("loop_2", sema::Stage::Vertex, src, false, true, true).expect("loop_2 compiles");
     assert!(looped, "the shape under test is a loop");
     assert!(p.is_empty(), "a live output register is overwritten: {p:?}");
 }

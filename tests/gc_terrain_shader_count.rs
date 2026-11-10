@@ -7,8 +7,9 @@
 //! terrain-compiler-fix). Mesa etnaviv's `etna_shc` counts for the GC7000UL
 //! are the comments; they are the target, not a pin. The pins include
 //! `gc-shadow-refract-shaders.md`'s "The patch" (a copy fold and a scalar lane
-//! merge, `src/shaderc/online/vivante/peephole.rs`); the comments give the
-//! count before it.
+//! merge, `src/shaderc/online/vivante/peephole.rs`) and the GC7000's
+//! constant-loop unroll (`select.rs` `unrolled`, the note's rank 1); the
+//! comments give the counts before them.
 //!
 //! The glmark2 texts are GPL-3.0 and never committed: they are built here from
 //! a glmark2 checkout (`GLMARK2_SRC`, its `data/shaders`) as glmark2's
@@ -76,7 +77,7 @@ fn blur(file: &str, radius: i32, sigma: f64, horizontal: bool, step: f64, tilt: 
 /// (name, stage, ours: instructions and temps); etna_shc's and the count before the patch in the comment
 const GLMARK2: [(&str, u32, u32, u32); 10] = [
     ("terrain.vert", SHC_STAGE_VERTEX, 48, 9),     // etna 39, 9; before 56, 9
-    ("terrain.frag", SHC_STAGE_FRAGMENT, 127, 16), // etna 72, 11; before 148, 19
+    ("terrain.frag", SHC_STAGE_FRAGMENT, 81, 12),  // etna 72, 11; before 127, 16 (sr patch), 148, 19
     ("tilt_h.frag", SHC_STAGE_FRAGMENT, 62, 12),   // etna 46, 5; before 66, 12
     ("tilt_v.frag", SHC_STAGE_FRAGMENT, 71, 12),   // etna 46, 5; before 75, 12
     ("bloom_h.frag", SHC_STAGE_FRAGMENT, 38, 8),   // etna 24, 5; before 42, 8
@@ -86,8 +87,9 @@ const GLMARK2: [(&str, u32, u32, u32); 10] = [
     ("quad.vert", SHC_STAGE_VERTEX, 7, 3),         // etna 4, 2; before 7, 3
     ("luminance.frag", SHC_STAGE_FRAGMENT, 7, 4),  // etna 3, 3; before 7, 4
 ];
-/// The ten's instructions: etna_shc 279; before the patch 475.
-const GLMARK2_TOTAL: u32 = 428;
+/// The ten's instructions: etna_shc 279; 428 before the unroll, 475 before
+/// the patch.
+const GLMARK2_TOTAL: u32 = 382;
 
 /// The ten texts from a glmark2 checkout, in [`GLMARK2`]'s order.
 fn glmark2_texts(root: &Path) -> Vec<String> {
@@ -120,12 +122,13 @@ fn micro() -> Vec<(&'static str, u32, String, u32)> {
     let fs = |decl: &str, body: &str| format!("{HEAD}{decl}void main() {{ {body} }}\n");
     vec![
         // t1, rank 1: a one-iteration loop over a uniform array; etnaviv unrolls it
-        // and reads the constant file; before the patch 23
+        // and reads the constant file, as select.rs `unrolled` now does; 19
+        // before the unroll, 23 before the patch
         (
             "t1",
             SHC_STAGE_FRAGMENT,
             fs("uniform vec4 P[1];\n", "vec4 c = a; for (int i = 0; i < 1; i++) { c += P[i]; } gl_FragColor = c;"),
-            19,
+            1,
         ),
         // t3, rank 3: one blur tap's `* Kernel +` (texld, mul, add); etnaviv texld, mad; before the patch 3
         ("t3", SHC_STAGE_FRAGMENT, fs("", "gl_FragColor = texture2D(T, a.xy) * 0.25 + b;"), 3),

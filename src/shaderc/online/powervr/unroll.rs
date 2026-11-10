@@ -125,6 +125,7 @@ struct Frame {
 struct Unroll<'a> {
     m: &'a ir::Module<'a>,
     a: &'a Arena<'a>,
+    rules: Rules,
     instrs: AVec<'a, Op>,
     comps: AVec<'a, u8>,
     nodes: AVec<'a, Node>,
@@ -213,15 +214,42 @@ pub struct Unrolled<'a> {
     pub trips: &'a [Trip],
 }
 
+/// Which loops the pass expands, and what it makes of the others.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Rules {
+    /// The PowerVR's and the V3D's ([`unroll`]): every loop is expanded or
+    /// kept as one loop with its exits as flags and its count in a [`Trip`].
+    Shared,
+    /// The GC7000's (select.rs `unrolled`): only a constant `for` loop of 1
+    /// to `max` passes (its count from `loop_count::constant_loop_entries`)
+    /// that leaves by its head test alone is expanded. Every other loop is
+    /// copied as it is -- its `break`s and `continue`s nodes, no flag, no
+    /// [`Trip`] -- for select.rs `loop_convert`. A uniform array read at an
+    /// index the pass knows becomes the read of that element (clamped to
+    /// the array, as the run-time read clamps), so it is a constant-file
+    /// register instead of a `load`.
+    Counted { max: u32 },
+}
+
 /// Expand every loop in `m`. `None` when it has none, so the caller keeps
 /// the module it has.
 pub fn unroll<'a>(m: &'a ir::Module<'a>, a: &'a Arena<'a>) -> Result<Option<Unrolled<'a>>, UnrollError> {
+    unroll_with(m, a, Rules::Shared)
+}
+
+/// [`unroll`] under `rules`.
+pub fn unroll_with<'a>(
+    m: &'a ir::Module<'a>,
+    a: &'a Arena<'a>,
+    rules: Rules,
+) -> Result<Option<Unrolled<'a>>, UnrollError> {
     if !m.nodes.iter().any(|n| matches!(n, Node::Loop { .. })) {
         return Ok(None);
     }
     let mut u = Unroll {
         m,
         a,
+        rules,
         instrs: AVec::new(),
         comps: AVec::new(),
         nodes: AVec::new(),
@@ -381,6 +409,7 @@ impl<'a> Unroll<'a> {
                  * are kept or dropped; it stores no output and ends at the
                  * cap). One that leaves on data under a constant count is
                  * kept only outside the arms, as it always was. */
+                Node::Loop { body } if matches!(self.rules, Rules::Counted { .. }) => self.counted(body, out)?,
                 Node::Loop { body }
                     if (self.arms == 0 && self.rolls(body))
                         || self.counted_at_run_time(body)
@@ -388,55 +417,7 @@ impl<'a> Unroll<'a> {
                 {
                     self.roll(body, out)?
                 }
-                Node::Loop { body } => {
-                    self.depth += 1;
-                    let frame = Frame { brk: None, cnt: None, on_data: 0, guarded_from: self.guarded.len() };
-                    self.frames.push(self.a, frame)?;
-                    /* Where the loop's flags are cleared, once it is known
-                     * which it made (see the `Break | Continue` arm). */
-                    let entry = out.len();
-                    let mut n = 0u32;
-                    loop {
-                        n += 1;
-                        if n > MAX_ITERATIONS {
-                            return Err(UnrollError::TooLong);
-                        }
-                        /* A `continue` on data skips the rest of one
-                         * iteration only. */
-                        if let Some(f) = self.frame().and_then(|f| f.cnt) {
-                            self.set(f, false, out)?;
-                        }
-                        match self.into(body, out)? {
-                            Flow::Break => break,
-                            Flow::Return => return Err(UnrollError::ReturnInLoop),
-                            Flow::Normal | Flow::Continue | Flow::Flagged => {}
-                        }
-                    }
-                    /* What a guarded store wrote depends on data. */
-                    let from = self.frame().map_or(0, |f| f.guarded_from);
-                    for i in from..self.guarded.len() {
-                        let l = self.guarded.as_slice()[i];
-                        if let Some(e) = self.env.as_mut_slice().get_mut(l.0 as usize) {
-                            *e = [None; 4];
-                        }
-                    }
-                    while self.guarded.len() > from {
-                        self.guarded.pop();
-                    }
-                    /* The flags the iterations made, cleared before the
-                     * first one: this point is on every path to every read
-                     * of them. */
-                    if let Some(f) = self.frame() {
-                        for flag in [f.brk, f.cnt].into_iter().flatten() {
-                            let at = out.len();
-                            self.set(flag, false, out)?;
-                            let n = out.len() - at;
-                            out.as_mut_slice()[entry..].rotate_right(n);
-                        }
-                    }
-                    self.frames.pop();
-                    self.depth -= 1;
-                }
+                Node::Loop { body } => self.expand(body, out)?,
                 Node::Break | Node::Continue => {
                     let brk = matches!(n, Node::Break);
                     let Some(f) = self.frame() else { return Err(UnrollError::DataDependentExit) };
@@ -480,6 +461,131 @@ impl<'a> Unroll<'a> {
             }
         }
         Ok(Flow::Normal)
+    }
+
+    /// Expand a loop into its iterations, onto the end of `out`.
+    fn expand(&mut self, body: ir::Range, out: &mut AVec<'a, Node>) -> Result<(), UnrollError> {
+        self.depth += 1;
+        let frame = Frame { brk: None, cnt: None, on_data: 0, guarded_from: self.guarded.len() };
+        self.frames.push(self.a, frame)?;
+        /* Where the loop's flags are cleared, once it is known
+         * which it made (see the `Break | Continue` arm). */
+        let entry = out.len();
+        let mut n = 0u32;
+        loop {
+            n += 1;
+            if n > MAX_ITERATIONS {
+                return Err(UnrollError::TooLong);
+            }
+            /* A `continue` on data skips the rest of one
+             * iteration only. */
+            if let Some(f) = self.frame().and_then(|f| f.cnt) {
+                self.set(f, false, out)?;
+            }
+            match self.into(body, out)? {
+                Flow::Break => break,
+                Flow::Return => return Err(UnrollError::ReturnInLoop),
+                Flow::Normal | Flow::Continue | Flow::Flagged => {}
+            }
+        }
+        /* What a guarded store wrote depends on data. */
+        let from = self.frame().map_or(0, |f| f.guarded_from);
+        for i in from..self.guarded.len() {
+            let l = self.guarded.as_slice()[i];
+            if let Some(e) = self.env.as_mut_slice().get_mut(l.0 as usize) {
+                *e = [None; 4];
+            }
+        }
+        while self.guarded.len() > from {
+            self.guarded.pop();
+        }
+        /* The flags the iterations made, cleared before the
+         * first one: this point is on every path to every read
+         * of them. */
+        if let Some(f) = self.frame() {
+            for flag in [f.brk, f.cnt].into_iter().flatten() {
+                let at = out.len();
+                self.set(flag, false, out)?;
+                let n = out.len() - at;
+                out.as_mut_slice()[entry..].rotate_right(n);
+            }
+        }
+        self.frames.pop();
+        self.depth -= 1;
+        Ok(())
+    }
+
+    /// A loop under [`Rules::Counted`]: expanded when it is a constant `for`
+    /// loop of 1 to `max` passes whose one way out is its head test (no other
+    /// `break`, no `continue` or `return`), otherwise copied as it is.
+    ///
+    /// The count is `loop_count::constant_loop_entries`'s, with the index's
+    /// value on entry from what the walk knows, so it is the number select.rs
+    /// `loop_convert` would have given the guard. With one exit the walk
+    /// follows the head test pass by pass, as [`Unroll::expand`] does for
+    /// the PowerVR, and no flag is ever made.
+    fn counted(&mut self, body: ir::Range, out: &mut AVec<'a, Node>) -> Result<(), UnrollError> {
+        let Rules::Counted { max } = self.rules else { return Err(UnrollError::DataDependentExit) };
+        let known = |i: ir::LocalId, _float: bool| self.env.as_slice().get(i.0 as usize).and_then(|k| k[0]);
+        let passes = crate::shaderc::online::loop_count::constant_loop_entries(self.m, body, &known)
+            .map(|entries| entries.saturating_sub(1));
+        fn exits(m: &ir::Module<'_>, r: ir::Range) -> u32 {
+            m.nodes_of(r)
+                .iter()
+                .map(|n| match *n {
+                    Node::Break => 1,
+                    Node::Continue | Node::Return => 2,
+                    Node::If { then_, else_, .. } => exits(m, then_) + exits(m, else_),
+                    Node::Loop { .. } => 0,
+                    Node::Instr(_) => 0,
+                })
+                .sum()
+        }
+        if passes.is_some_and(|p| (1..=max).contains(&p)) && exits(self.m, body) == 1 && !self.has_return(body) {
+            return self.expand(body, out);
+        }
+        /* Kept: what the body stores is not known at its head (a later pass
+         * comes back with other values), nor after it. */
+        self.forget_stores(body);
+        let kept = self.verbatim(body)?;
+        self.forget_stores(body);
+        out.push(self.a, Node::Loop { body: kept })?;
+        Ok(())
+    }
+
+    /// Copy `r` as it is, every `if` with both arms and every `break`,
+    /// `continue` and `return` a node, into a block of its own (a loop kept
+    /// under [`Rules::Counted`]). A loop inside goes through
+    /// [`Unroll::counted`] again.
+    fn verbatim(&mut self, r: ir::Range) -> Result<ir::Range, UnrollError> {
+        let mut here: AVec<'a, Node> = AVec::new();
+        for n in self.m.nodes_of(r) {
+            match *n {
+                Node::Instr(id) => {
+                    let new = self.instr(id)?;
+                    here.push(self.a, Node::Instr(new))?;
+                }
+                Node::If { cond, then_, else_ } => {
+                    let c = self.src(cond);
+                    let before = self.env_copy()?;
+                    let t = self.verbatim(then_)?;
+                    let after_then = self.env_copy()?;
+                    self.restore(before.as_slice());
+                    let e = self.verbatim(else_)?;
+                    self.meet(after_then.as_slice());
+                    after_then.release(self.a);
+                    before.release(self.a);
+                    here.push(self.a, Node::If { cond: c, then_: t, else_: e })?;
+                }
+                Node::Loop { body } => self.counted(body, &mut here)?,
+                Node::Break | Node::Continue | Node::Return => here.push(self.a, *n)?,
+            }
+        }
+        let first = self.nodes.len() as u32;
+        let len = here.len() as u32;
+        self.nodes.extend_from_slice(self.a, here.as_slice())?;
+        here.release(self.a);
+        Ok(ir::Range { first, len })
     }
 
     /// Back to `before` for the other arm. A flag the first arm made is
@@ -1023,7 +1129,21 @@ impl<'a> Unroll<'a> {
         let op = match op {
             Op::Alu(o, a) => Op::Alu(o, [s(self, a[0]), s(self, a[1]), s(self, a[2])]),
             Op::LoadUniformIdx { base_dw, stride_dw, len, index, comps } => {
-                Op::LoadUniformIdx { base_dw, stride_dw, len, index: s(self, index), comps }
+                let index = s(self, index);
+                /* Rules::Counted: an index the walk knows (a loop's, once the
+                 * loop is expanded) reads its element, clamped to the array
+                 * as the run-time read is. */
+                let element = match (self.rules, self.lane(index, 0)) {
+                    (Rules::Counted { .. }, Some(k)) if len > 0 => {
+                        let k = (k as i32).clamp(0, i32::from(len) - 1) as u32;
+                        u16::try_from(u32::from(base_dw) + k * u32::from(stride_dw)).ok()
+                    }
+                    _ => None,
+                };
+                match element {
+                    Some(dword_off) => Op::LoadUniform { dword_off, comps },
+                    None => Op::LoadUniformIdx { base_dw, stride_dw, len, index, comps },
+                }
             }
             Op::StoreOutput { slot, src } => Op::StoreOutput { slot, src: s(self, src) },
             Op::LoadLocal { local, index, comps } => Op::LoadLocal { local, index: index.map(|i| s(self, i)), comps },
