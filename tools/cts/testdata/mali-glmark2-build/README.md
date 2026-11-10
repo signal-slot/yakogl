@@ -11,14 +11,18 @@ toolchain is needed.
 | --- | --- |
 | `bin/readelf` | the fake readelf |
 | `tree/` | a built tree's layout: `bin/glmark2-es2-mali`, `lib/libGLESv2.so.2` (with the pair's contract-line text), `lib/libEGL.so.1`, `share/glmark2/{shaders,models,textures}`, `BUILD-INFO`. The files are text stand-ins; only their names, the contract text and `BUILD-INFO` are read |
+| `tree.links` | the links of a built tree, which git does not keep here: `lib/libEGL.so -> libEGL.so.1`, `lib/libGLESv2.so -> libGLESv2.so.2` (the names glmark2 dlopens first). The self-test makes them in each copy of `tree/` |
 | `readelf/good/*.txt` | `readelf -hldVW` of a real build (`--dev`, commit 78c917aa, Debian trixie g++ 14.2.0, the panthor-gles pair): the program, libGLESv2.so.2 and libEGL.so.1. The symbol-version table (one line per dynamic symbol) is left out; the version needs are kept. Maxima: GLIBC_2.38, GLIBCXX_3.4.32, CXXABI_1.3.9 |
 | `readelf/glibc-too-new/glmark2-es2-mali.txt` | the good program's, with its GLIBC_2.38 need made GLIBC_2.42 (one above the board's 2.41) |
 | `readelf/system-libegl/glmark2-es2-mali.txt` | the good program's, with a `NEEDED libEGL.so.1`: a program linked against the board's glvnd/Mesa EGL instead of dlopening the pair's |
 
 The other cases (GLIBCXX_3.4.34, a NEEDED libpng16.so.16, another RUNPATH,
 an x86-64 program, a libGLESv2.so.2 without the contract text, a stray
-libEGL.so.1, a libEGL.so.1 without RUNPATH `$ORIGIN`, a BUILD-INFO that does
-not match, no textures) are made by the self-test from these with `sed`.
+libEGL.so.1, a libEGL.so.1 without RUNPATH `$ORIGIN`, no `lib/libEGL.so` or
+`lib/libGLESv2.so`, a `lib/libGLESv2.so` copy, a link to the board's
+libEGL.so.1 or to the wrong file of the pair, a BUILD-INFO that does not
+match, no textures) are made by the self-test from these with `sed`, `rm`,
+`cp` and `ln`.
 
 Regenerate `readelf/good/` from a real build `<out>` with
 `<toolchain>/bin/aarch64-linux-gnu-readelf -hldVW <out>/<file>`, dropping the

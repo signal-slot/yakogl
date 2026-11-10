@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+#
+# The links of tree/ (git keeps none): <path in tree/> <relative target>.
+# tools/cts/mali-glmark2-build-selftest.sh makes them in its copy of tree/.
+lib/libEGL.so libEGL.so.1
+lib/libGLESv2.so libGLESv2.so.2

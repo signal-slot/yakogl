@@ -8,7 +8,9 @@
 # called (cargo, meson, ninja, curl, python3's fetch is never reached), and
 # --check on a fixture tree whose readelf is a fake printing the fixtures of
 # tools/cts/testdata/mali-glmark2-build/ (README.md there): a good tree, a
-# too-new GLIBC need, a system libEGL NEEDED, and mutations of the good one.
+# too-new GLIBC need, a system libEGL NEEDED, and mutations of the good one
+# (among them lib/libEGL.so and lib/libGLESv2.so missing, copied or linked
+# elsewhere: tree.links makes them in the copy of the good tree).
 #
 #   tools/cts/mali-glmark2-build-selftest.sh   prints "mali-glmark2-build-selftest: N checks passed"
 #
@@ -17,7 +19,7 @@ set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 FIX=$HERE/testdata/mali-glmark2-build
 BUILD_SH=$HERE/mali-glmark2-build.sh
-EXPECT=36
+EXPECT=41
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/mali-glmark2-build-selftest-XXXXXX")
 cleanup() {
   if [ "${MALI_GLMARK2_SELFTEST_KEEP-}" = 1 ]; then echo "mali-glmark2-build-selftest: kept $tmp"; else rm -rf "$tmp"; fi
@@ -101,9 +103,11 @@ check "a missing GLMARK2_SRC is said in a dry run, with how to make it" \
 check "meson builds only the pbuffer-glesv2 flavour, static, from the cross file" \
   bash -c "grep -q '^+ meson setup .*--cross-file $tmp/none/build/cross-trixie-aarch64.ini --buildtype=release -Dprefer_static=true -Dflavors=pbuffer-glesv2\$' '$tmp/main.txt' &&
     grep -q '^+ ninja -C $tmp/none/build/meson -j[0-9]* src/glmark2-es2-pbuffer\$' '$tmp/main.txt'"
-check "the layout: bin/glmark2-es2-mali, lib/ the pair, share/glmark2 the data, BUILD-INFO" \
+check "the layout: bin/glmark2-es2-mali, lib/ the pair and its unversioned links, share/glmark2 the data, BUILD-INFO" \
   bash -c "grep -q '^+ cp .*/meson/src/glmark2-es2-pbuffer $tmp/out.part/bin/glmark2-es2-mali\$' '$tmp/main.txt' &&
     grep -q '^+ cp $tmp/none/build/gles/libGLESv2.so.2 $tmp/none/build/gles/libEGL.so.1 $tmp/out.part/lib/\$' '$tmp/main.txt' &&
+    grep -q '^+ ln -s libGLESv2.so.2 $tmp/out.part/lib/libGLESv2.so\$' '$tmp/main.txt' &&
+    grep -q '^+ ln -s libEGL.so.1 $tmp/out.part/lib/libEGL.so\$' '$tmp/main.txt' &&
     grep -q '^+ cp -r .*/data/shaders .*/data/models .*/data/textures $tmp/out.part/share/glmark2/\$' '$tmp/main.txt' &&
     grep -q '^+ write $tmp/out.part/BUILD-INFO (commit=$c1 dev=no glmark2=22c527cb0556f3a1ac4445aaa52cc532760928d5 flavour=pbuffer glibc_max= glibcxx_max= cxxabi_max=)' '$tmp/main.txt' &&
     grep -q '^+ mv $tmp/out.part $tmp/out\$' '$tmp/main.txt'"
@@ -157,14 +161,19 @@ check "no refusal wrote anything or called a build tool" \
   bash -c "[ ! -e '$tmp/none' ] && [ ! -e '$tmp/out' ] && [ ! -e '$tmp/called.log' ]"
 
 # --check: the fixture tree, with the fake readelf reading $tmp/re/<case>/.
-# tree <case> <readelf fixture dir...>: a copy of the fixture tree and a
-# readelf directory of the good fixtures overlaid with the given ones.
+# tree <case> <readelf fixture dir...>: a copy of the fixture tree with the
+# links of tree.links, and a readelf directory of the good fixtures overlaid
+# with the given ones.
 tree() {
-  local c=$1 d
+  local c=$1 d l to
   shift
   rm -rf "$tmp/t/$c" "$tmp/re/$c"
   mkdir -p "$tmp/t" "$tmp/re/$c"
   cp -r "$FIX/tree" "$tmp/t/$c"
+  while read -r l to; do
+    case $l in '' | '#'*) continue ;; esac
+    ln -s "$to" "$tmp/t/$c/$l"
+  done < "$FIX/tree.links"
   cp "$FIX/readelf/good"/*.txt "$tmp/re/$c/"
   for d in "$@"; do cp "$FIX/readelf/$d"/*.txt "$tmp/re/$c/"; done
 }
@@ -216,6 +225,33 @@ tree stray
 cp "$tmp/t/stray/lib/libEGL.so.1" "$tmp/t/stray/bin/libEGL.so.1"
 chk stray
 check "another libEGL.so.1 in the tree: exit 1" check_fails stray "bin/libEGL.so.1: a libEGL/libGLESv2 other than the pair's"
+tree nolinks
+rm "$tmp/t/nolinks/lib/libEGL.so" "$tmp/t/nolinks/lib/libGLESv2.so"
+chk nolinks
+check "no lib/libEGL.so and lib/libGLESv2.so (glmark2 dlopens them first): exit 1, both named" \
+  bash -c "grep -qF 'no lib/libEGL.so (glmark2 dlopens it before libEGL.so.1' '$tmp/chk-nolinks.txt' &&
+    grep -qF 'no lib/libGLESv2.so (glmark2 dlopens it before libGLESv2.so.2' '$tmp/chk-nolinks.txt' &&
+    [ \"\$(cat '$tmp/chk-nolinks.rc')\" = 1 ]"
+tree nogles
+rm "$tmp/t/nogles/lib/libGLESv2.so"
+chk nogles
+check "lib/libEGL.so alone, no lib/libGLESv2.so: exit 1" check_fails nogles "no lib/libGLESv2.so (glmark2 dlopens it"
+tree copy
+rm "$tmp/t/copy/lib/libGLESv2.so"
+cp "$tmp/t/copy/lib/libGLESv2.so.2" "$tmp/t/copy/lib/libGLESv2.so"
+chk copy
+check "a lib/libGLESv2.so that is a copy, not a link: exit 1" \
+  check_fails copy "lib/libGLESv2.so is not a link to libGLESv2.so.2 (a copy loads as a second library)"
+tree elsewhere
+ln -sfn /usr/lib/aarch64-linux-gnu/libEGL.so.1 "$tmp/t/elsewhere/lib/libEGL.so"
+chk elsewhere
+check "a lib/libEGL.so linking to the board's libEGL.so.1: exit 1" \
+  check_fails elsewhere "lib/libEGL.so links to '/usr/lib/aarch64-linux-gnu/libEGL.so.1', not libEGL.so.1"
+tree crossed
+ln -sfn libEGL.so.1 "$tmp/t/crossed/lib/libGLESv2.so"
+chk crossed
+check "a lib/libGLESv2.so linking to libEGL.so.1: exit 1" \
+  check_fails crossed "lib/libGLESv2.so links to 'libEGL.so.1', not libGLESv2.so.2"
 tree fwd
 edit fwd '/Library runpath/d' libEGL.so.1
 chk fwd
