@@ -1458,6 +1458,12 @@ pub(crate) mod tests {
     /// file's) and the given frame, the microseconds slept, and Z3's pool
     /// afterwards.
     pub(crate) fn run_frame(z: &Z4, blob: &[u8], f: &Frame) -> (SubmitUp, u64, Vec<Table>) {
+        let (o, slept, pool, _) = run_frame_vm(z, blob, f);
+        (o, slept, pool)
+    }
+
+    /// [`run_frame`], and the group VM's table pool afterwards.
+    fn run_frame_vm(z: &Z4, blob: &[u8], f: &Frame) -> (SubmitUp, u64, Vec<Table>, Vec<Table>) {
         let mut pool = vec![[0u64; ENTRIES]; 16];
         let mut vm_pool = vec![[0u64; ENTRIES]; 16];
         let vm = z.backings();
@@ -1477,7 +1483,7 @@ pub(crate) mod tests {
             &mut |us| slept += u64::from(us),
             &mut |_| {},
         );
-        (o, slept, pool)
+        (o, slept, pool, vm_pool)
     }
 
     fn run(z: &Z4) -> SubmitUp {
@@ -1571,31 +1577,81 @@ pub(crate) mod tests {
         let blob = synth::small();
         let z = Z4::generated(blob.clone());
         let (o, _, _) = run_frame(&z, &blob, &GENERATED);
-        assert_eq!((o.step, o.refusal, o.detail), (STEP_NONE, 0, 0));
-        assert_eq!(o.fw.step, nanopc_t6_fw::STEP_NONE);
-        assert_eq!((o.as_present, o.l2_features), (0xff, 0x0712_0306));
-        // AS0: Z3's 7 tables and one more L3 for the queue's pages. The
-        // group VM: L0; the 4 GiB block of 0x1_0000_0000: L1, L2, one L3
-        // each for the queue (0x1_0080_0000), the arenas with the geometry
-        // buffer (0x1_0200_0000) and the target (0x1_0300_0000); the
-        // kernel range 0x8000_0000_0000: L1, L2, one L3 each for the pool
-        // and the chunk.
-        assert_eq!((o.as0_tables_used, o.vm_tables_used), (8, 10));
-        assert_eq!((o.suspend_size, o.protm_suspend_size), (0, 0));
-        // the heap: the trace's context, the file's chunk, 2 MiB, a 64-byte slot
-        assert_eq!(
-            (o.heap_ctx, o.heap_chunk, o.heap_chunk_size, o.heap_stride),
-            (0x8000_0001_5000, 0x8000_00a0_0000, 0x20_0000, 64)
+        // Z3's record whole: what Z3 alone gives over the same model and
+        // file (model-only: the synthetic firmware's, not the board's)
+        let t6 = T6::handed_over(blob.clone());
+        let mut z3_pool = vec![[0u64; ENTRIES]; 16];
+        let z3 = nanopc_t6_fw::fw_up(
+            &t6,
+            B,
+            &blob,
+            &backings(&blob),
+            &mut z3_pool,
+            TABLES_PA,
+            RK3588_TIMER_HZ,
+            &|a, n| t6.clean(a, n),
+            &mut |_| {},
+            &mut |_| {},
         );
-        assert_eq!((o.csg_req, o.csg_ack, o.cs_req, o.cs_ack), (0x11, 0x11, 0x0511, 0x0511));
-        assert_eq!((o.csg_ack_us, o.cs_ack_us), (1, 0));
-        assert_eq!((o.insert, o.extract, o.seqno, o.sync_status), (128, 128, 1, 0));
-        assert_eq!((o.latest_flush, o.sync_updates, o.wait_us), (0, 1, 20));
-        assert_eq!((o.status_cmd_ptr, o.info), (0, 0));
-        assert_eq!((o.stop_us, o.stop_refusal, o.terminate_us, o.terminate_refusal), (3, 0, 1, 0));
-        assert_eq!(o.cleared, [0, 0, 0]);
-        assert_eq!((o.red, o.blue, o.fill, o.other, o.pixels), (2048, 2048, 0, 0, 4096));
-        assert_eq!(o.digest, DIGEST);
+        assert_eq!((z3.step, z3.tables_used, z3.ping_acked), (nanopc_t6_fw::STEP_NONE, 7, 1));
+        let predicted = SubmitUp {
+            step: STEP_NONE,
+            refusal: 0,
+            detail: 0,
+            fw: z3,
+            // the model's identity registers, the board's values
+            as_present: 0xff,
+            l2_features: 0x0712_0306,
+            // AS0: Z3's tables and one more L3 for the queue's pages (model:
+            // 7 + 1; the board's file: 9 + 1). The group VM: L0; the 4 GiB
+            // block of 0x1_0000_0000: L1, L2, one L3 each for the queue
+            // (0x1_0080_0000), the arenas with the geometry buffer
+            // (0x1_0200_0000) and the target (0x1_0300_0000); the kernel
+            // range 0x8000_0000_0000: L1, L2, one L3 each for the pool and
+            // the chunk.
+            as0_tables_used: 8,
+            vm_tables_used: 10,
+            // model-only: the board's firmware reports CSG 0's sizes
+            suspend_size: 0,
+            protm_suspend_size: 0,
+            // the heap: the trace's context, the file's chunk, 2 MiB, a 64-byte slot
+            heap_ctx: 0x8000_0001_5000,
+            heap_chunk: 0x8000_00a0_0000,
+            heap_chunk_size: 0x20_0000,
+            heap_stride: 64,
+            csg_req: 0x11,
+            csg_ack: 0x11,
+            cs_req: 0x0511,
+            cs_ack: 0x0511,
+            // model-only: the model's acknowledge lag
+            csg_ack_us: 1,
+            cs_ack_us: 0,
+            // model-only: the GPU's flush id, 0 on the model
+            latest_flush: 0,
+            sync_updates: 1,
+            insert: 128,
+            extract: 128,
+            seqno: 1,
+            sync_status: 0,
+            // model-only: the model's job lag
+            wait_us: 20,
+            status_cmd_ptr: 0,
+            info: 0,
+            // model-only: the microseconds; the refusals are the board's
+            stop_us: 3,
+            stop_refusal: 0,
+            terminate_us: 1,
+            terminate_refusal: 0,
+            cleared: [0, 0, 0],
+            // the model paints the frame's halves; the board's GPU must too
+            red: 2048,
+            blue: 2048,
+            fill: 0,
+            other: 0,
+            pixels: 4096,
+            digest: 0xa4db_81a9_d39b_fdcc,
+        };
+        assert_eq!(o, predicted);
         // the digest as the doc and the probe carry it: the blocks and the
         // 53 words at CS_VA
         assert_eq!(DIGEST, 0xa4db_81a9_d39b_fdcc);
@@ -1620,6 +1676,43 @@ pub(crate) mod tests {
         assert_eq!(ram_u64(&z, QUEUE_VA + u64::from(RING_SIZE)), 1);
         // the chunk's header: no successor; the context zeroed
         assert_eq!((ram_u64(&z, gen::HEAP_FIRST_CHUNK_VA), ram_u64(&z, HEAP_CTX_VA)), (0, 0));
+    }
+
+    /// The queue-init words before the frame's first word, once (C1), and
+    /// the heap's pool and first chunk mapped in the group VM where
+    /// `HEAP_SET` and the frame name them (C2).
+    #[test]
+    fn the_stream_starts_with_the_queue_init_words_and_the_heap_is_mapped() {
+        // MOVE48 d72, #0x800000015000; HEAP_SET d72 (the trace's words)
+        assert_eq!(CS[0], 0x0148_8000_0001_5000);
+        assert_eq!(CS[1], 0x3000_4800_0000_0000);
+        assert_eq!(CS[2], gen::WORDS[0]);
+        assert_eq!((CS[0] >> 56, CS[0] >> 48 & 0xff, CS[0] & 0xffff_ffff_ffff), (1, HEAP_CTX_REG, HEAP_CTX_VA));
+        assert_eq!((CS[1] >> 56, CS[1] >> 40 & 0xff), (0x30, HEAP_CTX_REG));
+        // once per queue: the generated stream sets no heap itself
+        assert!(gen::WORDS.iter().all(|&w| w >> 56 != 0x30), "{:x?}", gen::WORDS);
+
+        let blob = synth::small();
+        let z = Z4::generated(blob.clone());
+        let (o, _, _, mut vm_pool) = run_frame_vm(&z, &blob, &GENERATED);
+        assert_eq!(o.step, STEP_NONE);
+        // the words as the GPU reads them at CS_VA, and HEAP_SET's operand
+        assert_eq!([ram_u64(&z, CS_VA), ram_u64(&z, CS_VA + 8)], QUEUE_INIT);
+        assert_eq!(z.heap_ctx.get(), Some(0x8000_0001_5000));
+        // the group VM maps the pool and the chunk on their regions' backings
+        let vm = z.backings();
+        let t = Tables { pages: &mut vm_pool, pa: VM_TABLES_PA, used: o.vm_tables_used as usize };
+        for (va, region) in [
+            (0x8000_0001_5000, REGION_HEAP_POOL),
+            (0x8000_0001_6ff8, REGION_HEAP_POOL),
+            (0x8000_00a0_0000, REGION_HEAP_CHUNK),
+            (0x8000_00bf_fff8, REGION_HEAP_CHUNK),
+        ] {
+            assert_eq!(t.walk(va).pa, Some(vm[region].pa + (va - REGIONS[region].va)), "{va:#x}");
+        }
+        // nothing past them
+        assert_eq!(t.walk(0x8000_0001_7000).pa, None);
+        assert_eq!(t.walk(0x8000_00c0_0000).pa, None);
     }
 
     /// The generated frame's layout: the regions as the C header lists
