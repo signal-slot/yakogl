@@ -22,13 +22,10 @@
 //!   pixels outside the box are the ones from before. The quad's own
 //!   fragments are not run here, so "inside the box" is the recorded
 //!   scissor box, not a pixel;
-//! - a refused clear is a GL error (the back end's refusal reaches the
-//!   application as GL_OUT_OF_MEMORY today, docs/es3-cts-failures.md) and
-//!   a refusal line in the platform log; the refusal's name is asserted.
-//!
-//! Refused today, pinned by a test that is not ignored, with the expected
-//! result in an `#[ignore = "<refusal name>"]` test beside it:
-//! `a scissored or masked colour clear of several colour attachments`.
+//! - a scissored or masked clear of several colour attachments is one clear
+//!   quad as well, whose program writes every attachment in its own class
+//!   (`src/v3d/clear_mrt.rs`; v3d-mrt-clear, which removed the refusal
+//!   `a scissored or masked colour clear of several colour attachments`).
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table --test es3_fragops_scissor_v3d
@@ -656,17 +653,6 @@ impl Effect {
         assert_eq!(self.error, GL_NO_ERROR, "{:?}", self.refusals);
         assert_eq!(self.refused, 0, "{:?}", self.refusals);
     }
-
-    /// The clear was refused as a draw of several attachments is today: one
-    /// refused draw, GL_OUT_OF_MEMORY, nothing recorded, and the refusal's
-    /// name in the platform log (written once per process, so any line since
-    /// start-up).
-    fn assert_refused_several_rt(&self, what: &str) {
-        assert_eq!(self.error, GL_OUT_OF_MEMORY, "{what}: {:?}", self.refusals);
-        assert_eq!(self.refused, 1, "{what}");
-        assert!(self.jobs.is_empty(), "{what}: nothing is recorded");
-        assert!(logs().iter().any(|l| l.contains(SEVERAL_RT)), "{what}: {:?}", logs());
-    }
 }
 
 /// glReadPixels of the whole target in the given format and type, `bpp` bytes
@@ -1107,13 +1093,12 @@ fn two_attachment_clears() -> [(&'static str, fn()); 4] {
     ]
 }
 
-const SEVERAL_RT: &str = "a scissored or masked colour clear of several colour attachments";
-
-/// Pinned as it is today: the back end refuses the clear by name, nothing is
-/// recorded, the GL core reports GL_OUT_OF_MEMORY (docs/es3-cts-failures.md),
-/// and the context is usable afterwards (the next unscissored clear works).
+/// The several-attachment clear: no error, one job that loads the
+/// attachments, and one clear quad scissored to the box clamped to the
+/// target, with the mask as written; the next unscissored clear is the
+/// TLB's again.
 #[test]
-fn a_scissored_or_masked_clear_of_two_attachments_is_refused_today() {
+fn a_scissored_or_masked_clear_of_two_attachments_is_a_quad() {
     let _g = rig();
     let _fb = Fb::new(&[GL_RGBA8, GL_RGBA32I], false);
     for (what, run) in two_attachment_clears() {
@@ -1121,20 +1106,25 @@ fn a_scissored_or_masked_clear_of_two_attachments_is_refused_today() {
         // SAFETY: a plain GL call.
         unsafe { glColorMask(1, 1, 1, 1) };
         no_scissor();
-        e.assert_refused_several_rt(what);
+        e.assert_no_error();
+        assert_eq!(e.jobs.len(), 1, "{what}");
+        let c = e.jobs[0].clear.unwrap();
+        assert!(c.load_rt0 && c.load_rt[0], "{what}: both attachments are loaded");
+        assert_eq!(e.draws().len(), 1, "{what}");
         let after = observe(|| {
             // SAFETY: a plain GL call.
             unsafe { glClear(GL_COLOR_BUFFER_BIT) }
         });
         after.assert_no_error();
         assert_eq!(after.jobs.len(), 1, "{what}: the next clear works");
+        assert!(after.draws().is_empty(), "{what}: the whole clear is the TLB's");
     }
 }
 
 /// The same with two integer attachments and with a float beside an integer
-/// one: any second attachment brings the refusal.
+/// one: the quad does not depend on the attachments' classes.
 #[test]
-fn the_refusal_does_not_depend_on_the_attachments_classes() {
+fn the_quad_does_not_depend_on_the_attachments_classes() {
     let _g = rig();
     for pair in [[GL_RGBA8, GL_RGBA16F], [GL_RGBA32I, GL_RGBA32UI], [GL_RGBA32UI, GL_RGBA8]] {
         let _fb = Fb::new(&pair, false);
@@ -1144,26 +1134,7 @@ fn the_refusal_does_not_depend_on_the_attachments_classes() {
             unsafe { glClear(GL_COLOR_BUFFER_BIT) }
         });
         no_scissor();
-        e.assert_refused_several_rt(&format!("{pair:x?}"));
-    }
-}
-
-/// What a back end that does the several-attachment clear must give: no
-/// error, one job that loads the attachments, and a clear quad scissored to
-/// the box clamped to the target, with the mask as written.
-#[test]
-#[ignore = "a scissored or masked colour clear of several colour attachments"]
-fn a_scissored_or_masked_clear_of_two_attachments_is_a_quad() {
-    let _g = rig();
-    let _fb = Fb::new(&[GL_RGBA8, GL_RGBA32I], false);
-    for (what, run) in two_attachment_clears() {
-        let e = observe(run);
-        // SAFETY: a plain GL call.
-        unsafe { glColorMask(1, 1, 1, 1) };
-        no_scissor();
-        assert_eq!(e.error, GL_NO_ERROR, "{what}: {:?}", e.refusals);
-        assert_eq!(e.jobs.len(), 1, "{what}");
-        assert!(e.jobs[0].clear.unwrap().load_rt0, "{what}");
-        assert_eq!(e.draws().len(), 1, "{what}");
+        e.assert_no_error();
+        assert_eq!((e.jobs.len(), e.draws().len()), (1, 1), "{pair:x?}");
     }
 }

@@ -819,11 +819,10 @@ fn a_clear_of_unequal_attachments_is_refused_by_name_today() {
     assert_refused("clear 64x64 + 32x32", &s);
 }
 
-/// The same clear under a scissor: `extra_targets` runs before the
-/// several-attachment clear-quad check of `draw_call`, so the size refusal
-/// is the one named today (after the size change it is the clear quad's,
-/// "a scissored or masked colour clear of several colour attachments", while
-/// v3d-mrt-clear is open; drawn after both, note (f) 5).
+/// The same clear under a scissor: `extra_targets` runs before the clear
+/// quad is drawn, so the size refusal is the one named today (after the
+/// size change the clear is the several-attachment quad of v3d-mrt-clear,
+/// `src/v3d/clear_mrt.rs`, over the intersection; note (f) 5).
 #[test]
 fn a_scissored_clear_of_unequal_attachments_is_refused_for_its_sizes_today() {
     let _g = rig();
