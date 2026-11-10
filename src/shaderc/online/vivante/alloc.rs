@@ -1902,10 +1902,15 @@ pub fn eliminate_dead(
         return Ok(0);
     }
     let mem = |_: ArenaError| AllocError::OutOfScratch;
+    /* Copies read through their readers' source fields first, so the copies
+     * nobody reads any more die below (peephole.rs). */
+    let dead = scratch.alloc_filled(n.div_ceil(64), 0u64).map_err(mem)?;
+    super::peephole::mark_targets(sel, dead);
+    super::peephole::fold_copies(sel, dead);
+    dead.fill(0);
     let values = vregs_needed(sel);
     let need = scratch.alloc_filled(values, 0u8).map_err(mem)?;
     lanes_needed(sel, need);
-    let dead = scratch.alloc_filled(n.div_ceil(64), 0u64).map_err(mem)?;
     /* The branch edges by target, counted then filled (a CSR). */
     let pred_at = scratch.alloc_filled(n + 1, 0u16).map_err(mem)?;
     for s in sel.iter() {
@@ -1974,9 +1979,31 @@ pub fn eliminate_dead(
         scratch.give_back(pred_from);
         scratch.give_back(pred_at);
     }
-    if removed == 0 {
-        return Ok(0);
+    if removed != 0 {
+        compact(sel, dead, back_edges);
     }
+    /* Then, over the survivors (each lane a scalar copy writes is one somebody
+     * needs), the per-lane copies of one scalar join (peephole.rs); the
+     * emptied ones go the same way. */
+    let left = n - removed;
+    super::peephole::mark_targets(&sel[..left], dead);
+    let merged = super::peephole::merge_scalar_lanes(&mut sel[..left], dead);
+    if merged != 0 {
+        dead.fill(0);
+        for (i, s) in sel[..left].iter().enumerate() {
+            if matches!(s.dst, Some(SelDst::Virtual { write_mask: 0, .. })) {
+                dead[i / 64] |= 1 << (i % 64);
+            }
+        }
+        compact(&mut sel[..left], dead, back_edges);
+    }
+    Ok(removed + merged)
+}
+
+/// Delete the instructions `dead` marks, compacting `sel` in place, and remap
+/// the branch targets and `back_edges` through the survivors.
+fn compact(sel: &mut [SelInstr], dead: &[u64], back_edges: &mut [usize]) {
+    let n = sel.len();
     let is_dead = |i: usize| dead[i / 64] >> (i % 64) & 1 != 0;
     /* Survivors before old index i: the new index of i, or of the next
      * survivor when i itself goes. */
@@ -1996,7 +2023,6 @@ pub fn eliminate_dead(
     for b in back_edges.iter_mut() {
         *b = new_index(*b);
     }
-    Ok(removed)
 }
 
 /// [`dead_after_liveness`]'s working tables, lent once for every round.
@@ -2201,7 +2227,7 @@ fn consumed_lanes_live(s: &SelInstr, swizzle: [u8; 4], eff: u8) -> u8 {
 /// `swizzle[c]` and nothing else; every other operation (a dot product, a
 /// texture fetch, a branch, anything not yet looked at) is taken to read all
 /// four swizzle lanes, which over-reserves and cannot clobber.
-fn consumed_lanes(s: &SelInstr, swizzle: [u8; 4], eff: u8) -> u8 {
+pub(super) fn consumed_lanes(s: &SelInstr, swizzle: [u8; 4], eff: u8) -> u8 {
     /* A result nobody needs consumes nothing, whatever the operation: a dead
      * dot product kept its sources alive until this line existed. */
     if eff == 0 && matches!(s.dst, Some(SelDst::Virtual { .. })) {
@@ -4824,7 +4850,8 @@ mod loop_and_io_tests {
             SelInstr::new(mov, OpType::F32).dst(SelDst::Fixed { reg: 1, write_mask: 0x3 }).src(2, vr(2, XYZW)),
         ];
         let removed = eliminate_dead(&Arena::new(&mut vec![0u8; 1 << 20]), &mut sel, &mut []).unwrap();
-        assert_eq!(removed, 1, "the seed at 0 is dead: z, w never needed, x, y replaced at 1");
+        /* The copy at 2 is read through by 3 (peephole::fold_copies) and dies with the seed. */
+        assert_eq!(removed, 2, "the seed at 0 is dead: z, w never needed, x, y replaced at 1");
         assert!(matches!(sel[0].dst, Some(SelDst::Virtual { v: VReg(1), write_mask: 0x3 })), "the partial write stays");
     }
 
