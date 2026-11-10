@@ -758,7 +758,12 @@ def self_test():
         # The tree's allow file on look-alikes of its own rules: every hit
         # in DROP is dropped, none in KEEP is.
         tool = j(["tool", "x"])
-        rxs = {c[0]: c[3] for c in build_classes({"lab-host": [tool]})}
+        # The lab names of the rules below, and a near miss of each (the same
+        # word with one more letter), as private values; and a login `user`.
+        lab = [tool, "armadillo.local", "armadillo.localx", "yakogl-gate",
+               "yakogl-gate2", "ccfarm", "ccfarm2"]
+        rxs = {c[0]: c[3] for c in build_classes({"lab-host": lab,
+                                                  "login": ["user"]})}
 
         def outcome(key, path, line):
             """[True for a dropped hit, False for a kept one] of LINE."""
@@ -836,6 +841,79 @@ def self_test():
                   kept(key, other, line))
             check("allow: another %s in %s stays a finding" % (key, path),
                   kept(key, path, "fixture %s end" % j(near)))
+        # The tree's other rules, each with a fixture it drops (or lists, for
+        # `info`) and a near miss at the same path that stays a finding.  A
+        # rule with a path glob also keeps the fixture elsewhere.  The
+        # etnaviv header rule matches any address in its path: its near
+        # miss is the same address in a file that is no `.xml.h`.
+        def actions(key, path, line):
+            return [(allow_rule(repo_rules, key, path, line, *m.span())
+                     or ("none",))[0] for m in rxs[key].finditer(line)]
+
+        def acted(key, path, line, action):
+            got = actions(key, path, line)
+            return bool(got) and all(a == action for a in got)
+
+        def left(key, path, line):
+            return "none" in actions(key, path, line)
+
+        pst = "tools/cts/pr-session-selftest.sh"
+        pre = "tools/cts/imx8mp-gles3-preflight-selftest.sh"
+        lock = "tools/mali/panthor/tests/board_lock.rs"
+        scanner = "tools/release/redaction-scan.py"
+        xml_h = "driver/src/vivante/hw/state.xml.h"
+        pad = "tools/y.sh"
+        rules = [
+            ("home-path", pad, "drop", ["/ho", "me/..."], ["/ho", "me/.cache"]),
+            ("login-at-host", pad, "drop", ["root", "@BOARD"], ["root", "@BOARD2"]),
+            ("login-at-host", pad, "drop", ["root", "@localhost"],
+             ["root", "@localhost2"]),
+            ("login-at-host", lock, "drop", ["root", "@board-lock-test"],
+             ["root", "@board-lock-other"]),
+            ("login-at-host", pad, "drop", ["<user", "@host>"], ["<user", "@hostx>"]),
+            ("private-ipv4", pst, "drop", ["secret-user", "@10.9", ".8.7"],
+             ["secret-user", "@10.9", ".8.70"]),
+            ("password", pre, "drop", ["SEC", "RET=ttyUSB9"], ["SEC", "RET=ttyACM0"]),
+            ("som-serial", pad, "drop", ["verdin-am62p-", "00000000"],
+             ["verdin-am62p-", "0000000a"]),
+            ("password", pad, "drop", ["NOPASS", "WD: ALL"], ["PASS", "WD: ALL"]),
+            ("lab-host", pad, "drop", ["armadillo", ".local"],
+             ["armadillo", ".localx"]),
+            ("lab-host", pad, "drop", ["yakogl", "-gate"], ["yakogl", "-gate2"]),
+            ("lab-host", pad, "drop", ["cc", "farm"], ["cc", "farm2"]),
+            ("lab-layout", scanner, "drop", ["$HOME", "/com/github/org"],
+             ["~", "/com/github/org"]),
+            ("email", pad, "drop", ["someone", "@host.invalid"],
+             ["someone", "@host.invalidx"]),
+            ("email", pad, "drop", ["t", "@example.org"], ["t", "@example.net"]),
+            ("email", pad, "drop", ["git", "@github.com"], ["git", "@gitlab.com"]),
+            ("email", "tools/testdata/c.txt", "drop",
+             ["bootdev", "@fa10000.bootdev.part_0"],
+             ["bootdev", "@fa10001.bootdev.part_0"]),
+            ("email", "tools/testdata/c.txt", "drop", ["user", "@1000.service"],
+             ["user", "@1001.service"]),
+            ("email", "docs/notes/pre-study-iq9075.md", "drop",
+             ["<abc", "@oss.qualcomm.com>"], ["<abc", "@qti.qualcomm.com>"]),
+            ("email", pad, "info", ["info", "@slint.dev"], ["help", "@slint.dev"]),
+            ("email", pad, "info", ["dev", "@kdab.com"], ["dev", "@kdab.de"]),
+            ("email", xml_h, "info", ["dev", "@example.org"], None),
+            ("email", "driver/src/v3d/x.c", "info", ["robclark", "@freedesktop.org"],
+             ["other", "@freedesktop.org"]),
+            ("email", "tools/vivante/a.patch", "info", ["dev", "@gmail.com"],
+             ["dev", "@gmail.net"]),
+        ]
+        for key, path, action, val, near in rules:
+            line = "fixture %s end" % j(val)
+            check("allow: %s %s in %s is %s" % (key, action, path, action),
+                  acted(key, path, line, action))
+            if near:
+                check("allow: another %s in %s stays a finding" % (key, path),
+                      left(key, path, "fixture %s end" % j(near)))
+            if path != pad and path != scanner:
+                check("allow: %s %s elsewhere stays a finding" % (key, path),
+                      left(key, pad, line))
+        check("allow: the etnaviv header rule is limited to .xml.h files",
+              left("email", "driver/src/vivante/hw/state.h", "dev" + "@example.org"))
         check("a comparison (`==`) is no password value",
               not rxs["password"].search("CHECK(bad_" + j(["pass", "word == 0"])
                                           + " && PM_" + j(["PASS", "WORD == 0x5a"])
