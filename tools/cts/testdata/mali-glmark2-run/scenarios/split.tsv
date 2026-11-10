@@ -1,0 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Scene 1: the result line split from its header by the back end's stdout log
+# (what the Mali's arena high-water lines do on the NanoPC-T6); scene 2 is clean.
+build:use-vbo=false	split

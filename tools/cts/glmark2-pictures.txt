@@ -6,8 +6,9 @@
 #
 #   <column> | <scene info string> | <the text after "glmark2-picture: <scene>: ">
 #
-# The column is the board the run was made on (am62p, pi4, imx8mp), or host (the host
-# harness, tools/hostharness/glmark2). The value is a glmark2 image's picture line
+# The column is the board the run was made on (am62p, pi4, imx8mp; mali, the NanoPC-T6's
+# Mali-G610 under its Armbian), or host (the host harness, tools/hostharness/glmark2). The
+# value is a glmark2 image's picture line
 # (driver/docs/glmark2.md, "The picture value"); `common-tally.py --gm-picture-lines
 # <console> <column>` prints a console's lines in this form. A board's picture is judged
 # against the column of that board name: each probe and the mean must be within the
@@ -158,3 +159,5 @@ pi4 | [function] fragment-complexity=medium:fragment-steps=5 | 800x600; probes c
 pi4 | [loop] fragment-loop=false:fragment-steps=5:vertex-steps=5 | 800x600; probes c 000000ff, tl 000000ff, tr 2c2c2cff, bl 636363ff, br 868686ff; crc16 3437, crc16q 1685; mean 54 54 54; black no
 pi4 | [loop] fragment-steps=5:fragment-uniform=false:vertex-steps=5 | 800x600; probes c 000000ff, tl 000000ff, tr 2c2c2cff, bl 636363ff, br 868686ff; crc16 9fb8, crc16q 3982; mean 54 54 54; black no
 pi4 | [loop] fragment-steps=5:fragment-uniform=true:vertex-steps=5 | 800x600; probes c 000000ff, tl 000000ff, tr 2c2c2cff, bl 636363ff, br 868686ff; crc16 59b4, crc16q 0c47; mean 54 54 54; black no
+# mali: the NanoPC-T6 (RK3588, Mali-G610 over panthor, the board's own Armbian trixie, back end gpu-mali) run of main da65355e (2026-11-10, tools/cts/mali-glmark2-run.sh: one glmark2-es2 process a scene, 800x600 on an EGL pbuffer of the tools/mali/panthor-gles pair; RESULTS.md "Mali: NanoPC-T6 ... glmark2-es2"). One line: the one scene of 33 that ran clean (the other 32 are refused at compile, docs/notes/mali-glmark2-forecast.md). Looked at: the frame of a second process of the same build (GLMARK2_FB=1, decoded with tools/cts/glmark2-fb.py) is the desktop scene, four Tux windows with drop shadows over the Linaro background. Against the am62p column the probes c, tl, tr, br and the mean agree (mean 200 205 186 to 198 203 183); probe bl is a moving window's edge, sampled at the last frame (ff, fb and f3 in three processes of this build), as the animated scenes of the other columns. Probes are 8 bits a channel, alpha ff. The run's other four picture values (desktop blur drawn without its refused blur pass; the three buffer scenes all black with their refused program) are no reference and are not here.
+mali | [desktop] effect=shadow:windows=4 | 800x600; probes c ffffffff, tl 919191ff, tr c0c0c0ff, bl f3f3f3ff, br ffffffff; crc16 825a, crc16q 596a; mean 200 205 186; black no

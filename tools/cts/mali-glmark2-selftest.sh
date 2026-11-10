@@ -10,7 +10,8 @@
 # removed under the login's home, the 800x600 command), a GL error, out of GPU
 # memory, a refused draw, a GPU fault with its panthor lines, a job timeout, a
 # failed setup, a crash, a hang killed by the timeout, a result with only an
-# FPS, the board not coming back and a reboot (exit 5, no retry), a missing
+# FPS, a result line split from its header by the back end's stdout log (the
+# board's shape), the board not coming back and a reboot (exit 5, no retry), a missing
 # or foreign "yakogl-mali: loaded" line (refused, exit 3), a busy render
 # node (exit 4), a commit not on the main ref or a dev build (refused before
 # any ssh, run with --dev), --scenes from a file, and --dry-run touching
@@ -31,7 +32,7 @@ set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 FIX=$HERE/testdata/mali-glmark2-run
 RUN=$HERE/mali-glmark2-run.sh
-EXPECT=78
+EXPECT=80
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/mali-glmark2-selftest-XXXXXX")
 # MALI_GLMARK2_SELFTEST_KEEP=1 keeps the directory and says where it is.
 cleanup() {
@@ -160,6 +161,14 @@ check "pictures.txt leaves out the scenes without a picture line (setup, crash, 
 check "the summary line names each failure cause in run order" \
   bash -c "grep -qx 'mali-glmark2: 2/10 scenes ok, failed 8 (gl-error 1, out-of-gpu-memory 1, refused-draw 1, gpu-fault 1, job-timeout 1, failed-scene 1, crash 1, hang 1), commit ${c1:0:8}' '$tmp/mixed/out.txt'"
 check "the stage is removed and the run directory is clean" bash -c "[ ! -e '$tmp/mixed/board/home/yakogl-mali-glmark2' ] && ! grep -rqiE 'board\.invalid|198\.51\.100|02:00:5e' '$tmp/mixed/out'"
+
+echo "mali-glmark2-selftest: a result line split from its header by the back end's stdout log"
+run split split --scenes 1-2
+check "the split result is its header's scene: ok, FrameTime 0.959 ms, the picture kept" \
+  bash -c "[ \"\$(cat '$tmp/split/rc')\" = 0 ] && [ '$(col split 1 3) $(col split 1 4)' = 'ok 0.959' ] &&
+    [ '$(col split 2 3) $(col split 2 4)' = 'ok 0.800' ] && [ \$(grep -c '^mali | ' '$tmp/split/out/pictures.txt') = 2 ]"
+check "...and the glued header line is read as the header: 2/2 ok" \
+  bash -c "grep -qx 'mali-glmark2: 2/2 scenes ok, failed 0, commit ${c1:0:8}' '$tmp/split/out.txt'"
 
 echo "mali-glmark2-selftest: scenes 1-8, each with another memory failure (--timeout 2)"
 run oom oom --scenes 1-8 --timeout 2
