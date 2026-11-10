@@ -124,7 +124,8 @@ check "dmesg-denied: exit 1" rc_is dm 1
 check "dmesg-denied: dmesg FAIL" has dm "preflight: dmesg: FAIL"
 
 # --- a build: its floors against the board's
-mkdir -p "$tmp/build-ok" "$tmp/build-new"
+mkdir -p "$tmp/build-ok/lib" "$tmp/build-new/lib" "$tmp/build-nonames"
+for d in build-ok build-new; do : > "$tmp/$d/lib/libEGL.so"; : > "$tmp/$d/lib/libGLESv2.so"; done
 printf 'commit=x\nglibc_max=2.38\nglibcxx_max=3.4.30\ncxxabi_max=1.3.14\n' > "$tmp/build-ok/BUILD-INFO"
 printf 'commit=x\nglibc_max=2.41\nglibcxx_max=3.4.34\ncxxabi_max=none\n' > "$tmp/build-new/BUILD-INFO"
 run_case bok good --build "$tmp/build-ok"
@@ -135,6 +136,16 @@ check "build-new: exit 1" rc_is bnew 1
 check "build-new: GLIBCXX FAIL" has bnew "preflight: build-GLIBCXX: FAIL needs GLIBCXX_3.4.34, board has GLIBCXX_3.4.33"
 check "build-new: cxxabi none is ok" has bnew "preflight: build-CXXABI: ok needs no CXXABI version"
 check "build-new: reading commands only" reading_only "$tmp/bnew.log"
+
+# --- a build without the unversioned EGL/GLES names fails system-egl
+cp "$tmp/build-ok/BUILD-INFO" "$tmp/build-nonames/"
+run_case bnames system-libegl-present --build "$tmp/build-nonames"
+check "build-egl-names: exit 1" rc_is bnames 1
+check "build-egl-names: FAIL" has bnames "preflight: build-egl-names: FAIL lib/ lacks libEGL.so libGLESv2.so"
+check "build-egl-names: system-egl FAIL" has bnames "preflight: system-egl: FAIL present"
+run_case bnames2 system-libegl-present --build "$tmp/build-ok"
+check "build-egl-names: ok with the names" has bnames2 "preflight: build-egl-names: ok"
+check "build-egl-names: system-egl not FAIL" lacks bnames2 "preflight: system-egl: FAIL"
 
 # --- no host: usage error, no ssh
 : > "$tmp/nohost.log"

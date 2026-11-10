@@ -26,7 +26,7 @@
 # One line per check, "preflight: <check>: ok|FAIL|warn <detail>", then a
 # summary. Exit 0 when no hard check failed, 1 when one did, 2 on usage.
 # Hard: ssh, os/kernel, the three floors, build floors, render node, panthor,
-# stage space, dmesg readable, RUNPATH of --build. Warn: /boot space, a system
+# stage space, dmesg readable, RUNPATH and lib/libEGL.so + libGLESv2.so of --build. Warn: /boot space, a system
 # libEGL/libGLESv2 (the 'sonama trap': a wrong RUNPATH would load glvnd/Mesa
 # instead of the panthor-gles pair) when no --build proves the RUNPATH.
 set -uo pipefail
@@ -130,7 +130,7 @@ floor glibcxx GLIBCXX "$GLIBCXX_FLOOR" "$b_glibcxx"
 floor cxxabi CXXABI "$CXXABI_FLOOR" "$b_cxxabi"
 
 # --- the build's own needs and RUNPATH
-runpath_ok=0
+runpath_ok=0 names_ok=0
 if [ -n "$build" ]; then
   info=$build/BUILD-INFO
   bin=$build/bin/$PROGRAM
@@ -160,6 +160,12 @@ if [ -n "$build" ]; then
       fi
     done
   fi
+  # glmark2 dlopen()s the unversioned libEGL.so/libGLESv2.so first: RUNPATH
+  # protects only if the build's lib/ holds those names (links to the pair).
+  miss=
+  for l in libEGL.so libGLESv2.so; do [ -e "$build/lib/$l" ] || miss="$miss $l"; done
+  if [ -z "$miss" ]; then names_ok=1; say build-egl-names ok "lib/ holds libEGL.so and libGLESv2.so"
+  else say build-egl-names FAIL "lib/ lacks${miss}: glmark2 dlopen()s these names and would load the board's"; fi
   if [ -f "$bin" ] && command -v readelf > /dev/null 2>&1; then
     if readelf -dW "$bin" 2> /dev/null | grep -qE '\(RUNPATH\).*\[\$ORIGIN/\.\./lib\]'; then
       runpath_ok=1
@@ -208,7 +214,8 @@ libs=$(rssh "$C_LIBS" 2>&1) || libs=
 if [ -z "$libs" ]; then say system-egl ok "no system libEGL/libGLESv2 in the loader cache"
 else
   names=$(grep -oE 'lib(EGL|GLESv2)\.so[.0-9]*' <<< "$libs" | sort -u | paste -sd' ' -)
-  if [ "$runpath_ok" = 1 ]; then say system-egl ok "present ($names) but the build's RUNPATH \$ORIGIN/../lib wins"
+  if [ -n "$build" ] && [ "$names_ok" != 1 ]; then say system-egl FAIL "present ($names) and the build's lib/ lacks libEGL.so/libGLESv2.so: the board's would be loaded"
+  elif [ "$runpath_ok" = 1 ]; then say system-egl ok "present ($names) but the build's lib/ holds libEGL.so/libGLESv2.so and RUNPATH \$ORIGIN/../lib wins"
   else say system-egl warn "present ($names): a RUNPATH other than \$ORIGIN/../lib would load glvnd/Mesa, not the panthor-gles pair (pass --build to prove it)"; fi
 fi
 finish
