@@ -34,7 +34,7 @@ if [ -z "$tree" ]; then
 elif [ -d "$tree/build-v3d" ]; then
   mb=$tree/build-v3d
   inc+=(-I"$tree/src" -I"$tree/include" -I"$tree/src/broadcom" -I"$mb/src/broadcom" -I"$mb/src")
-  libs=("$mb/src/broadcom/libbroadcom_v3d.a" "$mb/src/broadcom/cle/libbroadcom_cle.a"
+  libs=("$mb/src/broadcom/cle/libbroadcom_cle.a" "$mb/src/broadcom/libbroadcom_v3d.a"
     "$mb/src/broadcom/libv3d_neon.a" "$mb/src/util/libmesa_util.a" -lexpat -lz -lzstd -lm -lpthread)
 else
   echo "MESA_V3D_TREE='$tree' has no build-v3d (unset it for the vendored reference build)"
