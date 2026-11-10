@@ -739,6 +739,77 @@ modes 1, 8 and 15 on the two shim rows. Exit 0 pass, 1 mismatch, 2 gap (no
 tree: the check was not run), 64 usage. `gate_st_selftest.sh` checks the
 script without a tree.
 
+### A tile-status fast clear: mode 29 and `testdata/ts-clear.golden`
+
+The host test of `docs/notes/gc-tiled-targets.md` step 0: what Mesa tells
+the GC7000UL when a tiled target with tile status (TS) is fast-cleared, drawn
+into and resolved to linear. Mode 29 renders into a 64x64 `GL_RGBA8_OES`
+renderbuffer with a 64x64 `GL_DEPTH24_STENCIL8_OES` one, clears all three
+buffers in one `glClear` to values no other mode uses (colour 0.25, 0.5, 0.75,
+1.0; depth 0.75; stencil 0x5a), draws mode 1's triangle under `GL_LESS`, and
+reads the target back with `glReadPixels`. Mesa allocates the target tiled
+(super-tiled) with a TS buffer, so the clear touches the TS buffers alone and
+the readback is the resolve: the RS copies the tiled surface into a linear
+staging buffer with the source's TS bound.
+
+The committed golden is `cs_decode.py`'s print of the mode's
+`ETNA_SHIM_CS_DUMP`, nothing added. It reproduces from the tree under
+"Building it", byte for byte (one submit of 550 words; the raw dump's
+sha256 is `4cca1be2...0ad48e`, the memory dump's `c08bb343...87acf3c`):
+
+```sh
+MESA=<mesa-26.2.1, patched>          # "Building it" above
+BUILD=<build dir>/mesa-etnaviv-host
+cc -O1 -o cs_golden tools/vivante/cs_golden.c -I$MESA/include \
+    -L$BUILD/src/egl -L$BUILD/src/mesa/glapi/es2api -lEGL -lGLESv2
+rm -f ts-clear.cs ts-clear.mem       # the shim appends to both
+LD_LIBRARY_PATH=$BUILD/src/egl:$BUILD/src/mesa/glapi/es2api:$BUILD/src/gallium/targets/dri \
+LD_PRELOAD=$BUILD/src/etnaviv/drm-shim/libetnaviv_noop_drm_shim.so \
+MESA_LOADER_DRIVER_OVERRIDE=etnaviv ETNA_SHIM_GPU=GC7000UL \
+ETNA_SHIM_CS_DUMP=ts-clear.cs ETNA_SHIM_MEM_DUMP=ts-clear.mem \
+    ./cs_golden 29
+python3 tools/vivante/cs_decode.py ts-clear.cs \
+    --regs $MESA/src/etnaviv/hw/state_3d.xml.h \
+    --regs2 $MESA/src/etnaviv/hw/state.xml.h \
+    | diff tools/vivante/testdata/ts-clear.golden -
+```
+
+It prints `renderer: Vivante GC7000 rev 6204` and `drew; gl error 0x0`
+and exits 0, and the diff is empty. `MESA_LOADER_DRIVER_OVERRIDE` is needed
+on a host with a GPU of its own: without it the EGL loader names the host's
+driver (`virtio_gpu: driver missing`) and `eglInitialize` fails. Measured on
+2026-11-07 with the build recipe above. The tree compiled 1022 of 1022 steps
+with pycparser 2.22 taken from its source checkout, put on the path of the
+Python meson runs. Every other mode's two dumps came out byte-identical
+with and without this change to `cs_golden.c` (modes 1-5, 7, 8, 10-12,
+14-28; 16 exits 3 as before).
+
+What to read in it (`cs_decode.py` names a multi-register `LOAD_STATE` by its
+first register; the words after it are the registers that follow, 4 bytes
+apart):
+
+| what | registers | words |
+| --- | --- | --- |
+| the fast clear | two RS fills, colour TS then depth TS | `RS_CONFIG` 0x00004606 (A8R8G8B8 to A8R8G8B8, `DEST_TILED`), `RS_DEST_STRIDE` 0x100, `RS_WINDOW_SIZE` 0x00040010 (16 x 4), `RS_CLEAR_CONTROL` 0x0001ffff (`ENABLED1`, all 16 bits) with fill 0x11111111, `RS_PIPE_DEST_ADDR` the TS buffer (0xffff6000 colour, 0xffff1000 depth) |
+| the draw's TS state | `TS_MEM_CONFIG` (0x01654) count 7 | 0x000043c3 (`DEPTH_FAST_CLEAR`, `COLOR_FAST_CLEAR`, `DEPTH_COMPRESSION`, `COLOR_COMPRESSION`, compression format 3, `STENCIL_ENABLE`), then `TS_COLOR_STATUS_BASE` 0xffff6000, `TS_COLOR_SURFACE_BASE` 0xffff7000, `TS_COLOR_CLEAR_VALUE` 0xff4080bf, `TS_DEPTH_STATUS_BASE` 0xffff1000, `TS_DEPTH_SURFACE_BASE` 0xffff2000, `TS_DEPTH_CLEAR_VALUE` 0xbfffff5a; `TS_COLOR_CLEAR_VALUE_EXT` 0xff4080bf |
+| the PE's view | `PE_MEM_CONFIG` (0x014bc, the 8th word after `PE_STENCIL_CONFIG_EXT`) | 0x05000000 (`COLOR_TS_MODE`, `DEPTH_TS_MODE`); `PE_COLOR_FORMAT` (0x0142c, 7th word after `PE_DEPTH_STRIDE`) 0x00112f06, super-tiled; `PE_DEPTH_CONFIG` 0x05051111; `RA_EARLY_DEPTH` 0x05000031 |
+| the resolve | `TS_MEM_CONFIG` 0x00000382 (colour fast clear and compression only), `TS_COLOR_*` as above, then one RS copy | `RS_CONFIG` 0x20000686 (`SOURCE_TILED`, `SWAP_RB`), `RS_SOURCE_STRIDE` 0xa8000400 (`TILING`, `TS_MODE`, `SUPER_TILED_NEW`, stride 0x400), `RS_DEST_STRIDE` 0x100, `RS_WINDOW_SIZE` 0x00400040 (64 x 64), `RS_CLEAR_CONTROL` 0, source 0xffff7000, dest 0xffeea000 (the linear staging buffer) |
+
+The colour clear value is the A8R8G8B8 word of (0.25, 0.5, 0.75, 1.0), and
+the depth one the D24S8 word of 0.75 (0xbfffff) with stencil 0x5a; the TS
+fill 0x11111111 is the "cleared" tile-status code, not a colour: Mesa's
+`specs.ts_clear_value` for a part with 4 bits a tile and no DEC400
+(`etnaviv_screen.c`, `bits_per_tile`; 0x55555555 at 2 bits, 0xffffffff
+with DEC400).
+Addresses are where the shim's allocator put the buffers; compare slots and
+contents, not the numbers.
+
+**There is no `cs_ours` mode 29**, and none is needed yet: this backend has
+no tile status (linear targets, clears by quad), so there is nothing on our
+side to diff. `cs_ours.c`'s mode list reserves the number as golden-only.
+The mode is the reference the tile-status steps of `gc-tiled-targets.md`
+are checked against once they exist.
+
 ### What the patch does, and why each piece is needed
 
 Four changes, all to the shim, none to the driver (`GC7000UL` is the first

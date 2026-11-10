@@ -66,6 +66,12 @@
  *      so read this one with --tex-desc and --mem.
  *  28  a 4.0-wide GL_LINES draw (golden only): ALIASED_LINE_WIDTH_RANGE and
  *      PA_LINE_WIDTH, the Q11 question of issue #1281
+ *  29  a tile-status fast clear (golden only): a 64x64 RGBA8 target and its
+ *      D24S8 depth cleared together to values no other mode uses, one
+ *      depth-tested triangle, then glReadPixels, which resolves the tiled,
+ *      TS-cleared target to a linear one. TS_MEM_CONFIG, the TS clear
+ *      values and the RS fill and resolve are what to read here
+ *      (docs/notes/gc-tiled-targets.md step 0; testdata/ts-clear.golden)
  *  16  case 20's ETC2 RGBA8 EAC texture. The branch is here, but ES 2.0 has
  *      no ETC2 and this context rejects the upload with GL_INVALID_ENUM, so
  *      there is no golden to be had: it stops with exit 3 and says why,
@@ -781,7 +787,7 @@ int main(int argc, char **argv)
 		 * drift from the code the way the old duplicate mode list did. If
 		 * you add a branch, add the number here. */
 		static const int have[] = { 1, 2, 3, 4, 5, 7, 8, 10, 11, 12, 14, 15, 16, 17, 18,
-					    19, 20, 21, 22, 23, 24, 25, 26, 27, 28 };
+					    19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29 };
 		size_t k;
 		int known = 0;
 
@@ -829,12 +835,13 @@ int main(int argc, char **argv)
 	 * registers disagree for a reason that has nothing to do with depth.
 	 * Everything else keeps RGBA4, so the readings taken against it stand. */
 	glRenderbufferStorage(GL_RENDERBUFFER,
-			      mode == 8 || mode == 12 || mode == 14 || mode == 15 || mode == 18 ? GL_RGBA8_OES
+			      mode == 8 || mode == 12 || mode == 14 || mode == 15 || mode == 18 ||
+			      mode == 29 ? GL_RGBA8_OES
 								    : GL_RGBA4,
 			      64, 64);
 	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, rb);
 	if (mode == 8 || mode == 12 || mode == 14 || mode == 15 || mode == 18 ||
-	    mode == 21 || mode == 22) {
+	    mode == 21 || mode == 22 || mode == 29) {
 		/* a depth attachment, so the driver has a depth surface to
 		 * describe: the only way to see what it tells the PE about it.
 		 * The stencil modes need the stencil half of the same buffer. */
@@ -867,7 +874,7 @@ int main(int argc, char **argv)
 	}
 	glViewport(0, 0, 64, 64);
 
-	if (mode >= 19 && mode != 28) {
+	if (mode >= 19 && mode != 28 && mode != 29) {
 		return frag_mode_g(mode);
 	}
 
@@ -1208,6 +1215,40 @@ draw:
 		glDrawArrays(GL_TRIANGLES, 0, 3);
 		glFinish();
 		glClearDepthf(1.0f);
+		fprintf(stderr, "drew; gl error 0x%x\n", glGetError());
+		return 0;
+	}
+
+	if (mode == 29) {
+		/* A fast clear through the tile status, then a resolve. Mesa
+		 * gives this RGBA8 target and its D24S8 depth a tile-status
+		 * buffer each on the GC7000UL, so the clear below is an RS fill
+		 * of the two TS buffers plus the clear values in
+		 * TS_*_CLEAR_VALUE, not a write of the surfaces. The values are
+		 * ones no other mode uses, so they can be found in the stream:
+		 * colour 0x40/0x80/0xbf/0xff, depth 0.75 (0xbfffff in the top 24
+		 * bits) and stencil 0x5a. The triangle sits at depth 0.5, in
+		 * front of the cleared 0.75, so it passes GL_LESS.
+		 *
+		 * glReadPixels is the resolve: the target is tiled, so Mesa
+		 * copies it into a linear staging resource through the RS, with
+		 * the source's tile status (and its clear value) bound so that
+		 * the tiles the triangle did not touch come out as the clear
+		 * colour. The shim executes nothing, so the pixels read back
+		 * are not the point and are not checked. */
+		static unsigned char px[64 * 64 * 4];
+
+		glEnable(GL_DEPTH_TEST);
+		glDepthFunc(GL_LESS);
+		glClearColor(0.25f, 0.5f, 0.75f, 1.0f);
+		glClearDepthf(0.75f);
+		glClearStencil(0x5a);
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+		glDrawArrays(GL_TRIANGLES, 0, 3);
+		glReadPixels(0, 0, 64, 64, GL_RGBA, GL_UNSIGNED_BYTE, px);
+		glFinish();
+		glClearDepthf(1.0f);
+		glClearStencil(0);
 		fprintf(stderr, "drew; gl error 0x%x\n", glGetError());
 		return 0;
 	}

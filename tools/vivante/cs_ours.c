@@ -81,6 +81,9 @@
  *         texture2DLod in the vertex stage over two 128x128 RGB mipmapped
  *         textures, a minified and a magnified draw in one frame. Online too
  *   28    golden only: a 4.0-wide GL_LINES draw (Q11 of issue #1281)
+ *   29    golden only: a tile-status fast clear of an RGBA8 + D24S8 target,
+ *         one triangle, then a resolve to linear (glReadPixels). This
+ *         backend has no tile status yet (testdata/ts-clear.golden)
  */
 struct pc_vertex {
 	float pos[4];
