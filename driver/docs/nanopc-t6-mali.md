@@ -2078,6 +2078,70 @@ every wait as for Z2 and Z3: the probe feeds around the Z4 call, and a
 wait that does not finish inside the feeder's window ends in the
 watchdog's PSCI reset, not in a hang.
 
+**The runner's commands** (not run; every one is in
+`driver/tools/kexec-zephyr/`). The runner is `nanopc-t6.sh`; it is
+image-agnostic and has no `t6_submit` case: it kexecs any `zephyr.bin`
+that carries the `yakogl-wdt: nanopc_t6` marker. `BOARD_HOST`,
+`BOARD_UART`, `T6_RECORD_DIR` and the hand's name come from the
+environment, never from this page.
+
+```sh
+# 1. build, as the gate does (zephyr_werror_image in tools/check.sh), in
+#    the west workspace; the firmware header is in place (above)
+mods=$(PATH="$ZEPHYR_WS/.venv/bin:$PATH" tools/cts/zephyr-modules.sh "$ZEPHYR_WS")
+(cd "$ZEPHYR_WS" && PATH="$ZEPHYR_WS/.venv/bin:$PATH" ZEPHYR_BASE="$ZEPHYR_WS/zephyr" \
+  west build -p always -b nanopc_t6 -d "$PWD_YAKOGL/build/t6_submit" \
+  "$PWD_YAKOGL/tools/probes/nanopc_t6/t6_submit" -- \
+  "-DZEPHYR_MODULES=$mods" "-DYAKOGL_DIR=$PWD_YAKOGL" -DYAKOGL_WERROR=ON)
+
+# 2. dry run: checks the image on this host and the board read only,
+#    prints the plan, changes nothing anywhere
+BOARD_HOST=root@<t6> driver/tools/kexec-zephyr/nanopc-t6.sh build/t6_submit/zephyr/zephyr.bin
+
+# 3. the jump, once the preconditions hold
+BOARD_HOST=root@<t6> T6_HAND=<name> T6_RECORD_DIR=<dir> T6_UART=$BOARD_UART \
+  driver/tools/kexec-zephyr/nanopc-t6.sh build/t6_submit/zephyr/zephyr.bin --go
+
+# 4. judge the capture the run wrote
+driver/tools/kexec-zephyr/t6-verdict.sh t6_submit <dir>/<date>-t6/uart.log
+```
+
+(`$PWD_YAKOGL` is the detached checkout's root.) The `--go` run captures
+`uart2` itself: `T6_UART` is only ever read, as `uart.log` in the run's
+record directory `<dir>/<date>-t6/`, from before the jump until the board
+is back in Armbian, next to `record.txt` and the two `dmesg` files; there
+is nothing to capture separately. The image is copied to
+`/tmp/yakogl-kexec` on the board, which the next boot or run wipes. Nothing
+else is staged on the board, no boot-loader variable is set and the runner
+has no per-probe variable: the flow changes no persistent board state, and the
+runner prints no undo because there is none to print.
+
+**The safety net**, as the scripts implement it, the same for `t6_submit`
+as for `t6_fw`:
+
+- The image is refused (exit 3, nothing copied) without exactly one
+  `yakogl-wdt: nanopc_t6` marker and the `board: watchdog armed` line, with
+  a TOP outside 11..15, or linked outside the window; the dry run
+  shows it. `--go` is refused without `T6_HAND`, `T6_RECORD_DIR` and an
+  unopened `T6_UART`, and refuses (it does not wait) while anyone holds the
+  board lock, a kexec image is loaded, a process holds the GPU device or
+  `/dev/watchdog0`, or remote sessions exist (unless `T6_ALLOW_SESSIONS=1`).
+- Before the jump the runner opens `/dev/watchdog0`, reads WDT0's `WDT_CR`
+  and jumps only when `WDT_EN` (bit 0) reads 1; otherwise it writes the
+  magic close, does not jump and exits 98 (the run ends with exit 1).
+  That open covers the image's pre-arm window; the image then re-arms WDT0
+  itself and feeds it only while the probe's feeder window lasts.
+- A hang, a stop or a wait on the sync object that never ends is ended by
+  the image's PSCI reset or, if that fails, WDT0's own reset, no later than
+  the bound the dry run prints; the runner waits that long plus 180 s for
+  ssh and a new `boot_id`, then writes the registers (`GLB_RST_ST`, WDT0)
+  and the new Linux's `dmesg` to the record.
+- A board that does not come back is not retried: the runner records "no
+  Armbian … s after the jump: the board needs `<T6_HAND>` at its power
+  switch" and exits 1, and the named hand cuts the power. The same Linux
+  still running 60 s after the jump is reported as "the jump did not
+  happen", also exit 1.
+
 **Predicted record.** Z1's, Z2's and Z3's lines are as the Z3 procedure
 says; Z4 adds the fields of its own record (`board::nanopc_t6_submit`,
 C entry `yd_t6_submit`), and a `PASS` run holds `step` 0, `stop` 0 and
