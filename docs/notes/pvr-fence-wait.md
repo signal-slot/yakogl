@@ -85,7 +85,7 @@ flight", and "HWRT pair recycle".
 | | The wait ends at | CPU during the wait | Status |
 |---|---|---|---|
 | today | fence write rounded up to the next whole ms from the start of the wait, + ~16 us | spins (`k_busy_wait`) | measured (above) |
-| (a) finer poll, 20 us | fence write + at most 20 us + one 4-byte invalidate and read per step | spins | knob `pvr-fine-wait` / `CONFIG_YAKOGL_DRV_GPU_PVR_FINE_WAIT`, default off |
+| (a) finer poll, 20 us | fence write + at most 20 us + one 4-byte invalidate and read per step | spins | knob `pvr-fine-wait` / `CONFIG_YAKOGL_DRV_GPU_PVR_FINE_WAIT`, default off (since 1e67474f: on for the AM62P) |
 | (b) interrupt | fence write + interrupt latency (GIC, Zephyr ISR, `k_sem` wake-up; not measured on this board) | sleeps | not built (below) |
 
 Prediction for (a), to be checked on the board: the six scenes at 2,016-2,017
@@ -140,7 +140,7 @@ The reading: the quantisation is gone, but the six scenes fell by ~85-110
 us, not by up to 1 ms. The poll explained ~100 us of the 2.0 ms. Frame N-1's
 fence is written ~1.9 ms after the swap of N begins, in every light scene
 alike. That remaining ~1.9 ms is the kick path or the GPU, and it is the
-next item. The knob stays default off; it can land with these rows.
+next item. The knob stayed default off at this point; 1e67474f made it default on for the AM62P.
 
 ## The kick path (line numbers at the commit that adds this section)
 
