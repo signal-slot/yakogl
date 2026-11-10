@@ -67,6 +67,20 @@ pub(super) fn holds_buffer(c: &GlContext, slot: GLuint) -> bool {
             .any(|(v, o)| v != c.bound_vertex_array as usize && holds(&o.attribs, o.element_buffer))
 }
 
+/// The buffer orphan `from` moved to slot `to`: the vertex array objects that
+/// are not bound follow it (the bound one's live state holds no orphan).
+pub(super) fn orphan_moved(c: &mut GlContext, from: GLuint, to: GLuint) {
+    let bound = c.bound_vertex_array as usize;
+    for o in c.vaos.iter_mut().enumerate().filter(|(v, _)| *v != bound).map(|(_, o)| o) {
+        if o.element_buffer == from {
+            o.element_buffer = to;
+        }
+        for a in o.attribs.iter_mut().filter(|a| a.buffer == from) {
+            a.buffer = to;
+        }
+    }
+}
+
 /// The buffer slots vertex array object `v` attaches (the element array
 /// buffer first, 0 where there is none).
 fn buffers_of(c: &GlContext, v: usize) -> [GLuint; MAX_VERTEX_ATTRIBS + 1] {

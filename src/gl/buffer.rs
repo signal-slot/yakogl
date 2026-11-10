@@ -385,6 +385,25 @@ pub unsafe extern "C" fn glBindBuffer(target: GLenum, buffer: GLuint) {
         return;
     };
     if buffer != 0 {
+        if super::tf::is_orphan(c, buffer) {
+            /* the deleted name bound again: a new object under the name; the
+             * orphan moves to a free slot and the objects that hold it follow
+             * (the orphan rule of framebuffer.rs, glBindTexture) */
+            match (1..MAX_BUFFERS).find(|&i| !c.objs_ref().buffers[i].used) {
+                Some(to) => {
+                    let objs = c.objs();
+                    let moved = core::mem::replace(&mut objs.buffers[buffer as usize], zeroed_buffer());
+                    objs.buffers[to] = moved;
+                    rekey_retired(c.group, buffer, to as GLuint);
+                    super::tf::orphan_moved(c, buffer, to as GLuint);
+                }
+                None => {
+                    glog!("buffer {}: no free slot for its orphan; the holders lose it", buffer);
+                    super::tf::forget_orphan(c, buffer);
+                    free_buffer_storage(c, buffer);
+                }
+            }
+        }
         let b = &mut c.objs().buffers[buffer as usize];
         if !b.used {
             /* first bind creates the name */
@@ -1017,6 +1036,15 @@ fn retire(group: u8, h: GLuint, kick: u32, mem: &mut OsalGpuMem) {
     }
     *r = Retired { group, buffer: h, kick, mem: *mem, dirty: Dirty { n: 0, r: [(0, 0); DIRTY_RANGES] } };
     *mem = OsalGpuMem::ZERO;
+}
+
+/// Buffer `from`'s record moved to slot `to`: its retired storages follow.
+fn rekey_retired(group: u8, from: GLuint, to: GLuint) {
+    // SAFETY: single-threaded by contract.
+    let slots = unsafe { RETIRED.get() };
+    for r in slots.iter_mut().filter(|r| r.buffer == from && r.group == group) {
+        r.buffer = to;
+    }
 }
 
 /// Free the retired storages of buffer `h` of `group`, or of every buffer of
