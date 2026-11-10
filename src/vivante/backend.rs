@@ -2759,7 +2759,11 @@ fn build_vertex_input(f: &mut GcFrame, d: &mut GcDraw, gl: &GlesDraw) -> i32 {
                 return -1;
             }
         }
-        d.streams[i] = GcStream { gpu: base + off as u64, stride: a.stride, divisor: u32::from(a.per_instance != 0) };
+        /* the stream's instance divisor as the FE takes it (0x14680 + 4i,
+         * `emit_streams`): the array's own divisor, as Mesa etnaviv programs
+         * it on every HALTI2+ part (docs/notes/instanceid-per-draw.md V1) */
+        let divisor = if a.per_instance != 0 { u32::from(a.divisor.max(1)) } else { 0 };
+        d.streams[i] = GcStream { gpu: base + off as u64, stride: a.stride, divisor };
         d.elems[i] = GcElem {
             stream: i as u8,
             type_: attrib_data_type(a.format),
@@ -2869,14 +2873,16 @@ pub(super) unsafe fn draw_one(draw: *const GlesDraw) -> i32 {
     /* each part below is a step of draw_steps.rs */
     let mut clock = Timer::start();
     /* one instance of an instanced draw the GL core draws instance by
-     * instance: the FE starts the instance ID at 0 for every draw, so a
-     * program that reads gl_InstanceID is refused (counted by gc_draw). The
-     * online compiler names such programs in vs_instance_id_reg1
-     * (shaderc/online/abi.rs, docs/notes/instanceid-per-draw.md V0); before
-     * that it left the field 0 and these draws went through with
-     * gl_InstanceID reading 0 in every instance. */
+     * instance (an array's divisor past max_instance_divisor, 0xffff): the FE
+     * starts the instance ID at 0 for every draw, so a program that reads
+     * gl_InstanceID is refused (counted by gc_draw). The online compiler
+     * names such programs in vs_instance_id_reg1 (shaderc/online/abi.rs,
+     * docs/notes/instanceid-per-draw.md V0); before that it left the field 0
+     * and these draws went through with gl_InstanceID reading 0 in every
+     * instance. Divisors up to 0xffff are the streams' own (V1,
+     * build_vertex_input), one DRAW_INSTANCED for all the instances. */
     if gl.instance_id != 0 && !gl.vs.is_null() && unsafe { (*gl.vs).vs_instance_id_reg1 } != 0 {
-        glog_once!("yakogl/vivante: draw refused: an instance drawn on its own (a divisor past 1) whose program reads gl_InstanceID");
+        glog_once!("yakogl/vivante: draw refused: an instance drawn on its own (a divisor past 0xffff) whose program reads gl_InstanceID");
         return -crate::util::EINVAL;
     }
     /* ES 3.0 4.4.4.2 lets colour attachments differ in size; the render
@@ -3544,9 +3550,15 @@ pub static yakogl_backend_vivante: YakoglBackend = YakoglBackend {
     uniforms_host_only: true,
     ds_write: None,
     stencil_resolve: None,
-    /* divisor 1, as before the field (GcStream carries a divisor; whether
-     * the FE takes more than 1 is unmeasured) */
-    max_instance_divisor: 1,
+    /* the per-stream divisor state (0x14680 + 4i, `emit_streams`) takes the
+     * array's divisor as is, 16 bits of it: Mesa etnaviv programs it on
+     * every HALTI2+ part (etnaviv_screen.c `vertex_element_instance_divisor`,
+     * etnaviv_state.c `NFE_VERTEX_STREAMS_VERTEX_DIVISOR`), and this GPU is
+     * HALTI5. Whether this FE takes a divisor above 1 is not yet measured on
+     * the board: gl_test case 221 (docs/notes/instanceid-per-draw.md V1,
+     * section 5) does; if it ignores them, this goes back to 1 and V2 (a
+     * per-draw uniform) carries gl_InstanceID. */
+    max_instance_divisor: 0xffff,
     /* one kick's fence, the open frame submitted first (kick.rs): the sync
      * waits and the GL core's wait before a depth resolve */
     wait_kick: Some(gc_wait_kick),

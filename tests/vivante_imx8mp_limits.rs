@@ -389,7 +389,12 @@ fn the_vivante_table_and_flags_are_pinned() {
     assert!(!b.etc1_decoded_at_upload); // :3351
     assert_eq!(b.linear_row_align, 0); // :3372
     assert!(b.uniforms_host_only); // :3550 (route 3: the host arrays are copied into the arena)
-    assert_eq!(b.max_instance_divisor, 1); // :3378
+
+    /* :3561, V1 of docs/notes/instanceid-per-draw.md: the per-stream divisor
+     * word takes the array's divisor as is, 16 bits (was 1: every divisor
+     * above 1 drawn instance by instance) */
+    assert_eq!(b.max_instance_divisor, 0xffff);
+
     assert!(!b.samples_texel_copies); // :3382
 
     /* which entry points the board's table has (each a behaviour the GL

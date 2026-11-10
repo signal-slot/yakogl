@@ -12,6 +12,16 @@
 //!   per-instance one's is 1, and the instances are ONE DRAW_INSTANCED that
 //!   carries all of them, not a draw per instance.
 //!
+//! And the draws V1 changes (`max_instance_divisor` 0xffff, the divisor
+//! itself in the stream's word):
+//!
+//! * A mixed-divisor glDrawArraysInstanced and glDrawElementsInstanced
+//!   (attributes at divisors 0, 1 and 3, 4 instances): ONE DRAW_INSTANCED of
+//!   the 4 instances, the three streams' words 0, 1 and 3.
+//! * An attribute at divisor 0x10000, above what the table admits: the GL
+//!   core still draws instance by instance (one DRAW_INSTANCED of one
+//!   instance each, the element a constant, no stream word above 0).
+//!
 //! How it runs: the real GL core and the real Vivante back end over a
 //! stand-in OSAL that keeps every submitted stream (as
 //! tests/gc_state_dedup.rs).
@@ -28,7 +38,7 @@ use std::ffi::CString;
 use std::sync::Mutex;
 use yakogl::gl::buffer::{glBindBuffer, glBufferData, glGenBuffers};
 use yakogl::gl::consts::*;
-use yakogl::gl::draw::{glDrawArrays, glDrawArraysInstanced};
+use yakogl::gl::draw::{glDrawArrays, glDrawArraysInstanced, glDrawElementsInstanced};
 use yakogl::gl::program::{
     glAttachShader, glBindAttribLocation, glCreateProgram, glGetProgramiv, glLinkProgram, glUseProgram,
 };
@@ -229,7 +239,8 @@ fn shader(ty: GLenum, text: &str) -> GLuint {
     }
 }
 
-/// A linked program of `vs` and `fs`, attribute `p` at 0 and `q` at 1.
+/// A linked program of `vs` and `fs`, attribute `p` at 0, `q` at 1 and `r`
+/// (when the vertex shader has one) at 2.
 fn program(vs: &str, fs: &str) -> GLuint {
     // SAFETY: plain GL calls.
     unsafe {
@@ -238,6 +249,7 @@ fn program(vs: &str, fs: &str) -> GLuint {
         glAttachShader(p, shader(GL_FRAGMENT_SHADER, fs));
         glBindAttribLocation(p, 0, c"p".as_ptr());
         glBindAttribLocation(p, 1, c"q".as_ptr());
+        glBindAttribLocation(p, 2, c"r".as_ptr());
         glLinkProgram(p);
         let mut ok: GLint = 0;
         glGetProgramiv(p, GL_LINK_STATUS, &mut ok);
@@ -288,14 +300,14 @@ fn setup() {
     no_error("the setup");
 }
 
-/// The divisor words of streams 0 and 1 as the stream has loaded them at each
+/// The divisor words of streams 0..N as the stream has loaded them at each
 /// DRAW_INSTANCED (u32::MAX: never written), and the instance counts of those
 /// commands.
-fn divisor_words_and_draws(kicks: &[Vec<u32>]) -> (Vec<[u32; 2]>, Vec<u32>) {
+fn divisor_words_and_draws<const N: usize>(kicks: &[Vec<u32>]) -> (Vec<[u32; N]>, Vec<u32>) {
     let (mut pairs, mut counts) = (Vec::new(), Vec::new());
-    let (reg0, reg1) = (nfe_vertex_streams_vertex_divisor(0), nfe_vertex_streams_vertex_divisor(1));
+    let reg0 = nfe_vertex_streams_vertex_divisor(0);
     for words in kicks {
-        let mut cur = [u32::MAX; 2];
+        let mut cur = [u32::MAX; N];
         let mut i = 0usize;
         while i < words.len() {
             let w = words[i];
@@ -305,8 +317,8 @@ fn divisor_words_and_draws(kicks: &[Vec<u32>]) -> (Vec<[u32; 2]>, Vec<u32>) {
                     let base = (w & 0xffff) * 4;
                     for k in 0..count {
                         let r = base + 4 * k as u32;
-                        if r == reg0 || r == reg1 {
-                            cur[usize::from(r == reg1)] = words[i + 1 + k];
+                        if r >= reg0 && (r - reg0) % 4 == 0 && ((r - reg0) / 4) < N as u32 {
+                            cur[((r - reg0) / 4) as usize] = words[i + 1 + k];
                         }
                     }
                     i += 1 + count;
@@ -359,5 +371,132 @@ fn divisor_one_stream_has_word_one_in_one_instanced_draw() {
         let (pairs, counts) = divisor_words_and_draws(&take_kicks());
         assert_eq!(pairs, [[0, 1]], "stream 0 per vertex, stream 1 per instance");
         assert_eq!(counts, [3], "ONE instanced draw of the 3 instances, not one draw per instance");
+    });
+}
+
+/* ---- V1: the divisor itself, and the split that is left ---------------------------- */
+
+const VS3: &str = "attribute vec4 p;\nattribute vec4 q;\nattribute vec4 r;\nvarying vec4 v;\n\
+                   void main() { v = q + r; gl_Position = p; }\n";
+
+/// Positions (attribute 0) of a triangle, then four vec4 for attribute 1 and
+/// four for attribute 2: enough for 4 instances at any divisor.
+static DATA3: [f32; 44] = [
+    -1.0, -1.0, 0.5, 1.0, 1.0, -1.0, 0.5, 1.0, -1.0, 1.0, 0.5, 1.0, //
+    1.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, //
+    0.5, 0.0, 0.0, 1.0, 0.0, 0.5, 0.0, 1.0, 0.0, 0.0, 0.5, 1.0, 0.5, 0.5, 0.5, 1.0,
+];
+
+/// The three-attribute program and a buffer of [`DATA3`], attribute 0 at its
+/// start, 1 behind the positions and 2 behind those, bound and enabled, with
+/// `divisors` set on them.
+fn setup3(divisors: [GLuint; 3]) {
+    // SAFETY: plain GL calls; DATA3 is a static.
+    unsafe {
+        glUseProgram(program(VS3, FS));
+        glViewport(0, 0, 64, 64);
+        let mut vbo: GLuint = 0;
+        glGenBuffers(1, &mut vbo);
+        glBindBuffer(GL_ARRAY_BUFFER, vbo);
+        glBufferData(
+            GL_ARRAY_BUFFER,
+            core::mem::size_of_val(&DATA3) as GLsizeiptr,
+            DATA3.as_ptr() as *const c_void,
+            GL_STATIC_DRAW,
+        );
+        for (i, (off, div)) in [0usize, 12, 28].into_iter().zip(divisors).enumerate() {
+            glEnableVertexAttribArray(i as GLuint);
+            glVertexAttribPointer(i as GLuint, 4, GL_FLOAT, 0, 0, (off * 4) as *const c_void);
+            glVertexAttribDivisor(i as GLuint, div);
+        }
+    }
+    no_error("the setup");
+}
+
+/// An element buffer of the triangle's three indices, bound.
+fn bind_indices() {
+    static IDX: [u16; 3] = [0, 1, 2];
+    // SAFETY: plain GL calls; IDX is a static.
+    unsafe {
+        let mut ibo: GLuint = 0;
+        glGenBuffers(1, &mut ibo);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
+        glBufferData(
+            GL_ELEMENT_ARRAY_BUFFER,
+            core::mem::size_of_val(&IDX) as GLsizeiptr,
+            IDX.as_ptr() as *const c_void,
+            GL_STATIC_DRAW,
+        );
+    }
+    no_error("the index buffer");
+}
+
+/// V1 (docs/notes/instanceid-per-draw.md): a mixed-divisor instanced draw,
+/// attributes at divisors 0, 1 and 3 and 4 instances, is ONE DRAW_INSTANCED
+/// of the 4 instances (the table's `max_instance_divisor` 0xffff keeps the GL
+/// core from splitting it), and each stream's divisor word is its array's
+/// divisor: 0, 1 and 3, not a per-instance flag. Through glDrawArraysInstanced.
+#[test]
+fn mixed_divisors_are_each_streams_own_word_in_one_draw_arrays_instanced() {
+    let _g = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    with_backend(|| {
+        setup3([0, 1, 3]);
+        let _ = take_kicks();
+        // SAFETY: plain GL calls on the bound arrays.
+        unsafe {
+            glDrawArraysInstanced(GL_TRIANGLES, 0, 3, 4);
+            glFinish();
+        }
+        no_error("glDrawArraysInstanced");
+        let (words, counts) = divisor_words_and_draws(&take_kicks());
+        assert_eq!(words, [[0, 1, 3]], "the divisor words of streams 0, 1 and 2, as loaded at the draw");
+        assert_eq!(counts, [4], "ONE instanced draw of the 4 instances, not one draw per instance");
+    });
+}
+
+/// The same draw through glDrawElementsInstanced.
+#[test]
+fn mixed_divisors_are_each_streams_own_word_in_one_draw_elements_instanced() {
+    let _g = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    with_backend(|| {
+        setup3([0, 1, 3]);
+        bind_indices();
+        let _ = take_kicks();
+        // SAFETY: plain GL calls on the bound arrays and index buffer.
+        unsafe {
+            glDrawElementsInstanced(GL_TRIANGLES, 3, GL_UNSIGNED_SHORT, core::ptr::null(), 4);
+            glFinish();
+        }
+        no_error("glDrawElementsInstanced");
+        let (words, counts) = divisor_words_and_draws(&take_kicks());
+        assert_eq!(words, [[0, 1, 3]], "the divisor words of streams 0, 1 and 2, as loaded at the draw");
+        assert_eq!(counts, [4], "ONE instanced draw of the 4 instances, not one draw per instance");
+    });
+}
+
+/// The split that V1 leaves: an attribute at a divisor above what the table
+/// admits (0x10000 > `max_instance_divisor` 0xffff) is still drawn instance by
+/// instance by the GL core, each instance ONE DRAW_INSTANCED of one instance
+/// with that array's element as a constant, so no stream word is above 0.
+/// (The back end refuses such an instance when the program reads
+/// gl_InstanceID, src/vivante/backend_tests.rs; this program does not.)
+#[test]
+fn a_divisor_above_the_tables_is_still_drawn_instance_by_instance() {
+    let _g = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    with_backend(|| {
+        setup3([0, 1, 0x10000]);
+        let _ = take_kicks();
+        // SAFETY: plain GL calls on the bound arrays.
+        unsafe {
+            glDrawArraysInstanced(GL_TRIANGLES, 0, 3, 3);
+            glFinish();
+        }
+        no_error("glDrawArraysInstanced");
+        let (words, counts) = divisor_words_and_draws::<3>(&take_kicks());
+        assert_eq!(counts, [1, 1, 1], "one draw of one instance per instance");
+        assert!(
+            words.iter().all(|w| w.iter().all(|&d| d == 0 || d == u32::MAX)),
+            "no stream fetched per instance: {words:?}"
+        );
     });
 }

@@ -7,11 +7,12 @@
 //!
 //! Those cases draw with one array at divisor 0, one at 1 and one at 2, and
 //! the vertex shader reads `gl_InstanceID`. A back end that takes divisor 1
-//! only (`max_instance_divisor` 1: the PowerVR and the GC7000UL) makes the GL
-//! core draw instance by instance; this file pins what the core hands the
-//! back end then (each instance's value of each divisor array as a constant,
-//! and `GlesDraw::instance_id`), and what it hands a back end that takes any
-//! divisor (one draw, `instance_count` instances, the divisor per array). The
+//! only (`max_instance_divisor` 1: the PowerVR) makes the GL core draw
+//! instance by instance; this file pins what the core hands the back end
+//! then (each instance's value of each divisor array as a constant, and
+//! `GlesDraw::instance_id`), and what it hands a back end that takes any
+//! divisor (one draw, `instance_count` instances, the divisor per array: the
+//! GC7000UL since V1 of docs/notes/instanceid-per-draw.md, 0xffff). The
 //! back ends' refusal of an instance-by-instance draw that reads
 //! `gl_InstanceID` (`pvr/backend.rs`, `vivante/backend.rs`) is not part of
 //! the GL core and is not tested here.

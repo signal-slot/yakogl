@@ -690,8 +690,9 @@ fn the_backend_tells_the_osal_when_a_frame_is_open() {
 }
 
 /// One instance of an instanced draw the GL core draws instance by instance
-/// (GlesDraw::instance_id, a divisor past 1): the FE starts the instance ID
-/// at 0 for every draw, so a program that reads gl_InstanceID is refused
+/// (GlesDraw::instance_id, a divisor past `max_instance_divisor`, 0xffff):
+/// the FE starts the instance ID at 0 for every draw, so a program that
+/// reads gl_InstanceID is refused
 /// (and counted, gc_refused_draws), not drawn with 0. Instance 0, and a
 /// program that does not read it, are drawn. Revert check: without the
 /// refusal the first draw goes in.
@@ -727,8 +728,20 @@ fn an_instance_drawn_on_its_own_that_reads_gl_instance_id_is_refused() {
 /// once by name. The source is dEQP-GLES3
 /// `functional.instanced.draw_arrays_instanced.mixed.4_instances`
 /// (`es3fInstancedRenderingTests.cpp`, TYPE_FLOAT, 4 instances): it reads
-/// `gl_InstanceID` and two divisor-2 arrays, so the GL core draws it
-/// instance by instance.
+/// `gl_InstanceID` and two instanced arrays.
+///
+/// Since V1 (the hardware stream divisor, `max_instance_divisor` 0xffff) the
+/// GL core splits a draw only for an array at a divisor the FE cannot take,
+/// 0x10000 and up (`draw_instanced`, src/gl/draw.rs: the divisor is compared
+/// with `backend::max_instance_divisor()`); the dEQP case's divisor 2 is one
+/// draw. So the split half draws the program with its instanced arrays at
+/// divisor 0x10000: four draws of one instance each, `instance_id` 0..3,
+/// nothing fetched per instance (the core hands each instance's element as
+/// a constant; tests/gc_stream_divisor.rs pins that through the entry
+/// point). The second half is the mixed draw as V1 hands it in: divisors 0,
+/// 1 and 3 on three streams, 4 instances, `instance_id` 0. It is drawn, not
+/// refused, as ONE DRAW_INSTANCED of the 4 instances with the three streams'
+/// divisor words 0, 1 and 3, by both entry points.
 #[test]
 #[cfg(all(feature = "shaderc-online", not(feature = "report-es2")))]
 fn the_real_compiler_refuses_a_split_instanced_draw_that_reads_gl_instance_id() {
@@ -767,8 +780,13 @@ fn the_real_compiler_refuses_a_split_instanced_draw_that_reads_gl_instance_id() 
     vs.vs_instance_id_reg1 = real.vs_instance_id_reg1;
     rig._gl.logs();
     let base = gc_refused_draws();
+    /* the split: a_instanceG and a_instanceB at divisor 0x10000 (above
+     * max_instance_divisor, 0xffff), 4 instances. The core draws each
+     * instance on its own with the two arrays' elements as constants
+     * (per_instance 0, as the rig's attribute is) and instance_id i. */
     let mut d = rig.draw(3);
     d.vs = &vs;
+    d.instance_count = 1;
     for id in 0..4u32 {
         d.instance_id = id;
         // SAFETY: a live draw.
@@ -782,6 +800,91 @@ fn the_real_compiler_refuses_a_split_instanced_draw_that_reads_gl_instance_id() 
     assert_eq!(gc_refused_draws().wrapping_sub(base), 3);
     let named: Vec<String> = rig._gl.logs().into_iter().filter(|l| l.contains("gl_InstanceID")).collect();
     assert_eq!(named.len(), 1, "refused by name, once for the three: {named:?}");
+
+    /* V1: the mixed draw, the dEQP case's shape with divisor 3 for the third
+     * array, is one draw of 4 instances with each stream at its own divisor,
+     * and the program's gl_InstanceID read no longer refuses it */
+    let _ = rig.submit(&rig.draw(3)); /* past the first draw's one-off writes */
+    for indexed in [false, true] {
+        let mut m = mixed_divisor_draw(&rig, [0, 1, 3], 4);
+        m.vs = &vs;
+        if indexed {
+            m.index_buf_gpu = rig.vbo.gpu + 0x800;
+            m.index_size = 2;
+        }
+        let what = if indexed { "glDrawElementsInstanced" } else { "glDrawArraysInstanced" };
+        // SAFETY: a live draw.
+        assert_eq!(unsafe { gc_draw(&m) }, 0, "{what}: the mixed draw is drawn, not refused");
+        assert_eq!(gc_flush(), 0);
+        let s = rig.last_stream();
+        assert_eq!(s.draws(), [(indexed, GC_PRIM_TRIANGLES, 4, 3, 0)], "{what}: ONE draw of the 4 instances");
+        assert_eq!(divisor_words(&s, 3), [0, 1, 3], "{what}: the streams' divisor words");
+    }
+    assert_eq!(gc_refused_draws().wrapping_sub(base), 3, "nothing else refused");
+}
+
+/// The rig's draw with `divisors.len()` vec4 float streams out of its buffer
+/// (`divisors[i]` the i-th array's divisor, 0 per vertex) and
+/// `instance_count` instances, `instance_id` 0: what the GL core hands the
+/// back end for a mixed-divisor glDraw*Instanced since V1 (src/gl/draw.rs
+/// `draw_instanced`, every divisor at most `max_instance_divisor`).
+fn mixed_divisor_draw<const N: usize>(rig: &Rig, divisors: [u16; N], instance_count: u32) -> GlesDraw {
+    let mut d = rig.draw(3);
+    d.instance_count = instance_count;
+    d.num_attribs = N as u8;
+    let proto = d.attribs[0];
+    for (i, &divisor) in divisors.iter().enumerate() {
+        d.attribs[i] = GlesAttrib {
+            vi_reg: i as u8,
+            offset: 256 * i as u32,
+            per_instance: u8::from(divisor != 0),
+            divisor,
+            ..proto
+        };
+    }
+    d
+}
+
+/// The divisor words of streams 0..n (0x14680 + 4i, `emit_streams`) as the
+/// stream last loaded them.
+fn divisor_words(s: &Stream, n: usize) -> Vec<u32> {
+    (0..n as u32).map(|i| s.reg(nfe_vertex_streams_vertex_divisor(i))).collect()
+}
+
+/// V1 (docs/notes/instanceid-per-draw.md): a mixed-divisor instanced draw,
+/// three arrays at divisors 0, 1 and 3 and 4 instances, is ONE DRAW_INSTANCED
+/// of the 4 instances, and the three streams' divisor state words
+/// (NFE_VERTEX_STREAMS_VERTEX_DIVISOR, 0x14680 + 4i) are 0, 1 and 3: the
+/// FE fetches each stream at its own divisor, as Mesa etnaviv programs it on
+/// every HALTI2+ part. The same through glDrawElementsInstanced. The divisor
+/// word is the array's, not a flag: divisor 1 and divisor 3 differ, and a
+/// per-vertex stream stays 0 (tests/gc_stream_divisor.rs pins the words
+/// through the GL entry points). The back end's own table says it takes
+/// them (`max_instance_divisor` 0xffff), which is what keeps the GL core from
+/// splitting the draw. Whether the FE honours a divisor above 1 is the
+/// board's word (gl_test case 221, section 5 of the note), not this test's.
+#[test]
+fn a_mixed_divisor_instanced_draw_is_one_draw_with_each_streams_divisor() {
+    let rig = Rig::new();
+    assert_eq!(yakogl_backend_vivante.max_instance_divisor, 0xffff, "the GL core splits only above 0xffff");
+    for indexed in [false, true] {
+        let mut d = mixed_divisor_draw(&rig, [0, 1, 3], 4);
+        if indexed {
+            d.index_buf_gpu = rig.vbo.gpu + 0x800;
+            d.index_size = 2;
+        }
+        let s = rig.submit(&d);
+        let what = if indexed { "glDrawElementsInstanced" } else { "glDrawArraysInstanced" };
+        assert_eq!(s.draws(), [(indexed, GC_PRIM_TRIANGLES, 4, 3, 0)], "{what}: ONE draw of the 4 instances");
+        assert_eq!(divisor_words(&s, 3), [0, 1, 3], "{what}: the divisor words of streams 0, 1 and 2");
+        /* each stream is its own: base addresses 256 bytes apart */
+        let bases: Vec<u32> = (0..3).map(|i| s.reg(nfe_vertex_streams_base_addr(i))).collect();
+        assert_eq!(bases, [0, 256, 512].map(|o| rig.vbo.gpu as u32 + o), "{what}: one stream an array");
+    }
+    /* the largest divisor the table admits is written as is */
+    let s = rig.submit(&mixed_divisor_draw(&rig, [0, 0xffff], 2));
+    assert_eq!(divisor_words(&s, 2), [0, 0xffff]);
+    assert_eq!(s.draws().len(), 1);
 }
 
 /// ES 3.0 lets colour attachments differ in size (4.4.4.2); the render area
