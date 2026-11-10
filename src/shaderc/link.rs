@@ -76,10 +76,40 @@ pub(crate) fn duplicate_name<'a, T>(items: &'a [T], name: impl Fn(&'a T) -> &'a 
 /// is what this is here to stop. The measured margin says how often that
 /// costs anything -- the longest varying we ship is `qt_BaseColorMap_uv_coords1`
 /// at 26 of 32, and Qt Quick 3D generates the family as
-/// `qt_<MapName>_uv_coords<N>`. Task #47's name pool removes the limit, and
-/// lets the generator refuse truncation where it can still tell.
+/// `qt_<MapName>_uv_coords<N>`. Task #47's name pool removes the limit where
+/// it is kept ([`whole_block_member_row`]), and lets the generator refuse
+/// truncation where it can still tell.
 fn name_maxes_field(field: &[c_char]) -> bool {
     !field.is_empty() && name_bytes(field).len() == field.len() - 1
+}
+
+/// Row `k` of `sh`'s uniform table, its name field full, accepted anyway:
+/// the online back end's record keeps the row's whole name (its name pool,
+/// `online::backend::pooled_uniform_name`), so nothing was lost, and a
+/// uniform-block member fills the row, so the GL core never reads the field
+/// -- it names the member as GL does (`Block.m`, `ShcBlockMember::name`),
+/// gives it no location, and fills the row by the member's index
+/// (`program::fill_uniform_blocks`). The row's name is the qualified
+/// `<instance>.<member>`, which a 1,024-character instance name
+/// (dEQP-GLES3 `uniform_block.long_instance_name_*`) puts past any field.
+///
+/// A default-block uniform is still refused with its whole name kept: the
+/// GL core reads that row's field for `glGetActiveUniform` and
+/// `glGetUniformLocation` (`program::build_locations`), and a cut name
+/// there is reported and matched wrongly. Lifting that waits for the GL
+/// core to read the pool (task #47's last step). Without the online
+/// compiler no record has a pool, and the rule is the field's as before.
+fn whole_block_member_row(sh: &ShcShader, k: usize) -> bool {
+    #[cfg(feature = "shaderc-online")]
+    {
+        super::online::backend::pooled_uniform_name(sh, k).is_some()
+            && super::uniform_blocks(sh).members.iter().any(|m| usize::from(m.row) == k)
+    }
+    #[cfg(not(feature = "shaderc-online"))]
+    {
+        let _ = (sh, k);
+        false
+    }
 }
 
 /// Every name of one stage, refused if any may have been truncated.
@@ -92,7 +122,8 @@ pub(crate) fn reject_truncated_names(sh: &ShcShader, log: &mut CStrWriter, who: 
     if let Some(a) = attribs.iter().find(|a| name_maxes_field(&a.name)) {
         return reject_truncated(log, who, stage, "attribute", &a.name);
     }
-    if let Some(u) = sh.uniform_table().iter().find(|u| name_maxes_field(&u.name)) {
+    let cut = |(k, u): (usize, &super::ShcUniform)| name_maxes_field(&u.name) && !whole_block_member_row(sh, k);
+    if let Some((_, u)) = sh.uniform_table().iter().enumerate().find(|&e| cut(e)) {
         return reject_truncated(log, who, stage, "uniform", &u.name);
     }
     0
