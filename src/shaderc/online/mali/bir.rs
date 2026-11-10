@@ -67,6 +67,9 @@ pub enum Special {
     /// `program_counter` (page 0, entry 15): a non-last `BLEND`'s return
     /// address (`va_lower_blend`, va_pack.c:1188-1194).
     ProgramCounter,
+    /// `lane_id` (page 3, entry 1): the lane's index in its quad, the sign
+    /// fix of a derivative (docs/notes/mali-derivatives.md, section 1).
+    LaneId,
 }
 
 /// A word of the sysval UBO a vertex shader reads (Mesa's
@@ -435,6 +438,10 @@ pub enum Op {
     /// `LSHIFT_XOR.i32 dest, a, b, shift` (`nir_op_ixor` with the shift the
     /// byte 0, bifrost_compile.c:3383-3385).
     LshiftXorI32,
+    /// `CLPER.i32.subgroup4.xor dest, value, lane`: `value` of the lane
+    /// `L ^ lane` of the quad (`fddx_fine` / `fddy_fine`, lane 1 or 2, an
+    /// 8-bit `lanes` source; docs/notes/mali-derivatives.md, section 1).
+    Clper,
     /// `FROUND.f32` with the rounding mode (`ffloor`: `.rtn`, `fceil`:
     /// `.rtp`).
     FroundF32 {
@@ -588,6 +595,10 @@ pub enum Op {
     /// 16-bit half (a 16-bit NIR `ior`); the sources as
     /// [`Op::LshiftAndV2i16`]'s.
     LshiftOrV2i16,
+    /// `LSHIFT_XOR.v2i16 dest, a, b, shift`: [`Op::LshiftXorI32`] of each
+    /// 16-bit half (the sign fix of a 16-bit derivative); the sources as
+    /// [`Op::LshiftAndV2i16`]'s.
+    LshiftXorV2i16,
     /// `RSHIFT_AND.i32 dest, a, mask, shift`: `(a >> shift) & mask`
     /// (`bi_rshift_and_i32`, the sample id of r61, `bi_load_sample_id_to`,
     /// bifrost_compile.c:887-896); the sources as [`Op::LshiftAndI32`]'s.
@@ -922,9 +933,15 @@ pub const fn src_info(op: Op, s: usize) -> SrcInfo {
         /* LSHIFT_AND.v2i16: the value a 16-bit widen (any half swizzle),
          * the mask or or-value a plain word, the shift an 8-bit `lanes`
          * source (valhall.c) */
-        (Op::LshiftAndV2i16 | Op::LshiftOrV2i16, 0) => info(false, false, true, false, 16),
-        (Op::LshiftAndV2i16 | Op::LshiftOrV2i16, 1) => info(false, false, false, false, 16),
-        (Op::LshiftAndV2i16 | Op::LshiftOrV2i16, 2) => SrcInfo { lanes: true, ..info(false, false, false, false, 8) },
+        (Op::LshiftAndV2i16 | Op::LshiftOrV2i16 | Op::LshiftXorV2i16, 0) => info(false, false, true, false, 16),
+        (Op::LshiftAndV2i16 | Op::LshiftOrV2i16 | Op::LshiftXorV2i16, 1) => info(false, false, false, false, 16),
+        (Op::LshiftAndV2i16 | Op::LshiftOrV2i16 | Op::LshiftXorV2i16, 2) => {
+            SrcInfo { lanes: true, ..info(false, false, false, false, 8) }
+        }
+        /* CLPER.i32: the value a plain word, the lane an 8-bit `lanes`
+         * source (valhall.c) */
+        (Op::Clper, 0) => info(false, false, false, false, 32),
+        (Op::Clper, 1) => SrcInfo { lanes: true, ..info(false, false, false, false, 8) },
         /* the byte offset, then the mode descriptor (va_pack.c:746-769) */
         (Op::LdPka { .. }, 0..=1) => info(false, false, false, false, 32),
         (Op::LdTile { .. }, 0..=2) => info(false, false, false, false, 32),
@@ -1001,6 +1018,7 @@ pub const fn nr_srcs(op: Op) -> usize {
         | Op::V2f32ToV2f16
         | Op::MkvecV2i16
         | Op::IaddV2u16
+        | Op::Clper
         | Op::ShaddxS64 => 2,
         Op::LdAttrImm { .. } | Op::Blend { .. } | Op::BranchzI { .. } | Op::LdPka { .. } => 2,
         Op::LshiftAndI32
@@ -1008,6 +1026,7 @@ pub const fn nr_srcs(op: Op) -> usize {
         | Op::LshiftXorI32
         | Op::LshiftAndV2i16
         | Op::LshiftOrV2i16
+        | Op::LshiftXorV2i16
         | Op::RshiftAndI32
         | Op::RshiftOrI32
         | Op::ArshiftOrI32

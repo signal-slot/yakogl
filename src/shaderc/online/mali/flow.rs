@@ -31,10 +31,11 @@ use super::MaliError;
 
 /// `bi_instr_uses_helpers` (bi_helper_invocations.c) for the ops here:
 /// a look-up whose level of detail comes from the derivatives (a level-0
-/// one does not).
+/// one does not), and a `CLPER`, which reads a neighbour lane of the quad
+/// (docs/notes/mali-derivatives.md, section 4).
 pub fn uses_helpers(i: &Ins) -> bool {
     use super::bir::LodMode;
-    matches!(i.op, Op::TexSingle { lod: LodMode::Computed | LodMode::ComputedBias, .. })
+    matches!(i.op, Op::TexSingle { lod: LodMode::Computed | LodMode::ComputedBias, .. } | Op::Clper)
 }
 
 /// `bi_analyze_helper_requirements` (bi_helper_invocations.c) over the
@@ -621,4 +622,51 @@ pub fn preload_mask(p: &Prog<'_>, fragment: bool) -> u64 {
         live |= (1 << 60) | (1 << 61);
     }
     live
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::shaderc::online::mali::bir::{Dest, Src, Swz};
+
+    fn ins(op: Op, d: u8, srcs: &[Src]) -> Ins {
+        Ins::new(op, &[Dest { idx: Idx::Reg(d), swz: Swz::H01 }], srcs)
+    }
+
+    /// The flow of each instruction of a one-block fragment program after
+    /// `insert_flow_control_nops` and `merge_flow` (none of them a `NOP`).
+    fn flows(body: &[Ins]) -> ([u8; 8], usize) {
+        let mut buf = [Ins::NOP; 16];
+        let mut p = Prog::new(&mut buf);
+        for &i in body {
+            p.push(i).unwrap();
+        }
+        insert_flow_control_nops(&mut p, true).unwrap();
+        merge_flow(&mut p, true);
+        let mut f = [0u8; 8];
+        for (k, i) in p.as_slice().iter().enumerate() {
+            assert_ne!(i.op, Op::Nop, "{:?}", p.as_slice());
+            f[k] = i.flow;
+        }
+        (f, p.n)
+    }
+
+    /// docs/notes/mali-derivatives.md, section 4: a `CLPER` reads the
+    /// neighbour lanes, so the helpers live up to the last one, which ends
+    /// them (`.discard`, `fsarith_138_deriv`'s instruction 19); with no
+    /// `CLPER` the helpers end at the program's start.
+    #[test]
+    fn a_clper_is_a_helper_user() {
+        let lane = Src::of(Idx::Lut(4)).swz(Swz::B3);
+        let mov = ins(Op::MovI32, 0, &[Src::of(Idx::Uniform(0))]);
+        let x0 = ins(Op::Clper, 1, &[Src::of(Idx::Reg(0)), lane]);
+        let x1 = ins(Op::Clper, 2, &[Src::of(Idx::Reg(0)), lane]);
+        let add = ins(Op::FaddF32, 3, &[Src::of(Idx::Reg(1)), Src::of(Idx::Reg(2))]);
+        assert!(uses_helpers(&x0));
+        assert!(!uses_helpers(&add));
+        let (f, n) = flows(&[mov, x0, x1, add]);
+        assert_eq!(&f[..n], &[flow::NONE, flow::NONE, flow::DISCARD, flow::END]);
+        let (f, n) = flows(&[mov, add]);
+        assert_eq!(&f[..n], &[flow::DISCARD, flow::END]);
+    }
 }
