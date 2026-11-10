@@ -2147,11 +2147,64 @@ says; Z4 adds the fields of its own record (`board::nanopc_t6_submit`,
 C entry `yd_t6_submit`), and a `PASS` run holds `step` 0, `stop` 0 and
 `refusal` 0.
 
-> **PLACEHOLDER (predicted record).** The field table (CSG 0 / CS 0
-> started, the heap's chunks, the sync object's value, the exception and
-> fault words) and the typed `uart2` lines are filled from
-> `board::nanopc_t6_submit` and the probe's printk formats once both are
-> on main. Until then nothing here is predicted.
+These are the **MCU model's values**: `board::nanopc_t6_submit`'s test
+`the_generated_frame_s_record_is_as_predicted` runs the generated frame
+over the host MCU model and asserts the record below; no value is the
+board's. The "pinned" ones are fixed by the frame and the module's
+constants and must read the same on the board; the "board-dependent" ones
+are the model's own (its register values, lags and microseconds, the
+synthetic firmware's sizes): the model's value is given for orientation
+and a different board value is not a finding. The record is
+`struct yd_t6_submit_up` (392 bytes, offsets asserted in
+`yakogl_drivers.h`).
+
+| field | predicted value | pinned or board-dependent |
+|---|---|---|
+| `step`, `refusal`, `detail` | 0, 0, 0 | pinned (a pass) |
+| `fw` | Z3's record whole (`tables_used` 7 on the model, 9 on the board's file; `ping_acked` 1) | as the Z3 procedure |
+| `as_present` | 0xff | board-dependent (the board's `AS_PRESENT`; AS1 must be present) |
+| `l2_features` | 0x07120306 | board-dependent |
+| `as0_tables_used` | 8 (Z3's tables and one L3 for the queue's pages) | board-dependent (Z3's count plus 1: 10 on the board's file) |
+| `vm_tables_used` | 10 | pinned (the group VM's L0; L1, L2 and three L3 for the 4 GiB block (queue, arenas, target); L1, L2 and two L3 for the kernel range (pool, chunk)) |
+| `suspend_size`, `protm_suspend_size` | 0, 0 | board-dependent (the firmware reports CSG 0's sizes) |
+| `heap_ctx` | 0x0000800000015000 | pinned (`HEAP_CTX_VA`, `HEAP_SET`'s operand) |
+| `heap_chunk` | 0x0000800000a00000 | pinned |
+| `heap_chunk_size` | 2097152 (2 MiB) | pinned |
+| `heap_stride` | 64 | pinned (the G610's L2 line) |
+| `csg_req`, `csg_ack` | 0x11, 0x11 | pinned |
+| `cs_req`, `cs_ack` | 0x0511, 0x0511 | pinned |
+| `csg_ack_us`, `cs_ack_us` | 1, 0 | board-dependent (the model's acknowledge lag) |
+| `latest_flush` | 0 | board-dependent (the GPU's flush id) |
+| `sync_updates` | 1 | pinned |
+| `insert`, `extract` | 128, 128 | pinned |
+| `seqno`, `sync_status` | 1, 0 | pinned |
+| `wait_us` | 20 | board-dependent (the model's job lag; bounded by the 5 s wait) |
+| `status_cmd_ptr`, `info` | 0, 0 | pinned (a refused wait fills them) |
+| `stop_us`, `terminate_us` | 3, 1 | board-dependent |
+| `stop_refusal`, `terminate_refusal` | 0, 0 | pinned |
+| `cleared[3]` | 0, 0, 0 | pinned |
+| `red`, `blue` | 2048, 2048 | pinned (the model paints the frame's halves; the board's GPU must too) |
+| `fill`, `other` | 0, 0 | pinned |
+| `pixels` | 4096 | pinned |
+| `digest` | 0xa4db81a9d39bfdcc | pinned (FNV-1a 64 of the blocks and the 53 stream words at `CS_VA`; the probe prints the same) |
+
+A record whose pinned field differs is a finding, recorded as it came.
+
+**Time limit.** The wait on the sync object is bounded by `sched::wait`'s
+`JOB_TIMEOUT_US`, panthor's `JOB_TIMEOUT_MS`: 5 s (5000000 µs), counted
+from the call; on expiry the wait refuses (`step` 14, `refusal` 19,
+`JobTimeout`) and the group is stopped and terminated. The model's job
+takes 20 µs; a board job that needs more than a few milliseconds is a
+finding before it is a timeout. The probe feeds WDT0 around the call
+(`t6_watchdog_feed()` before and after `yd_t6_submit`, and in the
+handover callback); the feeder's rule is as for Z2 and Z3 (`TOP` 13,
+22.4 s period; the timer feeds only while the calls come at most
+`ALIVE_S` = 5 s apart, and until `LIFETIME_S` = 60 s of uptime). Z3's
+boot, the 5 s wait and the stop and terminate waits can together pass 5 s
+between calls: the feeding then stops and WDT0 resets the board within
+22.4 s of its last feed, at most 82.4 s after the arming, whatever the
+image does. Whether the probe also feeds inside the wait is not
+assumed here.
 
 **Verdict.** `driver/tools/kexec-zephyr/t6-verdict.sh t6_submit
 <uart.log>` judges the capture: Z1's, Z2's and Z3's lines as for `t6_fw`,
