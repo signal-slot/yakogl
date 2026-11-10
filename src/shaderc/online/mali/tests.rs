@@ -4891,6 +4891,124 @@ fn case_89_flatlast_is_byte_equal_to_mesa_26_2_1() {
     check_linked_for("89", vs, fs, json);
 }
 
+/// One decoded moved expression: its location, lane and nodes.
+type MovedLanes = (u8, u8, Vec<super::motion::Node>);
+
+/// The record of fragment shader `fs` compiled for vertex shader `vs` (its
+/// constant and uniform-only lanes, as [`compile_linked`]): the reads and
+/// the decoded moved expressions.
+fn linked_record(vs: &str, fs: &str) -> (Vec<(u8, u8)>, Vec<MovedLanes>) {
+    let (_, f) = compile_linked(vs, fs);
+    let pr = super::fragment_reads(&f.info.shader()).expect("the record's moved expressions encode");
+    let mut out = [super::motion::Moved::NONE; super::motion::MAX_MOVED];
+    let n = super::motion::decode(pr.moved(), &mut out).expect("the record's bytes decode");
+    (pr.reads().to_vec(), out[..n].iter().map(|m| (m.location, m.comp, m.nodes().to_vec())).collect())
+}
+
+/// Case 199's top program (es3trunc_vs.vert and es3trunc_fs.frag, #33):
+/// every lane of `v` is uniform-only, so the link moves the integer work of
+/// lanes y and z into the vertex shader (motion.rs, convergent lanes) and
+/// the fragment shader keeps `trunc(v.x)` and `trunc(-v.x)`: a flat `.v3`
+/// load, `FROUND.f32.rtz`, `FADD_IMM`, `FMA` by 0.125, ATEST of the moved z
+/// lane and BLEND; the varying program `LSHIFT_OR`, `ARSHIFT_OR`, `ISUB.s32`,
+/// `S32_TO_F32`, `F32_TO_U32.rtz`, `RSHIFT_OR`, `U32_TO_F32` and the
+/// products by 1/64 (docs/notes/mali-trunc.md). Both IDVS programs, the
+/// fragment program and every fact against fsarith_199_es3trunc.expect.json
+/// (drawn without uniform values).
+#[test]
+fn case_199_fragment_trunc_is_byte_equal_to_mesa_26_2_1() {
+    use super::motion::Node;
+    use super::nir::Alu;
+    let (vs, fs, json) =
+        (td!("fsarith_199_es3trunc.vert"), td!("fsarith_199_es3trunc.frag"), td!("fsarith_199_es3trunc.expect.json"));
+    assert_eq!(vs, include_str!("../../../../tools/shaders/gltest/es3trunc_vs.vert"));
+    assert_eq!(fs, include_str!("../../../../tools/shaders/gltest/es3trunc_fs.frag"));
+    let (reads, moved) = linked_record(vs, fs);
+    assert_eq!(reads, vec![(0, 0b0111)]);
+    /* lane y: `float((i >> 1) - (i << 3)) / 64.0` of `int(v.y)`; lane z:
+     * `float(u >> 2u) / 64.0` of `uint(v.z)` */
+    let y = vec![
+        Node::Lane { location: 0, comp: 1 },
+        Node::Op { op: Alu::F2i, src: [0, 0, 0] },
+        Node::Const(1),
+        Node::Op { op: Alu::Ishr, src: [1, 2, 0] },
+        Node::Const(3),
+        Node::Op { op: Alu::Ishl, src: [1, 4, 0] },
+        Node::Op { op: Alu::Isub, src: [3, 5, 0] },
+        Node::Op { op: Alu::I2f, src: [6, 0, 0] },
+        Node::Const(0x3c80_0000),
+        Node::Op { op: Alu::Fmul, src: [7, 8, 0] },
+    ];
+    let z = vec![
+        Node::Lane { location: 0, comp: 2 },
+        Node::Op { op: Alu::F2u, src: [0, 0, 0] },
+        Node::Const(2),
+        Node::Op { op: Alu::Ushr, src: [1, 2, 0] },
+        Node::Op { op: Alu::U2f, src: [3, 0, 0] },
+        Node::Const(0x3c80_0000),
+        Node::Op { op: Alu::Fmul, src: [4, 5, 0] },
+    ];
+    assert_eq!(moved, vec![(0, 1, y), (0, 2, z)]);
+    check_linked_for("199 fs", vs, fs, json);
+    /* the negative control: the same fragment shader on a varying the
+     * vertex shader reads from an attribute is interpolated, and `f2i` does
+     * not commute with interpolation, so nothing moves and the integer work
+     * stays in the fragment shader (where its first refusal is the
+     * fragment's own, not the link's) */
+    let attr = "#version 300 es\nin vec4 a_color;\nin vec4 a_pos;\nout vec4 v;\n\
+                void main() { gl_Position = a_pos; v = a_color; }\n";
+    let _k = store::test_keep();
+    let consts = store::with_scratch(|s| super::vs_constants(attr.as_bytes(), s))
+        .expect("the scratch arena is free")
+        .expect("the vertex shader's constant lanes");
+    let f = store::with_scratch(|s| {
+        super::compile_fs_for_vs(fs.as_bytes(), consts, s, store::keep()).map(|(sh, _)| stage_of(&sh))
+    })
+    .expect("the scratch arena is free");
+    match f {
+        Ok(f) => {
+            let pr = super::fragment_reads(&f.info.shader()).expect("the record encodes");
+            assert!(pr.moved().is_empty(), "an interpolated lane moved: {:?}", pr.moved());
+            assert!(f.code.iter().any(|w| text(*w).starts_with("F32_TO_S32")), "f2i left the fragment shader");
+        }
+        Err(e) => panic!("the attribute-fed control: {e:?}"),
+    }
+}
+
+/// The motion guard's pair (docs/notes/mali-trunc.md, fs-trunc), drawn on
+/// the Mesa 26.2.1 drm-shim: a highp `-v.x` of a uniform-only (convergent)
+/// lane moves (the varying program's `FMA.f32 r0, u5.w1.neg, 0x0,
+/// u5.w1.neg`, the fragment shader's `.src_flat32` load and no `.neg`), and
+/// a highp `v.x * 2.0` of an attribute-fed lane stored straight into the
+/// colour moves as well (`FADD.f32 r0, r0^, r0^` after `LD_ATTR_IMM`): the
+/// colour's stores are no condition. s4_fneg (an interpolated `-v.x`, kept)
+/// and the motion sentinels stay byte-equal in their own tests.
+#[test]
+fn the_motion_guard_pair_is_byte_equal_to_mesa_26_2_1() {
+    use super::motion::Node;
+    use super::nir::Alu;
+    let (vs, fs, json) = (
+        td!("motion_guard_conv_fneg.vert"),
+        td!("motion_guard_conv_fneg.frag"),
+        td!("motion_guard_conv_fneg.expect.json"),
+    );
+    let neg = vec![Node::Lane { location: 0, comp: 0 }, Node::Op { op: Alu::Fneg, src: [0, 0, 0] }];
+    assert_eq!(linked_record(vs, fs), (vec![(0, 0b0001)], vec![(0, 0, neg)]));
+    check_linked_for("motion_guard_conv_fneg", vs, fs, json);
+    let (vs, fs, json) = (
+        td!("motion_guard_interp_mul.vert"),
+        td!("motion_guard_interp_mul.frag"),
+        td!("motion_guard_interp_mul.expect.json"),
+    );
+    let mul =
+        vec![Node::Lane { location: 0, comp: 0 }, Node::Const(0x4000_0000), Node::Op { op: Alu::Fmul, src: [0, 1, 0] }];
+    assert_eq!(linked_record(vs, fs), (vec![(0, 0b0001)], vec![(0, 0, mul)]));
+    check_linked_for("motion_guard_interp_mul", vs, fs, json);
+    /* the interpolated negation, s4_fneg's shader: nothing moves */
+    let (vs, fs) = (td!("s4_fneg.vert"), td!("s4_fneg.frag"));
+    assert_eq!(linked_record(vs, fs).1, vec![]);
+}
+
 /// Two corpus programs on the same rules that no reference draws yet (the
 /// drm-shim run of each is to be recorded): tri_fragcoord's `x / 1280.0`
 /// and `y / 512.0` take the constants rounded to fp16 in one FAU word

@@ -349,6 +349,60 @@ In `src/shaderc/online/mali/tests.rs` (next to
    fragment shader (an interpolated lane is not movable through `f2i`) and
    is refused as before, so the convergent test is what lets 199 through.
 
+## 5a. Done in fs-trunc (measured)
+
+* **Byte-equal.** `tests.rs` `case_199_fragment_trunc_is_byte_equal_to_mesa_26_2_1`
+  passes `check_linked_for` against `fsarith_199_es3trunc.expect.json`:
+  both IDVS programs, the 13-word fragment program and every fact. The
+  record is reads `(0, 0b0111)` and the two moved expressions of §5.2
+  (lane 1 has 10 nodes, `Ishr` before `Ishl` in node order). The varying
+  program still comes out `LSHIFT_OR` before `ARSHIFT_OR`, so §4.2.5's
+  order needs no change in `expression()`. The negative control (the same
+  fragment shader on an attribute-fed `v`) moves nothing and keeps
+  `F32_TO_S32` in the fragment shader. It now *compiles*: it is no longer
+  refused, because the arms below exist. `corpus-verdicts.txt`:
+  `gltest/es3trunc_fs.frag` is `ok`, the only verdict that moved.
+* **`nir_fs.rs` `alu32`** gained `Ftrunc`, `Ishl`, `Ushr`, `Ineg`, `U2f`
+  and `Iadd(a, Ineg(b))` -> `Isub(a, b)`, in either operand order, as
+  `nir.rs` does it.
+* **`motion.rs`**, three changes:
+  1. **The sink guard is gone** (`d.up(pd) == SINK && f.prec.highp`).
+     Instead, an *interpolated* `Fneg` is unmovable unless every user is an
+     `Fadd` and it is no colour lane. Mesa sees a GLSL negation as a
+     preserve-inf `fneg`, which `:3745` refuses, and our `a - b` as a
+     fast-math `fsub`. A post-dominator that is such a subtraction's `Fneg`
+     on its own does not move (its `fadd` did not).
+  2. **A lane of a vector operation is unmovable** (`:3845-3848`;
+     `Fs::is_vector_node` means another node of the same op made by the
+     same IR instruction). The old sink guard was also hiding this rule:
+     without it, `varyorder_rev`'s `v_a * vec4(v_uv, 1.0, 1.0) + v_b`
+     (z and w are a plain `fadd` of two interpolated lanes, stored) moved,
+     and the reference keeps it in the fragment shader. The IR's width
+     table cannot answer this, because a scalar conversion has no width
+     there (`comps_of` reads 4).
+  3. **A fix:** `move_into_producer` rewrote the colour from the
+     *original* colour on each move. With two moves (case 199), the second
+     undid the first, and the first was then found again until
+     `MAX_MOVED`.
+* **The guard references** (Mesa 26.2.1 drm-shim, built from the
+  `MESA_PAN_TREE` source into `$CONNECTED_DEPS_DIR/mesa-shim` with
+  `drm_shim_ref.sh`'s options, drawn on 2026-11-10; that build reproduces
+  `s4_fneg.expect.json` byte for byte, and `fsarith_199_es3trunc`'s except
+  for the trace's name):
+  `tools/mali/testdata/motion_guard_conv_fneg.*` (uniform-fed `v`, highp
+  `-v.x`) is **moved**: the varying program is
+  `FMA.f32 r0, u5.w1.neg, 0x0, u5.w1.neg`, and the fragment shader is a
+  `.src_flat32` load with no `.neg`.
+  `motion_guard_interp_mul.*` (attribute-fed `v`, highp `v.x * 2.0`
+  stored straight into the colour) is **moved**: `LD_ATTR_IMM` then
+  `FADD.f32 r0, r0^, r0^`, and the fragment shader is the plain load. So
+  the open point is settled as §4.2.4 predicted, and "only interpolated
+  lanes" is not the rule either: `interp_mul` is an interpolated lane
+  whose only user is the store, and it moves. The rule is the op (the
+  negation) and the vector, not the sink. Both are pinned by
+  `the_motion_guard_pair_is_byte_equal_to_mesa_26_2_1`, which also checks
+  that `s4_fneg`'s shader moves nothing.
+
 ## 6. Risks / open
 
 * No board is needed: the reference is the draw of the shim. The sweep case

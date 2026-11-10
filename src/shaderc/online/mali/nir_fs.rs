@@ -960,6 +960,17 @@ impl<'s> Fs<'s> {
         )
     }
 
+    /// Node `n` is one lane of a vector operation: its IR instruction made
+    /// another node of the same operation (the lanes [`Self::alu32`] wrote
+    /// out; the IR's width table is no answer, a scalar conversion has no
+    /// width there). Mesa's linker runs before `nir_lower_alu_width` and
+    /// sees the vector, which is unmovable (nir_opt_varyings.c:3845-3848,
+    /// motion.rs). Lanes CSE'd into one node read as a scalar.
+    pub(super) fn is_vector_node(&self, n: u16) -> bool {
+        let (at, kind) = (self.origin[n as usize], self.nir.nodes[n as usize].kind);
+        (0..self.nir.n).any(|k| k != n as usize && self.origin[k] == at && self.nir.nodes[k].kind == kind)
+    }
+
     fn is_const(&self, v: Val, bits: &[u32]) -> bool {
         matches!(v, Val::Const(b) if bits.contains(&b))
     }
@@ -2312,9 +2323,28 @@ impl<'s> Fs<'s> {
                     (None, _) => self.op32(Alu::I2f, [x, u, u], at),
                 }
             }
-            AluOp::Iadd => self.op32(Alu::Iadd, [x, y, u], at),
+            /* `u2f32` of a smooth lane: case 199's `float(u >> 2u)`, which
+             * the link moves into the vertex shader (fsarith_199_es3trunc,
+             * its varying program's `U32_TO_F32`) */
+            AluOp::U2f => self.op32(Alu::U2f, [x, u, u], at),
+            /* GLSL's `a - b` is `iadd(a, ineg(b))`, which is `isub(a, b)`
+             * (nir_opt_algebraic.py, as the vertex stage's arm, nir.rs);
+             * the `ineg` is left to the colour's reach: case 199's
+             * `(i >> 1) - (i << 3)`, `ISUB.s32` (fsarith_199_es3trunc) */
+            AluOp::Iadd => match (self.alu_of(x), self.alu_of(y)) {
+                (_, Some((Alu::Ineg, [b, ..]))) => self.op32(Alu::Isub, [x, b, u], at),
+                (Some((Alu::Ineg, [b, ..])), _) => self.op32(Alu::Isub, [y, b, u], at),
+                _ => self.op32(Alu::Iadd, [x, y, u], at),
+            },
+            AluOp::Ineg => self.op32(Alu::Ineg, [x, u, u], at),
             AluOp::Iand => self.op32(Alu::Iand, [x, y, u], at),
+            AluOp::Ishl => self.op32(Alu::Ishl, [x, y, u], at),
             AluOp::Ishr => self.op32(Alu::Ishr, [x, y, u], at),
+            AluOp::Ushr => self.op32(Alu::Ushr, [x, y, u], at),
+            /* `trunc()`, `FROUND.f32.rtz`; of `-v.x` the `fneg` node stays,
+             * a source modifier (fsarith_199_es3trunc's `FROUND.f32.rtz r1,
+             * r2^.neg`) */
+            AluOp::Ftrunc => self.op32(Alu::Ftrunc, [x, u, u], at),
             /* every front-end ffma is `FMA.f32` with its sources in order: a
              * matrix product's term (the vertex stage's rule, here also of a
              * mat3 built from a vec4 array's elements, femtovg's
