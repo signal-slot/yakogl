@@ -58,6 +58,9 @@ pub struct StageMeta {
     helper_threads: bool,
     /// The fragment program discards ([`MaliShader::can_discard`]).
     can_discard: bool,
+    /// The fragment program's colour outputs, bit i = render target i
+    /// ([`MaliShader::colour_outputs`]); 0 for a vertex shader.
+    colour_outputs: u32,
 }
 
 impl StageMeta {
@@ -138,6 +141,9 @@ impl StageMeta {
             samples_texture: record.sampler.is_some(),
             helper_threads: record.helper_threads,
             can_discard: record.can_discard,
+            /* target 0 always: the frame needs it (its alpha is ATEST's),
+             * as the meta said before the record carried the others */
+            colour_outputs: if stage == ShaderStage::FRAGMENT { record.colour_outputs | 1 } else { 0 },
         })
     }
 
@@ -158,11 +164,12 @@ impl StageMeta {
                 register_allocation: register_allocation(s.work_reg_count),
             }),
             no_psiz_offset: self.no_psiz_offset,
-            /* the back end writes gl_FragColor only, and refuses every other
-             * output (MaliError::FragOutput); it discards where the source
-             * does (nir_fs.rs `Fs::discard`) and writes neither depth,
-             * stencil, coverage nor memory */
-            colour_outputs: u32::from(self.stage == ShaderStage::FRAGMENT),
+            /* the back end writes gl_FragColor or `layout(location = i)`
+             * outputs, each its own BLEND (frame.rs: DCD1's render target
+             * mask, refused past the frame's targets); it discards where the
+             * source does (nir_fs.rs `Fs::discard`) and writes neither
+             * depth, stencil, coverage nor memory */
+            colour_outputs: self.colour_outputs,
             samples_texture: self.samples_texture,
             requires_helper_threads: self.helper_threads,
             can_discard: self.can_discard,

@@ -66,9 +66,11 @@
 //! (or the wait's own error), and a backend with no Mali OSAL `-ENODEV`.
 //!
 //! The capability answers say what this backend does today: it samples no
-//! texel format, renders no integer or depth-only target and writes one
-//! colour target. Where the GL core needs a limit that is the hardware's,
-//! the value is Mesa's for this GPU, cited.
+//! texel format and renders no integer or depth-only target. A draw writes
+//! up to [`DRAW_TARGETS`] colour targets, in a frame that starts from a
+//! whole colour clear of all of them ([`colour_targets`]). Where the GL core
+//! needs a limit that is the hardware's, the value is Mesa's for this GPU,
+//! cited.
 
 use super::arena::{Arena, ArenaError, Pool, PoolTop, POOL_CHUNKS};
 use super::blend;
@@ -105,9 +107,8 @@ pub const INTEGER_RT_FORMATS: u32 = 0;
 /// src/gallium/drivers/panfrost/pan_screen.c:700-701). This is what the GL
 /// core reports as GL_MAX_COLOR_ATTACHMENTS / GL_MAX_DRAW_BUFFERS, so
 /// glFramebufferTexture2D(GL_COLOR_ATTACHMENT1) is not GL_INVALID_ENUM
-/// (docs/notes/mali-mrt-attachments.md). The frame builder takes several
-/// targets ([`frame::begin_frame_targets`]); [`check`] still refuses the
-/// draw itself ([`NOT_BUILT_TARGET_COUNT`]) until the backend opens one.
+/// (docs/notes/mali-mrt-attachments.md). A draw of several opens a frame of
+/// them all ([`frame::begin_frame_targets`], [`colour_targets`]).
 pub const DRAW_TARGETS: usize = 4;
 
 /// Vertex-stage texture units (`backend::GLES_VS_TEX_UNITS`): 16, the most
@@ -157,7 +158,34 @@ pub const FRAME_LOST: &str = "mali: an open frame could not be ended or submitte
 /// The draw names no colour surface. The contract of `backend::draw` makes
 /// that `-EINVAL` (a core bug), not a gap.
 pub const INVALID_NO_TARGET: &str = "mali: the draw has no colour target (target_gpu is 0)";
-pub const NOT_BUILT_TARGET_COUNT: &str = "mali: a draw with more than one colour target is not built yet";
+/// `num_targets` past [`DRAW_TARGETS`], what the GL core was told: its defect.
+pub const INVALID_TARGET_COUNT: &str = "mali: the draw has more colour targets than the backend reports";
+/* A draw of several colour targets (`GlesDraw::num_targets`), refused by
+ * name for what the frame of several does not build ([`check`],
+ * [`open_frame`]; frame::NOT_BUILT_MRT for a 4x one, a Z/S preload or a
+ * blend shader). */
+/// Targets 1.. of another size than target 0 (ES 3.0 draws the
+/// intersection; the frame's targets are of one size, frame::INVALID_MRT_SIZE).
+pub const NOT_BUILT_TARGET_SIZES: &str = "mali: several colour targets of different sizes are not built yet";
+/// glDrawBuffers({ATT0, GL_NONE, ATT2}): a slot that stores nowhere
+/// (`GlesDrawTarget::gpu` 0) before the last target.
+pub const NOT_BUILT_TARGET_GAP: &str = "mali: a GL_NONE draw buffer between colour targets is not built yet";
+/// The draw carries no row pitch for targets 1.. (`GlesDrawTarget`): they
+/// are taken at the GL core's linear pitch of their width
+/// ([`linear_row_stride`]), which a target 0 at another pitch (a level of a
+/// mip chain, laid out at level 0's pitch) says may not hold for them
+/// either.
+pub const NOT_BUILT_TARGETS_PITCH: &str =
+    "mali: several colour targets whose first is not at the linear row pitch of its width (a mip level) are not built yet";
+/// A frame of several targets that starts from their old images: the
+/// colour preload draws back target 0 only.
+pub const NOT_BUILT_TARGETS_PRELOAD: &str =
+    "mali: several colour targets in a frame that does not start from a whole colour clear are not built yet";
+/// A colour clear of several targets that is not the frame's start value
+/// for all of them (masked, scissored, of some draw buffers only, or after
+/// a draw): the clear quad writes target 0 only.
+pub const NOT_BUILT_TARGETS_CLEAR: &str =
+    "mali: a colour clear of several targets other than one whole clear of every target before any draw is not built yet";
 /// glDrawBuffers({GL_NONE, ATT1}): the list starts past fragment output 0.
 pub const NOT_BUILT_OUTPUT_SHIFT: &str = "mali: a draw whose first draw buffer is GL_NONE is not built yet";
 pub const NOT_BUILT_TARGET_FORMAT: &str =
@@ -387,6 +415,9 @@ struct TargetKey {
     objects: [(u32, u32); 2],
     ds_w: u32,
     ds_h: u32,
+    /// Colour targets 1.. of a draw of several, in order, `None` past the
+    /// last ([`colour_targets`]): another set is another frame.
+    more: [Option<SampleKey>; DRAW_TARGETS - 1],
 }
 
 /// Where one plane of the open frame's attachment starts.
@@ -494,9 +525,9 @@ struct SampleBuffer {
 
 const NO_SAMPLE_BUFFER: SampleBuffer = SampleBuffer { mem: OsalGpuMem::ZERO, holds: None };
 
-/// The colour image whose samples the store holds: its memory and layout
-/// (a [`TargetKey`] without the depth/stencil, which the store does not
-/// keep).
+/// A colour image's memory and layout: the one whose samples the store
+/// holds (a [`TargetKey`] without the depth/stencil, which the store does
+/// not keep), and each of a frame's targets 1.. ([`TargetKey::more`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct SampleKey {
     gpu: u64,
@@ -1359,13 +1390,13 @@ fn check(d: &GlesDraw) -> Result<(), FrameError> {
     if d.target_gpu == 0 {
         return Err(FrameError::Invalid(INVALID_NO_TARGET));
     }
-    if d.num_targets > 1 {
-        return not_built(NOT_BUILT_TARGET_COUNT);
-    }
     if d.targets[0].out_shift != 0 {
         return not_built(NOT_BUILT_OUTPUT_SHIFT);
     }
     target_format(d)?;
+    if d.num_targets > 1 {
+        check_targets(d)?;
+    }
     let touches_zs = d.index_count != 0 || d.do_clear_depth || d.do_clear_stencil;
     if touches_zs && (d.depth_id != 0 || d.stencil_id != 0) && (d.ds_w < d.target_w || d.ds_h < d.target_h) {
         return not_built(NOT_BUILT_ZS_SIZE);
@@ -1381,11 +1412,59 @@ fn check(d: &GlesDraw) -> Result<(), FrameError> {
     Ok(())
 }
 
+/// What a draw of several colour targets must be ([`check`]): targets 1..
+/// stored, each of target 0's size and of a format the frame renders,
+/// target 0 at the linear pitch the others are taken at, single-sampled,
+/// and a colour clear one whole clear of every target.
+fn check_targets(d: &GlesDraw) -> Result<(), FrameError> {
+    let not_built = |why| Err(FrameError::NotBuilt(why));
+    let n = usize::from(d.num_targets);
+    if n > DRAW_TARGETS {
+        return Err(FrameError::Invalid(INVALID_TARGET_COUNT));
+    }
+    for t in &d.targets[1..n] {
+        if t.gpu == 0 {
+            return not_built(NOT_BUILT_TARGET_GAP);
+        }
+        if (t.w, t.h) != (d.target_w, d.target_h) {
+            return not_built(NOT_BUILT_TARGET_SIZES);
+        }
+        surface_format(t.format)?;
+    }
+    let format = target_format(d)?;
+    if u64::from(backend::draw_pitch(d)) * u64::from(format.bytes()) != u64::from(linear_row_stride(d.target_w, format))
+    {
+        return not_built(NOT_BUILT_TARGETS_PITCH);
+    }
+    if d.samples > 1 {
+        return not_built(frame::NOT_BUILT_MRT);
+    }
+    /* glClearBuffer(GL_COLOR, n) names some draw buffers (bit k, target k) */
+    let every = (1u8 << n) - 1;
+    let all = d.clear_target_mask == 0 || d.clear_target_mask & every == every;
+    if d.do_clear && (d.clear_quad || colour_clear_mask(d) != 0xf || !all) {
+        return not_built(NOT_BUILT_TARGETS_CLEAR);
+    }
+    Ok(())
+}
+
+/// The row stride in bytes the GL core lays a linear image `w` wide out at
+/// for this backend: its pair-padded pitch (`gl::context::tex_pitch`) on
+/// [`TEXTURE_ROW_ALIGN`] bytes (`gl::context::linear_pitch`,
+/// `YakoglBackend::linear_row_align`).
+fn linear_row_stride(w: u32, format: frame::TargetFormat) -> u32 {
+    (w.wrapping_add(1) & !1).saturating_mul(format.bytes()).next_multiple_of(TEXTURE_ROW_ALIGN)
+}
+
 /// The GL core's colour surface format (`GLES_SURF_*`) as the frame's
 /// target format; the others are refused by name.
 fn target_format(d: &GlesDraw) -> Result<frame::TargetFormat, FrameError> {
+    surface_format(d.target_format)
+}
+
+fn surface_format(format: u8) -> Result<frame::TargetFormat, FrameError> {
     use frame::TargetFormat as F;
-    match d.target_format {
+    match format {
         backend::GLES_SURF_RGBA8888 => Ok(F::Rgba8888),
         backend::GLES_SURF_XRGB8888 => Ok(F::Xrgb8888),
         backend::GLES_SURF_RGB565 => Ok(F::Rgb565),
@@ -2526,6 +2605,13 @@ fn seed_depth(g: &mut MaliState, key: &TargetKey, t: ds_retention::DepthTexels) 
 
 impl TargetKey {
     fn of(d: &GlesDraw, row_stride: u32, format: frame::TargetFormat) -> TargetKey {
+        let mut more = [None; DRAW_TARGETS - 1];
+        let n = usize::from(d.num_targets).clamp(1, DRAW_TARGETS);
+        for (m, t) in more.iter_mut().zip(&d.targets[1..n]) {
+            /* `check` refused a gap and a format the frame does not render */
+            let format = surface_format(t.format).unwrap_or(format);
+            *m = Some(SampleKey { gpu: t.gpu, w: t.w, h: t.h, row_stride: linear_row_stride(t.w, format), format });
+        }
         TargetKey {
             gpu: d.target_gpu,
             w: d.target_w,
@@ -2537,12 +2623,41 @@ impl TargetKey {
             objects: [(d.depth_id, d.depth_gen), (d.stencil_id, d.stencil_gen)],
             ds_w: d.ds_w,
             ds_h: d.ds_h,
+            more,
         }
     }
 
     fn has_zs(&self) -> bool {
         self.objects[0].0 != 0 || self.objects[1].0 != 0
     }
+
+    /// Whether a colour target's rows share a byte with `[gpu, gpu + bytes)`.
+    fn writes(&self, gpu: u64, bytes: u64) -> bool {
+        core::iter::once(SampleKey::of(self)).chain(self.more.iter().flatten().copied()).any(|t| t.overlaps(gpu, bytes))
+    }
+}
+
+/// The frame's colour targets 1.. ([`TargetKey::more`]) as the frame
+/// builder takes them ([`frame::begin_frame_targets`]): single-sampled, at
+/// the GL core's linear pitch of their width ([`NOT_BUILT_TARGETS_PITCH`]).
+/// Returns them and their count.
+fn colour_targets(key: &TargetKey) -> ([frame::Target; DRAW_TARGETS - 1], usize) {
+    let none =
+        frame::Target { gpu: 0, width: 0, height: 0, row_stride: 0, format: frame::TargetFormat::Rgba8888, samples: 1 };
+    let mut out = [none; DRAW_TARGETS - 1];
+    let mut n = 0;
+    for (o, m) in out.iter_mut().zip(key.more.iter().flatten()) {
+        *o = frame::Target {
+            gpu: m.gpu,
+            width: m.w,
+            height: m.h,
+            row_stride: m.row_stride,
+            format: m.format,
+            samples: 1,
+        };
+        n += 1;
+    }
+    (out, n)
 }
 
 /// The index in `MaliState::zs_preload` of the program that preloads the
@@ -2574,6 +2689,10 @@ fn upload_preload(code: &mut Arena, p: &PreloadProgram) -> Result<u64, FrameErro
 /// holds, each drawn back by the per-sample preload, when the store holds
 /// its target's, and otherwise from the target's image in every sample.
 fn open_frame(g: &mut MaliState, key: TargetKey, target: frame::Target, clear: Option<[f32; 4]>) -> Result<(), Fail> {
+    let (more, n) = colour_targets(&key);
+    if clear.is_none() && n > 0 {
+        return Err(FrameError::NotBuilt(NOT_BUILT_TARGETS_PRELOAD).into());
+    }
     if clear.is_none() && g.preload.n == 0 {
         return Err(FrameError::NotBuilt(NOT_BUILT_PRELOAD_PROGRAM).into());
     }
@@ -2588,7 +2707,7 @@ fn open_frame(g: &mut MaliState, key: TargetKey, target: frame::Target, clear: O
     }
     // SAFETY: the slot is free of the GPU since the wait above.
     let (mut a, mut cs) = unsafe { slot_arenas(&g.slots[i], g.user_regs, Tops::ZERO, 0) }?;
-    let mut f = frame::begin_frame(&mut a.desc, &mut cs)?;
+    let mut f = frame::begin_frame_targets(&mut a.desc, &mut cs, &more[..n])?;
     let store = if target.samples == 4 { sample_store(g, &target) } else { None };
     let mut kept = None;
     if let Some((gpu, surface_stride)) = store {
@@ -2652,8 +2771,10 @@ fn end_open(g: &mut MaliState) -> i32 {
     let slot = g.slots[o.slot];
     /* the store holds nothing until this frame is submitted, if it keeps
      * its samples, and nothing of a target this frame writes otherwise */
-    let bytes = u64::from(o.target.row_stride) * u64::from(o.target.height);
-    g.samples.holds = g.samples.holds.filter(|h| o.kept.is_none() && !h.overlaps(o.target.gpu, bytes));
+    g.samples.holds = g.samples.holds.filter(|h| {
+        let bytes = u64::from(h.row_stride) * u64::from(h.h);
+        o.kept.is_none() && !o.key.writes(h.gpu, bytes)
+    });
     // SAFETY: the open frame's slot, which the GPU does not read until the
     // submit below.
     let built = unsafe { slot_arenas(&slot, g.user_regs, o.tops, o.cs_len) }.and_then(|(mut a, mut cs)| {
@@ -2986,6 +3107,10 @@ fn record_in(g: &mut MaliState, d: &GlesDraw) -> Result<(), Fail> {
         open_frame(g, key, target, None)?;
         quad.colour = d.do_clear || d.clear_quad;
     }
+    /* the clear quad's program writes output 0, target 0 only */
+    if quad.colour && key.more[0].is_some() {
+        return Err(FrameError::NotBuilt(NOT_BUILT_TARGETS_CLEAR).into());
+    }
     let o = g.open.as_mut().ok_or(FrameError::Invalid(frame::INVALID_OPEN_FRAME))?;
     for aspect in 0..2 {
         let cleared = [d.do_clear_depth, d.do_clear_stencil][aspect];
@@ -3224,10 +3349,7 @@ pub extern "C" fn mali_texture_released(base_gpu: u64, bytes: u64) {
     let end = base_gpu.saturating_add(bytes);
     /* the samples of an image that goes are nothing GL keeps */
     g.samples.holds = g.samples.holds.filter(|h| !h.overlaps(base_gpu, bytes));
-    if g.open.is_some_and(|o| {
-        let s = o.target.gpu;
-        s < end && base_gpu < s + u64::from(o.target.row_stride) * u64::from(o.target.height)
-    }) {
+    if g.open.is_some_and(|o| o.key.writes(base_gpu, end - base_gpu)) {
         end_open_for(g, "its colour target was released");
     }
 }
