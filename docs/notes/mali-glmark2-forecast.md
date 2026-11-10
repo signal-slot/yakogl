@@ -183,7 +183,7 @@ compile refusal first.
 
 | code | what | where | scenes | owner |
 |---|---|---|---|---|
-| `D-DEPTHONLY` | A framebuffer with no colour attachment is `GL_FRAMEBUFFER_UNSUPPORTED` on the Mali (`DRAWS_WITHOUT_COLOUR = false`, `src/mali/backend.rs:91`; `src/gl/framebuffer.rs` `check_status`). glmark2's shadow pass (`DepthRenderTarget::setup`, `src/scene-shadow.cpp`) attaches only a `GL_DEPTH_COMPONENT` texture and gives up on any other status: `DepthRenderTarget::setup: glCheckFramebufferStatus failed (0x8cdd)`. | setup | `shadow` | none yet: new issue (section 4) |
+| `D-DEPTHONLY` | A framebuffer with no colour attachment is `GL_FRAMEBUFFER_UNSUPPORTED` on the Mali (`DRAWS_WITHOUT_COLOUR = false`, `src/mali/backend.rs:91`, read as `DEPTH_ONLY_TARGETS` at `src/backend.rs:761`; `check_status` returns `GL_FRAMEBUFFER_UNSUPPORTED` for a framebuffer with no colour attachment at `src/gl/framebuffer.rs:871-874`). glmark2's shadow pass (`DepthRenderTarget::setup`, `src/scene-shadow.cpp:73-118`) attaches only a `GL_DEPTH_COMPONENT` texture and gives up on any other status: `DepthRenderTarget::setup: glCheckFramebufferStatus failed (0x8cdd)`. | setup | `shadow` | none yet: new issue (section 4) |
 | `D-NPOTMIP` | refract's colour target (`DistanceRenderTarget`, 1600x1200 RGBA, `GL_LINEAR_MIPMAP_LINEAR`, `glGenerateMipmap` every frame). The Mali lays out no NPOT chain (`npot_mip_chains` in `src/gl/texture.rs`: `MIP_LEVEL_ALIGN` 64, `native_layered_textures` false, so `grow_npot_chain` keeps one level), so the texture samples level 0 under the mipmap filter. Not a refusal, but a picture that can differ from Mesa's where it is minified. | draw (picture) | `refract` | a risk: new issue only if the board's picture shows it (section 4) |
 | `D-DEPTHTEX` | The depth texture `refract` (and `shadow`, once `D-DEPTHONLY` is gone) samples goes through `mali_depth_resolve` to R32F. gl_test case 169 is the only board evidence for it. | draw | `refract`, `shadow` | a risk; #32 (`docs/notes/mali-texture-refusals.md`) if it fails |
 | `D-OK` | No texture-format or blend refusal is expected: glmark2 uploads unsized `GL_RGB`/`GL_RGBA` `GL_UNSIGNED_BYTE` (stored RGBA8), its targets are `GL_RGBA`, and its blends (`SRC_ALPHA, ONE_MINUS_SRC_ALPHA`; desktop's separate `ZERO, ONE` alpha; terrain's `SRC_ALPHA, ONE`) are fixed function (`src/mali/blend.rs`). Every attribute is float32. `glGenerateMipmap` runs on the CPU (`generate_mipmap: None`). The harness confirms it for the scenes it reaches: no refused draw, no incomplete texture, no incomplete framebuffer, no OSAL refusal in any scene. | — | all | — |
@@ -231,11 +231,13 @@ causes have no issue:
 > Title: Mali: a framebuffer with only a depth attachment is
 > GL_FRAMEBUFFER_UNSUPPORTED (glmark2 shadow cannot set up)
 >
-> `src/mali/backend.rs` declares `DRAWS_WITHOUT_COLOUR = false`, so the GL
-> core reports a framebuffer with no colour attachment as
+> `src/mali/backend.rs:91` declares `DRAWS_WITHOUT_COLOUR = false`
+> (`DEPTH_ONLY_TARGETS`, `src/backend.rs:761`), so `check_status`
+> (`src/gl/framebuffer.rs:871-874`) reports a framebuffer with no colour attachment as
 > `GL_FRAMEBUFFER_UNSUPPORTED`. glmark2's `shadow` scene renders its depth
 > pass into such a framebuffer (a `GL_DEPTH_COMPONENT` texture on
-> `GL_DEPTH_ATTACHMENT`, no colour) and stops at
+> `GL_DEPTH_ATTACHMENT`, no colour; `DepthRenderTarget::setup`,
+> `src/scene-shadow.cpp:73-118`) and stops at
 > `DepthRenderTarget::setup: glCheckFramebufferStatus failed (0x8cdd)`, so
 > the scene cannot run on the NanoPC-T6 even after its shaders build. The
 > PowerVR, GC7000 and V3D back ends draw without a colour target. The frame
