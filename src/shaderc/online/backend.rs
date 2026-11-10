@@ -90,6 +90,9 @@ struct Compiled {
     /// The shader's uniform blocks, in this record's keep extent
     /// ([`keep_blocks`]).
     blocks: crate::shaderc::ShcBlocks,
+    /// The whole names of the uniform rows whose 64-byte field cut them, in
+    /// this record's keep extent ([`keep_blocks`], [`UniformNames`]).
+    names: UniformNames,
     /// A vertex shader compiled with the link's attribute locations
     /// ([`online_compile_vs_linked`]): the map, in this record's keep
     /// extent. The V3D builds a program's code at link from the sources
@@ -112,6 +115,37 @@ struct Compiled {
     /// keep extent, tagged by [`codegen_priv`]; null for the other GPUs):
     /// [`backend_priv`].
     backend_priv: *const c_void,
+}
+
+/// The name pool of a record: the uniform rows whose name the 64-byte
+/// `ShcUniform::name` field cut, each as its index in the shader's uniform
+/// table and its whole name as the source spells it, in the record's keep
+/// extent. Empty for every row the field holds whole, so a shader of
+/// ordinary names adds no byte to the keep region for it.
+///
+/// The field stores 63 characters (`util::set_name` keeps the last byte for
+/// the NUL), and a qualified block-member row is named
+/// `<instance>.<member>`: dEQP-GLES3's `uniform_block.long_instance_name_*`
+/// declare a 1,024-character instance name, whose rows the field cannot
+/// hold. The pool keeps what the field lost, so the block table resolves
+/// its members to their rows by the whole name ([`keep_blocks`]) and the
+/// link can tell a row cut here from one it would pair or report wrongly
+/// (`link::reject_truncated_names`). The `ShcUniform` field itself is not
+/// widened: it is the C ABI the offline tables and the generated reference
+/// files share.
+pub type UniformNames = &'static [(u16, &'static str)];
+
+/// What a compile keeps in its record beside the shader: the block table
+/// and the name pool ([`keep_blocks`]).
+#[derive(Clone, Copy)]
+struct Kept {
+    blocks: crate::shaderc::ShcBlocks,
+    names: UniformNames,
+}
+
+#[cfg(test)]
+impl Kept {
+    const EMPTY: Kept = Kept { blocks: crate::shaderc::ShcBlocks::EMPTY, names: &[] };
 }
 
 /// The tier marker of a code generator's own `priv_`: bit 0 of the pointer.
@@ -285,9 +319,9 @@ fn publish(
     source: &[u8],
     map: Option<&crate::shaderc::ShcAttribMap>,
     shader: ShcShader,
-    blocks: crate::shaderc::ShcBlocks,
+    kept: Kept,
 ) -> Result<&'static Compiled, usize> {
-    publish_as(txn, sha, stage, blend_key, source, map, Facts::plain(), shader, blocks)
+    publish_as(txn, sha, stage, blend_key, source, map, Facts::plain(), shader, kept)
 }
 
 /// What a compile was asked for beyond its source, stage, blend key, zero
@@ -438,7 +472,7 @@ fn publish_as(
     map: Option<&crate::shaderc::ShcAttribMap>,
     facts: Facts<'_>,
     mut shader: ShcShader,
-    blocks: crate::shaderc::ShcBlocks,
+    kept: Kept,
 ) -> Result<&'static Compiled, usize> {
     let keep = store::keep();
     /* The room the compile had, for a refusal: read while `txn` still holds
@@ -474,7 +508,8 @@ fn publish_as(
                 lod_key: facts.lod_key,
                 if_lowering: facts.if_lowering,
                 shader: ShcShader::ZERO,
-                blocks,
+                blocks: kept.blocks,
+                names: kept.names,
                 attrib_map,
                 fs_reads,
                 consts: facts.consts,
@@ -496,34 +531,91 @@ fn publish_as(
     Ok(published)
 }
 
+/// The reflection row table row `u` was copied from, when the row's name
+/// field was cut and `r` may be it: `r`'s name begins with the 63 bytes the
+/// field kept and is at least that long, and the two agree in every other
+/// field `reflect::uniform_rows` copies. The layout fields tell apart two
+/// rows the field cannot (`<1,023 a's>.x` and `<1,023 a's>.y` are one 63-byte
+/// prefix and two dword offsets); a sampler row's binding is its own.
+fn cut_row_is(u: &crate::shaderc::ShcUniform, r: &super::reflect::UniformRow<'_>) -> bool {
+    let stored = crate::util::name_bytes(&u.name);
+    r.name.as_bytes().starts_with(stored)
+        && u.dword_off == r.dword_off
+        && u.dwords == r.dwords
+        && u.gl_type == r.gl_type
+        && u.array_len == r.array_len
+        && u.binding == r.binding
+        && u.inner == r.inner
+}
+
+/// The name pool of `sh` ([`UniformNames`]), built from the compile's own
+/// reflection rows, whose names are whole: for each table row whose field
+/// holds as many bytes as it can (the field's writer, `util::set_name`,
+/// keeps the last for the NUL, so that is the one signature of a cut), the
+/// reflection row it was copied from ([`cut_row_is`]) names it. A cut row
+/// that two reflection rows of different names could be is left out of the
+/// pool: its name is not known, and the link refuses it as before rather
+/// than guess. Empty when no row was cut, and then nothing is allocated.
+fn keep_names(
+    sh: &ShcShader,
+    rows: &[&[super::reflect::UniformRow<'_>]],
+    keep: &'static crate::shaderc::online::arena::Arena<'static>,
+) -> Option<UniformNames> {
+    let table = sh.uniform_table();
+    let whole_of = |k: usize| -> Option<&str> {
+        let u = &table[k];
+        if crate::util::name_bytes(&u.name).len() < u.name.len() - 1 {
+            return None; /* the field holds the name whole */
+        }
+        let mut found: Option<&str> = None;
+        for r in rows.iter().flat_map(|r| r.iter()).filter(|r| cut_row_is(u, r)) {
+            match found {
+                None => found = Some(r.name),
+                Some(f) if f == r.name => {}
+                Some(_) => return None,
+            }
+        }
+        found
+    };
+    let n = (0..table.len()).filter(|&k| whole_of(k).is_some()).count();
+    if n == 0 {
+        return Some(&[]);
+    }
+    let kn = keep.alloc_filled(n, (0u16, "")).ok()?;
+    for (d, k) in kn.iter_mut().zip((0..table.len()).filter(|&k| whole_of(k).is_some())) {
+        *d = (k as u16, keep.alloc_str(whole_of(k)?).ok()?);
+    }
+    Some(kn)
+}
+
 /// A compile's block table copied into the keep region, each member's row
 /// resolved against the finished shader's uniform table by name (a back end
-/// may filter rows, so the reflection's index is not the table's).
+/// may filter rows, so the reflection's index is not the table's), and the
+/// name pool ([`keep_names`]).
 fn keep_blocks(
     sh: &ShcShader,
     (blocks, members, rows): codegen::Blocks<'_>,
     keep: &'static crate::shaderc::online::arena::Arena<'static>,
-) -> Option<crate::shaderc::ShcBlocks> {
+) -> Option<Kept> {
     use crate::shaderc::{ShcBlock, ShcBlockMember, ShcBlocks, SHC_BLOCK_NO_ROW};
     let table = sh.uniform_table();
+    let names = keep_names(sh, &rows, keep)?;
+    let name_of = |k: usize| crate::util::name_bytes(&table[k].name);
     /* The table rows declared as arrays, by name as the members below (a
      * back end filters rows; the V3D program's table holds both stages'). */
-    let is_array = |u: &crate::shaderc::ShcUniform| {
-        let n = crate::util::name_bytes(&u.name);
-        rows.iter().flat_map(|r| r.iter()).any(|r| r.is_array && r.name.as_bytes() == n)
-    };
-    let n_arrays = table.iter().filter(|u| is_array(u)).count();
+    let is_array = |k: usize| rows.iter().flat_map(|r| r.iter()).any(|r| r.is_array && r.name.as_bytes() == name_of(k));
+    let n_arrays = (0..table.len()).filter(|&k| is_array(k)).count();
     let arrays: &'static [u16] = if n_arrays == 0 {
         &[]
     } else {
         let ka = keep.alloc_filled(n_arrays, 0u16).ok()?;
-        for (d, k) in ka.iter_mut().zip((0..table.len()).filter(|&k| is_array(&table[k]))) {
+        for (d, k) in ka.iter_mut().zip((0..table.len()).filter(|&k| is_array(k))) {
             *d = k as u16;
         }
         ka
     };
     if blocks.is_empty() {
-        return Some(ShcBlocks { arrays, ..ShcBlocks::EMPTY });
+        return Some(Kept { blocks: ShcBlocks { arrays, ..ShcBlocks::EMPTY }, names });
     }
     let kb =
         keep.alloc_filled(blocks.len(), ShcBlock { name: "", data_size: 0, first_member: 0, num_members: 0 }).ok()?;
@@ -548,10 +640,7 @@ fn keep_blocks(
     let km = keep.alloc_filled(members.len(), zero).ok()?;
     for (d, s) in km.iter_mut().zip(members) {
         let row_name = s.row_name;
-        let row = table
-            .iter()
-            .position(|u| crate::util::name_bytes(&u.name) == row_name.as_bytes())
-            .map_or(SHC_BLOCK_NO_ROW, |k| k as u16);
+        let row = (0..table.len()).find(|&k| name_of(k) == row_name.as_bytes()).map_or(SHC_BLOCK_NO_ROW, |k| k as u16);
         *d = ShcBlockMember {
             name: keep.alloc_str(s.name).ok()?,
             row,
@@ -564,13 +653,33 @@ fn keep_blocks(
         };
     }
     let kb: &'static [ShcBlock] = kb;
-    Some(ShcBlocks { blocks: kb, members: km, arrays })
+    Some(Kept { blocks: ShcBlocks { blocks: kb, members: km, arrays }, names })
 }
 
 /// The uniform blocks behind a shader: the online back end's record's, or
 /// none (a table shader, or no record).
 pub fn blocks_of(sh: &ShcShader) -> crate::shaderc::ShcBlocks {
     base_of(sh).map_or(crate::shaderc::ShcBlocks::EMPTY, |c| c.blocks)
+}
+
+/// The whole name of row `k` of `sh`'s uniform table when the 64-byte name
+/// field cut it and this back end's record kept it ([`UniformNames`]); `None`
+/// for a row the field holds whole, a row the pool could not name, a table
+/// shader and a shader of another back end.
+pub fn pooled_uniform_name(sh: &ShcShader, k: usize) -> Option<&'static str> {
+    let names = base_of(sh)?.names;
+    names.iter().find(|(i, _)| usize::from(*i) == k).map(|(_, n)| *n)
+}
+
+/// Row `k` of `sh`'s uniform table as the source names it: the pool's
+/// whole name where the field cut it ([`pooled_uniform_name`]), else the
+/// field's bytes -- which are the whole name for every row the link
+/// accepts without the pool. Empty for a `k` the table has no row at.
+pub fn uniform_name(sh: &ShcShader, k: usize) -> &[u8] {
+    match pooled_uniform_name(sh, k) {
+        Some(n) => n.as_bytes(),
+        None => sh.uniform_table().get(k).map_or(&[], |u| crate::util::name_bytes(&u.name)),
+    }
 }
 
 /// Whether this back end made `sh`: a live record of ours behind it, or a
@@ -614,6 +723,7 @@ struct Base {
     if_lowering: IfLowering,
     attrib_map: Option<&'static crate::shaderc::ShcAttribMap>,
     blocks: crate::shaderc::ShcBlocks,
+    names: UniformNames,
     fs_reads: FsReads<'static>,
     consts: LinkConsts,
 }
@@ -631,6 +741,8 @@ impl Base {
             if_lowering: r.if_lowering,
             attrib_map: r.attrib_map,
             blocks: r.blocks,
+            /* the table's rows were made with every name whole or refused */
+            names: &[],
             /* the table has no program's vertex shader */
             fs_reads: FsReads::NONE,
             consts: LinkConsts::NONE,
@@ -648,6 +760,7 @@ impl Base {
             if_lowering: r.if_lowering,
             attrib_map: r.attrib_map,
             blocks: r.blocks,
+            names: r.names,
             fs_reads: r.fs_reads,
             consts: r.consts,
         }
@@ -1041,12 +1154,12 @@ fn compile_and_publish_keyed(
             Ok((sh, kept))
         })
     });
-    let (shader, blocks) = match built {
+    let (shader, kept) = match built {
         Some(Ok(sb)) => sb,
         Some(Err(e)) => return Err(report(log, stage, e)),
         None => return Err(report(log, stage, CompileError::Reentered)),
     };
-    match publish_as(txn, sha, stage, blend_key, glsl, map, facts, shader, blocks) {
+    match publish_as(txn, sha, stage, blend_key, glsl, map, facts, shader, kept) {
         Ok(rec) => Ok(rec),
         Err(left) => Err(report(log, stage, CompileError::OutOfMemory { which: Which::Keep, left })),
     }
@@ -1782,7 +1895,7 @@ fn link_program(vr: &Base, fr: &Base, zero: &ZeroList, fs: &mut ShcShader, log: 
                 },
             )
         });
-        let (shader, blocks) = match built {
+        let (shader, kept) = match built {
             Some(Ok(sb)) => sb,
             /* The V3D compiles the program, not a stage: a refusal here may
              * be the vertex shader's as well as the fragment shader's, and
@@ -1797,7 +1910,7 @@ fn link_program(vr: &Base, fr: &Base, zero: &ZeroList, fs: &mut ShcShader, log: 
             Some(Err(e)) => return report(log, SHC_STAGE_FRAGMENT, e),
             None => return report(log, SHC_STAGE_FRAGMENT, CompileError::Reentered),
         };
-        match publish(txn, sha, SHC_STAGE_FRAGMENT, V3D_PROGRAM_KEY, fr.source, None, shader, blocks) {
+        match publish(txn, sha, SHC_STAGE_FRAGMENT, V3D_PROGRAM_KEY, fr.source, None, shader, kept) {
             Ok(rec) => rec,
             Err(left) => {
                 return report(log, SHC_STAGE_FRAGMENT, CompileError::OutOfMemory { which: Which::Keep, left });
@@ -2753,17 +2866,8 @@ void main (void)
          * not from whatever the caller happened to pass last. */
         cache_clear();
         let txn = store::begin_keep().expect("no compile is open");
-        let rec = publish(
-            txn,
-            [7; 32],
-            SHC_STAGE_FRAGMENT,
-            0,
-            b"void main(){}",
-            None,
-            ShcShader::ZERO,
-            crate::shaderc::ShcBlocks::EMPTY,
-        )
-        .expect("the keep arena has room for one record");
+        let rec = publish(txn, [7; 32], SHC_STAGE_FRAGMENT, 0, b"void main(){}", None, ShcShader::ZERO, Kept::EMPTY)
+            .expect("the keep arena has room for one record");
         let back = base_of(&rec.shader).expect("priv leads back to the record");
         assert_eq!(back.source, b"void main(){}");
         assert_eq!(back.sha, [7; 32]);
@@ -2911,6 +3015,26 @@ void main (void)
         }
         release(&sh);
         assert_eq!(store::keep_in_use(), before, "the table went with the record");
+    }
+
+    /// A shader of ordinary names has no name pool: nothing was cut, so
+    /// nothing is kept twice, and the record's keep footprint is the one it
+    /// had before the pool existed.
+    #[cfg(not(feature = "report-es2"))] // compiles GLSL ES 3.00, which a report-es2 build refuses (pp.rs out_of_scope)
+    #[test]
+    fn a_shader_of_short_names_has_an_empty_name_pool() {
+        let _serial = test_lock();
+        cache_clear();
+        let src = "#version 300 es\nprecision highp float;\nlayout(location = 0) out vec4 o;\n\
+                   layout(std140) uniform Light { vec4 colour; } light;\nuniform vec4 tint;\n\
+                   void main() { o = light.colour * tint; }";
+        let sh = compile_out(SHC_STAGE_FRAGMENT, src);
+        assert!(base_of(&sh).expect("our record").names.is_empty(), "no row was cut");
+        for k in 0..sh.uniform_table().len() {
+            assert_eq!(pooled_uniform_name(&sh, k), None);
+            assert_eq!(uniform_name(&sh, k), crate::util::name_bytes(&sh.uniform_table()[k].name));
+        }
+        release(&sh);
     }
 
     /// On the V3D the link replaces the program's fragment shader with the
@@ -3294,6 +3418,7 @@ void main (void)
                     if_lowering: IfLowering::Default,
                     shader: ShcShader::ZERO,
                     blocks: crate::shaderc::ShcBlocks::EMPTY,
+                    names: &[],
                     attrib_map: None,
                     fs_reads: FsReads::NONE,
                     consts: LinkConsts::NONE,
@@ -3334,18 +3459,9 @@ void main (void)
                 sh.num_varyings = inputs.len() as u8;
             }
         }
-        publish(
-            txn,
-            sha256(src.as_bytes()),
-            SHC_STAGE_FRAGMENT,
-            0,
-            src.as_bytes(),
-            None,
-            sh,
-            crate::shaderc::ShcBlocks::EMPTY,
-        )
-        .expect("room")
-        .shader
+        publish(txn, sha256(src.as_bytes()), SHC_STAGE_FRAGMENT, 0, src.as_bytes(), None, sh, Kept::EMPTY)
+            .expect("room")
+            .shader
     }
 
     /// `online_link` on a compiled vertex shader and a fragment record; the
