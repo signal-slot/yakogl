@@ -145,3 +145,30 @@ fn redaction_scan_passes_a_clean_commit() {
     assert_eq!(s.class_findings("home-path"), 0, "{}", s.stdout);
     let _ = std::fs::remove_dir_all(&repo);
 }
+
+/// The repository itself, public classes only: a home path, address, login or
+/// e-mail added to any tracked file fails here before it reaches the audit.
+/// The failure names each finding's file:line and class, never the hit.
+#[test]
+fn redaction_scan_finds_nothing_in_this_tree() {
+    let s = scan(Path::new(env!("CARGO_MANIFEST_DIR")), "HEAD");
+    // 3 is the clean result without private values; 0 when they are set.
+    assert!(s.code == 0 || s.code == EXIT_NOT_RUN || s.hm > 0, "exit code {}:\n{}", s.code, s.stdout);
+    if s.hm > 0 {
+        let mut class = "";
+        let mut found = Vec::new();
+        for l in s.stdout.lines() {
+            if l.starts_with('[') {
+                // Only the H and M classes' hit lines are findings.
+                class = match l.get(..4) {
+                    Some("[H] " | "[M] ") => l[4..].split_whitespace().next().unwrap_or(""),
+                    _ => "",
+                };
+            } else if !class.is_empty() && l.starts_with("      ") && !l.trim_start().starts_with("info ") {
+                found.push(format!("{} {class}", l.split_whitespace().next().unwrap_or("")));
+            }
+        }
+        panic!("{} H/M finding(s) in the tree:\n{}", s.hm, found.join("\n"));
+    }
+    assert_eq!(s.hm, 0, "{}", s.stdout);
+}
