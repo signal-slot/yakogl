@@ -15,7 +15,7 @@
  * struct yd_t6_submit_up after fw (the key is the field's name; a 64-bit field
  * is 0x%016llx, a register word 0x%08x, a count or time decimal), then PASS or
  * FAIL and the reset. Every Z4 region is __nocache storage with PA = CPU
- * address; the watchdog is fed around the call and by on_handover.
+ * address; the watchdog is fed around the call, by on_handover and by every delay_us.
  */
 #include <zephyr/kernel.h>
 #include <zephyr/kernel/internal/mm.h>
@@ -138,9 +138,23 @@ static const char *const step_name[] = {
 	[YD_T6_SUBMIT_STEP_TERMINATE] = "CSG 0's terminate refused",
 };
 
+/* The Rust waits (Z3's bring-up, sched::wait's 5 s job timeout) poll through
+ * this callback and run between two of the feeds below, which the board glue
+ * wants at most CONFIG_YAKOGL_NANOPC_T6_ALIVE_S (5 s) apart: a run that ends
+ * in the 5 s timeout would be reset before it prints its Z4 record. So every
+ * delay feeds the watchdog, in slices of at most 100 ms. t6_watchdog_feed() is
+ * one store of the uptime (any context), and the Rust calls this from thread
+ * context only. A loop that stops calling delay_us() is still reset after
+ * ALIVE_S. */
 static void delay_us(uint32_t us)
 {
-	k_busy_wait(us);
+	do {
+		uint32_t slice = us > 100000U ? 100000U : us;
+
+		t6_watchdog_feed();
+		k_busy_wait(slice);
+		us -= slice;
+	} while (us > 0U);
 }
 
 static int clean(uintptr_t addr, size_t len)
