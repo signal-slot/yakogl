@@ -3063,14 +3063,16 @@ void main (void)
     /// instance name of 1,024 characters, so the member's row is named
     /// `<1,024 a's>.uniformMember`, which the 64-byte field cuts at 63 a's.
     /// The record's name pool keeps the whole name, the block table still
-    /// finds the member's row through it, and the pool goes back with the
-    /// record.
+    /// finds the member's row through it, the link accepts the stage (a
+    /// block member fills the row; the GL core never reads its field), and
+    /// the pool goes back with the record.
     ///
     /// Revert check: resolve the member's row by the field alone again and
-    /// `row` is `SHC_BLOCK_NO_ROW`.
+    /// `row` is `SHC_BLOCK_NO_ROW`; let the link read the field alone again
+    /// and it refuses the stage with "64-byte name field".
     #[cfg(not(feature = "report-es2"))] // compiles GLSL ES 3.00, which a report-es2 build refuses (pp.rs out_of_scope)
     #[test]
-    fn a_block_member_row_the_field_cut_keeps_its_whole_name_and_its_row() {
+    fn a_block_member_row_the_field_cut_keeps_its_whole_name_and_links() {
         let _serial = test_lock();
         cache_clear();
         let before = store::keep_in_use();
@@ -3095,7 +3097,10 @@ void main (void)
         assert_eq!(pooled_uniform_name(&sh, k), Some(whole.as_str()), "the pool holds the whole name");
         assert_eq!(uniform_name(&sh, k), whole.as_bytes());
         assert_eq!(base_of(&sh).expect("our record").names.len(), 1, "and only that row");
-        release(&sh);
+        let vs = "#version 300 es\nlayout(location = 0) in vec4 p;\nvoid main() { gl_Position = p; }";
+        let (rc, text, prog) = link(vs, sh);
+        assert_eq!(rc, 0, "the link accepts the cut row of a block member: {text}");
+        release(&prog);
         assert_eq!(store::keep_in_use(), before, "the pool went with the record");
     }
 
@@ -3131,6 +3136,35 @@ void main (void)
         assert_eq!(pooled_uniform_name(&sh, usize::from(ms[0].1)), Some(std::format!("{instance}.x").as_str()));
         assert_eq!(pooled_uniform_name(&sh, usize::from(ms[1].1)), Some(std::format!("{instance}.y").as_str()));
         release(&sh);
+    }
+
+    /// A default-block uniform whose name fills the field is still refused
+    /// at link, pool or no pool: `glGetActiveUniform` and
+    /// `glGetUniformLocation` read that row's field, and the GL core does
+    /// not read the pool yet. The pool holds its whole name all the same.
+    #[cfg(not(feature = "report-es2"))] // compiles GLSL ES 3.00, which a report-es2 build refuses (pp.rs out_of_scope)
+    #[test]
+    fn a_cut_default_block_uniform_is_still_refused_at_link() {
+        let _serial = test_lock();
+        cache_clear();
+        let name = "u".repeat(63);
+        let src = std::format!(
+            "#version 300 es\nprecision highp float;\nlayout(location = 0) out vec4 o;\n\
+             uniform vec4 {name};\nvoid main() {{ o = {name}; }}"
+        );
+        let sh = compile_out(SHC_STAGE_FRAGMENT, &src);
+        let k = sh
+            .uniform_table()
+            .iter()
+            .position(|u| crate::util::name_bytes(&u.name) == name.as_bytes())
+            .expect("the row, whole at 63 of 64");
+        assert_eq!(pooled_uniform_name(&sh, k), Some(name.as_str()), "the pool says it is whole");
+        assert!(crate::shaderc::uniform_blocks(&sh).members.is_empty(), "no block member fills it");
+        let vs = "#version 300 es\nlayout(location = 0) in vec4 p;\nvoid main() { gl_Position = p; }";
+        let (rc, text, fs) = link(vs, sh);
+        assert_eq!(rc, -EINVAL, "{text}");
+        assert!(text.contains("fragment uniform") && text.contains("64-byte name field"), "{text}");
+        release(&fs);
     }
 
     /// On the V3D the link replaces the program's fragment shader with the
