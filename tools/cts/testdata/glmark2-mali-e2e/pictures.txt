@@ -3,10 +3,10 @@
 #
 # The --table of tools/cts/glmark2-mali-e2e-selftest.sh, in the form of
 # tools/cts/glmark2-pictures.txt: a 'mali' column of three scenes, so the
-# drafts do not move when the real table gains its 'mali' column. Scene 1 is
-# the fake program's picture (a match), scene 2 is off in probe c and the mean
-# (a mismatch), scene 5 is not black where the fault's picture is not either
-# (a match); the other 30 have no reference.
+# judgement does not move when the real table gains its 'mali' column. Scene 1
+# is the fake program's picture (a match), scene 2 is off in probe c and the
+# mean (a mismatch), scene 5 is within the tolerance (a match; absent in
+# faults.tsv, whose scene 5 prints no picture); the other 30 have no reference.
 tolerance 8
 mali | [build] use-vbo=false | 800x600; probes c 336699ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 1a2b, crc16q 3c4d; mean 51 102 153; black no
 mali | [build] use-vbo=true | 800x600; probes c 996633ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 5e6f, crc16q 7a8b; mean 153 102 51; black no
