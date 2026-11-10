@@ -2069,6 +2069,7 @@ fn fs_reference_sources() -> Vec<&'static str> {
     srcs.extend(VARYCONST_POPULATION.iter().map(|c| c.2));
     srcs.extend(UNIARRAY_POPULATION.iter().map(|c| c.2));
     srcs.extend(ALU_POPULATION.iter().map(|c| c.2));
+    srcs.extend(DERIV_POPULATION.iter().map(|c| c.2));
     /* gl_FragCoord by precision class, case 192's uniform twin and the
      * rounded mediump constant (plan #153 frame-cull) */
     srcs.extend(FRAG_COORD_POPULATION.iter().map(|c| c.1));
@@ -4632,6 +4633,104 @@ fn the_alu_population_is_byte_equal_to_mesa_26_2_1() {
     }
     let f = compile(SHC_STAGE_FRAGMENT, td!("alu_branchlane.frag")).expect("alu_branchlane.frag compiles");
     assert!(f.info.can_discard);
+}
+
+/* ---- derivatives (plan #336 fs-deriv, docs/notes/mali-derivatives.md) -- */
+
+/// Case 138's deriv, drawn twice on the shim (name, VS, FS, expect.json):
+/// fsarith_138_deriv and alu_deriv are one program and one set of words.
+const DERIV_POPULATION: [(&str, &str, &str, &str); 2] = [
+    (
+        "fsarith_138_deriv",
+        td!("fsarith_138_deriv.vert"),
+        td!("fsarith_138_deriv.frag"),
+        td!("fsarith_138_deriv.expect.json"),
+    ),
+    ("alu_deriv", td!("alu_deriv.vert"), td!("alu_deriv.frag"), td!("alu_deriv.expect.json")),
+];
+
+/// Case 138's `vec4(0.5 + 8.0 * dFdx(v.x), 0.5 + 8.0 * dFdy(v.y), 0.5 +
+/// 0.125 * (dFdx(gl_FragCoord.x) + dFdy(gl_FragCoord.y)), 1.0)`: the
+/// varying's pair converted together and `v.x` widened for its `CLPER`
+/// (`U16_TO_U32 r0, r0^.h0`), each Y operand scaled by the narrowed y-flip
+/// (`FADD.f32 r2.h0, u2.w0, 0x0.neg`, one for both), the four `CLPER.i32.
+/// subgroup4.xor` / `FADD.v2f16` pairs, the last `CLPER` ending the helper
+/// lanes (`.discard`), one `LSHIFT_AND.i32 lane_id, 2` mask for both Y sign
+/// fixes and the four `LSHIFT_XOR.v2i16`, then the late `ffma`s the pair
+/// graph fuses (`FMA.v2f16 r2, 0x48000000.h11, r2^.h00, 0x38000000.h11` for
+/// `0.5 + 8.0 * d`, `u3.w1` for the 0.125) and the two `MKVEC.v2i16`
+/// words: every program the shim's to the byte, both FAU layouts too.
+#[test]
+fn the_derivative_population_is_byte_equal_to_mesa_26_2_1() {
+    for (name, vs, fs, json) in DERIV_POPULATION {
+        check_program_for(name, vs, fs, json, false);
+    }
+    /* a program with derivatives needs the helper lanes */
+    let f = compile(SHC_STAGE_FRAGMENT, td!("fsarith_138_deriv.frag")).expect("fsarith_138_deriv.frag compiles");
+    assert!(f.info.helper_threads, "the derivative's CLPER reads the quad's other lanes");
+}
+
+/// The corpus line of case 138 is the reference's own source.
+#[test]
+fn the_corpus_derivative_source_is_the_reference() {
+    assert_eq!(include_str!("../../../../tools/shaders/es100/deriv.frag"), td!("fsarith_138_deriv.frag"));
+    assert_eq!(td!("alu_deriv.frag"), td!("fsarith_138_deriv.frag"));
+}
+
+/// The derivative forms no reference draws stay refused, each at its own
+/// gap: a constant operand and a vector derivative (Mesa's `CLPER` of the
+/// pair word), a uniform's component or a computed lane as the operand, an
+/// `abs` of a derivative (`fwidth`'s form; Mesa omits the sign fix when
+/// every use ignores the sign bit, docs/notes/mali-derivatives.md 6.1), a
+/// varying lane the link loads alone (converted alone, not from its pair),
+/// a highp varying's lane in a mediump shader, and a highp shader's
+/// derivatives (fsarith_derivs_es300, `Fs::alu32`'s arithmetic).
+#[test]
+fn a_derivative_of_another_form_is_refused() {
+    let fs = |body: &str| format!("precision mediump float; varying vec2 v; uniform vec2 u; void main() {{ {body} }}");
+    let cases: [(&str, MaliError); 7] = [
+        ("gl_FragColor = vec4(dFdx(1.0), 0.5, 0.5, 1.0);", MaliError::Arithmetic),
+        ("gl_FragColor = vec4(dFdx(v), 0.5, 1.0);", MaliError::Arithmetic),
+        ("gl_FragColor = vec4(dFdx(u.x), 0.5, 0.5, 1.0);", MaliError::FsOperandForm),
+        ("gl_FragColor = vec4(dFdx(v.x * v.y), 0.5, 0.5, 1.0);", MaliError::FsOperandForm),
+        ("gl_FragColor = vec4(abs(dFdx(v.x)), 0.5, 0.5, 1.0);", MaliError::FsOperandForm),
+        ("gl_FragColor = vec4(fwidth(v.x), 0.5, 0.5, 1.0);", MaliError::FsOperandForm),
+        ("gl_FragColor = vec4(dFdy(v.y), 0.5, 0.5, 1.0);", MaliError::FsOperandForm),
+    ];
+    for (body, want) in cases {
+        let src = format!("#extension GL_OES_standard_derivatives : enable\n{}", fs(body));
+        assert_eq!(gap(SHC_STAGE_FRAGMENT, &src), want, "{body}");
+    }
+    let highp_varying = "#extension GL_OES_standard_derivatives : enable\nprecision mediump float; \
+                         varying highp vec2 v; void main() { gl_FragColor = vec4(dFdx(v.x), dFdy(v.y), 0.5, 1.0); }";
+    assert_eq!(gap(SHC_STAGE_FRAGMENT, highp_varying), MaliError::MixedPrecision);
+    assert_eq!(gap(SHC_STAGE_FRAGMENT, td!("fsarith_derivs_es300.frag")), MaliError::Arithmetic);
+    /* the highp gl_FragCoord of a mediump ES 3.00 shader meets its
+     * island's arm first (`Fs::alu32`, `Fs::fc32`) */
+    let fc32 = "#version 300 es\nprecision mediump float; out vec4 c; \
+                void main() { c = vec4(dFdx(gl_FragCoord.x), 0.5, 0.5, 1.0); }";
+    assert_eq!(gap(SHC_STAGE_FRAGMENT, fc32), MaliError::Arithmetic);
+}
+
+/// The flattened route (`select_highp`: a mediump shader's kept regions,
+/// its masks, an array look-up) draws no derivative: case 138's graph
+/// through it is refused, not emitted on an unwidened operand.
+#[test]
+fn a_derivative_on_the_flattened_route_is_refused() {
+    let src = td!("fsarith_138_deriv.frag");
+    let _k = store::test_keep();
+    let e = store::with_scratch(|s| {
+        let l = codegen::lower_source(SHC_STAGE_FRAGMENT, src.as_bytes(), &[], s).expect("the front end takes it");
+        let text = s.alloc_str(src).expect("room");
+        let prec = super::FsPrecision::of(&l.module, text, s).expect("the precision");
+        let mut f = super::nir_fs::walk(&l.module, s, prec).expect("the walk");
+        super::nir_fs::layout(&mut f, &l.module, None).expect("the layout");
+        let mut p = super::prog(s).expect("room");
+        let ubo = super::select::UboLayout::fs16(&l.module, &f.nir, &|_| false).expect("the block");
+        super::nir_fs::select_highp(&mut p, &mut f, &l.module, &ubo, s)
+    })
+    .expect("the scratch arena is free");
+    assert_eq!(e, Err(MaliError::FsOperandForm));
 }
 
 /// Case 81's branchquad: the discards of case 73 behind tests of lanes y

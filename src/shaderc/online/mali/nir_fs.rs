@@ -1120,13 +1120,19 @@ impl<'s> Fs<'s> {
     }
 
     /// One lane of `fabs`: a constant's is folded, `fabs(fneg(a))` and
-    /// `fabs(fabs(a))` are `fabs(a)` (nir_opt_algebraic.py).
+    /// `fabs(fabs(a))` are `fabs(a)` (nir_opt_algebraic.py). `fabs` of a
+    /// derivative (`fwidth`'s form) has no reference: Mesa leaves the
+    /// derivative's sign fix out when every use ignores the sign bit
+    /// (`bi_emit_derivative`'s `nir_def_all_uses_ignore_sign_bit`), a shape
+    /// no reference draws ([`MaliError::FsOperandForm`];
+    /// docs/notes/mali-derivatives.md 6.1).
     fn abs(&mut self, x: Val, at: usize) -> Result<Val, MaliError> {
         match (x, self.alu_of(x)) {
             (Val::Undef, _) => Err(MaliError::ColourForm),
             (Val::Const(b), _) => Ok(Val::Const(b & !F32_NEG_ZERO)),
             (_, Some((Alu::Fneg, [y, ..]))) => self.abs(y, at),
             (_, Some((Alu::Fabs, _))) => Ok(x),
+            (_, Some((Alu::Fddx | Alu::Fddy, _))) => Err(MaliError::FsOperandForm),
             _ => self.node(Alu::Fabs, [x, Val::Undef, Val::Undef], at),
         }
     }
@@ -4444,6 +4450,47 @@ fn walk_nodes(
                     *o = f.node(Alu::Fceil, [x, Val::Undef, Val::Undef], at)?;
                 }
             }
+            /* `dFdx` / `dFdy` of a varying's lane or of the narrowed
+             * gl_FragCoord's x or y (case 138 deriv, fsarith_138_deriv.
+             * expect.json; docs/notes/mali-derivatives.md 1): one 16-bit
+             * node a lane. `dFdy`'s operand is scaled by the y-flip `T.x`
+             * first (`nir_lower_wpos_ytransform`'s `lower_fddy` multiplies
+             * the source, `fmul(a, f2f16(T.x))`, the state uniform's lane
+             * narrowed once for every `dFdy`: `FADD.f32 r2.h0, u2.w0,
+             * 0x0.neg`, then `FMA.v2f16 r1, r1^.h00, r2.h00, 0x0.neg`). The
+             * front end gives a scalar call a 4-wide node whose lanes all
+             * read the operand ([`Fs::node`] makes them one); a vector
+             * derivative (lanes that differ: Mesa's `CLPER` of the pair
+             * word) and a constant operand (no fold) have no reference. A
+             * highp varying's lane makes the shader mixed
+             * ([`Fs::fp16_operand`]); the highp gl_FragCoord's island of an
+             * ES 3.00 shader ([`Fs::fc32`]) meets the island's arm first
+             * ([`Fs::alu32`]); the operand's form is the pair graph's
+             * ([`deriv_operand`]) */
+            ir::Op::Alu(a @ (AluOp::Fddx | AluOp::Fddy), s) => {
+                let w = m.comps_of(ir::ValueId(id.0)) as usize;
+                let first = lane(vals, s[0], 0);
+                for (i, o) in out.iter_mut().enumerate().take(w) {
+                    let mut x = f.fp16_operand(lane(vals, s[0], i));
+                    match x {
+                        Val::Undef => return Err(MaliError::ColourForm),
+                        Val::Const(_) => return Err(MaliError::Arithmetic),
+                        _ if x != first => return Err(MaliError::Arithmetic),
+                        _ => {}
+                    }
+                    let u = Val::Undef;
+                    if a == AluOp::Fddy {
+                        let before = f.nir.n;
+                        let t = f.nir.load(Kind::Uniform { dword: FB_WPOS_Y_TRANSFORM, comps: 2 })?;
+                        if f.nir.n > before {
+                            f.origin[t as usize] = at as u16;
+                        }
+                        let t16 = f.node(Alu::F2f16, [Val::Lane(t, 0), u, u], at)?;
+                        x = f.op(AluOp::Fmul, x, t16, at, Rule::None)?;
+                    }
+                    *o = f.node(if a == AluOp::Fddx { Alu::Fddx } else { Alu::Fddy }, [x, u, u], at)?;
+                }
+            }
             /* the front end's `mix(a, b, t)` is `ffma(t, fadd(b, fneg(a)),
              * a)`, the `ffma` nir_lower_flrp makes too: case 197's vtl_fs,
              * `FADD.v2f16 r2, r2^, r0.neg` then `FMA.v2f16 r0, u2.w0.h00,
@@ -5925,6 +5972,10 @@ enum Leaf {
     /// gl_FragCoord's x and y narrowed to fp16, in order, as one word
     /// (`MKVEC.v2i16 x.h0, y.h0`; [`Fs::frag_coord16`], [`frag16`]).
     Frag,
+    /// Lane `c` (0 x, 1 y) of the narrowed position alone, its own
+    /// register (`FADD.f32 r3.h0, r3^, 0x0.neg`; [`frag16_lanes`]): a
+    /// derivative's operand, or the scaled operand's (fsarith_138_deriv).
+    FragLane(u8),
     /// Nodes `x` and `y`, each a lane alone, as a word: `MKVEC.v2i16
     /// x.h0, y.h0` (cflow_74_ifoutput's `MKVEC.v2i16 r0, r1^.h0, r0^.h0`
     /// of the red and green selects of constants).
@@ -5978,8 +6029,9 @@ impl Pairs {
             P::Leaf(Leaf::Ubo(_) | Leaf::UboLane(_) | Leaf::UboHalf(_)) => Form::Ubo,
             /* `MKVEC.v2i16 x, #0`: a lane and a constant half */
             P::Leaf(Leaf::Zext(_) | Leaf::Lane { .. } | Leaf::Pack { .. }) => Form::Mk,
-            /* `MKVEC.v2i16 x, y` of the position's two halves */
-            P::Leaf(Leaf::Frag) => Form::Mk,
+            /* `MKVEC.v2i16 x, y` of the position's two halves, or one of
+             * them alone */
+            P::Leaf(Leaf::Frag | Leaf::FragLane(_)) => Form::Mk,
             P::Leaf(Leaf::Const(_)) => Form::Const,
             P::Op(Alu::Fneg, _) => Form::Neg,
             P::Op(Alu::Fabs, _) => Form::Abs,
@@ -6000,6 +6052,9 @@ impl Pairs {
                 Alu::Bcsel | Alu::Fcmp(_) => &[],
                 /* read at fp32 by its expansion ([`transc_rows`]) */
                 Alu::Fsin | Alu::Fcos | Alu::Flog2 => &[],
+                /* a derivative's operand and the narrowing of the y-flip's
+                 * lane take the forms [`deriv_operand`] builds, no other */
+                Alu::Fddx | Alu::Fddy | Alu::F2f16 => &[],
                 _ => &[Place::AbsSrc],
             };
             for (k, p) in places.iter().enumerate() {
@@ -6027,8 +6082,11 @@ fn vectorise(f: &mut Fs<'_>, pr: &mut Pairs, a: Val, b: Val, pair: u8, ubo: &Ubo
         /* a lane computed by `sin`, `cos` or `log2` (or read by a product
          * of one) and another computed lane: each lane alone, the word
          * packed (fsarith_77_transc: `(sin, cos)` and `(log2 * 0.25, exp2)`
-         * as `MKVEC.v2i16 r0, r0^.h0, r1^.h0` after ATEST) */
-        _ if f.alu_of(a).is_some() && f.alu_of(b).is_some() && (has_transc(f, a, 0) || has_transc(f, b, 0)) => {
+         * as `MKVEC.v2i16 r0, r0^.h0, r1^.h0` after ATEST). The same of a
+         * derivative: Mesa pairs `dFdx` with `dFdy` no more than two
+         * distinct definitions (`alu_srcs_equal`), fsarith_138_deriv's two
+         * scalar `FMA.v2f16` then `MKVEC.v2i16 r0, r0^.h0, r2^.h0` */
+        _ if f.alu_of(a).is_some() && f.alu_of(b).is_some() && (has_lane_op(f, a, 0) || has_lane_op(f, b, 0)) => {
             let x = lane_tree(f, pr, a, pair, ubo)?;
             let y = lane_tree(f, pr, b, pair, ubo)?;
             P::Leaf(Leaf::Pack { x, y })
@@ -6185,13 +6243,19 @@ const fn is_transc(op: Alu) -> bool {
     matches!(op, Alu::Fsin | Alu::Fcos | Alu::Flog2)
 }
 
-/// Lane `v` is one of [`is_transc`]'s, or sums, products and fnegs with one
-/// among them ([`lane_tree`]'s forms).
-fn has_transc(f: &Fs<'_>, v: Val, depth: u8) -> bool {
+/// `op` is `ddx` or `ddy` ([`Alu::Fddx`]).
+const fn is_deriv(op: Alu) -> bool {
+    matches!(op, Alu::Fddx | Alu::Fddy)
+}
+
+/// Lane `v` is one of [`is_transc`]'s or [`is_deriv`]'s (an operation of
+/// one lane, which `nir_opt_vectorize` pairs with nothing here), or sums,
+/// products and fnegs with one among them ([`lane_tree`]'s forms).
+fn has_lane_op(f: &Fs<'_>, v: Val, depth: u8) -> bool {
     match f.alu_of(v) {
-        Some((op, _)) if is_transc(op) => true,
+        Some((op, _)) if is_transc(op) || is_deriv(op) => true,
         Some((Alu::Fadd | Alu::Fmul | Alu::Fneg, s)) if depth < 8 => {
-            s[..2].iter().any(|&x| x != Val::Undef && has_transc(f, x, depth + 1))
+            s[..2].iter().any(|&x| x != Val::Undef && has_lane_op(f, x, depth + 1))
         }
         _ => false,
     }
@@ -6326,17 +6390,21 @@ fn lane_word(f: &Fs<'_>, pr: &mut Pairs, a: Val, b: Val, pair: u8, ubo: &UboLayo
 /// Lane `v` is sums and products of fp16 texels and constants, with a
 /// texel among them, or sums of a uniform's component, negated or not,
 /// and constants, with a uniform among them ([`lane_tree`]'s form;
-/// varyconst_75_immneg's `1.0 - u_k.z`).
+/// varyconst_75_immneg's `1.0 - u_k.z`), or sums and products of
+/// derivatives and constants (fsarith_138_deriv's blue, `0.5 + 0.125 *
+/// (dFdx(fc.x) + dFdy(fc.y))`; the derivatives' operands are
+/// [`deriv_operand`]'s).
 fn lone_tree(f: &Fs<'_>, v: Val) -> bool {
-    /* (a texel, a uniform) among the leaves */
-    fn walk(f: &Fs<'_>, v: Val) -> Option<(bool, bool)> {
-        let or = |x: (bool, bool), y: (bool, bool)| (x.0 | y.0, x.1 | y.1);
+    /* (a texel, a uniform, a derivative) among the leaves */
+    fn walk(f: &Fs<'_>, v: Val) -> Option<(bool, bool, bool)> {
+        let or = |x: (bool, bool, bool), y: (bool, bool, bool)| (x.0 | y.0, x.1 | y.1, x.2 | y.2);
         match (f.alu_of(v), f.texel(v), v) {
+            (Some((op, _)), ..) if is_deriv(op) => Some((false, false, true)),
             (Some((Alu::Fadd | Alu::Fmul, s)), ..) => Some(or(walk(f, s[0])?, walk(f, s[1])?)),
             (Some((Alu::Fneg, s)), ..) => walk(f, s[0]),
-            (None, Some((j, _)), _) if f.tex_f16(j) => Some((true, false)),
-            (None, None, Val::Const(_)) => Some((false, false)),
-            (None, None, _) if f.uniform_dword(v).is_some() => Some((false, true)),
+            (None, Some((j, _)), _) if f.tex_f16(j) => Some((true, false, false)),
+            (None, None, Val::Const(_)) => Some((false, false, false)),
+            (None, None, _) if f.uniform_dword(v).is_some() => Some((false, true, false)),
             _ => None,
         }
     }
@@ -6351,8 +6419,9 @@ fn lone_tree(f: &Fs<'_>, v: Val) -> bool {
         }
     }
     match walk(f, v) {
-        Some((true, false)) => true,
-        Some((false, true)) => uniform_form(f, v),
+        Some((true, false, false)) => true,
+        Some((false, true, false)) => uniform_form(f, v),
+        Some((false, false, true)) => true,
         _ => false,
     }
 }
@@ -6376,6 +6445,10 @@ fn lane_tree(f: &Fs<'_>, pr: &mut Pairs, v: Val, pair: u8, ubo: &UboLayout) -> R
         /* `sin`, `cos`, `log2` of a uniform's component, its 32-bit
          * expansion and narrowing ([`transc_rows`]) */
         (Some((op, s)), ..) if is_transc(op) => P::Op(op, [lane_tree(f, pr, s[0], pair, ubo)?, 0, 0]),
+        /* `dFdx`, `dFdy` of a varying's lane or the narrowed position's,
+         * scaled for Y ([`deriv_operand`]): the rows `(Fddx, 16, 1)`,
+         * `(Fddy, 16, 1)` */
+        (Some((op, s)), ..) if is_deriv(op) => P::Op(op, [deriv_operand(f, pr, s[0], pair, ubo, true)?, 0, 0]),
         (Some((Alu::Fadd, s)), ..) => {
             let x = lane_tree(f, pr, s[0], pair, ubo)?;
             let y = lane_tree(f, pr, s[1], pair, ubo)?;
@@ -6397,6 +6470,68 @@ fn lane_tree(f: &Fs<'_>, pr: &mut Pairs, v: Val, pair: u8, ubo: &UboLayout) -> R
             P::Leaf(Leaf::Uniform { base, comp: (w - base) as u8, swz })
         }
         _ => return Err(MaliError::ColourForm),
+    };
+    let x = pr.push(p, place)?;
+    pr.scalar[x as usize] = true;
+    Ok(x)
+}
+
+/// A derivative's operand `v` ([`lane_tree`]'s `Fddx` / `Fddy` arm) as
+/// nodes of one lane, the forms fsarith_138_deriv draws (docs/notes/
+/// mali-derivatives.md 2): a varying's lane, read from its converted pair
+/// (`V2F32_TO_V2F16 r0, r0^, r1^`, both lanes of the aligned pair
+/// converted together: [`Leaf::Half`] through the lane's own half, which
+/// [`op`] widens for the `CLPER` or the product reads as `r0.h11`); a lane
+/// of the narrowed position alone ([`Leaf::FragLane`], `FADD.f32 r3.h0`);
+/// or, with `scaled`, `dFdy`'s product of one of those with the y-flip's
+/// narrowed lane (`FMA.v2f16 r1, r1^.h00, r2.h00, 0x0.neg`), the narrowing
+/// `f2f16(T.x)` one node for the shader (`FADD.f32 r2.h0, u2.w0, 0x0.neg`,
+/// `nir_opt_cse`). A uniform's component, a texel, a constant or any
+/// computed lane has no reference ([`MaliError::FsOperandForm`]).
+fn deriv_operand(f: &Fs<'_>, pr: &mut Pairs, v: Val, pair: u8, ubo: &UboLayout, scaled: bool) -> Result<u8, MaliError> {
+    let place = (f.key(v), pair);
+    let wpos16 = |f: &Fs<'_>, t: Val| match t {
+        Val::Lane(n, 0) => matches!(
+            f.nir.nodes[n as usize],
+            NirNode { kind: Kind::Alu(Alu::F2f16), bits: 16, width: 1, src: [Val::Lane(u, 0), ..] }
+                if matches!(f.nir.nodes[u as usize].kind, Kind::Uniform { dword: FB_WPOS_Y_TRANSFORM, .. })
+        ),
+        _ => false,
+    };
+    let p = match (f.alu_of(v), f.input_lane(v), f.frag16_lane(v)) {
+        /* the narrowed position's lane (its `f2f16` node, [`Fs::frag_coord16`]) */
+        (_, _, Some(c)) => P::Leaf(Leaf::FragLane(c)),
+        (Some((Alu::Fmul, [a, t, _])), ..) if scaled && wpos16(f, t) => {
+            let x = deriv_operand(f, pr, a, pair, ubo, false)?;
+            /* the narrowed `T.x`, once: the fp32 state word (its own row of
+             * the block, select.rs `UboLayout::fs16`) through `(F2f16, 16, 1)` */
+            let base = ubo.word(FB_WPOS_Y_TRANSFORM).ok_or(MaliError::Defect(Defect::IrIndex))?;
+            let leaf = Leaf::Uniform { base, comp: 0, swz: Swz::H01 };
+            let made = (0..pr.n).find(|&i| match pr.nodes[i] {
+                P::Op(Alu::F2f16, [l, ..]) => pr.nodes[l as usize] == P::Leaf(leaf),
+                _ => false,
+            });
+            let s = match made {
+                Some(i) => i as u8,
+                None => {
+                    let l = pr.push(P::Leaf(leaf), (f.key(t), pair))?;
+                    pr.scalar[l as usize] = true;
+                    let s = pr.push(P::Op(Alu::F2f16, [l, 0, 0]), (f.key(t), pair))?;
+                    pr.scalar[s as usize] = true;
+                    s
+                }
+            };
+            P::Op(Alu::Fmul, [x, s, 0])
+        }
+        (None, Some((loc, c)), _) if (loc as usize) < MAX_VARYINGS => {
+            let (k, c) = index(f, loc, c)?;
+            /* the lane's aligned pair, both lanes of the load */
+            if (c | 1) >= f.varyings[k as usize].comps {
+                return Err(MaliError::FsOperandForm);
+            }
+            P::Leaf(Leaf::Half { k, h: c / 2, swz: if c % 2 == 0 { Swz::H00 } else { Swz::H11 } })
+        }
+        _ => return Err(MaliError::FsOperandForm),
     };
     let x = pr.push(p, place)?;
     pr.scalar[x as usize] = true;
@@ -6755,8 +6890,11 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
         ne += 1;
     }
     /* the narrowed position, where gl_FragCoord is read (its fp32 build,
-     * the narrowings and the word: [`frag16`]) */
-    if let (Some([x, _]), true) = (f.frag16, (0..pr.n).any(|i| live[i] && pr.nodes[i] == P::Leaf(Leaf::Frag))) {
+     * the narrowings and the word: [`frag16`]; the lanes alone for a
+     * derivative, [`frag16_lanes`]) */
+    let frag_word = (0..pr.n).any(|i| live[i] && pr.nodes[i] == P::Leaf(Leaf::Frag));
+    let frag_lane = (0..pr.n).any(|i| live[i] && matches!(pr.nodes[i], P::Leaf(Leaf::FragLane(_))));
+    if let (Some([x, _]), true) = (f.frag16, frag_word || frag_lane) {
         events[ne] = (f.key(x), 0, FRAG, 0);
         ne += 1;
     }
@@ -6819,6 +6957,7 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
         ubo_lanes: [[None; 4]; MAX_UBO_READS],
         desc: [[None; 2]; MAX_SIZE_QUERIES],
         frag: None,
+        frag_lanes: [None; 2],
     };
     let mut val = [None::<Src>; MAX_PAIRS];
     let mut rows = 0u128;
@@ -6913,7 +7052,13 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
                     texel = Some(alu(p, Op::Collect, &w)?);
                 }
             }
-            FRAG => lv.frag = Some(frag16(p, &lv, &mut rows)?),
+            FRAG => {
+                let lanes = frag16_lanes(p, &lv, &mut rows)?;
+                lv.frag_lanes = lanes.map(Some);
+                if frag_word {
+                    lv.frag = Some(frag16(p, lanes, &mut rows)?);
+                }
+            }
             UBO if vec4 => ubo_load(p, f, &mut lv, &mut rows)?,
             OFFSET => ubo_offset(p, f, x as usize, &mut lv, &mut rows)?,
             UBO => ubo_fetch(p, x as usize, &mut lv)?,
@@ -8201,6 +8346,7 @@ pub fn select_highp(
         ubo_lanes: [[None; 4]; MAX_UBO_READS],
         desc: [[None; 2]; MAX_SIZE_QUERIES],
         frag: None,
+        frag_lanes: [None; 2],
     };
     let val = scratch.alloc_filled(MAX_NODES, None::<Src>).map_err(oom)?;
     let mut rows = 0u128;
@@ -8314,6 +8460,14 @@ pub fn select_highp(
                     continue;
                 }
                 let Kind::Alu(op) = nd.kind else { return Err(defect) };
+                /* a derivative's operand is widened and read whole by the
+                 * pair graph's [`op`] alone (fsarith_138_deriv): on this
+                 * route (a mediump shader's flattened regions, its masks,
+                 * an array look-up, the fp32 island of gl_FragCoord) no
+                 * reference draws one */
+                if is_deriv(op) {
+                    return Err(MaliError::FsOperandForm);
+                }
                 /* the `vec2` of an fp16 look-up's two texels is its word
                  * ([`Fs::vec16`]): no instruction, the readers take it whole */
                 if op == Alu::Vec2 && nd.bits == 16 && nd.width == 2 {
@@ -8925,6 +9079,8 @@ struct Leaves {
     desc: [[Option<u16>; 2]; MAX_SIZE_QUERIES],
     /// The narrowed position's word ([`Leaf::Frag`], [`frag16`]).
     frag: Option<u16>,
+    /// Its x and y each narrowed alone ([`Leaf::FragLane`], [`frag16_lanes`]).
+    frag_lanes: [Option<u16>; 2],
 }
 
 /// The read of a vec4 array element at a run-time index, as Mesa's BIR has
@@ -9144,13 +9300,14 @@ fn tex(p: &mut Prog<'_>, f: &Fs<'_>, j: usize, lv: &mut Leaves, computed: Option
     Ok(())
 }
 
-/// The narrowed position's word in a mediump shader ([`Fs::frag_coord16`]):
+/// The narrowed position's lanes in a mediump shader ([`Fs::frag_coord16`]):
 /// x and y at fp32 in NIR's order (`u2f32` of both halves of the preloaded
 /// pixel, their `+ 0.5`, y's `ffma` with `gl_FbWposYTransform`), each
-/// narrowed (`f2f16`), then `vec2` of the two halves (prec_84.expect.json:
-/// `U16_TO_F32` x2, `FADD_IMM` x2, `FMA.f32`, `FADD.f32 .h0` x2,
-/// `MKVEC.v2i16 r0, r0^.h0, r1^.h0`).
-fn frag16(p: &mut Prog<'_>, lv: &Leaves, rows: &mut u128) -> Result<u16, MaliError> {
+/// narrowed (`f2f16`) into its own register (prec_84.expect.json:
+/// `U16_TO_F32` x2, `FADD_IMM` x2, `FMA.f32`, `FADD.f32 .h0` x2;
+/// fsarith_138_deriv's words 2-5 and 13-15, each lane a derivative's
+/// operand, [`Leaf::FragLane`]).
+fn frag16_lanes(p: &mut Prog<'_>, lv: &Leaves, rows: &mut u128) -> Result<[u16; 2], MaliError> {
     let defect = MaliError::Defect(Defect::IrIndex);
     let px = |c: Swz| Src::of(Idx::Reg(super::ra::POSITION_XY)).swz(c);
     let wpos = |c: u8| -> Result<Src, MaliError> {
@@ -9166,7 +9323,14 @@ fn frag16(p: &mut Prog<'_>, lv: &Leaves, rows: &mut u128) -> Result<u16, MaliErr
     let n16 = Row { op: Alu::F2f16, bits: 16, width: 1 };
     let x = row(p, rows, n16, &[Src::ssa(x)])?;
     let y = row(p, rows, n16, &[Src::ssa(y)])?;
-    let s = [Src::ssa(x).swz(Swz::H00), Src::ssa(y).swz(Swz::H00)];
+    Ok([x, y])
+}
+
+/// The narrowed position's word ([`Leaf::Frag`]): `vec2` of the two lanes'
+/// halves ([`frag16_lanes`]; prec_84.expect.json's `MKVEC.v2i16 r0, r0^.h0,
+/// r1^.h0`).
+fn frag16(p: &mut Prog<'_>, lanes: [u16; 2], rows: &mut u128) -> Result<u16, MaliError> {
+    let s = [Src::ssa(lanes[0]).swz(Swz::H00), Src::ssa(lanes[1]).swz(Swz::H00)];
     row(p, rows, Row { op: Alu::Vec2, bits: 16, width: 2 }, &s)
 }
 
@@ -9199,6 +9363,9 @@ fn operand(pr: &Pairs, x: u8, lv: &Leaves, val: &[Option<Src>; MAX_PAIRS]) -> Re
             Src::ssa(lv.tex.get(j as usize).and_then(|w| w[h as usize & 3]).ok_or(MaliError::Defect(Defect::IrIndex))?)
         }
         P::Leaf(Leaf::Frag) => Src::ssa(lv.frag.ok_or(MaliError::Defect(Defect::IrIndex))?),
+        P::Leaf(Leaf::FragLane(c)) => {
+            Src::ssa(lv.frag_lanes.get(c as usize).copied().flatten().ok_or(MaliError::Defect(Defect::IrIndex))?)
+        }
         P::Leaf(Leaf::Ubo(h)) => {
             Src::ssa(lv.ubo_words.get(h as usize).copied().flatten().ok_or(MaliError::Defect(Defect::IrIndex))?)
         }
@@ -9242,6 +9409,9 @@ fn op(
          * and a one-lane operation's (texmore_2's `%9^.h00`) */
         let lone = match pr.nodes[*y as usize] {
             P::Leaf(Leaf::Const(_)) => true,
+            /* the narrowed position's lane in its own register
+             * (fsarith_138_deriv's `FMA.v2f16 r1, r1^.h00, r2.h00, 0x0.neg`) */
+            P::Leaf(Leaf::FragLane(_)) => true,
             P::Op(..) => pr.scalar[*y as usize],
             _ => false,
         };
@@ -9253,6 +9423,17 @@ fn op(
     if is_transc(a) {
         val[x as usize] = Some(Src::ssa(transc_rows(p, rows, a, s[0])?));
         return Ok(());
+    }
+    /* a derivative reads its operand as one register word (`CLPER.i32`
+     * takes no half swizzle): a half of a converted pair is widened first,
+     * `MKVEC.v2i16 a.h0, #0` as `U16_TO_U32` (fsarith_138_deriv's
+     * `U16_TO_U32 r0, r0^.h0` for `v.x`); a lane in its own register (the
+     * scaled product, the narrowed position's lane) is read whole */
+    if is_deriv(a) {
+        if let P::Leaf(Leaf::Half { .. }) = pr.nodes[srcs[0] as usize] {
+            s[0] = Src::ssa(row(p, rows, Row { op: Alu::U2u32, bits: 32, width: 1 }, &s[..1])?);
+        }
+        s[0] = s[0].swz(Swz::H01);
     }
     let width = if pr.scalar[x as usize] { 1 } else { 2 };
     val[x as usize] = Some(Src::ssa(row(p, rows, Row { op: a, bits: 16, width }, &s)?));
