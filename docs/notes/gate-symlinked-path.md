@@ -12,7 +12,7 @@ applies it. Until then, run the gate from a canonical path.
 Fresh HTTPS clone of `origin/main` at 962318605a3e (2026-11-10), at
 `$CONNECTED_DEPS_DIR/symlink-record/clone`, run through a symlink
 `.../symlink-record/links/yk` (`pwd` = `.../links/yk`, `pwd -P` =
-`/home/orion/.local/share/ccfarm/deps/yakogl/symlink-record/clone`).
+`$HOME/.local/share/ccfarm/deps/yakogl/symlink-record/clone`).
 `MALI_CSFFW` set to the pinned file of `tools/cts/deps.toml` (282624 bytes).
 Host: 4 cores, rustc 1.101.0-nightly (5d8fec066 2026-10-16), clippy 0.1.101,
 cargo-nextest 0.9.148. Command: `tools/check.sh --quick`, from a cold tree.
@@ -37,7 +37,7 @@ The six unpatched failures are two causes:
 - Host environment, not the path: `clippy osal-zephyr,gpu-powervr,...
   (aarch64-unknown-none)`, `clippy osal-zephyr,gpu-v3d,...` and `check
   osal-zephyr,gpu-powervr,precompiled-shaders` failed in `build.rs` (cc-rs):
-  the shell had `CC_aarch64_unknown_none=/home/orion/connected-deps/bootlin-aarch64/
+  the shell had `CC_aarch64_unknown_none=$HOME/connected-deps/bootlin-aarch64/
   aarch64--glibc--stable-2024.05-1`, a directory that does not exist
   ("failed to find tool"). The patched run unset it. The unpatched run was
   not repeated without it, so the claim is: `no table` and `no test knob`

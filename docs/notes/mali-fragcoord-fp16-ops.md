@@ -159,7 +159,7 @@ vec_ctor.x = floor((gl_FragCoord.x - f162f(32.0h * right)) / 8.0)
 vec_ctor.y = floor(gl_FragCoord.y / 16.0)
 b = f2fmp(vec_ctor)
 vec_ctor@4 = (((b + 0.5h) / 4.0h).xy, f2fmp(0.5))       ; (mediump ) f16vec3
-n = tex float16_t u_near (f162f vec_ctor@4.xy) ... (f162f vec_ctor@4.z)
+n = tex float16_t u_near (f162f vec_ctor@4).xy ... (f162f vec_ctor@4).z
 l = tex float16_t u_lin  (...)                           ; the same of (b + 1.0h) / 4.0h
 if (0.5h < right) conditional_tmp = l else conditional_tmp = n
 o_color = f162f(f16vec4(r, r, r, f2fmp(1.0)))
