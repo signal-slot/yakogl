@@ -35,22 +35,23 @@
 //!   (`panthor_vm_map_pages`, panthor_mmu.c). The user pages are uncached
 //!   for the GPU (panthor_fw.c:451), the suspend buffers cached
 //!   (panthor_fw.c:480-487).
-//! - AS1 (the group's VM, panthor_mmu.c:759): the frame's range
-//!   `[va_base, va_end)` mapped writable, executable and GPU-cached (a user
-//!   buffer as panthor binds it without `MAP_NOEXEC` or `MAP_UNCACHED`),
-//!   then [`QUEUE_VM_BYTES`] at `va_end`: the ring ([`RING_SIZE`], the size
-//!   of the design page's panthor session) and a page whose first 16 bytes
-//!   are the sync object, both no-exec and uncached (panthor_sched.c:
-//!   3352-3358, 3522-3529). One [`GroupBacking`], mapped uncached for the
-//!   CPU, backs all of it, in that order. The tables are built in the
-//!   caller's second pool, cleaned, and the address space enabled as
-//!   `panthor_mmu_as_enable` does (`AS_TRANSTAB`, `AS_MEMATTR`,
-//!   `AS_TRANSCFG`, `UPDATE`), with Z2's `AS_MEMATTR` word
-//!   ([`MEMATTR_LIVE`], panthor's for AS0 and AS1).
+//! - AS1 (the group's VM, panthor_mmu.c:759): the frame's [`Region`]s, each
+//!   one buffer as panthor would bind it ([`Mapping`]): a user buffer
+//!   writable, executable and GPU-cached (no `MAP_NOEXEC`, no
+//!   `MAP_UNCACHED`); a heap buffer no-exec and GPU-cached (panthor_heap.c:
+//!   151, 556); the queue's region no-exec and uncached (panthor_sched.c:
+//!   3352-3358, 3522-3529), holding [`QUEUE_VM_BYTES`] at `queue_va`: the
+//!   ring ([`RING_SIZE`], the size of the design page's panthor session)
+//!   and a page whose first 16 bytes are the sync object. One
+//!   [`GroupBacking`] per region, in the regions' order, mapped uncached
+//!   for the CPU. The tables are built in the caller's second pool,
+//!   cleaned, and the address space enabled as `panthor_mmu_as_enable`
+//!   does (`AS_TRANSTAB`, `AS_MEMATTR`, `AS_TRANSCFG`, `UPDATE`), with Z2's
+//!   `AS_MEMATTR` word ([`MEMATTR_LIVE`], panthor's for AS0 and AS1).
 //! - The heap: the pool buffer at `heap_ctx_va` (heap 0's context is the
 //!   pool's first slot, panthor_heap.c:331-338) and one chunk of
-//!   `heap_chunk_size` at `heap_chunk_va`, both inside the frame's range.
-//!   One initial chunk and at most one, not Mesa's 5 and 64: the frame names
+//!   `heap_chunk_size` at `heap_chunk_va`, each inside a region. One
+//!   initial chunk and at most one, not Mesa's 5 and 64: the frame names
 //!   one first chunk, and Z4 grows no heap (`CS_TILER_OOM` is refused).
 //!
 //! # The frame, and what is read back
@@ -58,12 +59,22 @@
 //! [`Frame`] is the shape of driver/rust/src/board/nanopc_t6_frame.rs's
 //! consts (generated from tools/mali/panthor/src/l1.rs): the blocks at their
 //! VAs, the command stream the job calls, the heap's and the target's VAs,
-//! the range they all lie in, and the generator's digest, copied into the
-//! record as it is. Before the blocks the target is filled with [`FILL`]
-//! (l1.rs's `FILL`), so a frame that never reached the target reads as
-//! fill, not as a clear; after the group's end the CPU reads the target
-//! through the uncached mapping, `width * height` RGBA8 pixels, and counts
-//! opaque red ([`RED`]), opaque blue ([`BLUE`]), the fill and the rest.
+//! the regions they all lie in, and a digest of the blocks and the stream,
+//! copied into the record as it is. [`GENERATED`] is that file as a
+//! `Frame`, at the Z4 VAs ([`REGIONS`]), with the two queue-init words the
+//! generated stream leaves out put before it ([`QUEUE_INIT`]: `MOVE48 d72,
+//! #heap context` and `HEAP_SET d72`, what `frame::queue_init` of
+//! src/mali/frame.rs builds and Mesa 25.0.7 runs once per queue,
+//! pan_csf.c:1469-1473; the design page's "What L1 must provide"). Mesa
+//! submits them as a job of their own before the first frame; Z4 runs them
+//! at the head of the one stream its one job calls, which the firmware
+//! executes the same way (the heap context is queue state until the next
+//! `HEAP_SET`), so that the run is one job and one sync wait. Before the
+//! blocks the target is filled with [`FILL`] (l1.rs's `FILL`), so a frame
+//! that never reached the target reads as fill, not as a clear; after the
+//! group's end the CPU reads the target through the uncached mapping,
+//! `width * height` RGBA8 pixels, and counts opaque red ([`RED`]), opaque
+//! blue ([`BLUE`]), the fill and the rest.
 //!
 //! # What it returns
 //!
@@ -80,6 +91,7 @@
 //! reads from panthor's flush-id page; and the job's sequence number is
 //! [`SEQNO`], 1, the first of a fresh queue (panthor_sched.c:3165-3169).
 
+use super::nanopc_t6_frame as gen;
 use super::nanopc_t6_fw::{self, fw_up, FwUp};
 use super::nanopc_t6_gpu::{Bases, GpuUp};
 use super::nanopc_t6_mmu::MEMATTR_LIVE;
@@ -89,6 +101,7 @@ use crate::gpu::mali::fw;
 use crate::gpu::mali::heap::{self, Allocation, HeapError, HeapMemory, HeapObject, HeapParams, HeapPool};
 use crate::gpu::mali::mmu::{self, FlushOp};
 use crate::gpu::mali::pgtable::{Prot, Table, Tables, PAGE, VA_BITS};
+use crate::gpu::mali::sched::job::mov48;
 use crate::gpu::mali::sched::{
     self, Ended, Group, GroupVm, Job, Queue, RingbufInput, RingbufOutput, Started, SyncObj64, GROUP_AS,
     QUEUE_IFACE_SIZE, QUEUE_OUTPUT_OFFSET, QUEUE_PRIORITY, RING_MIN_SIZE,
@@ -162,10 +175,52 @@ pub const FILL: u32 = u32::from_le_bytes([0x5a, 0xa5, 0x3c, 0xc3]);
 pub const RED: u32 = u32::from_le_bytes([0xff, 0, 0, 0xff]);
 pub const BLUE: u32 = u32::from_le_bytes([0, 0, 0xff, 0xff]);
 
+/// How a [`Region`] of the group VM is mapped: the VM_BIND flags panthor
+/// gives the buffer it stands for (`flags_to_prot`, panthor_mmu.c).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u32)]
+pub enum Mapping {
+    /// A user buffer (the arenas, the geometry buffer, the target, the
+    /// stream): writable, executable, GPU-cached.
+    User = 1,
+    /// A kernel buffer of the heap (the pool, a chunk): no-exec, GPU-cached
+    /// (`DRM_PANTHOR_VM_BIND_OP_MAP_NOEXEC`, panthor_heap.c:151, 556).
+    Heap = 2,
+    /// The queue's ring and sync object: no-exec, uncached
+    /// (panthor_sched.c:3352-3358, 3522-3529). Nothing else may lie in it.
+    Queue = 3,
+}
+
+impl Mapping {
+    const fn prot(self) -> Prot {
+        match self {
+            Mapping::User => Prot { write: true, exec: true, cached: true },
+            Mapping::Heap => Prot { write: true, exec: false, cached: true },
+            Mapping::Queue => Prot { write: true, exec: false, cached: false },
+        }
+    }
+}
+
+/// One range of the group VM, 4 KiB aligned, backed by one
+/// [`GroupBacking`] of at least `size` bytes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Region {
+    pub va: u64,
+    pub size: u64,
+    pub mapping: Mapping,
+}
+
 /// The frame the run submits: the consts of the generated
-/// driver/rust/src/board/nanopc_t6_frame.rs, every VA in the group's VM.
+/// driver/rust/src/board/nanopc_t6_frame.rs ([`GENERATED`]), every VA in the
+/// group's VM.
 #[derive(Clone, Copy, Debug)]
 pub struct Frame<'a> {
+    /// The group VM: every range below lies inside one region, no two
+    /// regions overlap.
+    pub regions: &'a [Region],
+    /// The ring ([`RING_SIZE`]) and, in the page after it, the sync object:
+    /// [`QUEUE_VM_BYTES`] inside a [`Mapping::Queue`] region.
+    pub queue_va: u64,
     /// The blocks (descriptors, shaders, data), each written at its VA.
     pub blocks: &'a [(u64, &'a [u8])],
     /// The command stream the job's `CALL` runs, 8-byte aligned.
@@ -182,23 +237,161 @@ pub struct Frame<'a> {
     pub target_bytes: u32,
     pub width: u32,
     pub height: u32,
-    /// The range every VA above lies in: `[va_base, va_end)`, 4 KiB aligned.
-    pub va_base: u64,
-    pub va_end: u64,
-    /// The generator's digest of the frame, copied into the record.
+    /// The digest of the blocks and the stream ([`digest`]), copied into
+    /// the record.
     pub digest: u64,
 }
+
+/// `HEAP_SET dN` (Mesa's `cs_heap_set`; opcode 0x30, the address register
+/// in bits 40-47: the trace's `00 00 00 00 00 48 00 30` for d72).
+pub const fn heap_set(addr_reg: u64) -> u64 {
+    (0x30u64 << 56) | (addr_reg << 40)
+}
+
+/// FNV-1a over `bytes`, continued from `h`.
+const fn fnv1a(mut h: u64, bytes: &[u8]) -> u64 {
+    let mut i = 0;
+    while i < bytes.len() {
+        h = (h ^ bytes[i] as u64).wrapping_mul(0x0000_0100_0000_01b3);
+        i += 1;
+    }
+    h
+}
+
+/// The digest of a frame's bytes: FNV-1a 64 over each block's VA (8 bytes,
+/// little-endian) and bytes in the blocks' order, then the stream's VA and
+/// its words. A record whose `digest` is this value ran this frame.
+pub const fn digest(blocks: &[(u64, &[u8])], cs_va: u64, cs: &[u64]) -> u64 {
+    let mut h = 0xcbf2_9ce4_8422_2325;
+    let mut i = 0;
+    while i < blocks.len() {
+        h = fnv1a(h, &blocks[i].0.to_le_bytes());
+        h = fnv1a(h, blocks[i].1);
+        i += 1;
+    }
+    h = fnv1a(h, &cs_va.to_le_bytes());
+    let mut i = 0;
+    while i < cs.len() {
+        h = fnv1a(h, &cs[i].to_le_bytes());
+        i += 1;
+    }
+    h
+}
+
+/// The heap context register of `frame::queue_init` (src/mali/frame.rs,
+/// `reg::HEAP_CTX`): d72.
+pub const HEAP_CTX_REG: u64 = 72;
+/// Heap 0's context: the pool's first slot, placed at the address panthor's
+/// run on the board gave it, so that `HEAP_SET`'s operand is the trace's
+/// 0x800000015000 (heap.rs's module doc, the design page's "What L1 must
+/// provide").
+pub const HEAP_CTX_VA: u64 = 0x8000_0001_5000;
+/// The pool buffer's bytes: `pool_size(64)` for the G610's 64-byte L2 line
+/// (a larger line makes the heap step refuse: `PoolAlloc`, 1).
+pub const HEAP_POOL_SIZE: u64 = heap::pool_size(64);
+/// The queue-init words the generated stream leaves out: `MOVE48 d72,
+/// #HEAP_CTX_VA` and `HEAP_SET d72`.
+pub const QUEUE_INIT: [u64; 2] = [mov48(HEAP_CTX_REG, HEAP_CTX_VA), heap_set(HEAP_CTX_REG)];
+
+/// The Z4 VAs of the group VM that are not the generated file's: the
+/// queue's region (sched.rs's test ring) and the stream, after the data
+/// arena in the arenas' region.
+pub const QUEUE_VA: u64 = 0x1_0080_0000;
+pub const CS_VA: u64 = 0x1_0205_0000;
+/// The MCU address (AS0) the C entry maps the queue's [`McuBacking`] at:
+/// above Z3's sections (the shared interface ends at 0x0410_0000), 4 KiB
+/// aligned. [`QUEUE_MCU_MIN`] is the least it holds, the user pages; CSG
+/// 0's `suspend_size` and `protm_suspend_size`, each rounded up to 4 KiB,
+/// come on top (a short backing is [`STEP_QUEUE_MEM`] with the bytes
+/// needed).
+pub const QUEUE_MCU_VA: u32 = 0x0500_0000;
+pub const QUEUE_MCU_MIN: u64 = QUEUE_IFACE_SIZE as u64;
+
+/// The group VM's regions for [`GENERATED`], in the order the C side's
+/// `struct yd_t6_submit_mem` gives their backings: the queue's, the arenas
+/// (ctx, desc, code, spds, data, each at its `*_VA`, and the stream at
+/// [`CS_VA`]), the geometry buffer, the target, the heap's pool and its one
+/// chunk.
+pub const REGIONS: [Region; 6] = [
+    Region { va: QUEUE_VA, size: QUEUE_VM_BYTES, mapping: Mapping::Queue },
+    Region { va: gen::CTX_VA, size: 0x6_0000, mapping: Mapping::User },
+    Region { va: gen::GEOMETRY_BUFFER_VA, size: gen::GEOMETRY_BUFFER_SIZE as u64, mapping: Mapping::User },
+    Region { va: gen::TARGET_VA, size: 0x4000, mapping: Mapping::User },
+    Region { va: HEAP_CTX_VA, size: HEAP_POOL_SIZE, mapping: Mapping::Heap },
+    Region { va: gen::HEAP_FIRST_CHUNK_VA, size: gen::HEAP_CHUNK_SIZE as u64, mapping: Mapping::Heap },
+];
+/// The index of each region in [`REGIONS`].
+pub const REGION_QUEUE: usize = 0;
+pub const REGION_ARENAS: usize = 1;
+pub const REGION_GEOMETRY: usize = 2;
+pub const REGION_TARGET: usize = 3;
+pub const REGION_HEAP_POOL: usize = 4;
+pub const REGION_HEAP_CHUNK: usize = 5;
+
+/// The generated frame's blocks: the five arenas' used bytes at their VAs.
+pub const BLOCKS: [(u64, &[u8]); 5] = [
+    (gen::CTX_VA, &gen::CTX),
+    (gen::DESC_VA, &gen::DESC),
+    (gen::CODE_VA, &gen::CODE),
+    (gen::SPDS_VA, &gen::SPDS),
+    (gen::DATA_VA, &gen::DATA),
+];
+
+const fn with_queue_init<const N: usize>(words: &[u64]) -> [u64; N] {
+    let mut out = [0u64; N];
+    let mut i = 0;
+    while i < QUEUE_INIT.len() {
+        out[i] = QUEUE_INIT[i];
+        i += 1;
+    }
+    let mut j = 0;
+    while j < words.len() {
+        out[i + j] = words[j];
+        j += 1;
+    }
+    out
+}
+
+/// The stream the job calls: [`QUEUE_INIT`], then the generated words.
+pub const CS: [u64; QUEUE_INIT.len() + gen::WORDS.len()] = with_queue_init(&gen::WORDS);
+
+/// The target: 64 x 64 RGBA8, rows 256 bytes apart (l1.rs's `WIDTH`,
+/// `HEIGHT`, `ROW_STRIDE`).
+pub const WIDTH: u32 = 64;
+pub const HEIGHT: u32 = 64;
+pub const TARGET_BYTES: u32 = WIDTH * HEIGHT * 4;
+
+/// [`digest`] of [`GENERATED`].
+pub const DIGEST: u64 = digest(&BLOCKS, CS_VA, &CS);
+
+/// The Z4 frame: driver/rust/src/board/nanopc_t6_frame.rs at its VAs, the
+/// queue-init words before its stream, in the group VM of [`REGIONS`].
+pub const GENERATED: Frame<'static> = Frame {
+    regions: &REGIONS,
+    queue_va: QUEUE_VA,
+    blocks: &BLOCKS,
+    cs_va: CS_VA,
+    cs: &CS,
+    heap_ctx_va: HEAP_CTX_VA,
+    heap_chunk_va: gen::HEAP_FIRST_CHUNK_VA,
+    heap_chunk_size: gen::HEAP_CHUNK_SIZE,
+    target_va: gen::TARGET_VA,
+    target_bytes: TARGET_BYTES,
+    width: WIDTH,
+    height: HEIGHT,
+    digest: DIGEST,
+};
 
 /// Why [`check_frame`] refused, with the value that decided it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u32)]
 pub enum FrameRefusal {
-    /// `va_base`/`va_end` not 4 KiB aligned, empty, or the range with the
-    /// queue's [`QUEUE_VM_BYTES`] after it leaving [`VA_BITS`] (the value:
-    /// `va_base`).
+    /// No region, or a region not 4 KiB aligned, empty, leaving
+    /// [`VA_BITS`], or overlapping an earlier one (the value: its VA).
     Range = 1,
-    /// The [`GroupBacking`] is smaller than the range and the queue's bytes,
-    /// or not 4 KiB aligned (the value: the bytes needed).
+    /// Fewer [`GroupBacking`]s than regions (the value: the regions), or
+    /// one smaller than its region or not 4 KiB aligned (the value: the
+    /// bytes needed).
     Memory = 2,
     /// The command stream, a block, the target or the heap chunk has no
     /// bytes, or the stream more than `u32::MAX` (the value: its VA).
@@ -206,18 +399,20 @@ pub enum FrameRefusal {
     /// The command stream not 8-byte or the target not 4-byte aligned (the
     /// value: the VA).
     Unaligned = 4,
-    /// A range outside `[va_base, va_end)` (the value: its VA).
+    /// A range not inside one region (the value: its VA).
     Outside = 5,
     /// Two ranges overlap (the value: the later one's VA, in the order
-    /// stream, target, heap context, heap chunk, blocks).
+    /// queue, stream, target, heap context, heap chunk, blocks).
     Overlap = 6,
     /// `target_bytes` below `width * height * 4` (the value: `target_bytes`).
     Target = 7,
+    /// The queue's bytes not in a [`Mapping::Queue`] region, or another
+    /// range in one (the value: the VA).
+    Mapping = 8,
 }
 
-/// The group VM's memory: `size` bytes at physical `pa`, which the CPU
-/// reaches at `cpu`, mapped uncached. The frame's range at its start, the
-/// ring and the sync object after it ([`QUEUE_VM_BYTES`]).
+/// One region's memory: `size` bytes at physical `pa`, which the CPU
+/// reaches at `cpu`, mapped uncached.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct GroupBacking {
     pa: u64,
@@ -258,11 +453,12 @@ pub struct McuBacking {
     pub size: u64,
 }
 
-/// The memory Z4 adds to Z3's: the queue's in AS0, the group VM's, and the
-/// group VM's table pages at physical `vm_tables_pa`.
+/// The memory Z4 adds to Z3's: the queue's in AS0, the group VM's (one
+/// backing per [`Frame::regions`], in their order), and the group VM's
+/// table pages at physical `vm_tables_pa`.
 pub struct Z4Mem<'a> {
     pub queue: McuBacking,
-    pub vm: GroupBacking,
+    pub vm: &'a [GroupBacking],
     pub vm_pool: &'a mut [Table],
     pub vm_tables_pa: u64,
 }
@@ -271,21 +467,36 @@ fn overlap(a: (u64, u64), b: (u64, u64)) -> bool {
     a.0 < b.0 + b.1 && b.0 < a.0 + a.1
 }
 
+/// The region of `regions` holding all of `[va, va + len)`.
+fn region_of(regions: &[Region], va: u64, len: u64) -> Option<(usize, &Region)> {
+    regions.iter().enumerate().find(|(_, r)| va >= r.va && va.checked_add(len).is_some_and(|e| e <= r.va + r.size))
+}
+
 /// The frame and the group VM's memory checked, before anything is touched:
-/// the range, the memory, every range of the frame inside the range and
-/// none overlapping another.
-pub fn check_frame(f: &Frame, vm: &GroupBacking) -> Result<(), (FrameRefusal, u64)> {
+/// the regions, their memory, every range of the frame inside one region
+/// of the right mapping and none overlapping another.
+pub fn check_frame(f: &Frame, vm: &[GroupBacking]) -> Result<(), (FrameRefusal, u64)> {
     let top = 1u64 << VA_BITS;
-    if f.va_base >= f.va_end
-        || !f.va_base.is_multiple_of(PAGE)
-        || !f.va_end.is_multiple_of(PAGE)
-        || f.va_end.checked_add(QUEUE_VM_BYTES).is_none_or(|e| e > top)
-    {
-        return Err((FrameRefusal::Range, f.va_base));
+    if f.regions.is_empty() {
+        return Err((FrameRefusal::Range, 0));
     }
-    let need = f.va_end - f.va_base + QUEUE_VM_BYTES;
-    if vm.size < need || !vm.pa.is_multiple_of(PAGE) || !(vm.cpu as u64).is_multiple_of(PAGE) {
-        return Err((FrameRefusal::Memory, need));
+    for (i, r) in f.regions.iter().enumerate() {
+        if r.size == 0
+            || !r.va.is_multiple_of(PAGE)
+            || !r.size.is_multiple_of(PAGE)
+            || r.va.checked_add(r.size).is_none_or(|e| e > top)
+            || f.regions[..i].iter().any(|q| overlap((r.va, r.size), (q.va, q.size)))
+        {
+            return Err((FrameRefusal::Range, r.va));
+        }
+    }
+    if vm.len() < f.regions.len() {
+        return Err((FrameRefusal::Memory, f.regions.len() as u64));
+    }
+    for (r, b) in f.regions.iter().zip(vm) {
+        if b.size < r.size || !b.pa.is_multiple_of(PAGE) || !(b.cpu as u64).is_multiple_of(PAGE) {
+            return Err((FrameRefusal::Memory, r.size));
+        }
     }
     if f.cs.is_empty() || f.cs.len() > (u32::MAX / 8) as usize {
         return Err((FrameRefusal::Empty, f.cs_va));
@@ -301,20 +512,24 @@ pub fn check_frame(f: &Frame, vm: &GroupBacking) -> Result<(), (FrameRefusal, u6
     }
     let range = |i: usize| -> (u64, u64) {
         match i {
-            0 => (f.cs_va, 8 * f.cs.len() as u64),
-            1 => (f.target_va, u64::from(f.target_bytes)),
-            2 => (f.heap_ctx_va, HEAP_CTX_BYTES),
-            3 => (f.heap_chunk_va, u64::from(f.heap_chunk_size)),
-            _ => (f.blocks[i - 4].0, f.blocks[i - 4].1.len() as u64),
+            0 => (f.queue_va, QUEUE_VM_BYTES),
+            1 => (f.cs_va, 8 * f.cs.len() as u64),
+            2 => (f.target_va, u64::from(f.target_bytes)),
+            3 => (f.heap_ctx_va, HEAP_CTX_BYTES),
+            4 => (f.heap_chunk_va, u64::from(f.heap_chunk_size)),
+            _ => (f.blocks[i - 5].0, f.blocks[i - 5].1.len() as u64),
         }
     };
-    for i in 0..f.blocks.len() + 4 {
+    for i in 0..f.blocks.len() + 5 {
         let (va, len) = range(i);
         if len == 0 {
             return Err((FrameRefusal::Empty, va));
         }
-        if va < f.va_base || va.checked_add(len).is_none_or(|e| e > f.va_end) {
+        let Some((_, r)) = region_of(f.regions, va, len) else {
             return Err((FrameRefusal::Outside, va));
+        };
+        if (r.mapping == Mapping::Queue) != (i == 0) {
+            return Err((FrameRefusal::Mapping, va));
         }
         if (0..i).any(|j| overlap((va, len), range(j))) {
             return Err((FrameRefusal::Overlap, va));
@@ -347,52 +562,48 @@ pub fn heap_error_code(e: &HeapError<u32>) -> (u32, u64) {
     }
 }
 
-/// The group VM as the CPU sees it: `[va_base, va_end + QUEUE_VM_BYTES)` at
-/// the backing's CPU address.
-struct VmMap {
-    base: u64,
-    end: u64,
-    cpu: usize,
+/// The group VM as the CPU sees it: each region at its backing's CPU
+/// address.
+struct VmMap<'a> {
+    regions: &'a [Region],
+    vm: &'a [GroupBacking],
 }
 
-impl VmMap {
-    fn at(&self, va: u64) -> usize {
-        self.cpu + (va - self.base) as usize
+impl VmMap<'_> {
+    fn at(&self, va: u64, len: u64) -> Option<usize> {
+        let (i, r) = region_of(self.regions, va, len)?;
+        Some(self.vm.get(i)?.cpu + (va - r.va) as usize)
     }
 }
 
-impl GroupVm for VmMap {
+impl GroupVm for VmMap<'_> {
     fn cpu(&self, va: u64, len: u32) -> Option<usize> {
-        let in_range = va >= self.base && va.checked_add(u64::from(len)).is_some_and(|e| e <= self.end);
-        in_range.then(|| self.at(va))
+        self.at(va, u64::from(len))
     }
 }
 
-/// The heap's two buffers where the frame names them, inside the frame's
-/// range: the pool at `heap_ctx_va`, the chunk at `heap_chunk_va`. The
-/// error: 1 the pool, 2 the chunk not inside the range.
+/// The heap's two buffers where the frame names them, each inside a region:
+/// the pool at `heap_ctx_va`, the chunk at `heap_chunk_va`. The error: 1
+/// the pool, 2 the chunk not inside one region.
 struct VmHeap<'v> {
-    vm: &'v VmMap,
-    frame_end: u64,
+    vm: &'v VmMap<'v>,
     pool_va: u64,
     chunk_va: u64,
 }
 
-// SAFETY: every allocation is inside the GroupBacking (VmMap covers only
-// it), whose constructor's contract gives plain-pointer access to those
+// SAFETY: every allocation is inside one GroupBacking (VmMap covers only
+// them), whose constructor's contract gives plain-pointer access to those
 // bytes, the GPU's at the same VA in the group VM, uncached; the pool and
 // the chunk do not overlap (check_frame, and the heap's own size checks).
 unsafe impl HeapMemory for VmHeap<'_> {
     type Error = u32;
     fn alloc(&mut self, size: u64, what: HeapObject) -> Result<Allocation, u32> {
-        let (va, err) = match what {
+        let (va, err): (u64, u32) = match what {
             HeapObject::Pool => (self.pool_va, 1),
             HeapObject::Chunk => (self.chunk_va, 2),
         };
-        if va < self.vm.base || va.checked_add(size).is_none_or(|e| e > self.frame_end) {
-            return Err(err);
-        }
-        Ok(Allocation { cpu: self.vm.at(va), gpu: va, size })
+        let cpu = self.vm.at(va, size).ok_or(err)?;
+        Ok(Allocation { cpu, gpu: va, size })
     }
     fn free(&mut self, _: Allocation) {}
 }
@@ -640,10 +851,18 @@ pub fn submit_up(
     on_handover: &mut impl FnMut(&GpuUp),
 ) -> SubmitUp {
     let mut o = SubmitUp { digest: frame.digest, ..SubmitUp::default() };
-    if let Err((why, v)) = check_frame(frame, &mem.vm) {
+    if let Err((why, v)) = check_frame(frame, mem.vm) {
         o.stopped(STEP_FRAME, why as u32, v);
         return o;
     }
+    let vmap = VmMap { regions: frame.regions, vm: mem.vm };
+    // check_frame placed both inside a region
+    let (Some(target), Some(cs_cpu)) =
+        (vmap.at(frame.target_va, u64::from(frame.target_bytes)), vmap.at(frame.cs_va, 8 * frame.cs.len() as u64))
+    else {
+        o.stopped(STEP_FRAME, FrameRefusal::Outside as u32, frame.target_va);
+        return o;
+    };
 
     // Z3
     o.fw = fw_up(m, b, blob, backings, pool, tables_pa, timer_hz, clean, delay_us, on_handover);
@@ -728,9 +947,7 @@ pub fn submit_up(
         return o;
     }
 
-    // AS1: the frame's range, then the ring and the sync object
-    let vm = mem.vm;
-    let len = frame.va_end - frame.va_base;
+    // AS1: the frame's regions, each as panthor would bind it
     let root = {
         let mut t = match Tables::new(mem.vm_pool, mem.vm_tables_pa) {
             Ok(t) => t,
@@ -739,14 +956,10 @@ pub fn submit_up(
                 return o;
             }
         };
-        let user = Prot { write: true, exec: true, cached: true };
-        let queue = Prot { write: true, exec: false, cached: false };
-        for (va, pa, size, prot) in
-            [(frame.va_base, vm.pa, len, user), (frame.va_end, vm.pa + len, QUEUE_VM_BYTES, queue)]
-        {
-            if let Err(why) = t.map(va, pa, size, prot) {
+        for (r, b) in frame.regions.iter().zip(mem.vm) {
+            if let Err(why) = t.map(r.va, b.pa, r.size, r.mapping.prot()) {
                 o.vm_tables_used = t.used() as u32;
-                o.stopped(STEP_VM_MAP, why as u32, va);
+                o.stopped(STEP_VM_MAP, why as u32, r.va);
                 return o;
             }
         }
@@ -764,11 +977,8 @@ pub fn submit_up(
         o.stopped(STEP_VM_ENABLE, why as u32, u64::from(v));
         return o;
     }
-    let vmap = VmMap { base: frame.va_base, end: frame.va_end + QUEUE_VM_BYTES, cpu: vm.cpu };
-
     // the tiler heap
-    let mut hm =
-        VmHeap { vm: &vmap, frame_end: frame.va_end, pool_va: frame.heap_ctx_va, chunk_va: frame.heap_chunk_va };
+    let mut hm = VmHeap { vm: &vmap, pool_va: frame.heap_ctx_va, chunk_va: frame.heap_chunk_va };
     let mut list = [Allocation::default(); 1];
     let params = HeapParams {
         initial_chunk_count: 1,
@@ -799,17 +1009,17 @@ pub fn submit_up(
         (csg.protm_suspend_size != 0).then_some(protm_va),
     );
     let queue = Queue {
-        ring_va: frame.va_end,
+        ring_va: frame.queue_va,
         ring_size: RING_SIZE,
         input_va,
         output_va,
-        syncobj_va: frame.va_end + u64::from(RING_SIZE),
+        syncobj_va: frame.queue_va + u64::from(RING_SIZE),
         priority: QUEUE_PRIORITY,
     };
     let qmem = QueueMcu { fw: &fw_mem, q };
     let end = |o: &mut SubmitUp, delay_us: &mut _| {
         o.ended(&sched::stop_and_terminate(m, b.gpu, &iface, &csg, &cs, delay_us));
-        o.read_back(m, vmap.at(frame.target_va), frame);
+        o.read_back(m, target, frame);
     };
     let s: Started = match sched::start(m, b.gpu, &qmem, &vmap, &id, &iface, &csg, &cs, &group, &queue, delay_us) {
         Ok(s) => s,
@@ -827,14 +1037,15 @@ pub fn submit_up(
     o.cs_ack_us = s.cs_ack_us;
 
     // the frame at its VAs: the target filled, the blocks, the stream
-    let target = vmap.at(frame.target_va);
     for i in 0..frame.target_bytes as usize / 4 {
         m.write32(target + 4 * i, FILL);
     }
     for &(va, bytes) in frame.blocks {
-        write_bytes(m, vmap.at(va), bytes);
+        // check_frame placed every block inside a region
+        if let Some(cpu) = vmap.at(va, bytes.len() as u64) {
+            write_bytes(m, cpu, bytes);
+        }
     }
-    let cs_cpu = vmap.at(frame.cs_va);
     for (i, &w) in frame.cs.iter().enumerate() {
         m.write32(cs_cpu + 8 * i, w as u32);
         m.write32(cs_cpu + 8 * i + 4, (w >> 32) as u32);
@@ -882,7 +1093,7 @@ pub fn submit_up(
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::board::nanopc_t6_fw::tests::{backings, B, T6, TABLES_PA};
     use crate::board::nanopc_t6_gpu;
@@ -914,20 +1125,25 @@ mod tests {
     const DATA_VA: u64 = VA + 0x2000;
     /// The 8 bytes the frame's stream adds 1 to.
     const USER_SYNC_VA: u64 = VA + 0x3000;
-    const CS_VA: u64 = VA + 0x4000;
-    const TARGET_VA: u64 = VA + 0x8000;
-    const HEAP_CTX_VA: u64 = VA + 0x1_5000;
+    const SYNTH_CS_VA: u64 = VA + 0x4000;
+    const SYNTH_TARGET_VA: u64 = VA + 0x8000;
+    const SYNTH_HEAP_CTX_VA: u64 = VA + 0x1_5000;
     const CHUNK_VA: u64 = VA + 0x10_0000;
     const CHUNK_SIZE: u32 = 0x2_0000;
     const W: u32 = 64;
     const H: u32 = 64;
     const SYNC_VA: u64 = VA_END + RING_SIZE as u64;
 
-    const VM_TABLES_PA: u64 = 0x1048_0000;
+    pub(crate) const VM_TABLES_PA: u64 = 0x1048_0000;
     const VM_PA: u64 = 0x1100_0000;
     const VM_BYTES: u64 = VA_END - VA + QUEUE_VM_BYTES;
-    const QUEUE_MCU_VA: u32 = 0x0500_0000;
-    const QUEUE: McuBacking = McuBacking { va: QUEUE_MCU_VA, pa: 0x1080_0000, cpu: MEM + 0x0500_0000, size: 0x2000 };
+    pub(crate) const QUEUE: McuBacking =
+        McuBacking { va: QUEUE_MCU_VA, pa: 0x1080_0000, cpu: MEM + 0x0500_0000, size: 0x2000 };
+    /// The synthetic frame's group VM: the 2 MiB, then the queue's 8 KiB.
+    const SYNTH_REGIONS: [Region; 2] = [
+        Region { va: VA, size: VA_END - VA, mapping: Mapping::User },
+        Region { va: VA_END, size: QUEUE_VM_BYTES, mapping: Mapping::Queue },
+    ];
 
     const DESC: [u8; 64] = {
         let mut b = [0u8; 64];
@@ -942,23 +1158,23 @@ mod tests {
     const DATA: [u8; 13] = *b"thirteen byte";
     const USER_SYNC: [u8; 8] = [0; 8];
     /// A stream that only adds 1 to the 8 bytes at USER_SYNC_VA.
-    const CS: [u64; 3] = [mov48(0, USER_SYNC_VA), mov48(2, 1), sync_add64(0, 2)];
-    const BLOCKS: [(u64, &[u8]); 3] = [(DESC_VA, &DESC), (DATA_VA, &DATA), (USER_SYNC_VA, &USER_SYNC)];
+    const SYNTH_CS: [u64; 3] = [mov48(0, USER_SYNC_VA), mov48(2, 1), sync_add64(0, 2)];
+    const SYNTH_BLOCKS: [(u64, &[u8]); 3] = [(DESC_VA, &DESC), (DATA_VA, &DATA), (USER_SYNC_VA, &USER_SYNC)];
 
     fn frame() -> Frame<'static> {
         Frame {
-            blocks: &BLOCKS,
-            cs_va: CS_VA,
-            cs: &CS,
-            heap_ctx_va: HEAP_CTX_VA,
+            regions: &SYNTH_REGIONS,
+            queue_va: VA_END,
+            blocks: &SYNTH_BLOCKS,
+            cs_va: SYNTH_CS_VA,
+            cs: &SYNTH_CS,
+            heap_ctx_va: SYNTH_HEAP_CTX_VA,
             heap_chunk_va: CHUNK_VA,
             heap_chunk_size: CHUNK_SIZE,
-            target_va: TARGET_VA,
+            target_va: SYNTH_TARGET_VA,
             target_bytes: W * H * 4,
             width: W,
             height: H,
-            va_base: VA,
-            va_end: VA_END,
             digest: 0x0123_4567_89ab_cdef,
         }
     }
@@ -999,17 +1215,19 @@ mod tests {
     /// and the input page's `insert` run from the ring: `MOV32`/`MOV48` load
     /// registers, `CALL` runs the stream it names the same way, `SYNC_ADD64`
     /// adds to the 64-bit word it names (and writes `sync_status` when that
-    /// word is the queue's sync object); then `extract` advances and
-    /// `CSG_SYNC_UPDATE` is raised. After a `CALL` it paints the target as
+    /// word is the queue's sync object), `HEAP_SET` keeps the register it
+    /// names (`heap_ctx`); then `extract` advances and `CSG_SYNC_UPDATE` is
+    /// raised. After a `CALL` it paints the target (`target_va`, 64 x 64) as
     /// the frame would (red left half, blue right) when `paint` says so. The
-    /// group VM is real memory (`ram`, at VA `VA`): the heap writes it
-    /// through pointers. Knobs: `never_complete` ignores doorbell 1,
-    /// `gpu_id` replaces `GPU_ID`. The identity registers Z3's model leaves
-    /// at 0 read as the board's: `AS_PRESENT` 0xff, `TILER_PRESENT` 1,
-    /// `L2_FEATURES` 0x07120306.
-    struct Z4 {
-        t6: T6,
-        ram: Ram,
+    /// group VM is real memory (`rams`, one allocation per region at its
+    /// VA): the heap writes it through pointers. Knobs: `never_complete`
+    /// ignores doorbell 1, `gpu_id` replaces `GPU_ID`. The identity
+    /// registers Z3's model leaves at 0 read as the board's: `AS_PRESENT`
+    /// 0xff, `TILER_PRESENT` 1, `L2_FEATURES` 0x07120306.
+    pub(crate) struct Z4 {
+        pub(crate) t6: T6,
+        rams: Vec<(u64, Ram)>,
+        target_va: u64,
         log: RefCell<Vec<(usize, u32)>>,
         lag: u32,
         job_lag: u32,
@@ -1021,13 +1239,26 @@ mod tests {
         gpu_id: Option<u32>,
         as_present: u32,
         calls: Cell<u32>,
+        heap_ctx: Cell<Option<u64>>,
     }
 
     impl Z4 {
-        fn new(blob: Vec<u8>) -> Z4 {
+        /// The model with the synthetic frame's group VM: one allocation
+        /// for both regions.
+        pub(crate) fn new(blob: Vec<u8>) -> Z4 {
+            Z4::with_rams(blob, vec![(VA, Ram::new(VM_BYTES))], SYNTH_TARGET_VA)
+        }
+        /// The model with the generated frame's group VM: one allocation
+        /// per region of [`REGIONS`].
+        pub(crate) fn generated(blob: Vec<u8>) -> Z4 {
+            let rams = REGIONS.iter().map(|r| (r.va, Ram::new(r.size))).collect();
+            Z4::with_rams(blob, rams, gen::TARGET_VA)
+        }
+        fn with_rams(blob: Vec<u8>, rams: Vec<(u64, Ram)>, target_va: u64) -> Z4 {
             Z4 {
                 t6: T6::handed_over(blob),
-                ram: Ram::new(VM_BYTES),
+                rams,
+                target_va,
                 log: RefCell::new(vec![]),
                 lag: 3,
                 job_lag: 20,
@@ -1039,21 +1270,48 @@ mod tests {
                 gpu_id: None,
                 as_present: 0xff,
                 calls: Cell::new(0),
+                heap_ctx: Cell::new(None),
             }
         }
+        /// The group VM's backings, one per allocation, in their order; the
+        /// synthetic frame's two regions share the first.
+        pub(crate) fn backings(&self) -> Vec<GroupBacking> {
+            let mut out = Vec::new();
+            for (i, (va, ram)) in self.rams.iter().enumerate() {
+                let pa = VM_PA + 0x100_0000 * i as u64;
+                if *va == VA && ram.layout.size() as u64 == VM_BYTES {
+                    // SAFETY: the model's RAM, used by this run alone
+                    out.push(unsafe { GroupBacking::new(pa, ram.base, VA_END - VA) });
+                    out.push(unsafe {
+                        GroupBacking::new(pa + (VA_END - VA), ram.base + (VA_END - VA) as usize, QUEUE_VM_BYTES)
+                    });
+                } else {
+                    // SAFETY: as above
+                    out.push(unsafe { GroupBacking::new(pa, ram.base, ram.layout.size() as u64) });
+                }
+            }
+            out
+        }
         fn cpu(&self, va: u64) -> usize {
-            assert!((VA..VA + VM_BYTES).contains(&va), "{va:#x} outside the group VM");
-            self.ram.base + (va - VA) as usize
+            let (base, ram) = self
+                .rams
+                .iter()
+                .find(|(b, r)| (*b..*b + r.layout.size() as u64).contains(&va))
+                .unwrap_or_else(|| panic!("{va:#x} outside the group VM"));
+            ram.base + (va - base) as usize
+        }
+        fn has(&self, a: usize) -> bool {
+            self.rams.iter().any(|(_, r)| r.has(a))
         }
         fn w(&self, a: usize) -> u32 {
-            if self.ram.has(a) {
+            if self.has(a) {
                 // SAFETY: inside the allocation, 4-byte aligned (every access is)
                 return unsafe { (a as *const u32).read_volatile() };
             }
             self.t6.read32(a)
         }
         fn put(&self, a: usize, v: u32) {
-            if self.ram.has(a) {
+            if self.has(a) {
                 // SAFETY: as in w
                 return unsafe { (a as *mut u32).write_volatile(v) };
             }
@@ -1101,6 +1359,7 @@ mod tests {
                         self.paint_target();
                     }
                 }
+                48 => self.heap_ctx.set(Some(regs[r(40)])),
                 51 => {
                     let at = regs[r(40)];
                     let c = self.cpu(at);
@@ -1116,7 +1375,7 @@ mod tests {
             for y in 0..H as u64 {
                 for x in 0..W as u64 {
                     let px = if x < W as u64 / 2 { RED } else { BLUE };
-                    self.put(self.cpu(TARGET_VA + 4 * (y * W as u64 + x)), px);
+                    self.put(self.cpu(self.target_va + 4 * (y * W as u64 + x)), px);
                 }
             }
         }
@@ -1167,7 +1426,7 @@ mod tests {
             }
         }
         fn write32(&self, a: usize, v: u32) {
-            if !self.ram.has(a) && !(MEM..MEM + 0x1000_0000).contains(&a) {
+            if !self.has(a) && !(MEM..MEM + 0x1000_0000).contains(&a) {
                 self.log.borrow_mut().push((a, v));
             }
             if a == GPU + csf::doorbell(0) {
@@ -1182,12 +1441,12 @@ mod tests {
             }
         }
         fn read8(&self, a: usize) -> u8 {
-            assert!(self.ram.has(a));
+            assert!(self.has(a));
             // SAFETY: inside the allocation
             unsafe { (a as *const u8).read_volatile() }
         }
         fn write8(&self, a: usize, v: u8) {
-            if self.ram.has(a) {
+            if self.has(a) {
                 // SAFETY: inside the allocation
                 return unsafe { (a as *mut u8).write_volatile(v) };
             }
@@ -1195,18 +1454,14 @@ mod tests {
         }
     }
 
-    fn vm(z: &Z4) -> GroupBacking {
-        // SAFETY: the model's RAM, VM_BYTES of it, used by this run alone
-        unsafe { GroupBacking::new(VM_PA, z.ram.base, VM_BYTES) }
-    }
-
     /// The run over the model with `blob` (the backings the synthetic
     /// file's) and the given frame, the microseconds slept, and Z3's pool
     /// afterwards.
-    fn run_frame(z: &Z4, blob: &[u8], f: &Frame) -> (SubmitUp, u64, Vec<Table>) {
+    pub(crate) fn run_frame(z: &Z4, blob: &[u8], f: &Frame) -> (SubmitUp, u64, Vec<Table>) {
         let mut pool = vec![[0u64; ENTRIES]; 16];
-        let mut vm_pool = vec![[0u64; ENTRIES]; 8];
-        let mem = Z4Mem { queue: QUEUE, vm: vm(z), vm_pool: &mut vm_pool, vm_tables_pa: VM_TABLES_PA };
+        let mut vm_pool = vec![[0u64; ENTRIES]; 16];
+        let vm = z.backings();
+        let mem = Z4Mem { queue: QUEUE, vm: &vm, vm_pool: &mut vm_pool, vm_tables_pa: VM_TABLES_PA };
         let mut slept = 0u64;
         let o = submit_up(
             z,
@@ -1250,9 +1505,9 @@ mod tests {
         // the heap where the frame names it, a 64-byte slot (L2 line 2^6)
         assert_eq!(
             (o.heap_ctx, o.heap_chunk, o.heap_chunk_size, o.heap_stride),
-            (HEAP_CTX_VA, CHUNK_VA, CHUNK_SIZE, 64)
+            (SYNTH_HEAP_CTX_VA, CHUNK_VA, CHUNK_SIZE, 64)
         );
-        // the start: START with ENDPOINT_CONFIG; CS 0's START request acked
+        // the start: START with ENDPOINT_CONFIG; SYNTH_CS 0's START request acked
         assert_eq!((o.csg_req, o.csg_ack, o.cs_req, o.cs_ack), (0x11, 0x11, 0x0511, 0x0511));
         assert_eq!((o.csg_ack_us, o.cs_ack_us), (1, 0));
         // one 128-byte job consumed, the sync object at 1, its event seen
@@ -1270,19 +1525,19 @@ mod tests {
         assert_eq!((ram_u64(&z, USER_SYNC_VA), z.calls.get()), (1, 1));
         // the blocks at their VAs, the stream's words, the heap's context
         // zeroed and its one chunk's header unlinked
-        for (va, bytes) in BLOCKS {
+        for (va, bytes) in SYNTH_BLOCKS {
             for (i, &b) in bytes.iter().enumerate().filter(|&(i, _)| va != USER_SYNC_VA || i >= 8) {
                 assert_eq!(z.read8(z.cpu(va + i as u64)), b, "{va:#x}+{i}");
             }
         }
-        for (i, &w) in CS.iter().enumerate() {
-            assert_eq!(ram_u64(&z, CS_VA + 8 * i as u64), w);
+        for (i, &w) in SYNTH_CS.iter().enumerate() {
+            assert_eq!(ram_u64(&z, SYNTH_CS_VA + 8 * i as u64), w);
         }
         assert_eq!(ram_u64(&z, CHUNK_VA), 0);
         // the ring holds the job's block: CALL of the frame's stream, 24 bytes
         let ring: Vec<u64> = (0..job::JOB_WORDS as u64).map(|i| ram_u64(&z, VA_END + 8 * i)).collect();
-        assert!(ring.contains(&mov48(92, CS_VA)) && ring.contains(&job::mov32(94, 24)), "{ring:x?}");
-        // CSG 0 terminated, CS 0 stopped
+        assert!(ring.contains(&mov48(92, SYNTH_CS_VA)) && ring.contains(&job::mov32(94, 24)), "{ring:x?}");
+        // CSG 0 terminated, SYNTH_CS 0 stopped
         assert_eq!(z.w(CSG_OUT + offset_of!(CsgOutput, ack)) & CSG_STATE_MASK, CSG_STATE_TERMINATE);
         assert_eq!(z.w(CS_OUT + offset_of!(CsOutput, ack)) & CS_STATE_MASK, CS_STATE_STOP);
 
@@ -1302,6 +1557,102 @@ mod tests {
         assert!(transtab < update && update < ring1, "{log:x?}");
         assert!(log[update..ring1].iter().any(|&(a, _)| a == GPU + csf::doorbell(0)));
         assert!(ring1 < start, "the group's end rings the group after the job");
+    }
+
+    /// The generated frame (GENERATED: nanopc_t6_frame.rs at the Z4 VAs)
+    /// over the model: the predicted Z4 record, every field. What the
+    /// board's record must show for a pass, except where the model stands
+    /// in for the firmware: the microsecond counts, `latest_flush` (the
+    /// GPU's flush id, 0 on the model), and Z3's own fields (the synthetic
+    /// firmware's: `nanopc_t6_fw`'s test and the Z3 procedure have the
+    /// board's).
+    #[test]
+    fn the_generated_frame_s_record_is_as_predicted() {
+        let blob = synth::small();
+        let z = Z4::generated(blob.clone());
+        let (o, _, _) = run_frame(&z, &blob, &GENERATED);
+        assert_eq!((o.step, o.refusal, o.detail), (STEP_NONE, 0, 0));
+        assert_eq!(o.fw.step, nanopc_t6_fw::STEP_NONE);
+        assert_eq!((o.as_present, o.l2_features), (0xff, 0x0712_0306));
+        // AS0: Z3's 7 tables and one more L3 for the queue's pages. The
+        // group VM: L0; the 4 GiB block of 0x1_0000_0000: L1, L2, one L3
+        // each for the queue (0x1_0080_0000), the arenas with the geometry
+        // buffer (0x1_0200_0000) and the target (0x1_0300_0000); the
+        // kernel range 0x8000_0000_0000: L1, L2, one L3 each for the pool
+        // and the chunk.
+        assert_eq!((o.as0_tables_used, o.vm_tables_used), (8, 10));
+        assert_eq!((o.suspend_size, o.protm_suspend_size), (0, 0));
+        // the heap: the trace's context, the file's chunk, 2 MiB, a 64-byte slot
+        assert_eq!(
+            (o.heap_ctx, o.heap_chunk, o.heap_chunk_size, o.heap_stride),
+            (0x8000_0001_5000, 0x8000_00a0_0000, 0x20_0000, 64)
+        );
+        assert_eq!((o.csg_req, o.csg_ack, o.cs_req, o.cs_ack), (0x11, 0x11, 0x0511, 0x0511));
+        assert_eq!((o.csg_ack_us, o.cs_ack_us), (1, 0));
+        assert_eq!((o.insert, o.extract, o.seqno, o.sync_status), (128, 128, 1, 0));
+        assert_eq!((o.latest_flush, o.sync_updates, o.wait_us), (0, 1, 20));
+        assert_eq!((o.status_cmd_ptr, o.info), (0, 0));
+        assert_eq!((o.stop_us, o.stop_refusal, o.terminate_us, o.terminate_refusal), (3, 0, 1, 0));
+        assert_eq!(o.cleared, [0, 0, 0]);
+        assert_eq!((o.red, o.blue, o.fill, o.other, o.pixels), (2048, 2048, 0, 0, 4096));
+        assert_eq!(o.digest, DIGEST);
+        // the digest as the doc and the probe carry it: the blocks and the
+        // 53 words at CS_VA
+        assert_eq!(DIGEST, 0xa4db_81a9_d39b_fdcc);
+        assert_eq!(DIGEST, digest(&BLOCKS, CS_VA, &CS));
+        assert_eq!(CS.len(), 53);
+        assert_eq!(&CS[..2], &[0x0148_8000_0001_5000, 0x3000_4800_0000_0000]);
+        assert_eq!(&CS[2..], &gen::WORDS[..]);
+        // the stream ran once and set the heap context the frame was built for
+        assert_eq!((z.calls.get(), z.heap_ctx.get()), (1, Some(HEAP_CTX_VA)));
+        // the blocks at their VAs, the stream's words at CS_VA
+        for (va, bytes) in BLOCKS {
+            for (i, &b) in bytes.iter().enumerate() {
+                assert_eq!(z.read8(z.cpu(va + i as u64)), b, "{va:#x}+{i}");
+            }
+        }
+        for (i, &w) in CS.iter().enumerate() {
+            assert_eq!(ram_u64(&z, CS_VA + 8 * i as u64), w);
+        }
+        // the ring at the queue's VA holds the job: CALL of the stream, 424 bytes
+        let ring: Vec<u64> = (0..job::JOB_WORDS as u64).map(|i| ram_u64(&z, QUEUE_VA + 8 * i)).collect();
+        assert!(ring.contains(&mov48(92, CS_VA)) && ring.contains(&job::mov32(94, 424)), "{ring:x?}");
+        assert_eq!(ram_u64(&z, QUEUE_VA + u64::from(RING_SIZE)), 1);
+        // the chunk's header: no successor; the context zeroed
+        assert_eq!((ram_u64(&z, gen::HEAP_FIRST_CHUNK_VA), ram_u64(&z, HEAP_CTX_VA)), (0, 0));
+    }
+
+    /// The generated frame's layout: the regions as the C header lists
+    /// them, the arenas inside theirs, the file's sizes honoured.
+    #[test]
+    fn the_generated_frame_lies_in_its_six_regions() {
+        assert_eq!(check_frame(&GENERATED, &Z4::generated(synth::small()).backings()), Ok(()));
+        assert_eq!(REGIONS.len(), 6);
+        let inside = |va: u64, len: u64| region_of(&REGIONS, va, len).map(|(i, _)| i);
+        assert_eq!(inside(QUEUE_VA, QUEUE_VM_BYTES), Some(REGION_QUEUE));
+        for (va, size) in [
+            (gen::CTX_VA, gen::CTX_SIZE),
+            (gen::DESC_VA, gen::DESC_SIZE),
+            (gen::CODE_VA, gen::CODE_SIZE),
+            (gen::SPDS_VA, gen::SPDS_SIZE),
+            (gen::DATA_VA, gen::DATA_SIZE),
+        ] {
+            assert_eq!(inside(va, size as u64), Some(REGION_ARENAS), "{va:#x}");
+        }
+        assert_eq!(inside(CS_VA, 8 * CS.len() as u64), Some(REGION_ARENAS));
+        assert_eq!(inside(gen::GEOMETRY_BUFFER_VA, u64::from(gen::GEOMETRY_BUFFER_SIZE)), Some(REGION_GEOMETRY));
+        assert_eq!(inside(gen::TARGET_VA, u64::from(TARGET_BYTES)), Some(REGION_TARGET));
+        assert_eq!(inside(HEAP_CTX_VA, HEAP_POOL_SIZE), Some(REGION_HEAP_POOL));
+        assert_eq!(inside(gen::HEAP_FIRST_CHUNK_VA, u64::from(gen::HEAP_CHUNK_SIZE)), Some(REGION_HEAP_CHUNK));
+        assert_eq!((HEAP_POOL_SIZE, gen::HEAP_CHUNK_SIZE), (0x2000, 0x20_0000));
+        assert_eq!((REGIONS[REGION_QUEUE].mapping, REGIONS[REGION_HEAP_POOL].mapping), (Mapping::Queue, Mapping::Heap));
+        // the FBD RUN_FRAGMENT reads is in the desc arena's block
+        assert!((gen::DESC_VA..gen::DESC_VA + gen::DESC.len() as u64).contains(&(gen::FBD_POINTER & !63)));
+        // the digest changes with any byte of the frame
+        let mut words = CS;
+        words[10] ^= 1;
+        assert_ne!(digest(&BLOCKS, CS_VA, &words), DIGEST);
+        assert_ne!(digest(&BLOCKS[..4], CS_VA, &CS), DIGEST);
     }
 
     #[test]
@@ -1358,21 +1709,51 @@ mod tests {
         // heap's context, over the stream
         let twice: [(u64, &[u8]); 2] = [(DESC_VA, &DESC), (DESC_VA + 60, &DATA)];
         assert_eq!(refused(&Frame { blocks: &twice, ..frame() }), (FrameRefusal::Overlap as u32, DESC_VA + 60));
-        for va in [TARGET_VA + 16, HEAP_CTX_VA + 32, CS_VA + 16, CHUNK_VA + 0x1_fff0] {
+        for va in [SYNTH_TARGET_VA + 16, SYNTH_HEAP_CTX_VA + 32, SYNTH_CS_VA + 16, CHUNK_VA + 0x1_fff0] {
             let b: [(u64, &[u8]); 1] = [(va, &DATA)];
             assert_eq!(refused(&Frame { blocks: &b, ..frame() }), (FrameRefusal::Overlap as u32, va));
         }
         // a range not 4 KiB aligned, an unaligned stream, an empty one, a
         // target too small for its pixels
-        assert_eq!(refused(&Frame { va_base: VA + 8, ..frame() }), (FrameRefusal::Range as u32, VA + 8));
-        assert_eq!(refused(&Frame { cs_va: CS_VA + 4, ..frame() }), (FrameRefusal::Unaligned as u32, CS_VA + 4));
-        assert_eq!(refused(&Frame { cs: &[], ..frame() }), (FrameRefusal::Empty as u32, CS_VA));
-        assert_eq!(refused(&Frame { target_bytes: W * H * 4 - 4, ..frame() }), (FrameRefusal::Target as u32, 16380));
-        // a range larger than the group VM's memory
+        let unaligned = [Region { va: VA + 8, ..SYNTH_REGIONS[0] }, SYNTH_REGIONS[1]];
+        assert_eq!(refused(&Frame { regions: &unaligned, ..frame() }), (FrameRefusal::Range as u32, VA + 8));
         assert_eq!(
-            refused(&Frame { va_end: VA_END + 0x1000, ..frame() }),
-            (FrameRefusal::Memory as u32, VM_BYTES + 0x1000)
+            refused(&Frame { cs_va: SYNTH_CS_VA + 4, ..frame() }),
+            (FrameRefusal::Unaligned as u32, SYNTH_CS_VA + 4)
         );
+        assert_eq!(refused(&Frame { cs: &[], ..frame() }), (FrameRefusal::Empty as u32, SYNTH_CS_VA));
+        assert_eq!(refused(&Frame { target_bytes: W * H * 4 - 4, ..frame() }), (FrameRefusal::Target as u32, 16380));
+        // a region larger than its memory
+        let big = [
+            Region { size: VA_END - VA + 0x1000, ..SYNTH_REGIONS[0] },
+            Region { va: VA_END + 0x1000, ..SYNTH_REGIONS[1] },
+        ];
+        assert_eq!(refused(&Frame { regions: &big, ..frame() }), (FrameRefusal::Memory as u32, VA_END - VA + 0x1000));
+        // two regions over the same pages; no region
+        let twice = [SYNTH_REGIONS[0], Region { va: VA_END - 0x1000, ..SYNTH_REGIONS[1] }];
+        assert_eq!(refused(&Frame { regions: &twice, ..frame() }), (FrameRefusal::Range as u32, VA_END - 0x1000));
+        assert_eq!(refused(&Frame { regions: &[], ..frame() }), (FrameRefusal::Range as u32, 0));
+        // the queue in a user region, a block in the queue's region
+        let user = [SYNTH_REGIONS[0], Region { mapping: Mapping::User, ..SYNTH_REGIONS[1] }];
+        assert_eq!(refused(&Frame { regions: &user, ..frame() }), (FrameRefusal::Mapping as u32, VA_END));
+        let in_queue: [(u64, &[u8]); 1] = [(VA_END + 0x1800, &DATA)];
+        assert_eq!(refused(&Frame { blocks: &in_queue, ..frame() }), (FrameRefusal::Mapping as u32, VA_END + 0x1800));
+        // a block over two regions' boundary is in neither
+        let split = [
+            Region { size: 0x10_0000, ..SYNTH_REGIONS[0] },
+            Region { va: VA + 0x10_0000, size: 0x10_0000, mapping: Mapping::Heap },
+            SYNTH_REGIONS[1],
+        ];
+        let across: [(u64, &[u8]); 1] = [(VA + 0x10_0000 - 4, &DESC)];
+        let z = Z4::new(synth::small());
+        let mut vm = z.backings();
+        vm.insert(1, GroupBacking { pa: vm[0].pa + 0x10_0000, cpu: vm[0].cpu + 0x10_0000, size: 0x10_0000 });
+        let f = Frame { regions: &split, blocks: &across, ..frame() };
+        assert_eq!(check_frame(&f, &vm), Err((FrameRefusal::Outside, VA + 0x10_0000 - 4)));
+        // the chunk in the heap's region is fine; fewer backings than regions are not
+        let f = Frame { regions: &split, ..frame() };
+        assert_eq!(check_frame(&f, &vm), Ok(()));
+        assert_eq!(check_frame(&f, &vm[..2]), Err((FrameRefusal::Memory, 3)));
     }
 
     #[test]
@@ -1436,7 +1817,8 @@ mod tests {
         let mut pool = vec![[0u64; ENTRIES]; 16];
         let mut vm_pool = vec![[0u64; ENTRIES]; 8];
         let queue = McuBacking { size: 0x1000, ..QUEUE };
-        let mem = Z4Mem { queue, vm: vm(&z), vm_pool: &mut vm_pool, vm_tables_pa: VM_TABLES_PA };
+        let vm = z.backings();
+        let mem = Z4Mem { queue, vm: &vm, vm_pool: &mut vm_pool, vm_tables_pa: VM_TABLES_PA };
         let o = submit_up(
             &z,
             B,
@@ -1457,7 +1839,8 @@ mod tests {
         let mut vm_pool = vec![[0u64; ENTRIES]; 8];
         let z = Z4::new(blob.clone());
         let queue = McuBacking { va: 0x0400_0000, ..QUEUE };
-        let mem = Z4Mem { queue, vm: vm(&z), vm_pool: &mut vm_pool, vm_tables_pa: VM_TABLES_PA };
+        let vm = z.backings();
+        let mem = Z4Mem { queue, vm: &vm, vm_pool: &mut vm_pool, vm_tables_pa: VM_TABLES_PA };
         let o = submit_up(
             &z,
             B,
@@ -1505,5 +1888,11 @@ mod tests {
         assert_eq!(heap_error_code(&HeapError::UnknownChunk { chunk_gpu_va: 7 }), (17, 7));
         assert_eq!((FILL, RED, BLUE), (0xc33c_a55a, 0xff00_00ff, 0xffff_0000));
         assert_eq!((RING_SIZE, QUEUE_VM_BYTES, SEQNO), (0x1000, 0x2000, 1));
+        assert_eq!((FrameRefusal::Range as u32, FrameRefusal::Mapping as u32), (1, 8));
+        assert_eq!((Mapping::User as u32, Mapping::Heap as u32, Mapping::Queue as u32), (1, 2, 3));
+        assert_eq!((QUEUE_MCU_VA, QUEUE_MCU_MIN), (0x0500_0000, 0x2000));
+        // the queue-init words: MOVE48 d72 of the trace's heap context, HEAP_SET d72
+        assert_eq!(QUEUE_INIT, [0x0148_8000_0001_5000, 0x3000_4800_0000_0000]);
+        assert_eq!(heap_set(72), 0x3000_4800_0000_0000);
     }
 }

@@ -809,6 +809,180 @@ pub unsafe extern "C" fn yd_t6_fw_up(
 #[cfg(any(feature = "mali", test))]
 pub type YdT6FwUp = crate::board::nanopc_t6_fw::FwUp;
 
+/// `struct yd_t6_submit_up` is [`crate::board::nanopc_t6_submit::SubmitUp`]
+/// as it is.
+#[cfg(any(feature = "mali", test))]
+pub type YdT6SubmitUp = crate::board::nanopc_t6_submit::SubmitUp;
+
+/// The regions of the group VM `struct yd_t6_submit_mem` backs, in the
+/// order of [`crate::board::nanopc_t6_submit::REGIONS`].
+#[cfg(any(feature = "mali", test))]
+pub const YD_T6_SUBMIT_REGIONS: usize = crate::board::nanopc_t6_submit::REGIONS.len();
+
+/// `struct yd_t6_submit_mem`: the memory Z4 adds to Z3's. `queue` is the
+/// queue's AS0 memory (the user pages, then CSG 0's suspend buffers),
+/// mapped at `YD_T6_SUBMIT_QUEUE_MCU_VA`, its `cpu` uncached; `regions` is
+/// one backing per region of the group VM, in the header's order
+/// (`YD_T6_SUBMIT_REGION_*`), each at least its region's size, its `cpu`
+/// uncached; `vm_pool` is `vm_pool_pages` 4 KiB pages at physical
+/// `vm_tables_pa`, the group VM's tables, written by the call.
+#[cfg(any(feature = "mali", test))]
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct YdT6SubmitMem {
+    pub queue: YdT6FwBacking,
+    pub regions: [YdT6FwBacking; YD_T6_SUBMIT_REGIONS],
+    pub vm_pool: *mut u8,
+    pub vm_pool_pages: u32,
+    pub vm_tables_pa: u64,
+}
+
+#[cfg(all(any(feature = "mali", test), target_pointer_width = "64"))]
+const _: () = assert!(size_of::<YdT6SubmitMem>() == 192);
+
+/// Z4's run ([`crate::board::nanopc_t6_submit::submit_up`]) behind the C
+/// entry, over any [`Mmio`]: the arguments as [`yd_t6_submit`] documents
+/// them, `mem` and `frame` as `submit_up` takes them.
+#[cfg(feature = "mali")]
+#[allow(clippy::too_many_arguments)]
+fn submit_run(
+    m: &impl Mmio,
+    b: crate::board::nanopc_t6_gpu::Bases,
+    blob: &[u8],
+    backings: &[crate::board::nanopc_t6_sections::Backing],
+    pool: &mut [crate::gpu::mali::pgtable::Table],
+    tables_pa: u64,
+    timer_hz: u32,
+    mem: crate::board::nanopc_t6_submit::Z4Mem<'_>,
+    frame: &crate::board::nanopc_t6_submit::Frame<'_>,
+    clean: extern "C" fn(usize, usize) -> i32,
+    delay_us: extern "C" fn(u32),
+    on_handover: extern "C" fn(*const YdT6GpuUp),
+) -> YdT6SubmitUp {
+    crate::board::nanopc_t6_submit::submit_up(
+        m,
+        b,
+        blob,
+        backings,
+        pool,
+        tables_pa,
+        timer_hz,
+        mem,
+        frame,
+        &|a, n| clean(a, n),
+        &mut |us| delay_us(us),
+        &mut |h| {
+            let h = YdT6GpuUp::from(h);
+            on_handover(&h);
+        },
+    )
+}
+
+/// Z4 on the NanoPC-T6 ([`crate::board::nanopc_t6_submit::submit_up`] with
+/// the generated frame, `nanopc_t6_submit::GENERATED`): Z3 as
+/// [`yd_t6_fw_up`] runs it, with the same arguments, then the queue's
+/// memory added to AS0, the group VM built from `mem->regions` and enabled
+/// in address space 1, the tiler heap made, CSG 0 / CS 0 started, the
+/// frame written at its VAs, one job submitted and waited for (5 s), the
+/// group stopped and terminated, the target read back. 0 when every step
+/// ran (`out->step` is `YD_T6_SUBMIT_STEP_NONE`), `-EIO` when one stopped
+/// (`out->step` says which; Z3's own record is `out->fw`), `-EINVAL` for a
+/// null or misaligned argument.
+///
+/// # Safety
+/// As [`yd_t6_fw_up`]'s; and `mem` is valid, each backing in it the memory
+/// at its `pa` for `size` bytes, mapped uncached, writable by this call and
+/// used by nothing else while it runs, `mem->vm_pool` valid for writes of
+/// `vm_pool_pages` * 4096 bytes and the memory at `vm_tables_pa`.
+#[cfg(feature = "mali")]
+#[no_mangle]
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "C" fn yd_t6_submit(
+    cru: usize,
+    pmu: usize,
+    spi2: usize,
+    qos: usize,
+    gpu: usize,
+    blob: *const u8,
+    blob_len: usize,
+    backings: *const YdT6FwBacking,
+    n_backings: u32,
+    pool: *mut u8,
+    pool_pages: u32,
+    tables_pa: u64,
+    timer_hz: u32,
+    mem: *const YdT6SubmitMem,
+    clean: Option<extern "C" fn(usize, usize) -> i32>,
+    delay_us: Option<extern "C" fn(u32)>,
+    on_handover: Option<extern "C" fn(*const YdT6GpuUp)>,
+    out: *mut YdT6SubmitUp,
+) -> i32 {
+    use crate::board::nanopc_t6_sections::Backing;
+    use crate::board::nanopc_t6_submit::{GroupBacking, McuBacking, Z4Mem, GENERATED, QUEUE_MCU_VA};
+    use crate::gpu::mali::pgtable::{Table, PAGE};
+    let (Some(clean), Some(delay_us), Some(on_handover)) = (clean, delay_us, on_handover) else { return -EINVAL };
+    if out.is_null()
+        || blob.is_null()
+        || backings.is_null()
+        || pool.is_null()
+        || mem.is_null()
+        || pool_pages == 0
+        || n_backings as usize > crate::gpu::mali::fw::MAX_SECTIONS
+        || !(pool as usize).is_multiple_of(PAGE as usize)
+    {
+        return -EINVAL;
+    }
+    // SAFETY: the caller's contract.
+    let z4 = unsafe { *mem };
+    if z4.vm_pool.is_null() || z4.vm_pool_pages == 0 || !(z4.vm_pool as usize).is_multiple_of(PAGE as usize) {
+        return -EINVAL;
+    }
+    // SAFETY: the caller's contract.
+    let (blob, given) = unsafe {
+        (core::slice::from_raw_parts(blob, blob_len), core::slice::from_raw_parts(backings, n_backings as usize))
+    };
+    let mut placed = [Backing::default(); crate::gpu::mali::fw::MAX_SECTIONS];
+    for (p, k) in placed.iter_mut().zip(given) {
+        *p = Backing { pa: k.pa, cpu: k.cpu, size: k.size };
+    }
+    // SAFETY: the caller's contract; 4 KiB aligned covers u64's alignment.
+    let (pages, vm_pool) = unsafe {
+        (
+            core::slice::from_raw_parts_mut(pool.cast::<Table>(), pool_pages as usize),
+            core::slice::from_raw_parts_mut(z4.vm_pool.cast::<Table>(), z4.vm_pool_pages as usize),
+        )
+    };
+    // SAFETY: the caller's contract: each region's backing is this run's,
+    // uncached, the memory at its physical address.
+    let vm = z4.regions.map(|r| unsafe { GroupBacking::new(r.pa, r.cpu, r.size) });
+    let queue = McuBacking { va: QUEUE_MCU_VA, pa: z4.queue.pa, cpu: z4.queue.cpu, size: z4.queue.size };
+    let mem = Z4Mem { queue, vm: &vm, vm_pool, vm_tables_pa: z4.vm_tables_pa };
+    // SAFETY: the caller's contract.
+    let hw = unsafe { Hw::new() };
+    let b = crate::board::nanopc_t6_gpu::Bases { cru, pmu, spi2, qos, gpu };
+    let o = submit_run(
+        &hw,
+        b,
+        blob,
+        &placed[..given.len()],
+        pages,
+        tables_pa,
+        timer_hz,
+        mem,
+        &GENERATED,
+        clean,
+        delay_us,
+        on_handover,
+    );
+    // SAFETY: the caller's contract.
+    unsafe { *out = o };
+    if o.step == crate::board::nanopc_t6_submit::STEP_NONE {
+        0
+    } else {
+        -EIO
+    }
+}
+
 #[cfg(all(test, feature = "mali"))]
 mod fw_tests {
     use super::*;
@@ -928,6 +1102,234 @@ mod fw_tests {
         assert_eq!(call(core::ptr::null(), p, Some(clean_ok), &mut out), -EINVAL);
         assert_eq!(call(blob.as_ptr(), p, None, &mut out), -EINVAL);
         assert_eq!(call(blob.as_ptr(), unsafe { p.add(8) }, Some(clean_ok), &mut out), -EINVAL);
+    }
+
+    /// A header value: a decimal or `0x` hex literal, with or without a
+    /// `u` / `ull` suffix.
+    fn def64(name: &str) -> u64 {
+        const H: &str = include_str!("../../include/yakogl_drivers.h");
+        let l = H.lines().find(|l| l.starts_with(&format!("#define {name} "))).expect(name);
+        let v = l.split_whitespace().nth(2).expect(name).trim_end_matches("ull").trim_end_matches('u');
+        let parsed = match v.strip_prefix("0x") {
+            Some(h) => u64::from_str_radix(h, 16),
+            None => v.parse(),
+        };
+        parsed.unwrap_or_else(|_| panic!("{name}: {v}"))
+    }
+
+    #[test]
+    fn the_c_header_has_the_z4_numbers_and_layout() {
+        use crate::board::nanopc_t6_frame as gen;
+        use crate::board::nanopc_t6_submit::{self as sub, FrameRefusal, SubmitUp};
+        const H: &str = include_str!("../../include/yakogl_drivers.h");
+        for (name, v) in [
+            ("YD_T6_SUBMIT_STEP_NONE", sub::STEP_NONE),
+            ("YD_T6_SUBMIT_STEP_FRAME", sub::STEP_FRAME),
+            ("YD_T6_SUBMIT_STEP_FW", sub::STEP_FW),
+            ("YD_T6_SUBMIT_STEP_IFACE", sub::STEP_IFACE),
+            ("YD_T6_SUBMIT_STEP_IDENT", sub::STEP_IDENT),
+            ("YD_T6_SUBMIT_STEP_QUEUE_MEM", sub::STEP_QUEUE_MEM),
+            ("YD_T6_SUBMIT_STEP_AS0_MAP", sub::STEP_AS0_MAP),
+            ("YD_T6_SUBMIT_STEP_CLEAN", sub::STEP_CLEAN),
+            ("YD_T6_SUBMIT_STEP_AS0_FLUSH", sub::STEP_AS0_FLUSH),
+            ("YD_T6_SUBMIT_STEP_VM_MAP", sub::STEP_VM_MAP),
+            ("YD_T6_SUBMIT_STEP_VM_ENABLE", sub::STEP_VM_ENABLE),
+            ("YD_T6_SUBMIT_STEP_HEAP", sub::STEP_HEAP),
+            ("YD_T6_SUBMIT_STEP_START", sub::STEP_START),
+            ("YD_T6_SUBMIT_STEP_SUBMIT", sub::STEP_SUBMIT),
+            ("YD_T6_SUBMIT_STEP_WAIT", sub::STEP_WAIT),
+            ("YD_T6_SUBMIT_STEP_STOP", sub::STEP_STOP),
+            ("YD_T6_SUBMIT_STEP_TERMINATE", sub::STEP_TERMINATE),
+            ("YD_T6_FRAME_RANGE", FrameRefusal::Range as u32),
+            ("YD_T6_FRAME_MEMORY", FrameRefusal::Memory as u32),
+            ("YD_T6_FRAME_EMPTY", FrameRefusal::Empty as u32),
+            ("YD_T6_FRAME_UNALIGNED", FrameRefusal::Unaligned as u32),
+            ("YD_T6_FRAME_OUTSIDE", FrameRefusal::Outside as u32),
+            ("YD_T6_FRAME_OVERLAP", FrameRefusal::Overlap as u32),
+            ("YD_T6_FRAME_TARGET", FrameRefusal::Target as u32),
+            ("YD_T6_FRAME_MAPPING", FrameRefusal::Mapping as u32),
+            ("YD_T6_SUBMIT_QUEUE_MCU_VA", sub::QUEUE_MCU_VA),
+            ("YD_T6_SUBMIT_REGIONS", sub::REGIONS.len() as u32),
+            ("YD_T6_SUBMIT_REGION_QUEUE", sub::REGION_QUEUE as u32),
+            ("YD_T6_SUBMIT_REGION_ARENAS", sub::REGION_ARENAS as u32),
+            ("YD_T6_SUBMIT_REGION_GEOMETRY", sub::REGION_GEOMETRY as u32),
+            ("YD_T6_SUBMIT_REGION_TARGET", sub::REGION_TARGET as u32),
+            ("YD_T6_SUBMIT_REGION_HEAP_POOL", sub::REGION_HEAP_POOL as u32),
+            ("YD_T6_SUBMIT_REGION_HEAP_CHUNK", sub::REGION_HEAP_CHUNK as u32),
+            ("YD_T6_SUBMIT_CS_WORDS", sub::CS.len() as u32),
+            ("YD_T6_SUBMIT_WIDTH", sub::WIDTH),
+            ("YD_T6_SUBMIT_HEIGHT", sub::HEIGHT),
+        ] {
+            assert_eq!(def64(name), u64::from(v), "{name}");
+        }
+        assert_eq!(def64("YD_T6_SUBMIT_QUEUE_MCU_MIN"), sub::QUEUE_MCU_MIN);
+        assert_eq!(def64("YD_T6_SUBMIT_CS_VA"), sub::CS_VA);
+        assert_eq!(def64("YD_T6_SUBMIT_DIGEST"), sub::DIGEST);
+        // each region's VA and least size, in the header's order
+        let names = ["QUEUE", "ARENAS", "GEOMETRY", "TARGET", "HEAP_POOL", "HEAP_CHUNK"];
+        for (r, n) in sub::REGIONS.iter().zip(names) {
+            assert_eq!(def64(&format!("YD_T6_SUBMIT_{n}_VA")), r.va, "{n}");
+            assert_eq!(def64(&format!("YD_T6_SUBMIT_{n}_SIZE")), r.size, "{n}");
+        }
+        assert_eq!(
+            (def64("YD_T6_SUBMIT_HEAP_POOL_VA"), def64("YD_T6_SUBMIT_HEAP_CHUNK_VA")),
+            (sub::HEAP_CTX_VA, gen::HEAP_FIRST_CHUNK_VA)
+        );
+        assert_eq!((def64("YD_T6_SUBMIT_TARGET_VA"), def64("YD_T6_SUBMIT_ARENAS_VA")), (gen::TARGET_VA, gen::CTX_VA));
+
+        // the layouts: a _Static_assert per field of both structs and their sizes
+        let mut pins = vec![
+            ("sizeof(struct yd_t6_submit_mem)".to_string(), size_of::<YdT6SubmitMem>()),
+            ("offsetof(struct yd_t6_submit_mem, queue)".into(), offset_of!(YdT6SubmitMem, queue)),
+            ("offsetof(struct yd_t6_submit_mem, regions)".into(), offset_of!(YdT6SubmitMem, regions)),
+            ("offsetof(struct yd_t6_submit_mem, vm_pool)".into(), offset_of!(YdT6SubmitMem, vm_pool)),
+            ("offsetof(struct yd_t6_submit_mem, vm_pool_pages)".into(), offset_of!(YdT6SubmitMem, vm_pool_pages)),
+            ("offsetof(struct yd_t6_submit_mem, vm_tables_pa)".into(), offset_of!(YdT6SubmitMem, vm_tables_pa)),
+            ("sizeof(struct yd_t6_submit_up)".into(), size_of::<SubmitUp>()),
+        ];
+        macro_rules! field {
+            ($($f:ident),*) => { $( pins.push((
+                format!("offsetof(struct yd_t6_submit_up, {})", stringify!($f)), offset_of!(SubmitUp, $f))); )* };
+        }
+        field!(
+            step,
+            refusal,
+            detail,
+            fw,
+            as_present,
+            l2_features,
+            as0_tables_used,
+            vm_tables_used,
+            suspend_size,
+            protm_suspend_size,
+            heap_ctx,
+            heap_chunk,
+            heap_chunk_size,
+            heap_stride,
+            csg_req,
+            csg_ack,
+            cs_req,
+            cs_ack,
+            csg_ack_us,
+            cs_ack_us,
+            latest_flush,
+            sync_updates,
+            insert,
+            extract,
+            seqno,
+            sync_status,
+            wait_us,
+            status_cmd_ptr,
+            info,
+            stop_us,
+            stop_refusal,
+            terminate_us,
+            terminate_refusal,
+            cleared,
+            red,
+            blue,
+            fill,
+            other,
+            pixels,
+            digest
+        );
+        assert_eq!(pins.len(), 7 + 40);
+        for (what, v) in &pins {
+            let pin = format!("_Static_assert({what} == {v},");
+            assert!(H.contains(&pin), "{pin}");
+        }
+        // one assert per field and one for the size, each naming yd_t6_submit
+        let n = H.lines().filter(|l| l.starts_with("_Static_assert(") && l.contains("yd_t6_submit")).count();
+        assert!(n >= 41, "{n} _Static_assert lines name yd_t6_submit");
+    }
+
+    #[test]
+    fn the_z4_entry_runs_the_generated_frame_over_the_model_to_the_predicted_record() {
+        use crate::board::nanopc_t6_submit::tests::{QUEUE, VM_TABLES_PA, Z4};
+        use crate::board::nanopc_t6_submit::{self as sub, Z4Mem, GENERATED};
+        let blob = synth::small();
+        let z = Z4::generated(blob.clone());
+        let bk = backings(&blob);
+        let mut pool = vec![[0u64; ENTRIES]; 16];
+        let mut vm_pool = vec![[0u64; ENTRIES]; 16];
+        let vm = z.backings();
+        let mem = Z4Mem { queue: QUEUE, vm: &vm, vm_pool: &mut vm_pool, vm_tables_pa: VM_TABLES_PA };
+        MODEL.with(|m| m.set(&z.t6));
+        let o = submit_run(
+            &z,
+            B,
+            &blob,
+            &bk,
+            &mut pool,
+            TABLES_PA,
+            RK3588_TIMER_HZ,
+            mem,
+            &GENERATED,
+            clean_model,
+            no_delay,
+            no_handover,
+        );
+        assert_eq!((o.step, o.refusal, o.detail), (sub::STEP_NONE, 0, 0));
+        assert_eq!((o.fw.step, o.fw.ping_acked, o.as0_tables_used, o.vm_tables_used), (0, 1, 8, 10));
+        assert_eq!((o.heap_ctx, o.heap_chunk), (sub::HEAP_CTX_VA, def64("YD_T6_SUBMIT_HEAP_CHUNK_VA")));
+        assert_eq!((o.seqno, o.sync_status, o.red, o.blue, o.pixels), (1, 0, 2048, 2048, 4096));
+        assert_eq!(o.digest, sub::DIGEST);
+    }
+
+    #[test]
+    fn the_z4_entry_refuses_null_and_misaligned_arguments() {
+        use crate::board::nanopc_t6_submit::SubmitUp;
+        let mut out = SubmitUp::default();
+        let mut pool = vec![0u8; 8192 * 2];
+        let bk = [YdT6FwBacking::default()];
+        let blob = [0u8; 4];
+        let off = pool.as_mut_ptr().align_offset(4096);
+        let p = unsafe { pool.as_mut_ptr().add(off) };
+        let mem = |vm_pool: *mut u8, pages: u32| YdT6SubmitMem {
+            queue: YdT6FwBacking::default(),
+            regions: [YdT6FwBacking::default(); YD_T6_SUBMIT_REGIONS],
+            vm_pool,
+            vm_pool_pages: pages,
+            vm_tables_pa: 0,
+        };
+        let call = |blob: *const u8, pool: *mut u8, mem: *const YdT6SubmitMem, out: *mut SubmitUp| unsafe {
+            yd_t6_submit(
+                0,
+                0,
+                0,
+                0,
+                0,
+                blob,
+                4,
+                bk.as_ptr(),
+                1,
+                pool,
+                1,
+                0,
+                1,
+                mem,
+                Some(clean_ok),
+                Some(no_delay),
+                Some(no_handover),
+                out,
+            )
+        };
+        let good = mem(unsafe { p.add(4096) }, 1);
+        assert_eq!(call(blob.as_ptr(), p, &good, core::ptr::null_mut()), -EINVAL);
+        assert_eq!(call(core::ptr::null(), p, &good, &mut out), -EINVAL);
+        assert_eq!(call(blob.as_ptr(), p, core::ptr::null(), &mut out), -EINVAL);
+        assert_eq!(call(blob.as_ptr(), unsafe { p.add(8) }, &good, &mut out), -EINVAL);
+        // the group VM's pool: null, empty, misaligned
+        assert_eq!(call(blob.as_ptr(), p, &mem(core::ptr::null_mut(), 1), &mut out), -EINVAL);
+        assert_eq!(call(blob.as_ptr(), p, &mem(unsafe { p.add(4096) }, 0), &mut out), -EINVAL);
+        assert_eq!(call(blob.as_ptr(), p, &mem(unsafe { p.add(4100) }, 1), &mut out), -EINVAL);
+        // with every pointer in order the run starts and the frame's zero
+        // backings are refused before anything is touched: -EIO, STEP_FRAME
+        assert_eq!(call(blob.as_ptr(), p, &good, &mut out), -EIO);
+        assert_eq!(
+            (out.step, out.refusal),
+            (crate::board::nanopc_t6_submit::STEP_FRAME, crate::board::nanopc_t6_submit::FrameRefusal::Memory as u32)
+        );
     }
 }
 
