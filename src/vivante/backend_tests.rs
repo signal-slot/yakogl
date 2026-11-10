@@ -690,7 +690,7 @@ fn the_backend_tells_the_osal_when_a_frame_is_open() {
 }
 
 /// One instance of an instanced draw the GL core draws instance by instance
-/// (GlesDraw::instance_id, a divisor past 1): the FE starts the instance ID
+/// (GlesDraw::instance_id, a divisor past 0xffff): the FE starts the instance ID
 /// at 0 for every draw, so a program that reads gl_InstanceID is refused
 /// (and counted, gc_refused_draws), not drawn with 0. Instance 0, and a
 /// program that does not read it, are drawn. Revert check: without the

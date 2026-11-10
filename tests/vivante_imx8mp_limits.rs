@@ -389,7 +389,7 @@ fn the_vivante_table_and_flags_are_pinned() {
     assert!(!b.etc1_decoded_at_upload); // :3351
     assert_eq!(b.linear_row_align, 0); // :3372
     assert!(b.uniforms_host_only); // :3550 (route 3: the host arrays are copied into the arena)
-    assert_eq!(b.max_instance_divisor, 1); // :3378
+    assert_eq!(b.max_instance_divisor, 0xffff); // :3554 (V1, the stream divisor state)
     assert!(!b.samples_texel_copies); // :3382
 
     /* which entry points the board's table has (each a behaviour the GL

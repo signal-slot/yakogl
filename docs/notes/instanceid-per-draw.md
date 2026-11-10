@@ -105,7 +105,7 @@ Related sites:
      * that it left the field 0 and these draws went through with
      * gl_InstanceID reading 0 in every instance. */
     if gl.instance_id != 0 && !gl.vs.is_null() && unsafe { (*gl.vs).vs_instance_id_reg1 } != 0 {
-        glog_once!("yakogl/vivante: draw refused: an instance drawn on its own (a divisor past 1) whose program reads gl_InstanceID");
+        glog_once!("yakogl/vivante: draw refused: an instance drawn on its own (a divisor past 0xffff) whose program reads gl_InstanceID");
         return -crate::util::EINVAL;
     }
 ```
