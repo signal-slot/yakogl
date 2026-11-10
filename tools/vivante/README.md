@@ -84,6 +84,21 @@ their symbol numbers, and it refuses the result if any other row changed.
 That is how a directory leaves the tree: `qt/` and `qt3d/` left this way
 (#1509).
 
+`--st` compiles the committed table's rows (the stored sources, keys, blend
+keys and order) for the STM32MP257F's GPU and writes
+`tests/reference/vivante_blobs_st.rs`: the ids are the ones issue #1281 read
+on the board (model `0x8000`, revision `0x6205`, product `0x80003`, eco `0`)
+and customer `0x15`, the etnaviv hwdb row's (not read on the board; Mesa's
+lookup matches all five, so `etna_shc` takes the eco and customer ids after
+the three). The i.MX8MP table is never written by `--st`. `--st --check`
+regenerates the ST table in memory and compares it byte for byte (exit 2
+with a `gap:` line when there is no `etna_shc` at `ETNA_SHC`, under
+`MESA_ETNA_TREE/build-etnaviv`, or at the default path). The ST table carries
+no toolchain line, so the check is a byte comparison across hosts; the
+generator prints the host's `etna_shc` digest and glslang version instead.
+`tests/gc_st_blobs.rs` pins how many rows and instruction words the ids move
+(91 rows, 5853 words of 234 rows: the hwdb row's `SH_NO_ONECONST_LIMIT`).
+
 ### The table against its sources (issue #22, 2026-10-12)
 
 Issue #22 was "the GC7000 table lags the shader sources". Measured on the
