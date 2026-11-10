@@ -37,6 +37,13 @@ pub mod isa;
 pub mod isa_tables;
 pub mod legalise;
 pub mod listing;
+/// The colour targets' layout, written once in `src/pvr/mrt_layout.rs` for the
+/// compiler and the back end; included by path where `gpu-powervr` is off.
+#[cfg(feature = "gpu-powervr")]
+pub use crate::pvr::mrt_layout;
+#[cfg(not(feature = "gpu-powervr"))]
+#[path = "../../../pvr/mrt_layout.rs"]
+pub mod mrt_layout;
 pub mod operands;
 pub mod pack;
 pub mod prepare;

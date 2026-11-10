@@ -33,6 +33,9 @@ pub mod mesa_internal;
 )]
 pub mod csbgen;
 pub mod ffi;
+/// Where up to four colour targets leave the fragment program (shared with
+/// the online compiler, `shaderc::online::powervr::mrt_layout`).
+pub mod mrt_layout;
 /// The partial render's depth/stencil words (docs/notes/pvr-pr-zs.md).
 pub mod pr_zs;
 /// The partial render's SPM scratch size and PBE store words (Mesa's
