@@ -781,7 +781,38 @@ fn each_refusal_is_the_exact_line_of_its_cause() {
             d
         };
         let no_target = state(|d| d.target_gpu = 0);
-        let two_targets = state(|d| d.num_targets = 2);
+        /* a second 64x64 RGBA8 target (an address only: the mock's GPU
+         * writes nothing), and what a frame of two does not build */
+        let two = |mut d: GlesDraw| {
+            d.num_targets = 2;
+            d.targets[0] = backend::GlesDrawTarget { gpu: t, w: 64, h: 64, format: d.target_format, out_shift: 0 };
+            d.targets[1] = backend::GlesDrawTarget { gpu: t + 0x8000, ..d.targets[0] };
+            d
+        };
+        let gap = state(|d| d.num_targets = 2);
+        let five = state(|d| d.num_targets = 5);
+        let two_draw = two(draw);
+        let two_clear = two(clear);
+        let mut two_sizes = two_draw;
+        two_sizes.targets[1].w = 32;
+        let mut two_r16f = two_draw;
+        two_r16f.targets[1].format = backend::GLES_SURF_R16F;
+        let mut two_rgba16f = two_draw;
+        two_rgba16f.targets[1].format = backend::GLES_SURF_RGBA16F;
+        let mut two_level = two_draw;
+        two_level.target_pitch = 128;
+        let mut two_4x = two_draw;
+        two_4x.samples = 4;
+        let mut two_no_clear = two_draw;
+        two_no_clear.do_clear = false;
+        let mut two_masked = two_clear;
+        two_masked.clear_color_mask = 0x7;
+        let mut two_scissored = two_clear;
+        two_scissored.clear_quad = true;
+        let mut two_buffer_1 = two_clear;
+        two_buffer_1.clear_target_mask = 0x2;
+        let mut two_buffers = two_clear;
+        two_buffers.clear_target_mask = 0x3;
         let shifted = state(|d| d.targets[0].out_shift = 1);
         let multisampled = state(|d| d.samples = 4);
         let two_samples = state(|d| d.samples = 2);
@@ -904,7 +935,27 @@ fn each_refusal_is_the_exact_line_of_its_cause() {
             ("a GL draw whose records are not Mali programs", why(&no_records), not_built(NO_MALI_PROGRAM)),
             ("a draw with programs is built", why(&draw), built),
             ("no target", why(&no_target), invalid(INVALID_NO_TARGET)),
-            ("two targets", why(&two_targets), not_built(NOT_BUILT_TARGET_COUNT)),
+            ("a draw into two targets is built", why(&two_draw), built),
+            ("a clear of two targets is built", why(&two_clear), built),
+            ("a draw after a clear of two targets", why_after(&[two_clear], &two(no_clear_draw)), built),
+            ("an RGBA16F second target is built", why(&two_rgba16f), built),
+            ("glClearBuffer of both draw buffers is built", why(&two_buffers), built),
+            ("a GL_NONE draw buffer between targets", why(&gap), not_built(NOT_BUILT_TARGET_GAP)),
+            ("more targets than the backend reports", why(&five), invalid(INVALID_TARGET_COUNT)),
+            ("two targets of different sizes", why(&two_sizes), not_built(NOT_BUILT_TARGET_SIZES)),
+            ("an R16F second target", why(&two_r16f), not_built(NOT_BUILT_TARGET_FORMAT)),
+            ("two targets, the first at another pitch", why(&two_level), not_built(NOT_BUILT_TARGETS_PITCH)),
+            ("two targets at 4x", why(&two_4x), not_built(frame::NOT_BUILT_MRT)),
+            ("two targets and no clear", why(&two_no_clear), not_built(NOT_BUILT_TARGETS_PRELOAD)),
+            ("a masked clear of two targets", why(&two_masked), not_built(NOT_BUILT_TARGETS_CLEAR)),
+            ("a scissored clear of two targets", why(&two_scissored), not_built(NOT_BUILT_TARGETS_CLEAR)),
+            ("glClearBuffer of draw buffer 1 alone", why(&two_buffer_1), not_built(NOT_BUILT_TARGETS_CLEAR)),
+            (
+                "a clear of two targets after a draw",
+                why_after(&[two_draw], &two_clear),
+                not_built(NOT_BUILT_TARGETS_CLEAR),
+            ),
+            ("a blend shader into two targets", why(&two(const_blend)), not_built(frame::NOT_BUILT_MRT)),
             ("draw buffer 0 GL_NONE", why(&shifted), not_built(NOT_BUILT_OUTPUT_SHIFT)),
             ("a 4x target is built", why(&multisampled), built),
             ("a 2x target", why(&two_samples), not_built(frame::NOT_BUILT_SAMPLES)),
@@ -1179,7 +1230,13 @@ fn each_refusal_is_the_exact_line_of_its_cause() {
     let lines = [
         NO_MALI_PROGRAM,
         INVALID_NO_TARGET,
-        NOT_BUILT_TARGET_COUNT,
+        NOT_BUILT_TARGET_GAP,
+        INVALID_TARGET_COUNT,
+        NOT_BUILT_TARGET_SIZES,
+        NOT_BUILT_TARGETS_PITCH,
+        frame::NOT_BUILT_MRT,
+        NOT_BUILT_TARGETS_PRELOAD,
+        NOT_BUILT_TARGETS_CLEAR,
         frame::NOT_BUILT_SAMPLES,
         NOT_BUILT_TARGET_FORMAT,
         frame::NOT_BUILT_FLOAT_BLEND,
@@ -2262,6 +2319,91 @@ fn a_draw_into_another_target_ends_the_open_frame() {
     unsafe { m_free(&mut second) };
 }
 
+/// gl_test case 55 (es3mrt) through the backend: its program
+/// (tools/shaders/es300/mrt2.*, gl_test's own) into two 64x64 RGBA8
+/// targets cleared to blue is one frame of both, whose descriptors are
+/// Mesa 26.2.1's on the drm-shim (tools/mali/testdata/fsout_55_es3mrt.trace,
+/// frame_mrt_tests.rs): the two blend descriptors and the BLEND_DESC count,
+/// DCD1's render target mask, the FBD pointer's and the parameters' target
+/// count and colour buffer allocation, and each render target byte for
+/// byte but for the named difference (linear at the target's own memory,
+/// where Mesa's is AFBC). A draw after it without a clear goes into the
+/// same frame.
+#[test]
+fn case_55s_draw_into_two_targets_is_mesa_s_frame() {
+    use crate::mali::frame_mrt_tests::{block, cs_word, mesa_blend, mesa_rt, num, take, MRT2};
+    use crate::mali::genxml::v10::{Blend, DcdFlags1, FramebufferParameters, FramebufferPointer, RtBuffer};
+    let _rig = Rig::new(true);
+    assert_eq!(mali_init(), 0);
+    let t0 = target();
+    let mut second = OsalGpuMem::ZERO;
+    // SAFETY: a valid out-parameter.
+    assert_eq!(unsafe { m_alloc(0, 64 * 64 * 4, OSAL_MEM_DATA, &mut second) }, 0);
+    let t1 = second.gpu;
+    /* u_clear.first red, u_clear.second green, as gl_test sets them */
+    let colours: [f32; 8] = [1.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0];
+    let vs = include_str!("../../tools/shaders/es300/mrt2.vert");
+    let fs = include_str!("../../tools/shaders/es300/mrt2.frag");
+    with_programs(vs, fs, |vs, fs| {
+        let mut d = triangle(t0, &VERTICES);
+        (d.vs, d.fs) = (vs, fs);
+        (d.fs_uniform_cpu, d.fs_uniform_dwords) = (colours.as_ptr().cast(), 8);
+        d.num_targets = 2;
+        d.targets[0] =
+            backend::GlesDrawTarget { gpu: t0, w: 64, h: 64, format: backend::GLES_SURF_RGBA8888, out_shift: 0 };
+        d.targets[1] = backend::GlesDrawTarget { gpu: t1, ..d.targets[0] };
+        let mut again = d;
+        again.do_clear = false;
+        let before = with(|m| m.submits.len());
+        // SAFETY: valid draws whose records `with_programs` keeps.
+        assert_eq!(unsafe { mali_draw(&d) }, 0, "case 55's draw");
+        // SAFETY: as above.
+        assert_eq!(unsafe { mali_draw(&again) }, 0, "a second draw of the frame");
+        assert_eq!(mali_flush(), 0);
+        let stream = with(|m| {
+            assert_eq!(m.submits.len(), before + 1, "one frame");
+            m.submits[before].1.clone()
+        });
+        let idvs = regs_at_each_idvs(&stream);
+        assert_eq!(idvs.len(), 2, "both draws in it");
+        for r in &idvs {
+            /* BLEND_DESC: two descriptors, Mesa's, the count in the tag */
+            let d50 = u64::from(r[&50]) | u64::from(r[&51]) << 32;
+            assert_eq!(d50 & 63, cs_word(MRT2, "MOVE48 d50,") & 63);
+            assert_eq!(d50 & 63, 2);
+            for i in 0..2u64 {
+                let (theirs, _) = mesa_blend(block(MRT2, "Blend RT 0:", &format!("Blend RT {i}:")));
+                let ours = with(|m| m.read((d50 & !63) + i * Blend::LENGTH as u64, Blend::LENGTH));
+                assert_eq!(ours, theirs, "the blend descriptor of target {i}");
+            }
+            /* DCD1: Mesa's word, both targets written */
+            assert_eq!(r[&58], cs_word(MRT2, "MOVE32 r58,") as u32, "DCD1");
+            assert_eq!(DcdFlags1::unpack(&r[&58].to_le_bytes()).unwrap().render_target_mask, 0x3);
+        }
+        /* the FBD pointer and the parameters: two targets, 8192 bytes */
+        let fbd_word = stream.iter().rev().filter_map(|&w| move48(w)).find(|(d, _)| *d == 40).unwrap().1;
+        let ours = FramebufferPointer::unpack(&fbd_word.to_le_bytes()).unwrap();
+        let theirs = FramebufferPointer::unpack(&cs_word(MRT2, "MOVE48 d40,").to_le_bytes()).unwrap();
+        assert_eq!((ours.render_target_count, theirs.render_target_count), (2, 2));
+        let fbd = fbd_at_fragment(&stream).expect("a fragment job");
+        let p = FramebufferParameters::unpack(&with(|m| m.read(fbd, 64)).try_into().unwrap()).unwrap();
+        let mut f = block(MRT2, "Framebuffer @", "Parameters:");
+        assert_eq!(u64::from(p.render_target_count), num(&mut f, "Render Target Count"));
+        assert_eq!(u64::from(p.color_buffer_allocation), num(&mut f, "Color Buffer Allocation"));
+        assert_eq!(u64::from(p.effective_tile_size), num(&mut f, "Effective Tile Size"));
+        assert_eq!(take(&mut f, "Sample Pattern"), "Single-sampled");
+        /* each render target, at its own memory */
+        for (i, gpu) in [t0, t1].into_iter().enumerate() {
+            let rt = with(|m| m.read(fbd + 128 + 64 * i as u64, 64));
+            let want = mesa_rt(MRT2, i as u64, RtBuffer { base: gpu, row_stride: 256, surface_stride: 0 });
+            assert_eq!(rt, want, "render target {i}");
+        }
+    });
+    /* the rig allows the test one target of its own after shutdown */
+    // SAFETY: the buffer allocated above, no longer used.
+    unsafe { m_free(&mut second) };
+}
+
 /// The framebuffer descriptor RUN_FRAGMENT reads (d40's last value before
 /// it, its tag bits off).
 fn fbd_at_fragment(words: &[u64]) -> Option<u64> {
@@ -2459,6 +2601,80 @@ mod gl {
             assert_eq!(glGetError(), GL_NO_ERROR);
             glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + 4, GL_TEXTURE_2D, tex[1], 0);
             assert_ne!(glGetError(), GL_NO_ERROR);
+            context::gl_context_destroy(ctx);
+        }
+    }
+
+    /// gl_test case 55 (es3mrt) whole through the GL API: its program
+    /// (mrt2.*, gl_test_shaders.h's), the two attachments, glClear, a
+    /// glDrawArrays of the quad and glFinish raise no GL error, and the one
+    /// frame writes both textures: two render targets, each at its own
+    /// texture's memory, every draw's DCD1 naming both (the descriptors
+    /// themselves are Mesa's, `case_55s_draw_into_two_targets_is_mesa_s_frame`).
+    #[test]
+    fn case_55s_draw_writes_both_attachments() {
+        use crate::gl::program::{glGetUniformLocation, glUniform4f};
+        use crate::gl::state::glFinish;
+        use crate::mali::genxml::v10::{DcdFlags1, FramebufferParameters};
+        const QUAD: [f32; 18] =
+            [-1.0, -1.0, 0.0, 1.0, -1.0, 0.0, 1.0, 1.0, 0.0, -1.0, -1.0, 0.0, 1.0, 1.0, 0.0, -1.0, 1.0, 0.0];
+        let _rig = Rig::new(true);
+        assert_eq!(backend::init(), 0);
+        // SAFETY: the rig serialises the library; plain GL calls.
+        unsafe {
+            let ctx = context::gl_context_create(64, 64);
+            assert!(!ctx.is_null());
+            let p = glCreateProgram();
+            glAttachShader(p, shader(GL_VERTEX_SHADER, include_str!("../../tools/shaders/es300/mrt2.vert")));
+            glAttachShader(p, shader(GL_FRAGMENT_SHADER, include_str!("../../tools/shaders/es300/mrt2.frag")));
+            glLinkProgram(p);
+            let mut ok: GLint = 0;
+            glGetProgramiv(p, GL_LINK_STATUS, &mut ok);
+            assert_eq!(ok, 1, "case 55's program links");
+            let (mut tex, mut fbo) = ([0; 2], 0);
+            glGenTextures(2, tex.as_mut_ptr());
+            for t in tex {
+                glBindTexture(GL_TEXTURE_2D, t);
+                let null = core::ptr::null();
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA as GLint, 64, 64, 0, GL_RGBA, GL_UNSIGNED_BYTE, null);
+            }
+            glGenFramebuffers(1, &mut fbo);
+            glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex[0], 0);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, tex[1], 0);
+            assert_eq!(glCheckFramebufferStatus(GL_FRAMEBUFFER), GL_FRAMEBUFFER_COMPLETE);
+            glUseProgram(p);
+            glEnableVertexAttribArray(0);
+            glVertexAttribPointer(0, 3, GL_FLOAT, 0, 12, QUAD.as_ptr().cast());
+            glViewport(0, 0, 64, 64);
+            glUniform4f(glGetUniformLocation(p, c"u_clear.first".as_ptr()), 1.0, 0.0, 0.0, 1.0);
+            glUniform4f(glGetUniformLocation(p, c"u_clear.second".as_ptr()), 0.0, 1.0, 0.0, 1.0);
+            glClearColor(0.0, 0.0, 1.0, 1.0);
+            let before = with(|m| m.submits.len());
+            glClear(GL_COLOR_BUFFER_BIT);
+            glDrawArrays(GL_TRIANGLES, 0, 6);
+            glFinish();
+            assert_eq!(glGetError(), GL_NO_ERROR, "case 55's draw");
+            let frames: Vec<Vec<u64>> = with(|m| m.submits[before..].iter().map(|s| s.1.clone()).collect());
+            assert_eq!(frames.len(), 1, "the clear and the draw are one frame");
+            let w = &frames[0];
+            let idvs = regs_at_each_idvs(w);
+            assert_eq!(idvs.len(), 1, "one draw");
+            assert_eq!(DcdFlags1::unpack(&idvs[0][&58].to_le_bytes()).unwrap().render_target_mask, 0x3);
+            let fbd = fbd_at_fragment(w).expect("a fragment job");
+            let params = FramebufferParameters::unpack(&with(|m| m.read(fbd, 64)).try_into().unwrap()).unwrap();
+            assert_eq!(params.render_target_count, 2);
+            let bases: Vec<u64> = (0..2u64)
+                .map(|i| {
+                    let rt = with(|m| m.read(fbd + 128 + 64 * i, 64));
+                    u64::from_le_bytes(rt[32..40].try_into().unwrap())
+                })
+                .collect();
+            assert_ne!(bases[0], bases[1], "two textures");
+            for b in &bases {
+                assert!(with(|m| m.find(*b, 64 * 64 * 4).is_some()), "the target {b:#x} is an OSAL buffer");
+            }
+            glDeleteTextures(2, tex.as_ptr());
             context::gl_context_destroy(ctx);
         }
     }

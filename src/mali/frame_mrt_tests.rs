@@ -38,7 +38,7 @@ use super::frame::*;
 use super::genxml::v10::*;
 use std::collections::BTreeMap;
 
-const MRT2: &str = include_str!("../../tools/mali/testdata/fsout_55_es3mrt.trace");
+pub(super) const MRT2: &str = include_str!("../../tools/mali/testdata/fsout_55_es3mrt.trace");
 const MRT3: &str = include_str!("../../tools/mali/testdata/fsout_106_mrt3.trace");
 const DESC: u64 = 0x7fff_fffd_0000;
 /// The targets' memory: 64 rows of 256 bytes each, back to back.
@@ -46,7 +46,7 @@ const TARGET_GPU: u64 = 0x7fff_ffe0_0000;
 
 /// One decoded descriptor: pandecode's `Key: value` lines, each key the
 /// path of the headers above it (`Equation/RGB/A`).
-type Fields = BTreeMap<String, String>;
+pub(super) type Fields = BTreeMap<String, String>;
 
 fn indent(line: &str) -> usize {
     line.len() - line.trim_start().len()
@@ -54,7 +54,7 @@ fn indent(line: &str) -> usize {
 
 /// The fields of the first block whose header line starts with `header`,
 /// at or after the first line that starts with `after`.
-fn block(trace: &str, after: &str, header: &str) -> Fields {
+pub(super) fn block(trace: &str, after: &str, header: &str) -> Fields {
     let lines: Vec<&str> = trace.lines().collect();
     let from = lines.iter().position(|l| l.trim_start().starts_with(after)).unwrap_or_else(|| panic!("no {after}"));
     let at = from
@@ -81,7 +81,7 @@ fn block(trace: &str, after: &str, header: &str) -> Fields {
     f
 }
 
-fn take(f: &mut Fields, k: &str) -> String {
+pub(super) fn take(f: &mut Fields, k: &str) -> String {
     f.remove(k).unwrap_or_else(|| panic!("no {k}"))
 }
 
@@ -93,7 +93,7 @@ fn flag(f: &mut Fields, k: &str) -> bool {
     }
 }
 
-fn num(f: &mut Fields, k: &str) -> u64 {
+pub(super) fn num(f: &mut Fields, k: &str) -> u64 {
     let v = take(f, k);
     match v.strip_prefix("0x") {
         Some(h) => u64::from_str_radix(h, 16),
@@ -108,7 +108,7 @@ fn done(f: &Fields, what: &str) {
 
 /// The last word a `MOVE48 d<reg>` (or `MOVE32 r<reg>`) of the trace sets,
 /// from its printed bytes.
-fn cs_word(trace: &str, mnemonic: &str) -> u64 {
+pub(super) fn cs_word(trace: &str, mnemonic: &str) -> u64 {
     let l = trace.lines().rev().find(|l| l.contains(mnemonic)).unwrap_or_else(|| panic!("no {mnemonic}"));
     let b: Vec<u8> = l.split_whitespace().take(8).map(|h| u8::from_str_radix(h, 16).expect("a printed byte")).collect();
     let w = u64::from_le_bytes(b.try_into().expect("eight bytes"));
@@ -122,7 +122,7 @@ fn cs_word(trace: &str, mnemonic: &str) -> u64 {
 /// Mesa's blend descriptor of one target from its decoded fields, packed
 /// with our packer (`Shader/PC` is the same bits as the fixed-function
 /// part, read back separately).
-fn mesa_blend(mut f: Fields) -> ([u8; 16], u32) {
+pub(super) fn mesa_blend(mut f: Fields) -> ([u8; 16], u32) {
     let f = &mut f;
     let mut func = |p: &str| {
         let a = match take(f, &format!("Equation/{p}/A")).as_str() {
@@ -416,64 +416,71 @@ fn compare(trace: &str, n: u64) {
     done(&f, "FBD parameters");
 
     /* the render targets, after the 64 bytes of the ZS/CRC extension room */
-    let mut offset = 0;
     for i in 0..n {
         let at = fbd.gpu + 128 + i * RgbRenderTarget::LENGTH as u64;
-        let mut f = block(trace, "Color Render Targets @", &format!("AFBC RGB Color Render Target {i}:"));
-        let colour = |f: &mut Fields, c: usize| num(f, &format!("Clear/Color {c}")) as u32;
-        let clear = RtClear {
-            color_0: colour(&mut f, 0),
-            color_1: colour(&mut f, 1),
-            color_2: colour(&mut f, 2),
-            color_3: colour(&mut f, 3),
-        };
-        assert_eq!(take(&mut f, "Writeback Mode"), "Compat");
-        assert_eq!(take(&mut f, "Internal Format"), "R8G8B8A8");
-        assert_eq!(take(&mut f, "Writeback Format"), "R8G8B8A8");
-        assert_eq!(take(&mut f, "Writeback MSAA"), "Single");
-        assert_eq!(take(&mut f, "Swizzle"), "1672 (RGBA)");
-        let mesa_offset = num(&mut f, "Internal Buffer Offset") as u32;
-        assert_eq!(mesa_offset, offset, "target {i}: the tile-buffer offset");
-        let expected = RgbRenderTarget {
-            writeback_mode: WritebackMode::COMPAT,
-            internal_buffer_offset: mesa_offset,
-            yuv_enable: flag(&mut f, "YUV Enable"),
-            dithered_clear: flag(&mut f, "Dithered Clear"),
-            internal_format: ColorBufferInternalFormat::R8G8B8A8,
-            write_enable: flag(&mut f, "Write Enable"),
-            writeback_format: ColorFormat::R8G8B8A8,
-            writeback_msaa: Msaa::SINGLE,
-            srgb: flag(&mut f, "sRGB"),
-            dithering_enable: flag(&mut f, "Dithering Enable"),
-            swizzle: 1672,
-            clean_tile_write_enable: flag(&mut f, "Clean Tile Write Enable"),
-            clear,
-            /* the named difference: linear, the target's memory, where
-             * Mesa's is AFBC (below) */
-            writeback_block_format: BlockFormat::LINEAR,
-            writeback_buffer: RtBuffer { base: target(i).gpu, row_stride: 256, surface_stride: 0 },
-            ..Default::default()
-        };
-        assert_eq!(ours.at(at, RgbRenderTarget::LENGTH), expected.pack().unwrap(), "render target {i}");
-        assert_eq!(take(&mut f, "Writeback Block Format"), "AFBC");
-        for k in [
-            "Writeback Float Format",
-            "YUV Transform",
-            "Split block",
-            "Wide block",
-            "Reverse issue order",
-            "Front buffer",
-            "Alpha hint",
-            "Compression mode",
-            "Header",
-            "Row stride",
-            "Body offset",
-        ] {
-            take(&mut f, k);
-        }
-        done(&f, "render target");
-        offset += 4 * 1024;
+        let buffer = RtBuffer { base: target(i).gpu, row_stride: 256, surface_stride: 0 };
+        assert_eq!(ours.at(at, RgbRenderTarget::LENGTH), mesa_rt(trace, i, buffer), "render target {i}");
     }
+}
+
+/// Mesa's render target `i` of an MRT `trace` of RGBA8 targets from its
+/// decoded fields, packed with our packer, but for the named difference:
+/// linear at `buffer` (the target's memory) where Mesa's is AFBC.
+pub(super) fn mesa_rt(trace: &str, i: u64, buffer: RtBuffer) -> [u8; RgbRenderTarget::LENGTH] {
+    let mut f = block(trace, "Color Render Targets @", &format!("AFBC RGB Color Render Target {i}:"));
+    let colour = |f: &mut Fields, c: usize| num(f, &format!("Clear/Color {c}")) as u32;
+    let clear = RtClear {
+        color_0: colour(&mut f, 0),
+        color_1: colour(&mut f, 1),
+        color_2: colour(&mut f, 2),
+        color_3: colour(&mut f, 3),
+    };
+    assert_eq!(take(&mut f, "Writeback Mode"), "Compat");
+    assert_eq!(take(&mut f, "Internal Format"), "R8G8B8A8");
+    assert_eq!(take(&mut f, "Writeback Format"), "R8G8B8A8");
+    assert_eq!(take(&mut f, "Writeback MSAA"), "Single");
+    assert_eq!(take(&mut f, "Swizzle"), "1672 (RGBA)");
+    let mesa_offset = num(&mut f, "Internal Buffer Offset") as u32;
+    /* one RGBA8 target before it: 4 bytes a pixel of a 1024-pixel tile */
+    assert_eq!(u64::from(mesa_offset), 4096 * i, "target {i}: the tile-buffer offset");
+    let expected = RgbRenderTarget {
+        writeback_mode: WritebackMode::COMPAT,
+        internal_buffer_offset: mesa_offset,
+        yuv_enable: flag(&mut f, "YUV Enable"),
+        dithered_clear: flag(&mut f, "Dithered Clear"),
+        internal_format: ColorBufferInternalFormat::R8G8B8A8,
+        write_enable: flag(&mut f, "Write Enable"),
+        writeback_format: ColorFormat::R8G8B8A8,
+        writeback_msaa: Msaa::SINGLE,
+        srgb: flag(&mut f, "sRGB"),
+        dithering_enable: flag(&mut f, "Dithering Enable"),
+        swizzle: 1672,
+        clean_tile_write_enable: flag(&mut f, "Clean Tile Write Enable"),
+        clear,
+        /* the named difference: linear, the target's memory, where Mesa's
+         * is AFBC (below) */
+        writeback_block_format: BlockFormat::LINEAR,
+        writeback_buffer: buffer,
+        ..Default::default()
+    };
+    assert_eq!(take(&mut f, "Writeback Block Format"), "AFBC");
+    for k in [
+        "Writeback Float Format",
+        "YUV Transform",
+        "Split block",
+        "Wide block",
+        "Reverse issue order",
+        "Front buffer",
+        "Alpha hint",
+        "Compression mode",
+        "Header",
+        "Row stride",
+        "Body offset",
+    ] {
+        take(&mut f, k);
+    }
+    done(&f, "render target");
+    expected.pack().unwrap()
 }
 
 /// Case 55's frame: two RGBA8 targets.
