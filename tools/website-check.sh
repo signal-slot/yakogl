@@ -53,9 +53,8 @@ PRE_PUBLICATION_BUILDS = {
     "gltest.am62p": ("445c5653", "2026-10-20", "tools/cts/RESULTS.md", "Common set (stage 2 input)"),
     "gltest.imx8mp": ("445c5653", "2026-10-20", "tools/cts/RESULTS.md", "Common set (stage 2 input)"),
     "gltest.pi4": ("445c5653", "2026-10-20", "tools/cts/RESULTS.md", "Common set (stage 2 input)"),
-    "glmark2.am62p": ("445c5653", "2026-10-20", "tools/cts/RESULTS.md", "Common set (stage 2 input)"),
-    "glmark2.imx8mp": ("a917d123", "2026-10-20", "tools/cts/RESULTS.md", "Common set (stage 2 input)"),
-    "glmark2.pi4": ("c4af4917", "2026-10-22", "tools/cts/RESULTS.md", "Common set (stage 2 input)"),
+    "glmark2.imx8mp": ("445c5653", "2026-10-20", "tools/cts/RESULTS.md", "Common set (stage 2 input)"),
+    "glmark2.pi4": ("445c5653", "2026-10-20", "tools/cts/RESULTS.md", "Common set (stage 2 input)"),
 }
 errors = []
 

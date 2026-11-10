@@ -75,20 +75,20 @@ window.YAKOGL_DATA = {
       "label": "dEQP-GLES2, whole tree at 1x",
       "board": "am62p",
       "value": {
-        "pass": 17332,
+        "pass": 17142,
         "fail": 0,
-        "notSupported": 34,
+        "notSupported": 18,
         "warnings": 5,
-        "total": 17371
+        "total": 17165
       },
-      "unit": "cases begun at 1x (17,165 mustpass cases plus 206 outside the list)",
+      "unit": "cases of the mustpass list (the 17 images at 1x, with the 16 multisample cases from the 4x image)",
       "commit": "36c4305a",
       "onMain": true,
       "date": "2026-11-05",
       "source": "tools/cts/RESULTS.md",
       "section": "ES 2.0: dEQP-GLES2 (stage 1, met)",
       "status": "pass",
-      "note": "0 GPU resets. Within the mustpass list: 17,126 pass, 34 not supported, 5 warnings. The 16 multisample cases require the separate 4x image below; that image has not been rerun since 2026-10-15.",
+      "note": "0 GPU resets. The 1x run at 36c4305a alone reads 17,126 pass, 34 not supported, 5 warnings in the mustpass list; the 16 multisample cases come from the separate 4x image below, which has not been rerun since 2026-10-15.",
       "provenance": {
         "kind": "repository",
         "recordCommit": "08163414b656836b0d5e00260992f5d033e63a74"
@@ -246,7 +246,7 @@ window.YAKOGL_DATA = {
       "source": "tools/cts/RESULTS.md",
       "section": "Common set (stage 2 input)",
       "status": "warn",
-      "note": "This main commit holds the PowerVR depth-texture fix: shadow 10.63 ms and refract 37.05 ms a frame (353 and 375 ms at 445c5653). Terrain stays slow at 90.94 ms, mostly GL-call time on the CPU. All 33 picture values are recorded and none is black; 28 match the reference column, the other 5 are animated scenes sampled at another frame. A later branch build (6a7021ec, 2026-11-01, not a main commit) read 468, terrain 83.06 ms.",
+      "note": "Main 86d0b482 holds the PowerVR depth-texture fix of #40. All 33 scene picture values are recorded; none is black. Against the 445c5653 run, 28 of 33 match and 5 differ, all in animated scenes sampled at a different frame count. Per frame: shadow 10.63 ms, refract 37.05 ms, terrain 90.94 ms (terrain is still slow, mostly GL-call time on the CPU). 461 was the score at 445c5653. A later branch build (6a7021ec, 2026-11-01, not a main commit) read 468, terrain 83.06 ms.",
       "provenance": {
         "kind": "repository",
         "recordCommit": "93ada07490dae879f9fb3903eafb8d66e1ddfc7e"
@@ -257,30 +257,30 @@ window.YAKOGL_DATA = {
       "board": "imx8mp",
       "value": 42,
       "unit": "score at 800x600; 33 scenes, 0 failed, 0 GL errors",
-      "commit": "f87dde43",
-      "onMain": true,
-      "date": "2026-11-07",
+      "commit": "445c5653",
+      "onMain": false,
+      "date": "2026-10-20",
       "source": "tools/cts/RESULTS.md",
       "section": "Common set (stage 2 input)",
       "status": "warn",
-      "note": "Default one-buffer configuration; the same score as the 2026-10-20 runs at 445c5653 and a917d123. The per-scene figures and pictures come from the a917d123 run: all 33 picture values match the 445c5653 run; they have not been visually reviewed on the panel. Terrain is 4 FPS, shadow and refract 2 FPS. The texture/mipmap picture change remains unexplained. Extra display-buffer configurations are separate experiments.",
+      "note": "Default one-buffer configuration. Re-runs at a917d123 (2026-10-20) and f87dde43 (2026-11-07) read 42 again with all 33 pictures matching; the pictures have not been visually reviewed on the panel. Terrain is 4 FPS, shadow and refract 2 FPS. The texture/mipmap picture change remains unexplained. Extra display-buffer configurations are separate experiments.",
       "provenance": {
-        "kind": "repository",
-        "recordCommit": "8737e5a36e6b386340c7f3b5b11b078a32df0865"
+        "kind": "pre-publication",
+        "recordCommit": "381b0f09e9c8e7b3d437946c888224f12a27b367"
       }
     },
     "glmark2.pi4": {
       "label": "glmark2-es2",
       "board": "pi4",
-      "value": 195,
+      "value": 193,
       "unit": "score at 800x600; 33 scenes, 0 failed, 0 GL errors",
-      "commit": "c4af4917",
+      "commit": "445c5653",
       "onMain": false,
-      "date": "2026-10-22",
+      "date": "2026-10-20",
       "source": "tools/cts/RESULTS.md",
       "section": "Common set (stage 2 input)",
       "status": "warn",
-      "note": "All 33 scenes recorded; none is black. Thirty-one picture values match the earlier column; two animated scenes differ. Terrain is 161.79 ms, shadow 7.34 ms and refract 17.27 ms per frame. This is a newer build than the common-commit 193 score in the README.",
+      "note": "All 33 scenes recorded; none is black. Terrain is 179.26 ms, shadow 7.32 ms and refract 18.72 ms per frame.",
       "provenance": {
         "kind": "pre-publication",
         "recordCommit": "381b0f09e9c8e7b3d437946c888224f12a27b367"
