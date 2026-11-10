@@ -33,7 +33,7 @@ t6_submit: Z4e: insert 0x0000000000000000 extract 0x0000000000000000 seqno 0x000
 t6_submit: Z4f: latest_flush 0x00000000 sync_updates 0 status_cmd_ptr 0x0000000000000000 info 0x0000000000000000
 t6_submit: Z4g: stop 0 us refusal 0, terminate 0 us refusal 0, cleared 0 0 0
 t6_submit: Z4h: target red 0 blue 0 fill 0 other 0 of 0 pixels
-t6_submit: Z4i: frame digest 0x0123456789abcdef
+t6_submit: Z4i: frame digest 0xa4db81a9d39bfdcc
 t6_submit: FAIL: Z4 step 2 (Z3 stopped: Z3 step 3)
 t6: t6_submit done: PSCI SYSTEM_RESET at 40 ms (0 feeds)
 DDR V1.16 4bfdbd7 typ 24/01/09-11:49:58
