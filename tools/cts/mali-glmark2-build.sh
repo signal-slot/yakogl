@@ -28,12 +28,18 @@
 # one scene per process: about 1.9 MB of text per scene at 800x600). Unset, or
 # any other value, the output is the picture line alone.
 #
-# glmark2 links no GL or EGL library: it dlopen()s libEGL.so.1 and
-# libGLESv2.so.2, which its RUNPATH $ORIGIN/../lib finds in <outdir>/lib
-# before the board's glvnd + Mesa 25.0.7 (the same two SONAMEs: the "sonama
-# trap" of #327's probe, docs/es2/board-recipe-mali.md). libpng, libjpeg and
-# zlib are linked statically from pinned Debian trixie arm64 -dev packages
-# (IMG_PKGS), so the program needs only libc, libm, libstdc++ and libgcc_s.
+# glmark2 links no GL or EGL library: it dlopen()s the unversioned name first,
+# libEGL.so then libEGL.so.1, libGLESv2.so then libGLESv2.so.2 (glmark2's
+# src/gl-state-egl.cpp, init_display and gotValidDisplay). Its RUNPATH
+# $ORIGIN/../lib finds them in <outdir>/lib before the board's glvnd + Mesa
+# 25.0.7 (the same names: the "sonama trap" of #327's probe,
+# docs/es2/board-recipe-mali.md), so lib/ has the unversioned names too, as
+# relative links to the pair: without them dlopen("libEGL.so") takes the
+# board's glvnd and eglInitialize fails. A link, not a copy: a copy is another
+# file, which dlopen loads as a second libGLESv2 beside the one libEGL.so.1
+# needs. libpng, libjpeg and zlib are linked statically from pinned Debian
+# trixie arm64 -dev packages (IMG_PKGS), so the program needs only libc, libm,
+# libstdc++ and libgcc_s.
 #
 # Output, <outdir> absent or empty beforehand (written as <outdir>.part, renamed
 # at the end):
@@ -41,6 +47,8 @@
 #   <outdir>/lib/libGLESv2.so.2, libEGL.so.1
 #                                       the pair: tools/mali/panthor-gles/build.sh
 #                                       (default), or copied from --gles-lib DIR
+#   <outdir>/lib/libGLESv2.so -> libGLESv2.so.2, libEGL.so -> libEGL.so.1
+#                                       relative links, the names glmark2 dlopens first
 #   <outdir>/share/glmark2/             glmark2's data (shaders, models, textures)
 #   <outdir>/BUILD-INFO                 key=value lines: commit=<git describe of
 #                                       yakogl>, dev=, glmark2=<pin>, glmark2_patch=,
@@ -66,8 +74,10 @@
 # NEEDs nothing beyond libc, libm, libstdc++, libgcc_s and the loader (no
 # libEGL, libGLESv2, libGL, glvnd, libpng, ...); lib/ holds exactly the pair
 # (SONAMEs, libEGL.so.1 needing libGLESv2.so.2 through RUNPATH $ORIGIN,
-# libGLESv2.so.2 carrying the "yakogl-mali: loaded" contract text: not Mesa's)
-# and no other libEGL/libGLESv2 is anywhere in <outdir>; the program and the
+# libGLESv2.so.2 carrying the "yakogl-mali: loaded" contract text: not Mesa's),
+# lib/libEGL.so and lib/libGLESv2.so are links to exactly libEGL.so.1 and
+# libGLESv2.so.2 beside them (not copies, not elsewhere), and no other
+# libEGL/libGLESv2 is anywhere in <outdir>; the program and the
 # pair need no GLIBC, GLIBCXX or CXXABI version above the floors (readelf -V);
 # share/glmark2 has glmark2's data; BUILD-INFO has every key, the pin, flavour
 # pbuffer and the maxima readelf finds. It prints the maxima.
@@ -124,7 +134,7 @@ while [ $# -gt 0 ]; do
 	--dry-run) dry=1; shift ;;
 	--gles-lib) gles_lib=${2:?--gles-lib needs a directory}; shift 2 ;;
 	--check) check=1; out=${2:?--check needs an outdir}; shift 2 ;;
-	-h | --help) sed -n '5,88p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+	-h | --help) sed -n '5,103p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
 	-*) echo "$me: unknown argument '$1'" >&2; usage ;;
 	*) [ -z "$out" ] || { echo "$me: one <outdir> only" >&2; usage; }; out=$1; shift ;;
 	esac
@@ -195,10 +205,25 @@ check_tree() {
 	esac
 	[ "$(dyn "$re" RUNPATH)" = "\$ORIGIN" ] || fail "lib/libEGL.so.1 has RUNPATH '$(dyn "$re" RUNPATH)', not \$ORIGIN"
 	versions+=$re$'\n'
+	# the unversioned names glmark2 dlopens first: relative links to the pair
+	# (a copy would load as a second libGLESv2, a missing one finds glvnd)
+	local link
+	for link in libEGL.so:libEGL.so.1 libGLESv2.so:libGLESv2.so.2; do
+		f=$d/lib/${link%%:*}
+		if [ ! -L "$f" ]; then
+			if [ -e "$f" ]; then
+				fail "lib/${link%%:*} is not a link to ${link#*:} (a copy loads as a second library)"
+			else
+				fail "no lib/${link%%:*} (glmark2 dlopens it before ${link#*:}: the board's glvnd would be taken)"
+			fi
+		elif [ "$(readlink "$f")" != "${link#*:}" ]; then
+			fail "lib/${link%%:*} links to '$(readlink "$f")', not ${link#*:} (the pair's file beside it)"
+		fi
+	done
 	# no other libEGL/libGLESv2 anywhere in the tree
 	while IFS= read -r f; do
 		case $f in
-		"$d/lib/libGLESv2.so.2" | "$d/lib/libEGL.so.1") ;;
+		"$d/lib/libGLESv2.so.2" | "$d/lib/libEGL.so.1" | "$d/lib/libGLESv2.so" | "$d/lib/libEGL.so") ;;
 		*) fail "${f#"$d"/}: a libEGL/libGLESv2 other than the pair's" ;;
 		esac
 	done < <(find "$d" \( -name 'libEGL*' -o -name 'libGLESv2*' -o -name 'libGL.so*' \) \( -type f -o -type l \))
@@ -486,6 +511,8 @@ run rm -rf "$part"
 run mkdir -p "$part/bin" "$part/lib" "$part/share/glmark2"
 run cp "$bin" "$part/bin/$PROGRAM"
 run cp "$gles_out/libGLESv2.so.2" "$gles_out/libEGL.so.1" "$part/lib/"
+run ln -s libGLESv2.so.2 "$part/lib/libGLESv2.so"
+run ln -s libEGL.so.1 "$part/lib/libEGL.so"
 run cp -r "$BUILD/glmark2/data/shaders" "$BUILD/glmark2/data/models" "$BUILD/glmark2/data/textures" "$part/share/glmark2/"
 if [ "$dry" = 1 ]; then
 	echo "+ check $part (readelf: AArch64, RUNPATH \$ORIGIN/../lib, NEEDED within $NEEDED_OK, the pair, GLIBC_$GLIBC_FLOOR GLIBCXX_$GLIBCXX_FLOOR CXXABI_$CXXABI_FLOOR)"
