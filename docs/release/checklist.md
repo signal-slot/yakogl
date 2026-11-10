@@ -70,11 +70,11 @@ host Linux 7.2.8 x86-64, rustc 1.98.0-nightly (2026-07-01):
 - Not run: README steps 4-6 (no `aarch64-none-elf-gcc` and no newlib sysroot
   on this host), the Zephyr build, the host-harness compare, and the cargo
   test rows (line 3's `--quick` runs them).
-- Left for another change: `baremetal.mk:73` defaults `DRVSRC` to `../src`,
-  the old two-repository layout, so README tells the reader to pass
-  `DRVSRC=driver/src`; the README glmark2 table is #1196.
-  Update, 2026-11-08: the default has since moved to `driver/src`
-  (`baremetal.mk:73`) and README no longer passes `DRVSRC`.
+- Until `9c736975`, `baremetal.mk:73` defaulted `DRVSRC` to `../src`, the
+  old two-repository layout, and README told the reader to pass
+  `DRVSRC=driver/src`; since `9c736975` the default is `driver/src`
+  (`baremetal.mk:73`) and README no longer passes it. The README glmark2
+  table is #1196.
 
 ### Line 3: re-run (2026-11)
 
@@ -270,11 +270,11 @@ names README mentions.
 
 README step 3, clang form, from a clean `BUILD` directory at `14e93e64`:
 `make -f baremetal.mk CC='clang --target=aarch64-none-elf --sysroot=<Arm newlib sysroot>' AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy DRVSRC=driver/src`
-(the sysroot is the `aarch64-none-elf` directory of the Arm GNU Toolchain; its path is not recorded).
+(shown as run at `14e93e64`; `DRVSRC=driver/src` is the default since `9c736975`, so README no longer passes it. The sysroot is the `aarch64-none-elf` directory of the Arm GNU Toolchain; its path is not recorded).
 
 - Result: exit 0, wall 98.80 s. Both archive members: `architecture: aarch64`.
 - Versions: clang 21.1.8, llvm-ar 21.1.8, newlib 4.5.0 (`_NEWLIB_VERSION` in the sysroot's `newlib.h`).
-- GCC form, at `22265e87` (origin/main, 2026-11-06), Arm GNU Toolchain 15.2.Rel1 (`aarch64-none-elf-gcc` 15.2.1): README's `make -f baremetal.mk CROSS_COMPILE=aarch64-none-elf- DRVSRC=driver/src` exit 0, 26.8 s wall, objects `elf64-littleaarch64`.
+- GCC form, at `22265e87` (origin/main, 2026-11-06), Arm GNU Toolchain 15.2.Rel1 (`aarch64-none-elf-gcc` 15.2.1): README's `make -f baremetal.mk CROSS_COMPILE=aarch64-none-elf- DRVSRC=driver/src` (as run at that commit; `DRVSRC` has been the default since `9c736975`) exit 0, 26.8 s wall, objects `elf64-littleaarch64`.
 - Without `DRVSRC=driver/src`: exit 2 after 19.2 s, `abi_layout_check.c:17:10: fatal error: pvr_render.h: No such file or directory` at `baremetal.mk:184`, because `baremetal.mk:73` defaults `DRVSRC` to `$(HERE)/../src`.
 - Update, 2026-11-08: the default has since landed (`baremetal.mk:73` is `DRVSRC ?= $(HERE)/driver/src`) and README's commands no longer pass `DRVSRC`; the exit 2 above is the state before that change.
 - CMake aarch64: no new record; the 2026-11-05 exit 0 below stands (compiler version not recorded).
@@ -294,8 +294,8 @@ neither is given here; this table is read at base `7ae09845`):
 
 - Host quirks seen: a stale `ZEPHYR_BASE` was exported and `ZEPHYR_WS` held the
   literal string `unchanged`, not a path.
-- `baremetal.mk:73` still has `DRVSRC ?= $(HERE)/../src`; baremetal-drvsrc has
-  not merged at `7ae09845`.
+- At `7ae09845` (before `9c736975`) `baremetal.mk:73` still had
+  `DRVSRC ?= $(HERE)/../src`; baremetal-drvsrc had not merged.
 - To close the line: run step 3 on a host with `llvm-ar`, `llvm-nm`,
   `llvm-objcopy` and a newlib sysroot, and record the exit code, the compiler
   versions and the commit here.
@@ -305,7 +305,7 @@ neither is given here; this table is read at base `7ae09845`):
 | # | Decision | Why it is the owner's | Needed by |
 |---|---|---|---|
 | D1 | Licence of each component: YakoGL's own code (Apache-2.0 today, `LICENSE`); the Mesa-derived parts (MIT); the Imagination DDK material (MIT with the GPLv2 alternative); the NXP `hal_nxp` part (BSD-3-Clause); the Slint parts (GPL-3.0 / Slint Royalty-free 2.0 / Slint Software 3.0, which one applies to the samples); the Zephyr PR snapshot; and whatever line 7 finds. One licence per directory, stated in `LICENSE`/`NOTICE`: library (`src/`, `capi/`), kernel driver (`driver/`; `LICENSES/GPL-2.0-only.txt` exists), `third_party/`, `tools/`, `website/`, `zephyr/` | A legal choice; the audit only reports, and line 7 can only check files against that choice | before line 7 can reach zero |
-| D2 | Data files without an SPDX line: decided on 2026-10-20 (#1265): own source gets a header, generated output, captures, test data and images go into `tools/license_audit.allow` by path or kind. Still open: the 580 `undecided` files (Qt and femtovg shaders, patches, images; `docs/release/license-audit.md`, "Remaining findings") | Upstream-derived or unknown-origin files get no licence guessed | before line 7 can reach "no open finding" |
+| D2 | Data files without an SPDX line: decided on 2026-10-20 (#1265): own source gets a header, generated output, captures, test data and images go into `tools/license_audit.allow` by path or kind. The 580 `undecided` files (Qt and femtovg shaders, patches, images) once open are now 0 (line 7: each has a row, sidecar or header naming its source, or left the tree); whether `undecided` becomes a `--fail-on` class is the owner's decision (issue draft, not yet filed) | Upstream-derived or unknown-origin files get no licence guessed | line 7 reached "no open finding" (2026-10-26) |
 | D3 | History: publish the existing history, a rewritten one (filter out what line 8 finds), or a fresh single-commit history | Rewriting changes every hash quoted in the docs; a fresh history loses provenance | after line 8 |
 | D4 | What the README conformance table claims (`README.md` lines 37-66: per-board dEQP-GLES2 results, "17,165-case mustpass list"): per-board whole-tree counts from one commit each (as line 13 asks), the newest reading per row, or the failures listed explicitly; and whether a board with a known open regression may be published as "close to complete" | It is the public claim of the project | before lines 2, 5 and 9 close |
 | D5 | Security contact address, response times and supported versions in SECURITY.md | They become public | **decided** 2026-10-20 (#1266): GitHub private vulnerability reporting, no committed response time, `main` only |
