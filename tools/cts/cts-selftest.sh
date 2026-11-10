@@ -26,6 +26,11 @@
 # self-test (mali-deqp-tally-selftest.sh, its own pinned count), 43 the e2e
 # self-test (mali-deqp-e2e-selftest.sh, count pinned, no FAIL or XFAIL), 44
 # the mali-gles2-tree.txt coverage of gles2-mustpass.txt (each case once).
+# Checks 46-51 run the rest of its self-tests, each with its count pinned and
+# no FAIL or XFAIL: 46 mali-slice-redact-selftest.sh, 47
+# mali-slice-readme-selftest.sh, 48 mali-rerun-tree-selftest.sh, 49
+# mali-rerun-e2e-selftest.sh, 50 mali-fail-triage-selftest.sh, 51
+# mali-deqp-build-selftest.sh.
 set -u
 
 HERE=$(dirname "$0")
@@ -886,6 +891,49 @@ else
     bad "glmark2-picdiff.py --self-test failed"
     printf '%s\n' "$pdout" | tail -8 | sed 's/^/        | /'
 fi
+
+# 46-51: the NanoPC-T6 slice, rerun, triage and build self-tests, run like
+# check 43: TMPDIR in the scratch dir, any FAIL or XFAIL line is a failure, and
+# the count of their ok lines is pinned. A script that prints its own count
+# ("<name>: N checks passed") must print the pinned one; the others must end on
+# "<name>: ok". All six run on the host alone (mali-deqp-build-selftest.sh on
+# fake cargo, cmake, curl and cross tools, never the real ones).
+malicheck() {
+    local out name n said
+    name=${2%.sh}
+    echo
+    echo "== $1. $2"
+    if out=$(cd "$gl3tmp" && TMPDIR="$gl3tmp" bash "$ROOT/tools/cts/$2" 2>&1) \
+       && ! printf '%s\n' "$out" | grep -Eq '^ *(FAIL|XFAIL)' \
+       && n=$(printf '%s\n' "$out" | grep -c '^ *ok ') && [ "$n" = "$3" ]; then
+        said=$(printf '%s\n' "$out" | sed -n "s/^$name: \([0-9]*\) checks passed\$/\1/p")
+        if [ -n "$said" ] && [ "$said" != "$3" ]; then
+            bad "$2 reported $said checks passed, pinned $3"
+        elif [ -z "$said" ] && [ "$(printf '%s\n' "$out" | tail -1)" != "$name: ok" ]; then
+            bad "$2 did not end on '$name: ok'"
+        else
+            ok "$2: $3 checks passed, no FAIL or XFAIL"
+        fi
+    else
+        bad "$2 failed or did not pass $3 checks (ok lines: $(printf '%s\n' "$out" | grep -c '^ *ok '))"
+        printf '%s\n' "$out" | grep -E 'FAIL' | head -3 | sed 's/^/        | /'
+        printf '%s\n' "$out" | tail -3 | sed 's/^/        | /'
+    fi
+}
+
+# 46: mali-slice-redact.py on synthetic slices (addresses, host names and
+# serials found; clean slices pass; usage and unreadable files exit 2).
+malicheck 46 mali-slice-redact-selftest.sh 17
+# 47: mali-slice-readme.py writes and checks a slice's README.md.
+malicheck 47 mali-slice-readme-selftest.sh 23
+# 48: mali-rerun-tree.py builds the tree table of the Lost cases of slices.
+malicheck 48 mali-rerun-tree-selftest.sh 12
+# 49: mali-rerun-tree.py output through mali-deqp-run.sh on the fake board.
+malicheck 49 mali-rerun-e2e-selftest.sh 16
+# 50: mali-fail-triage.py drafts the cause table and issue list from slices.
+malicheck 50 mali-fail-triage-selftest.sh 11
+# 51: mali-deqp-build.sh's dry run and its symbol-floor checks on fake tools.
+malicheck 51 mali-deqp-build-selftest.sh 29
 
 if [ "$fail" -eq 0 ]; then
     echo "== all checks passed"
