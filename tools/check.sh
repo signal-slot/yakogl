@@ -2738,6 +2738,13 @@ print(len(l), "cases"); sys.exit(0 if ok else 1)'
   # tools/cts/mali-kmsg.py, the panthor kernel message classifier the runner
   # logs per chunk (resets, job timeouts, MMU and CS faults), on its fixtures.
   step "tools   mali-kmsg-selftest.sh (panthor kernel message classifier)" bash tools/cts/mali-kmsg-selftest.sh
+  # The Mali glmark2 build recipe (--dry-run on stubs), the tally of a run
+  # directory and the symbol check of glmark2-es2 against the panthor-gles
+  # pair, each on its own fixtures. Host only; a part that needs GLMARK2_SRC or
+  # a C compiler prints skip without it, never a gap.
+  step "tools   mali-glmark2-build-selftest.sh (NanoPC-T6 glmark2-es2 build recipe, dry run)" no_board_env bash tools/cts/mali-glmark2-build-selftest.sh
+  step "tools   glmark2-mali-tally-selftest.sh (Mali glmark2 per-scene tally)" no_board_env bash tools/cts/glmark2-mali-tally-selftest.sh
+  step "tools   glmark2-mali-symbols-selftest.sh (glmark2-es2 symbols against the panthor-gles pair)" no_board_env bash tools/cts/glmark2-mali-symbols-selftest.sh
   # The licence audit (check 25 of the script above) on its own, so that a diff
   # which reaches no `tools` path (a data file under tools/v3d, 7bd8a8e94) still
   # meets it: every added or changed file is a tracked file the audit reads.
