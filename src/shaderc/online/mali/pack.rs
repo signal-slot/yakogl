@@ -30,6 +30,8 @@ fn src_byte(s: &Src) -> Result<u32, MaliError> {
         Idx::Special(Special::BlendDescriptor(rt), hi) if rt < 8 => 0xc0 | (32 + 2 * (8 + rt as u32) + hi as u32),
         /* page 3, entry 15 ([`tail`] names the page) */
         Idx::Special(Special::ProgramCounter, hi) => 0xc0 | (32 + 2 * 15 + hi as u32),
+        /* page 3, entry 1 (assembler-cases.txt:5, `MOV.i32 r1, lane_id.w0`) */
+        Idx::Special(Special::LaneId, hi) => 0xc0 | (32 + 2 + hi as u32),
         _ => return Err(MaliError::Defect(Defect::Operand)),
     })
 }
@@ -171,9 +173,11 @@ impl Fill {
 
 /// The common tail: the FAU page (page 0, or page 3 for an instruction that
 /// reads `program_counter`, `VA_FAU_SPECIAL_PAGE_3_PROGRAM_COUNTER`,
-/// va_pack.c:95-96) and the flow.
+/// va_pack.c:95-96, or `lane_id`) and the flow.
 fn tail(f: &mut Fill, i: &Ins) -> Result<(), MaliError> {
-    let page = if i.srcs().iter().any(|s| s.idx == Idx::Special(Special::ProgramCounter, false)) { 3 } else { 0 };
+    let page3 =
+        |s: &Src| matches!(s.idx, Idx::Special(Special::ProgramCounter, false) | Idx::Special(Special::LaneId, _));
+    let page = if i.srcs().iter().any(page3) { 3 } else { 0 };
     f.put("fau_page_index", page)?.put("flow", i.flow as u32)?;
     Ok(())
 }
@@ -701,8 +705,12 @@ pub fn pack_one(i: &Ins, branch: i32) -> Result<u64, MaliError> {
             f.put("not_result", 0)?;
             alu_dest(&mut f, i, "dest_width")?;
         }
-        Op::LshiftAndV2i16 | Op::LshiftOrV2i16 => {
-            f = Fill::new(if i.op == Op::LshiftAndV2i16 { IsaOp::LshiftAndV2i16 } else { IsaOp::LshiftOrV2i16 });
+        Op::LshiftAndV2i16 | Op::LshiftOrV2i16 | Op::LshiftXorV2i16 => {
+            f = Fill::new(match i.op {
+                Op::LshiftAndV2i16 => IsaOp::LshiftAndV2i16,
+                Op::LshiftOrV2i16 => IsaOp::LshiftOrV2i16,
+                _ => IsaOp::LshiftXorV2i16,
+            });
             /* as the 32-bit form (`va_swap_12`), the value's halves its
              * `swz0` (`swiz_int_m`: h00 0, h10 1, h01 2, h11 3), the shift
              * a byte pair (`shift_bitwise_i16_lanes_m`: b00 4, as the
@@ -711,6 +719,15 @@ pub fn pack_one(i: &Ins, branch: i32) -> Result<u64, MaliError> {
             f.put("src2", src_byte(&i.src[1])?)?.put("not2", 0)?;
             f.put("src1", src_byte(&i.src[2])?)?.put("lanes1", byte_lane(i.src[2].swz)?)?;
             f.put("not_result", 0)?;
+            alu_dest(&mut f, i, "dest_width")?;
+        }
+        Op::Clper => {
+            f = Fill::new(IsaOp::Clper);
+            /* `.subgroup4.xor` (clper_subgroup_size_m 1, clper_lane_op_m 1),
+             * an inactive lane reads 0; the lane a byte of its source */
+            f.put("src0", src_byte(&i.src[0])?)?.put("src1", src_byte(&i.src[1])?)?;
+            f.put("lanes1", byte_lane(i.src[1].swz)?)?.put("lane_op", 1)?.put("subgroup", 1)?;
+            f.put("inactive_result", 0)?;
             alu_dest(&mut f, i, "dest_width")?;
         }
         Op::LdPka { words, half } => {
@@ -974,5 +991,69 @@ mod tests {
     fn fexp_is_byte_equal_to_mesa_26_2_1() {
         /* 34 FEXP.f32 r3, r4^, r3^ */
         assert_eq!(pack(Op::FexpF32, 3, &[last(4), last(3)]), 0x00a4c30000084344);
+    }
+
+    fn lane_id() -> Src {
+        Src::of(Idx::Special(Special::LaneId, false))
+    }
+
+    /// `word` is `op`'s in the ISA table and encodes back to itself.
+    fn decodes_as(word: u64, op: IsaOp) {
+        let d = isa::decode(word).unwrap();
+        assert_eq!(d.op, op, "{word:016x}");
+        assert_eq!(isa::encode(&d).unwrap(), word);
+    }
+
+    /// The words are `fsarith_138_deriv.expect.json`'s `fs.fragment`
+    /// (docs/notes/mali-derivatives.md, sections 2 and 4), Mesa 26.2.1:
+    /// the neighbour in Y (lane ^ 2, `0x3020100.b22`) and in X (lane ^ 1,
+    /// `0x1000000.b33`), the last one with the helpers' `.discard`.
+    #[test]
+    fn the_clper_words_are_byte_equal_to_mesa_26_2_1() {
+        let y = lut(8).swz(Swz::B2);
+        let x = lut(4).swz(Swz::B3);
+        /* 8 CLPER.i32.subgroup4.xor r3, r1, 0x3020100.b22 */
+        assert_eq!(pack(Op::Clper, 3, &[r(1), y]), 0x00a0c311180fc801);
+        /* 11 CLPER.i32.subgroup4.xor r3, r2, 0x3020100.b22 */
+        assert_eq!(pack(Op::Clper, 3, &[r(2), y]), 0x00a0c311180fc802);
+        /* 16 CLPER.i32.subgroup4.xor r4, r3, 0x1000000.b33 */
+        assert_eq!(pack(Op::Clper, 4, &[r(3), x]), 0x00a0c4111c0fc403);
+        /* 19 CLPER.i32.subgroup4.xor.discard r4, r0, 0x1000000.b33 */
+        let mut i = Ins::new(Op::Clper, &[Dest { idx: Idx::Reg(4), swz: Swz::H01 }], &[r(0), x]);
+        i.flow = flow::DISCARD;
+        assert_eq!(pack_one(&i, 0).unwrap(), 0x68a0c4111c0fc400);
+        for w in [0x00a0c311180fc801, 0x00a0c311180fc802, 0x00a0c4111c0fc403, 0x68a0c4111c0fc400] {
+            decodes_as(w, IsaOp::Clper);
+        }
+    }
+
+    /// The sign fixes and the Y mask (instructions 22-25 and 27): `lane_id`
+    /// is byte 0xe2 on FAU page 3 (byte 7 = 0x06), with a half swizzle on
+    /// the `v2i16` form; an instruction that reads no `lane_id` stays at
+    /// page 0.
+    #[test]
+    fn the_lane_id_words_are_byte_equal_to_mesa_26_2_1() {
+        let h00 = |s: Src| s.swz(Swz::H00);
+        let y = lut(11).swz(Swz::B2);
+        let x = lut(11).swz(Swz::B3);
+        /* 22 LSHIFT_AND.i32 r4, lane_id.w0, 0x0.b00, r4^ */
+        assert_eq!(pack(Op::LshiftAndI32, 4, &[lane_id(), last(4), lut(0).swz(Swz::B0)]), 0x06b4c4011044c0e2);
+        /* 23 LSHIFT_XOR.v2i16 r1, r4.h00, 0xF0E0D0C.b22, r1^ */
+        assert_eq!(pack(Op::LshiftXorV2i16, 1, &[h00(r(4)), last(1), y]), 0x00b5c1011a41cb04);
+        /* 24 LSHIFT_XOR.v2i16 r2, r4^.h00, 0xF0E0D0C.b22, r2^ */
+        assert_eq!(pack(Op::LshiftXorV2i16, 2, &[h00(last(4)), last(2), y]), 0x00b5c2011a42cb44);
+        /* 25 LSHIFT_XOR.v2i16 r3, lane_id.w0.h00, 0xF0E0D0C.b33, r3^ */
+        assert_eq!(pack(Op::LshiftXorV2i16, 3, &[h00(lane_id()), last(3), x]), 0x06b5c3011e43cbe2);
+        /* 27 LSHIFT_XOR.v2i16 r0, lane_id.w0.h00, 0xF0E0D0C.b33, r0^ */
+        assert_eq!(pack(Op::LshiftXorV2i16, 0, &[h00(lane_id()), last(0), x]), 0x06b5c0011e40cbe2);
+        decodes_as(0x06b4c4011044c0e2, IsaOp::LshiftAndI32);
+        for w in [0x00b5c1011a41cb04, 0x00b5c2011a42cb44, 0x06b5c3011e43cbe2, 0x06b5c0011e40cbe2] {
+            decodes_as(w, IsaOp::LshiftXorV2i16);
+        }
+        /* page 0 without lane_id: the CLPER above and a 32-bit LSHIFT_XOR */
+        let page = |w: u64| (w >> 57) & 3;
+        assert_eq!(page(pack(Op::Clper, 3, &[r(1), lut(8).swz(Swz::B2)])), 0);
+        assert_eq!(page(pack(Op::LshiftXorI32, 1, &[r(4), last(1), lut(11).swz(Swz::B2)])), 0);
+        assert_eq!(page(pack(Op::LshiftXorI32, 1, &[lane_id(), last(1), lut(11).swz(Swz::B2)])), 3);
     }
 }
