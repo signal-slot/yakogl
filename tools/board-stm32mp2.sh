@@ -11,11 +11,12 @@
 # (tools/am62p_netboot_uart.py); its verdict line has board.sh's shape so
 # the hook into board.sh (plan #322, board-gpu-identity) is a dispatch.
 #
-#   tools/board-stm32mp2.sh [--dry-run] status | install | uninstall | disarm
+#   tools/board-stm32mp2.sh [--dry-run] status | install [image] | uninstall | disarm
 #   tools/board-stm32mp2.sh [--dry-run] probe <logdir>
 #   tools/board-stm32mp2.sh [--dry-run] run <image> <logdir> [name]
 #   tools/board-stm32mp2.sh env-edit hook|unhook|arm|disarm <env.bin> <out.bin> [token file]
 #   tools/board-stm32mp2.sh tally <rundir>
+#   tools/board-stm32mp2.sh selftest          (tools/board_stm32mp2_selftest.sh, no board)
 #
 # Why not tools/board.sh's uboot-mmc backend: that backend arms the one-shot
 # with fw_setenv on the board, and this board's Linux has fw_printenv but no
@@ -62,8 +63,22 @@
 # records/stm32mp257f-dk/uboot-env/<stamp>-u-boot-env.bin) and on the card
 # (/boot/yakogl/backup/u-boot-env.bin), and records the sha256 of every file
 # of /boot (boot-sha256.txt) so "status" and the return trial can show the
-# stock boot files unchanged. "uninstall" puts bootcmd back and removes the
-# yako_* variables; "disarm" clears a pending one-shot and staged images.
+# stock boot files unchanged (boot.scr.uimg, the extlinux files, Image.gz and
+# the device trees are never written: the one-shot is a variable, not a
+# label). With an image, "install" checks it first, as "run" does, and
+# refuses before anything changes. "uninstall" puts bootcmd back and removes
+# the yako_* variables; "disarm" clears a pending one-shot and staged images.
+#
+# What the runner may write, enforced before every write (dev_guard): the
+# card's u-boot-env partition (the two copies' bytes, nothing else of it) and
+# files under /boot/yakogl on the card's bootfs. It refuses any device of
+# mmcblk0 (the eMMC, which carries the same labels, #1281) and any partition
+# labelled fsbla1, fsbla2, metadata1, metadata2, fip-a, fip-b, vendorfs,
+# rootfs or userfs, and the partition it writes must carry the label it
+# expects (u-boot-env, bootfs) on the disk Linux booted from. It never
+# repartitions, loads or unloads a module, or touches tailscale or sshd:
+# every command it sends is in this file, and the self-test's fake board
+# logs them.
 #
 # "run" does, in order, and stops at the first failure:
 #   1. checks the image: the AArch64 Image header, its footprint inside
@@ -104,6 +119,10 @@
 # blind run (no console) whose board came back; not_back: it did not.
 # boot_verdict is read from the console: U-Boot's "yakogl-mp2: go" line, the
 # layer's "MP2:B console up" and hand-over lines, the end line.
+# After a not_back verdict the runner prints one more line, "NEEDS A PERSON":
+# the board did not answer within the wait, nothing resets it from outside,
+# and the runner never retries; the board is released and reported, and no
+# other item takes it until its owner says it is back (plan #322).
 #
 # Exit codes: 0 done or returned; 2 usage; 3 refused before the board was
 # changed; 4 the verdict is not done; 5 the board did not come back, or an
@@ -140,7 +159,7 @@ for a in "$@"; do
     if [ "$a" = --dry-run ]; then DRY=1; else args+=("$a"); fi
 done
 set -- "${args[@]+"${args[@]}"}"
-usage() { sed -n '14,18p' "$SELF" >&2; exit 2; }
+usage() { sed -n '14,19p' "$SELF" >&2; exit 2; }
 [ $# -ge 1 ] || usage
 VERB=$1
 shift
@@ -152,6 +171,12 @@ MARKER='gc_wdog_arm: armed'       # stm32mp2_wdog.c:130
 STAGE_DIR=/boot/yakogl            # on bootfs; U-Boot sees it as /yakogl
 BACKUP_SUB=backup
 ENV_LABEL=u-boot-env
+BOOT_LABEL=bootfs
+# never written, whatever the arguments: the boot chain's partitions and the
+# file systems of ST's image (the card's layout, #1281), and the eMMC as a whole
+NEVER_LABELS="fsbla1 fsbla2 metadata1 metadata2 fip-a fip-b vendorfs rootfs userfs"
+EMMC_RE='^/dev/mmcblk0(p[0-9]+)?$'
+PART_RE='^/dev/mmcblk[^/ ]+p[0-9]+$'   # a partition of an mmcblk device (the dry run's is mmcblkD)
 ENV_OFF=${MP2_ENV_OFFSET:-0x7e000}
 ENV_OFF2=${MP2_ENV_OFFSET2:-0x7c000}
 ENV_SIZE=${MP2_ENV_SIZE:-0x2000}
@@ -216,7 +241,7 @@ act() {
 }
 need_board() {
     if [ "$DRY" = 1 ]; then BOARD_HOST=${BOARD_HOST:-user@BOARD}; return; fi
-    : "${BOARD_HOST:?set BOARD_HOST=user@host of the board (ST Linux)}"
+    [ -n "${BOARD_HOST:-}" ] || die "set BOARD_HOST=user@host of the board's Linux (root on ST's image); it comes from the lease, there is no default" 2
 }
 uart_is_bridge() { [[ ${BOARD_UART:-} =~ ^[^/:]+:[0-9]+$ ]]; }
 
@@ -289,18 +314,38 @@ env_disarm() { env_tool unset "$1" "$2" yako_once yako_file >/dev/null || die "u
 # and BOOT_DEV, BOOT_PART (the bootfs partition and its number), from the
 # mount of /boot. The eMMC carries the same partition labels (#1281), so the
 # label is looked up on the booted card only, never system-wide.
+PART_TABLE=   # "PATH PARTLABEL" lines of the booted card (lsblk), for dev_guard
+# dev_guard DEV LABEL: DEV may be written only if it is not the eMMC, not one
+# of NEVER_LABELS, and carries LABEL in PART_TABLE. Called where a device is
+# chosen and again in front of every dd that writes one; it is pure (the
+# table and the patterns), so the self-test runs it on its own.
+dev_guard() {
+    local dev=$1 want=$2 label l
+    [[ $dev =~ $EMMC_RE ]] && die "REFUSED: $dev is the eMMC (mmcblk0): never written, its partitions carry the card's labels (#1281)"
+    [[ $dev =~ $PART_RE ]] || die "REFUSED: $dev is not a partition of an mmcblk device"
+    label=$(awk -v d="$dev" '$1 == d { print $2 }' <<<"$PART_TABLE" | head -1)
+    for l in $NEVER_LABELS; do
+        [ "$label" != "$l" ] || die "REFUSED: $dev is labelled $label: never written"
+    done
+    [ "$label" = "$want" ] || die "REFUSED: $dev is labelled '${label:-nothing}', not $want: not a device this runner writes"
+}
 where_env() {
     local m disk
     bget m 'set -- $(findmnt -n -v -o SOURCE,FSTYPE -T /boot); d=$1; p=${d%p*}; echo "$d $2 $p"; lsblk -rno PATH,PARTLABEL "$p"' \
         $'/dev/mmcblkDp8 ext4 /dev/mmcblkD\n/dev/mmcblkD \n/dev/mmcblkDp7 u-boot-env\n/dev/mmcblkDp8 bootfs' ||
         die "cannot read the mount of /boot and the card's partitions"
     read -r BOOT_DEV fstype disk <<<"$(head -1 <<<"$m")"
+    PART_TABLE=$(tail -n +2 <<<"$m")
     [ "$fstype" = ext4 ] || die "/boot is '$fstype' on $BOOT_DEV, not ext4 (U-Boot's ext4load reads bootfs)"
+    [[ $disk =~ $EMMC_RE ]] && die "REFUSED: /boot is on $BOOT_DEV of the eMMC (mmcblk0): this runner writes the microSD the board booted from, never the eMMC"
     [[ $BOOT_DEV =~ p([0-9]+)$ ]] || die "/boot's source '$BOOT_DEV' is not a partition"
     BOOT_PART=${BASH_REMATCH[1]}
+    dev_guard "$BOOT_DEV" "$BOOT_LABEL"
     ENV_DEV=$(awk -v l="$ENV_LABEL" '$2 == l { print $1 }' <<<"$m" | head -1)
     [ -n "$ENV_DEV" ] || die "no partition labelled $ENV_LABEL on $disk (the card /boot is on)"
     [ "$ENV_DEV" != "$BOOT_DEV" ] || die "the $ENV_LABEL partition is /boot's: refusing"
+    [ "${ENV_DEV%p*}" = "${BOOT_DEV%p*}" ] || die "REFUSED: $ENV_DEV is not on $disk, the card /boot is on"
+    dev_guard "$ENV_DEV" "$ENV_LABEL"
 }
 # env_read FILE: the whole partition into FILE (the host), both copies checked
 env_read() {
@@ -321,6 +366,7 @@ env_read() {
 # lines in $TMP/expect); on any mismatch the pristine image goes back.
 env_write() {
     local file=$1 what=$2 got want
+    dev_guard "$ENV_DEV" "$ENV_LABEL"
     if [ "$DRY" = 1 ]; then
         echo "DRY host\$ tail -c +$((ENV_LO + 1)) $file | head -c $((ENV_HI - ENV_LO)) | ssh BOARD '${SU}dd of=$ENV_DEV bs=512 seek=$((ENV_LO / 512)) conv=fsync status=none'"
         echo "DRY board\$ ${SU}dd if=$ENV_DEV bs=64k status=none | sha256sum   # must equal the host image"
@@ -344,6 +390,7 @@ env_write() {
 PRISTINE=
 env_restore() {
     [ -n "$PRISTINE" ] && [ -f "$PRISTINE" ] || return 0
+    dev_guard "$ENV_DEV" "$ENV_LABEL"
     tail -c +$((ENV_LO + 1)) "$PRISTINE" | head -c $((ENV_HI - ENV_LO)) |
         timeout 120 ssh "${SSH_OPTS[@]}" "$BOARD_HOST" "${SU}dd of=$ENV_DEV bs=512 seek=$((ENV_LO / 512)) conv=fsync status=none" ||
         echo "$TAG: WARNING: writing the pristine environment back failed; the backup is $PRISTINE" | scrub >&2
@@ -397,7 +444,8 @@ check_image() {
 
 # ---- the run directory ---------------------------------------------------------------
 RD=
-meta() { [ "$DRY" = 1 ] || printf '%s=%s\n' "$1" "$2" >> "$RD/meta.txt"; }
+# (no run directory outside run/probe: install, uninstall and disarm keep no record)
+meta() { [ "$DRY" = 1 ] || [ -z "$RD" ] || printf '%s=%s\n' "$1" "$2" >> "$RD/meta.txt"; }
 mget() { sed -n "s/^$1=//p" "${2:-$RD}/meta.txt" 2>/dev/null | tail -1; }
 plain() { sed -E 's/^([0-9:]{8}|[0-9]{9,}\.[0-9]+) //' "$1" | tr -d '\0\r'; }
 redact_words() { # redact_words DIR PLACEHOLDER STRING...
@@ -480,6 +528,15 @@ verdict_line() {
     V_LINE="$TAG $name rc=$rc verdict=$v boot=$BOOT $kind boot_verdict=$bv result=$res back_after=$after"
     V_RC=$rc
 }
+# the line after a not_back verdict (run and tally): what the plan asks of a
+# board that did not come back
+needs_person() {
+    local dir=$1 bound
+    [ "$V_RC" = 5 ] || return 0
+    bound=$(mget wait_bound "$dir")
+    bound=${bound:+$bound s}
+    echo "$TAG: NEEDS A PERSON: the board did not answer ssh from a new boot within ${bound:-the wait} after the reboot (the image $(mget name "$dir"), its staged copy left on the card). Nothing resets it from outside and this runner never retries: release the board, report it, and let no other item take it until its owner says it is back."
+}
 write_index() {
     local dir=$1 f
     {
@@ -513,6 +570,7 @@ finish() {
     write_index "$RD"
     sed -n '/^console lines of ours:/,/^files/p' "$RD/INDEX.txt" | sed '$d'
     echo "$V_LINE"
+    needs_person "$RD"
     note "record $RD/INDEX.txt"
     exit "$V_RC"
 }
@@ -609,6 +667,8 @@ cmd_status() {
 STAMP=$(date +%Y%m%d-%H%M%S)
 backup_dir() { echo "${MP2_BACKUP_DIR:-$REPO/records/stm32mp257f-dk/uboot-env}"; }
 cmd_install() {
+    # with an image: checked first, as run checks it; a refusal changes nothing
+    [ $# -eq 0 ] || check_image "$1"
     need_board
     env_range
     take_lock
@@ -719,6 +779,9 @@ disarm_on_exit() {
     if [ -n "${STAGED:-}" ] && [ "${REBOOTED:-0}" = 0 ] && [ "$DRY" = 0 ]; then
         b "${SU}rm -f $STAGED" || echo "$TAG: WARNING: $STAGED was not removed" >&2
     fi
+    # the lock's watchdog and record (board_lock.sh's trap, which this one replaced)
+    [ -n "${BOARD_LOCK_WATCHDOG:-}" ] && kill "$BOARD_LOCK_WATCHDOG" 2>/dev/null
+    [ -n "${BOARD_LOCK:-}" ] && [ "$DRY" = 0 ] && : > "$BOARD_LOCK"
     rm -rf "$TMP"
     exit "$rc"
 }
@@ -762,6 +825,10 @@ cmd_run() {
     note "$NAME: build $(git -C "$REPO" describe --always --dirty 2>/dev/null || echo unknown) boot $BOOT image sha256 ${IMG_SHA:0:16} footprint ${footprint:-none}"
     [ "$BLIND" = 1 ] || console_check
     take_lock
+    # after the lock, as board.sh does: this trap replaces the lock's own, so
+    # disarm_on_exit ends the lock's watchdog itself
+    ARMED=0; REBOOTED=0; STAGED=
+    trap disarm_on_exit EXIT
     bget st 'systemctl is-system-running --wait >/dev/null 2>&1; cut -d" " -f1 /proc/uptime' 100 || die "the board's Linux does not answer"
     common_prechecks
     where_env
@@ -785,8 +852,7 @@ cmd_run() {
     token=$(printf '%s' "$NAME-${IMG_SHA:0:16}-$(date +%s)" | tr -c 'A-Za-z0-9._-' '_')
     file="once-$token.bin"
     meta token "$token"
-    ARMED=0; REBOOTED=0; STAGED=
-    trap disarm_on_exit EXIT
+    meta wait_bound "$((RUN_BOUND + RETURN_BOUND))"
     if [ "$DRY" = 1 ]; then
         echo "DRY board\$ ${SU}sh -c 'mkdir -p $STAGE_DIR && cat > $STAGE_DIR/$file.part && sync && mv $STAGE_DIR/$file.part $STAGE_DIR/$file && sync' < $IMG"
     else
@@ -883,10 +949,12 @@ cmd_tally() {
     [ -f "$dir/meta.txt" ] || die "$dir has no meta.txt" 2
     verdict_line "$dir"
     echo "$V_LINE"
+    needs_person "$dir"
     exit "$V_RC"
 }
 
 case "$VERB" in
+selftest) exec bash "$HERE/board_stm32mp2_selftest.sh" ;;
 status) cmd_status "$@" ;;
 install) cmd_install "$@" ;;
 uninstall) cmd_uninstall "$@" ;;
