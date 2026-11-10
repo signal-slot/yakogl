@@ -226,6 +226,13 @@ not read how it resolves a multisample attachment.)
 Depth/stencil blit reads `ds_write` / `stencil_resolve` / `depth_resolve`,
 which exist; at 4x they must read the 4x plane (`ds_bytes` layout) and take
 sample 0 (the 2x2 spread's first element).
+**Implicit resolve.** A glReadPixels, glCopyTex* or sample of a 4x FBO first
+flushes the pending render (`read_pixels_sync` / `gpu_idle_for_cpu`, the GL
+core's flush before a CPU read). The job end then writes the resolved pixels
+into the renderbuffer's single-sample `rb.mem` through the PBE `downscale`,
+as the 4x window resolves today (`pbe_reg_words(.., b.samples > 1, ..)`,
+`src/pvr/backend.rs`, the kick's PBE words). Today that holds for a 4x
+window target only; an FBO taking it is the plan for `pvr-msaa-fbo`.
 **dEQP rows** (am62p-gles3-notpass.tsv, same counts as the Pi 4): see (d). The
 ms4 image's 16 passes say the window's 4x draw is conformant; fbo_4_samples
 is the same draw into an FBO.
@@ -383,6 +390,12 @@ item 7 as it stands: `rb.mem` is resolved after every kick. A blit reads it
 after the fence. There is no sample-by-sample resolve engine: Mesa's blit of a
 multisample image goes through the blitter, not through this path, and this
 note did not read it.
+**Implicit resolve.** The Mali keeps the samples in tile memory and resolves at
+the job end into the single-sample target, as the 4x window does
+(`frame::resolve_frame` and the sample store, called from the kick's end in
+`src/mali/backend.rs`; `Target { samples: 4 }` from `GlesDraw::samples`). A
+later glReadPixels, glCopyTex* or sample sees resolved data after the GL core's
+flush (`read_pixels_sync`). An FBO taking this path is the plan for `mali-msaa-fbo`.
 **Owner.** `src/mali/**` is the Mali plans' (#336, #332, #327): item
 `mali-msaa-fbo` waits for them.
 **Host evidence.** `src/mali/frame_msaa_tests.rs` compares our 4x frame with
