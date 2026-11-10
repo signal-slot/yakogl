@@ -115,6 +115,17 @@ check t6_submit-wait-timeout 1 "VERDICT t6_submit FAIL (3 of $SUB)" "$((SUB - 3)
 check t6_submit-z3-stop 1 "VERDICT t6_submit FAIL (15 of $SUB)" "26 7 8" t6_submit "$D/t6_submit-z3-stop.uart"
 # cut after Z4f: Z4g, Z4h, Z4i, PASS and the reset line missing
 check t6_submit-missing 1 "VERDICT t6_submit FAIL (5 of $SUB)" "$((SUB - 5)) 5 0" t6_submit "$D/t6_submit-missing.uart"
+# the watchdog reset the probe during the Z4 wait: the capture ends after the
+# last Z3 line with a fresh boot banner. Z4a..Z4i, PASS and the reset line are
+# missing, and the first missing line names Z4a
+check t6_submit-z4-reset 1 "VERDICT t6_submit FAIL (11 of $SUB)" "$((SUB - 11)) 11 0" t6_submit "$D/t6_submit-z4-reset.uart"
+if [ "$(bash "$V" t6_submit "$D/t6_submit-z4-reset.uart" 2>&1 | grep -m1 '^missing ' | grep -c 't6_submit: Z4a:')" = 1 ]; then
+	echo "ok   t6_submit-z4-reset: the first missing line is Z4a"
+else
+	echo "FAIL t6_submit-z4-reset: the first missing line is not Z4a"
+	fails=$((fails + 1))
+fi
+runs=$((runs + 1))
 # the target's counts must add up to the pixels read
 sed 's/other 0 of 4096 pixels/other 0 of 4095 pixels/' "$D/t6_submit-pass.uart" >"$WORK/pix.log"
 check t6_submit-pixels 1 "VERDICT t6_submit FAIL (1 of $SUB)" "$((SUB - 1)) 0 1" t6_submit "$WORK/pix.log"
