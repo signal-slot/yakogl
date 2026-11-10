@@ -77,8 +77,8 @@ driver takes the memory-region's size.
 **The poll.** The render service reads the fragment UFO once per millisecond
 by default (`gpu::pvr::render::WAIT_POLL_US` = 1000), so every wait ends on a
 whole millisecond. `CONFIG_YAKOGL_DRV_GPU_PVR_FINE_WAIT` (yakogl-drivers feature
-`pvr-fine-wait`) reads it every 20 us. It stays opt-in until gl_test and
-glmark2 have run with it on the AM62P. The GPU's interrupt is in the device
+`pvr-fine-wait`) reads it every 20 us. It is on by default on the AM62P
+(`default y if SOC_AM62P54_A53`); other SoCs keep 1 ms. The GPU's interrupt is in the device
 tree (GIC SPI 241) but not connected; the PowerVR driver has no ISR.
 
 **The instrument.** `CONFIG_YAKOGL_DRV_GPU_PVR_KICK_TIMES` (feature
