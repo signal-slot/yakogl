@@ -55,19 +55,26 @@ CI, a review, then the merge. Never push main by hand.
   the `shaderc-online` tests: `tools/cts/deps-env.sh --check` says which
   entries this host's dependency layout has, and
   `export $(tools/cts/deps-env.sh)` sets them all from it before the run.
-  On a new host, build the three entries `--quick` reads and the layout
-  lacks, first, as one command:
+  On a new host, build the entries the layout lacks, first, as one command:
   `tools/cts/deps-env.sh --build MALI_CSFFW DEQP_GLES3_TEST_DIR PCO_SPM_LOAD_CAPTURE`
   (the Mali firmware, "The PowerVR firmware" below; the dEQP GLES3 shader
   corpus, which the `shaderc-online` tests and the corpus test read; and
   `capture_spm_load` beside `pco_shc`, which the `spm_load` regenerate row
-  compares against, a gap without it). On the `ed15e1be` walk (2026-11-09)
-  the firmware and the corpus took seconds and the capture program 85 s (97 s
-  on a retry here after a reset download). `--quick` runs their rows. Then,
-  after the export and the PowerVR header copy, as the CI does, `tools/setup-gate-host.sh --check`
+  compares against, a gap without it; only the full plan reads that row).
+  On the `ed15e1be` walk (2026-11-09) the firmware and the corpus took
+  seconds and the capture program 85 s (97 s on a retry here after a reset
+  download); run the build once at a time, two at once share `PCO_SHC.src` and
+  the second dies with `Text file busy`. Then, after the export and the
+  PowerVR header copy, as the CI does, `tools/setup-gate-host.sh --check`
   says whether this host has every tool and file the gate needs (it reads
   the same variables, so run before the export it reports a stale one as
-  missing). `ZEPHYR_WS` may be given
+  missing; `tools/setup-gate-host.sh --install` installs the packages, `lz4`
+  among them). The `lz4` command is a prerequisite of `--quick`: without it
+  the `am62p second stage` row is a gap and the run is red (`apt install lz4`,
+  Gentoo `app-arch/lz4`). A `CC_<target>` variable in the shell that names a
+  tool that is not there (for example `CC_aarch64_unknown_none`) fails the
+  aarch64 and `no Mesa reference` rows from a cold tree, in the build scripts
+  of the crates; `--check` reports it and `unset` fixes it. `ZEPHYR_WS` may be given
   through a symbolic link: the gate resolves it to the real path first, and
   every Zephyr build rewrites its generated linker snippets' `#include` paths
   to absolute at the end of the configure (`zephyr/linker_snippets.cmake`), so
@@ -76,16 +83,29 @@ CI, a review, then the merge. Never push main by hand.
   names a file no path resolves is left as it is and the configure warns with
   that line. The checkout itself is not resolved: run the gate from its
   canonical path (`cd "$(pwd -P)"` first), not through a symbolic link, until
-  that is fixed; from a linked path the three artefact rows ("no table",
-  "no Mesa reference", "no test knob in the artefact") fail.
+  that is fixed; from a linked path the two artefact rows "no table" and "no test knob in
+  the artefact" fail (`dep_info_within` compares the physical dep-info paths
+  with the logical `$PWD`; `cd -P` at `tools/check.sh:107` is the fix, not
+  applied, `docs/notes/gate-symlinked-path.md`).
 - `tools/check.sh --quick` is for the edit loop. It runs 177 of the
-  full plan's 220 rows (counted on 2026-11-09 at main `23edacff` with
+  full plan's 221 rows (counted on 2026-11-10 at main `08ae7a8e` with
   `YAKOGL_CHECK_PLAN=1`, which lists the rows and runs none; a row whose
   tool or file the host lacks is listed as a gap, and
-  `tools/check_scope_selftest.sh` pins the count, ok plus gaps). Measured on
-  2026-11-09 from a fresh clone of `ed15e1be` at a canonical path, the three
-  entries built and the layout exported as above: "176 ok, 0 failed,
-  0 gap(s)" in 2950 s. Earlier, with fewer rows: "173 ok, 0 failed,
+  `tools/check_scope_selftest.sh` pins the count, ok plus gaps: 217 ok and
+  4 gaps in the full plan there, 175 ok and 2 gaps for `--quick`). Measured on
+  2026-11-10 from a fresh clone of `0f020431` at a canonical path on a 4 core
+  host with two compiler slots, the layout exported, `lz4` on PATH and the
+  stale `CC_aarch64_unknown_none` unset: "177 ok, 0 failed, 0 gap(s)" in
+  4603 s from a cold tree and 1710 s warm (at `28611536`, 4703 s cold). From
+  a fresh clone of `18353e05` the same: "177 ok, 0 failed, 0 gap(s)" in
+  971 s. With the variable and the missing `lz4` as the host had them, the
+  host check exits 1 and the run is red (173 ok, 4 failed at `18353e05`).
+  At `8a5da05e` a run read "175 ok, 1 failed, 1 gap(s)" in 1379 s: the
+  failed row was `test yakogl-mali-panthor`
+  (`gltest_guard::the_verdict_line_is_out_before_the_next_case_starts`, a
+  timing test; it passed in the walks above) and the gap `lz4`. Earlier, with
+  fewer rows: "176 ok, 0 failed, 0 gap(s)" in 2950 s at `ed15e1be`
+  (2026-11-09), "173 ok, 0 failed,
   0 gap(s)" in 2334 s with two compiler slots (4 cores) at `e3e8d777`
   (2026-11-08), "170 ok, 0 failed, 0 gap(s)" in 2309 s from a fresh clone of
   `14e93e64` (2026-11-06), and "146 ok, 0 failed, 0 gap(s)" in 2747 s at
@@ -99,6 +119,31 @@ CI, a review, then the merge. Never push main by hand.
   (`tools/v3d/README.md`). `tools/check.sh --local <base>` runs the local set
   (about twenty rows, `tools/check_scope_selftest.sh`) when a change reaches
   everything. Neither is the landing gate: the CI is.
+- The commands above, run in this order in a fresh clone at a canonical path
+  (node with 4 cores, two compiler slots, 7.9 GB; rustc 1.101.0-nightly
+  (5d8fec066 2026-10-16), cargo 1.101.0-nightly (3960fa69b 2026-10-12),
+  clippy 0.1.101), at `0f020431` (2026-11-10), exit code and wall time:
+
+  | command | exit | wall |
+  | --- | --- | --- |
+  | `tools/cts/deps-env.sh --check`, empty layout | 1 | 0.1 s |
+  | `tools/cts/deps-env.sh --build MALI_CSFFW DEQP_GLES3_TEST_DIR PCO_SPM_LOAD_CAPTURE` | 0 | 170.7 s |
+  | `git rebase origin/main` | 0 | 1.1 s |
+  | the PowerVR header copy | 0 | 0.5 s |
+  | `tools/setup-gate-host.sh --check`, `lz4` missing, stale `CC_aarch64_unknown_none` | 1 | 3.0 s |
+  | the same with `lz4` on PATH and the variable unset | 0 | 0.6 s |
+  | `tools/check.sh --changed origin/main` (no change: `2 ok, 0 failed, 0 gap(s), 217 skipped`) | 0 | 8.8 s |
+  | `tools/check.sh --quick`, cold tree, `lz4` and the unset as above | 0 | 4603.6 s |
+  | `tools/check.sh --local origin/main` (no change) | 0 | 10.6 s |
+  | `tools/check_scope_selftest.sh` (137 checks, 0 failed) | 0 | 38.9 s |
+
+  The `--quick` summary line: "check.sh: 177 ok, 0 failed, 0 gap(s) (a gap was
+  not run: it is not a pass), 0 skipped (every row), 0 not run (passed on
+  main) in 4603s". That run is green only with the host remediated; as the
+  host was found, the host check is the red step (exit 1) and `--quick` has
+  the `lz4` gap. The `gltest_guard` timing test did not fail there (it did at
+  `8a5da05e`). Record: GitHub issue 1606; a walk at a symlinked path is
+  `docs/notes/gate-symlinked-path.md`.
 
 ## Branches and commits
 
