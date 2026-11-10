@@ -254,6 +254,16 @@ pub enum Alu {
     Fsin,
     Fcos,
     Flog2,
+    /// `ddx` / `ddy` of one 16-bit lane of a mediump fragment shader (the
+    /// fine form; `bi_emit_derivative`): `CLPER.i32.subgroup4.xor` of the
+    /// lane's neighbour (lane ^ 1, lane ^ 2), `FADD.v2f16 n, a.neg`, then the
+    /// sign fix `LSHIFT_XOR.v2i16` by the lane id's axis bit (X: `lane_id <<
+    /// 15`; Y: `(lane_id & 2) << 14`). `ddy`'s operand is scaled by the
+    /// y-flip `T.x` first (`nir_lower_wpos_ytransform`'s `lower_fddy`;
+    /// nir_fs.rs `walk_nodes`). Case 138 deriv, fsarith_138_deriv.expect.json;
+    /// docs/notes/mali-derivatives.md.
+    Fddx,
+    Fddy,
 }
 
 impl Alu {
@@ -287,7 +297,9 @@ impl Alu {
             | Alu::B2i
             | Alu::Fsin
             | Alu::Fcos
-            | Alu::Flog2 => 1,
+            | Alu::Flog2
+            | Alu::Fddx
+            | Alu::Fddy => 1,
             Alu::Ffma
             | Alu::Bcsel
             | Alu::Cubeface1
@@ -1942,7 +1954,9 @@ impl<'s> Nir<'s> {
                 | Alu::Ucmp(_)
                 | Alu::Fsin
                 | Alu::Fcos
-                | Alu::Flog2 => return Err(MaliError::ConstantFold),
+                | Alu::Flog2
+                | Alu::Fddx
+                | Alu::Fddy => return Err(MaliError::ConstantFold),
                 Alu::F2f16
                 | Alu::Fneg
                 | Alu::Fabs
