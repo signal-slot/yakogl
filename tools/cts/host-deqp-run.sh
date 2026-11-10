@@ -61,7 +61,23 @@
 #             library's runtime setting YAKOGL_PVR_NATIVE_3D (unset: the
 #             library default, off). The library is the same build either way;
 #             the run directory gets -n3d<v>, so the two arms never share one
-#   OUT       run directory              (default <repo>/build/host-deqp/run-<commit>,
+#   LIB_CMAKE_ARGS  extra CMake options for the library's configure line, split on
+#             blanks (e.g. LIB_CMAKE_ARGS="-DFOO=ON -DBAR=1"); --lib-cmake-arg=ARG
+#             adds one more, repeatable (an ARG may hold blanks). The library gets
+#             its own build directory keyed on the arguments (lib-<gpu>-x<cksum of
+#             the list>), not a reconfigure of the shared one: a run's option can
+#             never leak into a run without it, and each set keeps its own warm
+#             build. Without any, the directory and the cmake line are unchanged.
+#             The arguments are recorded in $OUT/commit ("lib-cmake-args=...")
+#             and the default run directory name gets the same -x<cksum>.
+#   COMPARE   an earlier run directory (--compare=DIR): after the run (or --report)
+#             each case's status in $OUT is compared with the same case in DIR
+#             (the <Result StatusCode> of the c_*.qpa logs). One line per case
+#             whose status changed ("case: old -> new"; "-" is a case absent from
+#             that run), then the totals per status for both runs. Unset: nothing
+#             printed. --compare-only=OLD,NEW prints this for two run directories
+#             and builds and runs nothing.
+#   OUT       run directory             (default <repo>/build/host-deqp/run-<commit>,
 #             run-<commit>-powervr for the PowerVR)
 #   JOBS      chunks in parallel         (default nproc - 2)
 #   CHUNK     cases per process          (default 100)
@@ -69,9 +85,52 @@ set -euo pipefail
 
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/../.." && pwd)
+
+# case_status DIR: "<case> <TAB> <status>" for every case the logs of run DIR
+# began, sorted; a case that began and has no result is Incomplete.
+case_status() {
+    cat "$1"/c_*.qpa 2>/dev/null | awk '
+        /^#beginTestCaseResult /{c=$2; st[c]="Incomplete"}
+        c != "" && /^<Result StatusCode="/{s=$0; sub(/^<Result StatusCode="/, "", s); sub(/".*/, "", s); st[c]=s}
+        END{for (c in st) print c "\t" st[c]}' | sort
+}
+
+# compare_runs OLD NEW: the cases whose status differs, then the totals.
+compare_runs() {
+    local old=$1 new=$2 f
+    for f in "$old" "$new"; do
+        ls "$f"/c_*.qpa > /dev/null 2>&1 ||
+            { echo "host-deqp-run: $f is not a run directory (no c_*.qpa)" >&2; return 1; }
+    done
+    echo "host-deqp-run: compare $new with $old (HOST-ONLY)"
+    awk -F'\t' '
+        FNR == NR {o[$1] = $2; next}
+        {n[$1] = $2}
+        END {
+            for (c in o) all[c] = 1
+            for (c in n) all[c] = 1
+            for (c in all) {
+                a = (c in o) ? o[c] : "-"; b = (c in n) ? n[c] : "-"
+                if (a != b) {print c ": " a " -> " b | "sort"; ch++}
+                if (c in o) to[a]++
+                if (c in n) tn[b]++
+            }
+            close("sort")
+            print "host-deqp-run: " ch + 0 " case(s) changed"
+            for (s in to) st[s] = 1
+            for (s in tn) st[s] = 1
+            printf "host-deqp-run: %-16s %10s %10s\n", "status", "old", "new"
+            for (s in st) printf "host-deqp-run: %-16s %10d %10d\n", s, to[s], tn[s] | "sort"
+        }' <(case_status "$old") <(case_status "$new")
+}
+
+LIB_ARGS=()
+# shellcheck disable=SC2206  # LIB_CMAKE_ARGS is split on blanks on purpose
+[ -z "${LIB_CMAKE_ARGS:-}" ] || LIB_ARGS=($LIB_CMAKE_ARGS)
 # Options equal to the environment variables below, for callers that cannot set
 # them: --gpu=G --module=M --cts=DIR --out=DIR --chunk=N --jobs=N --native-3d=V
 # (before the filter); --gpu=pvr is --gpu=powervr.
+# --lib-cmake-arg=ARG (repeatable) is LIB_CMAKE_ARGS, --compare=DIR is COMPARE.
 # --report=DIR builds and runs nothing: it prints step 4's report of the
 # finished run in DIR again (and rewrites its aborted.txt and summary.txt).
 while [ $# -gt 0 ]; do
@@ -83,6 +142,9 @@ while [ $# -gt 0 ]; do
         --chunk=*) CHUNK=${1#*=} ;;
         --jobs=*) JOBS=${1#*=} ;;
         --native-3d=*) NATIVE_3D=${1#*=} ;;
+        --lib-cmake-arg=*) LIB_ARGS+=("${1#*=}") ;;
+        --compare=*) COMPARE=${1#*=} ;;
+        --compare-only=*) compare_runs "$(a=${1#*=}; echo "${a%%,*}")" "${1##*,}"; exit ;;
         --report=*) OUT=${1#*=}; REPORT=1 ;;
         *) break ;;
     esac
@@ -118,6 +180,10 @@ case "${NATIVE_3D:-}" in
            export YAKOGL_PVR_NATIVE_3D=$NATIVE_3D; SUFFIX=$SUFFIX-n3d$NATIVE_3D ;;
     *) echo "host-deqp-run: NATIVE_3D must be 0 or 1, not '$NATIVE_3D'" >&2; exit 1 ;;
 esac
+if [ "${#LIB_ARGS[@]}" -gt 0 ]; then
+    XKEY=-x$(printf '%s\n' "${LIB_ARGS[@]}" | cksum | cut -d' ' -f1)
+    LIB=$LIB$XKEY; SUFFIX=$SUFFIX$XKEY
+fi
 OUT=${OUT:-$BASE/run-$COMMIT$SUFFIX}
 JOBS=${JOBS:-$(( $(nproc) > 3 ? $(nproc) - 2 : 1 ))}
 CHUNK=${CHUNK:-100}
@@ -149,7 +215,7 @@ fi
 # 2. The library: linux OSAL, the chosen GPU's back end, the online compiler.
 mkdir -p "$BASE"
 cmake -S "$REPO" -B "$LIB" -DYAKOGL_OSAL=linux -DYAKOGL_GPU="$GPU" \
-    -DYAKOGL_SHADERC=online -DYAKOGL_REPORT_ES2=$REPORT_ES2 -DYAKOGL_SHARED=ON > "$LIB-build.log" 2>&1 ||
+    -DYAKOGL_SHADERC=online -DYAKOGL_REPORT_ES2=$REPORT_ES2 -DYAKOGL_SHARED=ON ${LIB_ARGS[@]+"${LIB_ARGS[@]}"} > "$LIB-build.log" 2>&1 ||
     { tail -20 "$LIB-build.log"; exit 1; }
 cmake --build "$LIB" -j"$(nproc)" >> "$LIB-build.log" 2>&1 ||
     { tail -20 "$LIB-build.log"; exit 1; }
@@ -168,7 +234,7 @@ fi
 asked=$(wc -l < "$OUT/all.txt")
 [ "$asked" -gt 0 ] || { echo "host-deqp-run: no case matches '$FILTER'" >&2; exit 1; }
 (cd "$OUT" && split -l "$CHUNK" -d -a 3 all.txt c_)
-echo "$COMMIT $GPU $MODULE${NATIVE_3D:+ native-3d=$NATIVE_3D}" > "$OUT/commit"
+echo "$COMMIT $GPU $MODULE${NATIVE_3D:+ native-3d=$NATIVE_3D}${LIB_ARGS[*]:+ lib-cmake-args=${LIB_ARGS[*]}}" > "$OUT/commit"
 
 # A chunk whose process stops early (a crash, the timeout, a ResourceError --
 # which ends dEQP's whole run -- or a die() in a group's init) goes on in a
@@ -242,3 +308,4 @@ CTS="$CTS" python3 "$HERE/cts-summary.py" --mustpass "$OUT/all.txt" --by-group 3
     "$OUT" > "$OUT/summary.txt" 2>&1 || true
 echo "host-deqp-run: groups, failures by message: $OUT/summary.txt"
 echo "host-deqp-run: results in $OUT (HOST-ONLY: never quote a render verdict from them)"
+[ -z "${COMPARE:-}" ] || compare_runs "$COMPARE" "$OUT"
