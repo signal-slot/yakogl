@@ -516,6 +516,160 @@ Same three tables per back end and the same filters, one `OUT` per run, with
 the option of README section 2b on; the Pass/Fail/NotSupported moves against
 (d1) are the point, not the render verdicts. Placeholder: no rerun yet.
 
+## (f) Resolve semantics per GPU
+
+What a 4x-to-1x resolve does on each back end, as Mesa 26.2.1 does it (a
+reading of code, MIT parts only; nothing here is measured on a board unless a
+cell says so) and where yakogl stands. Columns: the resolve operation, the
+space the colours are averaged in, Mesa `file:line` (under `src/` of the
+Mesa tree), and yakogl `file:line` or **board only**. **board only** means
+Mesa does not say and the hardware has to be read back on a board; it is
+not a pass. The `glBlitFramebuffer` resolve averages the samples of a
+colour (integer formats take one sample, as Mesa's blitter does) and
+leaves depth and stencil to one sample; sample 0 is the plan's choice, as
+Mesa's.
+
+Mesa lines found moved against the earlier read, corrected here:
+`v3dx_rcl.c` store decimate is 158 / 165 / 167 (ALL_SAMPLES / 4X /
+SAMPLE_0), not 166-168; the depth blit job is `v3d_tlb_blit`
+(`v3d_blit.c:512-620`, the Z/S store at 613), its `FIXME: support
+depth/stencil` at 405 belongs to the *fast* path only.
+
+### (f1) V3D (`gallium/drivers/v3d`, yakogl `driver/src/v3d/v3d_job.c`)
+
+The tile buffer resolves in the TLB when its internal type is 8-bit or 16F
+(`v3d_format_supports_tlb_resolve_and_blend`, `v3d_formats.c:148-166`; the
+caller falls back to a shader blit otherwise, `v3d_blit.c:382-388`).
+sRGB and RGB10_A2 are both 16F at 64 bpp, with the conversion at tile
+buffer load and store (`v3dx_format_table.c:250-259`), so the average is
+taken on the halves: linear for sRGB, the unorm value for RGB10_A2.
+
+| row | resolve operation | averaging space | Mesa | yakogl |
+|---|---|---|---|---|
+| RGBA8 | TLB store, `DECIMATE_MODE_4X` from a 4x blit buffer | tile buffer, 8-bit normalised | `v3dx_rcl.c:159-166` (4X at 165), `v3d_blit.c:382-388`, `v3dx_format_table.c:65` | `v3d_job.c:1136` (4X store of RT0), kept samples `:1118-1121` and load `:1056-1059`, both `RGBA8` literals |
+| SRGB8_ALPHA8 | same store; the tile buffer holds 16F linear | linear (decoded at load, encoded at store) | `v3dx_format_table.c:67`, `:250-259`; `v3d_formats.c:160-166` | typed target: `rt_internal` `v3d_job.c:155-161` (16F, 64 bpp, clamp NORM); the 4x path refuses typed targets (`v3d_job.c:311-316`) and its samples are the `RGBA8` literal at `:1118` |
+| RGB10_A2 | same store, 16F | unorm value (no gamma) | `v3dx_format_table.c:71`, `:252`, `:255-259` | `rt_internal` `v3d_job.c:162-170`; same refusal and literal as the sRGB row |
+| depth (D24S8) | `v3d_tlb_blit`: Z store with `decimate SAMPLE_0` into a 1x D24S8 buffer (`resolve_4x` is false for Z/S) | none: sample 0 | `v3d_blit.c:512-620` (store at 613), `v3dx_rcl.c:165-167`, `:286-309`, `:105-107` (load of the 4x source `ALL_SAMPLES`) | today `zs_decimate` = `ALL_SAMPLES` at 4x (`v3d_job.c:1080-1081`), stored at `:1174-1179`; `v3d_depth_resolve` (`src/v3d/backend.rs:4798`) reads a 1x layout, so no kept-sample copy for it exists |
+| stencil | same store, stencil half of D24S8 (`S8` format when split) | none: sample 0 | `v3dx_rcl.c:288-304` | `v3d_job.c:1186-1192` (`zs_decimate`), `:1080-1081` |
+
+For the V3D item: (1) keep the samples per RT in that RT's own output
+format (`rt_fmt` + `rt_internal`, `v3d_job.c:259`, `:151`), not the `RGBA8`
+literal at `v3d_job.c:1118` (and the load at `:1056`), or an sRGB/RGB10_A2
+4x target would be stored as 8-bit bytes the tile buffer cannot hold; (2)
+lift the typed-target refusal at 4x (`v3d_job.c:311-316`); (3) keep a
+sample-0 store of depth and stencil into a 1x D24S8 beside the 4x one, for
+`v3d_depth_resolve` (`backend.rs:4798`) to read.
+
+### (f2) PowerVR (`imagination/vulkan`, yakogl `src/pvr`)
+
+Colour: the PBE's `downscale` bit on the end-of-tile store
+(`pvr_arch_job_common.c:282`, `reg.downscale = surface_params->down_scale`),
+averaging in the PBE. An sRGB format uses an F16 source and `gamma` on
+(`pvr_arch_pbe_get_src_format_and_gamma`, `pvr_arch_job_common.c:56-60`,
+`gamma` set at `:166-171`, format row `pvr_arch_formats.c:213`); RGB10_A2
+is `A2R10B10G10` with an F16 source and no gamma (`pvr_arch_formats.c:223`),
+so an sRGB average is in the F16 linear values, encoded on store.
+Depth and stencil do not go through the PBE at 4x unless the format is
+depth-only and the mode is average (`pvr_can_pbe_resolve_ds_attachment`,
+`pvr_arch_cmd_buffer.c:4041-4057`: stencil, any other mode, or a part
+without `gs_rta_support` is refused): they take `PVR_RESOLVE_TYPE_TRANSFER`
+(`pvr_arch_cmd_buffer.c:4374`, `:4412`), a transfer-engine pass.
+`PVR_RESOLVE_SAMPLE0` (a `VK_RESOLVE_MODE_SAMPLE_ZERO_BIT`,
+`pvr_arch_cmd_buffer.c:3737-3738`) goes to the `default:` of the transfer
+setup (`pvr_arch_job_transfer.c:2098-2105`): instance-rate shader, the TPU
+told the sample count and the shader's `sno` naming the sample.
+`PVR_RESOLVE_BLEND` on a D24S8 pixel format is an instance-rate USC filter
+(`pvr_int_pbe_pixel_requires_usc_filter`, `:1974-1992`), not PBE downscale.
+
+| row | resolve operation | averaging space | Mesa | yakogl |
+|---|---|---|---|---|
+| RGBA8 | PBE `downscale`, source 8 per channel, U8U8U8U8 | stored value (normalised, no gamma) | `pvr_arch_job_common.c:282`, `:39-79`, `pvr_arch_formats.c:105` | `pbe_reg_words` `src/pvr/backend.rs:896-915`, called with `downscale = b.samples > 1` at `:8958` (window only) |
+| SRGB8_ALPHA8 | PBE `downscale`, F16 source, `gamma` on | linear (F16), encoded on store | `pvr_arch_job_common.c:56-60`, `:166-171`, `pvr_arch_formats.c:213` | `gamma: gles_surf_is_srgb` `backend.rs:914`; F16 source `:1017-1021`; order of average and encode: **board only** |
+| RGB10_A2 | PBE `downscale`, F16 source, no gamma | unorm value | `pvr_arch_formats.c:223` | stored as RGBA8 today (note (d)): **board only** |
+| depth | transfer pass, `PVR_RESOLVE_SAMPLE0` (average is the PBE only for a depth-only format with `gs_rta_support`) | none | `pvr_arch_cmd_buffer.c:4041-4057`, `:3737-3738`, `pvr_arch_job_transfer.c:2098-2105` | window/CPU path: `ds_resolve` `backend.rs:4259`, `pvr_backend_depth_resolve` `:4909`; the hardware sample-0 position: **board only** |
+| stencil | same transfer pass (the PBE refuses stencil) | none | `pvr_arch_cmd_buffer.c:4053` | `pvr_backend_stencil_resolve` `backend.rs:4982`; sample position **board only** |
+
+### (f3) GC7000UL (`gallium/drivers/etnaviv`, yakogl `src/vivante`)
+
+Colour: the resolve engine (RS) copies the 2x2 (4x) tiled source into the
+single-sampled target with `RS_CONFIG_DOWNSAMPLE_X`/`_Y` set when the source
+has more samples (`etnaviv_rs.c:697-707`, config bits `:96-97`). Mesa does
+not say how the RS averages or in which space; it takes no scaling
+(`:712-719`), no mask (`:721-726`) and the same format on both sides
+(`:728-738`), and only the formats of `translate_rs_format`
+(`etnaviv_translate.h:279-310`). `etna_compatible_rs_format` (any
+same-size format) is allowed only when *not* downsampling
+(`etnaviv_rs.c:740-747`), so SRGB8_ALPHA8 (`R8G8B8A8_SRGB`: only the `B8G8R8A8`
+variant is in the RS table, `etnaviv_translate.h:306-309`) and RGB10_A2 have
+no RS resolve in Mesa and fall to the blitter's shader resolve
+(`etnaviv_clear_blit.c`, `u_blitter.c`), which averages the sampled
+values. Depth/stencil: a D24S8 resolve is a whole-pixel RS copy as
+`RS_FORMAT_D32` (`etnaviv_translate.h:288-289`); Mesa promotes a depth
+or stencil mask to the whole pixel for it (`etnaviv_clear_blit.c:171-180`),
+so depth and stencil resolve together, and which sample the RS keeps is
+not said.
+
+| row | resolve operation | averaging space | Mesa | yakogl |
+|---|---|---|---|---|
+| RGBA8 | RS copy, `A8R8G8B8`, DOWNSAMPLE_X/Y | the RS's (raw 8-bit channels): **board only** | `etnaviv_rs.c:697-707`, `etnaviv_translate.h:306-309` | `emit_resolve` `src/vivante/backend.rs:1032-1049` (config at `:1041`), window only, `GC_MSAA_ENABLE` off; RS format `ms_rs_format` `:1022-1028` |
+| SRGB8_ALPHA8 | not an RS format in Mesa (`R8G8B8A8_SRGB`); shader resolve in Mesa | blitter: sampled values, averaged (`util_make_fs_msaa_resolve` sums and multiplies by 1/n, `u_simple_shaders.c:790`) | `etnaviv_translate.h:306-309`, `u_blitter.c:1002-1030` | `ms_rs_format` gives `A8R8G8B8` for every 32-bit target: the RS averages the encoded bytes (**board only** whether that matches the dEQP tolerance) |
+| RGB10_A2 | no RS format (`R10G10B10A2` absent from `translate_rs_format`); shader resolve | blitter: sampled unorm values | `etnaviv_translate.h:279-310`, `u_blitter.c:1002-1030` | stored RGBA8 (note (d)); an `A8R8G8B8` RS would average the four 8-bit fields of the word, wrong: the item must refuse the RS for it or draw single-sampled. **board only** for any other route |
+| depth | whole-pixel RS copy, `D32`, mask promoted | none | `etnaviv_translate.h:288-289`, `etnaviv_clear_blit.c:171-180` | CPU resolve `resolve_depth` `src/vivante/ds_cache.rs:595`; the sample the RS keeps: **board only** |
+| stencil | same copy (a stencil-only mask is promoted) | none | `etnaviv_clear_blit.c:171-180` | no stencil resolve of a 4x surface; **board only** |
+
+### (f4) Mali (`gallium/drivers/panfrost`, `panfrost/lib`, yakogl `src/mali`)
+
+Two routes in Mesa. (1) Gallium `panfrost_blit` runs `util_blitter` on the
+*linear* view of both formats (`pan_blit.c:91`, `:95`: `util_format_linear`),
+so an sRGB resolve averages the encoded values; the blitter's colour
+resolve shader sums the samples and divides by their number
+(`u_simple_shaders.c:790`), integer formats copy one sample
+(`u_blitter.c:1005-1009`), and depth/stencil to a 1x destination draws
+with sample index 0 (`u_blitter.c:1975-1986`; the MSAA-to-MSAA path loops the
+samples, `:1955`). (2) The tile writeback `MALI_MSAA_AVERAGE` (a view with
+more samples than its image, `pan_desc.c:26-41`, used for the render target
+at `:1033` and the Z/S at `:518-521`), which yakogl uses. Mesa's newer
+framebuffer-preload code folds a resolve into the store only for
+`SAMPLE_0` on Z/S ("Z/S only supports SAMPLE_0", `pan_fb.c:177-179`), and
+for colour only for formats that blend in hardware
+(`pan_format_supports_msaa_average`, `pan_format.h:372-383`: not the
+formats needing a blend shader, nor F16 before v11); sRGB is an R8G8B8A8
+tile-buffer format with the sRGB flag (`BFMT_SRGB`, `pan_format.c:62-65`),
+RGB10_A2 is blendable (`pan_format.c:108`). Which space the hardware
+AVERAGE works in is not stated: **board only**.
+
+| row | resolve operation | averaging space | Mesa | yakogl |
+|---|---|---|---|---|
+| RGBA8 | tile writeback `MALI_MSAA_AVERAGE` (or the blitter's summed fetches) | the tile buffer's 8-bit unorm: **board only** | `pan_desc.c:26-41`, `:1033`; `pan_format.c:62-65` | `Msaa::AVERAGE` `src/mali/frame.rs:2198-2208`, `resolve_frame` `:2337` |
+| SRGB8_ALPHA8 | same writeback; blitter route on the linear view | blitter: encoded values (`pan_blit.c:91`, `:95`); writeback: **board only** | `pan_blit.c:91`, `:95`; `pan_format.c:62-65` | colour target format `TargetFormat` in `frame.rs`; sRGB 4x: **board only** |
+| RGB10_A2 | same writeback (blendable); blitter route otherwise | unorm value | `pan_format.c:108`, `pan_format.h:372-383` | no 4x target of this format: **board only** |
+| depth | blitter: `sample 0` draw; folded store: `SAMPLE_0` only | none | `u_blitter.c:1975-1986`, `pan_fb.c:177-179` | `frame.rs:2149-2154` writes the 4x D24S8 with **AVERAGE**, not SAMPLE_0 as Mesa's newer path would: which sample the hardware keeps is **board only** |
+| stencil | same | none | same | same: **board only** |
+
+### (f5) What each `*-msaa-fbo` item must implement
+
+- **All four:** the resolve is colour average, depth/stencil one sample.
+  Choose sample 0 where the back end can; where it cannot say (GC7000UL
+  RS, Mali AVERAGE on Z/S) write the sample down in the host test as
+  "unmeasured" and leave the cell of this note **board only** until a board
+  run fills it. Integer formats copy one sample (Mesa: `u_blitter.c:1005`).
+  `max_samples` stays 0 until the item's host test passes (note (a)).
+- **`v3d-msaa-fbo`:** the three points under (f1): per-RT sample format,
+  typed 4x targets, a sample-0 depth/stencil store for `v3d_depth_resolve`.
+  sRGB and RGB10_A2 average on the 16F halves, as the TLB does.
+- **`pvr-msaa-fbo`:** colour through `downscale` (`pbe_reg_words`,
+  `gamma` for sRGB, F16 source); depth/stencil need their own sample-0
+  path, not the PBE (Mesa: transfer pass, (f2)); RGB10_A2 stays refused or
+  single-sampled while it is stored RGBA8.
+- **`gc-msaa-fbo`:** RS `D32` for D24S8 (depth and stencil together);
+  `ms_rs_format` must not hand RGB10_A2 or sRGB to the `A8R8G8B8` RS
+  without a host test that pins the choice; sizes the RS cannot resolve are
+  open point 4 of (e).
+- **`mali-msaa-fbo`:** the writeback AVERAGE for colour; decide Z/S
+  (`SAMPLE_0` as `pan_fb.c:177-179`, against `frame.rs:2149-2154`'s
+  AVERAGE) in the item's host test and mark the hardware choice **board
+  only**.
+
 ## (e) Open points and the RC8 row draft
 
 1. **Size cap.** (b)3 sets `width * height > 2048 * 2048` as
