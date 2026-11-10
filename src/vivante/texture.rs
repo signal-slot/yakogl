@@ -16,11 +16,13 @@
 use crate::backend::{
     gles_texfmt_bit, gles_texfmt_bytes, swizzle_source, GlesTextureBind, GLES_TEXFMT_A8, GLES_TEXFMT_ETC2_RGB,
     GLES_TEXFMT_ETC2_RGBA, GLES_TEXFMT_ETC2_RGB_PT, GLES_TEXFMT_ETC2_SRGB_RGB, GLES_TEXFMT_ETC2_SRGB_RGBA,
-    GLES_TEXFMT_L8, GLES_TEXFMT_LA8, GLES_TEXFMT_R11G11B10F, GLES_TEXFMT_R16F, GLES_TEXFMT_R32F, GLES_TEXFMT_RGB10A2,
-    GLES_TEXFMT_RGB10A2UI, GLES_TEXFMT_RGB565, GLES_TEXFMT_RGB9E5, GLES_TEXFMT_RGBA16F, GLES_TEXFMT_RGBA16I,
-    GLES_TEXFMT_RGBA16UI, GLES_TEXFMT_RGBA32F, GLES_TEXFMT_RGBA32I, GLES_TEXFMT_RGBA32UI, GLES_TEXFMT_RGBA8I,
-    GLES_TEXFMT_RGBA8UI, GLES_TEXFMT_RGBA8_SNORM, GLES_TEXFMT_SRGB8_A8, GLES_TEXTYPE_2D_ARRAY, GLES_TEXTYPE_3D,
-    GLES_TEXTYPE_CUBE, GLES_WRAP_CLAMP_TO_EDGE, GLES_WRAP_MIRRORED_REPEAT,
+    GLES_TEXFMT_L8, GLES_TEXFMT_LA8, GLES_TEXFMT_R11G11B10F, GLES_TEXFMT_R16F, GLES_TEXFMT_R16I, GLES_TEXFMT_R16UI,
+    GLES_TEXFMT_R32F, GLES_TEXFMT_R32I, GLES_TEXFMT_R32UI, GLES_TEXFMT_R8I, GLES_TEXFMT_R8UI, GLES_TEXFMT_R8_SNORM,
+    GLES_TEXFMT_RG16I, GLES_TEXFMT_RG16UI, GLES_TEXFMT_RG32I, GLES_TEXFMT_RG32UI, GLES_TEXFMT_RG8I, GLES_TEXFMT_RG8UI,
+    GLES_TEXFMT_RG8_SNORM, GLES_TEXFMT_RGB10A2, GLES_TEXFMT_RGB10A2UI, GLES_TEXFMT_RGB565, GLES_TEXFMT_RGB9E5,
+    GLES_TEXFMT_RGBA16F, GLES_TEXFMT_RGBA16I, GLES_TEXFMT_RGBA16UI, GLES_TEXFMT_RGBA32F, GLES_TEXFMT_RGBA32I,
+    GLES_TEXFMT_RGBA32UI, GLES_TEXFMT_RGBA8I, GLES_TEXFMT_RGBA8UI, GLES_TEXFMT_RGBA8_SNORM, GLES_TEXFMT_SRGB8_A8,
+    GLES_TEXTYPE_2D_ARRAY, GLES_TEXTYPE_3D, GLES_TEXTYPE_CUBE, GLES_WRAP_CLAMP_TO_EDGE, GLES_WRAP_MIRRORED_REPEAT,
 };
 use crate::shaderc::{ShcShader, SHC_UNIFORM_NO_BLOCK};
 use crate::util::{Global, ENOMEM};
@@ -122,6 +124,36 @@ pub fn gc_texfmt(format: u8) -> GcTexfmt {
         GLES_TEXFMT_RGBA16UI => f.format_ext = GC_TEX_FORMAT_EXT_A16B16G16R16I,
         GLES_TEXFMT_RGBA16I => {
             f.format_ext = GC_TEX_FORMAT_EXT_A16B16G16R16I;
+            f.config2 = GC_TEXDESC_CONFIG2_SIGNED_INT16;
+        }
+        /* the narrow and 32-bit classes, built but still outside
+         * GC_SAMPLED_TEXFMTS: one integer word for both signs, CONFIG2
+         * sign-extending the 8- and 16-bit signed ones
+         * (etnaviv_texture_desc.c:187-189); HALTI5 replaces the 32-bit rows
+         * by EXT_R32I / EXT_G32R32I (etnaviv_format.c:286-290); no INT_FILTER
+         * as none is unorm (:296-338) */
+        GLES_TEXFMT_R32UI | GLES_TEXFMT_R32I => f.format_ext = GC_TEX_FORMAT_EXT_R32I, /* F:136-137,286-290 */
+        GLES_TEXFMT_RG32UI | GLES_TEXFMT_RG32I => f.format_ext = GC_TEX_FORMAT_EXT_G32R32I, /* F:209-210,286-290 */
+        GLES_TEXFMT_R8_SNORM => f.format_ext = GC_TEX_FORMAT_EXT_R8_SNORM,             /* F:89 */
+        GLES_TEXFMT_RG8_SNORM => f.format_ext = GC_TEX_FORMAT_EXT_G8R8_SNORM,          /* F:119 */
+        GLES_TEXFMT_R8UI => f.format_ext = GC_TEX_FORMAT_EXT_R8I,                      /* F:90 */
+        GLES_TEXFMT_R8I => {
+            f.format_ext = GC_TEX_FORMAT_EXT_R8I; /* F:91 */
+            f.config2 = GC_TEXDESC_CONFIG2_SIGNED_INT8;
+        }
+        GLES_TEXFMT_RG8UI => f.format_ext = GC_TEX_FORMAT_EXT_G8R8I, /* F:120 */
+        GLES_TEXFMT_RG8I => {
+            f.format_ext = GC_TEX_FORMAT_EXT_G8R8I; /* F:121 */
+            f.config2 = GC_TEXDESC_CONFIG2_SIGNED_INT8;
+        }
+        GLES_TEXFMT_R16UI => f.format_ext = GC_TEX_FORMAT_EXT_R16I, /* F:102 */
+        GLES_TEXFMT_R16I => {
+            f.format_ext = GC_TEX_FORMAT_EXT_R16I; /* F:103 */
+            f.config2 = GC_TEXDESC_CONFIG2_SIGNED_INT16;
+        }
+        GLES_TEXFMT_RG16UI => f.format_ext = GC_TEX_FORMAT_EXT_G16R16I, /* F:147 */
+        GLES_TEXFMT_RG16I => {
+            f.format_ext = GC_TEX_FORMAT_EXT_G16R16I; /* F:148 */
             f.config2 = GC_TEXDESC_CONFIG2_SIGNED_INT16;
         }
         /* no 128-bit TE format: Mesa's two G32R32 planes are not done here */
@@ -792,6 +824,37 @@ mod tests {
         }
         assert_eq!(log2_fixp88(90), 0x67d);
         assert_eq!(log2_fixp88(256), 0x800);
+    }
+
+    /// The 14 narrow and 32-bit integer classes (26-39) are Mesa's EXT_*
+    /// words (etnaviv_format.c:89-91,102-103,119-121,136-137,147-148,
+    /// 209-210, HALTI5 override :286-290; sign bits
+    /// etnaviv_texture_desc.c:187-189), identity swizzle, no INT_FILTER.
+    #[test]
+    fn the_narrow_and_32bit_classes_have_mesas_words() {
+        use crate::backend::*;
+        let rows = [
+            (GLES_TEXFMT_R32UI, GC_TEX_FORMAT_EXT_R32I, 0),
+            (GLES_TEXFMT_R32I, GC_TEX_FORMAT_EXT_R32I, 0),
+            (GLES_TEXFMT_RG32UI, GC_TEX_FORMAT_EXT_G32R32I, 0),
+            (GLES_TEXFMT_RG32I, GC_TEX_FORMAT_EXT_G32R32I, 0),
+            (GLES_TEXFMT_R8_SNORM, GC_TEX_FORMAT_EXT_R8_SNORM, 0),
+            (GLES_TEXFMT_RG8_SNORM, GC_TEX_FORMAT_EXT_G8R8_SNORM, 0),
+            (GLES_TEXFMT_R8UI, GC_TEX_FORMAT_EXT_R8I, 0),
+            (GLES_TEXFMT_R8I, GC_TEX_FORMAT_EXT_R8I, GC_TEXDESC_CONFIG2_SIGNED_INT8),
+            (GLES_TEXFMT_RG8UI, GC_TEX_FORMAT_EXT_G8R8I, 0),
+            (GLES_TEXFMT_RG8I, GC_TEX_FORMAT_EXT_G8R8I, GC_TEXDESC_CONFIG2_SIGNED_INT8),
+            (GLES_TEXFMT_R16UI, GC_TEX_FORMAT_EXT_R16I, 0),
+            (GLES_TEXFMT_R16I, GC_TEX_FORMAT_EXT_R16I, GC_TEXDESC_CONFIG2_SIGNED_INT16),
+            (GLES_TEXFMT_RG16UI, GC_TEX_FORMAT_EXT_G16R16I, 0),
+            (GLES_TEXFMT_RG16I, GC_TEX_FORMAT_EXT_G16R16I, GC_TEXDESC_CONFIG2_SIGNED_INT16),
+        ];
+        for (class, ext, config2) in rows {
+            let f = gc_texfmt(class);
+            assert_eq!((f.format, f.format_ext, f.config2), (0, ext, config2), "class {class}");
+            assert!(f.decoded && !f.compressed && !f.no_alpha && !f.int_filter, "class {class}");
+            assert!(!is_wide128(class), "class {class}");
+        }
     }
 
     /// The sRGB class's texels are the RGBA8 row's (A8B8G8R8): etnaviv
