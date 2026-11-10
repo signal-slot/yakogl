@@ -162,21 +162,28 @@ fn gl_string(name: GLenum) -> String {
 
 /* ---- the limits ---------------------------------------------------------- */
 
-/// A pinned glGetIntegerv answer: name, pname, the values, whether the
-/// ES 2.0 report refuses it; the comment above each says where it comes from.
+/// A pinned glGetIntegerv answer: name, pname, the values, the values of
+/// the ES 2.0 report, whether the ES 2.0 report refuses it; the comment
+/// above each says where it comes from.
 struct Pin {
     name: &'static str,
     pname: GLenum,
     values: &'static [GLint],
+    es2_values: &'static [GLint],
     es3_only: bool,
 }
 
 const fn pin(name: &'static str, pname: GLenum, values: &'static [GLint]) -> Pin {
-    Pin { name, pname, values, es3_only: false }
+    Pin { name, pname, values, es2_values: values, es3_only: false }
+}
+
+/// A pin whose ES 2.0 report answers other values.
+const fn pin2(name: &'static str, pname: GLenum, values: &'static [GLint], es2_values: &'static [GLint]) -> Pin {
+    Pin { name, pname, values, es2_values, es3_only: false }
 }
 
 const fn pin3(name: &'static str, pname: GLenum, values: &'static [GLint]) -> Pin {
-    Pin { name, pname, values, es3_only: true }
+    Pin { name, pname, values, es2_values: values, es3_only: true }
 }
 
 /// Every integer limit a chip profile could move, as the i.MX8MP's build
@@ -208,12 +215,20 @@ const PINS: &[Pin] = &[
     // state.rs:1285, context.rs:164 max_color_attachments = draw_targets(),
     // backend.rs:751-754 DRAW_TARGETS for gpu-vivante (3)
     pin("MAX_COLOR_ATTACHMENTS", GL_MAX_COLOR_ATTACHMENTS, &[3]),
-    // state.rs:1211, texture.rs:3388-3423: ETC1, RGB8_ETC2, RGBA8_ETC2_EAC
-    // (the sRGB pair needs the back end to sample it, texture.rs:3406)
-    pin("NUM_COMPRESSED_TEXTURE_FORMATS", GL_NUM_COMPRESSED_TEXTURE_FORMATS, &[3]),
-    pin(
+    // state.rs:1211, texture.rs stored_compressed_formats: ETC1, RGB8_ETC2,
+    // RGBA8_ETC2_EAC, and in an ES 3.0 report the sRGB pair, which
+    // GC_SAMPLED_TEXFMTS holds (backend.rs)
+    pin2("NUM_COMPRESSED_TEXTURE_FORMATS", GL_NUM_COMPRESSED_TEXTURE_FORMATS, &[5], &[3]),
+    pin2(
         "COMPRESSED_TEXTURE_FORMATS",
         GL_COMPRESSED_TEXTURE_FORMATS,
+        &[
+            GL_ETC1_RGB8_OES as GLint,
+            GL_COMPRESSED_RGB8_ETC2 as GLint,
+            GL_COMPRESSED_RGBA8_ETC2_EAC as GLint,
+            GL_COMPRESSED_SRGB8_ETC2 as GLint,
+            GL_COMPRESSED_SRGB8_ALPHA8_ETC2_EAC as GLint,
+        ],
         &[GL_ETC1_RGB8_OES as GLint, GL_COMPRESSED_RGB8_ETC2 as GLint, GL_COMPRESSED_RGBA8_ETC2_EAC as GLint],
     ),
     /* ---- ES 3.0 (GL_INVALID_ENUM under report-es2) ---- */
@@ -278,8 +293,11 @@ fn the_integer_limits_are_what_the_imx8mp_build_reports_today() {
             if err != GL_INVALID_ENUM || !got.is_empty() {
                 wrong.push(format!("{}: report-es2 wants GL_INVALID_ENUM, got {got:?} error 0x{err:x}", p.name));
             }
-        } else if err != GL_NO_ERROR || got != p.values {
-            wrong.push(format!("{}: pinned {:?}, got {got:?} error 0x{err:x}", p.name, p.values));
+        } else {
+            let want = if yakogl::REPORT_ES2 { p.es2_values } else { p.values };
+            if err != GL_NO_ERROR || got != want {
+                wrong.push(format!("{}: pinned {want:?}, got {got:?} error 0x{err:x}", p.name));
+            }
         }
     }
     assert!(wrong.is_empty(), "the i.MX8MP's reported limits moved:\n  {}", wrong.join("\n  "));

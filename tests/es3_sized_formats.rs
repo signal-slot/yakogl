@@ -257,6 +257,12 @@ fn storage_per_gpu_and_the_refusals() {
     assert_eq!(fmt(GL_RGB10_A2UI).storage_in(gc), Some(GLES_TEXFMT_RGB10A2UI));
     assert_eq!(fmt(GL_R8UI).storage_in(gc), Some(GLES_TEXFMT_RGBA8UI));
     assert_eq!(fmt(GL_RG16UI).storage_in(gc), Some(GLES_TEXFMT_RGBA16UI));
+    /* and the compressed sRGB ETC2 classes, as the PowerVR (etc2-srgb-gc);
+     * no sized format is stored in them, the compressed upload picks them */
+    for c in [GLES_TEXFMT_ETC2_SRGB_RGB, GLES_TEXFMT_ETC2_SRGB_RGBA] {
+        assert_ne!(gc & gles_texfmt_bit(c), 0, "GC7000UL: class {c}");
+        assert!(FORMATS.iter().all(|e| !e.storage.contains(&c)), "class {c}: compressed only");
+    }
     /* and keeps the fallbacks of the classes it does not: RGBA32*, R32/RG32 integers */
     assert_eq!(fmt(GL_RG32F).storage_in(gc), Some(GLES_TEXFMT_RGBA16F));
     assert_eq!(fmt(GL_RGB10_A2).storage_in(gc), Some(GLES_TEXFMT_RGBA8));
