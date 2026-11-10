@@ -588,10 +588,20 @@ fn keep_names(
     Some(kn)
 }
 
+/// Row `k` of `table` as the source names it: the pool's whole name where
+/// the field cut it, else the field's bytes.
+fn pooled_or_field(table: &[crate::shaderc::ShcUniform], names: UniformNames, k: usize) -> &[u8] {
+    match names.iter().find(|(i, _)| usize::from(*i) == k) {
+        Some((_, n)) => n.as_bytes(),
+        None => crate::util::name_bytes(&table[k].name),
+    }
+}
+
 /// A compile's block table copied into the keep region, each member's row
 /// resolved against the finished shader's uniform table by name (a back end
 /// may filter rows, so the reflection's index is not the table's), and the
-/// name pool ([`keep_names`]).
+/// name pool the resolution reads ([`keep_names`]): a member whose
+/// qualified row name the field cut still finds its row.
 fn keep_blocks(
     sh: &ShcShader,
     (blocks, members, rows): codegen::Blocks<'_>,
@@ -600,7 +610,7 @@ fn keep_blocks(
     use crate::shaderc::{ShcBlock, ShcBlockMember, ShcBlocks, SHC_BLOCK_NO_ROW};
     let table = sh.uniform_table();
     let names = keep_names(sh, &rows, keep)?;
-    let name_of = |k: usize| crate::util::name_bytes(&table[k].name);
+    let name_of = |k: usize| pooled_or_field(table, names, k);
     /* The table rows declared as arrays, by name as the members below (a
      * back end filters rows; the V3D program's table holds both stages'). */
     let is_array = |k: usize| rows.iter().flat_map(|r| r.iter()).any(|r| r.is_array && r.name.as_bytes() == name_of(k));
@@ -3034,6 +3044,80 @@ void main (void)
             assert_eq!(pooled_uniform_name(&sh, k), None);
             assert_eq!(uniform_name(&sh, k), crate::util::name_bytes(&sh.uniform_table()[k].name));
         }
+        release(&sh);
+    }
+
+    /// dEQP-GLES3 `uniform_block.long_instance_name_fragment`: a block
+    /// instance name of 1,024 characters, so the member's row is named
+    /// `<1,024 a's>.uniformMember`, which the 64-byte field cuts at 63 a's.
+    /// The record's name pool keeps the whole name, the block table still
+    /// finds the member's row through it, and the pool goes back with the
+    /// record.
+    ///
+    /// Revert check: resolve the member's row by the field alone again and
+    /// `row` is `SHC_BLOCK_NO_ROW`.
+    #[cfg(not(feature = "report-es2"))] // compiles GLSL ES 3.00, which a report-es2 build refuses (pp.rs out_of_scope)
+    #[test]
+    fn a_block_member_row_the_field_cut_keeps_its_whole_name_and_its_row() {
+        let _serial = test_lock();
+        cache_clear();
+        let before = store::keep_in_use();
+        let instance = "a".repeat(1024);
+        let src = std::format!(
+            "#version 300 es\nprecision highp float;\nlayout(location = 0) out vec4 o_color;\n\
+             uniform UniformBlock {{ vec4 uniformMember; }} {instance};\n\
+             void main() {{ o_color = {instance}.uniformMember; }}"
+        );
+        let sh = compile_out(SHC_STAGE_FRAGMENT, &src);
+        let t = crate::shaderc::uniform_blocks(&sh);
+        assert_eq!(t.blocks.len(), 1);
+        assert_eq!((t.blocks[0].name, t.blocks[0].data_size), ("UniformBlock", 16));
+        assert_eq!(t.members.len(), 1);
+        let m = t.members[0];
+        assert_eq!(m.name, "UniformBlock.uniformMember", "the GL name is the block's, and short");
+        assert_ne!(m.row, crate::shaderc::SHC_BLOCK_NO_ROW, "the member found its row by the whole name");
+        let k = usize::from(m.row);
+        let row = sh.uniform_table()[k];
+        assert_eq!(crate::util::name_bytes(&row.name), "a".repeat(63).as_bytes(), "the field holds 63 of them");
+        let whole = std::format!("{instance}.uniformMember");
+        assert_eq!(pooled_uniform_name(&sh, k), Some(whole.as_str()), "the pool holds the whole name");
+        assert_eq!(uniform_name(&sh, k), whole.as_bytes());
+        assert_eq!(base_of(&sh).expect("our record").names.len(), 1, "and only that row");
+        release(&sh);
+        assert_eq!(store::keep_in_use(), before, "the pool went with the record");
+    }
+
+    /// Two members of one long-named block: `<1,020 a's>.x` and
+    /// `<1,020 a's>.y` are the same 63 bytes in the field, and the pool
+    /// tells them apart by the rows' layout (two dword offsets), so each
+    /// member resolves to its own row and each whole name is its own.
+    #[cfg(not(feature = "report-es2"))] // compiles GLSL ES 3.00, which a report-es2 build refuses (pp.rs out_of_scope)
+    #[test]
+    fn two_cut_rows_of_one_prefix_each_find_their_own_row() {
+        let _serial = test_lock();
+        cache_clear();
+        let instance = "a".repeat(1020);
+        let src = std::format!(
+            "#version 300 es\nprecision highp float;\nlayout(location = 0) out vec4 o;\n\
+             uniform B {{ vec4 x; vec4 y; }} {instance};\n\
+             void main() {{ o = {instance}.x + {instance}.y; }}"
+        );
+        let sh = compile_out(SHC_STAGE_FRAGMENT, &src);
+        let t = crate::shaderc::uniform_blocks(&sh);
+        let ms: std::vec::Vec<(&str, u16, u32)> = t.members.iter().map(|m| (m.name, m.row, m.offset)).collect();
+        assert_eq!(ms.len(), 2);
+        assert_eq!((ms[0].0, ms[0].2), ("B.x", 0));
+        assert_eq!((ms[1].0, ms[1].2), ("B.y", 16));
+        assert!(ms[0].1 != crate::shaderc::SHC_BLOCK_NO_ROW && ms[1].1 != crate::shaderc::SHC_BLOCK_NO_ROW);
+        assert_ne!(ms[0].1, ms[1].1, "two rows");
+        let table = sh.uniform_table();
+        assert_eq!(
+            crate::util::name_bytes(&table[usize::from(ms[0].1)].name),
+            crate::util::name_bytes(&table[usize::from(ms[1].1)].name),
+            "which the field cannot tell apart"
+        );
+        assert_eq!(pooled_uniform_name(&sh, usize::from(ms[0].1)), Some(std::format!("{instance}.x").as_str()));
+        assert_eq!(pooled_uniform_name(&sh, usize::from(ms[1].1)), Some(std::format!("{instance}.y").as_str()));
         release(&sh);
     }
 
