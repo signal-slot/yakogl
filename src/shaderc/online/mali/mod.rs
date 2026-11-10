@@ -1700,6 +1700,53 @@ pub fn fragment_reads(r: &MaliShader<'_>) -> Result<ProgramReads, MaliError> {
     Ok(out)
 }
 
+/// `pr`, a fragment record's reads and moved expressions at fragment shader
+/// `fs_glsl`'s varying locations, at vertex shader `vs_glsl`'s, each
+/// varying paired by name as Mesa's link pairs them: the locations are each
+/// stage's declaration order, so a pair that declares its varyings in
+/// another order numbers them otherwise (case 19's tex pair: `Tint` is
+/// fragment location 0 and vertex location 1, docs/notes/
+/// mali-partial-varyings.md). The fragment shader's own inputs name the
+/// locations (a moved expression may read one its record does not list).
+/// None when a varying read is no vertex output of its name: the link
+/// refuses the pair (not written by the vertex shader), there is no vertex
+/// shader to build for it.
+pub fn reads_at_vertex_locations(
+    pr: &ProgramReads,
+    fs_glsl: &[u8],
+    vs_glsl: &[u8],
+    scratch: &Arena<'_>,
+) -> Result<Option<ProgramReads>, CompileError> {
+    let f = lower_source(SHC_STAGE_FRAGMENT, fs_glsl, &[], scratch)?;
+    let v = lower_source(SHC_STAGE_VERTEX, vs_glsl, &[], scratch)?;
+    fn varying<'a>(ios: &[ir_mod::IoDecl<'a>], hit: impl Fn(&ir_mod::IoDecl<'a>) -> bool) -> Option<(&'a str, u8)> {
+        ios.iter().find(|io| io.kind == ir_mod::IoKind::Varying && hit(io)).map(|io| (io.name, io.location))
+    }
+    let at_vertex = |loc: u8| {
+        let (name, _) = varying(f.module.inputs, |io| io.location == loc)?;
+        varying(v.module.outputs, |io| io.name == name).map(|(_, l)| l)
+    };
+    let mut out = *pr;
+    for r in &mut out.reads[..out.n] {
+        let Some(loc) = at_vertex(r.0) else { return Ok(None) };
+        r.0 = loc;
+    }
+    let mut mv = [motion::Moved::NONE; motion::MAX_MOVED];
+    let n = motion::decode(pr.moved(), &mut mv).map_err(refused)?;
+    for m in &mut mv[..n] {
+        let Some(loc) = at_vertex(m.location) else { return Ok(None) };
+        m.location = loc;
+        for node in &mut m.nodes[..m.n as usize] {
+            if let motion::Node::Lane { location, .. } = node {
+                let Some(loc) = at_vertex(*location) else { return Ok(None) };
+                *location = loc;
+            }
+        }
+    }
+    out.nmoved = motion::encode(&mv[..n], &mut out.moved).map_err(refused)?;
+    Ok(Some(out))
+}
+
 /// A vertex shader at the attribute locations the link chose: the front
 /// end's verdict, then the gap.
 pub fn compile_vs_mapped_blocks<'s>(

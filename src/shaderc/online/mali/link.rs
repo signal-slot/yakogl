@@ -36,8 +36,9 @@ pub const MALI_LAYOUTS_DIFFER: &str =
     "a Mali link whose stages place a varying at different offsets is not lowered yet";
 /// A fragment shader that reads part of a varying: Mesa's link keeps only
 /// the components read (`compact_varyings`), so the vertex shader's layout
-/// is the program's, built from the fragment shader's reads. A gap until the
-/// vertex shader is built per program.
+/// is the program's, built from the fragment shader's reads at its own
+/// locations (`compile_vs_linked`, mod.rs `reads_at_vertex_locations`). Left
+/// for a vertex shader that was not built for the program's fragment shader.
 pub const MALI_PARTIAL_READ: &str =
     "a Mali link whose fragment shader reads part of a varying (the link keeps only those components) is not lowered yet";
 /// The vertex output a fragment input reads is listed by the vertex record
