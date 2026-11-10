@@ -7,6 +7,13 @@ the `gpu-mali` back end on the NanoPC-T6 (issues #20 and #7). It is a
 forecast made on the host before any board run. Nothing was rendered, and
 `gh` was not run.
 
+**Board record** (added 2026-11-10): the first board run, main `da65355e`
+(`tools/cts/RESULTS.md`, section "Mali: NanoPC-T6 glmark2-es2 (stage 2
+criterion, first run)", landed in `08ae7a8e`), gave the per-scene outcomes
+this note forecasts, except terrain's signal: SIGABRT (rc 134, a libstdc++
+assertion) on the board, not SIGSEGV (section 1, row 22). `D-DEPTHONLY` and
+`D-NPOTMIP` were not reached (section 2).
+
 - **Made at** main `95f20610`. When `src/mali/**`, `src/shaderc/online/**`
   or `src/gl/**` move, the causes move with them (section 5).
 - **glmark2** `22c527cb0556f3a1ac4445aaa52cc532760928d5` (2023.01), the
@@ -90,7 +97,7 @@ without the refused program; `crash`: glmark2 itself, signal 11). The
 | 19 | `buffer:…:update-method=map:interleave=true` | `7234+9fe6` | runs, 15 GL errors | VS `ARITH_CONST`, FS `ARITH` | #309, #33 |
 | 20 | `ideas:speed=duration` | 9: `bf4b c265 a09e 038e c236 +23c8`, `51b2+c565`, `51b2+1aca`, `4f27+e6a9`, `4f27+df64` | setup fails | VS `FMA` (all 9); FS `INT_VALUE` (`c565`), `ARITH` (`1aca`), `TEX_COORD` (`df64`) | #309, #33; `TEX_COORD` #32 |
 | 21 | `jellyfish` | `08a2+22fc`, `14ac+8ee5` | setup fails | VS `FMA` + FS `ARITH`; FS `FRAGCOLOR_LANE` | #309, #33 |
-| 22 | `terrain` | 9: `8b69+895a` ok, `8b69+{1637,c549,d697,e043,bdfd,bbba,8c86}`, `18bc+4d26` | **crash** (glmark2, rc 139) | FS `ARITH` (6), FS `LOCALS` (`1637`), VS `ARITH_CONST` + FS `ARITH` (`18bc+4d26`; next VS `TEX_VERTEX`, section 3) | #309, #33; `TEX_VERTEX` #32 |
+| 22 | `terrain` | 9: `8b69+895a` ok, `8b69+{1637,c549,d697,e043,bdfd,bbba,8c86}`, `18bc+4d26` | **crash** (glmark2; host rc 139, board SIGABRT rc 134, libstdc++ assertion) | FS `ARITH` (6), FS `LOCALS` (`1637`), VS `ARITH_CONST` + FS `ARITH` (`18bc+4d26`; next VS `TEX_VERTEX`, section 3) | #309, #33; `TEX_VERTEX` #32 |
 | 23 | `shadow` | `6964+4748`, `37f4+928e`, `b9d1+cf4b` | setup fails | VS `ARITH_CONST` (all 3), FS `ARITH` (`cf4b`); then `D-DEPTHONLY` | #309, #33; `D-DEPTHONLY` new (section 4) |
 | 24 | `refract` | `7215+3fae`, `37f4+928e` | setup fails | VS `ARITH_CONST` (both), FS `ARITH` (`3fae`); then `D-NPOTMIP` risk | #309, #33; `D-NPOTMIP` new if the board shows it (section 4) |
 | 25 | `conditionals:vertex-steps=0:fragment-steps=0` | `3107+6c61` | setup fails | VS `ARITH`, FS `ARITH` | #309, #33 |
@@ -129,6 +136,11 @@ What the 32 do on the board, from the harness's logs:
   `TerrainRenderer::render`, using an unlinked program's -1 attribute
   locations as an index. A crash of the glmark2 process, not of YakoGL;
   the board runner's process per scene must contain it (plan #332 item 2).
+  On the board (main `da65355e`, RESULTS.md) the same cause ends as SIGABRT,
+  rc 134: Debian trixie's g++ 14 enables libstdc++'s
+  `std::vector<int>::operator[]` assertion, which fires in `Mesh::render_vbo`
+  on the -1 index before the read that gives signal 11 on the host. No
+  panthor kernel line, the runner's probe after it passed, boot_id unchanged.
 
 ## 2. The causes
 
@@ -179,12 +191,14 @@ guide: the compiler names only the family):
 ### Setup- and draw-time causes (predicted from the code at `95f20610`)
 
 None of these is reached on the host today: each scene is stopped by a
-compile refusal first.
+compile refusal first. The first board run (main `da65355e`) did not reach
+`D-DEPTHONLY` or `D-NPOTMIP` either, for the same reason; both stay open
+risks, to check once #309's refusals are gone.
 
 | code | what | where | scenes | owner |
 |---|---|---|---|---|
-| `D-DEPTHONLY` | A framebuffer with no colour attachment is `GL_FRAMEBUFFER_UNSUPPORTED` on the Mali (`DRAWS_WITHOUT_COLOUR = false`, `src/mali/backend.rs:91`, read as `DEPTH_ONLY_TARGETS` at `src/backend.rs:761`; `check_status` returns `GL_FRAMEBUFFER_UNSUPPORTED` for a framebuffer with no colour attachment at `src/gl/framebuffer.rs:871-874`). glmark2's shadow pass (`DepthRenderTarget::setup`, `src/scene-shadow.cpp:73-118`) attaches only a `GL_DEPTH_COMPONENT` texture and gives up on any other status: `DepthRenderTarget::setup: glCheckFramebufferStatus failed (0x8cdd)`. | setup | `shadow` | none yet: new issue (section 4) |
-| `D-NPOTMIP` | refract's colour target (`DistanceRenderTarget`, 1600x1200 RGBA, `GL_LINEAR_MIPMAP_LINEAR`, `glGenerateMipmap` every frame). The Mali lays out no NPOT chain (`npot_mip_chains` in `src/gl/texture.rs`: `MIP_LEVEL_ALIGN` 64, `native_layered_textures` false, so `grow_npot_chain` keeps one level), so the texture samples level 0 under the mipmap filter. Not a refusal, but a picture that can differ from Mesa's where it is minified. | draw (picture) | `refract` | a risk: new issue only if the board's picture shows it (section 4) |
+| `D-DEPTHONLY` | A framebuffer with no colour attachment is `GL_FRAMEBUFFER_UNSUPPORTED` on the Mali (`DRAWS_WITHOUT_COLOUR = false`, `src/mali/backend.rs:91`, read as `DEPTH_ONLY_TARGETS` at `src/backend.rs:761`; `check_status` returns `GL_FRAMEBUFFER_UNSUPPORTED` for a framebuffer with no colour attachment at `src/gl/framebuffer.rs:871-874`). glmark2's shadow pass (`DepthRenderTarget::setup`, `src/scene-shadow.cpp:73-118`) attaches only a `GL_DEPTH_COMPONENT` texture and gives up on any other status: `DepthRenderTarget::setup: glCheckFramebufferStatus failed (0x8cdd)`. | setup | `shadow` (not reached by the first board run) | none yet: new issue (section 4) |
+| `D-NPOTMIP` | refract's colour target (`DistanceRenderTarget`, 1600x1200 RGBA, `GL_LINEAR_MIPMAP_LINEAR`, `glGenerateMipmap` every frame). The Mali lays out no NPOT chain (`npot_mip_chains` in `src/gl/texture.rs`: `MIP_LEVEL_ALIGN` 64, `native_layered_textures` false, so `grow_npot_chain` keeps one level), so the texture samples level 0 under the mipmap filter. Not a refusal, but a picture that can differ from Mesa's where it is minified. | draw (picture) | `refract` (not reached by the first board run) | a risk: new issue only if the board's picture shows it (section 4) |
 | `D-DEPTHTEX` | The depth texture `refract` (and `shadow`, once `D-DEPTHONLY` is gone) samples goes through `mali_depth_resolve` to R32F. gl_test case 169 is the only board evidence for it. | draw | `refract`, `shadow` | a risk; #32 (`docs/notes/mali-texture-refusals.md`) if it fails |
 | `D-OK` | No texture-format or blend refusal is expected: glmark2 uploads unsized `GL_RGB`/`GL_RGBA` `GL_UNSIGNED_BYTE` (stored RGBA8), its targets are `GL_RGBA`, and its blends (`SRC_ALPHA, ONE_MINUS_SRC_ALPHA`; desktop's separate `ZERO, ONE` alpha; terrain's `SRC_ALPHA, ONE`) are fixed function (`src/mali/blend.rs`). Every attribute is float32. `glGenerateMipmap` runs on the CPU (`generate_mipmap: None`). The harness confirms it for the scenes it reaches: no refused draw, no incomplete texture, no incomplete framebuffer, no OSAL refusal in any scene. | — | all | — |
 
@@ -226,7 +240,8 @@ Existing issues: `ARITH_CONST`, `ARITH`, `FMA`, `CONST_FOLD`, `LOCALS`,
 `TEX_VERTEX` are #32 (plan #309). `D-DEPTHTEX` is #32 if it fails. Two
 causes have no issue:
 
-**Draft: `D-DEPTHONLY`**
+**Draft: `D-DEPTHONLY`** (not reached by the first board run, main
+`da65355e`: shadow stops at its compile refusal first)
 
 > Title: Mali: a framebuffer with only a depth attachment is
 > GL_FRAMEBUFFER_UNSUPPORTED (glmark2 shadow cannot set up)
@@ -249,8 +264,9 @@ causes have no issue:
 > check: glmark2 `shadow`, and a gl_test case that draws depth only and
 > samples the texture.
 
-**Draft: `D-NPOTMIP`** (to open only if the first board run's refract
-picture is wrong where the reflection is minified)
+**Draft: `D-NPOTMIP`** (to open only if a board run's refract picture is
+wrong where the reflection is minified; not reached by the first board run,
+main `da65355e`: refract stops at its compile refusal first)
 
 > Title: Mali: a non-power-of-two texture keeps one level under
 > glGenerateMipmap (glmark2 refract samples level 0)
