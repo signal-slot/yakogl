@@ -110,6 +110,9 @@ struct ProgState {
     /// so an aliased name may have no row, and glGetAttribLocation answers
     /// a bound name from the bindings.
     relinked: [[bool; MAX_PROGRAMS]; MAX_CONTEXTS],
+    /// The last link's vertex shader says `#version 300 es`: its uniforms
+    /// follow ES 3.0 2.12.6 to the letter (`setter_accepts`).
+    es300: [[bool; MAX_PROGRAMS]; MAX_CONTEXTS],
     /// With `relinked`: the program's own copy of the ACTIVE entries of the
     /// map the link decided (declared order, each with its location and
     /// declared type), from which GL_ACTIVE_ATTRIBUTES, glGetActiveAttrib,
@@ -1968,6 +1971,9 @@ pub unsafe extern "C" fn glLinkProgram(program: GLuint) {
     let vs_src = c.shader_ref(vs).map_or(core::ptr::null(), |s| s.source);
     let p = &mut c.objs().programs[obj_index(program)];
     let explicit = ExplicitAttribs::scan(vs_src);
+    // SAFETY: a shader object's NUL-terminated copy of its source, or null.
+    st.es300[ctx][obj_index(program)] =
+        !crate::REPORT_ES2 && !vs_src.is_null() && is_glsl_es300(unsafe { util::cstr_bytes(vs_src) });
     match link_attrib_layout(p, vs_src, &explicit, log) {
         Err(()) => return,
         /* the vertex shader for the fragment shader (with a map, the
@@ -2043,6 +2049,7 @@ unsafe fn destroy_program(c: &mut GlContext, program: GLuint) {
     st.delete_pending[c.group as usize][obj_index(program)] = false;
     st.validated[c.group as usize][obj_index(program)] = false;
     st.relinked[c.group as usize][obj_index(program)] = false;
+    st.es300[c.group as usize][obj_index(program)] = false;
     drop_active_attribs(&mut st.active_attribs[c.group as usize][obj_index(program)]);
     super::tf::program_reset(c.group, program);
     let (vs, fs) = (c.objs().programs[obj_index(program)].vs, c.objs().programs[obj_index(program)].fs);
@@ -2340,17 +2347,22 @@ enum Setter {
 /// Known, deliberate deviation, one way round: the UNSIGNED setter loads an
 /// int uniform. Qt's RHI chooses the setter from the SPIR-V type (uint) even
 /// when the GLSL ES 1.00 text declares the uniform int (Qt Quick 3D's light
-/// counts); the bit patterns are the same. The signed setter on a uint
+/// counts); the bit patterns are the same. A GLSL ES 3.00 program (`es300`)
+/// gets 2.12.6 to the letter instead: only uint, uvecN and bool take the
+/// unsigned setter (dEQP-GLES3 negative_api.shader.uniformui[v]_incompatible_type).
+/// The signed setter on a uint
 /// uniform is what 2.12.6 says, GL_INVALID_OPERATION (dEQP-GLES3
 /// negative_api.shader.uniformi[v]_incompatible_type); it was accepted too
 /// until 2026-09-24.
-fn setter_accepts(s: Setter, k: Class) -> bool {
+fn setter_accepts(s: Setter, k: Class, es300: bool) -> bool {
     match s {
         Setter::Float(n) => k.mat == 0 && k.comps == n && matches!(k.base, Base::Float | Base::Bool),
         Setter::Int(n) => {
             (k.comps == n && matches!(k.base, Base::Int | Base::Bool)) || (n == 1 && k.base == Base::Sampler)
         }
-        Setter::Uint(n) => k.comps == n && matches!(k.base, Base::Int | Base::Uint | Base::Bool),
+        Setter::Uint(n) => {
+            k.comps == n && (matches!(k.base, Base::Uint | Base::Bool) || (!es300 && k.base == Base::Int))
+        }
         /* matCxR is C columns of R rows; `comps` is their product */
         Setter::Mat { cols, rows } => k.base == Base::Float && k.mat == cols && k.comps == cols * rows,
     }
@@ -2533,7 +2545,7 @@ unsafe fn set_uniform(location: GLint, count: GLsizei, setter: Setter, values: V
     let Some(e) = uniform_entry(c, st, cur, location) else {
         return;
     };
-    if !setter_accepts(setter, e.class) {
+    if !setter_accepts(setter, e.class, st.es300[c.group as usize][obj_index(cur)]) {
         c.set_error(GL_INVALID_OPERATION, FUNC); /* type or size mismatch */
         return;
     }
@@ -4041,8 +4053,9 @@ mod tests {
 
     /// The signed integer setter does not load a uint uniform (ES 3.0
     /// 2.12.6; dEQP-GLES3 negative_api.shader.uniformi[v]_incompatible_type),
-    /// while the unsigned one still loads an int uniform: the deliberate
-    /// deviation Qt's RHI relies on (`setter_accepts`).
+    /// while the unsigned one no longer loads an int uniform of a GLSL ES
+    /// 3.00 program (negative_api.shader.uniformui[v]_incompatible_type; the
+    /// ES 1.00 deviation Qt's RHI relies on is tests/es3_negapi_uniform.rs).
     #[cfg(feature = "shaderc-online")]
     #[cfg(not(feature = "report-es2"))] // compiles GLSL ES 3.00, which a report-es2 build refuses (pp.rs out_of_scope)
     #[test]
@@ -4087,7 +4100,7 @@ mod tests {
             glUniform4uiv(lu, 1, v.as_ptr() as *const GLuint);
             assert_eq!(gl.error(), GL_NO_ERROR);
             glUniform4uiv(li, 1, v.as_ptr() as *const GLuint);
-            assert_eq!(gl.error(), GL_NO_ERROR, "uint setter on an int uniform: Qt's deviation, kept");
+            assert_eq!(gl.error(), GL_INVALID_OPERATION, "uint setter on an int uniform of an ES 3.00 program");
             glUniform4iv(li, 1, v.as_ptr());
             assert_eq!(gl.error(), GL_NO_ERROR);
         }
