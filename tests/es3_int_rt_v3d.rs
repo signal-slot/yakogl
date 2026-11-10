@@ -266,16 +266,23 @@ mod gl_api {
     use std::path::PathBuf;
     use std::process::Command;
     use std::sync::{Mutex, MutexGuard, Once, OnceLock};
+    use yakogl::backend::{GLES_SURF_RGBA32UI, GLES_SURF_RGBA8888, GLES_SURF_SRGB8_A8};
     use yakogl::gl::consts::*;
     use yakogl::gl::context;
+    use yakogl::gl::draw::glDrawArrays;
     use yakogl::gl::es3::*;
     use yakogl::gl::framebuffer::*;
+    use yakogl::gl::program::*;
+    use yakogl::gl::shader::*;
     use yakogl::gl::state::*;
+    use yakogl::gl::texture::*;
     use yakogl::gl::types::*;
+    use yakogl::gl::vertex::*;
     use yakogl::osal::{osal_set_ops, OsalGpuMem, OsalOps, OsalV3dCpuOf};
-    use yakogl::v3d::backend::yakogl_backend_v3d;
+    use yakogl::v3d::backend::{v3d_refused_draws, yakogl_backend_v3d};
     use yakogl::v3d::ffi::*;
     use yakogl::v3d::kick::V3dKick;
+    use yakogl::v3d::state;
 
     /* ---- the job builder: records, draws nothing ---- */
 
@@ -328,13 +335,22 @@ mod gl_api {
         // SAFETY: the backend passes its live job and a draw whose pointers live for the call.
         let (j, d) = unsafe { (&mut *j, &*d) };
         j.draws += 1;
+        /// A slice the draw names, empty when it names none (an application
+        /// draw with no fragment block hands a null pointer and a zero count).
+        unsafe fn words<T: Clone>(p: *const T, n: u32) -> Vec<T> {
+            if p.is_null() || n == 0 {
+                return Vec::new();
+            }
+            // SAFETY: the caller's slice, as long as the draw says.
+            unsafe { core::slice::from_raw_parts(p, n as usize) }.to_vec()
+        }
         // SAFETY: the job's BCL is live; the draw's slices are as long as it says.
         unsafe {
             (*j.bcl).used += 120;
             let rec = SeenDraw {
                 st: *d.st,
-                fs_storage: core::slice::from_raw_parts(d.fs_storage.words, d.fs_storage.count as usize).to_vec(),
-                fs_uniforms: core::slice::from_raw_parts((*d.fs).uniforms, (*d.fs).num_uniforms as usize).to_vec(),
+                fs_storage: words(d.fs_storage.words, d.fs_storage.count),
+                fs_uniforms: words((*d.fs).uniforms, (*d.fs).num_uniforms),
                 count: d.count,
             };
             seen(|s| s.draws.push(rec));
@@ -811,6 +827,543 @@ mod gl_api {
             assert!(s.draws.is_empty(), "{f:#x}: no quad: {:?}", s.log);
             assert_eq!(s.clears.len(), 1, "{f:#x}");
             assert!(!s.clears[0].load_rt0, "{f:#x}: cleared, not loaded");
+        }
+    }
+
+    /* ---- the sRGB render target (docs/es3/srgb.md 5.1, 5.4, 9 S6) ------------ */
+
+    /// `SRGB8_ALPHA8` through the same GL core and V3D back end: a draw into
+    /// it, a clear of it (glClear and glClearBufferfv), a clear the TLB
+    /// cannot do (scissored, masked), and the sRGB attachment beside an RGBA8
+    /// or an RGBA32UI one. What the job builder is handed is the whole of the
+    /// V3D's sRGB render side (the TLB does the encode on the board): the
+    /// job is typed with RT n's output image format `SRGB8_ALPHA8` (0, Mesa's
+    /// `v3dx_format_table.c:67`, internal type 16F at 64 bpp, clamp NORM:
+    /// `state::rt_format`), the clear words are the linear colour clamped to
+    /// [0, 1] in halves (`state::clear_words`), the fragment shader writes
+    /// f16 pairs with no TLB config of its own, and a clear quad is the float
+    /// program with the colour as four f32 words. Nothing of it is refused
+    /// but the scissored or masked clear of sRGB beside another attachment,
+    /// which is the several-attachment refusal every class gets
+    /// (`a_scissored_clear_of_srgb_beside_another_is_the_mrt_refusal_today`).
+    mod srgb {
+        use super::*;
+
+        /// The clear colour of these tests: 1.5 is out of range (the sRGB
+        /// surface is fixed-point, ES 3.0 4.2.3 clamps its clear).
+        const COLOUR: [f32; 4] = [0.5, 1.5, 0.2, 0.5];
+
+        /// `COLOUR` as the TLB's clear of the sRGB surface: linear halves,
+        /// 1.5 clamped to 1.0 (0x3c00), 0.5 is 0x3800, 0.2 is 0x3266.
+        const SRGB_CLEAR_WORDS: [u32; 4] = [0x3c00_3800, 0x3800_3266, 0, 0];
+
+        /// A framebuffer of one `W` x `H` renderbuffer per format on colour
+        /// attachments 0.., all of them draw buffers, bound, complete.
+        struct Fbo {
+            fb: GLuint,
+            rbs: Vec<GLuint>,
+            tex: GLuint,
+        }
+
+        impl Drop for Fbo {
+            fn drop(&mut self) {
+                // SAFETY: names this test made.
+                unsafe {
+                    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+                    glDeleteFramebuffers(1, &self.fb);
+                    glDeleteRenderbuffers(self.rbs.len() as GLsizei, self.rbs.as_ptr());
+                    if self.tex != 0 {
+                        glDeleteTextures(1, &self.tex);
+                    }
+                }
+            }
+        }
+
+        fn fbo(formats: &[GLenum]) -> Fbo {
+            let n = formats.len();
+            let (mut fb, mut rbs) = (0, vec![0; n]);
+            // SAFETY: plain GL calls with room for the names.
+            unsafe {
+                glGenFramebuffers(1, &mut fb);
+                glBindFramebuffer(GL_FRAMEBUFFER, fb);
+                glGenRenderbuffers(n as GLsizei, rbs.as_mut_ptr());
+                let mut bufs = Vec::new();
+                for (i, &f) in formats.iter().enumerate() {
+                    glBindRenderbuffer(GL_RENDERBUFFER, rbs[i]);
+                    glRenderbufferStorage(GL_RENDERBUFFER, f, W, H);
+                    glFramebufferRenderbuffer(
+                        GL_FRAMEBUFFER,
+                        GL_COLOR_ATTACHMENT0 + i as GLenum,
+                        GL_RENDERBUFFER,
+                        rbs[i],
+                    );
+                    bufs.push(GL_COLOR_ATTACHMENT0 + i as GLenum);
+                }
+                glDrawBuffers(n as GLsizei, bufs.as_ptr());
+                assert_eq!(glGetError(), GL_NO_ERROR, "{formats:#x?}: {:?}", seen(|s| s.log.clone()));
+                assert_eq!(glCheckFramebufferStatus(GL_FRAMEBUFFER), GL_FRAMEBUFFER_COMPLETE, "{formats:#x?}");
+                glViewport(0, 0, W, H);
+            }
+            Fbo { fb, rbs, tex: 0 }
+        }
+
+        /// A `W` x `H` SRGB8_ALPHA8 texture level as colour attachment 0 (the
+        /// texture layout code is reached: a render image in the TMU's layout).
+        fn tex_fbo() -> Fbo {
+            let (mut fb, mut tex) = (0, 0);
+            // SAFETY: plain GL calls with room for the names; null pixels only allocate.
+            unsafe {
+                glGenTextures(1, &mut tex);
+                glBindTexture(GL_TEXTURE_2D, tex);
+                glTexImage2D(
+                    GL_TEXTURE_2D,
+                    0,
+                    GL_SRGB8_ALPHA8 as GLint,
+                    W,
+                    H,
+                    0,
+                    GL_RGBA,
+                    GL_UNSIGNED_BYTE,
+                    core::ptr::null(),
+                );
+                glGenFramebuffers(1, &mut fb);
+                glBindFramebuffer(GL_FRAMEBUFFER, fb);
+                glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0);
+                assert_eq!(glGetError(), GL_NO_ERROR, "{:?}", seen(|s| s.log.clone()));
+                assert_eq!(glCheckFramebufferStatus(GL_FRAMEBUFFER), GL_FRAMEBUFFER_COMPLETE);
+                glViewport(0, 0, W, H);
+            }
+            Fbo { fb, rbs: Vec::new(), tex }
+        }
+
+        fn shader(ty: GLenum, src: &str) -> GLuint {
+            let c = CString::new(src).unwrap();
+            // SAFETY: plain GL calls; the string lives for the call.
+            unsafe {
+                let s = glCreateShader(ty);
+                let srcs = [c.as_ptr()];
+                glShaderSource(s, 1, srcs.as_ptr(), core::ptr::null());
+                glCompileShader(s);
+                let mut ok: GLint = 0;
+                glGetShaderiv(s, GL_COMPILE_STATUS, &mut ok);
+                assert_eq!(ok, 1, "compile {ty:#x}: {src}\n{:?}", seen(|s| s.log.clone()));
+                s
+            }
+        }
+
+        /// The current program: `a_position` at attribute 0 and one `out` per
+        /// entry of `outs` ("vec4" or "uvec4"), each written a constant.
+        fn program(outs: &[&str]) -> GLuint {
+            let mut fs = String::from("#version 300 es\nprecision highp float;\nprecision highp int;\n");
+            for (i, t) in outs.iter().enumerate() {
+                fs += &format!("layout(location = {i}) out {t} o{i};\n");
+            }
+            fs += "void main() {\n";
+            for (i, t) in outs.iter().enumerate() {
+                fs += &match *t {
+                    "vec4" => format!("  o{i} = vec4(0.5, 1.5, 0.2, 0.5);\n"),
+                    _ => format!("  o{i} = uvec4(1u, 2u, 3u, 4u);\n"),
+                };
+            }
+            fs += "}\n";
+            let v = shader(
+                GL_VERTEX_SHADER,
+                "#version 300 es\nin vec4 a_position;\nvoid main() { gl_Position = a_position; }\n",
+            );
+            let f = shader(GL_FRAGMENT_SHADER, &fs);
+            let name = CString::new("a_position").unwrap();
+            // SAFETY: plain GL calls on handles just made.
+            unsafe {
+                let p = glCreateProgram();
+                glAttachShader(p, v);
+                glAttachShader(p, f);
+                glBindAttribLocation(p, 0, name.as_ptr());
+                glLinkProgram(p);
+                let mut ok: GLint = 0;
+                glGetProgramiv(p, GL_LINK_STATUS, &mut ok);
+                assert_eq!(ok, 1, "link: {:?}", seen(|s| s.log.clone()));
+                glUseProgram(p);
+                glDeleteShader(v);
+                glDeleteShader(f);
+                p
+            }
+        }
+
+        /// One triangle over the whole target.
+        static TRI: [f32; 12] = [-1.0, -1.0, 0.0, 1.0, 3.0, -1.0, 0.0, 1.0, -1.0, 3.0, 0.0, 1.0];
+
+        fn draw_triangle() {
+            // SAFETY: plain GL calls; TRI is static.
+            unsafe {
+                glVertexAttribPointer(0, 4, GL_FLOAT, 0, 0, TRI.as_ptr() as *const c_void);
+                glEnableVertexAttribArray(0);
+                glDrawArrays(GL_TRIANGLES, 0, 3);
+            }
+        }
+
+        /// What a scene left: the job builder's record, the draws the back
+        /// end refused during it (`v3d_refused_draws`) and the GL error.
+        struct Run {
+            seen: Seen,
+            refused: u32,
+            error: GLenum,
+        }
+
+        /// Run `scene` on a fresh record and finish it; the GL state it set is
+        /// put back.
+        fn run(scene: impl FnOnce()) -> Run {
+            let refused0 = v3d_refused_draws();
+            seen(|s| *s = Seen::default());
+            scene();
+            // SAFETY: plain GL calls.
+            let error = unsafe {
+                let e = glGetError();
+                glFinish();
+                let e = if e == GL_NO_ERROR { glGetError() } else { e };
+                glUseProgram(0);
+                glDisable(GL_BLEND);
+                glDisable(GL_SCISSOR_TEST);
+                glColorMask(1, 1, 1, 1);
+                e
+            };
+            Run { seen: seen(core::mem::take), refused: v3d_refused_draws().wrapping_sub(refused0), error }
+        }
+
+        /// The one typed job of a run, its RTs' output image formats being
+        /// `rt_format` (the TLB rows: `rt_format[n]` is RT n's, Mesa's
+        /// `v3dx_format_table.c` column 2) and no draw refused.
+        fn the_typed_job(r: &Run, rt_format: &[u32]) -> V3dJobTarget {
+            assert_eq!(r.error, GL_NO_ERROR, "{:?}", r.seen.log);
+            assert_eq!(r.refused, 0, "no draw refused: {:?}", r.seen.log);
+            assert_eq!(r.seen.jobs.len(), 1, "one job: {:?}", r.seen.log);
+            let j = r.seen.jobs[0];
+            assert!(j.typed, "a typed job");
+            assert_eq!(j.rts.max(1) as usize, rt_format.len(), "RTs of the job");
+            assert_eq!(&j.rt_format[..rt_format.len()], rt_format);
+            assert!(!j.msaa && !j.rgb565);
+            j
+        }
+
+        /// The sRGB surface's TLB row the job builder types RT n with
+        /// (`driver/src/v3d/v3d_job.c` `rt_internal` reads the same table):
+        /// output SRGB8_ALPHA8, 16F at 64 bpp, clamp NORM, 4 bytes a pixel.
+        #[test]
+        fn the_srgb_row_is_mesas() {
+            let row = state::rt_format(GLES_SURF_SRGB8_A8).expect("a TLB row");
+            assert_eq!(row.output, V3D_OUTPUT_IMAGE_FORMAT_SRGB8_ALPHA8);
+            assert_eq!(V3D_OUTPUT_IMAGE_FORMAT_SRGB8_ALPHA8, 0, "v3d_packet.xml:227");
+            assert_eq!(row.internal_type, V3D_INTERNAL_TYPE_16F);
+            assert_eq!(row.internal_bpp, V3D_INTERNAL_BPP_64);
+            assert_eq!(row.clamp, V3D_RENDER_TARGET_CLAMP_NORM);
+            assert_eq!(row.bytes, 4);
+            assert!(state::typed(GLES_SURF_SRGB8_A8));
+            assert_eq!(state::clear_words(GLES_SURF_SRGB8_A8, COLOUR), SRGB_CLEAR_WORDS);
+        }
+
+        /// (1) A draw into an SRGB8_ALPHA8 renderbuffer: not refused, one
+        /// typed job with RT 0 in the SRGB8_ALPHA8 image format, one draw of
+        /// three vertices whose fragment shader writes f16 pairs (no 32-bit
+        /// TLB config: the TLB converts to the 16F tile buffer and encodes at
+        /// the store, docs/es3/srgb.md 5.3) under the full colour mask. With
+        /// GL_BLEND on, the same draw blends in the job's fixed function
+        /// (`blend_enabled`: the tile buffer is linear 16F, 5.2).
+        #[test]
+        fn a_draw_into_srgb_is_a_typed_16f_job_writing_halves() {
+            let _g = rig();
+            let f = fbo(&[GL_SRGB8_ALPHA8]);
+            let r = run(|| {
+                program(&["vec4"]);
+                draw_triangle();
+            });
+            the_typed_job(&r, &[V3D_OUTPUT_IMAGE_FORMAT_SRGB8_ALPHA8]);
+            assert_eq!(r.seen.draws.len(), 1, "the triangle: {:?}", r.seen.log);
+            let q = &r.seen.draws[0];
+            assert_eq!(q.count, 3);
+            assert!(!writes_32bit_words(q), "f16 pairs, the TLB's default config: {:?}", q.fs_uniforms);
+            assert_eq!(q.st.colormask, 0xf);
+            assert!(!q.st.blend_enabled);
+            let r = run(|| {
+                program(&["vec4"]);
+                // SAFETY: plain GL calls.
+                unsafe {
+                    glEnable(GL_BLEND);
+                    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+                }
+                draw_triangle();
+            });
+            the_typed_job(&r, &[V3D_OUTPUT_IMAGE_FORMAT_SRGB8_ALPHA8]);
+            assert_eq!(r.seen.draws.len(), 1, "{:?}", r.seen.log);
+            let q = &r.seen.draws[0];
+            assert!(q.st.blend_enabled, "the blend is the TLB's, in the linear tile buffer");
+            assert_eq!((q.st.rgb_src, q.st.rgb_dst), (V3D_BLEND_FACTOR_SRC_ALPHA, V3D_BLEND_FACTOR_INV_SRC_ALPHA));
+            drop(f);
+        }
+
+        /// (1) The same draw into an SRGB8_ALPHA8 texture level (dEQP
+        /// `fbo.render.*srgb8_alpha8*` renders into textures): typed, RT 0
+        /// SRGB8_ALPHA8, not refused; and no render image (`uif_address`): a
+        /// render image stands for RGBA8 textures only, the sRGB class is
+        /// sampled through the tiled copy, whose texture state decodes
+        /// (`src/v3d/backend.rs`, the `RtImage` list).
+        #[test]
+        fn a_draw_into_an_srgb_texture_level_is_the_same_typed_job() {
+            let _g = rig();
+            let f = tex_fbo();
+            let r = run(|| {
+                program(&["vec4"]);
+                draw_triangle();
+            });
+            let j = the_typed_job(&r, &[V3D_OUTPUT_IMAGE_FORMAT_SRGB8_ALPHA8]);
+            assert_eq!(r.seen.draws.len(), 1, "{:?}", r.seen.log);
+            assert!(!writes_32bit_words(&r.seen.draws[0]));
+            assert_eq!(j.uif_address, 0, "no render image: the sRGB class is sampled through the tiled copy");
+            drop(f);
+        }
+
+        /// (2) glClear of an SRGB8_ALPHA8 renderbuffer is the TLB's: no quad,
+        /// RT 0 cleared (not loaded) from the linear colour clamped to [0, 1]
+        /// as halves (`state::clear_words`, Mesa's v3dx_draw.c:1739-1743 for
+        /// internal type 16F): 1.5 is 0x3c00, no CPU encode anywhere.
+        #[test]
+        fn glclear_of_srgb_is_the_tlbs_clamped_linear_halves() {
+            let _g = rig();
+            let f = fbo(&[GL_SRGB8_ALPHA8]);
+            let r = run(|| {
+                // SAFETY: plain GL calls.
+                unsafe {
+                    glClearColor(COLOUR[0], COLOUR[1], COLOUR[2], COLOUR[3]);
+                    glClear(GL_COLOR_BUFFER_BIT);
+                }
+            });
+            the_typed_job(&r, &[V3D_OUTPUT_IMAGE_FORMAT_SRGB8_ALPHA8]);
+            assert!(r.seen.draws.is_empty(), "no quad: {:?}", r.seen.log);
+            assert_eq!(r.seen.clears.len(), 1);
+            let c = &r.seen.clears[0];
+            assert!(!c.load_rt0, "cleared, not loaded");
+            assert_eq!(c.clear_rt[0], SRGB_CLEAR_WORDS, "linear halves, clamped");
+            drop(f);
+        }
+
+        /// (2) glClearBufferfv(GL_COLOR, 0, ...) of the same: the same clear
+        /// words (the GL core hands the back end the float colour, 3.2).
+        #[test]
+        fn glclearbufferfv_of_srgb_is_the_same_tlb_clear() {
+            let _g = rig();
+            let f = fbo(&[GL_SRGB8_ALPHA8]);
+            let r = run(|| {
+                // SAFETY: plain GL call; four floats.
+                unsafe { glClearBufferfv(GL_COLOR, 0, COLOUR.as_ptr()) };
+            });
+            the_typed_job(&r, &[V3D_OUTPUT_IMAGE_FORMAT_SRGB8_ALPHA8]);
+            assert!(r.seen.draws.is_empty(), "no quad: {:?}", r.seen.log);
+            assert_eq!(r.seen.clears.len(), 1);
+            assert!(!r.seen.clears[0].load_rt0);
+            assert_eq!(r.seen.clears[0].clear_rt[0], SRGB_CLEAR_WORDS);
+            drop(f);
+        }
+
+        /// (2) A clear the TLB cannot do, scissored or colour-masked, of an
+        /// sRGB target alone: the float clear quad (six vertices, f16 pairs,
+        /// the colour as four f32 words unclamped: the TLB's NORM clamp of the
+        /// row takes 1.5 to 1 on entry), RT 0 loaded, the GL's box and mask.
+        /// Not refused (the several-attachment refusal needs two RTs).
+        #[test]
+        fn a_scissored_or_masked_clear_of_srgb_alone_is_the_float_quad() {
+            let _g = rig();
+            let f = fbo(&[GL_SRGB8_ALPHA8]);
+            /// (name, scissor box, colour mask)
+            type Scene = (&'static str, Option<[GLint; 4]>, [bool; 4]);
+            let scenes: [Scene; 3] = [
+                ("scissored", Some([3, 2, 9, 7]), [true; 4]),
+                ("masked", None, [true, false, true, false]),
+                ("scissored and masked", Some([0, 4, 10, 5]), [false, true, true, false]),
+            ];
+            for (name, scissor, mask) in scenes {
+                let r = run(|| {
+                    // SAFETY: plain GL calls; four floats.
+                    unsafe {
+                        if let Some([x, y, w, h]) = scissor {
+                            glEnable(GL_SCISSOR_TEST);
+                            glScissor(x, y, w, h);
+                        }
+                        glColorMask(mask[0] as u8, mask[1] as u8, mask[2] as u8, mask[3] as u8);
+                        glClearBufferfv(GL_COLOR, 0, COLOUR.as_ptr());
+                    }
+                });
+                the_typed_job(&r, &[V3D_OUTPUT_IMAGE_FORMAT_SRGB8_ALPHA8]);
+                assert_eq!(r.seen.draws.len(), 1, "{name}: the quad: {:?}", r.seen.log);
+                assert_eq!(r.seen.clears.len(), 1, "{name}");
+                assert!(r.seen.clears[0].load_rt0, "{name}: loaded, the quad writes it");
+                let q = &r.seen.draws[0];
+                assert_eq!(q.count, 6, "{name}");
+                assert!(!writes_32bit_words(q), "{name}: the float program, f16 pairs");
+                assert_eq!(q.fs_storage, COLOUR.map(f32::to_bits).to_vec(), "{name}: the colour, four f32 words");
+                let bits: u32 = mask.iter().enumerate().map(|(i, m)| u32::from(*m) << i).sum();
+                assert_eq!(q.st.colormask, bits, "{name}: the GL's mask");
+                assert_eq!(q.st.scissor, scissor.is_some(), "{name}");
+                if let Some([x, y, w, h]) = scissor {
+                    let b = [q.st.scissor_minx, q.st.scissor_miny, q.st.scissor_maxx, q.st.scissor_maxy];
+                    assert_eq!(b, [x as u32, y as u32, (x + w) as u32, (y + h) as u32], "{name}: the box");
+                }
+            }
+            drop(f);
+        }
+
+        /// An attachment pair of (3): its name, the two formats, the fragment
+        /// output type of each, and the output image format of each RT.
+        type Pair = (&'static str, [GLenum; 2], [&'static str; 2], [u32; 2]);
+
+        /// The attachment pairs of (3): sRGB in front of and behind an RGBA8
+        /// and an RGBA32UI attachment, with their fragment output types.
+        fn pairs() -> [Pair; 4] {
+            const S: u32 = V3D_OUTPUT_IMAGE_FORMAT_SRGB8_ALPHA8;
+            [
+                ("sRGB+RGBA8", [GL_SRGB8_ALPHA8, GL_RGBA8], ["vec4", "vec4"], [S, V3D_OUTPUT_IMAGE_FORMAT_RGBA8]),
+                ("RGBA8+sRGB", [GL_RGBA8, GL_SRGB8_ALPHA8], ["vec4", "vec4"], [V3D_OUTPUT_IMAGE_FORMAT_RGBA8, S]),
+                (
+                    "sRGB+RGBA32UI",
+                    [GL_SRGB8_ALPHA8, GL_RGBA32UI],
+                    ["vec4", "uvec4"],
+                    [S, V3D_OUTPUT_IMAGE_FORMAT_RGBA32UI],
+                ),
+                (
+                    "RGBA32UI+sRGB",
+                    [GL_RGBA32UI, GL_SRGB8_ALPHA8],
+                    ["uvec4", "vec4"],
+                    [V3D_OUTPUT_IMAGE_FORMAT_RGBA32UI, S],
+                ),
+            ]
+        }
+
+        /// (3) A draw into an sRGB attachment beside an RGBA8 or an RGBA32UI
+        /// one, in either order: not refused (`extra_targets` takes any
+        /// surface with a TLB row; its comment that the sRGB surface has none
+        /// is stale), one typed job of two RTs in their own image formats, the
+        /// integer RT written with the 32-bit TLB config naming it and the
+        /// sRGB RT with f16 pairs.
+        #[test]
+        fn a_draw_into_srgb_beside_another_attachment_is_one_typed_job() {
+            let _g = rig();
+            for (name, formats, outs, rows) in pairs() {
+                let f = fbo(&formats);
+                let r = run(|| {
+                    program(&outs);
+                    draw_triangle();
+                });
+                the_typed_job(&r, &rows);
+                assert_eq!(r.seen.draws.len(), 1, "{name}: {:?}", r.seen.log);
+                let q = &r.seen.draws[0];
+                assert_eq!(q.count, 3, "{name}");
+                for (rt, out) in outs.iter().enumerate() {
+                    let cfg = V3dUniform {
+                        contents: V3D_QUNIFORM_CONSTANT,
+                        data: yakogl::shaderc::online::v3d::select::tlb_config_32b(rt as u32, 4),
+                    };
+                    assert_eq!(q.fs_uniforms.contains(&cfg), *out == "uvec4", "{name}: RT {rt}: {:?}", q.fs_uniforms);
+                }
+                drop(f);
+            }
+        }
+
+        /// (3) The whole-target clear of sRGB beside RGBA8 (glClear) and
+        /// beside RGBA32UI (glClearBufferfv and glClearBufferuiv, one job) is
+        /// the TLB's: no quad, each RT cleared from its own words, the sRGB
+        /// one's the clamped linear halves, the RGBA8 one's the RGBA8 word and
+        /// the integer one's the raw words.
+        #[test]
+        fn a_whole_clear_of_srgb_beside_another_attachment_is_the_tlbs() {
+            let _g = rig();
+            let f = fbo(&[GL_SRGB8_ALPHA8, GL_RGBA8]);
+            let r = run(|| {
+                // SAFETY: plain GL calls.
+                unsafe {
+                    glClearColor(COLOUR[0], COLOUR[1], COLOUR[2], COLOUR[3]);
+                    glClear(GL_COLOR_BUFFER_BIT);
+                }
+            });
+            the_typed_job(&r, &[V3D_OUTPUT_IMAGE_FORMAT_SRGB8_ALPHA8, V3D_OUTPUT_IMAGE_FORMAT_RGBA8]);
+            assert!(r.seen.draws.is_empty(), "no quad: {:?}", r.seen.log);
+            assert_eq!(r.seen.clears.len(), 1);
+            let c = &r.seen.clears[0];
+            assert!(!c.load_rt0 && !c.load_rt[0], "both cleared, neither loaded");
+            assert_eq!(c.clear_rt[0], SRGB_CLEAR_WORDS);
+            assert_eq!(c.clear_rt[1], state::clear_words(GLES_SURF_RGBA8888, COLOUR), "RGBA8's own word");
+            drop(f);
+            let f = fbo(&[GL_RGBA32UI, GL_SRGB8_ALPHA8]);
+            let r = run(|| {
+                // SAFETY: plain GL calls; four words, four floats.
+                unsafe {
+                    glClearBufferuiv(GL_COLOR, 0, WORDS.as_ptr());
+                    glClearBufferfv(GL_COLOR, 1, COLOUR.as_ptr());
+                }
+            });
+            the_typed_job(&r, &[V3D_OUTPUT_IMAGE_FORMAT_RGBA32UI, V3D_OUTPUT_IMAGE_FORMAT_SRGB8_ALPHA8]);
+            assert!(r.seen.draws.is_empty(), "no quad: {:?}", r.seen.log);
+            assert_eq!(r.seen.clears.len(), 1, "one job clears both");
+            let c = &r.seen.clears[0];
+            assert!(!c.load_rt0 && !c.load_rt[0]);
+            assert_eq!(c.clear_rt[0], state::clear_words(GLES_SURF_RGBA32UI, WORDS.map(f32::from_bits)));
+            assert_eq!(c.clear_rt[0], WORDS, "the raw words");
+            assert_eq!(c.clear_rt[1], SRGB_CLEAR_WORDS);
+            drop(f);
+        }
+
+        /// The one refusal an sRGB attachment meets, and it is not sRGB's: a
+        /// scissored (or masked) colour clear of several colour attachments
+        /// is refused by that name whatever their classes
+        /// (`src/v3d/backend.rs` `draw_call`, the quad writes RT 0 alone;
+        /// tests/es3_mrt_clear_v3d.rs pins it for the integer/float pairs and
+        /// holds the post-fix cases). Today: the refusal, logged by that exact
+        /// name, counted in `v3d_refused_draws`, nothing recorded, the
+        /// application sees an error. Once v3d-mrt-clear lands, the same scene
+        /// must be drawn: both RTs loaded, a quad per class or one for both,
+        /// each with the GL's box, the float one writing f16 pairs with the
+        /// colour as f32 words into a job whose RTs are still
+        /// [SRGB8_ALPHA8, RGBA8]. Both states are held here so the fix does not
+        /// have to touch this file; delete the first arm with it.
+        #[test]
+        fn a_scissored_clear_of_srgb_beside_another_is_the_mrt_refusal_today() {
+            const REFUSAL: &str = "a scissored or masked colour clear of several colour attachments";
+            let _g = rig();
+            let f = fbo(&[GL_SRGB8_ALPHA8, GL_RGBA8]);
+            let r = run(|| {
+                // SAFETY: plain GL calls.
+                unsafe {
+                    glEnable(GL_SCISSOR_TEST);
+                    glScissor(3, 2, 9, 7);
+                    glClearColor(COLOUR[0], COLOUR[1], COLOUR[2], COLOUR[3]);
+                    glClear(GL_COLOR_BUFFER_BIT);
+                }
+            });
+            if r.refused != 0 {
+                /* today */
+                assert_eq!(r.refused, 1, "one draw refused: {:?}", r.seen.log);
+                let line = format!("yakogl/v3d: draw refused: {REFUSAL}");
+                assert!(r.seen.log.contains(&line), "the refusal by its exact name: {:?}", r.seen.log);
+                assert!(r.seen.draws.is_empty(), "nothing recorded");
+                assert_ne!(r.error, GL_NO_ERROR, "the application sees it");
+            } else {
+                /* after v3d-mrt-clear */
+                the_typed_job(&r, &[V3D_OUTPUT_IMAGE_FORMAT_SRGB8_ALPHA8, V3D_OUTPUT_IMAGE_FORMAT_RGBA8]);
+                assert_eq!(r.seen.clears.len(), 1);
+                assert!(r.seen.clears[0].load_rt0 && r.seen.clears[0].load_rt[0], "loaded, the quad writes them");
+                assert!(
+                    !r.seen.draws.is_empty() && r.seen.draws.len() <= 2,
+                    "a quad per class or one: {:?}",
+                    r.seen.log
+                );
+                for q in &r.seen.draws {
+                    assert_eq!(q.count, 6);
+                    assert!(!writes_32bit_words(q), "both RTs are float class");
+                    assert_eq!(q.fs_storage, COLOUR.map(f32::to_bits).to_vec());
+                    assert!(q.st.scissor);
+                    assert_eq!(
+                        [q.st.scissor_minx, q.st.scissor_miny, q.st.scissor_maxx, q.st.scissor_maxy],
+                        [3, 2, 12, 9]
+                    );
+                }
+            }
+            drop(f);
         }
     }
 }

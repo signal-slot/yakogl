@@ -443,6 +443,39 @@ first sRGB triangle on the board.
   `v3d::backend_tests` `an_srgb_target_is_a_typed_16f_job_clearing_linear_halves`,
   `tests/es3_int_rt_v3d.rs` `every_integer_surface_is_drawable`. B3 (the
   first triangle) is a board check.
+* Through the GL API into the real back end, with the job builder stood in
+  for (`tests/es3_int_rt_v3d.rs`, `gl_api::srgb`, the job words the V3D
+  hands `v3d_job_begin` / `v3d_job_draw` / `v3d_job_end`; the pixels
+  themselves need the board):
+  - a draw into an `SRGB8_ALPHA8` renderbuffer or texture level is one typed
+    job with RT 0 in output image format `SRGB8_ALPHA8` (0), its fragment
+    shader writing f16 pairs with no TLB config of its own, blending on in
+    the job's fixed function when GL_BLEND is on; an sRGB texture level
+    gets no render image (`RtImage` stands for RGBA8 textures only, the
+    class is sampled through the tiled copy, whose state decodes);
+  - glClear and glClearBufferfv of it are the TLB's: RT 0 cleared, not
+    loaded, from the linear colour clamped to [0, 1] in halves
+    (`clear_rt[0]`, 1.5 to 0x3c00), no CPU encode;
+  - a scissored or masked clear of it alone is the float clear quad (six
+    vertices, f16 pairs, the colour as four unclamped f32 words; the row's
+    NORM clamp takes 1.5 to 1 on entry), RT 0 loaded, the GL's box and mask;
+  - beside an RGBA8 or an RGBA32UI attachment, in either order, a draw is
+    one typed job of two RTs in their own image formats (the integer RT
+    written with the 32-bit TLB config naming it), and the whole-target
+    clear of both is the TLB's with each RT's own words (`extra_targets`
+    takes any surface with a TLB row; its comment "the sRGB surface has
+    none", `src/v3d/backend.rs:5990`, is stale: a comment fix).
+  - Still refused, and not for being sRGB: a scissored or masked colour
+    clear of sRGB beside another attachment is "a scissored or masked colour
+    clear of several colour attachments" (`src/v3d/backend.rs` `draw_call`,
+    the quad writes RT 0 alone), the refusal every class meets; it is
+    v3d-mrt-clear's (#1261, the `fragment_ops.scissor.*` and
+    `fbo.color.*clear*` rows), pinned by name in
+    `a_scissored_clear_of_srgb_beside_another_is_the_mrt_refusal_today`,
+    which also holds what the fixed job must carry. 4x multisampling of an
+    sRGB renderbuffer is "4x multisampling of an ES 3.0 colour format"
+    (`fbo.msaa.*srgb*`, docs/notes/v3d-msaa-es3.md). No sRGB-specific
+    refusal is left on the V3D's render side.
 
 ## 6. GC7000UL (Vivante, i.MX8MP)
 
