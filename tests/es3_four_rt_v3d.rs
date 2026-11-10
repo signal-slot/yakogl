@@ -18,16 +18,15 @@
 //! - "4x multisampling of several colour attachments": not reached, an FBO
 //!   is single-sampled.
 //! - "a scissored or masked colour clear of several colour attachments":
-//!   not reached by a draw. A glClear under scissor or colour mask on 2-4
-//!   attachments reaches it (pinned below); that is the v3d-mrt-clear item,
-//!   not a property of the fourth buffer.
+//!   gone (v3d-mrt-clear). A glClear under scissor or colour mask on 2-4
+//!   attachments is one clear quad whose program writes every attachment
+//!   (`src/v3d/clear_mrt.rs`, up to its `MAX_RTS` of four), pinned below.
 //! - "colour attachments of different sizes": reached only by attachments of
 //!   different sizes (docs/notes/v3d-mrt-sizes.md), not by their count.
 //!
 //! So nothing in `src/v3d` refuses a four-target draw. What blocks
 //! DRAW_TARGETS = 4 for the V3D is the constant itself (src/backend.rs, 3 in
-//! its V3D arm, "no board has drawn four") and the scissored/masked clear
-//! refusal above, which the arm would expose to a fourth attachment too.
+//! its V3D arm, "no board has drawn four").
 //! The tests pin the GL core's three-target limit (the build as it is), the
 //! job a draw of three attachments makes (rts, the fragment program's
 //! rt_mask, the tile size), and the job a four-attachment draw makes when a
@@ -807,15 +806,14 @@ mod gl_api {
         assert_eq!(j, (4, 0b1001, tile(4, 0, (32, 32))));
     }
 
-    /* ---- the refusal a several-attachment clear reaches ---- */
+    /* ---- the several-attachment clear a scissor makes a quad ---- */
 
     /// glClear under glScissor on three (or, with the stand-in, four)
-    /// attachments is the refusal the note lists: "a scissored or masked
-    /// colour clear of several colour attachments", not the fourth buffer's
-    /// doing, and nothing is recorded. The v3d-mrt-clear item removes it
-    /// (tests/es3_mrt_clear_v3d.rs holds its acceptance tests).
+    /// attachments is one clear quad in one job that loads every attachment
+    /// (the TLB clears none): no refusal, no error, whatever the count
+    /// (tests/es3_mrt_clear_v3d.rs holds the mixed-class cases).
     #[test]
-    fn a_scissored_clear_of_several_attachments_is_refused_by_name() {
+    fn a_scissored_clear_of_several_attachments_is_one_quad() {
         let _g = rig();
         for n in [3u8, 4] {
             stand_in(n);
@@ -828,17 +826,22 @@ mod gl_api {
                 glScissor(1, 1, 4, 4);
                 glClear(GL_COLOR_BUFFER_BIT);
                 glFinish();
+                glDisable(GL_SCISSOR_TEST);
             }
             let s = seen(core::mem::take);
             drop(fbo);
             as_built();
-            let why = "a scissored or masked colour clear of several colour attachments";
-            let named = s.log.iter().filter(|l| l.contains(why)).count();
-            /* the back end logs a cause the first time only; the counter is every draw */
-            assert_eq!(named, usize::from(n == 3), "{n} attachments: {:?}", s.log);
-            assert_eq!(yakogl::v3d::backend::v3d_refused_draws().wrapping_sub(base), 1, "{n} attachments: counted");
-            assert!(s.draws.is_empty(), "{n} attachments: nothing recorded");
-            err();
+            assert_eq!(err(), GL_NO_ERROR, "{n} attachments: {:?}", s.log);
+            assert_eq!(yakogl::v3d::backend::v3d_refused_draws().wrapping_sub(base), 0, "{n} attachments: {:?}", s.log);
+            assert_eq!(
+                (s.jobs.len(), s.draws.clone()),
+                (1, vec![6]),
+                "{n} attachments: one job, the quad: {:?}",
+                s.log
+            );
+            assert_eq!(s.jobs[0].rts, u32::from(n), "{n} attachments");
+            let c = &s.clears[0];
+            assert!(c.load_rt0 && c.load_rt[..n as usize - 1].iter().all(|l| *l), "{n} attachments: all loaded: {c:?}");
         }
     }
 

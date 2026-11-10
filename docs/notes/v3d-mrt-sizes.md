@@ -232,8 +232,8 @@ its first case (see (f)).
 5. `a_fused_clear_of_unequal_attachments_clears_the_intersection`: `do_clear`
    with RT sizes 64x64 and 32x32: `jobs[0].clear` as for an equal draw, the
    job 32x32, RT 0 stored 32x32 (no `load` of the part outside). With
-   `clear_quad`/scissor: refused by the other item's name only while
-   `v3d-mrt-clear` is open, drawn after.
+   `clear_quad`/scissor: drawn as the several-attachment quad
+   (`v3d-mrt-clear`, landed) over the intersection.
 6. `a_smaller_frame_does_not_use_the_render_image`: RT 0 sampled (an
    `RtImage` live) and a draw with a smaller RT 1: the job has
    `uif_address == 0`, raster store only; a following draw with equal sizes

@@ -171,9 +171,10 @@ before its GL half, otherwise no draw reaches them.
    refusals a four-target draw can reach and that need a look on the host
    before the arm moves: "a colour output with no attachment slot"
    (`draw_call`, rt_mask against `rts`), "4x multisampling of several colour
-   attachments", "a scissored or masked colour clear of several colour
-   attachments" (the item that is in flight, `v3d-mrt-clear`), and
-   "colour attachments of different sizes" (`docs/notes/v3d-mrt-sizes.md`).
+   attachments", and "colour attachments of different sizes"
+   (`docs/notes/v3d-mrt-sizes.md`); "a scissored or masked colour clear of
+   several colour attachments" is gone (`v3d-mrt-clear`: one quad from
+   `src/v3d/clear_mrt.rs`, up to its four RTs).
    dEQP's random cases clear nothing and use one size, so only the first
    matters for G5.
 

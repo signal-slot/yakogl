@@ -465,14 +465,13 @@ first sRGB triangle on the board.
     clear of both is the TLB's with each RT's own words (`extra_targets`
     takes any surface with a TLB row; its comment "the sRGB surface has
     none", `src/v3d/backend.rs:5990`, is stale: a comment fix).
-  - Still refused, and not for being sRGB: a scissored or masked colour
-    clear of sRGB beside another attachment is "a scissored or masked colour
-    clear of several colour attachments" (`src/v3d/backend.rs` `draw_call`,
-    the quad writes RT 0 alone), the refusal every class meets; it is
-    v3d-mrt-clear's (#1261, the `fragment_ops.scissor.*` and
-    `fbo.color.*clear*` rows), pinned by name in
-    `a_scissored_clear_of_srgb_beside_another_is_the_mrt_refusal_today`,
-    which also holds what the fixed job must carry. 4x multisampling of an
+  - A scissored or masked colour clear of sRGB beside another attachment
+    was "a scissored or masked colour clear of several colour attachments",
+    the refusal every class met; v3d-mrt-clear (#1261, the
+    `fragment_ops.scissor.*` and `fbo.color.*clear*` rows) draws it as one
+    quad from `src/v3d/clear_mrt.rs`, pinned in
+    `a_scissored_clear_of_srgb_beside_another_is_the_several_attachment_quad`
+    (tests/es3_int_rt_v3d.rs). 4x multisampling of an
     sRGB renderbuffer is "4x multisampling of an ES 3.0 colour format"
     (`fbo.msaa.*srgb*`, docs/notes/v3d-msaa-es3.md). No sRGB-specific
     refusal is left on the V3D's render side.
