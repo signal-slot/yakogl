@@ -6,17 +6,20 @@
  * (driver/rust/src/board/nanopc_t6_frame.rs, tools/mali/panthor/src/l1.rs over
  * src/mali/frame.rs) submitted and its sync object waited on. The image embeds
  * the CSF firmware (driver/src/fw/mali_csffw_blob.h, made by
- * driver/tools/mkmalifw.sh, never committed). The Z4 entry brings Z3 up
- * itself, so this file does not call yd_t6_fw_up.
+ * driver/tools/mkmalifw.sh, never committed). yd_t6_submit brings Z3 up itself
+ * (same arguments as yd_t6_fw_up), so this file does not call yd_t6_fw_up.
  *
- * This is the scaffold: it prints the build, the firmware digest, the Z3
- * section backings and the Z4 storage (the VA the frame uses, the size, the
- * PA), then stops with a FAIL line. The entry (yd_t6_submit) and its record
- * are not wired yet; the probe-verdict step replaces the FAIL line with the
- * call and the record, taking its storage from t6_z4_regions below.
+ * Output on uart2: the build, WDT0, the image, its sections and the pool (as
+ * t6_fw prints them), the "Z3: rc" line and Z3's record (t6_fw's formats), then
+ * the Z4 record, one "t6_submit: Z4: key=value" line per field in the order of
+ * struct yd_t6_submit_up after fw (the key is the field's name; a 64-bit field
+ * is 0x%016llx, a register word 0x%08x, a count or time decimal), then PASS or
+ * FAIL and the reset. Every Z4 region is __nocache storage with PA = CPU
+ * address; the watchdog is fed around the call and by on_handover.
  */
 #include <zephyr/kernel.h>
 #include <zephyr/kernel/internal/mm.h>
+#include <zephyr/cache.h>
 #include <zephyr/linker/section_tags.h>
 #include <zephyr/sys/device_mmio.h>
 #include <zephyr/sys/printk.h>
@@ -35,11 +38,13 @@
 #define QOS_PHYS  0xfdf35000UL
 #define GPU_PHYS  0xfb000000UL
 
-/* AS0's tables: the firmware's nine pages (Z3) and the Z4 regions' (the
- * frame's arenas and buffers, the heap, the ring, the sync object), from a
- * pool of thirty-two. */
-#define POOL_PAGES 32
+/* AS0's tables: the firmware's nine pages (Z3) and one for the queue memory,
+ * from a pool of sixteen; the group VM's tables (ten pages) come from their
+ * own pool of sixteen. */
+#define POOL_PAGES 16
 static uint8_t t6_submit_pool[POOL_PAGES * 4096] __aligned(4096);
+#define VM_POOL_PAGES 16
+static __nocache uint8_t t6_submit_vm_pool[VM_POOL_PAGES * 4096] __aligned(4096);
 
 /*
  * Z3's seven firmware sections, backed as t6_fw backs them (the board's
@@ -74,56 +79,173 @@ static const struct t6_submit_section t6_submit_sections[] = {
 BUILD_ASSERT(SECTIONS == 7, "the board's firmware has seven loaded sections");
 
 /*
- * Z4's storage. The VAs and sizes are driver/rust/src/board/nanopc_t6_frame.rs's
- * pub consts (generated from l1.rs, d2d9a816): CTX_VA/CTX_SIZE, DESC_VA/DESC_SIZE,
- * CODE_VA/CODE_SIZE, SPDS_VA/SPDS_SIZE, DATA_VA/DATA_SIZE,
- * GEOMETRY_BUFFER_VA/GEOMETRY_BUFFER_SIZE, TARGET_VA (64x64 RGBA8 at row stride
- * 256: 16 KiB), HEAP_FIRST_CHUNK_VA/HEAP_CHUNK_SIZE. The ring buffer (4 KiB,
- * panthor's size), the sync object page (4 KiB, one 16-byte object) and the heap
- * context page (4 KiB) have no fixed VA in the frame: the Z4 entry places them
- * (va 0 here). Every region the CPU writes and the GPU or MCU reads is
- * __nocache, so no cache clean is owed; the heap chunk is only touched by the
- * GPU (plain bss).
+ * Z4's storage, one buffer per YD_T6_SUBMIT_REGION_* (sizes from the header's
+ * *_SIZE; the entry places each at its *_VA). The queue's AS0 backing holds
+ * the 8 KiB of user pages and CSG 0's two suspend buffers (4 KiB rounded
+ * each); 1 MiB is far over what the firmware asks, and a short one stops with
+ * STEP_QUEUE_MEM and the bytes needed in detail. The regions are __nocache
+ * (the CPU writes, the GPU or MCU reads; no clean is owed).
  */
-static __nocache uint8_t t6_z4_ctx[0x1000] __aligned(4096);
-static __nocache uint8_t t6_z4_desc[0x4000] __aligned(4096);
-static __nocache uint8_t t6_z4_code[0x1000] __aligned(4096);
-static __nocache uint8_t t6_z4_spds[0x1000] __aligned(4096);
-static __nocache uint8_t t6_z4_data[0x1000] __aligned(4096);
-static __nocache uint8_t t6_z4_geometry[0x10000] __aligned(4096);
-static __nocache uint8_t t6_z4_target[0x4000] __aligned(4096);
-static __nocache uint8_t t6_z4_ring[0x1000] __aligned(4096);
-static __nocache uint8_t t6_z4_sync[0x1000] __aligned(4096);
-static __nocache uint8_t t6_z4_heap_ctx[0x1000] __aligned(4096);
-static uint8_t t6_z4_heap_chunk[0x200000] __aligned(4096);
+#define QUEUE_MEM_SIZE 0x100000
+static __nocache uint8_t t6_z4_queue_mem[QUEUE_MEM_SIZE] __aligned(4096);
+static __nocache uint8_t t6_z4_queue[YD_T6_SUBMIT_QUEUE_SIZE] __aligned(4096);
+static __nocache uint8_t t6_z4_arenas[YD_T6_SUBMIT_ARENAS_SIZE] __aligned(4096);
+static __nocache uint8_t t6_z4_geometry[YD_T6_SUBMIT_GEOMETRY_SIZE] __aligned(4096);
+static __nocache uint8_t t6_z4_target[YD_T6_SUBMIT_TARGET_SIZE] __aligned(4096);
+static __nocache uint8_t t6_z4_heap_pool[YD_T6_SUBMIT_HEAP_POOL_SIZE] __aligned(4096);
+static __nocache uint8_t t6_z4_heap_chunk[YD_T6_SUBMIT_HEAP_CHUNK_SIZE] __aligned(4096);
 
 struct t6_z4_region {
-	const char *name;
-	uint64_t va; /* 0: the Z4 entry places it */
 	uint8_t *cpu;
 	size_t size;
 };
 
-static const struct t6_z4_region t6_z4_regions[] = {
-	{ "context arena", 0x102000000ULL, t6_z4_ctx, sizeof(t6_z4_ctx) },
-	{ "descriptor arena", 0x102010000ULL, t6_z4_desc, sizeof(t6_z4_desc) },
-	{ "code arena", 0x102020000ULL, t6_z4_code, sizeof(t6_z4_code) },
-	{ "spds arena", 0x102030000ULL, t6_z4_spds, sizeof(t6_z4_spds) },
-	{ "data arena", 0x102040000ULL, t6_z4_data, sizeof(t6_z4_data) },
-	{ "geometry buffer", 0x102100000ULL, t6_z4_geometry, sizeof(t6_z4_geometry) },
-	{ "render target", 0x103000000ULL, t6_z4_target, sizeof(t6_z4_target) },
-	{ "heap first chunk", 0x800000a00000ULL, t6_z4_heap_chunk, sizeof(t6_z4_heap_chunk) },
-	{ "heap context", 0, t6_z4_heap_ctx, sizeof(t6_z4_heap_ctx) },
-	{ "CS ring buffer", 0, t6_z4_ring, sizeof(t6_z4_ring) },
-	{ "sync object", 0, t6_z4_sync, sizeof(t6_z4_sync) },
+static const struct t6_z4_region t6_z4_regions[YD_T6_SUBMIT_REGIONS] = {
+	[YD_T6_SUBMIT_REGION_QUEUE] = { t6_z4_queue, sizeof(t6_z4_queue) },
+	[YD_T6_SUBMIT_REGION_ARENAS] = { t6_z4_arenas, sizeof(t6_z4_arenas) },
+	[YD_T6_SUBMIT_REGION_GEOMETRY] = { t6_z4_geometry, sizeof(t6_z4_geometry) },
+	[YD_T6_SUBMIT_REGION_TARGET] = { t6_z4_target, sizeof(t6_z4_target) },
+	[YD_T6_SUBMIT_REGION_HEAP_POOL] = { t6_z4_heap_pool, sizeof(t6_z4_heap_pool) },
+	[YD_T6_SUBMIT_REGION_HEAP_CHUNK] = { t6_z4_heap_chunk, sizeof(t6_z4_heap_chunk) },
 };
-#define Z4_REGIONS ARRAY_SIZE(t6_z4_regions)
+
+BUILD_ASSERT(YD_T6_SUBMIT_QUEUE_MCU_MIN <= QUEUE_MEM_SIZE, "queue memory");
+BUILD_ASSERT(sizeof(struct yd_t6_fw_up) == 192, "struct yd_t6_fw_up moved");
+BUILD_ASSERT(sizeof(struct yd_t6_fw_backing) == 24, "struct yd_t6_fw_backing moved");
+BUILD_ASSERT(sizeof(struct yd_t6_submit_up) == 392, "struct yd_t6_submit_up moved");
+BUILD_ASSERT(sizeof(struct yd_t6_submit_mem) == 192, "struct yd_t6_submit_mem moved");
 
 #define GPU_MAP_SIZE 0x280000 /* the doorbells are at 0x80000 and up */
+#define TIMER_HZ     24000000 /* CNTFRQ_EL0 on the RK3588 */
+
+static const char *const step_name[] = {
+	[YD_T6_SUBMIT_STEP_NONE] = "none",
+	[YD_T6_SUBMIT_STEP_FRAME] = "the frame or its memory refused",
+	[YD_T6_SUBMIT_STEP_FW] = "Z3 stopped",
+	[YD_T6_SUBMIT_STEP_IFACE] = "reading the interface again refused",
+	[YD_T6_SUBMIT_STEP_IDENT] = "no address space 1",
+	[YD_T6_SUBMIT_STEP_QUEUE_MEM] = "the queue memory is short or misaligned",
+	[YD_T6_SUBMIT_STEP_AS0_MAP] = "adding the queue memory to AS0 refused",
+	[YD_T6_SUBMIT_STEP_CLEAN] = "a clean of table pages failed",
+	[YD_T6_SUBMIT_STEP_AS0_FLUSH] = "AS0's FLUSH_PT stopped",
+	[YD_T6_SUBMIT_STEP_VM_MAP] = "the group VM's tables refused",
+	[YD_T6_SUBMIT_STEP_VM_ENABLE] = "address space 1's enable stopped",
+	[YD_T6_SUBMIT_STEP_HEAP] = "the tiler heap refused",
+	[YD_T6_SUBMIT_STEP_START] = "sched::start refused",
+	[YD_T6_SUBMIT_STEP_SUBMIT] = "sched::submit refused",
+	[YD_T6_SUBMIT_STEP_WAIT] = "sched::wait refused",
+	[YD_T6_SUBMIT_STEP_STOP] = "CS 0's stop refused",
+	[YD_T6_SUBMIT_STEP_TERMINATE] = "CSG 0's terminate refused",
+};
+
+static void delay_us(uint32_t us)
+{
+	k_busy_wait(us);
+}
+
+static int clean(uintptr_t addr, size_t len)
+{
+	/* Zephyr's "flush" is a clean to the point of coherency (dc cvac). */
+	return sys_cache_data_flush_range((void *)addr, len);
+}
+
+static void on_handover(const struct yd_t6_gpu_up *h)
+{
+	ARG_UNUSED(h);
+	t6_watchdog_feed();
+}
+
+/* Z3's record, as t6_fw prints it (the same formats, this probe's prefix). */
+static void print_z3(const struct yd_t6_fw_up *o)
+{
+	printk("t6_submit: Z3: image version 0x%08x, %u sections loaded, %u protected skipped, "
+	       "%u table pages, %u flushes\n",
+	       o->image_version, o->sections, o->protected_skipped, o->tables_used, o->flushed);
+	printk("t6_submit: Z3: GPU_ID 0x%08x SHADER_PRESENT 0x%08x%08x MMU_FEATURES 0x%08x "
+	       "shared PA 0x%08x%08x clean rc %d\n",
+	       o->gpu_id, o->shader_present[1], o->shader_present[0], o->mmu_features,
+	       o->shared_pa[1], o->shared_pa[0], o->clean_rc);
+	printk("t6_submit: Z3: MCU_STATUS %u before, %u after, booted in %u us, JOB_INT_RAWSTAT "
+	       "0x%08x\n",
+	       o->mcu_status_before, o->mcu_status, o->boot_waited_us, o->job_raw);
+	printk("t6_submit: Z3: GLB version %u.%u.%u (0x%08x), features 0x%08x, instr 0x%08x, "
+	       "%u groups stride 0x%x\n",
+	       (o->version >> 24) & 0xff, (o->version >> 16) & 0xff, o->version & 0xffff,
+	       o->version, o->features, o->instr_features, o->group_num, o->group_stride);
+	printk("t6_submit: Z3: GLB input 0x%08x output 0x%08x, CSG0 in 0x%08x out 0x%08x "
+	       "%u streams stride 0x%x, CS0 in 0x%08x out 0x%08x features 0x%08x\n",
+	       o->glb_input, o->glb_output, o->csg0[0], o->csg0[1], o->csg0[2], o->csg0[3],
+	       o->cs0[0], o->cs0[1], o->cs0[2]);
+	printk("t6_submit: Z3: CORE_EN 0x%08x%08x, poweroff 0x%08x progress 0x%08x idle 0x%08x, "
+	       "ack_irq_mask 0x%08x\n",
+	       o->core_en_mask[1], o->core_en_mask[0], o->poweroff_timer, o->progress_timer,
+	       o->idle_timer, o->ack_irq_mask);
+	printk("t6_submit: Z3: init req 0x%08x acked 0x%08x in %u us, PING %s in %u us, "
+	       "GLB req 0x%08x ack 0x%08x\n",
+	       o->init_req, o->acked, o->init_ack_us, o->ping_acked ? "acked" : "NOT acked",
+	       o->ping_ack_us, o->glb_req, o->glb_ack);
+}
+
+#define Z4D(name, v) printk("t6_submit: Z4: " #name "=%u\n", (unsigned int)(v))
+#define Z4X(name, v) printk("t6_submit: Z4: " #name "=0x%08x\n", (unsigned int)(v))
+#define Z4Q(name, v) printk("t6_submit: Z4: " #name "=0x%016llx\n", (unsigned long long)(v))
+
+/* The Z4 record: the fields of struct yd_t6_submit_up after fw, in order, the
+ * key being the field's name (cleared[0..2] as cleared0..cleared2). The 64-bit
+ * counters insert, extract and seqno are small: decimal. */
+static void print_z4(const struct yd_t6_submit_up *o)
+{
+	Z4D(step, o->step);
+	Z4D(refusal, o->refusal);
+	Z4Q(detail, o->detail);
+	Z4X(as_present, o->as_present);
+	Z4X(l2_features, o->l2_features);
+	Z4D(as0_tables_used, o->as0_tables_used);
+	Z4D(vm_tables_used, o->vm_tables_used);
+	Z4D(suspend_size, o->suspend_size);
+	Z4D(protm_suspend_size, o->protm_suspend_size);
+	Z4Q(heap_ctx, o->heap_ctx);
+	Z4Q(heap_chunk, o->heap_chunk);
+	Z4X(heap_chunk_size, o->heap_chunk_size);
+	Z4D(heap_stride, o->heap_stride);
+	Z4X(csg_req, o->csg_req);
+	Z4X(csg_ack, o->csg_ack);
+	Z4X(cs_req, o->cs_req);
+	Z4X(cs_ack, o->cs_ack);
+	Z4D(csg_ack_us, o->csg_ack_us);
+	Z4D(cs_ack_us, o->cs_ack_us);
+	Z4X(latest_flush, o->latest_flush);
+	Z4D(sync_updates, o->sync_updates);
+	Z4D(insert, o->insert);
+	Z4D(extract, o->extract);
+	Z4D(seqno, o->seqno);
+	Z4D(sync_status, o->sync_status);
+	Z4D(wait_us, o->wait_us);
+	Z4Q(status_cmd_ptr, o->status_cmd_ptr);
+	Z4Q(info, o->info);
+	Z4D(stop_us, o->stop_us);
+	Z4D(stop_refusal, o->stop_refusal);
+	Z4D(terminate_us, o->terminate_us);
+	Z4D(terminate_refusal, o->terminate_refusal);
+	Z4X(cleared0, o->cleared[0]);
+	Z4X(cleared1, o->cleared[1]);
+	Z4X(cleared2, o->cleared[2]);
+	Z4D(red, o->red);
+	Z4D(blue, o->blue);
+	Z4D(fill, o->fill);
+	Z4D(other, o->other);
+	Z4D(pixels, o->pixels);
+	Z4Q(digest, o->digest);
+}
 
 int main(void)
 {
 	mm_reg_t cru, pmu, spi2, qos, gpu;
+	struct yd_t6_fw_backing backings[SECTIONS];
+	struct yd_t6_submit_mem mem = { 0 };
+	static struct yd_t6_submit_up o;
+	int64_t t0;
+	int rc;
 
 	printk("t6_submit: build %s\n", T6_SUBMIT_BUILD);
 	printk("t6_submit: WDT0 period %u ms, fed until %u ms of uptime\n",
@@ -134,11 +256,13 @@ int main(void)
 	       (unsigned int)(mali_csffw_blob[0] | mali_csffw_blob[1] << 8 |
 			      mali_csffw_blob[2] << 16 | (uint32_t)mali_csffw_blob[3] << 24));
 	for (size_t i = 0; i < SECTIONS; i++) {
+		backings[i].pa = k_mem_phys_addr(t6_submit_sections[i].cpu);
+		backings[i].cpu = (uintptr_t)t6_submit_sections[i].cpu;
+		backings[i].size = t6_submit_sections[i].size;
 		printk("t6_submit: section %u: VA 0x%08x, %u KiB, backing %p at PA 0x%llx\n",
 		       (unsigned int)i, t6_submit_sections[i].va,
 		       (unsigned int)(t6_submit_sections[i].size / 1024),
-		       (void *)t6_submit_sections[i].cpu,
-		       (unsigned long long)k_mem_phys_addr(t6_submit_sections[i].cpu));
+		       (void *)t6_submit_sections[i].cpu, (unsigned long long)backings[i].pa);
 	}
 	device_map(&cru, CRU_PHYS, 0x1000, K_MEM_CACHE_NONE);
 	device_map(&pmu, PMU_PHYS, 0x1000, K_MEM_CACHE_NONE);
@@ -149,22 +273,49 @@ int main(void)
 
 	printk("t6_submit: pool %p at PA 0x%llx (%u pages)\n", (void *)t6_submit_pool,
 	       (unsigned long long)k_mem_phys_addr(t6_submit_pool), POOL_PAGES);
-	for (size_t i = 0; i < Z4_REGIONS; i++) {
-		const struct t6_z4_region *r = &t6_z4_regions[i];
 
-		if (r->va) {
-			printk("t6_submit: Z4 %s: VA 0x%llx, ", r->name, (unsigned long long)r->va);
-		} else {
-			printk("t6_submit: Z4 %s: VA by the entry, ", r->name);
-		}
-		printk("%u bytes, backing %p at PA 0x%llx\n", (unsigned int)r->size,
-		       (void *)r->cpu, (unsigned long long)k_mem_phys_addr(r->cpu));
+	mem.queue.pa = k_mem_phys_addr(t6_z4_queue_mem);
+	mem.queue.cpu = (uintptr_t)t6_z4_queue_mem;
+	mem.queue.size = sizeof(t6_z4_queue_mem);
+	for (size_t i = 0; i < YD_T6_SUBMIT_REGIONS; i++) {
+		mem.regions[i].pa = k_mem_phys_addr(t6_z4_regions[i].cpu);
+		mem.regions[i].cpu = (uintptr_t)t6_z4_regions[i].cpu;
+		mem.regions[i].size = t6_z4_regions[i].size;
 	}
-	t6_watchdog_feed();
+	mem.vm_pool = t6_submit_vm_pool;
+	mem.vm_pool_pages = VM_POOL_PAGES;
+	mem.vm_tables_pa = k_mem_phys_addr(t6_submit_vm_pool);
 
-	/* probe-verdict replaces this with yd_t6_submit over t6_z4_regions, and
-	 * the Z4 record and PASS or FAIL. */
-	printk("t6_submit: FAIL: Z4 entry not wired (ffi-entry)\n");
+	/* Z1 to Z3 as t6_fw, then Z4, in one run; the probe feeds around it. */
+	t0 = k_uptime_get();
+	rc = yd_t6_submit(cru, pmu, spi2, qos, gpu, mali_csffw_blob, MALI_CSFFW_SIZE, backings,
+			  SECTIONS, t6_submit_pool, POOL_PAGES, k_mem_phys_addr(t6_submit_pool),
+			  TIMER_HZ, &mem, clean, delay_us, on_handover, &o);
+	t6_watchdog_feed();
+	printk("t6_submit: Z3: rc %d step %u, %lld ms\n", rc, o.fw.step,
+	       (long long)(k_uptime_get() - t0));
+
+	if (rc == -EINVAL) {
+		printk("t6_submit: FAIL: yd_t6_submit refused its arguments\n");
+	} else {
+		if (o.fw.step != YD_T6_FW_STEP_NONE) {
+			printk("t6_submit: Z3: stop %u refusal %u detail 0x%08x%08x acked 0x%08x\n",
+			       o.fw.stop, o.fw.refusal, o.fw.detail[1], o.fw.detail[0],
+			       o.fw.acked);
+		}
+		if (o.fw.step == YD_T6_FW_STEP_NONE || o.fw.step >= YD_T6_FW_STEP_BOOT) {
+			print_z3(&o.fw);
+		}
+		print_z4(&o);
+		if (rc == 0 && o.step == YD_T6_SUBMIT_STEP_NONE &&
+		    o.digest == YD_T6_SUBMIT_DIGEST) {
+			printk("t6_submit: PASS\n");
+		} else {
+			printk("t6_submit: FAIL: Z4 step %u (%s): rc %d, refusal %u\n", o.step,
+			       o.step < ARRAY_SIZE(step_name) ? step_name[o.step] : "unknown", rc,
+			       o.refusal);
+		}
+	}
 
 	t6_reset_to_linux("t6_submit done");
 }
