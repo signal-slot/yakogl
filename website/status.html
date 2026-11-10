@@ -126,6 +126,38 @@ target, not yet one of the three supported Zephyr boards.
 <a href="https://github.com/signal-slot/yakogl/blob/main/driver/docs/nanopc-t6-mali.md">Mali bring-up details</a> ·
 <a href="https://github.com/signal-slot/yakogl/blob/main/ROADMAP.md#5-more-boards">support criteria</a>.</p>
 
+<h3 id="x2">Armadillo-X2 <span class="badge">WIP</span></h3>
+<p>The Atmark Techno Armadillo-X2 carries the same SoC and GPU as the Verdin iMX8M Plus
+(NXP i.MX 8M Plus, Vivante GC7000UL), so the <code>gpu-vivante</code> back end runs on it
+unchanged. It is a second development board for that back end: the Zephyr board files
+and the board runner are in the tree, and Zephyr images reach the board by kexec from
+its own Linux. Those are development runs, never results. Booting YakoGL from the board's
+own loader, with no Linux in between, is designed with host tests and has not run on the
+board. No dEQP or benchmark result exists for it yet.
+<a href="https://github.com/signal-slot/yakogl/blob/main/docs/notes/x2-direct-boot.md">Direct-boot design</a> ·
+<a href="https://github.com/signal-slot/yakogl/blob/main/driver/tools/kexec-zephyr/README.md">board runner notes</a>.</p>
+
+<h3 id="stm32mp2">STM32MP257F-DK <span class="badge">WIP</span></h3>
+<p>The STMicroelectronics STM32MP257F-DK (two Cortex-A35 cores plus a Cortex-M33) has a
+smaller Vivante GPU, the GCNANOULTRA31. The port started when the board arrived in
+November 2026. In the tree: a pre-study of the hardware and of ST's open-source stack, the
+Zephyr board files, the C ABI over OP-TEE's watchdog and PSCI reset, a GPU identity probe
+tested against a host model, and a runner that boots one image from the board's own
+U-Boot and returns to ST's Linux. The first run of a YakoGL image on the board is the next
+step; nothing has rendered on it yet.
+<a href="https://github.com/signal-slot/yakogl/blob/main/docs/notes/pre-study-stm32mp257f-dk.md">Pre-study</a>.</p>
+
+<h3 id="pi5">Raspberry Pi 5 <span class="badge">WIP</span></h3>
+<p>The Raspberry Pi 5 (Broadcom BCM2712) has a V3D 7.1, a newer generation than the Pi 4's
+V3D 4.2. The V3D back end's 7.1 frame path (the clear-only frame and the frame checker) is
+built and run against a simulator on the host. For the board, a pre-study, the hardware
+facts read from Linux, and the first probe images (watchdog, boot, device tree, GPU
+identity, a clear-only frame) are in the tree, built and not yet run on the board. No GL
+result exists for it yet.
+<a href="https://github.com/signal-slot/yakogl/blob/main/docs/notes/pre-study-rpi5.md">Pre-study</a> ·
+<a href="https://github.com/signal-slot/yakogl/blob/main/driver/docs/rpi5-v3d71-facts.md">V3D 7.1 facts</a> ·
+<a href="https://github.com/signal-slot/yakogl/blob/main/tools/probes/rpi_5/README.md">probes</a>.</p>
+
 <h2 id="not-yet">What to assess before integration</h2>
 <ul>
 <li><strong>Your UI's performance.</strong> Heavy benchmark scenes remain slow, and the
