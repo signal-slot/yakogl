@@ -42,51 +42,84 @@
 
 <main class="wrap" id="main-content">
 <h1>What runs today</h1>
-<p class="lead">Three GPU families running on Zephyr. Here are the recorded results,
-the conditions behind them, and the work still in progress.</p>
-
-<div class="note">
-<p><strong>OpenGL ES 2.0: zero test failures on all three boards.</strong>
-These are our own runs of the Khronos dEQP-GLES2 test suite on real hardware.
-YakoGL has not been through the Khronos Adopters Program and is not a certified
-conformant implementation. Not-supported cases and warnings remain visible below.</p>
-</div>
-
-<nav class="cta" aria-label="On this page">
-  <a class="button" href="#am62p">AM62P</a>
-  <a class="button" href="#imx8mp">i.MX8M Plus</a>
-  <a class="button" href="#pi4">Raspberry Pi 4</a>
-  <a class="button" href="#development">In development</a>
-</nav>
-
-<p class="prov js-only">Records checked at <span data-meta="checked"></span>.</p>
-<p class="muted">Each result names its measurement date and build. The latest runs use
-different builds. A <em>pre-publication build</em> belongs to the earlier development
-repository; its hash is an identifier, and the public record is linked directly.
-A missing build commit is marked unverified.</p>
+<p class="lead">OpenGL ES 2.0 runs on three boards under Zephyr.
+Four more boards are in progress.</p>
 <noscript><p class="note">The tables require JavaScript. The same results are available in
 <a href="https://github.com/signal-slot/yakogl/blob/main/tools/cts/RESULTS.md">the public board record</a>,
 and their structured values are in <a href="data.js">data.js</a>.</p></noscript>
 
-<h2 id="am62p">Toradex Verdin AM62P <span class="muted">· PowerVR BXS-4-64</span></h2>
+<h2 id="supported">Supported boards</h2>
+<div class="scroll"><table class="summary-table">
+<thead><tr><th scope="col">Board</th><th scope="col">GPU</th><th scope="col">OpenGL ES 2.0 tests</th><th scope="col" class="num">glmark2-es2 score</th><th scope="col">Boots from</th></tr></thead>
+<tbody data-summary="boards"></tbody>
+</table></div>
+<p class="muted">The tests are the Khronos dEQP-GLES2 suite, run by us on each board.
+YakoGL has not been through the Khronos Adopters Program and is not a certified
+conformant implementation. The cases outside the pass count are not-supported cases
+and warnings; the <a href="#records">records</a> list them.</p>
+
+<h2 id="development">In progress</h2>
+<div class="scroll"><table class="summary-table">
+<thead><tr><th scope="col">Board</th><th scope="col">GPU</th><th scope="col">Where it is</th></tr></thead>
+<tbody>
+<tr id="mali"><th scope="row">FriendlyElec NanoPC-T6</th><td>Arm Mali-G610</td>
+<td>On the board's Linux, 147 of 256 <code>gl_test</code> cases pass (2026-11-07).
+On Zephyr, the GPU powers on and reports its ID; drawing does not run yet.
+<a href="https://github.com/signal-slot/yakogl/blob/main/driver/docs/nanopc-t6-mali.md">Details</a></td></tr>
+<tr id="x2"><th scope="row">Atmark Techno Armadillo-X2</th><td>Vivante GC7000UL</td>
+<td>The same SoC and GPU as the Verdin iMX8M Plus. Zephyr starts from the board's
+Linux for development. Booting from the board's own loader has not run yet.
+<a href="https://github.com/signal-slot/yakogl/blob/main/docs/notes/x2-direct-boot.md">Details</a></td></tr>
+<tr id="stm32mp2"><th scope="row">STM32MP257F-DK</th><td>Vivante GCNANOULTRA31</td>
+<td>Board files and a GPU identity probe are in the tree.
+No image has run on the board yet.
+<a href="https://github.com/signal-slot/yakogl/blob/main/docs/notes/pre-study-stm32mp257f-dk.md">Details</a></td></tr>
+<tr id="pi5"><th scope="row">Raspberry Pi 5</th><td>Broadcom V3D 7.1</td>
+<td>The frame path runs against a simulator on the host.
+No image has run on the board yet.
+<a href="https://github.com/signal-slot/yakogl/blob/main/docs/notes/pre-study-rpi5.md">Details</a></td></tr>
+</tbody>
+</table></div>
+<p class="muted">A board becomes supported when it boots from its own storage, passes the
+whole dEQP-GLES2 suite with 0 failures, and has its benchmarks recorded the same way.
+<a href="https://github.com/signal-slot/yakogl/blob/main/ROADMAP.md#5-more-boards">Support criteria</a>.</p>
+
+<h2 id="not-yet">Not yet</h2>
+<ul>
+<li id="es3"><strong>OpenGL ES 3.0.</strong> In development. Product builds report ES 2.0 by default.
+<a href="https://github.com/signal-slot/yakogl/blob/main/tools/cts/RESULTS.md#es-30-deqp-gles3-stage-4">ES 3.0 record</a>.</li>
+<li><strong>Speed in heavy scenes.</strong> Heavy benchmark scenes are slow, and the
+i.MX8MP's panel synchronization limits many lighter scenes. Measure your own UI.</li>
+<li><strong>Visual review.</strong> Every benchmark picture has recorded values. The Pi 4 and
+i.MX8MP pictures have not been reviewed by eye yet, and one i.MX8MP picture change is unexplained.</li>
+<li><strong>Repeated runs on the i.MX8MP.</strong> Earlier repeated boots showed intermittent
+failures in two regression cases. The latest run passes; the record does not show them fixed.</li>
+<li><strong>Touch input.</strong> The demos run without it.</li>
+</ul>
+
+<h2 id="records">Records</h2>
+<p>Every figure, with its build, its date and a link to the public record.</p>
+<p class="prov js-only">Records checked at <span data-meta="checked"></span>.</p>
+
+<h3 id="am62p">Toradex Verdin AM62P <span class="muted">· PowerVR BXS-4-64</span></h3>
 <div class="scroll"><table class="status-table">
 <thead><tr><th scope="col">Measurement</th><th scope="col">Result</th><th scope="col">Build, date and public record</th></tr></thead>
 <tbody data-status="am62p"></tbody>
 </table></div>
 
-<h2 id="imx8mp">Toradex Verdin iMX8M Plus <span class="muted">· Vivante GC7000UL</span></h2>
+<h3 id="imx8mp">Toradex Verdin iMX8M Plus <span class="muted">· Vivante GC7000UL</span></h3>
 <div class="scroll"><table class="status-table">
 <thead><tr><th scope="col">Measurement</th><th scope="col">Result</th><th scope="col">Build, date and public record</th></tr></thead>
 <tbody data-status="imx8mp"></tbody>
 </table></div>
 
-<h2 id="pi4">Raspberry Pi 4 <span class="muted">· Broadcom V3D 4.2</span></h2>
+<h3 id="pi4">Raspberry Pi 4 <span class="muted">· Broadcom V3D 4.2</span></h3>
 <div class="scroll"><table class="status-table">
 <thead><tr><th scope="col">Measurement</th><th scope="col">Result</th><th scope="col">Build, date and public record</th></tr></thead>
 <tbody data-status="pi4"></tbody>
 </table></div>
 
-<h2 id="terms">Reading the results</h2>
+<h3 id="terms">Reading the records</h3>
 <ul>
 <li><strong>dEQP-GLES2:</strong> the ES 2.0 mustpass list contains 17,165 cases.
 The i.MX8MP row counts 206 further cases outside that list.
@@ -100,76 +133,12 @@ configurations; they are context rather than a controlled driver comparison.</li
 <li><strong>Boot:</strong> the recorded tests load Zephyr from the board's own storage.
 Permanent-default boot modes and measured power-on latency are separate questions;
 see the <a href="https://github.com/signal-slot/yakogl/blob/main/docs/standalone-boot.md">boot record</a>.</li>
+<li><strong>Builds:</strong> each result names its measurement date and build. The latest runs use
+different builds. A <em>pre-publication build</em> belongs to the earlier development
+repository; its hash is an identifier, and the public record is linked directly.
+A missing build commit is marked unverified.</li>
 </ul>
 
-<h2 id="development">In development</h2>
-<h3 id="es3">OpenGL ES 3.0</h3>
-<p>Product builds report ES 2.0 by default. The AM62P full-tree baseline is shown above;
-later targeted reruns improve individual groups, but do not constitute a new complete result.
-The Pi 4 has partial hardware results, with failures still present. The i.MX8MP has not
-run dEQP-GLES3 on the board yet; its host capability work is recorded separately from
-hardware validation.
-<a href="https://github.com/signal-slot/yakogl/blob/main/tools/cts/RESULTS.md#es-30-deqp-gles3-stage-4">Read the ES 3.0 record</a>.</p>
-
-<h3 id="mali">Mali-G610 / NanoPC-T6 <span class="badge">WIP</span></h3>
-<p>The fourth GPU back end is actively being brought up on the FriendlyElec NanoPC-T6
-(Rockchip RK3588, Arm Mali-G610). The <code>gpu-mali</code> back end already runs
-<code>gl_test</code> on the board's Linux through the panthor kernel driver; the
-2026-11-07 sweep records 147 of 256 cases PASS and 2 FAIL (a second color
-attachment, and 3D texture levels); of the others, 15 are refused, 83 not
-present and 9 skipped. Zephyr board support, board glue and
-GPU bring-up probes are already in the tree. Under Zephyr, an image started by
-kexec has powered the GPU on and read its ID (2026-10-19); the MMU and firmware
-steps are written on the host side and have not run on the board yet. The
-complete Zephyr graphics path and board-level validation are still in progress. This is therefore a WIP
-target, not yet one of the three supported Zephyr boards.
-<a href="https://github.com/signal-slot/yakogl/blob/main/driver/docs/nanopc-t6-mali.md">Mali bring-up details</a> ·
-<a href="https://github.com/signal-slot/yakogl/blob/main/ROADMAP.md#5-more-boards">support criteria</a>.</p>
-
-<h3 id="x2">Armadillo-X2 <span class="badge">WIP</span></h3>
-<p>The Atmark Techno Armadillo-X2 carries the same SoC and GPU as the Verdin iMX8M Plus
-(NXP i.MX 8M Plus, Vivante GC7000UL), so the <code>gpu-vivante</code> back end runs on it
-unchanged. It is a second development board for that back end: the Zephyr board files
-and the board runner are in the tree, and Zephyr images reach the board by kexec from
-its own Linux. Those are development runs, never results. Booting YakoGL from the board's
-own loader, with no Linux in between, is designed with host tests and has not run on the
-board. No dEQP or benchmark result exists for it yet.
-<a href="https://github.com/signal-slot/yakogl/blob/main/docs/notes/x2-direct-boot.md">Direct-boot design</a> ·
-<a href="https://github.com/signal-slot/yakogl/blob/main/driver/tools/kexec-zephyr/README.md">board runner notes</a>.</p>
-
-<h3 id="stm32mp2">STM32MP257F-DK <span class="badge">WIP</span></h3>
-<p>The STMicroelectronics STM32MP257F-DK (two Cortex-A35 cores plus a Cortex-M33) has a
-smaller Vivante GPU, the GCNANOULTRA31. The port started when the board arrived in
-November 2026. In the tree: a pre-study of the hardware and of ST's open-source stack, the
-Zephyr board files, the C ABI over OP-TEE's watchdog and PSCI reset, a GPU identity probe
-tested against a host model, and a runner that boots one image from the board's own
-U-Boot and returns to ST's Linux. The first run of a YakoGL image on the board is the next
-step; nothing has rendered on it yet.
-<a href="https://github.com/signal-slot/yakogl/blob/main/docs/notes/pre-study-stm32mp257f-dk.md">Pre-study</a>.</p>
-
-<h3 id="pi5">Raspberry Pi 5 <span class="badge">WIP</span></h3>
-<p>The Raspberry Pi 5 (Broadcom BCM2712) has a V3D 7.1, a newer generation than the Pi 4's
-V3D 4.2. The V3D back end's 7.1 frame path (the clear-only frame and the frame checker) is
-built and run against a simulator on the host. For the board, a pre-study, the hardware
-facts read from Linux, and the first probe images (watchdog, boot, device tree, GPU
-identity, a clear-only frame) are in the tree, built and not yet run on the board. No GL
-result exists for it yet.
-<a href="https://github.com/signal-slot/yakogl/blob/main/docs/notes/pre-study-rpi5.md">Pre-study</a> ·
-<a href="https://github.com/signal-slot/yakogl/blob/main/driver/docs/rpi5-v3d71-facts.md">V3D 7.1 facts</a> ·
-<a href="https://github.com/signal-slot/yakogl/blob/main/tools/probes/rpi_5/README.md">probes</a>.</p>
-
-<h2 id="not-yet">What to assess before integration</h2>
-<ul>
-<li><strong>Your UI's performance.</strong> Heavy benchmark scenes remain slow, and the
-i.MX8MP's panel synchronization limits many lighter scenes. Measure your own application
-and display configuration.</li>
-<li><strong>Visual validation.</strong> Every benchmark scene has picture values recorded.
-Pi 4 and i.MX8MP results still need visual review; an i.MX8MP texture/mipmap picture change
-is unexplained. The records distinguish camera inspection from numerical comparisons.</li>
-<li><strong>Input and reliability.</strong> The demos currently run without touch input.
-The i.MX8MP regression record includes intermittent failures, even though its latest listed
-run passes the cases executed.</li>
-</ul>
 <p>The <a href="https://github.com/signal-slot/yakogl/blob/main/ROADMAP.md">roadmap</a>
 sets the project direction. The
 <a href="https://github.com/signal-slot/yakogl/blob/main/tools/cts/RESULTS.md">board record</a>

@@ -5,6 +5,7 @@
 //   <span data-fig="id">        the value
 //   <span data-prov="id">       "measured on <commit>, <date>" with a link to the record
 //   <tbody data-status="board"> the per-board rows of status.html
+//   <tbody data-summary="boards"> one row per supported board, at the top of status.html
 //   <div data-tiles="kind">     the highlight tiles of index.html
 //   <span data-meta="checked">  the main commit and date data.js was checked against
 (function () {
@@ -93,6 +94,21 @@
         '</td><td class="prov">' + prov(f) + "</td></tr>";
     }
     tbodies[t].innerHTML = html;
+  }
+
+  // status.html: one row per supported board.
+  var sums = document.querySelectorAll('tbody[data-summary="boards"]');
+  for (var s = 0; s < sums.length; s++) {
+    var rows = "";
+    for (var i2 = 0; i2 < D.boards.length; i2++) {
+      var sb = D.boards[i2];
+      var dq = D.figures["deqp2." + sb.id], gm = D.figures["glmark2." + sb.id], bt = D.figures["boot." + sb.id];
+      if (!dq || !gm || !bt) continue;
+      rows += '<tr><th scope="row"><a href="#' + esc(sb.id) + '">' + esc(sb.name) + "</a></th><td>" + esc(sb.gpu) +
+        "</td><td><strong>" + num(dq.value.fail) + " fail</strong> · " + num(dq.value.pass) + " of " +
+        num(dq.value.total) + ' pass</td><td class="num">' + num(gm.value) + "</td><td>" + esc(bt.value) + "</td></tr>";
+    }
+    sums[s].innerHTML = rows;
   }
 
   // index.html: highlight tiles.

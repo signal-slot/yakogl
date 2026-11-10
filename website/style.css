@@ -123,6 +123,7 @@ th, td { border-bottom: 1px solid var(--line); padding: 8px 10px; text-align: le
 thead th { font-size: 0.85rem; color: var(--muted); font-weight: 600; white-space: nowrap; }
 tbody th { font-weight: 600; }
 td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.summary-table { min-width: 560px; }
 .status-table { min-width: 680px; }
 .status-table tbody th { width: 17%; }
 .status-table td.prov { width: 30%; }
