@@ -5,11 +5,10 @@
 //! GC7000 online compiler: the instruction and temporary counts pinned
 //! (`docs/notes/gc-shadow-refract-shaders.md`, plan #328 item
 //! sr-compiler-fix). Mesa etnaviv's `etna_shc` counts for the GC7000UL are
-//! the comments; they are the target, not a pin. The comments also give the
-//! count with the note's "The patch" (a copy fold and a scalar lane merge in
-//! `src/shaderc/online/vivante/`), measured and not landed: it moves the
-//! shared `tests/fixtures/precompile_counts.txt`. The item that lands it
-//! re-pins these numbers to the "patch" column.
+//! the comments; they are the target, not a pin. The pins include the note's
+//! "The patch" (a copy fold and a scalar lane merge,
+//! `src/shaderc/online/vivante/peephole.rs`); the comments give the count
+//! before it.
 //!
 //! The glmark2 texts are GPL-3.0 and never committed: they are read from the
 //! host harness's corpus (`GLMARK2_CORPUS`, by default
@@ -42,17 +41,17 @@ fn count(stage: u32, src: &str) -> (u32, u32) {
 
 /// (text hash, stage, ours: instructions and temps, etna_shc's in the comment)
 const GLMARK2: [(&str, &str, u32, u32); 8] = [
-    ("37f46ae8961221f2", "vert", 6, 3),   // depth vertex; etna 4, 3; patch 5, 3
-    ("928e172a68b7f175", "frag", 3, 3),   // depth fragment; etna 2, 2; patch 3, 3
-    ("b9d18073e5979540", "vert", 12, 4),  // ground vertex; etna 7, 4; patch 11, 5
-    ("cf4bf899d84af04d", "frag", 16, 5),  // ground fragment; etna 11, 4; patch 13, 5
-    ("6964fcf6aaac9739", "vert", 23, 5),  // horse vertex; etna 14, 4; patch 21, 5
-    ("474800a67afed087", "frag", 1, 2),   // horse fragment; etna 1, 2; patch 1, 2
-    ("7215f4f5052a383c", "vert", 23, 5),  // refract vertex; etna 19, 5; patch 21, 5
-    ("3fae89c9ab969ea3", "frag", 86, 12), // refract fragment; etna 48, 6; patch 71, 12
+    ("37f46ae8961221f2", "vert", 5, 3),   // depth vertex; etna 4, 3; before 6, 3
+    ("928e172a68b7f175", "frag", 3, 3),   // depth fragment; etna 2, 2; before 3, 3
+    ("b9d18073e5979540", "vert", 11, 5),  // ground vertex; etna 7, 4; before 12, 4
+    ("cf4bf899d84af04d", "frag", 13, 5),  // ground fragment; etna 11, 4; before 16, 5
+    ("6964fcf6aaac9739", "vert", 21, 5),  // horse vertex; etna 14, 4; before 23, 5
+    ("474800a67afed087", "frag", 1, 2),   // horse fragment; etna 1, 2; before 1, 2
+    ("7215f4f5052a383c", "vert", 21, 5),  // refract vertex; etna 19, 5; before 23, 5
+    ("3fae89c9ab969ea3", "frag", 71, 12), // refract fragment; etna 48, 6; before 86, 12
 ];
-/// The eight's instructions: etna_shc 105; the patch 146.
-const GLMARK2_TOTAL: u32 = 170;
+/// The eight's instructions: etna_shc 105; before the patch 170.
+const GLMARK2_TOTAL: u32 = 146;
 
 const HEAD: &str = "precision mediump float;\nvarying vec4 a;\nvarying vec4 b;\n";
 
@@ -60,32 +59,33 @@ const HEAD: &str = "precision mediump float;\nvarying vec4 a;\nvarying vec4 b;\n
 fn micro() -> Vec<(&'static str, u32, String, u32)> {
     let fs = |body: &str| format!("{HEAD}void main() {{ {body} }}\n");
     vec![
-        // m1: etna 2 (one rcp, one mul); patch 2
-        ("m1", SHC_STAGE_FRAGMENT, fs("gl_FragColor = a / a.w;"), 5),
-        // m1b: etna 3; patch 4
-        ("m1b", SHC_STAGE_FRAGMENT, fs("gl_FragColor = vec4(a.xyz / a.w, 1.0);"), 6),
-        // m13: etna 3 (mad); patch 6 (no contraction)
+        // m1: etna 2 (one rcp, one mul); before the patch 5
+        ("m1", SHC_STAGE_FRAGMENT, fs("gl_FragColor = a / a.w;"), 2),
+        // m1b: etna 3; before the patch 6
+        ("m1b", SHC_STAGE_FRAGMENT, fs("gl_FragColor = vec4(a.xyz / a.w, 1.0);"), 4),
+        // m13: etna 3 (mad); before the patch 6 (the patch has no contraction)
         ("m13", SHC_STAGE_FRAGMENT, fs("vec3 t = a.xyz * b.x + b.xyz; gl_FragColor = vec4(t * 0.5 + 0.5, 1.0);"), 6),
-        // m9: etna 7; patch 10
+        // m9: etna 7; before the patch 17
         (
             "m9",
             SHC_STAGE_FRAGMENT,
             fs("const vec4 L = vec4(1.0, 2.0, 3.0, 2.0); gl_FragColor = vec4(normalize(a.xyz / a.w - L.xyz / L.w), 1.0);"),
-            17,
+            10,
         ),
-        // m5: etna 10; patch 17
-        ("m5", SHC_STAGE_FRAGMENT, fs("gl_FragColor = vec4(refract(a.xyz, b.xyz, 1.2), 1.0);"), 20),
-        // m8: etna 4; patch 7
-        ("m8", SHC_STAGE_FRAGMENT, fs("float k = dot(a.xyz, b.xyz); gl_FragColor = vec4(vec3(sqrt(1.0 - k * k)), 1.0);"), 8),
-        // m4 (vertex): etna 4; patch 5
+        // m5: etna 10; before the patch 20
+        ("m5", SHC_STAGE_FRAGMENT, fs("gl_FragColor = vec4(refract(a.xyz, b.xyz, 1.2), 1.0);"), 17),
+        // m8: etna 4; before the patch 8
+        ("m8", SHC_STAGE_FRAGMENT, fs("float k = dot(a.xyz, b.xyz); gl_FragColor = vec4(vec3(sqrt(1.0 - k * k)), 1.0);"), 7),
+        // m4 (vertex): etna 4; before the patch 6
         (
             "m4",
             SHC_STAGE_VERTEX,
             "attribute vec3 position;\nuniform mat4 M;\nvoid main() { gl_Position = M * vec4(position, 1.0); }\n".into(),
-            6,
+            5,
         ),
-        // the difference of two varyings: `mov t, -b` and an add in ours; patch 1
-        ("neg", SHC_STAGE_FRAGMENT, fs("gl_FragColor = a - b;"), 2),
+        // the difference of two varyings: one add with a negated source; before
+        // the patch 2 (`mov t, -b` and the add)
+        ("neg", SHC_STAGE_FRAGMENT, fs("gl_FragColor = a - b;"), 1),
     ]
 }
 

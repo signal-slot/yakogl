@@ -104,11 +104,12 @@ of its `uniforms` list. The model column is the shading cost at 0.6 ns an
 instruction on `pixels` (480 000 for the 800x600 passes, 65 536 for the 256x256
 bloom and normal-map passes, 393 216 vertices for terrain at cover x overdraw
 1.0) with the instruction counts of the table. The "sr patch" column is
-`gc-shadow-refract-shaders.md`'s measured, not landed patch (copy fold and
-scalar lane merge in `src/shaderc/online/vivante/`), recounted by item
-terrain-compiler-fix at main `abfac1ed` ("What to do" below);
-`tests/gc_terrain_shader_count.rs` pins the "ours" column and carries the
-other two as comments.
+`gc-shadow-refract-shaders.md`'s patch (copy fold and scalar lane merge,
+`src/shaderc/online/vivante/peephole.rs`), recounted by item
+terrain-compiler-fix at main `abfac1ed` and landed by item
+x2-tiled-probe-run ("What to do" below);
+`tests/gc_terrain_shader_count.rs` pins the column of the latest landed
+change and carries etnaviv's and the earlier counts as comments.
 
 | shader (program of) | stage | ours | sr patch | etnaviv | ratio | temps ours / etna | constant dwords ours / etna | model ms ours / etna |
 |---|---|---:|---:|---:|---:|---:|---:|---:|
@@ -351,8 +352,8 @@ terrain.vert 8 x 0.236 = 1.9, tilt 8 x 0.288 = 2.3, bloom and normal map
 ranking): the fold reads the `mov -x` and the partial-mask copies through,
 and the merge joins the per-lane `rcp`/`rsq`.
 tilt_v keeps its 9 more than tilt_h with the patch (71 against 62): the
-per-tap `vec2(0.0, k * stepY)` copies survive it. Why was not read out of
-the listing in this item; the item that lands the patch should look.
+per-tap `vec2(0.0, k * stepY)` copies survive it. Why is read out of the
+listing in "Landed: x2-tiled-probe-run" below.
 
 The micro-shaders of `tests/gc_terrain_shader_count.rs`, ours and with the
 patch: t1 (rank 1, a one-iteration loop over `uniform vec4 P[1]`) 23 and 19;
@@ -378,6 +379,31 @@ What landing the terrain part needs, in this order:
    passes, then a `mul` + `add` to `mad` pairing in `vivante/`. t3 to 2.
 5. Rank 5: a lane-packing pass of the per-tap offsets (shared IR). t5 to 1
    `mul`.
+
+## Landed: x2-tiled-probe-run
+
+Plan #328, item x2-tiled-probe-run, at main `4c19d79f`, in two commits.
+
+**Step 1, the sr patch** (`vivante/peephole.rs`, from
+`gc-shadow-refract-shaders.md`, applied as is). The "sr patch" column of the
+table reproduced exactly on this host: the ten from 475 to **428**
+(terrain.vert 56 to 48, terrain.frag 148 to 127 with temporaries 19 to 16,
+tilt_h 66 to 62, tilt_v 75 to 71, bloom 42 and 47 to 38 and 43, normal map
+25 to 23, the other three unchanged); micro t1 23 to 19, t3 3, t4 9 to 5, t5
+8. `tests/gc_terrain_shader_count.rs` pins these.
+
+**tilt_v's nine extra** (71 against tilt_h's 62, the same nine before the
+patch). Per tap tilt_h computes the offset straight into the vec2's lane x
+(`mul t4.x___, -3.0, t2.xxxx`) and sets lane y with a `mov t4._y__, 0.0`.
+tilt_v sets lane x the same way (`mov t4.x___, 0.0`) but computes the product
+`k * stepY` into lane y of one shared scratch register (`mul t3._y__, -3.0,
+t3.xxzw`) and copies it over (`mov t4._y__, t3.yyyy`): one `mov` a tap, nine
+taps. The patch's copy fold should **not** have removed it as built: the
+reader, the `add` of `TextureCoord` and the offset (`add t4, t3.xyzw, void,
+t4.xyzw`, listing 48), consumes every lane of `t4`, and the copy wrote only
+y (lane x is the `0.0`), so no single source can stand in for the copy. Removing it needs the producer written into the
+copy's destination lane (`mul t4._y__` directly), which is the coalescer of
+rank 2, not a read-through; item pe-wire has the analysis.
 
 ## Not done, and what would settle the open ends
 

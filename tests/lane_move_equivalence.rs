@@ -281,12 +281,14 @@ fn moving_a_value_to_another_lane_changes_no_output() {
     /* The population: the programs that move a lane, every one run (a
      * program the interpreter cannot run is its own outcome, not a pass).
      * Per build: a report-es2 build refuses GLSL ES 3.00 in the front end
-     * (pp.rs out_of_scope). Measured 2026-10-24; 249 / 165 while the Qt
-     * shaders were in the GC7000 table, until #1509. */
+     * (pp.rs out_of_scope). Measured 2026-11-10 with the copy fold and
+     * the scalar lane merge (vivante/peephole.rs; 103 / 87 before them,
+     * 2026-10-24); 249 / 165 while the Qt shaders were in the GC7000 table,
+     * until #1509. */
     let es2 = cfg!(feature = "report-es2");
     assert_eq!(
         with_moves,
-        if es2 { 87 } else { 103 },
+        if es2 { 86 } else { 102 },
         "the population moved: {with_moves} programs move a lane; re-derive the pin"
     );
     assert_eq!(

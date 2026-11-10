@@ -5,11 +5,10 @@
 //! GC7000 online compiler: the instruction and temporary counts pinned
 //! (`docs/notes/gc-terrain-shaders-rest.md`, plan #328 item
 //! terrain-compiler-fix). Mesa etnaviv's `etna_shc` counts for the GC7000UL
-//! are the comments; they are the target, not a pin. The comments also give
-//! the count with `gc-shadow-refract-shaders.md`'s "The patch" (a copy fold and
-//! a scalar lane merge in `src/shaderc/online/vivante/`), measured and not
-//! landed: it moves the shared `tests/fixtures/precompile_counts.txt`. The item
-//! that lands it re-pins these numbers to the "patch" column.
+//! are the comments; they are the target, not a pin. The pins include
+//! `gc-shadow-refract-shaders.md`'s "The patch" (a copy fold and a scalar lane
+//! merge, `src/shaderc/online/vivante/peephole.rs`); the comments give the
+//! count before it.
 //!
 //! The glmark2 texts are GPL-3.0 and never committed: they are built here from
 //! a glmark2 checkout (`GLMARK2_SRC`, its `data/shaders`) as glmark2's
@@ -74,21 +73,21 @@ fn blur(file: &str, radius: i32, sigma: f64, horizontal: bool, step: f64, tilt: 
     format!("{MACROS}{FPREC}{c}{}", file.replace("$CONVOLUTION$", &ss))
 }
 
-/// (name, stage, ours: instructions and temps); etna_shc's and the patch's in the comment
+/// (name, stage, ours: instructions and temps); etna_shc's and the count before the patch in the comment
 const GLMARK2: [(&str, u32, u32, u32); 10] = [
-    ("terrain.vert", SHC_STAGE_VERTEX, 56, 9),     // etna 39, 9; patch 48, 9
-    ("terrain.frag", SHC_STAGE_FRAGMENT, 148, 19), // etna 72, 11; patch 127, 16
-    ("tilt_h.frag", SHC_STAGE_FRAGMENT, 66, 12),   // etna 46, 5; patch 62, 12
-    ("tilt_v.frag", SHC_STAGE_FRAGMENT, 75, 12),   // etna 46, 5; patch 71, 12
-    ("bloom_h.frag", SHC_STAGE_FRAGMENT, 42, 8),   // etna 24, 5; patch 38, 8
-    ("bloom_v.frag", SHC_STAGE_FRAGMENT, 47, 8),   // etna 24, 5; patch 43, 8
-    ("normalmap.frag", SHC_STAGE_FRAGMENT, 25, 5), // etna 21, 4; patch 23, 5
-    ("overlay.frag", SHC_STAGE_FRAGMENT, 2, 2),    // etna 2, 2; patch 2, 2
-    ("quad.vert", SHC_STAGE_VERTEX, 7, 3),         // etna 4, 2; patch 7, 3
-    ("luminance.frag", SHC_STAGE_FRAGMENT, 7, 4),  // etna 3, 3; patch 7, 4
+    ("terrain.vert", SHC_STAGE_VERTEX, 48, 9),     // etna 39, 9; before 56, 9
+    ("terrain.frag", SHC_STAGE_FRAGMENT, 127, 16), // etna 72, 11; before 148, 19
+    ("tilt_h.frag", SHC_STAGE_FRAGMENT, 62, 12),   // etna 46, 5; before 66, 12
+    ("tilt_v.frag", SHC_STAGE_FRAGMENT, 71, 12),   // etna 46, 5; before 75, 12
+    ("bloom_h.frag", SHC_STAGE_FRAGMENT, 38, 8),   // etna 24, 5; before 42, 8
+    ("bloom_v.frag", SHC_STAGE_FRAGMENT, 43, 8),   // etna 24, 5; before 47, 8
+    ("normalmap.frag", SHC_STAGE_FRAGMENT, 23, 5), // etna 21, 4; before 25, 5
+    ("overlay.frag", SHC_STAGE_FRAGMENT, 2, 2),    // etna 2, 2; before 2, 2
+    ("quad.vert", SHC_STAGE_VERTEX, 7, 3),         // etna 4, 2; before 7, 3
+    ("luminance.frag", SHC_STAGE_FRAGMENT, 7, 4),  // etna 3, 3; before 7, 4
 ];
-/// The ten's instructions: etna_shc 279; the patch 428.
-const GLMARK2_TOTAL: u32 = 475;
+/// The ten's instructions: etna_shc 279; before the patch 475.
+const GLMARK2_TOTAL: u32 = 428;
 
 /// The ten texts from a glmark2 checkout, in [`GLMARK2`]'s order.
 fn glmark2_texts(root: &Path) -> Vec<String> {
@@ -121,23 +120,23 @@ fn micro() -> Vec<(&'static str, u32, String, u32)> {
     let fs = |decl: &str, body: &str| format!("{HEAD}{decl}void main() {{ {body} }}\n");
     vec![
         // t1, rank 1: a one-iteration loop over a uniform array; etnaviv unrolls it
-        // and reads the constant file; patch 19
+        // and reads the constant file; before the patch 23
         (
             "t1",
             SHC_STAGE_FRAGMENT,
             fs("uniform vec4 P[1];\n", "vec4 c = a; for (int i = 0; i < 1; i++) { c += P[i]; } gl_FragColor = c;"),
-            23,
+            19,
         ),
-        // t3, rank 3: one blur tap's `* Kernel +` (texld, mul, add); etnaviv texld, mad; patch 3
+        // t3, rank 3: one blur tap's `* Kernel +` (texld, mul, add); etnaviv texld, mad; before the patch 3
         ("t3", SHC_STAGE_FRAGMENT, fs("", "gl_FragColor = texture2D(T, a.xy) * 0.25 + b;"), 3),
-        // t4, rank 4: tilt-shift's constant divisor; etnaviv folds it (add, mul); patch 5
+        // t4, rank 4: tilt-shift's constant divisor; etnaviv folds it (add, mul); before the patch 9
         (
             "t4",
             SHC_STAGE_FRAGMENT,
             fs("const float S = 0.5;\n", "gl_FragColor = vec4(abs(S - a.y) / abs(1.0 - S));"),
-            9,
+            5,
         ),
-        // t5, rank 5: two taps' offsets from one scalar; etnaviv one vec2 mul for both; patch 8
+        // t5, rank 5: two taps' offsets from one scalar; etnaviv one vec2 mul for both; before the patch 8
         (
             "t5",
             SHC_STAGE_FRAGMENT,
