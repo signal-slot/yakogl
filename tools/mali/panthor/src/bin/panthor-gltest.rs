@@ -6,7 +6,7 @@
 //! Milestone L3 of driver/docs/nanopc-t6-mali.md, section "L3: gl_test under
 //! Armbian", which gives the design.
 //!
-//! Usage: panthor-gltest [--set | --sweep | <case>...] [--timeout S]
+//! Usage: panthor-gltest [--set | --sweep | <case>...] [--timeout S] [--max-wedged N]
 //!        panthor-gltest --one <case>
 //!
 //! - `--set` (the default): the regression set, gl_test.c's own list
@@ -23,6 +23,18 @@
 //! line once per process, so in one long process a case would inherit the
 //! silence of the case that refused first. It also keeps a case that faults
 //! the group from deciding the verdicts of the cases after it.
+//!
+//! Hang guard. A case that does not finish in the timeout is killed with its
+//! whole process group (each child leads one) and reaped, within a bound; the
+//! output pipes are read into shared buffers and abandoned, with what they
+//! hold, if a straggler outside the group keeps them open, so the parent never
+//! blocks on a child. Every verdict line is flushed before the next child
+//! starts. After `--max-wedged N` (default 3) consecutive HANG or FAULT
+//! verdicts, or one child that cannot be reaped (it may still hold the GPU),
+//! the sweep prints `STOPPING after case C: <why>` and runs no more cases,
+//! exit status 1: further work on a wedged queue would only deepen the wedge.
+//! The verdict lines are unchanged. The test hook `PANTHOR_GLTEST_CHILD`
+//! names a stand-in for the `--one` child (tests/gltest_guard.rs).
 //!
 //! The verdict of a case (printed as a `verdict` line, then the table and the
 //! histogram of refusal strings at the end):
@@ -63,7 +75,7 @@
 
 use std::collections::BTreeMap;
 use std::ffi::{c_char, c_int, c_uint};
-use std::io::Read;
+use std::io::{Read, Write};
 use std::process::{Command, ExitCode, Stdio};
 use std::time::{Duration, Instant};
 use yakogl::gl::consts::*;
@@ -389,48 +401,134 @@ fn classify(rep: Option<&Report>, signalled: Option<i32>) -> Verdict {
     }
 }
 
-fn run_child(exe: &std::path::Path, case: i32, timeout: Duration) -> (Verdict, Option<String>) {
+/// How long the parent waits for a killed child to be reaped. A child stuck in
+/// the kernel (a wedged GPU queue, D state) cannot die; past this the parent
+/// stops the sweep instead of waiting for it (`Ran::unreaped`).
+const REAP_GRACE: Duration = Duration::from_secs(5);
+/// How long the parent waits for the output pipes to reach EOF after the child
+/// is gone: a straggler of the case that kept them open is then killed, and
+/// after the same time again abandoned, so the parent never blocks on a pipe.
+const PIPE_GRACE: Duration = Duration::from_secs(2);
+/// Consecutive HANG or FAULT verdicts after which the sweep stops (`--max-wedged`).
+const MAX_WEDGED: usize = 3;
+/// The child to run in place of this binary's `--one`: a test hook
+/// (tools/mali/panthor/tests/gltest_guard.rs); unset on the board.
+const CHILD_EXE_ENV: &str = "PANTHOR_GLTEST_CHILD";
+
+/// SIGKILL to a child's whole process group (it is a group leader: see
+/// `run_child`). A reaped leader's pid is not reused while the group lives.
+fn kill_group(ch: &mut std::process::Child) {
+    // SAFETY: kill(2) with a negative pid, the group of our own child.
+    unsafe { libc::kill(-(ch.id() as libc::pid_t), libc::SIGKILL) };
+    let _ = ch.kill();
+}
+
+type Buf = std::sync::Arc<std::sync::Mutex<Vec<u8>>>;
+
+/// Read `r` to EOF into `buf` as it arrives, so a reader that never ends
+/// still leaves what it got.
+fn drain<R: Read + Send + 'static>(mut r: R, buf: Buf) -> std::thread::JoinHandle<()> {
+    std::thread::spawn(move || {
+        let mut chunk = [0u8; 4096];
+        while let Ok(n) = r.read(&mut chunk) {
+            if n == 0 {
+                break;
+            }
+            buf.lock().unwrap_or_else(std::sync::PoisonError::into_inner).extend_from_slice(&chunk[..n]);
+        }
+    })
+}
+
+/// What one child run came to.
+struct Ran {
+    verdict: Verdict,
+    name: Option<String>,
+    /// The child could not be reaped after SIGKILL (D state): it may still
+    /// hold /dev/dri, so no further case may start.
+    unreaped: bool,
+}
+
+fn run_child(exe: &std::path::Path, case: i32, timeout: Duration) -> Ran {
+    use std::os::unix::process::CommandExt;
+    use std::sync::{Arc, Mutex};
+    // A group of its own: a timeout kills the child and everything it
+    // started, so none is left holding /dev/dri or the pipes.
     let mut ch = match Command::new(exe)
         .args(["--one", &case.to_string()])
+        .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
+        .process_group(0)
         .spawn()
     {
         Ok(c) => c,
-        Err(e) => return (Verdict::Fault(format!("spawn: {e}")), None),
+        Err(e) => return Ran { verdict: Verdict::Fault(format!("spawn: {e}")), name: None, unreaped: false },
     };
-    let mut so = ch.stdout.take().expect("piped");
-    let mut se = ch.stderr.take().expect("piped");
-    let ro = std::thread::spawn(move || {
-        let mut s = String::new();
-        let _ = so.read_to_string(&mut s);
-        s
-    });
-    let re = std::thread::spawn(move || {
-        let mut s = String::new();
-        let _ = se.read_to_string(&mut s);
-        s
-    });
+    let (bo, be): (Buf, Buf) = (Arc::new(Mutex::new(Vec::new())), Arc::new(Mutex::new(Vec::new())));
+    let ro = drain(ch.stdout.take().expect("piped"), bo.clone());
+    let re = drain(ch.stderr.take().expect("piped"), be.clone());
     let t0 = Instant::now();
-    let status = loop {
+    let (mut status, mut unreaped) = (None, false);
+    loop {
         match ch.try_wait() {
-            Ok(Some(st)) => break Some(st),
+            Ok(Some(st)) => {
+                status = Some(st);
+                break;
+            }
             Ok(None) if t0.elapsed() >= timeout => {
-                let _ = ch.kill();
-                let _ = ch.wait();
-                break None;
+                kill_group(&mut ch);
+                let t1 = Instant::now();
+                loop {
+                    match ch.try_wait() {
+                        Ok(Some(_)) => break,
+                        Ok(None) if t1.elapsed() < REAP_GRACE => std::thread::sleep(Duration::from_millis(10)),
+                        _ => {
+                            unreaped = true;
+                            break;
+                        }
+                    }
+                }
+                break;
             }
             Ok(None) => std::thread::sleep(Duration::from_millis(20)),
-            Err(_) => break None,
+            Err(_) => break,
         }
-    };
-    let out = ro.join().unwrap_or_default();
-    let err = re.join().unwrap_or_default();
+    }
+    // The pipes reach EOF with the last holder. A straggler of the case that
+    // outlives the child is killed with the group; one that left the group is
+    // abandoned: its reader threads are dropped, the output so far is kept.
+    let t2 = Instant::now();
+    let (mut pipes_open, mut group_killed) = (false, false);
+    while !(ro.is_finished() && re.is_finished()) {
+        if t2.elapsed() >= PIPE_GRACE * 2 {
+            pipes_open = true;
+            break;
+        }
+        if t2.elapsed() >= PIPE_GRACE && !group_killed && !unreaped {
+            group_killed = true;
+            kill_group(&mut ch);
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let take =
+        |b: &Buf| String::from_utf8_lossy(&b.lock().unwrap_or_else(std::sync::PoisonError::into_inner)).into_owned();
+    let (out, err) = (take(&bo), take(&be));
     print!("{out}");
-    if !err.is_empty() {
-        for l in err.lines() {
-            println!("stderr: {l}");
-        }
+    if !out.is_empty() && !out.ends_with('\n') {
+        println!();
+    }
+    for l in err.lines() {
+        println!("stderr: {l}");
+    }
+    if unreaped {
+        println!(
+            "panthor-gltest: case {case}: the killed child (pid {}) could not be reaped in {} s",
+            ch.id(),
+            REAP_GRACE.as_secs()
+        );
+    }
+    if pipes_open {
+        println!("panthor-gltest: case {case}: an output pipe stayed open past the child (a straggler left its group); abandoned");
     }
     let rep = parse(case, &out);
     let verdict = match status {
@@ -444,7 +542,7 @@ fn run_child(exe: &std::path::Path, case: i32, timeout: Duration) -> (Verdict, O
             }
         }
     };
-    (verdict, rep.and_then(|r| r.name))
+    Ran { verdict, name: rep.and_then(|r| r.name), unreaped }
 }
 
 fn set_cases() -> Vec<i32> {
@@ -469,6 +567,7 @@ fn main() -> ExitCode {
     }
     println!("panthor-gltest: build {}", yakogl_mali_panthor::BUILD);
     let (mut cases, mut sweep, mut timeout) = (Vec::new(), false, Duration::from_secs(60));
+    let mut max_wedged = MAX_WEDGED;
     let mut it = args.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
@@ -484,6 +583,13 @@ fn main() -> ExitCode {
                     return ExitCode::from(2);
                 }
             },
+            "--max-wedged" => match it.next().and_then(|s| s.parse().ok()) {
+                Some(n) if n > 0 => max_wedged = n,
+                _ => {
+                    eprintln!("panthor-gltest: --max-wedged takes a count above 0");
+                    return ExitCode::from(2);
+                }
+            },
             s => match s.parse() {
                 Ok(c) => cases.push(c),
                 Err(_) => {
@@ -496,7 +602,7 @@ fn main() -> ExitCode {
     if cases.is_empty() {
         cases = set_cases();
     }
-    let exe = match std::env::current_exe() {
+    let exe = match std::env::var_os(CHILD_EXE_ENV).map(|e| Ok(e.into())).unwrap_or_else(std::env::current_exe) {
         Ok(e) => e,
         Err(e) => {
             eprintln!("panthor-gltest: current_exe: {e}");
@@ -505,15 +611,41 @@ fn main() -> ExitCode {
     };
     println!("panthor-gltest: {} case(s), one process each, timeout {} s", cases.len(), timeout.as_secs());
     let mut rows = Vec::new();
-    for &c in &cases {
+    let (mut wedged, mut stopped) = (0usize, false);
+    for (i, &c) in cases.iter().enumerate() {
         println!("panthor-gltest: === case {c}");
-        let (v, name) = run_child(&exe, c, timeout);
+        let _ = std::io::stdout().flush();
+        let ran = run_child(&exe, c, timeout);
+        let (v, name) = (ran.verdict, ran.name);
         let what = match &v {
             Verdict::Fail(s) | Verdict::Refused(s) | Verdict::Fault(s) | Verdict::NotStarted(s) => s.as_str(),
             _ => "",
         };
+        // Flushed before the next child starts: a HANG or FAULT line must
+        // reach the log (an ssh pipe) even if the board is lost after it.
         println!("panthor-gltest: verdict case {c} {}: {} {what}", name.as_deref().unwrap_or("?"), v.word());
+        let _ = std::io::stdout().flush();
+        wedged = if matches!(v, Verdict::Hang | Verdict::Fault(_)) { wedged + 1 } else { 0 };
         rows.push((c, name, v));
+        // More GPU work behind a wedged queue only deepens the wedge (and
+        // makes the board's recovery harder): stop, say why, leave the rest
+        // of the cases not run.
+        let why = if ran.unreaped {
+            Some(format!("case {c}'s child could not be killed: it may still hold the GPU"))
+        } else if wedged >= max_wedged {
+            Some(format!(
+                "{wedged} consecutive HANG/FAULT verdicts (--max-wedged {max_wedged}): the GPU queue may be wedged"
+            ))
+        } else {
+            None
+        };
+        if let Some(why) = why {
+            let left = cases.len() - i - 1;
+            println!("panthor-gltest: STOPPING after case {c}: {why}; {left} case(s) not run");
+            let _ = std::io::stdout().flush();
+            stopped = true;
+            break;
+        }
     }
 
     println!("panthor-gltest: table");
@@ -542,7 +674,7 @@ fn main() -> ExitCode {
     }
     let summary: Vec<String> = tally.iter().map(|(k, n)| format!("{k} {n}")).collect();
     println!("panthor-gltest: {} case(s) run: {}", rows.len(), summary.join(", "));
-    let bad = rows.iter().any(|(_, _, v)| matches!(v, Verdict::Fault(_) | Verdict::Hang | Verdict::Fail(_)));
+    let bad = stopped || rows.iter().any(|(_, _, v)| matches!(v, Verdict::Fault(_) | Verdict::Hang | Verdict::Fail(_)));
     if bad {
         ExitCode::FAILURE
     } else {
