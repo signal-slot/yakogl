@@ -185,10 +185,10 @@ fn precision_program(ty: &str, prec: &str, op: &str, vertex: bool) -> (String, S
 
 /// The 48 `precision.{int,uint}.{lowp,mediump,highp}_{add,sub,mul,div}_
 /// {vertex,fragment}` programs (24 fragment ones "m_program->isOk()" on the
-/// AM62P). Every one lowers, with one integer colour output. The PowerVR
-/// refuses the fragment ones ("a register read that nothing writes", a
-/// scalar integer output computed from an ALU result); the GC7000UL and the
-/// V3D build all 48.
+/// AM62P). Every one lowers, with one integer colour output, and all 48
+/// build on the three GPUs (the PowerVR refused the fragment ones, "a
+/// register read that nothing writes", until a colour output narrower than
+/// a vec4 stopped reading lanes its value does not have).
 #[test]
 fn precision_int_programs_lower() {
     for ty in ["int", "uint"] {
@@ -209,20 +209,36 @@ fn precision_int_programs_lower() {
     }
 }
 
-/// The smallest fragment shader the PowerVR refuses of that family: an
-/// integer output from an ALU result. A copy of the input, a constant and a
-/// uniform build. On the GC7000UL and the V3D all four build.
+/// The smallest fragment shader of that family the PowerVR refused: a scalar
+/// integer output from an ALU result ("a register read that nothing writes":
+/// the output's lanes past its width read registers the one-lane result
+/// never wrote). A copy of the input, a constant and a uniform built before;
+/// all of them build now, int and uint, on every GPU.
 #[test]
 fn int_output_from_arithmetic_is_the_powervr_shape() {
-    let vs = "#version 300 es\nin highp vec4 a_position;\nin highp int a_in0;\nflat out highp int v_in0;\n\
-              void main() { gl_Position = a_position; v_in0 = a_in0; }\n";
-    let fs = |body: &str| {
-        format!("#version 300 es\nflat in highp int v_in0;\nuniform highp int u;\nlayout(location = 0) out highp int o_out;\nvoid main() {{ {body} }}\n")
-    };
-    for body in ["o_out = v_in0;", "o_out = 3;", "o_out = u;"] {
-        build(vs, &fs(body)).unwrap_or_else(|e| panic!("{body}: {e}"));
+    for ty in ["int", "uint"] {
+        let vs = format!(
+            "#version 300 es\nin highp vec4 a_position;\nin highp {ty} a_in0;\nflat out highp {ty} v_in0;\n\
+             out highp float v_f;\n\
+             void main() {{ gl_Position = a_position; v_in0 = a_in0; v_f = a_position.x; }}\n"
+        );
+        let fs = |body: &str| {
+            format!(
+                "#version 300 es\nflat in highp {ty} v_in0;\nin highp float v_f;\nuniform highp {ty} u;\n\
+                 layout(location = 0) out highp {ty} o_out;\nvoid main() {{ {body} }}\n"
+            )
+        };
+        let one = if ty == "int" { "1" } else { "1u" };
+        for body in [
+            "o_out = v_in0;".to_string(),
+            format!("o_out = 3{};", &one[1..]),
+            "o_out = u;".to_string(),
+            format!("o_out = v_in0 + {one};"),
+            format!("o_out = {ty}(v_f);"),
+        ] {
+            build(&vs, &fs(&body)).unwrap_or_else(|e| panic!("{ty}: {body}: {e}"));
+        }
     }
-    front_end_accepts("int output from an add", vs, &fs("o_out = v_in0 + 1;"));
 }
 
 // ---- shaders.builtin_functions.common.modf (glsShaderExecUtil) ------------

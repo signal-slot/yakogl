@@ -1008,6 +1008,20 @@ impl<'a> Sel<'a> {
                 for (lane, c) in comps.iter_mut().enumerate().take(n) {
                     *c = Some(self.src(src, lane as u32)?);
                 }
+                /* A colour output narrower than a vec4 (`out int`, `out
+                 * vec2`): its value has only the declared lanes, and reading
+                 * the others read registers nothing writes -- refused as
+                 * such when the value was an ALU result (dEQP-GLES3
+                 * precision.int/uint fragment, `o_out = in0 + in1`). The
+                 * components the shader does not write are undefined in GL,
+                 * but the tail writes four registers and the discard
+                 * epilogue reads the alpha, so they repeat lane 0. */
+                if let ir::IoSlot::FragColor(loc) = slot {
+                    let first = comps[0];
+                    for c in comps.iter_mut().skip(self.colour_components(loc)) {
+                        *c = first;
+                    }
+                }
                 /* A slot stored again keeps the LAST value, per component:
                  * one entry per slot, so the epilogue writes each output
                  * dword once (visualization.vert assigns gl_Position twice,
@@ -1956,6 +1970,16 @@ impl<'a> Sel<'a> {
                 .map_or(4, |d| d.components as usize),
             _ => 4,
         }
+    }
+
+    /// The declared width of colour output `loc` (1..4); 4 for
+    /// `gl_FragColor` / `gl_FragData`, and for one the module does not list.
+    fn colour_components(&self, loc: u8) -> usize {
+        self.m
+            .outputs
+            .iter()
+            .find(|d| d.kind == ir::IoKind::Colour && d.location == loc)
+            .map_or(4, |d| usize::from(d.components).clamp(1, 4))
     }
 
     fn alu(&mut self, id: ir::InstrId, o: ir::AluOp, args: &[ir::Src; 3]) -> Result<(), SelectError> {
