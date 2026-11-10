@@ -383,7 +383,7 @@ impl LinkConsts {
 }
 
 /// The varyings a program's fragment shader reads, which its vertex shader
-/// is built for (the Mali's varying compaction, `mali::partial_reads`): a
+/// is built for (the Mali's varying compaction, `mali::program_reads`): a
 /// location and a component mask each, and the fragment shader's
 /// expressions the link moves into the vertex shader, as the bytes the
 /// back end encodes them in (`mali::motion`): a slice, empty for every
@@ -1084,15 +1084,28 @@ fn or_without_consts<'s>(
 }
 
 /// The constant varying lanes of vertex shader `text` that the Mali's link
-/// folds into the program's fragment shader (`codegen::vs_constants`, Mesa's
-/// nir_opt_varyings); [`LinkConsts::NONE`] when it stores none, or when the
-/// front end cannot run here (the plain link then decides).
+/// folds into the program's fragment shader `fs` (`mali::vs_constants_for`,
+/// Mesa's nir_opt_varyings; at `fs`'s locations, paired by name);
+/// [`LinkConsts::NONE`] when it stores none, or when the front end cannot
+/// run here (the plain link then decides).
 #[cfg(feature = "gpu-mali")]
-fn vs_consts_of(text: &[u8]) -> LinkConsts {
-    match store::with_scratch(|a| codegen::vs_constants(text, a)) {
+fn vs_consts_of(text: &[u8], fs: &ShcShader) -> LinkConsts {
+    match store::with_scratch(|a| super::mali::vs_constants_for(text, fs, a)) {
         Some(Ok(c)) => LinkConsts(c),
         _ => LinkConsts::NONE,
     }
+}
+
+/// The reads the program's vertex shader `text` is built for, from the
+/// program's fragment shader `fs` (its record `r`), at the vertex shader's
+/// locations (`mali::program_reads`).
+#[cfg(feature = "gpu-mali")]
+fn program_reads_of(
+    r: &super::mali::MaliShader<'_>,
+    fs: &ShcShader,
+    text: &[u8],
+) -> Result<super::mali::ProgramReads, CompileError> {
+    store::with_scratch(|a| super::mali::program_reads(r, fs, text, a)).unwrap_or(Err(CompileError::Reentered))
 }
 
 /* ---- the three entry points of `struct shc_backend` ---------------------- */
@@ -1644,7 +1657,7 @@ fn link_by_sources(vs: &ShcShader, vr: &Base, fr: &Base, fs: &mut ShcShader, log
          * list: a vertex shader that leaves a varying unwritten is refused
          * at its compile on this GPU. */
         #[cfg(feature = "gpu-mali")]
-        let consts = if zero.n == 0 { vs_consts_of(vsrc) } else { LinkConsts::NONE };
+        let consts = if zero.n == 0 { vs_consts_of(vsrc, &fs_copy) } else { LinkConsts::NONE };
         #[cfg(not(feature = "gpu-mali"))]
         let consts = LinkConsts::NONE;
         let rc = link_substituted(fr, &zero, affine, consts, fs, log);
@@ -1815,8 +1828,9 @@ fn link_program(vr: &Base, fr: &Base, zero: &ZeroList, fs: &mut ShcShader, log: 
 /// link decided (SHADERC_NOTES.md, "Attribute registers decided at link");
 /// `fs` is not read then. With no map, for the program's fragment shader
 /// `fs`: on the Mali, when it reads a varying in part, the vertex shader
-/// storing only those components (`mali::partial_reads`, Mesa's varying
-/// compaction); 1, and `*out` untouched, when there is nothing to build (the
+/// storing only those components (`mali::program_reads`, Mesa's varying
+/// compaction, the reads paired with the vertex outputs by name); 1, and
+/// `*out` untouched, when there is nothing to build (the
 /// shader's own vertex code is the program's, on every other GPU always).
 /// A program's copy, so at the program's end of the keep region, and cached
 /// under the source and the map or the reads.
@@ -1874,7 +1888,7 @@ unsafe extern "C" fn online_compile_vs_linked(
 /// under the record key the link's compile finds again.
 fn vs_for_fragment(text: &[u8], fs: &ShcShader, out: *mut ShcShader, log: &mut CStrWriter) -> i32 {
     #[cfg(feature = "gpu-mali")]
-    let consts = vs_consts_of(text);
+    let consts = vs_consts_of(text, fs);
     #[cfg(feature = "gpu-mali")]
     let reads = match base_of(fs) {
         Some(fr) if !consts.is_none() => {
@@ -1892,19 +1906,20 @@ fn vs_for_fragment(text: &[u8], fs: &ShcShader, out: *mut ShcShader, log: &mut C
                 Ok(sh) => sh,
                 Err(rc) => return rc,
             };
-            let pr = super::mali::MaliShader::of(&linked).map(super::mali::fragment_reads);
+            let pr = super::mali::MaliShader::of(&linked).map(|r| program_reads_of(r, &linked, text));
             release(&linked);
             pr
         }
-        _ => super::mali::partial_reads(fs),
+        _ => super::mali::needs_program_vs(fs).map(|r| program_reads_of(r, fs, text)),
     };
     #[cfg(feature = "gpu-mali")]
     if let Some(pr) = reads {
         let pr = match pr {
             Ok(pr) => pr,
-            /* the record's moved expressions do not encode: the back end's
-             * defect, reported as one, never the plain vertex shader */
-            Err(e) => return report(log, SHC_STAGE_VERTEX, CompileError::BackEnd(codegen::BackEndError::Mali(e))),
+            /* the record's moved expressions do not encode (the back end's
+             * defect, reported as one) or the front end could not run:
+             * never the plain vertex shader */
+            Err(e) => return report(log, SHC_STAGE_VERTEX, e),
         };
         /* the moved bytes are borrowed from `pr` for the compile; the record
          * gets its own copy (`publish_as`) */

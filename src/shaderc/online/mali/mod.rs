@@ -1581,6 +1581,30 @@ fn compile_lowered<'s>(
 /// fragment shader loads them `.src_flat32` (varyconst_117_uniidxf).
 pub fn vs_constants(glsl: &[u8], scratch: &Arena<'_>) -> Result<link::VaryingConsts, CompileError> {
     let l = lower_source(SHC_STAGE_VERTEX, glsl, &[], scratch)?;
+    constants_of(&l, glsl, scratch)
+}
+
+/// [`vs_constants`] at the fragment shader `fs`'s locations, the ones the
+/// program's fragment shader is compiled with ([`compile_fs_for_vs`]
+/// folds a lane into the read of its fragment location): the lanes are
+/// carried over by name ([`LocationPairs`], Mesa's link), and a lane of an
+/// output `fs` declares no input of is left out
+/// (`VaryingConsts::relocated`). Case 19's textured pair stores `Unused =
+/// 0.5` at the vertex shader's location 2, which the fragment shader does
+/// not declare; a pair whose fragment shader numbers another varying there
+/// would otherwise fold the constant into that one's read.
+pub fn vs_constants_for(glsl: &[u8], fs: &ShcShader, scratch: &Arena<'_>) -> Result<link::VaryingConsts, CompileError> {
+    let l = lower_source(SHC_STAGE_VERTEX, glsl, &[], scratch)?;
+    let pairs = LocationPairs::of(fs, l.module.outputs);
+    Ok(constants_of(&l, glsl, scratch)?.relocated(|v| pairs.fragment(v)))
+}
+
+/// [`vs_constants`] past the front end.
+fn constants_of(
+    l: &super::lower::Lowered<'_>,
+    glsl: &[u8],
+    scratch: &Arena<'_>,
+) -> Result<link::VaryingConsts, CompileError> {
     /* built as for a fragment shader that reads nothing: no lane is stored,
      * so none is refused for what it holds */
     let rw = glsl::passes(&l.module, scratch).map_err(refused)?;
@@ -1668,18 +1692,103 @@ impl ProgramReads {
     }
 }
 
-/// The reads a program's vertex shader is built for, when the fragment
-/// shader `fs` (a record of this back end) reads a varying in part or has
-/// code the link moves into the vertex shader; None otherwise (the vertex
-/// shader's own layout is the program's). `Some(Err)`: the record's moved
-/// expressions do not encode (a defect, never a plain vertex shader).
-pub fn partial_reads(fs: &ShcShader) -> Option<Result<ProgramReads, MaliError>> {
-    let r = MaliShader::of(fs)?;
-    (r.stage == SHC_STAGE_FRAGMENT && (r.compacted || !r.moved.is_empty())).then(|| fragment_reads(r))
+/// The record of fragment shader `fs` (one of this back end's) when its
+/// program needs a vertex shader built for it ([`program_reads`]): it
+/// reads a varying in part or has code the link moves into the vertex
+/// shader. None otherwise (the vertex shader's own layout is the
+/// program's).
+pub fn needs_program_vs(fs: &ShcShader) -> Option<&MaliShader<'_>> {
+    MaliShader::of(fs).filter(|r| r.stage == SHC_STAGE_FRAGMENT && (r.compacted || !r.moved.is_empty()))
+}
+
+/// The varyings a program's stages share, paired by name: Mesa's GLSL
+/// linker pairs a fragment input with the vertex output of its name
+/// (gl_nir_link_varyings.c:3536-3609, `get_matching_input` and
+/// `varying_matches_record`), and each stage of
+/// ours numbers its varyings in its own declaration order (ir.rs
+/// `IoDecl::location`), so the two numberings agree only when the
+/// declarations come in the same order. Case 19's textured pair declares
+/// `TexCoord` then `Tint` in the vertex shader and `Tint` then `TexCoord`
+/// in the fragment shader: `Tint` is the fragment shader's location 0 and
+/// the vertex shader's 1 (docs/notes/mali-partial-varyings.md).
+pub struct LocationPairs {
+    /// (vertex location, fragment location).
+    at: [(u8, u8); select::MAX_VARYINGS],
+    n: usize,
+}
+
+impl LocationPairs {
+    /// The pairs of the fragment inputs `fs` lists (its record's rows,
+    /// named as the IR names them: a per-column or per-element input
+    /// `m[1]` by that name) and the vertex outputs `vs_outputs` (the IR's
+    /// declarations, mod.rs `record` names the rows from the same). An
+    /// input no output is named for has no pair: the link refuses such a
+    /// program by name (backend.rs `link_by_sources`).
+    pub fn of(fs: &ShcShader, vs_outputs: &[ir_mod::IoDecl<'_>]) -> LocationPairs {
+        let mut p = LocationPairs { at: [(0, 0); select::MAX_VARYINGS], n: 0 };
+        for v in &fs.varyings[..(fs.num_varyings as usize).min(fs.varyings.len())] {
+            let name = crate::util::name_bytes(&v.name);
+            let o = vs_outputs.iter().find(|o| o.kind == ir_mod::IoKind::Varying && o.name.as_bytes() == name);
+            if let (Some(o), Some(slot)) = (o, p.at.get_mut(p.n)) {
+                *slot = (o.location, v.location);
+                p.n += 1;
+            }
+        }
+        p
+    }
+
+    /// The vertex location of fragment location `f`.
+    pub fn vertex(&self, f: u8) -> Option<u8> {
+        self.at[..self.n].iter().find(|p| p.1 == f).map(|p| p.0)
+    }
+
+    /// The fragment location of vertex location `v`.
+    pub fn fragment(&self, v: u8) -> Option<u8> {
+        self.at[..self.n].iter().find(|p| p.0 == v).map(|p| p.1)
+    }
+}
+
+/// The reads vertex shader `vs_glsl` is built for ([`compile_vs_for_reads`])
+/// in a program with the fragment shader `fs`, whose record is `r`:
+/// [`fragment_reads`] with each location, of the reads and of the moved
+/// expressions' lanes, the vertex shader's ([`LocationPairs`]). A read of
+/// an input no vertex output is named for keeps its location (the link
+/// refuses the program by name). The vertex source goes through the front
+/// end once more for its declarations; it compiled before (it is a shader
+/// object's), so what can fail here is the scratch arena.
+pub fn program_reads(
+    r: &MaliShader<'_>,
+    fs: &ShcShader,
+    vs_glsl: &[u8],
+    scratch: &Arena<'_>,
+) -> Result<ProgramReads, CompileError> {
+    let mut pr = fragment_reads(r).map_err(refused)?;
+    let l = lower_source(SHC_STAGE_VERTEX, vs_glsl, &[], scratch)?;
+    let pairs = LocationPairs::of(fs, l.module.outputs);
+    let at = |f: u8| pairs.vertex(f).unwrap_or(f);
+    for read in &mut pr.reads[..pr.n] {
+        read.0 = at(read.0);
+    }
+    if pr.nmoved != 0 {
+        let mut mv = [motion::Moved::NONE; motion::MAX_MOVED];
+        let n = motion::decode(pr.moved(), &mut mv).map_err(refused)?;
+        for m in &mut mv[..n] {
+            m.location = at(m.location);
+            for nd in &mut m.nodes[..m.n as usize] {
+                if let motion::Node::Lane { location, .. } = nd {
+                    *location = at(*location);
+                }
+            }
+        }
+        pr.nmoved = motion::encode(&mv[..n], &mut pr.moved).map_err(refused)?;
+    }
+    Ok(pr)
 }
 
 /// The generic varyings a fragment shader's record reads and its moved
-/// expressions, as [`compile_vs_for_reads`] takes them.
+/// expressions, as [`compile_vs_for_reads`] takes them, at the fragment
+/// shader's own locations ([`program_reads`] carries them over to the
+/// vertex shader's).
 pub fn fragment_reads(r: &MaliShader<'_>) -> Result<ProgramReads, MaliError> {
     let mut out =
         ProgramReads { reads: [(0, 0); select::MAX_VARYINGS], n: 0, moved: [0; motion::MAX_BYTES], nmoved: 0 };

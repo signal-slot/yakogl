@@ -34,12 +34,14 @@ use crate::util::{name_bytes, Bytes, CStrWriter, EINVAL};
 /// vertex shader would have to be built for the program).
 pub const MALI_LAYOUTS_DIFFER: &str =
     "a Mali link whose stages place a varying at different offsets is not lowered yet";
-/// A fragment shader that reads part of a varying: Mesa's link keeps only
-/// the components read (`compact_varyings`), so the vertex shader's layout
-/// is the program's, built from the fragment shader's reads. A gap until the
-/// vertex shader is built per program.
+/// The vertex shader stores other components of a varying than the
+/// fragment shader reads: Mesa's link keeps only the components read
+/// (`compact_varyings`), and the program's vertex shader is built for the
+/// fragment shader's reads, carried over by name (mod.rs `program_reads`,
+/// docs/notes/mali-partial-varyings.md), so a pair that still differs was
+/// not built for the program: the back end's defect, not the shader's.
 pub const MALI_PARTIAL_READ: &str =
-    "a Mali link whose fragment shader reads part of a varying (the link keeps only those components) is not lowered yet";
+    "Mali link: the vertex shader stores other components of a varying than the fragment shader reads (it was not built for the program: a back-end defect)";
 /// The vertex output a fragment input reads is listed by the vertex record
 /// but has no slot in its layout. The back end lays out every output it
 /// lists (it refuses a varying it does not write at compile time), so this
@@ -184,6 +186,23 @@ impl VaryingConsts {
 
     pub fn as_slice(&self) -> &[(u8, u8, u32)] {
         &self.at[..self.n]
+    }
+
+    /// The same lanes at the other stage's locations: `at(l)` is the
+    /// location the other stage numbers varying `l` under (mod.rs
+    /// `LocationPairs`: by name, as Mesa's link pairs them), None for a
+    /// varying it does not declare, whose lanes are left out (no fragment
+    /// read of them exists to fold, and the vertex shader built for the
+    /// fragment shader's reads stores none). The flat tags travel with
+    /// the lanes.
+    pub fn relocated(&self, at: impl Fn(u8) -> Option<u8>) -> VaryingConsts {
+        let mut out = VaryingConsts { full: self.full, ..VaryingConsts::NONE };
+        for &(location, comp, bits) in self.as_slice() {
+            if let Some(l) = at(location) {
+                out.push(l, comp, bits);
+            }
+        }
+        out
     }
 }
 

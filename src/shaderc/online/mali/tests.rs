@@ -463,29 +463,56 @@ fn check_vs_stage(v: &Stage, vs: &str, fs: &str, json: &str, vp: Viewport) {
     );
 }
 
-/// A program pair through the Mali's link step: the vertex shader's
-/// constant lanes (`vs_constants`), the fragment shader compiled with them
-/// (`compile_fs_for_vs`), the vertex shader built for its reads
-/// (`compile_vs_for_reads`), as Mesa's link leaves the pair
-/// (nir_opt_varyings).
+/// The fragment inputs of `fs` as the shader object's record lists them
+/// (name and location, from the IR's declarations as mod.rs `record` takes
+/// them): what the link pairs the vertex outputs with by name
+/// (`LocationPairs`). The names alone, no code.
+fn fragment_names(fs: &str) -> crate::shaderc::ShcShader {
+    let mut sh = crate::shaderc::ShcShader::ZERO;
+    store::with_scratch(|s| {
+        let l = super::lower_source(SHC_STAGE_FRAGMENT, fs.as_bytes(), &[], s).expect("the fragment shader lowers");
+        let mut n = 0;
+        for io in l.module.inputs.iter().filter(|io| io.kind == ir::IoKind::Varying) {
+            let dst = &mut sh.varyings[n];
+            crate::util::set_name(&mut dst.name, io.name.as_bytes());
+            dst.location = io.location;
+            dst.components = io.components;
+            n += 1;
+        }
+        sh.num_varyings = n as u8;
+    })
+    .expect("the scratch arena is free");
+    sh
+}
+
+/// A program pair through the Mali's link step, as the back end's entry
+/// points take it (backend.rs `vs_for_fragment`): the vertex shader's
+/// constant lanes at the fragment shader's locations (`vs_constants_for`),
+/// the fragment shader compiled with them (`compile_fs_for_vs`), its reads
+/// carried to the vertex shader's locations (`program_reads`) and the
+/// vertex shader built for them (`compile_vs_for_reads`), as Mesa's link
+/// leaves the pair (nir_opt_varyings, paired by name).
 fn compile_linked(vs: &str, fs: &str) -> (Stage, Stage) {
     let _k = store::test_keep();
-    let consts = store::with_scratch(|s| super::vs_constants(vs.as_bytes(), s))
+    let names = fragment_names(fs);
+    let consts = store::with_scratch(|s| super::vs_constants_for(vs.as_bytes(), &names, s))
         .expect("the scratch arena is free")
         .expect("the vertex shader's constant lanes");
-    let f = store::with_scratch(|s| {
-        super::compile_fs_for_vs(fs.as_bytes(), consts, s, store::keep()).map(|(sh, _)| stage_of(&sh))
-    })
-    .expect("the scratch arena is free")
-    .expect("the fragment shader compiles for the vertex shader");
-    let pr = super::fragment_reads(&f.info.shader()).expect("the record's moved expressions encode");
+    let linked =
+        store::with_scratch(|s| super::compile_fs_for_vs(fs.as_bytes(), consts, s, store::keep()).map(|(sh, _)| sh))
+            .expect("the scratch arena is free")
+            .expect("the fragment shader compiles for the vertex shader");
+    let r = MaliShader::of(&linked).expect("a Mali record");
+    let pr = store::with_scratch(|s| super::program_reads(r, &linked, vs.as_bytes(), s))
+        .expect("the scratch arena is free")
+        .expect("the program's reads at the vertex shader's locations");
     let v = store::with_scratch(|s| {
         super::compile_vs_for_reads(vs.as_bytes(), pr.reads(), pr.moved(), s, store::keep())
             .map(|(sh, _)| stage_of(&sh))
     })
     .expect("the scratch arena is free")
     .expect("the vertex shader compiles for the program");
-    (v, f)
+    (v, stage_of(&linked))
 }
 
 /// [`compile_linked`] checked against an expect.json, every region, and
@@ -500,10 +527,19 @@ fn check_linked_capped(vs: &str, fs: &str, json: &str, edits: &[CapEdit]) -> (St
     let (v, f) = compile_linked(vs, fs);
     check_vs_stage(&v, vs, fs, json, VIEWPORT_64X64);
     check_fs_stage_capped(&f, vs, fs, json, VIEWPORT_64X64, edits);
-    for s in &f.info.varyings {
+    /* each fragment read at the offset of the vertex output of its name */
+    let names = fragment_names(fs);
+    let at_vertex: Vec<(u8, u8)> = store::with_scratch(|s| {
+        let l = super::lower_source(SHC_STAGE_VERTEX, vs.as_bytes(), &[], s).expect("the vertex shader lowers");
+        let pairs = super::LocationPairs::of(&names, l.module.outputs);
+        (0..16u8).filter_map(|fl| pairs.vertex(fl).map(|vl| (fl, vl))).collect()
+    })
+    .expect("the scratch arena is free");
+    for s in f.info.varyings.iter().filter(|s| s.section == Section::Generic) {
+        let vl = s.varying.and_then(|fl| at_vertex.iter().find(|p| p.0 == fl).map(|p| p.1));
         assert!(
-            v.info.varyings.iter().any(|x| x.varying == s.varying && x.offset == s.offset && x.mask == s.mask),
-            "{s:?} in {:?}",
+            v.info.varyings.iter().any(|x| x.varying == vl && x.offset == s.offset && x.mask == s.mask),
+            "{s:?} (the vertex shader's {vl:?}) in {:?}",
             v.info.varyings
         );
     }
@@ -4817,26 +4853,185 @@ const VSFP16_POPULATION: [(&str, &str, &str, &str); 4] = [
 #[test]
 fn the_fp16_vertex_uniforms_are_byte_equal_to_mesa_26_2_1() {
     for (name, vs, fs, json) in VSFP16_POPULATION {
-        let (v, f) = compile_linked(vs, fs);
-        /* tex's stages declare `TexCoord` and `Tint` in the other order,
-         * and the varying locations are each stage's declaration order: the
-         * fragment shader's reads are given at the vertex shader's
-         * locations, as Mesa's link matches them by name (`Tint` at offset
-         * 0, `TexCoord` at 16, the fragment's order; `Unused` is no read) */
-        let v = if name == "vsfp16_19_tex" {
-            let _k = store::test_keep();
-            store::with_scratch(|s| {
-                super::compile_vs_for_reads(vs.as_bytes(), &[(1, 0b1111), (0, 0b0011)], &[], s, store::keep())
-                    .map(|(sh, _)| stage_of(&sh))
-            })
-            .expect("the scratch arena is free")
-            .expect("the vertex shader compiles for the program's reads")
-        } else {
-            v
-        };
-        check_vs_stage(&v, vs, fs, json, VIEWPORT_64X64);
-        check_fs_stage(&f, vs, fs, json, VIEWPORT_64X64);
+        /* tex's stages declare `TexCoord` and `Tint` in the other order:
+         * the link pairs them by name (`program_reads`), `Tint` at offset
+         * 0, `TexCoord` at 16, `Unused` no read */
+        let (v, f) = check_linked(vs, fs, json);
+        if name == "vsfp16_19_tex" {
+            assert_eq!(generic_slot(&v, 1), generic_slot(&f, 0), "Tint: the vertex shader's location 1");
+            assert_eq!(generic_slot(&v, 0), generic_slot(&f, 1), "TexCoord: the vertex shader's location 0");
+            assert_eq!(generic_slot(&f, 0), Some((0, 0xf)));
+            assert_eq!(generic_slot(&f, 1), Some((16, 0x3)));
+        }
     }
+}
+
+/// The offset and mask of the generic slot of varying `loc` in a stage's
+/// record.
+fn generic_slot(s: &Stage, loc: u8) -> Option<(u16, u8)> {
+    s.info
+        .varyings
+        .iter()
+        .find(|x| x.section == Section::Generic && x.varying == Some(loc) && x.mask != 0)
+        .map(|x| (x.offset, x.mask))
+}
+
+/// Case 19's textured pair (#33), the es100 program the sweep refused at
+/// the link (`'Tint'`, tools/cts/log/2026-11-07-t6-step4a): the stages
+/// declare `TexCoord` and `Tint` in opposite orders, so `Tint` is the
+/// fragment shader's location 0 and the vertex shader's 1, and the vertex
+/// shader stores `Unused = 0.5`, a constant lane at a location the fragment
+/// shader does not declare. Through the back end's own entry points, as
+/// the GL core calls them (glCompileShader of each stage, the program's
+/// vertex shader, glLinkProgram): the constant lane is carried over by
+/// name and so dropped (`vs_constants_for`), the fragment shader stays the
+/// object's and reads its varyings whole, the vertex record compiled
+/// without the lane is the program's, the link pairs the two numberings
+/// by name and takes the pair, each fragment read at its vertex output's
+/// offset, and both stages are the shim's to the byte
+/// (vsfp16_19_tex.expect.json; docs/notes/mali-partial-varyings.md).
+#[test]
+fn case_19_textured_pair_links_through_the_entry_points_byte_equal_to_mesa_26_2_1() {
+    use crate::shaderc::online::backend::{release, retain, SHC_ONLINE};
+    use crate::shaderc::ShcShader;
+    use crate::util::cstr_bytes;
+    let (vs, fs, json) = (td!("vsfp16_19_tex.vert"), td!("vsfp16_19_tex.frag"), td!("vsfp16_19_tex.expect.json"));
+    assert_eq!(vs, GLTEST_ES100_TEX_VS, "gl_test case 19's vertex source");
+    assert_eq!(fs, GLTEST_ES100_TEX_FS, "gl_test case 19's fragment source");
+    let _serial = store::test_lock();
+    let mut log = [0 as core::ffi::c_char; 512];
+    let text = |log: &[core::ffi::c_char; 512]| {
+        // SAFETY: the writer NUL-terminated the log.
+        String::from_utf8_lossy(unsafe { cstr_bytes(log.as_ptr()) }).into_owned()
+    };
+    let (vsrc, fsrc) = (format!("{vs}\0"), format!("{fs}\0"));
+    let mut compile = |stage: u32, src: &str| {
+        let mut sh = ShcShader::ZERO;
+        // SAFETY: a NUL-terminated source, a real output and a log of the announced size.
+        let rc = unsafe { (SHC_ONLINE.compile.unwrap())(stage, src.as_ptr().cast(), &mut sh, log.as_mut_ptr(), 512) };
+        assert_eq!(rc, 0, "{}", text(&log));
+        sh
+    };
+    let object_vs = compile(SHC_STAGE_VERTEX, &vsrc);
+    let object_fs = compile(SHC_STAGE_FRAGMENT, &fsrc);
+    /* the program's vertex shader: nothing to build (1). `Unused` is the
+     * only constant lane and the fragment shader declares no input of its
+     * name, so the link carries no lane over (`vs_constants_for`) and the
+     * fragment shader reads its varyings whole: the shader object's vertex
+     * record, compiled without the lane (`compile_vs_without_consts`), is
+     * the program's */
+    let mut built = ShcShader::ZERO;
+    // SAFETY: a NUL-terminated source, no map, the program's fragment shader,
+    // a real output and a log of the announced size.
+    let rc = unsafe {
+        (SHC_ONLINE.compile_vs_linked.unwrap())(
+            vsrc.as_ptr().cast(),
+            core::ptr::null(),
+            &object_fs,
+            &mut built,
+            log.as_mut_ptr(),
+            512,
+        )
+    };
+    assert_eq!(rc, 1, "the shader object's vertex record is the program's: {}", text(&log));
+    let v = object_vs;
+    let mut f = object_fs;
+    retain(&object_fs);
+    // SAFETY: two shaders of this back end and a log of the announced size.
+    let rc = unsafe { (SHC_ONLINE.link.unwrap())(&v, &mut f, log.as_mut_ptr(), 512) };
+    assert_eq!((rc, text(&log)), (0, String::new()), "the link takes the pair");
+    let (vst, fst) = (stage_of(&v), stage_of(&f));
+    check_vs_stage(&vst, vs, fs, json, VIEWPORT_64X64);
+    check_fs_stage(&fst, vs, fs, json, VIEWPORT_64X64);
+    /* Tint: the fragment shader's location 0, the vertex shader's 1;
+     * TexCoord: 1 and 0; Unused (the vertex shader's 2) stored nowhere */
+    assert_eq!(generic_slot(&vst, 1), Some((0, 0xf)));
+    assert_eq!(generic_slot(&fst, 0), Some((0, 0xf)));
+    assert_eq!(generic_slot(&vst, 0), Some((16, 0x3)));
+    assert_eq!(generic_slot(&fst, 1), Some((16, 0x3)));
+    assert_eq!(generic_slot(&vst, 2), None);
+    for sh in [&v, &f, &object_fs] {
+        release(sh);
+    }
+}
+
+/// gl_test case 19's textured pair (driver/tools/pvrlab/gl_test_shaders_es100.h
+/// `gl_test_es100_tex_{vs,fs}_src`), the sources the test above checks
+/// its testdata against.
+const GLTEST_ES100_TEX_VS: &str = "#version 100\n\
+attribute highp vec4 inVertex;\n\
+attribute mediump vec2 inTexCoord;\n\
+attribute lowp vec4 inTint;\n\
+uniform mediump mat4 MVPMatrix;\n\
+varying mediump vec2 TexCoord;\n\
+varying lowp vec4 Tint;\n\
+varying mediump float Unused;\n\
+void main(void)\n\
+{\n\
+\tgl_Position = MVPMatrix * inVertex;\n\
+\tTexCoord = inTexCoord;\n\
+\tTint = inTint;\n\
+\tUnused = 0.5;\n\
+}\n";
+const GLTEST_ES100_TEX_FS: &str = "#version 100\n\
+#extension GL_OES_standard_derivatives : enable\n\
+precision mediump float;\n\
+uniform sampler2D sTexture;\n\
+uniform lowp vec4 uScale;\n\
+varying lowp vec4 Tint;\n\
+varying mediump vec2 TexCoord;\n\
+void main(void)\n\
+{\n\
+\tgl_FragColor = texture2D(sTexture, TexCoord) * Tint * uScale;\n\
+}\n";
+
+/// A vertex shader's constant lane at a location the fragment shader
+/// numbers another varying under: `v_k = vec2(a_col.y, 0.5)` is the vertex
+/// shader's location 0 and the fragment shader's 1, where `v_a` is. The
+/// lanes are carried over by name (`vs_constants_for`,
+/// `VaryingConsts::relocated`), so the fragment shader folds `v_k.y` and
+/// keeps `v_a` whole, and the same pair declared in one order is the same
+/// three programs: the layout `v_a.zw` at 0, `v_k.x` at 8 in both stages,
+/// with the vertex shader's location of each.
+#[test]
+fn a_constant_lane_is_folded_by_name_not_by_location() {
+    const FS: &str = "precision mediump float; varying vec4 v_a; varying vec2 v_k; \
+                      void main() { gl_FragColor = vec4(v_k, v_a.zw); }";
+    const SAME: &str = "attribute vec4 a_pos; attribute vec4 a_col; varying vec4 v_a; varying vec2 v_k; \
+                        void main() { gl_Position = a_pos; v_a = a_col; v_k = vec2(a_col.y, 0.5); }";
+    const SWAPPED: &str = "attribute vec4 a_pos; attribute vec4 a_col; varying vec2 v_k; varying vec4 v_a; \
+                           void main() { gl_Position = a_pos; v_k = vec2(a_col.y, 0.5); v_a = a_col; }";
+    let (v0, f0) = compile_linked(SAME, FS);
+    let (v1, f1) = compile_linked(SWAPPED, FS);
+    assert_eq!(trim(&f1.code), trim(&f0.code), "fs.fragment");
+    assert_eq!(f1.info.fau, f0.info.fau);
+    assert_eq!(vs_regions(&v1), vs_regions(&v0), "vs.position and vs.varying");
+    /* the fragment shader: v_a (0) whole but for the compaction, v_k (1)
+     * its x alone, y the constant */
+    for f in [&f0, &f1] {
+        assert_eq!(generic_slot(f, 0), Some((0, 0b1100)), "v_a.zw");
+        assert_eq!(generic_slot(f, 1), Some((8, 0b0001)), "v_k.x");
+    }
+    assert_eq!((generic_slot(&v0, 0), generic_slot(&v0, 1)), (Some((0, 0b1100)), Some((8, 0b0001))));
+    assert_eq!((generic_slot(&v1, 1), generic_slot(&v1, 0)), (Some((0, 0b1100)), Some((8, 0b0001))));
+    /* the lanes themselves: at the vertex shader's location alone, then
+     * carried over */
+    let _k = store::test_keep();
+    let names = fragment_names(FS);
+    let (own, carried) = store::with_scratch(|s| {
+        (
+            super::vs_constants(SWAPPED.as_bytes(), s).expect("the lanes"),
+            super::vs_constants_for(SWAPPED.as_bytes(), &names, s).expect("the lanes"),
+        )
+    })
+    .expect("the scratch arena is free");
+    assert_eq!(own.as_slice(), [(0, 1, 0x3f00_0000)]);
+    assert_eq!(carried.as_slice(), [(1, 1, 0x3f00_0000)]);
+    /* a lane of an output the fragment shader does not declare is left out */
+    let unread = fragment_names("precision mediump float; varying vec4 v_a; void main() { gl_FragColor = v_a; }");
+    let dropped = store::with_scratch(|s| super::vs_constants_for(SWAPPED.as_bytes(), &unread, s).expect("the lanes"))
+        .expect("the scratch arena is free");
+    assert!(dropped.as_slice().is_empty(), "{dropped:?}");
 }
 
 /// Case 199's vertex shader (es3trunc_vsc.vert, #33): `trunc` is
