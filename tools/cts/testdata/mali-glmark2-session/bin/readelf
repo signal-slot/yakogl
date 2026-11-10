@@ -1,0 +1,8 @@
+#!/bin/bash
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+#
+# A fake readelf for tools/cts/mali-glmark2-session-selftest.sh: the fixture's
+# glmark2-es2-mali is a script, so the preflight's RUNPATH check is answered
+# as for the real binary.
+echo ' 0x000000000000001d (RUNPATH)            Library runpath: [$ORIGIN/../lib]'
