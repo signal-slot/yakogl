@@ -1,13 +1,15 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
-# GC7000: host counts of glmark2 terrain, shadow and refract, before the fixes
+# GC7000: host counts of glmark2 terrain, shadow and refract, before the fixes and at origin/main 8bd7cc04
 
 Plan #328, item host-cost-baseline (issues #1204, #1106). Counts only, from
 the harness's GC cost mode (`tools/hostharness/glmark2/README.md`, "GC7000
 costs"; `FINDINGS-gc-costs.md`): no times, no FPS, no board. No code
 changed. Each fix of the plan cites its change against the **baseline**
 columns here and fills the **after** column; the X2 numbers
-(x2-gm-after) are set beside these.
+(x2-gm-after) are set beside these. The sections after "Baseline" are
+recounts; the latest, "At origin/main 8bd7cc04" (end of the note), has the
+figures after mip-one-kick, resolve-own-kick and gc-cache-skip.
 
 ## Run
 
@@ -288,3 +290,136 @@ two RS blits (0.131 Mpx) are in the 800x600 chain starts' kicks
   runs.
 - The other fixes of the table are not filled in: none of them is in
   0a922ae2.
+
+## At origin/main 8bd7cc04
+
+Plan #328, item tiled-depth (issue #1204). Host model figures, not board
+times: counts of what the counted frames would make the i.MX8MP's CPU pay
+its GPU. Board ms are in `x2-glmark2-slow-scenes.md`. No code changed. The tip
+is origin/main `8bd7cc04` (2026-11-10), which holds every fix of the table
+"What each fix should move" except resolve-wide (in review) and the ones
+that wait for `backend.rs` (rs-clear-wire, gc-frames-ring) or the board
+(depth-sample-gc). Same glmark2 22c527cb, same two commands as "Run" (`done`
+run: `GM2_GCCOST_GPU=done`), 11 frames, counted frames 2 to 11, no GL error,
+no allocation refused. Rows are from `<out>/gc-cost-vivante.md` of each run;
+the lag run unless a row says `done`. "Previous" is the section above, "After
+tiled-copy-rs (0a922ae2)".
+
+Merged since that recount, by what each can move in these counts:
+
+- `d3ce1261` mip-one-kick: a GPU mipmap chain is one kick, not one kick a level.
+- `e320630d` resolve-own-kick: the depth resolve waits for the kick that wrote the depth.
+- `e58be17b` gc-cache-skip: no data-cache maintenance on the carve-out. It is in
+  `src/osal/zephyr_gc.c`; the harness puts its own OSAL table in front of
+  linux.c's, so **it sees no change from this commit** (the predicted
+  "stays" case). The KiB below are the stand-in for the CPU passes, not the
+  board's cache maintenance.
+- `732bde0f` fb-counters: only counters (`gc_backend_mip_chains`); the harness
+  does not print them (see "Mip chains" below).
+- `434d2695`, `099b5df6`, `37c90b49` (noise, sr and terrain compiler items):
+  "no code change" commits, measured only. A compiler change moves GPU
+  instruction counts, not any figure of this host model: **none explains any
+  change below.**
+- `c707598d` tiled-copy-rs: already in the previous column.
+
+### Terrain
+
+| | previous | now (8bd7cc04) | explained by |
+|---|---:|---:|---|
+| **kicks a frame** | 52.0 | **14.0** | mip-one-kick: 5 chains are 5 kicks, not 43 level kicks (52 - 43 + 5) |
+| waits in the swap (lag) | 1.8 | 2.8 | none named; more pending kicks at the swap in the lag model, not traced |
+| **waits other (lag)** | 48.2 | **10.2** | mip-one-kick: `record_level` 43.0 to 5.0 (one `frame_open` a chain); `gc_draw`'s `frame_open` 5.0 to 5.0; `glFinish` 0.2 |
+| waits, all (done) | 0.0 | 0.0 | |
+| **carve-out CPU KiB a frame**, invalidated (calls), lag | 0.0 (0.0) | **0.0 (0.0)** | tiled-copy-rs holds |
+| flushed (calls), lag | 92.4 (116.0) | **68.4 (28.0)** | mip-one-kick: the kick's two flushes a chain, not a level (stream KiB down too). gc-cache-skip: none (not seen) |
+| invalidated (calls), `done` | 256.0 (1.0) | 256.0 (1.0) | unchanged: one map's CPU copy |
+| flushed (calls), `done` | 348.2 (117.0) | 324.2 (29.0) | as the lag flushed row |
+| foreign KiB | 0.0 | 0.0 | |
+| stream KiB (lag, `done`) | 74.4, 74.2 | 51.3, 51.1 | mip-one-kick: no per-level prologue and state |
+| draws in the streams | 59.0 | 54.0 | probably mip-one-kick (one draw fewer a chain, 5); not traced |
+| draw box Mpx | 4.89 | 4.15 | same cause, -0.74 Mpx; not traced |
+| RS blits (Mpx), lag | 2.0 (0.13) | **7.0 (0.87)** | none predicted; **not traced** (below) |
+| RS blits (Mpx), `done` | 1.0 (0.07) | 6.0 (0.81) | same |
+
+Kick pass sizes (lag, a frame, draw box Mpx; kicks a frame): the chain kicks
+are 3 at 400x300 (0.480 Mpx, 27 draws) and 2 at 128x128 (0.044, 16 draws), 9
+and 8 draws a kick, 7.6 and 6.8 KB of stream each. The passes they follow:
+800x600 stride 3200: 3 kicks `glGenerateMipmap` (1.920), 1 `glDrawArrays`
+(0.480), 0.9 swap (0.864), 0.1 `glFinish` (0.096); 256x256 stride 1024: 2
+`glDrawArrays` and 2 `glGenerateMipmap` (0.131 each). Previous: 43 one-level
+kicks (draw box 0.5 Mpx together) and the same 9 other kicks.
+
+Mip chains a frame: **5 made by the GPU (3 from the 800x600 target, 2 from
+256x256), 0 refused (CPU-filtered)**; previous: 5 made as 43 level kicks, 0
+refused. The count is read off the kicks (the chain kicks are the ones with 8
+render targets) and from the library's log: it logs the first GPU chain
+(`10-level chain of a 512x512 texture`) and has no line "left to the CPU" in
+any phase. The harness does not read `gc_backend_mip_chains`; a printed
+per-frame counter is not in the harness.
+
+Tiled copies a frame: lag **0 CPU copies** (0 KiB read), all maps tiled by the
+RS in the stream (previous: the same). `done`: **1 CPU copy** (256 KiB read,
+256 KiB flushed), 5 maps by RS (previous: 1 and 1).
+
+### Shadow
+
+| | previous | now (8bd7cc04) | explained by |
+|---|---:|---:|---|
+| **kicks a frame** | 3.0 | **3.0** | unchanged; no mipmap |
+| waits in the swap (lag) | 0.9 | 0.9 | |
+| **waits other (lag)** | 1.8 | **1.1** | resolve-own-kick: `resolve_depth` 1.7 to 1.0 (K2 only); `glFinish` 0.1 |
+| waits, all (done) | 0.0 | 0.0 | |
+| **carve-out CPU KiB a frame**, invalidated (calls) | 7600.0 (1.0) | **7600.0 (1.0)** | unchanged: the CPU depth resolve reads the D24S8 surface; depth-sample-gc would remove it |
+| flushed (calls) | 7506.4 (11.0) | **7506.1 (8.0)** | KiB: none, 0.3 KiB less. Calls 11 to 8: **none named, not traced** |
+| invalidated / flushed, `done` | 7600.0 / 7506.4 | 7600.0 / 7506.1 | same |
+| stream KiB | 5.7 | 5.7 | |
+| draws, draw box Mpx | 5.0, 5.28 | 5.0, 5.28 | |
+| RS blits | 0 | 0 | |
+
+Kick pass sizes (draw box Mpx a frame): 1600x1200 stride 0 (the depth pass)
+1 kick, 2 draws, 3.840; 800x600 stride 3200: 1 `glDrawArrays` (0.480), 0.9
+swap (0.864), 0.1 `glFinish` (0.096). Same as before. Mip chains: none made,
+none refused. Tiled copies: none.
+
+### Refract
+
+| | previous | now (8bd7cc04) | explained by |
+|---|---:|---:|---|
+| **kicks a frame** | 13.0 | **4.0** | mip-one-kick: the 10 level kicks of the one chain are 1 kick (13 - 10 + 1) |
+| waits in the swap (lag) | 2.3 | 0.9 | mip-one-kick (fewer pending kicks at the swap); not traced further |
+| **waits other (lag)** | 9.4 | **1.1** | mip-one-kick: `record_level` 8.0 to 0; `resolve_depth` 0 to 1.0 (the chain's waits no longer finish the depth kick first, so the resolve finds it pending; with resolve-own-kick it waits for that kick only); `glFinish` 0.4 to 0.1. The `gc_draw` `frame_open` 1.0 is gone |
+| waits, all (done) | 0.0 | 0.0 | |
+| **carve-out CPU KiB a frame**, invalidated (calls) | 7600.0 (1.0) | **7600.0 (1.0)** | unchanged (CPU depth resolve) |
+| flushed (calls) | 7522.2 (29.0) | **7517.3 (9.0)** | mip-one-kick: 20 level flushes less; the KiB are the stream (17.9 to 13.3) |
+| invalidated / flushed, `done` | 7600.0 / 7522.2 | 7600.0 / 7517.3 | same |
+| stream KiB | 17.9 | 13.3 | mip-one-kick |
+| draws, draw box Mpx | 14.0, 5.44 | 14.0, 5.44 | unchanged |
+| RS blits | 0 | 0 | |
+
+Kick pass sizes (draw box Mpx a frame): 1600x1200 stride 6400 (K2) 1 kick, 2
+draws, 3.840, a `glGenerateMipmap`-attributed kick; the chain 800x600 stride
+6400, 1 kick, 10 draws, 0.640; 800x600 stride 3200: 1 `glDrawArrays` (0.480),
+0.9 swap (0.432), 0.1 `glFinish` (0.048). Previous: 10 one-level kicks for the
+same chain. Mip chains a frame: **1 made (logged as the `11-level chain of a 1600x1200
+texture`), 0 refused**; previous 1 and 0. Tiled copies: none.
+
+### What did not hold, and what is open
+
+- The previous section's prediction "refract: the resolve is not a counted
+  caller" is off by 1.0 now (see above); it follows from mip-one-kick, which
+  that prediction did not account for.
+- Terrain's RS blits rose from 2.0 to 7.0 (0.13 to 0.87 Mpx): six 256x256-sized
+  blits (two in `glDrawArrays` kicks, four in `glGenerateMipmap` kicks) and
+  one 800x600 blit in a chain-start kick, instead of two. None of the merged
+  commits was predicted to change it. **Not traced**; the likeliest reading is
+  that with fewer waits between kicks the producer is still pending when
+  the tiled copy is refreshed, so each refresh takes the RS path, as the
+  `done`-run difference of the previous section already showed.
+- Terrain's `waits other` is 10.2 in the lag model: 5.0 `record_level` and 5.0
+  `gc_draw` `frame_open` checks, one a kick that finds a kick pending.
+  Removing them is gc-frames-ring's (a ring of at least 14 slots now
+  covers a frame's kicks, not 52).
+- Terrain stays the heaviest of the three on kicks and waits; shadow and
+  refract stay the heaviest on CPU KiB (7.4 MiB read and 7.3 MiB flushed a
+  frame, the depth resolve), which only depth-sample-gc removes. gc-cache-skip
+  is not in these figures by construction.
