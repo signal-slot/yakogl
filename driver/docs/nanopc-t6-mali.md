@@ -15,8 +15,9 @@ tables, made three cache flush round trips and returned through PSCI
 PASS`). Two runs of the image of main `3aa24a68d` the same day stopped,
 once in Z1's power-on and once on the image's own reading of a status
 word; both were corrected before this run ("Z2 board procedure", "The
-runs of 2026-11-11"). Open: no jump has started from a powered-down GPU
-PLL since the power-on learned to power it (#4211).
+runs of 2026-11-11"). The power-on's PLL step ran the same day: `t6_gpu`
+of main `1bac19568`, started from a powered-down NPLL, powered it and
+passed (record `20261111-213650-t6`, `VERDICT t6_gpu PASS`).
 
 Status, 2026-10-18: **designed; the first parts are built.** On main: the `gpu-mali`
 skeleton and packers (#1073), the Valhall v10 ISA table, encoder and decoder (#1101),
@@ -1498,9 +1499,16 @@ clock gates and never looked at the PLL.
 - **The record now shows it.** `t6_gpu` prints `GPU PLL on: PLL_CON6 …
   at hand-over, was on N, waited N us, PLL_CON6 …`; `nanopc-t6.sh`'s
   "gpu power" lines carry `MODE_CON0` and `PLL_CON1`/`PLL_CON6` of
-  AUPLL, CPLL, GPLL and NPLL. Not run on the board yet: no jump has
-  started from NPLL since the fix (the run that passed Z2 started from
-  CPLL; #4211).
+  AUPLL, CPLL, GPLL and NPLL.
+- **Run on the board** the same day (`t6_gpu`, build
+  v0.1.0-915-g1bac19568, record `20261111-213650-t6`, `VERDICT t6_gpu
+  PASS`), from the same hand-over (`CLKSEL_CON(158)` 0x00001f60,
+  `PLL_CON1` 0x00002083, `PLL_CON6` 0x00004000, `BUCK1_ON_VSEL` 0x30):
+  `t6_gpu: GPU PLL on: PLL_CON6 0x00004000 at hand-over, was on 0, waited
+  10 us, PLL_CON6 0x0000a400`. NPLL locked within the first 10 µs wait;
+  the bus then left idle (`PD_GPU on: gates opened 0xd2, was on 0, waited
+  6/1/0 us`) and every later line is the predicted one ("The runs of
+  2026-11-11", the fourth).
 
 ### Z2: AS0 and a cache flush
 
@@ -1910,14 +1918,16 @@ bounded refusal, not a hang: a read of the GPU with PD_GPU off would be
 an external abort, but Z2 runs only after Z1 returned 0 (PD_GPU on, L2
 ready).
 
-**The runs of 2026-11-11.** Three jumps by kexec out of Armbian (kernel
+**The runs of 2026-11-11.** Four jumps by kexec out of Armbian (kernel
 6.18.55), records in `T6_RECORD_DIR`. The first two are the same image,
 `t6_mmu` build v0.1.0-897-g3aa24a68d (main `3aa24a68d`, sha256
 bd5fc04c…f69431e): both are FAIL and stay FAIL. The third is the image
 with both corrections, build v0.1.0-913-g1f19113a3 (main `1f19113a3`,
-sha256 1c2a83d6…fa178f5): PASS. The board came back to Armbian through
-the image's PSCI reset every time (31 s, 30 s and 30 s after the jump,
-`GLB_RST_ST` 0 before and after).
+sha256 1c2a83d6…fa178f5): PASS. The fourth is Z1's image, `t6_gpu` build
+v0.1.0-915-g1bac19568 (main `1bac19568`, sha256 6d8eef52…c5f1cfc),
+started from the first run's hand-over: PASS. The board came back to
+Armbian through the image's PSCI reset every time (31 s, 30 s, 30 s and
+30 s after the jump, `GLB_RST_ST` 0 before and after).
 
 1. **13:13 JST, record `20261111-131354-t6`: stopped in Z1's power-on.**
    `VERDICT t6_mmu FAIL (14 of 27)`. The image's lines:
@@ -1984,13 +1994,47 @@ the image's PSCI reset every time (31 s, 30 s and 30 s after the jump,
    `LOCK` of the mapped 64 KiB, the L2-only flush and the `UNLOCK` take
    no wait, and Z2's sequence with its prints takes 13 ms. Not shown by
    this run: Z1's PLL power-on (the clock's PLL was running at
-   hand-over; #4211), and what Z2 never shows ("What Z2 does not show":
-   the GPU's own walk of these tables is Z3's).
+   hand-over; the fourth run shows it), and what Z2 never shows ("What
+   Z2 does not show": the GPU's own walk of these tables is Z3's).
+4. **21:36 JST, record `20261111-213650-t6`: Z1 from a powered-down
+   NPLL, PASS.** `VERDICT t6_gpu PASS`. The hand-over of the first run
+   was made on purpose. Under Armbian, with the GPU runtime suspended
+   and no user of the GPU device, `1000000000` was written to the GPU
+   devfreq's `min_freq` (`/sys/class/devfreq/fb000000.gpu/min_freq`);
+   `clk_summary` then showed `clk_gpu_src` at 850 MHz from `npll` and
+   `pll_npll` with enable count 0. It is a sysfs write, not a GPU load:
+   no load was run. The runner's "gpu power before" line read
+   `CLKSEL_CON(158)` 0x00001f60, NPLL `PLL_CON1` 0x00002083 and
+   `PLL_CON6` 0x00004000, `MODE_CON0` 0x00000545. The image's lines of
+   the power-on:
+
+   ```
+   t6_gpu: PD_GPU at hand-over: PWR_GATE 0x0000ffff STATUS 0x2457ffff BUS_IDLE_REQ 0x0000e3cf ACK 0x000affff ST 0x000affff REPAIR_STATUS 0xfad40001: off or idle
+   t6_gpu: CRU at hand-over: CLKSEL_CON(158) 0x00001f60 CLKSEL_CON(159) 0x00000000 CLKGATE_CON(66) 0x000000d6 MODE_CON0 0x00000545 PLL_CON 0x000001a9 0x00002083 0x00000000: clk_gpu_src 850000000 Hz
+   t6_gpu: RK806 at hand-over: POWER_EN0 0x0f POWER_SLP_EN0 0xe0 BUCK1_CONFIG 0xa4 BUCK1_ON_VSEL 0x30: vdd_gpu_s0 on, 800000 uV
+   t6_gpu: GPU PLL on: PLL_CON6 0x00004000 at hand-over, was on 0, waited 10 us, PLL_CON6 0x0000a400
+   t6_gpu: PD_GPU on: gates opened 0xd2, was on 0, waited 6/1/0 us
+   t6_gpu: PD_GPU after: PWR_GATE 0x0000fffe STATUS 0x2457fffe BUS_IDLE_REQ 0x0000e3ce ACK 0x000afffe ST 0x000afffe REPAIR_STATUS 0xfad40003: on
+   t6_gpu: soft reset: GPU_INT_RAWSTAT 0x00000100 before the clear, 0x00000000 after; RESET_COMPLETED after 1 polls of 1 us
+   t6_gpu: L2 mask 0x1: L2_READY 0x0 before L2_PWRON, 0x1 after; waited 0/0 polls
+   t6_gpu: PASS: GPU_ID 0xa8670005, L2 ready, 16 ms
+   ```
+
+   Measured for the first time on the board: after the image's write
+   that powers NPLL (`PLL_CON1` := 0x20000000), the lock (`PLL_CON6`
+   bit 15) reads set after the first 10 µs wait; with the PLL running,
+   PD_GPU's bus leaves idle where the first run stopped. After the
+   reboot the GPU clock is
+   back on CPLL (`CLKSEL_CON(158)` 0x00001f24) and devfreq's `min_freq`
+   is its default. Not shown by this run: a hand-over reached by a real
+   GPU load under Linux (the clock, PLL and supply words are the first
+   run's, which devfreq's own choice had produced), and the sign-off
+   form.
 
 The reset line reads `PSCI SYSTEM_RESET at 14 ms (0 feeds)` in the first
-two runs and `at 16 ms (0 feeds)` in the third: the count is the 1 s
-timer's feeds of WDT0 (`nanopc_t6.c`), and the image was done before the
-first tick.
+two runs, `at 16 ms (0 feeds)` in the third and `at 18 ms (0 feeds)` in
+the fourth: the count is the 1 s timer's feeds of WDT0 (`nanopc_t6.c`),
+and the image was done before the first tick.
 
 **Recording the result.** A kexec run is a development result, as Z1's
 was (its sign-off form — U-Boot starting the image — has not run). The
