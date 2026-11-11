@@ -1,0 +1,2714 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES3 at b1b5b845, 2026-11-11, image FB4: UART console of the run, from the firmware's first line to the image's end line (README.md)
+  4.12 [sdcard] pieeprom.upd not found
+  4.12 [sdcard] recover4.elf not found
+  4.12 [sdcard] recovery.elf not found
+  4.55 Read start4.elf bytes  2299008 hnd 0x211ac
+  4.61 Read fixup4.dat bytes     5496 hnd 0x20bca
+  4.62 0x00d03114 0x00000000 0x00001fff
+  4.66 MEM GPU: 76 ARM: 948 TOTAL: 1024
+  4.02 Starting start4.elf @ 0xfec00200 partition 1
+  4.30 XHCI-STOP
+  4.30 xHC0 ver: 256 HCS: 05000420 fc000031 00e70004 HCC: 002841eb
+  4.31 USBSTS 18
+  4.31 PCI0 reset
+  4.32 +
+
+MESS:00:00:04.337039:0: arasan: arasan_emmc_open
+MESS:00:00:04.338698:0: arasan: arasan_emmc_set_clock C0: 0x00800000 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 400000 max: 400000 delay: 5
+MESS:00:00:04.458925:0: arasan: arasan_emmc_set_clock C0: 0x00800000 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 400000 max: 400000 delay: 5
+MESS:00:00:04.471795:0: arasan: arasan_emmc_set_clock C0: 0x00800f00 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 390000 max: 400000 delay: 5
+MESS:00:00:04.506068:0: boot-part: 1 fs-type: 0
+MESS:00:00:04.507480:0: boot-part: 1 fs-type: 3
+MESS:00:00:04.511864:0: arasan: arasan_emmc_set_clock C0: 0x00800f06 C1: 0x000e0207 emmc: 200000000 actual: 50000000 div: 0x00000002 target: 50000000 min: 0 max: 50000000 delay: 1
+MESS:00:00:04.676415:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:04.679237:0: brfs: File read: 164 bytes
+MESS:00:00:04.771912:0: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:04.776420:0: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:04.792828:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:05.291896:0: gpioman: gpioman_get_pin_num: pin DISPLAY_DSI_PORT not defined
+MESS:00:00:05.297443:0: gpioman: gpioman_get_pin_num: pin DISPLAY_DSI_PORT not defined
+MESS:00:00:05.306480:0: *** Restart logging
+MESS:00:00:05.308251:0: brfs: File read: 164 bytes
+MESS:00:00:05.386641:0: hdmi: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:05.391673:0: hdmi: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:05.409962:0: hdmi: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:05.415033:0: hdmi: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:05.420632:0: hdmi: HDMI:hdmi_get_state is deprecated, use hdmi_get_display_state instead
+MESS:00:00:05.429390:0: HDMI0: hdmi_pixel_encoding: 300000000
+MESS:00:00:05.434888:0: HDMI1: hdmi_pixel_encoding: 300000000
+MESS:00:00:05.456920:0: dtb_file 'bcm2711-rpi-4-b.dtb'
+MESS:00:00:05.472217:0: brfs: File read: /mfs/sd/bcm2711-rpi-4-b.dtb
+MESS:00:00:05.475509:0: Loaded 'bcm2711-rpi-4-b.dtb' to 0x100 size 0xdbb9
+MESS:00:00:05.516267:0: brfs: File read: 56249 bytes
+MESS:00:00:05.535799:0: brfs: File read: /mfs/sd/overlays/overlay_map.dtb
+MESS:00:00:05.600693:0: brfs: File read: 5971 bytes
+MESS:00:00:05.607352:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:05.648482:0: brfs: File read: 164 bytes
+MESS:00:00:05.652518:0: brfs: File read: /mfs/sd/cmdline.txt
+MESS:00:00:05.655642:0: Read command line from file 'cmdline.txt':
+MESS:00:00:05.661491:0: 'console=serial0,115200 console=tty1 root=PARTUUID=269eab4a-02 rootfstype=ext4 fsck.repair=yes rootwait cfg80211.ieee80211_regdom=JP splash quiet'
+MESS:00:00:05.818047:0: brfs: File read: 145 bytes
+MESS:00:00:07.223372:0: brfs: File read: /mfs/sd/yakogl-FB4.bin
+MESS:00:00:07.226192:0: Loaded 'yakogl-FB4.bin' to 0x200000 size 0xfc6dc0
+MESS:00:00:07.232718:0: Device tree loaded to 0x2eff1f00 (size 0xe0a1)
+MESS:00:00:07.241498:0: uart: Set PL011 baud rate to 103448.300000 Hz
+MESS:00:00:07.248021:0: uart: Baud rate change done...
+MESS:00:00:07.250044:0:board: watchdog armed
+*** Booting Zephyr OS build af17c0c8aa2a ***
+I: shader compiler scratch: 4194304 bytes, keep: 1048576 bytes
+v3d_deqp: build b1b5b845
+board: PM watchdog resets the SoC ~250 s after boot (tryboot -> Linux)
+v3d_deqp: the record at 210 s after boot at the latest
+V3D clock 250000000 -> 500000000 Hz (0)
+deqp: case filter 'dEQP-GLES3.functional.fbo.invalidate.*,dEQP-GLES3.functional.fbo.msaa.*,dEQP-GLES3.functional.fbo.render.*'
+Writing test log into deqp.qpa
+dEQP Core vulkan-cts-192.0.2.1-555-g93bca01861b0e3ef3c387027a9791e6d065f900c (0x93bca018) starting..
+  target implementation = 'YakoGL-Zephyr'
+I: V3D 4.2: 1 core(s), 8 QPUs, VPM 65536 bytes, PA 35 / VA 35 bits, MMU yes
+I: V3D raw: HUB_IDENT0..3 42554856 000e1124 00000100 00000e00 CTL_IDENT0..2 04443356 81001422 40078121 MMU_DEBUG_INFO 00000550
+osal(v3d): V3D 4.2, 8 QPUs, VPM 65536 bytes, MMU yes (identify 0)
+osal(v3d): UIFCFG 0x00000045
+osal(v3d): ready: carve-out 48 MiB at phys 0x2f09000, GPU VA 0x181000..0x3100000
+yakogl/v3d: depth and stencil apart (by renderbuffer), the platform's setting
+yakogl/v3d: job arenas for 1024 draws (the platform's budget): BCL 139264, indirect 458752, binner tile pool 1056768 bytes; tiled copies kept up to 16777216 bytes
+yakogl/v3d: two job arena sets (the second's texture arena 1048576 bytes): a job is recorded while the one before runs
+yakogl/v3d: clear program built: 408 bytes of code
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.default.bind_all'..
+yakogl/v3d: binner pool after job 1: given 0x00b96000 + 1056768, BPCA 0x00b99000 BPCS 1044480 CT0QMA 0x00b96000 CT0QMS 1056768, overflow blocks 0 of 2 (262144 bytes each)
+osal(v3d): BASELINE after a completed job 1: core_sts 0x0 hub_sts 0x0 err 0x1000 ct0 cs 0x0 ea 0x20108b ca 0x20108b ra 0x0 qba 0x201000 qea 0x20108b ct1 ca 0x223097 ra 0x223096 qba 0x223000 qea 0x223097
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.default.bind_all
+v3d_deqp: case #0 P 190ms k2/23 c15533/15725 r0 dEQP-GLES3.functional.fbo.invalidate.default.bind_all
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.default.bind_color'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.default.bind_color
+v3d_deqp: case #1 P 55ms k2/23 c15533/15725 r0 dEQP-GLES3.functional.fbo.invalidate.default.bind_color
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.default.bind_depth'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.default.bind_depth
+v3d_deqp: case #2 P 56ms k2/23 c15533/15725 r0 dEQP-GLES3.functional.fbo.invalidate.default.bind_depth
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.default.bind_depth_stencil'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.default.bind_depth_stencil
+v3d_deqp: case #3 P 57ms k2/23 c15533/15725 r0 dEQP-GLES3.functional.fbo.invalidate.default.bind_depth_stencil
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.default.bind_stencil'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.default.bind_stencil
+v3d_deqp: case #4 P 55ms k2/23 c15533/15725 r0 dEQP-GLES3.functional.fbo.invalidate.default.bind_stencil
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.default.draw_framebuffer_all'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.default.draw_framebuffer_all
+v3d_deqp: case #5 P 45ms k2/23 c15533/15725 r0 dEQP-GLES3.functional.fbo.invalidate.default.draw_framebuffer_all
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.default.draw_framebuffer_color'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.default.draw_framebuffer_color
+v3d_deqp: case #6 P 45ms k2/23 c15533/15725 r0 dEQP-GLES3.functional.fbo.invalidate.default.draw_framebuffer_color
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.default.read_framebuffer_all'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.default.read_framebuffer_all
+v3d_deqp: case #7 P 46ms k2/23 c15533/15725 r0 dEQP-GLES3.functional.fbo.invalidate.default.read_framebuffer_all
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.default.read_framebuffer_color'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.default.read_framebuffer_color
+v3d_deqp: case #8 P 45ms k2/23 c15533/15725 r0 dEQP-GLES3.functional.fbo.invalidate.default.read_framebuffer_color
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.default.render_all'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.default.render_all
+v3d_deqp: case #9 P 45ms k2/23 c15533/15725 r0 dEQP-GLES3.functional.fbo.invalidate.default.render_all
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.default.render_color'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.default.render_color
+v3d_deqp: case #10 P 42ms k2/23 c15533/15725 r0 dEQP-GLES3.functional.fbo.invalidate.default.render_color
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.default.render_depth'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.default.render_depth
+v3d_deqp: case #11 P 43ms k2/23 c15533/15725 r0 dEQP-GLES3.functional.fbo.invalidate.default.render_depth
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.default.render_depth_stencil'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.default.render_depth_stencil
+v3d_deqp: case #12 P 44ms k2/23 c15533/15725 r0 dEQP-GLES3.functional.fbo.invalidate.default.render_depth_stencil
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.default.render_none'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.default.render_none
+v3d_deqp: case #13 P 42ms k2/23 c15533/15725 r0 dEQP-GLES3.functional.fbo.invalidate.default.render_none
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.default.render_stencil'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.default.render_stencil
+v3d_deqp: case #14 P 41ms k2/23 c15533/15725 r0 dEQP-GLES3.functional.fbo.invalidate.default.render_stencil
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.default.sub_bind_all'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.default.sub_bind_all
+v3d_deqp: case #15 P 56ms k2/23 c15533/15725 r0 dEQP-GLES3.functional.fbo.invalidate.default.sub_bind_all
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.default.sub_bind_color'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.default.sub_bind_color
+v3d_deqp: case #16 P 55ms k2/23 c15533/15725 r0 dEQP-GLES3.functional.fbo.invalidate.default.sub_bind_color
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.default.sub_bind_depth'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.default.sub_bind_depth
+v3d_deqp: case #17 P 55ms k2/23 c15533/15725 r0 dEQP-GLES3.functional.fbo.invalidate.default.sub_bind_depth
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.default.sub_bind_depth_stencil'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.default.sub_bind_depth_stencil
+v3d_deqp: case #18 P 57ms k2/23 c15533/15725 r0 dEQP-GLES3.functional.fbo.invalidate.default.sub_bind_depth_stencil
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.default.sub_bind_stencil'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.default.sub_bind_stencil
+v3d_deqp: case #19 P 56ms k2/23 c15533/15725 r0 dEQP-GLES3.functional.fbo.invalidate.default.sub_bind_stencil
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.default.sub_render_all'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.default.sub_render_all
+v3d_deqp: case #20 P 43ms k2/23 c15533/15725 r0 dEQP-GLES3.functional.fbo.invalidate.default.sub_render_all
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.default.sub_render_color'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.default.sub_render_color
+v3d_deqp: case #21 P 42ms k2/23 c15533/15725 r0 dEQP-GLES3.functional.fbo.invalidate.default.sub_render_color
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.default.sub_render_depth'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.default.sub_render_depth
+v3d_deqp: case #22 P 43ms k2/23 c15533/15725 r0 dEQP-GLES3.functional.fbo.invalidate.default.sub_render_depth
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.default.sub_render_depth_stencil'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.default.sub_render_depth_stencil
+v3d_deqp: case #23 P 44ms k2/23 c15533/15725 r0 dEQP-GLES3.functional.fbo.invalidate.default.sub_render_depth_stencil
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.default.sub_render_stencil'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.default.sub_render_stencil
+v3d_deqp: case #24 P 44ms k2/23 c15533/15725 r0 dEQP-GLES3.functional.fbo.invalidate.default.sub_render_stencil
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.format.depth24_stencil8'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.format.depth24_stencil8
+v3d_deqp: case #25 P 47ms k2/23 c15533/15725 r0 dEQP-GLES3.functional.fbo.invalidate.format.depth24_stencil8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.format.depth32f_stencil8'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.format.depth32f_stencil8
+v3d_deqp: case #26 P 44ms k2/23 c15533/15725 r0 dEQP-GLES3.functional.fbo.invalidate.format.depth32f_stencil8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.format.depth_component16'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.format.depth_component16
+v3d_deqp: case #27 P 43ms k2/23 c15533/15725 r0 dEQP-GLES3.functional.fbo.invalidate.format.depth_component16
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.format.depth_component24'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.format.depth_component24
+v3d_deqp: case #28 P 45ms k2/23 c15533/15725 r0 dEQP-GLES3.functional.fbo.invalidate.format.depth_component24
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.format.depth_component32f'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.format.depth_component32f
+v3d_deqp: case #29 P 40ms k2/23 c15533/15725 r0 dEQP-GLES3.functional.fbo.invalidate.format.depth_component32f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.format.r11f_g11f_b10f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.invalidate.format.r11f_g11f_b10f
+v3d_deqp: case #30 N 25ms k2/23 c15533/15725 r0 dEQP-GLES3.functional.fbo.invalidate.format.r11f_g11f_b10f
+  NotSupported (Format not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.format.r16f'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.format.r16f
+v3d_deqp: case #31 P 39ms k2/23 c15533/15725 r0 dEQP-GLES3.functional.fbo.invalidate.format.r16f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.format.r16i'..
+deqp: Fail dEQP-GLES3.functional.fbo.invalidate.format.r16i
+v3d_deqp: case #32 F 24ms k2/23 c15533/15725 r0 dEQP-GLES3.functional.fbo.invalidate.format.r16i
+  Fail (Framebuffer is not complete: 'GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT' at es3fFboTestCase.cpp:146)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.format.r16ui'..
+deqp: Fail dEQP-GLES3.functional.fbo.invalidate.format.r16ui
+v3d_deqp: case #33 F 31ms k2/23 c15533/15725 r0 dEQP-GLES3.functional.fbo.invalidate.format.r16ui
+  Fail (Framebuffer is not complete: 'GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT' at es3fFboTestCase.cpp:146)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.format.r32f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.invalidate.format.r32f
+v3d_deqp: case #34 N 30ms k2/23 c15533/15725 r0 dEQP-GLES3.functional.fbo.invalidate.format.r32f
+  NotSupported (Format not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.format.r32i'..
+deqp: Fail dEQP-GLES3.functional.fbo.invalidate.format.r32i
+v3d_deqp: case #35 F 25ms k2/23 c15533/15874 r0 dEQP-GLES3.functional.fbo.invalidate.format.r32i
+  Fail (Framebuffer is not complete: 'GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT' at es3fFboTestCase.cpp:146)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.format.r32ui'..
+deqp: Fail dEQP-GLES3.functional.fbo.invalidate.format.r32ui
+v3d_deqp: case #36 F 32ms k2/23 c15533/15874 r0 dEQP-GLES3.functional.fbo.invalidate.format.r32ui
+  Fail (Framebuffer is not complete: 'GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT' at es3fFboTestCase.cpp:146)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.format.r8'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.format.r8
+v3d_deqp: case #37 P 43ms k2/23 c15533/15874 r0 dEQP-GLES3.functional.fbo.invalidate.format.r8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.format.r8i'..
+deqp: Fail dEQP-GLES3.functional.fbo.invalidate.format.r8i
+v3d_deqp: case #38 F 23ms k2/23 c15533/15874 r0 dEQP-GLES3.functional.fbo.invalidate.format.r8i
+  Fail (Framebuffer is not complete: 'GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT' at es3fFboTestCase.cpp:146)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.format.r8ui'..
+deqp: Fail dEQP-GLES3.functional.fbo.invalidate.format.r8ui
+v3d_deqp: case #39 F 31ms k2/23 c15533/15874 r0 dEQP-GLES3.functional.fbo.invalidate.format.r8ui
+  Fail (Framebuffer is not complete: 'GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT' at es3fFboTestCase.cpp:146)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.format.rg16f'..
+yakogl/v3d: tiled copies high-water 135168 of 16777216 bytes
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.format.rg16f
+v3d_deqp: case #40 P 49ms k2/23 c15533/15874 r0 dEQP-GLES3.functional.fbo.invalidate.format.rg16f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.format.rg16i'..
+deqp: Fail dEQP-GLES3.functional.fbo.invalidate.format.rg16i
+v3d_deqp: case #41 F 24ms k2/23 c15533/15874 r0 dEQP-GLES3.functional.fbo.invalidate.format.rg16i
+  Fail (Framebuffer is not complete: 'GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT' at es3fFboTestCase.cpp:146)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.format.rg16ui'..
+deqp: Fail dEQP-GLES3.functional.fbo.invalidate.format.rg16ui
+v3d_deqp: case #42 F 32ms k2/23 c15533/15874 r0 dEQP-GLES3.functional.fbo.invalidate.format.rg16ui
+  Fail (Framebuffer is not complete: 'GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT' at es3fFboTestCase.cpp:146)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.format.rg32f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.invalidate.format.rg32f
+v3d_deqp: case #43 N 30ms k2/23 c15533/15874 r0 dEQP-GLES3.functional.fbo.invalidate.format.rg32f
+  NotSupported (Format not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.format.rg32i'..
+deqp: Fail dEQP-GLES3.functional.fbo.invalidate.format.rg32i
+v3d_deqp: case #44 F 25ms k2/23 c15533/15874 r0 dEQP-GLES3.functional.fbo.invalidate.format.rg32i
+  Fail (Framebuffer is not complete: 'GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT' at es3fFboTestCase.cpp:146)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.format.rg32ui'..
+deqp: Fail dEQP-GLES3.functional.fbo.invalidate.format.rg32ui
+v3d_deqp: case #45 F 32ms k2/23 c15533/15874 r0 dEQP-GLES3.functional.fbo.invalidate.format.rg32ui
+  Fail (Framebuffer is not complete: 'GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT' at es3fFboTestCase.cpp:146)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.format.rg8'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.format.rg8
+v3d_deqp: case #46 P 44ms k2/23 c15533/15874 r0 dEQP-GLES3.functional.fbo.invalidate.format.rg8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.format.rg8i'..
+deqp: Fail dEQP-GLES3.functional.fbo.invalidate.format.rg8i
+v3d_deqp: case #47 F 24ms k2/23 c15533/15874 r0 dEQP-GLES3.functional.fbo.invalidate.format.rg8i
+  Fail (Framebuffer is not complete: 'GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT' at es3fFboTestCase.cpp:146)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.format.rg8ui'..
+deqp: Fail dEQP-GLES3.functional.fbo.invalidate.format.rg8ui
+v3d_deqp: case #48 F 31ms k2/23 c15533/15874 r0 dEQP-GLES3.functional.fbo.invalidate.format.rg8ui
+  Fail (Framebuffer is not complete: 'GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT' at es3fFboTestCase.cpp:146)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.format.rgb10_a2'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.format.rgb10_a2
+v3d_deqp: case #49 P 45ms k2/23 c15533/15874 r0 dEQP-GLES3.functional.fbo.invalidate.format.rgb10_a2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.format.rgb10_a2ui'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.format.rgb10_a2ui
+v3d_deqp: case #50 P 38ms k2/23 c15533/15874 r0 dEQP-GLES3.functional.fbo.invalidate.format.rgb10_a2ui
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.format.rgb565'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.format.rgb565
+v3d_deqp: case #51 P 38ms k2/23 c15533/15874 r0 dEQP-GLES3.functional.fbo.invalidate.format.rgb565
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.format.rgb5_a1'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.format.rgb5_a1
+v3d_deqp: case #52 P 38ms k2/23 c15533/15874 r0 dEQP-GLES3.functional.fbo.invalidate.format.rgb5_a1
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.format.rgb8'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.format.rgb8
+v3d_deqp: case #53 P 36ms k2/23 c15533/15874 r0 dEQP-GLES3.functional.fbo.invalidate.format.rgb8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.format.rgba16f'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.format.rgba16f
+v3d_deqp: case #54 P 40ms k2/23 c15533/15874 r0 dEQP-GLES3.functional.fbo.invalidate.format.rgba16f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.format.rgba16i'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.format.rgba16i
+v3d_deqp: case #55 P 42ms k2/23 c15533/15874 r0 dEQP-GLES3.functional.fbo.invalidate.format.rgba16i
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.format.rgba16ui'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.format.rgba16ui
+v3d_deqp: case #56 P 41ms k2/23 c15533/15874 r0 dEQP-GLES3.functional.fbo.invalidate.format.rgba16ui
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.format.rgba32f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.invalidate.format.rgba32f
+v3d_deqp: case #57 N 22ms k2/23 c15533/15874 r0 dEQP-GLES3.functional.fbo.invalidate.format.rgba32f
+  NotSupported (Format not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.format.rgba32i'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.format.rgba32i
+v3d_deqp: case #58 P 46ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.format.rgba32i
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.format.rgba32ui'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.format.rgba32ui
+v3d_deqp: case #59 P 44ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.format.rgba32ui
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.format.rgba4'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.format.rgba4
+v3d_deqp: case #60 P 38ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.format.rgba4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.format.rgba8'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.format.rgba8
+v3d_deqp: case #61 P 36ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.format.rgba8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.format.rgba8i'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.format.rgba8i
+v3d_deqp: case #62 P 38ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.format.rgba8i
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.format.rgba8ui'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.format.rgba8ui
+v3d_deqp: case #63 P 38ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.format.rgba8ui
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.format.srgb8_alpha8'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.format.srgb8_alpha8
+v3d_deqp: case #64 P 48ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.format.srgb8_alpha8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.format.stencil_index8'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.format.stencil_index8
+v3d_deqp: case #65 P 41ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.format.stencil_index8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.sub.render_all'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.sub.render_all
+v3d_deqp: case #66 P 45ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.sub.render_all
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.sub.render_color'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.sub.render_color
+v3d_deqp: case #67 P 45ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.sub.render_color
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.sub.render_depth'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.sub.render_depth
+v3d_deqp: case #68 P 45ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.sub.render_depth
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.sub.render_depth_stencil'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.sub.render_depth_stencil
+v3d_deqp: case #69 P 47ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.sub.render_depth_stencil
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.sub.render_none'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.sub.render_none
+v3d_deqp: case #70 P 45ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.sub.render_none
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.sub.render_stencil'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.sub.render_stencil
+v3d_deqp: case #71 P 45ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.sub.render_stencil
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.sub.unbind_blit_color'..
+glBlitFramebuffer: a stencil blit other than between renderbuffers of a back end with the ds_write and stencil_resolve entries is not implemented (GL_INVALID_OPERATION)
+GL error 0x502 in glBlitFramebuffer
+glBlitFramebuffer: a depth blit into the window or into a renderbuffer of a back end without the ds_write entry, or into a depth texture that is not a 2D texture is not implemented (GL_INVALID_OPERATION)
+GL error 0x502 in glBlitFramebuffer
+deqp: Fail dEQP-GLES3.functional.fbo.invalidate.sub.unbind_blit_color
+v3d_deqp: case #72 F 64ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.sub.unbind_blit_color
+  Fail (GL_INVALID_OPERATION at es3fFboTestCase.cpp:90)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.sub.unbind_blit_depth'..
+GL error 0x502 in glBlitFramebuffer
+deqp: Fail dEQP-GLES3.functional.fbo.invalidate.sub.unbind_blit_depth
+v3d_deqp: case #73 F 32ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.sub.unbind_blit_depth
+  Fail (GL_INVALID_OPERATION at es3fFboTestCase.cpp:90)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.sub.unbind_blit_depth_stencil'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.sub.unbind_blit_depth_stencil
+v3d_deqp: case #74 P 53ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.sub.unbind_blit_depth_stencil
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.sub.unbind_blit_msaa_color'..
+GL error 0x502 in glRenderbufferStorageMultisample
+GL error 0x502 in glRenderbufferStorageMultisample
+deqp: Fail dEQP-GLES3.functional.fbo.invalidate.sub.unbind_blit_msaa_color
+v3d_deqp: case #75 F 35ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.sub.unbind_blit_msaa_color
+  Fail (Framebuffer is not complete: 'GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT' at es3fFboTestCase.cpp:146)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.sub.unbind_blit_msaa_depth'..
+GL error 0x502 in glRenderbufferStorageMultisample
+GL error 0x502 in glRenderbufferStorageMultisample
+deqp: Fail dEQP-GLES3.functional.fbo.invalidate.sub.unbind_blit_msaa_depth
+v3d_deqp: case #76 F 43ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.sub.unbind_blit_msaa_depth
+  Fail (Framebuffer is not complete: 'GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT' at es3fFboTestCase.cpp:146)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.sub.unbind_blit_msaa_depth_stencil'..
+GL error 0x502 in glRenderbufferStorageMultisample
+GL error 0x502 in glRenderbufferStorageMultisample
+deqp: Fail dEQP-GLES3.functional.fbo.invalidate.sub.unbind_blit_msaa_depth_stencil
+v3d_deqp: case #77 F 44ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.sub.unbind_blit_msaa_depth_stencil
+  Fail (Framebuffer is not complete: 'GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT' at es3fFboTestCase.cpp:146)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.sub.unbind_blit_msaa_stencil'..
+GL error 0x502 in glRenderbufferStorageMultisample
+GL error 0x502 in glRenderbufferStorageMultisample
+deqp: Fail dEQP-GLES3.functional.fbo.invalidate.sub.unbind_blit_msaa_stencil
+v3d_deqp: case #78 F 44ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.sub.unbind_blit_msaa_stencil
+  Fail (Framebuffer is not complete: 'GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT' at es3fFboTestCase.cpp:146)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.sub.unbind_blit_stencil'..
+GL error 0x502 in glBlitFramebuffer
+deqp: Fail dEQP-GLES3.functional.fbo.invalidate.sub.unbind_blit_stencil
+v3d_deqp: case #79 F 37ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.sub.unbind_blit_stencil
+  Fail (GL_INVALID_OPERATION at es3fFboTestCase.cpp:90)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.sub.unbind_read_color'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.sub.unbind_read_color
+v3d_deqp: case #80 P 47ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.sub.unbind_read_color
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.sub.unbind_read_color_stencil'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.sub.unbind_read_color_stencil
+v3d_deqp: case #81 P 45ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.sub.unbind_read_color_stencil
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.sub.unbind_read_depth'..
+yakogl/v3d: a 128x128 depth texture is sampled from its depth buffer (DEPTH24_X8): no CPU resolve, no tiled copy
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.sub.unbind_read_depth
+v3d_deqp: case #82 P 56ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.sub.unbind_read_depth
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.sub.unbind_read_depth_stencil'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.sub.unbind_read_depth_stencil
+v3d_deqp: case #83 P 47ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.sub.unbind_read_depth_stencil
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.sub.unbind_read_stencil'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.sub.unbind_read_stencil
+v3d_deqp: case #84 P 46ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.sub.unbind_read_stencil
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.target.draw_framebuffer_draw_framebuffer_all'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.target.draw_framebuffer_draw_framebuffer_all
+v3d_deqp: case #85 P 52ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.target.draw_framebuffer_draw_framebuffer_all
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.target.draw_framebuffer_draw_framebuffer_color'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.target.draw_framebuffer_draw_framebuffer_color
+v3d_deqp: case #86 P 53ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.target.draw_framebuffer_draw_framebuffer_color
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.target.draw_framebuffer_draw_framebuffer_depth_stencil'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.target.draw_framebuffer_draw_framebuffer_depth_stencil
+v3d_deqp: case #87 P 54ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.target.draw_framebuffer_draw_framebuffer_depth_stencil
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.target.draw_framebuffer_framebuffer_all'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.target.draw_framebuffer_framebuffer_all
+v3d_deqp: case #88 P 53ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.target.draw_framebuffer_framebuffer_all
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.target.draw_framebuffer_framebuffer_color'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.target.draw_framebuffer_framebuffer_color
+v3d_deqp: case #89 P 52ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.target.draw_framebuffer_framebuffer_color
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.target.draw_framebuffer_framebuffer_depth_stencil'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.target.draw_framebuffer_framebuffer_depth_stencil
+v3d_deqp: case #90 P 53ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.target.draw_framebuffer_framebuffer_depth_stencil
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.target.draw_framebuffer_read_framebuffer_all'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.target.draw_framebuffer_read_framebuffer_all
+v3d_deqp: case #91 P 51ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.target.draw_framebuffer_read_framebuffer_all
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.target.draw_framebuffer_read_framebuffer_color'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.target.draw_framebuffer_read_framebuffer_color
+v3d_deqp: case #92 P 51ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.target.draw_framebuffer_read_framebuffer_color
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.target.draw_framebuffer_read_framebuffer_depth_stencil'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.target.draw_framebuffer_read_framebuffer_depth_stencil
+v3d_deqp: case #93 P 53ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.target.draw_framebuffer_read_framebuffer_depth_stencil
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.target.framebuffer_draw_framebuffer_all'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.target.framebuffer_draw_framebuffer_all
+v3d_deqp: case #94 P 55ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.target.framebuffer_draw_framebuffer_all
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.target.framebuffer_draw_framebuffer_color'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.target.framebuffer_draw_framebuffer_color
+v3d_deqp: case #95 P 52ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.target.framebuffer_draw_framebuffer_color
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.target.framebuffer_draw_framebuffer_depth_stencil'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.target.framebuffer_draw_framebuffer_depth_stencil
+v3d_deqp: case #96 P 54ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.target.framebuffer_draw_framebuffer_depth_stencil
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.target.framebuffer_framebuffer_all'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.target.framebuffer_framebuffer_all
+v3d_deqp: case #97 P 53ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.target.framebuffer_framebuffer_all
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.target.framebuffer_framebuffer_color'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.target.framebuffer_framebuffer_color
+v3d_deqp: case #98 P 50ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.target.framebuffer_framebuffer_color
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.target.framebuffer_framebuffer_depth_stencil'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.target.framebuffer_framebuffer_depth_stencil
+v3d_deqp: case #99 P 53ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.target.framebuffer_framebuffer_depth_stencil
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.target.framebuffer_read_framebuffer_all'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.target.framebuffer_read_framebuffer_all
+v3d_deqp: case #100 P 50ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.target.framebuffer_read_framebuffer_all
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.target.framebuffer_read_framebuffer_color'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.target.framebuffer_read_framebuffer_color
+v3d_deqp: case #101 P 50ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.target.framebuffer_read_framebuffer_color
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.target.framebuffer_read_framebuffer_depth_stencil'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.target.framebuffer_read_framebuffer_depth_stencil
+v3d_deqp: case #102 P 52ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.target.framebuffer_read_framebuffer_depth_stencil
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.target.read_framebuffer_draw_framebuffer_all'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.target.read_framebuffer_draw_framebuffer_all
+v3d_deqp: case #103 P 51ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.target.read_framebuffer_draw_framebuffer_all
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.target.read_framebuffer_draw_framebuffer_color'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.target.read_framebuffer_draw_framebuffer_color
+v3d_deqp: case #104 P 52ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.target.read_framebuffer_draw_framebuffer_color
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.target.read_framebuffer_draw_framebuffer_depth_stencil'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.target.read_framebuffer_draw_framebuffer_depth_stencil
+v3d_deqp: case #105 P 53ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.target.read_framebuffer_draw_framebuffer_depth_stencil
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.target.read_framebuffer_framebuffer_all'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.target.read_framebuffer_framebuffer_all
+v3d_deqp: case #106 P 54ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.target.read_framebuffer_framebuffer_all
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.target.read_framebuffer_framebuffer_color'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.target.read_framebuffer_framebuffer_color
+v3d_deqp: case #107 P 51ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.target.read_framebuffer_framebuffer_color
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.target.read_framebuffer_framebuffer_depth_stencil'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.target.read_framebuffer_framebuffer_depth_stencil
+v3d_deqp: case #108 P 53ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.target.read_framebuffer_framebuffer_depth_stencil
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.target.read_framebuffer_read_framebuffer_all'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.target.read_framebuffer_read_framebuffer_all
+v3d_deqp: case #109 P 54ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.target.read_framebuffer_read_framebuffer_all
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.target.read_framebuffer_read_framebuffer_color'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.target.read_framebuffer_read_framebuffer_color
+v3d_deqp: case #110 P 53ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.target.read_framebuffer_read_framebuffer_color
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.target.read_framebuffer_read_framebuffer_depth_stencil'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.target.read_framebuffer_read_framebuffer_depth_stencil
+v3d_deqp: case #111 P 54ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.target.read_framebuffer_read_framebuffer_depth_stencil
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.whole.render_all'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.whole.render_all
+v3d_deqp: case #112 P 51ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.whole.render_all
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.whole.render_color'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.whole.render_color
+v3d_deqp: case #113 P 45ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.whole.render_color
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.whole.render_depth'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.whole.render_depth
+v3d_deqp: case #114 P 46ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.whole.render_depth
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.whole.render_depth_stencil'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.whole.render_depth_stencil
+v3d_deqp: case #115 P 48ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.whole.render_depth_stencil
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.whole.render_none'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.whole.render_none
+v3d_deqp: case #116 P 44ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.whole.render_none
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.whole.render_stencil'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.whole.render_stencil
+v3d_deqp: case #117 P 45ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.whole.render_stencil
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.whole.unbind_blit_color'..
+GL error 0x502 in glBlitFramebuffer
+GL error 0x502 in glBlitFramebuffer
+deqp: Fail dEQP-GLES3.functional.fbo.invalidate.whole.unbind_blit_color
+v3d_deqp: case #118 F 33ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.whole.unbind_blit_color
+  Fail (GL_INVALID_OPERATION at es3fFboTestCase.cpp:90)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.whole.unbind_blit_depth'..
+GL error 0x502 in glBlitFramebuffer
+deqp: Fail dEQP-GLES3.functional.fbo.invalidate.whole.unbind_blit_depth
+v3d_deqp: case #119 F 32ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.whole.unbind_blit_depth
+  Fail (GL_INVALID_OPERATION at es3fFboTestCase.cpp:90)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.whole.unbind_blit_depth_stencil'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.whole.unbind_blit_depth_stencil
+v3d_deqp: case #120 P 57ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.whole.unbind_blit_depth_stencil
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.whole.unbind_blit_msaa_color'..
+GL error 0x502 in glRenderbufferStorageMultisample
+deqp: Fail dEQP-GLES3.functional.fbo.invalidate.whole.unbind_blit_msaa_color
+v3d_deqp: case #121 F 32ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.whole.unbind_blit_msaa_color
+  Fail (Framebuffer is not complete: 'GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT' at es3fFboTestCase.cpp:146)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.whole.unbind_blit_msaa_depth'..
+deqp: Fail dEQP-GLES3.functional.fbo.invalidate.whole.unbind_blit_msaa_depth
+v3d_deqp: case #122 F 34ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.whole.unbind_blit_msaa_depth
+  Fail (Framebuffer is not complete: 'GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT' at es3fFboTestCase.cpp:146)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.whole.unbind_blit_msaa_depth_stencil'..
+deqp: Fail dEQP-GLES3.functional.fbo.invalidate.whole.unbind_blit_msaa_depth_stencil
+v3d_deqp: case #123 F 37ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.whole.unbind_blit_msaa_depth_stencil
+  Fail (Framebuffer is not complete: 'GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT' at es3fFboTestCase.cpp:146)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.whole.unbind_blit_msaa_stencil'..
+deqp: Fail dEQP-GLES3.functional.fbo.invalidate.whole.unbind_blit_msaa_stencil
+v3d_deqp: case #124 F 35ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.whole.unbind_blit_msaa_stencil
+  Fail (Framebuffer is not complete: 'GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT' at es3fFboTestCase.cpp:146)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.whole.unbind_blit_stencil'..
+deqp: Fail dEQP-GLES3.functional.fbo.invalidate.whole.unbind_blit_stencil
+v3d_deqp: case #125 F 36ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.whole.unbind_blit_stencil
+  Fail (GL_INVALID_OPERATION at es3fFboTestCase.cpp:90)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.whole.unbind_read_color'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.whole.unbind_read_color
+v3d_deqp: case #126 P 52ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.whole.unbind_read_color
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.whole.unbind_read_color_stencil'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.whole.unbind_read_color_stencil
+v3d_deqp: case #127 P 50ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.whole.unbind_read_color_stencil
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.whole.unbind_read_depth'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.whole.unbind_read_depth
+v3d_deqp: case #128 P 52ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.whole.unbind_read_depth
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.whole.unbind_read_depth_stencil'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.whole.unbind_read_depth_stencil
+v3d_deqp: case #129 P 53ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.whole.unbind_read_depth_stencil
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.invalidate.whole.unbind_read_stencil'..
+deqp: Pass dEQP-GLES3.functional.fbo.invalidate.whole.unbind_read_stencil
+v3d_deqp: case #130 P 50ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.invalidate.whole.unbind_read_stencil
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.2_samples.depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.msaa.2_samples.depth24_stencil8
+v3d_deqp: case #131 F 28ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.2_samples.depth24_stencil8
+  Fail (Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.2_samples.depth32f_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.msaa.2_samples.depth32f_stencil8
+v3d_deqp: case #132 F 31ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.2_samples.depth32f_stencil8
+  Fail (Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.2_samples.depth_component16'..
+deqp: Fail dEQP-GLES3.functional.fbo.msaa.2_samples.depth_component16
+v3d_deqp: case #133 F 31ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.2_samples.depth_component16
+  Fail (Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.2_samples.depth_component24'..
+deqp: Fail dEQP-GLES3.functional.fbo.msaa.2_samples.depth_component24
+v3d_deqp: case #134 F 31ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.2_samples.depth_component24
+  Fail (Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.2_samples.depth_component32f'..
+deqp: Fail dEQP-GLES3.functional.fbo.msaa.2_samples.depth_component32f
+v3d_deqp: case #135 F 32ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.2_samples.depth_component32f
+  Fail (Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.2_samples.r11f_g11f_b10f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.msaa.2_samples.r11f_g11f_b10f
+v3d_deqp: case #136 N 28ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.2_samples.r11f_g11f_b10f
+  NotSupported (Format not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.2_samples.r16f'..
+deqp: Fail dEQP-GLES3.functional.fbo.msaa.2_samples.r16f
+v3d_deqp: case #137 F 26ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.2_samples.r16f
+  Fail (Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.2_samples.r32f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.msaa.2_samples.r32f
+v3d_deqp: case #138 N 26ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.2_samples.r32f
+  NotSupported (Format not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.2_samples.r8'..
+deqp: Fail dEQP-GLES3.functional.fbo.msaa.2_samples.r8
+v3d_deqp: case #139 F 25ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.2_samples.r8
+  Fail (Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.2_samples.rg16f'..
+deqp: Fail dEQP-GLES3.functional.fbo.msaa.2_samples.rg16f
+v3d_deqp: case #140 F 28ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.2_samples.rg16f
+  Fail (Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.2_samples.rg32f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.msaa.2_samples.rg32f
+v3d_deqp: case #141 N 25ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.2_samples.rg32f
+  NotSupported (Format not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.2_samples.rg8'..
+deqp: Fail dEQP-GLES3.functional.fbo.msaa.2_samples.rg8
+v3d_deqp: case #142 F 26ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.2_samples.rg8
+  Fail (Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.2_samples.rgb10_a2'..
+deqp: Fail dEQP-GLES3.functional.fbo.msaa.2_samples.rgb10_a2
+v3d_deqp: case #143 F 28ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.2_samples.rgb10_a2
+  Fail (Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.2_samples.rgb565'..
+deqp: Fail dEQP-GLES3.functional.fbo.msaa.2_samples.rgb565
+v3d_deqp: case #144 F 29ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.2_samples.rgb565
+  Fail (Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.2_samples.rgb5_a1'..
+deqp: Fail dEQP-GLES3.functional.fbo.msaa.2_samples.rgb5_a1
+v3d_deqp: case #145 F 28ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.2_samples.rgb5_a1
+  Fail (Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.2_samples.rgb8'..
+deqp: Fail dEQP-GLES3.functional.fbo.msaa.2_samples.rgb8
+v3d_deqp: case #146 F 28ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.2_samples.rgb8
+  Fail (Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.2_samples.rgba16f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.msaa.2_samples.rgba16f
+v3d_deqp: case #147 N 26ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.2_samples.rgba16f
+  NotSupported (Sample count not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.2_samples.rgba32f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.msaa.2_samples.rgba32f
+v3d_deqp: case #148 N 24ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.2_samples.rgba32f
+  NotSupported (Format not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.2_samples.rgba4'..
+deqp: Fail dEQP-GLES3.functional.fbo.msaa.2_samples.rgba4
+v3d_deqp: case #149 F 26ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.2_samples.rgba4
+  Fail (Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.2_samples.rgba8'..
+deqp: Fail dEQP-GLES3.functional.fbo.msaa.2_samples.rgba8
+v3d_deqp: case #150 F 28ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.2_samples.rgba8
+  Fail (Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.2_samples.srgb8_alpha8'..
+deqp: Fail dEQP-GLES3.functional.fbo.msaa.2_samples.srgb8_alpha8
+v3d_deqp: case #151 F 30ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.2_samples.srgb8_alpha8
+  Fail (Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.2_samples.stencil_index8'..
+deqp: Fail dEQP-GLES3.functional.fbo.msaa.2_samples.stencil_index8
+v3d_deqp: case #152 F 30ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.2_samples.stencil_index8
+  Fail (Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.4_samples.depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.msaa.4_samples.depth24_stencil8
+v3d_deqp: case #153 F 31ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.4_samples.depth24_stencil8
+  Fail (Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.4_samples.depth32f_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.msaa.4_samples.depth32f_stencil8
+v3d_deqp: case #154 F 31ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.4_samples.depth32f_stencil8
+  Fail (Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.4_samples.depth_component16'..
+deqp: Fail dEQP-GLES3.functional.fbo.msaa.4_samples.depth_component16
+v3d_deqp: case #155 F 31ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.4_samples.depth_component16
+  Fail (Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.4_samples.depth_component24'..
+deqp: Fail dEQP-GLES3.functional.fbo.msaa.4_samples.depth_component24
+v3d_deqp: case #156 F 31ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.4_samples.depth_component24
+  Fail (Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.4_samples.depth_component32f'..
+deqp: Fail dEQP-GLES3.functional.fbo.msaa.4_samples.depth_component32f
+v3d_deqp: case #157 F 31ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.4_samples.depth_component32f
+  Fail (Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.4_samples.r11f_g11f_b10f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.msaa.4_samples.r11f_g11f_b10f
+v3d_deqp: case #158 N 29ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.4_samples.r11f_g11f_b10f
+  NotSupported (Format not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.4_samples.r16f'..
+deqp: Fail dEQP-GLES3.functional.fbo.msaa.4_samples.r16f
+v3d_deqp: case #159 F 26ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.4_samples.r16f
+  Fail (Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.4_samples.r32f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.msaa.4_samples.r32f
+v3d_deqp: case #160 N 25ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.4_samples.r32f
+  NotSupported (Format not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.4_samples.r8'..
+deqp: Fail dEQP-GLES3.functional.fbo.msaa.4_samples.r8
+v3d_deqp: case #161 F 26ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.4_samples.r8
+  Fail (Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.4_samples.rg16f'..
+deqp: Fail dEQP-GLES3.functional.fbo.msaa.4_samples.rg16f
+v3d_deqp: case #162 F 28ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.4_samples.rg16f
+  Fail (Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.4_samples.rg32f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.msaa.4_samples.rg32f
+v3d_deqp: case #163 N 25ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.4_samples.rg32f
+  NotSupported (Format not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.4_samples.rg8'..
+deqp: Fail dEQP-GLES3.functional.fbo.msaa.4_samples.rg8
+v3d_deqp: case #164 F 26ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.4_samples.rg8
+  Fail (Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.4_samples.rgb10_a2'..
+deqp: Fail dEQP-GLES3.functional.fbo.msaa.4_samples.rgb10_a2
+v3d_deqp: case #165 F 28ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.4_samples.rgb10_a2
+  Fail (Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.4_samples.rgb565'..
+deqp: Fail dEQP-GLES3.functional.fbo.msaa.4_samples.rgb565
+v3d_deqp: case #166 F 28ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.4_samples.rgb565
+  Fail (Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.4_samples.rgb5_a1'..
+deqp: Fail dEQP-GLES3.functional.fbo.msaa.4_samples.rgb5_a1
+v3d_deqp: case #167 F 29ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.4_samples.rgb5_a1
+  Fail (Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.4_samples.rgb8'..
+deqp: Fail dEQP-GLES3.functional.fbo.msaa.4_samples.rgb8
+v3d_deqp: case #168 F 28ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.4_samples.rgb8
+  Fail (Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.4_samples.rgba16f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.msaa.4_samples.rgba16f
+v3d_deqp: case #169 N 26ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.4_samples.rgba16f
+  NotSupported (Sample count not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.4_samples.rgba32f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.msaa.4_samples.rgba32f
+v3d_deqp: case #170 N 24ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.4_samples.rgba32f
+  NotSupported (Format not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.4_samples.rgba4'..
+deqp: Fail dEQP-GLES3.functional.fbo.msaa.4_samples.rgba4
+v3d_deqp: case #171 F 26ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.4_samples.rgba4
+  Fail (Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.4_samples.rgba8'..
+deqp: Fail dEQP-GLES3.functional.fbo.msaa.4_samples.rgba8
+v3d_deqp: case #172 F 28ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.4_samples.rgba8
+  Fail (Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.4_samples.srgb8_alpha8'..
+deqp: Fail dEQP-GLES3.functional.fbo.msaa.4_samples.srgb8_alpha8
+v3d_deqp: case #173 F 29ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.4_samples.srgb8_alpha8
+  Fail (Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.4_samples.stencil_index8'..
+deqp: Fail dEQP-GLES3.functional.fbo.msaa.4_samples.stencil_index8
+v3d_deqp: case #174 F 31ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.4_samples.stencil_index8
+  Fail (Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.8_samples.depth24_stencil8'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.msaa.8_samples.depth24_stencil8
+v3d_deqp: case #175 N 28ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.8_samples.depth24_stencil8
+  NotSupported (Sample count not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.8_samples.depth32f_stencil8'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.msaa.8_samples.depth32f_stencil8
+v3d_deqp: case #176 N 27ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.8_samples.depth32f_stencil8
+  NotSupported (Sample count not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.8_samples.depth_component16'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.msaa.8_samples.depth_component16
+v3d_deqp: case #177 N 27ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.8_samples.depth_component16
+  NotSupported (Sample count not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.8_samples.depth_component24'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.msaa.8_samples.depth_component24
+v3d_deqp: case #178 N 27ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.8_samples.depth_component24
+  NotSupported (Sample count not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.8_samples.depth_component32f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.msaa.8_samples.depth_component32f
+v3d_deqp: case #179 N 28ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.8_samples.depth_component32f
+  NotSupported (Sample count not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.8_samples.r11f_g11f_b10f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.msaa.8_samples.r11f_g11f_b10f
+v3d_deqp: case #180 N 26ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.8_samples.r11f_g11f_b10f
+  NotSupported (Format not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.8_samples.r16f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.msaa.8_samples.r16f
+v3d_deqp: case #181 N 24ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.8_samples.r16f
+  NotSupported (Sample count not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.8_samples.r32f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.msaa.8_samples.r32f
+v3d_deqp: case #182 N 24ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.8_samples.r32f
+  NotSupported (Format not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.8_samples.r8'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.msaa.8_samples.r8
+v3d_deqp: case #183 N 23ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.8_samples.r8
+  NotSupported (Sample count not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.8_samples.rg16f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.msaa.8_samples.rg16f
+v3d_deqp: case #184 N 23ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.8_samples.rg16f
+  NotSupported (Sample count not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.8_samples.rg32f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.msaa.8_samples.rg32f
+v3d_deqp: case #185 N 24ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.8_samples.rg32f
+  NotSupported (Format not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.8_samples.rg8'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.msaa.8_samples.rg8
+v3d_deqp: case #186 N 24ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.8_samples.rg8
+  NotSupported (Sample count not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.8_samples.rgb10_a2'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.msaa.8_samples.rgb10_a2
+v3d_deqp: case #187 N 24ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.8_samples.rgb10_a2
+  NotSupported (Sample count not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.8_samples.rgb565'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.msaa.8_samples.rgb565
+v3d_deqp: case #188 N 24ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.8_samples.rgb565
+  NotSupported (Sample count not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.8_samples.rgb5_a1'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.msaa.8_samples.rgb5_a1
+v3d_deqp: case #189 N 25ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.8_samples.rgb5_a1
+  NotSupported (Sample count not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.8_samples.rgb8'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.msaa.8_samples.rgb8
+v3d_deqp: case #190 N 24ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.8_samples.rgb8
+  NotSupported (Sample count not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.8_samples.rgba16f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.msaa.8_samples.rgba16f
+v3d_deqp: case #191 N 24ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.8_samples.rgba16f
+  NotSupported (Sample count not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.8_samples.rgba32f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.msaa.8_samples.rgba32f
+v3d_deqp: case #192 N 24ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.8_samples.rgba32f
+  NotSupported (Format not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.8_samples.rgba4'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.msaa.8_samples.rgba4
+v3d_deqp: case #193 N 24ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.8_samples.rgba4
+  NotSupported (Sample count not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.8_samples.rgba8'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.msaa.8_samples.rgba8
+v3d_deqp: case #194 N 24ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.8_samples.rgba8
+  NotSupported (Sample count not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.8_samples.srgb8_alpha8'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.msaa.8_samples.srgb8_alpha8
+v3d_deqp: case #195 N 25ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.8_samples.srgb8_alpha8
+  NotSupported (Sample count not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.8_samples.stencil_index8'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.msaa.8_samples.stencil_index8
+v3d_deqp: case #196 N 26ms k2/23 c15533/16161 r0 dEQP-GLES3.functional.fbo.msaa.8_samples.stencil_index8
+  NotSupported (Sample count not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.renderbuffer_resize.ms_to_ms'..
+deqp: Pass dEQP-GLES3.functional.fbo.msaa.renderbuffer_resize.ms_to_ms
+v3d_deqp: case #197 P 27ms k2/23 c15545/16161 r0 dEQP-GLES3.functional.fbo.msaa.renderbuffer_resize.ms_to_ms
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.renderbuffer_resize.ms_to_nonms'..
+deqp: Pass dEQP-GLES3.functional.fbo.msaa.renderbuffer_resize.ms_to_nonms
+v3d_deqp: case #198 P 25ms k2/23 c15558/16161 r0 dEQP-GLES3.functional.fbo.msaa.renderbuffer_resize.ms_to_nonms
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.renderbuffer_resize.nonms_to_ms'..
+deqp: Pass dEQP-GLES3.functional.fbo.msaa.renderbuffer_resize.nonms_to_ms
+v3d_deqp: case #199 P 26ms k2/23 c15570/16161 r0 dEQP-GLES3.functional.fbo.msaa.renderbuffer_resize.nonms_to_ms
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.msaa.renderbuffer_resize.nonms_to_nonms'..
+deqp: Pass dEQP-GLES3.functional.fbo.msaa.renderbuffer_resize.nonms_to_nonms
+v3d_deqp: case #200 P 26ms k2/23 c15583/16161 r0 dEQP-GLES3.functional.fbo.msaa.renderbuffer_resize.nonms_to_nonms
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.rbo_r11f_g11f_b10f_depth_stencil_rbo_depth24_stencil8'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.render.recreate_color.rbo_r11f_g11f_b10f_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #201 N 36ms k2/23 c15583/16161 r0 dEQP-GLES3.functional.fbo.render.recreate_color.rbo_r11f_g11f_b10f_depth_stencil_rbo_depth24_stencil8
+  NotSupported (Format not supported, requires GL_EXT_color_buffer_float)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.rbo_r16f_depth_stencil_rbo_depth24_stencil8'..
+deqp: Pass dEQP-GLES3.functional.fbo.render.recreate_color.rbo_r16f_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #202 P 75ms k2/23 c15583/16161 r0 dEQP-GLES3.functional.fbo.render.recreate_color.rbo_r16f_depth_stencil_rbo_depth24_stencil8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.rbo_r16i_depth_stencil_rbo_depth24_stencil8'..
+deqp: Pass dEQP-GLES3.functional.fbo.render.recreate_color.rbo_r16i_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #203 P 73ms k2/23 c15583/16161 r0 dEQP-GLES3.functional.fbo.render.recreate_color.rbo_r16i_depth_stencil_rbo_depth24_stencil8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.rbo_r16ui_depth_stencil_rbo_depth24_stencil8'..
+deqp: Pass dEQP-GLES3.functional.fbo.render.recreate_color.rbo_r16ui_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #204 P 73ms k2/23 c15583/16161 r0 dEQP-GLES3.functional.fbo.render.recreate_color.rbo_r16ui_depth_stencil_rbo_depth24_stencil8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.rbo_r32f_depth_stencil_rbo_depth24_stencil8'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.render.recreate_color.rbo_r32f_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #205 N 38ms k2/23 c15583/16161 r0 dEQP-GLES3.functional.fbo.render.recreate_color.rbo_r32f_depth_stencil_rbo_depth24_stencil8
+  NotSupported (Format not supported, requires GL_EXT_color_buffer_float)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.rbo_r32i_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_color.rbo_r32i_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #206 F 95ms k2/23 c15583/16161 r0 dEQP-GLES3.functional.fbo.render.recreate_color.rbo_r32i_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.rbo_r32ui_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_color.rbo_r32ui_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #207 F 82ms k2/23 c15583/16161 r0 dEQP-GLES3.functional.fbo.render.recreate_color.rbo_r32ui_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.rbo_r8_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_color.rbo_r8_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #208 F 74ms k2/23 c15583/16161 r0 dEQP-GLES3.functional.fbo.render.recreate_color.rbo_r8_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.rbo_r8i_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_color.rbo_r8i_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #209 F 80ms k2/23 c15583/16161 r0 dEQP-GLES3.functional.fbo.render.recreate_color.rbo_r8i_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.rbo_r8ui_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_color.rbo_r8ui_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #210 F 80ms k2/23 c15583/16161 r0 dEQP-GLES3.functional.fbo.render.recreate_color.rbo_r8ui_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rg16f_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rg16f_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #211 F 85ms k2/23 c15583/16161 r0 dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rg16f_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rg16i_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rg16i_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #212 F 89ms k2/23 c15583/16161 r0 dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rg16i_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rg16ui_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rg16ui_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #213 F 82ms k2/23 c15583/16161 r0 dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rg16ui_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rg32f_depth_stencil_rbo_depth24_stencil8'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rg32f_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #214 N 40ms k2/23 c15583/16161 r0 dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rg32f_depth_stencil_rbo_depth24_stencil8
+  NotSupported (Format not supported, requires GL_EXT_color_buffer_float)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rg32i_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rg32i_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #215 F 103ms k2/23 c15583/16161 r0 dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rg32i_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rg32ui_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rg32ui_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #216 F 81ms k2/23 c15583/16161 r0 dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rg32ui_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rg8_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rg8_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #217 F 73ms k2/23 c15583/16161 r0 dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rg8_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rg8i_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rg8i_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #218 F 79ms k2/23 c15583/16161 r0 dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rg8i_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rg8ui_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rg8ui_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #219 F 78ms k2/23 c15583/16161 r0 dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rg8ui_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rgb10_a2_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rgb10_a2_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #220 F 74ms k2/23 c15583/16161 r0 dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rgb10_a2_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rgb10_a2ui_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rgb10_a2ui_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #221 F 81ms k2/23 c15583/16161 r0 dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rgb10_a2ui_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rgb16f_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rgb16f_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #222 F 79ms k2/23 c15583/16161 r0 dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rgb16f_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rgb565_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rgb565_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #223 F 74ms k2/23 c15583/16161 r0 dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rgb565_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rgb5_a1_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rgb5_a1_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #224 F 75ms k2/23 c15583/16161 r0 dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rgb5_a1_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rgb8_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rgb8_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #225 F 72ms k2/23 c15583/16161 r0 dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rgb8_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rgba16f_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rgba16f_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #226 F 80ms k2/23 c15583/16161 r0 dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rgba16f_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rgba16i_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rgba16i_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #227 F 84ms k2/23 c15583/16161 r0 dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rgba16i_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rgba16ui_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rgba16ui_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #228 F 84ms k2/23 c15583/16161 r0 dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rgba16ui_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rgba32f_depth_stencil_rbo_depth24_stencil8'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rgba32f_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #229 N 40ms k2/23 c15583/16161 r0 dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rgba32f_depth_stencil_rbo_depth24_stencil8
+  NotSupported (Format not supported, requires GL_EXT_color_buffer_float)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rgba32i_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rgba32i_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #230 F 98ms k2/23 c15583/16252 r0 dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rgba32i_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rgba32ui_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rgba32ui_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #231 F 100ms k2/23 c15583/16252 r0 dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rgba32ui_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rgba4_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rgba4_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #232 F 76ms k2/23 c15583/16252 r0 dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rgba4_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rgba8_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rgba8_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #233 F 74ms k2/23 c15583/16252 r0 dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rgba8_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rgba8i_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rgba8i_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #234 F 84ms k2/23 c15583/16252 r0 dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rgba8i_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rgba8ui_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rgba8ui_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #235 F 83ms k2/23 c15583/16252 r0 dEQP-GLES3.functional.fbo.render.recreate_color.rbo_rgba8ui_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.rbo_srgb8_alpha8_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_color.rbo_srgb8_alpha8_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #236 F 95ms k2/23 c15583/16252 r0 dEQP-GLES3.functional.fbo.render.recreate_color.rbo_srgb8_alpha8_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_r11f_g11f_b10f_depth_stencil_rbo_depth24_stencil8'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_r11f_g11f_b10f_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #237 N 42ms k2/23 c15583/16252 r0 dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_r11f_g11f_b10f_depth_stencil_rbo_depth24_stencil8
+  NotSupported (Format not supported, requires GL_EXT_color_buffer_float)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_r16f_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_r16f_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #238 F 92ms k2/23 c15583/16252 r0 dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_r16f_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_r16i_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_r16i_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #239 F 41ms k2/23 c15583/16252 r0 dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_r16i_depth_stencil_rbo_depth24_stencil8
+  Fail (Framebuffer is not complete: 'GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT' at es3fFboRenderTest.cpp:358)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_r16ui_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_r16ui_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #240 F 48ms k2/23 c15583/16252 r0 dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_r16ui_depth_stencil_rbo_depth24_stencil8
+  Fail (Framebuffer is not complete: 'GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT' at es3fFboRenderTest.cpp:358)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_r32f_depth_stencil_rbo_depth24_stencil8'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_r32f_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #241 N 46ms k2/23 c15583/16252 r0 dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_r32f_depth_stencil_rbo_depth24_stencil8
+  NotSupported (Format not supported, requires GL_EXT_color_buffer_float)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_r32i_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_r32i_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #242 F 44ms k2/23 c15583/16252 r0 dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_r32i_depth_stencil_rbo_depth24_stencil8
+  Fail (Framebuffer is not complete: 'GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT' at es3fFboRenderTest.cpp:358)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_r32ui_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_r32ui_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #243 F 47ms k2/23 c15583/16252 r0 dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_r32ui_depth_stencil_rbo_depth24_stencil8
+  Fail (Framebuffer is not complete: 'GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT' at es3fFboRenderTest.cpp:358)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_r8_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_r8_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #244 F 85ms k2/23 c15583/16252 r0 dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_r8_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_r8i_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_r8i_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #245 F 41ms k2/23 c15583/16252 r0 dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_r8i_depth_stencil_rbo_depth24_stencil8
+  Fail (Framebuffer is not complete: 'GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT' at es3fFboRenderTest.cpp:358)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_r8ui_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_r8ui_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #246 F 47ms k2/23 c15583/16252 r0 dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_r8ui_depth_stencil_rbo_depth24_stencil8
+  Fail (Framebuffer is not complete: 'GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT' at es3fFboRenderTest.cpp:358)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rg16f_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rg16f_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #247 F 96ms k2/23 c15583/16252 r0 dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rg16f_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rg16i_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rg16i_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #248 F 41ms k2/23 c15583/16252 r0 dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rg16i_depth_stencil_rbo_depth24_stencil8
+  Fail (Framebuffer is not complete: 'GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT' at es3fFboRenderTest.cpp:358)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rg16ui_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rg16ui_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #249 F 48ms k2/23 c15583/16252 r0 dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rg16ui_depth_stencil_rbo_depth24_stencil8
+  Fail (Framebuffer is not complete: 'GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT' at es3fFboRenderTest.cpp:358)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rg32f_depth_stencil_rbo_depth24_stencil8'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rg32f_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #250 N 46ms k2/23 c15583/16252 r0 dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rg32f_depth_stencil_rbo_depth24_stencil8
+  NotSupported (Format not supported, requires GL_EXT_color_buffer_float)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rg32i_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rg32i_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #251 F 44ms k2/23 c15583/16252 r0 dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rg32i_depth_stencil_rbo_depth24_stencil8
+  Fail (Framebuffer is not complete: 'GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT' at es3fFboRenderTest.cpp:358)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rg32ui_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rg32ui_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #252 F 48ms k2/23 c15583/16252 r0 dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rg32ui_depth_stencil_rbo_depth24_stencil8
+  Fail (Framebuffer is not complete: 'GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT' at es3fFboRenderTest.cpp:358)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rg8_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rg8_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #253 F 86ms k2/23 c15583/16252 r0 dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rg8_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rg8i_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rg8i_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #254 F 42ms k2/23 c15583/16252 r0 dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rg8i_depth_stencil_rbo_depth24_stencil8
+  Fail (Framebuffer is not complete: 'GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT' at es3fFboRenderTest.cpp:358)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rg8ui_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rg8ui_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #255 F 47ms k2/23 c15583/16252 r0 dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rg8ui_depth_stencil_rbo_depth24_stencil8
+  Fail (Framebuffer is not complete: 'GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT' at es3fFboRenderTest.cpp:358)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rgb10_a2_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rgb10_a2_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #256 F 89ms k2/23 c15583/16252 r0 dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rgb10_a2_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rgb10_a2ui_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rgb10_a2ui_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #257 F 94ms k2/23 c15583/16252 r0 dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rgb10_a2ui_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rgb16f_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rgb16f_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #258 F 40ms k2/23 c15583/16252 r0 dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rgb16f_depth_stencil_rbo_depth24_stencil8
+  Fail (Framebuffer is not complete: 'GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT' at es3fFboRenderTest.cpp:358)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rgb565_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rgb565_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #259 F 89ms k2/23 c15583/16252 r0 dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rgb565_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rgb5_a1_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rgb5_a1_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #260 F 82ms k2/23 c15583/16252 r0 dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rgb5_a1_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rgb8_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rgb8_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #261 F 81ms k2/23 c15583/16252 r0 dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rgb8_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rgba16f_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rgba16f_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #262 F 97ms k2/23 c15583/16252 r0 dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rgba16f_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rgba16i_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rgba16i_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #263 F 100ms k2/23 c15583/16252 r0 dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rgba16i_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rgba16ui_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rgba16ui_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #264 F 98ms k2/23 c15583/16252 r0 dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rgba16ui_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rgba32f_depth_stencil_rbo_depth24_stencil8'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rgba32f_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #265 N 41ms k2/23 c15583/16252 r0 dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rgba32f_depth_stencil_rbo_depth24_stencil8
+  NotSupported (Format not supported, requires GL_EXT_color_buffer_float)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rgba32i_depth_stencil_rbo_depth24_stencil8'..
+yakogl/v3d: tiled copies high-water 307200 of 16777216 bytes
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rgba32i_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #266 F 115ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rgba32i_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rgba32ui_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rgba32ui_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #267 F 108ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rgba32ui_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rgba4_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rgba4_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #268 F 81ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rgba4_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rgba8_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rgba8_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #269 F 80ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rgba8_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rgba8i_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rgba8i_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #270 F 86ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rgba8i_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rgba8ui_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rgba8ui_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #271 F 87ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rgba8ui_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_srgb8_alpha8_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_srgb8_alpha8_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #272 F 91ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_srgb8_alpha8_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_depth_stencil.tex2d_rgba8_depth_rbo_depth_component16'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_depth_stencil.tex2d_rgba8_depth_rbo_depth_component16
+v3d_deqp: case #273 F 84ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.recreate_depth_stencil.tex2d_rgba8_depth_rbo_depth_component16
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_depth_stencil.tex2d_rgba8_depth_rbo_depth_component24'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_depth_stencil.tex2d_rgba8_depth_rbo_depth_component24
+v3d_deqp: case #274 F 85ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.recreate_depth_stencil.tex2d_rgba8_depth_rbo_depth_component24
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_depth_stencil.tex2d_rgba8_depth_rbo_depth_component32f'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_depth_stencil.tex2d_rgba8_depth_rbo_depth_component32f
+v3d_deqp: case #275 F 80ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.recreate_depth_stencil.tex2d_rgba8_depth_rbo_depth_component32f
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_depth_stencil.tex2d_rgba8_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_depth_stencil.tex2d_rgba8_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #276 F 87ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.recreate_depth_stencil.tex2d_rgba8_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_depth_stencil.tex2d_rgba8_depth_stencil_rbo_depth32f_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_depth_stencil.tex2d_rgba8_depth_stencil_rbo_depth32f_stencil8
+v3d_deqp: case #277 F 85ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.recreate_depth_stencil.tex2d_rgba8_depth_stencil_rbo_depth32f_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_depth_stencil.tex2d_rgba8_depth_stencil_tex2d_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_depth_stencil.tex2d_rgba8_depth_stencil_tex2d_depth24_stencil8
+v3d_deqp: case #278 F 90ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.recreate_depth_stencil.tex2d_rgba8_depth_stencil_tex2d_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_depth_stencil.tex2d_rgba8_depth_stencil_tex2d_depth32f_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_depth_stencil.tex2d_rgba8_depth_stencil_tex2d_depth32f_stencil8
+v3d_deqp: case #279 F 87ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.recreate_depth_stencil.tex2d_rgba8_depth_stencil_tex2d_depth32f_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_depth_stencil.tex2d_rgba8_depth_tex2d_depth_component16'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_depth_stencil.tex2d_rgba8_depth_tex2d_depth_component16
+v3d_deqp: case #280 F 85ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.recreate_depth_stencil.tex2d_rgba8_depth_tex2d_depth_component16
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_depth_stencil.tex2d_rgba8_depth_tex2d_depth_component24'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_depth_stencil.tex2d_rgba8_depth_tex2d_depth_component24
+v3d_deqp: case #281 F 84ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.recreate_depth_stencil.tex2d_rgba8_depth_tex2d_depth_component24
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_depth_stencil.tex2d_rgba8_depth_tex2d_depth_component32f'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_depth_stencil.tex2d_rgba8_depth_tex2d_depth_component32f
+v3d_deqp: case #282 F 80ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.recreate_depth_stencil.tex2d_rgba8_depth_tex2d_depth_component32f
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.recreate_depth_stencil.tex2d_rgba8_stencil_rbo_stencil_index8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.recreate_depth_stencil.tex2d_rgba8_stencil_rbo_stencil_index8
+v3d_deqp: case #283 F 79ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.recreate_depth_stencil.tex2d_rgba8_stencil_rbo_stencil_index8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.rbo_r11f_g11f_b10f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.render.resize.rbo_r11f_g11f_b10f
+v3d_deqp: case #284 N 34ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.rbo_r11f_g11f_b10f
+  NotSupported (Format not supported, requires GL_EXT_color_buffer_float)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.rbo_r16f'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.rbo_r16f
+v3d_deqp: case #285 F 46ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.rbo_r16f
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.rbo_r16i'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.rbo_r16i
+v3d_deqp: case #286 F 44ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.rbo_r16i
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.rbo_r16ui'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.rbo_r16ui
+v3d_deqp: case #287 F 45ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.rbo_r16ui
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.rbo_r32f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.render.resize.rbo_r32f
+v3d_deqp: case #288 N 28ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.rbo_r32f
+  NotSupported (Format not supported, requires GL_EXT_color_buffer_float)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.rbo_r32i'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.rbo_r32i
+v3d_deqp: case #289 F 48ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.rbo_r32i
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.rbo_r32ui'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.rbo_r32ui
+v3d_deqp: case #290 F 45ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.rbo_r32ui
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.rbo_r8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.rbo_r8
+v3d_deqp: case #291 F 41ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.rbo_r8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.rbo_r8i'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.rbo_r8i
+v3d_deqp: case #292 F 45ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.rbo_r8i
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.rbo_r8ui'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.rbo_r8ui
+v3d_deqp: case #293 F 44ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.rbo_r8ui
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.rbo_rg16f'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.rbo_rg16f
+v3d_deqp: case #294 F 42ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.rbo_rg16f
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.rbo_rg16i'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.rbo_rg16i
+v3d_deqp: case #295 F 46ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.rbo_rg16i
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.rbo_rg16ui'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.rbo_rg16ui
+v3d_deqp: case #296 F 45ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.rbo_rg16ui
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.rbo_rg32f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.render.resize.rbo_rg32f
+v3d_deqp: case #297 N 28ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.rbo_rg32f
+  NotSupported (Format not supported, requires GL_EXT_color_buffer_float)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.rbo_rg32i'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.rbo_rg32i
+v3d_deqp: case #298 F 49ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.rbo_rg32i
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.rbo_rg32ui'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.rbo_rg32ui
+v3d_deqp: case #299 F 47ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.rbo_rg32ui
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.rbo_rg8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.rbo_rg8
+v3d_deqp: case #300 F 42ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.rbo_rg8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.rbo_rg8i'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.rbo_rg8i
+v3d_deqp: case #301 F 45ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.rbo_rg8i
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.rbo_rg8ui'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.rbo_rg8ui
+v3d_deqp: case #302 F 45ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.rbo_rg8ui
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.rbo_rgb10_a2'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.rbo_rgb10_a2
+v3d_deqp: case #303 F 43ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.rbo_rgb10_a2
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.rbo_rgb10_a2ui'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.rbo_rgb10_a2ui
+v3d_deqp: case #304 F 46ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.rbo_rgb10_a2ui
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.rbo_rgb16f'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.rbo_rgb16f
+v3d_deqp: case #305 F 44ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.rbo_rgb16f
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.rbo_rgb565'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.rbo_rgb565
+v3d_deqp: case #306 F 43ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.rbo_rgb565
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.rbo_rgb5_a1'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.rbo_rgb5_a1
+v3d_deqp: case #307 F 43ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.rbo_rgb5_a1
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.rbo_rgb8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.rbo_rgb8
+v3d_deqp: case #308 F 42ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.rbo_rgb8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.rbo_rgba16f'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.rbo_rgba16f
+v3d_deqp: case #309 F 44ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.rbo_rgba16f
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.rbo_rgba16i'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.rbo_rgba16i
+v3d_deqp: case #310 F 47ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.rbo_rgba16i
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.rbo_rgba16ui'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.rbo_rgba16ui
+v3d_deqp: case #311 F 48ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.rbo_rgba16ui
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.rbo_rgba32f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.render.resize.rbo_rgba32f
+v3d_deqp: case #312 N 29ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.rbo_rgba32f
+  NotSupported (Format not supported, requires GL_EXT_color_buffer_float)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.rbo_rgba32i'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.rbo_rgba32i
+v3d_deqp: case #313 F 50ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.rbo_rgba32i
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.rbo_rgba32ui'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.rbo_rgba32ui
+v3d_deqp: case #314 F 48ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.rbo_rgba32ui
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.rbo_rgba4'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.rbo_rgba4
+v3d_deqp: case #315 F 43ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.rbo_rgba4
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.rbo_rgba8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.rbo_rgba8
+v3d_deqp: case #316 F 42ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.rbo_rgba8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.rbo_rgba8i'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.rbo_rgba8i
+v3d_deqp: case #317 F 46ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.rbo_rgba8i
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.rbo_rgba8ui'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.rbo_rgba8ui
+v3d_deqp: case #318 F 46ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.rbo_rgba8ui
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.rbo_srgb8_alpha8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.rbo_srgb8_alpha8
+v3d_deqp: case #319 F 48ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.rbo_srgb8_alpha8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.tex2d_r11f_g11f_b10f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.render.resize.tex2d_r11f_g11f_b10f
+v3d_deqp: case #320 N 30ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.tex2d_r11f_g11f_b10f
+  NotSupported (Format not supported, requires GL_EXT_color_buffer_float)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.tex2d_r16f'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.tex2d_r16f
+v3d_deqp: case #321 F 61ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.tex2d_r16f
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.tex2d_r16i'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.tex2d_r16i
+v3d_deqp: case #322 F 30ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.tex2d_r16i
+  Fail (Framebuffer is not complete: 'GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT' at es3fFboRenderTest.cpp:358)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.tex2d_r16ui'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.tex2d_r16ui
+v3d_deqp: case #323 F 36ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.tex2d_r16ui
+  Fail (Framebuffer is not complete: 'GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT' at es3fFboRenderTest.cpp:358)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.tex2d_r32f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.render.resize.tex2d_r32f
+v3d_deqp: case #324 N 34ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.tex2d_r32f
+  NotSupported (Format not supported, requires GL_EXT_color_buffer_float)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.tex2d_r32i'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.tex2d_r32i
+v3d_deqp: case #325 F 33ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.tex2d_r32i
+  Fail (Framebuffer is not complete: 'GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT' at es3fFboRenderTest.cpp:358)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.tex2d_r32ui'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.tex2d_r32ui
+v3d_deqp: case #326 F 36ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.tex2d_r32ui
+  Fail (Framebuffer is not complete: 'GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT' at es3fFboRenderTest.cpp:358)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.tex2d_r8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.tex2d_r8
+v3d_deqp: case #327 F 58ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.tex2d_r8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.tex2d_r8i'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.tex2d_r8i
+v3d_deqp: case #328 F 30ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.tex2d_r8i
+  Fail (Framebuffer is not complete: 'GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT' at es3fFboRenderTest.cpp:358)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.tex2d_r8ui'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.tex2d_r8ui
+v3d_deqp: case #329 F 35ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.tex2d_r8ui
+  Fail (Framebuffer is not complete: 'GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT' at es3fFboRenderTest.cpp:358)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.tex2d_rg16f'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.tex2d_rg16f
+v3d_deqp: case #330 F 65ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.tex2d_rg16f
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.tex2d_rg16i'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.tex2d_rg16i
+v3d_deqp: case #331 F 30ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.tex2d_rg16i
+  Fail (Framebuffer is not complete: 'GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT' at es3fFboRenderTest.cpp:358)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.tex2d_rg16ui'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.tex2d_rg16ui
+v3d_deqp: case #332 F 36ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.tex2d_rg16ui
+  Fail (Framebuffer is not complete: 'GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT' at es3fFboRenderTest.cpp:358)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.tex2d_rg32f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.render.resize.tex2d_rg32f
+v3d_deqp: case #333 N 35ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.tex2d_rg32f
+  NotSupported (Format not supported, requires GL_EXT_color_buffer_float)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.tex2d_rg32i'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.tex2d_rg32i
+v3d_deqp: case #334 F 33ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.tex2d_rg32i
+  Fail (Framebuffer is not complete: 'GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT' at es3fFboRenderTest.cpp:358)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.tex2d_rg32ui'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.tex2d_rg32ui
+v3d_deqp: case #335 F 36ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.tex2d_rg32ui
+  Fail (Framebuffer is not complete: 'GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT' at es3fFboRenderTest.cpp:358)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.tex2d_rg8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.tex2d_rg8
+v3d_deqp: case #336 F 64ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.tex2d_rg8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.tex2d_rg8i'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.tex2d_rg8i
+v3d_deqp: case #337 F 29ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.tex2d_rg8i
+  Fail (Framebuffer is not complete: 'GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT' at es3fFboRenderTest.cpp:358)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.tex2d_rg8ui'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.tex2d_rg8ui
+v3d_deqp: case #338 F 36ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.tex2d_rg8ui
+  Fail (Framebuffer is not complete: 'GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT' at es3fFboRenderTest.cpp:358)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.tex2d_rgb10_a2'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.tex2d_rgb10_a2
+v3d_deqp: case #339 F 65ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.tex2d_rgb10_a2
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.tex2d_rgb10_a2ui'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.tex2d_rgb10_a2ui
+v3d_deqp: case #340 F 64ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.tex2d_rgb10_a2ui
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.tex2d_rgb16f'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.tex2d_rgb16f
+v3d_deqp: case #341 F 28ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.tex2d_rgb16f
+  Fail (Framebuffer is not complete: 'GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT' at es3fFboRenderTest.cpp:358)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.tex2d_rgb565'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.tex2d_rgb565
+v3d_deqp: case #342 F 64ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.tex2d_rgb565
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.tex2d_rgb5_a1'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.tex2d_rgb5_a1
+v3d_deqp: case #343 F 57ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.tex2d_rgb5_a1
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.tex2d_rgb8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.tex2d_rgb8
+v3d_deqp: case #344 F 56ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.tex2d_rgb8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba16f'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba16f
+v3d_deqp: case #345 F 64ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba16f
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba16f_depth_rbo_depth_component16'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba16f_depth_rbo_depth_component16
+v3d_deqp: case #346 F 70ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba16f_depth_rbo_depth_component16
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba16f_depth_rbo_depth_component24'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba16f_depth_rbo_depth_component24
+v3d_deqp: case #347 F 73ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba16f_depth_rbo_depth_component24
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba16f_depth_rbo_depth_component32f'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba16f_depth_rbo_depth_component32f
+v3d_deqp: case #348 F 72ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba16f_depth_rbo_depth_component32f
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba16f_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba16f_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #349 F 75ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba16f_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba16f_depth_stencil_rbo_depth32f_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba16f_depth_stencil_rbo_depth32f_stencil8
+v3d_deqp: case #350 F 76ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba16f_depth_stencil_rbo_depth32f_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba16f_depth_stencil_tex2d_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba16f_depth_stencil_tex2d_depth24_stencil8
+v3d_deqp: case #351 F 76ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba16f_depth_stencil_tex2d_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba16f_depth_stencil_tex2d_depth32f_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba16f_depth_stencil_tex2d_depth32f_stencil8
+v3d_deqp: case #352 F 78ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba16f_depth_stencil_tex2d_depth32f_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba16f_depth_tex2d_depth_component16'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba16f_depth_tex2d_depth_component16
+v3d_deqp: case #353 F 72ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba16f_depth_tex2d_depth_component16
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba16f_depth_tex2d_depth_component24'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba16f_depth_tex2d_depth_component24
+v3d_deqp: case #354 F 74ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba16f_depth_tex2d_depth_component24
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba16f_depth_tex2d_depth_component32f'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba16f_depth_tex2d_depth_component32f
+v3d_deqp: case #355 F 73ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba16f_depth_tex2d_depth_component32f
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba16f_stencil_rbo_stencil_index8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba16f_stencil_rbo_stencil_index8
+v3d_deqp: case #356 F 71ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba16f_stencil_rbo_stencil_index8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba16i'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba16i
+v3d_deqp: case #357 F 67ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba16i
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba16ui'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba16ui
+v3d_deqp: case #358 F 66ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba16ui
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba32f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba32f
+v3d_deqp: case #359 N 29ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba32f
+  NotSupported (Format not supported, requires GL_EXT_color_buffer_float)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba32i'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba32i
+v3d_deqp: case #360 F 79ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba32i
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba32ui'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba32ui
+v3d_deqp: case #361 F 78ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba32ui
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba4'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba4
+v3d_deqp: case #362 F 56ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba4
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba8
+v3d_deqp: case #363 F 55ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba8_depth_rbo_depth_component16'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba8_depth_rbo_depth_component16
+v3d_deqp: case #364 F 60ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba8_depth_rbo_depth_component16
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba8_depth_rbo_depth_component24'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba8_depth_rbo_depth_component24
+v3d_deqp: case #365 F 63ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba8_depth_rbo_depth_component24
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba8_depth_rbo_depth_component32f'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba8_depth_rbo_depth_component32f
+v3d_deqp: case #366 F 64ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba8_depth_rbo_depth_component32f
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba8_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba8_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #367 F 66ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba8_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba8_depth_stencil_rbo_depth32f_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba8_depth_stencil_rbo_depth32f_stencil8
+v3d_deqp: case #368 F 67ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba8_depth_stencil_rbo_depth32f_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba8_depth_stencil_tex2d_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba8_depth_stencil_tex2d_depth24_stencil8
+v3d_deqp: case #369 F 70ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba8_depth_stencil_tex2d_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba8_depth_stencil_tex2d_depth32f_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba8_depth_stencil_tex2d_depth32f_stencil8
+v3d_deqp: case #370 F 69ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba8_depth_stencil_tex2d_depth32f_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba8_depth_tex2d_depth_component16'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba8_depth_tex2d_depth_component16
+v3d_deqp: case #371 F 66ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba8_depth_tex2d_depth_component16
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba8_depth_tex2d_depth_component24'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba8_depth_tex2d_depth_component24
+v3d_deqp: case #372 F 66ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba8_depth_tex2d_depth_component24
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba8_depth_tex2d_depth_component32f'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba8_depth_tex2d_depth_component32f
+v3d_deqp: case #373 F 65ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba8_depth_tex2d_depth_component32f
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba8_stencil_rbo_stencil_index8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba8_stencil_rbo_stencil_index8
+v3d_deqp: case #374 F 64ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba8_stencil_rbo_stencil_index8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba8i'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba8i
+v3d_deqp: case #375 F 63ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba8i
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba8ui'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba8ui
+v3d_deqp: case #376 F 59ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.tex2d_rgba8ui
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.resize.tex2d_srgb8_alpha8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.resize.tex2d_srgb8_alpha8
+v3d_deqp: case #377 F 65ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.resize.tex2d_srgb8_alpha8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_r11f_g11f_b10f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_r11f_g11f_b10f
+v3d_deqp: case #378 N 32ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_r11f_g11f_b10f
+  NotSupported (Format not supported, requires GL_EXT_color_buffer_float)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_r11f_g11f_b10f_depth_rbo_depth24_stencil8'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_r11f_g11f_b10f_depth_rbo_depth24_stencil8
+v3d_deqp: case #379 N 42ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_r11f_g11f_b10f_depth_rbo_depth24_stencil8
+  NotSupported (Format not supported, requires GL_EXT_color_buffer_float)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_r11f_g11f_b10f_depth_stencil_rbo_depth24_stencil8'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_r11f_g11f_b10f_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #380 N 45ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_r11f_g11f_b10f_depth_stencil_rbo_depth24_stencil8
+  NotSupported (Format not supported, requires GL_EXT_color_buffer_float)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_r16f'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_r16f
+v3d_deqp: case #381 F 74ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_r16f
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_r16f_depth_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_r16f_depth_rbo_depth24_stencil8
+v3d_deqp: case #382 F 76ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_r16f_depth_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_r16f_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_r16f_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #383 F 83ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_r16f_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_r8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_r8
+v3d_deqp: case #384 F 89ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_r8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_r8_depth_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_r8_depth_rbo_depth24_stencil8
+v3d_deqp: case #385 F 95ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_r8_depth_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_r8_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_r8_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #386 F 102ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_r8_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rg16f'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rg16f
+v3d_deqp: case #387 F 92ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rg16f
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rg16f_depth_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rg16f_depth_rbo_depth24_stencil8
+v3d_deqp: case #388 F 97ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rg16f_depth_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rg16f_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rg16f_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #389 F 106ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rg16f_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rg8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rg8
+v3d_deqp: case #390 F 90ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rg8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rg8_depth_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rg8_depth_rbo_depth24_stencil8
+v3d_deqp: case #391 F 96ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rg8_depth_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rg8_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rg8_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #392 F 103ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rg8_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgb10_a2'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgb10_a2
+v3d_deqp: case #393 F 73ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgb10_a2
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgb10_a2_depth_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgb10_a2_depth_rbo_depth24_stencil8
+v3d_deqp: case #394 F 79ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgb10_a2_depth_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgb10_a2_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgb10_a2_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #395 F 86ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgb10_a2_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgb16f'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgb16f
+v3d_deqp: case #396 F 77ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgb16f
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgb16f_depth_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgb16f_depth_rbo_depth24_stencil8
+v3d_deqp: case #397 F 82ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgb16f_depth_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgb16f_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgb16f_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #398 F 89ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgb16f_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgb565'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgb565
+v3d_deqp: case #399 F 73ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgb565
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgb565_depth_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgb565_depth_rbo_depth24_stencil8
+v3d_deqp: case #400 F 77ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgb565_depth_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgb565_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgb565_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #401 F 86ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgb565_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgb5_a1'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgb5_a1
+v3d_deqp: case #402 F 72ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgb5_a1
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgb5_a1_depth_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgb5_a1_depth_rbo_depth24_stencil8
+v3d_deqp: case #403 F 77ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgb5_a1_depth_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgb5_a1_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgb5_a1_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #404 F 85ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgb5_a1_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgb8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgb8
+v3d_deqp: case #405 F 70ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgb8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgb8_depth_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgb8_depth_rbo_depth24_stencil8
+v3d_deqp: case #406 F 76ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgb8_depth_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgb8_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgb8_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #407 F 84ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgb8_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgba16f'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgba16f
+v3d_deqp: case #408 F 79ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgba16f
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgba16f_depth_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgba16f_depth_rbo_depth24_stencil8
+v3d_deqp: case #409 F 85ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgba16f_depth_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgba16f_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgba16f_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #410 F 93ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgba16f_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgba4'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgba4
+v3d_deqp: case #411 F 69ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgba4
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgba4_depth_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgba4_depth_rbo_depth24_stencil8
+v3d_deqp: case #412 F 75ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgba4_depth_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgba4_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgba4_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #413 F 83ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgba4_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgba8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgba8
+v3d_deqp: case #414 F 70ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgba8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgba8_depth_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgba8_depth_rbo_depth24_stencil8
+v3d_deqp: case #415 F 74ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgba8_depth_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgba8_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgba8_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #416 F 83ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_rgba8_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_srgb8_alpha8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_srgb8_alpha8
+v3d_deqp: case #417 F 92ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_srgb8_alpha8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_srgb8_alpha8_depth_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_srgb8_alpha8_depth_rbo_depth24_stencil8
+v3d_deqp: case #418 F 97ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_srgb8_alpha8_depth_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_srgb8_alpha8_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_srgb8_alpha8_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #419 F 105ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.rbo_srgb8_alpha8_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_r11f_g11f_b10f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_r11f_g11f_b10f
+v3d_deqp: case #420 N 37ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_r11f_g11f_b10f
+  NotSupported (Format not supported, requires GL_EXT_color_buffer_float)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_r11f_g11f_b10f_depth_rbo_depth24_stencil8'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_r11f_g11f_b10f_depth_rbo_depth24_stencil8
+v3d_deqp: case #421 N 42ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_r11f_g11f_b10f_depth_rbo_depth24_stencil8
+  NotSupported (Format not supported, requires GL_EXT_color_buffer_float)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_r11f_g11f_b10f_depth_stencil_rbo_depth24_stencil8'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_r11f_g11f_b10f_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #422 N 46ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_r11f_g11f_b10f_depth_stencil_rbo_depth24_stencil8
+  NotSupported (Format not supported, requires GL_EXT_color_buffer_float)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_r16f'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_r16f
+v3d_deqp: case #423 F 80ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_r16f
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_r16f_depth_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_r16f_depth_rbo_depth24_stencil8
+v3d_deqp: case #424 F 81ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_r16f_depth_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_r16f_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_r16f_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #425 F 89ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_r16f_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_r8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_r8
+v3d_deqp: case #426 F 91ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_r8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_r8_depth_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_r8_depth_rbo_depth24_stencil8
+v3d_deqp: case #427 F 97ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_r8_depth_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_r8_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_r8_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #428 F 105ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_r8_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rg16f'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rg16f
+v3d_deqp: case #429 F 93ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rg16f
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rg16f_depth_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rg16f_depth_rbo_depth24_stencil8
+v3d_deqp: case #430 F 99ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rg16f_depth_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rg16f_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rg16f_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #431 F 107ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rg16f_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rg8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rg8
+v3d_deqp: case #432 F 94ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rg8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rg8_depth_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rg8_depth_rbo_depth24_stencil8
+v3d_deqp: case #433 F 98ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rg8_depth_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rg8_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rg8_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #434 F 106ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rg8_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgb10_a2'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgb10_a2
+v3d_deqp: case #435 F 82ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgb10_a2
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgb10_a2_depth_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgb10_a2_depth_rbo_depth24_stencil8
+v3d_deqp: case #436 F 88ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgb10_a2_depth_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgb10_a2_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgb10_a2_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #437 F 93ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgb10_a2_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgb16f'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgb16f
+v3d_deqp: case #438 F 35ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgb16f
+  Fail (Framebuffer is not complete: 'GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT' at es3fFboRenderTest.cpp:358)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgb16f_depth_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgb16f_depth_rbo_depth24_stencil8
+v3d_deqp: case #439 F 42ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgb16f_depth_rbo_depth24_stencil8
+  Fail (Framebuffer is not complete: 'GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT' at es3fFboRenderTest.cpp:358)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgb16f_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgb16f_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #440 F 46ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgb16f_depth_stencil_rbo_depth24_stencil8
+  Fail (Framebuffer is not complete: 'GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT' at es3fFboRenderTest.cpp:358)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgb565'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgb565
+v3d_deqp: case #441 F 86ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgb565
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgb565_depth_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgb565_depth_rbo_depth24_stencil8
+v3d_deqp: case #442 F 86ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgb565_depth_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgb565_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgb565_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #443 F 95ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgb565_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgb5_a1'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgb5_a1
+v3d_deqp: case #444 F 80ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgb5_a1
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgb5_a1_depth_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgb5_a1_depth_rbo_depth24_stencil8
+v3d_deqp: case #445 F 85ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgb5_a1_depth_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgb5_a1_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgb5_a1_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #446 F 92ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgb5_a1_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgb8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgb8
+v3d_deqp: case #447 F 79ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgb8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgb8_depth_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgb8_depth_rbo_depth24_stencil8
+v3d_deqp: case #448 F 84ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgb8_depth_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgb8_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgb8_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #449 F 93ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgb8_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgba16f'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgba16f
+v3d_deqp: case #450 F 86ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgba16f
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgba16f_depth_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgba16f_depth_rbo_depth24_stencil8
+v3d_deqp: case #451 F 92ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgba16f_depth_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgba16f_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgba16f_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #452 F 101ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgba16f_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgba4'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgba4
+v3d_deqp: case #453 F 75ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgba4
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgba4_depth_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgba4_depth_rbo_depth24_stencil8
+v3d_deqp: case #454 F 83ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgba4_depth_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgba4_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgba4_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #455 F 91ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgba4_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgba8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgba8
+v3d_deqp: case #456 F 78ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgba8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgba8_depth_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgba8_depth_rbo_depth24_stencil8
+v3d_deqp: case #457 F 82ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgba8_depth_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgba8_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgba8_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #458 F 91ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_rgba8_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_srgb8_alpha8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_srgb8_alpha8
+v3d_deqp: case #459 F 99ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_srgb8_alpha8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_srgb8_alpha8_depth_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_srgb8_alpha8_depth_rbo_depth24_stencil8
+v3d_deqp: case #460 F 106ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_srgb8_alpha8_depth_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_srgb8_alpha8_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_srgb8_alpha8_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #461 F 112ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer.tex2d_srgb8_alpha8_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.rbo_r11f_g11f_b10f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.rbo_r11f_g11f_b10f
+v3d_deqp: case #462 N 34ms k2/27 c15583/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.rbo_r11f_g11f_b10f
+  NotSupported (Format not supported, requires GL_EXT_color_buffer_float)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.rbo_r16f'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.rbo_r16f
+v3d_deqp: case #463 F 42ms k2/27 c15577/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.rbo_r16f
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.rbo_r32f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.rbo_r32f
+v3d_deqp: case #464 N 28ms k2/27 c15577/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.rbo_r32f
+  NotSupported (Format not supported, requires GL_EXT_color_buffer_float)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.rbo_r8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.rbo_r8
+v3d_deqp: case #465 F 64ms k2/27 c15577/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.rbo_r8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.rbo_rg16f'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.rbo_rg16f
+v3d_deqp: case #466 F 63ms k2/27 c15577/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.rbo_rg16f
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.rbo_rg32f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.rbo_rg32f
+v3d_deqp: case #467 N 28ms k2/27 c15577/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.rbo_rg32f
+  NotSupported (Format not supported, requires GL_EXT_color_buffer_float)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.rbo_rg8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.rbo_rg8
+v3d_deqp: case #468 F 64ms k2/27 c15577/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.rbo_rg8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.rbo_rgb10_a2'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.rbo_rgb10_a2
+v3d_deqp: case #469 F 37ms k2/27 c15577/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.rbo_rgb10_a2
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.rbo_rgb16f'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.rbo_rgb16f
+v3d_deqp: case #470 F 40ms k2/27 c15577/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.rbo_rgb16f
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.rbo_rgb565'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.rbo_rgb565
+v3d_deqp: case #471 F 37ms k2/27 c15577/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.rbo_rgb565
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.rbo_rgb5_a1'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.rbo_rgb5_a1
+v3d_deqp: case #472 F 38ms k2/27 c15577/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.rbo_rgb5_a1
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.rbo_rgb8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.rbo_rgb8
+v3d_deqp: case #473 F 36ms k2/27 c15577/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.rbo_rgb8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.rbo_rgba16f'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.rbo_rgba16f
+v3d_deqp: case #474 F 41ms k2/27 c15577/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.rbo_rgba16f
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.rbo_rgba32f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.rbo_rgba32f
+v3d_deqp: case #475 N 29ms k2/27 c15577/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.rbo_rgba32f
+  NotSupported (Format not supported, requires GL_EXT_color_buffer_float)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.rbo_rgba4'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.rbo_rgba4
+v3d_deqp: case #476 F 42ms k2/27 c15577/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.rbo_rgba4
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.rbo_rgba8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.rbo_rgba8
+v3d_deqp: case #477 F 35ms k2/27 c15577/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.rbo_rgba8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.rbo_srgb8_alpha8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.rbo_srgb8_alpha8
+v3d_deqp: case #478 F 38ms k2/27 c15577/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.rbo_srgb8_alpha8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.tex2d_r11f_g11f_b10f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.tex2d_r11f_g11f_b10f
+v3d_deqp: case #479 N 32ms k2/27 c15577/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.tex2d_r11f_g11f_b10f
+  NotSupported (Format not supported, requires GL_EXT_color_buffer_float)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.tex2d_r16f'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.tex2d_r16f
+v3d_deqp: case #480 F 46ms k2/27 c15577/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.tex2d_r16f
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.tex2d_r32f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.tex2d_r32f
+v3d_deqp: case #481 N 29ms k2/27 c15577/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.tex2d_r32f
+  NotSupported (Format not supported, requires GL_EXT_color_buffer_float)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.tex2d_r8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.tex2d_r8
+v3d_deqp: case #482 F 64ms k2/27 c15577/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.tex2d_r8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.tex2d_rg16f'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.tex2d_rg16f
+v3d_deqp: case #483 F 61ms k2/27 c15577/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.tex2d_rg16f
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.tex2d_rg32f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.tex2d_rg32f
+v3d_deqp: case #484 N 29ms k2/27 c15577/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.tex2d_rg32f
+  NotSupported (Format not supported, requires GL_EXT_color_buffer_float)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.tex2d_rg8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.tex2d_rg8
+v3d_deqp: case #485 F 64ms k2/27 c15577/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.tex2d_rg8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.tex2d_rgb10_a2'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.tex2d_rgb10_a2
+v3d_deqp: case #486 F 45ms k2/27 c15577/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.tex2d_rgb10_a2
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.tex2d_rgb16f'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.tex2d_rgb16f
+v3d_deqp: case #487 F 29ms k2/27 c15577/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.tex2d_rgb16f
+  Fail (Framebuffer is not complete: 'GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT' at es3fFboRenderTest.cpp:834)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.tex2d_rgb565'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.tex2d_rgb565
+v3d_deqp: case #488 F 51ms k2/27 c15577/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.tex2d_rgb565
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.tex2d_rgb5_a1'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.tex2d_rgb5_a1
+v3d_deqp: case #489 F 45ms k2/27 c15577/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.tex2d_rgb5_a1
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.tex2d_rgb8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.tex2d_rgb8
+v3d_deqp: case #490 F 44ms k2/27 c15577/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.tex2d_rgb8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.tex2d_rgba16f'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.tex2d_rgba16f
+v3d_deqp: case #491 F 49ms k2/27 c15577/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.tex2d_rgba16f
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.tex2d_rgba32f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.tex2d_rgba32f
+v3d_deqp: case #492 N 30ms k2/27 c15577/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.tex2d_rgba32f
+  NotSupported (Format not supported, requires GL_EXT_color_buffer_float)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.tex2d_rgba4'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.tex2d_rgba4
+v3d_deqp: case #493 F 49ms k2/27 c15577/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.tex2d_rgba4
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.tex2d_rgba8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.tex2d_rgba8
+v3d_deqp: case #494 F 44ms k2/27 c15577/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.tex2d_rgba8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.tex2d_srgb8_alpha8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.tex2d_srgb8_alpha8
+v3d_deqp: case #495 F 46ms k2/27 c15577/16423 r0 dEQP-GLES3.functional.fbo.render.shared_colorbuffer_clear.tex2d_srgb8_alpha8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_depth_stencil.tex2d_rgba8_depth_rbo_depth_component16'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_depth_stencil.tex2d_rgba8_depth_rbo_depth_component16
+v3d_deqp: case #496 F 76ms k2/27 c15577/16423 r0 dEQP-GLES3.functional.fbo.render.shared_depth_stencil.tex2d_rgba8_depth_rbo_depth_component16
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_depth_stencil.tex2d_rgba8_depth_rbo_depth_component24'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_depth_stencil.tex2d_rgba8_depth_rbo_depth_component24
+v3d_deqp: case #497 F 77ms k2/27 c15577/16423 r0 dEQP-GLES3.functional.fbo.render.shared_depth_stencil.tex2d_rgba8_depth_rbo_depth_component24
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_depth_stencil.tex2d_rgba8_depth_rbo_depth_component32f'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_depth_stencil.tex2d_rgba8_depth_rbo_depth_component32f
+v3d_deqp: case #498 F 75ms k2/27 c15577/16423 r0 dEQP-GLES3.functional.fbo.render.shared_depth_stencil.tex2d_rgba8_depth_rbo_depth_component32f
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_depth_stencil.tex2d_rgba8_depth_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_depth_stencil.tex2d_rgba8_depth_stencil_rbo_depth24_stencil8
+v3d_deqp: case #499 F 82ms k2/27 c15577/16423 r0 dEQP-GLES3.functional.fbo.render.shared_depth_stencil.tex2d_rgba8_depth_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_depth_stencil.tex2d_rgba8_depth_stencil_rbo_depth32f_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_depth_stencil.tex2d_rgba8_depth_stencil_rbo_depth32f_stencil8
+v3d_deqp: case #500 F 79ms k2/27 c15577/16423 r0 dEQP-GLES3.functional.fbo.render.shared_depth_stencil.tex2d_rgba8_depth_stencil_rbo_depth32f_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_depth_stencil.tex2d_rgba8_depth_stencil_tex2d_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_depth_stencil.tex2d_rgba8_depth_stencil_tex2d_depth24_stencil8
+v3d_deqp: case #501 F 82ms k2/27 c15577/16423 r0 dEQP-GLES3.functional.fbo.render.shared_depth_stencil.tex2d_rgba8_depth_stencil_tex2d_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_depth_stencil.tex2d_rgba8_depth_stencil_tex2d_depth32f_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_depth_stencil.tex2d_rgba8_depth_stencil_tex2d_depth32f_stencil8
+v3d_deqp: case #502 F 80ms k2/27 c15577/16423 r0 dEQP-GLES3.functional.fbo.render.shared_depth_stencil.tex2d_rgba8_depth_stencil_tex2d_depth32f_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_depth_stencil.tex2d_rgba8_depth_tex2d_depth_component16'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_depth_stencil.tex2d_rgba8_depth_tex2d_depth_component16
+v3d_deqp: case #503 F 78ms k2/27 c15577/16423 r0 dEQP-GLES3.functional.fbo.render.shared_depth_stencil.tex2d_rgba8_depth_tex2d_depth_component16
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_depth_stencil.tex2d_rgba8_depth_tex2d_depth_component24'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_depth_stencil.tex2d_rgba8_depth_tex2d_depth_component24
+v3d_deqp: case #504 F 80ms k2/27 c15577/16423 r0 dEQP-GLES3.functional.fbo.render.shared_depth_stencil.tex2d_rgba8_depth_tex2d_depth_component24
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.shared_depth_stencil.tex2d_rgba8_depth_tex2d_depth_component32f'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.shared_depth_stencil.tex2d_rgba8_depth_tex2d_depth_component32f
+v3d_deqp: case #505 F 71ms k2/27 c15577/16423 r0 dEQP-GLES3.functional.fbo.render.shared_depth_stencil.tex2d_rgba8_depth_tex2d_depth_component32f
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.stencil_clear.tex2d_rgba8_stencil_rbo_depth24_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.stencil_clear.tex2d_rgba8_stencil_rbo_depth24_stencil8
+v3d_deqp: case #506 F 76ms k2/27 c15577/16423 r0 dEQP-GLES3.functional.fbo.render.stencil_clear.tex2d_rgba8_stencil_rbo_depth24_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.stencil_clear.tex2d_rgba8_stencil_rbo_depth32f_stencil8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.stencil_clear.tex2d_rgba8_stencil_rbo_depth32f_stencil8
+v3d_deqp: case #507 F 75ms k2/27 c15577/16423 r0 dEQP-GLES3.functional.fbo.render.stencil_clear.tex2d_rgba8_stencil_rbo_depth32f_stencil8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.render.stencil_clear.tex2d_rgba8_stencil_rbo_stencil_index8'..
+deqp: Fail dEQP-GLES3.functional.fbo.render.stencil_clear.tex2d_rgba8_stencil_rbo_stencil_index8
+v3d_deqp: case #508 F 75ms k2/27 c15577/16423 r0 dEQP-GLES3.functional.fbo.render.stencil_clear.tex2d_rgba8_stencil_rbo_stencil_index8
+  Fail (Image comparison failed)
+
+DONE!
+
+Test run totals:
+  Passed:        108/509 (21.2%)
+  Failed:        335/509 (65.8%)
+  Not supported: 66/509 (13.0%)
+  Warnings:      0/509 (0.0%)
+  Waived:        0/509 (0.0%)
+deqp: done: 108 passed, 335 failed, 66 not supported, 0 warnings, complete=1
+deqp: summary: 509 cases begun, 509 with a result, 0 without
+v3d_deqp DONE: build b1b5b845, filter 'dEQP-GLES3.functional.fbo.invalidate.*,dEQP-GLES3.functional.fbo.msaa.*,dEQP-GLES3.functional.fbo.render.*'
+  509 cases in 28262 ms, record at 28 s after boot, reset at ~250 s
+  totals: P 108 F 335 N 66  (R: not passed, a draw was refused in it; passed with one refused: 0)
+  done: 108 passed, 335 failed, 66 not supported, 0 warnings, complete=1
+  summary: 509 cases begun, 509 with a result, 0 without
+  keep region (KiB, of 1024): after #0 2, most 2 at #0, last 2, high-water 27, before #30 (first not passed) 2; slowest #0 190 ms
+  carve-out (KiB, of 48636): after #0 15533, last 15577, high-water 16423
+  jobs: slow in 0 cases; no job hung or timed out
+BASELINE (first completed) job 1: core_sts 0x0 hub_sts 0x0 err 0x1000 ct0 cs 0x0 ea 0x20108b ca 0x20108b ra 0x0 qba 0x201000 qea 0x20108b ct1 ca 0x223097 ra 0x223096 qba 0x223000 qea 0x223097
+FIRST FAILURE: none (no timeout)
+slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+binner out of memory: 0 jobs (2 overflow blocks of 256 KiB, CONFIG_YAKOGL_V3D_BIN_OVERFLOW_BLOCKS; each such job ends in a GPU reset)
+binning by interrupt (IRQ 106): 1187 interrupts, 0 overflow blocks fed by the ISR
+carve-out: 15377664 bytes used now, 16817152 at most, of 49803264; 0 frees held
+osal(v3d): pending frees: high-water 3/256, waits 0 (opt-in 0), refused 0 (0 unsubmitted, 0 no wait, 0 KiB kept)
+carve-out find: 3201 calls, 246709 map reads (77 a call, at most 1153 in one); free runs 3, longest 34424320 bytes; small blocks from the top: off (CONFIG_YAKOGL_V3D_CARVEOUT_TOP_BELOW 0)
+packets (packet skip on, CONFIG_YAKOGL_V3D_PACK_SKIP): 1187 jobs ended; emitted 20544, skipped 7994; groups compared 5141, mismatches 1048
+allocations refused for lack of GPU memory: 0 (0 size slots; the line is printed at each size's 1st, 10th, 100th, ... refusal)
+UIFCFG 0x00000045 (read at init)
+log: 0 causes logged once, 0 repeats not printed
+case order: P pass F fail R refused N not supported Q quality C compat E resource I internal X crash T timeout (letters stop before the last cases)
+    0 PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPNPFFNFFPFFPFFNFFPFFPPPPPPPPNPPPPPPPPPPPPPPFFPFFFFFPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPFFPFFFFFPP
+driver: osal(v3d): V3D 4.2, 8 QPUs, VPM 65536 bytes, MMU yes (identify 0)
+driver: osal(v3d): UIFCFG 0x00000045
+driver: osal(v3d): ready: carve-out 48 MiB at phys 0x2f09000, GPU VA 0x181000..0x3100000
+driver: ... 9 more lines (UART)
+not passed, by group (count, letters; reasons by count, F/R before N):
+  invalidate.format                                          16 F12 N4                 12x ~: 'GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT' at es3fFboTestCase.cpp:146
+                                                                                        4x Format not supported
+  invalidate.sub                                              7 F7                      4x ~: 'GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT' at es3fFboTestCase.cpp:146
+                                                                                        3x GL_INVALID_OPERATION at es3fFboTestCase.cpp:90
+  invalidate.whole                                            7 F7                      4x ~: 'GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT' at es3fFboTestCase.cpp:146
+                                                                                        3x GL_INVALID_OPERATION at es3fFboTestCase.cpp:90
+  msaa.2_samples                                             22 F17 N5                 17x Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154
+                                                                                        4x Format not supported
+                                                                                        1x Sample count not supported
+  msaa.4_samples                                             22 F17 N5                 17x Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154
+                                                                                        4x Format not supported
+                                                                                        1x Sample count not supported
+  msaa.8_samples                                             22 N22                    18x Sample count not supported
+                                                                                        4x Format not supported
+  render.recreate_color                                      69 F61 N8                 48x Image comparison failed
+                                                                                       13x ~'GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT' at es3fFboRenderTest.cpp:358
+                                                                                        8x Format not supported, requires GL_EXT_color_buffer_float
+  render.recreate_depth_stencil                              11 F11                    11x Image comparison failed
+  render.resize                                              94 F86 N8                 73x Image comparison failed
+                                                                                       13x ~'GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT' at es3fFboRenderTest.cpp:358
+                                                                                        8x Format not supported, requires GL_EXT_color_buffer_float
+  render.shared_colorbuffer                                  84 F78 N6                 75x Image comparison failed
+                                                                                        3x ~'GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT' at es3fFboRenderTest.cpp:358
+                                                                                        6x Format not supported, requires GL_EXT_color_buffer_float
+  render.shared_colorbuffer_clear                            34 F26 N8                 25x Image comparison failed
+                                                                                        1x ~'GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT' at es3fFboRenderTest.cpp:834
+                                                                                        8x Format not supported, requires GL_EXT_color_buffer_float
+  render.shared_depth_stencil                                10 F10                    10x Image comparison failed
+  render.stencil_clear                                        3 F3                      3x Image comparison failed
+  ... 401 more not passed (the UART has every line)
+v3d_deqp: build b1b5b845 DONE: 509 cases, P 108 F 335 R 0 N 66 other 0

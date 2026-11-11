@@ -1,0 +1,29 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES3 image FB2: deqp-uart-tally.py --mustpass tools/cts/gles3-mustpass.txt FB2.console.txt
+FB2.console.txt: deqp: done: 476 passed, 19 failed, 146 not supported, 0 warnings, complete=1 | deqp: summary: 641 cases begun, 641 with a result, 0 without
+mustpass cases with a result: 610 (of 641 seen)
+group                                       pass   fail    n/s  other
+fbo                                          445     19    146      0
+TOTAL                                        445     19    146      0
+(the pass / fail counts above are the result lines seen; the image's own counters:)
+  FB2: deqp: summary 641 cases begun, 641 with a result; deqp: done 476 passed, 19 failed, 146 not supported, 0 warnings; b1b5b845 DONE: 641 cases, P 476 F 19 R 0 N 146 other 0; 641 result lines seen
+Fail dEQP-GLES3.functional.fbo.blit.default_framebuffer.r8_linear_out_of_bounds_blit_from_default
+Fail dEQP-GLES3.functional.fbo.blit.default_framebuffer.r8_linear_scale_blit_from_default
+Fail dEQP-GLES3.functional.fbo.blit.default_framebuffer.r8_nearest_scale_blit_from_default
+Fail dEQP-GLES3.functional.fbo.blit.depth_stencil.depth24_stencil8_basic
+Fail dEQP-GLES3.functional.fbo.blit.depth_stencil.depth24_stencil8_depth_only
+Fail dEQP-GLES3.functional.fbo.blit.depth_stencil.depth24_stencil8_scale
+Fail dEQP-GLES3.functional.fbo.blit.depth_stencil.depth24_stencil8_stencil_only
+Fail dEQP-GLES3.functional.fbo.blit.depth_stencil.depth32f_stencil8_basic
+Fail dEQP-GLES3.functional.fbo.blit.depth_stencil.depth32f_stencil8_depth_only
+Fail dEQP-GLES3.functional.fbo.blit.depth_stencil.depth32f_stencil8_scale
+Fail dEQP-GLES3.functional.fbo.blit.depth_stencil.depth32f_stencil8_stencil_only
+Fail dEQP-GLES3.functional.fbo.blit.depth_stencil.depth_component16_basic
+Fail dEQP-GLES3.functional.fbo.blit.depth_stencil.depth_component16_scale
+Fail dEQP-GLES3.functional.fbo.blit.depth_stencil.depth_component24_basic
+Fail dEQP-GLES3.functional.fbo.blit.depth_stencil.depth_component24_scale
+Fail dEQP-GLES3.functional.fbo.blit.depth_stencil.depth_component32f_basic
+Fail dEQP-GLES3.functional.fbo.blit.depth_stencil.depth_component32f_scale
+Fail dEQP-GLES3.functional.fbo.blit.depth_stencil.stencil_index8_basic
+Fail dEQP-GLES3.functional.fbo.blit.depth_stencil.stencil_index8_scale
