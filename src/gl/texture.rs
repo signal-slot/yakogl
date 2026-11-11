@@ -3402,7 +3402,9 @@ pub(crate) const COMPRESSED_FORMATS: [GLenum; 5] = [
 /// it does not. The linear ETC2 classes are stored everywhere. The sRGB
 /// ones only in an ES 3.0 report (ES 2.0 has no sRGB format) and where the
 /// back end samples them ([`backend::sampled_texfmts`]: the PowerVR, whose
-/// TPU decodes the ETC2 blocks with its gamma bit, docs/es3/srgb.md 4.3).
+/// TPU decodes the ETC2 blocks with its gamma bit, docs/es3/srgb.md 4.3, and
+/// the GC7000UL, the ETC2 block format with SAMP_CTRL1's SRGB,
+/// docs/es3/gc-formats.md).
 /// glCompressedTex*Image and GL_COMPRESSED_TEXTURE_FORMATS both ask here, so
 /// the list names exactly the formats an upload accepts.
 pub(crate) fn stored_compressed_format(internalformat: GLenum) -> Option<(u8, u8)> {
@@ -9063,13 +9065,14 @@ mod tests {
     }
 
     /// The compressed sRGB ETC2 formats are stored as blocks in their own
-    /// texel classes where the back end samples them (the PowerVR, in an
-    /// ES 3.0 report), and stay GL_INVALID_ENUM, with nothing stored,
-    /// everywhere else. The RGB one has no alpha, as GL_COMPRESSED_RGB8_ETC2.
+    /// texel classes where the back end samples them (the PowerVR and the
+    /// GC7000UL, in an ES 3.0 report), and stay GL_INVALID_ENUM, with nothing
+    /// stored, everywhere else. The RGB one has no alpha, as
+    /// GL_COMPRESSED_RGB8_ETC2.
     #[test]
     fn compressed_srgb_etc2_is_stored_as_blocks_in_the_srgb_class() {
         let gl = TestGl::new(4, 4);
-        let stored = cfg!(feature = "gpu-powervr") && !crate::REPORT_ES2;
+        let stored = (cfg!(feature = "gpu-powervr") || cfg!(feature = "gpu-vivante")) && !crate::REPORT_ES2;
         for (format, bb, class, no_alpha) in [
             (GL_COMPRESSED_SRGB8_ETC2, 8usize, GLES_TEXFMT_ETC2_SRGB_RGB, true),
             (GL_COMPRESSED_SRGB8_ALPHA8_ETC2_EAC, 16, GLES_TEXFMT_ETC2_SRGB_RGBA, false),

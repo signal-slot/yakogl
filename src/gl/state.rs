@@ -3296,8 +3296,8 @@ mod tests {
 
     /// The list has the advertised length and names the stored formats: the
     /// three linear ones everywhere, and the sRGB ETC2 pair in an ES 3.0
-    /// report on the PowerVR, the one back end whose sampler decodes them
-    /// (`backend::PVR_SAMPLED_TEXFMTS`).
+    /// report on the PowerVR and the GC7000UL, the back ends whose sampler
+    /// decodes them (`backend::PVR_SAMPLED_TEXFMTS`, `GC_SAMPLED_TEXFMTS`).
     #[test]
     fn compressed_format_list_has_the_advertised_length() {
         let gl = TestGl::new(8, 8);
@@ -3310,7 +3310,7 @@ mod tests {
             GL_COMPRESSED_RGB8_ETC2 as GLint,
             GL_COMPRESSED_RGBA8_ETC2_EAC as GLint
         ];
-        if cfg!(feature = "gpu-powervr") && !crate::REPORT_ES2 {
+        if (cfg!(feature = "gpu-powervr") || cfg!(feature = "gpu-vivante")) && !crate::REPORT_ES2 {
             want.extend([GL_COMPRESSED_SRGB8_ETC2 as GLint, GL_COMPRESSED_SRGB8_ALPHA8_ETC2_EAC as GLint]);
         }
         assert_eq!(n as usize, want.len());

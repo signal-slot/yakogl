@@ -163,9 +163,8 @@ pub fn gc_texfmt(format: u8) -> GcTexfmt {
          * so SRGB8_ETC2 is EXT_NONE as ETC2_RGB8 is, :244, and
          * SRGB8_ALPHA8_ETC2_EAC is EXT_RGBA8_ETC2_EAC, :246), decoded from
          * the sRGB curve by SAMP_CTRL1's SRGB ([`samp_ctrl1`]) and, as every
-         * sRGB format, off INT_FILTER (etnaviv_format.c:317-318). Still in no
-         * GC mask: the GL core refuses the names until GC_SAMPLED_TEXFMTS
-         * holds the classes. */
+         * sRGB format, off INT_FILTER (etnaviv_format.c:317-318). Both are
+         * in GC_SAMPLED_TEXFMTS, so the GL core stores the blocks here. */
         GLES_TEXFMT_ETC2_SRGB_RGB => f = GcTexfmt { int_filter: false, ..unorm_format(GLES_TEXFMT_ETC2_RGB) },
         GLES_TEXFMT_ETC2_SRGB_RGBA => f = GcTexfmt { int_filter: false, ..unorm_format(GLES_TEXFMT_ETC2_RGBA) },
         /* the RGBA8 texel row, decoded by SAMP_CTRL1's SRGB ([`samp_ctrl1`]) */

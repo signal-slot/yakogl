@@ -230,12 +230,16 @@ pub const PVR_SAMPLED_TEXFMTS: u64 = BASE_SAMPLED_TEXFMTS
         GLES_TEXFMT_RGBA32F,
     ]);
 /// The GC7000 texture descriptor's (`vivante/texture.rs`), the sRGB class
-/// (A8B8G8R8 with SAMP_CTRL1's SRGB decode) and the eight ES 3.0 classes
-/// the descriptor decodes (packed float, snorm, RGB10A2UI, 8/16-bit integer);
-/// `formats-gc`. Not RGB10A2, RGBA32*, R32I/UI, RG32I/UI or ETC2.
+/// (A8B8G8R8 with SAMP_CTRL1's SRGB decode), the compressed sRGB classes
+/// (the linear twin's ETC2 block format with the same bit,
+/// etnaviv_format.c:244, 246, 278) and the eight ES 3.0 classes the
+/// descriptor decodes (packed float, snorm, RGB10A2UI, 8/16-bit integer);
+/// `formats-gc`. Not RGB10A2, RGBA32*, R32I/UI or RG32I/UI.
 pub const GC_SAMPLED_TEXFMTS: u64 = BASE_SAMPLED_TEXFMTS
     | texfmts(&[
         GLES_TEXFMT_SRGB8_A8,
+        GLES_TEXFMT_ETC2_SRGB_RGB,
+        GLES_TEXFMT_ETC2_SRGB_RGBA,
         GLES_TEXFMT_R11G11B10F,
         GLES_TEXFMT_RGB9E5,
         GLES_TEXFMT_RGB10A2UI,
