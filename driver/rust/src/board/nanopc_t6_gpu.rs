@@ -1054,4 +1054,71 @@ mod tests {
         assert_eq!((o.stop, o.detail), (Stop::NotG610, 0xa867_0001));
         assert!(t6.writes.borrow().iter().all(|w| w.0 != GPU + mali::GPU_CMD));
     }
+
+    /// `gpu_up` over PD_GPU x vdd_gpu_s0 x the clock as handed over. Every
+    /// clock lands on CPLL / 5 = 300 MHz (the 675 mV supply covers it), so
+    /// the outcome per (PD_GPU, DCDC1) is one row:
+    ///
+    /// | PD_GPU | DCDC1 | outcome                                       | SPI write    | PMU write |
+    /// |--------|-------|-----------------------------------------------|--------------|-----------|
+    /// | on     | on    | success, GPU id read                          | none         | none      |
+    /// | on     | off   | `SupplyOff`, refusal 1, detail POWER_EN0 0x0e | none         | none      |
+    /// | off    | on    | success, GPU id read                          | none         | yes       |
+    /// | off    | off   | success, GPU id read                          | DCDC1 enable | yes       |
+    ///
+    /// The clock states: Armbian's 0x1f24 (kept), the PVTPLL (0x5f24), an
+    /// unknown mux (0x1fe4) and a divider off the table (0x1f21, 750 MHz).
+    #[test]
+    fn gpu_up_over_pd_gpu_vdd_gpu_and_clock_start_states() {
+        let clocks = [(0x1f24, true), (0x5f24, false), (0x1fe4, false), (0x1f21, false)];
+        for pd_on in [true, false] {
+            for vdd_on in [true, false] {
+                for (sel, kept) in clocks {
+                    let what = format!("pd_on={pd_on} vdd_on={vdd_on} sel158={sel:#x}");
+                    let t6 = if pd_on { T6::handed_over_domain_on() } else { T6::handed_over() };
+                    if !vdd_on {
+                        t6.rk806.borrow_mut().insert(0x00, 0x0e);
+                    }
+                    t6.regs.borrow_mut().insert(SEL158, sel);
+                    let o = gpu_up(&t6, B, &mut |_| {}, &mut |_| {});
+
+                    if pd_on && !vdd_on {
+                        assert_eq!(
+                            (o.stop, o.refusal, o.detail),
+                            (Stop::SupplyOff, SUPPLY_OFF_DOMAIN_POWERED, 0x0e),
+                            "{what}"
+                        );
+                    } else {
+                        assert_eq!((o.stop, o.refusal, o.detail), (Stop::None, 0, 0), "{what}");
+                        assert_eq!(o.ident.gpu_id, mali::G610_GPU_ID, "{what}");
+                        assert!(o.pd_after.usable(), "{what}");
+                    }
+                    // the clock is on the table whenever the run got past the clock set
+                    assert_eq!(o.clock_set.src_hz, 300_000_000, "{what}");
+                    assert!(min_uv_for(o.clock_set.src_hz).is_some(), "{what}");
+                    assert_eq!(o.clock_set.kept, kept, "{what}");
+                    assert_eq!(t6.regs.borrow()[&SEL158], 0x1f24, "{what}");
+
+                    // the only SPI write frame is the DCDC1 enable, and only for an off DCDC1
+                    let frames = t6.rk806_writes.borrow();
+                    let enable = !pd_on && !vdd_on;
+                    assert_eq!(frames.len(), usize::from(enable), "{what}: {frames:02x?}");
+                    assert_eq!(o.supply_enabled, enable, "{what}");
+
+                    let writes = t6.writes.borrow();
+                    let in_pmu = |a: usize| (PMU_BASE..PMU_BASE + 0x400).contains(&a);
+                    assert_eq!(writes.iter().any(|w| in_pmu(w.0)), !pd_on, "{what}");
+                    // the CRU: CLKSEL_CON(158)/(159), and the gates of SPI2 and the GPU; no PLL word
+                    for w in writes.iter().filter(|w| (CRU_BASE..CRU_BASE + 0x1000).contains(&w.0)) {
+                        let ok = [clksel_con(158), clksel_con(159), clkgate_con(14), clkgate_con(66)]
+                            .iter()
+                            .any(|c| w.0 == CRU_BASE + c);
+                        assert!(ok, "{what}: CRU write {:#x} := {:#x}", w.0, w.1);
+                    }
+                    let clksel_writes = writes.iter().filter(|w| w.0 == SEL158 || w.0 == CRU_BASE + clksel_con(159));
+                    assert_eq!(clksel_writes.count(), usize::from(!kept), "{what}");
+                }
+            }
+        }
+    }
 }
