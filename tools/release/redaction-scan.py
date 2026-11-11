@@ -761,7 +761,7 @@ def self_test():
         # The lab names of the rules below, and a near miss of each (the same
         # word with one more letter), as private values; and a login `user`.
         lab = [tool, "armadillo.local", "armadillo.localx", "yakogl-gate",
-               "yakogl-gate2", "ccfarm", "ccfarm2"]
+               "yakogl-gate2", "ccfarm", "ccfarm2", "lab7"]
         rxs = {c[0]: c[3] for c in build_classes({"lab-host": lab,
                                                   "login": ["user"]})}
 
@@ -864,6 +864,7 @@ def self_test():
         lock = "tools/mali/panthor/tests/board_lock.rs"
         scanner = "tools/release/redaction-scan.py"
         xml_h = "driver/src/vivante/hw/state.xml.h"
+        regs = "driver/rust/src/soc/imx8mp/regs.rs"
         pad = "tools/y.sh"
         rules = [
             ("home-path", pad, "drop", ["/ho", "me/..."], ["/ho", "me/.cache"]),
@@ -883,6 +884,12 @@ def self_test():
              ["armadillo", ".localx"]),
             ("lab-host", pad, "drop", ["yakogl", "-gate"], ["yakogl", "-gate2"]),
             ("lab-host", pad, "drop", ["cc", "farm"], ["cc", "farm2"]),
+            # A fake lab host `lab7` as the PHY prefix of a register name,
+            # as a field and in a field's doc line; the bare name stays.
+            ("lab-host", regs, "drop", ["pub const A53_LAB7", "_PHY_PDN_STATUS_MASK"],
+             ["pub const LAB7", ": u32"]),
+            ("lab-host", regs, "drop", ["/// 0b1..Map LAB7", "_PHY to A53 domain"],
+             ["ssh lab7", " first"]),
             ("lab-layout", scanner, "drop", ["$HOME", "/com/github/org"],
              ["~", "/com/github/org"]),
             ("email", pad, "drop", ["someone", "@host.invalid"],
