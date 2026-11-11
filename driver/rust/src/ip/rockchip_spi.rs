@@ -135,10 +135,13 @@ pub fn write_then_read(
 }
 
 /// One frame sent and nothing read: Linux's `spi_write`, one transfer under
-/// the chip select. The bytes go out in the same transmit-and-receive phase
-/// as [`write_then_read`]'s command (the one measured on the T6), with what
-/// comes back dropped; there is no receive phase after it, so no frame is
-/// clocked past `tx`.
+/// the chip select, the first half of [`write_then_read`] (spi.c:4707-4757
+/// and fact 3). The bytes go out in the same transmit-and-receive phase as
+/// [`write_then_read`]'s command (the one measured on the T6), with what
+/// comes back dropped, then the bus is released; there is no receive phase
+/// after it, so no frame is clocked past `tx`. The same argument and
+/// controller-state checks apply (`tx` 1..=[`MAX_LEN`] frames, chip select,
+/// divider), only without a receive length.
 pub fn write(m: &impl Mmio, h: &Host, tx: &[u8], delay_us: &mut impl FnMut(u32)) -> Result<(), (SpiRefusal, u32)> {
     check(m, h, tx.len(), true)?;
     m.write32(h.base + SSIENR, 0);
@@ -452,5 +455,75 @@ pub(crate) mod tests {
             SpiRefusal::BadArgument
         );
         assert!(s.ops.borrow().iter().all(|o| o.0 == 'r'));
+    }
+
+    #[test]
+    fn write_sends_the_rk806_frame_under_one_chip_select_with_no_receive_only_phase() {
+        let s = Spi::new(Box::new(|_| 0xee));
+        let mut frame = [0u8; 4];
+        let n = crate::ip::rk806::dcdc1_enable_frame(&mut frame).unwrap();
+        let h = Host { base: BASE, cs: 0, baudr: 198, budget_us: 100 };
+        write(&s, &h, &frame[..n], &mut |_| {}).unwrap();
+        assert_eq!(*s.sent.borrow(), frame.to_vec());
+        let txdr: Vec<u8> = s.ops.borrow().iter().filter(|o| o.0 == 'w' && o.1 == TXDR).map(|o| o.2 as u8).collect();
+        assert_eq!(txdr, frame.to_vec());
+        let ctl: Vec<_> = s
+            .ops
+            .borrow()
+            .iter()
+            .filter(|o| o.0 == 'w' && matches!(o.1, SER | CTRLR0 | CTRLR1 | SSIENR))
+            .map(|o| (o.1, o.2))
+            .collect();
+        assert_eq!(
+            ctl,
+            vec![
+                (SSIENR, 0),
+                (SER, 1),
+                (SSIENR, 0),
+                (CTRLR0, 0x2c01),
+                (CTRLR1, 3),
+                (SSIENR, 1),
+                (SSIENR, 0),
+                (SSIENR, 0),
+                (SER, 0),
+            ]
+        );
+        assert!(s.ops.borrow().iter().all(|o| !(o.0 == 'w' && o.1 == CTRLR0 && o.2 & CTRLR0_XFM_RO != 0)));
+    }
+
+    #[test]
+    fn write_refuses_an_empty_or_oversize_tx_and_a_bad_chip_select_before_any_write() {
+        let s = Spi::new(Box::new(|_| 0));
+        let h = Host { base: BASE, cs: 0, baudr: 200, budget_us: 10 };
+        assert_eq!(write(&s, &h, &[], &mut |_| {}), Err((SpiRefusal::BadArgument, 0)));
+        assert_eq!(write(&s, &h, &[0; MAX_LEN + 1], &mut |_| {}), Err((SpiRefusal::BadArgument, 0)));
+        assert_eq!(write(&s, &Host { cs: 2, ..h }, &[1], &mut |_| {}), Err((SpiRefusal::BadArgument, 0)));
+        assert_eq!(write(&s, &Host { baudr: 199, ..h }, &[1], &mut |_| {}), Err((SpiRefusal::BadArgument, 0)));
+        assert!(s.ops.borrow().iter().all(|o| o.0 == 'r'));
+        // a longest frame is accepted
+        write(&s, &h, &[0; MAX_LEN], &mut |_| {}).unwrap();
+    }
+
+    #[test]
+    fn write_reports_a_busy_controller_a_dead_fifo_and_a_stuck_busy_line_and_releases_the_bus() {
+        let h = Host { base: BASE, cs: 0, baudr: 200, budget_us: 20 };
+        let s = Spi::new(Box::new(|_| 0));
+        s.regs.borrow_mut().insert(SSIENR, 1);
+        s.regs.borrow_mut().insert(SR, 1);
+        assert_eq!(write(&s, &h, &[1], &mut |_| {}), Err((SpiRefusal::Busy, 1)));
+        assert!(s.ops.borrow().iter().all(|o| o.0 == 'r'));
+
+        let mut s = Spi::new(Box::new(|_| 0));
+        s.deaf = true;
+        let mut slept = 0;
+        assert_eq!(write(&s, &h, &[1, 2], &mut |us| slept += us), Err((SpiRefusal::RxTimeout, 0)));
+        assert_eq!(slept, 20);
+        assert_eq!((s.regs.borrow()[&SSIENR], s.regs.borrow()[&SER]), (0, 0));
+
+        // idle while the controller is disabled passes check; busy after the last frame
+        let s = Spi::new(Box::new(|_| 0));
+        s.regs.borrow_mut().insert(SR, 1);
+        assert_eq!(write(&s, &h, &[1], &mut |_| {}), Err((SpiRefusal::IdleTimeout, 1)));
+        assert_eq!((s.regs.borrow()[&SSIENR], s.regs.borrow()[&SER]), (0, 0));
     }
 }
