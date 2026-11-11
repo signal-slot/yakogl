@@ -70,6 +70,28 @@ proof ..."). `--no-linux-wdt` jumps without it. The first jump (2026-10-19,
 without it) stopped before any output and held the board until its power was
 cut; that a WDT0 timeout brings this SoC back into Armbian is still unproven.
 
+The later probes go through the same script the same way: build the
+`t6_fw` (Z3) or `t6_submit` (Z4) image and pass its `zephyr.bin` in place of
+`t6_hello`'s, dry run first. `t6-verdict.sh` then judges the `uart.log` the
+`--go` run leaves in `T6_RECORD_DIR`, with the probe name as its first
+argument:
+
+```sh
+driver/tools/kexec-zephyr/t6-verdict.sh t6_submit <T6_RECORD_DIR>/uart.log
+```
+
+It prints one line per expected line (ok, differs or missing) and ends with
+`VERDICT <probe> PASS` (exit 0) or `VERDICT <probe> FAIL (<n> of <m>)` (exit
+1); exit 2 is a usage error. A `t6_submit` run that stops, whether the sync
+wait times out, Z3 stops or the watchdog resets the board during Z4, never
+reads PASS. `bash driver/tools/kexec-zephyr/t6-verdict-test.sh` checks the
+verdict against the fixtures in `testdata/` (`t6_submit-*.uart`: a passing
+run and the stopped ones) on the host, with no board. What each run does and
+which lines it must print are in `driver/docs/nanopc-t6-mali.md`, "Z3 board
+procedure" and "Z4 board procedure"; they are not repeated here. Both runs
+need the owner's go-ahead and someone at the power switch, and neither has
+been run on the board.
+
 ## The Armadillo-X2: `tools/board.sh x2`
 
 The Armadillo-X2 has the Verdin i.MX8MP's SoC and GPU under Armadillo Base OS.
