@@ -1678,6 +1678,67 @@ pub(crate) mod tests {
         assert_eq!((ram_u64(&z, gen::HEAP_FIRST_CHUNK_VA), ram_u64(&z, HEAP_CTX_VA)), (0, 0));
     }
 
+    /// The passing run's uart2 lines (the verdict table's fixture) carry the
+    /// record this module pins: each field `t6-verdict.sh` pins, in the
+    /// fixture's format (`%016llx`, `%08x`, decimal). The fields the table
+    /// leaves to a pattern (microseconds, `as0_tables_used`, `sync_updates`,
+    /// `latest_flush`, `cleared`, the pixel counts) are not compared.
+    #[test]
+    fn the_verdict_fixture_s_z4_lines_carry_the_pinned_record() {
+        const UART: &str = include_str!("../../../tools/kexec-zephyr/testdata/t6_submit-pass.uart");
+        let blob = synth::small();
+        let z = Z4::generated(blob.clone());
+        let (o, _, _) = run_frame(&z, &blob, &GENERATED);
+        // the token after `key` on the line tagged `tag`
+        let get = |tag: &str, key: &str| -> String {
+            let line = UART.lines().find(|l| l.contains(&format!(": {tag}: "))).unwrap_or_else(|| panic!("no {tag}"));
+            let mut t = line.split_whitespace().map(|w| w.trim_end_matches(','));
+            t.find(|&w| w == key).unwrap_or_else(|| panic!("{tag}: no {key}"));
+            t.next().unwrap().to_string()
+        };
+        let x64 = |v: u64| format!("{v:#018x}");
+        let x32 = |v: u32| format!("{v:#010x}");
+        let d = |v: u32| v.to_string();
+        let want = [
+            ("Z4a", "step", d(o.step)),
+            ("Z4a", "refusal", d(o.refusal)),
+            ("Z4a", "detail", x64(o.detail)),
+            ("Z4b", "AS_PRESENT", x32(o.as_present)),
+            ("Z4b", "L2_FEATURES", x32(o.l2_features)),
+            ("Z4b", "vm_tables_used", d(o.vm_tables_used)),
+            ("Z4b", "suspend_size", d(o.suspend_size)),
+            ("Z4b", "protm_suspend_size", d(o.protm_suspend_size)),
+            ("Z4c", "ctx", x64(o.heap_ctx)),
+            ("Z4c", "chunk", x64(o.heap_chunk)),
+            ("Z4c", "chunk_size", d(o.heap_chunk_size)),
+            ("Z4c", "stride", d(o.heap_stride)),
+            ("Z4e", "insert", x64(o.insert)),
+            ("Z4e", "extract", x64(o.extract)),
+            ("Z4e", "seqno", x64(o.seqno)),
+            ("Z4e", "sync_status", x32(o.sync_status)),
+            ("Z4f", "status_cmd_ptr", x64(o.status_cmd_ptr)),
+            ("Z4f", "info", x64(o.info)),
+            ("Z4i", "digest", x64(o.digest)),
+        ];
+        for (tag, key, v) in want {
+            assert_eq!(get(tag, key), v, "{tag} {key}");
+        }
+        // the lines with two values under one name, or a name that repeats
+        let line = |tag: &str| UART.lines().find(|l| l.contains(&format!(": {tag}: "))).unwrap();
+        let z4d = format!(
+            "CSG0 req {} ack {} CS0 req {} ack {}, acked in",
+            x32(o.csg_req),
+            x32(o.csg_ack),
+            x32(o.cs_req),
+            x32(o.cs_ack)
+        );
+        assert!(line("Z4d").contains(&z4d), "{}: {z4d}", line("Z4d"));
+        let z4g = format!("refusal {}, terminate", o.stop_refusal);
+        assert!(line("Z4g").contains(&z4g), "{}: {z4g}", line("Z4g"));
+        let z4g = format!("refusal {}, cleared", o.terminate_refusal);
+        assert!(line("Z4g").contains(&z4g), "{}: {z4g}", line("Z4g"));
+    }
+
     /// The queue-init words before the frame's first word, once (C1), and
     /// the heap's pool and first chunk mapped in the group VM where
     /// `HEAP_SET` and the frame name them (C2).
