@@ -3288,6 +3288,14 @@ step "tools   board-stm32mp2.sh dry-run matrix, env edits and replays" tools/boa
 scope tools drivers
 step "tools   board_lock.sh: a refusal names the holder; nanopc-t6.sh never waits" \
   driver/tools/kexec-zephyr/board_lock_selftest.sh
+# The judge of a NanoPC-T6 record (driver/tools/kexec-zephyr/t6-verdict.sh,
+# what nanopc-t6.sh's record is read with), without a board: the predicted
+# records in testdata/ pass, and each altered record (a line missing, a value
+# off, a stop line) gets its exit code, verdict line and per-line counts.
+# About 11 s. No input key: it runs every time, as the row above.
+scope drivers
+step "tools   t6-verdict.sh: the predicted records pass, each altered record is named" \
+  driver/tools/kexec-zephyr/t6-verdict-test.sh
 # The i.MX8MP board layer's host model (docs/notes/imx8mp-frame-floor.md,
 # "Waits per swap"): the latch thread and yakogl_zephyr_wait_vblank on cc and
 # pthreads, about 30 s. It reads the host/ directory and the three board
