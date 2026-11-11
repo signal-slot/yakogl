@@ -1039,26 +1039,95 @@ fn a_writer_that_runs_out_of_room_says_so_and_writes_nothing_more() {
 
 /* ---- frames ------------------------------------------------------------- */
 
+/// The rig's draw, into the 64x64 target at `gpu`.
+fn draw_into(rig: &Rig, gpu: u64) -> GlesDraw {
+    let mut d = rig.draw(3);
+    d.target_gpu = gpu;
+    d.targets[0].gpu = gpu;
+    d
+}
+
+/// Draws into targets A, B and A, then glFlush: one kick of three draws
+/// (docs/notes/gc-kick-continue.md T1). The pixel engine is pointed at A,
+/// B and A in draw order, and before each new target's address the stream
+/// writes back the colour and depth caches and holds the rasteriser until
+/// the pixel engine has drained (Mesa's ETNA_DIRTY_FRAMEBUFFER rule). The
+/// stream is set up once.
+///
+/// Deliberate break: put the `gl.target_gpu != g.target_gpu` term back
+/// into `draw_one`'s submit condition and the draw into B submits the
+/// first kick.
 #[test]
-fn a_frame_holds_every_draw_to_one_target_and_a_new_target_closes_it() {
+fn a_frame_holds_draws_to_several_targets_until_a_flush() {
     let rig = Rig::new();
-    let d = rig.draw(3);
+    let (a, b) = (TARGET_GPU, TARGET_GPU + 0x10_0000);
 
-    // SAFETY: `d` is live.
+    // SAFETY: live draws for the calls.
     unsafe {
-        assert_eq!(gc_draw(&d), 0);
-        assert_eq!(gc_draw(&d), 0);
+        for t in [a, b, a] {
+            assert_eq!(gc_draw(&draw_into(&rig, t)), 0);
+        }
     }
-    assert_eq!(rig.kicks(), 0, "nothing is submitted until the frame closes");
-
-    let mut other = rig.draw(3);
-    other.target_gpu = TARGET_GPU + 0x10_0000;
-    // SAFETY: `other` is live.
-    assert_eq!(unsafe { gc_draw(&other) }, 0);
-    assert_eq!(rig.kicks(), 1, "a new target ended the first frame");
-    assert_eq!(rig.last_stream().draws().len(), 2, "both draws are in it");
+    assert_eq!(rig.kicks(), 0, "a target change submits nothing");
     assert_eq!(gc_flush(), 0);
-    assert_eq!(rig.kicks(), 2);
+    assert_eq!(rig.kicks(), 1, "glFlush submits the one kick");
+    let s = rig.last_stream();
+    assert_eq!(s.draws().len(), 3, "all three draws are in it");
+    assert_eq!(s.writes(GC_GL_PIPE_SELECT).1, 1, "one context set-up");
+
+    /* (register, value, word) of every write, and where the draws are */
+    let mut w = Vec::new();
+    walk(&s.0, |r, v, i| w.push((r, v, i)));
+    let draws: Vec<usize> = (0..3).map(|n| s.upto_draw(n).0.len()).collect();
+    let addrs: Vec<(u32, usize)> =
+        w.iter().filter(|(r, _, _)| *r == pe_pipe_color_addr(0)).map(|&(_, v, i)| (v, i)).collect();
+    assert_eq!(addrs.iter().map(|&(v, _)| u64::from(v)).collect::<Vec<_>>(), [a, b, a], "A, B, A in draw order");
+    for n in 1..3 {
+        let (from, to) = (draws[n - 1], addrs[n].1);
+        assert!(from < to, "target {n}'s address comes after draw {}", n - 1);
+        let between = || w.iter().filter(move |&&(_, _, i)| i >= from && i < to);
+        assert!(
+            between().any(|&(r, v, _)| r == GC_GL_FLUSH_CACHE
+                && v & (GC_FLUSH_COLOR | GC_FLUSH_DEPTH) == GC_FLUSH_COLOR | GC_FLUSH_DEPTH),
+            "no colour and depth flush before target {n}'s address"
+        );
+        assert!(
+            between().any(|&(r, v, _)| r == GC_GL_STALL_TOKEN && v == stall_token(GC_SYNC_RA, GC_SYNC_PE)),
+            "no RA-PE stall before target {n}'s address"
+        );
+    }
+    assert!(whole_commands(&s.0));
+    assert!(rig.faults().is_empty());
+}
+
+/// Draws with the same state into A and then B, in one stream: the one
+/// into B writes the pixel engine's group (its key holds the target) and
+/// no other; the host build's dedup verify checks every group it skips
+/// against the words it would have written (T2).
+///
+/// Deliberate break: a `dedup::invalidate()` at the target change in
+/// `draw_one` and the second draw writes every group again.
+#[test]
+fn a_target_change_keeps_the_groups_and_rewrites_the_pixel_engine() {
+    let rig = Rig::new();
+    let (a, b) = (TARGET_GPU, TARGET_GPU + 0x10_0000);
+
+    // SAFETY: live draws for the calls.
+    unsafe {
+        /* two into A: the first stream's first draw leaves the stages'
+         * wiring (GL_VARYING_COMPONENT_USE) to be written once more */
+        assert_eq!(gc_draw(&draw_into(&rig, a)), 0);
+        assert_eq!(gc_draw(&draw_into(&rig, a)), 0);
+        dedup::reset_counts();
+        assert_eq!(gc_draw(&draw_into(&rig, b)), 0);
+    }
+    assert_eq!(dedup::counts(), (1, dedup::GROUPS as u32 - 1), "only the pixel engine's group is written again");
+    assert_eq!(gc_flush(), 0);
+    assert_eq!(rig.kicks(), 1);
+    let s = rig.last_stream();
+    assert_eq!(s.writes(pe_pipe_color_addr(0)), (Some(b as u32), 2), "B's address follows A's");
+    assert_eq!(s.writes(GC_PE_COLOR_STRIDE).1, 2, "the pixel engine group, once a target");
+    assert_eq!(s.writes(nfe_generic_attrib_scale(0)).1, 1, "the vertex elements, once");
     assert!(rig.faults().is_empty());
 }
 
@@ -4671,6 +4740,56 @@ fn a_multisampled_draw_is_supertiled_and_resolved_like_etnaviv_only_when_on() {
     assert_eq!(fallback.reg(GC_PE_COLOR_STRIDE), w * bpp);
 }
 
+/// Leaving a 4x target ends the kick, and its resolve writes that target's
+/// own storage (docs/notes/gc-kick-continue.md T4, D2 and C3):
+/// - 4x A, then 4x B: kick 1 ends with the resolve into A, and kick 2,
+///   after glFlush, with the resolve into B;
+/// - 4x A, then single-sampled B: kick 1 resolves A, kick 2 resolves
+///   nothing.
+///
+/// Deliberate breaks: set the 4x destination (the `ms_via_scratch` block)
+/// before the frame decision in `draw_one` and kick 1 of the first case
+/// resolves into B while kick 2 resolves nothing; drop the `leaves_4x`
+/// term from the submit condition and the change away from A ends no kick.
+#[cfg(feature = "test-knobs")]
+#[test]
+fn leaving_a_4x_target_resolves_it_into_its_own_storage() {
+    let rig = Rig::new();
+    let (a, b) = (TARGET_GPU, TARGET_GPU + 0x10_0000);
+    let resolves = |s: &Stream| s.writes(GC_RS_KICKER).1;
+
+    for b_samples in [4u8, 1] {
+        let k0 = rig.kicks();
+        let mut da = draw_into(&rig, a);
+        let mut db = draw_into(&rig, b);
+        (da.samples, db.samples) = (4, b_samples);
+        gc_debug_set_msaa(1);
+        // SAFETY: live draws for the calls.
+        unsafe {
+            assert_eq!(gc_draw(&da), 0);
+            assert_eq!(gc_draw(&db), 0);
+        }
+        assert_eq!(rig.kicks(), k0 + 1, "{b_samples}x B: leaving the 4x target A ended the kick");
+        let first = rig.last_stream();
+        assert_eq!(gc_flush(), 0);
+        gc_debug_set_msaa(0);
+        assert_eq!(rig.kicks(), k0 + 2);
+        let second = rig.last_stream();
+
+        assert_eq!(resolves(&first), 1, "{b_samples}x B: kick 1 resolves A");
+        assert_eq!(first.reg(rs_pipe_dest_addr(0)), a as u32, "{b_samples}x B: kick 1 resolves into A's storage");
+        assert!(first.at(GC_RS_KICKER) > first.upto_draw(0).0.len(), "after A's draw");
+        if b_samples == 4 {
+            assert_eq!(resolves(&second), 1, "kick 2 resolves B");
+            assert_eq!(second.reg(rs_pipe_dest_addr(0)), b as u32, "into B's storage");
+        } else {
+            assert_eq!(resolves(&second), 0, "a single-sampled B is drawn in place: nothing to resolve");
+            assert_eq!(second.reg(pe_pipe_color_addr(0)), b as u32);
+        }
+    }
+    assert!(rig.faults().is_empty());
+}
+
 /// A 4x RGB565 target resolves as R5G6B5 on both sides of RS_CONFIG, as etnaviv does.
 #[cfg(feature = "test-knobs")]
 #[test]
@@ -5085,6 +5204,49 @@ fn counted_draws_arm_a_slot_and_every_change_and_the_stream_end_suspend() {
     };
     assert!(s.at(GC_GL_OCCLUSION_QUERY_CONTROL) > *draws_at.last().unwrap(), "the last suspend follows the last draw");
     assert!(whole_commands(&s.0));
+}
+
+/// The counter stays armed across a target change: two counted draws into
+/// A and then B arm one slot and suspend it once, at the end of the one
+/// stream, and the result is what that slot holds (T8; an occlusion query
+/// counts samples whatever the target).
+///
+/// Deliberate break: an `oq_suspend` at the target change in `draw_one`
+/// and the stream arms slot 1 for the draw into B.
+#[test]
+fn counted_draws_into_two_targets_arm_one_slot_and_suspend_at_the_stream_end() {
+    let rig = Rig::new();
+    assert_eq!(gc_query_begin(6), 0);
+    let mut into_a = draw_into(&rig, TARGET_GPU);
+    let mut into_b = draw_into(&rig, TARGET_GPU + 0x10_0000);
+    (into_a.occlusion_query, into_b.occlusion_query) = (6, 6);
+    // SAFETY: live draws for the calls.
+    unsafe {
+        assert_eq!(gc_draw(&into_a), 0);
+        assert_eq!(gc_draw(&into_b), 0);
+    }
+    assert_eq!(gc_flush(), 0);
+    assert_eq!(rig.kicks(), 1, "one stream");
+    let s = rig.last_stream();
+    assert_eq!(s.draws().len(), 2);
+    assert_eq!(
+        oq_writes(&s),
+        [(GC_GL_OCCLUSION_QUERY_ADDR, oq_slot(6, 0)), (GC_GL_OCCLUSION_QUERY_CONTROL, GC_OQ_CONTROL_VALUE)],
+        "arm slot 0 once, suspend once at the end"
+    );
+    assert!(s.at(GC_GL_OCCLUSION_QUERY_CONTROL) > s.upto_draw(1).0.len(), "the suspend follows the draw into B");
+    /* the pixel engine stored both draws' samples in slot 0 */
+    let at = (oq_mem().cpu as *mut u64).wrapping_add(6 * 64);
+    // SAFETY: inside the slots.
+    unsafe {
+        at.write(11);
+        at.add(1).write(77); /* past the slots the query filled: not read */
+    }
+    let mut n = 0u64;
+    // SAFETY: `n` is a live u64.
+    assert_eq!(unsafe { gc_query_result(6, &mut n) }, 0);
+    assert_eq!(n, 11);
+    assert!(rig.faults().is_empty());
 }
 
 /// A clear inside the query is not counted: the clear quad suspends the

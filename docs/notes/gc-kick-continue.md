@@ -15,6 +15,25 @@ Host only. No code was changed and no board was run. Code is cited at
 origin/main `c707598d` (2026-11-07, after tiled-copy-rs). Mesa is the
 26.2.1 tree in the deps cache (`mesa-pan/mesa-26.2.1`).
 
+## Landed
+
+Plan #328 item gc-frames-ring, in the commit that adds this paragraph
+("vivante: a render-target change no longer ends the GC kick"): C1, C2, C3
+and C7's comments in `src/vivante/backend.rs`, with T1, T2, T4 and T8 in
+`src/vivante/backend_tests.rs` and T3 in `tests/gc_tiled_copy_reuse.rs`.
+A target change inside the stream writes `emit_target_boundary` (the
+colour, depth and shader-L1 flush, the TS flush, an FE-PE stall and the
+descriptor flush mip-one-kick wrote between a chain's levels), and the
+next draw's `emit_flushes` adds the RA-PE stall before the new PE address.
+That is more than Mesa's colour and depth flush and RA-PE stall: it keeps
+what a kick boundary gave the GPU until the board (B1, B2) shows the
+lighter rule is enough. A change with no room for the boundary submits.
+Still open: C4 (`ds_cache::drawn` stamped with the kick that holds the
+draw, after resolve-wide), C5 (the mipmap chain stays in the open kick,
+after fb-counters; `GcState::chain_stream` is no longer read by
+`draw_one` and goes with it), C6, C9 and `gc-scene-kicks`' ceilings
+(`tests/gc_scene_kicks.rs`, another item's file).
+
 ## Summary
 
 - At a kick boundary the stream gets the OSAL's epilogue and prologue
