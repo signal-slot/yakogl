@@ -8,10 +8,15 @@ returned through PSCI `SYSTEM_RESET` in 45 s (records:
 `0dce654a8:tools/mali/board-ref/2026-10-19-z1/`). Open: the watchdog reset path has not
 been exercised (no hang has been left to WDT0 yet).
 
-**Z2 not passed, 2026-11-11**: `t6_mmu` (main `3aa24a68d`) ran on the board
-twice and stopped both times, once in Z1's power-on and once on its own
-reading of a status word; both are corrected on the host and the corrected
-image has not run ("Z2 board procedure", "The runs of 2026-11-11").
+**Z2 PASS 2026-11-11 21:01 JST, build v0.1.0-913-g1f19113a3**: `t6_mmu`
+(main `1f19113a3`), kexec'd out of Armbian, enabled AS0 on its own page
+tables, made three cache flush round trips and returned through PSCI
+`SYSTEM_RESET` in 30 s (record `20261111-210127-t6`, `VERDICT t6_mmu
+PASS`). Two runs of the image of main `3aa24a68d` the same day stopped,
+once in Z1's power-on and once on the image's own reading of a status
+word; both were corrected before this run ("Z2 board procedure", "The
+runs of 2026-11-11"). Open: no jump has started from a powered-down GPU
+PLL since the power-on learned to power it (#4211).
 
 Status, 2026-10-18: **designed; the first parts are built.** On main: the `gpu-mali`
 skeleton and packers (#1073), the Valhall v10 ISA table, encoder and decoder (#1101),
@@ -784,12 +789,13 @@ milestones (Zephyr booted by U-Boot), as on every board.
   (U-Boot starting the image) has not run.
 - **Z2**: AS0 page tables; a GPU cache flush round trip. Host side done
   2026-10-26 (design, builder, register sequence, the `t6_mmu` image and its
-  gate row; below, "Z2: AS0 and a cache flush"). **Run on the board twice
-  on 2026-11-11, both FAIL** (the image of main `3aa24a68d`, by kexec;
-  below, "Z2 board procedure", "The runs of 2026-11-11"): the first
-  stopped in Z1's power-on, the second ran every Z2 step and stopped on
-  its own reading of `MMU_INT_RAWSTAT`. Both causes are corrected on the
-  host; no run has passed yet.
+  gate row; below, "Z2: AS0 and a cache flush"). **PASS on the board
+  2026-11-11** (the image of main `1f19113a3`, by kexec; below, "Z2 board
+  procedure", "The runs of 2026-11-11"), after two FAIL runs of the image
+  of main `3aa24a68d` the same day: the first stopped in Z1's power-on,
+  the second ran every Z2 step and stopped on its own reading of
+  `MMU_INT_RAWSTAT`. The sign-off form (U-Boot starting the image) has
+  not run.
 - **Z3**: firmware loaded; the MCU boots; GLB version reads 1.5.0; a `PING` is
   acknowledged. Host side written 2026-10-28 ("The firmware (Z3)": the
   generator, the parser, the interface, the boot over a model of the MCU);
@@ -799,8 +805,8 @@ milestones (Zephyr booted by U-Boot), as on every board.
   (c022cbfc, fbbd4d71, in `driver/rust/src/ffi/rk3588.rs` and
   `yakogl_drivers.h`), `t6_fw`'s lines in `t6-verdict.sh` (08163414) and
   the `t6_fw` gate row (370dd06b). Host side done; **the board run has
-  not happened**: it waits for Z2's board run to pass (below, "Z3 board
-  procedure").
+  not happened** (below, "Z3 board procedure"). Z2, the step it stands
+  on, passed on 2026-11-11.
 - **Z4**: CSG 0 / CS 0 started from our kernel side; the L1 frame renders the same
   bytes as under panthor. From here the same back end and compiler run on Zephyr,
   and gl_test and dEQP move to the product form.
@@ -1493,12 +1499,13 @@ clock gates and never looked at the PLL.
   at hand-over, was on N, waited N us, PLL_CON6 …`; `nanopc-t6.sh`'s
   "gpu power" lines carry `MODE_CON0` and `PLL_CON1`/`PLL_CON6` of
   AUPLL, CPLL, GPLL and NPLL. Not run on the board yet: no jump has
-  started from NPLL since the fix.
+  started from NPLL since the fix (the run that passed Z2 started from
+  CPLL; #4211).
 
 ### Z2: AS0 and a cache flush
 
 Written on the host 2026-10-26, before the code; run on the board on
-2026-11-11 and **not passed yet** (below, "Z2 board procedure"). What Z2
+2026-11-11, **PASS** on the third jump (below, "Z2 board procedure"). What Z2
 shows: our kernel side builds the MCU address space's
 page tables in the image, enables AS0 on them the way panthor enables the
 MCU's VM, and gets a GPU cache flush back with its completion bit. It is
@@ -1701,8 +1708,8 @@ flush)`, built as the `t6_gpu` row is.
 
 ### Z2 board procedure
 
-Run twice on 2026-11-11, both FAIL ("The runs of 2026-11-11" below); no
-run has passed. A run needs the T6 and `resource:<board-uart>` and
+Run three times on 2026-11-11: two FAIL, then PASS ("The runs of
+2026-11-11" below). A run needs the T6 and `resource:<board-uart>` and
 starts when they are free: `T6_HAND` names who power-cycles the board if
 it does not come back, and the run does not wait for that person. This
 is Z2's run (the `t6_mmu` image) only; Z3 runs after it and its procedure and
@@ -1720,7 +1727,7 @@ never by changing the prediction. Two predictions were wrong and the
 run of 2026-11-11 showed it: `LOCKADDR` as found (predicted 0, read
 0xe) and `MMU_INT_RAWSTAT` after the enable (predicted 0, read
 0x00010000). That run stays a FAIL; the two lines below carry the
-corrected prediction for the next run.
+corrected prediction, and the run that passed read both as corrected.
 
 **Build** — from a detached checkout of main, in the west workspace as
 Z1 built (the checkout named `yakogl`):
@@ -1903,12 +1910,14 @@ bounded refusal, not a hang: a read of the GPU with PD_GPU off would be
 an external abort, but Z2 runs only after Z1 returned 0 (PD_GPU on, L2
 ready).
 
-**The runs of 2026-11-11.** Two jumps of the same image, `t6_mmu` build
-v0.1.0-897-g3aa24a68d (main `3aa24a68d`, sha256 bd5fc04c…f69431e), by
-kexec out of Armbian (kernel 6.18.55), records in `T6_RECORD_DIR`. Both
-are FAIL and stay FAIL; the board came back to Armbian through the
-image's PSCI reset both times (31 s and 30 s after the jump, `GLB_RST_ST`
-0 before and after).
+**The runs of 2026-11-11.** Three jumps by kexec out of Armbian (kernel
+6.18.55), records in `T6_RECORD_DIR`. The first two are the same image,
+`t6_mmu` build v0.1.0-897-g3aa24a68d (main `3aa24a68d`, sha256
+bd5fc04c…f69431e): both are FAIL and stay FAIL. The third is the image
+with both corrections, build v0.1.0-913-g1f19113a3 (main `1f19113a3`,
+sha256 1c2a83d6…fa178f5): PASS. The board came back to Armbian through
+the image's PSCI reset every time (31 s, 30 s and 30 s after the jump,
+`GLB_RST_ST` 0 before and after).
 
 1. **13:13 JST, record `20261111-131354-t6`: stopped in Z1's power-on.**
    `VERDICT t6_mmu FAIL (14 of 27)`. The image's lines:
@@ -1956,11 +1965,32 @@ image's PSCI reset both times (31 s and 30 s after the jump, `GLB_RST_ST`
    done. `board::nanopc_t6_mmu` now refuses only bits 15:0, and the two
    wrong predictions (`LOCKADDR` as found, `MMU_INT_RAWSTAT` after) are
    corrected above for the next run.
+3. **21:01 JST, record `20261111-210127-t6`: PASS.** `VERDICT t6_mmu
+   PASS`: every line of the prediction above was seen. The hand-over
+   was as in the second run: the GPU clock on CPLL over 5
+   (`CLKSEL_CON(158)` 0x00001f24); NPLL was powered down (`PLL_CON1`
+   0x00002083) and not selected. The image's lines up to `IRQ after` read as in the second
+   run, value for value (`LOCKADDR` as found 0xe, each flush done after
+   2 polls of 1 µs, `MMU_INT_RAWSTAT` 0x00010000 after the enable). Then,
+   in place of the stop:
 
-The reset line reads `PSCI SYSTEM_RESET at 14 ms (0 feeds)` in both
-runs: the count is the 1 s timer's feeds of WDT0 (`nanopc_t6.c`), and
-the image was done before the first tick. Not run since: an image with
-both corrections.
+   ```
+   t6_mmu: the flush after the map: LOCKADDR 0x000000000400000f, LOCK polls 0/1; GPU_CMD 0x00000304, GPU_INT_RAWSTAT 0x00000600 before the clear, 0x00000600 after, CLEAN_CACHES_COMPLETED after 2 polls of 1 us; UNLOCK polls 0/1
+   t6_mmu: PASS: AS0 on TRANSTAB 0x0000000010023000, three cache flush round trips, 13 ms
+   t6: t6_mmu done: PSCI SYSTEM_RESET at 16 ms (0 feeds)
+   ```
+
+   Measured for the first time on the board: with AS0 enabled, the
+   `LOCK` of the mapped 64 KiB, the L2-only flush and the `UNLOCK` take
+   no wait, and Z2's sequence with its prints takes 13 ms. Not shown by
+   this run: Z1's PLL power-on (the clock's PLL was running at
+   hand-over; #4211), and what Z2 never shows ("What Z2 does not show":
+   the GPU's own walk of these tables is Z3's).
+
+The reset line reads `PSCI SYSTEM_RESET at 14 ms (0 feeds)` in the first
+two runs and `at 16 ms (0 feeds)` in the third: the count is the 1 s
+timer's feeds of WDT0 (`nanopc_t6.c`), and the image was done before the
+first tick.
 
 **Recording the result.** A kexec run is a development result, as Z1's
 was (its sign-off form — U-Boot starting the image — has not run). The

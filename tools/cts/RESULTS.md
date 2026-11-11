@@ -541,27 +541,28 @@ their predicted records and Z1's result are in
 
 | Step | Image | Result | Build | Run | Record |
 |---|---|---|---|---|---|
-| Z2: AS0 and a cache flush | `t6_mmu` | **FAIL**, `VERDICT t6_mmu FAIL (2 of 27)`: `t6_mmu: FAIL: stop 8 (AS0 is active or faulted after the update), refusal 3, detail 0x0000000000010000` | `v0.1.0-897-g3aa24a68d` (main `3aa24a68d`) | 2026-11-11 13:20 JST | `records/nanopc-t6/20261111-132001-t6` |
+| Z2: AS0 and a cache flush | `t6_mmu` | **PASS**, `VERDICT t6_mmu PASS`: `t6_mmu: PASS: AS0 on TRANSTAB 0x0000000010023000, three cache flush round trips, 13 ms` | `v0.1.0-913-g1f19113a3` (main `1f19113a3`) | 2026-11-11 21:01 JST | `records/nanopc-t6/20261111-210127-t6` |
 
-- Every Z2 step ran and read as predicted: Z1's power-on (`GPU_ID`
+- Every line of the predicted record was seen: Z1's power-on (`GPU_ID`
   0xa8670005, L2 ready), the cache flush round trip (2 polls of 1 µs), AS0's
   tables (4 of 16 pages, the walk of VA 0x04001234 reaches the backing),
-  the enable (`LOCK`, `UPDATE`, `UNLOCK` without a wait) and AS0 read back as
-  written with no fault recorded. The image then stopped on its own reading
-  of `MMU_INT_RAWSTAT` 0x00010000: on a CSF GPU bit 16 says AS0's command
-  completed, the fault bits are 15:0. The flush after the map and the PASS
-  line did not print. The reading is corrected in `board::nanopc_t6_mmu`;
-  this run stays FAIL.
-- The run before it the same day (13:13 JST, the same image, record
-  `records/nanopc-t6/20261111-131354-t6`, `VERDICT t6_mmu FAIL (14 of 27)`)
-  stopped in Z1's power-on (`stop 5, refusal 3, detail 0x00000000000a9fff`):
-  Linux had left the GPU clock on NPLL at 850 MHz and NPLL powered down, and
-  the image did not power it. The power-on now powers the clock's PLL and
-  waits for its lock (`board::nanopc_t6_gpu`); no jump has started from a
-  powered-down PLL since.
-- The board came back to Armbian through the image's PSCI reset both times
-  (31 s and 30 s after the jump).
-- Not run yet: an image with both corrections. Z3 and Z4 wait for a Z2 PASS.
+  the enable (`LOCK`, `UPDATE`, `UNLOCK` without a wait), AS0 read back as
+  written with no fault recorded (`MMU_INT_RAWSTAT` 0x00010000 is AS0's
+  "command completed" bit, the fault bits 15:0 are clear), the flush after
+  the map, and the PASS line 13 ms after Z2's sequence began (its prints
+  included).
+- The board came back to Armbian through the image's PSCI reset 30 s after
+  the jump (`GLB_RST_ST` 0 before and after; Linux's watchdog was open at
+  the jump, its `WDT_EN` proof is in the record).
+- Not shown by this run: the power-on's PLL step. The GPU clock was on CPLL
+  at hand-over, which was running; no jump has started from a powered-down
+  NPLL since the image learned to power it (#4211). Z2 by its design does
+  not show the GPU's own walk of the tables: that is Z3's first fetch.
+- The same day two runs of the image of main `3aa24a68d` stopped (Z1's
+  power-on on a powered-down NPLL; the image's own reading of
+  `MMU_INT_RAWSTAT`); both causes were corrected before this run
+  (`driver/docs/nanopc-t6-mali.md`, "The runs of 2026-11-11").
+- Next: Z3 (`t6_fw`, the firmware boots). Z4 waits for Z3.
 
 ## ES 3.0: dEQP-GLES3 (stage 4)
 
