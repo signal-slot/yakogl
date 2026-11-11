@@ -1,9 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-//! The Rockchip RK806 PMIC on SPI, read only: the frame of a register read
-//! and the meaning of the registers that say whether a buck converter is on
-//! and at what voltage. Nothing here can build a write: the NanoPC-T6's
-//! RK806 supplies the whole board, and a wrong write turns it off.
+//! The Rockchip RK806 PMIC on SPI: the frame of a register read, the meaning
+//! of the registers that say whether a buck converter is on and at what
+//! voltage, and exactly one write frame, [`dcdc1_enable_frame`].
+//!
+//! The NanoPC-T6's RK806 supplies the whole board, and a wrong write turns it
+//! off, so the module can build no write that takes a register or a value.
+//! The one write it builds is `POWER_EN0` = 0x11: DCDC1's write-enable twin
+//! (bit 4) and its on bit (bit 0), nothing else. U-Boot may leave vdd_gpu_s0
+//! (DCDC1) off, and powering PD_GPU from there needs that supply on. By fact
+//! 2 bits 7:4 are the twins of bits 3:0, so DCDC2..4 (bits 1..3, twins 5..7)
+//! are not written and keep their state. There is no voltage (`*_ON_VSEL`)
+//! write: the voltage is whatever the PMIC holds.
 //!
 //! Facts from Linux v6.18 (GPL-2.0: facts and file:line only, nothing
 //! transcribed):
@@ -58,6 +66,35 @@ pub fn read_frame(reg: u16, count: usize, out: &mut [u8]) -> Option<usize> {
     Some(len)
 }
 
+/// The `POWER_EN0` write-enable twin of DCDC1 (bit 4, fact 2).
+pub const DCDC1_WE: u8 = DCDC1_ON << 4;
+
+/// `RK806_CMD_WRITE`, bit 7 of the command byte (fact 1).
+const CMD_WRITE: u8 = 0x80;
+
+/// The bytes of the one write this module builds: `POWER_EN0` = `DCDC1_WE |
+/// DCDC1_ON` (0x11), a one-value frame. The command is `RK806_CMD_WRITE`
+/// | (1 - 1) in bits 3:0, then the address low byte first (fact 1), then the
+/// value. It takes no register and no value. `None` when `out` is shorter than
+/// 4 bytes, the length of the frame otherwise.
+pub fn dcdc1_enable_frame(out: &mut [u8]) -> Option<usize> {
+    if out.len() < 4 {
+        return None;
+    }
+    out[0] = CMD_WRITE;
+    out[1] = POWER_EN0 as u8;
+    out[2] = (POWER_EN0 >> 8) as u8;
+    out[3] = DCDC1_WE | DCDC1_ON;
+    Some(4)
+}
+
+/// How long to poll `POWER_EN0` / the rail for DCDC1 to read on after
+/// [`dcdc1_enable_frame`], in microseconds. This is a conservative budget, not
+/// a fact: no RK806 ramp rate or Linux enable delay for DCDC1 with a file:line
+/// is recorded in this tree, so the caller polls up to this long and stops
+/// with a cause when the supply has not come up.
+pub const DCDC1_RAMP_POLL_BUDGET_US: u32 = 10_000;
+
 /// DCDC1..DCDC10's `*_ON_VSEL` value in microvolts (fact 3).
 pub const fn buck_uv(sel: u8) -> u32 {
     let s = sel as u32;
@@ -84,18 +121,54 @@ mod tests {
     }
 
     #[test]
-    fn no_frame_this_builds_is_a_write() {
+    fn every_read_frame_has_the_read_command() {
         let mut f = [0u8; 3 + MAX_READ];
         for reg in [0u16, 0x1a, 0xff, 0xffff] {
             for count in 1..=MAX_READ {
                 read_frame(reg, count, &mut f).unwrap();
                 assert_eq!(f[0] & 0x80, 0, "RK806_CMD_WRITE in {f:02x?}");
                 assert_eq!(f[0] & 0x40, 0, "CRC enabled in {f:02x?}");
+                assert_eq!(f[0] as usize, count - 1);
             }
         }
         assert_eq!(read_frame(0, 0, &mut f), None);
         assert_eq!(read_frame(0, MAX_READ + 1, &mut f), None);
         assert_eq!(read_frame(0, 6, &mut [0u8; 8]), None);
+    }
+
+    #[test]
+    fn the_enable_frame_is_byte_exact() {
+        let mut f = [0xffu8; 6];
+        assert_eq!(dcdc1_enable_frame(&mut f), Some(4));
+        // write, one value | POWER_EN0 low, high | DCDC1 twin + on
+        assert_eq!(f[..4], [0x80, 0x00, 0x00, 0x11]);
+        assert_eq!(f[4..], [0xff, 0xff], "bytes past the frame untouched");
+        assert_eq!(dcdc1_enable_frame(&mut [0u8; 3]), None);
+        assert_eq!(dcdc1_enable_frame(&mut []), None);
+    }
+
+    #[test]
+    fn the_enable_frame_is_the_only_write_and_touches_only_dcdc1() {
+        let mut f = [0u8; 4];
+        dcdc1_enable_frame(&mut f).unwrap();
+        // the one write command, one value, CRC off
+        assert_eq!(f[0], 0x80);
+        assert_eq!(u16::from(f[1]) | u16::from(f[2]) << 8, POWER_EN0);
+        // twin mask 0x10, value bit 0x01, nothing else
+        assert_eq!(DCDC1_WE, 0x10);
+        assert_eq!(DCDC1_ON, 0x01);
+        assert_eq!(f[3], 0x11);
+        // DCDC2..4 (bits 1..3) and their twins (bits 5..7) are zero
+        assert_eq!(f[3] & 0xee, 0);
+        // no read frame carries the write bit: the read builder has no
+        // write path, so this function is the only write the module builds
+        let mut r = [0u8; 3 + MAX_READ];
+        for reg in 0..=0x1fu16 {
+            for count in 1..=MAX_READ {
+                read_frame(reg, count, &mut r).unwrap();
+                assert_eq!(r[0] & 0x80, 0);
+            }
+        }
     }
 
     #[test]
