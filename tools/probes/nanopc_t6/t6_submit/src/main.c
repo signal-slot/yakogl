@@ -11,9 +11,8 @@
  *
  * Output on uart2: the build, WDT0, the image, its sections and the pool (as
  * t6_fw prints them), the "Z3: rc" line and Z3's record (t6_fw's formats), then
- * the Z4 record, one "t6_submit: Z4: key=value" line per field in the order of
- * struct yd_t6_submit_up after fw (the key is the field's name; a 64-bit field
- * is 0x%016llx, a register word 0x%08x, a count or time decimal), then PASS or
+ * the Z4 record in the nine lines Z4a..Z4i that t6-verdict.sh judges (a 64-bit
+ * word is 0x%016llx, a register word 0x%08x, a count or time decimal), then PASS or
  * FAIL and the reset. Every Z4 region is __nocache storage with PA = CPU
  * address; the watchdog is fed around the call, by on_handover and by every delay_us.
  */
@@ -200,56 +199,38 @@ static void print_z3(const struct yd_t6_fw_up *o)
 	       o->ping_ack_us, o->glb_req, o->glb_ack);
 }
 
-#define Z4D(name, v) printk("t6_submit: Z4: " #name "=%u\n", (unsigned int)(v))
-#define Z4X(name, v) printk("t6_submit: Z4: " #name "=0x%08x\n", (unsigned int)(v))
-#define Z4Q(name, v) printk("t6_submit: Z4: " #name "=0x%016llx\n", (unsigned long long)(v))
-
-/* The Z4 record: the fields of struct yd_t6_submit_up after fw, in order, the
- * key being the field's name (cleared[0..2] as cleared0..cleared2). The 64-bit
- * counters insert, extract and seqno are small: decimal. */
+/* The Z4 record in nine lines, Z4a..Z4i, as t6-verdict.sh's table_t6_submit
+ * judges them: a 64-bit word is 0x%016llx, a register word 0x%08x, a count or
+ * time decimal. The fields are those of struct yd_t6_submit_up after fw. */
 static void print_z4(const struct yd_t6_submit_up *o)
 {
-	Z4D(step, o->step);
-	Z4D(refusal, o->refusal);
-	Z4Q(detail, o->detail);
-	Z4X(as_present, o->as_present);
-	Z4X(l2_features, o->l2_features);
-	Z4D(as0_tables_used, o->as0_tables_used);
-	Z4D(vm_tables_used, o->vm_tables_used);
-	Z4D(suspend_size, o->suspend_size);
-	Z4D(protm_suspend_size, o->protm_suspend_size);
-	Z4Q(heap_ctx, o->heap_ctx);
-	Z4Q(heap_chunk, o->heap_chunk);
-	Z4X(heap_chunk_size, o->heap_chunk_size);
-	Z4D(heap_stride, o->heap_stride);
-	Z4X(csg_req, o->csg_req);
-	Z4X(csg_ack, o->csg_ack);
-	Z4X(cs_req, o->cs_req);
-	Z4X(cs_ack, o->cs_ack);
-	Z4D(csg_ack_us, o->csg_ack_us);
-	Z4D(cs_ack_us, o->cs_ack_us);
-	Z4X(latest_flush, o->latest_flush);
-	Z4D(sync_updates, o->sync_updates);
-	Z4D(insert, o->insert);
-	Z4D(extract, o->extract);
-	Z4D(seqno, o->seqno);
-	Z4D(sync_status, o->sync_status);
-	Z4D(wait_us, o->wait_us);
-	Z4Q(status_cmd_ptr, o->status_cmd_ptr);
-	Z4Q(info, o->info);
-	Z4D(stop_us, o->stop_us);
-	Z4D(stop_refusal, o->stop_refusal);
-	Z4D(terminate_us, o->terminate_us);
-	Z4D(terminate_refusal, o->terminate_refusal);
-	Z4X(cleared0, o->cleared[0]);
-	Z4X(cleared1, o->cleared[1]);
-	Z4X(cleared2, o->cleared[2]);
-	Z4D(red, o->red);
-	Z4D(blue, o->blue);
-	Z4D(fill, o->fill);
-	Z4D(other, o->other);
-	Z4D(pixels, o->pixels);
-	Z4Q(digest, o->digest);
+	printk("t6_submit: Z4a: step %u refusal %u detail 0x%016llx\n", o->step, o->refusal,
+	       (unsigned long long)o->detail);
+	printk("t6_submit: Z4b: AS_PRESENT 0x%08x L2_FEATURES 0x%08x as0_tables_used %u "
+	       "vm_tables_used %u suspend_size %u protm_suspend_size %u\n",
+	       o->as_present, o->l2_features, o->as0_tables_used, o->vm_tables_used,
+	       o->suspend_size, o->protm_suspend_size);
+	printk("t6_submit: Z4c: heap ctx 0x%016llx chunk 0x%016llx chunk_size %u stride %u\n",
+	       (unsigned long long)o->heap_ctx, (unsigned long long)o->heap_chunk,
+	       o->heap_chunk_size, o->heap_stride);
+	printk("t6_submit: Z4d: CSG0 req 0x%08x ack 0x%08x CS0 req 0x%08x ack 0x%08x, "
+	       "acked in %u/%u us\n",
+	       o->csg_req, o->csg_ack, o->cs_req, o->cs_ack, o->csg_ack_us, o->cs_ack_us);
+	printk("t6_submit: Z4e: insert 0x%016llx extract 0x%016llx seqno 0x%016llx "
+	       "sync_status 0x%08x, wait %u us\n",
+	       (unsigned long long)o->insert, (unsigned long long)o->extract,
+	       (unsigned long long)o->seqno, o->sync_status, o->wait_us);
+	printk("t6_submit: Z4f: latest_flush 0x%08x sync_updates %u status_cmd_ptr 0x%016llx "
+	       "info 0x%016llx\n",
+	       o->latest_flush, o->sync_updates, (unsigned long long)o->status_cmd_ptr,
+	       (unsigned long long)o->info);
+	printk("t6_submit: Z4g: stop %u us refusal %u, terminate %u us refusal %u, "
+	       "cleared %u %u %u\n",
+	       o->stop_us, o->stop_refusal, o->terminate_us, o->terminate_refusal,
+	       o->cleared[0], o->cleared[1], o->cleared[2]);
+	printk("t6_submit: Z4h: target red %u blue %u fill %u other %u of %u pixels\n", o->red,
+	       o->blue, o->fill, o->other, o->pixels);
+	printk("t6_submit: Z4i: frame digest 0x%016llx\n", (unsigned long long)o->digest);
 }
 
 int main(void)
