@@ -2212,8 +2212,18 @@ fn es3_texture_bits(e: &super::es3_formats::Es3Format, texfmt: u8) -> Attachment
             let ct = if e.class == Class::Int { GL_INT } else { GL_UNSIGNED_INT };
             let rgba = match texfmt {
                 backend::GLES_TEXFMT_RGB10A2UI => [10, 10, 10, 2],
-                backend::GLES_TEXFMT_RGBA8UI | backend::GLES_TEXFMT_RGBA8I => first(8),
-                backend::GLES_TEXFMT_RGBA16UI | backend::GLES_TEXFMT_RGBA16I => first(16),
+                backend::GLES_TEXFMT_RGBA8UI
+                | backend::GLES_TEXFMT_RGBA8I
+                | backend::GLES_TEXFMT_R8UI
+                | backend::GLES_TEXFMT_R8I
+                | backend::GLES_TEXFMT_RG8UI
+                | backend::GLES_TEXFMT_RG8I => first(8),
+                backend::GLES_TEXFMT_RGBA16UI
+                | backend::GLES_TEXFMT_RGBA16I
+                | backend::GLES_TEXFMT_R16UI
+                | backend::GLES_TEXFMT_R16I
+                | backend::GLES_TEXFMT_RG16UI
+                | backend::GLES_TEXFMT_RG16I => first(16),
                 _ => first(32),
             };
             AttachmentBits::color(rgba, ct)
@@ -2222,8 +2232,8 @@ fn es3_texture_bits(e: &super::es3_formats::Es3Format, texfmt: u8) -> Attachment
             let rgba = if texfmt == backend::GLES_TEXFMT_RGB10A2 { [10, 10, 10, 2] } else { [8; 4] };
             AttachmentBits::color(rgba, GL_UNSIGNED_NORMALIZED)
         }
-        /* eight bits whether the class is RGBA8_SNORM or the half-float
-         * fallback, which holds at least that */
+        /* eight bits whether the class is RGBA8_SNORM, R8_SNORM, RG8_SNORM
+         * or the half-float fallback, which holds at least that */
         Class::Snorm => AttachmentBits::color(first(8), GL_SIGNED_NORMALIZED),
         Class::Float => {
             let rgba = match texfmt {
@@ -3847,6 +3857,46 @@ mod tests {
     };
     use crate::testutil::{gpu_render, CacheOp, MemEvent, TestGl, HEAP_DATA};
     use std::vec::Vec;
+
+    /* ---- es3_texture_bits, the narrow classes 30-39 ---------------------------- */
+
+    #[cfg(not(feature = "report-es2"))]
+    fn narrow_bits(internalformat: GLenum, texfmt: u8) -> AttachmentBits {
+        let (_, e) = crate::gl::es3_formats::find(internalformat).expect("a sized ES 3.0 format");
+        es3_texture_bits(e, texfmt)
+    }
+
+    #[cfg(not(feature = "report-es2"))]
+    fn assert_narrow(internalformat: GLenum, texfmt: u8, rgba: [GLint; 4], ct: GLenum) {
+        let b = narrow_bits(internalformat, texfmt);
+        assert_eq!(b.rgba, rgba, "sizes of class {texfmt}");
+        assert_eq!(b.component_type, ct, "component type of class {texfmt}");
+    }
+
+    #[cfg(not(feature = "report-es2"))]
+    #[test]
+    fn texture_bits_narrow_snorm_classes() {
+        assert_narrow(0x8F94, backend::GLES_TEXFMT_R8_SNORM, [8, 0, 0, 0], GL_SIGNED_NORMALIZED);
+        assert_narrow(0x8F95, backend::GLES_TEXFMT_RG8_SNORM, [8, 8, 0, 0], GL_SIGNED_NORMALIZED);
+    }
+
+    #[cfg(not(feature = "report-es2"))]
+    #[test]
+    fn texture_bits_narrow_8bit_integer_classes() {
+        assert_narrow(0x8232, backend::GLES_TEXFMT_R8UI, [8, 0, 0, 0], GL_UNSIGNED_INT);
+        assert_narrow(0x8231, backend::GLES_TEXFMT_R8I, [8, 0, 0, 0], GL_INT);
+        assert_narrow(0x8238, backend::GLES_TEXFMT_RG8UI, [8, 8, 0, 0], GL_UNSIGNED_INT);
+        assert_narrow(0x8237, backend::GLES_TEXFMT_RG8I, [8, 8, 0, 0], GL_INT);
+    }
+
+    #[cfg(not(feature = "report-es2"))]
+    #[test]
+    fn texture_bits_narrow_16bit_integer_classes() {
+        assert_narrow(0x8234, backend::GLES_TEXFMT_R16UI, [16, 0, 0, 0], GL_UNSIGNED_INT);
+        assert_narrow(0x8233, backend::GLES_TEXFMT_R16I, [16, 0, 0, 0], GL_INT);
+        assert_narrow(0x823A, backend::GLES_TEXFMT_RG16UI, [16, 16, 0, 0], GL_UNSIGNED_INT);
+        assert_narrow(0x8239, backend::GLES_TEXFMT_RG16I, [16, 16, 0, 0], GL_INT);
+    }
 
     /* ---- helpers ------------------------------------------------------------ */
 
