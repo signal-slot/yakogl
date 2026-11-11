@@ -19,7 +19,7 @@
 use core::ffi::c_char;
 use yakogl::shaderc::online::vivante::isa::Instr;
 use yakogl::shaderc::online::vivante::{decode, listing};
-use yakogl::shaderc::{ShcShader, SHC_STAGE_FRAGMENT, SHC_VIV_CONST_LITERAL, SHC_VIV_NO_REG};
+use yakogl::shaderc::{ShcShader, SHC_STAGE_FRAGMENT, SHC_STAGE_VERTEX, SHC_VIV_CONST_LITERAL, SHC_VIV_NO_REG};
 
 mod common;
 use common::{run, Run};
@@ -57,7 +57,9 @@ fn compile_raw(stage: u32, src: &str) -> Compiled {
             }
         }
     }
-    assert_ne!(sh.viv.ps_color_out_reg, SHC_VIV_NO_REG, "a fragment shader writes the colour");
+    if stage == SHC_STAGE_FRAGMENT {
+        assert_ne!(sh.viv.ps_color_out_reg, SHC_VIV_NO_REG, "a fragment shader writes the colour");
+    }
     Compiled { code, consts, colour: sh.viv.ps_color_out_reg }
 }
 
@@ -242,6 +244,38 @@ fn an_identity_of_a_slot_stored_again_later_keeps_the_earlier_value() {
     close(colour_of(&c, [1.0, 2.0, 3.0, 4.0], [5.0, 6.0, 7.0, 8.0]), [1.0, 2.0, 3.0, 4.0], "slot");
 }
 
+/// t4c, rank 4c: `gl_Position = m * vec4(p, 1.0)` in the vertex stage. The
+/// constructor is `mov t.xyz, p; mov t.w, 1.0`, two writes of one register,
+/// and `fold_constant_reads` folded a constant seed only into a register
+/// written once, so the first column's `mul m[3], t.wwww` read the register.
+/// Now a reader of the seed's lanes alone reads the constant, the `mul` by
+/// `1.0` is the column itself, and the `mov t.w` has no reader. 6 before the
+/// sr patch, 5 before rank 4c (m4 of tests/gc_sr_shader_count.rs is the
+/// same shader), 4 now, the note's target: the `mov t.xyz` and three `mad`s.
+fn t4c_a_constant_lane_of_a_constructed_vector_is_read_as_the_constant() {
+    let p = compile(
+        SHC_STAGE_VERTEX,
+        "attribute vec3 p;\nuniform mat4 m;\nvoid main() { gl_Position = m * vec4(p, 1.0); }\n",
+    );
+    show("t4c", &p);
+    assert_eq!(p.len(), 4, "t4c is 4 instructions (5 before rank 4c, 6 before the sr patch)");
+    assert_eq!(count(&p, "mad"), 3, "three columns are mads");
+    assert_eq!(count(&p, "mov"), 0, "no constructor copy is left: {p:?}");
+    assert!(p[0].contains("1.0:f20"), "the first column reads the 1.0 lane as the immediate: {}", p[0]);
+}
+
+/// A reader of mixed lanes keeps the seed: `t = vec4(a.xyz, 1.0)`, then
+/// `t * t.w` reads `t.xyzw` (kept) and `t.wwww` (the constant). The value
+/// is right on the host interpreter either way.
+fn a_mixed_read_of_a_constructed_vector_keeps_the_constant_lane() {
+    let src = fs("", "vec4 t = vec4(a.xyz, 2.0); gl_FragColor = t * t.w;");
+    let p = compile(SHC_STAGE_FRAGMENT, &src);
+    show("mixed", &p);
+    assert!(p.iter().any(|l| l.contains("2.0:f20")), "the 2.0 lane is still written for the whole read: {p:?}");
+    let c = compile_raw(SHC_STAGE_FRAGMENT, &src);
+    close(colour_of(&c, [0.25, -0.5, 3.0, 9.0], [0.0; 4]), [0.5, -1.0, 6.0, 4.0], "mixed");
+}
+
 /// One test: the online compiler's scratch arena is not reentrant, so the
 /// cases run one after another on one thread.
 #[test]
@@ -253,4 +287,6 @@ fn gc_select_fold_micro_shaders() {
     a_refused_fold_is_still_computed();
     a_product_scaled_by_a_power_of_two_is_one_mul();
     an_identity_of_a_slot_stored_again_later_keeps_the_earlier_value();
+    t4c_a_constant_lane_of_a_constructed_vector_is_read_as_the_constant();
+    a_mixed_read_of_a_constructed_vector_keeps_the_constant_lane();
 }
