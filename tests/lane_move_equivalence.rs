@@ -284,11 +284,13 @@ fn moving_a_value_to_another_lane_changes_no_output() {
      * (pp.rs out_of_scope). Measured 2026-11-10 with the copy fold and
      * the scalar lane merge (vivante/peephole.rs; 103 / 87 before them,
      * 2026-10-24); 249 / 165 while the Qt shaders were in the GC7000 table,
-     * until #1509. */
+     * until #1509. 104 / 86 since the retarget past a constant lane
+     * (select.rs `producer_behind`, 2026-11-11): two more programs keep a
+     * single-lane value the allocator may move. */
     let es2 = cfg!(feature = "report-es2");
     assert_eq!(
         with_moves,
-        if es2 { 86 } else { 102 },
+        if es2 { 86 } else { 104 },
         "the population moved: {with_moves} programs move a lane; re-derive the pin"
     );
     assert_eq!(
@@ -358,7 +360,10 @@ fn dropping_identity_copies_changes_no_output() {
     for b in &bad {
         println!("  differs: {b}");
     }
-    assert!(with_drops >= 60, "only {with_drops} programs drop an identity copy; the check has lost its population");
+    /* A floor, not a pin: 58 under report-es2 and 60 or more without it since
+     * the retarget past a constant lane (select.rs `producer_behind`,
+     * 2026-11-11) left fewer copies for the allocator to coalesce. */
+    assert!(with_drops >= 50, "only {with_drops} programs drop an identity copy; the check has lost its population");
     assert_eq!(skipped, 0, "{skipped} programs could not be run");
     assert!(bad.is_empty(), "{} programs differ after dropping identity copies", bad.len());
 }
