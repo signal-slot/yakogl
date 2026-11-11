@@ -525,6 +525,43 @@ pub mod pd_gpu {
 pub const QOS_GPU: [usize; 4] = [0xfdf3_5000, 0xfdf3_5200, 0xfdf3_5400, 0xfdf3_5600];
 pub const QOS_WORDS: [usize; 5] = [0x08, 0x0c, 0x10, 0x14, 0x18];
 
+/// The three QoS words the policy sets: `QOS_MODE` 0x0c, `QOS_BANDWIDTH`
+/// 0x10, `QOS_SATURATION` 0x14 (indices 1..=3 of [`QOS_WORDS`]; pm-domains.c:
+/// 86-90). `PRIORITY` and `EXTCONTROL` are never written.
+pub const QOS_POLICY_WORDS: [usize; 3] = [0x0c, 0x10, 0x14];
+
+/// What the GPU QoS words hold while a job runs (the question of
+/// nanopc-t6-mali.md "Open"): the first Z4 frame runs once with each.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum QosPolicy {
+    /// The reset values the image leaves: `MODE` 3, `BANDWIDTH` 0x12d,
+    /// `SATURATION` 0x40.
+    Reset,
+    /// What Linux reads with the GPU active (2026-10-26): all three 0.
+    LinuxZero,
+}
+
+impl QosPolicy {
+    /// The values for [`QOS_POLICY_WORDS`], in that order.
+    pub const fn values(self) -> [u32; 3] {
+        match self {
+            QosPolicy::Reset => [3, 0x12d, 0x40],
+            QosPolicy::LinuxZero => [0; 3],
+        }
+    }
+}
+
+/// Write `policy`'s three words into each of the four GPU QoS blocks
+/// ([`QOS_GPU`]): twelve writes, nothing else. The caller has powered
+/// PD_GPU on first (the blocks sit in its domain).
+pub fn qos_apply(m: &impl Mmio, policy: QosPolicy) {
+    for base in QOS_GPU {
+        for (off, v) in QOS_POLICY_WORDS.iter().zip(policy.values()) {
+            m.write32(base + off, v);
+        }
+    }
+}
+
 /// The PMU's PD_GPU registers at one moment.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct PdGpuRegs {
@@ -684,6 +721,55 @@ mod tests {
         fn write8(&self, _: usize, _: u8) {
             unreachable!()
         }
+    }
+
+    /// The QoS blocks as plain registers, with a write log.
+    struct Qos {
+        regs: RefCell<std::collections::BTreeMap<usize, u32>>,
+        writes: RefCell<Vec<usize>>,
+    }
+    impl Mmio for Qos {
+        fn read32(&self, addr: usize) -> u32 {
+            *self.regs.borrow().get(&addr).unwrap_or(&0)
+        }
+        fn write32(&self, addr: usize, val: u32) {
+            self.writes.borrow_mut().push(addr);
+            self.regs.borrow_mut().insert(addr, val);
+        }
+        fn read8(&self, _: usize) -> u8 {
+            unreachable!()
+        }
+        fn write8(&self, _: usize, _: u8) {
+            unreachable!()
+        }
+    }
+
+    /// All four blocks in the image's state (reset values), then `policy`.
+    fn qos_check(policy: QosPolicy, want: [u32; 3]) {
+        let q = Qos { regs: RefCell::new(Default::default()), writes: RefCell::new(vec![]) };
+        for b in QOS_GPU {
+            for (o, v) in [(0x08, 0x8000_0000), (0x0c, 3), (0x10, 0x12d), (0x14, 0x40)] {
+                q.regs.borrow_mut().insert(b + o, v);
+            }
+        }
+        qos_apply(&q, policy);
+        let expect: Vec<usize> = QOS_GPU.iter().flat_map(|b| [0x0c, 0x10, 0x14].map(|o| b + o)).collect();
+        assert_eq!(*q.writes.borrow(), expect);
+        for b in QOS_GPU {
+            assert_eq!([q.read32(b + 0x0c), q.read32(b + 0x10), q.read32(b + 0x14)], want);
+            assert_eq!(q.read32(b + 0x08), 0x8000_0000);
+            assert_eq!(q.read32(b + 0x18), 0);
+        }
+    }
+
+    #[test]
+    fn qos_reset_policy_writes_only_mode_bandwidth_saturation() {
+        qos_check(QosPolicy::Reset, [3, 0x12d, 0x40]);
+    }
+
+    #[test]
+    fn qos_linux_zero_policy_writes_only_mode_bandwidth_saturation() {
+        qos_check(QosPolicy::LinuxZero, [0, 0, 0]);
     }
 
     #[test]
