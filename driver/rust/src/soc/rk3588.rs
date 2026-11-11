@@ -605,7 +605,12 @@ fn wait(
 /// Power PD_GPU on in Linux's order (see [`pd_gpu`]): open the GPU clock
 /// gates, clear the power gate, wait for the domain, leave bus idle, wait
 /// for the acknowledge and the idle status. A domain already on and out of
-/// idle is left as it is (only the gates are opened). The supply
+/// idle is left as it is (only the gates are opened). "On" is
+/// [`PdGpuRegs::usable`]: powered and the idle request released, acknowledged
+/// and not idle; a domain that is powered with its idle request still set
+/// (a state Linux does not leave, possible after an earlier stage) runs the
+/// whole sequence, whose power wait passes at once and whose idle step
+/// releases the request. The supply
 /// (vdd_gpu_s0) is not touched: the caller checks it first. The QoS words
 /// are not written: the caller reads them back.
 ///
@@ -1087,6 +1092,21 @@ mod tests {
         let on = pd_gpu_on(&soc, CRU_BASE, PMU, &mut |_| {}).unwrap();
         assert_eq!(on, PdOn { opened: 0, was_on: true, waited_us: [0; 3] });
         assert!(soc.writes.borrow().is_empty());
+    }
+
+    #[test]
+    fn a_powered_domain_with_its_idle_request_set_is_released_from_idle() {
+        let soc = Soc::t6_suspended(0);
+        for (a, v) in [(pd_gpu::PWR_GATE, 0xfffe), (pd_gpu::REPAIR_STATUS, 0xfad5_0003)] {
+            soc.regs.borrow_mut().insert(PMU + a, v);
+        }
+        assert!(!PdGpuRegs::read(&soc, PMU).usable());
+        let on = pd_gpu_on(&soc, CRU_BASE, PMU, &mut |_| {}).unwrap();
+        assert!(!on.was_on);
+        assert_eq!(on.waited_us, [0, 0, 0]);
+        let pmu: Vec<_> = soc.writes.borrow().iter().filter(|w| w.0 >= PMU).copied().collect();
+        assert_eq!(pmu, vec![(PMU + pd_gpu::PWR_GATE, 0x0001_0000), (PMU + pd_gpu::BUS_IDLE_REQ, 0x0001_0000)]);
+        assert!(PdGpuRegs::read(&soc, PMU).usable());
     }
 
     #[test]

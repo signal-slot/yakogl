@@ -11,11 +11,37 @@
 //! reset it and power its L2 on. Every value read is kept in [`GpuUp`] for
 //! the image to print; the first step that refuses ends the run there.
 //!
-//! The supply is read, never written: the RK806 frames this builds are reads
-//! ([`crate::ip::rk806`]). A supply that is off, or lower than the GPU OPP
-//! table asks for the rate the clock is on, stops the run before PD_GPU is
-//! touched. The clock set is the only CRU write before the supply check
+//! The supply's voltage is read, never written. A supply lower than the GPU
+//! OPP table asks for the rate the clock is on stops the run before PD_GPU
+//! is touched. The clock set is the only CRU write before the supply check
 //! (the SPI2 gates aside), and it touches CLKSEL_CON(158) and (159) only.
+//!
+//! The starting states (driver/docs/nanopc-t6-mali.md, "Open": PD_GPU and
+//! vdd_gpu_s0 at the U-Boot hand-over):
+//!
+//! - PD_GPU off, vdd_gpu_s0 on: Linux's kexec state (measured 2026-10-19).
+//! - PD_GPU off, vdd_gpu_s0 off: possible after U-Boot, since the supply is
+//!   boot-on but not always-on (rk806 fact 4). vdd_gpu_s0 is PD_GPU's own
+//!   supply (rk3588-nanopc-t6.dtsi:628-630), so it comes on before the
+//!   domain, as in Linux, where the domain's supply is enabled before the
+//!   domain is powered. Before anything is written, `BUCK1_ON_VSEL` must
+//!   already cover the OPP minimum of the rate [`rk3588::gpu_clock_set`]
+//!   chose ([`Stop::SupplyBelowOpp`] otherwise). After the hand-over report
+//!   the one RK806 write, [`rk806::dcdc1_enable_frame`], is sent; then
+//!   `POWER_EN0` is polled until DCDC1 reads on within
+//!   [`rk806::DCDC1_RAMP_POLL_BUDGET_US`] ([`Stop::SupplyRampTimeout`]
+//!   otherwise, before any PMU write), `BUCK1_ON_VSEL` is read again and
+//!   checked again, and only then is PD_GPU powered.
+//! - PD_GPU on with its idle request released ([`PdGpuRegs::usable`]):
+//!   left as it is, no PMU write ([`rk3588::pd_gpu_on`]); with vdd_gpu_s0
+//!   on only. A domain that reads powered (`REPAIR_STATUS` bit 1) while
+//!   DCDC1 reads off is no state the facts cover: [`Stop::SupplyOff`],
+//!   refusal [`SUPPLY_OFF_DOMAIN_POWERED`], nothing written to the RK806.
+//!
+//! No PMU step is added for U-Boot's state: [`rk3588::pd_gpu_on`] writes
+//! `PWR_GATE` and `BUS_IDLE_REQ` through their write masks and waits on the
+//! result, so it does not depend on the other domains' bits or on whether
+//! the GPU's idle request was set when the domain is off.
 
 use crate::gpu::mali::{self, Ident, L2On, Reset};
 use crate::ip::{rk806, rockchip_spi};
@@ -78,7 +104,10 @@ pub enum Stop {
     SpiGate = 1,
     /// An RK806 read failed (`refusal` is the [`rockchip_spi::SpiRefusal`]).
     Rk806Read = 2,
-    /// DCDC1 (vdd_gpu_s0) reads off.
+    /// DCDC1 (vdd_gpu_s0) reads off while PD_GPU reads powered (`refusal`
+    /// [`SUPPLY_OFF_DOMAIN_POWERED`], the detail `POWER_EN0`). Nothing was
+    /// written to the RK806. An off DCDC1 with PD_GPU off is turned on
+    /// instead ([`Stop::SupplyBelowOpp`], [`Stop::SupplyRampTimeout`]).
     SupplyOff = 3,
     /// The supply is below what the OPP table asks for the rate the clock is
     /// on after [`rk3588::gpu_clock_set`] (`refusal` 0, the detail is the
@@ -104,11 +133,37 @@ pub enum Stop {
     /// the source at something other than 300 MHz afterwards (`refusal` 0,
     /// the detail that rate; [`ClockRefusal::Rate`]).
     ClockReadBack = 10,
+    /// DCDC1 reads off and `BUCK1_ON_VSEL` gives less than the OPP table
+    /// asks for the rate the clock is on after [`rk3588::gpu_clock_set`].
+    /// `refusal` 0: found before the enable, nothing was written to the
+    /// RK806; [`SUPPLY_BELOW_AFTER_ENABLE`]: read again after the enable.
+    /// The detail is `BUCK1_ON_VSEL` << 32 | the rate in Hz. No voltage is
+    /// ever written.
+    SupplyBelowOpp = 11,
+    /// The DCDC1-enable frame was sent and `POWER_EN0` did not read DCDC1 on
+    /// within [`rk806::DCDC1_RAMP_POLL_BUDGET_US`] (`refusal` 0, the detail
+    /// the last `POWER_EN0`). Nothing was written to the PMU.
+    SupplyRampTimeout = 12,
+    /// The DCDC1-enable frame could not be sent (`refusal` is the
+    /// [`rockchip_spi::SpiRefusal`], the detail its value). Whether it
+    /// reached the PMIC is unknown; nothing was written to the PMU.
+    Rk806Write = 13,
 }
 
 /// The refusal of [`Stop::ClockNotCovered`] when the GPU clock's PLL did not
 /// lock after its power-on ([`rk3588::pll_on`]).
 pub const CLOCK_PLL_NO_LOCK: u32 = 1;
+
+/// The refusal of [`Stop::SupplyOff`]: PD_GPU reads powered with DCDC1 off.
+pub const SUPPLY_OFF_DOMAIN_POWERED: u32 = 1;
+
+/// The refusal of [`Stop::SupplyBelowOpp`] when `BUCK1_ON_VSEL`, read again
+/// after DCDC1 came on, no longer covers the rate.
+pub const SUPPLY_BELOW_AFTER_ENABLE: u32 = 1;
+
+/// The wait between two `POWER_EN0` reads while DCDC1 comes on, in µs (each
+/// read is itself 4 frames, about 32 µs at 1 MHz).
+pub const SUPPLY_POLL_US: u32 = 100;
 
 /// Everything the run read, in the order it read it.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -128,7 +183,16 @@ pub struct GpuUp {
     pub spi_found: [u32; 8],
     /// [`RK806_READ`], read as Linux reads them (`write_then_read`).
     pub rk806: [u8; 4],
+    /// The voltage the supply check holds against the rate:
+    /// `BUCK1_ON_VSEL` as handed over, or as read again after the enable.
     pub vdd_gpu_uv: u32,
+    /// The DCDC1-enable frame was sent (DCDC1 read off at hand-over).
+    pub supply_enabled: bool,
+    /// `POWER_EN0` and `BUCK1_ON_VSEL` read after the enable (the last
+    /// `POWER_EN0` of the poll); 0 when no enable was sent.
+    pub supply_after: [u8; 2],
+    /// How long DCDC1 took to read on after the enable, in µs.
+    pub supply_waited_us: u32,
     /// The power-on of the PLL `CLK_GPU_SRC` runs from.
     pub pll_on: PllOn,
     pub pd_on: PdOn,
@@ -153,13 +217,20 @@ impl GpuUp {
         self.refusal = refusal;
         self.detail = detail;
     }
+
+    /// `vdd_gpu_uv` is at least the OPP table's voltage for the rate the
+    /// clock is on (false for a rate not in the table).
+    fn supply_covers_clock(&self) -> bool {
+        min_uv_for(self.clock_set.src_hz).is_some_and(|uv| self.vdd_gpu_uv >= uv)
+    }
 }
 
 /// The run (see the module). `delay_us` waits that many microseconds.
 ///
-/// `on_handover` sees what the run read before its first write to the PMU or
-/// the GPU (the hand-over state, the supply and the PLL's power-on), so the
-/// image prints it before a step that could fault.
+/// `on_handover` sees what the run read before its first write to the RK806,
+/// the PMU or the GPU (the hand-over state, the supply and the PLL's
+/// power-on; `supply_enabled` is still false there), so the image prints it
+/// before a step that could fault.
 pub fn gpu_up(m: &impl Mmio, b: Bases, delay_us: &mut impl FnMut(u32), on_handover: &mut impl FnMut(&GpuUp)) -> GpuUp {
     let mut o = GpuUp { pd_before: PdGpuRegs::read(m, b.pmu), ..GpuUp::default() };
     o.clock = rk3588::gpu_clock(m, b.cru);
@@ -180,14 +251,13 @@ pub fn gpu_up(m: &impl Mmio, b: Bases, delay_us: &mut impl FnMut(u32), on_handov
     }
     let bus = RK806_BUS.at(b.spi2);
     for (i, reg) in RK806_READ.into_iter().enumerate() {
-        let mut tx = [0u8; 4];
-        let n = rk806::read_frame(reg, 1, &mut tx).expect("a 1-register read fits 4 bytes");
-        let mut v = [0u8; 1];
-        if let Err((why, detail)) = rockchip_spi::write_then_read(m, &bus, &tx[..n - 1], &mut v, delay_us) {
-            o.stopped(Stop::Rk806Read, why as u32, u64::from(reg) << 32 | u64::from(detail));
-            return o;
+        match rk806_read(m, &bus, reg, delay_us) {
+            Ok(v) => o.rk806[i] = v,
+            Err((why, detail)) => {
+                o.stopped(Stop::Rk806Read, why, detail);
+                return o;
+            }
         }
-        o.rk806[i] = v[0];
     }
     o.vdd_gpu_uv = rk806::buck_uv(o.rk806[3]);
     // the clock onto the OPP table first, so the supply is checked against
@@ -203,16 +273,18 @@ pub fn gpu_up(m: &impl Mmio, b: Bases, delay_us: &mut impl FnMut(u32), on_handov
             return o;
         }
     }
-    if o.rk806[0] & rk806::DCDC1_ON == 0 {
-        o.stopped(Stop::SupplyOff, 0, u64::from(o.rk806[0]));
+    let supply_off = o.rk806[0] & rk806::DCDC1_ON == 0;
+    if supply_off && o.pd_before.repair & rk3588::pd_gpu::REPAIR_ON_BIT != 0 {
+        o.stopped(Stop::SupplyOff, SUPPLY_OFF_DOMAIN_POWERED, u64::from(o.rk806[0]));
         return o;
     }
-    match min_uv_for(o.clock_set.src_hz) {
-        Some(uv) if o.vdd_gpu_uv >= uv => {}
-        _ => {
+    if !o.supply_covers_clock() {
+        if supply_off {
+            o.stopped(Stop::SupplyBelowOpp, 0, u64::from(o.rk806[3]) << 32 | o.clock_set.src_hz);
+        } else {
             o.stopped(Stop::ClockNotCovered, 0, o.clock_set.src_hz);
-            return o;
         }
+        return o;
     }
     // Linux powers a PLL down with its last consumer, and the runtime-
     // suspended GPU can be that consumer: without the PLL the domain powers
@@ -228,6 +300,10 @@ pub fn gpu_up(m: &impl Mmio, b: Bases, delay_us: &mut impl FnMut(u32), on_handov
     }
     on_handover(&o);
 
+    // vdd_gpu_s0 is PD_GPU's supply: on before the domain
+    if supply_off && !supply_on(m, &bus, delay_us, &mut o) {
+        return o;
+    }
     match rk3588::pd_gpu_on(m, b.cru, b.pmu, delay_us) {
         Ok(on) => o.pd_on = on,
         Err((why, now)) => {
@@ -263,6 +339,69 @@ pub fn gpu_up(m: &impl Mmio, b: Bases, delay_us: &mut impl FnMut(u32), on_handov
     o
 }
 
+/// One RK806 register, read as Linux reads it (`write_then_read`); on a
+/// refusal the [`Stop::Rk806Read`] refusal and detail.
+fn rk806_read(
+    m: &impl Mmio,
+    bus: &rockchip_spi::Host,
+    reg: u16,
+    delay_us: &mut impl FnMut(u32),
+) -> Result<u8, (u32, u64)> {
+    let mut tx = [0u8; 4];
+    let n = rk806::read_frame(reg, 1, &mut tx).expect("a 1-register read fits 4 bytes");
+    let mut v = [0u8; 1];
+    rockchip_spi::write_then_read(m, bus, &tx[..n - 1], &mut v, delay_us)
+        .map_err(|(why, detail)| (why as u32, u64::from(reg) << 32 | u64::from(detail)))?;
+    Ok(v[0])
+}
+
+/// DCDC1 on from off (see the module): the one RK806 write, `POWER_EN0`
+/// polled until DCDC1 reads on, `BUCK1_ON_VSEL` read again and held against
+/// the rate again. False when it stopped (`o` says why).
+fn supply_on(m: &impl Mmio, bus: &rockchip_spi::Host, delay_us: &mut impl FnMut(u32), o: &mut GpuUp) -> bool {
+    let mut tx = [0u8; 4];
+    let n = rk806::dcdc1_enable_frame(&mut tx).expect("the enable frame fits 4 bytes");
+    if let Err((why, detail)) = rockchip_spi::write(m, bus, &tx[..n], delay_us) {
+        o.stopped(Stop::Rk806Write, why as u32, u64::from(detail));
+        return false;
+    }
+    o.supply_enabled = true;
+    let mut waited = 0;
+    loop {
+        match rk806_read(m, bus, rk806::POWER_EN0, delay_us) {
+            Ok(v) => o.supply_after[0] = v,
+            Err((why, detail)) => {
+                o.stopped(Stop::Rk806Read, why, detail);
+                return false;
+            }
+        }
+        if o.supply_after[0] & rk806::DCDC1_ON != 0 {
+            break;
+        }
+        if waited >= rk806::DCDC1_RAMP_POLL_BUDGET_US {
+            o.stopped(Stop::SupplyRampTimeout, 0, u64::from(o.supply_after[0]));
+            return false;
+        }
+        delay_us(SUPPLY_POLL_US);
+        waited += SUPPLY_POLL_US;
+    }
+    o.supply_waited_us = waited;
+    match rk806_read(m, bus, rk806::BUCK1_ON_VSEL, delay_us) {
+        Ok(v) => o.supply_after[1] = v,
+        Err((why, detail)) => {
+            o.stopped(Stop::Rk806Read, why, detail);
+            return false;
+        }
+    }
+    o.vdd_gpu_uv = rk806::buck_uv(o.supply_after[1]);
+    if !o.supply_covers_clock() {
+        let detail = u64::from(o.supply_after[1]) << 32 | o.clock_set.src_hz;
+        o.stopped(Stop::SupplyBelowOpp, SUPPLY_BELOW_AFTER_ENABLE, detail);
+        return false;
+    }
+    true
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -286,7 +425,15 @@ mod tests {
     struct T6 {
         regs: RefCell<HashMap<usize, u32>>,
         writes: RefCell<Vec<(usize, u32)>>,
-        rk806: HashMap<u16, u8>,
+        rk806: RefCell<HashMap<u16, u8>>,
+        /// The RK806 write frames received, whole.
+        rk806_writes: RefCell<Vec<Vec<u8>>>,
+        /// After an enable of DCDC1, the `POWER_EN0` reads that still find it
+        /// off; `None`: it never comes on.
+        dcdc1_ramp: Option<u32>,
+        ramp_left: RefCell<Option<u32>>,
+        /// The RK806 does not answer the frames of a write.
+        rk806_write_deaf: bool,
         frame: RefCell<Vec<u8>>,
         rxq: RefCell<std::collections::VecDeque<u8>>,
         l2_on: RefCell<bool>,
@@ -340,7 +487,11 @@ mod tests {
             T6 {
                 regs: RefCell::new(r),
                 writes: RefCell::new(vec![]),
-                rk806: [(0x00, 0x0f), (0x06, 0xe0), (0x10, 0xa4), (0x1a, 0x1c)].into_iter().collect(),
+                rk806: RefCell::new([(0x00, 0x0f), (0x06, 0xe0), (0x10, 0xa4), (0x1a, 0x1c)].into_iter().collect()),
+                rk806_writes: RefCell::new(vec![]),
+                dcdc1_ramp: Some(0),
+                ramp_left: RefCell::new(None),
+                rk806_write_deaf: false,
                 frame: RefCell::new(vec![]),
                 rxq: RefCell::new(Default::default()),
                 l2_on: RefCell::new(false),
@@ -363,8 +514,64 @@ mod tests {
             ] {
                 t6.regs.borrow_mut().insert(CRU_BASE + a, v);
             }
-            t6.rk806.insert(0x1a, 0x30);
+            t6.rk806.get_mut().insert(0x1a, 0x30);
             t6
+        }
+        /// A possible U-Boot hand-over: Armbian's, with DCDC1 off
+        /// (`POWER_EN0` 0x0e) and its voltage register at `vsel`.
+        fn handed_over_supply_off(vsel: u8) -> T6 {
+            let mut t6 = T6::handed_over();
+            t6.rk806.get_mut().extend([(0x00, 0x0e), (0x1a, vsel)]);
+            t6
+        }
+        /// PD_GPU left on and out of idle (Armbian's values with the GPU
+        /// active, 2026-10-19).
+        fn handed_over_domain_on() -> T6 {
+            let t6 = T6::handed_over();
+            for (a, v) in [
+                (pd_gpu::PWR_GATE, 0xfffe),
+                (pd_gpu::BUS_IDLE_REQ, 0x83ce),
+                (pd_gpu::BUS_IDLE_ACK, 0x000a_9ffe),
+                (pd_gpu::BUS_IDLE_ST, 0x000a_9ffe),
+                (pd_gpu::REPAIR_STATUS, 0xfad5_0003),
+            ] {
+                t6.regs.borrow_mut().insert(PMU_BASE + a, v);
+            }
+            t6.regs.borrow_mut().insert(CRU_BASE + clkgate_con(66), 0x04);
+            t6
+        }
+        /// An RK806 read as Linux reads it: the value of `reg`, with
+        /// DCDC1's ramp after an enable.
+        fn rk806_answer(&self, reg: u16) -> u8 {
+            if reg == rk806::POWER_EN0 {
+                let mut left = self.ramp_left.borrow_mut();
+                match *left {
+                    Some(0) => {
+                        *self.rk806.borrow_mut().get_mut(&reg).unwrap() |= rk806::DCDC1_ON;
+                        *left = None;
+                    }
+                    Some(n) => *left = Some(n - 1),
+                    None => {}
+                }
+            }
+            self.rk806.borrow()[&reg]
+        }
+        /// A whole write frame: only `POWER_EN0`, applied through its
+        /// write-enable twins (bits 7:4 for 3:0, rk806 fact 2); DCDC1's on
+        /// bit follows `dcdc1_ramp`.
+        fn rk806_write(&self, f: &[u8]) {
+            self.rk806_writes.borrow_mut().push(f.to_vec());
+            assert_eq!(f.len(), 4, "one-value writes only: {f:02x?}");
+            assert_eq!(f[0], 0x80, "{f:02x?}");
+            assert_eq!(u16::from_le_bytes([f[1], f[2]]), rk806::POWER_EN0, "a write to another register: {f:02x?}");
+            let (we, v) = (f[3] >> 4, f[3] & 0x0f);
+            let mut map = self.rk806.borrow_mut();
+            let en = map.get_mut(&rk806::POWER_EN0).unwrap();
+            let delayed = we & v & rk806::DCDC1_ON & !*en;
+            *en = (*en & !we) | (v & we & !delayed);
+            if delayed != 0 {
+                *self.ramp_left.borrow_mut() = self.dcdc1_ramp;
+            }
         }
         /// The same with NPLL at 900 MHz (`PLL_CON0` m = 450: not measured,
         /// an OPP rate so that the clock is kept on NPLL and the PLL's
@@ -408,10 +615,24 @@ mod tests {
             if a == SPI + rockchip_spi::TXDR {
                 let mut f = self.frame.borrow_mut();
                 f.push(v as u8);
+                if f[0] & 0x80 != 0 {
+                    // a write: whole after its value byte
+                    if f.len() == 4 {
+                        let whole = f.clone();
+                        drop(f);
+                        self.rk806_write(&whole);
+                    }
+                    if !self.rk806_write_deaf {
+                        self.rxq.borrow_mut().push_back(0);
+                    }
+                    return;
+                }
                 // the RK806 answers the value in the fourth byte of a 1-value read
                 let out = if f.len() == 4 {
-                    assert_eq!(f[0], 0, "only 1-value reads, never a write: {f:02x?}");
-                    self.rk806[&u16::from_le_bytes([f[1], f[2]])]
+                    assert_eq!(f[0], 0, "only 1-value reads: {f:02x?}");
+                    let reg = u16::from_le_bytes([f[1], f[2]]);
+                    drop(f);
+                    self.rk806_answer(reg)
                 } else {
                     0
                 };
@@ -430,8 +651,9 @@ mod tests {
             {
                 let f = self.frame.borrow().clone();
                 assert_eq!(f.len(), 3, "a receive-only phase after a 3-byte command: {f:02x?}");
-                assert_eq!(f[0], 0, "only 1-value reads, never a write: {f:02x?}");
-                self.rxq.borrow_mut().push_back(self.rk806[&u16::from_le_bytes([f[1], f[2]])]);
+                assert_eq!(f[0], 0, "only 1-value reads here: {f:02x?}");
+                let v = self.rk806_answer(u16::from_le_bytes([f[1], f[2]]));
+                self.rxq.borrow_mut().push_back(v);
             }
             if a == GPU + mali::L2_PWRON && v & 1 != 0 {
                 *self.l2_on.borrow_mut() = true;
@@ -451,7 +673,11 @@ mod tests {
                 let mask = v >> 16;
                 *e = (*e & !mask) | (v & mask);
                 // PD_GPU follows its controls at once
-                if a == PMU_BASE + pd_gpu::PWR_GATE && v == 1 << 16 {
+                // and powers only with its supply, DCDC1, on
+                if a == PMU_BASE + pd_gpu::PWR_GATE
+                    && v == 1 << 16
+                    && self.rk806.borrow()[&rk806::POWER_EN0] & rk806::DCDC1_ON != 0
+                {
                     *r.get_mut(&(PMU_BASE + pd_gpu::REPAIR_STATUS)).unwrap() |= 2;
                 }
                 for p in PLLS {
@@ -514,19 +740,42 @@ mod tests {
         assert_eq!(tx, want);
     }
 
+    /// The bus writes that start an RK806 write frame (its command byte has
+    /// `RK806_CMD_WRITE`; a read command never has, rk806 fact 1).
+    fn rk806_write_starts(w: &[(usize, u32)]) -> Vec<usize> {
+        w.iter()
+            .enumerate()
+            .filter(|(_, w)| w.0 == SPI + rockchip_spi::TXDR && w.1 & 0x80 != 0)
+            .map(|(i, _)| i)
+            .collect()
+    }
+
+    fn no_pmu_write(t6: &T6) -> bool {
+        t6.writes.borrow().iter().all(|w| !(PMU_BASE..PMU_BASE + 0x400).contains(&w.0))
+    }
+
     #[test]
-    fn the_handover_report_comes_before_any_pmu_or_gpu_write() {
-        let t6 = T6::handed_over();
-        let mut seen = None;
-        let o = gpu_up(&t6, B, &mut |_| {}, &mut |h| seen = Some((*h, t6.writes.borrow().len())));
-        let (h, writes_then) = seen.expect("on_handover was not called");
-        assert_eq!((h.rk806, h.vdd_gpu_uv, h.clock.src_hz), ([0x0f, 0xe0, 0xa4, 0x1c], 675_000, 300_000_000));
-        let before = &t6.writes.borrow()[..writes_then];
-        assert!(
-            before.iter().all(|w| !(PMU_BASE..PMU_BASE + 0x400).contains(&w.0) && !(GPU..GPU + 0x10000).contains(&w.0)),
-            "{before:x?}"
-        );
-        assert_eq!(o.stop, Stop::None);
+    fn the_handover_report_comes_before_any_pmu_gpu_or_rk806_write() {
+        // Linux's state (no RK806 write at all) and a U-Boot state (one)
+        for (t6, en0, enables) in [(T6::handed_over(), 0x0f, 0), (T6::handed_over_supply_off(0x1c), 0x0e, 1)] {
+            let mut seen = None;
+            let o = gpu_up(&t6, B, &mut |_| {}, &mut |h| seen = Some((*h, t6.writes.borrow().len())));
+            let (h, writes_then) = seen.expect("on_handover was not called");
+            assert_eq!((h.rk806, h.vdd_gpu_uv, h.clock.src_hz), ([en0, 0xe0, 0xa4, 0x1c], 675_000, 300_000_000));
+            assert!(!h.supply_enabled);
+            let w = t6.writes.borrow();
+            let before = &w[..writes_then];
+            assert!(
+                before
+                    .iter()
+                    .all(|w| !(PMU_BASE..PMU_BASE + 0x400).contains(&w.0) && !(GPU..GPU + 0x10000).contains(&w.0)),
+                "{before:x?}"
+            );
+            let starts = rk806_write_starts(&w);
+            assert_eq!(starts.len(), enables, "{w:x?}");
+            assert!(starts.iter().all(|&i| i >= writes_then), "an RK806 write before the report: {w:x?}");
+            assert_eq!(o.stop, Stop::None);
+        }
     }
 
     #[test]
@@ -591,14 +840,136 @@ mod tests {
         assert!(t6.writes.borrow().iter().all(|w| w.0 != CRU_BASE + clkgate_con(66)));
     }
 
+    // The starting states of the module: (a) is
+    // from_the_handed_over_state_it_reads_the_supply_powers_and_finds_the_g610
+    // (Linux's state, no RK806 write); (b), (b'), (b''), (c) follow.
+
     #[test]
-    fn a_supply_that_reads_off_stops_before_the_pmu_is_written() {
-        let mut t6 = T6::handed_over();
-        t6.rk806.insert(0x00, 0x0e);
-        let o = gpu_up(&t6, B, &mut |_| {}, &mut |_| {});
-        assert_eq!((o.stop, o.detail), (Stop::SupplyOff, 0x0e));
-        assert!(t6.writes.borrow().iter().all(|w| !(PMU_BASE..PMU_BASE + 0x400).contains(&w.0)));
+    fn b_supply_off_covering_300_mhz_is_enabled_by_one_frame_then_the_domain_comes_on() {
+        // 0x1c = 675 mV covers CPLL / 5 = 300 MHz (675 mV in the table)
+        let mut t6 = T6::handed_over_supply_off(0x1c);
+        t6.dcdc1_ramp = Some(3);
+        let mut slept = 0;
+        let o = gpu_up(&t6, B, &mut |us| slept += us, &mut |_| {});
+        assert_eq!((o.stop, o.refusal, o.detail), (Stop::None, 0, 0));
+        assert_eq!(o.rk806, [0x0e, 0xe0, 0xa4, 0x1c]);
+        assert!(o.supply_enabled);
+        assert_eq!((o.supply_after, o.supply_waited_us), ([0x0f, 0x1c], 3 * SUPPLY_POLL_US));
+        assert_eq!(o.vdd_gpu_uv, 675_000);
+        assert!(slept >= 3 * SUPPLY_POLL_US);
+        // exactly one RK806 write frame, byte for byte rk806-enable's, sent whole
+        assert_eq!(*t6.rk806_writes.borrow(), vec![vec![0x80, 0x00, 0x00, 0x11]]);
+        let w = t6.writes.borrow();
+        let starts = rk806_write_starts(&w);
+        assert_eq!(starts.len(), 1);
+        let tx: Vec<u8> =
+            w[starts[0]..].iter().filter(|w| w.0 == SPI + rockchip_spi::TXDR).take(4).map(|w| w.1 as u8).collect();
+        assert_eq!(tx, [0x80, 0x00, 0x00, 0x11]);
+        // DCDC2..4 kept as they were, DCDC1 on
+        assert_eq!(t6.rk806.borrow()[&rk806::POWER_EN0], 0x0f);
+        // the write, then the POWER_EN0 polls and BUCK1_ON_VSEL, then the PMU
+        let first_pmu = w.iter().position(|w| (PMU_BASE..PMU_BASE + 0x400).contains(&w.0)).unwrap();
+        let last_spi = w.iter().rposition(|w| (SPI..SPI + 0x1000).contains(&w.0)).unwrap();
+        assert!(starts[0] < last_spi && last_spi < first_pmu, "{w:x?}");
+        assert!(o.pd_after.usable());
+        assert!(!o.pd_on.was_on);
+        assert_eq!(o.ident.gpu_id, 0xa867_0005);
+        assert_eq!(o.l2.ready, 1);
+    }
+
+    #[test]
+    fn b_prime_supply_off_below_the_opp_stops_without_a_write() {
+        // 0x17 = 643.75 mV, under 300 MHz's 675 mV
+        let t6 = T6::handed_over_supply_off(0x17);
+        let mut reported = false;
+        let o = gpu_up(&t6, B, &mut |_| {}, &mut |_| reported = true);
+        assert_eq!((o.stop, o.refusal, o.detail), (Stop::SupplyBelowOpp, 0, 0x17 << 32 | 300_000_000));
+        assert!(!reported && !o.supply_enabled);
+        assert!(t6.rk806_writes.borrow().is_empty());
+        assert!(rk806_write_starts(&t6.writes.borrow()).is_empty());
+        assert!(no_pmu_write(&t6));
         assert!(t6.writes.borrow().iter().all(|w| w.0 != CRU_BASE + clkgate_con(66)));
+    }
+
+    #[test]
+    fn b_double_prime_supply_that_never_ramps_stops_without_a_pmu_write() {
+        let mut t6 = T6::handed_over_supply_off(0x1c);
+        t6.dcdc1_ramp = None;
+        let mut slept = 0;
+        let o = gpu_up(&t6, B, &mut |us| slept += us, &mut |_| {});
+        assert_eq!((o.stop, o.refusal, o.detail), (Stop::SupplyRampTimeout, 0, 0x0e));
+        assert!(o.supply_enabled);
+        assert_eq!(o.supply_after, [0x0e, 0]);
+        assert!(slept >= rk806::DCDC1_RAMP_POLL_BUDGET_US);
+        assert_eq!(t6.rk806_writes.borrow().len(), 1);
+        assert!(no_pmu_write(&t6));
+        assert!(t6.writes.borrow().iter().all(|w| w.0 != CRU_BASE + clkgate_con(66)));
+    }
+
+    #[test]
+    fn c_a_domain_left_on_is_not_written_in_the_pmu() {
+        let t6 = T6::handed_over_domain_on();
+        assert!(PdGpuRegs::read(&t6, PMU_BASE).usable());
+        let o = gpu_up(&t6, B, &mut |_| {}, &mut |_| {});
+        assert_eq!((o.stop, o.refusal, o.detail), (Stop::None, 0, 0));
+        assert_eq!(o.pd_on, PdOn { opened: 0, was_on: true, waited_us: [0; 3] });
+        assert!(!o.supply_enabled);
+        assert!(no_pmu_write(&t6));
+        assert!(t6.rk806_writes.borrow().is_empty());
+        assert_eq!(o.ident.gpu_id, 0xa867_0005);
+    }
+
+    #[test]
+    fn a_domain_that_reads_powered_with_the_supply_off_is_refused_without_a_write() {
+        let mut t6 = T6::handed_over_domain_on();
+        t6.rk806.get_mut().insert(rk806::POWER_EN0, 0x0e);
+        let mut reported = false;
+        let o = gpu_up(&t6, B, &mut |_| {}, &mut |_| reported = true);
+        assert_eq!((o.stop, o.refusal, o.detail), (Stop::SupplyOff, SUPPLY_OFF_DOMAIN_POWERED, 0x0e));
+        assert!(!reported);
+        assert!(t6.rk806_writes.borrow().is_empty());
+        assert!(no_pmu_write(&t6));
+    }
+
+    #[test]
+    fn a_voltage_that_reads_lower_after_the_enable_stops_before_the_pmu() {
+        // covered at hand-over; the model's BUCK1_ON_VSEL drops when DCDC1 comes on
+        struct Dropping(T6);
+        impl Mmio for Dropping {
+            fn read32(&self, a: usize) -> u32 {
+                if self.0.rk806.borrow()[&rk806::POWER_EN0] & rk806::DCDC1_ON != 0 {
+                    self.0.rk806.borrow_mut().insert(rk806::BUCK1_ON_VSEL, 0x10);
+                }
+                self.0.read32(a)
+            }
+            fn write32(&self, a: usize, v: u32) {
+                self.0.write32(a, v)
+            }
+            fn read8(&self, _: usize) -> u8 {
+                unreachable!()
+            }
+            fn write8(&self, _: usize, _: u8) {
+                unreachable!()
+            }
+        }
+        let d = Dropping(T6::handed_over_supply_off(0x1c));
+        let o = gpu_up(&d, B, &mut |_| {}, &mut |_| {});
+        assert_eq!(
+            (o.stop, o.refusal, o.detail),
+            (Stop::SupplyBelowOpp, SUPPLY_BELOW_AFTER_ENABLE, 0x10 << 32 | 300_000_000)
+        );
+        assert_eq!((o.supply_after, o.vdd_gpu_uv), ([0x0f, 0x10], 600_000));
+        assert!(no_pmu_write(&d.0));
+    }
+
+    #[test]
+    fn an_enable_frame_the_bus_does_not_take_stops_before_the_pmu() {
+        let mut t6 = T6::handed_over_supply_off(0x1c);
+        t6.rk806_write_deaf = true;
+        let o = gpu_up(&t6, B, &mut |_| {}, &mut |_| {});
+        assert_eq!((o.stop, o.refusal, o.detail), (Stop::Rk806Write, rockchip_spi::SpiRefusal::RxTimeout as u32, 0));
+        assert!(!o.supply_enabled);
+        assert!(no_pmu_write(&t6));
     }
 
     /// The T6 with CLKSEL_CON(158) as given, run to the end.
@@ -639,7 +1010,7 @@ mod tests {
     fn a_clock_the_supply_does_not_cover_stops_before_the_pmu_is_written() {
         // NPLL / 1 = 900 MHz, on the table, wants 800 mV; the supply gives 675 mV
         let mut t6 = T6::handed_over_on_npll_900();
-        t6.rk806.insert(0x1a, 0x1c);
+        t6.rk806.get_mut().insert(0x1a, 0x1c);
         let o = gpu_up(&t6, B, &mut |_| {}, &mut |_| {});
         assert_eq!((o.stop, o.refusal, o.detail), (Stop::ClockNotCovered, 0, 900_000_000));
         assert_eq!((o.clock_set.kept, o.vdd_gpu_uv), (true, 675_000));
