@@ -119,29 +119,33 @@ CI, a review, then the merge. Never push main by hand.
   (`tools/v3d/README.md`). `tools/check.sh --local <base>` runs the local set
   (about twenty rows, `tools/check_scope_selftest.sh`) when a change reaches
   everything. Neither is the landing gate: the CI is.
-- The commands above, run in this order in a fresh clone at a canonical path
-  (node with 4 cores, two compiler slots, 7.9 GB; rustc 1.101.0-nightly
-  (5d8fec066 2026-10-16), cargo 1.101.0-nightly (3960fa69b 2026-10-12),
-  clippy 0.1.101), at `0f020431` (2026-11-10), exit code and wall time:
+- The commands above, run in this order in a fresh clone (over HTTPS) at a
+  canonical path of `31e07d90` (2026-11-11), the layout exported with
+  `export $(tools/cts/deps-env.sh)` and `lz4` built from source on PATH
+  (node with 4 cores, two compiler slots, 7 GB; rustc 1.99.1, cargo 1.99.1,
+  clippy 0.1.99, a stable toolchain), exit code and wall time:
 
   | command | exit | wall |
   | --- | --- | --- |
-  | `tools/cts/deps-env.sh --check`, empty layout | 1 | 0.1 s |
-  | `tools/cts/deps-env.sh --build MALI_CSFFW DEQP_GLES3_TEST_DIR PCO_SPM_LOAD_CAPTURE` | 0 | 170.7 s |
-  | `git rebase origin/main` | 0 | 1.1 s |
-  | the PowerVR header copy | 0 | 0.5 s |
-  | `tools/setup-gate-host.sh --check`, `lz4` missing, stale `CC_aarch64_unknown_none` | 1 | 3.0 s |
-  | the same with `lz4` on PATH and the variable unset | 0 | 0.6 s |
-  | `tools/check.sh --changed origin/main` (no change: `2 ok, 0 failed, 0 gap(s), 217 skipped`) | 0 | 8.8 s |
-  | `tools/check.sh --quick`, cold tree, `lz4` and the unset as above | 0 | 4603.6 s |
-  | `tools/check.sh --local origin/main` (no change) | 0 | 10.6 s |
-  | `tools/check_scope_selftest.sh` (137 checks, 0 failed) | 0 | 38.9 s |
+  | `tools/cts/deps-env.sh --check`, layout missing entries | 1 | 1.1 s |
+  | `tools/cts/deps-env.sh --build MALI_CSFFW DEQP_GLES3_TEST_DIR PCO_SPM_LOAD_CAPTURE HAL_NXP_DIR` | 0 | 286.5 s |
+  | the PowerVR header copy | 0 | 0.1 s |
+  | `tools/setup-gate-host.sh --check` | 0 | 12.7 s |
+  | `tools/check.sh --changed origin/main` (no change) | 0 | 56.3 s |
+  | `tools/check.sh --quick`, cold tree | stopped at the 2 h limit, no summary line | about 7200 s |
+  | `tools/check.sh --quick`, rerun, warm tree | 0 | 3416.7 s |
+  | `tools/check.sh --local origin/main` (no change) | 0 | 12.9 s |
+  | `tools/check_scope_selftest.sh` (137 checks, 0 failed) | 0 | 56.7 s |
 
   The `--quick` summary line: "check.sh: 177 ok, 0 failed, 0 gap(s) (a gap was
   not run: it is not a pass), 0 skipped (every row), 0 not run (passed on
-  main) in 4603s". That run is green only with the host remediated; as the
-  host was found, the host check is the red step (exit 1) and `--quick` has
-  the `lz4` gap. The `gltest_guard` timing test did not fail there (it did at
+  main) in 3416s". The layout there lacked `HAL_NXP_DIR` too, so the build
+  named it. This host has no cold-tree time at that commit (more than two
+  hours); the last cold one is 4603 s at `0f020431` (2026-11-10, rustc
+  1.101.0-nightly, the same step list without `HAL_NXP_DIR`, where the host
+  check first exited 1 for a missing `lz4` and a stale
+  `CC_aarch64_unknown_none`, 3.0 s, and 0 once both were fixed). The
+  `gltest_guard` timing test did not fail in either walk (it did at
   `8a5da05e`). Record: GitHub issue 1606; a walk at a symlinked path is
   `docs/notes/gate-symlinked-path.md`.
 
