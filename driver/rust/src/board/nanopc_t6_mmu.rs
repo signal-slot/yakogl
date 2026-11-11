@@ -61,7 +61,8 @@ pub enum Stop {
     /// `MEMATTR`, 3 `TRANSCFG`; `detail` the value read).
     ReadBack = 7,
     /// AS0 is still active, or reports a fault, or `MMU_INT_RAWSTAT` has a
-    /// bit (`refusal` 1, 2, 3; `detail` the value).
+    /// fault bit (`refusal` 1, 2, 3; `detail` the value). The high half of
+    /// `MMU_INT_RAWSTAT` is no fault: bit 16 says AS0's commands completed.
     Fault = 8,
     /// The flush after the map stopped (`refusal`: the [`mali::MaliRefusal`]).
     FlushPt = 9,
@@ -226,8 +227,9 @@ pub(crate) fn as0_up(
             return false;
         }
     }
-    for (i, v) in
-        [o.after.status & mmu::AS_STATUS_AS_ACTIVE, o.after.faultstatus, o.after_irq[0]].into_iter().enumerate()
+    for (i, v) in [o.after.status & mmu::AS_STATUS_AS_ACTIVE, o.after.faultstatus, o.after_irq[0] & mmu::MMU_INT_FAULTS]
+        .into_iter()
+        .enumerate()
     {
         if v != 0 {
             o.stopped(Stop::Fault, i as u32 + 1, u64::from(v));
@@ -288,6 +290,9 @@ mod tests {
             (o.after.transtab, o.after.memattr, o.after.transcfg),
             (TABLES_PA, 0x8f8f_8f8f_8c4c_8f4c, 0x4200_01c6)
         );
+        // AS0's completed commands are in MMU_INT_RAWSTAT, and are no fault
+        // (the 2026-11-11 board run: 0 as found, 0x00010000 after)
+        assert_eq!((o.found_irq[0], o.after_irq[0]), (0, 0x0001_0000));
         assert_eq!(o.enable.flush.lockaddr, 63);
         assert_eq!(o.flush_pt.lockaddr, 0x0400_000f);
         assert_eq!(o.flush_pt.flush.cmd, 0x0304);
@@ -399,6 +404,6 @@ mod tests {
         let mut cleans = vec![];
         let o = run(&g, &mut pool, &mut cleans);
         assert_eq!((o.stop, o.refusal, o.detail), (Stop::Fault, 3, 1));
-        assert_eq!(o.found_irq[0], 1);
+        assert_eq!((o.found_irq[0], o.after_irq[0]), (1, 0x0001_0001));
     }
 }

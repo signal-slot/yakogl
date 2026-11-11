@@ -1539,7 +1539,7 @@ MCU's: `panthor_vm_active` always gives the MCU VM slot 0, `panthor_mmu.c:755-75
 | `AS_FAULTSTATUS`, `AS_FAULTADDRESS` | +0x1c, +0x20 | read |
 | `AS_STATUS` | +0x28 | read; bit 0 `AS_ACTIVE` |
 | `AS_TRANSCFG` | +0x30 (64) | 0x00000000420001c6 |
-| `MMU_INT_RAWSTAT`, `_CLEAR`, `_MASK` | 0x2000, 0x2004, 0x2008 | read (bit n a fault of AS n, bit 16+n its bus error) |
+| `MMU_INT_RAWSTAT`, `_CLEAR`, `_MASK` | 0x2000, 0x2004, 0x2008 | read (bit n a fault of AS n; bit 16+n a command of AS n completed, no fault) |
 | `GPU_CMD` | 0x30 | 0x3304, 0x0304 |
 | `GPU_INT_RAWSTAT`, `_CLEAR` | 0x20, 0x24 | bit 17 `CLEAN_CACHES_COMPLETED` |
 
@@ -1599,8 +1599,20 @@ One difference from panthor, on purpose: after each `AS_COMMAND` the image
 waits for `AS_ACTIVE` to clear (panthor only waits before the next one), so
 each command's completion is a measured count. AS0's registers are read
 back after `UPDATE`; the run passes when they equal what was written,
-`AS_STATUS`, `AS_FAULTSTATUS` and `MMU_INT_RAWSTAT` read 0, and the three
-flushes came back. Interrupt masks are read, never written.
+`AS_STATUS`, `AS_FAULTSTATUS` and the fault bits of `MMU_INT_RAWSTAT`
+(15:0) read 0, and the three flushes came back. Interrupt masks are read,
+never written.
+
+The high half of `MMU_INT_RAWSTAT` is no fault on a CSF GPU: bit 16 + n
+says that a command of AS n completed. Sources: Linux v6.18
+`panthor_mmu.c`, `panthor_mmu_fault_mask` ("Bits 16 to 31 mean
+REQ_COMPLETE", it returns bits 15:0) and `panthor_mmu_as_fault_mask`
+(`BIT(as)`); the Tyr driver's register definition (`[PATCH v5 4/6]
+drm/tyr: Use register! macro for MMU_CONTROL`, 2026-04-09: `IRQ_RAWSTAT`
+at 0x2000 with `page_fault` 15:0 and `command_completed` 31:16). The
+"bit 16 + n is a bus error" meaning is the job-manager GPUs'. This page
+and the image had the job-manager meaning until 2026-11-11; the board
+showed it wrong ("Z2 board procedure", the run of 2026-11-11).
 
 **What Z2 does not show.** That the GPU walks these tables right: nothing
 reads through AS0 before the MCU runs, and the MMU has no translate
@@ -1644,8 +1656,12 @@ WDT_EN proof), `GLB_RST_ST` read before and after; `--go` takes the
 board lock (`board_lock.sh`; it refuses, never waits). The predictions
 below were written 2026-11-02 from
 `tools/probes/nanopc_t6/t6_mmu/src/main.c` and the host tests, before
-any run; no value in them is measured. A run whose lines differ is a
-finding: record it as it came, never by changing the prediction.
+any run. A run whose lines differ is a finding: record it as it came,
+never by changing the prediction. Two predictions were wrong and the
+run of 2026-11-11 showed it: `LOCKADDR` as found (predicted 0, read
+0xe) and `MMU_INT_RAWSTAT` after the enable (predicted 0, read
+0x00010000). That run stays a FAIL; the two lines below carry the
+corrected prediction for the next run.
 
 **Build** — from a detached checkout of main, in the west workspace as
 Z1 built (the checkout named `yakogl`):
@@ -1689,7 +1705,7 @@ t6_mmu: build <describe>
 t6_mmu: WDT0 period 22369 ms, fed until 60000 ms of uptime
 t6_mmu: Z1: rc 0 stop 0 refusal 0: GPU_ID 0xa8670005 MMU_FEATURES 0x00002830 AS_PRESENT 0x000000ff L2_READY 0x1
 t6_mmu: pool 0x{P} at PA 0x{P} (16 pages), backing 0x{B} at PA 0x{B}
-t6_mmu: AS0 as found: TRANSTAB 0x0000000000000000 MEMATTR 0x0000000000000000 TRANSCFG 0x… LOCKADDR 0x0000000000000000 STATUS 0x00000000 FAULTSTATUS 0x00000000 FAULTADDRESS 0x0000000000000000
+t6_mmu: AS0 as found: TRANSTAB 0x0000000000000000 MEMATTR 0x0000000000000000 TRANSCFG 0x… LOCKADDR 0x… STATUS 0x00000000 FAULTSTATUS 0x00000000 FAULTADDRESS 0x0000000000000000
 t6_mmu: IRQ as found: MMU_INT_RAWSTAT 0x00000000 MMU_INT_MASK … GPU_INT_RAWSTAT 0x… GPU_INT_MASK …
 t6_mmu: flush round trip: GPU_CMD 0x00003304, GPU_INT_RAWSTAT 0x… before the clear, 0x… after; CLEAN_CACHES_COMPLETED after n polls of 1 us
 t6_mmu: tables at PA 0x00000000{P}: 4 of 16 pages used; backing PA 0x00000000{B}
@@ -1698,7 +1714,7 @@ t6_mmu: tables cleaned to the point of coherency: rc 0
 t6_mmu: AS0 enable, the whole-VA flush: LOCKADDR 0x000000000000003f, LOCK polls n/n; GPU_CMD 0x00003304, GPU_INT_RAWSTAT 0x… before the clear, 0x… after, CLEAN_CACHES_COMPLETED after n polls of 1 us; UNLOCK polls n/n
 t6_mmu: AS0 enable: TRANSTAB 0x00000000{P} MEMATTR 0x8f8f8f8f8c4c8f4c TRANSCFG 0x00000000420001c6 written; UPDATE polls n/n
 t6_mmu: AS0 after: TRANSTAB 0x00000000{P} MEMATTR 0x8f8f8f8f8c4c8f4c TRANSCFG 0x00000000420001c6 LOCKADDR 0x000000000000003f STATUS 0x00000000 FAULTSTATUS 0x00000000 FAULTADDRESS 0x0000000000000000
-t6_mmu: IRQ after: MMU_INT_RAWSTAT 0x00000000 MMU_INT_MASK … GPU_INT_RAWSTAT 0x… GPU_INT_MASK …
+t6_mmu: IRQ after: MMU_INT_RAWSTAT 0x00010000 MMU_INT_MASK … GPU_INT_RAWSTAT 0x… GPU_INT_MASK …
 t6_mmu: the flush after the map: LOCKADDR 0x000000000400000f, LOCK polls n/n; GPU_CMD 0x00000304, GPU_INT_RAWSTAT 0x… before the clear, 0x… after, CLEAN_CACHES_COMPLETED after n polls of 1 us; UNLOCK polls n/n
 t6_mmu: PASS: AS0 on TRANSTAB 0x00000000{P}, three cache flush round trips, N ms
 t6: t6_mmu done: PSCI SYSTEM_RESET at N ms (F feeds)
@@ -1716,15 +1732,19 @@ What each value is, and what a wrong one would mean:
   run there (`t6_mmu: FAIL: Z1's power-on stopped (stop N, refusal R,
   detail 0x…); run t6_gpu for its lines`): a Z1 or hand-over
   regression, not a Z2 one.
-- **`AS0 as found`.** `TRANSTAB`, `MEMATTR`, `LOCKADDR`, `STATUS`,
-  `FAULTSTATUS` and `FAULTADDRESS` 0 after Z1's soft reset; `TRANSCFG`
+- **`AS0 as found`.** `TRANSTAB`, `MEMATTR`, `STATUS`, `FAULTSTATUS`
+  and `FAULTADDRESS` 0 after Z1's soft reset; `TRANSCFG` and `LOCKADDR`
   recorded, not predicted (Armbian's panthor had AS0 enabled, and how
-  far a soft reset reaches into the AS registers is not measured). A
+  far a soft reset reaches into the AS registers is not measured;
+  `LOCKADDR` read 0xe on 2026-11-11, the smallest region, 2^15 bytes
+  at base 0, and no source gives its reset value). A
   non-zero `TRANSTAB` or `MEMATTR` means the GPU is not in the state Z1
   reported: the hand-over, not the table builder.
-- **The two IRQ lines.** `MMU_INT_RAWSTAT` 0 as found and after (bit 0
-  an AS0 fault, bit 16 its bus error); the masks 0 as the reset left
-  them — recorded, never written. `GPU_INT_RAWSTAT` bit 17
+- **The two IRQ lines.** `MMU_INT_RAWSTAT` 0 as found and 0x00010000
+  after: bit 16 says AS0's commands completed (the enable's `LOCK`,
+  `UPDATE` and `UNLOCK`), bits 15:0 are the faults (bit 0 AS0's) and
+  stay 0. The image reads the word and never clears it. The masks 0 as
+  the reset left them — recorded, never written. `GPU_INT_RAWSTAT` bit 17
   (`CLEAN_CACHES_COMPLETED`) must be clear before the first flush: a
   bit already set cannot be told from a completion, which is why the
   round trip refuses there. Bits 9/10 (`POWER_CHANGED`) may ride along
@@ -1769,11 +1789,12 @@ What each value is, and what a wrong one would mean:
   0x3f (the enable's; the flush after the map rewrites it after this
   snapshot), `STATUS` 0 (bit 0 `AS_ACTIVE` is the busy bit every
   `AS_COMMAND` waits clear — panthor's `wait_ready`), `FAULTSTATUS`
-  and `FAULTADDRESS` 0 and `MMU_INT_RAWSTAT` 0: nothing walked AS0.
-  `stop 8` (Fault) refuses those same fields: refusal 1 `AS_ACTIVE`
-  stuck after the `UPDATE`, 2 a `FAULTSTATUS` set though nothing walks
-  AS0 before the MCU, 3 a `MMU_INT_RAWSTAT` bit (1+n or 17+n another
-  address space's — Linux's AS1 state surviving the jump).
+  and `FAULTADDRESS` 0 and no fault bit in `MMU_INT_RAWSTAT`: nothing
+  walked AS0. `stop 8` (Fault) refuses those same fields: refusal 1
+  `AS_ACTIVE` stuck after the `UPDATE`, 2 a `FAULTSTATUS` set though
+  nothing walks AS0 before the MCU, 3 a fault bit of `MMU_INT_RAWSTAT`
+  (`detail` its bits 15:0; bit n with n > 0 is another address space's
+  — Linux's AS1 state surviving the jump).
 - **`PASS` and the reset.** `TRANSTAB` = P read once more; `N ms` is
   the wall time from before `yd_t6_mmu_up`, and the budgets of "the
   way back" below keep it in single seconds. `F feeds` counts the

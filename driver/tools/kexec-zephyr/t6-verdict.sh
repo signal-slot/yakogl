@@ -187,9 +187,9 @@ table_t6_mmu() {
 	else
 		e 't6_mmu: pool 0x{@PV} at PA 0x{@P} (16 pages), backing 0x{@BV} at PA 0x{@B}' '' mmu_pool
 	fi
-	# as found after Z1's soft reset: TRANSTAB, MEMATTR, LOCKADDR, STATUS,
-	# FAULTSTATUS, FAULTADDRESS 0; TRANSCFG recorded
-	e 't6_mmu: AS0 as found: TRANSTAB 0x0000000000000000 MEMATTR 0x0000000000000000 TRANSCFG 0x{x16} LOCKADDR 0x0000000000000000 STATUS 0x00000000 FAULTSTATUS 0x00000000 FAULTADDRESS 0x0000000000000000'
+	# as found after Z1's soft reset: TRANSTAB, MEMATTR, STATUS, FAULTSTATUS,
+	# FAULTADDRESS 0; TRANSCFG and LOCKADDR recorded
+	e 't6_mmu: AS0 as found: TRANSTAB 0x0000000000000000 MEMATTR 0x0000000000000000 TRANSCFG 0x{x16} LOCKADDR 0x{x16} STATUS 0x00000000 FAULTSTATUS 0x00000000 FAULTADDRESS 0x0000000000000000'
 	# GPU_INT_RAWSTAT: bit 17 clear, bits 9/10 may be set; the masks recorded
 	e 't6_mmu: IRQ as found: MMU_INT_RAWSTAT 0x00000000 MMU_INT_MASK 0x{x8} GPU_INT_RAWSTAT 0x{x8} GPU_INT_MASK 0x{x8}'
 	e 't6_mmu: flush round trip: GPU_CMD 0x00003304, GPU_INT_RAWSTAT 0x{x8} before the clear, 0x{x8} after; CLEAN_CACHES_COMPLETED after {d} polls of 1 us'
@@ -199,7 +199,8 @@ table_t6_mmu() {
 	e 't6_mmu: AS0 enable, the whole-VA flush: LOCKADDR 0x000000000000003f, LOCK polls {d}/{d}; GPU_CMD 0x00003304, GPU_INT_RAWSTAT 0x{x8} before the clear, 0x{x8} after, CLEAN_CACHES_COMPLETED after {d} polls of 1 us; UNLOCK polls {d}/{d}'
 	e 't6_mmu: AS0 enable: TRANSTAB 0x{=P16} MEMATTR 0x8f8f8f8f8c4c8f4c TRANSCFG 0x00000000420001c6 written; UPDATE polls {d}/{d}'
 	e 't6_mmu: AS0 after: TRANSTAB 0x{=P16} MEMATTR 0x8f8f8f8f8c4c8f4c TRANSCFG 0x00000000420001c6 LOCKADDR 0x000000000000003f STATUS 0x00000000 FAULTSTATUS 0x00000000 FAULTADDRESS 0x0000000000000000'
-	e 't6_mmu: IRQ after: MMU_INT_RAWSTAT 0x00000000 MMU_INT_MASK 0x{x8} GPU_INT_RAWSTAT 0x{x8} GPU_INT_MASK 0x{x8}'
+	# bit 16: AS0's commands completed (no fault: the fault bits are 15:0)
+	e 't6_mmu: IRQ after: MMU_INT_RAWSTAT 0x00010000 MMU_INT_MASK 0x{x8} GPU_INT_RAWSTAT 0x{x8} GPU_INT_MASK 0x{x8}'
 	e 't6_mmu: the flush after the map: LOCKADDR 0x000000000400000f, LOCK polls {d}/{d}; GPU_CMD 0x00000304, GPU_INT_RAWSTAT 0x{x8} before the clear, 0x{x8} after, CLEAN_CACHES_COMPLETED after {d} polls of 1 us; UNLOCK polls {d}/{d}'
 	e 't6_mmu: PASS: AS0 on TRANSTAB 0x{=P16}, three cache flush round trips, {d} ms' 't6_mmu: (PASS|FAIL)'
 	table_reset t6_mmu

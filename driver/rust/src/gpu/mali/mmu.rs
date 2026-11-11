@@ -23,12 +23,20 @@ use super::{flush_caches, Flush, MaliRefusal, CACHE_CLEAN, CACHE_INV};
 use crate::mmio::Mmio;
 
 /// The MMU interrupt block (panthor_regs.h `MMU_INT_*`): bit n is a fault
-/// of AS n, bit 16 + n a bus error of AS n
-/// (`panthor_mmu_as_fault_mask`).
+/// of AS n (`panthor_mmu_as_fault_mask`); bit 16 + n says that a command
+/// of AS n completed, and is no fault (`panthor_mmu_fault_mask`: "Bits 16
+/// to 31 mean REQ_COMPLETE"). The bus-error meaning of the high half is
+/// the job-manager GPUs', not a CSF GPU's.
 pub const MMU_INT_RAWSTAT: usize = 0x2000;
 pub const MMU_INT_CLEAR: usize = 0x2004;
 pub const MMU_INT_MASK: usize = 0x2008;
 pub const MMU_INT_STAT: usize = 0x200c;
+/// The fault bits of the `MMU_INT_*` words (`panthor_mmu_fault_mask`).
+pub const MMU_INT_FAULTS: u32 = 0xffff;
+/// The `MMU_INT_*` bit that says a command of AS `as_nr` completed.
+pub const fn mmu_int_command_completed(as_nr: u32) -> u32 {
+    1 << (16 + as_nr)
+}
 
 /// `MMU_AS(as)` = `MMU_BASE` (0x2400) + `as << MMU_AS_SHIFT` (6).
 pub const fn mmu_as(as_nr: u32) -> usize {
@@ -308,7 +316,9 @@ pub(crate) mod tests {
     /// `AS_COMMAND` keeps `AS_ACTIVE` set for `lag` reads of `AS_STATUS`, a
     /// cache flush raises `CLEAN_CACHES_COMPLETED` after `lag` reads of
     /// `GPU_INT_RAWSTAT`; a command while `AS_ACTIVE` is set is a test
-    /// failure, as is a flush while the last one is still pending.
+    /// failure, as is a flush while the last one is still pending. An
+    /// `AS_COMMAND` of AS n raises bit 16 + n of `MMU_INT_RAWSTAT`, as the
+    /// G610 does (the 2026-11-11 Z2 run read 0x00010000 after the enable).
     pub struct Gpu {
         pub regs: RefCell<HashMap<usize, u32>>,
         pub writes: RefCell<Vec<(usize, u32)>>,
@@ -392,6 +402,7 @@ pub(crate) mod tests {
                             Some((self.r64(a + AS_TRANSTAB), self.r64(a + AS_MEMATTR), self.r64(a + AS_TRANSCFG)));
                     }
                     self.active.borrow_mut()[n] = self.lag;
+                    *self.regs.borrow_mut().entry(MMU_INT_RAWSTAT).or_insert(0) |= mmu_int_command_completed(n as u32);
                 }
                 _ => {
                     self.regs.borrow_mut().insert(off, val);
