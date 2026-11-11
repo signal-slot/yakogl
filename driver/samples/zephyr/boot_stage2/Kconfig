@@ -27,6 +27,17 @@ config BOOT_STAGE2_SOURCE_EMMC
 
 endchoice
 
+config BOOT_STAGE2_BOOT0_ON_REQUEST
+	bool "A 'T' on the console selects eMMC boot partition 1 (boot0) and resets"
+	depends on BOOT_STAGE2_SOURCE_EMMC && PM_CPU_OPS_PSCI && SERIAL
+	help
+	  The way back to the boot chain in boot0 without the recovery button:
+	  while the loader runs it looks at its console twice (when the eMMC is
+	  up, and before the jump), without waiting. A 'T' received by then
+	  makes it write EXT_CSD PARTITION_CONFIG (byte 179) = 0x48 with CMD6,
+	  read it back and reset the SoC through PSCI. Only that byte is ever
+	  written. Send 'T' repeatedly from the host across the reset.
+
 config BOOT_STAGE2_DISK
 	string "Disk name of the eMMC (the zephyr,mmc-disk node's disk-name)"
 	default "emmc"
