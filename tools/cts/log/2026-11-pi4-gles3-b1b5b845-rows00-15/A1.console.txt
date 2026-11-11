@@ -1,0 +1,2637 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES3 at b1b5b845, 2026-11-11, image A1: UART console of the run, from the firmware's first line to the image's end line (README.md)
+  5.05 [sdcard] pieeprom.upd not found
+  5.05 [sdcard] recover4.elf not found
+  5.06 [sdcard] recovery.elf not found
+  5.87 Read start4.elf bytes  2299008 hnd 0x211ac
+  5.93 Read fixup4.dat bytes     5496 hnd 0x20bca
+  5.95 0x00d03114 0x00000000 0x00001fff
+  5.99 MEM GPU: 76 ARM: 948 TOTAL: 1024
+  5.35 Starting start4.elf @ 0xfec00200 partition 1
+  5.23 XHCI-STOP
+  5.23 xHC0 ver: 256 HCS: 05000420 fc000031 00e70004 HCC: 002841eb
+  5.24 USBSTS 18
+  5.24 PCI0 reset
+  5.25 +
+
+MESS:00:00:05.269775:0: arasan: arasan_emmc_open
+MESS:00:00:05.271434:0: arasan: arasan_emmc_set_clock C0: 0x00800000 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 400000 max: 400000 delay: 5
+MESS:00:00:05.391660:0: arasan: arasan_emmc_set_clock C0: 0x00800000 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 400000 max: 400000 delay: 5
+MESS:00:00:05.404529:0: arasan: arasan_emmc_set_clock C0: 0x00800f00 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 390000 max: 400000 delay: 5
+MESS:00:00:05.438805:0: boot-part: 1 fs-type: 0
+MESS:00:00:05.440218:0: boot-part: 1 fs-type: 3
+MESS:00:00:05.444601:0: arasan: arasan_emmc_set_clock C0: 0x00800f06 C1: 0x000e0207 emmc: 200000000 actual: 50000000 div: 0x00000002 target: 50000000 min: 0 max: 50000000 delay: 1
+MESS:00:00:05.609235:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:05.612056:0: brfs: File read: 162 bytes
+MESS:00:00:05.704953:0: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:05.709461:0: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:05.726110:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:06.225181:0: gpioman: gpioman_get_pin_num: pin DISPLAY_DSI_PORT not defined
+MESS:00:00:06.230728:0: gpioman: gpioman_get_pin_num: pin DISPLAY_DSI_PORT not defined
+MESS:00:00:06.239765:0: *** Restart logging
+MESS:00:00:06.241537:0: brfs: File read: 162 bytes
+MESS:00:00:06.320175:0: hdmi: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:06.325207:0: hdmi: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:06.343496:0: hdmi: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:06.348567:0: hdmi: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:06.354166:0: hdmi: HDMI:hdmi_get_state is deprecated, use hdmi_get_display_state instead
+MESS:00:00:06.362924:0: HDMI0: hdmi_pixel_encoding: 300000000
+MESS:00:00:06.368423:0: HDMI1: hdmi_pixel_encoding: 300000000
+MESS:00:00:06.385159:0: dtb_file 'bcm2711-rpi-4-b.dtb'
+MESS:00:00:06.401100:0: brfs: File read: /mfs/sd/bcm2711-rpi-4-b.dtb
+MESS:00:00:06.404390:0: Loaded 'bcm2711-rpi-4-b.dtb' to 0x100 size 0xdbb9
+MESS:00:00:06.445081:0: brfs: File read: 56249 bytes
+MESS:00:00:06.464822:0: brfs: File read: /mfs/sd/overlays/overlay_map.dtb
+MESS:00:00:06.529672:0: brfs: File read: 5971 bytes
+MESS:00:00:06.536299:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:06.577407:0: brfs: File read: 162 bytes
+MESS:00:00:06.581424:0: brfs: File read: /mfs/sd/cmdline.txt
+MESS:00:00:06.584567:0: Read command line from file 'cmdline.txt':
+MESS:00:00:06.590416:0: 'console=serial0,115200 console=tty1 root=PARTUUID=269eab4a-02 rootfstype=ext4 fsck.repair=yes rootwait cfg80211.ieee80211_regdom=JP splash quiet'
+MESS:00:00:06.747090:0: brfs: File read: 145 bytes
+MESS:00:00:08.138286:0: brfs: File read: /mfs/sd/yakogl-A1.bin
+MESS:00:00:08.141020:0: Loaded 'yakogl-A1.bin' to 0x200000 size 0xfc6dc0
+MESS:00:00:08.147457:0: Device tree loaded to 0x2eff1f00 (size 0xe0a1)
+MESS:00:00:08.156219:0: uart: Set PL011 baud rate to 103448.300000 Hz
+MESS:00:00:08.162759:0: uart: Baud rate change done...
+MESS:00:00:08.164781:0:board: watchdog armed
+*** Booting Zephyr OS build af17c0c8aa2a ***
+I: shader compiler scratch: 4194304 bytes, keep: 1048576 bytes
+v3d_deqp: build b1b5b845
+board: PM watchdog resets the SoC ~250 s after boot (tryboot -> Linux)
+v3d_deqp: the record at 210 s after boot at the latest
+V3D clock 250000000 -> 500000000 Hz (0)
+deqp: case filter 'dEQP-GLES3.functional.attribute_location.*,dEQP-GLES3.functional.color_clear.*,dEQP-GLES3.functional.default_vertex_array_object.*,dEQP-GLES3.functional.default_vertex_attrib.*,dEQP-GLES3.functional.depth_stencil_clear.*,dEQP-GLES3.functional.dither.*,dEQP-GLES3.functional.fence_sync.*,dEQP-GLES3.functional.implementation_limits.*,dEQP-GLES3.info.*,dEQP-GLES3.functional.prerequisite.*'
+Writing test log into deqp.qpa
+dEQP Core vulkan-cts-192.0.2.1-555-g93bca01861b0e3ef3c387027a9791e6d065f900c (0x93bca018) starting..
+  target implementation = 'YakoGL-Zephyr'
+I: V3D 4.2: 1 core(s), 8 QPUs, VPM 65536 bytes, PA 35 / VA 35 bits, MMU yes
+I: V3D raw: HUB_IDENT0..3 42554856 000e1124 00000100 00000e00 CTL_IDENT0..2 04443356 81001422 40078121 MMU_DEBUG_INFO 00000550
+osal(v3d): V3D 4.2, 8 QPUs, VPM 65536 bytes, MMU yes (identify 0)
+osal(v3d): UIFCFG 0x00000045
+osal(v3d): ready: carve-out 48 MiB at phys 0x2f09000, GPU VA 0x181000..0x3100000
+yakogl/v3d: depth and stencil apart (by renderbuffer), the platform's setting
+yakogl/v3d: job arenas for 1024 draws (the platform's budget): BCL 139264, indirect 458752, binner tile pool 1056768 bytes; tiled copies kept up to 16777216 bytes
+yakogl/v3d: two job arena sets (the second's texture arena 1048576 bytes): a job is recorded while the one before runs
+yakogl/v3d: clear program built: 408 bytes of code
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind.float'..
+yakogl/v3d: binner pool after job 1: given 0x00b96000 + 1056768, BPCA 0x00b99000 BPCS 1044480 CT0QMA 0x00b96000 CT0QMS 1056768, overflow blocks 0 of 2 (262144 bytes each)
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind.float
+v3d_deqp: case #0 P 163ms k2/8 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind.float
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind.int'..
+osal(v3d): BASELINE after a completed job 1: core_sts 0x0 hub_sts 0x0 err 0x1000 ct0 cs 0x0 ea 0x201011 ca 0x201011 ra 0x0 qba 0x201000 qea 0x201011 ct1 ca 0x223097 ra 0x223096 qba 0x223000 qea 0x223097
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind.int
+v3d_deqp: case #1 P 40ms k2/8 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind.int
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind.ivec2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind.ivec2
+v3d_deqp: case #2 P 23ms k2/8 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind.ivec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind.ivec3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind.ivec3
+v3d_deqp: case #3 P 23ms k2/8 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind.ivec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind.ivec4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind.ivec4
+v3d_deqp: case #4 P 24ms k2/8 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind.ivec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind.mat2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind.mat2
+v3d_deqp: case #5 P 23ms k2/8 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind.mat2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind.mat2x2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind.mat2x2
+v3d_deqp: case #6 P 23ms k2/8 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind.mat2x2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind.mat2x3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind.mat2x3
+v3d_deqp: case #7 P 23ms k2/8 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind.mat2x3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind.mat2x4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind.mat2x4
+v3d_deqp: case #8 P 24ms k2/8 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind.mat2x4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind.mat3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind.mat3
+v3d_deqp: case #9 P 23ms k2/8 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind.mat3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind.mat3x2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind.mat3x2
+v3d_deqp: case #10 P 23ms k2/8 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind.mat3x2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind.mat3x3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind.mat3x3
+v3d_deqp: case #11 P 24ms k2/8 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind.mat3x3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind.mat3x4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind.mat3x4
+v3d_deqp: case #12 P 23ms k2/8 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind.mat3x4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind.mat4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind.mat4
+v3d_deqp: case #13 P 23ms k2/8 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind.mat4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind.mat4x2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind.mat4x2
+v3d_deqp: case #14 P 24ms k2/8 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind.mat4x2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind.mat4x3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind.mat4x3
+v3d_deqp: case #15 P 23ms k2/8 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind.mat4x3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind.mat4x4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind.mat4x4
+v3d_deqp: case #16 P 24ms k2/8 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind.mat4x4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind.uint'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind.uint
+v3d_deqp: case #17 P 23ms k2/8 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind.uint
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind.uvec2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind.uvec2
+v3d_deqp: case #18 P 23ms k2/8 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind.uvec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind.uvec3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind.uvec3
+v3d_deqp: case #19 P 23ms k2/8 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind.uvec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind.uvec4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind.uvec4
+v3d_deqp: case #20 P 24ms k2/8 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind.uvec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind.vec2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind.vec2
+v3d_deqp: case #21 P 23ms k2/8 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind.vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind.vec3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind.vec3
+v3d_deqp: case #22 P 22ms k2/8 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind.vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind.vec4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind.vec4
+v3d_deqp: case #23 P 23ms k2/8 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind.vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_aliasing.cond_float'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_aliasing.cond_float
+v3d_deqp: case #24 P 27ms k2/12 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_aliasing.cond_float
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_aliasing.cond_mat2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_aliasing.cond_mat2
+v3d_deqp: case #25 P 28ms k2/12 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_aliasing.cond_mat2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_aliasing.cond_mat2_offset_1'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_aliasing.cond_mat2_offset_1
+v3d_deqp: case #26 P 29ms k2/12 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_aliasing.cond_mat2_offset_1
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_aliasing.cond_mat3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_aliasing.cond_mat3
+v3d_deqp: case #27 P 28ms k2/12 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_aliasing.cond_mat3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_aliasing.cond_mat3_offset_1'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_aliasing.cond_mat3_offset_1
+v3d_deqp: case #28 P 30ms k2/12 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_aliasing.cond_mat3_offset_1
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_aliasing.cond_mat4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_aliasing.cond_mat4
+v3d_deqp: case #29 P 28ms k2/12 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_aliasing.cond_mat4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_aliasing.cond_mat4_offset_1'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_aliasing.cond_mat4_offset_1
+v3d_deqp: case #30 P 30ms k2/12 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_aliasing.cond_mat4_offset_1
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_aliasing.cond_vec2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_aliasing.cond_vec2
+v3d_deqp: case #31 P 28ms k2/12 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_aliasing.cond_vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_aliasing.cond_vec3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_aliasing.cond_vec3
+v3d_deqp: case #32 P 27ms k2/12 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_aliasing.cond_vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_aliasing.cond_vec4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_aliasing.cond_vec4
+v3d_deqp: case #33 P 28ms k2/12 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_aliasing.cond_vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_aliasing.max_cond_float'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_aliasing.max_cond_float
+v3d_deqp: case #34 P 33ms k2/18 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_aliasing.max_cond_float
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_aliasing.max_cond_mat2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_aliasing.max_cond_mat2
+v3d_deqp: case #35 P 34ms k2/18 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_aliasing.max_cond_mat2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_aliasing.max_cond_mat3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_aliasing.max_cond_mat3
+v3d_deqp: case #36 P 32ms k2/18 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_aliasing.max_cond_mat3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_aliasing.max_cond_mat4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_aliasing.max_cond_mat4
+v3d_deqp: case #37 P 31ms k2/18 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_aliasing.max_cond_mat4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_aliasing.max_cond_vec2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_aliasing.max_cond_vec2
+v3d_deqp: case #38 P 36ms k2/20 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_aliasing.max_cond_vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_aliasing.max_cond_vec3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_aliasing.max_cond_vec3
+v3d_deqp: case #39 P 39ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_aliasing.max_cond_vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_aliasing.max_cond_vec4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_aliasing.max_cond_vec4
+v3d_deqp: case #40 P 41ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_aliasing.max_cond_vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_aliasing.max_inactive_float'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_aliasing.max_inactive_float
+v3d_deqp: case #41 P 34ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_aliasing.max_inactive_float
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_aliasing.max_inactive_mat2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_aliasing.max_inactive_mat2
+v3d_deqp: case #42 P 34ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_aliasing.max_inactive_mat2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_aliasing.max_inactive_mat3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_aliasing.max_inactive_mat3
+v3d_deqp: case #43 P 33ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_aliasing.max_inactive_mat3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_aliasing.max_inactive_mat4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_aliasing.max_inactive_mat4
+v3d_deqp: case #44 P 31ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_aliasing.max_inactive_mat4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_aliasing.max_inactive_vec2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_aliasing.max_inactive_vec2
+v3d_deqp: case #45 P 36ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_aliasing.max_inactive_vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_aliasing.max_inactive_vec3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_aliasing.max_inactive_vec3
+v3d_deqp: case #46 P 38ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_aliasing.max_inactive_vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_aliasing.max_inactive_vec4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_aliasing.max_inactive_vec4
+v3d_deqp: case #47 P 39ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_aliasing.max_inactive_vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_hole.float'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_hole.float
+v3d_deqp: case #48 P 33ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_hole.float
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_hole.int'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_hole.int
+v3d_deqp: case #49 P 31ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_hole.int
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_hole.ivec2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_hole.ivec2
+v3d_deqp: case #50 P 30ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_hole.ivec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_hole.ivec3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_hole.ivec3
+v3d_deqp: case #51 P 31ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_hole.ivec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_hole.ivec4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_hole.ivec4
+v3d_deqp: case #52 P 31ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_hole.ivec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_hole.mat2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_hole.mat2
+v3d_deqp: case #53 P 31ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_hole.mat2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_hole.mat2x2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_hole.mat2x2
+v3d_deqp: case #54 P 31ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_hole.mat2x2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_hole.mat2x3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_hole.mat2x3
+v3d_deqp: case #55 P 32ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_hole.mat2x3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_hole.mat2x4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_hole.mat2x4
+v3d_deqp: case #56 P 31ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_hole.mat2x4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_hole.mat3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_hole.mat3
+v3d_deqp: case #57 P 30ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_hole.mat3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_hole.mat3x2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_hole.mat3x2
+v3d_deqp: case #58 P 31ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_hole.mat3x2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_hole.mat3x3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_hole.mat3x3
+v3d_deqp: case #59 P 31ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_hole.mat3x3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_hole.mat3x4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_hole.mat3x4
+v3d_deqp: case #60 P 30ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_hole.mat3x4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_hole.mat4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_hole.mat4
+v3d_deqp: case #61 P 31ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_hole.mat4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_hole.mat4x2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_hole.mat4x2
+v3d_deqp: case #62 P 30ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_hole.mat4x2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_hole.mat4x3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_hole.mat4x3
+v3d_deqp: case #63 P 30ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_hole.mat4x3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_hole.mat4x4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_hole.mat4x4
+v3d_deqp: case #64 P 31ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_hole.mat4x4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_hole.uint'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_hole.uint
+v3d_deqp: case #65 P 31ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_hole.uint
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_hole.uvec2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_hole.uvec2
+v3d_deqp: case #66 P 30ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_hole.uvec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_hole.uvec3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_hole.uvec3
+v3d_deqp: case #67 P 31ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_hole.uvec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_hole.uvec4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_hole.uvec4
+v3d_deqp: case #68 P 31ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_hole.uvec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_hole.vec2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_hole.vec2
+v3d_deqp: case #69 P 31ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_hole.vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_hole.vec3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_hole.vec3
+v3d_deqp: case #70 P 31ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_hole.vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_hole.vec4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_hole.vec4
+v3d_deqp: case #71 P 31ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_hole.vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_max_attributes.float'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_max_attributes.float
+v3d_deqp: case #72 P 28ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_max_attributes.float
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_max_attributes.int'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_max_attributes.int
+v3d_deqp: case #73 P 30ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_max_attributes.int
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_max_attributes.ivec2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_max_attributes.ivec2
+v3d_deqp: case #74 P 32ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_max_attributes.ivec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_max_attributes.ivec3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_max_attributes.ivec3
+v3d_deqp: case #75 P 40ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_max_attributes.ivec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_max_attributes.ivec4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_max_attributes.ivec4
+v3d_deqp: case #76 P 35ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_max_attributes.ivec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_max_attributes.mat2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_max_attributes.mat2
+v3d_deqp: case #77 P 31ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_max_attributes.mat2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_max_attributes.mat2x2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_max_attributes.mat2x2
+v3d_deqp: case #78 P 31ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_max_attributes.mat2x2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_max_attributes.mat2x3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_max_attributes.mat2x3
+v3d_deqp: case #79 P 31ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_max_attributes.mat2x3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_max_attributes.mat2x4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_max_attributes.mat2x4
+v3d_deqp: case #80 P 31ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_max_attributes.mat2x4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_max_attributes.mat3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_max_attributes.mat3
+v3d_deqp: case #81 P 29ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_max_attributes.mat3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_max_attributes.mat3x2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_max_attributes.mat3x2
+v3d_deqp: case #82 P 29ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_max_attributes.mat3x2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_max_attributes.mat3x3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_max_attributes.mat3x3
+v3d_deqp: case #83 P 30ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_max_attributes.mat3x3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_max_attributes.mat3x4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_max_attributes.mat3x4
+v3d_deqp: case #84 P 29ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_max_attributes.mat3x4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_max_attributes.mat4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_max_attributes.mat4
+v3d_deqp: case #85 P 29ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_max_attributes.mat4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_max_attributes.mat4x2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_max_attributes.mat4x2
+v3d_deqp: case #86 P 29ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_max_attributes.mat4x2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_max_attributes.mat4x3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_max_attributes.mat4x3
+v3d_deqp: case #87 P 29ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_max_attributes.mat4x3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_max_attributes.mat4x4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_max_attributes.mat4x4
+v3d_deqp: case #88 P 29ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_max_attributes.mat4x4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_max_attributes.uint'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_max_attributes.uint
+v3d_deqp: case #89 P 30ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_max_attributes.uint
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_max_attributes.uvec2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_max_attributes.uvec2
+v3d_deqp: case #90 P 32ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_max_attributes.uvec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_max_attributes.uvec3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_max_attributes.uvec3
+v3d_deqp: case #91 P 33ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_max_attributes.uvec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_max_attributes.uvec4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_max_attributes.uvec4
+v3d_deqp: case #92 P 35ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_max_attributes.uvec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_max_attributes.vec2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_max_attributes.vec2
+v3d_deqp: case #93 P 31ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_max_attributes.vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_max_attributes.vec3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_max_attributes.vec3
+v3d_deqp: case #94 P 32ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_max_attributes.vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_max_attributes.vec4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_max_attributes.vec4
+v3d_deqp: case #95 P 34ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_max_attributes.vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_relink_hole.float'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_relink_hole.float
+v3d_deqp: case #96 P 41ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_relink_hole.float
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_relink_hole.int'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_relink_hole.int
+v3d_deqp: case #97 P 40ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_relink_hole.int
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_relink_hole.ivec2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_relink_hole.ivec2
+v3d_deqp: case #98 P 39ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_relink_hole.ivec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_relink_hole.ivec3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_relink_hole.ivec3
+v3d_deqp: case #99 P 40ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_relink_hole.ivec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_relink_hole.ivec4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_relink_hole.ivec4
+v3d_deqp: case #100 P 41ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_relink_hole.ivec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_relink_hole.mat2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_relink_hole.mat2
+v3d_deqp: case #101 P 40ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_relink_hole.mat2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_relink_hole.mat2x2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_relink_hole.mat2x2
+v3d_deqp: case #102 P 41ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_relink_hole.mat2x2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_relink_hole.mat2x3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_relink_hole.mat2x3
+v3d_deqp: case #103 P 40ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_relink_hole.mat2x3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_relink_hole.mat2x4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_relink_hole.mat2x4
+v3d_deqp: case #104 P 41ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_relink_hole.mat2x4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_relink_hole.mat3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_relink_hole.mat3
+v3d_deqp: case #105 P 39ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_relink_hole.mat3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_relink_hole.mat3x2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_relink_hole.mat3x2
+v3d_deqp: case #106 P 40ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_relink_hole.mat3x2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_relink_hole.mat3x3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_relink_hole.mat3x3
+v3d_deqp: case #107 P 39ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_relink_hole.mat3x3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_relink_hole.mat3x4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_relink_hole.mat3x4
+v3d_deqp: case #108 P 40ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_relink_hole.mat3x4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_relink_hole.mat4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_relink_hole.mat4
+v3d_deqp: case #109 P 39ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_relink_hole.mat4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_relink_hole.mat4x2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_relink_hole.mat4x2
+v3d_deqp: case #110 P 39ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_relink_hole.mat4x2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_relink_hole.mat4x3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_relink_hole.mat4x3
+v3d_deqp: case #111 P 39ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_relink_hole.mat4x3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_relink_hole.mat4x4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_relink_hole.mat4x4
+v3d_deqp: case #112 P 39ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_relink_hole.mat4x4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_relink_hole.uint'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_relink_hole.uint
+v3d_deqp: case #113 P 40ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_relink_hole.uint
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_relink_hole.uvec2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_relink_hole.uvec2
+v3d_deqp: case #114 P 39ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_relink_hole.uvec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_relink_hole.uvec3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_relink_hole.uvec3
+v3d_deqp: case #115 P 40ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_relink_hole.uvec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_relink_hole.uvec4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_relink_hole.uvec4
+v3d_deqp: case #116 P 41ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_relink_hole.uvec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_relink_hole.vec2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_relink_hole.vec2
+v3d_deqp: case #117 P 41ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_relink_hole.vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_relink_hole.vec3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_relink_hole.vec3
+v3d_deqp: case #118 P 40ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_relink_hole.vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_relink_hole.vec4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_relink_hole.vec4
+v3d_deqp: case #119 P 40ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_relink_hole.vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_time.post_link'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_time.post_link
+v3d_deqp: case #120 P 26ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_time.post_link
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_time.pre_attach'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_time.pre_attach
+v3d_deqp: case #121 P 26ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_time.pre_attach
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_time.pre_link'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_time.pre_link
+v3d_deqp: case #122 P 26ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_time.pre_link
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_time.reattach'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_time.reattach
+v3d_deqp: case #123 P 27ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_time.reattach
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.bind_time.relink'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.bind_time.relink
+v3d_deqp: case #124 P 27ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.bind_time.relink
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout.float'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout.float
+v3d_deqp: case #125 P 25ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout.float
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout.int'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout.int
+v3d_deqp: case #126 P 23ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout.int
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout.ivec2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout.ivec2
+v3d_deqp: case #127 P 24ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout.ivec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout.ivec3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout.ivec3
+v3d_deqp: case #128 P 24ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout.ivec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout.ivec4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout.ivec4
+v3d_deqp: case #129 P 24ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout.ivec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout.mat2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout.mat2
+v3d_deqp: case #130 P 24ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout.mat2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout.mat2x2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout.mat2x2
+v3d_deqp: case #131 P 24ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout.mat2x2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout.mat2x3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout.mat2x3
+v3d_deqp: case #132 P 24ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout.mat2x3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout.mat2x4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout.mat2x4
+v3d_deqp: case #133 P 24ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout.mat2x4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout.mat3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout.mat3
+v3d_deqp: case #134 P 24ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout.mat3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout.mat3x2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout.mat3x2
+v3d_deqp: case #135 P 24ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout.mat3x2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout.mat3x3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout.mat3x3
+v3d_deqp: case #136 P 24ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout.mat3x3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout.mat3x4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout.mat3x4
+v3d_deqp: case #137 P 25ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout.mat3x4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout.mat4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout.mat4
+v3d_deqp: case #138 P 23ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout.mat4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout.mat4x2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout.mat4x2
+v3d_deqp: case #139 P 24ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout.mat4x2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout.mat4x3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout.mat4x3
+v3d_deqp: case #140 P 25ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout.mat4x3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout.mat4x4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout.mat4x4
+v3d_deqp: case #141 P 24ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout.mat4x4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout.uint'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout.uint
+v3d_deqp: case #142 P 24ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout.uint
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout.uvec2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout.uvec2
+v3d_deqp: case #143 P 23ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout.uvec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout.uvec3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout.uvec3
+v3d_deqp: case #144 P 25ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout.uvec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout.uvec4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout.uvec4
+v3d_deqp: case #145 P 24ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout.uvec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout.vec2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout.vec2
+v3d_deqp: case #146 P 23ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout.vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout.vec3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout.vec3
+v3d_deqp: case #147 P 24ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout.vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout.vec4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout.vec4
+v3d_deqp: case #148 P 24ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout.vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout_hole.float'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout_hole.float
+v3d_deqp: case #149 P 31ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout_hole.float
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout_hole.int'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout_hole.int
+v3d_deqp: case #150 P 31ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout_hole.int
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout_hole.ivec2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout_hole.ivec2
+v3d_deqp: case #151 P 31ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout_hole.ivec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout_hole.ivec3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout_hole.ivec3
+v3d_deqp: case #152 P 32ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout_hole.ivec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout_hole.ivec4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout_hole.ivec4
+v3d_deqp: case #153 P 32ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout_hole.ivec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout_hole.mat2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout_hole.mat2
+v3d_deqp: case #154 P 31ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout_hole.mat2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout_hole.mat2x2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout_hole.mat2x2
+v3d_deqp: case #155 P 32ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout_hole.mat2x2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout_hole.mat2x3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout_hole.mat2x3
+v3d_deqp: case #156 P 32ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout_hole.mat2x3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout_hole.mat2x4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout_hole.mat2x4
+v3d_deqp: case #157 P 32ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout_hole.mat2x4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout_hole.mat3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout_hole.mat3
+v3d_deqp: case #158 P 31ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout_hole.mat3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout_hole.mat3x2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout_hole.mat3x2
+v3d_deqp: case #159 P 31ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout_hole.mat3x2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout_hole.mat3x3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout_hole.mat3x3
+v3d_deqp: case #160 P 32ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout_hole.mat3x3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout_hole.mat3x4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout_hole.mat3x4
+v3d_deqp: case #161 P 31ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout_hole.mat3x4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout_hole.mat4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout_hole.mat4
+v3d_deqp: case #162 P 31ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout_hole.mat4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout_hole.mat4x2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout_hole.mat4x2
+v3d_deqp: case #163 P 31ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout_hole.mat4x2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout_hole.mat4x3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout_hole.mat4x3
+v3d_deqp: case #164 P 31ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout_hole.mat4x3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout_hole.mat4x4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout_hole.mat4x4
+v3d_deqp: case #165 P 31ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout_hole.mat4x4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout_hole.uint'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout_hole.uint
+v3d_deqp: case #166 P 32ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout_hole.uint
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout_hole.uvec2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout_hole.uvec2
+v3d_deqp: case #167 P 31ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout_hole.uvec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout_hole.uvec3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout_hole.uvec3
+v3d_deqp: case #168 P 31ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout_hole.uvec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout_hole.uvec4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout_hole.uvec4
+v3d_deqp: case #169 P 32ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout_hole.uvec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout_hole.vec2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout_hole.vec2
+v3d_deqp: case #170 P 32ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout_hole.vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout_hole.vec3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout_hole.vec3
+v3d_deqp: case #171 P 31ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout_hole.vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout_hole.vec4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout_hole.vec4
+v3d_deqp: case #172 P 31ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout_hole.vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout_max_attributes.float'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout_max_attributes.float
+v3d_deqp: case #173 P 30ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout_max_attributes.float
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout_max_attributes.int'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout_max_attributes.int
+v3d_deqp: case #174 P 30ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout_max_attributes.int
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout_max_attributes.ivec2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout_max_attributes.ivec2
+v3d_deqp: case #175 P 33ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout_max_attributes.ivec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout_max_attributes.ivec3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout_max_attributes.ivec3
+v3d_deqp: case #176 P 41ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout_max_attributes.ivec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout_max_attributes.ivec4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout_max_attributes.ivec4
+v3d_deqp: case #177 P 36ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout_max_attributes.ivec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout_max_attributes.mat2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout_max_attributes.mat2
+v3d_deqp: case #178 P 31ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout_max_attributes.mat2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout_max_attributes.mat2x2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout_max_attributes.mat2x2
+v3d_deqp: case #179 P 31ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout_max_attributes.mat2x2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout_max_attributes.mat2x3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout_max_attributes.mat2x3
+v3d_deqp: case #180 P 32ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout_max_attributes.mat2x3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout_max_attributes.mat2x4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout_max_attributes.mat2x4
+v3d_deqp: case #181 P 32ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout_max_attributes.mat2x4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout_max_attributes.mat3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout_max_attributes.mat3
+v3d_deqp: case #182 P 30ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout_max_attributes.mat3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout_max_attributes.mat3x2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout_max_attributes.mat3x2
+v3d_deqp: case #183 P 29ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout_max_attributes.mat3x2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout_max_attributes.mat3x3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout_max_attributes.mat3x3
+v3d_deqp: case #184 P 31ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout_max_attributes.mat3x3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout_max_attributes.mat3x4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout_max_attributes.mat3x4
+v3d_deqp: case #185 P 30ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout_max_attributes.mat3x4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout_max_attributes.mat4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout_max_attributes.mat4
+v3d_deqp: case #186 P 29ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout_max_attributes.mat4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout_max_attributes.mat4x2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout_max_attributes.mat4x2
+v3d_deqp: case #187 P 30ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout_max_attributes.mat4x2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout_max_attributes.mat4x3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout_max_attributes.mat4x3
+v3d_deqp: case #188 P 29ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout_max_attributes.mat4x3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout_max_attributes.mat4x4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout_max_attributes.mat4x4
+v3d_deqp: case #189 P 30ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout_max_attributes.mat4x4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout_max_attributes.uint'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout_max_attributes.uint
+v3d_deqp: case #190 P 31ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout_max_attributes.uint
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout_max_attributes.uvec2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout_max_attributes.uvec2
+v3d_deqp: case #191 P 32ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout_max_attributes.uvec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout_max_attributes.uvec3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout_max_attributes.uvec3
+v3d_deqp: case #192 P 34ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout_max_attributes.uvec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout_max_attributes.uvec4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout_max_attributes.uvec4
+v3d_deqp: case #193 P 36ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout_max_attributes.uvec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout_max_attributes.vec2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout_max_attributes.vec2
+v3d_deqp: case #194 P 31ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout_max_attributes.vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout_max_attributes.vec3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout_max_attributes.vec3
+v3d_deqp: case #195 P 33ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout_max_attributes.vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.layout_max_attributes.vec4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.layout_max_attributes.vec4
+v3d_deqp: case #196 P 34ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.layout_max_attributes.vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed.float'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed.float
+v3d_deqp: case #197 P 25ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed.float
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed.int'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed.int
+v3d_deqp: case #198 P 24ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed.int
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed.ivec2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed.ivec2
+v3d_deqp: case #199 P 23ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed.ivec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed.ivec3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed.ivec3
+v3d_deqp: case #200 P 24ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed.ivec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed.ivec4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed.ivec4
+v3d_deqp: case #201 P 24ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed.ivec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed.mat2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed.mat2
+v3d_deqp: case #202 P 23ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed.mat2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed.mat2x2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed.mat2x2
+v3d_deqp: case #203 P 24ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed.mat2x2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed.mat2x3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed.mat2x3
+v3d_deqp: case #204 P 24ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed.mat2x3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed.mat2x4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed.mat2x4
+v3d_deqp: case #205 P 24ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed.mat2x4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed.mat3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed.mat3
+v3d_deqp: case #206 P 24ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed.mat3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed.mat3x2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed.mat3x2
+v3d_deqp: case #207 P 23ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed.mat3x2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed.mat3x3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed.mat3x3
+v3d_deqp: case #208 P 24ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed.mat3x3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed.mat3x4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed.mat3x4
+v3d_deqp: case #209 P 24ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed.mat3x4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed.mat4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed.mat4
+v3d_deqp: case #210 P 24ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed.mat4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed.mat4x2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed.mat4x2
+v3d_deqp: case #211 P 24ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed.mat4x2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed.mat4x3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed.mat4x3
+v3d_deqp: case #212 P 24ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed.mat4x3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed.mat4x4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed.mat4x4
+v3d_deqp: case #213 P 24ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed.mat4x4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed.uint'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed.uint
+v3d_deqp: case #214 P 23ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed.uint
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed.uvec2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed.uvec2
+v3d_deqp: case #215 P 24ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed.uvec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed.uvec3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed.uvec3
+v3d_deqp: case #216 P 24ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed.uvec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed.uvec4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed.uvec4
+v3d_deqp: case #217 P 23ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed.uvec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed.vec2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed.vec2
+v3d_deqp: case #218 P 24ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed.vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed.vec3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed.vec3
+v3d_deqp: case #219 P 23ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed.vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed.vec4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed.vec4
+v3d_deqp: case #220 P 24ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed.vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_hole.float'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_hole.float
+v3d_deqp: case #221 P 31ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_hole.float
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_hole.int'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_hole.int
+v3d_deqp: case #222 P 31ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_hole.int
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_hole.ivec2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_hole.ivec2
+v3d_deqp: case #223 P 31ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_hole.ivec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_hole.ivec3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_hole.ivec3
+v3d_deqp: case #224 P 31ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_hole.ivec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_hole.ivec4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_hole.ivec4
+v3d_deqp: case #225 P 32ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_hole.ivec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_hole.mat2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_hole.mat2
+v3d_deqp: case #226 P 31ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_hole.mat2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_hole.mat2x2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_hole.mat2x2
+v3d_deqp: case #227 P 32ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_hole.mat2x2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_hole.mat2x3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_hole.mat2x3
+v3d_deqp: case #228 P 32ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_hole.mat2x3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_hole.mat2x4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_hole.mat2x4
+v3d_deqp: case #229 P 31ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_hole.mat2x4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_hole.mat3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_hole.mat3
+v3d_deqp: case #230 P 31ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_hole.mat3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_hole.mat3x2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_hole.mat3x2
+v3d_deqp: case #231 P 31ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_hole.mat3x2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_hole.mat3x3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_hole.mat3x3
+v3d_deqp: case #232 P 31ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_hole.mat3x3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_hole.mat3x4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_hole.mat3x4
+v3d_deqp: case #233 P 32ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_hole.mat3x4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_hole.mat4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_hole.mat4
+v3d_deqp: case #234 P 30ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_hole.mat4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_hole.mat4x2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_hole.mat4x2
+v3d_deqp: case #235 P 31ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_hole.mat4x2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_hole.mat4x3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_hole.mat4x3
+v3d_deqp: case #236 P 31ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_hole.mat4x3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_hole.mat4x4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_hole.mat4x4
+v3d_deqp: case #237 P 31ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_hole.mat4x4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_hole.uint'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_hole.uint
+v3d_deqp: case #238 P 31ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_hole.uint
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_hole.uvec2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_hole.uvec2
+v3d_deqp: case #239 P 31ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_hole.uvec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_hole.uvec3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_hole.uvec3
+v3d_deqp: case #240 P 31ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_hole.uvec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_hole.uvec4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_hole.uvec4
+v3d_deqp: case #241 P 32ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_hole.uvec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_hole.vec2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_hole.vec2
+v3d_deqp: case #242 P 31ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_hole.vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_hole.vec3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_hole.vec3
+v3d_deqp: case #243 P 31ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_hole.vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_hole.vec4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_hole.vec4
+v3d_deqp: case #244 P 32ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_hole.vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_max_attributes.float'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_max_attributes.float
+v3d_deqp: case #245 P 29ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_max_attributes.float
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_max_attributes.int'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_max_attributes.int
+v3d_deqp: case #246 P 31ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_max_attributes.int
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_max_attributes.ivec2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_max_attributes.ivec2
+v3d_deqp: case #247 P 33ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_max_attributes.ivec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_max_attributes.ivec3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_max_attributes.ivec3
+v3d_deqp: case #248 P 40ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_max_attributes.ivec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_max_attributes.ivec4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_max_attributes.ivec4
+v3d_deqp: case #249 P 36ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_max_attributes.ivec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_max_attributes.mat2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_max_attributes.mat2
+v3d_deqp: case #250 P 32ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_max_attributes.mat2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_max_attributes.mat2x2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_max_attributes.mat2x2
+v3d_deqp: case #251 P 31ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_max_attributes.mat2x2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_max_attributes.mat2x3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_max_attributes.mat2x3
+v3d_deqp: case #252 P 32ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_max_attributes.mat2x3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_max_attributes.mat2x4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_max_attributes.mat2x4
+v3d_deqp: case #253 P 31ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_max_attributes.mat2x4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_max_attributes.mat3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_max_attributes.mat3
+v3d_deqp: case #254 P 30ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_max_attributes.mat3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_max_attributes.mat3x2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_max_attributes.mat3x2
+v3d_deqp: case #255 P 30ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_max_attributes.mat3x2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_max_attributes.mat3x3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_max_attributes.mat3x3
+v3d_deqp: case #256 P 30ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_max_attributes.mat3x3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_max_attributes.mat3x4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_max_attributes.mat3x4
+v3d_deqp: case #257 P 30ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_max_attributes.mat3x4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_max_attributes.mat4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_max_attributes.mat4
+v3d_deqp: case #258 P 29ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_max_attributes.mat4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_max_attributes.mat4x2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_max_attributes.mat4x2
+v3d_deqp: case #259 P 29ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_max_attributes.mat4x2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_max_attributes.mat4x3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_max_attributes.mat4x3
+v3d_deqp: case #260 P 30ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_max_attributes.mat4x3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_max_attributes.mat4x4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_max_attributes.mat4x4
+v3d_deqp: case #261 P 30ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_max_attributes.mat4x4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_max_attributes.uint'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_max_attributes.uint
+v3d_deqp: case #262 P 30ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_max_attributes.uint
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_max_attributes.uvec2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_max_attributes.uvec2
+v3d_deqp: case #263 P 33ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_max_attributes.uvec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_max_attributes.uvec3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_max_attributes.uvec3
+v3d_deqp: case #264 P 34ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_max_attributes.uvec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_max_attributes.uvec4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_max_attributes.uvec4
+v3d_deqp: case #265 P 36ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_max_attributes.uvec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_max_attributes.vec2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_max_attributes.vec2
+v3d_deqp: case #266 P 31ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_max_attributes.vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_max_attributes.vec3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_max_attributes.vec3
+v3d_deqp: case #267 P 33ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_max_attributes.vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_max_attributes.vec4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_max_attributes.vec4
+v3d_deqp: case #268 P 35ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_max_attributes.vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_relink_hole.float'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_relink_hole.float
+v3d_deqp: case #269 P 41ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_relink_hole.float
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_relink_hole.int'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_relink_hole.int
+v3d_deqp: case #270 P 41ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_relink_hole.int
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_relink_hole.ivec2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_relink_hole.ivec2
+v3d_deqp: case #271 P 40ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_relink_hole.ivec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_relink_hole.ivec3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_relink_hole.ivec3
+v3d_deqp: case #272 P 41ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_relink_hole.ivec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_relink_hole.ivec4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_relink_hole.ivec4
+v3d_deqp: case #273 P 41ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_relink_hole.ivec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_relink_hole.mat2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_relink_hole.mat2
+v3d_deqp: case #274 P 41ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_relink_hole.mat2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_relink_hole.mat2x2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_relink_hole.mat2x2
+v3d_deqp: case #275 P 42ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_relink_hole.mat2x2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_relink_hole.mat2x3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_relink_hole.mat2x3
+v3d_deqp: case #276 P 41ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_relink_hole.mat2x3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_relink_hole.mat2x4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_relink_hole.mat2x4
+v3d_deqp: case #277 P 42ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_relink_hole.mat2x4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_relink_hole.mat3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_relink_hole.mat3
+v3d_deqp: case #278 P 39ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_relink_hole.mat3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_relink_hole.mat3x2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_relink_hole.mat3x2
+v3d_deqp: case #279 P 41ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_relink_hole.mat3x2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_relink_hole.mat3x3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_relink_hole.mat3x3
+v3d_deqp: case #280 P 40ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_relink_hole.mat3x3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_relink_hole.mat3x4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_relink_hole.mat3x4
+v3d_deqp: case #281 P 40ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_relink_hole.mat3x4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_relink_hole.mat4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_relink_hole.mat4
+v3d_deqp: case #282 P 39ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_relink_hole.mat4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_relink_hole.mat4x2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_relink_hole.mat4x2
+v3d_deqp: case #283 P 40ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_relink_hole.mat4x2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_relink_hole.mat4x3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_relink_hole.mat4x3
+v3d_deqp: case #284 P 40ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_relink_hole.mat4x3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_relink_hole.mat4x4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_relink_hole.mat4x4
+v3d_deqp: case #285 P 39ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_relink_hole.mat4x4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_relink_hole.uint'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_relink_hole.uint
+v3d_deqp: case #286 P 41ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_relink_hole.uint
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_relink_hole.uvec2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_relink_hole.uvec2
+v3d_deqp: case #287 P 40ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_relink_hole.uvec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_relink_hole.uvec3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_relink_hole.uvec3
+v3d_deqp: case #288 P 41ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_relink_hole.uvec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_relink_hole.uvec4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_relink_hole.uvec4
+v3d_deqp: case #289 P 41ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_relink_hole.uvec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_relink_hole.vec2'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_relink_hole.vec2
+v3d_deqp: case #290 P 41ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_relink_hole.vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_relink_hole.vec3'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_relink_hole.vec3
+v3d_deqp: case #291 P 41ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_relink_hole.vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_relink_hole.vec4'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_relink_hole.vec4
+v3d_deqp: case #292 P 41ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_relink_hole.vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_time.post_link'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_time.post_link
+v3d_deqp: case #293 P 27ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_time.post_link
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_time.pre_attach'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_time.pre_attach
+v3d_deqp: case #294 P 26ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_time.pre_attach
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_time.pre_link'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_time.pre_link
+v3d_deqp: case #295 P 26ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_time.pre_link
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_time.reattach'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_time.reattach
+v3d_deqp: case #296 P 27ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_time.reattach
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.attribute_location.mixed_time.relink'..
+deqp: Pass dEQP-GLES3.functional.attribute_location.mixed_time.relink
+v3d_deqp: case #297 P 28ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.attribute_location.mixed_time.relink
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.color_clear.complex_rgb'..
+deqp: Pass dEQP-GLES3.functional.color_clear.complex_rgb
+v3d_deqp: case #298 P 72ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.color_clear.complex_rgb
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.color_clear.complex_rgba'..
+deqp: Pass dEQP-GLES3.functional.color_clear.complex_rgba
+v3d_deqp: case #299 P 71ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.color_clear.complex_rgba
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.color_clear.long_masked_rgb'..
+deqp: Pass dEQP-GLES3.functional.color_clear.long_masked_rgb
+v3d_deqp: case #300 P 35ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.color_clear.long_masked_rgb
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.color_clear.long_masked_rgba'..
+deqp: Pass dEQP-GLES3.functional.color_clear.long_masked_rgba
+v3d_deqp: case #301 P 36ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.color_clear.long_masked_rgba
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.color_clear.long_rgb'..
+deqp: Pass dEQP-GLES3.functional.color_clear.long_rgb
+v3d_deqp: case #302 P 30ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.color_clear.long_rgb
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.color_clear.long_rgba'..
+deqp: Pass dEQP-GLES3.functional.color_clear.long_rgba
+v3d_deqp: case #303 P 30ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.color_clear.long_rgba
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.color_clear.masked_rgb'..
+deqp: Pass dEQP-GLES3.functional.color_clear.masked_rgb
+v3d_deqp: case #304 P 82ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.color_clear.masked_rgb
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.color_clear.masked_rgba'..
+deqp: Pass dEQP-GLES3.functional.color_clear.masked_rgba
+v3d_deqp: case #305 P 82ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.color_clear.masked_rgba
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.color_clear.masked_scissored_rgb'..
+deqp: Pass dEQP-GLES3.functional.color_clear.masked_scissored_rgb
+v3d_deqp: case #306 P 75ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.color_clear.masked_scissored_rgb
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.color_clear.masked_scissored_rgba'..
+deqp: Pass dEQP-GLES3.functional.color_clear.masked_scissored_rgba
+v3d_deqp: case #307 P 76ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.color_clear.masked_scissored_rgba
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.color_clear.multiple_rgb'..
+deqp: Pass dEQP-GLES3.functional.color_clear.multiple_rgb
+v3d_deqp: case #308 P 75ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.color_clear.multiple_rgb
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.color_clear.multiple_rgba'..
+deqp: Pass dEQP-GLES3.functional.color_clear.multiple_rgba
+v3d_deqp: case #309 P 73ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.color_clear.multiple_rgba
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.color_clear.scissored_rgb'..
+deqp: Pass dEQP-GLES3.functional.color_clear.scissored_rgb
+v3d_deqp: case #310 P 73ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.color_clear.scissored_rgb
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.color_clear.scissored_rgba'..
+deqp: Pass dEQP-GLES3.functional.color_clear.scissored_rgba
+v3d_deqp: case #311 P 73ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.color_clear.scissored_rgba
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.color_clear.short_scissored_rgb'..
+deqp: Pass dEQP-GLES3.functional.color_clear.short_scissored_rgb
+v3d_deqp: case #312 P 115ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.color_clear.short_scissored_rgb
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.color_clear.single_rgb'..
+deqp: Pass dEQP-GLES3.functional.color_clear.single_rgb
+v3d_deqp: case #313 P 113ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.color_clear.single_rgb
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.color_clear.single_rgba'..
+deqp: Pass dEQP-GLES3.functional.color_clear.single_rgba
+v3d_deqp: case #314 P 112ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.color_clear.single_rgba
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.color_clear.subclears_rgb'..
+deqp: Pass dEQP-GLES3.functional.color_clear.subclears_rgb
+v3d_deqp: case #315 P 75ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.color_clear.subclears_rgb
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.color_clear.subclears_rgba'..
+deqp: Pass dEQP-GLES3.functional.color_clear.subclears_rgba
+v3d_deqp: case #316 P 74ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.color_clear.subclears_rgba
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_array_object.vertex_attrib_divisor'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_array_object.vertex_attrib_divisor
+v3d_deqp: case #317 P 25ms k2/21 c15532/15532 r0 dEQP-GLES3.functional.default_vertex_array_object.vertex_attrib_divisor
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.float.vertex_attrib_1f'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.float.vertex_attrib_1f
+v3d_deqp: case #318 P 30ms k2/21 c15532/15545 r0 dEQP-GLES3.functional.default_vertex_attrib.float.vertex_attrib_1f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.float.vertex_attrib_1fv'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.float.vertex_attrib_1fv
+v3d_deqp: case #319 P 30ms k2/21 c15532/15545 r0 dEQP-GLES3.functional.default_vertex_attrib.float.vertex_attrib_1fv
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.float.vertex_attrib_2f'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.float.vertex_attrib_2f
+v3d_deqp: case #320 P 29ms k2/21 c15532/15545 r0 dEQP-GLES3.functional.default_vertex_attrib.float.vertex_attrib_2f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.float.vertex_attrib_2fv'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.float.vertex_attrib_2fv
+v3d_deqp: case #321 P 29ms k2/21 c15532/15545 r0 dEQP-GLES3.functional.default_vertex_attrib.float.vertex_attrib_2fv
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.float.vertex_attrib_3f'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.float.vertex_attrib_3f
+v3d_deqp: case #322 P 29ms k2/21 c15532/15545 r0 dEQP-GLES3.functional.default_vertex_attrib.float.vertex_attrib_3f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.float.vertex_attrib_3fv'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.float.vertex_attrib_3fv
+v3d_deqp: case #323 P 29ms k2/21 c15532/15545 r0 dEQP-GLES3.functional.default_vertex_attrib.float.vertex_attrib_3fv
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.float.vertex_attrib_4f'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.float.vertex_attrib_4f
+v3d_deqp: case #324 P 30ms k2/21 c15532/15545 r0 dEQP-GLES3.functional.default_vertex_attrib.float.vertex_attrib_4f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.float.vertex_attrib_4fv'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.float.vertex_attrib_4fv
+v3d_deqp: case #325 P 29ms k2/21 c15532/15545 r0 dEQP-GLES3.functional.default_vertex_attrib.float.vertex_attrib_4fv
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.int.vertex_attribi_4i'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.int.vertex_attribi_4i
+v3d_deqp: case #326 P 29ms k2/21 c15532/15545 r0 dEQP-GLES3.functional.default_vertex_attrib.int.vertex_attribi_4i
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.int.vertex_attribi_4iv'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.int.vertex_attribi_4iv
+v3d_deqp: case #327 P 29ms k2/21 c15532/15545 r0 dEQP-GLES3.functional.default_vertex_attrib.int.vertex_attribi_4iv
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.ivec2.vertex_attribi_4i'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.ivec2.vertex_attribi_4i
+v3d_deqp: case #328 P 29ms k2/21 c15532/15545 r0 dEQP-GLES3.functional.default_vertex_attrib.ivec2.vertex_attribi_4i
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.ivec2.vertex_attribi_4iv'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.ivec2.vertex_attribi_4iv
+v3d_deqp: case #329 P 30ms k2/21 c15532/15545 r0 dEQP-GLES3.functional.default_vertex_attrib.ivec2.vertex_attribi_4iv
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.ivec3.vertex_attribi_4i'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.ivec3.vertex_attribi_4i
+v3d_deqp: case #330 P 30ms k2/21 c15532/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.ivec3.vertex_attribi_4i
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.ivec3.vertex_attribi_4iv'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.ivec3.vertex_attribi_4iv
+v3d_deqp: case #331 P 29ms k2/21 c15532/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.ivec3.vertex_attribi_4iv
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.ivec4.vertex_attribi_4i'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.ivec4.vertex_attribi_4i
+v3d_deqp: case #332 P 30ms k2/21 c15532/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.ivec4.vertex_attribi_4i
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.ivec4.vertex_attribi_4iv'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.ivec4.vertex_attribi_4iv
+v3d_deqp: case #333 P 30ms k2/21 c15532/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.ivec4.vertex_attribi_4iv
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.mat2.vertex_attrib_1f'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.mat2.vertex_attrib_1f
+v3d_deqp: case #334 P 30ms k2/21 c15533/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.mat2.vertex_attrib_1f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.mat2.vertex_attrib_1fv'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.mat2.vertex_attrib_1fv
+v3d_deqp: case #335 P 29ms k2/21 c15533/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.mat2.vertex_attrib_1fv
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.mat2.vertex_attrib_4f'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.mat2.vertex_attrib_4f
+v3d_deqp: case #336 P 29ms k2/21 c15533/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.mat2.vertex_attrib_4f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.mat2.vertex_attrib_4fv'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.mat2.vertex_attrib_4fv
+v3d_deqp: case #337 P 29ms k2/21 c15533/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.mat2.vertex_attrib_4fv
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.mat2x3.vertex_attrib_1f'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.mat2x3.vertex_attrib_1f
+v3d_deqp: case #338 P 29ms k2/21 c15533/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.mat2x3.vertex_attrib_1f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.mat2x3.vertex_attrib_1fv'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.mat2x3.vertex_attrib_1fv
+v3d_deqp: case #339 P 30ms k2/21 c15533/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.mat2x3.vertex_attrib_1fv
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.mat2x3.vertex_attrib_4f'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.mat2x3.vertex_attrib_4f
+v3d_deqp: case #340 P 30ms k2/21 c15533/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.mat2x3.vertex_attrib_4f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.mat2x3.vertex_attrib_4fv'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.mat2x3.vertex_attrib_4fv
+v3d_deqp: case #341 P 30ms k2/21 c15533/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.mat2x3.vertex_attrib_4fv
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.mat2x4.vertex_attrib_1f'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.mat2x4.vertex_attrib_1f
+v3d_deqp: case #342 P 30ms k2/21 c15533/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.mat2x4.vertex_attrib_1f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.mat2x4.vertex_attrib_1fv'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.mat2x4.vertex_attrib_1fv
+v3d_deqp: case #343 P 29ms k2/21 c15533/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.mat2x4.vertex_attrib_1fv
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.mat2x4.vertex_attrib_4f'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.mat2x4.vertex_attrib_4f
+v3d_deqp: case #344 P 30ms k2/21 c15533/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.mat2x4.vertex_attrib_4f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.mat2x4.vertex_attrib_4fv'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.mat2x4.vertex_attrib_4fv
+v3d_deqp: case #345 P 30ms k2/21 c15533/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.mat2x4.vertex_attrib_4fv
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.mat3.vertex_attrib_1f'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.mat3.vertex_attrib_1f
+v3d_deqp: case #346 P 30ms k2/21 c15533/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.mat3.vertex_attrib_1f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.mat3.vertex_attrib_1fv'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.mat3.vertex_attrib_1fv
+v3d_deqp: case #347 P 29ms k2/21 c15533/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.mat3.vertex_attrib_1fv
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.mat3.vertex_attrib_4f'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.mat3.vertex_attrib_4f
+v3d_deqp: case #348 P 29ms k2/21 c15533/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.mat3.vertex_attrib_4f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.mat3.vertex_attrib_4fv'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.mat3.vertex_attrib_4fv
+v3d_deqp: case #349 P 29ms k2/21 c15533/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.mat3.vertex_attrib_4fv
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.mat3x2.vertex_attrib_1f'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.mat3x2.vertex_attrib_1f
+v3d_deqp: case #350 P 29ms k2/21 c15533/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.mat3x2.vertex_attrib_1f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.mat3x2.vertex_attrib_1fv'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.mat3x2.vertex_attrib_1fv
+v3d_deqp: case #351 P 30ms k2/21 c15533/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.mat3x2.vertex_attrib_1fv
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.mat3x2.vertex_attrib_4f'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.mat3x2.vertex_attrib_4f
+v3d_deqp: case #352 P 30ms k2/21 c15533/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.mat3x2.vertex_attrib_4f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.mat3x2.vertex_attrib_4fv'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.mat3x2.vertex_attrib_4fv
+v3d_deqp: case #353 P 29ms k2/21 c15533/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.mat3x2.vertex_attrib_4fv
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.mat3x4.vertex_attrib_1f'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.mat3x4.vertex_attrib_1f
+v3d_deqp: case #354 P 30ms k2/21 c15533/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.mat3x4.vertex_attrib_1f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.mat3x4.vertex_attrib_1fv'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.mat3x4.vertex_attrib_1fv
+v3d_deqp: case #355 P 30ms k2/21 c15533/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.mat3x4.vertex_attrib_1fv
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.mat3x4.vertex_attrib_4f'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.mat3x4.vertex_attrib_4f
+v3d_deqp: case #356 P 30ms k2/21 c15533/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.mat3x4.vertex_attrib_4f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.mat3x4.vertex_attrib_4fv'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.mat3x4.vertex_attrib_4fv
+v3d_deqp: case #357 P 30ms k2/21 c15533/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.mat3x4.vertex_attrib_4fv
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.mat4.vertex_attrib_1f'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.mat4.vertex_attrib_1f
+v3d_deqp: case #358 P 29ms k2/21 c15533/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.mat4.vertex_attrib_1f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.mat4.vertex_attrib_1fv'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.mat4.vertex_attrib_1fv
+v3d_deqp: case #359 P 30ms k2/21 c15533/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.mat4.vertex_attrib_1fv
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.mat4.vertex_attrib_2f'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.mat4.vertex_attrib_2f
+v3d_deqp: case #360 P 29ms k2/21 c15533/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.mat4.vertex_attrib_2f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.mat4.vertex_attrib_2fv'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.mat4.vertex_attrib_2fv
+v3d_deqp: case #361 P 29ms k2/21 c15533/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.mat4.vertex_attrib_2fv
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.mat4.vertex_attrib_3f'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.mat4.vertex_attrib_3f
+v3d_deqp: case #362 P 30ms k2/21 c15533/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.mat4.vertex_attrib_3f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.mat4.vertex_attrib_3fv'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.mat4.vertex_attrib_3fv
+v3d_deqp: case #363 P 29ms k2/21 c15533/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.mat4.vertex_attrib_3fv
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.mat4.vertex_attrib_4f'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.mat4.vertex_attrib_4f
+v3d_deqp: case #364 P 29ms k2/21 c15533/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.mat4.vertex_attrib_4f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.mat4.vertex_attrib_4fv'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.mat4.vertex_attrib_4fv
+v3d_deqp: case #365 P 30ms k2/21 c15533/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.mat4.vertex_attrib_4fv
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.mat4x2.vertex_attrib_1f'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.mat4x2.vertex_attrib_1f
+v3d_deqp: case #366 P 29ms k2/21 c15533/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.mat4x2.vertex_attrib_1f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.mat4x2.vertex_attrib_1fv'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.mat4x2.vertex_attrib_1fv
+v3d_deqp: case #367 P 30ms k2/21 c15533/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.mat4x2.vertex_attrib_1fv
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.mat4x2.vertex_attrib_4f'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.mat4x2.vertex_attrib_4f
+v3d_deqp: case #368 P 29ms k2/21 c15533/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.mat4x2.vertex_attrib_4f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.mat4x2.vertex_attrib_4fv'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.mat4x2.vertex_attrib_4fv
+v3d_deqp: case #369 P 30ms k2/21 c15533/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.mat4x2.vertex_attrib_4fv
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.mat4x3.vertex_attrib_1f'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.mat4x3.vertex_attrib_1f
+v3d_deqp: case #370 P 30ms k2/21 c15533/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.mat4x3.vertex_attrib_1f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.mat4x3.vertex_attrib_1fv'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.mat4x3.vertex_attrib_1fv
+v3d_deqp: case #371 P 29ms k2/21 c15533/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.mat4x3.vertex_attrib_1fv
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.mat4x3.vertex_attrib_4f'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.mat4x3.vertex_attrib_4f
+v3d_deqp: case #372 P 30ms k2/21 c15533/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.mat4x3.vertex_attrib_4f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.mat4x3.vertex_attrib_4fv'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.mat4x3.vertex_attrib_4fv
+v3d_deqp: case #373 P 30ms k2/21 c15533/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.mat4x3.vertex_attrib_4fv
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.uint.vertex_attribi_4ui'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.uint.vertex_attribi_4ui
+v3d_deqp: case #374 P 29ms k2/21 c15533/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.uint.vertex_attribi_4ui
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.uint.vertex_attribi_4uiv'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.uint.vertex_attribi_4uiv
+v3d_deqp: case #375 P 30ms k2/21 c15533/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.uint.vertex_attribi_4uiv
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.uvec2.vertex_attribi_4ui'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.uvec2.vertex_attribi_4ui
+v3d_deqp: case #376 P 29ms k2/21 c15533/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.uvec2.vertex_attribi_4ui
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.uvec2.vertex_attribi_4uiv'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.uvec2.vertex_attribi_4uiv
+v3d_deqp: case #377 P 30ms k2/21 c15533/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.uvec2.vertex_attribi_4uiv
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.uvec3.vertex_attribi_4ui'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.uvec3.vertex_attribi_4ui
+v3d_deqp: case #378 P 30ms k2/21 c15533/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.uvec3.vertex_attribi_4ui
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.uvec3.vertex_attribi_4uiv'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.uvec3.vertex_attribi_4uiv
+v3d_deqp: case #379 P 30ms k2/21 c15533/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.uvec3.vertex_attribi_4uiv
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.uvec4.vertex_attribi_4ui'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.uvec4.vertex_attribi_4ui
+v3d_deqp: case #380 P 30ms k2/21 c15533/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.uvec4.vertex_attribi_4ui
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.uvec4.vertex_attribi_4uiv'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.uvec4.vertex_attribi_4uiv
+v3d_deqp: case #381 P 30ms k2/21 c15533/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.uvec4.vertex_attribi_4uiv
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.vec2.vertex_attrib_1f'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.vec2.vertex_attrib_1f
+v3d_deqp: case #382 P 29ms k2/21 c15533/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.vec2.vertex_attrib_1f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.vec2.vertex_attrib_1fv'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.vec2.vertex_attrib_1fv
+v3d_deqp: case #383 P 29ms k2/21 c15533/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.vec2.vertex_attrib_1fv
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.vec2.vertex_attrib_4f'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.vec2.vertex_attrib_4f
+v3d_deqp: case #384 P 29ms k2/21 c15533/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.vec2.vertex_attrib_4f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.vec2.vertex_attrib_4fv'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.vec2.vertex_attrib_4fv
+v3d_deqp: case #385 P 29ms k2/21 c15533/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.vec2.vertex_attrib_4fv
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.vec3.vertex_attrib_1f'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.vec3.vertex_attrib_1f
+v3d_deqp: case #386 P 29ms k2/21 c15533/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.vec3.vertex_attrib_1f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.vec3.vertex_attrib_1fv'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.vec3.vertex_attrib_1fv
+v3d_deqp: case #387 P 29ms k2/21 c15533/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.vec3.vertex_attrib_1fv
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.vec3.vertex_attrib_4f'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.vec3.vertex_attrib_4f
+v3d_deqp: case #388 P 29ms k2/21 c15533/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.vec3.vertex_attrib_4f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.vec3.vertex_attrib_4fv'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.vec3.vertex_attrib_4fv
+v3d_deqp: case #389 P 30ms k2/21 c15533/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.vec3.vertex_attrib_4fv
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.vec4.vertex_attrib_1f'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.vec4.vertex_attrib_1f
+v3d_deqp: case #390 P 29ms k2/21 c15533/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.vec4.vertex_attrib_1f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.vec4.vertex_attrib_1fv'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.vec4.vertex_attrib_1fv
+v3d_deqp: case #391 P 29ms k2/21 c15533/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.vec4.vertex_attrib_1fv
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.vec4.vertex_attrib_2f'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.vec4.vertex_attrib_2f
+v3d_deqp: case #392 P 30ms k2/21 c15533/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.vec4.vertex_attrib_2f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.vec4.vertex_attrib_2fv'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.vec4.vertex_attrib_2fv
+v3d_deqp: case #393 P 29ms k2/21 c15533/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.vec4.vertex_attrib_2fv
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.vec4.vertex_attrib_3f'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.vec4.vertex_attrib_3f
+v3d_deqp: case #394 P 29ms k2/21 c15533/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.vec4.vertex_attrib_3f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.vec4.vertex_attrib_3fv'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.vec4.vertex_attrib_3fv
+v3d_deqp: case #395 P 30ms k2/21 c15533/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.vec4.vertex_attrib_3fv
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.vec4.vertex_attrib_4f'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.vec4.vertex_attrib_4f
+v3d_deqp: case #396 P 29ms k2/21 c15533/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.vec4.vertex_attrib_4f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.default_vertex_attrib.vec4.vertex_attrib_4fv'..
+deqp: Pass dEQP-GLES3.functional.default_vertex_attrib.vec4.vertex_attrib_4fv
+v3d_deqp: case #397 P 29ms k2/21 c15533/15546 r0 dEQP-GLES3.functional.default_vertex_attrib.vec4.vertex_attrib_4fv
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.depth_stencil_clear.depth'..
+deqp: Pass dEQP-GLES3.functional.depth_stencil_clear.depth
+v3d_deqp: case #398 P 85ms k2/21 c15534/15546 r0 dEQP-GLES3.functional.depth_stencil_clear.depth
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.depth_stencil_clear.depth_scissored'..
+deqp: Pass dEQP-GLES3.functional.depth_stencil_clear.depth_scissored
+v3d_deqp: case #399 P 97ms k2/21 c15534/15546 r0 dEQP-GLES3.functional.depth_stencil_clear.depth_scissored
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.depth_stencil_clear.depth_scissored_masked'..
+deqp: Pass dEQP-GLES3.functional.depth_stencil_clear.depth_scissored_masked
+v3d_deqp: case #400 P 88ms k2/21 c15534/15546 r0 dEQP-GLES3.functional.depth_stencil_clear.depth_scissored_masked
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.depth_stencil_clear.depth_stencil'..
+deqp: Pass dEQP-GLES3.functional.depth_stencil_clear.depth_stencil
+v3d_deqp: case #401 P 110ms k2/21 c15534/15546 r0 dEQP-GLES3.functional.depth_stencil_clear.depth_stencil
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.depth_stencil_clear.depth_stencil_masked'..
+deqp: Pass dEQP-GLES3.functional.depth_stencil_clear.depth_stencil_masked
+v3d_deqp: case #402 P 142ms k2/21 c15534/15546 r0 dEQP-GLES3.functional.depth_stencil_clear.depth_stencil_masked
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.depth_stencil_clear.depth_stencil_scissored'..
+deqp: Pass dEQP-GLES3.functional.depth_stencil_clear.depth_stencil_scissored
+v3d_deqp: case #403 P 134ms k2/21 c15534/15546 r0 dEQP-GLES3.functional.depth_stencil_clear.depth_stencil_scissored
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.depth_stencil_clear.depth_stencil_scissored_masked'..
+deqp: Pass dEQP-GLES3.functional.depth_stencil_clear.depth_stencil_scissored_masked
+v3d_deqp: case #404 P 120ms k2/21 c15534/15546 r0 dEQP-GLES3.functional.depth_stencil_clear.depth_stencil_scissored_masked
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.depth_stencil_clear.stencil'..
+deqp: Pass dEQP-GLES3.functional.depth_stencil_clear.stencil
+v3d_deqp: case #405 P 82ms k2/21 c15534/15546 r0 dEQP-GLES3.functional.depth_stencil_clear.stencil
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.depth_stencil_clear.stencil_masked'..
+deqp: Pass dEQP-GLES3.functional.depth_stencil_clear.stencil_masked
+v3d_deqp: case #406 P 129ms k2/21 c15534/15546 r0 dEQP-GLES3.functional.depth_stencil_clear.stencil_masked
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.depth_stencil_clear.stencil_scissored'..
+deqp: Pass dEQP-GLES3.functional.depth_stencil_clear.stencil_scissored
+v3d_deqp: case #407 P 94ms k2/21 c15534/15546 r0 dEQP-GLES3.functional.depth_stencil_clear.stencil_scissored
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.depth_stencil_clear.stencil_scissored_masked'..
+deqp: Pass dEQP-GLES3.functional.depth_stencil_clear.stencil_scissored_masked
+v3d_deqp: case #408 P 107ms k2/21 c15534/15546 r0 dEQP-GLES3.functional.depth_stencil_clear.stencil_scissored_masked
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.dither.disabled.gradient_alpha'..
+deqp: Pass dEQP-GLES3.functional.dither.disabled.gradient_alpha
+v3d_deqp: case #409 P 1059ms k2/21 c15534/15546 r0 dEQP-GLES3.functional.dither.disabled.gradient_alpha
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.dither.disabled.gradient_blue'..
+deqp: Pass dEQP-GLES3.functional.dither.disabled.gradient_blue
+v3d_deqp: case #410 P 995ms k2/21 c15534/15546 r0 dEQP-GLES3.functional.dither.disabled.gradient_blue
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.dither.disabled.gradient_green'..
+deqp: Pass dEQP-GLES3.functional.dither.disabled.gradient_green
+v3d_deqp: case #411 P 989ms k2/21 c15534/15546 r0 dEQP-GLES3.functional.dither.disabled.gradient_green
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.dither.disabled.gradient_red'..
+deqp: Pass dEQP-GLES3.functional.dither.disabled.gradient_red
+v3d_deqp: case #412 P 992ms k2/21 c15534/15546 r0 dEQP-GLES3.functional.dither.disabled.gradient_red
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.dither.disabled.gradient_white'..
+deqp: Pass dEQP-GLES3.functional.dither.disabled.gradient_white
+v3d_deqp: case #413 P 857ms k2/21 c15534/15546 r0 dEQP-GLES3.functional.dither.disabled.gradient_white
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.dither.disabled.unicolored_quad_alpha'..
+deqp: Pass dEQP-GLES3.functional.dither.disabled.unicolored_quad_alpha
+v3d_deqp: case #414 P 206ms k2/21 c15534/15546 r0 dEQP-GLES3.functional.dither.disabled.unicolored_quad_alpha
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.dither.disabled.unicolored_quad_blue'..
+deqp: Pass dEQP-GLES3.functional.dither.disabled.unicolored_quad_blue
+v3d_deqp: case #415 P 192ms k2/21 c15534/15546 r0 dEQP-GLES3.functional.dither.disabled.unicolored_quad_blue
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.dither.disabled.unicolored_quad_green'..
+deqp: Pass dEQP-GLES3.functional.dither.disabled.unicolored_quad_green
+v3d_deqp: case #416 P 194ms k2/21 c15534/15546 r0 dEQP-GLES3.functional.dither.disabled.unicolored_quad_green
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.dither.disabled.unicolored_quad_red'..
+deqp: Pass dEQP-GLES3.functional.dither.disabled.unicolored_quad_red
+v3d_deqp: case #417 P 193ms k2/21 c15534/15546 r0 dEQP-GLES3.functional.dither.disabled.unicolored_quad_red
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.dither.disabled.unicolored_quad_white'..
+deqp: Pass dEQP-GLES3.functional.dither.disabled.unicolored_quad_white
+v3d_deqp: case #418 P 162ms k2/21 c15534/15546 r0 dEQP-GLES3.functional.dither.disabled.unicolored_quad_white
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.dither.enabled.gradient_alpha'..
+deqp: Pass dEQP-GLES3.functional.dither.enabled.gradient_alpha
+v3d_deqp: case #419 P 1048ms k2/21 c15534/15546 r0 dEQP-GLES3.functional.dither.enabled.gradient_alpha
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.dither.enabled.gradient_blue'..
+deqp: Pass dEQP-GLES3.functional.dither.enabled.gradient_blue
+v3d_deqp: case #420 P 998ms k2/21 c15534/15546 r0 dEQP-GLES3.functional.dither.enabled.gradient_blue
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.dither.enabled.gradient_green'..
+deqp: Pass dEQP-GLES3.functional.dither.enabled.gradient_green
+v3d_deqp: case #421 P 991ms k2/21 c15534/15546 r0 dEQP-GLES3.functional.dither.enabled.gradient_green
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.dither.enabled.gradient_red'..
+deqp: Pass dEQP-GLES3.functional.dither.enabled.gradient_red
+v3d_deqp: case #422 P 983ms k2/21 c15534/15546 r0 dEQP-GLES3.functional.dither.enabled.gradient_red
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.dither.enabled.gradient_white'..
+deqp: Pass dEQP-GLES3.functional.dither.enabled.gradient_white
+v3d_deqp: case #423 P 863ms k2/21 c15534/15546 r0 dEQP-GLES3.functional.dither.enabled.gradient_white
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.dither.enabled.unicolored_quad_alpha'..
+deqp: Pass dEQP-GLES3.functional.dither.enabled.unicolored_quad_alpha
+v3d_deqp: case #424 P 207ms k2/21 c15534/15546 r0 dEQP-GLES3.functional.dither.enabled.unicolored_quad_alpha
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.dither.enabled.unicolored_quad_blue'..
+deqp: Pass dEQP-GLES3.functional.dither.enabled.unicolored_quad_blue
+v3d_deqp: case #425 P 193ms k2/21 c15534/15546 r0 dEQP-GLES3.functional.dither.enabled.unicolored_quad_blue
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.dither.enabled.unicolored_quad_green'..
+deqp: Pass dEQP-GLES3.functional.dither.enabled.unicolored_quad_green
+v3d_deqp: case #426 P 192ms k2/21 c15534/15546 r0 dEQP-GLES3.functional.dither.enabled.unicolored_quad_green
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.dither.enabled.unicolored_quad_red'..
+deqp: Pass dEQP-GLES3.functional.dither.enabled.unicolored_quad_red
+v3d_deqp: case #427 P 191ms k2/21 c15534/15546 r0 dEQP-GLES3.functional.dither.enabled.unicolored_quad_red
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.dither.enabled.unicolored_quad_white'..
+deqp: Pass dEQP-GLES3.functional.dither.enabled.unicolored_quad_white
+v3d_deqp: case #428 P 162ms k2/21 c15534/15546 r0 dEQP-GLES3.functional.dither.enabled.unicolored_quad_white
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fence_sync.client_wait_sync_finish'..
+deqp: Pass dEQP-GLES3.functional.fence_sync.client_wait_sync_finish
+v3d_deqp: case #429 P 166ms k2/21 c16002/16015 r0 dEQP-GLES3.functional.fence_sync.client_wait_sync_finish
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fence_sync.client_wait_sync_flush_auto'..
+deqp: Pass dEQP-GLES3.functional.fence_sync.client_wait_sync_flush_auto
+v3d_deqp: case #430 P 168ms k2/21 c16002/16015 r0 dEQP-GLES3.functional.fence_sync.client_wait_sync_flush_auto
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fence_sync.client_wait_sync_flush_manual'..
+deqp: Pass dEQP-GLES3.functional.fence_sync.client_wait_sync_flush_manual
+v3d_deqp: case #431 P 168ms k2/21 c16002/16015 r0 dEQP-GLES3.functional.fence_sync.client_wait_sync_flush_manual
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fence_sync.client_wait_sync_largedraw'..
+deqp: Pass dEQP-GLES3.functional.fence_sync.client_wait_sync_largedraw
+v3d_deqp: case #432 P 169ms k2/21 c16002/16015 r0 dEQP-GLES3.functional.fence_sync.client_wait_sync_largedraw
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fence_sync.client_wait_sync_noflush'..
+deqp: Pass dEQP-GLES3.functional.fence_sync.client_wait_sync_noflush
+v3d_deqp: case #433 P 166ms k2/21 c16002/16015 r0 dEQP-GLES3.functional.fence_sync.client_wait_sync_noflush
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fence_sync.client_wait_sync_smalldraw'..
+deqp: Pass dEQP-GLES3.functional.fence_sync.client_wait_sync_smalldraw
+v3d_deqp: case #434 P 27ms k2/21 c16002/16015 r0 dEQP-GLES3.functional.fence_sync.client_wait_sync_smalldraw
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fence_sync.client_wait_sync_timeout_largedraw'..
+deqp: Pass dEQP-GLES3.functional.fence_sync.client_wait_sync_timeout_largedraw
+v3d_deqp: case #435 P 169ms k2/21 c16002/16015 r0 dEQP-GLES3.functional.fence_sync.client_wait_sync_timeout_largedraw
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fence_sync.client_wait_sync_timeout_smalldraw'..
+deqp: Pass dEQP-GLES3.functional.fence_sync.client_wait_sync_timeout_smalldraw
+v3d_deqp: case #436 P 29ms k2/21 c16002/16015 r0 dEQP-GLES3.functional.fence_sync.client_wait_sync_timeout_smalldraw
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fence_sync.wait_sync_largedraw'..
+deqp: Pass dEQP-GLES3.functional.fence_sync.wait_sync_largedraw
+v3d_deqp: case #437 P 167ms k2/21 c16002/16015 r0 dEQP-GLES3.functional.fence_sync.wait_sync_largedraw
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fence_sync.wait_sync_smalldraw'..
+deqp: Pass dEQP-GLES3.functional.fence_sync.wait_sync_smalldraw
+v3d_deqp: case #438 P 26ms k2/21 c16002/16015 r0 dEQP-GLES3.functional.fence_sync.wait_sync_smalldraw
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.implementation_limits.aliased_line_width_range'..
+deqp: Pass dEQP-GLES3.functional.implementation_limits.aliased_line_width_range
+v3d_deqp: case #439 P 25ms k2/21 c16002/16015 r0 dEQP-GLES3.functional.implementation_limits.aliased_line_width_range
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.implementation_limits.aliased_point_size_range'..
+deqp: Pass dEQP-GLES3.functional.implementation_limits.aliased_point_size_range
+v3d_deqp: case #440 P 26ms k2/21 c16002/16015 r0 dEQP-GLES3.functional.implementation_limits.aliased_point_size_range
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.implementation_limits.compressed_texture_formats'..
+deqp: Fail dEQP-GLES3.functional.implementation_limits.compressed_texture_formats
+v3d_deqp: case #441 F 27ms k2/21 c16002/16015 r0 dEQP-GLES3.functional.implementation_limits.compressed_texture_formats
+  Fail (Requirement not satisfied)
+
+Test case 'dEQP-GLES3.functional.implementation_limits.extensions'..
+deqp: Pass dEQP-GLES3.functional.implementation_limits.extensions
+v3d_deqp: case #442 P 26ms k2/21 c16002/16015 r0 dEQP-GLES3.functional.implementation_limits.extensions
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.implementation_limits.major_version'..
+deqp: Pass dEQP-GLES3.functional.implementation_limits.major_version
+v3d_deqp: case #443 P 23ms k2/21 c16002/16015 r0 dEQP-GLES3.functional.implementation_limits.major_version
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.implementation_limits.max_3d_texture_size'..
+deqp: Pass dEQP-GLES3.functional.implementation_limits.max_3d_texture_size
+v3d_deqp: case #444 P 25ms k2/21 c16002/16015 r0 dEQP-GLES3.functional.implementation_limits.max_3d_texture_size
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.implementation_limits.max_array_texture_layers'..
+deqp: Pass dEQP-GLES3.functional.implementation_limits.max_array_texture_layers
+v3d_deqp: case #445 P 26ms k2/21 c16002/16015 r0 dEQP-GLES3.functional.implementation_limits.max_array_texture_layers
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.implementation_limits.max_color_attachments'..
+deqp: Fail dEQP-GLES3.functional.implementation_limits.max_color_attachments
+v3d_deqp: case #446 F 26ms k2/21 c16002/16015 r0 dEQP-GLES3.functional.implementation_limits.max_color_attachments
+  Fail (Requirement not satisfied)
+
+Test case 'dEQP-GLES3.functional.implementation_limits.max_combined_fragment_uniform_components'..
+deqp: Fail dEQP-GLES3.functional.implementation_limits.max_combined_fragment_uniform_components
+v3d_deqp: case #447 F 30ms k2/21 c16002/16015 r0 dEQP-GLES3.functional.implementation_limits.max_combined_fragment_uniform_components
+  Fail (Requirement not satisfied)
+
+Test case 'dEQP-GLES3.functional.implementation_limits.max_combined_texture_image_units'..
+deqp: Pass dEQP-GLES3.functional.implementation_limits.max_combined_texture_image_units
+v3d_deqp: case #448 P 31ms k2/21 c16002/16015 r0 dEQP-GLES3.functional.implementation_limits.max_combined_texture_image_units
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.implementation_limits.max_combined_uniform_blocks'..
+deqp: Pass dEQP-GLES3.functional.implementation_limits.max_combined_uniform_blocks
+v3d_deqp: case #449 P 28ms k2/21 c16002/16015 r0 dEQP-GLES3.functional.implementation_limits.max_combined_uniform_blocks
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.implementation_limits.max_combined_vertex_uniform_components'..
+deqp: Fail dEQP-GLES3.functional.implementation_limits.max_combined_vertex_uniform_components
+v3d_deqp: case #450 F 29ms k2/21 c16002/16015 r0 dEQP-GLES3.functional.implementation_limits.max_combined_vertex_uniform_components
+  Fail (Requirement not satisfied)
+
+Test case 'dEQP-GLES3.functional.implementation_limits.max_cube_map_texture_size'..
+deqp: Pass dEQP-GLES3.functional.implementation_limits.max_cube_map_texture_size
+v3d_deqp: case #451 P 30ms k2/21 c16002/16015 r0 dEQP-GLES3.functional.implementation_limits.max_cube_map_texture_size
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.implementation_limits.max_draw_buffers'..
+deqp: Fail dEQP-GLES3.functional.implementation_limits.max_draw_buffers
+v3d_deqp: case #452 F 25ms k2/21 c16002/16015 r0 dEQP-GLES3.functional.implementation_limits.max_draw_buffers
+  Fail (Requirement not satisfied)
+
+Test case 'dEQP-GLES3.functional.implementation_limits.max_element_index'..
+deqp: Pass dEQP-GLES3.functional.implementation_limits.max_element_index
+v3d_deqp: case #453 P 26ms k2/21 c16002/16015 r0 dEQP-GLES3.functional.implementation_limits.max_element_index
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.implementation_limits.max_elements_indices'..
+deqp: Pass dEQP-GLES3.functional.implementation_limits.max_elements_indices
+v3d_deqp: case #454 P 26ms k2/21 c16002/16015 r0 dEQP-GLES3.functional.implementation_limits.max_elements_indices
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.implementation_limits.max_elements_vertices'..
+deqp: Pass dEQP-GLES3.functional.implementation_limits.max_elements_vertices
+v3d_deqp: case #455 P 25ms k2/21 c16002/16015 r0 dEQP-GLES3.functional.implementation_limits.max_elements_vertices
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.implementation_limits.max_fragment_input_components'..
+deqp: Fail dEQP-GLES3.functional.implementation_limits.max_fragment_input_components
+v3d_deqp: case #456 F 27ms k2/21 c16002/16015 r0 dEQP-GLES3.functional.implementation_limits.max_fragment_input_components
+  Fail (Requirement not satisfied)
+
+Test case 'dEQP-GLES3.functional.implementation_limits.max_fragment_uniform_blocks'..
+deqp: Pass dEQP-GLES3.functional.implementation_limits.max_fragment_uniform_blocks
+v3d_deqp: case #457 P 29ms k2/21 c16002/16015 r0 dEQP-GLES3.functional.implementation_limits.max_fragment_uniform_blocks
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.implementation_limits.max_fragment_uniform_components'..
+deqp: Pass dEQP-GLES3.functional.implementation_limits.max_fragment_uniform_components
+v3d_deqp: case #458 P 28ms k2/21 c16002/16015 r0 dEQP-GLES3.functional.implementation_limits.max_fragment_uniform_components
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.implementation_limits.max_fragment_uniform_vectors'..
+deqp: Pass dEQP-GLES3.functional.implementation_limits.max_fragment_uniform_vectors
+v3d_deqp: case #459 P 28ms k2/21 c16002/16015 r0 dEQP-GLES3.functional.implementation_limits.max_fragment_uniform_vectors
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.implementation_limits.max_program_texel_offset'..
+deqp: Pass dEQP-GLES3.functional.implementation_limits.max_program_texel_offset
+v3d_deqp: case #460 P 27ms k2/21 c16002/16015 r0 dEQP-GLES3.functional.implementation_limits.max_program_texel_offset
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.implementation_limits.max_renderbuffer_size'..
+deqp: Pass dEQP-GLES3.functional.implementation_limits.max_renderbuffer_size
+v3d_deqp: case #461 P 26ms k2/21 c16002/16015 r0 dEQP-GLES3.functional.implementation_limits.max_renderbuffer_size
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.implementation_limits.max_server_wait_timeout'..
+deqp: Pass dEQP-GLES3.functional.implementation_limits.max_server_wait_timeout
+v3d_deqp: case #462 P 26ms k2/21 c16002/16015 r0 dEQP-GLES3.functional.implementation_limits.max_server_wait_timeout
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.implementation_limits.max_texture_image_units'..
+deqp: Pass dEQP-GLES3.functional.implementation_limits.max_texture_image_units
+v3d_deqp: case #463 P 26ms k2/21 c16002/16015 r0 dEQP-GLES3.functional.implementation_limits.max_texture_image_units
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.implementation_limits.max_texture_lod_bias'..
+deqp: Pass dEQP-GLES3.functional.implementation_limits.max_texture_lod_bias
+v3d_deqp: case #464 P 26ms k2/21 c16002/16015 r0 dEQP-GLES3.functional.implementation_limits.max_texture_lod_bias
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.implementation_limits.max_texture_size'..
+deqp: Pass dEQP-GLES3.functional.implementation_limits.max_texture_size
+v3d_deqp: case #465 P 24ms k2/21 c16002/16015 r0 dEQP-GLES3.functional.implementation_limits.max_texture_size
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.implementation_limits.max_transform_feedback_interleaved_components'..
+deqp: Pass dEQP-GLES3.functional.implementation_limits.max_transform_feedback_interleaved_components
+v3d_deqp: case #466 P 30ms k2/21 c16002/16015 r0 dEQP-GLES3.functional.implementation_limits.max_transform_feedback_interleaved_components
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.implementation_limits.max_transform_feedback_separate_attribs'..
+deqp: Pass dEQP-GLES3.functional.implementation_limits.max_transform_feedback_separate_attribs
+v3d_deqp: case #467 P 31ms k2/21 c16002/16015 r0 dEQP-GLES3.functional.implementation_limits.max_transform_feedback_separate_attribs
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.implementation_limits.max_transform_feedback_separate_components'..
+deqp: Pass dEQP-GLES3.functional.implementation_limits.max_transform_feedback_separate_components
+v3d_deqp: case #468 P 30ms k2/21 c16002/16015 r0 dEQP-GLES3.functional.implementation_limits.max_transform_feedback_separate_components
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.implementation_limits.max_uniform_block_size'..
+deqp: Fail dEQP-GLES3.functional.implementation_limits.max_uniform_block_size
+v3d_deqp: case #469 F 28ms k2/21 c16002/16015 r0 dEQP-GLES3.functional.implementation_limits.max_uniform_block_size
+  Fail (Requirement not satisfied)
+
+Test case 'dEQP-GLES3.functional.implementation_limits.max_uniform_buffer_bindings'..
+deqp: Pass dEQP-GLES3.functional.implementation_limits.max_uniform_buffer_bindings
+v3d_deqp: case #470 P 29ms k2/21 c16002/16015 r0 dEQP-GLES3.functional.implementation_limits.max_uniform_buffer_bindings
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.implementation_limits.max_varying_components'..
+deqp: Fail dEQP-GLES3.functional.implementation_limits.max_varying_components
+v3d_deqp: case #471 F 26ms k2/21 c16002/16015 r0 dEQP-GLES3.functional.implementation_limits.max_varying_components
+  Fail (Requirement not satisfied)
+
+Test case 'dEQP-GLES3.functional.implementation_limits.max_varying_vectors'..
+deqp: Fail dEQP-GLES3.functional.implementation_limits.max_varying_vectors
+v3d_deqp: case #472 F 27ms k2/21 c16002/16015 r0 dEQP-GLES3.functional.implementation_limits.max_varying_vectors
+  Fail (Requirement not satisfied)
+
+Test case 'dEQP-GLES3.functional.implementation_limits.max_vertex_attribs'..
+deqp: Pass dEQP-GLES3.functional.implementation_limits.max_vertex_attribs
+v3d_deqp: case #473 P 27ms k2/21 c16002/16015 r0 dEQP-GLES3.functional.implementation_limits.max_vertex_attribs
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.implementation_limits.max_vertex_output_components'..
+deqp: Fail dEQP-GLES3.functional.implementation_limits.max_vertex_output_components
+v3d_deqp: case #474 F 27ms k2/21 c16002/16015 r0 dEQP-GLES3.functional.implementation_limits.max_vertex_output_components
+  Fail (Requirement not satisfied)
+
+Test case 'dEQP-GLES3.functional.implementation_limits.max_vertex_texture_image_units'..
+deqp: Pass dEQP-GLES3.functional.implementation_limits.max_vertex_texture_image_units
+v3d_deqp: case #475 P 29ms k2/21 c16002/16015 r0 dEQP-GLES3.functional.implementation_limits.max_vertex_texture_image_units
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.implementation_limits.max_vertex_uniform_blocks'..
+deqp: Pass dEQP-GLES3.functional.implementation_limits.max_vertex_uniform_blocks
+v3d_deqp: case #476 P 27ms k2/21 c16002/16015 r0 dEQP-GLES3.functional.implementation_limits.max_vertex_uniform_blocks
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.implementation_limits.max_vertex_uniform_components'..
+deqp: Pass dEQP-GLES3.functional.implementation_limits.max_vertex_uniform_components
+v3d_deqp: case #477 P 28ms k2/21 c16002/16015 r0 dEQP-GLES3.functional.implementation_limits.max_vertex_uniform_components
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.implementation_limits.max_vertex_uniform_vectors'..
+deqp: Pass dEQP-GLES3.functional.implementation_limits.max_vertex_uniform_vectors
+v3d_deqp: case #478 P 27ms k2/21 c16002/16015 r0 dEQP-GLES3.functional.implementation_limits.max_vertex_uniform_vectors
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.implementation_limits.min_program_texel_offset'..
+deqp: Pass dEQP-GLES3.functional.implementation_limits.min_program_texel_offset
+v3d_deqp: case #479 P 27ms k2/21 c16002/16015 r0 dEQP-GLES3.functional.implementation_limits.min_program_texel_offset
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.implementation_limits.minor_version'..
+deqp: Pass dEQP-GLES3.functional.implementation_limits.minor_version
+v3d_deqp: case #480 P 24ms k2/21 c16002/16015 r0 dEQP-GLES3.functional.implementation_limits.minor_version
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.implementation_limits.num_compressed_texture_formats'..
+deqp: Fail dEQP-GLES3.functional.implementation_limits.num_compressed_texture_formats
+v3d_deqp: case #481 F 27ms k2/21 c16002/16015 r0 dEQP-GLES3.functional.implementation_limits.num_compressed_texture_formats
+  Fail (Requirement not satisfied)
+
+Test case 'dEQP-GLES3.functional.implementation_limits.num_extensions'..
+deqp: Pass dEQP-GLES3.functional.implementation_limits.num_extensions
+v3d_deqp: case #482 P 27ms k2/21 c16002/16015 r0 dEQP-GLES3.functional.implementation_limits.num_extensions
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.implementation_limits.num_program_binary_formats'..
+deqp: Pass dEQP-GLES3.functional.implementation_limits.num_program_binary_formats
+v3d_deqp: case #483 P 26ms k2/21 c16002/16015 r0 dEQP-GLES3.functional.implementation_limits.num_program_binary_formats
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.implementation_limits.num_shader_binary_formats'..
+deqp: Pass dEQP-GLES3.functional.implementation_limits.num_shader_binary_formats
+v3d_deqp: case #484 P 26ms k2/21 c16002/16015 r0 dEQP-GLES3.functional.implementation_limits.num_shader_binary_formats
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.implementation_limits.shader_compiler'..
+deqp: Pass dEQP-GLES3.functional.implementation_limits.shader_compiler
+v3d_deqp: case #485 P 25ms k2/21 c16002/16015 r0 dEQP-GLES3.functional.implementation_limits.shader_compiler
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.implementation_limits.subpixel_bits'..
+deqp: Pass dEQP-GLES3.functional.implementation_limits.subpixel_bits
+v3d_deqp: case #486 P 24ms k2/21 c16002/16015 r0 dEQP-GLES3.functional.implementation_limits.subpixel_bits
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.implementation_limits.uniform_buffer_offset_alignment'..
+deqp: Pass dEQP-GLES3.functional.implementation_limits.uniform_buffer_offset_alignment
+v3d_deqp: case #487 P 27ms k2/21 c16002/16015 r0 dEQP-GLES3.functional.implementation_limits.uniform_buffer_offset_alignment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.prerequisite.clear_color'..
+deqp: Pass dEQP-GLES3.functional.prerequisite.clear_color
+v3d_deqp: case #488 P 23ms k2/21 c16002/16015 r0 dEQP-GLES3.functional.prerequisite.clear_color
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.prerequisite.read_pixels'..
+deqp: Pass dEQP-GLES3.functional.prerequisite.read_pixels
+v3d_deqp: case #489 P 26ms k2/21 c16002/16015 r0 dEQP-GLES3.functional.prerequisite.read_pixels
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.prerequisite.state_reset'..
+deqp: Pass dEQP-GLES3.functional.prerequisite.state_reset
+v3d_deqp: case #490 P 20ms k2/21 c16002/16015 r0 dEQP-GLES3.functional.prerequisite.state_reset
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.info.extensions'..
+deqp:   GL_OES_EGL_image
+deqp:   GL_OES_standard_derivatives
+deqp:   GL_OES_compressed_ETC1_RGB8_texture
+deqp:   GL_OES_compressed_ETC2_RGB8_texture
+deqp:   GL_OES_compressed_ETC2_RGBA8_texture
+deqp:   GL_OES_vertex_array_object
+deqp:   GL_OES_mapbuffer
+deqp:   GL_OES_fbo_render_mipmap
+deqp:   GL_EXT_texture_format_BGRA8888
+deqp:   GL_OES_rgb8_rgba8
+deqp:   GL_OES_required_internalformat
+deqp:   GL_EXT_texture_rg
+deqp:   GL_OES_texture_half_float
+deqp:   GL_EXT_color_buffer_half_float
+deqp:   GL_NV_fbo_color_attachments
+deqp:   GL_EXT_debug_marker
+deqp: Pass dEQP-GLES3.info.extensions
+v3d_deqp: case #491 P 68ms k2/21 c16002/16015 r0 dEQP-GLES3.info.extensions
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.info.render_target'..
+deqp: Pass dEQP-GLES3.info.render_target
+v3d_deqp: case #492 P 15ms k2/21 c16002/16015 r0 dEQP-GLES3.info.render_target
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.info.renderer'..
+deqp:   Broadcom V3D 4.2 (YakoGL)
+deqp: Pass dEQP-GLES3.info.renderer
+v3d_deqp: case #493 P 19ms k2/21 c16002/16015 r0 dEQP-GLES3.info.renderer
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.info.shading_language_version'..
+deqp:   OpenGL ES GLSL ES 3.00
+deqp: Pass dEQP-GLES3.info.shading_language_version
+v3d_deqp: case #494 P 20ms k2/21 c16002/16015 r0 dEQP-GLES3.info.shading_language_version
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.info.vendor'..
+deqp:   Signal Slot
+deqp: Pass dEQP-GLES3.info.vendor
+v3d_deqp: case #495 P 18ms k2/21 c16002/16015 r0 dEQP-GLES3.info.vendor
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.info.version'..
+deqp:   OpenGL ES 3.0 YakoGL
+deqp: Pass dEQP-GLES3.info.version
+v3d_deqp: case #496 P 17ms k2/21 c16002/16015 r0 dEQP-GLES3.info.version
+  Pass (Pass)
+
+DONE!
+
+Test run totals:
+  Passed:        486/497 (97.8%)
+  Failed:        11/497 (2.2%)
+  Not supported: 0/497 (0.0%)
+  Warnings:      0/497 (0.0%)
+  Waived:        0/497 (0.0%)
+deqp: done: 486 passed, 11 failed, 0 not supported, 0 warnings, complete=1
+deqp: summary: 497 cases begun, 497 with a result, 0 without
+v3d_deqp DONE: build b1b5b845, filter 'dEQP-GLES3.functional.attribute_location.*,dEQP-GLES3.functional.color_clear.*,dEQP-GLES3.functional.default_vertex_a...
+  497 cases in 28766 ms, record at 28 s after boot, reset at ~250 s
+  totals: P 486 F 11  (R: not passed, a draw was refused in it; passed with one refused: 0)
+  done: 486 passed, 11 failed, 0 not supported, 0 warnings, complete=1
+  summary: 497 cases begun, 497 with a result, 0 without
+  keep region (KiB, of 1024): after #0 2, most 2 at #0, last 2, high-water 21, before #441 (first not passed) 2; slowest #409 1059 ms
+  carve-out (KiB, of 48636): after #0 15532, last 16002, high-water 16015
+  jobs: slow in 0 cases; no job hung or timed out
+BASELINE (first completed) job 1: core_sts 0x0 hub_sts 0x0 err 0x1000 ct0 cs 0x0 ea 0x201011 ca 0x201011 ra 0x0 qba 0x201000 qea 0x201011 ct1 ca 0x223097 ra 0x223096 qba 0x223000 qea 0x223097
+FIRST FAILURE: none (no timeout)
+slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+binner out of memory: 0 jobs (2 overflow blocks of 256 KiB, CONFIG_YAKOGL_V3D_BIN_OVERFLOW_BLOCKS; each such job ends in a GPU reset)
+binning by interrupt (IRQ 106): 1772 interrupts, 0 overflow blocks fed by the ISR
+carve-out: 15858176 bytes used now, 16399616 at most, of 49803264; 0 frees held
+osal(v3d): pending frees: high-water 0/256, waits 0 (opt-in 0), refused 0 (0 unsubmitted, 0 no wait, 0 KiB kept)
+carve-out find: 348 calls, 12944 map reads (37 a call, at most 1153 in one); free runs 2, longest 33398016 bytes; small blocks from the top: off (CONFIG_YAKOGL_V3D_CARVEOUT_TOP_BELOW 0)
+packets (packet skip on, CONFIG_YAKOGL_V3D_PACK_SKIP): 1772 jobs ended; emitted 55608, skipped 81107; groups compared 49843, mismatches 6522
+allocations refused for lack of GPU memory: 0 (0 size slots; the line is printed at each size's 1st, 10th, 100th, ... refusal)
+UIFCFG 0x00000045 (read at init)
+log: 0 causes logged once, 0 repeats not printed
+case order: P pass F fail R refused N not supported Q quality C compat E resource I internal X crash T timeout
+    0 PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP
+  128 PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP
+  256 PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP
+  384 PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPFPPPPFFPPFPFPPPFPPPPPPPPPPPPFPFFPFPPPPPPFPPPPPPPPPPPPPPP
+driver: osal(v3d): V3D 4.2, 8 QPUs, VPM 65536 bytes, MMU yes (identify 0)
+driver: osal(v3d): UIFCFG 0x00000045
+driver: osal(v3d): ready: carve-out 48 MiB at phys 0x2f09000, GPU VA 0x181000..0x3100000
+driver: ... 6 more lines (UART)
+not passed, by group (count, letters; reasons by count, F/R before N):
+  functional.implementation_limits                           11 F11                    11x Requirement not satisfied
+  441 F ~mplementation_limits.compressed_texture_formats 27ms k2/21 c16002/16015         Requirement not satisfied
+  446 F ~nal.implementation_limits.max_color_attachments 26ms k2/21 c16002/16015         Requirement not satisfied
+  447 F ~limits.max_combined_fragment_uniform_components 30ms k2/21 c16002/16015         Requirement not satisfied
+  450 F ~n_limits.max_combined_vertex_uniform_components 29ms k2/21 c16002/16015         Requirement not satisfied
+  452 F ~nctional.implementation_limits.max_draw_buffers 25ms k2/21 c16002/16015         Requirement not satisfied
+  456 F ~ementation_limits.max_fragment_input_components 27ms k2/21 c16002/16015         Requirement not satisfied
+  469 F ~al.implementation_limits.max_uniform_block_size 28ms k2/21 c16002/16015         Requirement not satisfied
+  471 F ~al.implementation_limits.max_varying_components 26ms k2/21 c16002/16015         Requirement not satisfied
+  472 F ~ional.implementation_limits.max_varying_vectors 27ms k2/21 c16002/16015         Requirement not satisfied
+  ... 2 more not passed (the UART has every line)
+v3d_deqp: build b1b5b845 DONE: 497 cases, P 486 F 11 R 0 N 0 other 0

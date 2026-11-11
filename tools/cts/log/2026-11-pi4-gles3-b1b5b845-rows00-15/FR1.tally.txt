@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES3 image FR1: deqp-uart-tally.py --mustpass tools/cts/gles3-mustpass.txt FR1.console.txt
+FR1.console.txt: deqp: done: 360 passed, 12 failed, 48 not supported, 0 warnings, complete=1 | deqp: summary: 420 cases begun, 420 with a result, 0 without
+mustpass cases with a result: 420 (of 420 seen)
+group                                       pass   fail    n/s  other
+fragment_out                                 360     12     48      0
+TOTAL                                        360     12     48      0
+(the pass / fail counts above are the result lines seen; the image's own counters:)
+  FR1: deqp: summary 420 cases begun, 420 with a result; deqp: done 360 passed, 12 failed, 48 not supported, 0 warnings; b1b5b845 DONE: 420 cases, P 360 F 12 R 0 N 48 other 0; 420 result lines seen
+Fail dEQP-GLES3.functional.fragment_out.array.float.rg16f_highp_float
+Fail dEQP-GLES3.functional.fragment_out.array.float.rg16f_highp_vec2
+Fail dEQP-GLES3.functional.fragment_out.array.float.rg16f_highp_vec3
+Fail dEQP-GLES3.functional.fragment_out.array.float.rg16f_highp_vec4
+Fail dEQP-GLES3.functional.fragment_out.array.float.rg16f_lowp_float
+Fail dEQP-GLES3.functional.fragment_out.array.float.rg16f_lowp_vec2
+Fail dEQP-GLES3.functional.fragment_out.array.float.rg16f_lowp_vec3
+Fail dEQP-GLES3.functional.fragment_out.array.float.rg16f_lowp_vec4
+Fail dEQP-GLES3.functional.fragment_out.array.float.rg16f_mediump_float
+Fail dEQP-GLES3.functional.fragment_out.array.float.rg16f_mediump_vec2
+Fail dEQP-GLES3.functional.fragment_out.array.float.rg16f_mediump_vec3
+Fail dEQP-GLES3.functional.fragment_out.array.float.rg16f_mediump_vec4

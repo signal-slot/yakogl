@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES3 image A1: deqp-uart-tally.py --mustpass tools/cts/gles3-mustpass.txt A1.console.txt
+A1.console.txt: deqp: done: 486 passed, 11 failed, 0 not supported, 0 warnings, complete=1 | deqp: summary: 497 cases begun, 497 with a result, 0 without
+mustpass cases with a result: 472 (of 497 seen)
+group                                       pass   fail    n/s  other
+attribute_location                           274      0      0      0
+color_clear                                   19      0      0      0
+default_vertex_array_object                    1      0      0      0
+default_vertex_attrib                         80      0      0      0
+depth_stencil_clear                           10      0      0      0
+dither                                        20      0      0      0
+fence_sync                                    10      0      0      0
+implementation_limits                         38     11      0      0
+info                                           6      0      0      0
+prerequisite                                   3      0      0      0
+TOTAL                                        461     11      0      0
+(the pass / fail counts above are the result lines seen; the image's own counters:)
+  A1: deqp: summary 497 cases begun, 497 with a result; deqp: done 486 passed, 11 failed, 0 not supported, 0 warnings; b1b5b845 DONE: 497 cases, P 486 F 11 R 0 N 0 other 0; 497 result lines seen
+Fail dEQP-GLES3.functional.implementation_limits.compressed_texture_formats
+Fail dEQP-GLES3.functional.implementation_limits.max_color_attachments
+Fail dEQP-GLES3.functional.implementation_limits.max_combined_fragment_uniform_components
+Fail dEQP-GLES3.functional.implementation_limits.max_combined_vertex_uniform_components
+Fail dEQP-GLES3.functional.implementation_limits.max_draw_buffers
+Fail dEQP-GLES3.functional.implementation_limits.max_fragment_input_components
+Fail dEQP-GLES3.functional.implementation_limits.max_uniform_block_size
+Fail dEQP-GLES3.functional.implementation_limits.max_varying_components
+Fail dEQP-GLES3.functional.implementation_limits.max_varying_vectors
+Fail dEQP-GLES3.functional.implementation_limits.max_vertex_output_components
+Fail dEQP-GLES3.functional.implementation_limits.num_compressed_texture_formats

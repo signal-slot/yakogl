@@ -1,0 +1,1253 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES3 at b1b5b845, 2026-11-11, image FO3: UART console of the run, from the firmware's first line to the image's end line (README.md)
+  4.09 [sdcard] pieeprom.upd not found
+  4.10 [sdcard] recover4.elf not found
+  4.10 [sdcard] recovery.elf not found
+  4.31 Read start4.elf bytes  2299008 hnd 0x211ac
+  4.37 Read fixup4.dat bytes     5496 hnd 0x20bca
+  4.38 0x00d03114 0x00000000 0x00001fff
+  4.42 MEM GPU: 76 ARM: 948 TOTAL: 1024
+  4.78 Starting start4.elf @ 0xfec00200 partition 1
+  4.28 XHCI-STOP
+  4.28 xHC0 ver: 256 HCS: 05000420 fc000031 00e70004 HCC: 002841eb
+  4.28 USBSTS 18
+  4.29 PCI0 reset
+  4.30 +
+
+MESS:00:00:04.312873:0: arasan: arasan_emmc_open
+MESS:00:00:04.314531:0: arasan: arasan_emmc_set_clock C0: 0x00800000 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 400000 max: 400000 delay: 5
+MESS:00:00:04.434758:0: arasan: arasan_emmc_set_clock C0: 0x00800000 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 400000 max: 400000 delay: 5
+MESS:00:00:04.447627:0: arasan: arasan_emmc_set_clock C0: 0x00800f00 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 390000 max: 400000 delay: 5
+MESS:00:00:04.481901:0: boot-part: 1 fs-type: 0
+MESS:00:00:04.483313:0: boot-part: 1 fs-type: 3
+MESS:00:00:04.487696:0: arasan: arasan_emmc_set_clock C0: 0x00800f06 C1: 0x000e0207 emmc: 200000000 actual: 50000000 div: 0x00000002 target: 50000000 min: 0 max: 50000000 delay: 1
+MESS:00:00:04.651968:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:04.654797:0: brfs: File read: 164 bytes
+MESS:00:00:04.747348:0: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:04.751857:0: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:04.767989:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:05.267047:0: gpioman: gpioman_get_pin_num: pin DISPLAY_DSI_PORT not defined
+MESS:00:00:05.272599:0: gpioman: gpioman_get_pin_num: pin DISPLAY_DSI_PORT not defined
+MESS:00:00:05.281630:0: *** Restart logging
+MESS:00:00:05.283402:0: brfs: File read: 164 bytes
+MESS:00:00:05.361636:0: hdmi: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:05.366668:0: hdmi: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:05.377592:0: hdmi: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:05.387596:0: hdmi: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:05.392698:0: hdmi: HDMI:hdmi_get_state is deprecated, use hdmi_get_display_state instead
+MESS:00:00:05.400174:0: HDMI0: hdmi_pixel_encoding: 300000000
+MESS:00:00:05.405646:0: HDMI1: hdmi_pixel_encoding: 300000000
+MESS:00:00:05.427554:0: dtb_file 'bcm2711-rpi-4-b.dtb'
+MESS:00:00:05.442910:0: brfs: File read: /mfs/sd/bcm2711-rpi-4-b.dtb
+MESS:00:00:05.446200:0: Loaded 'bcm2711-rpi-4-b.dtb' to 0x100 size 0xdbb9
+MESS:00:00:05.486885:0: brfs: File read: 56249 bytes
+MESS:00:00:05.506565:0: brfs: File read: /mfs/sd/overlays/overlay_map.dtb
+MESS:00:00:05.571491:0: brfs: File read: 5971 bytes
+MESS:00:00:05.577931:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:05.619053:0: brfs: File read: 164 bytes
+MESS:00:00:05.623078:0: brfs: File read: /mfs/sd/cmdline.txt
+MESS:00:00:05.626212:0: Read command line from file 'cmdline.txt':
+MESS:00:00:05.632062:0: 'console=serial0,115200 console=tty1 root=PARTUUID=269eab4a-02 rootfstype=ext4 fsck.repair=yes rootwait cfg80211.ieee80211_regdom=JP splash quiet'
+MESS:00:00:05.788327:0: brfs: File read: 145 bytes
+MESS:00:00:07.182965:0: brfs: File read: /mfs/sd/yakogl-FO3.bin
+MESS:00:00:07.185784:0: Loaded 'yakogl-FO3.bin' to 0x200000 size 0xfc6dc0
+MESS:00:00:07.192310:0: Device tree loaded to 0x2eff1f00 (size 0xe0a1)
+MESS:00:00:07.201087:0: uart: Set PL011 baud rate to 103448.300000 Hz
+MESS:00:00:07.207613:0: uart: Baud rate change done...
+MESS:00:00:07.209636:0:board: watchdog armed
+*** Booting Zephyr OS build af17c0c8aa2a ***
+I: shader compiler scratch: 4194304 bytes, keep: 1048576 bytes
+v3d_deqp: build b1b5b845
+board: PM watchdog resets the SoC ~250 s after boot (tryboot -> Linux)
+v3d_deqp: the record at 210 s after boot at the latest
+V3D clock 250000000 -> 500000000 Hz (0)
+deqp: case filter 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_*,dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.max,dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.min'
+Writing test log into deqp.qpa
+dEQP Core vulkan-cts-192.0.2.1-555-g93bca01861b0e3ef3c387027a9791e6d065f900c (0x93bca018) starting..
+  target implementation = 'YakoGL-Zephyr'
+I: V3D 4.2: 1 core(s), 8 QPUs, VPM 65536 bytes, PA 35 / VA 35 bits, MMU yes
+I: V3D raw: HUB_IDENT0..3 42554856 000e1124 00000100 00000e00 CTL_IDENT0..2 04443356 81001422 40078121 MMU_DEBUG_INFO 00000550
+osal(v3d): V3D 4.2, 8 QPUs, VPM 65536 bytes, MMU yes (identify 0)
+osal(v3d): UIFCFG 0x00000045
+osal(v3d): ready: carve-out 48 MiB at phys 0x2f09000, GPU VA 0x181000..0x3100000
+yakogl/v3d: depth and stencil apart (by renderbuffer), the platform's setting
+yakogl/v3d: job arenas for 1024 draws (the platform's budget): BCL 139264, indirect 458752, binner tile pool 1056768 bytes; tiled copies kept up to 16777216 bytes
+yakogl/v3d: two job arena sets (the second's texture arena 1048576 bytes): a job is recorded while the one before runs
+yakogl/v3d: clear program built: 408 bytes of code
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_alpha_constant_alpha'..
+osal(v3d): BASELINE after a completed job 1: core_sts 0x0 hub_sts 0x0 err 0x1000 ct0 cs 0x0 ea 0x2010af ca 0x2010af ra 0x0 qba 0x201000 qea 0x2010af ct1 ca 0x223088 ra 0x223087 qba 0x223000 qea 0x223088
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_alpha_constant_alpha
+v3d_deqp: case #0 P 192ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_alpha_constant_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_alpha_constant_color'..
+yakogl/v3d: binner pool after job 1: given 0x00b96000 + 1056768, BPCA 0x00b99000 BPCS 1044480 CT0QMA 0x00b96000 CT0QMS 1056768, overflow blocks 0 of 2 (262144 bytes each)
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_alpha_constant_color
+v3d_deqp: case #1 P 69ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_alpha_constant_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_alpha_dst_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_alpha_dst_alpha
+v3d_deqp: case #2 P 53ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_alpha_dst_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_alpha_dst_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_alpha_dst_color
+v3d_deqp: case #3 P 53ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_alpha_dst_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_alpha_one'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_alpha_one
+v3d_deqp: case #4 P 50ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_alpha_one
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_alpha_one_minus_constant_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_alpha_one_minus_constant_alpha
+v3d_deqp: case #5 P 55ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_alpha_one_minus_constant_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_alpha_one_minus_constant_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_alpha_one_minus_constant_color
+v3d_deqp: case #6 P 56ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_alpha_one_minus_constant_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_alpha_one_minus_dst_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_alpha_one_minus_dst_alpha
+v3d_deqp: case #7 P 56ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_alpha_one_minus_dst_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_alpha_one_minus_dst_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_alpha_one_minus_dst_color
+v3d_deqp: case #8 P 56ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_alpha_one_minus_dst_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_alpha_one_minus_src_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_alpha_one_minus_src_alpha
+v3d_deqp: case #9 P 55ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_alpha_one_minus_src_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_alpha_one_minus_src_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_alpha_one_minus_src_color
+v3d_deqp: case #10 P 56ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_alpha_one_minus_src_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_alpha_src_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_alpha_src_alpha
+v3d_deqp: case #11 P 53ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_alpha_src_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_alpha_src_alpha_saturate'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_alpha_src_alpha_saturate
+v3d_deqp: case #12 P 55ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_alpha_src_alpha_saturate
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_alpha_src_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_alpha_src_color
+v3d_deqp: case #13 P 53ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_alpha_src_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_alpha_zero'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_alpha_zero
+v3d_deqp: case #14 P 52ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_alpha_zero
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_color_constant_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_color_constant_alpha
+v3d_deqp: case #15 P 54ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_color_constant_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_color_constant_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_color_constant_color
+v3d_deqp: case #16 P 54ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_color_constant_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_color_dst_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_color_dst_alpha
+v3d_deqp: case #17 P 54ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_color_dst_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_color_dst_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_color_dst_color
+v3d_deqp: case #18 P 53ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_color_dst_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_color_one'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_color_one
+v3d_deqp: case #19 P 52ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_color_one
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_color_one_minus_constant_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_color_one_minus_constant_alpha
+v3d_deqp: case #20 P 55ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_color_one_minus_constant_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_color_one_minus_constant_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_color_one_minus_constant_color
+v3d_deqp: case #21 P 57ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_color_one_minus_constant_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_color_one_minus_dst_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_color_one_minus_dst_alpha
+v3d_deqp: case #22 P 57ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_color_one_minus_dst_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_color_one_minus_dst_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_color_one_minus_dst_color
+v3d_deqp: case #23 P 56ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_color_one_minus_dst_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_color_one_minus_src_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_color_one_minus_src_alpha
+v3d_deqp: case #24 P 55ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_color_one_minus_src_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_color_one_minus_src_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_color_one_minus_src_color
+v3d_deqp: case #25 P 56ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_color_one_minus_src_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_color_src_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_color_src_alpha
+v3d_deqp: case #26 P 54ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_color_src_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_color_src_alpha_saturate'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_color_src_alpha_saturate
+v3d_deqp: case #27 P 55ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_color_src_alpha_saturate
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_color_src_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_color_src_color
+v3d_deqp: case #28 P 54ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_color_src_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_color_zero'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_color_zero
+v3d_deqp: case #29 P 52ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_constant_color_zero
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_alpha_constant_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_alpha_constant_alpha
+v3d_deqp: case #30 P 53ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_alpha_constant_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_alpha_constant_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_alpha_constant_color
+v3d_deqp: case #31 P 53ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_alpha_constant_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_alpha_dst_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_alpha_dst_alpha
+v3d_deqp: case #32 P 52ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_alpha_dst_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_alpha_dst_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_alpha_dst_color
+v3d_deqp: case #33 P 52ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_alpha_dst_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_alpha_one'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_alpha_one
+v3d_deqp: case #34 P 50ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_alpha_one
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_alpha_one_minus_constant_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_alpha_one_minus_constant_alpha
+v3d_deqp: case #35 P 54ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_alpha_one_minus_constant_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_alpha_one_minus_constant_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_alpha_one_minus_constant_color
+v3d_deqp: case #36 P 56ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_alpha_one_minus_constant_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_alpha_one_minus_dst_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_alpha_one_minus_dst_alpha
+v3d_deqp: case #37 P 55ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_alpha_one_minus_dst_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_alpha_one_minus_dst_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_alpha_one_minus_dst_color
+v3d_deqp: case #38 P 54ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_alpha_one_minus_dst_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_alpha_one_minus_src_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_alpha_one_minus_src_alpha
+v3d_deqp: case #39 P 55ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_alpha_one_minus_src_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_alpha_one_minus_src_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_alpha_one_minus_src_color
+v3d_deqp: case #40 P 54ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_alpha_one_minus_src_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_alpha_src_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_alpha_src_alpha
+v3d_deqp: case #41 P 53ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_alpha_src_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_alpha_src_alpha_saturate'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_alpha_src_alpha_saturate
+v3d_deqp: case #42 P 53ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_alpha_src_alpha_saturate
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_alpha_src_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_alpha_src_color
+v3d_deqp: case #43 P 53ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_alpha_src_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_alpha_zero'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_alpha_zero
+v3d_deqp: case #44 P 51ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_alpha_zero
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_color_constant_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_color_constant_alpha
+v3d_deqp: case #45 P 52ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_color_constant_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_color_constant_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_color_constant_color
+v3d_deqp: case #46 P 53ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_color_constant_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_color_dst_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_color_dst_alpha
+v3d_deqp: case #47 P 52ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_color_dst_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_color_dst_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_color_dst_color
+v3d_deqp: case #48 P 52ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_color_dst_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_color_one'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_color_one
+v3d_deqp: case #49 P 50ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_color_one
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_color_one_minus_constant_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_color_one_minus_constant_alpha
+v3d_deqp: case #50 P 55ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_color_one_minus_constant_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_color_one_minus_constant_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_color_one_minus_constant_color
+v3d_deqp: case #51 P 55ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_color_one_minus_constant_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_color_one_minus_dst_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_color_one_minus_dst_alpha
+v3d_deqp: case #52 P 55ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_color_one_minus_dst_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_color_one_minus_dst_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_color_one_minus_dst_color
+v3d_deqp: case #53 P 55ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_color_one_minus_dst_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_color_one_minus_src_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_color_one_minus_src_alpha
+v3d_deqp: case #54 P 54ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_color_one_minus_src_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_color_one_minus_src_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_color_one_minus_src_color
+v3d_deqp: case #55 P 54ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_color_one_minus_src_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_color_src_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_color_src_alpha
+v3d_deqp: case #56 P 53ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_color_src_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_color_src_alpha_saturate'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_color_src_alpha_saturate
+v3d_deqp: case #57 P 53ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_color_src_alpha_saturate
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_color_src_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_color_src_color
+v3d_deqp: case #58 P 53ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_color_src_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_color_zero'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_color_zero
+v3d_deqp: case #59 P 51ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_dst_color_zero
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_constant_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_constant_alpha
+v3d_deqp: case #60 P 49ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_constant_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_constant_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_constant_color
+v3d_deqp: case #61 P 51ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_constant_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_dst_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_dst_alpha
+v3d_deqp: case #62 P 49ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_dst_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_dst_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_dst_color
+v3d_deqp: case #63 P 50ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_dst_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_alpha_constant_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_alpha_constant_alpha
+v3d_deqp: case #64 P 54ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_alpha_constant_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_alpha_constant_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_alpha_constant_color
+v3d_deqp: case #65 P 57ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_alpha_constant_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_alpha_dst_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_alpha_dst_alpha
+v3d_deqp: case #66 P 57ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_alpha_dst_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_alpha_dst_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_alpha_dst_color
+v3d_deqp: case #67 P 56ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_alpha_dst_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_alpha_one'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_alpha_one
+v3d_deqp: case #68 P 54ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_alpha_one
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_alpha_one_minus_constant_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_alpha_one_minus_constant_alpha
+v3d_deqp: case #69 P 58ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_alpha_one_minus_constant_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_alpha_one_minus_constant_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_alpha_one_minus_constant_color
+v3d_deqp: case #70 P 60ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_alpha_one_minus_constant_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_alpha_one_minus_dst_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_alpha_one_minus_dst_alpha
+v3d_deqp: case #71 P 59ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_alpha_one_minus_dst_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_alpha_one_minus_dst_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_alpha_one_minus_dst_color
+v3d_deqp: case #72 P 59ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_alpha_one_minus_dst_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_alpha_one_minus_src_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_alpha_one_minus_src_alpha
+v3d_deqp: case #73 P 58ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_alpha_one_minus_src_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_alpha_one_minus_src_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_alpha_one_minus_src_color
+v3d_deqp: case #74 P 59ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_alpha_one_minus_src_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_alpha_src_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_alpha_src_alpha
+v3d_deqp: case #75 P 57ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_alpha_src_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_alpha_src_alpha_saturate'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_alpha_src_alpha_saturate
+v3d_deqp: case #76 P 57ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_alpha_src_alpha_saturate
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_alpha_src_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_alpha_src_color
+v3d_deqp: case #77 P 57ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_alpha_src_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_alpha_zero'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_alpha_zero
+v3d_deqp: case #78 P 55ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_alpha_zero
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_color_constant_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_color_constant_alpha
+v3d_deqp: case #79 P 56ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_color_constant_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_color_constant_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_color_constant_color
+v3d_deqp: case #80 P 57ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_color_constant_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_color_dst_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_color_dst_alpha
+v3d_deqp: case #81 P 56ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_color_dst_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_color_dst_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_color_dst_color
+v3d_deqp: case #82 P 56ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_color_dst_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_color_one'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_color_one
+v3d_deqp: case #83 P 53ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_color_one
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_color_one_minus_constant_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_color_one_minus_constant_alpha
+v3d_deqp: case #84 P 58ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_color_one_minus_constant_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_color_one_minus_constant_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_color_one_minus_constant_color
+v3d_deqp: case #85 P 60ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_color_one_minus_constant_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_color_one_minus_dst_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_color_one_minus_dst_alpha
+v3d_deqp: case #86 P 58ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_color_one_minus_dst_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_color_one_minus_dst_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_color_one_minus_dst_color
+v3d_deqp: case #87 P 59ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_color_one_minus_dst_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_color_one_minus_src_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_color_one_minus_src_alpha
+v3d_deqp: case #88 P 58ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_color_one_minus_src_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_color_one_minus_src_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_color_one_minus_src_color
+v3d_deqp: case #89 P 58ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_color_one_minus_src_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_color_src_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_color_src_alpha
+v3d_deqp: case #90 P 57ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_color_src_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_color_src_alpha_saturate'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_color_src_alpha_saturate
+v3d_deqp: case #91 P 57ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_color_src_alpha_saturate
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_color_src_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_color_src_color
+v3d_deqp: case #92 P 56ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_color_src_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_color_zero'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_color_zero
+v3d_deqp: case #93 P 55ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_constant_color_zero
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_alpha_constant_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_alpha_constant_alpha
+v3d_deqp: case #94 P 56ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_alpha_constant_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_alpha_constant_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_alpha_constant_color
+v3d_deqp: case #95 P 55ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_alpha_constant_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_alpha_dst_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_alpha_dst_alpha
+v3d_deqp: case #96 P 55ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_alpha_dst_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_alpha_dst_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_alpha_dst_color
+v3d_deqp: case #97 P 55ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_alpha_dst_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_alpha_one'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_alpha_one
+v3d_deqp: case #98 P 53ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_alpha_one
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_alpha_one_minus_constant_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_alpha_one_minus_constant_alpha
+v3d_deqp: case #99 P 56ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_alpha_one_minus_constant_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_alpha_one_minus_constant_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_alpha_one_minus_constant_color
+v3d_deqp: case #100 P 59ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_alpha_one_minus_constant_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_alpha_one_minus_dst_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_alpha_one_minus_dst_alpha
+v3d_deqp: case #101 P 57ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_alpha_one_minus_dst_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_alpha_one_minus_dst_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_alpha_one_minus_dst_color
+v3d_deqp: case #102 P 57ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_alpha_one_minus_dst_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_alpha_one_minus_src_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_alpha_one_minus_src_alpha
+v3d_deqp: case #103 P 58ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_alpha_one_minus_src_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_alpha_one_minus_src_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_alpha_one_minus_src_color
+v3d_deqp: case #104 P 57ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_alpha_one_minus_src_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_alpha_src_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_alpha_src_alpha
+v3d_deqp: case #105 P 55ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_alpha_src_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_alpha_src_alpha_saturate'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_alpha_src_alpha_saturate
+v3d_deqp: case #106 P 56ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_alpha_src_alpha_saturate
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_alpha_src_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_alpha_src_color
+v3d_deqp: case #107 P 55ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_alpha_src_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_alpha_zero'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_alpha_zero
+v3d_deqp: case #108 P 54ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_alpha_zero
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_color_constant_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_color_constant_alpha
+v3d_deqp: case #109 P 55ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_color_constant_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_color_constant_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_color_constant_color
+v3d_deqp: case #110 P 56ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_color_constant_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_color_dst_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_color_dst_alpha
+v3d_deqp: case #111 P 55ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_color_dst_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_color_dst_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_color_dst_color
+v3d_deqp: case #112 P 54ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_color_dst_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_color_one'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_color_one
+v3d_deqp: case #113 P 53ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_color_one
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_color_one_minus_constant_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_color_one_minus_constant_alpha
+v3d_deqp: case #114 P 57ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_color_one_minus_constant_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_color_one_minus_constant_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_color_one_minus_constant_color
+v3d_deqp: case #115 P 59ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_color_one_minus_constant_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_color_one_minus_dst_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_color_one_minus_dst_alpha
+v3d_deqp: case #116 P 57ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_color_one_minus_dst_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_color_one_minus_dst_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_color_one_minus_dst_color
+v3d_deqp: case #117 P 57ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_color_one_minus_dst_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_color_one_minus_src_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_color_one_minus_src_alpha
+v3d_deqp: case #118 P 58ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_color_one_minus_src_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_color_one_minus_src_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_color_one_minus_src_color
+v3d_deqp: case #119 P 57ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_color_one_minus_src_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_color_src_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_color_src_alpha
+v3d_deqp: case #120 P 55ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_color_src_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_color_src_alpha_saturate'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_color_src_alpha_saturate
+v3d_deqp: case #121 P 56ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_color_src_alpha_saturate
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_color_src_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_color_src_color
+v3d_deqp: case #122 P 55ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_color_src_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_color_zero'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_color_zero
+v3d_deqp: case #123 P 54ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_dst_color_zero
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_alpha_constant_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_alpha_constant_alpha
+v3d_deqp: case #124 P 55ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_alpha_constant_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_alpha_constant_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_alpha_constant_color
+v3d_deqp: case #125 P 56ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_alpha_constant_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_alpha_dst_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_alpha_dst_alpha
+v3d_deqp: case #126 P 54ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_alpha_dst_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_alpha_dst_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_alpha_dst_color
+v3d_deqp: case #127 P 55ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_alpha_dst_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_alpha_one'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_alpha_one
+v3d_deqp: case #128 P 53ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_alpha_one
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_alpha_one_minus_constant_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_alpha_one_minus_constant_alpha
+v3d_deqp: case #129 P 56ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_alpha_one_minus_constant_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_alpha_one_minus_constant_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_alpha_one_minus_constant_color
+v3d_deqp: case #130 P 59ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_alpha_one_minus_constant_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_alpha_one_minus_dst_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_alpha_one_minus_dst_alpha
+v3d_deqp: case #131 P 57ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_alpha_one_minus_dst_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_alpha_one_minus_dst_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_alpha_one_minus_dst_color
+v3d_deqp: case #132 P 57ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_alpha_one_minus_dst_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_alpha_one_minus_src_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_alpha_one_minus_src_alpha
+v3d_deqp: case #133 P 57ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_alpha_one_minus_src_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_alpha_one_minus_src_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_alpha_one_minus_src_color
+v3d_deqp: case #134 P 57ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_alpha_one_minus_src_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_alpha_src_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_alpha_src_alpha
+v3d_deqp: case #135 P 56ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_alpha_src_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_alpha_src_alpha_saturate'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_alpha_src_alpha_saturate
+v3d_deqp: case #136 P 56ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_alpha_src_alpha_saturate
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_alpha_src_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_alpha_src_color
+v3d_deqp: case #137 P 55ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_alpha_src_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_alpha_zero'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_alpha_zero
+v3d_deqp: case #138 P 54ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_alpha_zero
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_color_constant_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_color_constant_alpha
+v3d_deqp: case #139 P 55ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_color_constant_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_color_constant_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_color_constant_color
+v3d_deqp: case #140 P 56ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_color_constant_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_color_dst_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_color_dst_alpha
+v3d_deqp: case #141 P 55ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_color_dst_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_color_dst_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_color_dst_color
+v3d_deqp: case #142 P 54ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_color_dst_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_color_one'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_color_one
+v3d_deqp: case #143 P 53ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_color_one
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_color_one_minus_constant_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_color_one_minus_constant_alpha
+v3d_deqp: case #144 P 57ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_color_one_minus_constant_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_color_one_minus_constant_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_color_one_minus_constant_color
+v3d_deqp: case #145 P 58ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_color_one_minus_constant_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_color_one_minus_dst_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_color_one_minus_dst_alpha
+v3d_deqp: case #146 P 58ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_color_one_minus_dst_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_color_one_minus_dst_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_color_one_minus_dst_color
+v3d_deqp: case #147 P 57ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_color_one_minus_dst_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_color_one_minus_src_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_color_one_minus_src_alpha
+v3d_deqp: case #148 P 57ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_color_one_minus_src_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_color_one_minus_src_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_color_one_minus_src_color
+v3d_deqp: case #149 P 58ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_color_one_minus_src_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_color_src_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_color_src_alpha
+v3d_deqp: case #150 P 55ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_color_src_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_color_src_alpha_saturate'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_color_src_alpha_saturate
+v3d_deqp: case #151 P 56ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_color_src_alpha_saturate
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_color_src_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_color_src_color
+v3d_deqp: case #152 P 56ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_color_src_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_color_zero'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_color_zero
+v3d_deqp: case #153 P 53ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_minus_src_color_zero
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_one'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_one
+v3d_deqp: case #154 P 47ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_one
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_one_minus_constant_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_one_minus_constant_alpha
+v3d_deqp: case #155 P 52ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_one_minus_constant_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_one_minus_constant_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_one_minus_constant_color
+v3d_deqp: case #156 P 53ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_one_minus_constant_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_one_minus_dst_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_one_minus_dst_alpha
+v3d_deqp: case #157 P 52ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_one_minus_dst_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_one_minus_dst_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_one_minus_dst_color
+v3d_deqp: case #158 P 52ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_one_minus_dst_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_one_minus_src_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_one_minus_src_alpha
+v3d_deqp: case #159 P 51ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_one_minus_src_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_one_minus_src_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_one_minus_src_color
+v3d_deqp: case #160 P 53ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_one_minus_src_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_src_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_src_alpha
+v3d_deqp: case #161 P 50ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_src_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_src_alpha_saturate'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_src_alpha_saturate
+v3d_deqp: case #162 P 51ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_src_alpha_saturate
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_src_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_src_color
+v3d_deqp: case #163 P 50ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_src_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_zero'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_zero
+v3d_deqp: case #164 P 49ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_one_zero
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_constant_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_constant_alpha
+v3d_deqp: case #165 P 52ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_constant_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_constant_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_constant_color
+v3d_deqp: case #166 P 53ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_constant_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_dst_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_dst_alpha
+v3d_deqp: case #167 P 52ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_dst_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_dst_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_dst_color
+v3d_deqp: case #168 P 52ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_dst_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_one'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_one
+v3d_deqp: case #169 P 51ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_one
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_one_minus_constant_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_one_minus_constant_alpha
+v3d_deqp: case #170 P 54ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_one_minus_constant_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_one_minus_constant_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_one_minus_constant_color
+v3d_deqp: case #171 P 55ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_one_minus_constant_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_one_minus_dst_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_one_minus_dst_alpha
+v3d_deqp: case #172 P 55ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_one_minus_dst_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_one_minus_dst_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_one_minus_dst_color
+v3d_deqp: case #173 P 55ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_one_minus_dst_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_one_minus_src_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_one_minus_src_alpha
+v3d_deqp: case #174 P 54ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_one_minus_src_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_one_minus_src_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_one_minus_src_color
+v3d_deqp: case #175 P 55ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_one_minus_src_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_saturate_constant_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_saturate_constant_alpha
+v3d_deqp: case #176 P 55ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_saturate_constant_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_saturate_constant_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_saturate_constant_color
+v3d_deqp: case #177 P 56ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_saturate_constant_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_saturate_dst_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_saturate_dst_alpha
+v3d_deqp: case #178 P 54ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_saturate_dst_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_saturate_dst_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_saturate_dst_color
+v3d_deqp: case #179 P 55ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_saturate_dst_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_saturate_one'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_saturate_one
+v3d_deqp: case #180 P 53ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_saturate_one
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_saturate_one_minus_constant_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_saturate_one_minus_constant_alpha
+v3d_deqp: case #181 P 56ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_saturate_one_minus_constant_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_saturate_one_minus_constant_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_saturate_one_minus_constant_color
+v3d_deqp: case #182 P 58ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_saturate_one_minus_constant_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_saturate_one_minus_dst_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_saturate_one_minus_dst_alpha
+v3d_deqp: case #183 P 58ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_saturate_one_minus_dst_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_saturate_one_minus_dst_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_saturate_one_minus_dst_color
+v3d_deqp: case #184 P 57ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_saturate_one_minus_dst_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_saturate_one_minus_src_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_saturate_one_minus_src_alpha
+v3d_deqp: case #185 P 57ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_saturate_one_minus_src_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_saturate_one_minus_src_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_saturate_one_minus_src_color
+v3d_deqp: case #186 P 56ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_saturate_one_minus_src_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_saturate_src_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_saturate_src_alpha
+v3d_deqp: case #187 P 56ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_saturate_src_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_saturate_src_alpha_saturate'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_saturate_src_alpha_saturate
+v3d_deqp: case #188 P 55ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_saturate_src_alpha_saturate
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_saturate_src_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_saturate_src_color
+v3d_deqp: case #189 P 56ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_saturate_src_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_saturate_zero'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_saturate_zero
+v3d_deqp: case #190 P 53ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_saturate_zero
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_src_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_src_alpha
+v3d_deqp: case #191 P 52ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_src_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_src_alpha_saturate'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_src_alpha_saturate
+v3d_deqp: case #192 P 54ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_src_alpha_saturate
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_src_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_src_color
+v3d_deqp: case #193 P 52ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_src_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_zero'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_zero
+v3d_deqp: case #194 P 52ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_alpha_zero
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_color_constant_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_color_constant_alpha
+v3d_deqp: case #195 P 51ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_color_constant_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_color_constant_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_color_constant_color
+v3d_deqp: case #196 P 53ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_color_constant_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_color_dst_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_color_dst_alpha
+v3d_deqp: case #197 P 52ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_color_dst_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_color_dst_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_color_dst_color
+v3d_deqp: case #198 P 52ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_color_dst_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_color_one'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_color_one
+v3d_deqp: case #199 P 50ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_color_one
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_color_one_minus_constant_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_color_one_minus_constant_alpha
+v3d_deqp: case #200 P 54ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_color_one_minus_constant_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_color_one_minus_constant_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_color_one_minus_constant_color
+v3d_deqp: case #201 P 55ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_color_one_minus_constant_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_color_one_minus_dst_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_color_one_minus_dst_alpha
+v3d_deqp: case #202 P 55ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_color_one_minus_dst_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_color_one_minus_dst_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_color_one_minus_dst_color
+v3d_deqp: case #203 P 54ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_color_one_minus_dst_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_color_one_minus_src_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_color_one_minus_src_alpha
+v3d_deqp: case #204 P 54ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_color_one_minus_src_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_color_one_minus_src_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_color_one_minus_src_color
+v3d_deqp: case #205 P 55ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_color_one_minus_src_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_color_src_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_color_src_alpha
+v3d_deqp: case #206 P 52ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_color_src_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_color_src_alpha_saturate'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_color_src_alpha_saturate
+v3d_deqp: case #207 P 54ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_color_src_alpha_saturate
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_color_src_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_color_src_color
+v3d_deqp: case #208 P 52ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_color_src_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_color_zero'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_color_zero
+v3d_deqp: case #209 P 51ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_src_color_zero
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_zero_constant_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_zero_constant_alpha
+v3d_deqp: case #210 P 52ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_zero_constant_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_zero_constant_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_zero_constant_color
+v3d_deqp: case #211 P 52ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_zero_constant_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_zero_dst_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_zero_dst_alpha
+v3d_deqp: case #212 P 51ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_zero_dst_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_zero_dst_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_zero_dst_color
+v3d_deqp: case #213 P 50ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_zero_dst_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_zero_one'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_zero_one
+v3d_deqp: case #214 P 50ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_zero_one
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_zero_one_minus_constant_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_zero_one_minus_constant_alpha
+v3d_deqp: case #215 P 53ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_zero_one_minus_constant_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_zero_one_minus_constant_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_zero_one_minus_constant_color
+v3d_deqp: case #216 P 54ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_zero_one_minus_constant_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_zero_one_minus_dst_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_zero_one_minus_dst_alpha
+v3d_deqp: case #217 P 54ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_zero_one_minus_dst_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_zero_one_minus_dst_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_zero_one_minus_dst_color
+v3d_deqp: case #218 P 54ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_zero_one_minus_dst_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_zero_one_minus_src_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_zero_one_minus_src_alpha
+v3d_deqp: case #219 P 53ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_zero_one_minus_src_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_zero_one_minus_src_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_zero_one_minus_src_color
+v3d_deqp: case #220 P 53ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_zero_one_minus_src_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_zero_src_alpha'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_zero_src_alpha
+v3d_deqp: case #221 P 52ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_zero_src_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_zero_src_alpha_saturate'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_zero_src_alpha_saturate
+v3d_deqp: case #222 P 52ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_zero_src_alpha_saturate
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_zero_src_color'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_zero_src_color
+v3d_deqp: case #223 P 52ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_zero_src_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_zero_zero'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_zero_zero
+v3d_deqp: case #224 P 42ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_zero_zero
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.max'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.max
+v3d_deqp: case #225 P 47ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.max
+  Pass (Passed)
+
+Test case 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.min'..
+deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.min
+v3d_deqp: case #226 P 47ms k2/8 c15273/15350 r0 dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.min
+  Pass (Passed)
+
+DONE!
+
+Test run totals:
+  Passed:        227/227 (100.0%)
+  Failed:        0/227 (0.0%)
+  Not supported: 0/227 (0.0%)
+  Warnings:      0/227 (0.0%)
+  Waived:        0/227 (0.0%)
+deqp: done: 227 passed, 0 failed, 0 not supported, 0 warnings, complete=1
+deqp: summary: 227 cases begun, 227 with a result, 0 without
+v3d_deqp DONE, all passed: build b1b5b845, filter 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.add_*,dEQP-GLES3.functional....
+  227 cases in 12493 ms, record at 12 s after boot, reset at ~250 s
+  totals: P 227  (R: not passed, a draw was refused in it; passed with one refused: 0)
+  done: 227 passed, 0 failed, 0 not supported, 0 warnings, complete=1
+  summary: 227 cases begun, 227 with a result, 0 without
+  keep region (KiB, of 1024): after #0 2, most 2 at #0, last 2, high-water 8; slowest #0 192 ms
+  carve-out (KiB, of 48636): after #0 15273, last 15273, high-water 15350
+  jobs: slow in 0 cases; no job hung or timed out
+BASELINE (first completed) job 1: core_sts 0x0 hub_sts 0x0 err 0x1000 ct0 cs 0x0 ea 0x2010af ca 0x2010af ra 0x0 qba 0x201000 qea 0x2010af ct1 ca 0x223088 ra 0x223087 qba 0x223000 qea 0x223088
+FIRST FAILURE: none (no timeout)
+slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+binner out of memory: 0 jobs (2 overflow blocks of 256 KiB, CONFIG_YAKOGL_V3D_BIN_OVERFLOW_BLOCKS; each such job ends in a GPU reset)
+binning by interrupt (IRQ 106): 227 interrupts, 0 overflow blocks fed by the ISR
+carve-out: 15377664 bytes used now, 15718400 at most, of 49803264; 0 frees held
+osal(v3d): pending frees: high-water 0/256, waits 0 (opt-in 0), refused 0 (0 unsubmitted, 0 no wait, 0 KiB kept)
+carve-out find: 701 calls, 24247 map reads (34 a call, at most 1153 in one); free runs 2, longest 34425088 bytes; small blocks from the top: off (CONFIG_YAKOGL_V3D_CARVEOUT_TOP_BELOW 0)
+packets (packet skip on, CONFIG_YAKOGL_V3D_PACK_SKIP): 227 jobs ended; emitted 6583, skipped 3178; groups compared 2043, mismatches 454
+allocations refused for lack of GPU memory: 0 (0 size slots; the line is printed at each size's 1st, 10th, 100th, ... refusal)
+UIFCFG 0x00000045 (read at init)
+log: 0 causes logged once, 0 repeats not printed
+case order: P pass F fail R refused N not supported Q quality C compat E resource I internal X crash T timeout
+    0 PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP
+  128 PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP
+driver: osal(v3d): V3D 4.2, 8 QPUs, VPM 65536 bytes, MMU yes (identify 0)
+driver: osal(v3d): UIFCFG 0x00000045
+driver: osal(v3d): ready: carve-out 48 MiB at phys 0x2f09000, GPU VA 0x181000..0x3100000
+driver: ... 6 more lines (UART)
+v3d_deqp: build b1b5b845 DONE, all passed: 227 cases, P 227 F 0 R 0 N 0 other 0

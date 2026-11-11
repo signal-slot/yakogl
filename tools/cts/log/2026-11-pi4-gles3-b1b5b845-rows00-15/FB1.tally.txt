@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES3 image FB1: deqp-uart-tally.py --mustpass tools/cts/gles3-mustpass.txt FB1.console.txt
+FB1.console.txt: deqp: done: 574 passed, 17 failed, 7 not supported, 0 warnings, complete=1 | deqp: summary: 598 cases begun, 598 with a result, 0 without
+mustpass cases with a result: 580 (of 598 seen)
+group                                       pass   fail    n/s  other
+fbo                                          559     14      7      0
+TOTAL                                        559     14      7      0
+(the pass / fail counts above are the result lines seen; the image's own counters:)
+  FB1: deqp: summary 598 cases begun, 598 with a result; deqp: done 574 passed, 17 failed, 7 not supported, 0 warnings; b1b5b845 DONE: 598 cases, P 574 F 17 R 0 N 7 other 0; 598 result lines seen
+Fail dEQP-GLES3.functional.fbo.completeness.renderable.renderbuffer.color0.r32f
+Fail dEQP-GLES3.functional.fbo.completeness.renderable.texture.color0.r16i
+Fail dEQP-GLES3.functional.fbo.completeness.renderable.texture.color0.r16ui
+Fail dEQP-GLES3.functional.fbo.completeness.renderable.texture.color0.r32f
+Fail dEQP-GLES3.functional.fbo.completeness.renderable.texture.color0.r32i
+Fail dEQP-GLES3.functional.fbo.completeness.renderable.texture.color0.r32ui
+Fail dEQP-GLES3.functional.fbo.completeness.renderable.texture.color0.r8i
+Fail dEQP-GLES3.functional.fbo.completeness.renderable.texture.color0.r8ui
+Fail dEQP-GLES3.functional.fbo.completeness.renderable.texture.color0.rg16i
+Fail dEQP-GLES3.functional.fbo.completeness.renderable.texture.color0.rg16ui
+Fail dEQP-GLES3.functional.fbo.completeness.renderable.texture.color0.rg32i
+Fail dEQP-GLES3.functional.fbo.completeness.renderable.texture.color0.rg32ui
+Fail dEQP-GLES3.functional.fbo.completeness.renderable.texture.color0.rg8i
+Fail dEQP-GLES3.functional.fbo.completeness.renderable.texture.color0.rg8ui

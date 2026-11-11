@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES3 image B1: deqp-uart-tally.py --mustpass tools/cts/gles3-mustpass.txt B1.console.txt
+B1.console.txt: deqp: done: 695 passed, 0 failed, 0 not supported, 0 warnings, complete=1 | deqp: summary: 695 cases begun, 695 with a result, 0 without
+mustpass cases with a result: 695 (of 695 seen)
+group                                       pass   fail    n/s  other
+buffer                                       695      0      0      0
+TOTAL                                        695      0      0      0
+(the pass / fail counts above are the result lines seen; the image's own counters:)
+  B1: deqp: summary 695 cases begun, 695 with a result; deqp: done 695 passed, 0 failed, 0 not supported, 0 warnings; b1b5b845 DONE, all passed: 695 cases, P 695 F 0 R 0 N 0 other 0; 695 result lines seen
