@@ -327,6 +327,44 @@ check_dtc() {
   line ok dtc "${out%%$'\n'*}"
 }
 
+# aarch64 C compiler: tools/v3d/check71.d/xbuild71.sh cross-compiles the v3d71
+# host checks with one (a gap without it). The candidates and their order are
+# those of that script: aarch64-zephyr-elf-gcc under ZEPHYR_SDK_INSTALL_DIR,
+# clang --target=aarch64-none-elf (alone, then with --sysroot when
+# /usr/aarch64-linux-gnu exists), aarch64-linux-gnu-gcc; the first that
+# compiles a probe is reported. Keep the two in step.
+check_xcc() {
+  local candidates=() gcc c d tmp found=
+  if [ -n "${ZEPHYR_SDK_INSTALL_DIR:-}" ]; then
+    for gcc in "$ZEPHYR_SDK_INSTALL_DIR/gnu/aarch64-zephyr-elf/bin/aarch64-zephyr-elf-gcc" \
+               "$ZEPHYR_SDK_INSTALL_DIR/aarch64-zephyr-elf/bin/aarch64-zephyr-elf-gcc"; do
+      [ -x "$gcc" ] && candidates+=("$gcc")
+    done
+  fi
+  if command -v clang >/dev/null 2>&1; then
+    candidates+=("clang --target=aarch64-none-elf")
+    [ -d /usr/aarch64-linux-gnu ] && candidates+=("clang --target=aarch64-none-elf --sysroot=/usr/aarch64-linux-gnu")
+  fi
+  if command -v aarch64-linux-gnu-gcc >/dev/null 2>&1; then
+    candidates+=("aarch64-linux-gnu-gcc")
+  fi
+  tmp=$(mktemp -d)
+  printf '#include <stddef.h>\n#include <stdint.h>\n#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n#include <unistd.h>\nint probe(void) { return 0; }\n' >"$tmp/probe.c"
+  for c in "${candidates[@]}"; do
+    read -r -a d <<<"$c"
+    if "${d[@]}" -c "$tmp/probe.c" -o "$tmp/probe.o" >/dev/null 2>&1; then
+      found=$c
+      break
+    fi
+  done
+  rm -rf "$tmp"
+  if [ -n "$found" ]; then
+    line ok aarch64-cc "$found"
+  else
+    line missing aarch64-cc "no aarch64 C compiler that builds a probe (the xbuild71 row would be a gap): the Zephyr SDK (ZEPHYR_SDK_INSTALL_DIR, aarch64-zephyr-elf-gcc), Debian gcc-aarch64-linux-gnu, Gentoo cross-aarch64-linux-gnu, or clang with a target C library"
+  fi
+}
+
 check_pkgconfig() {
   local m out
   if ! command -v pkg-config >/dev/null 2>&1; then
@@ -548,6 +586,7 @@ run_checks() {
   check_glslang
   check_lz4
   check_dtc
+  check_xcc
   check_pkgconfig
   check_mali_csffw
   check_glmark2_src
