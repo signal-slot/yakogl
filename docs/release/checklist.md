@@ -37,7 +37,7 @@ commit that touched the file (`git log -1 --format=%h -- <path>`).
 | 9 | website/ consistent | Every number on `website/index.html`, `status.html` and `try-it.html` (from `website/data.js`) equals line 2's sources; `tools/website-check.sh` exits 0 | `grep -n checkedAgainst website/data.js`; `bash tools/website-check.sh` | **partial** (2026-11-05, base `7ae09845`). `bash tools/website-check.sh` exits 0: "website-check: ok (5 pages, 147 links and sources, 19 figures)". Item website-check-fix cleared the 6 (later 11) provenance problems and website-data-deqp (`755bd183`) moved the dEQP and status figures to RESULTS.md at main. The checker covers links, metadata, SPDX, commit names and the figures it has a source for. Not met: the glmark2 figures in `website/data.js` still follow the old table; they move with item website-data-refresh after the stage-2 one-commit run (line 2) lands, so the line stays partial until then. No gate row runs `website-check.sh`. |
 | 10 | Public ROADMAP.md | `ROADMAP.md` is in the tree with the owner's five stages, a measurable criterion each, and State paragraphs read from `tools/cts/RESULTS.md`, `tools/cts/STATUS.md` and the open issues | `ROADMAP.md` | **met** (2026-10-26, main `5ac5ac23c` plus #1606 step 6). The five stages and their criteria are in the tree. The State paragraphs were re-read: stage 1 adds the later re-runs; stage 2 gives the `445c5653` table, the Pi 4's 195, what is left (pictures by eye on the Pi 4 and the i.MX8MP, #1196) and the slow scenes with their issues; stage 3 gives #1606's decisions and the open checklist lines; stage 4 the AM62P's 31-image table, the Pi 4's 9 of 91 images at `925dbca9` and the i.MX8MP not run; stage 5 the NanoPC-T6 Mali port (98 of 256 `gl_test` cases PASS on its Linux, 2026-10-24). Stage 1's heading no longer says "conformance". |
 | 11 | Licence texts and NOTICE | `LICENSE` is Apache-2.0; every licence named in `NOTICE` has its text in `LICENSES/`; every vendored directory under `third_party/` is listed in `NOTICE` | `head -3 LICENSE`; `ls LICENSES/`; `NOTICE` lines 9-31 | **met** (2026-11-05, base `7ae09845`). `LICENSE` is the Apache License 2.0. `LICENSES/` holds 11 texts (Apache-2.0, BSD-2-Clause, BSD-3-Clause, BSL-1.0, CC-BY-ND-4.0, GPL-2.0-only, GPL-3.0-only, the two Slint texts, MIT, Zlib) and every licence `NOTICE` names (lines 9-31) has its file there. `NOTICE` names all three vendored directories, `third_party/mesa-26.2.1`, `third_party/ti-img-rogue-ddk-25.2` and `third_party/zephyr-pr114866-2026-07-29-2473da6b` (`ls third_party`). `python3 -I tools/license_audit.py --fail-on missing-spdx,unknown-id,third-party-mismatch,generated-mismatch` exits 0: 3812 files, `missing-spdx` 0, `undecided` 0, `unknown-id` 0, `unused-license` 0, `third-party-mismatch` 0, `generated-mismatch` 0, findings 0 (the tool lists 13 files under `third_party/` as `third-party-unlabelled`; that class is not a `--fail-on` class). |
-| 12 | Gate is green | `tools/check.sh` (full) exits 0 on the commit to publish | `tools/check.sh`; CI as in `docs/ci.md` | **partial** (2026-11-05, base `7ae09845`). Not claimed green: the full `tools/check.sh` was not run for this line. Plan #193 is fixing the full gate (the nightly `__rustc::rust_eh_personality` link failure). The three v3d Mesa rows pass with a built `MESA_V3D_TREE` (item mesa-v3d-tree built the Mesa 26.2.1 `v3d_shc` tree); without it they are one `gap`, which keeps the gate red. The `gap` rows for Zephyr images, hal_nxp, pco_shc and aarch64 need `ZEPHYR_WS`, `HAL_NXP_DIR` and `PCO_SHC`. Green means "N ok, 0 failed, 0 gap(s)" from a full run on the commit to publish. |
+| 12 | Gate is green | `tools/check.sh` (full) exits 0 on the commit to publish | `tools/check.sh`; CI as in `docs/ci.md` | **met** (2026-11-11, `c66bea9f`): full `tools/check.sh` 222 ok, 0 failed, 0 gap(s), exit 0 (3486 s; see "Line 12" below). It holds for that commit only: green means "N ok, 0 failed, 0 gap(s)" from a full run on the commit to publish, so it is re-run there. The nightly `__rustc::rust_eh_personality` link failure no longer occurs: `fce3e6aa` documents how yakogl resolves it and `2e949ed5` is the pvr check side. Without `MESA_V3D_TREE` (a Mesa tree with `build-v3d`) the three v3d rows are one `gap`, and without `ZEPHYR_WS`, `HAL_NXP_DIR`, `PCO_SHC` or an aarch64 compiler the Zephyr, hal_nxp, pco_shc and aarch64 rows are `gap`s; none was a gap in this run. |
 | 13 | Stage 1 met (input) | One whole dEQP-GLES2 tree per board, from one commit, newer than every GL-core change, reads 0 Fail over the 17,165 mustpass cases (AM62P with its ms4 image) | `tools/cts/RESULTS.md`, "ES 2.0" | **met** (2026-10-16). One tree per board at `e9901869a`, 0 Fail: AM62P 17,140 (1x and ms4), i.MX8MP 17,318, Pi 4 17,126 (issue #870). |
 
 ### Line 3: re-run (2026-10-25)
@@ -314,6 +314,27 @@ neither is given here; this table is read at base `7ae09845`):
 - To close the line: run step 3 on a host with `llvm-ar`, `llvm-nm`,
   `llvm-objcopy` and a newlib sysroot, and record the exit code, the compiler
   versions and the commit here.
+
+### Line 12: full gate (2026-11-11)
+
+Commit `c66bea9f` (origin/main), clean tree, 4 cores, 2 compiler slots. Inputs
+as `tools/setup-gate-host.sh --check` and `tools/cts/deps-env.sh --check`
+reported them, both clean before the run: `ZEPHYR_WS`, `HAL_NXP_DIR`,
+`PCO_SHC`, `PCO_SPM_LOAD_CAPTURE`, `MESA_PAN_TREE`, `MESA_V3D_TREE` (Mesa
+26.2.1 with `build-v3d`, set up per `tools/v3d/README.md`), `GLMARK2_SRC` at
+its pin, `DEQP_GLES3_TEST_DIR`, `MALI_CSFFW`, lz4 1.10.0 (built from source,
+no root), dtc 1.7.2, and `driver/src/fw/pvr_fw_blob.h` copied from
+`PVR_FW_BLOB` (untracked). `CC_aarch64_unknown_none` unset.
+
+Command: `export $(tools/cts/deps-env.sh --present); tools/check.sh` with
+`MESA_V3D_TREE` and lz4 on `PATH`.
+
+Result: `check.sh: 222 ok, 0 failed, 0 gap(s) (a gap was not run: it is not a
+pass), 0 skipped (every row), 0 not run (passed on main) in 3486s`, exit 0.
+An earlier, cold run of the same commit passed every row up to the Zephyr images
+(about 250 of 272 log lines) before the host's 2 h background limit stopped it; the figure above is the
+complete rerun. `test yakogl-mali-panthor` (plan #331's flaky row) passed in
+both.
 
 ## Decisions only the owner can make
 
