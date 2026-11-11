@@ -274,6 +274,28 @@ packages.apt = ["git"]
 packages.portage = ["dev-vcs/git"]
 
 [[dep]]
+name = "LZ4"
+path = "lz4/bin/lz4"
+marker = "lz4/bin/lz4"
+note = "the lz4 command of the am62p second-stage LZ4 vectors (tools/am62p-mkboot.py reads $LZ4, else lz4 on PATH), built from the upstream v1.10.0 release without root; the distribution package (ZEPHYR_WS packages) is the other way to have it"
+build = '''
+rm -rf "$DEPS/lz4.part"
+mkdir -p "$DEPS/lz4.part/src"
+tar -xzf "$DEPS/downloads/lz4-1.10.0.tar.gz" -C "$DEPS/lz4.part/src" --strip-components=1
+make -C "$DEPS/lz4.part/src" -j"$(nproc)" lz4
+mkdir -p "$DEPS/lz4.part/bin"
+cp "$DEPS/lz4.part/src/programs/lz4" "$DEPS/lz4.part/bin/lz4"
+rm -rf "$DEPS/lz4.part/src" "$DEPS/lz4"
+mv "$DEPS/lz4.part" "$DEPS/lz4"
+'''
+packages.apt = ["make", "gcc"]
+packages.portage = ["dev-build/make", "sys-devel/gcc"]
+
+[[dep.inputs]]
+url = "https://github.com/lz4/lz4/releases/download/v1.10.0/lz4-1.10.0.tar.gz"
+sha256 = "537512904744b35e232912055ccf8ec66d768639ff3abe5788d90d792ec5f48b"
+
+[[dep]]
 name = "PVR_FW_BLOB"
 path = "pvr_fw_blob.h"
 marker = "pvr_fw_blob.h"
