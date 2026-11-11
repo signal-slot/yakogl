@@ -343,6 +343,24 @@ pub fn layout_compressed(
     Some(l)
 }
 
+/// [`refusal_for`]'s texel format with no TMU row here (ETC2, or the RGB10A2
+/// class the GL core keeps in RGBA8).
+const NOT_SAMPLED: Refusal = "a texel format the V3D does not sample";
+
+/// [`refusal_for`]'s 16-bit format read by a 32-bit look-up.
+const RET32_OF_16: Refusal = "a look-up compiled for the 32-bit TMU output reads a texture of a 16-bit format";
+
+/// [`refusal_for`]'s 32-bit format read by a 16-bit look-up.
+const RET16_OF_32: Refusal = "a texture of 32-bit channels (R32F, RGBA32F, RGBA32UI, RGBA32I) read by a look-up \
+                              compiled for the 16-bit TMU output";
+
+/// The [`refusal_for`] reasons that are legal GL state this cut cannot
+/// sample yet: the backend refuses them with -ENOTSUP (a backend gap,
+/// src/backend.rs `draw`). Every other reason is a binding the GL core
+/// should not hand over (a cube without six square faces, a type or size
+/// GL rejects first, a layout unlike the core's), -EINVAL.
+pub const GAPS: [Refusal; 3] = [NOT_SAMPLED, RET32_OF_16, RET16_OF_32];
+
 /// What this cut samples, refused by name otherwise.
 pub fn refusal(b: &GlesTextureBind) -> Option<Refusal> {
     refusal_for(b, false)
@@ -377,15 +395,10 @@ fn refusal_in(b: &GlesTextureBind, ret32: bool, sampled: u64) -> Option<Refusal>
         _ => return Some("a texture binding of a type or layer count the V3D does not sample"),
     }
     if sampled & gles_texfmt_bit(b.format) == 0 {
-        return Some("a texel format the V3D does not sample");
+        return Some(NOT_SAMPLED);
     }
     if return_32(b) != ret32 {
-        return Some(if ret32 {
-            "a look-up compiled for the 32-bit TMU output reads a texture of a 16-bit format"
-        } else {
-            "a texture of 32-bit channels (R32F, RGBA32F, RGBA32UI, RGBA32I) read by a look-up compiled for the \
-             16-bit TMU output"
-        });
+        return Some(if ret32 { RET32_OF_16 } else { RET16_OF_32 });
     }
     if b.width == 0 || b.height == 0 || b.width >= 1 << 14 || b.height >= 1 << 14 {
         return Some("a texture size the TMU cannot address (0, or 16384 or more)");

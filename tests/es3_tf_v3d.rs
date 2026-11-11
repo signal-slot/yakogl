@@ -29,11 +29,9 @@
 //! What is held, for each case: no GL_OUT_OF_MEMORY is ever raised, the
 //! captured words are the vertices' (the capture is the GL core's and does
 //! not depend on the back end), and the draw is either recorded or refused
-//! by name with GL_INVALID_OPERATION (`-ENOTSUP`, `backend::draw`). Where
-//! today's tip still answers GL_OUT_OF_MEMORY the test pins that answer and
-//! the refusal's name, and an `#[ignore = "v3d-refuse-enotsup"]` twin holds
-//! the answer once the refusal is -ENOTSUP, or the draw recorded if the V3D
-//! can do it.
+//! by name with GL_INVALID_OPERATION (`-ENOTSUP`, `backend::draw`; the
+//! job builder's refusal answers it since v3d-refuse-enotsup). Where the
+//! V3D cannot draw a case yet, an `#[ignore]`d twin holds the draw recorded.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table --test es3_tf_v3d
@@ -880,20 +878,21 @@ fn position_and_point_size_cases_draw_and_capture() {
 }
 
 /// The cases over the cap: 39 of the 252, every one of them in both
-/// buffer modes and all three primitives, not only dEQP's `lines`. Today
-/// the job builder refuses the draw, the back end answers -EINVAL, and the
-/// GL core raises GL_OUT_OF_MEMORY (`submit_draw`): the error dEQP reads as a
-/// fatal resource error. The capture, which is the GL core's, is right.
-/// Pinned; `refused_cases_answer_invalid_operation` holds the answer
-/// -ENOTSUP gives, and `refused_cases_draw` what a V3D that can draw them
-/// gives.
+/// buffer modes and all three primitives, not only dEQP's `lines`. The job
+/// builder refuses the draw, the back end answers -ENOTSUP (legal GL state
+/// it cannot draw yet), and the GL core raises GL_INVALID_OPERATION
+/// (`submit_draw`): dEQP fails the case and goes on to the next, so TF1 and
+/// TF2 run to their end. Before v3d-refuse-enotsup the answer was -EINVAL
+/// and GL_OUT_OF_MEMORY, which dEQP reads as a fatal resource error. The
+/// capture, which is the GL core's, is right. `refused_cases_draw` holds
+/// what a V3D that can draw them gives.
 #[test]
-fn cases_over_the_input_cap_are_refused_as_out_of_memory_today() {
+fn cases_over_the_input_cap_are_refused_as_invalid_operation() {
     let _g = rig();
     let mut n = 0;
     for c in cases().into_iter().filter(|c| c.fragment_inputs() > FS_INPUT_CAP) {
         let o = run(&c);
-        assert_eq!(o.errors, [GL_OUT_OF_MEMORY], "{} ({} inputs)", c.name(), c.fragment_inputs());
+        assert_eq!(o.errors, [GL_INVALID_OPERATION], "{} ({} inputs)", c.name(), c.fragment_inputs());
         assert_eq!(o.captured, o.expected, "{}: the capture is the GL core's, right either way", c.name());
         n += 1;
     }
@@ -919,7 +918,7 @@ fn the_cap_is_24_fragment_input_scalars() {
     assert_eq!(run(&at).errors, []);
     let over = Case::array_of("vec4", GL_LINES, GL_INTERLEAVED_ATTRIBS);
     assert_eq!(over.fragment_inputs(), 28);
-    assert_eq!(run(&over).errors, [GL_OUT_OF_MEMORY]);
+    assert_eq!(run(&over).errors, [GL_INVALID_OPERATION]);
 }
 
 /// Each image's stop case, in dEQP's run order: the first case of the
@@ -938,21 +937,6 @@ fn the_first_refused_case_of_each_image_is_the_one_it_stopped_at() {
     };
     assert_eq!(first_refused("array."), (4, "array.interleaved.lines.highp_ivec4".to_string()));
     assert_eq!(first_refused("basic_types."), (11, "basic_types.interleaved.lines.highp_mat4".to_string()));
-}
-
-/// What -ENOTSUP gives (`submit_draw`): every refused case raises
-/// GL_INVALID_OPERATION and no GL_OUT_OF_MEMORY, so dEQP fails the case and
-/// goes on to the next, and TF1 and TF2 run to their end. Waits on the back
-/// end answering -ENOTSUP for a refusal of legal GL state (v3d-refuse-enotsup).
-#[test]
-#[ignore = "v3d-refuse-enotsup"]
-fn refused_cases_answer_invalid_operation() {
-    let _g = rig();
-    for c in cases().into_iter().filter(|c| c.fragment_inputs() > FS_INPUT_CAP) {
-        let o = run(&c);
-        assert_eq!(o.errors, [GL_INVALID_OPERATION], "{}", c.name());
-        assert_eq!(o.captured, o.expected, "{}: the capture", c.name());
-    }
 }
 
 /// What a V3D that draws them gives: no error for a program that reads more

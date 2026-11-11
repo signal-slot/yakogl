@@ -23,7 +23,13 @@ How to read the row counts:
 - A refusal returns `-EINVAL` (`refuse`) or `-ENOTSUP` (`refuse_unsupported`);
   the GL core turns the former into `GL_OUT_OF_MEMORY` for a pending clear
   (README of the 2026-10-31 run), which dEQP records as ResourceError and
-  stops the image.
+  stops the image, and the latter into `GL_INVALID_OPERATION`, which fails
+  one case. Since v3d-refuse-enotsup every refusal of legal GL state here is
+  `-ENOTSUP` (A1, A3-A7, A10, B1.3, B2.1, B2.3, B3.1-B3.3, B3.5, B3.6's and
+  B3.7's 32-bit address guards, B3.9, B3.14's fixed limits, B3.16, B4.4-B4.6);
+  a malformed draw or a guard keeps `-EINVAL` (A2, A9, B1.1, B1.2, B2.2, the
+  rest), and no memory keeps `-EINVAL` (a kept copy) or `-ENOMEM` (a
+  depth/stencil buffer, `ds_retention::refuse_no_memory`).
 - `NotSupported` rows are mostly not a refusal at all: dEQP reports it when
   the framebuffer is incomplete or the format is not colour-renderable, which
   is decided in the GL core before the back end is called (section C).

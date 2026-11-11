@@ -9,10 +9,10 @@
 //! only the case. The GL core maps a back end's `-ENOTSUP` to
 //! GL_INVALID_OPERATION and every other failure to GL_OUT_OF_MEMORY
 //! (src/gl/draw.rs `submit_draw`). The V3D's `refuse()` answers `-EINVAL`
-//! today; `refuse_unsupported()` answers `-ENOTSUP`. Each case here pins the
-//! error returned today and holds the wanted one in a test ignored until the
-//! item v3d-refuse-enotsup lands. Every case then draws legally, to show the
-//! context is still usable.
+//! for a malformed draw; `refuse_unsupported()` answers `-ENOTSUP` for
+//! legal GL state it cannot render yet, which since v3d-refuse-enotsup is
+//! every case here (they were `-EINVAL`, GL_OUT_OF_MEMORY, before). Every
+//! case then draws legally, to show the context is still usable.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table --test es3_v3d_refusal_gl
@@ -516,7 +516,7 @@ fn still_usable() {
 
 /// "a target larger than the tile memory is sized for (2048x2048), or empty":
 /// a 4096 x 16 renderbuffer is legal (GL_MAX_RENDERBUFFER_SIZE is 4096), and a
-/// clear of it is refused with -EINVAL.
+/// clear of it is refused with -ENOTSUP.
 fn refused_target_larger_than_2048() -> GLenum {
     let fb = fbo(&[GL_RGBA8], 4096, 16);
     // SAFETY: plain GL calls.
@@ -533,7 +533,7 @@ fn refused_target_larger_than_2048() -> GLenum {
 
 /// "a colour output with no attachment slot": a fragment shader writes
 /// locations 0 and 1 into a framebuffer with one attachment (ES 3.0 4.2.1
-/// drops the write of an output no draw buffer names), refused with -EINVAL.
+/// drops the write of an output no draw buffer names), refused with -ENOTSUP.
 fn refused_output_without_a_slot() -> GLenum {
     let fb = fbo(&[GL_RGBA8], W, H);
     program(FS2);
@@ -550,7 +550,7 @@ fn refused_output_without_a_slot() -> GLenum {
 
 /// "draw buffer 0 is GL_NONE while a later draw buffer is written": the list
 /// {GL_NONE, GL_COLOR_ATTACHMENT1} over two attachments, a draw of FS2;
-/// refused with -ENOTSUP already (`state::unsupported`).
+/// refused with -ENOTSUP (`state::unsupported`).
 fn refused_draw_buffer_zero_none() -> GLenum {
     let fb = fbo(&[GL_RGBA8, GL_RGBA8], W, H);
     program(FS2);
@@ -570,26 +570,9 @@ fn refused_draw_buffer_zero_none() -> GLenum {
     }
 }
 
-/* ---- refused with -EINVAL today: the application sees GL_OUT_OF_MEMORY ---- */
-
-/// What is returned today, pinned: when v3d-refuse-enotsup lands these four
-/// fail, and the ignored tests below them are enabled in the same change.
-#[test]
-fn today_a_target_over_2048_is_out_of_memory() {
-    let _g = rig();
-    assert_eq!(refused_target_larger_than_2048(), GL_OUT_OF_MEMORY, "{:?}", log_lines());
-    still_usable();
-}
+/* ---- refused with -ENOTSUP since v3d-refuse-enotsup (GL_OUT_OF_MEMORY before) ---- */
 
 #[test]
-fn today_an_output_without_a_slot_is_out_of_memory() {
-    let _g = rig();
-    assert_eq!(refused_output_without_a_slot(), GL_OUT_OF_MEMORY, "{:?}", log_lines());
-    still_usable();
-}
-
-#[test]
-#[ignore = "v3d-refuse-enotsup"]
 fn a_target_over_2048_is_invalid_operation() {
     let _g = rig();
     assert_eq!(refused_target_larger_than_2048(), GL_INVALID_OPERATION, "{:?}", log_lines());
@@ -597,14 +580,13 @@ fn a_target_over_2048_is_invalid_operation() {
 }
 
 #[test]
-#[ignore = "v3d-refuse-enotsup"]
 fn an_output_without_a_slot_is_invalid_operation() {
     let _g = rig();
     assert_eq!(refused_output_without_a_slot(), GL_INVALID_OPERATION, "{:?}", log_lines());
     still_usable();
 }
 
-/* ---- refused with -ENOTSUP already: the GL core's mapping holds ---- */
+/* ---- refused with -ENOTSUP before v3d-refuse-enotsup: the GL core's mapping holds ---- */
 
 /// The V3D's `refuse_unsupported()` answers -ENOTSUP, and the GL core turns it
 /// into GL_INVALID_OPERATION, never GL_OUT_OF_MEMORY: the mapping of
