@@ -14,6 +14,7 @@ use std::io::{BufRead, BufReader};
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
 fn scratch(name: &str) -> PathBuf {
@@ -24,16 +25,35 @@ fn scratch(name: &str) -> PathBuf {
 }
 
 /// The stand-in child: `body` is a sh script, `$2` the case, `$D` the scratch dir.
+///
+/// The body is read by sh, never executed. The one file the sweep executes
+/// is the wrapper below, written once, before this process forks anything:
+/// a script written by one test's thread while another test spawns its sweep
+/// is copied, open for writing, into the forked child until that child execs,
+/// and the sweep's exec of the script then fails with ETXTBSY (a FAULT
+/// "spawn: Text file busy", in 1 of 30 runs of this binary).
 fn stand_in(d: &Path, body: &str) -> PathBuf {
-    let p = d.join("child.sh");
-    fs::write(&p, format!("#!/bin/sh\nD='{}'\n{body}\n", d.display())).unwrap();
-    fs::set_permissions(&p, fs::Permissions::from_mode(0o755)).unwrap();
+    let p = d.join("body.sh");
+    fs::write(&p, format!("D='{}'\n{body}\n", d.display())).unwrap();
     p
 }
 
-fn sweep(child: &Path, args: &[&str]) -> Command {
+/// The executable the sweep runs: it hands the arguments to the body named by
+/// `PANTHOR_GLTEST_BODY`. Every test's first spawn goes through `sweep`, so
+/// the write is complete and closed before the first fork.
+fn wrapper() -> &'static Path {
+    static WRAPPER: OnceLock<PathBuf> = OnceLock::new();
+    WRAPPER.get_or_init(|| {
+        let p = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!("gltest-guard-child-{}.sh", std::process::id()));
+        fs::write(&p, "#!/bin/sh\nexec sh \"$PANTHOR_GLTEST_BODY\" \"$@\"\n").unwrap();
+        fs::set_permissions(&p, fs::Permissions::from_mode(0o755)).unwrap();
+        p
+    })
+}
+
+fn sweep(body: &Path, args: &[&str]) -> Command {
     let mut c = Command::new(env!("CARGO_BIN_EXE_panthor-gltest"));
-    c.args(args).env("PANTHOR_GLTEST_CHILD", child).stdin(Stdio::null());
+    c.args(args).env("PANTHOR_GLTEST_CHILD", wrapper()).env("PANTHOR_GLTEST_BODY", body).stdin(Stdio::null());
     c
 }
 
@@ -130,26 +150,43 @@ sleep 300"#,
 #[test]
 fn the_verdict_line_is_out_before_the_next_case_starts() {
     let d = scratch("flush");
-    // Case 1 hangs; case 2 leaves a marker the moment it starts. The reader
-    // sees case 1's verdict line while the sweep runs, and the marker is not
-    // there yet: the line was flushed first, not at exit.
+    // Case 1 hangs. Case 2 says it started, then blocks until the test
+    // releases it (bounded: the sweep kills it on the timeout), so the sweep
+    // cannot end before the test lets it. The reader holds case 1's verdict
+    // line while case 2 is alive and blocked: that line was flushed before
+    // case 2 ran, not at exit. A line held until exit arrives only after case
+    // 2 was killed on the timeout, and case 2's verdict is then HANG, not PASS,
+    // whatever the reader's timing: the release is written only after the
+    // line was read, and a killed case 2 cannot pass.
     let child = stand_in(
         &d,
         &format!(
             r#"echo "panthor-gltest: build stand-in"
 if [ "$2" = 1 ]; then exec sleep 300; fi
-: > "$D/case$2.started"
+echo $$ > "$D/case$2.started"
+n=0
+until [ -e "$D/release" ]; do
+  n=$((n + 1)); [ "$n" -lt 400 ] || exit 3
+  sleep 0.05
+done
 {PASS_CHILD}"#
         ),
     );
-    let mut sw = sweep(&child, &["--timeout", "1", "1", "2"]).stdout(Stdio::piped()).spawn().unwrap();
+    // 5 s: case 1's hang, and the time case 2 waits for the release before
+    // the sweep kills it.
+    let mut sw = sweep(&child, &["--timeout", "5", "1", "2"]).stdout(Stdio::piped()).spawn().unwrap();
     let mut lines = BufReader::new(sw.stdout.take().unwrap()).lines();
     let mut seen = false;
     for l in lines.by_ref() {
         let l = l.unwrap();
         if l.starts_with("panthor-gltest: verdict case 1 ") {
             assert!(l.contains(": HANG"), "{l}");
-            assert!(!d.join("case2.started").exists(), "case 2 started before case 1's verdict was out");
+            let _ = wait_for(&d.join("case2.started"));
+            assert!(
+                sw.try_wait().unwrap().is_none(),
+                "the sweep had ended when case 1's verdict line arrived: held until exit"
+            );
+            fs::write(d.join("release"), "").unwrap();
             seen = true;
             break;
         }
@@ -157,7 +194,10 @@ if [ "$2" = 1 ]; then exec sleep 300; fi
     let rest: Vec<String> = lines.map(Result::unwrap).collect();
     let _ = sw.wait();
     assert!(seen, "no verdict line for case 1");
-    assert!(rest.iter().any(|l| l.starts_with("panthor-gltest: verdict case 2 stub: PASS")), "{rest:?}");
+    assert!(
+        rest.iter().any(|l| l.starts_with("panthor-gltest: verdict case 2 stub: PASS")),
+        "case 2 did not pass: it was not released while it ran, so case 1's verdict line was not out while case 2 ran:\n{rest:?}"
+    );
 }
 
 #[test]
