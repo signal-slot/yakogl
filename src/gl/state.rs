@@ -22,6 +22,7 @@ use super::context::{
     MAX_VERTEX_ATTRIBS, MAX_VERTEX_UNIFORM_VECTORS, MIN_PROGRAM_TEXEL_OFFSET,
 };
 use super::draw;
+use super::msaa;
 use super::names::{self, Kind};
 use super::texture;
 use super::types::*;
@@ -1283,7 +1284,7 @@ fn get_integerv(c: &mut GlContext, pname: GLenum, out: &mut [GLint; STATE_VALUES
         }
         GL_MAX_DRAW_BUFFERS => context::max_draw_buffers() as GLint,
         GL_MAX_COLOR_ATTACHMENTS => context::max_color_attachments() as GLint,
-        GL_MAX_SAMPLES => 1,
+        GL_MAX_SAMPLES => msaa::max_samples_query(msaa::backend_max_samples()),
         GL_NUM_PROGRAM_BINARY_FORMATS => 0,
         GL_MAX_ARRAY_TEXTURE_LAYERS => 256,
         GL_MAX_3D_TEXTURE_SIZE => 256,
