@@ -79,17 +79,17 @@ const GLMARK2: [(&str, u32, u32, u32); 10] = [
     ("terrain.vert", SHC_STAGE_VERTEX, 48, 9),     // etna 39, 9; before 56, 9
     ("terrain.frag", SHC_STAGE_FRAGMENT, 81, 12),  // etna 72, 11; before 127, 16 (sr patch), 148, 19
     ("tilt_h.frag", SHC_STAGE_FRAGMENT, 62, 12),   // etna 46, 5; before 66, 12
-    ("tilt_v.frag", SHC_STAGE_FRAGMENT, 71, 12),   // etna 46, 5; before 75, 12
+    ("tilt_v.frag", SHC_STAGE_FRAGMENT, 62, 12),   // etna 46, 5; before 75, 12; 71 before rank T
     ("bloom_h.frag", SHC_STAGE_FRAGMENT, 38, 8),   // etna 24, 5; before 42, 8
-    ("bloom_v.frag", SHC_STAGE_FRAGMENT, 43, 8),   // etna 24, 5; before 47, 8
-    ("normalmap.frag", SHC_STAGE_FRAGMENT, 23, 5), // etna 21, 4; before 25, 5
+    ("bloom_v.frag", SHC_STAGE_FRAGMENT, 38, 8),   // etna 24, 5; before 47, 8; 43 before rank T
+    ("normalmap.frag", SHC_STAGE_FRAGMENT, 21, 6), // etna 21, 4; before 25, 5; 23, 5 before rank T
     ("overlay.frag", SHC_STAGE_FRAGMENT, 2, 2),    // etna 2, 2; before 2, 2
     ("quad.vert", SHC_STAGE_VERTEX, 7, 3),         // etna 4, 2; before 7, 3
     ("luminance.frag", SHC_STAGE_FRAGMENT, 7, 4),  // etna 3, 3; before 7, 4
 ];
-/// The ten's instructions: etna_shc 279; 428 before the unroll, 475 before
-/// the patch.
-const GLMARK2_TOTAL: u32 = 382;
+/// The ten's instructions: etna_shc 279; 382 before rank T (the retarget past
+/// a constant lane), 428 before the unroll, 475 before the patch.
+const GLMARK2_TOTAL: u32 = 366;
 
 /// The ten texts from a glmark2 checkout, in [`GLMARK2`]'s order.
 fn glmark2_texts(root: &Path) -> Vec<String> {
@@ -139,12 +139,21 @@ fn micro() -> Vec<(&'static str, u32, String, u32)> {
             fs("const float S = 0.5;\n", "gl_FragColor = vec4(abs(S - a.y) / abs(1.0 - S));"),
             5,
         ),
-        // t5, rank 5: two taps' offsets from one scalar; etnaviv one vec2 mul for both; before the patch 8
+        // t5, rank 5: two taps' offsets from one scalar; etnaviv one vec2 mul for both; before the patch 8,
+        // 8 before rank T (the first sum's store into the vec4 is retargeted past the second tap)
         (
             "t5",
             SHC_STAGE_FRAGMENT,
             fs("", "gl_FragColor = vec4(a.xy + vec2(-1.0 * b.x, 0.0), a.xy + vec2(1.0 * b.x, 0.0));"),
-            8,
+            7,
+        ),
+        // t5v, rank T: t5 with the lanes of each vec2 swapped, tilt_v's shape; the product is stored
+        // after the constant lane; 10 before rank T (`docs/notes/gc-compiler-ranks-3-5.md`)
+        (
+            "t5v",
+            SHC_STAGE_FRAGMENT,
+            fs("", "gl_FragColor = vec4(a.xy + vec2(0.0, -1.0 * b.x), a.xy + vec2(0.0, 1.0 * b.x));"),
+            7,
         ),
     ]
 }

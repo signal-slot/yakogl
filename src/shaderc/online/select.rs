@@ -298,6 +298,9 @@ pub struct MovSites {
     pub retarget_aliased: usize,
     pub retarget_is_a_slot: usize,
     pub retarget_not_last: usize,
+    /// Retargeted although the producer was not the last instruction
+    /// (`producer_behind`): the constant-lane case of rank T.
+    pub retarget_behind: usize,
     /// Operands `legalise_operands` had to materialise into a register
     /// because the operation never takes that register group in the
     /// reference. Each is one instruction added.
@@ -347,6 +350,7 @@ impl MovSites {
         retarget_aliased: 0,
         retarget_is_a_slot: 0,
         retarget_not_last: 0,
+        retarget_behind: 0,
         legalised: 0,
         retarget_lane_remap: 0,
         load_local_cf: 0,
@@ -614,6 +618,12 @@ struct Sel<'a> {
 /// `Sel::reg_of` entry of a register left out of the constant file.
 const NOT_IN_FILE: u16 = u16::MAX;
 
+/// How far behind the store `retarget_last_to` looks for the instruction that
+/// produced the stored value (`Sel::producer_behind`): the store itself and
+/// three more. A constructor's constant lanes are what sit between, and a
+/// `vec4` has at most three of them.
+const RETARGET_LOOKBACK: usize = 4;
+
 /// `arm_flags` bits: the then arm stores the slot, the else arm stores it,
 /// the then arm reads it or writes some of its lanes.
 const ARM_THEN_STORES: u8 = 1;
@@ -802,19 +812,26 @@ impl<'a> Sel<'a> {
             return false;
         }
         let Some(last) = self.instrs.len().checked_sub(1) else { return false };
-        match self.instrs[last].dst {
-            Some(SelDst::Virtual { v: wrote, write_mask }) if wrote == v && write_mask == build::WRITE_MASK_ALL => {}
-            _ => {
+        let produced = |ins: &SelInstr| matches!(ins.dst, Some(SelDst::Virtual { v: wrote, write_mask }) if wrote == v && write_mask == build::WRITE_MASK_ALL);
+        /* The producer is the last instruction, or sits a few behind it with
+         * nothing in between that the retarget would change (rank T of
+         * docs/notes/gc-compiler-ranks-3-5.md). */
+        let at = if produced(&self.instrs[last]) {
+            last
+        } else {
+            let Some(at) = self.producer_behind(v, dst, last, produced) else {
                 note_site(|x| x.retarget_not_last += 1);
                 return false;
-            }
-        }
+            };
+            note_site(|x| x.retarget_behind += 1);
+            at
+        };
         /* The store reads the value through a swizzle, so the instruction has
          * to compute in lane `i` what it computed in lane `swizzle[i]`. See
          * `lane_remap_would_do_it` for why that is only sound for an
          * operation whose lanes are independent. */
         if swizzle != ir::SWIZZLE_IDENTITY {
-            let p = self.instrs[last];
+            let p = self.instrs[at];
             if p.tex.is_some() || p.target.is_some() || !p.op.computes_lanewise() {
                 note_site(|x| x.retarget_swizzled += 1);
                 return false;
@@ -826,7 +843,7 @@ impl<'a> Sel<'a> {
              * change which component it is computed from -- `rcp(x.x)` would
              * become `rcp(x.z)`. So the remap for these is to do nothing. */
             if !p.op.reads_one_component() {
-                for slot in self.instrs[last].srcs.iter_mut() {
+                for slot in self.instrs[at].srcs.iter_mut() {
                     if let Some(sr) = *slot {
                         *slot = Some(compose(sr, swizzle));
                     }
@@ -834,8 +851,88 @@ impl<'a> Sel<'a> {
             }
             note_site(|x| x.retarget_lane_remap += 1);
         }
-        self.instrs[last].dst = Some(dst);
+        self.instrs[at].dst = Some(dst);
         true
+    }
+
+    /// The instruction that produced `v`, when it is not the last one but
+    /// within [`RETARGET_LOOKBACK`] of it and may still write `dst` itself.
+    ///
+    /// `vec2(0.0, k * s)` is the product, then the constant lane's `mov t.x,
+    /// 0.0`, then the store of the product to `t.y`: the producer is one
+    /// instruction behind the store, and refusing it cost tilt_v one copy per
+    /// tap over tilt_h, 9 of its 75 instructions (bloom_v 5 of 47;
+    /// `docs/notes/gc-compiler-ranks-3-5.md`, "rank T"). The producer keeps
+    /// its place; only its destination changes. So every instruction between
+    /// it and the store must
+    ///
+    /// - neither read nor write `v`: a read would read a register nothing
+    ///   writes any more, and a partial write of `v` is a producer that is not
+    ///   this one (a scalar operation's lanes are separate instructions);
+    /// - write no register the producer reads, the note's rule: nothing in
+    ///   the selection does, since a slot written after a read is snapshotted
+    ///   into a copy first, and keeping it here means the retarget never
+    ///   depends on that;
+    /// - neither read `dst`'s register, which would see the product before
+    ///   the store, nor write the lanes of it the retarget writes, which
+    ///   would clobber the product (`mov t.x, 0.0` writes `x`, the retarget
+    ///   `y`);
+    /// - be no branch, and no branch's target: the producer must run exactly
+    ///   when the store would have.
+    ///
+    /// Only a slot's register (`SelDst::Virtual`) is retargeted this way. An
+    /// output register is also an input register on the vertex stage (the
+    /// passthrough shader is zero instructions), and a read of it in between
+    /// would not show as a read of `dst`.
+    fn producer_behind(
+        &self,
+        v: VReg,
+        dst: SelDst,
+        last: usize,
+        produced: impl Fn(&SelInstr) -> bool,
+    ) -> Option<usize> {
+        let SelDst::Virtual { v: dv, write_mask: dm } = dst else { return None };
+        let instrs = self.instrs.as_slice();
+        let reads = |q: &SelInstr, r: VReg| {
+            q.srcs.iter().flatten().any(|s| matches!(s, SelSrc::Virtual { v: x, .. } if *x == r))
+        };
+        let first = last.saturating_sub(RETARGET_LOOKBACK - 1);
+        for i in (first..=last).rev() {
+            let q = &instrs[i];
+            if produced(q) {
+                /* Everything after `i` was accepted as "between"; one rule
+                 * needs the producer: nothing between writes what it reads. */
+                let between = &instrs[i + 1..=last];
+                let writes_a_source =
+                    between.iter().any(|b| matches!(b.dst, Some(SelDst::Virtual { v: w, .. }) if reads(q, w)));
+                if writes_a_source {
+                    return None;
+                }
+                let jumped_into = |t: usize| t > i && t <= last;
+                if instrs.iter().any(|b| b.target.is_some_and(|t| jumped_into(t as usize)))
+                    || self.loop_tops.as_slice().iter().any(|t| jumped_into(*t))
+                {
+                    return None;
+                }
+                return Some(i);
+            }
+            if q.target.is_some() || reads(q, v) || reads(q, dv) {
+                return None;
+            }
+            match q.dst {
+                None => {}
+                Some(SelDst::Virtual { v: w, write_mask: m }) => {
+                    if w == v || (w == dv && m & dm != 0) {
+                        return None;
+                    }
+                }
+                /* An io register or the address register: observable, and
+                 * on the vertex stage possibly a register `dst` or the
+                 * producer reads under another name. */
+                Some(SelDst::Fixed { .. } | SelDst::Address { .. }) => return None,
+            }
+        }
+        None
     }
 
     /// How many operands in the whole body read this value: every source of
@@ -4760,6 +4857,147 @@ mod tests {
             .expect("selects");
         assert_eq!(n, 0, "nothing to do, so nothing is emitted");
         assert_eq!(pos, Some(VS_POS_REG));
+    }
+
+    /// `vec2(0.0, a.x * b.x)` at the IR: the product, the constant lane's
+    /// store, then the product's lane store. The product is no longer the
+    /// last instruction when its lane is stored, and until rank T
+    /// (`docs/notes/gc-compiler-ranks-3-5.md`) that cost a `mov t.y, tmp`
+    /// per tap of tilt_v. Now the `mul` writes the slot's `y` itself: three
+    /// instructions (the `mul`, the `mov t.x, 0.0`, the output copy) and no
+    /// instruction reads the product's own register.
+    #[test]
+    fn a_product_stored_after_a_constant_lane_writes_the_slot_lane_itself() {
+        let _s = store::test_lock();
+        let (m, store_order) = constant_lane_then_product_module(false);
+        store::with_scratch(|a| {
+            let s = select(&m, a).expect("selects");
+            let mul = build::op_id("mul").expect("the machine has `mul`");
+            let slot = VReg(m.instrs.len() as u32);
+            let product = VReg(2);
+            let muls: Vec<Option<SelDst>> = s.instrs.iter().filter(|i| i.op == mul).map(|i| i.dst).collect();
+            assert!(
+                matches!(muls.as_slice(), [Some(SelDst::Virtual { v, write_mask: 0x2 })] if *v == slot),
+                "{store_order}: the mul writes the slot's y lane, got {muls:?}"
+            );
+            let reads_product = s
+                .instrs
+                .iter()
+                .any(|i| i.srcs.iter().flatten().any(|r| matches!(r, SelSrc::Virtual { v, .. } if *v == product)));
+            assert!(!reads_product, "{store_order}: nothing copies the product out of its own register");
+            assert_eq!(s.instrs.len(), 3, "{store_order}: mul, the zero lane, the output copy");
+            Ok::<_, SelectError>(())
+        })
+        .unwrap()
+        .unwrap();
+    }
+
+    /// The other way: when an instruction between the product and its lane
+    /// store writes the lane the retarget would write (`t.y = 0.0; t.x =
+    /// 0.0; t.y = a.x * b.x`), the product keeps its own register and is
+    /// copied, as before rank T. The first `mov t.y` would otherwise land
+    /// after the product and clobber it.
+    #[test]
+    fn a_product_is_not_retargeted_past_a_write_of_its_lane() {
+        let _s = store::test_lock();
+        let (m, store_order) = constant_lane_then_product_module(true);
+        store::with_scratch(|a| {
+            let s = select(&m, a).expect("selects");
+            let mul = build::op_id("mul").expect("the machine has `mul`");
+            let product = VReg(2);
+            let muls: Vec<Option<SelDst>> = s.instrs.iter().filter(|i| i.op == mul).map(|i| i.dst).collect();
+            assert!(
+                matches!(muls.as_slice(), [Some(SelDst::Virtual { v, write_mask: build::WRITE_MASK_ALL })] if *v == product),
+                "{store_order}: the mul keeps its own register, got {muls:?}"
+            );
+            let mov = build::op_id("mov").expect("the machine has `mov`");
+            let copies = s
+                .instrs
+                .iter()
+                .filter(|i| {
+                    i.op == mov && i.srcs.iter().flatten().any(|r| matches!(r, SelSrc::Virtual { v, .. } if *v == product))
+                })
+                .count();
+            assert_eq!(copies, 1, "{store_order}: the product is copied into the slot's lane once");
+            Ok::<_, SelectError>(())
+        })
+        .unwrap()
+        .unwrap();
+    }
+
+    /// The module of the two tests above: varyings `a` and `b`, the product
+    /// `a.x * b.x` (value 2), a `vec2` slot filled lane by lane and written
+    /// to the colour. With `clobber`, a store of `0.0` to the product's lane
+    /// comes first.
+    fn constant_lane_then_product_module(clobber: bool) -> (ir::Module<'static>, &'static str) {
+        let lane = |mask: u8, val: u32| ir::Op::StoreLocal {
+            local: ir::LocalId(0),
+            index: None,
+            src: ir::Src { val: ir::ValueId(val), swizzle: [0; 4] },
+            write_mask: mask,
+        };
+        let instrs: &'static [ir::Op] = if clobber {
+            Box::leak(Box::new([
+                ir::Op::LoadInput { slot: ir::IoSlot::Varying(0), comps: 4 },
+                ir::Op::LoadInput { slot: ir::IoSlot::Varying(1), comps: 4 },
+                ir::Op::Alu(
+                    ir::AluOp::Fmul,
+                    [
+                        ir::Src { val: ir::ValueId(0), swizzle: [0; 4] },
+                        ir::Src { val: ir::ValueId(1), swizzle: [0; 4] },
+                        ir::Src::id(ir::ValueId(0)),
+                    ],
+                ),
+                ir::Op::ConstF32([0.0f32.to_bits(); 4]),
+                lane(0x2, 3),
+                lane(0x1, 3),
+                lane(0x2, 2),
+                ir::Op::LoadLocal { local: ir::LocalId(0), index: None, comps: 2 },
+                ir::Op::StoreOutput {
+                    slot: ir::IoSlot::FragColor(0),
+                    src: ir::Src { val: ir::ValueId(7), swizzle: [0, 1, 0, 1] },
+                },
+            ]))
+        } else {
+            Box::leak(Box::new([
+                ir::Op::LoadInput { slot: ir::IoSlot::Varying(0), comps: 4 },
+                ir::Op::LoadInput { slot: ir::IoSlot::Varying(1), comps: 4 },
+                ir::Op::Alu(
+                    ir::AluOp::Fmul,
+                    [
+                        ir::Src { val: ir::ValueId(0), swizzle: [0; 4] },
+                        ir::Src { val: ir::ValueId(1), swizzle: [0; 4] },
+                        ir::Src::id(ir::ValueId(0)),
+                    ],
+                ),
+                ir::Op::ConstF32([0.0f32.to_bits(); 4]),
+                lane(0x1, 3),
+                lane(0x2, 2),
+                ir::Op::LoadLocal { local: ir::LocalId(0), index: None, comps: 2 },
+                ir::Op::StoreOutput {
+                    slot: ir::IoSlot::FragColor(0),
+                    src: ir::Src { val: ir::ValueId(6), swizzle: [0, 1, 0, 1] },
+                },
+            ]))
+        };
+        let nodes: &'static [ir::Node] = Box::leak(
+            (0..instrs.len()).map(|i| ir::Node::Instr(ir::InstrId(i as u32))).collect::<Vec<_>>().into_boxed_slice(),
+        );
+        let inputs: &'static [ir::IoDecl<'static>] =
+            Box::leak(Box::new([io("a", ir::IoKind::Varying, 0), io("b", ir::IoKind::Varying, 1)]));
+        let outputs: &'static [ir::IoDecl<'static>] = Box::leak(Box::new([io("gl_FragColor", ir::IoKind::Colour, 0)]));
+        let locals: &'static [ir::VarDecl<'static>] =
+            Box::leak(Box::new([ir::VarDecl { name: "t", ty: ir::Type::F32X4, array_len: 1 }]));
+        let m = ir::Module {
+            instrs,
+            nodes,
+            inputs,
+            outputs,
+            locals,
+            body: ir::Range { first: 0, len: nodes.len() as u32 },
+            ..ir::Module::empty(SHC_STAGE_FRAGMENT)
+        };
+        (m, if clobber { "t.y = 0.0; t.x = 0.0; t.y = a.x * b.x" } else { "t.x = 0.0; t.y = a.x * b.x" })
     }
 
     /// Case 89's fragment half, at the IR (the GLSL ES 3.00 front end is
