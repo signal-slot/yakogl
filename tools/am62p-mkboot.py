@@ -61,13 +61,15 @@ An image built with CONFIG_SKIP_BSS_CLEAR (its .config next to the
 zephyr.bin) gets a header version 2 with its .bss (from the zephyr.elf next
 to it) as the range the loader zeroes.
 
-Standard library only, plus the lz4 command for --compress lz4. No signing: the Zephyr payload has no TI x509
+Standard library only, plus the lz4 command for --compress lz4 ($LZ4 when
+set, else lz4 on PATH). No signing: the Zephyr payload has no TI x509
 certificate, so the A53 SPL on an HS-FS AM62P prints "Did not detect image
 signing certificate. Skipping authentication" and loads it. An HS-SE device
 would refuse it.
 """
 import argparse
 import hashlib
+import os
 import struct
 import sys
 import zlib
@@ -472,14 +474,21 @@ def deflate_raw(data):
     return c.compress(data) + c.flush()
 
 
+def lz4_command():
+    """The lz4 program: $LZ4 when it is set and non-empty, else lz4 on PATH;
+    None when neither is found."""
+    import shutil
+    return shutil.which(os.environ.get("LZ4") or "lz4")
+
+
 def lz4_frame(data):
     """One LZ4 frame of `data`, from the lz4 command (lz4 -12: the smallest
     output; 4 MB linked blocks; no checksums, the header's CRC-32s cover it)."""
-    import shutil
     import subprocess
-    if shutil.which("lz4") is None:
-        raise ValueError("--compress lz4 needs the lz4 command (app-arch/lz4, Debian lz4)")
-    return subprocess.run(["lz4", "-q", "-q", "-12", "-B7", "-BD", "--no-frame-crc", "-c"], input=data,
+    lz4 = lz4_command()
+    if lz4 is None:
+        raise ValueError("--compress lz4 needs the lz4 command: $LZ4, or lz4 on PATH (app-arch/lz4, Debian lz4)")
+    return subprocess.run([lz4, "-q", "-q", "-12", "-B7", "-BD", "--no-frame-crc", "-c"], input=data,
                           stdout=subprocess.PIPE, check=True).stdout
 
 
@@ -512,7 +521,6 @@ def bss_zero_range(zephyr_bin, load):
     """The (offset, bytes) the loader must zero for the image at `zephyr_bin`:
     its .bss, when its build (.config next to the zephyr.bin) skips the clear
     (CONFIG_SKIP_BSS_CLEAR); (0, 0) otherwise."""
-    import os
     d = os.path.dirname(os.path.abspath(zephyr_bin))
     cfg = os.path.join(d, ".config")
     if not os.path.exists(cfg) or "CONFIG_SKIP_BSS_CLEAR=y" not in open(cfg).read().split("\n"):
@@ -593,7 +601,7 @@ def stage2check(img, zephyr, load=ZEPHYR_LOAD, sector=STAGE2_SECTOR, end_sector=
     elif f["compression"] == COMP_LZ4 and f["version"] >= 2:
         import subprocess
         try:
-            image = subprocess.run(["lz4", "-d", "-c", "-q"], input=stored, stdout=subprocess.PIPE,
+            image = subprocess.run([lz4_command() or "lz4", "-d", "-c", "-q"], input=stored, stdout=subprocess.PIPE,
                                    stderr=subprocess.PIPE, check=True).stdout
         except (OSError, subprocess.CalledProcessError) as e:
             errors.append("lz4 -d: %s" % e)
@@ -677,8 +685,7 @@ def stage2_vectors(outdir):
     files["bad-zero-overlaps.img"] = bytes(b) + stored
     # LZ4 frames from the lz4 command (when it is there; tools/check.sh
     # requires it for the vector test)
-    import shutil
-    if shutil.which("lz4"):
+    if lz4_command():
         files["ok-lz4-mixed.img"] = stage2img(big, ZEPHYR_LOAD, COMP_LZ4, "lz4")
         files["ok-lz4-small.img"] = stage2img(small, ZEPHYR_LOAD, COMP_LZ4, "lz4-small")
         f4, s4 = stage2_parse(files["ok-lz4-mixed.img"])
