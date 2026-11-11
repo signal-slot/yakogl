@@ -383,13 +383,16 @@ read_regs() {
 # What the GPU's power looks like to Linux (driver/docs/nanopc-t6-mali.md,
 # "Z1"): the runtime PM state, the PMU's PD_GPU registers (PWR_GATE 0x14c,
 # BUS_IDLE_REQ 0x10c, _ACK 0x118, _ST 0x120, REPAIR_STATUS 0x290), the
-# CRU's CLKSEL_CON(158), (159) and CLKGATE_CON(66), and the RK806's
-# POWER_EN0, POWER_SLP_EN0, BUCK1_CONFIG and BUCK1_ON_VSEL from the regmap
-# cache Linux keeps (debugfs). All always-on blocks: nothing behind PD_GPU
-# is read.
+# CRU's CLKSEL_CON(158), (159) and CLKGATE_CON(66), the CRU's MODE_CON0 and
+# PLL_CON1 and PLL_CON6 of the four PLLs the GPU clock can run from (AUPLL,
+# CPLL, GPLL, NPLL: CON1 bit 13 set is powered down, CON6 bit 15 is the
+# lock; Linux powers down a PLL nothing uses), and the RK806's POWER_EN0,
+# POWER_SLP_EN0, BUCK1_CONFIG and BUCK1_ON_VSEL from the regmap cache Linux
+# keeps (debugfs). All always-on blocks: nothing behind PD_GPU is read.
 read_gpu_power() {
 	board "printf 'runtime %s; ' \$(cat /sys/bus/platform/devices/fb000000.gpu/power/runtime_status)
 for a in 0xfd8d814c 0xfd8d810c 0xfd8d8118 0xfd8d8120 0xfd8d8290 0xfd7c0578 0xfd7c057c 0xfd7c0908; do $STAGE/mmio_rd \$a; done | tr '\n' ' '
+printf 'pll '; for a in 0xfd7c0280 0xfd7c0184 0xfd7c0198 0xfd7c01a4 0xfd7c01b8 0xfd7c01c4 0xfd7c01d8 0xfd7c01e4 0xfd7c01f8; do $STAGE/mmio_rd \$a; done | tr '\n' ' '
 printf 'rk806 '; grep -E '^(00|06|10|1a):' /sys/kernel/debug/regmap/spi2.0/registers | tr '\n' ' '"
 }
 board "rm -rf $STAGE && mkdir -p $STAGE"

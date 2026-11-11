@@ -40,7 +40,7 @@ check() {
 }
 
 # the line counts: boot 10 + reset 1 + each probe's own
-MMU=27 HELLO=25 GPU=31
+MMU=27 HELLO=25 GPU=32
 
 check t6_mmu-pass 0 'VERDICT t6_mmu PASS' "$MMU 0 0" t6_mmu "$D/t6_mmu-pass.uart"
 check t6_mmu-missing 1 "VERDICT t6_mmu FAIL (1 of $MMU)" "$((MMU - 1)) 1 0" t6_mmu "$D/t6_mmu-missing.uart"

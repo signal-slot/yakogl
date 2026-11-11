@@ -74,11 +74,12 @@ References, read for this page:
 | Clocks | CLK_GPU / COREGROUP / STACKS (CRU 262-264), gates CLKGATE_CON(66) bits 4/6/7; rate through SCMI clock 5 (SMC 0x82000010) | linux:`rk3588-base.dtsi:453-457, 355-366`, `clk-rk3588.c:1354-1363` |
 | Power domain | PD_GPU 12, PMU 0xfd8d8000 (sequence below) | linux:`pm-domains.c:1277, 390-691` |
 | Supply | vdd_gpu_s0 = RK806 DCDC1 on SPI2 (0xfeb20000, 1 MHz); boot-on, **not** always-on; 675 mV at 300-600 MHz | linux:`rk3588-nanopc-t6.dtsi:755-824`, `rk3588-opp.dtsi:118-160`; board |
-| Clock now | 300 MHz from cpll (devfreq simple_ondemand) | board debugfs |
+| Clock now | 300 MHz from cpll at Z1's run of 2026-10-19, 850 MHz from npll on 2026-11-11 (devfreq simple_ondemand); Linux powers npll down while the GPU is suspended ("The GPU power-on") | board debugfs, `/dev/mem` |
 | Console | uart2, 1500000 baud | linux:`rk3588-nanopc-t6.dtsi:40-42` |
 
 **GPU power-on (kernel side, Z1)**, from linux:`pm-domains.c` (GPL: facts only):
-supply on; domain clocks on; PMU+0x14c = 0x00010000; poll PMU+0x290 bit 1; SIP SMC
+supply on; domain clocks on (the clock framework first powers their PLL and waits
+for its lock, `clk-pll.c`); PMU+0x14c = 0x00010000; poll PMU+0x290 bit 1; SIP SMC
 0x82000003; PMU+0x10c = 0x00010000, then poll ack 0x118 bit 0 and idle 0x120 bit 0
 clear; restore the QoS registers (0xfdf35000 + 0x0/0x200/0x400/0x600, offsets
 0x08-0x18). Rockchip registers take a write-enable mask in bits 31:16.
@@ -1372,12 +1373,19 @@ board's values). The order:
 2. Stop when vdd_gpu_s0 (RK806 DCDC1) is off, or below the GPU OPP table's
    voltage for the rate the CRU gives the GPU (rk3588-opp.dtsi:118-153),
    or when the CRU's rate is unknown (the PVTPLL selected).
-3. PD_GPU on in Linux's order (pm-domains.c): the four GPU clock gates,
+3. The PLL the GPU clock runs from, on, as Linux's
+   `rockchip_rk3588_pll_enable` does it (clk-pll.c): when `PLL_CON1` bit 13
+   (power-down) is set, clear it through its write-enable bit; then wait
+   for `PLL_CON6` bit 15 (lock), at most Linux's 1000 µs
+   (`rockchip_rk3588_pll_wait_lock`). The rate words and `MODE_CON0` are
+   left as found. A PLL that does not lock stops the run here (stop 4,
+   refusal 1, `detail` the `PLL_CON6`), before the PMU is written.
+4. PD_GPU on in Linux's order (pm-domains.c): the four GPU clock gates,
    `PWR_GATE` bit 0 cleared, wait for `REPAIR_STATUS` bit 1, the bus idle
    request released, wait for its acknowledge and status. The SIP call that
    tells the firmware about the domain is left out (it configures system
    suspend only). The QoS words are read, not written.
-4. `GPU_ID`; soft reset; `GPU_COHERENCY_PROTOCOL` = none; L2 on
+5. `GPU_ID`; soft reset; `GPU_COHERENCY_PROTOCOL` = none; L2 on
    (panthor_gpu.c, under its MIT option). The L2 wait needs `L2_READY` to
    show the L2: panthor's condition (`(mask & val) == val`,
    panthor_gpu.c:210) also accepts 0.
@@ -1437,6 +1445,46 @@ the jump and after the return).**
   `e3d9b7470:tools/mali/board-ref/2026-10-26-open-questions/regread.out`): `PRIORITY`
   0x80000000, `MODE` 0, `BANDWIDTH` 0, `SATURATION` 0, `EXTCONTROL` 0 in all four
   blocks. The image leaves them (under "Open").
+
+**Measured, 2026-11-11: the GPU clock on a PLL that Linux powered down.**
+Step 3 above was added after this run; the image of 2026-10-19 opened the
+clock gates and never looked at the PLL.
+
+- **The run.** `t6_mmu`, build v0.1.0-897-g3aa24a68d, record
+  `20261111-131354-t6`: `t6_mmu: Z1: rc -5 stop 5 refusal 3`, `detail`
+  0x000a9fff. PD_GPU's power came on, the bus idle request was released,
+  and the acknowledge (`BUS_IDLE_ACK` bit 0) never cleared in the wait's
+  budget. The board came back through the image's PSCI reset.
+- **The hand-over of that run** (the runner's "gpu power before" line):
+  `CLKSEL_CON(158)` 0x00001f60, `clk_gpu_src` from NPLL over 1, and
+  `BUCK1_ON_VSEL` 0x30 (800 mV): devfreq's last rate was 850 MHz, where
+  on 2026-10-19 it was 300 MHz from CPLL. PD_GPU off as before
+  (`PWR_GATE` 0x0000ffff, `BUS_IDLE_REQ` 0x000083cf, `_ACK`/`_ST`
+  0x000a9fff, `REPAIR_STATUS` 0xfad50001).
+- **NPLL under Armbian with the GPU suspended** (read through `/dev/mem`
+  the same day, kernel 6.18.55): `PLL_CON0` 0x000001a9, `PLL_CON1`
+  0x00002083 (bit 13 set: powered down), `PLL_CON6` 0x00004000 (bit 15
+  clear: not locked), `MODE_CON0` 0x00000545; `clk_summary` shows
+  `pll_npll` at 850 MHz with enable count 0. CPLL, which other clocks
+  use, reads `PLL_CON1` 0x00000042 and `PLL_CON6` 0x00009c00 (powered,
+  locked). The GPU is NPLL's only user, so Linux's clock framework
+  powers NPLL down when panthor suspends (`rockchip_rk3588_pll_disable`
+  sets bit 13 and nothing else).
+- **What it means.** A domain's bus cannot leave idle without its clock.
+  With the GPU's clock on CPLL the image got a running clock without
+  doing anything; on NPLL it got none. The rate arithmetic was right
+  (850 MHz, 800 mV covers it): the image rated a PLL that was off.
+- **On the host.** The board model in `board::nanopc_t6_gpu`'s tests now
+  lets the bus leave idle only when the selected PLL is powered and
+  locked. With that and the values above, the old sequence stops exactly
+  as the board did (stop 5, refusal 3, 0x000a9fff); with step 3 it runs
+  to the end and its only CRU write before the gates is `PLL_CON1` :=
+  0x20000000.
+- **The record now shows it.** `t6_gpu` prints `GPU PLL on: PLL_CON6 …
+  at hand-over, was on N, waited N us, PLL_CON6 …`; `nanopc-t6.sh`'s
+  "gpu power" lines carry `MODE_CON0` and `PLL_CON1`/`PLL_CON6` of
+  AUPLL, CPLL, GPLL and NPLL. Not run on the board yet: no jump has
+  started from NPLL since the fix.
 
 ### Z2: AS0 and a cache flush
 

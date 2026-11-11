@@ -3,9 +3,10 @@
 //! The NanoPC-T6's GPU power-on, the second half of Z1
 //! (driver/docs/nanopc-t6-mali.md): read what the kexec from Linux handed
 //! over (PD_GPU, the GPU clock in the CRU, vdd_gpu_s0 in the RK806), check
-//! the supply covers the clock, power PD_GPU on, read the GPU's identity,
-//! soft reset it and power its L2 on. Every value read is kept in [`GpuUp`]
-//! for the image to print; the first step that refuses ends the run there.
+//! the supply covers the clock, power the clock's PLL on when Linux left it
+//! powered down, power PD_GPU on, read the GPU's identity, soft reset it and
+//! power its L2 on. Every value read is kept in [`GpuUp`] for the image to
+//! print; the first step that refuses ends the run there.
 //!
 //! The supply is read, never written: the RK806 frames this builds are reads
 //! ([`crate::ip::rk806`]). A supply that is off, or lower than the GPU OPP
@@ -15,7 +16,7 @@
 use crate::gpu::mali::{self, Ident, L2On, Reset};
 use crate::ip::{rk806, rockchip_spi};
 use crate::mmio::Mmio;
-use crate::soc::rk3588::{self, GpuClock, PdGpuRegs, PdOn};
+use crate::soc::rk3588::{self, GpuClock, PdGpuRegs, PdOn, PllOn};
 
 /// The physical blocks this touches, mapped by the caller.
 #[derive(Clone, Copy, Debug)]
@@ -87,7 +88,9 @@ pub enum Stop {
     /// DCDC1 (vdd_gpu_s0) reads off.
     SupplyOff = 3,
     /// The CRU's GPU clock has no rate this can name, or the supply is below
-    /// what the OPP table asks for it.
+    /// what the OPP table asks for it (`refusal` 0, the detail is the rate);
+    /// or its PLL did not lock ([`CLOCK_PLL_NO_LOCK`], the detail is
+    /// `PLL_CON6`).
     ClockNotCovered = 4,
     /// PD_GPU did not come on (`refusal` is the [`rk3588::PdRefusal`]).
     PowerDomain = 5,
@@ -98,6 +101,10 @@ pub enum Stop {
     /// The L2 did not come up (`refusal` is the [`mali::MaliRefusal`]).
     L2 = 8,
 }
+
+/// The refusal of [`Stop::ClockNotCovered`] when the GPU clock's PLL did not
+/// lock after its power-on ([`rk3588::pll_on`]).
+pub const CLOCK_PLL_NO_LOCK: u32 = 1;
 
 /// Everything the run read, in the order it read it.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -113,6 +120,8 @@ pub struct GpuUp {
     /// [`RK806_READ`], read as Linux reads them (`write_then_read`).
     pub rk806: [u8; 4],
     pub vdd_gpu_uv: u32,
+    /// The power-on of the PLL `CLK_GPU_SRC` runs from.
+    pub pll_on: PllOn,
     pub pd_on: PdOn,
     pub pd_after: PdGpuRegs,
     /// `qos_gpu_m0..m3`, five words each, read after the power-on.
@@ -140,8 +149,8 @@ impl GpuUp {
 /// The run (see the module). `delay_us` waits that many microseconds.
 ///
 /// `on_handover` sees what the run read before its first write to the PMU or
-/// the GPU (the hand-over state and the supply), so the image prints it
-/// before a step that could fault.
+/// the GPU (the hand-over state, the supply and the PLL's power-on), so the
+/// image prints it before a step that could fault.
 pub fn gpu_up(m: &impl Mmio, b: Bases, delay_us: &mut impl FnMut(u32), on_handover: &mut impl FnMut(&GpuUp)) -> GpuUp {
     let mut o = GpuUp { pd_before: PdGpuRegs::read(m, b.pmu), ..GpuUp::default() };
     o.clock = rk3588::gpu_clock(m, b.cru);
@@ -181,6 +190,18 @@ pub fn gpu_up(m: &impl Mmio, b: Bases, delay_us: &mut impl FnMut(u32), on_handov
         _ => {
             o.stopped(Stop::ClockNotCovered, 0, o.clock.src_hz);
             return o;
+        }
+    }
+    // Linux powers a PLL down with its last consumer, and the runtime-
+    // suspended GPU can be that consumer: without the PLL the domain powers
+    // but never leaves bus idle
+    if let Some(pll) = rk3588::gpu_src_pll(rk3588::gpu_src(o.clock.sel158).0) {
+        match rk3588::pll_on(m, b.cru, pll, delay_us) {
+            Ok(on) => o.pll_on = on,
+            Err(con6) => {
+                o.stopped(Stop::ClockNotCovered, CLOCK_PLL_NO_LOCK, u64::from(con6));
+                return o;
+            }
         }
     }
     on_handover(&o);
@@ -248,7 +269,10 @@ mod tests {
     /// The T6 as Armbian hands it over with the GPU runtime-suspended
     /// (2026-10-19 reads): the CRU and PMU with their hiword masks, SPI2
     /// with the RK806 behind it, the GPU QoS blocks and the GPU, which
-    /// aborts (here: panics) when read with PD_GPU off.
+    /// aborts (here: panics) when read with PD_GPU off. A PLL locks when its
+    /// power-down bit is cleared, and PD_GPU leaves bus idle only while the
+    /// GPU's clock runs (the run of 2026-11-11: the acknowledge stayed set
+    /// with `CLK_GPU_SRC` on a powered-down NPLL).
     struct T6 {
         regs: RefCell<HashMap<usize, u32>>,
         writes: RefCell<Vec<(usize, u32)>>,
@@ -256,6 +280,19 @@ mod tests {
         frame: RefCell<Vec<u8>>,
         rxq: RefCell<std::collections::VecDeque<u8>>,
         l2_on: RefCell<bool>,
+        /// No PLL locks.
+        pll_dead: bool,
+    }
+
+    const PLLS: [rk3588::Pll; 4] = [rk3588::GPLL, rk3588::CPLL, rk3588::AUPLL, rk3588::NPLL];
+
+    /// `CLK_GPU_SRC` has an output: its PLL is powered and locked.
+    fn gpu_clock_runs(r: &HashMap<usize, u32>) -> bool {
+        let (src, _) = rk3588::gpu_src(r[&(CRU_BASE + clksel_con(158))]);
+        rk3588::gpu_src_pll(src).is_some_and(|p| {
+            let con = |i| r.get(&(CRU_BASE + pll_con(p.con + i))).copied().unwrap_or(0);
+            con(1) & rk3588::PLL_CON1_PWRDOWN == 0 && con(6) & rk3588::PLL_CON6_LOCK != 0
+        })
     }
 
     impl T6 {
@@ -270,6 +307,7 @@ mod tests {
                 (CRU_BASE + pll_con(104), 0xfa),
                 (CRU_BASE + pll_con(105), 0x42),
                 (CRU_BASE + pll_con(106), 0),
+                (CRU_BASE + pll_con(110), 0x9c00),
                 (PMU_BASE + pd_gpu::PWR_GATE, 0xffff),
                 (PMU_BASE + pd_gpu::STATUS, 0x2455_ffff),
                 (PMU_BASE + pd_gpu::BUS_IDLE_REQ, 0x83cf),
@@ -292,7 +330,25 @@ mod tests {
                 frame: RefCell::new(vec![]),
                 rxq: RefCell::new(Default::default()),
                 l2_on: RefCell::new(false),
+                pll_dead: false,
             }
+        }
+        /// The hand-over of 2026-11-11: the GPU last ran at 850 MHz, so
+        /// `CLK_GPU_SRC` is NPLL / 1 at 800 mV, and Linux powered NPLL down
+        /// when it suspended the GPU.
+        fn handed_over_on_npll() -> T6 {
+            let mut t6 = T6::handed_over();
+            for (a, v) in [
+                (clksel_con(158), 0x1f60),
+                (pll_con(120), 0x1a9),
+                (pll_con(121), 0x2083),
+                (pll_con(122), 0),
+                (pll_con(126), 0x4000),
+            ] {
+                t6.regs.borrow_mut().insert(CRU_BASE + a, v);
+            }
+            t6.rk806.insert(0x1a, 0x30);
+            t6
         }
         fn gpu_powered(&self) -> bool {
             let r = self.regs.borrow();
@@ -363,7 +419,14 @@ mod tests {
                 if a == PMU_BASE + pd_gpu::PWR_GATE && v == 1 << 16 {
                     *r.get_mut(&(PMU_BASE + pd_gpu::REPAIR_STATUS)).unwrap() |= 2;
                 }
-                if a == PMU_BASE + pd_gpu::BUS_IDLE_REQ && v == 1 << 16 {
+                for p in PLLS {
+                    if a == CRU_BASE + pll_con(p.con + 1) && !self.pll_dead {
+                        let down = r[&a] & rk3588::PLL_CON1_PWRDOWN != 0;
+                        let con6 = r.entry(CRU_BASE + pll_con(p.con + 6)).or_insert(0);
+                        *con6 = if down { *con6 & !rk3588::PLL_CON6_LOCK } else { *con6 | rk3588::PLL_CON6_LOCK };
+                    }
+                }
+                if a == PMU_BASE + pd_gpu::BUS_IDLE_REQ && v == 1 << 16 && gpu_clock_runs(&r) {
                     *r.get_mut(&(PMU_BASE + pd_gpu::BUS_IDLE_ACK)).unwrap() &= !1;
                     *r.get_mut(&(PMU_BASE + pd_gpu::BUS_IDLE_ST)).unwrap() &= !1;
                 }
@@ -386,6 +449,9 @@ mod tests {
         assert_eq!((o.stop, o.refusal, o.detail), (Stop::None, 0, 0));
         assert_eq!(o.pd_before.repair & 2, 0);
         assert_eq!(o.clock.src_hz, 300_000_000);
+        // CPLL has other consumers: Linux left it on, and it is not written
+        assert_eq!(o.pll_on, PllOn { was_on: true, waited_us: 0, con6: 0x9c00 });
+        assert!(t6.writes.borrow().iter().all(|w| w.0 != CRU_BASE + pll_con(105)));
         // Linux keeps SPI2 runtime-active: its gates are open, none is written
         assert_eq!(o.spi_opened, 0);
         assert_eq!(o.rk806, [0x0f, 0xe0, 0xa4, 0x1c]);
@@ -415,6 +481,36 @@ mod tests {
             "{before:x?}"
         );
         assert_eq!(o.stop, Stop::None);
+    }
+
+    #[test]
+    fn a_gpu_clock_on_a_powered_down_pll_is_powered_before_pd_gpu() {
+        let t6 = T6::handed_over_on_npll();
+        let o = gpu_up(&t6, B, &mut |_| {}, &mut |_| {});
+        assert_eq!((o.stop, o.refusal, o.detail), (Stop::None, 0, 0));
+        assert_eq!((o.clock.src_hz, o.vdd_gpu_uv), (850_000_000, 800_000));
+        assert_eq!((o.clock.pll_con, o.clock.pll_con6), ([0x1a9, 0x2083, 0], 0x4000));
+        assert_eq!(o.pll_on, PllOn { was_on: false, waited_us: 0, con6: 0xc000 });
+        assert!(o.pd_after.usable());
+        assert_eq!(o.ident.gpu_id, 0xa867_0005);
+        // the PLL's power-down bit is the first write after the supply is read
+        let w = t6.writes.borrow();
+        let pll = w.iter().position(|w| *w == (CRU_BASE + pll_con(121), 0x2000_0000)).expect("NPLL not powered");
+        let first_gate = w.iter().position(|w| w.0 == CRU_BASE + clkgate_con(66)).unwrap();
+        let last_spi = w.iter().rposition(|w| (SPI..SPI + 0x1000).contains(&w.0)).unwrap();
+        assert!(last_spi < pll && pll < first_gate, "{w:x?}");
+    }
+
+    #[test]
+    fn a_gpu_pll_that_does_not_lock_stops_before_the_pmu_is_written() {
+        let mut t6 = T6::handed_over_on_npll();
+        t6.pll_dead = true;
+        let mut reported = false;
+        let o = gpu_up(&t6, B, &mut |_| {}, &mut |_| reported = true);
+        assert_eq!((o.stop, o.refusal, o.detail), (Stop::ClockNotCovered, CLOCK_PLL_NO_LOCK, 0x4000));
+        assert!(!reported);
+        assert!(t6.writes.borrow().iter().all(|w| !(PMU_BASE..PMU_BASE + 0x400).contains(&w.0)));
+        assert!(t6.writes.borrow().iter().all(|w| w.0 != CRU_BASE + clkgate_con(66)));
     }
 
     #[test]

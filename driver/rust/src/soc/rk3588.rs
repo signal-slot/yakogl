@@ -199,6 +199,22 @@ pub const fn gpu_src_pll(src: GpuSrc) -> Option<Pll> {
     }
 }
 
+/// `PLL_CON1` bit 13 of a `pll_rk3588`: 1 = the PLL is powered down, and
+/// `PLL_CON6` bit 15: 1 = it is locked (clk-pll.c `RK3588_PLLCON1_PWRDOWN`,
+/// `RK3588_PLLCON6_LOCK_STATUS`). Linux powers a PLL down when its last
+/// consumer is disabled and leaves its `MODE_CON0` field alone
+/// (`rockchip_rk3588_pll_disable`), so a PLL in normal mode can have no
+/// output.
+///
+/// Measured on the T6 under Armbian, 2026-11-11 (read-only), with the GPU
+/// runtime-suspended after it had run at 850 MHz: CLKSEL_CON(158)
+/// 0x00001f60 (npll, divider 1), NPLL `PLL_CON0` 0x1a9, `PLL_CON1` 0x2083
+/// (powered down), `PLL_CON6` 0x4000 (not locked), MODE_CON0 0x545 (NPLL
+/// normal), `clk_summary`: pll_npll enable count 0. CPLL, which other
+/// clocks keep on: `PLL_CON1` 0x42, `PLL_CON6` 0x9c00.
+pub const PLL_CON1_PWRDOWN: u32 = 1 << 13;
+pub const PLL_CON6_LOCK: u32 = 1 << 15;
+
 /// The GPU's clock as read from the CRU.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct GpuClock {
@@ -208,9 +224,12 @@ pub struct GpuClock {
     pub mode_con0: u32,
     /// The selected PLL's CON0..CON2 (0 when the source is not a PLL read here).
     pub pll_con: [u32; 3],
+    /// The selected PLL's CON6 ([`PLL_CON6_LOCK`]), 0 like `pll_con`.
+    pub pll_con6: u32,
     /// `CLK_GPU_SRC`'s rate: the PLL's rate over the divider. 0 when it is
     /// not known (the PVTPLL, SPLL, an unknown mux value, a PLL not in
-    /// normal mode).
+    /// normal mode). It is the rate the PLL is set to: a PLL that is
+    /// powered down ([`PLL_CON1_PWRDOWN`]) gives it only after [`pll_on`].
     pub src_hz: u64,
 }
 
@@ -236,6 +255,7 @@ pub fn gpu_clock(m: &impl Mmio, cru: usize) -> GpuClock {
         for (i, w) in c.pll_con.iter_mut().enumerate() {
             *w = m.read32(cru + pll_con(pll.con + i));
         }
+        c.pll_con6 = m.read32(cru + pll_con(pll.con + 6));
         if pll_mode(c.mode_con0, pll) == 1 {
             if let Some(hz) = pll_hz(c.pll_con[0], c.pll_con[1], c.pll_con[2]) {
                 c.src_hz = hz / div as u64;
@@ -243,6 +263,41 @@ pub fn gpu_clock(m: &impl Mmio, cru: usize) -> GpuClock {
         }
     }
     c
+}
+
+/// Linux's wait for a `pll_rk3588` to lock: 1000 µs, where the lock takes
+/// 250 input clock cycles typically and 500 at most (clk-pll.c
+/// `rockchip_rk3588_pll_wait_lock`).
+pub const PLL_LOCK_WAIT_US: u32 = 1_000;
+
+/// What [`pll_on`] did.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct PllOn {
+    /// The PLL read powered before anything was written (nothing written).
+    pub was_on: bool,
+    /// Microseconds the wait for the lock took.
+    pub waited_us: u32,
+    /// `PLL_CON6` once it read locked.
+    pub con6: u32,
+}
+
+/// Power `pll` on as Linux does (clk-pll.c `rockchip_rk3588_pll_enable`):
+/// clear [`PLL_CON1_PWRDOWN`] through its write-enable twin, then wait for
+/// [`PLL_CON6_LOCK`]. A PLL that reads powered is not written; its lock is
+/// still waited for. The rate words and `MODE_CON0` are left as they are.
+/// `Err(PLL_CON6)` when it did not lock within [`PLL_LOCK_WAIT_US`].
+///
+/// `delay_us` waits that many microseconds.
+pub fn pll_on(m: &impl Mmio, cru: usize, pll: Pll, delay_us: &mut impl FnMut(u32)) -> Result<PllOn, u32> {
+    let con1 = cru + pll_con(pll.con + 1);
+    let con6 = cru + pll_con(pll.con + 6);
+    let was_on = m.read32(con1) & PLL_CON1_PWRDOWN == 0;
+    if !was_on {
+        m.write32(con1, PLL_CON1_PWRDOWN << 16);
+    }
+    let waited_us =
+        wait(m, con6, PLL_LOCK_WAIT_US, delay_us, |v| v & PLL_CON6_LOCK != 0).ok_or_else(|| m.read32(con6))?;
+    Ok(PllOn { was_on, waited_us, con6: m.read32(con6) })
 }
 
 /// The PMU (`power-management@fd8d8000`, rk3588-base.dtsi:842-844).
@@ -500,6 +555,7 @@ mod tests {
                 (CRU_BASE + pll_con(104), 0xfa),
                 (CRU_BASE + pll_con(105), 0x42),
                 (CRU_BASE + pll_con(106), 0),
+                (CRU_BASE + pll_con(110), 0x9c00),
                 (PMU + pd_gpu::PWR_GATE, 0xffff),
                 (PMU + pd_gpu::STATUS, 0x2455_ffff),
                 (PMU + pd_gpu::BUS_IDLE_REQ, 0x83cf),
@@ -564,8 +620,56 @@ mod tests {
         let c = gpu_clock(&soc, CRU_BASE);
         assert_eq!(gpu_src(c.sel158), (GpuSrc::Cpll, 5));
         assert_eq!(c.pll_con, [0xfa, 0x42, 0]);
+        assert_eq!(c.pll_con6, 0x9c00);
         assert_eq!(c.src_hz, 300_000_000);
         assert!(soc.writes.borrow().is_empty());
+    }
+
+    /// NPLL as the T6 read it on 2026-11-11, powered down by Linux.
+    fn npll_down(soc: &Soc) {
+        for (a, v) in [(120, 0x1a9), (121, 0x2083), (122, 0), (126, 0x4000)] {
+            soc.regs.borrow_mut().insert(CRU_BASE + pll_con(a), v);
+        }
+    }
+
+    #[test]
+    fn a_powered_down_pll_is_powered_through_its_write_mask_and_waited_for() {
+        let soc = Soc::t6_suspended(0);
+        npll_down(&soc);
+        soc.regs.borrow_mut().insert(CRU_BASE + clksel_con(158), 0x1f60);
+        let c = gpu_clock(&soc, CRU_BASE);
+        assert_eq!(gpu_src(c.sel158), (GpuSrc::Npll, 1));
+        assert_eq!((c.pll_con, c.pll_con6, c.src_hz), ([0x1a9, 0x2083, 0], 0x4000, 850_000_000));
+
+        // the lock comes 2 polls after the write
+        let mut slept = 0;
+        let on = pll_on(&soc, CRU_BASE, NPLL, &mut |us| {
+            slept += us;
+            if slept == 2 {
+                *soc.regs.borrow_mut().get_mut(&(CRU_BASE + pll_con(126))).unwrap() |= PLL_CON6_LOCK;
+            }
+        });
+        assert_eq!(on, Ok(PllOn { was_on: false, waited_us: 2, con6: 0xc000 }));
+        assert_eq!(slept, 2);
+        assert_eq!(*soc.writes.borrow(), vec![(CRU_BASE + pll_con(121), 0x2000_0000)]);
+        // only bit 13 moved: the rate words are Linux's
+        assert_eq!(soc.get(CRU_BASE + pll_con(121)), 0x83);
+    }
+
+    #[test]
+    fn a_pll_that_is_powered_and_locked_is_not_written() {
+        let soc = Soc::t6_suspended(0);
+        assert_eq!(pll_on(&soc, CRU_BASE, CPLL, &mut |_| {}), Ok(PllOn { was_on: true, waited_us: 0, con6: 0x9c00 }));
+        assert!(soc.writes.borrow().is_empty());
+    }
+
+    #[test]
+    fn a_pll_that_never_locks_times_out_after_linux_1_ms() {
+        let soc = Soc::t6_suspended(0);
+        npll_down(&soc);
+        let mut slept = 0;
+        assert_eq!(pll_on(&soc, CRU_BASE, NPLL, &mut |us| slept += us), Err(0x4000));
+        assert_eq!(slept, PLL_LOCK_WAIT_US + 1);
     }
 
     #[test]

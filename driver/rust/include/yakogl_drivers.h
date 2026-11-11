@@ -312,32 +312,41 @@ void yd_t6_banner_a3(uintptr_t uart, int32_t rc, uint32_t cr_now, uint32_t perio
  * soc::rk3588, ip::rockchip_spi, ip::rk806, gpu::mali; feature mali):
  * read PD_GPU, the CRU's GPU clock and the RK806 (vdd_gpu_s0, read only),
  * stop when the supply is off or below the OPP table's voltage for the
- * clock, power PD_GPU on, read the GPU's identity, soft reset, L2 on.
+ * clock, power the clock's PLL on when Linux left it powered down, power
+ * PD_GPU on, read the GPU's identity, soft reset, L2 on.
  * on_handover is called once with what was read before the first write to
- * the PMU or the GPU (the hand-over state and the supply), so it can be
- * printed before a step that could fault. 0 when every step ran, -EIO when
- * one stopped (stop says which), -EINVAL for a null argument. The bases: CRU 0xfd7c0000, PMU 0xfd8d8000,
+ * the PMU or the GPU (the hand-over state, the supply and the PLL's
+ * power-on), so it can be printed before a step that could fault. 0 when
+ * every step ran, -EIO when one stopped (stop says which), -EINVAL for a
+ * null argument. The bases: CRU 0xfd7c0000, PMU 0xfd8d8000,
  * SPI2 0xfeb20000, qos_gpu_m0 0xfdf35000 (0x800), GPU 0xfb000000, each
  * mapped at least 0x1000. A 64-bit value is two words, lo first. */
 #define YD_T6_GPU_STOP_NONE        0 /* GPU_ID read, reset done, L2 ready */
 #define YD_T6_GPU_STOP_SPI_GATE    1 /* an SPI2 CRU gate stays closed (refusal: its bit) */
 #define YD_T6_GPU_STOP_RK806_READ  2 /* an RK806 read failed (detail hi: the register) */
 #define YD_T6_GPU_STOP_SUPPLY_OFF  3 /* DCDC1 (vdd_gpu_s0) reads off */
-#define YD_T6_GPU_STOP_CLOCK       4 /* the GPU clock has no rate, or the supply is below its OPP */
+#define YD_T6_GPU_STOP_CLOCK       4 /* the GPU clock has no rate, or the supply is below its OPP
+				      * (refusal 0, detail: the rate); or its PLL did not lock
+				      * (refusal YD_T6_GPU_CLOCK_PLL_NO_LOCK, detail: PLL_CON6) */
 #define YD_T6_GPU_STOP_PD          5 /* PD_GPU did not come on */
 #define YD_T6_GPU_STOP_NOT_G610    6 /* GPU_ID is not 0xa8670005 */
 #define YD_T6_GPU_STOP_RESET       7 /* the soft reset did not complete */
 #define YD_T6_GPU_STOP_L2          8 /* the L2 did not come up */
 
+#define YD_T6_GPU_CLOCK_PLL_NO_LOCK 1
+
 struct yd_t6_gpu_up {
 	uint32_t pd_before[6];  /* PWR_GATE, STATUS, BUS_IDLE_REQ, _ACK, _ST, REPAIR_STATUS */
-	uint32_t clock[7];      /* CLKSEL_CON(158), (159), CLKGATE_CON(66), MODE_CON0, PLL_CON0..2 */
+	uint32_t clock[8];      /* CLKSEL_CON(158), (159), CLKGATE_CON(66), MODE_CON0, the selected
+				 * PLL's PLL_CON0..2 and PLL_CON6, as found */
 	uint32_t gpu_src_hz[2]; /* CLK_GPU_SRC's rate from the CRU, 0 when unknown */
 	uint32_t spi_gate14;    /* CLKGATE_CON(14) as found */
 	uint32_t spi_opened;    /* the SPI2 gate bits opened */
 	uint32_t rk806[4];      /* POWER_EN0, POWER_SLP_EN0, BUCK1_CONFIG, BUCK1_ON_VSEL */
 	uint32_t spi_found[8];  /* SPI2 as found: CTRLR0, CTRLR1, SSIENR, SER, BAUDR, SR, RXFLR, VERSION */
 	uint32_t vdd_gpu_uv;    /* BUCK1_ON_VSEL in microvolts */
+	uint32_t pll_on[3];     /* the GPU clock's PLL: read powered before any write (PLL_CON1
+				 * bit 13 clear), microseconds its lock took, PLL_CON6 after */
 	uint32_t pd_opened;     /* the CLKGATE_CON(66) GPU gate bits opened */
 	uint32_t pd_was_on;     /* PD_GPU read on and out of idle before any write */
 	uint32_t pd_waited_us[3]; /* power, idle acknowledge, idle */
