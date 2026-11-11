@@ -8,6 +8,11 @@ returned through PSCI `SYSTEM_RESET` in 45 s (records:
 `0dce654a8:tools/mali/board-ref/2026-10-19-z1/`). Open: the watchdog reset path has not
 been exercised (no hang has been left to WDT0 yet).
 
+**Z2 not passed, 2026-11-11**: `t6_mmu` (main `3aa24a68d`) ran on the board
+twice and stopped both times, once in Z1's power-on and once on its own
+reading of a status word; both are corrected on the host and the corrected
+image has not run ("Z2 board procedure", "The runs of 2026-11-11").
+
 Status, 2026-10-18: **designed; the first parts are built.** On main: the `gpu-mali`
 skeleton and packers (#1073), the Valhall v10 ISA table, encoder and decoder (#1101),
 `pan_shc` and the drm-shim byte reference (#1072), the frame builder (#1102). Open:
@@ -779,8 +784,12 @@ milestones (Zephyr booted by U-Boot), as on every board.
   (U-Boot starting the image) has not run.
 - **Z2**: AS0 page tables; a GPU cache flush round trip. Host side done
   2026-10-26 (design, builder, register sequence, the `t6_mmu` image and its
-  gate row; below, "Z2: AS0 and a cache flush"); **the board run has not
-  happened**: it waits for the owner's go-ahead and the UART.
+  gate row; below, "Z2: AS0 and a cache flush"). **Run on the board twice
+  on 2026-11-11, both FAIL** (the image of main `3aa24a68d`, by kexec;
+  below, "Z2 board procedure", "The runs of 2026-11-11"): the first
+  stopped in Z1's power-on, the second ran every Z2 step and stopped on
+  its own reading of `MMU_INT_RAWSTAT`. Both causes are corrected on the
+  host; no run has passed yet.
 - **Z3**: firmware loaded; the MCU boots; GLB version reads 1.5.0; a `PING` is
   acknowledged. Host side written 2026-10-28 ("The firmware (Z3)": the
   generator, the parser, the interface, the boot over a model of the MCU);
@@ -790,8 +799,8 @@ milestones (Zephyr booted by U-Boot), as on every board.
   (c022cbfc, fbbd4d71, in `driver/rust/src/ffi/rk3588.rs` and
   `yakogl_drivers.h`), `t6_fw`'s lines in `t6-verdict.sh` (08163414) and
   the `t6_fw` gate row (370dd06b). Host side done; **the board run has
-  not happened**: it waits for Z2's board run, the owner's go-ahead and
-  the UART (below, "Z3 board procedure").
+  not happened**: it waits for Z2's board run to pass (below, "Z3 board
+  procedure").
 - **Z4**: CSG 0 / CS 0 started from our kernel side; the L1 frame renders the same
   bytes as under panthor. From here the same back end and compiler run on Zephyr,
   and gl_test and dEQP move to the product form.
@@ -1488,9 +1497,9 @@ clock gates and never looked at the PLL.
 
 ### Z2: AS0 and a cache flush
 
-Written on the host 2026-10-26, before the code; **not run on the board**
-(a kexec reboots the board's Armbian; the owner schedules it, procedure
-below, "Z2 board procedure"). What Z2 shows: our kernel side builds the MCU address space's
+Written on the host 2026-10-26, before the code; run on the board on
+2026-11-11 and **not passed yet** (below, "Z2 board procedure"). What Z2
+shows: our kernel side builds the MCU address space's
 page tables in the image, enables AS0 on them the way panthor enables the
 MCU's VM, and gets a GPU cache flush back with its completion bit. It is
 the step before Z3, whose firmware is loaded into exactly these tables.
@@ -1692,9 +1701,11 @@ flush)`, built as the `t6_gpu` row is.
 
 ### Z2 board procedure
 
-Not run. For a later session that has the owner's go-ahead, the T6,
-someone at the power switch and `resource:<board-uart>`. This is Z2's
-run (the `t6_mmu` image) only; Z3 runs after it and its procedure and
+Run twice on 2026-11-11, both FAIL ("The runs of 2026-11-11" below); no
+run has passed. A run needs the T6 and `resource:<board-uart>` and
+starts when they are free: `T6_HAND` names who power-cycles the board if
+it does not come back, and the run does not wait for that person. This
+is Z2's run (the `t6_mmu` image) only; Z3 runs after it and its procedure and
 predicted record are not here ("The firmware (Z3)", "Open, before the
 board run"). Z1's procedure ("The first board procedure") applies
 unchanged: the named hand, the UART captured read only into the run's
@@ -1892,6 +1903,65 @@ bounded refusal, not a hang: a read of the GPU with PD_GPU off would be
 an external abort, but Z2 runs only after Z1 returned 0 (PD_GPU on, L2
 ready).
 
+**The runs of 2026-11-11.** Two jumps of the same image, `t6_mmu` build
+v0.1.0-897-g3aa24a68d (main `3aa24a68d`, sha256 bd5fc04c…f69431e), by
+kexec out of Armbian (kernel 6.18.55), records in `T6_RECORD_DIR`. Both
+are FAIL and stay FAIL; the board came back to Armbian through the
+image's PSCI reset both times (31 s and 30 s after the jump, `GLB_RST_ST`
+0 before and after).
+
+1. **13:13 JST, record `20261111-131354-t6`: stopped in Z1's power-on.**
+   `VERDICT t6_mmu FAIL (14 of 27)`. The image's lines:
+
+   ```
+   t6_mmu: Z1: rc -5 stop 5 refusal 3: GPU_ID 0x00000000 MMU_FEATURES 0x00000000 AS_PRESENT 0x00000000 L2_READY 0x0
+   t6_mmu: FAIL: Z1's power-on stopped (stop 5, refusal 3, detail 0x00000000000a9fff); run t6_gpu for its lines
+   ```
+
+   No Z2 step ran. The cause is a hand-over this image did not handle:
+   Linux had left the GPU clock on NPLL and NPLL powered down ("The GPU
+   power-on", "Measured, 2026-11-11"). The power-on now powers the PLL
+   and waits for its lock (step 3 there).
+2. **13:20 JST, record `20261111-132001-t6`: every Z2 step ran, the image
+   stopped on its own judgement.** `VERDICT t6_mmu FAIL (2 of 27)`
+   against the corrected prediction above: the flush after the map and
+   the PASS line are missing. This jump started from the reboot of the
+   first one, with the GPU clock back on CPLL over 5
+   (`CLKSEL_CON(158)` 0x00001f24), and Z1 passed. The image's lines:
+
+   ```
+   t6_mmu: Z1: rc 0 stop 0 refusal 0: GPU_ID 0xa8670005 MMU_FEATURES 0x00002830 AS_PRESENT 0x000000ff L2_READY 0x1
+   t6_mmu: pool 0x10023000 at PA 0x10023000 (16 pages), backing 0x10013000 at PA 0x10013000
+   t6_mmu: AS0 as found: TRANSTAB 0x0000000000000000 MEMATTR 0x0000000000000000 TRANSCFG 0x0000000000000001 LOCKADDR 0x000000000000000e STATUS 0x00000000 FAULTSTATUS 0x00000000 FAULTADDRESS 0x0000000000000000
+   t6_mmu: IRQ as found: MMU_INT_RAWSTAT 0x00000000 MMU_INT_MASK 0x00000000 GPU_INT_RAWSTAT 0x00000600 GPU_INT_MASK 0x00000000
+   t6_mmu: flush round trip: GPU_CMD 0x00003304, GPU_INT_RAWSTAT 0x00000600 before the clear, 0x00000600 after; CLEAN_CACHES_COMPLETED after 2 polls of 1 us
+   t6_mmu: tables at PA 0x0000000010023000: 4 of 16 pages used; backing PA 0x0000000010013000
+   t6_mmu: walk VA 0x0000000004001234: L0 0x0000000010024003 L1 0x0000000010025003 L2 0x0000000010026003 L3 0x0060000010014f47 (4 levels): PA 0x0000000010014234
+   t6_mmu: tables cleaned to the point of coherency: rc 0
+   t6_mmu: AS0 enable, the whole-VA flush: LOCKADDR 0x000000000000003f, LOCK polls 0/1; GPU_CMD 0x00003304, GPU_INT_RAWSTAT 0x00000600 before the clear, 0x00000600 after, CLEAN_CACHES_COMPLETED after 2 polls of 1 us; UNLOCK polls 0/1
+   t6_mmu: AS0 enable: TRANSTAB 0x0000000010023000 MEMATTR 0x8f8f8f8f8c4c8f4c TRANSCFG 0x00000000420001c6 written; UPDATE polls 0/1
+   t6_mmu: AS0 after: TRANSTAB 0x0000000010023000 MEMATTR 0x8f8f8f8f8c4c8f4c TRANSCFG 0x00000000420001c6 LOCKADDR 0x000000000000003f STATUS 0x00000000 FAULTSTATUS 0x00000000 FAULTADDRESS 0x0000000000000000
+   t6_mmu: IRQ after: MMU_INT_RAWSTAT 0x00010000 MMU_INT_MASK 0x00000000 GPU_INT_RAWSTAT 0x00000600 GPU_INT_MASK 0x00000000
+   t6_mmu: FAIL: stop 8 (AS0 is active or faulted after the update), refusal 3, detail 0x0000000000010000
+   ```
+
+   Measured for the first time on the board: the cache flush completes
+   (2 polls of 1 µs), the tables take 4 pages and walk to `B+0x1234`,
+   AS0 takes `LOCK`, `UPDATE` and `UNLOCK` without a wait and reads back
+   what was written, with no fault recorded. The stop is the image's:
+   it took `MMU_INT_RAWSTAT` 0x00010000 for a fault of AS0. On a CSF
+   GPU bits 15:0 of that word are the faults and bits 31:16 say "command
+   completed" per address space (panthor_mmu.c,
+   `panthor_mmu_fault_mask`); bit 16 is AS0's `LOCK`/`UPDATE`/`UNLOCK`
+   done. `board::nanopc_t6_mmu` now refuses only bits 15:0, and the two
+   wrong predictions (`LOCKADDR` as found, `MMU_INT_RAWSTAT` after) are
+   corrected above for the next run.
+
+The reset line reads `PSCI SYSTEM_RESET at 14 ms (0 feeds)` in both
+runs: the count is the 1 s timer's feeds of WDT0 (`nanopc_t6.c`), and
+the image was done before the first tick. Not run since: an image with
+both corrections.
+
 **Recording the result.** A kexec run is a development result, as Z1's
 was (its sign-off form — U-Boot starting the image — has not run). The
 build line, the PASS or FAIL line and the record reference go into Z2's
@@ -1899,8 +1969,8 @@ row in `tools/cts/RESULTS.md` (current results only: the run replaces
 the row, no run log) and the summary in `tools/cts/STATUS.md`;
 `uart.log` and the record directory stay out of the tree, in
 `T6_RECORD_DIR`. The run is reported to #7 as a comment naming the
-build and the record, and every new defect opens an issue; a person
-posts both. A run that did not happen is not a row: a gap is never a
+build and the record, and every new defect opens an issue, both posted
+with the run. A run that did not happen is not a row: a gap is never a
 pass.
 
 ### Z3 board procedure
@@ -1913,9 +1983,9 @@ reports to #7 (milestones: #26).
 
 **Preconditions** — all of them, or no run:
 
-- The owner's go-ahead for this run, given for Z3 itself (Z2's does not
-  carry over), the T6, someone at the power switch, and
-  `resource:<board-uart>`; the named hand, the read-only UART capture,
+- The T6 and `resource:<board-uart>`, free; the named hand (`T6_HAND`:
+  who power-cycles the board if it does not come back; the run does not
+  wait for that person), the read-only UART capture,
   the WDT_EN proof, `GLB_RST_ST` before and after, and `--go` taking the
   board lock are Z1's procedure as the Z2 one above states them.
 - Z2's board run has passed and is recorded (its row in
@@ -2084,7 +2154,7 @@ here is a finding, not a defect of the prediction.
 line into Z3's row in `tools/cts/RESULTS.md` and the summary in
 `tools/cts/STATUS.md`, `uart.log` and the record directory out of the
 tree, one comment for #7 naming the build and the record, a new issue
-for each defect; a person posts them. A run that did not happen is not a
+for each defect, posted with the run. A run that did not happen is not a
 row.
 
 ### Z4 board procedure
@@ -2107,9 +2177,9 @@ are not part of Z4.
 
 **Preconditions** — all of them, or no run:
 
-- The owner's go-ahead for this run, given for Z4 itself (Z3's does not
-  carry over), the T6, someone at the power switch, and
-  `resource:<board-uart>`; the named hand, the read-only UART capture,
+- The T6 and `resource:<board-uart>`, free; the named hand (`T6_HAND`:
+  who power-cycles the board if it does not come back; the run does not
+  wait for that person), the read-only UART capture,
   the WDT_EN proof, `GLB_RST_ST` before and after, and `--go` taking the
   board lock are Z1's procedure as the Z2 one above states them.
 - Z3's board run has passed and is recorded (its row in
@@ -2370,7 +2440,7 @@ trace is read against "The Z4 frame against the trace".
 line into Z4's row in `tools/cts/RESULTS.md` and the summary in
 `tools/cts/STATUS.md`, `uart.log` and the record directory out of the
 tree, one comment for #7 naming the build and the record, a new issue
-for each defect; a person posts them. A run that did not happen is not a
+for each defect, posted with the run. A run that did not happen is not a
 row.
 
 ## Decisions
