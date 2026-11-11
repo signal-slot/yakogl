@@ -17,7 +17,9 @@
 //! stencil as glReadPixels-style words (DEPTH_COMPONENT24 and DEPTH24_STENCIL8
 //! one u32, DEPTH32F_STENCIL8 eight bytes). A caller whose storage is another
 //! class (the GL core keeps RGB565 renderbuffers as RGBA8888) converts first,
-//! or resolves the storage's own format.
+//! or resolves the storage's own format: [`stored`] and [`resolve_rect`]
+//! resolve a rectangle in the layout the GL core stores
+//! ([`renderbuffer_surf_format`]), for the resolve blit.
 //!
 //! The rules:
 //!  - UNORM (the 8-bit R/RG/RGB/RGBA, RGB565, RGBA4, RGB5_A1, RGB10_A2): each
@@ -39,6 +41,7 @@
 
 use super::consts::*;
 use super::es3_formats::{self, Class};
+use super::framebuffer::renderbuffer_surf_format;
 use super::srgb;
 use super::types::GLenum;
 
@@ -148,6 +151,13 @@ pub(crate) fn resolve_pixel(internalformat: GLenum, samples: &[u8], n: usize, ou
     if n == 0 || samples.len() < n * b || out.len() < b {
         return false;
     }
+    resolve_with(r, b, samples, n, out);
+    true
+}
+
+/// Resolve one pixel of `b` bytes by rule `r`; the caller checked `n` > 0 and
+/// the slice lengths.
+fn resolve_with(r: Rule, b: usize, samples: &[u8], n: usize, out: &mut [u8]) {
     let px = |i: usize| &samples[i * b..(i + 1) * b];
     let nn = n as u64;
     match r {
@@ -197,6 +207,115 @@ pub(crate) fn resolve_pixel(internalformat: GLenum, samples: &[u8], n: usize, ou
             out[..4].copy_from_slice(&es3_formats::pack_r11g11b10f(r, g, b).to_ne_bytes());
         }
         Rule::Sample0(_) => out[..b].copy_from_slice(px(0)),
+    }
+}
+
+/// How a renderbuffer's samples are resolved in the layout the GL core
+/// stores it in: [`renderbuffer_surf_format`]'s surface, which is wider than
+/// the format's own pixel for the narrow names (R8, RG8, RGB8, RGB565, RGBA4,
+/// RGB5_A1, RGB10_A2 where its 10/10/10/2 surface is not drawn, and the other
+/// names of the RGBA8888 fallback are four bytes RGBA; RGB16F and RG16F are
+/// four halves).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) struct Stored {
+    /// Bytes of one stored pixel (one sample).
+    pub bytes: usize,
+    /// The rule applied to the stored channels.
+    pub rule: Rule,
+}
+
+/// The stored-layout resolve of `internalformat`; None as [`rule`].
+///
+/// A colour format's surface decides it: RGBA8888 (and XRGB8888) four UNORM
+/// bytes averaged, the sRGB surface as [`Rule::Srgb8A8`], the 10/10/10/2
+/// surface as [`Rule::Rgb10A2`], the half and float surfaces averaged as
+/// floats, RGB565 in its fields. An integer format takes sample 0 of its
+/// stored pixel. Depth and stencil take sample 0 of the format's own word
+/// ([`pixel_bytes`]): the GL core keeps no storage of its own for them, the
+/// back end's resolve does (note (e)6), so the CPU reference stays in the
+/// read-back layout.
+pub(crate) fn stored(internalformat: GLenum) -> Option<Stored> {
+    use crate::backend::*;
+    let own = rule(internalformat)?;
+    if matches!(
+        internalformat,
+        GL_DEPTH_COMPONENT16
+            | GL_DEPTH_COMPONENT24
+            | GL_DEPTH_COMPONENT32F
+            | GL_DEPTH24_STENCIL8
+            | GL_DEPTH32F_STENCIL8
+            | GL_STENCIL_INDEX8
+    ) {
+        return Some(Stored { bytes: pixel_bytes(internalformat)?, rule: own });
+    }
+    let surf = renderbuffer_surf_format(internalformat);
+    let bytes = gles_surf_bytes_per_pixel(surf) as usize;
+    /* integer formats keep sample 0 whatever surface holds them (an ES 2.0
+     * report maps them to RGBA8888, where they are not colour-renderable) */
+    let rule = if matches!(own, Rule::Sample0(_)) || gles_surf_is_integer(surf) {
+        Rule::Sample0(bytes)
+    } else {
+        match surf {
+            GLES_SURF_RGB565 => Rule::Unorm16(RGB565),
+            GLES_SURF_RGBA16F => Rule::Half(4),
+            GLES_SURF_R16F => Rule::Half(1),
+            GLES_SURF_R32F => Rule::F32(1),
+            GLES_SURF_SRGB8_A8 => Rule::Srgb8A8,
+            GLES_SURF_RGB10_A2 => Rule::Rgb10A2,
+            /* RGBA8888, XRGB8888 */
+            _ => Rule::Unorm8(4),
+        }
+    };
+    Some(Stored { bytes, rule })
+}
+
+/// Resolve a `w` x `h` rectangle of a multisample renderbuffer of
+/// `internalformat`, in its stored layout ([`stored`]).
+///
+/// `src` row `y` starts at `y * src_pitch` and holds `w` pixels of `samples`
+/// stored pixels each, back to back, sample 0 first (`samples * bytes` a
+/// pixel). `dst` row `y` starts at `y * dst_pitch` and gets `w` resolved
+/// stored pixels; the bytes between the rows and past the rectangle are not
+/// written. A 0-wide or 0-high rectangle writes nothing and is true. False,
+/// with nothing written, for a format [`stored`] does not know, `samples` 0,
+/// a pitch shorter than its row or a slice shorter than its rectangle.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn resolve_rect(
+    internalformat: GLenum,
+    src: &[u8],
+    src_pitch: usize,
+    samples: usize,
+    w: usize,
+    h: usize,
+    dst: &mut [u8],
+    dst_pitch: usize,
+) -> bool {
+    let Some(Stored { bytes: b, rule: r }) = stored(internalformat) else { return false };
+    if samples == 0 {
+        return false;
+    }
+    if w == 0 || h == 0 {
+        return true;
+    }
+    /* the last row ends at (h - 1) * pitch + row bytes */
+    let span = |pitch: usize, row: usize| -> Option<usize> {
+        (row <= pitch).then_some(())?;
+        (h - 1).checked_mul(pitch)?.checked_add(row)
+    };
+    let (Some(src_row), Some(dst_row)) = (w.checked_mul(samples).and_then(|p| p.checked_mul(b)), w.checked_mul(b))
+    else {
+        return false;
+    };
+    match (span(src_pitch, src_row), span(dst_pitch, dst_row)) {
+        (Some(s), Some(d)) if s <= src.len() && d <= dst.len() => {}
+        _ => return false,
+    }
+    let px = samples * b;
+    for y in 0..h {
+        let (s, d) = (&src[y * src_pitch..y * src_pitch + src_row], &mut dst[y * dst_pitch..y * dst_pitch + dst_row]);
+        for (sp, dp) in s.chunks_exact(px).zip(d.chunks_exact_mut(b)) {
+            resolve_with(r, b, sp, samples, dp);
+        }
     }
     true
 }
@@ -378,5 +497,182 @@ mod tests {
         ] {
             assert_eq!(pixel_bytes(f), Some(b), "{f:#x}");
         }
+    }
+
+    /// `w` x `h` pixels of `samples` stored pixels each from `px(x, y, s)`,
+    /// rows `pitch` bytes apart, the padding 0xaa.
+    fn ms_rect(
+        w: usize,
+        h: usize,
+        samples: usize,
+        pitch: usize,
+        px: impl Fn(usize, usize, usize) -> Vec<u8>,
+    ) -> Vec<u8> {
+        let mut v = vec![0xaau8; pitch * h];
+        for y in 0..h {
+            let mut o = y * pitch;
+            for x in 0..w {
+                for s in 0..samples {
+                    let p = px(x, y, s);
+                    v[o..o + p.len()].copy_from_slice(&p);
+                    o += p.len();
+                }
+            }
+        }
+        v
+    }
+
+    #[test]
+    fn stored_layout_follows_renderbuffer_surf_format() {
+        use crate::backend::*;
+        /* the narrow UNORMs are RGBA8888, four bytes averaged */
+        for f in [GL_R8, GL_RG8, GL_RGB8, GL_RGBA8, GL_RGB565, GL_RGBA4, GL_RGB5_A1] {
+            assert_eq!(renderbuffer_surf_format(f), GLES_SURF_RGBA8888, "{f:#x}");
+            assert_eq!(stored(f), Some(Stored { bytes: 4, rule: Rule::Unorm8(4) }), "{f:#x}");
+        }
+        /* the half surfaces: RGB16F and RG16F are held as four halves */
+        for f in [GL_RG16F, GL_RGB16F, GL_RGBA16F] {
+            assert_eq!(stored(f), Some(Stored { bytes: 8, rule: Rule::Half(4) }), "{f:#x}");
+        }
+        assert_eq!(stored(GL_R16F), Some(Stored { bytes: 2, rule: Rule::Half(1) }));
+        assert_eq!(stored(GL_R32F), Some(Stored { bytes: 4, rule: Rule::F32(1) }));
+        /* sRGB and RGB10_A2 as their surface is in this build */
+        let srgb = if crate::REPORT_ES2 { Rule::Unorm8(4) } else { Rule::Srgb8A8 };
+        assert_eq!(stored(GL_SRGB8_ALPHA8), Some(Stored { bytes: 4, rule: srgb }));
+        let rgb10a2 =
+            if renderbuffer_surf_format(GL_RGB10_A2) == GLES_SURF_RGB10_A2 { Rule::Rgb10A2 } else { Rule::Unorm8(4) };
+        assert_eq!(stored(GL_RGB10_A2), Some(Stored { bytes: 4, rule: rgb10a2 }));
+        /* integer: sample 0 of the stored pixel, which is the format's own
+         * where the build has the integer surfaces */
+        for e in es3_formats::FORMATS.iter().filter(|e| e.is_integer()) {
+            let st = stored(e.internalformat).unwrap();
+            let surf = renderbuffer_surf_format(e.internalformat);
+            assert_eq!(st, Stored { bytes: gles_surf_bytes_per_pixel(surf) as usize, rule: Rule::Sample0(st.bytes) });
+            if gles_surf_is_integer(surf) {
+                assert_eq!(Some(st.bytes), pixel_bytes(e.internalformat), "{}", e.name);
+            }
+        }
+        /* depth and stencil: the format's own word */
+        for (f, b) in [
+            (GL_DEPTH_COMPONENT16, 2),
+            (GL_DEPTH_COMPONENT24, 4),
+            (GL_DEPTH_COMPONENT32F, 4),
+            (GL_DEPTH24_STENCIL8, 4),
+            (GL_DEPTH32F_STENCIL8, 8),
+            (GL_STENCIL_INDEX8, 1),
+        ] {
+            assert_eq!(stored(f), Some(Stored { bytes: b, rule: Rule::Sample0(b) }), "{f:#x}");
+        }
+        for f in [GL_RGB9_E5, GL_RGBA8_SNORM, GL_RGBA, 0] {
+            assert_eq!(stored(f), None, "{f:#x}");
+        }
+    }
+
+    #[test]
+    fn rect_rgba8_4x_averages_each_pixel_and_keeps_padding() {
+        /* 3 x 2, distinct samples: channel k of sample s of (x, y) is
+         * 10 * s + 40 * x + 100 * y + k, so the mean is 15 + 40x + 100y + k */
+        let (w, h, n) = (3, 2, 4);
+        let src_pitch = w * n * 4 + 5;
+        let src =
+            ms_rect(w, h, n, src_pitch, |x, y, s| (0..4).map(|k| (10 * s + 40 * x + 100 * y + k) as u8).collect());
+        let dst_pitch = w * 4 + 3;
+        let mut dst = vec![0xeeu8; dst_pitch * h];
+        assert!(resolve_rect(GL_RGBA8, &src, src_pitch, n, w, h, &mut dst, dst_pitch));
+        for y in 0..h {
+            for x in 0..w {
+                let o = y * dst_pitch + x * 4;
+                let want: Vec<u8> = (0..4).map(|k| (15 + 40 * x + 100 * y + k) as u8).collect();
+                assert_eq!(dst[o..o + 4], want[..], "({x}, {y})");
+            }
+            /* the bytes after the row are untouched */
+            assert_eq!(dst[y * dst_pitch + w * 4..(y + 1) * dst_pitch], [0xee; 3]);
+        }
+        /* rounding: 0, 0, 255, 255 -> 128 in every byte */
+        let src = ms_rect(1, 1, 4, 16, |_, _, s| vec![if s < 2 { 0 } else { 255 }; 4]);
+        let mut d = [0u8; 4];
+        assert!(resolve_rect(GL_RGBA8, &src, 16, 4, 1, 1, &mut d, 4));
+        assert_eq!(d, [128; 4]);
+    }
+
+    #[test]
+    fn rect_narrow_format_averages_the_stored_bytes() {
+        /* RGB565 is stored RGBA8888: the four stored bytes are averaged, not
+         * a 5/6/5 word (two samples of 0xff and two of 0 or 1 give 128 in
+         * each byte) */
+        let src =
+            ms_rect(2, 1, 4, 32, |x, _, s| if s % 2 == 0 { vec![255, 255, 255, 255] } else { vec![x as u8, 0, 0, 0] });
+        let mut dst = [0u8; 8];
+        assert!(resolve_rect(GL_RGB565, &src, 32, 4, 2, 1, &mut dst, 8));
+        assert_eq!(dst, [128; 8]);
+        /* RGBA4: 1 + 2 + 3 + 6 = 12 / 4 = 3 in the red byte of the stored pixel */
+        let src = ms_rect(1, 1, 4, 16, |_, _, s| vec![[1, 2, 3, 6][s], 0, 9, 255]);
+        let mut d = [0u8; 4];
+        assert!(resolve_rect(GL_RGBA4, &src, 16, 4, 1, 1, &mut d, 4));
+        assert_eq!(d, [3, 0, 9, 255]);
+        /* RGB16F is stored as four halves: the fourth is averaged too */
+        let src = ms_rect(1, 1, 2, 16, |_, _, s| halves(&[s as f32, 1.0, 2.0, 2.0 * s as f32]));
+        let mut d = [0u8; 8];
+        assert!(resolve_rect(GL_RGB16F, &src, 16, 2, 1, 1, &mut d, 8));
+        assert_eq!(d.to_vec(), halves(&[0.5, 1.0, 2.0, 1.0]));
+    }
+
+    #[test]
+    fn rect_integer_takes_sample_0() {
+        let b = stored(GL_RGBA16UI).unwrap().bytes;
+        let src = ms_rect(2, 2, 4, 2 * 4 * b, |x, y, s| (0..b).map(|k| (s * 50 + x * 7 + y * 3 + k) as u8).collect());
+        let mut dst = vec![0u8; 2 * 2 * b];
+        assert!(resolve_rect(GL_RGBA16UI, &src, 2 * 4 * b, 4, 2, 2, &mut dst, 2 * b));
+        for y in 0..2 {
+            for x in 0..2 {
+                let want: Vec<u8> = (0..b).map(|k| (x * 7 + y * 3 + k) as u8).collect();
+                assert_eq!(dst[(y * 2 + x) * b..(y * 2 + x + 1) * b], want[..], "({x}, {y})");
+            }
+        }
+    }
+
+    #[test]
+    fn rect_depth24_stencil8_takes_sample_0() {
+        let src = ms_rect(2, 1, 4, 32, |x, _, s| w32(if s == 0 { 0xabcd_ef00 | x as u32 } else { 0x0000_00ff }));
+        let mut dst = [0u8; 8];
+        assert!(resolve_rect(GL_DEPTH24_STENCIL8, &src, 32, 4, 2, 1, &mut dst, 8));
+        assert_eq!(dst[..4], w32(0xabcd_ef00)[..]);
+        assert_eq!(dst[4..], w32(0xabcd_ef01)[..]);
+    }
+
+    #[test]
+    fn rect_one_sample_is_a_copy() {
+        let src: Vec<u8> = (0..2 * 12).map(|i| (i * 11) as u8).collect();
+        let mut dst = vec![0u8; 2 * 8];
+        /* 2 x 2 of RGBA8, the source rows 12 bytes apart, the destination 8 */
+        assert!(resolve_rect(GL_RGBA8, &src, 12, 1, 2, 2, &mut dst, 8));
+        assert_eq!(dst[..8], src[..8]);
+        assert_eq!(dst[8..], src[12..20]);
+    }
+
+    #[test]
+    fn rect_refuses_bad_arguments_and_writes_nothing() {
+        let src = [7u8; 64];
+        let mut dst = [0u8; 64];
+        /* unknown formats, samples 0 */
+        for f in [GL_RGB9_E5, GL_RGBA8_SNORM, GL_RGBA, 0] {
+            assert!(!resolve_rect(f, &src, 16, 1, 1, 1, &mut dst, 16), "{f:#x}");
+        }
+        assert!(!resolve_rect(GL_RGBA8, &src, 16, 0, 1, 1, &mut dst, 16));
+        /* a pitch shorter than its row: 2 x 4 x 4 = 32 source bytes a row */
+        assert!(!resolve_rect(GL_RGBA8, &src, 31, 4, 2, 1, &mut dst, 8));
+        assert!(!resolve_rect(GL_RGBA8, &src, 32, 4, 2, 1, &mut dst, 7));
+        /* slices shorter than the rectangle: 2 rows of 32 fit in 64, 3 do not */
+        assert!(!resolve_rect(GL_RGBA8, &src, 32, 4, 2, 3, &mut dst, 8));
+        assert!(!resolve_rect(GL_RGBA8, &src, 32, 4, 2, 2, &mut dst[..15], 8));
+        /* sizes that overflow */
+        assert!(!resolve_rect(GL_RGBA8, &src, usize::MAX, usize::MAX, usize::MAX, 1, &mut dst, 8));
+        assert!(!resolve_rect(GL_RGBA8, &src, 32, 4, 2, usize::MAX, &mut dst, 8));
+        assert_eq!(dst, [0; 64], "nothing written");
+        /* the exact fit is accepted */
+        assert!(resolve_rect(GL_RGBA8, &src, 32, 4, 2, 2, &mut dst[..16], 8));
+        /* an empty rectangle is done */
+        assert!(resolve_rect(GL_RGBA8, &[], 0, 4, 0, 5, &mut [], 0));
+        assert!(resolve_rect(GL_RGBA8, &[], 0, 4, 5, 0, &mut [], 0));
     }
 }
