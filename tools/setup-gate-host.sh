@@ -309,8 +309,8 @@ check_glslang() {
 # (tools/cts/deps.toml), so --install brings it with that entry's set.
 check_lz4() {
   local out
-  out=$(lz4 --version 2>&1) || {
-    line missing lz4 "lz4 not on PATH (Debian lz4, Gentoo app-arch/lz4): the second-stage LZ4 vectors"
+  out=$("${LZ4:-lz4}" --version 2>&1) || {
+    line missing lz4 "${LZ4:-lz4} not runnable (\$LZ4, else lz4 on PATH: Debian lz4, Gentoo app-arch/lz4): the second-stage LZ4 vectors"
     return
   }
   line ok lz4 "${out%%$'\n'*}"
