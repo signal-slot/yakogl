@@ -32,10 +32,12 @@
 
 use super::abi::{ConstSlot, IoReg};
 use super::arena::{AVec, Arena, ArenaError};
+use super::fold;
 use super::ir;
 use super::vivante::alloc::{Cond, OpType, MAX_BRANCH_TARGET};
 use super::vivante::build::{self, OpId};
 use super::vivante::builtins;
+use super::vivante::peephole;
 use crate::shaderc::{SHC_STAGE_FRAGMENT, SHC_STAGE_VERTEX};
 
 /* The interface-A types are `vivante::alloc`'s, not this file's.
@@ -583,6 +585,20 @@ struct Sel<'a> {
     /// _is_copied_first`), and it caught the version of this change that
     /// looked the slot up at use time.
     value_alias: &'a mut [Option<SelSrc>],
+    /// Per IR value, the float constant it is, when it is one: a `ConstF32`,
+    /// or a float operation on constants folded lane by lane with
+    /// `fold::fold_float` ([`fold_constants`], rank 4a of
+    /// `docs/notes/gc-compiler-ranks-3-5.md`). `src` reads these as
+    /// literals and `alu` emits nothing for them. `alu` adds `x * 0.0` as it
+    /// selects (rank 4b).
+    const_of: &'a mut [Option<[u32; 4]>],
+    /// Per IR value that is a `mul` by a constant: the constant it reads
+    /// INSTEAD of its own, because a `mul` of its result by a power of two
+    /// was merged into it (`(x * c1) * c2` is `x * (c1 * c2)`, rank 4b).
+    scaled_by: &'a [Option<[u32; 4]>],
+    /// Per IR value: the outer `mul` of such a merge. It is not emitted; it
+    /// aliases the inner product (`scaled_by`).
+    absorbed: &'a [bool],
     /// Where each loop's back edge ended up; see [`Selected::back_edges`].
     back_edges: AVec<'a, usize>,
     /// Branches emitted for a `break` and not yet given a destination.
@@ -656,6 +672,239 @@ fn slots_under_control_flow<'a>(m: &ir::Module<'_>, arena: &Arena<'a>) -> Result
     let out = arena.alloc_filled(m.locals.len(), false)?;
     walk(m, m.body, false, out);
     Ok(&*out)
+}
+
+/// The float operations [`fold_constants`] folds: a float result from float
+/// operands, lane by lane. The dot products sum across lanes, the derivatives
+/// are not functions of their operand, the comparisons make a bool (an int
+/// literal here, `op_type`), and the integer and bool operations are the
+/// PowerVR rules' business (`powervr/select.rs` `fold_constants`) if ever
+/// needed on this machine.
+fn folds_as_float(op: ir::AluOp) -> bool {
+    use ir::AluOp::*;
+    matches!(
+        op,
+        Fadd | Fmul
+            | Ffma
+            | Fmin
+            | Fmax
+            | Fneg
+            | Fabs
+            | Fsign
+            | Frcp
+            | Frsq
+            | Fsqrt
+            | Fexp2
+            | Flog2
+            | Fsin
+            | Fcos
+            | Ffloor
+            | Fceil
+            | Ftrunc
+            | Ffract
+    )
+}
+
+/// `c` as the one value of all four lanes, when it is one.
+fn one_value(c: [u32; 4]) -> Option<u32> {
+    (c[0] == c[1] && c[1] == c[2] && c[2] == c[3]).then_some(c[0])
+}
+
+/// Is `bits` a finite, normal power of two (of either sign)?
+fn power_of_two(bits: u32) -> bool {
+    f32::from_bits(bits).is_normal() && bits & 0x007f_ffff == 0
+}
+
+/// Rank 4a and the merge of 4b (`docs/notes/gc-compiler-ranks-3-5.md`):
+/// the constants among the IR values, found in one walk over `m.instrs`
+/// before selection, which is allocation order and so has every operand
+/// before the operation that reads it.
+///
+/// The folding rule is `fold::fold_float`'s: a float operation on
+/// `ConstF32` lanes, evaluated exactly as the IR defines it, and left alone
+/// (computed by the shader as before) whenever an operand or the result is
+/// a NaN, an infinity or a denormal, or the operation is only approximately
+/// computable on the host (`exp2`, `log2`, `sin`, `cos` away from their
+/// exact points). One refused lane leaves the whole value unfolded. tilt's
+/// `abs(1.0 - TiltShift)` and its reciprocal are the case: five
+/// instructions a pass computed from `const float`s.
+///
+/// The merge: `(x * c1) * c2`, with `c2` one power of two in every lane and
+/// the inner product read by nothing else, becomes `x * (c1 * c2)`. That is
+/// exact: scaling by a power of two commutes with rounding, and
+/// `fold_float` refuses a `c1 * c2` that overflows or goes denormal (an
+/// `x * c1` that itself goes denormal and is then scaled back is the one
+/// case that differs, by a denormal the GPU flushes). tilt's `TextureStep *
+/// abs(..) * 2.0` is the case, one instruction a pass.
+///
+/// Returns the constants, the merged constant each inner `mul` reads, and
+/// the outer `mul`s the merge absorbed ([`Folded`]).
+fn fold_constants<'a>(
+    m: &ir::Module<'_>,
+    arena: &Arena<'a>,
+    under_control_flow: &[bool],
+) -> Result<Folded<'a>, ArenaError> {
+    let n = m.instrs.len();
+    let const_of = arena.alloc_filled(n, None::<[u32; 4]>)?;
+    let scaled_by = arena.alloc_filled(n, None::<[u32; 4]>)?;
+    let absorbed = arena.alloc_filled(n, false)?;
+    /* A `const float` is a slot the front end stores once: its reads are
+     * the constant too. Per slot, the index of its one store, the value
+     * stored and the store's mask, when every store of the slot is that one
+     * (and no arm touches it, so that index order is execution order for
+     * it). A `float` slot is stored under mask `x`; the lanes a store does
+     * not write are never written, so a read of them is of an undefined
+     * register, and the constant's first lane there is a refinement, as
+     * `fold_constant_reads` says of its masked seeds. */
+    let slot_store = arena.alloc_filled(m.locals.len(), None::<(u32, ir::Src, u8)>)?;
+    let slot_stores = arena.alloc_filled(m.locals.len(), 0u32)?;
+    for (i, op) in m.instrs.iter().enumerate() {
+        if let ir::Op::StoreLocal { local, index, src, write_mask } = *op {
+            let Some(count) = slot_stores.get_mut(local.0 as usize) else { continue };
+            *count += 1;
+            if index.is_none() && write_mask & 0xf != 0 {
+                slot_store[local.0 as usize] = Some((i as u32, src, write_mask));
+            }
+        }
+    }
+    /* Uses per value, as `Sel::uses_of` counts them: every source and every
+     * `if`'s condition. */
+    let uses = arena.alloc_filled(n, 0u32)?;
+    for op in m.instrs.iter() {
+        op.for_each_src(|s| {
+            if let Some(u) = uses.get_mut(s.val.0 as usize) {
+                *u += 1;
+            }
+        });
+    }
+    for node in m.nodes.iter() {
+        if let ir::Node::If { cond, .. } = node {
+            if let Some(u) = uses.get_mut(cond.val.0 as usize) {
+                *u += 1;
+            }
+        }
+    }
+    /* Lane `l` of source `s`, when `s` is a constant. */
+    let lane = |const_of: &[Option<[u32; 4]>], s: ir::Src, l: usize| -> Option<u32> {
+        let c = (*const_of.get(s.val.0 as usize)?)?;
+        Some(c[(s.swizzle[l] & 3) as usize])
+    };
+    for i in 0..n {
+        let ir::Op::Alu(alu, srcs) = m.instrs[i] else {
+            match m.instrs[i] {
+                ir::Op::ConstF32(bits) => const_of[i] = Some(bits),
+                ir::Op::LoadLocal { local, index: None, .. } => {
+                    let l = local.0 as usize;
+                    if under_control_flow.get(l) == Some(&false) && slot_stores.get(l) == Some(&1) {
+                        if let Some((at, src, mask)) = slot_store[l] {
+                            if (at as usize) < i {
+                                let first = mask.trailing_zeros() as usize;
+                                let mut c = [0u32; 4];
+                                let mut known = true;
+                                for (k, v) in c.iter_mut().enumerate() {
+                                    let from = if mask & (1 << k) != 0 { k } else { first };
+                                    match lane(const_of, src, from) {
+                                        Some(x) => *v = x,
+                                        None => known = false,
+                                    }
+                                }
+                                if known {
+                                    const_of[i] = Some(c);
+                                }
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+            continue;
+        };
+        if !folds_as_float(alu) {
+            continue;
+        }
+        let k = alu.arity();
+        let mut out = [0u32; 4];
+        let mut all = true;
+        for (l, o) in out.iter_mut().enumerate() {
+            let x = lane(const_of, srcs[0], l);
+            let y = if k >= 2 { lane(const_of, srcs[1], l) } else { Some(0) };
+            let z = if k >= 3 { lane(const_of, srcs[2], l) } else { Some(0) };
+            match (x, y, z) {
+                (Some(x), Some(y), Some(z)) => match fold::fold_float(alu, x, y, z) {
+                    Some(r) => *o = r,
+                    None => {
+                        all = false;
+                        break;
+                    }
+                },
+                _ => {
+                    all = false;
+                    break;
+                }
+            }
+        }
+        if all {
+            const_of[i] = Some(out);
+            continue;
+        }
+        if alu != ir::AluOp::Fmul {
+            continue;
+        }
+        /* The merge. `c2` is this product's constant operand, `q` the other
+         * one: an unfolded `mul` with one constant operand `c1`, read once. */
+        let is_const = |s: ir::Src| const_of.get(s.val.0 as usize).is_some_and(|c| c.is_some());
+        let (q, c2) = match (is_const(srcs[0]), is_const(srcs[1])) {
+            (false, true) => (srcs[0], srcs[1]),
+            (true, false) => (srcs[1], srcs[0]),
+            _ => continue,
+        };
+        let mut c2_lanes = [0u32; 4];
+        let mut c2_known = true;
+        for (l, c) in c2_lanes.iter_mut().enumerate() {
+            match lane(const_of, c2, l) {
+                Some(v) => *c = v,
+                None => c2_known = false,
+            }
+        }
+        let Some(c2) = one_value(c2_lanes).filter(|_| c2_known) else { continue };
+        if !power_of_two(c2) {
+            continue;
+        }
+        let qi = q.val.0 as usize;
+        if uses.get(qi) != Some(&1) || absorbed[qi] || scaled_by[qi].is_some() {
+            continue;
+        }
+        let Some(ir::Op::Alu(ir::AluOp::Fmul, inner)) = m.instrs.get(qi) else { continue };
+        let c1 = match (is_const(inner[0]), is_const(inner[1])) {
+            (false, true) => inner[1],
+            (true, false) => inner[0],
+            _ => continue,
+        };
+        let mut merged = [0u32; 4];
+        let mut exact = true;
+        for (l, mg) in merged.iter_mut().enumerate() {
+            match lane(const_of, c1, l).and_then(|c| fold::fold_float(ir::AluOp::Fmul, c, c2, 0)) {
+                Some(r) => *mg = r,
+                None => {
+                    exact = false;
+                    break;
+                }
+            }
+        }
+        if exact {
+            scaled_by[qi] = Some(merged);
+            absorbed[i] = true;
+        }
+    }
+    Ok(Folded { const_of, scaled_by, absorbed })
+}
+
+/// What [`fold_constants`] found: the tables `Sel::const_of`,
+/// `Sel::scaled_by` and `Sel::absorbed`.
+struct Folded<'a> {
+    const_of: &'a mut [Option<[u32; 4]>],
+    scaled_by: &'a [Option<[u32; 4]>],
+    absorbed: &'a [bool],
 }
 
 impl<'a> Sel<'a> {
@@ -780,7 +1029,12 @@ impl<'a> Sel<'a> {
          * sum (GC7000 online, found by frontend2's ES 3.00 step 1). Only a
          * store that reads its own value's register may take the defining
          * instruction. */
-        if v.0 != src.val.0 {
+        /* The one alias whose other readers ARE visible: a merged `(x * c1)
+         * * c2` (`absorbed`) names the inner product, which the outer `mul`
+         * alone reads, and the outer is read once (checked above). */
+        let merged_inner = self.absorbed.get(src.val.0 as usize).copied().unwrap_or(false)
+            && matches!(self.m.def(src.val), Some(ir::Op::Alu(ir::AluOp::Fmul, s)) if s[0].val.0 == v.0 || s[1].val.0 == v.0);
+        if v.0 != src.val.0 && !merged_inner {
             note_site(|x| x.retarget_aliased += 1);
             return false;
         }
@@ -1153,7 +1407,7 @@ impl<'a> Sel<'a> {
                 ) || matches!(
                     self.m.def(src.val),
                     Some(ir::Op::LoadUniform { dword_off, .. }) if !self.reads_block_memory(*dword_off)
-                );
+                ) || self.const_of.get(src.val.0 as usize).is_some_and(|c| c.is_some());
                 if !simple {
                     return None;
                 }
@@ -1795,6 +2049,11 @@ impl<'a> Sel<'a> {
     }
 
     fn src(&mut self, s: ir::Src) -> Result<SelSrc, SelectError> {
+        /* A constant, written as such or folded (`const_of`): a literal,
+         * wherever the value came from. */
+        if let Some(bits) = self.const_of.get(s.val.0 as usize).copied().flatten() {
+            return self.literal_src(bits, s.swizzle);
+        }
         let def = *self.m.def(s.val).ok_or(SelectError::UndefinedValue(s.val))?;
         match def {
             /* gl_FrontFacing is not an input register: `instr` computed it
@@ -1817,27 +2076,9 @@ impl<'a> Sel<'a> {
                 let reg = self.input_reg(slot)?;
                 Ok(SelSrc::Input { reg, swizzle: s.swizzle, neg: false, abs: false })
             }
-            ir::Op::ConstF32(bits) => {
-                /* A literal whose four lanes are one value, exactly
-                 * representable, is an instruction immediate and costs no
-                 * constant register at all. That is what the reference does:
-                 * gl_test's ES 1.00 `tex.vert` writes `Unused = 0.5` as
-                 * `mov t3, void, void, 0.5:f20`, where we spent four dwords of
-                 * the constant file on it (const_count 20 against its 16).
-                 *
-                 * One value only, because an immediate is a scalar broadcast
-                 * across the lanes -- there is no per-lane immediate -- and
-                 * only when `imm_f32` accepts it, which it does for a value
-                 * whose low 12 mantissa bits are zero and refuses otherwise
-                 * rather than rounding. A rounded colour is a picture that is
-                 * merely wrong. */
-                if bits[0] == bits[1] && bits[1] == bits[2] && bits[2] == bits[3] {
-                    if let Ok(imm) = build::Src::imm_f32(f32::from_bits(bits[0])) {
-                        return Ok(SelSrc::Physical(imm));
-                    }
-                }
-                self.const_file_src(bits, s.swizzle)
-            }
+            /* In `const_of`, so taken above; kept so the match stays total
+             * over the literals. */
+            ir::Op::ConstF32(bits) => self.literal_src(bits, s.swizzle),
             /* An integer literal, and a bool as the all-ones mask it is
              * here (see `op_type`): the same folding as a float one, with
              * the s20 immediate in place of the f20. An integer operation
@@ -1892,7 +2133,126 @@ impl<'a> Sel<'a> {
             ir::Op::LoadLocal { local, index: None, .. } if self.local_is_stable_after(local, s.val.0) => {
                 Ok(SelSrc::Virtual { v: self.local_reg(local), swizzle: s.swizzle, neg: false, abs: false })
             }
+            /* An operation that is another operand under a name (rank 4b:
+             * `x * 1.0`, `x + 0.0`, `x * -1.0` as `-x`, a merged `(x * c1) *
+             * c2`): the operand `alu` recorded, through this read's swizzle.
+             * Every operand `src` hands out stays what it is for the rest of
+             * the body (a slot's register only when no later store changes
+             * it), so the alias holds at every later use too. */
+            ir::Op::Alu(..) if self.value_alias.get(s.val.0 as usize).copied().flatten().is_some() => {
+                let base = self.value_alias[s.val.0 as usize].expect("just checked");
+                Ok(compose(base, s.swizzle))
+            }
             _ => Ok(SelSrc::Virtual { v: VReg(s.val.0), swizzle: s.swizzle, neg: false, abs: false }),
+        }
+    }
+
+    /// A float literal as an operand.
+    ///
+    /// A literal whose four lanes are one value, exactly representable, is
+    /// an instruction immediate and costs no constant register at all. That
+    /// is what the reference does: gl_test's ES 1.00 `tex.vert` writes
+    /// `Unused = 0.5` as `mov t3, void, void, 0.5:f20`, where we spent four
+    /// dwords of the constant file on it (const_count 20 against its 16).
+    ///
+    /// One value only, because an immediate is a scalar broadcast across the
+    /// lanes -- there is no per-lane immediate -- and only when `imm_f32`
+    /// accepts it, which it does for a value whose low 12 mantissa bits are
+    /// zero and refuses otherwise rather than rounding. A rounded colour is a
+    /// picture that is merely wrong.
+    fn literal_src(&mut self, bits: [u32; 4], swizzle: [u8; 4]) -> Result<SelSrc, SelectError> {
+        if let Some(one) = one_value(bits) {
+            if let Ok(imm) = build::Src::imm_f32(f32::from_bits(one)) {
+                return Ok(SelSrc::Physical(imm));
+            }
+        }
+        self.const_file_src(bits, swizzle)
+    }
+
+    /// `s` without a negate or absolute: itself when it carries none, else a
+    /// copy made by an F32 `mov`, which applies them. For the instructions
+    /// that read their sources as bits (`alu`, the texture look-ups).
+    fn plain(&mut self, s: SelSrc) -> Result<SelSrc, SelectError> {
+        let modified = match s {
+            SelSrc::Virtual { neg, abs, .. } | SelSrc::Input { neg, abs, .. } => neg || abs,
+            SelSrc::Physical(p) => !p.is_immediate() && (p.neg || p.abs),
+        };
+        if !modified {
+            return Ok(s);
+        }
+        let v = VReg(self.next_vreg);
+        self.next_vreg += 1;
+        self.emit(
+            SelInstr::new(self.mov, OpType::F32)
+                .dst(SelDst::Virtual { v, write_mask: build::WRITE_MASK_ALL })
+                .operand(MOV_OPERAND, s),
+        )?;
+        Ok(SelSrc::Virtual { v, swizzle: ir::SWIZZLE_IDENTITY, neg: false, abs: false })
+    }
+
+    /// Lane `l` of `s` when `s` is a constant (`const_of`).
+    fn const_lane(&self, s: ir::Src, l: usize) -> Option<u32> {
+        let c = self.const_of.get(s.val.0 as usize).copied().flatten()?;
+        Some(c[(s.swizzle[l] & 3) as usize])
+    }
+
+    /// `s` as the one constant value of all four of its lanes, if it is one.
+    fn const_value(&self, s: ir::Src) -> Option<u32> {
+        let mut c = [0u32; 4];
+        for (l, v) in c.iter_mut().enumerate() {
+            *v = self.const_lane(s, l)?;
+        }
+        one_value(c)
+    }
+
+    /// Rank 4b of `docs/notes/gc-compiler-ranks-3-5.md`: an operation with
+    /// one constant operand that is its other operand, or a constant, so
+    /// that no instruction is emitted. `Some(alias)` names what the value
+    /// is; `None` selects the operation as usual.
+    ///
+    /// The rules, and what each gives up (GLSL ES 1.00 section 4.5.1 leaves
+    /// the precision of these to the implementation, and Mesa's NIR folds
+    /// each of them for GLSL, `nir_opt_algebraic` under no-signed-zero and
+    /// inexact):
+    /// - `x * 1.0` and `1.0 * x` are `x`: exact.
+    /// - `x * -1.0` and `-1.0 * x` are `-x`: exact; the negate rides on the
+    ///   operand's modifier, so not for an immediate, whose modifier bits
+    ///   are payload (`compose`).
+    /// - `x + 0.0`, `0.0 + x` and the same with `-0.0` are `x`: `-0.0 +
+    ///   0.0` is `+0.0` in IEEE and `-0.0` here. The sign of a zero is not
+    ///   kept.
+    /// - `x * 0.0` and `0.0 * x` are `0.0`: `-0.0` for a negative `x`, and
+    ///   a NaN for an infinite or NaN `x`, in IEEE; `+0.0` here.
+    ///
+    /// The alias is sound at every later use because `src` only hands out
+    /// operands that stay what they are for the rest of the body (a slot's
+    /// register only when nothing stores it afterwards).
+    fn identity_alias(
+        &mut self,
+        id: ir::InstrId,
+        op: ir::AluOp,
+        srcs: &[ir::Src; 3],
+        sel: &[Option<SelSrc>; 3],
+    ) -> Option<SelSrc> {
+        if !matches!(op, ir::AluOp::Fmul | ir::AluOp::Fadd) {
+            return None;
+        }
+        let (k, other) = match (self.const_value(srcs[0]), self.const_value(srcs[1])) {
+            (Some(k), None) => (k, sel[1]?),
+            (None, Some(k)) => (k, sel[0]?),
+            _ => return None,
+        };
+        let (one, minus_one) = (1.0f32.to_bits(), (-1.0f32).to_bits());
+        let zero = k & 0x7fff_ffff == 0;
+        match op {
+            ir::AluOp::Fmul if k == one => Some(other),
+            ir::AluOp::Fmul if k == minus_one => negated(other),
+            ir::AluOp::Fmul if zero => {
+                self.const_of[id.0 as usize] = Some([0; 4]);
+                build::Src::imm_f32(0.0).ok().map(SelSrc::Physical)
+            }
+            ir::AluOp::Fadd if zero => Some(other),
+            _ => None,
         }
     }
 
@@ -1976,11 +2336,47 @@ impl<'a> Sel<'a> {
     /// of what the machine has and the expansions for what it does not live
     /// together, so an operation cannot be in both.
     fn alu(&mut self, id: ir::InstrId, op: ir::AluOp, srcs: &[ir::Src; 3]) -> Result<(), SelectError> {
+        /* Rank 4a: a constant, which `src` reads as a literal. Nothing to
+         * emit, and the numbering keeps the gap. */
+        if self.const_of.get(id.0 as usize).copied().flatten().is_some() {
+            return Ok(());
+        }
+        /* Rank 4b's merge: `(x * c1) * c2` is the inner product, which reads
+         * `c1 * c2` (`scaled_by`) in place of `c1`. This outer `mul` is that
+         * value under another name. */
+        if self.absorbed.get(id.0 as usize).copied().unwrap_or(false) {
+            let inner = if self.const_value(srcs[0]).is_some() { srcs[1] } else { srcs[0] };
+            let base = self.src(inner)?;
+            self.value_alias[id.0 as usize] = Some(base);
+            return Ok(());
+        }
         let ty = op_type(op).ok_or(SelectError::Unsupported("a boolean operation: its operand type is not settled"))?;
         let n = op.arity();
         let mut sel = [None, None, None];
         for (i, out) in sel.iter_mut().enumerate().take(n) {
             *out = Some(self.src(srcs[i])?);
+        }
+        if let Some(merged) = self.scaled_by.get(id.0 as usize).copied().flatten() {
+            /* The merged constant stands in for this product's constant
+             * operand; its lanes are already the operand's after its
+             * swizzle. */
+            let k = usize::from(self.const_lane(srcs[0], 0).is_none());
+            sel[k] = Some(self.literal_src(merged, ir::SWIZZLE_IDENTITY)?);
+        } else if let Some(alias) = self.identity_alias(id, op, srcs, &sel) {
+            self.value_alias[id.0 as usize] = Some(alias);
+            return Ok(());
+        }
+        /* A negate or absolute on an operand (rank 4b's `x * -1.0` alias) is
+         * applied by the float arithmetic that reads modifiers as `Fneg` and
+         * `Fabs` mean them (peephole.rs `takes_float_modifiers`) and by
+         * nothing else: a `select` or `cmp` passes its sources through as
+         * bits, `Bcsel`'s with an integer type (dEQP-style vertex.11 read
+         * `-(u_f1 - f0)` as an integer negate), and the lowered operations
+         * are built from those. Everything else reads a plain copy. */
+        if !builtins::native(op, ty).is_some_and(|name| ty == OpType::F32 && peephole::float_modifier_op(name)) {
+            for s in sel.iter_mut().flatten() {
+                *s = self.plain(*s)?;
+            }
         }
         /* `dsx` and `dsy` read their one source from BOTH of their slots,
          * SRC0 and SRC2: Mesa's etnaviv (MIT, etnaviv_compiler_nir.c,
@@ -2126,9 +2522,14 @@ impl<'a> Sel<'a> {
         extra: Option<ir::Src>,
     ) -> Result<(), SelectError> {
         let dst = SelDst::Virtual { v: VReg(id.0), write_mask: build::WRITE_MASK_ALL };
+        /* A texture instruction applies no source modifier: `plain`. */
         let c = self.src(coord)?;
+        let c = self.plain(c)?;
         let x = match extra {
-            Some(e) => Some(self.src(e)?),
+            Some(e) => {
+                let e = self.src(e)?;
+                Some(self.plain(e)?)
+            }
             None => None,
         };
 
@@ -2166,6 +2567,7 @@ impl<'a> Sel<'a> {
     fn tex_fetch(&mut self, id: ir::InstrId, sampler: u8, coord: ir::Src, lod: ir::Src) -> Result<(), SelectError> {
         let dst = SelDst::Virtual { v: VReg(id.0), write_mask: build::WRITE_MASK_ALL };
         let c = self.src(coord)?;
+        let c = self.plain(c)?;
         let literal = match self.m.def(lod.val) {
             Some(ir::Op::ConstI32(bits)) => {
                 build::Src::imm_f32(bits[usize::from(lod.swizzle[0])] as f32).ok().map(SelSrc::Physical)
@@ -4251,6 +4653,7 @@ fn select_from<'a>(
     }
     let under_control_flow = slots_under_control_flow(m, arena)?;
     let arm_flags = arena.alloc_filled(m.locals.len(), 0u8)?;
+    let Folded { const_of, scaled_by, absorbed } = fold_constants(m, arena, under_control_flow)?;
     site_store::update(|v| *v = MovSites::ZERO);
     let mut s = Sel {
         m,
@@ -4259,6 +4662,9 @@ fn select_from<'a>(
         locals_in,
         locals_val,
         value_alias,
+        const_of,
+        scaled_by,
+        absorbed,
         /* NOT reserved at the IR's size, though that took random.23's
          * selection from 1.15 MB to 659 KB on a fresh arena: once the front
          * end's scratch is given back (lower.rs relocate), the one large
@@ -4765,6 +5171,22 @@ fn compose(src: SelSrc, outer: [u8; 4]) -> SelSrc {
             SelSrc::Physical(p)
         }
         SelSrc::Virtual { v, swizzle, neg, abs } => SelSrc::Virtual { v, swizzle: pick(swizzle), neg, abs },
+    }
+}
+
+/// `-s`, on the operand's own negate modifier. `None` for an immediate,
+/// whose modifier bits are its payload (see [`compose`]). The hardware takes
+/// the magnitude before the negate, so flipping `neg` on a source that has
+/// `abs` set negates `|x|`, which is the negation of what it read.
+fn negated(s: SelSrc) -> Option<SelSrc> {
+    match s {
+        SelSrc::Virtual { v, swizzle, neg, abs } => Some(SelSrc::Virtual { v, swizzle, neg: !neg, abs }),
+        SelSrc::Input { reg, swizzle, neg, abs } => Some(SelSrc::Input { reg, swizzle, neg: !neg, abs }),
+        SelSrc::Physical(p) if p.is_immediate() => None,
+        SelSrc::Physical(mut p) => {
+            p.neg = !p.neg;
+            Some(SelSrc::Physical(p))
+        }
     }
 }
 

@@ -34,7 +34,7 @@ pub mod isa;
 #[rustfmt::skip]
 pub mod isa_tables;
 pub mod listing;
-mod peephole;
+pub(crate) mod peephole;
 pub mod wide128;
 /* The round trip and the default audit both read the offline table. */
 #[cfg(all(test, not(feature = "no-shader-table")))]

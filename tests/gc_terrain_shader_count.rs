@@ -78,18 +78,19 @@ fn blur(file: &str, radius: i32, sigma: f64, horizontal: bool, step: f64, tilt: 
 const GLMARK2: [(&str, u32, u32, u32); 10] = [
     ("terrain.vert", SHC_STAGE_VERTEX, 48, 9),     // etna 39, 9; before 56, 9
     ("terrain.frag", SHC_STAGE_FRAGMENT, 81, 12),  // etna 72, 11; before 127, 16 (sr patch), 148, 19
-    ("tilt_h.frag", SHC_STAGE_FRAGMENT, 62, 12),   // etna 46, 5; before 66, 12
-    ("tilt_v.frag", SHC_STAGE_FRAGMENT, 62, 12),   // etna 46, 5; before 75, 12; 71 before rank T
-    ("bloom_h.frag", SHC_STAGE_FRAGMENT, 38, 8),   // etna 24, 5; before 42, 8
-    ("bloom_v.frag", SHC_STAGE_FRAGMENT, 38, 8),   // etna 24, 5; before 47, 8; 43 before rank T
-    ("normalmap.frag", SHC_STAGE_FRAGMENT, 21, 6), // etna 21, 4; before 25, 5; 23, 5 before rank T
+    ("tilt_h.frag", SHC_STAGE_FRAGMENT, 57, 12),   // etna 46, 5; before 66, 12; 62 before rank 4
+    ("tilt_v.frag", SHC_STAGE_FRAGMENT, 57, 12),   // etna 46, 5; before 75, 12; 71 before rank T, 62 before rank 4
+    ("bloom_h.frag", SHC_STAGE_FRAGMENT, 32, 8),   // etna 24, 5; before 42, 8; 38 before rank 4
+    ("bloom_v.frag", SHC_STAGE_FRAGMENT, 32, 8),   // etna 24, 5; before 47, 8; 43 before rank T, 38 before rank 4
+    ("normalmap.frag", SHC_STAGE_FRAGMENT, 20, 6), // etna 21, 4; before 25, 5; 23, 5 before rank T, 21 before rank 4
     ("overlay.frag", SHC_STAGE_FRAGMENT, 2, 2),    // etna 2, 2; before 2, 2
     ("quad.vert", SHC_STAGE_VERTEX, 7, 3),         // etna 4, 2; before 7, 3
     ("luminance.frag", SHC_STAGE_FRAGMENT, 7, 4),  // etna 3, 3; before 7, 4
 ];
-/// The ten's instructions: etna_shc 279; 382 before rank T (the retarget past
-/// a constant lane), 428 before the unroll, 475 before the patch.
-const GLMARK2_TOTAL: u32 = 366;
+/// The ten's instructions: etna_shc 279; 366 before rank 4 (float constant
+/// folding), 382 before rank T (the retarget past a constant lane), 428
+/// before the unroll, 475 before the patch.
+const GLMARK2_TOTAL: u32 = 343;
 
 /// The ten texts from a glmark2 checkout, in [`GLMARK2`]'s order.
 fn glmark2_texts(root: &Path) -> Vec<String> {
@@ -132,12 +133,13 @@ fn micro() -> Vec<(&'static str, u32, String, u32)> {
         ),
         // t3, rank 3: one blur tap's `* Kernel +` (texld, mul, add); etnaviv texld, mad; before the patch 3
         ("t3", SHC_STAGE_FRAGMENT, fs("", "gl_FragColor = texture2D(T, a.xy) * 0.25 + b;"), 3),
-        // t4, rank 4: tilt-shift's constant divisor; etnaviv folds it (add, mul); before the patch 9
+        // t4, rank 4: tilt-shift's constant divisor; etnaviv folds it (add, mul), as select.rs
+        // `fold_constants` now does; before the patch 9, 5 before rank 4
         (
             "t4",
             SHC_STAGE_FRAGMENT,
             fs("const float S = 0.5;\n", "gl_FragColor = vec4(abs(S - a.y) / abs(1.0 - S));"),
-            5,
+            2,
         ),
         // t5, rank 5: two taps' offsets from one scalar; etnaviv one vec2 mul for both; before the patch 8,
         // 8 before rank T (the first sum's store into the vec4 is retargeted past the second tap)
