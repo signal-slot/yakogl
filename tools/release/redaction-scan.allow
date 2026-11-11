@@ -60,6 +60,7 @@ drop | private-ipv4 | tools/cts/mali-slice-readme-selftest.sh | \b10\.1\.2\.3\b 
 drop | login-at-host | tools/cts/mali-slice-readme-selftest.sh | root[@]board\b | input of a refusal test: the slice check must refuse it
 drop | email | tools/cts/x2-glmark2-scenes-selftest.sh | \bt[@]example\.com\b | RFC 2606 example.com git identity of the self-test repository
 drop | home-path | tools/cts/mali-glmark2-selftest.sh | /ho[m]e/yakogl-mali-glmark2\b | the fake board's stage directory in a self-test, no user name
+drop | home-path | tools/cts/mali-glmark2-session-selftest.sh | /ho[m]e/yakogl-mali-glmark2\b | the fake board's stage directory in a self-test, no user name
 drop | private-ipv4 | tools/cts/mali-fail-triage.py | \b10\.1\.2\.3\b | private-range input of a redaction test (the scrub self-check)
 drop | login-at-host | tools/cts/mali-fail-triage.py | root[@]nano\b | input of a redaction test (the scrub self-check)
 drop | private-ipv4 | tools/cts/testdata/mali-fail-triage/slices/2026-11-09-t6-gles2-S1-11111111/kmsg/c.txt | \b10\.9\.8\.7\b | private-range input of a redaction test: a dirty kmsg line

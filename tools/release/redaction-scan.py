@@ -809,6 +809,8 @@ def self_test():
              ["t", "@example.com"], ["t", "@example.net"]),
             ("home-path", "tools/cts/mali-glmark2-selftest.sh",
              ["/ho", "me/yakogl-mali-glmark2"], ["/ho", "me/yakogl-other"]),
+            ("home-path", "tools/cts/mali-glmark2-session-selftest.sh",
+             ["/ho", "me/yakogl-mali-glmark2"], ["/ho", "me/yakogl-other"]),
             ("private-ipv4", triage, ["10.1", ".2.3"], ["10.1", ".2.30"]),
             ("login-at-host", triage, ["root", "@nano"], ["root", "@nano2"]),
             ("private-ipv4", c_txt, ["10.9", ".8.7"], ["10.9", ".8.70"]),
