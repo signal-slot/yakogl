@@ -19,9 +19,11 @@ dependency cache, never in this repository:
 | `linux:` | `https://github.com/torvalds/linux.git`, tag `v6.18` | `7d0a66e4bb9081d75c82ec4957c50034cb0ea449` |
 | `rpi:` | `https://github.com/raspberrypi/linux.git`, branch `rpi-6.12.y` | `5bd564aaa8dc4b1b8ed11733c19ec8ece63a72cc` |
 | `docs:` | `https://github.com/raspberrypi/documentation.git`, branch `master`, under `documentation/asciidoc/computers/` | `7376533ab86ea07acc77ef6a9f3c3e57fcff833d` |
+| `zephyr:` | `https://github.com/zephyrproject-rtos/zephyr.git`, the revision `west.yml` pins (the workspace this repository builds with) | `af17c0c8aa2a82a0b714a423915ad3610063ee68` |
 
 The Linux and Raspberry Pi files are GPL-2.0: only facts and `file:line`
-citations are kept here, never code. Where `rpi:` and `linux:` hold the same
+citations are kept here, never code. Zephyr is Apache-2.0; it is cited the
+same way. Where `rpi:` and `linux:` hold the same
 file, `linux:` is cited. `rpi:drivers/gpu/drm/v3d/v3d_regs.h` is byte for byte
 the same as `linux:` (the two directories differ in other files, which the
 `diff -rq` of the two trees lists). All `v3d_*` paths are under
@@ -200,6 +202,22 @@ until any OOM state has been cleared" (`:112-118`).
 | 7.1 AXI id table (mask 0x7f): L2T 0x00-0x2f, CLE 0x30-0x37, PTB 0x38, PSE 0x39, CSD 0x3a, TLB 0x40-0x5f, MMU 0x60-0x6f, TFU 0x7c-0x7d, GMP 0x7f. The 4.1 table (mask 0xff) differs | `linux:v3d_irq.c:175-225` |
 | Enabled sets: core `OUTOMEM`, `FLDONE`, `FRDONE`, `CSDDONE(ver)` (and `GMPV` below 7.1); hub `MMU_WRV`, `MMU_PTI`, `MMU_CAP`, `TFUC` (and `GMPV` on 7.1). Enabled by writing `~set` to `MSK_SET` then `set` to `MSK_CLR` | `linux:v3d_irq.c:23-33,306-319` |
 | The init clears pending bits of both sets first | `linux:v3d_irq.c:253-258` |
+| GIC interrupt IDs: core SPI 249 is ID **281**, hub SPI 250 is ID **282** (SPI *n* is ID *n* + 32, the GIC architecture rule) | section 9, "The node" |
+| Zephyr's stock `rpi_5` sets `NUM_IRQS` to **280** (IDs 0 to 279); the value comes from the SoC's Kconfig, not from the device tree | `zephyr:soc/brcm/bcm2712/Kconfig.defconfig:6-7` |
+| With 280, an ID above `NUM_IRQS - 1` is handled as spurious by the arm64 IRQ entry, so a V3D interrupt would never reach its handler | `zephyr:arch/arm64/core/isr_wrapper.S:89-91` |
+| With 280, connecting an ID above 279 fails the build: the ISR table generator rejects an index past the table | `zephyr:scripts/build/gen_isr_tables_parser_local.py:197-199` (direct), `:211-215` (software table) |
+| Zephyr's GIC-v2 driver sizes the distributor from the hardware (`GICD_TYPER.ITLinesNumber`, (N + 1) x 32 lines, at most 1020), not from `NUM_IRQS` | `zephyr:drivers/interrupt_controller/intc_gic.c:242-246` |
+| **Fix:** `CONFIG_NUM_IRQS=288` (any value of 283 or more) in the image's `prj.conf`; no overlay and no Zephyr patch is needed | the three rows above |
+
+The GIC-400 of the BCM2712 is `arm,gic-400` at bus 0x7fff9000
+(`rpi:arch/arm64/boot/dts/broadcom/bcm2712.dtsi:271-282`; Zephyr names the
+same block `interrupt-controller@107fff9000`, `zephyr:dts/arm64/broadcom/bcm2712.dtsi:46-53`).
+That its `GICD_TYPER` reports at least 288 lines (`ITLinesNumber` of 8 or
+more) is **open** until a board image reads it. The first clear (M1 to M4)
+polls the interrupt status registers and needs no interrupt; the first
+triangle with the Pi 4's interrupt path (`src/osal/zephyr_v3d.c:263-264`,
+`IRQ_CONNECT` and `irq_enable`) and `gl_test` (M5 on) need the fix. No
+`tools/probes/rpi_5` image sets `NUM_IRQS` today.
 
 ## 9. The GPU node, power, reset and clock on the Pi 5
 
@@ -289,6 +307,48 @@ driver; `SET_POWER_STATE` 0x00028001 (`raspberrypi-firmware.h:54`) is used by
 the firmware power driver (`rpi:drivers/pmdomain/bcm/raspberrypi-power.c:63`).
 These are the same tags the Pi 4 uses.
 
+The BCM2712 property mailbox, as an image without Linux reaches it. The
+citations are `rpi:` (`rpi-6.12.y`, the commit of the sources table) unless
+a row names another tree:
+
+| Fact | Value | Citation |
+|---|---|---|
+| Node | `mailbox: mailbox@7c013880`, `brcm,bcm2835-mbox`, `reg <0x7c013880 0x40>`, GIC SPI 33 | `rpi:arch/arm64/boot/dts/broadcom/bcm2712.dtsi:229-234` |
+| ARM address | **0x10_7c013880**: the node sits under `soc: soc@107c000000`, whose `ranges <0x00000000 0x10 0x00000000 0x80000000>` put child address *a* at 0x10_0000_0000 + *a* | `bcm2712.dtsi:189,191` |
+| Zephyr's node for the same block | `mbox0: mbox@107c013880`, `brcm,bcm2711-mbox`, `reg <0x10 0x7c013880 0x40>`, `status = "disabled"` | `zephyr:dts/arm64/broadcom/bcm2712.dtsi:61-69` |
+| Bus address of the message buffer | the ARM physical address, **no 0xc0000000 alias**: `soc` has no `dma-ranges` (`bcm2712.dtsi:189-193`), the `firmware` node has an empty `dma-ranges;` (`bcm2712-rpi.dtsi:14`), and the `axi` bus maps the first 64 GiB one to one (`bcm2712.dtsi:440`). The Pi 4's `soc` has `dma-ranges <0xc0000000 0x0 0x00000000 0x40000000>` | `bcm2712.dtsi:189-193,440`; `bcm2712-rpi.dtsi:14`; Pi 4: `rpi:arch/arm/boot/dts/broadcom/bcm2711.dtsi:45` |
+| Registers | read `MAIL0_RD` 0x00, read status `MAIL0_STA` 0x18, write `MAIL1_WRT` 0x20, write status `MAIL1_STA` 0x38 (mailbox 1 at 0x20) | `rpi:drivers/mailbox/bcm2835-mailbox.c:32-33,41-46` |
+| Status bits | `FULL` bit 31 (wait before a write), `EMPTY` bit 30 (wait before a read) | `bcm2835-mailbox.c:51-52`; used at `:75,118` |
+| Message word | buffer address bits 31:4 with the channel in bits 3:0; the **property channel is 8** | `rpi:drivers/firmware/raspberrypi.c:21,24` |
+| Buffer alignment and size | 16-byte aligned (the low 4 bits carry the channel; Linux warns otherwise), a whole number of 32-bit words, below 1 MiB; the address must fit 32 bits | `raspberrypi.c:53` (a 32-bit word), `:55,58` (alignment), `:100-101` (size), `:109` (1 MiB) |
+| Buffer layout | word 0 total size, word 1 request/response code, the tags, a 0 end tag | `raspberrypi.c:111-114`; end tag `raspberrypi-firmware.h:37` |
+| Response codes | request 0, success 0x80000000, error 0x80000001 | `rpi:include/soc/bcm2835/raspberrypi-firmware.h:15-17` |
+| Clock ids | EMMC 1, UART 2, ARM 3, CORE 4, **V3D 5**, ... DISP 16 | `raspberrypi-firmware.h:165-182` (V3D at `:170`) |
+| Clock tags | get state 0x00030001, get rate 0x00030002, get max 0x00030004, get min 0x00030007, get measured 0x00030047, set state 0x00038001, set rate 0x00038002 | `raspberrypi-firmware.h:55,56,58,61,79,81,82` |
+| The V3D's clock in the device tree | `clocks = <&firmware_clocks 5>` | `rpi:arch/arm64/boot/dts/broadcom/bcm2712-ds.dtsi:419` (node `:410-424`) |
+| The V3D's power domain in the device tree | `power-domains = <&pm BCM2835_POWER_DOMAIN_GRAFX_V3D>`, **1**, a domain of the `pm` block (section 9, "The power domain and the reset"), not of the firmware; `resets = <&pm BCM2835_RESET_V3D>`, 0 | `bcm2712-ds.dtsi:417-418`; `rpi:include/dt-bindings/soc/bcm2835-pm.h:7,22` |
+| The firmware's V3D power domain | `RPI_POWER_DOMAIN_V3D` = **10** exists, with the tags get domain state 0x00030030 and set domain state 0x00038030, but **no** BCM2712 device tree uses it for the V3D (the only `<&power ...>` users are USB) | `rpi:include/dt-bindings/power/raspberrypi-power.h:22`; `raspberrypi-firmware.h:77,86`; `grep '<&power '` over `arch/arm64/boot/dts/broadcom/bcm2712*` |
+
+What this means for an image without Linux: the clock is asked for through
+the mailbox as on the Pi 4 (clock 5, the same tags); the power and reset are
+the `pm` register (section 9), not a mailbox call. A **read-only** get domain
+state for firmware domain 10 is a second thing to try on the board, after
+the `pm` bit, to see what the firmware reports; whether the firmware answers
+it on the BCM2712 is **open**.
+
+Cross-check with the board layer's client,
+`driver/zephyr/lib/board/rpi4/rpi_mbox.c`: its BCM2712 base 0x10_7c013880
+(`:22-27`), the offsets 0x00, 0x18, 0x20, 0x38 and bits 31 and 30
+(`:31-36`), channel 8 (`:37`), the codes 0 and 0x80000000 (`:38-39`), no
+bus alias on the BCM2712 against 0xc0000000 on the BCM2711 (`:41-51`), and
+the tags 0x00038001, 0x00030002, 0x00030004, 0x00038002, 0x00030001,
+0x00030047 (`:367-407`) all agree with the table. Its `bcm2835-mailbox.c`
+and `raspberrypi.c` line numbers are mainline `linux:` v6.18's (`:41-50`,
+`:23`); the `rpi:` lines above are 2 and 1 higher, the values are the same.
+Its buffer is 64-byte aligned (`:54`), which meets the 16-byte rule. Its
+comment on the bus alias names the `axi` `dma-ranges`; the mailbox is a
+child of `soc`, which has none (the result, no alias, is the same).
+
 ## 10. Display: what Linux does for HVS, pixel valve and HDMI
 
 All `rpi:` (the display nodes are not in mainline `v6.18` for the BCM2712 except
@@ -377,6 +437,31 @@ bootable on a Pi 5 when it has `config.txt` and a suitable device tree
 32-bit images load at `0x8000`, 64-bit images at `0x200000`, and with
 `kernel_old` at `0x0` (`docs:legacy_config_txt/boot.adoc:38-40`).
 
+### What Zephyr's `rpi_5` image does with that start state
+
+Read in the Zephyr tree the workspace pins (`zephyr:` in the sources table):
+
+| Fact | Citation |
+|---|---|
+| The image starts with the Linux arm64 Image header: `b __start`, `text_offset` 0, the image size, flags, magic `ARM\x64` | `zephyr:arch/arm64/core/header.S:25-41` (`:26` the branch, `:28` the offset) |
+| The image is linked at `sram0`, a three-cell `reg <0x0 0x200000 SIZE>` (512 KiB in the SoC file; the `tools/probes/rpi_5` overlays make it 32 MiB, `reg = <0x0 0x200000 0x2000000>`) | `zephyr:dts/arm64/broadcom/bcm2712.dtsi:40-44`; e.g. `tools/probes/rpi_5/rpi5_clear/boards/rpi_5.overlay:14-16` |
+| Nothing in the start code compares the address it runs at with the link address; an image loaded anywhere but 0x200000 is not detected by Zephyr | `zephyr:arch/arm64/core/reset.S` (whole file) |
+| **x0 is lost before any hook runs**: `__reset_prep_c` uses x0 as a scratch register in its first instruction after saving the link register | `zephyr:arch/arm64/core/reset.S:45` (`switch_el x0, ...`) |
+| So the DTB pointer must be taken before Zephyr's `__start`: the probes link with `-Wl,--wrap=__start`, and `__wrap___start` stores x0 to x3, `CurrentEL`, its own address (the load address, U6) and `MPIDR_EL1` in a `.noinit` record, then branches to `__real___start` with the registers unchanged | `tools/probes/rpi_5/common/boot/boot_x0.S:33-61`, `rpi5_boot.h:13,16-22`, `rpi5_boot.cmake:13`, `README.md` |
+| Zephyr accepts entry at EL3, EL2 or EL1 and runs at EL1: from EL3 it `eret`s to the next level, from EL2 it `eret`s to EL1 with all exceptions masked | `zephyr:arch/arm64/core/reset.S:220-248` |
+| The `rpi_5` defconfig makes the MMU's virtual and physical address spaces 40 bits, so `device_map()` reaches the V3D hub, core and SMS (0x10_02xx_xxxx), `pm` (0x10_7d20_0000) and the mailbox (0x10_7c01_3880) | `zephyr:boards/raspberrypi/rpi_5/rpi_5_bcm2712_defconfig:3-4` |
+| The defconfig sets `CONFIG_PCIE=y`, the board picks `pcie1` as `zephyr,pcie-controller` and enables `gpio0_0` (the RP1 GPIO behind `pcie2`); `pcie1` and `pcie2` are `okay` in the SoC file. The PCIe controller driver starts at `PRE_KERNEL_1` with `CONFIG_PCIE_INIT_PRIORITY` (default 41); the RP1 GPIO driver at `POST_KERNEL` | `rpi_5_bcm2712_defconfig:12`; `zephyr:boards/raspberrypi/rpi_5/rpi_5_bcm2712.dts:26,49-51`; `bcm2712.dtsi:111-123,125-136,148-155`; `zephyr:drivers/pcie/controller/pcie_brcmstb.c:631-632`; `zephyr:drivers/pcie/host/Kconfig:17-19`; `zephyr:drivers/gpio/gpio_rp1.c:219-220` |
+| The probes under `tools/probes/rpi_5` keep that: none sets `CONFIG_PCIE=n` or disables `&pcie1`, `&pcie2` or `&gpio0_0`. The board layer's BCM2712 watchdog is armed at `PRE_KERNEL_1` priority 0, before the PCIe driver, so a hang in the PCIe start is reset by it | `tools/probes/rpi_5/*/prj.conf`, `*/boards/rpi_5.overlay`; `driver/zephyr/lib/board/rpi4/rpi_wdog.c:131-142` |
+
+If the PCIe start ever hangs or faults on the board, the way out is
+`CONFIG_PCIE=n` in the probe's `prj.conf` and `status = "disabled"` for
+`&pcie1`, `&pcie2` and `&gpio0_0` in its overlay; nothing of the GPU path
+needs PCIe or RP1. No image does this today.
+
+Still **open** for the board (D1's record, `rpi5_dtb`): the exception level
+at entry, the value of x0, and the load address (U6); and the GPU and DMA
+side of U10 (whether the V3D sees the image's RAM coherently).
+
 ## 12. Differences from the Pi 4 (BCM2711, V3D 4.2)
 
 | Item | Pi 4 (`bcm2711`) | Pi 5 (`bcm2712`) | Citation |
@@ -409,11 +494,24 @@ bootable on a Pi 5 when it has `config.txt` and a suitable device tree
 ### New findings
 
 - **GIC interrupt numbers.** SPI 250 and 249 are interrupt IDs 282 and 281.
-  The pre-study records that Zephyr's `bcm2712.dtsi` declares 280
-  interrupts. If that count is the number of interrupt IDs the GIC driver
-  accepts, both V3D interrupts would be outside it. That Zephyr tree was not
-  read for this file (it is outside the readable workspace); check when the
-  `rpi_5` image is built (H9, H10).
+  Zephyr's stock `rpi_5` sets `NUM_IRQS` to 280
+  (`zephyr:soc/brcm/bcm2712/Kconfig.defconfig:6-7`; the count is a Kconfig
+  default, not a device-tree property), so both IDs are outside its table:
+  the IRQ entry treats them as spurious (`zephyr:arch/arm64/core/isr_wrapper.S:89-91`)
+  and `IRQ_CONNECT` of either fails the build
+  (`zephyr:scripts/build/gen_isr_tables_parser_local.py:211-215`). The GIC
+  driver itself sizes the distributor from `GICD_TYPER`
+  (`zephyr:drivers/interrupt_controller/intc_gic.c:242-246`). The fix is
+  `CONFIG_NUM_IRQS=288` (283 or more) in the image's `prj.conf`, no overlay
+  or patch. Needed from M5 on (the first clear polls); that the GIC-400
+  reports at least 288 lines is open until a board image reads it (section 8).
+- **Mailbox without Linux.** The BCM2712 property mailbox is the BCM2835
+  block at ARM 0x10_7c013880 with no bus alias for the buffer; the V3D clock
+  is firmware clock 5; the V3D power domain in the device tree is the `pm`
+  block's domain 1, not the firmware's domain 10 (section 9, the mailbox
+  table).
+- **Zephyr's start.** Zephyr overwrites x0 before any hook; the probes keep
+  it with `--wrap=__start` (section 11).
 - **Two firmware-DTB facts for day one.** The V3D node needs the
   `vc4-kms-v3d` overlay to be `okay` in a Linux DTB; the DTB the firmware
   hands to `kernel=` has the node `disabled`, but its `reg`, `interrupts`

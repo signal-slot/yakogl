@@ -75,7 +75,7 @@ Every claim says where it was read. The paths are:
 | Display clocks and the firmware | The vc4 driver asks the firmware for the maximum core clock (`rpi_firmware_clk_get_max_rate`, `RPI_FIRMWARE_CORE_CLK_ID`) to decide 4096x2160 and HDMI 2.0, and defers probing without the firmware; the pixel and `bvb` clocks are plain `clk_set_rate` / `clk_set_min_rate` calls (minimum 120 MHz or about 101% of the TMDS rate for `hdmi`; 75, 150 or 300 MHz for `bvb`) | `RPI/vc4_hvs.c` (`vc4_hvs_bind`), `vc4_hdmi.c` (the clock requests) |
 | I/O chip | RP1 sits behind a PCIe link. Zephyr's device tree puts the RP1 GPIO block under the node `pcie2` and names `pcie1` as the board's `zephyr,pcie-controller` | `ZEPHYR/dts/arm64/broadcom/bcm2712.dtsi` (`pcie1`, `pcie2`, `rp1`), `rpi_5_bcm2712.dts` (`chosen`). Whether Zephyr's `pcie1`/`pcie2` names match Linux's is not checked |
 | Console | `uart10`, a PL011 (`arm,pl011`), 115200 baud in the board file; the 3-pin debug connector between the HDMI ports takes the Raspberry Pi Debug Probe | `rpi_5_bcm2712.dts`, `bcm2712.dtsi`, `.../doc/index.rst` "Serial Communication" |
-| Interrupt controller | GICv2 (`arm,gic-v2`), 280 interrupts, architected timer at 54 MHz | `bcm2712.dtsi` (`gic`), `ZEPHYR/soc/brcm/bcm2712/Kconfig.defconfig` |
+| Interrupt controller | GICv2 (`arm,gic-v2`), Zephyr's `NUM_IRQS` 280 (too small for the V3D's IDs 281 and 282, section 4), architected timer at 54 MHz | `bcm2712.dtsi` (`gic`), `ZEPHYR/soc/brcm/bcm2712/Kconfig.defconfig` |
 | Boot chain, before our image | On BCM2711 and BCM2712 the **boot ROM** runs first. It looks for `recovery.bin` in the root of the boot partition and, if valid, runs it instead of the flash contents; otherwise it runs the bootloader in the board's **SPI flash EEPROM** (Pi 4 and later; other models load `bootcode.bin` from the boot partition). The Pi 5's EEPROM images are the `firmware-2712` set (Pi 5, Pi 500, CM5), updated with `rpi-eeprom-update`, and Pi 5 alone has an **A/B** update of two EEPROM partitions. The EEPROM bootloader then loads the VideoCore firmware and the files named by `config.txt` from the boot partition. The EEPROM boot-flow section says of the Pi 5: "Instead of loading `start.elf`, the firmware loads the Linux kernel", so a Pi 5 card needs no `start4.elf`/`fixup4.dat`. `BOOT_ORDER` default `0xf41` is SD first, then USB mass storage, repeating. What the EEPROM stage hands over (registers, exception level) is not stated; the board page names only `config.txt`, `zephyr.bin` and the DTB | `DOCS/raspberry-pi/boot-eeprom.adoc` ("Raspberry Pi 4 and Pi 5 boot", `recovery.bin`, A/B); raspberrypi.com hardware page, "EEPROM boot flow" and the `BOOT_ORDER` table; `raspberrypi/rpi-eeprom` `README.md` (`firmware-2712`) |
 | Boot chain, our image | The firmware reads `config.txt` from the first FAT partition of the SD card (MBR, FAT32 per the board page) and starts `kernel=`. Defaults by model: `kernel8.img` on Pi 4; **`kernel_2712.img` on Pi 5, 500, 500+ and CM5, and if absent the firmware loads `kernel8.img`** (the default Pi 5 kernel has a 16K page size). `arm_64bit` is ignored on the Pi 5 (64-bit only). `os_prefix` puts the kernel, DTB, `cmdline.txt` and overlays under a prefix. `enable_uart=1` creates the serial console; `uart_2ndstage=1` turns on UART logging in the firmware. `armstub` is the Arm stub, chosen by firmware per model, and "sets up low-level hardware, such as the interrupt controller, before the kernel runs". The Zephyr board page builds `zephyr.bin` this way with three files on the card: `config.txt` (`kernel=zephyr.bin`, `enable_uart=1`, `uart_2ndstage=1`), `zephyr.bin` and the firmware's `bcm2712-rpi-5-b.dtb` | `DOCS/config_txt/boot.adoc` (`kernel`, `arm_64bit`, `os_prefix`, `enable_uart`, `uart_2ndstage`, `armstub`); `ZEPHYR/.../rpi_5/doc/index.rst`, "Blinky" and "Serial Communication" |
 | The arm64 image the firmware accepts | Zephyr's arm64 image starts with the Linux arm64 Image header: a branch to `__start`, `text_offset` 0 ("Image load offset from start of RAM"), the effective image size (`_flash_used`), flags with the page size, and the magic `ARM\x64`. Zephyr links the image at `sram0`, 0x200000. `kernel_address` is not in the config documentation read. So: the Pi 5 Zephyr route works with the Linux image header and a link address of 0x200000, and no `kernel_address` key is in the board page | `ZEPHYR/arch/arm64/core/header.S` (the `_image_header` section); `ZEPHYR/dts/arm64/broadcom/bcm2712.dtsi` (`sram0: memory@200000`, `reg = <0x0 0x200000 0x80000>`); `DOCS/config_txt/boot.adoc` (no `kernel_address`) |
@@ -423,13 +423,32 @@ What it brings up and assumes, as read:
   image is linked at 0x200000 and carries the Linux arm64 Image header
   (section 1, "The arm64 image the firmware accepts"); what the firmware
   documentation states about the load address is nothing (U6).
-- **Interrupts and clock.** GICv2 with 280 interrupts, a 54 MHz timer
-  (`TIMER_READS_ITS_FREQUENCY_AT_RUNTIME=y`), `uart10` on SPI 121.
+- **Start state.** Zephyr's arm64 start overwrites x0 (the DTB pointer)
+  before any hook runs (`ZEPHYR/arch/arm64/core/reset.S:45`), so the probes
+  link with `-Wl,--wrap=__start` and save x0 to x3, the exception level, the
+  address the image runs at and `MPIDR_EL1` first
+  (`repo:tools/probes/rpi_5/common/boot/`). Zephyr accepts entry at EL3, EL2
+  or EL1 and runs at EL1 (`reset.S:220-248`); it does not check where it was
+  loaded. `sram0` is a three-cell `reg <0x0 0x200000 SIZE>`. The 40-bit
+  defconfig lets `device_map()` reach the V3D, SMS, `pm` and mailbox blocks
+  above 4 GiB. The EL at entry, x0 and the load address stay open for the
+  board (U6). The citations are in `driver/docs/rpi5-v3d71-facts.md`,
+  section 11.
+- **Interrupts and clock.** GICv2, a 54 MHz timer
+  (`TIMER_READS_ITS_FREQUENCY_AT_RUNTIME=y`), `uart10` on SPI 121. The 280 is
+  `NUM_IRQS`, a default of `soc/brcm/bcm2712/Kconfig.defconfig:6-7`, and it
+  is too small for the V3D: its interrupts are GIC IDs 281 (core) and 282
+  (hub), which the IRQ entry would drop as spurious and the ISR table
+  generator refuses. An image that takes V3D interrupts sets
+  `CONFIG_NUM_IRQS=288` in its `prj.conf`; the GIC driver sizes itself from
+  the hardware (facts file, section 8).
 - **Console and mailbox.** `uart10` is the console and shell UART. A
   `brcm,bcm2711-mbox` node (`mbox0`) exists and is `disabled`. The Pi 4
   experience applies: Zephyr's own mailbox driver and our polling client must
   not both run (`repo:driver/samples/zephyr/common/rpi_4b_sram.dtsi`, the long
-  comment).
+  comment). The block is the BCM2835 mailbox at ARM 0x10_7c013880, property
+  channel 8, and the buffer's bus address is its ARM physical address (no
+  0xc0000000 alias as on the Pi 4); the table is in the facts file, section 9.
 - **What is missing for us.** The tree has **no node** for the V3D, the SMS,
   the display pipeline (HVS, pixel valves, HDMI), any clock controller other
   than one fixed UART clock, or any power domain. No driver exists for them.
@@ -445,7 +464,13 @@ What it brings up and assumes, as read:
 - **PCIe.** The board enables `pcie1` (the connector) and the defconfig sets
   `CONFIG_PCIE=y`. We do not need PCIe or RP1 for the GPU. RP1 matters only
   for USB, ethernet, GPIO and some display connectors, none needed for
-  sign-off.
+  sign-off. The SoC file also has `pcie2` (RP1) `okay`, the board enables
+  `gpio0_0` (RP1's GPIO), and the PCIe driver starts at `PRE_KERNEL_1`. The
+  probes under `tools/probes/rpi_5` leave all of it on (none sets
+  `CONFIG_PCIE=n`); the board layer's watchdog is armed before it, at
+  `PRE_KERNEL_1` priority 0. If the PCIe start hangs on the board, the fallback
+  is `CONFIG_PCIE=n` and `&pcie1`, `&pcie2`, `&gpio0_0` disabled (facts file,
+  section 11).
 
 **Boot route for sign-off.** The chain is: boot ROM, then the EEPROM
 bootloader in the board's SPI flash, then the VideoCore firmware, which reads
@@ -550,10 +575,10 @@ Each is a question; none is guessed.
 | U6 | At which address and in which exception level does the firmware start a `kernel=` arm64 image on BCM2712, and what does it pass in the registers (the DTB pointer)? Is any `config.txt` key needed beyond `kernel=`, `enable_uart=1`, `uart_2ndstage=1`? The card needs no `start4.elf` per the boot-flow section; the exact set is the board page's three files. | `config.txt` pages gave the file names only (no load address, no EL, no `kernel_address`); the Linux arm64 `booting.rst` (not read); Zephyr's link address 0x200000 and Image header; D1 |
 | U7 | `tryboot` is documented for all models (section 4); does `sudo reboot '0 tryboot'` work on our Pi 5 with the shipped EEPROM, and does the EEPROM need updating for our files? | One trial on the board; the `TRYBOOT` property table of the hardware page (not read) |
 | U8 | Does the 7.1 TMU filter cube maps seamlessly (the 4.2 defect `docs/v3d-noseamless-cube.md`)? | The first cube-map case on the board; Mesa's cube handling for 7.1 is not read |
-| U9 | How much of dEQP-GLES2 passes on Mesa's 7.1 driver, and does it have known 7.1 erratum workarounds we would need (the 4.2 ones are the `GFXH-*` comments of `v3dx_*.c`)? | `grep -n 'GFXH\|HW-\|erratum' MESA/src/gallium/drivers/v3d/v3dx_*.c`, filtered by `V3D_VERSION`; not done |
+| U9 | How much of dEQP-GLES2 passes on Mesa's 7.1 driver, and does it have known 7.1 erratum workarounds we would need (the 4.2 ones are the `GFXH-*` comments of `v3dx_*.c`)? | **Erratum part answered (2026-11-11): Mesa 26.2.1 has no 7.1-only erratum workaround**; the list below is what a 7.1 driver keeps. **Open:** the dEQP-GLES2 pass rate on 7.1 (a later plan, on the board). Record: `grep -rnE 'GFXH\|HW-[0-9]\|[Ee]rrat'` and `grep -rni workaround` over `MESA/src/gallium/drivers/v3d/*.c` and `MESA/src/broadcom/{cle,common,compiler,qpu}` (the full Mesa 26.2.1 tarball tree, the one `third_party/mesa-26.2.1/UPSTREAM` names; its `v3d_packet.xml`, `qpu_pack.c`, `v3d_device_info.h` and `v3dx_format_table.c` have the vendored sha256; `vulkan/` left out), each hit placed by its `#if V3D_VERSION` block or `devinfo->ver` test. **4.2 only** (`devinfo->ver == 42`): GFXH-1461 split depth/stencil clear (`v3dx_draw.c:1676-1683`, "fixed since V3D 4.3.18"), GFXH-1684 `VPMWT` at the end of VS and GS (`compiler/nir_to_vir.c:2166-2168,2175-2177`), GFXH-1625 no `TMUWT` in the last instruction (`compiler/qpu_schedule.c:1997-2000`, `qpu_validate.c:422-426`); GFXH-1633 is below 4.2 only (`qpu_validate.c:229-236`). **Both generations** (no version condition): GFXH-930 at least one attribute read by CS and VS, a dummy one if none (`v3dx_draw.c:749,824-830,850-853`); GFXH-1602 attribute 0 active when builtins are read (`v3dx_draw.c:832-833`, `compiler/nir_to_vir.c:2908-2911`); GFXH-1918 early-Z off for odd frame sizes and 16-bit multisampled depth loads (`v3dx_draw.c:948-951`); GFXH-1461/GFXH-1689 the store's clear bit not used for Z/S (`v3dx_rcl.c:325-328`; 7.1 emits `Clear Render Targets`, `:337-339`); GFXH-1742 two dummy stores before the first tile (`v3dx_rcl.c:631-654`, the 7.1 branch differs only in the clear packet); GFXH-1744 VCM cache of at least 2 batches and GS `Vc` 2 (`compiler/vir.c:927,2964`); GFXH-1559 transform-feedback spec (`v3d_program.c:147,163`); HW-2726 point size at least 0.125 (`v3dx_state.c:90-93`); GFXH-1895/1888/1897 L2T flushes through `L2TCACTL`, not the CL commands (`cle/v3d_packet.xml:177-209`). The 7.1-only conditions are revision tests, not errata labels: section 1's 7.1.5, 7.1.6, 7.1.7 and 7.1.10 rows |
 | U10 | Does our one-core, 512 KiB-`sram0` Zephyr start leave the GPU's view of memory valid (cache coherence of the A76 with the V3D, DMA address mapping above 4 GiB on 8 and 16 GB boards)? The Pi 4 asked the same of its 8 GB board (`pi4-v3d-bringup.md`, "Board questions") | D2/D3 plus U4's MMU width; keep the carve-out low until measured |
 | U11 | How does a new shader-record variant (7.1.10) interact with our fixed 3-programs-per-GL-program model, and does the `Never defer FEP depth writes` flag change early-z behaviour for `gl_FragDepth` shaders? | H3 references, then a `gl_test` case |
-| U12 | Does the vendored `third_party/mesa-26.2.1` carry everything H2 to H6 need (the compiler is built from a Mesa tree; the vendored tree has `src/broadcom/{cle,clif,common,qpu}` only)? | `tools/v3d/mesa_ref.sh` and the "vendored reference build" row; the vendored `UPSTREAM` list |
+| U12 | Does the vendored `third_party/mesa-26.2.1` carry everything H2 to H6 need (the compiler is built from a Mesa tree; the vendored tree has `src/broadcom/{cle,clif,common,qpu}` only)? | **Answered (2026-11-11): for H4 to H6 yes, for H2 and H3 no, by design.** H4 and the 7.1 reference checks: `repo:tools/v3d/mesa_ref.sh` generates the 4.2 and 7.1 packers with the vendored `gen_pack_header.py` (`:42-45`) and builds the CLIF decoder at both versions (`:80-82`) from the vendored `src/broadcom/{cle,clif,common,qpu}` (the `UPSTREAM` "Used by" list); `cl_golden`, `frame_check` and `shim71` of `tools/v3d/check71.d/` compare against that build and take `MESA_V3D_TREE` only as an option. H6: `repo:build.rs:118-122` compiles the vendored `qpu_pack.c` and `qpu_instr.c`, and `repo:src/shaderc/online/v3d/qpu_mesa.c:38-41` gives them the 7.1 device. H2 (`v3d_shc` at 7.1) and H3 (the drm-shim CLIF references) need Mesa's compiler, gallium driver and drm-shim, which are not vendored: they ran on a full Mesa 26.2.1 build from the tarball `UPSTREAM` names (`repo:tools/v3d/README.md`, "V3D 7.1 (Raspberry Pi 5) references", `drm_shim_ref.sh build`; the built tree is what `MESA_V3D_TREE` and `V3D_SHC` name). Record: `third_party/mesa-26.2.1/UPSTREAM`, `tools/v3d/mesa_ref.sh`, `tools/v3d/README.md` |
 
 Two things the reading **rules out**: an existing back end cannot be reused
 unchanged (the packets and the ISA differ, section 3), and the Pi 4 power-on
@@ -601,7 +626,9 @@ start state of the image), which only the board answers.
 H1 re-read the Linux sources from real checkouts (Linux `v6.18`, the Raspberry
 Pi fork `rpi-6.12.y`, the documentation repository; commits in
 `driver/docs/rpi5-v3d71-facts.md`). Where the first reading, by page summary,
-differs from the source:
+differs from the source (the rows from "GICv2 with 280 interrupts" on are later host
+readings: Zephyr at the `west.yml` pin, `rpi-6.12.y` at the facts file's
+commit and Mesa 26.2.1):
 
 | First reading | Source |
 |---|---|
@@ -615,12 +642,20 @@ differs from the source:
 | U5: what `BCM2835_POWER_DOMAIN_GRAFX_V3D` does on BCM2712 | The fork's `bcm2835-power.c:380-383` sets the V3D reset bit (bit 6) in `pm` register 0x304 (`PM_GRAFX_2712`); there is no ASB bridge and no domain clock on this node. Mainline v6.18 has no BCM2712 support in that driver |
 | U7: "the `TRYBOOT` property table of the hardware page" | The documentation repository at the commit used has no `TRYBOOT` property in `raspberry-pi/eeprom-bootloader.adoc`; `tryboot` is described in `bootflow-eeprom.adoc:80-98` |
 | U6: "config.txt pages gave... no load address, no `kernel_address`" | `config_txt/boot.adoc` names neither, but `legacy_config_txt/boot.adoc:38-40` documents `kernel_address`: 32-bit images load at `0x8000`, 64-bit at `0x200000`, `kernel_old` at `0x0`. The exception level and the register state stay open |
+| "GICv2 with 280 interrupts" from `bcm2712.dtsi` (sections 1 and 4); H1 left "the GIC interrupt IDs 281 and 282 against the 280 interrupts" to check | 280 is Zephyr's `NUM_IRQS` default (`soc/brcm/bcm2712/Kconfig.defconfig:6-7`), not a device-tree count, and it is too small: IDs above 279 are spurious at the IRQ entry (`arch/arm64/core/isr_wrapper.S:89-91`) and refused by the ISR table generator (`scripts/build/gen_isr_tables_parser_local.py:211-215`). The GIC driver sizes itself from `GICD_TYPER` (`drivers/interrupt_controller/intc_gic.c:242-246`). Fix: `CONFIG_NUM_IRQS=288` in a `prj.conf`. Checked on the host; the GIC-400's line count on the board is open (facts file, section 8) |
+| Section 4: Zephyr's start "carries the Linux arm64 Image header"; nothing said about x0 | Zephyr overwrites x0 before any hook (`arch/arm64/core/reset.S:45`); the DTB pointer is kept by `-Wl,--wrap=__start` (`repo:tools/probes/rpi_5/common/boot/`). Entry at EL3, EL2 or EL1 ends at EL1 (`reset.S:220-248`); no load-address check (facts file, section 11) |
+| Section 4, PCIe: only `pcie1` and `CONFIG_PCIE=y` named | `pcie2` (RP1) is `okay` too, the board enables `gpio0_0`, the PCIe driver starts at `PRE_KERNEL_1`; the probes keep it on, after the watchdog (facts file, section 11) |
+| U5: request the power "through the property mailbox power call, as the Pi 4's" | The Pi 5 device tree gives the V3D the `pm` block's domain 1 (`BCM2835_POWER_DOMAIN_GRAFX_V3D`, `rpi:include/dt-bindings/soc/bcm2835-pm.h:7`), not a firmware domain; the firmware's `RPI_POWER_DOMAIN_V3D` = 10 exists (`raspberrypi-power.h:22`) and no BCM2712 tree uses it. The mailbox gives the clock (id 5); a read-only get domain state for domain 10 is a second try on the board (facts file, section 9) |
+| The mailbox buffer as on the Pi 4 | Same block (`brcm,bcm2835-mbox`, ARM 0x10_7c013880, channel 8), but the buffer's bus address is the ARM physical address: no 0xc0000000 alias (`rpi:bcm2712.dtsi:189-193,440`, against `bcm2711.dtsi:45`) |
+| U9, U12 "not done" | Answered (U9 for the erratum part; its dEQP-GLES2 rate stays open), section 7 |
 
 Confirmed unchanged: the register map of section 3.4 (offsets, bits and
 version conditions, `v3d_regs.h`), the MMU format and the 24-bit PFN limit
 (`v3d_mmu.c:101`), the interrupt handling and its line numbers in
 `v3d_irq.c` (they were exact), the hub SPI 250 and core SPI 249 order, the
 HVS/pixel valve/HDMI addresses and interrupts, and the output-to-FIFO map.
-New in H1: the BCM2712 HDMI PHY sequence, the generic arm64 boot protocol, and
-one point to check on the Zephyr side (the GIC interrupt IDs 281 and 282 against
-the 280 interrupts the Zephyr device tree declares), all in the facts file.
+New in H1: the BCM2712 HDMI PHY sequence and the generic arm64 boot protocol,
+both in the facts file. The Zephyr point H1 left open (the GIC interrupt IDs
+281 and 282 against 280) is checked on the host: `NUM_IRQS` must be raised
+to 288 for an image that takes the V3D's interrupts (row above; facts file,
+section 8).
