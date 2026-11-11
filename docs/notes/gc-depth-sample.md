@@ -393,6 +393,57 @@ console reads the result:
 | check 6 fails too | the LINEAR descriptor does not address the surface | verdict no; the CPU resolve stays |
 | check 7 fails while 4 passes | stale texture cache | flush the texture cache after a depth pass before sampling (risk below) |
 
+### The X2 session of 2026-11-11: check 4 fails, D24X8 is not exact (plan #328, item x2-depth-tpu-run)
+
+A development run on the Armadillo-X2 (kexec-dev, never a row of
+`tools/cts/RESULTS.md`). **Result: check 3 passes and check 4 fails.** Today's
+path (P0) is the ramp, and the TPU's D24X8 view of the row-linear surface
+(P1) does not return the CPU resolve's value at every texel. The first
+differing pixel is top-down index 1, GL (1, 63), n = 65; index 0,
+GL (0, 63), n = 64, was equal. **Outcome (a) exact (verdict-table row 1) is
+ruled out.** The record cannot tell the remaining rows apart (checks 5, 6
+and 7, below), so **`gc-depth-sample-wire.md` has no branch chosen yet**:
+(a) with fewer bits (check 5), (b) (check 6) and (c) are all still possible.
+depth-sample-gc stays blocked until a run shows checks 5 and 6.
+
+- Commit: origin/main `5eec24ad` (contains `f6021e76`, case 222 `dtpu`).
+  Image `IMX8MP_BOARD=x2 tools/cts/imx8mp-gltest-build.sh <name> 222`
+  (`armadillo_x2/mimx8ml8/a53`, `CONFIG_GL_TEST_KNOBS=y`,
+  `CONFIG_YAKOGL_TEST_KNOBS=y`, `CONFIG_GC_BOARD_WDOG_SELF_ARM=y`), sha256
+  `1aed57f714a47705`, footprint 59117568. `strings` found
+  `gc_wdog_arm: armed` once; `tools/board.sh --dry-run x2 run` rc 0;
+  `status` clean (runlevel default, no kexec loaded, no container, crash
+  window 268435456, no `/tmp/yakogl-kexec` leftover); `probe` rc 0.
+- Run `SEL=0` (case 222; the case sets knobs 0, 1, 2 and 1 itself, so one
+  run covers them), no `BOARD_UART`. The record was cleared
+  (`rec0=00000000 53450000 00000000`), the image staged and read back
+  equal, and the jump was made at 03:27:20 UTC. Verdict line:
+  `board.sh x2 zephyr rc=5 verdict=not_back boot=kexec-dev DEV boot_verdict=not_back result=none resets=absent record=absent back_after=?s (kexec-dev: a development run, never a row)`.
+  Timeline: `jump 0s, ping lost 8s, ping back ?s, ssh back ?s, route --crash`.
+- **The `not_back` was the runner, not the image.** The machine that ran
+  the session could not resolve the board's ssh name for `ping`
+  (`Temporary failure in name resolution`): it reached the board only
+  through an ssh forward. So `kexec_wait_back` (`tools/board.sh`) could
+  never count "ping back" and never tried ssh. After the 1500 s limit the
+  board's sshd refused the machine's key, which lived in the tmpfs `/root`
+  and was lost at the reboot. Once the key was back, the board answered
+  with an uptime of 37 min, so it had booted Linux right after the jump.
+  The X2 glmark2 session of 2026-11-10 (`x2-glmark2-slow-scenes.md`)
+  probably ended the same way.
+- **Record words**, read afterwards by hand with `snvs_lpgpr` (copied to
+  `/tmp/yakogl-kexec`, then removed; no lease left on the board): LPGPR0
+  `dead0002` (U-Boot's boot count, unchanged), LPGPR1..3
+  `594b010e 00de0402 00000001`. `yakogl-tools record --words 3`:
+  `CASE (1) seq 14: case 222 check 4 status 2 got 0x00000001 want -`
+  (want, 4096 = "no pixel", is in the absent w3).
+- **The record shows only the first failing check** (`gl_test_check`
+  keeps the first). Checks 5 (P1 within 255 of P0: D24X8 with fewer bits),
+  6 (P2, the raw 8888 view, is the PE's word) and 7 (coherence without a
+  wait) ran but are not in the record. To choose between (a) with fewer
+  bits, (b) and (c), the next run needs the console's `dtpu: verdict:` and
+  `first at` lines, or a case variant that reports checks 5 and 6 on
+  their own.
+
 ## (b) What would change in the GC back end
 
 Mirror of the V3D: `v3d_depth_sampled`, `depth_buffer_state`/`depth_sample`
