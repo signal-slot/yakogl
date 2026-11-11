@@ -56,11 +56,13 @@ CI, a review, then the merge. Never push main by hand.
   entries this host's dependency layout has, and
   `export $(tools/cts/deps-env.sh)` sets them all from it before the run.
   On a new host, build the entries the layout lacks, first, as one command:
-  `tools/cts/deps-env.sh --build MALI_CSFFW DEQP_GLES3_TEST_DIR PCO_SPM_LOAD_CAPTURE`
+  `tools/cts/deps-env.sh --build MALI_CSFFW DEQP_GLES3_TEST_DIR PCO_SPM_LOAD_CAPTURE HAL_NXP_DIR`
   (the Mali firmware, "The PowerVR firmware" below; the dEQP GLES3 shader
   corpus, which the `shaderc-online` tests and the corpus test read; and
   `capture_spm_load` beside `pco_shc`, which the `spm_load` regenerate row
-  compares against, a gap without it; only the full plan reads that row).
+  compares against, a gap without it; only the full plan reads that row; and
+  the `hal_nxp` checkout, which the imx8mp `regs.rs` regenerate row reads, a
+  gap without it).
   On the `ed15e1be` walk (2026-11-09) the firmware and the corpus took
   seconds and the capture program 85 s (97 s on a retry here after a reset
   download); run the build once at a time, two at once share `PCO_SHC.src` and
