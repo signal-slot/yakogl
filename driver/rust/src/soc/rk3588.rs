@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! The Rockchip RK3588: the CRU clock gates a driver here needs open, the
-//! GPU's clock as the CRU sets it, and the GPU power domain (PD_GPU) in the
+//! GPU's clock as the CRU sets it (read, and put on a rate of the GPU OPP
+//! table when it is not on one), and the GPU power domain (PD_GPU) in the
 //! PMU.
 //!
 //! Facts from Linux v6.18 (GPL-2.0: facts and file:line only, nothing
@@ -147,6 +148,9 @@ pub mod gpu_clk {
     pub const MUX_SHIFT: u32 = 5;
     pub const MUX_MASK: u32 = 0x7 << MUX_SHIFT;
     pub const PVTPLL: u32 = 1 << 14;
+    /// The fields [`super::gpu_clock_set`] owns in CLKSEL_CON(158): the
+    /// mux, the divider and the PVTPLL bit. Its write enables exactly these.
+    pub const SET_MASK: u32 = PVTPLL | MUX_MASK | DIV_MASK;
 
     pub const SRC: Gate = Gate { con: 66, bit: 1 };
     pub const CORE: Gate = Gate { con: 66, bit: 4 };
@@ -263,6 +267,175 @@ pub fn gpu_clock(m: &impl Mmio, cru: usize) -> GpuClock {
         }
     }
     c
+}
+
+/// The GPU OPP table (rk3588-opp.dtsi:118-153): each OPP's rate and the
+/// first value of its `opp-microvolt`, the least vdd_gpu_s0 it runs at.
+pub const GPU_OPP: [(u64, u32); 8] = [
+    (300_000_000, 675_000),
+    (400_000_000, 675_000),
+    (500_000_000, 675_000),
+    (600_000_000, 675_000),
+    (700_000_000, 700_000),
+    (800_000_000, 750_000),
+    (900_000_000, 800_000),
+    (1_000_000_000, 850_000),
+];
+
+/// `hz` is exactly an OPP rate of [`GPU_OPP`].
+pub const fn gpu_opp_rate(hz: u64) -> bool {
+    let mut i = 0;
+    while i < GPU_OPP.len() {
+        if GPU_OPP[i].0 == hz {
+            return true;
+        }
+        i += 1;
+    }
+    false
+}
+
+/// The least vdd_gpu_s0 in µV [`GPU_OPP`] gives a clock: the voltage of the
+/// first OPP at or above it. `None` above the table's 1 GHz or for an
+/// unknown rate (0).
+pub const fn gpu_opp_min_uv(hz: u64) -> Option<u32> {
+    if hz == 0 {
+        return None;
+    }
+    let mut i = 0;
+    while i < GPU_OPP.len() {
+        if hz <= GPU_OPP[i].0 {
+            return Some(GPU_OPP[i].1);
+        }
+        i += 1;
+    }
+    None
+}
+
+/// The one setting [`gpu_clock_set`] moves the GPU clock to: `CLK_GPU_SRC`
+/// from the CPLL over 5, 300 MHz, the lowest OPP (675 mV, so any supply the
+/// table covers at all covers it) and the state Linux leaves after devfreq's
+/// lowest rate (the T6 reads 0x1f24). It is used only while the CPLL's
+/// `PLL_CON` words read [`SET_CPLL_HZ`] in normal mode: GPLL's 1188 MHz
+/// divides to no rate of the table, AUPLL and NPLL are not read for it (NPLL
+/// is the GPU's own PLL and Linux powers it down with the GPU, measured
+/// 2026-11-11), and the CPLL is the PLL Linux keeps on for other consumers.
+pub const SET_SRC: GpuSrc = GpuSrc::Cpll;
+pub const SET_DIV: u32 = 5;
+pub const SET_HZ: u64 = 300_000_000;
+pub const SET_CPLL_HZ: u64 = 1_500_000_000;
+
+/// The word for CLKSEL_CON(158) that selects [`SET_SRC`] / [`SET_DIV`] with
+/// the PVTPLL bit clear, write-enabling exactly [`gpu_clk::SET_MASK`]'s
+/// fields: 0x40ff_0024.
+pub const SET_SEL158: u32 = (gpu_clk::SET_MASK << 16) | ((SET_SRC as u32) << gpu_clk::MUX_SHIFT) | (SET_DIV - 1);
+
+/// The word for CLKSEL_CON(159) that sets the stacks divider to 1
+/// (field 0), write-enabling the divider field only: 0x001f_0000.
+pub const SET_SEL159: u32 = gpu_clk::DIV_MASK << 16;
+
+/// Why [`gpu_clock_set`] refused. Nothing was written for `NoTableRate`;
+/// the others come after the write.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ClockRefusal {
+    /// The CRU's GPU source gives no OPP rate and the CPLL does not read
+    /// [`SET_CPLL_HZ`] in normal mode (the rate it reads: 0 for none).
+    NoTableRate(u64),
+    /// A CLKSEL_CON read back without the fields written (its index, the
+    /// word read).
+    ReadBack(usize, u32),
+    /// The CRU, read again after the writes, rates the source at this and
+    /// not [`SET_HZ`].
+    Rate(u64),
+}
+
+/// What [`gpu_clock_set`] did.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ClockSet {
+    /// The CRU already gave an OPP rate with the stacks divider at 1:
+    /// nothing written.
+    pub kept: bool,
+    /// The CPLL's rate as read for the decision (0 when not in normal mode
+    /// or without a rate).
+    pub cpll_hz: u64,
+    /// The words written to CLKSEL_CON(158) and (159), hiword mask included;
+    /// 0 for one not written.
+    pub wrote: [u32; 2],
+    /// CLKSEL_CON(158) and (159) after it (read back when written, as found
+    /// when not).
+    pub sel: [u32; 2],
+    /// `CLK_GPU_SRC`'s rate after it: `found.src_hz` when kept, the CRU's
+    /// rating of the read-back words when written.
+    pub src_hz: u64,
+}
+
+/// Put the GPU clock on a rate of the OPP table, writing the CRU only when
+/// it is not there. `found` is the clock as [`gpu_clock`] read it.
+///
+/// Kept, nothing written: `CLK_GPU_SRC` is a PLL this reads, in normal
+/// mode, whose rate over the divider is exactly an OPP rate
+/// ([`gpu_opp_rate`]), and the stacks divider (CLKSEL_CON(159)[4:0]) is 1.
+/// Whether that PLL is powered is not this decision's: the caller powers it
+/// ([`pll_on`]) as it does today.
+///
+/// Otherwise (the PVTPLL, SPLL, a mux value past the parents, a divider
+/// off the table, a PLL out of normal mode) the clock is moved to
+/// [`SET_SRC`] / [`SET_DIV`] = [`SET_HZ`], provided the CPLL reads
+/// [`SET_CPLL_HZ`] in normal mode; else `NoTableRate`, nothing written.
+///
+/// The writes, in this order:
+/// 1. CLKSEL_CON(158) := [`SET_SEL158`]. The mux, the divider and the
+///    PVTPLL bit are fields of one register and move in one hiword-masked
+///    write, so the GPU sees no intermediate setting (a PLL at divider 1,
+///    for one). The bits outside [`gpu_clk::SET_MASK`] are not enabled and
+///    keep their value (0x1f in 12:8 under Armbian).
+/// 2. CLKSEL_CON(159) := [`SET_SEL159`], only when its divider field is
+///    not 0. After 158, so the stacks clock (`clk_gpu_src` over this
+///    divider) never runs faster than the source's final 300 MHz; the other
+///    order would put it at the old source's rate for a moment.
+///
+/// Both words are read back and the CRU is rated again ([`gpu_clock`]); a
+/// field that did not take or a rate other than [`SET_HZ`] is a refusal.
+/// No `PLL_CON`, `MODE_CON0` or GPU GRF (PVTPLL) word is ever written: the
+/// CPLL is used at the rate it has, and the PVTPLL is only deselected.
+pub fn gpu_clock_set(m: &impl Mmio, cru: usize, found: &GpuClock) -> Result<ClockSet, ClockRefusal> {
+    let mut out = ClockSet { sel: [found.sel158, found.sel159], src_hz: found.src_hz, ..ClockSet::default() };
+    let cpll = [
+        m.read32(cru + pll_con(CPLL.con)),
+        m.read32(cru + pll_con(CPLL.con + 1)),
+        m.read32(cru + pll_con(CPLL.con + 2)),
+    ];
+    if pll_mode(found.mode_con0, CPLL) == 1 {
+        out.cpll_hz = pll_hz(cpll[0], cpll[1], cpll[2]).unwrap_or(0);
+    }
+    // src_hz is 0 unless the source is a PLL read here, in normal mode
+    if gpu_opp_rate(found.src_hz) && found.sel159 & gpu_clk::DIV_MASK == 0 {
+        out.kept = true;
+        return Ok(out);
+    }
+    if out.cpll_hz != SET_CPLL_HZ {
+        return Err(ClockRefusal::NoTableRate(out.cpll_hz));
+    }
+    let sel158 = cru + clksel_con(gpu_clk::SEL_CON);
+    let sel159 = cru + clksel_con(gpu_clk::STACKS_SEL_CON);
+    m.write32(sel158, SET_SEL158);
+    out.wrote[0] = SET_SEL158;
+    out.sel[0] = m.read32(sel158);
+    if out.sel[0] & gpu_clk::SET_MASK != SET_SEL158 & 0xffff {
+        return Err(ClockRefusal::ReadBack(gpu_clk::SEL_CON, out.sel[0]));
+    }
+    if found.sel159 & gpu_clk::DIV_MASK != 0 {
+        m.write32(sel159, SET_SEL159);
+        out.wrote[1] = SET_SEL159;
+    }
+    out.sel[1] = m.read32(sel159);
+    if out.sel[1] & gpu_clk::DIV_MASK != 0 {
+        return Err(ClockRefusal::ReadBack(gpu_clk::STACKS_SEL_CON, out.sel[1]));
+    }
+    out.src_hz = gpu_clock(m, cru).src_hz;
+    if out.src_hz != SET_HZ {
+        return Err(ClockRefusal::Rate(out.src_hz));
+    }
+    Ok(out)
 }
 
 /// Linux's wait for a `pll_rk3588` to lock: 1000 µs, where the lock takes
@@ -542,6 +715,8 @@ mod tests {
         reads_since: RefCell<u32>,
         /// The domain never reports power.
         dead: bool,
+        /// Registers that ignore writes (logged, not applied).
+        stuck: Vec<usize>,
     }
     const PMU: usize = PMU_BASE;
     impl Soc {
@@ -565,7 +740,14 @@ mod tests {
             ] {
                 r.insert(a, v);
             }
-            Soc { regs: RefCell::new(r), writes: RefCell::new(vec![]), lag, reads_since: RefCell::new(0), dead: false }
+            Soc {
+                regs: RefCell::new(r),
+                writes: RefCell::new(vec![]),
+                lag,
+                reads_since: RefCell::new(0),
+                dead: false,
+                stuck: vec![],
+            }
         }
         fn get(&self, a: usize) -> u32 {
             self.regs.borrow()[&a]
@@ -592,6 +774,9 @@ mod tests {
         fn write32(&self, addr: usize, val: u32) {
             self.writes.borrow_mut().push((addr, val));
             *self.reads_since.borrow_mut() = 0;
+            if self.stuck.contains(&addr) {
+                return;
+            }
             let mut r = self.regs.borrow_mut();
             let e = r.get_mut(&addr).unwrap_or_else(|| panic!("write to an unmodelled register {addr:#x}"));
             let mask = val >> 16;
@@ -682,6 +867,174 @@ mod tests {
         let soc = Soc::t6_suspended(0);
         soc.regs.borrow_mut().insert(CRU_BASE + MODE_CON0, 0x445);
         assert_eq!(gpu_clock(&soc, CRU_BASE).src_hz, 0);
+    }
+
+    #[test]
+    fn the_opp_table_bounds_the_clock_by_the_supply() {
+        assert_eq!(gpu_opp_min_uv(300_000_000), Some(675_000));
+        assert_eq!(gpu_opp_min_uv(600_000_000), Some(675_000));
+        assert_eq!(gpu_opp_min_uv(600_000_001), Some(700_000));
+        assert_eq!(gpu_opp_min_uv(850_000_000), Some(800_000));
+        assert_eq!(gpu_opp_min_uv(1_000_000_000), Some(850_000));
+        assert_eq!(gpu_opp_min_uv(1_000_000_001), None);
+        assert_eq!(gpu_opp_min_uv(0), None);
+        // 198 MHz (GPLL / 6, panthor's probe-time rate) is under the table's
+        // lowest voltage, but it is not an OPP rate
+        assert_eq!(gpu_opp_min_uv(198_000_000), Some(675_000));
+        assert!(!gpu_opp_rate(198_000_000));
+        assert!(gpu_opp_rate(300_000_000) && gpu_opp_rate(1_000_000_000));
+        assert!(!gpu_opp_rate(850_000_000) && !gpu_opp_rate(0));
+        // the one setting: CPLL / 5 is the table's first row
+        assert_eq!((SET_HZ, SET_CPLL_HZ / SET_DIV as u64), (GPU_OPP[0].0, SET_HZ));
+        assert_eq!((SET_SEL158, SET_SEL159), (0x40ff_0024, 0x001f_0000));
+    }
+
+    const SEL158: usize = CRU_BASE + clksel_con(158);
+    const SEL159: usize = CRU_BASE + clksel_con(159);
+
+    /// The T6 under Armbian with CLKSEL_CON(158) as given, and the clock set
+    /// from it: the result and the CRU writes.
+    fn set_from(sel158: u32) -> (Soc, Result<ClockSet, ClockRefusal>) {
+        let soc = Soc::t6_suspended(0);
+        soc.regs.borrow_mut().insert(SEL158, sel158);
+        let found = gpu_clock(&soc, CRU_BASE);
+        let r = gpu_clock_set(&soc, CRU_BASE, &found);
+        (soc, r)
+    }
+
+    #[test]
+    fn the_clock_armbian_leaves_is_kept_without_a_write() {
+        let (soc, r) = set_from(0x1f24);
+        assert_eq!(
+            r,
+            Ok(ClockSet { kept: true, cpll_hz: 1_500_000_000, wrote: [0; 2], sel: [0x1f24, 0], src_hz: 300_000_000 })
+        );
+        assert!(soc.writes.borrow().is_empty(), "{:x?}", soc.writes.borrow());
+        assert_eq!(soc.get(SEL158), 0x1f24);
+    }
+
+    /// The setting the T6's state moves to, whatever it started from.
+    fn assert_moved_to_cpll_over_5(soc: &Soc, r: Result<ClockSet, ClockRefusal>) {
+        assert_eq!(
+            r,
+            Ok(ClockSet {
+                kept: false,
+                cpll_hz: 1_500_000_000,
+                wrote: [0x40ff_0024, 0],
+                sel: [0x1f24, 0],
+                src_hz: 300_000_000
+            })
+        );
+        assert_eq!(*soc.writes.borrow(), vec![(SEL158, 0x40ff_0024)]);
+        assert_eq!(soc.get(SEL158), 0x1f24);
+        assert_eq!(gpu_clock(soc, CRU_BASE).src_hz, 300_000_000);
+    }
+
+    #[test]
+    fn the_pvtpll_is_left_for_cpll_over_5_in_one_write() {
+        let (soc, r) = set_from(0x1f24 | gpu_clk::PVTPLL);
+        assert_moved_to_cpll_over_5(&soc, r);
+    }
+
+    #[test]
+    fn a_divider_off_the_table_is_rewritten_to_5() {
+        // CPLL / 2 = 750 MHz and / 4 = 375 MHz are no OPP rates
+        for sel in [0x1f21, 0x1f23] {
+            let (soc, r) = set_from(sel);
+            assert_moved_to_cpll_over_5(&soc, r);
+        }
+        // CPLL / 3 = 500 MHz is one, kept
+        let (soc, r) = set_from(0x1f22);
+        assert_eq!(r.map(|s| (s.kept, s.src_hz)), Ok((true, 500_000_000)));
+        assert!(soc.writes.borrow().is_empty());
+    }
+
+    #[test]
+    fn a_mux_value_past_the_parents_is_rewritten() {
+        for mux in 5..8 {
+            let (soc, r) = set_from(0x1f04 | (mux << 5));
+            assert_moved_to_cpll_over_5(&soc, r);
+        }
+        // SPLL (4) has no rate this reads either
+        let (soc, r) = set_from(0x1f84);
+        assert_moved_to_cpll_over_5(&soc, r);
+    }
+
+    #[test]
+    fn the_stacks_divider_is_set_to_1_after_the_source() {
+        let soc = Soc::t6_suspended(0);
+        soc.regs.borrow_mut().insert(SEL158, 0x5f24);
+        soc.regs.borrow_mut().insert(SEL159, 0x3);
+        let found = gpu_clock(&soc, CRU_BASE);
+        let r = gpu_clock_set(&soc, CRU_BASE, &found);
+        assert_eq!(r.map(|s| (s.wrote, s.sel, s.src_hz)), Ok(([0x40ff_0024, 0x001f_0000], [0x1f24, 0], 300_000_000)));
+        assert_eq!(*soc.writes.borrow(), vec![(SEL158, 0x40ff_0024), (SEL159, 0x001f_0000)]);
+        // a source on the table with a stacks divider off 1 is written too
+        let soc = Soc::t6_suspended(0);
+        soc.regs.borrow_mut().insert(SEL159, 0x1);
+        let found = gpu_clock(&soc, CRU_BASE);
+        let r = gpu_clock_set(&soc, CRU_BASE, &found);
+        assert_eq!(r.map(|s| (s.kept, s.wrote)), Ok((false, [0x40ff_0024, 0x001f_0000])));
+    }
+
+    #[test]
+    fn a_cpll_at_another_rate_refuses_without_a_write() {
+        // GPLL's 1188 MHz in the CPLL's words: / 5 = 237.6 MHz, no divider hits the table
+        let soc = Soc::t6_suspended(0);
+        soc.regs.borrow_mut().insert(SEL158, 0x5f24);
+        soc.regs.borrow_mut().insert(CRU_BASE + pll_con(104), 0xc6);
+        let found = gpu_clock(&soc, CRU_BASE);
+        assert_eq!(gpu_clock_set(&soc, CRU_BASE, &found), Err(ClockRefusal::NoTableRate(1_188_000_000)));
+        assert!(soc.writes.borrow().is_empty());
+        // CPLL / 5 with the CPLL at 1188 MHz is off the table as well: refused, not kept
+        soc.regs.borrow_mut().insert(SEL158, 0x1f24);
+        let found = gpu_clock(&soc, CRU_BASE);
+        assert_eq!(gpu_clock_set(&soc, CRU_BASE, &found), Err(ClockRefusal::NoTableRate(1_188_000_000)));
+        // CPLL in slow mode (MODE_CON0 bits 9:8 = 0): no rate claimed for it
+        let soc = Soc::t6_suspended(0);
+        soc.regs.borrow_mut().insert(CRU_BASE + MODE_CON0, 0x445);
+        let found = gpu_clock(&soc, CRU_BASE);
+        assert_eq!(gpu_clock_set(&soc, CRU_BASE, &found), Err(ClockRefusal::NoTableRate(0)));
+        assert!(soc.writes.borrow().is_empty());
+    }
+
+    #[test]
+    fn a_read_back_that_does_not_match_refuses() {
+        let mut soc = Soc::t6_suspended(0);
+        soc.stuck.push(SEL158);
+        soc.regs.borrow_mut().insert(SEL158, 0x5f24);
+        let found = gpu_clock(&soc, CRU_BASE);
+        assert_eq!(gpu_clock_set(&soc, CRU_BASE, &found), Err(ClockRefusal::ReadBack(158, 0x5f24)));
+        assert_eq!(soc.writes.borrow().len(), 1);
+        let mut soc = Soc::t6_suspended(0);
+        soc.stuck.push(SEL159);
+        soc.regs.borrow_mut().insert(SEL158, 0x5f24);
+        soc.regs.borrow_mut().insert(SEL159, 0x2);
+        let found = gpu_clock(&soc, CRU_BASE);
+        assert_eq!(gpu_clock_set(&soc, CRU_BASE, &found), Err(ClockRefusal::ReadBack(159, 0x2)));
+        assert_eq!(soc.writes.borrow().len(), 2);
+    }
+
+    #[test]
+    fn the_set_path_never_writes_a_pll_con_mode_con_or_grf_word() {
+        let states = [0x1f24, 0x5f24, 0x1f21, 0x1f23, 0x1fa4, 0x1fe4, 0x1f84, 0x1f60, 0x1f00];
+        for sel in states {
+            let soc = Soc::t6_suspended(0);
+            npll_down(&soc);
+            for (a, v) in [(112, 0xc6), (113, 0x42), (114, 0), (118, 0x9c00)] {
+                soc.regs.borrow_mut().insert(CRU_BASE + pll_con(a), v);
+            }
+            soc.regs.borrow_mut().insert(SEL158, sel);
+            soc.regs.borrow_mut().insert(SEL159, 0x1);
+            let found = gpu_clock(&soc, CRU_BASE);
+            let r = gpu_clock_set(&soc, CRU_BASE, &found);
+            assert!(r.is_ok(), "{sel:#x}: {r:?}");
+            for (a, _) in soc.writes.borrow().iter() {
+                assert!(*a == SEL158 || *a == SEL159, "{sel:#x}: a write to {a:#x}");
+                // and in particular nothing in the PLL_CON / MODE_CON range (CRU + 0..0x300) or outside the CRU
+                assert!(*a >= CRU_BASE + 0x300 && *a < CRU_BASE + 0x1000);
+            }
+        }
     }
 
     #[test]
