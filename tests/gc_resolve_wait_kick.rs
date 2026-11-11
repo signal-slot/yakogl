@@ -311,7 +311,9 @@ fn only_the_kick_that_wrote_the_depth_is_waited_for() {
     let mut rig = Rig::new();
     let depth = rig.draw(TARGET_A, 5, 0);
     let first = gc_kick_id();
-    rig.draw(TARGET_B, 6, 0); /* another target: the first kick is submitted */
+    /* a target change no longer ends the kick (gc-kick-continue.md C1) */
+    assert_eq!(gc_flush(), 0);
+    rig.draw(TARGET_B, 6, 0);
     let second = gc_kick_id();
     assert_eq!(gc_flush(), 0);
     assert_eq!((rig.submitted(), first + 1), (2, second), "two kicks in flight");
@@ -327,13 +329,17 @@ fn only_the_kick_that_wrote_the_depth_is_waited_for() {
 /// submitted and waited for; the kick before it, which wrote the same
 /// object's depth earlier, is complete with it (kicks run in order).
 ///
-/// Revert check: stamped with the kick open at `select`, the draw that
-/// changed targets (and so submitted that kick) waits for kick 2.
+/// Revert check: waiting for every slot (`finish`) waits for fences 1
+/// and 2 too. (A draw selected in one kick and recorded in the next is
+/// `a_draw_spilled_into_the_next_kick_is_waited_for_there`: a target
+/// change no longer submits, gc-kick-continue.md C1.)
 #[test]
 fn a_depth_written_by_the_newest_kick_waits_for_that_kick() {
     let mut rig = Rig::new();
     rig.draw(TARGET_A, 5, 0);
+    assert_eq!(gc_flush(), 0);
     rig.draw(TARGET_B, 6, 0);
+    assert_eq!(gc_flush(), 0);
     let depth = rig.draw(TARGET_A, 5, 0); /* kick 3, open */
     let newest = gc_kick_id();
     assert_eq!(rig.submitted(), 2, "the newest kick is not submitted yet");
