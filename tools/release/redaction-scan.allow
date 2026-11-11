@@ -26,6 +26,11 @@ drop | password | * | NOPASSWD: | sudoers keyword, not a password
 drop | lab-host | * | \barmadillo\.local\b | the vendor's mDNS default host name
 drop | lab-host | * | \byakogl-gate\b | the gate's public runner label
 drop | lab-host | * | \bccfarm\b | the name of the farm tool
+# The generated i.MX8MP register header (tools/hal-nxp/gen_regs.py, NXP's
+# names): a lab host's name is also the prefix of some PHY power-domain
+# identifiers.  Only the uppercase prefix with its `_PHY` suffix in that one
+# file; the bare name stays a finding there too.
+drop | lab-host | driver/rust/src/soc/imx8mp/regs.rs | (?<![A-Za-z0-9])[A-Z]{3}[0-9]_PHY(?![A-Za-z0-9]) | NXP register identifier (a PHY's power-domain field) in a generated file, not a host name
 # tools/env/* drives the pool and image tool through its public interface:
 # its CLI (`<tool> image build`, `<tool> pool apply`, `<tool> login`, `command
 # -v <tool>`), its environment variables (`<TOOL>_RECIPES`, `<TOOL>_URL`), a
