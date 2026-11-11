@@ -76,21 +76,22 @@ fn blur(file: &str, radius: i32, sigma: f64, horizontal: bool, step: f64, tilt: 
 
 /// (name, stage, ours: instructions and temps); etna_shc's and the count before the patch in the comment
 const GLMARK2: [(&str, u32, u32, u32); 10] = [
-    ("terrain.vert", SHC_STAGE_VERTEX, 48, 9),     // etna 39, 9; before 56, 9
-    ("terrain.frag", SHC_STAGE_FRAGMENT, 81, 12),  // etna 72, 11; before 127, 16 (sr patch), 148, 19
-    ("tilt_h.frag", SHC_STAGE_FRAGMENT, 57, 12),   // etna 46, 5; before 66, 12; 62 before rank 4
-    ("tilt_v.frag", SHC_STAGE_FRAGMENT, 57, 12),   // etna 46, 5; before 75, 12; 71 before rank T, 62 before rank 4
-    ("bloom_h.frag", SHC_STAGE_FRAGMENT, 32, 8),   // etna 24, 5; before 42, 8; 38 before rank 4
-    ("bloom_v.frag", SHC_STAGE_FRAGMENT, 32, 8),   // etna 24, 5; before 47, 8; 43 before rank T, 38 before rank 4
+    ("terrain.vert", SHC_STAGE_VERTEX, 44, 9), // etna 39, 9; before 56, 9; 48 before rank 4c
+    ("terrain.frag", SHC_STAGE_FRAGMENT, 80, 12), // etna 72, 11; before 127, 16 (sr patch), 148, 19; 81 before rank 4c
+    ("tilt_h.frag", SHC_STAGE_FRAGMENT, 57, 12), // etna 46, 5; before 66, 12; 62 before rank 4
+    ("tilt_v.frag", SHC_STAGE_FRAGMENT, 57, 12), // etna 46, 5; before 75, 12; 71 before rank T, 62 before rank 4
+    ("bloom_h.frag", SHC_STAGE_FRAGMENT, 32, 8), // etna 24, 5; before 42, 8; 38 before rank 4
+    ("bloom_v.frag", SHC_STAGE_FRAGMENT, 32, 8), // etna 24, 5; before 47, 8; 43 before rank T, 38 before rank 4
     ("normalmap.frag", SHC_STAGE_FRAGMENT, 20, 6), // etna 21, 4; before 25, 5; 23, 5 before rank T, 21 before rank 4
-    ("overlay.frag", SHC_STAGE_FRAGMENT, 2, 2),    // etna 2, 2; before 2, 2
-    ("quad.vert", SHC_STAGE_VERTEX, 7, 3),         // etna 4, 2; before 7, 3
-    ("luminance.frag", SHC_STAGE_FRAGMENT, 7, 4),  // etna 3, 3; before 7, 4
+    ("overlay.frag", SHC_STAGE_FRAGMENT, 2, 2), // etna 2, 2; before 2, 2
+    ("quad.vert", SHC_STAGE_VERTEX, 7, 3),     // etna 4, 2; before 7, 3
+    ("luminance.frag", SHC_STAGE_FRAGMENT, 7, 4), // etna 3, 3; before 7, 4
 ];
-/// The ten's instructions: etna_shc 279; 366 before rank 4 (float constant
+/// The ten's instructions: etna_shc 279; 343 before rank 4c (a constructor's
+/// constant lane read as the constant), 366 before rank 4 (float constant
 /// folding), 382 before rank T (the retarget past a constant lane), 428
 /// before the unroll, 475 before the patch.
-const GLMARK2_TOTAL: u32 = 343;
+const GLMARK2_TOTAL: u32 = 338;
 
 /// The ten texts from a glmark2 checkout, in [`GLMARK2`]'s order.
 fn glmark2_texts(root: &Path) -> Vec<String> {

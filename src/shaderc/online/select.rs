@@ -288,6 +288,10 @@ pub struct MovSites {
     pub fold_wrong_op: usize,
     pub fold_modifier: usize,
     pub fold_unsound: usize,
+    /// Seeds of a shared register (a constructor's constant lane) whose
+    /// readers of the seed's lanes alone were rewritten while a reader of
+    /// mixed lanes keeps the seed (rank 4c).
+    pub fold_lane: usize,
     /// Why `retarget_last_to` could not make the producing instruction write
     /// the slot itself, which is what turns a store into no instruction at
     /// all. Every one of these is a `mov` that stayed.
@@ -346,6 +350,7 @@ impl MovSites {
         fold_wrong_op: 0,
         fold_modifier: 0,
         fold_unsound: 0,
+        fold_lane: 0,
         retarget_swizzled: 0,
         retarget_not_a_value: 0,
         retarget_read_twice: 0,
@@ -4126,24 +4131,32 @@ impl<'a> Sel<'a> {
         let dead = self.arena.alloc_filled(n, false)?;
 
         for i in 0..n {
-            let (d, p) = {
+            let (d, m, p) = {
                 let ins = self.instrs.as_slice()[i];
                 if ins.op != self.mov || ins.cond.is_some() || ins.saturate || ins.tex.is_some() {
                     continue;
                 }
-                /* ANY write mask, unlike `propagate_copies`. `d` is written
-                 * exactly once (checked below), so the lanes this seed does
-                 * not write were never written at all: a reader of them reads
-                 * an undefined register, and reading the constant's lane
-                 * there instead is a refinement, not a change. The lanes it
-                 * does write are the constant's, lane for lane. Refusing the
+                /* ANY write mask, unlike `propagate_copies`. When `d` is
+                 * written exactly once, the lanes this seed does not write
+                 * were never written at all: a reader of them reads an
+                 * undefined register, and reading the constant's lane there
+                 * instead is a refinement, not a change. The lanes it does
+                 * write are the constant's, lane for lane. Refusing the
                  * masked seed kept every `vec2`/`vec3` literal local in a
                  * register of its own: dEQP tmp_array
                  * vec2/vec3_const_write_static_loop_read_vertex held 36
                  * `mov t.xy, k` seeds live across the loop, 45 temporaries
                  * against the vertex ceiling of 21, where the vec4 variant
-                 * folds them into immediates and compiles. */
-                let Some(SelDst::Virtual { v: d, .. }) = ins.dst else { continue };
+                 * folds them into immediates and compiles.
+                 *
+                 * When `d` is written by other instructions too, to OTHER
+                 * lanes (a constructor's lanes, `vec4(p, 1.0)`: `mov t.xyz,
+                 * p; mov t.w, 1.0`), the seed's lanes are still the
+                 * constant's and nothing else's. A reader of those lanes
+                 * alone (`t.wwww`) reads the constant; a reader of any other
+                 * lane keeps the register, and the seed stays for it (rank 4c
+                 * of docs/notes/gc-compiler-ranks-3-5.md). */
+                let Some(SelDst::Virtual { v: d, write_mask: m }) = ins.dst else { continue };
                 let mut only = None;
                 let mut count = 0;
                 for sl in ins.srcs.iter().flatten() {
@@ -4167,31 +4180,60 @@ impl<'a> Sel<'a> {
                         continue;
                     }
                 }
-                (d, p)
+                (d, m, p)
             };
 
+            /* The other writes of `d`. One that touches a lane of the seed's
+             * would change what the propagated reads should have seen; ones
+             * to other lanes make `d` a SHARED register, whose reads are
+             * taken only where they read the seed's lanes alone. */
             let mut why = None;
-            let mut readers = 0usize;
+            let mut shared = false;
             for (j, ins) in self.instrs.as_slice().iter().enumerate() {
+                if dead[j] || j == i {
+                    continue;
+                }
+                if let Some(SelDst::Virtual { v, write_mask }) = ins.dst {
+                    if v == d {
+                        if write_mask & m != 0 {
+                            why = Some(Why::Unsound);
+                            break;
+                        }
+                        shared = true;
+                    }
+                }
+            }
+            let in_seed = |sw: [u8; 4]| sw.iter().all(|l| m & (1 << (l & 3)) != 0);
+            let touches_seed = |sw: [u8; 4]| sw.iter().any(|l| m & (1 << (l & 3)) != 0);
+            /* A read of `d` this seed replaces: every one when the register
+             * is the seed's alone, those of its lanes alone when shared. */
+            let taken = |r: &SelSrc| matches!(r, SelSrc::Virtual { v, swizzle, .. } if *v == d && (!shared || in_seed(*swizzle)));
+            /* A read of the seed's lanes the seed must stay for: some of its
+             * lanes and some other's, through one swizzle. */
+            let kept = |r: &SelSrc| matches!(r, SelSrc::Virtual { v, swizzle, .. } if *v == d && shared && !in_seed(*swizzle) && touches_seed(*swizzle));
+
+            let mut readers = 0usize;
+            let mut keepers = 0usize;
+            for (j, ins) in self.instrs.as_slice().iter().enumerate() {
+                if why.is_some() {
+                    break;
+                }
                 if dead[j] {
                     continue;
                 }
-                /* Another write of `d`: a later one would change what the
-                 * propagated reads should have seen. */
-                if let Some(SelDst::Virtual { v, .. }) = ins.dst {
-                    if v == d && j != i {
-                        why = Some(Why::Unsound);
-                        break;
-                    }
-                }
-                let reads = ins.srcs.iter().flatten().any(|r| matches!(r, SelSrc::Virtual { v, .. } if *v == d));
-                if !reads {
+                let takes = ins.srcs.iter().flatten().any(taken);
+                let keeps = ins.srcs.iter().flatten().any(kept);
+                if !takes && !keeps {
                     continue;
                 }
                 /* A read BEFORE the copy is a read of whatever was there. */
                 if j < i {
                     why = Some(Why::Unsound);
                     break;
+                }
+                keepers += usize::from(keeps);
+                if !takes {
+                    continue;
                 }
                 readers += 1;
                 if !ins.op.takes_group(p.group) {
@@ -4203,14 +4245,14 @@ impl<'a> Sel<'a> {
                         .srcs
                         .iter()
                         .flatten()
-                        .any(|r| matches!(r, SelSrc::Virtual { v, neg, abs, .. } if *v == d && (*neg || *abs)))
+                        .any(|r| taken(r) && matches!(r, SelSrc::Virtual { neg, abs, .. } if *neg || *abs))
                 {
                     why = Some(Why::Modifier);
                     break;
                 }
                 let mut after = ins.srcs;
                 for slot in after.iter_mut() {
-                    if matches!(*slot, Some(SelSrc::Virtual { v, .. }) if v == d) {
+                    if slot.as_ref().is_some_and(taken) {
                         *slot = Some(SelSrc::Physical(p));
                     }
                 }
@@ -4242,7 +4284,7 @@ impl<'a> Sel<'a> {
                 }
                 for slot in item.srcs.iter_mut() {
                     let Some(SelSrc::Virtual { v, swizzle: outer, neg, abs }) = *slot else { continue };
-                    if v != d {
+                    if v != d || !slot.as_ref().is_some_and(taken) {
                         continue;
                     }
                     *slot = Some(if p.is_immediate() {
@@ -4266,8 +4308,14 @@ impl<'a> Sel<'a> {
                     });
                 }
             }
-            dead[i] = true;
-            note_site(|k| k.folded += 1);
+            /* The seed goes when no read of its lanes is left; a shared
+             * register read through a mixed swizzle keeps it. */
+            if keepers == 0 {
+                dead[i] = true;
+                note_site(|k| k.folded += 1);
+            } else {
+                note_site(|k| k.fold_lane += 1);
+            }
         }
 
         self.compact(dead)

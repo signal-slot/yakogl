@@ -41,18 +41,19 @@ fn count(stage: u32, src: &str) -> (u32, u32) {
 
 /// (text hash, stage, ours: instructions and temps, etna_shc's in the comment)
 const GLMARK2: [(&str, &str, u32, u32); 8] = [
-    ("37f46ae8961221f2", "vert", 5, 3),   // depth vertex; etna 4, 3; before 6, 3
-    ("928e172a68b7f175", "frag", 3, 3),   // depth fragment; etna 2, 2; before 3, 3
-    ("b9d18073e5979540", "vert", 11, 5),  // ground vertex; etna 7, 4; before 12, 4
-    ("cf4bf899d84af04d", "frag", 13, 5),  // ground fragment; etna 11, 4; before 16, 5
-    ("6964fcf6aaac9739", "vert", 21, 5),  // horse vertex; etna 14, 4; before 23, 5
-    ("474800a67afed087", "frag", 1, 2),   // horse fragment; etna 1, 2; before 1, 2
-    ("7215f4f5052a383c", "vert", 21, 5),  // refract vertex; etna 19, 5; before 23, 5
+    ("37f46ae8961221f2", "vert", 4, 3), // depth vertex; etna 4, 3; before 6, 3; 5, 3 before rank 4c
+    ("928e172a68b7f175", "frag", 3, 3), // depth fragment; etna 2, 2; before 3, 3
+    ("b9d18073e5979540", "vert", 9, 4), // ground vertex; etna 7, 4; before 12, 4; 11, 5 before rank 4c
+    ("cf4bf899d84af04d", "frag", 13, 5), // ground fragment; etna 11, 4; before 16, 5
+    ("6964fcf6aaac9739", "vert", 19, 5), // horse vertex; etna 14, 4; before 23, 5; 21, 5 before rank 4c
+    ("474800a67afed087", "frag", 1, 2), // horse fragment; etna 1, 2; before 1, 2
+    ("7215f4f5052a383c", "vert", 19, 5), // refract vertex; etna 19, 5; before 23, 5; 21, 5 before rank 4c
     ("3fae89c9ab969ea3", "frag", 64, 11), // refract fragment; etna 48, 6; before 86, 12; 71, 12 before rank 4
 ];
 /// The eight's instructions: etna_shc 105; before the patch 170; 146 before
-/// rank 4 (float constant folding, `docs/notes/gc-compiler-ranks-3-5.md`).
-const GLMARK2_TOTAL: u32 = 139;
+/// rank 4 (float constant folding, `docs/notes/gc-compiler-ranks-3-5.md`),
+/// 139 before rank 4c (a constructor's constant lane read as the constant).
+const GLMARK2_TOTAL: u32 = 132;
 
 const HEAD: &str = "precision mediump float;\nvarying vec4 a;\nvarying vec4 b;\n";
 
@@ -77,12 +78,12 @@ fn micro() -> Vec<(&'static str, u32, String, u32)> {
         ("m5", SHC_STAGE_FRAGMENT, fs("gl_FragColor = vec4(refract(a.xyz, b.xyz, 1.2), 1.0);"), 16),
         // m8: etna 4; before the patch 8
         ("m8", SHC_STAGE_FRAGMENT, fs("float k = dot(a.xyz, b.xyz); gl_FragColor = vec4(vec3(sqrt(1.0 - k * k)), 1.0);"), 7),
-        // m4 (vertex): etna 4; before the patch 6
+        // m4 (vertex): etna 4; before the patch 6; 5 before rank 4c (the `1.0` lane read as the constant)
         (
             "m4",
             SHC_STAGE_VERTEX,
             "attribute vec3 position;\nuniform mat4 M;\nvoid main() { gl_Position = M * vec4(position, 1.0); }\n".into(),
-            5,
+            4,
         ),
         // the difference of two varyings: one add with a negated source; before
         // the patch 2 (`mov t, -b` and the add)
