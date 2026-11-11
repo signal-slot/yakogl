@@ -145,7 +145,9 @@ void yd_env_init_devs(struct yd_env *env, const struct yd_env_devs *devs)
 
 #endif /* CONFIG_I2C && CONFIG_GPIO */
 
-FUNC_NORETURN void yd_panic(const uint8_t *file, size_t file_len, uint32_t line)
+/* Weak: an image with a panic line of its own (tools/probes/stm32mp257f_dk/
+ * mp2_gpu, its verdict FAIL line) overrides it. */
+__weak FUNC_NORETURN void yd_panic(const uint8_t *file, size_t file_len, uint32_t line)
 {
 	char f[96];
 

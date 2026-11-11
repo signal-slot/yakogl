@@ -19,6 +19,8 @@ properties:
       Three ranges, named "gpu" (the GPU register block, 32 KiB at 0x38000000
       on the i.MX8MP), "gpc" (the general power controller, 64 KiB at
       0x303a0000) and "ccm" (the clock control module, 64 KiB at 0x30380000).
+      A node with only "gpu" (the STM32MP257F's, 0x800 bytes at 0x48280000)
+      is powered by its board layer instead (gc_board_power_on).
 
   reg-names:
     required: true

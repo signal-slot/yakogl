@@ -38,3 +38,26 @@ config YAKOGL_STM32MP2_WDOG
 	  or on a refusal what refused and PSCI SYSTEM_RESET at once, and a
 	  1 s PET until the lifetime. Off by default; an image asks for it
 	  (tools/probes/stm32mp257f_dk/mp2_identify).
+
+config YAKOGL_STM32MP2_GPU
+	bool "STM32MP257F-DK A35: the GPU power C ABI (stm32mp2_gpu.h) in libyakogl_drivers.a"
+	default y if YAKOGL_DRV_GPU_VIVANTE
+	depends on YAKOGL_STM32MP2
+	select YAKOGL_DRV_DISPLAY_RUST
+	help
+	  The yakogl-drivers crate is built with the features stm32mp2 and
+	  vivante (driver/zephyr/CMakeLists.txt) and linked: one archive for
+	  the image, whether the Vivante driver is in it (gc_fence, gc_clear:
+	  on by default with it) or not (the mp2_gpu probe asks for it). With
+	  the driver, gc_power_mp2.c powers the GPU for it (gc_board_power_on:
+	  SCMI over OP-TEE, every message on the console, the RCC gate and
+	  reset), and refuses a part that is not model 0x8000 revision 0x6205
+	  (#1281) with a PSCI reset.
+
+config YAKOGL_BOARD_STM32MP2
+	def_bool YAKOGL_BOARD && YAKOGL_STM32MP2
+	help
+	  The board layer (yakogl_board.h) on the DK's A35
+	  (board_stm32mp2.c): no window or screen yet; record: the
+	  yk-record line on USART2; reset: mp2_reset_to_linux() (PSCI
+	  SYSTEM_RESET), the watchdog OP-TEE's (YAKOGL_STM32MP2_WDOG).

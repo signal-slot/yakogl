@@ -208,6 +208,20 @@ static void gc_power_mark(void *ctx, uint32_t step)
 	gc_init_mark(step, 0);
 }
 
+/*
+ * A node without the "gpc" and "ccm" ranges (the STM32MP257F's) is powered by
+ * its board layer: this is called with the mapped GPU block in place of
+ * gpu::vivante::power, before the identify. 0 or a negative errno. The weak
+ * one refuses: a board without the ranges has to provide it
+ * (lib/board/stm32mp2/gc_power_mp2.c).
+ */
+int gc_board_power_on(mm_reg_t regs);
+__weak int gc_board_power_on(mm_reg_t regs)
+{
+	ARG_UNUSED(regs);
+	return -ENOTSUP;
+}
+
 static int gc_init_steps(const struct device *dev)
 {
 	const struct gc_config *cfg = dev->config;
@@ -215,11 +229,16 @@ static int gc_init_steps(const struct device *dev)
 	int rc;
 
 	device_map(&d->regs, cfg->reg_phys, cfg->reg_size, K_MEM_CACHE_NONE);
-	device_map(&d->gpc, cfg->gpc_phys, cfg->gpc_size, K_MEM_CACHE_NONE);
-	device_map(&d->ccm, cfg->ccm_phys, cfg->ccm_size, K_MEM_CACHE_NONE);
-	gc_init_mark(0, 0);
+	if (cfg->gpc_size != 0u) {
+		device_map(&d->gpc, cfg->gpc_phys, cfg->gpc_size, K_MEM_CACHE_NONE);
+		device_map(&d->ccm, cfg->ccm_phys, cfg->ccm_size, K_MEM_CACHE_NONE);
+		gc_init_mark(0, 0);
 
-	rc = yd_gc_power_on(d->ccm, d->gpc, env(), gc_power_mark, NULL);
+		rc = yd_gc_power_on(d->ccm, d->gpc, env(), gc_power_mark, NULL);
+	} else {
+		gc_init_mark(0, 0);
+		rc = gc_board_power_on(d->regs);
+	}
 	if (rc) {
 		return rc;
 	}
@@ -254,10 +273,10 @@ static int gc_init(const struct device *dev)
 	static const struct gc_config gc_config_##inst = {                                   \
 		.reg_phys = DT_INST_REG_ADDR_BY_NAME(inst, gpu),                             \
 		.reg_size = DT_INST_REG_SIZE_BY_NAME(inst, gpu),                             \
-		.gpc_phys = DT_INST_REG_ADDR_BY_NAME(inst, gpc),                             \
-		.gpc_size = DT_INST_REG_SIZE_BY_NAME(inst, gpc),                             \
-		.ccm_phys = DT_INST_REG_ADDR_BY_NAME(inst, ccm),                             \
-		.ccm_size = DT_INST_REG_SIZE_BY_NAME(inst, ccm),                             \
+		.gpc_phys = DT_INST_REG_ADDR_BY_NAME_OR(inst, gpc, 0),                       \
+		.gpc_size = DT_INST_REG_SIZE_BY_NAME_OR(inst, gpc, 0),                       \
+		.ccm_phys = DT_INST_REG_ADDR_BY_NAME_OR(inst, ccm, 0),                       \
+		.ccm_size = DT_INST_REG_SIZE_BY_NAME_OR(inst, ccm, 0),                       \
 		.carveout_phys = DT_REG_ADDR(DT_INST_PHANDLE(inst, memory_region)),          \
 		.carveout_size = DT_REG_SIZE(DT_INST_PHANDLE(inst, memory_region)),          \
 		.clock_hz = DT_INST_PROP(inst, clock_frequency),                             \
