@@ -277,7 +277,7 @@ fn known_gaps() -> Vec<(&'static str, &'static str)> {
         ("MAX_SAMPLES", "1: no multisample render targets reported (gl/state.rs)"),
         (
             "NUM_COMPRESSED_TEXTURE_FORMATS",
-            "3: ETC1, RGB8_ETC2, RGBA8_ETC2_EAC, and 5 on the PowerVR with the sRGB ETC2 pair \
+            "3: ETC1, RGB8_ETC2, RGBA8_ETC2_EAC, and 5 on the PowerVR and the GC7000UL with the sRGB ETC2 pair \
              (gl/texture.rs stored_compressed_formats); ES 3.0 needs the ten ETC2/EAC formats (formats-*)",
         ),
     ];

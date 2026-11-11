@@ -16,8 +16,9 @@
 //!   look-up of its shape, the integers left unconverted, as Mesa's etnaviv
 //!   emits it; the shapes the float path refuses are still refused.
 //!
-//! What it cannot see: the GPU. The eight decoded classes are in
-//! `GC_SAMPLED_TEXFMTS` (src/backend.rs; the doc's `in mask` column).
+//! What it cannot see: the GPU. The eight decoded classes and the two
+//! compressed sRGB ETC2 classes are in `GC_SAMPLED_TEXFMTS` (src/backend.rs;
+//! the doc's `in mask` column).
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-vivante --test es3_formats_gc
@@ -220,6 +221,28 @@ fn the_mask_column_is_gc_sampled_texfmts() {
             assert!(gc_texfmt(id).decoded, "{}: sampled, so decoded", r.class);
         }
     }
+}
+
+/// The compressed sRGB ETC2 classes are offered (item etc2-srgb-gc): both
+/// are in GC_SAMPLED_TEXFMTS, as in the PowerVR's, and their words are the
+/// linear twin's ETC2 block format (etnaviv_format.c:244, 246, 278), tiled,
+/// without INT_FILTER (etnaviv_format.c:317-318); the sRGB decode is
+/// SAMP_CTRL1's SRGB (etnaviv_texture_desc.c:246-247), set at the draw.
+#[test]
+fn the_compressed_srgb_etc2_classes_are_offered_as_their_linear_twins_blocks() {
+    for (srgb, linear) in
+        [(GLES_TEXFMT_ETC2_SRGB_RGB, GLES_TEXFMT_ETC2_RGB), (GLES_TEXFMT_ETC2_SRGB_RGBA, GLES_TEXFMT_ETC2_RGBA)]
+    {
+        assert_ne!(GC_SAMPLED_TEXFMTS & gles_texfmt_bit(srgb), 0, "class {srgb}: in GC_SAMPLED_TEXFMTS");
+        assert_ne!(PVR_SAMPLED_TEXFMTS & gles_texfmt_bit(srgb), 0, "class {srgb}: as on the PowerVR");
+        let (f, l) = (gc_texfmt(srgb), gc_texfmt(linear));
+        assert!(f.decoded && f.compressed, "class {srgb}: a decoded block format");
+        assert_eq!((f.format, f.format_ext, f.config2), (l.format, l.format_ext, l.config2), "class {srgb}");
+        assert!(!f.int_filter, "class {srgb}: no INT_FILTER for sRGB");
+        assert_eq!(format_words(&bind(srgb), true), format_words(&bind(linear), true), "class {srgb}");
+    }
+    assert_eq!(gc_texfmt(GLES_TEXFMT_ETC2_SRGB_RGB).format_ext, GC_TEX_FORMAT_EXT_NONE);
+    assert_eq!(gc_texfmt(GLES_TEXFMT_ETC2_SRGB_RGBA).format_ext, GC_TEX_FORMAT_EXT_RGBA8_ETC2_EAC);
 }
 
 /// The GL core's R32I/UI and RG32I/UI classes (26-29) are in no back end's
