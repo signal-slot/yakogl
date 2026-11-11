@@ -15,7 +15,9 @@
 # away), reboot (a new boot_id), nolib (no loaded line), foreignlib (a loaded
 # line naming the board's own library), split (the result line on a line of
 # its own after the back end's stdout log, the board's shape). Each call is
-# logged to FAKE_BOARD/glmark2.calls.
+# logged to FAKE_BOARD/glmark2.calls. With GLMARK2_FB=1 it prints the fixture's
+# small frame dump (fbdump.txt, 16x12) and its picture line instead of the
+# 800x600 one.
 size= scene=
 while [ $# -gt 0 ]; do
   case $1 in
@@ -100,7 +102,12 @@ case $action in
     result= ;;
 esac
 [ -z "$result" ] || printf '%s: %s\n' "$info" "$result"
+if [ "${GLMARK2_FB-}" = 1 ]; then
+  # the frame dump (a 16x12 one, FAKE_FIXTURES/fbdump.txt) and its picture line
+  sed "s/@INFO@/$info/" "$FAKE_FIXTURES/fbdump.txt" >&2
+else
 echo "glmark2-picture: $info: 800x600; probes c 336699ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 1a2b, crc16q 3c4d; mean 51 102 153; black no" >&2
+fi
 echo "======================================================="
 echo "                                  glmark2 Score: 1250"
 echo "yakogl-mali-exit: draws=$draws refused=$refused first_refused=$first gpu_faults=$gpu job_timeouts=$jt" >&2
