@@ -180,10 +180,11 @@ fi
 
 # 20b. tools/cts/deps-selftest.sh: deps.toml and deps-env.sh (--check, the
 # board sets, --present, --packages, --build / --build-missing against a fake
-# deps.toml in a scratch layout, the MALI_CSFFW entry's build on a stand-in download, and
-# the nanopc_t6 set's MALI_DEQP_TOOLCHAIN). Its count is pinned like
+# deps.toml in a scratch layout, the MALI_CSFFW entry's build on a stand-in download,
+# the retry of a cut download, and the nanopc_t6 set's MALI_DEQP_TOOLCHAIN).
+# Its count is pinned like
 # images-selftest's.
-DEPS_SELFTEST_CHECKS=61
+DEPS_SELFTEST_CHECKS=67
 echo
 echo "== 20b. deps-selftest.sh: deps.toml, deps-env.sh --check / --build"
 dout=$("$HERE/deps-selftest.sh" 2>&1)
