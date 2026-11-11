@@ -316,6 +316,17 @@ check_lz4() {
   line ok lz4 "${out%%$'\n'*}"
 }
 
+# dtc: tools/check.sh's rpi_5 fdt_walk host test builds its tree with it (a
+# gap without it) and the board and Zephyr image rows compile device trees.
+check_dtc() {
+  local out
+  out=$(dtc --version 2>&1) || {
+    line missing dtc "dtc not on PATH (Debian device-tree-compiler, Gentoo sys-apps/dtc): the fdt_walk host test and the device-tree rows"
+    return
+  }
+  line ok dtc "${out%%$'\n'*}"
+}
+
 check_pkgconfig() {
   local m out
   if ! command -v pkg-config >/dev/null 2>&1; then
@@ -536,6 +547,7 @@ run_checks() {
   check_yaml
   check_glslang
   check_lz4
+  check_dtc
   check_pkgconfig
   check_mali_csffw
   check_glmark2_src
