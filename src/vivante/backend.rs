@@ -4,9 +4,10 @@
 //! commands and a DRAW_INSTANCED in the frame's command stream.
 //!
 //! The GPU is immediate mode and has no firmware, so a frame is one command
-//! stream that the front end fetches: draws accumulate into it until the
-//! render target changes, the buffer fills, or the GL core asks for a flush,
-//! and then the stream is submitted through the OSAL, which appends the EVENT
+//! stream that the front end fetches: draws accumulate into it, whatever
+//! target each draws into, until the buffer fills, a multisampled target is
+//! left, or the GL core asks for a flush (the swap is one), and then the
+//! stream is submitted through the OSAL, which appends the EVENT
 //! that raises the fence ([`super::kick`]).
 //!
 //! Every draw computes the whole state block, in ascending register order,
@@ -72,11 +73,12 @@ const GC_HEAP_COMMAND: u64 = 0x6000_0000;
 /// Command streams in flight. The GL core's swap pipelines the CPU against
 /// the GPU (`finish_previous`: everything but the frame just swapped), so the
 /// streams of one whole swap-frame are running while the next one records.
-/// A swap-frame is one kick when its stream fits, but a full stream, a target
-/// change or glFlush closes a kick early, and a stream slot is reused only
-/// once its kick has completed (`frame_open`) -- with two slots a two-kick
-/// frame made the next frame's first kick wait for this frame's first, which
-/// undid most of the overlap. Four leave room for two kicks a frame.
+/// A swap-frame is one kick when its stream fits, but a full stream, glFlush
+/// or leaving a multisampled target (its resolve ends the stream,
+/// docs/notes/gc-kick-continue.md D2) closes a kick early, and a stream slot
+/// is reused only once its kick has completed (`frame_open`) -- with two
+/// slots a two-kick frame made the next frame's first kick wait for this
+/// frame's first, which undid most of the overlap. Four leave room for two kicks a frame.
 const GC_FRAMES: usize = 4;
 /// Words in one command stream. Slint's cluster records about 66 K words a
 /// frame (263 draws, 2026-10-01, gc_slint on the Verdin): 64 K split every
@@ -130,7 +132,8 @@ pub(crate) struct GcState {
     /// another format clears it ([`pe_logic_op_srgb`]).
     srgb_set: bool,
 
-    /* the target the open frame is drawing to; a change closes the frame */
+    /* the target of the last draw recorded; a change ends the kick only when
+     * a 4x target is left (its resolve runs at the end of the stream) */
     target_gpu: u64,
     target_w: u32,
     target_h: u32,
@@ -176,9 +179,11 @@ pub(crate) struct GcState {
     /// init (`gc_backend_mip_chains`).
     pub(super) mip_chains: u32,
     pub(super) mip_chains_refused: u32,
-    /// A GPU mipmap chain is being recorded (mipmap.rs): a draw into another
-    /// target continues the open stream behind [`emit_target_boundary`]
-    /// instead of ending the kick, so the chain's levels are one kick.
+    /// A GPU mipmap chain is being recorded (mipmap.rs). Its levels once
+    /// needed it to continue the stream at a new target; every draw does now
+    /// (`draw_one`), so only the tests read it, until the chain stays in the
+    /// open kick and mipmap.rs drops it (docs/notes/gc-kick-continue.md C5).
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(super) chain_stream: bool,
     /// One opaque black RGBA8 texel: what GL's incomplete texture samples as
     /// (GL ES 2.0 section 3.7.10). Allocated once, bound in place of any
@@ -1842,8 +1847,12 @@ fn emit_flushes(c: &mut GcCmd) {
 const TARGET_BOUNDARY_WORDS: u32 = 5 * 2 + 2;
 
 /// Where a kick would have ended and the next begun, inside one stream: a
-/// draw into another target that reads what the draws before wrote (a GPU
-/// mipmap chain's next level, mipmap.rs). The OSAL's epilogue first
+/// draw into another target, which may read what the draws before wrote (a
+/// GPU mipmap chain's next level, mipmap.rs; terrain's next pass sampling
+/// the map the last one drew). A target change needs only the colour and
+/// depth flush and the RA-PE stall (Mesa's ETNA_DIRTY_FRAMEBUFFER rule,
+/// docs/notes/gc-kick-continue.md); this writes what a kick boundary wrote
+/// before the change stopped ending the kick. The OSAL's epilogue first
 /// (driver/rust/src/gpu/vivante/cmdbuf.rs `ring_submit`: the pixel engine's
 /// colour and depth caches and the shader L1 written back, the tile status
 /// flushed, the front end held until the pixel engine has drained), then
@@ -2363,7 +2372,9 @@ fn frame_submit() -> i32 {
 
     /* A multisampled frame rasterised into the scratch surface: average it
      * back into the target before the frame ends, while the stream is still
-     * being written. */
+     * being written. The resolve runs at the end of the stream only, so a
+     * draw that leaves the 4x target ends the stream (`draw_one`,
+     * docs/notes/gc-kick-continue.md D2). */
     if g.ms_dest_gpu != 0 {
         emit_resolve(&mut f.w);
         g.ms_dest_gpu = 0;
@@ -3024,20 +3035,6 @@ pub(super) unsafe fn draw_one(draw: *const GlesDraw) -> i32 {
     if gl.target_gpu == 0 && ensure_no_colour_surface() != 0 {
         return -ENOMEM;
     }
-    if ms_via_scratch(gl) {
-        let bpp = gles_surf_bytes_per_pixel(gl.target_format);
-
-        if ensure_msaa(gl.target_w, gl.target_h, bpp) != 0 {
-            return -ENOMEM;
-        }
-        let g = g();
-        g.ms_dest_gpu = gl.target_gpu;
-        g.ms_dest_w = gl.target_w;
-        g.ms_dest_h = gl.target_h;
-        g.ms_dest_bpp = bpp;
-        g.ms_dest_surf = gl.target_format;
-        g.ms_dest_stride = crate::backend::draw_pitch(gl) * bpp;
-    }
     #[cfg(feature = "vivante-depth-guard")]
     if selected.fresh {
         /* Lay the canary down as soon as the buffer exists, so everything the
@@ -3070,8 +3067,10 @@ pub(super) unsafe fn draw_one(draw: *const GlesDraw) -> i32 {
     }
     clock.lap(Step::GcTiledCopy);
 
-    /* a new target, a stream with no room left, or an arena that cannot take
-     * this draw's copies ends the frame */
+    /* A stream with no room left, an arena that cannot take this draw's
+     * copies, or a draw that leaves a multisampled target ends the frame.
+     * Any other target change continues the stream behind the flushes and
+     * the stall a kick boundary made (docs/notes/gc-kick-continue.md C1). */
     let need = staging_need(gl);
     /* A draw whose copies are larger than the arena starts a frame of its
      * own with memory of its own for them (`ensure_extra`), instead of being
@@ -3085,27 +3084,52 @@ pub(super) unsafe fn draw_one(draw: *const GlesDraw) -> i32 {
         let full = big || g.frames[g.cur].arena_used as usize + need > GC_ARENA_BYTES;
         let w = &g.frames[g.cur].w;
         let retarget = gl.target_gpu != g.target_gpu;
-        /* a chain's level continues the stream only with room for the
-         * boundary: the draw's own overflow is handled below */
-        let continues = retarget && g.chain_stream && w.used + TARGET_BOUNDARY_WORDS <= w.cap;
-        if g.recording && (retarget && !continues || w.overflow || full) {
+        /* the 4x scratch is resolved at the end of the stream only (D2) */
+        let leaves_4x = retarget && g.ms_dest_gpu != 0;
+        /* a change continues the stream only with room for the boundary:
+         * the draw's own overflow is handled below */
+        let room = w.used + TARGET_BOUNDARY_WORDS <= w.cap;
+        if g.recording && (leaves_4x || retarget && !room || w.overflow || full) {
             frame_submit();
         } else if g.recording && retarget {
-            /* a mipmap chain's next level: the same stream, behind the
-             * flushes a kick's end and start would have made */
+            /* the same stream, behind the flushes a kick's end and start
+             * would have made; the state groups stay known (the PE's key
+             * holds the target, so its words are written again) */
             emit_target_boundary(&mut g.frames[g.cur].w);
-            g.target_gpu = gl.target_gpu;
-            g.target_w = gl.target_w;
-            g.target_h = gl.target_h;
         }
     }
     if !g().recording && frame_open(gl.target_gpu, gl.target_w, gl.target_h) != 0 {
         return -1;
     }
+    {
+        let g = g();
+        g.target_gpu = gl.target_gpu;
+        g.target_w = gl.target_w;
+        g.target_h = gl.target_h;
+    }
     if big && ensure_extra(need) != 0 {
         return -ENOMEM;
     }
     clock.lap(Step::GcFrame);
+    /* The multisampled destination is set after the frame decision: a
+     * kick that ended because this draw left a 4x target has resolved into
+     * that target's own storage, not into this draw's (C3). The submits
+     * before the decision (`ds_cache::select`'s and `prepare`'s finish) also
+     * resolve the destination before this one. */
+    if ms_via_scratch(gl) {
+        let bpp = gles_surf_bytes_per_pixel(gl.target_format);
+
+        if ensure_msaa(gl.target_w, gl.target_h, bpp) != 0 {
+            return -ENOMEM;
+        }
+        let g = g();
+        g.ms_dest_gpu = gl.target_gpu;
+        g.ms_dest_w = gl.target_w;
+        g.ms_dest_h = gl.target_h;
+        g.ms_dest_bpp = bpp;
+        g.ms_dest_surf = gl.target_format;
+        g.ms_dest_stride = crate::backend::draw_pitch(gl) * bpp;
+    }
 
     /* The stream has no room check before a draw, and a draw's size is not
      * known until it is written (its state, uniforms and descriptors), so a
@@ -3175,8 +3199,8 @@ pub(super) unsafe fn draw_one(draw: *const GlesDraw) -> i32 {
          * never given to another pair (ds_cache.rs) */
         super::ds_cache::drawn(
             key,
-            /* the kick the draw is in now: `select`'s finish, a new target,
-             * or a full stream or arena may have submitted the one open
+            /* the kick the draw is in now: `select`'s finish, leaving a 4x
+             * target, or a full stream or arena may have submitted the one open
              * before */
             gc_kick_id(),
             restore.is_some(),

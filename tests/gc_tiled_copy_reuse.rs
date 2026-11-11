@@ -469,6 +469,24 @@ fn word_of_write(words: &[u32], n: usize) -> usize {
     panic!("write {n} is past the stream");
 }
 
+/// Index in `words` of each DRAW_INSTANCED, in order.
+fn draws_at(words: &[u32]) -> Vec<usize> {
+    let (mut out, mut i) = (Vec::new(), 0usize);
+    while i < words.len() {
+        let w = words[i];
+        if w & 0xf800_0000 == GC_OP_DRAW_INSTANCED {
+            out.push(i);
+        }
+        i += match w & 0xf800_0000 {
+            GC_OP_LOAD_STATE => 1 + ((w >> 16) & 0x3ff) as usize,
+            GC_OP_DRAW_INSTANCED => 4,
+            GC_OP_STALL => 2,
+            _ => 1,
+        };
+    }
+    out
+}
+
 /// A fragment stage that writes one colour: terrain's passes into its maps
 /// are draws.
 const VS_PLAIN: &str = "attribute vec4 p;\nvoid main() { gl_Position = p; }\n";
@@ -522,20 +540,29 @@ fn a_render_into_the_texture_is_tiled_by_the_rs_with_no_finish() {
         );
         // SAFETY: plain GL call.
         unsafe { glFinish() };
+        /* One kick since the render target change stopped ending it
+         * (docs/notes/gc-kick-continue.md T3). Deliberate break: undo C1
+         * (the `gl.target_gpu != g.target_gpu` term back in `draw_one`'s
+         * submit condition) and the render and the draw are two kicks. */
         let kicks = with_platform(|p| p.kicks[kicks0..].to_vec());
-        assert_eq!(kicks.len(), 2, "the render and the draw are two kicks");
-        let (render, draw) = (&kicks[0], &kicks[1]);
+        assert_eq!(kicks.len(), 1, "the render and the draw are one kick");
+        let draw = &kicks[0];
         let w = writes(draw);
         let desc = u64::from(last(&w, nte_descriptor_addr(0)).expect("no descriptor for slot 0"));
         let copy = u64::from(u32::from_le_bytes(read_gpu(desc, 4).try_into().unwrap()));
         assert_ne!(copy, before, "a render into the texture kept the old copy");
 
-        /* the render's kick drew into the texture's storage */
-        let storage = last(&writes(render), pe_pipe_color_addr(0)).expect("the render names no colour surface");
-        assert!(!writes(render).iter().any(|(r, _)| *r == GC_RS_KICKER), "no RS copy before the render");
-        /* the draw's kick: one RS copy, the storage into the copy */
+        /* the render drew into the texture's storage, the window's draw
+         * after it into another surface */
+        let colour: Vec<u32> = w.iter().filter(|(r, _)| *r == pe_pipe_color_addr(0)).map(|(_, v)| *v).collect();
+        let storage = *colour.first().expect("the render names no colour surface");
+        assert_ne!(colour.last(), Some(&storage), "the sampling draw is drawn into the window");
+        let draws = draws_at(draw);
+        assert_eq!(draws.len(), 2, "the render and the sampling draw");
+        /* one RS copy, the storage into the copy, between the two draws */
         let ops: Vec<usize> = w.iter().enumerate().filter(|(_, (r, _))| *r == GC_RS_KICKER).map(|(i, _)| i).collect();
-        assert_eq!(ops.len(), 1, "one RS operation in the draw's kick");
+        assert_eq!(ops.len(), 1, "one RS operation in the kick");
+        assert!(word_of_write(draw, ops[0]) > draws[0], "the RS copy comes after the render it reads");
         let r = &w[..ops[0]];
         assert_eq!(last(r, rs_pipe_dest_addr(0)), Some(copy as u32), "into the copy the draw samples");
         assert_eq!(last(r, rs_pipe_source_addr(0)), Some(storage), "from the rendered storage");
@@ -548,9 +575,9 @@ fn a_render_into_the_texture_is_tiled_by_the_rs_with_no_finish() {
         let cfg = r.iter().rposition(|(a, _)| *a == GC_RS_CONFIG).unwrap();
         assert_eq!(r[cfg - 3], (GC_GL_FLUSH_CACHE, GC_FLUSH_COLOR | GC_FLUSH_DEPTH), "the PE's caches flushed first");
         assert_eq!(r[cfg - 2].0, GC_GL_SEMAPHORE_TOKEN, "then the PE drained");
+        assert_eq!(r[cfg - 1], (GC_GL_STALL_TOKEN, stall_token(GC_SYNC_RA, GC_SYNC_PE)), "an RA-PE stall");
         /* and before the draw that samples the copy */
-        let draw_at = draw.iter().position(|w| w & 0xf800_0000 == GC_OP_DRAW_INSTANCED).expect("no draw");
-        assert!(word_of_write(draw, ops[0]) < draw_at, "the RS copy comes before the draw it feeds");
+        assert!(word_of_write(draw, ops[0]) < draws[1], "the RS copy comes before the draw it feeds");
         /* the descriptor says the copy is padded for the RS */
         let config1 = u32::from_le_bytes(read_gpu(desc + u64::from(GC_TEXDESC_CONFIG1), 4).try_into().unwrap());
         assert_eq!(config1 & texdesc_halign(7), texdesc_halign(GC_TEXTURE_HALIGN_SIXTEEN), "HALIGN SIXTEEN");
