@@ -1708,8 +1708,26 @@ mod tests {
         blit(all, all, GL_COLOR_BUFFER_BIT, GL_NEAREST);
         assert_eq!(gl.error(), GL_INVALID_OPERATION, "a resolve into another format");
         bind(ms_fb, f_fb);
+        blit(all, [4, 0, 0, 4], GL_COLOR_BUFFER_BIT, GL_NEAREST);
+        assert_eq!(gl.error(), GL_INVALID_OPERATION, "a flipped resolve");
+        blit(all, [0, 0, 2, 2], GL_COLOR_BUFFER_BIT, GL_LINEAR);
+        assert_eq!(gl.error(), GL_INVALID_OPERATION, "a scaled resolve");
+        bind(ms_fb, ms_fb);
+        blit(all, all, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+        assert_eq!(gl.error(), GL_INVALID_OPERATION, "multisample into multisample");
+        /* the argument errors outrank the multisample ones */
+        bind(f_fb, ms_fb);
+        blit(all, all, GL_COLOR_BUFFER_BIT, 0);
+        assert_eq!(gl.error(), GL_INVALID_ENUM);
+        blit(all, all, GL_COLOR_BUFFER_BIT | 0x8, GL_NEAREST);
+        assert_eq!(gl.error(), GL_INVALID_VALUE);
+        bind(ms_fb, f_fb);
         blit(all, all, GL_COLOR_BUFFER_BIT, GL_NEAREST);
         assert_eq!(gl.error(), GL_NO_ERROR, "a resolve");
+        /* a mask without the colour bit has no format to mismatch */
+        bind(ms_fb, f4_fb);
+        blit(all, all, GL_DEPTH_BUFFER_BIT, GL_NEAREST);
+        assert_eq!(gl.error(), GL_NO_ERROR, "no depth on either side");
     }
 
     /// A buffer named in the mask that one side lacks is ignored: colour
