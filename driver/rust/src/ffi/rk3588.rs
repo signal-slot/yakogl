@@ -405,16 +405,44 @@ pub struct YdT6GpuUp {
     pub stop: u32,
     pub refusal: u32,
     pub detail: [u32; 2],
+    /// Appended: the clock set ([`crate::soc::rk3588::ClockSet`]: kept, the
+    /// CPLL's rate, the words written to `CLKSEL_CON(158)`/`(159)`, those
+    /// registers after it, the source's rate after it) and the supply enable.
+    pub clock_kept: u32,
+    pub clock_cpll_hz: [u32; 2],
+    pub clock_wrote: [u32; 2],
+    pub clock_sel: [u32; 2],
+    pub clock_set_hz: [u32; 2],
+    pub supply_enabled: u32,
+    /// `POWER_EN0` and `BUCK1_ON_VSEL` after the enable.
+    pub supply_after: [u32; 2],
+    pub supply_waited_us: u32,
 }
 
 #[cfg(any(feature = "mali", test))]
-const _: () = assert!(size_of::<YdT6GpuUp>() == 4 * 112);
+const _: () = assert!(size_of::<YdT6GpuUp>() == 4 * 125);
 #[cfg(any(feature = "mali", test))]
 const _: () = assert!(offset_of!(YdT6GpuUp, rk806) == 4 * 18);
 #[cfg(any(feature = "mali", test))]
 const _: () = assert!(offset_of!(YdT6GpuUp, ident) == 4 * 65);
 #[cfg(any(feature = "mali", test))]
 const _: () = assert!(offset_of!(YdT6GpuUp, stop) == 4 * 108);
+#[cfg(any(feature = "mali", test))]
+const _: () = assert!(offset_of!(YdT6GpuUp, clock_kept) == 4 * 112);
+#[cfg(any(feature = "mali", test))]
+const _: () = assert!(offset_of!(YdT6GpuUp, clock_cpll_hz) == 4 * 113);
+#[cfg(any(feature = "mali", test))]
+const _: () = assert!(offset_of!(YdT6GpuUp, clock_wrote) == 4 * 115);
+#[cfg(any(feature = "mali", test))]
+const _: () = assert!(offset_of!(YdT6GpuUp, clock_sel) == 4 * 117);
+#[cfg(any(feature = "mali", test))]
+const _: () = assert!(offset_of!(YdT6GpuUp, clock_set_hz) == 4 * 119);
+#[cfg(any(feature = "mali", test))]
+const _: () = assert!(offset_of!(YdT6GpuUp, supply_enabled) == 4 * 121);
+#[cfg(any(feature = "mali", test))]
+const _: () = assert!(offset_of!(YdT6GpuUp, supply_after) == 4 * 122);
+#[cfg(any(feature = "mali", test))]
+const _: () = assert!(offset_of!(YdT6GpuUp, supply_waited_us) == 4 * 124);
 
 #[cfg(any(feature = "mali", test))]
 fn lo_hi(v: u64) -> [u32; 2] {
@@ -480,6 +508,14 @@ impl From<&crate::board::nanopc_t6_gpu::GpuUp> for YdT6GpuUp {
             stop: o.stop as u32,
             refusal: o.refusal,
             detail: lo_hi(o.detail),
+            clock_kept: u32::from(o.clock_set.kept),
+            clock_cpll_hz: lo_hi(o.clock_set.cpll_hz),
+            clock_wrote: o.clock_set.wrote,
+            clock_sel: o.clock_set.sel,
+            clock_set_hz: lo_hi(o.clock_set.src_hz),
+            supply_enabled: u32::from(o.supply_enabled),
+            supply_after: o.supply_after.map(u32::from),
+            supply_waited_us: o.supply_waited_us,
         }
     }
 }

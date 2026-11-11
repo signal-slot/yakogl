@@ -324,7 +324,9 @@ void yd_t6_banner_a3(uintptr_t uart, int32_t rc, uint32_t cr_now, uint32_t perio
 #define YD_T6_GPU_STOP_NONE        0 /* GPU_ID read, reset done, L2 ready */
 #define YD_T6_GPU_STOP_SPI_GATE    1 /* an SPI2 CRU gate stays closed (refusal: its bit) */
 #define YD_T6_GPU_STOP_RK806_READ  2 /* an RK806 read failed (detail hi: the register) */
-#define YD_T6_GPU_STOP_SUPPLY_OFF  3 /* DCDC1 (vdd_gpu_s0) reads off */
+#define YD_T6_GPU_STOP_SUPPLY_OFF  3 /* DCDC1 (vdd_gpu_s0) reads off while PD_GPU reads powered
+				      * (refusal YD_T6_GPU_SUPPLY_OFF_DOMAIN_POWERED, detail: POWER_EN0);
+				      * nothing was written to the RK806 */
 #define YD_T6_GPU_STOP_CLOCK       4 /* the GPU clock has no rate, or the supply is below its OPP
 				      * (refusal 0, detail: the rate); or its PLL did not lock
 				      * (refusal YD_T6_GPU_CLOCK_PLL_NO_LOCK, detail: PLL_CON6) */
@@ -332,8 +334,27 @@ void yd_t6_banner_a3(uintptr_t uart, int32_t rc, uint32_t cr_now, uint32_t perio
 #define YD_T6_GPU_STOP_NOT_G610    6 /* GPU_ID is not 0xa8670005 */
 #define YD_T6_GPU_STOP_RESET       7 /* the soft reset did not complete */
 #define YD_T6_GPU_STOP_L2          8 /* the L2 did not come up */
+#define YD_T6_GPU_STOP_CLOCK_SET_REFUSED 9 /* the GPU clock is on no OPP rate and the CPLL is not
+				      * 1500 MHz in normal mode (detail: the CPLL's rate, 0 for
+				      * none); nothing was written to the CRU */
+#define YD_T6_GPU_STOP_CLOCK_READ_BACK 10 /* the clock was written and did not take: refusal 158 or
+				      * 159 = that CLKSEL_CON read back without the fields written
+				      * (detail: the word read); refusal 0 = the CRU rates the source
+				      * at something but 300 MHz (detail: that rate) */
+#define YD_T6_GPU_STOP_SUPPLY_BELOW_OPP 11 /* DCDC1 off and BUCK1_ON_VSEL below the OPP's voltage
+				      * for the clock's rate (detail hi: BUCK1_ON_VSEL, lo: the rate
+				      * in Hz); refusal 0: found before the enable,
+				      * YD_T6_GPU_SUPPLY_BELOW_AFTER_ENABLE: read again after it.
+				      * No voltage is ever written */
+#define YD_T6_GPU_STOP_SUPPLY_RAMP_TIMEOUT 12 /* the DCDC1-enable frame was sent and POWER_EN0 did not
+				      * read DCDC1 on in time (detail: the last POWER_EN0) */
+#define YD_T6_GPU_STOP_RK806_WRITE 13 /* the DCDC1-enable frame could not be sent (refusal: the
+				      * SpiRefusal, as YD_T6_GPU_STOP_RK806_READ); whether it reached
+				      * the PMIC is unknown */
 
 #define YD_T6_GPU_CLOCK_PLL_NO_LOCK 1
+#define YD_T6_GPU_SUPPLY_OFF_DOMAIN_POWERED 1
+#define YD_T6_GPU_SUPPLY_BELOW_AFTER_ENABLE 1
 
 struct yd_t6_gpu_up {
 	uint32_t pd_before[6];  /* PWR_GATE, STATUS, BUS_IDLE_REQ, _ACK, _ST, REPAIR_STATUS */
@@ -364,6 +385,18 @@ struct yd_t6_gpu_up {
 	uint32_t stop;          /* YD_T6_GPU_STOP_* */
 	uint32_t refusal;       /* the stopping step's refusal number, 0 otherwise */
 	uint32_t detail[2];     /* the value the refusal is about */
+	/* appended: the clock set and the supply enable (the fields above are unmoved) */
+	uint32_t clock_kept;    /* the CRU already gave an OPP rate: nothing written to it */
+	uint32_t clock_cpll_hz[2]; /* the CPLL's rate as read for the decision, 0 for none */
+	uint32_t clock_wrote[2]; /* the words written to CLKSEL_CON(158), (159), hiword mask
+				 * included; 0 for one not written */
+	uint32_t clock_sel[2];  /* CLKSEL_CON(158), (159) after it (as found when not written) */
+	uint32_t clock_set_hz[2]; /* CLK_GPU_SRC's rate after it: read back when written */
+	uint32_t supply_enabled; /* the DCDC1-enable frame was sent (DCDC1 read off at hand-over);
+				 * on_handover always sees 0 */
+	uint32_t supply_after[2]; /* POWER_EN0 (the last of the poll), BUCK1_ON_VSEL after the
+				 * enable; 0 when none was sent */
+	uint32_t supply_waited_us; /* how long DCDC1 took to read on */
 };
 
 int yd_t6_gpu_up(uintptr_t cru, uintptr_t pmu, uintptr_t spi2, uintptr_t qos, uintptr_t gpu,
