@@ -3548,8 +3548,8 @@ fn deqps_multisample_shader_keeps_samples_by_its_alpha_alone() {
 /// channels two to a dword and 8-bit four, each the low bits of its value at
 /// its place, RGB10_A2UI 10/10/10/2 -- with no `pck` in the program (no
 /// conversion, no clamp: values past a channel's range keep their low
-/// bits), and the record says the dwords it writes. A colour mask on such a
-/// target is refused by name.
+/// bits), and the record says the dwords it writes. A colour mask on red
+/// keeps the pixel's red field (the program reads the pixel).
 #[test]
 fn integer_render_targets_get_the_packed_bits() {
     use yakogl::shaderc::*;
@@ -3621,9 +3621,27 @@ fn integer_render_targets_get_the_packed_bits() {
                 let got: Vec<u32> = (0..want.len() as u32).map(|k| *out.get(&k).expect("a pixel output")).collect();
                 assert_eq!(got, want, "{what}: the pixel output dwords");
                 assert_eq!(out.keys().filter(|k| **k < 8).count(), want.len(), "{what}: no other pixel output");
-                /* a colour mask on one of its channels is refused by name */
-                let masked = compile_fragment_for_err(&l, a, key | shc_blend_key_mask_off(1));
-                assert!(masked.contains("colour mask on an integer render target"), "{what}: {masked}");
+                /* a colour mask on red keeps the pixel's red field
+                 * (tests/es3_pvr_int_mask.rs has every mask) */
+                let rec = yakogl::shaderc::online::powervr::chain::compile_fragment_for(
+                    &l.module,
+                    &l.reflection,
+                    a,
+                    key | shc_blend_key_mask_off(1),
+                )
+                .unwrap_or_else(|e| panic!("{what}, red masked: {e:?}"));
+                assert_eq!(rec.uses_fbfetch, 1, "{what}, red masked: the record reads the pixel");
+                // SAFETY: the record's code lives in `keep`, `usc_dw` dwords.
+                let code = unsafe { core::slice::from_raw_parts(rec.usc, rec.usc_dw as usize) };
+                let image: Vec<u8> = code.iter().flat_map(|w| w.to_le_bytes()).collect();
+                inp.pixout = 0x5a5a_a5a5;
+                let out = run_binary(&image, &inp, true).expect("runs");
+                let red = if bits == 32 { u32::MAX } else { (1u32 << bits) - 1 };
+                let mut want = want;
+                /* one channel: the whole target masked, the dword as it was */
+                want[0] = if channels == 1 { inp.pixout } else { (want[0] & !red) | (inp.pixout & red) };
+                let got: Vec<u32> = (0..want.len() as u32).map(|k| *out.get(&k).expect("a pixel output")).collect();
+                assert_eq!(got, want, "{what}, red masked: the pixel's red, the shader's others");
             }
         }
     })
@@ -3681,18 +3699,6 @@ fn gl_test_case_200_intrt_on_the_host() {
         }
     })
     .unwrap();
-}
-
-/// The refusal of a variant, as text.
-fn compile_fragment_for_err<'a>(
-    l: &lower::Lowered<'a>,
-    a: &'a yakogl::shaderc::online::arena::Arena<'a>,
-    key: u32,
-) -> String {
-    match yakogl::shaderc::online::powervr::chain::compile_fragment_for(&l.module, &l.reflection, a, key) {
-        Ok(_) => "compiled".into(),
-        Err(e) => format!("{e:?}"),
-    }
 }
 
 /// gl_test case 182's two fragment shaders, on the host: the folded clamps

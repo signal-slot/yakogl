@@ -1041,6 +1041,13 @@ impl<'s> Arithmetic<'s> {
                     self.after_test = matches!(g.op, SelOp::Machine(MachineOp::LoopTest | MachineOp::CndLoopEnd));
                     self.after_cnd_if = matches!(g.op, SelOp::Machine(MachineOp::CndIf));
                     let mut built = build_group(g)?;
+                    /* a read of the pixel (an integer target's masked
+                     * channels, `chain::pack_int_output`) waits for the
+                     * output lock, as every pixel output reference of pco's
+                     * does (`ref_needs_olchk`) */
+                    if reads_pixout(g) {
+                        built.hdr.set("olchk", 1).map_err(|_| BuildError::Unsupported("no olchk in the header"))?;
+                    }
                     if let Some((arm, false)) = self.arm {
                         /* the then arm runs where the condition held: p0, set
                          * by the tstz where it is zero, is clear there */
@@ -1273,6 +1280,15 @@ pub fn build_unpck(format: &str, scale_rtz: u32, rpt: u32, src: u16, dst: u16) -
     hdr.set("rpt", rpt).map_err(|_| BuildError::Unsupported("the repeat count does not fit the header"))?;
     let parts = Parts { alutype: ALUTYPE_MAIN, instrs, lower: Some(lower), upper, iss, dst: Some(d), align_pad: 0 };
     close(&parts, hdr).map_err(BuildError::Group)
+}
+
+/// Does group `g` read a pixel output register (special `PIXOUT0..+4`)?
+fn reads_pixout(g: &super::sel::SelGroup) -> bool {
+    use super::sel::{Bank, SelSrc};
+    g.srcs
+        .iter()
+        .flatten()
+        .any(|s| matches!(s, SelSrc::Fixed { bank: Bank::Special, reg, .. } if (PIXOUT0..PIXOUT0 + 4).contains(reg)))
 }
 
 /// The colour already in the pixel, read into temporary `dst`: a move from

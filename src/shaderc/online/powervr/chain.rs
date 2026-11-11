@@ -876,25 +876,34 @@ pub fn build_fragment_for<'a>(
 /// carries one layout: attachments of different layouts are the caller's to
 /// refuse. Returned with the dwords written (the record's `num_outputs`).
 ///
-/// Refused by name: a colour mask on the target's channels (`mask`, the
-/// key's [26:29]: the output would have to keep the pixel's other channels,
-/// which needs a read of the pixel no integer path makes), a shader that
-/// writes anything but colour outputs at the consecutive locations 0..,
-/// and outputs that take more than the pixel's four output registers.
+/// A colour mask on the target's channels (`mask`, the key's [26:29], bit
+/// k set: channel k is not written) keeps those channels' stored bits, as
+/// the blend variants keep a masked float channel (`blend.rs`): the program
+/// reads the pixel's packed dwords from the pixel output registers (`mbyp`
+/// with `olchk`, the read pco's blend variants make; the record says
+/// `uses_fbfetch`, [`int_rt_reads_pixel`]), and each dword it writes is
+/// `(old & keep) | new`, `keep` the bits of its masked fields and `new` the
+/// unmasked fields bit-inserted as above. A dword whose fields are all
+/// masked (a masked 32-bit channel, or the whole target masked) is the old
+/// dword as it is. The GL core keys a mask of every channel of the target
+/// only when some channel it lacks is still written (`gl::draw`
+/// current_blend_key); that program writes the pixel back unchanged.
+///
+/// Refused by name: a shader that writes anything but colour outputs at the
+/// consecutive locations 0.., and outputs that take more than the pixel's
+/// four output registers.
 fn pack_int_output<'a>(
     sel: Selected<'a>,
     rt: crate::shaderc::ShcIntRt,
     mask: u32,
     a: &'a Arena<'a>,
 ) -> Result<(Selected<'a>, u8), ChainError> {
-    use super::sel::{OpType, SelDst, SelOp, SelSrc};
+    use super::sel::{Bank, OpType, SelDst, SelOp, SelSrc};
     use crate::shaderc::online::arena::AVec;
     use ir::AluOp::{Iand, Ior, Ishl};
     let unsupported = |why| ChainError::Build(BuildError::Unsupported(why));
     let oom = |_| ChainError::OutOfScratch;
-    if mask & ((1u32 << rt.channels) - 1) != 0 {
-        return Err(unsupported("a colour mask on an integer render target"));
-    }
+    let mask = mask & ((1u32 << rt.channels) - 1);
     /* output n is sel.outputs[at[n]]; every location 0..count is written */
     let count = sel.outputs.len();
     let mut at = [0usize; 4];
@@ -916,7 +925,7 @@ fn pack_int_output<'a>(
     if per * count as u32 > 4 {
         return Err(unsupported("integer colour outputs past the pixel's four output registers"));
     }
-    let mut groups: AVec<'a, SelGroup> = AVec::with_capacity(a, sel.groups.len() + 12 * count).map_err(oom)?;
+    let mut groups: AVec<'a, SelGroup> = AVec::with_capacity(a, sel.groups.len() + 15 * count).map_err(oom)?;
     for g in sel.groups {
         groups.push(a, *g).map_err(oom)?;
     }
@@ -934,11 +943,20 @@ fn pack_int_output<'a>(
         8 => (0, 8 * c, 8),
         _ => (0, 10 * c, if c == 3 { 2 } else { 10 }),
     };
+    /* the bits of dword k (of one output) that its masked fields hold */
+    let mut keep = [0u32; 4];
+    for c in (0..u32::from(rt.channels)).filter(|c| mask & (1 << c) != 0) {
+        let (dword, offset, width) = field(c);
+        keep[dword as usize] |= if width == 32 { u32::MAX } else { ((1u32 << width) - 1) << offset };
+    }
     let mut packed: [Option<SelSrc>; 4] = [None; 4];
     for (o, &i) in at[..count].iter().enumerate() {
         let comps = &sel.outputs[i].1;
         for c in 0..u32::from(rt.channels) {
             let x = comps[c as usize].ok_or(ChainError::FragmentOutputsNotBuilt)?;
+            if mask & (1 << c) != 0 {
+                continue;
+            }
             let (dword, offset, width) = field(c);
             let v = if width == 32 {
                 /* its own register: the output's value moved there as it is */
@@ -962,6 +980,25 @@ fn pack_int_output<'a>(
                 Some(acc) => emit(SelOp::Alu(Ior), OpType::U32, [Some(acc), Some(v), None])?,
             });
         }
+        /* the masked fields: the pixel's dword, its kept bits beside the new */
+        for (dword, &bits) in keep[..per as usize].iter().enumerate().filter(|(_, b)| **b != 0) {
+            let k = o as u32 * per + dword as u32;
+            let pixout = SelSrc::Fixed {
+                bank: Bank::Special,
+                reg: super::assemble::PIXOUT0 + k as u16,
+                mods: super::sel::Mods::default(),
+            };
+            let old = emit(SelOp::Copy, OpType::U32, [Some(pixout), None, None])?;
+            let d = &mut packed[k as usize];
+            *d = Some(match *d {
+                /* every field of the dword masked */
+                None => old,
+                Some(new) => {
+                    let kept = emit(SelOp::Alu(Iand), OpType::U32, [Some(old), Some(SelSrc::Imm(bits)), None])?;
+                    emit(SelOp::Alu(Ior), OpType::U32, [Some(new), Some(kept), None])?
+                }
+            });
+        }
     }
     let n = (per * count as u32) as usize;
     let first = packed[0].ok_or(ChainError::FragmentOutputsNotBuilt)?;
@@ -970,6 +1007,13 @@ fn pack_int_output<'a>(
     let comps = core::array::from_fn(|k| if k < n { packed[k] } else { Some(first) });
     let outputs = a.alloc_copy(&[(ir::IoSlot::FragColor(0), comps)]).map_err(oom)?;
     Ok((Selected { groups: groups.into_slice(), vregs, outputs, alpha_to_one: None, ..sel }, n as u8))
+}
+
+/// Does the integer render target variant `key` read the pixel: a colour
+/// mask on some channel the target has, whose stored bits the program keeps
+/// ([`pack_int_output`])? `false` for any other key.
+fn int_rt_reads_pixel(key: u32) -> bool {
+    crate::shaderc::ShcIntRt::of_key(key).is_some_and(|rt| (key >> 26) & 0xf & ((1u32 << rt.channels) - 1) != 0)
 }
 
 /// The colour outputs of a fragment shader drawn into several sRGB
@@ -1431,10 +1475,12 @@ pub fn compile_fragment_for<'a>(
         if let Some(r) = output_regs {
             sh.num_outputs = r;
         }
-        /* an integer target's variant: its key, and the dwords it writes */
+        /* an integer target's variant: its key, and the dwords it writes;
+         * under a colour mask it reads the pixel (`pack_int_output`) */
         if let Some(n) = int_dwords {
             sh.blend_key = blend_key;
             sh.num_outputs = n;
+            sh.uses_fbfetch = u8::from(int_rt_reads_pixel(blend_key));
         }
         /* several sRGB attachments' variant: its key, which the back end
          * checks before it draws the attachments as RGBA8 bytes; one
