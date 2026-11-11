@@ -138,7 +138,9 @@
 //!
 //! * **Texture reads (TMU)**, the regular 2D and cube lookups, as Mesa emits them
 //!   (`v3d_vir_emit_tex`, v3d_tex.c:222-393): magic writes to TMUT/TMUR/
-//!   TMUI/TMUB/TMUDREF/TMUOFF give the coordinates, WRTMUC signals take the
+//!   TMUI/TMUB/TMUDREF/TMUOFF give the coordinates (TMUDREF a shadow
+//!   look-up's reference depth, compared per texel before the filter by
+//!   the sampler's function, `Env::compare`), WRTMUC signals take the
 //!   configuration words P0 (then P1, P2) from the uniform stream, and the
 //!   write to TMUS, TMUSLOD, TMUSCM or TMUSF (S, "triggers the lookup",
 //!   v3d_tex.c:101) retires the request. P0's bits 0..3 say which result
@@ -199,8 +201,8 @@
 //!   texel edge (the hardware's rounding there is not known), a level of
 //!   detail within dEQP's LOD precision of a level boundary, a cube
 //!   direction within 1e-3 of a face edge, I with TMUSCM (a cube array)
-//!   or with R (a 3D array, which nothing has), DREF/OFF
-//!   (shadow, a non-constant offset), a P2 that is not a regular lookup
+//!   or with R (a 3D array, which nothing has), OFF (a non-constant
+//!   offset), a P2 that is not a regular lookup
 //!   (gather, coefficient mode, a sample number, Offset Format 8, an LOD
 //!   query), unnormalised coordinates, and conditional texture writes.
 //! * **General memory through the TMU**, as Mesa's spills and fills and
@@ -324,6 +326,17 @@ pub struct Env {
     /// only (a LINEAR filter on one is refused: GL leaves the texture
     /// incomplete).
     pub integer_textures: u32,
+    /// The depth compare function of each sampler of `samplers` (the sampler
+    /// record's "Depth Compare Function", `GlesTextureBind::compare_op`
+    /// bits 0-2; docs/notes/v3d-shadow.md (a)), by the same index P1 names;
+    /// `None` (or no entry) is a sampler whose compare is off. A look-up
+    /// that writes TMUDREF (a shadow look-up) on a sampler with a function
+    /// compares every texel its filter reads against the reference, then
+    /// filters (`texref::Compare`); on a sampler with none it is refused
+    /// (GLSL ES 3.00 leaves it undefined; the record then holds NEVER and
+    /// the hardware's answer is not measured). A look-up without TMUDREF
+    /// reads the depth itself whatever the function (not compared).
+    pub compare: Vec<Option<crate::shaderc::online::texref::CompareFunc>>,
 }
 
 /// A piece of memory LDUNIFA can read: 32-bit words from `base` on (a byte
@@ -899,8 +912,8 @@ impl Machine<'_> {
             12 | 13 => self.tmu_general(waddr, vals, mask, what),
             // TMUT, TMUR (a cube's third coordinate), TMUI (a 2D array's
             // layer), TMUB (a bias, or an explicit LOD with TMUSLOD or P2's
-            // disable_autolod).
-            34..=37 => {
+            // disable_autolod), TMUDREF (a shadow look-up's reference depth).
+            34..=38 => {
                 self.tmu_coords.retain(|(w, _)| *w != waddr);
                 self.tmu_coords.push((waddr, vals));
                 Ok(())
@@ -1059,6 +1072,14 @@ impl Machine<'_> {
         // level. Otherwise it comes from the derivatives, and TMUB is a
         // bias on it.
         let b = coord(37);
+        // TMUDREF: a shadow look-up's reference depth (Mesa's
+        // nir_tex_src_comparator write). The compare function is the
+        // sampler's (`Env::compare`); GLSL ES 3.00 has no shadow texelFetch
+        // and no sampler3DShadow.
+        let dref = coord(38);
+        if dref.is_some() && (fetch || (r.is_some() && !cube)) {
+            return unmodelled(format!("{what}: a shadow reference (TMUDREF) on a texel fetch or a 3D lookup"));
+        }
         let explicit = retire == 42 || disable_autolod;
         if explicit && b.is_none() {
             return unmodelled(format!("{what}: an explicit level of detail with no TMUB write"));
@@ -1097,6 +1118,21 @@ impl Machine<'_> {
             .copied()
             .unwrap_or_else(|| Sampler::of(tex));
         let integer = idx < 32 && self.env.integer_textures & (1 << idx) != 0;
+        // The compare function of a shadow look-up: the sampler's entry.
+        let compare = match dref {
+            None => None,
+            Some(_) => {
+                let k = config.get(1).map_or(0, |p1| (p1 >> 24) as usize);
+                match self.env.compare.get(k).copied().flatten() {
+                    Some(f) => Some(f),
+                    None => {
+                        return unmodelled(format!(
+                            "{what}: a shadow lookup (TMUDREF) on sampler {k}, whose compare is off (undefined in GLSL ES 3.00)"
+                        ))
+                    }
+                }
+            }
+        };
         let nearest = sampler.mag == texref::Filter::Nearest
             && matches!(sampler.min, texref::MinFilter::Nearest | texref::MinFilter::NearestMipmapNearest);
         /* a texel fetch filters nothing, whatever the sampler says */
@@ -1148,8 +1184,48 @@ impl Machine<'_> {
                 if let Some((l1, _)) = second {
                     self.out.levels |= 1 << l1;
                 }
-                match (r, layer) {
-                    (Some(r), _) if cube => {
+                /* A shadow look-up: every texel the filter reads compared
+                 * with the reference first, then the weights (texref's
+                 * compare model, ES 3.0.6 3.8.15.1); the result is one
+                 * value, in lane 0, (0, 0, 1) beside it as texref's tap
+                 * leaves them. The reference is not clamped: whether the
+                 * TMU clamps it for a fixed-point depth is a board question
+                 * (docs/notes/v3d-shadow.md (d)). */
+                let cmp = compare.zip(dref).map(|(func, d)| texref::Compare { func, dref: fl(d[l]), clamp_ref: false });
+                match (r, layer, cmp) {
+                    (Some(r), _, Some(cmp)) if cube => {
+                        let (v, face) =
+                            texref::sample_cube_compare(tex, &sampler, &cmp, fl(s[l]), fl(t[l]), fl(r[l]), lod)
+                                .map_err(refused)?;
+                        self.out.cube_faces |= 1 << face.index();
+                        [v, 0.0, 0.0, 1.0]
+                    }
+                    (None, layer, Some(cmp)) => {
+                        let layer = match layer {
+                            Some(i) => {
+                                let faces = tex.levels.first().map_or(1, |lv| lv.faces.len());
+                                let layer = texref::layer_of(fl(i[l]), faces).map_err(refused)?;
+                                if tex.cube {
+                                    self.out.cube_faces |= 1 << layer;
+                                }
+                                layer
+                            }
+                            None => 0,
+                        };
+                        let v = texref::sample_layer_offset_compare(
+                            tex,
+                            &sampler,
+                            &cmp,
+                            layer,
+                            fl(s[l]),
+                            fl(t[l]),
+                            lod,
+                            st_offset,
+                        )
+                        .map_err(refused)?;
+                        [v, 0.0, 0.0, 1.0]
+                    }
+                    (Some(r), _, _) if cube => {
                         let (v, face) = texref::sample_cube_filtered(tex, &sampler, fl(s[l]), fl(t[l]), fl(r[l]), lod)
                             .map_err(refused)?;
                         self.out.cube_faces |= 1 << face.index();
@@ -1158,10 +1234,10 @@ impl Machine<'_> {
                     /* a 3D look-up: the slice NEAREST picks along r, then
                      * (s, t) on it (texref::sample_3d; a LINEAR filter is
                      * refused there) */
-                    (Some(r), _) => {
+                    (Some(r), _, _) => {
                         texref::sample_3d(tex, &sampler, fl(s[l]), fl(t[l]), fl(r[l]), lod, offset).map_err(refused)?
                     }
-                    (None, Some(i)) => {
+                    (None, Some(i), None) => {
                         /* floor(layer + 0.5), clamped to the layers there are */
                         let faces = tex.levels.first().map_or(1, |lv| lv.faces.len());
                         let layer = texref::layer_of(fl(i[l]), faces).map_err(refused)?;
@@ -1171,8 +1247,10 @@ impl Machine<'_> {
                         texref::sample_layer_offset(tex, &sampler, layer, fl(s[l]), fl(t[l]), lod, st_offset)
                             .map_err(refused)?
                     }
-                    (None, None) => texref::sample_layer_offset(tex, &sampler, 0, fl(s[l]), fl(t[l]), lod, st_offset)
-                        .map_err(refused)?,
+                    (None, None, None) => {
+                        texref::sample_layer_offset(tex, &sampler, 0, fl(s[l]), fl(t[l]), lod, st_offset)
+                            .map_err(refused)?
+                    }
                 }
             };
             let mut n = 0;
@@ -2302,6 +2380,18 @@ mod undefined_lane_tests {
         tex: Texture,
         sampler: Option<Sampler>,
     ) -> Result<Outcome, String> {
+        fs_with_compare(body, uniforms, tex, sampler, None)
+    }
+
+    /// [`fs_with_sampler`] with sampler 0's depth compare function
+    /// (`Env::compare`), for a shadow look-up.
+    fn fs_with_compare(
+        body: &[Alu],
+        uniforms: &[u32],
+        tex: Texture,
+        sampler: Option<Sampler>,
+        compare: Option<crate::shaderc::online::texref::CompareFunc>,
+    ) -> Result<Outcome, String> {
         let mut code = vec![thrsw(Alu::nop()), thrsw(Alu::nop())];
         code.extend_from_slice(body);
         code.extend([thrsw(Alu::nop()), Alu::nop(), Alu::nop()]);
@@ -2316,7 +2406,13 @@ mod undefined_lane_tests {
             back_facing: [false; LANES],
             varyings: Vec::new(),
         };
-        let env = Env { textures: vec![tex], samplers: sampler.into_iter().collect(), threads: 1, ..Env::default() };
+        let env = Env {
+            textures: vec![tex],
+            samplers: sampler.into_iter().collect(),
+            threads: 1,
+            compare: vec![compare],
+            ..Env::default()
+        };
         run(&words, uniforms, &Inputs::Fragment(Box::new(inputs)), &env)
     }
 
@@ -2364,6 +2460,23 @@ mod undefined_lane_tests {
         p2: Option<u32>,
         s: u32,
     ) -> (Vec<Alu>, Vec<u32>) {
+        tex_program_full(retire, t, r, i, b, p2, None, s)
+    }
+
+    /// [`tex_program_words`] with a shadow look-up's reference depth written
+    /// to TMUDREF when `dref` (after TMUB, before S: Mesa's order, the
+    /// comparator source after the coordinate and the level).
+    #[allow(clippy::too_many_arguments)]
+    fn tex_program_full(
+        retire: u8,
+        t: u32,
+        r: Option<u32>,
+        i: Option<u32>,
+        b: Option<u32>,
+        p2: Option<u32>,
+        dref: Option<u32>,
+        s: u32,
+    ) -> (Vec<Alu>, Vec<u32>) {
         let mut ld = Alu::nop();
         ld.sig.ldunif = true; // r5
         let mut wrtmuc = Alu::nop();
@@ -2393,6 +2506,10 @@ mod undefined_lane_tests {
         } else if let Some(p2) = p2 {
             code.push(wrtmuc);
             unif.push(p2);
+        }
+        if let Some(d) = dref {
+            code.extend([ld, mov_mul(38, true, Mux::R5)]); // TMUDREF
+            unif.push(d);
         }
         code.extend([ld, mov_mul(retire, true, Mux::R5)]);
         unif.push(s);
@@ -2776,6 +2893,120 @@ mod undefined_lane_tests {
         let (code, unif) = tex_program_layer(33, 0.5, None, Some(f32::NAN), None, false, 0.5);
         let e = fs_with(&code, &unif, edge_cube()).unwrap_err();
         assert!(e.contains("a 2D-array layer that is not finite"), "{e}");
+    }
+
+    /// A shadow look-up (T, DREF, S; the sampler's compare function in
+    /// `Env::compare`, docs/notes/v3d-shadow.md (c)): each texel the filter
+    /// reads is compared with the reference by the sampler's function,
+    /// reference OP depth (GL_LESS passes when the reference is below the
+    /// texel's depth, ES 3.0.6 3.8.15.1), NEAREST giving 0 or 1 per texel,
+    /// which pins the direction once per function; LINEAR compares the four
+    /// taps first and blends the results (a fraction, never the compare of
+    /// the blend); a level on TMUB and a layer on TMUI keep their meaning
+    /// beside DREF; and the refusals: DREF on a sampler whose compare is
+    /// off, on a texel fetch, on a 3D look-up.
+    #[test]
+    fn a_shadow_lookup_compares_each_texel_with_the_reference_then_filters() {
+        use crate::shaderc::online::texref::{CompareFunc, Filter, Level, MinFilter};
+        /* a 2x2 depth texture: 0.25, 0.5 on row 0, 0.5, 0.75 on row 1 */
+        let texel = |d: f32| [d, 0.0, 0.0, 1.0];
+        let depth = Texture {
+            cube: false,
+            min: MinFilter::Nearest,
+            levels: vec![Level {
+                width: 2,
+                height: 2,
+                faces: vec![vec![texel(0.25), texel(0.5), texel(0.5), texel(0.75)]],
+            }],
+        };
+        let look = |func: Option<CompareFunc>, sp: Option<Sampler>, s: f32, t: f32, dref: f32| {
+            let (code, unif) =
+                tex_program_full(33, t.to_bits(), None, None, None, None, Some(dref.to_bits()), s.to_bits());
+            fs_with_compare(&code, &unif, depth.clone(), sp, func).map(|o| tlb_r(&o))
+        };
+        let centres = [(0.25, 0.25), (0.75, 0.25), (0.25, 0.75), (0.75, 0.75)];
+        let table = [
+            (CompareFunc::Never, [0.0, 0.0, 0.0, 0.0]),
+            (CompareFunc::Less, [0.0, 0.0, 0.0, 1.0]),
+            (CompareFunc::Equal, [0.0, 1.0, 1.0, 0.0]),
+            (CompareFunc::Lequal, [0.0, 1.0, 1.0, 1.0]),
+            (CompareFunc::Greater, [1.0, 0.0, 0.0, 0.0]),
+            (CompareFunc::NotEqual, [1.0, 0.0, 0.0, 1.0]),
+            (CompareFunc::Gequal, [1.0, 1.0, 1.0, 0.0]),
+            (CompareFunc::Always, [1.0, 1.0, 1.0, 1.0]),
+        ];
+        for (func, want) in table {
+            for (k, (s, t)) in centres.into_iter().enumerate() {
+                assert_eq!(look(Some(func), None, s, t, 0.5), Ok(want[k]), "{func:?} at texel {k}, reference 0.5");
+            }
+        }
+        /* LINEAR at the centre: the four taps compared, then blended with
+         * weight 1/4 each; the blend of the depths (0.5) compared would give
+         * 0 or 1 */
+        let linear = Sampler { mag: Filter::Linear, min: MinFilter::Linear, ..Sampler::NEAREST_CLAMP };
+        assert_eq!(look(Some(CompareFunc::Less), Some(linear), 0.5, 0.5, 0.5), Ok(0.25));
+        assert_eq!(look(Some(CompareFunc::Gequal), Some(linear), 0.5, 0.5, 0.5), Ok(0.75));
+        assert_eq!(look(Some(CompareFunc::Greater), Some(linear), 0.5, 0.5, 0.6), Ok(0.75));
+        /* the reference is taken as it is (no clamp here: whether the TMU
+         * clamps for a fixed-point depth is a board question) */
+        assert_eq!(look(Some(CompareFunc::Lequal), None, 0.25, 0.25, 1.5), Ok(0.0));
+        assert_eq!(look(Some(CompareFunc::Gequal), None, 0.25, 0.25, -0.5), Ok(0.0));
+        /* an explicit level on TMUB beside DREF: level 1 of a two-level
+         * depth texture (1x1, depth 0.5) */
+        let two = Texture {
+            cube: false,
+            min: MinFilter::NearestMipmapNearest,
+            levels: vec![depth.levels[0].clone(), Level { width: 1, height: 1, faces: vec![vec![texel(0.5)]] }],
+        };
+        let (code, unif) = tex_program_full(
+            42,
+            0.25f32.to_bits(),
+            None,
+            None,
+            Some(1.0f32.to_bits()),
+            None,
+            Some(0.4f32.to_bits()),
+            0.25f32.to_bits(),
+        );
+        let got = fs_with_compare(&code, &unif, two.clone(), None, Some(CompareFunc::Less)).map(|o| tlb_r(&o));
+        assert_eq!(got, Ok(1.0), "0.4 < 0.5 on level 1 (level 0's texel is 0.25)");
+        /* a 2D-array shadow look-up: the layer on TMUI (layer 1 of a
+         * two-layer texture, 0.75 everywhere) */
+        let layers = Texture {
+            cube: false,
+            min: MinFilter::Nearest,
+            levels: vec![Level { width: 2, height: 2, faces: vec![vec![texel(0.25); 4], vec![texel(0.75); 4]] }],
+        };
+        let (code, unif) = tex_program_full(
+            33,
+            0.25f32.to_bits(),
+            None,
+            Some(1.0f32.to_bits()),
+            None,
+            None,
+            Some(0.5f32.to_bits()),
+            0.25f32.to_bits(),
+        );
+        let got = fs_with_compare(&code, &unif, layers, None, Some(CompareFunc::Less)).map(|o| tlb_r(&o));
+        assert_eq!(got, Ok(1.0), "0.5 < 0.75 on layer 1");
+        /* refusals */
+        let e = look(None, None, 0.25, 0.25, 0.5).unwrap_err();
+        assert!(e.contains("a shadow lookup (TMUDREF) on sampler 0, whose compare is off"), "{e}");
+        let (code, unif) = tex_program_full(41, 0, None, None, Some(0), None, Some(0.5f32.to_bits()), 0);
+        let e = fs_with_compare(&code, &unif, depth.clone(), None, Some(CompareFunc::Less)).unwrap_err();
+        assert!(e.contains("a shadow reference (TMUDREF) on a texel fetch or a 3D lookup"), "{e}");
+        let (code, unif) = tex_program_full(
+            33,
+            0.25f32.to_bits(),
+            Some(0.5f32.to_bits()),
+            None,
+            None,
+            None,
+            Some(0.5f32.to_bits()),
+            0.25f32.to_bits(),
+        );
+        let e = fs_with_compare(&code, &unif, depth, None, Some(CompareFunc::Less)).unwrap_err();
+        assert!(e.contains("a shadow reference (TMUDREF) on a texel fetch or a 3D lookup"), "{e}");
     }
 
     /// An LDTMU of the next word into r1.

@@ -4,10 +4,14 @@
 
 Design for occlusion-query (open: #1236), written
 2026-10-08 (`d3037128`) and built on all three back ends (section 2 says
-where). Everything in it is proven on the host only; nothing has been
-measured on a board yet (gl_test 196 `occl` is the first board test, section
-8). Every hardware statement is either a Mesa citation or marked
-**[unverified]**.
+where). Everything in it was proven on the host first; the Pi 4 has since
+run gl_test 196 `occl` (section 8): the first run read 0 for every query
+(the 64-byte counter stride, fixed in `9b1ce2ff` to one 1024-byte group a
+handle, the storage row of section 3.1), and the rerun from the origin/main
+build `67b27e26` passed, `gl_test: case 196 occl: PASS`
+(`tools/cts/log/2026-11-pi4-gltest/`, `6ddba20c`). The AM62P and the
+i.MX8MP have not run it. Every other hardware statement is either a Mesa
+citation or marked **[unverified]**.
 
 Scope: `GL_ANY_SAMPLES_PASSED` and `GL_ANY_SAMPLES_PASSED_CONSERVATIVE`
 (`glBeginQuery`, `glEndQuery`, `glGetQueryiv`, `glGetQueryObjectuiv`,
@@ -679,4 +683,8 @@ accumulation and ordering; the GC PE store timing; the dEQP 62 + 4 cases.
    board run of `occlusion_query.depth_write*` decides whether either can
    go.
 3. **V3D accumulate** (3.1): gl_test 196's q3 (one query over two jobs).
+   Answered on the Pi 4: the counter that read 0 for every query was the
+   64-byte stride, not the accumulate (`9b1ce2ff`, the storage row of
+   3.1), and the rerun passed the whole case, q3 included
+   (`tools/cts/log/2026-11-pi4-gltest/`).
 4. **ES 2.0 extension** (section 6): owner decision, not this plan.

@@ -70,8 +70,23 @@ sys.path.insert(0, os.path.join(REPO, "tools", "vivante"))
 import glsl2vivante as gv  # noqa: E402
 from glsl2vivante import u  # noqa: E402  (es100: stage_of, es_version)
 
-V3D_SHC = os.environ.get("V3D_SHC", os.path.expanduser(
-    "~/pvr-lab/mesa-build/mesa-26.2.1/build-v3d/src/broadcom/v3d_shc"))
+def _find_v3d_shc():
+    """$V3D_SHC, else the first of the known build places that exists: the
+    pvr-lab tree, or the deps cache's Mesa tree (the tree tools/v3d/README.md
+    builds it in on a connected worker, $CONNECTED_DEPS_DIR/mesa-pan/...)."""
+    if os.environ.get("V3D_SHC"):
+        return os.environ["V3D_SHC"]
+    rel = "mesa-26.2.1/build-v3d/src/broadcom/v3d_shc"
+    places = [os.path.expanduser("~/pvr-lab/mesa-build/" + rel)]
+    if os.environ.get("CONNECTED_DEPS_DIR"):
+        places.append(os.path.join(os.environ["CONNECTED_DEPS_DIR"], "mesa-pan", rel))
+    for p in places:
+        if os.path.isfile(p):
+            return p
+    return places[0]
+
+
+V3D_SHC = _find_v3d_shc()
 GLSLANG = gv.GLSLANG
 SPIRV_DIS = os.environ.get("SPIRV_DIS", "spirv-dis")
 STAGES = ("fs", "vs", "cs")
@@ -314,9 +329,11 @@ def name_pairs(files):
 # SPIR-V and varying names
 # --------------------------------------------------------------------------
 
-def translate(rel):
-    """The GLSL 4.60 text glsl2vivante.compile_one would hand glslang."""
-    path = os.path.join(SHADERS, rel)
+def translate(rel, base=SHADERS):
+    """The GLSL 4.60 text glsl2vivante.compile_one would hand glslang.
+    `base` is the directory `rel` is under: tools/shaders, or another
+    source directory (sim_fixture.py's pin programs)."""
+    path = os.path.join(base, rel)
     stage = u.stage_of(path)
     text = open(path).read()
     version = u.es_version(text)
@@ -377,15 +394,16 @@ def spirv_io(spv):
     return ins, outs
 
 
-def prepare(rel, work):
+def prepare(rel, work, base=SHADERS):
     """Translate and assemble one source. Returns a dict with spv (or None),
     error (the full glslang/translator message, or None), and the in/out
-    names from the text and from the SPIR-V (None when not known)."""
+    names from the text and from the SPIR-V (None when not known). `base`
+    as translate()'s."""
     stage = u.stage_of(rel)
     rec = {"rel": rel, "stage": stage, "spv": None, "error": None,
            "ins": None, "outs": None, "spirv_ins": None, "spirv_outs": None}
     try:
-        text = translate(rel)
+        text = translate(rel, base)
     except SystemExit as e:
         rec["error"] = "translate: %s" % e
         return rec

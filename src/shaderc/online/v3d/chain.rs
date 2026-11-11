@@ -274,10 +274,15 @@ fn vertex<'a>(
 /// A program all the way to its words, and the thread count it runs at: 4
 /// when its values fit 4 threads' registers, else 2, whose threads have
 /// twice the register file (v3d_nir_to_vir_finish, nir_to_vir.c:5160-5200:
-/// 4, then 2, and never 1 without spilling). Nothing else in the program
-/// depends on the count; the shader record's 4-way flag carries it.
+/// 4, then 2, and never 1 without spilling). A look-up of more than 4 TMU
+/// writes (a shadow look-up of a cube or a 2D array with a bias or a level:
+/// T, R or I, B, DREF, S) runs at 2 as well, as the 16-slot TMU input FIFO
+/// is shared by the threads (`select::tmu_input_writes`, Mesa's
+/// v3d_vir_emit_tex). Nothing else in the program depends on the count; the
+/// shader record's 4-way flag carries it.
 fn build<'a>(sel: &Selected<'_>, single_seg: bool, a: &Arena<'a>) -> Result<(Code<'a>, u32), V3dError> {
-    let (al, threads) = match allocate(sel, 4, a) {
+    let four = super::select::tmu_input_writes(sel.ops) <= 16 / 4;
+    let (al, threads) = match if four { allocate(sel, 4, a) } else { Err(AllocError::DoesNotFit) } {
         Ok(al) => (al, 4),
         Err(AllocError::DoesNotFit) => (allocate(sel, 2, a)?, 2),
         Err(e) => return Err(e.into()),
@@ -812,20 +817,21 @@ mod tests {
 
     /// What every program that comes back must satisfy, whatever it is.
     /// The first TMU access that is not a look-up of a bound texture, as
-    /// text; `None` when every one is. A look-up writes only TMUS, TMUT and
-    /// TMUB (its coordinates and bias) and a `wrtmuc` per P0/P1 uniform
-    /// (contents 40/41, which the driver resolves to that texture's state), so
-    /// it reads nothing but the texture. Every other TMU register (TMUD, TMUA,
-    /// TMUAU, TMUC, TMUDREF, TMUOFF, TMUHS*) is a general memory access or a
-    /// form this back end does not select, and is reported. `uniforms` are the
-    /// stream's contents codes.
+    /// text; `None` when every one is. A look-up writes only TMUS, TMUT,
+    /// TMUB and TMUDREF (its coordinates, bias and a shadow reference) and a
+    /// `wrtmuc` per P0/P1 uniform (contents 40/41, which the driver resolves
+    /// to that texture's state), so it reads nothing but the texture. Every
+    /// other TMU register (TMUD, TMUA, TMUAU, TMUC, TMUOFF, TMUHS*) is a
+    /// general memory access or a form this back end does not select, and is
+    /// reported. `uniforms` are the stream's contents codes.
     fn first_tmu_memory_access(instrs: &[Instr], uniforms: &[(u32, u32)]) -> Option<String> {
         let tmu = |magic: bool, w: u8| magic && ((11..=13).contains(&w) || (32..=46).contains(&w));
         /* a look-up's writes: TMUS, TMUSLOD (a 2D explicit level, every
          * vertex-stage 2D look-up), TMUSCM (a cube) or TMUSF (a texelFetch)
          * retires it; TMUT, TMUR (a cube's r), TMUI (an array look-up's
-         * layer) and TMUB (bias or level) */
-        let lookup = |w: u8| matches!(w, 33 | 34 | 35 | 36 | 37 | 40 | 41 | 42);
+         * layer), TMUB (bias or level) and TMUDREF (a shadow look-up's
+         * reference) */
+        let lookup = |w: u8| matches!(w, 33 | 34 | 35 | 36 | 37 | 38 | 40 | 41 | 42);
         for (n, i) in instrs.iter().enumerate() {
             if let Instr::Alu(a) = i {
                 for (magic, w) in [(a.add.magic, a.add.waddr), (a.mul.magic, a.mul.waddr)] {
@@ -891,6 +897,27 @@ mod tests {
         tlbu_writes(what, c, TLB_Z_PER_PIXEL)
     }
 
+    /// The most TMU writes any one look-up of the scheduled code makes
+    /// (`select::tmu_input_writes` on the words: TMUT, TMUR, TMUI, TMUB,
+    /// TMUDREF, then the S write that retires it).
+    fn tmu_writes_of(instrs: &[Instr]) -> u32 {
+        let (mut most, mut run) = (0u32, 0u32);
+        for i in instrs {
+            let Instr::Alu(a) = i else { continue };
+            for (magic, w) in [(a.add.magic, a.add.waddr), (a.mul.magic, a.mul.waddr)] {
+                match w {
+                    34..=38 if magic => run += 1,
+                    33 | 40 | 41 | 42 if magic => {
+                        most = most.max(run + 1);
+                        run = 0;
+                    }
+                    _ => {}
+                }
+            }
+        }
+        most
+    }
+
     fn check_all(p: &V3dProgram<'_>) {
         for (what, c, seg) in [
             ("fs", &p.fs.code, p.fs.single_seg),
@@ -903,14 +930,16 @@ mod tests {
             let words: Vec<(u32, u32)> = c.uniforms.iter().map(|u| (u.contents, u.data)).collect();
             assert_eq!(first_tmu_memory_access(c.instrs, &words), None, "{what} reaches memory through the TMU");
         }
-        /* 4 threads unless the registers do not fit them, then 2: the
-         * fallback is taken exactly when it is needed. */
+        /* 4 threads unless the registers do not fit them, or a look-up
+         * writes more than the input FIFO's 16 / 4 slots (`build`), then 2:
+         * the fallback is taken exactly when it is needed. */
         for (what, c, threads) in
             [("fs", &p.fs.code, p.fs.threads), ("vs", &p.vs.code, p.vs.threads), ("cs", &p.cs.code, p.cs.threads)]
         {
             assert!(threads == 4 || threads == 2, "{what}: {threads} threads");
             assert_eq!(registers_fit_threads(c.instrs, threads), Ok(()), "{what}");
-            assert_eq!(threads == 2, registers_fit_threads(c.instrs, 4).is_err(), "{what}: {threads} threads");
+            let needed = registers_fit_threads(c.instrs, 4).is_err() || tmu_writes_of(c.instrs) > 16 / 4;
+            assert_eq!(threads == 2, needed, "{what}: {threads} threads");
         }
         /* The fragment shader always has its last-thread-switch pair; a
          * vertex or coordinate shader starts in its last section exactly when
@@ -4615,6 +4644,85 @@ mod tests {
                 assert!(ops.iter().any(|o| o.contains("mov tmub")), "{ops:#?}");
             },
         );
+    }
+
+    /// A shadow look-up is Mesa's sequence with one more write (docs/notes/
+    /// v3d-shadow.md (c), v3d_tex.c handle_tex_src's comparator write): P0
+    /// (one result word), P1 (the per-pixel mask), T, DREF, then S, which
+    /// retires it, then one ldtmu; no P2 for the plain form. A level goes
+    /// to TMUB before DREF and retires by TMUSLOD; a cube's direction to
+    /// TMUR, retired by TMUSCM, its explicit level (textureGrad's: GLSL ES
+    /// 3.00 8.8 has no textureLod of a cube or 2D-array shadow sampler)
+    /// with the P2 word; a 2D array's layer to TMUI, its offset in P2. A
+    /// look-up of five writes (a cube or an array with a level: T, R or I,
+    /// B, DREF, S) runs the program at 2 threads
+    /// (`select::tmu_input_writes`); the four-write forms stay at 4. A
+    /// vertex shader's shadow look-up is level 0 on TMUB, DREF, TMUSLOD.
+    /// Revert checks: DREF left out fails the counts; the thread rule left
+    /// out fails the cube-gradient case.
+    #[cfg(not(feature = "report-es2"))] // GLSL ES 3.00, which a report-es2 build refuses
+    #[test]
+    fn a_shadow_look_up_is_mesas_sequence_with_dref_before_s() {
+        const VS: &str = "#version 300 es\nin highp vec4 a_pos;\nout highp vec4 p;\n\
+                          void main() { p = a_pos; gl_Position = a_pos; }\n";
+        let fs = |sampler: &str, expr: &str| {
+            std::format!(
+                "#version 300 es\nprecision highp float;\nuniform highp {sampler} t;\nuniform highp float b;\n\
+                 uniform highp vec3 gx, gy;\nin highp vec4 p;\nout vec4 o;\nvoid main() {{ o = vec4({expr}); }}\n"
+            )
+        };
+        /* (sampler, expression, wrtmuc, the writes in order, threads) */
+        let cases: [(&str, &str, usize, &[&str], u32); 8] = [
+            ("sampler2DShadow", "texture(t, p.xyz)", 2, &["tmut", "tmudref", "tmus,"], 4),
+            ("sampler2DShadow", "texture(t, p.xyz, b)", 2, &["tmut", "tmub", "tmudref", "tmus,"], 4),
+            ("sampler2DShadow", "textureLod(t, p.xyz, b)", 2, &["tmut", "tmub", "tmudref", "tmuslod"], 4),
+            ("sampler2DShadow", "textureOffset(t, p.xyz, ivec2(1, -1))", 3, &["tmut", "tmudref", "tmus,"], 4),
+            ("samplerCubeShadow", "texture(t, p)", 2, &["tmut", "tmur", "tmudref", "tmuscm"], 4),
+            ("samplerCubeShadow", "textureGrad(t, p, gx, gy)", 3, &["tmut", "tmur", "tmub", "tmudref", "tmuscm"], 2),
+            ("sampler2DArrayShadow", "texture(t, p)", 2, &["tmut", "tmui", "tmudref", "tmus,"], 4),
+            (
+                "sampler2DArrayShadow",
+                "textureGrad(t, p, gx.xy, gy.xy)",
+                2,
+                &["tmut", "tmui", "tmub", "tmudref", "tmuslod"],
+                2,
+            ),
+        ];
+        for (sampler, expr, wrtmuc, writes, threads) in cases {
+            with_program(VS, &fs(sampler, expr), Prim::Triangles, |p| {
+                let p = p.unwrap_or_else(|e| panic!("{sampler} {expr}: {e:?}"));
+                check_all(p);
+                let ops: Vec<String> = p.fs.code.instrs.iter().map(text).collect();
+                let what = std::format!("{sampler} {expr}: {ops:#?}");
+                let tmu: Vec<Uniform> =
+                    p.fs.code.uniforms.iter().copied().filter(|u| u.contents == 40 || u.contents == 41).collect();
+                assert_eq!(tmu, [Uniform { contents: 40, data: 0x1 }, Uniform { contents: 41, data: 0x4 }], "{what}");
+                let n = |s: &str| ops.iter().filter(|o| o.contains(s)).count();
+                assert_eq!((n("wrtmuc"), n("ldtmu"), n("tmudref")), (wrtmuc, 1, 1), "{what}");
+                let at = |s: &str| ops.iter().position(|o| o.contains(s)).unwrap_or_else(|| panic!("no {s}: {what}"));
+                for w in writes.windows(2) {
+                    assert!(at(w[0]) < at(w[1]), "{} before {}: {what}", w[0], w[1]);
+                }
+                assert!(at(writes[writes.len() - 1]) < at("ldtmu"), "{what}");
+                assert_eq!(p.fs.threads, threads, "{what}");
+            });
+        }
+        /* the vertex stage: level 0 on TMUB, then DREF, retired by TMUSLOD */
+        let vs = "#version 300 es\nuniform highp sampler2DShadow t;\nin highp vec4 a_pos;\nout highp vec4 c;\n\
+                  void main() { c = vec4(texture(t, a_pos.xyz)); gl_Position = a_pos; }\n";
+        let fs_c = "#version 300 es\nprecision mediump float;\nin vec4 c;\nout vec4 o;\nvoid main() { o = c; }\n";
+        with_program(vs, fs_c, Prim::Triangles, |p| {
+            let p = p.expect("compiles");
+            check_all(p);
+            let ops: Vec<String> = p.vs.code.instrs.iter().map(text).collect();
+            let n = |s: &str| ops.iter().filter(|o| o.contains(s)).count();
+            assert_eq!((n("tmub"), n("tmudref"), n("tmuslod"), n("ldtmu")), (1, 1, 1, 1), "{ops:#?}");
+            let at = |s: &str| ops.iter().position(|o| o.contains(s)).unwrap();
+            assert!(at("tmub") < at("tmudref") && at("tmudref") < at("tmuslod"), "{ops:#?}");
+            let tmu: Vec<Uniform> =
+                p.vs.code.uniforms.iter().copied().filter(|u| u.contents == 40 || u.contents == 41).collect();
+            assert_eq!(tmu, [Uniform { contents: 40, data: 0x1 }, Uniform { contents: 41, data: 0x4 }]);
+        });
     }
 
     #[test]

@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# The V3D Mesa pin programs (README.md): <vs> <fs> [v3d_shc flags...].
+# A shadow sampler reads a depth texture, whose return size is 32 (every
+# depth row of v3dx_format_table.c), so the shadow pairs carry the fragment
+# key --fs-ret32 0x1 (sampler binding 0), as a draw keys them.
+quad.vert shadow2d.frag --fs-ret32 0x1
+quad.vert shadow2d_lod_offset.frag --fs-ret32 0x1
+quad.vert shadow2d_proj.frag --fs-ret32 0x1
+quad.vert shadowcube.frag --fs-ret32 0x1
+quad.vert shadowcube_grad.frag --fs-ret32 0x1
+quad.vert shadowarr.frag --fs-ret32 0x1
+quad.vert shadowarr_grad.frag --fs-ret32 0x1
+quad.vert grad2d.frag
+quad.vert gradcube.frag
+quad.vert grad3d_offset.frag
+quad.vert vol_offset.frag
+vsret32.vert passcol.frag --vs-ret32 0x1
+vsret32v4.vert passcol.frag --vs-ret32 0x1
+vsret32i.vert passcol.frag --vs-ret32 0x1
+vsmixed.vert passcol.frag --vs-ret32 0x1
+vsshadow.vert passcol.frag --vs-ret32 0x1
