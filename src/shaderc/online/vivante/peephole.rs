@@ -33,11 +33,17 @@ use super::build::Src;
 /// them. Not `select` or `cmp` (they pass a source through as bits), not the
 /// texture or memory operations.
 fn takes_float_modifiers(s: &SelInstr) -> bool {
-    s.ty == super::alloc::OpType::F32
-        && matches!(
-            s.op.op().name,
-            "mov" | "add" | "mul" | "mad" | "dp2" | "dp3" | "dp4" | "rcp" | "rsq" | "sqrt" | "floor" | "ceil" | "frc"
-        )
+    s.ty == super::alloc::OpType::F32 && float_modifier_op(s.op.op().name)
+}
+
+/// The operations, by name, of [`takes_float_modifiers`]: selection asks the
+/// same question before it hands an operand with a modifier to an
+/// instruction (select.rs `Sel::plain`).
+pub(crate) fn float_modifier_op(name: &str) -> bool {
+    matches!(
+        name,
+        "mov" | "add" | "mul" | "mad" | "dp2" | "dp3" | "dp4" | "rcp" | "rsq" | "sqrt" | "floor" | "ceil" | "frc"
+    )
 }
 
 /// The scalar operations [`merge_scalar_lanes`] joins: one value from the

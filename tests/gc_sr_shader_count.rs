@@ -48,10 +48,11 @@ const GLMARK2: [(&str, &str, u32, u32); 8] = [
     ("6964fcf6aaac9739", "vert", 21, 5),  // horse vertex; etna 14, 4; before 23, 5
     ("474800a67afed087", "frag", 1, 2),   // horse fragment; etna 1, 2; before 1, 2
     ("7215f4f5052a383c", "vert", 21, 5),  // refract vertex; etna 19, 5; before 23, 5
-    ("3fae89c9ab969ea3", "frag", 71, 12), // refract fragment; etna 48, 6; before 86, 12
+    ("3fae89c9ab969ea3", "frag", 64, 11), // refract fragment; etna 48, 6; before 86, 12; 71, 12 before rank 4
 ];
-/// The eight's instructions: etna_shc 105; before the patch 170.
-const GLMARK2_TOTAL: u32 = 146;
+/// The eight's instructions: etna_shc 105; before the patch 170; 146 before
+/// rank 4 (float constant folding, `docs/notes/gc-compiler-ranks-3-5.md`).
+const GLMARK2_TOTAL: u32 = 139;
 
 const HEAD: &str = "precision mediump float;\nvarying vec4 a;\nvarying vec4 b;\n";
 
@@ -65,15 +66,15 @@ fn micro() -> Vec<(&'static str, u32, String, u32)> {
         ("m1b", SHC_STAGE_FRAGMENT, fs("gl_FragColor = vec4(a.xyz / a.w, 1.0);"), 4),
         // m13: etna 3 (mad); before the patch 6 (the patch has no contraction)
         ("m13", SHC_STAGE_FRAGMENT, fs("vec3 t = a.xyz * b.x + b.xyz; gl_FragColor = vec4(t * 0.5 + 0.5, 1.0);"), 6),
-        // m9: etna 7; before the patch 17
+        // m9: etna 7; before the patch 17; 10 before rank 4 (`L.xyz / L.w` is a constant now)
         (
             "m9",
             SHC_STAGE_FRAGMENT,
             fs("const vec4 L = vec4(1.0, 2.0, 3.0, 2.0); gl_FragColor = vec4(normalize(a.xyz / a.w - L.xyz / L.w), 1.0);"),
-            10,
+            8,
         ),
-        // m5: etna 10; before the patch 20
-        ("m5", SHC_STAGE_FRAGMENT, fs("gl_FragColor = vec4(refract(a.xyz, b.xyz, 1.2), 1.0);"), 17),
+        // m5: etna 10; before the patch 20; 17 before rank 4 (`1.0 - eta * eta` folds)
+        ("m5", SHC_STAGE_FRAGMENT, fs("gl_FragColor = vec4(refract(a.xyz, b.xyz, 1.2), 1.0);"), 16),
         // m8: etna 4; before the patch 8
         ("m8", SHC_STAGE_FRAGMENT, fs("float k = dot(a.xyz, b.xyz); gl_FragColor = vec4(vec3(sqrt(1.0 - k * k)), 1.0);"), 7),
         // m4 (vertex): etna 4; before the patch 6
