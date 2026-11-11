@@ -234,7 +234,7 @@ fn shader(ty: GLenum, text: &str) -> GLuint {
     }
 }
 
-/// A linked program of `vs` and `fs`, attribute `p` at 0 and `q` at 1.
+/// A linked program of `vs` and `fs`, attribute `p` at 0, `q` at 1 and `r` at 2.
 fn program(vs: &str, fs: &str) -> GLuint {
     // SAFETY: plain GL calls.
     unsafe {
@@ -243,6 +243,7 @@ fn program(vs: &str, fs: &str) -> GLuint {
         glAttachShader(p, shader(GL_FRAGMENT_SHADER, fs));
         glBindAttribLocation(p, 0, c"p".as_ptr());
         glBindAttribLocation(p, 1, c"q".as_ptr());
+        glBindAttribLocation(p, 2, c"r".as_ptr());
         glLinkProgram(p);
         let mut ok: GLint = 0;
         glGetProgramiv(p, GL_LINK_STATUS, &mut ok);
@@ -293,14 +294,14 @@ fn setup() {
     no_error("the setup");
 }
 
-/// The divisor words of streams 0 and 1 as the stream has loaded them at each
-/// DRAW_INSTANCED (u32::MAX: never written), and the instance counts of those
-/// commands.
-fn divisor_words_and_draws(kicks: &[Vec<u32>]) -> (Vec<[u32; 2]>, Vec<u32>) {
+/// The divisor words of streams 0, 1 and 2 as the stream has loaded them at
+/// each DRAW_INSTANCED (u32::MAX: never written), and the instance counts of
+/// those commands.
+fn divisor_words3_and_draws(kicks: &[Vec<u32>]) -> (Vec<[u32; 3]>, Vec<u32>) {
     let (mut pairs, mut counts) = (Vec::new(), Vec::new());
-    let (reg0, reg1) = (nfe_vertex_streams_vertex_divisor(0), nfe_vertex_streams_vertex_divisor(1));
+    let regs = [0, 1, 2].map(nfe_vertex_streams_vertex_divisor);
     for words in kicks {
-        let mut cur = [u32::MAX; 2];
+        let mut cur = [u32::MAX; 3];
         let mut i = 0usize;
         while i < words.len() {
             let w = words[i];
@@ -310,8 +311,8 @@ fn divisor_words_and_draws(kicks: &[Vec<u32>]) -> (Vec<[u32; 2]>, Vec<u32>) {
                     let base = (w & 0xffff) * 4;
                     for k in 0..count {
                         let r = base + 4 * k as u32;
-                        if r == reg0 || r == reg1 {
-                            cur[usize::from(r == reg1)] = words[i + 1 + k];
+                        if let Some(s) = regs.iter().position(|&x| x == r) {
+                            cur[s] = words[i + 1 + k];
                         }
                     }
                     i += 1 + count;
@@ -327,6 +328,12 @@ fn divisor_words_and_draws(kicks: &[Vec<u32>]) -> (Vec<[u32; 2]>, Vec<u32>) {
         }
     }
     (pairs, counts)
+}
+
+/// The divisor words of streams 0 and 1 (see [`divisor_words3_and_draws`]).
+fn divisor_words_and_draws(kicks: &[Vec<u32>]) -> (Vec<[u32; 2]>, Vec<u32>) {
+    let (triples, counts) = divisor_words3_and_draws(kicks);
+    (triples.into_iter().map(|t| [t[0], t[1]]).collect(), counts)
 }
 
 #[test]
@@ -432,6 +439,43 @@ fn a_mixed_draw_reading_gl_instance_id_is_one_instanced_draw() {
         assert_eq!(yakogl::vivante::backend::gc_refused_draws().wrapping_sub(refused), 0, "no instance refused");
         let (pairs, counts) = divisor_words_and_draws(&take_kicks());
         assert_eq!(pairs, [[0, 2]], "stream 0 per vertex, stream 1 one element per 2 instances");
+        assert_eq!(counts, [4], "ONE instanced draw of the 4 instances");
+    });
+}
+
+const VS3: &str = "attribute vec4 p;\nattribute vec4 q;\nattribute vec4 r;\nvarying vec4 v;\n\
+                   void main() { v = q + r; gl_Position = p; }\n";
+
+/// Mesa etnaviv (`etnaviv_state.c`, `VIVS_NFE_VERTEX_STREAMS_VERTEX_DIVISOR(i)`
+/// = 0x14680 + 4 * i): one raw word a stream, 0 per vertex, else the divisor.
+/// Three arrays at divisors 0, 1 and 3, 4 instances: the words 0, 1 and 3 at
+/// 0x14680, 0x14684 and 0x14688 in ONE DRAW_INSTANCED.
+#[test]
+fn mixed_divisors_0_1_3_have_words_0_1_3_in_one_instanced_draw() {
+    let _g = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    with_backend(|| {
+        setup();
+        // SAFETY: plain GL calls on the bound buffer; DATA is a static.
+        unsafe {
+            glUseProgram(program(VS3, FS));
+            glEnableVertexAttribArray(2);
+            // 4 instances read 4 elements at divisor 1 and 2 at divisor 3:
+            // keep both inside the 24 floats of DATA.
+            glVertexAttribPointer(1, 4, GL_FLOAT, 0, 0, core::ptr::null());
+            glVertexAttribPointer(2, 4, GL_FLOAT, 0, 0, (12 * 4) as *const c_void);
+            glVertexAttribDivisor(1, 1);
+            glVertexAttribDivisor(2, 3);
+        }
+        no_error("the three-array program");
+        let _ = take_kicks();
+        // SAFETY: plain GL calls on the bound arrays.
+        unsafe {
+            glDrawArraysInstanced(GL_TRIANGLES, 0, 3, 4);
+            glFinish();
+        }
+        no_error("glDrawArraysInstanced");
+        let (triples, counts) = divisor_words3_and_draws(&take_kicks());
+        assert_eq!(triples, [[0, 1, 3]], "words at 0x14680, 0x14684, 0x14688");
         assert_eq!(counts, [4], "ONE instanced draw of the 4 instances");
     });
 }
