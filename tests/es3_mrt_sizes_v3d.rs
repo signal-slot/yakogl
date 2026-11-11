@@ -638,11 +638,11 @@ fn scene(f: impl FnOnce()) -> Seen {
 /// The refusal's name, as `extra_targets` words it.
 const REFUSAL: &str = "colour attachments of different sizes";
 
-/// The error a V3D refusal reaches the application as today: `refuse`
-/// answers -EINVAL and `submit_draw` (src/gl/draw.rs) maps every errno but
-/// -ENOTSUP to GL_OUT_OF_MEMORY. The v3d-refuse-enotsup item makes a refusal
-/// of legal GL state GL_INVALID_OPERATION: this one constant then changes.
-const REFUSAL_ERROR: GLenum = GL_OUT_OF_MEMORY;
+/// The error a V3D refusal of legal GL state reaches the application as:
+/// the back end answers -ENOTSUP (`refuse_unsupported`) and `submit_draw`
+/// (src/gl/draw.rs) maps that to GL_INVALID_OPERATION, where every other
+/// errno is GL_OUT_OF_MEMORY and aborts a dEQP session.
+const REFUSAL_ERROR: GLenum = GL_INVALID_OPERATION;
 
 /// The raster stride of a `w`-wide render target at `bpp` bytes a pixel: the
 /// pair-padded pitch (`target_pitch`, the GL core's `tex_pitch`) in bytes.

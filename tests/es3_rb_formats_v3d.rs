@@ -850,10 +850,10 @@ mod trampolines {
     /// The largest sizes. The V3D's tile memory is sized for 2048 on a side
     /// (`v3d::backend::MAX_TARGET`) while GL_MAX_RENDERBUFFER_SIZE is 4096
     /// (src/gl/state.rs): the storage is taken, the framebuffer is complete,
-    /// the clear is taken, and the draw is refused with -EINVAL, which the GL
-    /// core answers as GL_OUT_OF_MEMORY. Pinned for every format.
+    /// the clear is taken, and the draw is refused with -ENOTSUP, which the GL
+    /// core answers as GL_INVALID_OPERATION. Pinned for every format.
     #[test]
-    fn pinned_draw_past_2048_a_side_is_out_of_memory() {
+    fn pinned_draw_past_2048_a_side_is_invalid_operation() {
         let _g = rig();
         let mut seen = 0;
         for &(name, f, k) in all_formats() {
@@ -862,7 +862,7 @@ mod trampolines {
             let p = probe(f, k, w, h, 0);
             assert_eq!((p.storage, p.status, p.clear), (GL_NO_ERROR, GL_FRAMEBUFFER_COMPLETE, GL_NO_ERROR), "{name}");
             if w > 2048 {
-                assert_eq!(p.draw, GL_OUT_OF_MEMORY, "{name} {w}x{h}: today's refusal answers OOM");
+                assert_eq!(p.draw, GL_INVALID_OPERATION, "{name} {w}x{h}: the refusal answers -ENOTSUP");
                 seen += 1;
             } else {
                 assert_eq!(p.draw, GL_NO_ERROR, "{name} {w}x{h}");
@@ -877,17 +877,15 @@ mod trampolines {
         let _g = rig();
         let ok = |w, h| probe(GL_RGBA8, Kind::Float, w, h, 0).letter();
         assert_eq!((ok(2048, 16), ok(16, 2048), ok(2048, 2048)), ('C', 'C', 'C'));
-        assert_eq!((ok(2049, 16), ok(16, 2049), ok(4096, 1)), ('O', 'O', 'O'));
+        assert_eq!((ok(2049, 16), ok(16, 2049), ok(4096, 1)), ('E', 'E', 'E'));
     }
 
     /// What a legal state the V3D cannot do must be: not GL_OUT_OF_MEMORY
     /// (dEQP aborts the session on it), GL_FRAMEBUFFER_UNSUPPORTED or
-    /// GL_INVALID_OPERATION. Cause: v3d-refuse-enotsup (the refusal answers
-    /// -EINVAL, and src/gl/draw.rs turns that into OOM) and the 4096 limit
-    /// of the GL core against the V3D's 2048 (an issue draft: report 2048 for
-    /// GL_MAX_RENDERBUFFER_SIZE on the V3D, or refuse with -ENOTSUP).
+    /// GL_INVALID_OPERATION. The refusal answers -ENOTSUP (v3d-refuse-enotsup);
+    /// the 4096 limit of the GL core against the V3D's 2048 stays an issue
+    /// draft: report 2048 for GL_MAX_RENDERBUFFER_SIZE on the V3D.
     #[test]
-    #[ignore = "v3d-refuse-enotsup: a draw past 2048 a side is GL_OUT_OF_MEMORY, not GL_INVALID_OPERATION"]
     fn draw_past_2048_a_side_is_not_out_of_memory() {
         let _g = rig();
         for &(name, f, k) in all_formats() {
