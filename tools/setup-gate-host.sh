@@ -58,6 +58,11 @@
 # or the GitHub archive directory glmark2-<pin>); --install only prints the
 # commands that fetch it. --check also reports DEQP_GLES3_TEST_DIR (the dEQP
 # shader tree es3_shaderc_corpus reads: unset skips it, a bad path fails it).
+# --check also reports a HAL_NXP_DIR, ZEPHYR_WS or PCO_SHC that is set: unset
+# is ok (tools/cts/deps-env.sh --present supplies the layout), but a set value
+# overrides the layout and must hold the marker deps.toml gives for that entry
+# (zephyr/module.yml, .west/config, an executable pco_shc); a stale one is
+# `missing` (it made rows fail or gap in earlier walks).
 # --check also reports the rustup target aarch64-unknown-linux-gnu (check.sh's
 # "clippy yakogl-mali-panthor (aarch64-unknown-linux-gnu)" row gaps without it
 # on the toolchain the gate runs under; the same per-toolchain rule as
@@ -311,6 +316,17 @@ check_lz4() {
   line ok lz4 "${out%%$'\n'*}"
 }
 
+# dtc: tools/check.sh's rpi_5 fdt_walk host test builds its tree with it (a
+# gap without it) and the board and Zephyr image rows compile device trees.
+check_dtc() {
+  local out
+  out=$(dtc --version 2>&1) || {
+    line missing dtc "dtc not on PATH (Debian device-tree-compiler, Gentoo sys-apps/dtc): the fdt_walk host test and the device-tree rows"
+    return
+  }
+  line ok dtc "${out%%$'\n'*}"
+}
+
 check_pkgconfig() {
   local m out
   if ! command -v pkg-config >/dev/null 2>&1; then
@@ -456,8 +472,8 @@ check_pvr_fw_blob() {
 # or a link into it), then the deps layout's Mesa tree at <PCO_SHC's
 # directory>.src. A host prepared before tools/cts/deps.toml's entry has
 # pco_shc and not this program. Without PCO_SHC the row is a gap naming
-# PCO_SHC itself, so nothing is reported in that case: PCO_SHC is a workspace
-# (the header), not a tool this script judges.
+# PCO_SHC itself, so nothing is reported in that case; check_env_tree below
+# reports the variable itself (unset is ok).
 pco_spm_load_capture_path() {
   local p
   for p in "${PCO_SPM_LOAD_CAPTURE-}" \
@@ -477,6 +493,31 @@ check_pco_spm_load_capture() {
     line ok PCO_SPM_LOAD_CAPTURE "$p"
   else
     line missing PCO_SPM_LOAD_CAPTURE "no capture_spm_load at PCO_SPM_LOAD_CAPTURE='${PCO_SPM_LOAD_CAPTURE-}' or beside PCO_SHC='${PCO_SHC-}' (the spm_load gen row would gap): tools/cts/deps-env.sh --build PCO_SPM_LOAD_CAPTURE"
+  fi
+}
+
+# HAL_NXP_DIR, ZEPHYR_WS and PCO_SHC override the deps layout when set, so a
+# value that names no built tree turns rows into gaps or failures (e.g.
+# "imx8mp regs.rs: no hal_nxp at <HAL_NXP_DIR>"). Unset is ok: deps-env.sh
+# --present supplies the layout. Set, each is tested against the marker
+# tools/cts/deps.toml gives for its entry.
+check_env_tree() {
+  local var=$1 marker=$2 kind=$3 v
+  v=${!var-}
+  if [ -z "$v" ]; then
+    line ok "$var" "unset: tools/cts/deps-env.sh --present supplies the layout"
+    return
+  fi
+  if [ "$kind" = exe ]; then
+    if [ -f "$v" ] && [ -x "$v" ]; then
+      line ok "$var" "$v"
+    else
+      line missing "$var" "$v is not an executable program (rows that run it would gap): unset $var, or point it at the built $marker (tools/cts/deps-env.sh --build $var)"
+    fi
+  elif [ -f "$v/$marker" ]; then
+    line ok "$var" "$v"
+  else
+    line missing "$var" "$v has no $marker (not a built tree; rows that need it would fail or gap): unset $var, or point it at a built tree (tools/cts/deps-env.sh --build $var)"
   fi
 }
 
@@ -506,6 +547,7 @@ run_checks() {
   check_yaml
   check_glslang
   check_lz4
+  check_dtc
   check_pkgconfig
   check_mali_csffw
   check_glmark2_src
@@ -513,6 +555,9 @@ run_checks() {
   check_pvr_fw_blob
   check_pco_spm_load_capture
   check_cc_aarch64
+  check_env_tree HAL_NXP_DIR zephyr/module.yml file
+  check_env_tree ZEPHYR_WS .west/config file
+  check_env_tree PCO_SHC pco_shc exe
 }
 
 # ---------------------------------------------------------------------------

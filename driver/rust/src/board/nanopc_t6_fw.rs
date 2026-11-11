@@ -358,6 +358,7 @@ pub(crate) mod tests {
                 (CRU_BASE + pll_con(104), 0xfa),
                 (CRU_BASE + pll_con(105), 0x42),
                 (CRU_BASE + pll_con(106), 0),
+                (CRU_BASE + pll_con(110), 0x9c00),
                 (PMU_BASE + pd_gpu::PWR_GATE, 0xffff),
                 (PMU_BASE + pd_gpu::STATUS, 0x2455_ffff),
                 (PMU_BASE + pd_gpu::BUS_IDLE_REQ, 0x83cf),

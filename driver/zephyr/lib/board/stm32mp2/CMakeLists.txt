@@ -7,9 +7,18 @@ if(CONFIG_YAKOGL_STM32MP2)
   zephyr_library_named(yakogl_board_stm32mp2)
   zephyr_library_sources(stm32mp2.c stm32mp2_entry.S)
   zephyr_library_sources_ifdef(CONFIG_YAKOGL_STM32MP2_WDOG stm32mp2_wdog.c)
+  # The board layer (yakogl_board.h) for gc_fence and gc_clear.
+  zephyr_library_sources_ifdef(CONFIG_YAKOGL_BOARD_STM32MP2 board_stm32mp2.c)
+  # The GPU powered for the Vivante driver (gc_board_power_on) through the
+  # crate's stm32mp2_gpu.h (CONFIG_YAKOGL_STM32MP2_GPU: the crate built by
+  # ../../../CMakeLists.txt with the features stm32mp2 and vivante).
+  if(CONFIG_YAKOGL_STM32MP2_GPU AND CONFIG_YAKOGL_DRV_GPU_VIVANTE)
+    zephyr_library_sources(gc_power_mp2.c)
+  endif()
   zephyr_include_directories(.)
   # stm32mp2_gpu.h: the crate's GPU power C ABI (soc/stm32mp2/gpu_ffi.rs),
-  # for the images that link the crate with it (mp2_gpu).
+  # for the images that link the crate with it (CONFIG_YAKOGL_STM32MP2_GPU:
+  # mp2_gpu, gc_fence, gc_clear).
   zephyr_include_directories(include)
   # tools/check.sh builds the probes with -DYAKOGL_WERROR=ON.
   if(YAKOGL_WERROR)

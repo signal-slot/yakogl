@@ -48,7 +48,7 @@ pub struct GcElem {
 pub struct GcStream {
     pub gpu: u64,
     pub stride: u32,
-    /// 0: per vertex, 1: per instance.
+    /// 0: per vertex, n: one element per n instances.
     pub divisor: u32,
 }
 

@@ -350,6 +350,7 @@ fn run_binary_decoded(
              * colour already in the pixel (a blend variant). */
             Some("special") if o.index == 32 => Ok(inp.pixout),
             Some("special") if o.index == 33 => Ok(inp.pixout1),
+            Some("special") if matches!(o.index, 34 | 35) => Ok(pixout_hi()[o.index as usize - 34]),
             Some("special") if o.index == 44 => Ok(inp.face_ccw),
             Some("special") if matches!(o.index, 97 | 98 | 100 | 101) => {
                 Ok(inp.frag_xy[[97, 98, 100, 101].iter().position(|r| *r == o.index).unwrap_or(0)])
@@ -1131,6 +1132,24 @@ pub fn set_smp_meta(words: [u32; 2]) {
 /// [`set_smp_meta`]'s words.
 pub fn smp_meta() -> [u32; 2] {
     SMP_META.with(|c| c.get())
+}
+
+std::thread_local! {
+    static PIXOUT_HI: std::cell::Cell<[u32; 2]> = const { std::cell::Cell::new([0, 0]) };
+}
+
+/// Pixel output registers 2 and 3 as the byte model reads them before
+/// anything wrote them (an integer target's third and fourth dwords, which
+/// a colour mask keeps), on this thread: [`Inputs::pixout`] and
+/// [`Inputs::pixout1`] are the first two.
+#[allow(dead_code)]
+pub fn set_pixout_hi(words: [u32; 2]) {
+    PIXOUT_HI.with(|c| c.set(words));
+}
+
+/// [`set_pixout_hi`]'s words.
+fn pixout_hi() -> [u32; 2] {
+    PIXOUT_HI.with(|c| c.get())
 }
 
 /// A shadow look-up's result as the online compiler's `shadow_compare`

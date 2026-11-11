@@ -8,7 +8,8 @@
 # real deps.toml against an empty scratch layout (names, aliases, board sets,
 # markers, packages), and --build / --build-missing against a small fake
 # deps.toml (DEPS_TOML) whose downloads are file:// URLs in the scratch
-# directory. No network, nothing outside the scratch directory is written.
+# directory, and the retry of a cut download against a stand-in urlopen. No
+# network, nothing outside the scratch directory is written.
 set -u
 
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -230,6 +231,51 @@ out=$(DEPS_TOML=$T/mali.toml "$ENV_SH" --build M 2>&1); rc=$?
 [ "$rc" -eq 0 ] && cmp -s "$T/mali_csffw.bin" "$L/mali-csffw/mali_csffw.bin" &&
   ok "MALI_CSFFW's build puts the pinned download at its marker" || bad "MALI_CSFFW's build: rc $rc: $out"
 [ ! -e "$L/mali-csffw/mali_csffw.bin.part" ] && ok "MALI_CSFFW's build leaves no .part" || bad "MALI_CSFFW: .part left"
+
+# A download whose connection is cut is tried again: one "Connection reset by
+# peer" must not end a gate run before any row. An answer that will not change
+# (404, a full disk, a wrong digest) is not tried again. urlopen and the waits are
+# stand-ins: no network, no sleeping.
+out=$(python3 -I - "$HERE" "$T" 2>&1 <<'PY'
+import hashlib, io, pathlib, sys, urllib.error
+sys.path.insert(0, sys.argv[1])
+import deps_env
+deps = pathlib.Path(sys.argv[2]) / "retry"
+body = b"payload\n"
+slept = []
+deps_env.time.sleep = slept.append
+def run(name, failures, sha=hashlib.sha256(body).hexdigest()):
+    calls = []
+    def urlopen(url, **kw):
+        calls.append(url)
+        if len(calls) <= len(failures):
+            raise failures[len(calls) - 1]
+        return io.BytesIO(body)
+    deps_env.urllib.request.urlopen = urlopen
+    del slept[:]
+    try:
+        deps_env.fetch({"url": f"https://example.invalid/{name}", "sha256": sha}, deps)
+        end = "fetched"
+    except deps_env.FetchError as e:
+        end = f"FetchError: {e}"
+    left = sorted(p.name for p in (deps / "downloads").glob("*.part"))
+    print(f"{name}: {end}; tries {len(calls)}; waits {slept}; part {left}")
+reset = urllib.error.URLError(ConnectionResetError(104, "Connection reset by peer"))
+run("cut-once", [reset])
+run("cut-always", [reset] * 9)
+run("not-found", [urllib.error.HTTPError("u", 404, "Not Found", {}, None)] * 9)
+run("server-error", [urllib.error.HTTPError("u", 503, "Service Unavailable", {}, None)])
+run("disk-full", [OSError(28, "No space left on device")] * 9)
+run("wrong-digest", [], sha="0" * 64)
+PY
+)
+check "a cut download is tried again" "cut-once: fetched; tries 2; waits [5]; part []" "$out"
+check "a download that is cut every time fails after 4 tries" \
+  "cut-always: FetchError: <urlopen error [Errno 104] Connection reset by peer> (4 tries); tries 4; waits [5, 20, 60]; part []" "$out"
+check "a 404 is not tried again" "not-found: FetchError: HTTP Error 404: Not Found; tries 1; waits []; part []" "$out"
+check "a 503 is tried again" "server-error: fetched; tries 2; waits [5]; part []" "$out"
+check "an error of the local file is not tried again" "disk-full: FetchError: [Errno 28] No space left on device; tries 1; waits []; part []" "$out"
+check "a wrong sha256 is not tried again" "expected $(printf '%064d' 0); tries 1; waits []; part []" "$out"
 
 echo
 if [ "$fail" -eq 0 ]; then

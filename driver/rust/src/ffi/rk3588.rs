@@ -372,7 +372,9 @@ mod early {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct YdT6GpuUp {
     pub pd_before: [u32; 6],
-    pub clock: [u32; 7],
+    /// `CLKSEL_CON(158)`, `(159)`, `CLKGATE_CON(66)`, `MODE_CON0`, the
+    /// selected PLL's `PLL_CON0..2` and `PLL_CON6`, as found.
+    pub clock: [u32; 8],
     pub gpu_src_hz: [u32; 2],
     pub spi_gate14: u32,
     pub spi_opened: u32,
@@ -382,6 +384,9 @@ pub struct YdT6GpuUp {
     /// `SR`, `RXFLR`, `VERSION`.
     pub spi_found: [u32; 8],
     pub vdd_gpu_uv: u32,
+    /// The GPU clock's PLL: read powered before any write, the microseconds
+    /// its lock took, `PLL_CON6` after.
+    pub pll_on: [u32; 3],
     pub pd_opened: u32,
     pub pd_was_on: u32,
     pub pd_waited_us: [u32; 3],
@@ -403,13 +408,13 @@ pub struct YdT6GpuUp {
 }
 
 #[cfg(any(feature = "mali", test))]
-const _: () = assert!(size_of::<YdT6GpuUp>() == 4 * 108);
+const _: () = assert!(size_of::<YdT6GpuUp>() == 4 * 112);
 #[cfg(any(feature = "mali", test))]
-const _: () = assert!(offset_of!(YdT6GpuUp, rk806) == 4 * 17);
+const _: () = assert!(offset_of!(YdT6GpuUp, rk806) == 4 * 18);
 #[cfg(any(feature = "mali", test))]
-const _: () = assert!(offset_of!(YdT6GpuUp, ident) == 4 * 61);
+const _: () = assert!(offset_of!(YdT6GpuUp, ident) == 4 * 65);
 #[cfg(any(feature = "mali", test))]
-const _: () = assert!(offset_of!(YdT6GpuUp, stop) == 4 * 104);
+const _: () = assert!(offset_of!(YdT6GpuUp, stop) == 4 * 108);
 
 #[cfg(any(feature = "mali", test))]
 fn lo_hi(v: u64) -> [u32; 2] {
@@ -452,13 +457,14 @@ impl From<&crate::board::nanopc_t6_gpu::GpuUp> for YdT6GpuUp {
         let c = &o.clock;
         YdT6GpuUp {
             pd_before: pd_words(&o.pd_before),
-            clock: [c.sel158, c.sel159, c.gate66, c.mode_con0, c.pll_con[0], c.pll_con[1], c.pll_con[2]],
+            clock: [c.sel158, c.sel159, c.gate66, c.mode_con0, c.pll_con[0], c.pll_con[1], c.pll_con[2], c.pll_con6],
             gpu_src_hz: lo_hi(c.src_hz),
             spi_gate14: o.spi_gate14,
             spi_opened: o.spi_opened,
             rk806: o.rk806.map(u32::from),
             spi_found: o.spi_found,
             vdd_gpu_uv: o.vdd_gpu_uv,
+            pll_on: [u32::from(o.pll_on.was_on), o.pll_on.waited_us, o.pll_on.con6],
             pd_opened: o.pd_on.opened,
             pd_was_on: u32::from(o.pd_on.was_on),
             pd_waited_us: o.pd_on.waited_us,

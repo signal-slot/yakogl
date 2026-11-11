@@ -27,17 +27,18 @@
 #define GPU_PHYS  0xfb000000UL
 
 /* driver/rust/src/ffi/rk3588.rs pins the same layout. */
-BUILD_ASSERT(sizeof(struct yd_t6_gpu_up) == 4 * 108, "struct yd_t6_gpu_up moved");
-BUILD_ASSERT(offsetof(struct yd_t6_gpu_up, rk806) == 4 * 17, "struct yd_t6_gpu_up moved");
-BUILD_ASSERT(offsetof(struct yd_t6_gpu_up, ident) == 4 * 61, "struct yd_t6_gpu_up moved");
-BUILD_ASSERT(offsetof(struct yd_t6_gpu_up, stop) == 4 * 104, "struct yd_t6_gpu_up moved");
+BUILD_ASSERT(sizeof(struct yd_t6_gpu_up) == 4 * 112, "struct yd_t6_gpu_up moved");
+BUILD_ASSERT(offsetof(struct yd_t6_gpu_up, rk806) == 4 * 18, "struct yd_t6_gpu_up moved");
+BUILD_ASSERT(offsetof(struct yd_t6_gpu_up, ident) == 4 * 65, "struct yd_t6_gpu_up moved");
+BUILD_ASSERT(offsetof(struct yd_t6_gpu_up, stop) == 4 * 108, "struct yd_t6_gpu_up moved");
 
 static const char *const stop_name[] = {
 	[YD_T6_GPU_STOP_NONE] = "none",
 	[YD_T6_GPU_STOP_SPI_GATE] = "an SPI2 gate stays closed",
 	[YD_T6_GPU_STOP_RK806_READ] = "an RK806 read failed",
 	[YD_T6_GPU_STOP_SUPPLY_OFF] = "vdd_gpu_s0 (RK806 DCDC1) is off",
-	[YD_T6_GPU_STOP_CLOCK] = "the GPU clock has no rate or the supply is below its OPP",
+	[YD_T6_GPU_STOP_CLOCK] = "the GPU clock has no rate, the supply is below its OPP or its PLL "
+				 "did not lock",
 	[YD_T6_GPU_STOP_PD] = "PD_GPU did not come on",
 	[YD_T6_GPU_STOP_NOT_G610] = "GPU_ID is not 0xa8670005",
 	[YD_T6_GPU_STOP_RESET] = "the soft reset did not complete",
@@ -117,6 +118,9 @@ int main(void)
 		on_handover(&o);
 	}
 	if (o.stop == YD_T6_GPU_STOP_NONE || o.stop >= YD_T6_GPU_STOP_PD) {
+		printk("t6_gpu: GPU PLL on: PLL_CON6 0x%08x at hand-over, was on %u, waited %u us, "
+		       "PLL_CON6 0x%08x\n",
+		       o.clock[7], o.pll_on[0], o.pll_on[1], o.pll_on[2]);
 		printk("t6_gpu: PD_GPU on: gates opened 0x%x, was on %u, waited %u/%u/%u us\n",
 		       o.pd_opened, o.pd_was_on, o.pd_waited_us[0], o.pd_waited_us[1],
 		       o.pd_waited_us[2]);

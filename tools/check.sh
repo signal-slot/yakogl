@@ -3275,7 +3275,9 @@ step "tools   board-stm32mp2.sh dry-run matrix, env edits and replays" tools/boa
 # The board lock every board runner takes (driver/tools/kexec-zephyr/
 # board_lock.sh), without a board: a second taker refuses at once and names
 # the holder's pid and script, and nanopc-t6.sh sources it with LOCK_WAIT 0
-# (a jump never waits onto a later session). 6 checks, pinned in the script.
+# (a jump never waits onto a later session); who_remote.sh, the runner's
+# check for remote sessions on the board, leaves out the ssh command it runs
+# in and names every other. The number of checks is pinned in the script.
 scope tools drivers
 step "tools   board_lock.sh: a refusal names the holder; nanopc-t6.sh never waits" \
   driver/tools/kexec-zephyr/board_lock_selftest.sh

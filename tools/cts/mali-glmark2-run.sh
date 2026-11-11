@@ -127,6 +127,16 @@
 #                  boot_id_before, boot_id_after, kernel, started, ended
 #   summary.txt    the summary line, as printed:
 #     mali-glmark2: <ok>/<n> scenes ok, failed <k> (<verdict> <count>, ...), commit <sha8>
+# FB_DUMP=1 (off by default): each numbered scene's process gets GLMARK2_FB=1,
+# the frame dump of mali-glmark2-pbuffer.patch (about 1.9 MB of "glmark2-fb:"
+# lines on stderr at 800x600: a begin line, one "<y> <crc16> <base64 RGB888>"
+# line a row, "end crc32 <hex>"; the format and its checks are
+# tools/cts/glmark2-fb.py's). The runner decodes it with that script to
+# RAW_DIR/png/<NN>.png (NN: the scene's number, two digits; the script's
+# report next to it as <NN>.txt; a damaged dump is drawn magenta there and
+# noted) and strips every "glmark2-fb:" line from log/<n>.err, leaving one
+# "dump stripped" line, so the committed run directory stays small. Probes
+# run without it. The verdict is judged on the raw stderr as ever.
 # The raw files (fetched, not redacted) go to RAW_DIR (default
 # build/mali-glmark2-run/<outdir's name>/, ignored by git), never committed.
 #
@@ -290,9 +300,11 @@ esac
 
 stamp=$(date -u +%Y%m%d-%H%M%S)
 stage_root_given=${MALI_GLMARK2_STAGE_ROOT-}
+# fb_env <id>: the frame dump's variable, for a numbered scene when FB_DUMP=1
+fb_env() { if [ "${FB_DUMP-}" = 1 ] && [[ $1 =~ ^([0-9]+|[<]n[>])$ ]]; then echo " GLMARK2_FB=1"; fi; }
 gm_cmd() { # <stage> <id> <scene> [seconds]: the board's command for one process
   echo "cd $1 && setsid -w sh -c 'echo \$\$ > $1/run/$2.pgid; exec timeout -k ${KILL_GRACE_S:-10} ${4:-$limit}" \
-    "env LD_LIBRARY_PATH=$1/lib $1/bin/$PROGRAM --size $SIZE -b \"\$1\"' glmark2 '$3'" \
+    "env LD_LIBRARY_PATH=$1/lib$(fb_env "$2") $1/bin/$PROGRAM --size $SIZE -b \"\$1\"' glmark2 '$3'" \
     "> $1/run/$2.out 2> $1/run/$2.err < /dev/null"
 }
 
@@ -313,6 +325,9 @@ if [ "$dry" = 1 ]; then
   echo "$me: stage \$BOARD_HOST:${stage_root_given:-<home>/yakogl-mali-glmark2}/$sha8-<stamp>/ (bin/, lib/, share/, BUILD-INFO), removed at the end"
   echo "$me: out ${out:-<outdir>} (scenes.tsv, pictures.txt, kmsg/<n>.log, log/, meta.txt, summary.txt), raw files ${RAW_DIR:-build/mali-glmark2-run/<outdir name>}"
   echo "$me: per scene <n> (over ssh to \$BOARD_HOST):"
+  if [ "${FB_DUMP-}" = 1 ]; then
+    echo "$me: FB_DUMP=1: GLMARK2_FB=1 on each scene's process (not the probes); its frame dump is decoded to ${RAW_DIR:-build/mali-glmark2-run/<outdir name>}/png/<NN>.png and stripped from log/<n>.err"
+  fi
   echo "  dmesg | tail -n 1"
   echo "  $(gm_cmd '<stage>' '<n>' '<scene>')"
   echo "  dmesg; cat /proc/sys/kernel/random/boot_id   (every 5 s for ${BOARD_BACK_S:-120} s until it answers)"
@@ -737,7 +752,22 @@ run_one() {
 # save_one <id>: the redacted log and kernel files of one process.
 save_one() {
   local id=$1 ext
-  for ext in out err; do py redact "$raw/run/$id.$ext" "$out/log/$id.$ext"; done
+  local errsrc=$raw/run/$id.err nn
+  if [ "${FB_DUMP-}" = 1 ] && [[ $id =~ ^[0-9]+$ ]]; then
+    nn=$(printf %02d "$id")
+    mkdir -p "$raw/png"
+    if python3 -I "$HERE/glmark2-fb.py" "$errsrc" "$raw/png/$nn.png" > "$raw/png/$nn.txt" 2>&1; then
+      echo "$me: scene $id: frame dump decoded to $raw/png/$nn.png"
+    else
+      echo "$me: scene $id: no frame dump, or a damaged one: see $raw/png/$nn.txt" >&2
+    fi
+    if grep -q 'glmark2-fb: ' "$errsrc"; then
+      { grep -v 'glmark2-fb: ' "$errsrc" || true; echo "glmark2-fb: dump stripped (the PNG is in the raw directory)"; } > "$raw/run/$id.err.nodump"
+      errsrc=$raw/run/$id.err.nodump
+    fi
+  fi
+  py redact "$raw/run/$id.out" "$out/log/$id.out"
+  py redact "$errsrc" "$out/log/$id.err"
   if [ -f "$klog" ]; then
     py redact "$klog" "$out/kmsg/$id.log"
     cp "$raw/kmsg/$id.class" "$out/kmsg/$id.class"

@@ -94,7 +94,8 @@
 #                   is absent, already open, or the settings do not hold.
 #   MMIO_RD         a built mmio_rd; otherwise it is built like kexec_zephyr.
 #   T6_ALLOW_SESSIONS=1  --go even when `who` lists remote (pts, sshd) sessions
-#                   on the board (the jump ends them; ask whoever holds them
+#                   on the board other than this script's own ssh command
+#                   (who_remote.sh; the jump ends them; ask whoever holds them
 #                   first). Console logins (tty1, ttyS2, seat0: Armbian's
 #                   autologin) are printed, not refused.
 set -euo pipefail
@@ -162,7 +163,11 @@ fi
 
 # ---- 2. the board, read only -----------------------------------------------
 board() { timeout 30 ssh "${SSH_OPTS[@]}" -o BatchMode=yes -o ConnectTimeout=10 "$BOARD_HOST" "$@" </dev/null; }
-facts=$(board 'set -u
+# who_remote, defined on the board ahead of the commands that call it: the
+# remote sessions without this ssh command's own (who_remote.sh).
+WHO_REMOTE=$(cat "$HERE/who_remote.sh") || die "cannot read $HERE/who_remote.sh"
+facts=$(board "$WHO_REMOTE"'
+set -u
 printf "compatible=%s\n" "$(tr "\0" " " </proc/device-tree/compatible)"
 printf "kernel=%s\n" "$(uname -r)"
 printf "kexec_load_disabled=%s\n" "$(cat /proc/sys/kernel/kexec_load_disabled)"
@@ -175,7 +180,7 @@ printf "boot_id=%s\n" "$(cat /proc/sys/kernel/random/boot_id)"
 for f in identity state timeout nowayout; do printf "wdt_%s=%s\n" "$f" "$(cat /sys/class/watchdog/watchdog0/$f 2>/dev/null || echo absent)"; done
 printf "wdt_users=%s\n" "$(fuser /dev/watchdog /dev/watchdog0 2>/dev/null | tr -s " " || true)"
 printf "gpu_users=%s\n" "$(fuser /dev/dri/* 2>/dev/null | tr -s " " || true)"
-printf "who_remote=%s\n" "$(who | awk "\$2 ~ /^(pts|sshd)/ {print \$1\"@\"\$2\"(\"\$NF\")\"}" | tr "\n" " ")"
+printf "who_remote=%s\n" "$(who_remote)"
 printf "who_local=%s\n" "$(who | awk "\$2 !~ /^(pts|sshd)/ {print \$1\"@\"\$2}" | tr "\n" " ")"
 printf "gic_tables=%s\n" "$(dmesg | grep -oE "(LPI (property|pending) table|Devices|Interrupt Collections) @(0x)?[0-9a-f]+" | sed "s/.*@//; s/^0x//" | tr "\n" " ")"
 echo "iomem<<"; cat /proc/iomem; echo ">>"') || refuse "cannot read the board's facts over ssh ($BOARD_HOST)"
@@ -317,11 +322,12 @@ LOCK_WAIT=${LOCK_WAIT:-0}
 # Under the lock, the state the jump depends on is read again: the facts
 # above were read before the lock, and the wait for it can be LOCK_WAIT long
 # when the caller set one.
-fresh=$(board 'printf "kexec_loaded=%s\n" "$(cat /sys/kernel/kexec_loaded)"
+fresh=$(board "$WHO_REMOTE"'
+printf "kexec_loaded=%s\n" "$(cat /sys/kernel/kexec_loaded)"
 printf "boot_id=%s\n" "$(cat /proc/sys/kernel/random/boot_id)"
 printf "gpu_users=%s\n" "$(fuser /dev/dri/* 2>/dev/null | tr -s " " || true)"
 printf "wdt_users=%s\n" "$(fuser /dev/watchdog /dev/watchdog0 2>/dev/null | tr -s " " || true)"
-printf "who_remote=%s\n" "$(who | awk "\$2 ~ /^(pts|sshd)/ {print \$1\"@\"\$2\"(\"\$NF\")\"}" | tr "\n" " ")"') ||
+printf "who_remote=%s\n" "$(who_remote)"') ||
 	refuse "cannot read the board's state again under the lock"
 fresh_fact() { printf '%s\n' "$fresh" | sed -n "s/^$1=//p" | head -1; }
 [ "$(fresh_fact kexec_loaded)" = 0 ] || refuse "under the lock: a kexec image is already loaded (/sys/kernel/kexec_loaded '$(fresh_fact kexec_loaded)')"
@@ -377,13 +383,16 @@ read_regs() {
 # What the GPU's power looks like to Linux (driver/docs/nanopc-t6-mali.md,
 # "Z1"): the runtime PM state, the PMU's PD_GPU registers (PWR_GATE 0x14c,
 # BUS_IDLE_REQ 0x10c, _ACK 0x118, _ST 0x120, REPAIR_STATUS 0x290), the
-# CRU's CLKSEL_CON(158), (159) and CLKGATE_CON(66), and the RK806's
-# POWER_EN0, POWER_SLP_EN0, BUCK1_CONFIG and BUCK1_ON_VSEL from the regmap
-# cache Linux keeps (debugfs). All always-on blocks: nothing behind PD_GPU
-# is read.
+# CRU's CLKSEL_CON(158), (159) and CLKGATE_CON(66), the CRU's MODE_CON0 and
+# PLL_CON1 and PLL_CON6 of the four PLLs the GPU clock can run from (AUPLL,
+# CPLL, GPLL, NPLL: CON1 bit 13 set is powered down, CON6 bit 15 is the
+# lock; Linux powers down a PLL nothing uses), and the RK806's POWER_EN0,
+# POWER_SLP_EN0, BUCK1_CONFIG and BUCK1_ON_VSEL from the regmap cache Linux
+# keeps (debugfs). All always-on blocks: nothing behind PD_GPU is read.
 read_gpu_power() {
 	board "printf 'runtime %s; ' \$(cat /sys/bus/platform/devices/fb000000.gpu/power/runtime_status)
 for a in 0xfd8d814c 0xfd8d810c 0xfd8d8118 0xfd8d8120 0xfd8d8290 0xfd7c0578 0xfd7c057c 0xfd7c0908; do $STAGE/mmio_rd \$a; done | tr '\n' ' '
+printf 'pll '; for a in 0xfd7c0280 0xfd7c0184 0xfd7c0198 0xfd7c01a4 0xfd7c01b8 0xfd7c01c4 0xfd7c01d8 0xfd7c01e4 0xfd7c01f8; do $STAGE/mmio_rd \$a; done | tr '\n' ' '
 printf 'rk806 '; grep -E '^(00|06|10|1a):' /sys/kernel/debug/regmap/spi2.0/registers | tr '\n' ' '"
 }
 board "rm -rf $STAGE && mkdir -p $STAGE"

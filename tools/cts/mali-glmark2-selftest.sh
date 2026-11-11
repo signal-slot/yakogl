@@ -32,7 +32,7 @@ set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 FIX=$HERE/testdata/mali-glmark2-run
 RUN=$HERE/mali-glmark2-run.sh
-EXPECT=80
+EXPECT=89
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/mali-glmark2-selftest-XXXXXX")
 # MALI_GLMARK2_SELFTEST_KEEP=1 keeps the directory and says where it is.
 cleanup() {
@@ -135,6 +135,31 @@ check "the run staged only under <home>/yakogl-mali-glmark2/<sha8>-<stamp>/" \
 check "the stage (and the directory the run made for it) is removed at the end" stage_gone clean
 check "the run directory keeps no host name, address or MAC" clean_out clean
 check "the board lock is released (its record emptied)" bash -c "[ ! -s '$tmp/board.lock' ]"
+
+check "without FB_DUMP: no GLMARK2_FB on the board command, no png directory, no dump text" \
+  bash -c "! grep -q GLMARK2_FB '$tmp/clean/ssh.log' && [ ! -e '$tmp/clean/raw/png' ] && ! grep -q 'glmark2-fb:' '$tmp/clean/out/log/1.err'"
+
+echo "mali-glmark2-selftest: FB_DUMP=1 over scenes 1-2 (a 16x12 frame dump in each scene's stderr)"
+FB_DUMP=1 run fbdump clean --scenes 1-2
+check "exit 0, both scenes ok (the verdict is as without the dump)" \
+  bash -c "[ \"\$(cat '$tmp/fbdump/rc')\" = 0 ] && grep -qx 'mali-glmark2: 2/2 scenes ok, failed 0, commit ${c1:0:8}' '$tmp/fbdump/out.txt'"
+check "GLMARK2_FB=1 is on each scene's board command" \
+  bash -c "[ \$(grep -c 'env LD_LIBRARY_PATH=[^ ]*/lib GLMARK2_FB=1 ' '$tmp/fbdump/ssh.log') = 2 ]"
+check "a PNG of the dump's size per scene in RAW_DIR/png/, nowhere in the run directory" \
+  bash -c "for n in 01 02; do python3 -I -c \"import struct,sys; d=open(sys.argv[1],'rb').read(); sys.exit(0 if d[:8]==b'\\x89PNG\\r\\n\\x1a\\n' and struct.unpack('>II', d[16:24])==(16,12) else 1)\" '$tmp/fbdump/raw/png/'\$n.png || exit 1; done;
+    grep -q 'crc32 .* agrees' '$tmp/fbdump/raw/png/01.txt' && grep -q 'picture value agrees' '$tmp/fbdump/raw/png/02.txt' &&
+    [ -z \"\$(find '$tmp/fbdump/out' -name '*.png')\" ]"
+check "the raw stderr keeps the dump; the redacted log/<n>.err has none, one 'dump stripped' line and the picture line" \
+  bash -c "for n in 1 2; do grep -q '^glmark2-fb: 11 ' '$tmp/fbdump/raw/run/'\$n.err &&
+    ! grep -q 'glmark2-fb: [0-9e]' '$tmp/fbdump/out/log/'\$n.err && ! grep -q 'begin' '$tmp/fbdump/out/log/'\$n.err &&
+    [ \$(grep -c '^glmark2-fb: dump stripped' '$tmp/fbdump/out/log/'\$n.err) = 1 ] &&
+    grep -q '^glmark2-picture: ' '$tmp/fbdump/out/log/'\$n.err &&
+    grep -q '^yakogl-mali-exit: ' '$tmp/fbdump/out/log/'\$n.err || exit 1; done"
+check "the picture still reaches scenes.tsv and pictures.txt, and the run directory is clean" \
+  bash -c "[ \$(grep -c '^mali | ' '$tmp/fbdump/out/pictures.txt') = 2 ] && grep -q 'probes c ' '$tmp/fbdump/out/pictures.txt' && ! grep -rq 'glmark2-fb: [0-9]' '$tmp/fbdump/out'" 
+check "glmark2-fb.py --rundir on the redacted run directory finds no dump (and none damaged)" \
+  bash -c "python3 -I '$HERE/glmark2-fb.py' --rundir '$tmp/fbdump/out' '$tmp/fbdump/pngs' | grep -c 'no dump' | grep -qx 2"
+check "the run directory keeps no host name, address or MAC" clean_out fbdump
 
 echo "mali-glmark2-selftest: scenes 1-10, each with another outcome (--timeout 2)"
 run mixed mixed --scenes 1-10 --timeout 2
@@ -315,7 +340,12 @@ dry c --dry-run "$tmp/drybuild" "$tmp/dry/out"
 check "--dry-run says a real run would refuse a commit not on main, and exits 0" \
   bash -c "[ \"\$(cat '$tmp/dry/c.rc')\" = 0 ] && grep -q 'a real run refuses it, exit 3' '$tmp/dry/c.txt'"
 check "--dry-run never calls ssh or scp, takes no lock and creates nothing" \
-  bash -c "[ ! -e '$tmp/dry/called.log' ] && [ -z \"\$(ls -A '$tmp/dry' | grep -v '^[abc]\.')\" ]"
+  bash -c "[ ! -e '$tmp/dry/called.log' ] && [ -z \"\$(ls -A '$tmp/dry' | grep -v '^[abce]\.')\" ]"
+FB_DUMP=1 dry e --dry-run --scenes 1-2 "$tmp/drybuild" "$tmp/dry/out"
+check "--dry-run with FB_DUMP=1 says so and shows GLMARK2_FB=1 in the command; without it neither appears" \
+  bash -c "[ \"\$(cat '$tmp/dry/e.rc')\" = 0 ] && grep -q 'FB_DUMP=1: GLMARK2_FB=1 on each scene' '$tmp/dry/e.txt' &&
+    grep -q 'LD_LIBRARY_PATH=<stage>/lib GLMARK2_FB=1 <stage>/bin/glmark2-es2-mali' '$tmp/dry/e.txt' &&
+    ! grep -q 'GLMARK2_FB\|FB_DUMP' '$tmp/dry/a.txt'"
 dry d "$tmp/drybuild"
 check "a real run without <outdir> exits 1 (usage)" bash -c "[ \"\$(cat '$tmp/dry/d.rc')\" = 1 ]"
 
