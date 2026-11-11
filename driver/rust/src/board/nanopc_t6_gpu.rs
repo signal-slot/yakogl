@@ -22,7 +22,7 @@
 //! - PD_GPU off, vdd_gpu_s0 on: Linux's kexec state (measured 2026-10-19).
 //! - PD_GPU off, vdd_gpu_s0 off: possible after U-Boot, since the supply is
 //!   boot-on but not always-on (rk806 fact 4). vdd_gpu_s0 is PD_GPU's own
-//!   supply (rk3588-nanopc-t6.dtsi:628-630), so it comes on before the
+//!   supply (Linux v6.18 rk3588-nanopc-t6.dtsi:628-630), so it comes on before the
 //!   domain, as in Linux, where the domain's supply is enabled before the
 //!   domain is powered. Before anything is written, `BUCK1_ON_VSEL` must
 //!   already cover the OPP minimum of the rate [`rk3588::gpu_clock_set`]
@@ -60,12 +60,12 @@ pub struct Bases {
 }
 
 /// `BAUDR` for the RK806: `clk_spi2`'s parents are 200 MHz, 150 MHz and
-/// 24 MHz (`mux_200m_150m_24m_p`, clk-rk3588.c:455, 1182-1184; the T6 reads
+/// 24 MHz (`mux_200m_150m_24m_p`, Linux v6.18 clk-rk3588.c:455, 1182-1184; the T6 reads
 /// 198 MHz), so 200 keeps the bus at or below the PMIC's 1 MHz
 /// (rk3588-nanopc-t6.dtsi:765) whichever parent Linux left selected.
 pub const RK806_BAUDR: u32 = 200;
 
-/// The RK806 on SPI2 chip select 0 (rk3588-nanopc-t6.dtsi:763-766). A
+/// The RK806 on SPI2 chip select 0 (v6.18 rk3588-nanopc-t6.dtsi:763-766). A
 /// 1-value read is 4 frames, 32 µs at 1 MHz; the budget is generous.
 pub const RK806_BUS: rockchip_spi::Host = rockchip_spi::Host { base: 0, cs: 0, baudr: RK806_BAUDR, budget_us: 1_000 };
 
@@ -502,7 +502,7 @@ mod tests {
         /// The hand-over of 2026-11-11: the GPU last ran at 850 MHz, so
         /// `CLK_GPU_SRC` is NPLL / 1 at 800 mV, and Linux powered NPLL down
         /// when it suspended the GPU. 850 MHz is no rate of the OPP table
-        /// the code holds (rk3588-opp.dtsi:118-153).
+        /// the code holds (v6.18 rk3588-opp.dtsi:118-153).
         fn handed_over_on_npll() -> T6 {
             let mut t6 = T6::handed_over();
             for (a, v) in [
