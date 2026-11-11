@@ -1,0 +1,15 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-FileCopyrightText: 2026 Signal Slot, Inc. */
+/*
+ * STM32MP257F-DK, Cortex-A35: the GPU for the Vivante driver. The node is
+ * the SoC's (dts/arm64/st/stm32mp257fxx_a35.dtsi: the 0x800-byte register
+ * block at 0x48280000, GIC SPI 183, no "gpc" or "ccm" range: the board
+ * layer powers it) and the board's memory-region is the 64 MiB no-map
+ * gpu-reserved area at 0xfa800000 (#1281). The core clock's rate was never
+ * read (#1281, Q3: neither galcore nor our image sets one); it only sizes
+ * the front end's idle-loop WAIT (gpu::vivante::cmdbuf).
+ */
+&gpu {
+	clock-frequency = <800000000>;
+	status = "okay";
+};

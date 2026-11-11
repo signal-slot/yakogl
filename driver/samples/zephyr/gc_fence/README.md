@@ -26,7 +26,18 @@ board layer's `app.conf` and `app.overlay` (`examples/zephyr.cmake`).
 # from the top of a west workspace made from yakogl's west.yml (../README.md)
 west build -p always -b verdin_imx8mp/mimx8ml8/a53 -d build/gc_fence \
     yakogl/driver/samples/zephyr/gc_fence -- -DYAKOGL_WERROR=ON
+# the STM32MP257F-DK's A35 (plan #322)
+west build -p always -b stm32mp257f_dk/stm32mp257fxx/a35 -d build/gc_fence_mp2 \
+    yakogl/driver/samples/zephyr/gc_fence -- -DYAKOGL_WERROR=ON
 ```
+
+On the STM32MP257F-DK the board layer (`driver/zephyr/lib/board/stm32mp2`)
+powers the GPU from the driver's init (`gc_power_mp2.c`: SCMI over OP-TEE,
+every message on the console as `gc_power: ...`, the RCC gate and reset),
+identifies it and refuses anything but model 0x8000 revision 0x6205 (#1281)
+with a `gc_power: REFUSED ...` line and a PSCI reset. The GPU's memory is
+the 64 MiB `gpu-reserved` area at 0xfa800000; the run ends with PSCI
+SYSTEM_RESET back into ST's Linux.
 
 The result line and the record:
 
@@ -46,4 +57,4 @@ interrupt count is `gc_render_perf()`'s `kicks_done`, which only the
 interrupt handler moves; the irq latency is its `gpu_busy_ns` (submit to
 interrupt). The elapsed time has the wait's 1 ms polling step in it.
 
-Built for the Verdin iMX8M Plus A53 with `-Werror`; not run on a board yet.
+Built for the Verdin iMX8M Plus A53 and the STM32MP257F-DK A35 with `-Werror`; not run on a board yet.

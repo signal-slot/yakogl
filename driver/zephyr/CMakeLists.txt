@@ -225,6 +225,11 @@ if(CONFIG_YAKOGL_DRV_DISPLAY_RUST OR CONFIG_YAKOGL_DRV_GPU_PVR_RUST OR CONFIG_YA
     # yd_t6_gpu_up
     list(APPEND _yd_features rk3588 mali)
   endif()
+  if(CONFIG_YAKOGL_STM32MP2_GPU)
+    # soc::stm32mp2's GPU power C ABI (gpu_ffi.rs over gpu::vivante's
+    # identity table) behind lib/board/stm32mp2/include/stm32mp2_gpu.h
+    list(APPEND _yd_features stm32mp2 vivante)
+  endif()
   list(REMOVE_DUPLICATES _yd_features)
 
   set(_yd_archive "${CMAKE_CURRENT_BINARY_DIR}/libyakogl_drivers.a")
