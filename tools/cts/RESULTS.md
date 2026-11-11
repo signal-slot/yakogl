@@ -536,14 +536,16 @@ Zephyr images started out of the board's Armbian by kexec
 (`driver/tools/kexec-zephyr/nanopc-t6.sh`) and judged against the predicted
 record (`driver/tools/kexec-zephyr/t6-verdict.sh`). A development result: the
 sign-off form (U-Boot starting the image) has not run. The steps Z1 to Z4,
-their predicted records and Z1's result are in
-`driver/docs/nanopc-t6-mali.md`; a step gets its row here when it has run.
+their predicted records and the result of Z1's first half (`t6_hello`,
+2026-10-19) are in `driver/docs/nanopc-t6-mali.md`; a step gets its row
+here when it has run.
 
 | Step | Image | Result | Build | Run | Record |
 |---|---|---|---|---|---|
+| Z1, second half: the GPU power-on | `t6_gpu` | **PASS**, `VERDICT t6_gpu PASS`: `t6_gpu: PASS: GPU_ID 0xa8670005, L2 ready, 16 ms` | `v0.1.0-915-g1bac19568` (main `1bac19568`) | 2026-11-11 21:36 JST | `records/nanopc-t6/20261111-213650-t6` |
 | Z2: AS0 and a cache flush | `t6_mmu` | **PASS**, `VERDICT t6_mmu PASS`: `t6_mmu: PASS: AS0 on TRANSTAB 0x0000000010023000, three cache flush round trips, 13 ms` | `v0.1.0-913-g1f19113a3` (main `1f19113a3`) | 2026-11-11 21:01 JST | `records/nanopc-t6/20261111-210127-t6` |
 
-- Every line of the predicted record was seen: Z1's power-on (`GPU_ID`
+- Z2: every line of the predicted record was seen: Z1's power-on (`GPU_ID`
   0xa8670005, L2 ready), the cache flush round trip (2 polls of 1 µs), AS0's
   tables (4 of 16 pages, the walk of VA 0x04001234 reaches the backing),
   the enable (`LOCK`, `UPDATE`, `UNLOCK` without a wait), AS0 read back as
@@ -554,10 +556,20 @@ their predicted records and Z1's result are in
 - The board came back to Armbian through the image's PSCI reset 30 s after
   the jump (`GLB_RST_ST` 0 before and after; Linux's watchdog was open at
   the jump, its `WDT_EN` proof is in the record).
-- Not shown by this run: the power-on's PLL step. The GPU clock was on CPLL
-  at hand-over, which was running; no jump has started from a powered-down
-  NPLL since the image learned to power it (#4211). Z2 by its design does
-  not show the GPU's own walk of the tables: that is Z3's first fetch.
+- Z2's run does not show the power-on's PLL step: the GPU clock was on
+  CPLL at hand-over, which was running. Z1's run shows it. It started from
+  the hand-over that stopped the first run of the day, the GPU clock on
+  NPLL (`CLKSEL_CON(158)` 0x00001f60) and NPLL powered down (`PLL_CON1`
+  0x00002083), and the image powered the PLL and saw its lock: `t6_gpu:
+  GPU PLL on: PLL_CON6 0x00004000 at hand-over, was on 0, waited 10 us,
+  PLL_CON6 0x0000a400`. Then PD_GPU, the soft reset and L2 as predicted,
+  the PASS line 16 ms after the power-on began (its prints included), and
+  the board back in Armbian 30 s after the jump.
+- That hand-over was made under Armbian by a write to the GPU devfreq's
+  `min_freq` with the GPU suspended, not by a GPU load
+  (`driver/docs/nanopc-t6-mali.md`, "The runs of 2026-11-11").
+- Z2 by its design does not show the GPU's own walk of the tables: that is
+  Z3's first fetch.
 - The same day two runs of the image of main `3aa24a68d` stopped (Z1's
   power-on on a powered-down NPLL; the image's own reading of
   `MMU_INT_RAWSTAT`); both causes were corrected before this run
