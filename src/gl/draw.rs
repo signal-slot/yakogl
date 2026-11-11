@@ -691,6 +691,10 @@ pub(crate) fn sampling_fields(t: &GlTexture) -> (u8, u8, u8, u8) {
 /// (`backend::texture_uploaded`). The fields a draw also sets from the
 /// program (`unit`) are 0.
 /// The GL base format of `t` has no alpha channel (`GlesTextureBind::no_alpha`).
+/// The integer base formats count too (ES 3.0.6 3.8.15, table 3.24: alpha 1
+/// for every base format without A; docs/notes/gc-128bit-swizzle.md).
+/// `t.format` is the base format the upload named, so the packed floats
+/// (GL_RGB) and RGB10_A2 (GL_RGBA) already come out right.
 pub(crate) fn texture_has_no_alpha(t: &GlTexture) -> bool {
     t.bgra
         || matches!(
@@ -699,6 +703,9 @@ pub(crate) fn texture_has_no_alpha(t: &GlTexture) -> bool {
                 | GL_LUMINANCE
                 | GL_RED
                 | GL_RG
+                | GL_RGB_INTEGER
+                | GL_RG_INTEGER
+                | GL_RED_INTEGER
                 | GL_ETC1_RGB8_OES
                 | GL_COMPRESSED_RGB8_ETC2
                 | GL_COMPRESSED_SRGB8_ETC2
