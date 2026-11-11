@@ -1,0 +1,15 @@
+glmark2-fb: @INFO@ 16x12 begin
+glmark2-fb: 0 98ef AABmEABmIABmMABmQABmUABmYABmcABmgABmkABmoABmsABmwABm0ABm4ABm8ABm
+glmark2-fb: 1 c804 ARRmERRmIRRmMRRmQRRmURRmYRRmcRRmgRRmkRRmoRRmsRRmwRRm0RRm4RRm8RRm
+glmark2-fb: 2 3939 AihmEihmIihmMihmQihmUihmYihmcihmgihmkihmoihmsihmwihm0ihm4ihm8ihm
+glmark2-fb: 3 69d2 AzxmEzxmIzxmMzxmQzxmUzxmYzxmczxmgzxmkzxmozxmszxmwzxm0zxm4zxm8zxm
+glmark2-fb: 4 cb62 BFBmFFBmJFBmNFBmRFBmVFBmZFBmdFBmhFBmlFBmpFBmtFBmxFBm1FBm5FBm9FBm
+glmark2-fb: 5 b199 BWRmFWRmJWRmNWRmRWRmVWRmZWRmdWRmhWRmlWRmpWRmtWRmxWRm1WRm5WRm9WRm
+glmark2-fb: 6 6ab4 BnhmFnhmJnhmNnhmRnhmVnhmZnhmdnhmhnhmlnhmpnhmtnhmxnhm1nhm5nhm9nhm
+glmark2-fb: 7 ec2f B4xmF4xmJ4xmN4xmR4xmV4xmZ4xmd4xmh4xml4xmp4xmt4xmx4xm14xm54xm94xm
+glmark2-fb: 8 3ff5 CKBmGKBmKKBmOKBmSKBmWKBmaKBmeKBmiKBmmKBmqKBmuKBmyKBm2KBm6KBm+KBm
+glmark2-fb: 9 6f1e CbRmGbRmKbRmObRmSbRmWbRmabRmebRmibRmmbRmqbRmubRmybRm2bRm6bRm+bRm
+glmark2-fb: 10 ca03 CshmGshmKshmOshmSshmWshmashmeshmishmmshmqshmushmyshm2shm6shm+shm
+glmark2-fb: 11 9ae8 C9xmG9xmK9xmO9xmS9xmW9xma9xme9xmi9xmm9xmq9xmu9xmy9xm29xm69xm+9xm
+glmark2-fb: end crc32 c608e87d
+glmark2-picture: @INFO@: 16x12; probes c 86786600, tl 433c6600, tr c33c6600, bl 49b46600, br c9b46600; crc16 05fc, crc16q 34ab; mean 127 112 102; black no

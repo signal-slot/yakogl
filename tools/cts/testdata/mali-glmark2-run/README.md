@@ -44,3 +44,9 @@ NanoPC-T6 glmark2-es2 runner `tools/cts/mali-glmark2-run.sh` without a board.
 The host name `board.invalid`, the address `198.51.100.7` (TEST-NET-2) and the
 MAC `02:00:5e:00:53:01` (documentation range) appear in the inputs on
 purpose: the self-test checks that the run directory keeps none of them.
+
+`fbdump.txt` is a 16x12 frame dump in `glmark2-fb.py`'s format (begin line,
+twelve row lines, end crc32) with its `glmark2-picture:` line, built with that
+script's own `crc16`/`picture_value`; `@INFO@` stands for the scene's info
+string. The fixture `glmark2-es2-mali` prints it on stderr, in place of the
+800x600 picture line, when `GLMARK2_FB=1` is set (the runner's `FB_DUMP=1`).
