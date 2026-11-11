@@ -128,6 +128,7 @@ table_t6_gpu() {
 	e 't6_gpu: SPI2 gates CLKGATE_CON(14) 0x{x8}, opened 0x{x}'
 	e 't6_gpu: SPI2 as found: CTRLR0 0x{x8} CTRLR1 0x{x8} SSIENR 0x{x} SER 0x{x} BAUDR 0x{x} SR 0x{x8} RXFLR 0x{x} VERSION 0x{x8}'
 	e 't6_gpu: RK806 at hand-over: POWER_EN0 0x{x} POWER_SLP_EN0 0x{x} BUCK1_CONFIG 0x{x} BUCK1_ON_VSEL 0x{x}: vdd_gpu_s0 on, {d} uV'
+	e 't6_gpu: GPU PLL on: PLL_CON6 0x{x8} at hand-over, was on {d}, waited {d} us, PLL_CON6 0x{x8}'
 	e 't6_gpu: PD_GPU on: gates opened 0x{x}, was on {d}, waited {d}/{d}/{d} us'
 	e 't6_gpu: PD_GPU after: PWR_GATE 0x{x8} STATUS 0x{x8} BUS_IDLE_REQ 0x{x8} ACK 0x{x8} ST 0x{x8} REPAIR_STATUS 0x{x8}: on'
 	local b

@@ -40,9 +40,9 @@ static uint8_t t6_mmu_pool[POOL_PAGES * 4096] __aligned(4096);
 static uint8_t t6_mmu_backing[64 * 1024] __aligned(4096);
 
 /* driver/rust/src/ffi/rk3588.rs pins the same layouts. */
-BUILD_ASSERT(sizeof(struct yd_t6_gpu_up) == 4 * 108, "struct yd_t6_gpu_up moved");
-BUILD_ASSERT(offsetof(struct yd_t6_gpu_up, ident) == 4 * 61, "struct yd_t6_gpu_up moved");
-BUILD_ASSERT(offsetof(struct yd_t6_gpu_up, stop) == 4 * 104, "struct yd_t6_gpu_up moved");
+BUILD_ASSERT(sizeof(struct yd_t6_gpu_up) == 4 * 112, "struct yd_t6_gpu_up moved");
+BUILD_ASSERT(offsetof(struct yd_t6_gpu_up, ident) == 4 * 65, "struct yd_t6_gpu_up moved");
+BUILD_ASSERT(offsetof(struct yd_t6_gpu_up, stop) == 4 * 108, "struct yd_t6_gpu_up moved");
 
 static const char *const stop_name[] = {
 	[YD_T6_MMU_STOP_NONE] = "none",
