@@ -1521,7 +1521,10 @@ fn g() -> &'static mut V3dState {
 }
 
 /// Log a refusal once per cause, and give the errno the contract names for a
-/// draw the backend does not record.
+/// draw the backend does not record because it is malformed, a guard the GL
+/// core should never reach, or out of memory (-EINVAL, which the GL core
+/// raises as GL_OUT_OF_MEMORY). Legal GL state this backend cannot render
+/// is [`refuse_unsupported`]'s.
 fn refuse(g: &mut V3dState, why: state::Refusal) -> i32 {
     count_refusal(g, why);
     -EINVAL
@@ -2674,7 +2677,7 @@ fn begin_job(g: &mut V3dState, target: Target) -> i32 {
         // SAFETY: plain computations on the out-parameter given.
         unsafe { v3d_frame_tiling_bpp(w, h, u32::from(target.rts.max(1)), msaa, max_bpp, &mut tiling) };
         if tiling.tiles_x * tiling.tiles_y > MAX_JOB_TILES {
-            return refuse(g, "a 64- or 128-bpp colour target with more tiles than the job pools hold");
+            return refuse_unsupported(g, "a 64- or 128-bpp colour target with more tiles than the job pools hold");
         }
     }
     let (bcl_cpu, bcl_gpu) = (g.arenas.bcl.cpu as *mut u8, g.arenas.bcl.gpu as u32);
@@ -3727,8 +3730,12 @@ enum Attempt {
     /// bytes fitting only with it given back). End the job, try once in a
     /// new one; there the draw is refused with the reason.
     NoMemory(state::Refusal),
-    /// Not drawn, with the reason.
+    /// Not drawn, with the reason: a malformed draw, a guard, or the kept
+    /// copies run out (`refuse`, -EINVAL).
     Refused(state::Refusal),
+    /// Not drawn, with the reason: legal GL state this backend cannot render
+    /// yet (`refuse_unsupported`, -ENOTSUP).
+    Unsupported(state::Refusal),
 }
 
 /// Record the draw into the open job (the arrays staged, the job builder
@@ -3737,12 +3744,12 @@ enum Attempt {
 fn record(g: &mut V3dState, d: &GlesDraw, st: &V3dJobState, fs: &ShcShader) -> Result<(), Attempt> {
     let (reads_z, reads_s, writes_z, writes_s) = state::zs_use(d);
     if reads_z && !g.j.z_valid {
-        return Err(Attempt::Refused(
+        return Err(Attempt::Unsupported(
             "the draw reads depth an earlier job wrote, and the target has no depth/stencil buffer to keep it in",
         ));
     }
     if reads_s && !g.j.s_valid {
-        return Err(Attempt::Refused(
+        return Err(Attempt::Unsupported(
             "the draw reads stencil an earlier job wrote, and the target has no depth/stencil buffer to keep it in",
         ));
     }
@@ -3799,7 +3806,7 @@ fn record_arrays_and_draw(
      * (VERTEX_ARRAY_SINGLE_INSTANCE_PRIMS and SET_INSTANCEID are not
      * measured on the board) */
     if d.instance_id != 0 && v3d.vs.uses_iid != 0 {
-        return Err(Attempt::Refused("an instance drawn on its own whose program reads gl_InstanceID"));
+        return Err(Attempt::Unsupported("an instance drawn on its own whose program reads gl_InstanceID"));
     }
     /* the arrays, one per attribute record */
     let mut attrs = [V3dVertexAttr::default(); V3D_MAX_ATTRS];
@@ -3812,13 +3819,13 @@ fn record_arrays_and_draw(
             continue; /* the program does not read this location */
         }
         if a.format != GLES_ATTRIBF_FLOAT32 {
-            return Err(Attempt::Refused("an attribute format other than float32 reached the backend"));
+            return Err(Attempt::Unsupported("an attribute format other than float32 reached the backend"));
         }
         let address = if !a.cpu.is_null() {
             stage(g, a.cpu, a.cpu_bytes as usize).ok_or(Attempt::Full)?
         } else {
             gpu32(a.buffer_gpu + a.offset as u64)
-                .ok_or(Attempt::Refused("a vertex array outside the V3D's 32-bit address space"))?
+                .ok_or(Attempt::Unsupported("a vertex array outside the V3D's 32-bit address space"))?
         };
         /* an ES 3.0 per-instance array: element i / divisor for instance i,
          * the record's Instance Divisor (the GL core passes divisors up to
@@ -3858,7 +3865,7 @@ fn record_arrays_and_draw(
             index_bytes = d.index_bytes;
         } else {
             index_buffer = gpu32(d.index_buf_gpu)
-                .ok_or(Attempt::Refused("an index buffer outside the V3D's 32-bit address space"))?;
+                .ok_or(Attempt::Unsupported("an index buffer outside the V3D's 32-bit address space"))?;
             index_bytes = u32::try_from(need).map_err(|_| Attempt::Refused("an index list too long to address"))?;
         }
     }
@@ -3908,7 +3915,7 @@ fn record_arrays_and_draw(
             Ok(())
         }
         V3D_JOB_FULL => Err(Attempt::Full),
-        _ => Err(Attempt::Refused(
+        _ => Err(Attempt::Unsupported(
             "the job builder refused the draw (a uniform, program or primitive it does not write)",
         )),
     }
@@ -4270,7 +4277,7 @@ fn cpu_of(gpu: u64, bytes: u32) -> Option<*const u8> {
 /// (docs/online-shaderc/v3d-backend.md, "M6 textures").
 fn tex_state_for(g: &mut V3dState, b: &GlesTextureBind, ret32: bool) -> Result<u32, Attempt> {
     if let Some(why) = texture::refusal_for(b, ret32) {
-        return Err(Attempt::Refused(why));
+        return Err(if texture::GAPS.contains(&why) { Attempt::Unsupported(why) } else { Attempt::Refused(why) });
     }
     let key = TexKey::of(b);
     if let Some(i) = g.j.tex_keys[..g.j.ntex].iter().position(|k| *k == key) {
@@ -4525,8 +4532,17 @@ fn copy_image_for(g: &mut V3dState, b: &GlesTextureBind) -> Result<(V3dTexLayout
                          than the texture arena (8 MiB tiled)"
                     }
                 };
-                /* no memory may be memory the open job holds: run it first */
-                return Err(if miss == KeptMiss::NoMemory { Attempt::NoMemory(why) } else { Attempt::Refused(why) });
+                /* no memory may be memory the open job holds: run it first.
+                 * No slot and a full working set run out of the copies in
+                 * use, as no memory does; the others are this backend's
+                 * fixed limits on a legal texture, a gap (-ENOTSUP) */
+                return Err(match miss {
+                    KeptMiss::NoMemory => Attempt::NoMemory(why),
+                    KeptMiss::NoSlot | KeptMiss::WorkingSetFull => Attempt::Refused(why),
+                    KeptMiss::Unstamped | KeptMiss::OverBudget | KeptMiss::FillRefused | KeptMiss::Address => {
+                        Attempt::Unsupported(why)
+                    }
+                });
             }
             /* level 0 is laid out at a 4 KiB boundary of the image (Mesa's
              * BOs are page aligned), so the image is too */
@@ -5494,7 +5510,7 @@ fn texture_units(
                 continue;
             }
             if unit < 64 && ret32_units & (1 << unit) != 0 {
-                return Err(Attempt::Refused(
+                return Err(Attempt::Unsupported(
                     "an incomplete texture read by a look-up compiled for the 32-bit TMU output",
                 ));
             }
@@ -5534,7 +5550,7 @@ fn black_state(g: &V3dState, cube: bool) -> u32 {
 /// arena, uncached.
 fn black_typed_state(g: &mut V3dState, b: &GlesTextureBind, ret32: bool) -> Result<u32, Attempt> {
     if ret32 != texture::return_32(b) {
-        return Err(Attempt::Refused("an incomplete texture read by a look-up compiled for the 32-bit TMU output"));
+        return Err(Attempt::Unsupported("an incomplete texture read by a look-up compiled for the 32-bit TMU output"));
     }
     let cube = b.type_ == GLES_TEXTYPE_CUBE;
     let (off, stand_in) = if cube { (BLACK_CUBE_OFF, black_cube_binding()) } else { (0, black_binding()) };
@@ -5649,6 +5665,7 @@ fn draw_in_job(g: &mut V3dState, target: Target, d: &GlesDraw, st: &V3dJobState,
                 return 0;
             }
             Err(Attempt::Refused(why)) => return refuse(g, why),
+            Err(Attempt::Unsupported(why)) => return refuse_unsupported(g, why),
             Err(Attempt::Full) if attempt == 0 => {
                 let rc = flush_job(g);
                 if rc < 0 {
@@ -6180,6 +6197,13 @@ pub unsafe extern "C" fn v3d_draw(draw: *const GlesDraw) -> i32 {
     rc
 }
 
+/// [`extra_targets`]'s attachment of a surface format with no TLB row. Every
+/// `GLES_SURF` id has one (`state::rt_format`), so this is a malformed draw
+/// (-EINVAL), as the same for RT 0 is (`state::refusal`); the other
+/// refusals of `extra_targets` are legal GL state the job cannot take.
+const UNKNOWN_EXTRA_FORMAT: state::Refusal =
+    "a colour attachment past the first of a format the backend does not render";
+
 /// The draw's colour attachments past the first (multiple render targets,
 /// docs/online-shaderc/v3d-backend.md): how many render targets the job
 /// configures, RT 1..3's addresses and their surface formats. The job
@@ -6202,7 +6226,7 @@ fn extra_targets(d: &GlesDraw) -> Result<(u8, [u32; 3], [u8; 3]), state::Refusal
         /* any format with a TLB row (state::rt_format): RGBA8, the ES 3.0
          * integer and float ones; the sRGB surface has none */
         if state::rt_format(t.format).is_none() {
-            return Err("a colour attachment past the first of a format the backend does not render");
+            return Err(UNKNOWN_EXTRA_FORMAT);
         }
         rt[i] = gpu32(t.gpu).ok_or("a colour attachment outside the V3D's 32-bit address space")?;
         formats[i] = t.format;
@@ -6238,21 +6262,29 @@ unsafe fn draw_call(draw: *const GlesDraw) -> i32 {
             return refuse(g, "a draw with no colour target and no depth/stencil buffer");
         }
         if d.samples == 4 {
-            return refuse(g, "4x multisampling with no colour target");
+            return refuse_unsupported(g, "4x multisampling with no colour target");
         }
         0
     } else {
         match gpu32(d.target_gpu) {
             Some(a) => a,
-            None => return refuse(g, "the target is outside the V3D's 32-bit address space"),
+            None => return refuse_unsupported(g, "the target is outside the V3D's 32-bit address space"),
         }
     };
-    if d.target_w == 0 || d.target_h == 0 || d.target_w > MAX_TARGET || d.target_h > MAX_TARGET {
-        return refuse(g, "a target larger than the tile memory is sized for (2048x2048), or empty");
+    /* one name for both: an empty target is a malformed draw (-EINVAL), one
+     * past 2048 a side is legal GL (GL_MAX_RENDERBUFFER_SIZE is 4096) that
+     * the tile memory cannot take (-ENOTSUP) */
+    const PAST_2048: state::Refusal = "a target larger than the tile memory is sized for (2048x2048), or empty";
+    if d.target_w == 0 || d.target_h == 0 {
+        return refuse(g, PAST_2048);
+    }
+    if d.target_w > MAX_TARGET || d.target_h > MAX_TARGET {
+        return refuse_unsupported(g, PAST_2048);
     }
     let (rts, rt, rt_format) = match extra_targets(d) {
         Ok(x) => x,
-        Err(why) => return refuse(g, why),
+        Err(why) if why == UNKNOWN_EXTRA_FORMAT => return refuse(g, why),
+        Err(why) => return refuse_unsupported(g, why),
     };
     let target = Target {
         gpu: addr as u64,
@@ -6274,12 +6306,12 @@ unsafe fn draw_call(draw: *const GlesDraw) -> i32 {
      * samples (v3d_job.h); an FBO is single-sampled, so this needs a 4x
      * surface with attachments, which the GL core does not make */
     if target.msaa && rts > 1 {
-        return refuse(g, "4x multisampling of several colour attachments");
+        return refuse_unsupported(g, "4x multisampling of several colour attachments");
     }
     /* 4x of an ES 3.0 colour format: the kept samples and the resolve are
      * RGBA8 (v3d_job.h); nothing in the GL core makes such a surface */
     if target.msaa && target.typed() {
-        return refuse(g, "4x multisampling of an ES 3.0 colour format");
+        return refuse_unsupported(g, "4x multisampling of an ES 3.0 colour format");
     }
     /* The draw's own state, checked before anything is recorded, so a
      * refused draw leaves its fused clear unrecorded too. A clear-only draw
@@ -6307,7 +6339,7 @@ unsafe fn draw_call(draw: *const GlesDraw) -> i32 {
     if let Some(fs) = fs.filter(|_| d.index_count != 0) {
         let slots = u32::from(rts.max(1));
         if u32::from(fs.v3d.fs.rt_mask) >> slots != 0 {
-            return refuse(g, "a colour output with no attachment slot");
+            return refuse_unsupported(g, "a colour output with no attachment slot");
         }
     }
 

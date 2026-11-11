@@ -1896,7 +1896,7 @@ fn a_full_texture_arena_ends_the_job() {
     assert_eq!(jobs.len(), 2, "the first job went out");
     assert_eq!((jobs[0].draws, jobs[1].draws), (1, 1));
     d.textures[0] = texture(0, 2048, 1024, 1); /* 8 MiB: not with its records */
-    assert_eq!(draw(&d), -EINVAL);
+    assert_eq!(draw(&d), -ENOTSUP);
     assert_eq!(rig.logs_with("larger than the V3D's texture arena"), 1);
 }
 
@@ -2418,7 +2418,7 @@ fn a_depth_clear_quad_after_a_job_wrote_depth_is_refused() {
     let mut c = clear_only(&rig);
     (c.do_clear, c.clear_quad, c.do_clear_depth) = (false, true, true);
     (c.scissor, c.scissor_rect) = (true, [0, 0, 8, 8]);
-    assert_eq!(draw(&c), -EINVAL);
+    assert_eq!(draw(&c), -ENOTSUP);
     assert_eq!(rig.logs_with("reads depth an earlier job wrote"), 1);
 }
 
@@ -3323,7 +3323,7 @@ fn a_refused_draw_leaves_the_data_arena_where_it_stood() {
     d.attribs[0].cpu = verts.as_ptr() as *const c_void;
     d.attribs[0].cpu_bytes = 64;
     rig.answer(&[V3D_JOB_REFUSED]);
-    assert_eq!(draw(&d), -EINVAL);
+    assert_eq!(draw(&d), -ENOTSUP);
     assert_eq!(g().j.data_used, 0);
     assert_eq!(rig.logs_with("job builder refused"), 1);
 }
@@ -3400,7 +3400,7 @@ fn a_depth_draw_after_a_job_that_wrote_depth_is_refused_until_a_clear() {
     /* the next job cannot see that depth */
     let mut again = depth_draw(&rig);
     again.do_clear = false;
-    assert_eq!(draw(&again), -EINVAL);
+    assert_eq!(draw(&again), -ENOTSUP);
     assert_eq!(rig.logs_with("reads depth an earlier job wrote"), 1);
     /* colour-only draws go on */
     let mut colour = again;
@@ -3447,7 +3447,7 @@ fn stencil_is_tracked_apart_from_depth() {
     assert_eq!(v3d_flush(), 0);
     let mut s = rig.draw();
     (s.do_clear, s.stencil) = (false, true);
-    assert_eq!(draw(&s), -EINVAL);
+    assert_eq!(draw(&s), -ENOTSUP);
     assert_eq!(rig.logs_with("reads stencil"), 1);
     let mut z = depth_draw(&rig);
     z.do_clear = false;
@@ -3466,7 +3466,7 @@ fn once_the_history_is_full_a_new_target_counts_as_written() {
     }
     let mut d = depth_draw(&rig);
     (d.target_gpu, d.do_clear) = (TARGET + 0x100_0000, false);
-    assert_eq!(draw(&d), -EINVAL, "an unknown history is never read as an empty one");
+    assert_eq!(draw(&d), -ENOTSUP, "an unknown history is never read as an empty one");
     d.do_clear_depth = true;
     assert_eq!(draw(&d), 0);
 }
@@ -3484,8 +3484,8 @@ fn refusals_are_logged_once_per_cause() {
     assert_eq!(rig.logs_with("a sample count other than 1 and 4"), 1);
     let mut t = rig.draw();
     t.index_count2 = 3;
-    assert_eq!(draw(&t), -EINVAL);
-    assert_eq!(draw(&t), -EINVAL);
+    assert_eq!(draw(&t), -ENOTSUP);
+    assert_eq!(draw(&t), -ENOTSUP);
     assert_eq!(rig.logs_with("a second index list in one draw is not implemented"), 1);
     assert!(rig.draws().is_empty() && rig.jobs().is_empty(), "nothing was recorded");
 }
@@ -3738,13 +3738,13 @@ fn a_colour_output_with_no_attachment_slot_is_refused() {
     rig.init();
     let base = v3d_refused_draws();
     let p = program_writing(0b101);
-    assert_eq!(draw(&mrt_draw(&rig, &p, 2)), -EINVAL, "RT 2 written, two slots");
+    assert_eq!(draw(&mrt_draw(&rig, &p, 2)), -ENOTSUP, "RT 2 written, two slots");
     assert_eq!(rig.logs_with("a colour output with no attachment slot"), 1);
     assert_eq!(v3d_refused_draws().wrapping_sub(base), 1, "counted");
     assert!(rig.draws().is_empty(), "nothing was recorded");
     let mut one = rig.draw();
     one.fs = &*p;
-    assert_eq!(draw(&one), -EINVAL, "RT 2 written, the default framebuffer's one slot");
+    assert_eq!(draw(&one), -ENOTSUP, "RT 2 written, the default framebuffer's one slot");
     assert_eq!(draw(&mrt_draw(&rig, &p, 3)), 0, "three slots: drawn");
     assert_eq!(rig.draws().len(), 1);
 }
@@ -3797,7 +3797,7 @@ fn attachments_the_job_builder_cannot_take_are_refused_by_name() {
     let p = program_writing(0b11);
     let mut d = mrt_draw(&rig, &p, 2);
     d.targets[1].w = 32;
-    assert_eq!(draw(&d), -EINVAL);
+    assert_eq!(draw(&d), -ENOTSUP);
     assert_eq!(rig.logs_with("colour attachments of different sizes"), 1);
     let mut d = mrt_draw(&rig, &p, 2);
     d.targets[1].format = 99;
@@ -3805,7 +3805,7 @@ fn attachments_the_job_builder_cannot_take_are_refused_by_name() {
     assert_eq!(rig.logs_with("a colour attachment past the first of a format the backend does not render"), 1);
     let mut d = mrt_draw(&rig, &p, 2);
     d.samples = 4;
-    assert_eq!(draw(&d), -EINVAL);
+    assert_eq!(draw(&d), -ENOTSUP);
     assert_eq!(rig.logs_with("4x multisampling of several colour attachments"), 1);
     assert!(rig.draws().is_empty() && rig.jobs().is_empty(), "nothing was recorded");
     let mut d = mrt_draw(&rig, &p, 2);
@@ -4294,7 +4294,7 @@ fn every_refused_draw_is_counted_and_nothing_else() {
     assert_eq!(v3d_refused_draws().wrapping_sub(base), 2, "both are counted");
     let mut d = rig.draw();
     rig.answer(&[V3D_JOB_REFUSED]);
-    assert_eq!(draw(&d), -EINVAL);
+    assert_eq!(draw(&d), -ENOTSUP);
     assert_eq!(v3d_refused_draws().wrapping_sub(base), 3, "the job builder's refusal");
     /* not refusals */
     assert_eq!(draw(&d), 0);
@@ -4316,6 +4316,75 @@ fn every_refused_draw_is_counted_and_nothing_else() {
     with_platform(|p| p.fail_alloc_from = None);
     assert_eq!(v3d_refused_draws().wrapping_sub(base), 5, "so is one whose data has no memory of its own");
     assert_eq!(rig.logs_with("draw refused: no empty job holds the draw"), 1, "one line for the cause");
+}
+
+/// A refusal of legal GL state the backend cannot render yet answers
+/// -ENOTSUP, which the GL core raises as GL_INVALID_OPERATION: dEQP fails
+/// that one case. -EINVAL would be GL_OUT_OF_MEMORY, which dEQP takes as a
+/// ResourceError and ends the whole session on (gluDefs.cpp:77-78,
+/// tcuTestSessionExecutor.cpp:384-388). Each such draw is counted as
+/// refused and logged by its name. A malformed draw keeps -EINVAL, and no
+/// memory for a depth/stencil buffer keeps -ENOMEM (GL_OUT_OF_MEMORY).
+#[test]
+fn a_backend_gap_is_enotsup_and_counted() {
+    let rig = Rig::new();
+    rig.init();
+    let base = v3d_refused_draws();
+    let mut n = 0;
+    let mut gap = |d: &GlesDraw, why: &str| {
+        assert_eq!(draw(d), -ENOTSUP, "{why}");
+        n += 1;
+        assert_eq!(v3d_refused_draws().wrapping_sub(base), n, "{why}: counted");
+        assert_eq!(rig.logs_with(why), 1, "{why}: named");
+    };
+    let two = program_writing(0b11);
+    let mut d = mrt_draw(&rig, &two, 2);
+    d.targets[1].w = 32;
+    gap(&d, "colour attachments of different sizes");
+    let mut d = rig.draw();
+    (d.target_w, d.target_h) = (MAX_TARGET + 1, 16);
+    gap(&d, "a target larger than the tile memory is sized for (2048x2048), or empty");
+    let rt2 = program_writing(0b101);
+    gap(&mrt_draw(&rig, &rt2, 2), "a colour output with no attachment slot");
+    let mut d = mrt_draw(&rig, &two, 2);
+    d.samples = 4;
+    gap(&d, "4x multisampling of several colour attachments");
+    let mut d = rig.draw();
+    (d.target_format, d.samples) = (GLES_SURF_RGBA16F, 4);
+    gap(&d, "4x multisampling of an ES 3.0 colour format");
+    let mut d = mrt_draw(&rig, &two, 2);
+    (d.target_w, d.target_h) = (2048, 2048);
+    (d.targets[0].w, d.targets[0].h) = (2048, 2048);
+    (d.targets[1].w, d.targets[1].h) = (2048, 2048);
+    d.targets[1].format = GLES_SURF_RGBA32UI;
+    gap(&d, "a 64- or 128-bpp colour target with more tiles than the job pools hold");
+    let mut d = rig.draw();
+    d.index_count2 = 3;
+    gap(&d, "a second index list in one draw is not implemented");
+    assert!(rig.draws().is_empty() && rig.jobs().is_empty(), "nothing was recorded");
+    rig.answer(&[V3D_JOB_REFUSED]);
+    gap(&rig.draw(), "the job builder refused the draw (a uniform, program or primitive it does not write)");
+    assert!(rig.draws().is_empty(), "the refused draw was not recorded");
+
+    /* malformed: -EINVAL, counted all the same */
+    let base = v3d_refused_draws();
+    let mut d = rig.draw();
+    d.target_w = 0;
+    assert_eq!(draw(&d), -EINVAL, "an empty target, under the 2048 refusal's name");
+    let mut d = mrt_draw(&rig, &two, 2);
+    d.targets[1].format = 99;
+    assert_eq!(draw(&d), -EINVAL, "a surface number none names");
+    let mut d = rig.draw();
+    d.samples = 2;
+    assert_eq!(draw(&d), -EINVAL, "a sample count the GL core never offers");
+    assert_eq!(v3d_refused_draws().wrapping_sub(base), 3, "counted");
+
+    /* no memory for a depth/stencil buffer: -ENOMEM, as before */
+    with_platform(|p| p.fail_alloc_from = Some(1));
+    let mut d = kept_depth_draw(&rig, 100);
+    (d.do_clear_depth, d.clear_depth) = (true, 1.0);
+    assert_eq!(draw(&d), -ENOMEM, "{:?}", rig.gl.logs());
+    with_platform(|p| p.fail_alloc_from = None);
 }
 
 #[test]
@@ -4343,13 +4412,13 @@ fn addresses_the_v3d_cannot_hold_are_refused() {
     rig.init();
     let mut d = rig.draw();
     d.target_gpu = 1 << 32;
-    assert_eq!(draw(&d), -EINVAL);
+    assert_eq!(draw(&d), -ENOTSUP);
     let mut d = rig.draw();
     d.attribs[0].buffer_gpu = 1 << 32;
-    assert_eq!(draw(&d), -EINVAL);
+    assert_eq!(draw(&d), -ENOTSUP);
     let mut d = rig.draw();
     d.target_w = MAX_TARGET + 1;
-    assert_eq!(draw(&d), -EINVAL);
+    assert_eq!(draw(&d), -ENOTSUP);
     assert!(rig.draws().is_empty());
 }
 
@@ -5943,7 +6012,7 @@ fn after_a_swap_the_next_frames_stencil_stroke_is_not_refused() {
     assert_eq!(draw(&frame), 0);
     assert_eq!(v3d_flush(), 0);
     /* no swap: the next job would read a stencil nothing kept */
-    assert_eq!(draw(&frame), -EINVAL, "without a swap the second job is still refused");
+    assert_eq!(draw(&frame), -ENOTSUP, "without a swap the second job is still refused");
     assert_eq!(rig.logs_with("reads stencil an earlier job wrote"), 1);
     /* the swap: surface_swapped, then the flush */
     v3d_surface_swapped(frame.target_gpu);
@@ -5985,7 +6054,7 @@ fn a_swap_of_another_surface_changes_nothing_here() {
     assert_eq!(draw(&frame), 0);
     assert_eq!(v3d_flush(), 0);
     v3d_surface_swapped(frame.target_gpu + 0x10_0000);
-    assert_eq!(draw(&frame), -EINVAL);
+    assert_eq!(draw(&frame), -ENOTSUP);
 }
 
 /// One line per frame whose largest job raised an arena's high-water, and
@@ -6657,18 +6726,18 @@ fn what_a_typed_job_cannot_take_is_refused_by_name() {
     rig.init();
     let mut d = rig.draw();
     (d.target_format, d.samples) = (GLES_SURF_RGBA16F, 4);
-    assert_eq!(draw(&d), -EINVAL);
+    assert_eq!(draw(&d), -ENOTSUP);
     assert_eq!(rig.logs_with("4x multisampling of an ES 3.0 colour format"), 1);
     let mut d = rig.draw();
     (d.target_format, d.samples, d.clear_quad) = (GLES_SURF_R32I, 4, true);
-    assert_eq!(draw(&d), -EINVAL, "4x of an integer format, with a quad clear (the same refusal, logged once)");
+    assert_eq!(draw(&d), -ENOTSUP, "4x of an integer format, with a quad clear (the same refusal, logged once)");
     let p = program_writing(0b11);
     let mut d = mrt_draw(&rig, &p, 2);
     (d.target_w, d.target_h) = (2048, 2048);
     (d.targets[0].w, d.targets[0].h) = (2048, 2048);
     (d.targets[1].w, d.targets[1].h) = (2048, 2048);
     d.targets[1].format = GLES_SURF_RGBA32UI;
-    assert_eq!(draw(&d), -EINVAL, "32x16 tiles over 2048x2048: 8192 tiles");
+    assert_eq!(draw(&d), -ENOTSUP, "32x16 tiles over 2048x2048: 8192 tiles");
     assert_eq!(rig.logs_with("more tiles than the job pools hold"), 1);
     assert!(rig.draws().is_empty() && rig.jobs().is_empty(), "nothing was recorded");
 }
@@ -7202,7 +7271,7 @@ fn a_texture_larger_than_the_arena_is_sampled_from_its_kept_copy() {
     assert_eq!(tiled().0, 1, "sampled from a kept copy");
     /* unstamped: the arena, and its size check */
     t.content_gen = 0;
-    assert_eq!(draw(&sampling(&rig, t)), -EINVAL);
+    assert_eq!(draw(&sampling(&rig, t)), -ENOTSUP);
     assert_eq!(rig.logs_with("an unstamped (EGLImage) texture larger than the V3D's texture arena (8 MiB tiled)"), 1);
     /* no memory for the kept copy (T5, eaf98dc8: a 22 MB chain inside a
      * 24 MiB budget): the refusal says so, not only the arena's size */
@@ -7224,7 +7293,7 @@ fn a_texture_larger_than_the_arena_is_sampled_from_its_kept_copy() {
     assert_eq!(g().tiled_budget, DEFAULT_TILED_BUDGET);
     let mut t = texture(0, 2048, 1024, 1);
     t.content_gen = 62;
-    assert_eq!(draw(&sampling(&rig, t)), -EINVAL);
+    assert_eq!(draw(&sampling(&rig, t)), -ENOTSUP);
     assert_eq!(rig.logs_with("a texture larger than the tiled-copy budget"), 1);
 }
 
@@ -9070,7 +9139,7 @@ fn a_depth_texture_alone_is_drawn_into_with_no_colour_target() {
     assert_eq!(draw(&none), -EINVAL);
     let mut ms = d;
     ms.samples = 4;
-    assert_eq!(draw(&ms), -EINVAL);
+    assert_eq!(draw(&ms), -ENOTSUP);
     let logs = rig.gl.logs().join("\n");
     for why in ["a draw with no colour target and no depth/stencil buffer", "4x multisampling with no colour target"] {
         assert!(logs.contains(why), "{why:?} not in {logs}");

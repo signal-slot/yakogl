@@ -42,12 +42,6 @@ pub fn refusal(d: &GlesDraw) -> Option<Refusal> {
     }
     /* several colour attachments: the backend's extra_targets and its
      * attachment-slot check (multiple render targets) */
-    if d.index_count == 0 {
-        return None; /* a clear: nothing below applies */
-    }
-    if d.index_count2 != 0 {
-        return Some("a second index list in one draw is not implemented");
-    }
     None
 }
 
@@ -74,6 +68,11 @@ pub fn unsupported(d: &GlesDraw) -> Option<Refusal> {
      * refused rather than drawn with the wrong output (review R-09). */
     if d.targets[0].out_shift != 0 {
         return Some("draw buffer 0 is GL_NONE while a later draw buffer is written");
+    }
+    /* the GL core's second index list of one draw (`index_count2`): not
+     * recorded here; a clear has none */
+    if d.index_count != 0 && d.index_count2 != 0 {
+        return Some("a second index list in one draw is not implemented");
     }
     None
 }
@@ -965,11 +964,7 @@ mod tests {
     fn every_refusal_has_its_own_reason() {
         /* each case: how to break the plain draw, and a word its reason names */
         type Case = (fn(&mut GlesDraw), &'static str);
-        let cases: [Case; 3] = [
-            (|d| d.target_format = 99, "does not know"),
-            (|d| d.samples = 2, "sample count"),
-            (|d| d.index_count2 = 3, "second index list"),
-        ];
+        let cases: [Case; 2] = [(|d| d.target_format = 99, "does not know"), (|d| d.samples = 2, "sample count")];
         let mut seen: std::vec::Vec<&str> = std::vec::Vec::new();
         assert_eq!(refusal(&draw()), None, "the plain draw is drawn");
         for (make, word) in cases {
@@ -1015,6 +1010,19 @@ mod tests {
         let mut other = draw();
         other.target_format = 99;
         assert_ne!(refusal(&other), unsupported(&d));
+    }
+
+    /// The GL core's second index list in one draw is legal state the
+    /// backend does not record yet: [`unsupported`], not [`refusal`]; a clear
+    /// (no indices) is not refused for it.
+    #[test]
+    fn a_second_index_list_is_a_gap_not_a_malformed_draw() {
+        let mut d = draw();
+        d.index_count2 = 3;
+        assert_eq!(refusal(&d), None, "not a malformed draw");
+        assert_eq!(unsupported(&d), Some("a second index list in one draw is not implemented"));
+        d.index_count = 0;
+        assert_eq!(unsupported(&d), None, "a clear");
     }
 
     /// Every ES 3.0 colour surface the backend renders (int-rt-v3d) has
