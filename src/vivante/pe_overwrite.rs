@@ -5,7 +5,8 @@
 //! rank 8).
 //!
 //! Self-contained on purpose: it uses `core` only, so a host test can include
-//! it with `#[path]` before it is joined to the module tree.
+//! it with `#[path]`. `emit_pe_state` (backend.rs) takes RT0's and the other
+//! targets' OVERWRITE from it (tests/gc_pe_wire_stream.rs).
 //!
 //! What Mesa 26.2.1 etnaviv does (`src/gallium/drivers/etnaviv/`):
 //!

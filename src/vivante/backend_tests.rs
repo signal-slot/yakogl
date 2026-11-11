@@ -433,6 +433,12 @@ impl Rig {
         d.target_format = GLES_SURF_RGBA8888;
         /* slot 0 mirrors the target, as the GL core builds it (backend.h) */
         d.targets[0] = GlesDrawTarget { gpu: TARGET_GPU, w: 64, h: 64, format: GLES_SURF_RGBA8888, out_shift: 0 };
+        /* the default framebuffer's own D24S8, as gl/draw.rs
+         * resolve_ds_storage names it: with no attachment the pixel engine
+         * skips depth and stencil altogether (pe_zs.rs) */
+        d.depth_id = 0x8000_0000 | (TARGET_GPU >> 12) as u32;
+        d.stencil_id = d.depth_id;
+        (d.ds_w, d.ds_h) = (64, 64);
         d.viewport = [0, 0, 64, 64];
         d.depth_range = [0.0, 1.0];
         d.color_mask = 0xf;
@@ -3532,7 +3538,8 @@ fn a_clear_is_a_quad_drawn_with_the_backends_own_shaders() {
 /// engine's fill, as etnaviv clears a surface without tile status: the value
 /// packed A8R8G8B8 in all four fill words, MODE_ENABLED1 with every bit, a
 /// linear destination at the target, and the draw after it alone. A clear
-/// that also clears depth, or one under a scissor, stays the quad.
+/// that also clears depth is a second fill; one under a scissor stays the
+/// quad (tests/gc_rs_clear_stream.rs has the rest).
 #[test]
 fn a_whole_colour_clear_is_a_resolve_engine_fill() {
     let rig = Rig::new();
@@ -3553,13 +3560,13 @@ fn a_whole_colour_clear_is_a_resolve_engine_fill() {
     assert_eq!(s.reg(GC_RS_CONFIG) & GC_RS_DEST_TILED, 0, "linear");
     assert_eq!(s.writes(GC_RS_KICKER).1, 1);
 
-    /* with depth it is the quad again */
+    /* with depth it is two fills, colour then depth (etna_clear_rs) */
     let mut both = rig.draw(3);
     both.do_clear = true;
     both.do_clear_depth = true;
     let s = rig.submit(&both);
-    assert_eq!(s.draws().len(), 2);
-    assert_eq!(s.writes(GC_RS_KICKER).1, 0);
+    assert_eq!(s.draws().len(), 1);
+    assert_eq!(s.writes(GC_RS_KICKER).1, 2);
 
     /* and under a scissor */
     let mut sc = rig.draw(3);

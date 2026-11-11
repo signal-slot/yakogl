@@ -5,15 +5,15 @@
 //! (docs/notes/gc-slow-terrain-stream-diff.md, 'The differences, ranked',
 //! rank 9).
 //!
-//! Today `emit_pe_state` (backend.rs) treats every clear quad as depth tested
-//! and leaves clears out of the `DISABLE_ZS` condition, so a clear into a
-//! target with no depth or stencil attachment (terrain's noise, normal,
-//! bloom_h, bloom_v and tilt_h passes) runs the PE depth stage against a
+//! `emit_pe_state` (backend.rs) used to treat every clear quad as depth
+//! tested and leave clears out of the `DISABLE_ZS` condition, so a clear into
+//! a target with no depth or stencil attachment (terrain's noise, normal,
+//! bloom_h, bloom_v and tilt_h passes) ran the PE depth stage against a
 //! ds_cache scratch surface: `PE_DEPTH_CONFIG` 0x00040711 (D24S8, ALWAYS, no
 //! write, no `DISABLE_ZS`). Mesa's draws there carry 0x01000700
-//! (`DISABLE_ZS`). This file says what the PE needs; nothing calls it yet.
-//! For every case with a depth or stencil attachment it gives exactly what
-//! the inline code gives today, so it can replace that code byte for byte.
+//! (`DISABLE_ZS`). This file says what the PE needs, and `emit_pe_state`
+//! takes its answer (tests/gc_pe_wire_stream.rs). For every case with a
+//! depth or stencil attachment it gives exactly what the inline code gave.
 //! Core only, no crate imports: tests/gc_pe_zs.rs includes it by path.
 //!
 //! Mesa 26.2.1 (archive.mesa3d.org/mesa-26.2.1.tar.xz, the tarball whose
