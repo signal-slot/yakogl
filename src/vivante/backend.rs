@@ -35,7 +35,10 @@ use super::cmd::GcCmd;
 use super::dedup::{self, Group};
 use super::internal::{GC_INTERNAL_CLEAR_PS, GC_INTERNAL_CLEAR_VS, GC_INTERNAL_TABLE};
 use super::kick::{GcKick, GC_KICK_MAGIC, GC_KICK_TAIL_BYTES};
+use super::pe_overwrite::{self, PeTarget};
+use super::pe_zs::{pe_zs, ZsFunc, ZsInput};
 use super::regs::*;
+use super::rs_clear;
 use super::state::*;
 use super::{shader, texture};
 
@@ -1458,14 +1461,27 @@ fn emit_raster_state(c: &mut GcCmd, d: &GcDraw) {
 /// 0x01400..0x014bc.
 fn emit_pe_state(c: &mut GcCmd, d: &GcDraw, depth_stride: u32, depth_addr: u32) {
     let gl = d.gl;
-    /* A clear of the colour alone leaves the depth unit off, so that the
-     * pixel engine has no reason to touch the depth/stencil surface: the
-     * route-3 cluster clears its window's colour every frame (2026-11-04). */
-    let depth_test = if d.is_clear { d.clear_depth || d.clear_stencil } else { gl.depth_test };
-    /* GL 4.1.5: with the depth test off the buffer is not written, whatever
-     * glDepthMask says. */
-    let depth_write = if d.is_clear { d.clear_depth } else { gl.depth_test && gl.depth_write };
-    let depth_func = if d.is_clear { GLES_CMP_ALWAYS } else { gl.depth_func };
+    /* Depth and stencil as pe_zs.rs says: a clear tests ALWAYS and writes
+     * depth only when it clears it; a draw writes only with the test on (GL
+     * 4.1.5); and with no depth or stencil attachment the pixel engine skips
+     * the stage (DISABLE_ZS), clears included, as Mesa's draws there do. A
+     * colour-only clear into a target with an attachment tests ALWAYS and
+     * writes nothing: the route-3 cluster clears its window's colour every
+     * frame (2026-11-04). */
+    let zs = pe_zs(ZsInput {
+        is_clear: d.is_clear,
+        clear_depth: d.clear_depth,
+        clear_stencil: d.clear_stencil,
+        depth_test: gl.depth_test,
+        depth_write: gl.depth_write,
+        stencil_test: gl.stencil,
+        has_depth_attachment: gl.depth_id != 0,
+        has_stencil_attachment: gl.stencil_id != 0,
+    });
+    let depth_func = match zs.depth_func {
+        ZsFunc::Always => GLES_CMP_ALWAYS,
+        ZsFunc::Gl => gl.depth_func,
+    };
     /* A colour format with no alpha (GL_RGB, GL_RGB565) reads alpha 1 (ES 2.0
      * 4.3.1), and its storage is RGBA8 here: a draw leaves the alpha byte as
      * the clear wrote it -- 1, the GL core rounds a clear's alpha to the
@@ -1529,9 +1545,9 @@ fn emit_pe_state(c: &mut GcCmd, d: &GcDraw, depth_stride: u32, depth_addr: u32) 
     let mut pe_depth = GC_PE_DEPTH_MODE_Z
         | GC_PE_DEPTH_FORMAT_D24S8
         | GC_PE_DEPTH_UNK18
-        | pe_depth_func(if depth_test { depth_func } else { GLES_CMP_ALWAYS })
-        | if depth_write { GC_PE_DEPTH_WRITE_ENABLE } else { 0 };
-    if !depth_test && !depth_write && !gl.stencil && !d.is_clear {
+        | pe_depth_func(depth_func)
+        | if zs.depth_write { GC_PE_DEPTH_WRITE_ENABLE } else { 0 };
+    if zs.disable_zs {
         pe_depth |= GC_PE_DEPTH_DISABLE_ZS;
     }
     c.state(GC_PE_DEPTH_CONFIG, pe_depth);
@@ -1661,15 +1677,21 @@ fn emit_pe_state(c: &mut GcCmd, d: &GcDraw, depth_stride: u32, depth_addr: u32) 
     c.state(GC_PE_ALPHA_CONFIG, pe_alpha);
 
     /* the colour surface. OVERWRITE tells the PE the draw replaces whole
-     * pixels, which it cannot do while blending or masking channels. */
+     * pixels, which it cannot do while blending or masking channels, nor on
+     * a multisampled target (etnaviv_state.c): pe_overwrite.rs. A clear's
+     * mask is already final (its alpha included), so it goes in as a target
+     * with alpha. Every target is `Fbo` there: GlesDraw does not say which
+     * is the window, and the window reports 8 alpha bits, so `Window`'s
+     * answer would never differ. */
+    let ms = ms_via_scratch(gl);
+    let alpha_bits = if d.is_clear { 8 } else { u32::from(gl.target_alpha_bits) };
+    let rt0 = pe_overwrite::pe_color(rt_mask(0), blend, alpha_bits, PeTarget::Fbo, ms);
     let mut pe_color = if ext_format {
         pe_color_format_format_ext(format) | GC_PE_COLOR_FORMAT_FORMAT_MASK
     } else {
         pe_color_format_format(format)
-    } | pe_color_format_components(rt_mask(0));
-    let ms = ms_via_scratch(gl);
-    /* never OVERWRITE on a multisampled target (etnaviv_state.c) */
-    if !blend && rt_mask(0) == 0xf && !ms {
+    } | pe_color_format_components(rt0.components);
+    if rt0.overwrite {
         pe_color |= GC_PE_COLOR_FORMAT_OVERWRITE;
     }
     if ms {
@@ -1719,10 +1741,14 @@ fn emit_pe_state(c: &mut GcCmd, d: &GcDraw, depth_stride: u32, depth_addr: u32) 
         c.state(pe_rt_addr_8_pipe(rt as u32, 0), t.gpu as u32);
         let srgb = if gles_surf_is_srgb(t.format) { GC_RT_CONFIG_SRGB } else { 0 };
         c.state(pe_rt_config_8(rt as u32), rt_config_stride(rt_pitch) | rt_config_format(fmt) | srgb);
+        /* these targets keep 8 alpha bits (GlesDraw::target_alpha_bits) and
+         * are drawn in place, never through the multisample scratch, which
+         * stands in for RT0 alone: msaa false, as before */
+        let rt_color = pe_overwrite::pe_color(rt_mask(slot), rt_blend, 8, PeTarget::Fbo, false);
         c.state(
             pe_halti5_rt_colormask(rt as u32),
-            pe_halti5_rt_colormask_components(rt_mask(slot))
-                | if !rt_blend && rt_mask(slot) == 0xf { GC_PE_HALTI5_RT_COLORMASK_OVERWRITE } else { 0 },
+            pe_halti5_rt_colormask_components(rt_color.components)
+                | if rt_color.overwrite { GC_PE_HALTI5_RT_COLORMASK_OVERWRITE } else { 0 },
         );
         c.state(pe_halti5_rt_alpha_config(rt as u32), if rt_blend { pe_alpha } else { 0 });
     }
@@ -2039,7 +2065,9 @@ fn pe_key(k: &mut dedup::Key, d: &GcDraw, depth_stride: u32, depth_addr: u32) ->
             | u32::from(mirrors(gl.flip_y)) << 9
             | u32::from(ms_via_scratch(gl)) << 10
             | u32::from(negative_stride(gl.flip_y)) << 11
-            | u32::from(msaa_extras(gl)) << 12,
+            | u32::from(msaa_extras(gl)) << 12
+            | u32::from(gl.depth_id != 0) << 13
+            | u32::from(gl.stencil_id != 0) << 14,
     );
     k.u32(gl.depth_func);
     k.u32(u32::from_le_bytes([gl.target_alpha_bits, gl.clear_color_mask, gl.clear_target_mask, gl.target_format]));
@@ -2448,64 +2476,102 @@ pub extern "C" fn gc_debug_rs_clear(on: bool) {
     RS_CLEAR.store(on, core::sync::atomic::Ordering::Relaxed);
 }
 
-/// A colour-only clear of a whole single-sampled 32-bit linear target, by
-/// the resolve engine's fill instead of the quad: etnaviv's RS clear for a
-/// surface without tile status (Mesa 26.2.1 etnaviv_rs.c
-/// etna_rs_gen_clear_cmd: A8R8G8B8, RS_CLEAR_CONTROL BITS 0xffff |
-/// MODE_ENABLED1, the value in all four RS_FILL_VALUE words, a linear
-/// destination whose width is a multiple of 16 and height of 4). The quad
-/// shaded every pixel through the pixel engine at its ~4 ns a pixel: about
-/// 4 ms of the route-3 cluster's frame for its full-window clear
-/// (2026-11-05). Returns false when the clear is not one it takes, and the
-/// caller draws the quad.
-fn emit_rs_clear(f: &mut GcFrame, gl: &GlesDraw) -> bool {
-    if !gl.do_clear || gl.do_clear_depth || gl.do_clear_stencil || !gl.color_write {
-        return false;
+/// The resolve engine's fill for the clear `gl` asks for, or `None` when it
+/// stays the quad: etnaviv's RS clear of a surface without tile status
+/// (Mesa 26.2.1 etnaviv_rs.c etna_clear_rs), its words from
+/// [`rs_clear::rs_clear`]. The quad shaded every pixel through the pixel
+/// engine at its ~4 ns a pixel: about 4 ms of the route-3 cluster's frame
+/// for its full-window clear (2026-11-05), and a depth pass's clear of its
+/// whole depth surface each frame (glmark2 shadow, refract).
+///
+/// `ds` is the depth/stencil surface the draw was given: its row stride in
+/// bytes, GPU address and rows (ds_cache.rs `select`). It is D24S8, linear
+/// and padded to 64x64, so its whole padded size is the fill's window, as
+/// Mesa fills a padded surface. The colour fill covers the target's own
+/// width and height at its row pitch: a window surface may be a view into a
+/// wider scan-out buffer whose other columns are not the target's.
+///
+/// The clear stays the quad when it is scissored, multisampled or into a
+/// 64-bit target; (colour) into several targets or none, masked, not
+/// A8R8G8B8 or X8R8G8B8, not 16x4-aligned or drawn upward; (depth/stencil)
+/// with no attachment, a stencil write mask other than 0xff, or storage
+/// larger than the target (the part past the target keeps its contents).
+/// glDepthMask is already in `do_clear_depth` (gl/draw.rs). When one plane
+/// stays the quad, the whole clear does.
+fn rs_clear_of(gl: &GlesDraw, ds: (u32, u32, u32)) -> Option<rs_clear::Clear> {
+    if gl.scissor || ms_via_scratch(gl) || wide_target(gl) {
+        return None;
     }
-    if gl.target_gpu == 0 || gl.num_targets > 1 || gl.scissor || ms_via_scratch(gl) || wide_target(gl) {
-        return false;
-    }
-    if gl.clear_color_mask != 0 && gl.clear_color_mask != 0xf {
-        return false;
-    }
-    let (fmt, ext) = pe_color_format(gl.target_format);
-    let alpha = match (fmt, ext) {
-        (GC_PE_FORMAT_A8R8G8B8, false) => None,
-        (GC_PE_FORMAT_X8R8G8B8, false) => Some(0xffu32),
-        _ => return false,
+    let colour = if gl.do_clear {
+        if gl.target_gpu == 0 || gl.num_targets > 1 || !gl.color_write || !clear_takes(gl, 0) {
+            return None;
+        }
+        if gl.clear_color_mask != 0 && gl.clear_color_mask != 0xf {
+            return None;
+        }
+        let alpha = match pe_color_format(gl.target_format) {
+            (GC_PE_FORMAT_A8R8G8B8, false) => None,
+            (GC_PE_FORMAT_X8R8G8B8, false) => Some(0xffu32),
+            _ => return None,
+        };
+        let (w, h) = (gl.target_w, gl.target_h);
+        if w == 0 || h == 0 || w % 16 != 0 || h % 4 != 0 || negative_stride(gl.flip_y) {
+            return None;
+        }
+        let ch = |v: f32| -> u32 { ((v.clamp(0.0, 1.0) * 255.0) + 0.5) as u32 };
+        let [r, g_, b, a] = gl.clear_rgba;
+        let pixel = (alpha.unwrap_or_else(|| ch(a)) << 24) | (ch(r) << 16) | (ch(g_) << 8) | ch(b);
+        Some(rs_clear::ColourClear {
+            surface: rs_clear::Surface {
+                addr: gl.target_gpu as u32,
+                padded_width: w,
+                padded_height: h,
+                bpp: 4,
+                pitch: crate::backend::draw_pitch(gl) * 4,
+            },
+            pixel,
+            write_mask: 0xf,
+        })
+    } else {
+        None
     };
-    let (w, h) = (gl.target_w, gl.target_h);
-    if w == 0 || h == 0 || w % 16 != 0 || h % 4 != 0 || negative_stride(gl.flip_y) {
+    let depth_stencil = if gl.do_clear_depth || gl.do_clear_stencil {
+        if gl.depth_id == 0 && gl.stencil_id == 0 {
+            return None; /* no attachment: the quad's pixel engine skips it (pe_zs.rs) */
+        }
+        if gl.ds_w > gl.target_w || gl.ds_h > gl.target_h {
+            return None;
+        }
+        let (stride, addr, rows) = ds;
+        let stencil_write_mask =
+            if gl.clear_stencil_write_mask != 0 { gl.clear_stencil_write_mask } else { gl.stencil_write_mask };
+        Some(rs_clear::DepthStencilClear {
+            surface: rs_clear::Surface { addr, padded_width: stride / 4, padded_height: rows, bpp: 4, pitch: 0 },
+            has_stencil: true,
+            clear_depth: gl.do_clear_depth,
+            clear_stencil: gl.do_clear_stencil,
+            depth: gl.clear_depth,
+            stencil: gl.clear_stencil,
+            depth_write: true,
+            stencil_write_mask,
+        })
+    } else {
+        None
+    };
+    Some(rs_clear::Clear { width: gl.target_w, height: gl.target_h, scissor: None, colour, depth_stencil })
+}
+
+/// Record the clear `gl` asks for as the resolve engine's fill
+/// ([`rs_clear_of`], `ds` as there). Returns false when the clear is not one
+/// it takes, and the caller draws the quad.
+fn emit_rs_clear(f: &mut GcFrame, gl: &GlesDraw, ds: (u32, u32, u32)) -> bool {
+    let Some(clear) = rs_clear_of(gl, ds) else {
         return false;
-    }
-    let pitch = crate::backend::draw_pitch(gl) * 4;
-    let ch = |v: f32| -> u32 { ((v.clamp(0.0, 1.0) * 255.0) + 0.5) as u32 };
-    let [r, g_, b, a] = gl.clear_rgba;
-    let value = (alpha.unwrap_or_else(|| ch(a)) << 24) | (ch(r) << 16) | (ch(g_) << 8) | ch(b);
-    let rsf = GC_RS_FORMAT_A8R8G8B8;
-    let c = &mut f.w;
-    c.state(GC_GL_FLUSH_CACHE, GC_FLUSH_COLOR | GC_FLUSH_DEPTH);
-    c.stall(GC_SYNC_RA, GC_SYNC_PE);
-    c.state(GC_RS_CONFIG, rs_source_format(rsf) | rs_dest_format(rsf));
-    c.state(GC_RS_SOURCE_STRIDE, 0);
-    c.state(GC_RS_DEST_STRIDE, pitch);
-    c.state(rs_pipe_source_addr(0), 0);
-    c.state(rs_pipe_dest_addr(0), gl.target_gpu as u32);
-    c.state(rs_pipe_offset(0), 0);
-    c.state(rs_pipe_offset(1), 0);
-    c.state(GC_RS_WINDOW_SIZE, rs_window_width(w) | rs_window_height(h));
-    c.state(rs_dither(0), 0xffff_ffff);
-    c.state(rs_dither(1), 0xffff_ffff);
-    c.state(GC_RS_CLEAR_CONTROL, GC_RS_CLEAR_CONTROL_BITS_ALL | GC_RS_CLEAR_CONTROL_MODE_ENABLED1);
-    for i in 0..4 {
-        c.state(rs_fill_value(i), value);
-    }
-    c.state(GC_RS_EXTRA_CONFIG, 0);
-    c.state(GC_RS_KICKER, GC_RS_KICKER_VALUE);
-    /* the draws after it: the colour cache holds nothing of the target, and
-     * each draw's flushes stall the pixel engine on the resolve engine */
-    c.state(GC_GL_FLUSH_CACHE, GC_FLUSH_COLOR | GC_FLUSH_DEPTH);
-    c.stall(GC_SYNC_RA, GC_SYNC_PE);
+    };
+    let Ok(words) = rs_clear::rs_clear(&clear) else {
+        return false;
+    };
+    f.w.append(words.as_slice());
     true
 }
 
@@ -3237,10 +3303,11 @@ unsafe fn record(gl: &GlesDraw, clock: &mut Timer) -> i32 {
     let g = g();
     let code = (g.clear_vs_code.gpu, g.clear_ps_code.gpu);
     let depth = (g.depth_stride, g.depth.gpu as u32 + g.depth_surface_off);
+    let ds = (depth.0, depth.1, g.depth_h);
     let cur = g.cur;
 
     if (gl.do_clear || gl.do_clear_depth || gl.do_clear_stencil)
-        && !(gc_rs_clear_on() && emit_rs_clear(&mut g.frames[cur], gl))
+        && !(gc_rs_clear_on() && emit_rs_clear(&mut g.frames[cur], gl, ds))
         && emit_clear(&mut g.frames[cur], gl, code, depth) != 0
     {
         return -1;

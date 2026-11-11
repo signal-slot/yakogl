@@ -217,12 +217,16 @@ fn decode(words: &[u32]) -> Vec<(u32, u32)> {
 const A: u32 = 0x4000_8000; /* any address; the golden's is the shim's */
 
 fn rgba8_64(pixel: u32) -> ColourClear {
-    ColourClear { surface: Surface { addr: A, padded_width: 64, padded_height: 64, bpp: 4 }, pixel, write_mask: 0xf }
+    ColourClear {
+        surface: Surface { addr: A, padded_width: 64, padded_height: 64, bpp: 4, pitch: 0 },
+        pixel,
+        write_mask: 0xf,
+    }
 }
 
 fn d24s8_64(depth: f32, clear_stencil: bool) -> DepthStencilClear {
     DepthStencilClear {
-        surface: Surface { addr: A + 0x4000, padded_width: 64, padded_height: 64, bpp: 4 },
+        surface: Surface { addr: A + 0x4000, padded_width: 64, padded_height: 64, bpp: 4, pitch: 0 },
         has_stencil: true,
         clear_depth: true,
         clear_stencil,
@@ -355,7 +359,7 @@ fn shadow_sized_targets_match_mesa() {
     /* glmark2's 800x600 canvas (padded 800x600) and shadow's 1600x1200 pass */
     for (w, h) in [(800u32, 600u32), (1600, 1200), (256, 256), (16, 4)] {
         let col = ColourClear {
-            surface: Surface { addr: A, padded_width: w, padded_height: h, bpp: 4 },
+            surface: Surface { addr: A, padded_width: w, padded_height: h, bpp: 4, pitch: 0 },
             pixel: 0x8040_2010,
             write_mask: 0xf,
         };

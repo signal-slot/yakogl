@@ -6,9 +6,10 @@
 //! The backend draws every glClear as a quad (`backend.rs` `emit_clear`).
 //! Mesa etnaviv clears a whole surface through the RS instead: no shader, no
 //! vertex fetch, the fill value a literal in the stream. This module decides
-//! whether a clear may take that path and writes its command words; joining
-//! it to the backend is item rs-clear-wire. It is not in `mod.rs` yet. It
-//! depends on `super::regs` only, so a host test includes both by `#[path]`.
+//! whether a clear may take that path and writes its command words;
+//! `backend.rs` `emit_rs_clear` builds the [`Clear`] of a draw and appends
+//! the words (tests/gc_rs_clear_stream.rs). It depends on `super::regs`
+//! only, so a host test includes both by `#[path]`.
 //!
 //! Sources: Mesa 26.2.1 etnaviv, `src/gallium/drivers/etnaviv/`:
 //!
@@ -83,8 +84,9 @@ pub const MAX_WORDS: usize = 2 * 2 + 2 * 4 + 2 * FILL_WORDS;
 /// One RS fill block, as coalesced (see `fill`).
 pub const FILL_WORDS: usize = 32;
 
-/// A render surface the clear may fill. The padded size and the stride are
-/// the allocation's, not the GL size: the fill covers the padding as well.
+/// A render surface the clear may fill. The padded size is the window the
+/// fill covers: Mesa's is the allocation's, not the GL size, so the fill
+/// covers the padding as well.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Surface {
     /// GPU address of the first byte.
@@ -93,12 +95,21 @@ pub struct Surface {
     pub padded_height: u32,
     /// Bytes a pixel: 2 or 4 take the RS, anything else the quad.
     pub bpp: u32,
+    /// Bytes from one row to the next when the rows are wider than the
+    /// window (a window surface that is a view into a wider scan-out
+    /// buffer, whose columns past the window are not this target's); 0:
+    /// `padded_width * bpp`, Mesa's.
+    pub pitch: u32,
 }
 
 impl Surface {
     /// Bytes from one row to the next (linear).
     pub const fn stride(&self) -> u32 {
-        self.padded_width * self.bpp
+        if self.pitch != 0 {
+            self.pitch
+        } else {
+            self.padded_width * self.bpp
+        }
     }
 }
 
@@ -324,6 +335,7 @@ fn aligned(s: &Surface) -> bool {
         && s.padded_height <= 0xffff
         && s.padded_width.is_multiple_of(RS_WIDTH_ALIGN)
         && s.padded_height.is_multiple_of(RS_HEIGHT_ALIGN)
+        && (s.pitch == 0 || s.pitch >= s.padded_width * s.bpp)
 }
 
 /// Does the scissor box, if any, cover the whole `width` x `height` target?

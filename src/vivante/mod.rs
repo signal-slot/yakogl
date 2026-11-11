@@ -19,6 +19,9 @@
 //! | [`cmd`] | writing commands into a CPU-mapped buffer (LOAD_STATE, stall, draw) |
 //! | [`state`] | what the three translation units share: the resolved draw and the frame |
 //! | [`backend`] | frames, the render target, the rasteriser and pixel engine, the clear quad |
+//! | [`rs_clear`] | a whole-target clear of colour, depth and stencil as the resolve engine's fill: whether a clear takes it, and its words |
+//! | [`pe_zs`] | when the pixel engine may skip depth and stencil (PE_DEPTH_CONFIG DISABLE_ZS), clears included |
+//! | [`pe_overwrite`] | the PE colour COMPONENTS mask and OVERWRITE bit of a draw |
 //! | [`dedup`] | the state groups as the open stream last wrote them: a draw writes only the ones that differ |
 //! | [`depth_format`] | the depth surface format, size and clear word per GL depth attachment (not yet used) |
 //! | [`early_z`] | the early-depth rule: whether a draw may use it and the PE_DEPTH_CONFIG and RA_EARLY_DEPTH words for it (not yet used) |
@@ -53,8 +56,11 @@ pub mod layout;
 #[path = "../../tests/reference/gc_clear_shader.rs"]
 pub mod mesa_clear_shader;
 pub mod mipmap;
+pub mod pe_overwrite;
+pub mod pe_zs;
 pub mod profile;
 pub mod regs;
+pub mod rs_clear;
 pub mod shader;
 pub mod state;
 pub mod texture;
