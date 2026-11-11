@@ -5344,8 +5344,20 @@ pub fn texture_descriptor(t: &GlesTextureBind) -> [u32; TEX_DESC_DWORDS as usize
 /// One pvr_combined_image_sampler_descriptor (TEX_DESC_DWORDS, zeroed by the
 /// caller): image words 0..3, image meta 4..7, sampler words 8..11, sampler
 /// meta 12..15, gather words 16..19.
+/// The swiz0..3 of a descriptor: the bind's GL_TEXTURE_SWIZZLE_* (in
+/// base-format terms) composed with the format's own swizzle, as Mesa
+/// composes a view's swizzle with the format's (pvr_get_hw_swizzle). ZERO and
+/// ONE stay the TPU's constants. All `GLES_SWIZZLE_SAME` is the identity.
+fn compose_tex_swizzle(fmt: [csb::ROGUE_TEXSTATE_SWIZ; 4], bind: &[u8; 4]) -> [csb::ROGUE_TEXSTATE_SWIZ; 4] {
+    core::array::from_fn(|k| match swizzle_source(k, bind[k]) {
+        c @ 0..=3 => fmt[c],
+        4 => SWIZ_ZERO,
+        _ => SWIZ_ONE,
+    })
+}
+
 fn build_tex_desc(w: &mut [u32], t: &GlesTextureBind, warned: &mut u32) {
-    let fmt: TexFormat;
+    let mut fmt: TexFormat;
 
     /* An image address outside the heaps is a texture fetch the TCU will
      * fault on (the fault's VA is then this address plus a texel offset,
@@ -5449,6 +5461,7 @@ fn build_tex_desc(w: &mut [u32], t: &GlesTextureBind, warned: &mut u32) {
         w[4] = t.bytes;
         w[7] = TEX_PCK_INFO_COMPRESSED_UNORM;
     }
+    fmt.swiz = compose_tex_swizzle(fmt.swiz, &t.swizzle);
     if t.type_ == GLES_TEXTYPE_CUBE_TWIDDLED_PROBE {
         /* The native cube (gl::native_cube, pvr_native_cube): the TPU's own
          * cube over Mesa's twiddled face-major layout, in the format's own
