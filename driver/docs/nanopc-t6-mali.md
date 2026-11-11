@@ -1382,29 +1382,84 @@ WDT0 reset brings the SoC back (step 3, measured 2026-10-19).
 mock of its registers; a composed test runs the whole sequence over the
 board's values). The order:
 
-1. Read what Linux handed over, writing nothing: PD_GPU in the PMU, the GPU
-   clock in the CRU, SPI2's state, then the RK806 over SPI2 (read frames
-   only: `ip::rk806` cannot build a write, and a test checks it). The image
-   prints all of it before its first PMU or GPU write.
-2. Stop when vdd_gpu_s0 (RK806 DCDC1) is off, or below the GPU OPP table's
-   voltage for the rate the CRU gives the GPU (rk3588-opp.dtsi:118-153),
-   or when the CRU's rate is unknown (the PVTPLL selected).
-3. The PLL the GPU clock runs from, on, as Linux's
+1. Read what the previous stage handed over, writing nothing: PD_GPU in the
+   PMU, the GPU clock in the CRU, SPI2's state, then the RK806 over SPI2
+   (`rockchip_spi::write_then_read`, read frames only). The image prints all
+   of it before its first RK806, PMU or GPU write (`gpu_up`'s `on_handover`).
+2. The GPU clock onto the OPP table (`soc::rk3588::gpu_clock_set`). Kept,
+   nothing written, when `CLK_GPU_SRC` is a PLL the CRU reads in normal mode
+   whose rate over the divider is an OPP rate (`gpu_opp_rate`) and the stacks
+   divider (`CLKSEL_CON(159)` [4:0]) is 0: Armbian's 0x1f24 (CPLL / 5, 300
+   MHz) and 0x1f60 (NPLL, 850 MHz) both stay as they are. Otherwise (the
+   PVTPLL selected, SPLL, a mux value past the parents, a divider off the
+   table, a PLL out of normal mode) it writes `CLKSEL_CON(158)` := 0x40ff0024
+   (`SET_SEL158`: CPLL, divider 5, PVTPLL bit clear, one hiword-masked write)
+   and, only if its divider field is not 0, `CLKSEL_CON(159)` := 0x001f0000
+   (`SET_SEL159`), reads both back and rates the CRU again: 300 MHz or a
+   refusal. It does this only while the CPLL reads 1500 MHz in normal mode
+   (`SET_CPLL_HZ`); GPLL's 1188 MHz divides to no OPP rate and NPLL is the
+   GPU's own PLL, which Linux powers down with the GPU. No `PLL_CON`,
+   `MODE_CON0` or PVTPLL word is ever written. Stops: no table rate (stop 9,
+   `ClockSetRefused`, `detail` the CPLL's rate, nothing written); a word that
+   did not read back, or a rate other than 300 MHz afterwards (stop 10,
+   `ClockReadBack`).
+3. The supply, held against the rate of step 2's result (the OPP table's
+   voltage, rk3588-opp.dtsi:118-153). The image never writes a voltage. By
+   DCDC1 (`POWER_EN0` bit 0) and PD_GPU (`REPAIR_STATUS` bit 1):
+   - **vdd_gpu_s0 on** (Linux's kexec state, 675 mV): a `BUCK1_ON_VSEL` below
+     the OPP minimum stops the run (stop 4, `ClockNotCovered`, refusal 0,
+     `detail` the rate); nothing is written to the RK806.
+   - **vdd_gpu_s0 off, PD_GPU off** (possible after U-Boot, the supply being
+     boot-on but not always-on): `BUCK1_ON_VSEL` as found must already cover
+     the rate (else stop 11, `SupplyBelowOpp`, refusal 0, `detail`
+     `BUCK1_ON_VSEL` << 32 | rate in Hz, nothing written). Then, after the
+     hand-over report and the PLL (step 4), the one RK806 write,
+     `ip::rk806::dcdc1_enable_frame`: `POWER_EN0` := 0x11 (DCDC1 and its
+     write-enable twin, nothing else), sent by `rockchip_spi::write`
+     (transmit only: `write_then_read` refuses an empty receive buffer).
+     `POWER_EN0` is polled until DCDC1 reads on, at most
+     `rk806::DCDC1_RAMP_POLL_BUDGET_US`, and `BUCK1_ON_VSEL` is read again and
+     held against the rate again. Stops: the frame could not be sent (stop 13,
+     `Rk806Write`, refusal the `SpiRefusal`; whether it reached the PMIC is
+     unknown), DCDC1 not on in the budget (stop 12, `SupplyRampTimeout`,
+     `detail` the last `POWER_EN0`), `BUCK1_ON_VSEL` below the rate after the
+     enable (stop 11, refusal 1). Nothing is written to the PMU on any of
+     them: the supply is on before the domain, as in Linux.
+   - **vdd_gpu_s0 off, PD_GPU powered**: no state the facts cover; stop 3
+     (`SupplyOff`), refusal 1, `detail` `POWER_EN0`, nothing written to the
+     RK806.
+
+   An RK806 read that fails is stop 2 (`Rk806Read`); an SPI2 gate that stays
+   closed is stop 1.
+4. The PLL the GPU clock runs from, on, as Linux's
    `rockchip_rk3588_pll_enable` does it (clk-pll.c): when `PLL_CON1` bit 13
    (power-down) is set, clear it through its write-enable bit; then wait
    for `PLL_CON6` bit 15 (lock), at most Linux's 1000 µs
    (`rockchip_rk3588_pll_wait_lock`). The rate words and `MODE_CON0` are
    left as found. A PLL that does not lock stops the run here (stop 4,
-   refusal 1, `detail` the `PLL_CON6`), before the PMU is written.
-4. PD_GPU on in Linux's order (pm-domains.c): the four GPU clock gates,
-   `PWR_GATE` bit 0 cleared, wait for `REPAIR_STATUS` bit 1, the bus idle
-   request released, wait for its acknowledge and status. The SIP call that
-   tells the firmware about the domain is left out (it configures system
-   suspend only). The QoS words are read, not written.
-5. `GPU_ID`; soft reset; `GPU_COHERENCY_PROTOCOL` = none; L2 on
+   refusal 1, `detail` the `PLL_CON6`), before the RK806 and the PMU are written.
+5. PD_GPU on in Linux's order (pm-domains.c), `soc::rk3588::pd_gpu_on`: the
+   four GPU clock gates, `PWR_GATE` bit 0 cleared, wait for `REPAIR_STATUS`
+   bit 1, the bus idle request released, wait for its acknowledge and status.
+   Its PMU words go through write masks and the waits read the result, so no
+   step depends on the other domains' bits or, with the domain off, on
+   whether the GPU's idle request was set. A domain already powered with its
+   idle request released (`PdGpuRegs::usable`) is left as it is (only the
+   gates are opened); one powered with the request still set runs the whole
+   sequence. A refusal is stop 5 (`PowerDomain`, refusal the `PdRefusal`,
+   `detail` the register read). The SIP call that tells the firmware about
+   the domain is left out (it configures system suspend only). The QoS words
+   are read, not written.
+6. `GPU_ID`; soft reset; `GPU_COHERENCY_PROTOCOL` = none; L2 on
    (panthor_gpu.c, under its MIT option). The L2 wait needs `L2_READY` to
    show the L2: panthor's condition (`(mask & val) == val`,
-   panthor_gpu.c:210) also accepts 0.
+   panthor_gpu.c:210) also accepts 0. Stops: a `GPU_ID` that is not the G610's
+   is stop 6 (`NotG610`), a soft reset that does not complete stop 7
+   (`Reset`), an L2 that does not come up stop 8 (`L2`).
+
+The stop numbers are `board::nanopc_t6_gpu::Stop`; the C names of 9 and up
+(`YD_T6_GPU_STOP_*`) and the clock-set and supply-enable fields of the record
+are not in the header yet.
 
 **Measured, 2026-10-19 (records `0dce654a8:tools/mali/board-ref/2026-10-19-z1-gpu/`,
 three jumps; the recipe now records the GPU's power under Linux before
@@ -2553,15 +2608,24 @@ and nothing written:
   `BUCK1_CONFIG`, `BUCK1_ON_VSEL` (Linux and the image: 0x0f, 0xe0, 0xa4, 0x1c =
   675 mV), through U-Boot's `regulator dev vdd_gpu_s0` / `regulator status` or
   `pmic dump` when its driver has the supply, else the same SPI2 read the image does.
-  What decides: whether the image can power the domain on U-Boot's state without a
-  step Linux took first.
+  The image already handles the states U-Boot could plausibly leave (PD_GPU off with
+  vdd_gpu_s0 off or on, or PD_GPU powered with its idle request set; `board::nanopc_t6_gpu::gpu_up`,
+  "The GPU power-on" step 3 and 5), each host-tested with a stop for every refusal.
+  What decides: whether U-Boot's real state is one of those, whether it leaves PD_GPU
+  powered with the idle request set, and how fast DCDC1 ramps (the image polls up to
+  `rk806::DCDC1_RAMP_POLL_BUDGET_US`, a budget and not a fact). The design is in
+  docs/notes/nanopc-t6-uboot-handover.md.
 - **The GPU clock without Linux**: SCMI clock 5 against the CRU. In U-Boot read the CRU
   (0xfd7c0000) `CLKSEL_CON(158)` (0xfd7c0578; Linux leaves 0x1f24: `clk_gpu_src`
   CPLL / 5 = 300 MHz, PVTPLL bit 14 clear), `CLKGATE_CON(66)`, the CPLL and GPLL
   `PLL_CON` words, and `clk dump` (the rates U-Boot believes, SCMI clock 5
-  included), at the prompt with nothing run before. The image refuses the PVTPLL and, when the CRU is not at a
-  rate inside the OPP table, sets `CLKSEL_CON(158)` itself (a PLL and divider
-  inside the OPP table); not written yet.
+  included), at the prompt with nothing run before. The image refuses the PVTPLL
+  and, when the CRU is not at a rate inside the OPP table, sets `CLKSEL_CON(158)`
+  (and (159)) itself: `soc::rk3588::gpu_clock_set`, CPLL / 5 = 300 MHz while the
+  CPLL reads 1500 MHz in normal mode, host-tested over the register model for
+  Armbian's 0x1f24 (kept), a PVTPLL state, an out-of-table divider and an unknown
+  mux ("The GPU power-on", step 2). What the prompt read decides is whether U-Boot's
+  CRU is in one of those states, and whether the CPLL reads 1500 MHz there.
 - **The QoS words' effect.** Linux reads 0 for `MODE`, `BANDWIDTH` and `SATURATION`
   in all four blocks with the GPU active (measured 2026-10-26, "The GPU power-on");
   the image leaves the reset values (`MODE` 3, `BANDWIDTH` 0x12d, `SATURATION`
