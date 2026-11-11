@@ -134,6 +134,21 @@ pub fn write_then_read(
     r
 }
 
+/// One frame sent and nothing read: Linux's `spi_write`, one transfer under
+/// the chip select. The bytes go out in the same transmit-and-receive phase
+/// as [`write_then_read`]'s command (the one measured on the T6), with what
+/// comes back dropped; there is no receive phase after it, so no frame is
+/// clocked past `tx`.
+pub fn write(m: &impl Mmio, h: &Host, tx: &[u8], delay_us: &mut impl FnMut(u32)) -> Result<(), (SpiRefusal, u32)> {
+    check(m, h, tx.len(), true)?;
+    m.write32(h.base + SSIENR, 0);
+    m.write32(h.base + SER, 1 << h.cs);
+    let mut drop = [0u8; MAX_LEN];
+    let r = phase(m, h, Some(tx), &mut drop[..tx.len()], delay_us);
+    release(m, h.base);
+    r
+}
+
 /// The arguments and the controller's state, before anything is written.
 fn check(m: &impl Mmio, h: &Host, n: usize, rx_ok: bool) -> Result<(), (SpiRefusal, u32)> {
     if n == 0 || n > MAX_LEN || !rx_ok || h.cs > 1 || h.baudr < 2 || !h.baudr.is_multiple_of(2) {
@@ -343,6 +358,38 @@ pub(crate) mod tests {
         );
         // nothing written to TXDR in the receive phase
         assert_eq!(s.ops.borrow().iter().filter(|o| o.0 == 'w' && o.1 == TXDR).count(), 3);
+    }
+
+    #[test]
+    fn write_sends_one_transmit_phase_and_no_receive_only_phase() {
+        let s = Spi::new(Box::new(|_| 0xee));
+        let h = Host { base: BASE, cs: 0, baudr: 200, budget_us: 100 };
+        write(&s, &h, &[0x80, 0x00, 0x00, 0x11], &mut |_| {}).unwrap();
+        assert_eq!(*s.sent.borrow(), vec![0x80, 0x00, 0x00, 0x11]);
+        let ctl: Vec<_> = s
+            .ops
+            .borrow()
+            .iter()
+            .filter(|o| o.0 == 'w' && matches!(o.1, SER | CTRLR0 | CTRLR1 | SSIENR))
+            .map(|o| (o.1, o.2))
+            .collect();
+        assert_eq!(
+            ctl,
+            vec![
+                (SSIENR, 0),
+                (SER, 1),
+                (SSIENR, 0),
+                (CTRLR0, 0x2c01),
+                (CTRLR1, 3),
+                (SSIENR, 1),
+                (SSIENR, 0),
+                (SSIENR, 0),
+                (SER, 0),
+            ]
+        );
+        // what came back was drained
+        assert!(s.rxq.borrow().is_empty());
+        assert_eq!(write(&s, &h, &[], &mut |_| {}).unwrap_err().0, SpiRefusal::BadArgument);
     }
 
     #[test]
