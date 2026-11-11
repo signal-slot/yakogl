@@ -165,6 +165,10 @@ pub const WADDR_TMUSF: u8 = 41;
 /// A 2D-array look-up's layer (V3D_QPU_WADDR_TMUI).
 pub const WADDR_TMUI: u8 = 36;
 pub const WADDR_TMUB: u8 = 37;
+/// A shadow look-up's reference depth (V3D_QPU_WADDR_TMUDREF, qpu_instr.h;
+/// Mesa's nir_tex_src_comparator write, v3d_tex.c handle_tex_src), written
+/// after the coordinates and the bias or level, before the retiring S write.
+pub const WADDR_TMUDREF: u8 = 38;
 
 /// One entry of a uniform stream.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -884,8 +888,8 @@ impl<'a> Sel<'a> {
                     }
                 }
             }
-            if let SOp::Tex { srcs, cube, layer, vol, bias, lod, .. } = *op {
-                for x in srcs.iter().take(super::prepare::tex_operands(cube || layer || vol, bias || lod)) {
+            if let SOp::Tex { srcs, cube, layer, vol, bias, lod, shadow, .. } = *op {
+                for x in srcs.iter().take(super::prepare::tex_operands(cube || layer || vol, bias || lod, shadow)) {
                     as_value[x.0 as usize] = true;
                 }
             }
@@ -911,7 +915,7 @@ impl<'a> Sel<'a> {
                  * look-up (TMUSLOD for an explicit level: `txl`, v3d_tex.c:
                  * 374-375, which a vertex shader's every look-up is); then
                  * one ldtmu per word asked for. */
-                SOp::Tex { sampler, srcs, cube, layer, vol, bias, lod, fetch, offset } => {
+                SOp::Tex { sampler, srcs, cube, layer, vol, bias, lod, fetch, shadow, offset } => {
                     /* A binding the draw keyed for a 32-bit output
                      * (`LodKey::ret32`: an R32F texture, Mesa's return size
                      * 32): one word per channel, lane l is word l, instead
@@ -980,6 +984,22 @@ impl<'a> Sel<'a> {
                     if bias || lod {
                         let b = self.val(a, srcs[2 + usize::from(cube || layer || vol)])?;
                         self.push(a, VOp::Mul { op: MulOp::Mov, dst: Dst::Magic(WADDR_TMUB), a: b, b: Operand::None })?;
+                    }
+                    /* a shadow look-up's reference depth (Mesa's
+                     * nir_tex_src_comparator write, v3d_tex.c
+                     * handle_tex_src): an ordinary write among the earlier
+                     * ones, before S, which retires the look-up; no P1 or
+                     * P2 bit names it, the sampler record's compare function
+                     * does the compare (docs/notes/v3d-shadow.md (c)). It
+                     * counts toward the TMU input FIFO like the others
+                     * (`tmu_input_writes`). */
+                    if shadow {
+                        let d =
+                            self.val(a, srcs[super::prepare::tex_operands(cube || layer || vol, bias || lod, false)])?;
+                        self.push(
+                            a,
+                            VOp::Mul { op: MulOp::Mov, dst: Dst::Magic(WADDR_TMUDREF), a: d, b: Operand::None },
+                        )?;
                     }
                     /* the retiring S write (v3d_tex.c:371-381): TMUSF for a
                      * texelFetch, TMUSCM for a cube, TMUSLOD for an explicit
@@ -1878,6 +1898,34 @@ pub enum Pressure {
     /// fallback scheduler turn TMU pipelining off (vir.c:2197, "disable TMU
     /// pipelining (2t)"), as queued results are live longer.
     Serial,
+}
+
+/// The most TMU register writes any one look-up of `ops` makes: its
+/// coordinate, layer, bias or level and reference writes (TMUT, TMUR, TMUI,
+/// TMUB, TMUDREF) plus the S write that retires it. The TMU input FIFO has
+/// 16 slots across all threads, so a program whose look-up writes more than
+/// `16 / threads` runs at fewer threads (Mesa's get_required_tex_tmu_writes
+/// and the `while (tmu_writes > 16 / c->threads) c->threads /= 2` of
+/// v3d_vir_emit_tex, v3d_tex.c; chain.rs `build` applies it). 0 for a
+/// program with no look-up. A general TMU access (TMUA, TMUD) is not one of
+/// these and this back end selects none.
+pub fn tmu_input_writes(ops: &[VOp]) -> u32 {
+    let (mut most, mut run) = (0u32, 0u32);
+    for op in ops {
+        let w = match op {
+            VOp::Mul { dst: Dst::Magic(w), .. } | VOp::Add { dst: Dst::Magic(w), .. } => *w,
+            _ => continue,
+        };
+        match w {
+            WADDR_TMUT | WADDR_TMUR | WADDR_TMUI | WADDR_TMUB | WADDR_TMUDREF => run += 1,
+            WADDR_TMUS | WADDR_TMUSCM | WADDR_TMUSF | WADDR_TMUSLOD => {
+                most = most.max(run + 1);
+                run = 0;
+            }
+            _ => {}
+        }
+    }
+    most
 }
 
 /// The TMU output FIFO's words per thread at 4 threads: `16 / threads`

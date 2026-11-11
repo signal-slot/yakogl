@@ -46,7 +46,15 @@ tests/fixtures/v3d_mesa_programs_71.txt: the same pairs and lines from
 `v3d_shc --device 71` (tools/v3d/README.md, H2), with `# device: 71` in the
 header; the 4.2 default writes what it wrote before the option existed.
 
-Usage: sim_fixture.py [--device 42|71] [--out FILE] [--remove DIR...]
+`--pins` writes tests/fixtures/v3d_mesa_pins.txt instead: the pin programs
+of tools/v3d/pin-shaders (its pairs.txt: `<vs> <fs> [v3d_shc flags...]`,
+the ES 3.0 look-up forms, README.md there), each compiled with its flags
+(`--fs-ret32` / `--vs-ret32`, the return-size key), in the same format
+with the paths relative to the repository root (`tools/v3d/pin-shaders/...`)
+and a `flags <flags...>` line after `pair`. Every pin must compile, or the
+run fails.
+
+Usage: sim_fixture.py [--device 42|71] [--out FILE] [--remove DIR...] [--pins]
 """
 import argparse
 import json
@@ -68,6 +76,11 @@ import gl_test_pairs as gp  # noqa: E402  (table_arms)
 
 VPM_SIZE = 65536
 FEMTOVG_VS = "femtovg/main.vert"
+# The pin programs (--pins): their directory, its pair list and the fixture.
+PINS_DIR = os.path.join(HERE, "pin-shaders")
+PINS_LIST = os.path.join(PINS_DIR, "pairs.txt")
+PINS_OUT = os.path.join(REPO, "tests", "fixtures", "v3d_mesa_pins.txt")
+PINS_REL = "tools/v3d/pin-shaders/"
 # Pairs the V3D's Mesa pins need that neither rule forms: fragment shaders
 # written for the compiler's ES 3.00 texture forms (texelFetch, textureOffset
 # and textureLodOffset) that no gl_test site links and that have no namesake
@@ -159,6 +172,121 @@ def remove(path, dirs):
     print("sim_fixture --remove: %d real pairs, %d of them compiled, removed (%s)" % (n_real, n_pairs, ", ".join(dirs)))
 
 
+def compile_pair(vs, fs, rv, rf, shc_flags):
+    """One pair through v3d_shc: the fixture record, or (None, why)."""
+    if rv["spv"] is None or rf["spv"] is None:
+        return None, "glslang: %s" % (rv["error"] or rf["error"]).splitlines()[0]
+    # The VPM size of the V3D 4.2 on the Raspberry Pi 4, measured on the
+    # board 2026-09-24 (IDENT1.VPM_SIZE: 65536 bytes); v3d_shc otherwise
+    # assumes 16384 and its JSON says so. 7.1 is given the same: it is
+    # what `--device 71` assumes (Mesa's drm-shim), the Pi 5's own is
+    # not measured yet.
+    r = subprocess.run([g.V3D_SHC, rv["spv"], rf["spv"], "--vpm-size", str(VPM_SIZE)] + shc_flags,
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        return None, "v3d_shc exit %d" % r.returncode
+    js = json.loads(r.stdout)
+    rec = {"vs_path": vs, "fs_path": fs,
+           "spirv_io": {"vs": spirv_locations(rv["spv"]), "fs": spirv_locations(rf["spv"])},
+           "attributes": js["attributes"], "uniform_names": js["uniform_names"]}
+    for st, keys in (("fs", FS_KEYS), ("vs", VS_KEYS), ("cs", VS_KEYS)):
+        s = js[st]
+        rec[st] = {k: s[k] for k in keys if k in s}
+        rec[st]["code"] = s["code"]
+        rec[st]["uniforms"] = [[u["contents"], u["data"]] for u in s["uniforms"]]
+    return rec, None
+
+
+def pair_lines(r, flags=()):
+    """The fixture lines of one compiled pair (the format in the module doc);
+    `flags` are the pair's own v3d_shc flags (the pins), written after
+    `pair` when there are any."""
+    lines = ["pair %s %s" % (r["vs_path"], r["fs_path"])]
+    if flags:
+        lines.append("flags %s" % " ".join(flags))
+    for st in ("vs", "fs"):
+        for d in ("in", "out"):
+            for name, loc in sorted(r["spirv_io"][st][d].items()):
+                lines.append("io %s %s %s %d" % (st, d, name, loc))
+    for a in r["attributes"]:
+        lines.append("attr %s %d %s" % (a["name"], a["location"],
+                                        ",".join("-" if x is None else str(x) for x in a["records"])))
+    for u in r["uniform_names"]:
+        # A sampler has its binding (the texture index its code carries
+        # in TMU config P0) instead of a slot; the slot is the stage's own
+        # (driver_location per stage).
+        where = ("slot=%d" % u["slot"]) if "slot" in u else ("binding=%d" % u["binding"])
+        lines.append("uniform %s %s %s %d%s" % (u["stage"], u["name"], where, u["vec4s"],
+                                                (" " + u["state"]) if u.get("state") else ""))
+    for st in ("fs", "vs", "cs"):
+        s_ = r[st]
+        meta = " ".join("%s=%s" % (k, s_[k]) for k in sorted(s_)
+                        if k not in ("code", "uniforms", "input_slots", "vattr_sizes"))
+        lines.append("%s meta %s" % (st, meta))
+        for sl in s_.get("input_slots", []):
+            lines.append("%s input %d %d" % (st, sl["slot"], sl["component"]))
+        if "vattr_sizes" in s_:
+            lines.append("%s vattr %s" % (st, ",".join(str(x) for x in s_["vattr_sizes"])))
+        lines.append("%s code %s" % (st, " ".join(s_["code"])))
+        lines.append("%s uniforms %s" % (st, " ".join("%d:%s" % (c, d) for c, d in s_["uniforms"])))
+    lines.append("end")
+    return lines
+
+
+def pin_pairs():
+    """tools/v3d/pin-shaders/pairs.txt: [(vs, fs, [flags...])]."""
+    out = []
+    with open(PINS_LIST) as f:
+        for line in f:
+            w = line.split()
+            if not w or w[0].startswith("#"):
+                continue
+            if len(w) < 2:
+                raise SystemExit("sim_fixture: %s: a pair needs a vertex and a fragment shader: %r"
+                                 % (PINS_LIST, line))
+            for s in w[:2]:
+                if not os.path.isfile(os.path.join(PINS_DIR, s)):
+                    raise SystemExit("sim_fixture: %s names %s, which is not in %s" % (PINS_LIST, s, PINS_DIR))
+            out.append((w[0], w[1], w[2:]))
+    if not out:
+        raise SystemExit("sim_fixture: %s lists no pair" % PINS_LIST)
+    return out
+
+
+def write_pins(out_path, shc_flags):
+    """--pins: the pin programs' fixture. Every pin compiles or the run fails
+    (a pin that Mesa refuses is not a pin)."""
+    pins = pin_pairs()
+    work = tempfile.mkdtemp(prefix="sim_fixture-pins-", dir=os.environ.get("SIM_FIXTURE_TMP"))
+    recs, out, failed = {}, [], []
+    for vs, fs, flags in pins:
+        for f in (vs, fs):
+            if f not in recs:
+                recs[f] = g.prepare(f, work, PINS_DIR)
+        rec, why = compile_pair(PINS_REL + vs, PINS_REL + fs, recs[vs], recs[fs], shc_flags + flags)
+        if rec is None:
+            failed.append("%s + %s %s: %s" % (vs, fs, " ".join(flags), why))
+            continue
+        out.append((rec, flags))
+    if failed:
+        raise SystemExit("sim_fixture: FAIL: pin programs Mesa did not compile:\n  " + "\n  ".join(failed))
+    lines = ["# V3D 4.2 Mesa pin programs (tools/v3d/pin-shaders, the ES 3.0 look-up",
+             "# forms) for tests/v3d_sim_mesa.rs; written by tools/v3d/sim_fixture.py --pins.",
+             "# build: %s" % build_id(),
+             "# v3d_shc: %s" % os.path.basename(g.V3D_SHC),
+             "# vpm size: %d" % VPM_SIZE,
+             "# pin pairs: %d" % len(pins),
+             "# compiled: %d" % len(out)]
+    for rec, flags in out:
+        lines += pair_lines(rec, flags)
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+    tmp = out_path + ".tmp"
+    with open(tmp, "w") as f:
+        f.write("\n".join(lines) + "\n")
+    os.replace(tmp, out_path)
+    print("sim_fixture: %d pin pairs, %d compiled -> %s" % (len(pins), len(out), out_path))
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--device", choices=("42", "71"), default="42",
@@ -166,10 +294,18 @@ def main():
     ap.add_argument("--out", help="the fixture (default: the device's under tests/fixtures)")
     ap.add_argument("--remove", nargs="+", metavar="DIR",
                     help="drop the pairs of these directories from --out instead of writing it")
+    ap.add_argument("--pins", action="store_true",
+                    help="write the pin programs' fixture (tools/v3d/pin-shaders) instead")
     args = ap.parse_args()
-    args.out = args.out or DEFAULT_OUT[args.device]
     # Empty for 4.2, so a 4.2 run is exactly what it was before --device.
     shc_flags = ["--device", "71"] if args.device == "71" else []
+    if args.pins:
+        if args.device != "42":
+            raise SystemExit("sim_fixture: --pins is the 4.2 fixture only")
+        if not os.path.isfile(g.V3D_SHC):
+            raise SystemExit("sim_fixture: %s not found (set V3D_SHC)" % g.V3D_SHC)
+        return write_pins(args.out or PINS_OUT, shc_flags)
+    args.out = args.out or DEFAULT_OUT[args.device]
     if args.remove:
         return remove(args.out, args.remove)
     if not os.path.isfile(g.V3D_SHC):
@@ -215,29 +351,10 @@ def main():
         for f in (vs, fs):
             if f not in recs:
                 recs[f] = g.prepare(f, work)
-        rv, rf = recs[vs], recs[fs]
-        if rv["spv"] is None or rf["spv"] is None:
-            failed.append((vs, fs, "glslang: %s" % (rv["error"] or rf["error"]).splitlines()[0]))
+        rec, why = compile_pair(vs, fs, recs[vs], recs[fs], shc_flags)
+        if rec is None:
+            failed.append((vs, fs, why))
             continue
-        # The VPM size of the V3D 4.2 on the Raspberry Pi 4, measured on the
-        # board 2026-09-24 (IDENT1.VPM_SIZE: 65536 bytes); v3d_shc otherwise
-        # assumes 16384 and its JSON says so. 7.1 is given the same: it is
-        # what `--device 71` assumes (Mesa's drm-shim), the Pi 5's own is
-        # not measured yet.
-        r = subprocess.run([g.V3D_SHC, rv["spv"], rf["spv"], "--vpm-size", str(VPM_SIZE)] + shc_flags,
-                           capture_output=True, text=True)
-        if r.returncode != 0:
-            failed.append((vs, fs, "v3d_shc exit %d" % r.returncode))
-            continue
-        js = json.loads(r.stdout)
-        rec = {"vs_path": vs, "fs_path": fs,
-               "spirv_io": {"vs": spirv_locations(rv["spv"]), "fs": spirv_locations(rf["spv"])},
-               "attributes": js["attributes"], "uniform_names": js["uniform_names"]}
-        for st, keys in (("fs", FS_KEYS), ("vs", VS_KEYS), ("cs", VS_KEYS)):
-            s = js[st]
-            rec[st] = {k: s[k] for k in keys if k in s}
-            rec[st]["code"] = s["code"]
-            rec[st]["uniforms"] = [[u["contents"], u["data"]] for u in s["uniforms"]]
         out.append(rec)
 
     reasons = {}
@@ -260,33 +377,7 @@ def main():
     for vs, fs in real:
         lines.append("real %s %s" % (vs, fs))
     for r in out:
-        lines.append("pair %s %s" % (r["vs_path"], r["fs_path"]))
-        for st in ("vs", "fs"):
-            for d in ("in", "out"):
-                for name, loc in sorted(r["spirv_io"][st][d].items()):
-                    lines.append("io %s %s %s %d" % (st, d, name, loc))
-        for a in r["attributes"]:
-            lines.append("attr %s %d %s" % (a["name"], a["location"],
-                                            ",".join("-" if x is None else str(x) for x in a["records"])))
-        for u in r["uniform_names"]:
-            # A sampler has its binding (the texture index its code carries
-            # in TMU config P0) instead of a slot; the slot is the stage's own
-            # (driver_location per stage).
-            where = ("slot=%d" % u["slot"]) if "slot" in u else ("binding=%d" % u["binding"])
-            lines.append("uniform %s %s %s %d%s" % (u["stage"], u["name"], where, u["vec4s"],
-                                                    (" " + u["state"]) if u.get("state") else ""))
-        for st in ("fs", "vs", "cs"):
-            s_ = r[st]
-            meta = " ".join("%s=%s" % (k, s_[k]) for k in sorted(s_)
-                            if k not in ("code", "uniforms", "input_slots", "vattr_sizes"))
-            lines.append("%s meta %s" % (st, meta))
-            for sl in s_.get("input_slots", []):
-                lines.append("%s input %d %d" % (st, sl["slot"], sl["component"]))
-            if "vattr_sizes" in s_:
-                lines.append("%s vattr %s" % (st, ",".join(str(x) for x in s_["vattr_sizes"])))
-            lines.append("%s code %s" % (st, " ".join(s_["code"])))
-            lines.append("%s uniforms %s" % (st, " ".join("%d:%s" % (c, d) for c, d in s_["uniforms"])))
-        lines.append("end")
+        lines += pair_lines(r)
     os.makedirs(os.path.dirname(args.out), exist_ok=True)
     tmp = args.out + ".tmp"
     with open(tmp, "w") as f:

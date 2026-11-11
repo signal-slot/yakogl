@@ -33,8 +33,17 @@ Run it on SPIR-V made the way `tools/vivante/glsl2vivante.py` makes it
 (`glslangValidator -G`):
 
 ```sh
-v3d_shc vs.spv fs.spv [--vpm-size BYTES] > out.json 2> disasm.txt
+v3d_shc vs.spv fs.spv [--vpm-size BYTES] [--vs-ret32 MASK] [--fs-ret32 MASK] > out.json 2> disasm.txt
 ```
+
+`--vs-ret32` and `--fs-ret32` give the stage's sampler return-size key
+(`struct v3d_key` `sampler_is_32b`: bit b set when the texture at binding b
+returns 32 bits a channel, as the gallium driver sets it for R32F,
+RGBA32F/UI/I and the depth formats); default 0, the 16-bit return every
+earlier program was compiled with, so no earlier word moves. The programs
+of `pin-shaders/` (its `pairs.txt` names each one's flags) are compiled
+with them by `sim_fixture.py --pins` into `tests/fixtures/v3d_mesa_pins.txt`
+(`pin-shaders/README.md`).
 
 The JSON has the QPU code of `fs`, `vs` and `cs` (64-bit words), each stage's
 uniform stream description (`contents` is Mesa's `enum quniform_contents`),

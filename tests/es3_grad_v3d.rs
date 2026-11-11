@@ -79,7 +79,7 @@ fn build(vs: &str, fs: &str) -> Result<(), String> {
 }
 
 /// The forms of GLSL ES 3.00 8.8 with gradients, every sampler type but the
-/// shadow ones (item v3d-qpu-shadow's), and the 3D offsets: (sampler,
+/// shadow ones (tests/es3_shadow_v3d.rs), and the 3D offsets: (sampler,
 /// gradient width, expression of `t`, `p` (a vec4) and the gradients `gx`,
 /// `gy`).
 const FORMS: [(&str, u8, &str); 16] = [
@@ -103,7 +103,7 @@ const FORMS: [(&str, u8, &str); 16] = [
 
 /// Every form builds in the fragment and the vertex stage (a vertex shader
 /// may sample with gradients: they are its own values, no derivative is
-/// involved). The shadow forms stay refused by name, another item's.
+/// involved), and so does the shadow one.
 #[test]
 fn grad_and_3d_offset_forms_build() {
     let vs_pass = "#version 300 es\nin highp vec4 a_pos;\nout highp vec4 p;\n\
@@ -125,13 +125,13 @@ fn grad_and_3d_offset_forms_build() {
         }
         build(&vs, fs_c).unwrap_or_else(|e| panic!("vertex {sampler} {expr}: {e}\n{vs}"));
     }
+    /* the shadow form builds too (tests/es3_shadow_v3d.rs has the rest) */
     let fs = "#version 300 es\nprecision highp float;\nuniform highp sampler2DShadow t;\n\
               uniform highp vec2 gx, gy;\nin highp vec4 p;\nout vec4 o;\n\
               void main() {\n  o = vec4(textureGrad(t, p.xyz, gx, gy));\n}\n";
     let vs =
         "#version 300 es\nin highp vec4 a_pos;\nout highp vec4 p;\nvoid main() { p = a_pos; gl_Position = a_pos; }\n";
-    let e = build(vs, fs).expect_err("a shadow look-up is still refused");
-    assert!(e.contains("shadow"), "{e}");
+    build(vs, fs).expect("a shadow textureGrad builds");
 }
 
 // ---- values, on the QPU interpreter ----------------------------------------

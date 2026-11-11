@@ -15,12 +15,19 @@
  * here; no device is needed.
  *
  *   v3d_shc vs.spv fs.spv [--device 42|71] [--rev N] [--compat-rev N]
- *           [--vpm-size BYTES] [--prim triangles|lines|points] > out.json
+ *           [--vpm-size BYTES] [--prim triangles|lines|points]
+ *           [--vs-ret32 MASK] [--fs-ret32 MASK] > out.json
  *
  * --device picks the GPU generation: 42 (the default, the BCM2711) or 71 (the
  * BCM2712). One binary serves both; the 42 output does not depend on the flag.
  * --rev and --compat-rev (71 only) set the hardware revision the compiler sees
  * (default 7 and 0, what Mesa's drm-shim reports); the 71 JSON names them.
+ *
+ * --vs-ret32 and --fs-ret32 give the stage's sampler return-size key (struct
+ * v3d_key sampler_is_32b: bit b set when the texture at binding b returns 32
+ * bits a channel, which the gallium driver sets from the format: R32F,
+ * RGBA32F/UI/I and the depth formats). Default 0, the 16-bit return every
+ * earlier pair was compiled with; the JSON names a non-zero mask in gpu.
  *
  * --prim picks the variant: Mesa compiles the FS for the primitive being drawn
  * (v3d_program.c v3d_update_compiled_fs: is_points, is_lines) and a points draw
@@ -670,7 +677,7 @@ int main(int argc, char **argv)
 {
 	if (argc < 3) {
 		fprintf(stderr, "usage: v3d_shc vs.spv fs.spv [--device 42|71] [--vpm-size BYTES] "
-				"[--prim triangles|lines|points]\n");
+				"[--prim triangles|lines|points] [--vs-ret32 MASK] [--fs-ret32 MASK]\n");
 		return 2;
 	}
 
@@ -732,6 +739,16 @@ int main(int argc, char **argv)
 	v3d_nir_options.lower_fsat = devinfo.ver < 71;
 	const char *vpm_source = "assumed";
 	const char *prim = "triangles";
+	/*
+	 * The per-stage return-size key (struct v3d_key sampler_is_32b, a mask
+	 * over the sampler bindings: bit b set when the texture bound at b
+	 * returns 32 bits a channel, as the gallium driver sets it from the
+	 * format's return size, v3d_program.c v3d_setup_shared_key). Default 0,
+	 * the 16-bit return every pair was compiled with before the switch, so
+	 * no earlier word moves. The vertex mask is the coordinate shader's too
+	 * (the same key). docs/notes/v3d-vs-ret32.md (c).
+	 */
+	uint32_t vs_ret32 = 0, fs_ret32 = 0;
 	for (int i = 3; i < argc; i++) {
 		if (strcmp(argv[i], "--device") == 0 && i + 1 < argc) {
 			i++; /* read above */
@@ -756,6 +773,10 @@ int main(int argc, char **argv)
 			vpm_source = "given";
 		} else if (strcmp(argv[i], "--prim") == 0 && i + 1 < argc) {
 			prim = argv[++i];
+		} else if (strcmp(argv[i], "--vs-ret32") == 0 && i + 1 < argc) {
+			vs_ret32 = strtoul(argv[++i], NULL, 0);
+		} else if (strcmp(argv[i], "--fs-ret32") == 0 && i + 1 < argc) {
+			fs_ret32 = strtoul(argv[++i], NULL, 0);
 		} else {
 			fprintf(stderr, "v3d_shc: unknown argument '%s'\n", argv[i]);
 			return 2;
@@ -897,6 +918,7 @@ int main(int argc, char **argv)
 	fs_key.can_earlyz_with_discard = fs->info.fs.uses_discard;
 	fs_key.is_points = points;
 	fs_key.is_lines = lines;
+	fs_key.base.sampler_is_32b = fs_ret32;
 	struct v3d_prog_data *fs_data = NULL;
 	uint32_t fs_bytes = 0;
 	uint64_t *fs_code = v3d_compile(compiler, &fs_key.base, &fs_data, fs, debug_output, NULL,
@@ -918,6 +940,7 @@ int main(int argc, char **argv)
 	 * that writes it. The CS copies this key. */
 	vs_key.per_vertex_point_size =
 		points && (vs->info.outputs_written & BITFIELD64_BIT(VARYING_SLOT_PSIZ));
+	vs_key.base.sampler_is_32b = vs_ret32;
 	struct v3d_prog_data *vs_data = NULL;
 	uint32_t vs_bytes = 0;
 	uint64_t *vs_code = v3d_compile(compiler, &vs_key.base, &vs_data, vs, debug_output, NULL,
@@ -942,11 +965,15 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
-	/* a 71 run names its revision; the 42 output keeps its old bytes */
-	char rev_json[64] = "";
+	/* a 71 run names its revision, a keyed run its return-size masks; the
+	 * plain 42 output keeps its old bytes */
+	char rev_json[128] = "";
 	if (devinfo.ver == 71)
 		snprintf(rev_json, sizeof(rev_json), ", \"rev\": %u, \"compat_rev\": %u",
 			 devinfo.rev, devinfo.compat_rev);
+	if (vs_ret32 || fs_ret32)
+		snprintf(rev_json + strlen(rev_json), sizeof(rev_json) - strlen(rev_json),
+			 ", \"vs_ret32\": %u, \"fs_ret32\": %u", vs_ret32, fs_ret32);
 	printf("{\n  \"gpu\": { \"ver\": %u, \"vpm_size\": %d, \"vpm_size_source\": \"%s\", "
 	       "\"prim\": \"%s\", \"per_vertex_point_size\": %s%s },\n",
 	       devinfo.ver, devinfo.vpm_size, vpm_source, prim,

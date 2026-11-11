@@ -930,6 +930,33 @@ pub fn sample_layer_compare(
     over_levels(t, sp, lod, |l, filter| sample_face_with(l, layer, filter, sp, s, tc, |v| cmp.tap(v))).map(|v| v[0])
 }
 
+/// [`sample_layer_compare`] with a constant texel offset
+/// (`textureOffset` on a shadow sampler, the TMU's P2 Offset S / T), added
+/// to the texel coordinates of each level before the wrap as
+/// [`sample_layer_offset`] adds it; a zero offset is [`sample_layer_compare`].
+#[allow(clippy::too_many_arguments)]
+pub fn sample_layer_offset_compare(
+    t: &Texture,
+    sp: &Sampler,
+    cmp: &Compare,
+    layer: usize,
+    s: f32,
+    tc: f32,
+    lod: Lod,
+    offset: [i32; 2],
+) -> Result<f32, Refusal> {
+    let faces = t.levels.first().map_or(0, |l| l.faces.len());
+    if faces == 0 {
+        return Err(Refusal::NoLevel);
+    }
+    let layer = layer.min(faces - 1);
+    over_levels(t, sp, lod, |l, filter| {
+        let (s, tc) = (s + offset[0] as f32 / l.width as f32, tc + offset[1] as f32 / l.height as f32);
+        sample_face_with(l, layer, filter, sp, s, tc, |v| cmp.tap(v))
+    })
+    .map(|v| v[0])
+}
+
 /// [`sample_layer_compare`] on layer 0: a `sampler2DShadow` look-up.
 pub fn sample_2d_compare(t: &Texture, sp: &Sampler, cmp: &Compare, s: f32, tc: f32, lod: Lod) -> Result<f32, Refusal> {
     sample_layer_compare(t, sp, cmp, 0, s, tc, lod)

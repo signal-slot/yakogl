@@ -107,16 +107,23 @@ pub enum SOp {
     /// TMUSF; always with `lod`, never with `cube` or `bias`. `offset`: the
     /// constant texel offset (s, t, r) of `textureOffset` and its forms,
     /// TMU config parameter 2's 4-bit signed fields (0 without one; r is 0
-    /// but for a 3D look-up). Its result is read through [`SOp::TexLane`].
+    /// but for a 3D look-up). `shadow`: a shadow look-up (`sampler2DShadow`,
+    /// `samplerCubeShadow`, `sampler2DArrayShadow`): the reference depth
+    /// follows the other operands as the last one ([`tex_operands`]),
+    /// written to TMUDREF before the retiring S write (docs/notes/
+    /// v3d-shadow.md (c)); the sampler record's compare function decides
+    /// the result, one lane. Never with `fetch` or `vol`. Its result is read
+    /// through [`SOp::TexLane`].
     Tex {
         sampler: u8,
-        srcs: [S; 4],
+        srcs: [S; 5],
         cube: bool,
         layer: bool,
         vol: bool,
         bias: bool,
         lod: bool,
         fetch: bool,
+        shadow: bool,
         offset: [i8; 3],
     },
     /// Lane `lane` (r, g, b, a) of the look-up `tex[0]`, of the sampler's
@@ -187,8 +194,8 @@ impl SOp {
         match self {
             SOp::Alu(op, s) => &s[..op.arity()],
             SOp::Fsub(s) => s,
-            SOp::Tex { srcs, cube, layer, vol, bias, lod, .. } => {
-                &srcs[..tex_operands(*cube || *layer || *vol, *bias || *lod)]
+            SOp::Tex { srcs, cube, layer, vol, bias, lod, shadow, .. } => {
+                &srcs[..tex_operands(*cube || *layer || *vol, *bias || *lod, *shadow)]
             }
             SOp::TexLane { tex, .. } => tex,
             SOp::Phi { init } => init,
@@ -1444,8 +1451,10 @@ impl<'m, 'a> Walk<'m, 'a> {
                 if array && proj {
                     return Err(PrepError::NotYet("a projected 2D-array look-up"));
                 }
-                if shadow {
-                    return Err(PrepError::NotYet("a shadow look-up"));
+                /* GLSL ES 3.00 has no sampler3DShadow and no texelFetch of a
+                 * shadow sampler; a hand-built IR that carries one is named */
+                if shadow && (vol || matches!(lod, ir::TexLod::Fetch(_))) {
+                    return Err(PrepError::NotYet("a shadow texelFetch or 3D shadow look-up (GLSL ES 3.00 has none)"));
                 }
                 /* An isampler / usampler reads its texture's integers raw
                  * (ES 3.0 3.8.13: an integer texture is filtered NEAREST
@@ -1533,14 +1542,30 @@ impl<'m, 'a> Walk<'m, 'a> {
                  * texture, or a 2D array's layer, then the bias or level:
                  * packed, so the operands are srcs[..n]. */
                 let mut r = if cube || vol { Some(self.src(coord, 2)?) } else { None };
+                /* A shadow look-up's reference depth: the coordinate's z for
+                 * a 2D sampler, its w for a cube or a 2D array (ir.rs
+                 * Op::Tex; eval.rs look_up reads the same lanes). It goes to
+                 * TMUDREF as it is (select.rs), Mesa's nir_tex_src_comparator
+                 * write (v3d_tex.c handle_tex_src); the compare function is
+                 * the sampler record's, not the program's (docs/notes/
+                 * v3d-shadow.md (b), (c)). A cube's reference is not divided
+                 * by the major axis below: only the direction is. */
+                let mut dref =
+                    if shadow { Some(self.src(coord, if dim == ir::TexDim::D2 { 2 } else { 3 })?) } else { None };
                 if proj {
-                    /* textureProj of a sampler3D divides r too */
+                    /* textureProj of a sampler3D divides r too, and a
+                     * projected 2D shadow look-up its reference (GLSL ES
+                     * 3.00 8.8: every component but the last is divided by
+                     * the last; eval.rs does the same) */
                     let q = self.src(coord, 3)?;
                     let inv = self.push(a, SOp::Alu(AluOp::Frcp, [q, S(0), S(0)]))?;
                     s = self.push(a, SOp::Alu(AluOp::Fmul, [s, inv, S(0)]))?;
                     t = self.push(a, SOp::Alu(AluOp::Fmul, [t, inv, S(0)]))?;
                     if let Some(z) = r {
                         r = Some(self.push(a, SOp::Alu(AluOp::Fmul, [z, inv, S(0)]))?);
+                    }
+                    if let Some(d) = dref {
+                        dref = Some(self.push(a, SOp::Alu(AluOp::Fmul, [d, inv, S(0)]))?);
                     }
                 }
                 /* A cube direction is divided by its major axis first, so
@@ -1605,8 +1630,11 @@ impl<'m, 'a> Walk<'m, 'a> {
                         r = Some(z);
                     }
                 }
-                let mut srcs = [s, t, S(0), S(0)];
-                for (slot, x) in srcs[2..].iter_mut().zip([r.or(layer), third].into_iter().flatten()) {
+                /* s, t, the third coordinate, the bias or level, then the
+                 * reference: packed, so the operands are srcs[..n]
+                 * (tex_operands) */
+                let mut srcs = [s, t, S(0), S(0), S(0)];
+                for (slot, x) in srcs[2..].iter_mut().zip([r.or(layer), third, dref].into_iter().flatten()) {
                     *slot = x;
                 }
                 let tex = self.push(
@@ -1620,11 +1648,21 @@ impl<'m, 'a> Walk<'m, 'a> {
                         bias: third.is_some() && !is_lod,
                         lod: is_lod,
                         fetch,
+                        shadow,
                         offset,
                     },
                 )?;
-                for (lane, o) in out.iter_mut().enumerate() {
-                    *o = Some(self.push(a, SOp::TexLane { tex: [tex], lane: lane as u8, ret: lane_ret })?);
+                if shadow {
+                    /* One lane, the compare result (ir.rs: a shadow value is
+                     * one F32 lane; Mesa's return_words of a one-component
+                     * def is word 0). Every lane of `out` reads it, so a
+                     * reader of a wider swizzle meets no undefined lane. */
+                    let v = self.push(a, SOp::TexLane { tex: [tex], lane: 0, ret: lane_ret })?;
+                    out = [Some(v); 4];
+                } else {
+                    for (lane, o) in out.iter_mut().enumerate() {
+                        *o = Some(self.push(a, SOp::TexLane { tex: [tex], lane: lane as u8, ret: lane_ret })?);
+                    }
                 }
             }
             /* textureSize (GLSL ES 3.00 8.8: the size of level `lod`; a
@@ -2454,11 +2492,11 @@ fn compact<'a>(ops: &[SOp], roots: &mut [S], a: &Arena<'a>) -> Result<&'a [SOp],
                 }
                 SOp::Alu(alu, s)
             }
-            SOp::Tex { sampler, mut srcs, cube, layer, vol, bias, lod, fetch, offset } => {
-                for x in srcs.iter_mut().take(tex_operands(cube || layer || vol, bias || lod)) {
+            SOp::Tex { sampler, mut srcs, cube, layer, vol, bias, lod, fetch, shadow, offset } => {
+                for x in srcs.iter_mut().take(tex_operands(cube || layer || vol, bias || lod, shadow)) {
                     *x = S(map[x.0 as usize]);
                 }
-                SOp::Tex { sampler, srcs, cube, layer, vol, bias, lod, fetch, offset }
+                SOp::Tex { sampler, srcs, cube, layer, vol, bias, lod, fetch, shadow, offset }
             }
             SOp::Fsub(s) => SOp::Fsub(s.map(|x| S(map[x.0 as usize]))),
             SOp::TexLane { tex, lane, ret } => SOp::TexLane { tex: [S(map[tex[0].0 as usize])], lane, ret },
@@ -2507,9 +2545,11 @@ fn refuse_undef(ops: &[SOp]) -> Result<(), PrepError> {
 }
 
 /// How many of [`SOp::Tex`]'s `srcs` it reads: s and t, r for a cube or the
-/// layer of an array look-up (`third_coord`), and the bias or level.
-pub(super) fn tex_operands(third_coord: bool, third: bool) -> usize {
-    2 + usize::from(third_coord) + usize::from(third)
+/// layer of an array look-up (`third_coord`), the bias or level (`third`),
+/// and a shadow look-up's reference depth last (`shadow`), so the reference
+/// is `srcs[tex_operands(third_coord, third, false)]`.
+pub(super) fn tex_operands(third_coord: bool, third: bool, shadow: bool) -> usize {
+    2 + usize::from(third_coord) + usize::from(third) + usize::from(shadow)
 }
 
 /// Prepare a fragment shader: `gl_FragColor` and what it needs.
@@ -2819,11 +2859,135 @@ mod tests {
                 look_up_of(stage, "sampler2D", 2, "textureProjGrad(t, p.xyw, gx, gy)").expect("projected");
             assert!(lod, "{stage:?} textureProjGrad");
         }
-        /* the shadow forms stay another item's refusal */
-        assert_eq!(
-            look_up_of(Stage::Fragment, "sampler2DShadow", 2, "textureGrad(t, p.xyz, gx, gy)").map(|r| r.0),
-            Err(PrepError::NotYet("a shadow look-up"))
-        );
+        /* a shadow textureGrad is the same explicit level, with the
+         * reference as the look-up's last operand */
+        let (lod, bias, _, level, _) =
+            look_up_of(Stage::Fragment, "sampler2DShadow", 2, "textureGrad(t, p.xyz, gx, gy)").expect("2D shadow");
+        assert!(lod && !bias && level.starts_with("Fmin(Fmax(Fmul(Flog2("), "{level}");
+    }
+
+    /// The one look-up of a GLSL ES 3.00 shader of `stage` (as
+    /// [`look_up_of`]), prepared: its `shadow`, `lod`, `bias`, `cube` and
+    /// `layer` flags, its Offset, and its operands as text in `srcs` order
+    /// (s, t, the third coordinate, the level, the reference), as many as
+    /// [`tex_operands`] says it reads.
+    #[cfg(not(feature = "report-es2"))] // GLSL ES 3.00, which a report-es2 build refuses
+    #[allow(clippy::type_complexity)]
+    fn shadow_look_up_of(
+        stage: Stage,
+        sampler: &str,
+        expr: &str,
+    ) -> Result<(bool, bool, bool, bool, bool, [i8; 3], std::vec::Vec<String>), PrepError> {
+        let decl = format!("uniform highp {sampler} t;\nuniform highp vec2 gx, gy;\nuniform highp float b;");
+        let src = match stage {
+            Stage::Fragment => format!(
+                "#version 300 es\nprecision highp float;\n{decl}\nin highp vec4 p;\nout vec4 o;\n\
+                 void main() {{ o = vec4({expr}); }}\n"
+            ),
+            _ => format!(
+                "#version 300 es\n{decl}\nin highp vec4 p;\nout highp vec4 o;\n\
+                 void main() {{ o = vec4({expr}); gl_Position = p; }}\n"
+            ),
+        };
+        store::with_scratch(|a| {
+            let m = lower::compile_to_ir(a, stage, a.alloc_str(&src).unwrap()).map_err(|e| e.msg).unwrap();
+            let p = match stage {
+                Stage::Fragment => prepare_fragment(&m.module, a)?,
+                _ => prepare_vertex(&m.module, &[(0, 0)], a)?,
+            };
+            let (srcs, cube, layer, vol, bias, lod, shadow, offset) = p
+                .ops
+                .iter()
+                .find_map(|o| match *o {
+                    SOp::Tex { srcs, cube, layer, vol, bias, lod, shadow, offset, .. } => {
+                        Some((srcs, cube, layer, vol, bias, lod, shadow, offset))
+                    }
+                    _ => None,
+                })
+                .expect("a look-up");
+            let n = tex_operands(cube || layer || vol, bias || lod, shadow);
+            Ok((shadow, lod, bias, cube, layer, offset, srcs[..n].iter().map(|s| show(p.ops, *s)).collect()))
+        })
+        .unwrap()
+    }
+
+    /// A shadow look-up (docs/notes/v3d-shadow.md (c)) is a look-up of its
+    /// sampler's shape with the reference depth as the last operand: the
+    /// coordinate's z for `sampler2DShadow`, its w for `samplerCubeShadow`
+    /// and `sampler2DArrayShadow`; a projected 2D one's reference is divided
+    /// by q as s and t are, a cube's is not divided by the major axis; the
+    /// bias, level (a vertex shader's level 0), offset and gradient forms
+    /// keep their flags with the reference after the level; the result is
+    /// one lane read by all four. Revert check: the old arm refused each by
+    /// name ("a shadow look-up").
+    #[cfg(not(feature = "report-es2"))] // GLSL ES 3.00, which a report-es2 build refuses
+    #[test]
+    fn a_shadow_look_up_carries_its_reference_last() {
+        let (shadow, lod, bias, cube, layer, offset, ops) =
+            shadow_look_up_of(Stage::Fragment, "sampler2DShadow", "texture(t, p.xyz)").expect("2D");
+        assert!(shadow && !lod && !bias && !cube && !layer && offset == [0; 3]);
+        assert_eq!(ops, ["v0.0", "v0.1", "v0.2"], "s, t, the reference");
+        let (_, lod, bias, _, _, _, ops) =
+            shadow_look_up_of(Stage::Fragment, "sampler2DShadow", "texture(t, p.xyz, b)").expect("2D bias");
+        assert!(!lod && bias, "a bias");
+        /* `b` is uniform dword 4, after gx and gy */
+        assert_eq!(ops, ["v0.0", "v0.1", "u4", "v0.2"], "the bias before the reference");
+        let (_, lod, _, _, _, _, ops) =
+            shadow_look_up_of(Stage::Fragment, "sampler2DShadow", "textureLod(t, p.xyz, b)").expect("2D lod");
+        assert!(lod);
+        assert_eq!(ops, ["v0.0", "v0.1", "u4", "v0.2"], "the level before the reference");
+        let (_, _, _, _, _, offset, ops) =
+            shadow_look_up_of(Stage::Fragment, "sampler2DShadow", "textureOffset(t, p.xyz, ivec2(-3, 5))")
+                .expect("2D offset");
+        assert_eq!((offset, ops.len()), ([-3, 5, 0], 3));
+        let (_, lod, _, _, _, _, ops) =
+            shadow_look_up_of(Stage::Fragment, "sampler2DShadow", "textureProj(t, p)").expect("2D proj");
+        assert!(!lod);
+        assert_eq!(ops.len(), 3);
+        assert!(ops[0].starts_with("Fmul(v0.0, Frcp(v0.3))"), "{ops:?}");
+        assert!(ops[2].starts_with("Fmul(v0.2, Frcp(v0.3))"), "the reference over q: {ops:?}");
+        let (_, lod, _, _, _, _, ops) =
+            shadow_look_up_of(Stage::Fragment, "sampler2DShadow", "textureProjLodOffset(t, p, b, ivec2(1, 1))")
+                .expect("2D proj lod offset");
+        assert!(lod);
+        assert_eq!(ops.len(), 4);
+        assert!(ops[3].starts_with("Fmul(v0.2, Frcp(v0.3))"), "{ops:?}");
+        let (shadow, lod, bias, cube, layer, _, ops) =
+            shadow_look_up_of(Stage::Fragment, "samplerCubeShadow", "texture(t, p)").expect("cube");
+        assert!(shadow && !lod && !bias && cube && !layer);
+        assert_eq!(ops.len(), 4, "s, t, r, the reference");
+        assert!(ops[0].starts_with("Fmul(v0.0, Frcp(Fmax("), "the direction over its major axis: {ops:?}");
+        assert_eq!(ops[3], "v0.3", "the reference as it is");
+        let (shadow, lod, bias, cube, layer, _, ops) =
+            shadow_look_up_of(Stage::Fragment, "sampler2DArrayShadow", "texture(t, p)").expect("2D array");
+        assert!(shadow && !lod && !bias && !cube && layer);
+        assert_eq!(ops, ["v0.0", "v0.1", "v0.2", "v0.3"], "s, t, the layer, the reference");
+        /* GLSL ES 3.00 8.8 has no textureOffset of a 2D-array shadow sampler
+         * (the front end refuses it); its textureGrad is the level form */
+        let (_, lod, _, _, layer, _, ops) =
+            shadow_look_up_of(Stage::Fragment, "sampler2DArrayShadow", "textureGrad(t, p, gx, gy)")
+                .expect("2D array grad");
+        assert!(lod && layer);
+        assert_eq!((ops.len(), ops[4].as_str()), (5, "v0.3"));
+        let (_, lod, _, _, _, _, ops) =
+            shadow_look_up_of(Stage::Fragment, "sampler2DShadow", "textureGrad(t, p.xyz, gx, gy)").expect("grad");
+        assert!(lod);
+        assert_eq!((ops.len(), ops[3].as_str()), (4, "v0.2"));
+        /* the vertex stage: an implicit look-up is level 0 */
+        for (sampler, expr, n) in [
+            ("sampler2DShadow", "texture(t, p.xyz)", 4),
+            ("samplerCubeShadow", "texture(t, p)", 5),
+            ("sampler2DArrayShadow", "texture(t, p)", 5),
+            ("sampler2DShadow", "textureLod(t, p.xyz, b)", 4),
+        ] {
+            let (shadow, lod, bias, _, _, _, ops) =
+                shadow_look_up_of(Stage::Vertex, sampler, expr).unwrap_or_else(|e| panic!("{sampler} {expr}: {e:?}"));
+            assert!(shadow && lod && !bias, "{sampler} {expr}");
+            assert_eq!(ops.len(), n, "{sampler} {expr}: {ops:?}");
+            if expr.starts_with("texture(") {
+                assert_eq!(ops[n - 2], "0", "{sampler} {expr}: level 0 before the reference: {ops:?}");
+            }
+        }
     }
 
     /// The texelFetch and offset forms GLSL ES 3.00 has not (section 8.8: no

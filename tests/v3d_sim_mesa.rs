@@ -91,6 +91,9 @@ struct Pair {
     mutant: bool,
     /// V3D 7.1 words (FIXTURE_71), run through `sim::run_gen(Gen::V71, ..)`.
     v71: bool,
+    /// The pair's own `v3d_shc` flags (the pin fixture's `flags` line: the
+    /// return-size keys `--vs-ret32` / `--fs-ret32`); empty for the corpus.
+    flags: Vec<String>,
 }
 
 impl Pair {
@@ -153,6 +156,7 @@ fn parse_in(fixture: &str, v71: bool) -> Vec<Pair> {
         let cur = p.as_mut().unwrap_or_else(|| panic!("a line outside a pair: {line}"));
         match w[0] {
             "end" => out.push(p.take().unwrap()),
+            "flags" => cur.flags = w[1..].iter().map(|s| s.to_string()).collect(),
             "io" => {
                 cur.io.entry((w[1].into(), w[2].into())).or_default().insert(w[3].into(), w[4].parse().unwrap());
             }
@@ -650,7 +654,7 @@ const INSTANCE_ID: u32 = 3;
 /// from the lane number in every lane. The array length is checked, not
 /// assumed: another length is refused as unmodelled.
 fn vertex_ids(p: &Pair) -> Result<[u32; LANES], Skip> {
-    let full = format!("{}/tools/shaders/{}", env!("CARGO_MANIFEST_DIR"), p.vs_path);
+    let full = source_path(&p.vs_path);
     let text = std::fs::read_to_string(&full).map_err(|e| Skip::NotTried(format!("read {}: {e}", p.vs_path)))?;
     let indexed = ["[cornerIndex]", "[gl_VertexID]"].iter().find_map(|k| {
         let at = text.find(k)?;
@@ -700,6 +704,9 @@ fn env(u: &Uniforms, stage: &str, st: &Stage, texs: &[sim::Texture]) -> sim::Env
         quads: false,
         // the corpus' textures are float ones
         integer_textures: 0,
+        // no shadow sampler: a look-up that writes TMUDREF is unmodelled
+        // here (the harness has no compare function to give both sides)
+        compare: Vec::new(),
     }
 }
 
@@ -1068,8 +1075,19 @@ fn stream(st: &Stage, stage: &str, u: &Uniforms, ours: bool, texs: &[sim::Textur
     Ok(out)
 }
 
+/// Where a fixture path's source is: under tools/shaders, or, for a path
+/// that starts with `tools/` (the pin fixture's, tools/v3d/pin-shaders),
+/// under the repository root.
+fn source_path(path: &str) -> String {
+    if path.starts_with("tools/") {
+        format!("{}/{path}", env!("CARGO_MANIFEST_DIR"))
+    } else {
+        format!("{}/tools/shaders/{path}", env!("CARGO_MANIFEST_DIR"))
+    }
+}
+
 fn compile<'a>(a: &Arena<'a>, stage: sema::Stage, path: &str) -> Result<lower::Lowered<'a>, Skip> {
-    let full = format!("{}/tools/shaders/{path}", env!("CARGO_MANIFEST_DIR"));
+    let full = source_path(path);
     let text = std::fs::read_to_string(&full).map_err(|e| Skip::NotTried(format!("read {path}: {e}")))?;
     let src = a.alloc_str(&text).map_err(|_| Skip::NotTried("arena".into()))?;
     lower::compile_to_ir(a, stage, src).map_err(|e| Skip::NotTried(format!("front end: {}", e.msg)))
@@ -2725,10 +2743,186 @@ const SIM71_NOT_TRIED_ES2: &[(&str, usize)] = &[
 // ---------------------------------------------------------------------------
 
 use yakogl::shaderc::online::v3d::chain::{compile_program, Prim, Target, V3dError};
+use yakogl::shaderc::LodKey;
 
 /// The VPM of the Raspberry Pi 4's V3D 4.2, measured on the board
 /// (2026-09-24): the target every program here is compiled for.
 const TARGET: Target = Target { vpm_size: 65536 };
+
+/// The pin programs (tools/v3d/pin-shaders/README.md): Mesa's code for the
+/// ES 3.0 look-up forms, written by `sim_fixture.py --pins`.
+#[cfg(not(feature = "report-es2"))] // GLSL ES 3.00 sources
+static FIXTURE_PINS: &str = include_str!("fixtures/v3d_mesa_pins.txt");
+
+/// The return-size keys a pin's `flags` line asks for.
+#[cfg(not(feature = "report-es2"))]
+fn pin_keys(flags: &[String]) -> (LodKey, LodKey) {
+    let mask = |name: &str| {
+        flags
+            .iter()
+            .position(|f| f == name)
+            .and_then(|i| flags.get(i + 1))
+            .map_or(0, |m| u32::from_str_radix(m.trim_start_matches("0x"), 16).expect("a mask"))
+    };
+    (LodKey { ret32: mask("--vs-ret32"), ..LodKey::NONE }, LodKey { ret32: mask("--fs-ret32"), ..LodKey::NONE })
+}
+
+/// Magic writes to TMUDREF (waddr 38, a shadow look-up's reference) in
+/// `code`.
+#[cfg(not(feature = "report-es2"))]
+fn dref_writes(code: &[u64]) -> usize {
+    use yakogl::shaderc::online::v3d::decode::decode;
+    use yakogl::shaderc::online::v3d::isa::Instr;
+    code.iter()
+        .filter(|w| {
+            matches!(decode(**w), Ok(Instr::Alu(a)) if (a.add.magic && a.add.waddr == 38) || (a.mul.magic && a.mul.waddr == 38))
+        })
+        .count()
+}
+
+/// The pin programs: the shadow look-ups, textureGrad (2D, cube, 3D with an
+/// offset), the 3D texel offset and the vertex-stage 32-bit look-ups, Mesa's
+/// code against ours.
+///
+/// Mesa's words are the reference the compiler was written to
+/// (docs/notes/v3d-shadow.md, v3d-qpu-grad.md, v3d-vs-ret32.md): every
+/// shadow pin writes TMUDREF and no other pin does; a keyed stage's P1
+/// carries the 32-bit output bit (0x5) and a 16-bit one's does not (0x4);
+/// the five-write shadow look-ups (a cube's or an array's textureGrad: T, R
+/// or I, B, DREF, S) run at 2 threads. OUR compiler takes every pin (none is
+/// a NotYet), under the pin's keys, with the same TMUDREF writes, P1 words
+/// and thread counts; the word counts are printed side by side and pinned
+/// (ours never more than Mesa's plus the margin below). Mesa's code runs on
+/// the interpreter against the IR evaluator as the corpus does
+/// (`run_pair`); the 3D-offset pin and the float vertex 32-bit pins agree,
+/// the rest are not tried (PIN_POPULATION says why); the population is
+/// pinned.
+#[cfg(not(feature = "report-es2"))] // GLSL ES 3.00 sources
+#[test]
+fn the_pin_pairs_are_mesas_forms_and_ours_compiles_them() {
+    let pins = parse_in(FIXTURE_PINS, false);
+    assert_eq!(pins.len(), header_in(FIXTURE_PINS, "pin pairs"), "every pin compiled (sim_fixture.py --pins)");
+    assert_eq!(pins.len(), header_in(FIXTURE_PINS, "compiled"));
+    assert_eq!(pins.len(), 16, "the pin list moved; re-derive the pins");
+    let p1_of = |st: &Stage| -> Vec<u32> { st.uniforms.iter().filter(|(c, _)| *c == 41).map(|(_, d)| *d).collect() };
+    let mut verdicts: BTreeMap<&'static str, Vec<String>> = BTreeMap::new();
+    let mut counts: Vec<(String, [usize; 3], [usize; 3])> = Vec::new();
+    for p in &pins {
+        let short = |s: &str| s.rsplit('/').next().unwrap_or(s).to_string();
+        let name = format!("{} + {}", short(&p.vs_path), short(&p.fs_path));
+        let shadow = name.contains("shadow");
+        let (vk, fk) = pin_keys(&p.flags);
+        // Mesa's side.
+        let mesa_dref = dref_writes(&p.fs.code) + dref_writes(&p.vs.code) + dref_writes(&p.cs.code);
+        assert_eq!(mesa_dref > 0, shadow, "{name}: Mesa writes TMUDREF in the shadow pins alone ({mesa_dref})");
+        let mesa_fs_p1 = p1_of(&p.fs);
+        let mesa_vs_p1 = p1_of(&p.vs);
+        for w in &mesa_fs_p1 {
+            assert_eq!(w & 1, u32::from(fk.ret32 & (1 << (w >> 24)) != 0), "{name}: Mesa's FS P1 {w:#x} and the key");
+        }
+        for w in &mesa_vs_p1 {
+            assert_eq!(w & 1, u32::from(vk.ret32 & (1 << (w >> 24)) != 0), "{name}: Mesa's VS P1 {w:#x} and the key");
+        }
+        let mesa_threads = |st: &Stage| st.meta.get("threads").and_then(|t| t.parse::<u32>().ok()).unwrap_or(0);
+        let five = name.contains("shadowcube_grad") || name.contains("shadowarr_grad");
+        assert_eq!(mesa_threads(&p.fs), if five { 2 } else { 4 }, "{name}: Mesa's FS thread count");
+        // The interpreter on Mesa's code against the IR.
+        let (verdict, _) = run_pair(p, seed_of(&name));
+        let (kind, why) = match verdict {
+            Verdict::Agree => ("agree", String::new()),
+            Verdict::Disagree(w) => ("disagree", w),
+            Verdict::Unmodelled(w) => ("unmodelled", w),
+            Verdict::NotTried(w) => ("not tried", w),
+        };
+        println!("pin {name}: {kind} {why}");
+        verdicts.entry(kind).or_default().push(name.clone());
+        // Ours, under the same keys.
+        let o = ours_pair_keyed(&p.vs_path, &p.fs_path, vk, fk).unwrap_or_else(|e| {
+            let why = match e {
+                Ours::FrontEnd(w) | Ours::Other(w) => w,
+                Ours::NotYet(w) => w.to_string(),
+            };
+            panic!("{name}: our compiler refuses a pin program: {why}")
+        });
+        let our_dref = dref_writes(&o.fs.code) + dref_writes(&o.vs.code) + dref_writes(&o.cs.code);
+        assert_eq!(our_dref > 0, shadow, "{name}: ours writes TMUDREF in the shadow pins alone ({our_dref})");
+        // A texelFetch binds no sampler in Mesa, whose P1 is then a plain
+        // constant (contents 0; vsret32i); ours keeps contents 41 for every
+        // look-up (the driver reads the 32-bit mask off it), so the words
+        // are compared where Mesa has the sampler word, and the key bit
+        // alone where it has not.
+        for (stage, ours, mesa, key) in [("FS", p1_of(&o.fs), mesa_fs_p1, fk), ("VS", p1_of(&o.vs), mesa_vs_p1, vk)] {
+            if mesa.is_empty() {
+                for w in &ours {
+                    assert_eq!(w & 1, u32::from(key.ret32 & (1 << (w >> 24)) != 0), "{name}: our {stage} P1 {w:#x}");
+                }
+            } else {
+                assert_eq!(ours, mesa, "{name}: our {stage} P1 words are Mesa's");
+            }
+        }
+        let our_fs_threads = o.fs.meta.get("threads").and_then(|t| t.parse::<u32>().ok()).unwrap_or(0);
+        assert_eq!(our_fs_threads, mesa_threads(&p.fs), "{name}: our FS thread count is Mesa's");
+        counts.push((
+            name,
+            [o.fs.code.len(), o.vs.code.len(), o.cs.code.len()],
+            [p.fs.code.len(), p.vs.code.len(), p.cs.code.len()],
+        ));
+    }
+    println!("pin word counts, ours / Mesa (fs, vs, cs):");
+    for (name, ours, mesa) in &counts {
+        println!("  {name}: {} / {}, {} / {}, {} / {}", ours[0], mesa[0], ours[1], mesa[1], ours[2], mesa[2]);
+    }
+    assert!(verdicts.get("disagree").is_none_or(Vec::is_empty), "pins disagree: {:?}", verdicts.get("disagree"));
+    let n = |k: &str| verdicts.get(k).map_or(0, Vec::len);
+    println!("pins: {} agree, {} unmodelled, {} not tried", n("agree"), n("unmodelled"), n("not tried"));
+    // The population, pinned (PIN_POPULATION says who is where and why).
+    assert_eq!((n("agree"), n("unmodelled"), n("not tried")), PIN_POPULATION, "the pin population moved");
+    // Our word counts beside Mesa's, pinned per pin and stage (PIN_WORDS):
+    // a change on either side is a decision, not a drift.
+    let got: Vec<(&str, [usize; 3], [usize; 3])> = counts.iter().map(|(n, o, m)| (n.as_str(), *o, *m)).collect();
+    assert_eq!(got, PIN_WORDS.to_vec(), "the pin word counts moved; re-derive PIN_WORDS from the table above");
+}
+
+/// (agree, unmodelled, not tried) of the pin pairs on the interpreter,
+/// measured 2026-11-11: vol_offset and the three float vertex 32-bit pins
+/// agree; the shadow pins and vsret32i stop in the evaluator (no shadow or
+/// integer sampler on its texture path; the interpreter had already stopped
+/// on the shadow look-up, the harness giving no compare function), the
+/// gradient pins in the evaluator (no explicit gradients there), and the
+/// three cube pins on Mesa's split of their `dir` uniform.
+#[cfg(not(feature = "report-es2"))]
+const PIN_POPULATION: (usize, usize, usize) = (4, 0, 12);
+
+/// Words per pin, ours then Mesa's, (fs, vs, cs), measured 2026-11-11 with
+/// the keys of pairs.txt. The vertex and coordinate shaders of the quad
+/// pairs are the same program (20 / 21 and 21 / 18: ours loads the
+/// attributes at the top, Mesa's layout). The fragment shaders: a shadow
+/// look-up is Mesa's sequence plus our f16 pack of the one result and the
+/// `v_xy * 0.5 + 0.5` kept as two ops (+4); the gradient forms compute the
+/// level from the size words with one LOG where Mesa uses a LOG and the
+/// RSQRT/RECIP pairs (2D: 32 / 31, 3D with the offset: 38 / 39); the cube
+/// gradient forms pay for the per-lane major-axis select of the face
+/// (84 / 71, 83 / 71); vol_offset's two look-ups are serialised by the
+/// output FIFO rule where Mesa queues them (29 / 21).
+#[cfg(not(feature = "report-es2"))]
+const PIN_WORDS: [(&str, [usize; 3], [usize; 3]); 16] = [
+    ("quad.vert + shadow2d.frag", [14, 20, 21], [10, 21, 18]),
+    ("quad.vert + shadow2d_lod_offset.frag", [23, 20, 21], [15, 21, 18]),
+    ("quad.vert + shadow2d_proj.frag", [18, 20, 21], [15, 21, 18]),
+    ("quad.vert + shadowcube.frag", [21, 20, 21], [17, 22, 18]),
+    ("quad.vert + shadowcube_grad.frag", [83, 20, 21], [71, 22, 18]),
+    ("quad.vert + shadowarr.frag", [15, 20, 21], [11, 21, 18]),
+    ("quad.vert + shadowarr_grad.frag", [31, 20, 21], [31, 21, 18]),
+    ("quad.vert + grad2d.frag", [32, 20, 21], [31, 21, 18]),
+    ("quad.vert + gradcube.frag", [84, 20, 21], [71, 22, 18]),
+    ("quad.vert + grad3d_offset.frag", [38, 20, 21], [39, 21, 18]),
+    ("quad.vert + vol_offset.frag", [29, 20, 21], [21, 21, 18]),
+    ("vsret32.vert + passcol.frag", [9, 29, 21], [8, 23, 18]),
+    ("vsret32v4.vert + passcol.frag", [9, 35, 21], [9, 27, 18]),
+    ("vsret32i.vert + passcol.frag", [9, 36, 21], [9, 31, 18]),
+    ("vsmixed.vert + passcol.frag", [9, 46, 21], [9, 36, 18]),
+    ("vsshadow.vert + passcol.frag", [9, 30, 21], [6, 25, 18]),
+];
 
 /// Why our compiler did not produce a program.
 enum Ours {
@@ -2743,6 +2937,13 @@ enum Ours {
 
 /// OUR program for a pair, as a [`Pair`] the harness runs like Mesa's.
 fn ours_pair(vs_path: &str, fs_path: &str) -> Result<Pair, Ours> {
+    ours_pair_keyed(vs_path, fs_path, LodKey::NONE, LodKey::NONE)
+}
+
+/// [`ours_pair`] compiled with the vertex and fragment keys (the return-size
+/// masks a draw of 32-bit textures carries; the pin fixture's flags).
+fn ours_pair_keyed(vs_path: &str, fs_path: &str, vs_key: LodKey, fs_key: LodKey) -> Result<Pair, Ours> {
+    use yakogl::shaderc::online::v3d::chain::compile_program_keyed;
     let mut mem = vec![0u8; 16 << 20];
     let a = Arena::new(&mut mem);
     let fe = |e: Skip| match e {
@@ -2751,7 +2952,13 @@ fn ours_pair(vs_path: &str, fs_path: &str) -> Result<Pair, Ours> {
     let fsl = compile(&a, sema::Stage::Fragment, fs_path).map_err(fe)?;
     let vsl = compile(&a, sema::Stage::Vertex, vs_path).map_err(fe)?;
     let (fsm, vsm) = (&fsl.module, &vsl.module);
-    let prog = compile_program(vsm, fsm, Prim::Triangles, TARGET, &a).map_err(|e| match e {
+    // The fragment stage reads its return-size key from the compile key the
+    // GL core sets around a keyed compile (select_fragment), the vertex
+    // stage from the argument.
+    let old = yakogl::shaderc::set_compile_lod_key(fs_key);
+    let prog = compile_program_keyed(vsm, fsm, Prim::Triangles, TARGET, vs_key, fs_key, &a);
+    yakogl::shaderc::set_compile_lod_key(old);
+    let prog = prog.map_err(|e| match e {
         V3dError::NotYet(what) => Ours::NotYet(what),
         e => Ours::Other(format!("{e:?}")),
     })?;
