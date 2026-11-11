@@ -530,6 +530,39 @@ picture against the `mali` column):
 | 32 | `[loop] fragment-steps=5:fragment-uniform=false:vertex-steps=5` | - | - | refused: VS arithmetic | absent | 0 |
 | 33 | `[loop] fragment-steps=5:fragment-uniform=true:vertex-steps=5` | - | - | refused: VS arithmetic | absent | 0 |
 
+## Mali: NanoPC-T6 on Zephyr (by kexec)
+
+Zephyr images started out of the board's Armbian by kexec
+(`driver/tools/kexec-zephyr/nanopc-t6.sh`) and judged against the predicted
+record (`driver/tools/kexec-zephyr/t6-verdict.sh`). A development result: the
+sign-off form (U-Boot starting the image) has not run. The steps Z1 to Z4,
+their predicted records and Z1's result are in
+`driver/docs/nanopc-t6-mali.md`; a step gets its row here when it has run.
+
+| Step | Image | Result | Build | Run | Record |
+|---|---|---|---|---|---|
+| Z2: AS0 and a cache flush | `t6_mmu` | **FAIL**, `VERDICT t6_mmu FAIL (2 of 27)`: `t6_mmu: FAIL: stop 8 (AS0 is active or faulted after the update), refusal 3, detail 0x0000000000010000` | `v0.1.0-897-g3aa24a68d` (main `3aa24a68d`) | 2026-11-11 13:20 JST | `records/nanopc-t6/20261111-132001-t6` |
+
+- Every Z2 step ran and read as predicted: Z1's power-on (`GPU_ID`
+  0xa8670005, L2 ready), the cache flush round trip (2 polls of 1 µs), AS0's
+  tables (4 of 16 pages, the walk of VA 0x04001234 reaches the backing),
+  the enable (`LOCK`, `UPDATE`, `UNLOCK` without a wait) and AS0 read back as
+  written with no fault recorded. The image then stopped on its own reading
+  of `MMU_INT_RAWSTAT` 0x00010000: on a CSF GPU bit 16 says AS0's command
+  completed, the fault bits are 15:0. The flush after the map and the PASS
+  line did not print. The reading is corrected in `board::nanopc_t6_mmu`;
+  this run stays FAIL.
+- The run before it the same day (13:13 JST, the same image, record
+  `records/nanopc-t6/20261111-131354-t6`, `VERDICT t6_mmu FAIL (14 of 27)`)
+  stopped in Z1's power-on (`stop 5, refusal 3, detail 0x00000000000a9fff`):
+  Linux had left the GPU clock on NPLL at 850 MHz and NPLL powered down, and
+  the image did not power it. The power-on now powers the clock's PLL and
+  waits for its lock (`board::nanopc_t6_gpu`); no jump has started from a
+  powered-down PLL since.
+- The board came back to Armbian through the image's PSCI reset both times
+  (31 s and 30 s after the jump).
+- Not run yet: an image with both corrections. Z3 and Z4 wait for a Z2 PASS.
+
 ## ES 3.0: dEQP-GLES3 (stage 4)
 
 Mustpass list: 42,810 cases. Images report ES 3.0 (`REPORT_ES2` off).
