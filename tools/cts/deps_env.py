@@ -7,11 +7,15 @@ The entries come from tools/cts/deps.toml (DEPS_TOML names another file, for
 the self-test). Run through deps-env.sh, which supplies python3 -I.
 """
 import hashlib
+import http.client
 import os
 import shutil
 import socket
+import ssl
 import subprocess
 import sys
+import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -28,6 +32,8 @@ KEYS = {"name", "aliases", "path", "command", "marker", "board", "create", "requ
         "build", "note", "inputs", "packages", "rustup_target"}
 INPUT_KEYS = {"url", "sha256", "sha256_from"}
 FAMILIES = ("apt", "portage", "brew")
+# Seconds before the second, third and fourth try of a download that was cut.
+FETCH_WAITS = (5, 20, 60)
 
 
 class FetchError(Exception):
@@ -151,6 +157,19 @@ def expected_sha(i):
     raise FetchError(f"{name}: no pinned digest")  # load() rules this out
 
 
+def worth_another_try(url, e):
+    """Whether a failed download may succeed when asked again: a transfer that
+    was cut or a server that was busy, not an answer that stays the same."""
+    if url.startswith("file:"):
+        return False
+    if isinstance(e, urllib.error.HTTPError):
+        return e.code in (408, 429) or e.code >= 500
+    # Everything else the network raises; an error of the local file (a full
+    # disk) is a plain OSError and stays as it is.
+    return isinstance(e, (urllib.error.URLError, ConnectionError, TimeoutError, ssl.SSLError,
+                          http.client.HTTPException))
+
+
 def fetch(i, deps):
     dest = deps / "downloads" / i["url"].rsplit("/", 1)[1]
     want = expected_sha(i)
@@ -159,8 +178,19 @@ def fetch(i, deps):
     dest.parent.mkdir(parents=True, exist_ok=True)
     part = dest.with_name(dest.name + ".part")
     print(f"fetch    {i['url']}")
-    with urllib.request.urlopen(i["url"]) as r, open(part, "wb") as f:
-        shutil.copyfileobj(r, f)
+    for tries, wait in enumerate((*FETCH_WAITS, None), 1):
+        try:
+            with urllib.request.urlopen(i["url"]) as r, open(part, "wb") as f:
+                shutil.copyfileobj(r, f)
+            break
+        except (OSError, http.client.HTTPException) as e:
+            part.unlink(missing_ok=True)
+            if not worth_another_try(i["url"], e):
+                raise FetchError(str(e)) from e
+            if wait is None:
+                raise FetchError(f"{e} ({tries} tries)") from e
+            print(f"again    {i['url']}: {e}; next try in {wait} s", flush=True)
+            time.sleep(wait)
     got = sha256_of(part)
     if got != want:
         part.unlink()

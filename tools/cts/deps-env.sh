@@ -37,8 +37,10 @@
 #   tools/cts/deps-env.sh --build [--board <board>] NAME...
 #   tools/cts/deps-env.sh --build-missing [board]
 #     Make entries (NAME is the name or an alias): fetch the entry's inputs
-#     into <layout>/downloads (sha256 checked), run its `build` with $DEPS set
-#     to the layout, and check the marker afterwards. An entry that is
+#     into <layout>/downloads (sha256 checked; a download that is cut or
+#     meets a busy server is tried up to four times, 5, 20 and 60 s apart),
+#     run its `build` with $DEPS set to the layout, and check the marker
+#     afterwards. An entry that is
 #     present is never touched; entries it `requires` are made first; an
 #     entry without a build (the firmware header) is reported and fails the
 #     run. For hosts and images, run on purpose: the gate never builds these.
