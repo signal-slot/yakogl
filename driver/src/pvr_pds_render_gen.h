@@ -267,6 +267,28 @@ int pvr_pds_render_vertex_program_ids(uint64_t vs_usc_exec_offset,
                                       uint32_t *code_out,
                                       struct pvr_pds_render_vertex_info *info);
 
+/* As pvr_pds_render_vertex_program_ids(), and gl_InstanceID starts at
+ * instance_id_base instead of 0: Mesa's instance_id_modifier adds the constant
+ * to the instance number (IR1) before the gl_InstanceID write (a draw split
+ * per instance; docs/notes/instanceid-per-draw.md, fix P1). The base is
+ * ignored unless instance_id_reg != PVR_PDS_NO_ID_REG. Base 0 is exactly
+ * pvr_pds_render_vertex_program_ids(): the same data and code, byte for byte.
+ * A base != 0 needs, beyond the _ids sizes, 1 more code dword (the ADD32) and
+ * 0 to 2 more data dwords (the modifier constant, which Mesa's constant bank
+ * may pad): size data_out by the _ids need + 2 and code_out by the _ids need
+ * + 1; info reports the exact sizes. */
+int pvr_pds_render_vertex_program_ids_base(uint64_t vs_usc_exec_offset,
+                                           uint32_t vs_temps,
+                                           const struct pvr_pds_render_stream *streams,
+                                           uint32_t num_streams,
+                                           int has_slc_mcu_cache_controls,
+                                           uint32_t vertex_id_reg,
+                                           uint32_t instance_id_reg,
+                                           uint32_t instance_id_base,
+                                           uint32_t *data_out,
+                                           uint32_t *code_out,
+                                           struct pvr_pds_render_vertex_info *info);
+
 /* ------------------------------------------------------------------------- *
  * 5. Coefficient-loading (DOUTI) PDS program for the fragment varyings
  *    (TA_STATE_PDS_VARYINGBASE). Port of pvr_pds_coefficient_loading()

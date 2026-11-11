@@ -59,8 +59,9 @@ _Static_assert(PVR_PDS_DOUTU_MAX_TEMPS ==
 static int vertex_program(uint64_t vs_usc_exec_offset, uint32_t vs_temps,
                           const struct pvr_pds_render_stream *streams, uint32_t num_streams,
                           int has_slc_mcu_cache_controls, uint32_t vertex_id_reg,
-                          uint32_t instance_id_reg, uint32_t *data_out, uint32_t *code_out,
-                          struct pvr_pds_render_vertex_info *info, uint32_t fixed_vtxin_dw)
+                          uint32_t instance_id_reg, uint32_t instance_id_base, uint32_t *data_out,
+                          uint32_t *code_out, struct pvr_pds_render_vertex_info *info,
+                          uint32_t fixed_vtxin_dw)
 {
    uint32_t vtxin_dw = 0;
    const struct pvr_device_info *dev_info = pvr_mesa_dev_info(has_slc_mcu_cache_controls);
@@ -99,6 +100,10 @@ static int vertex_program(uint64_t vs_usc_exec_offset, uint32_t vs_temps,
    if (instance_id_reg != PVR_PDS_NO_ID_REG) {
       program.iterate_instance_id = true;
       program.instance_id_register = instance_id_reg;
+      /* Mesa adds the modifier to the instance number (IR1) before the
+       * gl_InstanceID write: the draw's first instance (docs/notes/
+       * instanceid-per-draw.md, fix P1). 0 is the old path. */
+      program.instance_id_modifier = instance_id_base;
       if (instance_id_reg + 1 > vtxin_dw)
          vtxin_dw = instance_id_reg + 1;
    }
@@ -153,7 +158,7 @@ int pvr_pds_render_clear_vertex_program(uint64_t vs_usc_exec_offset,
    /* The clear shader's inputs are the PVR_CLEAR_VERTEX_COORDINATES floats,
     * whatever the DMA moves. */
    return vertex_program(vs_usc_exec_offset, vs_temps, &st, 1, has_slc_mcu_cache_controls,
-                         PVR_PDS_NO_ID_REG, PVR_PDS_NO_ID_REG, data_out, code_out, info,
+                         PVR_PDS_NO_ID_REG, PVR_PDS_NO_ID_REG, 0, data_out, code_out, info,
                          PVR_CLEAR_VERTEX_COORDINATES);
 }
 
@@ -182,14 +187,32 @@ int pvr_pds_render_vertex_program_ids(uint64_t vs_usc_exec_offset,
                                       uint32_t *code_out,
                                       struct pvr_pds_render_vertex_info *info)
 {
+   return pvr_pds_render_vertex_program_ids_base(vs_usc_exec_offset, vs_temps, streams,
+                                                 num_streams, has_slc_mcu_cache_controls,
+                                                 vertex_id_reg, instance_id_reg, 0, data_out,
+                                                 code_out, info);
+}
+
+int pvr_pds_render_vertex_program_ids_base(uint64_t vs_usc_exec_offset,
+                                           uint32_t vs_temps,
+                                           const struct pvr_pds_render_stream *streams,
+                                           uint32_t num_streams,
+                                           int has_slc_mcu_cache_controls,
+                                           uint32_t vertex_id_reg,
+                                           uint32_t instance_id_reg,
+                                           uint32_t instance_id_base,
+                                           uint32_t *data_out,
+                                           uint32_t *code_out,
+                                           struct pvr_pds_render_vertex_info *info)
+{
    /* No streams is legal: a vertex shader that builds its geometry from
     * gl_VertexID reads no attribute at all (Qt Quick 3D's post-processing
     * passes draw their full-screen triangle that way). */
    if (!data_out || !code_out || (num_streams > 0 && !streams))
       return -1;
    return vertex_program(vs_usc_exec_offset, vs_temps, streams, num_streams,
-                         has_slc_mcu_cache_controls, vertex_id_reg, instance_id_reg, data_out,
-                         code_out, info, 0);
+                         has_slc_mcu_cache_controls, vertex_id_reg, instance_id_reg,
+                         instance_id_base, data_out, code_out, info, 0);
 }
 
 /* ========================================================================= *
