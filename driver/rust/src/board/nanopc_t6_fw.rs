@@ -334,7 +334,13 @@ pub(crate) mod tests {
     /// boots only from code that was loaded and cleaned.
     pub(crate) struct T6 {
         soc: RefCell<HashMap<usize, u32>>,
-        rk806: HashMap<u16, u8>,
+        rk806: RefCell<HashMap<u16, u8>>,
+        /// Reads of `POWER_EN0` DCDC1 takes to read on after its enable
+        /// (`None`: never).
+        dcdc1_ramp: Option<u32>,
+        ramp_left: RefCell<Option<Option<u32>>>,
+        /// The RK806 write frames the board sent, whole.
+        rk806_writes: RefCell<Vec<Vec<u8>>>,
         frame: RefCell<Vec<u8>>,
         rxq: RefCell<VecDeque<u8>>,
         l2_on: RefCell<bool>,
@@ -374,7 +380,10 @@ pub(crate) mod tests {
             }
             T6 {
                 soc: RefCell::new(r),
-                rk806: [(0x00, 0x0f), (0x06, 0xe0), (0x10, 0xa4), (0x1a, 0x1c)].into_iter().collect(),
+                rk806: RefCell::new([(0x00, 0x0f), (0x06, 0xe0), (0x10, 0xa4), (0x1a, 0x1c)].into_iter().collect()),
+                dcdc1_ramp: Some(3),
+                ramp_left: RefCell::new(None),
+                rk806_writes: RefCell::new(vec![]),
                 frame: RefCell::new(vec![]),
                 rxq: RefCell::new(VecDeque::new()),
                 l2_on: RefCell::new(false),
@@ -383,6 +392,61 @@ pub(crate) mod tests {
                 mcu: Mcu::new(blob),
                 log: RefCell::new(vec![]),
                 clean_fails: None,
+            }
+        }
+        /// U-Boot's likely hand-over with vdd_gpu_s0 off: DCDC1 off
+        /// (`POWER_EN0` 0x0e) and `BUCK1_ON_VSEL` at `vsel`, PD_GPU off.
+        pub(crate) fn uboot_supply_off(blob: Vec<u8>, vsel: u8) -> T6 {
+            let t6 = T6::handed_over(blob);
+            t6.rk806.borrow_mut().extend([(0x00, 0x0e), (0x1a, vsel)]);
+            t6
+        }
+        /// U-Boot's likely hand-over with vdd_gpu_s0 on: PD_GPU off, DCDC1
+        /// on at 675 mV. That is Armbian's register state but for the
+        /// CRU's GPU clock, which the caller sets with [`T6::with_clock`].
+        pub(crate) fn uboot_supply_on(blob: Vec<u8>) -> T6 {
+            T6::handed_over(blob)
+        }
+        /// CLKSEL_CON(158) as given (the PVTPLL bit, a divider, a mux).
+        pub(crate) fn with_clock(self, sel158: u32) -> T6 {
+            self.soc.borrow_mut().insert(CRU_BASE + clksel_con(158), sel158);
+            self
+        }
+        /// DCDC1 reads on, or still off, `POWER_EN0` (the model's rail).
+        fn dcdc1_on(&self) -> bool {
+            self.rk806.borrow()[&0] & 1 != 0
+        }
+        /// An RK806 register as a read answers it: `POWER_EN0` shows DCDC1
+        /// on once its ramp has passed.
+        fn rk806_answer(&self, reg: u16) -> u8 {
+            if reg == 0 {
+                let mut left = self.ramp_left.borrow_mut();
+                match *left {
+                    Some(Some(0)) => {
+                        *self.rk806.borrow_mut().get_mut(&reg).unwrap() |= 1;
+                        *left = None;
+                    }
+                    Some(Some(n)) => *left = Some(Some(n - 1)),
+                    // never ramps
+                    Some(None) | None => {}
+                }
+            }
+            self.rk806.borrow()[&reg]
+        }
+        /// A whole write frame: only `POWER_EN0`, through its write-enable
+        /// twins (bits 7:4 for 3:0); DCDC1 reads on after `dcdc1_ramp`.
+        fn rk806_write(&self, f: &[u8]) {
+            self.rk806_writes.borrow_mut().push(f.to_vec());
+            assert_eq!(f.len(), 4, "one-value writes only: {f:02x?}");
+            assert_eq!(f[0], 0x80, "{f:02x?}");
+            assert_eq!(u16::from_le_bytes([f[1], f[2]]), 0, "a write to another register: {f:02x?}");
+            let (we, v) = (f[3] >> 4, f[3] & 0x0f);
+            let mut map = self.rk806.borrow_mut();
+            let en = map.get_mut(&0).unwrap();
+            let delayed = we & v & 1 & !*en;
+            *en = (*en & !we) | (v & we & !delayed);
+            if delayed != 0 {
+                *self.ramp_left.borrow_mut() = Some(self.dcdc1_ramp);
             }
         }
         fn gpu_powered(&self) -> bool {
@@ -445,9 +509,14 @@ pub(crate) mod tests {
                 let mut f = self.frame.borrow_mut();
                 f.push(v as u8);
                 // the RK806 answers the value in the fourth byte of a 1-value read
-                let out = if f.len() == 4 {
-                    assert_eq!(f[0], 0, "only 1-value reads, never a write: {f:02x?}");
-                    self.rk806[&u16::from_le_bytes([f[1], f[2]])]
+                let out = if f.len() == 4 && f[0] == 0x80 {
+                    let w = f.clone();
+                    drop(f);
+                    self.rk806_write(&w);
+                    0
+                } else if f.len() == 4 {
+                    assert_eq!(f[0], 0, "a 1-value read or the enable write: {f:02x?}");
+                    self.rk806_answer(u16::from_le_bytes([f[1], f[2]]))
                 } else {
                     0
                 };
@@ -466,7 +535,7 @@ pub(crate) mod tests {
             {
                 let f = self.frame.borrow().clone();
                 assert_eq!((f.len(), f[0]), (3, 0), "a 1-value read's command: {f:02x?}");
-                self.rxq.borrow_mut().push_back(self.rk806[&u16::from_le_bytes([f[1], f[2]])]);
+                self.rxq.borrow_mut().push_back(self.rk806_answer(u16::from_le_bytes([f[1], f[2]])));
             }
             match a {
                 _ if a == GPU + mali::L2_PWRON && v & 1 != 0 => *self.l2_on.borrow_mut() = true,
@@ -487,6 +556,7 @@ pub(crate) mod tests {
                         *e = (*e & !mask) | (v & mask);
                         // PD_GPU follows its controls at once
                         if a == PMU_BASE + pd_gpu::PWR_GATE && v == 1 << 16 {
+                            assert!(self.dcdc1_on(), "PD_GPU powered with vdd_gpu_s0 off");
                             *r.get_mut(&(PMU_BASE + pd_gpu::REPAIR_STATUS)).unwrap() |= 2;
                         }
                         if a == PMU_BASE + pd_gpu::BUS_IDLE_REQ && v == 1 << 16 {
@@ -767,6 +837,149 @@ pub(crate) mod tests {
         );
         assert_eq!(fw_error_code(&FwError::TooSmall { len: 7 }), (1, 7));
         assert_eq!(fw_error_code(&FwError::NoSharedSection), (18, 0));
+    }
+
+    // U-Boot's likely hand-overs, run through the whole of Z3 (nanopc_t6_gpu's
+    // cases (a), (b), (b'), (b'') and the clock set). The model refuses a PMU
+    // power-on while DCDC1 reads off: the board's domain would be powered
+    // from a dead rail.
+
+    fn pmu_writes(t6: &T6) -> usize {
+        t6.writes().iter().filter(|w| (PMU_BASE..PMU_BASE + 0x400).contains(&w.0)).count()
+    }
+
+    fn sel158_writes(t6: &T6) -> Vec<u32> {
+        let a = CRU_BASE + clksel_con(158);
+        t6.writes().iter().filter(|w| w.0 == a).map(|w| w.1).collect()
+    }
+
+    fn sel158(t6: &T6) -> u32 {
+        t6.soc.borrow()[&(CRU_BASE + clksel_con(158))]
+    }
+
+    /// A stop of the GPU step, with nothing after it run.
+    fn assert_gpu_stop(o: &FwUp, stop: nanopc_t6_gpu::Stop, refusal: u32, detail: u64) {
+        assert_eq!((o.step, o.stop, o.refusal, o.detail), (STEP_GPU, stop as u32, refusal, lo_hi(detail)));
+        assert_eq!((o.tables_used, o.flushed, o.clean_rc, o.version, o.glb_ack), (0, 0, 0, 0, 0));
+    }
+
+    #[test]
+    fn uboot_with_the_supply_on_boots_without_an_rk806_write() {
+        let blob = synth::small();
+        let t6 = T6::uboot_supply_on(blob.clone());
+        let o = run(&t6, &blob);
+        assert_booted(&o);
+        assert!(t6.rk806_writes.borrow().is_empty());
+        assert_eq!(sel158(&t6), 0x1f24);
+        assert!(sel158_writes(&t6).is_empty(), "the clock is on the table: left alone");
+    }
+
+    #[test]
+    fn uboot_with_the_supply_off_enables_it_once_and_then_boots() {
+        let blob = synth::small();
+        // 0x1c = 675 mV, what the 300 MHz OPP asks for
+        let t6 = T6::uboot_supply_off(blob.clone(), 0x1c);
+        let o = run(&t6, &blob);
+        assert_booted(&o);
+        assert_eq!(*t6.rk806_writes.borrow(), vec![vec![0x80, 0x00, 0x00, 0x11]]);
+        assert_eq!(t6.rk806.borrow()[&0], 0x0f);
+        // the rail first (the model refuses the domain on a dead rail), then the domain
+        assert!(t6.dcdc1_on() && pmu_writes(&t6) > 0);
+        assert_eq!((o.gpu_id, o.shader_present), (0xa867_0005, [0x50005, 0]));
+    }
+
+    #[test]
+    fn uboot_with_the_supply_off_below_the_opp_stops_at_the_gpu_step_untouched() {
+        let blob = synth::small();
+        // 0x17 = 643.75 mV, under 300 MHz's 675 mV: nothing may be written
+        let t6 = T6::uboot_supply_off(blob.clone(), 0x17);
+        let o = run(&t6, &blob);
+        assert_gpu_stop(&o, nanopc_t6_gpu::Stop::SupplyBelowOpp, 0, 0x17 << 32 | 300_000_000);
+        assert!(t6.rk806_writes.borrow().is_empty());
+        assert_eq!(pmu_writes(&t6), 0);
+        assert!(!t6.dcdc1_on());
+    }
+
+    #[test]
+    fn uboot_with_a_supply_that_never_ramps_stops_before_the_domain() {
+        let blob = synth::small();
+        let mut t6 = T6::uboot_supply_off(blob.clone(), 0x1c);
+        t6.dcdc1_ramp = None;
+        let o = run(&t6, &blob);
+        // one enable was sent; the detail is the last POWER_EN0
+        assert_gpu_stop(&o, nanopc_t6_gpu::Stop::SupplyRampTimeout, 0, 0x0e);
+        assert_eq!(t6.rk806_writes.borrow().len(), 1);
+        assert_eq!(pmu_writes(&t6), 0);
+    }
+
+    #[test]
+    fn uboot_with_the_clock_on_the_pvtpll_is_moved_onto_the_table_and_boots() {
+        let blob = synth::small();
+        for t6 in [T6::uboot_supply_on(blob.clone()), T6::uboot_supply_off(blob.clone(), 0x1c)] {
+            let t6 = t6.with_clock(0x1f24 | 1 << 14);
+            let o = run(&t6, &blob);
+            assert_booted(&o);
+            // one hiword-masked write moves it: CPLL over 5, the PVTPLL bit clear
+            assert_eq!(sel158_writes(&t6), vec![0x40ff_0024]);
+            assert_eq!(sel158(&t6), 0x1f24);
+        }
+    }
+
+    #[test]
+    fn uboot_with_a_clock_divider_off_the_table_is_moved_onto_it_and_boots() {
+        let blob = synth::small();
+        // CPLL / 2 = 750 MHz and / 4 = 375 MHz are no OPP rates
+        for sel in [0x1f21, 0x1f23] {
+            let t6 = T6::uboot_supply_off(blob.clone(), 0x1c).with_clock(sel);
+            let o = run(&t6, &blob);
+            assert_booted(&o);
+            assert_eq!(sel158_writes(&t6), vec![0x40ff_0024], "{sel:#x}");
+            assert_eq!(sel158(&t6), 0x1f24);
+        }
+        // CPLL / 3 = 500 MHz is a rate of the table: kept
+        let t6 = T6::uboot_supply_on(blob.clone()).with_clock(0x1f22);
+        assert_booted(&run(&t6, &blob));
+        assert!(sel158_writes(&t6).is_empty());
+        assert_eq!(sel158(&t6), 0x1f22);
+    }
+
+    #[test]
+    fn uboot_with_an_unknown_clock_mux_is_moved_onto_the_table_and_boots() {
+        let blob = synth::small();
+        let t6 = T6::uboot_supply_on(blob.clone()).with_clock(0x1fe4);
+        assert_booted(&run(&t6, &blob));
+        assert_eq!((sel158_writes(&t6), sel158(&t6)), (vec![0x40ff_0024], 0x1f24));
+    }
+
+    #[test]
+    fn a_clock_that_cannot_be_put_on_the_table_stops_before_the_rk806_or_the_pmu() {
+        let blob = synth::small();
+        // A refusal by design: with the CPLL not in normal mode the code has
+        // no PLL to put the clock on and writes nothing (Stop::ClockSetRefused,
+        // the detail the CPLL's rate, 0 for none).
+        let t6 = T6::uboot_supply_off(blob.clone(), 0x1c).with_clock(0x5f24);
+        t6.soc.borrow_mut().insert(CRU_BASE + MODE_CON0, 0);
+        let o = run(&t6, &blob);
+        assert_gpu_stop(&o, nanopc_t6_gpu::Stop::ClockSetRefused, 0, 0);
+        assert!(sel158_writes(&t6).is_empty());
+        assert!(t6.rk806_writes.borrow().is_empty());
+        assert_eq!(pmu_writes(&t6), 0);
+    }
+
+    #[test]
+    fn a_domain_left_powered_with_the_supply_off_is_refused_by_design() {
+        let blob = synth::small();
+        // Not a state to run from: a domain cannot be powered with its rail
+        // off, so this is a misread or a hand-over the code does not know,
+        // and no RK806 write is allowed on it.
+        let t6 = T6::uboot_supply_off(blob.clone(), 0x1c);
+        for (a, v) in [(pd_gpu::REPAIR_STATUS, 0xfad5_0003), (pd_gpu::BUS_IDLE_ST, 0), (pd_gpu::BUS_IDLE_ACK, 0)] {
+            t6.soc.borrow_mut().insert(PMU_BASE + a, v);
+        }
+        let o = run(&t6, &blob);
+        assert_gpu_stop(&o, nanopc_t6_gpu::Stop::SupplyOff, nanopc_t6_gpu::SUPPLY_OFF_DOMAIN_POWERED, 0x0e);
+        assert!(t6.rk806_writes.borrow().is_empty());
+        assert_eq!(pmu_writes(&t6), 0);
     }
 
     /// The board's file (`MALI_CSFFW`, `tools/cts/deps-env.sh --build
