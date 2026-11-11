@@ -45,10 +45,17 @@
 # environment; the end sweeps the pids that carry it, found under /proc
 # (never by name or process group), and checks that none is left.
 #
+# A sixth, found on 2026-11-11 when the T6 had no utmp (Armbian trixie:
+# `who` lists the sessions of systemd-logind): every ssh command was a
+# session on line "sshd", so nanopc-t6.sh listed the command it read the
+# board with as a remote session and --go refused every run. The session
+# the check runs in is now left out (who_remote.sh); any other remote
+# session is still named.
+#
 # Needs bash and flock(1). tools/check.sh runs it ("tools   board_lock.sh: ...").
 set -u
 here=$(cd "$(dirname "$0")" && pwd)
-planned=10
+planned=13
 run=0
 failed=0
 check() { # <what> <0 = ok>
@@ -171,6 +178,34 @@ printf 'pid=%s\nticks=1\nstarted=2026-10-19 00:00:00\ncmd=bash run-on-board.sh g
 err=$(BOARD_LOCK=$tmp/stale.lock LOCK_WAIT=0 HOLD_MAX=0 timeout 30 bash -c ". '$here/board_lock.sh'; echo went-past" 2>&1)
 check "a stale record (pid $dead gone) is named and the lock is taken" \
 	"$(grep -q "stale record, pid $dead gone" <<<"$err" && grep -q went-past <<<"$err"; echo $?)"
+
+# who_remote.sh, as nanopc-t6.sh runs it on the board, on made-up `who -u`
+# output. The session it runs in is the line that carries the pid of one of
+# its ancestors (this shell here, the ssh command's sshd on the board); the
+# other session's pid belongs to a process that is gone.
+bash -c 'exit 0' &
+other=$!
+wait "$other"
+console="root     ttyS2        2026-11-09 15:00  old          829
+root     seat0        2026-11-09 15:00   ?           828
+root     tty1         2026-11-09 15:00  old          828"
+own_line="root     sshd         2026-11-11 04:07   ?       $$ (203.0.113.7)"
+who_remote_on() { # <the who -u output>
+	WR_WHO=$1 sh -c 'who() { printf "%s\n" "$WR_WHO"; }; . "$0"; who_remote' "$here/who_remote.sh"
+}
+got=$(who_remote_on "$own_line
+$console")
+check "who_remote: its own ssh command and the console logins are no remote session ('$got')" \
+	"$([ -z "$got" ]; echo $?)"
+got=$(who_remote_on "$own_line
+user     sshd         2026-11-11 04:01   ?       $other (203.0.113.9)
+$console")
+check "who_remote: another ssh command beside its own is named ('$got')" \
+	"$([ "$got" = "user@sshd(203.0.113.9) " ]; echo $?)"
+got=$(who_remote_on "user     pts/0        2026-11-11 04:01   .       $other (203.0.113.9)
+$console")
+check "who_remote: a login on a pts is named ('$got')" \
+	"$([ "$got" = "user@pts/0(203.0.113.9) " ]; echo $?)"
 
 # The test leaves no process behind: the sweep ends every marked process,
 # and a known one (the holder, still running here) shows that the search
