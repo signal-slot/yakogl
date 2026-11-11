@@ -8,28 +8,28 @@ Development measurements on the Armadillo-X2 (kexec-dev, never a row of
 built for `armadillo_x2/mimx8ml8/a53` with the watchdog marker
 `gc_wdog_arm: armed` (the dry run found it in the image).
 
-## Result: no measurement, the board did not come back
+## Result: no measurement, no jump was made (2026-11-11)
 
-| scene | commit | run | verdict line |
-|---|---|---|---|
-| terrain | `de737051` (origin/main tip, "after") | no selector | `rc=5 verdict=not_back boot_verdict=not_back result=none record=absent` |
+No row exists, for either commit; nothing here is a ms a frame. The
+session that follows the dtpu session checked reachability before any jump
+and stopped:
 
-- The dry run of all five runs of terrain at `de737051` built the image,
-  found the marker and printed what each run would do (rc 0).
-- The first real run (terrain, no selector, the jump itself) did not bring
-  the board back within the runner's limit. The script stopped the whole
-  command by its rule (exit 5), without a retry. The next ssh from the
-  session was refused (publickey), so the board is not in the state the
-  session found it in.
-- No row exists, for either commit: the "before" commit `72972ba4` was not
-  run, and the "after" table has no number. Nothing here is a ms a frame.
-- **The board needs a person** (no remote power control). Whether the
-  image hung with its watchdog not expiring, or the board rebooted into a
-  state without the farm's ssh key, is not known: no console was open.
+- `ping -c1` by the board's name failed ("Temporary failure in name
+  resolution"): the task machine does not reach the board directly.
+- ssh to the board worked only through the forward connected makes for one
+  turn, with a per-task key kept in a tmpfs, not with the farm node's
+  persisted key. That is the same state in which the dtpu session's jump
+  ended in `not_back` although the board came back in Linux.
+- `tools/board.sh x2 status` ran (no lease, board clock readable); no jump
+  and no image was built or run. The board was left as found.
+
+The earlier `rc=5 verdict=not_back` runs (terrain at `de737051`, then the
+dtpu session) came from the runner losing the board, not from a measured
+hang; they give no ms a frame either.
 
 ## What is left
 
-Rerun, on the board once it is back:
+Rerun from a machine that pings the board by name and logs in with a persisted key (see the checks above):
 
 ```sh
 tools/cts/x2-glmark2-scenes.sh --commit 72972ba4 <outdir> terrain shadow refract
