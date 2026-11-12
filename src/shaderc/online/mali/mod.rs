@@ -1361,7 +1361,7 @@ fn compile_stage<'s>(
                 f.mixed |=
                     is_float_uniform(u.gl_type) && !matches!(prec(u.name).or_else(member), Some(Precision::High));
             }
-            nir_fs::select_highp(&mut p, &mut f, m, &ubo, scratch).map(|()| ubo)
+            nir_fs::select_highp(&mut p, &mut f, &ubo, scratch).map(|()| ubo)
         } else if nir_fs::mask_colour(&f) || nir_fs::array_look_ups(&f) {
             /* a mediump shader's colour of masks: the fp16 uniform block
              * (case 72's `u_in`, its fp16 half read by `F16_TO_S32`; case
@@ -1370,7 +1370,7 @@ fn compile_stage<'s>(
             nir_fs::fuse16(&mut f);
             nir_fs::vectorise_int_sources(&mut f)
                 .and_then(|()| select::UboLayout::fs16(m, &f.nir, &highp))
-                .and_then(|ubo| nir_fs::select_highp(&mut p, &mut f, m, &ubo, scratch).map(|()| ubo))
+                .and_then(|ubo| nir_fs::select_highp(&mut p, &mut f, &ubo, scratch).map(|()| ubo))
         } else if nir_fs::guarded16(&f) || nir_fs::kept16(&f) || nir_fs::frag32(&f) {
             /* a mediump shader's unrolled loop with run-time guards: the
              * graph's regions flattened as a highp shader's, its fp16 nodes
@@ -1380,7 +1380,7 @@ fn compile_stage<'s>(
              * island of the highp gl_FragCoord (case 218 shadowcmp) */
             let highp = |name: &str| matches!(prec(name), Some(Precision::High));
             select::UboLayout::fs16(m, &f.nir, &highp)
-                .and_then(|ubo| nir_fs::select_highp(&mut p, &mut f, m, &ubo, scratch).map(|()| ubo))
+                .and_then(|ubo| nir_fs::select_highp(&mut p, &mut f, &ubo, scratch).map(|()| ubo))
         } else {
             /* the fp16 uniform block (LowerPrecisionFloat16Uniforms); a
              * uniform declared highp is Mesa's fp32 one, refused */

@@ -4898,7 +4898,7 @@ fn a_derivative_on_the_flattened_route_is_refused() {
         super::nir_fs::layout(&mut f, &l.module, None).expect("the layout");
         let mut p = super::prog(s).expect("room");
         let ubo = super::select::UboLayout::fs16(&l.module, &f.nir, &|_| false).expect("the block");
-        super::nir_fs::select_highp(&mut p, &mut f, &l.module, &ubo, s)
+        super::nir_fs::select_highp(&mut p, &mut f, &ubo, s)
     })
     .expect("the scratch arena is free");
     assert_eq!(e, Err(MaliError::FsOperandForm));
@@ -6223,6 +6223,68 @@ fn texmore_206_vol_is_byte_equal_to_mesa_26_2_1() {
 
 /* ---- chains and algebraic folds (plan #154 chains, #33) -------------- */
 
+/// One reference pair of tools/mali/testdata by its name: (name, VS, FS,
+/// expect.json).
+macro_rules! pair {
+    ($n:literal) => {
+        (
+            $n,
+            include_str!(concat!("../../../../tools/mali/testdata/", $n, ".vert")),
+            include_str!(concat!("../../../../tools/mali/testdata/", $n, ".frag")),
+            include_str!(concat!("../../../../tools/mali/testdata/", $n, ".expect.json")),
+        )
+    };
+}
+
+/// The uniform words Mesa pushes (select.rs `UboLayout::load_of`, fau.rs
+/// `push_ubo`), each pair through the link ([`check_linked`]) against its
+/// drm-shim reference drawn with `--uniform-values`: a load from its first
+/// word up to the last one read, split where its offset's alignment is
+/// smaller than its bytes, and an array element's or a matrix column's
+/// words each alone. A highp vec4 at byte 0 read at `.z` (three words), at
+/// byte 4 after a float (bytes 8-15), at byte 8 after a vec2 (bytes
+/// 16-23); a vec4 array's `u[1].z`; a vec3's `.y`; `.y` and `.w`; case
+/// 80's chain (lanes y-w of `u_k`, four words); mediump lanes z and w in a
+/// sum, a look-up's product, a discard's compare and a kept branch's
+/// (issue #4569 b: `u2.w1`, not `u2.w0`); and the vertex stage's: a vec4's
+/// `.z`, one after a float and one after a vec2, a mat4's `m[1].z` alone, a
+/// whole column with `m[0].x`, an array element's `.z`.
+const UNILOAD_POPULATION: [(&str, &str, &str, &str); 18] = [
+    pair!("uniload_fs_vec4z"),
+    pair!("uniload_fs_float_vec4z"),
+    pair!("uniload_fs_vec2_vec4w"),
+    pair!("uniload_fs_array_z"),
+    pair!("uniload_fs_vec3y"),
+    pair!("uniload_fs_vec4yw"),
+    pair!("uniload_fs_chain80"),
+    pair!("uniload_fs16_vec4zw"),
+    pair!("uniload_fs16_tex_vec4w"),
+    pair!("uniload_fs16_discard_w"),
+    pair!("uniload_fs16_discard_vuw"),
+    pair!("uniload_fs16_branch_w"),
+    pair!("uniload_vs_vec4z"),
+    pair!("uniload_vs_float_vec4z"),
+    pair!("uniload_vs_vec2_vec4w"),
+    pair!("uniload_vs_mat4z"),
+    pair!("uniload_vs_mat4col"),
+    pair!("uniload_vs_array_z"),
+];
+
+#[test]
+fn the_uniform_loads_push_mesa_s_words() {
+    let mut failed = Vec::new();
+    for (name, vs, fs, json) in UNILOAD_POPULATION {
+        let r = std::panic::catch_unwind(|| {
+            check_linked(vs, fs, json);
+        });
+        if let Err(e) = r {
+            let m = e.downcast_ref::<String>().cloned().unwrap_or_else(|| format!("{:?}", e.downcast_ref::<&str>()));
+            failed.push(format!("{name}: {m}"));
+        }
+    }
+    assert!(failed.is_empty(), "{} of {} differ:\n{}", failed.len(), UNILOAD_POPULATION.len(), failed.join("\n"));
+}
+
 /// The chain and fold population (docs/notes/mali-rebalance.md,
 /// docs/notes/mali-algebraic-folds.md), each pair through the link
 /// ([`check_linked`]) against its drm-shim reference: (name, VS, FS,
@@ -6559,8 +6621,9 @@ fn glsl_leaves_a_chain_of_matrix_local_columns_in_order() {
 /// (case 80's word 43 reads `u3.w1`). The `FRCP` stands before it here, as
 /// in Mesa's NIR (`%5 = frcp` before `%14 = ffma`); in the whole case the
 /// scheduler puts it after, which the population pins byte for byte. (FAU
-/// words differ from case 80's: this shader reads no `u_k.x`, `u_c` or
-/// `u_i`.)
+/// words differ from case 80's: this shader reads no `u_c` or `u_i`, and
+/// pushes `u_k` whole from its x, which it does not read: Mesa's words,
+/// uniload_fs_chain80.expect.json in [`UNILOAD_POPULATION`].)
 #[test]
 fn the_matrix_local_chain_compiles_in_the_source_order() {
     let f = compile(SHC_STAGE_FRAGMENT, CHAIN_80).expect("the chain compiles");
@@ -6569,13 +6632,13 @@ fn the_matrix_local_chain_compiles_in_the_source_order() {
     assert_eq!(
         ops,
         [
-            "FADD.f32.discard r0, 0x44000000.h1, u2.w1.neg",
-            "FRCP.f32 r1, u2.w0",
-            "FMA.f32 r0, u3.w0, 0x40000000, r0^",
+            "FADD.f32.discard r0, 0x44000000.h1, u3.w0.neg",
+            "FRCP.f32 r1, u2.w1",
+            "FMA.f32 r0, u3.w1, 0x40000000, r0^",
             "FMA.f32 r0, 0x40000000, r1^, r0^",
-            "FADD.f32 r0, r0^, u2.w1.neg",
-            "FMA.f32 r0, 0x44000000.h1, u2.w1, r0^",
-            "FMA.f32 r0, r0^, u3.w1, 0x0.neg",
+            "FADD.f32 r0, r0^, u3.w0.neg",
+            "FMA.f32 r0, 0x44000000.h1, u3.w0, r0^",
+            "FMA.f32 r0, r0^, u4.w0, 0x0.neg",
         ]
     );
 }

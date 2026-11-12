@@ -5697,41 +5697,20 @@ fn uniform_load(m: &Module<'_>, dword: u16) -> Result<(u16, u16), MaliError> {
 /// `nir_opt_shrink_vectors` for the uniform loads of a highp shader: each
 /// keeps the lanes up to the highest one read (the vertex stage's `shrink`,
 /// nir.rs; a load the colour alone reads counts its stores, pushed before
-/// this runs). A vec4 array's element also loses the lanes below the
-/// lowest one read, its offset moved up (`shrink_dest_to_read_mask` with
-/// `shrink_start`, nir_opt_shrink_vectors.c:82-140): measured on femtovg's
-/// `frag[12].w` and `frag[10].x`, one FAU word each
-/// (fvg_fill_color_nodiscard.expect.json), where a plain vec4's `u.zw` in
-/// a vertex shader keeps x and y (sel_u_zw); a plain fragment uniform read
-/// from its second lane on has no reference and keeps the vertex stage's
-/// form.
-fn shrink_uniforms(f: &mut Fs<'_>, m: &Module<'_>) {
+/// this runs). It never takes off the lanes below the lowest one read
+/// (`shrink_start` is false, bifrost_nir.c:286): which words Mesa pushes
+/// is the layout's rule ([`super::select::UboLayout::load_of`]).
+fn shrink_uniforms(f: &mut Fs<'_>) {
     for k in 0..f.nir.len {
         let id = f.nir.order[k];
         let Kind::Uniform { dword, .. } = f.nir.nodes[id as usize].kind else { continue };
-        let (mut low, mut top) = (4u8, 0u8);
+        let mut top = 0u8;
         for (u, s) in f.nir.uses(id) {
             if let Val::Lane(_, c) = f.nir.nodes[u as usize].src[s] {
                 top = top.max(c + 1);
-                low = low.min(c);
             }
         }
-        let element = dword != FB_WPOS_Y_TRANSFORM && uniform_extent(m, dword).is_ok_and(|(u, _)| u.array_len > 1);
-        if !element || low == 0 || low >= top {
-            f.nir.nodes[id as usize].kind = Kind::Uniform { dword, comps: top };
-            continue;
-        }
-        f.nir.nodes[id as usize].kind = Kind::Uniform { dword: dword + u16::from(low), comps: top - low };
-        for j in 0..f.nir.len {
-            let u = f.nir.order[j] as usize;
-            for s in f.nir.nodes[u].src.iter_mut() {
-                if let Val::Lane(n, c) = *s {
-                    if n == id {
-                        *s = Val::Lane(n, c - low);
-                    }
-                }
-            }
-        }
+        f.nir.nodes[id as usize].kind = Kind::Uniform { dword, comps: top };
     }
 }
 
@@ -8343,13 +8322,7 @@ fn store_cmp(
 /// (nir.rs `fuse`, `late_rules`), each load where its first read stands and
 /// each node where its IR operation does, as its fp32 row, then the
 /// colour's conversions ([`Word`]), ATEST on the alpha and BLEND.
-pub fn select_highp(
-    p: &mut Prog<'_>,
-    f: &mut Fs<'_>,
-    m: &Module<'_>,
-    ubo: &UboLayout,
-    scratch: &Arena<'_>,
-) -> Result<(), MaliError> {
+pub fn select_highp(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout, scratch: &Arena<'_>) -> Result<(), MaliError> {
     let oom = |_| MaliError::OutOfScratch;
     let defect = MaliError::Defect(Defect::IrIndex);
     f.ubo = *ubo;
@@ -8428,7 +8401,7 @@ pub fn select_highp(
         nir::move_compares(&mut f.nir, scratch)?;
     }
     clamp_forms(&f.nir)?;
-    shrink_uniforms(f, m);
+    shrink_uniforms(f);
     /* an fneg the fusion made stands where its ffma does, a select
      * `bcsel_fadd` made where its fadd does: each before the node after it */
     for k in (0..f.nir.len).rev() {
