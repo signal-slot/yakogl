@@ -105,7 +105,12 @@
 //!     (`:406-407`), the 16-byte name. The model answers set-level only; the
 //!     board's names, OPP table and sustained point were not read
 //!     ([`Mp2Config`]: level 800000 is the reference vectors' illustrative
-//!     value, `tools/testdata/optee-scmi/scmi_msgs.txt`);
+//!     value, `tools/testdata/optee-scmi/scmi_msgs.txt`). ST's levels are the
+//!     frequency in Hz (`product/optee-stm32mp2/fw/config_all.c:962`, `.level
+//!     = dvfs_opp_khz[l] * 1000UL`): the DK's GPU table, from OP-TEE's device
+//!     tree, would read 800000000 and 900000000 (`stm32mp255.dtsi:12-23`,
+//!     not read from the board). The path sets [`crate::soc::stm32mp2::power::Level::Current`],
+//!     so only the vectors' value, not the path, depends on it;
 //!   - PROTOCOL_ATTRIBUTES as the reference vectors (`scmi_msgs.txt`): one
 //!     power domain; two performance domains (the CPU's is 0, the GPU's 1:
 //!     `core/arch/arm/plat-stm32mp2/scmi_server_scpfw.c:369-378` registers
