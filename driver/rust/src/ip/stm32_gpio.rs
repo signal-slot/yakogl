@@ -17,9 +17,9 @@
 //!
 //! RIF (RM0457 GPIO chapter, "GPIO resource isolation"): `SECCFGR` bit n set
 //! makes pin n secure; `PRIVCFGR` bit n set makes it privileged; `CIDCFGR[n]`
-//! (0x50 + 8 n) holds `CFEN` (bit 0), `SEMEN` (bit 1), `SCID` (bits 6:4) and
+//! (0x50 + 8 n) holds `CFEN` (bit 0), `SEMEN` (bit 1), `SCID` (bits 5:4) and
 //! `SEMWL` (bits 23:16); `SEMCR[n]` (0x54 + 8 n) holds `MUTEX` (bit 0) and
-//! `SCID` (bits 6:4) of the holder. Linux checks a bank's pins against these
+//! `SCID` (bits 5:4) of the holder. Linux checks a bank's pins against these
 //! before it takes them (the stm32mp25 RIF check in pinctrl-stm32.c); here
 //! [`access`] does it for a compartment ID the caller names. The A35 side of
 //! ST's images runs as CID 1 ([`CID_A35`]). The code sets none of them: the
@@ -51,10 +51,10 @@ pub mod r {
     }
     pub const CID_CFEN: u32 = 1 << 0;
     pub const CID_SEMEN: u32 = 1 << 1;
-    pub const CID_SCID_MASK: u32 = 0x7 << 4;
+    pub const CID_SCID_MASK: u32 = 0x3 << 4;
     pub const CID_SEMWL_MASK: u32 = 0xff << 16;
     pub const SEM_MUTEX: u32 = 1 << 0;
-    pub const SEM_SCID_MASK: u32 = 0x7 << 4;
+    pub const SEM_SCID_MASK: u32 = 0x3 << 4;
 }
 
 /// The compartment ID the A35 non-secure world runs as in ST's images.
@@ -147,13 +147,11 @@ pub fn access<M: Mmio>(m: &M, base: usize, pin: u32, cid: u32) -> Result<(), Err
     Ok(())
 }
 
-/// `stm32_pmx_set_mode`: the pin's `AFRL`/`AFRH` nibble when the mode is
-/// alternate, then its 2-bit `MODER` field.
+/// `stm32_pmx_set_mode`: the pin's `AFRL`/`AFRH` nibble (always written,
+/// 0 for input and output), then its 2-bit `MODER` field.
 fn set_mode<M: Mmio>(m: &M, base: usize, pin: u32, mode: Mode, af: u32) {
-    if mode == Mode::Alternate {
-        let reg = if pin > 7 { r::AFRH } else { r::AFRL };
-        m.modify32(base + reg, 0xf << (4 * (pin & 7)), af << (4 * (pin & 7)));
-    }
+    let reg = if pin > 7 { r::AFRH } else { r::AFRL };
+    m.modify32(base + reg, 0xf << (4 * (pin & 7)), af << (4 * (pin & 7)));
     m.modify32(base + r::MODER, 3 << (2 * pin), (mode as u32) << (2 * pin));
 }
 
@@ -287,6 +285,125 @@ mod tests {
         assert_eq!(bank_base('L'), None);
     }
 
+    // Citations: OP-TEE 4.0.0-stm32mp-r3.1 (0063536697f1) and ST Linux
+    // v6.6-stm32mp (548f960c), paths relative to each tree.
+
+    #[test]
+    fn register_offsets_match_optee_stm32_gpio_c() {
+        // core/drivers/stm32_gpio.c:41-49
+        assert_eq!(
+            [r::MODER, r::OTYPER, r::OSPEEDR, r::PUPDR, r::IDR, r::ODR, r::BSRR, r::AFRL, r::AFRH],
+            [0x00, 0x04, 0x08, 0x0c, 0x10, 0x14, 0x18, 0x20, 0x24]
+        );
+        // :50 GPIO_SECR_OFFSET (SECCFGR), :51 GPIO_PRIVCFGR_OFFSET
+        assert_eq!((r::SECCFGR, r::PRIVCFGR), (0x30, 0x34));
+        // :53 GPIO_CIDCFGR(x) = 0x50 + 8 x, :54 GPIO_SEMCR(x) = 0x54 + 8 x
+        assert_eq!((r::cidcfgr(3), r::semcr(3)), (0x50 + 24, 0x54 + 24));
+    }
+
+    #[test]
+    fn rif_fields_match_optee() {
+        // core/include/drivers/stm32_rif.h:17-22 CFEN bit 0, SCID shift 4,
+        // SEMEN bit 1, SEMWL shift 16; :27-29 SEMCR MUTEX bit 0; stm32_gpio.c:
+        // 61 SEMWL 23:16. The SCID width is 2 bits for GPIO's 3 CIDs
+        // (core/drivers/firewall/stm32_rif.c:13-32 get_scid_mask(3) = 5:4);
+        // OP-TEE's stm32_gpio.c:62,85 and stm32_rif.h:18,29 say 6:4, Linux
+        // drivers/pinctrl/stm32/pinctrl-stm32.c:69,73 says GENMASK(5, 4).
+        // Corrected 6:4 -> 5:4.
+        assert_eq!((r::CID_CFEN, r::CID_SEMEN), (1, 2));
+        assert_eq!((r::CID_SCID_MASK, r::CID_SEMWL_MASK), (0x30, 0x00ff_0000));
+        assert_eq!((r::SEM_MUTEX, r::SEM_SCID_MASK), (1, 0x30));
+        // core/include/dt-bindings/soc/stm32mp25-rif.h:11 RIF_CID1 = 1
+        assert_eq!(CID_A35, 1);
+    }
+
+    #[test]
+    fn access_follows_optee_pin_is_accessible() {
+        // core/drivers/stm32_gpio.c:462-475 with core/include/drivers/
+        // stm32_rif.h:73-97: CFEN clear -> ok; SCID == CID1 with SEMEN clear
+        // -> ok; SEMEN set and CID1 in SEMWL -> take the semaphore, which
+        // core/drivers/firewall/stm32_rif.c:51-54 grants when MUTEX is clear
+        // or its SCID is CID1. SECCFGR is read separately (stm32_gpio.c:502).
+        let m = Bank::default();
+        m.set(r::cidcfgr(0), r::CID_CFEN | r::CID_SEMEN | (1 << 4) | (4 << 16));
+        // SEMEN set: static SCID does not grant, CID1 is not in SEMWL.
+        assert_eq!(access(&m, B, 0, CID_A35), Err(Error::ForeignCid));
+        m.set(r::cidcfgr(1), r::CID_CFEN | r::CID_SEMEN | (2 << 16));
+        m.set(r::semcr(1), r::SEM_MUTEX | (1 << 4));
+        assert_eq!(access(&m, B, 1, CID_A35), Ok(()));
+        m.set(r::cidcfgr(2), r::CID_CFEN | (1 << 4));
+        assert_eq!(access(&m, B, 2, CID_A35), Ok(()));
+    }
+
+    #[test]
+    fn offsets_and_rif_match_linux_pinctrl_stm32_c() {
+        // drivers/pinctrl/stm32/pinctrl-stm32.c:41-56 MODER 0x00, TYPER 0x04,
+        // SPEEDR 0x08, PUPDR 0x0c, IDR 0x10, ODR 0x14, BSRR 0x18, AFRL 0x20,
+        // AFRH 0x24, SECCFGR 0x30, CIDCFGR(x) 0x50 + 8x, SEMCR(x) 0x54 + 8x;
+        // :67-73 CFEN bit 0, SEMEN bit 1, SCID GENMASK(5, 4), SEMWL of CID1
+        // BIT(16 + 1), MUTEX bit 0, SEMCID GENMASK(5, 4); :39 CID1 = 1.
+        assert_eq!(
+            [r::MODER, r::OTYPER, r::OSPEEDR, r::PUPDR, r::IDR, r::ODR, r::BSRR, r::AFRL, r::AFRH, r::SECCFGR],
+            [0x00, 0x04, 0x08, 0x0c, 0x10, 0x14, 0x18, 0x20, 0x24, 0x30]
+        );
+        assert_eq!((r::cidcfgr(15), r::semcr(15)), (0x50 + 8 * 15, 0x54 + 8 * 15));
+        assert_eq!((r::CID_SCID_MASK, r::SEM_SCID_MASK), (0x30, 0x30));
+        // :263-283 stm32_gpio_rif_valid / :285-322 acquire_semaphore: a held
+        // semaphore of another SCID refuses, a free one is taken (the module
+        // does not take it: the secure side owns RIF).
+        let m = Bank::default();
+        m.set(r::cidcfgr(0), r::CID_CFEN | r::CID_SEMEN | (2 << 16));
+        m.set(r::semcr(0), r::SEM_MUTEX | (2 << 4));
+        assert_eq!(access(&m, B, 0, CID_A35), Err(Error::ForeignCid));
+        m.set(r::semcr(0), r::SEM_MUTEX | (1 << 4));
+        assert_eq!(access(&m, B, 0, CID_A35), Ok(()));
+    }
+
+    #[test]
+    fn set_mode_writes_afr_for_every_mode_like_stm32_pmx_set_mode() {
+        // pinctrl-stm32.c:1033-1070 stm32_pmx_set_mode writes the AFR nibble
+        // (alt 0 for gpio_set_direction, :1134) before MODER, whatever the
+        // mode. Corrected: the module wrote AFR only for alternate.
+        let m = Bank::default();
+        m.set(r::AFRL, 0x0000_0900);
+        configure_input(&m, B, 2, Pull::None, CID_A35).unwrap();
+        assert_eq!(m.log(), vec![(r::AFRL, 0), (r::MODER, 0), (r::PUPDR, 0)]);
+    }
+
+    #[test]
+    fn bank_bases_match_linux_dtsi() {
+        // arch/arm64/boot/dts/st/stm32mp251.dtsi:2759 gpioa@44240000 ... :2879
+        // gpiok@442e0000, :2960 gpioz@46200000 (pinctrl_z at :2943).
+        assert_eq!(bank_base('A'), Some(0x4424_0000));
+        assert_eq!(bank_base('K'), Some(0x442e_0000));
+        assert_eq!(bank_base('Z'), Some(0x4620_0000));
+    }
+
+    #[test]
+    fn bank_bases_match_optee_stm32mp251_dtsi() {
+        // core/arch/arm/dts/stm32mp251.dtsi:1081 gpioa 0x44240000, :1093 gpiob
+        // 0x44250000, :1105 gpioc, :1117 gpiod, :1129 gpioe, :1141 gpiof
+        // 0x44290000, :1153 gpiog, :1165 gpioh, :1177 gpioi, :1189 gpioj,
+        // :1201 gpiok 0x442e0000, :1265 gpioz 0x46200000.
+        let want = [
+            ('A', 0x4424_0000),
+            ('B', 0x4425_0000),
+            ('C', 0x4426_0000),
+            ('D', 0x4427_0000),
+            ('E', 0x4428_0000),
+            ('F', 0x4429_0000),
+            ('G', 0x442a_0000),
+            ('H', 0x442b_0000),
+            ('I', 0x442c_0000),
+            ('J', 0x442d_0000),
+            ('K', 0x442e_0000),
+            ('Z', 0x4620_0000),
+        ];
+        for (l, a) in want {
+            assert_eq!(bank_base(l), Some(a), "GPIO{l}");
+        }
+    }
+
     #[test]
     fn i2c_open_drain_af_pin_order() {
         // pin 5, AF9, open drain, pull-up; the neighbours' bits survive.
@@ -325,11 +442,11 @@ mod tests {
         configure_output(&m, B, 3, true, OType::PushPull, Speed::Low, Pull::None, CID_A35).unwrap();
         assert_eq!(
             m.log(),
-            vec![(r::BSRR, 1 << 3), (r::MODER, 1 << 6), (r::OTYPER, 0), (r::OSPEEDR, 0), (r::PUPDR, 0)]
+            vec![(r::BSRR, 1 << 3), (r::AFRL, 0), (r::MODER, 1 << 6), (r::OTYPER, 0), (r::OSPEEDR, 0), (r::PUPDR, 0)]
         );
         clear(&m, B, 3);
         set(&m, B, 4);
-        assert_eq!(&m.log()[5..], &[(r::BSRR, 1 << 19), (r::BSRR, 1 << 4)]);
+        assert_eq!(&m.log()[6..], &[(r::BSRR, 1 << 19), (r::BSRR, 1 << 4)]);
         m.set(r::IDR, 1 << 7);
         assert!(read(&m, B, 7) && !read(&m, B, 6));
     }
