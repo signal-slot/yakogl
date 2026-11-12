@@ -128,10 +128,14 @@ pub const fn pll_hz(con0: u32, con1: u32, con2: u32) -> Option<u64> {
 /// is bit 1, and `CLK_GPU_STACKS` has its own divider in CLKSEL_CON(159)[4:0]
 /// (clk-rk3588.c:1353-1363). Bit 14 of CLKSEL_CON(158) switches the GPU to
 /// the GPU PVTPLL (a ring oscillator in the GPU GRF), a field Linux does not
-/// name: TF-A's rk3588 SCMI clock writes it (`GPU_CLK_PATH_PVTPLL`,
-/// plat/rockchip/rk3588/drivers/scmi/rk3588_clk.c, BSD-3-Clause; the T6's
+/// name: TF-A's rk3588 SCMI clock driver sets it to put the GPU on the
+/// PVTPLL (TF-A v2.13.0, commit c17351450c8a, BSD-3-Clause:
+/// plat/rockchip/rk3588/drivers/scmi/rk3588_clk.c:146 defines
+/// `GPU_CLK_PATH_PVTPLL` as a write-masked set of bit 14, :145 the clear
+/// that returns to the normal PLLs, :975-976 write it to CLKSEL_CON(158) in
+/// `clk_gpu_set_rate` after the GPU GRF PVTPLL setup at :957-973). The T6's
 /// BL31 is Rockchip's binary v1.48, so that source is a reference, not the
-/// code that runs).
+/// code that runs.
 ///
 /// Measured on the T6 under Armbian, 2026-10-19 (read-only; the GPU forced
 /// active through its runtime PM `control` for the second read):
