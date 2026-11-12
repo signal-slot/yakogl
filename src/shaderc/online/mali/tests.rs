@@ -3345,14 +3345,35 @@ fn a_mediump_texture_cube_at_the_implicit_level_is_byte_equal_to_mesa_26_2_1() {
     let (_, f) = check_program(vs, fs, td!("fstex_cube_whole.expect.json"));
     let texts: Vec<String> = trim(&f.code).iter().map(|w| text(*w)).collect();
     assert!(!texts.iter().any(|t| t.starts_with("MOV.i32") && t.contains(", r")), "{texts:?}");
-    /* the gaps beside it: a highp shader's implicit level, and a computed
-     * direction (dEQP's texture.specification cube face shader), which have
-     * no reference at the implicit level */
+    /* the gap beside it: a highp shader's implicit level has no reference */
     let highp = "precision highp float; uniform samplerCube s; varying vec3 d; void main(){ gl_FragColor = textureCube(s, d); }";
     assert_eq!(gap(SHC_STAGE_FRAGMENT, highp), MaliError::TexKind);
-    let face = "uniform samplerCube s; varying mediump vec2 v; void main(){ mediump float x = v.x*2.0 - 1.0; \
-                mediump float y = v.y*2.0 - 1.0; gl_FragColor = textureCube(s, vec3(-x, -y, -1)); }";
-    assert_eq!(gap(SHC_STAGE_FRAGMENT, face), MaliError::TexCoord);
+}
+
+/// dEQP-GLES2's texture.specification cube cases draw each face with
+/// TexCubeShader (tools/mali/testdata/fstex_cubeface*): a direction
+/// computed from `x = v_coord.x*2.0 - 1.0` and `y` in fp16, a constant
+/// lane +-1. Face 4's `vec3(-x, -y, -1)` is case 41's form at the computed
+/// level: the pair `FMA.v2f16` then `FADD.v2f16 .neg`, each lane
+/// `F16_TO_F32`, the constant `0x3F800000.neg` an operand of the cube ops,
+/// `TEX_SINGLE.16.cube.computed`; both programs the shim's to the byte. The
+/// other five need a pair swapped (`.h10`), one half negated
+/// (`.neg.h00`) or the constant in x or y, which the cube direction's
+/// pair does not take yet: refused by name.
+#[test]
+fn deqp_cube_face_4_is_byte_equal_to_mesa_26_2_1() {
+    let vs = td!("fstex_cubeface.vert");
+    let (_, f) = check_program(vs, td!("fstex_cubeface4.frag"), td!("fstex_cubeface4.expect.json"));
+    assert!(f.info.helper_threads, "a computed level needs the helper invocations");
+    for fs in [
+        td!("fstex_cubeface0.frag"),
+        td!("fstex_cubeface1.frag"),
+        td!("fstex_cubeface2.frag"),
+        td!("fstex_cubeface3.frag"),
+        td!("fstex_cubeface5.frag"),
+    ] {
+        assert_eq!(gap(SHC_STAGE_FRAGMENT, fs), MaliError::ColourForm, "{fs}");
+    }
 }
 
 /// gl_test case 114's fragment stage (`cubelod`, prog[1]: tools/shaders/

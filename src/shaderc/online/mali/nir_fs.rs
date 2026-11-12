@@ -5017,11 +5017,11 @@ fn walk_nodes(
             /* `textureCube(s, dir)` in a mediump shader (dEQP-GLES2's
              * texture cube cases, fstex_cube.expect.json): the look-up at
              * `COMPUTED_LOD` (pan_nir_lower_tex.c:944-945), two staging
-             * words, `build_cube_desc`'s of the direction's lanes: a
-             * varying's raw fp32 lanes or constants, as the bias's arm takes
-             * them ([`select`]). A computed direction (`vec3(-x, -y, -1.0)`
-             * of fp16 values, dEQP's texture.specification cube cases) or a
-             * highp shader's look-up: no reference */
+             * words, `build_cube_desc`'s of the direction's lanes as case
+             * 41's arm takes them ([`select`]): a varying's raw fp32 lanes
+             * or constants, or fp16 values converted at the look-up
+             * (fstex_cubeface4's `vec3(-x, -y, -1)`). A highp shader's: no
+             * reference */
             ir::Op::Tex {
                 dim: ir::TexDim::Cube,
                 shadow: false,
@@ -5033,11 +5033,7 @@ fn walk_nodes(
                 offset: None,
             } if !prec.highp => {
                 let dir = [lane(vals, coord, 0), lane(vals, coord, 1), lane(vals, coord, 2)];
-                let raw = |v: Val| match v {
-                    Val::Const(_) => true,
-                    _ => f.input_lane(v).is_some_and(|(loc, _)| loc != POINT_COORD),
-                };
-                if !dir.into_iter().all(raw) || dir.iter().all(|v| matches!(v, Val::Const(_))) {
+                if dir.contains(&Val::Undef) || dir.iter().all(|v| matches!(v, Val::Const(_))) {
                     return Err(MaliError::TexCoord);
                 }
                 let n = f.nir.push_node(NirNode { kind: Kind::Tex, src: dir, bits: 16, width: 1 })?;
