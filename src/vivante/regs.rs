@@ -1249,6 +1249,8 @@ mod mesa_header {
         u32::from_str_radix(hex, 16).expect("hex")
     }
 
+    type Named = (&'static str, fn(u32) -> u32);
+
     /// The tile-status, RS and sampler-TS registers (W1 of
     /// docs/notes/gc-tiled-wire.md) against state_3d.xml.h and common_3d.xml.h.
     #[test]
@@ -1289,7 +1291,7 @@ mod mesa_header {
         for (n, v) in plain {
             assert_eq!(*v, want(n), "VIVS_{n}");
         }
-        let arrays: &[(&str, fn(u32) -> u32)] = &[
+        let arrays: &[Named] = &[
             ("TS_SAMPLER_CONFIG", ts_sampler_config),
             ("TS_SAMPLER_STATUS_BASE", ts_sampler_status_base),
             ("TS_SAMPLER_CLEAR_VALUE", ts_sampler_clear_value),
@@ -1303,7 +1305,7 @@ mod mesa_header {
             }
         }
         // Field macros: each against the header's __MASK and __SHIFT.
-        let fields: &[(&str, fn(u32) -> u32)] = &[
+        let fields: &[Named] = &[
             ("PE_MEM_CONFIG_COLOR_TS_MODE", pe_mem_config_color_ts_mode),
             ("PE_MEM_CONFIG_DEPTH_TS_MODE", pe_mem_config_depth_ts_mode),
             ("RS_CLEAR_CONTROL_BITS", rs_clear_bits),
