@@ -376,15 +376,28 @@ config YAKOGL_MALI_CARVEOUT_BYTES
 	  hold it besides the kernel.
 
 config YAKOGL_MALI_HEAP_CHUNKS
-	int "Mali tiler heap: 2 MiB chunks, all made at init"
+	int "Mali tiler heap: 2 MiB chunks at most"
 	depends on YAKOGL_GPU_MALI
 	range 1 64
 	default 5
 	help
-	  The tiler heap's chunks. The heap does not grow (a full heap is the
-	  job's fault, refused: board::nanopc_t6_osal), so it starts with all of
-	  them. 5 is Mesa's initial count for this GPU (2 MiB chunks; Mesa grows
-	  to 64).
+	  The tiler heap's chunks at most: a __nocache static of this many
+	  2 MiB chunks. The heap starts with YAKOGL_MALI_HEAP_INITIAL_CHUNKS of
+	  them and is given one more on each tiler out-of-memory event until
+	  all are its (board::nanopc_t6_osal); then the event is answered with
+	  no chunk and the firmware waits for fragment work, as panthor does.
+	  Mesa grows its heap to 64.
+
+config YAKOGL_MALI_HEAP_INITIAL_CHUNKS
+	int "Mali tiler heap: 2 MiB chunks made at init"
+	depends on YAKOGL_GPU_MALI
+	range 1 64
+	default 5
+	help
+	  The tiler heap's chunks at the start, at most
+	  YAKOGL_MALI_HEAP_CHUNKS (a build assert). 5 is Mesa's initial count
+	  for this GPU (2 MiB chunks). Below YAKOGL_MALI_HEAP_CHUNKS the heap
+	  grows on a tiler out-of-memory event.
 
 config YAKOGL_DRAW_STEP_STATS
 	bool "Time every draw's steps (src/draw_steps.rs) and keep the totals"
