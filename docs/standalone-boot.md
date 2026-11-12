@@ -514,6 +514,11 @@ says.
   the reset line. `driver/tools/kexec-zephyr/t6-verdict.sh <probe> <uart.log>`
   checks the log against those lines and prints `VERDICT <probe> PASS` or
   `FAIL`.
+- `tools/board.sh nanopc-t6 run <zephyr.bin> <logdir>` runs the same jump
+  through `nanopc-t6.sh --go`, with every rule above, and writes the run
+  directory, the verdict line (`kexec-dev`, DEV) and `INDEX.txt` as on the
+  other boards; a probe's verdict there is `t6-verdict.sh`'s. It has no boot
+  loader backend yet.
 
 ### Z1 to Z4
 

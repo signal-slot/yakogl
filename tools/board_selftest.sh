@@ -44,6 +44,13 @@
 #    CASE_SET_FAIL form), on the Pi 4 console and in the i.MX8MP SNVS: done,
 #    failed (rc 4) and bad_record (rc 4). The end line of each Pi 5 probe
 #    (tools/probes/rpi_5): its verdict, a FAIL line failed.
+# 5. The NanoPC-T6 (kexec-dev through driver/tools/kexec-zephyr/nanopc-t6.sh)
+#    with a fake runner (T6_RUNNER) and an ssh that answers: what board.sh
+#    hands the runner (--go, the run directory as T6_RECORD_DIR, BOARD_UART as
+#    T6_UART, T6_HAND), the runner's record taken into the run directory and
+#    redacted, and the verdict of each way a run ends: back with a probe's
+#    record (t6-verdict.sh's PASS or FAIL, the testdata/ records), back with
+#    a gl_test set, Armbian not back, no jump, a refusal before any change.
 # Prints "board_selftest: N checks, F failed"; exit 0 only when F is 0 and N is
 # the pinned count (a check that silently stops running fails the pin).
 set -uo pipefail
@@ -56,7 +63,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/.." && pwd)
 B="$HERE/board.sh"
 TD="$HERE/testdata"
-WANT_CHECKS=341
+WANT_CHECKS=373
 
 S=$(mktemp -d)
 trap 'rm -rf "$S"' EXIT
@@ -101,7 +108,7 @@ export YAKOGL_TOOLS=$td/debug/yakogl-tools
 unset BOARD_HOST BOARD_UART BOARD_BOOT PI4_HOST PI4_UART PI5_HOST PI5_UART UART_ADDR NETBOOT_SERVER NETBOOT_TFTP_ROOT \
     NETBOOT_TFTP_LOG NETBOOT_ROUTE NETBOOT_NO_WATCHDOG SEL TREE_IMAGE TREE_IMAGE_DIR TREE_TAG TREE_ROWS \
     TREE_PREV LOCK BOARD_LOCK RUN_BOUND RETURN_BOUND BOARD_END_RE PI4_END_RE PI4_HDMI_TIMINGS BOARD_HDMI_TIMINGS \
-    DEQP_CASELIST
+    DEQP_CASELIST T6_UART T6_HAND T6_RUNNER T6_RECORD_DIR T6_POOL_PA T6_BACKING_PA
 
 # ---- fake images: the AArch64 Image header, image_size, a marker ------------
 mkimg() { # mkimg FILE FOOTPRINT MARKER
@@ -123,6 +130,7 @@ mkimg "$S/img/am62p.bin" 4194304 'rti_arm: armed preload 0xef'
 mkimg "$S/img/am62p-deqp.bin" 4194304 'rti_arm: armed preload 0xef deqp: summary'
 mkimg "$S/img/imx8mp.bin" 4194304 'gc_wdog_arm: armed'
 mkimg "$S/img/x2.bin" 4194304 'gc_wdog_arm: armed'
+mkimg "$S/img/nanopc-t6.bin" 4194304 'yakogl-wdt: nanopc_t6 WDT0 armed at boot; top 13; lifetime_s 60; alive_s 5; proof 0; load 0x10000000'
 mkimg "$S/img/layer.bin" 4194304 'board: watchdog armed'
 mkimg "$S/img/nomarker.bin" 4194304 'nothing arms here'
 mkimg "$S/img/huge.bin" $((512 * 1024 * 1024)) 'rti_arm: armed'
@@ -146,6 +154,7 @@ imx8mp:uboot-tftp:sync; sudo -n systemctl reboot
 imx8mp:uboot-mmc:sync; sudo -n systemctl reboot
 imx8mp:kexec-dev:kexec-zephyr 0x60000000 --crash
 x2:kexec-dev:/tmp/yakogl-kexec/kexec_zephyr /tmp/yakogl-kexec/zephyr.bin 0x60000000 --crash
+nanopc-t6:kexec-dev:bash driver/tools/kexec-zephyr/nanopc-t6.sh
 pi5:tryboot:sudo reboot "0 tryboot"'
 while IFS=: read -r board boot bootcmd; do
     img="$S/img/$board.bin"
@@ -229,6 +238,28 @@ out=$(dry x2 status 2>&1)
 check "x2 status: OpenRC's runlevel and the crash window, no remoteproc" \
     eval 'grep -q "rc-status -r" <<<"$out" && grep -q "kexec_crash_size" <<<"$out" && ! grep -q "remoteproc" <<<"$out"'
 check "x2 runs: nothing written on the host, no stub ran" eval '[ ! -e "$S/logs" ] && untouched'
+# the NanoPC-T6 (kexec-dev only): the runner makes the jump and takes the
+# board lock itself; board.sh takes the board lease (waiting no longer than
+# the runner's lock: LOCK_WAIT 0) and names no UART path
+out=$(BOARD_UART=/dev/ttyFAKE9 T6_HAND=selftest dry nanopc-t6 run "$S/img/nanopc-t6.bin" "$S/logs" 2>&1)
+rc=$?
+check "nanopc-t6 run: rc 0, kexec-dev the default, DEV, no sudo, the lease taken, the runner with --go, T6_HAND and the run directory" \
+    eval '[ "$rc" = 0 ] && grep -q "boot kexec-dev (DEV)" <<<"$out" && ! grep -q "sudo" <<<"$out" &&
+          grep -q "take /var/tmp/yakogl-board.lease" <<<"$out" &&
+          grep -qF "T6_HAND=selftest T6_RECORD_DIR=<rundir> bash driver/tools/kexec-zephyr/nanopc-t6.sh $S/img/nanopc-t6.bin --go" <<<"$out"'
+check "nanopc-t6 run: board.sh takes no board lock of its own (the runner's would refuse), the runner's waits 0 s; no UART path printed" \
+    eval '! grep -q "^DRY host\$ \. driver/tools/kexec-zephyr/board_lock.sh" <<<"$out" && grep -q "board_lock.sh (LOCK_WAIT 0: refused while held)" <<<"$out" &&
+          grep -q "T6_UART=<BOARD_UART>" <<<"$out" && ! grep -q "ttyFAKE9" <<<"$out"'
+out=$(dry nanopc-t6 run "$S/img/nanopc-t6.bin" "$S/logs" 2>&1)
+check "nanopc-t6 run without T6_HAND: the dry run says the runner refuses" grep -qF "T6_HAND=<unset: the runner refuses>" <<<"$out"
+out=$(dry nanopc-t6 run "$S/img/nanopc-t6.bin" "$REPO/.t6-selftest-logs" 2>&1)
+rc=$?
+check "nanopc-t6 run with the log directory inside a checkout: rc 3 (the runner's record rule), no board command, nothing made" \
+    eval '[ "$rc" = 3 ] && grep -q "inside a git checkout" <<<"$out" && ! grep -q "^DRY" <<<"$out" && [ ! -e "$REPO/.t6-selftest-logs" ]'
+out=$(dry nanopc-t6 status 2>&1)
+check "nanopc-t6 status: kexec_loaded, watchdog0 and the runner's staging directory" \
+    eval 'grep -q "kexec_loaded /sys/class/watchdog/watchdog0/state" <<<"$out" && grep -q "/tmp/yakogl-kexec" <<<"$out"'
+check "nanopc-t6 runs: nothing written on the host, no stub ran" eval '[ ! -e "$S/logs" ] && untouched'
 out=$(dry pi4 run "$S/img/pi4.bin" "$S/logs" 2>&1)
 check "pi4: /boot/firmware free space read, tryboot.txt written and put back" \
     eval 'grep -q "df -B1 --output=avail /boot/firmware" <<<"$out" && [ "$(grep -c "tee /boot/firmware/tryboot.txt" <<<"$out")" = 2 ]'
@@ -684,6 +715,21 @@ done
 out=$(dry x2 default "$S/img/x2.bin" 2 2>&1)
 rc=$?
 check "x2 default: rc 2 (no boot loader backend), nothing done" eval '[ "$rc" = 2 ] && ! grep -q "^DRY" <<<"$out"'
+for boot in uboot-tftp uboot-mmc tryboot; do
+    out=$(BOARD_BOOT=$boot dry nanopc-t6 status 2>&1)
+    check "nanopc-t6 has no $boot: rc 2" [ $? = 2 ]
+done
+out=$(dry nanopc-t6 default "$S/img/nanopc-t6.bin" 2 2>&1)
+rc=$?
+check "nanopc-t6 default: rc 2 (no boot loader backend), nothing done" eval '[ "$rc" = 2 ] && ! grep -q "^DRY" <<<"$out"'
+out=$(dry nanopc-t6 run "$S/img/x2.bin" "$S/logs" 2>&1)
+rc=$?
+check "nanopc-t6 run of an image without the T6 watchdog marker (an i.MX8MP one): rc 3, REFUSED, no board command" \
+    eval '[ "$rc" = 3 ] && grep -q "REFUSED" <<<"$out" && ! grep -q "^DRY board" <<<"$out"'
+mkimg "$S/img/t6-big.bin" $((16 * 1024 * 1024 + 4096)) 'yakogl-wdt: nanopc_t6 WDT0 armed at boot; top 13; lifetime_s 60'
+out=$(dry nanopc-t6 run "$S/img/t6-big.bin" "$S/logs" 2>&1)
+rc=$?
+check "nanopc-t6 run of an image past the 16 MiB window at 0x10000000: rc 3" eval '[ "$rc" = 3 ] && grep -q "does not fit" <<<"$out"'
 out=$(dry x2 nodefault 2>&1)
 check "x2 nodefault: rc 2" [ $? = 2 ]
 out=$(TREE_IMAGE=$S/img/pi4.bin dry pi4 tree "$S/am.txt" "$S/tree" 2>&1)
@@ -1313,6 +1359,100 @@ pi5|rpi5_wdog: feeding stopped, reset expected within 10 s|rc=4 verdict=no_end_l
 pi4|v3d_clear: FAIL (render: no frame done in 1000 ms)|rc=4 verdict=no_end_line boot=tryboot row boot_verdict=no_end_line result=none
 pi4|rpi5_dtb: done|rc=4 verdict=no_end_line boot=tryboot row boot_verdict=no_end_line result=none
 EOF
+
+echo "== 5. NanoPC-T6 runs through a fake nanopc-t6.sh (T6_RUNNER) and an ssh that answers"
+# The fake runner: what board.sh handed it into $S/t6/args, then the record
+# the real one writes (its line forms: nanopc-t6.sh's rec lines) for the way
+# FAKE_T6 names; FAKE_T6_UART is the uart.log it leaves.
+cat > "$S/fake-nanopc-t6.sh" <<'EOF'
+echo "runner" >> "${FAKE_T6_ARGS%/*}/ssh.log"
+printf 'argv=%s\nT6_RECORD_DIR=%s\nT6_UART=%s\nT6_HAND=%s\nBOARD_HOST=%s\n' "$*" "$T6_RECORD_DIR" "$T6_UART" "$T6_HAND" "$BOARD_HOST" > "$FAKE_T6_ARGS"
+if [ "$FAKE_T6" = refused ]; then echo "nanopc-t6.sh: REFUSED: under the lock: remote sessions on the board" >&2; exit 3; fi
+r=$T6_RECORD_DIR/20261112-120000-t6
+mkdir "$r"
+rec() { printf '2026-11-12 12:%s %s\n' "$1" "$2" >> "$r/record.txt"; }
+rec 00:00 "board $BOARD_HOST, boot_id 0; hand at the power switch: $T6_HAND; linux_wdt 1"
+rec 00:01 "UART capture started (pid 1, read only): $T6_UART -> $r/uart.log"
+cp "$FAKE_T6_UART" "$r/uart.log"
+echo "[ 1.0] a line of the old Linux" > "$r/linux-before.dmesg-w"
+case $FAKE_T6 in
+back)
+    rec 00:05 "jumping (linux_wdt 1)"
+    rec 00:42 "back in Armbian 37 s after the jump (boot_id 1, up 20.1 s)"
+    echo "[ 1.0] a line of the new Linux" > "$r/linux-after.dmesg"
+    exit 0 ;;
+lost)
+    rec 00:05 "jumping (linux_wdt 1)"
+    rec 04:25 "no Armbian 260 s after the jump: the board needs $T6_HAND at its power switch"
+    exit 1 ;;
+nojump)
+    rec 00:05 "jumping (linux_wdt 1)"
+    rec 00:06 "linux-wdt: REFUSED on the board, no jump: linux-wdt: WDT0 CR 0x00000000 TORR 0x00000000 after the open: WDT_EN is not 1"
+    exit 1 ;;
+esac
+EOF
+mkdir -p "$S/okstub"
+# ssh: every call logged, the board's host name for uname -n, else nothing and rc 0
+printf '#!/bin/sh\necho "ssh $*" >> "%s/t6/ssh.log"\ncase "$*" in *"uname -n"*) echo t6fake-host ;; esac\nexit 0\n' "$S" > "$S/okstub/ssh"
+chmod +x "$S/okstub/ssh"
+mkdir -p "$S/t6"
+# t6run CASE UART-LOG [VAR=VALUE...]: a nanopc-t6 run of the fake runner in its
+# own log directory; T6_OUT its output, T6_RC its exit code, T6_RD the run directory
+t6run() {
+    local c=$1 u=$2
+    shift 2
+    T6_OUT=$(env BOARD_HOST=root@t6fake-host BOARD_UART=/dev/ttyFAKE-T6 T6_HAND=selftest "$@" T6_RUNNER="$S/fake-nanopc-t6.sh" \
+        FAKE_T6="$c" FAKE_T6_UART="$u" FAKE_T6_ARGS="$S/t6/args" PATH="$S/okstub:$PATH" "$B" nanopc-t6 run "$S/img/nanopc-t6.bin" "$S/t6/$c-${u##*/}" 2>&1)
+    T6_RC=$?
+    T6_RD=$(ls -d "$S/t6/$c-${u##*/}"/*/ 2>/dev/null | head -1)
+    T6_RD=${T6_RD%/}
+}
+KT="$REPO/driver/tools/kexec-zephyr/testdata"
+t6run back "$KT/t6_hello-pass.uart"
+check "nanopc-t6 back with t6_hello's passing record: rc 0, done, DEV, t6-verdict.sh's PASS, back after 37 s" \
+    eval '[ "$T6_RC" = 0 ] && grep -q "^board.sh nanopc-t6 nanopc-t6 rc=0 verdict=done boot=kexec-dev DEV boot_verdict=complete result=legacy:t6-verdict_t6_hello resets=absent record=absent back_after=37s (kexec-dev: a development run, never a row)$" <<<"$T6_OUT"'
+check "nanopc-t6: the runner got --go, the run directory as T6_RECORD_DIR, BOARD_UART as T6_UART, T6_HAND" \
+    eval 'grep -qx "argv=$S/img/nanopc-t6.bin --go" "$S/t6/args" && grep -qx "T6_RECORD_DIR=$T6_RD" "$S/t6/args" &&
+          grep -qx "T6_UART=/dev/ttyFAKE-T6" "$S/t6/args" && grep -qx "T6_HAND=selftest" "$S/t6/args"'
+check "nanopc-t6: the runner's record moved into the run directory (no <date>-t6 left), console.txt = uart.log, INDEX.txt lists them" \
+    eval '[ -n "$T6_RD" ] && ! ls -d "$T6_RD"/*-t6 > /dev/null 2>&1 && cmp -s "$T6_RD/console.txt" "$KT/t6_hello-pass.uart" &&
+          [ "$(grep -cE "  (uart.log|record.txt|linux-before.dmesg-w|linux-after.dmesg|kexec.log|meta.txt)$" "$T6_RD/INDEX.txt")" = 6 ]'
+check "nanopc-t6: the record names neither the board's host nor the UART path (redacted), the hand stays" \
+    eval '! grep -rq "t6fake-host\|ttyFAKE-T6" "$T6_RD" && grep -q "board root@<board-host>," "$T6_RD/record.txt" &&
+          grep -q "read only): <BOARD_UART> ->" "$T6_RD/record.txt" && grep -q "hand at the power switch: selftest" "$T6_RD/record.txt"'
+check "nanopc-t6: the board lease taken before the runner and given back at the end; no other board command" \
+    eval '[ "$(grep -c "^ssh .*yakogl-board.lease" "$S/t6/ssh.log")" = 2 ] && [ "$(grep -c "^ssh .*uname -n" "$S/t6/ssh.log")" = 1 ] &&
+          [ "$(grep -c "^ssh " "$S/t6/ssh.log")" = 3 ] && grep -q "^ssh .*rm -f /var/tmp/yakogl-board.lease" <(tail -1 "$S/t6/ssh.log") &&
+          [ "$(grep -n "^ssh .*yakogl-board.lease" "$S/t6/ssh.log" | head -1 | cut -d: -f1)" -lt "$(grep -n "^runner$" "$S/t6/ssh.log" | cut -d: -f1)" ]'
+check "nanopc-t6 tally of the run directory: the same verdict line" \
+    says nanopc-t6 "$T6_RD" "rc=0 verdict=done boot=kexec-dev DEV boot_verdict=complete result=legacy:t6-verdict_t6_hello .*back_after=37s"
+t6run back "$KT/t6_mmu-differs.uart"
+check "nanopc-t6 back with t6_mmu's differing record: failed rc 4, t6-verdict.sh's FAIL" \
+    eval '[ "$T6_RC" = 4 ] && grep -q "rc=4 verdict=failed boot=kexec-dev DEV boot_verdict=complete result=legacy:t6-verdict_t6_mmu " <<<"$T6_OUT"'
+t6run back "$KT/t6_submit-z3-stop.uart"
+check "nanopc-t6 back with a t6_submit record that stopped in Z3: failed rc 4 (the probe's lines judge it, not an end line)" \
+    eval '[ "$T6_RC" = 4 ] && grep -q "rc=4 verdict=failed .*result=legacy:t6-verdict_t6_submit " <<<"$T6_OUT"'
+printf '%s\r\n' 'T6:C WDT0 armed, period 22369 ms' 'board: watchdog armed' 'gl_test: build 0123abcd' \
+    'gl_test: all: 0 of 3 cases failed (3 passed; 0 timed out; first failure case -1 at index -1)' \
+    't6: gl_test done: PSCI SYSTEM_RESET at 9000 ms (9 feeds)' > "$S/t6/gltest-pass.uart"
+sed 's/all: 0 of 3 cases failed (3 passed/all: 1 of 3 cases failed (2 passed/' "$S/t6/gltest-pass.uart" > "$S/t6/gltest-fail.uart"
+t6run back "$S/t6/gltest-pass.uart" BOARD_UART= T6_UART=/dev/ttyFAKE-T6
+check "nanopc-t6 back with a gl_test set that passed: done rc 0, result=legacy:gl_test_all; T6_UART alone reaches the runner" \
+    eval '[ "$T6_RC" = 0 ] && grep -q "rc=0 verdict=done boot=kexec-dev DEV boot_verdict=complete result=legacy:gl_test_all " <<<"$T6_OUT" &&
+          grep -qx "T6_UART=/dev/ttyFAKE-T6" "$S/t6/args"'
+t6run back "$S/t6/gltest-fail.uart"
+check "nanopc-t6 back with a gl_test set with a failure: failed rc 4" \
+    eval '[ "$T6_RC" = 4 ] && grep -q "rc=4 verdict=failed .*result=legacy:gl_test_all " <<<"$T6_OUT"'
+t6run lost "$KT/t6_hello-pass.uart"
+check "nanopc-t6 jumped, Armbian not back within the runner's bound: not_back rc 5" \
+    eval '[ "$T6_RC" = 5 ] && grep -q "rc=5 verdict=not_back boot=kexec-dev DEV boot_verdict=not_back " <<<"$T6_OUT"'
+t6run nojump "$S/t6/gltest-pass.uart"
+check "nanopc-t6 refused on the board (WDT_EN not 1), no jump: no_jump rc 4" \
+    eval '[ "$T6_RC" = 4 ] && grep -q "rc=4 verdict=no_jump boot=kexec-dev DEV boot_verdict=no_jump " <<<"$T6_OUT"'
+t6run refused "$KT/t6_hello-pass.uart"
+check "nanopc-t6 runner refused before any change (rc 3, no record): rc 3, its line shown, no INDEX.txt, the lease given back" \
+    eval '[ "$T6_RC" = 3 ] && grep -q "nanopc-t6.sh: REFUSED: under the lock" <<<"$T6_OUT" && grep -q "refused (rc 3) before it changed anything" <<<"$T6_OUT" &&
+          [ ! -e "$T6_RD/INDEX.txt" ] && ! grep -rq "t6fake-host" "$T6_RD" && [ "$(tail -1 "$S/t6/ssh.log" | grep -c "rm -f /var/tmp/yakogl-board.lease")" = 1 ]'
 
 echo "board_selftest: $n checks, $fails failed (pinned: $WANT_CHECKS)"
 [ "$fails" = 0 ] && [ "$n" = "$WANT_CHECKS" ]

@@ -3,7 +3,7 @@
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 #
 # board.sh - one runner for the three boards (driver/docs/one-method.md section 4),
-# and for the Armadillo-X2 as a development board (kexec-dev only, below).
+# and for the Armadillo-X2 and the NanoPC-T6 as development boards (kexec-dev only).
 #
 #   tools/board.sh [--dry-run] <board> status | install | uninstall | disarm
 #   tools/board.sh [--dry-run] <board> probe <logdir>
@@ -13,7 +13,7 @@
 #   tools/board.sh <board> gm-lines <outdir>
 #   tools/board.sh [--dry-run] <board> default <image> <boots|forever> | nodefault
 #   tools/board.sh <board> tally <rundir> | diff <rundir-a> <rundir-b>
-#      board = pi4 | pi5 | am62p | imx8mp | x2
+#      board = pi4 | pi5 | am62p | imx8mp | x2 | nanopc-t6
 #      BOARD_BOOT = tryboot | uboot-tftp | uboot-mmc | kexec-dev
 #
 # Only the boot backend differs between the boards; everything else is one
@@ -23,13 +23,25 @@
 # tools/tftp_oneshot.py), uboot-mmc (am62p, imx8mp; the same one-shot, but
 # U-Boot loads the image from the eMMC, where Linux staged it: the standalone
 # boot, docs/standalone-boot.md) and kexec-dev
-# (am62p, imx8mp, x2; driver/tools/kexec-zephyr). A kexec-dev run is a development
+# (am62p, imx8mp, x2, nanopc-t6; driver/tools/kexec-zephyr). A kexec-dev run is a development
 # run: its verdict line says DEV and it is never a row (a bootloader boot is
 # the bar). x2 is the Armadillo-X2 (the i.MX8MP's GPU under Armadillo Base OS):
 # it has kexec-dev only, so every x2 run is a development run; root logs in
 # (no sudo), the loader and the record tool are copied to a tmpfs by each run,
 # and the record is LPGPR1..3 read through /dev/mem ("The Armadillo-X2" in
 # driver/tools/kexec-zephyr/README.md).
+# nanopc-t6 is the NanoPC-T6 (RK3588, Mali-G610) under Armbian: it has
+# kexec-dev only, and its run is its own runner's,
+# driver/tools/kexec-zephyr/nanopc-t6.sh --go (kexec_t6, below), with every
+# rule of that runner as it is: the runner takes the board lock itself and
+# refuses at once while it is held (LOCK_WAIT 0; the board lease here waits
+# no longer), reads the board again under it, needs the person at the power
+# switch (T6_HAND), only reads the debug UART, and writes its record into
+# the run directory, which therefore must be outside any checkout. board.sh
+# adds the image check, the board lease, the run directory with its verdict
+# line and INDEX.txt, and for a probe image (tools/probes/nanopc_t6) the
+# verdict of driver/tools/kexec-zephyr/t6-verdict.sh. The boot loader
+# backend (uboot-mmc) is not here yet.
 #   tools/board.sh [--dry-run] x2 stage <image> <logdir> [name]
 #      every step of an x2 run up to the jump (image checks, readiness, the
 #      tools and the image copied, the record cleared and read back, the
@@ -175,7 +187,14 @@
 #                      the run directory (console.raw/.ts/.txt; read it with
 #                      tools/cts/imx8mp-console-scan.py), unset: no capture;
 #                      x2: optional in the same way (UART2, the board's own
-#                      USB serial adapter), for a kexec-dev run
+#                      USB serial adapter), for a kexec-dev run; nanopc-t6:
+#                      required for a run (the runner refuses without it): the
+#                      host's tty on the debug UART, only ever read (T6_UART
+#                      also read; redacted in the record)
+#   T6_HAND            nanopc-t6: the name of the person at the power switch for
+#                      this run (nanopc-t6.sh --go refuses without it)
+#   T6_RUNNER          nanopc-t6: the runner (default driver/tools/kexec-zephyr/
+#                      nanopc-t6.sh; tools/board_selftest.sh puts a fake there)
 #   BOARD_BOOT         the boot backend (default: pi4 tryboot, else uboot-tftp)
 #   BOARD_PERSON_PRESENT  1: a person is at the board ("default ... forever" refuses without)
 #   NETBOOT_SERVER, NETBOOT_TFTP_ROOT, NETBOOT_TFTP_LOG (i.MX8MP), NETBOOT_ROUTE
@@ -186,7 +205,8 @@
 #                      (pi4 420/300, pi5 420/420 (a reboot takes ~150 s to ssh), am62p U-Boot 420/180 (780/180 for a dEQP image:
 #                      600 s RTI bound + 60 s + 120 s boot), imx8mp U-Boot 600
 #                      in all, am62p kexec-dev 1500/600, imx8mp and x2 kexec-dev
-#                      1500 in all)
+#                      1500 in all; nanopc-t6: not read, the runner's bound is
+#                      the image's own, from its watchdog marker)
 #   BOARD_END_RE       extended regex of the image's last line (pi4: PI4_END_RE
 #                      also read); BOARD_TAIL_S seconds kept after it (5)
 #   BOARD_HDMI_TIMINGS pi4 only (pi5: ignored): the panel's hdmi_timings, 17 integers (PI4_HDMI_TIMINGS
@@ -338,6 +358,29 @@ x2)
     X2_DIR=/tmp/yakogl-kexec
     NO_CONSOLE_WHY="BOARD_UART was not set"
     END_RE_DEFAULT=
+    LEGACY_RE='^(deqp: summary: |gl_test: all: )'
+    TREE_RETRIES_DEFAULT=0
+    ;;
+nanopc-t6)
+    # The NanoPC-T6 (RK3588, Mali-G610) under Armbian: kexec-dev only, every
+    # run a development run, the jump made by nanopc-t6.sh (kexec_t6). The
+    # boot loader backend is not here yet (uboot-mmc, #4168).
+    BOOTS="kexec-dev"
+    NB_MMC=-
+    # nanopc_t6.dts zephyr,sram: 16 MiB at 0x10000000 (nanopc-t6.sh's window)
+    YAKO_ADDR=0x10000000; LOAD_END=0x11000000
+    # driver/zephyr/lib/board/nanopc_t6/nanopc_t6.c, t6_marker; the runner
+    # checks the whole marker and the board layer's line again
+    MARKER='yakogl-wdt: nanopc_t6 WDT0 armed at boot'
+    NB_WATCHDOG=WDT0
+    # root logs in (kexec_load needs CAP_SYS_BOOT): no sudo
+    SU=
+    BOARD_UART=${BOARD_UART:-${T6_UART:-}}
+    UART_VAR=T6_UART
+    NO_CONSOLE_WHY="the runner left no uart.log"
+    # the samples' result lines, and the board glue's reset line, which ends
+    # every image ("t6: <why>: PSCI SYSTEM_RESET at N ms", nanopc_t6.c)
+    END_RE_DEFAULT='^(deqp: summary: |gl_test: all: |gl_test: (OK|FAILED) \(rc=|t6: [^:]+: PSCI SYSTEM_RESET at )'
     LEGACY_RE='^(deqp: summary: |gl_test: all: )'
     TREE_RETRIES_DEFAULT=0
     ;;
@@ -539,6 +582,8 @@ redact_run() {
         redact_words "$1" "<BOARD_UART>" "$BOARD_UART" "${UART_REAL:-}"
         if uart_is_bridge; then redact_words "$1" "<uart-bridge>" "${BOARD_UART%:*}"; fi
     fi
+    # the NanoPC-T6 runner's record.txt names the UART tty it read
+    if [ "$BOARD" = nanopc-t6 ]; then redact_words "$1" "<BOARD_UART>" "${BOARD_UART:-}"; fi
     redact_dir "$1" "${BHOSTNAME:-}" "${BOARD_HOST#*@}"
 }
 
@@ -620,6 +665,23 @@ pvr_resets() {
     echo absent
 }
 
+# t6_probe CONSOLE: "pass <probe>" or "fail <probe>" when the console is a
+# NanoPC-T6 probe's (tools/probes/nanopc_t6: its "<probe>: build" line), as
+# driver/tools/kexec-zephyr/t6-verdict.sh judges it against the lines the
+# probe must print (T6_POOL_PA and T6_BACKING_PA, when set, reach its t6_mmu
+# table); else nothing.
+t6_probe() {
+    local c=$1 p
+    { [ "$BOARD" = nanopc-t6 ] && [ -s "$c" ]; } || return 0
+    p=$(plain "$c" | sed -nE 's/^(t6_hello|t6_gpu|t6_mmu|t6_fw|t6_submit): build .*/\1/p' | head -1)
+    [ -n "$p" ] || return 0
+    if bash "$REPO/driver/tools/kexec-zephyr/t6-verdict.sh" "$p" "$c" > /dev/null 2>&1; then
+        echo "pass $p"
+    else
+        echo "fail $p"
+    fi
+}
+
 # gl_test_set_verdict CONSOLE: the verdict of a run whose result is a legacy
 # line: "failed" when the console's last "gl_test: all: F of T cases failed
 # (P passed; X timed out ...)" (gl_test.c, the set or a list) has F or X above
@@ -667,7 +729,7 @@ single_case() {
 # verdict_line DIR: the verdict of a run, from its files alone (run and tally
 # both call it). Sets V_LINE, V_RC, V_VERDICT, V_SCAN.
 verdict_line() {
-    local dir=$1 name boot probe rcc bv="" verdict="" result=none resets=absent rec="" shown="" rec0 line cls kname unsup="" status
+    local dir=$1 name boot probe rcc bv="" verdict="" result=none resets=absent rec="" shown="" rec0 line cls kname unsup="" status t6p
     local console=$dir/console.txt scan="" lost=0 tftp=none tl up="" ba=? recf=absent sc
     # a capture whose console.txt was never derived (an imported bridge log)
     [ -f "$console" ] || [ ! -f "$dir/console.ts" ] || console=$dir/console.ts
@@ -735,6 +797,8 @@ verdict_line() {
         # (the image outlived its bounded feeding) only counts without a result
         elif grep -aq 'ZEPHYR FATAL ERROR' < <(plain "$console" 2>/dev/null); then bv=fatal
         elif [ -n "$(legacy_result "$console")" ] || [ -n "$(single_case "$console")" ]; then bv=complete
+        # a NanoPC-T6 probe: its own verdict judges the lines, those it stopped before too
+        elif [ -n "$(t6_probe "$console")" ]; then bv=complete
         elif grep -aq 'RTI feeder lifetime over' < <(plain "$console" 2>/dev/null); then bv=watchdog_end
         elif end_seen "$console"; then bv=complete
         else bv=no_end_line; fi
@@ -780,10 +844,15 @@ verdict_line() {
                 verdict=no_record
             else
                 sc=$(single_case "$console")
+                t6p=$(t6_probe "$console")
                 if [ -n "$sc" ]; then
                     # one gl_test case run alone: its own line is the verdict
                     result=legacy:gl_test_case
                     if [ "${sc%% *}" = pass ]; then verdict=done; else verdict=failed; fi
+                elif [ -n "$t6p" ]; then
+                    # a NanoPC-T6 probe: t6-verdict.sh's PASS or FAIL
+                    result="legacy:t6-verdict_${t6p#* }"
+                    if [ "${t6p%% *}" = pass ]; then verdict=done; else verdict=failed; fi
                 else
                     result=$(legacy_result "$console")
                     if [ -n "$result" ]; then
@@ -884,7 +953,7 @@ finish() {
     write_index "$RD"
     # what the record says (the summary lines the old tryboot runner printed; every console board)
     if [ -s "$RD/console.txt" ]; then
-        plain "$RD/console.txt" | grep -aE 'Booting Zephyr|: build [0-9a-f]|deqp: (done|summary|fatal)|cases passed|recoveries: |GPU reset \(recovery|RECORD end|DONE|INCOMPLETE|STOPPED|gl_test: all: |yk-record: |ZEPHYR FATAL|RTI feeder lifetime over' |
+        plain "$RD/console.txt" | grep -aE 'Booting Zephyr|: build [0-9a-f]|deqp: (done|summary|fatal)|cases passed|recoveries: |GPU reset \(recovery|RECORD end|DONE|INCOMPLETE|STOPPED|gl_test: all: |yk-record: |ZEPHYR FATAL|RTI feeder lifetime over|: PSCI SYSTEM_RESET at ' |
             sed 's/^/  /'
     fi
     sed -n '/^records:/,/^files/p' "$RD/INDEX.txt" | sed '$d'
@@ -1770,6 +1839,17 @@ run_kexec() {
         take_lock
         common_prechecks
         kexec_x2
+    elif [ "$BOARD" = nanopc-t6 ]; then
+        # The board lease only: the runner takes the board lock (board_lock.sh)
+        # itself, and would refuse one taken here. Its rule, that a jump never
+        # waits onto a later session, holds for the lease too (LOCK_WAIT 0:
+        # refused at once), and the lease outlives the runner's own hold (the
+        # image's lifetime + its watchdog period + 600 s).
+        LOCK_WAIT=${LOCK_WAIT:-0}
+        HOLD_MAX=${HOLD_MAX:-$(($(t6_lifetime "$IMG") + 1200))}
+        lease_take
+        bget BHOSTNAME 'uname -n' DRY-HOSTNAME || die "cannot read the board's host name"
+        kexec_t6
     else
         # 1500 s for the board to come back, 600 s of settling, the rest
         HOLD_MAX=${HOLD_MAX:-$((1500 + 600 + 300))}
@@ -1777,6 +1857,88 @@ run_kexec() {
         common_prechecks
         kexec_imx8mp
     fi
+}
+
+# t6_outside_checkout LOGDIR: refuse a log directory inside a git checkout
+# (nanopc-t6.sh's T6_RECORD_DIR rule: the record holds the board's dmesg and
+# the UART's bytes, which are never committed); LOGDIR need not exist yet
+t6_outside_checkout() {
+    local d=$1
+    while [ ! -d "$d" ]; do d=$(dirname "$d"); done
+    if [ "$(git -C "$d" rev-parse --is-inside-work-tree 2>/dev/null)" = true ]; then
+        die "$1 is inside a git checkout: nanopc-t6.sh writes its record there, and its record directory must be outside any checkout"
+    fi
+}
+
+# t6_lifetime IMAGE: the seconds the image feeds WDT0 (its marker's lifetime_s), 0 without one
+t6_lifetime() {
+    local l
+    l=$(grep -aoE 'yakogl-wdt: nanopc_t6 WDT0 armed at boot; top [0-9]+; lifetime_s [0-9]+' "$1" | head -1)
+    echo "${l##* }" | grep -E '^[0-9]+$' || echo 0
+}
+
+# kexec_t6: the jump through nanopc-t6.sh --go, then its record taken into the
+# run directory and read. Every check of the runner stays the runner's: the
+# image's marker and window, the board's identity, root and kexec state,
+# /proc/iomem and the GIC tables, the board lock (taken there, LOCK_WAIT 0),
+# the state again under the lock (kexec_loaded, the GPU's users, remote
+# sessions, the watchdog's users), T6_HAND, the UART (a readable tty nobody
+# has open, set raw and read back) and the record directory; the copies read
+# back; WDT_EN read back before the jump. The runner exits 3 for a refusal
+# before anything changed, makes its record directory (<rundir>/<date>-t6)
+# only after that, and writes there what happened: "jumping", then "back in
+# Armbian N s after the jump", "no Armbian N s after the jump", "the same
+# Linux still runs 60 s after the jump", or the board's own "REFUSED on the
+# board, no jump".
+kexec_t6() {
+    local runner=${T6_RUNNER:-$REPO/driver/tools/kexec-zephyr/nanopc-t6.sh} rc rec recs jl back t0 n
+    if [ "$DRY" = 1 ]; then
+        echo "DRY host\$ BOARD_HOST=\$BOARD_HOST T6_UART=<BOARD_UART> T6_HAND=${T6_HAND:-<unset: the runner refuses>} T6_RECORD_DIR=<rundir> bash ${runner#"$REPO"/} $IMG --go 2>&1 | tee <rundir>/kexec.log"
+        echo "DRY host\$   # the runner: its board checks, board_lock.sh (LOCK_WAIT ${LOCK_WAIT}: refused while held), the board again under the lock, the record <rundir>/<date>-t6/, the jump, Armbian back (a new boot_id) within the image's bound + 180 s"
+        echo "DRY host\$ move <rundir>/<date>-t6/* (uart.log, record.txt, linux-before.dmesg-w, linux-after.dmesg) into <rundir>; console.txt = uart.log"
+        exit 0
+    fi
+    trap 'lease_release; rm -rf "$TMP"' EXIT
+    BOARD_HOST=$BOARD_HOST T6_UART=${BOARD_UART:-} T6_HAND=${T6_HAND:-} T6_RECORD_DIR=$RD \
+        bash "$runner" "$IMG" --go < /dev/null 2>&1 | tee "$RD/kexec.log"
+    rc=${PIPESTATUS[0]}
+    meta runner_rc "$rc"
+    recs=("$RD"/*-t6)
+    if [ ! -d "${recs[0]}" ]; then
+        # no record: the runner stopped before it changed anything on the board
+        meta ended "$(date '+%F %T')"
+        redact_run "$RD"
+        # (rc 2: a usage error or a host failure, as the runner's die; else its refusal, rc 3)
+        die "nanopc-t6.sh refused (rc $rc) before it changed anything on the board; its output: $RD/kexec.log" "$([ "$rc" = 2 ] && echo 2 || echo 3)"
+    fi
+    [ ${#recs[@]} = 1 ] || die "more than one runner record in $RD: ${recs[*]}" 4
+    rec=${recs[0]}
+    meta runner_record "${rec##*/}"
+    # its files beside the run's own (the names differ: meta.txt, kexec.log)
+    if ! mv "$rec"/* "$RD"/ || ! rmdir "$rec"; then die "cannot move the runner's record $rec into $RD" 4; fi
+    [ ! -f "$RD/uart.log" ] || cp "$RD/uart.log" "$RD/console.txt"
+    jl=$(grep -m1 -E '^[0-9-]{10} [0-9:]{8} jumping \(linux_wdt' "$RD/record.txt" 2>/dev/null)
+    back=$(grep -m1 -E '^[0-9-]{10} [0-9:]{8} back in Armbian [0-9]+ s after the jump' "$RD/record.txt" 2>/dev/null)
+    if [ -n "$jl" ]; then
+        t0=$(date -d "${jl:0:19}" +%s)
+        meta t_reboot "$t0"
+    fi
+    if [ -n "$jl" ] && [ -n "$back" ]; then
+        n=$(sed -E 's/.* back in Armbian ([0-9]+) s after the jump.*/\1/' <<<"$back")
+        meta jump ok
+        meta back 1
+        meta t_back $((t0 + n))
+    elif [ -n "$jl" ] && ! grep -qE 'linux-wdt: REFUSED on the board, no jump|the same Linux still runs 60 s after the jump' "$RD/record.txt"; then
+        # jumped, and Armbian did not come back within the runner's bound
+        meta jump ok
+        meta rc_cycle 5
+    else
+        # no jump: the board's refusal, a loader that returned, or the runner
+        # stopped between its record and the jump (the copies, the registers)
+        meta jump failed
+        meta rc_cycle 4
+    fi
+    finish
 }
 
 kexec_am62p() {
@@ -2036,6 +2198,8 @@ cmd_run() {
     else
         check_image "$IMG"
         sha8=${IMG_SHA:0:8}
+        # the NanoPC-T6 runner's record goes into the run directory: its rule holds
+        if [ "$BOARD" = nanopc-t6 ]; then t6_outside_checkout "$LOGDIR"; fi
     fi
     RD="$LOGDIR/$(date +%Y%m%d-%H%M)-$NAME-$sha8"
     if [ "$DRY" = 1 ]; then
@@ -2106,6 +2270,9 @@ cmd_status() {
             b 'cut -d" " -f1 /proc/uptime; cat /sys/class/remoteproc/remoteproc0/state /sys/kernel/kexec_loaded /sys/kernel/kexec_crash_loaded /sys/kernel/kexec_crash_size; ls -l ~/kexec 2>/dev/null'
         elif [ "$BOARD" = x2 ]; then
             b "cut -d' ' -f1 /proc/uptime; rc-status -r; cat /sys/kernel/kexec_loaded /sys/kernel/kexec_crash_loaded /sys/kernel/kexec_crash_size; podman ps -q 2>/dev/null | wc -l; ls -l $X2_DIR 2>/dev/null"
+        elif [ "$BOARD" = nanopc-t6 ]; then
+            # nanopc-t6.sh's staging directory goes with the reboot that ends a run
+            b "cut -d' ' -f1 /proc/uptime; cat /sys/kernel/kexec_loaded /sys/class/watchdog/watchdog0/state; ls -l /tmp/yakogl-kexec 2>/dev/null"
         else
             b 'cut -d" " -f1 /proc/uptime; cat /sys/kernel/kexec_loaded; ls -l ~/kexec_zephyr ~/zephyr.bin ~/kexec 2>/dev/null'
         fi
