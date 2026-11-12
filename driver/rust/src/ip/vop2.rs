@@ -219,8 +219,10 @@ pub mod sys {
     pub const CFG_DONE_GLB: u32 = 1 << 15;
     /// `SYS_AUTO_GATING_CTRL` auto gating enable.
     pub const AUTO_GATING_EN: u32 = 1 << 31;
+    /// `SYS_PD_CTRL`: every Esmart window's domain, 1 = off (fact 4).
+    pub const PD_ESMART: u32 = 1 << 7;
     /// `SYS_PD_CTRL`: Cluster0-3 and every Esmart (fact 4).
-    pub const PD_CLUSTERS_ESMART: u32 = 0xf | 1 << 7;
+    pub const PD_CLUSTERS_ESMART: u32 = 0xf | PD_ESMART;
     /// `DSP_IF_POL` `CFG_DONE_IMD`.
     pub const POL_CFG_DONE_IMD: u32 = 1 << 28;
 
@@ -1537,7 +1539,7 @@ mod tests {
         // Esmart0: layer id 2, AXI bus 0, read ids 0x0a/0x0b
         assert_eq!((Esmart::E0.layer_sel_id(), Esmart::E0.axi()), (2, (0, 0x0a, 0x0b)));
         // REG_CFG_DONE: global bit 15; SYS_PD_CTRL: clusters 0-3 and bit 7
-        assert_eq!((sys::CFG_DONE_GLB, sys::PD_CLUSTERS_ESMART), (0x8000, 0x8f));
+        assert_eq!((sys::CFG_DONE_GLB, sys::PD_CLUSTERS_ESMART, sys::PD_ESMART), (0x8000, 0x8f, 0x80));
         assert_eq!(esmart::FMT_ARGB8888, 0);
     }
 
