@@ -1074,8 +1074,8 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
         (0..33).map(|i| format!("vec4 a{i} = {}; ", if i == 0 { "p".into() } else { format!("a{}", i - 1) })).collect();
     let varyings: String = (0..17).map(|i| format!("varying float v{i}; ")).collect();
     let mut v: Vec<(u32, String, MaliError)> = [
-        /* `abs` is taken (vs-abs-if); `fract` is not */
-        (VS, "attribute vec4 p; void main(){ gl_Position = fract(p); }", MaliError::Arithmetic),
+        /* `abs` and `fract` are taken; `sqrt` is not */
+        (VS, "attribute vec4 p; void main(){ gl_Position = sqrt(p); }", MaliError::Arithmetic),
         /* a constant times a product with a constant across a change of
          * width: GLSL's reassociate_constant moves it (glsl.rs), which is
          * not transcribed for a vector times a scalar product */
@@ -2227,6 +2227,29 @@ fn a_vertex_matrix_product_with_a_w_of_one_is_byte_equal_to_mesa_26_2_1() {
     check_vs_in(vs, fs, td!("vsfold_normal.expect.json"), VIEWPORT_64X64);
     let (vs, fs) = (td!("vsfold_mvstruct.vert"), td!("vsfold_mvstruct.frag"));
     check_linked_for("mvstruct", vs, fs, td!("vsfold_mvstruct.expect.json"));
+}
+
+/* ---- vertex fract, inversesqrt and sqrt (glmark2's `fract`,
+ * `normalize` and `length`) ------------------------------------------ */
+
+/// `fract(a)` is `fadd(a, fneg(ffloor(a)))` (nir_opt_algebraic.py's
+/// `lower_ffract`, then `lower_fsub`), lowered on the vector before it is
+/// scalarised: the four `FROUND.f32.rtn` made first, each `FADD.f32 a,
+/// r.neg` after, which the pressure schedule interleaves with the stores
+/// (vsarith_fract); `inversesqrt` one `FRSQ.f32` (vsarith_vrcp, beside
+/// `1.0 / x`'s `FRCP.f32`).
+#[test]
+fn a_vertex_fract_and_inversesqrt_are_byte_equal_to_mesa_26_2_1() {
+    check_linked(td!("vsarith_fract.vert"), td!("vsarith_fract.frag"), td!("vsarith_fract.expect.json"));
+    check_linked(td!("vsarith_vrcp.vert"), td!("vsarith_vrcp.frag"), td!("vsarith_vrcp.expect.json"));
+}
+
+/// `sqrt` stays refused: its reference, vsarith_length (`FRSQ.f32` then
+/// `FRCP.f32`), stores `vec4(length(a.xyz))`, four equal varying lanes
+/// that Mesa's link merges into one, which this walk refuses first.
+#[test]
+fn a_vertex_sqrt_is_refused() {
+    assert_eq!(gap(SHC_STAGE_VERTEX, td!("vsarith_length.vert")), MaliError::Arithmetic);
 }
 
 /* ---- the vertex fused multiply-add outside a uniform matrix's term
