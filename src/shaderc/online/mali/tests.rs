@@ -2210,6 +2210,41 @@ fn case_221_instmix_is_byte_equal_to_mesa_26_2_1() {
     check_linked_for("221 instmix", vs, fs, td!("vsfma_221_instmix.expect.json"));
 }
 
+/* ---- the vertex matrix term by 1.0 (glmark2's `M * vec4(p, 1.0)`,
+ * docs/notes/mali-vs-constant-products.md) ------------------------- */
+
+/// S1: `M * vec4(p, 1.0)`'s last term is `fadd(acc, c3)`, the sum first
+/// and the column second, four `FADD.f32 r, r^, u.w` (vsfold_one,
+/// glmark2's bump-51d0), in the varying program too (vsfold_normal's
+/// `vec3(NormalMatrix * vec4(normal, 1.0))`; its fragment shader's
+/// `Normal * 0.5 + 0.5` is refused, so the vertex stage is compiled
+/// alone), and through a struct of matrices (vsfold_mvstruct, the
+/// corpus's es100/mvstruct.vert, traced with every uniform 0).
+#[test]
+fn a_vertex_matrix_product_with_a_w_of_one_is_byte_equal_to_mesa_26_2_1() {
+    check_linked(td!("vsfold_one.vert"), td!("vsfold_one.frag"), td!("vsfold_one.expect.json"));
+    let (vs, fs) = (td!("vsfold_normal.vert"), td!("vsfold_normal.frag"));
+    check_vs_in(vs, fs, td!("vsfold_normal.expect.json"), VIEWPORT_64X64);
+    let (vs, fs) = (td!("vsfold_mvstruct.vert"), td!("vsfold_mvstruct.frag"));
+    check_linked_for("mvstruct", vs, fs, td!("vsfold_mvstruct.expect.json"));
+}
+
+/// The matrix terms by 1.0 or -1.0 no reference of this walk draws stay
+/// refused: `vec4(p.xy, 0.0, 1.0)` (S2, column 3 moved into the first
+/// term: vsfold_xy also stores a uniform varying, refused first), a `w`
+/// of -1.0, a `z` of 1.0.
+#[test]
+fn vertex_matrix_terms_no_reference_draws_are_refused() {
+    for src in [
+        "attribute vec2 p; uniform mat4 m; void main(){ gl_Position = m * vec4(p, 0.0, 1.0); }",
+        "attribute vec3 p; uniform mat4 m; void main(){ gl_Position = m * vec4(p, -1.0); }",
+        "attribute vec2 p; uniform mat4 m; void main(){ gl_Position = m * vec4(p, 0.0, -1.0); }",
+        "attribute vec2 p; attribute float q; uniform mat4 m; void main(){ gl_Position = m * vec4(p, 1.0, q); }",
+    ] {
+        assert_eq!(gap(SHC_STAGE_VERTEX, src), MaliError::ArithConstant, "{src}");
+    }
+}
+
 /// gl_test case 188 (tools/shaders/gltest/predif_vs_uni.vert): the vertex
 /// `if` over `u_x > 0.0` flattened, both sides computed, the compare one
 /// `FCMP_OR.f32.lt.m1` with the 0 on the left, one `CSEL.u32.eq` per lane
