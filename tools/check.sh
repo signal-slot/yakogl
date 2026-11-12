@@ -3604,19 +3604,22 @@ zephyr_nanopc_t6_image() {
   marker=$(strings -n 20 "$dir/zephyr/zephyr.bin" | grep -c '^yakogl-wdt: nanopc_t6 WDT0 armed at boot; ') || true
   [ "$marker" = 1 ] || { echo "zephyr.bin carries the watchdog marker ${marker:-0} times, not once"; return 1; }
 }
-# Z3's probe (t6_fw) embeds the CSF firmware, driver/src/fw/mali_csffw_blob.h
-# (gitignored, never committed). With the board's file at <fw> the header is
+# Z3's probe (t6_fw) and Z4's (t6_submit) embed the CSF firmware,
+# driver/src/fw/mali_csffw_blob.h (gitignored, never committed); $2 names
+# the probe. With the board's file at <fw> the header is
 # made from it first (driver/tools/mkmalifw.sh), and replaced only when its
 # bytes differ, so a header from another file never builds the image; without
 # the file an existing header is used, as the AM62P rows use pvr_fw_blob.h.
+# The two rows may run at once (--jobs): each makes its own copy and renames
+# it into place, so neither build reads a header half written by the other.
 zephyr_nanopc_t6_fw_image() {
-  local f="$1" h=driver/src/fw/mali_csffw_blob.h t=build/zephyr-werror/mali_csffw_blob.h
+  local f="$1" probe="$2" h=driver/src/fw/mali_csffw_blob.h t="build/zephyr-werror/mali_csffw_blob.$2.h"
   if [ -f "$f" ]; then
     mkdir -p build/zephyr-werror
     bash driver/tools/mkmalifw.sh "$f" "$t" || return 1
-    cmp -s "$t" "$h" || { mkdir -p "${h%/*}" && cp "$t" "$h"; } || return 1
+    cmp -s "$t" "$h" || { mkdir -p "${h%/*}" && cp "$t" "$h.$probe.new" && mv "$h.$probe.new" "$h"; } || return 1
   fi
-  zephyr_werror_image nanopc_t6 tools/probes/nanopc_t6/t6_fw nanopc_t6_fw
+  zephyr_werror_image nanopc_t6 "tools/probes/nanopc_t6/$probe" "nanopc_$probe"
 }
 # No input key: an image's inputs include the west workspace and the Zephyr
 # SDK, thousands of files outside the checkout, and a module edited in place
@@ -3688,11 +3691,19 @@ if [ "$QUICK" -eq 0 ]; then
       zephyr_werror_image nanopc_t6 tools/probes/nanopc_t6/t6_mmu nanopc_t6_mmu
     # Z3's probe (the firmware boot): without the board's mali_csffw.bin and
     # without a header made from it the row is a gap naming the file.
-    if [ -f "$mali_csffw" ] || [ ! -f driver/src/fw/mali_csffw_blob.h ]; then
-      needs "$mali_csffw" "the board's CSF firmware, from which driver/tools/mkmalifw.sh makes driver/src/fw/mali_csffw_blob.h: tools/cts/deps-env.sh --build MALI_CSFFW fetches it, or name the board's file in MALI_CSFFW"
-    fi
+    needs_mali_csffw() {
+      if [ -f "$mali_csffw" ] || [ ! -f driver/src/fw/mali_csffw_blob.h ]; then
+        needs "$mali_csffw" "the board's CSF firmware, from which driver/tools/mkmalifw.sh makes driver/src/fw/mali_csffw_blob.h: tools/cts/deps-env.sh --build MALI_CSFFW fetches it, or name the board's file in MALI_CSFFW"
+      fi
+    }
+    needs_mali_csffw
     step "zephyr  nanopc_t6 t6_fw image (Z3, the firmware boot), -Werror on our C files" \
-      zephyr_nanopc_t6_fw_image "$mali_csffw"
+      zephyr_nanopc_t6_fw_image "$mali_csffw" t6_fw
+    # Z4's probe (one frame submitted from our kernel side) embeds the same
+    # firmware: the same gap without it.
+    needs_mali_csffw
+    step "zephyr  nanopc_t6 t6_submit image (Z4), -Werror on our C files" \
+      zephyr_nanopc_t6_fw_image "$mali_csffw" t6_submit
     step "zephyr  rpi_5 probe images (tools/probes/rpi_5/*), -Werror on our C files" \
       zephyr_rpi5_probe_images
   else
