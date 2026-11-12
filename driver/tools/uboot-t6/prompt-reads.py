@@ -49,7 +49,8 @@ Three steps depend on what was read before them:
     not be the one that causes a probe.
 
 Exit: 0 done (every command answered, `reset` entered, the Linux login seen
-again). 3 no autoboot line in time (nothing written). 4 the autoboot was
+again). 12 no autoboot line in time (nothing written; not 3, which
+prompt-reads.sh keeps for "refused before the reboot"). 4 the autoboot was
 missed (one space written, Linux booted). 5 stopped at the prompt (an echo
 that never matched, or a command without an answer): the board stays at the
 U-Boot prompt until someone resets it. 6 `reset` entered but no Linux login
@@ -339,7 +340,7 @@ def run(fd, rec, boot_wait=240, login_wait=180, gap=0.003, cmd_wait=30):
         try:
             say("listening, nothing written (waiting up to %d s for the autoboot line)" % boot_wait)
             if not con.wait_for(AUTOBOOT, boot_wait):
-                raise Stop(3, "no autoboot line in %d s: nothing was written" % boot_wait)
+                raise Stop(12, "no autoboot line in %d s after the reboot: nothing was written" % boot_wait)
             con.armed = True
             con.buf = b""
             con.write(b" ")
@@ -607,7 +608,7 @@ def self_test():
 
     # 5. No autoboot line: nothing is written.
     rc, f, _ = case(mode="noautoboot")
-    check(rc == 3 and f.got == b"", "no autoboot line: exit 3, nothing written (%r)" % f.got)
+    check(rc == 12 and f.got == b"", "no autoboot line: exit 12, nothing written (%r)" % f.got)
 
     # 6. One damaged line: dropped with ctrl-c, typed again, entered once.
     rc, f, _ = case(garble=1)

@@ -54,8 +54,8 @@ and `uart.log` are never copied into the tree, an issue or a pull request as
 they are.
 
 Exit codes: 0 done and Armbian is back; 1 the board did not come back; 2
-usage; 3 refused before anything changed, or no autoboot line; 4 autoboot
-missed; 5 stopped at the prompt; 6 `reset` entered, no Linux login; 7 U-Boot
+usage; 3 refused before anything changed (the board was not rebooted); 12
+no autoboot line after the reboot, nothing written; 4 autoboot missed; 5 stopped at the prompt; 6 `reset` entered, no Linux login; 7 U-Boot
 left the prompt and started Linux.
 
 The run on 2026-11-12 (record `20261112-184729-t6-uboot-reads`): 27 commands
