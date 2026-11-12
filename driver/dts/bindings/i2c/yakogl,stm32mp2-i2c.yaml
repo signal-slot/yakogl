@@ -15,11 +15,11 @@ description: |
   this device's init maps the registers only. As the shim has no clock
   driver, the kernel clock rate is a property. `clock-frequency` (the bus
   speed) comes from i2c-controller.yaml; the timing is computed from it as
-  i2c-stm32f7.c's stm32f7_i2c_compute_timing does. ST's i2c-stm32f7.c reads
-  no i2c-scl-rising-time-ns or -falling-time-ns: rise and fall stay at the
-  fixed 25 and 10 ns of its spec table (i2c-stm32f7.c:174-175), so the DK
-  dts's values of 108 and 12 (stm32mp257f-dk.dts:399-400) feed no timing
-  code and carry no property here either.
+  i2c-stm32f7.c's stm32f7_i2c_compute_timing does. The SCL rise and fall
+  times and the filters are read as stm32f7_i2c_setup_timing does (below);
+  ST's DK dts sets i2c-scl-rising-time-ns = <108> and
+  i2c-scl-falling-time-ns = <12> on the ADV7535's bus (&i2c2,
+  stm32mp257f-dk.dts:399-400) and neither filter property.
 
 compatible: "yakogl,stm32mp2-i2c"
 
@@ -42,3 +42,39 @@ properties:
       CK_KER_I2C2, stm32mp251.dtsi:939), whose rate the timing computation
       uses as setup->clock_src (i2c-stm32f7.c:686); it fixes the TIMINGR
       prescaler and SCL counts.
+
+  i2c-scl-rising-time-ns:
+    type: int
+    default: 25
+    description: |
+      SCL rise time in ns, as i2c-stm32f7.c's stm32f7_i2c_setup_timing
+      reads it through i2c_parse_fw_timings into setup.rise_time; absent it
+      keeps STM32F7_I2C_RISE_TIME_DEFAULT, 25. ST's DK sets 108 on i2c2.
+
+  i2c-scl-falling-time-ns:
+    type: int
+    default: 10
+    description: |
+      SCL fall time in ns, read like i2c-scl-rising-time-ns into
+      setup.fall_time; absent it keeps STM32F7_I2C_FALL_TIME_DEFAULT, 10.
+      ST's DK sets 12 on i2c2.
+
+  i2c-analog-filter:
+    type: boolean
+    description: |
+      Leave the analog noise filter on. i2c-stm32f7.c reads it with
+      of_property_read_bool("i2c-analog-filter"): absent means the filter is
+      off (CR1.ANFOFF set), present clears ANFOFF and adds the filter delay
+      to the timing computation. The DK's i2c2 does not set it.
+
+  i2c-digital-filter-width-ns:
+    type: int
+    default: 0
+    description: |
+      Digital noise filter width in ns (0: none); the driver turns it into
+      CR1.DNF = DIV_ROUND_CLOSEST(width, i2c_clk period), at most 15.
+      i2c-stm32f7.c takes the width from i2c_parse_fw_timings but keeps
+      STM32F7_I2C_DNF_DEFAULT (0) unless the boolean "i2c-digital-filter"
+      is also present, so the stock driver needs both. This binding does not
+      define that boolean: the width alone selects the filter here. The DK's
+      i2c2 sets neither.
