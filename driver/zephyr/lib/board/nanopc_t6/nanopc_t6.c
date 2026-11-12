@@ -40,9 +40,10 @@
  *   the hook above, z_arm64_el2_init and z_arm64_el1_init, and the T6:A
  *   code: register writes and uart2, no wait on a device, no memory but the
  *   stack. A fault in it halts the CPU for good (T6:X at EL2), and nothing
- *   of the image's own covers that. Linux's dw_wdt does, opt-in:
- *   nanopc-t6.sh --go --linux-wdt opens /dev/watchdog0 in the jump's own ssh
- *   command, so WDT0 is running with Linux's period (44.7 s from the open)
+ *   of the image's own covers that. Linux's dw_wdt does: nanopc-t6.sh --go
+ *   (by default; --no-linux-wdt turns it off) opens /dev/watchdog0 in the
+ *   jump's own ssh command, so WDT0 is running with Linux's period (44.7 s
+ *   from the open)
  *   when the image starts, and the arming re-arms it ("was running").
  *   EARLY: the GICv3 CPU interface back to EOImode 0 (Linux left it in split
  *     mode; with it, the system timer would tick once).
