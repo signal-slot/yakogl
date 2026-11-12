@@ -3,15 +3,16 @@
 
 description: |
   Analog Devices ADV7535 MIPI DSI to HDMI bridge on I2C (the STM32MP257F-DK's
-  HDMI output; stm32mp257f-dk.dts:328-350, :428-460, ST's compatible
-  "adi,adv7535"). The register logic is driver/rust/src/ip/adv7535.rs, from
-  Linux's drivers/gpu/drm/bridge/adv7511/ (adv7511_drv.c, adv7533.c) in its
-  ADV7533 mode, which the ADV7535 shares.
+  HDMI output; the node stm32mp257f-dk.dts:428-469, a child of the &i2c2 bus
+  at :395, ST's compatible "adi,adv7535" at :429). The register logic is
+  driver/rust/src/ip/adv7535.rs, from Linux's drivers/gpu/drm/bridge/adv7511/
+  (adv7511_drv.c, adv7533.c) in its ADV7533 mode, which the ADV7535 shares.
 
   The main register map sits at `reg`; the secondary maps (EDID, CEC/DSI,
   packet memory) are separate I2C addresses the driver programs into the
   chip at init, named as in Linux's adi,adv7533 binding (reg-names "edid",
-  "cec", "packet").
+  "cec", "packet", adi,adv7533.yaml:35-44; the DK states all four, reg and
+  reg-names at stm32mp257f-dk.dts:430-431).
 
 compatible: "yakogl,adv7535"
 
@@ -21,58 +22,82 @@ properties:
   reg:
     required: true
     description: |
-      The main map; 0x3d on the DK (stm32mp257f-dk.dts:328-350). 0x39 or
-      0x3d by the strapping (Linux adv7511 binding).
+      The main map; 0x3d on the DK (stm32mp257f-dk.dts:430, reg-names "main"
+      at :431). 0x39 or 0x3d by the strapping (the bindings' own examples sit
+      at hdmi@39, adi,adv7533.yaml:135).
 
   edid-reg:
     type: int
     default: 0x3f
     description: |
-      I2C address of the EDID map (Linux adv7511 "edid" reg; the chip's
-      EDID_I2C_ADDR register 0x43 holds it shifted left, reset 0x7e).
+      I2C address of the EDID map (Linux "edid" reg, adi,adv7533.yaml:42;
+      0x3f on the DK, stm32mp257f-dk.dts:430). The chip's EDID_I2C_ADDR
+      register 0x43 holds it shifted left, reset 0x7e (adv7511.h:56, the
+      reset table's byte at adv7511_drv.c:51, the driver's default 0x3f at
+      adv7511.h:99).
 
   cec-reg:
     type: int
     default: 0x3c
     description: |
-      I2C address of the CEC / DSI map (Linux "cec" reg; in ADV7533 mode it
-      holds the MIPI DSI receiver registers, CEC_I2C_ADDR register 0xe1,
-      reset 0x78).
+      I2C address of the CEC / DSI map (Linux "cec" reg; 0x3c on the DK,
+      stm32mp257f-dk.dts:430; in ADV7533 mode it holds the MIPI DSI receiver
+      registers, which adv7533.c writes through regmap_cec, adv7533.c:42).
+      CEC_I2C_ADDR register 0xe1, reset 0x78 (adv7511.h:92, default 0x3c at
+      adv7511.h:98).
 
   packet-reg:
     type: int
     default: 0x38
     description: |
-      I2C address of the packet memory map (Linux "packet" reg;
-      PACKET_I2C_ADDR register 0x45, reset 0x70).
+      I2C address of the packet memory map (Linux "packet" reg; 0x38 on the
+      DK, stm32mp257f-dk.dts:430). PACKET_I2C_ADDR register 0x45, reset 0x70
+      (adv7511.h:58, default 0x38 at adv7511.h:100).
 
   hpd-gpios:
     type: phandle-array
     description: |
-      A hot-plug detect line, if wired. Absent: HPD is read from the chip's
-      status register 0x42.
+      A hot-plug detect line, if wired; the DK has none (the hdmi-connector
+      node, stm32mp257f-dk.dts:129-140, carries no HPD gpio). Absent: HPD is
+      read from the chip's status register 0x42 (adv7511.h:55).
 
   pd-gpios:
     type: phandle-array
     description: |
-      The chip's power-down pin (active low at the pin), if wired (Linux
-      adv7511 binding "pd-gpios"). Absent: not driven.
+      The chip's power-down pin (Linux "pd-gpios", adi,adv7533.yaml:56-58;
+      adv7511_drv.c:1248 requests "pd" and toggles it active then inactive to
+      wake the chip). Absent: not driven. The DK wires no pd line; see
+      reset-gpios.
+
+  reset-gpios:
+    type: phandle-array
+    description: |
+      The chip's reset line, if wired. The DK wires one: ST's dts names it
+      reset-gpios = <&gpiob 6 GPIO_ACTIVE_LOW> (stm32mp257f-dk.dts:438).
+      Nothing in Linux consumes it — the adv7511 driver reads only "pd"
+      (adv7511_drv.c:1248), and neither adi,adv7533.yaml nor adi,adv7511.yaml
+      defines reset-gpios — so ST's Linux runs with the line left as the
+      board's pulls and the bootloader have it. Absent: not driven.
 
   interrupts:
-    description: "The chip's INT output, if wired. Absent: the driver polls."
+    description: |
+      The chip's INT output, if wired (Linux "interrupts", maxItems 1,
+      adi,adv7533.yaml:53-54). The DK has it on GPIO B4, falling edge
+      (stm32mp257f-dk.dts:436-437). Absent: the driver polls.
 
   adi,dsi-lanes:
     type: int
     default: 4
     enum: [1, 2, 3, 4]
     description: |
-      DSI data lanes used (Linux adi,adv7533 binding "adi,dsi-lanes"; four on
-      the DK, stm32mp257f-dk.dts:428-433). Must equal the DSI host's
-      data-lanes.
+      DSI data lanes used (Linux adi,adv7533 binding "adi,dsi-lanes",
+      :87-90, required there and 2 to 4; four on the DK,
+      stm32mp257f-dk.dts:433). Must equal the DSI host's data-lanes.
 
   adi,disable-timing-generator:
     type: boolean
     description: |
       Disable the chip's internal timing generator (Linux adi,adv7533
-      binding): the DSI stream's own timing is used. Absent: the timing
-      generator runs.
+      binding, :80-85): the DSI stream's own timing is used. Absent: the
+      timing generator runs, which is the DK's state (ST's node does not
+      carry the property).
