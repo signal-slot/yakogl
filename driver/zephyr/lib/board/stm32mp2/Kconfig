@@ -52,7 +52,9 @@ config YAKOGL_STM32MP2_GPU
 	  the driver, gc_power_mp2.c powers the GPU for it (gc_board_power_on:
 	  SCMI over OP-TEE, every message on the console, the RCC gate and
 	  reset), and refuses a part that is not model 0x8000 revision 0x6205
-	  (#1281) with a PSCI reset.
+	  (#1281) with a PSCI reset; gc_irq_mp2.c prints the GIC's state of
+	  the GPU's interrupt, SPI 183, once the driver has connected it (the
+	  "gc_irq: ..." line).
 
 config YAKOGL_BOARD_STM32MP2
 	def_bool YAKOGL_BOARD && YAKOGL_STM32MP2
