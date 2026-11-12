@@ -290,7 +290,7 @@ Compared with `tools/mali/testdata/frame_{cull,attr_instance,rt_rgba16f}.expect.
   RGBA16F target for opaque writes of every channel only: blending that is
   not `ONE, ZERO` or a colour mask other than 0xf is refused by name
   (`frame::NOT_BUILT_FLOAT_BLEND`, `check_draw()`), and a blend shader into
-  it stays `NOT_BUILT_BLEND_SHADER` (`blend::shader_equation` is RGBA8888
+  it stays `NOT_BUILT_BLEND_SHADER` (`blend::shader_key` is RGBA8888
   only). The colour preload of an RGBA16F target (a frame without a clear)
   follows the opaque draw's pattern (conversion `RGBA16F`, `raw` false over
   the RAW64 buffer); no dump pins it, and a board item should say so.

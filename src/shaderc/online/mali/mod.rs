@@ -48,6 +48,8 @@ pub const MAT_TIMES_VEC_ORDER: super::ir::MatOrder = super::ir::MatOrder::MesaGl
 
 pub mod bir;
 pub mod blend;
+pub mod blend_nir;
+mod blend_nir_rules;
 pub mod emit;
 pub mod fau;
 pub mod flow;

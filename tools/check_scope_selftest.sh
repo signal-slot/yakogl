@@ -201,7 +201,7 @@ out=$(plan tools/hostharness/glmark2/run.sh)
 expect "hostharness: the glmark2 corpus row" '^plan  test    glmark2 corpus generated from GLMARK2_SRC' "$out"
 expect "hostharness: not every row" '^check.sh: .*\(--changed HEAD, scopes: tools \)' "$out"
 out=$(plan tools/mali/pan_shc.c)
-expect "mali: the pan_shc row, a gap without MESA_PAN_TREE" '^gap   mali pan_shc on the tri pair: no MESA_PAN_TREE' "$out"
+expect "mali: the pan_shc row, a gap without MESA_PAN_TREE" '^gap   mali pan_shc on the tri pair, the blend references and blend_nir_rules.rs: no MESA_PAN_TREE' "$out"
 expect "mali: the pan_ref_diff self-test needs no Mesa tree" '^plan  run     mali pan_ref_diff and ref_cases self-test' "$out"
 expect "mali: not every row" '^check.sh: .*\(--changed HEAD, scopes: mali \)' "$out"
 out=$(plan driver/zephyr/lib/board/nanopc_t6/nanopc_t6.c)

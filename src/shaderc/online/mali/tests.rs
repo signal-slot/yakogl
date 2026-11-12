@@ -4798,104 +4798,180 @@ fn the_one_plane_zs_preloads_are_mesa_s() {
     }
 }
 
-/* ---- blend shaders (#33, 2026-10-23) ------------------------------------ */
+/* ---- blend shaders (#33) ------------------------------------------------- */
 
-/// The blend shaders (`super::blend::shader`) of every equation a constant
-/// colour makes a blend shader of (glBlendFunc with `CONSTANT_COLOR` or its
-/// inverse against ONE, ZERO or the other), into an RGBA8 target (memory
-/// format RGBA8_TB, RGBA: `0xED000`), against Mesa 26.2.1's on drm-shim:
-/// `gl_ref.py --blend-func S,D --blend-color 0.25,0.5,0.75,1.0` with
-/// gl_test's colour_uv pair, the shader the trace disassembles after the
-/// draw's blend descriptor, extracted by `pan_ref_diff.py extract <trace>
-/// blend=<va>` (0dce654a8:tools/mali/board-ref/2026-10-23-blendconst/README.md).
-/// `blend_c_ic` is gl_test case 8's fifth frame.
-#[test]
-fn the_blend_shaders_are_mesa_s() {
-    use super::blend::{Equation, Factor::*};
-    const RGBA8_TB_RGBA: u32 = 0xed000;
-    for (name, json, src, dst) in [
-        ("blend_c_ic", td!("blend_c_ic.expect.json"), Const, InvConst),
-        ("blend_ic_c", td!("blend_ic_c.expect.json"), InvConst, Const),
-        ("blend_c_zero", td!("blend_c_zero.expect.json"), Const, Zero),
-        ("blend_c_one", td!("blend_c_one.expect.json"), Const, One),
-        ("blend_one_c", td!("blend_one_c.expect.json"), One, Const),
-        ("blend_zero_c", td!("blend_zero_c.expect.json"), Zero, Const),
-        ("blend_ic_zero", td!("blend_ic_zero.expect.json"), InvConst, Zero),
-        ("blend_ic_one", td!("blend_ic_one.expect.json"), InvConst, One),
-        ("blend_one_ic", td!("blend_one_ic.expect.json"), One, InvConst),
-        ("blend_zero_ic", td!("blend_zero_ic.expect.json"), Zero, InvConst),
-    ] {
-        let mesa = after(json, "words").and_then(hex_array).expect("the blend shader's words");
-        let (words, wrc) = store::with_scratch(|sc| {
-            let mut out = vec![0u64; 64];
-            let b = super::blend::shader(&mut out, sc, Equation::both(src, dst), RGBA8_TB_RGBA)
-                .expect("the blend shader compiles");
-            (b.code.to_vec(), b.work_reg_count)
-        })
-        .expect("the scratch arena is free");
-        assert_words(name, &trim(&words), &mesa);
-        assert_eq!(wrc, 32, "{name}: the split file's count");
+/// A blend shader's key as `pan_shc --blend` reads it (tools/mali/
+/// README-pan_shc.md "Blend shaders"): `<rgb func> <rgb src> <rgb dst>
+/// <alpha func> <alpha src> <alpha dst> <mask> <samples> [f32]`, gallium's
+/// names, `f32` for an fp32 fragment colour.
+fn blend_key(text: &str) -> super::blend::Key {
+    use super::blend::{Base, Channel, Factor, Func, Key};
+    let w: Vec<&str> = text.split_whitespace().collect();
+    assert!(w.len() == 8 || (w.len() == 9 && w[8] == "f32"), "{text}");
+    let func = |s: &str| match s {
+        "add" => Func::Add,
+        "subtract" => Func::Subtract,
+        "reverse_subtract" => Func::ReverseSubtract,
+        "min" => Func::Min,
+        "max" => Func::Max,
+        _ => panic!("{s}"),
+    };
+    let factor = |s: &str| {
+        if s == "zero" {
+            return Factor { base: Base::One, invert: true };
+        }
+        let (invert, b) = match s.strip_prefix("inv_") {
+            Some(b) => (true, b),
+            None => (false, s),
+        };
+        let base = match b {
+            "one" => Base::One,
+            "src_color" => Base::SrcColor,
+            "src_alpha" => Base::SrcAlpha,
+            "dst_alpha" => Base::DstAlpha,
+            "dst_color" => Base::DstColor,
+            "src_alpha_saturate" => Base::SrcAlphaSaturate,
+            "const_color" => Base::ConstColor,
+            "const_alpha" => Base::ConstAlpha,
+            _ => panic!("{s}"),
+        };
+        Factor { base, invert }
+    };
+    let ch = |f: &str, s: &str, d: &str| Channel { func: func(f), src: factor(s), dst: factor(d) };
+    Key {
+        rgb: ch(w[0], w[1], w[2]),
+        alpha: ch(w[3], w[4], w[5]),
+        mask: w[6].parse().expect("a mask"),
+        samples: w[7].parse().expect("a sample count"),
+        colour_f32: w.len() == 9,
     }
-    /* both factors the same constant term: NIR factors the sum, no
-     * reference is drawn; refused, never approximated */
-    let same = Equation::both(Const, Const);
-    assert!(!super::blend::builds(same));
 }
 
-/// The blend shaders of gl_test cases 211 and 190 (docs/notes/
-/// mali-blend-shaders.md sections 2 and 5), against Mesa 26.2.1's on
-/// drm-shim (tools/mali/testdata/blend_case*.words, one word a line; the
-/// `.txt` next to each is pandecode's disassembly): 211's `CONSTANT_COLOR,
-/// ONE_MINUS_CONSTANT_COLOR` at 4x (the tile read at the sample id of
-/// r61), 190's column 3 (GL_MIN colour, SRC_ALPHA, ONE_MINUS_SRC_ALPHA
-/// alpha) and column 4 (ONE_MINUS_DST_ALPHA, ONE_MINUS_SRC_ALPHA colour,
-/// ONE, ZERO alpha) at 1x, into RGBA8.
-#[test]
-fn case_211_and_190_s_blend_shaders_are_mesa_s() {
-    use super::blend::{builds, Channel, Equation, Factor::*};
+/// `key`'s blend shader into an RGBA8 target (memory format RGBA8_TB,
+/// RGBA: `0xED000`): its words and work register count.
+fn blend_words(key: super::blend::Key) -> Result<(Vec<u64>, u8), MaliError> {
     const RGBA8_TB_RGBA: u32 = 0xed000;
-    let words = |text: &str| -> Vec<u64> {
+    store::with_scratch(|sc| {
+        let mut out = vec![0u64; 64];
+        super::blend::shader(&mut out, sc, key, RGBA8_TB_RGBA).map(|b| (trim(b.code), b.work_reg_count))
+    })
+    .expect("the scratch arena is free")
+}
+
+/// The blend shaders the shim driver drew (Mesa 26.2.1's GL driver on
+/// drm-shim, `gl_ref.py --blend-func S,D --blend-color 0.25,0.5,0.75,1.0`
+/// with gl_test's colour_uv pair, extracted by `pan_ref_diff.py extract
+/// <trace> blend=<va>`, 0dce654a8:tools/mali/board-ref/2026-10-23-blendconst/
+/// README.md; and docs/notes/mali-blend-shaders.md section 5's
+/// blend_case*.words): every constant colour equation against ONE, ZERO or
+/// the other (`blend_c_ic` is gl_test case 8's fifth frame), case 211's at
+/// 4x, case 190's columns 3 (GL_MIN colour) and 4 (ONE_MINUS_DST_ALPHA,
+/// ONE_MINUS_SRC_ALPHA colour, ONE, ZERO alpha). The same words as pan_shc
+/// --blend's (README-pan_shc.md).
+#[test]
+fn the_shim_driver_s_blend_shaders_are_ours() {
+    let hex = |text: &str| -> Vec<u64> {
         text.lines().map(|l| u64::from_str_radix(l.trim(), 16).expect("a hex word")).collect()
     };
-    let case211 = Equation { samples: 4, ..Equation::both(Const, InvConst) };
-    let col3 = Equation { rgb: Channel::MIN, alpha: Channel::add(SrcAlpha, InvSrcAlpha), samples: 1 };
-    let col4 = Equation { rgb: Channel::add(InvDstAlpha, InvSrcAlpha), alpha: Channel::add(One, Zero), samples: 1 };
-    for (name, text, eq) in [
-        ("blend_case211", td!("blend_case211.words"), case211),
-        ("blend_case190_col3", td!("blend_case190_col3.words"), col3),
-        ("blend_case190_col4", td!("blend_case190_col4.words"), col4),
+    let json = |text: &str| after(text, "words").and_then(hex_array).expect("the blend shader's words");
+    for (name, mesa, key) in [
+        (
+            "blend_c_ic",
+            json(td!("blend_c_ic.expect.json")),
+            "add const_color inv_const_color add const_color inv_const_color 15 1",
+        ),
+        (
+            "blend_ic_c",
+            json(td!("blend_ic_c.expect.json")),
+            "add inv_const_color const_color add inv_const_color const_color 15 1",
+        ),
+        ("blend_c_zero", json(td!("blend_c_zero.expect.json")), "add const_color zero add const_color zero 15 1"),
+        ("blend_c_one", json(td!("blend_c_one.expect.json")), "add const_color one add const_color one 15 1"),
+        ("blend_one_c", json(td!("blend_one_c.expect.json")), "add one const_color add one const_color 15 1"),
+        ("blend_zero_c", json(td!("blend_zero_c.expect.json")), "add zero const_color add zero const_color 15 1"),
+        (
+            "blend_ic_zero",
+            json(td!("blend_ic_zero.expect.json")),
+            "add inv_const_color zero add inv_const_color zero 15 1",
+        ),
+        ("blend_ic_one", json(td!("blend_ic_one.expect.json")), "add inv_const_color one add inv_const_color one 15 1"),
+        ("blend_one_ic", json(td!("blend_one_ic.expect.json")), "add one inv_const_color add one inv_const_color 15 1"),
+        (
+            "blend_zero_ic",
+            json(td!("blend_zero_ic.expect.json")),
+            "add zero inv_const_color add zero inv_const_color 15 1",
+        ),
+        (
+            "blend_case211",
+            hex(td!("blend_case211.words")),
+            "add const_color inv_const_color add const_color inv_const_color 15 4",
+        ),
+        ("blend_case190_col3", hex(td!("blend_case190_col3.words")), "min one one add src_alpha inv_src_alpha 15 1"),
+        (
+            "blend_case190_col4",
+            hex(td!("blend_case190_col4.words")),
+            "add inv_dst_alpha inv_src_alpha add one zero 15 1",
+        ),
     ] {
-        let mesa = words(text);
-        let (ours, wrc) = store::with_scratch(|sc| {
-            let mut out = vec![0u64; 64];
-            let b = super::blend::shader(&mut out, sc, eq, RGBA8_TB_RGBA).expect("the blend shader compiles");
-            (b.code.to_vec(), b.work_reg_count)
-        })
-        .expect("the scratch arena is free");
-        assert_words(name, &trim(&ours), &mesa);
+        let (ours, wrc) = blend_words(blend_key(key)).unwrap_or_else(|e| panic!("{name}: {e:?}"));
+        assert_words(name, &ours, &mesa);
         assert_eq!(wrc, 32, "{name}: the split file's count");
     }
-    /* the key: what no reference draws is refused, never approximated */
-    let refused = [
-        Equation { samples: 4, ..col3 },
-        Equation { samples: 4, ..col4 },
-        Equation { samples: 4, ..Equation::both(Const, Zero) },
-        Equation { samples: 2, ..case211 },
-        Equation { rgb: Channel { func: super::blend::Func::Min, ..Channel::add(One, One) }, ..col4 },
-        Equation { alpha: Channel::MIN, ..col3 },
-        Equation {
-            rgb: Channel::add(InvDstAlpha, InvSrcAlpha),
-            alpha: Channel::add(SrcAlpha, InvSrcAlpha),
-            samples: 1,
-        },
-        Equation::both(SrcAlpha, InvSrcAlpha),
-    ];
-    for eq in refused {
-        assert!(!builds(eq), "{eq:?}");
-        let r = store::with_scratch(|sc| super::blend::shader(&mut [0u64; 64], sc, eq, RGBA8_TB_RGBA).err())
-            .expect("the scratch arena is free");
-        assert_eq!(r, Some(MaliError::BlendVariantNotLowered), "{eq:?}");
+}
+
+/// Every blend shader of dEQP-GLES2 functional.fragment_ops.blend (the
+/// blend states of es2fBlendTests.cpp that Mesa draws with a blend shader,
+/// 1403 keys, tools/mali/blend_deqp_ref.py) is Mesa 26.2.1's, word for word
+/// (tools/mali/testdata/blend_deqp.words, `pan_shc --blend`), and so is its
+/// work register count (32 for every key; `pan_shc --blend` prints it).
+#[test]
+fn every_deqp_gles2_blend_shader_is_mesa_s() {
+    let mut differ = Vec::new();
+    let mut n = 0;
+    for line in td!("blend_deqp.words").lines() {
+        let (key, words) = line.split_once(" : ").expect("a key and its words");
+        let mesa: Vec<u64> =
+            words.split_whitespace().map(|w| u64::from_str_radix(w, 16).expect("a hex word")).collect();
+        n += 1;
+        match blend_words(blend_key(key)) {
+            Ok((ours, 32)) if ours == mesa => {}
+            Ok((ours, _)) => differ.push(format!("{key}: {} words ours, {} Mesa's", ours.len(), mesa.len())),
+            Err(e) => differ.push(format!("{key}: {e:?}")),
+        }
     }
+    assert_eq!(n, 1403, "the reference's keys");
+    assert!(differ.is_empty(), "{} of {n} differ:\n{}", differ.len(), differ.join("\n"));
+}
+
+/// 2700 more blend shaders (tools/mali/blend_deqp_ref.py `random`: every
+/// function, factor and colour mask drawn at random, 1500 at 1x and 600 at
+/// 4x with case 211's with an fp16 colour, 600 with an fp32 one) are Mesa
+/// 26.2.1's, word for word: their SHA-256 is the one of `pan_shc
+/// --blend`'s words (tools/mali/testdata/blend_random.sha, the first 16 hex
+/// digits of the hash of the little-endian words). The work register count
+/// is Mesa's for every one of them: 32 (`pan_shc --blend` prints it).
+#[test]
+fn random_blend_shaders_are_mesa_s() {
+    let mut differ = Vec::new();
+    let mut n = 0;
+    for line in td!("blend_random.sha").lines() {
+        let (key, digest) = line.split_once(" : ").expect("a key and its digest");
+        n += 1;
+        match blend_words(blend_key(key)) {
+            Ok((_, wrc)) if wrc != 32 => differ.push(format!("{key}: {wrc} work registers, Mesa's 32")),
+            Ok((ours, _)) => {
+                let bytes: Vec<u8> = ours.iter().flat_map(|w| w.to_le_bytes()).collect();
+                let h = crate::shaderc::sha256::sha256(&bytes);
+                let hex: String = h[..8].iter().map(|b| format!("{b:02x}")).collect();
+                if hex != digest {
+                    differ.push(format!("{key}: {hex}, Mesa's {digest}"));
+                }
+            }
+            Err(e) => differ.push(format!("{key}: {e:?}")),
+        }
+    }
+    assert_eq!(n, 2700, "the reference's keys");
+    assert!(differ.is_empty(), "{} of {n} differ:\n{}", differ.len(), differ.join("\n"));
 }
 
 /* ---- highp fragment shaders (S2, 2026-10-21) ----------------------------- */
