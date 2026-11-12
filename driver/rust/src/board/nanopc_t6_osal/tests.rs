@@ -601,6 +601,50 @@ fn an_unrecoverable_fatal_leaves_the_osal_dead_with_its_fences_complete() {
     assert_eq!(r.osal.wait(&*r.z, f, -1, &mut no_delay), -EIO);
 }
 
+/// After a restart's terminate is acknowledged and before any memory of
+/// the lost kicks is used again (the heap made again, the held frees given
+/// back), the GPU's L2 and LSC are cleaned and invalidated (Z2's command,
+/// `GPU_CMD` 0x3304): a lost job never reached its block's `FLUSH_CACHE2`.
+/// A shutdown does the same after its terminate.
+#[test]
+fn a_restart_cleans_and_invalidates_the_gpu_caches_after_the_end() {
+    let mut r = rig();
+    queue_init(&mut r);
+    let s = stream(&mut r);
+    let flush = (B.gpu + crate::gpu::mali::GPU_CMD, crate::gpu::mali::CMD_FLUSH_L2_LSC);
+    let (group, stream_bell) = (B.gpu + csf::doorbell(0), B.gpu + csf::doorbell(1));
+    let flushes = |r: &Rig| r.z.writes().iter().filter(|w| **w == flush).count();
+    let before = flushes(&r);
+    r.z.fail_at(2, Fail::Fault(1));
+    let f = r.osal.submit(&*r.z, s.gpu, 24, &mut no_delay);
+    let kicked = r.z.writes().len();
+    assert_eq!(r.osal.wait(&*r.z, f, -1, &mut no_delay), -EIO);
+    assert_eq!((r.osal.restarts, flushes(&r)), (1, before + 1));
+    // the group's register writes from the failed kick on: the stop's and
+    // the terminate's doorbells, the flush, then the start's doorbell and
+    // the queue-init job's
+    let after: Vec<usize> = r.z.writes()[kicked..]
+        .iter()
+        .filter_map(|w| match *w {
+            w if w == flush => Some(0),
+            (a, _) if a == group => Some(1),
+            (a, _) if a == stream_bell => Some(2),
+            _ => None,
+        })
+        .collect();
+    let at = after.iter().position(|&w| w == 0).unwrap();
+    assert!(after[..at].iter().filter(|&&w| w == 1).count() >= 2, "stop and terminate first: {after:?}");
+    assert_eq!((after[at + 1..].contains(&1), after.last()), (true, Some(&2)), "{after:?}");
+
+    let ended = r.z.writes().len();
+    assert!(r.osal.shutdown(&*r.z, &mut no_delay).unwrap().terminate.is_ok());
+    assert_eq!(flushes(&r), before + 2);
+    let log = &r.z.writes()[ended..];
+    let bells: Vec<usize> = log.iter().enumerate().filter(|(_, w)| w.0 == group).map(|(i, _)| i).collect();
+    let at = log.iter().position(|w| *w == flush).unwrap();
+    assert!(bells.len() >= 2 && bells.iter().all(|&i| i < at), "after the stop and the terminate: {bells:?}, {at}");
+}
+
 /// A kick that completed before an error, though no call had seen it yet,
 /// is not lost: the restart reads the sync object before it marks the
 /// kicks not complete as lost.

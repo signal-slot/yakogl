@@ -50,8 +50,9 @@
 //! `completed`, restarts the group ([`Osal::recover`]): every kick the
 //! sync object does not show complete (read once, unless its `status` is
 //! the error) is lost (its fence completes, so the backend frees its slot,
-//! and a wait for it is `-EIO`), CS 0 is stopped and CSG 0 terminated
-//! (only then do the held frees go back), the heap made again, CSG 0 / CS 0 started
+//! and a wait for it is `-EIO`), CS 0 is stopped and CSG 0 terminated,
+//! the GPU's L2 and LSC cleaned and invalidated ([`Osal::clean_caches`];
+//! only then do the held frees go back), the heap made again, CSG 0 / CS 0 started
 //! again over the same memory with an empty ring ([`sched::restart`]), and
 //! the queue-init stream (`HEAP_SET` of the heap context, Z4's
 //! [`z4::QUEUE_INIT`], at [`INIT_VA`]) run and waited for, since a new
@@ -69,7 +70,8 @@
 //! kick is `submitted + 1`.
 //!
 //! [`Osal::shutdown`] waits for the last kick, then stops CS 0 and
-//! terminates CSG 0, as panthor ends a destroyed group; later kicks are
+//! terminates CSG 0, as panthor ends a destroyed group, and cleans the GPU
+//! caches as a restart does; later kicks are
 //! `-EIO` and frees give their pages back at once. A full pending-free
 //! queue waits for its oldest kick (src/osal/pending_frees.h's rule).
 //!
@@ -96,7 +98,7 @@ use crate::gpu::mali::heap::{
 use crate::gpu::mali::pgtable::{Table, PAGE};
 use crate::gpu::mali::sched::job::JOB_BYTES;
 use crate::gpu::mali::sched::{self, Ended, Job, SchedRefusal, TilerOom, JOB_TIMEOUT_US};
-use crate::gpu::mali::{csf, fw};
+use crate::gpu::mali::{self as mali, csf, fw};
 use crate::mmio::Mmio;
 
 /// The group VM's regions (the module's table). The queue's is Z4's; the
@@ -803,8 +805,32 @@ impl Osal {
         }
         self.down = true;
         self.unended = ended.terminate.is_err();
+        if !self.unended {
+            if let Err(r) = self.clean_caches(m, delay_us) {
+                self.unended = true;
+                self.stop(r);
+            }
+        }
         self.drain();
         Some(ended)
+    }
+
+    /// The GPU's L2 and LSC cleaned and invalidated after the group's end,
+    /// before memory its kicks used is used again: a lost job never reached
+    /// its block's `FLUSH_CACHE2`, and a dirty line it left would be
+    /// written back later over the heap made again or a page handed out
+    /// again. panthor flushes so before it reuses GPU memory: an unmap
+    /// ends in `panthor_vm_flush_range` (panthor_mmu.c:935, :941), whose
+    /// operation is `GPU_CMD` `FLUSH_CACHES` with L2 and LSC clean and
+    /// invalidate (`mmu_hw_do_operation_locked`, :575-608). The command is
+    /// Z2's ([`mali::flush_caches`], the one Z2 ran on the board).
+    /// [`SchedRefusal::CacheFlush`] when it does not complete.
+    fn clean_caches(&self, m: &impl Mmio, delay_us: &mut impl FnMut(u32)) -> Result<(), Dead> {
+        let cln_inv = mali::CACHE_CLEAN | mali::CACHE_INV;
+        match mali::flush_caches(m, self.gpu, cln_inv, cln_inv, 0, delay_us) {
+            Ok(_) => Ok(()),
+            Err((why, _)) => Err((SchedRefusal::CacheFlush, why as u32)),
+        }
     }
 
     /// Fences `from..=to` lost. [`LOST_RANGES`] holds every range the
@@ -865,6 +891,10 @@ impl Osal {
         }
         let ended = ended.unwrap_or_else(|| sched::stop_and_terminate(m, self.gpu, &u.iface, &u.csg, &u.cs, delay_us));
         if let Err(r) = ended.terminate {
+            self.unended = true;
+            return self.stop(r);
+        }
+        if let Err(r) = self.clean_caches(m, delay_us) {
             self.unended = true;
             return self.stop(r);
         }
