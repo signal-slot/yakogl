@@ -112,20 +112,31 @@ that measures it.
    (`nir_opt_varyings_bulk`, gl_nir_linker.c:1524) runs while that vector
    conversion reads every lane, so every lane is kept; the lanes no one
    reads go only in the fragment shader's own compile.
+   The link sees the program after gl_nir_opts (gl_nir_linker.c:1441,
+   before `nir_opt_varyings_bulk` at :1524): `nir_lower_vars_to_ssa`
+   makes a local the value stored, the whole-identity folds of step 5
+   remove `* 1.0` and `+ 0.0`, `f2f32(f2fmp(a))` is `a`
+   (nir_opt_algebraic.py:1991) and DCE drops a dead tree. A varying is
+   kept whole only where an `f2fmp` of it survives those passes
+   (`kept_whole`, `colour_keeps_whole`):
    - Kept whole: a mediump float varying of a mediump shader that an fp16
      operation reads (fsvec_*, discard_81_branchquad, intloop_*), or that
-     a lowered colour takes as it is. A colour lane is in a lowered tree
-     when its dereference is an operation's operand or is stored to a
-     local lower_precision lowers (a constructor's temporary, a mediump
-     local), and every lane of the colour is a constant, a mediump
-     varying's lane, a mediump uniform's component, an fp16 texel,
-     gl_PointCoord or fp16 arithmetic (cmp_*, fsload_*, case 105).
-   - The lanes read alone: a lane assigned to the colour itself
-     (`gl_FragColor.xy = a.xy`, no tree to lower: fsload_bare1-4); a
-     highp shader, a highp varying and an integer one (fsload_highp,
-     fsload_hp_var2, intbool_89_flatlast); a colour
-     with an fp32 lane, a highp varying's, uniform's or texel's or an fp32
-     operation's (fsload_hp_var2, case 89); a varying only a cube
+     a colour store takes in a constructor beside another value (a
+     constant, another varying, an operation): `f2f32` then reads the
+     vector, not the `f2fmp` (cmp_*, fsload_*, case 105, c05, c20).
+     Every lane of that colour is a constant, a mediump varying's lane, a
+     mediump uniform's component, an fp16 texel, gl_PointCoord or fp16
+     arithmetic.
+   - The lanes read alone: a colour store of the varying's dereference
+     through locals stored once, swizzles and whole identities
+     (`gl_FragColor.xy = a.xy`, a mediump local read back, `a.xy *
+     vec2(1.0)`: fsload_bare1-4, fsload_cancel1-8); a constructor of the
+     varying's lanes alone, one vector of its `f2fmp` after copy
+     propagation (fsload_cancel10-11); a tree no colour store reads, dead
+     at the link (fsload_cancel9); a highp shader, a highp varying and an
+     integer one (fsload_highp, fsload_hp_var2, intbool_89_flatlast); a
+     colour with an fp32 lane, a highp varying's, uniform's or texel's or
+     an fp32 operation's (fsload_hp_var2, case 89); a varying only a cube
      direction reads raw (varyconst_101_cubebias).
    - A matrix is kept per column, each column its own deref (fsload_mat2:
      `.v2`; fsload_mat3: `.v3`).
@@ -141,11 +152,14 @@ that measures it.
    interpolation qualifier are equal (`get_input_qualifier`'s tables,
    nir_opt_varyings.c:3042-3136, 3298-3305): two flat ones merge
    (fsload_qual4); a flat and a smooth one stay apart, a layout refused
-   here (fsload_qual1-3: `VaryingNotFromAttribute`). Mesa compares the
-   stores block by block (:3150-3160): two lanes a vertex `if` writes
-   with the same value on both sides merge (fsload_dup_if); two that join
-   the same two values are refused, their join's vertex words not being
-   this back end's (fsload_dup_phi: `VaryingDuplicate`).
+   here (fsload_qual1-3: `VaryingNotFromAttribute`). The vertex shader's
+   outputs are temporaries stored at its end (`nir_lower_io_passes`,
+   nir_lower_io.c:1434-1453), so the values compared are those the lanes
+   hold there, wherever a vertex `if` wrote them: equal on both sides of
+   the `if`, or one lane before or after it, they merge
+   (fsload_dup_if, fsload_dup_if2-4). Two lanes that join the same two
+   values Mesa merges too, but its vertex words for the join are not this
+   back end's: refused (fsload_dup_phi: `VaryingDuplicate`).
 4. **Loads.** `nir_unlower_io_to_vars` (st_program.c:872) makes one
    variable of each slot's lanes. The fragment shader loads a slot it
    reads a lane of at that width (`component + num_components`,
@@ -157,13 +171,15 @@ that measures it.
    - The lanes a lowered tree reads are converted where its `f2fmp` stands,
      in lane order (`nir_lower_alu_width`), at their load: a compare's
      before its discard, an operand's before its operation.
-   - An identity constant (`* 1.0`, `+ 0.0`) on every lane of an
-     operation is folded at the link (nir_opt_algebraic.py:292, :236-237,
-     in gl_nir_opts, gl_nir_linker.c:102; a constant matches when every
-     lane it reads is the constant, nir_search.c:260-286): its operand is
-     the colour's own lane (fsconv_fold1-3). On some lanes only, the
-     operation stays an fp16 one and its folded lanes are the tree's
-     (`Fs::folded`; sel_v_color_uv, fsconv_fold4).
+   - The same identity constant on every lane of an operation (`* 1.0`;
+     `+ 0.0`, or `+ -0.0`, one sign of zero on every lane) is folded at
+     the link (nir_opt_algebraic.py:292, :236-237, in gl_nir_opts,
+     gl_nir_linker.c:102; a constant matches when every lane it reads is
+     the constant, the sign of zero checked per lane, nir_search.c:260-286
+     and :282-285): its operand is the colour's own lane (fsconv_fold1-3).
+     On some lanes only, the operation stays an fp16 one and its folded
+     lanes are the tree's (`Fs::folded`; sel_v_color_uv, fsconv_fold4).
+     Zeros of both signs on every lane are refused (fsload_zeros).
    - The colour's own lanes lose their conversion at the link
      (`f2f32(f2fmp(a))` is `a`, nir_opt_algebraic.py:1991) and are
      converted at the colour's store (`nir_lower_mediump_io`,
@@ -202,7 +218,10 @@ refused by name (`FsVaryingLoad`):
    `raw_read`, so the load is made where its key stands and not at the
    store after it.
 4. `kept_whole`'s colour arm names the kind of node it reads, measured
-   lowered or fp32; any other kind is refused.
+   lowered or fp32; any other kind is refused. Whether the lane keeps its
+   varying whole is decided on what the link leaves (step 2,
+   `colour_keeps_whole`): a new form of colour store is named there or
+   refused.
 5. It reaches a lane through `Fs::lane_of` (via `index`), never through
    the location: a merged lane lives in another varying's slot (step 3).
 
