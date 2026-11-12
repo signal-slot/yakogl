@@ -812,7 +812,13 @@ milestones (Zephyr booted by U-Boot), as on every board.
   out of Armbian. The sign-off form (U-Boot starting the image) has not
   run.
 - **Z4**: CSG 0 / CS 0 started from our kernel side; the L1 frame renders the same
-  bytes as under panthor. From here the same back end and compiler run on Zephyr,
+  bytes as under panthor. **The board run passed on 2026-11-12**
+  (`VERDICT t6_submit PASS`, the image of main `ef86672bf`; below, "Z4
+  board procedure", and `tools/cts/RESULTS.md`), after a first run the
+  same day whose frame was right and whose record showed three
+  predictions wrong (issue #4515): a development result, by kexec out of
+  Armbian. The sign-off form (U-Boot starting the image) has not run.
+  From here the same back end and compiler run on Zephyr,
   and gl_test and dEQP move to the product form.
 
 ### The Z4 frame against the trace
@@ -2344,11 +2350,17 @@ row.
 
 ### Z4 board procedure
 
-**Not run.** Written 2026-11-09 from the Z3 procedure above, before any
-run and before the Z4 code is on this page's base: no value in it is
-measured on the board. A run whose record differs is a finding: record
-it as it came, never by changing the prediction. Z4 runs only after Z3
-has passed, and reports to #7 (milestones: #26).
+**Run twice on 2026-11-12; the second run passed.** Written 2026-11-09
+from the Z3 procedure above, before any run. The first run (the image of
+main `4f618d77e`) drew the frame and was recorded as it came: FAIL, 3 of
+its 40 predicted lines differed. In all three the prediction was wrong,
+not the driver (issue #4515), and the model, the record and the verdict
+were corrected from that record. The second run (the image of main
+`ef86672bf`) passed: `VERDICT t6_submit PASS`, 42 of 42 lines
+(`tools/cts/RESULTS.md`). Below, a value says "measured" where a run
+gave it. A run whose record differs is a finding: record it as it came,
+never by changing the prediction. Z4 runs only after Z3 has passed, and
+reports to #7 (milestones: #26).
 
 **What Z4 does.** It brings up Z3 (the firmware boot, AS0, the MCU
 acknowledging `PING`), starts CSG 0 / CS 0 from our kernel side
@@ -2401,8 +2413,10 @@ every wait as for Z2 and Z3: the probe feeds around the Z4 call, and a
 wait that does not finish inside the feeder's window ends in the
 watchdog's PSCI reset, not in a hang.
 
-**The runner's commands** (not run; every one is in
-`driver/tools/kexec-zephyr/`). The runner is `nanopc-t6.sh`; it is
+**The runner's commands** (every one is in
+`driver/tools/kexec-zephyr/`; the runs of 2026-11-12 made steps 3 and 4
+through `tools/board.sh nanopc-t6 run`, which calls the same runner and
+verdict and keeps the record). The runner is `nanopc-t6.sh`; it is
 image-agnostic and has no `t6_submit` case: it kexecs any `zephyr.bin`
 that carries the `yakogl-wdt: nanopc_t6` marker. `BOARD_HOST`,
 `BOARD_UART`, `T6_RECORD_DIR` and the hand's name come from the
@@ -2474,8 +2488,9 @@ These are the **MCU model's values**: `board::nanopc_t6_submit`'s test
 `the_generated_frame_s_record_is_as_predicted` runs the generated frame
 over the host MCU model and asserts the record below. Where the first
 board run (2026-11-12, issue #4515) showed the model wrong, the model now
-does what the board's firmware did, and the row says "measured"; every
-other value is still a prediction. The "pinned" ones are fixed by the frame and the module's
+does what the board's firmware did, and the row says "measured"; the
+second run (the same day, PASS) measured the drain's rows. Every other
+board-dependent value is the model's. The "pinned" ones are fixed by the frame and the module's
 constants and must read the same on the board; the "board-dependent" ones
 are the model's own (its register values, lags and microseconds, the
 synthetic firmware's sizes): the model's value is given for orientation
@@ -2500,23 +2515,23 @@ and a different board value is not a finding. The record is
 | `cs_req`, `cs_ack` | 0x0511, 0x0011 | pinned (measured: `ack` 0x00000011 for `req` 0x00000511, so the firmware's `ack` carries the state field and bit 4 but not the idle bits 0x0500 of the request; issue #4515. Not decided: whether bit 4 is a copy of the request's `CS_EXTRACT_EVENT` or an extract event's toggle, both read 1; the model copies it) |
 | `csg_ack_us`, `cs_ack_us` | 1, 0 | board-dependent (the model's acknowledge lag) |
 | `latest_flush` | 0 | board-dependent (the GPU's flush id) |
-| `sync_updates` | 0 | board-dependent (the model's firmware raises `CSG_SYNC_UPDATE` after the stream wrote the `seqno`, as the board's first run showed: 0 there; when the event comes is not measured yet) |
-| `insert`, `extract_at_done` | 128, 0 | `insert` pinned; `extract_at_done` board-dependent (the output page's `extract` right after the wait saw the `seqno`: the firmware publishes it later, measured 0 on the board's first run) |
+| `sync_updates` | 0 | board-dependent (the `CSG_SYNC_UPDATE` events the wait acknowledged. The model's firmware raises the event after the stream wrote the `seqno`. Measured: 0 on the board's first run, 1 on the second: the event comes about when the wait ends, before or after its last look) |
+| `insert`, `extract_at_done` | 128, 0 | `insert` pinned; `extract_at_done` board-dependent (the output page's `extract` right after the wait saw the `seqno`: the firmware publishes it later, measured 0 on both board runs) |
 | `seqno`, `sync_status` | 1, 0 | pinned |
 | `wait_us` | 20 | board-dependent (the model's job lag; bounded by the 5 s wait) |
 | `status_cmd_ptr`, `info` | 0, 0 | pinned (a refused wait fills them) |
 | `stop_us`, `terminate_us` | 3, 1 | board-dependent |
 | `stop_refusal`, `terminate_refusal` | 0, 0 | pinned |
-| `cleared[3]` | 0, 0, 0 | board-dependent (the drain acknowledges the late `CSG_SYNC_UPDATE` and CS 0's `cs_irq` bit; the board's first run, without the drain, read 268435456 1 0 here) |
+| `cleared[3]` | 0, 0, 0 | board-dependent (what the terminate found pending: CSG 0's events, CS 0's `cs_irq` bit, CS 0's events. On the model the drain has acknowledged the late `CSG_SYNC_UPDATE` and the `cs_irq` bit. Measured: 268435456 1 0 on the first run (`CSG_SYNC_UPDATE`; no drain in that image), 536870912 1 0 on the second (`CSG_IDLE`; the wait had taken the sync update, the drain took nothing)) |
 | `red`, `blue` | 2048, 2048 | pinned (the model paints the frame's halves; the board's GPU must too) |
 | `fill`, `other` | 0, 0 | pinned |
 | `pixels` | 4096 | pinned |
 | `digest` | 0xa4db81a9d39bfdcc | pinned (FNV-1a 64 of the blocks and the 53 stream words at `CS_VA`; the probe prints the same) |
-| `extract_drained`, `drain_us` | 128, 10 | not measured yet (`sched::drained` after the wait: the `extract` it ended with, the model's one poll) |
-| `drain_refusal`, `drain_sync_updates` | 0, 1 | not measured yet (27 `DrainTimeout` is recorded, not a step; any other refusal is step 17, `STEP_DRAIN`) |
-| `drain_cs_ack` | 0x11 | not measured yet (CS 0's `ack` right after the drain: whether the firmware toggles `CS_EXTRACT_EVENT` there) |
-| `extract_at_end` | 128 | not measured yet (`extract` after the group's stop and terminate) |
-| `drain_cs_irq_acks`, `drain_idle_acks` | 1, 0 | not measured yet (the drain's looks that acknowledged CS 0's `cs_irq` bit, and the `CSG_IDLE` events it acknowledged: the drain takes what the first run's terminate found pending, `cleared[1]` = 1, so it counts it) |
+| `extract_drained`, `drain_us` | 128, 10 | `extract_drained` pinned (measured: 128, `insert`'s value, on the second run); `drain_us` board-dependent (`sched::drained` after the wait: the model's one poll; measured 10 too, `extract` was there on the drain's second look) |
+| `drain_refusal`, `drain_sync_updates` | 0, 1 | `drain_refusal` pinned (measured 0; 27 `DrainTimeout` is recorded, not a step; any other refusal is step 17, `STEP_DRAIN`); `drain_sync_updates` board-dependent (measured 0: the wait had taken the run's one sync update) |
+| `drain_cs_ack` | 0x11 | pinned (measured: CS 0's `ack` right after the drain is 0x00000011, as before it: the firmware did not toggle `CS_EXTRACT_EVENT` when it published `extract`) |
+| `extract_at_end` | 128 | pinned (measured: `extract` after the group's stop and terminate is still 128) |
+| `drain_cs_irq_acks`, `drain_idle_acks` | 1, 0 | board-dependent (the drain's looks that acknowledged CS 0's `cs_irq` bit, and the `CSG_IDLE` events it acknowledged. Measured 0, 0: neither was pending during the drain's two looks; the terminate found both, `cleared` above) |
 
 A record whose pinned field differs is a finding, recorded as it came.
 
@@ -2525,17 +2540,27 @@ sync object's `seqno` is the stream's own write (its `SYNC_ADD64`), and
 the wait saw it 220 µs after the doorbell with the output page's
 `extract` still 0 and no `CSG_SYNC_UPDATE` (`sync_updates` 0); the
 terminate then found `CSG_SYNC_UPDATE` and CS 0's `cs_irq` bit pending
-(`cleared` 268435456 1 0). Not measured yet: that the MCU firmware
-publishes `extract` (and raises the event) later at all, and when: the
-first record did not read `extract` again. The model publishes both
-`PUBLISH_LAG` reads after the `seqno` (the instant publish is its other
-setting, tested too). The second run measures it: after the wait the
+(`cleared` 268435456 1 0). That record did not read `extract` again.
+The second run did: after the wait the
 probe runs `sched::drained` (polls until `extract` equals `insert`,
 within `CS_ACK_WAIT_US`, acknowledging the events as the wait does) and
 records the microseconds, the `extract` it ended with, its refusal, the
 sync updates, `cs_irq` bits and `CSG_IDLE` events it acknowledged, CS 0's
 `ack` after it, and `extract` once more after the group's end (Z4j,
-Z4k). panthor has no such wait: it
+Z4k). Measured on the second run: the wait saw the `seqno` 230 µs after
+the doorbell, again with `extract` 0, and this time acknowledged one
+`CSG_SYNC_UPDATE`; the drain's first look did not yet read `insert`'s
+value, its second look, one `JOB_POLL_US` (10 µs) later, read 0x80,
+equal to `insert`; the drain acknowledged nothing, CS 0's `ack` stayed
+0x00000011, and `extract` read 0x80 again after the group's end, where
+the terminate found `CSG_IDLE` and CS 0's `cs_irq` bit pending
+(`cleared` 536870912 1 0). So the MCU firmware does publish `extract`,
+a few microseconds after the stream's `seqno` (within one 10 µs poll in
+this run), and `CSG_SYNC_UPDATE` is not tied to that publish: it came
+after the wait in the first run and before the publish in the second.
+The model publishes both `PUBLISH_LAG` reads after the `seqno` (the
+instant publish is its other setting, tested too). panthor has no such
+wait: it
 takes completion from the sync object and ring space from its
 scheduler's credits, and reads `output->extract` only when it programs
 a slot and for its idle check.
@@ -2558,8 +2583,8 @@ assumed here.
 
 **Verdict.** `driver/tools/kexec-zephyr/t6-verdict.sh t6_submit
 <uart.log>` judges the capture with the table `table_t6_submit` of that
-script (not run on a board; its self-test, `t6-verdict-test.sh`, runs it
-over fixtures). It looks for each line in order, each after the one
+script (it judged both board runs of 2026-11-12; its self-test,
+`t6-verdict-test.sh`, runs it over fixtures). It looks for each line in order, each after the one
 before it, and prints `ok`, `differs` or `missing` per line, then
 `VERDICT t6_submit PASS` (exit 0) or `VERDICT t6_submit FAIL (<n> of <m>)`
 (exit 1). The lines, as the table writes them, in the order `uart2` must
@@ -2585,8 +2610,8 @@ t6_submit: Z4f: latest_flush 0x{x8} sync_updates {d} status_cmd_ptr 0x0000000000
 t6_submit: Z4g: stop {d} us refusal 0, terminate {d} us refusal 0, cleared {d} {d} {d}
 t6_submit: Z4h: target red {@R} blue {@B} fill {@F} other {@O} of {@P} pixels
 t6_submit: Z4i: frame digest 0xa4db81a9d39bfdcc
-t6_submit: Z4j: drain {d} us refusal {d} extract 0x{x16} sync_updates {d} cs_ack 0x{x8} cs_irq_acks {d} idle_acks {d}
-t6_submit: Z4k: extract after the end 0x{x16}
+t6_submit: Z4j: drain {d} us refusal 0 extract 0x0000000000000080 sync_updates {d} cs_ack 0x00000011 cs_irq_acks {d} idle_acks {d}
+t6_submit: Z4k: extract after the end 0x0000000000000080
 t6_submit: PASS
 ```
 
@@ -2604,14 +2629,18 @@ and `detail` 0 (Z4a: a stopped run differs here); `vm_tables_used` 10;
 `chunk_size` 2097152, stride 64; the CSG 0 request and acknowledge words
 0x00000011, CS 0's request 0x00000511 and acknowledge 0x00000011;
 `insert` 0x80, `seqno` 1, `sync_status` 0; `status_cmd_ptr` and `info` 0; the stop's and the
-terminate's `refusal` 0; the frame digest 0xa4db81a9d39bfdcc. **Any value
+terminate's `refusal` 0; the frame digest 0xa4db81a9d39bfdcc; and, from
+the second run, the drain's `refusal` 0, the `extract` it ended with
+0x80, CS 0's `ack` 0x00000011 after it (Z4j) and `extract` 0x80 after
+the group's end (Z4k). **Any value
 of its form**, checked for presence and form only: `as0_tables_used` (the
 board's file sizes Z3's tables: the model's 8 is not the board's, 10 is
 predicted above), the timings (`acked in`, `wait`, `stop` and `terminate`
-µs), `latest_flush`, `extract`, `sync_updates`, the three `cleared`
-words (the last three move with when the firmware publishes `extract`,
-not measured yet), Z4j's and Z4k's values (not measured yet; the commit
-that records the second run pins them), and the four pixel counts (only their sum is checked
+µs), `latest_flush`, `extract` after the wait, `sync_updates`, the three
+`cleared` words and the drain's microseconds and event counts
+(`sync_updates`, `cs_irq_acks`, `idle_acks`): these move with when the
+firmware raises its events and publishes `extract` against our looks,
+and the two runs read them differently; and the four pixel counts (only their sum is checked
 against the total).
 
 Where the verdict and the prediction table above differ in strength

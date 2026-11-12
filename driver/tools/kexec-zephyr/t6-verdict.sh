@@ -52,11 +52,15 @@
 # refusal 0, detail 0, so a stopped run (wait timeout, Z3 stopped) differs
 # there and on the fields it left at 0, and its FAIL line stands for PASS.
 # Pinned from the first board run (issue #4515): the suspend sizes 25600 /
-# 25600 and CS 0's ack 0x00000011. The record's timing (*_us), latest_flush
+# 25600 and CS 0's ack 0x00000011. Pinned from the second (2026-11-12, the
+# image of main ef86672bf): the drain's refusal 0, the extract it ended
+# with (insert's 0x80), CS 0's ack 0x00000011 after it, and extract after
+# the group's end (Z4j, Z4k). The record's timing (*_us), latest_flush
 # and as0_tables_used (the board's file sizes Z3's tables: the model's 8 is
-# not the board's) are tokens; so are, until the second board run measures
-# them, extract after the wait, sync_updates, cleared and the drain's line
-# and extract after the end (Z4j, Z4k). vm_tables_used, the heap chunk and
+# not the board's) are tokens; so are the values that move with when the
+# firmware raises its events against our looks: extract after the wait,
+# the sync updates, cs_irq and CSG_IDLE acknowledges of the wait and of
+# the drain, and cleared. vm_tables_used, the heap chunk and
 # the digest are pinned as the generated frame's record in nanopc_t6_submit
 # pins them; the target's pixel counts are tokens whose sum must equal the
 # pixels read.
@@ -334,15 +338,20 @@ table_t6_submit() {
 	# publish, so it is checked for form only
 	e 't6_submit: Z4e: insert 0x0000000000000080 extract 0x{x16} seqno 0x0000000000000001 sync_status 0x00000000, wait {d} us' 't6_submit: Z4e:'
 	# sync_updates (Z4f) and cleared (Z4g) move with when the firmware
-	# publishes extract: not measured on the board yet, form only
+	# raises CSG_SYNC_UPDATE and CSG_IDLE against the wait's looks: the
+	# first run read 0 and 268435456 1 0, the second 1 and 536870912 1 0.
+	# Form only
 	e 't6_submit: Z4f: latest_flush 0x{x8} sync_updates {d} status_cmd_ptr 0x0000000000000000 info 0x0000000000000000' 't6_submit: Z4f:'
 	e 't6_submit: Z4g: stop {d} us refusal 0, terminate {d} us refusal 0, cleared {d} {d} {d}' 't6_submit: Z4g:'
 	e 't6_submit: Z4h: target red {@R} blue {@B} fill {@F} other {@O} of {@P} pixels' 't6_submit: Z4h:' z4_pixels
 	e 't6_submit: Z4i: frame digest 0xa4db81a9d39bfdcc' 't6_submit: Z4i:'
-	# sched::drained and extract after the group's end: not measured on the
-	# board yet, form only (the commit that records the second run pins them)
-	e 't6_submit: Z4j: drain {d} us refusal {d} extract 0x{x16} sync_updates {d} cs_ack 0x{x8} cs_irq_acks {d} idle_acks {d}' 't6_submit: Z4j:'
-	e 't6_submit: Z4k: extract after the end 0x{x16}' 't6_submit: Z4k:'
+	# sched::drained and extract after the group's end, as the second run
+	# measured them: the drain not refused, extract at insert (0x80) after
+	# it and after the end, CS 0's ack unchanged. The events the drain
+	# acknowledged are the ones the wait left (the second run: none; the
+	# model: one sync update and one cs_irq): form only
+	e 't6_submit: Z4j: drain {d} us refusal 0 extract 0x0000000000000080 sync_updates {d} cs_ack 0x00000011 cs_irq_acks {d} idle_acks {d}' 't6_submit: Z4j:'
+	e 't6_submit: Z4k: extract after the end 0x0000000000000080' 't6_submit: Z4k:'
 	e 't6_submit: PASS' 't6_submit: (PASS|FAIL)'
 	table_reset t6_submit
 }
