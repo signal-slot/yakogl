@@ -742,6 +742,16 @@ impl<'x, 'a> Scan<'x, 'a> {
         })
     }
 
+    /// `e` reads a `const` mediump variable whose initialiser folds
+    /// (directly, or an element or member of one).
+    fn folded_medium_const(&self, e: ExprId) -> bool {
+        match *self.ast.expr(e) {
+            Expr::Ident(n) => self.lookup(n).is_some_and(|v| v.folds && v.class == Prec::Medium),
+            Expr::Index(b, _) | Expr::Field(b, _) => self.folded_medium_const(b),
+            _ => false,
+        }
+    }
+
     /// Whether a look-up through the sampler `e` returns a Medium value:
     /// the precision of the variable it reads (`variable_referenced`). A
     /// sampler in a struct reads the struct's variable, which has no
@@ -844,7 +854,13 @@ impl<'x, 'a> Scan<'x, 'a> {
                 self.scan(i)?;
                 let folds = if self.folds(b) && self.folds(i) { FOLDS } else { 0 };
                 let emits = (self.info(b) | self.info(i)) & EMITS;
-                self.set(e, Kind::Deref, typed(self.deref_class(b)), folds | emits);
+                /* A run-time index into a folded `const` mediump vector or
+                 * array reads its 16-bit storage in Mesa, while every
+                 * folded read is the 32-bit value; the lowering keeps one
+                 * slot, at 32 bits (lower.rs `declare_var`), so this read
+                 * has no class that is right: Unknown. */
+                let c = if !self.folds(i) && self.folded_medium_const(b) { Prec::Unknown } else { self.deref_class(b) };
+                self.set(e, Kind::Deref, typed(c), folds | emits);
             }
             Expr::Field(b, name) => {
                 self.scan(b)?;
@@ -1849,6 +1865,25 @@ mod tests {
             "u",
         );
         assert_eq!(f, M);
+    }
+
+    /// A run-time index into a folded `const` mediump vector or array
+    /// reads its 16-bit storage in Mesa (second review B-A, probe p21:
+    /// `16 bcsel ... 0x2e66, 0x3266, 0x34cd`, then `f2f32`, then the 32-bit
+    /// multiply), while a constant index or a whole read gets the exact
+    /// 32-bit value. The slot holds the 32-bit value (B4 (b)), so the
+    /// run-time-indexed read records Unknown: no single class is right.
+    #[test]
+    fn a_run_time_index_into_a_folded_const_is_unknown() {
+        let g = vs("uniform int i; varying highp vec4 v; const mediump vec3 cv = vec3(0.1, 0.2, 0.3);\n\
+                    void main(){ gl_Position = p; v = vec4(a * cv[i], b * cv.y, a * cv[1], 1.0); }");
+        assert!(!alu(&g, AluOp::Bcsel).is_empty());
+        assert!(alu(&g, AluOp::Bcsel).iter().all(|&p| p == Prec::Unknown), "{:?}", alu(&g, AluOp::Bcsel));
+        assert_eq!(alu(&g, AluOp::Fmul), [H, H, H], "the readers stay High; the Unknown value refuses");
+        /* a highp const, and a mediump local that is no folded const */
+        let g = vs("uniform int i; varying highp vec4 v; const highp vec3 cv = vec3(0.1, 0.2, 0.3);\n\
+                    void main(){ gl_Position = p; v = vec4(a * cv[i]); }");
+        assert!(alu(&g, AluOp::Bcsel).iter().all(|&p| p == H));
     }
 
     #[test]
