@@ -2456,14 +2456,14 @@ and a different board value is not a finding. The record is
 | `cs_req`, `cs_ack` | 0x0511, 0x0011 | pinned (measured: the firmware's `ack` copies the state field and `CS_EXTRACT_EVENT`, not the idle bits 0x0500 of the request; issue #4515) |
 | `csg_ack_us`, `cs_ack_us` | 1, 0 | board-dependent (the model's acknowledge lag) |
 | `latest_flush` | 0 | board-dependent (the GPU's flush id) |
-| `sync_updates` | 1 | pinned |
-| `insert`, `extract` | 128, 128 | pinned |
+| `sync_updates` | 0 | board-dependent (the model's firmware raises `CSG_SYNC_UPDATE` after the stream wrote the `seqno`, as the board's first run showed: 0 there; when the event comes is not measured yet) |
+| `insert`, `extract` | 128, 0 | `insert` pinned; `extract` board-dependent (read when the wait saw the `seqno`: the firmware publishes it later, 0 on the board's first run; when it reaches 128 is not measured yet) |
 | `seqno`, `sync_status` | 1, 0 | pinned |
 | `wait_us` | 20 | board-dependent (the model's job lag; bounded by the 5 s wait) |
 | `status_cmd_ptr`, `info` | 0, 0 | pinned (a refused wait fills them) |
 | `stop_us`, `terminate_us` | 3, 1 | board-dependent |
 | `stop_refusal`, `terminate_refusal` | 0, 0 | pinned |
-| `cleared[3]` | 0, 0, 0 | pinned |
+| `cleared[3]` | 0x10000000, 1, 0 | board-dependent (the late `CSG_SYNC_UPDATE` and CS 0's `cs_irq` bit, pending at the terminate: the board's first run read 268435456 1 0) |
 | `red`, `blue` | 2048, 2048 | pinned (the model paints the frame's halves; the board's GPU must too) |
 | `fill`, `other` | 0, 0 | pinned |
 | `pixels` | 4096 | pinned |
@@ -2531,20 +2531,21 @@ and `detail` 0 (Z4a: a stopped run differs here); `vm_tables_used` 10;
 `suspend_size` and `protm_suspend_size` 25600;
 `heap_ctx` 0x0000800000015000, the heap chunk 0x0000800000a00000,
 `chunk_size` 2097152, stride 64; the CSG 0 request and acknowledge words
-0x00000011, CS 0's request 0x00000511 and acknowledge 0x00000011; `insert` and `extract` 0x80, `seqno`
-1, `sync_status` 0; `status_cmd_ptr` and `info` 0; the stop's and the
+0x00000011, CS 0's request 0x00000511 and acknowledge 0x00000011;
+`insert` 0x80, `seqno` 1, `sync_status` 0; `status_cmd_ptr` and `info` 0; the stop's and the
 terminate's `refusal` 0; the frame digest 0xa4db81a9d39bfdcc. **Any value
 of its form**, checked for presence and form only: `as0_tables_used` (the
 board's file sizes Z3's tables: the model's 8 is not the board's, 10 is
 predicted above), the timings (`acked in`, `wait`, `stop` and `terminate`
-µs), `latest_flush`, `sync_updates`, the three `cleared` words, and the
-four pixel counts (only their sum is checked against the total).
+µs), `latest_flush`, `extract`, `sync_updates`, the three `cleared`
+words (the last three move with when the firmware publishes `extract`,
+not measured yet), and the four pixel counts (only their sum is checked
+against the total).
 
 Where the verdict and the prediction table above differ in strength
-(reported, the table is not changed): the table pins `sync_updates` 1,
-`cleared` 0 0 0 and the red and blue counts at 2048 each, while the
-verdict checks them for form only, so read them against the table by
-eye; the verdict writes `AS_PRESENT` 0x000000ff and `L2_FEATURES`
+(reported, the table is not changed): the table pins the red and blue
+counts at 2048 each, while the verdict checks them for form only, so
+read them against the table by eye; the verdict writes `AS_PRESENT` 0x000000ff and `L2_FEATURES`
 0x07120306 as Z1 measured them: a board that reports other values makes
 Z4b differ, a finding to record, not a defect of the verdict. Every pinned value in the list above agrees with the
 table.

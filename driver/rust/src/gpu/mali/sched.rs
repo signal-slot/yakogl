@@ -16,8 +16,8 @@
 //! `SUBLEVEL = 0`). Where this differs from panthor it says so.
 //!
 //! This file holds the design, the refusals, the constants, the bring-up
-//! ([`start`]), the submit ([`submit`]), the completion wait ([`wait`])
-//! and the group's end ([`stop`], [`terminate`], [`clear_events`],
+//! ([`start`]), the submit ([`submit`]), the completion wait ([`wait`]),
+//! the stream's drain ([`drained`]) and the group's end ([`stop`], [`terminate`], [`clear_events`],
 //! [`stop_and_terminate`]); the instruction words panthor wraps a job in are [`job`]'s.
 //!
 //! # The interface this uses
@@ -615,6 +615,10 @@ pub enum SchedRefusal {
     /// the two highs agreeing (the value: the last high word). Ours:
     /// panthor reads the sync object's `seqno` with one 64-bit load.
     Read64Unstable = 26,
+    /// The output page's `extract` did not reach the input page's `insert`
+    /// within [`CS_ACK_WAIT_US`] after the job was done (the value:
+    /// `extract`'s low 32 bits). Ours: panthor never waits for it.
+    DrainTimeout = 27,
 }
 
 /// The ring's size as panthor's queue creation accepts it
@@ -1415,6 +1419,83 @@ pub fn wait(
     Err(r)
 }
 
+/// What [`drained`] saw.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Drained {
+    /// Microseconds polled from the call.
+    pub us: u32,
+    /// The output page's `extract` on the last look.
+    pub extract: u64,
+    /// `CSG_SYNC_UPDATE` events acknowledged on the way.
+    pub sync_updates: u32,
+}
+
+/// Why [`drained`] stopped short, with what it had seen until then.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DrainRefused {
+    pub refused: Refused,
+    pub at: Drained,
+}
+
+/// The stream drained: after [`wait`] saw the job done, the output page's
+/// `extract` polled every [`JOB_POLL_US`] until it equals the input page's
+/// `insert`, within [`CS_ACK_WAIT_US`]; otherwise
+/// [`SchedRefusal::DrainTimeout`] with `extract`'s low 32 bits. Each look
+/// reads `extract` ([`read64_stable`]) and `insert`, then takes the events
+/// as [`poll_job`] does (refusing a progress timeout or a stream event,
+/// acknowledging `cs_irq`, `CSG_SYNC_UPDATE` and `CSG_IDLE` and ringing
+/// the group, refusing a sync object `status`), with the sequence number
+/// already reached. A refusal leaves the group running.
+///
+/// Why: the sync object's `seqno` is written by the stream itself (its
+/// `SYNC_ADD64`), while `extract` and `CSG_SYNC_UPDATE` are the MCU
+/// firmware's to publish. The first NanoPC-T6 Z4 run (issue #4515) saw
+/// the job done 220 µs after the doorbell with `extract` still 0 and no
+/// sync update; the event was pending at the group's terminate. panthor
+/// decides completion from the sync object (`group_sync_upd_work`) and
+/// ring space from its scheduler's credits, and reads `output->extract`
+/// only when it programs a slot (`cs_slot_prog_locked`, :1061) and for
+/// its idle check (`input->insert == output->extract`,
+/// `cs_slot_sync_queue_state_locked`); it has no such wait. Ours: the
+/// record needs to know when the firmware publishes `extract`, and a
+/// driver that runs more than one job needs it too: [`submit`] measures
+/// the ring's room from the output page's `extract`
+/// ([`job::check_ring_fit`]), so a job submitted before `extract` caught
+/// up is refused as [`SchedRefusal::RingOverflow`] although the ring is
+/// free.
+const _: () = assert!(CS_ACK_WAIT_US.is_multiple_of(JOB_POLL_US));
+
+#[allow(clippy::too_many_arguments)]
+pub fn drained(
+    m: &impl Mmio,
+    gpu: usize,
+    iface: &Iface,
+    csg: &Csg,
+    cs: &Cs,
+    s: &Started,
+    delay_us: &mut impl FnMut(u32),
+) -> Result<Drained, DrainRefused> {
+    let mut d = Drained::default();
+    loop {
+        let look = read64_stable(m, s.output_cpu + offset_of!(RingbufOutput, extract)).and_then(|extract| {
+            d.extract = extract;
+            let insert = read64(m, s.input_cpu + offset_of!(RingbufInput, insert));
+            poll_job(m, gpu, iface, csg, cs, s, 0, &mut d.sync_updates)?;
+            Ok(extract == insert)
+        });
+        match look {
+            Ok(true) => return Ok(d),
+            Ok(false) => {}
+            Err(refused) => return Err(DrainRefused { refused, at: d }),
+        }
+        if d.us >= CS_ACK_WAIT_US {
+            return Err(DrainRefused { refused: (SchedRefusal::DrainTimeout, d.extract as u32), at: d });
+        }
+        delay_us(JOB_POLL_US);
+        d.us += JOB_POLL_US;
+    }
+}
+
 /// CS 0 stopped: its state field to `CS_STATE_STOP` under `CS_STATE_MASK`
 /// (`cs_slot_reset_locked`'s write, panthor_sched.c:1106-1108), CS 0's bit
 /// of the group's `doorbell_req` toggled and the group rung (as for its
@@ -1549,7 +1630,7 @@ pub fn stop_and_terminate(
 mod tests {
     use super::*;
 
-    const ALL: [SchedRefusal; 26] = [
+    const ALL: [SchedRefusal; 27] = [
         SchedRefusal::RingSize,
         SchedRefusal::RingUnmapped,
         SchedRefusal::UserPagesUnmapped,
@@ -1576,6 +1657,7 @@ mod tests {
         SchedRefusal::JobParams,
         SchedRefusal::RingInsert,
         SchedRefusal::Read64Unstable,
+        SchedRefusal::DrainTimeout,
     ];
 
     #[test]
@@ -1700,7 +1782,11 @@ mod tests {
     /// firmware would: `MOV32` and `MOV48` load registers, `SYNC_ADD64`
     /// adds to the 64-bit word at the GPU address it names (and writes
     /// `sync_status`), the rest is skipped. Then `extract` advances to
-    /// `insert` and `CSG_SYNC_UPDATE` is raised in CSG 0's `ack`. With
+    /// `insert` and `CSG_SYNC_UPDATE` is raised in CSG 0's `ack`, at once
+    /// (`publish_lag` `None`), or, as the board's firmware does,
+    /// `publish_lag` reads after the sync object was written, with CS 0's
+    /// bit of `cs_irq_req` raised too (the first Z4 run's terminate found
+    /// both pending, issue #4515). With
     /// `job_fault` the `SYNC_ADD64` is not reached: the event is raised on
     /// CS 0 and in `cs_irq_req` instead. Knobs: `never_complete` ignores
     /// doorbell 1, `no_stop_ack` and `no_terminate_ack` leave a stop or a
@@ -1733,6 +1819,12 @@ mod tests {
         unstable: Cell<Option<usize>>,
         /// Blocks run.
         runs: Cell<u32>,
+        /// Reads from the sync object's write to the output page's
+        /// `extract` and the events (`None`: the same read).
+        publish_lag: Option<u32>,
+        publish_due: Cell<Option<u32>>,
+        /// The `extract` the next publish writes.
+        published: Cell<u64>,
     }
 
     impl Mcu {
@@ -1759,6 +1851,9 @@ mod tests {
                 ack_state: Cell::new(None),
                 unstable: Cell::new(None),
                 runs: Cell::new(0),
+                publish_lag: None,
+                publish_due: Cell::new(None),
+                published: Cell::new(0),
             }
         }
         fn word(&self, a: usize) -> u32 {
@@ -1868,9 +1963,24 @@ mod tests {
                 self.runs.set(self.runs.get() + 1);
                 extract += job::JOB_BYTES;
             }
-            self.put64(out + offset_of!(RingbufOutput, extract), extract);
+            self.published.set(extract);
+            match self.publish_lag {
+                Some(n) => self.publish_due.set(Some(n)),
+                None => {
+                    self.put64(out + offset_of!(RingbufOutput, extract), extract);
+                    let ack = at(CSG_OUT) + offset_of!(CsgOutput, ack);
+                    self.put(ack, self.word(ack) ^ csf::CSG_SYNC_UPDATE);
+                }
+            }
+        }
+        /// The firmware's late side of a job: `extract`, `CSG_SYNC_UPDATE`
+        /// and CS 0's `cs_irq_req` bit.
+        fn publish(&self) {
+            self.put64(at(QUEUE.output_va) + offset_of!(RingbufOutput, extract), self.published.get());
             let ack = at(CSG_OUT) + offset_of!(CsgOutput, ack);
             self.put(ack, self.word(ack) ^ csf::CSG_SYNC_UPDATE);
+            let irq = at(CSG_OUT) + offset_of!(CsgOutput, cs_irq_req);
+            self.put(irq, self.word(irq) ^ 1 << CS_SLOT);
         }
         fn tick(&self, due: &Cell<Option<u32>>, answer: impl FnOnce()) {
             match due.get() {
@@ -1893,6 +2003,7 @@ mod tests {
             self.tick(&self.csg_due, || self.answer_csg());
             self.tick(&self.cs_due, || self.answer_cs());
             self.tick(&self.job_due, || self.answer_job());
+            self.tick(&self.publish_due, || self.publish());
             let v = self.word(addr);
             if self.unstable.get() == Some(addr) {
                 self.put(addr, v.wrapping_add(1));
@@ -2838,6 +2949,111 @@ mod tests {
         let log = named(&mcu.log());
         assert!(log.iter().all(|w| w.0 != "csg.doorbell_req"), "{log:?}");
         assert_eq!(log.last(), Some(&("doorbell 0", 1)));
+    }
+
+    // ---- the firmware's late publish of extract, and the drain ----
+
+    /// The model's late publish: 10 reads after the sync object's write,
+    /// after the wait's last look (its seqno read) and before the group's
+    /// end has cleared the events, as on the board.
+    const PUBLISH_LAG: u32 = 10;
+
+    fn do_drained(mcu: &Mcu, s: &Started) -> (Result<Drained, DrainRefused>, u64) {
+        let mut slept = 0u64;
+        let r = drained(mcu, GPU, &iface(), &csg0(), &cs0(), s, &mut |us| slept += u64::from(us));
+        (r, slept)
+    }
+
+    #[test]
+    fn the_board_s_firmware_publishes_extract_and_the_sync_update_after_the_seqno() {
+        // the first Z4 run (issue #4515): the wait saw seqno 1 with extract
+        // 0 and no sync update; the terminate then cleared CSG_SYNC_UPDATE
+        // and CS 0's cs_irq bit (cleared 0x10000000 1 0)
+        let mcu = Mcu { publish_lag: Some(PUBLISH_LAG), ..Mcu::new() };
+        let s = started(&mcu);
+        let sub = do_submit(&mcu, &s, 1).unwrap();
+        let w = do_wait(&mcu, &s, &sub).0.unwrap();
+        assert_eq!((w.seqno, w.sync_updates), (1, 0));
+        assert_eq!(mcu.read64(at(QUEUE.output_va)), 0);
+        let mut slept = 0u64;
+        let ended = stop_and_terminate(&mcu, GPU, &iface(), &csg0(), &cs0(), &mut |us| slept += u64::from(us));
+        let cleared = ended.terminate.unwrap().cleared;
+        assert_eq!(cleared, Cleared { csg_events: csf::CSG_SYNC_UPDATE, cs_irq: 1, cs_events: 0 });
+        assert_eq!(mcu.read64(at(QUEUE.output_va)), 128);
+    }
+
+    #[test]
+    fn drained_waits_for_extract_and_acknowledges_the_late_events() {
+        // a publish later than the drain's first look
+        let mcu = Mcu { publish_lag: Some(40), ..Mcu::new() };
+        let s = started(&mcu);
+        let sub = do_submit(&mcu, &s, 1).unwrap();
+        assert_eq!(do_wait(&mcu, &s, &sub).0.unwrap().sync_updates, 0);
+        mcu.log.borrow_mut().clear();
+        let (r, slept) = do_drained(&mcu, &s);
+        let d = r.unwrap();
+        assert_eq!((d.extract, d.sync_updates), (128, 1));
+        assert_eq!(u64::from(d.us), slept);
+        assert!(d.us > 0 && d.us.is_multiple_of(JOB_POLL_US), "{d:?}");
+        // the events acknowledged as the wait's poll does: cs_irq_ack to
+        // cs_irq_req, the group's req to its ack under the events, the
+        // group rung once
+        assert_eq!(
+            named(&mcu.log()),
+            [
+                ("csg.cs_irq_ack", 1),
+                ("csg.req", 0x11 | csf::CSG_SYNC_UPDATE),
+                ("glb.doorbell_req", 0),
+                ("doorbell 0", 1),
+            ]
+        );
+        // so the group's end finds nothing pending
+        let ended = stop_and_terminate(&mcu, GPU, &iface(), &csg0(), &cs0(), &mut |_| {});
+        assert_eq!(ended.terminate.unwrap().cleared, Cleared::default());
+    }
+
+    #[test]
+    fn drained_after_an_instant_publish_returns_at_once_and_writes_nothing() {
+        let mcu = Mcu::new();
+        let s = started(&mcu);
+        let sub = do_submit(&mcu, &s, 1).unwrap();
+        assert_eq!(do_wait(&mcu, &s, &sub).0.unwrap().sync_updates, 1);
+        mcu.log.borrow_mut().clear();
+        let (r, slept) = do_drained(&mcu, &s);
+        assert_eq!((r, slept), (Ok(Drained { us: 0, extract: 128, sync_updates: 0 }), 0));
+        assert_eq!(mcu.log(), vec![]);
+    }
+
+    #[test]
+    fn an_extract_that_never_comes_is_refused_after_the_budget() {
+        let mcu = Mcu { publish_lag: Some(u32::MAX), ..Mcu::new() };
+        let s = started(&mcu);
+        let sub = do_submit(&mcu, &s, 1).unwrap();
+        assert_eq!(do_wait(&mcu, &s, &sub).0.unwrap().seqno, 1);
+        mcu.log.borrow_mut().clear();
+        let (r, slept) = do_drained(&mcu, &s);
+        let at = Drained { us: CS_ACK_WAIT_US, extract: 0, sync_updates: 0 };
+        assert_eq!(r, Err(DrainRefused { refused: (SchedRefusal::DrainTimeout, 0), at }));
+        assert_eq!(slept, u64::from(CS_ACK_WAIT_US));
+        // nothing pending was acknowledged, nothing written
+        assert_eq!(mcu.log(), vec![]);
+    }
+
+    #[test]
+    fn a_fault_after_the_job_is_refused_by_the_drain_with_what_it_saw() {
+        let mcu = Mcu { publish_lag: Some(PUBLISH_LAG), ..Mcu::new() };
+        let s = started(&mcu);
+        let sub = do_submit(&mcu, &s, 1).unwrap();
+        do_wait(&mcu, &s, &sub).0.unwrap();
+        mcu.put(at(CS_OUT) + offset_of!(CsOutput, fault), EXCEPTION_CS_INHERIT_FAULT);
+        raise_event(&mcu, CS_FAULT);
+        let (r, slept) = do_drained(&mcu, &s);
+        // the extract was read before the events (published by then)
+        let at = Drained { us: 0, extract: 128, sync_updates: 0 };
+        assert_eq!(
+            (r, slept),
+            (Err(DrainRefused { refused: (SchedRefusal::CsFault, EXCEPTION_CS_INHERIT_FAULT), at }), 0)
+        );
     }
 
     #[test]
