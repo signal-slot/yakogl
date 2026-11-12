@@ -3,7 +3,8 @@
 # dEQP-GLES2 on Zephyr: the conformance suite as a Zephyr image, EGL/GLES from
 # YakoGL, shaders from the in-process compiler. See README.md. One sample for
 # every board: the Zephyr board (-b) picks the GPU and its board side, the
-# board's files are in boards/. The Raspberry Pi 4 (V3D) adds src/v3d_board.c
+# board's files are in boards/. The STM32MP257F-DK's A35 adds the board
+# layer's stm32mp2/app.conf (below). The Raspberry Pi 4 (V3D) adds src/v3d_board.c
 # (the V3D's EGL default display and the result record, one screen the lead
 # photographs), the mailbox framebuffer, the HDMI console and the
 # bounded-lifetime watchdog of the rpi4 board layer.
@@ -13,6 +14,14 @@
 cmake_minimum_required(VERSION 3.20.0)
 get_filename_component(PVR_REPO "${CMAKE_CURRENT_SOURCE_DIR}/../../.." ABSOLUTE)
 include("${CMAKE_CURRENT_SOURCE_DIR}/../common/yakogl_dir.cmake")
+# The STM32MP257F-DK's A35 takes the board layer's own board files, as
+# gc_fence, gc_clear and gl_test do: app.conf here (the Vivante driver,
+# OP-TEE's watchdog, no hold), app.overlay through
+# boards/stm32mp257f_dk_stm32mp257fxx_a35.overlay, and dEQP's own needs in
+# boards/stm32mp257f_dk_stm32mp257fxx_a35.conf.
+if(BOARD MATCHES "^stm32mp257f_dk")
+  set(EXTRA_CONF_FILE "${PVR_REPO}/zephyr/lib/board/stm32mp2/app.conf" ${EXTRA_CONF_FILE})
+endif()
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(deqp_zephyr)
 set(PVR_SAMPLES "${CMAKE_CURRENT_SOURCE_DIR}/..")
@@ -25,6 +34,12 @@ endforeach()
 
 if(NOT CONFIG_YAKOGL_GPU_V3D)
   include("${PVR_SAMPLES}/common/sample.cmake")
+endif()
+# STM32MP257F-DK: the board layer (driver/zephyr/lib/board/stm32mp2) powers
+# the GPU, arms OP-TEE's watchdog and ends the run (src/main.cpp:
+# board_finish), with the yk-record line and PSCI SYSTEM_RESET into ST's Linux.
+if(CONFIG_YAKOGL_STM32MP2 AND NOT CONFIG_YAKOGL_BOARD_STM32MP2)
+  message(FATAL_ERROR "deqp: CONFIG_YAKOGL_BOARD is off (boards/stm32mp257f_dk_stm32mp257fxx_a35.conf turns it on)")
 endif()
 
 # Which dEQP package: gles2 (default) or gles3, against a stage 1 built with
