@@ -114,12 +114,16 @@ that measures it.
    reads go only in the fragment shader's own compile.
    - Kept whole: a mediump float varying of a mediump shader that an fp16
      operation reads (fsvec_*, discard_81_branchquad, intloop_*), or that
-     a lowered colour takes as it is. The colour is lowered when every
-     lane is a constant, a mediump varying's lane, a mediump uniform's
-     component, an fp16 texel, gl_PointCoord or fp16 arithmetic (cmp_*,
-     fsload_*, case 105).
-   - The lanes read alone: a highp shader, a highp varying and an integer
-     one (fsload_highp, fsload_hp_var2, intbool_89_flatlast); a colour
+     a lowered colour takes as it is. A colour lane is in a lowered tree
+     when its dereference is an operation's operand or is stored to a
+     local lower_precision lowers (a constructor's temporary, a mediump
+     local), and every lane of the colour is a constant, a mediump
+     varying's lane, a mediump uniform's component, an fp16 texel,
+     gl_PointCoord or fp16 arithmetic (cmp_*, fsload_*, case 105).
+   - The lanes read alone: a lane assigned to the colour itself
+     (`gl_FragColor.xy = a.xy`, no tree to lower: fsload_bare1-4); a
+     highp shader, a highp varying and an integer one (fsload_highp,
+     fsload_hp_var2, intbool_89_flatlast); a colour
      with an fp32 lane, a highp varying's, uniform's or texel's or an fp32
      operation's (fsload_hp_var2, case 89); a varying only a cube
      direction reads raw (varyconst_101_cubebias).

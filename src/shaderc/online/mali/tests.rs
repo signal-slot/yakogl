@@ -2096,6 +2096,30 @@ fn an_identity_on_every_lane_is_the_colour_s_own_lane_as_mesa_26_2_1() {
     assert!(failed.is_empty(), "{} of {} differ:\n{}", failed.len(), cases.len(), failed.join("\n"));
 }
 
+/// A colour lane assigned to the colour itself (`gl_FragColor.xy =
+/// a.xy`) is in no tree lower_precision lowers, so the link keeps the
+/// lanes read; a constructor's lane is (nir_fs.rs `kept_whole`).
+/// fsload_bare1-3 keep the lanes read; fsload_bare4 keeps p whole (its
+/// constructor) and c.y alone.
+#[test]
+fn a_lane_assigned_to_the_colour_keeps_the_lanes_read_as_mesa_26_2_1() {
+    let cases = [
+        ("fsload_bare1", td!("fsload_bare1.vert"), td!("fsload_bare1.frag"), td!("fsload_bare1.expect.json")),
+        ("fsload_bare2", td!("fsload_bare2.vert"), td!("fsload_bare2.frag"), td!("fsload_bare2.expect.json")),
+        ("fsload_bare3", td!("fsload_bare3.vert"), td!("fsload_bare3.frag"), td!("fsload_bare3.expect.json")),
+        ("fsload_bare4", td!("fsload_bare4.vert"), td!("fsload_bare4.frag"), td!("fsload_bare4.expect.json")),
+    ];
+    let failed: Vec<String> = cases
+        .iter()
+        .filter_map(|&(name, vs, fs, json)| {
+            std::panic::catch_unwind(|| check_linked_for(name, vs, fs, json)).err().map(|e| {
+                format!("{name}: {}", e.downcast_ref::<String>().map_or("", |s| s.lines().next().unwrap_or("")))
+            })
+        })
+        .collect();
+    assert!(failed.is_empty(), "{} of {} differ:\n{}", failed.len(), cases.len(), failed.join("\n"));
+}
+
 /// Two lanes of equal value: Mesa's link keeps the first in the layout's
 /// order and reads the other from it (`deduplicate_outputs`,
 /// nir_opt_varyings.c:3253-3420). fsload_dup's `a.z` is `a.x` (`.v2`, two
