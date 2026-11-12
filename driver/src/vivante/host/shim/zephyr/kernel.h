@@ -25,6 +25,7 @@
 #define BIT(n) (1UL << (n))
 #define ROUND_UP(x, a) ((((x) + ((a) - 1)) / (a)) * (a))
 #define ROUND_DOWN(x, a) (((x) / (a)) * (a))
+#define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 
 /* zephyr/device.h, zephyr/sys/sys_io.h: no registers, every read is 0 */
 struct device {

@@ -23,20 +23,28 @@
  * pixels: the GPU's 0x800+ state space is never read (driver/docs/
  * vivante-kernel-rust.md).
  *
+ * With CONFIG_GC_TRIANGLE_LINEAR_OUT the drawn target is then copied by the
+ * resolve engine (gc_draw_copy) into the top left of a linear XRGB8888
+ * buffer of a given width, height, pitch and address, the kind a display
+ * controller scans out, and the same checks run on the copy (lines prefixed
+ * "linear: "), with every pixel of the window compared to the target.
+ *
  * Only the board layer (yakogl_board.h) and the GPU driver's own interface
  * (gc.h, gc_render.h, gc_draw.h) are used, so the sample builds for every
  * board of the board layer with a vivante,gc node.
  *
  * The result lines (one per check, then the verdict):
  *   gc_triangle: red apex PASS (x,y) = rrggbbaa
+ *   gc_triangle: linear: PASS WxH pitch P at GPU 0x... phys 0x... (N failing checks)
  *   gc_triangle: PASS (0 failing checks)
  * The record: on a pass kind APP, w1 = status 1, w2 = the covered pixels,
  * w3 = W << 16 | H; when a check fails kind CHECK, tag CHECK_UNDRAWN,
  * w1 = the failing checks, w2 = the covered pixels, w3 = a bit mask of the
  * failing checks (bit 0 red apex, 1 green left, 2 blue right, 3 outside,
- * 4 covered pixels); on any other failure kind APP, w1 = stage << 8 |
- * status 2 (the step that failed), w2 = the fences retired, w3 = W << 16 | H.
- * A failed step's errno is on the console.
+ * 4 covered pixels, 5 a check of the linear copy, 6 a pixel of the copy
+ * that differs from the target); on any other failure kind APP, w1 = stage
+ * << 8 | status 2 (the step that failed), w2 = the fences retired, w3 =
+ * W << 16 | H. A failed step's errno is on the console.
  */
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
@@ -80,6 +88,7 @@ enum step {
 	STEP_DRAW,       /* gc_draw_triangle: the submit */
 	STEP_WAIT,       /* a fence's wait */
 	STEP_CHECK,      /* the read-back */
+	STEP_LINEAR,     /* CONFIG_GC_TRIANGLE_LINEAR_OUT: the buffer, the copy's submit */
 };
 
 /* The triangle in clip space (x right, y up): red at the top, green bottom
@@ -138,13 +147,15 @@ static uint32_t chan(uint32_t rgb, unsigned int shift)
 	return (rgb >> shift) & 0xffu;
 }
 
-/* One apex check: the pixel `own` (0 red, 1 green, 2 blue) is dominated by its
- * own channel. Prints the line; returns 1 when it fails. */
-static int check_apex(const char *what, unsigned int own, float x, float y)
+/* One apex check on `t`: the pixel `own` (0 red, 1 green, 2 blue) is
+ * dominated by its own channel. Prints the line, `pfx` first; returns 1 when
+ * it fails. */
+static int check_apex(const struct gc_target *t, const char *pfx, const char *what,
+		      unsigned int own, float x, float y)
 {
 	uint32_t px = (uint32_t)CLAMP((int)x, 0, (int)W - 1);
 	uint32_t py = (uint32_t)CLAMP((int)y, 0, (int)H - 1);
-	uint32_t v = gc_target_pixel(&s_target, px, py);
+	uint32_t v = gc_target_pixel(t, px, py);
 	uint32_t mine = chan(v, 16u - 8u * own);
 	bool ok = mine >= DOMINANT_MIN;
 
@@ -153,10 +164,192 @@ static int check_apex(const char *what, unsigned int own, float x, float y)
 			ok = false;
 		}
 	}
-	printk(NAME ": %-10s %s (%u,%u) = %08x\n", what, ok ? "PASS" : "FAIL", px, py,
+	printk(NAME ": %s%-10s %s (%u,%u) = %08x\n", pfx, what, ok ? "PASS" : "FAIL", px, py,
 	       (v << 8) | 0xffu);
 	return ok ? 0 : 1;
 }
+
+/*
+ * The checks of one picture: the three apexes, the outside, the covered
+ * pixels. `t` is the buffer, whose width and height may exceed the drawn
+ * W x H window at its top left; `rows` are the rows scanned (with the guard
+ * rows). A pixel outside the window must still hold the poison. `pfx`
+ * prefixes the lines. Adds the failing checks' bits to *mask and returns how
+ * many failed.
+ */
+static uint32_t check_picture(const struct gc_target *t, uint32_t rows, const char *pfx,
+			      uint32_t *covered_out, uint32_t *mask)
+{
+	uint32_t failing = 0, covered = 0, outside_wrong = 0;
+
+	/* The triangle's corners in pixels and its centroid. */
+	const float rx = px_x(s_tri[0].pos[0]), ry = px_y(s_tri[0].pos[1]);
+	const float gx = px_x(s_tri[1].pos[0]), gy = px_y(s_tri[1].pos[1]);
+	const float bx = px_x(s_tri[2].pos[0]), by = px_y(s_tri[2].pos[1]);
+	const float cx = (rx + gx + bx) / 3.0f, cy = (ry + gy + by) / 3.0f;
+
+	/* The three apexes, each just inside. */
+	if (check_apex(t, pfx, "red apex", 0, rx + (cx - rx) * INSET, ry + (cy - ry) * INSET)) {
+		failing++;
+		*mask |= BIT(0);
+	}
+	if (check_apex(t, pfx, "green left", 1, gx + (cx - gx) * INSET, gy + (cy - gy) * INSET)) {
+		failing++;
+		*mask |= BIT(1);
+	}
+	if (check_apex(t, pfx, "blue right", 2, bx + (cx - bx) * INSET, by + (cy - by) * INSET)) {
+		failing++;
+		*mask |= BIT(2);
+	}
+
+	/* Outside the bounding box (less a margin) the background must stay; the
+	 * guard rows and the buffer past the window must keep the poison;
+	 * everything in the window that differs from the background is counted
+	 * as covered. */
+	const int x0 = (int)gx - EDGE_MARGIN, x1 = (int)bx + EDGE_MARGIN;
+	const int y0 = (int)ry - EDGE_MARGIN, y1 = (int)gy + EDGE_MARGIN;
+	uint32_t first_x = 0, first_y = 0, first_v = 0;
+
+	for (uint32_t y = 0; y < rows; y++) {
+		const volatile uint32_t *r =
+			(const volatile uint32_t *)((uint8_t *)t->cpu + (size_t)y * t->stride);
+
+		for (uint32_t x = 0; x < t->width; x++) {
+			uint32_t v = r[x] & 0x00ffffffu;
+			bool drawn = x < W && y < H;
+			bool must_be_bg = drawn && ((int)x < x0 || (int)x > x1 || (int)y < y0 ||
+						    (int)y > y1);
+
+			if (drawn && v != BACKGROUND) {
+				covered++;
+			}
+			if ((!drawn && v != POISON) || (must_be_bg && v != BACKGROUND)) {
+				if (outside_wrong == 0u) {
+					first_x = x;
+					first_y = y;
+					first_v = v;
+				}
+				outside_wrong++;
+			}
+		}
+	}
+	if (outside_wrong != 0u) {
+		printk(NAME ": %soutside     FAIL (%u,%u) = %06x (%u wrong pixels)\n", pfx,
+		       first_x, first_y, first_v, outside_wrong);
+		failing++;
+		*mask |= BIT(3);
+	} else {
+		printk(NAME ": %soutside     PASS (background kept outside the box and in the guard rows)\n",
+		       pfx);
+	}
+
+	/* The area of the triangle in pixels. */
+	float area = 0.5f * (bx - gx) * (gy - ry);
+	float lo = area * (1.0f - AREA_TOLERANCE), hi = area * (1.0f + AREA_TOLERANCE);
+	bool area_ok = (float)covered >= lo && (float)covered <= hi;
+
+	printk(NAME ": %scovered     %s %u pixels (%u..%u expected)\n", pfx,
+	       area_ok ? "PASS" : "FAIL", covered, (uint32_t)lo, (uint32_t)hi);
+	if (!area_ok) {
+		failing++;
+		*mask |= BIT(4);
+	}
+	*covered_out = covered;
+	return failing;
+}
+
+#ifdef CONFIG_GC_TRIANGLE_LINEAR_OUT
+#define OUT_W (CONFIG_GC_TRIANGLE_LINEAR_OUT_WIDTH ? CONFIG_GC_TRIANGLE_LINEAR_OUT_WIDTH : W)
+#define OUT_H (CONFIG_GC_TRIANGLE_LINEAR_OUT_HEIGHT ? CONFIG_GC_TRIANGLE_LINEAR_OUT_HEIGHT : H)
+#define OUT_PITCH                                                                                  \
+	((uint32_t)(CONFIG_GC_TRIANGLE_LINEAR_OUT_PITCH ? CONFIG_GC_TRIANGLE_LINEAR_OUT_PITCH      \
+							: ROUND_UP(OUT_W * 4u, 64u)))
+/* An allocated buffer has guard rows after it; an address given is used for
+ * exactly the buffer. */
+#define OUT_GUARD (CONFIG_GC_TRIANGLE_LINEAR_OUT_ADDR == 0 ? GUARD_ROWS : 0u)
+
+BUILD_ASSERT(H % 4 == 0, "the resolve engine's copy takes heights in multiples of 4");
+BUILD_ASSERT(OUT_W >= W && OUT_H >= H, "the scan-out buffer is smaller than the target");
+BUILD_ASSERT(OUT_PITCH % 64 == 0 && OUT_PITCH >= OUT_W * 4,
+	     "the scan-out pitch must be a multiple of 64 and hold the width");
+BUILD_ASSERT(CONFIG_GC_TRIANGLE_LINEAR_OUT_ADDR % 64 == 0,
+	     "the scan-out address must be 64-byte aligned");
+
+/*
+ * CONFIG_GC_TRIANGLE_LINEAR_OUT: the drawn target copied by the resolve
+ * engine (gc_draw_copy) into the top left of a linear XRGB8888 buffer of
+ * OUT_W x OUT_H at OUT_PITCH, the kind a display controller scans out, and
+ * the picture's checks repeated on that copy. The buffer is poisoned first,
+ * so a pixel outside the window that changed is caught. Adds bit 5 (a check
+ * of the copy) and bit 6 (a window pixel that differs from the target) to
+ * *mask. Returns the failing checks, or a negative errno after fail().
+ */
+static int linear_out(uint32_t *mask)
+{
+	const size_t bytes = (size_t)OUT_PITCH * (OUT_H + OUT_GUARD);
+	struct gc_target out = { .width = OUT_W, .height = OUT_H, .stride = OUT_PITCH };
+	struct gc_bo bo;
+	uint32_t fence = 0, lmask = 0, covered = 0, differ = 0, failing;
+	int rc;
+
+	stage(STEP_LINEAR);
+	if (CONFIG_GC_TRIANGLE_LINEAR_OUT_ADDR == 0) {
+		rc = gc_render_alloc(bytes, 4096, &bo);
+	} else {
+		rc = gc_render_map_phys(CONFIG_GC_TRIANGLE_LINEAR_OUT_ADDR, bytes, &bo);
+	}
+	if (rc == 0 && bo.cpu == NULL) {
+		rc = -EFAULT;   /* no CPU view of the buffer to check */
+	}
+	if (rc) {
+		return fail(STEP_LINEAR, rc);
+	}
+	out.gpu = bo.gpu;
+	out.cpu = bo.cpu;
+
+	for (size_t i = 0; i < bytes / 4u; i++) {
+		((volatile uint32_t *)out.cpu)[i] = POISON;
+	}
+	gc_render_cache_flush(out.cpu, bytes);
+
+	rc = gc_draw_copy(&s_target, &out, &fence);
+	if (rc) {
+		return fail(STEP_LINEAR, rc);
+	}
+	rc = wait_fence(fence);
+	if (rc) {
+		return fail(STEP_WAIT, rc);
+	}
+	board_watchdog_feed();
+	stage(STEP_CHECK);
+	gc_render_cache_invd(out.cpu, bytes);
+
+	failing = check_picture(&out, OUT_H + OUT_GUARD, "linear: ", &covered, &lmask);
+	if (lmask != 0u) {
+		*mask |= BIT(5);
+	}
+	for (uint32_t y = 0; y < H; y++) {
+		const volatile uint32_t *s =
+			(const volatile uint32_t *)((uint8_t *)s_target.cpu + (size_t)y * s_target.stride);
+		const volatile uint32_t *d =
+			(const volatile uint32_t *)((uint8_t *)out.cpu + (size_t)y * out.stride);
+
+		for (uint32_t x = 0; x < W; x++) {
+			differ += ((s[x] ^ d[x]) & 0x00ffffffu) != 0u;
+		}
+	}
+	printk(NAME ": linear: copy       %s (%u of %ux%u pixels differ from the target)\n",
+	       differ == 0u ? "PASS" : "FAIL", differ, W, H);
+	if (differ != 0u) {
+		failing++;
+		*mask |= BIT(6);
+	}
+	printk(NAME ": linear: %s %ux%u pitch %u at GPU 0x%08x phys 0x%llx (%u failing checks)\n",
+	       failing == 0u ? "PASS" : "FAIL", OUT_W, OUT_H, OUT_PITCH, out.gpu,
+	       (unsigned long long)bo.phys, failing);
+	return (int)failing;
+}
+#endif
 
 static int run(void)
 {
@@ -164,7 +357,7 @@ static int run(void)
 	const struct gc_identity *id;
 	struct gc_bo bo;
 	uint32_t fence = 0;
-	uint32_t failing = 0, mask = 0, covered = 0, outside_wrong = 0;
+	uint32_t failing = 0, mask = 0, covered = 0;
 	int rc;
 
 	stage(STEP_DEVICE);
@@ -232,76 +425,15 @@ static int run(void)
 	stage(STEP_CHECK);
 	gc_render_cache_invd(s_target.cpu, (size_t)s_target.stride * (H + GUARD_ROWS));
 
-	/* The triangle's corners in pixels and its centroid. */
-	const float rx = px_x(s_tri[0].pos[0]), ry = px_y(s_tri[0].pos[1]);
-	const float gx = px_x(s_tri[1].pos[0]), gy = px_y(s_tri[1].pos[1]);
-	const float bx = px_x(s_tri[2].pos[0]), by = px_y(s_tri[2].pos[1]);
-	const float cx = (rx + gx + bx) / 3.0f, cy = (ry + gy + by) / 3.0f;
+	failing = check_picture(&s_target, H + GUARD_ROWS, "", &covered, &mask);
 
-	/* The three apexes, each just inside. */
-	if (check_apex("red apex", 0, rx + (cx - rx) * INSET, ry + (cy - ry) * INSET)) {
-		failing++;
-		mask |= BIT(0);
+#ifdef CONFIG_GC_TRIANGLE_LINEAR_OUT
+	rc = linear_out(&mask);
+	if (rc < 0) {
+		return rc;
 	}
-	if (check_apex("green left", 1, gx + (cx - gx) * INSET, gy + (cy - gy) * INSET)) {
-		failing++;
-		mask |= BIT(1);
-	}
-	if (check_apex("blue right", 2, bx + (cx - bx) * INSET, by + (cy - by) * INSET)) {
-		failing++;
-		mask |= BIT(2);
-	}
-
-	/* Outside the bounding box (less a margin) the background must stay; the
-	 * guard rows must keep the poison; everything that differs from the
-	 * background anywhere is counted as covered. */
-	const int x0 = (int)gx - EDGE_MARGIN, x1 = (int)bx + EDGE_MARGIN;
-	const int y0 = (int)ry - EDGE_MARGIN, y1 = (int)gy + EDGE_MARGIN;
-	uint32_t first_x = 0, first_y = 0, first_v = 0;
-
-	for (uint32_t y = 0; y < H + GUARD_ROWS; y++) {
-		const volatile uint32_t *r =
-			(const volatile uint32_t *)((uint8_t *)s_target.cpu +
-						    (size_t)y * s_target.stride);
-
-		for (uint32_t x = 0; x < W; x++) {
-			uint32_t v = r[x] & 0x00ffffffu;
-			bool must_be_bg = y < H && ((int)x < x0 || (int)x > x1 || (int)y < y0 ||
-						    (int)y > y1);
-
-			if (y < H && v != BACKGROUND) {
-				covered++;
-			}
-			if ((y >= H && v != POISON) || (must_be_bg && v != BACKGROUND)) {
-				if (outside_wrong == 0u) {
-					first_x = x;
-					first_y = y;
-					first_v = v;
-				}
-				outside_wrong++;
-			}
-		}
-	}
-	if (outside_wrong != 0u) {
-		printk(NAME ": outside     FAIL (%u,%u) = %06x (%u wrong pixels)\n", first_x,
-		       first_y, first_v, outside_wrong);
-		failing++;
-		mask |= BIT(3);
-	} else {
-		printk(NAME ": outside     PASS (background kept outside the box and in the guard rows)\n");
-	}
-
-	/* The area of the triangle in pixels. */
-	float area = 0.5f * (bx - gx) * (gy - ry);
-	float lo = area * (1.0f - AREA_TOLERANCE), hi = area * (1.0f + AREA_TOLERANCE);
-	bool area_ok = (float)covered >= lo && (float)covered <= hi;
-
-	printk(NAME ": covered     %s %u pixels (%u..%u expected)\n", area_ok ? "PASS" : "FAIL",
-	       covered, (uint32_t)lo, (uint32_t)hi);
-	if (!area_ok) {
-		failing++;
-		mask |= BIT(4);
-	}
+	failing += (uint32_t)rc;
+#endif
 
 	if (failing != 0u) {
 		printk(NAME ": FAIL (%u failing checks)\n", failing);
