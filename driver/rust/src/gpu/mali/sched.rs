@@ -1350,8 +1350,10 @@ fn job_params(cs: &Cs, queue: &Queue, j: &Job) -> Result<job::JobParams, Refused
 /// One job on the started stream, as `queue_run_job` puts it there
 /// (panthor_sched.c:3133-3231):
 ///
-/// 1. checks before any write: a pending stream event ([`cs_events`]), the
-///    job's words ([`job_params`]; `seqno` above the sync object's), the
+/// 1. checks before any write: a pending stream error ([`cs_events`]
+///    without `CS_TILER_OOM`: an OOM is the stream waiting for memory, not
+///    an error, and panthor's `queue_run_job` reads no event; the wait's
+///    look services or refuses it, [`poll_job`]), the job's words ([`job_params`]; `seqno` above the sync object's), the
 ///    ring's room: its size less `in_flight`, the bytes of the jobs the
 ///    caller has not yet seen complete ([`job::check_ring_fit`] from
 ///    `insert - in_flight`: [`SchedRefusal::RingOverflow`] with the free
@@ -1394,7 +1396,9 @@ pub fn submit(
     seqno: u64,
     in_flight: u64,
 ) -> Result<Submitted, Refused> {
-    cs_events(m, cs)?;
+    // an OOM raised after the caller's last look must not refuse the job:
+    // it is the wait's to service (the OSAL grows its heap there)
+    cs_events_in(m, cs, CS_EVT_MASK & !CS_TILER_OOM)?;
     let p = job_params(cs, queue, j)?;
     if seqno <= read64_stable(m, s.syncobj_cpu + offset_of!(SyncObj64, seqno))? {
         return Err((SchedRefusal::JobParams, 5));
@@ -3358,9 +3362,9 @@ mod tests {
         let e = r.unwrap_err();
         assert_eq!((e.refused, e.us, slept, e.ended), ((SchedRefusal::TilerOom, 0x77), 0, 0, None));
         assert_eq!(mcu.log(), vec![]);
-        // a submit meets it first, before any write
-        assert_eq!(do_submit(&mcu, &s, 2), Err((SchedRefusal::TilerOom, 0x77)));
-        assert_eq!(mcu.log(), vec![]);
+        // a submit is not refused by it (panthor's queue_run_job reads no
+        // event): the job goes on the ring behind the waiting one
+        assert_eq!(do_submit(&mcu, &s, 2).map(|sub| sub.seqno), Ok(2));
 
         // the group's end: the event acknowledged on CS 0's req, the
         // stream's bit of doorbell_req toggled and the group rung
