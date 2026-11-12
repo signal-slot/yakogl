@@ -151,6 +151,7 @@ pub(super) fn passes<'s>(m: &Module<'_>, scratch: &Arena<'s>) -> Result<Option<R
     t.rebalance()?;
     t.reassociate()?;
     t.negneg();
+    t.neg_products()?;
     t.neg_zero_compares();
     if !t.changed && trees.is_none() {
         return Ok(None);
@@ -1538,6 +1539,77 @@ impl Tree<'_, '_> {
 }
 
 impl Tree<'_, '_> {
+    /// `fmul(fneg(a), b)` is `fneg(fmul(a, b))` (nir_opt_algebraic.py:2387,
+    /// a commutative match: `a` the fneg's source, first, on whichever
+    /// side the fneg stood) for a negated literal: glsl_to_nir gives
+    /// `x * -3.0` as `fmul(x, fneg(3.0))`, and the GL linker's loop runs
+    /// `nir_opt_algebraic` before `nir_opt_constant_folding`
+    /// (gl_nir_linker.c:102-103), so the rule takes the product before the
+    /// constant is folded. Measured: `vec4(a2 * -3.0, 0.0, 1.0)` is
+    /// `FMA.v2f16 r0, u2.w0, r0^` (3.0 first) then `FADD.v2f16 r0,
+    /// r0^.neg, 0x0.neg` (tools/mali/testdata/negmul_*). The builders fold
+    /// `fneg(3.0)` into `-3.0` before they see the product, so it is
+    /// rewritten here, in place: the fneg (read by the product alone)
+    /// becomes the product of the literal and the other operand, and the
+    /// product its negation. That needs the other operand made before the
+    /// fneg; a literal first (`-3.0 * x`) has no place for the product
+    /// between the operand and its user, and is refused
+    /// ([`MaliError::ArithConstant`]), unless it is 1.0, which both forms
+    /// make `fneg(x)` (:292, :296). A product read by `fmin` or `fmax` may be
+    /// GLSL's `clamp` that NIR sees as `fsat` (the rule's
+    /// `is_used_by_non_fsat`), and a product of a product (`x * u * -3.0`)
+    /// takes a reassociation next (`fmul(fmul(a, b), #c)`, measured: Mesa
+    /// computes `x * 3.0` first, then `* u`, negmul_three): both refused
+    /// the same way.
+    fn neg_products(&mut self) -> Result<(), MaliError> {
+        let n = self.instrs.len();
+        let mut any = false;
+        for p in 0..n {
+            let IrOp::Alu(AluOp::Fmul, s) = self.instrs[p] else { continue };
+            let lit = |t: &Self, k: usize| -> Option<(usize, Src)> {
+                let id = s[k].val.0 as usize;
+                let IrOp::Alu(AluOp::Fneg, [c, ..]) = *t.instrs.get(id)? else { return None };
+                matches!(t.instrs.get(c.val.0 as usize)?, IrOp::ConstF32(_)).then_some((id, c))
+            };
+            let (k, (nid, c)) = match (lit(self, 0), lit(self, 1)) {
+                (Some(_), Some(_)) => return Err(MaliError::ArithConstant),
+                (Some(x), None) => (0, x),
+                (None, Some(x)) => (1, x),
+                (None, None) => continue,
+            };
+            let w = usize::from(self.comps[p]).clamp(1, 4);
+            let swizzle: [u8; 4] = core::array::from_fn(|i| c.swizzle[s[k].swizzle[i] as usize & 3]);
+            let IrOp::ConstF32(v) = self.instrs[c.val.0 as usize] else { continue };
+            let one = swizzle[..w].iter().all(|&l| v[l as usize & 3] == 0x3f80_0000);
+            let other = s[1 - k];
+            let read_by = |t: &Self, id: usize, f: &dyn Fn(&IrOp) -> bool| {
+                t.instrs.iter().any(|op| {
+                    let mut r = false;
+                    op.for_each_src(|x| r |= x.val.0 as usize == id);
+                    r && f(op)
+                })
+            };
+            let clamped = read_by(self, p, &|op| matches!(op, IrOp::Alu(AluOp::Fmin | AluOp::Fmax, _)));
+            let placed = self.uses[nid] == Use::Alu(p as u32) && (other.val.0 as usize) < nid;
+            let chain = matches!(self.instrs.get(other.val.0 as usize), Some(IrOp::Alu(AluOp::Fmul, _)));
+            if one && !clamped {
+                continue;
+            }
+            if clamped || chain || !placed {
+                return Err(MaliError::ArithConstant);
+            }
+            self.instrs[nid] = IrOp::Alu(AluOp::Fmul, [Src { val: c.val, swizzle }, other, other]);
+            self.comps[nid] = self.comps[p];
+            self.instrs[p] = IrOp::Alu(AluOp::Fneg, [Src::id(ValueId(nid as u32)); 3]);
+            any = true;
+        }
+        if any {
+            self.changed = true;
+            self.count();
+        }
+        Ok(())
+    }
+
     /// The rules of nir_opt_algebraic.py on a compare with `-0.0`
     /// (:771-776): `flt` and `fge` take `0.0` on either side, `feq(-0.0,
     /// a)` is `feq(a, 0.0)` and `fneu(a, -0.0)` is `fneu(0.0, a)`, each

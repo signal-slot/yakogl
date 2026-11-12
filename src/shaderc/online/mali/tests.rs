@@ -6326,6 +6326,73 @@ fn a_negative_zero_is_mesa_s_in_every_route() {
     assert!(failed.is_empty(), "{} of {} differ:\n{}", failed.len(), NEGZERO_POPULATION.len(), failed.join("\n"));
 }
 
+/// A product with a negated literal (issue #4575), each pair through the
+/// link against its drm-shim reference (`--uniform-values`): `x * -c` is
+/// `fneg(fmul(c, x))` (glsl.rs `Tree::neg_products`,
+/// nir_opt_algebraic.py:2387): mediump by -3.0, -2.0, -0.5 and -0.0 (the
+/// colour's lanes -0.0), then by a uniform; highp alone and in a sum; the
+/// vertex stage's position by -3.0 alone and in a sum, a varying by -2.0;
+/// and a negated position's lanes, whose fneg moves into the viewport
+/// transform (nir.rs `Nir::alu`). Guards that were equal: `* -1.0` (an
+/// fneg), a constant vector with a negative lane, `-x * 3.0`, a negated w.
+const NEGMUL_POPULATION: [(&str, &str, &str, &str); 18] = [
+    pair!("negmul_mediump"),
+    pair!("negmul_mediump_two"),
+    pair!("negmul_mediump_half"),
+    pair!("negmul_mediump_zero"),
+    pair!("negmul_then_uniform"),
+    pair!("negmul_highp"),
+    pair!("negmul_highp_sum"),
+    pair!("negmul_vs"),
+    pair!("negmul_vs_sum"),
+    pair!("negmul_vs_varying"),
+    pair!("negmul_vs_neg"),
+    pair!("negmul_vs_negxy"),
+    pair!("negmul_vs_xy"),
+    pair!("negmul_vs_w"),
+    pair!("negmul_mediump_one"),
+    pair!("negmul_mediump_vector"),
+    pair!("negmul_mediump_negvalue"),
+    pair!("negmul_vs_negw"),
+];
+
+#[test]
+fn a_product_with_a_negated_literal_is_mesa_s() {
+    let mut failed = Vec::new();
+    for (name, vs, fs, json) in NEGMUL_POPULATION {
+        let r = std::panic::catch_unwind(|| {
+            check_linked(vs, fs, json);
+        });
+        if let Err(e) = r {
+            let m = e.downcast_ref::<String>().cloned().unwrap_or_else(|| format!("{:?}", e.downcast_ref::<&str>()));
+            failed.push(format!("{name}: {m}"));
+        }
+    }
+    assert!(failed.is_empty(), "{} of {} differ:\n{}", failed.len(), NEGMUL_POPULATION.len(), failed.join("\n"));
+}
+
+/// The negated-literal products that compiled on main to words that are
+/// not Mesa's and have no transcription yet, refused by name: the literal
+/// first (`-3.0 * a2`: no place in the IR for the product between the
+/// operand and its user), a product of a product (`a2 * u * -3.0`, Mesa
+/// reassociates it to `(a2 * 3.0) * u`), and a mediump sum (`a2 * -3.0 +
+/// 0.25`, the fused negation's operand form). Their references are kept.
+#[test]
+fn a_negated_literal_product_without_a_transcription_is_refused() {
+    for (name, _, fs, json, e) in [
+        (pair!("negmul_first"), MaliError::ArithConstant),
+        (pair!("negmul_three"), MaliError::ArithConstant),
+        (pair!("negmul_mediump_sum"), MaliError::FsOperandForm),
+    ]
+    .map(|((n, v, f, j), e)| (n, v, f, j, e))
+    {
+        assert!(region(json, "fs.fragment").is_some(), "{name}: the reference");
+        assert_eq!(gap(SHC_STAGE_FRAGMENT, fs), e, "{name}");
+    }
+    let vs = "attribute highp vec4 a_position; void main() { gl_Position = -3.0 * a_position; }";
+    assert_eq!(gap(SHC_STAGE_VERTEX, vs), MaliError::ArithConstant);
+}
+
 /// The chain and fold population (docs/notes/mali-rebalance.md,
 /// docs/notes/mali-algebraic-folds.md), each pair through the link
 /// ([`check_linked`]) against its drm-shim reference: (name, VS, FS,
