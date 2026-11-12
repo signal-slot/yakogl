@@ -127,6 +127,29 @@
 //! 16. STANDBY (c:950-969): `DSP_CTRL` = STANDBY takes effect at the end of
 //!     the frame and raises DSP_HOLD_VALID; Linux waits for it at most 50 ms,
 //!     and the bus clocks must not stop before it.
+//! 17. Cluster windows (h:533-536, h:544, h:566; r:282-315, r:1121-1198):
+//!     bases 0x1000, 0x1200, 0x1400, 0x1600; layer ids 0, 1, 4, 5; port
+//!     fields in `OVL_PORT_SEL` 17:16, 19:18, 21:20, 23:22 (h:738-741).
+//!     `CLUSTER_WIN_CTRL0` +0x000 has the window enable in bit 0 and YUV clip
+//!     in bit 19; `CLUSTER_CTRL` +0x100 has `CLUSTER_ENABLE` in bit 0. Linux
+//!     disables a window with enable 0 and, for a Cluster, `CLUSTER_ENABLE` 0
+//!     (c:149-155), YUV clip 0 (c:1078-1079), and disables every plane of a
+//!     port before STANDBY (c:946-947). Linux puts its own picture on
+//!     Cluster0 of VP0 (and of VP1 for the T6's second HDMI output; board
+//!     reading of 2026-11-12) and splits the eight layers evenly over the
+//!     ports it uses (c:2474-2484).
+//!
+//! The take-over from a system that left the VOP running (route (a) of
+//! driver/docs/nanopc-t6-display.md, section 2): (1) [`take_over`] disables
+//! every window of the ports it names (VP0, and VP1 when Linux drives the
+//! second output) except the one asked to keep, writes `REG_CFG_DONE` for
+//! those ports and waits for one frame start on each; (2)
+//! `rk_iommu::paging_off`, so nothing fetches through Linux's page tables
+//! any more by the time they stop being used; (3) [`overlay_single`] and
+//! [`window_show`] with our buffer. Doing (2) before (1) would let Linux's
+//! windows read their IOVAs as physical addresses for up to a frame; doing
+//! (3) before (1) leaves Linux's windows enabled outside every port's layer
+//! range, whose fetch behaviour the source does not tell.
 //!
 //! What is ours, not Linux's: the window must lie inside the active area (Linux
 //! clips, c:1211-1231), start on 64 bytes (the Mali render target's rule,
@@ -326,6 +349,7 @@ pub enum Esmart {
 }
 
 impl Esmart {
+    pub const ALL: [Esmart; 4] = [Esmart::E0, Esmart::E1, Esmart::E2, Esmart::E3];
     pub const fn base(self) -> usize {
         match self {
             Esmart::E0 => 0x1800,
@@ -372,6 +396,46 @@ impl Esmart {
     }
 }
 
+/// A Cluster window (fact 17). This module never shows one; it only turns
+/// off the one Linux leaves on (the take-over).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Cluster {
+    C0,
+    C1,
+    C2,
+    C3,
+}
+
+impl Cluster {
+    pub const ALL: [Cluster; 4] = [Cluster::C0, Cluster::C1, Cluster::C2, Cluster::C3];
+    pub const fn base(self) -> usize {
+        match self {
+            Cluster::C0 => 0x1000,
+            Cluster::C1 => 0x1200,
+            Cluster::C2 => 0x1400,
+            Cluster::C3 => 0x1600,
+        }
+    }
+    /// Its port field in `OVL_PORT_SEL`.
+    pub const fn port_sel_field(self) -> u32 {
+        match self {
+            Cluster::C0 => 0x3 << 16,
+            Cluster::C1 => 0x3 << 18,
+            Cluster::C2 => 0x3 << 20,
+            Cluster::C3 => 0x3 << 22,
+        }
+    }
+}
+
+/// Cluster window registers, offsets from [`Cluster::base`] (fact 17).
+pub mod cluster {
+    pub const WIN_CTRL0: usize = 0x00;
+    pub const CTRL: usize = 0x100;
+    pub const WIN_CTRL0_EN: u32 = 1 << 0;
+    pub const WIN_CTRL0_YUV_CLIP: u32 = 1 << 19;
+    pub const CTRL_CLUSTER_EN: u32 = 1 << 0;
+}
+
 /// The delay of an Esmart window in the default mode (fact 12).
 pub const ESMART_DLY: u32 = 23;
 
@@ -413,6 +477,11 @@ pub enum Refusal {
     StandbyTimeout = 9,
     /// The port cannot take the request (the single-layer overlay on VP3).
     BadPort = 10,
+    /// An event bit still reads 1 right after `VP_INT_CLR`: a later 1 could
+    /// be the old event, so it is not taken as new.
+    EventNotCleared = 11,
+    /// No frame start within [`FRAME_WAIT_US`]: the port does not run.
+    FrameTimeout = 12,
 }
 
 /// A refusal and the register value it is about (0 when there is none).
@@ -497,6 +566,9 @@ pub fn cfg_pending(m: &impl Mmio, base: usize, port: Vp) -> bool {
 /// The words a mode puts in a video port (facts 6-9), for HDMI RGB 8 bit.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct VpTiming {
+    /// The port the words are for: [`vp_set_timing`] and [`vp_start`] write
+    /// them there and nowhere else.
+    pub port: Vp,
     pub htotal_hs_end: u32,
     pub hact_st_end: u32,
     pub vtotal_vs_end: u32,
@@ -517,10 +589,15 @@ const fn post_scale(src: u32, dst: u32) -> u32 {
 }
 
 /// The timing words of `mode` on `port` (facts 6-9). Refused when a field is
-/// 0, a word field would overflow 16 bits, or the active area exceeds the
-/// port's largest output.
+/// 0 or wider than 16 bits (each is bounded before any sum, so nothing can
+/// wrap), a word field would overflow 16 bits, or the active area exceeds
+/// the port's largest output.
 pub fn vp_timing(mode: &VideoMode, port: Vp) -> Result<VpTiming, Refused> {
     let (max_w, max_h) = port.max_output();
+    let fields = [mode.hactive, mode.hfront, mode.hsync, mode.hback, mode.vactive, mode.vfront, mode.vsync, mode.vback];
+    if fields.iter().any(|&f| f > 0xffff) {
+        return Err(refuse(Refusal::BadMode));
+    }
     if mode.check().is_err() || mode.hactive < 2 || mode.vactive < 2 || mode.hactive > max_w || mode.vactive > max_h {
         return Err(refuse(Refusal::BadMode));
     }
@@ -544,6 +621,7 @@ pub fn vp_timing(mode: &VideoMode, port: Vp) -> Result<VpTiming, Refused> {
         post_scl_ctrl |= vp::POST_SCL_CTRL_VSCALEDOWN;
     }
     Ok(VpTiming {
+        port,
         htotal_hs_end: mode.htotal() << 16 | mode.hsync,
         hact_st_end: hact_st << 16 | hact_end,
         vtotal_vs_end: mode.vtotal() << 16 | mode.vsync,
@@ -623,7 +701,8 @@ pub const fn hdmi_grf(hdmi: HdmiPort, mode: &VideoMode) -> HdmiGrf {
 
 /// Write the port's timing (fact 7): the pixel clock is set after this and
 /// before [`vp_start`], as Linux does.
-pub fn vp_set_timing(m: &impl Mmio, base: usize, port: Vp, t: &VpTiming) {
+pub fn vp_set_timing(m: &impl Mmio, base: usize, t: &VpTiming) {
+    let port = t.port;
     let v = vp::base(port.id());
     wr(m, base, v + vp::DSP_HTOTAL_HS_END, t.htotal_hs_end);
     wr(m, base, v + vp::DSP_HACT_ST_END, t.hact_st_end);
@@ -636,7 +715,8 @@ pub fn vp_set_timing(m: &impl Mmio, base: usize, port: Vp, t: &VpTiming) {
 /// Start the port with its pixel clock running (facts 8, 9): background
 /// delay, post-scaler, `REG_CFG_DONE` for the port, then `DSP_CTRL` with
 /// STANDBY clear, last.
-pub fn vp_start(m: &impl Mmio, base: usize, port: Vp, t: &VpTiming) {
+pub fn vp_start(m: &impl Mmio, base: usize, t: &VpTiming) {
+    let port = t.port;
     let v = vp::base(port.id());
     wr(m, base, ovl::vp_bg_mix_ctrl(port.id()), t.bg_mix_ctrl);
     wr(m, base, v + vp::PRE_SCAN_HTIMING, t.pre_scan_htiming);
@@ -651,8 +731,12 @@ pub fn vp_start(m: &impl Mmio, base: usize, port: Vp, t: &VpTiming) {
 
 /// `OVL_LAYER_SEL` with `win` moved to layer `layer` and the window found
 /// there moved to `win`'s old layer (fact 11). A window found on no layer
-/// leaves the others where they are.
-pub const fn layer_sel_with(found: u32, layer: u32, win: Esmart) -> u32 {
+/// leaves the others where they are. `None` for a layer past the eighth
+/// (the RK3588 has eight windows, r:2529).
+pub const fn layer_sel_with(found: u32, layer: u32, win: Esmart) -> Option<u32> {
+    if layer >= 8 {
+        return None;
+    }
     let id = win.layer_sel_id();
     let mut old_layer = 0;
     while old_layer < 8 && (found >> (4 * old_layer)) & 0xf != id {
@@ -663,7 +747,7 @@ pub const fn layer_sel_with(found: u32, layer: u32, win: Esmart) -> u32 {
     if old_layer < 8 && old_layer != layer {
         sel = sel & !(0x7 << (4 * old_layer)) | displaced << (4 * old_layer);
     }
-    sel
+    Some(sel)
 }
 
 /// `OVL_PORT_SEL` with `win` as the only layer of `port` (0-2) and no layer
@@ -707,7 +791,9 @@ pub fn overlay_single(
     let port_found = rd(m, base, ovl::PORT_SEL);
     let layer_found = rd(m, base, ovl::LAYER_SEL);
     let port_sel = port_sel_with(port_found, port, win);
-    let layer_sel = layer_sel_with(layer_found, 0, win);
+    let Some(layer_sel) = layer_sel_with(layer_found, 0, win) else {
+        return Err(refuse(Refusal::BadPort));
+    };
 
     let mut ctrl = ctrl_found & !(ovl::CTRL_REGDONE_IMD | ovl::CTRL_REGDONE_SEL | 1 << port.id());
     if layer_sel != layer_found || port_sel != port_found {
@@ -770,15 +856,23 @@ pub struct Window {
     pub format: Format,
 }
 
+/// The largest active area a window is placed in: the RK3588's largest
+/// input, 4096x4320 (r:2525); every port's output is smaller (fact 6).
+pub const MAX_ACTIVE: (u32, u32) = (4096, 4320);
+
 /// The alignment of a window's address (the module text).
 pub const WINDOW_ALIGN: u64 = 64;
 
 /// Whether `w` can be shown in an active area of `active_w` x `active_h`
 /// (the module text): inside it, on 64 bytes, a stride of whole 32-bit words
-/// that holds a line and fits 16 bits, and every byte below 4 GiB.
+/// that holds a line and fits 16 bits, and every byte below 4 GiB. The
+/// active area itself is at most [`MAX_ACTIVE`], so every size and position
+/// word fits its 16-bit half; the end address is computed without wrapping.
 pub fn window_check(w: &Window, active_w: u32, active_h: u32) -> Result<(), Refused> {
     let line = u64::from(w.width) * u64::from(w.format.bytes_per_pixel());
-    if w.width == 0
+    if active_w > MAX_ACTIVE.0
+        || active_h > MAX_ACTIVE.1
+        || w.width == 0
         || w.height == 0
         || u64::from(w.x) + u64::from(w.width) > u64::from(active_w)
         || u64::from(w.y) + u64::from(w.height) > u64::from(active_h)
@@ -794,11 +888,14 @@ pub fn window_check(w: &Window, active_w: u32, active_h: u32) -> Result<(), Refu
     if u64::from(w.stride_bytes) < line {
         return Err(refuse(Refusal::StrideTooNarrow));
     }
-    let end = w.addr + u64::from(w.stride_bytes) * u64::from(w.height - 1) + line;
-    if end > 1 << 32 {
-        return Err(refuse(Refusal::WindowAbove4G));
+    let end = u64::from(w.stride_bytes)
+        .checked_mul(u64::from(w.height - 1))
+        .and_then(|rows| rows.checked_add(line))
+        .and_then(|span| span.checked_add(w.addr));
+    match end {
+        Some(e) if e <= 1 << 32 => Ok(()),
+        _ => Err(refuse(Refusal::WindowAbove4G)),
     }
-    Ok(())
 }
 
 /// Program Esmart `win` for `w` and enable it (facts 13, 14), with enable
@@ -875,6 +972,93 @@ pub fn window_disable(m: &impl Mmio, base: usize, win: Esmart) {
     modify(m, base + win.base(), esmart::REGION0_CTRL, esmart::R0_ENABLE | esmart::R0_YUV_CLIP, 0);
 }
 
+/// Disable a Cluster window (fact 17): `WIN0_EN` and YUV clip, then
+/// `CLUSTER_ENABLE`; it goes at the port's next [`cfg_done`].
+pub fn cluster_disable(m: &impl Mmio, base: usize, win: Cluster) {
+    let b = base + win.base();
+    modify(m, b, cluster::WIN_CTRL0, cluster::WIN_CTRL0_EN | cluster::WIN_CTRL0_YUV_CLIP, 0);
+    modify(m, b, cluster::CTRL, cluster::CTRL_CLUSTER_EN, 0);
+}
+
+/// Which windows [`windows_off`] disabled: bit n Cluster n, bit 4 + n Esmart n.
+pub type WindowMask = u32;
+
+/// Disable every window whose `OVL_PORT_SEL` field names a port in `ports`
+/// (bit n = VPn), except `keep` (fact 17). Nothing takes effect before each
+/// port's [`cfg_done`]. Returns the windows disabled.
+pub fn windows_off(m: &impl Mmio, base: usize, ports: u32, keep: Option<Esmart>) -> WindowMask {
+    let sel = rd(m, base, ovl::PORT_SEL);
+    let on = |f: u32| ports & 1 << ((sel & f) >> f.trailing_zeros()) != 0;
+    let mut off = 0;
+    for (i, c) in Cluster::ALL.iter().enumerate() {
+        if on(c.port_sel_field()) {
+            cluster_disable(m, base, *c);
+            off |= 1 << i;
+        }
+    }
+    for (i, e) in Esmart::ALL.iter().enumerate() {
+        if Some(*e) != keep && on(e.port_sel_field()) {
+            window_disable(m, base, *e);
+            off |= 1 << (4 + i);
+        }
+    }
+    off
+}
+
+/// Clear `bits` of `port` and check they read 0 (review S1): a bit that
+/// stays set is [`Refusal::EventNotCleared`], never a new event.
+fn clear_checked(m: &impl Mmio, base: usize, port: Vp, bits: u32) -> Result<(), Refused> {
+    vp_clear(m, base, port, bits);
+    let raw = vp_raw_status(m, base, port);
+    if raw & bits != 0 {
+        return Err(Refused { why: Refusal::EventNotCleared, read_back: raw });
+    }
+    Ok(())
+}
+
+/// Wait for the next frame start of `port`: cleared and checked first, then
+/// polled for at most [`FRAME_WAIT_US`]. Returns the µs waited.
+pub fn wait_frame(m: &impl Mmio, base: usize, port: Vp, delay_us: &mut impl FnMut(u32)) -> Result<u32, Refused> {
+    clear_checked(m, base, port, sys::INT_FS)?;
+    let mut waited = 0;
+    loop {
+        let raw = vp_raw_status(m, base, port);
+        if raw & sys::INT_FS != 0 {
+            return Ok(waited);
+        }
+        if waited >= FRAME_WAIT_US {
+            return Err(Refused { why: Refusal::FrameTimeout, read_back: raw });
+        }
+        delay_us(POLL_STEP_US);
+        waited += POLL_STEP_US;
+    }
+}
+
+/// The first step of taking the VOP over from the system before us
+/// (fact 17, the module text's take-over order): every window on `ports`
+/// except `keep` disabled, `REG_CFG_DONE` for each of those ports, then one
+/// frame start on each, after which no disabled window fetches any more.
+/// Only then may the IOMMU be switched off (`rk_iommu::paging_off`) and the
+/// overlay changed ([`overlay_single`]).
+pub fn take_over(
+    m: &impl Mmio,
+    base: usize,
+    ports: &[Vp],
+    keep: Option<Esmart>,
+    delay_us: &mut impl FnMut(u32),
+) -> Result<WindowMask, Refused> {
+    let mask = ports.iter().fold(0, |a, p| a | 1 << p.id());
+    let off = windows_off(m, base, mask, keep);
+    for p in ports {
+        cfg_done(m, base, *p);
+    }
+    // A frame start after CFG_DONE: the update was taken at that boundary.
+    for p in ports {
+        wait_frame(m, base, *p, delay_us)?;
+    }
+    Ok(off)
+}
+
 /// `REGION0_YRGB_MST` of a window.
 pub fn window_address(m: &impl Mmio, base: usize, win: Esmart) -> u32 {
     rd(m, base + win.base(), esmart::REGION0_YRGB_MST)
@@ -883,10 +1067,13 @@ pub fn window_address(m: &impl Mmio, base: usize, win: Esmart) -> u32 {
 /// Put `port` in STANDBY and wait for DSP_HOLD_VALID (fact 16): clear the
 /// event, write `DSP_CTRL` = STANDBY, poll `VP_INT_RAW_STATUS` for at most
 /// [`FRAME_WAIT_US`]. Returns the µs waited; on a timeout the bus clocks must
-/// stay on (the caller's rule).
+/// stay on (the caller's rule). A DSP_HOLD_VALID that the clear does not
+/// clear is [`Refusal::EventNotCleared`] and STANDBY is not written. A port
+/// already in STANDBY raises no new DSP_HOLD_VALID and times out: the caller
+/// reads `DSP_CTRL` first.
 pub fn standby(m: &impl Mmio, base: usize, port: Vp, delay_us: &mut impl FnMut(u32)) -> Result<u32, Refused> {
     let hold = sys::INT_DSP_HOLD_VALID;
-    wr(m, base, sys::vp_int_clr(port.id()), hold << 16 | hold);
+    clear_checked(m, base, port, hold)?;
     wr(m, base, vp::base(port.id()) + vp::DSP_CTRL, vp::DSP_CTRL_STANDBY);
     let mut waited = 0;
     loop {
@@ -926,19 +1113,26 @@ pub struct FrameCheck {
 }
 
 /// Clear frame start and POST_BUF_EMPTY of `port`, wait `wait_us` (more than
-/// one frame), then read them and the two bus error bits back.
-pub fn frame_check(m: &impl Mmio, base: usize, port: Vp, wait_us: u32, delay_us: &mut impl FnMut(u32)) -> FrameCheck {
-    vp_clear(m, base, port, sys::INT_FS | sys::INT_POST_BUF_EMPTY);
+/// one frame), then read them and the two bus error bits back. Bits that
+/// the clear does not clear are [`Refusal::EventNotCleared`].
+pub fn frame_check(
+    m: &impl Mmio,
+    base: usize,
+    port: Vp,
+    wait_us: u32,
+    delay_us: &mut impl FnMut(u32),
+) -> Result<FrameCheck, Refused> {
+    clear_checked(m, base, port, sys::INT_FS | sys::INT_POST_BUF_EMPTY)?;
     delay_us(wait_us);
     let raw = vp_raw_status(m, base, port);
     let s0 = rd(m, base, sys::SYS0_INT_STATUS);
     let s1 = rd(m, base, sys::SYS1_INT_STATUS);
-    FrameCheck {
+    Ok(FrameCheck {
         frame_start: raw & sys::INT_FS != 0,
         underflow: raw & sys::INT_POST_BUF_EMPTY != 0,
         bus_error: [s0 & sys::INT_BUS_ERROR != 0, s1 & sys::INT_BUS_ERROR != 0],
         raw,
-    }
+    })
 }
 
 /// The registers the board prints after a bring-up (section 5): read only.
@@ -1057,6 +1251,8 @@ mod tests {
         underflow: bool,
         /// The AXI fetch fails (SYS0 bus error, when enabled).
         bus_error: bool,
+        /// `VP_INT_CLR` does not clear the raw bits (review S1).
+        clr_ignored: bool,
     }
 
     #[derive(Default)]
@@ -1180,7 +1376,8 @@ mod tests {
                         s.pending = true;
                     }
                 }
-                VP0_INT_CLR => s.raw &= !(val & (val >> 16) & 0xffff),
+                VP0_INT_CLR if !self.f.clr_ignored => s.raw &= !(val & (val >> 16) & 0xffff),
+                VP0_INT_CLR => {}
                 PORT_SEL => s.port_sel_written = Some(val),
                 VP0_DSP_CTRL => {
                     let was = Self::running(&s);
@@ -1366,8 +1563,8 @@ mod tests {
     fn the_port_starts_with_cfg_done_before_dsp_ctrl_and_dsp_ctrl_last() {
         let v = Vop::new(Faults::default());
         let t = vp_timing(&CEA_1080P60, Vp::Vp0).unwrap();
-        vp_set_timing(&v, BASE, Vp::Vp0, &t);
-        vp_start(&v, BASE, Vp::Vp0, &t);
+        vp_set_timing(&v, BASE, &t);
+        vp_start(&v, BASE, &t);
         let w = v.writes();
         assert_eq!(
             &w[..6],
@@ -1385,7 +1582,7 @@ mod tests {
         assert_eq!(w[n - 1], (0xc00, 15));
         assert_eq!(v.reg(0x6e0), 54 << 24);
         // the port runs: a frame starts within one frame time
-        let c = frame_check(&v, BASE, Vp::Vp0, 20_000, &mut |us| v.advance(us));
+        let c = frame_check(&v, BASE, Vp::Vp0, 20_000, &mut |us| v.advance(us)).unwrap();
         assert!(c.frame_start && !c.underflow && c.bus_error == [false, false]);
     }
 
@@ -1393,9 +1590,9 @@ mod tests {
     fn a_port_without_a_pixel_clock_shows_no_frame_start() {
         let v = Vop::new(Faults { no_frames: true, ..Faults::default() });
         let t = vp_timing(&CEA_1080P60, Vp::Vp0).unwrap();
-        vp_set_timing(&v, BASE, Vp::Vp0, &t);
-        vp_start(&v, BASE, Vp::Vp0, &t);
-        let c = frame_check(&v, BASE, Vp::Vp0, 50_000, &mut |us| v.advance(us));
+        vp_set_timing(&v, BASE, &t);
+        vp_start(&v, BASE, &t);
+        let c = frame_check(&v, BASE, Vp::Vp0, 50_000, &mut |us| v.advance(us)).unwrap();
         assert!(!c.frame_start);
     }
 
@@ -1404,8 +1601,8 @@ mod tests {
         let v = Vop::new(Faults { underflow: true, bus_error: true, ..Faults::default() });
         init(&v, BASE).unwrap();
         let t = vp_timing(&CEA_1080P60, Vp::Vp0).unwrap();
-        vp_start(&v, BASE, Vp::Vp0, &t);
-        let c = frame_check(&v, BASE, Vp::Vp0, 40_000, &mut |us| v.advance(us));
+        vp_start(&v, BASE, &t);
+        let c = frame_check(&v, BASE, Vp::Vp0, 40_000, &mut |us| v.advance(us)).unwrap();
         assert!(c.frame_start && c.underflow);
         assert_eq!(c.bus_error, [true, false]);
         let r = read_back(&v, BASE, Vp::Vp0, Esmart::E0);
@@ -1417,8 +1614,8 @@ mod tests {
         let v = Vop::new(Faults::default());
         init(&v, BASE).unwrap();
         let t = vp_timing(&CEA_1080P60, Vp::Vp0).unwrap();
-        vp_set_timing(&v, BASE, Vp::Vp0, &t);
-        vp_start(&v, BASE, Vp::Vp0, &t);
+        vp_set_timing(&v, BASE, &t);
+        vp_start(&v, BASE, &t);
         v.advance(20_000);
         v.clear_log();
         v
@@ -1500,13 +1697,13 @@ mod tests {
     #[test]
     fn the_layer_select_swaps_esmart0_onto_layer_0() {
         // ids 0-7 on layers 0-7: Esmart0 (2) on layer 2 trades with layer 0
-        assert_eq!(layer_sel_with(0x7654_3210, 0, Esmart::E0), 0x7654_3012);
+        assert_eq!(layer_sel_with(0x7654_3210, 0, Esmart::E0), Some(0x7654_3012));
         // already there: unchanged
-        assert_eq!(layer_sel_with(0x7654_3012, 0, Esmart::E0), 0x7654_3012);
+        assert_eq!(layer_sel_with(0x7654_3012, 0, Esmart::E0), Some(0x7654_3012));
         // Linux clears three bits of the nibble (r:2229): bit 3 stays
-        assert_eq!(layer_sel_with(0x0000_0028, 0, Esmart::E0), 0x0000_008a);
+        assert_eq!(layer_sel_with(0x0000_0028, 0, Esmart::E0), Some(0x0000_008a));
         // not on any layer: only layer 0 changes
-        assert_eq!(layer_sel_with(0x1111_1111, 0, Esmart::E0), 0x1111_1112);
+        assert_eq!(layer_sel_with(0x1111_1111, 0, Esmart::E0), Some(0x1111_1112));
     }
 
     #[test]
@@ -1568,7 +1765,7 @@ mod tests {
     fn standby_times_out_by_name_when_dsp_hold_never_comes() {
         let v = Vop::new(Faults { no_dsp_hold: true, ..Faults::default() });
         let t = vp_timing(&CEA_1080P60, Vp::Vp0).unwrap();
-        vp_start(&v, BASE, Vp::Vp0, &t);
+        vp_start(&v, BASE, &t);
         v.s.borrow_mut().raw |= 1 << 6;
         let r = standby(&v, BASE, Vp::Vp0, &mut |us| v.advance(us)).unwrap_err();
         assert_eq!(r.why, Refusal::StandbyTimeout);
@@ -1583,11 +1780,11 @@ mod tests {
         init(&v, BASE).unwrap();
         let t = vp_timing(&CEA_1080P60, Vp::Vp0).unwrap();
         hdmi_route(&v, BASE, Vp::Vp0, HdmiPort::Hdmi0);
-        vp_set_timing(&v, BASE, Vp::Vp0, &t);
-        vp_start(&v, BASE, Vp::Vp0, &t);
+        vp_set_timing(&v, BASE, &t);
+        vp_start(&v, BASE, &t);
         overlay_single(&v, BASE, Vp::Vp0, Esmart::E0, &mut |us| v.advance(us)).unwrap();
         window_show(&v, BASE, Vp::Vp0, Esmart::E0, &FB, (1920, 1080)).unwrap();
-        let c = frame_check(&v, BASE, Vp::Vp0, 40_000, &mut |us| v.advance(us));
+        let c = frame_check(&v, BASE, Vp::Vp0, 40_000, &mut |us| v.advance(us)).unwrap();
         assert!(c.frame_start && !c.underflow);
         let r = read_back(&v, BASE, Vp::Vp0, Esmart::E0);
         assert_eq!(
@@ -1596,5 +1793,195 @@ mod tests {
         );
         assert_eq!(r.pd_ctrl & 0x8f, 0);
         assert_eq!(r.dsp_if_en, 1 << 3);
+    }
+
+    /// Review B1: Linux left its picture on Cluster0 of VP0 (measured on
+    /// the board, 2026-11-12) and split the layers four and four over VP0
+    /// and VP1 (c:2474-2484: PORT0_MUX 3, PORT1_MUX 7).
+    #[test]
+    fn taking_over_from_linux_leaves_no_other_window_enabled_on_the_port() {
+        let v = running_vop();
+        {
+            let mut s = v.s.borrow_mut();
+            s.regs.insert(0x1000, 1);
+            s.regs.insert(0x1100, 1);
+            s.regs.insert(0x1010, 0x0040_0000);
+            s.regs.insert(0x604, 0x7654_3210);
+            s.regs.insert(PORT_SEL, 0x0000_7873);
+        }
+        // Esmart1 also on VP0 and enabled; Cluster1 enabled on VP1
+        v.s.borrow_mut().regs.insert(0x1a10, 1);
+        v.s.borrow_mut().regs.insert(0x1200, 1);
+        v.s.borrow_mut().regs.insert(0x1300, 1);
+        v.s.borrow_mut().regs.insert(PORT_SEL, 0x0004_7873);
+        v.clear_log();
+        let off = take_over(&v, BASE, &[Vp::Vp0], Some(Esmart::E0), &mut |us| v.advance(us)).unwrap();
+        // Cluster0, Cluster2, Cluster3, Esmart1-3 (port field 0); not Cluster1
+        // (VP1), not the window kept
+        assert_eq!(off, 0b1110_1101);
+        assert_eq!((v.reg(0x1000) & 1, v.reg(0x1100) & 1), (0, 0), "Cluster0 still enabled");
+        assert_eq!(v.reg(0x1a10) & 1, 0, "Esmart1 still enabled");
+        assert_eq!((v.reg(0x1200), v.reg(0x1300)), (1, 1), "a window of VP1 was touched");
+        // the disables, then CFG_DONE, then one frame start waited for
+        let ops = v.ops();
+        let last_disable =
+            ops.iter().rposition(|o| matches!(o, Op::W(a, _) if (0x1000..0x1f00).contains(&(a - BASE)))).unwrap();
+        let cfg = ops.iter().position(|o| *o == Op::W(BASE + CFG_DONE, 0x8000 | 1 << 16 | 1)).unwrap();
+        let delay = ops.iter().position(|o| matches!(o, Op::Delay(_))).unwrap();
+        assert!(last_disable < cfg && cfg < delay);
+        assert!(!cfg_pending(&v, BASE, Vp::Vp0), "the frame took the disables");
+
+        // then (paging_off, not in this model) the overlay and our window
+        overlay_single(&v, BASE, Vp::Vp0, Esmart::E0, &mut |us| v.advance(us)).unwrap();
+        window_show(&v, BASE, Vp::Vp0, Esmart::E0, &FB, (1920, 1080)).unwrap();
+        v.advance(17_000);
+        assert_eq!((v.reg(0x1000) & 1, v.reg(0x1100) & 1), (0, 0));
+        assert_eq!(v.reg(E0_REGION0_CTRL) & 1, 1);
+    }
+
+    #[test]
+    fn the_take_over_of_a_port_that_does_not_run_times_out_by_name() {
+        let v = Vop::new(Faults { no_frames: true, ..Faults::default() });
+        let t = vp_timing(&CEA_1080P60, Vp::Vp0).unwrap();
+        vp_start(&v, BASE, &t);
+        let r = take_over(&v, BASE, &[Vp::Vp0], None, &mut |us| v.advance(us)).unwrap_err();
+        assert_eq!(r.why, Refusal::FrameTimeout);
+    }
+
+    /// Review S1: a clear that does not clear must not pass for a new event.
+    #[test]
+    fn an_event_the_clear_does_not_clear_is_refused_not_taken_as_new() {
+        let v = Vop::new(Faults { clr_ignored: true, ..Faults::default() });
+        v.s.borrow_mut().raw = 1 << 6 | 1;
+        let r = standby(&v, BASE, Vp::Vp0, &mut |us| v.advance(us)).unwrap_err();
+        assert_eq!((r.why, r.read_back), (Refusal::EventNotCleared, 1 << 6 | 1));
+        assert!(v.writes().iter().all(|w| w.0 != VP0_DSP_CTRL), "STANDBY written after a failed clear");
+        let r = frame_check(&v, BASE, Vp::Vp0, 20_000, &mut |us| v.advance(us)).unwrap_err();
+        assert_eq!(r.why, Refusal::EventNotCleared);
+        let r = wait_frame(&v, BASE, Vp::Vp0, &mut |us| v.advance(us)).unwrap_err();
+        assert_eq!(r.why, Refusal::EventNotCleared);
+    }
+
+    /// Review S3: the end address is computed without wrapping.
+    #[test]
+    fn a_window_whose_end_wraps_is_refused() {
+        let w = Window { addr: u64::MAX - 63, width: 16, height: 1, stride_bytes: 64, ..FB };
+        assert_eq!(window_check(&w, 1920, 1080).unwrap_err().why, Refusal::WindowAbove4G);
+    }
+
+    /// Review S4: every field is bounded before any sum.
+    #[test]
+    fn a_mode_whose_sums_wrap_is_refused() {
+        let m = VideoMode { hsync: 0x8000_0000, hback: 0x8000_0000 + 160, ..CEA_720P60 };
+        assert_eq!(vp_timing(&m, Vp::Vp0).unwrap_err().why, Refusal::BadMode);
+    }
+
+    /// Review S6: a layer past the eighth and an active area past 16 bits.
+    #[test]
+    fn a_layer_past_seven_and_a_huge_active_area_are_refused() {
+        assert_eq!(layer_sel_with(0x7654_3210, 8, Esmart::E0), None);
+        let w = Window { x: 0x1_0000, width: 16, height: 16, ..FB };
+        assert_eq!(window_check(&w, 0x2_0000, 1080).unwrap_err().why, Refusal::WindowOutside);
+    }
+
+    /// The board's LCD: no hot-plug, no EDID, one fixed mode, 1024x768 at
+    /// 60 Hz, 65 MHz, H 1024 1048 1184 1344, V 768 771 777 806, both syncs
+    /// negative (VESA DMT; Linux runs VP0 with it, output_mode 0xf).
+    const DMT_1024X768_60: VideoMode = VideoMode {
+        pixel_clock_hz: 65_000_000,
+        hactive: 1024,
+        hfront: 24,
+        hsync: 136,
+        hback: 160,
+        vactive: 768,
+        vfront: 3,
+        vsync: 6,
+        vback: 29,
+        hsync_high: false,
+        vsync_high: false,
+        de_high: true,
+    };
+
+    #[test]
+    fn the_timing_words_of_the_boards_1024x768() {
+        let t = vp_timing(&DMT_1024X768_60, Vp::Vp0).unwrap();
+        assert_eq!(
+            [
+                t.htotal_hs_end,
+                t.hact_st_end,
+                t.vtotal_vs_end,
+                t.vact_st_end,
+                t.line_flag,
+                t.bg_mix_ctrl,
+                t.pre_scan_htiming
+            ],
+            [0x0540_0088, 0x0128_0528, 0x0326_0006, 0x0023_0323, 0x0323_0323, 0x3600_0000, 0x0235_0088]
+        );
+        assert_eq!((t.dsp_ctrl, t.post_scl_factor_yrgb, t.post_scl_ctrl), (0xf, 0x1000_1000, 0));
+    }
+
+    /// Review S5: a window away from (0, 0); DSP_ST is y << 16 | x (c:1387).
+    #[test]
+    fn a_window_at_x_y_is_placed_there() {
+        let v = running_vop();
+        let w = Window { width: 640, height: 480, stride_bytes: 2560, x: 16, y: 8, ..FB };
+        window_show(&v, BASE, Vp::Vp0, Esmart::E0, &w, (1920, 1080)).unwrap();
+        assert_eq!(v.reg(E0 + 0x28), 8 << 16 | 16);
+        assert_eq!(v.reg(E0 + 0x24), 479 << 16 | 639);
+        // the far corner must stay inside
+        let w = Window { x: 1281, ..w };
+        assert_eq!(window_check(&w, 1920, 1080).unwrap_err().why, Refusal::WindowOutside);
+    }
+
+    /// Review S5: every Esmart's table, restated from r:1199-1266 and
+    /// h:734-737, h:757-760; and what window_set and overlay_single write
+    /// from it.
+    #[test]
+    fn the_esmart_tables_are_linuxs() {
+        // (window, base, layer id, AXI bus, YRGB id, UV id, port field shift, delay shift)
+        let rows = [
+            (Esmart::E0, 0x1800, 2, 0, 0x0a, 0x0b, 24, 0),
+            (Esmart::E1, 0x1a00, 3, 0, 0x0c, 0x01, 26, 8),
+            (Esmart::E2, 0x1c00, 6, 1, 0x0a, 0x0b, 28, 16),
+            (Esmart::E3, 0x1e00, 7, 1, 0x0c, 0x0d, 30, 24),
+        ];
+        for (e, b, id, bus, y, uv, port_shift, dly_shift) in rows {
+            assert_eq!((e.base(), e.layer_sel_id(), e.axi()), (b, id, (bus, y, uv)), "{e:?}");
+            assert_eq!((e.port_sel_field(), e.dly_field()), (3 << port_shift, 0xff << dly_shift), "{e:?}");
+            let v = running_vop();
+            window_show(&v, BASE, Vp::Vp0, e, &FB, (1920, 1080)).unwrap();
+            assert_eq!(v.reg(b + 0x08), bus << 1, "{e:?} AXI_CTRL");
+            assert_eq!(v.reg(b + 0x04), y << 4 | uv << 12, "{e:?} CTRL1");
+            overlay_single(&v, BASE, Vp::Vp0, e, &mut |us| v.advance(us)).unwrap();
+            assert_eq!(v.reg(0x6f8), 23 << dly_shift, "{e:?} SMART_DLY_NUM");
+            assert_eq!(v.reg(PORT_SEL) & 3 << port_shift, 0, "{e:?} on VP0");
+            assert_eq!(v.reg(0x604) & 0xf, id, "{e:?} on layer 0");
+        }
+        let clusters = [
+            (Cluster::C0, 0x1000, 16),
+            (Cluster::C1, 0x1200, 18),
+            (Cluster::C2, 0x1400, 20),
+            (Cluster::C3, 0x1600, 22),
+        ];
+        for (c, b, shift) in clusters {
+            assert_eq!((c.base(), c.port_sel_field()), (b, 3 << shift), "{c:?}");
+        }
+    }
+
+    /// Review S6: the words go to the port they were made for.
+    #[test]
+    fn timing_words_carry_their_port() {
+        let v = Vop::new(Faults::default());
+        let t = vp_timing(&CEA_720P60, Vp::Vp3).unwrap();
+        assert_eq!((t.port, t.dsp_ctrl), (Vp::Vp3, 0));
+        vp_set_timing(&v, BASE, &t);
+        vp_start(&v, BASE, &t);
+        let w = v.writes();
+        assert!(
+            w.iter().all(|(a, _)| *a == 0x07c || *a == 0x6ec || *a == CFG_DONE || (0xf00..0x1000).contains(a)),
+            "{w:x?}"
+        );
+        assert_eq!(w.last(), Some(&(0xf00, 0)));
+        assert_eq!(w[w.len() - 2], (CFG_DONE, 0x8000 | 1 << 19 | 1 << 3));
     }
 }
