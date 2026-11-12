@@ -41,8 +41,8 @@ All of it is part of the Rust crate `yakogl`.
 First slice, milestone L3 of `driver/docs/nanopc-t6-mali.md`. It compiles the
 shapes of the triangle programs (tri, tri_varying, the triangle sample) to the
 bytes Mesa 26.2.1 makes for them, and refuses every other shape with its own
-"... is not lowered yet" message (`MaliError::GAPS`, 54: 48 reached by an ES
-1.00 source in the tests, 6 unreachable from ES 1.00 source today, each with
+"... is not lowered yet" message (`MaliError::GAPS`: each is reached by an ES
+1.00 source in the tests, or is unreachable from ES 1.00 source today and has
 its reason in `tests.rs` `unreachable_from_es100`). The pipeline is
 Mesa's, transcribed for the 20 ops it selects: `nir` (a vertex shader as
 Mesa's NIR has it before selection: scalar `fadd`, `fmul`, the dot products
