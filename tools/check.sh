@@ -2888,6 +2888,15 @@ print(len(l), "cases"); sys.exit(0 if ok else 1)'
   step "tools   mali-glmark2-build-selftest.sh (NanoPC-T6 glmark2-es2 build recipe, dry run)" no_board_env bash tools/cts/mali-glmark2-build-selftest.sh
   step "tools   glmark2-mali-tally-selftest.sh (Mali glmark2 per-scene tally)" no_board_env bash tools/cts/glmark2-mali-tally-selftest.sh
   step "tools   glmark2-mali-symbols-selftest.sh (glmark2-es2 symbols against the panthor-gles pair)" no_board_env bash tools/cts/glmark2-mali-symbols-selftest.sh
+  # The rest of the Mali glmark2 tools, each against fake ssh/scp and stubs:
+  # the per-scene runner, the read-only preflight, the /boot + U-Boot env +
+  # module snapshot, the session wrapper that chains them, and the end to end
+  # chain (build --dry-run, runner on the fake board, tally). Host only.
+  step "tools   mali-glmark2-selftest.sh (NanoPC-T6 glmark2-es2 runner, fake board)" no_board_env bash tools/cts/mali-glmark2-selftest.sh
+  step "tools   mali-glmark2-preflight-selftest.sh (NanoPC-T6 glmark2 preflight, fake ssh)" no_board_env bash tools/cts/mali-glmark2-preflight-selftest.sh
+  step "tools   mali-board-state-selftest.sh (NanoPC-T6 /boot, U-Boot env and module snapshot, fake ssh)" no_board_env bash tools/cts/mali-board-state-selftest.sh
+  step "tools   mali-glmark2-session-selftest.sh (NanoPC-T6 glmark2 session wrapper, fake board)" no_board_env bash tools/cts/mali-glmark2-session-selftest.sh
+  step "tools   glmark2-mali-e2e-selftest.sh (Mali glmark2 build, runner and tally end to end)" no_board_env bash tools/cts/glmark2-mali-e2e-selftest.sh
   # The licence audit (check 25 of the script above) on its own, so that a diff
   # which reaches no `tools` path (a data file under tools/v3d, 7bd8a8e94) still
   # meets it: every added or changed file is a tracked file the audit reads.
