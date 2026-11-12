@@ -88,9 +88,18 @@ void gc_board_irq_connected(unsigned int irq)
 	} else {
 		route = "ours";
 	}
+	/* INTID 215 is GICD_IGROUPR6 bit 23 (word = INTID / 32); counted by SPI
+	 * number (183 / 32 = 5) it is the same bit 23 of the register before.
+	 * TF-A r3.1 puts SPI 183 in group 1 (plat/st/stm32mp2/bl31_plat_setup.c,
+	 * stm32mp_gic_init), so the bit reads 1 when the view allows it. */
+	uint32_t igroupr = sys_read32(GICD_IGROUPRn + word);
+	uint32_t g23 = (igroupr >> 23) & 1u;
+
 	printk("gc_irq: spi=%u intid=%u enable=%u cfg=%u target=0x%02x self=0x%02x prio=0x%02x "
 	       "group=%u pend=%u active=%u gicd_ctlr=0x%x typer=0x%x secext=%u gicc_ctlr=0x%x "
 	       "pmr=0x%02x route=%s\n",
 	       irq - GIC_SPI_INT_BASE, irq, enable, cfg, target, self, prio, group, pend, active,
 	       gicd_ctlr, typer, (typer & GICD_TYPER_SECEXT) ? 1u : 0u, gicc_ctlr, pmr, route);
+	printk("gc_irq: igroupr=0x%08x (GICD_IGROUPR%u) bit23=%u expect=1 %s\n", igroupr,
+	       irq / 32u, g23, g23 == 1u ? "ok" : "mismatch");
 }

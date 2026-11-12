@@ -36,11 +36,14 @@
  * running when U-Boot hands over, which the watchdog item is to confirm.
  *
  * The hand-over record line (one line, key=value pairs after the tag):
- *   mp2-handover: v=1 el=2 sctlr=0x... m=0 c=0 i=1 x0=0x... x1=0x0 x2=0x0
- *     x3=0x0 pc=0xa0000000 cntfrq=... mpidr=0x80000000 psci=0x10001
+ *   mp2-handover: v=1 el=2 sctlr=0x... m=0 c=0 i=1 x0=0x... x1=0x... x2=0x...
+ *     x3=0x... pc=0xa0000000 cntfrq=... mpidr=0x80000000 psci=0x10001
  * sctlr is SCTLR_EL2 (el=2) or SCTLR_EL1 as found; m, c and i are its M, C
- * and I bits. x0-x3 are the entry values (booti: x0 the DTB pointer, x1-x3
- * 0; go: x0 argc, x1 argv). pc is where the entry code ran (the load
+ * and I bits. x0-x3 are the entry values, printed
+ * and never asserted. At U-Boot's `go` (ST r3.1) the image starts at EL2
+ * with SCTLR M/C/I = 0, x0 = 0 and x1 non-null; x2 and x3 are
+ * indeterminate. TF-A r3.1 BL31 leaves SPI 183 in group 1, non-secure
+ * (plat/st/stm32mp2/bl31_plat_setup.c:151, stm32mp_gic_init, GICv2 driver). pc is where the entry code ran (the load
  * address, if the image was not moved). cntfrq is decimal Hz, the rest
  * hex. Without the entry code's record the line is
  * "mp2-handover: v=1 missing".
