@@ -185,7 +185,10 @@ impl TexLookup {
     /// `COMPUTED_BIAS`; `bi_instr_uses_helpers`): neither a fetch, nor a
     /// level given.
     pub fn computed(&self) -> bool {
-        (self.cube.is_none() && !self.fetch && !self.zero) || self.bias != Val::Undef
+        match self.cube {
+            Some(Cube { lod }) => lod == CubeLod::Computed,
+            None => !self.fetch && !self.zero,
+        }
     }
 }
 
@@ -224,15 +227,27 @@ pub const MAX_LOOK_UPS: usize = 64;
 /// look-up node's sources are `build_cube_desc`'s S and T and, at an
 /// explicit level, its 8.8 word ([`nir::Nir::cube_desc`],
 /// [`nir::Nir::sfixed_8_8`]), fp32 nodes of the graph; in a mediump one
-/// they are the direction's three fp16 lanes, converted at the look-up
-/// (`F16_TO_F32` each, the cube ops being fp32 only) and the descriptor
-/// built there ([`select`]; case41.expect.json).
+/// they are the direction's three lanes, fp16 ones converted at the
+/// look-up (`F16_TO_F32` each, the cube ops being fp32 only) and the
+/// descriptor built there ([`select`]; case41.expect.json).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Cube {
-    /// The level is not the constant 0 (`nir_scalar_is_zero`): the LOD
-    /// mode `EXPLICIT` and a third staging word; else `ZERO_LOD`
-    /// (pan_nir_lower_tex.c:927-937).
-    pub explicit: bool,
+    /// The level mode (pan_nir_lower_tex.c:927-946).
+    pub lod: CubeLod,
+}
+
+/// A cube look-up's level ([`Cube::lod`]), as `va_lower_tex` picks it.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum CubeLod {
+    /// `textureLod` at the constant 0 (`nir_scalar_is_zero`): `ZERO_LOD`,
+    /// two staging words.
+    Zero,
+    /// `textureLod` at another level: `EXPLICIT`, a third staging word.
+    Explicit,
+    /// `textureCube` with no level, or with a bias ([`TexLookup::bias`]):
+    /// the level from the derivatives, `COMPUTED_LOD` (fstex_cube.expect
+    /// .json's `.cube.computed`), or `COMPUTED_BIAS` with the bias word.
+    Computed,
 }
 
 /// The texture and sampler index of a shader's first sampler. Mesa
@@ -815,6 +830,13 @@ pub struct Fs<'s> {
     /// docs/notes/mali-fragment-outputs.md). Only in straight-line code
     /// ([`walk`]).
     pub(super) targets: [Option<[Val; 4]>; MAX_TARGETS - 1],
+    /// The shader writes gl_FragColor: Mesa lowers it to all eight targets
+    /// (`nir_lower_fragcolor(.., 8)`, pan_shader.c:556-561) and drops the
+    /// stores past the first (`panfrost_nir_remove_fragcolor_stores`), but
+    /// `outputs_written` keeps them, so `blend_pan` copies its colour into
+    /// a new vector at the store (bifrost_compile.c:1683-1688, "explicit
+    /// copy since BLEND inputs are precoloured"): its moves after ATEST.
+    fragcolor: bool,
     /// The expressions Mesa's link moves into the program's vertex shader
     /// (motion.rs), in the order they were found.
     pub moved: [Moved; MAX_MOVED],
@@ -3027,6 +3049,7 @@ pub fn walk<'s>(m: &Module<'_>, scratch: &Arena<'s>, prec: FsPrecision) -> Resul
         keys: scratch.alloc_filled(MAX_VALUES, u32::MAX).map_err(oom)?,
         colour: None,
         targets: [None; MAX_TARGETS - 1],
+        fragcolor: m.outputs.iter().any(|d| matches!(d.kind, IoKind::Colour) && d.name == "gl_FragColor"),
         moved: [Moved::NONE; MAX_MOVED],
         nmoved: 0,
         var_key: [u32::MAX; MAX_VARYINGS],
@@ -4907,7 +4930,7 @@ fn walk_nodes(
              * either stage (pan_nir_lower_tex.c:825-829), its lanes any
              * value, a constant one an operand (case114_f.expect.json's
              * `CUBEFACE1.discard r2, 0x3F800000, r0, r1`). An implicit
-             * level (`textureCube`'s `COMPUTED_LOD`) has no reference */
+             * level is the arm after the bias's */
             ir::Op::Tex {
                 dim: ir::TexDim::Cube,
                 shadow: false,
@@ -4948,7 +4971,7 @@ fn walk_nodes(
                 let bits = if prec.highp && prec.highp_samplers >> (sampler & 31) & 1 != 0 { 32 } else { 16 };
                 let n = f.nir.push_node(NirNode { kind: Kind::Tex, src, bits, width: 1 })?;
                 f.origin[n as usize] = at as u16;
-                let cube = Some(Cube { explicit });
+                let cube = Some(Cube { lod: if explicit { CubeLod::Explicit } else { CubeLod::Zero } });
                 f.push_look_up(TexLookup::new(sampler, TexCoord::Computed, cube, false, at, n))?;
                 for (c, o) in out.iter_mut().enumerate() {
                     *o = Val::Lane(n, c as u8);
@@ -4983,9 +5006,44 @@ fn walk_nodes(
                 }
                 let n = f.nir.push_node(NirNode { kind: Kind::Tex, src: dir, bits: 16, width: 1 })?;
                 f.origin[n as usize] = at as u16;
-                let mut t = TexLookup::new(sampler, TexCoord::Computed, Some(Cube { explicit: false }), false, at, n);
+                let mut t =
+                    TexLookup::new(sampler, TexCoord::Computed, Some(Cube { lod: CubeLod::Computed }), false, at, n);
                 t.bias = bias;
                 f.push_look_up(t)?;
+                for (c, o) in out.iter_mut().enumerate() {
+                    *o = Val::Lane(n, c as u8);
+                }
+            }
+            /* `textureCube(s, dir)` in a mediump shader (dEQP-GLES2's
+             * texture cube cases, fstex_cube.expect.json): the look-up at
+             * `COMPUTED_LOD` (pan_nir_lower_tex.c:944-945), two staging
+             * words, `build_cube_desc`'s of the direction's lanes: a
+             * varying's raw fp32 lanes or constants, as the bias's arm takes
+             * them ([`select`]). A computed direction (`vec3(-x, -y, -1.0)`
+             * of fp16 values, dEQP's texture.specification cube cases) or a
+             * highp shader's look-up: no reference */
+            ir::Op::Tex {
+                dim: ir::TexDim::Cube,
+                shadow: false,
+                proj: false,
+                ret: ir::ScalarType::F32,
+                sampler,
+                coord,
+                lod: ir::TexLod::Implicit,
+                offset: None,
+            } if !prec.highp => {
+                let dir = [lane(vals, coord, 0), lane(vals, coord, 1), lane(vals, coord, 2)];
+                let raw = |v: Val| match v {
+                    Val::Const(_) => true,
+                    _ => f.input_lane(v).is_some_and(|(loc, _)| loc != POINT_COORD),
+                };
+                if !dir.into_iter().all(raw) || dir.iter().all(|v| matches!(v, Val::Const(_))) {
+                    return Err(MaliError::TexCoord);
+                }
+                let n = f.nir.push_node(NirNode { kind: Kind::Tex, src: dir, bits: 16, width: 1 })?;
+                f.origin[n as usize] = at as u16;
+                let cube = Some(Cube { lod: CubeLod::Computed });
+                f.push_look_up(TexLookup::new(sampler, TexCoord::Computed, cube, false, at, n))?;
                 for (c, o) in out.iter_mut().enumerate() {
                     *o = Val::Lane(n, c as u8);
                 }
@@ -7890,8 +7948,12 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
                  * collects the split words into the look-up's value right
                  * after it (bifrost_compile.c), so its moves stand before
                  * ATEST (case41.expect.json: `MOV.i32 r0, r2^`, `MOV.i32
-                 * r1, r3`, then `ATEST ... r3^.h1`) */
-                if roots.map(|r| pr.nodes[r as usize]) == [P::Leaf(Leaf::Tex(x, 0)), P::Leaf(Leaf::Tex(x, 1))] {
+                 * r1, r3`, then `ATEST ... r3^.h1`). gl_FragColor's store
+                 * copies the colour itself ([`Fs::fragcolor`]): the moves
+                 * the words' own, after ATEST (fstex_cube_whole: `ATEST`
+                 * then `BLEND` of the look-up's `@r0:r1`, the moves gone) */
+                let whole = [P::Leaf(Leaf::Tex(x, 0)), P::Leaf(Leaf::Tex(x, 1))];
+                if !f.fragcolor && roots.map(|r| pr.nodes[r as usize]) == whole {
                     let mut w = [Src::NULL; 2];
                     for (k, x) in w.iter_mut().enumerate() {
                         *x = Src::ssa(alu(p, Op::MovI32, &[operand(&pr, roots[k], &lv, &val)?])?);
@@ -9692,7 +9754,7 @@ fn tex_highp(
     let nd = f.nir.nodes[t.node as usize];
     let mut staging = [Src::NULL; 3];
     let n = match t {
-        TexLookup { cube: Some(Cube { explicit: true }), .. }
+        TexLookup { cube: Some(Cube { lod: CubeLod::Explicit }), .. }
         | TexLookup { array: true, .. }
         | TexLookup { d3: true, .. }
         | TexLookup { shadow: true, .. } => 3,
@@ -10175,8 +10237,9 @@ fn tex(p: &mut Prog<'_>, f: &Fs<'_>, j: usize, lv: &mut Leaves, computed: Option
         None if t.fetch => (super::bir::LodMode::Fetch, plain),
         None if t.zero => (super::bir::LodMode::Zero, plain),
         Some(_) if t.bias != Val::Undef => (super::bir::LodMode::ComputedBias, super::bir::TexDim::Cube),
-        Some(Cube { explicit: true }) => (super::bir::LodMode::Explicit, super::bir::TexDim::Cube),
-        Some(Cube { explicit: false }) => (super::bir::LodMode::Zero, super::bir::TexDim::Cube),
+        Some(Cube { lod: CubeLod::Explicit }) => (super::bir::LodMode::Explicit, super::bir::TexDim::Cube),
+        Some(Cube { lod: CubeLod::Zero }) => (super::bir::LodMode::Zero, super::bir::TexDim::Cube),
+        Some(Cube { lod: CubeLod::Computed }) => (super::bir::LodMode::Computed, super::bir::TexDim::Cube),
         None => (super::bir::LodMode::Computed, plain),
     };
     let tail = (1u8 << (8 - t.lanes.leading_zeros())) - 1;

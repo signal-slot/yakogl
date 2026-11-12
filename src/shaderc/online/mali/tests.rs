@@ -1168,7 +1168,9 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
         (VS, "uniform sampler2D s; uniform vec4 w; attribute vec4 p; varying vec4 v; void main(){ gl_Position = p; v = w.x * texture2DLod(s, p.xy, 0.0) + w.y * texture2DLod(s, p.xy, 0.0); }", MaliError::TexVertex),
         (FS, "precision mediump float; uniform sampler2D s; varying vec2 v; void main(){ gl_FragColor = texture2D(s, v, 1.0); }", MaliError::TexKind),
         (FS, "precision mediump float; uniform sampler2D s; varying vec3 v; void main(){ gl_FragColor = texture2DProj(s, v); }", MaliError::TexKind),
-        (FS, "precision mediump float; uniform samplerCube s; varying vec3 v; void main(){ gl_FragColor = textureCube(s, v); }", MaliError::TexKind),
+        /* a cube at the implicit level is lowered in a mediump shader
+         * (fstex_cube); a highp shader's has no reference */
+        (FS, "precision highp float; uniform samplerCube s; varying vec3 v; void main(){ gl_FragColor = textureCube(s, v); }", MaliError::TexKind),
         /* a mediump computed coordinate (case 121's form) beside another
          * look-up: no reference draws it (texmore_2's two read a varying) */
         (FS, "precision mediump float; uniform sampler2D s; uniform sampler2D t; uniform vec4 u; varying vec2 v; void main(){ gl_FragColor = texture2D(s, v) + texture2D(t, vec2(u.w * 0.5)); }", MaliError::TexCount),
@@ -3306,15 +3308,51 @@ fn a_fragment_cube_look_up_is_byte_equal_to_mesa_26_2_1() {
     let texts: Vec<String> = trim(&f.code).iter().map(|w| text(*w)).collect();
     assert_eq!(texts.iter().filter(|t| t.starts_with("F16_TO_F32")).count(), 3, "{texts:?}");
     assert!(texts.iter().any(|t| t.starts_with("TEX_SINGLE") && t.contains(".16.cube.zero")), "{texts:?}");
-    /* the gaps beside it: an implicit level (`textureCube`'s computed LOD)
-     * and a mediump explicit level have no reference */
+    /* the gap beside it: a mediump explicit level has no reference */
     let fs = |lod: &str| {
         format!(
             "#version 300 es\nprecision mediump float; uniform samplerCube c; uniform float l; in vec2 v; out vec4 o; void main(){{ o = {lod}; }}"
         )
     };
-    assert_eq!(gap(SHC_STAGE_FRAGMENT, &fs("texture(c, vec3(v, 1.0))")), MaliError::TexKind);
     assert_eq!(gap(SHC_STAGE_FRAGMENT, &fs("textureLod(c, vec3(v, 1.0), l)")), MaliError::TexKind);
+}
+
+/// dEQP-GLES2's mediump `textureCube` (glsTextureTestUtil.cpp
+/// ProgramLibrary, PROGRAM_CUBE_FLOAT; tools/mali/testdata/fstex_cube.*):
+/// `textureCube(u_sampler, v_texCoord) * u_colorScale + u_colorBias`, the
+/// texture.{filtering,size,completeness,format} cube cases. The direction
+/// is the varying's three fp32 words (`src_f32`: read by the fp32 cube ops
+/// alone), `build_cube_desc`'s sequence, then `TEX_SINGLE.16.cube.computed`
+/// at two staging words: the level from the derivatives, so the helper
+/// invocations run to the look-up. Both programs the shim's to the byte
+/// (fstex_cube.expect.json, `--uniform-values`), and so are gl_test's
+/// texcube pair, whose colour is the texel whole (fstex_cube_whole).
+#[test]
+fn a_mediump_texture_cube_at_the_implicit_level_is_byte_equal_to_mesa_26_2_1() {
+    let (_, f) = check_program(td!("fstex_cube.vert"), td!("fstex_cube.frag"), td!("fstex_cube.expect.json"));
+    assert_eq!(f.info.sampler, Some(0));
+    assert!(f.info.helper_threads, "a computed level needs the helper invocations");
+    let texts: Vec<String> = trim(&f.code).iter().map(|w| text(*w)).collect();
+    assert!(!texts.iter().any(|t| t.starts_with("F16_TO_F32")), "{texts:?}");
+    assert!(texts.iter().any(|t| t.starts_with("TEX_SINGLE") && t.contains(".16.cube.computed.")), "{texts:?}");
+    /* the texel stored whole (gl_test 115, 133 and 134's texcube_fs.frag):
+     * gl_FragColor's store copies it after ATEST ([`nir_fs::Fs`]'s
+     * `fragcolor`), so RA writes the texels into r0:r1 at once and the
+     * copy's moves vanish (fstex_cube_whole.expect.json) */
+    let (vs, fs) = (td!("fstex_cube_whole.vert"), td!("fstex_cube_whole.frag"));
+    assert_eq!(include_str!("../../../../tools/shaders/gltest/texcube_vs.vert"), vs);
+    assert_eq!(include_str!("../../../../tools/shaders/gltest/texcube_fs.frag"), fs);
+    let (_, f) = check_program(vs, fs, td!("fstex_cube_whole.expect.json"));
+    let texts: Vec<String> = trim(&f.code).iter().map(|w| text(*w)).collect();
+    assert!(!texts.iter().any(|t| t.starts_with("MOV.i32") && t.contains(", r")), "{texts:?}");
+    /* the gaps beside it: a highp shader's implicit level, and a computed
+     * direction (dEQP's texture.specification cube face shader), which have
+     * no reference at the implicit level */
+    let highp = "precision highp float; uniform samplerCube s; varying vec3 d; void main(){ gl_FragColor = textureCube(s, d); }";
+    assert_eq!(gap(SHC_STAGE_FRAGMENT, highp), MaliError::TexKind);
+    let face = "uniform samplerCube s; varying mediump vec2 v; void main(){ mediump float x = v.x*2.0 - 1.0; \
+                mediump float y = v.y*2.0 - 1.0; gl_FragColor = textureCube(s, vec3(-x, -y, -1)); }";
+    assert_eq!(gap(SHC_STAGE_FRAGMENT, face), MaliError::TexCoord);
 }
 
 /// gl_test case 114's fragment stage (`cubelod`, prog[1]: tools/shaders/
