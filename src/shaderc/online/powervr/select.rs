@@ -6470,6 +6470,7 @@ void main() {{ colour = vec4(0.0); {body} }}
                 interp: ir::INTERP_SMOOTH,
                 gl_type: 0,
                 invariant: false,
+                prec: ir::Prec::None,
             }],
             ..vs(&instrs, &nodes)
         };
@@ -6586,6 +6587,7 @@ void main() {{ colour = vec4(0.0); {body} }}
                 interp: 0,
                 gl_type: 0,
                 invariant: false,
+                prec: ir::Prec::None,
             },
             ir::IoDecl {
                 name: "v_unread",
@@ -6595,6 +6597,7 @@ void main() {{ colour = vec4(0.0); {body} }}
                 interp: 0,
                 gl_type: 0,
                 invariant: false,
+                prec: ir::Prec::None,
             },
         ];
         let instrs = [

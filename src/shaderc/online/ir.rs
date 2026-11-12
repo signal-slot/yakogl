@@ -608,6 +608,12 @@ pub struct IoDecl<'a> {
     /// (`powervr/prepare.rs` `fusion_pairs`). Recorded on inputs as
     /// declared, where nothing reads it.
     pub invariant: bool,
+    /// The declared precision's class (docs/notes/mali-precision.md A.2):
+    /// Medium for a mediump or lowp float, High for a highp one, None for
+    /// an int. Recorded by the front end for the back end that lowers
+    /// precision (a bare read of a mediump varying records High, so the
+    /// read alone does not say it); [`Prec::None`] in a hand-built module.
+    pub prec: Prec,
 }
 
 impl IoDecl<'_> {
@@ -1177,6 +1183,7 @@ mod tests {
             interp: INTERP_FLAT,
             gl_type: 0,
             invariant: false,
+            prec: Prec::None,
         }];
         let m = Module { inputs: &flat, ..Module::empty(SHC_STAGE_FRAGMENT) };
         assert!(!m.needs_w_iterator(), "flat inputs alone need no w iterator");
@@ -1189,6 +1196,7 @@ mod tests {
             interp: INTERP_SMOOTH,
             gl_type: 0,
             invariant: false,
+            prec: Prec::None,
         }];
         let m = Module { inputs: &smooth, ..Module::empty(SHC_STAGE_FRAGMENT) };
         assert!(m.needs_w_iterator(), "one perspective input is enough");

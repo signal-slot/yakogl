@@ -5266,7 +5266,16 @@ mod tests {
     const LOOP_TOP: u16 = 1;
 
     fn io(name: &'static str, kind: ir::IoKind, location: u8) -> ir::IoDecl<'static> {
-        ir::IoDecl { name, kind, location, components: 4, interp: ir::INTERP_SMOOTH, gl_type: 0, invariant: false }
+        ir::IoDecl {
+            name,
+            kind,
+            location,
+            components: 4,
+            interp: ir::INTERP_SMOOTH,
+            gl_type: 0,
+            invariant: false,
+            prec: ir::Prec::None,
+        }
     }
 
     /// A matrix attribute read only through a later column is present as a
@@ -6200,6 +6209,7 @@ mod tests {
                 gl_type: 0,
                 name: "v_color",
                 invariant: false,
+                prec: ir::Prec::None,
             },
             ir::IoDecl {
                 kind: ir::IoKind::Varying,
@@ -6209,6 +6219,7 @@ mod tests {
                 gl_type: 0,
                 name: "v_uv",
                 invariant: false,
+                prec: ir::Prec::None,
             },
         ];
         /* Both are read, so both keep a register and the subject is the
@@ -6257,6 +6268,7 @@ mod tests {
                 gl_type: 0,
                 name: "a",
                 invariant: false,
+                prec: ir::Prec::None,
             },
             ir::IoDecl {
                 kind: ir::IoKind::Varying,
@@ -6266,6 +6278,7 @@ mod tests {
                 gl_type: 0,
                 name: "b",
                 invariant: false,
+                prec: ir::Prec::None,
             },
         ];
         let instrs = [
