@@ -6623,6 +6623,20 @@ fn a_loop_carried_negative_zero_is_refused() {
     }
 }
 
+/// A compare of a value that may fold to a constant (a select with a 0.0
+/// arm, `a2.y > 0.5 ? a2.x : 0.0`) with `-0.0`. At eb11186b0 the "compare
+/// of two constants" skip took it and kept `0x0.neg` (12 words, Mesa 11);
+/// the skip now needs two constant expressions. With the operand made 0.0
+/// it is still not Mesa's: Mesa folds the select into the compare
+/// (`FCMP_AND.f32.lt.m1`), a rule not transcribed, so the -0.0 rule
+/// refuses a compare whose other side may fold ([`MaliError::NegZeroShared`]).
+#[test]
+fn a_compare_of_a_maybe_constant_with_negative_zero_is_refused() {
+    let (_, _, fs, json) = pair!("negzero_select_zero");
+    assert!(region(json, "fs.fragment").is_some(), "the reference");
+    assert_eq!(gap(SHC_STAGE_FRAGMENT, fs), MaliError::NegZeroShared);
+}
+
 /// The chain and fold population (docs/notes/mali-rebalance.md,
 /// docs/notes/mali-algebraic-folds.md), each pair through the link
 /// ([`check_linked`]) against its drm-shim reference: (name, VS, FS,

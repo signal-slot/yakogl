@@ -1801,12 +1801,13 @@ impl Tree<'_, '_> {
                 continue;
             };
             let w = usize::from(self.comps[i]).clamp(1, 4);
-            /* a compare of two constants folds to a constant boolean (no
-             * operand is encoded; -0.0 and 0.0 compare the same) */
-            let constant = |x: Src| self.fold(x, 0, &Assumed::NONE)[..w].iter().all(|l| l.maybe_const());
-            if constant(s[0]) && constant(s[1]) {
+            /* a compare of two constant expressions (no input, uniform or
+             * texel under either side) folds to a constant boolean: no
+             * operand is encoded, and -0.0 and 0.0 compare the same */
+            if !self.varies(s[0], 0, 0) && !self.varies(s[1], 0, 0) {
                 continue;
             }
+            let orig = s;
             let mut zero = [false; 2];
             for k in 0..2 {
                 if let Some(z) = self.plus_zero(s[k], w)? {
@@ -1816,6 +1817,17 @@ impl Tree<'_, '_> {
             }
             if zero == [false; 2] {
                 continue;
+            }
+            /* measured: the other side is no constant (an input, a
+             * uniform, an operation on them). One that may fold (a select
+             * with a 0.0 arm, `c ? a2.x : 0.0`) takes further rules of
+             * Mesa's (an `FCMP_AND` of the select's compare), none
+             * transcribed: refused */
+            for k in 0..2 {
+                let other = self.fold(orig[1 - k], 0, &Assumed::NONE);
+                if zero[k] && other[..w].iter().any(|l| l.maybe_const()) {
+                    return Err(MaliError::NegZeroShared);
+                }
             }
             let swap = match op {
                 AluOp::Feq => zero == [true, false],
@@ -1998,6 +2010,43 @@ impl Tree<'_, '_> {
                 UNKNOWN
             }
             _ => UNKNOWN,
+        }
+    }
+
+    /// Value `s` reads an input, a uniform or a texel somewhere under it
+    /// (through a local's stores too): it is no constant expression. A
+    /// local read again under its own stores adds nothing; one past the
+    /// first 64, or a walk too deep, counts as varying.
+    fn varies(&self, s: Src, depth: usize, seen: u64) -> bool {
+        if depth > 16 {
+            return true;
+        }
+        match self.instrs.get(s.val.0 as usize) {
+            None => true,
+            Some(
+                IrOp::LoadInput { .. }
+                | IrOp::LoadUniform { .. }
+                | IrOp::LoadUniformIdx { .. }
+                | IrOp::Tex { .. }
+                | IrOp::TexSize { .. },
+            ) => true,
+            Some(&IrOp::LoadLocal { local, index, .. }) => {
+                let Some(bit) = 1u64.checked_shl(local.0) else { return true };
+                if seen & bit != 0 {
+                    return false;
+                }
+                index.is_some_and(|x| self.varies(x, depth + 1, seen))
+                    || self.instrs.iter().any(|st| {
+                        matches!(*st, IrOp::StoreLocal { local: to, src, index, .. } if to == local
+                            && (self.varies(src, depth + 1, seen | bit)
+                                || index.is_some_and(|x| self.varies(x, depth + 1, seen | bit))))
+                    })
+            }
+            Some(op) => {
+                let mut v = false;
+                op.for_each_src(|x| v |= self.varies(x, depth + 1, seen));
+                v
+            }
         }
     }
 
