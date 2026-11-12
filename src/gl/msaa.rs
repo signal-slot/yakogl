@@ -11,7 +11,7 @@
 //! and the framebuffer completeness check.
 
 use super::consts::*;
-use super::framebuffer::renderbuffer_surf_format;
+use super::framebuffer::{integer_surf_format, renderbuffer_surf_format};
 use super::types::GLenum;
 use crate::backend;
 
@@ -41,7 +41,6 @@ pub(crate) fn max_samples_query(max: u32) -> i32 {
 /// 1..=max gives 4 (ES 3.0 4.4.2.1 allows "at least"). With `max` 0 a request
 /// of 1 keeps what the code stores today (1: sample buffers for completeness,
 /// one sample in fact); any larger count is refused as today.
-#[cfg_attr(not(test), allow(dead_code))] // no caller until gl-msaa-cap
 pub(crate) fn stored_samples(requested: i32, max: u32, integer_format: bool) -> Result<u32, GLenum> {
     if requested < 0 {
         return Err(GL_INVALID_VALUE);
@@ -57,7 +56,6 @@ pub(crate) fn stored_samples(requested: i32, max: u32, integer_format: bool) -> 
 }
 
 /// Is a multisampled renderbuffer of this size GL_OUT_OF_MEMORY?
-#[cfg_attr(not(test), allow(dead_code))] // no caller until gl-msaa-cap
 pub(crate) fn oom(samples: u32, w: u32, h: u32) -> bool {
     samples > 1 && u64::from(w) * u64::from(h) > MS_MAX_PIXELS
 }
@@ -66,7 +64,6 @@ pub(crate) fn oom(samples: u32, w: u32, h: u32) -> bool {
 /// and the depth/stencil formats, plus the half-float names the back end
 /// draws single-sampled; the 32F ones stay out (note (b)2). Integer formats
 /// are out: ES 3.0 has no multisample integer format.
-#[cfg_attr(not(test), allow(dead_code))] // no caller until gl-msaa-cap
 pub(crate) fn multisample_renderable(internalformat: GLenum) -> bool {
     match internalformat {
         GL_RGBA8
@@ -93,10 +90,13 @@ pub(crate) fn multisample_renderable(internalformat: GLenum) -> bool {
 
 /// glGetInternalformativ GL_SAMPLES: the counts the format supports, largest
 /// first; GL_NUM_SAMPLE_COUNTS is its length.
-#[cfg_attr(not(test), allow(dead_code))] // no caller until gl-msaa-cap
 pub(crate) fn internalformat_sample_counts(internalformat: GLenum, max: u32) -> &'static [i32] {
     if max >= MS_SAMPLES && multisample_renderable(internalformat) {
         &[MS_SAMPLES as i32]
+    } else if max == 0 && integer_surf_format(internalformat).is_none() {
+        /* a single-sampled back end: the one count, 1, of every format the
+         * query accepts except the integer ones (they have none) */
+        &[1]
     } else {
         &[]
     }
@@ -104,7 +104,6 @@ pub(crate) fn internalformat_sample_counts(internalformat: GLenum, max: u32) -> 
 
 /// Completeness (GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE): every attachment has
 /// the same count, a texture counting 0.
-#[cfg_attr(not(test), allow(dead_code))] // no caller until gl-msaa-cap
 pub(crate) fn attachments_complete(mut samples: impl Iterator<Item = u32>) -> bool {
     let Some(first) = samples.next() else { return true };
     samples.all(|s| s == first)
@@ -209,7 +208,13 @@ mod tests {
     fn sample_counts() {
         assert_eq!(internalformat_sample_counts(GL_RGBA8, 4), &[4]);
         assert_eq!(internalformat_sample_counts(GL_DEPTH24_STENCIL8, 4), &[4]);
-        assert!(internalformat_sample_counts(GL_RGBA8, 0).is_empty());
+        assert_eq!(internalformat_sample_counts(GL_RGBA8, 0), &[1]);
+        assert_eq!(internalformat_sample_counts(GL_DEPTH24_STENCIL8, 0), &[1]);
+        assert_eq!(internalformat_sample_counts(GL_RGB10_A2, 0), &[1]);
+        assert_eq!(internalformat_sample_counts(GL_R32F, 0), &[1]);
+        assert!(internalformat_sample_counts(GL_R8I, 0).is_empty());
+        assert!(internalformat_sample_counts(GL_RGBA32UI, 0).is_empty());
+        assert!(internalformat_sample_counts(GL_RGB10_A2UI, 0).is_empty());
         assert!(internalformat_sample_counts(GL_R32F, 4).is_empty());
         assert!(internalformat_sample_counts(GL_RGBA8UI, 4).is_empty());
     }
