@@ -492,6 +492,38 @@ unsafe extern "C" fn pvr_pds_render_vertex_program_ids(
     0
 }
 
+/* The base-instance entry point: the stand-in ignores the base. */
+#[no_mangle]
+unsafe extern "C" fn pvr_pds_render_vertex_program_ids_base(
+    vs_usc_exec_offset: u64,
+    vs_temps: u32,
+    streams: *const PvrPdsVertexStream,
+    num_streams: u32,
+    has_slc_mcu_cache_controls: i32,
+    vertex_id_reg: u32,
+    instance_id_reg: u32,
+    _instance_id_base: u32,
+    data_out: *mut u32,
+    code_out: *mut u32,
+    info: *mut PvrPdsRenderVertexInfo,
+) -> i32 {
+    // SAFETY: the caller's buffers, as for the stand-in above.
+    unsafe {
+        pvr_pds_render_vertex_program_ids(
+            vs_usc_exec_offset,
+            vs_temps,
+            streams,
+            num_streams,
+            has_slc_mcu_cache_controls,
+            vertex_id_reg,
+            instance_id_reg,
+            data_out,
+            code_out,
+            info,
+        )
+    }
+}
+
 #[no_mangle]
 unsafe extern "C" fn pvr_pds_render_coeff_program(
     _uses_w: i32,

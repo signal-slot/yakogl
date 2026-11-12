@@ -382,6 +382,38 @@ unsafe extern "C" fn pvr_pds_render_vertex_program_ids(
     0
 }
 
+/* The base-instance entry point: the stand-in ignores the base. */
+#[no_mangle]
+unsafe extern "C" fn pvr_pds_render_vertex_program_ids_base(
+    vs_usc_exec_offset: u64,
+    vs_temps: u32,
+    streams: *const PvrPdsVertexStream,
+    num_streams: u32,
+    has_slc_mcu_cache_controls: i32,
+    vertex_id_reg: u32,
+    instance_id_reg: u32,
+    _instance_id_base: u32,
+    data_out: *mut u32,
+    code_out: *mut u32,
+    info: *mut PvrPdsRenderVertexInfo,
+) -> i32 {
+    // SAFETY: the caller's buffers, as for the stand-in above.
+    unsafe {
+        pvr_pds_render_vertex_program_ids(
+            vs_usc_exec_offset,
+            vs_temps,
+            streams,
+            num_streams,
+            has_slc_mcu_cache_controls,
+            vertex_id_reg,
+            instance_id_reg,
+            data_out,
+            code_out,
+            info,
+        )
+    }
+}
+
 #[no_mangle]
 unsafe extern "C" fn pvr_pds_render_coeff_program(
     _uses_w: i32,
@@ -2838,10 +2870,12 @@ fn an_instanced_draw_past_the_budget_is_split_by_instances() {
     pvr_backend_set_option(PVR_BACKEND_OPT_PRIM_BUDGET, 0);
 }
 
+#[cfg(feature = "test-knobs")]
 #[test]
-fn a_draw_that_reads_gl_instance_id_is_never_split_by_instances() {
-    /* upstream 575288b: the vertex fetch numbers instances per index list, so
-     * the ID would restart at 0 in every chunk. */
+fn a_draw_that_reads_gl_instance_id_is_split_by_instances_with_each_chunks_base() {
+    /* the vertex fetch numbers instances per index list: each chunk passes
+     * its first instance as the PDS base, so gl_InstanceID goes on counting
+     * (tests/es3_pvr_instanceid.rs reads the base back). */
     let rig = Rig::new();
     let mut fvs = *rig.fvs;
     fvs.vs_instance_id_reg1 = 3;
@@ -2853,24 +2887,25 @@ fn a_draw_that_reads_gl_instance_id_is_never_split_by_instances() {
     assert_eq!(draw(&d), 0);
     assert_eq!(pvr_backend_flush(), 0);
     let il = rig.index_lists();
-    assert_eq!(il.iter().map(|l| l.3).collect::<Vec<_>>(), [4], "one index list of four instances");
+    /* (the colour-load quad of the second chunk's frame has no instances) */
+    assert_eq!(il.iter().map(|l| l.3).filter(|&n| n != 0).collect::<Vec<_>>(), [2, 2], "instances per chunk");
     pvr_backend_set_option(PVR_BACKEND_OPT_PRIM_BUDGET, 0);
 }
 
 /// One instance of an instanced draw the GL core draws instance by instance
-/// (GlesDraw::instance_id, a divisor past 1): the PDS starts the instance
-/// number at 0 for every draw, so a program that reads gl_InstanceID is
-/// refused, not drawn with 0. Instance 0, and a program that does not read
-/// it, are drawn. Revert check: without the refusal the first draw goes in.
+/// (GlesDraw::instance_id, a divisor past 1): drawn, whatever the instance,
+/// with the instance as the base of the vertex PDS (tests/es3_pvr_instanceid.rs
+/// reads the base back); a program that does not read gl_InstanceID is drawn
+/// too.
 #[test]
-fn an_instance_drawn_on_its_own_that_reads_gl_instance_id_is_refused() {
+fn an_instance_drawn_on_its_own_that_reads_gl_instance_id_is_drawn() {
     let rig = Rig::new();
     let mut fvs = *rig.fvs;
     fvs.vs_instance_id_reg1 = 3;
     let mut d = rig.draw(3);
     d.vs = &fvs;
     d.instance_id = 2;
-    assert_eq!(draw(&d), -EINVAL, "reads gl_InstanceID, instance 2");
+    assert_eq!(draw(&d), 0, "reads gl_InstanceID, instance 2");
     d.instance_id = 0;
     assert_eq!(draw(&d), 0, "instance 0");
     let mut e = rig.draw(3);
