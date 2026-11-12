@@ -2871,9 +2871,10 @@ fn an_instanced_draw_past_the_budget_is_split_by_instances() {
 }
 
 #[test]
-fn a_draw_that_reads_gl_instance_id_is_never_split_by_instances() {
-    /* upstream 575288b: the vertex fetch numbers instances per index list, so
-     * the ID would restart at 0 in every chunk. */
+fn a_draw_that_reads_gl_instance_id_is_split_by_instances_with_each_chunks_base() {
+    /* the vertex fetch numbers instances per index list: each chunk passes
+     * its first instance as the PDS base, so gl_InstanceID goes on counting
+     * (tests/es3_pvr_instanceid.rs reads the base back). */
     let rig = Rig::new();
     let mut fvs = *rig.fvs;
     fvs.vs_instance_id_reg1 = 3;
@@ -2885,7 +2886,8 @@ fn a_draw_that_reads_gl_instance_id_is_never_split_by_instances() {
     assert_eq!(draw(&d), 0);
     assert_eq!(pvr_backend_flush(), 0);
     let il = rig.index_lists();
-    assert_eq!(il.iter().map(|l| l.3).collect::<Vec<_>>(), [4], "one index list of four instances");
+    /* (the colour-load quad of the second chunk's frame has no instances) */
+    assert_eq!(il.iter().map(|l| l.3).filter(|&n| n != 0).collect::<Vec<_>>(), [2, 2], "instances per chunk");
     pvr_backend_set_option(PVR_BACKEND_OPT_PRIM_BUDGET, 0);
 }
 
