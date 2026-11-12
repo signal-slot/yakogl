@@ -154,8 +154,38 @@ config GL_TEST_PVR_FS_TEMPS_MIN
 
 endmenu
 
+menu "gl_test on the STM32MP257F-DK (Vivante GCNanoUltra31)"
+	depends on YAKOGL_GPU_VIVANTE && YAKOGL_STM32MP2
+
+config GL_TEST_MP2_CASE
+	int "Which gl_test case to run (7 = the regression set)"
+	default 7
+	help
+	  The case numbers are tools/pvrlab/gl_test.c's own; its header
+	  comment lists them. 7 runs the regression set (SET_ORDER of the
+	  runner, driver/tools/pvrlab/runner). Ignored with
+	  GL_TEST_MP2_SET_HEAD.
+
+config GL_TEST_MP2_SET_HEAD
+	bool "Run only the first cases of the regression set"
+	help
+	  Runs the first GL_TEST_MP2_SET_HEAD_CASES cases of the regression
+	  set, in its order, instead of GL_TEST_MP2_CASE: with the default
+	  of 1, case 1 ("uniform": one fragment-uniform draw read back)
+	  alone, the DK's first GL run (gc_gl_triangle in
+	  docs/notes/pre-study-stm32mp257f-dk.md). One case ends with that
+	  case's record, more with the set's summary. Off by default.
+
+config GL_TEST_MP2_SET_HEAD_CASES
+	int "How many cases from the head of the regression set"
+	depends on GL_TEST_MP2_SET_HEAD
+	range 1 50
+	default 1
+
+endmenu
+
 menu "gl_test on the i.MX8M Plus (Vivante GC7000UL)"
-	depends on YAKOGL_GPU_VIVANTE
+	depends on YAKOGL_GPU_VIVANTE && YAKOGL_GC_BOARD
 
 config GC_GL_TEST_CASE
 	int "Which gl_test case to run (7 = the regression set)"

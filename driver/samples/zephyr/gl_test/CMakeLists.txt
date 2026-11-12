@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 # gl_test: the one GL suite image for the Verdin AM62P (PowerVR), the Verdin
-# iMX8M Plus and Armadillo-X2 (Vivante GC7000UL) and the Raspberry Pi 4 (V3D).
+# iMX8M Plus and Armadillo-X2 (Vivante GC7000UL), the STM32MP257F-DK's A35
+# (Vivante GCNanoUltra31) and the Raspberry Pi 4 (V3D).
 # tools/pvrlab/gl_test.c is the on-silicon GL test suite of the Linux harness;
 # the same source runs here (printk instead of pr_info). The board is chosen by
 # the Zephyr board (-b) only; there is no per-board option here. What differs
@@ -32,6 +33,14 @@ if(BOARD MATCHES "^(verdin_imx8mp|armadillo_x2)")
     list(APPEND _imx8mp_conf "${CMAKE_CURRENT_LIST_DIR}/boards/armadillo_x2_direct.conf")
   endif()
   set(EXTRA_CONF_FILE ${_imx8mp_conf} ${EXTRA_CONF_FILE})
+endif()
+# The STM32MP257F-DK's A35 takes the board layer's own board files, as
+# gc_fence and gc_clear do (examples/zephyr.cmake): app.conf here (the
+# Vivante driver, OP-TEE's watchdog, no hold), app.overlay through
+# boards/stm32mp257f_dk_stm32mp257fxx_a35.overlay, and gl_test's own needs in
+# boards/stm32mp257f_dk_stm32mp257fxx_a35.conf.
+if(BOARD MATCHES "^stm32mp257f_dk")
+  set(EXTRA_CONF_FILE "${PVR_REPO}/zephyr/lib/board/stm32mp2/app.conf" ${EXTRA_CONF_FILE})
 endif()
 
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
@@ -108,6 +117,18 @@ if(CONFIG_YAKOGL_GPU_V3D)
     message(WARNING "gl_test: built WITHOUT the watchdog (V3D_RPI_WDOG=OFF): QEMU only, never the board")
     target_compile_definitions(app PRIVATE V3D_NO_RPI_WDOG)
   endif()
+elseif(CONFIG_YAKOGL_GPU_VIVANTE AND CONFIG_YAKOGL_STM32MP2)
+  # ---- STM32MP257F-DK, A35: Vivante GCNanoUltra31 (0x8000/0x6205) ----------
+  # The board layer (yakogl_board.h) powers the GPU, arms OP-TEE's watchdog,
+  # prints the yk-record line and resets into ST's Linux at the end
+  # (driver/zephyr/lib/board/stm32mp2); the suite is the same C.
+  if(NOT CONFIG_YAKOGL_BOARD_STM32MP2)
+    message(FATAL_ERROR "gl_test: CONFIG_YAKOGL_BOARD is off (boards/stm32mp257f_dk_stm32mp257fxx_a35.conf turns it on)")
+  endif()
+  target_sources(app PRIVATE src/main_stm32mp2.c)
+  target_include_directories(app PRIVATE
+    "${YAKOGL_DIR}/src/vivante"
+    "${PVR_REPO}/src/vivante")
 elseif(CONFIG_YAKOGL_GPU_VIVANTE)
   # ---- Verdin iMX8M Plus, Armadillo-X2: Vivante GC7000UL -------------------
   # Only the few lines that start the backend know which GPU this is, and they
