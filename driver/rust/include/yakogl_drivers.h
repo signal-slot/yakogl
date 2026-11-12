@@ -717,8 +717,9 @@ int yd_t6_submit(uintptr_t cru, uintptr_t pmu, uintptr_t spi2, uintptr_t qos, ui
  * yd_t6_osal_up, then the OSAL ops of src/osal/mali.rs. The group VM's four
  * regions, each backed by one struct yd_t6_fw_backing of mem (uncached for
  * the CPU): the ring and the sync object's page, the heap's pool (its first
- * slot is HEAP_SET's operand), its chunks (whole 2 MiB chunks, all made at
- * the start), and the carve-out every gpu_alloc comes from (whole pages, at
+ * slot is HEAP_SET's operand), its chunks (whole 2 MiB chunks,
+ * heap_initial_chunks made at the start, the others on a tiler OOM), and
+ * the carve-out every gpu_alloc comes from (whole pages, at
  * most YD_T6_OSAL_CARVE_MAX bytes), mapped whole at YD_T6_OSAL_CARVE_VA. */
 #define YD_T6_OSAL_QUEUE_VA       0x100800000ull
 #define YD_T6_OSAL_QUEUE_SIZE     0x2000u
@@ -742,6 +743,7 @@ struct yd_t6_osal_mem {
 	void *vm_pool;                 /* the group VM's tables: vm_pool_pages at vm_tables_pa */
 	uint32_t vm_pool_pages;
 	uint64_t vm_tables_pa;
+	uint32_t heap_initial_chunks;  /* 1 to the chunks heap_chunks holds (at most 64) */
 };
 
 struct yd_t6_osal_counts {
@@ -753,6 +755,12 @@ struct yd_t6_osal_counts {
 	uint32_t refused_frees;
 	uint32_t dead_refusal;   /* the sched refusal that stopped the OSAL, 0: none */
 	uint32_t dead_value;
+	uint32_t restarts;       /* the group's restarts, and the refusal that caused the last */
+	uint32_t last_refusal;
+	uint32_t last_value;
+	uint32_t oom_chunks;     /* tiler OOMs answered with a chunk, and with none */
+	uint32_t oom_no_chunk;
+	uint32_t heap_chunks;    /* the tiler heap's chunks now */
 };
 
 struct osal_gpu_mem;   /* include/gles_osal.h */
@@ -777,6 +785,7 @@ int yd_t6_osal_map_phys(uint64_t phys, size_t size, struct osal_gpu_mem *out);
 int64_t yd_t6_osal_submit(uint64_t stream_gpu, uint32_t stream_bytes);
 int yd_t6_osal_wait(int64_t fence, int64_t timeout_us);
 int64_t yd_t6_osal_completed(void);
+int yd_t6_osal_shutdown(void);
 int yd_t6_osal_gpu(struct osal_mali_gpu *out);
 int yd_t6_osal_heap(struct osal_mali_heap *out);
 int yd_t6_osal_counts(struct yd_t6_osal_counts *out);
@@ -1857,7 +1866,7 @@ _Static_assert(offsetof(struct yd_t6_submit_up, drain_sync_updates) == 416, "yd_
 _Static_assert(offsetof(struct yd_t6_submit_up, drain_cs_ack) == 420, "yd_t6_submit_up.drain_cs_ack");
 _Static_assert(offsetof(struct yd_t6_submit_up, drain_cs_irq_acks) == 424, "yd_t6_submit_up.drain_cs_irq_acks");
 _Static_assert(offsetof(struct yd_t6_submit_up, drain_idle_acks) == 428, "yd_t6_submit_up.drain_idle_acks");
-_Static_assert(sizeof(struct yd_t6_osal_mem) == 192, "struct yd_t6_osal_mem");
+_Static_assert(sizeof(struct yd_t6_osal_mem) == 200, "struct yd_t6_osal_mem");
 _Static_assert(offsetof(struct yd_t6_osal_mem, fw) == 0, "yd_t6_osal_mem.fw");
 _Static_assert(offsetof(struct yd_t6_osal_mem, pool) == 24, "yd_t6_osal_mem.pool");
 _Static_assert(offsetof(struct yd_t6_osal_mem, pool_pages) == 32, "yd_t6_osal_mem.pool_pages");
@@ -1870,7 +1879,8 @@ _Static_assert(offsetof(struct yd_t6_osal_mem, carve) == 144, "yd_t6_osal_mem.ca
 _Static_assert(offsetof(struct yd_t6_osal_mem, vm_pool) == 168, "yd_t6_osal_mem.vm_pool");
 _Static_assert(offsetof(struct yd_t6_osal_mem, vm_pool_pages) == 176, "yd_t6_osal_mem.vm_pool_pages");
 _Static_assert(offsetof(struct yd_t6_osal_mem, vm_tables_pa) == 184, "yd_t6_osal_mem.vm_tables_pa");
-_Static_assert(sizeof(struct yd_t6_osal_counts) == 40, "struct yd_t6_osal_counts");
+_Static_assert(offsetof(struct yd_t6_osal_mem, heap_initial_chunks) == 192, "yd_t6_osal_mem.heap_initial_chunks");
+_Static_assert(sizeof(struct yd_t6_osal_counts) == 64, "struct yd_t6_osal_counts");
 _Static_assert(offsetof(struct yd_t6_osal_counts, submitted) == 0, "yd_t6_osal_counts.submitted");
 _Static_assert(offsetof(struct yd_t6_osal_counts, completed) == 8, "yd_t6_osal_counts.completed");
 _Static_assert(offsetof(struct yd_t6_osal_counts, live_pages) == 16, "yd_t6_osal_counts.live_pages");
@@ -1879,6 +1889,12 @@ _Static_assert(offsetof(struct yd_t6_osal_counts, held) == 24, "yd_t6_osal_count
 _Static_assert(offsetof(struct yd_t6_osal_counts, refused_frees) == 28, "yd_t6_osal_counts.refused_frees");
 _Static_assert(offsetof(struct yd_t6_osal_counts, dead_refusal) == 32, "yd_t6_osal_counts.dead_refusal");
 _Static_assert(offsetof(struct yd_t6_osal_counts, dead_value) == 36, "yd_t6_osal_counts.dead_value");
+_Static_assert(offsetof(struct yd_t6_osal_counts, restarts) == 40, "yd_t6_osal_counts.restarts");
+_Static_assert(offsetof(struct yd_t6_osal_counts, last_refusal) == 44, "yd_t6_osal_counts.last_refusal");
+_Static_assert(offsetof(struct yd_t6_osal_counts, last_value) == 48, "yd_t6_osal_counts.last_value");
+_Static_assert(offsetof(struct yd_t6_osal_counts, oom_chunks) == 52, "yd_t6_osal_counts.oom_chunks");
+_Static_assert(offsetof(struct yd_t6_osal_counts, oom_no_chunk) == 56, "yd_t6_osal_counts.oom_no_chunk");
+_Static_assert(offsetof(struct yd_t6_osal_counts, heap_chunks) == 60, "yd_t6_osal_counts.heap_chunks");
 _Static_assert(sizeof(struct yd_sn65dsi8x_config) == 8, "struct yd_sn65dsi8x_config");
 _Static_assert(offsetof(struct yd_sn65dsi8x_config, flags) == 0, "yd_sn65dsi8x_config.flags");
 _Static_assert(offsetof(struct yd_sn65dsi8x_config, lanes) == 4, "yd_sn65dsi8x_config.lanes");

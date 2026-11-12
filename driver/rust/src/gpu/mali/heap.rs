@@ -28,8 +28,10 @@
 //! return of a chunk the firmware could not take
 //! (`panthor_heap_return_chunk`, :359-414: [`return_chunk`]) and a heap's
 //! teardown (`panthor_heap_destroy`, :226-255: [`destroy`]) are transcribed
-//! too. Nothing calls them in Z4: they are for a later `CS_TILER_OOM`
-//! handler in sched.rs, which refuses `CS_TILER_OOM` today.
+//! too. Z4's probe calls none of them (its `sched::wait` refuses
+//! `CS_TILER_OOM`); the Zephyr OSAL (board::nanopc_t6_osal) calls [`grow`]
+//! from `sched::service_tiler_oom`, and [`destroy`] and [`create`] again
+//! when it restarts its group.
 //!
 //! Two points where panthor differs from the plan's wording for growth,
 //! both followed as panthor has them: the in-flight refusal is for strictly
@@ -168,18 +170,16 @@
 //!
 //! # Follow-ups (written down only; not changed here)
 //!
-//! - sched.rs: `CS_TILER_OOM` is refused (`SchedRefusal::TilerOom`). A
-//!   handler would read the stream's `heap_address`, `heap_vt_start`,
-//!   `heap_vt_end`, `heap_frag_end`, refuse `frag_end > vt_end` or
-//!   `vt_end >= vt_start` (panthor_sched.c:1480), call [`grow`] with
-//!   `vt_start - frag_end` and `vt_end - frag_end`, write its value (0 on
+//! - sched.rs's `service_tiler_oom` is the `CS_TILER_OOM` handler: it
+//!   reads the stream's `heap_address`, `heap_vt_start`, `heap_vt_end`,
+//!   `heap_frag_end`, refuses `frag_end > vt_end` or `vt_end >= vt_start`
+//!   (panthor_sched.c:1480), and the OSAL's `grow` calls [`grow`] with
+//!   `vt_start - frag_end` and `vt_end - frag_end` and answers 0 on
 //!   `InFlightAboveTarget`, `MaxChunksReached` or an allocator's out of
-//!   memory, panthor's `-ENOMEM`; any other refusal makes the queue fatal)
-//!   to `heap_start`/`heap_end` and acknowledge, then [`return_chunk`] the
-//!   chunk if the group was scheduled out meanwhile
-//!   (`group_process_tiler_oom`, panthor_sched.c:1448-1532). It also has to
-//!   be given the heap's pool and heaps to reach them from the group.
-//!   csf.rs already has those `CsInput`/`CsOutput` fields; it needs nothing.
+//!   memory (panthor's `-ENOMEM`; any other refusal makes the queue fatal);
+//!   the value goes to `heap_start`/`heap_end` and the event is
+//!   acknowledged (`group_process_tiler_oom`, panthor_sched.c:1448-1532).
+//!   [`return_chunk`] is not needed: the one group is never scheduled out.
 //! - Pool destruction (`panthor_heap_pool_destroy`, :594-616) is not
 //!   transcribed: Z4's group VM lives until the reset. panthor's pool
 //!   `size` counter (:101-102, 133, 188, 397), read only by its fdinfo, is
@@ -545,6 +545,49 @@ impl Heap<'_> {
             reserved: 0,
         }
     }
+    /// The heap without its chunk list, for an owner that keeps the list
+    /// itself between calls ([`Heap::from_parts`]).
+    pub fn parts(&self) -> HeapParts {
+        HeapParts {
+            id: self.id,
+            ctx_gpu: self.ctx_gpu,
+            chunk_size: self.chunk_size,
+            max_chunks: self.max_chunks,
+            target_in_flight: self.target_in_flight,
+            chunk_count: self.chunk_count,
+        }
+    }
+    /// The heap again from [`Heap::parts`] and the list it was made with
+    /// (the one [`create`] took, as [`grow`] and [`return_chunk`] left it).
+    /// `None` when the list is shorter than `max_chunks` or the count is
+    /// above it: parts and a list that were never one heap.
+    pub fn from_parts(p: HeapParts, chunks: &mut [Allocation]) -> Option<Heap<'_>> {
+        if chunks.len() < p.max_chunks as usize || p.chunk_count > p.max_chunks {
+            return None;
+        }
+        Some(Heap {
+            id: p.id,
+            ctx_gpu: p.ctx_gpu,
+            chunk_size: p.chunk_size,
+            max_chunks: p.max_chunks,
+            target_in_flight: p.target_in_flight,
+            chunks,
+            chunk_count: p.chunk_count,
+        })
+    }
+}
+
+/// A [`Heap`] less its chunk list ([`Heap::parts`]): what an owner that
+/// cannot hold the borrow keeps between calls, the Zephyr OSAL's
+/// `CS_TILER_OOM` handler among them (board::nanopc_t6_osal).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct HeapParts {
+    pub id: u32,
+    pub ctx_gpu: u64,
+    pub chunk_size: u32,
+    pub max_chunks: u32,
+    pub target_in_flight: u32,
+    pub chunk_count: u32,
 }
 
 /// `OsalMaliHeap` of src/osal/mali.rs:46-56 (`struct osal_mali_heap`), which
@@ -679,9 +722,9 @@ fn find_heap<'h, 'l, E>(
 
 /// `panthor_heap_grow` (panthor_heap.c:416-489): one more chunk for the heap
 /// whose context is at `heap_gpu_va`, the `heap_address` a stream's
-/// `CS_TILER_OOM` reports. For a later `CS_TILER_OOM` handler in sched.rs
-/// (`group_process_tiler_oom`, panthor_sched.c:1448-1532); nothing calls it
-/// yet: Z4's sched.rs refuses `CS_TILER_OOM`.
+/// `CS_TILER_OOM` reports. The `grow` of sched.rs's `service_tiler_oom`
+/// (`group_process_tiler_oom`, panthor_sched.c:1448-1532) in the Zephyr
+/// OSAL; Z4's probe refuses `CS_TILER_OOM`.
 ///
 /// `renderpasses_in_flight` is the stream's `heap_vt_start - heap_frag_end`
 /// and `pending_frag_count` its `heap_vt_end - heap_frag_end`
@@ -736,8 +779,8 @@ pub fn grow<M: HeapMemory>(
 /// chunk at `chunk_gpu_va` of the heap whose context is at `heap_gpu_va`,
 /// the chunk [`grow`] made that the handler could not hand to the stream
 /// because the group was scheduled out meanwhile (:365-367;
-/// panthor_sched.c:1520-1525). For the same later `CS_TILER_OOM` handler;
-/// nothing calls it yet.
+/// panthor_sched.c:1520-1525). Nothing calls it: our one group is never
+/// scheduled out, so the chunk always reaches the stream.
 ///
 /// The heap is found as [`grow`] finds it (`-EINVAL`, :373-387), the low 12
 /// bits of `chunk_gpu_va` are dropped (:389), so [`grow`]'s value names its
