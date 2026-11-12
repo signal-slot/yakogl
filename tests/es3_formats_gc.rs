@@ -245,13 +245,12 @@ fn the_compressed_srgb_etc2_classes_are_offered_as_their_linear_twins_blocks() {
     assert_eq!(gc_texfmt(GLES_TEXFMT_ETC2_SRGB_RGBA).format_ext, GC_TEX_FORMAT_EXT_RGBA8_ETC2_EAC);
 }
 
-/// The GL core's R32I/UI and RG32I/UI classes (26-29) are in no back end's
-/// mask yet: the four formats fall to their RGBA32 class, which the GC7000UL
-/// lacks too, so its build still refuses them at upload; the PowerVR and the
-/// V3D store them in RGBA32UI/I, the Mali refuses them. The native class
+/// The GL core's R32I/UI and RG32I/UI classes (26-29) are in the GC7000UL's
+/// mask since gc-r32-flip: the four formats are stored natively there. The
+/// PowerVR and the V3D store them in RGBA32UI/I, the Mali refuses them. The native class
 /// holds the first 4 / 8 bytes of the RGBA32 texel of the same source.
 #[test]
-fn the_r32_and_rg32_integer_classes_are_in_no_mask_yet() {
+fn the_r32_and_rg32_integer_classes_are_in_the_gc_mask_only() {
     use yakogl::gl::consts::*;
     use yakogl::gl::es3_formats::{convert_row, find, storage_bytes};
     let rows = [
@@ -265,11 +264,12 @@ fn the_r32_and_rg32_integer_classes_are_in_no_mask_yet() {
         assert_eq!(e.storage, [native, wide], "{}: the native class, then the RGBA32 fallback", e.name);
         assert_eq!(gles_texfmt_bytes(native), bytes, "{}", e.name);
         assert_eq!(storage_bytes(native), bytes as usize, "{}", e.name);
-        for mask in [GC_SAMPLED_TEXFMTS, PVR_SAMPLED_TEXFMTS, V3D_SAMPLED_TEXFMTS] {
-            assert_eq!(mask & gles_texfmt_bit(native), 0, "{}: no mask has class {native}", e.name);
+        for mask in [PVR_SAMPLED_TEXFMTS, V3D_SAMPLED_TEXFMTS] {
+            assert_eq!(mask & gles_texfmt_bit(native), 0, "{}: no other mask has class {native}", e.name);
         }
-        assert_eq!(e.storage_in(GC_SAMPLED_TEXFMTS), None, "{}: GC7000UL, refused as before", e.name);
-        assert_eq!(e.storage_in(GC_SAMPLED_TEXFMTS | gles_texfmt_bit(wide)), Some(wide), "{}", e.name);
+        assert_ne!(GC_SAMPLED_TEXFMTS & gles_texfmt_bit(native), 0, "{}: GC7000UL has class {native}", e.name);
+        assert_eq!(e.storage_in(GC_SAMPLED_TEXFMTS), Some(native), "{}: GC7000UL, its own class", e.name);
+        assert_eq!(e.storage_in(GC_SAMPLED_TEXFMTS & !gles_texfmt_bit(native)), None, "{}: no RGBA32 class", e.name);
         assert_eq!(e.storage_in(PVR_SAMPLED_TEXFMTS), Some(wide), "{}: PowerVR", e.name);
         assert_eq!(e.storage_in(V3D_SAMPLED_TEXFMTS), Some(wide), "{}: V3D", e.name);
         assert_eq!(e.storage_in(0), None, "{}: Mali (mask 0)", e.name);
@@ -356,10 +356,10 @@ fn the_binding_bits_apply_to_every_class() {
         if !gc_texfmt(id).decoded {
             continue;
         }
-        /* no gc_texfmt arm yet (r32-rg32-classes adds it with the mask bits):
-         * they fall to the RGBA8 default, which no texture reaches while
-         * GC_SAMPLED_TEXFMTS lacks them */
-        if (GLES_TEXFMT_R32UI..=GLES_TEXFMT_RG16I).contains(&id) {
+        /* the narrow classes have no gc_texfmt arm yet: they fall to the
+         * RGBA8 default, which no texture reaches while GC_SAMPLED_TEXFMTS
+         * lacks them; R32I/UI and RG32I/UI have their own (gc-r32-flip) */
+        if (GLES_TEXFMT_R8_SNORM..=GLES_TEXFMT_RG16I).contains(&id) {
             assert_eq!(GC_SAMPLED_TEXFMTS & gles_texfmt_bit(id), 0, "{name}");
             continue;
         }

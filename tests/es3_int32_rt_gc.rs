@@ -13,13 +13,11 @@
 //! their own pitch. What this file pins, for each of the four, today:
 //!
 //! - the framebuffer is complete with the format as a renderbuffer colour
-//!   attachment. A **texture** of the format is refused today: the GC
-//!   samples no 32-bit integer class (`GC_SAMPLED_TEXFMTS`, src/backend.rs),
-//!   so glTexImage2D and glTexStorage2D set GL_INVALID_OPERATION
-//!   (`es3_storage_or_refuse`, src/gl/texture.rs) and a texture attachment
-//!   has no image: GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT. Opening that class
-//!   is gc-r32-flip's (RC17, fbo.completeness `renderable.texture.*32*`);
-//!   the test that pins the refusal flips with it;
+//!   attachment. A **texture** of the format is stored (the GC
+//!   mask holds the four classes, gc-r32-flip), but as a colour attachment it
+//!   is GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT until the GL core's
+//!   `integer_texture_surface` has rows for them (item gl-r32-surface; RC17,
+//!   fbo.completeness `renderable.texture.*32*`);
 //! - a draw and a glClearBuffer{i,ui}v emit the whole PE_COLOR_FORMAT word
 //!   (FORMAT_EXT, FORMAT_MASK, FORMAT_EXT's own write mask clear; a draw
 //!   0x14000710 / 0x15000710, COMPONENTS without A and so no OVERWRITE; a
@@ -593,13 +591,15 @@ fn a_renderbuffer_of_each_is_a_complete_colour_attachment() {
     }
 }
 
-/// Today a texture of the four is refused (GC_SAMPLED_TEXFMTS has no 32-bit
-/// integer class; `es3_storage_or_refuse`, src/gl/texture.rs), so a texture
-/// colour attachment has no image and the framebuffer is incomplete. This is
-/// the state gc-r32-flip changes (RC17, dEQP fbo.completeness
-/// `renderable.texture.*32*`): the assertions flip with it.
+/// A texture of the four is stored (GC_SAMPLED_TEXFMTS holds their classes
+/// since gc-r32-flip; `es3_storage_or_refuse`, src/gl/texture.rs), so
+/// glTexImage2D and glTexStorage2D raise nothing and the attachment is made.
+/// The framebuffer is still INCOMPLETE_ATTACHMENT: `integer_texture_surface`
+/// (src/gl/framebuffer.rs) has no surface for the four (item gl-r32-surface);
+/// the status assertion flips with it (RC17, dEQP fbo.completeness
+/// `renderable.texture.*32*`).
 #[test]
-fn a_texture_of_each_is_refused_today_and_so_is_no_attachment() {
+fn a_texture_of_each_is_stored_and_awaits_its_surface_as_attachment() {
     for t in &INT32 {
         on_gc7000(|| {
             let name = t.name();
@@ -613,10 +613,10 @@ fn a_texture_of_each_is_refused_today_and_so_is_no_attachment() {
                 glGenTextures(2, tex.as_mut_ptr());
                 glBindTexture(GL_TEXTURE_2D, tex[0]);
                 glTexImage2D(GL_TEXTURE_2D, 0, t.internal as GLint, 16, 16, 0, format, ty, core::ptr::null());
-                assert_eq!(glGetError(), GL_INVALID_OPERATION, "{name}: glTexImage2D refused");
+                assert_eq!(glGetError(), GL_NO_ERROR, "{name}: glTexImage2D");
                 glBindTexture(GL_TEXTURE_2D, tex[1]);
                 glTexStorage2D(GL_TEXTURE_2D, 1, t.internal, 16, 16);
-                assert_eq!(glGetError(), GL_INVALID_OPERATION, "{name}: glTexStorage2D refused");
+                assert_eq!(glGetError(), GL_NO_ERROR, "{name}: glTexStorage2D");
                 let mut fb = 0;
                 glGenFramebuffers(1, &mut fb);
                 glBindFramebuffer(GL_FRAMEBUFFER, fb);
@@ -625,7 +625,7 @@ fn a_texture_of_each_is_refused_today_and_so_is_no_attachment() {
                 assert_eq!(
                     glCheckFramebufferStatus(GL_FRAMEBUFFER),
                     GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT,
-                    "{name}: a texture without an image"
+                    "{name}: a texture with no surface class yet (gl-r32-surface)"
                 );
             }
         });
