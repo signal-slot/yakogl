@@ -45,6 +45,9 @@
 # Exit: 0 every check passed, 1 a check failed, 2 usage, an unreadable file or
 # a missing tool.
 set -uo pipefail
+# readelf translates its output ("Library soname:") under the host's locale;
+# the checks below read the C locale's text
+export LC_ALL=C
 
 usage() {
   echo "usage: ${0##*/} [--glmark2-src DIR] [--libdir DIR] <glmark2-es2> <libGLESv2.so.2> <libEGL.so.1>" >&2
