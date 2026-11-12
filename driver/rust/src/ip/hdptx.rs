@@ -76,6 +76,10 @@
 //!    fraction, of 264-750 MHz (hdptx.c:925-942), and
 //!    VCO = 24 MHz x M -/+ (k / lc) x Fsdc / 16, k the SDM numerator, lc its
 //!    denominator, minus when the sign bit is 1 (hdptx.c:932-936, :958-965).
+//!    Linux's calculator keeps k within 7 bits (at most 127) and lc within 8
+//!    bits (at most 255) (hdptx.c:934-935); its registers 0x65 and 0x60 are 8
+//!    bits wide (hdptx.c:106, :112), so a table row or a dump may hold a
+//!    larger k.
 //! 10. Power-off (hdptx.c:876-898), done by Linux only when `STATUS` shows
 //!    `PLL_LOCK_DONE` (hdptx.c:1148-1155): assert apb, 20 µs, release apb;
 //!    lane 0x300 = 0x82, SB 0x10f = 0xc1, SB 0x110 = 0x01, lane 0x301,
@@ -229,6 +233,10 @@ pub const VCO_MAX_HZ: u64 = 4_000_000_000;
 pub const TMDS_MAX_HZ: u64 = 340_000_000;
 /// The SDC divider this module's plans use (N = 8, as hdptx.c:906).
 pub const SDC_N: u32 = 8;
+/// The largest SDM numerator and denominator [`plan`] makes: 7 and 8 bits,
+/// as Linux's calculator (hdptx.c:934-935).
+pub const SDM_K_MAX: u64 = 127;
+pub const SDM_LC_MAX: u64 = 255;
 /// Fsdc's range (fact 9); a plan's Fsdc is a multiple of [`REF_HZ`] in it.
 pub const FSDC_MIN_HZ: u64 = 264_000_000;
 pub const FSDC_MAX_HZ: u64 = 750_000_000;
@@ -389,7 +397,8 @@ fn write_all(m: &impl Mmio, phy: usize, words: &[(u16, u32)]) -> Result<(), Refu
 pub struct Sdm {
     /// The SDM term is subtracted from 24 MHz x M (sign bit 1).
     pub minus: bool,
-    /// SDM numerator k and denominator lc (8 bits each).
+    /// SDM numerator k and denominator lc (8-bit registers; [`plan`] keeps
+    /// k at most [`SDM_K_MAX`], as Linux's calculator does).
     pub k: u8,
     pub lc: u8,
     /// SDC divider N (3-10) and fraction a / b (6 bits each).
@@ -596,7 +605,8 @@ fn best_fraction(num: u64, den: u64, max_p: u64, max_q: u64) -> (u64, u64) {
 /// [`SDC_N`], Fsdc is the smallest multiple of 24 MHz from 264 MHz with
 /// N x Fsdc > 24 MHz x M, so a/b = (N x Fsdc - 24 MHz x M) / Fsdc exactly,
 /// and k/lc is 16 x (24 MHz x M - VCO) / Fsdc, exact or the closest
-/// fraction with 8-bit terms ([`Plan::error_mhz`] says how close).
+/// fraction with k at most [`SDM_K_MAX`] and lc at most [`SDM_LC_MAX`]
+/// ([`Plan::error_mhz`] says how close).
 pub fn plan(rate_hz: u64) -> Result<Plan, Refused> {
     let no = refuse(Refusal::Rate, rate_hz.min(u64::from(u32::MAX)) as u32);
     if rate_hz == 0 || rate_hz > TMDS_MAX_HZ {
@@ -632,7 +642,7 @@ pub fn plan(rate_hz: u64) -> Result<Plan, Refused> {
         return Err(no);
     }
     // k/lc = 16·delta / (REF_HZ·q)
-    let (k, lc) = best_fraction(16 * delta, REF_HZ * q, 255, 255);
+    let (k, lc) = best_fraction(16 * delta, REF_HZ * q, SDM_K_MAX, SDM_LC_MAX);
     if k == 0 {
         // the SDM term rounds to nothing: an integer plan, its error stated
         return Ok(Plan { rate_hz, m: m as u8, s: s as u8, sdm: None });
@@ -1407,14 +1417,15 @@ mod tests {
 
     #[test]
     fn a_rate_that_needs_an_approximation_states_its_error() {
-        // 65.000001 MHz: 16·delta/Fsdc = 11999940/31500000 has no 8-bit
-        // form; the closest 8-bit fraction is 8/21, the one of 65 MHz, so
-        // the plan makes 65 MHz and says it is 1 Hz short
+        // 65.000001 MHz: 16·delta/Fsdc = 11999940/31500000 has no exact
+        // form with k <= 127 and lc <= 255; the closest such fraction is
+        // 8/21, the one of 65 MHz, so the plan makes 65 MHz and says it is
+        // 1 Hz short
         let p = plan(65_000_001).unwrap();
         let d = p.sdm.unwrap();
         assert_eq!((d.k, d.lc), (8, 21));
         assert_eq!(p.error_mhz(), -1000);
-        // the closest 8-bit fraction: no other lc gives a smaller error
+        // the closest fraction within the bounds: no other lc gives a smaller error
         let fsdc = 24_000_000u64 * u64::from(d.b) * u64::from(p.m) / (u64::from(d.n) * u64::from(d.b) - u64::from(d.a));
         let delta = 24_000_000u128 * u128::from(p.m) - 5 * 65_000_001u128 * u128::from(p.s);
         let target = (16 * delta, u128::from(fsdc));
@@ -1422,7 +1433,7 @@ mod tests {
         let best = err(u128::from(d.k), u128::from(d.lc));
         for lc in 1..=255u128 {
             let k = (target.0 * lc + target.1 / 2) / target.1;
-            if k <= 255 {
+            if k <= 127 {
                 assert!(err(k, lc) >= best, "{k}/{lc} beats {}/{}", d.k, d.lc);
             }
         }
@@ -1440,6 +1451,38 @@ mod tests {
         let p = Plan { rate_hz: 594_000_000, m: 124, s: 1, sdm: None };
         assert_eq!(pll_on(&s, &s, &B, &p, &IMG).unwrap_err().why, Refusal::Rate);
         assert!(s.ops().is_empty());
+    }
+    #[test]
+    fn the_sdm_numerator_stays_within_7_bits() {
+        // hdptx.c:932-936 bounds k by GENMASK(6, 0) = 127 and lc by
+        // GENMASK(7, 0) = 255. At 25.001 MHz the closest fraction with an
+        // 8-bit k would be 192/199; within the bounds it is 55/57.
+        let p = plan(25_001_000).unwrap();
+        let d = p.sdm.unwrap();
+        assert_eq!((p.s, p.m, d.k, d.lc), (16, 84, 55, 57));
+        // no fraction within the bounds is closer to 16·delta/Fsdc
+        let fsdc =
+            24_000_000u128 * u128::from(p.m) * u128::from(d.b) / (u128::from(d.n) * u128::from(d.b) - u128::from(d.a));
+        let delta = 24_000_000u128 * u128::from(p.m) - 5 * 25_001_000u128 * u128::from(p.s);
+        let (tn, td) = (16 * delta, fsdc);
+        let err = |k: u128, lc: u128| (k * td).abs_diff(tn * lc) * 1_000_000 / (lc * td);
+        let best = err(u128::from(d.k), u128::from(d.lc));
+        for lc in 1..=255u128 {
+            let k = (tn * lc + td / 2) / td;
+            if k <= 127 {
+                assert!(err(k, lc) >= best, "{k}/{lc} beats {}/{}", d.k, d.lc);
+            }
+        }
+        // every rate from 25 to 340 MHz in 100 kHz steps keeps k within 7 bits
+        for rate in (25_000_000u64..=340_000_000).step_by(100_000) {
+            let p = plan(rate).unwrap();
+            if let Some(d) = p.sdm {
+                assert!(d.k <= 127, "{rate}: k {}", d.k);
+            }
+        }
+        // our mode is unchanged
+        let d = plan(65_000_000).unwrap().sdm.unwrap();
+        assert_eq!((d.k, d.lc), (8, 21));
     }
 
     #[test]
