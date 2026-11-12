@@ -36,12 +36,24 @@
 # (<n> of <m>)" (exit 1: n expected lines not ok, of m). Exit 2: usage.
 #
 # T6_ROUTE: how the image was started, kexec (the default, nanopc-t6.sh) or
-# uboot (U-Boot's `go`, driver/tools/uboot-t6/go-zephyr.sh). Two lines of the
+# uboot (U-Boot's `go`, driver/tools/uboot-t6/prompt-go.sh). Two lines of the
 # boot depend on it. uboot expects the entry's T6:G line after T6:A (the MMU
 # and caches U-Boot left on were turned off, board::nanopc_t6_go), with the
-# window 0x10000000-0x20000000 cleaned. kexec expects the GICv3 line (Linux
-# left EOImode 1; nanopc_t6.c prints it only when it changed the mode);
-# uboot does not judge it: U-Boot does not touch the CPU interface.
+# window 0x10000000-0x20000000 cleaned; its first value must have M, C or I
+# set and its second (SCTLR_EL2 read back after the turn-off) must have all
+# three clear and be T6:A's SCTLR_EL2. kexec expects the GICv3 line (Linux
+# left EOImode 1; nanopc_t6.c prints it only when it changed the mode) and
+# no T6:G line (a T6:G there differs); uboot does not judge the GICv3 line:
+# U-Boot does not touch the CPU interface. On both routes T6:A's SCTLR_EL2
+# must have M, C and I clear: the image runs its early code with the MMU and
+# caches off.
+#
+# The probes' own tables (t6_gpu and after) predict the GPU hand-over Linux
+# leaves (PD_GPU off with vdd_gpu_s0 on, the clock at CPLL / 5). With
+# T6_ROUTE=uboot those lines are judged against the same values, so a correct
+# image that finds U-Boot's state (the clock on the SPLL, the supply maybe
+# off) can FAIL there; it cannot PASS wrongly. A uboot variant of those
+# tables comes with the first measured U-Boot hand-over.
 #
 # t6_mmu: P (t6_mmu_pool's PA) and B (t6_mmu_backing's) are taken from the
 # "pool" line, or from T6_POOL_PA and T6_BACKING_PA when set (step 1 of the
@@ -111,10 +123,13 @@ never() { NOT+=("$1"); }
 table_boot() {
 	# banner_a_el2 with the VHE exit: HCR_EL2 found -> written (Z1 measured
 	# 0x000000048800003a -> 0x0000000080000002; not a prediction for a probe)
-	e 'T6:A EL2 HCR_EL2 0x{x16} -> 0x{x16} SCTLR_EL2 0x{x16} VBAR_EL2 0x{x16} -> 0x{x16}' 'T6:A EL'
-	# U-Boot's go: the SCTLR_EL2 values are recorded, the window predicted
+	# SCTLR_EL2 (SA) with M, C and I clear (hook t6a_sctlr)
+	e 'T6:A EL2 HCR_EL2 0x{x16} -> 0x{x16} SCTLR_EL2 0x{@SA} VBAR_EL2 0x{x16} -> 0x{x16}' 'T6:A EL' t6a_sctlr
+	# U-Boot's go: found (GF) with one of M, C, I set; left (GL), read back,
+	# with all three clear and equal to T6:A's (hook t6g_sctlr)
 	if [ "$ROUTE" = uboot ]; then
-		e 'T6:G go: SCTLR_EL2 0x{x16} -> 0x{x16} (MMU, D-cache, I-cache off); 0x10000000-0x20000000 cleaned and invalidated to PoC, TLB and I-cache invalidated'
+		e 'T6:G go: SCTLR_EL2 0x{@GF} -> 0x{@GL} (MMU, D-cache, I-cache off); 0x10000000-0x20000000 cleaned and invalidated to PoC, TLB and I-cache invalidated' \
+			'T6:G ' t6g_sctlr
 	fi
 	e 'T6:A1 EL1 init done, MMU off'
 	e 'T6:A2 EL1, MMU off: arming WDT0'
@@ -138,6 +153,15 @@ table_boot() {
 		't6: WDT0 arm'
 	e 'T6:C WDT0 armed, period 22369 ms'
 	e 'board: watchdog armed'
+}
+
+# SCTLR_EL2's M (bit 0), C (bit 2) and I (bit 12): the entry turns them off.
+SCTLR_MCI=$((0x1005))
+is_x16() { [[ $1 =~ ^[0-9a-f]{16}$ ]]; }
+t6a_sctlr() { is_x16 "${V[SA]}" && (( (16#${V[SA]} & SCTLR_MCI) == 0 )); }
+t6g_sctlr() {
+	is_x16 "${V[GF]}" && is_x16 "${V[GL]}" && (( (16#${V[GF]} & SCTLR_MCI) != 0 )) &&
+		(( (16#${V[GL]} & SCTLR_MCI) == 0 )) && [ "${V[GL]}" = "${V[SA]:-}" ]
 }
 
 # nanopc_t6.c, t6_reset_to_linux, the probe's last line.
@@ -583,6 +607,17 @@ for ((i = 0; i < total; i++)); do
 		bad=$((bad + 1))
 	fi
 done
+
+# kexec: a T6:G line says the entry found the MMU or a cache on, which a
+# kexec entry never does (or the record is of a go run): a differing line
+if [ "$ROUTE" = kexec ]; then
+	for ((j = 0; j < ${#LINES[@]}; j++)); do
+		if [[ ${LINES[j]} == "T6:G "* ]]; then
+			printf 'differs  expected no T6:G line on the kexec route; seen "%s" (line %d)\n' "${LINES[j]}" $((j + 1))
+			bad=$((bad + 1))
+		fi
+	done
+fi
 
 # t6_fw, t6_submit: the stop line of a run that did not reach the end (the
 # stop, the refusal and what it was about) is a differing line too
