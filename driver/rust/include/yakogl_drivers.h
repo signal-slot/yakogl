@@ -761,6 +761,8 @@ struct yd_t6_osal_counts {
 	uint32_t oom_chunks;     /* tiler OOMs answered with a chunk, and with none */
 	uint32_t oom_no_chunk;
 	uint32_t heap_chunks;    /* the tiler heap's chunks now */
+	uint32_t unended;        /* 1: the group's end was not acknowledged; it may still run */
+	uint32_t down;           /* 1: yd_t6_osal_shutdown ended the group */
 };
 
 struct osal_gpu_mem;   /* include/gles_osal.h */
@@ -1880,7 +1882,7 @@ _Static_assert(offsetof(struct yd_t6_osal_mem, vm_pool) == 168, "yd_t6_osal_mem.
 _Static_assert(offsetof(struct yd_t6_osal_mem, vm_pool_pages) == 176, "yd_t6_osal_mem.vm_pool_pages");
 _Static_assert(offsetof(struct yd_t6_osal_mem, vm_tables_pa) == 184, "yd_t6_osal_mem.vm_tables_pa");
 _Static_assert(offsetof(struct yd_t6_osal_mem, heap_initial_chunks) == 192, "yd_t6_osal_mem.heap_initial_chunks");
-_Static_assert(sizeof(struct yd_t6_osal_counts) == 64, "struct yd_t6_osal_counts");
+_Static_assert(sizeof(struct yd_t6_osal_counts) == 72, "struct yd_t6_osal_counts");
 _Static_assert(offsetof(struct yd_t6_osal_counts, submitted) == 0, "yd_t6_osal_counts.submitted");
 _Static_assert(offsetof(struct yd_t6_osal_counts, completed) == 8, "yd_t6_osal_counts.completed");
 _Static_assert(offsetof(struct yd_t6_osal_counts, live_pages) == 16, "yd_t6_osal_counts.live_pages");
@@ -1895,6 +1897,8 @@ _Static_assert(offsetof(struct yd_t6_osal_counts, last_value) == 48, "yd_t6_osal
 _Static_assert(offsetof(struct yd_t6_osal_counts, oom_chunks) == 52, "yd_t6_osal_counts.oom_chunks");
 _Static_assert(offsetof(struct yd_t6_osal_counts, oom_no_chunk) == 56, "yd_t6_osal_counts.oom_no_chunk");
 _Static_assert(offsetof(struct yd_t6_osal_counts, heap_chunks) == 60, "yd_t6_osal_counts.heap_chunks");
+_Static_assert(offsetof(struct yd_t6_osal_counts, unended) == 64, "yd_t6_osal_counts.unended");
+_Static_assert(offsetof(struct yd_t6_osal_counts, down) == 68, "yd_t6_osal_counts.down");
 _Static_assert(sizeof(struct yd_sn65dsi8x_config) == 8, "struct yd_sn65dsi8x_config");
 _Static_assert(offsetof(struct yd_sn65dsi8x_config, flags) == 0, "yd_sn65dsi8x_config.flags");
 _Static_assert(offsetof(struct yd_sn65dsi8x_config, lanes) == 4, "yd_sn65dsi8x_config.lanes");

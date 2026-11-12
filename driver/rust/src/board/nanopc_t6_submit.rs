@@ -1461,7 +1461,7 @@ pub(crate) mod tests {
         chunks: Cell<u32>,
         oom: Cell<bool>,
         heap_starts: RefCell<Vec<u64>>,
-        fail: Cell<Option<(u32, Fail)>>,
+        fails: RefCell<Vec<(u32, Fail)>>,
         halted: Cell<bool>,
         sync_error: Cell<Option<u32>>,
         /// The firmware no longer answers the group's doorbell: no CSG or
@@ -1567,7 +1567,7 @@ pub(crate) mod tests {
                 chunks: Cell::new(0),
                 oom: Cell::new(false),
                 heap_starts: RefCell::new(vec![]),
-                fail: Cell::new(None),
+                fails: RefCell::new(vec![]),
                 halted: Cell::new(false),
                 sync_error: Cell::new(None),
                 deaf: Cell::new(false),
@@ -1577,9 +1577,17 @@ pub(crate) mod tests {
             }
         }
         /// Raise `f` at the `n`-th `CALL` counted from the model's start
-        /// (the first is 1), once.
+        /// (the first is 1; a `CALL` that fails is not counted, so the
+        /// next one has the same number), once; several are taken in the
+        /// order given.
         pub(crate) fn fail_at(&self, n: u32, f: Fail) {
-            self.fail.set(Some((n, f)));
+            self.fails.borrow_mut().push((n, f));
+        }
+        /// The failure due at the next `CALL`, taken.
+        fn take_fail(&self) -> Option<Fail> {
+            let mut fails = self.fails.borrow_mut();
+            let i = fails.iter().position(|&(n, _)| n == self.calls.get() + 1)?;
+            Some(fails.remove(i).1)
         }
         /// The chunks the model's tiler heap holds ([`need_chunks`]).
         pub(crate) fn set_chunks(&self, n: u32) {
@@ -1749,9 +1757,8 @@ pub(crate) mod tests {
                 2 => regs[r(48)] = w & 0xffff_ffff,
                 0x7f if self.chunks.get() < w as u32 => return Err(Stop::Oom),
                 32 => {
-                    let fail = self.fail.get().filter(|&(n, _)| n == self.calls.get() + 1).map(|(_, f)| f);
+                    let fail = self.take_fail();
                     if let Some(f) = fail.filter(|f| !matches!(f, Fail::SyncError(_))) {
-                        self.fail.set(None);
                         self.raise_fail(f);
                         return Err(Stop::Failed);
                     }
@@ -1761,7 +1768,6 @@ pub(crate) mod tests {
                     }
                     self.calls.set(self.calls.get() + 1);
                     if let Some(Fail::SyncError(v)) = fail {
-                        self.fail.set(None);
                         self.sync_error.set(Some(v));
                     }
                     if self.paint.get() {

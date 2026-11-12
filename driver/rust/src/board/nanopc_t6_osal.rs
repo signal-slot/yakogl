@@ -83,7 +83,12 @@
 //! errors that need a reset), the GPU may still run it ([`Osal::unended`]):
 //! the held frees stay held and `alloc` is `-EIO`, so no page a kick used
 //! is handed out again. The same after a shutdown whose terminate was not
-//! acknowledged. `map_phys` outside the carve-out is `-ENOTSUP`.
+//! acknowledged. A restart refused after its start was asked (the start
+//! not acknowledged, or the queue-init job refused) leaves the new group
+//! stopped and terminated where panthor would terminate it, and not
+//! ended where panthor would reset the GPU ([`Osal::end_failed_restart`]);
+//! the counts' `unended` and the UART's stop line say which. `map_phys`
+//! outside the carve-out is `-ENOTSUP`.
 
 use super::nanopc_t6_gpu::{Bases, GpuUp};
 use super::nanopc_t6_sections::Backing;
@@ -941,22 +946,57 @@ impl Osal {
         let started =
             match sched::restart(m, self.gpu, &u.iface, &u.csg, &u.cs, &u.group, &u.queue, &u.started, delay_us) {
                 Ok(s) => s,
-                Err(r) => return self.stop(r),
+                Err(r) => return self.end_failed_restart(m, r, None, delay_us),
             };
         self.up = Some(GroupUp { started, ..u });
-        if let Err(r) = self.run_init(m, delay_us) {
-            return self.stop(r);
+        if let Err((r, ended)) = self.run_init(m, delay_us) {
+            return self.end_failed_restart(m, r, ended, delay_us);
         }
         self.restarts += 1;
         -EIO
+    }
+
+    /// A restart refused after the old group ended (the heap made again,
+    /// the caches cleaned): the OSAL is dead with `why`, and what the new
+    /// group is, is made known ([`Osal::unended`]), as panthor does for
+    /// the same failures. A queue of the group that faults can never run
+    /// again (`group_can_run`, panthor_sched.c:1925-1931) and the next tick
+    /// terminates its slot (`tick_ctx_apply`, :2195-2207): here CS 0 is
+    /// stopped and CSG 0 terminated at once, the group ended when the
+    /// terminate is acknowledged. A timeout's own end (`ended`) decides
+    /// the same way. A start or group update that is not acknowledged
+    /// makes panthor reset the GPU (`panthor_device_schedule_reset`,
+    /// :2297-2301; and the errors of [`Osal::needs_reset`]): the group may
+    /// still start, so it is not ended. A refusal before the start was
+    /// asked (CSG 0's `req` still `TERMINATE`) leaves the group ended.
+    fn end_failed_restart(
+        &mut self,
+        m: &impl Mmio,
+        why: Dead,
+        ended: Option<Ended>,
+        delay_us: &mut impl FnMut(u32),
+    ) -> i32 {
+        let Some(u) = self.up else { return self.stop(why) };
+        if let Some(e) = ended {
+            self.unended = e.terminate.is_err();
+        } else if Self::needs_reset(why) {
+            self.unended = true;
+        } else {
+            let req = m.read32(u.csg.input + core::mem::offset_of!(csf::CsgInput, req));
+            if req & csf::CSG_STATE_MASK != csf::CSG_STATE_TERMINATE {
+                let e = sched::stop_and_terminate(m, self.gpu, &u.iface, &u.csg, &u.cs, delay_us);
+                self.unended = e.terminate.is_err();
+            }
+        }
+        self.stop(why)
     }
 
     /// The queue-init stream ([`z4::QUEUE_INIT`]: `HEAP_SET` of the heap
     /// context) written at [`INIT_VA`] and run as the restarted ring's
     /// first job, waited for with panthor's 5 s. Its fence is `submitted`,
     /// already complete: `base` is set so.
-    fn run_init(&mut self, m: &impl Mmio, delay_us: &mut impl FnMut(u32)) -> Result<(), Dead> {
-        let Some(u) = self.up else { return Err((SchedRefusal::JobParams, 0)) };
+    fn run_init(&mut self, m: &impl Mmio, delay_us: &mut impl FnMut(u32)) -> Result<(), (Dead, Option<Ended>)> {
+        let Some(u) = self.up else { return Err(((SchedRefusal::JobParams, 0), None)) };
         let s = &u.started;
         let cpu = s.syncobj_cpu + (INIT_VA - u.queue.syncobj_va) as usize;
         for (i, w) in z4::QUEUE_INIT.iter().enumerate() {
@@ -969,10 +1009,12 @@ impl Osal {
             cs_size: 8 * z4::QUEUE_INIT.len() as u32,
             latest_flush: m.read32(self.gpu + LATEST_FLUSH_ID),
         };
-        sched::submit(m, self.gpu, &u.cs, &u.queue, s, &job, 1, 0)?;
+        sched::submit(m, self.gpu, &u.cs, &u.queue, s, &job, 1, 0).map_err(|r| (r, None))?;
         let gpu = self.gpu;
         let r = sched::wait_seqno(m, gpu, &u.iface, &u.csg, &u.cs, s, 1, delay_us, &mut self.grower());
-        r.map(|_| ()).map_err(|r| r.refused)
+        // a timeout's own stop and terminate are kept: they say whether the
+        // group ended
+        r.map(|_| ()).map_err(|r| (r.refused, r.ended))
     }
 
     /// `submit` of a kick: one job whose `CALL` runs `stream_bytes` at

@@ -664,6 +664,59 @@ fn a_shutdown_whose_cache_clean_is_refused_says_so() {
     freed_pages_stay_held(&mut r, &a);
 }
 
+/// A restart whose queue-init job faults: the new group is stopped and
+/// terminated as panthor ends a group with a fatal queue (it never runs
+/// again; the next tick terminates it), the OSAL is dead with the fault,
+/// and the group is known ended.
+#[test]
+fn a_restart_whose_queue_init_faults_ends_the_new_group() {
+    let mut r = rig();
+    queue_init(&mut r);
+    let s = stream(&mut r);
+    r.z.fail_at(2, Fail::Fault(1));
+    // the failed CALL is not counted: the queue-init's CALL is the 2nd too
+    r.z.fail_at(2, Fail::Fault(2));
+    let f = r.osal.submit(&*r.z, s.gpu, 24, &mut no_delay);
+    assert_eq!(r.osal.wait(&*r.z, f, -1, &mut no_delay), -EIO);
+    assert_eq!((r.osal.restarts, r.osal.dead()), (0, Some((SchedRefusal::CsFault, 2))));
+    assert_eq!((csg_state(&r), r.osal.unended()), (csf::CSG_STATE_TERMINATE, false));
+    assert_eq!(r.osal.submit(&*r.z, s.gpu, 24, &mut no_delay), -i64::from(EIO));
+}
+
+/// A restart whose queue-init job hangs, and whose terminate after the
+/// 5 s is not acknowledged: the group may still run.
+#[test]
+fn a_restart_whose_queue_init_hangs_unended_is_known() {
+    let mut r = rig();
+    queue_init(&mut r);
+    let s = stream(&mut r);
+    r.z.fail_at(2, Fail::Fault(1));
+    r.z.fail_at(2, Fail::Hang);
+    // the restart's own terminate is acknowledged, the init timeout's not
+    r.z.terminates_left.set(Some(1));
+    let f = r.osal.submit(&*r.z, s.gpu, 24, &mut no_delay);
+    assert_eq!(r.osal.wait(&*r.z, f, -1, &mut no_delay), -EIO);
+    assert_eq!(r.osal.dead().map(|d| d.0), Some(SchedRefusal::JobTimeout));
+    assert!(r.osal.unended(), "the init's terminate was not acknowledged");
+    assert_eq!(r.osal.alloc(4096), Err(-EIO));
+}
+
+/// A restart whose start the firmware does not acknowledge: panthor resets
+/// the GPU (panthor_sched.c:2297-2301); the group may start later, so it
+/// is not known ended.
+#[test]
+fn a_restart_whose_start_is_not_acknowledged_is_not_known_ended() {
+    let mut r = rig();
+    queue_init(&mut r);
+    let s = stream(&mut r);
+    r.z.fail_at(2, Fail::Fault(1));
+    r.z.deaf_to_start.set(true);
+    let f = r.osal.submit(&*r.z, s.gpu, 24, &mut no_delay);
+    assert_eq!(r.osal.wait(&*r.z, f, -1, &mut no_delay), -EIO);
+    assert_eq!(r.osal.dead().map(|d| d.0), Some(SchedRefusal::CsgStartAckTimeout));
+    assert!(r.osal.unended());
+}
+
 /// A kick that completed before an error, though no call had seen it yet,
 /// is not lost: the restart reads the sync object before it marks the
 /// kicks not complete as lost.
