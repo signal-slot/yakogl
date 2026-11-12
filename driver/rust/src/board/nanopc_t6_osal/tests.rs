@@ -637,12 +637,31 @@ fn a_restart_cleans_and_invalidates_the_gpu_caches_after_the_end() {
     assert_eq!((after[at + 1..].contains(&1), after.last()), (true, Some(&2)), "{after:?}");
 
     let ended = r.z.writes().len();
-    assert!(r.osal.shutdown(&*r.z, &mut no_delay).unwrap().terminate.is_ok());
+    assert_eq!(r.osal.shutdown(&*r.z, &mut no_delay).unwrap().code(), 0);
     assert_eq!(flushes(&r), before + 2);
     let log = &r.z.writes()[ended..];
     let bells: Vec<usize> = log.iter().enumerate().filter(|(_, w)| w.0 == group).map(|(i, _)| i).collect();
     let at = log.iter().position(|w| *w == flush).unwrap();
     assert!(bells.len() >= 2 && bells.iter().all(|&i| i < at), "after the stop and the terminate: {bells:?}, {at}");
+}
+
+/// A shutdown whose cache clean after the end is refused: the group ended,
+/// but the memory is kept, and the answer is neither the clean end's 0
+/// nor a refused end's `-EIO`.
+#[test]
+fn a_shutdown_whose_cache_clean_is_refused_says_so() {
+    let mut r = rig();
+    let s = stream(&mut r);
+    let f = r.osal.submit(&*r.z, s.gpu, 24, &mut no_delay);
+    assert_eq!(r.osal.wait(&*r.z, f, -1, &mut no_delay), 0);
+    let a = r.osal.alloc(4096).unwrap();
+    r.z.flush_stuck.set(true);
+    let e = r.osal.shutdown(&*r.z, &mut no_delay).unwrap();
+    assert!(e.ended.stop.is_ok() && e.ended.terminate.is_ok(), "{e:?}");
+    assert_eq!((e.cleaned, e.code()), (false, -ETIMEDOUT));
+    assert_eq!(r.osal.dead().map(|d| d.0), Some(SchedRefusal::CacheFlush));
+    assert_eq!(r.osal.free(&*r.z, a.gpu, a.handle, &mut no_delay), 0);
+    freed_pages_stay_held(&mut r, &a);
 }
 
 /// A kick that completed before an error, though no call had seen it yet,
@@ -723,7 +742,8 @@ fn a_shutdown_not_acknowledged_keeps_the_frees_held() {
     assert_eq!(r.osal.wait(&*r.z, f, -1, &mut no_delay), 0);
     r.z.deaf.set(true);
     let e = r.osal.shutdown(&*r.z, &mut no_delay).unwrap();
-    assert!(e.terminate.is_err(), "{e:?}");
+    assert!(e.ended.terminate.is_err(), "{e:?}");
+    assert_eq!((e.cleaned, e.code()), (false, -EIO));
     assert_eq!(r.osal.free(&*r.z, a.gpu, a.handle, &mut no_delay), 0);
     freed_pages_stay_held(&mut r, &a);
 }
@@ -789,7 +809,8 @@ fn shutdown_waits_for_the_last_kick_and_terminates_the_group() {
     let a = r.osal.alloc(4096).unwrap();
     assert_eq!(csg_state(&r), csf::CSG_STATE_START);
     let e = r.osal.shutdown(&*r.z, &mut no_delay).unwrap();
-    assert!(e.stop.is_ok() && e.terminate.is_ok(), "{e:?}");
+    assert!(e.ended.stop.is_ok() && e.ended.terminate.is_ok() && e.cleaned, "{e:?}");
+    assert_eq!(e.code(), 0);
     assert_eq!(csg_state(&r), csf::CSG_STATE_TERMINATE);
     assert_eq!((word(&s), r.osal.fences(), r.osal.is_down()), (1, (1, 1), true));
     assert_eq!(r.osal.wait(&*r.z, f, -1, &mut no_delay), 0, "it completed before the end");
@@ -810,7 +831,8 @@ fn shutdown_ends_the_group_after_a_hung_kick_too() {
     r.z.fail_at(2, Fail::Hang);
     let f = r.osal.submit(&*r.z, s.gpu, 24, &mut no_delay);
     let e = r.osal.shutdown(&*r.z, &mut no_delay).unwrap();
-    assert!(e.stop.is_ok() && e.terminate.is_ok(), "{e:?}");
+    assert!(e.ended.stop.is_ok() && e.ended.terminate.is_ok() && e.cleaned, "{e:?}");
+    assert_eq!(e.code(), 0);
     assert_eq!((r.osal.restarts, r.osal.last_error().unwrap().0), (1, SchedRefusal::JobTimeout));
     assert_eq!(csg_state(&r), csf::CSG_STATE_TERMINATE);
     assert_eq!(r.osal.wait(&*r.z, f, -1, &mut no_delay), -EIO);
