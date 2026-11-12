@@ -951,6 +951,13 @@ fn lower_ordered<'a>(
     l.declare_io()?;
     let body = l.main_body()?;
     let uniforms = l.uniform_decls()?;
+    /* The precision tables are property maps of `instrs` and `locals`
+     * (ir.rs `Module::prec`): a slot or an instruction pushed beside
+     * `push_local` or `push_sized` would shift every entry after it onto
+     * another value. Refused rather than handed on. */
+    if l.prec.len() != l.instrs.len() || l.local_prec.len() != l.locals.len() {
+        return Err(Error::new(l.line, "precision", "the precision tables are out of step with the IR"));
+    }
     Ok(ir::Module {
         comps: a.alloc_copy(l.comps.as_slice())?,
         prec: a.alloc_copy(l.prec.as_slice())?,
@@ -1577,8 +1584,7 @@ impl<'a> Lower<'_, 'a> {
                 _ => Run::Single,
             };
             for _ in 0..run.slots() {
-                self.locals
-                    .push(self.a, ir::VarDecl { name, ty: ir::Type::new(ir::ScalarType::F32, comps), array_len: 1 })?;
+                self.push_local(ir::VarDecl { name, ty: ir::Type::new(ir::ScalarType::F32, comps), array_len: 1 })?;
             }
             let mut l = Local::scalar(name, id, comps);
             l.run = run;
@@ -4754,8 +4760,7 @@ impl<'a> Lower<'_, 'a> {
         let columns = run.slots();
         let id = ir::LocalId(self.locals.len() as u32);
         for _ in 0..columns {
-            self.locals
-                .push(self.a, ir::VarDecl { name: "", ty: ir::Type::new(ir::ScalarType::F32, comps), array_len: 1 })?;
+            self.push_local(ir::VarDecl { name: "", ty: ir::Type::new(ir::ScalarType::F32, comps), array_len: 1 })?;
         }
         let slot = Local { name: "", id, comps, run, value: None };
         let mut run: AVec<Node> = AVec::new();

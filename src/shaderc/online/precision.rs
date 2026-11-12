@@ -1343,6 +1343,43 @@ mod tests {
         assert_eq!(of(&g, |o| matches!(o, Op::ConstF32(_))), [M]);
     }
 
+    /// Every slot records its own storage: the shadow slot of an output
+    /// read back and a function's result slot are pushed through
+    /// `push_local` too, so no local takes another's entry. Mesa (review
+    /// probes r_shadow, r_ret, drm-shim GLSL IR): `highp float h`,
+    /// `float16_t m`, `temporary mediump float16_t f_retval`.
+    #[test]
+    fn every_slot_records_its_own_storage() {
+        let g = compile(
+            "precision mediump float; varying mediump vec4 v; uniform highp float k;\n\
+             void main(){ gl_FragColor = v; highp float h = k * k; mediump float m = v.x * v.y; \
+             gl_FragColor = gl_FragColor * 0.5 + vec4(h, m, 0.0, 0.0); }",
+            Stage::Fragment,
+        );
+        assert_eq!(local(&g, "h"), H);
+        assert_eq!(local(&g, "m"), M);
+        assert_eq!(local(&g, "gl_FragColor"), H, "an output's shadow");
+        let g = vs("attribute mediump vec4 q; varying highp vec4 v;\n\
+                    mediump float f(mediump float x){ if (x > 0.5) return x * 2.0; return x * 3.0; }\n\
+                    void main(){ gl_Position = p; highp float h = p.x * p.y; mediump float m = q.y * q.z; \
+                    v = vec4(f(q.x), m, h, 1.0); }");
+        assert_eq!(local(&g, "h"), H);
+        assert_eq!(local(&g, "m"), M);
+        assert!(g.locals.iter().any(|(n, p)| n.is_empty() && *p == M), "the result slot: {:?}", g.locals);
+    }
+
+    /// The corpus shader the review found 92 table entries for 93 locals
+    /// in: the tables are as long as what they describe.
+    #[test]
+    fn the_tables_are_in_step_on_a_dead_cube_shader() {
+        let src = include_str!("../../../tests/fixtures/deqp_random_dead_cube/all_features.fragment.13.frag");
+        let mut buf = std::vec![0u8; 1 << 22];
+        let a = Arena::new(&mut buf);
+        let l = compile_to_ir(&a, Stage::Fragment, a.alloc_str(src).expect("arena")).expect("compiles");
+        assert_eq!(l.module.prec.len(), l.module.instrs.len());
+        assert_eq!(l.module.local_prec.len(), l.module.locals.len());
+    }
+
     #[test]
     fn f16_exact_knows_the_f16_values() {
         for x in [0.0f32, -0.0, 1.0, 1.5, 65504.0, -2.0, 6.103_515_6e-5, 5.960_464_5e-8, 0.000_122_070_31] {
