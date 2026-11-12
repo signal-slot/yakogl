@@ -686,6 +686,10 @@ pub enum Prec {
     /// value is not this constant narrowed, so a back end that lowers
     /// precision cannot take it as one.
     Fold32,
+    /// No class is known: the module has no precision tables (a pass
+    /// rebuilt it, [`Module::prec`]), or the front end had no class for
+    /// the expression. A reader that lowers precision refuses it.
+    Unknown,
 }
 
 /// One stage's IR: what the front end hands the code generator.
@@ -728,8 +732,19 @@ pub struct Module<'a> {
     pub uses_front_facing: bool,
     /// The [`Prec`] of each instruction, by the same `ValueId` as
     /// [`Module::comps`]; for a `StoreOutput`, the output's declared
-    /// precision. Read it through [`Module::prec_of`]: a module built by
-    /// hand, or by a back end's rewrite that keeps no table, has none.
+    /// precision. Read it through [`Module::prec_of`].
+    ///
+    /// The rule for every pass after the front end: the two tables
+    /// describe `instrs` and `locals` exactly as the front end built them.
+    /// A pass that renumbers, adds, removes or rewrites instructions, nodes
+    /// or locals gives its module EMPTY tables (`prec: &[], local_prec:
+    /// &[]`), unless it carries them along entry for entry (lodkey.rs's
+    /// remap, lower.rs's `relocate` and `zero_varyings`, which replace one
+    /// instruction by one of the same meaning). A module whose tables are
+    /// not as long as `instrs` and `locals` has no precision
+    /// ([`Module::has_prec`]), and every answer of [`Module::prec_of`] and
+    /// [`Module::local_prec_of`] is then [`Prec::Unknown`]: a reader that
+    /// lowers precision refuses it, and never indexes a stale table.
     pub prec: &'a [Prec],
     /// Whether each local is stored at 16 bits ([`Prec::Medium`]) or at
     /// full width, by [`LocalId`]. Read it through
@@ -758,16 +773,28 @@ impl<'a> Module<'a> {
         }
     }
 
-    /// The [`Prec`] of the value `id`; [`Prec::None`] when the module
-    /// records none for it (an empty table, an id past it).
-    pub fn prec_of(&self, id: ValueId) -> Prec {
-        self.prec.get(id.0 as usize).copied().unwrap_or(Prec::None)
+    /// The module carries precision tables in step with its instructions
+    /// and locals (the rule at [`Module::prec`]).
+    pub fn has_prec(&self) -> bool {
+        self.prec.len() == self.instrs.len() && self.local_prec.len() == self.locals.len()
     }
 
-    /// The [`Prec`] of the local `l`'s storage; [`Prec::None`] when the
-    /// module records none for it.
+    /// The [`Prec`] of the value `id`; [`Prec::Unknown`] when the module
+    /// has no precision ([`Module::has_prec`]) or no such value.
+    pub fn prec_of(&self, id: ValueId) -> Prec {
+        if !self.has_prec() {
+            return Prec::Unknown;
+        }
+        self.prec.get(id.0 as usize).copied().unwrap_or(Prec::Unknown)
+    }
+
+    /// The [`Prec`] of the local `l`'s storage; [`Prec::Unknown`] when the
+    /// module has no precision or no such local.
     pub fn local_prec_of(&self, l: LocalId) -> Prec {
-        self.local_prec.get(l.0 as usize).copied().unwrap_or(Prec::None)
+        if !self.has_prec() {
+            return Prec::Unknown;
+        }
+        self.local_prec.get(l.0 as usize).copied().unwrap_or(Prec::Unknown)
     }
 
     /// The nodes of `r`, or `&[]` when it runs past the array.
@@ -1050,19 +1077,28 @@ mod tests {
     }
 
     #[test]
-    fn a_precision_is_none_where_the_module_records_none() {
-        /* A hand-built module, or one a back end rewrote without the
-         * tables, answers None: not recorded, never a guessed width. */
-        let m = Module::empty(SHC_STAGE_VERTEX);
-        assert_eq!(m.prec_of(ValueId(0)), Prec::None);
-        assert_eq!(m.local_prec_of(LocalId(0)), Prec::None);
+    fn a_precision_is_unknown_where_the_module_has_no_tables_in_step() {
+        /* A hand-built module, or one a pass rebuilt (empty tables), or one
+         * whose tables do not match its instructions, answers Unknown: a
+         * refusal for a reader, never a guessed or a stale entry. */
+        let instrs = [Op::ConstF32([0; 4]), Op::ConstF32([0; 4])];
+        let locals = [VarDecl { name: "", ty: Type::new(ScalarType::F32, 1), array_len: 1 }];
+        let m = Module { instrs: &instrs, locals: &locals, ..Module::empty(SHC_STAGE_VERTEX) };
+        assert!(!m.has_prec());
+        assert_eq!(m.prec_of(ValueId(0)), Prec::Unknown);
+        assert_eq!(m.local_prec_of(LocalId(0)), Prec::Unknown);
         let prec = [Prec::High, Prec::Medium];
         let local_prec = [Prec::Medium];
-        let m = Module { prec: &prec, local_prec: &local_prec, ..Module::empty(SHC_STAGE_VERTEX) };
+        let m = Module { prec: &prec, local_prec: &local_prec, ..m };
+        assert!(m.has_prec());
         assert_eq!(m.prec_of(ValueId(1)), Prec::Medium);
-        assert_eq!(m.prec_of(ValueId(2)), Prec::None, "past the table");
+        assert_eq!(m.prec_of(ValueId(2)), Prec::Unknown, "past the table");
         assert_eq!(m.local_prec_of(LocalId(0)), Prec::Medium);
-        assert_eq!(m.local_prec_of(LocalId(1)), Prec::None, "past the table");
+        assert_eq!(m.local_prec_of(LocalId(1)), Prec::Unknown, "past the table");
+        /* stale: one instruction more than the table */
+        let three = [Op::ConstF32([0; 4]); 3];
+        let m = Module { instrs: &three, ..m };
+        assert_eq!(m.prec_of(ValueId(0)), Prec::Unknown, "a table out of step is no table");
     }
 
     #[test]

@@ -212,3 +212,25 @@ fn glsl_rewrites_a_write_ladder_into_the_ilt_tree() {
         .any(|o| matches!(o, Op::Alu(AluOp::Ieq, [_, k, _]) if op(&ir, *k) == Op::ConstI32([0, 1, 2, 3]))));
     assert!(!ir.iter().any(|o| matches!(o, Op::Alu(AluOp::Ilt, _))));
 }
+
+/// A stage the passes rewrite carries no precision tables (ir.rs
+/// `Module::prec`): every answer is `Prec::Unknown`, so a reader of
+/// precision refuses it rather than read an entry of the front end's
+/// numbering. The rebalanced sum renumbers nothing but rewrites in place;
+/// the front end's own module has its tables.
+#[test]
+fn a_stage_the_passes_rewrite_has_no_precision() {
+    use crate::shaderc::online::ir::Prec;
+    let src = "precision mediump float; varying vec4 a; varying vec4 b; varying vec4 c; varying vec4 d;\n\
+               void main(){ gl_FragColor = (a + b + c + d) * 0.25; }";
+    let _k = store::test_keep();
+    store::with_scratch(|s| {
+        let l = codegen::lower_source(SHC_STAGE_FRAGMENT, src.as_bytes(), &[], s).expect("the front end takes it");
+        assert!(l.module.has_prec(), "the front end's module has its tables");
+        let (instrs, shape) = super::passes(&l.module, false, s).expect("the passes").expect("the sum is rebalanced");
+        let m = shape.module(instrs, &l.module);
+        assert!(!m.has_prec());
+        assert!((0..m.instrs.len()).all(|i| m.prec_of(ValueId(i as u32)) == Prec::Unknown));
+    })
+    .expect("the scratch arena is free");
+}

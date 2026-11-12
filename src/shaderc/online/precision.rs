@@ -62,14 +62,16 @@ use super::R;
 /// The two answers for one expression, as [`Precs::instr`] and
 /// [`Precs::temp`] give them.
 const INSTR_SHIFT: u8 = 0;
-const CLASS_SHIFT: u8 = 2;
+const CLASS_SHIFT: u8 = 3;
+/// One [`Prec`] in a table byte.
+const PREC_MASK: u8 = 7;
 
 /// What the lowering asks: the class of each expression, of each declared
 /// variable, and of each function's result.
 #[derive(Clone, Copy)]
 pub struct Precs<'a> {
     /// Per [`ExprId`]: the [`Prec`] of the instructions that compute the
-    /// expression (bits 0-1), and its A.3 class (bits 2-3).
+    /// expression (bits 0-2), and its A.3 class (bits 3-5).
     exprs: &'a [u8],
     /// Per [`DeclId`]: a variable's declared class, a function's result's,
     /// and a struct's default float (bits 0-1) and int (bits 2-3)
@@ -86,13 +88,13 @@ impl<'a> Precs<'a> {
     /// lowered built-in's body), High for any other float or bool value,
     /// None for an int, a struct or no value.
     pub fn instr(&self, e: ExprId) -> Prec {
-        prec_of((self.exprs.get(e.0 as usize).copied().unwrap_or(0) >> INSTR_SHIFT) & 3)
+        prec_of((self.exprs.get(e.0 as usize).copied().unwrap_or(0) >> INSTR_SHIFT) & PREC_MASK)
     }
 
     /// `e`'s class (A.3): what a compiler temporary holding its value is
     /// (Mesa's `vec_ctor`, `conditional_tmp`, a call's return value).
     pub fn class(&self, e: ExprId) -> Prec {
-        prec_of((self.exprs.get(e.0 as usize).copied().unwrap_or(0) >> CLASS_SHIFT) & 3)
+        prec_of((self.exprs.get(e.0 as usize).copied().unwrap_or(0) >> CLASS_SHIFT) & PREC_MASK)
     }
 
     /// The class a variable `d` was declared with (`handle_precision` of
@@ -172,11 +174,12 @@ fn prec_of(b: u8) -> Prec {
         1 => Prec::High,
         2 => Prec::Medium,
         3 => Prec::Fold32,
+        4 => Prec::Unknown,
         _ => Prec::None,
     }
 }
 
-/// Two bits of a table entry. No class is [`Prec::Fold32`] (only the
+/// Three bits of a table entry. No class is [`Prec::Fold32`] (only the
 /// lowering's folds are); it has its code for completeness.
 const fn bits_of(p: Prec) -> u8 {
     match p {
@@ -184,6 +187,7 @@ const fn bits_of(p: Prec) -> u8 {
         Prec::High => 1,
         Prec::Medium => 2,
         Prec::Fold32 => 3,
+        Prec::Unknown => 4,
     }
 }
 
@@ -407,7 +411,7 @@ impl<'x, 'a> Scan<'x, 'a> {
     }
 
     fn class(&self, e: ExprId) -> Prec {
-        prec_of((self.exprs.get(e.0 as usize).copied().unwrap_or(0) >> CLASS_SHIFT) & 3)
+        prec_of((self.exprs.get(e.0 as usize).copied().unwrap_or(0) >> CLASS_SHIFT) & PREC_MASK)
     }
 
     fn set(&mut self, e: ExprId, kind: Kind, class: Prec, flags: u8) {
@@ -415,13 +419,13 @@ impl<'x, 'a> Scan<'x, 'a> {
             *i = kind as u8 | flags;
         }
         if let Some(x) = self.exprs.get_mut(e.0 as usize) {
-            *x = (*x & !(3 << CLASS_SHIFT)) | (bits_of(class) << CLASS_SHIFT);
+            *x = (*x & !(PREC_MASK << CLASS_SHIFT)) | (bits_of(class) << CLASS_SHIFT);
         }
     }
 
     fn set_instr(&mut self, e: ExprId, p: Prec) {
         if let Some(x) = self.exprs.get_mut(e.0 as usize) {
-            *x = (*x & !(3 << INSTR_SHIFT)) | (bits_of(p) << INSTR_SHIFT);
+            *x = (*x & !(PREC_MASK << INSTR_SHIFT)) | (bits_of(p) << INSTR_SHIFT);
         }
     }
 
