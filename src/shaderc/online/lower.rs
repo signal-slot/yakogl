@@ -8851,17 +8851,20 @@ struct Sink<'s, 'x, 'a> {
 
 impl Sink<'_, '_, '_> {
     /// The width an `Alu` of the expansion over `srcs` records. One lane
-    /// when every source that is not a constant is a one-lane step of this
-    /// expansion (the square root of `length`'s dot): the operation reads
-    /// lane 0 of each and makes one value. Otherwise [`Sink::width`] by
-    /// [`ir::AluOp::result_comps`]: an argument read through a splat
-    /// (`smoothstep`'s scalar edge) still serves every lane.
+    /// when every source that is not a constant of the expansion's own is
+    /// a one-lane step of this expansion (the square root of `length`'s
+    /// dot): the operation reads lane 0 of each and makes one value.
+    /// Otherwise [`Sink::width`] by [`ir::AluOp::result_comps`]: an
+    /// argument read through a splat (`smoothstep`'s scalar edge) still
+    /// serves every lane, and so does a constant argument (`normalize` of
+    /// a constant vector multiplies its lanes by the one-lane reciprocal).
     fn alu_width(&self, alu: ir::AluOp, srcs: &[Src; 3]) -> u8 {
         let instrs = self.l.instrs.as_slice();
         let mut any = false;
         for s in &srcs[..alu.arity()] {
             match instrs.get(s.val.0 as usize) {
-                Some(Op::ConstF32(_) | Op::ConstI32(_) | Op::ConstBool(_)) => continue,
+                /* a constant of the expansion's own (smoothstep's 3.0) */
+                Some(Op::ConstF32(_) | Op::ConstI32(_) | Op::ConstBool(_)) if s.val.0 >= self.start => continue,
                 _ if s.val.0 >= self.start && self.l.comps.as_slice().get(s.val.0 as usize) == Some(&1) => any = true,
                 _ => return alu.result_comps(self.width),
             }
@@ -12517,6 +12520,15 @@ mod value_width_tests {
         assert_eq!(all_comps_of(&l.module, ir::AluOp::Frsq), [1]);
         assert_eq!(all_comps_of(&l.module, ir::AluOp::Fsqrt), [1]);
         assert_eq!(all_comps_of(&l.module, ir::AluOp::Fmul), [3, 3], "normalize's product, then the scale");
+        /* a constant argument keeps its lanes (the review's corpus:
+         * vsfold_normconst, refract of constants) */
+        let mut b4 = std::vec![0u8; 1 << 19];
+        let l = ir(
+            &mut b4,
+            "precision mediump float;\nvoid main(){ gl_FragColor = vec4(normalize(vec3(1.0, 2.0, 2.0)), 1.0); }",
+        );
+        assert_eq!(all_comps_of(&l.module, ir::AluOp::Frsq), [1]);
+        assert_eq!(all_comps_of(&l.module, ir::AluOp::Fmul), [3], "the constant's three lanes");
         let mut b3 = [0u8; 1 << 19];
         let l = ir(
             &mut b3,
