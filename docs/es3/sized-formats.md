@@ -63,7 +63,7 @@ classes are read by `isampler2D`/`usampler2D`), so there each format is
 stored in its own class except `RGB10_A2`, which stays in `RGBA8` because a
 texture of the `RGB10A2` class is no render target and has no
 glGenerateMipmap here. The GC7000 and the V3D masks list only the classes
-their samplers already read (the GC7000UL's also lists the 8/16-bit integer
+their samplers already read (the GC7000UL's also lists the 8/16-bit and R32/RG32 integer
 classes and `RGB10_A2UI`, its descriptor decodes them): there the other integer
 formats are **refused by name** (a log line `glTexImage2D: GL_RGBA16UI is not supported:
 this back end samples none of its storage classes` and GL_INVALID_OPERATION,
@@ -103,16 +103,18 @@ change; the tests state the expectation per mask.
 ## Not done (left to other items)
 
 * Sampling the new classes and isampler/usampler on the V3D (#1232, #1233).
-  The GC7000UL (`src/vivante/**`) takes the 8/16-bit integer classes and
-  `RGB10_A2UI` (`GC_SAMPLED_TEXFMTS`); its texture descriptor composes the
+  The GC7000UL (`src/vivante/**`) takes the 8/16-bit and the R32/RG32 integer
+  classes and `RGB10_A2UI` (`GC_SAMPLED_TEXFMTS`); its texture descriptor composes the
   format swizzle with `GlesTextureBind::swizzle` and SAMP_CTRL0's W wrap comes
   from `wrap_r` (`840ea7ec`, `tests/es3_tex_swizzle_gc.rs`,
   `docs/notes/gc-texture-swizzle-wrap.md`). Still out of the mask, so refused:
   `RGBA32F/UI/I`, whose two-plane back end (a second sampler slot, a per-draw
   shader key) and compiler join are in the tree but not offered
   (`docs/notes/gc-128bit-texture-sampling.md`, `gc-128bit-swizzle.md`,
-  `tests/es3_wide128_gc.rs`); and `R32I/UI`, `RG32I/UI`, whose descriptor rows
-  (`e40e9418`) exist but whose mask flip is a pending item. The PowerVR's integer cube, 3D and 2D-array samplers
+  `tests/es3_wide128_gc.rs`; the flip is pending, item gc-wide128-flip).
+  `R32I/UI` and `RG32I/UI` are in the mask (descriptor rows `e40e9418`, flip
+  `b5e04b14`): sampled natively, `EXT_R32I` / `EXT_G32R32I`, so the GL core
+  stores them natively and no longer refuses them on this back end. The PowerVR's integer cube, 3D and 2D-array samplers
   select since the stacked arms take the sampler's return type
   (`docs/es3/pvr-formats.md` section 10.1); their AM62P dEQP-GLES3
   `texture.format` run is still to do.
@@ -120,8 +122,9 @@ change; the tests state the expectation per mask.
   on the PowerVR and the GC7000 (the V3D has it; the PowerVR writes the nineteen integer formats since
   `fc658e64`, merged in `a27d69c0`; `docs/es3/pvr-formats.md` section 10).
   On the GC7000UL the 8/16-bit integer targets work (`tests/es3_int_rt_gc.rs`)
-  and `R32I/UI`, `RG32I/UI` draw as colour targets on the host back end
-  (`tests/es3_int32_rt_gc.rs`, `dafc866c`); `RGBA32I/UI` stays refused by
+  and `R32I/UI`, `RG32I/UI` draw as colour targets on the host back end, as
+  renderbuffers and, since `6c5b004f` (`integer_texture_surface` rows), as
+  texture attachments (`tests/es3_int32_rt_gc.rs`, `dafc866c`); `RGBA32I/UI` stays refused by
   name: the tiled shadow's 16-byte plane split and join, the plane masks and
   clear words are inert, tested functions (`src/vivante/wide_target.rs`,
   `docs/notes/gc-128bit-render-targets.md`, `gc-128bit-rt-shader.md`; a
