@@ -18,12 +18,14 @@
 # Check the U-Boot numbering first: `mmc list; part list mmc 0`.
 if test -z "${t6z_dev}"; then setenv t6z_dev 0:1; fi
 if test -z "${t6z_file}"; then setenv t6z_file /boot/yakogl/t6-zephyr.bin; fi
-# The image's link address and entry (nanopc_t6.dts zephyr,sram window,
-# nanopc-t6.sh WINDOW_BASE/WINDOW_SIZE): the Image header's first word is a
-# branch to the start, so the entry is the link address itself.
+# The image's link address and entry, and the window's size: nanopc_t6.dts
+# zephyr,sram, 256 MiB at 0x10000000 (nanopc-t6.sh WINDOW_BASE/WINDOW_SIZE
+# hold the same; driver/tools/kexec-zephyr/board_lock_selftest.sh compares
+# all three). The Image header's first word is a branch to the start, so
+# the entry is the link address itself.
 setenv t6z_load 0x10000000
 setenv t6z_entry 0x10000000
-setenv t6z_window 0x1000000
+setenv t6z_window 0x10000000
 # 0x40 is the arm64 Image header.
 setenv t6z_min 0x40
 
@@ -73,7 +75,22 @@ if itest.l *${t6z_magic} != 0x644d5241; then
 	echo "t6-zephyr: STOP: no ARM64 Image magic at byte 56 of the loaded file"
 	exit
 fi
-echo "t6-zephyr: loaded ${filesize} bytes at ${t6z_load}"
+# The header's image_size (64 bits at byte 16; Zephyr's _flash_used: the RAM
+# the image takes from its start, .bss and .noinit included) must fit the
+# window as well: the file is only the first part of it. The image zeroes
+# its .bss itself; the rest of the window is as U-Boot left it.
+setexpr t6z_hdr ${t6z_load} + 0x14
+if itest.l *${t6z_hdr} != 0; then
+	echo "t6-zephyr: STOP: the header's image_size is 4 GiB or more"
+	exit
+fi
+setexpr t6z_hdr ${t6z_load} + 0x10
+setexpr.l t6z_imgsz *${t6z_hdr}
+if itest.l *${t6z_hdr} -gt ${t6z_window}; then
+	echo "t6-zephyr: STOP: the image takes 0x${t6z_imgsz} bytes of RAM (header image_size), above the ${t6z_window}-byte window"
+	exit
+fi
+echo "t6-zephyr: loaded ${filesize} bytes at ${t6z_load}, RAM footprint 0x${t6z_imgsz} bytes of the ${t6z_window}-byte window"
 
 # `go`, not `booti`: booti would move the image to RAM base + text_offset (the
 # header has text_offset 0 and flags bit 3 clear) and a Zephyr image runs only

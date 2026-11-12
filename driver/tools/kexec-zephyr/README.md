@@ -68,7 +68,8 @@ why that holds), and it jumps only after the board has read `WDT_CR.WDT_EN`
 back as 1 after the open: the record carries that line ("linux-wdt: WDT_EN
 proof ..."). `--no-linux-wdt` jumps without it. The first jump (2026-10-19,
 without it) stopped before any output and held the board until its power was
-cut; that a WDT0 timeout brings this SoC back into Armbian is still unproven.
+cut. A WDT0 timeout brings this SoC back into Armbian (measured 2026-10-19:
+`driver/docs/nanopc-t6-mali.md`, "The watchdog proof and the trap").
 
 The later probes go through the same script the same way: build the
 `t6_fw` (Z3) or `t6_submit` (Z4) image and pass its `zephyr.bin` in place of

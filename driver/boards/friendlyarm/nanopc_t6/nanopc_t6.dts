@@ -7,16 +7,26 @@
  * The SoC (GICv3, the arch timer at 24 MHz, PSCI over SMC, uart2/uart3) is
  * Zephyr's rk3588.dtsi. This file adds:
  *
- * - zephyr,sram: 16 MiB at 0x10000000, where the image is linked and loaded.
+ * - zephyr,sram: 256 MiB at 0x10000000 (0x10000000-0x1fffffff), where the
+ *   image is linked and loaded. 256 MiB holds the dEQP-GLES2 image with the
+ *   Mali OSAL (151140 KB: the GL core, the in-process compiler's scratch, the
+ *   OSAL's 32 MiB carve-out and dEQP's 64 MiB C heap); the probes use under
+ *   6 MiB. driver/tools/kexec-zephyr/nanopc-t6.sh (WINDOW_SIZE) and
+ *   driver/tools/uboot-t6/t6-zephyr.cmd (t6z_window) hold the same window;
+ *   driver/tools/kexec-zephyr/board_lock_selftest.sh compares them with
+ *   this node's reg. The
+ *   defconfig's KERNEL_VM_SIZE must reach past this size (nanopc_t6.c
+ *   asserts it).
  *   On the T6 under Armbian 26.8.10 (Linux 6.18.55, /proc/iomem read
- *   2026-10-18) the range lies inside the System RAM bank
- *   0x00200000-0xe143ffff and overlaps no entry under it: the kernel image is
- *   at 0x02000000-0x0432ffff, the bank's other reservation at
- *   0xcd400000-0xe13fffff. What stays live across the kexec is below it: the
- *   firmware under 0x00200000 (not System RAM; the SCMI shared memory at
- *   0x0010f000). The kernel copies the segment into place only at the jump,
- *   so whatever Linux kept there before does not matter. 2 MiB aligned and
- *   below 4 GiB.
+ *   2026-10-18 and 2026-11-12) the range lies inside the System RAM bank
+ *   0x00200000-0xe143ffff and overlaps no entry under it: below 0x20000000
+ *   the only entries are the kernel image's, 0x02000000-0x0432ffff. What
+ *   stays live across the kexec is outside it: the firmware under 0x00200000
+ *   (not System RAM; the SCMI shared memory at 0x0010f000) and the GIC's
+ *   ITS/LPI tables above 4 GiB. The kernel copies the segment into place only
+ *   at the jump, so whatever Linux kept there before does not matter. 2 MiB
+ *   aligned and below 4 GiB. nanopc-t6.sh reads /proc/iomem and the GIC
+ *   tables again before every jump and refuses otherwise.
  * - uart2 at 24 MHz and 1500000 baud: the console U-Boot and Linux use
  *   (Linux rk3588-nanopc-t6.dtsi:41, stdout-path "serial2:1500000n8"; the
  *   board's clk_summary: sclk_uart2 24000000 Hz). rk3588.dtsi says 12 MHz.
@@ -45,7 +55,7 @@
 	zephyr_ram: memory@10000000 {
 		compatible = "mmio-sram";
 		device_type = "memory";
-		reg = <0x10000000 DT_SIZE_M(16)>;
+		reg = <0x10000000 DT_SIZE_M(256)>;
 	};
 
 	wdt0: watchdog@feaf0000 {
