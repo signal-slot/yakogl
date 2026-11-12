@@ -4657,8 +4657,11 @@ fn the_alu_population_is_byte_equal_to_mesa_26_2_1() {
 /// `--uniform-values` (name, VS, FS, expect.json; the note's sha256 table
 /// pins the words): `fract`, `length` and `normalize` at both precisions,
 /// the mediump ones `FROUND.v2f16` and `FADD.v2f16` of one narrowed lane, a
-/// dot product of fp16 lanes, `FRSQ.f16` and `FRCP.f16`.
-const FSVEC_POPULATION: [(&str, &str, &str, &str); 6] = [
+/// dot product of fp16 lanes, `FRSQ.f16` and `FRCP.f16`; and a mediump
+/// `reflect`, its `-2.0 * d` one `FADD.v2f16 d, d` read negated. (The
+/// highp `reflect` differs in the vertex stage's rules, nir.rs: not a row
+/// here.)
+const FSVEC_POPULATION: [(&str, &str, &str, &str); 7] = [
     (
         "fsvec_fract_highp",
         td!("fsvec_fract_highp.vert"),
@@ -4694,6 +4697,12 @@ const FSVEC_POPULATION: [(&str, &str, &str, &str); 6] = [
         td!("fsvec_normalize_mediump.vert"),
         td!("fsvec_normalize_mediump.frag"),
         td!("fsvec_normalize_mediump.expect.json"),
+    ),
+    (
+        "fsvec_reflect_mediump",
+        td!("fsvec_reflect_mediump.vert"),
+        td!("fsvec_reflect_mediump.frag"),
+        td!("fsvec_reflect_mediump.expect.json"),
     ),
 ];
 
