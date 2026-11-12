@@ -1,0 +1,6 @@
+/* Mediump product of two constants whose fp32 result fp16 does not hold
+ * exactly (-1.0 x 0.00125, family D of the Mali glmark2 refusals): the
+ * Mesa 26.2.1 drm-shim reference. */
+precision mediump float;
+varying vec2 uv;
+void main() { const float k = 0.00125; gl_FragColor = vec4(uv.x + -1.0 * k); }
