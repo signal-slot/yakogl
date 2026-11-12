@@ -1448,6 +1448,10 @@ mod tests {
             Stage::Fragment,
         );
         assert_eq!(alu(&g, AluOp::Fmul), [M]);
+        /* a report-es2 build refuses an ES 3.00 source */
+        if crate::REPORT_ES2 {
+            return;
+        }
         let g = compile(
             "#version 300 es\nprecision mediump float;\nout vec4 o;\n\
              void main(){ o = vec4(gl_FragCoord.x * 0.5, 0.0, 0.0, 1.0); }",
