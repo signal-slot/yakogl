@@ -1464,17 +1464,17 @@ mod tests {
     /// the reciprocal it computes at 32 bits (lower.rs `reciprocal`); Mesa
     /// computes `frcp` of the 16-bit `c` at 16 bits (review probes div1,
     /// q4div: `/ (constant float16_t 1.299805)`). Where `c` has no exact
-    /// f16 value the two differ (`/ 1.3`: 0.76904 against 0.76953), so in
-    /// a Medium tree the reciprocal is kept, `Frcp` of `c`, and the back
-    /// end computes it at 16 bits; where it has one they agree and the
-    /// constant is folded, Medium.
+    /// f16 value the two differ (`/ 1.3`: 0.76904 against 0.76953). The
+    /// fold stays (keeping `Frcp` moved the PowerVR's words, second review
+    /// B-B), so in a Medium tree its constant records Unknown; where `c`
+    /// has an f16 value the two agree and it is Medium.
     #[test]
-    fn a_reciprocal_in_a_lowered_tree_is_kept_where_a_fold_would_differ() {
+    fn a_reciprocal_folded_in_a_lowered_tree_is_unknown_where_it_differs() {
         let consts = |g: &Got| of(g, |o| matches!(o, Op::ConstF32(_)));
         let g = vs("varying highp float v;\nvoid main(){ mediump float m = a; v = m / 1.3; gl_Position = p; }");
         assert_eq!(alu(&g, AluOp::Fmul), [M]);
-        assert_eq!(alu(&g, AluOp::Frcp), [M], "the reciprocal of the 16-bit 1.3");
-        assert_eq!(consts(&g), [M], "1.3 itself, no reciprocal constant");
+        assert_eq!(alu(&g, AluOp::Frcp), [], "folded, as on main");
+        assert_eq!(consts(&g), [M, Prec::Unknown], "1.3 itself, then its 32-bit reciprocal");
         let g = vs("varying highp float v;\nvoid main(){ mediump float m = a; v = m / 4.0; gl_Position = p; }");
         assert_eq!(consts(&g), [M, M]);
         let g = vs("varying highp float v;\nvoid main(){ v = b / 1.3; gl_Position = p; }");

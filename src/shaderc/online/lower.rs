@@ -5610,16 +5610,27 @@ impl<'a> Lower<'_, 'a> {
     /// encoder.
     fn reciprocal(&mut self, v: Src, want: u8, out: &mut AVec<'a, Node>) -> R<'a, Src> {
         if let Some(lanes) = self.const_lanes_of(v) {
-            /* Mesa divides inside a 16-bit tree at 16 bits, by the 16-bit
-             * `c`: the same value as this fold narrowed only when `c` is a
-             * 16-bit value (open question E.5 of
-             * docs/notes/mali-precision.md). Otherwise the reciprocal is
-             * kept for the back end to compute. */
-            let exact = || lanes[..usize::from(want.clamp(1, 4))].iter().all(|&x| precision::f16_exact(x));
-            if lanes.iter().all(|x| x.is_finite()) && (self.cur != Prec::Medium || exact()) {
+            if lanes.iter().all(|x| x.is_finite()) {
                 let inv = [1.0 / lanes[0], 1.0 / lanes[1], 1.0 / lanes[2], 1.0 / lanes[3]];
                 if inv.iter().all(|x| x.is_finite()) {
-                    return self.const_value(inv, out);
+                    let r = self.const_value(inv, out)?;
+                    /* Mesa divides inside a 16-bit tree at 16 bits, by the
+                     * 16-bit `c`: the same value as this fold narrowed only
+                     * when `c` is a 16-bit value (open question E.5 of
+                     * docs/notes/mali-precision.md). Keeping the `Frcp`
+                     * instead moves other back ends' words (a `mediump
+                     * mat2` divided by 2.2 on the PowerVR), so the fold
+                     * stays and its constant records Unknown: a refusal for
+                     * the back end that lowers precision. A constant shared
+                     * with another use is Unknown for both. */
+                    if self.cur == Prec::Medium
+                        && !lanes[..usize::from(want.clamp(1, 4))].iter().all(|&x| precision::f16_exact(x))
+                    {
+                        if let Some(p) = self.prec.as_mut_slice().get_mut(r.val.0 as usize) {
+                            *p = Prec::Unknown;
+                        }
+                    }
+                    return Ok(r);
                 }
             }
         }
@@ -15955,6 +15966,18 @@ mod powervr_word_pins {
             "86924013cdcccc3d000040ff35820087840400000041348200824100004235820040c0a2000041ff3482008341000040\
              55a0060800800400003055a0000804c00000003055a0000805c00000003055a0000806c00000003058a0000807c00000\
              0030f3ffffffffff44a08005000000ff030001080000"
+        );
+    }
+
+    #[test]
+    fn a_mediump_matrix_divided_by_a_constant_compiles_to_main_s_words() {
+        let src = "attribute highp vec4 p; attribute mediump vec4 a; varying highp vec4 v;\n\
+                   void main(){ gl_Position = p; mediump mat2 m2 = mat2(a) / 2.2; v = vec4(m2 * a.xy, 0.0, 1.0); }";
+        assert_eq!(
+            words(src),
+            "869240132ebae83e000040ff3582004084e0100000413582004080a0000042ff35820040c2c50800004035820040c1c5\
+             08000043368200c0c1440840000044ff368200c0c2440843000040ff34820087000000413582008780010000004255a0\
+             060800800400003055a0000804c40000003057a0040805c000000030f2ffffff44a08005000000ff050001080000"
         );
     }
 }
