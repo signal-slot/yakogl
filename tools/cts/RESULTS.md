@@ -532,6 +532,7 @@ here when it has run.
 | Z1, second half: the GPU power-on | `t6_gpu` | **PASS**, `VERDICT t6_gpu PASS`: `t6_gpu: PASS: GPU_ID 0xa8670005, L2 ready, 16 ms` | `v0.1.0-915-g1bac19568` (main `1bac19568`) | 2026-11-11 21:36 JST | `records/nanopc-t6/20261111-213650-t6` |
 | Z2: AS0 and a cache flush | `t6_mmu` | **PASS**, `VERDICT t6_mmu PASS`: `t6_mmu: PASS: AS0 on TRANSTAB 0x0000000010023000, three cache flush round trips, 13 ms` | `v0.1.0-913-g1f19113a3` (main `1f19113a3`) | 2026-11-11 21:01 JST | `records/nanopc-t6/20261111-210127-t6` |
 | Z3: the firmware boots | `t6_fw` | **PASS**, `VERDICT t6_fw PASS`: `t6_fw: Z3: rc 0 step 0, 4 ms`, `t6_fw: PASS` | `v0.1.0-986-g988639752` (main `988639752`) | 2026-11-12 11:41 JST | `records/nanopc-t6/20261112-114132-t6` |
+| Z4: one frame submitted from our kernel side | `t6_submit` | **PASS**, `VERDICT t6_submit PASS`: `t6_submit: Z4h: target red 2048 blue 2048 fill 0 other 0 of 4096 pixels`, `t6_submit: PASS` | `v0.1.0-1045-gef86672bf` (main `ef86672bf`) | 2026-11-12 16:42 JST | `records/nanopc-t6/20261112-1642-t6_submit-9dabc1c7` |
 
 - Z2: every line of the predicted record was seen: Z1's power-on (`GPU_ID`
   0xa8670005, L2 ready), the cache flush round trip (2 polls of 1 µs), AS0's
@@ -584,7 +585,45 @@ here when it has run.
   before and after; Linux's watchdog was open at the jump, its `WDT_EN`
   proof is in the record). Z3 is the GPU's own first walk of AS0's
   tables, which Z2 by its design did not show.
-- Next: Z4 (`t6_submit`, one frame submitted from our kernel side).
+- Z4: every line of the predicted record was seen (42 of 42). On the
+  firmware Z3 booted, our kernel side started CSG 0 / CS 0 (CSG 0 `req`
+  and `ack` 0x00000011; CS 0 `ack` 0x00000011 for `req` 0x00000511,
+  acknowledged in 47 µs), created the tiler heap (one 2 MiB chunk) and
+  submitted the L1 frame (`insert` 0x80, frame digest
+  0xa4db81a9d39bfdcc). The stream's sync object reached `seqno` 1 with
+  `sync_status` 0 in 230 µs, no fault (`status_cmd_ptr` and `info` 0).
+  The target read back as the frame paints it: 2048 red and 2048 blue
+  pixels of 4096, none of the fill colour, none other. The stop and the
+  terminate were acknowledged in 78 and 64 µs, no refusal.
+- Z4, the firmware's publish of `extract`: at the wait's end the output
+  page's `extract` still read 0; the drain (`sched::drained`) read 0x80,
+  equal to `insert`, on its second look, 10 µs later, and `extract` read
+  0x80 again after the group's end. So the sync object's `seqno` (the
+  stream's own write) comes first and the firmware's `extract` follows
+  within microseconds; a driver that reuses ring space waits for it.
+- Z4, the values that move from run to run (checked for form only): the
+  wait acknowledged one `CSG_SYNC_UPDATE` and the drain none, and the
+  terminate found `CSG_IDLE` and CS 0's `cs_irq` bit pending (`cleared`
+  536870912 1 0). The first run of the day (below) saw no sync update
+  in its wait and found `CSG_SYNC_UPDATE` pending at the terminate
+  (`cleared` 268435456 1 0).
+- Z4: the whole sequence took 26 ms from the image's start to its PSCI
+  reset (Z3's part 5 ms). The board came back to Armbian 28 s after the
+  jump (`GLB_RST_ST` 0 before and after; Linux's watchdog was open at
+  the jump, its `WDT_EN` proof is in the record).
+- The same day a first Z4 run (the image of main `4f618d77e`, record
+  `records/nanopc-t6/20261112-1410-t6_submit-f400b448`) drew the same
+  frame (digest and pixel counts equal, `t6_submit: PASS` printed) and
+  was judged FAIL: 3 of its 40 predicted lines differed. In all three
+  the prediction, made from a host model of the firmware, was wrong and
+  the driver right (issue #4515): the group's suspend buffer sizes
+  (25600 bytes each, not 0), CS 0's `ack` (it does not mirror the
+  request's idle bits) and `extract` at the wait's end (0, published
+  later). The model, the record and the verdict were corrected from that
+  run, and the drain was added to measure the publish, before this run.
+- Next: the GL back end's kernel side on Zephyr (the driver Z4 ran,
+  behind `src/mali` in place of panthor's ioctls), then the `gl_test`
+  image.
 
 ## ES 3.0: dEQP-GLES3 (stage 4)
 
