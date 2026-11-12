@@ -475,10 +475,54 @@ check "dk common dry run: the board" "-b stm32mp257f_dk/stm32mp257fxx/a35" "$out
 check "dk common dry run: the sample" "driver/samples/zephyr/gl_test" "$out"
 check "dk common dry run: the output" "build/common/stm32mp257f-dk-" "$out"
 check "dk common dry run: the watchdog marker" "gc_wdog_arm: armed" "$out"
-for t in "stm32mp257f-dk deqp" "stm32mp257f-dk ms4" "stm32mp257f-dk gles3"; do
+for t in "stm32mp257f-dk ms4" "stm32mp257f-dk gles3"; do
     out=$(cd "$REPO_ROOT" && BOARD_STAGE_DRY_RUN=1 tools/cts/board-stage.sh $t 2>&1); rc=$?
     [ "$rc" = 2 ] && ok "$t refused (rc 2)" || bad "$t: rc=$rc: $out"
 done
+
+# board-stage.sh stm32mp257f-dk deqp: the whole GLES2 table as one image, build
+# only. No DEQP_STAGE1 entry (the DK's stage 1 is DEQP_STAGE1_DK, checked by the
+# stage); the built image is held to the runner's limits (bootfs's free space,
+# the load window) with exit 2.
+out=$(nd imx8mp deqp stm32mp257f-dk)
+check "dk deqp needs ZEPHYR_WS" "ZEPHYR_WS" "$out"
+absent "dk deqp does not need DEQP_STAGE1" "DEQP_STAGE1" "$out"
+absent "dk deqp does not need IMX8MP_OUT" "IMX8MP_OUT" "$out"
+out=$(cd "$REPO_ROOT" && BOARD_STAGE_DRY_RUN=1 tools/cts/board-stage.sh stm32mp257f-dk deqp 2>&1); rc=$?
+[ "$rc" = 0 ] && ok "dk deqp dry run: rc 0" || bad "dk deqp dry run: rc=$rc: $out"
+check "dk deqp dry run: the board" "-b stm32mp257f_dk/stm32mp257fxx/a35" "$out"
+check "dk deqp dry run: the sample" "driver/samples/zephyr/deqp" "$out"
+check "dk deqp dry run: the table" "tools/cts/imx8mp-full-tree.txt" "$out"
+check "dk deqp dry run: the output" "build/deqp/stm32mp257f-dk-" "$out"
+check "dk deqp dry run: the stage 1" "DEQP_STAGE1_DK" "$out"
+check "dk deqp dry run: the limits" "0xa0000000..0xb0000000" "$out"
+# dk_limits against a canned readelf: a footprint inside the window, one past it
+cat > "$T/bin/readelf" <<'EOF2'
+#!/bin/sh
+echo "Section Headers:"
+echo "  [Nr] Name              Type            Address          Off    Size   ES Flg Lk Inf Al"
+echo "  [ 0]                   NULL            0000000000000000 000000 000000 00      0   0  0"
+echo "  [ 1] text              PROGBITS        00000000a0000000 001000 100000 00  AX  0   0  4"
+echo "  [ 2] noinit            NOBITS          00000000a0100000 101000 $READELF_NOINIT 00  WA  0   0  8"
+echo "  [ 3] .comment          PROGBITS        0000000000000000 101000 000020 01  MS  0   0  1"
+EOF2
+chmod +x "$T/bin/readelf"
+mkdir -p "$T/dkb/zephyr"
+sed -n '/^dk_limits() {/,/^}/p' "$HERE/board-stage.sh" > "$T/dk_limits.sh"
+dk_lim() { # <bin size> <noinit size hex>: dk_limits of board-stage.sh on a fake build
+    head -c "$1" /dev/zero > "$T/dkb/zephyr/zephyr.bin"
+    : > "$T/dkb/zephyr/zephyr.elf"
+    PATH=$T/bin:$PATH READELF_NOINIT=$2 DK_BUILD=$T/dkb DK_BIN_MAX=$((34 * 1024 * 1024)) \
+        DK_WIN_LO=$((0xa0000000)) DK_WIN_HI=$((0xb0000000)) \
+        bash -c 'die() { echo "board-stage.sh: $1" >&2; exit "${2:-2}"; }; . "$1"; dk_limits' _ "$T/dk_limits.sh" 2>&1
+}
+out=$(dk_lim 1000 0d000000); rc=$?
+[ "$rc" = 0 ] && ok "dk limits: a footprint of 209 MiB fits (rc 0)" || bad "dk limits fit: rc=$rc: $out"
+check "dk limits: the footprint line" "DK footprint: 0xa0000000..0xad100000" "$out"
+out=$(dk_lim 1000 11000000); rc=$?
+[ "$rc" = 2 ] && check "dk limits: the window is named, rc 2" "outside the runner's load window" "$out" || bad "dk limits window: rc=$rc: $out"
+out=$(dk_lim $((35 * 1024 * 1024)) 0d000000); rc=$?
+[ "$rc" = 2 ] && check "dk limits: bootfs is named, rc 2" "over bootfs's free space" "$out" || bad "dk limits bootfs: rc=$rc: $out"
 
 # needed_deps against the builders: a board stage runs the image builders, and
 # board-stage.sh stops only for what needed_deps lists. So every deps.toml
