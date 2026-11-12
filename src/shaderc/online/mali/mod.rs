@@ -296,6 +296,12 @@ pub enum MaliError {
     /// draws: `max(x, 0.0)` (`fclamp_pos`), `clamp(x, -1.0, 1.0)`
     /// (`fsat_signed`), a negated `float(bool)` in a product.
     AlgebraicForm,
+    /// An integer constant that the ISA's table holds only as a byte or a
+    /// half, read by U32_TO_F32 or S32_TO_F32: Mesa packs the source's
+    /// widen (valhall.c gives these sources one), which Arm's description
+    /// fixes to none on v9-10 (isa-v9-v14.xml:17105, :20334, `widen0`
+    /// `exact="none"`), so the packer cannot write Mesa's word.
+    ConvertWiden,
     /// More expressions than the record holds, or one larger, moved by
     /// Mesa's link into the vertex shader (motion.rs).
     MovedTooLarge,
@@ -370,6 +376,7 @@ impl MaliError {
         MaliError::IfForm,
         MaliError::CompareForm,
         MaliError::AlgebraicForm,
+        MaliError::ConvertWiden,
         MaliError::MovedTooLarge,
     ];
 
@@ -527,6 +534,9 @@ impl MaliError {
             }
             MaliError::AlgebraicForm => {
                 "Valhall: a shape Mesa's algebraic rules rewrite without a reference (max(x, 0.0), clamp(x, -1.0, 1.0), a negated float(bool) in a product) is not lowered yet"
+            }
+            MaliError::ConvertWiden => {
+                "Valhall: an integer-to-float conversion of a constant the ISA's table holds only as a byte or a half is not lowered yet"
             }
             MaliError::MovedTooLarge => {
                 "Valhall: more than 4 fragment expressions, or one of more than 8 operations, that Mesa's link moves into the vertex shader is not lowered yet"

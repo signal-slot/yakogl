@@ -381,11 +381,15 @@ pub fn pack_one(i: &Ins, branch: i32) -> Result<u64, MaliError> {
             f.put("saturate", 0)?;
             alu_dest(&mut f, i, "dest_width")?;
         }
-        /* valhall.c gives the source a widen; the ISA table has no field
-         * for it, so a narrowed source is refused, never read whole */
+        /* valhall.c gives the source a widen, which Mesa packs; Arm's
+         * description fixes `widen0` to none on v9-10 (isa-v9-v14.xml:
+         * 20334, :17105 for S32_TO_F32), so a narrowed source (a table
+         * constant's byte or half) is a gap, never read whole */
         Op::U32ToF32 => {
             f = Fill::new(IsaOp::U32ToF32);
-            whole(&i.src[0])?;
+            if i.src[0].swz != Swz::H01 {
+                return Err(MaliError::ConvertWiden);
+            }
             f.put("src0", src_byte(&i.src[0])?)?.put("round", 0)?;
             alu_dest(&mut f, i, "dest_width")?;
         }
@@ -469,7 +473,9 @@ pub fn pack_one(i: &Ins, branch: i32) -> Result<u64, MaliError> {
         /* as U32_TO_F32 */
         Op::S32ToF32 => {
             f = Fill::new(IsaOp::S32ToF32);
-            whole(&i.src[0])?;
+            if i.src[0].swz != Swz::H01 {
+                return Err(MaliError::ConvertWiden);
+            }
             f.put("src0", src_byte(&i.src[0])?)?.put("round", 0)?;
             alu_dest(&mut f, i, "dest_width")?;
         }
@@ -1117,9 +1123,9 @@ mod tests {
 
     /// A modifier the op's entry has no field for is refused, never
     /// dropped (va_pack.c `invalid_instruction`): a half of the table on
-    /// the cube ops (#4574), a negated move; and a narrowed source of
-    /// U32_TO_F32 or S32_TO_F32 (a widen in valhall.c, no field in the ISA
-    /// table).
+    /// the cube ops (#4574), a negated move. A narrowed source of
+    /// U32_TO_F32 or S32_TO_F32 is Mesa's word (a widen in valhall.c) that
+    /// Arm's description fixes to none on v10: a gap by name.
     #[test]
     fn a_source_modifier_without_a_field_is_refused() {
         let one = |op: Op, srcs: &[Src]| pack_one(&Ins::new(op, &[Dest { idx: Idx::Reg(0), swz: Swz::H01 }], srcs), 0);
@@ -1127,8 +1133,8 @@ mod tests {
         let refused = Err(MaliError::Defect(Defect::Operand));
         assert_eq!(one(Op::Cubeface1, &[lut(16), r(1), h1]), refused);
         assert_eq!(one(Op::CubeSsel, &[h1, lut(16), r(2)]), refused);
-        assert_eq!(one(Op::U32ToF32, &[Src { swz: Swz::H00, ..r(1) }]), refused);
-        assert_eq!(one(Op::S32ToF32, &[Src { swz: Swz::B0, ..lut(4) }]), refused);
+        assert_eq!(one(Op::U32ToF32, &[Src { swz: Swz::H00, ..r(1) }]), Err(MaliError::ConvertWiden));
+        assert_eq!(one(Op::S32ToF32, &[Src { swz: Swz::B0, ..lut(4) }]), Err(MaliError::ConvertWiden));
         assert_eq!(one(Op::MovI32, &[neg(r(1))]), refused);
         /* the same sources without the modifier pack */
         assert!(one(Op::Cubeface1, &[lut(16), r(1), lut(26)]).is_ok());

@@ -998,6 +998,10 @@ fn unreachable_from_es100(e: MaliError) -> Option<&'static str> {
              front end refuses gl_FragData[n > 0] (the test pins its verdict), and a vertex shader writes none",
         ),
         E::Interpolation => Some("ES 1.00 has no interpolation qualifier: every varying is smooth"),
+        E::ConvertWiden => Some(
+            "no test or corpus shader gives U32_TO_F32 or S32_TO_F32 a constant source (the only way a narrowed \
+             source reaches them: the constant lowering's table byte or half)",
+        ),
         E::FauFull => Some(
             "the sysvals are at most 6 words (VS) and 4 (FS) of 128, pushed first; uniforms that do not fit are \
              UboFallback",
