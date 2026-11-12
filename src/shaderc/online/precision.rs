@@ -1726,6 +1726,24 @@ mod tests {
         assert_eq!(local(&g, "m"), M, "a mediump local that is no const is stored at 16 bits");
     }
 
+    /// A projective look-up divides its coordinate by the last lane. Mesa
+    /// divides in the texture instruction's lowering, on the coordinate,
+    /// which is a 32-bit root (A.3: a look-up's arguments are trees of
+    /// their own, each root widened): drm-shim for the width review's
+    /// t_proj (`texture2DProjLod(s, vec3(p.xy, c * d), 0.0)`, lowp `s`) is
+    /// `FRCP.f32` and `FMA.f32` before `TEX_SINGLE`. So the divide records
+    /// High; the look-up keeps its sampler's class. (`c * d` is a Medium
+    /// root, 16-bit in Mesa's GLSL IR; its `FMA.f32` is NIR's late rule.)
+    #[test]
+    fn a_projective_divide_is_full_width() {
+        let g = vs("attribute mediump float c; attribute mediump float d; uniform sampler2D s;\n\
+                    varying highp vec4 v;\n\
+                    void main(){ gl_Position = p; v = texture2DProjLod(s, vec3(p.xy, c * d), 0.0); }");
+        assert_eq!(alu(&g, AluOp::Frcp), [H]);
+        assert_eq!(alu(&g, AluOp::Fmul), [M, H], "c * d, then the divide");
+        assert_eq!(of(&g, |o| matches!(o, Op::Tex { .. })), [M]);
+    }
+
     #[test]
     fn f16_exact_knows_the_f16_values() {
         for x in [0.0f32, -0.0, 1.0, 1.5, 65504.0, -2.0, 6.103_515_6e-5, 5.960_464_5e-8, 0.000_122_070_31] {

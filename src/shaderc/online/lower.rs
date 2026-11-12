@@ -4262,7 +4262,11 @@ impl<'a> Lower<'_, 'a> {
             self.full_width_args(ids, &ops[..n], start)?;
             self.cur = Prec::High;
         }
-        let mut sink = Sink { l: self, out, width };
+        /* A look-up's own arithmetic (a projective divide) works on its
+         * coordinate, a 32-bit root (A.3); only the `Tex` is the
+         * sampler's class. */
+        let look_up = matches!(ops.first(), Some(Operand::Sampler { .. }));
+        let mut sink = Sink { l: self, out, width, look_up };
         let lowered = match builtin_call::lower_call(&mut sink, name, ops, want) {
             None if es3 => builtin_call::lower_es3(&mut sink, name, ops),
             r => r,
@@ -8839,20 +8843,35 @@ struct Sink<'s, 'x, 'a> {
     /// than its one lane: an over-estimate, which `Module::comps_of` allows,
     /// never a narrow answer.
     width: u8,
+    /// The call is a look-up: what it emits besides the `Tex` (the
+    /// divide of a projective form) records High.
+    look_up: bool,
 }
 
 impl<'a> builtin_call::Emit<'a> for Sink<'_, '_, 'a> {
     fn emit(&mut self, op: Op) -> R<'a, Src> {
+        let outer = self.l.cur;
+        if self.look_up && !matches!(op, Op::Tex { .. } | Op::TexSize { .. }) {
+            self.l.cur = Prec::High;
+        }
         let v = match op {
-            Op::Alu(alu, _) => self.l.push_sized(op, alu.result_comps(self.width))?,
-            _ => self.l.push_instr(op)?,
+            Op::Alu(alu, _) => self.l.push_sized(op, alu.result_comps(self.width)),
+            _ => self.l.push_instr(op),
         };
+        self.l.cur = outer;
+        let v = v?;
         self.out.push(self.l.a, Node::Instr(ir::InstrId(v.0)))?;
         Ok(Src::id(v))
     }
 
     fn constant(&mut self, lanes: [f32; 4]) -> R<'a, Src> {
-        self.l.const_value(lanes, self.out)
+        let outer = self.l.cur;
+        if self.look_up {
+            self.l.cur = Prec::High;
+        }
+        let r = self.l.const_value(lanes, self.out);
+        self.l.cur = outer;
+        r
     }
 
     fn vertex(&self) -> bool {
