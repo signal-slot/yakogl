@@ -1,0 +1,21 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# panthor-gltest 19 44 55 70 77 80 86 91 101 138 149 181 182 188 199 206 218, one run per file (README.md): the verdict and summary lines
+panthor-gltest: verdict case 19 es100: PASS 
+panthor-gltest: verdict case 44 es3hdr: PASS 
+panthor-gltest: verdict case 55 es3mrt: PASS 
+panthor-gltest: verdict case 70 loopcarry: PASS 
+panthor-gltest: verdict case 77 transc: REFUSED compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet)
+panthor-gltest: verdict case 80 matdyn: PASS 
+panthor-gltest: verdict case 86 anyall: PASS 
+panthor-gltest: verdict case 91 hdrblend: PASS 
+panthor-gltest: verdict case 101 cubebias: PASS 
+panthor-gltest: verdict case 138 deriv: PASS 
+panthor-gltest: verdict case 149 vsunits: REFUSED draw: mali: a vertex shader that reads more than one texture is not built yet
+panthor-gltest: verdict case 181 fusemad: PASS 
+panthor-gltest: verdict case 182 fsat: PASS 
+panthor-gltest: verdict case 188 predif: PASS 
+panthor-gltest: verdict case 199 es3trunc: PASS 
+panthor-gltest: verdict case 206 es3levels: FAIL rc -1, first bad check 2 got 0x04602020 want 0x04602090
+panthor-gltest: verdict case 218 shadowcmp: FAIL rc -1, first bad check 3 got 0xff000000 want 0xffbfbfbf
+panthor-gltest: 17 case(s) run: FAIL 2, PASS 13, REFUSED 2
