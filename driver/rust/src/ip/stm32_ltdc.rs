@@ -76,8 +76,9 @@
 //!   1..4; the MP25 hides L3 when its RIF firewall refuses it, which the
 //!   caller checks), the pad limit is 150 MHz for a1/a2 and the MP25 (`drv.c`
 //!   `stm_drm_plat_data_mp25`), 90 MHz for 0x010300, 65 MHz for 0x010200.
-//! - Frame CRC (r3.1 `ltdc.c`; line numbers are those of the task that asked
-//!   for it, the functions are named so they can be found again):
+//! - Frame CRC (r3.1 `ltdc.c`, checked against the file: `LTDC_CCRCR` :89,
+//!   `GCR_CRCEN` :142, `CRC_SKIP_FRAMES` :274, `ltdc_irq` read :1053-1054,
+//!   `ltdc_crtc_set_crc_source` :1476-1501, `caps.crc` as below):
 //!   `ltdc_get_caps` sets `caps.crc = true` for HWVER 0x040100/0x040101
 //!   (:2566) and clears it again when the third layer is secure (:2588-2590,
 //!   "Do not expose the crc to the user if the third layer is secure"); the
