@@ -7,7 +7,8 @@
 # with and without CONFIG_YAKOGL_BOARD_SCANOUT_VIEW) and print the panel
 # periods a frame of each application takes, without .wait_vblank in the
 # GC7000's OSAL (unwired, main before 2026-10-17) and with it (wired). Host
-# only, about 30 s.
+# only, a few seconds: the models run on a simulated clock (sim_kernel.c), so
+# they print the same numbers on every run and every host, however loaded.
 #
 #   run.sh [board_imx8mp.c] [outdir]
 #     board_imx8mp.c  default: the tree's. An older one (git show
@@ -17,10 +18,11 @@
 #
 # With the tree's board file each row is checked against the expected value
 # (docs/notes/imx8mp-frame-floor.md, "Waits per swap"), and the run exits 1
-# on a difference: a number is a match within 0.25 periods (the draw is
-# 0.3 T, so 1 and 2 periods are far apart); "u" (unpaced) is under 0.8; and
+# on a difference: a number must be printed exactly (1 is 1.00); "u"
+# (unpaced) is 0.30, the draw alone (D = 0.3 T) with no wait for the panel;
 # an in-place draw (a cluster frame submitted into the half on the panel) is
-# always a failure.
+# always a failure, and so is a model that stops (exit 3: every thread waits
+# for ever).
 set -euo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)
@@ -40,7 +42,7 @@ build() { # build <buffers> <view 0|1>
     -I"$top/driver/zephyr/lib/board/common" -I"$top/include" \
     -DCONFIG_YAKOGL_BOARD=1 -DCONFIG_YAKOGL_DRV_DISPLAY_IMX8MP=1 -DCONFIG_YAKOGL_DRV_GPU_VIVANTE=1 \
     -DCONFIG_YAKOGL_BOARD_IMX8MP_SCREEN_BUFFERS="$1" -DCONFIG_YAKOGL_BOARD_IMX8MP_WINDOWS=1 "${v[@]}" \
-    -o "$out/model-$1-$2" "$board" "$here/latch_model.c"
+    -o "$out/model-$1-$2" "$board" "$here/latch_model.c" "$here/sim_kernel.c"
 }
 
 # expected periods/frame: app, buffers, view, unwired, wired
@@ -73,11 +75,9 @@ EOF
 }
 
 match() { # match <got> <want>
-  if [ "$2" = u ]; then
-    awk -v g="$1" 'BEGIN { exit !(g < 0.8) }'
-  else
-    awk -v g="$1" -v w="$2" 'BEGIN { d = g - w; if (d < 0) d = -d; exit !(d <= 0.25) }'
-  fi
+  local w=$2
+  [ "$w" = u ] && w=0.30
+  [ "$1" = "$(LC_ALL=C printf '%.2f' "$w")" ]
 }
 
 for b in 1 2 3; do
@@ -89,7 +89,12 @@ while read -r app b v want_unwired want_wired; do
   for osal in unwired wired; do
     want=$want_unwired
     [ "$osal" = wired ] && want=$want_wired
-    line=$("$out/model-$b-$v" "$app" "$osal" | grep '^app=')
+    if ! line=$("$out/model-$b-$v" "$app" "$osal" 2>&1); then
+      echo "FAIL  app=$app osal=$osal buffers=$b view=$v: the model stopped: $(tail -n 1 <<<"$line")"
+      fail=1
+      continue
+    fi
+    line=$(grep '^app=' <<<"$line")
     got=$(sed -n 's/.*periods\/frame=\([0-9.]*\).*/\1/p' <<<"$line")
     if [ "$check" = 0 ]; then
       echo "      $line"
