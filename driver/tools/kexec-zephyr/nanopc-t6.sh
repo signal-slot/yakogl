@@ -137,10 +137,14 @@ footprint=$(od -A n -t u8 -j 16 -N 8 "$IMG" | tr -d ' ')
 [ "$footprint" -ge "$file_size" ] || footprint=$file_size
 memsz=$(( (footprint + 4095) / 4096 * 4096 ))
 
-markers=$(strings -n 20 "$IMG" | grep '^yakogl-wdt: nanopc_t6 ' || true)
+# The image's strings are read once and matched from here-strings: under
+# pipefail, `strings | grep -q` is 141 (strings killed by SIGPIPE) when grep
+# leaves at a match before strings has finished, which read as "no such line".
+strs=$(strings -n 20 "$IMG")
+markers=$(grep '^yakogl-wdt: nanopc_t6 ' <<<"$strs" || true)
 [ -n "$markers" ] || refuse "$IMG carries no 'yakogl-wdt: nanopc_t6' marker: its watchdog is not armed at boot (an image for another board, or built without driver/zephyr/lib/board/nanopc_t6)"
 [ "$(printf '%s\n' "$markers" | wc -l)" -eq 1 ] || refuse "$IMG carries more than one watchdog marker: $markers"
-strings -n 20 "$IMG" | grep -qxF 'board: watchdog armed' || refuse "$IMG lacks the 'board: watchdog armed' line"
+grep -qxF 'board: watchdog armed' <<<"$strs" || refuse "$IMG lacks the 'board: watchdog armed' line"
 re='^yakogl-wdt: nanopc_t6 WDT0 armed at boot; top ([0-9]+); lifetime_s ([0-9]+); alive_s ([0-9]+); proof ([01]); load (0x[0-9a-fA-F]+)$'
 [[ "$markers" =~ $re ]] || refuse "the marker does not parse: $markers"
 top=${BASH_REMATCH[1]} lifetime=${BASH_REMATCH[2]} alive=${BASH_REMATCH[3]} proof=${BASH_REMATCH[4]} load=${BASH_REMATCH[5]}
@@ -195,7 +199,7 @@ case "$(fact compatible)" in *friendlyarm,nanopc-t6*) ;; *) refuse "$BOARD_HOST 
 # The window: inside one top-level "System RAM" range, overlapping no entry
 # under it (the kernel image, reserved memory).
 iomem=$(printf '%s\n' "$facts" | sed -n '/^iomem<<$/,/^>>$/p' | sed '1d;$d')
-printf '%s\n' "$iomem" | grep -qE '^ *[0-9a-f]*[1-9a-f][0-9a-f]*-' || refuse "/proc/iomem shows no addresses (not root?)"
+grep -qE '^ *[0-9a-f]*[1-9a-f][0-9a-f]*-' <<<"$iomem" || refuse "/proc/iomem shows no addresses (not root?)"
 wb=$WINDOW_BASE we=$((WINDOW_BASE + WINDOW_SIZE - 1))
 inside=0 parent_s=-1 parent_e=-1 clash=
 while IFS= read -r line; do
