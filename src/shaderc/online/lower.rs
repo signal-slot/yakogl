@@ -929,7 +929,7 @@ fn lower_ordered<'a>(
         cur_class: Prec::None,
         slot_prec: None,
         pinned: AVec::new(),
-        const_params: AVec::new(),
+        var_params: AVec::new(),
         nodes: AVec::new(),
         inputs: AVec::new(),
         outputs: AVec::new(),
@@ -1027,11 +1027,10 @@ struct Lower<'x, 'a> {
     /// Float constants a full-width built-in reads at their fp16 value
     /// ([`Lower::full_width_args`]).
     pinned: AVec<'a, u32>,
-    /// The parameters of the bodies being inlined whose argument is a
-    /// constant (or reads such a parameter), by inline depth: Mesa folds
-    /// them into the inlined body, so a full-width built-in reading one
-    /// takes the constant's fp16 value ([`Lower::full_width_args`]).
-    const_params: AVec<'a, (u32, &'a str)>,
+    /// The parameters of the bodies being inlined whose argument is known
+    /// to vary ([`Lower::varies`]), by inline depth. Any other parameter
+    /// may be a constant once NIR has inlined and propagated it.
+    var_params: AVec<'a, (u32, &'a str)>,
     nodes: AVec<'a, Node>,
     inputs: AVec<'a, IoDecl<'a>>,
     outputs: AVec<'a, IoDecl<'a>>,
@@ -4322,12 +4321,13 @@ impl<'a> Lower<'_, 'a> {
         }
         for (&e, op) in ids.iter().zip(ops) {
             let Operand::Value { src, .. } = *op else { continue };
-            /* a parameter that takes a constant: Mesa folds the constant
-             * into the inlined body, so the parameter's `f2fmp` becomes the
-             * fp16 constant (third review B-E, probe p3/u5); the lowering
-             * reads the parameter's 32-bit slot or the caller's value, and
-             * has no form for that rounding */
-            if self.mentions_const_param(e, 0) {
+            /* An argument not known to vary may be a constant to NIR,
+             * after inlining and propagation: a local set to 0.1, a
+             * parameter given one (fourth review, probes p4/f06, f09: Mesa
+             * folds the parameter's `f2fmp` to the fp16 constant). The
+             * lowering reads its 32-bit value and has no form for that
+             * rounding: Unknown. A constant expression is the case below. */
+            if !self.precs.folds(e) && !self.varies(e, 0) {
                 if let Some(x) = self.prec.as_mut_slice().get_mut(src.val.0 as usize) {
                     *x = Prec::Unknown;
                 }
@@ -4359,21 +4359,42 @@ impl<'a> Lower<'_, 'a> {
         Ok(())
     }
 
-    /// `e` reads a parameter of the innermost inlined body that takes a
-    /// constant ([`Lower::const_params`]).
-    fn mentions_const_param(&self, e: ExprId, depth: u32) -> bool {
+    /// `e` is known to vary from one invocation to the next: it reads an
+    /// input, a uniform or a built-in input, or a parameter of the
+    /// innermost inlined body given such a value ([`Lower::var_params`]),
+    /// through any operation. A whitelist: a local, a `const`, a literal
+    /// and anything else may be a constant to NIR.
+    fn varies(&self, e: ExprId, depth: u32) -> bool {
         if depth > 64 {
-            return true;
+            return false;
         }
         match *self.ast.expr(e) {
-            Expr::Ident(n) => self.const_params.as_slice().iter().any(|&(d, p)| d == self.inline_depth && p == n),
+            Expr::Ident(n) => {
+                if self.var_params.as_slice().iter().any(|&(d, p)| d == self.inline_depth && p == n) {
+                    return true;
+                }
+                if self.scope_entry(n).is_some() || self.shadow_of(n).is_some() {
+                    return false;
+                }
+                let row = |r: &str| {
+                    r == n || (r.len() > n.len() && r.starts_with(n) && matches!(r.as_bytes()[n.len()], b'.' | b'['))
+                };
+                self.input_of(n).is_some()
+                    || matches!(
+                        n,
+                        "gl_FragCoord" | "gl_PointCoord" | "gl_FrontFacing" | "gl_VertexID" | "gl_InstanceID"
+                    )
+                    || self.reflection.uniforms.iter().any(|u| row(u.name))
+            }
+            /* a select varies only through its sides */
+            Expr::Select(_, t, f) => self.varies(t, depth + 1) || self.varies(f, depth + 1),
             Expr::Call { args, .. } | Expr::ArrayCtor { args, .. } => {
-                args.indices().any(|i| self.mentions_const_param(self.ast.expr_ids[i], depth + 1))
+                args.indices().any(|i| self.varies(self.ast.expr_ids[i], depth + 1))
             }
             _ => {
                 let mut c = [ExprId(0); 3];
                 let n = self.expr_children(e, &mut c);
-                c[..n].iter().any(|&x| self.mentions_const_param(x, depth + 1))
+                c[..n].iter().any(|&x| self.varies(x, depth + 1))
             }
         }
     }
@@ -4712,12 +4733,13 @@ impl<'a> Lower<'_, 'a> {
         /* The callee's returns are its own: a `return` in a loop of the
          * callee must leave the callee, not the caller's loop around the
          * call. */
-        /* which parameters take a constant: decided in the caller's frame */
-        let marks = self.const_params.len();
+        /* which parameters take a value known to vary: decided in the
+         * caller's frame */
+        let marks = self.var_params.len();
         for (p, &arg) in param_ids.iter().zip(arg_ids) {
             if let Some(pname) = p.name {
-                if self.precs.folds(arg) || self.mentions_const_param(arg, 0) {
-                    self.const_params.push(self.a, (self.inline_depth + 1, pname))?;
+                if self.varies(arg, 0) {
+                    self.var_params.push(self.a, (self.inline_depth + 1, pname))?;
                 }
             }
         }
@@ -4725,8 +4747,8 @@ impl<'a> Lower<'_, 'a> {
         self.inline_depth += 1;
         let r = self.inline_body(name, body, want, out);
         self.inline_depth -= 1;
-        while self.const_params.len() > marks {
-            self.const_params.pop();
+        while self.var_params.len() > marks {
+            self.var_params.pop();
         }
         self.ret = caller_ret;
         while self.scope.len() > caller_top {
