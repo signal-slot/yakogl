@@ -396,6 +396,19 @@ static long read_file(const char *path, char **out)
 	if (n < 0) {
 		die("read", n);
 	}
+	/* A full buffer ends the loop with a read of 0 bytes, which returns 0
+	 * whether or not the file goes on: read one byte more, so a file
+	 * larger than IMG_MAX is refused instead of loaded cut short. */
+	if (size == (long)IMG_MAX) {
+		char more;
+
+		n = sys(SYS_read, fd, (long)&more, 1, 0, 0, 0);
+		if (n != 0) {
+			put(path);
+			put(": larger than the 64 MiB a file may have here (IMG_MAX)\n");
+			sys(SYS_exit, 1, 0, 0, 0, 0, 0);
+		}
+	}
 	*out = img;
 	return size;
 }
