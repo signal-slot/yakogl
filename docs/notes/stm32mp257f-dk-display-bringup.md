@@ -367,6 +367,200 @@ Our image is linked at 0xa0000000 and owns 256 MiB as `zephyr,sram`
    (see "The secure layer"), not inside `zephyr,sram` (the image's own heap
    and stacks; also cacheable).
 
+## Framebuffer memory and bus-master access
+
+Why it matters: the LTDC (and later the GPU) reads and writes DDR as a bus
+master. A master passes two gates, the RIF master configuration in RIFSC
+(RIMU: security, privilege and CID it presents) and the DDR firewall RISAF4
+(regions that name the CIDs allowed to read and to write). A region that does
+not grant the master's CID fails the access with no error at the LTDC; the
+screen stays black. Citations as in "Sources" (O = ST OP-TEE `core/`, T = ST
+TF-A). ST's Linux and U-Boot trees were **not** re-read for this section (the
+sparse checkouts of this pass were refused); the L and U facts reused here
+are the ones cited above. RM0457's RIMU and RISAF chapters are unread, so the
+RIMU-to-master mapping of the LTDC is **not** in any source (item 1).
+
+### 1. RIMU settings (who the LTDC and the GPU are on the bus)
+
+- **Fields.** OP-TEE writes one `RIFSC_RIMC_ATTRx` per `st,rimu` entry at
+  RIFSC + 0xC10 + 4 x n: bit 2 `CIDSEL` (0 = the CID comes from the master's
+  peripheral entry, "RISUP", 1 = from the RIMU's own `MCID`), bits 6:4
+  `MCID`, bit 8 `MSEC`, bit 9 `MPRIV` (O:`drivers/firewall/stm32_rifsc.c:30-31`,
+  `:102-107`, `:618-632`; DT macro O:`include/dt-bindings/soc/stm32mp25-rifsc.h:151-172`,
+  `RIF_CIDSEL_P` = config from RISUP, `RIF_CIDSEL_M` = config from RIMU).
+- **GPU = RIMU 9**, paired with the GPU's RISUP entry
+  (O:`stm32_rifsc.c:183-186`, pair table `:146-211`). The DK file programs
+  it `RIF_UNUSED` CID, **non-secure, privileged, `CIDSEL_P`** (inherit)
+  (O:`dts/stm32mp257f-dk-ca35tdcid-rif.dtsi:634`). Its RISUP entry (RIFSC 79)
+  is non-secure, non-privileged, unlocked, **CID filter off**
+  (`RIF_CFDIS`, `:81`). With the filter off OP-TEE's own check treats the
+  inherited CID as CID0 ("inheritance mode with CID0", O:`stm32_rifsc.c:596-612`;
+  that check runs only with `st,errata-ahbrisab`, which no DK file sets), so
+  the GPU reaches RISAF4 as **CID0, non-secure** [D].
+- **LTDC = not named.** RIMU 11, 12, 13 are the only entries without a
+  RISUP pairing (`risup_id = 0`, O:`stm32_rifsc.c:191-202`); the DK file sets
+  all three to **CID0, non-secure, privileged, `CIDSEL_M`** (O:`...-rif.dtsi:636-638`).
+  The LTDC has three RIFSC entries `l1l2`, `l3`, `rot` (RIFSC 119 to 121,
+  O:`...-rif.dtsi:83-85`) and no pairing of its own, so the three
+  unpaired RIMUs are the likely LTDC masters [D, unconfirmed]. All three
+  present CID0 and non-secure; nothing in TF-A touches a display RIMU (TF-A
+  programs only RIMU 4, USB3DR, and only for USB boot: T:`plat/st/stm32mp2/bl2_plat_setup.c:612-625`,
+  `stm32mp2_def.h:745-749`). RIMU 0 (CID1, non-secure, privileged, `CIDSEL_M`,
+  `...-rif.dtsi:625`) has no peripheral either and may be a different master
+  (open question: board item 1 below).
+- **What the image must do.** Nothing: the RIFSC grants of the DK file are
+  already the ones that let CID0 masters through; our image runs at EL2
+  non-secure and cannot write RIMU anyway (RIFSC RIMC is secure-written by
+  OP-TEE at its boot). The image only reads them back.
+
+### 2. RISAF4 on the DK's DDR
+
+- **Instance.** RISAF4 at 0x420D0000 (T:`stm32mp2_def.h:699`;
+  O:`dts/stm32mp251.dtsi:748-754`), covers `st,mem-map` 0x80000000 + 4 GiB
+  (`:752`), the whole 4 GiB DDR of the DK (O:`dts/stm32mp257f-dk.dts:35-37`).
+  Region n sits at RISAF4 + 0x40 + 0x40 x n: `CFGR` (+0, `BREN` bit 0,
+  `SEC` bit 8, `ENC` bit 15, `PRIVC` bits 23:16), `STARTR` (+4) and `ENDR`
+  (+8) as offsets from 0x80000000, `CIDCFGR` (+0xC, read CIDs bits 7:0, write
+  CIDs bits 23:16) (O:`drivers/firewall/stm32_risaf.c:66-79`, `:98-128`,
+  `:540-551`). A CID `c` may read when bit `c` of `CIDCFGR[7:0]` is set, and
+  write when bit `16 + c` is set (`:125-128`).
+- **Regions of the DK (O:`...-rif.dtsi:905-1001`, areas O:`...-resmem.dtsi`).**
+
+  | Region | Area (resmem) | Range | Sec | Read CIDs | Write CIDs | Note |
+  | --- | --- | --- | --- | --- | --- | --- |
+  | 1 | `tfm_code` (`:82`) | 0x80000000, 1 MiB | S | 2 | 2 | enc. (`:949`) |
+  | 2 | `cm33_cube_fw` | 0x80100000, 8 MiB | NS | 0,1,2 | 0,1,2 | (`:953`) |
+  | 3 | `tfm_data` | 0x80900000, 1 MiB | S | 2 | 2 | (`:957`) |
+  | 4 | `cm33_cube_data` | 0x80a00000, 8 MiB | NS | 0,1,2 | 0,1,2 | (`:961`) |
+  | 5 | `ipc_shmem` (`:102`) | 0x81200000, 1 MiB | NS | 0,1,2 | 0,1,2 | (`:965`) |
+  | 6 | `spare1` (`:107`) | 0x81300000, 0xcc0000 | NS | 0,1,2 | 0,1,2 | (`:969`) |
+  | 7 | `bl31_context` (`:112`) | 0x81fc0000, 256 KiB | S | 0,1 | 0,1 | enc. (`:973`) |
+  | 8 | `op_tee` (`:117`) | 0x82000000, 32 MiB | S | 0,1 | 0,1 | enc. (`:977`) |
+  | 9 | `linuxkernel1` (`:122`) | **0x84000000, 0x76800000 (to 0xfa7fffff)** | **NS** | **0,1** | **0,1** | (`:981`) |
+  | 10 | `gpu_reserved` (`:127`) | **0xfa800000, 64 MiB (to 0xfe7fffff)** | **NS** | **0,1** | **0,1** | (`:985`) |
+  | 13 | `ltdc_sec_layer` (`:132`) | 0xfe800000, 8 MiB | **NS** | 0,1 | 0,1 | (`:989`) |
+  | 14 | `ltdc_sec_rotation` (`:137`) | 0xff000000, 16 MiB | **NS** | 0,1 | 0,1 | (`:993`) |
+  | 15 | `linuxkernel2` (`:142`) | 0x100000000, 2 GiB | NS | 0,1 | 0,1 | (`:997`) |
+
+  The `PRIVC` list is `RIF_UNUSED` (0) for every non-secure region, so
+  non-privileged and privileged accesses both pass (O:`stm32mp25-risaf.h:62-69`,
+  the `cid_priv_list` argument). The region table is applied by
+  `&risaf4 { memory-region = ... }` (O:`...-rif.dtsi:1000-1001`). The areas are
+  contiguous from 0x80000000 to 0xffffffff and 0x100000000 to 0x17fffffff,
+  so no part of the DDR is left to the reset default [D]; the RISAF's
+  behaviour for an address outside every enabled region is RM0457's and is
+  not asserted here.
+- **Consequence.** A master with **CID0 or CID1, non-secure**, reads and
+  writes everything from 0x84000000 up (regions 9, 10, 13, 14, 15). CID2 (the
+  M33) is not allowed there. The GPU is CID0 (item 1) and the LTDC, if it is
+  RIMU 11 to 13, is CID0: both pass. If the LTDC's CID were anything but 0
+  or 1 (for example if RIMU 11-13 are not its masters and the board resets
+  them to a different CID), it fails at every address of the table; the
+  state probe's RIMC read (board item 1) decides.
+- The area below 0x84000000 is OP-TEE's and the M33's (regions 1 to 8), CID2,
+  secure or encrypted: **never** a framebuffer. Internal RAM (RISAB 3/4/5)
+  is not considered: TF-A and OP-TEE keep BL31 and the SCMI buffers there
+  (O:`...-resmem.dtsi:12-45`), and the RISAB errata forbids CID0 masters on
+  RISAB 3/4/5 once CID filtering is on there (O:`stm32_rifsc.c:546-552`).
+
+### 3. The two LTDC secure-layer areas at 0xfe800000
+
+- **What they are.** 8 MiB `ltdc-sec-layer@fe800000` and 16 MiB
+  `ltdc-sec-rotation@ff000000`, `no-map`, directly above the GPU carveout
+  and the last 24 MiB below 4 GiB (O:`...-resmem.dtsi:132-140`; the same in
+  ST's Linux tree, `stm32mp257f-dk-resmem.dtsi:175-183`, from the section
+  "The secure layer" above). RISAF4 regions 13 and 14 (table above).
+- **On this DK variant they are not secure.** OP-TEE's DK file marks both
+  `RIF_NSEC`, CID0 and CID1 read/write (O:`...-rif.dtsi:989`, `:993`), so a
+  non-secure CID0 master would pass. The reasons the framebuffer still stays
+  out [D]: (a) they are the areas ST's configuration reserves for a
+  *secured* LTDC layer 3 and a rotation buffer; Linux hides layer 3
+  as "reserved for secure application" when RIFSC 120 is not granted
+  (section "The LTDC", L:`ltdc.c:2445-2465`), and on any other variant of
+  OP-TEE's DT (secure or CID-filtered) regions 13 and 14 become secure or
+  CID-limited, so an image that uses them works only on this DK file;
+  (b) the EV1 board points the LTDC's `rotation-memory` at the second area
+  (L:`stm32mp257f-ev1.dts:580`), so the area is owned by a driver feature
+  we do not use but ST's tree would, and a later Linux boot of the same
+  board assumes it is free; (c) they are only 24 MiB and are the top of the
+  map, where U-Boot relocates (board file `:13-24`), while the region 9
+  range above is large and free. None of these is a hardware measurement.
+
+### 4. Where the image lives and the proposed framebuffer
+
+| Range | What | Source |
+| --- | --- | --- |
+| 0x84000000 - 0x9fffffff | System RAM, U-Boot's load addresses (kernel 0x84000000/0x8a000000, FDT 0x90000000, ramdisk 0x90400000) | `driver/boards/st/stm32mp257f_dk/stm32mp257f_dk_stm32mp257fxx_a35.dts:10-24`, `:36-41` |
+| 0xa0000000 - 0xaFFFFFFF | **our image**, `zephyr,sram`, 256 MiB, link and load address | board `.dts:22-24`, `:44-47`; `tools/board-stm32mp2.sh:189-190`, `:449-456` (image footprint is rejected above `LOAD_END` 0xb0000000) |
+| 0xb0000000 - 0xfa7fffff | free System RAM (RISAF4 region 9) | this section |
+| 0xfa800000 - 0xfe7fffff | GPU carveout, `no-map` (region 10) | board `.dts:55-68` |
+| 0xfe800000 - 0xffffffff | LTDC secure-layer areas (regions 13, 14), not used | above |
+
+**Proposal.**
+
+- **LTDC test pattern and display buffers:** base **0xb0000000**, 32 MiB
+  reserved, declared `no-map` in the probe's own overlay (not the board file).
+  It is directly past `LOAD_END`, so the load script can never overlap it,
+  inside region 9 (CID0/1, non-secure, read/write), clear of U-Boot's low
+  load addresses and of its relocation at the top of RAM (board file `:13-24`),
+  and below 4 GiB, so the LTDC's 32-bit `CFBAR` reaches it [D].
+  - 1280x720 XRGB8888: pitch 5120 B, 3 686 400 B (0x384000) per frame:
+    frame 0 at 0xb0000000, frame 1 at 0xb0400000.
+  - 1920x1080 XRGB8888: pitch 7680 B, 8 294 400 B (0x7E9000) per frame:
+    frame 0 at 0xb0000000, frame 1 at 0xb0800000 (8 MiB steps; each fits
+    with 94 208 B to spare).
+  - Base is 4 KiB aligned and each pitch a multiple of 64 B, the stricter of
+    the two alignments the repository already asserts for the GPU side
+    (`driver/samples/zephyr/gc_triangle/src/main.c:272-276`); the LTDC's own
+    requirement is not in any source read (RM0457).
+- **GPU-rendered frame (gc_triangle's target):** leave it in the carveout
+  (region 10, same access) and point `L1CFBAR` at the address
+  gc_triangle prints (`gc_triangle: linear: ... phys 0x...`,
+  `gc_triangle/src/main.c:38`), as `CONFIG_GC_TRIANGLE_LINEAR_OUT_ADDR` = 0
+  does; or, to keep the LTDC's pitch fixed, set that option to 0xb0000000 (it
+  imports a 64-byte aligned, below-4-GiB, non-secure address, and
+  `CONFIG_GC_TRIANGLE_LINEAR_OUT_PITCH` must be a multiple of 64; Kconfig
+  `:57-66`). Both ranges are readable and writable for the GPU and the
+  LTDC by the table. The carveout is the better choice: the GPU driver already
+  maps it, and an address in it must lie past what the pool hands out
+  (Kconfig `:64-66`).
+- **Not** inside `zephyr,sram` (cacheable, the heap), not 0xfe800000 and up.
+
+**Cache maintenance.** The LTDC and the GPU are not cache-coherent with the
+A35 in any source read (pre-study Q14, "Coherence is in no tree",
+`docs/notes/pre-study-stm32mp257f-dk.md:640-641`). So:
+(1) Map the framebuffer **non-cacheable** (`K_MEM_CACHE_NONE`, as every other
+device or carveout mapping of this image, e.g. `gpu_vivante_gc_rust.c:231`,
+`tools/probes/stm32mp257f_dk/mp2_gpu/src/main.c:88`): the CPU then writes
+straight to DDR, a `dsb sy` before the LTDC is enabled or the address
+register reloaded is the only barrier needed. (2) If it is mapped cacheable
+(the default for RAM under `zephyr,sram`), the CPU must clean the written
+range to the point of coherency (`sys_cache_data_flush_range`, `dc cvac` +
+`dsb sy`) before the reload, and must not write the buffer again while the
+LTDC scans it without repeating that. (3) After the GPU writes a frame the
+LTDC needs no maintenance (it reads DDR), but the CPU must **invalidate**
+(`dc ivac`, `sys_cache_data_invd_range`) before it reads the GPU's frame, as
+gc_triangle does (`gc_render_cache_flush`, `main.c:313`). (4) No stale dirty
+line may exist for the buffer before the first LTDC read: U-Boot hands over
+with caches off (`tools/board-stm32mp2.sh:37-40`), so nothing of ours is dirty
+at entry; the first frame written non-cacheable never is.
+
+### 5. What only the board can confirm (registers state-probe reads)
+
+All read-only, from EL2 non-secure; any read that bus-errors is itself the
+answer (the entry is secure to us).
+
+| # | Read | Answer |
+| --- | --- | --- |
+| 1 | `RIFSC_RIMC_ATTRn` = RIFSC 0x42080000 + 0xC10 + 4n, for n = 0, 9, 11, 12, 13 (and all 16) | `CIDSEL` bit 2, `MCID` bits 6:4, `MSEC` bit 8, `MPRIV` bit 9. Expected: n = 9 `CIDSEL` 0, MSEC 0; n = 11 to 13 `CIDSEL` 1, MCID 0, MSEC 0, MPRIV 1 (the DK file). Which of 11 to 13 is the LTDC: the one whose value changes when the LTDC reads (compare before and after the first frame), or RM0457 |
+| 2 | `RIFSC_RIMC_CR` (RIFSC + 0xC00) | `GLOCK` bit 0, `TDCID` bits 6:4 (O:`stm32_rifsc.c:30`, `:73-74`) |
+| 3 | `PERx_CIDCFGR` = RIFSC + 0x100 + 8x for x = 79 (GPU), 80, 119, 120, 121 (LTDC) | `CFEN` 0 expected, so inherited CID = 0 |
+| 4 | `RISAF4_REGn_CFGR/STARTR/ENDR/CIDCFGR` = 0x420D0000 + 0x40 + 0x40 n + {0, 4, 8, 0xC} for n = 9, 10, 13, 14, 15 (and 1 to 8) | `BREN`, `SEC` 0 for the non-secure ones; start/end as the table (offset from 0x80000000); `CIDCFGR` 0x00030003 (read 0,1; write 0,1). A bus error means RISAF4's register page is secure to us (then only SCMI/OP-TEE can say) |
+| 5 | `RISAF4_SR` (+0x04), `_IASR` (+0x08), `_IAESR0/1` (+0x20, +0x28), `_IADDR0/1` (+0x24, +0x2C) | after the first LTDC frame: an illegal-access record names the failing address and CID (O:`stm32_risaf.c:26-32`) |
+| 6 | `LTDC_L1CFBAR` / `_CFBLR` / `_CFBLNR` readback, `LTDC_CDSR`, and the LTDC's FIFO underrun interrupt flag | the buffer address landed; a DMA that is denied shows as an underrun or a constant colour [D] |
+| 7 | `GPU` (RIFSC 79) entry and the first GPU write | gc_triangle's `phys` readback verifies the GPU side; the same RISAF4 record (item 5) names a denied GPU write |
+| 8 | the image's own loader: `md.l 0xb0000000` from U-Boot (non-secure, CID0 read) | reads back what a CPU write left; shows the region is real DDR and not a fault |
+
 ## Open questions for the board
 
 Each is a question with what answers it; the state probe (item state-probe)
