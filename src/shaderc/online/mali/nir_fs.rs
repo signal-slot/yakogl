@@ -6073,11 +6073,17 @@ pub fn layout(f: &mut Fs<'_>, m: &Module<'_>, order: Option<super::link::Varying
      * lanes in slots of their own, a layout no reference draws beside
      * interpolated ones (nir.rs refuses the pair's vertex shader too) */
     let (mut flat, mut smooth) = (false, false);
+    /* the lanes laid out, by the first vertex lane of their value
+     * (`deduplicate_outputs`, nir_opt_varyings.c:3253-3420, in scalar slot
+     * order: the first kept, the others read from it; fsload_dup_swz's
+     * q.x is p.y): (that lane, slot, lane) */
+    let mut placed = [((0u8, 0u8), 0u8, 0u8); 4 * MAX_VARYINGS];
+    let mut nplaced = 0;
     for at in &lay[..n] {
         let loc = at.location as usize & 15;
         let first = s;
         let full = (1u8 << at.comps) - 1;
-        let keep = if whole[loc] {
+        let mut keep = if whole[loc] {
             let konst = |c: u8| f.prec.consts.get(at.location, c).is_some();
             (0..at.comps).filter(|&c| !konst(c)).fold(read[loc], |m, c| m | 1 << c)
         } else {
@@ -6085,6 +6091,17 @@ pub fn layout(f: &mut Fs<'_>, m: &Module<'_>, order: Option<super::link::Varying
         };
         for comp in 0..at.comps {
             if keep & (1 << comp) == 0 {
+                continue;
+            }
+            let class = f.prec.consts.class(at.location, comp);
+            if let Some(&(_, slot, lane)) = placed[..nplaced].iter().find(|x| x.0 == class) {
+                /* a lane equal to one laid out: read from it, not stored */
+                keep &= !(1 << comp);
+                if read[loc] & (1 << comp) != 0 {
+                    used[slot as usize] |= 1 << lane;
+                    first_read[slot as usize] = first_read[slot as usize].min(f.var_key[loc]);
+                    f.lane_of[loc][comp as usize] = Some((slot, lane));
+                }
                 continue;
             }
             let declared = m
@@ -6098,6 +6115,8 @@ pub fn layout(f: &mut Fs<'_>, m: &Module<'_>, order: Option<super::link::Varying
             }
             let (slot, lane) = ((s / 4) as usize, (s % 4) as u8);
             *held.get_mut(slot).ok_or(MaliError::VaryingLocation)? |= 1 << lane;
+            *placed.get_mut(nplaced).ok_or(MaliError::VaryingLocation)? = (class, slot as u8, lane);
+            nplaced += 1;
             if read[loc] & (1 << comp) != 0 {
                 used[slot] |= 1 << lane;
                 first_read[slot] = first_read[slot].min(f.var_key[loc]);

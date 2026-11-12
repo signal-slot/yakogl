@@ -2070,37 +2070,16 @@ fn colour_lanes_are_converted_at_the_store_as_mesa_26_2_1() {
     assert!(failed.is_empty(), "{} of {} differ:\n{}", failed.len(), cases.len(), failed.join("\n"));
 }
 
-/// Two equal lanes of a varying the link keeps whole: Mesa's link merges
-/// them (`nir_opt_varyings`' deduplication; fsload_dup.expect.json loads
-/// `.v2` and stores two lanes), which the link here does not do, so the
-/// program's vertex shader is refused by name (`VaryingDuplicate`), not
-/// built with the duplicated lane.
+/// Two lanes of equal value: Mesa's link keeps the first in the layout's
+/// order and reads the other from it (`deduplicate_outputs`,
+/// nir_opt_varyings.c:3253-3420). fsload_dup's `a.z` is `a.x` (`.v2`, two
+/// stores); fsload_dup_swz's q is p swizzled, so q.x is read from p.y
+/// (`.v2`, one `V2F32_TO_V2F16`).
 #[test]
-fn a_duplicated_lane_of_a_varying_kept_whole_is_refused_at_the_link() {
-    let (vs, fs, json) = (td!("fsload_dup.vert"), td!("fsload_dup.frag"), td!("fsload_dup.expect.json"));
-    let r = region(json, "fs.fragment").expect("fs.fragment");
-    assert!(text(r.words[0]).starts_with("LD_VAR_BUF_IMM.f32.slot0.v2"), "{}", text(r.words[0]));
-    let _k = store::test_keep();
-    let consts = store::with_scratch(|s| super::vs_constants(vs.as_bytes(), s))
-        .expect("the scratch arena is free")
-        .expect("the vertex shader's constant lanes");
-    let f = store::with_scratch(|s| {
-        super::compile_fs_for_vs(fs.as_bytes(), consts, s, store::keep()).map(|(sh, _)| stage_of(&sh))
-    })
-    .expect("the scratch arena is free")
-    .expect("the fragment shader compiles for the vertex shader");
-    let pr = super::fragment_reads(&f.info.shader()).expect("the record's moved expressions encode");
-    let r = store::with_scratch(|s| {
-        let pr = super::reads_at_vertex_locations(&pr, fs.as_bytes(), vs.as_bytes(), s)
-            .expect("both stages lower")
-            .expect("every read is a vertex output");
-        super::compile_vs_for_reads(vs.as_bytes(), pr.reads(), pr.moved(), s, store::keep()).map(|_| ())
-    })
-    .expect("the scratch arena is free");
-    match r {
-        Err(CompileError::BackEnd(codegen::BackEndError::Mali(e))) => assert_eq!(e, MaliError::VaryingDuplicate),
-        other => panic!("the vertex shader is not refused by name: {other:?}"),
-    }
+fn equal_varying_lanes_are_merged_as_mesa_26_2_1() {
+    check_linked_for("fsload_dup", td!("fsload_dup.vert"), td!("fsload_dup.frag"), td!("fsload_dup.expect.json"));
+    let (vs, fs, json) = (td!("fsload_dup_swz.vert"), td!("fsload_dup_swz.frag"), td!("fsload_dup_swz.expect.json"));
+    check_linked_for("fsload_dup_swz", vs, fs, json);
 }
 
 const SEL_U_FAU65: &str = td!("sel_u_fau65.vert");
