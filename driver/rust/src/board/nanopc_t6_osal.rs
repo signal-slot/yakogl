@@ -91,7 +91,7 @@ use super::nanopc_t6_submit::{
     self as z4, GroupBacking, GroupUp, HeapPlace, Mapping, McuBacking, Region, SubmitUp, Z4Mem, HEAP_CTX_VA,
     HEAP_POOL_SIZE, LATEST_FLUSH_ID, MAX_HEAP_CHUNKS, QUEUE_VM_BYTES, RING_SIZE,
 };
-use crate::errno::{EBUSY, EINVAL, EIO, ENOMEM, ENOSPC, ENOTSUP};
+use crate::errno::{EBUSY, EINVAL, EIO, ENOMEM, ENOSPC, ENOTSUP, ETIMEDOUT};
 use crate::gpu::mali::heap::{
     self, Allocation, HeapError, HeapMemory, HeapObject, HeapParams, HeapParts, HeapPool, OsalMaliHeap,
 };
@@ -373,6 +373,34 @@ fn set(map: &mut [u64], i: usize, on: bool) {
         map[i / 64] |= 1 << (i % 64);
     } else {
         map[i / 64] &= !(1 << (i % 64));
+    }
+}
+
+/// What [`Osal::shutdown`] did.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Shutdown {
+    /// CS 0's stop and CSG 0's terminate.
+    pub ended: Ended,
+    /// The GPU's L2 and LSC cleaned after an acknowledged end
+    /// ([`Osal::clean_caches`]); false when the end was refused or the
+    /// clean was.
+    pub cleaned: bool,
+}
+
+impl Shutdown {
+    /// The C entry's answer (`yd_t6_osal_shutdown`): 0 when the group was
+    /// stopped, terminated and the caches cleaned; `-EIO` when the stop or
+    /// the terminate was refused (the group may still run, the memory is
+    /// kept); `-ETIMEDOUT` when the group ended but the clean was refused
+    /// (the memory is kept).
+    pub fn code(&self) -> i32 {
+        if self.ended.stop.is_err() || self.ended.terminate.is_err() {
+            -EIO
+        } else if !self.cleaned {
+            -ETIMEDOUT
+        } else {
+            0
+        }
     }
 }
 
@@ -787,10 +815,11 @@ impl Osal {
     /// CS 0 is stopped and CSG 0 terminated ([`sched::stop_and_terminate`])
     /// at once, and a kick still not complete is lost. Later submits and
     /// waits are `-EIO`; frees go on (nothing runs: every page held comes
-    /// back). The memory stays the image's. Both ends' results; `None` when
+    /// back). The memory stays the image's. Both ends' results and whether
+    /// the GPU caches were cleaned after them ([`Shutdown`]); `None` when
     /// the group is not up, already shut down, or dead (a dead OSAL's group
     /// needs the GPU reset, not a terminate).
-    pub fn shutdown(&mut self, m: &impl Mmio, delay_us: &mut impl FnMut(u32)) -> Option<Ended> {
+    pub fn shutdown(&mut self, m: &impl Mmio, delay_us: &mut impl FnMut(u32)) -> Option<Shutdown> {
         if !self.runs() {
             return None;
         }
@@ -805,14 +834,18 @@ impl Osal {
         }
         self.down = true;
         self.unended = ended.terminate.is_err();
+        let mut cleaned = false;
         if !self.unended {
-            if let Err(r) = self.clean_caches(m, delay_us) {
-                self.unended = true;
-                self.stop(r);
+            match self.clean_caches(m, delay_us) {
+                Ok(()) => cleaned = true,
+                Err(r) => {
+                    self.unended = true;
+                    self.stop(r);
+                }
             }
         }
         self.drain();
-        Some(ended)
+        Some(Shutdown { ended, cleaned })
     }
 
     /// The GPU's L2 and LSC cleaned and invalidated after the group's end,
