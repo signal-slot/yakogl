@@ -367,10 +367,11 @@ mod tests {
     /// tri_varying.frag with `vcol` declared and not read.
     const UNUSED_FS: &str =
         "precision mediump float; varying vec3 vcol; void main(){ gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0); }";
-    /// tri_varying.frag reading `vcol.y` only: Mesa's link keeps that
-    /// one component (at offset 0, nir_fs.rs `layout`).
+    /// tri_varying.frag reading `vcol.y` only, at highp: Mesa's link keeps
+    /// that one component (at offset 0, nir_fs.rs `layout`; a mediump one
+    /// is loaded whole, fsload_v3_one.expect.json).
     const PART_FS: &str =
-        "precision mediump float; varying vec3 vcol; void main(){ gl_FragColor = vec4(vcol.y, 0.5, 0.25, 1.0); }";
+        "precision highp float; varying vec3 vcol; void main(){ gl_FragColor = vec4(vcol.y, 0.5, 0.25, 1.0); }";
     /// tri.vert with `vcol` declared and not written.
     const UNWRITTEN_VS: &str =
         "attribute vec2 pos; varying vec3 vcol; void main(){ gl_Position = vec4(pos, 0.0, 1.0); }";

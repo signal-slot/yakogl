@@ -130,8 +130,14 @@ pub struct VaryingAt {
 /// fragment shader that declares them in another order lays them out
 /// otherwise, and the link compiles it again with its reads in the vertex
 /// shader's order (link.rs `VaryingOrder`).
+///
+/// A matrix is declared once per column, and sorted by the components of
+/// the whole matrix (`glsl_without_array(var->type)`, :2697): a mat2 as a
+/// vec4, before a vec2 (the shim's mat2_v2b: `vec4(t.x, m[0].y, ..)` of a
+/// `vec2 t` declared first loads m[0] in lanes 0-1, t in 2-3); `decls`
+/// carry each declaration's GL type for it.
 pub fn generic_layout(
-    decls: impl Iterator<Item = (u8, u8)>,
+    decls: impl Iterator<Item = (u8, u8, u16)>,
     out: &mut [VaryingAt; MAX_VARYINGS],
 ) -> Result<usize, MaliError> {
     let rank = |comps: u8| match comps % 4 {
@@ -140,8 +146,9 @@ pub fn generic_layout(
         1 => 2,
         _ => 3,
     };
+    let mut ranks = [0u8; MAX_VARYINGS];
     let mut n = 0;
-    for (location, comps) in decls {
+    for (location, comps, gl_type) in decls {
         if n >= MAX_VARYINGS {
             return Err(MaliError::VaryingLocation);
         }
@@ -149,10 +156,13 @@ pub fn generic_layout(
             /* the front end's varyings are 1 to 4 components */
             return Err(MaliError::Defect(super::Defect::IrIndex));
         }
+        let r = rank(matrix_comps(gl_type).unwrap_or(comps));
         /* a stable insertion: after every one of the same or a lower rank */
-        let at = out[..n].iter().position(|v| rank(v.comps) > rank(comps)).unwrap_or(n);
+        let at = ranks[..n].iter().position(|&x| x > r).unwrap_or(n);
         out.copy_within(at..n, at + 1);
+        ranks.copy_within(at..n, at + 1);
         out[at] = VaryingAt { location, comps, offset: 0 };
+        ranks[at] = r;
         n += 1;
     }
     let mut component = 0u16;
@@ -161,6 +171,21 @@ pub fn generic_layout(
         component += v.comps as u16;
     }
     Ok(n)
+}
+
+/// The components of a float matrix type (`glsl_get_component_slots`);
+/// None for any other type.
+fn matrix_comps(gl_type: u16) -> Option<u8> {
+    use crate::gl::consts as gl;
+    Some(match gl_type as u32 {
+        gl::GL_FLOAT_MAT2 => 4,
+        gl::GL_FLOAT_MAT3 => 9,
+        gl::GL_FLOAT_MAT4 => 16,
+        gl::GL_FLOAT_MAT2x3 | gl::GL_FLOAT_MAT3x2 => 6,
+        gl::GL_FLOAT_MAT2x4 | gl::GL_FLOAT_MAT4x2 => 8,
+        gl::GL_FLOAT_MAT3x4 | gl::GL_FLOAT_MAT4x3 => 12,
+        _ => return None,
+    })
 }
 
 /// Emit `SPLIT v` into `n` scalars; returns them.

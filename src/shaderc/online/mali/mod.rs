@@ -255,6 +255,12 @@ pub enum MaliError {
     Interpolation,
     ColourForm,
     ColourPair,
+    /// A fragment shader's varying load of a form no reference draws: a
+    /// mediump varying beside a colour lane whose precision decides the
+    /// load and is not measured, the lanes of an aligned pair converted
+    /// apart, or conversions out of the order Mesa makes them (nir_fs.rs
+    /// `kept_whole`, `select`).
+    FsVaryingLoad,
     /// A pair of a varying lane and the constant 0.0, which Mesa selects as
     /// `U16_TO_U32` (bi_lower_mkvec_swz.c:256-257), an op not transcribed.
     ColourZeroHalf,
@@ -349,6 +355,7 @@ impl MaliError {
         MaliError::Interpolation,
         MaliError::ColourForm,
         MaliError::ColourPair,
+        MaliError::FsVaryingLoad,
         MaliError::ColourZeroHalf,
         MaliError::Fp16Inexact,
         MaliError::FauPage,
@@ -482,6 +489,9 @@ impl MaliError {
                 "Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet"
             }
             MaliError::ColourPair => "Valhall: a colour pair of a constant then a varying lane is not lowered yet",
+            MaliError::FsVaryingLoad => {
+                "Valhall: a fragment varying load or conversion of a form no reference draws (a colour lane of unmeasured precision beside a mediump varying, an aligned pair converted apart, lanes converted out of Mesa's order) is not lowered yet"
+            }
             MaliError::ColourZeroHalf => {
                 "Valhall: a colour pair of a varying lane and 0.0 (Mesa's U16_TO_U32) is not lowered yet"
             }

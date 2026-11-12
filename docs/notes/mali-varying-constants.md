@@ -328,15 +328,18 @@ shader's cube look-up with a bias is item cubebias101's.
    stored or read beside an interpolated one is refused
    (`VaryingNotFromAttribute`): the link packs flat lanes in slots of their
    own, a layout no reference draws.
-3. **A packed matrix varying is read whole.** A matrix varying of columns
-   narrower than a vec4 (mat2: the GLSL linker's `packed:v_m[0],v_m[1]`)
-   any lane of which the colour reads is read whole, every column
-   (`nir_fs.rs` `layout`), so 78's vertex shader stores four words and the
-   fragment shader loads `.v4`. The word of two lanes of that load that are
-   no aligned pair is `Leaf::Lanes`: each lane converted alone
-   (`FADD.f32 rN.h0, rM^, 0x0.neg`) then `MKVEC.v2i16 x.h0, y.h0`. Only for a
-   load the link keeps whole: `v.xzyw` of a compacted load stays
-   `ColourForm`. 78's fragment shader alone (no link) also reads
+3. **A matrix varying is kept per column.** Each column of a mediump
+   matrix varying that the colour reads a lane of is kept whole (its
+   `f2fmp`, `nir_fs.rs` `kept_whole`; the matrix sorts by its own
+   components, a mat2 as a vec4, select.rs `generic_layout`), so 78's
+   vertex shader stores four words (both columns read) and the fragment
+   shader loads `.v4`; a mat2 of which one column is read loads `.v2`
+   (fsload_mat2), and a highp one the lane read (fsload_hp_mat2). The word
+   of two lanes of that load that are no aligned pair is `Leaf::Lanes`:
+   each lane converted alone (`FADD.f32 rN.h0, rM^, 0x0.neg`) then
+   `MKVEC.v2i16 x.h0, y.h0`. Only for a load that holds lanes no one reads
+   (`vec4(v.x, v.z, ..)`, cmp_xz.expect.json): `v.xzyw` of a load whose
+   every lane is read stays `ColourForm`. 78's fragment shader alone (no link) also reads
    `v_after.z`, which splits the matrix over two slots; the word then takes
    its two lanes from two such loads. That is only the shader object's
    record, which glCompileShader needs (the link reads both records,

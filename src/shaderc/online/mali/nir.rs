@@ -3148,7 +3148,7 @@ pub fn build<'s>(
      * below) and merges two lanes of equal value (sel_v_duplicate, refused:
      * the layout would not be this stage's alone) */
     let decls = m.outputs.iter().filter(|o| o.kind == IoKind::Varying);
-    vs.nvar = generic_layout(decls.clone().map(|o| (o.location, o.components)), &mut vs.varyings)?;
+    vs.nvar = generic_layout(decls.clone().map(|o| (o.location, o.components, o.gl_type)), &mut vs.varyings)?;
     /* a shader alone that stores a constant lane is built for its own lanes
      * less its constant ones, the layout the link's fragment shader reads
      * once they are folded into it (codegen.rs `compile_vs_without_consts`,
