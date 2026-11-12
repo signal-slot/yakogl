@@ -273,9 +273,13 @@ pub const YD_T6_EARLY_VHE_EXIT: u64 = 1 << 0;
 /// image was entered at, before any C code: "Stack is not yet available",
 /// "x23, x24 and x25 must be preserved"). `__start` has already loaded `x24`
 /// with the top of `z_interrupt_stacks`, which `__reset_prep_c` makes the
-/// stack right after the hook; the entry makes it the stack now, keeps the
-/// return address in `x22` (callee-saved, unused by `__start` and
-/// `__reset_prep_c`), and calls [`yd_t6_early_c`] with the flags in `x0`.
+/// stack right after the hook. The entry first turns off the MMU and the
+/// caches when U-Boot's `go` left them on, with no stack and no load or
+/// store (board::nanopc_t6_go, its text `t6_go_off_asm`; with them already
+/// off, as after kexec, it changes nothing); then it makes `x24` the stack,
+/// keeps the return address in `x22` (callee-saved, unused by `__start` and
+/// `__reset_prep_c`), and calls [`yd_t6_early_c`] with the flags in `x0`
+/// and what the first part found in `x1`..`x3`.
 ///
 /// `yd_t6_el2_vectors` is the EL2 vector table [`yd_t6_early_c`] installs:
 /// every one of the 16 entries passes its offset to [`yd_t6_el2_trap`] on a
@@ -288,6 +292,7 @@ mod early {
     use super::YdDwWdtArm;
     use crate::aarch64;
     use crate::board::nanopc_t6_early::{self as banner, El2Entry, El2Trap, UART2_PHYS};
+    use crate::board::nanopc_t6_go::{self as go, t6_go_off_asm};
     use crate::ip::ns16550_tx::Tx;
     use crate::mmio::Hw;
 
@@ -305,6 +310,7 @@ mod early {
         ".type yd_t6_early_entry, %function",
         ".balign 4",
         "yd_t6_early_entry:",
+        t6_go_off_asm!(),
         "    mov x22, x30",
         "    mov sp, x24",
         "    bl {early}",
@@ -355,13 +361,15 @@ mod early {
     /// `T6:A`, and at EL2: `VBAR_EL2` to the trap reporter first (any EL2
     /// exception after this is reported), then, with
     /// [`super::YD_T6_EARLY_VHE_EXIT`], `HCR_EL2` to
-    /// [`aarch64::HCR_EL2_AT_ENTRY`].
+    /// [`aarch64::HCR_EL2_AT_ENTRY`]. Then `T6:G` when the entry turned off
+    /// the MMU and caches `go` left on: `go_sctlr` the `SCTLR_EL2` it found
+    /// (0 when it found them off), `start`..`end` the range it cleaned.
     ///
     /// # Safety
     /// Only from `yd_t6_early_entry`, as reset.S's plat_prep_c hook: MMU off,
     /// uart2 as the previous stage left it, `.bss` not yet used.
     #[no_mangle]
-    pub unsafe extern "C" fn yd_t6_early_c(flags: u64) {
+    pub unsafe extern "C" fn yd_t6_early_c(flags: u64, go_sctlr: u64, start: u64, end: u64) {
         // SAFETY: with the MMU off every address is the physical one, and
         // UART2_PHYS is uart2's 32-bit registers.
         let hw = unsafe { Hw::new() };
@@ -369,6 +377,7 @@ mod early {
         let el = aarch64::current_el();
         if el != 2 {
             banner::banner_a_other(&mut tx, el);
+            go::print_go(&mut tx, go_sctlr, start, end);
             return;
         }
         let vbar_found = aarch64::read_vbar_el2();
@@ -392,6 +401,7 @@ mod early {
             vbar_now: aarch64::read_vbar_el2(),
         };
         banner::banner_a_el2(&mut tx, &e);
+        go::print_go(&mut tx, go_sctlr, start, end);
     }
 
     /// `T6:X`, then halt.
