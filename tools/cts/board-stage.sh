@@ -14,6 +14,7 @@
 #   tools/cts/board-stage.sh x2 deqp          the Armadillo-X2's dEQP-GLES2 tree image (build only)
 #   tools/cts/board-stage.sh x2 gles3         the Armadillo-X2's dEQP-GLES3 tree image (build only)
 #   tools/cts/board-stage.sh stm32mp257f-dk common   the STM32MP257F-DK's gl_test image (build only)
+#   tools/cts/board-stage.sh stm32mp257f-dk deqp     the STM32MP257F-DK's dEQP-GLES2 tree image (build only)
 #
 # The STM32MP257F-DK (the name tools/board-stm32mp2.sh prints in its verdict
 # line) is staged as builds only, as x2 is: no board command, no BOARD_HOST,
@@ -26,9 +27,20 @@
 # (the runner refuses an image without it). The image ends at
 # build/common/stm32mp257f-dk-<sha8>/zephyr/zephyr.bin (log: the same name with
 # .log); running it is `tools/board-stm32mp2.sh run`, a board step held by a
-# runner. deqp, ms4 and gles3 are refused (exit 2): the DK's dEQP stage comes
-# with a later item. The dependency layout is the imx8mp one without
-# IMX8MP_OUT and GLMARK2_SRC: the three entries every image needs.
+# runner. ms4 and gles3 are refused (exit 2). The dependency layout is the imx8mp
+# one without IMX8MP_OUT and GLMARK2_SRC: the three entries every image needs.
+# `deqp` builds driver/samples/zephyr/deqp for the same board with the whole
+# dEQP-GLES2 table (tools/cts/imx8mp-full-tree.txt, 29 rows, one image, the
+# x2 deqp shape) to build/deqp/stm32mp257f-dk-<sha8>/zephyr/zephyr.bin (log:
+# the same name with .log). Its stage 1 is the DK's own (-mcpu=cortex-a35, the
+# sample's README), not DEQP_STAGE1: DEQP_STAGE1_DK names it (no deps.toml
+# entry; a stage 1 without build/modules/gles2/libdeqp-gles2-package.a stops
+# the stage, exit 2). The built image must fit tools/board-stm32mp2.sh's
+# limits, else the stage says which one it breaks and stops with exit 2 (the
+# runner is not changed): zephyr.bin at most 34 MiB (DK_BIN_MAX, the free
+# space of the card's bootfs) and the image's allocated sections inside
+# 0xa0000000..0xb0000000 (readelf of zephyr.elf). The run is not this stage's:
+# `tools/board-stm32mp2.sh run`, with RUN_BOUND=600 or more.
 #
 # The X2 (the Armadillo-X2, tools/board.sh's kexec-dev development board) is
 # staged as builds only: this stage runs no board command for x2. It reads no
@@ -130,7 +142,8 @@ needed_deps() {
     [ "$layout" = am62p ] && echo PVR_FW_BLOB
     [ "$layout" = imx8mp ] && [ "$board" != stm32mp257f-dk ] && echo IMX8MP_OUT
     if [ "$what" != common ] && ! { [ "$what" = gles3 ] && [ "$board" = x2 ]; }; then
-        if [ "$layout" = imx8mp ]; then echo DEQP_STAGE1; else echo DEQP_WORK; fi
+        if [ "$board" = stm32mp257f-dk ]; then :   # DEQP_STAGE1_DK, checked by the stage itself
+        elif [ "$layout" = imx8mp ]; then echo DEQP_STAGE1; else echo DEQP_WORK; fi
     fi
     return 0
 }
@@ -159,7 +172,7 @@ check_deps() {
 }
 [ "${BOARD_STAGE_SOURCE_ONLY:-}" = 1 ] && return 0 2>/dev/null
 
-usage() { echo "usage: tools/cts/board-stage.sh am62p|imx8mp|pi4 common|deqp|ms4|gles3 | x2 common|deqp|gles3 | stm32mp257f-dk common" >&2; exit 2; }
+usage() { echo "usage: tools/cts/board-stage.sh am62p|imx8mp|pi4 common|deqp|ms4|gles3 | x2 common|deqp|gles3 | stm32mp257f-dk common|deqp" >&2; exit 2; }
 die() { echo "board-stage.sh: $1" >&2; exit "${2:-2}"; }
 [ $# -eq 2 ] || usage
 board=$1 what=$2
@@ -172,7 +185,7 @@ stm32mp257f-dk) layout=imx8mp key=DK ;;   # the three zephyr entries only (neede
 *) usage ;;
 esac
 if [ "$board" = stm32mp257f-dk ]; then
-    [ "$what" = common ] || die "$what is not staged for the stm32mp257f-dk: only 'common' (its gl_test image, build only); the DK's deqp comes in a later item, ms4 and gles3 are not its sets"
+    case "$what" in common | deqp) ;; *) die "$what is not staged for the stm32mp257f-dk: only 'common' (its gl_test image) and 'deqp' (its dEQP-GLES2 tree image), both build only; ms4 and gles3 are not its sets" ;; esac
 fi
 case "$what" in common | deqp) ;; ms4 | gles3)
     [ "$board:$what" = x2:ms4 ] && die "ms4 is the AM62P's tree; the x2 stage builds the gl_test image, the dEQP-GLES2 and the dEQP-GLES3 tree images, and runs no board"
@@ -225,10 +238,25 @@ fi
 # stm32mp257f-dk common: the build command, before the layout is read
 DK_BUILD=build/common/stm32mp257f-dk-$H8
 DK_ARGS=(-DYAKOGL_WERROR=ON -DCONFIG_GL_TEST_MP2_SET_HEAD=y)
+DK_SAMPLE=gl_test
+DK_STAGE1=${DEQP_STAGE1_DK:-}
+DK_BIN_MAX=$((34 * 1024 * 1024))   # bootfs's free space (tools/board-stm32mp2.sh header)
+DK_WIN_LO=$((0xa0000000)) DK_WIN_HI=$((0xb0000000))   # the runner's load window
+if [ "$board" = stm32mp257f-dk ] && [ "$what" = deqp ]; then
+    DK_BUILD=build/deqp/stm32mp257f-dk-$H8
+    DK_SAMPLE=deqp
+    DK_ARGS=(-DYAKOGL_WERROR=ON "-DDEQP_SRC=${DK_STAGE1:-<DEQP_STAGE1_DK>}/cts" "-DDEQP_BUILD=${DK_STAGE1:-<DEQP_STAGE1_DK>}/build"
+        '-DCONFIG_DEQP_CASE="dEQP-GLES2.info.*"' "-DEXTRA_CONF_FILE=$PWD/$DK_BUILD.table.conf")
+fi
 if [ "$board" = stm32mp257f-dk ] && [ "${BOARD_STAGE_DRY_RUN:-}" = 1 ]; then
-    echo "board-stage.sh: stm32mp257f-dk common at $H8 (dry run: nothing is built; the stage runs no board)"
-    echo "board-stage.sh\$ west build -p always -b stm32mp257f_dk/stm32mp257fxx/a35 -d $DK_BUILD driver/samples/zephyr/gl_test -- -DZEPHYR_MODULES=<modules> -DYAKOGL_DIR=\$PWD ${DK_ARGS[*]}"
+    echo "board-stage.sh: stm32mp257f-dk $what at $H8 (dry run: nothing is built; the stage runs no board)"
+    if [ "$what" = deqp ]; then
+        echo "board-stage.sh: stage 1 at \${DEQP_STAGE1_DK} (the DK's own, -mcpu=cortex-a35; driver/samples/zephyr/deqp/README.md)"
+        echo "board-stage.sh: CONFIG_DEQP_CASE_TABLE from tools/cts/imx8mp-full-tree.txt -> $DK_BUILD.table.conf"
+    fi
+    echo "board-stage.sh\$ west build -p always -b stm32mp257f_dk/stm32mp257fxx/a35 -d $DK_BUILD driver/samples/zephyr/$DK_SAMPLE -- -DZEPHYR_MODULES=<modules> -DYAKOGL_DIR=\$PWD ${DK_ARGS[*]}"
     echo "  -> $DK_BUILD/zephyr/zephyr.bin (arms OP-TEE's watchdog: \"gc_wdog_arm: armed\")"
+    [ "$what" = deqp ] && echo "  limits: zephyr.bin <= $DK_BIN_MAX bytes (bootfs), footprint inside $(printf '0x%x..0x%x' $DK_WIN_LO $DK_WIN_HI) (exit 2 when broken)"
     exit 0
 fi
 
@@ -272,26 +300,57 @@ else
     fi
     [ "$board" = pi4 ] || clear_stale_once   # the Pi 4 boots by tryboot: nothing is staged on its eMMC
 fi
+# dk_build: west build of driver/samples/zephyr/$DK_SAMPLE for the DK into
+# $DK_BUILD (the common and the deqp stage); running it is
+# `tools/board-stm32mp2.sh run`, a board step, never this stage.
+dk_build() {
+    [ -n "${WEST_VENV:-}" ] && PATH=$WEST_VENV/bin:$PATH
+    export ZEPHYR_BASE=$ZEPHYR_WS/zephyr ZEPHYR_TOOLCHAIN_VARIANT=${ZEPHYR_TOOLCHAIN_VARIANT:-zephyr}
+    DK_MODS=$(tools/cts/zephyr-modules.sh "$ZEPHYR_WS") || die "no zephyr module list for $ZEPHYR_WS"
+    mkdir -p "$(dirname "$DK_BUILD")"
+    DK_REPO=$PWD
+    echo "board-stage.sh\$ west build -p always -b stm32mp257f_dk/stm32mp257fxx/a35 -d $DK_BUILD driver/samples/zephyr/$DK_SAMPLE -- ${DK_ARGS[*]}   (log: $DK_BUILD.log)"
+    (cd "$ZEPHYR_WS" && west build -p always -b stm32mp257f_dk/stm32mp257fxx/a35 -d "$DK_REPO/$DK_BUILD" \
+        "$DK_REPO/driver/samples/zephyr/$DK_SAMPLE" -- "-DZEPHYR_MODULES=$DK_MODS" "-DYAKOGL_DIR=$DK_REPO" "${DK_ARGS[@]}") \
+        > "$DK_BUILD.log" 2>&1 < /dev/null || die "DK $DK_SAMPLE image build failed ($DK_BUILD.log)" 1
+    [ -s "$DK_BUILD/zephyr/zephyr.bin" ] || die "DK $DK_SAMPLE build wrote no image ($DK_BUILD.log)" 1
+    grep -aqF 'gc_wdog_arm: armed' "$DK_BUILD/zephyr/zephyr.bin" ||
+        die "DK image has no \"gc_wdog_arm: armed\" (the runner would refuse it): $DK_BUILD/zephyr/zephyr.bin" 1
+    echo "board-stage.sh: DK image: $DK_BUILD/zephyr/zephyr.bin"
+}
+# dk_limits: the built image against the runner's limits (tools/board-stm32mp2.sh
+# header); the first one it breaks is named and stops the stage with exit 2.
+dk_limits() {
+    local bin=$DK_BUILD/zephyr/zephyr.bin elf=$DK_BUILD/zephyr/zephyr.elf size lo hi
+    size=$(stat -c %s "$bin")
+    echo "board-stage.sh: DK image: $size bytes (limit $DK_BIN_MAX: bootfs's free space)"
+    [ "$size" -le "$DK_BIN_MAX" ] ||
+        die "DK dEQP image does not fit: $bin is $size bytes, over bootfs's free space of $DK_BIN_MAX (tools/board-stm32mp2.sh)"
+    [ -f "$elf" ] || die "DK dEQP build wrote no $elf: the footprint cannot be checked against the runner's window" 1
+    # allocated sections: start of the lowest, end of the highest (the heap is noinit, in the footprint)
+    local n name type addr off len es flags a e
+    lo=$((1 << 62)) hi=0
+    while read -r n name type addr off len es flags _; do
+        case "$n" in "["[0-9]*"]") ;; *) continue ;; esac
+        case "$flags" in *A*) ;; *) continue ;; esac
+        a=$((16#$addr)) e=$((a + 16#$len))
+        [ "$a" -gt 0 ] || continue
+        [ "$a" -ge "$lo" ] || lo=$a
+        [ "$e" -le "$hi" ] || hi=$e
+    done < <(readelf -SW "$elf" | sed 's/\[ */[/')
+    [ "$hi" -gt 0 ] || die "DK dEQP build: no allocated section in $elf" 1
+    printf 'board-stage.sh: DK footprint: 0x%x..0x%x, %d MiB (runner window 0x%x..0x%x)\n' \
+        "$lo" "$hi" $(((hi - lo) >> 20)) "$DK_WIN_LO" "$DK_WIN_HI"
+    if [ "$lo" -lt "$DK_WIN_LO" ] || [ "$hi" -gt "$DK_WIN_HI" ]; then
+        die "DK dEQP image does not fit: footprint $(printf '0x%x..0x%x' "$lo" "$hi") is outside the runner's load window $(printf '0x%x..0x%x' "$DK_WIN_LO" "$DK_WIN_HI")"
+    fi
+}
 echo "board-stage.sh: $board $what at $H8 ($(git describe --always --dirty 2>/dev/null || echo unknown))"
-run() { echo "board-stage.sh\$ $*"; "$@"; }
+run(){ echo "board-stage.sh\$ $*"; "$@"; }
 case "$what" in
 common)
     if [ "$board" = stm32mp257f-dk ]; then
-        # gl_test for the DK (the sample's README); running it is
-        # `tools/board-stm32mp2.sh run`, a board step, never this stage.
-        [ -n "${WEST_VENV:-}" ] && PATH=$WEST_VENV/bin:$PATH
-        export ZEPHYR_BASE=$ZEPHYR_WS/zephyr ZEPHYR_TOOLCHAIN_VARIANT=${ZEPHYR_TOOLCHAIN_VARIANT:-zephyr}
-        DK_MODS=$(tools/cts/zephyr-modules.sh "$ZEPHYR_WS") || die "no zephyr module list for $ZEPHYR_WS"
-        mkdir -p build/common
-        DK_REPO=$PWD
-        echo "board-stage.sh\$ west build -p always -b stm32mp257f_dk/stm32mp257fxx/a35 -d $DK_BUILD driver/samples/zephyr/gl_test -- ${DK_ARGS[*]}   (log: $DK_BUILD.log)"
-        (cd "$ZEPHYR_WS" && west build -p always -b stm32mp257f_dk/stm32mp257fxx/a35 -d "$DK_REPO/$DK_BUILD" \
-            "$DK_REPO/driver/samples/zephyr/gl_test" -- "-DZEPHYR_MODULES=$DK_MODS" "-DYAKOGL_DIR=$DK_REPO" "${DK_ARGS[@]}") \
-            > "$DK_BUILD.log" 2>&1 < /dev/null || die "DK gl_test image build failed ($DK_BUILD.log)" 1
-        [ -s "$DK_BUILD/zephyr/zephyr.bin" ] || die "DK gl_test build wrote no image ($DK_BUILD.log)" 1
-        grep -aqF 'gc_wdog_arm: armed' "$DK_BUILD/zephyr/zephyr.bin" ||
-            die "DK image has no \"gc_wdog_arm: armed\" (the runner would refuse it): $DK_BUILD/zephyr/zephyr.bin" 1
-        echo "board-stage.sh: DK image: $DK_BUILD/zephyr/zephyr.bin"
+        dk_build   # gl_test for the DK (the sample's README)
     elif [ "$board" = x2 ]; then
         # the common set's gl_test row for the X2 (the sweep configuration;
         # one case with SEL=n, the set with SEL=256, tools/board.sh x2 run).
@@ -307,6 +366,17 @@ common)
     ;;
 deqp)
     case "$board" in
+    stm32mp257f-dk)
+        # the whole dEQP-GLES2 table as one image (the x2 shape), from the DK's own stage 1
+        [ -f "$DK_STAGE1/build/modules/gles2/libdeqp-gles2-package.a" ] ||
+            die "no stage 1 for the DK at '$DK_STAGE1': set DEQP_STAGE1_DK to the -mcpu=cortex-a35 stage 1 (driver/samples/zephyr/deqp/README.md)"
+        mkdir -p "$(dirname "$DK_BUILD")"
+        printf 'CONFIG_DEQP_CASE_TABLE="%s"\n' "$(grep -vE '^[[:space:]]*(#|$)' tools/cts/imx8mp-full-tree.txt | paste -sd';' -)" > "$DK_BUILD.table.conf"
+        unset DEQP_GL_CONFIG_NAME
+        dk_build
+        dk_limits
+        echo "board-stage.sh: DK dEQP image fits the runner; running it is tools/board-stm32mp2.sh run (RUN_BOUND=600 or more)"
+        ;;
     x2)
         # the whole dEQP-GLES2 tree as one table image (29 rows, selector i);
         # running it is `TREE_IMAGE=$IMX8MP_OUT/x2/deqp-$H8/zephyr/zephyr.bin

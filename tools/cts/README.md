@@ -198,7 +198,7 @@ board's table (or, on the i.MX8MP, one image with the table and a selector).
 
 **ES 3.0 gl_test cases.** An ES 3.0 gl_test image needs `CONFIG_GL_TEST_CASES` for `gl_test`; `tools/cts/common-images.sh --cases 202,203 am62p ...` sets `CONFIG_GL_TEST_CASES` for the gl_test row (the Pi 4's `CONFIG_V3D_GL_TEST_CASE` for one case, `CONFIG_V3D_GL_TEST_CASES` for a list; `--pipe` adds `-pipe` to the compile; use a new `<img-dir>` when the case list changes, a build directory made with other arguments is refused). The expected readings are in the cases themselves (`driver/tools/pvrlab/gl_test.c`): 196 `occl` q0 to q4 `available 1` with 0, 1, 0, 1, 1; 202 `blitconv` 12 / 12; 203 `tfcap` 9 / 9; 204 `srgb` 8 / 8; 205 `mappbo` 15 / 15. Each skips by name in an ES 2.0 context.
 
-Board rules for every run: one GL client per board (check that the board is idle first); images only from commits on origin/main, built from a detached checkout (section 2d), with the commit recorded beside each result; `BOARD_BOOT=uboot-mmc` on the two Verdins, tryboot (board.sh's default) on the Pi 4. The ES 2.0 sign-off runs are one command each, `tools/cts/board-stage.sh <board> common|deqp` (and `am62p ms4`, `am62p gles3`; for the Armadillo-X2 `x2 common|deqp|gles3` build the images only; for the STM32MP257F-DK `stm32mp257f-dk common` builds the gl_test image only); that script's header names the environment.
+Board rules for every run: one GL client per board (check that the board is idle first); images only from commits on origin/main, built from a detached checkout (section 2d), with the commit recorded beside each result; `BOARD_BOOT=uboot-mmc` on the two Verdins, tryboot (board.sh's default) on the Pi 4. The ES 2.0 sign-off runs are one command each, `tools/cts/board-stage.sh <board> common|deqp` (and `am62p ms4`, `am62p gles3`; for the Armadillo-X2 `x2 common|deqp|gles3` build the images only; for the STM32MP257F-DK `stm32mp257f-dk common|deqp` build the gl_test and the dEQP-GLES2 tree images only); that script's header names the environment.
 
 ### The baseline: five groups, one command per board
 
@@ -342,6 +342,7 @@ entry in the list stops the run (exit 2) with the same message as before.
 | `x2 common` | the three of every image and `IMX8MP_OUT`; no `GLMARK2_SRC` (it builds the gl_test image alone) |
 | `x2 deqp` | the three of every image, `IMX8MP_OUT` and `DEQP_STAGE1` |
 | `stm32mp257f-dk common` | the three of every image; no `IMX8MP_OUT`, no `GLMARK2_SRC` |
+| `stm32mp257f-dk deqp` | the three of every image; no `IMX8MP_OUT`, no `DEQP_STAGE1`: its stage 1 is the DK's own, `DEQP_STAGE1_DK` (no `deps.toml` entry), which the stage checks itself (exit 2 when missing) |
 | `x2 gles3` | the three of every image and `IMX8MP_OUT`; no `DEQP_STAGE1`: its stage 1 is the gles3 one, `DEQP_STAGE1_GLES3` (default `$IMX8MP_OUT/deqp-stage1-gles3`, not a `deps.toml` entry), which the stage checks itself (exit 2 when missing) |
 
 `board-stage.sh x2` takes the sets `common`, `deqp` and `gles3`. `x2 ms4` is
@@ -365,7 +366,18 @@ for `stm32mp257f_dk/stm32mp257fxx/a35` (`-DYAKOGL_WERROR=ON`, case 1 alone),
 the image at `build/common/stm32mp257f-dk-<sha8>/zephyr/zephyr.bin`, checked
 for the `gc_wdog_arm: armed` marker the runner requires. It reads no
 `BOARD_HOST` or `BOARD_UART`; running the image is `tools/board-stm32mp2.sh
-run`. `stm32mp257f-dk deqp|ms4|gles3` are refused (exit 2).
+run`. `stm32mp257f-dk ms4|gles3` are refused (exit 2).
+
+`board-stage.sh stm32mp257f-dk deqp` builds the whole dEQP-GLES2 table
+(`tools/cts/imx8mp-full-tree.txt`, 29 rows, one image as for x2) with
+`driver/samples/zephyr/deqp` for the same board, from the DK's own stage 1
+(`-mcpu=cortex-a35`, `driver/samples/zephyr/deqp/README.md`) named by
+`DEQP_STAGE1_DK`; the image is `build/deqp/stm32mp257f-dk-<sha8>/zephyr/zephyr.bin`
+(log: the same name with `.log`). It then holds the image to the runner's
+limits and stops with exit 2, naming the one it breaks, when `zephyr.bin`
+exceeds 34 MiB (bootfs's free space) or the allocated sections (`readelf` of
+`zephyr.elf`) leave `0xa0000000..0xb0000000`. It runs nothing on the board;
+`tools/board-stm32mp2.sh run` does, with `RUN_BOUND=600` or more.
 
 The list is `needed_deps` in `board-stage.sh`; `images-selftest.sh` checks
 both directions against the real `deps.toml`, and against what the builders
