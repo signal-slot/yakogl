@@ -537,4 +537,103 @@ pub(crate) mod tests {
         assert_eq!(write(&s, &h, &[1], &mut |_| {}), Err((SpiRefusal::IdleTimeout, 1)));
         assert_eq!((s.regs.borrow()[&SSIENR], s.regs.borrow()[&SER]), (0, 0));
     }
+
+    /// The mock with at most `cap` frames ever visible in the receive FIFO.
+    struct Capped<'a> {
+        spi: &'a Spi,
+        cap: usize,
+    }
+
+    impl Mmio for Capped<'_> {
+        fn read32(&self, addr: usize) -> u32 {
+            let v = self.spi.read32(addr);
+            if addr - BASE == RXFLR {
+                let taken = self.spi.ops.borrow().iter().filter(|o| o.0 == 'r' && o.1 == RXDR).count();
+                return v.min(self.cap.saturating_sub(taken) as u32);
+            }
+            v
+        }
+        fn write32(&self, addr: usize, val: u32) {
+            self.spi.write32(addr, val)
+        }
+        fn read8(&self, _: usize) -> u8 {
+            unreachable!()
+        }
+        fn write8(&self, _: usize, _: u8) {
+            unreachable!()
+        }
+    }
+
+    #[test]
+    fn write_rx_timeout_carries_the_frames_received_and_clears_the_enable_and_chip_select() {
+        let h = Host { base: BASE, cs: 0, baudr: 200, budget_us: 7 };
+        let s = Spi::new(Box::new(|_| 0));
+        let m = Capped { spi: &s, cap: 2 };
+        let mut slept = 0;
+        // all four frames are sent; only two ever come back
+        assert_eq!(write(&m, &h, &[1, 2, 3, 4], &mut |us| slept += us), Err((SpiRefusal::RxTimeout, 2)));
+        assert_eq!(slept, 7);
+        assert_eq!(*s.sent.borrow(), vec![1, 2, 3, 4]);
+        assert_eq!((s.regs.borrow()[&SSIENR], s.regs.borrow()[&SER]), (0, 0));
+        // the two frames that never became visible are left in the FIFO, not read
+        assert_eq!(s.rxq.borrow().len(), 2);
+    }
+
+    #[test]
+    fn write_idle_timeout_carries_the_status_word_and_clears_the_enable_and_chip_select() {
+        let h = Host { base: BASE, cs: 0, baudr: 200, budget_us: 5 };
+        // busy (bit 0) with other status bits set; idle while disabled is not asked for
+        let s = Spi::new(Box::new(|_| 0));
+        s.regs.borrow_mut().insert(SR, 0x0d);
+        let mut slept = 0;
+        assert_eq!(write(&s, &h, &[9], &mut |us| slept += us), Err((SpiRefusal::IdleTimeout, 0x0d)));
+        assert_eq!(slept, 5);
+        assert_eq!((s.regs.borrow()[&SSIENR], s.regs.borrow()[&SER]), (0, 0));
+        assert!(s.rxq.borrow().is_empty());
+    }
+
+    #[test]
+    fn write_busy_carries_the_status_word_and_leaves_the_controller_untouched() {
+        let h = Host { base: BASE, cs: 0, baudr: 200, budget_us: 5 };
+        let s = Spi::new(Box::new(|_| 0));
+        s.regs.borrow_mut().insert(SSIENR, 1);
+        s.regs.borrow_mut().insert(SER, 1);
+        s.regs.borrow_mut().insert(SR, 0x25);
+        assert_eq!(write(&s, &h, &[1], &mut |_| {}), Err((SpiRefusal::Busy, 0x25)));
+        // nothing written: the running transfer keeps its enable and chip select
+        assert!(s.ops.borrow().iter().all(|o| o.0 == 'r'));
+        assert_eq!((s.regs.borrow()[&SSIENR], s.regs.borrow()[&SER]), (1, 1));
+        // enabled but idle is not busy
+        s.regs.borrow_mut().insert(SR, 0x0c);
+        write(&s, &h, &[1], &mut |_| {}).unwrap();
+    }
+
+    #[test]
+    fn write_bad_argument_has_detail_zero_and_the_controller_state_is_kept() {
+        let s = Spi::new(Box::new(|_| 0));
+        s.regs.borrow_mut().insert(SSIENR, 1);
+        s.regs.borrow_mut().insert(SER, 1);
+        let h = Host { base: BASE, cs: 0, baudr: 200, budget_us: 5 };
+        for bad in [Host { baudr: 0, ..h }, Host { baudr: 1, ..h }, Host { cs: 2, ..h }] {
+            assert_eq!(write(&s, &bad, &[1], &mut |_| {}), Err((SpiRefusal::BadArgument, 0)));
+        }
+        assert!(s.ops.borrow().iter().all(|o| o.0 == 'r'));
+        assert_eq!((s.regs.borrow()[&SSIENR], s.regs.borrow()[&SER]), (1, 1));
+    }
+
+    #[test]
+    fn write_puts_the_bytes_on_txdr_in_order_and_reads_rx_only_to_drain() {
+        let s = Spi::new(Box::new(|_| 0xa5));
+        let h = Host { base: BASE, cs: 0, baudr: 200, budget_us: 10 };
+        let tx = [0x80, 0x01, 0xfe, 0x7f, 0x00];
+        write(&s, &h, &tx, &mut |_| {}).unwrap();
+        let txdr: Vec<u32> = s.ops.borrow().iter().filter(|o| o.0 == 'w' && o.1 == TXDR).map(|o| o.2).collect();
+        assert_eq!(txdr, tx.iter().map(|&b| u32::from(b)).collect::<Vec<_>>());
+        // exactly one RXDR read per frame sent, each of a frame that was in the FIFO
+        let rxdr: Vec<u32> = s.ops.borrow().iter().filter(|o| o.0 == 'r' && o.1 == RXDR).map(|o| o.2).collect();
+        assert_eq!(rxdr, vec![0xa5; tx.len()]);
+        assert!(s.rxq.borrow().is_empty());
+        // no RXDR access is a write
+        assert!(s.ops.borrow().iter().all(|o| !(o.0 == 'w' && o.1 == RXDR)));
+    }
 }
