@@ -552,12 +552,14 @@ impl QosPolicy {
 }
 
 /// Write `policy`'s three words into each of the four GPU QoS blocks
-/// ([`QOS_GPU`]): twelve writes, nothing else. The caller has powered
+/// ([`QOS_GPU`]): twelve writes, nothing else. `base` is where the caller
+/// mapped `qos_gpu_m0` (block i is at `base + 0x200 * i`, the stride of
+/// [`QOS_GPU`]); it is not the physical address. The caller has powered
 /// PD_GPU on first (the blocks sit in its domain).
-pub fn qos_apply(m: &impl Mmio, policy: QosPolicy) {
-    for base in QOS_GPU {
+pub fn qos_apply(m: &impl Mmio, base: usize, policy: QosPolicy) {
+    for blk in 0..QOS_GPU.len() {
         for (off, v) in QOS_POLICY_WORDS.iter().zip(policy.values()) {
-            m.write32(base + off, v);
+            m.write32(base + 0x200 * blk + off, v);
         }
     }
 }
@@ -746,16 +748,19 @@ mod tests {
 
     /// All four blocks in the image's state (reset values), then `policy`.
     fn qos_check(policy: QosPolicy, want: [u32; 3]) {
+        // a mapped base that is not the physical address
+        const MAPPED: usize = 0x7000_0000;
+        let blocks = [0, 1, 2, 3].map(|i| MAPPED + 0x200 * i);
         let q = Qos { regs: RefCell::new(Default::default()), writes: RefCell::new(vec![]) };
-        for b in QOS_GPU {
+        for b in blocks {
             for (o, v) in [(0x08, 0x8000_0000), (0x0c, 3), (0x10, 0x12d), (0x14, 0x40)] {
                 q.regs.borrow_mut().insert(b + o, v);
             }
         }
-        qos_apply(&q, policy);
-        let expect: Vec<usize> = QOS_GPU.iter().flat_map(|b| [0x0c, 0x10, 0x14].map(|o| b + o)).collect();
+        qos_apply(&q, MAPPED, policy);
+        let expect: Vec<usize> = blocks.iter().flat_map(|b| [0x0c, 0x10, 0x14].map(|o| b + o)).collect();
         assert_eq!(*q.writes.borrow(), expect);
-        for b in QOS_GPU {
+        for b in blocks {
             assert_eq!([q.read32(b + 0x0c), q.read32(b + 0x10), q.read32(b + 0x14)], want);
             assert_eq!(q.read32(b + 0x08), 0x8000_0000);
             assert_eq!(q.read32(b + 0x18), 0);
