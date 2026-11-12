@@ -1970,7 +1970,7 @@ impl Tree<'_, '_> {
                 }))
             }
             IrOp::LoadLocal { local, .. } => {
-                let bit = 1u64.checked_shl(local.0 as u32).unwrap_or(0);
+                let bit = 1u64.checked_shl(local.0).unwrap_or(0);
                 if bit == 0 {
                     return UNKNOWN;
                 }
