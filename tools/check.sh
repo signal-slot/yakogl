@@ -2717,9 +2717,9 @@ if command -v python3 >/dev/null 2>&1; then
       return 1
     }
   }
-  # One row either way, so the plan's row count (check_scope_selftest.sh) is
-  # the same on a host with the lz4 command and on one without: a gap in the
-  # row's place names what was not checked, as the MESA_PAN_TREE row above.
+  # One row either way, so the plan has the same rows on a host with the lz4
+  # command and on one without: a gap in the row's place names what was not
+  # checked, as the MESA_PAN_TREE row above.
   # lz4 is in the ZEPHYR_WS entry's packages (tools/cts/deps.toml), so
   # tools/setup-gate-host.sh --install brings it to a gate host.
   if command -v lz4 > /dev/null 2>&1; then
