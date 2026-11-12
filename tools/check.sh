@@ -1808,11 +1808,8 @@ step "clippy  $MALI_CONFIG" cargo clippy --no-default-features --features "$MALI
 step "test    $MALI_CONFIG (--lib mali::, $MALI_TESTS tests: packers and ISA vs Mesa and the board)" mali_lib_tests
 # ES 3.0 multisample renderbuffers on the Mali: the pins of today's one-sample
 # behaviour and the ignored tests of the 4x result (not run).
-step "test    $MALI_CONFIG (tests/es3_msaa_mali.rs)" \
-  cargo_test --no-fail-fast --no-default-features --features "$MALI_CONFIG" --test es3_msaa_mali
-# The levels and the mip filter the GL core hands the Mali for a 3D texture.
-step "test    $MALI_CONFIG (tests/mali_3d_levels.rs)" \
-  cargo_test --no-fail-fast --no-default-features --features "$MALI_CONFIG" --test mali_3d_levels
+step "test    $MALI_CONFIG (tests/es3_msaa_mali.rs, tests/mali_3d_levels.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$MALI_CONFIG" --test es3_msaa_mali --test mali_3d_levels
 # src/mali/genxml/v10.rs and v10_cases.rs are what tools/mali/gen_pack_rs.py
 # makes from the vendored v10.xml, byte for byte (third_party/mesa-26.2.1/UPSTREAM,
 # "Used by"); a failing generator prints nothing and so differs too.
