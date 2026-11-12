@@ -235,9 +235,10 @@ pub struct V3dJobTarget {
     /// buffer, configured but never loaded or stored).
     pub rts: u32,
     pub rt: [V3dJobRt; 3],
-    /// 4x multisampling: RT 0 is stored resolved into `address`, and its
-    /// samples kept in `ms_address` (UIF RGBA8 at 2w x 2h; 0: not kept),
-    /// loaded and stored with all samples. One RT only.
+    /// 4x multisampling: every RT is stored resolved into its raster
+    /// buffer, and its samples kept in its sample buffer (RT 0 `ms_address`,
+    /// RT n `rt[n - 1].ms_address`; UIF at 2w x 2h, RGBA8 or with `typed`
+    /// the RT's format; 0: not kept), loaded and stored with all samples.
     pub msaa: bool,
     pub ms_address: u32,
     pub ms_memory_format: u32,
@@ -252,7 +253,8 @@ pub struct V3dJobTarget {
     /// is the `V3D_OUTPUT_IMAGE_FORMAT_*` of RT n (RT 0 at `[0]`; `rgb565`
     /// is then not read), each loaded and stored in it with Mesa's internal
     /// type, bpp and clamp for the format, the tile size following the
-    /// largest bpp (v3d_job.h). Not with `msaa`. Clear for every ES 2.0 job.
+    /// largest bpp (v3d_job.h). With `msaa` internal type 8 or 16F only (the
+    /// TLB's resolve). Clear for every ES 2.0 job.
     pub typed: bool,
     /// The lazy raster store (docs/notes/v3d-lazy-raster.md): RT 0 is stored
     /// into the render image (`uif_address`) alone, not into `address`.
@@ -316,6 +318,11 @@ pub const V3D_RENDER_TARGET_CLAMP_INT: u32 = 3;
 pub struct V3dJobRt {
     pub address: u32,
     pub stride: u32,
+    /// At 4x, the RT's own sample buffer, as `V3dJobTarget::ms_*` is RT
+    /// 0's (0: samples not kept).
+    pub ms_address: u32,
+    pub ms_memory_format: u32,
+    pub ms_height_in_ub: u32,
 }
 
 /// `struct v3d_job_stencil_face`.
@@ -691,7 +698,7 @@ impl V3dJob {
             tile_alloc: 0,
             rgb565: false,
             rts: 0,
-            rt: [V3dJobRt { address: 0, stride: 0 }; 3],
+            rt: [V3dJobRt { address: 0, stride: 0, ms_address: 0, ms_memory_format: 0, ms_height_in_ub: 0 }; 3],
             msaa: false,
             ms_address: 0,
             ms_memory_format: 0,
@@ -845,21 +852,25 @@ const _: () = assert!(offset_of!(V3dCl, gpu) == 8);
 const _: () = assert!(offset_of!(V3dCl, used) == 16);
 const _: () = assert!(offset_of!(V3dCl, overflow) == 20);
 const _: () = assert!(offset_of!(V3dCl, bad_field) == 21);
-const _: () = assert!(size_of::<V3dJobTarget>() == 100);
+const _: () = assert!(size_of::<V3dJobTarget>() == 136);
+const _: () = assert!(size_of::<V3dJobRt>() == 20);
+const _: () = assert!(offset_of!(V3dJobRt, ms_address) == 8);
+const _: () = assert!(offset_of!(V3dJobRt, ms_memory_format) == 12);
+const _: () = assert!(offset_of!(V3dJobRt, ms_height_in_ub) == 16);
 const _: () = assert!(offset_of!(V3dJobTarget, rgb565) == 20);
 const _: () = assert!(offset_of!(V3dJobTarget, rts) == 24);
 const _: () = assert!(offset_of!(V3dJobTarget, rt) == 28);
-const _: () = assert!(offset_of!(V3dJobTarget, msaa) == 52);
-const _: () = assert!(offset_of!(V3dJobTarget, ms_address) == 56);
-const _: () = assert!(offset_of!(V3dJobTarget, ms_memory_format) == 60);
-const _: () = assert!(offset_of!(V3dJobTarget, ms_height_in_ub) == 64);
-const _: () = assert!(offset_of!(V3dJobTarget, uif_address) == 68);
-const _: () = assert!(offset_of!(V3dJobTarget, uif_memory_format) == 72);
-const _: () = assert!(offset_of!(V3dJobTarget, uif_height_in_ub) == 76);
-const _: () = assert!(offset_of!(V3dJobTarget, typed) == 80);
-const _: () = assert!(offset_of!(V3dJobTarget, uif_only) == 81);
-const _: () = assert!(offset_of!(V3dJobTarget, uif_load) == 82);
-const _: () = assert!(offset_of!(V3dJobTarget, rt_format) == 84);
+const _: () = assert!(offset_of!(V3dJobTarget, msaa) == 88);
+const _: () = assert!(offset_of!(V3dJobTarget, ms_address) == 92);
+const _: () = assert!(offset_of!(V3dJobTarget, ms_memory_format) == 96);
+const _: () = assert!(offset_of!(V3dJobTarget, ms_height_in_ub) == 100);
+const _: () = assert!(offset_of!(V3dJobTarget, uif_address) == 104);
+const _: () = assert!(offset_of!(V3dJobTarget, uif_memory_format) == 108);
+const _: () = assert!(offset_of!(V3dJobTarget, uif_height_in_ub) == 112);
+const _: () = assert!(offset_of!(V3dJobTarget, typed) == 116);
+const _: () = assert!(offset_of!(V3dJobTarget, uif_only) == 117);
+const _: () = assert!(offset_of!(V3dJobTarget, uif_load) == 118);
+const _: () = assert!(offset_of!(V3dJobTarget, rt_format) == 120);
 const _: () = assert!(size_of::<V3dJobStencilFace>() == 28);
 const _: () = assert!(size_of::<V3dJobState>() == 188);
 const _: () = assert!(offset_of!(V3dJobState, scissor) == 24);
@@ -932,12 +943,12 @@ const _: () = assert!(offset_of!(V3dJobClear, s_address) == 32);
 const _: () = assert!(offset_of!(V3dJobClear, s_height_in_ub) == 40);
 const _: () = assert!(offset_of!(V3dJobClear, s_load) == 44);
 const _: () = assert!(offset_of!(V3dJobClear, s_store) == 45);
-const _: () = assert!(size_of::<V3dJob>() == 864);
-const _: () = assert!(offset_of!(V3dJob, pack) == 136);
+const _: () = assert!(size_of::<V3dJob>() == 904);
+const _: () = assert!(offset_of!(V3dJob, pack) == 172);
 const _: () = assert!(size_of::<V3dJobPack>() == 728);
 const _: () = assert!(offset_of!(V3dJobPack, valid) == 4);
 const _: () = assert!(offset_of!(V3dJobPack, key) == 8);
 const _: () = assert!(offset_of!(V3dJobPack, n) == 712);
 const _: () = assert!(offset_of!(V3dJob, t) == 24);
-const _: () = assert!(offset_of!(V3dJob, draws) == 124);
-const _: () = assert!(offset_of!(V3dJob, broken) == 132);
+const _: () = assert!(offset_of!(V3dJob, draws) == 160);
+const _: () = assert!(offset_of!(V3dJob, broken) == 168);

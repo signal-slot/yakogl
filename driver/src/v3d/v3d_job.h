@@ -26,11 +26,10 @@
  * glFrontFace, the scissor box) is the caller's, in src/v3d/, where it is
  * host-tested.
  *
- * What this cut does not do, refused rather than drawn wrong: 4x
- * multisampling with more than one render target, early Z (off: legal, only
- * slower), transform feedback, a base vertex, primitive restart. (Several
- * render targets, depth/stencil kept in memory, instancing and 4x
- * multisampling of one render target were added since the first cut; see
+ * What this cut does not do, refused rather than drawn wrong: early Z (off:
+ * legal, only slower), transform feedback, a base vertex, primitive restart.
+ * (Several render targets, depth/stencil kept in memory, instancing and 4x
+ * multisampling of every render target were added since the first cut; see
  * each field below.)
  *
  * No OS calls: the caller owns the memory and the addresses.
@@ -66,25 +65,38 @@ struct v3d_job_target {
 	 * meaning RT 0 alone (the fields above). Each extra one is RGBA8 raster
 	 * at rt[n - 1]; an address of 0 is a GL_NONE draw buffer: the RT is
 	 * configured, so a program's write to it has TLB space, but it is never
-	 * loaded or stored, so the write is dropped. */
+	 * loaded or stored, so the write is dropped. At 4x, ms_* is the RT's
+	 * own sample buffer, as the target's ms_* is RT 0's (below). */
 	uint32_t rts;
 	struct v3d_job_rt {
 		uint32_t address;  /* GPU address of the first row; 0: none */
 		uint32_t stride;   /* bytes per row */
+		uint32_t ms_address;       /* 4 KiB aligned; 0: samples not kept */
+		uint32_t ms_memory_format; /* V3D_MEMORY_FORMAT_UIF_* */
+		uint32_t ms_height_in_ub;  /* the padded height in UIF blocks */
 	} rt[3];
 	/* 4x multisampling (docs/online-shaderc/v3d-backend.md "Multisampling"):
 	 * the tile buffer holds four samples a pixel (Mesa's job->msaa:
 	 * TILE_BINNING_MODE_CFG and the rendering mode's Multisample Mode (4x),
 	 * v3dx_draw.c:92, v3dx_rcl.c:763-764), so the tiles are smaller
-	 * (v3d_frame_tiling_ms). RT 0 is stored resolved into `address` (store
-	 * general, decimate 4X, v3dx_rcl.c:159-166): the window, glReadPixels
-	 * and a texture read see the resolved image after every job. Its
-	 * samples are kept between jobs in `ms_address` when not 0: RGBA8, the
-	 * layout Mesa gives a multisampled resource (single-level UIF at twice
-	 * the width and height, v3d_resource.c:612-642), stored and loaded with
-	 * decimate ALL_SAMPLES (v3dx_rcl.c:104-107, :157-158). A job that loads
-	 * RT 0 at 4x needs it; the Z/S buffers of a 4x job (v3d_job_clear) are
-	 * 4x ones, loaded and stored with ALL_SAMPLES too. One RT only at 4x. */
+	 * (v3d_frame_tiling_bpp). Every RT is stored resolved into its raster
+	 * buffer (`address`, rt[n - 1].address; store general, decimate 4X,
+	 * v3dx_rcl.c:159-166): the window, glReadPixels and a texture read see
+	 * the resolved image after every job. Its samples are kept between jobs
+	 * in its sample buffer (RT 0 `ms_address`, RT n rt[n - 1].ms_address)
+	 * when not 0: the layout Mesa gives a multisampled resource
+	 * (single-level UIF at twice the width and height, v3d_resource.c:
+	 * 612-642), stored right before the resolve and loaded with decimate
+	 * ALL_SAMPLES (v3dx_rcl.c:104-107, :157-158), in the RT's format with
+	 * `typed` (Mesa's v3d_get_rt_format of the surface) and RGBA8 without
+	 * (RT 0 of an rgb565 target too: the buffer is laid out at 4 bytes a
+	 * pixel). No R/B swap and no alpha forcing on the samples, which only
+	 * the tile buffer reads back. A job that loads an RT at 4x needs its
+	 * buffer; the Z/S buffers of a 4x job (v3d_job_clear) are 4x ones,
+	 * loaded and stored with ALL_SAMPLES too. A typed 4x RT is one the TLB
+	 * resolves by averaging, internal type 8 or 16F (Mesa's
+	 * v3d_format_supports_tlb_resolve_and_blend, v3d_formats.c:148-163);
+	 * any other breaks the job at v3d_job_begin. */
 	bool msaa;
 	uint32_t ms_address;         /* GPU address, 4 KiB aligned; 0: samples not kept */
 	uint32_t ms_memory_format;   /* V3D_MEMORY_FORMAT_UIF_* */
@@ -115,8 +127,8 @@ struct v3d_job_target {
 	 * (v3dx_rcl.c:396-407: INT for a pure integer format), and the tile size
 	 * takes the largest bpp of all RTs (v3d_frame_tiling_bpp). The formats
 	 * this builder takes are the rows of rt_internal (v3d_job.c); any other
-	 * breaks the job at v3d_job_begin, and so does 4x with `typed` (the
-	 * kept samples are RGBA8). Clear (every ES 2.0 job): RT 0 is RGBA8 or
+	 * breaks the job at v3d_job_begin, and so does 4x with one the TLB
+	 * cannot resolve (`msaa`). Clear (every ES 2.0 job): RT 0 is RGBA8 or
 	 * BGR565 as rgb565 says and RT 1..3 RGBA8, byte for byte as before. */
 	bool typed;
 	/* The lazy raster store of a render image (docs/notes/v3d-lazy-raster.md):

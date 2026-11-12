@@ -167,6 +167,7 @@ static struct v3d_vs_prog vs_prog(uint32_t code, const struct v3d_uniform *u, ui
 #define TARGET     0x00400000u
 #define TILE_ALLOC 0x00800000u
 #define MS_BUF 0x00e00000u /* part 14's 4x colour buffer */
+#define MS_BUF1 0x00e80000u /* and RT 1's */
 #define RT_IMG 0x00f00000u /* part 20's render image */
 #define W 200u
 #define H 100u
@@ -443,6 +444,8 @@ static char *decode(const struct lists *l)
 	/* part 14's 4x colour buffer (2W x 2H RGBA8, UIF, and room for padding) */
 	static uint8_t msbuf[4 * W * H * 4 + 65536];
 	clif_dump_add_bo(clif, "msbuf", MS_BUF, sizeof(msbuf), msbuf);
+	static uint8_t msbuf1[4 * W * H * 4 + 65536];
+	clif_dump_add_bo(clif, "msbuf1", MS_BUF1, sizeof(msbuf1), msbuf1);
 	/* part 20's render image (W x H RGBA8, UIF, and room for padding) */
 	static uint8_t rtimg[W * H * 4 + 65536];
 	clif_dump_add_bo(clif, "rtimg", RT_IMG, sizeof(rtimg), rtimg);
@@ -1706,6 +1709,13 @@ static void part_instanced(void)
 	      "1 instance: the plain VERTEX_ARRAY_PRIMS");
 }
 
+/* The lists ms_job built last, hashed as part 15 hashes them, and what
+ * b7c1484e (one RT at 4x, before the per-RT sample buffers) built for
+ * part 14's first two jobs. */
+static uint64_t ms_hash;
+#define MS_HASH_KEPT    0x66c79bc9414a56e1ull
+#define MS_HASH_RESOLVE 0xc1b762756f1d8341ull
+
 /* A job at 4x (msaa) or not, on the usual target, whose RT 0 samples are
  * kept at `ms` (0: not kept) and whose draw's sample mask is `mask`. */
 static char *ms_job(struct lists *l, const struct v3d_job_clear *c, bool msaa, uint32_t ms, uint32_t mask, bool *ended)
@@ -1729,13 +1739,83 @@ static char *ms_job(struct lists *l, const struct v3d_job_clear *c, bool msaa, u
 	struct v3d_job j;
 	bool ok = v3d_job_begin(&j, &t, &l->bcl, &l->rcl, &l->ind) && v3d_job_draw(&j, &d, NULL) == V3D_JOB_OK;
 	*ended = ok && v3d_job_end(&j, c, NULL, NULL);
+	ms_hash = pack_seq_fnv(&l->ind, pack_seq_fnv(&l->rcl, pack_seq_fnv(&l->bcl, 0xcbf29ce484222325ull)));
 	return decode(l);
+}
+
+/* A typed 4x job on two RTs: RT 0 the usual target in rt_format[0], RT 1
+ * at 0x00c00000 in rt_format[1], their samples kept at MS_BUF and MS_BUF1
+ * (0: not kept). NULL when v3d_job_begin refused it. */
+static char *ms2_job(struct lists *l, const struct v3d_job_clear *c, const uint32_t rt_format[2], uint32_t ms1,
+		     bool *ended)
+{
+	struct v3d_fs_prog fs = fs_prog();
+	struct v3d_vs_prog vs = vs_prog(0x00201000u, vs_u, 5), cs = vs_prog(0x00202000u, cs_u, 3);
+	struct v3d_vertex_attr attrs[2] = { { 0x00300000u, 32, 4 }, { 0x00300010u, 32, 4 } };
+	struct v3d_uniform_storage vst = { vs_words, 4 }, fst = { fs_words, 2 };
+	struct v3d_job_state st = m5_state();
+	st.sample_mask = 0xf;
+	struct v3d_job_draw d = {
+		.st = &st, .fs = &fs, .vs = &vs, .cs = &cs, .vs_storage = vst, .fs_storage = fst,
+		.attrs = attrs, .num_attrs = 2, .prim = V3D_PRIM_TRIANGLES, .count = 3,
+	};
+	struct v3d_job_target t = { W, H, TARGET, W * 4, TILE_ALLOC, false };
+	t.rts = 2;
+	t.rt[0] = (struct v3d_job_rt){ 0x00c00000u, W * 4, ms1, V3D_MEMORY_FORMAT_UIF_NO_XOR, 26 };
+	t.msaa = true;
+	t.ms_address = MS_BUF;
+	t.ms_memory_format = V3D_MEMORY_FORMAT_UIF_NO_XOR;
+	t.ms_height_in_ub = 26;
+	t.typed = true;
+	t.rt_format[0] = rt_format[0];
+	t.rt_format[1] = rt_format[1];
+	lists_init(l, RCL_OFF - BCL_OFF);
+	struct v3d_job j;
+	bool ok = v3d_job_begin(&j, &t, &l->bcl, &l->rcl, &l->ind);
+	if (ok)
+		ok = v3d_job_draw(&j, &d, NULL) == V3D_JOB_OK;
+	*ended = ok && v3d_job_end(&j, c, NULL, NULL);
+	return ok ? decode(l) : NULL;
+}
+
+/* Mesa's load_general / store_general (v3dx_rcl.c:60-170) packed with the
+ * fields they set for a colour surface, into `out`. */
+static void ms_load(uint8_t *out, uint32_t buffer, uint32_t address, uint32_t memory_format, uint32_t fmt,
+		    uint32_t height, uint32_t decimate)
+{
+	struct V3D42_LOAD_TILE_BUFFER_GENERAL ml = { V3D42_LOAD_TILE_BUFFER_GENERAL_header };
+	ml.buffer_to_load = buffer;
+	ml.address = address;
+	ml.memory_format = memory_format;
+	ml.input_image_format = fmt;
+	ml.r_b_swap = false;
+	ml.force_alpha_1 = false;
+	ml.height_in_ub_or_stride = height;
+	ml.decimate_mode = decimate;
+	V3D42_LOAD_TILE_BUFFER_GENERAL_pack(NULL, out, &ml);
+}
+
+static void ms_store(uint8_t *out, uint32_t buffer, uint32_t address, uint32_t memory_format, uint32_t fmt,
+		     uint32_t height, uint32_t decimate)
+{
+	struct V3D42_STORE_TILE_BUFFER_GENERAL ms = { V3D42_STORE_TILE_BUFFER_GENERAL_header };
+	ms.buffer_to_store = buffer;
+	ms.address = address;
+	ms.clear_buffer_being_stored = false;
+	ms.output_image_format = fmt;
+	ms.r_b_swap = false;
+	ms.memory_format = memory_format;
+	ms.height_in_ub_or_stride = height;
+	ms.decimate_mode = decimate;
+	V3D42_STORE_TILE_BUFFER_GENERAL_pack(NULL, out, &ms);
 }
 
 /* 4x multisampling (Mesa's job->msaa): the two config bits, the tile size,
  * the rasterizer oversample, the sample mask, RT 0's samples stored and
  * loaded with ALL_SAMPLES and the resolve stored with 4X, Z/S with
- * ALL_SAMPLES; and what is refused. */
+ * ALL_SAMPLES, the one-RT RGBA8 lists byte for byte as before the per-RT
+ * sample buffers; two typed RTs at 4x, each loaded from and stored to its
+ * own sample buffer in its own format then resolved; and what is refused. */
 static void part_msaa(void)
 {
 	static struct lists l;
@@ -1745,6 +1825,10 @@ static void part_msaa(void)
 				   .zs_load = true, .zs_store = true };
 	char *text = ms_job(&l, &c, true, MS_BUF, 0x5, &ended);
 	check(ended, "a 4x job builds");
+	if (getenv("JOB_CHECK_MS_HASH"))
+		printf("job_check: 4x RGBA8 job hash 0x%016llxull\n", (unsigned long long)ms_hash);
+	check(ms_hash == MS_HASH_KEPT,
+	      "4x job: the lists are b7c1484e's, byte for byte (pinned hash; one RT, RGBA8, samples kept)");
 	check(!strstr(text, "Failed") && !strstr(text, "nknown"), "4x job: the decoder reported no error");
 	check(field(text, "TILE_BINNING_MODE_CFG", 0, "Multisample Mode (4x)") == 1 &&
 		      field(text, "TILE_RENDERING_MODE_CFG_COMMON", 0, "Multisample Mode (4x)") == 1,
@@ -1776,6 +1860,10 @@ static void part_msaa(void)
 	/* samples not kept: the resolve alone; a load of RT 0 is refused at end */
 	struct v3d_job_clear cleared = { .load_rt0 = false, .rgba8 = 0xff0000ffu, .z = 1.0f };
 	text = ms_job(&l, &cleared, true, 0, 0xf, &ended);
+	if (getenv("JOB_CHECK_MS_HASH"))
+		printf("job_check: 4x RGBA8 resolve-only job hash 0x%016llxull\n", (unsigned long long)ms_hash);
+	check(ms_hash == MS_HASH_RESOLVE,
+	      "4x job, samples not kept: the lists are b7c1484e's, byte for byte (pinned hash)");
 	check(ended && store_of(text, V3D_STORE_BUFFER_RT0) >= 0 &&
 		      field(text, "STORE", store_of(text, V3D_STORE_BUFFER_RT0), "Decimate mode") == V3D_DECIMATE_MODE_4X &&
 		      field(text, "STORE", store_of(text, V3D_STORE_BUFFER_RT0) + 1, "Buffer to Store") !=
@@ -1784,13 +1872,86 @@ static void part_msaa(void)
 	struct v3d_job_clear loads = { .load_rt0 = true, .z = 1.0f };
 	(void)ms_job(&l, &loads, true, 0, 0xf, &ended);
 	check(!ended, "4x, samples not kept: a job that loads RT 0 is refused");
-	/* 4x with two RTs: refused at begin */
-	struct v3d_job_target t2 = { W, H, TARGET, W * 4, TILE_ALLOC, false };
-	t2.rts = 2;
-	t2.msaa = true;
-	struct v3d_job j2;
-	lists_init(&l, RCL_OFF - BCL_OFF);
-	check(!v3d_job_begin(&j2, &t2, &l.bcl, &l.rcl, &l.ind), "4x with 2 RTs: refused");
+	/* 4x with two typed RTs, RGBA8 and SRGB8_ALPHA8 (16F, 64 bpp in the
+	 * tile buffer), each keeping its samples in its own buffer
+	 * (docs/notes/v3d-msaa-es3.md (3)) */
+	const uint32_t rgba_srgb[2] = { V3D_OUTPUT_IMAGE_FORMAT_RGBA8, V3D_OUTPUT_IMAGE_FORMAT_SRGB8_ALPHA8 };
+	struct v3d_job_clear both = { .load_rt0 = true, .z = 1.0f, .load_rt = { true, false, false } };
+	text = ms2_job(&l, &both, rgba_srgb, MS_BUF1, &ended);
+	check(ended && text, "4x, 2 typed RTs: the job builds");
+	check(text && !strstr(text, "Failed") && !strstr(text, "nknown"),
+	      "4x, 2 typed RTs: the decoder reported no error");
+	check(text && field(text, "TILE_BINNING_MODE_CFG", 0, "Multisample Mode (4x)") == 1 &&
+		      field(text, "TILE_RENDERING_MODE_CFG_COMMON", 0, "Multisample Mode (4x)") == 1 &&
+		      field(text, "TILE_BINNING_MODE_CFG", 0, "Number of Render Targets") == 2 &&
+		      field(text, "TILE_RENDERING_MODE_CFG_COMMON", 0, "Number of Render Targets") == 2 &&
+		      field(text, "TILE_BINNING_MODE_CFG", 0, "Maximum BPP of all render targets") ==
+			      V3D_INTERNAL_BPP_64 &&
+		      field(text, "TILE_RENDERING_MODE_CFG_COMMON", 0, "Maximum BPP of all render targets") ==
+			      V3D_INTERNAL_BPP_64,
+	      "4x, 2 typed RTs: both configs say 4x, 2 RTs, 64 bpp");
+	/* v3d_choose_tile_size 4.x: 2 RTs (1) + 4x (2) + 64 bpp (1) = index 4,
+	 * 16x16, so 200x100 is 13 x 7 tiles (v3d_frame_tiling_bpp) */
+	check(text && field(text, "MULTICORE_RENDERING_SUPERTILE_CFG", 0, "Total Frame Width in Tiles") == 13 &&
+		      field(text, "MULTICORE_RENDERING_SUPERTILE_CFG", 0, "Total Frame Height in Tiles") == 7,
+	      "4x, 2 typed RTs: 16x16 tiles (13 x 7 for 200 x 100)");
+	check(text && field(text, "TILE_RENDERING_MODE_CFG_COLOR", 0, "Render Target 1 Internal Type") ==
+			      V3D_INTERNAL_TYPE_16F &&
+		      field(text, "TILE_RENDERING_MODE_CFG_COLOR", 0, "Render Target 1 Internal BPP") ==
+			      V3D_INTERNAL_BPP_64,
+	      "4x, 2 typed RTs: RT 1 is 16F at 64 bpp in the tile buffer");
+	/* each RT loaded from its kept samples in its own format, RT order;
+	 * then per RT the kept samples (ALL_SAMPLES) and the resolve (4X into
+	 * the raster buffer), RT 0 then RT 1, nothing between them */
+	{
+		enum { LL = V3D42_LOAD_TILE_BUFFER_GENERAL_length, SL = V3D42_STORE_TILE_BUFFER_GENERAL_length };
+		uint8_t loads[2 * LL], stores[4 * SL];
+		ms_load(loads, V3D_LOAD_BUFFER_RT0, MS_BUF, V3D_MEMORY_FORMAT_UIF_NO_XOR,
+			V3D_OUTPUT_IMAGE_FORMAT_RGBA8, 26, V3D_DECIMATE_MODE_ALL_SAMPLES);
+		ms_load(loads + LL, V3D_LOAD_BUFFER_RT0 + 1, MS_BUF1, V3D_MEMORY_FORMAT_UIF_NO_XOR,
+			V3D_OUTPUT_IMAGE_FORMAT_SRGB8_ALPHA8, 26, V3D_DECIMATE_MODE_ALL_SAMPLES);
+		ms_store(stores, V3D_STORE_BUFFER_RT0, MS_BUF, V3D_MEMORY_FORMAT_UIF_NO_XOR,
+			 V3D_OUTPUT_IMAGE_FORMAT_RGBA8, 26, V3D_DECIMATE_MODE_ALL_SAMPLES);
+		ms_store(stores + SL, V3D_STORE_BUFFER_RT0, TARGET, V3D_MEMORY_FORMAT_RASTER,
+			 V3D_OUTPUT_IMAGE_FORMAT_RGBA8, W * 4, V3D_DECIMATE_MODE_4X);
+		ms_store(stores + 2 * SL, V3D_STORE_BUFFER_RT0 + 1, MS_BUF1, V3D_MEMORY_FORMAT_UIF_NO_XOR,
+			 V3D_OUTPUT_IMAGE_FORMAT_SRGB8_ALPHA8, 26, V3D_DECIMATE_MODE_ALL_SAMPLES);
+		ms_store(stores + 3 * SL, V3D_STORE_BUFFER_RT0 + 1, 0x00c00000u, V3D_MEMORY_FORMAT_RASTER,
+			 V3D_OUTPUT_IMAGE_FORMAT_SRGB8_ALPHA8, W * 4, V3D_DECIMATE_MODE_4X);
+		const uint8_t *ind = l.bo + IND_OFF;
+		check(memmem(ind, BO_SIZE - IND_OFF, loads, LL) != NULL &&
+			      memmem(ind, BO_SIZE - IND_OFF, loads + LL, LL) != NULL,
+		      "4x, 2 typed RTs: each RT's LOAD is Mesa's load_general of its kept samples, ALL_SAMPLES, its format");
+		check(memmem(ind, BO_SIZE - IND_OFF, loads, sizeof(loads)) != NULL,
+		      "4x, 2 typed RTs: the two LOADs back to back, RT 0 then RT 1");
+		check(memmem(ind, BO_SIZE - IND_OFF, stores, SL) != NULL &&
+			      memmem(ind, BO_SIZE - IND_OFF, stores + 2 * SL, SL) != NULL,
+		      "4x, 2 typed RTs: each RT's kept STORE is Mesa's store_general, ALL_SAMPLES, its format");
+		check(memmem(ind, BO_SIZE - IND_OFF, stores + SL, SL) != NULL &&
+			      memmem(ind, BO_SIZE - IND_OFF, stores + 3 * SL, SL) != NULL,
+		      "4x, 2 typed RTs: each RT's resolve STORE is Mesa's store_general, 4X, raster, its format");
+		check(memmem(ind, BO_SIZE - IND_OFF, stores, sizeof(stores)) != NULL,
+		      "4x, 2 typed RTs: kept then resolve per RT, RT 0 then RT 1, back to back");
+	}
+	free(text);
+	/* RT 1 cleared and its samples not kept: its resolve alone */
+	struct v3d_job_clear rt0_only = { .load_rt0 = true, .z = 1.0f };
+	text = ms2_job(&l, &rt0_only, rgba_srgb, 0, &ended);
+	int s1 = text ? store_of(text, V3D_STORE_BUFFER_RT0 + 1) : -1;
+	check(ended && s1 >= 0 && field(text, "STORE", s1, "Decimate mode") == V3D_DECIMATE_MODE_4X &&
+		      field_has(text, "STORE", s1, "Address", "[rt1+0x00000000]") &&
+		      field(text, "STORE", s1 + 1, "Buffer to Store") != V3D_STORE_BUFFER_RT0 + 1 &&
+		      load_of(text, V3D_LOAD_BUFFER_RT0 + 1) < 0,
+	      "4x, RT 1 cleared, samples not kept: one RT 1 store, the resolve, no RT 1 load");
+	free(text);
+	/* RT 1 loaded with no buffer: refused at end; an integer RT at 4x (no
+	 * TLB resolve, v3d_format_supports_tlb_resolve_and_blend): at begin */
+	text = ms2_job(&l, &both, rgba_srgb, 0, &ended);
+	check(text && !ended, "4x, RT 1 loaded with no sample buffer: refused at end");
+	free(text);
+	const uint32_t rgba_int[2] = { V3D_OUTPUT_IMAGE_FORMAT_RGBA8, V3D_OUTPUT_IMAGE_FORMAT_RGBA8UI };
+	text = ms2_job(&l, &both, rgba_int, MS_BUF1, &ended);
+	check(!text && !ended, "4x with an integer RT: refused at begin");
 	/* a single-sampled job: none of it, whatever the draw's mask holds */
 	text = ms_job(&l, &cleared, false, MS_BUF, 0x5, &ended);
 	check(ended && field(text, "TILE_BINNING_MODE_CFG", 0, "Multisample Mode (4x)") == 0 &&
@@ -2474,7 +2635,7 @@ int main(void)
 	 * part 11: 2 builds + 2 fields + 1 + 2 refusals;
 	 * part 12 (multiple render targets): 3 builds + 12;
 	 * part 13 (instanced draws): 3 builds + 8;
-	 * part 14 (4x multisampling): 14;
+	 * part 14 (4x multisampling): 13 + 2 pinned hashes + 13 two typed RTs;
 	 * part 15 (packet skip): 4 knob off + 9 knob on + 4 identical draws +
 	 * 3 depth range + 1 viewport x + 4 refusal + 2 one input + 1 new job;
 	 * part 16 (S8 stencil): 1 build + 7;
@@ -2482,7 +2643,7 @@ int main(void)
 	 * part 18 (no colour buffer): 2 builds + 4 + 3 + 1 refusal;
 	 * part 19 (occlusion queries): 2 builds + 4;
 	 * part 20 (the render image): 1 build + 5 + 3 refusals */
-	const int planned = 14 + 11 + 6 + 51 + 2 + 47 + 3 + 3 + 19 + 20 + 21 + 31 + 13 + 10 + 8 + 7 + 15 + 11 + 14 +
+	const int planned = 14 + 11 + 6 + 51 + 2 + 47 + 3 + 3 + 19 + 20 + 21 + 31 + 13 + 10 + 8 + 7 + 15 + 11 + 28 +
 			    28 + 8 + 6 + 10 + 6 + 9;
 	part_identity();
 	part_rollback();

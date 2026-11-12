@@ -2705,7 +2705,7 @@ fn begin_job(g: &mut V3dState, target: Target) -> i32 {
         rt: core::array::from_fn(|i| {
             let a = target.rt[i];
             let bytes = state::rt_row(target.rt_format[i]).bytes;
-            V3dJobRt { address: a, stride: if a != 0 { target_pitch(w) * bytes } else { 0 } }
+            V3dJobRt { address: a, stride: if a != 0 { target_pitch(w) * bytes } else { 0 }, ..V3dJobRt::default() }
         }),
         msaa,
         ms_address: ms.map_or(0, |i| g.msbufs[i].address),
