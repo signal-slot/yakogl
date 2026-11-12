@@ -76,6 +76,23 @@
 //!   1..4; the MP25 hides L3 when its RIF firewall refuses it, which the
 //!   caller checks), the pad limit is 150 MHz for a1/a2 and the MP25 (`drv.c`
 //!   `stm_drm_plat_data_mp25`), 90 MHz for 0x010300, 65 MHz for 0x010200.
+//! - Frame CRC (r3.1 `ltdc.c`; line numbers are those of the task that asked
+//!   for it, the functions are named so they can be found again):
+//!   `ltdc_get_caps` sets `caps.crc = true` for HWVER 0x040100/0x040101
+//!   (:2566) and clears it again when the third layer is secure (:2588-2590,
+//!   "Do not expose the crc to the user if the third layer is secure"); the
+//!   older versions have `caps.crc = false`. `ltdc_crtc_set_crc_source`
+//!   enables the CRC by `regmap_set_bits(LTDC_GCR, GCR_CRCEN)` (`GCR_CRCEN` =
+//!   bit 19, `LTDC_CCRCR` = 0x7C, "Computed CRC value") and disables it by
+//!   clearing the bit; `ltdc_irq` reads `CCRCR` once per line interrupt
+//!   (`LIF`, the event [`Ltdc::wait_frame`] polls) while `crc_active`, and
+//!   `ltdc_irq_thread` drops the first `CRC_SKIP_FRAMES` (2) values after the
+//!   enable. [`Ltdc::crc_enable`], [`Ltdc::read_crc`] and [`Ltdc::frame_crc`]
+//!   do the same. This module knows the version but not the RIF state: the
+//!   caller passes whether layer 3 is secure (RIFSC entry 120) to
+//!   `crc_enable`. The CRC algorithm is not documented, so nothing here
+//!   computes an expected value: a caller checks that the CRC is stable
+//!   across frames of a static picture and changes when the picture changes.
 
 use crate::env::{Env, Level};
 use crate::errno::{EINVAL, ENODEV, ETIMEDOUT};
@@ -99,6 +116,8 @@ pub const ICR: u32 = 0x3c;
 pub const LIPCR: u32 = 0x40;
 pub const EDCR: u32 = 0x60;
 pub const FUT: u32 = 0x90;
+/// `LTDC_CCRCR`: the computed frame CRC (MP25 versions only).
+pub const CCRCR: u32 = 0x7c;
 
 pub const HWVER_10200: u32 = 0x01_0200;
 pub const HWVER_10300: u32 = 0x01_0300;
@@ -110,6 +129,10 @@ pub const HWVER_40101: u32 = 0x04_0101;
 pub const GCR_LTDCEN: u32 = 1 << 0;
 pub const GCR_ROTEN: u32 = 1 << 2;
 pub const GCR_DEN: u32 = 1 << 16;
+/// `GCR_CRCEN` (`ltdc_crtc_set_crc_source`).
+pub const GCR_CRCEN: u32 = 1 << 19;
+/// `CRC_SKIP_FRAMES`: values `ltdc_irq_thread` drops after the CRC is enabled.
+pub const CRC_SKIP_FRAMES: u32 = 2;
 pub const GCR_PCPOL: u32 = 1 << 28;
 pub const GCR_DEPOL: u32 = 1 << 29;
 pub const GCR_VSPOL: u32 = 1 << 30;
@@ -476,6 +499,40 @@ impl Ltdc {
         wr(m, self.base, self.regs.cfbar, phys as u32);
         wr(m, self.base, self.reload_reg(), RCR_VBR);
         self.wait_reload(m, env, RCR_VBR)
+    }
+
+    /// Whether this version has the frame CRC (`caps.crc`, :2566).
+    pub const fn has_crc(&self) -> bool {
+        matches!(self.hwver, HWVER_40100 | HWVER_40101)
+    }
+
+    /// Switch the CRC unit on or off (`ltdc_crtc_set_crc_source`: `GCR_CRCEN`
+    /// set or cleared, nothing else touched). `Err(-ENODEV)` where the
+    /// version has no CRC; `Err(-EINVAL)` when switching on while layer 3 is
+    /// secure (`layer3_secure`, RIFSC entry 120: ltdc.c :2588-2590 then
+    /// offers no CRC source). The first [`CRC_SKIP_FRAMES`] frames after
+    /// switching on are not meaningful.
+    pub fn crc_enable(&self, m: &impl Mmio, on: bool, layer3_secure: bool) -> Result<(), i32> {
+        if !self.has_crc() {
+            return Err(-ENODEV);
+        }
+        if on && layer3_secure {
+            return Err(-EINVAL);
+        }
+        upd(m, self.base, GCR, GCR_CRCEN, if on { GCR_CRCEN } else { 0 });
+        Ok(())
+    }
+
+    /// `CCRCR` as it stands (`ltdc_irq` reads it once per line interrupt).
+    pub fn read_crc(&self, m: &impl Mmio) -> u32 {
+        rd(m, self.base, CCRCR)
+    }
+
+    /// Wait for a frame ([`Ltdc::wait_frame`]) and return the CRC computed
+    /// for it.
+    pub fn frame_crc(&self, m: &impl Mmio, env: &impl Env) -> Result<u32, i32> {
+        self.wait_frame(m, env)?;
+        Ok(self.read_crc(m))
     }
 
     /// Whether the controller is enabled with the layer on.
@@ -939,6 +996,64 @@ mod tests {
                 let (lo, hi) = (runs.iter().map(|r| r.1).min().unwrap(), runs.iter().map(|r| r.1).max().unwrap());
                 assert!(hi - lo <= 1, "{width}: bar widths {runs:?}");
             }
+        }
+    }
+
+    #[test]
+    fn mp25_crc_enable_sets_only_crcen_and_read_returns_ccrcr() {
+        // r3.1 ltdc_crtc_set_crc_source: set/clear GCR_CRCEN (bit 19); CCRCR at 0x7c
+        assert_eq!((CCRCR, GCR_CRCEN, CRC_SKIP_FRAMES), (0x7c, 1 << 19, 2));
+        let f = Fake::mp25();
+        let l = Ltdc::probe(&f, B).unwrap();
+        assert!(l.has_crc());
+        f.regs.borrow_mut().insert(B + GCR as usize, GCR_LTDCEN | GCR_HSPOL);
+        f.clear_log();
+        l.crc_enable(&f, true, false).unwrap();
+        assert_eq!(f.peek(GCR), GCR_LTDCEN | GCR_HSPOL | GCR_CRCEN);
+        f.regs.borrow_mut().insert(B + CCRCR as usize, 0xdead_beef);
+        assert_eq!(l.read_crc(&f), 0xdead_beef);
+        l.crc_enable(&f, false, true).unwrap();
+        assert_eq!(f.peek(GCR), GCR_LTDCEN | GCR_HSPOL);
+        assert!(f.writes().iter().all(|w| w.0 == GCR), "only GCR is written");
+    }
+
+    #[test]
+    fn mp25_frame_crc_waits_for_a_frame_then_reads() {
+        let e = TestEnv::default();
+        let f = Fake::mp25();
+        let l = Ltdc::probe(&f, B).unwrap();
+        f.regs.borrow_mut().insert(B + GCR as usize, GCR_LTDCEN);
+        f.regs.borrow_mut().insert(B + CCRCR as usize, 0x1234_5678);
+        f.clear_log();
+        assert_eq!(l.frame_crc(&f, &e), Ok(0x1234_5678));
+        let log = f.log.borrow();
+        let isr = log.iter().position(|e| !e.0 && e.1 == ISR).unwrap();
+        let crc = log.iter().position(|e| !e.0 && e.1 == CCRCR).unwrap();
+        assert!(isr < crc, "CCRCR is read after the line interrupt");
+        drop(log);
+        // no pixel clock: no frame, no CRC
+        let g = Fake::mp25();
+        let lg = Ltdc::probe(&g, B).unwrap();
+        assert_eq!(lg.frame_crc(&g, &e), Err(-ETIMEDOUT));
+    }
+
+    #[test]
+    fn crc_is_refused_without_hardware_and_with_a_secure_layer_3() {
+        // r3.1 ltdc_get_caps: caps.crc only for 0x40100/0x40101 (:2566), not with a secure L3 (:2588)
+        for v in [HWVER_10200, HWVER_10300, HWVER_20101] {
+            let f = Fake::new(v, 2);
+            let l = Ltdc::probe(&f, B).unwrap();
+            assert!(!l.has_crc());
+            f.clear_log();
+            assert_eq!(l.crc_enable(&f, true, false), Err(-ENODEV));
+            assert_eq!(l.crc_enable(&f, false, false), Err(-ENODEV));
+            assert!(f.writes().is_empty());
+        }
+        for v in [HWVER_40100, HWVER_40101] {
+            let f = Fake::new(v, 3);
+            let l = Ltdc::probe(&f, B).unwrap();
+            assert_eq!(l.crc_enable(&f, true, true), Err(-EINVAL));
+            assert_eq!(f.peek(GCR) & GCR_CRCEN, 0);
         }
     }
 
