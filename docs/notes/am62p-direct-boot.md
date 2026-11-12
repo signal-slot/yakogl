@@ -562,6 +562,19 @@ become:
 
 ## Recovery
 
+- **Back to boot0 without the button** (eMMC source, `emmc.conf`:
+  `BOOT_STAGE2_BOOT0_ON_REQUEST`; added 2026-11-12, not run on a board yet):
+  a `T` on the loader's console while it runs. The loader looks at its UART
+  twice without waiting (when the eMMC is up and before the jump; a normal
+  boot loses no time), and on a `T` sends CMD6 SWITCH, write byte,
+  EXT_CSD[179] PARTITION_CONFIG = 0x48 (BOOT_ACK kept, boot partition 1,
+  user-area access), polls CMD13 until the card is back in tran, reads the
+  EXT_CSD back (CMD8), prints `boot0 request: PARTITION_CONFIG 0x50 -> 0x48
+  (wanted 0x48)` and resets the SoC with PSCI SYSTEM_RESET. A failed step is
+  named and the boot goes on. No other EXT_CSD byte is written. The sender
+  must stop at the loader's first line: U-Boot is next on that console and a
+  key stops its autoboot (the showcase's `sbl/tools/to-boot0.py` does). Back
+  again from Linux: `mmc bootpart enable 2 1 /dev/mmcblk0`.
 - **Back to Torizon**: USB recovery mode, the recovery U-Boot, then
   `mmc partconf 0 <ack> 1 0` (boot0) through uuu
   (`build/am62p/uuu/back-to-boot0.lst`). Everything Torizon needs is still in
