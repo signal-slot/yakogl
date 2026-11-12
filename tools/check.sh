@@ -1591,18 +1591,17 @@ scope vivante
 step "clippy  $KNOBS_CONFIG" cargo clippy --no-default-features --features "$KNOBS_CONFIG" --all-targets
 step "test    $KNOBS_CONFIG (--lib, ${#KNOBS_TESTS[@]} knob tests by name)" knobs_lib_tests "$KNOBS_CONFIG" "${KNOBS_TESTS[@]}"
 # The KICK_DIFF comparison (src/vivante/kick.rs `diff`) exists only with the
-# knobs, so its test binary runs here; all KICK_DIFF_TESTS of it must pass,
-# so a cfg that stops compiling them turns the row red, not green.
-KICK_DIFF_TESTS=7
+# knobs, so its test binary runs here; every #[test] of the file must pass
+# (tests_as_declared), so a cfg that stops compiling them turns the row red,
+# not green.
 kick_diff_tests() {
   local out
   out=$(cargo_test --libtest --no-fail-fast --no-default-features --features "$KNOBS_CONFIG" --test gc_kick_diff 2>&1) ||
     { printf '%s\n' "$out" | grep -E '^test result|FAILED|panicked' | head -20; return 1; }
   printf '%s\n' "$out" | grep -E '^test result'
-  printf '%s\n' "$out" | grep -q "^test result: ok. $KICK_DIFF_TESTS passed; 0 failed; 0 ignored" ||
-    { echo "tests/gc_kick_diff.rs: not $KICK_DIFF_TESTS passed"; return 1; }
+  printf '%s\n' "$out" | tests_as_declared tests/gc_kick_diff.rs
 }
-step "test    $KNOBS_CONFIG (tests/gc_kick_diff.rs, $KICK_DIFF_TESTS tests)" kick_diff_tests
+step "test    $KNOBS_CONFIG (tests/gc_kick_diff.rs, every declared test)" kick_diff_tests
 scope pvr
 step "clippy  $KNOBS_POWERVR_CONFIG" cargo clippy --no-default-features --features "$KNOBS_POWERVR_CONFIG" --all-targets
 step "test    $KNOBS_POWERVR_CONFIG (--lib, ${#KNOBS_POWERVR_TESTS[@]} knob tests by name)" \
