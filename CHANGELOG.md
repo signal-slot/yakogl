@@ -27,6 +27,10 @@ records at the tip.
   (2026-11-01, record `99156df8`; shadow 10.62, refract 35.09 and
   terrain 83.06 ms a frame). The README table stays #1196's one-commit
   table.
+- `gl_test` on the common set: the AM62P 49 of 50 — case 20 `etc` fails
+  its first check alone, a stale expectation, its other 16 checks pass
+  (record `99156df8`); the i.MX8MP 49 of 49 run, case 16 skipped, from
+  main `f87dde43` (`8737e5a3`).
 - `gl_test` on the NanoPC-T6 (its own Linux, panthor): 165 of 256 cases
   pass, twice with identical verdict lines, on main `1a22bd38e`
   (`ba200dda`); the previous record read 161 at `0decb5f7`
@@ -38,6 +42,11 @@ records at the tip.
   match; 31 of the 32 failing scenes stop at the online compiler's
   `glCompileShader` refusal (#33) and terrain aborts in glmark2 itself
   after its refusals, so there is no score yet.
+- Z4 — one frame submitted from our own kernel side on Zephyr, the
+  `t6_submit` probe — reads PASS on the NanoPC-T6: 42 of 42 predicted
+  record lines, the target read back 2048 red and 2048 blue of 4096
+  pixels, 26 ms in all (the image of main `ef86672bf`; a kexec
+  development run, the U-Boot sign-off form not run, `14ea040a`).
 - dEQP-GLES3 on the Pi 4: rows 0-15, sixteen images, from main
   `b1b5b845`: 8,350 mustpass cases all with a result, 7,346 pass, 558
   fail, 446 not supported, 0 GPU recoveries (`d498d5ad`).
@@ -56,9 +65,12 @@ records at the tip.
   clear of an integer colour target. Also the V3D 7.1 (Raspberry Pi 5)
   QPU model, encoder and decoder, host-side only (#210).
 - V3D: a `GLES_SURF_RGB10_A2` render surface with its TLB words, and the GL
-  core's side of `GL_RGB10_A2` (own surface, bits, CPU mipmap chain). Both
-  are gated off: no back end reports the format yet
-  (`docs/notes/v3d-rgb10a2.md`).
+  core's side of `GL_RGB10_A2` (own surface, bits, CPU mipmap chain). The
+  V3D reports the format: `GLES_TEXFMT_RGB10A2` joined
+  `V3D_SAMPLED_TEXFMTS`, so a `GL_RGB10_A2` texture, renderbuffer and
+  attachment is the 10/10/10/2 class there (`03f4bbd9`). The TFU has no
+  10-bit input yet, so the mipmap chain stays on the CPU; PowerVR and
+  GC7000 keep the RGBA8 fallback (`docs/notes/v3d-rgb10a2.md`).
 - GC7000: texture-format words for the remaining ES 3.0 classes, checked
   against Mesa; RGBA32F/UI/I as two G32R32 planes with a companion slot and
   the compiler's 128-bit look-up keys (kept inert,
@@ -94,7 +106,10 @@ records at the tip.
   `yd_t6_fw_up` (declared in `yakogl_drivers.h`); and Z4, the CSG/CS
   start, the scheduler's submit sequence, ring, doorbell and sync-object
   wait, and the tiler heap's creation, growth and chunk return, transcribed
-  from panthor and run over host models only.
+  from panthor and run over host models; Z4 also read PASS on the board
+  (Results). The model firmware acknowledges CS 0, sizes CSG 0's suspend
+  buffers and publishes the output extract as the board's does
+  (`6abf4e8c`, `5ec69246`, `068e65be`).
   `driver/tools/kexec-zephyr/t6-verdict.sh` judges a board `uart.log`.
 - V3D: the QPU's shadow look-ups end to end, pinned to Mesa's ES 3.0
   look-up forms (`06bd7bc5`); `textureGrad`, vertex-stage 32-bit look-ups
@@ -109,8 +124,14 @@ records at the tip.
   NPOT divisors as Mesa encodes them (`d7731961`); textures stored as
   rgba16f and r16f sample (`520bc394`); `GL_MAX_COLOR_ATTACHMENTS` is 4
   (`4cf8532b`); the transcendentals reach Valhall ops and run-time index
-  ladders rewrite into Mesa's binary search (`3d937fe5`, `ee9d01e0`);
-  and `gl_test` cases 218 and 221 run through the GL core on the mock
+  ladders rewrite into Mesa's binary search (`3d937fe5`, `ee9d01e0`); a
+  vertex `M * vec4(p, 1.0)`, `cross()` and `P * M * v` are Mesa's fadd
+  and FMAs byte for byte and a vertex `fract()` and `inversesqrt()` are
+  Mesa's (`7810e44a`, `fc6522a3`, `9ed7b294`); mediump `reflect`, `length`,
+  `normalize` and `fract` of a varying's lane compile byte-equal to Mesa
+  26.2.1 (`e0574847`, `9794b4a7`, `8ea24220`;
+  `docs/notes/mali-fs-vector-builtins.md` tracks the rest); and
+  `gl_test` cases 218 and 221 run through the GL core on the mock
   (`68b9cdf2`). Each is checked against Mesa's drm-shim output.
 - GC7000: the hardware per-stream instance divisor (V1),
   `max_instance_divisor` 0xffff, its divisor words pinned per stream
@@ -120,8 +141,10 @@ records at the tip.
 - PowerVR: `mrt_layout`, the four-target colour layout and its
   end-of-tile program (`a47bcb77`); the vertex program adds a per-draw
   base to `gl_InstanceID` (`a489b1b8`,
-  `docs/notes/instanceid-per-draw.md`); and a texture swizzle composes
-  into the texture state (`2df189df`).
+  `docs/notes/instanceid-per-draw.md`); a texture swizzle composes
+  into the texture state (`2df189df`); and the pvrlab `gl_test` wires
+  the ES 3.0 flat-line, `drawrandom` and precision cases 230-242
+  (`99f6aaf6`).
 - GL core: `msaa_resolve` resolves a rectangle on the stored surface
   layout (`c1288b0c`); the ES 3.0 multisample renderbuffer rules are
   pure functions in `src/gl/msaa.rs` (`230caff1`), a shared
@@ -135,11 +158,19 @@ records at the tip.
   the C ABI over OP-TEE's SMC watchdog and PSCI reset (`98e268dd`).
 - NanoPC-T6: `tools/board.sh` runs the board, kexec-dev through
   `nanopc-t6.sh` (`10347727`); the GPU power-on starts a powered-down
-  NPLL and runs from U-Boot's starting state (`eca6e91d`), and the Z1
+  NPLL and runs from U-Boot's starting state (`eca6e91d`), and `gpu_up`
+  applies the GPU QoS policy after the power-on (`54c8f991`); the Z1
   (t6_gpu), Z2 (t6_mmu) and Z3 (t6_fw) probe images read PASS on the
   board (`358401ed`, `1bac1956`, `7aa7e8cb`); the `t6_submit` probe
-  prints the Z4a..Z4i record lines `t6-verdict.sh` judges
-  (`0357ae87`).
+  prints the Z4a..Z4k record lines `t6-verdict.sh` judges, Z4j and Z4k
+  measuring when the firmware publishes the extract and counting the
+  drain's acknowledges (`0357ae87`, `b559d36b`, `371b517d`), and Z4
+  reads PASS on the board (Results); the Zephyr images' window is
+  256 MiB, tied in the dts, `nanopc-t6.sh` and the U-Boot script, with
+  no jump while the GIC tables are unknown (`e1264cd1`);
+  `driver/tools/uboot-t6/t6-zephyr.cmd`, the draft sign-off route that
+  ext4loads a Zephyr image and runs `go`, uses only v2026.07 commands
+  and compiles with `mkimage` (`59fee21b`, `e0433194`).
 - RK3588: the GPU clock set stays inside its CLKSEL and OPP range
   (`8e415597`) and `QosPolicy` with `qos_apply` drives the four GPU QoS
   blocks (`483a3037`).
@@ -154,7 +185,10 @@ records at the tip.
   addresses, host names and serials (`2e9a9bda`); the gate takes its
   inputs from a dependency layout, `tools/cts/deps.toml`, with LZ4 from
   a pinned source build and `$LZ4` honoured by `am62p-mkboot.py`
-  (`8c046e65`, `570cd8c6`).
+  (`8c046e65`, `570cd8c6`); `kexec_zephyr` refuses a file larger than
+  64 MiB instead of loading it cut short, and its board self-test
+  compares the loaders' window with the dts node (`2ded94b7`,
+  `e1264cd1`).
 
 ### Changed
 
@@ -199,6 +233,12 @@ records at the tip.
 - PowerVR: flat varyings take the last (provoking) vertex (`7b39917c`).
 - GL core: `texture_has_no_alpha` covers the integer base formats
   (`50b9b6e3`).
+- GC7000: a draw whose sampler slots pass slot 31 is refused by name
+  instead of writing past the 32-slot array (`b1e22a8d`).
+- GL core: `glDeleteBuffers` frees the name at once, so binding it again
+  creates a new buffer, and a transform feedback or vertex array object
+  that held the deleted buffer keeps its storage (`da0eede3`,
+  `docs/notes/es3-tf-lifetime.md`).
 
 ## [0.1.0] - 2026-10-27
 
