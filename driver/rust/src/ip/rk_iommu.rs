@@ -132,6 +132,11 @@ fn poll_all(
 /// check that no set pages afterwards. A set that was not paging gets only
 /// `INT_MASK` = 0 and `DTE_ADDR` = 0. The block behind the IOMMU must be
 /// idle or able to stall: while a set is stalled its master waits.
+///
+/// Every step runs even when an earlier poll timed out, as Linux's does
+/// (:915: errors are ignored while disabling). The result: `PagingStuck`
+/// when a set still pages at the end; otherwise the first stall or unstall
+/// time-out (paging is then off on every set, checked); otherwise `Ok`.
 pub fn paging_off(m: &impl Mmio, bases: &[usize], delay_us: &mut impl FnMut(u32)) -> Result<Off, Refused> {
     if bases.is_empty() || bases.len() > MAX_SETS {
         return Err(Refused { why: Refusal::BadArgument, set: 0, status: 0 });
@@ -142,7 +147,14 @@ pub fn paging_off(m: &impl Mmio, bases: &[usize], delay_us: &mut impl FnMut(u32)
         status_found[i] = m.read32(b + STATUS);
         paging[i] = status_found[i] & STATUS_PAGING_ENABLED != 0;
     }
-    let refuse = |why| move |(set, status)| Refused { why, set, status };
+    // Like Linux (:915), a failed step does not stop the next one: the
+    // first failure is kept and reported once everything was done.
+    let mut first: Option<Refused> = None;
+    let mut keep = |why, r: Result<(), (usize, u32)>| {
+        if let (Err((set, status)), None) = (r, first) {
+            first = Some(Refused { why, set, status });
+        }
+    };
 
     // Stall each paging set that is not stalled already (fact 3).
     let mut stall = [false; MAX_SETS];
@@ -152,14 +164,15 @@ pub fn paging_off(m: &impl Mmio, bases: &[usize], delay_us: &mut impl FnMut(u32)
             m.write32(b + COMMAND, CMD_ENABLE_STALL);
         }
     }
-    poll_all(m, bases, &stall, |s| s & STATUS_STALL_ACTIVE != 0, delay_us).map_err(refuse(Refusal::StallTimeout))?;
+    keep(Refusal::StallTimeout, poll_all(m, bases, &stall, |s| s & STATUS_STALL_ACTIVE != 0, delay_us));
 
     for (i, b) in bases.iter().enumerate() {
         if paging[i] {
             m.write32(b + COMMAND, CMD_DISABLE_PAGING);
         }
     }
-    poll_all(m, bases, &paging, |s| s & STATUS_PAGING_ENABLED == 0, delay_us).map_err(refuse(Refusal::PagingStuck))?;
+    // A set that keeps paging is reported by the check at the end.
+    let _ = poll_all(m, bases, &paging, |s| s & STATUS_PAGING_ENABLED == 0, delay_us);
 
     for b in bases {
         m.write32(b + INT_MASK, 0);
@@ -174,8 +187,7 @@ pub fn paging_off(m: &impl Mmio, bases: &[usize], delay_us: &mut impl FnMut(u32)
             m.write32(b + COMMAND, CMD_DISABLE_STALL);
         }
     }
-    poll_all(m, bases, &stalled, |s| s & STATUS_STALL_ACTIVE == 0, delay_us)
-        .map_err(refuse(Refusal::UnstallTimeout))?;
+    keep(Refusal::UnstallTimeout, poll_all(m, bases, &stalled, |s| s & STATUS_STALL_ACTIVE == 0, delay_us));
 
     // The check: no set pages, whatever the commands did.
     let mut status_now = [0; MAX_SETS];
@@ -185,7 +197,10 @@ pub fn paging_off(m: &impl Mmio, bases: &[usize], delay_us: &mut impl FnMut(u32)
             return Err(Refused { why: Refusal::PagingStuck, set: i, status: status_now[i] });
         }
     }
-    Ok(Off { status_found, status_now })
+    match first {
+        Some(r) => Err(r),
+        None => Ok(Off { status_found, status_now }),
+    }
 }
 
 #[cfg(test)]
@@ -345,7 +360,7 @@ mod tests {
     fn a_stuck_paging_bit_is_a_named_error_after_the_bounded_poll() {
         let m = Mmu { paging_stuck: true, ..Mmu::crash_kexec() };
         let r = paging_off(&m, &SETS, &mut |us| m.delay(us)).unwrap_err();
-        assert_eq!(r, Refused { why: Refusal::PagingStuck, set: 0, status: 0x5 });
+        assert_eq!(r, Refused { why: Refusal::PagingStuck, set: 0, status: 0x1 });
         let waited: u32 =
             m.log.borrow().iter().filter_map(|o| if let Op::Delay(d) = o { Some(*d) } else { None }).sum();
         assert_eq!(waited, POLL_BUDGET_US);
@@ -356,8 +371,8 @@ mod tests {
         let m = Mmu { stall_never: true, ..Mmu::crash_kexec() };
         let r = paging_off(&m, &SETS, &mut |us| m.delay(us)).unwrap_err();
         assert_eq!((r.why, r.set, r.status), (Refusal::StallTimeout, 0, 1));
-        // nothing past the stall request was written
-        assert!(m.writes().iter().all(|w| *w == (0, 0x08, 2) || *w == (1, 0x08, 2)));
+        // every step was still taken: paging is off on both sets
+        assert!(m.sets.borrow().iter().all(|s| s.status & STATUS_PAGING_ENABLED == 0));
 
         let m = Mmu { stall_stuck: true, ..Mmu::crash_kexec() };
         let r = paging_off(&m, &SETS, &mut |us| m.delay(us)).unwrap_err();
@@ -370,5 +385,16 @@ mod tests {
         assert_eq!(paging_off(&m, &[], &mut |_| {}).unwrap_err().why, Refusal::BadArgument);
         assert_eq!(paging_off(&m, &[SETS[0]; 3], &mut |_| {}).unwrap_err().why, Refusal::BadArgument);
         assert!(m.log.borrow().is_empty());
+    }
+
+    /// Review S2: Linux goes on with the next steps after a stall time-out
+    /// (rockchip-iommu.c:915-923).
+    #[test]
+    fn a_stall_time_out_does_not_stop_the_paging_off() {
+        let m = Mmu { stall_never: true, ..Mmu::crash_kexec() };
+        let _ = paging_off(&m, &SETS, &mut |us| m.delay(us));
+        for s in m.sets.borrow().iter() {
+            assert_eq!((s.status & STATUS_PAGING_ENABLED, s.dte, s.int_mask), (0, 0, 0));
+        }
     }
 }
