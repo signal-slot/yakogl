@@ -138,12 +138,12 @@ measured by a reference in `tools/mali/testdata` (nir_fs.rs `layout`,
    lanes lose their conversion at the link (`f2f32(f2fmp(a))` is `a`,
    nir_opt_algebraic.py:1991) and are converted with the stored colour
    (`nir_lower_mediump_io`, bifrost_nir.c:914), in the colour's order
-   (intloop_ifloop: the pair z,w, then x). `nir_opt_vectorize` makes two
-   lanes of one load that are an aligned pair one `V2F32_TO_V2F16`, the
-   first lane low (nir_opt_vectorize.c:166-171, 559). The selection here
-   converts each load's lanes in lane order: any other order, and a pair
-   it converts apart (fsload_mk_pair, fsload_disc_col: the compare's y,
-   then the colour's x), is refused (`FsVaryingLoad`).
+   (fsload_order: z then x; intloop_ifloop: the pair z,w, then x).
+   `nir_opt_vectorize` makes two lanes of one load that are an aligned
+   pair one `V2F32_TO_V2F16`, the first lane low
+   (nir_opt_vectorize.c:166-171, 559). A pair the selection here converts
+   apart (fsload_mk_pair, fsload_disc_col: the compare's y, then the
+   colour's x) or with the odd lane low is refused (`FsVaryingLoad`).
 
 ## Pins
 

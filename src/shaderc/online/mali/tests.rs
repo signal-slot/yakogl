@@ -1970,7 +1970,8 @@ fn a_highp_varying_read_in_part_is_compacted_as_mesa_26_2_1() {
 /// and a mat2 before a vec2 (fsload_mat2_v2); a matrix is kept per column
 /// (fsload_mat2, fsload_mat3) and, in a highp shader, per lane read
 /// (fsload_hp_mat2); a colour that holds a highp varying's lane keeps the
-/// lanes read (fsload_hp_var2).
+/// lanes read (fsload_hp_var2); the colour's own lanes are converted in
+/// the colour's order (fsload_order, intloop_ifloop: the pair z,w first).
 #[test]
 fn varyings_sharing_a_slot_are_loaded_per_slot_as_mesa_26_2_1() {
     let pair = |n: &'static str| match n {
@@ -1979,7 +1980,9 @@ fn varyings_sharing_a_slot_are_loaded_per_slot_as_mesa_26_2_1() {
         "fsload_mat2" | "fsload_hp_mat2" => td!("fsload_mat2.vert"),
         "fsload_mat3" => td!("fsload_mat3.vert"),
         "fsload_mat2_v2" => td!("fsload_mat2_v2.vert"),
-        _ => td!("fsload_hp_var2.vert"),
+        "fsload_hp_var2" => td!("fsload_hp_var2.vert"),
+        "fsload_order" => td!("fsload_order.vert"),
+        _ => td!("intloop_ifloop.vert"),
     };
     let cases = [
         ("fsload_v3x_v3z", td!("fsload_v3x_v3z.frag"), td!("fsload_v3x_v3z.expect.json")),
@@ -1991,6 +1994,8 @@ fn varyings_sharing_a_slot_are_loaded_per_slot_as_mesa_26_2_1() {
         ("fsload_mat3", td!("fsload_mat3.frag"), td!("fsload_mat3.expect.json")),
         ("fsload_mat2_v2", td!("fsload_mat2_v2.frag"), td!("fsload_mat2_v2.expect.json")),
         ("fsload_hp_var2", td!("fsload_hp_var2.frag"), td!("fsload_hp_var2.expect.json")),
+        ("fsload_order", td!("fsload_order.frag"), td!("fsload_order.expect.json")),
+        ("intloop_ifloop", td!("intloop_ifloop.frag"), td!("intloop_ifloop.expect.json")),
     ];
     let failed: Vec<String> = cases
         .iter()
