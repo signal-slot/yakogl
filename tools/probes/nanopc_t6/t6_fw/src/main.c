@@ -79,7 +79,7 @@ static const struct t6_fw_section t6_fw_sections[] = {
 BUILD_ASSERT(SECTIONS == 7, "the board's firmware has seven loaded sections");
 
 /* driver/rust/src/ffi/rk3588.rs pins the same layouts. */
-BUILD_ASSERT(sizeof(struct yd_t6_fw_up) == 192, "struct yd_t6_fw_up moved");
+BUILD_ASSERT(sizeof(struct yd_t6_fw_up) == 208, "struct yd_t6_fw_up moved");
 BUILD_ASSERT(sizeof(struct yd_t6_fw_backing) == 24, "struct yd_t6_fw_backing moved");
 
 #define GPU_MAP_SIZE 0x280000 /* the doorbells are at 0x80000 and up */
