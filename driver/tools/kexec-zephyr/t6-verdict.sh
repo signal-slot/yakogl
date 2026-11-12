@@ -47,14 +47,18 @@
 # t6_fw: JOB_INT_RAWSTAT must have bit 31 set and the GLB req and ack words
 # agree on the acknowledged bits; hooks check both.
 #
-# t6_submit: Z3's lines as t6_fw's, then the Z4 record's nine lines (Z4a ..
-# Z4i, board::nanopc_t6_submit::SubmitUp). The status line (Z4a) pins step 0,
+# t6_submit: Z3's lines as t6_fw's, then the Z4 record's eleven lines (Z4a ..
+# Z4k, board::nanopc_t6_submit::SubmitUp). The status line (Z4a) pins step 0,
 # refusal 0, detail 0, so a stopped run (wait timeout, Z3 stopped) differs
-# there and on the fields it left at 0, and its FAIL line stands for PASS. The
-# record's timing (*_us), latest_flush, sync_updates, cleared and as0_tables_used
-# (the board's file sizes Z3's tables: the model's 8 is not the board's) are
-# tokens; vm_tables_used, the heap chunk and the digest are pinned as the
-# generated frame's record in nanopc_t6_submit pins them; the target's pixel counts are tokens whose sum must equal the
+# there and on the fields it left at 0, and its FAIL line stands for PASS.
+# Pinned from the first board run (issue #4515): the suspend sizes 25600 /
+# 25600 and CS 0's ack 0x00000011. The record's timing (*_us), latest_flush
+# and as0_tables_used (the board's file sizes Z3's tables: the model's 8 is
+# not the board's) are tokens; so are, until the second board run measures
+# them, extract after the wait, sync_updates, cleared and the drain's line
+# and extract after the end (Z4j, Z4k). vm_tables_used, the heap chunk and
+# the digest are pinned as the generated frame's record in nanopc_t6_submit
+# pins them; the target's pixel counts are tokens whose sum must equal the
 # pixels read.
 set -euo pipefail
 export LC_ALL=C
@@ -309,10 +313,10 @@ z4_pixels() {
 }
 
 # tools/probes/nanopc_t6/t6_submit/src/main.c: Z3's lines as t6_fw's, then
-# yd_t6_submit's record (SubmitUp, 392 bytes) in nine lines, %016llx for the
+# yd_t6_submit's record (SubmitUp, 424 bytes) in eleven lines, %016llx for the
 # 64-bit words, %08x for the 32-bit words, %u for counts. The predicted values
-# are the_frame_runs_on_csg0_cs0_and_the_record_is_as_predicted's, over the MCU
-# model, not run on the board. A stopped run prints its record too (the
+# are the_generated_frame_s_record_is_as_predicted's, over the MCU model; the
+# ones the first board run measured are pinned from it. A stopped run prints its record too (the
 # fields after the stop at 0) and "t6_submit: FAIL: Z4 step N (name)".
 table_t6_submit() {
 	table_boot
@@ -328,10 +332,16 @@ table_t6_submit() {
 	# #4515: 0 at the wait's end on the first run); its value at the wait's
 	# end is not measured on the board yet as a rule: form only
 	e 't6_submit: Z4e: insert 0x0000000000000080 extract 0x{x16} seqno 0x0000000000000001 sync_status 0x00000000, wait {d} us' 't6_submit: Z4e:'
+	# sync_updates (Z4f) and cleared (Z4g) move with when the firmware
+	# publishes extract: not measured on the board yet, form only
 	e 't6_submit: Z4f: latest_flush 0x{x8} sync_updates {d} status_cmd_ptr 0x0000000000000000 info 0x0000000000000000' 't6_submit: Z4f:'
 	e 't6_submit: Z4g: stop {d} us refusal 0, terminate {d} us refusal 0, cleared {d} {d} {d}' 't6_submit: Z4g:'
 	e 't6_submit: Z4h: target red {@R} blue {@B} fill {@F} other {@O} of {@P} pixels' 't6_submit: Z4h:' z4_pixels
 	e 't6_submit: Z4i: frame digest 0xa4db81a9d39bfdcc' 't6_submit: Z4i:'
+	# sched::drained and extract after the group's end: not measured on the
+	# board yet, form only (the commit that records the second run pins them)
+	e 't6_submit: Z4j: drain {d} us refusal {d} extract 0x{x16} sync_updates {d} cs_ack 0x{x8}' 't6_submit: Z4j:'
+	e 't6_submit: Z4k: extract after the end 0x{x16}' 't6_submit: Z4k:'
 	e 't6_submit: PASS' 't6_submit: (PASS|FAIL)'
 	table_reset t6_submit
 }

@@ -587,6 +587,7 @@ int yd_t6_fw_up(uintptr_t cru, uintptr_t pmu, uintptr_t spi2, uintptr_t qos, uin
 #define YD_T6_SUBMIT_STEP_WAIT      14 /* sched::wait refused (19 = the 5 s timeout; status_cmd_ptr, info read) */
 #define YD_T6_SUBMIT_STEP_STOP      15 /* the job completed, CS 0's stop was refused */
 #define YD_T6_SUBMIT_STEP_TERMINATE 16 /* the job completed, CSG 0's terminate was refused: reset */
+#define YD_T6_SUBMIT_STEP_DRAIN     17 /* the job completed, sched::drained refused with other than its timeout (27, recorded in drain_refusal only) */
 
 /* refusal of YD_T6_SUBMIT_STEP_FRAME (board::nanopc_t6_submit::FrameRefusal) */
 #define YD_T6_FRAME_RANGE     1 /* a region misaligned, empty, out of the 48-bit VA or overlapping (detail: its VA) */
@@ -664,7 +665,7 @@ struct yd_t6_submit_up {
 	uint32_t latest_flush;  /* the job's */
 	uint32_t sync_updates;  /* CSG_SYNC_UPDATE events the wait acknowledged */
 	uint64_t insert;        /* after the wait */
-	uint64_t extract;
+	uint64_t extract_at_done; /* the output page's extract right after the wait */
 	uint64_t seqno;         /* the sync object's */
 	uint32_t sync_status;
 	uint32_t wait_us;
@@ -681,6 +682,12 @@ struct yd_t6_submit_up {
 	uint32_t other;
 	uint32_t pixels;        /* read (0 when the run stopped before the blocks) */
 	uint64_t digest;        /* YD_T6_SUBMIT_DIGEST */
+	uint64_t extract_drained; /* sched::drained after a done job (0 when not run): the extract it ended with */
+	uint64_t extract_at_end;  /* extract after the group's stop and terminate */
+	uint32_t drain_us;
+	uint32_t drain_refusal;   /* 0, or the SchedRefusal (27: the drain's timeout, not a step) */
+	uint32_t drain_sync_updates; /* CSG_SYNC_UPDATE events the drain acknowledged */
+	uint32_t drain_cs_ack;    /* CS 0's ack right after the drain */
 };
 
 int yd_t6_submit(uintptr_t cru, uintptr_t pmu, uintptr_t spi2, uintptr_t qos, uintptr_t gpu,
@@ -1718,7 +1725,7 @@ _Static_assert(offsetof(struct yd_t6_submit_mem, regions) == 24, "yd_t6_submit_m
 _Static_assert(offsetof(struct yd_t6_submit_mem, vm_pool) == 168, "yd_t6_submit_mem.vm_pool");
 _Static_assert(offsetof(struct yd_t6_submit_mem, vm_pool_pages) == 176, "yd_t6_submit_mem.vm_pool_pages");
 _Static_assert(offsetof(struct yd_t6_submit_mem, vm_tables_pa) == 184, "yd_t6_submit_mem.vm_tables_pa");
-_Static_assert(sizeof(struct yd_t6_submit_up) == 392, "struct yd_t6_submit_up");
+_Static_assert(sizeof(struct yd_t6_submit_up) == 424, "struct yd_t6_submit_up");
 _Static_assert(offsetof(struct yd_t6_submit_up, step) == 0, "yd_t6_submit_up.step");
 _Static_assert(offsetof(struct yd_t6_submit_up, refusal) == 4, "yd_t6_submit_up.refusal");
 _Static_assert(offsetof(struct yd_t6_submit_up, detail) == 8, "yd_t6_submit_up.detail");
@@ -1742,7 +1749,7 @@ _Static_assert(offsetof(struct yd_t6_submit_up, cs_ack_us) == 276, "yd_t6_submit
 _Static_assert(offsetof(struct yd_t6_submit_up, latest_flush) == 280, "yd_t6_submit_up.latest_flush");
 _Static_assert(offsetof(struct yd_t6_submit_up, sync_updates) == 284, "yd_t6_submit_up.sync_updates");
 _Static_assert(offsetof(struct yd_t6_submit_up, insert) == 288, "yd_t6_submit_up.insert");
-_Static_assert(offsetof(struct yd_t6_submit_up, extract) == 296, "yd_t6_submit_up.extract");
+_Static_assert(offsetof(struct yd_t6_submit_up, extract_at_done) == 296, "yd_t6_submit_up.extract_at_done");
 _Static_assert(offsetof(struct yd_t6_submit_up, seqno) == 304, "yd_t6_submit_up.seqno");
 _Static_assert(offsetof(struct yd_t6_submit_up, sync_status) == 312, "yd_t6_submit_up.sync_status");
 _Static_assert(offsetof(struct yd_t6_submit_up, wait_us) == 316, "yd_t6_submit_up.wait_us");
@@ -1759,6 +1766,12 @@ _Static_assert(offsetof(struct yd_t6_submit_up, fill) == 372, "yd_t6_submit_up.f
 _Static_assert(offsetof(struct yd_t6_submit_up, other) == 376, "yd_t6_submit_up.other");
 _Static_assert(offsetof(struct yd_t6_submit_up, pixels) == 380, "yd_t6_submit_up.pixels");
 _Static_assert(offsetof(struct yd_t6_submit_up, digest) == 384, "yd_t6_submit_up.digest");
+_Static_assert(offsetof(struct yd_t6_submit_up, extract_drained) == 392, "yd_t6_submit_up.extract_drained");
+_Static_assert(offsetof(struct yd_t6_submit_up, extract_at_end) == 400, "yd_t6_submit_up.extract_at_end");
+_Static_assert(offsetof(struct yd_t6_submit_up, drain_us) == 408, "yd_t6_submit_up.drain_us");
+_Static_assert(offsetof(struct yd_t6_submit_up, drain_refusal) == 412, "yd_t6_submit_up.drain_refusal");
+_Static_assert(offsetof(struct yd_t6_submit_up, drain_sync_updates) == 416, "yd_t6_submit_up.drain_sync_updates");
+_Static_assert(offsetof(struct yd_t6_submit_up, drain_cs_ack) == 420, "yd_t6_submit_up.drain_cs_ack");
 _Static_assert(sizeof(struct yd_sn65dsi8x_config) == 8, "struct yd_sn65dsi8x_config");
 _Static_assert(offsetof(struct yd_sn65dsi8x_config, flags) == 0, "yd_sn65dsi8x_config.flags");
 _Static_assert(offsetof(struct yd_sn65dsi8x_config, lanes) == 4, "yd_sn65dsi8x_config.lanes");

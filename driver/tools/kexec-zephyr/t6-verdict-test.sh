@@ -117,23 +117,24 @@ check t6_fw-job-bit 1 "VERDICT t6_fw FAIL (1 of $FW)" "$((FW - 1)) 0 1" t6_fw "$
 sed 's/GLB version 1.5.0 (0x01050000)/GLB version 1.4.0 (0x01040000)/' "$D/t6_fw-pass.uart" >"$WORK/ver.log"
 check t6_fw-version 1 "VERDICT t6_fw FAIL (1 of $FW)" "$((FW - 1)) 0 1" t6_fw "$WORK/ver.log"
 
-# t6_submit: t6_fw's 31 lines (the Z3 record) + 9 Z4 lines = 40. The Z4 lines
-# are the pinning test's record (board::nanopc_t6_submit); a stopped run prints
-# its record too and is judged by its status fields.
-SUB=40
+# t6_submit: t6_fw's 31 lines (the Z3 record) + 11 Z4 lines = 42. The Z4 lines
+# are the model's records (board::nanopc_t6_submit's
+# the_fixtures_z4_lines_are_the_model_s_records); a stopped run prints its
+# record too and is judged by its status fields.
+SUB=42
 check t6_submit-pass 0 'VERDICT t6_submit PASS' "$SUB 0 0" t6_submit "$D/t6_submit-pass.uart"
 # wait timeout (step 14, refusal 19): Z4a, Z4e (extract and seqno 0) and the FAIL line differ
 check t6_submit-wait-timeout 1 "VERDICT t6_submit FAIL (3 of $SUB)" "$((SUB - 3)) 0 3" t6_submit "$D/t6_submit-wait-timeout.uart"
 # Z3 stopped (Z1 refused, stop 5): the rc line, Z4a..Z4e (zeros), the FAIL line
 # and the stop line differ, the 7 record lines are missing; Z1's record
 # follows the stop line (8 ok)
-check t6_submit-z3-stop 1 "VERDICT t6_submit FAIL (15 of $((SUB + Z1)))" "$((26 + Z1)) 7 8" t6_submit "$D/t6_submit-z3-stop.uart"
-# cut after Z4f: Z4g, Z4h, Z4i, PASS and the reset line missing
-check t6_submit-missing 1 "VERDICT t6_submit FAIL (5 of $SUB)" "$((SUB - 5)) 5 0" t6_submit "$D/t6_submit-missing.uart"
+check t6_submit-z3-stop 1 "VERDICT t6_submit FAIL (15 of $((SUB + Z1)))" "$((28 + Z1)) 7 8" t6_submit "$D/t6_submit-z3-stop.uart"
+# cut after Z4f: Z4g .. Z4k, PASS and the reset line missing
+check t6_submit-missing 1 "VERDICT t6_submit FAIL (7 of $SUB)" "$((SUB - 7)) 7 0" t6_submit "$D/t6_submit-missing.uart"
 # the watchdog reset the probe during the Z4 wait: the capture ends after the
-# last Z3 line with a fresh boot banner. Z4a..Z4i, PASS and the reset line are
+# last Z3 line with a fresh boot banner. Z4a..Z4k, PASS and the reset line are
 # missing, and the first missing line names Z4a
-check t6_submit-z4-reset 1 "VERDICT t6_submit FAIL (11 of $SUB)" "$((SUB - 11)) 11 0" t6_submit "$D/t6_submit-z4-reset.uart"
+check t6_submit-z4-reset 1 "VERDICT t6_submit FAIL (13 of $SUB)" "$((SUB - 13)) 13 0" t6_submit "$D/t6_submit-z4-reset.uart"
 if [ "$(bash "$V" t6_submit "$D/t6_submit-z4-reset.uart" 2>&1 | grep -m1 '^missing ' | grep -c 't6_submit: Z4a:')" = 1 ]; then
 	echo "ok   t6_submit-z4-reset: the first missing line is Z4a"
 else

@@ -37,9 +37,11 @@ t6_submit: Z4c: heap ctx 0x0000800000015000 chunk 0x0000800000a00000 chunk_size 
 t6_submit: Z4d: CSG0 req 0x00000011 ack 0x00000011 CS0 req 0x00000511 ack 0x00000011, acked in 1/0 us
 t6_submit: Z4e: insert 0x0000000000000080 extract 0x0000000000000000 seqno 0x0000000000000001 sync_status 0x00000000, wait 20 us
 t6_submit: Z4f: latest_flush 0x00000000 sync_updates 0 status_cmd_ptr 0x0000000000000000 info 0x0000000000000000
-t6_submit: Z4g: stop 1 us refusal 0, terminate 1 us refusal 0, cleared 268435456 1 0
+t6_submit: Z4g: stop 3 us refusal 0, terminate 1 us refusal 0, cleared 0 0 0
 t6_submit: Z4h: target red 2048 blue 2048 fill 0 other 0 of 4096 pixels
 t6_submit: Z4i: frame digest 0xa4db81a9d39bfdcc
+t6_submit: Z4j: drain 10 us refusal 0 extract 0x0000000000000080 sync_updates 1 cs_ack 0x00000011
+t6_submit: Z4k: extract after the end 0x0000000000000080
 t6_submit: PASS
 t6: t6_submit done: PSCI SYSTEM_RESET at 214 ms (0 feeds)
 DDR V1.16 4bfdbd7 typ 24/01/09-11:49:58

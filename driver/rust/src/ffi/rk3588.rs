@@ -1238,6 +1238,7 @@ mod fw_tests {
             ("YD_T6_SUBMIT_STEP_WAIT", sub::STEP_WAIT),
             ("YD_T6_SUBMIT_STEP_STOP", sub::STEP_STOP),
             ("YD_T6_SUBMIT_STEP_TERMINATE", sub::STEP_TERMINATE),
+            ("YD_T6_SUBMIT_STEP_DRAIN", sub::STEP_DRAIN),
             ("YD_T6_FRAME_RANGE", FrameRefusal::Range as u32),
             ("YD_T6_FRAME_MEMORY", FrameRefusal::Memory as u32),
             ("YD_T6_FRAME_EMPTY", FrameRefusal::Empty as u32),
@@ -1313,7 +1314,7 @@ mod fw_tests {
             latest_flush,
             sync_updates,
             insert,
-            extract,
+            extract_at_done,
             seqno,
             sync_status,
             wait_us,
@@ -1329,16 +1330,22 @@ mod fw_tests {
             fill,
             other,
             pixels,
-            digest
+            digest,
+            extract_drained,
+            extract_at_end,
+            drain_us,
+            drain_refusal,
+            drain_sync_updates,
+            drain_cs_ack
         );
-        assert_eq!(pins.len(), 7 + 40);
+        assert_eq!(pins.len(), 7 + 46);
         for (what, v) in &pins {
             let pin = format!("_Static_assert({what} == {v},");
             assert!(H.contains(&pin), "{pin}");
         }
         // one assert per field and one for the size, each naming yd_t6_submit
         let n = H.lines().filter(|l| l.starts_with("_Static_assert(") && l.contains("yd_t6_submit")).count();
-        assert!(n >= 41, "{n} _Static_assert lines name yd_t6_submit");
+        assert!(n >= 47, "{n} _Static_assert lines name yd_t6_submit");
     }
 
     #[test]
