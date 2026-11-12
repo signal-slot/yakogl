@@ -211,6 +211,13 @@ function(yakogl_add_capi_archive)
   if(YAKOGL_MSAA_FBO)
     list(APPEND _features "msaa-fbo")
   endif()
+  # Any other crate feature, comma or semicolon separated (a global, empty by
+  # default): tools/cts/host-deqp-run.sh's EXTRA_FEATURES for an opt-in feature
+  # that has no option of its own yet.
+  if(YAKOGL_EXTRA_FEATURES)
+    string(REPLACE "," ";" _extra "${YAKOGL_EXTRA_FEATURES}")
+    list(APPEND _features ${_extra})
+  endif()
   # The gl_test runner (the crate's `gl-test-runner`): the walker of
   # tools/pvrlab/gl_test.c, in every archive a build of that file links and
   # in no other.

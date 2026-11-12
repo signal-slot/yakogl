@@ -567,6 +567,14 @@ and commit at once need their own `OUT=`. On 2026-10-08 the gles3 `info`
 cases reported `OpenGL ES 3.0 YakoGL` and `OpenGL ES GLSL ES 3.00`
 (HOST-ONLY).
 
+**Extra cargo features.** `EXTRA_FEATURES='a,b' tools/cts/host-deqp-run.sh ...`
+appends those features to the ones the CMake options give (it is
+`-DYAKOGL_EXTRA_FEATURES=a,b`, a `LIB_CMAKE_ARGS` entry: its own library
+directory `lib-<gpu>[-es3]-x<cksum>`, the same suffix on the default run
+directory, and `lib-cmake-args=` in `$OUT/commit`). Unset, the run is unchanged.
+Check the feature on cargo's line in `build/host-deqp/lib-*-build.log`. For
+example `GPU=powervr EXTRA_FEATURES=pvr-instance-divisor`.
+
 ### The multisample groups, per `GPU=`, without and with `msaa-fbo`
 
 The three groups the multisample renderbuffer work moves
