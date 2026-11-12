@@ -4655,9 +4655,22 @@ fn the_alu_population_is_byte_equal_to_mesa_26_2_1() {
 
 /// The vector built-ins of a fragment shader, each drawn on the shim with
 /// `--uniform-values` (name, VS, FS, expect.json; the note's sha256 table
-/// pins the words): `length` and `normalize` at both precisions, the
-/// mediump ones a dot product of fp16 lanes, `FRSQ.f16` and `FRCP.f16`.
-const FSVEC_POPULATION: [(&str, &str, &str, &str); 4] = [
+/// pins the words): `fract`, `length` and `normalize` at both precisions,
+/// the mediump ones `FROUND.v2f16` and `FADD.v2f16` of one narrowed lane, a
+/// dot product of fp16 lanes, `FRSQ.f16` and `FRCP.f16`.
+const FSVEC_POPULATION: [(&str, &str, &str, &str); 6] = [
+    (
+        "fsvec_fract_highp",
+        td!("fsvec_fract_highp.vert"),
+        td!("fsvec_fract_highp.frag"),
+        td!("fsvec_fract_highp.expect.json"),
+    ),
+    (
+        "fsvec_fract_mediump",
+        td!("fsvec_fract_mediump.vert"),
+        td!("fsvec_fract_mediump.frag"),
+        td!("fsvec_fract_mediump.expect.json"),
+    ),
     (
         "fsvec_length_highp",
         td!("fsvec_length_highp.vert"),
@@ -4684,14 +4697,15 @@ const FSVEC_POPULATION: [(&str, &str, &str, &str); 4] = [
     ),
 ];
 
-/// Every program of [`FSVEC_POPULATION`] is the shim's to the byte: both
-/// vertex programs, the fragment program, the FAU words (`u` is (16, 17,
-/// 18, 19)) and the register counts.
+/// Every program of [`FSVEC_POPULATION`] is the shim's to the byte, the
+/// pair compiled through the link (a highp `fract(v.x)` stores one lane):
+/// both vertex programs, the fragment program, the FAU words (`u` is (16,
+/// 17, 18, 19)) and the register counts.
 #[test]
 fn the_fsvec_population_is_byte_equal_to_mesa_26_2_1() {
     let mut failed = Vec::new();
     for (name, vs, fs, json) in FSVEC_POPULATION {
-        if let Err(e) = std::panic::catch_unwind(|| check_program(vs, fs, json)) {
+        if let Err(e) = std::panic::catch_unwind(|| check_linked(vs, fs, json)) {
             let m = e.downcast_ref::<String>().cloned().unwrap_or_else(|| format!("{:?}", e.downcast_ref::<&str>()));
             failed.push(format!("{name}: {m}"));
         }

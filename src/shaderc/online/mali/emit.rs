@@ -36,7 +36,7 @@ const fn row(op: Alu, bits: u8, width: u8) -> Row {
 }
 
 /// The rows [`emit`] selects, each with the `bi_emit_alu` case it is.
-pub const ROWS: [(Row, &str); 92] = [
+pub const ROWS: [(Row, &str); 93] = [
     (row(Alu::Fadd, 32, 1), "nir_op_fadd: FADD.f32"),
     (row(Alu::Fmul, 32, 1), "nir_op_fmul: FMA.f32 a, b, -0.0"),
     (row(Alu::Ffma, 32, 1), "nir_op_ffma: FMA.f32"),
@@ -201,6 +201,9 @@ pub const ROWS: [(Row, &str); 92] = [
      * r2^.h00`; `FRSQ.f16 r0, r0^.h00` then `FRCP.f16 r0, r0^.h00`) */
     (row(Alu::Frsq, 16, 1), "nir_op_frsq of one 16-bit lane: FRSQ.f16 a.hN"),
     (row(Alu::Frcp, 16, 1), "nir_op_frcp of one 16-bit lane: FRCP.f16 a.hN"),
+    /* a mediump `fract` (tools/mali/testdata/fsvec_fract_mediump:
+     * `FROUND.v2f16.rtn r1, r0.h00`) */
+    (row(Alu::Ffloor, 16, 1), "nir_op_ffloor of one 16-bit lane: FROUND.v2f16.rtn a.hN"),
 ];
 
 /// A source of a one-lane 16-bit operation: its lane's half in both
@@ -270,6 +273,7 @@ pub fn emit(p: &mut Prog<'_>, row: Row, s: &[Src]) -> Result<u16, MaliError> {
         /* one lane: each source's half in both (the caller's swizzle) */
         (Alu::Fcmp(cmpf), 16, 1 | 2) => ins(p, Op::FcmpOrV2f16 { cmpf, result: ResultType::M1 }, &[s[0], s[1], ZERO])?,
         (Alu::Fceil, 16, 1) => ins(p, Op::FroundV2f16 { round: Round::Rtp }, &[lone(s[0])])?,
+        (Alu::Ffloor, 16, 1) => ins(p, Op::FroundV2f16 { round: Round::Rtn }, &[lone(s[0])])?,
         (Alu::Fmin, 16, 1) => ins(p, Op::FminV2f16, &[lone(s[0]), lone(s[1])])?,
         (Alu::Frsq, 16, 1) => ins(p, Op::FrsqF16, &[lone(s[0])])?,
         (Alu::Frcp, 16, 1) => ins(p, Op::FrcpF16, &[lone(s[0])])?,
