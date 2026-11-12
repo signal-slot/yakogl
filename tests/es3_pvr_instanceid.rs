@@ -20,6 +20,7 @@
     feature = "host-test",
     feature = "gpu-powervr",
     feature = "shaderc-online",
+    not(feature = "report-es2"),
     not(feature = "no-shader-table"),
     target_os = "linux",
     any(target_arch = "x86_64", target_arch = "aarch64")
