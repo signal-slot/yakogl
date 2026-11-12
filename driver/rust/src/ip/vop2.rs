@@ -151,10 +151,12 @@
 //!     ports it uses (c:2474-2484).
 //!
 //! The take-over from a system that left the VOP running (route (a) of
-//! driver/docs/nanopc-t6-display.md, section 2): (1) [`take_over`] disables
-//! every window of the ports it names (VP0, and VP1 when Linux drives the
-//! second output) except the one asked to keep, writes `REG_CFG_DONE` for
-//! those ports and waits for one frame start on each; (2)
+//! driver/docs/nanopc-t6-display.md, section 2): (1) [`take_over`] finds
+//! the running ports itself (`DSP_CTRL` STANDBY clear: VP0, and VP1 when
+//! Linux drives the second output), disables every window except the one
+//! asked to keep (refused if that one is already enabled), writes
+//! `REG_CFG_DONE` for the running ports and waits for one frame start on
+//! each; (2)
 //! `rk_iommu::paging_off`, so nothing fetches through Linux's page tables
 //! any more by the time they stop being used; (3) [`overlay_single`] and
 //! [`window_show`] with our buffer. Doing (2) before (1) would let Linux's
@@ -493,6 +495,9 @@ pub enum Refusal {
     EventNotCleared = 11,
     /// No frame start within [`FRAME_WAIT_US`]: the port does not run.
     FrameTimeout = 12,
+    /// The window [`take_over`] was asked to keep is already enabled: it
+    /// still points at the system before us's address. Nothing was written.
+    KeepEnabled = 13,
 }
 
 /// A refusal and the register value it is about (0 when there is none).
@@ -1037,29 +1042,68 @@ pub fn wait_frame(m: &impl Mmio, base: usize, port: Vp, delay_us: &mut impl FnMu
     }
 }
 
+/// The ports that run frames: `DSP_CTRL` STANDBY clear (bit n = VPn).
+pub fn running_ports(m: &impl Mmio, base: usize) -> u32 {
+    (0..4).filter(|p| rd(m, base, vp::base(*p) + vp::DSP_CTRL) & vp::DSP_CTRL_STANDBY == 0).fold(0, |a, p| a | 1 << p)
+}
+
+/// What [`take_over`] did.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TakeOver {
+    /// The ports found running (bit n = VPn): each took the disables.
+    pub running: u32,
+    /// The windows disabled ([`WindowMask`]).
+    pub off: WindowMask,
+}
+
+/// Why [`take_over`] failed, and what it had done by then: the windows in
+/// `off` are disabled in the registers, but a port that timed out has not
+/// taken them (they land at its next frame).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TakeOverFailed {
+    pub refused: Refused,
+    pub running: u32,
+    pub off: WindowMask,
+}
+
 /// The first step of taking the VOP over from the system before us
-/// (fact 17, the module text's take-over order): every window on `ports`
-/// except `keep` disabled, `REG_CFG_DONE` for each of those ports, then one
-/// frame start on each, after which no disabled window fetches any more.
-/// Only then may the IOMMU be switched off (`rk_iommu::paging_off`) and the
-/// overlay changed ([`overlay_single`]).
+/// (fact 17, the module text's take-over order). The caller names no port:
+/// the running ports are read from their `DSP_CTRL` ([`running_ports`]), so
+/// a port the system before us drives cannot be missed. Every window except
+/// `keep` is disabled, whatever its port (a window of a stopped port would
+/// fetch once that port starts); `REG_CFG_DONE` is written for each running
+/// port, then one frame start is waited for on each, after which no
+/// disabled window fetches any more. Only then may the IOMMU be switched off
+/// (`rk_iommu::paging_off`) and the overlay changed ([`overlay_single`]).
+///
+/// A `keep` window that is already enabled is refused before any write
+/// ([`Refusal::KeepEnabled`]): its address is the system before us's.
+/// With no port running nothing can fetch, and only the disables are
+/// written.
 pub fn take_over(
     m: &impl Mmio,
     base: usize,
-    ports: &[Vp],
     keep: Option<Esmart>,
     delay_us: &mut impl FnMut(u32),
-) -> Result<WindowMask, Refused> {
-    let mask = ports.iter().fold(0, |a, p| a | 1 << p.id());
-    let off = windows_off(m, base, mask, keep);
-    for p in ports {
+) -> Result<TakeOver, TakeOverFailed> {
+    if let Some(k) = keep {
+        let ctrl = rd(m, base, k.base() + esmart::REGION0_CTRL);
+        if ctrl & esmart::R0_ENABLE != 0 {
+            let refused = Refused { why: Refusal::KeepEnabled, read_back: ctrl };
+            return Err(TakeOverFailed { refused, running: 0, off: 0 });
+        }
+    }
+    let running = running_ports(m, base);
+    let off = windows_off(m, base, 0xf, keep);
+    let ports = [Vp::Vp0, Vp::Vp1, Vp::Vp2, Vp::Vp3];
+    for p in ports.iter().filter(|p| running & 1 << p.id() != 0) {
         cfg_done(m, base, *p);
     }
     // A frame start after CFG_DONE: the update was taken at that boundary.
-    for p in ports {
-        wait_frame(m, base, *p, delay_us)?;
+    for p in ports.iter().filter(|p| running & 1 << p.id() != 0) {
+        wait_frame(m, base, *p, delay_us).map_err(|refused| TakeOverFailed { refused, running, off })?;
     }
-    Ok(off)
+    Ok(TakeOver { running, off })
 }
 
 /// `REGION0_YRGB_MST` of a window.
@@ -1230,7 +1274,6 @@ mod tests {
     const SYS0_INT_STATUS: usize = 0x088;
     const SYS1_INT_STATUS: usize = 0x098;
     const VP0_INT_CLR: usize = 0x0a4;
-    const VP0_INT_RAW: usize = 0x0ac;
     const PORT_SEL: usize = 0x608;
     const VP0_DSP_CTRL: usize = 0xc00;
     const E0: usize = 0x1800;
@@ -1262,27 +1305,39 @@ mod tests {
     struct State {
         regs: BTreeMap<usize, u32>,
         log: Vec<Op>,
-        /// `OVL_PORT_SEL` written, taken at VP0's next frame after its CFG_DONE.
+        /// `OVL_PORT_SEL` written, taken at the next frame of a port whose
+        /// CFG_DONE is pending.
         port_sel_written: Option<u32>,
-        /// VP0's CFG_DONE is pending.
-        pending: bool,
-        raw: u32,
-        /// STANDBY was written while running: the frame in progress ends it.
-        stopping: bool,
+        /// Per port: CFG_DONE pending, raw events, STANDBY written while
+        /// running (the frame in progress ends it), the next frame start.
+        pending: [bool; 4],
+        raw: [u32; 4],
+        stopping: [bool; 4],
+        next_frame_us: [u64; 4],
         now_us: u64,
-        next_frame_us: u64,
     }
 
-    /// VP0 of the VOP2 as the module text describes it: frames every
-    /// `frame_us` while `DSP_CTRL` STANDBY is clear and a pixel clock runs;
-    /// at a frame start the pending CFG_DONE is taken (its bit clears, the
-    /// port select becomes the value in force), frame start is raised, and
-    /// STANDBY written while running stops the port and raises DSP_HOLD_VALID.
+    /// The four video ports of the VOP2 as the module text describes them:
+    /// each runs frames every `frame_us` while its `DSP_CTRL` STANDBY is
+    /// clear and a pixel clock runs; at a port's frame start its pending
+    /// CFG_DONE is taken (its bit clears, a written port select comes into
+    /// force), frame start is raised, and STANDBY written while running
+    /// stops the port at the end of the frame and raises DSP_HOLD_VALID.
     /// `VP_INT_CLR` clears the raw bits whose write-enable is set.
     struct Vop {
         s: RefCell<State>,
         frame_us: u64,
         f: Faults,
+    }
+
+    const fn dsp_ctrl(vp: usize) -> usize {
+        0xc00 + 0x100 * vp
+    }
+    const fn int_clr(vp: usize) -> usize {
+        0x0a4 + 0x10 * vp
+    }
+    const fn int_raw(vp: usize) -> usize {
+        0x0ac + 0x10 * vp
     }
 
     impl Vop {
@@ -1291,45 +1346,54 @@ mod tests {
             {
                 let mut s = v.s.borrow_mut();
                 s.regs.insert(VERSION, VERSION_RK3588);
-                // after the domain comes up: every internal domain off, VP0
-                // in standby, the layer select Linux would read at reset
+                // after the domain comes up: every internal domain off, every
+                // port in standby, the layer select Linux would read at reset
                 // (window ids 0-7 on layers 0-7 is not known; any permutation)
                 s.regs.insert(PD_CTRL, 0xef);
-                s.regs.insert(VP0_DSP_CTRL, 1 << 31);
+                for p in 0..4 {
+                    s.regs.insert(dsp_ctrl(p), 1 << 31);
+                }
                 s.regs.insert(0x604, 0x7654_3210);
                 s.regs.insert(PORT_SEL, 0x8000_8888);
             }
             v
         }
-        fn running(s: &State) -> bool {
-            s.stopping || s.regs.get(&VP0_DSP_CTRL).copied().unwrap_or(0) & 1 << 31 == 0
+        fn running(s: &State, p: usize) -> bool {
+            s.stopping[p] || s.regs.get(&dsp_ctrl(p)).copied().unwrap_or(0) & 1 << 31 == 0
+        }
+        /// Start port `p` as the system before us left it (no CFG_DONE).
+        fn run_port(&self, p: usize) {
+            let mut s = self.s.borrow_mut();
+            s.regs.insert(dsp_ctrl(p), 0xf);
+            s.next_frame_us[p] = s.now_us + self.frame_us / 2 + p as u64 * 1000;
         }
         fn advance(&self, us: u32) {
             let mut s = self.s.borrow_mut();
             s.log.push(Op::Delay(us));
             let end = s.now_us + u64::from(us);
-            while !self.f.no_frames && Self::running(&s) && s.next_frame_us <= end {
-                s.now_us = s.next_frame_us;
-                s.next_frame_us += self.frame_us;
-                if s.stopping {
-                    s.stopping = false;
-                    if !self.f.no_dsp_hold {
-                        s.raw |= 1 << 6;
+            for p in 0..4 {
+                while !self.f.no_frames && Self::running(&s, p) && s.next_frame_us[p] <= end {
+                    s.next_frame_us[p] += self.frame_us;
+                    if s.stopping[p] {
+                        s.stopping[p] = false;
+                        if !self.f.no_dsp_hold {
+                            s.raw[p] |= 1 << 6;
+                        }
+                        break;
                     }
-                    break;
-                }
-                s.raw |= 1;
-                if s.pending {
-                    s.pending = false;
-                    if let Some(p) = s.port_sel_written.take() {
-                        s.regs.insert(PORT_SEL, p);
+                    s.raw[p] |= 1;
+                    if s.pending[p] {
+                        s.pending[p] = false;
+                        if let Some(sel) = s.port_sel_written.take() {
+                            s.regs.insert(PORT_SEL, sel);
+                        }
                     }
-                }
-                if self.f.underflow {
-                    s.raw |= 1 << 4;
-                }
-                if self.f.bus_error && s.regs.get(&0x080).copied().unwrap_or(0) & 2 != 0 {
-                    s.regs.insert(SYS0_INT_STATUS, 2);
+                    if self.f.underflow {
+                        s.raw[p] |= 1 << 4;
+                    }
+                    if self.f.bus_error && s.regs.get(&0x080).copied().unwrap_or(0) & 2 != 0 {
+                        s.regs.insert(SYS0_INT_STATUS, 2);
+                    }
                 }
             }
             s.now_us = end;
@@ -1349,6 +1413,19 @@ mod tests {
         fn clear_log(&self) {
             self.s.borrow_mut().log.clear();
         }
+        /// The windows enabled now, as [`WindowMask`] bits.
+        fn enabled(&self) -> u32 {
+            let mut m = 0;
+            for i in 0..4 {
+                if self.reg(0x1000 + 0x200 * i) & 1 != 0 || self.reg(0x1100 + 0x200 * i) & 1 != 0 {
+                    m |= 1 << i;
+                }
+                if self.reg(0x1810 + 0x200 * i) & 1 != 0 {
+                    m |= 1 << (4 + i);
+                }
+            }
+            m
+        }
     }
 
     impl Mmio for Vop {
@@ -1357,9 +1434,13 @@ mod tests {
             // the HDR and LUT registers from 0x2000 on are never touched
             assert!(off < 0x2000 && off & 3 == 0, "read outside the VOP's first 8 KiB: {off:#x}");
             let mut s = self.s.borrow_mut();
+            let raw_port = (0..4).find(|p| int_raw(*p) == off);
             let v = match off {
-                CFG_DONE => s.regs.get(&CFG_DONE).copied().unwrap_or(0) | u32::from(s.pending),
-                VP0_INT_RAW => s.raw,
+                CFG_DONE => {
+                    let pend = (0..4).fold(0, |a, p| a | u32::from(s.pending[p]) << p);
+                    s.regs.get(&CFG_DONE).copied().unwrap_or(0) | pend
+                }
+                _ if raw_port.is_some() => s.raw[raw_port.unwrap()],
                 _ => s.regs.get(&off).copied().unwrap_or(0),
             };
             s.log.push(Op::R(addr, v));
@@ -1371,30 +1452,33 @@ mod tests {
             assert_ne!(off, VERSION, "VERSION_INFO is read only");
             let mut s = self.s.borrow_mut();
             s.log.push(Op::W(addr, val));
-            match off {
-                CFG_DONE => {
-                    // bit 15 has no write-enable; bit 0 lands only with bit 16
-                    s.regs.insert(CFG_DONE, val & 1 << 15);
-                    if val & 1 != 0 && val & 1 << 16 != 0 {
-                        s.pending = true;
+            let clr_port = (0..4).find(|p| int_clr(*p) == off);
+            let ctrl_port = (0..4).find(|p| dsp_ctrl(*p) == off);
+            if off == CFG_DONE {
+                // bit 15 has no write-enable; bit n lands only with bit n + 16
+                s.regs.insert(CFG_DONE, val & 1 << 15);
+                for p in 0..4 {
+                    if val & 1 << p != 0 && val & 1 << (p + 16) != 0 {
+                        s.pending[p] = true;
                     }
                 }
-                VP0_INT_CLR if !self.f.clr_ignored => s.raw &= !(val & (val >> 16) & 0xffff),
-                VP0_INT_CLR => {}
-                PORT_SEL => s.port_sel_written = Some(val),
-                VP0_DSP_CTRL => {
-                    let was = Self::running(&s);
-                    s.regs.insert(off, val);
-                    if !was && Self::running(&s) {
-                        s.next_frame_us = s.now_us + self.frame_us;
-                    }
-                    if was && val & 1 << 31 != 0 {
-                        s.stopping = true;
-                    }
+            } else if let Some(p) = clr_port {
+                if !self.f.clr_ignored {
+                    s.raw[p] &= !(val & (val >> 16) & 0xffff);
                 }
-                _ => {
-                    s.regs.insert(off, val);
+            } else if off == PORT_SEL {
+                s.port_sel_written = Some(val);
+            } else if let Some(p) = ctrl_port {
+                let was = Self::running(&s, p);
+                s.regs.insert(off, val);
+                if !was && Self::running(&s, p) {
+                    s.next_frame_us[p] = s.now_us + self.frame_us;
                 }
+                if was && val & 1 << 31 != 0 {
+                    s.stopping[p] = true;
+                }
+            } else {
+                s.regs.insert(off, val);
             }
         }
         fn read8(&self, _: usize) -> u8 {
@@ -1746,7 +1830,7 @@ mod tests {
     #[test]
     fn standby_waits_for_dsp_hold() {
         let v = running_vop();
-        v.s.borrow_mut().raw = 1 << 6; // a stale event from before, no frame start
+        v.s.borrow_mut().raw[0] = 1 << 6; // a stale event from before, no frame start
         let waited = standby(&v, BASE, Vp::Vp0, &mut |us| v.advance(us)).unwrap();
         // the hold comes at the end of the frame in progress
         assert!(waited > 0 && waited <= 16_800, "{waited}");
@@ -1767,7 +1851,7 @@ mod tests {
         let v = Vop::new(Faults { no_dsp_hold: true, ..Faults::default() });
         let t = vp_timing(&CEA_1080P60, Vp::Vp0).unwrap();
         vp_start(&v, BASE, &t);
-        v.s.borrow_mut().raw |= 1 << 6;
+        v.s.borrow_mut().raw[0] |= 1 << 6;
         let r = standby(&v, BASE, Vp::Vp0, &mut |us| v.advance(us)).unwrap_err();
         assert_eq!(r.why, Refusal::StandbyTimeout);
         assert_eq!(r.read_back & 1 << 6, 0);
@@ -1816,13 +1900,13 @@ mod tests {
         v.s.borrow_mut().regs.insert(0x1300, 1);
         v.s.borrow_mut().regs.insert(PORT_SEL, 0x0004_7873);
         v.clear_log();
-        let off = take_over(&v, BASE, &[Vp::Vp0], Some(Esmart::E0), &mut |us| v.advance(us)).unwrap();
-        // Cluster0, Cluster2, Cluster3, Esmart1-3 (port field 0); not Cluster1
-        // (VP1), not the window kept
-        assert_eq!(off, 0b1110_1101);
+        let t = take_over(&v, BASE, Some(Esmart::E0), &mut |us| v.advance(us)).unwrap();
+        // VP0 runs; every window but the one kept is disabled, Cluster1 of
+        // the stopped VP1 too (it would fetch once VP1 starts)
+        assert_eq!(t, TakeOver { running: 1, off: 0b1110_1111 });
         assert_eq!((v.reg(0x1000) & 1, v.reg(0x1100) & 1), (0, 0), "Cluster0 still enabled");
         assert_eq!(v.reg(0x1a10) & 1, 0, "Esmart1 still enabled");
-        assert_eq!((v.reg(0x1200), v.reg(0x1300)), (1, 1), "a window of VP1 was touched");
+        assert_eq!(v.enabled(), 0);
         // the disables, then CFG_DONE, then one frame start waited for
         let ops = v.ops();
         let last_disable =
@@ -1845,15 +1929,17 @@ mod tests {
         let v = Vop::new(Faults { no_frames: true, ..Faults::default() });
         let t = vp_timing(&CEA_1080P60, Vp::Vp0).unwrap();
         vp_start(&v, BASE, &t);
-        let r = take_over(&v, BASE, &[Vp::Vp0], None, &mut |us| v.advance(us)).unwrap_err();
-        assert_eq!(r.why, Refusal::FrameTimeout);
+        let r = take_over(&v, BASE, None, &mut |us| v.advance(us)).unwrap_err();
+        // the disables are written and named; VP0 has not taken them
+        assert_eq!((r.refused.why, r.running, r.off), (Refusal::FrameTimeout, 1, 0xff));
+        assert_eq!(cfg_done_bits(&v), 1);
     }
 
     /// Review S1: a clear that does not clear must not pass for a new event.
     #[test]
     fn an_event_the_clear_does_not_clear_is_refused_not_taken_as_new() {
         let v = Vop::new(Faults { clr_ignored: true, ..Faults::default() });
-        v.s.borrow_mut().raw = 1 << 6 | 1;
+        v.s.borrow_mut().raw[0] = 1 << 6 | 1;
         let r = standby(&v, BASE, Vp::Vp0, &mut |us| v.advance(us)).unwrap_err();
         assert_eq!((r.why, r.read_back), (Refusal::EventNotCleared, 1 << 6 | 1));
         assert!(v.writes().iter().all(|w| w.0 != VP0_DSP_CTRL), "STANDBY written after a failed clear");
@@ -1984,5 +2070,57 @@ mod tests {
         );
         assert_eq!(w.last(), Some(&(0xf00, 0)));
         assert_eq!(w[w.len() - 2], (CFG_DONE, 0x8000 | 1 << 19 | 1 << 3));
+    }
+
+    /// The ports whose CFG_DONE is still pending.
+    fn cfg_done_bits(v: &Vop) -> u32 {
+        v.read32(BASE + CFG_DONE) & 0xf
+    }
+
+    /// Review R2-B1: the board state read on 2026-11-12 (Linux's picture
+    /// on Cluster0 of VP0; Cluster1 on VP1 behind the same vop_mmu, whether
+    /// VP1 runs is not measured). Nothing named by the caller: every running
+    /// port is found from its DSP_CTRL.
+    #[test]
+    fn the_take_over_finds_every_running_port_and_leaves_no_window_enabled() {
+        let v = Vop::new(Faults::default());
+        init(&v, BASE).unwrap();
+        v.run_port(0);
+        v.run_port(1);
+        {
+            let mut s = v.s.borrow_mut();
+            for off in [0x1000, 0x1100, 0x1200, 0x1300] {
+                s.regs.insert(off, 1);
+            }
+            s.regs.insert(PORT_SEL, 0x0004_7873);
+        }
+        v.advance(20_000);
+        let r = take_over(&v, BASE, None, &mut |us| v.advance(us));
+        assert_eq!(r, Ok(TakeOver { running: 0b11, off: 0xff }));
+        assert_eq!(v.enabled(), 0, "a window of a running port is still enabled");
+        assert_eq!(cfg_done_bits(&v), 0, "a port did not take its disables");
+        // both ports took them at a frame start after their CFG_DONE
+        let ops = v.ops();
+        for p in 0..2 {
+            let cfg = ops.iter().position(|o| *o == Op::W(BASE + CFG_DONE, 0x8000 | 1 << (16 + p) | 1 << p)).unwrap();
+            let fs =
+                ops.iter().rposition(|o| matches!(o, Op::R(a, r) if *a == BASE + int_raw(p) && r & 1 != 0)).unwrap();
+            assert!(cfg < fs, "VP{p}");
+        }
+    }
+
+    /// Review R2-B1: a window to keep that the system before us left enabled
+    /// still points at its address (an IOVA); it is refused, nothing written.
+    #[test]
+    fn a_keep_window_already_enabled_is_refused_before_any_write() {
+        let v = Vop::new(Faults::default());
+        init(&v, BASE).unwrap();
+        v.run_port(0);
+        v.s.borrow_mut().regs.insert(E0_REGION0_CTRL, 1);
+        v.s.borrow_mut().regs.insert(E0_MST, 0x00c0_0000);
+        v.clear_log();
+        let r = take_over(&v, BASE, Some(Esmart::E0), &mut |us| v.advance(us)).unwrap_err();
+        assert_eq!((r.refused, r.off), (Refused { why: Refusal::KeepEnabled, read_back: 1 }, 0));
+        assert!(v.writes().is_empty(), "{:x?}", v.writes());
     }
 }

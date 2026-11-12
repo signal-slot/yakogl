@@ -281,13 +281,16 @@ show its own buffer, in this order:
    mode from the VP timing registers; refuse if the mode differs from the
    build's. Linux shows its picture on Cluster0 of VP0, and of VP1 for the
    second HDMI output (board reading, 2026-11-12).
-2. Turn off Linux's windows (`ip::vop2::take_over`): every window whose
-   `OVL_PORT_SEL` field names VP0 (and VP1 when Linux drives it) except the
-   one to keep, a Cluster window with both its enable bits (`WIN0_EN` in
-   `CLUSTER_WIN_CTRL0`, `CLUSTER_ENABLE` in `CLUSTER_CTRL`;
-   `rockchip_vop2_reg.c:283`, `:314`; Linux does the same,
-   `rockchip_drm_vop2.c:149-155`); then `REG_CFG_DONE` for those ports and
-   wait for one frame start on each, so no window of Linux fetches any more.
+2. Turn off Linux's windows (`ip::vop2::take_over`). It finds the running
+   ports itself (`DSP_CTRL` STANDBY clear), since whether Linux drives VP1
+   as well is not something the caller should have to know. It disables
+   every window except the one to keep, whatever its port, a Cluster window
+   with both its enable bits (`WIN0_EN` in `CLUSTER_WIN_CTRL0`,
+   `CLUSTER_ENABLE` in `CLUSTER_CTRL`; `rockchip_vop2_reg.c:283`, `:314`;
+   Linux does the same, `rockchip_drm_vop2.c:149-155`). It refuses a window
+   to keep that is already enabled (its address is Linux's). Then
+   `REG_CFG_DONE` for every running port and one frame start waited for on
+   each, so no window of Linux fetches any more.
 3. Stop the IOMMU translating (`ip::rk_iommu::paging_off`): for both
    `vop_mmu` register sets Linux's order, stall, disable paging,
    `INT_MASK` = 0 and `DTE_ADDR` = 0, stall off (`rockchip-iommu.c:911-925`),
