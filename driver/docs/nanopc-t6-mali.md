@@ -1493,14 +1493,32 @@ board's values). The order:
    values (`MODE` 3, `BANDWIDTH` 0x12d, `SATURATION` 0x40), and
    `LinuxZero`, what Linux reads with the GPU active (all three 0;
    measured 2026-10-26). The constant is `LinuxZero`: every Z1-Z4 board run
-   so far worked under Linux's zeroed QoS. Host tests:
+   so far worked under Linux's zeroed QoS. The build picks the policy with
+   the t6_gpu probe's CMake variable `T6_GPU_QOS` (`reset` or `linux-zero`,
+   the default; `tools/probes/nanopc_t6/t6_gpu/CMakeLists.txt:31`): the
+   probe passes its id to `yd_t6_gpu_qos_policy` before `yd_t6_gpu_up`
+   (`tools/probes/nanopc_t6/t6_gpu/src/main.c:65`,
+   `driver/rust/src/ffi/rk3588.rs:546`); without that call the default
+   applies — `gpu_up` is `gpu_up_with(GPU_QOS_POLICY, ...)`,
+   `driver/rust/src/board/nanopc_t6_gpu.rs:244`). The Z1 record names the
+   policy that ran: `GpuUp::qos_policy` / `struct yd_t6_gpu_up.qos_policy`,
+   `YD_T6_QOS_RESET` 1, `YD_T6_QOS_LINUX_ZERO` 2, 0 when the run stopped
+   before the step, with `qos_gpu_m0`'s three words read back in
+   `qos_words` (`driver/rust/include/yakogl_drivers.h:401`,
+   `tools/probes/nanopc_t6/common/t6_z1.c:152`). Host tests:
    `qos_reset_policy_writes_only_mode_bandwidth_saturation` and
    `qos_linux_zero_policy_writes_only_mode_bandwidth_saturation`
    (`soc::rk3588`, each block's other words and every other address
-   untouched), and the composed
+   untouched), the composed
    `from_the_handed_over_state_it_reads_the_supply_powers_and_finds_the_g610`
-   (`board::nanopc_t6_gpu`, the twelve writes of 0 and the read-back). What
-   the hardware does with each policy is unmeasured ("Open").
+   (`board::nanopc_t6_gpu`, the twelve writes of 0 and the read-back), and
+   for the selector and the record
+   `each_qos_policy_is_applied_and_named_in_the_record`
+   (`driver/rust/src/board/nanopc_t6_gpu.rs:731`),
+   `a_run_stopped_before_the_qos_step_names_no_policy` (same file, :747)
+   and `z1_record_appends_the_qos_policy_and_its_words`
+   (`driver/rust/src/ffi/rk3588.rs:1674`). What the hardware does with each
+   policy is unmeasured ("Open").
 6. `GPU_ID`; soft reset; `GPU_COHERENCY_PROTOCOL` = none; L2 on
    (panthor_gpu.c, under its MIT option). The L2 wait needs `L2_READY` to
    show the L2: panthor's condition (`(mask & val) == val`,
@@ -2754,5 +2772,20 @@ and nothing written:
   The default is `LinuxZero`: every Z1-Z4 board run so far worked under Linux's
   zeroed QoS, and the U-Boot route applies the same words. What the hardware does
   with each policy is unmeasured until a job runs on the GPU from Zephyr (Z3 and
-  later), in a board session the owner allows; `GPU_QOS_POLICY` is a `const`, so a
-  run under the other policy is a rebuild.
+  later), in a board session the owner allows. Which policy a run applies is a
+  build-time choice, not an edit: `west build ... -- -DT6_GPU_QOS=reset` or
+  `=linux-zero` (the default; `tools/probes/nanopc_t6/t6_gpu/CMakeLists.txt:31`)
+  reaches `gpu_up_with` through `yd_t6_gpu_qos_policy()`
+  (`driver/rust/src/ffi/rk3588.rs:546`) before `yd_t6_gpu_up`, and the record's
+  `qos_policy` names the one that ran (`YD_T6_QOS_RESET` 1,
+  `YD_T6_QOS_LINUX_ZERO` 2, 0 when the run stopped before the step;
+  `driver/rust/include/yakogl_drivers.h:401`), so each run's own Z1 printout
+  says which words it wrote (`tools/probes/nanopc_t6/common/t6_z1.c:152`). A
+  Z3 or Z4 run applies `LinuxZero` today: `yd_t6_fw_up` and `yd_t6_submit` run
+  Z1's power-on through `board::nanopc_t6_fw::fw_up`, whose `gpu_up` call
+  (`nanopc_t6_fw.rs:226`, and `nanopc_t6_submit.rs:909` into it) takes the
+  `GPU_QOS_POLICY` default and ignores the selector; picking `Reset` on those
+  paths means carrying the chosen policy into that call. The record names the
+  applied policy either way, host-tested by
+  `each_qos_policy_is_applied_and_named_in_the_record`
+  (`driver/rust/src/board/nanopc_t6_gpu.rs:731`).
