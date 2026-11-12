@@ -64,10 +64,27 @@
 # text: it must get past that check (to the refusal of its TOP 9), and an
 # image without the line must still be refused for it.
 #
+# An eighth, found on 2026-11-12 (issue #4499): the watchdog was one
+# `sleep HOLD_MAX` and then `kill -0 $$`. A runner killed with SIGKILL
+# never ran the EXIT trap that stops the watchdog, so the watchdog and its
+# `sleep 1800` stayed for the rest of HOLD_MAX (six pairs after six gate
+# runs), and when the sleep ended it killed whatever process had the dead
+# runner's pid by then. The watchdog now looks at its runner every second
+# and ends when the runner is gone, and it names its runner by pid AND start
+# time (board_lock_watchdog <pid> <ticks> <seconds>), so a pid given to
+# another process is never killed. The checks: a runner killed with SIGKILL
+# leaves no process of its watchdog after 5 s, and a watchdog given a live
+# pid with other start ticks ends without killing it, while one given the
+# right ticks kills it after its seconds. A normal exit left a process too:
+# the EXIT trap killed the watchdog's subshell, and its `sleep HOLD_MAX`
+# went on to the end (55 such sleeps of 1800 and 21600 s on one host). Now
+# what is left is a `sleep 1`, so a holder that returns leaves no process
+# of its watchdog after 5 s either.
+#
 # Needs bash, flock(1) and strings(1). tools/check.sh runs it ("tools   board_lock.sh: ...").
 set -u
 here=$(cd "$(dirname "$0")" && pwd)
-planned=15
+planned=20
 run=0
 failed=0
 check() { # <what> <0 = ok>
@@ -86,12 +103,13 @@ done
 tmp=$(mktemp -d)
 # Every process started below inherits this; no other process has it.
 export BOARD_LOCK_SELFTEST_RUN=$tmp
-# marked: the pids under /proc whose environment carries the marker, this
+# marked [marker]: the pids under /proc whose environment carries the marker
+# (default $tmp; a check may give its processes a marker of their own), this
 # shell excepted (the command substitution's subshell has it too, and is
 # excepted by reading BASHPID). Builtins only: a tr or grep started here
 # would carry the marker and could find itself.
 marked() {
-	local self=$BASHPID e p v
+	local self=$BASHPID mark=${1:-$tmp} e p v
 	local -a env
 	for e in /proc/[0-9]*/environ; do
 		p=${e#/proc/}
@@ -99,18 +117,18 @@ marked() {
 		{ [ "$p" = "$$" ] || [ "$p" = "$self" ]; } && continue
 		{ mapfile -d '' env <"$e"; } 2>/dev/null || continue
 		for v in "${env[@]}"; do
-			[ "$v" = "BOARD_LOCK_SELFTEST_RUN=$tmp" ] && { echo "$p"; break; }
+			[ "$v" = "BOARD_LOCK_SELFTEST_RUN=$mark" ] && { echo "$p"; break; }
 		done
 	done
 }
-# sweep: TERM each marked pid, then wait up to 5 s for them to go.
+# sweep [marker]: TERM each marked pid, then wait up to 5 s for them to go.
 sweep() {
 	local p
-	for p in $(marked); do kill "$p" 2>/dev/null; done
-	for _ in $(seq 50); do [ -z "$(marked)" ] && return 0; sleep 0.1; done
+	for p in $(marked "$@"); do kill "$p" 2>/dev/null; done
+	for _ in $(seq 50); do [ -z "$(marked "$@")" ] && return 0; sleep 0.1; done
 	return 1
 }
-trap 'sweep; rm -rf "$tmp"' EXIT
+trap 'sweep "$tmp/killed"; sweep "$tmp/normal"; sweep; rm -rf "$tmp"' EXIT
 
 # A holder run by an absolute path longer than the holder line's 100
 # characters, named as the two runners are.
@@ -190,6 +208,69 @@ printf 'pid=%s\nticks=1\nstarted=2026-10-19 00:00:00\ncmd=bash run-on-board.sh g
 err=$(BOARD_LOCK=$tmp/stale.lock LOCK_WAIT=0 HOLD_MAX=0 timeout 30 bash -c ". '$here/board_lock.sh'; echo went-past" 2>&1)
 check "a stale record (pid $dead gone) is named and the lock is taken" \
 	"$(grep -q "stale record, pid $dead gone" <<<"$err" && grep -q went-past <<<"$err"; echo $?)"
+
+# A holder that returns (its EXIT trap stops the watchdog) leaves no process
+# of its watchdog behind; its processes carry a marker of their own.
+cat > "$tmp/normal.sh" <<EOF
+#!/bin/bash
+LOCK_WAIT=0 HOLD_MAX=1800
+. "$here/board_lock.sh"
+echo "\$BOARD_LOCK_WATCHDOG" > "$tmp/normal.wd"
+EOF
+chmod +x "$tmp/normal.sh"
+BOARD_LOCK_SELFTEST_RUN=$tmp/normal BOARD_LOCK=$tmp/normal.lock timeout 60 "$tmp/normal.sh"
+rc=$?
+for _ in $(seq 50); do [ -z "$(marked "$tmp/normal")" ] && break; sleep 0.1; done
+left=$(marked "$tmp/normal")
+left=${left//$'\n'/ }
+check "a holder that returns (rc $rc) leaves no watchdog process after 5 s (left: ${left:-none})" \
+	"$([ "$rc" = 0 ] && [ -s "$tmp/normal.wd" ] && [ -z "$left" ]; echo $?)"
+
+# A runner killed with SIGKILL (its EXIT trap never runs) leaves no process
+# of its watchdog behind. Its processes carry a marker of their own, so the
+# holder above does not count. The runner's own `sleep` is killed by its pid
+# once the runner is gone; what is left after that is the watchdog's.
+cat > "$tmp/killed.sh" <<EOF
+#!/bin/bash
+LOCK_WAIT=0 HOLD_MAX=1800
+. "$here/board_lock.sh"
+sleep 60 &
+echo \$! > "$tmp/killed.sleep"
+wait
+EOF
+chmod +x "$tmp/killed.sh"
+BOARD_LOCK_SELFTEST_RUN=$tmp/killed BOARD_LOCK=$tmp/killed.lock "$tmp/killed.sh" &
+killed_pid=$!
+for _ in $(seq 100); do [ -s "$tmp/killed.sleep" ] && break; sleep 0.1; done
+kill -KILL "$killed_pid"
+wait "$killed_pid" 2>/dev/null
+kill "$(cat "$tmp/killed.sleep")" 2>/dev/null
+for _ in $(seq 50); do [ -z "$(marked "$tmp/killed")" ] && break; sleep 0.1; done
+left=$(marked "$tmp/killed")
+left=${left//$'\n'/ }
+check "a runner killed with SIGKILL leaves no watchdog process after 5 s (left: ${left:-none})" \
+	"$([ -s "$tmp/killed.sleep" ] && [ -z "$left" ]; echo $?)"
+
+# The watchdog kills only its own runner: a live pid whose start ticks are
+# not the runner's (the pid given to another process) is left alone, and the
+# watchdog ends; the same pid with its own ticks is killed after the seconds.
+sleep 30 &
+victim=$!
+vticks=$(BOARD_LOCK_NO_ACQUIRE=1 BOARD_LOCK=$tmp/wd.lock bash -c ". '$here/board_lock.sh'; board_lock_start_ticks $victim")
+t0=$(date +%s)
+BOARD_LOCK_NO_ACQUIRE=1 BOARD_LOCK=$tmp/wd.lock timeout 30 \
+	bash -c ". '$here/board_lock.sh' && board_lock_watchdog $victim $((vticks + 1)) 1" 2>/dev/null
+rc=$?
+t1=$(date +%s)
+check "a watchdog whose pid has other start ticks ends (rc $rc) within 5 s ($((t1 - t0)) s)" \
+	"$([ "$rc" = 0 ] && [ $((t1 - t0)) -le 5 ]; echo $?)"
+check "... and does not kill that process (pid $victim)" "$(kill -0 "$victim" 2>/dev/null; echo $?)"
+err=$(BOARD_LOCK_NO_ACQUIRE=1 BOARD_LOCK=$tmp/wd.lock timeout 30 \
+	bash -c ". '$here/board_lock.sh' && board_lock_watchdog $victim $vticks 1" 2>&1)
+wait "$victim" 2>/dev/null
+vrc=$?
+check "a watchdog with its runner's start ticks kills it after its seconds (exit $vrc) and says so" \
+	"$([ "$vrc" = 143 ] && grep -q "pid $victim held the board past 1s" <<<"$err"; echo $?)"
 
 # who_remote.sh, as nanopc-t6.sh runs it on the board, on made-up `who -u`
 # output. The session it runs in is the line that carries the pid of one of

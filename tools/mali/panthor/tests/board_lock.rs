@@ -12,6 +12,12 @@
 //! while it holds the lock. Needs bash and flock(1): board_lock.sh names
 //! the holder from the record the holder writes into the lock file, and
 //! nothing here runs lsof (CI runner A has none).
+//!
+//! Each test leaves no process behind: its runs are stopped with SIGKILL,
+//! which skips the EXIT trap that stops board_lock.sh's watchdog, and until
+//! issue #4499 the watchdog then stayed with its `sleep HOLD_MAX` (1800 s for
+//! run-on-board.sh). Every process a test starts carries the test's own
+//! marker in its environment, and the end finds them under /proc.
 
 use std::fs;
 use std::io::{BufRead, BufReader};
@@ -47,9 +53,49 @@ fn wait_for(path: &Path, what: &str) {
     }
 }
 
+/// The environment variable that marks every process a test starts; its
+/// value is the test's scratch directory, so no other process has it.
+const MARK: &str = "BOARD_LOCK_TEST_RUN";
+
+/// The pids under /proc whose environment carries `MARK=<mark>`.
+fn marked(mark: &Path) -> Vec<String> {
+    let want = format!("{MARK}={}", mark.display()).into_bytes();
+    let Ok(procs) = fs::read_dir("/proc") else { return Vec::new() };
+    procs
+        .flatten()
+        .filter_map(|p| p.file_name().to_str().filter(|n| n.bytes().all(|b| b.is_ascii_digit())).map(str::to_owned))
+        .filter(|pid| {
+            fs::read(format!("/proc/{pid}/environ")).is_ok_and(|env| env.split(|&b| b == 0).any(|v| v == want))
+        })
+        .collect()
+}
+
+/// No process of the test is left 5 s after its runs were stopped (the
+/// watchdog looks at its runner once a second). Whatever is left is killed
+/// by its exact pid before the assertion, so a failure leaves nothing either.
+fn assert_none_left(mark: &Path) {
+    let t0 = Instant::now();
+    let mut left = marked(mark);
+    while !left.is_empty() && t0.elapsed() < Duration::from_secs(5) {
+        std::thread::sleep(Duration::from_millis(100));
+        left = marked(mark);
+    }
+    let cmds: Vec<String> = left
+        .iter()
+        .map(|pid| {
+            let cmd = fs::read(format!("/proc/{pid}/cmdline")).unwrap_or_default();
+            format!("{pid} {}", String::from_utf8_lossy(&cmd).replace('\0', " ").trim_end())
+        })
+        .collect();
+    for pid in &left {
+        let _ = Command::new("kill").args(["-KILL", pid]).status();
+    }
+    assert!(cmds.is_empty(), "processes of the test left 5 s after its runs were stopped:\n{}", cmds.join("\n"));
+}
+
 /// A process that holds the lock as the kexec recipe does (sources
 /// board_lock.sh), then waits.
-fn holder(lock: &Path, marker: &Path) -> Child {
+fn holder(lock: &Path, marker: &Path, mark: &Path) -> Child {
     let script = format!(
         ". {}/driver/tools/kexec-zephyr/board_lock.sh && : > {} && sleep 60",
         root().display(),
@@ -60,6 +106,7 @@ fn holder(lock: &Path, marker: &Path) -> Child {
         .env("BOARD_LOCK", lock)
         .env("LOCK_WAIT", "0")
         .env("HOLD_MAX", "120")
+        .env(MARK, mark)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
@@ -94,7 +141,7 @@ fn a_gl_run_refuses_while_another_holds_the_board_and_names_it() {
     let d = scratch("gl-refuses");
     let lock = d.join("board.lock");
     let held = d.join("held");
-    let h = holder(&lock, &held);
+    let h = holder(&lock, &held, &d);
     wait_for(&held, "the holder");
     let hpid = h.id();
 
@@ -107,6 +154,7 @@ fn a_gl_run_refuses_while_another_holds_the_board_and_names_it() {
     let path = format!("{}:{}", bin.display(), std::env::var("PATH").unwrap_or_default());
     let out = Command::new(root().join("tools/mali/panthor/run-on-board.sh"))
         .arg("panthor-hello")
+        .env(MARK, &d)
         .env("BOARD_HOST", "root@board-lock-test")
         .env("BOARD_LOCK", &lock)
         .env("PATH", &path)
@@ -116,6 +164,7 @@ fn a_gl_run_refuses_while_another_holds_the_board_and_names_it() {
         .unwrap();
     stop(h);
     release(&lock);
+    assert_none_left(&d);
     let err = String::from_utf8_lossy(&out.stderr);
     assert_eq!(out.status.code(), Some(1), "run-on-board.sh must refuse a held board (exit 1); stderr:\n{err}");
     assert!(err.contains("board_lock: busy"), "the refusal is board_lock.sh's; stderr:\n{err}");
@@ -138,6 +187,7 @@ fn a_jump_refuses_while_a_gl_run_holds_the_board_and_names_it() {
     let path = format!("{}:{}", bin.display(), std::env::var("PATH").unwrap_or_default());
     let mut gl = Command::new(root().join("tools/mali/panthor/run-on-board.sh"))
         .arg("panthor-gltest")
+        .env(MARK, &d)
         .env("BOARD_HOST", "root@board-lock-test")
         .env("BOARD_LOCK", &lock)
         .env("PATH", &path)
@@ -152,10 +202,11 @@ fn a_jump_refuses_while_a_gl_run_holds_the_board_and_names_it() {
     let line = BufReader::new(gl.stdout.take().unwrap()).lines().next().and_then(Result::ok).unwrap_or_default();
 
     let second = d.join("second");
-    let jump = holder(&lock, &second);
+    let jump = holder(&lock, &second, &d);
     let out = jump.wait_with_output().unwrap();
     stop(gl);
     release(&lock);
+    assert_none_left(&d);
     let err = String::from_utf8_lossy(&out.stderr);
     assert!(
         line.starts_with("run-on-board.sh: holding the board lock "),
