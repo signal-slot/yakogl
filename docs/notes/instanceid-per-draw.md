@@ -26,9 +26,9 @@ The six dEQP-GLES3 cases
 `functional.instanced.{draw_arrays_instanced,draw_elements_instanced}.mixed.{2,4,20}_instances`
 use arrays with divisor 0, 1 and 2, and the vertex shader reads
 `gl_InstanceID`. Both back ends set `max_instance_divisor` to 1. So
-`draw_instanced` (`src/gl/draw.rs:4565`) draws one instance per draw. It feeds
+`draw_instanced` (`src/gl/draw.rs:5224`) draws one instance per draw. It feeds
 each divisor array as a constant and sets `GlesDraw::instance_id` to the
-instance number (`src/gl/draw.rs:4635-4637`).
+instance number (`src/gl/draw.rs:5294-5295`).
 
 - **PowerVR: refused.** The draw entry refuses an instance > 0 when the
   program reads `gl_InstanceID`. The host shows `-EINVAL` for instances 1..3.
@@ -79,7 +79,7 @@ any frame work:
 
 Related sites:
 
-- `src/pvr/backend.rs:7530-7531`: `/* the PDS fetches a per-instance array by
+- `src/pvr/backend.rs:9517-9518`: `/* the PDS fetches a per-instance array by
   the instance number: divisor 1 */ max_instance_divisor: 1,`
 - `src/pvr/backend.rs:4820-4829`: an instanced draw that is too large for one
   kick is split into chunks of instances. A program that reads
@@ -147,13 +147,13 @@ row.
 
 Related sites:
 
-- `src/vivante/backend.rs:3622`: `max_instance_divisor: 0xffff,` (V1; it was
+- `src/vivante/backend.rs:3646`: `max_instance_divisor: 0xffff,` (V1; it was
   1 until `6c4759ea`, and whether the FE takes more than 1 is unmeasured)
-- `src/vivante/backend.rs:2830-2831`: `divisor` is `u32::from(a.divisor.max(1))`
+- `src/vivante/backend.rs:2841-2842`: `divisor` is `u32::from(a.divisor.max(1))`
   for a per-instance array, else 0, and goes into `GcStream` (V1; before
   `6c4759ea` it was `u32::from(a.per_instance != 0)` and ignored
   `GlesAttrib::divisor`).
-- `src/vivante/backend.rs:1323`: `emit_streams` already writes
+- `src/vivante/backend.rs:1318`: `emit_streams` already writes
   `nfe_vertex_streams_vertex_divisor(i)` (0x14680 + 4i, `src/vivante/regs.rs:161`)
   for every stream on every draw.
 - `src/vivante/shader.rs:229-238`: `GC_FE_HALTI5_ID_CONFIG` puts the vertex
@@ -227,7 +227,7 @@ So plan #19 (`src/gl/draw.rs`) is not needed for any option.
 | **P1** (do first) | PDS `instance_id_modifier` = `GlesDraw::instance_id` | Add a parameter `instance_id_base` to `pvr_pds_render_vertex_program_ids` and set `program.instance_id_modifier` from it. Pass `d.instance_id` at the call site. Remove the refusal. Make `VDATA_DWORDS`/`VCODE_DWORDS` larger (one more constant, maybe padded to an even pair, and one more instruction; today the slice at `backend.rs:7403` is `min(VDATA_DWORDS)` after the generator has written `data_size_dw`, so the buffer must grow before the program does). Test: the PDS data holds the modifier constant, and instance 2 is drawn, not refused. | ~30 C + ~30 Rust + ~60 test lines | `driver/src/pvr_pds_render_gen.{c,h}`, `src/pvr/ffi.rs` (548-558), `src/pvr/ffi_layout_check.c` (275-277), `src/pvr/backend.rs` (5890-5905, 2210-2212, 7382-7404), `src/pvr/backend_tests.rs` (mock at 350-358) | plan #18 (PowerVR back end; the `driver/src` generator goes with it) |
 | P1b (with P1, optional) | Correct chunking for programs that read `gl_InstanceID` | In `draw_sized`, set the modifier to `first` for each chunk. Drop `attribs_advance_instances` for the streams, because the modifier already moves the per-instance DMA index. Drop the `reads_instance_id` exception. | ~20 lines + test | `src/pvr/backend.rs` (`draw_sized`, 6478-6545) | #18 |
 | P2 | Per-draw uniform: the compiler reads `gl_InstanceID` from a shared register that the driver writes, like `fs_front_face_off1` | A new `ShcShader` field (ABI change), PowerVR selection of `IoSlot::InstanceId` as a shared-register load, and a per-draw shared-register write in the back end. | ~200 lines | `src/shaderc/online/powervr/{select,chain,abi}.rs`, `src/shaderc/mod.rs`, `src/abi_layout.rs`, `src/abi_layout_check.c`, `src/pvr/backend.rs` | #19 (compiler) + #18. **Not recommended**: the PDS does the same in one instruction (P1). |
-| **P3** (full path) | Hardware divisors: stream `multiplier`/`shift` | Add a `divisor` field to `struct pvr_pds_render_stream` and `PvrPdsVertexStream` (layout asserts at `ffi.rs:686-694`, `ffi_layout_check.c:177-182`). Compute multiplier/shift as in `pvr_pipeline_pds.c:846-864`. `add_stream` (`backend.rs:9521-9542`) must also compare the divisor before it coalesces. Chunking must use P1's modifier, not a base move (a base move is wrong unless `first % divisor == 0`). Set `max_instance_divisor: 0xffff` (`backend.rs:9506`). Then the mixed cases are one draw, and the emulation is used only for divisors > 0xffff. Tests: the PDS data words for divisors 2, 3 and 4, and a coalescing test. | ~60 C + ~60 Rust + ~100 test lines | `driver/src/pvr_pds_render_gen.{c,h}`, `src/pvr/ffi.rs`, `src/pvr/ffi_layout_check.c`, `src/pvr/backend.rs`, `src/pvr/backend_tests.rs` | #18 |
+| **P3** (full path) | Hardware divisors: stream `multiplier`/`shift` | Add a `divisor` field to `struct pvr_pds_render_stream` and `PvrPdsVertexStream` (layout asserts at `ffi.rs:686-694`, `ffi_layout_check.c:177-182`). Compute multiplier/shift as in `pvr_pipeline_pds.c:846-864`. `add_stream` (`backend.rs:9534-9555`) must also compare the divisor before it coalesces. Chunking must use P1's modifier, not a base move (a base move is wrong unless `first % divisor == 0`). Set `max_instance_divisor: 0xffff` (`backend.rs:9518`). Then the mixed cases are one draw, and the emulation is used only for divisors > 0xffff. Tests: the PDS data words for divisors 2, 3 and 4, and a coalescing test. | ~60 C + ~60 Rust + ~100 test lines | `driver/src/pvr_pds_render_gen.{c,h}`, `src/pvr/ffi.rs`, `src/pvr/ffi_layout_check.c`, `src/pvr/backend.rs`, `src/pvr/backend_tests.rs` | #18 |
 
 P1 alone fixes the six cases: instance i gets `gl_InstanceID = i`, and the
 divisor values are already constants. P3 removes the 2/4/20 separate draws
@@ -239,9 +239,9 @@ must be re-run on the board.
 
 | Rank | Option | What changes | Size | Files | Owner |
 |---|---|---|---|---|---|
-| **V0** (done, `7897e809`) | Make the refusal work: give GC7000UL programs `vs_instance_id_reg1` | In selection, record `InstanceId` reads apart from `VertexId` reads (`src/shaderc/online/select.rs:4359-4362` and `:4378`, `abi.rs:633-636`). Set `ShcShader::vs_instance_id_reg1 = vs_id_in_reg + 1` (or any non-zero value) when `gl_InstanceID` is read. Test with real compiler output in `src/vivante/backend_tests.rs`: instance 2 is refused and counted. **Landed in `7897e809`** (test `the_real_compiler_refuses_a_split_instanced_draw_that_reads_gl_instance_id`, `src/vivante/backend_tests.rs`: it compiles a real program, checks `vs_instance_id_reg1 == viv.vs_id_in_reg + 1` and counts 3 refused draws). Without V0, a draw that is still split into instances (divisor > `max_instance_divisor`) is drawn wrong without any message. | ~20 lines + test | `src/shaderc/online/select.rs`, `src/shaderc/online/abi.rs` (and the `ShcShader` fill for the GC7000UL output), `src/vivante/backend_tests.rs` | compiler: plan #19 (the online compiler; `select.rs`/`abi.rs` are not in the files #19 marks as held, so the owner must confirm) + #18 for the test |
-| V0' (not needed: V0 landed) | Back-end-only refusal on `viv.vs_id_in_reg != SHC_VIV_NO_REG` | One line in `draw_one` (`backend.rs:2930`). It also refuses programs that read only `gl_VertexID`, which are drawn correctly today. That is a regression, so this is a stop-gap only. | 1 line + test | `src/vivante/backend.rs` | #18 |
-| **V1** (done, `6c4759ea`) | Hardware divisor | `src/vivante/backend.rs:2830`: `divisor: if a.per_instance != 0 { u32::from(a.divisor.max(1)) } else { 0 }`, into `GcStream` (`:2831`); `:3622`: `max_instance_divisor: 0xffff`. `emit_streams` (`:1323`) writes the word into 0x14680 + 4i. The GL core hands the mixed draw over as one DRAW_INSTANCED of n instances, and the FE gives `gl_InstanceID` 0..n-1. **Landed in `6c4759ea`**; the third-stream (0x14688) assertions followed in `256ec05b`. Host tests: see section 4 (`tests/gc_stream_divisor.rs`). **Not measured on the board**: no one knows if the GC7000UL FE takes a divisor > 1. etnaviv relies on it on every HALTI2+ part, and this GPU is HALTI5 (it uses `FE_HALTI5_ID_CONFIG`). The X2 check is section 5. | ~5 lines + ~40 test lines | `src/vivante/backend.rs`, `src/vivante/backend_tests.rs`, `tests/gc_stream_divisor.rs` | #18 |
+| **V0** (done, `7897e809`) | Make the refusal work: give GC7000UL programs `vs_instance_id_reg1` | In selection, record `InstanceId` reads apart from `VertexId` reads (`src/shaderc/online/select.rs:4910-4913` and `:4929`, `abi.rs:633-636`). Set `ShcShader::vs_instance_id_reg1 = vs_id_in_reg + 1` (or any non-zero value) when `gl_InstanceID` is read. Test with real compiler output in `src/vivante/backend_tests.rs`: instance 2 is refused and counted. **Landed in `7897e809`** (test `the_real_compiler_refuses_a_split_instanced_draw_that_reads_gl_instance_id`, `src/vivante/backend_tests.rs`: it compiles a real program, checks `vs_instance_id_reg1 == viv.vs_id_in_reg + 1` and counts 3 refused draws). Without V0, a draw that is still split into instances (divisor > `max_instance_divisor`) is drawn wrong without any message. | ~20 lines + test | `src/shaderc/online/select.rs`, `src/shaderc/online/abi.rs` (and the `ShcShader` fill for the GC7000UL output), `src/vivante/backend_tests.rs` | compiler: plan #19 (the online compiler; `select.rs`/`abi.rs` are not in the files #19 marks as held, so the owner must confirm) + #18 for the test |
+| V0' (not needed: V0 landed) | Back-end-only refusal on `viv.vs_id_in_reg != SHC_VIV_NO_REG` | One line in `draw_one` (`backend.rs:2958`). It also refuses programs that read only `gl_VertexID`, which are drawn correctly today. That is a regression, so this is a stop-gap only. | 1 line + test | `src/vivante/backend.rs` | #18 |
+| **V1** (done, `6c4759ea`) | Hardware divisor | `src/vivante/backend.rs:2841`: `let divisor = if a.per_instance != 0 { u32::from(a.divisor.max(1)) } else { 0 };`, into `GcStream` (`:2842`); `:3646`: `max_instance_divisor: 0xffff`. `emit_streams` (`:1318`; the write is `:1328`) writes the word into 0x14680 + 4i. The GL core hands the mixed draw over as one DRAW_INSTANCED of n instances, and the FE gives `gl_InstanceID` 0..n-1. **Landed in `6c4759ea`**; the third-stream (0x14688) assertions followed in `256ec05b`. Host tests: see section 4 (`tests/gc_stream_divisor.rs`). **Not measured on the board**: no one knows if the GC7000UL FE takes a divisor > 1. etnaviv relies on it on every HALTI2+ part, and this GPU is HALTI5 (it uses `FE_HALTI5_ID_CONFIG`). The X2 check is section 5. | ~5 lines + ~40 test lines | `src/vivante/backend.rs`, `src/vivante/backend_tests.rs`, `tests/gc_stream_divisor.rs` | #18 |
 | V2 (fallback, not needed unless the board shows the FE ignores divisors above 1; otherwise only for divisor > 0xffff) | Per-draw uniform for split draws | The compiler loads `gl_InstanceID` from a constant register (a new `ShcViv` field, ABI change) instead of the FE's `.y`, and the back end writes `instance_id` there for each draw. There is no FE base-instance state (section 2), so there is no register-only way. | ~150-200 lines | `src/shaderc/online/select.rs`, `src/shaderc/mod.rs`, `src/abi_layout.rs`, `src/abi_layout_check.c`, `src/vivante/{backend,shader}.rs` | #19 + #18. Not needed now: with V1 it matters only for divisors > 65535, or if the board shows the FE ignores a divisor above 1 (then `max_instance_divisor` goes back to 1). |
 
 ## 4. Host check (both refusal sites, with the real compiler)
