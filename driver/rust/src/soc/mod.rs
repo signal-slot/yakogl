@@ -12,5 +12,8 @@ pub mod am62p;
 #[cfg(any(feature = "rk3588", test))]
 pub mod rk3588;
 
+#[cfg(test)]
+mod rk3588_clock_exhaustive;
+
 #[cfg(any(feature = "stm32mp2", test))]
 pub mod stm32mp2;
