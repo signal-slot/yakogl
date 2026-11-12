@@ -104,9 +104,11 @@ impl TfObject {
 
 static OBJECTS: Global<[[TfObject; MAX_FEEDBACKS]; MAX_CONTEXTS]> = Global::zeroed();
 static BOUND: Global<[GLuint; MAX_CONTEXTS]> = Global::zeroed();
-/// Buffer slots whose name was deleted while a transform feedback object
-/// that was not current still held them: the storage lives until the last
-/// object lets go (per context; the objects are per context).
+/// Buffer slots whose name was deleted while a transform feedback object or
+/// a vertex array object that was not current still held them: the storage
+/// lives until the last object lets go (per context; the objects are per
+/// context). A name bound again moves its orphan to another slot
+/// (`buffer::move_orphan`, [`orphan_moved`]).
 static ORPHANS: Global<[[bool; MAX_BUFFERS]; MAX_CONTEXTS]> = Global::zeroed();
 
 fn objects(index: u8) -> &'static mut [TfObject; MAX_FEEDBACKS] {
@@ -370,6 +372,31 @@ pub(super) fn release_slot(c: &mut GlContext, slot: GLuint) {
     }
     orphans(c.index)[slot as usize % MAX_BUFFERS] = false;
     super::buffer::free_orphan(c, slot);
+}
+
+/// Is buffer slot `slot` a deleted buffer's storage that an object still
+/// holds? The flag is shared by both kinds of holder: transform feedback
+/// objects and vertex array objects (`vao::holds_buffer`) set it alike in
+/// [`on_buffer_delete`]. `target == 0 && used` does not tell it apart: a
+/// generated name that was never bound looks the same.
+pub(super) fn is_orphan(c: &GlContext, slot: GLuint) -> bool {
+    slot != 0 && (slot as usize) < MAX_BUFFERS && orphans(c.index)[slot as usize]
+}
+
+/// The orphan in buffer slot `from` moved to slot `to` (`buffer::move_orphan`):
+/// every transform feedback object that attaches it follows, the bound one
+/// too (it may have been bound again after the delete). `to` 0: the orphan
+/// was freed, and the objects lose the attachment.
+pub(super) fn orphan_moved(c: &mut GlContext, from: GLuint, to: GLuint) {
+    for b in objects(c.index).iter_mut().filter(|o| o.used).flat_map(|o| o.bind.iter_mut()) {
+        if b.buffer == from {
+            *b = if to == 0 { TfBinding::NONE } else { TfBinding { buffer: to, ..*b } };
+        }
+    }
+    orphans(c.index)[from as usize % MAX_BUFFERS] = false;
+    if to != 0 {
+        orphans(c.index)[to as usize % MAX_BUFFERS] = true;
+    }
 }
 
 /* ---------------------------------------------------------------- varyings */
