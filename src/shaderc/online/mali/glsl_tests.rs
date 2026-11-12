@@ -15,7 +15,7 @@ fn rewrite(stage: u32, src: &str) -> (Result<Vec<Op>, MaliError>, Vec<Op>) {
     let _k = store::test_keep();
     store::with_scratch(|s| {
         let l = codegen::lower_source(stage, src.as_bytes(), &[], s).expect("the front end takes it");
-        let passes = super::passes(&l.module, s).map(|r| match r {
+        let passes = super::passes(&l.module, false, s).map(|r| match r {
             Some((instrs, _)) => instrs.to_vec(),
             None => l.module.instrs.to_vec(),
         });
