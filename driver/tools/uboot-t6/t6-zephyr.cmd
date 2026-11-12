@@ -42,11 +42,14 @@ if test ${t6z_ok} -eq 0; then
 	echo "t6-zephyr: STOP: ${t6z_file} not found on mmc ${t6z_dev}"
 	exit
 fi
-if test ${filesize} -lt ${t6z_min}; then
+# ${filesize} is hex without 0x (env_set_hex, fs/fs.c:787, :865). `test` reads
+# operands in base 0, so as decimal (cmd/test.c:152-173); `itest` reads plain
+# operands as hex (cmd/itest.c, hextoul), so the size checks use itest.
+if itest ${filesize} -lt ${t6z_min}; then
 	echo "t6-zephyr: STOP: file ${filesize} bytes, below the ${t6z_min}-byte Image header"
 	exit
 fi
-if test ${filesize} -gt ${t6z_window}; then
+if itest ${filesize} -gt ${t6z_window}; then
 	echo "t6-zephyr: STOP: file ${filesize} bytes, above the ${t6z_window}-byte window"
 	exit
 fi
