@@ -10,9 +10,10 @@
 //! is the allocation. A draw cannot reach it from an integration test (the
 //! sampled mask that opens the 128-bit classes is a `cfg(test)` hook of the
 //! crate), so this file drives the function itself, laid out as
-//! `emit_textures_inner` calls it (src/vivante/texture.rs:680-697): the
+//! `emit_textures_inner` calls it (src/vivante/texture.rs): the
 //! fragment stage at base 0 with `fs_count` slots, the vertex stage at base
-//! `fs_count + fs_wide` (= VS_SAMPLER_BASE).
+//! `fs_count + fs_wide` (= VS_SAMPLER_BASE). `stage_slots_fit` is the check
+//! that refuses a draw whose vertex stage passes slot 31.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-vivante,shaderc-online --test es3_wide128_slots_gc
@@ -21,7 +22,7 @@
 #![cfg(all(feature = "host-test", feature = "gpu-vivante", feature = "shaderc-online", not(feature = "report-es2")))]
 
 use yakogl::vivante::state::GC_MAX_SAMPLERS;
-use yakogl::vivante::texture::{companion_slot, GC_HW_SAMPLER_SLOTS};
+use yakogl::vivante::texture::{companion_slot, stage_slots_fit, GC_HW_SAMPLER_SLOTS};
 
 /// A stage's slots: per binding, `(own slot, companion slot)`.
 type Slots = Vec<(u32, Option<u32>)>;
@@ -151,18 +152,23 @@ fn a_companion_past_the_hardware_slots_is_refused_not_overlapped() {
     assert_eq!(companion_slot(0, 16, 16), None);
 }
 
-/// KNOWN DEFECT (src/vivante/texture.rs:682-697, reported by this item): the
-/// companions are refused past slot 31, but the vertex stage's *own* slots
-/// start at `vs_base = fs_count + fs_wide` and `emit_slot` is called with
-/// `base + unit` unchecked. 16 fragment units with one wide binding put
-/// vertex unit 15 at slot 32, off the array. This test records the arithmetic
-/// only; it asserts nothing about a draw.
+/// The vertex stage's *own* slots start at `vs_base = fs_count + fs_wide`;
+/// `emit_textures_inner` refuses the draw (-ENOTSUP, logged by name) when
+/// `stage_slots_fit` says the last slot is past 31, before any slot is
+/// written. 16 fragment units with one wide binding put vertex unit 15 at
+/// slot 32: refused. One vertex unit fewer ends at slot 31: accepted.
 #[test]
-fn record_the_vertex_own_slot_overflow_arithmetic() {
+fn the_vertex_own_slot_overflow_is_refused() {
     let mut fs: Vec<_> = (0..16).map(|u| (u, false)).collect();
     fs[0].1 = true;
     let vs: Vec<_> = (0..16).map(|u| (u, false)).collect();
     let (vs_base, _, v) = layout(&fs, &vs);
     assert_eq!(vs_base, 17);
     assert_eq!(v.last().unwrap().0, 32, "one past the last slot of the array");
+    assert_eq!(stage_slots_fit(16, 1, 16), Err(32));
+
+    /* exactly at the limit: 15 vertex units, the last at slot 31 */
+    let (_, _, v) = layout(&fs, &vs[..15]);
+    assert_eq!(v.last().unwrap().0, 31);
+    assert_eq!(stage_slots_fit(16, 1, 15), Ok(()));
 }
