@@ -92,3 +92,4 @@ drop | tailnet-dns | tools/mp2_uboot_record_check.py | \bdk1\.tail1234\.ts\.net\
 drop | private-ipv4 | tools/probes/rpi5_display/verdicts_selftest.sh | \b100\.64\.7\.9\b | private-range input of a redaction test: a console line the verdict tool must not print
 drop | ipv6-local | tools/probes/rpi5_display/verdicts_selftest.sh | \bfe80::1\b | link-local input of the same redaction test
 drop | email | tools/probes/rpi5_display/verdicts_selftest.sh | \bserial-getty@ttyS2\.service\b | systemd unit name in the same console line
+drop | email | driver/tools/uboot-t6/prompt-reads.sh | serial-getty[@]ttyS2\.service\b | systemd unit instance the tool asks the board about, not an address
