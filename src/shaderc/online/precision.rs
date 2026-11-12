@@ -194,21 +194,18 @@ fn prec_of(b: u8) -> Prec {
     match b {
         1 => Prec::High,
         2 => Prec::Medium,
-        3 => Prec::Fold32,
-        4 => Prec::Unknown,
+        3 => Prec::Unknown,
         _ => Prec::None,
     }
 }
 
-/// Three bits of a table entry. No class is [`Prec::Fold32`] (only the
-/// lowering's folds are); it has its code for completeness.
+/// Three bits of a table entry.
 const fn bits_of(p: Prec) -> u8 {
     match p {
         Prec::None => 0,
         Prec::High => 1,
         Prec::Medium => 2,
-        Prec::Fold32 => 3,
-        Prec::Unknown => 4,
+        Prec::Unknown => 3,
     }
 }
 
