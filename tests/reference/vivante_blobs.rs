@@ -282,6 +282,9 @@
 //   es300/uniidx.frag    fs  sha256=a5aee528c0285c64916a2b3602265709c5398d4b4b189943926f1d2d2a208cf4
 // Appended rows (--append), compiled by etna_shc=a22662e5bd4e8b6c05f564f76c0fad941f45d830c2fd610b605d973f665408c2 glslang=Glslang Version: 11:16.4.0:
 //   es300/uops.frag      fs  sha256=26e5d55fb9a1e96fd9184c66e7ebb36e57f0a8dd0a6472b19d49efffa5e0688d
+// Appended rows (--append), compiled by etna_shc=33a83f1a1590ee1144f5e37a721e0bd9cd0124b9db5784ec81d9b18beb0c5800 glslang=Glslang Version: 11:16.2.0:
+//   es300/mrt4.vert      vs  sha256=36519be55473f6278f27fe88622bb2ea111f08fc56d6e44b17cd46f701d46323
+//   es300/mrt4.frag      fs  sha256=6bc9b2afb479b8d74db99bd3f2ea25847d715e776e030311a5152198fd369cb8
 #![allow(clippy::all)]
 #![cfg_attr(rustfmt, rustfmt_skip)]
 
@@ -5874,7 +5877,22 @@ static UNI_233: [ShcUniform; 3] = [
     ShcUniform { name: cname("f"), dword_off: 4, dwords: 1, gl_type: 0x1406, array_len: 1, binding: 0, inner: 1 },
 ];
 
-pub static SHC_BLOB_TABLE: [ShcBlob; 234] = [
+static CODE_234: [u32; 4] = [
+    0x00000000, 0x00000000, 0x00000000, 0x00000000,
+];
+
+static CODE_235: [u32; 16] = [
+    0x07811009, 0x00000004, 0x00000000, 0x20050008, 0x07821009, 0x00000004, 0x00000000, 0x20044008,
+    0x07831009, 0x00000004, 0x00000000, 0x20014008, 0x07841009, 0x00000004, 0x00000000, 0x20040008,
+];
+static CC_235: [u8; 4] = [
+    1, 1, 0, 0,
+];
+static CD_235: [u32; 4] = [
+    0x3f800000, 0x00000000, 0x00000000, 0x00000000,
+];
+
+pub static SHC_BLOB_TABLE: [ShcBlob; 236] = [
     ShcBlob {
         sha256: [0x32, 0x96, 0xa5, 0xe0, 0x1b, 0x2b, 0xa4, 0xfb, 0xc9, 0xcb, 0x94, 0x8e, 0x2c, 0xbf, 0xaf, 0xe7, 0xa8, 0xc3, 0xc0, 0x5b, 0x24, 0x98, 0xe6, 0x69, 0xfc, 0xc4, 0x20, 0xec, 0x00, 0x92, 0x1b, 0xdc],
         name: "color_uv.frag\0",
@@ -20803,9 +20821,133 @@ pub static SHC_BLOB_TABLE: [ShcBlob; 234] = [
             priv_: core::ptr::null(),
         },
     },
+    ShcBlob {
+        sha256: [0x36, 0x51, 0x9b, 0xe5, 0x54, 0x73, 0xf6, 0x27, 0x8f, 0x27, 0xfe, 0x88, 0x62, 0x2b, 0xb2, 0xea, 0x11, 0x1f, 0x08, 0xfc, 0x56, 0xd6, 0xe4, 0x4b, 0x17, 0xcd, 0x46, 0xf7, 0x01, 0xd4, 0x63, 0x23],
+        name: "es300/mrt4.vert\0",
+        stage: SHC_STAGE_VERTEX,
+        blend_key: 0,
+        shader: ShcShader {
+            usc: CODE_234.as_ptr(),
+            usc_dw: 4,
+            temps: 1,
+            varyings: [ShcVarying::ZERO; 16],
+            num_varyings: 0,
+            uses_w: 0,
+            uses_discard: 0,
+            reads_front_facing: 0,
+            meta_off: 0,
+            fs_front_face_off1: 0,
+            num_outputs: 0,
+            num_tile_buffers: 0,
+            tile_buffer_sh: 0,
+            attribs: pad_attribs([
+                ShcAttrib { location: 0, components: 4, vi_reg: 0, format: 0, name: cname("a_pos"), gl_type: 0x8b52 },
+            ]),
+            num_attribs: 1,
+            vs_output_size: 0,
+            vs_psize_off: 0,
+            vs_vertex_id_reg1: 0,
+            vs_instance_id_reg1: 0,
+            uniform_dwords: 0,
+            uniform_sh_dwords: 0,
+            uniforms: core::ptr::null(),
+            num_uniforms: 0,
+            blend_key: 0,
+            uses_fbfetch: 0,
+            blend_consts_off: SHC_NO_BLEND_CONSTS,
+            uses_pntc: 0,
+            uses_z: 0,
+            fragcoord_ytf_off1: 0,
+            native_cube: 0,
+            layout_at_link: 0,
+            declared: core::ptr::null(),
+            num_declared: 0,
+            writes_depth: 0,
+            viv: ShcViv {
+                in_: pad_io([
+                    ShcVivIo { reg: 0, slot: 15, components: 4, interp: 0, name: cname("a_pos") },
+                ]),
+                num_in: 1,
+                out: [ShcVivIo::ZERO; SHC_VIV_MAX_IO],
+                num_out: 0,
+                vs_reg_of_in: [0; SHC_VIV_MAX_IO],
+                vs_pos_out_reg: 0,
+                vs_pointsize_out_reg: 255,
+                vs_id_in_reg: 255,
+                ps_color_out_reg: 0,
+                ps_depth_out_reg: 255,
+                vs_load_balancing: 0x0f3f0241,
+                input_count_unk8: 1,
+                const_contents: core::ptr::null(),
+                const_data: core::ptr::null(),
+                const_count: 0,
+            },
+            priv_: core::ptr::null(),
+        },
+    },
+    ShcBlob {
+        sha256: [0x6b, 0xc9, 0xb2, 0xaf, 0xb4, 0x79, 0xb8, 0xd7, 0x4d, 0xb9, 0x9b, 0xd3, 0xf2, 0xea, 0x25, 0x84, 0x7d, 0x71, 0x5e, 0x77, 0x6e, 0x03, 0x03, 0x11, 0xa5, 0x15, 0x21, 0x98, 0xfd, 0x36, 0x9c, 0xb8],
+        name: "es300/mrt4.frag\0",
+        stage: SHC_STAGE_FRAGMENT,
+        blend_key: 0,
+        shader: ShcShader {
+            usc: CODE_235.as_ptr(),
+            usc_dw: 16,
+            temps: 5,
+            varyings: [ShcVarying::ZERO; 16],
+            num_varyings: 0,
+            uses_w: 0,
+            uses_discard: 0,
+            reads_front_facing: 0,
+            meta_off: 0,
+            fs_front_face_off1: 0,
+            num_outputs: 0,
+            num_tile_buffers: 0,
+            tile_buffer_sh: 0,
+            attribs: [ShcAttrib::ZERO; 16],
+            num_attribs: 0,
+            vs_output_size: 0,
+            vs_psize_off: 0,
+            vs_vertex_id_reg1: 0,
+            vs_instance_id_reg1: 0,
+            uniform_dwords: 0,
+            uniform_sh_dwords: 0,
+            uniforms: core::ptr::null(),
+            num_uniforms: 0,
+            blend_key: 0,
+            uses_fbfetch: 0,
+            blend_consts_off: SHC_NO_BLEND_CONSTS,
+            uses_pntc: 0,
+            uses_z: 0,
+            fragcoord_ytf_off1: 0,
+            native_cube: 0,
+            layout_at_link: 0,
+            declared: core::ptr::null(),
+            num_declared: 0,
+            writes_depth: 0,
+            viv: ShcViv {
+                in_: [ShcVivIo::ZERO; SHC_VIV_MAX_IO],
+                num_in: 0,
+                out: [ShcVivIo::ZERO; SHC_VIV_MAX_IO],
+                num_out: 0,
+                vs_reg_of_in: [0; SHC_VIV_MAX_IO],
+                vs_pos_out_reg: 255,
+                vs_pointsize_out_reg: 255,
+                vs_id_in_reg: 255,
+                ps_color_out_reg: 1,
+                ps_depth_out_reg: 255,
+                vs_load_balancing: 0x00000000,
+                input_count_unk8: 31,
+                const_contents: CC_235.as_ptr(),
+                const_data: CD_235.as_ptr(),
+                const_count: 4,
+            },
+            priv_: core::ptr::null(),
+        },
+    },
 ];
 
-pub static SHC_SOURCE_TABLE: [ShcSource; 234] = [
+pub static SHC_SOURCE_TABLE: [ShcSource; 236] = [
     ShcSource {
         name: "color_uv.frag",
         text: concat!(
@@ -34564,6 +34706,40 @@ pub static SHC_SOURCE_TABLE: [ShcSource; 234] = [
             "    uint mix1 = d ^ (m << 8u) ^ (sh << 16u) ^ umn ^ (umx << 5u) ^ nt ^ (fu << 3u) ^ uint(mn) ^ (uint(mx) << 11u);\n",
             "    colour = vec4(float(mix1 & 255u) / 255.0, float((mix1 >> 8u) & 255u) / 255.0,\n",
             "                  (u.x < u.y ? 0.25 : 0.0) + (u.x <= u.y ? 0.5 : 0.0), fract(float(u.x) / 65536.0));\n",
+            "}\n",
+            "\0",
+        ),
+    },
+    ShcSource {
+        name: "mrt4.vert",
+        text: concat!(
+            "#version 300 es\n",
+            "// gl_test 243 mrt4: a full-screen position, nothing else.\n",
+            "layout(location = 0) in vec4 a_pos;\n",
+            "void main()\n",
+            "{\n",
+            "    gl_Position = a_pos;\n",
+            "}\n",
+            "\0",
+        ),
+    },
+    ShcSource {
+        name: "mrt4.frag",
+        text: concat!(
+            "#version 300 es\n",
+            "// gl_test 243 mrt4: four draw buffers, each its own colour, so a target\n",
+            "// that got another's output (or none) reads as the wrong colour.\n",
+            "precision mediump float;\n",
+            "layout(location = 0) out vec4 o0;\n",
+            "layout(location = 1) out vec4 o1;\n",
+            "layout(location = 2) out vec4 o2;\n",
+            "layout(location = 3) out vec4 o3;\n",
+            "void main()\n",
+            "{\n",
+            "    o0 = vec4(1.0, 0.0, 0.0, 1.0);\n",
+            "    o1 = vec4(0.0, 1.0, 0.0, 1.0);\n",
+            "    o2 = vec4(0.0, 0.0, 1.0, 1.0);\n",
+            "    o3 = vec4(1.0, 1.0, 0.0, 1.0);\n",
             "}\n",
             "\0",
         ),

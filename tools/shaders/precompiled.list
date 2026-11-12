@@ -514,6 +514,7 @@ pair passthrough.vert es100/uniidx_h.frag
 pair passthrough.vert es100/uniidx_i.frag
 pair passthrough.vert interp_color.frag
 pair es300/mrt3.vert es300/mrt3.frag
+pair es300/mrt4.vert es300/mrt4.frag
 pair passthrough.vert es100/uniidx_j.frag
 pair es100/cubemap.vert es100/cubelod.frag
 pair passthrough.vert es100/affectand.frag
@@ -666,6 +667,7 @@ pair gl_test_es100/passthrough.vert es100/uniidx_h.frag
 pair gl_test_es100/passthrough.vert es100/uniidx_i.frag
 pair gl_test_es100/passthrough.vert gl_test_es100/interp_color.frag
 pair es300/mrt3.vert es300/mrt3.frag
+pair es300/mrt4.vert es300/mrt4.frag
 pair gl_test_es100/passthrough.vert es100/uniidx_j.frag
 pair es100/cubemap.vert es100/cubelod.frag
 pair gl_test_es100/passthrough.vert es100/affectand.frag
