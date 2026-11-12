@@ -3686,9 +3686,9 @@ fn a_draw_on_three_attachments_configures_three_render_targets() {
     assert_eq!(
         t.rt,
         [
-            V3dJobRt { address: RT1 as u32, stride: 256 },
-            V3dJobRt { address: RT2 as u32, stride: 256 },
-            V3dJobRt { address: 0, stride: 0 }
+            V3dJobRt { address: RT1 as u32, stride: 256, ..V3dJobRt::default() },
+            V3dJobRt { address: RT2 as u32, stride: 256, ..V3dJobRt::default() },
+            V3dJobRt { address: 0, stride: 0, ..V3dJobRt::default() }
         ]
     );
     let c = jobs[0].clear.expect("ended");
@@ -6687,7 +6687,7 @@ fn attachments_of_different_formats_each_keep_their_own() {
     assert!(j.target.typed);
     assert_eq!(j.target.rt_format, [27, V3D_OUTPUT_IMAGE_FORMAT_RGBA32UI, 27, 27]);
     assert_eq!(j.target.stride, 64 * 4);
-    assert_eq!(j.target.rt[0], V3dJobRt { address: RT1 as u32, stride: 64 * 16 });
+    assert_eq!(j.target.rt[0], V3dJobRt { address: RT1 as u32, stride: 64 * 16, ..V3dJobRt::default() });
     let c = j.clear.unwrap();
     assert!(!c.load_rt0 && !c.load_rt[0]);
     assert_eq!(c.clear_rt[0], [state::pack_rgba8(d.clear_rgba), 0, 0, 0], "RT 0: the RGBA8 word");

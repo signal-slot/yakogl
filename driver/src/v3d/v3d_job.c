@@ -265,6 +265,35 @@ static uint32_t rt_fmt(const struct v3d_job_target *t, uint32_t n)
 	return V3D_OUTPUT_IMAGE_FORMAT_RGBA8;
 }
 
+/* Render target n's sample buffer at 4x (v3d_job.h msaa): RT 0's is the
+ * target's ms_*, RT n's its rt[n - 1].ms_*. */
+struct ms_buffer {
+	uint32_t address, memory_format, height_in_ub;
+};
+
+static struct ms_buffer rt_ms(const struct v3d_job_target *t, uint32_t n)
+{
+	if (n == 0)
+		return (struct ms_buffer){ t->ms_address, t->ms_memory_format, t->ms_height_in_ub };
+	const struct v3d_job_rt *rt = &t->rt[n - 1];
+	return (struct ms_buffer){ rt->ms_address, rt->ms_memory_format, rt->ms_height_in_ub };
+}
+
+/* The image format RT n's samples are kept in: the RT's own with `typed`
+ * (Mesa loads and stores a multisampled surface in v3d_get_rt_format of its
+ * format, v3dx_rcl.c:60-170), else RGBA8, RT 0 of an rgb565 target too (its
+ * buffer is laid out at 4 bytes a pixel, src/v3d/backend.rs ms_buf). */
+static uint32_t ms_fmt(const struct v3d_job_target *t, uint32_t n)
+{
+	return t->typed ? t->rt_format[n] : V3D_OUTPUT_IMAGE_FORMAT_RGBA8;
+}
+
+/* The raster buffer of render target n: 0 for none. */
+static uint32_t rt_address(const struct v3d_job_target *t, uint32_t n)
+{
+	return n == 0 ? t->address : t->rt[n - 1].address;
+}
+
 /* The largest internal bpp of the job's render targets: Mesa's
  * job->internal_bpp maximum, which TILE_BINNING_MODE_CFG and the rendering
  * mode's common config carry (v3dx_draw.c start_binning, v3dx_rcl.c
@@ -285,12 +314,10 @@ bool v3d_job_begin(struct v3d_job *j, const struct v3d_job_target *t, struct v3d
 {
 	*j = (struct v3d_job){ .bcl = bcl, .rcl = rcl, .ind = ind, .t = *t };
 	j->pack.on = v3d_job_pack_skip;
-	/* 4x with more than one RT: not written (the samples of RT 1..3 would
-	 * need buffers of their own); refused. 4x with no colour buffer
-	 * (address 0) is refused too: a depth-only framebuffer is never
-	 * multisampled in ES 2.0, so the shape has no user. */
-	if (t->width == 0 || t->height == 0 || t->rts > 4 || (t->msaa && t->rts > 1) ||
-	    (t->msaa && !t->address)) {
+	/* 4x with no colour buffer (address 0) is refused: a 4x depth-only
+	 * framebuffer has no user (draw_call refuses it too). Each RT at 4x
+	 * keeps its samples in its own buffer (v3d_job.h msaa). */
+	if (t->width == 0 || t->height == 0 || t->rts > 4 || (t->msaa && !t->address)) {
 		j->broken = true;
 		return false;
 	}
@@ -307,16 +334,15 @@ bool v3d_job_begin(struct v3d_job *j, const struct v3d_job_target *t, struct v3d
 		j->broken = true;
 		return false;
 	}
-	/* typed targets: every RT a format of rt_internal's table, and no 4x
-	 * (the kept samples and the resolve are RGBA8, v3d_job.h) */
+	/* typed targets: every RT a format of rt_internal's table; at 4x one
+	 * the TLB resolves by averaging, internal type 8 or 16F (Mesa's
+	 * v3d_format_supports_tlb_resolve_and_blend, v3d_formats.c:148-163;
+	 * ES 3.0 has no multisample integer renderbuffer) */
 	if (t->typed) {
-		if (t->msaa) {
-			j->broken = true;
-			return false;
-		}
 		for (uint32_t n = 0; n < job_rts(t); n++) {
 			uint32_t type, bpp, clamp;
-			if (!rt_internal(t->rt_format[n], &type, &bpp, &clamp)) {
+			if (!rt_internal(t->rt_format[n], &type, &bpp, &clamp) ||
+			    (t->msaa && type != V3D_INTERNAL_TYPE_8 && type != V3D_INTERNAL_TYPE_16F)) {
 				j->broken = true;
 				return false;
 			}
@@ -1005,6 +1031,41 @@ int v3d_job_draw(struct v3d_job *j, const struct v3d_job_draw *d, struct v3d_job
 	return V3D_JOB_OK;
 }
 
+/* v3d_rcl_emit_stores -> store_general of render target n (v3dx_rcl.c:
+ * 131-170), counted in `stores`: at 4x its samples for the next job first
+ * (ALL_SAMPLES, :157-158) when it keeps them (v3d_job.h msaa), then the
+ * resolve, decimate 4X into its raster buffer in its format (:159-166);
+ * single-sampled the raster store alone, sample 0. `raster` false leaves
+ * the raster store out (RT 0's uif_only). */
+static void store_rt(struct v3d_cl *list, const struct v3d_job *j, uint32_t n, bool r_b_swap, bool raster,
+		     uint32_t *stores)
+{
+	const struct ms_buffer ms = rt_ms(&j->t, n);
+	if (j->t.msaa && ms.address) {
+		(*stores)++;
+		v3d_cl_emit(list, STORE_TILE_BUFFER_GENERAL, st) {
+			st.buffer_to_store = V3D_STORE_BUFFER_RT0 + n;
+			st.memory_format = ms.memory_format;
+			st.output_image_format = ms_fmt(&j->t, n);
+			st.height_in_ub_or_stride = ms.height_in_ub;
+			st.address = ms.address;
+			st.decimate_mode = V3D_DECIMATE_MODE_ALL_SAMPLES;
+		}
+	}
+	if (!raster)
+		return;
+	(*stores)++;
+	v3d_cl_emit(list, STORE_TILE_BUFFER_GENERAL, st) {
+		st.buffer_to_store = V3D_STORE_BUFFER_RT0 + n;
+		st.memory_format = V3D_MEMORY_FORMAT_RASTER;
+		st.output_image_format = rt_fmt(&j->t, n);
+		st.height_in_ub_or_stride = n == 0 ? j->t.stride : j->t.rt[n - 1].stride;
+		st.address = rt_address(&j->t, n);
+		st.r_b_swap = r_b_swap;
+		st.decimate_mode = j->t.msaa ? V3D_DECIMATE_MODE_4X : V3D_DECIMATE_MODE_SAMPLE_0;
+	}
+}
+
 /* v3dx_rcl.c v3d_rcl_emit_generic_per_tile_list, written into `list`. */
 static void emit_tile_list(const struct v3d_job *j, const struct v3d_job_clear *c,
 			   struct v3d_cl *list, uint32_t *start, uint32_t *end)
@@ -1045,33 +1106,37 @@ static void emit_tile_list(const struct v3d_job *j, const struct v3d_job_clear *
 			ld.decimate_mode = V3D_DECIMATE_MODE_SAMPLE_0;
 		}
 	}
-	/* at 4x, the samples an earlier job kept (v3dx_rcl.c:100-110: a
-	 * multisampled surface loads with ALL_SAMPLES); v3d_job_end refuses a
-	 * 4x load with no buffer. RGBA8 in the tile buffer throughout, so
-	 * neither swap nor alpha forcing applies to the kept samples. */
-	if (rt0 && c->load_rt0 && j->t.msaa) {
-		v3d_cl_emit(list, LOAD_TILE_BUFFER_GENERAL, ld) {
-			ld.buffer_to_load = V3D_LOAD_BUFFER_RT0;
-			ld.memory_format = j->t.ms_memory_format;
-			ld.input_image_format = V3D_OUTPUT_IMAGE_FORMAT_RGBA8;
-			ld.height_in_ub_or_stride = j->t.ms_height_in_ub;
-			ld.address = j->t.ms_address;
-			ld.decimate_mode = V3D_DECIMATE_MODE_ALL_SAMPLES;
-		}
-	}
-	/* then RT 1..3 (v3d_rcl_emit_loads, v3dx_rcl.c:198-212: RENDER_TARGET_0
-	 * + i, in RT order), each that has a buffer and was not cleared */
-	for (uint32_t n = 1; n < job_rts(&j->t); n++) {
-		const struct v3d_job_rt *rt = &j->t.rt[n - 1];
-		if (!rt->address || !c->load_rt[n - 1])
+	/* at 4x RT 0, and RT 1..3 (v3d_rcl_emit_loads, v3dx_rcl.c:198-212:
+	 * RENDER_TARGET_0 + i, in RT order), each that has a buffer and was not
+	 * cleared. At 4x from the samples an earlier job kept (v3dx_rcl.c:
+	 * 100-110: a multisampled surface loads with ALL_SAMPLES), in the
+	 * format they were stored in; v3d_job_end refuses a 4x load with no
+	 * buffer. The tile buffer wrote them, so neither swap nor alpha forcing
+	 * applies to the kept samples. */
+	for (uint32_t n = 0; n < job_rts(&j->t); n++) {
+		const bool load = n == 0 ? c->load_rt0 : c->load_rt[n - 1];
+		if (!rt_address(&j->t, n) || !load)
 			continue;
-		v3d_cl_emit(list, LOAD_TILE_BUFFER_GENERAL, ld) {
-			ld.buffer_to_load = V3D_LOAD_BUFFER_RT0 + n;
-			ld.memory_format = V3D_MEMORY_FORMAT_RASTER;
-			ld.input_image_format = rt_fmt(&j->t, n);
-			ld.height_in_ub_or_stride = rt->stride;
-			ld.address = rt->address;
-			ld.decimate_mode = V3D_DECIMATE_MODE_SAMPLE_0;
+		if (j->t.msaa) {
+			const struct ms_buffer ms = rt_ms(&j->t, n);
+			v3d_cl_emit(list, LOAD_TILE_BUFFER_GENERAL, ld) {
+				ld.buffer_to_load = V3D_LOAD_BUFFER_RT0 + n;
+				ld.memory_format = ms.memory_format;
+				ld.input_image_format = ms_fmt(&j->t, n);
+				ld.height_in_ub_or_stride = ms.height_in_ub;
+				ld.address = ms.address;
+				ld.decimate_mode = V3D_DECIMATE_MODE_ALL_SAMPLES;
+			}
+		} else if (n > 0) {
+			const struct v3d_job_rt *rt = &j->t.rt[n - 1];
+			v3d_cl_emit(list, LOAD_TILE_BUFFER_GENERAL, ld) {
+				ld.buffer_to_load = V3D_LOAD_BUFFER_RT0 + n;
+				ld.memory_format = V3D_MEMORY_FORMAT_RASTER;
+				ld.input_image_format = rt_fmt(&j->t, n);
+				ld.height_in_ub_or_stride = rt->stride;
+				ld.address = rt->address;
+				ld.decimate_mode = V3D_DECIMATE_MODE_SAMPLE_0;
+			}
 		}
 	}
 	/* then Z and S apart, stencil first (v3dx_rcl.c:220-234): each half
@@ -1108,34 +1173,11 @@ static void emit_tile_list(const struct v3d_job *j, const struct v3d_job_clear *
 	}
 	v3d_cl_emit(list, SET_INSTANCEID, iid);
 	v3d_cl_emit(list, BRANCH_TO_IMPLICIT_TILE_LIST, branch);
-	/* at 4x, RT 0's samples for the next job first (store_general with
-	 * ALL_SAMPLES, v3dx_rcl.c:157-158), then the resolve below */
-	if (rt0 && j->t.msaa && j->t.ms_address) {
-		stores++;
-		v3d_cl_emit(list, STORE_TILE_BUFFER_GENERAL, ms) {
-			ms.buffer_to_store = V3D_STORE_BUFFER_RT0;
-			ms.memory_format = j->t.ms_memory_format;
-			ms.output_image_format = V3D_OUTPUT_IMAGE_FORMAT_RGBA8;
-			ms.height_in_ub_or_stride = j->t.ms_height_in_ub;
-			ms.address = j->t.ms_address;
-			ms.decimate_mode = V3D_DECIMATE_MODE_ALL_SAMPLES;
-		}
-	}
-	/* v3d_rcl_emit_stores -> store_general, RT0, raster in the target's
-	 * format; at 4x the resolve, decimate 4X (v3dx_rcl.c:159-166). Not
-	 * with `uif_only`: the render image below is the target's one store. */
-	if (rt0 && !(j->t.uif_only && j->t.uif_address && !j->t.msaa)) {
-		stores++;
-		v3d_cl_emit(list, STORE_TILE_BUFFER_GENERAL, st) {
-			st.buffer_to_store = V3D_STORE_BUFFER_RT0;
-			st.memory_format = V3D_MEMORY_FORMAT_RASTER;
-			st.output_image_format = rt_fmt(&j->t, 0);
-			st.height_in_ub_or_stride = j->t.stride;
-			st.address = j->t.address;
-			st.r_b_swap = c->r_b_swap;
-			st.decimate_mode = j->t.msaa ? V3D_DECIMATE_MODE_4X : V3D_DECIMATE_MODE_SAMPLE_0;
-		}
-	}
+	/* RT 0's stores (store_rt). Not its raster one with `uif_only`: the
+	 * render image below is the target's one store. */
+	if (rt0)
+		store_rt(list, j, 0, c->r_b_swap, !(j->t.uif_only && j->t.uif_address && !j->t.msaa),
+			 &stores);
 	/* RT 0 again, into its render image (v3d_job.h uif_*): the tiled copy
 	 * the TMU samples, written by the TLB instead of the CPU. RGBA8 as the
 	 * TMU reads it, no R/B swap (v3d_job_begin refuses the targets that
@@ -1152,20 +1194,12 @@ static void emit_tile_list(const struct v3d_job *j, const struct v3d_job_clear *
 		}
 	}
 	/* RT 1..3 (v3d_rcl_emit_stores, v3dx_rcl.c:258-283, in RT order), each
-	 * that has a buffer: a GL_NONE one is never stored */
+	 * that has a buffer: a GL_NONE one is never stored. No R/B swap: the
+	 * swapped (XRGB) surface is a window's, RT 0 (c->r_b_swap), and none of
+	 * rt_internal's formats needs one (v3d_format_needs_tlb_rb_swap). */
 	for (uint32_t n = 1; n < job_rts(&j->t); n++) {
-		const struct v3d_job_rt *rt = &j->t.rt[n - 1];
-		if (!rt->address)
-			continue;
-		stores++;
-		v3d_cl_emit(list, STORE_TILE_BUFFER_GENERAL, sr) {
-			sr.buffer_to_store = V3D_STORE_BUFFER_RT0 + n;
-			sr.memory_format = V3D_MEMORY_FORMAT_RASTER;
-			sr.output_image_format = rt_fmt(&j->t, n);
-			sr.height_in_ub_or_stride = rt->stride;
-			sr.address = rt->address;
-			sr.decimate_mode = V3D_DECIMATE_MODE_SAMPLE_0;
-		}
+		if (j->t.rt[n - 1].address)
+			store_rt(list, j, n, false, true, &stores);
 	}
 	/* store_general, ZSTENCIL, D24S8 (v3dx_rcl.c:285-309): for the next job */
 	if (c->zs_address && c->zs_store) {
@@ -1216,11 +1250,15 @@ bool v3d_job_end(struct v3d_job *j, const struct v3d_job_clear *c, uint32_t *til
 {
 	if (j->broken)
 		return false;
-	/* a 4x job that loads RT 0 needs the samples an earlier job kept: a
-	 * resolved image loaded back would not be what a 4x surface holds */
-	if (j->t.msaa && c->load_rt0 && !j->t.ms_address) {
-		j->broken = true;
-		return false;
+	/* a 4x job that loads an RT needs the samples an earlier job kept in
+	 * its buffer: a resolved image loaded back would not be what a 4x
+	 * surface holds (an RT with no raster buffer is never loaded) */
+	for (uint32_t n = 0; j->t.msaa && n < job_rts(&j->t); n++) {
+		const bool load = n == 0 ? c->load_rt0 : c->load_rt[n - 1];
+		if (load && rt_address(&j->t, n) && !rt_ms(&j->t, n).address) {
+			j->broken = true;
+			return false;
+		}
 	}
 
 	/* v3dX(bcl_epilogue): no TF, no primitive counts */
