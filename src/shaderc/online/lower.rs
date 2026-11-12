@@ -1309,6 +1309,7 @@ impl<'a> Lower<'_, 'a> {
                     interp: ir::INTERP_SMOOTH,
                     gl_type: at.gl_type,
                     invariant: false,
+                    prec: self.precs.global_path(self.ast, at.name),
                 },
             )?;
         }
@@ -1336,6 +1337,7 @@ impl<'a> Lower<'_, 'a> {
                     interp: v.interp,
                     gl_type: v.gl_type,
                     invariant: self.declared_invariant(v.name),
+                    prec: self.precs.global_path(self.ast, v.name),
                 };
                 match self.stage {
                     Stage::Vertex => self.outputs.push(self.a, decl)?,
@@ -1358,6 +1360,7 @@ impl<'a> Lower<'_, 'a> {
                         interp: ir::INTERP_SMOOTH,
                         gl_type: o.gl_type,
                         invariant: self.declared_invariant(o.name),
+                        prec: self.precs.global_path(self.ast, o.name),
                     },
                 )?;
             }
@@ -1468,6 +1471,7 @@ impl<'a> Lower<'_, 'a> {
                     interp: ir::INTERP_SMOOTH,
                     gl_type: 0x8B52,
                     invariant: self.declared_invariant(name),
+                    prec: self.output_prec(slot),
                 },
             )?;
         }
@@ -1488,6 +1492,7 @@ impl<'a> Lower<'_, 'a> {
                         interp: ir::INTERP_SMOOTH,
                         gl_type: if comps == 4 { 0x8B52 } else { 0x1406 },
                         invariant: self.declared_invariant(name),
+                        prec: self.output_prec(slot),
                     },
                 )?;
             }
@@ -8790,7 +8795,7 @@ impl<'a> Lower<'_, 'a> {
                 let Some(d) = self.outputs.as_slice().iter().find(|d| d.slot() == slot) else {
                     return Prec::None;
                 };
-                self.precs.global_path(self.ast, d.name)
+                d.prec
             }
         }
     }

@@ -1744,6 +1744,37 @@ mod tests {
         assert_eq!(of(&g, |o| matches!(o, Op::Tex { .. })), [M]);
     }
 
+    /// Each input and output records its declared precision (A.2), which
+    /// the width pass needs for a varying's width and which a bare read
+    /// does not show (it records High).
+    #[test]
+    fn every_input_and_output_records_its_declared_precision() {
+        let p_of = |src: &str, stage: Stage| {
+            let mut buf = std::vec![0u8; 1 << 21];
+            let a = Arena::new(&mut buf);
+            let l = compile_to_ir(&a, stage, a.alloc_str(src).expect("arena")).expect("compiles");
+            let io = |ds: &[super::super::ir::IoDecl]| -> Vec<(String, Prec)> {
+                ds.iter().map(|d| (String::from(d.name), d.prec)).collect()
+            };
+            (io(l.module.inputs), io(l.module.outputs))
+        };
+        let (i, o) = p_of(
+            "attribute highp vec4 p; attribute mediump vec4 q; varying mediump vec2 w; varying highp float h;\n\
+             void main(){ gl_Position = p; w = q.xy; h = q.z; }",
+            Stage::Vertex,
+        );
+        assert_eq!(i, [(String::from("p"), H), (String::from("q"), M)]);
+        assert!(o.contains(&(String::from("w"), M)) && o.contains(&(String::from("h"), H)), "{o:?}");
+        assert!(o.contains(&(String::from("gl_Position"), H)), "{o:?}");
+        let (i, o) = p_of(
+            "precision mediump float; varying vec2 w; varying highp float h;\n\
+             void main(){ gl_FragColor = vec4(w, h, 1.0); }",
+            Stage::Fragment,
+        );
+        assert!(i.contains(&(String::from("w"), M)) && i.contains(&(String::from("h"), H)), "{i:?}");
+        assert_eq!(o, [(String::from("gl_FragColor"), M)]);
+    }
+
     #[test]
     fn f16_exact_knows_the_f16_values() {
         for x in [0.0f32, -0.0, 1.0, 1.5, 65504.0, -2.0, 6.103_515_6e-5, 5.960_464_5e-8, 0.000_122_070_31] {
