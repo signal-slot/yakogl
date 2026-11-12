@@ -126,7 +126,7 @@ tools/shaders/es100/va_vec2.vert: Valhall: two varying lanes of equal value (Mes
 tools/shaders/es100/va_vec4x2.vert: ok
 tools/shaders/es100/varyings15.frag: Valhall: an integer or boolean value is not lowered yet
 tools/shaders/es100/varyings15.vert: ok
-tools/shaders/es100/vrcp.vert: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
+tools/shaders/es100/vrcp.vert: ok
 tools/shaders/es100/vtex_struct_sampler.vert: Valhall: a varying lane computed from no attribute (a constant or a uniform alone, which Mesa's link moves or rewrites) is not lowered yet
 tools/shaders/es100/vtex_struct_sampler_array.vert: Valhall: a varying lane computed from no attribute (a constant or a uniform alone, which Mesa's link moves or rewrites) is not lowered yet
 tools/shaders/es100/vtransc.frag: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet

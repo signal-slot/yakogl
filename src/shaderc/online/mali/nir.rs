@@ -2800,6 +2800,8 @@ pub fn build<'s>(
                 }
             }
             IrOp::Alu(a, s) => {
+                /* lanes an arm makes for every lane at once, at lane 0 */
+                let mut held = [Val::Undef; 4];
                 for (l, o) in out.iter_mut().enumerate().take(width) {
                     let x = |k: usize| lane(w, s[k], l);
                     *o = match a {
@@ -2807,6 +2809,10 @@ pub fn build<'s>(
                         AluOp::Fneg => vs.alu(Alu::Fneg, x(0), Val::Undef, Val::Undef)?,
                         /* `a / b` is `a * rcp(b)` from the front end */
                         AluOp::Frcp => vs.alu(Alu::Frcp, x(0), Val::Undef, Val::Undef)?,
+                        /* a lane past the source's: the front end gives
+                         * `normalize`'s product of a vec3 and its `rsq` four
+                         * lanes (builtin_call.rs), the last undefined */
+                        AluOp::Fmul if x(0) == Val::Undef || x(1) == Val::Undef => Val::Undef,
                         AluOp::Fmul => vs.alu(Alu::Fmul, x(0), x(1), Val::Undef)?,
                         /* a matrix product's last term by a `w` of 1.0
                          * (`M * vec4(p, 1.0)`): `fmul(c3, 1.0)` is `c3`
@@ -2898,6 +2904,29 @@ pub fn build<'s>(
                          * docs/notes/mali-vs-abs-if.md) */
                         AluOp::Fabs => vs.alu(Alu::Fabs, x(0), Val::Undef, Val::Undef)?,
                         AluOp::Ffloor => vs.alu(Alu::Ffloor, x(0), Val::Undef, Val::Undef)?,
+                        /* `fract(a)` is `fadd(a, fneg(ffloor(a)))`
+                         * (nir_opt_algebraic.py's `lower_ffract`, then
+                         * `lower_fsub`), rewritten on the vector before
+                         * it is scalarised: every lane's `ffloor` first
+                         * (made at lane 0, `held`), then each lane's
+                         * `fadd`; `FROUND.f32.rtn` and `FADD.f32 a, r.neg`
+                         * (vsarith_fract.expect.json, whose pressure
+                         * schedule differs in the lane-by-lane order) */
+                        AluOp::Ffract => {
+                            if l == 0 {
+                                for (i, h) in held.iter_mut().enumerate().take(width) {
+                                    *h = vs.alu(Alu::Ffloor, lane(w, s[0], i), Val::Undef, Val::Undef)?;
+                                }
+                            }
+                            let n = vs.alu(Alu::Fneg, held[l], Val::Undef, Val::Undef)?;
+                            vs.alu(Alu::Fadd, x(0), n, Val::Undef)?
+                        }
+                        /* `inversesqrt` is one `FRSQ.f32`
+                         * (vsarith_vrcp.expect.json). `sqrt` stays at the
+                         * catch-all: its reference (vsarith_length) also
+                         * merges equal varying lanes, which this walk
+                         * refuses */
+                        AluOp::Frsq => vs.alu(Alu::Frsq, x(0), Val::Undef, Val::Undef)?,
                         /* a lane past the compared vector's (a vec2 or vec3
                          * compared as the front end's four lanes) */
                         AluOp::Feq | AluOp::Flt | AluOp::Fle if x(0) == Val::Undef || x(1) == Val::Undef => Val::Undef,
