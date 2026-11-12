@@ -100,15 +100,15 @@ use super::nanopc_t6_fw::{self, fw_up, FwUp};
 use super::nanopc_t6_gpu::{Bases, GpuUp};
 use super::nanopc_t6_mmu::MEMATTR_LIVE;
 use super::nanopc_t6_sections::{Backing, McuMem, Placement};
-use crate::gpu::mali::csf::{self, Cs, CsfRefusal, Csg, Iface, McuMemory};
+use crate::gpu::mali::csf::{self, Cs, CsfRefusal, Csg, Iface, McuMemory, RingbufInput, RingbufOutput};
 use crate::gpu::mali::fw;
 use crate::gpu::mali::heap::{self, Allocation, HeapError, HeapMemory, HeapObject, HeapParams, HeapPool};
 use crate::gpu::mali::mmu::{self, FlushOp};
 use crate::gpu::mali::pgtable::{Prot, Table, Tables, PAGE, VA_BITS};
 use crate::gpu::mali::sched::job::mov48;
 use crate::gpu::mali::sched::{
-    self, Ended, Group, GroupVm, Job, Queue, RingbufInput, RingbufOutput, Started, SyncObj64, GROUP_AS,
-    QUEUE_IFACE_SIZE, QUEUE_OUTPUT_OFFSET, QUEUE_PRIORITY, RING_MIN_SIZE,
+    self, Ended, Group, GroupVm, Job, Queue, Started, SyncObj64, GROUP_AS, QUEUE_IFACE_SIZE, QUEUE_OUTPUT_OFFSET,
+    QUEUE_PRIORITY, RING_MIN_SIZE,
 };
 use crate::gpu::mali::{self, Ident};
 use crate::mmio::Mmio;
