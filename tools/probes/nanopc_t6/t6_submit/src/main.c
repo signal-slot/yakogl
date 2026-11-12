@@ -113,9 +113,9 @@ static const struct t6_z4_region t6_z4_regions[YD_T6_SUBMIT_REGIONS] = {
 };
 
 BUILD_ASSERT(YD_T6_SUBMIT_QUEUE_MCU_MIN <= QUEUE_MEM_SIZE, "queue memory");
-BUILD_ASSERT(sizeof(struct yd_t6_fw_up) == 192, "struct yd_t6_fw_up moved");
+BUILD_ASSERT(sizeof(struct yd_t6_fw_up) == 208, "struct yd_t6_fw_up moved");
 BUILD_ASSERT(sizeof(struct yd_t6_fw_backing) == 24, "struct yd_t6_fw_backing moved");
-BUILD_ASSERT(sizeof(struct yd_t6_submit_up) == 432, "struct yd_t6_submit_up moved");
+BUILD_ASSERT(sizeof(struct yd_t6_submit_up) == 448, "struct yd_t6_submit_up moved");
 BUILD_ASSERT(sizeof(struct yd_t6_submit_mem) == 192, "struct yd_t6_submit_mem moved");
 
 #define GPU_MAP_SIZE 0x280000 /* the doorbells are at 0x80000 and up */

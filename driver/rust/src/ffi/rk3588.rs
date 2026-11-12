@@ -1145,6 +1145,9 @@ mod fw_tests {
             ("offsetof(struct yd_t6_fw_up, core_en_mask)", offset_of!(FwUp, core_en_mask)),
             ("offsetof(struct yd_t6_fw_up, acked)", offset_of!(FwUp, acked)),
             ("offsetof(struct yd_t6_fw_up, glb_ack)", offset_of!(FwUp, glb_ack)),
+            ("offsetof(struct yd_t6_fw_up, supply_enabled)", offset_of!(FwUp, supply_enabled)),
+            ("offsetof(struct yd_t6_fw_up, supply_after)", offset_of!(FwUp, supply_after)),
+            ("offsetof(struct yd_t6_fw_up, supply_waited_us)", offset_of!(FwUp, supply_waited_us)),
         ];
         for (what, v) in pins {
             let pin = format!("_Static_assert({what} == {v},");

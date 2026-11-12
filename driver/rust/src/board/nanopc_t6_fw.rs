@@ -152,9 +152,17 @@ pub struct FwUp {
     pub ping_ack_us: u32,
     pub glb_req: u32,
     pub glb_ack: u32,
+
+    /// Appended: Z1's supply enable, as [`GpuUp`] records it
+    /// (`supply_enabled` is 0 or 1; `supply_after` is `POWER_EN0` and
+    /// `BUCK1_ON_VSEL` after the enable, 0 when none was sent; the
+    /// microseconds DCDC1 took to read on).
+    pub supply_enabled: u32,
+    pub supply_after: [u32; 2],
+    pub supply_waited_us: u32,
 }
 
-const _: () = assert!(size_of::<FwUp>() == 4 * 48);
+const _: () = assert!(size_of::<FwUp>() == 4 * 52);
 const _: () = assert!(offset_of!(FwUp, image_version) == 4 * 5);
 const _: () = assert!(offset_of!(FwUp, gpu_id) == 4 * 8);
 const _: () = assert!(offset_of!(FwUp, tables_used) == 4 * 12);
@@ -164,6 +172,9 @@ const _: () = assert!(offset_of!(FwUp, csg0) == 4 * 28);
 const _: () = assert!(offset_of!(FwUp, core_en_mask) == 4 * 35);
 const _: () = assert!(offset_of!(FwUp, acked) == 4 * 42);
 const _: () = assert!(offset_of!(FwUp, glb_ack) == 4 * 47);
+const _: () = assert!(offset_of!(FwUp, supply_enabled) == 4 * 48);
+const _: () = assert!(offset_of!(FwUp, supply_after) == 4 * 49);
+const _: () = assert!(offset_of!(FwUp, supply_waited_us) == 4 * 51);
 
 impl FwUp {
     fn stopped(&mut self, step: u32, stop: u32, refusal: u32, detail: u64) {
@@ -228,6 +239,9 @@ pub fn fw_up(
     o.gpu_id = g.ident_after_reset.gpu_id;
     o.shader_present = lo_hi(g.ident_after_reset.shader_present);
     o.mmu_features = g.ident_after_reset.mmu_features;
+    o.supply_enabled = u32::from(g.supply_enabled);
+    o.supply_after = g.supply_after.map(u32::from);
+    o.supply_waited_us = g.supply_waited_us;
     if g.stop != nanopc_t6_gpu::Stop::None {
         o.stopped(STEP_GPU, g.stop as u32, g.refusal, g.detail);
         return o;
@@ -833,7 +847,7 @@ pub(crate) mod tests {
 
     #[test]
     fn the_record_is_48_words_at_fixed_offsets() {
-        assert_eq!((size_of::<FwUp>(), align_of::<FwUp>()), (4 * 48, 4));
+        assert_eq!((size_of::<FwUp>(), align_of::<FwUp>()), (4 * 52, 4));
         let words = [
             (offset_of!(FwUp, step), 0),
             (offset_of!(FwUp, stop), 1),
@@ -874,6 +888,9 @@ pub(crate) mod tests {
             (offset_of!(FwUp, ping_ack_us), 45),
             (offset_of!(FwUp, glb_req), 46),
             (offset_of!(FwUp, glb_ack), 47),
+            (offset_of!(FwUp, supply_enabled), 48),
+            (offset_of!(FwUp, supply_after), 49),
+            (offset_of!(FwUp, supply_waited_us), 51),
         ];
         for &(off, word) in &words {
             assert_eq!(off, 4 * word, "word {word}");
@@ -920,6 +937,7 @@ pub(crate) mod tests {
         assert!(t6.rk806_writes.borrow().is_empty());
         assert_eq!(sel158(&t6), 0x1f24);
         assert!(sel158_writes(&t6).is_empty(), "the clock is on the table: left alone");
+        assert_eq!((o.supply_enabled, o.supply_after, o.supply_waited_us), (0, [0, 0], 0));
     }
 
     #[test]
@@ -934,6 +952,9 @@ pub(crate) mod tests {
         // the rail first (the model refuses the domain on a dead rail), then the domain
         assert!(t6.dcdc1_on() && pmu_writes(&t6) > 0);
         assert_eq!((o.gpu_id, o.shader_present), (0xa867_0005, [0x50005, 0]));
+        // the record carries the enable: sent, POWER_EN0 and BUCK1_ON_VSEL after it, the ramp
+        assert_eq!((o.supply_enabled, o.supply_after), (1, [0x0f, 0x1c]));
+        assert!(o.supply_waited_us > 0 && o.supply_waited_us % nanopc_t6_gpu::SUPPLY_POLL_US == 0);
     }
 
     #[test]
@@ -963,6 +984,11 @@ pub(crate) mod tests {
         );
         assert_eq!(o.stop, 11);
         assert_eq!(o.refusal, 1);
+        // the record names the enable that went out and the 0x10 it read after it
+        assert_eq!(
+            (o.supply_enabled, o.supply_after, o.supply_waited_us),
+            (1, [0x0f, 0x10], 3 * nanopc_t6_gpu::SUPPLY_POLL_US)
+        );
         // the enable went out once and took; nothing after it
         assert_eq!(*t6.rk806_writes.borrow(), vec![vec![0x80, 0x00, 0x00, 0x11]]);
         assert!(t6.dcdc1_on());
@@ -980,6 +1006,8 @@ pub(crate) mod tests {
         assert_gpu_stop(&o, nanopc_t6_gpu::Stop::SupplyRampTimeout, 0, 0x0e);
         assert_eq!(t6.rk806_writes.borrow().len(), 1);
         assert_eq!(pmu_writes(&t6), 0);
+        // sent, never read on: the last POWER_EN0, no BUCK1_ON_VSEL, no ramp time
+        assert_eq!((o.supply_enabled, o.supply_after, o.supply_waited_us), (1, [0x0e, 0], 0));
     }
 
     #[test]

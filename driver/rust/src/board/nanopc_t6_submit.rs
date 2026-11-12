@@ -757,57 +757,57 @@ pub struct SubmitUp {
     pub drain_idle_acks: u32,
 }
 
-const _: () = assert!(size_of::<SubmitUp>() == 8 * 54);
+const _: () = assert!(size_of::<SubmitUp>() == 8 * 56);
 const _: () = assert!(align_of::<SubmitUp>() == 8);
 const _: () = assert!(offset_of!(SubmitUp, step) == 0);
 const _: () = assert!(offset_of!(SubmitUp, refusal) == 4);
 const _: () = assert!(offset_of!(SubmitUp, detail) == 8);
 const _: () = assert!(offset_of!(SubmitUp, fw) == 16);
 const _: () = assert!(offset_of!(SubmitUp, as_present) == 16 + size_of::<FwUp>());
-const _: () = assert!(offset_of!(SubmitUp, as_present) == 208);
-const _: () = assert!(offset_of!(SubmitUp, l2_features) == 212);
-const _: () = assert!(offset_of!(SubmitUp, as0_tables_used) == 216);
-const _: () = assert!(offset_of!(SubmitUp, vm_tables_used) == 220);
-const _: () = assert!(offset_of!(SubmitUp, suspend_size) == 224);
-const _: () = assert!(offset_of!(SubmitUp, protm_suspend_size) == 228);
-const _: () = assert!(offset_of!(SubmitUp, heap_ctx) == 232);
-const _: () = assert!(offset_of!(SubmitUp, heap_chunk) == 240);
-const _: () = assert!(offset_of!(SubmitUp, heap_chunk_size) == 248);
-const _: () = assert!(offset_of!(SubmitUp, heap_stride) == 252);
-const _: () = assert!(offset_of!(SubmitUp, csg_req) == 256);
-const _: () = assert!(offset_of!(SubmitUp, csg_ack) == 260);
-const _: () = assert!(offset_of!(SubmitUp, cs_req) == 264);
-const _: () = assert!(offset_of!(SubmitUp, cs_ack) == 268);
-const _: () = assert!(offset_of!(SubmitUp, csg_ack_us) == 272);
-const _: () = assert!(offset_of!(SubmitUp, cs_ack_us) == 276);
-const _: () = assert!(offset_of!(SubmitUp, latest_flush) == 280);
-const _: () = assert!(offset_of!(SubmitUp, sync_updates) == 284);
-const _: () = assert!(offset_of!(SubmitUp, insert) == 288);
-const _: () = assert!(offset_of!(SubmitUp, extract_at_done) == 296);
-const _: () = assert!(offset_of!(SubmitUp, seqno) == 304);
-const _: () = assert!(offset_of!(SubmitUp, sync_status) == 312);
-const _: () = assert!(offset_of!(SubmitUp, wait_us) == 316);
-const _: () = assert!(offset_of!(SubmitUp, status_cmd_ptr) == 320);
-const _: () = assert!(offset_of!(SubmitUp, info) == 328);
-const _: () = assert!(offset_of!(SubmitUp, stop_us) == 336);
-const _: () = assert!(offset_of!(SubmitUp, stop_refusal) == 340);
-const _: () = assert!(offset_of!(SubmitUp, terminate_us) == 344);
-const _: () = assert!(offset_of!(SubmitUp, terminate_refusal) == 348);
-const _: () = assert!(offset_of!(SubmitUp, cleared) == 352);
-const _: () = assert!(offset_of!(SubmitUp, red) == 364);
-const _: () = assert!(offset_of!(SubmitUp, blue) == 368);
-const _: () = assert!(offset_of!(SubmitUp, fill) == 372);
-const _: () = assert!(offset_of!(SubmitUp, other) == 376);
-const _: () = assert!(offset_of!(SubmitUp, pixels) == 380);
-const _: () = assert!(offset_of!(SubmitUp, digest) == 384);
-const _: () = assert!(offset_of!(SubmitUp, extract_drained) == 392);
-const _: () = assert!(offset_of!(SubmitUp, extract_at_end) == 400);
-const _: () = assert!(offset_of!(SubmitUp, drain_us) == 408);
-const _: () = assert!(offset_of!(SubmitUp, drain_refusal) == 412);
-const _: () = assert!(offset_of!(SubmitUp, drain_sync_updates) == 416);
-const _: () = assert!(offset_of!(SubmitUp, drain_cs_ack) == 420);
-const _: () = assert!(offset_of!(SubmitUp, drain_cs_irq_acks) == 424);
-const _: () = assert!(offset_of!(SubmitUp, drain_idle_acks) == 428);
+const _: () = assert!(offset_of!(SubmitUp, as_present) == 224);
+const _: () = assert!(offset_of!(SubmitUp, l2_features) == 228);
+const _: () = assert!(offset_of!(SubmitUp, as0_tables_used) == 232);
+const _: () = assert!(offset_of!(SubmitUp, vm_tables_used) == 236);
+const _: () = assert!(offset_of!(SubmitUp, suspend_size) == 240);
+const _: () = assert!(offset_of!(SubmitUp, protm_suspend_size) == 244);
+const _: () = assert!(offset_of!(SubmitUp, heap_ctx) == 248);
+const _: () = assert!(offset_of!(SubmitUp, heap_chunk) == 256);
+const _: () = assert!(offset_of!(SubmitUp, heap_chunk_size) == 264);
+const _: () = assert!(offset_of!(SubmitUp, heap_stride) == 268);
+const _: () = assert!(offset_of!(SubmitUp, csg_req) == 272);
+const _: () = assert!(offset_of!(SubmitUp, csg_ack) == 276);
+const _: () = assert!(offset_of!(SubmitUp, cs_req) == 280);
+const _: () = assert!(offset_of!(SubmitUp, cs_ack) == 284);
+const _: () = assert!(offset_of!(SubmitUp, csg_ack_us) == 288);
+const _: () = assert!(offset_of!(SubmitUp, cs_ack_us) == 292);
+const _: () = assert!(offset_of!(SubmitUp, latest_flush) == 296);
+const _: () = assert!(offset_of!(SubmitUp, sync_updates) == 300);
+const _: () = assert!(offset_of!(SubmitUp, insert) == 304);
+const _: () = assert!(offset_of!(SubmitUp, extract_at_done) == 312);
+const _: () = assert!(offset_of!(SubmitUp, seqno) == 320);
+const _: () = assert!(offset_of!(SubmitUp, sync_status) == 328);
+const _: () = assert!(offset_of!(SubmitUp, wait_us) == 332);
+const _: () = assert!(offset_of!(SubmitUp, status_cmd_ptr) == 336);
+const _: () = assert!(offset_of!(SubmitUp, info) == 344);
+const _: () = assert!(offset_of!(SubmitUp, stop_us) == 352);
+const _: () = assert!(offset_of!(SubmitUp, stop_refusal) == 356);
+const _: () = assert!(offset_of!(SubmitUp, terminate_us) == 360);
+const _: () = assert!(offset_of!(SubmitUp, terminate_refusal) == 364);
+const _: () = assert!(offset_of!(SubmitUp, cleared) == 368);
+const _: () = assert!(offset_of!(SubmitUp, red) == 380);
+const _: () = assert!(offset_of!(SubmitUp, blue) == 384);
+const _: () = assert!(offset_of!(SubmitUp, fill) == 388);
+const _: () = assert!(offset_of!(SubmitUp, other) == 392);
+const _: () = assert!(offset_of!(SubmitUp, pixels) == 396);
+const _: () = assert!(offset_of!(SubmitUp, digest) == 400);
+const _: () = assert!(offset_of!(SubmitUp, extract_drained) == 408);
+const _: () = assert!(offset_of!(SubmitUp, extract_at_end) == 416);
+const _: () = assert!(offset_of!(SubmitUp, drain_us) == 424);
+const _: () = assert!(offset_of!(SubmitUp, drain_refusal) == 428);
+const _: () = assert!(offset_of!(SubmitUp, drain_sync_updates) == 432);
+const _: () = assert!(offset_of!(SubmitUp, drain_cs_ack) == 436);
+const _: () = assert!(offset_of!(SubmitUp, drain_cs_irq_acks) == 440);
+const _: () = assert!(offset_of!(SubmitUp, drain_idle_acks) == 444);
 
 impl SubmitUp {
     fn stopped(&mut self, step: u32, refusal: u32, detail: u64) {
@@ -2273,9 +2273,9 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn the_record_is_54_words_of_8_at_fixed_offsets_and_the_steps_are_numbered() {
-        assert_eq!((size_of::<SubmitUp>(), align_of::<SubmitUp>()), (432, 8));
-        assert_eq!(size_of::<FwUp>(), 192);
+    fn the_record_is_56_words_of_8_at_fixed_offsets_and_the_steps_are_numbered() {
+        assert_eq!((size_of::<SubmitUp>(), align_of::<SubmitUp>()), (448, 8));
+        assert_eq!(size_of::<FwUp>(), 208);
         assert_eq!(
             [
                 STEP_NONE,
