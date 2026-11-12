@@ -1,0 +1,63 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+
+description: |
+  The STM32MP25 MIPI DSI host (a Synopsys DesignWare MIPI DSI host plus ST's
+  D-PHY wrapper and PLL; dsi@48000000 in ST's stm32mp255.dtsi:123-133, RIFSC
+  entry 81) as a Zephyr MIPI-DSI device on the STM32MP257F-DK's A35. Register
+  logic in Rust (driver/rust/src/ip/dw_mipi_dsi.rs and ip/stm32_dsi_phy.rs,
+  from RM0457's DSI chapter, Linux's drm/bridge/synopsys/dw-mipi-dsi.c and
+  drm/stm/dw_mipi_dsi-stm.c). Video mode.
+
+  Its output goes to the bridge in `bridge` (stm32mp257f-dk.dts:328-350,
+  :428-433: an ADV7535 with four DSI lanes). The block's clocks, reset and RIF
+  settings are the chain owner's; this device's init maps the registers only.
+
+compatible: "yakogl,stm32-dsi"
+
+include: base.yaml
+
+properties:
+  reg:
+    required: true
+    description: |
+      The DSI host registers, 0x48000000 on the DK (stm32mp255.dtsi:123-133).
+
+  data-lanes:
+    type: int
+    default: 4
+    enum: [1, 2, 3, 4]
+    description: |
+      Data lanes wired, as the DK's ADV7535 endpoint has them
+      (stm32mp257f-dk.dts:428-433; the ADV7535 side is adi,dsi-lanes).
+      A mipi_dsi_device's data_lanes overrides it.
+
+  bridge:
+    type: phandle
+    description: |
+      The device the DSI feeds (yakogl,adv7535 on the DK), attached by the
+      host once the link is up (stm32mp257f-dk.dts:328-350).
+
+  pll-ref-frequency:
+    type: int
+    required: true
+    description: |
+      Hz of the clock feeding the D-PHY PLL (the DSI "ref" clock of
+      dw_mipi_dsi-stm.c, whose PLL input range limits the divider choice).
+      Set from the clock the board leaves on it, as read by the
+      mp2_display_state probe.
+
+  burst-clock-frequency:
+    type: int
+    default: 0
+    description: |
+      The lane bit rate, Hz. 0: the slowest rate the PLL makes that carries
+      pixel clock x bits per pixel / lanes (the rate dw_mipi_dsi-stm.c
+      derives from the mode).
+
+  pixel-clock-frequency:
+    type: int
+    default: 0
+    description: |
+      The pixel clock the LTDC really runs, Hz, for the blanking word counts
+      (dw-mipi-dsi.c dw_mipi_dsi_video_packet_config / _timing_config).
