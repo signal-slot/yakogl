@@ -1179,9 +1179,10 @@ pub(crate) mod tests {
     const CS_IN: usize = MEM + 0x0400_3400;
     const CS_OUT: usize = MEM + 0x0400_7200;
 
-    /// The bits of CS 0's `req` the board's firmware copies into `ack`: the
+    /// The bits of CS 0's `req` the model's firmware copies into `ack`: the
     /// state field and `CS_EXTRACT_EVENT`, not the start's idle bits. The
-    /// first Z4 run (issue #4515) read `req` 0x0511, `ack` 0x0011.
+    /// first Z4 run (issue #4515) read `req` 0x0511, `ack` 0x0011; it cannot
+    /// tell a copy of bit 4 from an extract event's toggle (both read 1).
     const CS_ACK_MASK: u32 = CS_STATE_MASK | CS_EXTRACT_EVENT;
 
     /// The synthetic frame's group VM: 2 MiB from the kernel range's start.

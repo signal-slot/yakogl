@@ -329,8 +329,9 @@ table_t6_submit() {
 	e 't6_submit: Z4c: heap ctx 0x0000800000015000 chunk 0x0000800000a00000 chunk_size 2097152 stride 64' 't6_submit: Z4c:'
 	e 't6_submit: Z4d: CSG0 req 0x00000011 ack 0x00000011 CS0 req 0x00000511 ack 0x00000011, acked in {d}/{d} us' 't6_submit: Z4d:'
 	# extract: the firmware publishes it after the stream's seqno (issue
-	# #4515: 0 at the wait's end on the first run); its value at the wait's
-	# end is not measured on the board yet as a rule: form only
+	# #4515: the first run read 0 at the wait's end). Its value there
+	# depends on a race between the wait's last look and the firmware's
+	# publish, so it is checked for form only
 	e 't6_submit: Z4e: insert 0x0000000000000080 extract 0x{x16} seqno 0x0000000000000001 sync_status 0x00000000, wait {d} us' 't6_submit: Z4e:'
 	# sync_updates (Z4f) and cleared (Z4g) move with when the firmware
 	# publishes extract: not measured on the board yet, form only

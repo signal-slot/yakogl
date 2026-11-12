@@ -2455,7 +2455,7 @@ and a different board value is not a finding. The record is
 | `heap_chunk_size` | 2097152 (2 MiB) | pinned |
 | `heap_stride` | 64 | pinned (the G610's L2 line) |
 | `csg_req`, `csg_ack` | 0x11, 0x11 | pinned |
-| `cs_req`, `cs_ack` | 0x0511, 0x0011 | pinned (measured: the firmware's `ack` copies the state field and `CS_EXTRACT_EVENT`, not the idle bits 0x0500 of the request; issue #4515) |
+| `cs_req`, `cs_ack` | 0x0511, 0x0011 | pinned (measured: `ack` 0x00000011 for `req` 0x00000511, so the firmware's `ack` carries the state field and bit 4 but not the idle bits 0x0500 of the request; issue #4515. Not decided: whether bit 4 is a copy of the request's `CS_EXTRACT_EVENT` or an extract event's toggle, both read 1; the model copies it) |
 | `csg_ack_us`, `cs_ack_us` | 1, 0 | board-dependent (the model's acknowledge lag) |
 | `latest_flush` | 0 | board-dependent (the GPU's flush id) |
 | `sync_updates` | 0 | board-dependent (the model's firmware raises `CSG_SYNC_UPDATE` after the stream wrote the `seqno`, as the board's first run showed: 0 there; when the event comes is not measured yet) |
