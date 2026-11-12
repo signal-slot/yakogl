@@ -54,6 +54,9 @@ pub mod sn65dsi8x;
 /// ST's DSI wrapper and its D-PHY PLL on the STM32MP25.
 #[cfg(any(feature = "stm32mp2", test))]
 pub mod stm32_dsi_phy;
+/// The STM32MP25 GPIO bank: pin mux, drive, level and per-pin RIF.
+#[cfg(any(feature = "stm32mp2", test))]
+pub mod stm32_gpio;
 /// The STM32 I2C v2 controller as a polled master.
 #[cfg(any(feature = "stm32mp2", test))]
 pub mod stm32_i2c;
