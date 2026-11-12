@@ -1473,8 +1473,26 @@ board's values). The order:
    gates are opened); one powered with the request still set runs the whole
    sequence. A refusal is stop 5 (`PowerDomain`, refusal the `PdRefusal`,
    `detail` the register read). The SIP call that tells the firmware about
-   the domain is left out (it configures system suspend only). The QoS words
-   are read, not written.
+   the domain is left out (it configures system suspend only). The QoS
+   blocks `qos_gpu_m0..m3` sit in the PD_GPU domain, so their policy is
+   applied only once `pd_gpu_on` has returned: `gpu_up` calls
+   `soc::rk3588::qos_apply`, which writes the three words of
+   `GPU_QOS_POLICY` (`QOS_MODE` 0x0c, `QOS_BANDWIDTH` 0x10, `QOS_SATURATION`
+   0x14 — `rk3588::QOS_POLICY_WORDS`) into each of the four blocks, twelve
+   writes, never `QOS_PRIORITY` or `QOS_EXTCONTROL`; `gpu_up` then reads the
+   five words of each block into the record (`GpuUp::qos`). The two
+   policies are `soc::rk3588::QosPolicy`: `Reset`, the hardware reset
+   values (`MODE` 3, `BANDWIDTH` 0x12d, `SATURATION` 0x40), and
+   `LinuxZero`, what Linux reads with the GPU active (all three 0;
+   measured 2026-10-26). The constant is `LinuxZero`: every Z1-Z4 board run
+   so far worked under Linux's zeroed QoS. Host tests:
+   `qos_reset_policy_writes_only_mode_bandwidth_saturation` and
+   `qos_linux_zero_policy_writes_only_mode_bandwidth_saturation`
+   (`soc::rk3588`, each block's other words and every other address
+   untouched), and the composed
+   `from_the_handed_over_state_it_reads_the_supply_powers_and_finds_the_g610`
+   (`board::nanopc_t6_gpu`, the twelve writes of 0 and the read-back). What
+   the hardware does with each policy is unmeasured ("Open").
 6. `GPU_ID`; soft reset; `GPU_COHERENCY_PROTOCOL` = none; L2 on
    (panthor_gpu.c, under its MIT option). The L2 wait needs `L2_READY` to
    show the L2: panthor's condition (`(mask & val) == val`,
@@ -1540,7 +1558,8 @@ the jump and after the return).**
   + 0x08..0x18` (`regread.py qos`, record
   `e3d9b7470:tools/mali/board-ref/2026-10-26-open-questions/regread.out`): `PRIORITY`
   0x80000000, `MODE` 0, `BANDWIDTH` 0, `SATURATION` 0, `EXTCONTROL` 0 in all four
-  blocks. The image leaves them (under "Open").
+  blocks. The image of that run left them; `gpu_up` has since applied
+  `GPU_QOS_POLICY` after the power-on (step 5, and "Open").
 
 **Measured, 2026-11-11: the GPU clock on a PLL that Linux powered down.**
 Step 3 above was added after this run; the image of 2026-10-19 opened the
@@ -2693,8 +2712,16 @@ and nothing written:
   Armbian's 0x1f24 (kept), a PVTPLL state, an out-of-table divider and an unknown
   mux ("The GPU power-on", step 2). What the prompt read decides is whether U-Boot's
   CRU is in one of those states, and whether the CPLL reads 1500 MHz there.
-- **The QoS words' effect.** Linux reads 0 for `MODE`, `BANDWIDTH` and `SATURATION`
-  in all four blocks with the GPU active (measured 2026-10-26, "The GPU power-on");
-  the image leaves the reset values (`MODE` 3, `BANDWIDTH` 0x12d, `SATURATION`
-  0x40). Whether the difference matters is unmeasurable until a job runs on the GPU
-  from Zephyr (Z3 and later): the first Z4 frame is run once with each setting.
+- **The QoS words' effect.** The choice is made in code: `soc::rk3588::QosPolicy`
+  holds the two candidates — `Reset`, the hardware reset values (`MODE` 3,
+  `BANDWIDTH` 0x12d, `SATURATION` 0x40), and `LinuxZero`, what Linux reads with the
+  GPU active (all three 0; measured 2026-10-26) — and `gpu_up` applies
+  `GPU_QOS_POLICY` with `soc::rk3588::qos_apply`, only after `pd_gpu_on` has
+  returned ("The GPU power-on", step 5; host tests
+  `qos_reset_policy_writes_only_mode_bandwidth_saturation` and
+  `qos_linux_zero_policy_writes_only_mode_bandwidth_saturation` in `soc::rk3588`).
+  The default is `LinuxZero`: every Z1-Z4 board run so far worked under Linux's
+  zeroed QoS, and the U-Boot route applies the same words. What the hardware does
+  with each policy is unmeasured until a job runs on the GPU from Zephyr (Z3 and
+  later), in a board session the owner allows; `GPU_QOS_POLICY` is a `const`, so a
+  run under the other policy is a rebuild.
