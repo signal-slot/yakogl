@@ -115,7 +115,7 @@ static const struct t6_z4_region t6_z4_regions[YD_T6_SUBMIT_REGIONS] = {
 BUILD_ASSERT(YD_T6_SUBMIT_QUEUE_MCU_MIN <= QUEUE_MEM_SIZE, "queue memory");
 BUILD_ASSERT(sizeof(struct yd_t6_fw_up) == 192, "struct yd_t6_fw_up moved");
 BUILD_ASSERT(sizeof(struct yd_t6_fw_backing) == 24, "struct yd_t6_fw_backing moved");
-BUILD_ASSERT(sizeof(struct yd_t6_submit_up) == 392, "struct yd_t6_submit_up moved");
+BUILD_ASSERT(sizeof(struct yd_t6_submit_up) == 424, "struct yd_t6_submit_up moved");
 BUILD_ASSERT(sizeof(struct yd_t6_submit_mem) == 192, "struct yd_t6_submit_mem moved");
 
 #define GPU_MAP_SIZE 0x280000 /* the doorbells are at 0x80000 and up */
@@ -139,6 +139,7 @@ static const char *const step_name[] = {
 	[YD_T6_SUBMIT_STEP_WAIT] = "sched::wait refused",
 	[YD_T6_SUBMIT_STEP_STOP] = "CS 0's stop refused",
 	[YD_T6_SUBMIT_STEP_TERMINATE] = "CSG 0's terminate refused",
+	[YD_T6_SUBMIT_STEP_DRAIN] = "sched::drained refused",
 };
 
 /* The Rust waits (Z3's bring-up, sched::wait's 5 s job timeout) poll through
@@ -203,10 +204,12 @@ static void print_z3(const struct yd_t6_fw_up *o)
 	       o->ping_ack_us, o->glb_req, o->glb_ack);
 }
 
-/* The Z4 record in the nine lines Z4a .. Z4i t6-verdict.sh's table_t6_submit
+/* The Z4 record in the eleven lines Z4a .. Z4k t6-verdict.sh's table_t6_submit
  * judges, every field of struct yd_t6_submit_up after fw in its order: 0x%016llx
  * for a 64-bit word, 0x%08x for a register word, %u for a count, a size or a
- * time (cleared[] included). */
+ * time (cleared[] included). Z4e's extract is extract_at_done; Z4j and Z4k
+ * are the fields appended after digest (sched::drained, extract after the
+ * group's end). */
 static void print_z4(const struct yd_t6_submit_up *o)
 {
 	printk("t6_submit: Z4a: step %u refusal %u detail 0x%016llx\n", o->step, o->refusal,
@@ -223,7 +226,7 @@ static void print_z4(const struct yd_t6_submit_up *o)
 	       o->csg_req, o->csg_ack, o->cs_req, o->cs_ack, o->csg_ack_us, o->cs_ack_us);
 	printk("t6_submit: Z4e: insert 0x%016llx extract 0x%016llx seqno 0x%016llx "
 	       "sync_status 0x%08x, wait %u us\n",
-	       (unsigned long long)o->insert, (unsigned long long)o->extract,
+	       (unsigned long long)o->insert, (unsigned long long)o->extract_at_done,
 	       (unsigned long long)o->seqno, o->sync_status, o->wait_us);
 	printk("t6_submit: Z4f: latest_flush 0x%08x sync_updates %u status_cmd_ptr 0x%016llx "
 	       "info 0x%016llx\n",
@@ -236,6 +239,12 @@ static void print_z4(const struct yd_t6_submit_up *o)
 	printk("t6_submit: Z4h: target red %u blue %u fill %u other %u of %u pixels\n", o->red,
 	       o->blue, o->fill, o->other, o->pixels);
 	printk("t6_submit: Z4i: frame digest 0x%016llx\n", (unsigned long long)o->digest);
+	printk("t6_submit: Z4j: drain %u us refusal %u extract 0x%016llx sync_updates %u "
+	       "cs_ack 0x%08x\n",
+	       o->drain_us, o->drain_refusal, (unsigned long long)o->extract_drained,
+	       o->drain_sync_updates, o->drain_cs_ack);
+	printk("t6_submit: Z4k: extract after the end 0x%016llx\n",
+	       (unsigned long long)o->extract_at_end);
 }
 
 int main(void)

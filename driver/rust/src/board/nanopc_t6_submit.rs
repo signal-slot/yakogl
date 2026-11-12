@@ -12,9 +12,10 @@
 //! frame names ([`heap`]), CSG 0 / CS 0 started ([`sched::start`]), the
 //! frame's blocks and command stream written at their VAs, one job submitted
 //! that calls the stream ([`sched::submit`]), its sync object waited for
-//! with panthor's 5 s timeout ([`sched::wait`]), the group stopped and
-//! terminated ([`sched::stop_and_terminate`]), and the target read back by
-//! the CPU.
+//! with panthor's 5 s timeout ([`sched::wait`]), the firmware's publish
+//! of the output page's `extract` waited for and recorded
+//! ([`sched::drained`]), the group stopped and terminated
+//! ([`sched::stop_and_terminate`]), and the target read back by the CPU.
 //!
 //! Derived from Linux v6.18's drivers/gpu/drm/panthor (Copyright 2023
 //! Collabora ltd.), used under the MIT option of its `GPL-2.0 or MIT`
@@ -84,7 +85,10 @@
 //! whole (`fw`). After a refusal past the start the group is still stopped
 //! and terminated (sched.rs: "the caller terminates it") and both results
 //! are kept; a stop or terminate that fails after a completed job is the
-//! step itself ([`STEP_STOP`], [`STEP_TERMINATE`]).
+//! step itself ([`STEP_STOP`], [`STEP_TERMINATE`]). The drain's timeout is
+//! not a step: what the firmware does there is a finding the record
+//! carries (`drain_refusal`), and the run goes on to the group's end and
+//! the target.
 //!
 //! Two choices of ours: the job's `latest_flush` is `GPU_LATEST_FLUSH_ID`
 //! (panthor_regs.h, 0x38) read right before the submit, the value Mesa
@@ -155,6 +159,13 @@ pub const STEP_STOP: u32 = 15;
 /// The job completed, but CSG 0's terminate was refused (`refusal`: the
 /// `SchedRefusal`): the GPU needs the reset.
 pub const STEP_TERMINATE: u32 = 16;
+/// The job completed, but [`sched::drained`] refused with something other
+/// than its timeout (`refusal`: the `SchedRefusal`, a stream event or a
+/// progress timeout after the job). Its number comes last; in the run it
+/// comes after [`STEP_WAIT`]. The drain's timeout is not a step: it is
+/// recorded (`drain_refusal`) and the run goes on to the group's end and
+/// the target.
+pub const STEP_DRAIN: u32 = 17;
 
 /// The ring: panthor's smallest, the size of the design page's panthor
 /// session (sched.rs's module doc).
@@ -689,14 +700,15 @@ pub struct SubmitUp {
     pub cs_ack_us: u32,
 
     /// The job's `latest_flush`; the `CSG_SYNC_UPDATE` events the wait
-    /// acknowledged.
+    /// acknowledged (the drain's are `drain_sync_updates`).
     pub latest_flush: u32,
     pub sync_updates: u32,
     /// After the wait: the input page's `insert`, the output page's
-    /// `extract`, the sync object's `seqno` and `status`, the wait's
-    /// microseconds (the elapsed time from the doorbell).
+    /// `extract` as read right after the wait returned (the job seen done,
+    /// or the wait refused), the sync object's `seqno` and `status`, the
+    /// wait's microseconds (the elapsed time from the doorbell).
     pub insert: u64,
-    pub extract: u64,
+    pub extract_at_done: u64,
     pub seqno: u64,
     pub sync_status: u32,
     pub wait_us: u32,
@@ -724,9 +736,24 @@ pub struct SubmitUp {
 
     /// [`Frame::digest`].
     pub digest: u64,
+
+    /// [`sched::drained`] after a wait that saw the job done (all 0 when
+    /// it did not run): the output page's `extract` it ended with, and
+    /// `extract` read again after the group's end (stop and terminate,
+    /// whenever the group was started).
+    pub extract_drained: u64,
+    pub extract_at_end: u64,
+    /// The drain's microseconds, its refusal (0 for none; 27
+    /// `DrainTimeout` is recorded here and is not a step), the
+    /// `CSG_SYNC_UPDATE` events it acknowledged, and CS 0's `ack` word
+    /// right after it.
+    pub drain_us: u32,
+    pub drain_refusal: u32,
+    pub drain_sync_updates: u32,
+    pub drain_cs_ack: u32,
 }
 
-const _: () = assert!(size_of::<SubmitUp>() == 8 * 49);
+const _: () = assert!(size_of::<SubmitUp>() == 8 * 53);
 const _: () = assert!(align_of::<SubmitUp>() == 8);
 const _: () = assert!(offset_of!(SubmitUp, step) == 0);
 const _: () = assert!(offset_of!(SubmitUp, refusal) == 4);
@@ -752,7 +779,7 @@ const _: () = assert!(offset_of!(SubmitUp, cs_ack_us) == 276);
 const _: () = assert!(offset_of!(SubmitUp, latest_flush) == 280);
 const _: () = assert!(offset_of!(SubmitUp, sync_updates) == 284);
 const _: () = assert!(offset_of!(SubmitUp, insert) == 288);
-const _: () = assert!(offset_of!(SubmitUp, extract) == 296);
+const _: () = assert!(offset_of!(SubmitUp, extract_at_done) == 296);
 const _: () = assert!(offset_of!(SubmitUp, seqno) == 304);
 const _: () = assert!(offset_of!(SubmitUp, sync_status) == 312);
 const _: () = assert!(offset_of!(SubmitUp, wait_us) == 316);
@@ -769,6 +796,12 @@ const _: () = assert!(offset_of!(SubmitUp, fill) == 372);
 const _: () = assert!(offset_of!(SubmitUp, other) == 376);
 const _: () = assert!(offset_of!(SubmitUp, pixels) == 380);
 const _: () = assert!(offset_of!(SubmitUp, digest) == 384);
+const _: () = assert!(offset_of!(SubmitUp, extract_drained) == 392);
+const _: () = assert!(offset_of!(SubmitUp, extract_at_end) == 400);
+const _: () = assert!(offset_of!(SubmitUp, drain_us) == 408);
+const _: () = assert!(offset_of!(SubmitUp, drain_refusal) == 412);
+const _: () = assert!(offset_of!(SubmitUp, drain_sync_updates) == 416);
+const _: () = assert!(offset_of!(SubmitUp, drain_cs_ack) == 420);
 
 impl SubmitUp {
     fn stopped(&mut self, step: u32, refusal: u32, detail: u64) {
@@ -1061,6 +1094,7 @@ pub fn submit_up(
         Err((why, v)) => {
             o.stopped(STEP_SUBMIT, why as u32, u64::from(v));
             end(&mut o, delay_us);
+            o.extract_at_end = read64(m, s.output_cpu + offset_of!(RingbufOutput, extract));
             return o;
         }
     };
@@ -1081,8 +1115,25 @@ pub fn submit_up(
         }
     };
     o.insert = read64(m, s.input_cpu + offset_of!(RingbufInput, insert));
-    o.extract = read64(m, s.output_cpu + offset_of!(RingbufOutput, extract));
+    o.extract_at_done = read64(m, s.output_cpu + offset_of!(RingbufOutput, extract));
     o.sync_status = m.read32(s.syncobj_cpu + offset_of!(SyncObj64, status));
+    // the job done: when the firmware publishes extract (issue #4515)
+    if o.step == STEP_NONE {
+        let (d, refused) = match sched::drained(m, b.gpu, &iface, &csg, &cs, &s, delay_us) {
+            Ok(d) => (d, None),
+            Err(r) => (r.at, Some(r.refused)),
+        };
+        o.extract_drained = d.extract;
+        o.drain_us = d.us;
+        o.drain_sync_updates = d.sync_updates;
+        o.drain_cs_ack = m.read32(cs.output + offset_of!(csf::CsOutput, ack));
+        if let Some((why, v)) = refused {
+            o.drain_refusal = why as u32;
+            if why != sched::SchedRefusal::DrainTimeout {
+                o.stopped(STEP_DRAIN, why as u32, u64::from(v));
+            }
+        }
+    }
     match ended {
         // the timeout stopped and terminated the group itself
         Some(e) => {
@@ -1091,6 +1142,7 @@ pub fn submit_up(
         }
         None => end(&mut o, delay_us),
     }
+    o.extract_at_end = read64(m, s.output_cpu + offset_of!(RingbufOutput, extract));
     o
 }
 
@@ -1268,6 +1320,9 @@ pub(crate) mod tests {
         pub(crate) publish_lag: Option<u32>,
         publish_due: Cell<Option<u32>>,
         published: Cell<u64>,
+        /// The late publish raises `CS_FAULT` on CS 0 too (fault word
+        /// `EXCEPTION_CS_INHERIT_FAULT`).
+        publish_fault: bool,
     }
 
     impl Z4 {
@@ -1302,6 +1357,7 @@ pub(crate) mod tests {
                 publish_lag: Some(PUBLISH_LAG),
                 publish_due: Cell::new(None),
                 published: Cell::new(0),
+                publish_fault: false,
             }
         }
         /// The group VM's backings, one per allocation, in their order; the
@@ -1443,6 +1499,11 @@ pub(crate) mod tests {
             self.put(ack, self.w(ack) ^ CSG_SYNC_UPDATE);
             let irq = CSG_OUT + offset_of!(CsgOutput, cs_irq_req);
             self.put(irq, self.w(irq) ^ 1);
+            if self.publish_fault {
+                self.put(CS_OUT + offset_of!(CsOutput, fault), sched::EXCEPTION_CS_INHERIT_FAULT);
+                let ack = CS_OUT + offset_of!(CsOutput, ack);
+                self.put(ack, self.w(ack) ^ csf::CS_FAULT);
+            }
         }
         fn tick(&self, due: &Cell<Option<u32>>, answer: impl FnOnce()) {
             match due.get() {
@@ -1567,12 +1628,16 @@ pub(crate) mod tests {
         assert_eq!((o.csg_ack_us, o.cs_ack_us), (1, 0));
         // one 128-byte job written, the sync object at 1; the firmware has
         // not yet published extract nor raised its event (PUBLISH_LAG)
-        assert_eq!((o.insert, o.extract, o.seqno, o.sync_status), (128, 0, 1, 0));
+        assert_eq!((o.insert, o.extract_at_done, o.seqno, o.sync_status), (128, 0, 1, 0));
         assert_eq!((o.latest_flush, o.sync_updates, o.wait_us), (0, 0, 20));
         assert_eq!((o.status_cmd_ptr, o.info), (0, 0));
-        // the end: both acknowledged at once; the late events cleared then
+        // the drain: extract published one poll later, the late event
+        // acknowledged; CS 0's ack as the start left it
+        assert_eq!((o.extract_drained, o.drain_us, o.drain_refusal, o.drain_sync_updates), (128, 10, 0, 1));
+        assert_eq!((o.drain_cs_ack, o.extract_at_end), (0x11, 128));
+        // the end: both acknowledged at once, nothing left pending
         assert_eq!((o.stop_refusal, o.terminate_refusal), (0, 0));
-        assert_eq!(o.cleared, [CSG_SYNC_UPDATE, 1, 0]);
+        assert_eq!(o.cleared, [0, 0, 0]);
         // the target as the model painted it
         assert_eq!((o.red, o.blue, o.fill, o.other, o.pixels), (2048, 2048, 0, 0, 4096));
         assert_eq!(o.digest, 0x0123_4567_89ab_cdef);
@@ -1697,7 +1762,7 @@ pub(crate) mod tests {
             // board's first run showed: the wait sees neither
             sync_updates: 0,
             insert: 128,
-            extract: 0,
+            extract_at_done: 0,
             seqno: 1,
             sync_status: 0,
             // model-only: the model's job lag
@@ -1709,9 +1774,10 @@ pub(crate) mod tests {
             stop_refusal: 0,
             terminate_us: 1,
             terminate_refusal: 0,
-            // the late CSG_SYNC_UPDATE and CS 0's cs_irq bit, pending at the
-            // terminate (the board's first run: 268435456 1 0)
-            cleared: [CSG_SYNC_UPDATE, 1, 0],
+            // the late CSG_SYNC_UPDATE and CS 0's cs_irq bit, acknowledged by
+            // the drain: nothing left for the terminate (the board's first
+            // run, without the drain: 268435456 1 0)
+            cleared: [0, 0, 0],
             // the model paints the frame's halves; the board's GPU must too
             red: 2048,
             blue: 2048,
@@ -1719,6 +1785,14 @@ pub(crate) mod tests {
             other: 0,
             pixels: 4096,
             digest: 0xa4db_81a9_d39b_fdcc,
+            // the drain: extract published, the late event acknowledged
+            // (model-only: the microseconds)
+            extract_drained: 128,
+            extract_at_end: 128,
+            drain_us: 10,
+            drain_refusal: 0,
+            drain_sync_updates: 1,
+            drain_cs_ack: 0x11,
         };
         assert_eq!(o, predicted);
         // the digest as the doc and the probe carry it: the blocks and the
@@ -1757,70 +1831,113 @@ pub(crate) mod tests {
         let mut z = Z4::generated(blob.clone());
         z.publish_lag = None;
         let (o, _, _) = run_frame(&z, &blob, &GENERATED);
-        assert_eq!((o.step, o.seqno, o.extract, o.sync_updates), (STEP_NONE, 1, 128, 1));
+        assert_eq!((o.step, o.seqno, o.extract_at_done, o.sync_updates), (STEP_NONE, 1, 128, 1));
         assert_eq!(o.cleared, [0, 0, 0]);
         assert_eq!((o.red, o.blue), (2048, 2048));
     }
 
-    /// The passing run's uart2 lines (the verdict table's fixture) carry the
-    /// record this module pins: each field `t6-verdict.sh` pins, in the
-    /// fixture's format (`%016llx`, `%08x`, decimal). The fields the table
-    /// leaves to a pattern (microseconds, `as0_tables_used`, `extract`,
-    /// `sync_updates`, `latest_flush`, `cleared`, the pixel counts) are not
-    /// compared.
-    #[test]
-    fn the_verdict_fixture_s_z4_lines_carry_the_pinned_record() {
-        const UART: &str = include_str!("../../../tools/kexec-zephyr/testdata/t6_submit-pass.uart");
+    /// The Z4 lines tools/probes/nanopc_t6/t6_submit/src/main.c's
+    /// `print_z4` prints for `o`, the same formats in the same order.
+    fn z4_lines(o: &SubmitUp) -> Vec<String> {
+        let p = "t6_submit: Z4";
+        vec![
+            format!("{p}a: step {} refusal {} detail {:#018x}", o.step, o.refusal, o.detail),
+            format!(
+                "{p}b: AS_PRESENT {:#010x} L2_FEATURES {:#010x} as0_tables_used {} vm_tables_used {} suspend_size {} \
+                 protm_suspend_size {}",
+                o.as_present, o.l2_features, o.as0_tables_used, o.vm_tables_used, o.suspend_size, o.protm_suspend_size
+            ),
+            format!(
+                "{p}c: heap ctx {:#018x} chunk {:#018x} chunk_size {} stride {}",
+                o.heap_ctx, o.heap_chunk, o.heap_chunk_size, o.heap_stride
+            ),
+            format!(
+                "{p}d: CSG0 req {:#010x} ack {:#010x} CS0 req {:#010x} ack {:#010x}, acked in {}/{} us",
+                o.csg_req, o.csg_ack, o.cs_req, o.cs_ack, o.csg_ack_us, o.cs_ack_us
+            ),
+            format!(
+                "{p}e: insert {:#018x} extract {:#018x} seqno {:#018x} sync_status {:#010x}, wait {} us",
+                o.insert, o.extract_at_done, o.seqno, o.sync_status, o.wait_us
+            ),
+            format!(
+                "{p}f: latest_flush {:#010x} sync_updates {} status_cmd_ptr {:#018x} info {:#018x}",
+                o.latest_flush, o.sync_updates, o.status_cmd_ptr, o.info
+            ),
+            format!(
+                "{p}g: stop {} us refusal {}, terminate {} us refusal {}, cleared {} {} {}",
+                o.stop_us,
+                o.stop_refusal,
+                o.terminate_us,
+                o.terminate_refusal,
+                o.cleared[0],
+                o.cleared[1],
+                o.cleared[2]
+            ),
+            format!(
+                "{p}h: target red {} blue {} fill {} other {} of {} pixels",
+                o.red, o.blue, o.fill, o.other, o.pixels
+            ),
+            format!("{p}i: frame digest {:#018x}", o.digest),
+            format!(
+                "{p}j: drain {} us refusal {} extract {:#018x} sync_updates {} cs_ack {:#010x}",
+                o.drain_us, o.drain_refusal, o.extract_drained, o.drain_sync_updates, o.drain_cs_ack
+            ),
+            format!("{p}k: extract after the end {:#018x}", o.extract_at_end),
+        ]
+    }
+
+    /// The t6_submit fixtures' Z4 records, each as the model gives it: the
+    /// generated frame's pass, its wait timeout (the job never runs), the
+    /// pass cut after Z4f, and a Z3 stop (Z1 refused: `step` 2, `refusal`
+    /// 3, every Z4 field 0 but the digest).
+    fn fixture_records() -> Vec<(&'static str, &'static str, Vec<String>)> {
         let blob = synth::small();
         let z = Z4::generated(blob.clone());
-        let (o, _, _) = run_frame(&z, &blob, &GENERATED);
-        // the token after `key` on the line tagged `tag`
-        let get = |tag: &str, key: &str| -> String {
-            let line = UART.lines().find(|l| l.contains(&format!(": {tag}: "))).unwrap_or_else(|| panic!("no {tag}"));
-            let mut t = line.split_whitespace().map(|w| w.trim_end_matches(','));
-            t.find(|&w| w == key).unwrap_or_else(|| panic!("{tag}: no {key}"));
-            t.next().unwrap().to_string()
-        };
-        let x64 = |v: u64| format!("{v:#018x}");
-        let x32 = |v: u32| format!("{v:#010x}");
-        let d = |v: u32| v.to_string();
-        let want = [
-            ("Z4a", "step", d(o.step)),
-            ("Z4a", "refusal", d(o.refusal)),
-            ("Z4a", "detail", x64(o.detail)),
-            ("Z4b", "AS_PRESENT", x32(o.as_present)),
-            ("Z4b", "L2_FEATURES", x32(o.l2_features)),
-            ("Z4b", "vm_tables_used", d(o.vm_tables_used)),
-            ("Z4b", "suspend_size", d(o.suspend_size)),
-            ("Z4b", "protm_suspend_size", d(o.protm_suspend_size)),
-            ("Z4c", "ctx", x64(o.heap_ctx)),
-            ("Z4c", "chunk", x64(o.heap_chunk)),
-            ("Z4c", "chunk_size", d(o.heap_chunk_size)),
-            ("Z4c", "stride", d(o.heap_stride)),
-            ("Z4e", "insert", x64(o.insert)),
-            ("Z4e", "seqno", x64(o.seqno)),
-            ("Z4e", "sync_status", x32(o.sync_status)),
-            ("Z4f", "status_cmd_ptr", x64(o.status_cmd_ptr)),
-            ("Z4f", "info", x64(o.info)),
-            ("Z4i", "digest", x64(o.digest)),
-        ];
-        for (tag, key, v) in want {
-            assert_eq!(get(tag, key), v, "{tag} {key}");
+        let pass = z4_lines(&run_frame(&z, &blob, &GENERATED).0);
+        let mut z = Z4::generated(blob.clone());
+        z.never_complete = true;
+        let timeout = z4_lines(&run_frame(&z, &blob, &GENERATED).0);
+        let z3_stop = z4_lines(&SubmitUp { step: STEP_FW, refusal: 3, digest: DIGEST, ..SubmitUp::default() });
+        vec![
+            ("t6_submit-pass", include_str!("../../../tools/kexec-zephyr/testdata/t6_submit-pass.uart"), pass.clone()),
+            (
+                "t6_submit-wait-timeout",
+                include_str!("../../../tools/kexec-zephyr/testdata/t6_submit-wait-timeout.uart"),
+                timeout,
+            ),
+            (
+                "t6_submit-missing",
+                include_str!("../../../tools/kexec-zephyr/testdata/t6_submit-missing.uart"),
+                pass[..6].to_vec(),
+            ),
+            ("t6_submit-z3-stop", include_str!("../../../tools/kexec-zephyr/testdata/t6_submit-z3-stop.uart"), z3_stop),
+        ]
+    }
+
+    /// Each t6_submit fixture's Z4 lines are the model's record as the
+    /// probe prints it ([`z4_lines`]), every line exactly: the fixtures are
+    /// regenerated from the model, not written by hand
+    /// (`print_the_fixtures_z4_lines` prints them).
+    #[test]
+    fn the_fixtures_z4_lines_are_the_model_s_records() {
+        for (name, uart, want) in fixture_records() {
+            let got: Vec<&str> = uart.lines().filter(|l| l.starts_with("t6_submit: Z4")).collect();
+            assert_eq!(got, want, "{name}");
         }
-        // the lines with two values under one name, or a name that repeats
-        let line = |tag: &str| UART.lines().find(|l| l.contains(&format!(": {tag}: "))).unwrap();
-        let z4d = format!(
-            "CSG0 req {} ack {} CS0 req {} ack {}, acked in",
-            x32(o.csg_req),
-            x32(o.csg_ack),
-            x32(o.cs_req),
-            x32(o.cs_ack)
-        );
-        assert!(line("Z4d").contains(&z4d), "{}: {z4d}", line("Z4d"));
-        let z4g = format!("refusal {}, terminate", o.stop_refusal);
-        assert!(line("Z4g").contains(&z4g), "{}: {z4g}", line("Z4g"));
-        let z4g = format!("refusal {}, cleared", o.terminate_refusal);
-        assert!(line("Z4g").contains(&z4g), "{}: {z4g}", line("Z4g"));
+    }
+
+    /// `cargo test ... print_the_fixtures_z4_lines -- --ignored --nocapture`:
+    /// each fixture's Z4 lines as [`the_fixtures_z4_lines_are_the_model_s_records`]
+    /// wants them, to paste over the fixture's.
+    #[test]
+    #[ignore]
+    fn print_the_fixtures_z4_lines() {
+        for (name, _, want) in fixture_records() {
+            println!("== {name}");
+            for l in want {
+                println!("{l}");
+            }
+        }
     }
 
     /// The queue-init words before the frame's first word, once (C1), and
@@ -2003,13 +2120,46 @@ pub(crate) mod tests {
         assert_eq!((o.step, o.refusal, o.detail), (STEP_WAIT, SchedRefusal::JobTimeout as u32, 0));
         assert_eq!((o.wait_us, o.seqno, o.sync_status), (sched::JOB_TIMEOUT_US, 0, 0));
         // the ring was written, nothing consumed it
-        assert_eq!((o.insert, o.extract), (128, 0));
+        assert_eq!((o.insert, o.extract_at_done), (128, 0));
         // wait's own stop and terminate, both acknowledged
         assert_eq!((o.stop_refusal, o.terminate_refusal), (0, 0));
         assert!(slept >= u64::from(sched::JOB_TIMEOUT_US));
         assert_eq!(z.w(CSG_OUT + offset_of!(CsgOutput, ack)) & CSG_STATE_MASK, CSG_STATE_TERMINATE);
         // the stream never ran: the target is the fill
         assert_eq!((o.fill, o.pixels, z.calls.get()), (4096, 4096, 0));
+    }
+
+    #[test]
+    fn an_extract_that_never_comes_is_recorded_and_the_run_goes_on() {
+        let mut z = Z4::new(synth::small());
+        z.publish_lag = Some(u32::MAX);
+        let (o, slept, _) = run_frame(&z, &synth::small(), &frame());
+        // a finding, not a step: the group ended and the target read
+        assert_eq!((o.step, o.refusal, o.detail), (STEP_NONE, 0, 0));
+        assert_eq!((o.seqno, o.extract_at_done, o.sync_updates), (1, 0, 0));
+        assert_eq!(
+            (o.drain_us, o.drain_refusal, o.extract_drained, o.drain_sync_updates),
+            (sched::CS_ACK_WAIT_US, SchedRefusal::DrainTimeout as u32, 0, 0)
+        );
+        assert!(slept >= u64::from(sched::CS_ACK_WAIT_US));
+        assert_eq!((o.stop_refusal, o.terminate_refusal, o.cleared), (0, 0, [0, 0, 0]));
+        assert_eq!((o.extract_at_end, o.red, o.blue), (0, 2048, 2048));
+    }
+
+    #[test]
+    fn a_fault_after_the_job_stops_the_drain_as_its_step_and_the_group_is_ended() {
+        let mut z = Z4::new(synth::small());
+        z.publish_fault = true;
+        let o = run(&z);
+        let fault = sched::EXCEPTION_CS_INHERIT_FAULT;
+        assert_eq!((o.step, o.refusal, o.detail), (STEP_DRAIN, SchedRefusal::CsFault as u32, u64::from(fault)));
+        assert_eq!(o.drain_refusal, SchedRefusal::CsFault as u32);
+        // the fault and its cs_irq left pending by the drain, cleared by
+        // the terminate; extract, published with them, was read before
+        // them on the drain's look and again after the end
+        assert_eq!((o.stop_refusal, o.terminate_refusal), (0, 0));
+        assert_eq!(o.cleared, [CSG_SYNC_UPDATE, 1, csf::CS_FAULT]);
+        assert_eq!((o.extract_drained, o.extract_at_end), (0, 128));
     }
 
     #[test]
@@ -2020,7 +2170,7 @@ pub(crate) mod tests {
         z.publish_lag = None;
         let o = run(&z);
         assert_eq!((o.step, o.refusal, o.detail), (STEP_WAIT, SchedRefusal::SyncObjError as u32, 0x41));
-        assert_eq!((o.seqno, o.sync_status, o.insert, o.extract), (1, 0x41, 128, 128));
+        assert_eq!((o.seqno, o.sync_status, o.insert, o.extract_at_done), (1, 0x41, 128, 128));
         assert_eq!((o.stop_refusal, o.terminate_refusal), (0, 0));
         // the SYNC_UPDATE event was acknowledged on the poll that refused:
         // nothing left for the terminate to clear
@@ -2102,8 +2252,8 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn the_record_is_49_words_of_8_at_fixed_offsets_and_the_steps_are_numbered() {
-        assert_eq!((size_of::<SubmitUp>(), align_of::<SubmitUp>()), (392, 8));
+    fn the_record_is_53_words_of_8_at_fixed_offsets_and_the_steps_are_numbered() {
+        assert_eq!((size_of::<SubmitUp>(), align_of::<SubmitUp>()), (424, 8));
         assert_eq!(size_of::<FwUp>(), 192);
         assert_eq!(
             [
@@ -2123,9 +2273,10 @@ pub(crate) mod tests {
                 STEP_SUBMIT,
                 STEP_WAIT,
                 STEP_STOP,
-                STEP_TERMINATE
+                STEP_TERMINATE,
+                STEP_DRAIN
             ],
-            core::array::from_fn::<u32, 17, _>(|i| i as u32)
+            core::array::from_fn::<u32, 18, _>(|i| i as u32)
         );
         assert_eq!(heap_error_code(&HeapError::ZeroInitialChunks), (1, 0));
         assert_eq!(heap_error_code(&HeapError::UnknownChunk { chunk_gpu_va: 7 }), (17, 7));

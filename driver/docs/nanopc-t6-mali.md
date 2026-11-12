@@ -2430,13 +2430,15 @@ C entry `yd_t6_submit`), and a `PASS` run holds `step` 0, `stop` 0 and
 
 These are the **MCU model's values**: `board::nanopc_t6_submit`'s test
 `the_generated_frame_s_record_is_as_predicted` runs the generated frame
-over the host MCU model and asserts the record below; no value is the
-board's. The "pinned" ones are fixed by the frame and the module's
+over the host MCU model and asserts the record below. Where the first
+board run (2026-11-12, issue #4515) showed the model wrong, the model now
+does what the board's firmware did, and the row says "measured"; every
+other value is still a prediction. The "pinned" ones are fixed by the frame and the module's
 constants and must read the same on the board; the "board-dependent" ones
 are the model's own (its register values, lags and microseconds, the
 synthetic firmware's sizes): the model's value is given for orientation
 and a different board value is not a finding. The record is
-`struct yd_t6_submit_up` (392 bytes, offsets asserted in
+`struct yd_t6_submit_up` (424 bytes, offsets asserted in
 `yakogl_drivers.h`).
 
 | field | predicted value | pinned or board-dependent |
@@ -2457,19 +2459,42 @@ and a different board value is not a finding. The record is
 | `csg_ack_us`, `cs_ack_us` | 1, 0 | board-dependent (the model's acknowledge lag) |
 | `latest_flush` | 0 | board-dependent (the GPU's flush id) |
 | `sync_updates` | 0 | board-dependent (the model's firmware raises `CSG_SYNC_UPDATE` after the stream wrote the `seqno`, as the board's first run showed: 0 there; when the event comes is not measured yet) |
-| `insert`, `extract` | 128, 0 | `insert` pinned; `extract` board-dependent (read when the wait saw the `seqno`: the firmware publishes it later, 0 on the board's first run; when it reaches 128 is not measured yet) |
+| `insert`, `extract_at_done` | 128, 0 | `insert` pinned; `extract_at_done` board-dependent (the output page's `extract` right after the wait saw the `seqno`: the firmware publishes it later, measured 0 on the board's first run) |
 | `seqno`, `sync_status` | 1, 0 | pinned |
 | `wait_us` | 20 | board-dependent (the model's job lag; bounded by the 5 s wait) |
 | `status_cmd_ptr`, `info` | 0, 0 | pinned (a refused wait fills them) |
 | `stop_us`, `terminate_us` | 3, 1 | board-dependent |
 | `stop_refusal`, `terminate_refusal` | 0, 0 | pinned |
-| `cleared[3]` | 0x10000000, 1, 0 | board-dependent (the late `CSG_SYNC_UPDATE` and CS 0's `cs_irq` bit, pending at the terminate: the board's first run read 268435456 1 0) |
+| `cleared[3]` | 0, 0, 0 | board-dependent (the drain acknowledges the late `CSG_SYNC_UPDATE` and CS 0's `cs_irq` bit; the board's first run, without the drain, read 268435456 1 0 here) |
 | `red`, `blue` | 2048, 2048 | pinned (the model paints the frame's halves; the board's GPU must too) |
 | `fill`, `other` | 0, 0 | pinned |
 | `pixels` | 4096 | pinned |
 | `digest` | 0xa4db81a9d39bfdcc | pinned (FNV-1a 64 of the blocks and the 53 stream words at `CS_VA`; the probe prints the same) |
+| `extract_drained`, `drain_us` | 128, 10 | not measured yet (`sched::drained` after the wait: the `extract` it ended with, the model's one poll) |
+| `drain_refusal`, `drain_sync_updates` | 0, 1 | not measured yet (27 `DrainTimeout` is recorded, not a step; any other refusal is step 17, `STEP_DRAIN`) |
+| `drain_cs_ack` | 0x11 | not measured yet (CS 0's `ack` right after the drain: whether the firmware toggles `CS_EXTRACT_EVENT` there) |
+| `extract_at_end` | 128 | not measured yet (`extract` after the group's stop and terminate) |
 
 A record whose pinned field differs is a finding, recorded as it came.
+
+**The firmware's publish of `extract`.** Measured on the first run: the
+sync object's `seqno` is the stream's own write (its `SYNC_ADD64`), and
+the wait saw it 220 µs after the doorbell with the output page's
+`extract` still 0 and no `CSG_SYNC_UPDATE` (`sync_updates` 0); the
+terminate then found `CSG_SYNC_UPDATE` and CS 0's `cs_irq` bit pending
+(`cleared` 268435456 1 0). Not measured yet: that the MCU firmware
+publishes `extract` (and raises the event) later at all, and when: the
+first record did not read `extract` again. The model publishes both
+`PUBLISH_LAG` reads after the `seqno` (the instant publish is its other
+setting, tested too). The second run measures it: after the wait the
+probe runs `sched::drained` (polls until `extract` equals `insert`,
+within `CS_ACK_WAIT_US`, acknowledging the events as the wait does) and
+records the microseconds, the `extract` it ended with, its refusal, the
+sync updates it acknowledged, CS 0's `ack` after it, and `extract` once
+more after the group's end (Z4j, Z4k). panthor has no such wait: it
+takes completion from the sync object and ring space from its
+scheduler's credits, and reads `output->extract` only when it programs
+a slot and for its idle check.
 
 **Time limit.** The wait on the sync object is bounded by `sched::wait`'s
 `JOB_TIMEOUT_US`, panthor's `JOB_TIMEOUT_MS`: 5 s (5000000 µs), counted
@@ -2503,7 +2528,7 @@ carry them:
    build, WDT0, image, the 7 sections and the pool (`table_fw_image`),
    then `Z3: rc` and its seven record lines (`table_z3_record`). The Z3
    procedure above gives them; they are not repeated here.
-3. The nine Z4 lines (`SubmitUp`, 392 bytes; 64-bit words print as
+3. The eleven Z4 lines (`SubmitUp`, 424 bytes; 64-bit words print as
    `%016llx`, 32-bit words as `%08x`, counts as `%u`), then `PASS`:
 
 ```
@@ -2511,18 +2536,20 @@ t6_submit: Z4a: step 0 refusal 0 detail 0x0000000000000000
 t6_submit: Z4b: AS_PRESENT 0x000000ff L2_FEATURES 0x07120306 as0_tables_used {d} vm_tables_used 10 suspend_size 25600 protm_suspend_size 25600
 t6_submit: Z4c: heap ctx 0x0000800000015000 chunk 0x0000800000a00000 chunk_size 2097152 stride 64
 t6_submit: Z4d: CSG0 req 0x00000011 ack 0x00000011 CS0 req 0x00000511 ack 0x00000011, acked in {d}/{d} us
-t6_submit: Z4e: insert 0x0000000000000080 extract 0x0000000000000080 seqno 0x0000000000000001 sync_status 0x00000000, wait {d} us
+t6_submit: Z4e: insert 0x0000000000000080 extract 0x{x16} seqno 0x0000000000000001 sync_status 0x00000000, wait {d} us
 t6_submit: Z4f: latest_flush 0x{x8} sync_updates {d} status_cmd_ptr 0x0000000000000000 info 0x0000000000000000
 t6_submit: Z4g: stop {d} us refusal 0, terminate {d} us refusal 0, cleared {d} {d} {d}
 t6_submit: Z4h: target red {@R} blue {@B} fill {@F} other {@O} of {@P} pixels
 t6_submit: Z4i: frame digest 0xa4db81a9d39bfdcc
+t6_submit: Z4j: drain {d} us refusal {d} extract 0x{x16} sync_updates {d} cs_ack 0x{x8}
+t6_submit: Z4k: extract after the end 0x{x16}
 t6_submit: PASS
 ```
 
 The glue's `t6: t6_submit done: PSCI SYSTEM_RESET at {d} ms ({d} feeds)`
 closes the capture. Tokens, explained once: `{d}` a decimal number
 (optionally negative); `{x8}` exactly 8 lower-case hex digits (`{x16}`:
-16, used in the early banner); `{@R}`, `{@B}`, `{@F}`, `{@O}` and `{@P}` the
+16: the early banner, `extract`); `{@R}`, `{@B}`, `{@F}`, `{@O}` and `{@P}` the
 target's red, blue, fill, other and total pixel counts (`@` captures the value), each a decimal
 number: the verdict adds the first four and compares the sum with `{@P}`.
 
@@ -2539,7 +2566,8 @@ board's file sizes Z3's tables: the model's 8 is not the board's, 10 is
 predicted above), the timings (`acked in`, `wait`, `stop` and `terminate`
 µs), `latest_flush`, `extract`, `sync_updates`, the three `cleared`
 words (the last three move with when the firmware publishes `extract`,
-not measured yet), and the four pixel counts (only their sum is checked
+not measured yet), Z4j's and Z4k's values (not measured yet; the commit
+that records the second run pins them), and the four pixel counts (only their sum is checked
 against the total).
 
 Where the verdict and the prediction table above differ in strength
@@ -2557,7 +2585,7 @@ detail not 0), as do the fields the run left at 0, and the `PASS` line is
 reported as differing; a `t6_submit: Z3: stop …` line counts as one more
 differing line. A watchdog reset during Z4 is not a PASS either: the
 capture ends after the last Z3 line with a fresh boot banner, and Z4a to
-Z4i, `PASS` and the reset line are `missing`, the first of them Z4a (the
+Z4k, `PASS` and the reset line are `missing`, the first of them Z4a (the
 fixture `testdata/t6_submit-z4-reset.uart` of the self-test).
 
 To judge a captured log, as step 4 of the runner's commands above (it
