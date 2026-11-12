@@ -13,6 +13,22 @@
 #   tools/cts/board-stage.sh x2 common        the Armadillo-X2's gl_test image (build only)
 #   tools/cts/board-stage.sh x2 deqp          the Armadillo-X2's dEQP-GLES2 tree image (build only)
 #   tools/cts/board-stage.sh x2 gles3         the Armadillo-X2's dEQP-GLES3 tree image (build only)
+#   tools/cts/board-stage.sh stm32mp257f-dk common   the STM32MP257F-DK's gl_test image (build only)
+#
+# The STM32MP257F-DK (the name tools/board-stm32mp2.sh prints in its verdict
+# line) is staged as builds only, as x2 is: no board command, no BOARD_HOST,
+# no BOARD_UART, no lease. `common` builds driver/samples/zephyr/gl_test for
+# stm32mp257f_dk/stm32mp257fxx/a35 (the board files boards/stm32mp257f_dk_*,
+# src/main_stm32mp2.c) with -DYAKOGL_WERROR=ON and -DCONFIG_GL_TEST_MP2_SET_HEAD=y
+# (case 1 alone, the DK's first GL run). The watchdog marker ("gc_wdog_arm:
+# armed") comes from the board layer's stm32mp2/app.conf
+# (CONFIG_YAKOGL_STM32MP2_WDOG=y), and the stage checks the built image for it
+# (the runner refuses an image without it). The image ends at
+# build/common/stm32mp257f-dk-<sha8>/zephyr/zephyr.bin (log: the same name with
+# .log); running it is `tools/board-stm32mp2.sh run`, a board step held by a
+# runner. deqp, ms4 and gles3 are refused (exit 2): the DK's dEQP stage comes
+# with a later item. The dependency layout is the imx8mp one without
+# IMX8MP_OUT and GLMARK2_SRC: the three entries every image needs.
 #
 # The X2 (the Armadillo-X2, tools/board.sh's kexec-dev development board) is
 # staged as builds only: this stage runs no board command for x2. It reads no
@@ -36,7 +52,7 @@
 # Verdin), not the layout's DEQP_STAGE1; a missing one stops the stage (exit 2)
 # before any build. ms4 has no X2 tree and is refused (exit 2).
 #
-# <board> is am62p, imx8mp, pi4 or x2, as tools/board.sh names them. The images
+# <board> is am62p, imx8mp, pi4, x2 or stm32mp257f-dk, as tools/board.sh names them. The images
 # are built from HEAD (build/common/<board>-<sha8>, build/deqp/<board>-<sha8>)
 # and the records go to records/<board>/{common,deqp,deqp-ms4}-<sha8>; a run
 # that stopped resumes there (board.sh skips a row with a finished run). The
@@ -97,11 +113,12 @@ clear_stale_once() {
 # needed_deps <layout> <what> [board]: the deps.toml entries a stage reads,
 # one per line. Read from what the builders take from the environment:
 #   every image   the west workspace (cts-build-zephyr.sh, common-images.sh)
-#   common        the glmark2 source (common-images.sh; not board x2: glmark2
-#                 has no Armadillo-X2 image, x2 common builds gl_test alone)
+#   common        the glmark2 source (common-images.sh; not board x2 or the DK:
+#                 glmark2 has no image for either, they build gl_test alone)
 #   am62p         the PowerVR firmware header (copied below, never committed)
 #   imx8mp        IMX8MP_OUT, the image directory of imx8mp-env.sh (board x2
-#                 uses the same layout: its images go to $IMX8MP_OUT/x2/)
+#                 uses the same layout: its images go to $IMX8MP_OUT/x2/; not
+#                 the DK: its image goes under build/common/)
 #   deqp, ms4     stage 1: DEQP_WORK (am62p, pi4) or DEQP_STAGE1 (imx8mp, x2)
 #   gles3         DEQP_WORK on the am62p (its gles3 stage 1 sits beside it);
 #                 not board x2: its stage 1 is DEQP_STAGE1_GLES3, no deps.toml
@@ -109,9 +126,9 @@ clear_stale_once() {
 needed_deps() {
     local layout=$1 what=$2 board=${3:-}
     printf '%s\n' ZEPHYR_WS WEST_VENV ZEPHYR_SDK_INSTALL_DIR
-    [ "$what" = common ] && [ "$board" != x2 ] && echo GLMARK2_SRC
+    [ "$what" = common ] && [ "$board" != x2 ] && [ "$board" != stm32mp257f-dk ] && echo GLMARK2_SRC
     [ "$layout" = am62p ] && echo PVR_FW_BLOB
-    [ "$layout" = imx8mp ] && echo IMX8MP_OUT
+    [ "$layout" = imx8mp ] && [ "$board" != stm32mp257f-dk ] && echo IMX8MP_OUT
     if [ "$what" != common ] && ! { [ "$what" = gles3 ] && [ "$board" = x2 ]; }; then
         if [ "$layout" = imx8mp ]; then echo DEQP_STAGE1; else echo DEQP_WORK; fi
     fi
@@ -142,7 +159,7 @@ check_deps() {
 }
 [ "${BOARD_STAGE_SOURCE_ONLY:-}" = 1 ] && return 0 2>/dev/null
 
-usage() { echo "usage: tools/cts/board-stage.sh am62p|imx8mp|pi4 common|deqp|ms4|gles3 | x2 common|deqp|gles3" >&2; exit 2; }
+usage() { echo "usage: tools/cts/board-stage.sh am62p|imx8mp|pi4 common|deqp|ms4|gles3 | x2 common|deqp|gles3 | stm32mp257f-dk common" >&2; exit 2; }
 die() { echo "board-stage.sh: $1" >&2; exit "${2:-2}"; }
 [ $# -eq 2 ] || usage
 board=$1 what=$2
@@ -151,8 +168,12 @@ am62p) layout=am62p key=AM62P ;;
 imx8mp) layout=imx8mp key=IMX8MP ;;
 pi4) layout=rpi_4b key=RPI4 ;;
 x2) layout=imx8mp key=X2 ;;   # same host dependency layout as the Verdin (imx8mp-env.sh)
+stm32mp257f-dk) layout=imx8mp key=DK ;;   # the three zephyr entries only (needed_deps); build only, like x2
 *) usage ;;
 esac
+if [ "$board" = stm32mp257f-dk ]; then
+    [ "$what" = common ] || die "$what is not staged for the stm32mp257f-dk: only 'common' (its gl_test image, build only); the DK's deqp comes in a later item, ms4 and gles3 are not its sets"
+fi
 case "$what" in common | deqp) ;; ms4 | gles3)
     [ "$board:$what" = x2:ms4 ] && die "ms4 is the AM62P's tree; the x2 stage builds the gl_test image, the dEQP-GLES2 and the dEQP-GLES3 tree images, and runs no board"
     [ "$board" = am62p ] || [ "$board:$what" = x2:gles3 ] || die "$what is the AM62P's tree only" ;; *) usage ;; esac
@@ -201,6 +222,16 @@ if [ "$board" = x2 ] && [ "${BOARD_STAGE_DRY_RUN:-}" = 1 ]; then
     exit 0
 fi
 
+# stm32mp257f-dk common: the build command, before the layout is read
+DK_BUILD=build/common/stm32mp257f-dk-$H8
+DK_ARGS=(-DYAKOGL_WERROR=ON -DCONFIG_GL_TEST_MP2_SET_HEAD=y)
+if [ "$board" = stm32mp257f-dk ] && [ "${BOARD_STAGE_DRY_RUN:-}" = 1 ]; then
+    echo "board-stage.sh: stm32mp257f-dk common at $H8 (dry run: nothing is built; the stage runs no board)"
+    echo "board-stage.sh\$ west build -p always -b stm32mp257f_dk/stm32mp257fxx/a35 -d $DK_BUILD driver/samples/zephyr/gl_test -- -DZEPHYR_MODULES=<modules> -DYAKOGL_DIR=\$PWD ${DK_ARGS[*]}"
+    echo "  -> $DK_BUILD/zephyr/zephyr.bin (arms OP-TEE's watchdog: \"gc_wdog_arm: armed\")"
+    exit 0
+fi
+
 # the dependency layout: every entry or nothing
 if ! check_deps "$layout" "$what" "$board"; then
     die "the dependency layout is incomplete on $(hostname -s) (above)"
@@ -221,6 +252,8 @@ fi
 # under the build scripts' X2 selection instead.
 if [ "$board" = x2 ]; then
     export IMX8MP_BOARD=x2
+elif [ "$board" = stm32mp257f-dk ]; then
+    :   # builds only: no lease, no console, no BOARD_BOOT, no clear_stale_once
 else
     ssh_var=RESOURCE_${key}_SSH
     export BOARD_HOST=${BOARD_HOST:-${!ssh_var:-}}
@@ -243,7 +276,23 @@ echo "board-stage.sh: $board $what at $H8 ($(git describe --always --dirty 2>/de
 run() { echo "board-stage.sh\$ $*"; "$@"; }
 case "$what" in
 common)
-    if [ "$board" = x2 ]; then
+    if [ "$board" = stm32mp257f-dk ]; then
+        # gl_test for the DK (the sample's README); running it is
+        # `tools/board-stm32mp2.sh run`, a board step, never this stage.
+        [ -n "${WEST_VENV:-}" ] && PATH=$WEST_VENV/bin:$PATH
+        export ZEPHYR_BASE=$ZEPHYR_WS/zephyr ZEPHYR_TOOLCHAIN_VARIANT=${ZEPHYR_TOOLCHAIN_VARIANT:-zephyr}
+        DK_MODS=$(tools/cts/zephyr-modules.sh "$ZEPHYR_WS") || die "no zephyr module list for $ZEPHYR_WS"
+        mkdir -p build/common
+        DK_REPO=$PWD
+        echo "board-stage.sh\$ west build -p always -b stm32mp257f_dk/stm32mp257fxx/a35 -d $DK_BUILD driver/samples/zephyr/gl_test -- ${DK_ARGS[*]}   (log: $DK_BUILD.log)"
+        (cd "$ZEPHYR_WS" && west build -p always -b stm32mp257f_dk/stm32mp257fxx/a35 -d "$DK_REPO/$DK_BUILD" \
+            "$DK_REPO/driver/samples/zephyr/gl_test" -- "-DZEPHYR_MODULES=$DK_MODS" "-DYAKOGL_DIR=$DK_REPO" "${DK_ARGS[@]}") \
+            > "$DK_BUILD.log" 2>&1 < /dev/null || die "DK gl_test image build failed ($DK_BUILD.log)" 1
+        [ -s "$DK_BUILD/zephyr/zephyr.bin" ] || die "DK gl_test build wrote no image ($DK_BUILD.log)" 1
+        grep -aqF 'gc_wdog_arm: armed' "$DK_BUILD/zephyr/zephyr.bin" ||
+            die "DK image has no \"gc_wdog_arm: armed\" (the runner would refuse it): $DK_BUILD/zephyr/zephyr.bin" 1
+        echo "board-stage.sh: DK image: $DK_BUILD/zephyr/zephyr.bin"
+    elif [ "$board" = x2 ]; then
         # the common set's gl_test row for the X2 (the sweep configuration;
         # one case with SEL=n, the set with SEL=256, tools/board.sh x2 run).
         # glmark2 has no Armadillo-X2 image: named, not silently skipped.
