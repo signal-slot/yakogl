@@ -101,13 +101,30 @@ check t6_hello-no-ap1r 1 "VERDICT t6_hello FAIL (1 of $HELLO)" "$((HELLO - 1)) 1
 
 # T6_ROUTE=uboot (U-Boot's go, t6_hello-uboot-pass: the predicted record,
 # not board output): the T6:G line in place of the GIC EOImode line, so the
-# count is the same. Each route's record judged as the other's names the one line.
+# count is the same. Each route's record judged as the other's names its
+# lines: the go record as kexec misses the EOImode line and has a T6:G; the
+# kexec record as uboot misses T6:G.
 check t6_hello-uboot-pass 0 'VERDICT t6_hello PASS' "$HELLO 0 0" t6_hello "$D/t6_hello-uboot-pass.uart" T6_ROUTE=uboot
-check t6_hello-uboot-as-kexec 1 "VERDICT t6_hello FAIL (1 of $HELLO)" "$((HELLO - 1)) 1 0" t6_hello "$D/t6_hello-uboot-pass.uart"
+check t6_hello-uboot-as-kexec 1 "VERDICT t6_hello FAIL (2 of $HELLO)" "$((HELLO - 1)) 1 1" t6_hello "$D/t6_hello-uboot-pass.uart"
 check t6_hello-kexec-as-uboot 1 "VERDICT t6_hello FAIL (1 of $HELLO)" "$((HELLO - 1)) 1 0" t6_hello "$D/t6_hello-pass.uart" T6_ROUTE=uboot
 # a T6:G line that names another range differs
 sed 's/0x10000000-0x20000000 cleaned/0x10000000-0x10800000 cleaned/' "$D/t6_hello-uboot-pass.uart" >"$WORK/range.log"
 check t6_hello-uboot-range 1 "VERDICT t6_hello FAIL (1 of $HELLO)" "$((HELLO - 1)) 0 1" t6_hello "$WORK/range.log" T6_ROUTE=uboot
+# the MMU or a cache left on must never pass: T6:A's SCTLR_EL2 with M, C, I
+# set (T6:A differs, and T6:G's read-back no longer equals it); T6:G's
+# read-back with them set; a T6:G whose read-back is not T6:A's value
+sed '/^T6:A EL2/s/SCTLR_EL2 0x0000000030c50830/SCTLR_EL2 0x0000000030c51835/' "$D/t6_hello-uboot-pass.uart" >"$WORK/a-on.log"
+check t6_hello-uboot-t6a-mmu-on 1 "VERDICT t6_hello FAIL (2 of $HELLO)" "$((HELLO - 2)) 0 2" t6_hello "$WORK/a-on.log" T6_ROUTE=uboot
+sed '/^T6:G/s/0x0000000030c51835 -> 0x0000000030c50830/0x0000000030c51835 -> 0x0000000030c51835/' "$D/t6_hello-uboot-pass.uart" >"$WORK/g-on.log"
+check t6_hello-uboot-t6g-left-on 1 "VERDICT t6_hello FAIL (1 of $HELLO)" "$((HELLO - 1)) 0 1" t6_hello "$WORK/g-on.log" T6_ROUTE=uboot
+sed '/^T6:A EL2/a T6:G go: SCTLR_EL2 0x0000000030c51835 -> 0x0000000030c50830 (MMU, D-cache, I-cache off); 0x10000000-0x20000000 cleaned and invalidated to PoC, TLB and I-cache invalidated' \
+	"$D/t6_hello-pass.uart" >"$WORK/g-other.log"
+check t6_hello-uboot-t6g-not-t6a 1 "VERDICT t6_hello FAIL (1 of $HELLO)" "$((HELLO - 1)) 0 1" t6_hello "$WORK/g-other.log" T6_ROUTE=uboot
+# the same record on the kexec route: a T6:G line there differs
+check t6_hello-kexec-with-t6g 1 "VERDICT t6_hello FAIL (1 of $HELLO)" "$HELLO 0 1" t6_hello "$WORK/g-other.log"
+# T6:A's SCTLR_EL2 with the MMU on fails the kexec route too
+sed '/^T6:A EL2/s/SCTLR_EL2 0x0000000030400800/SCTLR_EL2 0x0000000030400801/' "$D/t6_hello-pass.uart" >"$WORK/k-on.log"
+check t6_hello-kexec-t6a-mmu-on 1 "VERDICT t6_hello FAIL (1 of $HELLO)" "$((HELLO - 1)) 0 1" t6_hello "$WORK/k-on.log"
 check t6_gpu-pass 0 'VERDICT t6_gpu PASS' "$GPU 0 0" t6_gpu "$D/t6_gpu-pass.uart"
 # the crash kexec: PD_GPU handed over on, Z1 takes the GPU over (four lines)
 TAKE=4

@@ -58,8 +58,8 @@
 //!    nothing and loads nothing.
 //! 4. `dsb sy`; `ic iallu` and `tlbi alle2` (U-Boot's instructions and
 //!    translations), `dsb sy`, `isb`.
-//! 5. Pass the `SCTLR_EL2` found (x1), and the range cleaned (x2, x3), to
-//!    [`print_go`] for the `T6:G` line.
+//! 5. Read `SCTLR_EL2` back (x4) and pass it, the value found (x1) and the
+//!    range cleaned (x2, x3) to [`print_go`] for the `T6:G` line.
 //!
 //! The entry's code itself is fetched before step 2 through U-Boot's caches.
 //! It lies in the image's first pages, which arrive by SDMA into DRAM (not
@@ -83,36 +83,13 @@ pub const SCTLR_GO_MASK: u64 = SCTLR_M | SCTLR_C | SCTLR_I;
 /// the Z1 record; driver/tools/kexec-zephyr/testdata/t6_hello-pass.uart).
 pub const SCTLR_EL2_KEXEC_MEASURED: u64 = 0x3040_0800;
 
-/// The `SCTLR_EL2` value the entry writes, or `None` when it leaves the
-/// register as found (M, C and I already clear).
-pub const fn sctlr_off(found: u64) -> Option<u64> {
-    if found & SCTLR_GO_MASK == 0 {
-        None
-    } else {
-        Some(found & !SCTLR_GO_MASK)
-    }
-}
-
-/// The smallest data cache line in bytes: `CTR_EL0.DminLine` (bits 19:16) is
-/// its log2 in 4-byte words.
-pub const fn dcache_line(ctr_el0: u64) -> u64 {
-    4 << ((ctr_el0 >> 16) & 0xf)
-}
-
-/// The addresses `dc civac` is given for `[start, end)`, as the entry's loop
-/// walks them: from `start` rounded down to the line, one line at a time,
-/// while below `end`.
-pub fn clean_lines(start: u64, end: u64, line: u64) -> impl Iterator<Item = u64> {
-    let first = start & !(line - 1);
-    (first..end).step_by(line as usize)
-}
-
 /// The text of the entry's first instructions, shared by `global_asm!` in
-/// ffi::rk3588 and the tests here. Registers: x9..x13 scratch; x0 (the
-/// flags from the glue), x22..x25 and x30 are not touched; x1 is set to the
-/// `SCTLR_EL2` found on the go path and to 0 on the other, x2 and x3 to the
-/// range cleaned (go path only). The mask is [`SCTLR_GO_MASK`], checked by
-/// `the_asm_masks_the_three_bits`.
+/// ffi::rk3588 and the tests here, which run this text in an interpreter.
+/// Registers: x9..x13 scratch; x0 (the flags from the glue), x22..x25 and
+/// x30 are not touched; x1 is set to the `SCTLR_EL2` found on the go path
+/// and to 0 on the other; on the go path x2 and x3 hold the range cleaned
+/// and x4 the `SCTLR_EL2` read back at the end. The mask is
+/// [`SCTLR_GO_MASK`], checked by `the_asm_masks_the_three_bits`.
 #[cfg(any(target_arch = "aarch64", test))]
 macro_rules! t6_go_off_asm {
     () => {
@@ -147,6 +124,7 @@ macro_rules! t6_go_off_asm {
             "    tlbi alle2\n",
             "    dsb sy\n",
             "    isb\n",
+            "    mrs x4, sctlr_el2\n",
             "    mov x1, x9\n",
             "    b 4f\n",
             "3:\n",
@@ -159,12 +137,15 @@ macro_rules! t6_go_off_asm {
 pub(crate) use t6_go_off_asm;
 
 /// `T6:G`, printed after `T6:A` when the entry found the MMU or a cache on
-/// (U-Boot's `go`); the kexec entry prints no `T6:G`.
-pub fn banner_g<M: Mmio>(tx: &mut Tx<'_, M>, found: u64, start: u64, end: u64) {
+/// (U-Boot's `go`); the kexec entry prints no `T6:G`. `left` is the value
+/// read back from the register after the turn-off, not a computed one, so a
+/// turn-off that did not take shows (t6-verdict.sh requires M, C and I clear
+/// in it and the same value on `T6:A`).
+pub fn banner_g<M: Mmio>(tx: &mut Tx<'_, M>, found: u64, left: u64, start: u64, end: u64) {
     tx.str(b"T6:G go: SCTLR_EL2 ");
     tx.hex(found, 16);
     tx.str(b" -> ");
-    tx.hex(found & !SCTLR_GO_MASK, 16);
+    tx.hex(left, 16);
     tx.str(b" (MMU, D-cache, I-cache off); ");
     tx.hex(start, 8);
     tx.str(b"-");
@@ -173,9 +154,20 @@ pub fn banner_g<M: Mmio>(tx: &mut Tx<'_, M>, found: u64, start: u64, end: u64) {
 }
 
 /// The `T6:G` line when the entry took the go path (`found` not 0).
-pub fn print_go<M: Mmio>(tx: &mut Tx<'_, M>, found: u64, start: u64, end: u64) {
+pub fn print_go<M: Mmio>(tx: &mut Tx<'_, M>, found: u64, left: u64, start: u64, end: u64) {
     if found != 0 {
-        banner_g(tx, found, start, end);
+        banner_g(tx, found, left, start, end);
+    }
+}
+
+/// Entered at EL1 (not U-Boot's `go` on the RK3588, which enters at EL2) the
+/// text turns nothing off. When `SCTLR_EL1` then has the MMU or a cache on,
+/// `T6:G` says so, so a record does not look like a clean entry.
+pub fn print_el1<M: Mmio>(tx: &mut Tx<'_, M>, sctlr_el1: u64) {
+    if sctlr_el1 & SCTLR_GO_MASK != 0 {
+        tx.str(b"T6:G EL1: SCTLR_EL1 ");
+        tx.hex(sctlr_el1, 16);
+        tx.str(b" has the MMU or a cache on: not turned off (only the EL2 entry does)\r\n");
     }
 }
 
@@ -184,60 +176,249 @@ mod tests {
     use super::*;
     use crate::ip::ns16550_tx::tests::{Uart, BASE};
 
+    /// One instruction of the macro text, decoded. The interpreter knows only
+    /// the forms the text uses and panics on any other, so a changed
+    /// instruction cannot slip past it.
+    #[derive(Clone, Debug)]
+    enum I {
+        Label(u32),
+        MrsCurrentEl(usize),
+        MrsSctlr(usize),
+        MrsCtr(usize),
+        MsrSctlr(usize),
+        CmpImm(usize, u64),
+        CmpReg(usize, usize),
+        Tst(usize, usize),
+        MovImm(usize, u64),
+        MovReg(usize, usize),
+        Bic(usize, usize, usize),
+        Adrp(usize, &'static str),
+        AddLo12(usize, usize, &'static str),
+        AddReg(usize, usize, usize),
+        SubImm(usize, usize, u64),
+        Lsl(usize, usize, usize),
+        Ubfx(usize, usize, u32, u32),
+        DcCivac(usize),
+        Barrier(&'static str),
+        B(u32, char),
+        Bcond(&'static str, u32, char),
+    }
+
+    fn reg(t: &str) -> usize {
+        match t {
+            "xzr" => 31,
+            _ => t
+                .strip_prefix('x')
+                .and_then(|n| n.parse().ok())
+                .filter(|n| *n < 31)
+                .unwrap_or_else(|| panic!("register {t}")),
+        }
+    }
+
+    fn imm(t: &str) -> u64 {
+        let t = t.strip_prefix('#').unwrap_or_else(|| panic!("immediate {t}"));
+        match t.strip_prefix("0x") {
+            Some(h) => u64::from_str_radix(h, 16).unwrap(),
+            None => t.parse().unwrap(),
+        }
+    }
+
+    fn target(t: &str) -> (u32, char) {
+        let (n, d) = t.split_at(t.len() - 1);
+        (n.parse().unwrap(), d.chars().next().unwrap())
+    }
+
+    fn decode(s: &'static str) -> I {
+        if let Some(l) = s.strip_suffix(':') {
+            return I::Label(l.parse().unwrap());
+        }
+        let (op, rest) = s.split_once(' ').unwrap_or((s, ""));
+        let a: Vec<&'static str> = rest.split(',').map(str::trim).filter(|t| !t.is_empty()).collect();
+        match (op, a.as_slice()) {
+            ("mrs", [d, "CurrentEL"]) => I::MrsCurrentEl(reg(d)),
+            ("mrs", [d, "sctlr_el2"]) => I::MrsSctlr(reg(d)),
+            ("mrs", [d, "ctr_el0"]) => I::MrsCtr(reg(d)),
+            ("msr", ["sctlr_el2", r]) => I::MsrSctlr(reg(r)),
+            ("cmp", [n, m]) if m.starts_with('#') => I::CmpImm(reg(n), imm(m)),
+            ("cmp", [n, m]) => I::CmpReg(reg(n), reg(m)),
+            ("tst", [n, m]) => I::Tst(reg(n), reg(m)),
+            ("mov", [d, m]) if m.starts_with('#') => I::MovImm(reg(d), imm(m)),
+            ("mov", [d, m]) => I::MovReg(reg(d), reg(m)),
+            ("bic", [d, n, m]) => I::Bic(reg(d), reg(n), reg(m)),
+            ("adrp", [d, sym]) => I::Adrp(reg(d), sym),
+            ("add", [d, n, m]) if m.starts_with(":lo12:") => I::AddLo12(reg(d), reg(n), &m[6..]),
+            ("add", [d, n, m]) => I::AddReg(reg(d), reg(n), reg(m)),
+            ("sub", [d, n, m]) => I::SubImm(reg(d), reg(n), imm(m)),
+            ("lsl", [d, n, m]) => I::Lsl(reg(d), reg(n), reg(m)),
+            ("ubfx", [d, n, lsb, w]) => I::Ubfx(reg(d), reg(n), imm(lsb) as u32, imm(w) as u32),
+            ("dc", ["civac", r]) => I::DcCivac(reg(r)),
+            ("isb", []) => I::Barrier("isb"),
+            ("dsb", ["sy"]) => I::Barrier("dsb sy"),
+            ("ic", ["iallu"]) => I::Barrier("ic iallu"),
+            ("tlbi", ["alle2"]) => I::Barrier("tlbi alle2"),
+            ("b", [t]) => {
+                let (n, d) = target(t);
+                I::B(n, d)
+            }
+            ("b.eq" | "b.ne" | "b.lo", [t]) => {
+                let (n, d) = target(t);
+                I::Bcond(&op[2..], n, d)
+            }
+            _ => panic!("the interpreter does not know {s:?}"),
+        }
+    }
+
+    /// What one run of the text did.
+    #[derive(Debug, Default)]
+    struct Run {
+        x: [u64; 32],
+        sctlr: u64,
+        sctlr_writes: Vec<u64>,
+        /// `dc civac` addresses: how many, the first, the last, and whether
+        /// each was one line after the one before.
+        dc_count: u64,
+        dc_first: Option<u64>,
+        dc_last: u64,
+        dc_strided: bool,
+        /// Barriers and maintenance in order, with the index of the last
+        /// `msr` and of the first `dc` among them.
+        events: Vec<String>,
+    }
+
+    /// Run the macro text at `el` with `sctlr` in `SCTLR_EL2`, `ctr` in
+    /// `CTR_EL0` and the two symbols at `start` and `end`, up to its end.
+    fn run(el: u64, sctlr: u64, ctr: u64, start: u64, end: u64) -> Run {
+        let prog: Vec<I> = lines().into_iter().map(decode).collect();
+        let sym = |s: &str| match s {
+            "__rom_region_start" => start,
+            "__kernel_ram_end" => end,
+            _ => panic!("symbol {s}"),
+        };
+        let find = |n: u32, d: char, pc: usize| -> usize {
+            let hit = |i: usize| matches!(prog[i], I::Label(l) if l == n);
+            if d == 'f' {
+                (pc + 1..prog.len()).find(|&i| hit(i)).expect("forward label")
+            } else {
+                (0..pc).rev().find(|&i| hit(i)).expect("backward label")
+            }
+        };
+        let mut r = Run { sctlr, dc_strided: true, ..Run::default() };
+        let (mut z, mut lo) = (false, false);
+        let mut pc = 0;
+        let mut steps = 0u64;
+        let line = 4u64 << ((ctr >> 16) & 0xf);
+        while pc < prog.len() {
+            steps += 1;
+            assert!(steps < 100_000_000, "the text does not end");
+            let x = r.x;
+            let g = |i: usize| if i == 31 { 0 } else { x[i] };
+            let mut next = pc + 1;
+            match prog[pc].clone() {
+                I::Label(_) => {}
+                I::MrsCurrentEl(d) => r.x[d] = el << 2,
+                I::MrsSctlr(d) => r.x[d] = r.sctlr,
+                I::MrsCtr(d) => r.x[d] = ctr,
+                I::MsrSctlr(n) => {
+                    r.sctlr = g(n);
+                    r.sctlr_writes.push(g(n));
+                    r.events.push("msr".into());
+                }
+                I::CmpImm(n, v) => (z, lo) = (g(n) == v, g(n) < v),
+                I::CmpReg(n, m) => (z, lo) = (g(n) == g(m), g(n) < g(m)),
+                I::Tst(n, m) => z = g(n) & g(m) == 0,
+                I::MovImm(d, v) => r.x[d] = v,
+                I::MovReg(d, m) => r.x[d] = g(m),
+                I::Bic(d, n, m) => r.x[d] = g(n) & !g(m),
+                I::Adrp(d, s) => r.x[d] = sym(s) & !0xfff,
+                I::AddLo12(d, n, s) => r.x[d] = g(n) + (sym(s) & 0xfff),
+                I::AddReg(d, n, m) => r.x[d] = g(n) + g(m),
+                I::SubImm(d, n, v) => r.x[d] = g(n) - v,
+                I::Lsl(d, n, m) => r.x[d] = g(n) << (g(m) & 63),
+                I::Ubfx(d, n, lsb, w) => r.x[d] = (g(n) >> lsb) & ((1 << w) - 1),
+                I::DcCivac(n) => {
+                    let a = g(n);
+                    if r.dc_count > 0 && a != r.dc_last + line {
+                        r.dc_strided = false;
+                    }
+                    if r.dc_count == 0 {
+                        r.dc_first = Some(a);
+                        r.events.push("dc".into());
+                    }
+                    r.dc_last = a;
+                    r.dc_count += 1;
+                }
+                I::Barrier(b) => r.events.push(b.into()),
+                I::B(n, d) => next = find(n, d, pc),
+                I::Bcond(c, n, d) => {
+                    let take = match c {
+                        "eq" => z,
+                        "ne" => !z,
+                        _ => lo,
+                    };
+                    if take {
+                        next = find(n, d, pc);
+                    }
+                }
+            }
+            pc = next;
+        }
+        r
+    }
+
     /// U-Boot's `SCTLR_EL2` at `go`: M, C and I set (cache_v8.c:817, :894,
     /// :1175); the other bits are illustrative, not measured.
     const UBOOT_SCTLR: u64 = 0x30c5_1835;
+    /// Cortex-A55's `CTR_EL0` (DminLine 4: 64-byte lines).
+    const CTR_A55: u64 = 0x8444_c004;
+    const WIN: (u64, u64) = (0x1000_0000, 0x2000_0000);
 
     #[test]
-    fn the_kexec_state_leaves_sctlr_as_found() {
-        assert_eq!(sctlr_off(SCTLR_EL2_KEXEC_MEASURED), None);
-        // Any value with M, C and I clear, whatever the rest.
-        assert_eq!(sctlr_off(!SCTLR_GO_MASK), None);
-        assert_eq!(sctlr_off(0), None);
+    fn at_go_the_text_clears_m_c_and_i_reads_the_register_back_and_cleans_every_line_of_the_window() {
+        let r = run(2, UBOOT_SCTLR, CTR_A55, WIN.0, WIN.1);
+        assert_eq!(r.sctlr_writes, vec![0x30c5_0830], "one write, M, C and I cleared, the rest as found");
+        assert_eq!(r.sctlr & SCTLR_GO_MASK, 0);
+        assert_eq!((r.x[1], r.x[2], r.x[3]), (UBOOT_SCTLR, WIN.0, WIN.1), "x1 found, x2..x3 the range");
+        assert_eq!(r.x[4], r.sctlr, "x4 is SCTLR_EL2 read back after the turn-off");
+        assert_eq!(r.dc_first, Some(WIN.0));
+        assert_eq!(r.dc_last, WIN.1 - 64);
+        assert_eq!(r.dc_count, (WIN.1 - WIN.0) / 64);
+        assert!(r.dc_strided, "one line after the other");
+        assert_eq!(r.events, ["msr", "isb", "dc", "dsb sy", "ic iallu", "tlbi alle2", "dsb sy", "isb"]);
     }
 
     #[test]
-    fn the_go_state_clears_exactly_m_c_and_i() {
-        assert_eq!(sctlr_off(UBOOT_SCTLR), Some(0x30c5_0830));
-        // One bit of the three is enough to take the go path.
+    fn each_of_the_three_bits_alone_takes_the_go_path_and_other_bits_stay() {
+        let others = (1 << 1) | (1 << 3) | (1 << 19) | (1 << 25) | SCTLR_EL2_KEXEC_MEASURED;
         for b in [SCTLR_M, SCTLR_C, SCTLR_I] {
-            assert_eq!(sctlr_off(SCTLR_EL2_KEXEC_MEASURED | b), Some(SCTLR_EL2_KEXEC_MEASURED));
+            let r = run(2, others | b, CTR_A55, WIN.0, WIN.0 + 0x1000);
+            assert_eq!(r.sctlr_writes, vec![others], "bit {b:#x}");
+            assert_eq!(r.x[1], others | b);
+            assert_eq!(r.dc_count, 0x1000 / 64);
         }
-        // A (bit 1), SA (bit 3), WXN (bit 19), EE (bit 25) stay as found.
-        let others = (1 << 1) | (1 << 3) | (1 << 19) | (1 << 25);
-        assert_eq!(sctlr_off(others | SCTLR_GO_MASK), Some(others));
-    }
-
-    #[test]
-    fn the_line_size_is_ctr_el0_dminline() {
-        // Cortex-A55 and A76 report 64-byte lines: DminLine 4.
-        assert_eq!(dcache_line(0x8444_c004), 64);
-        assert_eq!(dcache_line(0x9444_c004), 64);
-        assert_eq!(dcache_line(0x0003_0000), 32);
-    }
-
-    #[test]
-    fn the_walk_covers_every_line_of_the_window_once() {
-        let (start, end, line) = (0x1000_0000u64, 0x2000_0000u64, 64u64);
-        let mut n = 0u64;
-        let mut last = None;
-        for a in clean_lines(start, end, line) {
-            assert_eq!(a % line, 0);
-            if let Some(p) = last {
-                assert_eq!(a, p + line);
-            }
-            last = Some(a);
-            n += 1;
-        }
-        assert_eq!(n, (end - start) / line);
-        assert_eq!(last, Some(end - line));
     }
 
     #[test]
     fn an_unaligned_range_starts_at_its_line_and_ends_on_the_last_line_it_touches() {
-        let v: Vec<u64> = clean_lines(0x1000_0030, 0x1000_0081, 64).collect();
-        assert_eq!(v, vec![0x1000_0000, 0x1000_0040, 0x1000_0080]);
-        assert_eq!(clean_lines(0x1000_0000, 0x1000_0000, 64).count(), 0);
+        let r = run(2, UBOOT_SCTLR, CTR_A55, 0x1000_0030, 0x1000_0081);
+        assert_eq!((r.dc_first, r.dc_last, r.dc_count), (Some(0x1000_0000), 0x1000_0080, 3));
+        // 32-byte lines (DminLine 3)
+        let r = run(2, UBOOT_SCTLR, 0x0003_0000, WIN.0, WIN.0 + 0x100);
+        assert_eq!((r.dc_count, r.dc_last), (8, WIN.0 + 0xe0));
+    }
+
+    #[test]
+    fn the_kexec_state_and_el1_run_no_write_and_no_maintenance() {
+        // Z1's measured SCTLR_EL2 at the kexec entry, and any value with M, C
+        // and I clear.
+        for v in [SCTLR_EL2_KEXEC_MEASURED, !SCTLR_GO_MASK, 0] {
+            let r = run(2, v, CTR_A55, WIN.0, WIN.1);
+            assert!(r.sctlr_writes.is_empty() && r.events.is_empty() && r.dc_count == 0, "{v:#x}");
+            assert_eq!(r.x[1], 0, "x1 = 0: no T6:G line");
+        }
+        // Entered at EL1 the text reads no EL2 register at all.
+        let r = run(1, UBOOT_SCTLR, CTR_A55, WIN.0, WIN.1);
+        assert!(r.sctlr_writes.is_empty() && r.events.is_empty() && r.dc_count == 0);
+        assert_eq!((r.x[1], r.x[9]), (0, 1 << 2), "only CurrentEL was read");
     }
 
     fn lines() -> Vec<&'static str> {
@@ -332,11 +513,23 @@ mod tests {
     #[test]
     fn the_g_line_names_the_values_found_and_left_and_the_range() {
         assert_eq!(
-            sent(|tx| print_go(tx, UBOOT_SCTLR, 0x1000_0000, 0x2000_0000)),
+            sent(|tx| print_go(tx, UBOOT_SCTLR, 0x30c5_0830, 0x1000_0000, 0x2000_0000)),
             "T6:G go: SCTLR_EL2 0x0000000030c51835 -> 0x0000000030c50830 (MMU, D-cache, I-cache off); \
              0x10000000-0x20000000 cleaned and invalidated to PoC, TLB and I-cache invalidated\r\n"
         );
         // The kexec entry: x1 = 0, no line.
-        assert_eq!(sent(|tx| print_go(tx, 0, 0, 0)), "");
+        assert_eq!(sent(|tx| print_go(tx, 0, 0, 0, 0)), "");
+        // A turn-off that did not take is printed as read.
+        assert!(sent(|tx| print_go(tx, UBOOT_SCTLR, UBOOT_SCTLR, 0x1000_0000, 0x2000_0000))
+            .starts_with("T6:G go: SCTLR_EL2 0x0000000030c51835 -> 0x0000000030c51835 "));
+    }
+
+    #[test]
+    fn at_el1_the_line_names_an_mmu_or_cache_left_on() {
+        assert_eq!(
+            sent(|tx| print_el1(tx, 0x30d0_1805)),
+            "T6:G EL1: SCTLR_EL1 0x0000000030d01805 has the MMU or a cache on: not turned off (only the EL2 entry does)\r\n"
+        );
+        assert_eq!(sent(|tx| print_el1(tx, 0x30d0_0800)), "");
     }
 }
