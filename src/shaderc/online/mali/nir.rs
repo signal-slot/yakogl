@@ -3133,6 +3133,36 @@ pub fn build<'s>(
             }
         }
     }
+    /* the interpolated lanes equal to an earlier one, which Mesa's link
+     * merges (`deduplicate_outputs`): [`super::link::VaryingConsts::push_equal`] */
+    let decls: [Option<&ir::IoDecl<'_>>; MAX_VARYINGS] =
+        core::array::from_fn(|i| m.outputs.iter().filter(|o| o.kind == IoKind::Varying).nth(i));
+    let lane_at = |o: &ir::IoDecl<'_>, c: usize| {
+        let l = varyings.get(o.location as usize).copied().flatten()?;
+        let phi = phis & (1 << (o.location as usize * 4 + c)) != 0;
+        match l[c & 3] {
+            Val::Lane(n, _) if !phi && !vs.convergent(n) => Some(l[c & 3]),
+            _ => None,
+        }
+    };
+    let mut equal = [(0u8, 0u8, 0u8, 0u8); 4 * MAX_VARYINGS];
+    let mut nequal = 0;
+    for (i, o) in decls.iter().enumerate().filter_map(|(i, o)| o.map(|o| (i, o))) {
+        for c in 0..(o.components as usize).min(4) {
+            let Some(v) = lane_at(o, c) else { continue };
+            let earlier = decls[..=i].iter().flatten().find_map(|e| {
+                let last = if e.location == o.location { c } else { e.components as usize };
+                (0..last.min(4)).find(|&d| lane_at(e, d) == Some(v)).map(|d| (e.location, d as u8))
+            });
+            if let (Some((l, d)), Some(x)) = (earlier, equal.get_mut(nequal)) {
+                *x = (o.location, c as u8, l, d);
+                nequal += 1;
+            }
+        }
+    }
+    for &(l, c, of_l, of_c) in &equal[..nequal] {
+        vs.consts.push_equal(l, c, of_l, of_c);
+    }
     /* the fragment shader's moved expressions, cloned at the end of the
      * shader's own code (nir_opt_varyings.c:4398-4401) */
     super::motion::apply(&mut vs, &mut varyings, moved)?;

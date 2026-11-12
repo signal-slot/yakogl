@@ -129,8 +129,11 @@ that measures it.
 3. **Compaction** (nir_fs.rs `layout`). `compact_varyings`
    (nir_opt_varyings.c:5491-5560) gives every kept lane the next scalar
    slot in the order of step 1. A vertex shader's constant lane is
-   propagated, not kept. Two equal lanes are merged (fsload_dup loads
-   `.v2`); the link here refuses that vertex shader (`VaryingDuplicate`).
+   propagated, not kept. Of lanes the vertex shader stores the same value
+   in, the first in that order is kept and the others are read from it
+   (`deduplicate_outputs`, nir_opt_varyings.c:3253-3420; nir.rs records
+   the equal lanes, link.rs `VaryingConsts::push_equal`): fsload_dup's
+   `a.z` is `a.x` (`.v2`), fsload_dup_swz's q.x is p.y.
 4. **Loads.** `nir_unlower_io_to_vars` (st_program.c:872) makes one
    variable of each slot's lanes. The fragment shader loads a slot it
    reads a lane of at that width (`component + num_components`,
