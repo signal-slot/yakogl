@@ -11,9 +11,10 @@ if(CONFIG_YAKOGL_STM32MP2)
   zephyr_library_sources_ifdef(CONFIG_YAKOGL_BOARD_STM32MP2 board_stm32mp2.c)
   # The GPU powered for the Vivante driver (gc_board_power_on) through the
   # crate's stm32mp2_gpu.h (CONFIG_YAKOGL_STM32MP2_GPU: the crate built by
-  # ../../../CMakeLists.txt with the features stm32mp2 and vivante).
+  # ../../../CMakeLists.txt with the features stm32mp2 and vivante), and
+  # the read-back line of its interrupt, GIC SPI 183 (gc_board_irq_connected).
   if(CONFIG_YAKOGL_STM32MP2_GPU AND CONFIG_YAKOGL_DRV_GPU_VIVANTE)
-    zephyr_library_sources(gc_power_mp2.c)
+    zephyr_library_sources(gc_power_mp2.c gc_irq_mp2.c)
   endif()
   zephyr_include_directories(.)
   # stm32mp2_gpu.h: the crate's GPU power C ABI (soc/stm32mp2/gpu_ffi.rs),

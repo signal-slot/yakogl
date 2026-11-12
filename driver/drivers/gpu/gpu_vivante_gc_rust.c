@@ -404,6 +404,12 @@ static void gc_isr(const void *arg)
 	(void)gc_irq_handle((struct gc_dev *)arg);
 }
 
+#ifdef CONFIG_YAKOGL_STM32MP2_GPU
+/* The STM32MP257F-DK's board layer prints the GIC's state of the line as
+ * this image reads it (lib/board/stm32mp2/gc_irq_mp2.c). */
+void gc_board_irq_connected(unsigned int irq);
+#endif
+
 void gc_irq_connect(struct gc_dev *g)
 {
 	ARG_UNUSED(g);
@@ -411,4 +417,7 @@ void gc_irq_connect(struct gc_dev *g)
 		    DT_INST_IRQ(0, flags));
 	irq_enable(DT_INST_IRQN(0));
 	LOG_INF("irq %d connected", DT_INST_IRQN(0));
+#ifdef CONFIG_YAKOGL_STM32MP2_GPU
+	gc_board_irq_connected(DT_INST_IRQN(0));
+#endif
 }
