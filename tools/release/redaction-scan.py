@@ -808,6 +808,7 @@ def self_test():
              ["tester", "@pi5-other.example"]),
             ("private-ipv4", board, ["100.64", ".7.9"], ["100.64", ".7.10"]),
             ("private-ipv4", board, ["10.20", ".30.40"], ["10.20", ".30.41"]),
+            ("login-at-host", board, ["root", "@t6fake-host"], ["root", "@t6fake-other"]),
             ("private-ipv4", readme, ["10.1", ".2.3"], ["10.1", ".2.30"]),
             ("login-at-host", readme, ["root", "@board"], ["root", "@board2"]),
             ("email", "tools/cts/x2-glmark2-scenes-selftest.sh",
