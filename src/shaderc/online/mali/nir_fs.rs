@@ -1210,6 +1210,15 @@ impl<'s> Fs<'s> {
         if self.nir.nodes[cn as usize].bits != if self.prec.highp { 32 } else { 16 } {
             return Err(MaliError::DiscardForm);
         }
+        /* two varying lanes, of one varying or two (`v.y < v.x`, `v.x <
+         * w.x`): ours narrows each and compares the halves (10 words);
+         * Mesa compares the fp32 lanes, `DISCARD.f32.lt r1^, r0^` (8
+         * words, tools/mali/testdata/discard16_two_lanes*). Not
+         * transcribed: refused */
+        let s = self.nir.nodes[cn as usize].src;
+        if !self.prec.highp && self.input_lane(s[0]).is_some() && self.input_lane(s[1]).is_some() {
+            return Err(MaliError::FsOperandForm);
+        }
         if self.discards as usize >= MAX_DISCARDS {
             return Err(MaliError::BlockTableFull);
         }

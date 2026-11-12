@@ -1,0 +1,6 @@
+attribute highp vec4 a_position;
+attribute highp vec4 a_a;
+attribute highp vec4 a_b;
+varying mediump vec2 v;
+varying mediump vec2 w;
+void main() { gl_Position = a_position; v = a_a.xy; w = a_b.xy; }
