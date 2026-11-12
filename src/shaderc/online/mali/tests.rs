@@ -6893,9 +6893,10 @@ fn case_70_loopcarry_is_byte_equal_to_mesa_26_2_1() {
 }
 
 /// The fold of a constant times a product with a constant (nir_fs.rs `Fs::op`) on
-/// case 70's loop with other constants: the folded constant kept as one
-/// product per pass (`FMA.v2f16 .., 1.5`), a product not exact in fp16
-/// refused, and the shapes with no reference still refused: the folded
+/// case 70's loop with other constants: a folded constant other than 1.0
+/// leaves a product per pass that pairs with no other lane (refused), a
+/// product not exact in fp16 refused, and the shapes with no reference
+/// still refused: the folded
 /// `-1.0`'s fneg, which the unrolled ladder does not take, and the sum
 /// twin (nir_opt_algebraic.py:2410).
 #[test]
@@ -6908,17 +6909,38 @@ fn the_fp16_constant_products_fold_as_mesa_s() {
         trim(&f.code).iter().map(|w| isa::decode(*w).expect("decodes").op.info().mnemonic).collect()
     };
     let fma = |v: &[&str]| v.iter().filter(|m| m.starts_with("FMA")).count();
-    let n = |v: &[&str], m: &str| v.iter().filter(|x| **x == m).count();
     /* case 70: one FMA (`u_k * (3.0, 2.0)`), no product left in the passes */
     let p = ops(&with("* 2.0", "* 0.5"));
     assert_eq!((p.len(), fma(&p)), (29, 1), "{p:?}");
-    /* `* 3.0 * 0.5` is `* 1.5`: the first pass's `k * 1.5` pairs with
-     * `u_k.x * 3.0` in the first FMA, then a sum and a product per pass */
-    let p = ops(&with("* 3.0", "* 0.5"));
-    assert_eq!((fma(&p), n(&p, "FADD.v2f16")), (1 + 7, 7), "{p:?}");
+    /* `* 3.0 * 0.5` is `* 1.5`: each pass's `k * 1.5` pairs with no other
+     * lane; main made 37 words of it, Mesa makes 34
+     * (deadloop_loopcarry_mul3.expect.json): refused
+     * ([`an_unrolled_pass_s_lone_fp16_product_is_refused`]) */
+    assert_eq!(gap(SHC_STAGE_FRAGMENT, &with("* 3.0", "* 0.5")), MaliError::GuardMediump);
     assert_eq!(gap(SHC_STAGE_FRAGMENT, &with("* 0.1", "* 0.3")), MaliError::ConstantFold);
     assert_eq!(gap(SHC_STAGE_FRAGMENT, &with("* 2.0", "* -0.5")), MaliError::Arithmetic);
     assert_eq!(gap(SHC_STAGE_FRAGMENT, &with("+ 2.0", "+ 0.5")), MaliError::ArithConstant);
+}
+
+/// Case 71's deadloop with its bound's product in other forms. A pair of
+/// products by 2.0 (`ceil(u_k.x * 2.0)` beside each pass's `u_k.y * 2.0`)
+/// is the late rule's `fadd(a, a)` in both halves (`FADD.v2f16 r0, u2.w0,
+/// u2.w0`, nir_fs.rs `late_rules16`): byte-equal. A product that pairs with
+/// no other lane (the bound's lane in the uniform's second word, `u_k.z`;
+/// the constant first, `3.0 * u_k.x`; case 70's loop with `acc * 3.0`)
+/// compiled on main to words that are not Mesa's (the sums placed after
+/// the compares; 37 words against 34): refused by name until Mesa's order
+/// of those passes is transcribed. Issue #4569 (`ceil(u_k.z * 3.0)`).
+#[test]
+fn an_unrolled_pass_s_lone_fp16_product_is_refused() {
+    let (_, vs, fs, json) = pair!("deadloop_mul2");
+    check_linked(vs, fs, json);
+    for (name, _, fs, json) in
+        [pair!("deadloop_lane_z"), pair!("deadloop_const_first"), pair!("deadloop_loopcarry_mul3")]
+    {
+        assert!(region(json, "fs.fragment").is_some(), "{name}: the reference");
+        assert_eq!(gap(SHC_STAGE_FRAGMENT, fs), MaliError::GuardMediump, "{name}");
+    }
 }
 
 /// Case 218 shadowcmp (docs/notes/mali-fragcoord-fp16-ops.md): a mediump
