@@ -24,19 +24,38 @@ Where parts 1 and 2 disagree on the tree, the status after the merge is
 noted at the finding (H2, H3, M1). Their `file:line` references are at
 their own bases; many of those files have left the tree since.
 
-# Part 4: re-run with the scan tool on the current main tip (2026-11-11)
+# Part 4: re-run with the scan tool on the current main tip (2026-11-12)
 
 | Item | Value |
 |---|---|
-| Date | 2026-11-11 |
-| Base | `ed76d27602f4a3a19fae32259300c4bb402aefeb` (`ed76d276`, "setup-gate-host: --check reports a missing dtc and missing aarch64 rustup targets"): the integration tip, after `b9234557` (the allow rule for the `mali-glmark2-session-selftest.sh` stage path). 5,026 files scanned (the tool skips binaries, `third_party/` and this file). The Part 4 of `a034e289` (2026-11-10, public classes only) is replaced by this one |
+| Date | 2026-11-12 (public classes); the private classes were last measured on `ed76d276` (2026-11-11) |
+| Base | `ada67285d123d61b3a50ddad0baaa7f201387925` (`ada67285`, "docs: redaction-audit Parts 1-3 hold no private value"): the integration tip, after `1d264c47` (merge of `caa4bd6b`, the lab-host allow rule for the generated i.MX8MP register names) and after `b9234557` (the allow rule for the `mali-glmark2-session-selftest.sh` stage path). The tool skips binaries, `third_party/` and this file. The Part 4 of `ed76d276` (2026-11-11) is replaced by this one |
 | History | not scanned (decision 1 of #1606: the public history is one fresh commit of the cleaned tree) |
-| Command | `python3 -I tools/release/redaction-scan.py ed76d27602f4a3a19fae32259300c4bb402aefeb` (public classes), and the same command with `YAKOGL_REDACTION_PRIVATE` set in the process environment only (private classes). Self-test: `python3 -I tools/release/redaction-scan.py --self-test` prints "self-test passed". Look-alikes are in `tools/release/redaction-scan.allow` |
-| Private values | a partial set derived on a farm worker and kept in memory only (never in a file, a log or a commit): 1 owner-login and 1 public-name (the owner's git identity and the farm's notes), 3 login (lab and vendor-image logins from the farm's notes), 15 lab-host (lab machines, the laptop, serial-bridge hosts and device resource ids from the farm's notes). This section holds no private value and no unmasked hit |
-| Exit status | public run: 3 (`0 H/M finding(s), 3 class(es) not run, 98 informational, 95 look-alike(s) dropped: NOT COMPLETE (private classes not run)`). Private run: 1 (`12 H/M finding(s), 0 class(es) not run, 98 informational, 97 look-alike(s) dropped: FINDINGS`), all 12 one lab-host value matching an i.MX8MP register name (below); without that value: 0 (`0 H/M finding(s), 0 class(es) not run, 98 informational, 97 look-alike(s) dropped: clean`) |
+| Command | `python3 -I tools/release/redaction-scan.py ada67285d123d61b3a50ddad0baaa7f201387925` (public classes), and the same command with `YAKOGL_REDACTION_PRIVATE` set in the process environment only (private classes). Self-test: `python3 -I tools/release/redaction-scan.py --self-test` prints "self-test passed". Look-alikes are in `tools/release/redaction-scan.allow` |
+| Private values | none on the worker that ran this round: its environment holds the owner's git identity but no ssh host entries or logins, and a run with only that identity is not a representative private run (not recorded). The private counts below are the last measurement, on `ed76d276`, with a partial set derived on a farm worker and kept in memory only (never in a file, a log or a commit): 1 owner-login and 1 public-name (the owner's git identity and the farm's notes), 3 login (lab and vendor-image logins from the farm's notes), 15 lab-host (lab machines, the laptop, serial-bridge hosts and device resource ids from the farm's notes). This section holds no private value and no unmasked hit |
+| Exit status | public run on `ada67285`: 3 (`0 H/M finding(s), 3 class(es) not run, 98 informational, 99 look-alike(s) dropped: NOT COMPLETE (private classes not run)`); self-test: "self-test passed". Private run, last measured on `ed76d276`, before the regs.rs rule: 1 (`12 H/M finding(s), 0 class(es) not run, 98 informational, 97 look-alike(s) dropped: FINDINGS`), all 12 one lab-host value matching an i.MX8MP register name; without that value: 0. With the rule of `caa4bd6b` those 12 are dropped as look-alikes (expected private run: 0 H/M, lab-host 12 more drops; not re-measured on this worker) |
 
-Tool output of the private run, class and summary lines (hit values are
-masked by the tool: first character, `***`, length):
+Tool output of the public run on `ada67285`, class and summary lines:
+
+```
+[M] home-path      Home path: ok, 10 look-alike(s) dropped
+[H] private-ipv4   Private / tailnet IPv4: ok, 16 look-alike(s) dropped
+[H] ipv6-local     IPv6 link-local / ULA: ok, 2 look-alike(s) dropped
+[H] owner-login    Owner login: not run (no private values)
+[H] login-at-host  Login at a real host: ok; not run for the private logins (root only), 20 look-alike(s) dropped
+[M] lab-host       Lab machine name: not run (no private values)
+[M] som-serial     SoM serial in a host name: ok, 7 look-alike(s) dropped
+[H] bridge-port    Serial-bridge port: ok
+[H] tailnet-dns    Tailnet DNS name: ok, 2 look-alike(s) dropped
+[H] token          Token / key: ok
+[H] password       Password / secret value: ok, 5 look-alike(s) dropped
+[M] email          E-mail address: ok, 34 look-alike(s) dropped
+[L] lab-layout     Lab checkout layout: 17 informational, 3 look-alike(s) dropped
+summary: 0 H/M finding(s), 3 class(es) not run, 98 informational, 99 look-alike(s) dropped: NOT COMPLETE (private classes not run)
+```
+
+Tool output of the private run on `ed76d276` (before the regs.rs rule; hit
+values are masked by the tool: first character, `***`, length):
 
 ```
 private values: from YAKOGL_REDACTION_PRIVATE (owner-login x1, public-name x1, login x3, lab-host x15)
@@ -68,9 +87,8 @@ private values: from YAKOGL_REDACTION_PRIVATE (owner-login x1, public-name x1, l
 summary: 12 H/M finding(s), 0 class(es) not run, 98 informational, 97 look-alike(s) dropped: FINDINGS
 ```
 
-The public run prints the same lines except `owner-login` and `lab-host`
-"not run (no private values)", `login-at-host` "ok; not run for the private
-logins (root only), 18 look-alike(s) dropped", and its summary above.
+The private run prints the same lines except `owner-login` and `lab-host`
+run, `login-at-host` run for the private logins too, and its summary above.
 
 The tool counts hits, not lines. "Dropped" is what `redaction-scan.allow`
 drops as a look-alike, "info" is listed but not a finding (upstream authors,
@@ -78,53 +96,53 @@ the L-class lab layout).
 
 ## Counts per class
 
-"Found" is the hits of the class in the private run (open + dropped + info);
-the public run differs only in the three private classes (noted in the
-cells). "Fixed" is the findings of the class that were open after the
+"Found" is the hits of the class (open + dropped + info) in the public run on
+`ada67285`. The three private classes (`owner-login`, `lab-host`, and
+`login-at-host` for the private logins) are the private run of `ed76d276`,
+noted in the cells, plus the regs.rs rule of `caa4bd6b`. "Fixed" is the findings of the class that were open after the
 previous Part 4 and are gone from the tree by an edit, not by an allow rule.
 
 | Class | Tool class (sev.) | Found | Dropped by allow rule | Info | Fixed in this round | Open |
 |---|---|---|---|---|---|---|
 | Home path | `home-path` (M) | 10 | 10 | 0 | 0 | 0 |
-| Owner login | `owner-login` (H) | 1 (public run: not run) | 1 | 0 | 0 | 0 |
+| Owner login | `owner-login` (H) | not run (`ed76d276`: 1) | not run (`ed76d276`: 1) | 0 | 0 | 0 |
 | Private / tailnet IPv4 | `private-ipv4` (H) | 16 | 16 | 0 | 0 | 0 |
 | IPv6 link-local / ULA | `ipv6-local` (H) | 2 | 2 | 0 | 0 | 0 |
-| Login at a real host | `login-at-host` (H) | 19 (public run, root only: 18) | 19 | 0 | 0 | 0 |
-| Lab machine names | `lab-host` (M) | 12 (public run: not run) | 0 | 0 | 0 | 12, all look-alikes of one value (i.MX8MP register identifiers, below) |
+| Login at a real host | `login-at-host` (H) | 20 (root only; `ed76d276`, private logins too: 19, all dropped) | 20 | 0 | 0 | 0 |
+| Lab machine names | `lab-host` (M) | not run (`ed76d276`: 12 hits of one value, i.MX8MP register identifiers) | not run (expected 12, by the rule of `caa4bd6b`; not re-measured here) | 0 | 0 | 0 (`ed76d276`: 12 look-alikes, now dropped by the rule) |
 | SoM serial in a host name | `som-serial` (M) | 7 | 7 | 0 | 0 | 0 |
 | Serial-bridge ports | `bridge-port` (H) | 0 | 0 | 0 | 0 | 0 |
 | Tailnet DNS name | `tailnet-dns` (H) | 2 | 2 | 0 | 0 | 0 |
 | Token / key | `token` (H) | 0 | 0 | 0 | 0 | 0 |
 | Password / secret value | `password` (H) | 5 | 5 | 0 | 0 | 0 |
-| E-mail addresses | `email` (M) | 113 | 32 | 81 | 0 | 0 |
+| E-mail addresses | `email` (M) | 115 | 34 | 81 | 0 | 0 |
 | Lab checkout layout | `lab-layout` (L) | 20 | 3 | 17 | 0 | 0 |
-| Total | | | 97 (public run: 95) | 98 | 0 | **12** private-run look-alikes; public run **0** |
+| Total | | | 99 (`ed76d276` private run: 97, plus the 12 of the regs.rs rule) | 98 | 0 | **0** public H/M; private run on `ed76d276`: 12 look-alikes, now dropped by the rule |
 
-At the Part 4 of `a034e289` the public drops were 93; the 2 added since are
-one home path (the fake board stage directory of
-`tools/cts/mali-glmark2-session-selftest.sh`, rule of `b9234557`) and one
-e-mail fixture. The 2 more drops of the private run (owner login 1, login at
-host 1) are existing allow rules matching the private values.
+At the Part 4 of `ed76d276` the public drops were 95; the 4 more are 2
+login-at-host and 2 e-mail hits that tree changes since added and existing
+allow rules drop (the allow file's only change since is the regs.rs rule,
+which acts on the `lab-host` class only).
 
 ## Private-class scan: partial value set
 
-The private values were not the owner's file. They were derived on a farm
-worker from the owner's git identity and the farm's own notes (its
+The private values were not the owner's file. At `ed76d276` they were derived
+on a farm worker from the owner's git identity and the farm's own notes (its
 machines, devices, serial bridges and logins) and kept in the scanning
 process's environment only. The set is partial: it holds what the farm
-knows, not necessarily every name the owner considers private. The owner's
-run with the full private file (`YAKOGL_REDACTION_PRIVATE_FILE`) on the
-snapshot commit, exit 0, is still open for #1606 step 8 (decisions D7/D8).
+knows, not necessarily every name the owner considers private. The worker of
+this round could not derive such a set (see the Private values row), so the
+private counts here are those of `ed76d276`, not a new measurement. The
+owner's run with the full private file (`YAKOGL_REDACTION_PRIVATE_FILE`) on
+the snapshot commit, exit 0, is still open for #1606 step 8 (decisions
+D7/D8).
 
-The 12 `lab-host` hits are one value (masked `U***[4]`, a serial-bridge
-host): the same four characters begin power-domain register identifiers of
-the i.MX8MP in `driver/rust/src/soc/imx8mp/regs.rs`, which follow the SoC
-reference manual. They are look-alikes, not leaks; no allow rule is added in
-this round (the tool and its allow file are held by another item). The
-owner's private file either leaves that host name out, or a narrow rule
-(class `lab-host`, that one path, the register identifiers' suffix as the
-regex) drops them. With that one value removed, the private run exits 0
-(summary in the Exit status row).
+The 12 `lab-host` hits of `ed76d276` were one value (masked `U***[4]`, a
+serial-bridge host): the same four characters begin power-domain register
+identifiers of the i.MX8MP in `driver/rust/src/soc/imx8mp/regs.rs`, which
+follow the SoC reference manual. They are look-alikes, not leaks. The rule of
+`caa4bd6b` (merged as `1d264c47`, below) drops them, so the expected private
+run with that value set is 0 H/M with those 12 dropped.
 
 ## Every surviving hit
 
@@ -154,14 +172,16 @@ another file stays a finding).
 | Class | Where | Masked value | Justification |
 |---|---|---|---|
 | e-mail | `tools/board_selftest.sh` | `t***[6]@p***[16]` (a `.example` host) | RFC 2606 reserved fake `BOARD_HOST` of the pi5 dry-run self-test |
-| IPv4 | `tools/board_selftest.sh` | `100.64.7.9`, `10.20.30.40` | private-range inputs of a redaction test: a fake ssh error and a console line the redaction must rewrite |
-| IPv4, login at host | `tools/cts/mali-slice-readme-selftest.sh` | `10.1.2.3`, `r***[4]@b***[5]` | inputs of a refusal test: the slice check must refuse them |
+| IPv4 | `tools/board_selftest.sh` | `1***[10]`, `1***[11]` | private-range inputs of a redaction test: a fake ssh error and a console line the redaction must rewrite |
+| IPv4, login at host | `tools/cts/mali-slice-readme-selftest.sh` | `1***[8]`, `r***[4]@b***[5]` | inputs of a refusal test: the slice check must refuse them |
 | e-mail | `tools/cts/x2-glmark2-scenes-selftest.sh` | `t@example.com` | RFC 2606 git identity of the self-test's repository |
 | home path | `tools/cts/mali-glmark2-selftest.sh` | the fake board's stage directory (no user name) | fake path of a self-test |
-| IPv4, login at host | `tools/cts/mali-fail-triage.py` | `10.1.2.3`, `r***[4]@n***[4]` | inputs of the scrub self-check |
-| IPv4, login at host | `tools/cts/testdata/mali-fail-triage/slices/.../kmsg/c.txt` | `10.9.8.7`, `r***[4]@b***[5]` | a dirty kmsg line the redaction test feeds |
+| IPv4, login at host | `tools/cts/mali-fail-triage.py` | `1***[8]`, `r***[4]@n***[4]` | inputs of the scrub self-check |
+| IPv4, login at host | `tools/cts/testdata/mali-fail-triage/slices/.../kmsg/c.txt` | `1***[8]`, `r***[4]@b***[5]` | a dirty kmsg line the redaction test feeds |
 | login at host, tailnet DNS | `tools/cts/testdata/mali-slice-redact/dirty/` (`kmsg/a.txt`, `meta.txt`) | `r***[4]@b***[5]`, a `board-1.example.ts.net` name | inputs of a redaction test; the tailnet name is under the reserved `example` |
-| IPv4, IPv6, login, tailnet DNS, e-mail | `tools/cts/mali-slice-redact.py` | `100.64.0.0`, `100.64.0.9`, `f***[4]::1`, `r***[4]@b***[5]`, `r***[4]@192.0.2.7`, the `example.ts.net` name, `s***[11]@t***[11].service` | inputs of the redaction test that the tool's help and checks use; the last is a systemd unit instance, not an address |
+| home path | `tools/cts/mali-glmark2-session-selftest.sh` | the fake board's stage directory (no user name) | fake path of a self-test; rule of `b9234557` |
+| lab-host | `driver/rust/src/soc/imx8mp/regs.rs` | `U***[4]` followed by `_PHY` (a lab host's four characters, uppercase, then the suffix; the value itself is never quoted) | generated i.MX8MP register identifiers (PHY power-domain fields, NXP's names) collide with the four characters of a lab host. One class, one path, the uppercase prefix with its `_PHY` suffix: the bare name stays a finding in that file. Rule: last lab-host entry of "Product defaults and keywords" in `tools/release/redaction-scan.allow` (`caa4bd6b`, merged as `1d264c47`). Self-test: the two `regs` cases in the `rules` list of `self_test()` (a field and its doc line drop; the bare name and an unrelated line stay), with a fake host `lab7` |
+| IPv4, IPv6, login, tailnet DNS, e-mail | `tools/cts/mali-slice-redact.py` | `1***[10]`, `1***[10]`, `f***[4]::1`, `r***[4]@b***[5]`, `r***[4]@192.0.2.7`, the `example.ts.net` name, `s***[11]@t***[11].service` | inputs of the redaction test that the tool's help and checks use; the last is a systemd unit instance, not an address |
 
 ### Dropped by the allow file earlier (unchanged from the previous Part 4)
 
@@ -203,11 +223,12 @@ itself.
 
 ## Open items (not fixes of this round)
 
-- **Private classes**: run here with a partial value set (above): 0
-  owner-login and 0 private login-at-host findings, 12 lab-host look-alikes
-  of one value. Still needed: the owner's run with the full private file
-  (with the tailnet name and anything the farm's notes do not hold), exit 0,
-  and a decision on the i.MX8MP register look-alike.
+- **Private classes**: last run with a partial value set (above, `ed76d276`):
+  0 owner-login and 0 private login-at-host findings, 12 lab-host
+  look-alikes of one value, now dropped by the regs.rs rule. Still needed:
+  a private run on the snapshot commit, and the owner's run with the full
+  private file (with the tailnet name and anything the farm's notes do not
+  hold), exit 0.
 - **`tools/cts/log/2026-10-31-pi4-gles3-a/*.tally.txt`** (Part 3's home path
   of the farm worker's account): no longer a finding; line 4 of each tally
   names its console relatively (`7bac2d8a`); nothing is allowed.
@@ -220,11 +241,12 @@ itself.
 
 ## Verdict of part 4
 
-The public classes are clean on `ed76d276`: 0 H/M findings, the self-test
+The public classes are clean on `ada67285`: 0 H/M findings, the self-test
 passes, and a test fails the build if the tree slips back. The private
-classes ran with a partial value set: no owner login or private login leaks,
-and 12 lab-host hits that are all one register-name look-alike. This is not
-yet a pass of line 8: the owner runs the command with
+classes last ran on `ed76d276` with a partial value set: no owner login or
+private login leaks, and 12 lab-host hits that are one register-name
+look-alike, which the rule of `caa4bd6b` now drops (not re-measured). This is
+not yet a pass of line 8: the owner runs the command with
 `YAKOGL_REDACTION_PRIVATE_FILE` on the snapshot commit and needs exit 0.
 
 # Part 3: re-run on the cut tree (2026-10-27)
