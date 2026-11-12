@@ -1329,6 +1329,20 @@ mod tests {
         assert_eq!(consts(&g), [H, H]);
     }
 
+    /// A float constant the lowering shares between a 16-bit tree and a
+    /// 32-bit one (`const_value` reuses one within a block) records High:
+    /// a literal read at each user's width. Medium on a constant means it
+    /// is in 16-bit trees only, so a reader may take its fp16 value.
+    #[test]
+    fn a_constant_shared_by_both_widths_is_high() {
+        let g = vs("varying mediump float w;\nvarying highp float v;\n\
+                    void main(){ mediump float m = a; w = m * 1.3; v = b * 1.3; gl_Position = p; }");
+        assert_eq!(alu(&g, AluOp::Fmul), [M, H]);
+        assert_eq!(of(&g, |o| matches!(o, Op::ConstF32(_))), [H], "one constant, shared");
+        let g = vs("varying mediump float w;\nvoid main(){ mediump float m = a; w = m * 1.3; gl_Position = p; }");
+        assert_eq!(of(&g, |o| matches!(o, Op::ConstF32(_))), [M]);
+    }
+
     #[test]
     fn f16_exact_knows_the_f16_values() {
         for x in [0.0f32, -0.0, 1.0, 1.5, 65504.0, -2.0, 6.103_515_6e-5, 5.960_464_5e-8, 0.000_122_070_31] {
