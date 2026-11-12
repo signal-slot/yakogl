@@ -1464,6 +1464,10 @@ pub(crate) mod tests {
         fail: Cell<Option<(u32, Fail)>>,
         halted: Cell<bool>,
         sync_error: Cell<Option<u32>>,
+        /// The firmware no longer answers the group's doorbell: no CSG or
+        /// CS request is acknowledged (a stop or terminate that never
+        /// completes).
+        pub(crate) deaf: Cell<bool>,
     }
 
     /// An error the model raises at a `CALL` ([`Z4::fail_at`]).
@@ -1559,6 +1563,7 @@ pub(crate) mod tests {
                 fail: Cell::new(None),
                 halted: Cell::new(false),
                 sync_error: Cell::new(None),
+                deaf: Cell::new(false),
             }
         }
         /// Raise `f` at the `n`-th `CALL` counted from the model's start
@@ -1639,6 +1644,9 @@ pub(crate) mod tests {
             let (db_req, db_ack) =
                 (GLB_IN + offset_of!(GlbInput, doorbell_req), GLB_OUT + offset_of!(GlbOutput, doorbell_ack));
             let rung = self.w(db_req) ^ self.w(db_ack);
+            if self.deaf.get() {
+                return;
+            }
             self.ack_field(db_req, db_ack, rung);
             if rung & 1 == 0 {
                 return;
