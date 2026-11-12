@@ -2,12 +2,12 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # NanoPC-T6: the GPU hand-over from U-Boot (decisions, 2026-11-11)
 
-Status: design note. The clock and power decisions (sections 1 and 2) are
-merged code with host tests. The U-Boot and eMMC facts (section 4) were
+Status: design note. The clock, power and QoS decisions (sections 1, 2 and 7)
+are merged code with host tests. The U-Boot and eMMC facts (section 4) were
 measured read-only under Armbian; the load route (section 5) is a proposal
-whose load addresses are not measured yet. The entry audit (section 6) and the
-QoS state (section 7) follow. The U-Boot prompt reads (section 3) are drafted
-and not run.
+whose load addresses are not measured yet, with a script draft in
+driver/tools/uboot-t6/t6-zephyr.cmd (never run). The entry audit (section 6)
+follows. The U-Boot prompt reads (section 3) are drafted and not run.
 
 Why: every Z1 to Z4 image so far runs after Armbian by kexec, on the GPU clock
 and power state Linux left. Stage 5's product form is U-Boot booting Zephyr
@@ -18,9 +18,9 @@ this note and the code cite facts with file:line and transcribe nothing.
 
 ## 1. The GPU clock without Linux
 
-Code: `gpu_clock` (read only) and `gpu_clock_set` in
-driver/rust/src/soc/rk3588.rs, called first by `gpu_up` in
-driver/rust/src/board/nanopc_t6_gpu.rs, before the supply check.
+Code (paths under driver/rust/src): `gpu_clock` (read only) and
+`gpu_clock_set` (soc/rk3588.rs:404), called by `gpu_up`
+(board/nanopc_t6_gpu.rs:240) after the RK806 reads and before the supply check.
 
 The CRU is at 0xfd7c0000. `CLKSEL_CON(158)` (0xfd7c0578) holds `clk_gpu_src`:
 divider in bits 4:0 (field + 1), mux in bits 7:5, the PVTPLL select in bit 14.
@@ -86,14 +86,14 @@ its write-enable twin, then the wait for lock), which `gpu_up` calls after the
 supply check; tests `a_powered_down_pll_is_powered_through_its_write_mask_and_waited_for`
 and `a_gpu_clock_on_a_powered_down_pll_is_powered_before_pd_gpu`.
 
-Not decided here: the QoS words (a separate item), and whether SCMI clock 5
-(U-Boot's view) agrees with the CRU. Section 3 reads both.
+Not decided here: whether SCMI clock 5 (U-Boot's view) agrees with the CRU.
+Section 3 reads both. The QoS words are section 7.
 
 ## 2. The GPU power-on from U-Boot's state
 
-Code: `gpu_up` and `supply_on` in driver/rust/src/board/nanopc_t6_gpu.rs;
-`pd_gpu_on` in soc/rk3588.rs; `dcdc1_enable_frame` in
-driver/rust/src/ip/rk806.rs. The PMU is at 0xfd8d8000 (`PWR_GATE` 0x14c,
+Code (under driver/rust/src): `gpu_up` (board/nanopc_t6_gpu.rs:240) and
+`supply_on` in the same file; `pd_gpu_on` (soc/rk3588.rs:662);
+`dcdc1_enable_frame` (ip/rk806.rs:83). The PMU is at 0xfd8d8000 (`PWR_GATE` 0x14c,
 `BUS_IDLE_REQ` 0x10c, `BUS_IDLE_ACK` 0x118, `BUS_IDLE_ST` 0x120,
 `REPAIR_STATUS` 0x290; PD_GPU is bit 0 of the gate and idle words, bit 1 of
 `REPAIR_STATUS` reads powered).
@@ -121,6 +121,11 @@ The decisions:
 6. **The domain** is powered by `pd_gpu_on` through the PMU's write masks,
    which does not depend on the other domains' bits nor on whether the GPU's
    idle request was set while the domain is off.
+7. **The QoS policy is applied right after the power-on succeeds.** `gpu_up`
+   calls `rk3588::qos_apply` with `GPU_QOS_POLICY` = `QosPolicy::LinuxZero`
+   (nanopc_t6_gpu.rs:172 and :322) once `pd_gpu_on` has returned `Ok`, then reads
+   the five words of each block into `GpuUp.qos` (:323-327). A run that stops
+   at or before `PowerDomain` applies none. Section 7.
 
 The starting states:
 
@@ -131,9 +136,16 @@ The starting states:
 | on, idle request released | on | left as it is, no PMU write | `c_a_domain_left_on_is_not_written_in_the_pmu` |
 | on | off | refused, no write | `a_domain_that_reads_powered_with_the_supply_off_is_refused_without_a_write` |
 
-The stop causes (`Stop` in nanopc_t6_gpu.rs; the value crosses to C as
-`YD_T6_GPU_STOP_*`, the variants from 9 on not in the C header yet). `refusal`
-and `detail` are the `GpuUp` fields of those names.
+The stop causes (`Stop`, nanopc_t6_gpu.rs:99-137; the value crosses to C as
+`YD_T6_GPU_STOP_*`, values 0 to 13 are all in
+driver/rust/include/yakogl_drivers.h:324-352). `refusal` and `detail` are the
+`GpuUp` fields of those names. The table lists the causes of the clock and
+supply steps. The others: 0 `None` (every step ran), 1 `SpiGate` (an SPI2 clock
+gate stays closed; refusal its bit), 2 `Rk806Read` (an RK806 read failed;
+refusal the `SpiRefusal`), 5 `PowerDomain` (`pd_gpu_on` refused; refusal the
+`PdRefusal`, detail the PMU word; before the QoS write), 6 `NotG610` (detail
+the `GPU_ID` read), 7 `Reset` (the soft reset did not complete) and 8 `L2` (the
+L2 did not come up); 6 to 8 come after the QoS write.
 
 | Stop | Value | Refusal | Detail | Test |
 |---|---|---|---|---|
@@ -145,7 +157,7 @@ and `detail` are the `GpuUp` fields of those names.
 | `SupplyRampTimeout` | 12 | 0 | the last `POWER_EN0` | `b_double_prime_supply_that_never_ramps_stops_without_a_pmu_write` |
 | `Rk806Write` | 13 | the `SpiRefusal` | its value | `an_enable_frame_the_bus_does_not_take_stops_before_the_pmu` |
 
-Stops 11, 12 and 13 never write the PMU. After 12 and 13 whether the enable
+Stops 9 to 13 never write the PMU. After 12 and 13 whether the enable
 reached the PMIC is unknown; the supply fields of `GpuUp` (`supply_enabled`,
 `supply_after`, `supply_waited_us`) show what was read.
 
@@ -175,8 +187,9 @@ section 4 and in issue #26.
 3. **The RK806.** `pmic dump`, or `regulator dev vdd_gpu_s0` then `regulator
    status`, when U-Boot's driver has the supply; otherwise record that it does
    not (the image reads it over SPI2 itself). Wanted: `POWER_EN0` (Linux and
-   the image read 0x0f), `POWER_SLP_EN0` (0xe0), `BUCK1_CONFIG` (0xa4),
-   `BUCK1_ON_VSEL` (0x1c, 675 mV). Read-only: never `regulator value` or
+   the image read 0x0f), `POWER_SLP_EN0` (register 0x06, Linux reads 0xe0), `BUCK1_CONFIG` (register
+   0x10, 0xa4), `BUCK1_ON_VSEL` (register 0x1a, 0x1c = 675 mV;
+   ip/rk806.rs:46-48, :179). Read-only: never `regulator value` or
    `regulator enable`, which write. Decides: whether DCDC1 is on, and for an
    off supply whether `BUCK1_ON_VSEL` covers 675 mV (`SupplyBelowOpp`).
 4. **The CRU.** `md.l` of 0xfd7c0578 (`CLKSEL_CON(158)`; Linux leaves 0x1f24),
@@ -192,7 +205,8 @@ section 4 and in issue #26.
    domain's block can fault the bus; this ordering is a safety assumption, not
    a measured fact): `md.l` of the five words (+0x08 to +0x18) of each of the
    four blocks at 0xfdf35000, 0xfdf35200, 0xfdf35400 and 0xfdf35600.
-   Read-only. Linux reads `PRIORITY` 0x80000000 and 0 in the other four words.
+   Read-only. Linux reads `PRIORITY` 0x80000000 and 0 in the other four words;
+   what the image applies after the power-on is section 7.
 6. **The eMMC.** `mmc list`, `mmc dev 0` (selects, writes nothing), `mmc part`,
    then `ext4ls mmc 0:<n> /` (or `ls`) for each partition section 4 names.
    Read-only. Never `mmc write`, `ext4write` or `saveenv`.
@@ -270,9 +284,20 @@ What the script must do besides the two commands (section 6):
 - set a one-shot variable with its undo, because U-Boot's `bootcmd` reruns after
   the image's PSCI reset and would load the image again.
 
+The script draft is driver/tools/uboot-t6/t6-zephyr.cmd (README.md beside it),
+never run on a board. It sizes the file with `ext4size` (:40), refuses outside
+0x40 to 0x1000000 bytes, `ext4load`s to 0x10000000, checks the size read back
+and the `ARM\x64` magic at byte 56, turns the instruction and data caches off
+(:83) and runs `go 0x10000000` (:87). Its mmc device `0:1` is a default, not a
+measurement (:19). It writes nothing to any disk or to the saved environment;
+its variables are `t6z_*`, in RAM. It differs from the list above in two
+points: no one-shot variable, because nothing is saved and a reset returns to
+`bootflow scan -lb` (:32-34); and no watchdog is armed: the script prints that
+the watchdog marker is not checked (:35), so that step stays open.
+
 Load addresses: not measured yet. They are U-Boot's compiled-in `kernel_addr_r`,
-`fdt_addr_r` and `loadaddr`, "measured by uboot-addrs" (a plan #346 item that
-had not landed when this note was written). The image's link address,
+`fdt_addr_r`, `scriptaddr` and `loadaddr`; the draft's `load mmc 0:1
+${scriptaddr}` line needs `scriptaddr` set. The image's link address,
 0x10000000, is from the repo. That the 16 MiB window is free of U-Boot's and
 the trusted firmware's own memory is a read for section 3, not a fact.
 
@@ -283,9 +308,8 @@ build (commit `fc874938`), confirmed by the uboot-src-lines item:
 `boot.cmd`. The line numbers are in that item's report; its handoff did not
 carry them, so they are not written here.
 
-v2026.10 against v2026.07 for these files: the uboot-1026-diff item ran it, and
-its result was not in this note's handoff. Take it from that item's report
-before relying on a newer U-Boot.
+This note cites U-Boot v2026.07 (`ece349ad`). The v2026.10 comparison is not
+recorded in this note: check it before relying on a newer U-Boot.
 
 ## 6. What the Z images assume Linux left, against U-Boot
 
@@ -311,21 +335,28 @@ None of the changes the audit found was made by this plan.
 
 ## 7. QoS
 
-The code at the tip this note was written against (e259c8d5 plus what is merged):
+Code (under driver/rust/src):
 
 - soc/rk3588.rs holds the choice: `QosPolicy` with `Reset` (`MODE` 3,
   `BANDWIDTH` 0x12d, `SATURATION` 0x40, the values the image leaves) and
   `LinuxZero` (all three 0, what Linux reads with the GPU active, 2026-10-26),
-  `QOS_POLICY_WORDS` (0x0c, 0x10, 0x14), and `qos_apply`, which writes those
-  three words in each of the four blocks at `QOS_GPU`: twelve writes,
-  `PRIORITY` and `EXTCONTROL` never. Tests:
+  `QOS_POLICY_WORDS` (0x0c, 0x10, 0x14; :536), and `qos_apply` (:564), which
+  writes those three words in each of the four blocks at `QOS_GPU` (:530):
+  twelve writes, `PRIORITY` and `EXTCONTROL` never. Tests:
   `qos_reset_policy_writes_only_mode_bandwidth_saturation`,
   `qos_linux_zero_policy_writes_only_mode_bandwidth_saturation`.
-- `gpu_up` does **not** apply it at this tip. It reads the five words of each of
-  the four blocks after the power-on into `GpuUp.qos` and writes none of them;
-  `qos_apply` has no caller in `driver/rust/src`. The item `qos-wire` (in
-  review) adds the call after the power-on; the record field naming the policy
-  is the later item `qos-select`. Until both land, a Z run leaves the QoS words
-  as the PD_GPU power-on gave them.
-- Which policy a real frame needs is open (nanopc-t6-mali.md "Open"): the
-  first Z4 frame runs once with each.
+- `gpu_up` applies it. Right after `pd_gpu_on` returns `Ok` and `pd_after` is
+  read, it calls `rk3588::qos_apply(m, b.qos, GPU_QOS_POLICY)` with
+  `GPU_QOS_POLICY` = `QosPolicy::LinuxZero` (board/nanopc_t6_gpu.rs:172, :322),
+  then reads the five words of each block into `GpuUp.qos` (:323-327), so the
+  record shows the words after the write. The choice is `LinuxZero` because
+  every Z1 to Z4 board run so far worked under Linux's zeroed words (doc
+  comment, :168-171). Test
+  `from_the_handed_over_state_it_reads_the_supply_powers_and_finds_the_g610`
+  (:715) checks the twelve writes of 0 and that no other QoS word is written.
+- Not done: the record field naming the policy applied is the later item
+  `qos-select` (build-time selectable). Until it lands the policy is the
+  constant and `GpuUp` does not say which one ran.
+- Which policy a real frame needs is open (nanopc-t6-mali.md "Open", "The QoS
+  words' effect"): the first Z4 frame runs once with each (`Reset` by changing
+  the constant).
